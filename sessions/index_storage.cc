@@ -56,7 +56,7 @@ bool GetVersion(std::string* version, const base::FilePath& file) {
 }
 
 void OnLoad(const base::FilePath& directory,
-            const base::FilePath::StringPieceType& filename,
+            const base::FilePath::StringViewType& filename,
             const base::WeakPtr<sessions::IndexStorage> storage,
             std::unique_ptr<IndexLoadDetails> details) {
   const base::FilePath file = directory.Append(filename);

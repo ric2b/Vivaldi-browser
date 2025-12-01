@@ -23,6 +23,8 @@
 #include "extensions/common/constants.h"  // nogncheck
 #endif
 
+#include "third_party/blink/public/platform/url_loader_throttle_provider.h"
+
 namespace safe_browsing {
 
 namespace {
@@ -53,6 +55,11 @@ RendererURLLoaderThrottle::RendererURLLoaderThrottle(
 #endif  // BUILDFLAG(ENABLE_EXTENSIONS)
 
 RendererURLLoaderThrottle::~RendererURLLoaderThrottle() {
+  // NOTE(ondrej@vivaldi.com): VB-113318
+  if (vivaldi_throttle_guard_) {
+    vivaldi_throttle_guard_->RemoveObserver(this);
+  }
+
   if (deferred_)
     TRACE_EVENT_NESTABLE_ASYNC_END0("safe_browsing", "Deferred",
                                     TRACE_ID_LOCAL(this));

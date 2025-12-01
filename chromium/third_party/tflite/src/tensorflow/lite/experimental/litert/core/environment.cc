@@ -17,7 +17,7 @@
 #include <memory>
 
 #include "absl/types/span.h"
-#include "tensorflow/lite/experimental/litert/c/litert_environment.h"
+#include "tensorflow/lite/experimental/litert/c/litert_environment_options.h"
 #include "tensorflow/lite/experimental/litert/c/litert_logging.h"
 #include "tensorflow/lite/experimental/litert/cc/litert_expected.h"
 
@@ -25,8 +25,9 @@ litert::Expected<LiteRtEnvironmentT::Ptr> LiteRtEnvironmentT::CreateWithOptions(
     absl::Span<const LiteRtEnvOption> options) {
   LITERT_LOG(LITERT_INFO, "Creating LiteRT environment with options");
   auto env = std::make_unique<LiteRtEnvironmentT>();
-  for (auto& option : options) {
-    env->options_[option.tag] = option.value;
+  for (const auto& opt : options) {
+    env->options_.SetOption(opt);
   }
+
   return env;
 }

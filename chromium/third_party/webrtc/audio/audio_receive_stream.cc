@@ -49,7 +49,7 @@ namespace webrtc {
 
 std::string AudioReceiveStreamInterface::Config::Rtp::ToString() const {
   char ss_buf[1024];
-  rtc::SimpleStringBuilder ss(ss_buf);
+  SimpleStringBuilder ss(ss_buf);
   ss << "{remote_ssrc: " << remote_ssrc;
   ss << ", local_ssrc: " << local_ssrc;
   ss << ", nack: " << nack.ToString();
@@ -63,7 +63,7 @@ std::string AudioReceiveStreamInterface::Config::Rtp::ToString() const {
 
 std::string AudioReceiveStreamInterface::Config::ToString() const {
   char ss_buf[1024];
-  rtc::SimpleStringBuilder ss(ss_buf);
+  SimpleStringBuilder ss(ss_buf);
   ss << "{rtp: " << rtp.ToString();
   ss << ", rtcp_send_transport: "
      << (rtcp_send_transport ? "(Transport)" : "null");
@@ -302,8 +302,7 @@ webrtc::AudioReceiveStreamInterface::Stats AudioReceiveStreamImpl::GetStats(
   stats.total_output_energy = channel_receive_->GetTotalOutputEnergy();
   stats.total_output_duration = channel_receive_->GetTotalOutputDuration();
   stats.estimated_playout_ntp_timestamp_ms =
-      channel_receive_->GetCurrentEstimatedPlayoutNtpTimestampMs(
-          rtc::TimeMillis());
+      channel_receive_->GetCurrentEstimatedPlayoutNtpTimestampMs(TimeMillis());
 
   // Get jitter buffer and total delay (alg + jitter + playout) stats.
   auto ns = channel_receive_->GetNetworkStatistics(get_and_clear_legacy_stats);
@@ -318,19 +317,19 @@ webrtc::AudioReceiveStreamInterface::Stats AudioReceiveStreamImpl::GetStats(
   stats.concealment_events = ns.concealmentEvents;
   stats.jitter_buffer_delay_seconds =
       static_cast<double>(ns.jitterBufferDelayMs) /
-      static_cast<double>(rtc::kNumMillisecsPerSec);
+      static_cast<double>(kNumMillisecsPerSec);
   stats.jitter_buffer_emitted_count = ns.jitterBufferEmittedCount;
   stats.jitter_buffer_target_delay_seconds =
       static_cast<double>(ns.jitterBufferTargetDelayMs) /
-      static_cast<double>(rtc::kNumMillisecsPerSec);
+      static_cast<double>(kNumMillisecsPerSec);
   stats.jitter_buffer_minimum_delay_seconds =
       static_cast<double>(ns.jitterBufferMinimumDelayMs) /
-      static_cast<double>(rtc::kNumMillisecsPerSec);
+      static_cast<double>(kNumMillisecsPerSec);
   stats.inserted_samples_for_deceleration = ns.insertedSamplesForDeceleration;
   stats.removed_samples_for_acceleration = ns.removedSamplesForAcceleration;
   stats.total_processing_delay_seconds =
       static_cast<double>(ns.totalProcessingDelayUs) /
-      static_cast<double>(rtc::kNumMicrosecsPerSec);
+      static_cast<double>(kNumMicrosecsPerSec);
   stats.expand_rate = Q14ToFloat(ns.currentExpandRate);
   stats.speech_expand_rate = Q14ToFloat(ns.currentSpeechExpandRate);
   stats.secondary_decoded_rate = Q14ToFloat(ns.currentSecondaryDecodedRate);
@@ -341,7 +340,7 @@ webrtc::AudioReceiveStreamInterface::Stats AudioReceiveStreamImpl::GetStats(
   stats.delayed_packet_outage_samples = ns.delayedPacketOutageSamples;
   stats.relative_packet_arrival_delay_seconds =
       static_cast<double>(ns.relativePacketArrivalDelayMs) /
-      static_cast<double>(rtc::kNumMillisecsPerSec);
+      static_cast<double>(kNumMillisecsPerSec);
   stats.interruption_count = ns.interruptionCount;
   stats.total_interruption_duration_ms = ns.totalInterruptionDurationMs;
 

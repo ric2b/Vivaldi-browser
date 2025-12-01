@@ -53,7 +53,7 @@ const UIStrings = {
    *@description Text to show an item is empty
    */
   empty: '(empty)',
-};
+} as const;
 const str_ = i18n.i18n.registerUIStrings('panels/profiler/IsolateSelector.ts', UIStrings);
 const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
 export class IsolateSelector extends UI.Widget.VBox implements UI.ListControl.ListDelegate<ListItem>,
@@ -225,11 +225,11 @@ export class IsolateSelector extends UI.Widget.VBox implements UI.ListControl.Li
     if (toElement) {
       toElement.classList.add('selected');
     }
-    const model = to && to.model();
+    const model = to?.model();
     UI.Context.Context.instance().setFlavor(
-        SDK.HeapProfilerModel.HeapProfilerModel, model && model.heapProfilerModel());
+        SDK.HeapProfilerModel.HeapProfilerModel, model?.heapProfilerModel() ?? null);
     UI.Context.Context.instance().setFlavor(
-        SDK.CPUProfilerModel.CPUProfilerModel, model && model.target().model(SDK.CPUProfilerModel.CPUProfilerModel));
+        SDK.CPUProfilerModel.CPUProfilerModel, model?.target().model(SDK.CPUProfilerModel.CPUProfilerModel) ?? null);
   }
 
   update(): void {
@@ -272,13 +272,17 @@ export class ListItem {
 
   updateTitle(): void {
     const modelCountByName = new Map<string, number>();
+    const targetManager = SDK.TargetManager.TargetManager.instance();
     for (const model of this.isolate.models()) {
       const target = model.target();
-      const name = SDK.TargetManager.TargetManager.instance().primaryPageTarget() !== target ? target.name() : '';
+      const isPrimaryPageTarget = targetManager.primaryPageTarget() === target;
+      const name = target.name();
       const parsedURL = new Common.ParsedURL.ParsedURL(target.inspectedURL());
       const domain = parsedURL.isValid ? parsedURL.domain() : '';
-      const title =
-          target.decorateLabel(domain && name ? `${domain}: ${name}` : name || domain || i18nString(UIStrings.empty));
+      // If it is primary page target, omit `domain` in the title.
+      // Otherwise show its `domain` and `name` as title if available.
+      const title = target.decorateLabel(
+          domain && !isPrimaryPageTarget ? `${domain}: ${name}` : name || domain || i18nString(UIStrings.empty));
       modelCountByName.set(title, (modelCountByName.get(title) || 0) + 1);
     }
     this.nameDiv.removeChildren();

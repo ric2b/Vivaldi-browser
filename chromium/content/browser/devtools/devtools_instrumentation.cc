@@ -55,6 +55,7 @@
 #include "net/base/load_flags.h"
 #include "net/cookies/canonical_cookie.h"
 #include "net/cookies/cookie_inclusion_status.h"
+#include "net/filter/source_stream_type.h"
 #include "net/http/http_request_headers.h"
 #include "net/quic/web_transport_error.h"
 #include "net/ssl/ssl_info.h"
@@ -396,6 +397,13 @@ FederatedAuthRequestResultToProtocol(
     case FederatedAuthRequestResult::kUiDismissedNoEmbargo: {
       return FederatedAuthRequestIssueReasonEnum::UiDismissedNoEmbargo;
     }
+    case FederatedAuthRequestResult::kCorsError: {
+      return FederatedAuthRequestIssueReasonEnum::CorsError;
+    }
+    case FederatedAuthRequestResult::kSuppressedBySegmentationPlatform: {
+      return FederatedAuthRequestIssueReasonEnum::
+          SuppressedBySegmentationPlatform;
+    }
     case FederatedAuthRequestResult::kSuccess: {
       NOTREACHED();
     }
@@ -559,6 +567,44 @@ std::unique_ptr<protocol::Audits::InspectorIssue> BuildBounceTrackingIssue(
               protocol::Audits::InspectorIssueCodeEnum::BounceTrackingIssue)
           .SetDetails(std::move(protocol_issue_details))
           .Build();
+
+  return issue;
+}
+
+std::unique_ptr<protocol::Audits::InspectorIssue> BuildPartitioningBlobURLIssue(
+    const blink::mojom::PartitioningBlobURLIssueDetailsPtr& issue_details) {
+  protocol::String partitioning_blob_url_info_string;
+  switch (issue_details->partitioning_blob_url_info) {
+    case blink::mojom::PartitioningBlobURLInfo::kBlockedCrossPartitionFetching:
+      partitioning_blob_url_info_string = protocol::Audits::
+          PartitioningBlobURLInfoEnum::BlockedCrossPartitionFetching;
+      break;
+    case blink::mojom::PartitioningBlobURLInfo::kEnforceNoopenerForNavigation:
+      partitioning_blob_url_info_string = protocol::Audits::
+          PartitioningBlobURLInfoEnum::EnforceNoopenerForNavigation;
+      break;
+    default:
+      partitioning_blob_url_info_string = "Unknown";
+      break;
+  }
+
+  auto partitioning_blob_url_issue_details =
+      protocol::Audits::PartitioningBlobURLIssueDetails::Create()
+          .SetUrl(issue_details->url.spec())
+          .SetPartitioningBlobURLInfo(partitioning_blob_url_info_string)
+          .Build();
+
+  auto protocol_issue_details =
+      protocol::Audits::InspectorIssueDetails::Create()
+          .SetPartitioningBlobURLIssueDetails(
+              std::move(partitioning_blob_url_issue_details))
+          .Build();
+
+  auto issue = protocol::Audits::InspectorIssue::Create()
+                   .SetCode(protocol::Audits::InspectorIssueCodeEnum::
+                                PartitioningBlobURLIssue)
+                   .SetDetails(std::move(protocol_issue_details))
+                   .Build();
 
   return issue;
 }
@@ -1269,7 +1315,7 @@ void ApplyNetworkRequestOverrides(
     bool* disable_cache,
     bool* network_instrumentation_enabled,
     bool* skip_service_worker,
-    std::optional<std::vector<net::SourceStream::SourceType>>*
+    std::optional<std::vector<net::SourceStreamType>>*
         devtools_accepted_stream_types,
     bool* devtools_user_agent_overridden,
     bool* devtools_accept_language_overridden) {
@@ -1323,7 +1369,7 @@ void ApplyNetworkRequestOverrides(
     FrameTreeNode* frame_tree_node,
     blink::mojom::BeginNavigationParams* begin_params,
     bool* report_raw_headers,
-    std::optional<std::vector<net::SourceStream::SourceType>>*
+    std::optional<std::vector<net::SourceStreamType>>*
         devtools_accepted_stream_types,
     bool* devtools_user_agent_overridden,
     bool* devtools_accept_language_overridden) {
@@ -2109,6 +2155,10 @@ void BuildAndReportBrowserInitiatedIssue(
              blink::mojom::InspectorIssueCode::kBounceTrackingIssue) {
     issue =
         BuildBounceTrackingIssue(info->details->bounce_tracking_issue_details);
+  } else if (info->code ==
+             blink::mojom::InspectorIssueCode::kPartitioningBlobURLIssue) {
+    issue = BuildPartitioningBlobURLIssue(
+        info->details->partitioning_blob_url_issue_details);
   } else if (info->code == blink::mojom::InspectorIssueCode::
                                kCookieDeprecationMetadataIssue) {
     issue = BuildCookieDeprecationMetadataIssue(

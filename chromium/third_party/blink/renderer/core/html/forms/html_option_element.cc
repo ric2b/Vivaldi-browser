@@ -28,6 +28,7 @@
 
 #include "third_party/blink/public/mojom/use_counter/metrics/web_feature.mojom-shared.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_mutation_observer_init.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_scroll_into_view_options.h"
 #include "third_party/blink/renderer/core/accessibility/ax_object_cache.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/events/simulated_click_options.h"
@@ -156,6 +157,18 @@ bool HTMLOptionElement::MatchesEnabledPseudoClass() const {
 }
 
 String HTMLOptionElement::DisplayLabel() const {
+  if (RuntimeEnabledFeatures::OptionLabelAttributeWhitespaceEnabled()) {
+    // If the label attribute is set and is not an empty string, then use its
+    // value. Otherwise, use inner text.
+    String label_attr = String(FastGetAttribute(html_names::kLabelAttr));
+    if (!label_attr.empty()) {
+      return label_attr;
+    }
+    return CollectOptionInnerText()
+        .StripWhiteSpace(IsHTMLSpace<UChar>)
+        .SimplifyWhiteSpace(IsHTMLSpace<UChar>);
+  }
+
   String label_attr = String(FastGetAttribute(html_names::kLabelAttr))
     .StripWhiteSpace(IsHTMLSpace<UChar>).SimplifyWhiteSpace(IsHTMLSpace<UChar>);
   String inner_text = CollectOptionInnerText()
@@ -163,7 +176,7 @@ String HTMLOptionElement::DisplayLabel() const {
   // FIXME: The following treats an element with the label attribute set to
   // the empty string the same as an element with no label attribute at all.
   // Is that correct? If it is, then should the label function work the same
-  // way? https://github.com/whatwg/html/issues/10955
+  // way?
   return label_attr.empty() ? inner_text : label_attr;
 }
 
@@ -359,29 +372,12 @@ HTMLDataListElement* HTMLOptionElement::OwnerDataListElement() const {
   return Traversal<HTMLDataListElement>::FirstAncestor(*this);
 }
 
-namespace {
-HTMLSelectElement* NearestAncestorSelectNoNesting(
-    const HTMLOptionElement& option) {
-  for (Node& ancestor : NodeTraversal::AncestorsOf(option)) {
-    if (IsA<HTMLOptionElement>(ancestor)) {
-      // Don't associate nested <option>s with <select>s. This matches the
-      // traversals in OptionList and HTMLOptionElement::InsertedInto.
-      return nullptr;
-    }
-    if (auto* select = DynamicTo<HTMLSelectElement>(ancestor)) {
-      return select;
-    }
-  }
-  return nullptr;
-}
-}  // namespace
-
 HTMLSelectElement* HTMLOptionElement::OwnerSelectElement(
     bool skip_check) const {
-  if (RuntimeEnabledFeatures::SelectParserRelaxationEnabled()) {
+  if (HTMLSelectElement::SelectParserRelaxationEnabled(this)) {
     if (!skip_check) {
       DCHECK_EQ(nearest_ancestor_select_,
-                NearestAncestorSelectNoNesting(*this));
+                HTMLSelectElement::NearestAncestorSelectNoNesting(*this));
     }
     return nearest_ancestor_select_;
   } else {
@@ -399,8 +395,8 @@ HTMLSelectElement* HTMLOptionElement::OwnerSelectElement(
 }
 
 void HTMLOptionElement::SetOwnerSelectElement(HTMLSelectElement* select) {
-  CHECK(RuntimeEnabledFeatures::SelectParserRelaxationEnabled());
-  DCHECK_EQ(select, NearestAncestorSelectNoNesting(*this));
+  CHECK(HTMLSelectElement::SelectParserRelaxationEnabled(this));
+  DCHECK_EQ(select, HTMLSelectElement::NearestAncestorSelectNoNesting(*this));
   nearest_ancestor_select_ = select;
 }
 
@@ -457,15 +453,15 @@ String HTMLOptionElement::CollectOptionInnerText() const {
   return text.ToString();
 }
 
-HTMLFormElement* HTMLOptionElement::form() const {
+HTMLElement* HTMLOptionElement::formForBinding() const {
   if (HTMLSelectElement* select_element = OwnerSelectElement())
-    return select_element->formOwner();
+    return select_element->formForBinding();
 
   return nullptr;
 }
 
 void HTMLOptionElement::DidAddUserAgentShadowRoot(ShadowRoot& root) {
-  if (RuntimeEnabledFeatures::CustomizableSelectEnabled()) {
+  if (HTMLSelectElement::CustomizableSelectEnabled(this)) {
     label_container_ = MakeGarbageCollected<HTMLSpanElement>(GetDocument());
     label_container_->SetShadowPseudoId(
         shadow_element_names::kOptionLabelContainer);
@@ -482,7 +478,7 @@ void HTMLOptionElement::DidAddUserAgentShadowRoot(ShadowRoot& root) {
 }
 
 void HTMLOptionElement::UpdateLabel() {
-  if (RuntimeEnabledFeatures::CustomizableSelectEnabled()) {
+  if (HTMLSelectElement::CustomizableSelectEnabled(this)) {
     if (label_container_) {
       label_container_->setTextContent(DisplayLabel());
     }
@@ -494,8 +490,8 @@ void HTMLOptionElement::UpdateLabel() {
 Node::InsertionNotificationRequest HTMLOptionElement::InsertedInto(
     ContainerNode& insertion_point) {
   auto return_value = HTMLElement::InsertedInto(insertion_point);
-  if (!RuntimeEnabledFeatures::SelectParserRelaxationEnabled()) {
-    CHECK(!RuntimeEnabledFeatures::CustomizableSelectEnabled());
+  if (!HTMLSelectElement::SelectParserRelaxationEnabled(this)) {
+    CHECK(!HTMLSelectElement::CustomizableSelectEnabled(this));
     return return_value;
   }
 
@@ -523,22 +519,12 @@ Node::InsertionNotificationRequest HTMLOptionElement::InsertedInto(
   // OptionInserted. Otherwise, if this option is being inserted into a <select>
   // ancestor, then we must call OptionInserted on it.
   bool passed_insertion_point = false;
-  for (Node& ancestor : NodeTraversal::AncestorsOf(*this)) {
-    if (IsA<HTMLOptionElement>(ancestor)) {
-      // Don't call OptionInserted() on nested <option>s. This matches the
-      // traversals in OptionList and OwnerSelectElement.
-      break;
-    }
-    if (&ancestor == &insertion_point) {
-      passed_insertion_point = true;
-    }
-    if (auto* select = DynamicTo<HTMLSelectElement>(ancestor)) {
-      SetOwnerSelectElement(select);
-      if (passed_insertion_point) {
-        select->OptionInserted(*this, Selected());
-      }
-      break;
-    }
+  HTMLSelectElement* new_ancestor_select =
+      HTMLSelectElement::NearestAncestorSelectNoNesting(
+          *this, &insertion_point, &passed_insertion_point);
+  SetOwnerSelectElement(new_ancestor_select);
+  if (new_ancestor_select && passed_insertion_point) {
+    new_ancestor_select->OptionInserted(*this, Selected());
   }
 
   return return_value;
@@ -546,8 +532,8 @@ Node::InsertionNotificationRequest HTMLOptionElement::InsertedInto(
 
 void HTMLOptionElement::RemovedFrom(ContainerNode& insertion_point) {
   HTMLElement::RemovedFrom(insertion_point);
-  if (!RuntimeEnabledFeatures::SelectParserRelaxationEnabled()) {
-    CHECK(!RuntimeEnabledFeatures::CustomizableSelectEnabled());
+  if (!HTMLSelectElement::SelectParserRelaxationEnabled(this)) {
+    CHECK(!HTMLSelectElement::CustomizableSelectEnabled(this));
     return;
   }
 
@@ -581,31 +567,20 @@ void HTMLOptionElement::RemovedFrom(ContainerNode& insertion_point) {
     // Don't call select->OptionRemoved() in this case because
     // HTMLSelectElement::ChildrenChanged or
     // HTMLOptGroupElement::ChildrenChanged will call it for us.
+    // TODO(crbug.com/1511354): When the SelectParserRelaxation flag is removed,
+    // we can remove this and the code in HTMLSelectElement::ChildrenChanged and
+    // HTMLOptGroupElement::ChildrenChanged.
     return;
   }
 
-  for (Node& ancestor : NodeTraversal::AncestorsOf(*this)) {
-    // If this option is still associated with a <select> inside the detached
-    // subtree, then we should not call OptionRemoved() because we don't call
-    // OptionInserted() in the corresponding attachment case. Also, APIs like
-    // select.options should still work when the <select> is detached.
-    // Nested options should not be associated with selects.
-    if (IsA<HTMLSelectElement>(ancestor) || IsA<HTMLOptionElement>(ancestor)) {
-      return;
-    }
-  }
-
-  SetOwnerSelectElement(nullptr);
-
-  for (Node& ancestor : NodeTraversal::InclusiveAncestorsOf(insertion_point)) {
-    if (IsA<HTMLOptionElement>(ancestor)) {
-      // Nested options should not be associated with selects.
-      return;
-    }
-    if (auto* select = DynamicTo<HTMLSelectElement>(ancestor)) {
-      select->OptionRemoved(*this);
-      break;
-    }
+  HTMLSelectElement* new_ancestor_select =
+      HTMLSelectElement::NearestAncestorSelectNoNesting(*this);
+  if (new_ancestor_select != nearest_ancestor_select_) {
+    // We should only get here if we are being removed from a <select>
+    CHECK(!new_ancestor_select);
+    CHECK(nearest_ancestor_select_);
+    nearest_ancestor_select_->OptionRemoved(*this);
+    SetOwnerSelectElement(new_ancestor_select);
   }
 }
 
@@ -619,7 +594,7 @@ bool HTMLOptionElement::SpatialNavigationFocused() const {
 bool HTMLOptionElement::IsDisplayNone(bool ensure_style) {
   const ComputedStyle* style = GetComputedStyle();
   if (!style && ensure_style &&
-      RuntimeEnabledFeatures::SelectParserRelaxationEnabled()) {
+      HTMLSelectElement::SelectParserRelaxationEnabled(this)) {
     style = EnsureComputedStyle();
   }
   return !style || style->Display() == EDisplay::kNone;
@@ -733,7 +708,11 @@ void HTMLOptionElement::DefaultEventHandlerInternal(Event& event) {
             // The next option isn't visible, which means we were at the very
             // bottom. Scroll the current option to the top, and then focus the
             // bottom one.
-            scrollIntoView(/*align_to_top*/ true);
+            ScrollIntoViewOptions* scroll_into_view_options =
+                ScrollIntoViewOptions::Create();
+            scroll_into_view_options->setBlock("start");
+            scroll_into_view_options->setInlinePosition("nearest");
+            scrollIntoViewWithOptions(scroll_into_view_options);
           }
           // Then find the last option that is still in the view.
           HTMLOptionElement* next_focus = this;
@@ -755,7 +734,11 @@ void HTMLOptionElement::DefaultEventHandlerInternal(Event& event) {
             // The previous option isn't visible, which means we were at the
             // very top. Scroll the current option to the bottom, and then focus
             // the top one.
-            scrollIntoView(/*align_to_top*/ false);
+            ScrollIntoViewOptions* scroll_into_view_options =
+                ScrollIntoViewOptions::Create();
+            scroll_into_view_options->setBlock("end");
+            scroll_into_view_options->setInlinePosition("nearest");
+            scrollIntoViewWithOptions(scroll_into_view_options);
           }
           // Then find the first option that is in the view.
           HTMLOptionElement* next_focus = this;
@@ -783,7 +766,7 @@ void HTMLOptionElement::DefaultEventHandlerInternal(Event& event) {
 
 void HTMLOptionElement::FinishParsingChildren() {
   HTMLElement::FinishParsingChildren();
-  if (RuntimeEnabledFeatures::CustomizableSelectEnabled() && Selected()) {
+  if (HTMLSelectElement::CustomizableSelectEnabled(this) && Selected()) {
     auto* select = OwnerSelectElement();
     if (select && !select->IsMultiple()) {
       select->UpdateAllSelectedcontents(this);
@@ -793,7 +776,7 @@ void HTMLOptionElement::FinishParsingChildren() {
 
 // static
 bool HTMLOptionElement::IsLabelContainerElement(const Element& element) {
-  if (!RuntimeEnabledFeatures::CustomizableSelectEnabled()) {
+  if (!HTMLSelectElement::CustomizableSelectEnabled(&element)) {
     return false;
   }
   return IsA<HTMLOptionElement>(element.OwnerShadowHost()) &&

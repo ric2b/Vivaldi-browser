@@ -14,6 +14,7 @@
 #import "ios/chrome/browser/complex_tasks/model/ios_content_record_task_id.h"
 #import "ios/chrome/browser/complex_tasks/model/ios_task_tab_helper.h"
 #import "ios/chrome/browser/history/model/history_service_factory.h"
+#import "ios/chrome/browser/lens_overlay/model/lens_overlay_url_utils.h"
 #import "ios/chrome/browser/sessions/model/ios_chrome_session_tab_helper.h"
 #import "ios/chrome/browser/shared/model/profile/profile_ios.h"
 #import "ios/chrome/browser/shared/model/url/chrome_url_constants.h"
@@ -86,7 +87,10 @@ void HistoryTabHelper::UpdateHistoryPageTitle(const web::NavigationItem& item) {
 history::HistoryAddPageArgs HistoryTabHelper::CreateHistoryAddPageArgs(
     web::NavigationItem* last_committed_item,
     web::NavigationContext* navigation_context) {
-  const GURL& url = last_committed_item->GetURL();
+  const GURL& url =
+      lens_url_processing_enabled_
+          ? lens::ProcessURLForHistory(last_committed_item->GetURL())
+          : last_committed_item->GetURL();
 
   const ui::PageTransition transition =
       last_committed_item->GetTransitionType();
@@ -235,7 +239,9 @@ void HistoryTabHelper::DidFinishNavigation(
 
   // Do not record failed navigation nor 404 to the history (to prevent them
   // from showing up as Most Visited tiles on NTP).
-  UMA_HISTOGRAM_BOOLEAN("History.IsErrorNavigation",
+  UMA_HISTOGRAM_BOOLEAN("History.Is4XXOr5XXStatusCode",
+                        navigation_context->GetError());
+  UMA_HISTOGRAM_BOOLEAN("History.ShouldUpdateHistory",
                         navigation_context->GetError());
   if (navigation_context->GetError()) {
     return;
@@ -332,7 +338,10 @@ void HistoryTabHelper::WebStateDestroyed(web::WebState* web_state) {
   translate_observation_.Reset();
 
   history::HistoryService* history_service = GetHistoryService();
-  if (history_service) {
+  // A WebState cannot go from realized to unrealized. If it is unrealized
+  // it cannot have any cached state that would need to be updated or
+  // cleared.
+  if (web_state_->IsRealized() && history_service) {
     // If there is a current history-eligible navigation in this tab (i.e.
     // `cached_navigation_state_` exists), that visit is concluded now, so
     // update its end time.

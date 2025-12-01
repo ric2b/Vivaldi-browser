@@ -163,8 +163,7 @@ interface UntrustedPageHandler {
   OnColorChange(read_anything.mojom.Colors color);
 
   // Informs the browser controller that the user updated the speech rate via
-  // the webui toolbar. rate is a multiplicative scale where 1 is the baseline,
-  // and 2 is twice as fast, 0.5 is half as fast. See
+  // the webui toolbar. The value is a multiplier against the baseline rate; see
   // https://developer.mozilla.org/en-US/docs/Web/API/SpeechSynthesisUtterance/rate
   OnSpeechRateChange(double rate);
 
@@ -260,11 +259,11 @@ interface UntrustedPage {
   SetLanguageCode(string code);
 
   // Notifies that the device has been locked. Only called by ChromeOS.
-  [EnableIf=is_chromeos_ash]
+  [EnableIf=is_chromeos]
   OnDeviceLocked();
 
   // Notifies that the TTS engine for Google natural voices has been installed.
-  [EnableIfNot=is_chromeos_ash]
+  [EnableIfNot=is_chromeos]
   OnTtsEngineInstalled();
 
   // Sets the default language code to be available in the WebUI in the event
@@ -287,6 +286,15 @@ interface UntrustedPage {
 
   // Notifies the WebUI that the ScreenAI service is ready on this device.
   ScreenAIServiceReady();
+
+  // Notifies the WebUI that the current reading mode panel is hidden. This
+  // might be due to a different side panel opening, the side panel closing
+  // while reading mode is open, or a new tab opening. If reading mode is closed
+  // because of the tab closing, OnTabWillDetach is called instead.
+  OnReadingModeHidden();
+
+  // Notifies the WebUI that current tab will detach so it can clean up.
+  OnTabWillDetach();
 
   // Notifies the WebUI that an image has been downloaded for a given node.
   OnImageDataDownloaded(ax.mojom.AXTreeID tree_id,

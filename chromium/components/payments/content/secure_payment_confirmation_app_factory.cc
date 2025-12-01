@@ -19,6 +19,7 @@
 #include "base/feature_list.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
+#include "components/payments/content/browser_binding/passkey_browser_binder.h"
 #include "components/payments/content/payment_manifest_web_data_service.h"
 #include "components/payments/content/payment_request_spec.h"
 #include "components/payments/content/secure_payment_confirmation_app.h"
@@ -351,6 +352,13 @@ void SecurePaymentConfirmationAppFactory::Create(
   delegate->OnDoneCreatingPaymentApps();
 }
 
+#if BUILDFLAG(IS_ANDROID)
+void SecurePaymentConfirmationAppFactory::SetBrowserBoundKeyStoreForTesting(
+    std::unique_ptr<BrowserBoundKeyStore> key_store) {
+  browser_bound_key_store_for_testing_ = std::move(key_store);
+}
+#endif  // BUILDFLAG(IS_ANDROID)
+
 void SecurePaymentConfirmationAppFactory::OnWebDataServiceRequestDone(
     WebDataServiceBase::Handle handle,
     std::unique_ptr<WDTypedResult> result) {
@@ -371,13 +379,6 @@ void SecurePaymentConfirmationAppFactory::OnWebDataServiceRequestDone(
                           result.get())
                           ->GetValue();
     OnRetrievedCredentials(std::move(request), std::move(credentials));
-  } else if (result && result->GetType() == BROWSER_BOUND_KEY) {
-    std::optional<std::vector<uint8_t>> browser_bound_key_id =
-        static_cast<WDResult<std::optional<std::vector<uint8_t>>>*>(
-            result.get())
-            ->GetValue();
-    OnRetrievedBrowserBoundKeyId(std::move(request),
-                                 std::move(browser_bound_key_id));
   } else {
     request->delegate->OnDoneCreatingPaymentApps();
     return;
@@ -407,25 +408,6 @@ void SecurePaymentConfirmationAppFactory::OnRetrievedCredentials(
   if (!credentials.empty())
     request->credential = std::move(credentials.front());
 
-#if BUILDFLAG(IS_ANDROID)
-  if (base::FeatureList::IsEnabled(
-          blink::features::kSecurePaymentConfirmationBrowserBoundKeys)) {
-    WebDataServiceBase::Handle handle =
-        request->web_data_service->GetBrowserBoundKey(
-            request->credential->credential_id,
-            request->credential->relying_party_id, this);
-    requests_[handle] = std::move(request);
-    return;
-  }
-#endif  // BUILDFLAG(IS_ANDROID)
-
-  OnRetrievedBrowserBoundKeyId(std::move(request),
-                               /*browser_bound_key_id=*/std::nullopt);
-}
-
-void SecurePaymentConfirmationAppFactory::OnRetrievedBrowserBoundKeyId(
-    std::unique_ptr<Request> request,
-    std::optional<std::vector<uint8_t>> browser_bound_key_id) {
   // Download the icons for the payment instrument, network icon, and issuer
   // icon. These download URLs were passed into the PaymentRequest API. If given
   // icon URL wasn't specified, then DownloadImageInFrame will simply return an
@@ -449,8 +431,7 @@ void SecurePaymentConfirmationAppFactory::OnRetrievedBrowserBoundKeyId(
   auto barrier_closure = base::BarrierClosure(
       request_ptr->icon_infos.size(),
       base::BindOnce(&SecurePaymentConfirmationAppFactory::DidDownloadAllIcons,
-                     weak_ptr_factory_.GetWeakPtr(),
-                     std::move(browser_bound_key_id), std::move(request)));
+                     weak_ptr_factory_.GetWeakPtr(), std::move(request)));
 
   gfx::Size preferred_size(kSecurePaymentConfirmationIconMaximumWidthPx,
                            kSecurePaymentConfirmationIconHeightPx);
@@ -468,7 +449,6 @@ void SecurePaymentConfirmationAppFactory::OnRetrievedBrowserBoundKeyId(
 }
 
 void SecurePaymentConfirmationAppFactory::DidDownloadAllIcons(
-    std::optional<std::vector<uint8_t>> browser_bound_key_id,
     std::unique_ptr<Request> request) {
   DCHECK(request);
   if (!request->delegate || !request->web_contents())
@@ -505,19 +485,37 @@ void SecurePaymentConfirmationAppFactory::DidDownloadAllIcons(
       base::UTF8ToUTF16(request->mojo_request->instrument->display_name);
 
   std::u16string network_label = u"";
-  SkBitmap network_icon;
+  std::unique_ptr<SkBitmap> network_icon;
   if (request->mojo_request->network_info) {
     network_label =
         base::UTF8ToUTF16(request->mojo_request->network_info->name);
-    network_icon = request->icon_infos[IconType::NETWORK].icon;
+    if (!request->icon_infos[IconType::NETWORK].icon.drawsNothing()) {
+      network_icon = std::make_unique<SkBitmap>(
+          request->icon_infos[IconType::NETWORK].icon);
+    }
   }
 
   std::u16string issuer_label = u"";
-  SkBitmap issuer_icon;
+  std::unique_ptr<SkBitmap> issuer_icon;
   if (request->mojo_request->issuer_info) {
     issuer_label = base::UTF8ToUTF16(request->mojo_request->issuer_info->name);
-    issuer_icon = request->icon_infos[IconType::ISSUER].icon;
+    if (!request->icon_infos[IconType::ISSUER].icon.drawsNothing()) {
+      issuer_icon = std::make_unique<SkBitmap>(
+          request->icon_infos[IconType::ISSUER].icon);
+    }
   }
+
+  std::unique_ptr<PasskeyBrowserBinder> passkey_browser_binder;
+#if BUILDFLAG(IS_ANDROID)
+  if (base::FeatureList::IsEnabled(
+          blink::features::kSecurePaymentConfirmationBrowserBoundKeys)) {
+    passkey_browser_binder = std::make_unique<PasskeyBrowserBinder>(
+        browser_bound_key_store_for_testing_
+            ? std::move(browser_bound_key_store_for_testing_)
+            : GetBrowserBoundKeyStoreInstance(),
+        request->web_data_service);
+  }
+#endif  // BUILDFLAG(IS_ANDROID)
 
   request->delegate->OnPaymentAppCreated(
       std::make_unique<SecurePaymentConfirmationApp>(
@@ -525,11 +523,12 @@ void SecurePaymentConfirmationAppFactory::DidDownloadAllIcons(
           payment_instrument_label,
           std::make_unique<SkBitmap>(payment_instrument_icon),
           std::move(request->credential->credential_id),
-          std::move(browser_bound_key_id),
+          std::move(passkey_browser_binder),
           url::Origin::Create(request->delegate->GetTopOrigin()),
           request->delegate->GetSpec()->AsWeakPtr(),
           std::move(request->mojo_request), std::move(request->authenticator),
-          network_label, network_icon, issuer_label, issuer_icon));
+          network_label, std::move(network_icon), issuer_label,
+          std::move(issuer_icon)));
 
   request->delegate->OnDoneCreatingPaymentApps();
 }

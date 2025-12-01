@@ -15,6 +15,7 @@
 #include "build/build_config.h"
 #include "chrome/browser/extensions/chrome_test_extension_loader.h"
 #include "chrome/browser/extensions/crx_installer.h"
+#include "chrome/browser/extensions/delayed_install_manager.h"
 #include "chrome/browser/extensions/extension_apitest.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/profiles/profile.h"
@@ -497,7 +498,7 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerRegistrationApiTest,
     // This also mimics update behavior if a user clicks "Update" in the
     // chrome://extensions page.
     scoped_refptr<CrxInstaller> crx_installer =
-        CrxInstaller::Create(extension_service(), /*prompt=*/nullptr);
+        CrxInstaller::Create(profile(), /*client=*/nullptr);
     crx_installer->set_error_on_unsupported_requirements(true);
     crx_installer->set_off_store_install_allow_reason(
         CrxInstaller::OffStoreInstallAllowedFromSettingsPage);
@@ -1008,9 +1009,8 @@ IN_PROC_BROWSER_TEST_F(
         UpdateExtensionWaitForIdle(kNTPTestExtensionId, crx_v2_path,
                                    /*expected_change=*/0);
   }
-  ExtensionService* service = extension_service();
-  ASSERT_TRUE(service);
-  ASSERT_EQ(1u, service->delayed_installs()->size());
+  ASSERT_EQ(1u,
+            DelayedInstallManager::Get(profile())->delayed_installs().size());
   // v2 won't install though since v1 isn't idle (NTP page is still open) yet so
   // we're given the original `extension_v1` object.
   ASSERT_TRUE(extension_update);

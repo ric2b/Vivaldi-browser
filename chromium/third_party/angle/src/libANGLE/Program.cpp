@@ -2174,11 +2174,11 @@ angle::Result Program::serialize(const Context *context)
     }
 
     // mSeparable must be before mExecutable->save(), since it uses the value.
-    stream.writeBool(mState.mSeparable);
-    stream.writeInt(mState.mTransformFeedbackBufferMode);
+    stream.writeBool(mState.mExecutable->mPod.isSeparable);
+    stream.writeInt(mState.mExecutable->mPod.transformFeedbackBufferMode);
 
-    stream.writeInt(mState.mTransformFeedbackVaryingNames.size());
-    for (const std::string &name : mState.mTransformFeedbackVaryingNames)
+    stream.writeInt(mState.mExecutable->mTransformFeedbackVaryingNames.size());
+    for (const std::string &name : mState.mExecutable->mTransformFeedbackVaryingNames)
     {
         stream.writeString(name);
     }
@@ -2316,7 +2316,6 @@ bool Program::deserialize(const Context *context, BinaryInputStream &stream)
             ASSERT(shaderSource.length() > 0);
             sources[shaderType] = std::move(shaderSource);
         }
-
         // Store it for use during mid-execution capture
         context->getShareGroup()->getFrameCaptureShared()->setProgramSources(id(),
                                                                              std::move(sources));

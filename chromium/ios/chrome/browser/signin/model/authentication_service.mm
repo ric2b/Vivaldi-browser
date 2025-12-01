@@ -77,29 +77,6 @@ CoreAccountId SystemIdentityToAccountID(
   return identity_manager->PickAccountIdForAccount(gaia_id, email);
 }
 
-// Updates list of loaded profiles used in widgets.
-// TODO(crbug.com/380847504): Move this logic out of this class.
-void UpdateLoadedAccounts(std::vector<AccountInfo> accounts_on_device) {
-  NSMutableDictionary* accounts = [[NSMutableDictionary alloc] init];
-  for (const AccountInfo& account_info : accounts_on_device) {
-    NSMutableDictionary* account = [[NSMutableDictionary alloc] init];
-    [account setObject:base::SysUTF8ToNSString(account_info.hosted_domain)
-                forKey:app_group::kHostedDomain];
-    [account setObject:base::SysUTF8ToNSString(account_info.email)
-                forKey:app_group::kEmail];
-    // Add the account to the dictionary of accounts.
-    [accounts setObject:account forKey:account_info.gaia.ToNSString()];
-    // TODO(crbug.com/380847504): Save avatar info to disk.
-  }
-
-  NSUserDefaults* shared_defaults = app_group::GetGroupUserDefaults();
-  [shared_defaults setObject:accounts forKey:app_group::kAccountsOnDevice];
-
-#if BUILDFLAG(ENABLE_WIDGETS_FOR_MIM)
-  [WidgetTimelinesUpdater reloadAllTimelines];
-#endif
-}
-
 }  // namespace
 
 AuthenticationService::AuthenticationService(
@@ -169,6 +146,22 @@ void AuthenticationService::Initialize(
   local_pref_change_registrar_.Add(prefs::kBrowserSigninPolicy,
                                    browser_signin_policy_callback);
 
+// Migrate primary identity info to widgets if needed.
+#if BUILDFLAG(ENABLE_WIDGETS_FOR_MIM)
+  NSUserDefaults* shared_defaults = app_group::GetGroupUserDefaults();
+  NSString* primary_account =
+      [shared_defaults objectForKey:app_group::kPrimaryAccount];
+
+  if (!primary_account) {
+    id<SystemIdentity> identity =
+        GetPrimaryIdentity(signin::ConsentLevel::kSignin);
+    if (identity.gaiaID) {
+      [shared_defaults setObject:identity.gaiaID
+                          forKey:app_group::kPrimaryAccount];
+    }
+  }
+#endif
+
   // Reload credentials to ensure the accounts from the token service are
   // up-to-date.
   ReloadCredentialsFromIdentities();
@@ -202,57 +195,7 @@ void AuthenticationService::Initialize(
                                   signed_in_state);
   }
 
-  // If opening a managed profile, the user needs to be signed in automatically.
-  // TODO(crbug.com/375605572): Move the entire logic below into a continuation.
-  if (!AreSeparateProfilesForManagedAccountsEnabled()) {
-    // Skip if the feature is not enabled.
-    return;
-  }
-  ProfileManagerIOS* profile_manager =
-      GetApplicationContext()->GetProfileManager();
-  if (!profile_manager) {
-    // Skip if there is no profile manager, but this is possible only for test.
-    CHECK_IS_TEST();
-    return;
-  }
-  ProfileAttributesStorageIOS* attributes_storage =
-      profile_manager->GetProfileAttributesStorage();
-
-  std::string profile_name = account_manager_service_->GetProfileName();
-
-  // If the profile was already initialized before, nothing to do here.
-  if (attributes_storage->GetAttributesForProfileWithName(profile_name)
-          .IsFullyInitialized()) {
-    return;
-  }
-
-  // Once this method returns, the profile is considered fully initialized.
-  base::ScopedClosureRunner mark_profile_initialized(base::BindOnce(
-      [](ProfileAttributesStorageIOS* attributes_storage,
-         std::string_view profile_name) {
-        attributes_storage->UpdateAttributesForProfileWithName(
-            profile_name, base::BindOnce([](ProfileAttributesIOS attrs) {
-              attrs.SetFullyInitialized();
-              return attrs;
-            }));
-      },
-      attributes_storage, profile_name));
-
-  if (profile_name == attributes_storage->GetPersonalProfileName()) {
-    // Nothing to do if the current profile is the default profile.
-    return;
-  }
-  NSArray<id<SystemIdentity>>* identities_for_profile =
-      account_manager_service_->GetAllIdentities();
-  // TODO(crbug.com/375605572): Evaluate if there is no race condition with
-  // this CHECK.
-  CHECK_EQ(identities_for_profile.count, 1ul);
-  if (HasPrimaryIdentity(signin::ConsentLevel::kSignin)) {
-    // Nothing to do if the profile is already signed in.
-    return;
-  }
-  // TODO(crbug.com/375605572): Need to set the right access point.
-  SignIn(identities_for_profile[0], signin_metrics::AccessPoint::kUnknown);
+  PerformFirstTimeProfileInitializationIfNecessary();
 }
 
 void AuthenticationService::Shutdown() {
@@ -325,21 +268,6 @@ void AuthenticationService::OnApplicationWillEnterForeground() {
   }
 }
 
-bool AuthenticationService::IsAccountSwitchInProgress() {
-  return account_switch_in_progress_;
-}
-
-base::ScopedClosureRunner
-AuthenticationService::DeclareAccountSwitchInProgress() {
-  CHECK(!account_switch_in_progress_);
-  account_switch_in_progress_ = true;
-  return base::ScopedClosureRunner(base::BindOnce(
-      [](AuthenticationService* service) {
-        service->account_switch_in_progress_ = false;
-      },
-      this));
-}
-
 void AuthenticationService::SetReauthPromptForSignInAndSync() {
   pref_service_->SetBoolean(prefs::kSigninShouldPromptForSigninAgain, true);
 }
@@ -368,15 +296,10 @@ bool AuthenticationService::HasPrimaryIdentityManaged(
 bool AuthenticationService::ShouldClearDataForSignedInPeriodOnSignOut() const {
   // Data on the device should be cleared on signout when all conditions are
   // met:
-  // 1. `kClearDeviceDataOnSignOutForManagedUsers` feaature is enabled).
-  // 2. The user is signed in with a managed account.
-  // 3. The user is no longer using sync-the-feature.
-  // 4. The app management configuration key is present.
+  // 1. The user is signed in with a managed account.
+  // 2. The app management configuration key is present.
   // Note: data will be cleared from the time of sign-in in this case.
-  return base::FeatureList::IsEnabled(
-             kClearDeviceDataOnSignOutForManagedUsers) &&
-         HasPrimaryIdentityManaged(signin::ConsentLevel::kSignin) &&
-         !HasPrimaryIdentity(signin::ConsentLevel::kSync) &&
+  return HasPrimaryIdentityManaged(signin::ConsentLevel::kSignin) &&
          !IsApplicationManagedByMDM();
 }
 
@@ -423,9 +346,6 @@ void AuthenticationService::SignIn(id<SystemIdentity> identity,
   // mismatch between the old and the new authenticated accounts.
   if (!identity_manager_->HasPrimaryAccount(signin::ConsentLevel::kSignin)) {
     DCHECK(identity_manager_->GetPrimaryAccountMutator());
-    // Initial sign-in to Chrome does not automatically turn on Sync features.
-    // The Sync service will be enabled in a separate request to
-    // `GrantSyncConsent`.
     signin::PrimaryAccountMutator::PrimaryAccountError error =
         identity_manager_->GetPrimaryAccountMutator()->SetPrimaryAccount(
             account_id, signin::ConsentLevel::kSignin, access_point);
@@ -451,49 +371,6 @@ void AuthenticationService::SignIn(id<SystemIdentity> identity,
   crash_keys::SetCurrentlySignedIn(true);
 }
 
-void AuthenticationService::GrantSyncConsent(
-    id<SystemIdentity> identity,
-    signin_metrics::AccessPoint access_point) {
-  // TODO(crbug.com/40067025): Turn sync on was deprecated. Remove
-  // `GrantSyncConsent()` as it is obsolete.
-  DUMP_WILL_BE_CHECK(access_point !=
-                     signin_metrics::AccessPoint::kPostDeviceRestoreSigninPromo)
-      << "Turn sync on should not be available as sync promos are deprecated "
-         "[access point = "
-      << int(access_point) << "]";
-  DCHECK(account_manager_service_->IsValidIdentity(identity));
-  DCHECK(identity_manager_->HasPrimaryAccount(signin::ConsentLevel::kSignin));
-
-  const CoreAccountId account_id = identity_manager_->PickAccountIdForAccount(
-      GaiaId(identity.gaiaID), base::SysNSStringToUTF8(identity.userEmail));
-  // Ensure that the account the user is trying to sign into has been loaded
-  // from the SSO library and that hosted_domain is set (should be the proper
-  // hosted domain or kNoHostedDomainFound that are both non-empty strings).
-  const AccountInfo account_info =
-      identity_manager_->FindExtendedAccountInfoByAccountId(account_id);
-  CHECK(!account_info.IsEmpty());
-  CHECK(!account_info.hosted_domain.empty());
-
-  // When sync is disabled by enterprise, sync consent is not removed.
-  // Consent can be skipped.
-  if (!HasPrimaryIdentity(signin::ConsentLevel::kSync)) {
-    const signin::PrimaryAccountMutator::PrimaryAccountError error =
-        identity_manager_->GetPrimaryAccountMutator()->SetPrimaryAccount(
-            account_id, signin::ConsentLevel::kSync, access_point);
-    CHECK_EQ(signin::PrimaryAccountMutator::PrimaryAccountError::kNoError,
-             error)
-        << "SetPrimaryAccount error: " << static_cast<int>(error);
-  }
-  CHECK_EQ(account_id,
-           identity_manager_->GetPrimaryAccountId(signin::ConsentLevel::kSync));
-
-  // Kick-off sync: The authentication error UI (sign in infobar and warning
-  // badge in settings screen) check the sync auth error state. Sync
-  // needs to be kicked off so that it resets the auth error quickly once
-  // `identity` is reauthenticated.
-  sync_service_->SetSyncFeatureRequested();
-}
-
 void AuthenticationService::SignOut(
     signin_metrics::ProfileSignout signout_source,
     ProceduralBlock completion) {
@@ -514,9 +391,6 @@ void AuthenticationService::SignOut(
   const bool is_migrated_from_syncing =
       browser_sync::WasPrimaryAccountMigratedFromSyncingToSignedIn(
           identity_manager_, pref_service_);
-  // Get first setup complete value before stopping the sync service.
-  const bool is_initial_sync_feature_setup_complete =
-      sync_service_->GetUserSettings()->IsInitialSyncFeatureSetupComplete();
   const bool should_clear_data_for_signed_in_period =
       ShouldClearDataForSignedInPeriodOnSignOut();
 
@@ -535,17 +409,11 @@ void AuthenticationService::SignOut(
   base::OnceClosure callback_closure =
       completion ? base::BindOnce(completion) : base::DoNothing();
 
-  if (base::FeatureList::IsEnabled(kSeparateProfilesForManagedAccounts) &&
-      is_managed) {
-    if (completion) {
-      base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
-          FROM_HERE, std::move(callback_closure));
-    }
-    return;
-  }
-
-  if ((is_managed && is_initial_sync_feature_setup_complete) ||
-      (is_managed && is_migrated_from_syncing)) {
+  // Note: Once `kSeparateProfilesForManagedAccounts` is launched, the "clear
+  // browsing data" cases are only reachable for managed accounts that were
+  // already signed in before that feature was enabled. Once those users have
+  // been migrated, this code can be cleaned up.
+  if (is_managed && is_migrated_from_syncing) {
     // If `is_clear_data_feature_for_managed_users_enabled` is false, browsing
     // data for managed account needs to be cleared only if sync has started at
     // least once. This also includes the case where a previously-syncing user
@@ -557,6 +425,59 @@ void AuthenticationService::SignOut(
     base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
         FROM_HERE, std::move(callback_closure));
   }
+}
+
+void AuthenticationService::PerformFirstTimeProfileInitializationIfNecessary() {
+  ProfileManagerIOS* profile_manager =
+      GetApplicationContext()->GetProfileManager();
+  if (!profile_manager) {
+    // Skip if there is no profile manager, but this is possible only for test.
+    CHECK_IS_TEST();
+    return;
+  }
+  ProfileAttributesStorageIOS* attributes_storage =
+      profile_manager->GetProfileAttributesStorage();
+
+  const std::string profile_name = account_manager_service_->GetProfileName();
+
+  // If the profile was already initialized before, nothing to do here.
+  if (attributes_storage->GetAttributesForProfileWithName(profile_name)
+          .IsFullyInitialized()) {
+    return;
+  }
+
+  // Once this method returns, the profile is considered fully initialized.
+  base::ScopedClosureRunner mark_profile_initialized(base::BindOnce(
+      [](ProfileAttributesStorageIOS* attributes_storage,
+         std::string_view profile_name) {
+        attributes_storage->UpdateAttributesForProfileWithName(
+            profile_name, base::BindOnce([](ProfileAttributesIOS& attrs) {
+              attrs.SetFullyInitialized();
+            }));
+      },
+      attributes_storage, profile_name));
+
+  // When opening a managed profile for the first time, the user needs to be
+  // signed in automatically.
+  if (!AreSeparateProfilesForManagedAccountsEnabled()) {
+    return;
+  }
+
+  if (profile_name == attributes_storage->GetPersonalProfileName()) {
+    // Nothing to do if the current profile is the personal profile.
+    return;
+  }
+  NSArray<id<SystemIdentity>>* identities_for_profile =
+      account_manager_service_->GetAllIdentities();
+  // TODO(crbug.com/375605572): Evaluate if there is no race condition with
+  // this CHECK.
+  CHECK_EQ(identities_for_profile.count, 1ul);
+  if (HasPrimaryIdentity(signin::ConsentLevel::kSignin)) {
+    // Nothing to do if the profile is already signed in.
+    return;
+  }
+  // TODO(crbug.com/375605572): Need to set the right access point.
+  SignIn(identities_for_profile[0], signin_metrics::AccessPoint::kUnknown);
 }
 
 id<RefreshAccessTokenError> AuthenticationService::GetCachedMDMError(
@@ -607,7 +528,7 @@ void AuthenticationService::OnPrimaryAccountChanged(
   }
 }
 
-void AuthenticationService::OnIdentityListChanged() {
+void AuthenticationService::OnIdentitiesInProfileChanged() {
   ClearAccountSettingsPrefsOfRemovedAccounts();
   ReloadCredentialsFromIdentities();
 }
@@ -785,7 +706,6 @@ void AuthenticationService::ReloadCredentialsFromIdentities() {
       ->ReloadAllAccountsFromSystemWithPrimaryAccount(
           identity_manager_->GetPrimaryAccountId(
               signin::ConsentLevel::kSignin));
-  UpdateLoadedAccounts(identity_manager_->GetAccountsOnDevice());
 }
 
 void AuthenticationService::FirePrimaryAccountRestricted() {

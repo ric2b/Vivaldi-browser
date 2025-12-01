@@ -16,10 +16,10 @@
 #include <utility>
 
 #include "base/check.h"
-#include "base/cpu_reduction_experiment.h"
 #include "base/debug/alias.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/notreached.h"
+#include "base/rand_util.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_util.h"
 #include "base/time/time.h"
@@ -85,7 +85,7 @@ static_assert(std::size(kReportTypeNames) == kFrameReportTypeCount,
 
 // This value should be recalculated in case of changes to the number of values
 // in CompositorFrameReporter::DroppedFrameReportType or in
-// CompositorFrameReporter::StageType
+// CompositorFrameReporter::StageType.
 constexpr int kStagesWithBreakdownCount = kStageTypeCount + kAllBreakdownCount;
 constexpr int kMaxCompositorLatencyHistogramIndex =
     kFrameReportTypeCount *
@@ -191,15 +191,6 @@ void ReportEventLatencyMetric(
             kEventLatencyHistogramBucketCount,
             base::HistogramBase::kUmaTargetedHistogramFlag));
   }
-}
-
-constexpr char kTraceCategory[] =
-    "cc,benchmark," TRACE_DISABLED_BY_DEFAULT("devtools.timeline.frame");
-
-bool IsTracingEnabled() {
-  bool enabled;
-  TRACE_EVENT_CATEGORY_GROUP_ENABLED(kTraceCategory, &enabled);
-  return enabled;
 }
 
 base::TimeTicks ComputeSafeDeadlineForFrame(const viz::BeginFrameArgs& args) {
@@ -361,7 +352,7 @@ void ReportTopControlsMetric(
         base::Histogram::FactoryMicrosecondsTimeGet(
             versioned_name, bucketing->min, bucketing->max, bucketing->count,
             base::HistogramBase::kUmaTargetedHistogramFlag));
-  } else if (base::ShouldLogHistogramForCpuReductionExperiment()) {
+  } else if (base::ShouldRecordSubsampledMetric(0.001)) {
     // We want to sub-sample the reports with top controls not moving. As they
     // dominate in volume.
     std::string versioned_name = name + kTopControlsDidNotMoveName;
@@ -1016,8 +1007,8 @@ void CompositorFrameReporter::EndCurrentStage(base::TimeTicks end_time) {
 }
 
 void CompositorFrameReporter::ReportCompositorLatencyMetrics() const {
-  // Subsampling these metrics reduced CPU utilization (crbug.com/1295441).
-  if (!base::ShouldLogHistogramForCpuReductionExperiment()) {
+  // Subsampling these metrics to reduce CPU utilization.
+  if (!base::ShouldRecordSubsampledMetric(0.001)) {
     return;
   }
 
@@ -1463,7 +1454,11 @@ void CompositorFrameReporter::ReportCompositorLatencyTraceEvents(
         has_partial_update_);
   }
 
-  if (!IsTracingEnabled()) {
+  static constexpr char kTraceCategory[] =
+      "cc,benchmark," TRACE_DISABLED_BY_DEFAULT("devtools.timeline.frame");
+  bool enabled;
+  TRACE_EVENT_CATEGORY_GROUP_ENABLED(kTraceCategory, &enabled);
+  if (!enabled) {
     return;
   }
 
@@ -1652,30 +1647,40 @@ void CompositorFrameReporter::ReportScrollJankMetrics() const {
   // This handles cases when we have multiple scroll events. Events for dropped
   // frames are reported by the reporter for next presented frame which could
   // lead to having multiple scroll events.
-  EventMetrics* earliest_event = nullptr;
+  // TODO(crbug.com/402148798): Deprecate usage of latest_event.
+  ScrollUpdateEventMetrics* earliest_event = nullptr;
+  base::TimeTicks earliest_event_generation_ts = base::TimeTicks::Max();
+  ScrollUpdateEventMetrics* latest_event = nullptr;
+  base::TimeTicks latest_event_generation_ts = base::TimeTicks::Min();
   base::TimeTicks last_coalesced_ts = base::TimeTicks::Min();
-  for (const auto& event : events_metrics_) {
+  for (auto& event : events_metrics_) {
     TRACE_EVENT("input", "GestureType", "gesture", event->type());
-    const auto* scroll_update = event->AsScrollUpdate();
+    auto* scroll_update = event->AsScrollUpdate();
     if (!scroll_update) {
       continue;
     }
 
     total_predicted_delta += scroll_update->predicted_delta();
+    base::TimeTicks generation_ts = scroll_update->GetDispatchStageTimestamp(
+        EventMetrics::DispatchStage::kGenerated);
     if (!had_gesture_scrolls) {
-      earliest_event = event.get();
+      earliest_event = scroll_update;
+      earliest_event_generation_ts = generation_ts;
+      latest_event = scroll_update;
+      latest_event_generation_ts = generation_ts;
     }
     had_gesture_scrolls = true;
-    if (earliest_event->GetDispatchStageTimestamp(
-            EventMetrics::DispatchStage::kGenerated) <
-        event->GetDispatchStageTimestamp(
-            EventMetrics::DispatchStage::kGenerated)) {
-      earliest_event = event.get();
+    if (generation_ts < earliest_event_generation_ts) {
+      earliest_event = scroll_update;
+      earliest_event_generation_ts = generation_ts;
+    } else if (generation_ts > latest_event_generation_ts) {
+      latest_event = scroll_update;
+      latest_event_generation_ts = generation_ts;
     }
     last_coalesced_ts =
         std::max(last_coalesced_ts, scroll_update->last_timestamp());
 
-    switch (event->type()) {
+    switch (scroll_update->type()) {
       case EventMetrics::EventType::kFirstGestureScrollUpdate:
         is_scroll_start = true;
         [[fallthrough]];
@@ -1703,7 +1708,7 @@ void CompositorFrameReporter::ReportScrollJankMetrics() const {
     if (global_trackers_.scroll_jank_ukm_reporter) {
       global_trackers_.scroll_jank_ukm_reporter->EmitScrollJankUkm();
       global_trackers_.scroll_jank_ukm_reporter->SetEarliestScrollEvent(
-          *(earliest_event->AsScrollUpdate()));
+          *latest_event);
     }
   }
 
@@ -1718,11 +1723,11 @@ void CompositorFrameReporter::ReportScrollJankMetrics() const {
   if (global_trackers_.predictor_jank_tracker) {
     global_trackers_.predictor_jank_tracker->ReportLatestScrollDelta(
         total_predicted_delta, end_timestamp, args_.interval,
-        earliest_event->AsScrollUpdate()->trace_id());
+        latest_event->trace_id());
   }
   if (global_trackers_.scroll_jank_dropped_frame_tracker) {
     global_trackers_.scroll_jank_dropped_frame_tracker
-        ->ReportLatestPresentationData(*(earliest_event->AsScrollUpdate()),
+        ->ReportLatestPresentationData(*earliest_event, *latest_event,
                                        last_coalesced_ts, end_timestamp,
                                        args_.interval);
   }

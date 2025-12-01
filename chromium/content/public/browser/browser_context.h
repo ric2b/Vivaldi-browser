@@ -21,6 +21,7 @@
 #include "base/supports_user_data.h"
 #include "content/common/content_export.h"
 #include "content/public/browser/k_anonymity_service_delegate.h"
+#include "content/public/browser/prefetch_handle.h"
 #include "content/public/browser/prefetch_request_status_listener.h"
 #include "content/public/browser/zoom_level_delegate.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
@@ -199,18 +200,35 @@ class CONTENT_EXPORT BrowserContext : public base::SupportsUserData {
 
   StoragePartition* GetDefaultStoragePartition();
 
-  // Starts a prefetch network request for the given |url|.
-  void StartBrowserPrefetchRequest(
+  // Starts a prefetch network request for the given `url`.
+  // `ttl` (Time-To-Live) specifies how long prefetched data remains valid in
+  // the cache. After this period, the data is reset.
+  // Returns `PrefetchHandle` to control prefetch resources. This can be
+  // null when it can't add `PrefetchContainer` to `PrefetchService`.
+  std::unique_ptr<content::PrefetchHandle> StartBrowserPrefetchRequest(
       const GURL& url,
       bool javascript_enabled,
       std::optional<net::HttpNoVarySearchData> no_vary_search_hint,
       const net::HttpRequestHeaders& additional_headers,
-      std::unique_ptr<PrefetchRequestStatusListener> request_status_listener);
+      std::unique_ptr<PrefetchRequestStatusListener> request_status_listener,
+      base::TimeDelta ttl_in_sec,
+      bool should_append_variations_header);
 
   // Updates the "Accept Language" header that the prefetch service delegate
   // will use.
   void UpdatePrefetchServiceDelegateAcceptLanguageHeader(
       std::string accept_language_header);
+
+  // Returns `true` if a new prefetch request with `url` and
+  // `no_vary_search_hint` has a duplicate in the prefetch cache and thus the
+  // caller can choose not to start the prefetch request.
+  //
+  // Note: This is currently used for WebView initiated prefetches
+  // so consideration should be taken if updating the
+  // underlying implementation (or its dependencies).
+  bool IsPrefetchDuplicate(
+      GURL& url,
+      std::optional<net::HttpNoVarySearchData> no_vary_search_hint);
 
   using BlobCallback = base::OnceCallback<void(std::unique_ptr<BlobHandle>)>;
   using BlobContextGetter =

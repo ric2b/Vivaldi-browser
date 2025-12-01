@@ -21,7 +21,7 @@ describe('Heavy Ad issue', () => {
   it.skip('[crbug.com/375892666]: should display correct information', async () => {
     await navigateToIssuesTab();
     const {frontend} = getBrowserAndPages();
-    frontend.evaluate(() => {
+    await frontend.evaluate(() => {
       const issue = {
         code: 'HeavyAdIssue',
         details: {
@@ -32,7 +32,7 @@ describe('Heavy Ad issue', () => {
           },
         },
       };
-      // @ts-ignore
+      // @ts-expect-error
       window.addIssueForTest(issue);
       const issue2 = {
         code: 'HeavyAdIssue',
@@ -44,7 +44,7 @@ describe('Heavy Ad issue', () => {
           },
         },
       };
-      // @ts-ignore
+      // @ts-expect-error
       window.addIssueForTest(issue2);
     });
     await expandIssue();

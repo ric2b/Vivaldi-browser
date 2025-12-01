@@ -353,6 +353,7 @@ dawn_test("dawn_unittests") {
     "unittests/RingBufferAllocatorTests.cpp",
     "unittests/SerialMapTests.cpp",
     "unittests/SerialQueueTests.cpp",
+    "unittests/Sha3Tests.cpp",
     "unittests/SlabAllocatorTests.cpp",
     "unittests/SubresourceStorageTests.cpp",
     "unittests/SystemUtilsTests.cpp",
@@ -629,6 +630,7 @@ source_set("end2end_tests_sources") {
     "end2end/FramebufferFetchTests.cpp",
     "end2end/GpuMemorySynchronizationTests.cpp",
     "end2end/HistogramTests.cpp",
+    "end2end/ImmediateDataTests.cpp",
     "end2end/IndexFormatTests.cpp",
     "end2end/InfiniteLoopTests.cpp",
     "end2end/MaxLimitTests.cpp",
@@ -667,6 +669,7 @@ source_set("end2end_tests_sources") {
     "end2end/ShaderTests.cpp",
     "end2end/ShaderValidationTests.cpp",
     "end2end/StorageTextureTests.cpp",
+    "end2end/SubgroupMatrixTests.cpp",
     "end2end/SubgroupsTests.cpp",
     "end2end/SubresourceRenderAttachmentTests.cpp",
     "end2end/Texture3DTests.cpp",
@@ -729,7 +732,10 @@ source_set("end2end_tests_sources") {
   }
 
   if (dawn_enable_vulkan) {
-    sources += [ "end2end/YCbCrInfoTests.cpp" ]
+    sources += [
+      "end2end/AllocatorMemoryInstrumentationTests.cpp",
+      "end2end/YCbCrInfoTests.cpp",
+    ]
   }
 
   if (dawn_enable_d3d11 || dawn_enable_d3d12 ||

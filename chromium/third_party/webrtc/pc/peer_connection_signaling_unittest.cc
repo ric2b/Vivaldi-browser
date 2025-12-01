@@ -23,6 +23,7 @@
 #include <utility>
 #include <vector>
 
+#include "absl/strings/str_replace.h"
 #include "api/audio/audio_device.h"
 #include "api/audio_codecs/builtin_audio_decoder_factory.h"
 #include "api/audio_codecs/builtin_audio_encoder_factory.h"
@@ -51,23 +52,23 @@
 #include "api/video_codecs/video_encoder_factory_template_open_h264_adapter.h"
 #include "media/base/codec.h"
 #include "pc/peer_connection.h"
-#include "pc/peer_connection_proxy.h"
 #include "pc/peer_connection_wrapper.h"
 #include "pc/sdp_utils.h"
 #include "pc/session_description.h"
+#include "pc/test/fake_audio_capture_module.h"
+#include "pc/test/fake_rtc_certificate_generator.h"
 #include "pc/test/mock_peer_connection_observers.h"
 #include "rtc_base/checks.h"
 #include "rtc_base/string_encode.h"
 #include "rtc_base/thread.h"
+#include "rtc_base/virtual_socket_server.h"
 #include "test/gmock.h"
 #include "test/gtest.h"
 #include "test/wait_until.h"
+
 #ifdef WEBRTC_ANDROID
 #include "pc/test/android_test_initializer.h"
 #endif
-#include "pc/test/fake_audio_capture_module.h"
-#include "pc/test/fake_rtc_certificate_generator.h"
-#include "rtc_base/virtual_socket_server.h"
 
 namespace webrtc {
 
@@ -89,13 +90,6 @@ class PeerConnectionWrapperForSignalingTest : public PeerConnectionWrapper {
 
   bool initial_offerer() {
     return GetInternalPeerConnection()->initial_offerer();
-  }
-
-  PeerConnection* GetInternalPeerConnection() {
-    auto* pci =
-        static_cast<PeerConnectionProxyWithInternal<PeerConnectionInterface>*>(
-            pc());
-    return static_cast<PeerConnection*>(pci->internal());
   }
 };
 
@@ -129,14 +123,14 @@ class PeerConnectionSignalingBaseTest : public ::testing::Test {
   typedef std::unique_ptr<PeerConnectionWrapperForSignalingTest> WrapperPtr;
 
   explicit PeerConnectionSignalingBaseTest(SdpSemantics sdp_semantics)
-      : vss_(new rtc::VirtualSocketServer()),
+      : vss_(new VirtualSocketServer()),
         main_(vss_.get()),
         sdp_semantics_(sdp_semantics) {
 #ifdef WEBRTC_ANDROID
     InitializeAndroidObjects();
 #endif
     pc_factory_ = CreatePeerConnectionFactory(
-        rtc::Thread::Current(), rtc::Thread::Current(), rtc::Thread::Current(),
+        Thread::Current(), Thread::Current(), Thread::Current(),
         rtc::scoped_refptr<AudioDeviceModule>(FakeAudioCaptureModule::Create()),
         CreateBuiltinAudioEncoderFactory(), CreateBuiltinAudioDecoderFactory(),
         std::make_unique<VideoEncoderFactoryTemplate<
@@ -202,8 +196,8 @@ class PeerConnectionSignalingBaseTest : public ::testing::Test {
     return NumberOfDtlsTransports(pc_wrapper) > 0;
   }
 
-  std::unique_ptr<rtc::VirtualSocketServer> vss_;
-  rtc::AutoSocketServerThread main_;
+  std::unique_ptr<VirtualSocketServer> vss_;
+  AutoSocketServerThread main_;
   rtc::scoped_refptr<PeerConnectionFactoryInterface> pc_factory_;
   const SdpSemantics sdp_semantics_;
 };
@@ -699,7 +693,7 @@ TEST_P(PeerConnectionSignalingTest,
   EXPECT_FALSE(observer->called());
   // Process all currently pending messages by waiting for a posted task to run.
   bool checkpoint_reached = false;
-  rtc::Thread::Current()->PostTask(
+  Thread::Current()->PostTask(
       [&checkpoint_reached] { checkpoint_reached = true; });
   EXPECT_THAT(WaitUntil([&] { return checkpoint_reached; }, ::testing::IsTrue(),
                         {.timeout = webrtc::TimeDelta::Millis(kWaitTimeout)}),
@@ -1266,7 +1260,7 @@ TEST_F(PeerConnectionSignalingUnifiedPlanTest,
   auto caller = CreatePeerConnection();
   EXPECT_FALSE(caller->observer()->has_negotiation_needed_event());
   auto transceiver =
-      caller->AddTransceiver(cricket::MEDIA_TYPE_AUDIO, RtpTransceiverInit());
+      caller->AddTransceiver(webrtc::MediaType::AUDIO, RtpTransceiverInit());
   EXPECT_TRUE(caller->observer()->has_negotiation_needed_event());
   EXPECT_TRUE(caller->pc()->ShouldFireNegotiationNeededEvent(
       caller->observer()->latest_negotiation_needed_event()));
@@ -1277,7 +1271,7 @@ TEST_F(PeerConnectionSignalingUnifiedPlanTest,
   auto caller = CreatePeerConnection();
   EXPECT_FALSE(caller->observer()->has_negotiation_needed_event());
   auto transceiver =
-      caller->AddTransceiver(cricket::MEDIA_TYPE_AUDIO, RtpTransceiverInit());
+      caller->AddTransceiver(webrtc::MediaType::AUDIO, RtpTransceiverInit());
   EXPECT_TRUE(caller->observer()->has_negotiation_needed_event());
 
   auto observer = rtc::make_ref_counted<MockCreateSessionDescriptionObserver>();
@@ -1308,7 +1302,7 @@ TEST_F(PeerConnectionSignalingUnifiedPlanTest,
 
   EXPECT_FALSE(caller->observer()->has_negotiation_needed_event());
   auto transceiver =
-      callee->AddTransceiver(cricket::MEDIA_TYPE_AUDIO, RtpTransceiverInit());
+      callee->AddTransceiver(webrtc::MediaType::AUDIO, RtpTransceiverInit());
   EXPECT_TRUE(callee->observer()->has_negotiation_needed_event());
 
   // Change signaling state (to "have-remote-offer") by setting a remote offer.
@@ -1377,6 +1371,24 @@ TEST_F(PeerConnectionSignalingUnifiedPlanTest, RtxReofferApt) {
   // The apt should match the id from the remote offer.
   EXPECT_EQ(apt_it->second, rtc::ToString(codecs[0].id));
   EXPECT_EQ(apt_it->second, "102");
+}
+
+TEST_F(PeerConnectionSignalingUnifiedPlanTest, LoopbackSdpIsPossible) {
+  // This is not a recommended way of doing things.
+  // The test is added because an Android test tries to do it this way,
+  // and triggered surprising behavior.
+  auto caller = CreatePeerConnection();
+  auto transceiver =
+      caller->AddTransceiver(webrtc::MediaType::AUDIO, RtpTransceiverInit());
+
+  auto offer = caller->CreateOffer(RTCOfferAnswerOptions());
+  std::string offer_sdp;
+  ASSERT_TRUE(offer->ToString(&offer_sdp));
+  std::string answer_sdp =
+      absl::StrReplaceAll(offer_sdp, {{"a=setup:actpass", "a=setup:active"}});
+  EXPECT_TRUE(caller->SetLocalDescription(std::move(offer)));
+  auto answer = CreateSessionDescription(SdpType::kAnswer, answer_sdp);
+  EXPECT_TRUE(caller->SetRemoteDescription(std::move(answer)));
 }
 
 }  // namespace webrtc

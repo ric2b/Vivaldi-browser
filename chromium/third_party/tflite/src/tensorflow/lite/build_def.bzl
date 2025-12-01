@@ -391,6 +391,7 @@ def _gen_selected_ops_impl(ctx):
         executable = ctx.executable._generate_op_registrations,
         mnemonic = "OpRegistration",
         progress_message = "gen_selected_ops",
+        use_default_shell_env = True,
     )
 
 gen_selected_ops_rule = rule(
@@ -939,3 +940,8 @@ register_extension_info(
     extension = tflite_cc_library_with_c_headers_test,
     label_regex_for_dep = "{extension_name}",
 )
+
+# Workaround bug in Bazel before 8.0 where --cxxopt didn't apply to objc++ compilations.
+CXX17_BAZEL_ONLY_COPTS = [
+    "-std=c++17",  # copybara:comment
+]

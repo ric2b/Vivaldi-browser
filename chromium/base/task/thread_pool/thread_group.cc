@@ -85,7 +85,7 @@ void ThreadGroup::BaseScopedCommandsExecutor::Flush() {
   // called on their destructor, i.e. before this) to prevent the case where a
   // worker enters its main function, is descheduled because it wasn't woken up
   // yet, and is woken up immediately after.
-  for (auto worker : workers_to_start_) {
+  for (auto& worker : workers_to_start_) {
     worker->Start(outer_->after_start().service_thread_task_runner,
                   outer_->after_start().worker_thread_observer);
     if (outer_->worker_started_for_testing_) {
@@ -134,7 +134,7 @@ ThreadGroup::ThreadGroup(std::string_view histogram_label,
   DCHECK(!thread_group_label_.empty());
 }
 
-void ThreadGroup::StartImpl(
+void ThreadGroup::StartImplLockRequired(
     size_t max_tasks,
     size_t max_best_effort_tasks,
     TimeDelta suggested_reclaim_time,
@@ -160,8 +160,6 @@ void ThreadGroup::StartImpl(
       thread_type_hint_ != ThreadType::kBackground
           ? kForegroundBlockedWorkersPoll
           : kBackgroundBlockedWorkersPoll;
-
-  CheckedAutoLock auto_lock(lock_);
 
   max_tasks_ = max_tasks;
   baseline_max_tasks_ = max_tasks;

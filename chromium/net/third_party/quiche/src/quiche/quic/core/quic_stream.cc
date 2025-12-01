@@ -817,7 +817,7 @@ void QuicStream::WriteOrBufferDataAtLevel(
   bool had_buffered_data = HasBufferedData();
   // Do not respect buffered data upper limit as WriteOrBufferData guarantees
   // all data to be consumed.
-  if (data.length() > 0) {
+  if (!data.empty()) {
     QuicStreamOffset offset = send_buffer_.stream_offset();
     if (kMaxStreamLength - offset < data.length()) {
       QUIC_BUG(quic_bug_10586_4) << "Write too many data via stream " << id_;
@@ -1235,7 +1235,8 @@ bool QuicStream::OnStreamFrameAcked(QuicStreamOffset offset,
                                     QuicByteCount data_length, bool fin_acked,
                                     QuicTime::Delta ack_delay_time,
                                     QuicTime receive_timestamp,
-                                    QuicByteCount* newly_acked_length) {
+                                    QuicByteCount* newly_acked_length,
+                                    bool is_retransmission) {
   QUIC_DVLOG(1) << ENDPOINT << "stream " << id_ << " Acking "
                 << "[" << offset << ", " << offset + data_length << "]"
                 << " fin = " << fin_acked;
@@ -1267,7 +1268,7 @@ bool QuicStream::OnStreamFrameAcked(QuicStreamOffset offset,
   if (notify_ack_listener_earlier_ && new_data_acked) {
     QUIC_RELOADABLE_FLAG_COUNT_N(quic_notify_ack_listener_earlier, 1, 3);
     OnNewDataAcked(offset, data_length, *newly_acked_length, receive_timestamp,
-                   ack_delay_time);
+                   ack_delay_time, is_retransmission);
   }
   if (!IsWaitingForAcks() && read_side_closed_ && write_side_closed_) {
     session_->MaybeCloseZombieStream(id_);
@@ -1279,7 +1280,8 @@ void QuicStream::OnNewDataAcked(QuicStreamOffset /*offset*/,
                                 QuicByteCount /*data_length*/,
                                 QuicByteCount /*newly_acked_length*/,
                                 QuicTime /*receive_timestamp*/,
-                                QuicTime::Delta /*ack_delay_time*/) {
+                                QuicTime::Delta /*ack_delay_time*/,
+                                bool /*is_retransmission*/) {
   QUICHE_DCHECK(notify_ack_listener_earlier_);
 }
 

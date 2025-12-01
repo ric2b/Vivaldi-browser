@@ -1,3 +1,4 @@
+// clang-format off
 // Auto-generated file. Do not edit!
 //   Template: src/f32-dwconv/unipass-scalar.c.in
 //   Generator: tools/xngen
@@ -9,8 +10,8 @@
 
 #include <assert.h>
 
-#include "xnnpack/dwconv.h"
-#include "xnnpack/math.h"
+#include "src/xnnpack/dwconv.h"
+#include "src/xnnpack/math.h"
 
 
 void xnn_f32_dwconv_minmax_ukernel_4p2c__wasm(
@@ -23,7 +24,7 @@ void xnn_f32_dwconv_minmax_ukernel_4p2c__wasm(
     size_t output_increment,
     size_t input_offset,
     const float* zero,
-    const union xnn_f32_minmax_params params[restrict XNN_MIN_ELEMENTS(1)])
+    const struct xnn_f32_minmax_params params[restrict XNN_MIN_ELEMENTS(1)])
 {
   assert(channels != 0);
   assert(output_width != 0);

@@ -27,8 +27,6 @@
 
 #include "src/tint/lang/glsl/writer/raise/builtin_polyfill.h"
 
-#include <string>
-#include <tuple>
 #include <utility>
 
 #include "src/tint/lang/core/fluent_types.h"  // IWYU pragma: export

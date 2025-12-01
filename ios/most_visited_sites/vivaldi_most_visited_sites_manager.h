@@ -5,7 +5,7 @@
 
 #import <Foundation/Foundation.h>
 
-#import "ios/chrome/browser/ui/content_suggestions/cells/content_suggestions_most_visited_item.h"
+#import "ios/chrome/browser/content_suggestions/ui_bundled/cells/content_suggestions_most_visited_item.h"
 #import "ios/most_visited_sites/vivaldi_most_visited_sites_consumer.h"
 
 class ProfileIOS;

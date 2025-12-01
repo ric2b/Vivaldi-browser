@@ -8,6 +8,7 @@
 #include <string>
 #include <string_view>
 #include <utility>
+#include <variant>
 
 #include "base/check_op.h"
 #include "base/containers/contains.h"
@@ -23,7 +24,6 @@
 #include "base/time/time.h"
 #include "base/unguessable_token.h"
 #include "build/build_config.h"
-#include "build/chromeos_buildflags.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/grit/generated_resources.h"
 #include "chrome/services/printing/public/mojom/print_backend_service.mojom.h"
@@ -287,7 +287,7 @@ void PrintBackendServiceManager::GetDefaultPrinterName(
                      base::Unretained(this), std::move(result.context)));
 }
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
 void PrintBackendServiceManager::GetPrinterSemanticCapsAndDefaults(
     const std::string& printer_name,
     mojom::PrintBackendService::GetPrinterSemanticCapsAndDefaultsCallback
@@ -310,7 +310,7 @@ void PrintBackendServiceManager::GetPrinterSemanticCapsAndDefaults(
           &PrintBackendServiceManager::OnDidGetPrinterSemanticCapsAndDefaults,
           base::Unretained(this), std::move(result.context)));
 }
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+#endif  // BUILDFLAG(IS_CHROMEOS)
 
 #if BUILDFLAG(IS_WIN)
 void PrintBackendServiceManager::GetPaperPrintableArea(
@@ -705,13 +705,13 @@ PrintBackendServiceManager::GetRemoteIdForPrintDocumentClientId(
 std::optional<PrintBackendServiceManager::ClientId>
 PrintBackendServiceManager::RegisterClient(
     ClientType client_type,
-    absl::variant<std::string, RemoteId> destination) {
+    std::variant<std::string, RemoteId> destination) {
   ClientId client_id = ClientId(++last_client_id_);
   RemoteId remote_id =
-      absl::holds_alternative<std::string>(destination)
+      std::holds_alternative<std::string>(destination)
           ? GetRemoteIdForPrinterName(
-                /*printer_name=*/absl::get<std::string>(destination))
-          : absl::get<RemoteId>(destination);
+                /*printer_name=*/std::get<std::string>(destination))
+          : std::get<RemoteId>(destination);
 
   VLOG(1) << "Registering a client with ID " << client_id << " (client type "
           << ClientTypeToString(client_type) << ") for print backend service.";
@@ -756,7 +756,7 @@ PrintBackendServiceManager::RegisterClient(
   } else {
     // Service not already available, so launch it now so that it will be
     // ready by the time the client gets to point of invoking a Mojo call.
-    if (absl::holds_alternative<RemoteId>(destination)) {
+    if (std::holds_alternative<RemoteId>(destination)) {
       // When the destination is to reuse an existing remote, and that remote
       // is gone, then any expected context in that remote is also gone.  Such
       // a loss of context should be treated as a failure for the user's request
@@ -764,7 +764,7 @@ PrintBackendServiceManager::RegisterClient(
       return std::nullopt;
     }
     bool should_sandbox = ShouldServiceBeSandboxed(
-        /*printer_name=*/absl::get<std::string>(destination), client_type);
+        /*printer_name=*/std::get<std::string>(destination), client_type);
     GetService(remote_id, client_type, should_sandbox);
   }
 

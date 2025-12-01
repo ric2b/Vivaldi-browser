@@ -23,7 +23,6 @@
 #include "base/strings/string_util.h"
 #include "components/dbus/thread_linux/dbus_thread_linux.h"
 #include "components/os_crypt/async/common/algorithm.mojom.h"
-#include "crypto/encryptor.h"
 #include "crypto/kdf.h"
 #include "dbus/message.h"
 #include "dbus/object_path.h"
@@ -638,7 +637,10 @@ void FreedesktopSecretKeyProvider::FinalizeFailure(InitStatus status,
     return;
   }
   RecordInitStatus(status, detail);
-  std::move(key_callback_).Run(kEncryptionTag, std::nullopt);
+  // TODO(crbug.com/389016528): Indicate whether this is a temporary or
+  // permanent failure depending on the `status` and `detail`.
+  std::move(key_callback_)
+      .Run(kEncryptionTag, base::unexpected(KeyError::kTemporarilyUnavailable));
   CloseSession();
 }
 

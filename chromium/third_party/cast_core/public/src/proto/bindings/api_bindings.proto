@@ -25,6 +25,11 @@ message ApiBinding {
   string before_load_script = 1;
   // Name of script
   string script_name = 2;
+  // Optional, if a script needs initial values it should be set here, and the
+  // script should provide a stable means for handling the initial values.
+  // Effectively, the script needs to have a
+  // cast.__platform__.[SCRIPT_NAME].SetInitialValues(json) function provided.
+  string initial_values = 3;
 }
 
 message GetAllRequest {}

@@ -125,6 +125,7 @@ public class AutocompleteCoordinator
                                 DeviceFormFactor.isNonMultiDisplayContextOnTablet(context)
                                         && !forcePhoneStyleOmnibox)
                         .with(SuggestionListProperties.SUGGESTION_MODELS, listItems)
+                        .with(SuggestionListProperties.ACTIVITY_WINDOW_FOCUSED, true)
                         .build();
 
         mMediator =

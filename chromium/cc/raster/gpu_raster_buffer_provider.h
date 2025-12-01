@@ -77,7 +77,6 @@ class CC_EXPORT GpuRasterBufferProvider : public RasterBufferProvider {
    public:
     RasterBufferImpl(GpuRasterBufferProvider* client,
                      const ResourcePool::InUsePoolResource& in_use_resource,
-                     ResourcePool::GpuBacking* backing,
                      bool resource_has_previous_content,
                      bool depends_on_at_raster_decodes,
                      bool depends_on_hardware_accelerated_jpeg_candidates,
@@ -124,14 +123,11 @@ class CC_EXPORT GpuRasterBufferProvider : public RasterBufferProvider {
         const gfx::AxisTransform2d& transform,
         const RasterSource::PlaybackSettings& playback_settings);
 
-    // These fields may only be used on the compositor thread.
+    // These fields are safe to access on both the compositor and worker thread.
     const raw_ptr<GpuRasterBufferProvider> client_;
-    raw_ptr<ResourcePool::GpuBacking> backing_;
+    raw_ptr<ResourcePool::Backing> backing_;
 
     // These fields are for use on the worker thread.
-    const gfx::Size resource_size_;
-    const viz::SharedImageFormat shared_image_format_;
-    const gfx::ColorSpace color_space_;
     const bool resource_has_previous_content_;
     const bool depends_on_at_raster_decodes_;
     const bool depends_on_hardware_accelerated_jpeg_candidates_;

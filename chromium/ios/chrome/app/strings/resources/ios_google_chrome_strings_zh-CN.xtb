@@ -1,7 +1,6 @@
 <?xml version="1.0" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="zh-CN">
-<translation id="1066101356081285416">Chrome 将检测您所访问的网站上的跟踪编号，并在新标签页中向您显示包裹动态。为实现此功能，系统会将包裹跟踪编号和网站名称发送给 Google。这些信息还将用于完善 Google 购物功能，让所有用户受益。您可以随时在<ph name="BEGIN_LINK" />包裹跟踪设置<ph name="END_LINK" />中更新此设置。</translation>
 <translation id="1076643793026027628">Chrome 会自动在无痕模式下打开 YouTube 无痕式链接。</translation>
 <translation id="1086486568852410168">使用 Google 智能镜头搜索</translation>
 <translation id="1143896152279775643">系统会将您的密码保存到 <ph name="EMAIL" /> 的 Google 密码管理工具中。</translation>
@@ -37,17 +36,20 @@
 <translation id="1634522710245925681">默认使用 Chrome 轻松获取价格分析</translation>
 <translation id="1646463005043273333">打开 Chrome 设置以将 Chrome 设为默认浏览器。</translation>
 <translation id="1670609221633730681">Chrome 提示：选择地址栏的位置</translation>
+<translation id="1683863426423719967">若要接收来自 Chrome 的标签页提醒，请在 iOS 设置中开启通知。</translation>
 <translation id="1759842336958782510">Chrome</translation>
 <translation id="1784567647421309104">在 Chrome 中保存密码</translation>
 <translation id="1790080846677398234">将输入的网址添加到您在 Chrome 中保存的书签。</translation>
 <translation id="1799920918471566157">Chrome 提示</translation>
 <translation id="1830634592642484976">此地址目前已保存到 Chrome。如需在所有 Google 产品中使用此地址，请将它保存到您的 Google 账号 <ph name="USER_EMAIL" /> 中。</translation>
 <translation id="1891812034154776216">退出 Chrome 时隐藏打开的无痕式标签页</translation>
+<translation id="1894434821386148799">您可以在此处找到 Chrome 设置和其他内容</translation>
 <translation id="1917964099031477364">系统会从该设备上的 Chrome 和其他 Google 应用中移除此账号以及所有未保存的数据。</translation>
 <translation id="1919130412786645364">允许登录 Chrome</translation>
 <translation id="1965935827552890526">请完成您先前在另一已打开的 Chrome 窗口中正在执行的操作。</translation>
+<translation id="1973910962341002002">在“<ph name="TEXT_OF_THE_SETTINGS_MENU_ITEM" />”设置中开启“Chrome”</translation>
 <translation id="1984705450038014246">同步 Chrome 数据</translation>
-<translation id="1987779152850321833">请完成下面这些建议的操作，以便充分利用 Chrome。</translation>
+<translation id="1987779152850321833">完成这些建议的操作，充分利用 Chrome。</translation>
 <translation id="2055826352861631739">默认使用 iPad 版 Chrome</translation>
 <translation id="2056123005618757196">借助比以前更简单、更安全、更快速的 Google Chrome 提高工作效率。</translation>
 <translation id="2120238739383482109">打开 Chrome 书签。</translation>
@@ -68,7 +70,6 @@
 <translation id="2574249610672786438">要查看您在其他设备上用 Chrome 打开的标签页，请在所有设备上登录</translation>
 <translation id="2576431527583832481">Chrome 浏览器刚刚经过了改进！新版本已推出。</translation>
 <translation id="257708665678654955">下次访问这个网站时，您希望 Google Chrome 翻译其中的<ph name="LANGUAGE_NAME" />网页吗？</translation>
-<translation id="2650286135394207535">让 Chrome 帮助您跟踪包裹</translation>
 <translation id="2668242166988961773">在 Chrome 中使用语音搜索。</translation>
 <translation id="2671426118752779020">您可在 iPhone 上的其他应用内使用已保存至 Google 密码管理工具的密码。</translation>
 <translation id="2689064829982324496">若要在所有网站上退出您的 Google 账号，请<ph name="BEGIN_LINK" />退出 Chrome<ph name="END_LINK" />。</translation>
@@ -98,10 +99,13 @@
 <translation id="3282568296779691940">登录 Chrome</translation>
 <translation id="3303503998967553377">在 iOS 中使用 Chrome 操作</translation>
 <translation id="3348862487678490430">将阅读清单项添加到 Chrome</translation>
+<translation id="3357827134511189025">通过 Chrome 的自动填充功能，使用任意应用中已保存的密码和通行密钥登录</translation>
 <translation id="3360031466389132716">{THRESHOLD,plural, =1{当 Chrome 闲置 {THRESHOLD} 分钟后，就会发生这种情况}other{当 Chrome 闲置 {THRESHOLD} 分钟后，就会发生这种情况}}</translation>
 <translation id="3367797402528056312">完成 Chrome 设置</translation>
 <translation id="3371064404604898522">将 Chrome 设为默认浏览器</translation>
 <translation id="3399930248910934354">打开 Chrome 设置</translation>
+<translation id="3440830787838130530">在 Google 密码管理工具中，您可以轻松安全地与家人群组分享密码</translation>
+<translation id="3460369101684070455">若要轻松获取其他应用中已保存的密码，请选择 Chrome 的自动填充功能</translation>
 <translation id="3472587960215700950">Chrome 会使用 Google 地图针对检测到的地址为您提供路线和当地信息。</translation>
 <translation id="3503014945441706099">同时也为这份 Chrome 个人资料启用“增强型安全浏览”功能</translation>
 <translation id="3522659714780527202">要查看您在其他设备上用 Chrome 打开的标签页，请开启同步功能</translation>
@@ -121,11 +125,12 @@
 <translation id="4064699917955374540">如要将 Chrome 数据保存在您的 Google 账号中并使用这些数据，请确认是您本人在操作。</translation>
 <translation id="417201473131094001">在 Chrome Canary 版中不受支持</translation>
 <translation id="424864128008805179">退出 Chrome？</translation>
+<translation id="4430797724889237570">在 Chrome 中打开 Gmail、Google 地图、YouTube 和其他应用中的链接</translation>
 <translation id="447252321002412580">帮助我们改进 Chrome 的功能和性能</translation>
 <translation id="4523886039239821078">部分插件导致 Chrome 崩溃，请卸载这些插件：</translation>
+<translation id="4574806550936185355">开启“在您关闭 Chrome 时锁定无痕式标签页”</translation>
 <translation id="4633328489441962921">Chrome 无法检查是否有更新</translation>
 <translation id="4636900170638246267">登录此网站和 Chrome。</translation>
-<translation id="4646014602299206846">Chrome 将检测您所访问的网站上的包裹跟踪编号，并在新标签页中向您显示包裹动态。您的数据将分享给 Google，以便系统提供此功能和改进 Google 购物，让所有人都受益。</translation>
 <translation id="4647910807533196601">在 Chrome 中打开我最近打开的标签页。</translation>
 <translation id="4693084815234024320">您正在使用 Chrome 无痕模式</translation>
 <translation id="4724297637870447613">随时随地使用 Chrome</translation>
@@ -137,7 +142,6 @@
 <translation id="4830799082179398588">将 Chrome 设为默认浏览器？</translation>
 <translation id="484033449593719797">在 Chrome Beta 版中不受支持</translation>
 <translation id="4840404732697892756">您需要先登录 Google 账号，然后才能使用 Google 密码管理工具的密码检查功能。</translation>
-<translation id="4860330141789125848">{COUNT,plural, =1{Chrome 可以帮助您在“新标签页”页面中跟踪此包裹。}other{Chrome 可以帮助您在“新标签页”页面中跟踪这些包裹。}}</translation>
 <translation id="4903674399067644695">此卡片会为您提供一些建议，帮助您充分利用 Chrome。</translation>
 <translation id="49200511069271369">您的组织 (<ph name="DOMAIN" />) 负责管理您登录的账号和 Chrome 的使用方式。您的管理员可以设置或限制某些功能。</translation>
 <translation id="4925322001044117929">默认在 iPad 上使用 Chrome</translation>
@@ -157,9 +161,7 @@
 <translation id="5395376160638294582">请确保您可以一直使用 Google 账号中的 Chrome 数据</translation>
 <translation id="5404252374083197467">将 Chrome 设为默认浏览器？</translation>
 <translation id="5439191312780166229">基于比“标准保护”更全面的网站数据进行分析，针对危险网站（甚至是 Google 之前未知的网站）向您发出警告。您可以选择忽略 Chrome 警告。</translation>
-<translation id="5442013002200339429">如果您隐藏“<ph name="MODULE_NAME" />”，Chrome 将不再自动跟踪您的未来包裹，而是会删除您的所有过往包裹跟踪数据。</translation>
 <translation id="5460571915754665838">4. 选择“Chrome”</translation>
-<translation id="546541279759910616">{COUNT,plural, =1{Chrome 将帮助您在“新标签页”页面中跟踪此包裹。}other{Chrome 将帮助您在“新标签页”页面中跟踪这些包裹。}}</translation>
 <translation id="5492504007368565877">Google 密码管理工具无法检查您的密码。</translation>
 <translation id="5525095647255982834">若要将此标签页发送到另一设备，请在该设备上登录 Chrome。</translation>
 <translation id="5527026824954593399">点按“在 Chrome 上通过 Google 地图查看”。</translation>
@@ -177,6 +179,7 @@
 <translation id="5716154293141027663">每当您点按其他应用中的链接时，系统都会使用 Chrome 打开相应链接</translation>
 <translation id="5752489513673657785">Google 专为您打造的自定义信息流</translation>
 <translation id="5772407442571703917">可从此处下载 Chrome。</translation>
+<translation id="5777468213129569553">打开 Chrome</translation>
 <translation id="5779767936254214055">在您退出 Chrome 或切换到其他应用时，锁定无痕式标签页。</translation>
 <translation id="5808435672482059465">查看您的 Chrome 历史记录</translation>
 <translation id="5833027901704861726">部分 Chrome 数据尚未保存到 <ph name="EMAIL" />。
@@ -184,6 +187,7 @@
 <translation id="5998675059699164418">根据贵单位的要求，您必须登录才能使用 Chrome。</translation>
 <translation id="6021312115739110405">Google 专为您打造的自定义信息流，包括新闻、体育和天气。</translation>
 <translation id="6022659036123304283">定制您的专属 Chrome</translation>
+<translation id="6132075343662013154">Chrome 会询问您是否保存密码</translation>
 <translation id="6132149203299792222">登录您的 Google 账号即可同步您的密码、书签等信息。</translation>
 <translation id="6145223986912084844">Chrome</translation>
 <translation id="6177442314419606057">在 Chrome 中搜索</translation>
@@ -204,11 +208,11 @@
 <translation id="6481963882741794338">关联 Chrome 和其他 Google 服务，以便获得个性化体验和实现其他用途</translation>
 <translation id="6484712497741564393">目前登录的账号是 <ph name="EMAIL" />。您的数据已使用您的口令加密。请输入该口令，以便将 Chrome 数据保存在您的 Google 账号中并使用这些数据。</translation>
 <translation id="6533470733797826516">使用 Chrome 自动填充功能更快地登录</translation>
+<translation id="6536544321553662809">将 Chrome 设为默认浏览器，即可轻松分享和打开链接</translation>
 <translation id="6545449117344801102">Chrome 会检测地址，并使用 Google 地图为您提供路线和本地信息。</translation>
 <translation id="6636941099779251629">根据贵组织的要求，您必须登录才能使用 Chrome。<ph name="BEGIN_LINK" />了解详情<ph name="END_LINK" /></translation>
 <translation id="6646696210740573446">通过可隐藏 IP 地址的隐私保护服务器将经过混淆处理的网址片段发送给 Google。如果某个网站企图窃取您的密码，或者您下载了有害的文件，Chrome 可能还会将相应网址连同少量网页内容发送给 Google。</translation>
 <translation id="6647304104688527905">在 Chrome 中打开新标签页。</translation>
-<translation id="6648150602980899529">您正要登录由 <ph name="DOMAIN" /> 管理的账号，并要授权其管理员控制您的 Chrome 数据。您的数据将与此账号永久关联。退出 Chrome 后，您的数据将从这台设备上删除，但仍会保留在您的 Google 账号中。</translation>
 <translation id="6684809838922667136">帮助改善 Chrome</translation>
 <translation id="6695698548122852044">{THRESHOLD,plural, =1{当 Chrome 闲置 {THRESHOLD} 分钟后，就会发生这种情况。系统会删除您在登录期间仅保存在此设备上的数据。这些数据可能包括历史记录和密码。}other{当 Chrome 闲置 {THRESHOLD} 分钟后，就会发生这种情况。系统会删除您在登录期间仅保存在此设备上的数据。这些数据可能包括历史记录和密码。}}</translation>
 <translation id="6709398533399187136">您的密码在数据泄露事件中外泄。Google 密码管理工具建议您立即更改此密码。</translation>
@@ -228,6 +232,7 @@
 <translation id="7061455974939528301">按住 Chrome 图标，然后点击“修改主屏幕”</translation>
 <translation id="7065813315247345131">将 Chrome 移至程序坞</translation>
 <translation id="7124339256045485976">确保使用最新版的 Chrome</translation>
+<translation id="7145599899567697473">在 Chrome 中保存并自动填充密码</translation>
 <translation id="7161390184744336561">Google Chrome 版本太旧</translation>
 <translation id="7165736900384873061">开始使用 Google Chrome QR 码扫描器</translation>
 <translation id="7175129790242719365">Chrome 提示：登录 Chrome</translation>
@@ -255,12 +260,14 @@
 <translation id="7575971113404272499">Chrome 提示：默认使用 Chrome</translation>
 <translation id="7581063337314642333">访问 Chrome 中的标签页网格</translation>
 <translation id="7599894504325210080">Chrome 自动填充视图已展开</translation>
+<translation id="7617512710641355143">Chrome 处于受管理状态</translation>
 <translation id="7642373780953416937">接收有关 Chrome 为您自动检测到的任何隐私或安全问题的提醒。</translation>
 <translation id="7660356333829433649">欢迎回来查看更多实用提示，了解如何充分利用 Chrome。</translation>
 <translation id="7662994914830945754">要查看您在其他设备上用 Chrome 打开的标签页，请登录账号并开启同步功能</translation>
 <translation id="7693590760643069321">现在，每当点按消息、文档和其他应用中的链接时，您都可以使用 Chrome 打开链接。</translation>
 <translation id="7698568245838009292">Chrome 想要访问相机</translation>
 <translation id="7707877166818730835">在 Chrome 中打开我最近打开的标签页</translation>
+<translation id="7747746207470479571">使用 Chrome 的自动填充功能，轻松获取您的密码和通行密钥</translation>
 <translation id="776305366874821582">从 iPhone 主屏幕上的程序坞更快速地访问 Chrome。</translation>
 <translation id="7780154209050837198">若要充分利用 Chrome，请使用您的 Google 账号登录 Chrome。</translation>
 <translation id="7787205077729386167">在 iOS 中打开 Chrome 设置，然后点按“默认浏览器应用”并选择“Chrome”。</translation>
@@ -281,6 +288,7 @@
 <translation id="8136856065410661948">这是为了在 Apple 日历中通过 Chrome 和 Google 智能镜头创建活动。</translation>
 <translation id="8154120522323162874">继续设置浏览器，即可充分利用 Chrome 的各项功能。</translation>
 <translation id="8160472928944011082">Chrome 无法更新</translation>
+<translation id="8245080522851805544">关闭 Chrome 后，通过设备身份验证确保浏览数据的私密性</translation>
 <translation id="8248887045858762645">Chrome 小窍门</translation>
 <translation id="8265730590513812063">打开 Chrome 菜单</translation>
 <translation id="8317674518145175158">付款方式和地址不会加密。Chrome 中的浏览记录不会同步。
@@ -289,6 +297,7 @@
 <translation id="8370517070665726704">版权所有 <ph name="YEAR" /> Google LLC. 保留所有权利。</translation>
 <translation id="8371138994040262994">在 Chrome 中打开设置。</translation>
 <translation id="8387459386171870978">继续使用 Chrome</translation>
+<translation id="8392023217086447677">已在 Chrome 无痕模式下打开</translation>
 <translation id="840168496893712993">部分插件导致 Chrome 崩溃，请尝试卸载这些插件。</translation>
 <translation id="8413500425974960807">Chrome 提示：将 Chrome 移至程序坞</translation>
 <translation id="8413795581997394485">防范已知危险的网站、下载内容和扩展程序。当您访问某个网站时，Chrome 会通过可隐藏 IP 地址的隐私保护服务器将经过混淆处理的网址片段发送给 Google。如果网站有可疑行为，系统也会发送完整网址和少量网页内容。</translation>
@@ -311,7 +320,7 @@
 <translation id="8855781063981781621">若要在 Chrome 中停用锁定模式，请在您的 iPad 上关闭该模式。</translation>
 <translation id="8857676124663337448">Google 密码管理工具无法检查所有密码。请明天再试。</translation>
 <translation id="8865415417596392024">您账号中的 Chrome 数据</translation>
-<translation id="8874688701962049679">有关充分利用 Chrome 的提示。</translation>
+<translation id="8874688701962049679">实用技巧，助你充分发掘 Chrome 的各种功能。</translation>
 <translation id="8897749957032330183">系统会将密码保存到此设备上的 Google 密码管理工具中。</translation>
 <translation id="9004772704776174843">已退出 Chrome 账号</translation>
 <translation id="9068336935206019333">在 Chrome 中以无痕模式打开</translation>
@@ -321,5 +330,6 @@
 <translation id="9181628561061032322">打开最近使用 Chrome 打开的标签页。</translation>
 <translation id="948597495737267756">打开 Chrome 历史记录页面。</translation>
 <translation id="97300214378190234">每次点按其他应用中的链接时，都使用 Chrome 打开。</translation>
+<translation id="997929539742564806">自动填充 Chrome 中的密码和通行密钥，快速登录应用和网站</translation>
 <translation id="998677222109959694">管理 Chrome 设置</translation>
 </translationbundle>

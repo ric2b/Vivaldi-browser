@@ -57,6 +57,19 @@ describeWithEnvironment('FilmStripView', function() {
     filmStrip.detach();
   });
 
+  it('shows status text', async function() {
+    const filmStripView = new PerfUI.FilmStripView.FilmStripView();
+    filmStripView.markAsRoot();
+    filmStripView.show(document.body);
+
+    const expectedStatusText = 'Placeholder';
+
+    filmStripView.setStatusText(expectedStatusText);
+    assert.deepEqual(filmStripView.contentElement.textContent, expectedStatusText);
+
+    filmStripView.detach();
+  });
+
   describe('FilmStripView Dialog', function() {
     async function renderDialogWithTrace(filmStrip: Trace.Extras.FilmStrip.Data, selectedFrameIndex: number):
         Promise<{dialog: PerfUI.FilmStripView.Dialog, shadowRoot: ShadowRoot}> {

@@ -31,6 +31,7 @@
 <translation id="2441056087170876076">Monstro 2</translation>
 <translation id="2444387452209867610">Inserir nota</translation>
 <translation id="2486841023299517366">Animal 4</translation>
+<translation id="2501278716633472235">Volver</translation>
 <translation id="2612127540243995147">Listo para instalar. Vivaldi pecharase e logo reiniciarase automaticamente.</translation>
 <translation id="2613387515621326337">Amosar sitio web actualizado</translation>
 <translation id="2647368062414805334">Lamentablemente as túas preferencias de Edge non estarán dispoñibles mentres o navegador estea executándose. Para importalas a Vivaldi, garda o teu traballo, pecha todas as xanelas de Edge e logo prema en Continuar.</translation>
@@ -51,6 +52,7 @@
 <translation id="3259769196742189631">Validar</translation>
 <translation id="3291915639428159043">Autoreproducir bloqueado</translation>
 <translation id="3302905971452834934">Monstro 1</translation>
+<translation id="3308738399950580893">anuncios</translation>
 <translation id="3334610655141903168">(non título)</translation>
 <translation id="3372505110412186107">Vivaldi <ph name="VERSION" /> é a versión máis recente dispoñible.</translation>
 <translation id="3383198080133834965">Vivaldi foi actualizado!</translation>
@@ -72,6 +74,7 @@
 <translation id="3795800845758778870">Lamentablemente as túas preferencias de Brave non estarán dispoñibles mentres o navegador estea executándose. Para importalas a Vivaldi, garda o teu traballo, pecha todas as xanelas de Brave e logo prema en Continuar.</translation>
 <translation id="3822431842304177896">Novo separador</translation>
 <translation id="3832132597516774400">Paisaxe 5</translation>
+<translation id="3894751534882749287">Se desexa ver a páxina de todos os xeitos, pode cambiar o seu nivel de protección de seguimento na xanela emerxente bloqueador de seguimento ou premendo no botón Permitir</translation>
 <translation id="3914946330804881301">Importado desde Ópera</translation>
 <translation id="3921292902397893431">Monstro 8</translation>
 <translation id="3943857333388298514">Pegar</translation>
@@ -90,6 +93,7 @@
 <translation id="4582480609585453144">Abrir ligazón nunha lapela en segundo plano</translation>
 <translation id="4636708767492582204">Enviar por correo</translation>
 <translation id="4677434526832593569">Animal 8</translation>
+<translation id="4736016046474602958">Bloqueador de rastreadores</translation>
 <translation id="474217410105706308">Lapela silenciada</translation>
 <translation id="4881695831933465202">Abrir</translation>
 <translation id="498766871928286903"><ph name="DOWNLOADED" /> de <ph name="TOTAL_SIZE_TO_DOWNLOAD" /></translation>
@@ -128,6 +132,7 @@
 <translation id="6896758677409633944">Copiar</translation>
 <translation id="7086554968911045110">Paisaxe 7</translation>
 <translation id="7111492742514999492">Paisaxe 9</translation>
+<translation id="7113310725918019676">Permitir <ph name="BLOCKED_TYPE" /> desde <ph name="DOMAIN" /></translation>
 <translation id="7337881442233988129">Chromium</translation>
 <translation id="7581266044164103589">Erro ao iniciar o instalador de actualizacións. Por favor, revisa que o equipo teña suficiente memoria ou espazo en disco e reinténtao máis tarde.</translation>
 <translation id="7658239707568436148">Cancelar</translation>
@@ -141,9 +146,9 @@
 <translation id="8027581147000338959">Abrir nunha nova xanela</translation>
 <translation id="8044382196220116469">Non dar permiso ás páxinas para reproducir os vídeos automaticamente</translation>
 <translation id="8099620695029051217">Copiar o enderezo da páxina</translation>
+<translation id="8119307142152921512">rastreadores e anuncios</translation>
 <translation id="8197810018650377191">Páxina dos marcadores</translation>
 <translation id="8261506727792406068">Eliminar</translation>
-<translation id="8263047843452521549">Inspeccionar en segundo plano ao traballador do servizo</translation>
 <translation id="8331671104904436324">Abrir unha lapela en segundo plano</translation>
 <translation id="8373293945112511707">Paisaxe 1</translation>
 <translation id="8388552048012645975">Descargando actualización…</translation>
@@ -157,13 +162,13 @@
 <translation id="8651348004684669199">Engadir a lapela activa</translation>
 <translation id="8669345741879513971">Monstro 10</translation>
 <translation id="867544375504146191">Yandex</translation>
-<translation id="8689295374912158752">Inspeccionar o documento do portal</translation>
 <translation id="8768970203213061953">Pasaixe 14</translation>
 <translation id="8773635261052182196">Xa non verás estas notificacións. Podes habilitalos de novo desde a configuración de vivaldi.</translation>
 <translation id="8774017153185436870">As páxinas poderían autoreproducir vídeos</translation>
 <translation id="8813277370772331957">Recordarmo máis tarde</translation>
 <translation id="8894900864683381599">Engadir a ligazón ao panel web</translation>
 <translation id="8912720443398351457">Ten a certeza de querer saír de Vivaldi?</translation>
+<translation id="8940028675168378100">Bloqueado por <ph name="BLOCKER_NAME" /></translation>
 <translation id="8947109330183116400">Selecciona o ficheiro de marcadores HTML</translation>
 <translation id="9017566390391482291">Selecciona o cartafol do perfil de Vivaldi a importar</translation>
 <translation id="9048058608784130603">Pendente de actualizar <ph name="VERSION" /></translation>
@@ -173,6 +178,7 @@
 <translation id="912022491595344261">Abrir imaxe como <ph name="USER" /></translation>
 <translation id="9157539936604258187">Abrir ligazón</translation>
 <translation id="9169060351863393881">Opera 12.x</translation>
+<translation id="9180553614777056266">Bloqueador de anuncios</translation>
 <translation id="939305735877869636">Brave</translation>
 <translation id="970294721402795299">Paisaxe 16</translation>
 </translationbundle>

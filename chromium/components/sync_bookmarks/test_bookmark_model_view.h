@@ -73,8 +73,6 @@ class TestBookmarkModelView : public BookmarkModelView {
                                      creation_time, uuid);
   }
 
-  const bookmarks::BookmarkNode* trash_node() const override;
-
  private:
   // Constructor overload needed to enforce construction order.
   TestBookmarkModelView(

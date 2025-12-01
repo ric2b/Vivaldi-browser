@@ -38,11 +38,7 @@ void PasswordManagerClient::ShowPasswordManagerErrorMessage(
 
 void PasswordManagerClient::ShowKeyboardReplacingSurface(
     PasswordManagerDriver* driver,
-    const PasswordFillingParams& password_filling_params,
-    bool is_webauthn_form,
-    base::OnceCallback<void(bool)> shown_cb) {
-  std::move(shown_cb).Run(false);
-}
+    const autofill::PasswordSuggestionRequest& request) {}
 #endif
 
 bool PasswordManagerClient::IsReauthBeforeFillingRequired(
@@ -195,11 +191,7 @@ void PasswordManagerClient::RefreshPasswordManagerSettingsIfNeeded() const {
   // For most implementations settings do not need to be refreshed.
 }
 
-void PasswordManagerClient::ShowCredentialsInAmbientBubble(
-    std::vector<std::unique_ptr<password_manager::PasswordForm>> forms,
-    int credential_type_flags,
-    CredentialsCallback callback) {
-  std::move(callback).Run(nullptr);
-}
+void PasswordManagerClient::TriggerSignIn(
+    signin_metrics::AccessPoint access_point) const {}
 
 }  // namespace password_manager

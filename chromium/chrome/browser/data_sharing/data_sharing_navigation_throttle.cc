@@ -7,6 +7,7 @@
 #include "chrome/browser/data_sharing/data_sharing_navigation_utils.h"
 #include "chrome/browser/data_sharing/data_sharing_service_factory.h"
 #include "chrome/browser/profiles/profile.h"
+#include "components/collaboration/internal/metrics.h"
 #include "components/data_sharing/public/features.h"
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/web_contents.h"
@@ -51,8 +52,7 @@ bool ShouldHandleShareURLNavigation(
 std::unique_ptr<content::NavigationThrottle>
 DataSharingNavigationThrottle::MaybeCreateThrottleFor(
     content::NavigationHandle* handle) {
-  if (base::FeatureList::IsEnabled(
-          data_sharing::features::kDataSharingFeature)) {
+  if (features::IsDataSharingFunctionalityEnabled()) {
     return std::make_unique<DataSharingNavigationThrottle>(handle);
   }
   return nullptr;
@@ -99,6 +99,9 @@ DataSharingNavigationThrottle::CheckIfShouldIntercept() {
   const GURL& url = navigation_handle()->GetURL();
   if (data_sharing_service &&
       data_sharing_service->ShouldInterceptNavigationForShareURL(url)) {
+    collaboration::metrics::RecordJoinPageTransitionType(
+        data_sharing_service->GetLogger(),
+        navigation_handle()->GetPageTransition());
     if (ShouldHandleShareURLNavigation(navigation_handle())) {
       data_sharing_service->HandleShareURLNavigationIntercepted(
           url, /* context = */ nullptr);

@@ -18,28 +18,11 @@
 
 class GURL;
 
-namespace blink {
-
+namespace network {
 class PermissionsPolicy;
+}  // namespace network
 
-using ClientHintToPolicyFeatureMap =
-    base::flat_map<network::mojom::WebClientHintsType,
-                   network::mojom::PermissionsPolicyFeature>;
-
-using PolicyFeatureToClientHintMap =
-    base::flat_map<network::mojom::PermissionsPolicyFeature,
-                   std::set<network::mojom::WebClientHintsType>>;
-
-// Mapping from WebClientHintsType to the corresponding Permissions-Policy (e.g.
-// kDpr => kClientHintsDPR). The order matches the header mapping and the enum
-// order in services/network/public/mojom/web_client_hints_types.mojom
-BLINK_COMMON_EXPORT const ClientHintToPolicyFeatureMap&
-GetClientHintToPolicyFeatureMap();
-
-// Mapping from Permissions-Policy to the corresponding WebClientHintsType(s)
-// (e.g. kClientHintsDPR => {kDpr, kDpr_DEPRECATED}).
-BLINK_COMMON_EXPORT const PolicyFeatureToClientHintMap&
-GetPolicyFeatureToClientHintMap();
+namespace blink {
 
 // Indicates that a hint is sent by default, regardless of an opt-in.
 BLINK_COMMON_EXPORT
@@ -48,7 +31,7 @@ bool IsClientHintSentByDefault(network::mojom::WebClientHintsType type);
 // Add a list of Client Hints headers to be removed to the output vector, based
 // on Permissions Policy and the url's origin.
 BLINK_COMMON_EXPORT void FindClientHintsToRemove(
-    const PermissionsPolicy* permissions_policy,
+    const network::PermissionsPolicy* permissions_policy,
     const GURL& url,
     std::vector<std::string>* removed_headers);
 

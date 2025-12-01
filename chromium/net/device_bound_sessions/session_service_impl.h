@@ -15,6 +15,7 @@
 #include "base/containers/unique_ptr_adapters.h"
 #include "base/functional/callback.h"
 #include "base/memory/weak_ptr.h"
+#include "base/timer/elapsed_timer.h"
 #include "net/base/net_export.h"
 #include "net/device_bound_sessions/registration_fetcher.h"
 #include "net/device_bound_sessions/registration_fetcher_param.h"
@@ -47,6 +48,7 @@ struct DeferredURLRequest {
   ~DeferredURLRequest();
 
   raw_ptr<const URLRequest> request = nullptr;
+  base::ElapsedTimer timer;
   SessionService::RefreshCompleteCallback restart_callback;
   SessionService::RefreshCompleteCallback continue_callback;
 };
@@ -69,12 +71,13 @@ class NET_EXPORT SessionServiceImpl : public SessionService {
       const NetLogWithSource& net_log,
       const std::optional<url::Origin>& original_request_initiator) override;
 
-  std::optional<Session::Id> GetAnySessionRequiringDeferral(
-      URLRequest* request) override;
+  std::optional<DeferralParams> ShouldDefer(
+      URLRequest* request,
+      const FirstPartySetMetadata& first_party_set_metadata) override;
 
   void DeferRequestForRefresh(
       URLRequest* request,
-      Session::Id session_id,
+      DeferralParams deferral,
       RefreshCompleteCallback restart_callback,
       RefreshCompleteCallback continue_callback) override;
 
@@ -92,7 +95,9 @@ class NET_EXPORT SessionServiceImpl : public SessionService {
   void DeleteAllSessions(
       std::optional<base::Time> created_after_time,
       std::optional<base::Time> created_before_time,
-      base::RepeatingCallback<bool(const net::SchemefulSite&)> site_matcher,
+      base::RepeatingCallback<bool(const url::Origin&,
+                                   const net::SchemefulSite&)>
+          origin_and_site_matcher,
       base::OnceClosure completion_callback) override;
   base::ScopedClosureRunner AddObserver(
       const GURL& url,
@@ -129,12 +134,12 @@ class NET_EXPORT SessionServiceImpl : public SessionService {
 
   void OnRegistrationComplete(
       OnAccessCallback on_access_callback,
-      std::optional<RegistrationFetcher::RegistrationCompleteParams> params);
+      base::expected<SessionParams, SessionError> params_or_error);
   void OnRefreshRequestCompletion(
       OnAccessCallback on_access_callback,
       SchemefulSite site,
       Session::Id session_id,
-      std::optional<RegistrationFetcher::RegistrationCompleteParams> result);
+      base::expected<SessionParams, SessionError> params_or_error);
 
   void AddSession(const SchemefulSite& site, std::unique_ptr<Session> session);
   void UnblockDeferredRequests(const Session::Id& session_id,
@@ -165,14 +170,47 @@ class NET_EXPORT SessionServiceImpl : public SessionService {
   // Remove an observer by site and pointer.
   void RemoveObserver(net::SchemefulSite site, Observer* observer);
 
+  // Helper function encapsulating the processing of registration
+  SessionError::ErrorType OnRegistrationCompleteInternal(
+      OnAccessCallback on_access_callback,
+      base::expected<SessionParams, SessionError> params_or_error);
+
+  // Helper function encapsulating the processing of refresh
+  SessionError::ErrorType OnRefreshRequestCompletionInternal(
+      OnAccessCallback on_access_callback,
+      const SchemefulSite& site,
+      const Session::Id& session_id,
+      base::expected<SessionParams, SessionError> params_or_error);
+
+  // Callback after unwrapping a session key
+  void OnSessionKeyRestored(URLRequest* request,
+                            const SchemefulSite& site,
+                            const Session::Id& session_id,
+                            Session::KeyIdOrError key_id_or_error);
+
+  // Helper function for starting a refresh
+  void RefreshSessionInternal(URLRequest* request,
+                              const SchemefulSite& site,
+                              Session* session,
+                              unexportable_keys::UnexportableKeyId key_id);
+
+  // Whether the site has exceeded its refresh quota.
+  bool RefreshQuotaExceeded(const SchemefulSite& site);
+
   // Whether we are waiting on the initial load of saved sessions to complete.
   bool pending_initialization_ = false;
   // Functions to call once initialization completes.
   std::vector<base::OnceClosure> queued_operations_;
+  // Number of requests deferred due to pending initialization.
+  size_t requests_before_initialization_ = 0;
 
   const raw_ref<unexportable_keys::UnexportableKeyService> key_service_;
   raw_ptr<const URLRequestContext> context_;
   raw_ptr<SessionStore> session_store_ = nullptr;
+
+  // When true, the refresh quota is not enforced. This is only ever set to
+  // true for testing purposes.
+  bool ignore_refresh_quota_ = false;
 
   // Deferred requests are stored by session ID.
   DeferredRequestsMap deferred_requests_;
@@ -182,6 +220,10 @@ class NET_EXPORT SessionServiceImpl : public SessionService {
 
   // All observers of sessions.
   std::map<net::SchemefulSite, ObserverSet> observers_by_site_;
+
+  // Per-site session refresh quota. In order to be robust across
+  // session parameter changes, we enforce refresh quota for a site.
+  std::map<net::SchemefulSite, std::vector<base::TimeTicks>> refresh_times_;
 
   base::WeakPtrFactory<SessionServiceImpl> weak_factory_{this};
 };

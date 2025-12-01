@@ -43,7 +43,7 @@ constexpr char kFullSessionResponse[] = R"(
           "kDummyDeviceId":
          {
             "info": {"device_id":"kDummyDeviceId"},
-            "state":"ACTIVE",
+            "state":"INACTIVE",
             "activity": {
               "activeTab": {
                 "title": "google"
@@ -126,7 +126,8 @@ constexpr char kFullSessionResponse[] = R"(
               "url": "https://youtube.com"
             }
           ],
-          "locked": true
+          "locked": true,
+          "lockToAppHome": true
         }
       }
     }
@@ -155,7 +156,7 @@ constexpr char kPartialResponse[] = R"(
             "kDummyDeviceId":
           {
               "info": {"device_id":"kDummyDeviceId"},
-              "state":"ACTIVE",
+              "state":"INACTIVE",
               "activity": {
                 "activeTab": {
                   "title": "google"
@@ -305,6 +306,12 @@ TEST_F(SessionParserTest, TestParseSessionConfigProtoFromJson) {
                   .active_bundle()
                   .locked());
 
+  EXPECT_TRUE(session_full->student_group_configs()
+                  .at(kMainStudentGroupName)
+                  .on_task_config()
+                  .active_bundle()
+                  .lock_to_app_home());
+
   auto content_config = std::move(session_full->student_group_configs()
                                       .at(kMainStudentGroupName)
                                       .on_task_config()
@@ -398,6 +405,11 @@ TEST_F(SessionParserTest, TestParseStudentStatusProtoFromJson) {
                           .activity()
                           .active_tab()
                           .title());
+  EXPECT_EQ(::boca::StudentDevice::INACTIVE, session_partial->student_statuses()
+                                                 .at("3")
+                                                 .devices()
+                                                 .at("kDummyDeviceId")
+                                                 .state());
   EXPECT_EQ(::boca::ViewScreenConfig::REQUESTED,
             session_partial->student_statuses()
                 .at("3")

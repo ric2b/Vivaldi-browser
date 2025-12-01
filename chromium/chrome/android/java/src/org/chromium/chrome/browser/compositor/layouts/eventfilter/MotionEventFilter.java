@@ -62,16 +62,6 @@ public class MotionEventFilter extends EventFilter {
         }
     }
 
-    /** Creates a {@link MotionEventFilter} with offset touch events. */
-    public MotionEventFilter(Context context, MotionEventHandler handler) {
-        this(context, handler, true);
-    }
-
-    /** Creates a {@link MotionEventFilter} with default long press behavior. */
-    public MotionEventFilter(Context context, MotionEventHandler handler, boolean autoOffset) {
-        this(context, handler, autoOffset, true);
-    }
-
     /**
      * Creates a {@link MotionEventFilter}.
      *
@@ -140,11 +130,7 @@ public class MotionEventFilter extends EventFilter {
                         // call handler.click if a long press has been detected.
                         if (mSingleInput && !mInLongPress) {
                             float pxToDp = mPxToDp;
-                            mHandler.click(
-                                    e.getX() * pxToDp,
-                                    e.getY() * pxToDp,
-                                    e.getToolType(0) == MotionEvent.TOOL_TYPE_MOUSE,
-                                    mButtons);
+                            mHandler.click(e.getX() * pxToDp, e.getY() * pxToDp, mButtons);
                         }
                         return true;
                     }
@@ -169,11 +155,7 @@ public class MotionEventFilter extends EventFilter {
                         mInLongPress = false;
                         mSeenFirstScrollEvent = false;
                         if (mSingleInput) {
-                            mHandler.onDown(
-                                    e.getX() * mPxToDp,
-                                    e.getY() * mPxToDp,
-                                    e.getToolType(0) == MotionEvent.TOOL_TYPE_MOUSE,
-                                    mButtons);
+                            mHandler.onDown(e.getX() * mPxToDp, e.getY() * mPxToDp, mButtons);
                         }
                         return true;
                     }
@@ -268,6 +250,8 @@ public class MotionEventFilter extends EventFilter {
         // Propagate the up event after any gesture events.
         if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL) {
             mHandler.onUpOrCancel();
+	    // Note(david@vivaldi.com): Pass the touch coordinates to the up and cancel event.
+            mHandler.onUpOrCancel(e.getX() * mPxToDp,e.getY() * mPxToDp);
         }
         return true;
     }

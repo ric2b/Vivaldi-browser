@@ -17,8 +17,11 @@
 #include <cstdint>
 #include <optional>
 #include <utility>
+#include <vector>
 
 #include "absl/log/absl_check.h"
+#include "tensorflow/lite/experimental/litert/c/litert_common.h"
+#include "tensorflow/lite/experimental/litert/c/litert_logging.h"
 #include "tensorflow/lite/experimental/litert/c/litert_model.h"
 #include "tensorflow/lite/experimental/litert/cc/litert_buffer_ref.h"
 #include "tensorflow/lite/experimental/litert/cc/litert_detail.h"
@@ -42,16 +45,46 @@ void CloneTo(const LiteRtTensorT& src, LiteRtTensorT& dest) {
   dest.SetName({src.Name().cbegin(), src.Name().cend()});
   dest.SetQarams(src.Qparams());
   dest.SetType(src.Type());
-  // TODO: Optimize buffer handoffs here.
-  OwningBufferRef<uint8_t> weights_buffer(src.Weights().Buffer().Data(),
-                                          src.Weights().Buffer().Size());
-  SetWeightsFromOwnedBuffer(dest.Weights(), std::move(weights_buffer));
+
+  // Manully copy per-channel quantization params,quant array is owned by
+  // tensor.
+  if (src.Qparams().first == kLiteRtQuantizationPerChannel) {
+    std::vector<float> scales(
+        src.Qparams().second.per_channel.scales,
+        src.Qparams().second.per_channel.scales +
+            src.Qparams().second.per_channel.num_channels);
+    std::vector<int64_t> zero_points(
+        src.Qparams().second.per_channel.zero_points,
+        src.Qparams().second.per_channel.zero_points +
+            src.Qparams().second.per_channel.num_channels);
+    Quantization dest_qparams = MakePerChannelQuantization(
+        scales, zero_points,
+        src.Qparams().second.per_channel.quantized_dimension,
+        [&dest](auto s) { return dest.RequestScratchBuffer(s); });
+    dest.SetQarams(std::move(dest_qparams));
+  }
+
+  // Move weight buffer from src to dest.
+  const auto& src_weights = src.Weights();
+  auto& dest_weights = dest.Weights();
+
+  const auto same_manager =
+      src_weights.GetBufferManager() == dest_weights.GetBufferManager();
+
+  if (same_manager) {
+    dest_weights.SetBufferId(src_weights.GetBufferId());
+  } else {
+    OwningBufferRef<uint8_t> weights_buffer(src_weights.Buffer().Data(),
+                                            src_weights.Buffer().Size());
+    SetWeightsFromOwnedBuffer(dest_weights, std::move(weights_buffer));
+  }
 }
 
 void CloneTo(const LiteRtOpT& src, LiteRtOpT& dest) {
   dest.SetCustomOptions(src.CustomOptions().Data(), src.CustomOptions().Size());
-  detail::SetTflOptions(dest, detail::GetTflOptions(src));
-  detail::SetTflOpCodeInd(dest, detail::GetTflOpCodeInd(src));
+  litert::internal::SetTflOptions(dest, litert::internal::GetTflOptions(src));
+  litert::internal::SetTflOpCodeInd(dest,
+                                    litert::internal::GetTflOpCodeInd(src));
   dest.SetOpCode(src.OpCode());
 }
 
@@ -184,6 +217,8 @@ bool DCE(LiteRtSubgraphT& subgraph) {
     return IsTensorDead(t) && !IsIO(subgraph, t);
   };
   const auto tensors_removed = subgraph.RemoveTensorIf(rm_tensor);
+  LITERT_LOG(LITERT_INFO, "Removed %d ops, %d tensors", ops_removed,
+             tensors_removed);
 
   return (ops_removed + tensors_removed) > 0;
 }

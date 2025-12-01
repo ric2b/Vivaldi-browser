@@ -24,6 +24,7 @@
 #include "third_party/blink/renderer/core/svg/svg_animated_length.h"
 #include "third_party/blink/renderer/core/svg/svg_length.h"
 #include "third_party/blink/renderer/core/svg/svg_length_functions.h"
+#include "third_party/blink/renderer/platform/geometry/path_builder.h"
 #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
 
 namespace blink {
@@ -57,7 +58,11 @@ void SVGCircleElement::Trace(Visitor* visitor) const {
 }
 
 Path SVGCircleElement::AsPath() const {
-  Path path;
+  return AsMutablePath().Finalize();
+}
+
+PathBuilder SVGCircleElement::AsMutablePath() const {
+  PathBuilder builder;
 
   const SVGViewportResolver viewport_resolver(*this);
   const ComputedStyle& style = ComputedStyleRef();
@@ -67,9 +72,9 @@ Path SVGCircleElement::AsPath() const {
   if (r > 0) {
     gfx::PointF center =
         PointForLengthPair(style.Cx(), style.Cy(), viewport_resolver, style);
-    path.AddEllipse(center, r, r);
+    builder.AddEllipse(center, r, r);
   }
-  return path;
+  return builder;
 }
 
 void SVGCircleElement::SvgAttributeChanged(
@@ -77,7 +82,6 @@ void SVGCircleElement::SvgAttributeChanged(
   const QualifiedName& attr_name = params.name;
   if (attr_name == svg_names::kRAttr || attr_name == svg_names::kCxAttr ||
       attr_name == svg_names::kCyAttr) {
-    UpdateRelativeLengthsInformation();
     GeometryPresentationAttributeChanged(params.property);
     return;
   }

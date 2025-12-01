@@ -73,6 +73,7 @@
 
 #if BUILDFLAG(IS_CHROMEOS)
 #include "ash/constants/ash_switches.h"
+#include "base/check_deref.h"
 #include "chrome/browser/ash/login/users/avatar/user_image_manager_impl.h"
 #include "chrome/browser/ash/login/users/fake_chrome_user_manager.h"
 #include "chrome/browser/ash/login/users/user_manager_delegate_impl.h"
@@ -88,6 +89,7 @@
 #include "chromeos/ash/experiences/arc/session/arc_management_transition.h"
 #include "components/user_manager/fake_user_manager.h"
 #include "components/user_manager/scoped_user_manager.h"
+#include "components/user_manager/test_helper.h"
 #include "components/user_manager/user_manager.h"
 #include "components/user_manager/user_manager_impl.h"
 #include "components/user_manager/user_names.h"
@@ -201,6 +203,7 @@ class ProfileManagerTest : public testing::Test {
     ash::UserImageManagerImpl::SkipDefaultUserImageDownloadForTesting();
     wallpaper_controller_client_ = std::make_unique<
         WallpaperControllerClientImpl>(
+        CHECK_DEREF(TestingBrowserProcess::GetGlobal()->local_state()),
         std::make_unique<wallpaper_handlers::TestWallpaperFetcherDelegate>());
     wallpaper_controller_client_->InitForTesting(&test_wallpaper_controller_);
 
@@ -295,12 +298,22 @@ class ProfileManagerTest : public testing::Test {
   // Helper function to register an user with id |user_id| and create profile
   // with a correct path.
   void RegisterUser(const AccountId& account_id) {
-    ash::ProfileHelper* profile_helper = ash::ProfileHelper::Get();
+    auto* user_manager = user_manager::UserManager::Get();
+
+    // Add user for testing.
+    {
+      user_manager::TestHelper test_helper(user_manager);
+      if (account_id == user_manager::GuestAccountId()) {
+        ASSERT_TRUE(test_helper.AddGuestUser());
+      } else {
+        ASSERT_TRUE(test_helper.AddRegularUser(account_id));
+      }
+    }
+
     const std::string user_id_hash =
-        user_manager::FakeUserManager::GetFakeUsernameHash(account_id);
-    user_manager::UserManager::Get()->UserLoggedIn(account_id, user_id_hash,
-                                                   false /* browser_restart */,
-                                                   false /* is_child */);
+        user_manager::TestHelper::GetFakeUsernameHash(account_id);
+    user_manager::UserManager::Get()->UserLoggedIn(account_id, user_id_hash);
+    ash::ProfileHelper* profile_helper = ash::ProfileHelper::Get();
     g_browser_process->profile_manager()->GetProfile(
         profile_helper->GetProfilePathByUserIdHash(user_id_hash));
   }
@@ -319,9 +332,18 @@ class ProfileManagerTest : public testing::Test {
     const AccountId account_id =
         AccountId::FromUserEmailGaiaId(user_email, GaiaId("1"));
     const std::string user_id_hash =
-        user_manager::FakeUserManager::GetFakeUsernameHash(account_id);
+        user_manager::TestHelper::GetFakeUsernameHash(account_id);
     const base::FilePath dest_path =
         profile_helper->GetProfilePathByUserIdHash(user_id_hash);
+
+    {
+      user_manager::TestHelper test_helper(user_manager);
+      if (user_is_child) {
+        CHECK(test_helper.AddChildUser(account_id));
+      } else {
+        CHECK(test_helper.AddRegularUser(account_id));
+      }
+    }
 
     TestingProfile::Builder builder;
     builder.SetPath(dest_path);
@@ -340,8 +362,7 @@ class ProfileManagerTest : public testing::Test {
                                       *arc_is_managed);
     }
 
-    user_manager->UserLoggedIn(account_id, user_id_hash,
-                               false /* browser_restart */, user_is_child);
+    user_manager->UserLoggedIn(account_id, user_id_hash);
     g_browser_process->profile_manager()->InitProfileUserPrefs(profile.get());
 
     return profile;
@@ -389,9 +410,8 @@ TEST_F(ProfileManagerTest, GetProfile) {
 TEST_F(ProfileManagerTest, DefaultProfileDir) {
   base::FilePath expected_default =
       base::FilePath().AppendASCII(chrome::kInitialProfile);
-  EXPECT_EQ(
-      expected_default.value(),
-      g_browser_process->profile_manager()->GetInitialProfileDir().value());
+  EXPECT_EQ(expected_default.value(),
+            ProfileManager::GetInitialProfileDir().value());
 }
 
 MATCHER(SameNotNull, "The same non-NULL value for all calls.") {
@@ -406,12 +426,13 @@ MATCHER(SameNotNull, "The same non-NULL value for all calls.") {
 TEST_F(ProfileManagerTest, LoggedInProfileDir) {
   base::FilePath expected_default =
       base::FilePath().AppendASCII(chrome::kInitialProfile);
-  ProfileManager* profile_manager = g_browser_process->profile_manager();
   EXPECT_EQ(expected_default.value(),
-            profile_manager->GetInitialProfileDir().value());
+            ProfileManager::GetInitialProfileDir().value());
 
-  const AccountId test_account_id(AccountId::FromUserEmailGaiaId(
-      "test-user@example.com", GaiaId("0123456789")));
+  constexpr char kTestUserName[] = "test-user@example.com";
+  constexpr GaiaId::Literal kTestUserGaiaId("0123456789");
+  const AccountId test_account_id(
+      AccountId::FromUserEmailGaiaId(kTestUserName, kTestUserGaiaId));
   auto* user_manager = new ash::FakeChromeUserManager();
   user_manager::ScopedUserManager enabler(base::WrapUnique(user_manager));
 
@@ -423,9 +444,9 @@ TEST_F(ProfileManagerTest, LoggedInProfileDir) {
   base::FilePath expected_logged_in(
       ash::ProfileHelper::GetUserProfileDir(active_user->username_hash()));
   EXPECT_EQ(expected_logged_in.value(),
-            profile_manager->GetInitialProfileDir().value());
+            ProfileManager::GetInitialProfileDir().value());
   VLOG(1) << temp_dir_.GetPath()
-                 .Append(profile_manager->GetInitialProfileDir())
+                 .Append(ProfileManager::GetInitialProfileDir())
                  .value();
 }
 
@@ -449,10 +470,11 @@ TEST_F(ProfileManagerTest, UserProfileLoading) {
   const AccountId account_id = AccountId::FromUserEmailGaiaId(
       "test-user@example.com", GaiaId("0123456789"));
   const std::string user_id_hash =
-      user_manager::FakeUserManager::GetFakeUsernameHash(account_id);
-  user_manager::UserManager::Get()->UserLoggedIn(account_id, user_id_hash,
-                                                 false /* browser_restart */,
-                                                 false /* is_child */);
+      user_manager::TestHelper::GetFakeUsernameHash(account_id);
+  auto* user_manager = user_manager::UserManager::Get();
+  ASSERT_TRUE(
+      user_manager::TestHelper(user_manager).AddRegularUser(account_id));
+  user_manager->UserLoggedIn(account_id, user_id_hash);
 
   // Sign-in profile should be returned at this stage. Otherwise, login code
   // ends up in an invalid state. Strange things as in http://crbug.com/728683
@@ -953,13 +975,6 @@ class ProfileManagerGuestTest : public ProfileManagerTest {
     unittest_profile_manager_ = profile_manager_unique.get();
     return profile_manager_unique;
   }
-
-#if BUILDFLAG(IS_CHROMEOS)
-  ash::FakeChromeUserManager* GetFakeUserManager() const {
-    return static_cast<ash::FakeChromeUserManager*>(
-        user_manager::UserManager::Get());
-  }
-#endif
 
  private:
   raw_ptr<UnittestGuestProfileManager, DanglingUntriaged>

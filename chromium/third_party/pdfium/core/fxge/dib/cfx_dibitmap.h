@@ -33,12 +33,16 @@ class CFX_DIBitmap final : public CFX_DIBBase {
   // un-premultiplies in the dtor if pre-multiplication was required.
   class ScopedPremultiplier {
    public:
-    // `bitmap` must start out un-premultiplied.
-    // ScopedPremultiplier is a no-op if `do_premultiply` is false.
-    ScopedPremultiplier(RetainPtr<CFX_DIBitmap> bitmap, bool do_premultiply);
+    // ScopedPremultiplier is a no-op if `bitmap` does not need to be
+    // pre-multiplied, as determined by NeedToPremultiplyBitmap().
+    explicit ScopedPremultiplier(RetainPtr<CFX_DIBitmap> bitmap);
     ~ScopedPremultiplier();
 
    private:
+    // Returns true if Skia is enabled at runtime and `bitmap_` is an format
+    // that has un-premultiplied alpha.
+    bool NeedToPremultiplyBitmap() const;
+
     RetainPtr<CFX_DIBitmap> const bitmap_;
     const bool do_premultiply_;
   };
@@ -147,7 +151,7 @@ class CFX_DIBitmap final : public CFX_DIBBase {
                      int height,
                      uint32_t color);
 
-  bool ConvertColorScale(uint32_t forecolor, uint32_t backcolor);
+  void ConvertColorScale(uint32_t forecolor, uint32_t backcolor);
 
   // |width| and |height| must be greater than 0.
   // |format| must have a valid bits per pixel count.

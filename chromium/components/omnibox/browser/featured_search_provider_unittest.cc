@@ -55,6 +55,7 @@ const std::string kBookmarksUrl =
 const std::string kHistoryUrl =
     TemplateURLStarterPackData::history.destination_url;
 const std::string kTabsUrl = TemplateURLStarterPackData::tabs.destination_url;
+const std::string kPageUrl = TemplateURLStarterPackData::page.destination_url;
 const std::string kGeminiUrl =
     TemplateURLStarterPackData::Gemini.destination_url;
 
@@ -295,7 +296,8 @@ TEST_F(FeaturedSearchProviderTest, StarterPackExpansion) {
 
 TEST_F(FeaturedSearchProviderTest, StarterPackExpansionRelevance) {
   base::test::ScopedFeatureList features;
-  features.InitAndEnableFeature(omnibox::kStarterPackExpansion);
+  features.InitWithFeatures(
+      {omnibox::kStarterPackExpansion, omnibox::kStarterPackPage}, {});
 
   AddStarterPackEntriesToTemplateUrlService();
 
@@ -318,6 +320,7 @@ TEST_F(FeaturedSearchProviderTest, StarterPackExpansionRelevance) {
       kGeminiUrl,
       kBookmarksUrl,
       kHistoryUrl,
+      kPageUrl,
       kTabsUrl,
   });
   for (size_t i = 0; i < matches.size(); i++) {
@@ -866,7 +869,7 @@ TEST_F(FeaturedSearchProviderTest, IphShownLimit) {
   }
 }
 
-TEST_F(FeaturedSearchProviderTest, OffTheRecord) {
+TEST_F(FeaturedSearchProviderTest, OffTheRecord_HistoryEmbeddings) {
   base::test::ScopedFeatureList features;
   features.InitWithFeatures({history_embeddings::kHistoryEmbeddings},
                             {omnibox::kStarterPackIPH});
@@ -881,4 +884,32 @@ TEST_F(FeaturedSearchProviderTest, OffTheRecord) {
   // doesn't make sense to promote it in these windows.
   EXPECT_CALL(*client_, IsOffTheRecord()).WillRepeatedly(testing::Return(true));
   RunAndVerifyIphTypes(input, {});
+}
+
+TEST_F(FeaturedSearchProviderTest, OffTheRecord_FeaturedEnterpriseSearch) {
+  base::test::ScopedFeatureList features;
+  features.InitWithFeatures({omnibox::kStarterPackExpansion},
+                            {omnibox::kStarterPackIPH});
+  AddStarterPackEntriesToTemplateUrlService();
+  AddFeaturedEnterpriseSearchEngine(FeaturedKeywordN(1), FeaturedUrlN(1),
+                                    TemplateURLData::PolicyOrigin::kSiteSearch);
+  AddFeaturedEnterpriseSearchEngine(
+      FeaturedKeywordN(2), FeaturedUrlN(2),
+      TemplateURLData::PolicyOrigin::kSearchAggregator);
+  AutocompleteInput input;
+  input.set_focus_type(metrics::INTERACTION_FOCUS);
+
+  // The enterprise search aggregator scope doesn't work in Incognito or guest
+  // mode. However, the match and IPH for enterprise site search engine should
+  // still show.
+  EXPECT_CALL(*client_, IsOffTheRecord()).WillRepeatedly(testing::Return(true));
+  RunAndVerifyIph(input, {{IphType::kFeaturedEnterpriseSearch,
+                           u"Type @ to search featured1.com"}});
+
+  // "@" state.
+  std::vector<TestData> typing_scheme_cases = {
+      // Typing '@' should give all the starter pack suggestions (excluding
+      // history), featured site search engine, and no IPH.
+      {u"@", {kBookmarksUrl, FeaturedUrlN(1), kGeminiUrl, kTabsUrl}}};
+  RunTest(typing_scheme_cases);
 }

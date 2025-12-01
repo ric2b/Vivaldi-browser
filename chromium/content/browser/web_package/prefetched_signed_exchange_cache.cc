@@ -337,10 +337,10 @@ bool ExtractSHA256HashValueFromString(std::string_view value,
   const std::string_view base64_str = value.substr(7);
   std::string decoded;
   if (!base::Base64Decode(base64_str, &decoded) ||
-      decoded.size() != sizeof(out->data)) {
+      decoded.size() != out->size()) {
     return false;
   }
-  memcpy(out->data, decoded.data(), sizeof(out->data));
+  memcpy(out->data(), decoded.data(), out->size());
   return true;
 }
 
@@ -457,7 +457,8 @@ PrefetchedSignedExchangeCache::MaybeCreateInterceptor(
                               : net::CookieSettingOverrides(),
             /*devtools_cookie_setting_overrides=*/net::CookieSettingOverrides(),
             cookie_manager.BindNewPipeAndPassReceiver(),
-            render_frame_host ? render_frame_host->CreateCookieAccessObserver()
+            render_frame_host ? render_frame_host->CreateCookieAccessObserver(
+                                    CookieAccessDetails::Source::kNonNavigation)
                               : mojo::NullRemote());
   }
 

@@ -19,6 +19,10 @@
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "ui/gfx/image/image.h"
 
+// Vivaldi
+#include "app/vivaldi_apptools.h"
+// End Vivaldi
+
 namespace favicon {
 
 gfx::Image WebFaviconDriver::GetFavicon() const {
@@ -82,6 +86,15 @@ void WebFaviconDriver::OnFaviconUpdated(
     const GURL& icon_url,
     bool icon_url_changed,
     const gfx::Image& image) {
+
+  if (vivaldi::IsVivaldiRunning()) {
+    const web::FaviconStatus& current = web_state_->GetFaviconStatus();
+    // Skip update if image is empty and current image is already valid
+    if (image.IsEmpty() && current.valid && !current.image.IsEmpty()) {
+      return;
+    }
+  } // End Vivaldi
+
   web::FaviconStatus favicon_status;
   favicon_status.valid = true;
   favicon_status.image = image;

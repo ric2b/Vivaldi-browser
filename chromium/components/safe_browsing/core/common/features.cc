@@ -33,7 +33,7 @@ BASE_FEATURE(kAdSamplerTriggerFeature,
 #if BUILDFLAG(IS_ANDROID)
 BASE_FEATURE(kAddReferringAppInfoToProtegoPings,
              "AddReferringAppInfoToProtegoPings",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 BASE_FEATURE(kAddReferringWebApkToProtegoPings,
              "AddReferringWebApkToProtegoPings",
@@ -46,7 +46,7 @@ BASE_FEATURE(kAddWarningShownTSToClientSafeBrowsingReport,
 
 BASE_FEATURE(kClientSideDetectionAcceptHCAllowlist,
              "ClientSideDetectionAcceptHCAllowlist",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 BASE_FEATURE(kClientSideDetectionBrandAndIntentForScamDetection,
              "ClientSideDetectionBrandAndIntentForScamDetection",
@@ -78,6 +78,10 @@ BASE_FEATURE(kClientSideDetectionNotificationPrompt,
 
 BASE_FEATURE(kClientSideDetectionSamplePing,
              "ClientSideDetectionSamplePing",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+
+BASE_FEATURE(kClientSideDetectionShowLlamaScamVerdictWarning,
+             "ClientSideDetectionShowLlamaScamVerdictWarning",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 BASE_FEATURE(kClientSideDetectionShowScamVerdictWarning,
@@ -100,10 +104,6 @@ BASE_FEATURE(kCreateWarningShownClientSafeBrowsingReports,
              "CreateWarningShownClientSafeBrowsingReports",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
-BASE_FEATURE(kDeepScanningCriteria,
-             "SafeBrowsingDeepScanningCriteria",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
 BASE_FEATURE(kDelayedWarnings,
              "SafeBrowsingDelayedWarnings",
              base::FEATURE_DISABLED_BY_DEFAULT);
@@ -123,10 +123,6 @@ BASE_FEATURE(kDownloadsPageReferrerUrl,
              "DownloadsPageReferrerUrl",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
-BASE_FEATURE(kDownloadTailoredWarnings,
-             "DownloadTailoredWarnings",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
 BASE_FEATURE(kDownloadWarningSurvey,
              "DownloadWarningSurvey",
              base::FEATURE_DISABLED_BY_DEFAULT);
@@ -138,6 +134,10 @@ constexpr base::FeatureParam<int> kDownloadWarningSurveyType{
 constexpr base::FeatureParam<int> kDownloadWarningSurveyIgnoreDelaySeconds{
     &kDownloadWarningSurvey, "ignore_delay_seconds", 300};
 
+BASE_FEATURE(kEnhancedFieldsForSecOps,
+             "EnhancedFieldsForSecOps",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
 BASE_FEATURE(kEnhancedSafeBrowsingPromo,
              "EnhancedSafeBrowsingPromo",
 #if BUILDFLAG(IS_IOS)
@@ -146,6 +146,10 @@ BASE_FEATURE(kEnhancedSafeBrowsingPromo,
              base::FEATURE_DISABLED_BY_DEFAULT
 #endif
 );
+
+BASE_FEATURE(kEnterpriseFileSystemAccessDeepScan,
+             "EnterpriseFileSystemAccessDeepScan",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
 BASE_FEATURE(kEnterprisePasswordReuseUiRefresh,
              "EnterprisePasswordReuseUiRefresh",
@@ -192,6 +196,10 @@ BASE_FEATURE(kExternalAppRedirectTelemetry,
              "SafeBrowsingExternalAppRedirectTelemetry",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
+BASE_FEATURE(kGoogleStandardDeviceBoundSessionCredentials,
+             "GoogleStandardDeviceBoundSessionCredentials",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
 BASE_FEATURE(kGooglePlayProtectInApkTelemetry,
              "SafeBrowsingGooglePlayProtectInApkTelemetry",
              base::FEATURE_ENABLED_BY_DEFAULT);
@@ -210,10 +218,6 @@ constexpr base::FeatureParam<std::string> kHashPrefixRealTimeLookupsRelayUrl{
     /*default_value=*/
     "https://google-ohttp-relay-safebrowsing.fastly-edge.com/"};
 
-BASE_FEATURE(kHashPrefixRealTimeLookupsFasterOhttpKeyRotation,
-             "SafeBrowsingHashPrefixRealTimeLookupsFasterOhttpKeyRotation",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
 BASE_FEATURE(kHashPrefixRealTimeLookupsSamplePing,
              "SafeBrowsingHashPrefixRealTimeLookupsSamplePing",
              base::FEATURE_DISABLED_BY_DEFAULT);
@@ -230,9 +234,32 @@ BASE_FEATURE(kLocalListsUseSBv5,
              "SafeBrowsingLocalListsUseSBv5",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
+#if BUILDFLAG(IS_ANDROID)
+BASE_FEATURE(kMaliciousApkDownloadCheck,
+             "MaliciousApkDownloadCheck",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+BASE_FEATURE_PARAM(bool,
+                   kMaliciousApkDownloadCheckTelemetryOnly,
+                   &kMaliciousApkDownloadCheck,
+                   "telemetry_only",
+                   /*default_value=*/false);
+
+BASE_FEATURE_PARAM(int,
+                   kMaliciousApkDownloadCheckSamplePercentage,
+                   &kMaliciousApkDownloadCheck,
+                   "sample_percentage",
+                   /*default_value=*/100);
+
+constexpr base::FeatureParam<std::string>
+    kMaliciousApkDownloadCheckServiceUrlOverride{&kMaliciousApkDownloadCheck,
+                                                 "service_url_override",
+                                                 /*default_value=*/""};
+#endif
+
 BASE_FEATURE(kOnDeviceNotificationContentDetectionModel,
              "OnDeviceNotificationContentDetectionModel",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 constexpr base::FeatureParam<int>
     kOnDeviceNotificationContentDetectionModelAllowlistSamplingRate{
@@ -242,7 +269,7 @@ constexpr base::FeatureParam<int>
 
 BASE_FEATURE(kPasswordLeakToggleMove,
              "PasswordLeakToggleMove",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 BASE_FEATURE(kRedWarningSurvey,
              "RedWarningSurvey",
@@ -257,12 +284,6 @@ constexpr base::FeatureParam<std::string> kRedWarningSurveyReportTypeFilter{
 constexpr base::FeatureParam<std::string> kRedWarningSurveyDidProceedFilter{
     &kRedWarningSurvey, "RedWarningSurveyDidProceedFilter",
     /*default_value=*/"TRUE,FALSE"};
-
-#if BUILDFLAG(IS_IOS)
-BASE_FEATURE(kSafeBrowsingAsyncRealTimeCheck,
-             "SafeBrowsingAsyncRealTimeCheck",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-#endif
 
 BASE_FEATURE(kSafeBrowsingDailyPhishingReportsLimit,
              "SafeBrowsingDailyPhishingReportsLimit",
@@ -286,9 +307,28 @@ BASE_FEATURE(kSafetyHubAbusiveNotificationRevocation,
              "SafetyHubAbusiveNotificationRevocation",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
+BASE_FEATURE(kSafetyHubDisruptiveNotificationRevocation,
+             "SafetyHubDisruptiveNotificationRevocation",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+constexpr base::FeatureParam<bool>
+    kSafetyHubDisruptiveNotificationRevocationShadowRun{
+        &kSafetyHubDisruptiveNotificationRevocation,
+        /*name=*/"shadow_run", /*default_value=*/true};
+
+constexpr base::FeatureParam<int>
+    kSafetyHubDisruptiveNotificationRevocationMinNotificationCount{
+        &kSafetyHubDisruptiveNotificationRevocation,
+        /*name=*/"min_notification_count", /*default_value=*/3};
+
+constexpr base::FeatureParam<double>
+    kSafetyHubDisruptiveNotificationRevocationMaxEngagementScore{
+        &kSafetyHubDisruptiveNotificationRevocation,
+        /*name=*/"max_engagement_score", /*default_value=*/0.0};
+
 BASE_FEATURE(kSavePasswordHashFromProfilePicker,
              "SavePasswordHashFromProfilePicker",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 BASE_FEATURE(kShowWarningsForSuspiciousNotifications,
              "ShowWarningsForSuspiciousNotifications",
@@ -337,7 +377,7 @@ base::Value::List GetFeatureStatusList() {
       &kCreateNotificationsAcceptedClientSafeBrowsingReports,
       &kDelayedWarnings,
       &kDlpRegionalizedEndpoints,
-      &kDownloadTailoredWarnings,
+      &kEnhancedFieldsForSecOps,
       &kEnhancedSafeBrowsingPromo,
       &kEnterprisePasswordReuseUiRefresh,
       &kEnterpriseRealTimeUrlCheckOnAndroid,
@@ -345,7 +385,6 @@ base::Value::List GetFeatureStatusList() {
       &kExtensionTelemetryForEnterprise,
       &kExternalAppRedirectTelemetry,
       &kHashPrefixRealTimeLookups,
-      &kHashPrefixRealTimeLookupsFasterOhttpKeyRotation,
       &kLocalIpAddressInEvents,
       &kLocalListsUseSBv5,
       &kOnDeviceNotificationContentDetectionModel,

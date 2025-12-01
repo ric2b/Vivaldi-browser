@@ -29,6 +29,7 @@
 #include "chrome/browser/ui/profiles/profile_colors_util.h"
 #include "chrome/browser/ui/sync/profile_signin_confirmation_helper.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
+#include "chrome/browser/ui/ui_features.h"
 #include "chrome/browser/ui/webui/signin/login_ui_service_factory.h"
 #include "chrome/browser/ui/webui/signin/signin_email_confirmation_dialog.h"
 #include "chrome/browser/ui/webui/signin/signin_ui_error.h"
@@ -82,11 +83,14 @@ void OnEmailConfirmation(signin::SigninChoiceCallback callback,
 
 }  // namespace
 
-TurnSyncOnHelperDelegateImpl::TurnSyncOnHelperDelegateImpl(Browser* browser,
-                                                           bool is_sync_promo)
+TurnSyncOnHelperDelegateImpl::TurnSyncOnHelperDelegateImpl(
+    Browser* browser,
+    bool is_sync_promo,
+    bool turn_sync_on_signed_profile)
     : browser_(browser),
       profile_(browser_->profile()),
-      is_sync_promo_(is_sync_promo) {
+      is_sync_promo_(is_sync_promo),
+      turn_sync_on_signed_profile_(turn_sync_on_signed_profile) {
   DCHECK(browser);
   DCHECK(profile_);
   BrowserList::AddObserver(this);
@@ -101,7 +105,14 @@ bool TurnSyncOnHelperDelegateImpl::IsProfileCreationRequiredByPolicy() const {
 }
 
 void TurnSyncOnHelperDelegateImpl::ShowLoginError(const SigninUIError& error) {
-  DCHECK(!error.IsOk());
+  CHECK(!error.IsOk());
+  if (is_sync_promo_ &&
+      error.type() ==
+          SigninUIError::Type::kAccountAlreadyUsedByAnotherProfile) {
+    // Do not show Sync-related errors if it's a Sync promo.
+    return;
+  }
+
   TurnSyncOnHelper::Delegate::ShowLoginErrorForBrowser(error, browser_);
 }
 
@@ -109,6 +120,11 @@ void TurnSyncOnHelperDelegateImpl::
     ShouldEnterpriseConfirmationPromptForNewProfile(
         Profile* profile,
         base::OnceCallback<void(bool)> callback) {
+  if (base::FeatureList::IsEnabled(
+          features::kEnterpriseUpdatedProfileCreationScreen)) {
+    std::move(callback).Run(/*prompt_for_new_profile=*/true);
+    return;
+  }
   ui::CheckShouldPromptForNewProfile(profile, std::move(callback));
 }
 
@@ -140,6 +156,12 @@ void TurnSyncOnHelperDelegateImpl::ShowSyncConfirmation(
   browser_ = EnsureBrowser(browser_, profile_);
   browser_->signin_view_controller()->ShowModalSyncConfirmationDialog(
       /*is_signin_intercept=*/false, is_sync_promo_);
+}
+
+bool TurnSyncOnHelperDelegateImpl::
+    ShouldAbortBeforeShowSyncDisabledConfirmation() {
+  // Do not show the sync disabled confirmation if it's a Sync promo.
+  return is_sync_promo_;
 }
 
 void TurnSyncOnHelperDelegateImpl::ShowSyncDisabledConfirmation(
@@ -209,6 +231,7 @@ void TurnSyncOnHelperDelegateImpl::OnProfileSigninRestrictionsFetched(
   browser_->signin_view_controller()->ShowModalManagedUserNoticeDialog(
       std::make_unique<signin::EnterpriseProfileCreationDialogParams>(
           account_info, /*is_oidc_account=*/false,
+          /*turn_sync_on_signed_profile=*/turn_sync_on_signed_profile_,
           profile_creation_required_by_policy_, show_link_data_option,
           std::move(callback),
           base::BindOnce(&SigninViewController::CloseModalSignin,
@@ -248,6 +271,7 @@ void TurnSyncOnHelperDelegateImpl::OnProfileCheckComplete(
   browser_->signin_view_controller()->ShowModalManagedUserNoticeDialog(
       std::make_unique<signin::EnterpriseProfileCreationDialogParams>(
           account_info, /*is_oidc_account=*/false,
+          /*turn_sync_on_signed_profile=*/turn_sync_on_signed_profile_,
           /*profile_creation_required_by_policy=*/false,
           /*show_link_data_option=*/false,
           base::BindOnce(

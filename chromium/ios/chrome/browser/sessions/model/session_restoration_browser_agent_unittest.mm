@@ -33,6 +33,7 @@
 #import "ios/chrome/browser/shared/model/web_state_list/web_state_opener.h"
 #import "ios/chrome/browser/signin/model/authentication_service_factory.h"
 #import "ios/chrome/browser/signin/model/fake_authentication_service_delegate.h"
+#import "ios/chrome/browser/tips_manager/model/tips_manager_ios_factory.h"
 #import "ios/chrome/test/ios_chrome_scoped_testing_local_state.h"
 #import "ios/web/public/navigation/navigation_manager.h"
 #import "ios/web/public/navigation/referrer.h"
@@ -138,12 +139,15 @@ class SessionRestorationBrowserAgentTest : public PlatformTest {
  public:
   SessionRestorationBrowserAgentTest() {
     test_session_service_ = [[TestSessionService alloc] init];
-    TestProfileIOS::Builder test_cbs_builder;
-    test_cbs_builder.AddTestingFactory(
+    TestProfileIOS::Builder test_profile_builder;
+    test_profile_builder.AddTestingFactory(
         AuthenticationServiceFactory::GetInstance(),
         AuthenticationServiceFactory::GetFactoryWithDelegate(
             std::make_unique<FakeAuthenticationServiceDelegate>()));
-    profile_ = std::move(test_cbs_builder).Build();
+    test_profile_builder.AddTestingFactory(
+        TipsManagerIOSFactory::GetInstance(),
+        TipsManagerIOSFactory::GetDefaultFactory());
+    profile_ = std::move(test_profile_builder).Build();
 
     session_identifier_ = [[NSUUID UUID] UUIDString];
   }

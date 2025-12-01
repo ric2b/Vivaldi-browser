@@ -123,8 +123,8 @@ class ScrollButton : public views::ImageButton {
       : views::ImageButton(std::move(callback)) {
     ConfigureVectorImageButton(this);
 
-    SetBackground(views::CreateThemedRoundedRectBackground(
-        ui::kColorButtonBackground, web_app::kIconSize / 2));
+    SetBackground(views::CreateRoundedRectBackground(ui::kColorButtonBackground,
+                                                     web_app::kIconSize / 2));
 
     views::HighlightPathGenerator::Install(
         this,
@@ -213,7 +213,7 @@ class ImageCarouselView : public views::View {
       throbber->Start();
 
       throbber_container_view->AddChildView(std::move(throbber));
-      throbber_container_view->SetBorder(views::CreateThemedSolidBorder(
+      throbber_container_view->SetBorder(views::CreateSolidBorder(
           /*thickness=*/1, ui::kColorSysSecondaryContainer));
       throbber_container_view->SetProperty(
           views::kMarginsKey, gfx::Insets::TLBR(0, 0, 0, image_padding_));
@@ -484,7 +484,7 @@ void ShowWebAppDetailedInstallDialog(
     delegate_weak_ptr->CloseDialogAsIgnored();
     return;
   }
-  delegate_weak_ptr->StartObservingWidgetForChanges(detailed_dialog_widget);
+  delegate_weak_ptr->OnWidgetShownStartTracking(detailed_dialog_widget);
 
   base::RecordAction(base::UserMetricsAction("WebAppDetailedInstallShown"));
 

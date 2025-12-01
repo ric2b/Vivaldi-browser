@@ -25,7 +25,7 @@ const UIStrings = {
    *@description Error message for canceled source map loads
    */
   loadCanceledDueToReloadOf: 'Load canceled due to reload of inspected page',
-};
+} as const;
 const str_ = i18n.i18n.registerUIStrings('core/sdk/PageResourceLoader.ts', UIStrings);
 const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
 
@@ -56,6 +56,7 @@ export interface PageResource {
   initiator: PageResourceLoadInitiator;
   url: Platform.DevToolsPath.UrlString;
   size: number|null;
+  duration: number|null;
 }
 
 // Used for revealing a resource.
@@ -80,11 +81,11 @@ interface LoadQueueEntry {
  * resources were loaded, and whether there was a load error.
  */
 export class PageResourceLoader extends Common.ObjectWrapper.ObjectWrapper<EventTypes> {
-  #currentlyLoading: number;
-  #currentlyLoadingPerTarget: Map<Protocol.Target.TargetID|'main', number>;
+  #currentlyLoading = 0;
+  #currentlyLoadingPerTarget = new Map<Protocol.Target.TargetID|'main', number>();
   readonly #maxConcurrentLoads: number;
-  #pageResources: Map<string, PageResource>;
-  #queuedLoads: LoadQueueEntry[];
+  #pageResources = new Map<string, PageResource>();
+  #queuedLoads: LoadQueueEntry[] = [];
   readonly #loadOverride: ((arg0: string) => Promise<{
                              success: boolean,
                              content: string,
@@ -98,11 +99,7 @@ export class PageResourceLoader extends Common.ObjectWrapper.ObjectWrapper<Event
                      }>)|null,
       maxConcurrentLoads: number) {
     super();
-    this.#currentlyLoading = 0;
-    this.#currentlyLoadingPerTarget = new Map();
     this.#maxConcurrentLoads = maxConcurrentLoads;
-    this.#pageResources = new Map();
-    this.#queuedLoads = [];
     TargetManager.instance().addModelListener(
         ResourceTreeModel, ResourceTreeModelEvents.PrimaryPageChanged, this.onPrimaryPageChanged, this);
     this.#loadOverride = loadOverride;
@@ -201,12 +198,12 @@ export class PageResourceLoader extends Common.ObjectWrapper.ObjectWrapper<Event
       this.#currentlyLoadingPerTarget.set(target.id(), currentCount + 1);
     }
     if (this.#currentlyLoading > this.#maxConcurrentLoads) {
-      const entry: LoadQueueEntry = {resolve: () => {}, reject: (): void => {}};
-      const waitForCapacity = new Promise<void>((resolve, reject) => {
-        entry.resolve = resolve;
-        entry.reject = reject;
-      });
-      this.#queuedLoads.push(entry);
+      const {
+        promise: waitForCapacity,
+        resolve,
+        reject,
+      } = Promise.withResolvers<void>();
+      this.#queuedLoads.push({resolve, reject});
       await waitForCapacity;
     }
   }
@@ -255,9 +252,11 @@ export class PageResourceLoader extends Common.ObjectWrapper.ObjectWrapper<Event
       throw new Error('Invalid initiator');
     }
     const key = PageResourceLoader.makeKey(url, initiator);
-    const pageResource: PageResource = {success: null, size: null, errorMessage: undefined, url, initiator};
+    const pageResource:
+        PageResource = {success: null, size: null, duration: null, errorMessage: undefined, url, initiator};
     this.#pageResources.set(key, pageResource);
     this.dispatchEventToListeners(Events.UPDATE);
+    const startTime = performance.now();
     try {
       await this.acquireLoadSlot(initiator.target);
       const resultPromise = this.dispatchLoad(url, initiator);
@@ -278,6 +277,7 @@ export class PageResourceLoader extends Common.ObjectWrapper.ObjectWrapper<Event
       }
       throw e;
     } finally {
+      pageResource.duration = performance.now() - startTime;
       this.releaseLoadSlot(initiator.target);
       this.dispatchEventToListeners(Events.UPDATE);
     }
@@ -294,7 +294,7 @@ export class PageResourceLoader extends Common.ObjectWrapper.ObjectWrapper<Event
 
     let failureReason: string|null = null;
     if (this.#loadOverride) {
-      return this.#loadOverride(url);
+      return await this.#loadOverride(url);
     }
     const parsedURL = new Common.ParsedURL.ParsedURL(url);
     const eligibleForLoadFromTarget = getLoadThroughTargetSetting().get() && parsedURL && parsedURL.scheme !== 'file' &&
@@ -341,8 +341,8 @@ export class PageResourceLoader extends Common.ObjectWrapper.ObjectWrapper<Event
     return result;
   }
 
-  private getDeveloperResourceScheme(parsedURL: Common.ParsedURL.ParsedURL|
-                                     null): Host.UserMetrics.DeveloperResourceScheme {
+  private getDeveloperResourceScheme(parsedURL: Common.ParsedURL.ParsedURL|null):
+      Host.UserMetrics.DeveloperResourceScheme {
     if (!parsedURL || parsedURL.scheme === '') {
       return Host.UserMetrics.DeveloperResourceScheme.UKNOWN;
     }

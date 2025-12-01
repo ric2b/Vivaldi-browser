@@ -121,6 +121,8 @@ class CORE_EXPORT HTMLFormElement final : public HTMLElement {
     return radio_button_group_scope_;
   }
 
+  const Node* GetListedElementsScope() const;
+
   // Returns the listed elements (form controls) associated with `this`.
   const ListedElement::List& ListedElements() const {
     return CollectAndCacheListedElements(/*include_shadow_trees*/ false);
@@ -206,7 +208,7 @@ class CORE_EXPORT HTMLFormElement final : public HTMLElement {
   void RemoveFromPastNamesMap(HTMLElement&);
   bool PastNamesEmpty() const;
 
-  typedef HeapHashMap<AtomicString, Member<Element>> PastNamesMap;
+  using PastNamesMap = GCedHeapHashMap<AtomicString, Member<Element>>;
 
   FormSubmission::Attributes attributes_;
   Member<PastNamesMap> past_names_map_;

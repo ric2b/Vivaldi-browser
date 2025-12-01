@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+import * as SDK from '../core/sdk/sdk.js';
 import type * as Protocol from '../generated/protocol.js';
 import * as Trace from '../models/trace/trace.js';
 import * as Timeline from '../panels/timeline/timeline.js';
@@ -57,7 +58,7 @@ export class TraceLoader {
     if (!context || context.timeout() >= 10_000) {
       return;
     }
-    context?.timeout(10_000);
+    context.timeout(15_000);
   }
 
   /**
@@ -212,7 +213,7 @@ export class TraceLoader {
   }> {
     const events = 'traceEvents' in contents ? contents.traceEvents : contents;
     const metadata = 'metadata' in contents ? contents.metadata : {};
-    return new Promise((resolve, reject) => {
+    return await new Promise((resolve, reject) => {
       const model = Trace.TraceModel.Model.createWithAllHandlers(traceEngineConfig);
       model.addEventListener(Trace.TraceModel.ModelUpdateEvent.eventName, (event: Event) => {
         const {data} = event as Trace.TraceModel.ModelUpdateEvent;
@@ -236,7 +237,21 @@ export class TraceLoader {
         }
       });
 
-      void model.parse(events, {metadata, isFreshRecording: emulateFreshRecording}).catch(e => console.error(e));
+      void model
+          .parse(events, {
+            metadata,
+            isFreshRecording: emulateFreshRecording,
+            async resolveSourceMap(params) {
+              const {scriptUrl, sourceMapUrl, cachedRawSourceMap} = params;
+
+              if (cachedRawSourceMap) {
+                return new SDK.SourceMap.SourceMap(scriptUrl, sourceMapUrl, cachedRawSourceMap);
+              }
+
+              return null;
+            },
+          })
+          .catch(e => console.error(e));
     });
   }
 }
@@ -252,7 +267,7 @@ async function loadTraceFileFromURL(url: URL): Promise<Trace.Types.File.Contents
   }
 
   const contentType = response.headers.get('content-type');
-  const isGzipEncoded = contentType !== null && contentType.includes('gzip');
+  const isGzipEncoded = contentType?.includes('gzip');
   let buffer = await response.arrayBuffer();
   if (isGzipEncoded) {
     buffer = await decodeGzipBuffer(buffer);
@@ -289,4 +304,21 @@ function codec(buffer: ArrayBuffer, codecStream: CompressionStream|Decompression
 
 function decodeGzipBuffer(buffer: ArrayBuffer): Promise<ArrayBuffer> {
   return codec(buffer, new DecompressionStream('gzip'));
+}
+
+export async function fetchFixture(url: URL): Promise<string> {
+  const response = await fetch(url);
+  if (response.status !== 200) {
+    throw new Error(`Unable to load ${url}`);
+  }
+
+  const contentType = response.headers.get('content-type');
+  const isGzipEncoded = contentType?.includes('gzip');
+  let buffer = await response.arrayBuffer();
+  if (isGzipEncoded) {
+    buffer = await decodeGzipBuffer(buffer);
+  }
+  const decoder = new TextDecoder('utf-8');
+  const contents = decoder.decode(buffer);
+  return contents;
 }

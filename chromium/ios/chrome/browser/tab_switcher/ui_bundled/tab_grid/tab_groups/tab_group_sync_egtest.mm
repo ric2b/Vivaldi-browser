@@ -4,6 +4,7 @@
 
 #import <Foundation/Foundation.h>
 
+#import "components/data_sharing/public/features.h"
 #import "ios/chrome/browser/authentication/ui_bundled/signin_earl_grey_ui_test_util.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/signin/model/fake_system_identity.h"
@@ -127,17 +128,22 @@ void CloseGroupAtIndex(int group_cell_index) {
 - (AppLaunchConfiguration)appConfigurationForTestCase {
   AppLaunchConfiguration config;
   config.features_enabled.push_back(kTabGroupsIPad);
-  config.features_enabled.push_back(kModernTabStrip);
   config.features_enabled.push_back(kTabGroupSync);
 
   // Add the flag to use FakeTabGroupSyncService.
   config.additional_args.push_back(
       "--" + std::string(test_switches::kEnableFakeTabGroupSyncService));
+  config.features_enabled.push_back(
+      data_sharing::features::kDataSharingFeature);
   return config;
 }
 
 // Tests that the third panel is Tab Groups panel.
 - (void)testThirdPanelIsTabGroups {
+  if (@available(iOS 17, *)) {
+  } else if ([ChromeEarlGrey isIPadIdiom]) {
+    EARL_GREY_TEST_SKIPPED(@"Only available on iOS 17+ on iPad.");
+  }
   [ChromeEarlGreyUI openTabGrid];
 
   // Switch over to the third panel.
@@ -149,6 +155,10 @@ void CloseGroupAtIndex(int group_cell_index) {
 
 // Tests that TabGroupAppInterface creates synced tab groups correctly.
 - (void)testPreparedSyncedTabGroups {
+  if (@available(iOS 17, *)) {
+  } else if ([ChromeEarlGrey isIPadIdiom]) {
+    EARL_GREY_TEST_SKIPPED(@"Only available on iOS 17+ on iPad.");
+  }
   GREYAssertEqual(0, [TabGroupAppInterface countOfSavedTabGroups],
                   @"The number of saved tab groups should be 0.");
   [TabGroupAppInterface prepareFakeSyncedTabGroups:3];
@@ -193,6 +203,10 @@ void CloseGroupAtIndex(int group_cell_index) {
 
 // Tests that a group is deleted in the Tab Groups panel.
 - (void)testDeleteTabGroupInThirdPanel {
+  if (@available(iOS 17, *)) {
+  } else if ([ChromeEarlGrey isIPadIdiom]) {
+    EARL_GREY_TEST_SKIPPED(@"Only available on iOS 17+ on iPad.");
+  }
   [ChromeEarlGreyUI openTabGrid];
 
   // Create a tab group with an item at 0.
@@ -244,6 +258,10 @@ void CloseGroupAtIndex(int group_cell_index) {
 // Tests that renaming a group in the tab grid reflects the change in the
 // Tab Groups panel.
 - (void)testRenameGroupInTabGrid {
+  if (@available(iOS 17, *)) {
+  } else if ([ChromeEarlGrey isIPadIdiom]) {
+    EARL_GREY_TEST_SKIPPED(@"Only available on iOS 17+ on iPad.");
+  }
   [ChromeEarlGreyUI openTabGrid];
 
   // Create a tab group with an item at 0.
@@ -286,6 +304,10 @@ void CloseGroupAtIndex(int group_cell_index) {
 // Tests that ungrouping a group in the tab grid reflects the change in the
 // Tab Groups panel.
 - (void)testUngroupGroupInTabGrid {
+  if (@available(iOS 17, *)) {
+  } else if ([ChromeEarlGrey isIPadIdiom]) {
+    EARL_GREY_TEST_SKIPPED(@"Only available on iOS 17+ on iPad.");
+  }
   [ChromeEarlGreyUI openTabGrid];
 
   // Create a tab group with an item at 0.
@@ -326,6 +348,10 @@ void CloseGroupAtIndex(int group_cell_index) {
 // Tests that closing a group in the tab grid reflects the change in the
 // Tab Groups panel.
 - (void)testCloseGroupInTabGrid {
+  if (@available(iOS 17, *)) {
+  } else if ([ChromeEarlGrey isIPadIdiom]) {
+    EARL_GREY_TEST_SKIPPED(@"Only available on iOS 17+ on iPad.");
+  }
   [ChromeEarlGreyUI openTabGrid];
 
   // Create a tab group with an item at 0.
@@ -369,6 +395,10 @@ void CloseGroupAtIndex(int group_cell_index) {
 // Tests deleting a saved group from one device while the same group is
 // being viewed in the tab group view on a different device.
 - (void)testDeleteGroupOnAnotherDevice {
+  if (@available(iOS 17, *)) {
+  } else if ([ChromeEarlGrey isIPadIdiom]) {
+    EARL_GREY_TEST_SKIPPED(@"Only available on iOS 17+ on iPad.");
+  }
   [TabGroupAppInterface prepareFakeSyncedTabGroups:1];
 
   [SigninEarlGreyUI signinWithFakeIdentity:[FakeSystemIdentity fakeIdentity1]
@@ -409,6 +439,10 @@ void CloseGroupAtIndex(int group_cell_index) {
 
 // Tests the tab group snackbar CTA.
 - (void)testTabGroupSnackbarAction {
+  if (@available(iOS 17, *)) {
+  } else if ([ChromeEarlGrey isIPadIdiom]) {
+    EARL_GREY_TEST_SKIPPED(@"Only available on iOS 17+ on iPad.");
+  }
   [ChromeEarlGreyUI openTabGrid];
 
   // Create a tab group with an item at 0.
@@ -439,6 +473,10 @@ void CloseGroupAtIndex(int group_cell_index) {
 
 // Tests that creating a group in the incognito tab grid isn't synced.
 - (void)testGroupsNotSyncedInIncognito {
+  if (@available(iOS 17, *)) {
+  } else if ([ChromeEarlGrey isIPadIdiom]) {
+    EARL_GREY_TEST_SKIPPED(@"Only available on iOS 17+ on iPad.");
+  }
   [ChromeEarlGrey openNewIncognitoTab];
   [ChromeEarlGreyUI openTabGrid];
 
@@ -460,6 +498,10 @@ void CloseGroupAtIndex(int group_cell_index) {
 // Tests that the cancellation of ungrouping in the tab grid doesn't ungroup a
 // group and ungrouping again after the cancellation works well.
 - (void)testConfirmationCancelledForUngroupGroupInTabGrid {
+  if (@available(iOS 17, *)) {
+  } else if ([ChromeEarlGrey isIPadIdiom]) {
+    EARL_GREY_TEST_SKIPPED(@"Only available on iOS 17+ on iPad.");
+  }
   // Cancel button only exists on iPhone. Skip the test on iPad.
   if ([ChromeEarlGrey isIPadIdiom]) {
     EARL_GREY_TEST_SKIPPED(@"Skipped for iPad");
@@ -505,6 +547,10 @@ void CloseGroupAtIndex(int group_cell_index) {
 // Tests that the cancellation of deleting in the Tab Groups panel doesn't
 // delete a group and deleting a group again after the cancellation works well.
 - (void)testConfirmationCancelledForDeleteGroupInThirdPanel {
+  if (@available(iOS 17, *)) {
+  } else if ([ChromeEarlGrey isIPadIdiom]) {
+    EARL_GREY_TEST_SKIPPED(@"Only available on iOS 17+ on iPad.");
+  }
   // Cancel button only exists on iPhone. Skip the test on iPad.
   if ([ChromeEarlGrey isIPadIdiom]) {
     EARL_GREY_TEST_SKIPPED(@"Skipped for iPad");
@@ -574,6 +620,10 @@ void CloseGroupAtIndex(int group_cell_index) {
 // Tests that Search mode is exited when focusing the Tab Groups panel via the
 // snackbar that appears after closing a group from Search results.
 - (void)testSearchModeExitsWhenOpeningTabGroupsPanelFromSnackbar {
+  if (@available(iOS 17, *)) {
+  } else if ([ChromeEarlGrey isIPadIdiom]) {
+    EARL_GREY_TEST_SKIPPED(@"Only available on iOS 17+ on iPad.");
+  }
   [ChromeEarlGreyUI openTabGrid];
 
   // Create a tab group with an item at 0.

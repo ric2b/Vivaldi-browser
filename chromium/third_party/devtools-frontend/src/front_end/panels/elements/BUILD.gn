@@ -13,6 +13,7 @@ generate_css("css_files") {
     "accessibilityTreeView.css",
     "classesPaneWidget.css",
     "computedStyleSidebarPane.css",
+    "cssValueTraceView.css",
     "domLinkifier.css",
     "elementStatePaneWidget.css",
     "elementsPanel.css",
@@ -33,12 +34,14 @@ devtools_module("elements") {
     "AccessibilityTreeView.ts",
     "CSSRuleValidator.ts",
     "CSSRuleValidatorHelper.ts",
+    "CSSValueTraceView.ts",
     "ClassesPaneWidget.ts",
     "ColorSwatchPopoverIcon.ts",
     "ComputedStyleModel.ts",
     "ComputedStyleWidget.ts",
     "DOMLinkifier.ts",
     "DOMPath.ts",
+    "ElementIssueUtils.ts",
     "ElementStatePaneWidget.ts",
     "ElementsPanel.ts",
     "ElementsSidebarPane.ts",
@@ -90,6 +93,7 @@ devtools_module("elements") {
     "../../ui/components/floating_button:bundle",
     "../../ui/components/highlighting:bundle",
     "../../ui/components/text_editor:bundle",
+    "../../ui/components/tooltips:bundle",
     "../../ui/components/tree_outline:bundle",
     "../../ui/legacy:bundle",
     "../../ui/legacy/components/color_picker:bundle",
@@ -114,6 +118,7 @@ devtools_entrypoint("bundle") {
   visibility = [
     ":*",
     "../../entrypoints/*",
+    "../../models/ai_assistance/*",
     "../../panels/ai_assistance/*",
     "../../panels/profiler/*",
     "../../panels/recorder/*",
@@ -153,6 +158,7 @@ ts_library("unittests") {
   sources = [
     "AccessibilityTreeView.test.ts",
     "CSSRuleValidator.test.ts",
+    "CSSValueTraceView.test.ts",
     "ClassesPaneWidget.test.ts",
     "ColorSwatchPopoverIcon.test.ts",
     "ComputedStyleModel.test.ts",
@@ -160,6 +166,7 @@ ts_library("unittests") {
     "DOMLinkifier.test.ts",
     "ElementStatePaneWidget.test.ts",
     "ElementsPanel.test.ts",
+    "ElementsTreeElement.test.ts",
     "ElementsTreeElementHighlighter.test.ts",
     "ElementsTreeOutline.test.ts",
     "InspectElementModeController.test.ts",
@@ -177,6 +184,7 @@ ts_library("unittests") {
 
   deps = [
     ":bundle",
+    "../../models/text_utils:bundle",
     "../../testing",
     "./components:unittests",
   ]

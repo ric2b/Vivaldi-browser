@@ -73,6 +73,7 @@ class KeyEvent;
 
 namespace views {
 
+class FocusManager;
 class FocusManagerDelegate;
 class FocusSearch;
 class View;
@@ -105,10 +106,13 @@ class VIEWS_EXPORT FocusTraversable {
 class VIEWS_EXPORT FocusChangeListener {
  public:
   // No change to focus state has occurred yet when this function is called.
-  virtual void OnWillChangeFocus(View* focused_before, View* focused_now) = 0;
+  virtual void OnWillChangeFocus(View* focused_before, View* focused_now) {}
 
   // Called after focus state has changed.
-  virtual void OnDidChangeFocus(View* focused_before, View* focused_now) = 0;
+  virtual void OnDidChangeFocus(View* focused_before, View* focused_now) {}
+
+  // TODO(crbug.com/348369180): Remove this. Debug only.
+  virtual void OnFocusManagerDestroying(FocusManager* focus_manager) {}
 
  protected:
   virtual ~FocusChangeListener() = default;

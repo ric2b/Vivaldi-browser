@@ -10,14 +10,15 @@
 
 #include "base/memory/raw_ptr.h"
 #include "build/build_config.h"
-#include "build/chromeos_buildflags.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
+#include "chrome/browser/enterprise/browser_management/management_service_factory.h"
 #include "chrome/browser/ui/ui_features.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/base/testing_profile.h"
 #include "chrome/test/base/testing_profile_manager.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
+#include "components/policy/core/common/management/scoped_management_service_override_for_testing.h"
 #include "content/public/test/browser_task_environment.h"
 #include "net/base/host_port_pair.h"
 #include "net/cert/x509_certificate.h"
@@ -28,13 +29,13 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/gurl.h"
 
-#if !BUILDFLAG(IS_CHROMEOS_ASH)
+#if !BUILDFLAG(IS_CHROMEOS)
 #include "base/values.h"
 #include "components/policy/core/browser/browser_policy_connector_base.h"
 #include "components/policy/core/common/mock_configuration_policy_provider.h"
 #include "components/policy/core/common/policy_map.h"
 #include "components/policy/core/common/policy_types.h"
-#endif  // !BUILDFLAG(IS_CHROMEOS_ASH)
+#endif  // !BUILDFLAG(IS_CHROMEOS)
 
 using testing::UnorderedElementsAre;
 
@@ -71,7 +72,7 @@ TEST(ManagedBrowserUtils, GetRequestingUrl) {
   EXPECT_EQ(expected, enterprise_util::GetRequestingUrl(host_port_pair));
 }
 
-#if !BUILDFLAG(IS_CHROMEOS_ASH)
+#if !BUILDFLAG(IS_CHROMEOS)
 class ManagedBrowserUtilsTest : public testing::Test {
  protected:
   void SetUp() override {
@@ -107,7 +108,7 @@ TEST_F(ManagedBrowserUtilsTest, HasMachineLevelPolicies) {
 
   EXPECT_TRUE(enterprise_util::IsBrowserManaged(profile()));
 }
-#endif  // !BUILDFLAG(IS_CHROMEOS_ASH)
+#endif  // !BUILDFLAG(IS_CHROMEOS)
 
 #if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)
 TEST_F(ManagedBrowserUtilsTest, WorkProfileDefaultLabel) {
@@ -118,7 +119,26 @@ TEST_F(ManagedBrowserUtilsTest, WorkProfileDefaultLabel) {
 
   {
     enterprise_util::SetUserAcceptedAccountManagement(profile(), true);
+    policy::ScopedManagementServiceOverrideForTesting platform_management(
+        policy::ManagementServiceFactory::GetForProfile(profile()),
+        policy::EnterpriseManagementAuthority::CLOUD);
     EXPECT_EQ(enterprise_util::GetEnterpriseLabel(profile()), work_label);
+  }
+
+  {
+    enterprise_util::SetUserAcceptedAccountManagement(profile(), false);
+    policy::ScopedManagementServiceOverrideForTesting platform_management(
+        policy::ManagementServiceFactory::GetForProfile(profile()),
+        policy::EnterpriseManagementAuthority::CLOUD);
+    EXPECT_NE(enterprise_util::GetEnterpriseLabel(profile()), work_label);
+  }
+
+  {
+    enterprise_util::SetUserAcceptedAccountManagement(profile(), true);
+    policy::ScopedManagementServiceOverrideForTesting platform_management(
+        policy::ManagementServiceFactory::GetForProfile(profile()),
+        policy::EnterpriseManagementAuthority::NONE);
+    EXPECT_NE(enterprise_util::GetEnterpriseLabel(profile()), work_label);
   }
 
   {
@@ -134,6 +154,9 @@ TEST_F(ManagedBrowserUtilsTest, DefaultLabelDisabledbyPolicy) {
   profile()->GetPrefs()->SetInteger(
       prefs::kEnterpriseProfileBadgeToolbarSettings, 1);
   enterprise_util::SetUserAcceptedAccountManagement(profile(), true);
+  policy::ScopedManagementServiceOverrideForTesting platform_management(
+      policy::ManagementServiceFactory::GetForProfile(profile()),
+      policy::EnterpriseManagementAuthority::CLOUD);
 
   // There should be no text because the policy fully disables badging.
   EXPECT_EQ(enterprise_util::GetEnterpriseLabel(profile()), std::u16string());
@@ -147,6 +170,9 @@ TEST_F(ManagedBrowserUtilsTest, CustomLabelDisabledbyPolicy) {
   profile()->GetPrefs()->SetInteger(
       prefs::kEnterpriseProfileBadgeToolbarSettings, 1);
   enterprise_util::SetUserAcceptedAccountManagement(profile(), true);
+  policy::ScopedManagementServiceOverrideForTesting platform_management(
+      policy::ManagementServiceFactory::GetForProfile(profile()),
+      policy::EnterpriseManagementAuthority::CLOUD);
 
   // There should be no label because the policy fully disables badging.
   EXPECT_EQ(enterprise_util::GetEnterpriseLabel(profile()), std::u16string());
@@ -158,6 +184,9 @@ TEST_F(ManagedBrowserUtilsTest, CustomLabelTruncated) {
   profile()->GetPrefs()->SetString(prefs::kEnterpriseCustomLabelForProfile,
                                    "Custom Label Can Be Max 16 Characters");
   enterprise_util::SetUserAcceptedAccountManagement(profile(), true);
+  policy::ScopedManagementServiceOverrideForTesting platform_management(
+      policy::ManagementServiceFactory::GetForProfile(profile()),
+      policy::EnterpriseManagementAuthority::CLOUD);
 
   EXPECT_EQ(enterprise_util::GetEnterpriseLabel(profile()),
             u"Custom Label Can Be Max 16 Characters");
@@ -170,6 +199,9 @@ TEST_F(ManagedBrowserUtilsTest, DefaultLabelGatedBehindFeature) {
   scoped_feature_list_.InitAndDisableFeature(
       features::kEnterpriseProfileBadgingForAvatar);
   enterprise_util::SetUserAcceptedAccountManagement((profile()), true);
+  policy::ScopedManagementServiceOverrideForTesting platform_management(
+      policy::ManagementServiceFactory::GetForProfile(profile()),
+      policy::EnterpriseManagementAuthority::CLOUD);
 
   // The text should be truncated to 16 characters followed by ellipsis.
   EXPECT_EQ(enterprise_util::GetEnterpriseLabel((profile())), std::u16string());

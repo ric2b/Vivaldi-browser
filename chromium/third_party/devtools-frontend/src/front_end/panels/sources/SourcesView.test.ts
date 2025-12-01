@@ -99,6 +99,41 @@ describeWithEnvironment('SourcesView', () => {
     assert.instanceOf(sourcesView.getSourceView(uiSourceCode), SourcesComponents.HeadersView.HeadersView);
   });
 
+  it('shows and hides an infobar which warns about AI-generated changes', async () => {
+    const attachSpy = sinon.spy(Sources.AiWarningInfobarPlugin.AiWarningInfobarPlugin.prototype, 'attachInfobar');
+    const removeSpy = sinon.spy(Sources.AiWarningInfobarPlugin.AiWarningInfobarPlugin.prototype, 'removeInfobar');
+
+    const sourcesView = new Sources.SourcesView.SourcesView();
+    const {uiSourceCode} = createFileSystemUISourceCode({
+      url: urlString`file:///path/to/project/example.ts`,
+      mimeType: 'text/typescript',
+      content: 'export class Foo {}',
+    });
+
+    // Mock an AI-generated edit
+    uiSourceCode.setWorkingCopy('export class Bar {}');
+    uiSourceCode.setContainsAiChanges(true);
+
+    const contentLoadedPromise = new Promise(res => window.addEventListener('source-file-loaded', res));
+    const widget = sourcesView.viewForFile(uiSourceCode);
+    assert.instanceOf(widget, Sources.UISourceCodeFrame.UISourceCodeFrame);
+    const uiSourceCodeFrame = widget;
+
+    // Only load the AiWarningInfobarPlugin
+    sinon.stub(Sources.UISourceCodeFrame.UISourceCodeFrame, 'sourceFramePlugins').returns([
+      Sources.AiWarningInfobarPlugin.AiWarningInfobarPlugin
+    ]);
+    uiSourceCodeFrame.wasShown();
+
+    await contentLoadedPromise;
+
+    assert.isTrue(attachSpy.called);
+    assert.isTrue(removeSpy.notCalled);
+
+    uiSourceCode.commitWorkingCopy();
+    assert.isTrue(removeSpy.called);
+  });
+
   describe('viewForFile', () => {
     it('records the correct media type in the DevTools.SourcesPanelFileOpened metric', async () => {
       const sourcesView = new Sources.SourcesView.SourcesView();
@@ -111,7 +146,7 @@ describeWithEnvironment('SourcesView', () => {
       const contentLoadedPromise = new Promise(res => window.addEventListener('source-file-loaded', res));
       const widget = sourcesView.viewForFile(uiSourceCode);
       assert.instanceOf(widget, Sources.UISourceCodeFrame.UISourceCodeFrame);
-      const uiSourceCodeFrame = widget as Sources.UISourceCodeFrame.UISourceCodeFrame;
+      const uiSourceCodeFrame = widget;
 
       // Skip creating the DebuggerPlugin, which times out and simulate DOM attach/showing.
       sinon.stub(uiSourceCodeFrame, 'loadPlugins' as keyof typeof uiSourceCodeFrame).callsFake(() => {});
@@ -193,7 +228,7 @@ describeWithMockConnection('SourcesView', () => {
     createFileSystemUISourceCode({
       url: urlString`snippet:///foo.js`,
       mimeType: 'application/javascript',
-      type: 'snippets',
+      type: Persistence.PlatformFileSystem.PlatformFileSystemType.SNIPPETS,
     });
 
     const sourcesView = new Sources.SourcesView.SourcesView();

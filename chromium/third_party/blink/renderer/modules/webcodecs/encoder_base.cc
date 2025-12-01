@@ -101,7 +101,7 @@ void EncoderBase<Traits>::configure(const ConfigType* config,
   if (ThrowIfCodecStateClosed(state_, "configure", exception_state))
     return;
 
-  InternalConfigType* parsed_config = ParseConfig(config, exception_state);
+  InternalConfigType* parsed_config = OnNewConfigure(config, exception_state);
   if (!parsed_config) {
     DCHECK(exception_state.HadException());
     return;
@@ -136,9 +136,15 @@ void EncoderBase<Traits>::encode(InputType* input,
 
   DCHECK(active_config_);
 
+  OnNewEncode(input, exception_state);
+  if (exception_state.HadException()) {
+    return;
+  }
+
   // This will fail if |input| is already closed.
   // Remove exceptions relating to cloning closed input.
-  auto* internal_input = input->clone(IGNORE_EXCEPTION);
+  auto* internal_input =
+      input->clone(IgnoreException(script_state_->GetIsolate()));
 
   if (!internal_input) {
     exception_state.ThrowTypeError("Cannot encode closed input.");

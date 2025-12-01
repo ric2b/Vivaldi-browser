@@ -6,6 +6,7 @@ package org.chromium.chrome.browser;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotEquals;
+import static org.junit.Assert.assertTrue;
 
 import android.content.Context;
 
@@ -17,7 +18,6 @@ import androidx.test.platform.app.InstrumentationRegistry;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
-import org.junit.ClassRule;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -50,9 +50,9 @@ import org.chromium.chrome.browser.tabmodel.TabGroupModelFilter;
 import org.chromium.chrome.browser.tabmodel.TabGroupModelFilterImpl;
 import org.chromium.chrome.browser.tabmodel.TabModel;
 import org.chromium.chrome.test.ChromeJUnit4RunnerDelegate;
-import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
 import org.chromium.chrome.test.R;
-import org.chromium.chrome.test.batch.BlankCTATabInitialStateRule;
+import org.chromium.chrome.test.transit.AutoResetCtaTransitTestRule;
+import org.chromium.chrome.test.transit.ChromeTransitTestRules;
 import org.chromium.chrome.test.util.ChromeTabUtils;
 import org.chromium.chrome.test.util.browser.signin.AccountManagerTestRule;
 import org.chromium.content_public.browser.LoadUrlParams;
@@ -78,13 +78,9 @@ import java.util.concurrent.atomic.AtomicReference;
 @UseRunnerDelegate(ChromeJUnit4RunnerDelegate.class)
 @CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE})
 public class WarmupManagerTest {
-    @ClassRule
-    public static ChromeTabbedActivityTestRule sActivityTestRule =
-            new ChromeTabbedActivityTestRule();
-
     @Rule
-    public BlankCTATabInitialStateRule mBlankCTATabInitialStateRule =
-            new BlankCTATabInitialStateRule(sActivityTestRule, false);
+    public AutoResetCtaTransitTestRule mActivityTestRule =
+            ChromeTransitTestRules.fastAutoResetCtaActivityRule();
 
     public enum ProfileType {
         REGULAR_PROFILE,
@@ -124,10 +120,10 @@ public class WarmupManagerTest {
 
     @Before
     public void setUp() throws Exception {
-        mTabModel = sActivityTestRule.getActivity().getTabModelSelector().getModel(false);
+        mTabModel = mActivityTestRule.getActivity().getTabModelSelector().getModel(false);
 
         mTabGroupModelFilter =
-                sActivityTestRule
+                mActivityTestRule
                         .getActivity()
                         .getTabModelSelector()
                         .getTabGroupModelFilterProvider()
@@ -180,7 +176,7 @@ public class WarmupManagerTest {
                 Tab tab =
                         ChromeTabUtils.fullyLoadUrlInNewTab(
                                 InstrumentationRegistry.getInstrumentation(),
-                                sActivityTestRule.getActivity(),
+                                mActivityTestRule.getActivity(),
                                 "about:blank",
                                 /* incognito= */ false);
                 tabs.add(tab);
@@ -205,7 +201,7 @@ public class WarmupManagerTest {
                                             ? TabLaunchType.FROM_TAB_GROUP_UI
                                             : TabLaunchType.FROM_CHROME_UI;
                             TabCreator tabCreator =
-                                    sActivityTestRule
+                                    mActivityTestRule
                                             .getActivity()
                                             .getTabCreator(/* incognito= */ false);
                             return tabCreator.createNewTab(
@@ -270,7 +266,7 @@ public class WarmupManagerTest {
         PostTask.runOrPostTask(
                 TaskTraits.UI_DEFAULT,
                 () -> {
-                    mWarmupManager.createSpareWebContents(sActivityTestRule.getProfile(false));
+                    mWarmupManager.createSpareWebContents(mActivityTestRule.getProfile(false));
                     Assert.assertTrue(mWarmupManager.hasSpareWebContents());
                     WebContents webContents =
                             mWarmupManager.takeSpareWebContents(
@@ -296,7 +292,7 @@ public class WarmupManagerTest {
     @SmallTest
     @UiThreadTest
     public void testTakeSpareWebContents() {
-        mWarmupManager.createSpareWebContents(sActivityTestRule.getProfile(false));
+        mWarmupManager.createSpareWebContents(mActivityTestRule.getProfile(false));
         WebContents webContents =
                 mWarmupManager.takeSpareWebContents(
                         /* incognito= */ false,
@@ -311,7 +307,7 @@ public class WarmupManagerTest {
     @SmallTest
     @UiThreadTest
     public void testTakeSpareWebContentsChecksArguments() {
-        mWarmupManager.createSpareWebContents(sActivityTestRule.getProfile(false));
+        mWarmupManager.createSpareWebContents(mActivityTestRule.getProfile(false));
         // We don't expect tabs that are incognito, or targeting a network, to receive spare
         // WebContents.
         Assert.assertNull(
@@ -344,7 +340,7 @@ public class WarmupManagerTest {
     @SmallTest
     @UiThreadTest
     public void testClearsDeadWebContents() {
-        mWarmupManager.createSpareWebContents(sActivityTestRule.getProfile(false));
+        mWarmupManager.createSpareWebContents(mActivityTestRule.getProfile(false));
         WebContentsUtils.simulateRendererKilled(mWarmupManager.mSpareWebContents);
         Assert.assertNull(
                 mWarmupManager.takeSpareWebContents(
@@ -524,7 +520,7 @@ public class WarmupManagerTest {
         var histogramWatcher =
                 HistogramWatcher.newSingleRecordWatcher(
                         HISTOGRAM_SPARE_TAB_FINAL_STATUS, SpareTabFinalStatus.TAB_USED);
-        Assert.assertNotNull(sActivityTestRule.getActivity().getCurrentTabCreator());
+        Assert.assertNotNull(mActivityTestRule.getActivity().getCurrentTabCreator());
 
         prepareTabs(Arrays.asList(new Integer[] {3, 1}));
         List<Tab> tabs = getCurrentTabs();
@@ -560,7 +556,7 @@ public class WarmupManagerTest {
     @MediumTest
     @Feature({"SpareTab"})
     public void testMetricsRecordedWithSpareTab() {
-        Assert.assertNotNull(sActivityTestRule.getActivity().getCurrentTabCreator());
+        Assert.assertNotNull(mActivityTestRule.getActivity().getCurrentTabCreator());
 
         prepareTabs(Arrays.asList(new Integer[] {1, 1}));
         List<Tab> tabs = getCurrentTabs();
@@ -614,18 +610,27 @@ public class WarmupManagerTest {
     @SmallTest
     @Restriction({DeviceRestriction.RESTRICTION_TYPE_AUTO})
     public void testApplyContextOverridesOnAutomotive() {
+        // UI scaling is turned off by default in integration tests, so it needs to explicitly be
+        // applied here.
+        DisplayUtil.setUiScalingFactorForAutomotiveForTesting(1.34f);
+
         Context baseContext = mContext.getApplicationContext();
+        int baseDensityDpi = baseContext.getResources().getDisplayMetrics().densityDpi;
         Context updatedContext = WarmupManager.applyContextOverrides(baseContext);
+        int updatedDensityDpi = updatedContext.getResources().getDisplayMetrics().densityDpi;
 
         assertNotEquals(
                 "The updated context should be different from the original context.",
                 baseContext,
                 updatedContext);
+        assertTrue(
+                "The updated context should have a higher densityDpi.",
+                updatedDensityDpi > baseDensityDpi);
         assertEquals(
                 "The updated context should have a scaled up densityDpi",
-                (int)
-                        (baseContext.getResources().getDisplayMetrics().densityDpi
-                                * DisplayUtil.getUiScalingFactorForAutomotive()),
-                updatedContext.getResources().getDisplayMetrics().densityDpi);
+                DisplayUtil.getUiDensityForAutomotive(baseContext, baseDensityDpi),
+                updatedDensityDpi);
+
+        DisplayUtil.resetUiScalingFactorForAutomotiveForTesting();
     }
 }

@@ -42,14 +42,6 @@ export class PrivacyGuideSafeBrowsingFragmentElement extends
   static get properties() {
     return {
       /**
-       * Preferences state.
-       */
-      prefs: {
-        type: Object,
-        notify: true,
-      },
-
-      /**
        * Valid safe browsing states.
        */
       safeBrowsingSettingEnum_: {
@@ -108,7 +100,7 @@ export class PrivacyGuideSafeBrowsingFragmentElement extends
           PrivacyGuideSettingsStates.SAFE_BROWSING_STANDARD_TO_ENHANCED :
           PrivacyGuideSettingsStates.SAFE_BROWSING_STANDARD_TO_STANDARD;
     }
-    this.metricsBrowserProxy_.recordPrivacyGuideSettingsStatesHistogram(state!);
+    this.metricsBrowserProxy_.recordPrivacyGuideSettingsStatesHistogram(state);
   }
 
   private onSafeBrowsingEnhancedClick_() {

@@ -28,7 +28,6 @@ namespace {
 const base::Feature* const kFeaturesExposedToJava[] = {
     &features::kWebViewBackForwardCache,
     &features::kWebViewFileSystemAccess,
-    &::features::kWebViewFrameRateHints,
     &features::kWebViewInvokeZoomPickerOnGSU,
     &features::kWebViewLazyFetchHandWritingIcon,
     &features::kWebViewMixedContentAutoupgrades,
@@ -36,7 +35,6 @@ const base::Feature* const kFeaturesExposedToJava[] = {
     &features::kWebViewUseMetricsUploadService,
     &features::kWebViewUseMetricsUploadServiceOnlySdkRuntime,
     &features::kWebViewXRequestedWithHeaderControl,
-    &features::kWebViewRestrictSensitiveContent,
     &metrics::kAndroidMetricsAsyncMetricLogging,
     &safe_browsing::kHashPrefixRealTimeLookups,
     &features::kWebViewSupervisedUserSiteBlock,
@@ -52,11 +50,13 @@ const base::Feature* const kFeaturesExposedToJava[] = {
     &features::kWebViewDoNotSendAccessibilityEventsOnGSU,
     &features::kWebViewHyperlinkContextMenu,
     &features::kWebViewDisableCHIPS,
+    &features::kWebViewSafeAreaIncludesSystemBars,
     &base::features::kPostGetMyMemoryStateToBackground,
     &sensitive_content::features::kSensitiveContent,
     &features::kWebViewWebauthn,
     &::features::kPrefetchBrowserInitiatedTriggers,
-    &features::kWebViewPartitionedCookiesExcluded,
+    &features::kWebViewShortCircuitShouldInterceptRequest,
+    &features::kWebViewUseStartupTasksLogic,
 };
 
 // static

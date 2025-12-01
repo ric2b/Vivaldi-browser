@@ -47,10 +47,15 @@ bool CanonicalNumericIndexString(Isolate* isolate,
 void JSArrayBuffer::Setup(SharedFlag shared, ResizableFlag resizable,
                           std::shared_ptr<BackingStore> backing_store,
                           Isolate* isolate) {
-  if (shared == SharedFlag::kShared) {
-    isolate->CountUsage(
-        v8::Isolate::UseCounterFeature::kSharedArrayBufferConstructed);
-  }
+  auto finish_setup = [shared, isolate]() {
+    // Count usage may lead to a blink allocation, through the callback, which
+    // may trigger a GC. It is important to delay this, until the array buffer
+    // is properly initialized.
+    if (shared == SharedFlag::kShared) {
+      isolate->CountUsage(
+          v8::Isolate::UseCounterFeature::kSharedArrayBufferConstructed);
+    }
+  };
   clear_padding();
   init_extension();
   set_detach_key(ReadOnlyRoots(isolate).undefined_value());
@@ -67,11 +72,13 @@ void JSArrayBuffer::Setup(SharedFlag shared, ResizableFlag resizable,
     set_backing_store(isolate, EmptyBackingStoreBuffer());
     set_byte_length(0);
     set_max_byte_length(0);
+    finish_setup();
     return;
   }
-  // Rest of the code here deals with attaching an the BackingStore.
+  // Rest of the code here deals with attaching the BackingStore.
   DCHECK_EQ(is_shared(), backing_store->is_shared());
-  DCHECK_EQ(is_resizable_by_js(), backing_store->is_resizable_by_js());
+  DCHECK((is_resizable_by_js() == backing_store->is_resizable_by_js()) ||
+         (backing_store->is_wasm_memory() && is_shared()));
   DCHECK_IMPLIES(
       !backing_store->is_wasm_memory() && !backing_store->is_resizable_by_js(),
       backing_store->byte_length() == backing_store->max_byte_length());
@@ -110,6 +117,7 @@ void JSArrayBuffer::Setup(SharedFlag shared, ResizableFlag resizable,
   }
 
   CreateExtension(isolate, std::move(backing_store));
+  finish_setup();
 }
 
 Maybe<bool> JSArrayBuffer::Detach(DirectHandle<JSArrayBuffer> buffer,
@@ -448,35 +456,38 @@ size_t JSTypedArray::LengthTrackingGsabBackedTypedArrayLength(
   return (backing_byte_length - array->byte_offset()) / element_byte_size;
 }
 
-size_t JSTypedArray::GetVariableLengthOrOutOfBounds(bool& out_of_bounds) const {
+size_t JSTypedArray::GetVariableByteLengthOrOutOfBounds(
+    bool& out_of_bounds) const {
   DCHECK(!WasDetached());
+  size_t own_byte_offset = byte_offset();
   if (is_length_tracking()) {
     if (is_backed_by_rab()) {
-      if (byte_offset() > buffer()->byte_length()) {
+      size_t buffer_byte_length = buffer()->byte_length();
+      if (own_byte_offset > buffer_byte_length) {
         out_of_bounds = true;
         return 0;
       }
-      return (buffer()->byte_length() - byte_offset()) / element_size();
+      return (buffer_byte_length - own_byte_offset);
     }
-    if (byte_offset() >
-        buffer()->GetBackingStore()->byte_length(std::memory_order_seq_cst)) {
-      out_of_bounds = true;
-      return 0;
-    }
-    return (buffer()->GetBackingStore()->byte_length(
-                std::memory_order_seq_cst) -
-            byte_offset()) /
-           element_size();
+    // GSAB-backed TypedArrays can't be out of bounds.
+    size_t buffer_byte_length =
+        buffer()->GetBackingStore()->byte_length(std::memory_order_seq_cst);
+    SBXCHECK(own_byte_offset <= buffer_byte_length);
+    return buffer_byte_length - own_byte_offset;
   }
   DCHECK(is_backed_by_rab());
-  size_t array_length = LengthUnchecked();
-  // The sum can't overflow, since we have managed to allocate the
-  // JSTypedArray.
-  if (byte_offset() + array_length * element_size() > buffer()->byte_length()) {
+  size_t own_byte_length = byte_length();
+  size_t buffer_byte_length = buffer()->byte_length();
+  if (own_byte_length > buffer_byte_length ||
+      own_byte_offset > buffer_byte_length - own_byte_length) {
     out_of_bounds = true;
     return 0;
   }
-  return array_length;
+  return own_byte_length;
+}
+
+size_t JSTypedArray::GetVariableLengthOrOutOfBounds(bool& out_of_bounds) const {
+  return GetVariableByteLengthOrOutOfBounds(out_of_bounds) / element_size();
 }
 
 }  // namespace internal

@@ -88,8 +88,7 @@ protected:
     std::unique_ptr<SkScalerContext> onCreateScalerContext(
         const SkScalerContextEffects& effects, const SkDescriptor* desc) const override
     {
-        return SkScalerContext::MakeEmpty(
-                sk_ref_sp(const_cast<SkEmptyTypeface*>(this)), effects, desc);
+        return SkScalerContext::MakeEmpty(*const_cast<SkEmptyTypeface*>(this), effects, desc);
     }
     void onFilterRec(SkScalerContextRec*) const override { }
     std::unique_ptr<SkAdvancedTypefaceMetrics> onGetAdvancedMetrics() const override {
@@ -357,7 +356,7 @@ std::unique_ptr<SkScalerContext> SkTypeface::createScalerContext(
 std::unique_ptr<SkScalerContext> SkTypeface::onCreateScalerContextAsProxyTypeface
         (const SkScalerContextEffects&,
          const SkDescriptor*,
-         sk_sp<SkTypeface>) const {
+         SkTypeface*) const {
     SK_ABORT("Not implemented.");
 }
 
@@ -445,7 +444,7 @@ int SkTypeface::getUnitsPerEm() const {
     return this->onGetUPEM();
 }
 
-bool SkTypeface::getKerningPairAdjustments(const uint16_t glyphs[], int count,
+bool SkTypeface::getKerningPairAdjustments(const SkGlyphID glyphs[], int count,
                                            int32_t adjustments[]) const {
     SkASSERT(count >= 0);
     // check for the only legal way to pass a nullptr.. everything is 0
@@ -532,7 +531,7 @@ std::unique_ptr<SkAdvancedTypefaceMetrics> SkTypeface::getAdvancedMetrics() cons
     return result;
 }
 
-bool SkTypeface::onGetKerningPairAdjustments(const uint16_t glyphs[], int count,
+bool SkTypeface::onGetKerningPairAdjustments(const SkGlyphID glyphs[], int count,
                                              int32_t adjustments[]) const {
     return false;
 }

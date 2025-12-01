@@ -11,8 +11,9 @@
 #include "base/callback_list.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
-#include "chrome/browser/ui/tabs/public/tab_interface.h"
+#include "chrome/browser/ui/tabs/split_tab_id.h"
 #include "chrome/browser/ui/tabs/tab_strip_model_observer.h"
+#include "components/tab_collections/public/tab_interface.h"
 #include "components/tab_groups/tab_group_id.h"
 #include "content/public/browser/web_contents.h"
 #include "third_party/perfetto/include/perfetto/tracing/traced_value_forward.h"
@@ -60,7 +61,9 @@ class TabModel final : public TabInterface, public TabStripModelObserver {
   void SetGroup(std::optional<tab_groups::TabGroupId> group);
 
   void set_blocked(bool blocked) { blocked_ = blocked; }
-  void set_split(bool split) { split_ = split; }
+  void set_split(std::optional<split_tabs::SplitTabId> split) {
+    split_ = split;
+  }
 
   void WriteIntoTrace(perfetto::TracedValue context) const;
 
@@ -111,6 +114,7 @@ class TabModel final : public TabInterface, public TabStripModelObserver {
   void DidInsert(base::PassKey<TabStripModel>);
 
   // TabInterface overrides:
+  base::WeakPtr<TabInterface> GetWeakPtr() override;
   content::WebContents* GetContents() const override;
   base::CallbackListSubscription RegisterWillDiscardContents(
       TabInterface::WillDiscardContentsCallback callback) override;
@@ -144,6 +148,7 @@ class TabModel final : public TabInterface, public TabStripModelObserver {
   tabs::TabFeatures* GetTabFeatures() override;
   bool IsPinned() const override;
   bool IsSplit() const override;
+  std::optional<split_tabs::SplitTabId> GetSplit() const override;
   std::optional<tab_groups::TabGroupId> GetGroup() const override;
   bool ShouldAcceptMouseEventsWhileWindowInactive() const override;
   std::unique_ptr<ScopedAcceptMouseEventsWhileWindowInactive>
@@ -209,7 +214,7 @@ class TabModel final : public TabInterface, public TabStripModelObserver {
   bool blocked_ = false;
   // TODO(crbug.com/392951786): Remove this property, and instead determine a
   // tab's split status based on whether it is part of a split tab collection.
-  bool split_ = false;
+  std::optional<split_tabs::SplitTabId> split_ = std::nullopt;
   std::optional<tab_groups::TabGroupId> group_ = std::nullopt;
   raw_ptr<TabCollection> parent_collection_ = nullptr;
 

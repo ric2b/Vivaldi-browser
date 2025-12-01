@@ -32,7 +32,13 @@ public class DiscountsBottomSheetContentViewBinder {
             ((TextView) view.findViewById(R.id.description_detail))
                     .setText(model.get(DESCRIPTION_DETAIL));
         } else if (EXPIRY_TIME == propertyKey) {
-            ((TextView) view.findViewById(R.id.expiry_time)).setText(model.get(EXPIRY_TIME));
+            TextView expiryTimeTextView = ((TextView) view.findViewById(R.id.expiry_time));
+            if (model.get(EXPIRY_TIME) != null) {
+                expiryTimeTextView.setVisibility(View.VISIBLE);
+                expiryTimeTextView.setText(model.get(EXPIRY_TIME));
+            } else {
+                expiryTimeTextView.setVisibility(View.GONE);
+            }
         }
     }
 }

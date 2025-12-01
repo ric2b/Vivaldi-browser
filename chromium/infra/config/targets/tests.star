@@ -21,10 +21,26 @@ targets.tests.gtest_test(
 )
 
 targets.tests.isolated_script_test(
-    name = "android_blink_wpt_tests",
+    name = "android_chrome_wpt_tests",
     args = [
         "--skipped",
         "always",
+        "--test-type",
+        "testharness",
+        "reftest",
+        "crashtest",
+        "print-reftest",
+    ],
+    binary = "chrome_public_wpt",
+)
+
+targets.tests.isolated_script_test(
+    name = "android_webdriver_wpt_tests",
+    args = [
+        "--skipped",
+        "always",
+        "--test-type",
+        "wdspec",
     ],
     binary = "chrome_public_wpt",
 )
@@ -778,6 +794,10 @@ targets.tests.gpu_telemetry_test(
     telemetry_test_name = "context_lost",
     mixins = [
         "has_native_resultdb_integration",
+        "gpu_force_command_decoder_passthrough",
+        "gpu_force_angle_gl",
+        "gpu_force_skia_ganesh",
+        "gpu_integration_test_common_args",
     ],
 )
 
@@ -891,6 +911,10 @@ targets.tests.gtest_test(
     name = "cronet_unittests_android",
 )
 
+targets.tests.isolated_script_test(
+    name = "crossbench_smoketests",
+)
+
 targets.tests.gtest_test(
     name = "crypto_unittests",
 )
@@ -967,6 +991,11 @@ targets.tests.gpu_telemetry_test(
     mixins = [
         "skia_gold_test",
         "has_native_resultdb_integration",
+        "gpu_force_command_decoder_passthrough",
+        "gpu_force_angle_gl",
+        "gpu_force_skia_ganesh",
+        "gpu_integration_test_expected_color_args",
+        "gpu_integration_test_common_args",
     ],
 )
 
@@ -1615,6 +1644,15 @@ targets.tests.gtest_test(
 )
 
 targets.tests.gtest_test(
+    name = "layer_list_mode_cc_unittests",
+    args = [
+        "--test-launcher-filter-file=../../testing/buildbot/filters/layer_list_mode.cc_unittests.filter",
+        "--enable-features=UseLayerListsByDefault",
+    ],
+    binary = "cc_unittests",
+)
+
+targets.tests.gtest_test(
     name = "latency_unittests",
 )
 
@@ -1942,19 +1980,6 @@ targets.tests.gtest_test(
 )
 
 targets.tests.gtest_test(
-    name = "pixel_experimental_browser_tests",
-    mixins = [
-        "skia_gold_test",
-    ],
-    args = [
-        "--browser-ui-tests-verify-pixels",
-        "--enable-pixel-output-in-tests",
-        "--test-launcher-filter-file=../../testing/buildbot/filters/linux-chromeos.browser_tests.pixel_tests.filter",
-    ],
-    binary = "browser_tests",
-)
-
-targets.tests.gtest_test(
     name = "pixel_interactive_ui_tests",
     mixins = [
         "skia_gold_test",
@@ -1973,6 +1998,11 @@ targets.tests.gpu_telemetry_test(
     mixins = [
         "skia_gold_test",
         "has_native_resultdb_integration",
+        "gpu_force_command_decoder_passthrough",
+        "gpu_force_angle_gl",
+        "gpu_force_skia_ganesh",
+        "gpu_integration_test_pixel_args",
+        "gpu_integration_test_common_args",
     ],
 )
 
@@ -2058,6 +2088,10 @@ targets.tests.isolated_script_test(
     name = "polymer_tools_python_unittests",
 )
 
+targets.tests.isolated_script_test(
+    name = "webui_resources_tools_python_unittests",
+)
+
 targets.tests.gtest_test(
     name = "power_sampler_unittests",
 )
@@ -2135,6 +2169,11 @@ targets.tests.gpu_telemetry_test(
     telemetry_test_name = "screenshot_sync",
     mixins = [
         "has_native_resultdb_integration",
+        "gpu_force_command_decoder_passthrough",
+        "gpu_force_angle_gl",
+        "gpu_force_skia_ganesh",
+        "gpu_integration_test_screenshot_sync_args",
+        "gpu_integration_test_common_args",
     ],
 )
 
@@ -2204,6 +2243,9 @@ targets.tests.gpu_telemetry_test(
     telemetry_test_name = "screenshot_sync",
     mixins = [
         "has_native_resultdb_integration",
+        "gpu_force_command_decoder_validating",
+        "gpu_integration_test_screenshot_sync_args",
+        "gpu_integration_test_common_args",
     ],
 )
 
@@ -2567,6 +2609,15 @@ targets.tests.gtest_test(
 )
 
 targets.tests.gtest_test(
+    name = "views_ax_chromeos_browser_tests",
+    args = [
+        "--enable-features=ViewsAccessibilitySerializeOnDataChanged",
+        "--test-launcher-filter-file=../../testing/buildbot/filters/views_ax_chromeos.browser_tests.filter",
+    ],
+    binary = "browser_tests",
+)
+
+targets.tests.gtest_test(
     name = "viz_unittests",
 )
 
@@ -2719,6 +2770,7 @@ targets.tests.gpu_telemetry_test(
         "has_native_resultdb_integration",
         "gpu_force_command_decoder_passthrough",
         "gpu_force_angle_d3d11",
+        "gpu_force_high_performance_gpu",
         "gpu_integration_test_webgl2_args",
         "gpu_integration_test_common_args",
     ],
@@ -2732,6 +2784,7 @@ targets.tests.gpu_telemetry_test(
         "gpu_force_command_decoder_passthrough",
         "gpu_force_angle_gl",
         "gpu_force_skia_ganesh",
+        "gpu_force_high_performance_gpu",
         "gpu_integration_test_webgl2_args",
         "gpu_integration_test_common_args",
     ],
@@ -2744,6 +2797,7 @@ targets.tests.gpu_telemetry_test(
         "has_native_resultdb_integration",
         "gpu_force_command_decoder_passthrough",
         "gpu_force_angle_gl",
+        "gpu_force_high_performance_gpu",
         "gpu_integration_test_webgl2_args",
         "gpu_integration_test_common_args",
     ],
@@ -2756,25 +2810,24 @@ targets.tests.gpu_telemetry_test(
         "has_native_resultdb_integration",
         "gpu_force_command_decoder_passthrough",
         "gpu_force_angle_gles",
+        "gpu_force_high_performance_gpu",
         "gpu_integration_test_webgl2_args",
         "gpu_integration_test_common_args",
     ],
 )
 
-# TODO(crbug.com/391899126): Convert to use common mixins after resolving
-# non-standard arguments.
 targets.tests.gpu_telemetry_test(
     name = "webgl2_conformance_metal_passthrough_graphite_tests",
     telemetry_test_name = "webgl2_conformance",
     mixins = [
         "has_native_resultdb_integration",
-    ],
-    args = [
-        "--webgl-conformance-version=2.0.1",
-        targets.magic_args.GPU_WEBGL_RUNTIME_FILE,
-        # On dual-GPU devices we want the high-performance GPU to be active
-        "--extra-browser-args=--use-gl=angle --use-angle=metal --use-cmd-decoder=passthrough --enable-features=EGLDualGPURendering,ForceHighPerformanceGPUForWebGL,SkiaGraphite",
-        "--enable-metal-debug-layers",
+        "gpu_force_command_decoder_passthrough",
+        "gpu_force_angle_metal",
+        "gpu_force_skia_graphite",
+        "gpu_force_high_performance_gpu_for_webgl_metal",
+        "gpu_enable_metal_debug_layers",
+        "gpu_integration_test_webgl2_args",
+        "gpu_integration_test_common_args",
     ],
 )
 
@@ -2784,6 +2837,7 @@ targets.tests.gpu_telemetry_test(
     mixins = [
         "has_native_resultdb_integration",
         "gpu_force_command_decoder_validating",
+        "gpu_force_high_performance_gpu",
         "gpu_integration_test_webgl2_args",
         "gpu_integration_test_common_args",
     ],
@@ -2796,6 +2850,7 @@ targets.tests.gpu_telemetry_test(
         "has_native_resultdb_integration",
         "gpu_force_command_decoder_passthrough",
         "gpu_force_angle_d3d11",
+        "gpu_force_high_performance_gpu",
         "gpu_integration_test_webgl1_args",
         "gpu_integration_test_common_args",
     ],
@@ -2808,6 +2863,7 @@ targets.tests.gpu_telemetry_test(
         "has_native_resultdb_integration",
         "gpu_force_command_decoder_passthrough",
         "gpu_force_angle_d3d9",
+        "gpu_force_high_performance_gpu",
         "gpu_integration_test_webgl1_args",
         "gpu_integration_test_common_args",
     ],
@@ -2821,6 +2877,7 @@ targets.tests.gpu_telemetry_test(
         "gpu_force_command_decoder_passthrough",
         "gpu_force_angle_gl",
         "gpu_force_skia_ganesh",
+        "gpu_force_high_performance_gpu",
         "gpu_integration_test_webgl1_args",
         "gpu_integration_test_common_args",
     ],
@@ -2833,6 +2890,7 @@ targets.tests.gpu_telemetry_test(
         "has_native_resultdb_integration",
         "gpu_force_command_decoder_passthrough",
         "gpu_force_angle_gl",
+        "gpu_force_high_performance_gpu",
         "gpu_integration_test_webgl1_args",
         "gpu_integration_test_common_args",
     ],
@@ -2845,6 +2903,7 @@ targets.tests.gpu_telemetry_test(
         "has_native_resultdb_integration",
         "gpu_force_angle_gles",
         "gpu_force_command_decoder_passthrough",
+        "gpu_force_high_performance_gpu",
         "gpu_integration_test_webgl1_args",
         "gpu_integration_test_common_args",
     ],
@@ -2858,6 +2917,7 @@ targets.tests.gpu_telemetry_test(
         "gpu_force_angle_gles",
         "gpu_force_command_decoder_passthrough",
         "gpu_force_skia_ganesh",
+        "gpu_force_high_performance_gpu",
         "gpu_integration_test_webgl1_args",
         "gpu_integration_test_common_args",
     ],
@@ -2871,50 +2931,51 @@ targets.tests.gpu_telemetry_test(
         "gpu_force_angle_gles",
         "gpu_force_command_decoder_passthrough",
         "gpu_force_skia_graphite",
+        "gpu_force_high_performance_gpu",
         "gpu_integration_test_webgl1_args",
         "gpu_integration_test_common_args",
     ],
 )
 
-# TODO(crbug.com/391899126): Convert to use common mixins after resolving
-# non-standard arguments.
 targets.tests.gpu_telemetry_test(
     name = "webgl_conformance_metal_passthrough_ganesh_tests",
     telemetry_test_name = "webgl1_conformance",
     mixins = [
         "has_native_resultdb_integration",
-    ],
-    args = [
-        # On dual-GPU devices we want the high-performance GPU to be active
-        "--extra-browser-args=--use-gl=angle --use-angle=metal --use-cmd-decoder=passthrough --enable-features=EGLDualGPURendering,ForceHighPerformanceGPUForWebGL --disable-features=SkiaGraphite",
-        targets.magic_args.GPU_WEBGL_RUNTIME_FILE,
-        "--enable-metal-debug-layers",
+        "gpu_force_command_decoder_passthrough",
+        "gpu_force_angle_metal",
+        "gpu_force_skia_ganesh",
+        "gpu_force_high_performance_gpu_for_webgl_metal",
+        "gpu_enable_metal_debug_layers",
+        "gpu_integration_test_webgl1_args",
+        "gpu_integration_test_common_args",
     ],
 )
 
-# TODO(crbug.com/391899126): Convert to use common mixins after resolving
-# non-standard arguments.
 targets.tests.gpu_telemetry_test(
     name = "webgl_conformance_metal_passthrough_graphite_tests",
     telemetry_test_name = "webgl1_conformance",
     mixins = [
         "has_native_resultdb_integration",
-    ],
-    args = [
-        # On dual-GPU devices we want the high-performance GPU to be active
-        "--extra-browser-args=--use-gl=angle --use-angle=metal --use-cmd-decoder=passthrough --enable-features=EGLDualGPURendering,ForceHighPerformanceGPUForWebGL,SkiaGraphite",
-        targets.magic_args.GPU_WEBGL_RUNTIME_FILE,
-        "--enable-metal-debug-layers",
+        "gpu_force_command_decoder_passthrough",
+        "gpu_force_angle_metal",
+        "gpu_force_skia_graphite",
+        "gpu_force_high_performance_gpu_for_webgl_metal",
+        "gpu_enable_metal_debug_layers",
+        "gpu_integration_test_webgl1_args",
+        "gpu_integration_test_common_args",
     ],
 )
 
-# TODO(crbug.com/391899126): Convert to use common mixins after resolving
-# non-standard arguments.
 targets.tests.gpu_telemetry_test(
     name = "webgl_conformance_swangle_passthrough_tests",
     telemetry_test_name = "webgl1_conformance",
     mixins = [
         "has_native_resultdb_integration",
+        "gpu_force_command_decoder_passthrough",
+        "gpu_force_angle_swiftshader",
+        # Note gpu_integration_test_webgl1_args isn't used here.
+        "gpu_integration_test_common_args",
     ],
 )
 
@@ -2923,6 +2984,7 @@ targets.tests.gpu_telemetry_test(
     telemetry_test_name = "webgl1_conformance",
     mixins = [
         "has_native_resultdb_integration",
+        "gpu_force_high_performance_gpu",
         "gpu_integration_test_webgl1_args",
         "gpu_integration_test_common_args",
     ],
@@ -2935,6 +2997,7 @@ targets.tests.gpu_telemetry_test(
         "has_native_resultdb_integration",
         "gpu_force_command_decoder_validating",
         "gpu_force_skia_ganesh",
+        "gpu_force_high_performance_gpu",
         "gpu_integration_test_webgl1_args",
         "gpu_integration_test_common_args",
     ],
@@ -2947,6 +3010,7 @@ targets.tests.gpu_telemetry_test(
         "has_native_resultdb_integration",
         "gpu_force_command_decoder_validating",
         "gpu_force_skia_graphite",
+        "gpu_force_high_performance_gpu",
         "gpu_integration_test_webgl1_args",
         "gpu_integration_test_common_args",
     ],
@@ -2958,18 +3022,22 @@ targets.tests.gpu_telemetry_test(
     mixins = [
         "has_native_resultdb_integration",
         "gpu_force_command_decoder_validating",
+        "gpu_force_high_performance_gpu",
         "gpu_integration_test_webgl1_args",
         "gpu_integration_test_common_args",
     ],
 )
 
-# TODO(crbug.com/391899126): Convert to use common mixins after resolving
-# non-standard arguments.
 targets.tests.gpu_telemetry_test(
     name = "webgl_conformance_vulkan_passthrough_tests",
     telemetry_test_name = "webgl1_conformance",
     mixins = [
         "has_native_resultdb_integration",
+        "gpu_force_command_decoder_passthrough",
+        "gpu_force_angle_vulkan",
+        "gpu_force_high_performance_gpu",
+        "gpu_integration_test_webgl1_args",
+        "gpu_integration_test_common_args",
     ],
 )
 
@@ -2990,6 +3058,14 @@ targets.tests.isolated_script_test(
 
 targets.tests.gpu_telemetry_test(
     name = "webgpu_cts_compat_tests",
+    telemetry_test_name = "webgpu_compat_cts",
+    mixins = [
+        "has_native_resultdb_integration",
+    ],
+)
+
+targets.tests.gpu_telemetry_test(
+    name = "webgpu_cts_compat_min_es31_tests",
     telemetry_test_name = "webgpu_compat_cts",
     mixins = [
         "has_native_resultdb_integration",
@@ -3104,7 +3180,7 @@ targets.tests.gtest_test(
 )
 
 targets.tests.isolated_script_test(
-    name = "webview_blink_wpt_tests",
+    name = "android_webview_wpt_tests",
     args = [
         "--skipped",
         "always",

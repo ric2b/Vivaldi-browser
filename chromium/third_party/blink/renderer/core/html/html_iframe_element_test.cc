@@ -4,9 +4,9 @@
 
 #include "third_party/blink/renderer/core/html/html_iframe_element.h"
 
+#include "services/network/public/cpp/permissions_policy/permissions_policy_declaration.h"
+#include "services/network/public/mojom/permissions_policy/permissions_policy_feature.mojom-blink.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/blink/public/common/permissions_policy/origin_with_possible_wildcards.h"
-#include "third_party/blink/public/mojom/permissions_policy/permissions_policy.mojom-blink.h"
 #include "third_party/blink/public/platform/web_runtime_features.h"
 #include "third_party/blink/public/platform/web_runtime_features_base.h"
 #include "third_party/blink/renderer/core/dom/document.h"
@@ -160,7 +160,7 @@ TEST_F(HTMLIFrameElementTest, DefaultContainerPolicy) {
                                AtomicString("http://example.net/"));
   frame_element_->UpdateContainerPolicyForTests();
 
-  const ParsedPermissionsPolicy& container_policy =
+  const network::ParsedPermissionsPolicy& container_policy =
       frame_element_->GetFramePolicy().container_policy;
   EXPECT_EQ(0UL, container_policy.size());
 }
@@ -174,7 +174,7 @@ TEST_F(HTMLIFrameElementTest, AllowAttributeContainerPolicy) {
                                AtomicString("fullscreen"));
   frame_element_->UpdateContainerPolicyForTests();
 
-  const ParsedPermissionsPolicy& container_policy1 =
+  const network::ParsedPermissionsPolicy& container_policy1 =
       frame_element_->GetFramePolicy().container_policy;
 
   EXPECT_EQ(1UL, container_policy1.size());
@@ -189,7 +189,7 @@ TEST_F(HTMLIFrameElementTest, AllowAttributeContainerPolicy) {
                                AtomicString("payment; fullscreen"));
   frame_element_->UpdateContainerPolicyForTests();
 
-  const ParsedPermissionsPolicy& container_policy2 =
+  const network::ParsedPermissionsPolicy& container_policy2 =
       frame_element_->GetFramePolicy().container_policy;
   EXPECT_EQ(2UL, container_policy2.size());
   EXPECT_TRUE(container_policy2[0].feature ==
@@ -212,7 +212,7 @@ TEST_F(HTMLIFrameElementTest, AllowAttributeContainerPolicy) {
 // Test the ConstructContainerPolicy method when no attributes are set on the
 // iframe element.
 TEST_F(HTMLIFrameElementTest, ConstructEmptyContainerPolicy) {
-  ParsedPermissionsPolicy container_policy =
+  network::ParsedPermissionsPolicy container_policy =
       frame_element_->ConstructContainerPolicy();
   EXPECT_EQ(0UL, container_policy.size());
 }
@@ -222,7 +222,7 @@ TEST_F(HTMLIFrameElementTest, ConstructEmptyContainerPolicy) {
 TEST_F(HTMLIFrameElementTest, ConstructContainerPolicy) {
   frame_element_->setAttribute(html_names::kAllowAttr,
                                AtomicString("payment; usb"));
-  ParsedPermissionsPolicy container_policy =
+  network::ParsedPermissionsPolicy container_policy =
       frame_element_->ConstructContainerPolicy();
   EXPECT_EQ(2UL, container_policy.size());
   EXPECT_EQ(network::mojom::PermissionsPolicyFeature::kPayment,
@@ -243,7 +243,7 @@ TEST_F(HTMLIFrameElementTest, ConstructContainerPolicy) {
 TEST_F(HTMLIFrameElementTest, ConstructContainerPolicyWithAllowFullscreen) {
   frame_element_->SetBooleanAttribute(html_names::kAllowfullscreenAttr, true);
 
-  ParsedPermissionsPolicy container_policy =
+  network::ParsedPermissionsPolicy container_policy =
       frame_element_->ConstructContainerPolicy();
   EXPECT_EQ(1UL, container_policy.size());
   EXPECT_EQ(network::mojom::PermissionsPolicyFeature::kFullscreen,
@@ -258,7 +258,7 @@ TEST_F(HTMLIFrameElementTest, ConstructContainerPolicyWithAllowPaymentRequest) {
   frame_element_->SetBooleanAttribute(html_names::kAllowpaymentrequestAttr,
                                       true);
 
-  ParsedPermissionsPolicy container_policy =
+  network::ParsedPermissionsPolicy container_policy =
       frame_element_->ConstructContainerPolicy();
   EXPECT_EQ(2UL, container_policy.size());
   EXPECT_EQ(network::mojom::PermissionsPolicyFeature::kUsb,
@@ -284,7 +284,7 @@ TEST_F(HTMLIFrameElementTest, ConstructContainerPolicyWithAllowAttributes) {
   frame_element_->SetBooleanAttribute(html_names::kAllowpaymentrequestAttr,
                                       true);
 
-  ParsedPermissionsPolicy container_policy =
+  network::ParsedPermissionsPolicy container_policy =
       frame_element_->ConstructContainerPolicy();
   EXPECT_EQ(3UL, container_policy.size());
   EXPECT_EQ(network::mojom::PermissionsPolicyFeature::kPayment,

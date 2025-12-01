@@ -13,6 +13,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.times;
@@ -27,7 +28,6 @@ import android.view.View;
 import androidx.annotation.Nullable;
 import androidx.appcompat.content.res.AppCompatResources;
 import androidx.test.core.app.ApplicationProvider;
-import androidx.test.filters.SmallTest;
 
 import org.junit.After;
 import org.junit.Before;
@@ -54,12 +54,17 @@ import org.chromium.chrome.browser.hub.PaneHubController;
 import org.chromium.chrome.browser.hub.PaneId;
 import org.chromium.chrome.browser.incognito.reauth.IncognitoReauthController;
 import org.chromium.chrome.browser.incognito.reauth.IncognitoReauthManager.IncognitoReauthCallback;
+import org.chromium.chrome.browser.profiles.Profile;
+import org.chromium.chrome.browser.tab.MockTab;
+import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tabmodel.IncognitoTabModel;
 import org.chromium.chrome.browser.tabmodel.IncognitoTabModelObserver;
 import org.chromium.chrome.browser.tabmodel.TabGroupModelFilter;
+import org.chromium.chrome.browser.tabmodel.TabModelObserver;
 import org.chromium.chrome.browser.ui.edge_to_edge.EdgeToEdgeController;
 import org.chromium.chrome.browser.user_education.UserEducationHelper;
 
+import java.util.List;
 import java.util.function.DoubleConsumer;
 
 /**
@@ -79,10 +84,13 @@ public class IncognitoTabSwitcherPaneUnitTest {
     @Mock private PaneHubController mPaneHubController;
     @Mock private DoubleConsumer mOnAlphaChange;
     @Mock private UserEducationHelper mUserEducationHelper;
+    @Mock private Profile mProfile;
+    @Mock private TabGroupCreationUiFlow mUiFlow;
 
     @Captor private ArgumentCaptor<IncognitoTabModelObserver> mIncognitoTabModelObserverCaptor;
     @Captor private ArgumentCaptor<IncognitoReauthCallback> mIncognitoReauthCallbackCaptor;
     @Captor private ArgumentCaptor<Callback<Integer>> mOnTabClickedCallbackCaptor;
+    @Captor private ArgumentCaptor<TabModelObserver> mTabModelObserverCaptor;
 
     private final OneshotSupplierImpl<IncognitoReauthController>
             mIncognitoReauthControllerSupplier = new OneshotSupplierImpl<>();
@@ -90,10 +98,17 @@ public class IncognitoTabSwitcherPaneUnitTest {
             new ObservableSupplierImpl<>();
     private final ObservableSupplierImpl<CompositorViewHolder> mCompositorViewHolderSupplier =
             new ObservableSupplierImpl<>();
+    private final ObservableSupplierImpl<Boolean> mIsRecyclerViewAnimatorRunningSupplier =
+            new ObservableSupplierImpl<>(false);
+    private final ObservableSupplierImpl<Boolean> mTabGridDialogShowingOrAnimationSupplier =
+            new ObservableSupplierImpl<>(false);
+    private final ObservableSupplierImpl<Integer> mRecentlySwipedTabIdSupplier =
+            new ObservableSupplierImpl<>(null);
 
     private Context mContext;
     private IncognitoTabSwitcherPane mIncognitoTabSwitcherPane;
     private int mTimesCreated;
+    private List<Tab> mTabList;
 
     @Before
     public void setUp() {
@@ -116,8 +131,16 @@ public class IncognitoTabSwitcherPaneUnitTest {
                         any(),
                         any());
 
+        mTabList = List.of(mock(Tab.class));
+        when(mTabGroupModelFilter.getRepresentativeTabList()).thenReturn(mTabList);
         when(mTabGroupModelFilter.getTabModel()).thenReturn(mIncognitoTabModel);
         when(mTabGroupModelFilter.isTabModelRestored()).thenReturn(true);
+        when(mTabSwitcherPaneCoordinator.getIsRecyclerViewAnimatorRunning())
+                .thenReturn(mIsRecyclerViewAnimatorRunningSupplier);
+        when(mTabSwitcherPaneCoordinator.getRecentlySwipedTabIdSupplier())
+                .thenReturn(mRecentlySwipedTabIdSupplier);
+        when(mTabSwitcherPaneCoordinator.getTabGridDialogShowingOrAnimationSupplier())
+                .thenReturn(mTabGridDialogShowingOrAnimationSupplier);
 
         mIncognitoTabSwitcherPane =
                 new IncognitoTabSwitcherPane(
@@ -129,7 +152,8 @@ public class IncognitoTabSwitcherPaneUnitTest {
                         mOnAlphaChange,
                         mUserEducationHelper,
                         mEdgeToEdgeSupplier,
-                        mCompositorViewHolderSupplier);
+                        mCompositorViewHolderSupplier,
+                        mUiFlow);
     }
 
     @After
@@ -146,7 +170,6 @@ public class IncognitoTabSwitcherPaneUnitTest {
     }
 
     @Test
-    @SmallTest
     public void testInitWithNativeHasIncognitoTabs() {
         when(mIncognitoTabModel.getCount()).thenReturn(1);
         mIncognitoTabSwitcherPane.initWithNative();
@@ -159,7 +182,6 @@ public class IncognitoTabSwitcherPaneUnitTest {
     }
 
     @Test
-    @SmallTest
     public void testInitWithNativeHasNoIncognitoTabs() {
         when(mIncognitoTabModel.getCount()).thenReturn(0);
         mIncognitoTabSwitcherPane.initWithNative();
@@ -170,13 +192,11 @@ public class IncognitoTabSwitcherPaneUnitTest {
     }
 
     @Test
-    @SmallTest
     public void testPaneId() {
         assertEquals(PaneId.INCOGNITO_TAB_SWITCHER, mIncognitoTabSwitcherPane.getPaneId());
     }
 
     @Test
-    @SmallTest
     public void testNewTabButtonData() {
         checkNewTabButton(/* enabled= */ false);
 
@@ -198,8 +218,8 @@ public class IncognitoTabSwitcherPaneUnitTest {
     }
 
     @Test
-    @SmallTest
     public void testIncognitoReauthCallback() {
+        assertNull(mIncognitoTabSwitcherPane.getHubSearchEnabledStateSupplier().get());
         checkNewTabButton(/* enabled= */ false);
 
         mIncognitoReauthControllerSupplier.set(mIncognitoReauthController);
@@ -223,61 +243,62 @@ public class IncognitoTabSwitcherPaneUnitTest {
 
         when(mIncognitoReauthController.isIncognitoReauthPending()).thenReturn(true);
         when(mIncognitoReauthController.isReauthPageShowing()).thenReturn(true);
-        when(mTabGroupModelFilter.isCurrentlySelectedFilter()).thenReturn(true);
+        when(mIncognitoTabModel.isActiveModel()).thenReturn(true);
         mIncognitoTabSwitcherPane.notifyLoadHint(LoadHint.HOT);
-        verify(coordinator).resetWithTabList(null);
+        verify(coordinator).resetWithListOfTabs(null);
         checkNewTabButton(/* enabled= */ false);
+        assertFalse(mIncognitoTabSwitcherPane.getHubSearchEnabledStateSupplier().get());
 
         when(mIncognitoReauthController.isIncognitoReauthPending()).thenReturn(false);
         when(mIncognitoReauthController.isReauthPageShowing()).thenReturn(false);
         callback.onIncognitoReauthSuccess();
-        verify(coordinator).resetWithTabList(mTabGroupModelFilter);
+        verify(coordinator).resetWithListOfTabs(mTabList);
         verify(coordinator, times(2)).setInitialScrollIndexOffset();
         verify(coordinator).requestAccessibilityFocusOnCurrentTab();
         checkNewTabButton(/* enabled= */ true);
+        assertTrue(mIncognitoTabSwitcherPane.getHubSearchEnabledStateSupplier().get());
 
         // Check not called again
         mIncognitoTabSwitcherPane.notifyLoadHint(LoadHint.WARM);
         callback.onIncognitoReauthSuccess();
         verifyNoMoreInteractions(coordinator);
         mIncognitoTabSwitcherPane.notifyLoadHint(LoadHint.HOT);
-        verify(coordinator, times(2)).resetWithTabList(mTabGroupModelFilter);
+        verify(coordinator, times(2)).resetWithListOfTabs(mTabList);
         verify(coordinator, times(3)).setInitialScrollIndexOffset();
         verify(coordinator, times(2)).requestAccessibilityFocusOnCurrentTab();
         checkNewTabButton(/* enabled= */ true);
+        assertTrue(mIncognitoTabSwitcherPane.getHubSearchEnabledStateSupplier().get());
 
-        when(mTabGroupModelFilter.isCurrentlySelectedFilter()).thenReturn(false);
+        when(mIncognitoTabModel.isActiveModel()).thenReturn(false);
         callback.onIncognitoReauthSuccess();
         verifyNoMoreInteractions(coordinator);
     }
 
     @Test
-    @SmallTest
     public void testResetWithTabList() {
-        assertFalse(mIncognitoTabSwitcherPane.resetWithTabList(null, false));
+        mIncognitoTabSwitcherPane.resetWithListOfTabs(null);
 
         mIncognitoTabSwitcherPane.createTabSwitcherPaneCoordinator();
         TabSwitcherPaneCoordinator coordinator =
                 mIncognitoTabSwitcherPane.getTabSwitcherPaneCoordinator();
 
-        assertTrue(mIncognitoTabSwitcherPane.resetWithTabList(null, false));
-        verify(coordinator).resetWithTabList(null);
+        mIncognitoTabSwitcherPane.resetWithListOfTabs(null);
+        verify(coordinator).resetWithListOfTabs(null);
 
-        when(mTabGroupModelFilter.isCurrentlySelectedFilter()).thenReturn(true);
+        when(mIncognitoTabModel.isActiveModel()).thenReturn(true);
         mIncognitoTabSwitcherPane.showAllTabs();
-        verify(coordinator, times(2)).resetWithTabList(null);
-        when(mTabGroupModelFilter.isCurrentlySelectedFilter()).thenReturn(false);
+        verify(coordinator, times(2)).resetWithListOfTabs(null);
+        when(mIncognitoTabModel.isActiveModel()).thenReturn(false);
 
         mIncognitoTabSwitcherPane.notifyLoadHint(LoadHint.HOT);
-        verify(coordinator, times(3)).resetWithTabList(null);
+        verify(coordinator, times(3)).resetWithListOfTabs(null);
 
-        when(mTabGroupModelFilter.isCurrentlySelectedFilter()).thenReturn(true);
+        when(mIncognitoTabModel.isActiveModel()).thenReturn(true);
         mIncognitoTabSwitcherPane.showAllTabs();
-        verify(coordinator).resetWithTabList(mTabGroupModelFilter);
+        verify(coordinator).resetWithListOfTabs(mTabList);
     }
 
     @Test
-    @SmallTest
     public void testLoadHintColdWarmHotCold() {
         mIncognitoTabSwitcherPane.notifyLoadHint(LoadHint.COLD);
         ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
@@ -302,9 +323,8 @@ public class IncognitoTabSwitcherPaneUnitTest {
     }
 
     @Test
-    @SmallTest
     public void testLoadHintColdHot_TabStateNotInitialized() {
-        when(mTabGroupModelFilter.isCurrentlySelectedFilter()).thenReturn(true);
+        when(mIncognitoTabModel.isActiveModel()).thenReturn(true);
         when(mTabGroupModelFilter.isTabModelRestored()).thenReturn(false);
 
         mIncognitoTabSwitcherPane.notifyLoadHint(LoadHint.COLD);
@@ -316,7 +336,7 @@ public class IncognitoTabSwitcherPaneUnitTest {
         TabSwitcherPaneCoordinator coordinator =
                 mIncognitoTabSwitcherPane.getTabSwitcherPaneCoordinator();
         assertNotNull(coordinator);
-        verify(coordinator, never()).resetWithTabList(mTabGroupModelFilter);
+        verify(coordinator, never()).resetWithListOfTabs(mTabList);
         verify(coordinator).setInitialScrollIndexOffset();
         verify(coordinator).requestAccessibilityFocusOnCurrentTab();
 
@@ -325,12 +345,11 @@ public class IncognitoTabSwitcherPaneUnitTest {
                 HistogramWatcher.newSingleRecordWatcher(
                         "Android.GridTabSwitcher.TimeToTabStateInitializedFromShown");
         mIncognitoTabSwitcherPane.showAllTabs();
-        verify(coordinator).resetWithTabList(mTabGroupModelFilter);
+        verify(coordinator).resetWithListOfTabs(mTabList);
         watcher.assertExpected();
     }
 
     @Test
-    @SmallTest
     public void testResetWithTabListReauthRequired() {
         mIncognitoReauthControllerSupplier.set(mIncognitoReauthController);
         ShadowLooper.runUiThreadTasks();
@@ -338,17 +357,16 @@ public class IncognitoTabSwitcherPaneUnitTest {
         TabSwitcherPaneCoordinator coordinator =
                 mIncognitoTabSwitcherPane.getTabSwitcherPaneCoordinator();
 
-        when(mTabGroupModelFilter.isCurrentlySelectedFilter()).thenReturn(true);
+        when(mIncognitoTabModel.isActiveModel()).thenReturn(true);
         mIncognitoTabSwitcherPane.notifyLoadHint(LoadHint.HOT);
-        verify(coordinator).resetWithTabList(mTabGroupModelFilter);
+        verify(coordinator).resetWithListOfTabs(mTabList);
 
         when(mIncognitoReauthController.isIncognitoReauthPending()).thenReturn(true);
         mIncognitoTabSwitcherPane.showAllTabs();
-        verify(coordinator).resetWithTabList(null);
+        verify(coordinator).resetWithListOfTabs(null);
     }
 
     @Test
-    @SmallTest
     public void testRequestAccessibilityFocusOnCurrentTab() {
         mIncognitoReauthControllerSupplier.set(mIncognitoReauthController);
         ShadowLooper.runUiThreadTasks();
@@ -363,6 +381,83 @@ public class IncognitoTabSwitcherPaneUnitTest {
         when(mIncognitoReauthController.isReauthPageShowing()).thenReturn(false);
         mIncognitoTabSwitcherPane.requestAccessibilityFocusOnCurrentTab();
         verify(coordinator).requestAccessibilityFocusOnCurrentTab();
+    }
+
+    @Test
+    public void testForceCleanup() {
+        mIncognitoTabSwitcherPane.createTabSwitcherPaneCoordinator();
+        assertNotNull(mIncognitoTabSwitcherPane.getTabSwitcherPaneCoordinator());
+        mIncognitoTabSwitcherPane.setPaneHubController(mPaneHubController);
+        when(mTabSwitcherPaneCoordinator.getIsRecyclerViewAnimatorRunning()).thenReturn(null);
+
+        mIncognitoTabSwitcherPane.initWithNative();
+        verify(mIncognitoTabModel).addIncognitoObserver(mIncognitoTabModelObserverCaptor.capture());
+        IncognitoTabModelObserver observer = mIncognitoTabModelObserverCaptor.getValue();
+
+        observer.didBecomeEmpty();
+        ShadowLooper.runUiThreadTasks();
+
+        verify(mPaneHubController).focusPane(PaneId.TAB_SWITCHER);
+        assertNull(mIncognitoTabSwitcherPane.getTabSwitcherPaneCoordinator());
+    }
+
+    @Test
+    public void testFinalIncognitoTabWasSwiped() {
+        mIncognitoTabSwitcherPane.createTabSwitcherPaneCoordinator();
+        assertNotNull(mIncognitoTabSwitcherPane.getTabSwitcherPaneCoordinator());
+        mIncognitoTabSwitcherPane.setPaneHubController(mPaneHubController);
+
+        mIncognitoTabSwitcherPane.initWithNative();
+        verify(mIncognitoTabModel).addIncognitoObserver(mIncognitoTabModelObserverCaptor.capture());
+        verify(mIncognitoTabModel).addObserver(mTabModelObserverCaptor.capture());
+        IncognitoTabModelObserver incognitoObserver = mIncognitoTabModelObserverCaptor.getValue();
+        TabModelObserver observer = mTabModelObserverCaptor.getValue();
+
+        MockTab mockTab = new MockTab(0, mProfile);
+        mRecentlySwipedTabIdSupplier.set(0);
+
+        observer.onFinishingTabClosure(mockTab);
+        incognitoObserver.didBecomeEmpty();
+        ShadowLooper.runUiThreadTasks();
+
+        verify(mPaneHubController).focusPane(PaneId.TAB_SWITCHER);
+        assertNull(mIncognitoTabSwitcherPane.getTabSwitcherPaneCoordinator());
+    }
+
+    @Test
+    public void testTabGridDialogVisible() {
+        mIncognitoTabSwitcherPane.createTabSwitcherPaneCoordinator();
+        assertNotNull(mIncognitoTabSwitcherPane.getTabSwitcherPaneCoordinator());
+        mIncognitoTabSwitcherPane.setPaneHubController(mPaneHubController);
+
+        mIncognitoTabSwitcherPane.initWithNative();
+        verify(mIncognitoTabModel).addIncognitoObserver(mIncognitoTabModelObserverCaptor.capture());
+        IncognitoTabModelObserver incognitoObserver = mIncognitoTabModelObserverCaptor.getValue();
+
+        mTabGridDialogShowingOrAnimationSupplier.set(true);
+        incognitoObserver.didBecomeEmpty();
+        ShadowLooper.runUiThreadTasks();
+
+        verify(mPaneHubController).focusPane(PaneId.TAB_SWITCHER);
+        assertNull(mIncognitoTabSwitcherPane.getTabSwitcherPaneCoordinator());
+    }
+
+    @Test
+    public void testTabGridDialogNotVisible() {
+        mIncognitoTabSwitcherPane.createTabSwitcherPaneCoordinator();
+        assertNotNull(mIncognitoTabSwitcherPane.getTabSwitcherPaneCoordinator());
+        mIncognitoTabSwitcherPane.setPaneHubController(mPaneHubController);
+
+        mIncognitoTabSwitcherPane.initWithNative();
+        verify(mIncognitoTabModel).addIncognitoObserver(mIncognitoTabModelObserverCaptor.capture());
+        IncognitoTabModelObserver incognitoObserver = mIncognitoTabModelObserverCaptor.getValue();
+
+        mTabGridDialogShowingOrAnimationSupplier.set(false);
+        incognitoObserver.didBecomeEmpty();
+        ShadowLooper.runUiThreadTasks();
+
+        verify(mPaneHubController, never()).focusPane(PaneId.TAB_SWITCHER);
+        assertNotNull(mIncognitoTabSwitcherPane.getTabSwitcherPaneCoordinator());
     }
 
     /**
@@ -404,6 +499,10 @@ public class IncognitoTabSwitcherPaneUnitTest {
         IncognitoTabModelObserver observer = mIncognitoTabModelObserverCaptor.getValue();
 
         observer.didBecomeEmpty();
+        mIsRecyclerViewAnimatorRunningSupplier.set(true);
+        mIsRecyclerViewAnimatorRunningSupplier.set(false);
+        ShadowLooper.runUiThreadTasks();
+
         assertNull(mIncognitoTabSwitcherPane.getReferenceButtonDataSupplier().get());
         verify(mPaneHubController).focusPane(PaneId.TAB_SWITCHER);
         assertNull(mIncognitoTabSwitcherPane.getTabSwitcherPaneCoordinator());
@@ -420,7 +519,12 @@ public class IncognitoTabSwitcherPaneUnitTest {
                 buttonData.resolveContentDescription(mContext));
         assertNotNull(buttonData.resolveIcon(mContext));
 
+        mIncognitoTabSwitcherPane.createTabSwitcherPaneCoordinator();
         observer.didBecomeEmpty();
+        mIsRecyclerViewAnimatorRunningSupplier.set(true);
+        mIsRecyclerViewAnimatorRunningSupplier.set(false);
+        ShadowLooper.runUiThreadTasks();
+
         assertNull(mIncognitoTabSwitcherPane.getReferenceButtonDataSupplier().get());
         verify(mPaneHubController, times(2)).focusPane(PaneId.TAB_SWITCHER);
         assertNull(mIncognitoTabSwitcherPane.getTabSwitcherPaneCoordinator());

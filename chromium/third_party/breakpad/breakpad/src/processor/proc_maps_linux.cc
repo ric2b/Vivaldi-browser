@@ -17,6 +17,8 @@
 #include <inttypes.h>
 #include <stdio.h>
 
+#include <utility>
+
 #include "common/using_std_string.h"
 #include "processor/logging.h"
 
@@ -99,7 +101,7 @@ bool ParseProcMaps(const string& input,
       return false;
 
     // Pushing then assigning saves us a string copy.
-    regions.push_back(region);
+    regions.push_back(std::move(region));
     regions.back().path.assign(line + path_index);
     regions.back().line.assign(line);
   }

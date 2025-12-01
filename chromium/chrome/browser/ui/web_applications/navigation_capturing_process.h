@@ -22,6 +22,8 @@ struct NavigateParams;
 
 namespace web_app {
 
+class NavigationCapturingSettings;
+
 // This class encompasses all of the logic for navigations in the browser to be
 // captured into installed web app launches.
 //
@@ -166,6 +168,10 @@ class NavigationCapturingProcess
   // For an effective client mode of `kNavigateExisting` or `kFocusExisting`,
   // both `browser` and `tab_index` will be populated, indicating the tab that
   // should be navigated or focused.
+  //
+  // If the target app uses standalone 'app' tabbed display mode, the
+  // `target_url` is used to decide if a pinned home tab or other tab should be
+  // used.
   struct ClientModeAndBrowser {
     LaunchHandler::ClientMode effective_client_mode =
         LaunchHandler::ClientMode::kNavigateNew;
@@ -173,7 +179,8 @@ class NavigationCapturingProcess
     std::optional<int> tab_index;
   };
   ClientModeAndBrowser GetEffectiveClientModeAndBrowser(
-      const webapps::AppId& app_id);
+      const webapps::AppId& app_id,
+      const GURL& target_url);
 
   // Helper methods for `GetInitialBrowserAndTabOverrideForNavigation()` that
   // return the correct return value and update internal state of this class
@@ -209,7 +216,11 @@ class NavigationCapturingProcess
            disposition_ == WindowOpenDisposition::NEW_BACKGROUND_TAB;
   }
 
+  base::Value::Dict& PopulateAndGetDebugData();
+
   PipelineState state_ = PipelineState::kCreated;
+
+  std::unique_ptr<NavigationCapturingSettings> navigation_capturing_settings_;
 
   // These fields are copied or derived from the NavigateParams of the original
   // navigation.
@@ -221,6 +232,8 @@ class NavigationCapturingProcess
   const raw_ptr<Browser> navigation_params_browser_;
   std::optional<webapps::AppId> first_navigation_app_id_;
   std::optional<blink::mojom::DisplayMode> first_navigation_app_display_mode_;
+
+  bool navigation_capturing_enabled_ = false;
 
   // This field records the outcome of handling the initial navigation,before
   // any redirects might have happened.
@@ -242,6 +255,7 @@ class NavigationCapturingProcess
   // Debug information persisted to chrome://web-app-internals on destruction of
   // this class.
   base::Value::Dict debug_data_;
+  std::optional<int64_t> navigation_handle_id_ = std::nullopt;
 
   NAVIGATION_HANDLE_USER_DATA_KEY_DECL();
 };

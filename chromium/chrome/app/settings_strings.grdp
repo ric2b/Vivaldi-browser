@@ -38,8 +38,8 @@
   </if>
 
   <!-- About Page -->
-  <message name="IDS_SETTINGS_ABOUT_PAGE_BROWSER_VERSION" desc="The text label describing the version of the browser, example: Version 57.0.2937.0 (Developer Build) unknown (64-bit)">
-    Version <ph name="PRODUCT_VERSION">$1<ex>15.0.865.0</ex></ph> (<ph name="PRODUCT_CHANNEL">$2<ex>Developer Build</ex></ph>) <ph name="PRODUCT_MODIFIER">$3</ph> <ph name="PRODUCT_VERSION_BITS">$4</ph>
+  <message name="IDS_SETTINGS_ABOUT_PAGE_BROWSER_VERSION" desc="The text label describing the version of the browser, example: Version 57.0.2937.0-r123456 (Developer Build) unknown (64-bit). The suffix of the version (eg. '-r123456') exists only in limited cases.)">
+    Version <ph name="PRODUCT_VERSION">$1<ex>15.0.865.0</ex></ph><ph name="PRODUCT_VERSION_SUFFIX">$2<ex>-r123456</ex></ph>  (<ph name="PRODUCT_CHANNEL">$3<ex>Developer Build</ex></ph>) <ph name="PRODUCT_MODIFIER">$4</ph> <ph name="PRODUCT_VERSION_BITS">$5</ph>
   </message>
   <message name="IDS_SETTINGS_ABOUT_PAGE_LEARN_MORE_UPDATE_ERRORS" desc="The accessibility label for a 'Learn more' link next to an error message about how an update has failed.">
     Learn more about fixing update errors
@@ -176,6 +176,14 @@
       Select the More Gestures tab, then turn on Swipe between pages to navigate back and forward
     </message>
   </if>
+  <if expr="not chromeos_ash">
+    <message name="IDS_SETTINGS_ACCESSIBILITY_TOAST_FREQUENCY_TITLE" desc="Title for a setting that allows you to change what type of feedback messages you receive.">
+      Copied to clipboard confirmations
+    </message>
+    <message name="IDS_SETTINGS_ACCESSIBILITY_TOAST_FREQUENCY_DESCRIPTION" desc="Subtitle for a setting that allows you to change the frequency of feedback messages.">
+      Shows a confirmation when you copy links, images, or videos
+    </message>
+  </if>
 
   <!-- Appearance Page -->
   <message name="IDS_SETTINGS_APPEARANCE" desc="Name of the settings page which displays appearance preferences.">
@@ -273,9 +281,6 @@
   </message>
   <message name="IDS_SETTINGS_CHANGE_HOME_PAGE" desc="Label of the control to change the home page.">
     Change
-  </message>
-  <message name="IDS_SETTINGS_WEB_STORE" desc="Sub-label about choosing something from the Chrome Web Store.">
-    Open Chrome Web Store
   </message>
   <if expr="is_macosx">
     <message name="IDS_SETTINGS_TABS_TO_LINKS_PREF" desc="The documentation string of the 'Tabs to Links' preference">
@@ -407,6 +412,9 @@
   <message name="IDS_SETTINGS_AUTOFILL_DETAIL" desc="Description of what toggling the 'Autofill' setting does. Immediately underneath IDS_SETTINGS_AUTOFILL">
     Enable Autofill to fill out forms in a single click
   </message>
+  <message name="IDS_SETTINGS_AUTOFILL_DROPDOWN_NO_OPTION_SELECTED" desc="The default option in a dropdown menu that serves both to suggest to the user that they select something and also allows them to not select anything (by leaving the default value chosen). For example, a country dropdown includes the values 'Select, Afghanistan, Albania, Algeria etc.'. The user can choose to leave 'Select' selected — effectively not choosing a country at all.">
+    Select
+  </message>
   <message name="IDS_SETTINGS_AUTOFILL_CARD_DESCRIPTION" desc="The (accessibility) credit card description from the network of the card and last 4 digits of the card number.">
     <ph name="NETWORK_NAME">$1<ex>Visa</ex></ph> ending in <ph name="LAST_FOUR_DIGITS">$2<ex>1234</ex></ph>
   </message>
@@ -472,15 +480,6 @@
   </message>
   <message name="IDS_SETTINGS_ADD_CREDIT_CARD_TITLE" desc="The title for the dialog that's shown when entering the information for a new card. This can be either credit, debit, or prepaid card.">
     Add card
-  </message>
-  <message name="IDS_SETTINGS_MIGRATABLE_CARDS_LABEL" desc="Label for the field to migrate the locally cached credit card to Google Payments. Clicking this will upload migratable credit cards to Google Payments.">
-    Save cards in your Google Account
-  </message>
-  <message name="IDS_SETTINGS_SINGLE_MIGRATABLE_CARD_INFO" desc="Display text under the save cards to Google Pay label. This text indicates one of local cards can only be used on this device.">
-    Right now, you have one card that can only be used on this device
-  </message>
-  <message name="IDS_SETTINGS_MULTIPLE_MIGRATABLE_CARDS_INFO" desc="Display text under the save cards to Google Pay label. This text indicates user has multiple migratable cards on this device.">
-    Right now, you have some cards that can only be used on this device
   </message>
   <message name="IDS_SETTINGS_REMOTE_PAYMENT_METHODS_LINK_LABEL" desc="The title and ARIA (accessibility) label for a link in chrome://settings/payments that opens the payment methods settings on https://pay.google.com. Note that the ARIA role and the link icon already convey that this is a link that will be opened when you click on it. Therefore, the message does not contain a verb.">
     Your payment methods in Google Pay
@@ -614,41 +613,57 @@
       =1 {1 reused password}
       other {{NUM_REUSED} reused passwords}}
   </message>
-  <message name="IDS_SETTINGS_AUTOFILL_PREDICTION_IMPROVEMENTS_PAGE_TITLE" desc="The title of the page in Settings that allows to manage the autofill improved predictions settings.">
+  <message name="IDS_SETTINGS_AUTOFILL_AI_PAGE_TITLE" desc="The title of the page in Settings that allows managing the Autofill AI settings.">
     Autofill with AI
   </message>
-  <message name="IDS_SETTINGS_AUTOFILL_PREDICTION_IMPROVEMENTS_TO_CONSIDER_NEW_FEATURE"  desc="One of the items describing what the user should consider before enabling improved autofill predictions.">
-    This feature uses AI, is in early development, and won’t always get it right
+  <message name="IDS_SETTINGS_AUTOFILL_AI_WHEN_ON_SAVED_INFO" desc="Bullet 1 of 2 that appears beneath the 'When on' title. 'Autofill': the user is on the 'Autofill with AI' feature page, but we want to frame this new type of autofill as just 'Autofill'. 'Can offer to save info when you submit forms': we want to convey that the user has the choice, each time a form is submitted, whether they want their info saved to Chrome for the purposes of Autofill. 'Like your driver's license or passport number': Today, supported data types for 'Autofill with AI' include 1) driver's licenses, 2) passports, and 3) vehicles. Eventually we'll support more, but this example needs to mention these types of data and not others.">
+    Autofill can offer to save info when you submit forms, like your driver's license or passport number
   </message>
-  <message name="IDS_SETTINGS_AUTOFILL_PREDICTION_IMPROVEMENTS_TO_CONSIDER_DATA_USAGE"  desc="One of the items describing what the user should consider before enabling improved autofill predictions.">
-    When you fill a form, your info and the page it comes from are sent to Google to generate suggestions
+  <message name="IDS_SETTINGS_AUTOFILL_AI_TO_CONSIDER_DATA_USAGE" desc="Bullet 1 of 2 that appears beneath the 'Things to consider' title. The point of this bullet is to convey to the user the types of data that get shared with Google to support this feature. There are 2 data types: 1) 'sites you visit' can mean browsing history and the URL of the page the user is visiting, and 2) 'page content', by which we mean the words, visuals, and layout of the pages the user visits. This notion that Google is considering 'page content' is new. We want to lead with 'To offer suggestions' even though it might be a bit grammatically awkward, because we want to express the need / value before explaining the data that gets shared.">
+    To offer suggestions, sites you visit and page content are shared with Google
   </message>
-  <message name="IDS_SETTINGS_AUTOFILL_PREDICTION_IMPROVEMENTS_TO_CONSIDER_STORAGE"  desc="One of the items describing what the user should consider before enabling improved autofill predictions.">
+  <message name="IDS_SETTINGS_AUTOFILL_AI_TO_CONSIDER_STORAGE" desc="Bullet 2 of 2 that appears beneath the 'Things to consider' title. This statement isn't immediately relevant to how Autofill with AI works, but it's intended as a reassuring statement.">
     Your saved information is stored on your device
   </message>
-  <message name="IDS_SETTINGS_AUTOFILL_PREDICTION_IMPROVEMENTS_TO_CONSIDER_IMPROVEMENT"  desc="One of the items describing what the user should consider before enabling improved autofill predictions.">
-    Data may be seen by human reviewers to improve this feature
-  </message>
-  <message name="IDS_SETTINGS_AUTOFILL_PREDICTION_IMPROVEMENTS_USER_ANNOTATIONS_HEADER"  desc="User annotation entries header on the autofill prediction improvements settings page.">
+  <message name="IDS_SETTINGS_AUTOFILL_AI_ENTITY_INSTANCES_HEADER" desc="Header of the entity instance list on the Autofill with AI settings page.">
     Saved information
   </message>
-  <message name="IDS_SETTINGS_AUTOFILL_PREDICTION_IMPROVEMENTS_USER_ANNOTATIONS_NONE"  desc="The placeholder message for the user annotation entries empty list.">
+  <message name="IDS_SETTINGS_AUTOFILL_AI_ENTITY_INSTANCES_NONE" desc="Placeholder for empty entity instance list on the Autofill with AI settings page.">
     Saved information will appear here
   </message>
-  <message name="IDS_SETTINGS_AUTOFILL_PREDICTION_IMPROVEMENTS_DELETE_ENTRY_DIALOG_TITLE"  desc="The title of the delete user annotations entry confirmation dialog.">
-    Delete data
+  <message name="IDS_SETTINGS_AUTOFILL_AI_MORE_ACTIONS_FOR_ENTITY_INSTANCE" desc="The accessibility label of the More options menu. Options in the menu include 'Edit' and 'Delete'. If including specific verbs in your language adds undo complexity, it's also acceptable to use something like: 'More options for 'label', 'sublabel''. Examples of 'label' and 'sublabel' include 'Toyota Corolla, Vehicle'.">
+    More options to edit or delete <ph name="ENTITY_INSTANCE_LABEL">$1<ex>Toyota</ex></ph>, <ph name="ENTITY_INSTANCE_SUBLABEL">$2<ex>Car</ex></ph>
   </message>
-  <message name="IDS_SETTINGS_AUTOFILL_PREDICTION_IMPROVEMENTS_DELETE_ENTRY_DIALOG_TEXT"  desc="The body text of the delete user annotations entry confirmation dialog dscribing the entry.">
-    <ph name="KEY">$1<ex>Date of birth</ex></ph>: <ph name="VALUE">$2<ex>15/02/1989</ex></ph>
+  <!-- TODO(crbug.com/393318914): Change this string in favor of entity specific strings. -->
+  <message name="IDS_SETTINGS_AUTOFILL_AI_DELETE_ENTITY_INSTANCE_DIALOG_TITLE" desc="A title of a dialog within settings that allows a user to delete an entry. The user opened this dialog by choosing 'Delete' from the more options menu.">
+    Delete info?
   </message>
-  <message name="IDS_SETTINGS_AUTOFILL_PREDICTION_IMPROVEMENTS_DELETE_ALL_ENTRIES_BUTTON_LABEL" desc="The label of the delete all user annotations entries button.">
-    Delete all
+  <message name="IDS_SETTINGS_AUTOFILL_AI_DELETE_ENTITY_INSTANCE_DIALOG_TEXT" desc="The body text of the delete entity instance confirmation dialog, on the Autofill AI settings page.">
+    Autofill won't have this info on this device to help fill out forms
   </message>
-  <message name="IDS_SETTINGS_AUTOFILL_PREDICTION_IMPROVEMENTS_DELETE_ALL_ENTRIES_DIALOG_TITLE" desc="The title of the delete all user annotations entries confirmation dialog.">
-    Delete all data used by autofill with AI
+  <message name="IDS_SETTINGS_AUTOFILL_AI_ACCESSIBILITY_LABEL_MONTH_DROPDOWN" desc="The accessibility label on the month dropdown of a date field, to let users know the dropdown corresponds to the month.">
+    <ph name="DROPDOWN_NAME">$1<ex>Expiration date</ex></ph> month
   </message>
-  <message name="IDS_SETTINGS_AUTOFILL_PREDICTION_IMPROVEMENTS_DELETE_ALL_ENTRIES_DIALOG_TEXT" desc="The body text of the delete all user annotations entries confirmation dialog.">
-    All data will be deleted. This action cannot be undone
+  <message name="IDS_SETTINGS_AUTOFILL_AI_ACCESSIBILITY_LABEL_DAY_DROPDOWN" desc="The accessibility label on the day dropdown of a date field, to let users know the dropdown corresponds to the day.">
+    <ph name="DROPDOWN_NAME">$1<ex>Expiration date</ex></ph> day
+  </message>
+  <message name="IDS_SETTINGS_AUTOFILL_AI_ACCESSIBILITY_LABEL_YEAR_DROPDOWN" desc="The accessibility label on the year dropdown of a date field, to let users know the dropdown corresponds to the year.">
+    <ph name="DROPDOWN_NAME">$1<ex>Expiration date</ex></ph> year
+  </message>
+  <message name="IDS_SETTINGS_AUTOFILL_AI_MONTH_DROPDOWN_NO_OPTION_SELECTED" desc="The default option in a dropdown menu that serves both to suggest to the user that they select something and also allows them to not select anything (by leaving the default value chosen). For example, a month dropdown includes the values 'MM, Jan, Feb, Mar, etc.'. The user can choose to leave 'MM' selected — effectively not choosing a month at all.">
+    MM
+  </message>
+  <message name="IDS_SETTINGS_AUTOFILL_AI_DAY_DROPDOWN_NO_OPTION_SELECTED" desc="The default option in a dropdown menu that serves both to suggest to the user that they select something and also allows them to not select anything (by leaving the default value chosen). For example, a day dropdown includes the values 'DD, 1, 2, 3, etc.'. The user can choose to leave 'DD' selected — effectively not choosing a day at all.">
+    DD
+  </message>
+  <message name="IDS_SETTINGS_AUTOFILL_AI_YEAR_DROPDOWN_NO_OPTION_SELECTED" desc="The default option in a dropdown menu that serves both to suggest to the user that they select something and also allows them to not select anything (by leaving the default value chosen). For example, a year dropdown includes the values 'YYYY, 2025, 2024, 2023, etc.'. The user can choose to leave 'YYYY' selected — effectively not choosing a year at all.">
+    YYYY
+  </message>
+  <message name="IDS_SETTINGS_AUTOFILL_AI_ADD_OR_EDIT_DIALOG_DATE_VALIDATION_ERROR" desc="An error message that appears beneath a date picker in the case that the user doesn't add a full date. For example, the user sees this error if they set the month but not the day or year, or choose an invalid date like February 30.">
+    Check the date
+  </message>
+  <message name="IDS_SETTINGS_AUTOFILL_AI_ADD_OR_EDIT_DIALOG_VALIDATION_ERROR" desc="An error message if the user clicks Save without having filled at least one value in the form.">
+    Fill at least one field before saving
   </message>
 
   <if expr="is_win or is_macosx">
@@ -1046,6 +1061,16 @@
   </message>
   <message name="IDS_SETTINGS_NOTIFICATION_WARNING" desc="A warning that notifications will be disabled by deleting cookies for this site.">
     Notifications will be disabled
+  </message>
+  <!-- TODO(crbug.com/397187800): Make DBDv2 strings translatable. -->
+  <message name="IDS_SETTINGS_CLEAR_BROWSING_DATA_SHOW_MORE" translateable="false">
+    Show more
+  </message>
+  <message name="IDS_SETTINGS_CLEAR_BROWSING_DATA_MORE" translateable="false">
+    More
+  </message>
+  <message name="IDS_SETTINGS_CLEAR_PERIOD_15_MINUTES" desc="The option to delete browsing data from the last 15 minutes." translateable="false">
+    Last 15 min
   </message>
 
   <!-- Downloads Page -->
@@ -2473,6 +2498,9 @@
   <message name="IDS_SETTINGS_SITE_SETTINGS_NOTIFICATIONS_DEFAULT_BEHAVIOR_DESC" desc="Description for the site settings notifications content setting default behavior.">
     Sites automatically follow this setting when you visit them. Sites usually send notifications to let you know about breaking news or chat messages.
   </message>
+  <message name="IDS_SETTINGS_SITE_SETTINGS_NOTIFICATIONS_DESC" desc="Description for the site settings notifications content setting.">
+    Sites usually send notifications to let you know about breaking news or chat messages.
+  </message>
   <message name="IDS_SETTINGS_SITE_SETTINGS_CUSTOMIZED_BEHAVIORS" desc="Label for the site settings exceptions.">
     Customized behaviors
   </message>
@@ -2887,6 +2915,9 @@
   <message name="IDS_SETTINGS_SITE_SETTINGS_PERMISSION_LOUD" desc="Label for the loud version of the permission prompt.">
    Expand all requests
   </message>
+  <message name="IDS_SETTINGS_SITE_SETTINGS_PERMISSION_TITLE" desc="Title for permission prompt request how-to-show chooser.">
+   How to show requests
+  </message>
   <message name="IDS_SETTINGS_SITE_SETTINGS_NOTIFICATIONS_BLOCKED" desc="Label for the blocked option of the notifications content setting.">
     Don't allow sites to send notifications
   </message>
@@ -3094,6 +3125,21 @@
   </message>
   <message name="IDS_SETTINGS_SITE_SETTINGS_HAND_TRACKING_BLOCK" desc="The block label for the hand tracking feature in site settings.">
     Don't allow sites to track your hands
+  </message>
+  <message name="IDS_SETTINGS_SITE_SETTINGS_LOCAL_NETWORK_ACCESS_DESCRIPTION" desc="Description of the local network access content setting.">
+    Sites can use this feature to look for and connect to any device on your local network
+  </message>
+  <message name="IDS_SETTINGS_SITE_SETTINGS_LOCAL_NETWORK_ACCESS_ASK" desc="Label for the enabled option of the local network access content setting.">
+    Sites can ask to connect to any device on your local network
+  </message>
+  <message name="IDS_SETTINGS_SITE_SETTINGS_LOCAL_NETWORK_ACCESS_BLOCK" desc="Label for the disabled option of the local network access content setting.">
+    Don't allow sites to connect to any device on your local network
+  </message>
+  <message name="IDS_SETTINGS_SITE_SETTINGS_LOCAL_NETWORK_ACCESS_ALLOWED_EXCEPTIONS" desc="Label for the allowed exceptions site list of the local network access content setting.">
+    Allowed to connect to any device on your local network
+  </message>
+  <message name="IDS_SETTINGS_SITE_SETTINGS_LOCAL_NETWORK_ACCESS_BLOCKED_EXCEPTIONS" desc="Label for the blocked exceptions site list of the local network access content setting.">
+    Not allowed to connect to any device on your local network
   </message>
   <message name="IDS_SETTINGS_THIRD_PARTY_COOKIES_PAGE_DESCRIPTION" desc="An explanation of what third-party cookies are that appear beneath the page title: 'Third-party cookies'. * 'embed': A site you visit uses HTML to construct the page. HTML tags include references to images, like img src='filename.jpg', that are used to show an image. 'filename.jpg' can be a local file owned by the site you visit or a site can embed an external file with something like img src='www.third-party-site.com/images/filename.jpg'. This image is embedded into the site you visit and www.third-party-site.com can set a third-party cookie onto your device.">
     A site you visit can embed content from other sites, for example, images, ads, and text. Cookies set by these other sites are called third-party cookies.
@@ -3434,17 +3480,26 @@
   <message name="IDS_SETTINGS_SITE_SETTINGS_DELETE_DISPLAYED_STORAGE_CONFIRMATION" desc="Text for the dialog that warns about deleting storage used by displayed sites.">
     This will delete <ph name="TOTAL_USAGE">$1<ex>8 GB</ex></ph> of data stored by displayed sites
   </message>
+  <message name="IDS_SETTINGS_SITE_SETTINGS_DELETE_RWS_STORAGE_CONFIRMATION" desc="Text for the dialog that warns about deleting storage used by a site and its related sites.">
+    This will delete <ph name="TOTAL_USAGE">$1<ex>8 GB</ex></ph> of data stored by <ph name="SITE_NAME">$2<ex>www.example.com</ex></ph> and related sites
+  </message>
   <message name="IDS_SETTINGS_SITE_SETTINGS_DELETE_ALL_STORAGE_CONFIRMATION_INSTALLED" desc="Text for the dialog that warns about deleting storage used by all sites, shown when there are installed apps.">
     This will delete <ph name="TOTAL_USAGE">$1<ex>8 GB</ex></ph> of data stored by sites and installed apps
   </message>
   <message name="IDS_SETTINGS_SITE_SETTINGS_DELETE_DISPLAYED_STORAGE_CONFIRMATION_INSTALLED" desc="Text for the dialog that warns about deleting storage used by displayed sites, shown when there are installed apps.">
     This will delete <ph name="TOTAL_USAGE">$1<ex>8 GB</ex></ph> of data stored by displayed sites and installed apps
   </message>
+  <message name="IDS_SETTINGS_SITE_SETTINGS_DELETE_RWS_STORAGE_CONFIRMATION_INSTALLED" desc="Text for the dialog that warns about deleting storage used by a site and its related sites, shown when there are installed apps.">
+    This will delete <ph name="TOTAL_USAGE">$1<ex>8 GB</ex></ph> of data stored by <ph name="SITE_NAME">$2<ex>www.example.com</ex></ph>, related sites, and installed apps
+  </message>
   <message name="IDS_SETTINGS_SITE_SETTINGS_CLEAR_ALL_STORAGE_SIGN_OUT" desc="Text for the dialog that warns about being signed out when clearing storage used by all sites.">
     You'll be signed out of all sites, including in open tabs
   </message>
   <message name="IDS_SETTINGS_SITE_SETTINGS_CLEAR_DISPLAYED_STORAGE_SIGN_OUT" desc="Text for the dialog that warns about being signed out when clearing storage used by displayed sites.">
     You'll be signed out of displayed sites, including in open tabs
+  </message>
+  <message name="IDS_SETTINGS_SITE_SETTINGS_CLEAR_RWS_STORAGE_SIGN_OUT" desc="Text for the dialog that warns about being signed out of the related sites mentioned previously in the dialog when clearing storage.">
+    You'll be signed out of these sites, including in open tabs
   </message>
   <message name="IDS_SETTINGS_SITE_SETTINGS_SITE_RESET_DIALOG_TITLE" desc="Title of a dialog that asks users to confirm that they want to reset all permissions for a site.">
     Reset permissions?
@@ -3642,37 +3697,37 @@
   </message>
   <!-- Site Settings - Storage Access Page -->
   <message name="IDS_SETTINGS_STORAGE_ACCESS_DESCRIPTION" desc="The body description on the Embedded content settings page.">
-    Sites you visit can embed content from other sites, for example images, ads, and text. These other sites can ask for permission to use info they've saved about you as you browse the site.
+    Sites you visit can embed content from other sites, for example images, ads, and text. These other sites can ask for permission to use information they've saved about you as you browse the site.
   </message>
-  <message name="IDS_SETTINGS_STORAGE_ACCESS_ALLOWED" desc="One of two radio buttons on the Embedded content settings page. If a user chooses this option, they're allowing a new permission prompt that may get shown as the user browses sites. In the description below, “Google Docs” is just used as an example. 1) “use info” means retrieve existing info and save additional info. 2) “they've' saved about you”: Google Docs can only prompt the user for permission on www.myfavoritesite.com if the user has previously used Google Docs.">
-    Sites can ask to use info they've saved about you
+  <message name="IDS_SETTINGS_STORAGE_ACCESS_ALLOWED" desc="One of two radio buttons on the Embedded content settings page. If a user chooses this option, they're allowing a new permission prompt that may get shown as the user browses sites. In the description below, “Google Docs” is just used as an example. 1) “use information” means retrieve existing info and save additional info. 2) “they've' saved about you”: Google Docs can only prompt the user for permission on www.myfavoritesite.com if the user has previously used Google Docs.">
+    Sites can ask to use information they've saved about you
   </message>
-  <message name="IDS_SETTINGS_STORAGE_ACCESS_BLOCKED" desc="The second of two radio buttons on the Embedded content settings page. If a user chooses this option, they're not allowing a new permission prompt that may get shown as the user browses sites. In the description below, “www.myfavoritesite.com” and “Google Docs” are just used as examples. 1) “use info” means retrieve existing info and save additional info. 2) “they've' saved about you”: Google Docs can only prompt the user for permission on www.myfavoritesite.com if the user has previously used Google Docs.">
-    Sites are blocked from asking you to use info they've saved about you
+  <message name="IDS_SETTINGS_STORAGE_ACCESS_BLOCKED" desc="The second of two radio buttons on the Embedded content settings page. If a user chooses this option, they're not allowing a new permission prompt that may get shown as the user browses sites. In the description below, “www.myfavoritesite.com” and “Google Docs” are just used as examples. 1) “use information” means retrieve existing info and save additional info. 2) “they've' saved about you”: Google Docs can only prompt the user for permission on www.myfavoritesite.com if the user has previously used Google Docs.">
+    Sites are blocked from asking you to use information they've saved about you
   </message>
   <message name="IDS_SETTINGS_STORAGE_ACCESS_ALLOWED_EXCEPTIONS" desc="A sub title on the Embedded content settings page. When a user grants a site permission, that site appears in this list of sites.">
-    Allowed to use info they've saved about you
+    Allowed to use information they've saved about you
   </message>
   <message name="IDS_SETTINGS_STORAGE_ACCESS_BLOCKED_EXCEPTIONS" desc="A sub title on the Embedded content settings page. When a user denies a site permission, that site appears in this list of sites.">
-    Not allowed to use info they've saved about you
+    Not allowed to use information they've saved about you
   </message>
   <message name="IDS_SETTINGS_STORAGE_ACCESS_RESET_ALL" desc="Label for the trashcan button to reset the permission for allowing or blocking a website to access its unpartitioned cookies while embedded in all other sites.">
     Remove <ph name="SITE">$1<ex>google.com</ex></ph>
   </message>
-  <message name="IDS_SETTINGS_STORAGE_ACCESS_RESET_SITE" desc="Label for the trashcan button to reset the permission for allowing or blocking a website (embedded.com) to “use their info“ while on another website (top-level.com).">
+  <message name="IDS_SETTINGS_STORAGE_ACCESS_RESET_SITE" desc="Label for the trashcan button to reset the permission for allowing or blocking a website (embedded.com) to “use their information“ while on another website (top-level.com).">
     Remove <ph name="EMBEDDED_SITE">$1<ex>embedding.com</ex></ph> from <ph name="SITE">$2<ex>top-level.com</ex></ph>
   </message>
-  <message name="IDS_SETTINGS_STORAGE_ACCESS_OPEN_EXPAND" desc="Label for an expand button to open a collapse row with the websites an origin website (top-level.com) is allowed or blocked to “use their info“ on">
+  <message name="IDS_SETTINGS_STORAGE_ACCESS_OPEN_EXPAND" desc="Label for an expand button to open a collapse row with the websites an origin website (top-level.com) is allowed or blocked to “use their information“ on">
     Show sites
   </message>
-  <message name="IDS_SETTINGS_STORAGE_ACCESS_CLOSE_EXPAND" desc="Label for an expand button to close a collapse row with the websites an origin website (top-level.com) is allowed or blocked to “use their info“ on.">
+  <message name="IDS_SETTINGS_STORAGE_ACCESS_CLOSE_EXPAND" desc="Label for an expand button to close a collapse row with the websites an origin website (top-level.com) is allowed or blocked to “use their information“ on.">
     Show less
   </message>
-  <message name="IDS_SETTINGS_STORAGE_ACCESS_ALLOWED_SITE_LABEL" desc="Text after a url (e.g. google.com) that explains that a webite is allowed to “use their info“ on one or more sites that follow this text. Previously, the user 1) visited a site, such as www.myfavoritesite.com 2)  www.myfavoritesite.com embeds content and services, such as Google Docs. 3) Google Docs prompted the user for permission to use data Google Docs has previously saved related to the user. 4) The user says yes. 5) Later in settings, the user sees the site exception with this text and can revoke its access.">
-    can use your info as you browse
+  <message name="IDS_SETTINGS_STORAGE_ACCESS_ALLOWED_SITE_LABEL" desc="Text after a url (e.g. google.com) that explains that a webite is allowed to “use their information“ on one or more sites that follow this text. Previously, the user 1) visited a site, such as www.myfavoritesite.com 2)  www.myfavoritesite.com embeds content and services, such as Google Docs. 3) Google Docs prompted the user for permission to use data Google Docs has previously saved related to the user. 4) The user says yes. 5) Later in settings, the user sees the site exception with this text and can revoke its access.">
+    can use your information as you browse
   </message>
-  <message name="IDS_SETTINGS_STORAGE_ACCESS_BLOCKED_SITE_LABEL" desc="Text after a url (e.g. google.com) that explains that a webite is not allowed to “use their info“ on one or more sites that follow this text. Previously, the user 1) visited a site, such as www.myfavoritesite.com 2)  www.myfavoritesite.com embeds content and services, such as Google Docs. 3) Google Docs prompted the user for permission to use data Google Docs has previously saved related to the user. 4) The user says yes. 5) Later in settings, the user sees the site exception with this text and can unblock the site.">
-    is blocked from using your info on
+  <message name="IDS_SETTINGS_STORAGE_ACCESS_BLOCKED_SITE_LABEL" desc="Text after a url (e.g. google.com) that explains that a webite is not allowed to “use their information“ on one or more sites that follow this text. Previously, the user 1) visited a site, such as www.myfavoritesite.com 2)  www.myfavoritesite.com embeds content and services, such as Google Docs. 3) Google Docs prompted the user for permission to use data Google Docs has previously saved related to the user. 4) The user says yes. 5) Later in settings, the user sees the site exception with this text and can unblock the site.">
+    is blocked from using your information on
   </message>
 
   <message name="IDS_SETTINGS_NO_BLUETOOTH_DEVICES_FOUND" desc="Explanation for not showing Bluetooth devices in site settings.">
@@ -4567,14 +4622,6 @@
   </message>
   <message name="IDS_SETTINGS_TAB_ORGANIZER_CONSIDER_DATA" desc="This is a bullet point in the ‘Things to consider’ column, which describes things users should consider about a feature. This string explains that AI features will send data to Google servers in order to provide the feature’s respective benefit. The tone should be informative.">
     When you use organize tabs, the titles and URLs of your open tabs are sent to Google to generate suggested tab groups
-  </message>
-
-  <!-- Experimental settings - Wallpaper Search -->
-  <message name="IDS_SETTINGS_EXPERIMENTAL_ADVANCED_FEATURE3_LABEL" desc="The primary description for the create themes with AI feature.">
-    Create themes with AI
-  </message>
-  <message name="IDS_SETTINGS_AI_THEMES_SUB_LABEL" desc="This string is the subheading of a setting for ‘Create themes with AI’. This subheading summarizes the user benefit of the Create Themes feature. This is an AI (artificial intelligence) feature that helps users create their own custom Chrome themes/wallpapers by letting users select from a list of options. The tone should be motivating.">
-    Helps you design custom themes for Chrome
   </message>
 
   <!-- Experimental settings - Compare -->

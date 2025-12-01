@@ -92,16 +92,15 @@ std::unique_ptr<VideoDecoder> CreateVp8Decoder(const Environment& env) {
 
 class LibvpxVp8Decoder::QpSmoother {
  public:
-  QpSmoother() : last_sample_ms_(rtc::TimeMillis()), smoother_(kAlpha) {}
+  QpSmoother() : last_sample_ms_(TimeMillis()), smoother_(kAlpha) {}
 
   int GetAvg() const {
     float value = smoother_.filtered();
-    return (value == rtc::ExpFilter::kValueUndefined) ? 0
-                                                      : static_cast<int>(value);
+    return (value == ExpFilter::kValueUndefined) ? 0 : static_cast<int>(value);
   }
 
   void Add(float sample) {
-    int64_t now_ms = rtc::TimeMillis();
+    int64_t now_ms = TimeMillis();
     smoother_.Apply(static_cast<float>(now_ms - last_sample_ms_), sample);
     last_sample_ms_ = now_ms;
   }
@@ -111,7 +110,7 @@ class LibvpxVp8Decoder::QpSmoother {
  private:
   const float kAlpha = 0.95f;
   int64_t last_sample_ms_;
-  rtc::ExpFilter smoother_;
+  ExpFilter smoother_;
 };
 
 LibvpxVp8Decoder::LibvpxVp8Decoder(const Environment& env)

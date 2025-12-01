@@ -3036,6 +3036,12 @@ void OnStackReplacement(MacroAssembler* masm, OsrSourceTier source,
     __ leave();
   }
 
+  // Check we are actually jumping to an OSR code object. This among other
+  // things ensures that the object contains deoptimization data below.
+  __ movl(scratch, FieldOperand(maybe_target_code, Code::kOsrOffsetOffset));
+  __ cmpl(scratch, Immediate(BytecodeOffset::None().ToInt()));
+  __ SbxCheck(Condition::not_equal, AbortReason::kExpectedOsrCode);
+
   // Check the target has a matching parameter count. This ensures that the OSR
   // code will correctly tear down our frame when leaving.
   __ movzxwq(scratch,
@@ -3453,8 +3459,9 @@ void SaveState(MacroAssembler* masm, Register active_continuation, Register tmp,
   Register jmpbuf = tmp;
   __ LoadExternalPointerField(
       jmpbuf,
-      FieldOperand(active_continuation, WasmContinuationObject::kJmpbufOffset),
-      kWasmContinuationJmpbufTag, kScratchRegister);
+      FieldOperand(active_continuation, WasmContinuationObject::kStackOffset),
+      kWasmStackMemoryTag, kScratchRegister);
+  __ leaq(jmpbuf, Operand(jmpbuf, wasm::StackMemory::jmpbuf_offset()));
   FillJumpBuffer(masm, jmpbuf, suspend);
 }
 
@@ -3463,8 +3470,10 @@ void LoadTargetJumpBuffer(MacroAssembler* masm, Register target_continuation,
   Register target_jmpbuf = target_continuation;
   __ LoadExternalPointerField(
       target_jmpbuf,
-      FieldOperand(target_continuation, WasmContinuationObject::kJmpbufOffset),
-      kWasmContinuationJmpbufTag, kScratchRegister);
+      FieldOperand(target_continuation, WasmContinuationObject::kStackOffset),
+      kWasmStackMemoryTag, kScratchRegister);
+  __ leaq(target_jmpbuf,
+          Operand(target_jmpbuf, wasm::StackMemory::jmpbuf_offset()));
   MemOperand GCScanSlotPlace =
       MemOperand(rbp, StackSwitchFrameConstants::kGCScanSlotCountOffset);
   __ Move(GCScanSlotPlace, 0);
@@ -3472,40 +3481,25 @@ void LoadTargetJumpBuffer(MacroAssembler* masm, Register target_continuation,
   LoadJumpBuffer(masm, target_jmpbuf, false, expected_state);
 }
 
-// Updates the stack limit to match the new active stack.
-// Pass the {finished_continuation} argument to indicate that the stack that we
-// are switching from has returned, and in this case return its memory to the
-// stack pool.
-void SwitchStacks(MacroAssembler* masm, Register finished_continuation,
-                  const Register& keep1, const Register& keep2 = no_reg,
-                  const Register& keep3 = no_reg) {
+// Updates the stack limit and central stack info, and validates the switch.
+void SwitchStacks(MacroAssembler* masm, Register old_continuation,
+                  bool return_switch,
+                  const std::initializer_list<Register> keep) {
   using ER = ExternalReference;
-  __ Push(keep1);
-  if (keep2 != no_reg) {
-    __ Push(keep2);
+  for (auto reg : keep) {
+    __ Push(reg);
   }
-  if (keep3 != no_reg) {
-    __ Push(keep3);
-  }
-  if (finished_continuation != no_reg) {
-    FrameScope scope(masm, StackFrame::MANUAL);
-    __ Move(kCArgRegs[0], ExternalReference::isolate_address(masm->isolate()));
-    __ Move(kCArgRegs[1], finished_continuation);
-    __ PrepareCallCFunction(2);
-    __ CallCFunction(ER::wasm_return_switch(), 2);
-  } else {
+  {
     FrameScope scope(masm, StackFrame::MANUAL);
     __ Move(kCArgRegs[0], ExternalReference::isolate_address());
-    __ PrepareCallCFunction(1);
-    __ CallCFunction(ER::wasm_sync_stack_limit(), 1);
+    __ Move(kCArgRegs[1], old_continuation);
+    __ PrepareCallCFunction(2);
+    __ CallCFunction(
+        return_switch ? ER::wasm_return_switch() : ER::wasm_switch_stacks(), 2);
   }
-  if (keep3 != no_reg) {
-    __ Pop(keep3);
+  for (auto it = std::rbegin(keep); it != std::rend(keep); ++it) {
+    __ Pop(*it);
   }
-  if (keep2 != no_reg) {
-    __ Pop(keep2);
-  }
-  __ Pop(keep1);
 }
 
 void ReloadParentContinuation(MacroAssembler* masm, Register promise,
@@ -3519,8 +3513,9 @@ void ReloadParentContinuation(MacroAssembler* masm, Register promise,
   Register jmpbuf = kScratchRegister;
   __ LoadExternalPointerField(
       jmpbuf,
-      FieldOperand(active_continuation, WasmContinuationObject::kJmpbufOffset),
-      kWasmContinuationJmpbufTag, tmp2);
+      FieldOperand(active_continuation, WasmContinuationObject::kStackOffset),
+      kWasmStackMemoryTag, tmp2);
+  __ leaq(jmpbuf, Operand(jmpbuf, wasm::StackMemory::jmpbuf_offset()));
   SwitchStackState(masm, jmpbuf, wasm::JumpBuffer::Active,
                    wasm::JumpBuffer::Retired);
 
@@ -3533,12 +3528,14 @@ void ReloadParentContinuation(MacroAssembler* masm, Register promise,
   __ movq(masm->RootAsOperand(RootIndex::kActiveContinuation), parent);
   jmpbuf = parent;
   __ LoadExternalPointerField(
-      jmpbuf, FieldOperand(parent, WasmContinuationObject::kJmpbufOffset),
-      kWasmContinuationJmpbufTag, kScratchRegister);
+      jmpbuf, FieldOperand(parent, WasmContinuationObject::kStackOffset),
+      kWasmStackMemoryTag, kScratchRegister);
+  __ leaq(jmpbuf, Operand(jmpbuf, wasm::StackMemory::jmpbuf_offset()));
 
   // Switch stack!
+  SwitchStacks(masm, active_continuation, true,
+               {promise, return_value, context, jmpbuf});
   LoadJumpBuffer(masm, jmpbuf, false, wasm::JumpBuffer::Inactive);
-  SwitchStacks(masm, active_continuation, promise, return_value, context);
 }
 
 // Loads the context field of the WasmTrustedInstanceData or WasmImportData
@@ -3563,29 +3560,9 @@ void RestoreParentSuspender(MacroAssembler* masm, Register tmp1,
                             Register tmp2) {
   Register suspender = tmp1;
   __ LoadRoot(suspender, RootIndex::kActiveSuspender);
-  __ StoreTaggedSignedField(
-      FieldOperand(suspender, WasmSuspenderObject::kStateOffset),
-      Smi::FromInt(WasmSuspenderObject::kInactive));
   __ LoadTaggedField(
       suspender, FieldOperand(suspender, WasmSuspenderObject::kParentOffset));
   __ CompareRoot(suspender, RootIndex::kUndefinedValue);
-  Label undefined;
-  __ j(equal, &undefined, Label::kNear);
-#ifdef DEBUG
-  // Check that the parent suspender is active.
-  Label parent_inactive;
-  Register state = tmp2;
-  __ LoadTaggedSignedField(
-      state, FieldOperand(suspender, WasmSuspenderObject::kStateOffset));
-  __ SmiCompare(state, Smi::FromInt(WasmSuspenderObject::kActive));
-  __ j(equal, &parent_inactive, Label::kNear);
-  __ Trap();
-  __ bind(&parent_inactive);
-#endif
-  __ StoreTaggedSignedField(
-      FieldOperand(suspender, WasmSuspenderObject::kStateOffset),
-      Smi::FromInt(WasmSuspenderObject::kActive));
-  __ bind(&undefined);
   __ movq(masm->RootAsOperand(RootIndex::kActiveSuspender), suspender);
 }
 
@@ -3608,7 +3585,8 @@ void SwitchToAllocatedStack(MacroAssembler* masm, Register wasm_instance,
       parent_continuation,
       FieldOperand(parent_continuation, WasmContinuationObject::kParentOffset));
   SaveState(masm, parent_continuation, scratch, suspend);
-  SwitchStacks(masm, no_reg, kWasmImplicitArgRegister, wrapper_buffer);
+  SwitchStacks(masm, parent_continuation, false,
+               {kWasmImplicitArgRegister, wrapper_buffer});
   parent_continuation = no_reg;
   Register target_continuation = scratch;
   __ LoadRoot(target_continuation, RootIndex::kActiveContinuation);
@@ -3997,18 +3975,16 @@ void Builtins::Generate_WasmSuspend(MacroAssembler* masm) {
   // Save current state in active jump buffer.
   // -------------------------------------------
   Label resume;
-  Register continuation = rcx;
+  Register continuation = rbx;
   __ LoadRoot(continuation, RootIndex::kActiveContinuation);
   Register jmpbuf = rdx;
   __ LoadExternalPointerField(
-      jmpbuf, FieldOperand(continuation, WasmContinuationObject::kJmpbufOffset),
-      kWasmContinuationJmpbufTag, r8);
+      jmpbuf, FieldOperand(continuation, WasmContinuationObject::kStackOffset),
+      kWasmStackMemoryTag, r8);
+  __ leaq(jmpbuf, Operand(jmpbuf, wasm::StackMemory::jmpbuf_offset()));
   FillJumpBuffer(masm, jmpbuf, &resume);
   SwitchStackState(masm, jmpbuf, wasm::JumpBuffer::Active,
                    wasm::JumpBuffer::Suspended);
-  __ StoreTaggedSignedField(
-      FieldOperand(suspender, WasmSuspenderObject::kStateOffset),
-      Smi::FromInt(WasmSuspenderObject::kSuspended));
   jmpbuf = no_reg;
   // live: [rax, rbx, rcx]
 
@@ -4043,16 +4019,18 @@ void Builtins::Generate_WasmSuspend(MacroAssembler* masm) {
       parent, FieldOperand(suspender, WasmSuspenderObject::kParentOffset));
   __ movq(masm->RootAsOperand(RootIndex::kActiveSuspender), parent);
   parent = no_reg;
-  // live: [rax, rcx]
+  // live: [rax, rbx, rcx]
 
   // -------------------------------------------
   // Load jump buffer.
   // -------------------------------------------
-  SwitchStacks(masm, no_reg, caller, suspender);
+  SwitchStacks(masm, continuation, false, {caller, suspender});
+  continuation = no_reg;
   jmpbuf = caller;
   __ LoadExternalPointerField(
-      jmpbuf, FieldOperand(caller, WasmContinuationObject::kJmpbufOffset),
-      kWasmContinuationJmpbufTag, r8);
+      jmpbuf, FieldOperand(caller, WasmContinuationObject::kStackOffset),
+      kWasmStackMemoryTag, r8);
+  __ leaq(jmpbuf, Operand(jmpbuf, wasm::StackMemory::jmpbuf_offset()));
   caller = no_reg;
   __ LoadTaggedField(
       kReturnRegister0,
@@ -4100,24 +4078,14 @@ void Generate_WasmResumeHelper(MacroAssembler* masm, wasm::OnResume on_resume) {
   __ LoadTaggedField(
       resume_data,
       FieldOperand(sfi, SharedFunctionInfo::kUntrustedFunctionDataOffset));
-
   // The write barrier uses a fixed register for the host object (rdi). The next
   // barrier is on the suspender, so load it in rdi directly.
   Register suspender = rdi;
   __ LoadTaggedField(
       suspender, FieldOperand(resume_data, WasmResumeData::kSuspenderOffset));
-  // Check the suspender state.
-  Label suspender_is_suspended;
-  Register state = rdx;
-  __ LoadTaggedSignedField(
-      state, FieldOperand(suspender, WasmSuspenderObject::kStateOffset));
-  __ SmiCompare(state, Smi::FromInt(WasmSuspenderObject::kSuspended));
-  __ j(equal, &suspender_is_suspended);
-  __ Trap();  // TODO(thibaudm): Throw a wasm trap.
   closure = no_reg;
   sfi = no_reg;
 
-  __ bind(&suspender_is_suspended);
   // -------------------------------------------
   // Save current state.
   // -------------------------------------------
@@ -4127,8 +4095,10 @@ void Generate_WasmResumeHelper(MacroAssembler* masm, wasm::OnResume on_resume) {
   Register current_jmpbuf = rax;
   __ LoadExternalPointerField(
       current_jmpbuf,
-      FieldOperand(active_continuation, WasmContinuationObject::kJmpbufOffset),
-      kWasmContinuationJmpbufTag, rdx);
+      FieldOperand(active_continuation, WasmContinuationObject::kStackOffset),
+      kWasmStackMemoryTag, rdx);
+  __ leaq(current_jmpbuf,
+          Operand(current_jmpbuf, wasm::StackMemory::jmpbuf_offset()));
   FillJumpBuffer(masm, current_jmpbuf, &suspend);
   SwitchStackState(masm, current_jmpbuf, wasm::JumpBuffer::Active,
                    wasm::JumpBuffer::Inactive);
@@ -4147,9 +4117,6 @@ void Generate_WasmResumeHelper(MacroAssembler* masm, wasm::OnResume on_resume) {
       active_suspender);
   __ RecordWriteField(suspender, WasmSuspenderObject::kParentOffset,
                       active_suspender, slot_address, SaveFPRegsMode::kIgnore);
-  __ StoreTaggedSignedField(
-      FieldOperand(suspender, WasmSuspenderObject::kStateOffset),
-      Smi::FromInt(WasmSuspenderObject::kActive));
   __ movq(masm->RootAsOperand(RootIndex::kActiveSuspender), suspender);
 
   Register target_continuation = suspender;
@@ -4160,6 +4127,8 @@ void Generate_WasmResumeHelper(MacroAssembler* masm, wasm::OnResume on_resume) {
   __ StoreTaggedField(
       FieldOperand(target_continuation, WasmContinuationObject::kParentOffset),
       active_continuation);
+  Register old_continuation = r11;
+  __ movq(old_continuation, active_continuation);
   __ RecordWriteField(
       target_continuation, WasmContinuationObject::kParentOffset,
       active_continuation, slot_address, SaveFPRegsMode::kIgnore);
@@ -4167,7 +4136,7 @@ void Generate_WasmResumeHelper(MacroAssembler* masm, wasm::OnResume on_resume) {
   __ movq(masm->RootAsOperand(RootIndex::kActiveContinuation),
           target_continuation);
 
-  SwitchStacks(masm, no_reg, target_continuation);
+  SwitchStacks(masm, old_continuation, false, {target_continuation});
 
   // -------------------------------------------
   // Load state from target jmpbuf (longjmp).
@@ -4175,8 +4144,10 @@ void Generate_WasmResumeHelper(MacroAssembler* masm, wasm::OnResume on_resume) {
   Register target_jmpbuf = rdi;
   __ LoadExternalPointerField(
       target_jmpbuf,
-      FieldOperand(target_continuation, WasmContinuationObject::kJmpbufOffset),
-      kWasmContinuationJmpbufTag, rax);
+      FieldOperand(target_continuation, WasmContinuationObject::kStackOffset),
+      kWasmStackMemoryTag, rax);
+  __ leaq(target_jmpbuf,
+          Operand(target_jmpbuf, wasm::StackMemory::jmpbuf_offset()));
   // Move resolved value to return register.
   __ movq(kReturnRegister0, Operand(rbp, 3 * kSystemPointerSize));
   __ Move(MemOperand(rbp, StackSwitchFrameConstants::kGCScanSlotCountOffset),
@@ -4425,18 +4396,18 @@ void Builtins::Generate_CEntry(MacroAssembler* masm, int result_size,
 
   // Result is in rax or rdx:rax - do not destroy these registers!
 
-#if V8_ENABLE_WEBASSEMBLY
-  if (switch_to_central_stack) {
-    SwitchFromTheCentralStackIfNeeded(masm, kR12SpillSlot);
-  }
-#endif  // V8_ENABLE_WEBASSEMBLY
-
   // Check result for exception sentinel.
   Label exception_returned;
   // The returned value may be a trusted object, living outside of the main
   // pointer compression cage, so we need to use full pointer comparison here.
   __ CompareRoot(rax, RootIndex::kException, ComparisonMode::kFullPointer);
   __ j(equal, &exception_returned);
+
+#if V8_ENABLE_WEBASSEMBLY
+  if (switch_to_central_stack) {
+    SwitchFromTheCentralStackIfNeeded(masm, kR12SpillSlot);
+  }
+#endif  // V8_ENABLE_WEBASSEMBLY
 
   // Check that there is no exception, otherwise we
   // should have returned the exception sentinel.
@@ -4670,7 +4641,6 @@ void Builtins::Generate_CallApiCallbackImpl(MacroAssembler* masm,
   // Both modes:
   //  -- rcx                 : arguments count (not including the receiver)
   //  -- rbx                 : FunctionTemplateInfo
-  //  -- rdi                 : holder
   //  -- rsi                 : context
   //  -- rsp[0]              : return address
   //  -- rsp[8]              : argument 0 (receiver)
@@ -4685,7 +4655,6 @@ void Builtins::Generate_CallApiCallbackImpl(MacroAssembler* masm,
   Register api_function_address = no_reg;
   Register argc = no_reg;
   Register func_templ = no_reg;
-  Register holder = no_reg;
   Register topmost_script_having_context = no_reg;
   Register scratch = rax;
   Register scratch2 = no_reg;
@@ -4698,7 +4667,6 @@ void Builtins::Generate_CallApiCallbackImpl(MacroAssembler* masm,
           TopmostScriptHavingContextRegister();
       func_templ =
           CallApiCallbackGenericDescriptor::FunctionTemplateInfoRegister();
-      holder = CallApiCallbackGenericDescriptor::HolderRegister();
       break;
 
     case CallApiCallbackMode::kOptimizedNoProfiling:
@@ -4711,11 +4679,10 @@ void Builtins::Generate_CallApiCallbackImpl(MacroAssembler* masm,
       argc = CallApiCallbackOptimizedDescriptor::ActualArgumentsCountRegister();
       func_templ =
           CallApiCallbackOptimizedDescriptor::FunctionTemplateInfoRegister();
-      holder = CallApiCallbackOptimizedDescriptor::HolderRegister();
       break;
   }
   DCHECK(!AreAliased(api_function_address, topmost_script_having_context, argc,
-                     holder, func_templ, scratch, scratch2, kScratchRegister));
+                     func_templ, scratch, scratch2, kScratchRegister));
 
   using FCA = FunctionCallbackArguments;
   using ER = ExternalReference;
@@ -4727,7 +4694,7 @@ void Builtins::Generate_CallApiCallbackImpl(MacroAssembler* masm,
   static_assert(FCA::kReturnValueIndex == 3);
   static_assert(FCA::kContextIndex == 2);
   static_assert(FCA::kIsolateIndex == 1);
-  static_assert(FCA::kHolderIndex == 0);
+  static_assert(FCA::kUnusedIndex == 0);
 
   // Set up FunctionCallbackInfo's implicit_args on the stack as follows:
   //
@@ -4736,7 +4703,7 @@ void Builtins::Generate_CallApiCallbackImpl(MacroAssembler* masm,
   //
   // Target state:
   //   rsp[0 * kSystemPointerSize]: return address
-  //   rsp[1 * kSystemPointerSize]: kHolder   <= implicit_args_
+  //   rsp[1 * kSystemPointerSize]: kUnused  <= FCA::implicit_args_
   //   rsp[2 * kSystemPointerSize]: kIsolate
   //   rsp[3 * kSystemPointerSize]: kContext
   //   rsp[4 * kSystemPointerSize]: undefined (kReturnValue)
@@ -4758,8 +4725,12 @@ void Builtins::Generate_CallApiCallbackImpl(MacroAssembler* masm,
   __ Push(func_templ);        // kTarget
   __ Push(kScratchRegister);  // kReturnValue
   __ Push(kContextRegister);  // kContext
-  __ PushAddress(ER::isolate_address());
-  __ Push(holder);
+  __ PushAddress(ER::isolate_address());  // kIsolate
+  // TODO(ishell, http://crbug.com/326505377): in case of non-constructor
+  // call, don't pass kNewTarget and kUnused. Add IsConstructCall flag to
+  // kIsolate field.
+  __ LoadRoot(kScratchRegister, RootIndex::kUndefinedValue);
+  __ Push(kScratchRegister);  // kUnused
 
   if (mode == CallApiCallbackMode::kGeneric) {
     __ LoadExternalPointerField(

@@ -10,6 +10,7 @@
 #include <cstdint>
 #include <cstring>
 #include <iostream>
+#include <limits>
 #include <memory>
 #include <optional>
 #include <string>
@@ -17,11 +18,13 @@
 #include <vector>
 
 #include "absl/algorithm/container.h"
+#include "absl/base/casts.h"
 #include "absl/container/flat_hash_map.h"
 #include "absl/strings/ascii.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_format.h"
 #include "absl/strings/str_join.h"
+#include "absl/strings/str_replace.h"
 #include "absl/strings/string_view.h"
 #include "absl/time/time.h"
 #include "quiche/quic/core/crypto/quic_random.h"
@@ -39,6 +42,7 @@
 #include "quiche/quic/moqt/test_tools/moqt_simulator_harness.h"
 #include "quiche/quic/test_tools/simulator/actor.h"
 #include "quiche/quic/test_tools/simulator/link.h"
+#include "quiche/quic/test_tools/simulator/port.h"
 #include "quiche/quic/test_tools/simulator/simulator.h"
 #include "quiche/quic/test_tools/simulator/switch.h"
 #include "quiche/common/platform/api/quiche_command_line_flags.h"
@@ -61,6 +65,7 @@ using ::quic::QuicClock;
 using ::quic::QuicTime;
 using ::quic::QuicTimeDelta;
 
+using ::quic::simulator::Endpoint;
 using ::quic::simulator::Simulator;
 
 // In the simulation, the server link is supposed to be the bottleneck, so this
@@ -83,12 +88,25 @@ struct SimulationParameters {
   QuicByteCount network_queue_size = 0;
   // Duration for which the simulation is run.
   QuicTimeDelta duration = QuicTimeDelta::FromSeconds(60);
+  // Packet aggregation timeout.  If zero, this will be set to the quarter of
+  // min RTT.
+  QuicTimeDelta aggregation_timeout = QuicTimeDelta::Zero();
+  // Packet aggregation threshold.  If zero, packet aggregation is disabled.
+  QuicByteCount aggregation_threshold = 0;
 
   // Count frames as useful only if they were received `deadline` after which
   // they were generated.
   QuicTimeDelta deadline = QuicTimeDelta::FromSeconds(2);
   // Delivery order used by the publisher.
   MoqtDeliveryOrder delivery_order = MoqtDeliveryOrder::kDescending;
+  // Delivery timeout for the subscription.  This is mechanically independent
+  // from `deadline`, which is an accounting-only parameter (in practice, those
+  // should probably be close).
+  QuicTimeDelta delivery_timeout = QuicTimeDelta::Infinite();
+  // Whether MoqtBitrateAdjuster is enabled.
+  bool bitrate_adaptation = true;
+  // Use alternative delivery timeout design.
+  bool alternative_timeout = false;
 
   // Number of frames in an individual group.
   int keyframe_interval = 30 * 2;
@@ -98,12 +116,90 @@ struct SimulationParameters {
   float i_to_p_ratio = 2 / 1;
   // The target bitrate of the data being exchanged.
   QuicBandwidth bitrate = QuicBandwidth::FromBitsPerSecond(1.0e6);
+
+  // Adds random packet loss rate, as a fraction.
+  float packet_loss_rate = 0.0f;
+
+  // If non-zero, makes the traffic disappear in the middle of the connection
+  // for the specified duration.
+  quic::QuicTimeDelta blackhole_duration = QuicTimeDelta::Zero();
 };
 
 std::string FormatPercentage(size_t n, size_t total) {
   float percentage = 100.0f * n / total;
   return absl::StrFormat("%d / %d (%.2f%%)", n, total, percentage);
 }
+
+using OutputField = std::pair<absl::string_view, std::string>;
+
+OutputField OutputFraction(absl::string_view key, size_t n, size_t total) {
+  float fraction = static_cast<float>(n) / total;
+  return OutputField(key, absl::StrCat(fraction));
+}
+
+float RandFloat(quic::QuicRandom& rng) {
+  uint32_t number;
+  rng.RandBytes(&number, sizeof(number));
+  return absl::bit_cast<float>((number & 0x7fffff) | 0x3f800000) - 1.0f;
+}
+
+// Box that enacts MoQT simulator specific modifications to the traffic.
+class ModificationBox : public Endpoint,
+                        public quic::simulator::UnconstrainedPortInterface {
+ public:
+  ModificationBox(Endpoint* wrapped_endpoint,
+                  const SimulationParameters& parameters)
+      : Endpoint(
+            wrapped_endpoint->simulator(),
+            absl::StrCat(wrapped_endpoint->name(), " (moedification box)")),
+        wrapped_endpoint_(*wrapped_endpoint),
+        parameters_(parameters) {}
+
+  void OnBeforeSimulationStart() {
+    if (!parameters_.blackhole_duration.IsZero()) {
+      float offset =
+          0.5f + RandFloat(*simulator()->GetRandomGenerator()) * 0.2f;
+      blackhole_start_time_ =
+          simulator()->GetClock()->Now() + offset * parameters_.duration;
+    }
+  }
+
+  // Endpoint implementation.
+  void Act() override {}
+  quic::simulator::UnconstrainedPortInterface* GetRxPort() override {
+    return this;
+  }
+  void SetTxPort(quic::simulator::ConstrainedPortInterface* port) override {
+    return wrapped_endpoint_.SetTxPort(port);
+  }
+
+  // UnconstrainedPortInterface implementation.
+  void AcceptPacket(std::unique_ptr<quic::simulator::Packet> packet) {
+    quic::QuicRandom* const rng = simulator()->GetRandomGenerator();
+    const quic::QuicTime now = simulator()->GetClock()->Now();
+    bool drop = false;
+    if (parameters_.packet_loss_rate > 0) {
+      if (RandFloat(*rng) < parameters_.packet_loss_rate) {
+        drop = true;
+      }
+    }
+    if (blackhole_start_time_.has_value()) {
+      quic::QuicTime blackhole_end_time =
+          *blackhole_start_time_ + parameters_.blackhole_duration;
+      if (now >= blackhole_start_time_ && now < blackhole_end_time) {
+        drop = true;
+      }
+    }
+    if (!drop) {
+      wrapped_endpoint_.GetRxPort()->AcceptPacket(std::move(packet));
+    }
+  }
+
+ private:
+  Endpoint& wrapped_endpoint_;
+  SimulationParameters parameters_;
+  std::optional<QuicTime> blackhole_start_time_;
+};
 
 // Generates test objects at a constant rate.  The first eight bytes of every
 // object generated is a timestamp, the rest is all zeroes.  The first object in
@@ -118,7 +214,8 @@ class ObjectGenerator : public quic::simulator::Actor,
                   QuicBandwidth bitrate)
       : Actor(simulator, actor_name),
         queue_(std::make_shared<MoqtOutgoingQueue>(
-            track_name, MoqtForwardingPreference::kSubgroup)),
+            track_name, MoqtForwardingPreference::kSubgroup,
+            simulator->GetClock())),
         keyframe_interval_(keyframe_interval),
         time_between_frames_(QuicTimeDelta::FromMicroseconds(1.0e6 / fps)),
         i_to_p_ratio_(i_to_p_ratio),
@@ -205,34 +302,21 @@ class ObjectReceiver : public SubscribeRemoteTrack::Visitor {
   void OnObjectFragment(const FullTrackName& full_track_name,
                         FullSequence sequence,
                         MoqtPriority /*publisher_priority*/,
-                        MoqtObjectStatus status,
-                        absl::string_view object,
+                        MoqtObjectStatus status, absl::string_view object,
                         bool end_of_message) override {
     QUICHE_DCHECK(full_track_name == TrackName());
     if (status != MoqtObjectStatus::kNormal) {
       QUICHE_DCHECK(end_of_message);
       return;
     }
-
-    // Buffer and assemble partially available objects.
-    // TODO: this logic should be factored out. Also, this should take advantage
-    // of the fact that in the current MoQT, the object size is known in
-    // advance.
     if (!end_of_message) {
-      auto [it, unused] = partial_objects_.try_emplace(sequence);
-      it->second.append(object);
+      QUICHE_LOG(DFATAL) << "Partial receiving of objects wasn't enabled";
       return;
     }
-    auto it = partial_objects_.find(sequence);
-    if (it == partial_objects_.end()) {
-      OnFullObject(sequence, object);
-      return;
-    }
-    std::string full_object = std::move(it->second);
-    full_object.append(object);
-    partial_objects_.erase(it);
-    OnFullObject(sequence, full_object);
+    OnFullObject(sequence, object);
   }
+
+  void OnSubscribeDone(FullTrackName /*full_track_name*/) override {}
 
   void OnFullObject(FullSequence sequence, absl::string_view payload) {
     QUICHE_CHECK_GE(payload.size(), 8u);
@@ -300,8 +384,9 @@ class MoqtSimulator {
         client_endpoint_(&simulator_, "Client", "Server", kMoqtVersion),
         server_endpoint_(&simulator_, "Server", "Client", kMoqtVersion),
         switch_(&simulator_, "Switch", 8, AdjustedQueueSize(parameters)),
-        client_link_(&client_endpoint_, switch_.port(1), kClientLinkBandwidth,
-                     parameters.min_rtt * 0.25),
+        modification_box_(switch_.port(1), parameters),
+        client_link_(&client_endpoint_, &modification_box_,
+                     kClientLinkBandwidth, parameters.min_rtt * 0.25),
         server_link_(&server_endpoint_, switch_.port(2), parameters.bandwidth,
                      parameters.min_rtt * 0.25),
         generator_(&simulator_, "Client generator", client_endpoint_.session(),
@@ -311,6 +396,14 @@ class MoqtSimulator {
         adjuster_(simulator_.GetClock(), client_endpoint_.session()->session(),
                   &generator_),
         parameters_(parameters) {
+    if (parameters.aggregation_threshold > 0) {
+      QuicTimeDelta timeout = parameters.aggregation_timeout;
+      if (timeout.IsZero()) {
+        timeout = parameters.min_rtt * 0.25;
+      }
+      switch_.port_queue(2)->EnableAggregation(parameters.aggregation_threshold,
+                                               timeout);
+    }
     client_endpoint_.RecordTrace();
   }
 
@@ -328,29 +421,21 @@ class MoqtSimulator {
 
   // Runs the simulation and outputs the results to stdout.
   void Run() {
-    // Timeout for establishing the connection.
-    constexpr QuicTimeDelta kConnectionTimeout = QuicTimeDelta::FromSeconds(1);
-
     // Perform the QUIC and the MoQT handshake.
     client_session()->set_support_object_acks(true);
-    client_session()->callbacks().session_established_callback = [this] {
-      client_established_ = true;
-    };
     server_session()->set_support_object_acks(true);
-    server_session()->callbacks().session_established_callback = [this] {
-      server_established_ = true;
-    };
-    client_endpoint_.quic_session()->CryptoConnect();
-    simulator_.RunUntilOrTimeout(
-        [&]() { return client_established_ && server_established_; },
-        kConnectionTimeout);
-    QUICHE_CHECK(client_established_) << "Client failed to establish session";
-    QUICHE_CHECK(server_established_) << "Server failed to establish session";
+    RunHandshakeOrDie(simulator_, client_endpoint_, server_endpoint_);
 
     generator_.queue()->SetDeliveryOrder(parameters_.delivery_order);
     client_session()->set_publisher(&publisher_);
-    client_session()->SetMonitoringInterfaceForTrack(TrackName(), &adjuster_);
+    if (parameters_.bitrate_adaptation) {
+      client_session()->SetMonitoringInterfaceForTrack(TrackName(), &adjuster_);
+    }
+    if (parameters_.alternative_timeout) {
+      client_session()->UseAlternateDeliveryTimeout();
+    }
     publisher_.Add(generator_.queue());
+    modification_box_.OnBeforeSimulationStart();
 
     // The simulation is started as follows.  At t=0:
     //   (1) The server issues a subscribe request.
@@ -358,19 +443,26 @@ class MoqtSimulator {
     //       server does not yet have an active subscription, so the client has
     //       some catching up to do.
     generator_.Start();
-    server_session()->SubscribeCurrentGroup(TrackName(), &receiver_);
+    MoqtSubscribeParameters subscription_parameters;
+    if (!parameters_.delivery_timeout.IsInfinite()) {
+      subscription_parameters.delivery_timeout = parameters_.delivery_timeout;
+    }
+    server_session()->JoiningFetch(TrackName(), &receiver_, 0,
+                                   subscription_parameters);
     simulator_.RunFor(parameters_.duration);
 
     // At the end, we wait for eight RTTs until the connection settles down.
     generator_.Stop();
-    absl::Duration wait_at_the_end =
+    wait_at_the_end_ =
         8 * client_endpoint_.quic_session()->GetSessionStats().smoothed_rtt;
-    simulator_.RunFor(QuicTimeDelta(wait_at_the_end));
-    const QuicTimeDelta total_time =
-        parameters_.duration + QuicTimeDelta(wait_at_the_end);
+    simulator_.RunFor(QuicTimeDelta(wait_at_the_end_));
+  }
 
+  void HumanReadableOutput() {
+    const QuicTimeDelta total_time =
+        parameters_.duration + QuicTimeDelta(wait_at_the_end_);
     absl::PrintF("Ran simulation for %v + %.1fms\n", parameters_.duration,
-                 absl::ToDoubleMilliseconds(wait_at_the_end));
+                 absl::ToDoubleMilliseconds(wait_at_the_end_));
     absl::PrintF("Congestion control used: %s\n",
                  GetClientSessionCongestionControl());
 
@@ -395,11 +487,28 @@ class MoqtSimulator {
     absl::PrintF("Bitrates: %s\n", generator_.FormatBitrateHistory());
   }
 
+  void CustomOutput(absl::string_view format) {
+    size_t total_sent = generator_.total_objects_sent();
+    std::vector<OutputField> fields;
+    fields.push_back(OutputFraction("{on_time_fraction}",
+                                    receiver_.full_objects_received_on_time(),
+                                    total_sent));
+    fields.push_back(OutputFraction(
+        "{late_fraction}", receiver_.full_objects_received_late(), total_sent));
+    size_t missing_objects =
+        generator_.total_objects_sent() - receiver_.full_objects_received();
+    fields.push_back(
+        OutputFraction("{missing_fraction}", missing_objects, total_sent));
+    std::string output = absl::StrReplaceAll(format, fields);
+    std::cout << output << std::endl;
+  }
+
  private:
   Simulator simulator_;
   MoqtClientEndpoint client_endpoint_;
   MoqtServerEndpoint server_endpoint_;
   quic::simulator::Switch switch_;
+  ModificationBox modification_box_;
   quic::simulator::SymmetricLink client_link_;
   quic::simulator::SymmetricLink server_link_;
   MoqtKnownTrackPublisher publisher_;
@@ -408,8 +517,7 @@ class MoqtSimulator {
   MoqtBitrateAdjuster adjuster_;
   SimulationParameters parameters_;
 
-  bool client_established_ = false;
-  bool server_established_ = false;
+  absl::Duration wait_at_the_end_;
 };
 
 }  // namespace
@@ -434,6 +542,57 @@ DEFINE_QUICHE_COMMAND_LINE_FLAG(
     std::string, delivery_order, "desc",
     "Delivery order used for the MoQT track simulated ('asc' or 'desc').");
 
+DEFINE_QUICHE_COMMAND_LINE_FLAG(
+    bool, bitrate_adaptation, true,
+    "Whether track payload's bitrate can be adjusted.");
+
+DEFINE_QUICHE_COMMAND_LINE_FLAG(absl::Duration, delivery_timeout,
+                                absl::InfiniteDuration(),
+                                "Delivery timeout for the subscription.");
+
+DEFINE_QUICHE_COMMAND_LINE_FLAG(bool, alternative_timeout, false,
+                                "Use alternative delivery timeout design.");
+
+DEFINE_QUICHE_COMMAND_LINE_FLAG(
+    float, packet_loss_rate,
+    moqt::test::SimulationParameters().packet_loss_rate,
+    "Adds additional packet loss at the publisher-to-subscriber direction, "
+    "specified as a fraction.");
+
+DEFINE_QUICHE_COMMAND_LINE_FLAG(
+    absl::Duration, blackhole_duration,
+    moqt::test::SimulationParameters().blackhole_duration.ToAbsl(),
+    "If non-zero, makes the traffic disappear in the middle of the connection "
+    "for the specified duration.");
+
+DEFINE_QUICHE_COMMAND_LINE_FLAG(
+    quic::QuicByteCount, aggregation_threshold,
+    moqt::test::SimulationParameters().aggregation_threshold,
+    "If non-zero, enables packet aggregation with the specified threshold (the "
+    "packets sent by publisher will be delayed until the specified number is "
+    "present).");
+
+DEFINE_QUICHE_COMMAND_LINE_FLAG(
+    absl::Duration, aggregation_timeout,
+    moqt::test::SimulationParameters().aggregation_timeout.ToAbsl(),
+    "Sets the timeout for packet aggregation; if zero, this will be set to the "
+    "quarter of min RTT.");
+
+DEFINE_QUICHE_COMMAND_LINE_FLAG(
+    absl::Duration, group_duration, absl::ZeroDuration(),
+    "If non-zero, sets the group size to match the requested duration");
+
+DEFINE_QUICHE_COMMAND_LINE_FLAG(
+    std::string, output_format, "",
+    R"(If non-empty, instead of the usual human-readable format,
+the tool will output the raw numbers from the simulation, formatted as
+descrbied by the parameter.
+
+Supported format keys:
+* {on_time_fraction} -- fraction of objects that arrived on time
+* {late_fraction} -- fraction of objects that arrived late
+* {missing_fraction} -- fraction of objects that never arrived)");
+
 int main(int argc, char** argv) {
   moqt::test::SimulationParameters parameters;
   quiche::QuicheParseCommandLineFlags("moqt_simulator", argc, argv);
@@ -443,6 +602,27 @@ int main(int argc, char** argv) {
       quic::QuicTimeDelta(quiche::GetQuicheCommandLineFlag(FLAGS_deadline));
   parameters.duration =
       quic::QuicTimeDelta(quiche::GetQuicheCommandLineFlag(FLAGS_duration));
+  parameters.bitrate_adaptation =
+      quiche::GetQuicheCommandLineFlag(FLAGS_bitrate_adaptation);
+  parameters.delivery_timeout = quic::QuicTimeDelta(
+      quiche::GetQuicheCommandLineFlag(FLAGS_delivery_timeout));
+  parameters.packet_loss_rate =
+      quiche::GetQuicheCommandLineFlag(FLAGS_packet_loss_rate);
+  parameters.alternative_timeout =
+      quiche::GetQuicheCommandLineFlag(FLAGS_alternative_timeout);
+  parameters.blackhole_duration = quic::QuicTimeDelta(
+      quiche::GetQuicheCommandLineFlag(FLAGS_blackhole_duration));
+  parameters.aggregation_threshold =
+      quiche::GetQuicheCommandLineFlag(FLAGS_aggregation_threshold);
+  parameters.aggregation_timeout = quic::QuicTimeDelta(
+      quiche::GetQuicheCommandLineFlag(FLAGS_aggregation_timeout));
+
+  absl::Duration group_duration =
+      quiche::GetQuicheCommandLineFlag(FLAGS_group_duration);
+  if (group_duration > absl::ZeroDuration()) {
+    parameters.keyframe_interval =
+        absl::ToDoubleSeconds(group_duration) * parameters.fps;
+  }
 
   std::string raw_delivery_order = absl::AsciiStrToLower(
       quiche::GetQuicheCommandLineFlag(FLAGS_delivery_order));
@@ -457,5 +637,13 @@ int main(int argc, char** argv) {
 
   moqt::test::MoqtSimulator simulator(parameters);
   simulator.Run();
+
+  std::string output_format =
+      quiche::GetQuicheCommandLineFlag(FLAGS_output_format);
+  if (output_format.empty()) {
+    simulator.HumanReadableOutput();
+  } else {
+    simulator.CustomOutput(output_format);
+  }
   return 0;
 }

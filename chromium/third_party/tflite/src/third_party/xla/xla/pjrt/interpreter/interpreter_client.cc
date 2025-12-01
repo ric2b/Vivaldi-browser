@@ -62,8 +62,8 @@ limitations under the License.
 #include "xla/shape.h"
 #include "xla/shape_util.h"
 #include "xla/tsl/platform/errors.h"
+#include "xla/tsl/platform/statusor.h"
 #include "xla/util.h"
-#include "tsl/platform/statusor.h"
 
 namespace xla {
 namespace {
@@ -333,8 +333,8 @@ absl::StatusOr<Layout> InterpreterClient::GetDefaultLayout(
 }
 
 absl::StatusOr<std::unique_ptr<PjRtLoadedExecutable>>
-InterpreterClient::Compile(const XlaComputation& computation,
-                           CompileOptions options) {
+InterpreterClient::CompileAndLoad(const XlaComputation& computation,
+                                  CompileOptions options) {
   std::vector<const Shape*> argument_layout_pointers;
   const ExecutableBuildOptions& build_options =
       options.executable_build_options;
@@ -356,7 +356,8 @@ InterpreterClient::Compile(const XlaComputation& computation,
 }
 
 absl::StatusOr<std::unique_ptr<PjRtLoadedExecutable>>
-InterpreterClient::Compile(mlir::ModuleOp module, CompileOptions options) {
+InterpreterClient::CompileAndLoad(mlir::ModuleOp module,
+                                  CompileOptions options) {
   XlaComputation xla_computation;
   const ExecutableBuildOptions& exec_build_options =
       options.executable_build_options;
@@ -368,7 +369,7 @@ InterpreterClient::Compile(mlir::ModuleOp module, CompileOptions options) {
   // If the compile options specify argument layout, then let's
   // fall back to using the options to determine layouts.
   if (options.argument_layouts) {
-    return Compile(xla_computation, options);
+    return CompileAndLoad(xla_computation, options);
   }
 
   TF_ASSIGN_OR_RETURN(std::vector<LayoutMode> arg_layout_modes,
@@ -501,7 +502,7 @@ InterpreterClient::RunBackend(std::unique_ptr<HloModule> hlo_module,
           /*op_supports_dynamism_handler=*/[&](HloInstruction* hlo) {
             return OpDynamismSupport::kOptional;
           }));
-  auto evaluator = std::make_unique<HloEvaluator>();
+  auto evaluator = hlo_evaluator_factory_();
   evaluator->set_use_fast_path(
       hlo_module->config().debug_options().xla_hlo_evaluator_use_fast_path());
   evaluator->set_custom_call_handler(HandleEvaluatorCustomCall);

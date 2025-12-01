@@ -3,22 +3,17 @@
 {
   "SRCDIR": "../..",
 
-  "app/native_resources/vivaldi_native_resources.grd": {
-    "includes": [62000],
-    "structures": [62100],
-  },
-  "app/native_resources/vivaldi_native_unscaled.grd": {
-    "includes": [62200],
-    "structures": [62300],
-  },
   "extensions/vivaldi_extension_resources.grd": {
-    "includes": [62400],
-    "structures": [20500],
+    "includes": [62600],
+    "structures": [20650],
   },
   "app/installer/vivaldi_installer_strings.grd": {
-    "messages": [62600],
+    "messages": [62700],
   },
-
+  "app/native_resources/vivaldi_native_unscaled.grd": {
+    "includes": [62800],
+    "structures": [62850],
+  },
   # Long sections, hundreds of strings
   "app/native_resources/vivaldi_native_strings.grd": {
     "messages": [63000],
@@ -26,6 +21,11 @@
   "app/android/vivaldi_android_strings.grd": {
     "messages": [64000],
   },
+  "app/native_resources/vivaldi_native_resources.grd": {
+    "includes": [65000],
+    "structures": [65050],
+  },
+
 
 
   # Dummy values, since these are not actually used because
@@ -104,7 +104,7 @@
   "app/resources/android-tab-ui/vivaldi_android_chrome_tab_ui_strings.grd": {
     "messages": [92100],
   },
-  "app/resources/android-browser-ui/vivaldi_browser_ui_string.grd": {
+  "app/resources/android-browser-ui/vivaldi_browser_ui_strings.grd": {
     "messages": [92200],
   },
   "app/resources/ios_share_extension_strings/vivaldi_ios_share_extension_strings.grd": {
@@ -142,5 +142,8 @@
   },
   "app/resources/android_webapps/vivaldi_android_webapps_strings.grd": {
     "messages": [93400],
+  },
+  "app/resources/android_content/vivaldi_android_content_strings.grd": {
+    "messages": [93500],
   },
 }

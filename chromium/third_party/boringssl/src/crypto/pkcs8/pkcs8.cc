@@ -286,11 +286,20 @@ static const struct pbe_suite *get_pkcs12_pbe_suite(int pbe_nid) {
   return NULL;
 }
 
-int pkcs12_pbe_encrypt_init(CBB *out, EVP_CIPHER_CTX *ctx, int alg,
-                            uint32_t iterations, const char *pass,
-                            size_t pass_len, const uint8_t *salt,
-                            size_t salt_len) {
-  const struct pbe_suite *suite = get_pkcs12_pbe_suite(alg);
+int pkcs12_pbe_encrypt_init(CBB *out, EVP_CIPHER_CTX *ctx, int alg_nid,
+                            const EVP_CIPHER *alg_cipher, uint32_t iterations,
+                            const char *pass, size_t pass_len,
+                            const uint8_t *salt, size_t salt_len) {
+  // TODO(davidben): OpenSSL has since extended |pbe_nid| to control either
+  // the PBES1 scheme or the PBES2 PRF. E.g. passing |NID_hmacWithSHA256| will
+  // select PBES2 with HMAC-SHA256 as the PRF. Implement this if anything uses
+  // it. See 5693a30813a031d3921a016a870420e7eb93ec90 in OpenSSL.
+  if (alg_nid == -1) {
+    return PKCS5_pbe2_encrypt_init(out, ctx, alg_cipher, iterations, pass,
+                                   pass_len, salt, salt_len);
+  }
+
+  const struct pbe_suite *suite = get_pkcs12_pbe_suite(alg_nid);
   if (suite == NULL) {
     OPENSSL_PUT_ERROR(PKCS8, PKCS8_R_UNKNOWN_ALGORITHM);
     return 0;
@@ -437,25 +446,10 @@ int PKCS8_marshal_encrypted_private_key(CBB *out, int pbe_nid,
     }
 
     CBB epki;
-    if (!CBB_add_asn1(out, &epki, CBS_ASN1_SEQUENCE)) {
-      goto err;
-    }
-
-    // TODO(davidben): OpenSSL has since extended |pbe_nid| to control either
-    // the PBES1 scheme or the PBES2 PRF. E.g. passing |NID_hmacWithSHA256| will
-    // select PBES2 with HMAC-SHA256 as the PRF. Implement this if anything uses
-    // it. See 5693a30813a031d3921a016a870420e7eb93ec90 in OpenSSL.
-    int alg_ok;
-    if (pbe_nid == -1) {
-      alg_ok =
-          PKCS5_pbe2_encrypt_init(&epki, &ctx, cipher, (uint32_t)iterations,
-                                  pass, pass_len, salt, salt_len);
-    } else {
-      alg_ok =
-          pkcs12_pbe_encrypt_init(&epki, &ctx, pbe_nid, (uint32_t)iterations,
-                                  pass, pass_len, salt, salt_len);
-    }
-    if (!alg_ok) {
+    if (!CBB_add_asn1(out, &epki, CBS_ASN1_SEQUENCE) ||
+        !pkcs12_pbe_encrypt_init(&epki, &ctx, pbe_nid, cipher,
+                                 (uint32_t)iterations, pass, pass_len, salt,
+                                 salt_len)) {
       goto err;
     }
 

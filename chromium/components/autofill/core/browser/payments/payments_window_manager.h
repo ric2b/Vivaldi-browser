@@ -9,7 +9,7 @@
 #include <string>
 
 #include "base/functional/callback.h"
-#include "components/autofill/core/browser/data_model/credit_card.h"
+#include "components/autofill/core/browser/data_model/payments/credit_card.h"
 #include "components/autofill/core/browser/payments/card_unmask_challenge_option.h"
 #include "url/gurl.h"
 
@@ -85,7 +85,8 @@ class PaymentsWindowManager {
   using OnVcn3dsAuthenticationCompleteCallback =
       base::OnceCallback<void(Vcn3dsAuthenticationResponse)>;
 
-  using OnBnplPopupClosedCallback = base::OnceCallback<void(BnplFlowResult)>;
+  using OnBnplPopupClosedCallback =
+      base::OnceCallback<void(BnplFlowResult, GURL)>;
 
   // The contextual data required for the VCN 3DS flow.
   struct Vcn3dsContext {
@@ -124,17 +125,18 @@ class PaymentsWindowManager {
     // The starting location of the BNPL flow, which is an initial URL to
     // open inside of the pop-up.
     GURL initial_url;
-    // The URL that denotes the user successfully finished the flow inside of
-    // the pop-up. This parameter will be used to match against each URL
-    // navigation inside of the pop-up, and if the window manager observes
-    // `success_url` inside of the pop-up, it will close the pop-up
+    // The URL prefix that denotes the user successfully finished the flow
+    // inside of the pop-up. This parameter will be used to match against each
+    // URL navigation inside of the pop-up, and if the window manager observes
+    // `success_url_prefix` inside of the pop-up, it will close the pop-up
     // automatically.
-    GURL success_url;
-    // The URL that denotes the user failed the flow inside of the pop-up. This
-    // parameter will be used to match against each URL navigation inside of the
-    // pop-up, and if the window manager observes `failure_url` inside of the
-    // pop-up, it will close the pop-up automatically.
-    GURL failure_url;
+    GURL success_url_prefix;
+    // The URL prefix that denotes the user failed the flow inside of the
+    // pop-up. This parameter will be used to match against each URL navigation
+    // inside of the pop-up, and if the window manager observes the
+    // `failure_url_prefix` inside of the pop-up, it will close the pop-up
+    // automatically.
+    GURL failure_url_prefix;
     // The callback to run to notify the caller that the flow inside of the
     // pop-up was finished, with the result.
     OnBnplPopupClosedCallback completion_callback;

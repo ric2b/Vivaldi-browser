@@ -28,7 +28,7 @@ import {
 describe('Hide issues menu', () => {
   it('should become visible on hovering over the issue header', async () => {
     const {frontend} = getBrowserAndPages();
-    frontend.evaluate(() => {
+    await frontend.evaluate(() => {
       const issue = {
         code: 'HeavyAdIssue',
         details: {
@@ -39,10 +39,10 @@ describe('Hide issues menu', () => {
           },
         },
       };
-      // @ts-ignore
+      // @ts-expect-error
       window.addIssueForTest(issue);
     });
-    frontend.evaluate(() => {
+    await frontend.evaluate(() => {
       const issue = {
         code: 'DeprecationIssue',
         details: {
@@ -56,7 +56,7 @@ describe('Hide issues menu', () => {
           },
         },
       };
-      // @ts-ignore
+      // @ts-expect-error
       window.addIssueForTest(issue);
     });
 

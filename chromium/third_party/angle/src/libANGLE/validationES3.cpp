@@ -118,14 +118,17 @@ bool ValidateUniformMatrixES3(const Context *context,
     return ValidateUniformMatrix(context, entryPoint, valueType, location, count, transpose);
 }
 
-bool ValidateGenOrDeleteES3(const Context *context, angle::EntryPoint entryPoint, GLint n)
+bool ValidateGenOrDeleteES3(const Context *context,
+                            angle::EntryPoint entryPoint,
+                            GLint n,
+                            const void *ids)
 {
     if (context->getClientMajorVersion() < 3)
     {
         ANGLE_VALIDATION_ERROR(GL_INVALID_OPERATION, kES3Required);
         return false;
     }
-    return ValidateGenOrDelete(context, entryPoint, n);
+    return ValidateGenOrDelete(context, entryPoint, n, ids);
 }
 
 bool ValidateGenOrDeleteCountES3(const Context *context, angle::EntryPoint entryPoint, GLint count)
@@ -608,29 +611,26 @@ bool ValidateES3TexImageParametersBase(const Context *context,
             break;
 
         case TextureType::CubeMapArray:
-            if (!isSubImage && width != height)
+            if (!isSubImage)
             {
-                ANGLE_VALIDATION_ERROR(GL_INVALID_VALUE, kCubemapFacesEqualDimensions);
-                return false;
+                if (width != height)
+                {
+                    ANGLE_VALIDATION_ERROR(GL_INVALID_VALUE, kCubemapFacesEqualDimensions);
+                    return false;
+                }
+
+                if (depth % 6 != 0)
+                {
+                    ANGLE_VALIDATION_ERROR(GL_INVALID_VALUE, kCubemapInvalidDepth);
+                    return false;
+                }
             }
 
             if (width > (caps.maxCubeMapTextureSize >> level) ||
-                height > (caps.maxCubeMapTextureSize >> level))
+                height > (caps.maxCubeMapTextureSize >> level) ||
+                depth > caps.maxArrayTextureLayers)
             {
                 ANGLE_VALIDATION_ERROR(GL_INVALID_VALUE, kResourceMaxTextureSize);
-                return false;
-            }
-
-            if (width > (caps.max3DTextureSize >> level) ||
-                height > (caps.max3DTextureSize >> level) || depth > caps.max3DTextureSize)
-            {
-                ANGLE_VALIDATION_ERROR(GL_INVALID_VALUE, kResourceMaxTextureSize);
-                return false;
-            }
-
-            if (!isSubImage && depth % 6 != 0)
-            {
-                ANGLE_VALIDATION_ERROR(GL_INVALID_VALUE, kCubemapInvalidDepth);
                 return false;
             }
             break;
@@ -647,6 +647,12 @@ bool ValidateES3TexImageParametersBase(const Context *context,
     if (!texture)
     {
         ANGLE_VALIDATION_ERROR(GL_INVALID_OPERATION, kMissingTexture);
+        return false;
+    }
+
+    if (context->getState().isTextureBoundToActivePLS(texture->id()))
+    {
+        ANGLE_VALIDATION_ERROR(GL_INVALID_OPERATION, kActivePLSBackingTexture);
         return false;
     }
 
@@ -1335,7 +1341,8 @@ bool ValidateES3TexStorageParametersLevel(const Context *context,
                                           GLsizei depth)
 {
     GLsizei maxDim = std::max(width, height);
-    if (target != TextureType::_2DArray)
+    // The "depth" parameter of array texture types does not affect mip levels.
+    if (target == TextureType::_3D)
     {
         maxDim = std::max(maxDim, depth);
     }
@@ -1433,14 +1440,7 @@ bool ValidateES3TexStorageParametersExtent(const Context *context,
                 return false;
             }
 
-            if (width > caps.maxCubeMapTextureSize)
-            {
-                ANGLE_VALIDATION_ERROR(GL_INVALID_VALUE, kResourceMaxTextureSize);
-                return false;
-            }
-
-            if (width > caps.max3DTextureSize || height > caps.max3DTextureSize ||
-                depth > caps.max3DTextureSize)
+            if (width > caps.maxCubeMapTextureSize || depth > caps.maxArrayTextureLayers)
             {
                 ANGLE_VALIDATION_ERROR(GL_INVALID_VALUE, kResourceMaxTextureSize);
                 return false;
@@ -2430,6 +2430,13 @@ bool ValidateClearBufferiv(const Context *context,
                            GLint drawbuffer,
                            const GLint *value)
 {
+    // INVALID_VALUE is generated if the value pointer is NULL
+    if (value == nullptr)
+    {
+        ANGLE_VALIDATION_ERROR(GL_INVALID_VALUE, kPLSParamsNULL);
+        return false;
+    }
+
     switch (buffer)
     {
         case GL_COLOR:
@@ -2523,6 +2530,12 @@ bool ValidateClearBufferuiv(const Context *context,
             return false;
     }
 
+    if (value == nullptr)
+    {
+        ANGLE_VALIDATION_ERROR(GL_INVALID_VALUE, kPLSParamsNULL);
+        return false;
+    }
+
     return ValidateClearBuffer(context, entryPoint);
 }
 
@@ -2576,6 +2589,12 @@ bool ValidateClearBufferfv(const Context *context,
         default:
             ANGLE_VALIDATION_ERRORF(GL_INVALID_ENUM, kEnumNotSupported, buffer);
             return false;
+    }
+
+    if (value == nullptr)
+    {
+        ANGLE_VALIDATION_ERROR(GL_INVALID_VALUE, kPLSParamsNULL);
+        return false;
     }
 
     return ValidateClearBuffer(context, entryPoint);
@@ -2995,7 +3014,7 @@ bool ValidateGenQueries(const Context *context,
                         GLsizei n,
                         const QueryID *queries)
 {
-    return ValidateGenOrDeleteES3(context, entryPoint, n);
+    return ValidateGenOrDeleteES3(context, entryPoint, n, queries);
 }
 
 bool ValidateDeleteQueries(const Context *context,
@@ -3003,7 +3022,7 @@ bool ValidateDeleteQueries(const Context *context,
                            GLsizei n,
                            const QueryID *queries)
 {
-    return ValidateGenOrDeleteES3(context, entryPoint, n);
+    return ValidateGenOrDeleteES3(context, entryPoint, n, queries);
 }
 
 bool ValidateGenSamplers(const Context *context,
@@ -3011,6 +3030,12 @@ bool ValidateGenSamplers(const Context *context,
                          GLsizei count,
                          const SamplerID *samplers)
 {
+    if (samplers == nullptr)
+    {
+        ANGLE_VALIDATION_ERROR(GL_INVALID_VALUE, kPLSParamsNULL);
+        return false;
+    }
+
     return ValidateGenOrDeleteCountES3(context, entryPoint, count);
 }
 
@@ -3019,6 +3044,12 @@ bool ValidateDeleteSamplers(const Context *context,
                             GLsizei count,
                             const SamplerID *samplers)
 {
+    if (samplers == nullptr)
+    {
+        ANGLE_VALIDATION_ERROR(GL_INVALID_VALUE, kPLSParamsNULL);
+        return false;
+    }
+
     return ValidateGenOrDeleteCountES3(context, entryPoint, count);
 }
 
@@ -3027,7 +3058,7 @@ bool ValidateGenTransformFeedbacks(const Context *context,
                                    GLsizei n,
                                    const TransformFeedbackID *ids)
 {
-    return ValidateGenOrDeleteES3(context, entryPoint, n);
+    return ValidateGenOrDeleteES3(context, entryPoint, n, ids);
 }
 
 bool ValidateDeleteTransformFeedbacks(const Context *context,
@@ -3035,7 +3066,7 @@ bool ValidateDeleteTransformFeedbacks(const Context *context,
                                       GLsizei n,
                                       const TransformFeedbackID *ids)
 {
-    if (!ValidateGenOrDeleteES3(context, entryPoint, n))
+    if (!ValidateGenOrDeleteES3(context, entryPoint, n, ids))
     {
         return false;
     }
@@ -3057,7 +3088,7 @@ bool ValidateGenVertexArrays(const Context *context,
                              GLsizei n,
                              const VertexArrayID *arrays)
 {
-    return ValidateGenOrDeleteES3(context, entryPoint, n);
+    return ValidateGenOrDeleteES3(context, entryPoint, n, arrays);
 }
 
 bool ValidateDeleteVertexArrays(const Context *context,
@@ -3065,7 +3096,7 @@ bool ValidateDeleteVertexArrays(const Context *context,
                                 GLsizei n,
                                 const VertexArrayID *arrays)
 {
-    return ValidateGenOrDeleteES3(context, entryPoint, n);
+    return ValidateGenOrDeleteES3(context, entryPoint, n, arrays);
 }
 
 bool ValidateBeginTransformFeedback(const Context *context,
@@ -3751,7 +3782,7 @@ bool ValidateGetSynciv(const Context *context,
 
     if (bufSize < 0)
     {
-        ANGLE_VALIDATION_ERROR(GL_INVALID_VALUE, kNegativeBufferSize);
+        ANGLE_VALIDATION_ERROR(GL_INVALID_VALUE, kNegativeBufSize);
         return false;
     }
 
@@ -4284,7 +4315,7 @@ bool ValidateGetTransformFeedbackVarying(const Context *context,
 
     if (bufSize < 0)
     {
-        ANGLE_VALIDATION_ERROR(GL_INVALID_VALUE, kNegativeBufferSize);
+        ANGLE_VALIDATION_ERROR(GL_INVALID_VALUE, kNegativeBufSize);
         return false;
     }
 
@@ -4467,6 +4498,12 @@ bool ValidateVertexAttribI4iv(const PrivateState &state,
         return false;
     }
 
+    if (v == nullptr)
+    {
+        errors->validationError(entryPoint, GL_INVALID_VALUE, kVertexAttributeValueNULL);
+        return false;
+    }
+
     return ValidateVertexAttribIndex(state, errors, entryPoint, index);
 }
 
@@ -4479,6 +4516,12 @@ bool ValidateVertexAttribI4uiv(const PrivateState &state,
     if (state.getClientMajorVersion() < 3)
     {
         errors->validationError(entryPoint, GL_INVALID_OPERATION, kES3Required);
+        return false;
+    }
+
+    if (v == nullptr)
+    {
+        errors->validationError(entryPoint, GL_INVALID_VALUE, kVertexAttributeValueNULL);
         return false;
     }
 
@@ -4786,6 +4829,12 @@ bool ValidateClientWaitSync(const Context *context,
         return false;
     }
 
+    if (context->getState().getPixelLocalStorageActivePlanes() != 0)
+    {
+        ANGLE_VALIDATION_ERROR(GL_INVALID_OPERATION, kPLSActive);
+        return false;
+    }
+
     if ((flags & ~(GL_SYNC_FLUSH_COMMANDS_BIT)) != 0)
     {
         ANGLE_VALIDATION_ERROR(GL_INVALID_VALUE, kInvalidFlags);
@@ -4971,7 +5020,7 @@ bool ValidateGetSamplerParameterfv(const Context *context,
                                    GLenum pname,
                                    const GLfloat *params)
 {
-    return ValidateGetSamplerParameterBase(context, entryPoint, sampler, pname, nullptr);
+    return ValidateGetSamplerParameterBase(context, entryPoint, sampler, pname, nullptr, params);
 }
 
 bool ValidateGetSamplerParameteriv(const Context *context,
@@ -4980,7 +5029,7 @@ bool ValidateGetSamplerParameteriv(const Context *context,
                                    GLenum pname,
                                    const GLint *params)
 {
-    return ValidateGetSamplerParameterBase(context, entryPoint, sampler, pname, nullptr);
+    return ValidateGetSamplerParameterBase(context, entryPoint, sampler, pname, nullptr, params);
 }
 
 bool ValidateSamplerParameterf(const Context *context,

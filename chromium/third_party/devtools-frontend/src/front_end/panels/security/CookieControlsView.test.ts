@@ -5,8 +5,9 @@
 import * as Common from '../../core/common/common.js';
 import * as Platform from '../../core/platform/platform.js';
 import * as SDK from '../../core/sdk/sdk.js';
-import {createFakeSetting, createTarget} from '../../testing/EnvironmentHelpers.js';
+import {createFakeSetting, createTarget, updateHostConfig} from '../../testing/EnvironmentHelpers.js';
 import {describeWithMockConnection} from '../../testing/MockConnection.js';
+import {createViewFunctionStub, type ViewFunctionStub} from '../../testing/ViewFunctionHelpers.js';
 import * as UI from '../../ui/legacy/legacy.js';
 
 import * as Security from './security.js';
@@ -14,11 +15,11 @@ import * as Security from './security.js';
 const {urlString} = Platform.DevToolsPath;
 
 describeWithMockConnection('CookieControlsView', () => {
-  let mockView: sinon.SinonStub;
+  let mockView: ViewFunctionStub<typeof Security.CookieControlsView.CookieControlsView>;
   let target: SDK.Target.Target;
 
   beforeEach(() => {
-    mockView = sinon.stub();
+    mockView = createViewFunctionStub(Security.CookieControlsView.CookieControlsView);
   });
 
   it('should update setting', async () => {
@@ -34,8 +35,7 @@ describeWithMockConnection('CookieControlsView', () => {
   });
 
   it('should invoke getAffectedUrlsForThirdPartyCookieMetadata upon construction', async () => {
-    Common.Settings.Settings.instance().setHostConfig(
-        {thirdPartyCookieControls: {thirdPartyCookieMetadataEnabled: true}});
+    updateHostConfig({thirdPartyCookieControls: {thirdPartyCookieMetadataEnabled: true}});
 
     target = createTarget();
     const getAffectedUrlsSpy = sinon.spy(target.storageAgent(), 'invoke_getAffectedUrlsForThirdPartyCookieMetadata');
@@ -45,8 +45,7 @@ describeWithMockConnection('CookieControlsView', () => {
   });
 
   it('should invoke getAffectedUrlsForThirdPartyCookieMetadata when a resource is added', async () => {
-    Common.Settings.Settings.instance().setHostConfig(
-        {thirdPartyCookieControls: {thirdPartyCookieMetadataEnabled: true}});
+    updateHostConfig({thirdPartyCookieControls: {thirdPartyCookieMetadataEnabled: true}});
     new Security.CookieControlsView.CookieControlsView(undefined, mockView);
 
     target = createTarget();

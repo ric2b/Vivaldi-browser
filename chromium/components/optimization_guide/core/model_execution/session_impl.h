@@ -55,9 +55,13 @@ class SessionImpl : public OptimizationGuideModelExecutor::Session {
               std::optional<OnDeviceOptions> on_device_opts,
               ExecuteRemoteFn execute_remote_fn,
               const std::optional<SessionConfigParams>& config_params);
+  SessionImpl(ModelBasedCapabilityKey feature,
+              ExecuteRemoteFn execute_remote_fn,
+              const SamplingParams& sampling_params);
   ~SessionImpl() override;
 
   // optimization_guide::OptimizationGuideModelExecutor::Session:
+  on_device_model::mojom::Session& GetSession() override;
   const TokenLimits& GetTokenLimits() const override;
   const proto::Any& GetOnDeviceFeatureMetadata() const override;
   void SetInput(MultimodalMessage request) override;
@@ -72,12 +76,14 @@ class SessionImpl : public OptimizationGuideModelExecutor::Session {
       const std::string& text,
       OptimizationGuideModelSizeInTokenCallback callback) override;
   void GetExecutionInputSizeInTokens(
-      const google::protobuf::MessageLite& request_metadata,
+      MultimodalMessageReadView request_metadata,
       OptimizationGuideModelSizeInTokenCallback callback) override;
   void GetContextSizeInTokens(
-      const google::protobuf::MessageLite& request_metadata,
+      MultimodalMessageReadView request_metadata,
       OptimizationGuideModelSizeInTokenCallback callback) override;
   const SamplingParams GetSamplingParams() const override;
+  on_device_model::Capabilities GetCapabilities() const override;
+  std::unique_ptr<Session> Clone() override;
 
   // Returns true if the on-device model should be used.
   bool ShouldUseOnDeviceModel() const;
@@ -93,7 +99,7 @@ class SessionImpl : public OptimizationGuideModelExecutor::Session {
   // Helper function to get the size of request in tokens with boolean flag to
   // control if we are extracting the context or the execution text.
   void GetSizeInTokensInternal(
-      const google::protobuf::MessageLite& request,
+      MultimodalMessageReadView request,
       OptimizationGuideModelSizeInTokenCallback callback,
       bool want_input_context);
 
@@ -112,6 +118,9 @@ class SessionImpl : public OptimizationGuideModelExecutor::Session {
 
   // Params used to control output sampling for the on device model.
   const SamplingParams sampling_params_;
+
+  // Capabilities for this session of the on device model.
+  on_device_model::Capabilities capabilities_;
 
   base::WeakPtrFactory<SessionImpl> weak_ptr_factory_{this};
 };

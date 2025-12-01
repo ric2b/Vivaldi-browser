@@ -67,7 +67,7 @@
 
 - (void)start {
   [super start];
-  ProfileIOS* profile = self.browser->GetProfile();
+  ProfileIOS* profile = self.profile;
   CHECK_EQ(profile, profile->GetOriginalProfile());
   _authenticationService = AuthenticationServiceFactory::GetForProfile(profile);
   syncer::SyncService* syncService = SyncServiceFactory::GetForProfile(profile);
@@ -111,45 +111,9 @@
 
 #pragma mark - InterruptibleChromeCoordinator
 
-- (void)interruptWithAction:(SigninCoordinatorInterrupt)action
-                 completion:(ProceduralBlock)completion {
-  __weak __typeof(self) weakSelf = self;
-  ProceduralBlock dismissCompletion = ^() {
-    [weakSelf viewWasDismissedWithResult:SigninCoordinatorResultInterrupted];
-    if (completion) {
-      completion();
-    }
-  };
-  switch (action) {
-    case SigninCoordinatorInterrupt::DismissWithAnimation:
-    case SigninCoordinatorInterrupt::DismissWithoutAnimation: {
-      BOOL animated =
-          SigninCoordinatorInterrupt::DismissWithAnimation == action;
-      if (IsInterruptibleCoordinatorStoppedSynchronouslyEnabled()) {
-        [_navigationController dismissViewControllerAnimated:animated
-                                                  completion:nil];
-        dismissCompletion();
-      } else {
-        [_navigationController dismissViewControllerAnimated:animated
-                                                  completion:dismissCompletion];
-      }
-      break;
-    }
-    case SigninCoordinatorInterrupt::UIShutdownNoDismiss:
-      CHECK(!IsInterruptibleCoordinatorAlwaysDismissedEnabled(),
-            base::NotFatalUntil::M136);
-      // The view should be ignored and leave it being presented.
-      _navigationController.presentationController.delegate = nil;
-      _navigationController = nil;
-      // This coordinator is now done, and its owner can now stop it.
-      [self.delegate
-          historySyncPopupCoordinator:self
-                  didFinishWithResult:SigninCoordinatorResultInterrupted];
-      if (completion) {
-        completion();
-      }
-      break;
-  }
+- (void)interruptAnimated:(BOOL)animated {
+  [_navigationController dismissViewControllerAnimated:animated completion:nil];
+  [self viewWasDismissedWithResult:SigninCoordinatorResultInterrupted];
 }
 
 #pragma mark - Private
@@ -180,7 +144,6 @@
 - (void)closeHistorySyncCoordinator:
             (HistorySyncCoordinator*)historySyncCoordinator
                      declinedByUser:(BOOL)declined {
-  CHECK(_navigationController);
   [self stopHistorySyncCoordinator];
   SigninCoordinatorResult result = declined
                                        ? SigninCoordinatorResultCanceledByUser

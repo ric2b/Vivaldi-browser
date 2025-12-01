@@ -87,17 +87,20 @@ in your `~/.bashrc` or `~/.zshrc`). Assuming you cloned 'depot_tools' to
 ifdef::backend-xhtml11[]
 WINDOWS
 ^^^^^^^
-Download the 'depot_tools'
-link:https://storage.googleapis.com/chrome-infra/depot_tools.zip[bundle] and
-extract it somewhere.
+Download and install Git for Windows from https://git-scm.com/downloads/win.
 
-[WARNING]
-*DO NOT* use drag-n-drop or copy-n-paste extract from Explorer, this will not
-extract the hidden ``.git'' folder which is necessary for 'depot_tools' to
-autoupdate itself. You can use ``Extract all...'' from the context menu though.
+From a command shell, navigate to the directory where you want to put
+'depot_tools' and clone the 'depot_tools' repository. For example, if you
+want 'depot_tools' to be cloned to `C:\workspace\depot_tools`:
+
+[subs="quotes"]
+----
+[white]**$ cd C:\workspace**
+[white]**$ git clone https://chromium.googlesource.com/chromium/tools/depot_tools.git**
+----
 
 Add 'depot_tools' to the 'front' of your PATH (must be ahead of any installs of
-Python). Assuming you unzipped the bundle to `C:\workspace\depot_tools`:
+Python). Assuming you cloned 'depot_tools' to `C:\workspace\depot_tools`:
 
 With Administrator access: ::
   *Control Panel -> System and Security -> System -> Advanced system settings*
@@ -277,6 +280,17 @@ Once you're done resolving all of the merge conflict, just run `git
 rebase-update`, and it will pick up where it left off. Once the command has
 finished updating all of your branches, it will return you back to the branch
 you started on.
+
+As an alternative, or if you experience issues with multiple merge conflicts on
+the same changes you can run `git squash-branch` on the conflicted branch
+(either after running `git rebase --abort` or before running `git
+rebase-update`). This will convert the branch to a single commit, which should
+apply more cleanly, or at least result in only needing to resolve the merge
+conflicts once. Running `git cl squash-closed` prior to `git rebase-update` will
+perform this `git squash-branch` on all branches that gerrit thinks are closed.
+These now-closed branches should have a single commit that will cleanly apply
+(and then subsequently be deleted by the rebase process), and can reduce the
+risk of running into merge conflicts during the rebase.
 
 [NOTE]
 Running `git rebase-update` will update all your branches, but it will not

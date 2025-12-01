@@ -366,12 +366,10 @@ protected:
     virtual bool onGetFixedPitch() const; // TODO: = 0;
 
     // Must return a valid scaler context. It can not return nullptr.
-    virtual std::unique_ptr<SkScalerContext> onCreateScalerContext(const SkScalerContextEffects&,
-                                                                   const SkDescriptor*) const = 0;
+    virtual std::unique_ptr<SkScalerContext> onCreateScalerContext(
+        const SkScalerContextEffects&, const SkDescriptor*) const = 0;
     virtual std::unique_ptr<SkScalerContext> onCreateScalerContextAsProxyTypeface
-                                                                  (const SkScalerContextEffects&,
-                                                                   const SkDescriptor*,
-                                                                   sk_sp<SkTypeface>) const;
+        (const SkScalerContextEffects&, const SkDescriptor*, SkTypeface* proxyTypeface) const;
     virtual void onFilterRec(SkScalerContextRec*) const = 0;
     friend class SkScalerContext;  // onFilterRec
 
@@ -442,8 +440,8 @@ private:
     friend class SkRandomTypeface;   // getAdvancedMetrics
     friend class SkPDFFont;          // getAdvancedMetrics
     friend class SkTypeface_proxy;
-
     friend class SkFontPriv;         // getGlyphToUnicodeMap
+    friend void TestSkTypefaceGlyphToUnicodeMap(SkTypeface&, SkUnichar*);
 
 private:
     SkTypefaceID        fUniqueID;

@@ -9,6 +9,7 @@
 
 #include "chrome/browser/new_tab_page/one_google_bar/one_google_bar_loader_impl.h"
 
+#include <map>
 #include <string>
 #include <utility>
 
@@ -296,7 +297,12 @@ OneGoogleBarLoaderImpl::OneGoogleBarLoaderImpl(
       application_locale_(application_locale),
       account_consistency_mirror_required_(account_consistency_mirror_required),
       async_bar_parts_(base::FeatureList::IsEnabled(
-          ntp_features::kNtpOneGoogleBarAsyncBarParts)) {}
+          ntp_features::kNtpOneGoogleBarAsyncBarParts)),
+      additional_query_params_(
+          {{"async", base::FeatureList::IsEnabled(
+                         ntp_features::kNtpOneGoogleBarAsyncBarParts)
+                         ? "fixed:0,abp:1"
+                         : "fixed:0"}}) {}
 
 OneGoogleBarLoaderImpl::~OneGoogleBarLoaderImpl() = default;
 
@@ -317,13 +323,9 @@ GURL OneGoogleBarLoaderImpl::GetLoadURLForTesting() const {
   return GetApiUrl();
 }
 
-bool OneGoogleBarLoaderImpl::SetAdditionalQueryParams(
-    const std::string& value) {
-  if (additional_query_params_ == value) {
-    return false;
-  }
-  additional_query_params_ = value;
-  return true;
+void OneGoogleBarLoaderImpl::SetAdditionalQueryParams(
+    const std::map<std::string, std::string>& params) {
+  additional_query_params_ = params;
 }
 
 GURL OneGoogleBarLoaderImpl::GetApiUrl() const {
@@ -336,26 +338,30 @@ GURL OneGoogleBarLoaderImpl::GetApiUrl() const {
   api_url = google_base_url.Resolve(kNewTabOgbApiPath);
 
   // Add the "hl=" parameter.
-  if (additional_query_params_.find("&hl=") == std::string::npos) {
+  if (additional_query_params_.find("hl") == additional_query_params_.end()) {
     api_url = net::AppendQueryParameter(api_url, "hl", application_locale_);
   }
 
-  // Add the "async=" parameter. We can't use net::AppendQueryParameter for
-  // this because we need the ":" to remain unescaped.
-  GURL::Replacements replacements;
-  std::string query = api_url.query();
-  query += additional_query_params_;
-  if (additional_query_params_.find("&async=") == std::string::npos) {
-    query += "&async=fixed:0";
+  for (const auto& param_pair : additional_query_params_) {
+    // Add the "async=" parameter. We can't use net::AppendQueryParameter for
+    // this because we need the ":" to remain unescaped.
+    if (param_pair.first == "async") {
+      std::string query = api_url.query() + "&async=" + param_pair.second;
+      if (query.at(0) == '&') {
+        query = query.substr(1);
+      }
+      GURL::Replacements replacements;
+      replacements.SetQueryStr(query);
+      api_url = api_url.ReplaceComponents(replacements);
+
+      continue;
+    }
+
+    api_url =
+        net::AppendQueryParameter(api_url, param_pair.first, param_pair.second);
   }
-  if (async_bar_parts_) {
-    query += "&expflags=OgbModule__use_async_bar_parts:true";
-  }
-  if (query.at(0) == '&') {
-    query = query.substr(1);
-  }
-  replacements.SetQueryStr(query);
-  return api_url.ReplaceComponents(replacements);
+
+  return api_url;
 }
 
 void OneGoogleBarLoaderImpl::LoadDone(

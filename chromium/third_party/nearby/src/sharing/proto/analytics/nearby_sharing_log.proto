@@ -31,7 +31,7 @@ option objc_class_prefix = "GNCP";
 
 // Top-level log proto for all NearbySharing logging.
 // Each log contains a key (event_type), value (a verb-noun event) pair.
-// Next Tag: 81
+// Next Tag: 83
 // LINT.IfChange
 message SharingLog {
   /* collection_basis = {
@@ -217,6 +217,10 @@ message SharingLog {
   optional StartQrCodeSession start_qr_code_session = 79;
 
   optional QrCodeOpenedInWebClient qr_code_opened_in_web_client = 80;
+
+  optional HatsJointEvent hats_joint_event = 81;
+
+  optional ReceivePreviews receive_previews = 82;
 
   // Used only for Nearby Share Windows app now.
   message AppInfo {
@@ -565,6 +569,10 @@ message SharingLog {
     // Exact transfer count stored on device, but when logging put the transfer
     // count in buckets, initially we use buckets: 1, 2, 3, …, 10, 11+
     optional int32 lifetime_transfer_count = 13;
+    // The medium used for the connection.
+    optional int32 connection_medium = 14;
+    // The data usage of the user settings.
+    optional location.nearby.proto.sharing.DataUsage data_usage = 15;
   }
 
   // EventType: RECEIVE_ATTACHMENTS_START
@@ -596,6 +604,10 @@ message SharingLog {
     // Exact transfer count stored on device, but when logging put the transfer
     // count in buckets, initially we use buckets: 1, 2, 3, …, 10, 11+
     optional int32 lifetime_transfer_count = 8;
+    // The medium used for the connection.
+    optional int32 connection_medium = 14;
+    // The data usage of the user settings.
+    optional location.nearby.proto.sharing.DataUsage data_usage = 15;
   }
 
   // EventType: CANCEL_CONNECTION
@@ -919,6 +931,7 @@ message SharingLog {
     optional int32 original_quality = 5;
     optional int32 connection_medium = 6;
     optional int32 connection_mode = 7;
+    optional int32 instant_connection_result = 8;
   }
 
   message RpcCallStatus {
@@ -952,6 +965,21 @@ message SharingLog {
       WINDOWS = 5;
     }
     optional ClientPlatform client_platform = 1;
+
+    // Whether the /qrcode page was opened in the browser again after the user
+    // clicked on the "Try again" button
+    optional bool is_retry = 2;
+  }
+  // EventType: HATS_JOINT_EVENT
+  message HatsJointEvent {
+    optional int64 flow_id = 1 /* type = ST_SESSION_ID */;
+    optional string hats_session_id = 2
+        /* type = ST_SESSION_ID */;
+  }
+
+  // EventType: RECEIVE_PREVIEWS
+  message ReceivePreviews {
+    optional int32 num_previews = 1;
   }
 }
 // LINT.ThenChange(//depot/google3/logs/proto/location/nearby/nearby_client_log.proto)

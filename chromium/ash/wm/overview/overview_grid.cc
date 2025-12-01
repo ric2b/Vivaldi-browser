@@ -614,16 +614,12 @@ OverviewGrid::OverviewGrid(
   }
 
   if (split_view_drag_indicators_) {
-    if (chromeos::features::AreOverviewSessionInitOptimizationsEnabled()) {
-      // Initializing the widget before it's visible is not required but can
-      // save a couple milliseconds when rendering the first frame of
-      // `SplitViewDragIndicators`.
-      enter_animation_task_pool_.AddTask(
-          base::BindOnce(&SplitViewDragIndicators::InitWidget,
-                         base::Unretained(split_view_drag_indicators_.get())));
-    } else {
-      split_view_drag_indicators_->InitWidget();
-    }
+    // Initializing the widget before it's visible is not required but can
+    // save a couple milliseconds when rendering the first frame of
+    // `SplitViewDragIndicators`.
+    enter_animation_task_pool_.AddTask(
+        base::BindOnce(&SplitViewDragIndicators::InitWidget,
+                       base::Unretained(split_view_drag_indicators_.get())));
   }
 }
 
@@ -2431,7 +2427,7 @@ void OverviewGrid::UpdateSaveDeskButtons() {
   // viable to be shown, then we want to record a histogram for holdback
   // purposes.
   if (target_visible && visibility_changed) {
-    if (features::IsSavedDeskUiRevampEnabled()) {
+    if (features::IsForestFeatureEnabled()) {
       base::UmaHistogramBoolean(kShowSavedDeskButtonsRevampEnabledHistogramName,
                                 true);
     } else {
@@ -2441,7 +2437,7 @@ void OverviewGrid::UpdateSaveDeskButtons() {
   }
 
   // If the UI revamp is enabled, we return as the buttons will not be shown.
-  if (features::IsSavedDeskUiRevampEnabled()) {
+  if (features::IsForestFeatureEnabled()) {
     return;
   }
 
@@ -2891,25 +2887,13 @@ void OverviewGrid::MaybeInitDesksWidget() {
   desks_widget_ = DeskBarViewBase::CreateDeskWidget(
       root_window_, initial_widget_bounds, DeskBarViewBase::Type::kOverview);
 
-  if (chromeos::features::AreOverviewSessionInitOptimizationsEnabled()) {
-    auto desk_bar_view = std::make_unique<OverviewDeskBarView>(
-        weak_ptr_factory_.GetWeakPtr(), window_occlusion_calculator_,
-        initial_widget_bounds);
-    // Initializing the desk bar before calling `SetContentsView()` prevents
-    // a second unnecessary desk bar layout when rendering the first frame.
-    desk_bar_view->Init(desks_widget_->GetNativeWindow());
-    desks_bar_view_ = desks_widget_->SetContentsView(std::move(desk_bar_view));
-  } else {
-    // The following order of function calls was significant: SetContentsView()
-    // had to be called before OverviewDeskBarView:: Init(). This was needed
-    // because the desks mini views needed to access the widget to get the root
-    // window in order to know how to layout themselves.
-    desks_bar_view_ =
-        desks_widget_->SetContentsView(std::make_unique<OverviewDeskBarView>(
-            weak_ptr_factory_.GetWeakPtr(), window_occlusion_calculator_,
-            initial_widget_bounds));
-    desks_bar_view_->Init(desks_widget_->GetNativeWindow());
-  }
+  auto desk_bar_view = std::make_unique<OverviewDeskBarView>(
+      weak_ptr_factory_.GetWeakPtr(), window_occlusion_calculator_,
+      initial_widget_bounds);
+  // Initializing the desk bar before calling `SetContentsView()` prevents
+  // a second unnecessary desk bar layout when rendering the first frame.
+  desk_bar_view->Init(desks_widget_->GetNativeWindow());
+  desks_bar_view_ = desks_widget_->SetContentsView(std::move(desk_bar_view));
 
   // If the feature ContinuousOverviewScrollAnimation is enabled and a
   // continuous scroll is now starting, move the desk bar up so we can slowly

@@ -4,6 +4,7 @@
 
 import("//build/config/ui.gni")
 import("//components/optimization_guide/features.gni")
+import("//components/safe_browsing/buildflags.gni")
 import("//device/vr/buildflags/buildflags.gni")
 import("//services/device/public/cpp/geolocation/buildflags.gni")
 import("//third_party/protobuf/proto_library.gni")
@@ -12,14 +13,10 @@ source_set("permissions") {
   sources = [
     "chrome_permissions_client.cc",
     "chrome_permissions_client.h",
-    "contextual_notification_permission_ui_selector.cc",
-    "contextual_notification_permission_ui_selector.h",
     "crowd_deny_preload_data.cc",
     "crowd_deny_preload_data.h",
     "crowd_deny_safe_browsing_request.cc",
     "crowd_deny_safe_browsing_request.h",
-    "genai_model_handler.cc",
-    "genai_model_handler.h",
     "notifications_engagement_service_factory.cc",
     "notifications_engagement_service_factory.h",
     "notifications_permission_revocation_config.cc",
@@ -41,6 +38,8 @@ source_set("permissions") {
     "permission_manager_factory.h",
     "permission_revocation_request.cc",
     "permission_revocation_request.h",
+    "permissions_ai_handler.cc",
+    "permissions_ai_handler.h",
     "prediction_based_permission_ui_selector.cc",
     "prediction_based_permission_ui_selector.h",
     "prediction_model_handler_provider.cc",
@@ -61,7 +60,6 @@ source_set("permissions") {
     "//chrome/browser:browser_public_dependencies",
     "//chrome/browser/media/webrtc",
     "//chrome/browser/permissions/system",
-    "//chrome/browser/resource_coordinator:tab_lifecycle_observer",
     "//chrome/browser/ui:browser_navigator_params_headers",
   ]
 
@@ -86,7 +84,7 @@ source_set("permissions") {
     "//components/background_sync",
     "//components/content_settings/core/browser",
     "//components/content_settings/core/browser:cookie_settings",
-    "//components/embedder_support:browser_util",
+    "//components/embedder_support:permissions",
     "//components/google/core/common",
     "//components/infobars/content",
     "//components/keyed_service/content",
@@ -142,7 +140,7 @@ source_set("permissions") {
   }
   allow_circular_includes_from = []
 
-  if (is_chromeos_ash) {
+  if (is_chromeos) {
     deps += [
       "//chrome/browser/ash/app_mode/isolated_web_app",
       "//chrome/browser/ash/app_mode/web_app",
@@ -170,6 +168,13 @@ source_set("permissions") {
   if (!is_android) {
     deps += [ "//chrome/browser/ui/permission_bubble" ]
   }
+
+  if (safe_browsing_mode != 0) {
+    sources += [
+      "contextual_notification_permission_ui_selector.cc",
+      "contextual_notification_permission_ui_selector.h",
+    ]
+  }
 }
 
 proto_library("permissions_proto") {
@@ -185,11 +190,11 @@ source_set("unit_tests") {
     "contextual_notification_permission_ui_selector_unittest.cc",
     "crowd_deny_preload_data_unittest.cc",
     "crowd_deny_safe_browsing_request_unittest.cc",
-    "genai_model_handler_unittest.cc",
     "notifications_engagement_service_unittest.cc",
     "permission_context_base_permissions_policy_unittest.cc",
     "permission_revocation_request_unittests.cc",
     "permission_subscription_unittest.cc",
+    "permissions_ai_handler_unittest.cc",
     "prediction_based_permission_ui_selector_unittest.cc",
     "pref_based_quiet_permission_ui_selector_unittest.cc",
     "system/mock_platform_handle.cc",
@@ -205,6 +210,7 @@ source_set("unit_tests") {
     "//chrome/browser/search_engines",
     "//chrome/test:test_support",
     "//components/optimization_guide/core:test_support",
+    "//components/permissions/prediction_service:prediction_service",
     "//components/site_engagement/content",
     "//components/ukm/content",
     "//components/unified_consent",
@@ -228,7 +234,7 @@ source_set("unit_tests") {
     deps += [ "//chrome/browser/ui/hats" ]
   }
 
-  if (is_chromeos_ash) {
+  if (is_chromeos) {
     deps += [
       "//chrome/browser/ash/app_mode/web_app",
       "//chrome/browser/ash/login/users:test_support",
@@ -264,7 +270,7 @@ if (!is_android) {
       "//components/optimization_guide/core:test_support",
     ]
 
-    if (is_chromeos_ash) {
+    if (is_chromeos) {
       sources += [ "system/system_permission_settings_chromeos_unittest.cc" ]
       deps += [ "//chrome/browser/ash/privacy_hub" ]
     }

@@ -32,6 +32,7 @@
 #include "base/values.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
+#include "components/guest_view/buildflags/buildflags.h"
 #include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/renderer/render_frame.h"
@@ -63,6 +64,7 @@
 #include "extensions/common/permissions/permission_set.h"
 #include "extensions/common/permissions/permissions_data.h"
 #include "extensions/common/switches.h"
+#include "extensions/common/user_scripts_allowed_state.h"
 #include "extensions/common/utils/extension_utils.h"
 #include "extensions/grit/extensions_renderer_resources.h"
 #include "extensions/renderer/api/messaging/native_renderer_messaging_service.h"
@@ -1033,6 +1035,8 @@ void Dispatcher::LoadExtensions(
     ExtensionId id = param->id;
     std::optional<base::UnguessableToken> worker_activation_token =
         param->worker_activation_token;
+    SetCurrentUserScriptAllowedState(kRendererProfileId, id,
+                                     param->user_scripts_allowed);
 
     scoped_refptr<const Extension> extension =
         ConvertToExtension(std::move(param), kRendererProfileId, &error);
@@ -1314,6 +1318,17 @@ void Dispatcher::SetDeveloperMode(bool current_developer_mode) {
   UpdateAllBindings(/*api_permissions_changed=*/true);
 }
 
+void Dispatcher::SetUserScriptsAllowed(const ExtensionId& extension_id,
+                                       bool enabled) {
+  SetCurrentUserScriptAllowedState(kRendererProfileId, extension_id, enabled);
+  const Extension* extension =
+      RendererExtensionRegistry::Get()->GetByID(extension_id);
+  if (!extension) {
+    return;
+  }
+  UpdateBindingsForExtension(*extension);
+}
+
 void Dispatcher::SetSessionInfo(version_info::Channel channel,
                                 mojom::FeatureSessionType session_type) {
   SetCurrentChannel(channel);
@@ -1509,11 +1524,13 @@ void Dispatcher::RequireGuestViewModules(ScriptContext* context) {
     module_system->Require("appViewDeny");
   }
 
+#if BUILDFLAG(ENABLE_GUEST_VIEW)
   // Require ExtensionOptions.
   if (context->GetAvailability("extensionOptionsInternal").is_available()) {
     requires_guest_view_module = true;
     module_system->Require("extensionOptionsElement");
   }
+#endif
 
   // Require WebView.
   if (context->GetAvailability("webViewInternal").is_available()) {

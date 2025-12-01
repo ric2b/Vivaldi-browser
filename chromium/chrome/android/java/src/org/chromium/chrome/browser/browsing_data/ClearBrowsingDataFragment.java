@@ -77,7 +77,7 @@ import java.util.List;
 import java.util.Set;
 
 // Vivaldi
-import org.chromium.chrome.browser.profiles.ProfileManager;
+import org.chromium.build.BuildConfig;
 
 /**
  * Settings screen that allows the user to clear browsing data. The user can choose which types of
@@ -966,6 +966,9 @@ public class ClearBrowsingDataFragment extends ChromeBaseSettingsFragment
     }
 
     private void triggerHapticFeedback() {
+        // Vivaldi ref. AUTO-254
+        if (BuildConfig.IS_OEM_AUTOMOTIVE_BUILD) return;
+
         Activity activity = getLastFocusedActivity();
         if (activity == null) return;
         Vibrator v = (Vibrator) activity.getSystemService(Context.VIBRATOR_SERVICE);

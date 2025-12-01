@@ -48,8 +48,8 @@ suite('<os-settings-input-page>', () => {
      * behavior of SpellcheckService as it relies on a C++ PrefChangeRegistrar
      * to listen to pref changes - which do not work when the prefs are mocked.
      */
-    async function spellCheckServiceListener(
-        prefs: chrome.settingsPrivate.PrefObject[]): Promise<void> {
+    function spellCheckServiceListener(
+        prefs: chrome.settingsPrivate.PrefObject[]) {
       for (const pref of prefs) {
         switch (pref.key) {
           case 'spellcheck.dictionaries':
@@ -661,7 +661,7 @@ suite('<os-settings-input-page>', () => {
       assertTrue(!!inputPage.get('lastUsedImeAccelerator_'));
       assertEquals(
           (inputPage.get('lastUsedImeAccelerator_'))!.keyDisplay,
-          updatedLastUsedImeAccelerator!.keyDisplay);
+          updatedLastUsedImeAccelerator.keyDisplay);
 
       let element =
           inputPage.shadowRoot!.querySelector('keyboard-shortcut-banner');

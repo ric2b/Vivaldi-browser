@@ -39,11 +39,6 @@
 #include "components/autofill/core/common/autofill_features.h"
 #include "components/autofill/core/common/autofill_payments_features.h"
 
-#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
-#include "components/autofill/core/browser/payments/local_card_migration_manager.h"
-#include "components/autofill/core/browser/payments/payments_requests/migrate_cards_request.h"
-#endif  // !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
-
 namespace autofill::payments {
 namespace {
 
@@ -169,18 +164,6 @@ void PaymentsNetworkInterface::UploadIban(
       std::move(callback)));
 }
 
-#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
-void PaymentsNetworkInterface::MigrateCards(
-    const MigrationRequestDetails& request_details,
-    const std::vector<MigratableCreditCard>& migratable_credit_cards,
-    MigrateCardsCallback callback) {
-  IssueRequest(std::make_unique<MigrateCardsRequest>(
-      request_details, migratable_credit_cards,
-      account_info_getter_->IsSyncFeatureEnabledForPaymentsServerMetrics(),
-      std::move(callback)));
-}
-#endif  // !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
-
 void PaymentsNetworkInterface::SelectChallengeOption(
     const SelectChallengeOptionRequestDetails& request_details,
     base::OnceCallback<void(PaymentsRpcResult, const std::string&)> callback) {
@@ -208,7 +191,7 @@ void PaymentsNetworkInterface::GetDetailsForCreateBnplPaymentInstrument(
     const GetDetailsForCreateBnplPaymentInstrumentRequestDetails&
         request_details,
     base::OnceCallback<void(PaymentsRpcResult,
-                            std::u16string context_token,
+                            std::string context_token,
                             std::unique_ptr<base::Value::Dict>)> callback) {
   IssueRequest(
       std::make_unique<GetDetailsForCreateBnplPaymentInstrumentRequest>(
@@ -220,7 +203,7 @@ void PaymentsNetworkInterface::GetDetailsForCreateBnplPaymentInstrument(
 
 void PaymentsNetworkInterface::CreateBnplPaymentInstrument(
     const CreateBnplPaymentInstrumentRequestDetails& request_details,
-    base::OnceCallback<void(PaymentsRpcResult, std::u16string instrument_id)>
+    base::OnceCallback<void(PaymentsRpcResult, std::string instrument_id)>
         callback) {
   IssueRequest(std::make_unique<CreateBnplPaymentInstrumentRequest>(
       request_details,

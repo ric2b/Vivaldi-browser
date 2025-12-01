@@ -62,6 +62,7 @@
 #include "mojo/public/cpp/bindings/self_owned_receiver.h"
 #include "mojo/public/cpp/system/data_pipe_drainer.h"
 #include "mojo/public/cpp/system/data_pipe_utils.h"
+#include "services/network/public/cpp/permissions_policy/permissions_policy_declaration.h"
 #include "skia/public/mojom/skcolor.mojom-blink.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -689,10 +690,10 @@ TEST_F(WebFrameTest, ExecuteScriptWithPromiseWithoutWait) {
   // Since the caller specified the script shouldn't wait for the promise to
   // be resolved, the callback should have completed normally and the result
   // value should be the promise.
-  // As `V8ValueConverterForTest` fails to convert the promise to `base::Value`,
-  // the callback receives `std::nullopt`.
+  // `V8ValueConverterForTest` converts the promise to `base::Value` which the
+  // callback receives.
   EXPECT_TRUE(callback_helper.DidComplete());
-  EXPECT_FALSE(callback_helper.HasAnyResults());
+  EXPECT_TRUE(callback_helper.HasAnyResults());
 }
 
 TEST_F(WebFrameTest, ExecuteScriptWithPromiseFulfilled) {
@@ -4668,7 +4669,7 @@ class ClearScrollStateOnCommitWebFrameClient
   void DidCommitNavigation(
       WebHistoryCommitType commit_type,
       bool should_reset_browser_interface_broker,
-      const ParsedPermissionsPolicy& permissions_policy_header,
+      const network::ParsedPermissionsPolicy& permissions_policy_header,
       const DocumentPolicyFeatureState& document_policy_header) override {
     Frame()->View()->ResetScrollAndScaleState();
   }
@@ -6924,7 +6925,7 @@ class TestWillInsertBodyWebFrameClient final
   void DidCommitNavigation(
       WebHistoryCommitType commit_type,
       bool should_reset_browser_interface_broker,
-      const ParsedPermissionsPolicy& permissions_policy_header,
+      const network::ParsedPermissionsPolicy& permissions_policy_header,
       const DocumentPolicyFeatureState& document_policy_header) final {
     did_load_ = true;
   }
@@ -7649,6 +7650,7 @@ class TestNewWindowWebFrameClient
       const WebURLRequest&,
       const WebWindowFeatures&,
       const WebString&,
+      const gfx::Rect&,
       WebNavigationPolicy,
       network::mojom::blink::WebSandboxFlags,
       const SessionStorageNamespaceId&,
@@ -10108,7 +10110,7 @@ class RemoteToLocalSwapWebFrameClient
   void DidCommitNavigation(
       WebHistoryCommitType history_commit_type,
       bool should_reset_browser_interface_broker,
-      const ParsedPermissionsPolicy& permissions_policy_header,
+      const network::ParsedPermissionsPolicy& permissions_policy_header,
       const DocumentPolicyFeatureState& document_policy_header) override {
     history_commit_type_ = history_commit_type;
   }
@@ -10377,7 +10379,7 @@ class CommitTypeWebFrameClient final
   void DidCommitNavigation(
       WebHistoryCommitType history_commit_type,
       bool should_reset_browser_interface_broker,
-      const ParsedPermissionsPolicy& permissions_policy_header,
+      const network::ParsedPermissionsPolicy& permissions_policy_header,
       const DocumentPolicyFeatureState& document_policy_header) final {
     history_commit_type_ = history_commit_type;
   }
@@ -13747,6 +13749,8 @@ std::vector<TextRunDOMNodeIdInfo> GetPrintedTextRunDOMNodeIds(
 }  // namespace
 
 TEST_F(WebFrameTest, PrintSomePages) {
+  ScopedNoFontAntialiasingForTest disable_no_font_antialiasing_for_test(false);
+
   RegisterMockedHttpURLLoad("print-pages.html");
   frame_test_helpers::WebViewHelper web_view_helper;
   web_view_helper.InitializeAndLoad(base_url_ + "print-pages.html");
@@ -13762,6 +13766,8 @@ TEST_F(WebFrameTest, PrintSomePages) {
 }
 
 TEST_F(WebFrameTest, PrintAllPages) {
+  ScopedNoFontAntialiasingForTest disable_no_font_antialiasing_for_test(false);
+
   RegisterMockedHttpURLLoad("print-pages.html");
   frame_test_helpers::WebViewHelper web_view_helper;
   web_view_helper.InitializeAndLoad(base_url_ + "print-pages.html");

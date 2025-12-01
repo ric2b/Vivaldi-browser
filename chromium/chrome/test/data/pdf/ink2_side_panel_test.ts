@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {AnnotationBrushType, UserAction} from 'chrome-extension://mhjfbmdgcfjbbpaeojofohoefgiehjai/pdf_viewer_wrapper.js';
+import {AnnotationBrushType, AnnotationMode, UserAction} from 'chrome-extension://mhjfbmdgcfjbbpaeojofohoefgiehjai/pdf_viewer_wrapper.js';
 import type {InkColorSelectorElement, InkSizeSelectorElement} from 'chrome-extension://mhjfbmdgcfjbbpaeojofohoefgiehjai/pdf_viewer_wrapper.js';
 import {microtasksFinished} from 'chrome://webui-test/test_util.js';
 
@@ -31,12 +31,12 @@ chrome.test.runTests([
   async function testOpenSidePanel() {
     const mockMetricsPrivate = setupMockMetricsPrivate();
 
-    viewer.$.toolbar.toggleAnnotation();
+    viewer.$.toolbar.setAnnotationMode(AnnotationMode.DRAW);
     await microtasksFinished();
 
-    chrome.test.assertTrue(viewer.$.toolbar.annotationMode);
+    chrome.test.assertEq(AnnotationMode.DRAW, viewer.$.toolbar.annotationMode);
     chrome.test.assertTrue(
-        !!viewer.shadowRoot!.querySelector('viewer-side-panel'));
+        !!viewer.shadowRoot.querySelector('viewer-side-panel'));
     mockMetricsPrivate.assertCount(UserAction.OPEN_INK2_SIDE_PANEL, 1);
     mockMetricsPrivate.assertCount(UserAction.OPEN_INK2_BOTTOM_TOOLBAR, 0);
     chrome.test.succeed();
@@ -45,7 +45,7 @@ chrome.test.runTests([
   // Test that the pen can be selected. Test that its size and color can be
   // selected.
   async function testSelectPen() {
-    chrome.test.assertTrue(viewer.$.toolbar.annotationMode);
+    chrome.test.assertEq(AnnotationMode.DRAW, viewer.$.toolbar.annotationMode);
 
     // Default to a black pen. Cannot use assertAnnotationBrush() yet, since
     // there's no need to set the brush in the backend immediately after getting
@@ -54,7 +54,9 @@ chrome.test.runTests([
     assertSelectedSize(sizeButtons, /*buttonIndex=*/ 2);
 
     // Change the pen size.
-    sizeButtons[0].click();
+    const sizeButton = sizeButtons[0];
+    chrome.test.assertTrue(!!sizeButton);
+    sizeButton.click();
     await microtasksFinished();
 
     assertAnnotationBrush(mockPlugin, {
@@ -65,7 +67,9 @@ chrome.test.runTests([
 
     // Change the pen color to '#fdd663'.
     const colorButtons = getColorButtons(getColorSelector());
-    colorButtons[6].click();
+    const colorButton = colorButtons[6];
+    chrome.test.assertTrue(!!colorButton);
+    colorButton.click();
     await microtasksFinished();
 
     assertAnnotationBrush(mockPlugin, {
@@ -78,41 +82,30 @@ chrome.test.runTests([
 
   // Test that the eraser can be selected.
   async function testSelectEraser() {
-    chrome.test.assertTrue(viewer.$.toolbar.annotationMode);
+    chrome.test.assertEq(AnnotationMode.DRAW, viewer.$.toolbar.annotationMode);
 
     // Switch to eraser.
-    setGetAnnotationBrushReply(
-        mockPlugin, AnnotationBrushType.ERASER, /*size=*/ 3);
+    setGetAnnotationBrushReply(mockPlugin, AnnotationBrushType.ERASER);
     getBrushSelector(getSidePanel()).$.eraser.click();
     await microtasksFinished();
 
     assertAnnotationBrush(mockPlugin, {
       type: AnnotationBrushType.ERASER,
-      size: 3,
-    });
-
-    const sizeButtons = getSizeButtons(getSizeSelector());
-    assertSelectedSize(sizeButtons, /*buttonIndex=*/ 2);
-
-    // Change the eraser size.
-    sizeButtons[1].click();
-    await microtasksFinished();
-
-    assertAnnotationBrush(mockPlugin, {
-      type: AnnotationBrushType.ERASER,
-      size: 2,
     });
 
     // There shouldn't be color options.
     const sidePanel = getSidePanel();
     chrome.test.assertTrue(!sidePanel.shadowRoot!.querySelector<HTMLElement>(
         'ink-color-selector'));
+    // There shouldn't be size options.
+    chrome.test.assertTrue(
+        !sidePanel.shadowRoot!.querySelector<HTMLElement>('ink-size-selector'));
     chrome.test.succeed();
   },
 
   // Test that the highlighter can be selected.
   async function testSelectHighlighter() {
-    chrome.test.assertTrue(viewer.$.toolbar.annotationMode);
+    chrome.test.assertEq(AnnotationMode.DRAW, viewer.$.toolbar.annotationMode);
 
     // Switch to highlighter.
     setGetAnnotationBrushReply(
@@ -131,7 +124,9 @@ chrome.test.runTests([
     assertSelectedSize(sizeButtons, /*buttonIndex=*/ 2);
 
     // Change the highlighter size.
-    sizeButtons[4].click();
+    const sizeButton = sizeButtons[4];
+    chrome.test.assertTrue(!!sizeButton);
+    sizeButton.click();
     await microtasksFinished();
 
     assertAnnotationBrush(mockPlugin, {
@@ -142,7 +137,9 @@ chrome.test.runTests([
 
     // Change the highlighter color to '#34a853'.
     const colorButtons = getColorButtons(getColorSelector());
-    colorButtons[2].click();
+    const colorButton = colorButtons[2];
+    chrome.test.assertTrue(!!colorButton);
+    colorButton.click();
     await microtasksFinished();
 
     assertAnnotationBrush(mockPlugin, {

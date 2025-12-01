@@ -764,7 +764,7 @@ void Verifier::Visitor::Check(Node* node, const AllNodes& all) {
       CheckTypeIs(node, Type::OtherObject());
       break;
     case IrOpcode::kJSCreateTypedArray:
-      CheckTypeIs(node, Type::OtherObject());
+      CheckTypeIs(node, Type::TypedArray());
       break;
     case IrOpcode::kJSCreateLiteralArray:
       CheckTypeIs(node, Type::Array());
@@ -1009,8 +1009,10 @@ void Verifier::Visitor::Check(Node* node, const AllNodes& all) {
       CheckValueInputIs(node, 1, Type::Number());
       CheckTypeIs(node, Type::Boolean());
       break;
-    case IrOpcode::kSpeculativeSafeIntegerAdd:
-    case IrOpcode::kSpeculativeSafeIntegerSubtract:
+    case IrOpcode::kSpeculativeAdditiveSafeIntegerAdd:
+    case IrOpcode::kSpeculativeAdditiveSafeIntegerSubtract:
+    case IrOpcode::kSpeculativeSmallIntegerAdd:
+    case IrOpcode::kSpeculativeSmallIntegerSubtract:
     case IrOpcode::kSpeculativeNumberAdd:
     case IrOpcode::kSpeculativeNumberSubtract:
     case IrOpcode::kSpeculativeNumberMultiply:
@@ -1171,14 +1173,6 @@ void Verifier::Visitor::Check(Node* node, const AllNodes& all) {
       CheckValueInputIs(node, 0, Type::Number());
       CheckTypeIs(node, Type::Unsigned32());
       break;
-    case IrOpcode::kNumberToFloat16RawBits:
-      CheckValueInputIs(node, 0, Type::Number());
-      CheckTypeIs(node, Type::Number());
-      break;
-    case IrOpcode::kFloat16RawBitsToNumber:
-      CheckValueInputIs(node, 0, Type::Number());
-      CheckTypeIs(node, Type::Number());
-      break;
     case IrOpcode::kIntegral32OrMinusZeroToBigInt:
       CheckValueInputIs(node, 0, Type::Integral32OrMinusZero());
       CheckTypeIs(node, Type::BigInt());
@@ -1259,7 +1253,7 @@ void Verifier::Visitor::Check(Node* node, const AllNodes& all) {
       CheckTypeIs(node, TypeCache::Get()->kStringLengthType);
       break;
     case IrOpcode::kTypedArrayLength:
-      CheckValueInputIs(node, 0, Type::Object());
+      CheckValueInputIs(node, 0, Type::TypedArray());
       CheckTypeIs(node, TypeCache::Get()->kJSTypedArrayLengthType);
       break;
     case IrOpcode::kStringToLowerCaseIntl:
@@ -1617,15 +1611,19 @@ void Verifier::Visitor::Check(Node* node, const AllNodes& all) {
     case IrOpcode::kCheckedUint64ToInt64:
     case IrOpcode::kCheckedUint64ToTaggedSigned:
     case IrOpcode::kCheckedFloat64ToInt32:
+    case IrOpcode::kCheckedFloat64ToAdditiveSafeInteger:
     case IrOpcode::kCheckedFloat64ToInt64:
     case IrOpcode::kCheckedTaggedSignedToInt32:
     case IrOpcode::kCheckedTaggedToInt32:
     case IrOpcode::kCheckedTaggedToArrayIndex:
+    case IrOpcode::kCheckedTaggedToAdditiveSafeInteger:
     case IrOpcode::kCheckedTaggedToInt64:
     case IrOpcode::kCheckedTaggedToFloat64:
     case IrOpcode::kCheckedTaggedToTaggedSigned:
     case IrOpcode::kCheckedTaggedToTaggedPointer:
     case IrOpcode::kCheckedTruncateTaggedToWord32:
+    case IrOpcode::kCheckedAdditiveSafeIntegerAdd:
+    case IrOpcode::kCheckedAdditiveSafeIntegerSub:
     case IrOpcode::kCheckedInt64Add:
     case IrOpcode::kCheckedInt64Sub:
     case IrOpcode::kCheckedInt64Mul:
@@ -2049,7 +2047,7 @@ void Verifier::Visitor::Check(Node* node, const AllNodes& all) {
   }
 }
 
-void Verifier::Run(Graph* graph, Typing typing, CheckInputs check_inputs,
+void Verifier::Run(TFGraph* graph, Typing typing, CheckInputs check_inputs,
                    CodeType code_type) {
   CHECK_NOT_NULL(graph->start());
   CHECK_NOT_NULL(graph->end());
@@ -2073,7 +2071,6 @@ void Verifier::Run(Graph* graph, Typing typing, CheckInputs check_inputs,
     }
   }
 }
-
 
 // -----------------------------------------------------------------------------
 

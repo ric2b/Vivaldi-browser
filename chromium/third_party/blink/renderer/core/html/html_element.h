@@ -158,6 +158,7 @@ class CORE_EXPORT HTMLElement : public Element {
   bool ShouldSerializeEndTag() const;
 
   virtual HTMLFormElement* formOwner() const;
+  virtual HTMLElement* formForBinding() const;
 
   HTMLFormElement* FindFormAncestor() const;
 
@@ -244,9 +245,6 @@ class CORE_EXPORT HTMLElement : public Element {
   // Popover API related functions.
   void UpdatePopoverAttribute(const AtomicString&);
   bool HasPopoverAttribute() const;
-  // The IDL reflections:
-  AtomicString popover() const;
-  void setPopover(const AtomicString& value);
   PopoverValueType PopoverType() const;
   bool popoverOpen() const;
   // IsPopoverReady returns true if the popover is in a state where it can be
@@ -318,6 +316,8 @@ class CORE_EXPORT HTMLElement : public Element {
   // See: crbug.com/1490919, https://open-ui.org/components/invokers.explainer/
   bool IsValidBuiltinCommand(HTMLElement& invoker,
                              CommandEventType command) override;
+  bool IsValidBuiltinPopoverCommand(HTMLElement& invoker,
+                                    CommandEventType command);
   bool HandleCommandInternal(HTMLElement& invoker,
                              CommandEventType command) override;
 
@@ -412,6 +412,7 @@ class CORE_EXPORT HTMLElement : public Element {
   void OnLangAttrChanged(const AttributeModificationParams&);
   void OnNonceAttrChanged(const AttributeModificationParams&);
   void OnPopoverChanged(const AttributeModificationParams&);
+  void OnContainerTimingAttrChanged(const AttributeModificationParams&);
 
   int AdjustedOffsetForZoom(LayoutUnit);
   int OffsetTopOrLeft(bool top);

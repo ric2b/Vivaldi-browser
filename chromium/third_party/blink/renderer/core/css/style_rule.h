@@ -19,17 +19,13 @@
  * Boston, MA 02110-1301, USA.
  */
 
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
-#pragma allow_unsafe_buffers
-#endif
-
 #ifndef THIRD_PARTY_BLINK_RENDERER_CORE_CSS_STYLE_RULE_H_
 #define THIRD_PARTY_BLINK_RENDERER_CORE_CSS_STYLE_RULE_H_
 
 #include <limits>
 
 #include "base/bits.h"
+#include "base/compiler_specific.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/types/pass_key.h"
 #include "third_party/blink/renderer/core/core_export.h"
@@ -249,10 +245,10 @@ class CORE_EXPORT StyleRule : public StyleRuleBase {
   // Partial subset of the CSSSelector API.
   const CSSSelector* FirstSelector() const { return SelectorArray(); }
   const CSSSelector& SelectorAt(wtf_size_t index) const {
-    return SelectorArray()[index];
+    return UNSAFE_TODO(SelectorArray()[index]);
   }
   CSSSelector& MutableSelectorAt(wtf_size_t index) {
-    return SelectorArray()[index];
+    return UNSAFE_TODO(SelectorArray()[index]);
   }
   wtf_size_t SelectorIndex(const CSSSelector& selector) const {
     return static_cast<wtf_size_t>(&selector - FirstSelector());
@@ -275,7 +271,8 @@ class CORE_EXPORT StyleRule : public StyleRuleBase {
   StyleRule* Copy() const {
     const CSSSelector* selector_array = SelectorArray();
     size_t flattened_size = 1;
-    while (!selector_array[flattened_size - 1].IsLastInSelectorList()) {
+    while (!UNSAFE_TODO(selector_array[flattened_size - 1])
+                .IsLastInSelectorList()) {
       ++flattened_size;
     }
     return MakeGarbageCollected<StyleRule>(
@@ -289,15 +286,18 @@ class CORE_EXPORT StyleRule : public StyleRuleBase {
 
   void TraceAfterDispatch(blink::Visitor*) const;
 
-  const HeapVector<Member<StyleRuleBase>>* ChildRules() const {
+  const GCedHeapVector<Member<StyleRuleBase>>* ChildRules() const {
     return child_rules_.Get();
   }
-  HeapVector<Member<StyleRuleBase>>* ChildRules() { return child_rules_.Get(); }
+  GCedHeapVector<Member<StyleRuleBase>>* ChildRules() {
+    return child_rules_.Get();
+  }
   void EnsureChildRules() {
     // Allocate the child rule vector only when we need it,
     // since most rules won't have children (almost by definition).
     if (child_rules_ == nullptr) {
-      child_rules_ = MakeGarbageCollected<HeapVector<Member<StyleRuleBase>>>();
+      child_rules_ =
+          MakeGarbageCollected<GCedHeapVector<Member<StyleRuleBase>>>();
     }
   }
   void AddChildRule(StyleRuleBase* child) {
@@ -309,7 +309,7 @@ class CORE_EXPORT StyleRule : public StyleRuleBase {
     child_rules_->insert(index, rule);
   }
   void WrapperRemoveRule(unsigned index) {
-    child_rules_->erase(child_rules_->begin() + index);
+    child_rules_->erase(UNSAFE_TODO(child_rules_->begin() + index));
   }
 
  private:
@@ -318,8 +318,9 @@ class CORE_EXPORT StyleRule : public StyleRuleBase {
   bool HasParsedProperties() const;
 
   CSSSelector* SelectorArray() {
-    return reinterpret_cast<CSSSelector*>(base::bits::AlignUp(
-        reinterpret_cast<uint8_t*>(this + 1), alignof(CSSSelector)));
+    return reinterpret_cast<CSSSelector*>(
+        base::bits::AlignUp(UNSAFE_TODO(reinterpret_cast<uint8_t*>(this + 1)),
+                            alignof(CSSSelector)));
   }
   const CSSSelector* SelectorArray() const {
     return const_cast<StyleRule*>(this)->SelectorArray();
@@ -327,7 +328,7 @@ class CORE_EXPORT StyleRule : public StyleRuleBase {
 
   mutable Member<CSSPropertyValueSet> properties_;
   mutable Member<CSSLazyPropertyParser> lazy_property_parser_;
-  Member<HeapVector<Member<StyleRuleBase>>> child_rules_;
+  Member<GCedHeapVector<Member<StyleRuleBase>>> child_rules_;
 };
 
 class CORE_EXPORT StyleRuleFontFace : public StyleRuleBase {
@@ -666,12 +667,16 @@ class CORE_EXPORT StyleRuleFunction : public StyleRuleGroup {
   const HeapVector<Parameter>& GetParameters() const { return parameters_; }
   const CSSSyntaxDefinition& GetReturnType() const { return return_type_; }
 
+  void SetCascadeLayer(const CascadeLayer* layer) { layer_ = layer; }
+  const CascadeLayer* GetCascadeLayer() const { return layer_.Get(); }
+
   void TraceAfterDispatch(blink::Visitor*) const;
 
  private:
   AtomicString name_;
   HeapVector<Parameter> parameters_;
   CSSSyntaxDefinition return_type_;
+  Member<const CascadeLayer> layer_;
 };
 
 // An @mixin rule, representing a CSS mixin. We store all of the rules
@@ -752,7 +757,8 @@ struct DowncastTraits<StyleRuleGroup> {
   static bool AllowFrom(const StyleRuleBase& rule) {
     return rule.IsMediaRule() || rule.IsSupportsRule() ||
            rule.IsContainerRule() || rule.IsLayerBlockRule() ||
-           rule.IsScopeRule() || rule.IsStartingStyleRule();
+           rule.IsScopeRule() || rule.IsStartingStyleRule() ||
+           rule.IsFunctionRule();
   }
 };
 

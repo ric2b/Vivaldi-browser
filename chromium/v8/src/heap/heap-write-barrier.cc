@@ -48,6 +48,9 @@ MarkingBarrier* WriteBarrier::SetForThread(MarkingBarrier* marking_barrier) {
 
 void WriteBarrier::MarkingSlow(Tagged<HeapObject> host, HeapObjectSlot slot,
                                Tagged<HeapObject> value) {
+  SLOW_DCHECK_IMPLIES(kUninterestingPagesCanBeSkipped,
+                      MemoryChunk::FromHeapObject(host)->GetFlags() &
+                          MemoryChunk::kPointersFromHereAreInterestingMask);
   MarkingBarrier* marking_barrier = CurrentMarkingBarrier(host);
   marking_barrier->Write(host, slot, value);
 }
@@ -95,7 +98,7 @@ void WriteBarrier::SharedSlow(Tagged<InstructionStream> host,
   MarkCompactCollector::RecordRelocSlotInfo info =
       MarkCompactCollector::ProcessRelocInfo(host, reloc_info, value);
 
-  base::SpinningMutexGuard write_scope(info.page_metadata->mutex());
+  base::MutexGuard write_scope(info.page_metadata->mutex());
   RememberedSet<OLD_TO_SHARED>::InsertTyped(info.page_metadata, info.slot_type,
                                             info.offset);
 }
@@ -329,7 +332,7 @@ void WriteBarrier::GenerationalBarrierForCodeSlow(
   const MarkCompactCollector::RecordRelocSlotInfo info =
       MarkCompactCollector::ProcessRelocInfo(host, rinfo, value);
 
-  base::SpinningMutexGuard write_scope(info.page_metadata->mutex());
+  base::MutexGuard write_scope(info.page_metadata->mutex());
   RememberedSet<OLD_TO_NEW>::InsertTyped(info.page_metadata, info.slot_type,
                                          info.offset);
 }
@@ -337,6 +340,9 @@ void WriteBarrier::GenerationalBarrierForCodeSlow(
 // static
 void WriteBarrier::CombinedGenerationalAndSharedEphemeronBarrierSlow(
     Tagged<EphemeronHashTable> table, Address slot, Tagged<HeapObject> value) {
+  SLOW_DCHECK_IMPLIES(kUninterestingPagesCanBeSkipped,
+                      MemoryChunk::FromHeapObject(table)->GetFlags() &
+                          MemoryChunk::kPointersFromHereAreInterestingMask);
   if (HeapLayout::InYoungGeneration(value)) {
     MutablePageMetadata* table_chunk =
         MutablePageMetadata::FromHeapObject(table);

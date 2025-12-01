@@ -18,6 +18,7 @@
 #include "base/test/scoped_feature_list.h"
 #include "base/test/task_environment.h"
 #include "base/test/test_mock_time_task_runner.h"
+#include "base/types/expected.h"
 #include "build/build_config.h"
 #include "components/autofill/core/browser/autofill_field.h"
 #include "components/autofill/core/browser/crowdsourcing/mock_autofill_crowdsourcing_manager.h"
@@ -138,8 +139,7 @@ constexpr autofill::FieldSignature kSingleUsernameFieldSignature(123);
 // Unique renderer id of the single username field.
 constexpr autofill::FieldRendererId kSingleUsernameFieldRendererId(101);
 
-const std::optional<std::vector<PasskeyCredential>> kNullopt = std::nullopt;
-const std::optional<std::vector<PasskeyCredential>> kNoPasskeys =
+const std::vector<PasskeyCredential> kNoPasskeys =
     std::vector<PasskeyCredential>();
 const PasskeyCredential kPasskey(
     PasskeyCredential::Source::kGooglePasswordManager,
@@ -523,7 +523,7 @@ class PasswordFormManagerTest : public testing::Test,
     ON_CALL(client_, GetWebAuthnCredentialsDelegateForDriver)
         .WillByDefault(Return(&webauthn_credentials_delegate_));
     ON_CALL(webauthn_credentials_delegate_, GetPasskeys)
-        .WillByDefault(ReturnRef(passkeys_));
+        .WillByDefault(Return(base::ok(&passkeys_)));
     ON_CALL(webauthn_credentials_delegate_, IsSecurityKeyOrHybridFlowAvailable)
         .WillByDefault(Return(true));
 #if BUILDFLAG(IS_ANDROID)
@@ -659,7 +659,7 @@ class PasswordFormManagerTest : public testing::Test,
   NiceMock<MockWebAuthnCredentialsDelegate> webauthn_credentials_delegate_;
   std::unique_ptr<FieldInfoManager> field_info_manager_;
   scoped_refptr<TestMockTimeTaskRunner> task_runner_;
-  std::optional<std::vector<PasskeyCredential>> passkeys_;
+  std::vector<PasskeyCredential> passkeys_;
   base::LRUCache<PossibleUsernameFieldIdentifier, PossibleUsernameData>
       possible_usernames_;
 
@@ -3299,8 +3299,6 @@ TEST_P(PasswordFormManagerTest, UsernameFirstFlowWithPrefilledUsername) {
 // user edits username prompt to the value of one of the text fields found in
 // the password form negative in form overrule vote is sent.
 TEST_P(PasswordFormManagerTest, UsernameFirstFlowInFormOverruleVotes) {
-  base::test::ScopedFeatureList feature_list(
-      features::kUsernameFirstFlowWithIntermediateValuesVoting);
   CreateFormManager(submitted_form_);
   fetcher_->NotifyFetchCompleted();
 
@@ -3352,9 +3350,6 @@ TEST_P(PasswordFormManagerTest, UsernameFirstFlowInFormOverruleVotes) {
 // text fields found outside of the password form. Positive in form overrule
 // single username vote must be sent.
 TEST_P(PasswordFormManagerTest, UsernameFirstFlowPositiveInFormOverruleVote) {
-  base::test::ScopedFeatureList feature_list(
-      features::kUsernameFirstFlowWithIntermediateValuesVoting);
-
   CreateFormManager(submitted_form_);
   fetcher_->NotifyFetchCompleted();
 
@@ -3409,9 +3404,6 @@ TEST_P(PasswordFormManagerTest, UsernameFirstFlowPositiveInFormOverruleVote) {
 // signal that this is a Username First Flow.
 TEST_P(PasswordFormManagerTest,
        UsernameFirstFlowDoNotSendVotesOnNotUsernameFirstFlow) {
-  base::test::ScopedFeatureList feature_list(
-      features::kUsernameFirstFlowWithIntermediateValuesVoting);
-
   CreateFormManager(submitted_form_);
   fetcher_->NotifyFetchCompleted();
 
@@ -3530,8 +3522,6 @@ TEST_P(PasswordFormManagerTest,
 // saved value into, and a strong negative vote is sent for the form, into which
 // the user has typed a different value.
 TEST_P(PasswordFormManagerTest, UsernameFirstFlowSendVotesOnRecentFields) {
-  base::test::ScopedFeatureList feature_list(
-      features::kUsernameFirstFlowWithIntermediateValuesVoting);
   CreateFormManager(observed_form_only_password_fields_);
   fetcher_->NotifyFetchCompleted();
 
@@ -3756,8 +3746,6 @@ TEST_P(PasswordFormManagerTest, PossibleUsernameLikelyOTP) {
 
 // Tests that no single username votes are sent on an unrelated website.
 TEST_P(PasswordFormManagerTest, NoSingleUsernameVotingOnUnrelatedWebsite) {
-  base::test::ScopedFeatureList feature_list(
-      features::kUsernameFirstFlowWithIntermediateValuesVoting);
   // Simulate user input in a single username form.
   constexpr char16_t kPossibleUsername[] = u"possible_username";
   PossibleUsernameData single_username_data(
@@ -5301,7 +5289,9 @@ class PasswordFormManagerWebAuthnCredentialsTest : public testing::Test {
     ON_CALL(client_, GetWebAuthnCredentialsDelegateForDriver)
         .WillByDefault(Return(&webauthn_credentials_delegate_));
     ON_CALL(webauthn_credentials_delegate_, GetPasskeys)
-        .WillByDefault(ReturnRef(kNullopt));
+        .WillByDefault(Return(
+            base::unexpected(WebAuthnCredentialsDelegate::
+                                 PasskeysUnavailableReason::kNotReceived)));
   }
 
   MockPasswordManagerClient& client() { return client_; }
@@ -5338,10 +5328,9 @@ TEST_F(PasswordFormManagerWebAuthnCredentialsTest, NoConditionalRequest) {
 
 TEST_F(PasswordFormManagerWebAuthnCredentialsTest,
        OnePasskeysFromConditionalRequest) {
-  const std::optional<std::vector<PasskeyCredential>> kOnePasskey =
-      std::vector<PasskeyCredential>{kPasskey};
+  const auto kOnePasskey = std::vector<PasskeyCredential>{kPasskey};
   ON_CALL(webauthn_credentials_delegate(), GetPasskeys)
-      .WillByDefault(ReturnRef(kOnePasskey));
+      .WillByDefault(Return(base::ok(&kOnePasskey)));
 
   EXPECT_TRUE(form_manager().WebAuthnCredentialsAvailable());
 }
@@ -5353,7 +5342,7 @@ TEST_F(
   base::test::ScopedFeatureList features(
       features::kWebAuthnUsePasskeyFromAnotherDeviceInContextMenu);
   ON_CALL(webauthn_credentials_delegate(), GetPasskeys)
-      .WillByDefault(ReturnRef(kNoPasskeys));
+      .WillByDefault(Return(base::ok(&kNoPasskeys)));
 
   EXPECT_FALSE(form_manager().WebAuthnCredentialsAvailable());
 }
@@ -5362,7 +5351,7 @@ TEST_F(
     PasswordFormManagerWebAuthnCredentialsTest,
     NoPasskeysFromConditionalRequest_WhenUseAnotherDeviceInAutofillPopup_ThenWebauthnCredentials) {
   ON_CALL(webauthn_credentials_delegate(), GetPasskeys)
-      .WillByDefault(ReturnRef(kNoPasskeys));
+      .WillByDefault(Return(base::ok(&kNoPasskeys)));
 
   EXPECT_TRUE(form_manager().WebAuthnCredentialsAvailable());
 }
@@ -5371,7 +5360,7 @@ TEST_F(
 TEST_F(PasswordFormManagerWebAuthnCredentialsTest,
        NoPasskeysFromConditionalRequest_ThenWebauthnCredentials) {
   ON_CALL(webauthn_credentials_delegate(), GetPasskeys)
-      .WillByDefault(ReturnRef(kNoPasskeys));
+      .WillByDefault(Return(base::ok(&kNoPasskeys)));
 
   EXPECT_TRUE(form_manager().WebAuthnCredentialsAvailable());
 }

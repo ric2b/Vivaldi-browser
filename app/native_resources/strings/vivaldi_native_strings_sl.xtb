@@ -14,6 +14,7 @@
 <translation id="1454726940098520109">Ne pokaži več potrditve</translation>
 <translation id="1462666970065907900">Ali zares želite zapreti to okno?</translation>
 <translation id="1480046233931937785">Zasluge</translation>
+<translation id="1490502035430975848">Preglejte dokument portala</translation>
 <translation id="1521774566618522728">Aktiven danes</translation>
 <translation id="1526344461589023948">Med poskusom shranjevanja prenesene posodobitve je prišlo do napake. Preverite, ali ima računalnik dovolj prostora na disku, in poskusite znova pozneje.</translation>
 <translation id="1635542496948266458">Preklopi profile</translation>
@@ -34,9 +35,11 @@
 <translation id="2141974047387702305">Med prenosom posodobitvenih datotek je prišlo do napake. Preverite internetno povezavo in poskusite znova pozneje.</translation>
 <translation id="2226825946708954262">⚠ Nadaljuj z izgubo podatkov</translation>
 <translation id="2339641773402824483">Preverjanje posodobitev...</translation>
+<translation id="2429571091666452569">S seznama:</translation>
 <translation id="2441056087170876076">Pošast 2</translation>
 <translation id="2444387452209867610">Vstavi opombo</translation>
 <translation id="2486841023299517366">Žival 4</translation>
+<translation id="2501278716633472235">Pojdi nazaj</translation>
 <translation id="2612127540243995147">Pripravljeno za namestitev. Vivaldi se bo zaprl in ponovno zagnal.</translation>
 <translation id="2613387515621326337">Prikaži spletno mesto s posodobitvami</translation>
 <translation id="2645477450146475243">Na žalost vaše nastavitve Opera niso na voljo, ko ta brskalnik deluje. Če želite te nastavitve uvoziti v Vivaldi, shranite svoje delo in zaprite vsa okna Opera. Nato kliknite Nadaljuj.</translation>
@@ -61,6 +64,7 @@
 <translation id="3259769196742189631">Preveri</translation>
 <translation id="3291915639428159043">Samodejno predvajanje je blokirano</translation>
 <translation id="3302905971452834934">Pošast 1</translation>
+<translation id="3308738399950580893">oglasi</translation>
 <translation id="3334610655141903168">(brez naslova)</translation>
 <translation id="3372505110412186107">Vivaldi <ph name="VERSION" /> je trenutno najnovejša razpoložljiva različica.</translation>
 <translation id="3383198080133834965">Ste na tekočem!</translation>
@@ -71,9 +75,11 @@
 <translation id="3521635864657970829">Ali res želite zapreti to okno?</translation>
 <translation id="3540597690227428180">Žival 9</translation>
 <translation id="3542768452570884558">Odpri povezavo v novem oknu</translation>
+<translation id="3586931643579894722">Skrij podrobnosti</translation>
 <translation id="3588820906588687999">Odpri sliko v novem zavihku</translation>
 <translation id="3601066750251199488">Pošast 3</translation>
 <translation id="3620979700683094848">Spletna mesta lahko samodejno predvajajo video</translation>
+<translation id="3650023731264842343">Med nalaganjem naslednje strani:</translation>
 <translation id="3658651522139217005">Opera GX</translation>
 <translation id="3680031241659195730">Na voljo je nova različica Vivaldija!</translation>
 <translation id="3708982624815781692">Prenos je bil preklican.</translation>
@@ -83,6 +89,7 @@
 <translation id="3795800845758778870">Na žalost vaše nastavitve Brave niso na voljo, ko se ta brskalnik izvaja. Če želite te nastavitve uvoziti v Vivaldi, shranite svoje delo in zaprite vsa okna Brave. Nato kliknite Nadaljuj.</translation>
 <translation id="3822431842304177896">Nov ločevalnik</translation>
 <translation id="3832132597516774400">Pokrajina 5</translation>
+<translation id="3894751534882749287">Če si želite stran vseeno ogledati, lahko stopnjo zaščite sledenja spremenite v pojavnem oknu Blokator sledilcev ali s klikom na gumb Dovoli</translation>
 <translation id="3914946330804881301">Uvoženo iz Opera</translation>
 <translation id="3921292902397893431">Pošast 8</translation>
 <translation id="3943857333388298514">Prilepi</translation>
@@ -107,6 +114,7 @@
 <translation id="4582480609585453144">Odpri povezavo v zavihku v ozadju</translation>
 <translation id="4636708767492582204">Pošlji po pošti</translation>
 <translation id="4677434526832593569">Žival 8</translation>
+<translation id="4736016046474602958">Blokator sledilcev</translation>
 <translation id="474217410105706308">Zavihek brez zvoka</translation>
 <translation id="4861715717329665002">Samodejno shranjene seje</translation>
 <translation id="4881695831933465202">Odpri</translation>
@@ -133,9 +141,11 @@
 <translation id="588258955323874662">Celozaslonski način</translation>
 <translation id="5916080360077521750">Na žalost vaše nastavitve Chrome niso na voljo med delovanjem brskalnika. Če želite te nastavitve uvažati v Vivaldi, shranite svoje delo in zaprite vsa okna Chrome. Nato kliknite Nadaljuj.</translation>
 <translation id="6040143037577758943">Zapri</translation>
+<translation id="6140948187512243695">Prikaži podrobnosti</translation>
 <translation id="6229528619562190452">Kliknite tukaj, če želite posodobiti Vivaldi.</translation>
 <translation id="6234173136417926046">Uporabi sliko kot ozadje začetne strani</translation>
 <translation id="6339818817272922368">Lokalni račun</translation>
+<translation id="6376435169746695498">Nalaganje te strani je blokiral ujemajoči se <ph name="BLOCKER_NAME" /></translation>
 <translation id="6398710281890660037">Zaščiti moj profil</translation>
 <translation id="6438786710866753178">Pokrajina 4</translation>
 <translation id="6477028720702061455">Izberite mapo profila Opera za uvoz</translation>
@@ -152,6 +162,7 @@
 <translation id="7086554968911045110">Pokrajina 7</translation>
 <translation id="7099506190679014195">Varna nadgradnja shrambe ključev</translation>
 <translation id="7111492742514999492">Pokrajina 9</translation>
+<translation id="7113310725918019676">Dovoli <ph name="BLOCKED_TYPE" /> od <ph name="DOMAIN" /></translation>
 <translation id="7208252576848052204">Na žalost vaše nastavitve Arc niso na voljo, ko se ta brskalnik izvaja. Če želite te nastavitve uvoziti v Vivaldi, shranite svoje delo in zaprite vsa okna Arc. Nato kliknite Nadaljuj.</translation>
 <translation id="7321500017121629018">Aktiven včeraj</translation>
 <translation id="7337881442233988129">Chromium</translation>
@@ -167,12 +178,13 @@
 <translation id="8027581147000338959">Odpri v novem oknu</translation>
 <translation id="8044382196220116469">Spletnim mestom ne dovoli samodejno predvajanje videoposnetkov</translation>
 <translation id="8099620695029051217">Kopiraj naslov strani</translation>
+<translation id="8119307142152921512">sledilci in oglasi</translation>
 <translation id="8197810018650377191">Shrani trenutno stran kot zaznamek</translation>
 <translation id="8261506727792406068">Izbriši</translation>
-<translation id="8263047843452521549">Preglejte servisnega delavca v ozadju</translation>
 <translation id="8331671104904436324">Odpri v zavihku v ozadju</translation>
 <translation id="8373293945112511707">Pokrajina 1</translation>
 <translation id="8388552048012645975">Prenos posodobitve...</translation>
+<translation id="8392904568172593155">Brez parametrov</translation>
 <translation id="8427094907586191051">Pokrajina 17</translation>
 <translation id="8439034818057146672">Nova različica programa Vivaldi je pripravljena za namestitev.</translation>
 <translation id="8446668873108041390">Izvajanje JavaScript prek AppleScript je izklopljeno. Pod Nastavitve&gt; Zasebnost&gt; Apple Events, obstaja nastavitev, ki omogoča JavaScript iz Apple Events.</translation>
@@ -183,14 +195,15 @@
 <translation id="8651348004684669199">Dodaj aktivni zavihek</translation>
 <translation id="8669345741879513971">Pošast 10</translation>
 <translation id="867544375504146191">Yandex</translation>
-<translation id="8689295374912158752">Preglejte dokument portala</translation>
 <translation id="875142999698251063">Končaj zdaj</translation>
 <translation id="8768970203213061953">Pokrajina 14</translation>
 <translation id="8773635261052182196">Teh obvestil ne boste več videli. Ponovno jih lahko omogočite iz Vivaldi nastavitev.</translation>
 <translation id="8774017153185436870">Spletna mesta lahko samodejno predvajajo video</translation>
 <translation id="8813277370772331957">Opomni me kasneje</translation>
+<translation id="8837256239226739065">Preglejte delavce v ozadju storitve</translation>
 <translation id="8894900864683381599">Shrani trenutno povezavo kot spletni panel</translation>
 <translation id="8912720443398351457">Ali res želite zapustiti Vivaldi?</translation>
+<translation id="8940028675168378100">Blokiral <ph name="BLOCKER_NAME" /></translation>
 <translation id="8947109330183116400">Izberite HTML datoteko z zaznamki</translation>
 <translation id="9017566390391482291">Izberite mapo profila Vivaldi za uvoz</translation>
 <translation id="9048058608784130603">Čakanje na posodobitev <ph name="VERSION" /></translation>
@@ -201,6 +214,7 @@
 <translation id="912022491595344261">Odpri sliko kot <ph name="USER" /></translation>
 <translation id="9157539936604258187">Odpri povezavo</translation>
 <translation id="9169060351863393881">Opera 12.x</translation>
+<translation id="9180553614777056266">Blokator oglasov</translation>
 <translation id="939305735877869636">Brave</translation>
 <translation id="970294721402795299">Pokrajina 16</translation>
 </translationbundle>

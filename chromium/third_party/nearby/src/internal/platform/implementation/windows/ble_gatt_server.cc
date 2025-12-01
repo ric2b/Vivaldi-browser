@@ -442,13 +442,18 @@ bool BleGattServer::StartAdvertisement(const ByteArray& service_data,
     // Wait for the advertising to start.
     int wait_milliseconds = 0;
     while (gatt_service_provider_.AdvertisementStatus() !=
-           GattServiceProviderAdvertisementStatus::Started) {
+               GattServiceProviderAdvertisementStatus::Started &&
+           gatt_service_provider_.AdvertisementStatus() !=
+               GattServiceProviderAdvertisementStatus::
+                   StartedWithoutAllAdvertisementData) {
       absl::SleepFor(absl::Milliseconds(kGattServerCheckIntervalInMills));
       wait_milliseconds += kGattServerCheckIntervalInMills;
       if (absl::Milliseconds(wait_milliseconds) > kGattServerTimeout) {
         LOG(ERROR) << __func__
                    << ": Failed to start GATT advertising due to timeout.";
-        return false;
+        // GattServiceProvider can become Started after the timeout.  Stop
+        // waiting for the status change and continue as if it has started..
+        break;
       }
     }
 
@@ -540,6 +545,7 @@ void BleGattServer::SetCloseNotifier(absl::AnyInvocable<void()> notifier) {
       LOG(ERROR) << __func__ << ": Failed to find characteristic="
                  << ::winrt::to_string(
                         ::winrt::to_hstring(gatt_local_characteristic.Uuid()));
+      deferral.Complete();
       return {};
     }
 

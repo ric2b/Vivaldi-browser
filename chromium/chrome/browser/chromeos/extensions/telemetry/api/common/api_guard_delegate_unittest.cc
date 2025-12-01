@@ -30,6 +30,7 @@
 #include "chrome/browser/chromeos/extensions/telemetry/api/common/remote_probe_service_strategy.h"
 #include "chrome/browser/extensions/extension_management_test_util.h"
 #include "chrome/browser/ui/web_applications/test/isolated_web_app_test_utils.h"
+#include "chrome/browser/web_applications/test/web_app_install_test_utils.h"
 #include "chrome/common/chromeos/extensions/chromeos_system_extension_info.h"  // nogncheck
 #include "chrome/common/url_constants.h"
 #include "chrome/test/base/browser_with_test_window_test.h"
@@ -79,18 +80,36 @@ struct ExtensionInfoTestParams {
   const std::string manufacturer;
 };
 
+constexpr char kGoogleExtensionId[] = "gogonhoemckpdpadfnjnpgbjpbjnodgc";
+constexpr char kGoogleAllowedUrl[] =
+    "https://googlechromelabs.github.io/cros-sample-telemetry-extension/"
+    "test-page";
+constexpr char kGoogleAllowedUrlPattern[] =
+    "*://googlechromelabs.github.io/cros-sample-telemetry-extension/test-page/"
+    "*";
+
 const std::vector<ExtensionInfoTestParams> kAllExtensionInfoTestParams{
     // Make sure the Google extension is allowed for every OEM.
     ExtensionInfoTestParams(
-        /*extension_id=*/"gogonhoemckpdpadfnjnpgbjpbjnodgc",
-        /*app_ui_url=*/"https://googlechromelabs.github.io/",
-        /*matches_origin=*/"*://googlechromelabs.github.io/*",
+        /*extension_id=*/kGoogleExtensionId,
+        /*app_ui_url=*/kGoogleAllowedUrl,
+        /*matches_origin=*/kGoogleAllowedUrlPattern,
         /*manufacturer=*/"HP"),
     ExtensionInfoTestParams(
-        /*extension_id=*/"gogonhoemckpdpadfnjnpgbjpbjnodgc",
-        /*app_ui_url=*/"https://googlechromelabs.github.io/",
-        /*matches_origin=*/"*://googlechromelabs.github.io/*",
+        /*extension_id=*/kGoogleExtensionId,
+        /*app_ui_url=*/kGoogleAllowedUrl,
+        /*matches_origin=*/kGoogleAllowedUrlPattern,
         /*manufacturer=*/"ASUS"),
+    ExtensionInfoTestParams(
+        /*extension_id=*/kGoogleExtensionId,
+        /*app_ui_url=*/kGoogleAllowedUrl,
+        /*matches_origin=*/kGoogleAllowedUrlPattern,
+        /*manufacturer=*/"Acer"),
+    ExtensionInfoTestParams(
+        /*extension_id=*/kGoogleExtensionId,
+        /*app_ui_url=*/kGoogleAllowedUrl,
+        /*matches_origin=*/kGoogleAllowedUrlPattern,
+        /*manufacturer=*/"Lenovo"),
     // Make sure the extensions of each OEM are allowed on their device.
     ExtensionInfoTestParams(
         /*extension_id=*/"alnedpmllcfpgldkagbfbjkloonjlfjb",
@@ -109,7 +128,7 @@ const std::vector<ExtensionInfoTestParams> kAllExtensionInfoTestParams{
         /*matches_origin=*/"https://acerpartners.com/*",
         /*manufacturer=*/"Acer"),
     ExtensionInfoTestParams(
-        /*extension_id=*/"abpkjagfgndmbkendplbabnefkjkgdcf",
+        /*extension_id=*/"mconamggkmbalafmibfjlcmimnlbgmlb",
         /*app_ui_url=*/"https://chromebookdiags.lenovo.com",
         /*matches_origin=*/"https://chromebookdiags.lenovo.com/*",
         /*manufacturer=*/"Lenovo"),
@@ -136,6 +155,7 @@ class ApiGuardDelegateTest
   // BrowserWithTestWindowTest:
   void SetUp() override {
     BrowserWithTestWindowTest::SetUp();
+    web_app::test::AwaitStartWebAppProviderAndSubsystems(profile());
 
     CreateExtension();
 

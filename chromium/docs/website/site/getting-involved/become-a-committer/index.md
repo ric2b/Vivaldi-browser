@@ -251,6 +251,15 @@ wish to resume contributing after that, contact accounts@ to ask that it be
 restored, and we will normally do so. This does not mean that we will shut off
 your @chromium.org address, if you have one; that should continue to work.
 
+Occasionally, committers choose to relinquish their committer privileges.
+Leaving the committers@chromium.org mailing list isn't sufficient to
+relinquish your committer powers, and if you do this you'll be added back by
+automation. If you're a committer and you'd like to be removed from the
+committers@chromium.org group and lose your committer powers, contact
+accounts@chromium.org. Alternatively, if you're a committer and you'd like
+to change your [email subscription settings](https://support.google.com/groups/answer/9792489)
+to the committers@chromium.org group, you can do so [here](https://groups.google.com/a/chromium.org/g/committers/membership).
+
 If you have questions about your committer status, overall, please contact
 accounts@chromium.org.
 

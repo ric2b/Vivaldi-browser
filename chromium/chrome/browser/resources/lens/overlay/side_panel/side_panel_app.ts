@@ -2,15 +2,17 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+import './side_panel_ghost_loader.js';
 import '/strings.m.js';
 import '/lens/shared/searchbox_ghost_loader.js';
 import '/lens/shared/searchbox_shared_style.css.js';
 import '//resources/cr_components/searchbox/searchbox.js';
-import './side_panel_ghost_loader.js';
+import '//resources/cr_elements/cr_toast/cr_toast.js';
 
 import {ColorChangeUpdater} from '//resources/cr_components/color_change_listener/colors_css_updater.js';
 import {HelpBubbleMixin} from '//resources/cr_components/help_bubble/help_bubble_mixin.js';
 import type {SearchboxElement} from '//resources/cr_components/searchbox/searchbox.js';
+import type {CrToastElement} from '//resources/cr_elements/cr_toast/cr_toast.js';
 import {I18nMixin} from '//resources/cr_elements/i18n_mixin.js';
 import {assert} from '//resources/js/assert.js';
 import {EventTracker} from '//resources/js/event_tracker.js';
@@ -40,6 +42,9 @@ export interface LensSidePanelAppElement {
     searchbox: SearchboxElement,
     searchboxContainer: HTMLElement,
     searchboxGhostLoader: SearchboxGhostLoaderElement,
+    toast: CrToastElement,
+    uploadProgressBar: HTMLElement,
+    uploadProgressBarContainer: HTMLElement,
   };
 }
 
@@ -99,9 +104,14 @@ export class LensSidePanelAppElement extends LensSidePanelAppElementBase {
         type: Boolean,
         value: true,
       },
+      enableGhostLoader: {
+        type: Boolean,
+        value: () => loadTimeData.getBoolean('enableGhostLoader'),
+      },
       showGhostLoader: {
         type: Boolean,
         computed: `computeShowGhostLoader(
+                enableGhostLoader,
                 isSearchboxFocused,
                 autocompleteRequestStarted,
                 showErrorState,
@@ -122,6 +132,16 @@ export class LensSidePanelAppElement extends LensSidePanelAppElementBase {
         computed:
             `computePlaceholderText(isContextualSearchbox, pageContentType)`,
       },
+      uploadProgressPercentage: {
+        type: Number,
+        value: 0,
+      },
+      showUploadProgress: {
+        type: Number,
+        computed: `computeShowUploadProgress(uploadProgressPercentage)`,
+        reflectToAttribute: true,
+      },
+      toastMessage: String,
     };
   }
 
@@ -129,12 +149,19 @@ export class LensSidePanelAppElement extends LensSidePanelAppElementBase {
   isBackArrowVisible: boolean;
   // Whether the user is currently focused into the searchbox.
   isSearchboxFocused: boolean;
+  private showGhostLoader: boolean;
   // Whether to purposely suppress the ghost loader. Done when escaping from
   // the searchbox when there's text or when page bytes aren't successfully
   // uploaded.
   suppressGhostLoader: boolean;
+  placeholderText: string;
   // Whether the ghost loader should show its error state.
   showErrorState: boolean;
+  private showUploadProgress: boolean;
+  // The current progress of the page content upload.
+  uploadProgressPercentage: number;
+  // Whether the ghost loader is enabled via feature flag.
+  private enableGhostLoader: boolean;
   // The placeholder text to show in the searchbox.
   private pageContentType: PageContentType = PageContentType.kUnknown;
   // Whether this is an in flight request to autocomplete.
@@ -148,6 +175,10 @@ export class LensSidePanelAppElement extends LensSidePanelAppElementBase {
   // The URL for the loading image shown when results frame is loading a new
   // page.
   private readonly loadingImageUrl: string;
+  // The animations for the progress bar. One for the progress bar width
+  // increase, and one for the progress bar height decrease on results load.
+  private progressBarAnimation: Animation|null = null;
+  private progressBarHideAnimation: Animation|null = null;
 
   private browserProxy: SidePanelBrowserProxy =
       SidePanelBrowserProxyImpl.getInstance();
@@ -155,6 +186,7 @@ export class LensSidePanelAppElement extends LensSidePanelAppElementBase {
   private listenerIds: number[];
   private pageHandler: LensSidePanelPageHandlerInterface;
   private wasBackArrowAvailable: boolean;
+  private toastMessage: string = '';
   private eventTracker_: EventTracker = new EventTracker();
 
   constructor() {
@@ -185,6 +217,8 @@ export class LensSidePanelAppElement extends LensSidePanelAppElementBase {
           this.loadResultsInFrame.bind(this)),
       this.browserProxy.callbackRouter.setIsLoadingResults.addListener(
           this.setIsLoadingResults.bind(this)),
+      this.browserProxy.callbackRouter.setPageContentUploadProgress.addListener(
+          this.setPageContentUploadProgress.bind(this)),
       this.browserProxy.callbackRouter.setBackArrowVisible.addListener(
           this.setBackArrowVisible.bind(this)),
       this.browserProxy.callbackRouter.setShowErrorPage.addListener(
@@ -193,6 +227,8 @@ export class LensSidePanelAppElement extends LensSidePanelAppElementBase {
           this.suppressGhostLoader_.bind(this)),
       this.browserProxy.callbackRouter.pageContentTypeChanged.addListener(
           this.pageContentTypeChanged.bind(this)),
+      this.browserProxy.callbackRouter.showToast.addListener(
+          this.showToast.bind(this)),
     ];
     this.eventTracker_.add(this.$.searchbox, 'mousedown', () => {
       this.suppressGhostLoader = false;
@@ -222,7 +258,57 @@ export class LensSidePanelAppElement extends LensSidePanelAppElementBase {
   }
 
   private setIsLoadingResults(isLoading: boolean) {
+    if (this.isLoadingResults === isLoading) {
+      return;
+    }
     this.isLoadingResults = isLoading;
+
+    if (this.isLoadingResults) {
+      // The user submitted a new query, therefore the searchbox should not stay
+      // focused.
+      this.blurSearchbox();
+    } else {
+      // Animate away the progress bar once the results are loaded.
+      this.progressBarHideAnimation = this.$.uploadProgressBarContainer.animate(
+          {height: ['0px'], transform: ['scaleY(1)', 'scaleY(0)']}, {
+            duration: 200,
+            easing: 'cubic-bezier(0.3, 0, 0.8, 0.15)',
+            fill: 'forwards',
+          });
+      this.progressBarHideAnimation.onfinish = () => {
+        // Reset progress bar to 0 so the next upload starts from the beginning
+        // and the progress bar stays invisible.
+        this.uploadProgressPercentage = 0;
+      };
+    }
+  }
+
+  private setPageContentUploadProgress(progress: number) {
+    // If the results are not loading, then the progress bar should not be
+    // shown.
+    if (!this.isLoadingResults) {
+      return;
+    }
+
+    if (this.uploadProgressPercentage === 0) {
+      // Restart the progress bar animations to ensure the progress bar is
+      // visible and animates from the beginning.
+      this.progressBarAnimation?.cancel();
+      this.progressBarHideAnimation?.cancel();
+    }
+
+    this.uploadProgressPercentage = progress * 100;
+
+    // Control the progress bar animation.
+    this.progressBarAnimation = this.$.uploadProgressBar.animate(
+        {
+          width: [this.uploadProgressPercentage + '%'],
+        },
+        {
+          duration: this.uploadProgressPercentage === 100 ? 400 : 1000,
+          easing: 'cubic-bezier(0.2, 0.0, 0, 1.0)',
+          fill: 'forwards',
+        });
   }
 
   private loadResultsInFrame(resultsUrl: Url) {
@@ -242,6 +328,10 @@ export class LensSidePanelAppElement extends LensSidePanelAppElementBase {
     this.$.results.src = url.href;
     // Remove focus from the input when results are loaded. Does not have
     // any effect if input is not focused.
+    this.blurSearchbox();
+  }
+
+  private blurSearchbox() {
     this.shadowRoot!.querySelector<HTMLElement>('cr-searchbox')
         ?.shadowRoot!.querySelector<HTMLElement>('input')
         ?.blur();
@@ -292,7 +382,10 @@ export class LensSidePanelAppElement extends LensSidePanelAppElementBase {
   }
 
   private computeShowGhostLoader(): boolean {
-    if (!this.isContextualSearchbox || this.suppressGhostLoader) {
+    // Ghost loader is disabled by the feature flag, suppressed by the
+    // LensOverlayController or not in contextual searchbox flow.
+    if (!this.isContextualSearchbox || !this.enableGhostLoader ||
+        this.suppressGhostLoader) {
       return false;
     }
     // Show the ghost loader if there is focus on the searchbox, and there is
@@ -310,6 +403,10 @@ export class LensSidePanelAppElement extends LensSidePanelAppElementBase {
         this.i18n('searchBoxHintContextualDefault');
   }
 
+  private computeShowUploadProgress(): boolean {
+    return this.uploadProgressPercentage > 0;
+  }
+
   private getSearchboxAriaDescription(): string {
     // Get the the text from the ghost loader to add to the searchbox aria
     // description.
@@ -324,6 +421,25 @@ export class LensSidePanelAppElement extends LensSidePanelAppElementBase {
 
   private pageContentTypeChanged(newPageContentType: PageContentType) {
     this.pageContentType = newPageContentType;
+  }
+
+  private async showToast(message: string) {
+    if (this.$.toast.open) {
+      // If toast already open, wait after hiding so that animation is
+      // smoother.
+      await this.$.toast.hide();
+      setTimeout(() => {
+        this.toastMessage = message;
+        this.$.toast.show();
+      }, 100);
+    } else {
+      this.toastMessage = message;
+      this.$.toast.show();
+    }
+  }
+
+  private onHideToastClick() {
+    this.$.toast.hide();
   }
 
   makeGhostLoaderVisibleForTesting() {

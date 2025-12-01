@@ -58,7 +58,7 @@ class TestStdMapSerializer : public ::testing::Test {
  protected:
   void SetUp() {
     serialized_size_ = 0;
-    serialized_data_ = NULL;
+    serialized_data_ = nullptr;
   }
 
   void TearDown() {

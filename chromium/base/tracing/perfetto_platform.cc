@@ -56,11 +56,11 @@ std::unique_ptr<perfetto::base::TaskRunner> PerfettoPlatform::CreateTaskRunner(
   return perfetto_task_runner;
 }
 
-void PerfettoPlatform::ResetTaskRunnerForTesting(
+void PerfettoPlatform::ResetTaskRunner(
     scoped_refptr<base::SequencedTaskRunner> task_runner) {
   task_runner_ = task_runner;
   if (perfetto_task_runner_) {
-    perfetto_task_runner_->ResetTaskRunnerForTesting(task_runner);  // IN-TEST
+    perfetto_task_runner_->ResetTaskRunner(task_runner);
   }
 }
 
@@ -90,7 +90,8 @@ std::string PerfettoPlatform::GetCurrentProcessName() {
 }
 
 perfetto::base::PlatformThreadId PerfettoPlatform::GetCurrentThreadId() {
-  return base::PlatformThread::CurrentId();
+  return base::strict_cast<perfetto::base::PlatformThreadId>(
+      base::PlatformThread::CurrentId().raw());
 }
 
 }  // namespace base::tracing

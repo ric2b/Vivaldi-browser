@@ -244,9 +244,10 @@ BASE_EXPORT extern const char16_t
     kWhitespaceNoCrLfUTF16[];  // Unicode w/o CR/LF.
 BASE_EXPORT extern const char kWhitespaceASCII[];
 BASE_EXPORT extern const char16_t kWhitespaceASCIIAs16[];  // No unicode.
-                                                           //
+
 // https://infra.spec.whatwg.org/#ascii-whitespace
-BASE_EXPORT extern const char kInfraAsciiWhitespace[];
+// Note that this array is not null-terminated.
+inline constexpr char kInfraAsciiWhitespace[] = {0x09, 0x0A, 0x0C, 0x0D, 0x20};
 
 // Null-terminated string representing the UTF-8 byte order mark.
 BASE_EXPORT extern const char kUtf8ByteOrderMark[];
@@ -306,9 +307,11 @@ BASE_EXPORT std::string_view TrimString(std::string_view input,
 
 // Truncates a string to the nearest UTF-8 character that will leave
 // the string less than or equal to the specified byte size.
-BASE_EXPORT void TruncateUTF8ToByteSize(const std::string& input,
+BASE_EXPORT void TruncateUTF8ToByteSize(std::string_view input,
                                         const size_t byte_size,
                                         std::string* output);
+BASE_EXPORT std::string_view TruncateUTF8ToByteSize(std::string_view input,
+                                                    size_t byte_size);
 
 // Trims any whitespace from either end of the input string.
 //

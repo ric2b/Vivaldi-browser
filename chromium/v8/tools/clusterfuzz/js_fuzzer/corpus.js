@@ -17,7 +17,10 @@ const random = require('./random.js');
 const sourceHelpers = require('./source_helpers.js');
 
 // We drop files containing dropped flags with a high probability.
-DROP_DISCOURAGED_FILES_PROB = 0.8;
+const DROP_DISCOURAGED_FILES_PROB = 0.8;
+
+const WASM_MODULE_BUILDER = 'test/mjsunit/wasm/wasm-module-builder.js';
+const WASM_LOAD_LINE = `d8.file.execute("${WASM_MODULE_BUILDER}")`;
 
 function* walkDirectory(directory, filter) {
   // Generator for recursively walk a directory.
@@ -39,6 +42,27 @@ function* walkDirectory(directory, filter) {
   }
 }
 
+/**
+ * Returns true if the test file loads the wasm module builder.
+ *
+ * Note this is an approximation which might slightly underestimate (missing
+ * files that e.g. conditionally depend on the wasm-module-builder) and
+ * slightly overestimate (in case the load line appears in a multi-line
+ * comment).
+ */
+function needsWasmModuleBuilder(absPath) {
+  // TODO(machenbach): This could be optimized with caching or an
+  // input-stream version.
+  const data = fs.readFileSync(absPath, 'utf-8');
+
+  for (const [index, line] of data.split('\n').entries()) {
+    if (line.startsWith(WASM_LOAD_LINE)) {
+      return true;
+    }
+  }
+  return false;
+}
+
 class Corpus extends sourceHelpers.BaseCorpus {
   // Input corpus.
   constructor(inputDir, corpusName, extraStrict=false) {
@@ -58,7 +82,8 @@ class Corpus extends sourceHelpers.BaseCorpus {
     const directory = path.join(inputDir, corpusName);
     for (const absPath of walkDirectory(directory, isPermittedJSFile)) {
       const relPath = path.relative(this.inputDir, absPath);
-      if (exceptions.isTestSkippedRel(relPath)) {
+      if (exceptions.isTestSkippedRel(relPath) ||
+          this.isTestSkippedInCorpus(relPath)) {
         this.skippedFiles.push(relPath);
       } else if (exceptions.isTestSoftSkippedAbs(absPath) ||
           exceptions.isTestSoftSkippedRel(relPath)) {
@@ -69,6 +94,13 @@ class Corpus extends sourceHelpers.BaseCorpus {
     }
     random.shuffle(this.softSkippedFiles);
     random.shuffle(this.permittedFiles);
+  }
+
+  /**
+   * Enable subclasses to decide on more skipped files.
+   */
+  isTestSkippedInCorpus(relPath) {
+    return false;
   }
 
   // Relative paths of all files in corpus.
@@ -145,9 +177,13 @@ class Corpus extends sourceHelpers.BaseCorpus {
 }
 
 class FuzzilliCorpus extends Corpus {
-  constructor(inputDir, corpusName, extraStrict=false) {
-    super(inputDir, corpusName, extraStrict);
+  constructor(inputDir, corpusName, extraStrict=false, v8Corpus=undefined) {
+    super(inputDir, 'fuzzilli', extraStrict);
     this.flagMap = new Map();
+
+    // We require a V8 corpus side-by-side to cross-load resources.
+    this.v8Corpus = v8Corpus;
+    assert(this.v8Corpus);
   }
 
   get diffFuzzLabel() {
@@ -177,9 +213,46 @@ class FuzzilliCorpus extends Corpus {
     }
     return flags;
   }
+
+  // Fuzzilli is able to load resources relative to the V8 corpus, which is
+  // expected to be side-by-side.
+  loadDependency(relPath) {
+    const pathComponents = relPath.split(path.sep);
+    assert(pathComponents.length > 1);
+    if (pathComponents[0] != 'fuzzilli') {
+      assert(pathComponents[0] == 'v8');
+      return this.v8Corpus.loadDependency(relPath);
+    }
+    return super.loadDependency(relPath);
+  }
+}
+
+// As above, but skipping files from the crashes directories.
+class FuzzilliNoCrashCorpus extends FuzzilliCorpus {
+  isTestSkippedInCorpus(relPath) {
+    const pathComponents = relPath.split(path.sep);
+    if (pathComponents.length < 3) {
+      return false;
+    }
+    assert(pathComponents[0] == 'fuzzilli');
+    return pathComponents[2] == 'crashes';
+  }
+}
+
+// Fuzzilli corpus that only contains the files depending on the
+// wasm-module-builder.
+class FuzzilliWasmCorpus extends FuzzilliCorpus {
+  isTestSkippedInCorpus(relPath) {
+    return !needsWasmModuleBuilder(
+        path.resolve(path.join(this.inputDir, relPath)));
+  }
 }
 
 class V8Corpus extends Corpus {
+  constructor(inputDir, corpusName, extraStrict=false) {
+    super(inputDir, 'v8', extraStrict);
+  }
+
   loadFlags(relPath, data) {
     const result = [];
     let count = 0;
@@ -201,14 +274,26 @@ class V8Corpus extends Corpus {
   }
 }
 
+// V8 corpus that only contains the files depending on the
+// wasm-module-builder.
+class V8WasmCorpus extends V8Corpus {
+  isTestSkippedInCorpus(relPath) {
+    return !needsWasmModuleBuilder(
+        path.resolve(path.join(this.inputDir, relPath)));
+  }
+}
+
 const CORPUS_CLASSES = {
   'fuzzilli': FuzzilliCorpus,
+  'fuzzilli_no_crash': FuzzilliNoCrashCorpus,
+  'fuzzilli_wasm': FuzzilliWasmCorpus,
   'v8': V8Corpus,
+  'v8_wasm': V8WasmCorpus,
 };
 
-function create(inputDir, corpusName, extraStrict=false) {
+function create(inputDir, corpusName, ...args) {
   const cls = CORPUS_CLASSES[corpusName] || Corpus;
-  return new cls(inputDir, corpusName, extraStrict);
+  return new cls(inputDir, corpusName, ...args);
 }
 
 module.exports = {

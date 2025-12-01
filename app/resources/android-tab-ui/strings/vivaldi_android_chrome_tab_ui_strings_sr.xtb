@@ -1,10 +1,18 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="sr">
+<translation id="2277224997687551299">Уреди име групе</translation>
+<translation id="2330212241471632770">{TABS_COUNT, plural,
+          =1 {Додај у обележиваче}
+          other {Додај у обележиваче}
+        }</translation>
 <translation id="2947471979790858922">Ваше активности у овим приватним картицама ће бити уклоњене са овог уређаја</translation>
 <translation id="3870643923290313246">{INCOGNITO_TABS_COUNT, plural,
         =1 {Затворене картице можете пронаћи у недавним картицама у главном Vivaldi менију. Ваша приватна картица неће бити доступна.}
         few {Затворене картице можете пронаћи у недавним картицама у главном Vivaldi менију. Ваше # приватне картице неће бити доступне.}
         other {Затворене картице можете пронаћи у недавним картицама у главном Vivaldi менију. Ваших # приватних картица неће бити доступно.}}</translation>
+<translation id="4460014764210899310">Разгрупиши</translation>
 <translation id="4871187110787939393">Затворити све приватне картице?</translation>
+<translation id="5494920125229734069">Изабери све</translation>
+<translation id="6744956528665271406">Уреди боју групе</translation>
 </translationbundle>

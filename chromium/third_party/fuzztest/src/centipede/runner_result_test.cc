@@ -14,7 +14,9 @@
 
 #include "./centipede/runner_result.h"
 
+#include <array>
 #include <cstdint>
+#include <cstdlib>
 #include <filesystem>  // NOLINT
 #include <fstream>
 #include <ios>
@@ -28,10 +30,13 @@
 #include "./centipede/execution_metadata.h"
 #include "./centipede/feature.h"
 #include "./centipede/shared_memory_blob_sequence.h"
+#include "./common/defs.h"
 #include "./common/test_util.h"
 
 namespace centipede {
 namespace {
+
+using ::testing::ElementsAre;
 
 TEST(ExecutionResult, WriteThenRead) {
   auto buffer = std::make_unique<uint8_t[]>(1000);
@@ -43,8 +48,10 @@ TEST(ExecutionResult, WriteThenRead) {
   FeatureVec v2{5, 6, 7, 8};
   ExecutionMetadata metadata;
   metadata.AppendCmpEntry({1, 2, 3}, {4, 5, 6});
-  ExecutionResult::Stats stats1{.peak_rss_mb = 10};
-  ExecutionResult::Stats stats2{.peak_rss_mb = 20};
+  ExecutionResult::Stats stats1;
+  stats1.peak_rss_mb = 10;
+  ExecutionResult::Stats stats2;
+  stats2.peak_rss_mb = 20;
   // First input.
   EXPECT_TRUE(BatchResult::WriteInputBegin(blobseq));
   EXPECT_TRUE(BatchResult::WriteOneFeatureVec(v1.data(), v1.size(), blobseq));
@@ -73,10 +80,10 @@ TEST(ExecutionResult, WriteThenRead) {
   EXPECT_EQ(batch_result.results()[1].features(), v2);
   EXPECT_EQ(batch_result.results()[1].stats(), stats2);
   EXPECT_THAT(batch_result.results()[1].metadata().cmp_data,
-              testing::ElementsAre(3,        // size
-                                   1, 2, 3,  // cmp0
-                                   4, 5, 6   // cmp1
-                                   ));
+              ElementsAre(3,        // size
+                          1, 2, 3,  // cmp0
+                          4, 5, 6   // cmp1
+                          ));
 
   // If there are fewer ExecutionResult-s than expected everything should work.
   blobseq.Reset();
@@ -102,8 +109,10 @@ TEST(ExecutionResult, WriteIntoFileThenRead) {
   // Imitate execution of two inputs.
   FeatureVec v1{1, 2, 3};
   FeatureVec v2{5, 6, 7, 8};
-  ExecutionResult::Stats stats1{.peak_rss_mb = 10};
-  ExecutionResult::Stats stats2{.peak_rss_mb = 20};
+  ExecutionResult::Stats stats1;
+  stats1.peak_rss_mb = 10;
+  ExecutionResult::Stats stats2;
+  stats2.peak_rss_mb = 20;
   ExecutionMetadata metadata;
   metadata.AppendCmpEntry({1, 2, 3}, {4, 5, 6});
 
@@ -151,10 +160,59 @@ TEST(ExecutionResult, WriteIntoFileThenRead) {
   EXPECT_EQ(batch_result.results()[0].stats(), stats1);
   EXPECT_EQ(batch_result.results()[1].stats(), stats2);
   EXPECT_THAT(batch_result.results()[1].metadata().cmp_data,
-              testing::ElementsAre(3,        // size
-                                   1, 2, 3,  // cmp0
-                                   4, 5, 6   // cmp1
-                                   ));
+              ElementsAre(3,        // size
+                          1, 2, 3,  // cmp0
+                          4, 5, 6   // cmp1
+                          ));
+}
+
+TEST(ExecutionResult, IdentifiesSetupFailure) {
+  BatchResult batch_result;
+  batch_result.exit_code() = EXIT_FAILURE;
+  batch_result.failure_description() = "SETUP FAILURE: something went wrong";
+
+  EXPECT_TRUE(batch_result.IsSetupFailure());
+}
+
+TEST(MutationResult, WriteThenRead) {
+  std::array<uint8_t, 1000> buffer;
+  BlobSequence blobseq(buffer.data(), buffer.size());
+
+  // Write a mutation result.
+  ASSERT_TRUE(MutationResult::WriteHasCustomMutator(true, blobseq));
+  ASSERT_TRUE(MutationResult::WriteMutant({1, 2, 3}, blobseq));
+  ASSERT_TRUE(MutationResult::WriteMutant({4, 5, 6}, blobseq));
+  ASSERT_TRUE(MutationResult::WriteMutant({7, 8, 9}, blobseq));
+  blobseq.Reset();
+
+  MutationResult mutation_result;
+  ASSERT_TRUE(mutation_result.Read(3, blobseq));
+
+  EXPECT_TRUE(mutation_result.has_custom_mutator());
+  EXPECT_THAT(
+      mutation_result.mutants(),
+      ElementsAre(ByteArray{1, 2, 3}, ByteArray{4, 5, 6}, ByteArray{7, 8, 9}));
+}
+
+TEST(ExecutionResult, ReadResultSucceedsOnlyWithInputBegin) {
+  auto buffer = std::make_unique<uint8_t[]>(1000);
+  BlobSequence blobseq(buffer.get(), 1000);
+  BatchResult batch_result;
+
+  EXPECT_TRUE(BatchResult::WriteInputBegin(blobseq));
+  EXPECT_TRUE(BatchResult::WriteOneFeatureVec({}, 0, blobseq));
+  EXPECT_TRUE(BatchResult::WriteInputEnd(blobseq));
+  blobseq.Reset();
+  batch_result.ClearAndResize(1);
+  EXPECT_TRUE(batch_result.Read(blobseq));
+
+  blobseq.Reset();
+  EXPECT_TRUE(BatchResult::WriteOneFeatureVec({}, 0, blobseq));
+  EXPECT_TRUE(BatchResult::WriteInputEnd(blobseq));
+
+  blobseq.Reset();
+  batch_result.ClearAndResize(1);
+  EXPECT_FALSE(batch_result.Read(blobseq));
 }
 
 }  // namespace

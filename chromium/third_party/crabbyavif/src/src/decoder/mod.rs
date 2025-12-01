@@ -43,6 +43,7 @@ use crate::*;
 
 use std::cmp::max;
 use std::cmp::min;
+use std::num::NonZero;
 
 pub trait IO {
     fn read(&mut self, offset: u64, max_read_size: usize) -> AvifResult<&[u8]>;
@@ -159,9 +160,9 @@ pub struct Settings {
     pub allow_incremental: bool,
     pub image_content_to_decode: ImageContentType,
     pub codec_choice: CodecChoice,
-    pub image_size_limit: u32,
-    pub image_dimension_limit: u32,
-    pub image_count_limit: u32,
+    pub image_size_limit: Option<NonZero<u32>>,
+    pub image_dimension_limit: Option<NonZero<u32>>,
+    pub image_count_limit: Option<NonZero<u32>>,
     pub max_threads: u32,
     pub android_mediacodec_output_color_format: AndroidMediaCodecOutputColorFormat,
 }
@@ -177,9 +178,9 @@ impl Default for Settings {
             allow_incremental: false,
             image_content_to_decode: ImageContentType::ColorAndAlpha,
             codec_choice: Default::default(),
-            image_size_limit: DEFAULT_IMAGE_SIZE_LIMIT,
-            image_dimension_limit: DEFAULT_IMAGE_DIMENSION_LIMIT,
-            image_count_limit: DEFAULT_IMAGE_COUNT_LIMIT,
+            image_size_limit: NonZero::new(DEFAULT_IMAGE_SIZE_LIMIT),
+            image_dimension_limit: NonZero::new(DEFAULT_IMAGE_DIMENSION_LIMIT),
+            image_count_limit: NonZero::new(DEFAULT_IMAGE_COUNT_LIMIT),
             max_threads: 1,
             android_mediacodec_output_color_format: AndroidMediaCodecOutputColorFormat::default(),
         }
@@ -314,35 +315,6 @@ pub enum CompressionFormat {
     #[default]
     Avif = 0,
     Heic = 1,
-}
-
-#[derive(Clone, Copy, Debug, Default, PartialEq)]
-pub enum Category {
-    #[default]
-    Color,
-    Alpha,
-    Gainmap,
-}
-
-impl Category {
-    const COUNT: usize = 3;
-    const ALL: [Category; Category::COUNT] = [Self::Color, Self::Alpha, Self::Gainmap];
-    const ALL_USIZE: [usize; Category::COUNT] = [0, 1, 2];
-
-    pub(crate) fn usize(self) -> usize {
-        match self {
-            Category::Color => 0,
-            Category::Alpha => 1,
-            Category::Gainmap => 2,
-        }
-    }
-
-    pub(crate) fn planes(&self) -> &[Plane] {
-        match self {
-            Category::Alpha => &A_PLANE,
-            _ => &YUV_PLANES,
-        }
-    }
 }
 
 impl Decoder {
@@ -835,10 +807,12 @@ impl Decoder {
             if !self.tracks.is_empty() {
                 self.image.image_sequence_track_present = true;
                 for track in &self.tracks {
-                    if !track.check_limits(
-                        self.settings.image_size_limit,
-                        self.settings.image_dimension_limit,
-                    ) {
+                    if track.is_video_handler()
+                        && !track.check_limits(
+                            self.settings.image_size_limit,
+                            self.settings.image_dimension_limit,
+                        )
+                    {
                         return Err(AvifError::BmffParseFailed(
                             "track dimension too large".into(),
                         ));
@@ -908,7 +882,11 @@ impl Decoder {
                 )?);
                 self.tile_info[Category::Color.usize()].tile_count = 1;
 
-                if let Some(alpha_track) = self.tracks.iter().find(|x| x.is_aux(color_track.id)) {
+                if let Some(alpha_track) = self
+                    .tracks
+                    .iter()
+                    .find(|x| x.is_aux(color_track.id) && x.is_auxiliary_alpha())
+                {
                     self.tiles[Category::Alpha.usize()].push(Tile::create_from_track(
                         alpha_track,
                         self.settings.image_count_limit,
@@ -1037,8 +1015,10 @@ impl Decoder {
                 let color_item = self.items.get(&item_ids[Category::Color.usize()]).unwrap();
                 self.image.width = color_item.width;
                 self.image.height = color_item.height;
-                self.image.alpha_present = item_ids[Category::Alpha.usize()] != 0;
-                // alphapremultiplied.
+                let alpha_item_id = item_ids[Category::Alpha.usize()];
+                self.image.alpha_present = alpha_item_id != 0;
+                self.image.alpha_premultiplied =
+                    alpha_item_id != 0 && color_item.prem_by_id == alpha_item_id;
 
                 if color_item.progressive {
                     self.image.progressive_state = ProgressiveState::Available;
@@ -1694,8 +1674,10 @@ impl Decoder {
         if !self.parsing_complete() {
             return Err(AvifError::NoContent);
         }
-        if n > self.settings.image_count_limit {
-            return Err(AvifError::NoImagesRemaining);
+        if let Some(limit) = self.settings.image_count_limit {
+            if n > limit.get() {
+                return Err(AvifError::NoImagesRemaining);
+            }
         }
         if self.color_track_id.is_none() {
             return Ok(self.image_timing);

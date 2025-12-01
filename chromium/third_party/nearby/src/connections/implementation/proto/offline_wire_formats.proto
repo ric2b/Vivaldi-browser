@@ -85,6 +85,7 @@ message ConnectionRequestFrame {
     BLE_L2CAP = 10;
     USB = 11;
     WEB_RTC_NON_CELLULAR = 12;
+    AWDL = 13;
   }
   // LINT.ThenChange(//depot/google3/third_party/nearby/proto/connections_enums.proto)
 
@@ -179,6 +180,8 @@ message PayloadTransferFrame {
     optional bool is_sensitive = 4;
     optional string file_name = 5;
     optional string parent_folder = 6;
+    // Time since the epoch in milliseconds.
+    optional int64 last_modified_timestamp_millis = 7;
   }
 
   // Accompanies DATA packets.
@@ -242,6 +245,7 @@ message BandwidthUpgradeNegotiationFrame {
       // 10 is reserved.
       USB = 11;
       WEB_RTC_NON_CELLULAR = 12;
+      AWDL = 13;
     }
 
     // Accompanies Medium.WIFI_HOTSPOT.
@@ -352,6 +356,7 @@ message BandwidthUpgradeRetryFrame {
     BLE_L2CAP = 10;
     USB = 11;
     WEB_RTC_NON_CELLULAR = 12;
+    AWDL = 13;
   }
   // LINT.ThenChange(//depot/google3/third_party/nearby/proto/connections_enums.proto)
 
@@ -416,6 +421,7 @@ message AutoResumeFrame {
   optional EventType event_type = 1;
   optional int64 pending_payload_id = 2;
   optional int32 next_payload_chunk_index = 3;
+  optional int32 version = 4;
 }
 
 message AutoReconnectFrame {

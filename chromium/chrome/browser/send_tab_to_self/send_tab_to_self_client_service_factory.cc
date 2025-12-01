@@ -8,7 +8,7 @@
 
 #include "base/functional/bind.h"
 #include "base/no_destructor.h"
-#include "build/chromeos_buildflags.h"
+#include "build/build_config.h"
 #include "chrome/browser/notifications/notification_display_service_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/send_tab_to_self/send_tab_to_self_client_service.h"
@@ -16,9 +16,22 @@
 #include "components/send_tab_to_self/send_tab_to_self_model.h"
 #include "components/send_tab_to_self/send_tab_to_self_sync_service.h"
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
 #include "chrome/browser/ash/profiles/profile_helper.h"
 #include "components/user_manager/user.h"
+#endif
+
+#if BUILDFLAG(IS_ANDROID)
+#include "chrome/browser/android/send_tab_to_self/android_notification_handler.h"
+#else
+#include "chrome/browser/ui/send_tab_to_self/send_tab_to_self_toolbar_icon_controller.h"
+#endif
+
+#include "app/vivaldi_apptools.h"
+
+// Vivaldi
+#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)
+#include "ui/vivaldi_browser_window.h"
 #endif
 
 namespace send_tab_to_self {
@@ -63,7 +76,7 @@ SendTabToSelfClientServiceFactory::BuildServiceInstanceForBrowserContext(
   SendTabToSelfSyncService* sync_service =
       SendTabToSelfSyncServiceFactory::GetForProfile(profile);
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
   // Create SendTabToSelfClientService only for profiles of Gaia users.
   // ChromeOS has system level profiles, such as the sign-in profile, or
   // users that are not Gaia users, such as public account users. Do not
@@ -81,9 +94,23 @@ SendTabToSelfClientServiceFactory::BuildServiceInstanceForBrowserContext(
   }
 #endif
 
-  // TODO(crbug.com/40632832) refactor profile out of STTSClient constructor.
+  SendTabToSelfModel* model = sync_service->GetSendTabToSelfModel();
+
+#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)
+  if (vivaldi::IsVivaldiRunning()) {
+    return std::make_unique<SendTabToSelfClientService>(
+      std::make_unique<VivaldiUIRelay>(profile), model);
+  }
+#endif
+
   return std::make_unique<SendTabToSelfClientService>(
-      profile, sync_service->GetSendTabToSelfModel());
+#if BUILDFLAG(IS_ANDROID)
+      std::make_unique<AndroidNotificationHandler>(model)
+#else
+      std::make_unique<SendTabToSelfToolbarIconController>(profile)
+#endif
+          ,
+      model);
 }
 
 bool SendTabToSelfClientServiceFactory::ServiceIsCreatedWithBrowserContext()

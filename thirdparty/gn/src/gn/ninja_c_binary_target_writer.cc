@@ -525,8 +525,9 @@ void NinjaCBinaryTargetWriter::WriteSwiftSources(
 
   for (const Target* swiftmodule :
        resolved().GetSwiftModuleDependencies(target_)) {
-      CHECK(swiftmodule->has_dependency_output()); {
-    swift_order_only_deps.push_back(swiftmodule->dependency_output());
+    CHECK(swiftmodule->has_dependency_output());
+    {
+      swift_order_only_deps.push_back(swiftmodule->dependency_output());
     }
   }
 

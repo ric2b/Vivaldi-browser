@@ -50,8 +50,7 @@ class BucketContextTest : public testing::Test {
     storage::BucketInfo bucket_info = quota_manager_->CreateBucket(
         storage::BucketInitParams::ForDefaultBucket(
             blink::StorageKey::CreateFromStringForTesting(
-                "https://example.com")),
-        blink::mojom::StorageType::kTemporary);
+                "https://example.com")));
     bucket_context_ = std::make_unique<BucketContext>(
         bucket_info, base::FilePath(), BucketContext::Delegate(),
         scoped_refptr<base::UpdateableSequencedTaskRunner>(),
@@ -62,7 +61,6 @@ class BucketContextTest : public testing::Test {
 
   void SetQuotaLeft(int64_t quota_manager_response) {
     quota_manager_->SetQuota(bucket_context_->bucket_locator().storage_key,
-                             blink::mojom::StorageType::kTemporary,
                              quota_manager_response);
   }
 

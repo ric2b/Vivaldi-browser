@@ -35,7 +35,7 @@
 #include "base/time/time.h"
 #include "base/unguessable_token.h"
 #include "net/cookies/site_for_cookies.h"
-#include "net/filter/source_stream.h"
+#include "net/filter/source_stream_type.h"
 #include "net/storage_access_api/status.h"
 #include "services/metrics/public/cpp/ukm_source_id.h"
 #include "services/network/public/mojom/attribution.mojom-blink.h"
@@ -58,10 +58,15 @@
 #include "third_party/blink/renderer/platform/weborigin/security_origin.h"
 #include "third_party/blink/renderer/platform/wtf/ref_counted.h"
 
+namespace network {
+class PermissionsPolicy;
+}  // namespace network
+
 namespace blink {
 
+class FeatureContext;
 class EncodedFormData;
-class PermissionsPolicy;
+struct IntegrityMetadataSet;
 
 // ResourceRequestHead represents request without request body.
 // See ResourceRequest below to see what request is.
@@ -400,12 +405,12 @@ class PLATFORM_EXPORT ResourceRequestHead {
   }
 
   const String& GetFetchIntegrity() const { return fetch_integrity_; }
-  void SetFetchIntegrity(const String& integrity);
+  void SetFetchIntegrity(const String& integrity, const FeatureContext*);
 
-  // The list of expected signatures is set as a side-effect of
-  // `SetFetchIntegrity()`.
-  const WTF::Vector<String>& GetExpectedSignatures() const {
-    return expected_signatures_;
+  // This is also called as a side-effect of `SetFetchIntegrity()`.
+  void SetExpectedPublicKeys(const IntegrityMetadataSet&);
+  const WTF::Vector<String>& GetExpectedPublicKeys() const {
+    return expected_public_keys_;
   }
 
   bool CacheControlContainsNoCache() const;
@@ -457,14 +462,13 @@ class PLATFORM_EXPORT ResourceRequestHead {
   }
 
   const scoped_refptr<
-      base::RefCountedData<base::flat_set<net::SourceStream::SourceType>>>&
+      base::RefCountedData<base::flat_set<net::SourceStreamType>>>&
   GetDevToolsAcceptedStreamTypes() const {
     return devtools_accepted_stream_types_;
   }
   void SetDevToolsAcceptedStreamTypes(
       const scoped_refptr<
-          base::RefCountedData<base::flat_set<net::SourceStream::SourceType>>>&
-          types) {
+          base::RefCountedData<base::flat_set<net::SourceStreamType>>>& types) {
     devtools_accepted_stream_types_ = types;
   }
 
@@ -670,6 +674,14 @@ class PLATFORM_EXPORT ResourceRequestHead {
 #endif
   }
 
+  bool AllowsDeviceBoundSessions() const {
+    return allows_device_bound_sessions_;
+  }
+
+  void SetAllowsDeviceBoundSessions(bool allows_device_bound_sessions) {
+    allows_device_bound_sessions_ = allows_device_bound_sessions;
+  }
+
  private:
   const CacheControlHeader& GetCacheControlHeader() const;
 
@@ -739,8 +751,8 @@ class PLATFORM_EXPORT ResourceRequestHead {
   network::mojom::RedirectMode redirect_mode_;
   // Exposed as Request.integrity in Service Workers
   String fetch_integrity_;
-  // Signature expectations extracted from `fetch_integrity_`
-  WTF::Vector<String> expected_signatures_;
+  // Public key expectations extracted from `integrity_`
+  WTF::Vector<String> expected_public_keys_;
   String referrer_string_;
   network::mojom::ReferrerPolicy referrer_policy_;
   network::mojom::CorsPreflightPolicy cors_preflight_policy_;
@@ -792,8 +804,7 @@ class PLATFORM_EXPORT ResourceRequestHead {
   // Instead of using std::optional, we use scoped_refptr to reduce
   // blink memory footprint because the attribute is only used by DevTools
   // and we should keep the footprint minimal when DevTools is closed.
-  scoped_refptr<
-      base::RefCountedData<base::flat_set<net::SourceStream::SourceType>>>
+  scoped_refptr<base::RefCountedData<base::flat_set<net::SourceStreamType>>>
       devtools_accepted_stream_types_;
 
   net::StorageAccessApiStatus storage_access_api_status_ =
@@ -824,6 +835,11 @@ class PLATFORM_EXPORT ResourceRequestHead {
 #if DCHECK_IS_ON()
   bool is_set_url_allowed_ = true;
 #endif
+
+  // Whether this request is allowed to register new device bound
+  // sessions or accept challenges on device bound sessions (e.g. due to
+  // an Origin Trial)
+  bool allows_device_bound_sessions_ = false;
 };
 
 class PLATFORM_EXPORT ResourceRequestBody {
@@ -905,7 +921,7 @@ class PLATFORM_EXPORT ResourceRequest final : public ResourceRequestHead {
   // `PermissionsPolicy::IsFeatureEnabledForSubresourceRequestAssumingOptIn()`
   // private for safety.
   bool IsFeatureEnabledForSubresourceRequestAssumingOptIn(
-      const PermissionsPolicy* policy,
+      const network::PermissionsPolicy* policy,
       network::mojom::PermissionsPolicyFeature feature,
       const url::Origin& origin);
 

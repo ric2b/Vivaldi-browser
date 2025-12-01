@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <memory>
+#include <optional>
 
 #include "base/memory/raw_ref.h"
 #include "chrome/browser/ui/layout_constants.h"
@@ -202,8 +203,11 @@ class TabContainerTest : public ChromeViewsTestBase {
               std::optional<tab_groups::TabGroupId> group = std::nullopt,
               TabActive active = TabActive::kInactive,
               TabPinned pinned = TabPinned::kUnpinned) {
-    Tab* tab = tab_container_->AddTab(
-        std::make_unique<Tab>(tab_slot_controller_.get()), model_index, pinned);
+    std::vector<TabContainer::TabInsertionParams> tabs_params;
+    tabs_params.emplace_back(std::make_unique<Tab>(tab_slot_controller_.get()),
+                             model_index, pinned);
+    Tab* tab = tab_container_->AddTabs(std::move(tabs_params))[0];
+
     tab_strip_controller_->AddTab(model_index, active, pinned);
 
     if (active == TabActive::kActive) {
@@ -341,8 +345,8 @@ class TabContainerTest : public ChromeViewsTestBase {
     }
   }
 
-  // Checks whether |tab| contains |point_in_tab_container_coords|, where the
-  // point is in |tab_container_| coordinates.
+  // Checks whether `tab` contains `point_in_tab_container_coords`, where the
+  // point is in `tab_container_` coordinates.
   bool IsPointInTab(Tab* tab, const gfx::Point& point_in_tab_container_coords) {
     gfx::Point point_in_tab_coords(point_in_tab_container_coords);
     views::View::ConvertPointToTarget(tab_container_.get(), tab,
@@ -395,8 +399,7 @@ TEST_F(TabContainerTest, ExitsClosingModeAtStandardWidth) {
 
   // Enter tab closing mode manually; this would normally happen as the result
   // of a mouse/touch-based tab closure action.
-  tab_container_->EnterTabClosingMode(std::nullopt,
-                                      CloseTabSource::CLOSE_TAB_FROM_MOUSE);
+  tab_container_->EnterTabClosingMode(std::nullopt, CloseTabSource::kFromMouse);
 
   // Close the second-to-last tab; tab closing mode should remain active,
   // constraining tab widths to below full size.
@@ -430,8 +433,7 @@ TEST_F(TabContainerTest, StaysInClosingModeBelowStandardWidth) {
 
   // Enter tab closing mode manually; this would normally happen as the result
   // of a mouse/touch-based tab closure action.
-  tab_container_->EnterTabClosingMode(std::nullopt,
-                                      CloseTabSource::CLOSE_TAB_FROM_MOUSE);
+  tab_container_->EnterTabClosingMode(std::nullopt, CloseTabSource::kFromMouse);
 
   // Close the second-to-last tab; tab closing mode should remain active,
   // constraining tab widths to below full size.
@@ -462,8 +464,7 @@ TEST_F(TabContainerTest, ClosingModeAffectsMinWidth) {
 
   // Enter tab closing mode manually; this would normally happen as the result
   // of a mouse/touch-based tab closure action.
-  tab_container_->EnterTabClosingMode(std::nullopt,
-                                      CloseTabSource::CLOSE_TAB_FROM_MOUSE);
+  tab_container_->EnterTabClosingMode(std::nullopt, CloseTabSource::kFromMouse);
 
   RemoveTab(tab_container_->GetTabCount() - 1);
   tab_container_->CompleteAnimationAndLayout();
@@ -500,8 +501,7 @@ TEST_F(TabContainerTest, RemoveTabInGroupWithTabClosingMode) {
   AddTabToGroup(3, group1);
 
   // Remove the second from last tab
-  tab_container_->EnterTabClosingMode(std::nullopt,
-                                      CloseTabSource::CLOSE_TAB_FROM_MOUSE);
+  tab_container_->EnterTabClosingMode(std::nullopt, CloseTabSource::kFromMouse);
   RemoveTab(tab_container_->GetTabCount() - 2);
   tab_container_->CompleteAnimationAndLayout();
 
@@ -511,8 +511,7 @@ TEST_F(TabContainerTest, RemoveTabInGroupWithTabClosingMode) {
   gfx::Point tab_center = tab_close_button->GetBoundsInScreen().CenterPoint();
 
   // Remove the tab
-  tab_container_->EnterTabClosingMode(std::nullopt,
-                                      CloseTabSource::CLOSE_TAB_FROM_MOUSE);
+  tab_container_->EnterTabClosingMode(std::nullopt, CloseTabSource::kFromMouse);
   tab_container_->OnGroupContentsChanged(group1);
   RemoveTab(1);
   tab_container_->CompleteAnimationAndLayout();
@@ -1100,7 +1099,7 @@ TEST_F(TabContainerTest, PreferredWidthNotAffectedByTransferTabTo) {
 
   // Transfer one out, then pretend to animate it.
   std::unique_ptr<views::View> hold_my_tab = std::make_unique<views::View>();
-  hold_my_tab->AddChildView(tab_container_->RemoveTabFromViewModel(1));
+  hold_my_tab->AddChildViewRaw(tab_container_->RemoveTabFromViewModel(1));
   tab_container_controller_->set_is_animating_outside_container(true);
   // Preferred width should be unchanged, even though `owned_tab` is no longer
   // part of `tab_container_`.

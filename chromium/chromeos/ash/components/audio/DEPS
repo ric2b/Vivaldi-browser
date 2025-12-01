@@ -2,9 +2,7 @@ noparent = True
 
 include_rules = [
   "+ash/constants",
-  "+ash/public",
-  "+ash/resources",
-  "+ash/strings",
+  "+ash/strings/grit/ash_strings.h",
   "+base",
   "+chromeos/ash/components/dbus",
   "+chromeos/ash/grit/ash_resources.h",
@@ -45,4 +43,6 @@ include_rules = [
   '-third_party/abseil-cpp/absl/types/any.h',
   '-third_party/abseil-cpp/absl/types/optional.h',
   '-third_party/abseil-cpp/absl/types/span.h',
+  '-third_party/abseil-cpp/absl/types/variant.h',
+  '-third_party/abseil-cpp/absl/utility/utility.h',
 ]

@@ -9,6 +9,7 @@
 
 #include "libANGLE/renderer/wgpu/ContextWgpu.h"
 
+#include "common/PackedEnums.h"
 #include "common/debug.h"
 
 #include "compiler/translator/wgsl/OutputUniformBlocks.h"
@@ -70,6 +71,7 @@ ContextWgpu::ContextWgpu(const gl::State &state, gl::ErrorSet *errorSet, Display
         DIRTY_BIT_RENDER_PIPELINE_BINDING,  // The pipeline needs to be bound for each renderpass
         DIRTY_BIT_VIEWPORT,
         DIRTY_BIT_SCISSOR,
+        DIRTY_BIT_BLEND_CONSTANT,
         DIRTY_BIT_VERTEX_BUFFERS,
         DIRTY_BIT_INDEX_BUFFER,
         DIRTY_BIT_BIND_GROUPS,
@@ -202,20 +204,24 @@ angle::Result ContextWgpu::drawArrays(const gl::Context *context,
                                       GLint first,
                                       GLsizei count)
 {
-    if (mode == gl::PrimitiveMode::LineLoop)
-    {
-        UNIMPLEMENTED();
-        return angle::Result::Continue;
-    }
-    else if (mode == gl::PrimitiveMode::TriangleFan)
+    if (mode == gl::PrimitiveMode::TriangleFan)
     {
         UNIMPLEMENTED();
         return angle::Result::Continue;
     }
 
+    uint32_t firstIndex = 0;
+    uint32_t indexCount = static_cast<uint32_t>(count);
     ANGLE_TRY(setupDraw(context, mode, first, count, 1, gl::DrawElementsType::InvalidEnum, nullptr,
-                        0, nullptr, nullptr));
-    mCommandBuffer.draw(static_cast<uint32_t>(count), 1, static_cast<uint32_t>(first), 0);
+                        0, &firstIndex, &indexCount));
+    if (mode == gl::PrimitiveMode::LineLoop)
+    {
+        mCommandBuffer.drawIndexed(indexCount, 1, firstIndex, 0, 0);
+    }
+    else
+    {
+        mCommandBuffer.draw(static_cast<uint32_t>(count), 1, static_cast<uint32_t>(first), 0);
+    }
     return angle::Result::Continue;
 }
 
@@ -225,21 +231,26 @@ angle::Result ContextWgpu::drawArraysInstanced(const gl::Context *context,
                                                GLsizei count,
                                                GLsizei instanceCount)
 {
-    if (mode == gl::PrimitiveMode::LineLoop)
-    {
-        UNIMPLEMENTED();
-        return angle::Result::Continue;
-    }
-    else if (mode == gl::PrimitiveMode::TriangleFan)
+    if (mode == gl::PrimitiveMode::TriangleFan)
     {
         UNIMPLEMENTED();
         return angle::Result::Continue;
     }
 
+    uint32_t firstIndex = 0;
+    uint32_t indexCount = static_cast<uint32_t>(count);
     ANGLE_TRY(setupDraw(context, mode, first, count, instanceCount,
-                        gl::DrawElementsType::InvalidEnum, nullptr, 0, nullptr, nullptr));
-    mCommandBuffer.draw(static_cast<uint32_t>(count), static_cast<uint32_t>(instanceCount),
-                        static_cast<uint32_t>(first), 0);
+                        gl::DrawElementsType::InvalidEnum, nullptr, 0, &firstIndex, &indexCount));
+    if (mode == gl::PrimitiveMode::LineLoop)
+    {
+        mCommandBuffer.drawIndexed(indexCount, static_cast<uint32_t>(instanceCount), firstIndex, 0,
+                                   0);
+    }
+    else
+    {
+        mCommandBuffer.draw(indexCount, static_cast<uint32_t>(instanceCount),
+                            static_cast<uint32_t>(first), 0);
+    }
     return angle::Result::Continue;
 }
 
@@ -250,21 +261,26 @@ angle::Result ContextWgpu::drawArraysInstancedBaseInstance(const gl::Context *co
                                                            GLsizei instanceCount,
                                                            GLuint baseInstance)
 {
-    if (mode == gl::PrimitiveMode::LineLoop)
-    {
-        UNIMPLEMENTED();
-        return angle::Result::Continue;
-    }
-    else if (mode == gl::PrimitiveMode::TriangleFan)
+    if (mode == gl::PrimitiveMode::TriangleFan)
     {
         UNIMPLEMENTED();
         return angle::Result::Continue;
     }
 
+    uint32_t firstIndex = 0;
+    uint32_t indexCount = static_cast<uint32_t>(count);
     ANGLE_TRY(setupDraw(context, mode, first, count, instanceCount,
-                        gl::DrawElementsType::InvalidEnum, nullptr, 0, nullptr, nullptr));
-    mCommandBuffer.draw(static_cast<uint32_t>(count), static_cast<uint32_t>(instanceCount),
-                        static_cast<uint32_t>(first), baseInstance);
+                        gl::DrawElementsType::InvalidEnum, nullptr, 0, &firstIndex, &indexCount));
+    if (mode == gl::PrimitiveMode::LineLoop)
+    {
+        mCommandBuffer.drawIndexed(indexCount, static_cast<uint32_t>(instanceCount), firstIndex, 0,
+                                   baseInstance);
+    }
+    else
+    {
+        mCommandBuffer.draw(static_cast<uint32_t>(count), static_cast<uint32_t>(instanceCount),
+                            static_cast<uint32_t>(first), baseInstance);
+    }
     return angle::Result::Continue;
 }
 
@@ -581,12 +597,50 @@ angle::Result ContextWgpu::syncState(const gl::Context *context,
                 mDirtyBits.set(DIRTY_BIT_VIEWPORT);
                 break;
             case gl::state::DIRTY_BIT_BLEND_ENABLED:
+            {
+                const gl::BlendStateExt &blendStateExt = mState.getBlendStateExt();
+                gl::DrawBufferMask enabledMask         = blendStateExt.getEnabledMask();
+                for (size_t i = 0; i < blendStateExt.getDrawBufferCount(); i++)
+                {
+                    if (mRenderPipelineDesc.setBlendEnabled(i, enabledMask.test(i)))
+                    {
+                        invalidateCurrentRenderPipeline();
+                    }
+                }
+            }
                 break;
             case gl::state::DIRTY_BIT_BLEND_COLOR:
+                mDirtyBits.set(DIRTY_BIT_BLEND_CONSTANT);
                 break;
             case gl::state::DIRTY_BIT_BLEND_FUNCS:
+            {
+                const gl::BlendStateExt &blendState = mState.getBlendStateExt();
+                for (size_t i = 0; i < blendState.getDrawBufferCount(); i++)
+                {
+                    if (mRenderPipelineDesc.setBlendFuncs(
+                            i, gl_wgpu::GetBlendFactor(blendState.getSrcColorIndexed(i)),
+                            gl_wgpu::GetBlendFactor(blendState.getDstColorIndexed(i)),
+                            gl_wgpu::GetBlendFactor(blendState.getSrcAlphaIndexed(i)),
+                            gl_wgpu::GetBlendFactor(blendState.getDstAlphaIndexed(i))))
+                    {
+                        invalidateCurrentRenderPipeline();
+                    }
+                }
+            }
                 break;
             case gl::state::DIRTY_BIT_BLEND_EQUATIONS:
+            {
+                const gl::BlendStateExt &blendState = mState.getBlendStateExt();
+                for (size_t i = 0; i < blendState.getDrawBufferCount(); i++)
+                {
+                    if (mRenderPipelineDesc.setBlendEquations(
+                            i, gl_wgpu::GetBlendEquation(blendState.getEquationColorIndexed(i)),
+                            gl_wgpu::GetBlendEquation(blendState.getEquationAlphaIndexed(i))))
+                    {
+                        invalidateCurrentRenderPipeline();
+                    }
+                }
+            }
                 break;
             case gl::state::DIRTY_BIT_COLOR_MASK:
             {
@@ -1019,7 +1073,21 @@ angle::Result ContextWgpu::setupDraw(const gl::Context *context,
                                      uint32_t *outFirstIndex,
                                      uint32_t *indexCountOut)
 {
-    if (mRenderPipelineDesc.setPrimitiveMode(mode, indexTypeOrInvalid))
+    gl::DrawElementsType dstDndexTypeOrInvalid = indexTypeOrInvalid;
+    if (mode == gl::PrimitiveMode::LineLoop &&
+        dstDndexTypeOrInvalid == gl::DrawElementsType::InvalidEnum)
+    {
+        if (vertexOrIndexCount >= std::numeric_limits<unsigned short>::max())
+        {
+            dstDndexTypeOrInvalid = gl::DrawElementsType::UnsignedInt;
+        }
+        else
+        {
+            dstDndexTypeOrInvalid = gl::DrawElementsType::UnsignedShort;
+        }
+    }
+
+    if (mRenderPipelineDesc.setPrimitiveMode(mode, dstDndexTypeOrInvalid))
     {
         invalidateCurrentRenderPipeline();
     }
@@ -1034,6 +1102,8 @@ angle::Result ContextWgpu::setupDraw(const gl::Context *context,
     if (mState.areClientArraysEnabled())
     {
         VertexArrayWgpu *vertexArrayWgpu = GetImplAs<VertexArrayWgpu>(mState.getVertexArray());
+        // Pass in original indexTypeOrInvalid into syncClientArrays because the method will need to
+        // determine if the original draw call was a DrawElements or DrawArrays call.
         ANGLE_TRY(vertexArrayWgpu->syncClientArrays(
             context, mState.getProgramExecutable()->getActiveAttribLocationsMask(), mode,
             firstVertexOrInvalid, vertexOrIndexCount, instanceCount, indexTypeOrInvalid, indices,
@@ -1041,17 +1111,14 @@ angle::Result ContextWgpu::setupDraw(const gl::Context *context,
     }
 
     bool reAddDirtyIndexBufferBit = false;
-    if (indexTypeOrInvalid != gl::DrawElementsType::InvalidEnum)
+    if (dstDndexTypeOrInvalid != gl::DrawElementsType::InvalidEnum)
     {
-        *outFirstIndex = gl_wgpu::GetFirstIndexForDrawCall(indexTypeOrInvalid, adjustedIndicesPtr);
-        if (mCurrentIndexBufferType != indexTypeOrInvalid)
+        *outFirstIndex =
+            gl_wgpu::GetFirstIndexForDrawCall(dstDndexTypeOrInvalid, adjustedIndicesPtr);
+        if (mCurrentIndexBufferType != dstDndexTypeOrInvalid)
         {
             invalidateIndexBuffer();
         }
-    }
-    else
-    {
-        ASSERT(outFirstIndex == nullptr);
     }
 
     if (mDirtyBits.any())
@@ -1082,15 +1149,19 @@ angle::Result ContextWgpu::setupDraw(const gl::Context *context,
                     ANGLE_TRY(handleDirtyScissor(&dirtyBitIter));
                     break;
 
+                case DIRTY_BIT_BLEND_CONSTANT:
+                    ANGLE_TRY(handleDirtyBlendConstant(&dirtyBitIter));
+                    break;
+
                 case DIRTY_BIT_VERTEX_BUFFERS:
                     ANGLE_TRY(handleDirtyVertexBuffers(mDirtyVertexBuffers, &dirtyBitIter));
                     mDirtyVertexBuffers.reset();
                     break;
 
                 case DIRTY_BIT_INDEX_BUFFER:
-                    if (indexTypeOrInvalid != gl::DrawElementsType::InvalidEnum)
+                    if (dstDndexTypeOrInvalid != gl::DrawElementsType::InvalidEnum)
                     {
-                        ANGLE_TRY(handleDirtyIndexBuffer(indexTypeOrInvalid, &dirtyBitIter));
+                        ANGLE_TRY(handleDirtyIndexBuffer(dstDndexTypeOrInvalid, &dirtyBitIter));
                     }
                     else
                     {
@@ -1216,6 +1287,24 @@ angle::Result ContextWgpu::handleDirtyScissor(DirtyBits::Iterator *dirtyBitsIter
     return angle::Result::Continue;
 }
 
+angle::Result ContextWgpu::handleDirtyBlendConstant(DirtyBits::Iterator *dirtyBitsIterator)
+{
+    const gl::ColorF &blendColor = mState.getBlendColor();
+
+    bool isDefaultBlendConstant = blendColor.red == 0 && blendColor.green == 0 &&
+                                  blendColor.blue == 0 && blendColor.alpha == 0;
+    if (isDefaultBlendConstant && !mCommandBuffer.hasSetBlendConstantCommand())
+    {
+        // Each render pass has a default blend constant set to all zeroes. We can skip setting it.
+        return angle::Result::Continue;
+    }
+
+    ASSERT(mCurrentGraphicsPipeline);
+    mCommandBuffer.setBlendConstant(blendColor.red, blendColor.green, blendColor.blue,
+                                    blendColor.alpha);
+    return angle::Result::Continue;
+}
+
 angle::Result ContextWgpu::handleDirtyRenderPass(DirtyBits::Iterator *dirtyBitsIterator)
 {
     FramebufferWgpu *drawFramebufferWgpu = webgpu::GetImpl(mState.getDrawFramebuffer());
@@ -1231,19 +1320,20 @@ angle::Result ContextWgpu::handleDirtyVertexBuffers(const gl::AttributesMask &sl
     VertexArrayWgpu *vertexArrayWgpu = GetImplAs<VertexArrayWgpu>(mState.getVertexArray());
     for (size_t slot : slots)
     {
-        webgpu::BufferHelper *buffer = vertexArrayWgpu->getVertexBuffer(slot);
-        if (!buffer)
+        const VertexBufferWithOffset &buffer = vertexArrayWgpu->getVertexBuffer(slot);
+        if (!buffer.buffer)
         {
             // Missing default attribute support
             ASSERT(!mState.getVertexArray()->getVertexAttribute(slot).enabled);
             UNIMPLEMENTED();
             continue;
         }
-        if (buffer->getMappedState())
+        if (buffer.buffer->getMappedState())
         {
-            ANGLE_TRY(buffer->unmap());
+            ANGLE_TRY(buffer.buffer->unmap());
         }
-        mCommandBuffer.setVertexBuffer(static_cast<uint32_t>(slot), buffer->getBuffer());
+        mCommandBuffer.setVertexBuffer(static_cast<uint32_t>(slot), buffer.buffer->getBuffer(),
+                                       buffer.offset, WGPU_WHOLE_SIZE);
     }
     return angle::Result::Continue;
 }

@@ -8,12 +8,12 @@ source_set("tools") {
     "//chrome/common",
     "//components/zoom",
     "//extensions/buildflags",
-    "//extensions/browser",
+    # "//extensions/browser",
     "//net",
     "//skia",
-    "//vivaldi/ui",
+    # "//vivaldi/ui",
   ]
   allow_circular_includes_from = [
-    "//vivaldi/ui",
+    # "//vivaldi/ui",
   ]
 }

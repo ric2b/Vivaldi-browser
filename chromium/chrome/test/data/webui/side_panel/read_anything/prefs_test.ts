@@ -2,35 +2,30 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-// import {flush} from
-// '//resources/polymer/v3_0/polymer/polymer_bundled.min.js';
-import {BrowserProxy, ToolbarEvent} from 'chrome-untrusted://read-anything-side-panel.top-chrome/read_anything.js';
+import {BrowserProxy, SpeechBrowserProxyImpl, ToolbarEvent} from 'chrome-untrusted://read-anything-side-panel.top-chrome/read_anything.js';
 import type {AppElement} from 'chrome-untrusted://read-anything-side-panel.top-chrome/read_anything.js';
 import {assertArrayEquals, assertEquals, assertFalse, assertTrue} from 'chrome-untrusted://webui-test/chai_assert.js';
 
-import {createAndSetVoices, createSpeechSynthesisVoice, emitEvent, setVoices, suppressInnocuousErrors} from './common.js';
+import {createAndSetVoices, createApp, createSpeechSynthesisVoice, emitEvent, setupBasicSpeech, setVoices} from './common.js';
 import {FakeReadingMode} from './fake_reading_mode.js';
-import {FakeSpeechSynthesis} from './fake_speech_synthesis.js';
 import {TestColorUpdaterBrowserProxy} from './test_color_updater_browser_proxy.js';
+import {TestSpeechBrowserProxy} from './test_speech_browser_proxy.js';
 
 // TODO: b/40927698 - Add more tests.
 suite('PrefsTest', () => {
   let app: AppElement;
-  let testBrowserProxy: TestColorUpdaterBrowserProxy;
-  let speechSynthesis: FakeSpeechSynthesis;
+  let speech: TestSpeechBrowserProxy;
 
-  setup(() => {
-    suppressInnocuousErrors();
+  setup(async () => {
+    // Clearing the DOM should always be done first.
     document.body.innerHTML = window.trustedTypes!.emptyHTML;
-    testBrowserProxy = new TestColorUpdaterBrowserProxy();
-    BrowserProxy.setInstance(testBrowserProxy);
+    BrowserProxy.setInstance(new TestColorUpdaterBrowserProxy());
     const readingMode = new FakeReadingMode();
     chrome.readingMode = readingMode as unknown as typeof chrome.readingMode;
     chrome.readingMode.isReadAloudEnabled = true;
-    app = document.createElement('read-anything-app');
-    document.body.appendChild(app);
-    speechSynthesis = new FakeSpeechSynthesis();
-    app.synth = speechSynthesis;
+    speech = new TestSpeechBrowserProxy();
+    SpeechBrowserProxyImpl.setInstance(speech);
+    app = await createApp();
   });
 
 
@@ -43,9 +38,7 @@ suite('PrefsTest', () => {
     test('removes unavailable languages from prefs', () => {
       const previouslyAvailableLang = 'pt-pt';
       chrome.readingMode.onLanguagePrefChange(previouslyAvailableLang, true);
-      setVoices(app, speechSynthesis, [
-        createSpeechSynthesisVoice({lang: 'en-us', name: 'Google Elphaba'}),
-      ]);
+      setupBasicSpeech(app, speech);
 
       app.restoreSettingsFromPrefs();
 
@@ -58,9 +51,8 @@ suite('PrefsTest', () => {
       const previouslyAvailableLang = 'pt-pt';
       const availableLang = 'pt-br';
       chrome.readingMode.onLanguagePrefChange(previouslyAvailableLang, true);
-      setVoices(app, speechSynthesis, [
-        createSpeechSynthesisVoice(
-            {lang: availableLang, name: 'Google Galinda'}),
+      createAndSetVoices(app, speech, [
+        {lang: availableLang, name: 'Google Galinda'},
       ]);
 
       app.restoreSettingsFromPrefs();
@@ -76,8 +68,8 @@ suite('PrefsTest', () => {
     test('adds unavailable language to prefs once available', () => {
       const previouslyAvailableLang = 'da-dk';
       chrome.readingMode.onLanguagePrefChange(previouslyAvailableLang, true);
-      setVoices(app, speechSynthesis, [
-        createSpeechSynthesisVoice({lang: 'en-us', name: 'Google Fiyero'}),
+      createAndSetVoices(app, speech, [
+        {lang: 'en-us', name: 'Google Fiyero'},
       ]);
 
       app.restoreSettingsFromPrefs();
@@ -87,9 +79,9 @@ suite('PrefsTest', () => {
           previouslyAvailableLang));
 
       // The previously unavailable language is now available.
-      setVoices(app, speechSynthesis, [
-        createSpeechSynthesisVoice({lang: 'en-us', name: 'Google Fiyero'}),
-        createSpeechSynthesisVoice({lang: 'da-dk', name: 'Doctor Dillamond'}),
+      createAndSetVoices(app, speech, [
+        {lang: 'en-us', name: 'Google Fiyero'},
+        {lang: 'da-dk', name: 'Doctor Dillamond'},
       ]);
 
       assertTrue(app.enabledLangs.includes(previouslyAvailableLang));
@@ -102,7 +94,7 @@ suite('PrefsTest', () => {
         chrome.readingMode.baseLanguageForSpeech = 'en';
 
         // Set synthesis to have no available voices
-        setVoices(app, speechSynthesis, []);
+        setVoices(app, speech, []);
         app.resetVoiceForTesting();
       });
 
@@ -115,10 +107,7 @@ suite('PrefsTest', () => {
         assertFalse(!!app.getSpeechSynthesisVoice());
 
         // Update the speech synthesis engine with voices.
-        setVoices(
-            app, speechSynthesis,
-            [createSpeechSynthesisVoice({lang: 'en', name: 'Google Yu'})]);
-        app.onVoicesChanged();
+        setupBasicSpeech(app, speech);
 
         // Once voices are available, settings should be restored.
         assertTrue(!!app.getSpeechSynthesisVoice());
@@ -135,10 +124,7 @@ suite('PrefsTest', () => {
             assertFalse(!!app.getSpeechSynthesisVoice());
 
             // Update the speech synthesis engine with voices.
-            setVoices(app, speechSynthesis, [
-              createSpeechSynthesisVoice({lang: 'es', name: 'Google Kristi'}),
-            ]);
-            app.onVoicesChanged();
+            setupBasicSpeech(app, speech);
 
             // Once voices are available, settings should be restored.
             assertTrue(!!app.getSpeechSynthesisVoice());
@@ -155,13 +141,11 @@ suite('PrefsTest', () => {
             assertFalse(!!app.getSpeechSynthesisVoice());
 
             // Update the speech synthesis engine with voices.
-            setVoices(app, speechSynthesis, [
-              createSpeechSynthesisVoice({lang: 'en', name: 'Google Lauren'}),
-              createSpeechSynthesisVoice({lang: 'en', name: 'Google Eitan'}),
-              createSpeechSynthesisVoice(
-                  {lang: 'en-uk', name: 'Google Kristi'}),
+            createAndSetVoices(app, speech, [
+              {lang: 'en', name: 'Google Lauren'},
+              {lang: 'en', name: 'Google Eitan'},
+              {lang: 'en-uk', name: 'Google Kristi'},
             ]);
-            app.onVoicesChanged();
 
             // Once voices are available, settings should be restored.
             const selectedVoice = app.getSpeechSynthesisVoice();
@@ -183,12 +167,11 @@ suite('PrefsTest', () => {
                 createSpeechSynthesisVoice({lang: 'en', name: 'Google Kristi'});
 
             // Update the speech synthesis engine with voices.
-            setVoices(app, speechSynthesis, [
+            setVoices(app, speech, [
               createSpeechSynthesisVoice({lang: 'en', name: 'Google Lauren'}),
               createSpeechSynthesisVoice({lang: 'en', name: 'Google Shari'}),
               futureSelectedVoice,
             ]);
-            app.onVoicesChanged();
 
             // Once voices are available, settings should be restored.
             let selectedVoice = app.getSpeechSynthesisVoice();
@@ -205,7 +188,6 @@ suite('PrefsTest', () => {
             // We have to update the stored voice so onVoicesChanged recognizes
             // a user chosen voice.
             chrome.readingMode.getStoredVoice = () => 'Google Kristi';
-
             app.onVoicesChanged();
 
             // After onVoicesChanged, the most recently selected voice should
@@ -221,7 +203,7 @@ suite('PrefsTest', () => {
       const locales = ['si-lk', 'km-kh', 'th-th'];
 
       setup(() => {
-        createAndSetVoices(app, speechSynthesis, [
+        createAndSetVoices(app, speech, [
           {lang: langs[0], name: 'Google Frodo'},
           {lang: langs[1], name: 'Google Merry'},
           {lang: langs[2], name: 'Google Pippin'},
@@ -279,7 +261,7 @@ suite('PrefsTest', () => {
       ];
 
       setup(() => {
-        setVoices(app, speechSynthesis, voices);
+        setVoices(app, speech, voices);
       });
 
       test('to the stored voice for this language if there is one', () => {

@@ -39,10 +39,10 @@
 #include <algorithm>
 #include <limits>
 #include <map>
+#include <memory>
 #include <string>
 #include <utility>
 
-#include "common/scoped_ptr.h"
 #include "common/stdio_wrapper.h"
 #include "common/using_std_string.h"
 #include "google_breakpad/processor/call_stack.h"
@@ -200,15 +200,15 @@ ProcessResult MinidumpProcessor::Process(
   }
 
   BPLOG(INFO) << "Minidump " << dump->path() << " has " <<
-      (has_cpu_info            ? "" : "no ") << "CPU info, " <<
-      (has_os_info             ? "" : "no ") << "OS info, " <<
-      (breakpad_info != NULL   ? "" : "no ") << "Breakpad info, " <<
-      (exception != NULL       ? "" : "no ") << "exception, " <<
-      (module_list != NULL     ? "" : "no ") << "module list, " <<
-      (threads != NULL         ? "" : "no ") << "thread list, " <<
-      (has_dump_thread         ? "" : "no ") << "dump thread, " <<
-      (has_requesting_thread   ? "" : "no ") << "requesting thread, and " <<
-      (has_process_create_time ? "" : "no ") << "process create time";
+      (has_cpu_info             ? "" : "no ") << "CPU info, " <<
+      (has_os_info              ? "" : "no ") << "OS info, " <<
+      (breakpad_info != nullptr ? "" : "no ") << "Breakpad info, " <<
+      (exception != nullptr     ? "" : "no ") << "exception, " <<
+      (module_list != nullptr   ? "" : "no ") << "module list, " <<
+      (threads != nullptr       ? "" : "no ") << "thread list, " <<
+      (has_dump_thread          ? "" : "no ") << "dump thread, " <<
+      (has_requesting_thread    ? "" : "no ") << "requesting thread, and " <<
+      (has_process_create_time  ? "" : "no ") << "process create time";
 
   bool interrupted = false;
   bool found_requesting_thread = false;
@@ -344,7 +344,7 @@ ProcessResult MinidumpProcessor::Process(
     // returns.  process_state->modules_ is owned by the ProcessState object
     // (just like the StackFrame objects), and is much more suitable for this
     // task.
-    scoped_ptr<Stackwalker> stackwalker(
+    std::unique_ptr<Stackwalker> stackwalker(
         Stackwalker::StackwalkerForCPU(process_state->system_info(),
                                        context,
                                        thread_memory,
@@ -352,7 +352,7 @@ ProcessResult MinidumpProcessor::Process(
                                        process_state->unloaded_modules_,
                                        frame_symbolizer_));
 
-    scoped_ptr<CallStack> stack(new CallStack());
+    std::unique_ptr<CallStack> stack(new CallStack());
     if (stackwalker.get()) {
       if (!stackwalker->Walk(stack.get(),
                              &process_state->modules_without_symbols_,
@@ -370,7 +370,7 @@ ProcessResult MinidumpProcessor::Process(
     stack->set_tid(thread_id);
     process_state->threads_.push_back(stack.release());
     process_state->thread_memory_regions_.push_back(thread_memory);
-    process_state->thread_names_.push_back(thread_name);
+    process_state->thread_names_.push_back(std::move(thread_name));
   }
 
   if (interrupted) {
@@ -393,11 +393,11 @@ ProcessResult MinidumpProcessor::Process(
   // If an exploitability run was requested we perform the platform specific
   // rating.
   if (enable_exploitability_) {
-    scoped_ptr<Exploitability> exploitability(
+    std::unique_ptr<Exploitability> exploitability(
         Exploitability::ExploitabilityForPlatform(
           dump, process_state, enable_objdump_for_exploitability_));
     // The engine will be null if the platform is not supported
-    if (exploitability != NULL) {
+    if (exploitability != nullptr) {
       process_state->exploitability_ = exploitability->CheckExploitability();
     } else {
       process_state->exploitability_ = EXPLOITABILITY_ERR_NOENGINE;
@@ -428,7 +428,7 @@ static const MDRawSystemInfo* GetSystemInfo(Minidump* dump,
                                             MinidumpSystemInfo** system_info) {
   MinidumpSystemInfo* minidump_system_info = dump->GetSystemInfo();
   if (!minidump_system_info)
-    return NULL;
+    return nullptr;
 
   if (system_info)
     *system_info = minidump_system_info;
@@ -461,7 +461,7 @@ static uint64_t GetAddressForArchitecture(const MDCPUArchitecture architecture,
 // cpu_info: address of target string, cpu info text will be appended to it.
 static void GetARMCpuInfo(const MDRawSystemInfo* raw_info,
                           string* cpu_info) {
-  assert(raw_info != NULL && cpu_info != NULL);
+  assert(raw_info != nullptr && cpu_info != nullptr);
 
   // Write ARM architecture version.
   char cpu_string[32];
@@ -531,7 +531,7 @@ static void GetARMCpuInfo(const MDRawSystemInfo* raw_info,
   uint32_t cpuid = raw_info->cpu.arm_cpu_info.cpuid;
   if (cpuid != 0) {
     // Extract vendor name from CPUID
-    const char* vendor = NULL;
+    const char* vendor = nullptr;
     uint32_t vendor_id = (cpuid >> 24) & 0xff;
     for (size_t i = 0; i < sizeof(vendors)/sizeof(vendors[0]); ++i) {
       if (vendors[i].id == vendor_id) {
@@ -549,7 +549,7 @@ static void GetARMCpuInfo(const MDRawSystemInfo* raw_info,
 
     // Extract part name from CPUID
     uint32_t part_id = (cpuid & 0xff00fff0);
-    const char* part = NULL;
+    const char* part = nullptr;
     for (size_t i = 0; i < sizeof(parts)/sizeof(parts[0]); ++i) {
       if (parts[i].id == part_id) {
         part = parts[i].name;
@@ -557,7 +557,7 @@ static void GetARMCpuInfo(const MDRawSystemInfo* raw_info,
       }
     }
     cpu_info->append(" ");
-    if (part != NULL) {
+    if (part != nullptr) {
       cpu_info->append(part);
     } else {
       snprintf(cpu_string, sizeof(cpu_string), "part(0x%x)", part_id);
@@ -810,13 +810,13 @@ static bool IsCanonicalAddress(uint64_t address) {
 static void CalculateFaultAddressFromInstruction(Minidump* dump,
                                                  uint64_t* address) {
   MinidumpException* exception = dump->GetException();
-  if (exception == NULL) {
+  if (exception == nullptr) {
     BPLOG(INFO) << "Failed to get exception.";
     return;
   }
 
   MinidumpContext* context = exception->GetContext();
-  if (context == NULL) {
+  if (context == nullptr) {
     BPLOG(INFO) << "Failed to get exception context.";
     return;
   }
@@ -831,7 +831,7 @@ static void CalculateFaultAddressFromInstruction(Minidump* dump,
   MinidumpMemoryList* memory_list = dump->GetMemoryList();
   MinidumpMemoryRegion* memory_region =
     memory_list ?
-    memory_list->GetMemoryRegionForAddress(instruction_ptr) : NULL;
+    memory_list->GetMemoryRegionForAddress(instruction_ptr) : nullptr;
   if (!memory_region) {
     BPLOG(INFO) << "No memory region around instruction pointer.";
     return;
@@ -896,7 +896,7 @@ string MinidumpProcessor::GetCrashReason(Minidump* dump, uint64_t* address,
            flags_string);
   string reason = reason_string;
 
-  const MDRawSystemInfo* raw_system_info = GetSystemInfo(dump, NULL);
+  const MDRawSystemInfo* raw_system_info = GetSystemInfo(dump, nullptr);
   if (!raw_system_info)
     return reason;
 

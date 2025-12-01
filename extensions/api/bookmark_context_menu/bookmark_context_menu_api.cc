@@ -17,6 +17,7 @@
 
 #include "browser/menus/vivaldi_menu_enums.h"
 #include "extensions/tools/vivaldi_tools.h"
+#include "extensions/vivaldi_browser_component_wrapper.h"
 #include "ui/vivaldi_browser_window.h"
 
 namespace extensions {
@@ -67,7 +68,9 @@ ExtensionFunction::ResponseAction BookmarkContextMenuShowFunction::Run() {
   EXTENSION_FUNCTION_VALIDATE(params_);
 
   VivaldiBrowserWindow* window =
-      VivaldiBrowserWindow::FromId(params_->properties.window_id);
+      VivaldiBrowserComponentWrapper::GetInstance()->
+          VivaldiBrowserWindowFromId(
+            params_->properties.window_id);
   if (!window) {
     return RespondNow(Error("No such window"));
   }
@@ -172,11 +175,12 @@ std::string BookmarkContextMenuShowFunction::Open(
     return "Unknown menu id";
   }
 
-  bookmarks::BookmarkModel* model = BookmarkModelFactory::GetForBrowserContext(
-      web_contents->GetBrowserContext());
-
-  const bookmarks::BookmarkNode* node =
-      bookmarks::GetBookmarkNodeByID(model, node_id);
+  VivaldiBrowserComponentWrapper* wrapper =
+      VivaldiBrowserComponentWrapper::GetInstance();
+  bookmarks::BookmarkModel* model = wrapper->GetBookmarkModelForBrowserContext(
+       web_contents->GetBrowserContext());
+  const bookmarks::BookmarkNode* node = wrapper->GetBookmarkNodeByID(
+      model, node_id);
   if (!node) {
     return "Node with id " + id + " does not exist";
   }

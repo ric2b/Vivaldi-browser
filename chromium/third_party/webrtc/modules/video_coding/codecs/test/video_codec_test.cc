@@ -172,7 +172,7 @@ std::string TestName() {
 
 std::string TestOutputPath() {
   std::string output_path =
-      (rtc::StringBuilder() << OutputPath() << TestName()).str();
+      (StringBuilder() << OutputPath() << TestName()).str();
   std::string output_dir = DirName(output_path);
   bool result = CreateDir(output_dir);
   RTC_CHECK(result) << "Cannot create " << output_dir;
@@ -344,6 +344,12 @@ TEST_P(SpatialQualityTest, SpatialQuality) {
       {{"video_name", video_info.name},
        {"codec_type", codec_type},
        {"codec_impl", codec_impl}});
+
+  if (absl::GetFlag(FLAGS_write_csv)) {
+    stats->LogMetrics((StringBuilder() << TestOutputPath() << ".csv").str(),
+                      stats->Slice(Filter{}, /*merge=*/false), /*metadata=*/
+                      {{"test_name", TestName()}});
+  }
 }
 
 INSTANTIATE_TEST_SUITE_P(
@@ -442,6 +448,12 @@ TEST_P(BitrateAdaptationTest, BitrateAdaptation) {
        {"video_name", video_info.name},
        {"rate_profile", std::to_string(bitrate_kbps.first) + "," +
                             std::to_string(bitrate_kbps.second)}});
+
+  if (absl::GetFlag(FLAGS_write_csv)) {
+    stats->LogMetrics((StringBuilder() << TestOutputPath() << ".csv").str(),
+                      stats->Slice(Filter{}, /*merge=*/false), /*metadata=*/
+                      {{"test_name", TestName()}});
+  }
 }
 
 INSTANTIATE_TEST_SUITE_P(All,
@@ -531,6 +543,12 @@ TEST_P(FramerateAdaptationTest, FramerateAdaptation) {
        {"video_name", video_info.name},
        {"rate_profile", std::to_string(framerate_fps.first) + "," +
                             std::to_string(framerate_fps.second)}});
+
+  if (absl::GetFlag(FLAGS_write_csv)) {
+    stats->LogMetrics((StringBuilder() << TestOutputPath() << ".csv").str(),
+                      stats->Slice(Filter{}, /*merge=*/false), /*metadata=*/
+                      {{"test_name", TestName()}});
+  }
 }
 
 INSTANTIATE_TEST_SUITE_P(All,
@@ -618,7 +636,7 @@ TEST(VideoCodecTest, DISABLED_EncodeDecode) {
   for (int sidx = 0; sidx < num_spatial_layers; ++sidx) {
     for (int tidx = 0; tidx < num_temporal_layers; ++tidx) {
       std::string metric_name_prefix =
-          (rtc::StringBuilder() << "s" << sidx << "t" << tidx << "_").str();
+          (StringBuilder() << "s" << sidx << "t" << tidx << "_").str();
       stream = stats->Aggregate(
           {.layer_id = {{.spatial_idx = sidx, .temporal_idx = tidx}}});
       stream.LogMetrics(GetGlobalMetricsLogger(), TestName(),
@@ -628,10 +646,9 @@ TEST(VideoCodecTest, DISABLED_EncodeDecode) {
   }
 
   if (absl::GetFlag(FLAGS_write_csv)) {
-    stats->LogMetrics(
-        (rtc::StringBuilder() << TestOutputPath() << ".csv").str(),
-        stats->Slice(Filter{}, /*merge=*/false), /*metadata=*/
-        {{"test_name", TestName()}});
+    stats->LogMetrics((StringBuilder() << TestOutputPath() << ".csv").str(),
+                      stats->Slice(Filter{}, /*merge=*/false), /*metadata=*/
+                      {{"test_name", TestName()}});
   }
 }
 

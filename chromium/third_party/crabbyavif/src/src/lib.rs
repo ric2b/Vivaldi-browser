@@ -13,6 +13,7 @@
 // limitations under the License.
 
 #![deny(unsafe_op_in_unsafe_fn)]
+#![cfg_attr(feature = "disable_cfi", feature(no_sanitize))]
 
 #[macro_use]
 mod internal_utils;
@@ -29,6 +30,8 @@ pub mod capi;
 mod codecs;
 
 mod parser;
+
+use image::*;
 
 // Workaround for https://bugs.chromium.org/p/chromium/issues/detail?id=1516634.
 #[derive(Default)]
@@ -409,3 +412,66 @@ pub(crate) use checked_decr;
 pub(crate) use checked_incr;
 pub(crate) use checked_mul;
 pub(crate) use checked_sub;
+
+#[derive(Clone, Copy, Debug, Default)]
+pub(crate) struct Grid {
+    pub rows: u32,
+    pub columns: u32,
+    pub width: u32,
+    pub height: u32,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub enum Category {
+    #[default]
+    Color,
+    Alpha,
+    Gainmap,
+}
+
+impl Category {
+    const COUNT: usize = 3;
+    const ALL: [Category; Category::COUNT] = [Self::Color, Self::Alpha, Self::Gainmap];
+    const ALL_USIZE: [usize; Category::COUNT] = [0, 1, 2];
+
+    pub(crate) fn usize(self) -> usize {
+        match self {
+            Category::Color => 0,
+            Category::Alpha => 1,
+            Category::Gainmap => 2,
+        }
+    }
+
+    pub fn planes(&self) -> &[Plane] {
+        match self {
+            Category::Alpha => &A_PLANE,
+            _ => &YUV_PLANES,
+        }
+    }
+}
+
+/// cbindgen:rename-all=CamelCase
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+#[repr(C)]
+pub struct PixelAspectRatio {
+    pub h_spacing: u32,
+    pub v_spacing: u32,
+}
+
+/// cbindgen:field-names=[maxCLL, maxPALL]
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct ContentLightLevelInformation {
+    pub max_cll: u16,
+    pub max_pall: u16,
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct Nclx {
+    pub color_primaries: ColorPrimaries,
+    pub transfer_characteristics: TransferCharacteristics,
+    pub matrix_coefficients: MatrixCoefficients,
+    pub yuv_range: YuvRange,
+}
+
+pub const MAX_AV1_LAYER_COUNT: usize = 4;

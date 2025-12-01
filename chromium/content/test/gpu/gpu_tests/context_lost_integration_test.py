@@ -7,7 +7,7 @@ import logging
 import os
 import sys
 import time
-from typing import Any, List, Optional, Set, Tuple
+from typing import Any
 import unittest
 
 from gpu_tests import common_browser_args as cba
@@ -80,7 +80,7 @@ class ContextLostIntegrationTest(gpu_integration_test.GpuIntegrationTest):
   def _SuiteSupportsParallelTests(cls) -> bool:
     return True
 
-  def _GetSerialTests(self) -> Set[str]:
+  def _GetSerialTests(self) -> set[str]:
     serial_tests = {
         # High/low power tests don't work properly with multiple browsers
         # active.
@@ -97,7 +97,7 @@ class ContextLostIntegrationTest(gpu_integration_test.GpuIntegrationTest):
     return serial_tests
 
   @classmethod
-  def GenerateBrowserArgs(cls, additional_args: List[str]) -> List[str]:
+  def GenerateBrowserArgs(cls, additional_args: list[str]) -> list[str]:
     """Adds default arguments to |additional_args|.
 
     See the parent class' method documentation for additional information.
@@ -121,7 +121,7 @@ class ContextLostIntegrationTest(gpu_integration_test.GpuIntegrationTest):
     # Could not figure out how to prevent yapf from breaking the formatting
     # below.
     # yapf: disable
-    tests: Tuple[Tuple[str, str], ...] = (
+    tests: tuple[tuple[str, str], ...] = (
              ('GpuCrash_GPUProcessCrashesExactlyOncePerVisitToAboutGpuCrash',
               'gpu_process_crash.html'),
              ('GpuCrash_GPUProcessCrashesExactlyOnce_SurfaceControlDisabled',
@@ -169,6 +169,7 @@ class ContextLostIntegrationTest(gpu_integration_test.GpuIntegrationTest):
              ('ContextLost_MacWebGLPreserveDBHighPowerSwitchLosesContext',
               'webgl2-preserve-db-high-power-switch-loses-context.html'),
              ('GpuCrash_InfoForHardwareGpu', 'simple.html'),
+             ('GpuCrash_SoftwareFallbackDisabled', 'simple.html'),
              ('GpuCrash_InfoForDualHardwareGpus', 'webgl-high-perf.html'),
              ('ContextLost_WebGPUBlockedAfterJSNavigation',
               'webgpu-domain-blocking-page1.html'),
@@ -208,7 +209,7 @@ class ContextLostIntegrationTest(gpu_integration_test.GpuIntegrationTest):
       timeout *= 2
     return timeout
 
-  def _WaitForPageToFinish(self, tab, timeout: Optional[int] = None) -> bool:
+  def _WaitForPageToFinish(self, tab, timeout: int | None = None) -> bool:
     timeout = timeout or self._GetWaitTimeout()
     try:
       tab.WaitForJavaScriptCondition('window.domAutomationController._finished',
@@ -220,7 +221,7 @@ class ContextLostIntegrationTest(gpu_integration_test.GpuIntegrationTest):
   def _KillGPUProcess(self,
                       number_of_gpu_process_kills: int,
                       check_crash_count: bool,
-                      timeout: Optional[int] = None) -> None:
+                      timeout: int | None = None) -> None:
     timeout = timeout or self._GetWaitTimeout()
     tab = self.tab
     # Doing the GPU process kill operation cooperatively -- in the
@@ -322,8 +323,7 @@ class ContextLostIntegrationTest(gpu_integration_test.GpuIntegrationTest):
     tab.Close()
     return vid
 
-  def _WaitForTabAndCheckCompletion(self,
-                                    timeout: Optional[int] = None) -> None:
+  def _WaitForTabAndCheckCompletion(self, timeout: int | None = None) -> None:
     tab = self.tab
     completed = self._WaitForPageToFinish(tab, timeout=timeout)
     if not completed:
@@ -684,8 +684,10 @@ class ContextLostIntegrationTest(gpu_integration_test.GpuIntegrationTest):
   def _GpuCrash_InfoForHardwareGpu(self, test_path: str) -> None:
     # Ensure that info displayed in chrome:gpu for hardware gpu is correct,
     # after gpu process crashes three times and falls back to SwiftShader.
-    self.RestartBrowserIfNecessaryWithArgs(
-        [cba.DISABLE_DOMAIN_BLOCKING_FOR_3D_APIS])
+    self.RestartBrowserIfNecessaryWithArgs([
+        cba.DISABLE_DOMAIN_BLOCKING_FOR_3D_APIS,
+        '--enable-features=AllowSoftwareGLFallbackDueToCrashes'
+    ])
     self._NavigateAndWaitForLoad(test_path)
     # Check WebGL status at browser startup.
     webgl_status = self._GetWebGLFeatureStatus(False)
@@ -706,6 +708,28 @@ class ContextLostIntegrationTest(gpu_integration_test.GpuIntegrationTest):
     if webgl_status_for_hardware_gpu != 'enabled':
       self.fail('WebGL status for hardware gpu should be "enabled", '
                 'but got %s' % webgl_status_for_hardware_gpu)
+    self._RestartBrowser('must restart after tests that kill the GPU process')
+
+  def _GpuCrash_SoftwareFallbackDisabled(self, test_path: str) -> None:
+    # Ensure that WebGL is using hardware acceleration by default. If the
+    # AllowSoftwareGLFallbackDueToCrashes is disabled and the GPU process
+    # crashes three times then WebGL should be fully disabled.
+    self.RestartBrowserIfNecessaryWithArgs([
+        cba.DISABLE_DOMAIN_BLOCKING_FOR_3D_APIS,
+        '--disable-features=AllowSoftwareGLFallbackDueToCrashes'
+    ])
+    self._NavigateAndWaitForLoad(test_path)
+    # Check WebGL status at browser startup.
+    webgl_status = self._GetWebGLFeatureStatus(False)
+    if webgl_status != 'enabled':
+      self.fail('WebGL should be hardware accelerated initially, but got %s' %
+                webgl_status)
+    # Check WebGL status after three GPU crashes - No software fallback due to
+    # AllowSoftwareGLFallbackDueToCrashes being disabled.
+    self._KillGPUProcess(3, True)
+    webgl_status = self._GetWebGLFeatureStatus(False)
+    if webgl_status != 'disabled_off':
+      self.fail('WebGL should be disabled_off, but got %s' % webgl_status)
     self._RestartBrowser('must restart after tests that kill the GPU process')
 
   def _GpuCrash_InfoForDualHardwareGpus(self, test_path: str) -> None:
@@ -833,7 +857,7 @@ class ContextLostIntegrationTest(gpu_integration_test.GpuIntegrationTest):
     self._RestartBrowser('must restart after tests that kill the GPU process')
 
   @classmethod
-  def ExpectationsFiles(cls) -> List[str]:
+  def ExpectationsFiles(cls) -> list[str]:
     return [
         os.path.join(
             os.path.dirname(os.path.abspath(__file__)), 'test_expectations',

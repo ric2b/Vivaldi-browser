@@ -23,6 +23,7 @@ constexpr char kExcludeType[] = "type";
 constexpr char kSearchEnginesDataVersionRequired[] =
     "kSearchEnginesDataVersionRequired";
 constexpr char kVersion[] = "kVersion";
+constexpr char kType[] = "kType";
 
 }  // namespace
 
@@ -56,6 +57,12 @@ ParsedSearchEnginesPrompt::FromJsonString(std::string_view json_string,
   std::optional<int> version = int_variables->FindInt(kVersion);
   if (!version) {
     error = base::StrCat({"Missing key: ", kVersion});
+    return nullptr;
+  }
+
+  std::string* type = int_variables->FindString(kType);
+  if (!type) {
+    error = base::StrCat({"Missing key: ", kType});
     return nullptr;
   }
 
@@ -140,9 +147,10 @@ ParsedSearchEnginesPrompt::FromJsonString(std::string_view json_string,
   }
 
   return std::unique_ptr<ParsedSearchEnginesPrompt>(
-      new ParsedSearchEnginesPrompt(
-          *maybe_prompt_if_domain, *maybe_prompt_if_type, exclude_if_domain,
-          exclude_if_type, *version, *search_engines_data_version_required));
+      new ParsedSearchEnginesPrompt(*maybe_prompt_if_domain,
+                                    *maybe_prompt_if_type, exclude_if_domain,
+                                    exclude_if_type, *version, *type,
+                                    *search_engines_data_version_required));
 }
 
 ParsedSearchEnginesPrompt::ParsedSearchEnginesPrompt(
@@ -151,12 +159,14 @@ ParsedSearchEnginesPrompt::ParsedSearchEnginesPrompt(
     std::vector<std::string> exclude_if_domain,
     std::set<SearchEngineType> exclude_if_type,
     int version,
+    std::string type,
     int search_engines_data_version_required)
     : prompt_if_domain_(std::move(prompt_if_domain)),
       prompt_if_type_(std::move(prompt_if_type)),
       exclude_if_domain_(std::move(exclude_if_domain)),
       exclude_if_type_(std::move(exclude_if_type)),
       version_(version),
+      type_(std::move(type)),
       search_engines_data_version_required_(
           search_engines_data_version_required) {}
 

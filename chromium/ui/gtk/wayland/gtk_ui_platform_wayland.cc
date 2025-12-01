@@ -37,11 +37,6 @@ void GtkUiPlatformWayland::OnInitialized(GtkWidget* widget) {
   // Nothing to do upon initialization for Wayland.
 }
 
-GdkKeymap* GtkUiPlatformWayland::GetGdkKeymap() {
-  NOTIMPLEMENTED_LOG_ONCE();
-  return nullptr;
-}
-
 GdkModifierType GtkUiPlatformWayland::GetGdkKeyEventState(
     const ui::KeyEvent& key_event) {
   // We first reconstruct the state that was stored as a property by
@@ -158,8 +153,11 @@ GtkUiPlatformWayland::CreateInputMethodContext(
     ui::LinuxInputMethodContextDelegate* delegate) const {
   // GDK3 doesn't have a way to create foreign wayland windows, so we can't
   // translate from ui::KeyEvent to GdkEventKey for InputMethodContextImplGtk.
-  if (!GtkCheckVersion(4))
+  if (!GtkCheckVersion(4) ||
+      // Don't use GTK IME if Wayland protocol IME feature is enabled.
+      base::FeatureList::IsEnabled(features::kWaylandTextInputV3)) {
     return nullptr;
+  }
   return std::make_unique<InputMethodContextImplGtk>(delegate);
 }
 
@@ -167,6 +165,10 @@ bool GtkUiPlatformWayland::IncludeFontScaleInDeviceScale() const {
   // Assume font scaling will be handled by Ozone/Wayland when WaylandUiScale
   // feature is enabled.
   return base::FeatureList::IsEnabled(features::kWaylandUiScale);
+}
+
+bool GtkUiPlatformWayland::IncludeScaleInCursorSize() const {
+  return false;
 }
 
 }  // namespace gtk

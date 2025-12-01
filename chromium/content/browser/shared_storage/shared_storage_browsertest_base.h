@@ -10,6 +10,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "base/memory/raw_ptr.h"
@@ -36,8 +37,6 @@ namespace content {
 
 class SharedStorageBrowserTestBase : public ContentBrowserTest {
  public:
-  using AccessType = TestSharedStorageObserver::AccessType;
-
   using MockPrivateAggregationShellContentBrowserClient =
       MockPrivateAggregationContentBrowserClientBase<
           ContentBrowserTestContentBrowserClient>;
@@ -85,6 +84,19 @@ class SharedStorageBrowserTestBase : public ContentBrowserTest {
 
   void ExecuteScriptInWorklet(
       const ToRenderFrameHost& execution_target,
+      std::string_view script,
+      GURL* out_module_script_url,
+      size_t expected_total_host_count = 1u,
+      bool keep_alive_after_operation = true,
+      std::optional<std::string> context_id = std::nullopt,
+      std::optional<std::string> filtering_id_max_bytes = std::nullopt,
+      std::optional<std::string> max_contributions = std::nullopt,
+      std::string* out_error = nullptr,
+      bool wait_for_operation_finish = true,
+      bool use_add_module = true);
+
+  void ExecuteScriptInWorkletUsingCreateWorklet(
+      const ToRenderFrameHost& execution_target,
       const std::string& script,
       GURL* out_module_script_url,
       size_t expected_total_host_count = 1u,
@@ -124,6 +136,10 @@ class SharedStorageBrowserTestBase : public ContentBrowserTest {
   ~SharedStorageBrowserTestBase() override;
 
  protected:
+  static void WaitForHistogram(const std::string& histogram_name);
+  static void WaitForHistograms(
+      const std::vector<std::string>& histogram_names);
+
   static constexpr double kBudgetAllowed = 5.0;
   static constexpr int kStalenessThresholdDays = 1;
 
@@ -146,6 +162,14 @@ class SharedStorageBrowserTestBase : public ContentBrowserTest {
     });
   }
 )";
+
+  static constexpr char kTimingSelectUrlExecutedInWorkletHistogram[] =
+      "Storage.SharedStorage.Document.Timing.SelectURL.ExecutedInWorklet";
+  static constexpr char kSelectUrlBudgetStatusHistogram[] =
+      "Storage.SharedStorage.Worklet.SelectURL.BudgetStatus";
+
+  static constexpr char kPageWithBlankIframePath[] =
+      "/page_with_blank_iframe.html";
 
   test::FencedFrameTestHelper fenced_frame_test_helper_;
 

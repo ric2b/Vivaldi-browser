@@ -7,7 +7,6 @@ package org.chromium.chrome.modules.readaloud;
 import androidx.annotation.IntDef;
 import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
-
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.util.List;
@@ -25,6 +24,35 @@ public class PlaybackArgs {
     @Nullable private final String mLanguage;
     @Nullable private final List<PlaybackVoice> mVoices;
     private final long mDateModifiedMsSinceEpoch;
+
+    /* The playback mode. Still unused. */
+    private final PlaybackMode mPlaybackMode;
+
+    /** Playback mode. */
+    public enum PlaybackMode {
+        UNSPECIFIED(0),
+        CLASSIC(1),
+        OVERVIEW(2);
+
+        private final int mValue;
+
+        PlaybackMode(int value) {
+            mValue = value;
+        }
+
+        public int getValue() {
+            return mValue;
+        }
+
+        public static PlaybackMode fromValue(int value) {
+            for (PlaybackMode mode : values()) {
+                if (mode.getValue() == value) {
+                    return mode;
+                }
+            }
+            throw new IllegalArgumentException("Unknown value: " + value);
+        }
+    }
 
     /**
      * Encapsulates info about a TTS voice that can be used for playback. Tone is only relevant for
@@ -234,12 +262,23 @@ public class PlaybackArgs {
             @Nullable String language,
             @Nullable List<PlaybackVoice> voices,
             long dateModifiedMsSinceEpoch) {
+        this(mSource, isUrl, language, voices, dateModifiedMsSinceEpoch, PlaybackMode.UNSPECIFIED);
+    }
+
+    public PlaybackArgs(
+            String mSource,
+            boolean isUrl,
+            @Nullable String language,
+            @Nullable List<PlaybackVoice> voices,
+            long dateModifiedMsSinceEpoch,
+            PlaybackMode playbackMode) {
         this.mUrl = mSource;
         this.mSource = mSource;
         this.mIsSourceUrl = isUrl;
         this.mLanguage = language;
         this.mVoices = voices;
         this.mDateModifiedMsSinceEpoch = dateModifiedMsSinceEpoch;
+        this.mPlaybackMode = playbackMode;
     }
 
     /** Returns the URL of the playback page. */
@@ -276,6 +315,11 @@ public class PlaybackArgs {
     /** Represents the website version. */
     public long getDateModifiedMsSinceEpoch() {
         return mDateModifiedMsSinceEpoch;
+    }
+
+    /** Returns the playback mode. */
+    public PlaybackMode getPlaybackMode() {
+        return mPlaybackMode;
     }
 
     // Override toString() to help with debug logging.

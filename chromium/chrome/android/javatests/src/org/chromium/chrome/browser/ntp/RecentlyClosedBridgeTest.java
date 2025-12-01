@@ -27,6 +27,7 @@ import org.chromium.base.test.util.Batch;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.CriteriaHelper;
 import org.chromium.base.test.util.DisableIf;
+import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Features.EnableFeatures;
 import org.chromium.chrome.browser.ChromeTabbedActivity;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
@@ -905,7 +906,7 @@ public class RecentlyClosedBridgeTest {
         final String[] titles = new String[1];
         ThreadUtils.runOnUiThreadBlocking(
                 () -> {
-                    mTabGroupModelFilter.createSingleTabGroup(tabA, /* notify= */ false);
+                    mTabGroupModelFilter.createSingleTabGroup(tabA);
                     mTabGroupModelFilter.setTabGroupTitle(tabA.getId(), "Bar");
                     titles[0] = tabA.getTitle();
                     closeTabs(
@@ -958,7 +959,7 @@ public class RecentlyClosedBridgeTest {
         final String[] titles = new String[1];
         ThreadUtils.runOnUiThreadBlocking(
                 () -> {
-                    mTabGroupModelFilter.createSingleTabGroup(tabA, /* notify= */ false);
+                    mTabGroupModelFilter.createSingleTabGroup(tabA);
                     mTabGroupModelFilter.setTabGroupTitle(tabA.getId(), "Bar");
                     titles[0] = tabA.getTitle();
                     closeTabs(
@@ -1010,7 +1011,7 @@ public class RecentlyClosedBridgeTest {
         final String[] titles = new String[1];
         ThreadUtils.runOnUiThreadBlocking(
                 () -> {
-                    mTabGroupModelFilter.createSingleTabGroup(tabA, /* notify= */ false);
+                    mTabGroupModelFilter.createSingleTabGroup(tabA);
                     mTabGroupModelFilter.setTabGroupTitle(tabA.getId(), "Bar");
                     titles[0] = tabA.getTitle();
                     closeTabs(
@@ -1037,7 +1038,7 @@ public class RecentlyClosedBridgeTest {
         final String[] titles = new String[1];
         ThreadUtils.runOnUiThreadBlocking(
                 () -> {
-                    mTabGroupModelFilter.createSingleTabGroup(tabA, /* notify= */ false);
+                    mTabGroupModelFilter.createSingleTabGroup(tabA);
                     mTabGroupModelFilter.setTabGroupTitle(tabA.getId(), "Bar");
                     titles[0] = tabA.getTitle();
                     closeTabs(
@@ -1056,6 +1057,7 @@ public class RecentlyClosedBridgeTest {
     /** Tests opening a specific closed group and that it persists across restarts. */
     @Test
     @LargeTest
+    @DisabledTest(message = "https://crbug.com/407607684")
     public void testOpenRecentlyClosedEntry_Group_FromGroupClosure_WithRestart() {
         if (mTabGroupModelFilter == null) return;
 
@@ -1625,7 +1627,7 @@ public class RecentlyClosedBridgeTest {
                 () -> {
                     mTabGroupModelFilter.mergeTabsToGroup(tabC.getId(), tabB.getId());
                     mTabGroupModelFilter.setTabGroupTitle(tabB.getId(), "Group 1");
-                    mTabGroupModelFilter.createSingleTabGroup(tabA, true);
+                    mTabGroupModelFilter.createSingleTabGroup(tabA);
                     mTabGroupModelFilter.setTabGroupTitle(tabA.getId(), "Group 2");
                     group2Titles[0] = tabA.getTitle();
                     group1Titles[1] = tabB.getTitle();

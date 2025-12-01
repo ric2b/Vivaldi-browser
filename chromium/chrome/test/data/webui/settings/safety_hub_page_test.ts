@@ -246,7 +246,7 @@ suite('SafetyHubPage', function() {
         isChildVisible(testElement, 'settings-safety-hub-extensions-module'));
   });
 
-  test('Password Card', async function() {
+  test('Password Card', function() {
     assertTrue(isChildVisible(testElement, '#passwords'));
 
     // Card header and subheader should be what the browser proxy provides.
@@ -297,7 +297,7 @@ suite('SafetyHubPage', function() {
     assertEquals(PasswordManagerPage.CHECKUP, param);
   });
 
-  test('Version Card', async function() {
+  test('Version Card', function() {
     assertTrue(isChildVisible(testElement, '#version'));
 
     // Card header and subheader should be what the browser proxy provides.
@@ -367,7 +367,7 @@ suite('SafetyHubPage', function() {
     const dialog = relaunchConfirmationDialogElement.shadowRoot!.querySelector(
         'cr-dialog')!;
     const description =
-        dialog.shadowRoot!.querySelector<HTMLSlotElement>('slot[name=body]')!;
+        dialog.shadowRoot.querySelector<HTMLSlotElement>('slot[name=body]')!;
     assertEquals(
         'Test description.', description.assignedNodes()[0]!.textContent);
 
@@ -385,54 +385,21 @@ suite('SafetyHubPage', function() {
     return lifetimeBrowserProxy.whenCalled('relaunch');
   });
 
-  test('Version Card Clicked via Enter', async function() {
+  test('Version Card Clicked via Enter', function() {
     testElement.$.passwords.dispatchEvent(
         new KeyboardEvent('keydown', {key: 'Enter', bubbles: true}));
     // Ensure the About page is shown.
     assertEquals(routes.ABOUT, Router.getInstance().getCurrentRoute());
   });
 
-  test('Version Card Clicked via Space', async function() {
+  test('Version Card Clicked via Space', function() {
     testElement.$.passwords.dispatchEvent(
         new KeyboardEvent('keydown', {key: ' ', bubbles: true}));
     // Ensure the About page is shown.
     assertEquals(routes.ABOUT, Router.getInstance().getCurrentRoute());
   });
 
-  test('Version Card updates upon Chrome version change', async function() {
-    const safeCardData = versionCardMockData;
-    const warningCardData: CardInfo = {
-      header: 'Chrome is not up to date',
-      subheader: 'Relaunch to update',
-      state: CardState.WARNING,
-    };
-
-    // Assert that Version card's initial state says Chrome is up to date.
-    assertEquals(
-        safeCardData.header,
-        testElement.$.version.shadowRoot!.querySelector(
-                                             '#header')!.textContent!.trim());
-    assertEquals(
-        safeCardData.subheader,
-        testElement.$.version.shadowRoot!.querySelector('#subheader')!
-            .textContent!.trim());
-
-    // Chrome version changes.
-    webUIListenerCallback(
-        SafetyHubEvent.CHROME_VERSION_MAYBE_CHANGED, warningCardData);
-
-    // Assert that Version card's new state says Chrome needs an update.
-    assertEquals(
-        warningCardData.header,
-        testElement.$.version.shadowRoot!.querySelector(
-                                             '#header')!.textContent!.trim());
-    assertEquals(
-        warningCardData.subheader,
-        testElement.$.version.shadowRoot!.querySelector('#subheader')!
-            .textContent!.trim());
-  });
-
-  test('Safe Browsing Card', async function() {
+  test('Safe Browsing Card', function() {
     assertTrue(isChildVisible(testElement, '#safeBrowsing'));
 
     // Card header and subheader should be what the browser proxy provides.
@@ -467,14 +434,14 @@ suite('SafetyHubPage', function() {
     assertEquals(safeBrowsingCardMockData.state, result[1]);
   });
 
-  test('Safe Browsing Card Clicked via Enter', async function() {
+  test('Safe Browsing Card Clicked via Enter', function() {
     testElement.$.passwords.dispatchEvent(
         new KeyboardEvent('keydown', {key: 'Enter', bubbles: true}));
     // Ensure the Security Settings page is shown.
     assertEquals(routes.SECURITY, Router.getInstance().getCurrentRoute());
   });
 
-  test('Safe Browsing Card Clicked via Space', async function() {
+  test('Safe Browsing Card Clicked via Space', function() {
     testElement.$.passwords.dispatchEvent(
         new KeyboardEvent('keydown', {key: ' ', bubbles: true}));
     // Ensure the Security Settings page is shown.

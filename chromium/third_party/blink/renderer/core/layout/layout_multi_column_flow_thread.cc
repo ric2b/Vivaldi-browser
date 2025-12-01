@@ -1075,7 +1075,7 @@ void LayoutMultiColumnFlowThread::ToggleSpannersInSubtree(
   }
 }
 
-LayoutPoint LayoutMultiColumnFlowThread::LocationInternal() const {
+DeprecatedLayoutPoint LayoutMultiColumnFlowThread::LocationInternal() const {
   NOT_DESTROYED();
   if (!HasValidCachedGeometry() && EverHadLayout()) {
     // const_cast in order to update the cached value.
@@ -1096,7 +1096,7 @@ PhysicalSize LayoutMultiColumnFlowThread::Size() const {
 void LayoutMultiColumnFlowThread::UpdateGeometry() {
   NOT_DESTROYED();
   SetHasValidCachedGeometry(true);
-  frame_location_ = LayoutPoint();
+  frame_location_ = DeprecatedLayoutPoint();
   LogicalSize thread_size;
   const LayoutBlockFlow* container = MultiColumnBlockFlow();
   if (container->PhysicalFragmentCount() == 0u) {
@@ -1118,8 +1118,8 @@ void LayoutMultiColumnFlowThread::UpdateGeometry() {
       if (!has_processed_first_column_in_flow_thread) {
         // The offset of the flow thread is the same as that of the first
         // column.
-        frame_location_ = LayoutBoxUtils::ComputeLocation(
-            child_fragment, link.Offset(), container_fragment, break_token);
+        frame_location_ = ComputeBoxLocation(child_fragment, link.Offset(),
+                                             container_fragment, break_token);
 
         thread_size.inline_size = logical_size.inline_size;
         has_processed_first_column_in_flow_thread = true;

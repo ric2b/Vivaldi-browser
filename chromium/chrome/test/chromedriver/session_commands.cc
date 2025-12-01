@@ -350,7 +350,7 @@ Status InitSessionHelper(const InitSessionParams& bound_params,
     base::Value::Dict body;
     body.Set("capabilities", session->capabilities->Clone());
     body.Set("sessionId", session->id);
-    *value = std::make_unique<base::Value>(body.Clone());
+    *value = std::make_unique<base::Value>(std::move(body));
   } else {
     *value = std::make_unique<base::Value>(session->capabilities->Clone());
   }
@@ -410,7 +410,10 @@ Status InitSessionHelper(const InitSessionParams& bound_params,
       }
     }
 
-    status = web_view->StartBidiServer(mapper_script);
+    bool enable_unsafe_extension_debugging =
+        capabilities.switches.HasSwitch("enable-unsafe-extension-debugging");
+    status = web_view->StartBidiServer(mapper_script,
+                                       enable_unsafe_extension_debugging);
     if (status.IsError()) {
       return status;
     }

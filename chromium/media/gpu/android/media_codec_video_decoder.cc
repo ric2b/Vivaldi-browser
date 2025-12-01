@@ -5,6 +5,7 @@
 #include "media/gpu/android/media_codec_video_decoder.h"
 
 #include <memory>
+#include <variant>
 
 #include "base/android/build_info.h"
 #include "base/command_line.h"
@@ -15,6 +16,7 @@
 #include "base/memory/ptr_util.h"
 #include "base/memory/weak_ptr.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/no_destructor.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/task/bind_post_task.h"
 #include "base/task/sequenced_task_runner.h"
@@ -219,10 +221,12 @@ PendingDecode::~PendingDecode() = default;
 // static
 std::vector<SupportedVideoDecoderConfig>
 MediaCodecVideoDecoder::GetSupportedConfigs() {
-  static const auto configs = GenerateSupportedConfigs(
-      DeviceInfo::GetInstance(),
-      base::FeatureList::IsEnabled(media::kAllowMediaCodecSoftwareDecoder));
-  return configs;
+  static const base::NoDestructor<std::vector<SupportedVideoDecoderConfig>>
+      configs(GenerateSupportedConfigs(
+          DeviceInfo::GetInstance(),
+          base::FeatureList::IsEnabled(
+              media::kAllowMediaCodecSoftwareDecoder)));
+  return *configs;
 }
 
 MediaCodecVideoDecoder::MediaCodecVideoDecoder(
@@ -980,7 +984,7 @@ bool MediaCodecVideoDecoder::QueueInput() {
   if (base::FeatureList::IsEnabled(kMediaCodecElideEOS) &&
       pending_buffer->end_of_stream() && pending_buffer->next_config()) {
     const auto new_config =
-        absl::get<VideoDecoderConfig>(*pending_buffer->next_config());
+        std::get<VideoDecoderConfig>(*pending_buffer->next_config());
 
     // The underlying MediaCodec must remain the same in order for us to elide
     // the end of stream flush.

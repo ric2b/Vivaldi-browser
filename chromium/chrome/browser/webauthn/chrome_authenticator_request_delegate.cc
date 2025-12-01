@@ -40,7 +40,6 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_observer.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
-#include "chrome/browser/sync/device_info_sync_service_factory.h"
 #include "chrome/browser/sync/sync_service_factory.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_finder.h"
@@ -48,7 +47,6 @@
 #include "chrome/browser/ui/browser_navigator_params.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/passwords/passwords_client_ui_delegate.h"
-#include "chrome/browser/ui/webauthn/passkey_upgrade_request_controller.h"
 #include "chrome/browser/ui/webauthn/user_actions.h"
 #include "chrome/browser/webauthn/authenticator_request_dialog_controller.h"
 #include "chrome/browser/webauthn/authenticator_request_dialog_model.h"
@@ -68,9 +66,6 @@
 #include "components/signin/public/identity_manager/identity_manager.h"
 #include "components/sync/protocol/webauthn_credential_specifics.pb.h"
 #include "components/sync/service/sync_service.h"
-#include "components/sync_device_info/device_info.h"
-#include "components/sync_device_info/device_info_sync_service.h"
-#include "components/sync_device_info/device_info_tracker.h"
 #include "components/trusted_vault/frontend_trusted_vault_connection.h"
 #include "components/user_prefs/user_prefs.h"
 #include "components/webauthn/core/browser/passkey_model.h"
@@ -100,6 +95,7 @@
 #include "extensions/common/url_pattern.h"
 #include "net/base/registry_controlled_domains/registry_controlled_domain.h"
 #include "net/base/url_util.h"
+#include "third_party/blink/public/mojom/credentialmanagement/credential_type_flags.mojom.h"
 #include "third_party/icu/source/common/unicode/locid.h"
 #include "ui/base/page_transition_types.h"
 #include "ui/base/window_open_disposition.h"
@@ -108,7 +104,6 @@
 #if BUILDFLAG(IS_MAC)
 #include "chrome/browser/webauthn/chrome_authenticator_request_delegate_mac.h"
 #include "device/fido/mac/credential_metadata.h"
-#include "device/fido/mac/icloud_keychain.h"
 #include "third_party/icu/source/i18n/unicode/timezone.h"
 #include "ui/views/widget/widget.h"
 #endif
@@ -122,6 +117,11 @@
 #include "chromeos/components/webauthn/webauthn_request_registrar.h"
 #include "ui/aura/window.h"
 #endif
+
+using PasswordCredentials = PasswordCredentialController::PasswordCredentials;
+using UIPresentation = ChromeAuthenticatorRequestDelegate::UIPresentation;
+using TransportAvailabilityInfo =
+    device::FidoRequestHandlerBase::TransportAvailabilityInfo;
 
 namespace {
 
@@ -216,88 +216,6 @@ class CableLinkingEventHandler : public ProfileObserver {
   raw_ptr<Profile> profile_;
 };
 
-#if BUILDFLAG(IS_MAC)
-
-bool UserDeniedICloudKeychainPermission() {
-  const std::optional<bool> has_permission =
-      device::fido::icloud_keychain::HasPermission();
-  return has_permission && has_permission.value() == false;
-}
-
-bool AccountHasPasskeys(Profile* profile) {
-  webauthn::PasskeyModel* passkey_model =
-      PasskeyModelFactory::GetInstance()->GetForProfile(profile);
-  CHECK(passkey_model);
-  return !passkey_model->IsEmpty();
-}
-
-bool AccountHasNonAppleDevice(Profile* profile) {
-  syncer::DeviceInfoSyncService* const sync_service =
-      DeviceInfoSyncServiceFactory::GetForProfile(profile);
-  if (!sync_service) {
-    return false;
-  }
-
-  syncer::DeviceInfoTracker* const tracker =
-      sync_service->GetDeviceInfoTracker();
-  const std::vector<const syncer::DeviceInfo*> devices =
-      tracker->GetAllDeviceInfo();
-
-  return std::ranges::any_of(devices, [](const auto* device) {
-    switch (device->os_type()) {
-      case syncer::DeviceInfo::OsType::kIOS:
-      case syncer::DeviceInfo::OsType::kMac:
-        return false;
-      default:
-        return true;
-    }
-  });
-}
-
-bool EnclaveCanBeDefault(Profile* profile) {
-  if (AccountHasPasskeys(profile)) {
-    FIDO_LOG(EVENT)
-        << "Enclave can be default because account already has passkeys.";
-    return true;
-  }
-
-  if (AccountHasNonAppleDevice(profile)) {
-    FIDO_LOG(EVENT)
-        << "Enclave can be default because non-Apple device found in Sync.";
-    return true;
-  }
-
-  if (!device::fido::icloud_keychain::IsSupported()) {
-    FIDO_LOG(EVENT)
-        << "Enclave can be default because iCloud Keychain isn't supported.";
-    return true;
-  }
-
-  if (!IsICloudDriveEnabled()) {
-    FIDO_LOG(EVENT)
-        << "Enclave can be default because iCloud Drive isn't enabled.";
-    return true;
-  }
-
-  if (UserDeniedICloudKeychainPermission()) {
-    FIDO_LOG(EVENT) << "Enclave can be default because iCloud Keychain "
-                       "permission is denied.";
-    return true;
-  }
-
-  FIDO_LOG(EVENT) << "Enclave cannot be the default for this request. No "
-                     "enabling conditions apply.";
-  return false;
-}
-
-#else
-
-bool EnclaveCanBeDefault(Profile* profile) {
-  return true;
-}
-
-#endif
-
 bool SkipGpmPasskeyCreationForOwnAccount(
     device::FidoRequestType request_type,
     const std::string& rp_id,
@@ -317,6 +235,23 @@ bool SkipGpmPasskeyCreationForOwnAccount(
          rp_id == kGoogleRpId &&
          (user_name == primary_account_info.email ||
           user_name == account_email_local_part);
+}
+
+bool PasswordsUsable(int credential_types, UIPresentation ui_presentation) {
+  if (!(credential_types &
+        static_cast<int>(blink::mojom::CredentialTypeFlags::kPassword))) {
+    return false;
+  }
+
+  if (base::FeatureList::IsEnabled(device::kWebAuthnAmbientSignin) &&
+      ui_presentation == UIPresentation::kAutofill) {
+    // TODO(https://crbug.com/358119268): This will probably get its own
+    // mediation type, but for prototyping we assume any conditional request
+    // with passwords uses ambient.
+    return true;
+  }
+
+  return ui_presentation == UIPresentation::kModalImmediate;
 }
 
 }  // namespace
@@ -415,7 +350,7 @@ void ChromeAuthenticatorRequestDelegate::SetRelyingPartyId(
 
 void ChromeAuthenticatorRequestDelegate::SetUIPresentation(
     UIPresentation ui_presentation) {
-  dialog_controller_->set_ui_presentation(ui_presentation);
+  dialog_controller_->SetUIPresentation(ui_presentation);
 }
 
 bool ChromeAuthenticatorRequestDelegate::DoesBlockRequestOnFailure(
@@ -532,17 +467,21 @@ void ChromeAuthenticatorRequestDelegate::OnTransactionSuccessful(
 
 void ChromeAuthenticatorRequestDelegate::RegisterActionCallbacks(
     base::OnceClosure cancel_callback,
+    base::OnceClosure immediate_not_found_callback,
     base::RepeatingClosure start_over_callback,
     AccountPreselectedCallback account_preselected_callback,
+    PasswordSelectedCallback password_selected_callback,
     device::FidoRequestHandlerBase::RequestCallback request_callback,
     base::RepeatingClosure bluetooth_adapter_power_on_callback,
     base::RepeatingCallback<
         void(device::FidoRequestHandlerBase::BlePermissionCallback)>
         request_ble_permission_callback) {
-  request_callback_ = request_callback;
   cancel_callback_ = std::move(cancel_callback);
+  immediate_not_found_callback_ = std::move(immediate_not_found_callback);
   start_over_callback_ = std::move(start_over_callback);
   account_preselected_callback_ = std::move(account_preselected_callback);
+  password_selected_callback_ = std::move(password_selected_callback);
+  request_callback_ = request_callback;
 
   dialog_controller_->SetRequestCallback(request_callback);
   dialog_controller_->SetAccountPreselectedCallback(
@@ -551,6 +490,10 @@ void ChromeAuthenticatorRequestDelegate::RegisterActionCallbacks(
       bluetooth_adapter_power_on_callback);
   dialog_controller_->SetRequestBlePermissionCallback(
       request_ble_permission_callback);
+  if (password_controller_) {
+    password_controller_->SetPasswordSelectedCallback(
+        password_selected_callback_);
+  }
 }
 
 void ChromeAuthenticatorRequestDelegate::ConfigureDiscoveries(
@@ -586,12 +529,10 @@ void ChromeAuthenticatorRequestDelegate::ConfigureDiscoveries(
     if (dialog_controller_->ui_presentation() ==
             UIPresentation::kPasskeyUpgrade &&
         enclave_create_enabled) {
-      // Set up the upgrade request controller. This handles enclave
-      // transactions in place of the "regular" GPMEnclaveController.
+      // PasskeyUpgradeRequestController will handle enclave transactions in
+      // place of the "regular" GPMEnclaveController.
       CHECK(!enclave_controller_);
-      PasskeyUpgradeRequestController::GetOrCreateForCurrentDocument(
-          GetRenderFrameHost())
-          ->InitializeEnclaveRequestCallback(discovery_factory);
+      dialog_controller_->InitializeEnclaveRequestCallback(discovery_factory);
       discovery_factory->set_network_context_factory(base::BindRepeating([]() {
         return SystemNetworkContextManager::GetInstance()->GetContext();
       }));
@@ -753,6 +694,23 @@ void ChromeAuthenticatorRequestDelegate::ConfigureDiscoveries(
 #if BUILDFLAG(IS_MAC)
   ConfigureICloudKeychain(request_source, rp_id);
 #endif
+
+  if (PasswordsUsable(credential_types_,
+                      dialog_controller_->ui_presentation())) {
+    // Only valid for the main frame.
+    if (!password_controller_ && GetRenderFrameHost()->IsInPrimaryMainFrame()) {
+      password_controller_ = std::make_unique<PasswordCredentialController>(
+          render_frame_host_id_, dialog_model_.get());
+    }
+    if (!password_controller_) {
+      return;
+    }
+    password_controller_->FetchPasswords(
+        origin.GetURL(),
+        base::BindOnce(
+            &ChromeAuthenticatorRequestDelegate::OnPasswordCredentialsReceived,
+            AsWeakPtr()));
+  }
 }
 
 void ChromeAuthenticatorRequestDelegate::SetHints(
@@ -792,9 +750,9 @@ bool ChromeAuthenticatorRequestDelegate::webauthn_ui_enabled() const {
   return dialog_controller_->ui_presentation() != UIPresentation::kDisabled;
 }
 
-void ChromeAuthenticatorRequestDelegate::SetAmbientCredentialTypes(
+void ChromeAuthenticatorRequestDelegate::SetCredentialTypes(
     int credential_type_flags) {
-  ambient_credential_types_ = credential_type_flags;
+  credential_types_ = credential_type_flags;
 }
 
 void ChromeAuthenticatorRequestDelegate::SetCredentialIdFilter(
@@ -815,7 +773,7 @@ void ChromeAuthenticatorRequestDelegate::ProvideChallengeUrl(
 }
 
 void ChromeAuthenticatorRequestDelegate::OnTransportAvailabilityEnumerated(
-    device::FidoRequestHandlerBase::TransportAvailabilityInfo data) {
+    TransportAvailabilityInfo data) {
   if (g_observer) {
     g_observer->OnPreTransportAvailabilityEnumerated(this);
   }
@@ -824,18 +782,10 @@ void ChromeAuthenticatorRequestDelegate::OnTransportAvailabilityEnumerated(
     return;
   }
 
-  const bool delay_ui_for_gpm =
-      enclave_controller_ && !enclave_controller_->ready_for_ui();
-  if (delay_ui_for_gpm) {
-    // Delay showing UI until GPM state is loaded. It's only after this
-    // point that we know whether GPM will be active for this request or not.
-    pending_transport_availability_info_ = std::make_unique<
-        device::FidoRequestHandlerBase::TransportAvailabilityInfo>(
-        std::move(data));
-    return;
-  }
-
-  ShowUI(std::move(data));
+  pending_transport_availability_info_ = std::make_unique<
+      device::FidoRequestHandlerBase::TransportAvailabilityInfo>(
+      std::move(data));
+  TryToShowUI();
 }
 
 bool ChromeAuthenticatorRequestDelegate::EmbedderControlsAuthenticatorDispatch(
@@ -967,6 +917,11 @@ void ChromeAuthenticatorRequestDelegate::SetMockTimeForTesting(
   timer_task_runner_ = std::move(task_runner);
 }
 
+void ChromeAuthenticatorRequestDelegate::SetPasswordControllerForTesting(
+    std::unique_ptr<PasswordCredentialController> controller) {
+  password_controller_ = std::move(controller);
+}
+
 content::RenderFrameHost*
 ChromeAuthenticatorRequestDelegate::GetRenderFrameHost() const {
   content::RenderFrameHost* ret =
@@ -984,13 +939,61 @@ Profile* ChromeAuthenticatorRequestDelegate::profile() const {
   return Profile::FromBrowserContext(GetRenderFrameHost()->GetBrowserContext());
 }
 
-void ChromeAuthenticatorRequestDelegate::ShowUI(
-    device::FidoRequestHandlerBase::TransportAvailabilityInfo tai) {
+bool ChromeAuthenticatorRequestDelegate::MaybeHandleImmediateMediation(
+    const TransportAvailabilityInfo& data,
+    const PasswordCredentials& passwords) {
+  if (data.request_type != device::FidoRequestType::kGetAssertion ||
+      dialog_controller_->ui_presentation() !=
+          UIPresentation::kModalImmediate) {
+    return false;
+  }
+
+  // Always return not found immediate in incognito.
+  if (profile()->IsOffTheRecord()) {
+    return true;
+  }
+
+  if (data.recognized_credentials.size() + passwords.size() == 0) {
+    return true;
+  }
+
+  return false;
+}
+
+void ChromeAuthenticatorRequestDelegate::TryToShowUI() {
+  if (!pending_transport_availability_info_) {
+    return;
+  }
+  if (enclave_controller_ && !enclave_controller_->ready_for_ui()) {
+    // Delay showing UI until GPM state is loaded. It's only after this
+    // point that we know whether GPM will be active for this request or not.
+    return;
+  }
+  if (PasswordsUsable(credential_types_,
+                      dialog_controller_->ui_presentation()) &&
+      !pending_password_credentials_) {
+    return;
+  }
+  auto tai = std::move(pending_transport_availability_info_);
+  auto passwords = pending_password_credentials_
+                       ? std::move(pending_password_credentials_)
+                       : std::make_unique<PasswordCredentials>();
+  MaybeShowUI(std::move(*tai), std::move(*passwords));
+}
+
+void ChromeAuthenticatorRequestDelegate::MaybeShowUI(
+    TransportAvailabilityInfo tai,
+    PasswordCredentials passwords) {
   if (can_use_synced_phone_passkeys_ ||
       (enclave_controller_ && enclave_controller_->is_active())) {
     GetPhoneContactableGpmPasskeysForRpId(&tai.recognized_credentials);
   }
   FilterRecognizedCredentials(&tai);
+
+  if (MaybeHandleImmediateMediation(tai, passwords)) {
+    std::move(immediate_not_found_callback_).Run();
+    return;
+  }
 
   if (g_observer) {
     g_observer->OnTransportAvailabilityEnumerated(this, &tai);
@@ -1001,15 +1004,9 @@ void ChromeAuthenticatorRequestDelegate::ShowUI(
     return;
   }
 
-  // At the time of writing we don't support GPM passkeys on iOS, so we want to
-  // avoid defaulting to GPM for macOS users who likely have an iPhone. But on
-  // all other platforms, GPM should be the default.
-  dialog_controller_->set_enclave_can_be_default(
-      EnclaveCanBeDefault(profile()));
+  dialog_controller_->SetCredentialTypes(credential_types_);
 
-  dialog_controller_->set_ambient_credential_types(ambient_credential_types_);
-
-  dialog_controller_->StartFlow(std::move(tai));
+  dialog_controller_->StartFlow(std::move(tai), std::move(passwords));
 
   if (g_observer) {
     g_observer->UIShown(this);
@@ -1017,15 +1014,7 @@ void ChromeAuthenticatorRequestDelegate::ShowUI(
 }
 
 void ChromeAuthenticatorRequestDelegate::OnReadyForUI() {
-  if (!pending_transport_availability_info_) {
-    return;
-  }
-
-  auto pending_transport_availability_info =
-      std::move(pending_transport_availability_info_);
-  pending_transport_availability_info_.reset();
-
-  ShowUI(std::move(*pending_transport_availability_info));
+  TryToShowUI();
 }
 
 bool ChromeAuthenticatorRequestDelegate::ShouldPermitCableExtension(
@@ -1093,12 +1082,13 @@ void ChromeAuthenticatorRequestDelegate::GetPhoneContactableGpmPasskeysForRpId(
         device::PublicKeyCredentialUserEntity(
             std::vector<uint8_t>(passkey.user_id().begin(),
                                  passkey.user_id().end()),
-            passkey.user_name(), passkey.user_display_name()));
+            passkey.user_name(), passkey.user_display_name()),
+        /*provider_name=*/std::nullopt);
   }
 }
 
 void ChromeAuthenticatorRequestDelegate::FilterRecognizedCredentials(
-    device::FidoRequestHandlerBase::TransportAvailabilityInfo* tai) {
+    TransportAvailabilityInfo* tai) {
   if (dialog_model()->relying_party_id == kGoogleRpId &&
       tai->has_empty_allow_list &&
       std::ranges::any_of(tai->recognized_credentials,
@@ -1130,6 +1120,20 @@ void ChromeAuthenticatorRequestDelegate::FilterRecognizedCredentials(
       }
     }
     tai->recognized_credentials = std::move(filtered_list);
+  }
+
+  const auto kImmediateTypes =
+      std::unordered_set{device::AuthenticatorType::kEnclave,
+                         device::AuthenticatorType::kICloudKeychain,
+                         device::AuthenticatorType::kWinNative,
+                         device::AuthenticatorType::kChromeOS,
+                         device::AuthenticatorType::kTouchID};
+  if (dialog_controller_->ui_presentation() ==
+      UIPresentation::kModalImmediate) {
+    std::erase_if(tai->recognized_credentials,
+                  [&kImmediateTypes](const auto& passkey) {
+                    return !kImmediateTypes.contains(passkey.source);
+                  });
   }
 }
 
@@ -1237,8 +1241,7 @@ void ChromeAuthenticatorRequestDelegate::ConfigureNSWindow(
   if (widget) {
     const gfx::NativeWindow window = widget->GetNativeWindow();
     if (window) {
-      discovery_factory->set_nswindow(
-          reinterpret_cast<uintptr_t>(window.GetNativeNSWindow()));
+      discovery_factory->set_nswindow(window);
     }
   }
 }
@@ -1262,3 +1265,10 @@ void ChromeAuthenticatorRequestDelegate::ConfigureICloudKeychain(
 }
 
 #endif
+
+void ChromeAuthenticatorRequestDelegate::OnPasswordCredentialsReceived(
+    PasswordCredentials credentials) {
+  pending_password_credentials_ =
+      std::make_unique<PasswordCredentials>(std::move(credentials));
+  TryToShowUI();
+}

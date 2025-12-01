@@ -6,6 +6,8 @@
 #define V8_API_API_ARGUMENTS_INL_H_
 
 #include "src/api/api-arguments.h"
+// Include the non-inl header before the rest of the headers.
+
 #include "src/api/api-inl.h"
 #include "src/debug/debug.h"
 #include "src/execution/vm-state-inl.h"
@@ -40,10 +42,6 @@ inline Tagged<JSObject> PropertyCallbackArguments::holder() const {
 
 inline Tagged<Object> PropertyCallbackArguments::receiver() const {
   return *slot_at(T::kThisIndex);
-}
-
-inline Tagged<JSReceiver> FunctionCallbackArguments::holder() const {
-  return Cast<JSReceiver>(*slot_at(T::kHolderIndex));
 }
 
 #define DCHECK_NAME_COMPATIBLE(interceptor, name) \

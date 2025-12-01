@@ -12,7 +12,6 @@
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/run_until.h"
 #include "build/build_config.h"
-#include "build/chromeos_buildflags.h"
 #include "chrome/browser/password_manager/chrome_password_manager_client.h"
 #include "chrome/browser/password_manager/password_manager_interactive_test_base.h"
 #include "chrome/browser/password_manager/passwords_navigation_observer.h"
@@ -153,10 +152,10 @@ IN_PROC_BROWSER_TEST_F(PasswordManagerInteractiveTest,
 
   FillElementWithValue("password_field", "123");
   BubbleObserver prompt_observer(WebContents());
-  prompt_observer.WaitForFallbackForSaving();
 
   // Since the timeout is changed to zero for testing, the save prompt should be
-  // hidden right after show.
+  // hidden right after show. Potentially the manual fallback state is not
+  // caught by the test.
   prompt_observer.WaitForInactiveState();
   EXPECT_FALSE(prompt_observer.IsSavePromptAvailable());
 }
@@ -191,8 +190,8 @@ IN_PROC_BROWSER_TEST_F(PasswordManagerInteractiveTest,
 
   NavigateToFile("/password/password_form.html");
 
-  SimulateUserDeletingFieldContent("password_field");
-  FillElementWithValue("password_field", "123");
+  SimulateUserDeletingFieldContent("username_field");
+  FillElementWithValue("username_field", "123");
   BubbleObserver prompt_observer(WebContents());
   prompt_observer.WaitForFallbackForSaving();
 
@@ -359,9 +358,11 @@ IN_PROC_BROWSER_TEST_F(PasswordManagerInteractiveTest,
   // Instruct Chrome to show the password dropdown.
   autofill::FormData form;
   driver->ShowPasswordSuggestions(autofill::PasswordSuggestionRequest(
-      kElementId, form,
-      autofill::AutofillSuggestionTriggerSource::kFormControlElementClicked, 0,
-      0, base::i18n::LEFT_TO_RIGHT, std::u16string(), false, element_bounds));
+      autofill::TriggeringField(
+          kElementId,
+          autofill::AutofillSuggestionTriggerSource::kFormControlElementClicked,
+          base::i18n::LEFT_TO_RIGHT, std::u16string(), false, element_bounds),
+      form, 0, 0));
   autofill::AutofillSuggestionController* controller = nullptr;
   // Showing the Autofill Popup is an asynchronous task.
   EXPECT_TRUE(base::test::RunUntil([&]() {
@@ -386,9 +387,11 @@ IN_PROC_BROWSER_TEST_F(PasswordManagerInteractiveTest,
   WaitForPasswordStore();
   // Reshow the dropdown.
   driver->ShowPasswordSuggestions(autofill::PasswordSuggestionRequest(
-      kElementId, form,
-      autofill::AutofillSuggestionTriggerSource::kFormControlElementClicked, 0,
-      0, base::i18n::LEFT_TO_RIGHT, std::u16string(), false, element_bounds));
+      autofill::TriggeringField(
+          kElementId,
+          autofill::AutofillSuggestionTriggerSource::kFormControlElementClicked,
+          base::i18n::LEFT_TO_RIGHT, std::u16string(), false, element_bounds),
+      form, 0, 0));
   // Showing the Autofill Popup is an asynchronous task.
   EXPECT_TRUE(base::test::RunUntil([&]() {
     return controller =
@@ -410,9 +413,11 @@ IN_PROC_BROWSER_TEST_F(PasswordManagerInteractiveTest,
   WaitForPasswordStore();
   // Reshow the dropdown won't work because there is nothing to suggest.
   driver->ShowPasswordSuggestions(autofill::PasswordSuggestionRequest(
-      kElementId, form,
-      autofill::AutofillSuggestionTriggerSource::kFormControlElementClicked, 0,
-      0, base::i18n::LEFT_TO_RIGHT, std::u16string(), false, element_bounds));
+      autofill::TriggeringField(
+          kElementId,
+          autofill::AutofillSuggestionTriggerSource::kFormControlElementClicked,
+          base::i18n::LEFT_TO_RIGHT, std::u16string(), false, element_bounds),
+      form, 0, 0));
   // Showing the Autofill Popup is an asynchronous task.
   base::RunLoop().RunUntilIdle();
   EXPECT_FALSE(autofill_client->suggestion_controller_for_testing());

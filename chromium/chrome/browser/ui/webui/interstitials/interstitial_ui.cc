@@ -5,9 +5,11 @@
 #include "chrome/browser/ui/webui/interstitials/interstitial_ui.h"
 
 #include <memory>
+#include <optional>
 #include <utility>
 
 #include "base/atomic_sequence_num.h"
+#include "base/functional/callback_helpers.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted_memory.h"
 #include "base/strings/string_number_conversions.h"
@@ -51,6 +53,7 @@
 #include "components/security_interstitials/core/unsafe_resource_locator.h"
 #include "components/supervised_user/core/browser/supervised_user_error_page.h"  // nogncheck
 #include "components/supervised_user/core/browser/supervised_user_interstitial.h"
+#include "components/supervised_user/core/browser/supervised_user_service.h"
 #include "components/supervised_user/core/browser/supervised_user_utils.h"
 #include "content/public/browser/global_routing_id.h"
 #include "content/public/browser/render_frame_host.h"
@@ -88,8 +91,7 @@ using security_interstitials::TestSafeBrowsingBlockingPageQuiet;
 using security_interstitials::UnsafeResourceLocator;
 
 InterstitialUIConfig::InterstitialUIConfig()
-    : DefaultWebUIConfig(content::kChromeUIScheme,
-                         chrome::kChromeUIInterstitialHost) {}
+    : DefaultInternalWebUIConfig(chrome::kChromeUIInterstitialHost) {}
 
 namespace {
 
@@ -287,12 +289,27 @@ CreateInsecureFormPage(content::WebContents* web_contents) {
 std::unique_ptr<security_interstitials::HttpsOnlyModeBlockingPage>
 CreateHttpsOnlyModePage(content::WebContents* web_contents) {
   GURL request_url("http://example.com");
+  std::string type_param;
+  security_interstitials::https_only_mode::HttpInterstitialState state;
+  if (net::GetValueForKeyInQuery(web_contents->GetVisibleURL(), "type",
+                                 &type_param)) {
+    if (type_param == "advanced_protection") {
+      state.enabled_by_advanced_protection = true;
+    } else if (type_param == "site_engagement") {
+      state.enabled_by_engagement_heuristic = true;
+    } else if (type_param == "typically_secure") {
+      state.enabled_by_typically_secure_browsing = true;
+    } else if (type_param == "incognito") {
+      state.enabled_by_incognito = true;
+    }
+  }
   return std::make_unique<security_interstitials::HttpsOnlyModeBlockingPage>(
       web_contents, request_url,
       std::make_unique<HttpsOnlyModeControllerClient>(web_contents,
                                                       request_url),
-      security_interstitials::https_only_mode::HttpInterstitialState{},
-      /*use_new_interstitial=*/IsNewHttpsFirstModeInterstitialEnabled());
+      state,
+      /*use_new_interstitial=*/IsNewHttpsFirstModeInterstitialEnabled(),
+      /*metrics_callback=*/base::DoNothing());
 }
 
 #if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
@@ -657,9 +674,10 @@ void InterstitialHTMLSource::StartDataRequest(
         CreateSafeBrowsingQuietBlockingPage(web_contents);
     html = blocking_page->GetHTML();
     interstitial_delegate = std::move(blocking_page);
-  } else
-#endif
+  } else if (path_without_query == "/supervised-user-ask-parent") {
+#else
   if (path_without_query == "/supervised-user-ask-parent") {
+#endif
     html = GetSupervisedUserInterstitialHTML(path);
   } else if (interstitial_delegate.get()) {
     html = interstitial_delegate.get()->GetHTMLContents();
@@ -683,10 +701,10 @@ std::string InterstitialHTMLSource::GetSupervisedUserInterstitialHTML(
     allow_access_requests = allow_access_requests_string == "1";
   }
 
-  std::string custodian = "Alice";
-  net::GetValueForKeyInQuery(url, "custodian", &custodian);
-  std::string second_custodian = "Bob";
-  net::GetValueForKeyInQuery(url, "second_custodian", &second_custodian);
+  std::string custodian_name = "Alice";
+  net::GetValueForKeyInQuery(url, "custodian", &custodian_name);
+  std::string second_custodian_name = "Bob";
+  net::GetValueForKeyInQuery(url, "second_custodian", &second_custodian_name);
   std::string custodian_email = "alice.bloggs@gmail.com";
   net::GetValueForKeyInQuery(url, "custodian_email", &custodian_email);
   std::string second_custodian_email = "bob.bloggs@gmail.com";
@@ -710,10 +728,14 @@ std::string InterstitialHTMLSource::GetSupervisedUserInterstitialHTML(
     }
   }
 
+  supervised_user::Custodian first_custodian(custodian_name, custodian_email,
+                                             profile_image_url);
+  supervised_user::Custodian second_custodian(
+      second_custodian_name, second_custodian_email, profile_image_url2);
+
   return supervised_user::BuildErrorPageHtml(
-      allow_access_requests, profile_image_url, profile_image_url2, custodian,
-      custodian_email, second_custodian, second_custodian_email, reason,
+      allow_access_requests, first_custodian, second_custodian, reason,
       g_browser_process->GetApplicationLocale(),
       /*already_sent_remote_request=*/false,
-      /*is_main_frame=*/true);
+      /*is_main_frame=*/true, /*ios_font_size_multiplier=*/std::nullopt);
 }

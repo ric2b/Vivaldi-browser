@@ -36,7 +36,6 @@
 #include "content/public/browser/url_data_source.h"
 #include "content/public/browser/web_ui.h"
 #include "content/public/browser/web_ui_data_source.h"
-#include "content/public/common/user_agent.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/webui/web_ui_util.h"
 #include "ui/webui/webui_util.h"
@@ -52,6 +51,7 @@
 #endif
 
 #if BUILDFLAG(IS_CHROMEOS)
+#include "build/util/LASTCHANGE_commit_position.h"
 #include "chrome/browser/ui/webui/version/version_handler_chromeos.h"
 #endif
 
@@ -133,6 +133,16 @@ std::string GetProductModifier() {
   modifier_parts.emplace_back("dcheck");
 #endif  // BUILDFLAG(DCHECK_IS_CONFIGURABLE)
   return base::JoinString(modifier_parts, "-");
+}
+
+std::string GetVersionInformationalSuffix() {
+#if BUILDFLAG(IS_CHROMEOS) && CHROMIUM_COMMIT_POSITION_IS_MAIN
+  // Adds the revision number as a suffix to the version number if the chrome
+  // is built from the main branch.
+  return "-r" CHROMIUM_COMMIT_POSITION_NUMBER;
+#else
+  return "";
+#endif
 }
 
 }  // namespace
@@ -217,7 +227,9 @@ void VersionUI::AddVersionDetailStrings(content::WebUIDataSource* html_source) {
 
   // Data strings.
   html_source->AddString(version_ui::kVersion,
-                         std::string(version_info::GetVersionNumber()));
+                         version_info::GetVersionNumber());
+  html_source->AddString(version_ui::kVersionSuffix,
+                         GetVersionInformationalSuffix());
 
   html_source->AddString(version_ui::kVersionModifier, GetProductModifier());
 
@@ -228,21 +240,19 @@ void VersionUI::AddVersionDetailStrings(content::WebUIDataSource* html_source) {
       base::i18n::MessageFormatter::FormatWithNumberedArgs(
           l10n_util::GetStringUTF16(IDS_ABOUT_VERSION_COPYRIGHT),
           base::Time::Now()));
-  html_source->AddString(version_ui::kCL,
-                         std::string(version_info::GetLastChange()));
+  html_source->AddString(version_ui::kCL, version_info::GetLastChange());
   html_source->AddString(version_ui::kUserAgent,
                          embedder_support::GetUserAgent());
   // Note that the executable path and profile path are retrieved asynchronously
   // and returned in VersionHandler::OnGotFilePaths. The area is initially
   // blank.
-  html_source->AddString(version_ui::kExecutablePath, std::string());
-  html_source->AddString(version_ui::kProfilePath, std::string());
+  html_source->AddString(version_ui::kExecutablePath, std::string_view());
+  html_source->AddString(version_ui::kProfilePath, std::string_view());
 
 #if BUILDFLAG(IS_MAC)
   html_source->AddString(version_ui::kOSType, base::mac::GetOSDisplayName());
 #elif !BUILDFLAG(IS_CHROMEOS)
-  html_source->AddString(version_ui::kOSType,
-                         std::string(version_info::GetOSType()));
+  html_source->AddString(version_ui::kOSType, version_info::GetOSType());
 #endif  // BUILDFLAG(IS_MAC)
 
 #if BUILDFLAG(IS_ANDROID)
@@ -272,7 +282,7 @@ void VersionUI::AddVersionDetailStrings(content::WebUIDataSource* html_source) {
           base::CommandLine::ForCurrentProcess()->GetCommandLineString()));
 #else
   std::string command_line;
-  typedef std::vector<std::string> ArgvList;
+  using ArgvList = std::vector<std::string>;
   const ArgvList& argv = base::CommandLine::ForCurrentProcess()->argv();
   for (const auto& iter : argv) {
     command_line += " " + iter;
@@ -299,7 +309,7 @@ void VersionUI::AddVersionDetailStrings(content::WebUIDataSource* html_source) {
           : std::string());
 
   html_source->AddString(version_ui::kSanitizer,
-                         std::string(version_info::GetSanitizerList()));
+                         version_info::GetSanitizerList());
 }
 
 #if !BUILDFLAG(IS_ANDROID)
@@ -308,6 +318,7 @@ std::u16string VersionUI::GetAnnotatedVersionStringForUi() {
   return l10n_util::GetStringFUTF16(
       IDS_SETTINGS_ABOUT_PAGE_BROWSER_VERSION,
       base::UTF8ToUTF16(vivaldi::GetVivaldiVersionString()),
+      base::UTF8ToUTF16(GetVersionInformationalSuffix()),
       l10n_util::GetStringUTF16(version_info::IsOfficialBuild()
                                     ? IDS_VERSION_UI_OFFICIAL
                                     : IDS_VERSION_UI_UNOFFICIAL),

@@ -1,11 +1,15 @@
-"""Build rules for XLA testing."""
+"""Build rules for XLA testing. This file is only used for the OSS build."""
 
-load("//xla:xla.bzl", "xla_cc_test")
+load("//xla:xla.default.bzl", "xla_cc_test")
 load("//xla/tests:plugin.bzl", "plugins")
+load("//xla/tsl:package_groups.bzl", "DEFAULT_LOAD_VISIBILITY")
 load(
     "//xla/tsl/platform:build_config_root.bzl",
     "tf_gpu_tests_tags",
 )
+load("//xla/tsl/platform/default:build_config.bzl", "strict_cc_test")
+
+visibility(DEFAULT_LOAD_VISIBILITY)
 
 # Possible backend values for the GPU family.
 NVIDIA_GPU_BACKENDS = [
@@ -14,7 +18,7 @@ NVIDIA_GPU_BACKENDS = [
     "gpu_v100",
     "gpu_a100",
     "gpu_h100",
-    "gpu_b100",
+    "gpu_b200",
 ]
 
 # The generic "gpu" backend includes the actual backends in this list.
@@ -22,7 +26,7 @@ NVIDIA_GPU_DEFAULT_BACKENDS = [
     "gpu_any",
     "gpu_a100",
     "gpu_h100",
-    "gpu_b100",
+    "gpu_b200",
 ]
 
 AMD_GPU_DEFAULT_BACKENDS = ["gpu_amd_any"]
@@ -65,7 +69,7 @@ def prepare_nvidia_gpu_backend_data(backends, disabled_backends, backend_tags, b
         "gpu_v100": (7, 0),
         "gpu_a100": (8, 0),
         "gpu_h100": (9, 0),
-        "gpu_b100": (10, 0),
+        "gpu_b200": (10, 0),
     }
     for gpu_backend in NVIDIA_GPU_BACKENDS:
         all_tags = new_backend_tags[gpu_backend]
@@ -191,8 +195,12 @@ def xla_test(
         backend_tags = {},
         backend_args = {},
         backend_kwargs = {},
+        # Inside Google, we link statically to catch duplicate main() definitions.
+        # However, this increases the size of the test binary, which breaks Nvidia's build.
+        # Therefore we use dynamic linking outside Google.
+        linkstatic = False,
         **kwargs):
-    """Generates cc_test targets for the given XLA backends.
+    """Generates strict_cc_test targets for the given XLA backends.
 
     This rule generates a cc_test target for one or more XLA backends. The arguments
     are identical to cc_test with two additions: 'backends' and 'backend_args'.
@@ -210,6 +218,10 @@ def xla_test(
     Each generated cc_test target has a tag indicating which backend the test is
     for. This tag is of the form "xla_${BACKEND}" (eg, "xla_cpu"). These
     tags can be used to gather tests for a particular backend into a test_suite.
+
+    Use xla_test instead of cc_test or xla_cc_test in all tests that need to run
+    on specific XLA backends. Do not use xla_test in .../tsl/... directories,
+    where tsl_cc_test should be used instead.
 
     Examples:
 
@@ -254,9 +266,10 @@ def xla_test(
       backend_args: A dict mapping backend name to list of additional args to
         use for that target.
       backend_kwargs: A dict mapping backend name to list of additional keyword
-        arguments to pass to native.cc_test. Only use for kwargs that don't have a
+        arguments to pass to strict_cc_test. Only use for kwargs that don't have a
         dedicated argument, like setting per-backend flaky or timeout attributes.
-      **kwargs: Additional keyword arguments to pass to native.cc_test.
+      linkstatic: Whether to link the test statically.
+      **kwargs: Additional keyword arguments to pass to strict_cc_test.
     """
 
     test_names = []
@@ -297,8 +310,16 @@ def xla_test(
             ]
             if backend in NVIDIA_GPU_BACKENDS:
                 this_backend_tags += tf_gpu_tests_tags()
+                backend_deps += [
+                    "//xla/stream_executor/cuda:all_runtime",
+                    "//xla/stream_executor/cuda:stream_executor_cuda",
+                ]
             if backend in AMD_GPU_DEFAULT_BACKENDS:
                 this_backend_tags.append("gpu")
+                backend_deps += [
+                    "//xla/stream_executor/rocm:all_runtime",
+                    "//xla/stream_executor/rocm:stream_executor_rocm",
+                ]
             this_backend_copts.append("-DXLA_TEST_BACKEND_GPU=1")
 
             # TODO: b/382779188 - Remove this when all tests are migrated to PjRt.
@@ -335,6 +356,7 @@ def xla_test(
             args = args + this_backend_args,
             deps = deps + backend_deps,
             data = data + this_backend_data,
+            linkstatic = linkstatic,
             **this_backend_kwargs
         )
 
@@ -364,14 +386,20 @@ def xla_test(
     if test_names:
         native.test_suite(name = name, tags = tags + ["manual"], tests = test_names)
     else:
-        native.cc_test(name = name, deps = ["@com_google_googletest//:gtest_main"])
+        strict_cc_test(
+            name = name,
+            deps = ["@com_google_googletest//:gtest_main"],
+            linkstatic = linkstatic,
+            **kwargs
+        )
 
 def xla_test_library(
         name,
         srcs,
         hdrs = [],
         deps = [],
-        backends = []):
+        backends = [],
+        **kwargs):
     """Generates cc_library targets for the given XLA backends.
 
     This rule forces the sources to be compiled for each backend so that the
@@ -405,6 +433,7 @@ def xla_test_library(
       backends: A list of backends to generate libraries for.
         Supported values: "cpu", "gpu". If this list is empty, the
         library will be generated for all supported backends.
+      **kwargs: Additional keyword arguments to pass to native.cc_library.
     """
 
     if not backends:
@@ -432,6 +461,7 @@ def xla_test_library(
             copts = ["-DXLA_TEST_BACKEND_%s=1" % backend.upper()] +
                     this_backend_copts,
             deps = deps + backend_deps,
+            **kwargs
         )
 
 def generate_backend_suites(backends = []):  # buildifier: disable=unnamed-macro

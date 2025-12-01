@@ -9,6 +9,7 @@
 #include "content/browser/web_contents/web_contents_impl.h"  // nogncheck
 
 #include "app/vivaldi_constants.h"
+#include "extensions/vivaldi_browser_component_wrapper.h"
 #include "ui/vivaldi_browser_window.h"
 
 namespace extensions {
@@ -20,7 +21,8 @@ ExtensionFunction::ResponseAction EditcommandExecuteFunction::Run() {
   EXTENSION_FUNCTION_VALIDATE(params);
 
   VivaldiBrowserWindow* window =
-      VivaldiBrowserWindow::FromId(params->window_id);
+      VivaldiBrowserComponentWrapper::GetInstance()->
+          VivaldiBrowserWindowFromId(params->window_id);
   if (!window) {
     return RespondNow(Error("No such window"));
   }

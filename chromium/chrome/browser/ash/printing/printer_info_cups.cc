@@ -14,6 +14,7 @@
 #include "base/version.h"
 #include "chrome/browser/ash/printing/printer_info.h"
 #include "chromeos/printing/cups_printer_status.h"
+#include "chromeos/printing/printer_configuration.h"
 #include "printing/backend/cups_jobs.h"
 #include "printing/printer_status.h"
 
@@ -86,15 +87,23 @@ void OnPrinterQueried(ash::PrinterInfoCallback callback,
     std::move(callback).Run(result, ::printing::PrinterStatus(),
                             /*make_and_model=*/std::string(),
                             /*document_formats=*/{}, /*ipp_everywhere=*/false,
-                            chromeos::PrinterAuthenticationInfo{});
+                            chromeos::PrinterAuthenticationInfo{},
+                            chromeos::IppPrinterInfo{});
     return;
   }
-
-  std::move(callback).Run(result, printer_status, printer_info.make_and_model,
-                          printer_info.document_formats,
-                          IsAutoconf(printer_info),
-                          {.oauth_server = printer_info.oauth_server,
-                           .oauth_scope = printer_info.oauth_scope});
+  std::move(callback).Run(
+      result, printer_status, printer_info.make_and_model,
+      printer_info.document_formats, IsAutoconf(printer_info),
+      {.oauth_server = printer_info.oauth_server,
+       .oauth_scope = printer_info.oauth_scope},
+      {/*document_formats=*/printer_info.document_formats,
+       /*document_format_default=*/printer_info.document_format_default,
+       /*document_format_preferred=*/printer_info.document_format_preferred,
+       /*urf_supported=*/printer_info.urf_supported,
+       /*pdf_versions=*/printer_info.pdf_versions,
+       /*ipp_features=*/printer_info.ipp_features,
+       /*mopria_certified=*/printer_info.mopria_certified,
+       /*printer_kind=*/printer_info.printer_kind});
 }
 
 }  // namespace

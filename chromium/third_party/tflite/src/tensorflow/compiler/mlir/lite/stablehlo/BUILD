@@ -192,7 +192,6 @@ cc_library(
         "@llvm-project//mlir:TensorDialect",
         "@llvm-project//mlir:TransformUtils",
         "@local_tsl//tsl/platform:bfloat16",
-        "@local_tsl//tsl/platform:status",
         "@local_tsl//tsl/platform:tensor_float_32_hdr_lib",
         "@local_xla//xla:xla_data_proto_cc",
         "@local_xla//xla/client:padding",
@@ -202,6 +201,7 @@ cc_library(
         "@local_xla//xla/mlir_hlo",
         "@local_xla//xla/mlir_hlo:convert_op_folder",
         "@local_xla//xla/translate/hlo_to_mhlo:attribute_importer",
+        "@local_xla//xla/tsl/platform:status",
         "@stablehlo//:chlo_ops",
     ] + if_static(["@local_tsl//tsl/platform:tensor_float_32_utils"]),
 )
@@ -281,17 +281,19 @@ cc_library(
     ],
     deps = [
         ":drop_savedmodel_semantics",
-        ":fold_broadcast_pass",
-        ":fuse_convolution_pass",
         ":legalize_stablehlo_custom_call_to_composite",
         ":legalize_tf_xla_call_module_to_stablehlo_pass",
         ":optimize",
         ":rename_entrypoint_to_main",
         ":smuggle_disallowed_ops",
+        ":stablehlo_fuse_convolution_pass",
+        ":stablehlo_unfuse_batch_norm_pass",
         ":tf_stablehlo",
         ":unfold_splat_constant_pass",
-        ":unfuse_batch_norm_pass",
         "//tensorflow/compiler/mlir/quantization/stablehlo:bridge_passes",
+        "//tensorflow/compiler/mlir/stablehlo:fold_broadcast_pass",
+        "//tensorflow/compiler/mlir/stablehlo:fuse_convolution_pass",
+        "//tensorflow/compiler/mlir/stablehlo:unfuse_batch_norm_pass",
         "//tensorflow/compiler/mlir/tensorflow/transforms:tensorflow_passes",
         "//tensorflow/compiler/mlir/tensorflow/transforms:tf_saved_model_passes",
         "//tensorflow/compiler/mlir/tf2xla/transforms:tf_xla_passes",
@@ -388,9 +390,9 @@ cc_library(
 )
 
 cc_library(
-    name = "unfuse_batch_norm_pass",
+    name = "stablehlo_unfuse_batch_norm_pass",
     srcs = [
-        "transforms/unfuse_batch_norm_pass.cc",
+        "transforms/stablehlo_unfuse_batch_norm_pass.cc",
     ],
     hdrs = [
         "transforms/stablehlo_passes.h",
@@ -400,50 +402,23 @@ cc_library(
     ],
     deps = [
         ":passes_inc_gen",
+        "//tensorflow/compiler/mlir/tensorflow",
         "//tensorflow/compiler/mlir/tensorflow:tensorflow_ops",
-        "//tensorflow/compiler/mlir/tensorflow:tensorflow_types",
-        "@llvm-project//llvm:Support",
         "@llvm-project//mlir:FuncDialect",
         "@llvm-project//mlir:IR",
         "@llvm-project//mlir:Pass",
         "@llvm-project//mlir:ShapeDialect",
         "@llvm-project//mlir:Support",
         "@llvm-project//mlir:TransformUtils",
-        "@llvm-project//mlir:Transforms",
-        "@local_xla//xla/mlir_hlo",
+        "@stablehlo//:stablehlo_ops",
     ],
     alwayslink = 1,
 )
 
 cc_library(
-    name = "fold_broadcast_pass",
+    name = "stablehlo_fuse_convolution_pass",
     srcs = [
-        "transforms/fold_broadcast_pass.cc",
-    ],
-    hdrs = [
-        "transforms/stablehlo_passes.h",
-    ],
-    copts = [
-        "-Ithird_party",
-    ],
-    deps = [
-        ":passes_inc_gen",
-        "@llvm-project//llvm:Support",
-        "@llvm-project//mlir:FuncDialect",
-        "@llvm-project//mlir:IR",
-        "@llvm-project//mlir:Pass",
-        "@llvm-project//mlir:Support",
-        "@llvm-project//mlir:TransformUtils",
-        "@llvm-project//mlir:Transforms",
-        "@local_xla//xla/mlir_hlo",
-    ],
-    alwayslink = 1,
-)
-
-cc_library(
-    name = "fuse_convolution_pass",
-    srcs = [
-        "transforms/fuse_convolution_pass.cc",
+        "transforms/stablehlo_fuse_convolution_pass.cc",
     ],
     hdrs = [
         "transforms/stablehlo_passes.h",
@@ -463,8 +438,7 @@ cc_library(
         "@llvm-project//mlir:ShapeDialect",
         "@llvm-project//mlir:Support",
         "@llvm-project//mlir:TransformUtils",
-        "@llvm-project//mlir:Transforms",
-        "@local_xla//xla/mlir_hlo",
+        "@stablehlo//:stablehlo_ops",
     ],
     alwayslink = 1,
 )
@@ -944,8 +918,10 @@ cc_library(
         "@jsoncpp_git//:jsoncpp",
         "@llvm-project//llvm:Support",
         "@llvm-project//mlir:Analysis",
+        "@llvm-project//mlir:ArithDialect",
         "@llvm-project//mlir:FuncDialect",
         "@llvm-project//mlir:IR",
+        "@llvm-project//mlir:Pass",
         "@llvm-project//mlir:Support",
         "@stablehlo//:stablehlo_ops",
     ],
@@ -1082,8 +1058,6 @@ tf_cc_binary(
     tags = ["hostonly"],
     deps = [
         ":compose_uniform_quantized_type_pass",
-        ":fold_broadcast_pass",
-        ":fuse_convolution_pass",
         ":legalize_stablehlo_composite_to_tfl_custom",
         ":legalize_stablehlo_custom_call_to_composite",
         ":legalize_stablehlo_to_vhlo_pass",
@@ -1091,15 +1065,19 @@ tf_cc_binary(
         ":optimize",
         ":passes_inc_gen",
         ":prepare_hlo",
+        ":stablehlo_fuse_convolution_pass",
+        ":stablehlo_unfuse_batch_norm_pass",
         ":tf_legalize_hlo",
         ":tf_stablehlo",
         ":tfl_legalize_chlo",
         ":tfl_legalize_hlo",
         ":tfl_stablehlo",
-        ":unfuse_batch_norm_pass",
         ":uniform_quantized_stablehlo_to_tfl_pass",
         "//tensorflow/compiler/mlir:passes",
         "//tensorflow/compiler/mlir:tf_mlir_opt_main",
+        "//tensorflow/compiler/mlir/stablehlo:fold_broadcast_pass",
+        "//tensorflow/compiler/mlir/stablehlo:fuse_convolution_pass",
+        "//tensorflow/compiler/mlir/stablehlo:unfuse_batch_norm_pass",
     ],
 )
 

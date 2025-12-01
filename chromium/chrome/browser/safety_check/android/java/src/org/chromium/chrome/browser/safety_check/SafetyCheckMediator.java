@@ -27,8 +27,8 @@ import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.base.shared_preferences.SharedPreferencesManager;
 import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.build.BuildConfig;
+import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.password_check.PasswordCheckFactory;
-import org.chromium.chrome.browser.password_manager.CustomTabIntentHelper;
 import org.chromium.chrome.browser.password_manager.GmsUpdateLauncher;
 import org.chromium.chrome.browser.password_manager.ManagePasswordsReferrer;
 import org.chromium.chrome.browser.password_manager.PasswordCheckReferrer;
@@ -54,6 +54,7 @@ import org.chromium.chrome.browser.ui.signin.BottomSheetSigninAndHistorySyncConf
 import org.chromium.chrome.browser.ui.signin.SigninAndHistorySyncActivityLauncher;
 import org.chromium.chrome.browser.ui.signin.account_picker.AccountPickerBottomSheetStrings;
 import org.chromium.chrome.browser.ui.signin.history_sync.HistorySyncConfig;
+import org.chromium.components.browser_ui.settings.SettingsCustomTabLauncher;
 import org.chromium.components.prefs.PrefService;
 import org.chromium.components.signin.metrics.SigninAccessPoint;
 import org.chromium.components.sync.SyncService;
@@ -115,10 +116,10 @@ class SafetyCheckMediator {
     private PasswordManagerHelper mPasswordManagerHelper;
 
     /**
-     * Provides an intent used to open a p-link help center article in a custom tab. Needed by the
-     * password manager settings.
+     * Used to open a p-link help center article in a custom tab. Needed by the password manager
+     * settings.
      */
-    private CustomTabIntentHelper mCustomTabIntentHelper;
+    private SettingsCustomTabLauncher mSettingsCustomTabLauncher;
 
     private ObservableSupplier<ModalDialogManager> mModalDialogManagerSupplier;
 
@@ -134,8 +135,8 @@ class SafetyCheckMediator {
     private long mCheckStartTime = -1;
 
     /**
-     * UMA histogram values for Safety check interactions. Some value don't apply to Android.
-     * Note: this should stay in sync with SettingsSafetyCheckInteractions in enums.xml.
+     * UMA histogram values for Safety check interactions. Some value don't apply to Android. Note:
+     * this should stay in sync with SettingsSafetyCheckInteractions in enums.xml.
      */
     @IntDef({
         SafetyCheckInteractions.STARTED,
@@ -214,7 +215,7 @@ class SafetyCheckMediator {
             PasswordStoreBridge passwordStoreBridge,
             PasswordManagerHelper passwordManagerHelper,
             ObservableSupplier<ModalDialogManager> modalDialogManagerSupplier,
-            CustomTabIntentHelper customTabIntentHelper) {
+            SettingsCustomTabLauncher settingsCustomTabLauncher) {
         this(
                 profile,
                 safetyCheckModel,
@@ -228,9 +229,9 @@ class SafetyCheckMediator {
                 new Handler(),
                 passwordStoreBridge,
                 new PasswordCheckControllerFactory(),
-                passwordManagerHelper);
-        mModalDialogManagerSupplier = modalDialogManagerSupplier;
-        mCustomTabIntentHelper = customTabIntentHelper;
+                passwordManagerHelper,
+                modalDialogManagerSupplier);
+        mSettingsCustomTabLauncher = settingsCustomTabLauncher;
     }
 
     @VisibleForTesting
@@ -262,11 +263,11 @@ class SafetyCheckMediator {
                 handler,
                 passwordStoreBridge,
                 passwordCheckControllerFactory,
-                passwordManagerHelper);
-        mModalDialogManagerSupplier = modalDialogManagerSupplier;
+                passwordManagerHelper,
+                modalDialogManagerSupplier);
     }
 
-    SafetyCheckMediator(
+    private SafetyCheckMediator(
             Profile profile,
             PropertyModel safetyCheckModel,
             PropertyModel passwordsCheckAccountModel,
@@ -279,7 +280,8 @@ class SafetyCheckMediator {
             Handler handler,
             PasswordStoreBridge passwordStoreBridge,
             PasswordCheckControllerFactory passwordCheckControllerFactory,
-            PasswordManagerHelper passwordManagerHelper) {
+            PasswordManagerHelper passwordManagerHelper,
+            ObservableSupplier<ModalDialogManager> modalDialogManagerSupplier) {
         mProfile = profile;
         mSafetyCheckModel = safetyCheckModel;
         mPasswordsCheckAccountStorageModel = passwordsCheckAccountModel;
@@ -294,6 +296,7 @@ class SafetyCheckMediator {
                 passwordCheckControllerFactory.create(
                         syncService, prefService, passwordStoreBridge, passwordManagerHelper);
         mPasswordManagerHelper = passwordManagerHelper;
+        mModalDialogManagerSupplier = modalDialogManagerSupplier;
         // Set the listener for clicking the updates element.
         mSafetyCheckModel.set(
                 SafetyCheckProperties.UPDATES_CLICK_LISTENER,
@@ -371,16 +374,19 @@ class SafetyCheckMediator {
             mSafetyCheckModel.set(
                     SafetyCheckProperties.SAFE_BROWSING_STATE, SafeBrowsingState.UNCHECKED);
             mSafetyCheckModel.set(SafetyCheckProperties.UPDATES_STATE, UpdatesState.UNCHECKED);
-
-            // If the new Password Manager backend is out of date, attempting to fetch breached
-            // credentials will expectedly fail and display an error message. This error is
-            // designed to be only shown when user explicitly runs the check (or it was ran
-            // recently). For this case, breached credential fetch is skipped.
-            if (mPasswordManagerHelper.canUseUpm()
-                    && !PasswordManagerUtilBridge.areMinUpmRequirementsMet()) {
-                setPasswordsState(mPasswordsCheckAccountStorageModel, PasswordsState.UNCHECKED);
-                setPasswordsState(mPasswordsCheckLocalStorageModel, PasswordsState.UNCHECKED);
-                return;
+            // After login DB deprecation, every invocation of SafetyCheck is guaranteed to only
+            // be made if the user can access UPM.
+            if (!ChromeFeatureList.isEnabled(ChromeFeatureList.LOGIN_DB_DEPRECATION_ANDROID)) {
+                // If the new Password Manager backend is out of date, attempting to fetch breached
+                // credentials will expectedly fail and display an error message. This error is
+                // designed to be only shown when user explicitly runs the check (or it was ran
+                // recently). For this case, breached credential fetch is skipped.
+                if (mPasswordManagerHelper.canUseUpm()
+                        && !PasswordManagerUtilBridge.areMinUpmRequirementsMet()) {
+                    setPasswordsState(mPasswordsCheckAccountStorageModel, PasswordsState.UNCHECKED);
+                    setPasswordsState(mPasswordsCheckLocalStorageModel, PasswordsState.UNCHECKED);
+                    return;
+                }
             }
         }
         setPasswordsState(mPasswordsCheckAccountStorageModel, PasswordsState.CHECKING);
@@ -584,7 +590,7 @@ class SafetyCheckMediator {
                                 mModalDialogManagerSupplier,
                                 /* managePasskeys= */ false,
                                 account,
-                                mCustomTabIntentHelper);
+                                mSettingsCustomTabLauncher);
                         return true;
                     };
         } else if (state == PasswordsState.SIGNED_OUT) {
@@ -626,10 +632,14 @@ class SafetyCheckMediator {
                                 SafetyCheckInteractions.PASSWORDS_MANAGE,
                                 SafetyCheckInteractions.MAX_VALUE);
                         // Open the Password Check UI.
-                        if (!mPasswordManagerHelper.canUseUpm()) {
-                            PasswordCheckFactory.getOrCreate()
-                                    .showUi(p.getContext(), PasswordCheckReferrer.SAFETY_CHECK);
-                        } else {
+                        if (ChromeFeatureList.isEnabled(
+                                        ChromeFeatureList.LOGIN_DB_DEPRECATION_ANDROID)
+                                || mPasswordManagerHelper.canUseUpm()) {
+                            // This UI surface was deprecated for all use-cases apart form the
+                            // PhishGuard dialog. The dialog option leading to SafetyCheck, implies
+                            // that there are passwords saved in both local and account stores. This
+                            // means that UPM
+                            // is guaranteed to be available.
                             String account =
                                     getAccountNameForPasswordStorageType(
                                             passwordStorageType, mSyncService);
@@ -637,7 +647,11 @@ class SafetyCheckMediator {
                                     p.getContext(),
                                     PasswordCheckReferrer.SAFETY_CHECK,
                                     mModalDialogManagerSupplier,
-                                    account);
+                                    account,
+                                    mSettingsCustomTabLauncher);
+                        } else {
+                            PasswordCheckFactory.getOrCreate()
+                                    .showUi(p.getContext(), PasswordCheckReferrer.SAFETY_CHECK);
                         }
                         return true;
                     };

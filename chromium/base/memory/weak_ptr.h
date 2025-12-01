@@ -85,13 +85,6 @@
 #include "base/sequence_checker.h"
 #include "base/synchronization/atomic_flag.h"
 
-namespace performance_manager {
-class FrameNodeImpl;
-class PageNodeImpl;
-class ProcessNodeImpl;
-class WorkerNodeImpl;
-}  // namespace performance_manager
-
 namespace base {
 
 namespace sequence_manager::internal {
@@ -199,6 +192,12 @@ class WeakPtrFactory;
 //   if (foo)
 //     foo->method();
 //
+// WeakPtr intentionally doesn't implement operator== or operator<=>, because
+// comparisons of weak references are inherently unstable. If the comparison
+// takes validity into account, the result can change at any time as pointers
+// are invalidated. If it depends only on the underlying pointer value, even
+// after the pointer is invalidated, unrelated WeakPtrs can unexpectedly
+// compare equal if the address is reused.
 template <typename T>
 class TRIVIAL_ABI WeakPtr {
  public:
@@ -348,10 +347,6 @@ class BASE_EXPORT BindWeakPtrFactoryPassKey {
   BindWeakPtrFactoryPassKey() = default;
 
   friend class BindWeakPtrFactoryForTesting;
-  friend class performance_manager::FrameNodeImpl;
-  friend class performance_manager::PageNodeImpl;
-  friend class performance_manager::ProcessNodeImpl;
-  friend class performance_manager::WorkerNodeImpl;
   friend class sequence_manager::internal::TaskQueueImpl;
 };
 

@@ -8,9 +8,9 @@
 
 #include "base/test/scoped_feature_list.h"
 #include "base/values.h"
+#include "chrome/browser/background/glic/glic_launcher_configuration.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/glic/glic_pref_names.h"
-#include "chrome/browser/glic/launcher/glic_launcher_configuration.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/test_browser_window.h"
@@ -77,16 +77,20 @@ IN_PROC_BROWSER_TEST_F(GlicHandlerBrowserTest, UpdateShortcutSuspension) {
 
 IN_PROC_BROWSER_TEST_F(GlicHandlerBrowserTest, UpdateGlicShortcut) {
   const ui::Accelerator invalid_shortcut(ui::VKEY_A, ui::EF_NONE);
-  glic_handler()->HandleSetGlicShortcut(base::Value::List().Append(
-      ui::Command::AcceleratorToString(invalid_shortcut)));
+  glic_handler()->HandleSetGlicShortcut(
+      base::Value::List()
+          .Append("callback_id")
+          .Append(ui::Command::AcceleratorToString(invalid_shortcut)));
   ui::Accelerator saved_hotkey =
       glic::GlicLauncherConfiguration::GetGlobalHotkey();
   EXPECT_EQ(ui::VKEY_UNKNOWN, saved_hotkey.key_code());
   EXPECT_EQ(ui::EF_NONE, saved_hotkey.modifiers());
 
   const ui::Accelerator valid_shortcut(ui::VKEY_A, ui::EF_CONTROL_DOWN);
-  glic_handler()->HandleSetGlicShortcut(base::Value::List().Append(
-      ui::Command::AcceleratorToString(valid_shortcut)));
+  glic_handler()->HandleSetGlicShortcut(
+      base::Value::List()
+          .Append("callback_id")
+          .Append(ui::Command::AcceleratorToString(valid_shortcut)));
   saved_hotkey = glic::GlicLauncherConfiguration::GetGlobalHotkey();
   EXPECT_EQ(valid_shortcut.key_code(), saved_hotkey.key_code());
   EXPECT_EQ(valid_shortcut.modifiers(), saved_hotkey.modifiers());

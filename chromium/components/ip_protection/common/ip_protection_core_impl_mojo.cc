@@ -4,25 +4,37 @@
 
 #include "components/ip_protection/common/ip_protection_core_impl_mojo.h"
 
+#include <map>
+#include <memory>
+#include <optional>
 #include <string>
+#include <utility>
 #include <vector>
 
+#include "base/check.h"
+#include "base/files/file_path.h"
 #include "base/functional/bind.h"
+#include "base/location.h"
 #include "base/memory/scoped_refptr.h"
-#include "base/task/task_traits.h"
+#include "base/memory/weak_ptr.h"
 #include "base/time/time.h"
 #include "components/ip_protection/common/ip_protection_core_host_remote.h"
+#include "components/ip_protection/common/ip_protection_core_impl.h"
 #include "components/ip_protection/common/ip_protection_data_types.h"
+#include "components/ip_protection/common/ip_protection_probabilistic_reveal_token_manager.h"
+#include "components/ip_protection/common/ip_protection_probabilistic_reveal_token_mojo_fetcher.h"
 #include "components/ip_protection/common/ip_protection_proxy_config_manager.h"
 #include "components/ip_protection/common/ip_protection_proxy_config_manager_impl.h"
 #include "components/ip_protection/common/ip_protection_proxy_config_mojo_fetcher.h"
 #include "components/ip_protection/common/ip_protection_token_manager.h"
 #include "components/ip_protection/common/ip_protection_token_manager_impl.h"
 #include "components/ip_protection/common/ip_protection_token_mojo_fetcher.h"
+#include "components/ip_protection/common/probabilistic_reveal_token_registry.h"
+#include "components/ip_protection/mojom/core.mojom.h"
+#include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "net/base/features.h"
 #include "net/base/proxy_chain.h"
 #include "net/base/proxy_server.h"
-#include "net/base/proxy_string_util.h"
 
 namespace ip_protection {
 
@@ -51,8 +63,10 @@ IpProtectionCoreImplMojo::IpProtectionCoreImplMojo(
     mojo::PendingReceiver<ip_protection::mojom::CoreControl> pending_receiver,
     scoped_refptr<IpProtectionCoreHostRemote> core_host_remote,
     MaskedDomainListManager* masked_domain_list_manager,
+    ProbabilisticRevealTokenRegistry* probabilistic_reveal_token_registry,
     bool is_ip_protection_enabled,
-    bool use_regular_mdl)
+    bool ip_protection_incognito,
+    std::optional<base::FilePath> data_directory)
     : IpProtectionCoreImpl(
           masked_domain_list_manager,
           core_host_remote
@@ -65,8 +79,18 @@ IpProtectionCoreImplMojo::IpProtectionCoreImplMojo(
               ? MakeTokenManagerMap(this, core_host_remote)
               : std::map<ProxyLayer,
                          std::unique_ptr<IpProtectionTokenManager>>(),
+          probabilistic_reveal_token_registry,
+          (core_host_remote &&
+           base::FeatureList::IsEnabled(
+               net::features::kEnableProbabilisticRevealTokens))
+              ? std::make_unique<IpProtectionProbabilisticRevealTokenManager>(
+                    std::make_unique<
+                        IpProtectionProbabilisticRevealTokenMojoFetcher>(
+                        core_host_remote),
+                    data_directory)
+              : nullptr,
           is_ip_protection_enabled,
-          use_regular_mdl),
+          ip_protection_incognito),
       receiver_(this, std::move(pending_receiver)) {}
 
 IpProtectionCoreImplMojo::IpProtectionCoreImplMojo(
@@ -75,13 +99,18 @@ IpProtectionCoreImplMojo::IpProtectionCoreImplMojo(
         ip_protection_proxy_config_manager,
     std::map<ProxyLayer, std::unique_ptr<IpProtectionTokenManager>>
         ip_protection_token_managers,
+    ProbabilisticRevealTokenRegistry* probabilistic_reveal_token_registry,
+    std::unique_ptr<IpProtectionProbabilisticRevealTokenManager>
+        ipp_prt_manager,
     bool is_ip_protection_enabled,
-    bool use_regular_mdl)
+    bool ip_protection_incognito)
     : IpProtectionCoreImpl(masked_domain_list_manager,
                            std::move(ip_protection_proxy_config_manager),
                            std::move(ip_protection_token_managers),
+                           probabilistic_reveal_token_registry,
+                           std::move(ipp_prt_manager),
                            is_ip_protection_enabled,
-                           use_regular_mdl),
+                           ip_protection_incognito),
       receiver_(this) {}
 
 IpProtectionCoreImplMojo::~IpProtectionCoreImplMojo() = default;
@@ -93,10 +122,16 @@ IpProtectionCoreImplMojo IpProtectionCoreImplMojo::CreateForTesting(
         ip_protection_proxy_config_manager,
     std::map<ProxyLayer, std::unique_ptr<IpProtectionTokenManager>>
         ip_protection_token_managers,
-    bool is_ip_protection_enabled) {
+    ProbabilisticRevealTokenRegistry* probabilistic_reveal_token_registry,
+    std::unique_ptr<IpProtectionProbabilisticRevealTokenManager>
+        ipp_prt_manager,
+    bool is_ip_protection_enabled,
+    bool ip_protection_incognito) {
   return IpProtectionCoreImplMojo(
       masked_domain_list_manager, std::move(ip_protection_proxy_config_manager),
-      std::move(ip_protection_token_managers), is_ip_protection_enabled);
+      std::move(ip_protection_token_managers),
+      probabilistic_reveal_token_registry, std::move(ipp_prt_manager),
+      is_ip_protection_enabled, ip_protection_incognito);
 }
 
 void IpProtectionCoreImplMojo::VerifyIpProtectionCoreHostForTesting(

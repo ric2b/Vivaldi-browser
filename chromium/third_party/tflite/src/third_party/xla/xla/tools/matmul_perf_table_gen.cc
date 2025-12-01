@@ -32,7 +32,6 @@ limitations under the License.
 #include "absl/status/status.h"
 #include "absl/strings/match.h"
 #include "absl/strings/str_cat.h"
-#include "absl/strings/str_join.h"
 #include "absl/strings/string_view.h"
 #include "absl/strings/substitute.h"
 #include "absl/time/time.h"
@@ -53,11 +52,13 @@ limitations under the License.
 #include "xla/service/hlo.pb.h"
 #include "xla/service/hlo_module_config.h"
 #include "xla/service/hlo_runner.h"
+#include "xla/service/hlo_runner_interface.h"
 #include "xla/shape_util.h"
 #include "xla/tests/test_utils.h"
 #include "xla/tsl/platform/env.h"
 #include "xla/tsl/platform/errors.h"
 #include "xla/tsl/platform/logging.h"
+#include "xla/util.h"
 #include "xla/xla_data.pb.h"
 
 namespace xla::gpu {
@@ -146,7 +147,7 @@ std::unique_ptr<HloModule> GetModule(absl::string_view lhs_dtype,
   return *std::move(parsed);
 }
 
-void Measure(HloRunner& runner, Executable* executable,
+void Measure(HloRunner& runner, OpaqueExecutable* executable,
              const std::vector<Literal>& args_small,
              const std::vector<Literal>& args_large) {
   CHECK_OK(runner.ExecuteWithExecutable(executable, args_small).status());
@@ -303,32 +304,31 @@ int64_t GetFlops(const HloDotInstruction& dot) {
     return ShapeUtil::GetDimension(instr.shape(), idx);
   };
 
+  const DotDimensionNumbers& dot_dims = dot.dot_dimension_numbers();
+  const HloInstruction& lhs = *dot.operand(0);
+  const HloInstruction& rhs = *dot.operand(1);
+
   // Get non-contracting dims
-  auto get_non_contracting_dim_sizes =
-      [&dot, &dim_size](const absl::flat_hash_set<int>& contracting_dims,
-                        int operand_id) {
-        int64_t fmas = 1;
-        for (int dim = 0; dim < dot.operand(operand_id)->shape().rank();
-             ++dim) {
-          if (contracting_dims.contains(dim)) {
-            continue;
-          }
-          fmas *= dim_size(*dot.operand(operand_id), dim);
-        }
-        return fmas;
-      };
-  fmas *= get_non_contracting_dim_sizes(
-      {dot.dot_dimension_numbers().lhs_contracting_dimensions().begin(),
-       dot.dot_dimension_numbers().lhs_contracting_dimensions().end()},
-      0);
-  fmas *= get_non_contracting_dim_sizes(
-      {dot.dot_dimension_numbers().rhs_contracting_dimensions().begin(),
-       dot.dot_dimension_numbers().rhs_contracting_dimensions().end()},
-      1);
+  for (int dim : GetNonContractingDims(lhs.shape().dimensions_size(),
+                                       dot_dims.lhs_contracting_dimensions(),
+                                       dot_dims.lhs_batch_dimensions())) {
+    fmas *= dim_size(lhs, dim);
+  }
+  for (int dim : GetNonContractingDims(rhs.shape().dimensions_size(),
+                                       dot_dims.rhs_contracting_dimensions(),
+                                       dot_dims.rhs_batch_dimensions())) {
+    fmas *= dim_size(rhs, dim);
+  }
 
   // Get contracting dim.
   for (int dim : dot.dot_dimension_numbers().lhs_contracting_dimensions()) {
-    fmas *= dim_size(*dot.operand(0), dim);
+    fmas *= dim_size(lhs, dim);
+  }
+
+  // Get batch dim
+  for (int dim : dot.dot_dimension_numbers().lhs_batch_dimensions()) {
+    CHECK_EQ(dim_size(lhs, dim), dim_size(rhs, dim));
+    fmas *= dim_size(lhs, dim);
   }
 
   return fmas * 2;  // Every FMA is 2 floating point ops.
@@ -336,7 +336,7 @@ int64_t GetFlops(const HloDotInstruction& dot) {
 
 }  // namespace
 
-std::unique_ptr<Executable> MatmulPerfTableGen::Compile(
+std::unique_ptr<OpaqueExecutable> MatmulPerfTableGen::Compile(
     std::unique_ptr<HloModule> module) {
   auto compiled =
       runner_.CreateExecutable(std::move(module), /*run_hlo_passes=*/true);
@@ -357,7 +357,7 @@ absl::Duration MatmulPerfTableGen::Profile(std::unique_ptr<HloModule> module) {
                                                       /*use_large_range=*/true)
                                         .value();
 
-  std::unique_ptr<Executable> compiled = Compile(std::move(module));
+  std::unique_ptr<OpaqueExecutable> compiled = Compile(std::move(module));
 
   // First run to warm up stuff.
   CHECK_OK(runner_.ExecuteWithExecutable(compiled.get(), args_small).status());

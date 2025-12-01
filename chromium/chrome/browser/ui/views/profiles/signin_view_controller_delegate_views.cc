@@ -53,6 +53,7 @@
 #include "ui/views/layout/fill_layout.h"
 #include "ui/views/layout/flex_layout.h"
 #include "ui/views/layout/layout_types.h"
+#include "ui/views/view_class_properties.h"
 #include "ui/views/widget/widget.h"
 #include "url/gurl.h"
 
@@ -175,11 +176,16 @@ std::unique_ptr<views::WebView>
 SigninViewControllerDelegateViews::CreateSignoutConfirmationWebView(
     Browser* browser,
     ChromeSignoutConfirmationPromptVariant variant,
-    base::OnceCallback<void(ChromeSignoutConfirmationChoice)> callback) {
+    SignoutConfirmationCallback callback) {
+  // Set an initial height of 0 since the actual dialog's height will be set
+  // dynamically based on its contents, so the initial height does not matter.
   std::unique_ptr<views::WebView> web_view = CreateDialogWebView(
       browser, GURL(chrome::kChromeUISignoutConfirmationURL),
-      kSignoutConfirmationPromptMinHeight, kModalDialogWidth,
+      /*dialog_height=*/0, kModalDialogWidth,
       InitializeSigninWebDialogUI(false));
+  web_view->SetProperty(
+      views::kElementIdentifierKey,
+      SigninViewController::kSignoutConfirmationDialogViewElementId);
 
   SignoutConfirmationUI* web_ui = web_view->GetWebContents()
                                       ->GetWebUI()
@@ -334,6 +340,7 @@ SigninViewControllerDelegateViews::SigninViewControllerDelegateViews(
     ui::mojom::ModalType dialog_modal_type,
     bool wait_for_size,
     bool should_show_close_button,
+    bool animate_on_resize,
     bool delete_profile_on_cancel,
     base::ScopedClosureRunner on_closed_callback)
     : content_view_(content_view.get()),
@@ -351,22 +358,27 @@ SigninViewControllerDelegateViews::SigninViewControllerDelegateViews(
   // Use the layout manager of `this` to automatically translate its preferred
   // size to the owning Widget.
   SetLayoutManager(std::make_unique<WidgetAutoResizingLayout>());
-  // `AnimatingLayoutManager` resizes `animated_view` to match `content_view`'s
-  // preferred size with animation.
-  views::View* animated_view = AddChildView(std::make_unique<views::View>());
-  views::AnimatingLayoutManager* animating_layout =
-      animated_view->SetLayoutManager(
-          std::make_unique<views::AnimatingLayoutManager>());
-  animating_layout
-      ->SetBoundsAnimationMode(
-          views::AnimatingLayoutManager::BoundsAnimationMode::kAnimateMainAxis)
-      .SetOrientation(views::LayoutOrientation::kVertical);
-  // Using `FlexLayout` because `AnimatingLayoutManager` doesn't work properly
-  // with `FillLayout`.
-  auto* flex_layout = animating_layout->SetTargetLayoutManager(
-      std::make_unique<views::FlexLayout>());
-  flex_layout->SetOrientation(views::LayoutOrientation::kVertical);
-  animated_view->AddChildView(std::move(content_view));
+
+  if (animate_on_resize) {
+    // `AnimatingLayoutManager` resizes `animated_view` to match
+    // `content_view`'s preferred size with animation.
+    views::View* animated_view = AddChildView(std::make_unique<views::View>());
+    views::AnimatingLayoutManager* animating_layout =
+        animated_view->SetLayoutManager(
+            std::make_unique<views::AnimatingLayoutManager>());
+    animating_layout
+        ->SetBoundsAnimationMode(views::AnimatingLayoutManager::
+                                     BoundsAnimationMode::kAnimateMainAxis)
+        .SetOrientation(views::LayoutOrientation::kVertical);
+    // Using `FlexLayout` because `AnimatingLayoutManager` doesn't work properly
+    // with `FillLayout`.
+    auto* flex_layout = animating_layout->SetTargetLayoutManager(
+        std::make_unique<views::FlexLayout>());
+    flex_layout->SetOrientation(views::LayoutOrientation::kVertical);
+    animated_view->AddChildView(std::move(content_view));
+  } else {
+    AddChildView(std::move(content_view));
+  }
 
   SetButtons(static_cast<int>(ui::mojom::DialogButton::kNone));
 
@@ -445,8 +457,8 @@ void SigninViewControllerDelegateViews::DisplayModal() {
           this, host_web_contents);
       if (should_show_close_button_) {
         auto border = std::make_unique<views::BubbleBorder>(
-            views::BubbleBorder::NONE, views::BubbleBorder::STANDARD_SHADOW,
-            kColorProfilesReauthDialogBorder);
+            views::BubbleBorder::NONE, views::BubbleBorder::STANDARD_SHADOW);
+        border->SetColor(kColorProfilesReauthDialogBorder);
         GetBubbleFrameView()->SetBubbleBorder(std::move(border));
       }
       constrained_window::ShowModalDialog(
@@ -496,7 +508,8 @@ SigninViewControllerDelegate::CreateSyncConfirmationDelegate(
   return new SigninViewControllerDelegateViews(
       SigninViewControllerDelegateViews::CreateSyncConfirmationWebView(
           browser, style, is_sync_promo),
-      browser, ui::mojom::ModalType::kWindow, true, false);
+      browser, ui::mojom::ModalType::kWindow, true, false,
+      /*animate_on_resize=*/true);
 }
 
 // static
@@ -504,7 +517,8 @@ SigninViewControllerDelegate*
 SigninViewControllerDelegate::CreateSigninErrorDelegate(Browser* browser) {
   return new SigninViewControllerDelegateViews(
       SigninViewControllerDelegateViews::CreateSigninErrorWebView(browser),
-      browser, ui::mojom::ModalType::kWindow, true, false);
+      browser, ui::mojom::ModalType::kWindow, true, false,
+      /*animate_on_resize=*/true);
 }
 
 #if BUILDFLAG(ENABLE_DICE_SUPPORT)
@@ -520,7 +534,7 @@ SigninViewControllerDelegate::CreateProfileCustomizationDelegate(
           browser, is_local_profile_creation, show_profile_switch_iph,
           show_supervised_user_iph),
       browser, ui::mojom::ModalType::kWindow, false, false,
-      is_local_profile_creation);
+      /*animate_on_resize=*/true, is_local_profile_creation);
 }
 
 // static
@@ -528,11 +542,14 @@ SigninViewControllerDelegate*
 SigninViewControllerDelegate::CreateSignoutConfirmationDelegate(
     Browser* browser,
     ChromeSignoutConfirmationPromptVariant variant,
-    base::OnceCallback<void(ChromeSignoutConfirmationChoice)> callback) {
+    SignoutConfirmationCallback callback) {
+  // Don't have the native view animate resizes since the dialog contains WebUI
+  // elements that animate on resize.
   return new SigninViewControllerDelegateViews(
       SigninViewControllerDelegateViews::CreateSignoutConfirmationWebView(
           browser, variant, std::move(callback)),
-      browser, ui::mojom::ModalType::kWindow, true, false);
+      browser, ui::mojom::ModalType::kWindow, true, false,
+      /*animate_on_resize=*/false);
 }
 #endif  // BUILDFLAG(ENABLE_DICE_SUPPORT)
 
@@ -634,6 +651,6 @@ SigninViewControllerDelegate::CreateManagedUserNoticeDelegate(
 
   return new SigninViewControllerDelegateViews(
       std::move(web_view), browser, ui::mojom::ModalType::kWindow, true, false,
-      false, std::move(on_closed_callback));
+      /*animate_on_resize=*/true, false, std::move(on_closed_callback));
 }
 #endif

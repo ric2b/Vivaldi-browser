@@ -568,8 +568,8 @@ void ProxyMain::SetShouldWarmUp() {
 void ProxyMain::SetNeedsAnimate(bool urgent) {
   DCHECK(IsMainThread());
   if (SendCommitRequestToImplThreadIfNeeded(ANIMATE_PIPELINE_STAGE, urgent)) {
-    TRACE_EVENT_INSTANT0("cc", "ProxyMain::SetNeedsAnimate",
-                         TRACE_EVENT_SCOPE_THREAD);
+    TRACE_EVENT_INSTANT1("cc", "ProxyMain::SetNeedsAnimate",
+                         TRACE_EVENT_SCOPE_THREAD, "urgent", urgent);
   }
 }
 
@@ -724,6 +724,12 @@ void ProxyMain::StopDeferringCommits(PaintHoldingCommitTrigger trigger) {
 
   // Notify depended systems that the deferral status has changed.
   layer_tree_host_->OnDeferCommitsChanged(false, reason, trigger);
+}
+
+void ProxyMain::SetShouldThrottleFrameRate(bool flag) {
+  ImplThreadTaskRunner()->PostTask(
+      FROM_HERE, base::BindOnce(&ProxyImpl::SetShouldThrottleFrameRate,
+                                base::Unretained(proxy_impl_.get()), flag));
 }
 
 bool ProxyMain::IsDeferringCommits() const {
@@ -914,6 +920,15 @@ void ProxyMain::SetUkmSmoothnessDestination(
       FROM_HERE, base::BindOnce(&ProxyImpl::SetUkmSmoothnessDestination,
                                 base::Unretained(proxy_impl_.get()),
                                 std::move(ukm_smoothness_data)));
+}
+
+void ProxyMain::SetUkmDroppedFramesDestination(
+    base::WritableSharedMemoryMapping ukm_dropped_frames_data) {
+  DCHECK(IsMainThread());
+  ImplThreadTaskRunner()->PostTask(
+      FROM_HERE, base::BindOnce(&ProxyImpl::SetUkmDroppedFramesDestination,
+                                base::Unretained(proxy_impl_.get()),
+                                std::move(ukm_dropped_frames_data)));
 }
 
 void ProxyMain::SetRenderFrameObserver(

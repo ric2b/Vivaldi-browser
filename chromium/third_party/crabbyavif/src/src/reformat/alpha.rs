@@ -17,7 +17,6 @@ use super::libyuv;
 
 use super::rgb;
 
-use crate::decoder::Category;
 use crate::image::Plane;
 use crate::internal_utils::*;
 use crate::reformat::rgb::Format;
@@ -39,6 +38,14 @@ fn unpremultiply_u16(pixel: u16, alpha: u16, max_channel_f: f32) -> u16 {
     ((pixel as f32) * max_channel_f / (alpha as f32))
         .floor()
         .min(max_channel_f) as u16
+}
+
+macro_rules! alpha_index_in_rgba_1010102 {
+    ($x:expr) => {{
+        // The index of the alpha pixel depends on the endianness since each pixel is a u32 in this
+        // case. The alpha value is the 2-bit MSB of the pixel at this index.
+        $x * 2 + if cfg!(target_endian = "little") { 1 } else { 0 }
+    }};
 }
 
 impl rgb::Image {
@@ -234,6 +241,33 @@ impl rgb::Image {
             return Err(AvifError::InvalidArgument);
         }
         let width = usize_from_u32(self.width)?;
+        if self.format == Format::Rgba1010102 {
+            // Clippy warns about the loops using x as an index for src_row. But it is also used to
+            // compute the index for dst_row. Disable the warnings.
+            #[allow(clippy::needless_range_loop)]
+            if image.depth > 8 {
+                for y in 0..self.height {
+                    let dst_row = self.row16_mut(y)?;
+                    let src_row = image.row16(Plane::A, y)?;
+                    for x in 0..width {
+                        let alpha_pixel = (src_row[x]) >> (image.depth - 2);
+                        let index = alpha_index_in_rgba_1010102!(x);
+                        dst_row[index] = (dst_row[index] & 0x3fff) | (alpha_pixel << 14);
+                    }
+                }
+            } else {
+                for y in 0..self.height {
+                    let dst_row = self.row16_mut(y)?;
+                    let src_row = image.row(Plane::A, y)?;
+                    for x in 0..width {
+                        let alpha_pixel = ((src_row[x]) >> 6) as u16;
+                        let index = alpha_index_in_rgba_1010102!(x);
+                        dst_row[index] = (dst_row[index] & 0x3fff) | (alpha_pixel << 14);
+                    }
+                }
+            }
+            return Ok(());
+        }
         let dst_alpha_offset = self.format.alpha_offset();
         if self.depth == image.depth {
             if self.depth > 8 {
@@ -573,6 +607,68 @@ mod tests {
                         assert_eq!(rgb_row[x * 4 + idx], expected_value);
                     }
                 }
+            }
+        }
+        Ok(())
+    }
+
+    #[test_matrix(20, 10, 10, [8, 10, 12])]
+    fn reformat_alpha_rgba1010102(
+        width: u32,
+        height: u32,
+        rgb_depth: u8,
+        yuv_depth: u8,
+    ) -> AvifResult<()> {
+        let format = rgb::Format::Rgba1010102;
+        let mut buffer: Vec<u8> = vec![];
+        let mut rgb = rgb_image(
+            width,
+            height,
+            rgb_depth,
+            format,
+            /*use_pointer*/ false,
+            &mut buffer,
+        )?;
+
+        let mut image = image::Image::default();
+        image.width = width;
+        image.height = height;
+        image.depth = yuv_depth;
+        image.allocate_planes(Category::Alpha)?;
+
+        let mut rng = rand::thread_rng();
+        let mut expected_values: Vec<u16> = Vec::new();
+        if yuv_depth == 8 {
+            for y in 0..height {
+                let row = image.row_mut(Plane::A, y)?;
+                for x in 0..width as usize {
+                    let value = rng.gen_range(0..256) as u8;
+                    expected_values.push((value >> 6) as u16);
+                    row[x] = value;
+                }
+            }
+        } else {
+            for y in 0..height {
+                let row = image.row16_mut(Plane::A, y)?;
+                for x in 0..width as usize {
+                    let value = rng.gen_range(0..(1i32 << yuv_depth)) as u16;
+                    expected_values.push(value >> (yuv_depth - 2));
+                    row[x] = value;
+                }
+            }
+        }
+
+        rgb.import_alpha_from(&image)?;
+
+        let mut expected_values = expected_values.into_iter();
+        for y in 0..height {
+            let rgb_row = rgb.row16(y)?;
+            assert_eq!(rgb_row.len(), (width * 2) as usize);
+            for x in 0..width as usize {
+                assert_eq!(
+                    rgb_row[alpha_index_in_rgba_1010102!(x)] >> 14,
+                    expected_values.next().unwrap()
+                );
             }
         }
         Ok(())

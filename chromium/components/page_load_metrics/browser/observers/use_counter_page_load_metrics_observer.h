@@ -56,6 +56,10 @@ class UseCounterMetricsRecorder {
   // Records WebDXFeatures that are based on other WebFeature use counters.
   void RecordWebDXFeatures(ukm::SourceId ukm_source_id);
 
+  // Records privacy sensitive WebFeatures that have been observed in the page
+  // while ad script was running.
+  void RecordPrivacySensitiveFeatures(ukm::SourceId ukm_source_id);
+
   using UkmFeatureList = base::flat_set<blink::mojom::WebFeature>;
 
   // Allow test access to assert each user defined feature is mapped correctly
@@ -67,9 +71,6 @@ class UseCounterMetricsRecorder {
  private:
   // Returns a list of opt-in UKM features for use counter.
   static const UkmFeatureList& GetAllowedUkmFeatures();
-
-  // Returns a list of opt-in UKM features for the Web Dev Metrics use counter.
-  static const UkmFeatureList& GetAllowedWebDevMetricsUkmFeatures();
 
   // Getters for mappings of WebFeature and CSSSampleId's to WebDXFeature use
   // counters.
@@ -101,12 +102,13 @@ class UseCounterMetricsRecorder {
   std::unique_ptr<
       AtMostOnceEnumUmaDeferrer<network::mojom::PermissionsPolicyFeature>>
       uma_permissions_policy_header2_;
+  std::unique_ptr<
+      AtMostOnceEnumUmaDeferrer<network::mojom::PermissionsPolicyFeature>>
+      uma_permissions_policy_enabled_private_;
 
   // To keep tracks of which features have been measured.
   std::bitset<static_cast<size_t>(blink::mojom::WebFeature::kMaxValue) + 1>
       ukm_features_recorded_;
-  std::bitset<static_cast<size_t>(blink::mojom::WebFeature::kMaxValue) + 1>
-      webdev_metrics_ukm_features_recorded_;
 };
 
 // This class reports several use counters coming from Blink.

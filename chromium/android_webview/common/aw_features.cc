@@ -89,13 +89,6 @@ BASE_FEATURE(kWebViewMuteAudio,
              "WebViewMuteAudio",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
-// When enabled, WebView records if a site with partitioned cookies has any
-// cookies excluded due to a different cookie partition key than the current
-// site's.
-BASE_FEATURE(kWebViewPartitionedCookiesExcluded,
-             "WebViewPartitionedCookiesExcluded",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
 // Only allow extra headers added via loadUrl() to be sent to the original
 // origin; strip them from the request if a cross-origin redirect occurs.
 BASE_FEATURE(kWebViewExtraHeadersSameOriginOnly,
@@ -106,12 +99,6 @@ BASE_FEATURE(kWebViewExtraHeadersSameOriginOnly,
 // histogram Android.WebView.AppDataDirectorySize.
 BASE_FEATURE(kWebViewRecordAppDataDirectorySize,
              "WebViewRecordAppDataDirectorySize",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
-// Flag to restrict main frame Web Content to verified web content. Verification
-// happens via Digital Asset Links.
-BASE_FEATURE(kWebViewRestrictSensitiveContent,
-             "WebViewRestrictSensitiveContent",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 // Enable blocking the loading of mature sites (according to Google SafeSearch)
@@ -211,6 +198,12 @@ BASE_FEATURE(kWebViewPrefetchNativeLibrary,
 const base::FeatureParam<bool> kWebViewPrefetchFromRenderer{
     &kWebViewPrefetchNativeLibrary, "WebViewPrefetchFromRenderer", false};
 
+// Include system bars in safe-area-inset CSS environment values for WebViews
+// that take up the entire screen
+BASE_FEATURE(kWebViewSafeAreaIncludesSystemBars,
+             "WebViewSafeAreaIncludesSystemBars",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+
 // If enabled TYPE_SCROLLED accessibility events are sent every 100ms when user
 // is scrolling irrespective of GestureScrollUpdate being consumed or not.
 // If disabled events are sent on GSU consumed ack.
@@ -264,5 +257,22 @@ BASE_FEATURE(kWebViewInterceptedCookieHeader,
 // header has no effect on the cookie jar.
 BASE_FEATURE(kWebViewInterceptedCookieHeaderReadWrite,
              "WebViewInterceptedCookieHeaderReadWrite",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+// When enabled, if the developer hasn't overridden shouldInterceptRequest
+// (or provided the async version), we short circuit (return no response)
+// on the IO thread instead of calling the (empty) method on a background
+// thread.
+BASE_FEATURE(kWebViewShortCircuitShouldInterceptRequest,
+             "WebViewShortCircuitShouldInterceptRequest",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+// When enabled, webview chromium initialization uses the startup tasks logic
+// where it runs the startup tasks asynchronously if startup is triggered from a
+// background thread. Otherwise runs startup synchronously.
+// Also caches any chromium startup exception and rethrows it if startup is
+// retried without a restart.
+BASE_FEATURE(kWebViewUseStartupTasksLogic,
+             "WebViewUseStartupTasksLogic",
              base::FEATURE_DISABLED_BY_DEFAULT);
 }  // namespace android_webview::features

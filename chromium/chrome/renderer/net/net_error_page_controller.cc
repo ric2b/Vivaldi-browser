@@ -108,6 +108,8 @@ gin::ObjectTemplateBuilder NetErrorPageController::GetObjectTemplateBuilder(
     v8::Isolate* isolate) {
   return gin::Wrappable<NetErrorPageController>::GetObjectTemplateBuilder(
              isolate)
+      .SetMethod("openVivaldia",
+                 &NetErrorPageController::OpenVivaldia)
       .SetMethod("downloadButtonClick",
                  &NetErrorPageController::DownloadButtonClick)
       .SetMethod("reloadButtonClick",
@@ -124,16 +126,5 @@ gin::ObjectTemplateBuilder NetErrorPageController::GetObjectTemplateBuilder(
       .SetMethod("resetEasterEggHighScore",
                  &NetErrorPageController::ResetEasterEggHighScore)
       .SetMethod("savePageForLater", &NetErrorPageController::SavePageForLater)
-      .SetMethod("cancelSavePage", &NetErrorPageController::CancelSavePage)
-
-      .SetMethod("openVivaldia",
-                 &NetErrorPageController::OpenVivaldia);
+      .SetMethod("cancelSavePage", &NetErrorPageController::CancelSavePage);
 }
-
-// Vivaldi
-void NetErrorPageController::OpenVivaldia() {
-  if (delegate_)
-    delegate_->OpenVivaldia();
-}
-// End Vivaldi
-

@@ -15,12 +15,12 @@ export class CSSStyleDeclaration {
   readonly #cssModelInternal: CSSModel;
   parentRule: CSSRule|null;
   #allPropertiesInternal!: CSSProperty[];
-  styleSheetId!: Protocol.CSS.StyleSheetId|undefined;
+  styleSheetId?: Protocol.CSS.StyleSheetId;
   range!: TextUtils.TextRange.TextRange|null;
-  cssText!: string|undefined;
-  #shorthandValues!: Map<string, string>;
-  #shorthandIsImportant!: Set<string>;
-  #activePropertyMap!: Map<string, CSSProperty>;
+  cssText?: string;
+  #shorthandValues = new Map<string, string>();
+  #shorthandIsImportant = new Set<string>();
+  #activePropertyMap = new Map<string, CSSProperty>();
   #leadingPropertiesInternal!: CSSProperty[]|null;
   type: Type;
   // For CSSStyles coming from animations,
@@ -271,7 +271,7 @@ export class CSSStyleDeclaration {
 
   #insertionRange(index: number): TextUtils.TextRange.TextRange {
     const property = this.propertyAt(index);
-    if (property && property.range) {
+    if (property?.range) {
       return property.range.collapseToStart();
     }
     if (!this.range) {

@@ -23,7 +23,6 @@
 #import "ios/chrome/browser/overlays/ui_bundled/infobar_banner/confirm/confirm_infobar_banner_overlay_mediator.h"
 #import "ios/chrome/browser/overlays/ui_bundled/infobar_banner/features.h"
 #import "ios/chrome/browser/overlays/ui_bundled/infobar_banner/infobar_banner_overlay_mediator.h"
-#import "ios/chrome/browser/overlays/ui_bundled/infobar_banner/parcel_tracking/parcel_tracking_infobar_banner_overlay_mediator.h"
 #import "ios/chrome/browser/overlays/ui_bundled/infobar_banner/passwords/password_infobar_banner_overlay_mediator.h"
 #import "ios/chrome/browser/overlays/ui_bundled/infobar_banner/permissions/permissions_infobar_banner_overlay_mediator.h"
 #import "ios/chrome/browser/overlays/ui_bundled/infobar_banner/safe_browsing/enhanced_safe_browsing_infobar_overlay_mediator.h"
@@ -74,7 +73,6 @@ using vivaldi::IsVivaldiRunning;
     [PermissionsBannerOverlayMediator class],
     [TailoredSecurityInfobarBannerOverlayMediator class],
     [SyncErrorInfobarBannerOverlayMediator class],
-    [ParcelTrackingBannerOverlayMediator class],
     [EnhancedSafeBrowsingBannerOverlayMediator class],
   ];
 }
@@ -141,8 +139,7 @@ using vivaldi::IsVivaldiRunning;
                   type:config->infobar_type()];
   mediator.consumer = self.bannerViewController;
   mediator.engagementTracker =
-      feature_engagement::TrackerFactory::GetForProfile(
-          self.browser->GetProfile());
+      feature_engagement::TrackerFactory::GetForProfile(self.profile);
 
   self.mediator = mediator;
   // Present the banner.
@@ -261,9 +258,6 @@ using vivaldi::IsVivaldiRunning;
       break;
     case InfobarType::kInfobarTypeTranslate:
       mediatorClass = [TranslateInfobarBannerOverlayMediator class];
-      break;
-    case InfobarType::kInfobarTypeParcelTracking:
-      mediatorClass = [ParcelTrackingBannerOverlayMediator class];
       break;
     case InfobarType::kInfobarTypeEnhancedSafeBrowsing:
       mediatorClass = [EnhancedSafeBrowsingBannerOverlayMediator class];

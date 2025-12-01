@@ -647,6 +647,11 @@
         "type": "function",
         "description": "Fetch current targets with information that can be used to make a menu.",
         "parameters": [
+          {
+            "type": "integer",
+            "name": "tabId",
+            "minimum": 0
+          }
         ],
         "returns_async": {
           "name": "callback",

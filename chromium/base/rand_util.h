@@ -46,6 +46,10 @@ BASE_EXPORT double RandDoubleAvoidAllocation();
 
 }  // namespace internal
 
+namespace test {
+class InsecureRandomGenerator;
+}  // namespace test
+
 // Returns a random number in range [0, UINT64_MAX]. Thread-safe.
 BASE_EXPORT uint64_t RandUint64();
 
@@ -268,6 +272,8 @@ class BASE_EXPORT InsecureRandomGenerator {
   friend class memory_simulator::MemoryHolder;
   // Uses the generator to sub-sample metrics.
   friend class MetricsSubSampler;
+  // test::InsecureRandomGenerator can be used for testing.
+  friend class test::InsecureRandomGenerator;
 
   FRIEND_TEST_ALL_PREFIXES(RandUtilTest,
                            InsecureRandomGeneratorProducesBothValuesOfAllBits);
@@ -287,6 +293,8 @@ class BASE_EXPORT MetricsSubSampler {
  public:
   MetricsSubSampler();
   bool ShouldSample(double probability) const;
+
+  void Reseed();
 
   // Make any call to ShouldSample for any instance of MetricsSubSampler
   // return true for testing. Cannot be used in conjunction with
@@ -309,6 +317,23 @@ class BASE_EXPORT MetricsSubSampler {
  private:
   InsecureRandomGenerator generator_;
 };
+
+// Returns true with `probability` using a pseudo-random number generator (or
+// always/never returns true if a `ScopedAlwaysSampleForTesting` or
+// `ScopedNeverSampleForTesting` is in scope). Valid values for `probability`
+// are in range [0, 1].
+//
+// This function is intended for sub-sampled metric recording only. Do not use
+// it for any other purpose, especially where cryptographic randomness is
+// required.
+//
+// Uses a thread local MetricsSubSampler.
+BASE_EXPORT bool ShouldRecordSubsampledMetric(double probability);
+
+// Reseeds the MetricsSubsampler used by ShouldRecordSubsampledMetric. Used
+// after forking a zygote to avoid having multiple processes sharing initial
+// RNG state.
+BASE_EXPORT void ReseedSharedMetricsSubsampler();
 
 }  // namespace base
 

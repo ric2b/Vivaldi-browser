@@ -48,7 +48,7 @@ ElfCoreDump::Note::Note() {}
 ElfCoreDump::Note::Note(const MemoryRange& content) : content_(content) {}
 
 bool ElfCoreDump::Note::IsValid() const {
-  return GetHeader() != NULL;
+  return GetHeader() != nullptr;
 }
 
 const ElfCoreDump::Nhdr* ElfCoreDump::Note::GetHeader() const {
@@ -144,7 +144,7 @@ const ElfCoreDump::Phdr* ElfCoreDump::GetProgramHeader(unsigned index) const {
     return reinterpret_cast<const Phdr*>(content_.GetArrayElement(
         header->e_phoff, header->e_phentsize, index));
   }
-  return NULL;
+  return nullptr;
 }
 
 const ElfCoreDump::Phdr* ElfCoreDump::GetFirstProgramHeaderOfType(
@@ -155,7 +155,7 @@ const ElfCoreDump::Phdr* ElfCoreDump::GetFirstProgramHeaderOfType(
       return program;
     }
   }
-  return NULL;
+  return nullptr;
 }
 
 unsigned ElfCoreDump::GetProgramHeaderCount() const {

@@ -15,6 +15,7 @@
 #include <string_view>
 #include <tuple>
 #include <utility>
+#include <variant>
 #include <vector>
 
 #include "base/base64.h"
@@ -50,10 +51,12 @@
 #include "chrome/browser/webauthn/change_pin_controller_impl.h"
 #include "chrome/browser/webauthn/gpm_user_verification_policy.h"
 #include "chrome/browser/webauthn/passkey_model_factory.h"
+#include "chrome/browser/webauthn/password_credential_controller.h"
 #include "chrome/browser/webauthn/webauthn_metrics_util.h"
 #include "chrome/browser/webauthn/webauthn_pref_names.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/device_event_log/device_event_log.h"
+#include "components/password_manager/core/browser/credential_manager_utils.h"
 #include "components/password_manager/core/browser/passkey_credential.h"
 #include "components/prefs/pref_service.h"
 #include "components/strings/grit/components_strings.h"
@@ -72,17 +75,18 @@
 #include "device/fido/features.h"
 #include "device/fido/fido_authenticator.h"
 #include "device/fido/fido_constants.h"
+#include "device/fido/fido_discovery_factory.h"
 #include "device/fido/fido_request_handler_base.h"
 #include "device/fido/fido_transport_protocol.h"
 #include "device/fido/fido_types.h"
 #include "device/fido/pin.h"
-#include "third_party/abseil-cpp/absl/types/variant.h"
 #include "third_party/icu/source/common/unicode/locid.h"
 #include "third_party/icu/source/common/unicode/utypes.h"
 #include "third_party/icu/source/i18n/unicode/coll.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/gfx/paint_vector_icon.h"
 #include "ui/gfx/text_elider.h"
+#include "url/scheme_host_port.h"
 
 #if BUILDFLAG(IS_WIN)
 #include "device/fido/win/webauthn_api.h"
@@ -107,6 +111,7 @@ using UIPresentation =
     content::AuthenticatorRequestClientDelegate::UIPresentation;
 using device::AuthenticatorType;
 using device::FidoRequestType;
+using PasswordCredentials = PasswordCredentialController::PasswordCredentials;
 
 constexpr int GetMessageIdForTransportDescription(
     AuthenticatorTransport transport) {
@@ -370,6 +375,11 @@ bool ProfileAuthenticatorWillDoUserVerification(
 #endif
 }
 
+inline bool IsModalRequest(UIPresentation ui_presentation) {
+  return ui_presentation == UIPresentation::kModal ||
+         ui_presentation == UIPresentation::kModalImmediate;
+}
+
 }  // namespace
 
 AuthenticatorRequestDialogController::EphemeralState::EphemeralState() =
@@ -469,7 +479,7 @@ void AuthenticatorRequestDialogController::OnRecoverSecurityDomainClosed() {
   // dismissed the recovery window. This will ensure the users to have a backup
   // such as hybrid.
   if (transport_availability_.request_type == FidoRequestType::kGetAssertion &&
-      ui_presentation_ == UIPresentation::kModal &&
+      IsModalRequest(ui_presentation()) &&
       model_->step() == Step::kRecoverSecurityDomain) {
     model_->StartOver();
     return;
@@ -513,7 +523,7 @@ void AuthenticatorRequestDialogController::CancelAuthenticatorRequest() {
       model_->step() == Step::kGPMChangePin) {
     ChangePinControllerImpl::RecordHistogram(ChangePinEvent::kNewPinCancelled);
   }
-  if (ui_presentation_ == UIPresentation::kAutofill) {
+  if (ui_presentation() == UIPresentation::kAutofill) {
     // Conditional UI requests are never cancelled, they restart silently.
     ResetEphemeralState();
     for (auto& observer : model_->observers) {
@@ -533,7 +543,7 @@ void AuthenticatorRequestDialogController::CancelAuthenticatorRequest() {
 }
 
 void AuthenticatorRequestDialogController::OnRequestComplete() {
-  if (ui_presentation_ == UIPresentation::kAutofill) {
+  if (ui_presentation() == UIPresentation::kAutofill) {
     auto* render_frame_host = GetRenderFrameHost();
     auto* web_contents =
         content::WebContents::FromRenderFrameHost(render_frame_host);
@@ -613,8 +623,7 @@ void AuthenticatorRequestDialogController::OnUserConfirmedPriorityMechanism() {
 }
 
 void AuthenticatorRequestDialogController::OnPasskeysChanged(
-    const std::vector<webauthn::PasskeyModelChange>& changes) {
-}
+    const std::vector<webauthn::PasskeyModelChange>& changes) {}
 
 void AuthenticatorRequestDialogController::OnPasskeyModelShuttingDown() {
   passkey_model_observation_.Reset();
@@ -622,6 +631,18 @@ void AuthenticatorRequestDialogController::OnPasskeyModelShuttingDown() {
 
 void AuthenticatorRequestDialogController::OnPasskeyModelIsReady(
     bool is_ready) {}
+
+void AuthenticatorRequestDialogController::PasskeyUpgradeSucceeded() {
+  // Nothing to do. The WebAuthn request will be resolved automatically via the
+  // request handler success callback. The PasskeyUpgradeRequestController shows
+  // its own UI.
+  CHECK_EQ(model_->step(), Step::kPasskeyUpgrade);
+}
+
+void AuthenticatorRequestDialogController::PasskeyUpgradeFailed() {
+  CHECK_EQ(model_->step(), Step::kPasskeyUpgrade);
+  CancelAuthenticatorRequest();
+}
 
 void AuthenticatorRequestDialogController::HideDialog() {
   SetCurrentStep(Step::kNotStarted);
@@ -638,7 +659,8 @@ bool AuthenticatorRequestDialogController::is_request_complete() const {
 }
 
 void AuthenticatorRequestDialogController::StartFlow(
-    TransportAvailabilityInfo transport_availability) {
+    TransportAvailabilityInfo transport_availability,
+    PasswordCredentials passwords) {
   DCHECK(!started_);
   DCHECK_EQ(model_->step(), Step::kNotStarted);
   DCHECK_EQ(
@@ -647,6 +669,7 @@ void AuthenticatorRequestDialogController::StartFlow(
 
   started_ = true;
   transport_availability_ = std::move(transport_availability);
+  passwords_ = std::move(passwords);
   UpdateModelForTransportAvailability();
   // All recognised credentials that are "Chrome implemented" are from the
   // same source, i.e. a platform never has two Chrome implemented platform
@@ -671,8 +694,9 @@ void AuthenticatorRequestDialogController::StartFlow(
   PopulateMechanisms();
   model_->priority_mechanism_index = IndexOfPriorityMechanism();
 
-  switch (ui_presentation_) {
+  switch (ui_presentation()) {
     case UIPresentation::kModal:
+    case UIPresentation::kModalImmediate:
       StartGuidedFlowForMostLikelyTransportOrShowMechanismSelection();
       break;
     case UIPresentation::kAutofill:
@@ -724,7 +748,7 @@ void AuthenticatorRequestDialogController::
     Mechanism& mechanism =
         model_->mechanisms[*model_->priority_mechanism_index];
     const Mechanism::Credential* cred =
-        absl::get_if<Mechanism::Credential>(&mechanism.type);
+        std::get_if<Mechanism::Credential>(&mechanism.type);
 
     // If the authenticator will show its own confirmation then we don't want to
     // duplicate it.
@@ -756,11 +780,13 @@ void AuthenticatorRequestDialogController::
          (cred->value().source == AuthenticatorType::kEnclave &&
           !enclave_will_do_uv))) {
       SetCurrentStep(Step::kSelectPriorityMechanism);
+    } else if (std::holds_alternative<Mechanism::Password>(mechanism.type)) {
+      SetCurrentStep(Step::kSelectPriorityMechanism);
     } else if (cred != nullptr || !hints_.transport.has_value() ||
                transport_availability_.request_type !=
                    FidoRequestType::kGetAssertion ||
                !StartGuidedFlowForHint(*hints_.transport)) {
-      if (absl::holds_alternative<Mechanism::Enclave>(mechanism.type)) {
+      if (std::holds_alternative<Mechanism::Enclave>(mechanism.type)) {
         device::enclave::RecordEvent(
             device::enclave::Event::kMakeCredentialPriorityShown);
         enclave_was_priority_mechanism_ = true;
@@ -807,8 +833,8 @@ void AuthenticatorRequestDialogController::
                                        FidoRequestType::kGetAssertion) {
           for (size_t i = 0; i < model_->mechanisms.size(); ++i) {
             const auto& type = model_->mechanisms[i].type;
-            if (absl::holds_alternative<Mechanism::Credential>(type) &&
-                absl::get<Mechanism::Credential>(type)->source ==
+            if (std::holds_alternative<Mechanism::Credential>(type) &&
+                std::get<Mechanism::Credential>(type)->source ==
                     AuthenticatorType::kEnclave) {
               model_->priority_mechanism_index = i;
               SetCurrentStep(Step::kSelectPriorityMechanism);
@@ -823,14 +849,14 @@ void AuthenticatorRequestDialogController::
           // passkeys, jump to the first one of them.
           for (auto& mechanism : model_->mechanisms) {
             const auto& type = mechanism.type;
-            if (absl::holds_alternative<Mechanism::Credential>(type)) {
-              if (absl::get<Mechanism::Credential>(type)->source ==
+            if (std::holds_alternative<Mechanism::Credential>(type)) {
+              if (std::get<Mechanism::Credential>(type)->source ==
                   AuthenticatorType::kEnclave) {
                 CHECK(enclave_will_do_uv);
                 mechanism.callback.Run();
                 return;
               }
-              if (absl::get<Mechanism::Credential>(type)->source ==
+              if (std::get<Mechanism::Credential>(type)->source ==
                   AuthenticatorType::kPhone) {
                 SetCurrentStep(Step::kPhoneConfirmationSheet);
                 return;
@@ -845,9 +871,9 @@ void AuthenticatorRequestDialogController::
     // extra step. Jump to Windows instead.
     if (transport_availability_.has_win_native_api_authenticator &&
         std::ranges::all_of(model_->mechanisms, [](const auto& mech) {
-          return absl::holds_alternative<Mechanism::WindowsAPI>(mech.type) ||
-                 (absl::holds_alternative<Mechanism::Credential>(mech.type) &&
-                  absl::get<Mechanism::Credential>(mech.type).value().source ==
+          return std::holds_alternative<Mechanism::WindowsAPI>(mech.type) ||
+                 (std::holds_alternative<Mechanism::Credential>(mech.type) &&
+                  std::get<Mechanism::Credential>(mech.type).value().source ==
                       AuthenticatorType::kWinNative);
         })) {
       ephemeral_state_.did_invoke_platform_despite_no_priority_mechanism_ =
@@ -861,7 +887,7 @@ void AuthenticatorRequestDialogController::
         // If there were any matches, ignore a hint and show the user the list.
         std::ranges::any_of(model_->mechanisms,
                             [](const auto& mech) {
-                              return absl::get_if<Mechanism::Credential>(
+                              return std::get_if<Mechanism::Credential>(
                                   &mech.type);
                             }) ||
         !StartGuidedFlowForHint(*hints_.transport)) {
@@ -877,7 +903,7 @@ bool AuthenticatorRequestDialogController::StartGuidedFlowForHint(
           ->GetOriginalProfile();
   const auto mechanism_is_transport = [](const Mechanism& mech,
                                          AuthenticatorTransport transport) {
-    const auto* mech_transport = absl::get_if<Mechanism::Transport>(&mech.type);
+    const auto* mech_transport = std::get_if<Mechanism::Transport>(&mech.type);
     return mech_transport && mech_transport->value() == transport;
   };
 
@@ -888,19 +914,19 @@ bool AuthenticatorRequestDialogController::StartGuidedFlowForHint(
       [this, mechanism_is_transport, transport, profile](const auto& mech) {
         switch (transport) {
           case AuthenticatorTransport::kUsbHumanInterfaceDevice:
-            return absl::get_if<Mechanism::WindowsAPI>(&mech.type) ||
+            return std::get_if<Mechanism::WindowsAPI>(&mech.type) ||
                    mechanism_is_transport(
                        mech, AuthenticatorTransport::kUsbHumanInterfaceDevice);
           case AuthenticatorTransport::kHybrid:
             return (WebAuthnApiSupportsHybrid() &&
-                    absl::get_if<Mechanism::WindowsAPI>(&mech.type)) ||
-                   absl::get_if<Mechanism::AddPhone>(&mech.type);
+                    std::get_if<Mechanism::WindowsAPI>(&mech.type)) ||
+                   std::get_if<Mechanism::AddPhone>(&mech.type);
           case AuthenticatorTransport::kInternal:
             return enclave_enabled_status_ !=
                        EnclaveEnabledStatus::kEnabledAndReauthNeeded &&
-                   (absl::get_if<Mechanism::WindowsAPI>(&mech.type) ||
-                    absl::get_if<Mechanism::ICloudKeychain>(&mech.type) ||
-                    (absl::get_if<Mechanism::Enclave>(&mech.type) &&
+                   (std::get_if<Mechanism::WindowsAPI>(&mech.type) ||
+                    std::get_if<Mechanism::ICloudKeychain>(&mech.type) ||
+                    (std::get_if<Mechanism::Enclave>(&mech.type) &&
                      CanDefaultToEnclave(profile)) ||
                     mechanism_is_transport(mech,
                                            AuthenticatorTransport::kInternal));
@@ -1212,7 +1238,7 @@ void AuthenticatorRequestDialogController::OnAuthenticatorStorageFull() {
 }
 
 void AuthenticatorRequestDialogController::OnUserConsentDenied() {
-  if (ui_presentation_ == UIPresentation::kAutofill) {
+  if (ui_presentation() == UIPresentation::kAutofill) {
     // Do not show a page-modal retry error sheet if the user cancelled out of
     // their platform authenticator during a conditional UI request.
     // Instead, retry silently.
@@ -1231,13 +1257,13 @@ void AuthenticatorRequestDialogController::OnUserConsentDenied() {
         model_->priority_mechanism_index.has_value()) {
       const auto& priority_type =
           model_->mechanisms[*model_->priority_mechanism_index].type;
-      if (absl::holds_alternative<Mechanism::Credential>(priority_type)) {
+      if (std::holds_alternative<Mechanism::Credential>(priority_type)) {
         const Mechanism::CredentialInfo* cred_info =
-            &absl::get<Mechanism::Credential>(priority_type).value();
+            &std::get<Mechanism::Credential>(priority_type).value();
         if (cred_info->source == AuthenticatorType::kICloudKeychain) {
           did_trigger_automatically = true;
         }
-      } else if (absl::holds_alternative<Mechanism::ICloudKeychain>(
+      } else if (std::holds_alternative<Mechanism::ICloudKeychain>(
                      priority_type)) {
         did_trigger_automatically = true;
       }
@@ -1260,7 +1286,7 @@ void AuthenticatorRequestDialogController::OnUserConsentDenied() {
 
 bool AuthenticatorRequestDialogController::OnWinUserCancelled() {
 #if BUILDFLAG(IS_WIN)
-  if (ui_presentation_ == UIPresentation::kAutofill) {
+  if (ui_presentation() == UIPresentation::kAutofill) {
     // Do not show a page-modal retry error sheet if the user cancelled out of
     // their platform authenticator during a conditional UI request.
     // Instead, retry silently.
@@ -1277,19 +1303,19 @@ bool AuthenticatorRequestDialogController::OnWinUserCancelled() {
   // UI and there are other options in Chrome's UI.
   bool enclave_is_option =
       std::ranges::any_of(model_->mechanisms, [](const Mechanism& m) {
-        return absl::holds_alternative<Mechanism::Enclave>(m.type);
+        return std::holds_alternative<Mechanism::Enclave>(m.type);
       });
   bool phone_is_option =
       !WebAuthnApiSupportsHybrid() &&
       std::ranges::any_of(model_->mechanisms, [](const Mechanism& m) -> bool {
-        return absl::holds_alternative<Mechanism::Phone>(m.type) ||
-               absl::holds_alternative<Mechanism::AddPhone>(m.type);
+        return std::holds_alternative<Mechanism::Phone>(m.type) ||
+               std::holds_alternative<Mechanism::AddPhone>(m.type);
       });
   bool have_other_option = enclave_is_option || phone_is_option;
   bool windows_was_priority =
       ephemeral_state_.did_invoke_platform_despite_no_priority_mechanism_ ||
       (model_->priority_mechanism_index &&
-       absl::holds_alternative<Mechanism::WindowsAPI>(
+       std::holds_alternative<Mechanism::WindowsAPI>(
            model_->mechanisms[*model_->priority_mechanism_index].type));
   if (have_other_option && windows_was_priority) {
     StartOver();
@@ -1393,7 +1419,8 @@ void AuthenticatorRequestDialogController::SelectAccount(
   for (const auto& response : ephemeral_state_.responses_) {
     model_->creds.emplace_back(AuthenticatorType::kOther,
                                model_->relying_party_id,
-                               response.credential->id, *response.user_entity);
+                               response.credential->id, *response.user_entity,
+                               /*provider_name=*/std::nullopt);
   }
   selection_callback_ = std::move(callback);
   SetCurrentStep(Step::kSelectAccount);
@@ -1426,11 +1453,9 @@ AuthenticatorType AuthenticatorRequestDialogController::OnAccountPreselected(
     return source;
   }
 
-  const bool use_gpm =
-      base::FeatureList::IsEnabled(device::kWebAuthnEnclaveAuthenticator);
   // `source` should not be `kPhone` here except in some tests, which don't
   // configure the enclave.
-  if (use_gpm && source != AuthenticatorType::kPhone) {
+  if (source != AuthenticatorType::kPhone) {
     model_->OnGPMPasskeySelected(credential_id);
     return source;
   }
@@ -1567,11 +1592,6 @@ void AuthenticatorRequestDialogController::set_should_create_in_icloud_keychain(
   should_create_in_icloud_keychain_ = is_enabled;
 }
 
-void AuthenticatorRequestDialogController::set_enclave_can_be_default(
-    bool can_be_default) {
-  enclave_can_be_default_ = can_be_default;
-}
-
 #if BUILDFLAG(IS_MAC)
 
 // This enum is used in a histogram. Never change assigned values and only add
@@ -1622,7 +1642,7 @@ void AuthenticatorRequestDialogController::RecordMacOsStartedHistogram() {
     }
   } else if (transport_availability_.request_type ==
                  device::FidoRequestType::kGetAssertion &&
-             ui_presentation_ == UIPresentation::kModal) {
+             IsModalRequest(ui_presentation())) {
     const bool profile =
         transport_availability_.has_platform_authenticator_credential ==
         device::FidoRequestHandlerBase::RecognizedCredential::
@@ -1697,19 +1717,18 @@ void AuthenticatorRequestDialogController::set_has_icloud_drive_enabled(
 
 #endif
 
-void AuthenticatorRequestDialogController::set_ambient_credential_types(
-    int types) {
-  ambient_credential_types_ = types;
+void AuthenticatorRequestDialogController::SetCredentialTypes(int types) {
+  credential_types_ = types;
 }
 
 content::AuthenticatorRequestClientDelegate::UIPresentation
 AuthenticatorRequestDialogController::ui_presentation() const {
-  return ui_presentation_;
+  return model_->ui_presentation;
 }
 
-void AuthenticatorRequestDialogController::set_ui_presentation(
+void AuthenticatorRequestDialogController::SetUIPresentation(
     UIPresentation modality) {
-  ui_presentation_ = modality;
+  model_->set_ui_presentation(modality);
 }
 
 void AuthenticatorRequestDialogController::ProvideChallengeUrl(
@@ -1723,9 +1742,20 @@ void AuthenticatorRequestDialogController::ProvideChallengeUrl(
   // Conditional requests don't initiate a challenge fetch unless and until the
   // user triggers it, but modal requests always perform the fetch so it can
   // be started immediately.
-  if (ui_presentation_ == UIPresentation::kModal) {
+  if (IsModalRequest(ui_presentation())) {
     MaybeStartChallengeFetch();
   }
+}
+
+void AuthenticatorRequestDialogController::InitializeEnclaveRequestCallback(
+    device::FidoDiscoveryFactory* discovery_factory) {
+  CHECK(!enclave_request_callback_);
+
+  using EnclaveEventStream = device::FidoDiscoveryBase::EventStream<
+      std::unique_ptr<device::enclave::CredentialRequest>>;
+  std::unique_ptr<EnclaveEventStream> event_stream;
+  std::tie(enclave_request_callback_, event_stream) = EnclaveEventStream::New();
+  discovery_factory->set_enclave_ui_request_stream(std::move(event_stream));
 }
 
 void AuthenticatorRequestDialogController::MaybeStartChallengeFetch() {
@@ -1945,30 +1975,36 @@ void AuthenticatorRequestDialogController::StartAutofillRequest() {
             credential.user.display_name.value_or("")));
     if (credential.source == AuthenticatorType::kPhone) {
       passkey.SetAuthenticatorLabel(l10n_util::GetStringFUTF16(
-          base::FeatureList::IsEnabled(device::kWebAuthnEnclaveAuthenticator)
-              ? IDS_PASSWORD_MANAGER_PASSKEY_FROM_PHONE_NEW
-              : IDS_PASSWORD_MANAGER_PASSKEY_FROM_PHONE,
-          *priority_phone_name));
+          IDS_PASSWORD_MANAGER_PASSKEY_FROM_PHONE, *priority_phone_name));
     }
   }
   ReportConditionalUiPasskeyCount(credentials.size());
 
+  // TODO(https://crbug.com/358119268): This will probably get its own mediation
+  // type, but for prototyping we assume any conditional request with passwords
+  // uses ambient.
+  bool has_ambient_credentials = !credentials.empty() || !passwords_.empty();
   if (base::FeatureList::IsEnabled(device::kWebAuthnAmbientSignin) &&
-      !credentials.empty()) {
+      has_ambient_credentials &&
+      (credential_types_ &
+       static_cast<int>(blink::mojom::CredentialTypeFlags::kPassword))) {
     auto* controller =
         ambient_signin::AmbientSigninController::GetOrCreateForCurrentDocument(
             render_frame_host);
+    // TODO(https://crbug.com/358119268): `AmbientSigninController` needs to be
+    // refactored, since this is now the single source of all credentials it
+    // shows.
     controller->AddAndShowWebAuthnMethods(
-        model(), credentials, ambient_credential_types_,
+        model(), credentials, credential_types_,
         base::BindOnce(
-            [](base::WeakPtr<AuthenticatorRequestDialogController> controller,
-               std::vector<uint8_t> credential_id) {
-              if (!controller) {
-                return;
-              }
-              controller->OnAccountPreselected(std::move(credential_id));
-            },
+            IgnoreResult(
+                &AuthenticatorRequestDialogController::OnAccountPreselected),
             weak_factory_.GetWeakPtr()));
+    controller->AddAndShowPasswordMethods(
+        std::move(passwords_), credential_types_,
+        base::BindRepeating(
+            &AuthenticatorRequestDialogModel::OnPasswordCredentialSelected,
+            base::Unretained(model_)));
   }
 
   ChromeWebAuthnCredentialsDelegate* webauthn_credentials_delegate =
@@ -2093,7 +2129,7 @@ void AuthenticatorRequestDialogController::PopulateMechanisms() {
   bool specific_phones_listed = false;
   bool specific_local_passkeys_listed = false;
   bool enclave_passkeys_shown = false;
-  if (is_get_assertion && ui_presentation_ == UIPresentation::kModal) {
+  if (is_get_assertion && IsModalRequest(ui_presentation())) {
     // List passkeys instead of mechanisms for platform & GPM authenticators.
     for (const auto& cred : transport_availability_.recognized_credentials) {
       if (cred.source == AuthenticatorType::kPhone && !list_phone_passkeys) {
@@ -2127,7 +2163,10 @@ void AuthenticatorRequestDialogController::PopulateMechanisms() {
               base::Unretained(this), cred.cred_id));
       mechanism.description =
           AuthenticatorRequestDialogModel::GetMechanismDescription(
-              cred.source, model_->priority_phone_name);
+              cred, model_->priority_phone_name, ui_presentation());
+    }
+    if (!passwords_.empty()) {
+      PopulatePasswords();
     }
   }
 
@@ -2136,7 +2175,7 @@ void AuthenticatorRequestDialogController::PopulateMechanisms() {
   // platform credential directly. This is true for both conditional requests
   // and the new passkey selector UI.
   bool did_enumerate_local_passkeys = false;
-  if (ui_presentation_ == UIPresentation::kAutofill) {
+  if (ui_presentation() == UIPresentation::kAutofill) {
     did_enumerate_local_passkeys = true;
   } else if (is_get_assertion) {
     switch (transport_availability_.has_platform_authenticator_credential) {
@@ -2191,8 +2230,7 @@ void AuthenticatorRequestDialogController::PopulateMechanisms() {
     }
   }
 
-  if (base::FeatureList::IsEnabled(device::kWebAuthnEnclaveAuthenticator) &&
-      !is_get_assertion &&
+  if (!is_get_assertion &&
       enclave_enabled_status_ == EnclaveEnabledStatus::kEnabled &&
       *transport_availability_.make_credential_attachment !=
           device::AuthenticatorAttachment::kCrossPlatform) {
@@ -2207,7 +2245,7 @@ void AuthenticatorRequestDialogController::PopulateMechanisms() {
   }
   if (enclave_enabled_status_ ==
           EnclaveEnabledStatus::kEnabledAndReauthNeeded &&
-      ui_presentation_ == UIPresentation::kModal &&
+          UIPresentation::kModal == ui_presentation() &&
       model_->relying_party_id != "google.com") {
     // Show a button that lets the user sign in again to restore sync. This
     // cancels the request, so we can't do it for conditional UI requests.
@@ -2284,8 +2322,7 @@ void AuthenticatorRequestDialogController::PopulateMechanisms() {
         transport_availability_.has_icloud_keychain_credential ==
             device::FidoRequestHandlerBase::RecognizedCredential::
                 kNoRecognizedCredential &&
-        paired_phones_.size() == 1 &&
-        ui_presentation_ == UIPresentation::kModal &&
+        paired_phones_.size() == 1 && IsModalRequest(ui_presentation()) &&
         transport_availability_.is_only_hybrid_or_internal;
     if (skip_to_phone_confirmation) {
       FIDO_LOG(EVENT)
@@ -2361,13 +2398,15 @@ AuthenticatorRequestDialogController::IndexOfPriorityMechanism() {
   // button.
   if (enclave_enabled_status_ ==
           EnclaveEnabledStatus::kEnabledAndReauthNeeded &&
-      ui_presentation_ == UIPresentation::kModal) {
+      IsModalRequest(ui_presentation())) {
     return std::nullopt;
   }
 
   switch (transport_availability_.request_type) {
     case FidoRequestType::kGetAssertion:
-      return IndexOfGetAssertionPriorityMechanism();
+      return ui_presentation() == UIPresentation::kModalImmediate
+                 ? std::nullopt
+                 : IndexOfGetAssertionPriorityMechanism();
     case FidoRequestType::kMakeCredential:
       return IndexOfMakeCredentialPriorityMechanism();
   }
@@ -2388,12 +2427,13 @@ AuthenticatorRequestDialogController::IndexOfGetAssertionPriorityMechanism() {
     std::optional<std::pair<size_t, const Mechanism::CredentialInfo*>>
         best_cred;
     bool multiple_distinct_creds = false;
+    bool has_password = false;
 
     for (size_t i = 0; i < model_->mechanisms.size(); ++i) {
       const auto& type = model_->mechanisms[i].type;
-      if (absl::holds_alternative<Mechanism::Credential>(type)) {
+      if (std::holds_alternative<Mechanism::Credential>(type)) {
         const Mechanism::CredentialInfo* cred_info =
-            &absl::get<Mechanism::Credential>(type).value();
+            &std::get<Mechanism::Credential>(type).value();
 
         if (!best_cred.has_value()) {
           best_cred = std::make_pair(i, cred_info);
@@ -2405,10 +2445,12 @@ AuthenticatorRequestDialogController::IndexOfGetAssertionPriorityMechanism() {
         } else {
           multiple_distinct_creds = true;
         }
+      } else if (std::holds_alternative<Mechanism::Password>(type)) {
+        has_password = true;
       }
     }
     // If one of the passkeys is a valid default, go to that.
-    if (!multiple_distinct_creds && best_cred.has_value() &&
+    if (!has_password && !multiple_distinct_creds && best_cred.has_value() &&
         (best_cred->second->source != AuthenticatorType::kEnclave ||
          CanDefaultToEnclave(Profile::FromBrowserContext(
                                  GetRenderFrameHost()->GetBrowserContext())
@@ -2460,8 +2502,7 @@ AuthenticatorRequestDialogController::IndexOfMakeCredentialPriorityMechanism() {
     Profile* profile =
         Profile::FromBrowserContext(GetRenderFrameHost()->GetBrowserContext())
             ->GetOriginalProfile();
-    if (base::FeatureList::IsEnabled(device::kWebAuthnEnclaveAuthenticator) &&
-        CanDefaultToEnclave(profile) &&
+    if (CanDefaultToEnclave(profile) &&
         enclave_enabled_status_ == EnclaveEnabledStatus::kEnabled) {
       priority_list.emplace_back(Mechanism::Enclave());
     }
@@ -2502,7 +2543,7 @@ AuthenticatorRequestDialogController::IndexOfMakeCredentialPriorityMechanism() {
 
   for (const auto& priority_mechanism : priority_list) {
     // A phone should never be triggered immediately.
-    CHECK(!absl::holds_alternative<Mechanism::Phone>(priority_mechanism));
+    CHECK(!std::holds_alternative<Mechanism::Phone>(priority_mechanism));
 
     for (size_t i = 0; i < model_->mechanisms.size(); i++) {
       if (priority_mechanism == model_->mechanisms[i].type) {
@@ -2533,10 +2574,6 @@ void AuthenticatorRequestDialogController::
 
 bool AuthenticatorRequestDialogController::CanDefaultToEnclave(
     Profile* profile) {
-  if (!enclave_can_be_default_) {
-    return false;
-  }
-
   const bool enclave_decline_limit_reached =
       profile->GetPrefs()->GetInteger(
           webauthn::pref_names::kEnclaveDeclinedGPMCredentialCreationCount) >=
@@ -2557,26 +2594,35 @@ AuthenticatorRequestDialogController::GetRenderFrameHost() const {
 }
 
 void AuthenticatorRequestDialogController::StartPasskeyUpgradeRequest() {
-  auto* controller =
-      PasskeyUpgradeRequestController::GetOrCreateForCurrentDocument(
-          GetRenderFrameHost());
-  if (!model_->user_entity.name) {
-    FIDO_LOG(ERROR) << "Ignoring passkey upgrade request: empty username";
+  SetCurrentStep(Step::kPasskeyUpgrade);
+
+  if (!enclave_request_callback_) {
+    FIDO_LOG(ERROR)
+        << "Passkey upgrade request failed because GPM is disabled by policy.";
+    PasskeyUpgradeFailed();
     return;
   }
-  controller->TryUpgradePasswordToPasskey(
-      model_->relying_party_id, *model_->user_entity.name,
-      base::BindOnce(
-          [](base::WeakPtr<AuthenticatorRequestDialogController> controller,
-             bool success) {
-            if (!controller) {
-              return;
-            }
-            // The pending request callback is resolved through the
-            // MakeCredentialRequestHandler.
-            FIDO_LOG(EVENT)
-                << "Passkey upgrade request complete success=" << success;
-          },
-          weak_factory_.GetWeakPtr()));
-  SetCurrentStep(Step::kPasskeyUpgrade);
+
+  passkey_upgrade_request_controller_ =
+      std::make_unique<PasskeyUpgradeRequestController>(
+          GetRenderFrameHost(), std::move(enclave_request_callback_));
+  passkey_upgrade_request_controller_->TryUpgradePasswordToPasskey(
+      model_->relying_party_id, model_->user_entity.name.value_or(""),
+      /*delegate=*/this);
+}
+
+void AuthenticatorRequestDialogController::PopulatePasswords() {
+  for (const auto& password : passwords_) {
+    Mechanism mechanism(
+        Mechanism::Password(), password->username_value,
+        password->username_value, vector_icons::kPasswordManagerIcon,
+        base::BindRepeating(
+            &AuthenticatorRequestDialogModel::OnPasswordCredentialSelected,
+            base::Unretained(model_),
+            std::make_pair(password->username_value,
+                           password->password_value)));
+    mechanism.description = l10n_util::GetStringUTF16(
+        IDS_PASSWORD_MANAGER_PASSWORD_FROM_GOOGLE_PASSWORD_MANAGER);
+    model_->mechanisms.emplace_back(std::move(mechanism));
+  }
 }

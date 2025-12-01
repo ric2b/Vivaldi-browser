@@ -13,16 +13,20 @@
 namespace autofill::features {
 
 // All features in alphabetical order.
+#if BUILDFLAG(IS_IOS)
 COMPONENT_EXPORT(AUTOFILL)
-BASE_DECLARE_FEATURE(kAutofillDisableLocalCardMigration);
+BASE_DECLARE_FEATURE(kAutofillDisableDefaultSaveCardFixFlowDetection);
+#endif
 COMPONENT_EXPORT(AUTOFILL)
 BASE_DECLARE_FEATURE(kAutofillEnableAllowlistForBmoCardCategoryBenefits);
 COMPONENT_EXPORT(AUTOFILL)
+BASE_DECLARE_FEATURE(kAutofillEnableAmountExtractionAllowlistDesktop);
+COMPONENT_EXPORT(AUTOFILL)
 BASE_DECLARE_FEATURE(kAutofillEnableAmountExtractionDesktop);
 COMPONENT_EXPORT(AUTOFILL)
-BASE_DECLARE_FEATURE(kAutofillEnableBuyNowPayLaterForAffirm);
+BASE_DECLARE_FEATURE(kAutofillEnableAmountExtractionDesktopLogging);
 COMPONENT_EXPORT(AUTOFILL)
-BASE_DECLARE_FEATURE(kAutofillEnableBuyNowPayLaterForZip);
+BASE_DECLARE_FEATURE(kAutofillEnableBuyNowPayLater);
 COMPONENT_EXPORT(AUTOFILL)
 BASE_DECLARE_FEATURE(kAutofillEnableBuyNowPayLaterSyncing);
 COMPONENT_EXPORT(AUTOFILL)
@@ -33,7 +37,6 @@ COMPONENT_EXPORT(AUTOFILL)
 BASE_DECLARE_FEATURE(kAutofillEnableCardBenefitsIph);
 COMPONENT_EXPORT(AUTOFILL)
 BASE_DECLARE_FEATURE(kAutofillEnableCardBenefitsSync);
-COMPONENT_EXPORT(AUTOFILL) BASE_DECLARE_FEATURE(kAutofillEnableCardProductName);
 COMPONENT_EXPORT(AUTOFILL)
 BASE_DECLARE_FEATURE(kAutofillEnableCardInfoRuntimeRetrieval);
 COMPONENT_EXPORT(AUTOFILL)
@@ -49,7 +52,7 @@ BASE_DECLARE_FEATURE(kAutofillEnableFpanRiskBasedAuthentication);
 COMPONENT_EXPORT(AUTOFILL)
 BASE_DECLARE_FEATURE(kAutofillEnableLogFormEventsToAllParsedFormTypes);
 COMPONENT_EXPORT(AUTOFILL)
-BASE_DECLARE_FEATURE(kAutofillEnableNewCardArtAndNetworkImages);
+BASE_DECLARE_FEATURE(kAutofillEnableNewFopDisplayDesktop);
 COMPONENT_EXPORT(AUTOFILL)
 BASE_DECLARE_FEATURE(kAutofillEnableOffersInClankKeyboardAccessory);
 COMPONENT_EXPORT(AUTOFILL)
@@ -66,10 +69,6 @@ COMPONENT_EXPORT(AUTOFILL)
 BASE_DECLARE_FEATURE(kAutofillEnablePrefetchingRiskDataForRetrieval);
 COMPONENT_EXPORT(AUTOFILL)
 BASE_DECLARE_FEATURE(kAutofillEnableSaveAndFill);
-COMPONENT_EXPORT(AUTOFILL)
-BASE_DECLARE_FEATURE(kAutofillEnableSaveCardLoadingAndConfirmation);
-COMPONENT_EXPORT(AUTOFILL)
-BASE_DECLARE_FEATURE(kAutofillEnableSaveCardLocalSaveFallback);
 
 #if BUILDFLAG(IS_ANDROID)
 COMPONENT_EXPORT(AUTOFILL)
@@ -79,15 +78,15 @@ BASE_DECLARE_FEATURE(kAutofillEnableSyncingOfPixBankAccounts);
 COMPONENT_EXPORT(AUTOFILL)
 BASE_DECLARE_FEATURE(kAutofillEnableVcn3dsAuthentication);
 COMPONENT_EXPORT(AUTOFILL)
-BASE_DECLARE_FEATURE(kAutofillEnableVcnEnrollLoadingAndConfirmation);
-COMPONENT_EXPORT(AUTOFILL)
 BASE_DECLARE_FEATURE(kAutofillEnableVcnGrayOutForMerchantOptOut);
 COMPONENT_EXPORT(AUTOFILL)
 BASE_DECLARE_FEATURE(kAutofillEnableVerveCardSupport);
 COMPONENT_EXPORT(AUTOFILL)
-BASE_DECLARE_FEATURE(kAutofillEnableVirtualCardMetadata);
+BASE_DECLARE_FEATURE(kAutofillParseVcnCardOnFileStandaloneCvcFields);
+#if BUILDFLAG(IS_IOS)
 COMPONENT_EXPORT(AUTOFILL)
-BASE_DECLARE_FEATURE(kAutofillRemovePaymentsButterDropdown);
+BASE_DECLARE_FEATURE(kAutofillSaveCardBottomSheet);
+#endif
 COMPONENT_EXPORT(AUTOFILL)
 BASE_DECLARE_FEATURE(kAutofillSharedStorageServerCardData);
 #if BUILDFLAG(IS_IOS)

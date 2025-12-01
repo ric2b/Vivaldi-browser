@@ -392,8 +392,7 @@ absl::Status ConvertTFExecutorToTFLOrFlatbuffer(
     tflite::ConverterFlags& converter_flags,
     const mlir::TFL::PassConfig& pass_config,
     const std::unordered_set<std::string>& saved_model_tags,
-    llvm::StringRef saved_model_dir, std::string* result,
-    bool serialize_stablehlo_ops, bool export_to_mlir,
+    llvm::StringRef saved_model_dir, std::string* result, bool export_to_mlir,
     const PyFunctionLibrary* quantization_py_function_lib) {
   // TODO: b/353597396 - Remove this once the StableHLO Quantizer is fully
   // eliminated from the TFLite Converter.
@@ -465,11 +464,7 @@ absl::Status ConvertTFExecutorToTFLOrFlatbuffer(
   AddPostVariableFreezingTFToTFLConversionPasses(
       saved_model_dir, converter_flags, pass_config, pass_manager.get());
   if (failed(pass_manager->run(module.get()))) {
-    return status_handler->Combine(absl::InvalidArgumentError(
-        "Variable constant folding is failed. Please consider using "
-        "enabling `experimental_enable_resource_variables` flag in the "
-        "TFLite converter object. For example, "
-        "converter.experimental_enable_resource_variables = True"));
+    return status_handler->ConsumeStatus();
   }
 
   if (failed(GraphContainsStatefulPartitionedOp(module.get()))) {

@@ -10,11 +10,11 @@
 #include "base/functional/bind.h"
 #include "base/metrics/histogram_functions.h"
 #include "chrome/browser/signin/signin_promo.h"
-#include "chrome/browser/ui/tabs/public/tab_interface.h"
 #include "components/grit/components_resources.h"
 #include "components/security_interstitials/content/security_interstitial_controller_client.h"
 #include "components/security_interstitials/core/common_string_util.h"
 #include "components/strings/grit/components_strings.h"
+#include "components/tab_collections/public/tab_interface.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/referrer.h"
@@ -99,8 +99,6 @@ void SupervisedUserVerificationPage::CloseSignInTabs() {
     return;
   }
 
-  int closed_tab_count = 0;
-  int skipped_tab_count = 0;
   while (!signin_tabs_handle_list_.empty()) {
     const tabs::TabHandle tab_handle = signin_tabs_handle_list_.front();
     signin_tabs_handle_list_.pop_front();
@@ -117,16 +115,10 @@ void SupervisedUserVerificationPage::CloseSignInTabs() {
     // the rest will be left open as the user might have navigated elsewhere.
     if (!IsSignInUrl(tab_interface->GetContents()->GetLastCommittedURL()) &&
         !IsSignInUrl(tab_interface->GetContents()->GetVisibleURL())) {
-      skipped_tab_count++;
       continue;
     }
     tab_interface->Close();
-    closed_tab_count++;
   }
-  RecordSignInTabUmaMetrics(closed_tab_count, skipped_tab_count);
-
-  // TODO(b/364546097): Ideally focus the last visited tab (before the sign-in
-  // page), before closing the sign-in tabs.
 }
 
 bool SupervisedUserVerificationPage::IsSignInUrl(const GURL& url) {
@@ -164,9 +156,6 @@ void SupervisedUserVerificationPage::PopulateCommonStrings(
     base::Value::Dict& load_time_data) {
   load_time_data.Set("overridable", false);
   load_time_data.Set("hide_primary_button", false);
-  load_time_data.Set("show_recurrent_error_paragraph", false);
-
-  load_time_data.Set("recurrentErrorParagraph", "");
   load_time_data.Set("openDetails", "");
   load_time_data.Set("explanationParagraph", "");
   load_time_data.Set("finalParagraph", "");

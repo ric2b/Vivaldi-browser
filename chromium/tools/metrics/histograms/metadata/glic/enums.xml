@@ -26,11 +26,170 @@ chromium-metrics-reviews@google.com.
 
 <enums>
 
+<!-- LINT.IfChange(ActInFocusedTabErrorReason) -->
+
+<enum name="ActInFocusedTabErrorReason">
+  <int value="0" label="Unknown"/>
+  <int value="1" label="Get context failed"/>
+  <int value="2" label="Invalid action proto"/>
+  <int value="3" label="Target not found"/>
+</enum>
+
+<!-- LINT.ThenChange(//chrome/browser/glic/host/glic.mojom:ActInFocusedTabErrorReason) -->
+
+<!-- LINT.IfChange(GlicAttachChangeReason) -->
+
+<enum name="GlicAttachChangeReason">
+  <int value="0" label="Drag gesture."/>
+  <int value="1" label="Menu click."/>
+  <int value="2" label="Panel initialized."/>
+</enum>
+
+<!-- LINT.ThenChange(//chrome/browser/glic/glic_metrics.h:AttachChangeReason) -->
+
+<!-- LINT.IfChange(GlicEntryPointImpression) -->
+
+<enum name="GlicEntryPointImpression">
+  <int value="0" label="User has not completed fre."/>
+  <int value="1"
+      label="User has completed fre, browser entry point is enabled, and os
+             entry point is disabled."/>
+  <int value="2"
+      label="User has completed fre, browser entry point is disabled, and os
+             entry point is enabled."/>
+  <int value="3"
+      label="User has completed fre, both browser and os entry points are
+             enabled."/>
+  <int value="4"
+      label="User has completed fre, neither entry point is enabled."/>
+  <int value="5"
+      label="User is not allowed to see glic, e.g. due to enterprise policy."/>
+  <int value="6"
+      label="User has not completed fre, neither entry point is enabled."/>
+</enum>
+
+<!-- LINT.ThenChange(//chrome/browser/glic/glic_metrics.h:EntryPointImpression) -->
+
+<!-- LINT.IfChange(GlicHotkeyUsage) -->
+
+<enum name="GlicHotkeyUsage">
+  <int value="0" label="Default"/>
+  <int value="1" label="Custom"/>
+</enum>
+
+<!-- LINT.ThenChange(//chrome/browser/background/glic/glic_background_mode_manager.h:HotkeyUsage) -->
+
+<!-- LINT.IfChange(GlicInputModesUsed) -->
+
+<enum name="GlicInputModesUsed">
+  <int value="0" label="No input submitted"/>
+  <int value="1" label="Only text input submitted"/>
+  <int value="2" label="Only audio input submitted"/>
+  <int value="3" label="Text and Audio input submitted"/>
+</enum>
+
+<!-- LINT.ThenChange(//chrome/browser/glic/glic_metrics.h:GlicInputModesUsed) -->
+
+<!-- LINT.IfChange(GlicInvocationSource) -->
+
+<enum name="GlicInvocationSource">
+  <int value="0" label="Button in the OS"/>
+  <int value="1" label="Menu from button in the OS"/>
+  <int value="2" label="OS-level hotkey"/>
+  <int value="3" label="Button in top-chrome"/>
+  <int value="4" label="First run experience"/>
+  <int value="5" label="From the profile picker"/>
+  <int value="6" label="From tab strip nudge"/>
+  <int value="7" label="From 3-dot menu"/>
+  <int value="8" label="An unsupported/unknown source"/>
+  <int value="9" label="From the What's New page"/>
+  <int value="10" label="User clicked sign-in and signed in"/>
+</enum>
+
+<!-- LINT.ThenChange(//chrome/browser/glic/host/glic.mojom:InvocationSource) -->
+
+<!-- LINT.IfChange(GlicResponseError) -->
+
+<enum name="GlicMetricsError">
+  <int value="0" label="Response start without input."/>
+  <int value="1" label="Response stop without input."/>
+  <int value="2" label="Response start while hiding or hidden."/>
+  <int value="3" label="Window close without window open."/>
+</enum>
+
+<!-- LINT.ThenChange(//chrome/browser/glic/glic_metrics.h:Error) -->
+
+<enum name="GlicRequestEvent">
+  <int value="0" label="Request received."/>
+  <int value="1" label="Response sent."/>
+  <int value="2" label="Request handling exception caught."/>
+</enum>
+
+<!-- LINT.IfChange(GlicResponseSegmentation) -->
+
+<enum name="GlicResponseSegmentation">
+  <int value="0" label="Unknown"/>
+  <int value="1" label="Button in the OS, attached, text mode."/>
+  <int value="2" label="Button in the OS, attached, audio mode."/>
+  <int value="3" label="Button in the OS, detached, text mode."/>
+  <int value="4" label="Button in the OS, detached, audio mode."/>
+  <int value="5" label="Menu from button in the OS, attached, text mode."/>
+  <int value="6" label="Menu from button in the OS, attached, audio mode."/>
+  <int value="7" label="Menu from button in the OS, detached, text mode."/>
+  <int value="8" label="Menu from button in the OS, detached, audio mode."/>
+  <int value="9" label="OS hotkey, attached, text mode."/>
+  <int value="10" label="OS hotkey, attached, audio mode."/>
+  <int value="11" label="OS hotkey, detached, text mode."/>
+  <int value="12" label="OS hotkey, detached, audio mode."/>
+  <int value="13" label="Button in top-chrome, attached, text mode."/>
+  <int value="14" label="Button in top-chrome, attached, audio mode."/>
+  <int value="15" label="Button in top-chrome, detached, text mode."/>
+  <int value="16" label="Button in top-chrome, detached, audio mode."/>
+  <int value="17" label="First run experience, attached, text mode."/>
+  <int value="18" label="First run experience, attached, audio mode."/>
+  <int value="19" label="First run experience, detached, text mode."/>
+  <int value="20" label="First run experience, detached, audio mode."/>
+  <int value="21" label="Profile picker, attached, text mode."/>
+  <int value="22" label="Profile picker, attached, audio mode."/>
+  <int value="23" label="Profile picker, detached, text mode."/>
+  <int value="24" label="Profile picker, detached, audio mode."/>
+  <int value="25" label="Nudge, attached, text mode."/>
+  <int value="26" label="Nudge, attached, audio mode."/>
+  <int value="27" label="Nudge, detached, text mode."/>
+  <int value="28" label="Nudge, detached, audio mode."/>
+  <int value="29" label="3-dot menu, attached, text mode."/>
+  <int value="30" label="3-dot menu, attached, audio mode."/>
+  <int value="31" label="3-dot menu, detached, text mode."/>
+  <int value="32" label="3-dot menu, detached, audio mode."/>
+  <int value="33" label="Unsupported/unknown, attached, text mode."/>
+  <int value="34" label="Unsupported/unknown, attached, audio mode."/>
+  <int value="35" label="Unsupported/unknown, detached, text mode."/>
+  <int value="36" label="Unsupported/unknown, detached, audio mode."/>
+  <int value="37" label="What's New page, attached, text mode."/>
+  <int value="38" label="What's New page, attached, audio mode."/>
+  <int value="39" label="What's New page, detached, text mode."/>
+  <int value="40" label="What's New page, detached, audio mode."/>
+  <int value="41"
+      label="User clicked sign-in and signed in, attached, text mode."/>
+  <int value="42"
+      label="User clicked sign-in and signed in, attached, audio mode."/>
+  <int value="43"
+      label="User clicked sign-in and signed in, detached, text mode."/>
+  <int value="44"
+      label="User clicked sign-in and signed in, detached, audio mode."/>
+</enum>
+
+<!-- LINT.ThenChange(//chrome/browser/glic/glic_metrics.h:ResponseSegmentation) -->
+
+<!-- LINT.IfChange(WebClientMode) -->
+
 <enum name="GlicWebClientMode">
   <int value="0" label="Text"/>
   <int value="1" label="Audio"/>
   <int value="2" label="Unknown"/>
 </enum>
+
+<!-- LINT.ThenChange(//chrome/browser/glic/host/glic.mojom:WebClientMode) -->
 
 <enum name="PdfRequestStates">
   <int value="0" label="PDF main doc; PDF found"/>
@@ -55,9 +214,10 @@ chromium-metrics-reviews@google.com.
   <int value="7" label="Glic is not available for profile"/>
   <int value="8" label="Web view is displayed"/>
   <int value="9" label="The panel is unresponsive"/>
+  <int value="10" label="The sign-in panel is displayed"/>
 </enum>
 
-<!-- LINT.ThenChange(//chrome/browser/glic/glic.mojom:WebUiState) -->
+<!-- LINT.ThenChange(//chrome/browser/glic/host/glic.mojom:WebUiState) -->
 
 </enums>
 

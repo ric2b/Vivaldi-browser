@@ -3,14 +3,17 @@
 // found in the LICENSE file.
 
 import 'chrome://resources/cr_elements/cr_button/cr_button.js';
+import 'chrome://resources/cr_elements/cr_input/cr_input.js';
 import 'chrome://resources/cr_elements/cr_checkbox/cr_checkbox.js';
 import 'chrome://resources/cr_elements/cr_toast/cr_toast.js';
+import 'chrome://resources/cr_elements/cr_toggle/cr_toggle.js';
 
 import type {CrToastElement} from 'chrome://resources/cr_elements/cr_toast/cr_toast.js';
 // <if expr="is_win">
 import type {CrToggleElement} from 'chrome://resources/cr_elements/cr_toggle/cr_toggle.js';
 // </if>
 import {CrLitElement} from 'chrome://resources/lit/v3_0/lit.rollup.js';
+import type {BigBuffer} from 'chrome://resources/mojo/mojo/public/mojom/base/big_buffer.mojom-webui.js';
 
 import {TraceReportBrowserProxy} from './trace_report_browser_proxy.js';
 import {getCss} from './tracing_scenarios_config.css.js';
@@ -58,15 +61,15 @@ export class TracingScenariosConfigElement extends CrLitElement {
   private traceReportProxy_: TraceReportBrowserProxy =
       TraceReportBrowserProxy.getInstance();
 
-  protected presetConfig_: Config[] = [];
-  protected fieldConfig_: Config[] = [];
-  protected isEdited_: boolean = false;
-  protected isLoading_: boolean = false;
-  protected privacyFilterEnabled_: boolean = false;
-  protected toastMessage_: string = '';
+  protected accessor presetConfig_: Config[] = [];
+  protected accessor fieldConfig_: Config[] = [];
+  protected accessor isEdited_: boolean = false;
+  protected accessor isLoading_: boolean = false;
+  protected accessor privacyFilterEnabled_: boolean = false;
+  protected accessor toastMessage_: string = '';
   // <if expr="is_win">
-  protected tracingServiceSupported_: boolean = false;
-  protected tracingServiceRegistered_: boolean = false;
+  protected accessor tracingServiceSupported_: boolean = false;
+  protected accessor tracingServiceRegistered_: boolean = false;
   protected securityShieldIconUrl_: string = '';
   // </if>
 
@@ -127,13 +130,14 @@ export class TracingScenariosConfigElement extends CrLitElement {
     this.isLoading_ = false;
   }
 
-  protected privacyFilterDidChange_(event: CustomEvent<{value: boolean}>):
-      void {
-    if (this.privacyFilterEnabled_ === event.detail.value) {
+  protected async privacyFilterDidChange_(event: CustomEvent<boolean>):
+      Promise<void> {
+    if (this.privacyFilterEnabled_ === event.detail) {
       return;
     }
-    this.privacyFilterEnabled_ = event.detail.value;
-    this.isEdited_ = true;
+    this.privacyFilterEnabled_ = event.detail;
+    await this.traceReportProxy_.handler.setPrivacyFilterEnabled(
+        this.privacyFilterEnabled_);
   }
 
   protected valueDidChange_(event: CustomEvent<{value: boolean}>): void {
@@ -153,9 +157,6 @@ export class TracingScenariosConfigElement extends CrLitElement {
   }
 
   protected async onConfirmClick_(): Promise<void> {
-    await this.traceReportProxy_.handler.setPrivacyFilterEnabled(
-        this.privacyFilterEnabled_);
-
     const enabledScenarios: string[] = [];
     for (const scenario of this.presetConfig_) {
       if (scenario.selected) {
@@ -170,6 +171,41 @@ export class TracingScenariosConfigElement extends CrLitElement {
       return;
     }
     await this.initScenariosConfig_();
+  }
+
+  protected async onAddConfig_(e: Event&
+                               {target: HTMLInputElement}): Promise<void> {
+    const files = e.target.files;
+    if (!files) {
+      this.toastMessage_ = `Failed to open config file.`;
+      this.$.toast.show();
+      return;
+    }
+
+    for (const file of files) {
+      const result = await this.processConfigFile_(file);
+      if (!result.success) {
+        this.toastMessage_ = `Failed to read config file ${file.name}.`;
+        this.$.toast.show();
+      }
+    }
+
+    await this.initScenariosConfig_();
+  }
+
+  private async processConfigFile_(file: File): Promise<{success: boolean}> {
+    const isTextFile = (file.type === 'text/plain');
+    const handler = this.traceReportProxy_.handler;
+
+    if (isTextFile) {
+      const text = (await file.text()).replace('\n', '');
+      return handler.setScenariosConfigFromString(text);
+    } else {
+      const bytes = await file.arrayBuffer();
+      const buffer: BigBuffer = {bytes: Array.from(new Uint8Array(bytes))} as
+          any;
+      return handler.setScenariosConfigFromBuffer(buffer);
+    }
   }
 
   protected async onCancelClick_(): Promise<void> {

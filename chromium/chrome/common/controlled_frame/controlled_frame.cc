@@ -20,9 +20,11 @@
 
 base::span<const char* const> GetControlledFrameFeatureList() {
   static constexpr const char* feature_list[] = {
+      // LINT.IfChange
       "controlledFrameInternal", "chromeWebViewInternal", "guestViewInternal",
       "vivaldi",
       "webRequestInternal",      "webViewInternal",
+      // LINT.ThenChange(chrome/common/extensions/extension_test_util.cc)
   };
   return base::span(feature_list);
 }
@@ -62,6 +64,11 @@ namespace controlled_frame {
 //  * The frame is a child frame that *is* an Isolated Context but was not
 //    delegated either the "cross-origin-isolated" or "controlled-frame"
 //    Permissions Policies.
+//  * Controlled Frame is disabled by a set of content settings generated from
+//    admin policies (DefaultControlledFrameSetting,
+//    ControlledFrameAllowedForUrls, ControlledFrameBlockedForUrls).
+//    These checks need to happen in the browser context, so look for them in
+//    the BrowserFrameContextData::HasControlledFrameCapability method.
 bool AvailabilityCheck(const std::string& api_full_name,
                        const extensions::Extension* extension,
                        extensions::mojom::ContextType context,

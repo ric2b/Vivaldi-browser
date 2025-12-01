@@ -42,8 +42,8 @@ ProgressBarDialogView::ProgressBarDialogView(bool is_multiple_files)
   constexpr int kCornerRadius = 12;
 
   auto border = std::make_unique<views::BubbleBorder>(
-      views::BubbleBorder::NONE, views::BubbleBorder::STANDARD_SHADOW,
-      ash::kColorAshDialogBackgroundColor);
+      views::BubbleBorder::NONE, views::BubbleBorder::STANDARD_SHADOW);
+  border->SetColor(ash::kColorAshDialogBackgroundColor);
   border->SetCornerRadius(kCornerRadius);
   SetBackground(std::make_unique<views::BubbleBackground>(border.get()));
   SetBorder(std::move(border));
@@ -58,7 +58,7 @@ ProgressBarDialogView::ProgressBarDialogView(bool is_multiple_files)
   message_label_->SetMultiLine(true);
   message_label_->SetHorizontalAlignment(gfx::ALIGN_LEFT);
   message_label_->SetVerticalAlignment(gfx::ALIGN_TOP);
-  AddChildView(message_label_.get());
+  AddChildViewRaw(message_label_.get());
 
   progress_bar_ = AddChildView(std::make_unique<views::ProgressBar>());
   progress_bar_->SetPreferredHeight(kProgressBarHeight);

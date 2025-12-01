@@ -877,6 +877,11 @@ message CreateDiskImageRequest {
   // |disk_size| is unspecified or 0. DISK_ALLOCATION_TYPE_PREALLOCATE must be
   // combined with a non-zero |disk_size|.
   DiskImageAllocationType allocation_type = 12;
+
+  // Switch indicating that a zstd-compressed image has been passed as an FD,
+  // which will be decompressed and written as the disk image contents.
+  // Currently this is only used for baguette vm's.
+  bool copy_baguette_image = 13;
 }
 
 // Response to a CreateDiskImageRequest.
@@ -1543,4 +1548,23 @@ message ModifyFakePowerConfigRequest {
   // The maximum battery capacity bat device can report to guest. This field
   // should only be set when the action is SET.
   uint32 capacity_limit = 4;
+}
+
+// Request to mute/unmute vm audio
+message MuteVmAudioRequest {
+  // The name of the VM to be muted/unmuted.
+  string name = 1;
+
+  // The owner of the vm.
+  string owner_id = 2;
+
+  // Set to true to mute, and false to unmute.
+  bool muted = 3;
+}
+
+// Response containing the URL of the Baguette image to download. This is a
+// constant baked into the concierge binary.
+message GetBaguetteImageUrlResponse {
+  string url = 1;
+  string sha256 = 2;
 }

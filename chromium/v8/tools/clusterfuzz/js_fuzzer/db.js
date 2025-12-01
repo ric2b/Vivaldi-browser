@@ -311,6 +311,14 @@ class MutateDbWriter {
           return;
         }
 
+        if (path.parentPath.isMemberExpression() &&
+            path.parent.property == path.node &&
+            babelTypes.isIdentifier(path.parent.object) &&
+            globalIdentifiers.has(path.parent.object.name)) {
+          // Property access on a global name.
+          return;
+        }
+
         let binding = path.scope.getBinding(path.node.name);
         if (!binding) {
           // Unknown dependency. Don't handle this.
@@ -455,6 +463,10 @@ class MutateDbWriter {
   }
 
   writeIndex() {
+    this.index.all.sort();
+    this.index.statements.sort();
+    this.index.superStatements.sort();
+
     fs.writeFileSync(
         fsPath.join(this.outputDir, 'index.json'),
         JSON.stringify(this.index));
@@ -480,6 +492,13 @@ class MutateDb {
     let path = fsPath.join(
         this.outputDir, choices[random.randInt(0, choices.length - 1)]);
     return JSON.parse(fs.readFileSync(path), 'utf-8');
+  }
+
+  *iterateStatements() {
+    for (const exp of this.index.all) {
+      const path = fsPath.join(this.outputDir, exp);
+      yield JSON.parse(fs.readFileSync(path), 'utf-8');
+    }
   }
 }
 

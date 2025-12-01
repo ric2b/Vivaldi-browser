@@ -28,6 +28,7 @@
 #include "base/logging.h"
 #include "base/memory/raw_ptr.h"
 #include "base/run_loop.h"
+#include "base/scoped_observation.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
@@ -54,6 +55,7 @@
 #include "components/favicon_base/favicon_callback.h"
 #include "components/favicon_base/favicon_types.h"
 #include "components/query_parser/query_parser.h"
+#include "components/signin/public/base/signin_switches.h"
 #include "components/sync/base/features.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -554,7 +556,7 @@ class BookmarkModelTest : public testing::Test, public BookmarkModelObserver {
 
  protected:
   base::test::ScopedFeatureList features_{
-      syncer::kSyncEnableBookmarksInTransportMode};
+      switches::kSyncEnableBookmarksInTransportMode};
   std::unique_ptr<BookmarkModel> model_;
   ObserverDetails observer_details_;
   ObserverDetails before_observer_details_;
@@ -1621,7 +1623,7 @@ TEST_F(BookmarkModelTest, MostRecentlyAddedEntries) {
 // bookmarks.
 TEST_F(BookmarkModelTest, MostRecentlyAddedEntriesLocalAndAccountBookmarks) {
   base::test::ScopedFeatureList scoped_feature_list{
-      syncer::kSyncEnableBookmarksInTransportMode};
+      switches::kSyncEnableBookmarksInTransportMode};
   model_->CreateAccountPermanentFolders();
 
   // Add nodes such that the following holds for the creation time of the
@@ -1838,12 +1840,18 @@ TEST_F(BookmarkModelTest, ReorderCallWithSizeMismatch) {
 TEST_F(BookmarkModelTest, NodeVisibility) {
 #if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_IOS)
   EXPECT_FALSE(model_->bookmark_bar_node()->IsVisible());
+  EXPECT_FALSE(model_->IsNodeVisible(*model_->bookmark_bar_node()));
   EXPECT_FALSE(model_->other_node()->IsVisible());
+  EXPECT_FALSE(model_->IsNodeVisible(*model_->other_node()));
   EXPECT_TRUE(model_->mobile_node()->IsVisible());
+  EXPECT_TRUE(model_->IsNodeVisible(*model_->mobile_node()));
 #else
   EXPECT_TRUE(model_->bookmark_bar_node()->IsVisible());
+  EXPECT_TRUE(model_->IsNodeVisible(*model_->bookmark_bar_node()));
   EXPECT_TRUE(model_->other_node()->IsVisible());
+  EXPECT_TRUE(model_->IsNodeVisible(*model_->other_node()));
   EXPECT_FALSE(model_->mobile_node()->IsVisible());
+  EXPECT_FALSE(model_->IsNodeVisible(*model_->mobile_node()));
 #endif
 
   // Arbitrary node should be visible
@@ -1852,13 +1860,18 @@ TEST_F(BookmarkModelTest, NodeVisibility) {
   const BookmarkNode* parent = model_->mobile_node();
   PopulateBookmarkNode(&bbn, model_.get(), parent);
   EXPECT_TRUE(parent->children().front()->IsVisible());
+  EXPECT_TRUE(model_->IsNodeVisible(*parent->children().front()));
+
   parent = model_->other_node();
   PopulateBookmarkNode(&bbn, model_.get(), parent);
   EXPECT_TRUE(parent->children().front()->IsVisible());
+  EXPECT_TRUE(model_->IsNodeVisible(*parent->children().front()));
 
   // Mobile folder should be visible now that it has a child.
   EXPECT_TRUE(model_->mobile_node()->IsVisible());
+  EXPECT_TRUE(model_->IsNodeVisible(*model_->mobile_node()));
   EXPECT_TRUE(model_->other_node()->IsVisible());
+  EXPECT_TRUE(model_->IsNodeVisible(*model_->other_node()));
 }
 
 TEST_F(BookmarkModelTest, NodeVisibility_AllBookmarksPhase0) {
@@ -1899,6 +1912,7 @@ TEST_F(BookmarkModelTest, MobileNodeVisibleWithChildren) {
 
   model_->AddURL(mobile_node, 0, kTitle, kUrl);
   EXPECT_TRUE(model_->mobile_node()->IsVisible());
+  EXPECT_TRUE(model_->IsNodeVisible(*model_->mobile_node()));
 }
 
 TEST_F(BookmarkModelTest, ExtensiveChangesObserver) {
@@ -2441,7 +2455,7 @@ TEST(BookmarkModelLoadTest, NodesPopulatedOnLoad) {
 
 TEST(BookmarkModelLoadTest, NodesPopulatedIncludingAccountNodesOnLoad) {
   base::test::ScopedFeatureList features{
-      syncer::kSyncEnableBookmarksInTransportMode};
+      switches::kSyncEnableBookmarksInTransportMode};
 
   // Create a model with one local-or-syncable url and one account url.
   base::ScopedTempDir tmp_dir;
@@ -2480,7 +2494,7 @@ TEST(BookmarkModelLoadTest, NodesPopulatedIncludingAccountNodesOnLoad) {
 
 TEST(BookmarkModelLoadTest, AccountSyncMetadataPopulatedWithoutNodesOnLoad) {
   base::test::ScopedFeatureList features{
-      syncer::kSyncEnableBookmarksInTransportMode};
+      switches::kSyncEnableBookmarksInTransportMode};
 
   // Since metadata str serialized proto, it could contain non-ASCII characters.
   const std::string sync_metadata_str("a/2'\"");
@@ -2524,6 +2538,49 @@ TEST(BookmarkModelLoadTest, AccountSyncMetadataPopulatedWithoutNodesOnLoad) {
   EXPECT_EQ(sync_metadata_str, client_ptr->account_bookmark_sync_metadata());
 }
 
+TEST(BookmarkModelLoadTest, RemoveAccountPermanentFoldersUponMetadataDecoding) {
+  base::test::ScopedFeatureList features{
+      switches::kSyncEnableBookmarksInTransportMode};
+
+  // Create a model with account bookmarks.
+  base::ScopedTempDir tmp_dir;
+  ASSERT_TRUE(tmp_dir.CreateUniqueTempDir());
+  base::test::TaskEnvironment task_environment{
+      base::test::TaskEnvironment::TimeSource::MOCK_TIME};
+
+  {
+    auto model =
+        std::make_unique<BookmarkModel>(std::make_unique<TestBookmarkClient>());
+    model->Load(tmp_dir.GetPath());
+    test::WaitForBookmarkModelToLoad(model.get());
+    model->CreateAccountPermanentFolders();
+
+    // This is necessary to ensure the save completes.
+    task_environment.FastForwardUntilNoTasksRemain();
+  }
+
+  testing::StrictMock<MockBookmarkModelObserver> observer;
+  EXPECT_CALL(observer, BookmarkModelLoaded);
+
+  // Load the model from disk, but pretend that the client responded with
+  // `kMustRemoveAccountPermanentFolders` when decoding account sync metadata.
+  auto client = std::make_unique<TestBookmarkClient>();
+  client->SetDecodeAccountBookmarkSyncMetadataResult(
+      BookmarkClient::DecodeAccountBookmarkSyncMetadataResult::
+          kMustRemoveAccountPermanentFolders);
+  BookmarkModel model(std::move(client));
+  base::ScopedObservation<BookmarkModel, BookmarkModelObserver> observation(
+      &observer);
+  observation.Observe(&model);
+
+  model.Load(tmp_dir.GetPath());
+  test::WaitForBookmarkModelToLoad(&model);
+
+  EXPECT_EQ(nullptr, model.account_bookmark_bar_node());
+  EXPECT_EQ(nullptr, model.account_other_node());
+  EXPECT_EQ(nullptr, model.account_mobile_node());
+}
+
 // Verifies the TitledUrlIndex is properly loaded.
 TEST(BookmarkModelLoadTest, TitledUrlIndexPopulatedOnLoad) {
   // Create a model with a single url.
@@ -2558,7 +2615,7 @@ TEST(BookmarkModelLoadTest, TitledUrlIndexPopulatedOnLoad) {
 // Verifies the TitledUrlIndex is properly loaded for account bookmarks.
 TEST(BookmarkModelLoadTest, TitledUrlIndexPopulatedForAccountNodesOnLoad) {
   base::test::ScopedFeatureList features{
-      syncer::kSyncEnableBookmarksInTransportMode};
+      switches::kSyncEnableBookmarksInTransportMode};
 
   // Create a model with a single url.
   base::ScopedTempDir tmp_dir;
@@ -2627,7 +2684,7 @@ TEST(BookmarkModelLoadTest, UuidIndexPopulatedOnLoad) {
 // Verifies the UUID index is properly loaded, for account nodes.
 TEST(BookmarkModelLoadTest, UuidIndexPopulatedForAccountNodesOnLoad) {
   base::test::ScopedFeatureList features{
-      syncer::kSyncEnableBookmarksInTransportMode};
+      switches::kSyncEnableBookmarksInTransportMode};
 
   // Create a model with a single url.
   base::ScopedTempDir tmp_dir;
@@ -2666,7 +2723,7 @@ TEST(BookmarkModelLoadTest, UuidIndexPopulatedForAccountNodesOnLoad) {
 TEST(BookmarkModelStorageTest,
      GetTotalNumberOfUrlsAndFoldersIncludingManagedNodes) {
   base::test::ScopedFeatureList features{
-      syncer::kSyncEnableBookmarksInTransportMode};
+      switches::kSyncEnableBookmarksInTransportMode};
 
   // Create a model with a single url.
   base::ScopedTempDir tmp_dir;
@@ -2732,7 +2789,7 @@ TEST(BookmarkModelStorageTest,
 
 TEST(BookmarkModelStorageTest, SaveExactlyOneFile) {
   base::test::ScopedFeatureList features{
-      syncer::kSyncEnableBookmarksInTransportMode};
+      switches::kSyncEnableBookmarksInTransportMode};
 
   base::ScopedTempDir tmp_dir;
   ASSERT_TRUE(tmp_dir.CreateUniqueTempDir());
@@ -3026,6 +3083,69 @@ TEST_F(BookmarkModelTest, UserFolderDepthHistograms) {
   histogram_tester()->ExpectTotalCount(kUrlOpenedMetricName, 6);
   histogram_tester()->ExpectBucketCount(kUrlOpenedMetricName,
                                         /*sample=*/2, /*expected_count=*/3);
+}
+
+TEST_F(BookmarkModelTest, IsVisible) {
+  // Test with empty local folders only.
+  EXPECT_TRUE(model_->IsNodeVisible(*model_->root_node()));
+
+  // Check per-platform visibility of empty permanent nodes.
+#if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_IOS)
+  EXPECT_FALSE(model_->IsNodeVisible(*model_->bookmark_bar_node()));
+  EXPECT_FALSE(model_->IsNodeVisible(*model_->other_node()));
+  EXPECT_TRUE(model_->IsNodeVisible(*model_->mobile_node()));
+#else
+  EXPECT_TRUE(model_->IsNodeVisible(*model_->bookmark_bar_node()));
+  EXPECT_TRUE(model_->IsNodeVisible(*model_->other_node()));
+  EXPECT_FALSE(model_->IsNodeVisible(*model_->mobile_node()));
+#endif  // BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_IOS)
+
+  // Create empty account folders.
+  model_->CreateAccountPermanentFolders();
+
+  // All empty local permanent folders are now hidden.
+  // The account permanent folders are visible, except for the mobile node.
+  EXPECT_TRUE(model_->IsNodeVisible(*model_->root_node()));
+  EXPECT_FALSE(model_->IsNodeVisible(*model_->bookmark_bar_node()));
+  EXPECT_FALSE(model_->IsNodeVisible(*model_->other_node()));
+
+#if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_IOS)
+  EXPECT_TRUE(model_->IsNodeVisible(*model_->mobile_node()));
+#else
+  EXPECT_FALSE(model_->IsNodeVisible(*model_->mobile_node()));
+#endif  // BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_IOS)
+
+  // Check per-platform visibility of empty account permanent nodes.
+#if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_IOS)
+  EXPECT_FALSE(model_->IsNodeVisible(*model_->account_bookmark_bar_node()));
+  EXPECT_FALSE(model_->IsNodeVisible(*model_->account_other_node()));
+  EXPECT_TRUE(model_->IsNodeVisible(*model_->account_mobile_node()));
+#else
+  EXPECT_TRUE(model_->IsNodeVisible(*model_->account_bookmark_bar_node()));
+  EXPECT_TRUE(model_->IsNodeVisible(*model_->account_other_node()));
+  EXPECT_FALSE(model_->IsNodeVisible(*model_->account_mobile_node()));
+#endif  // BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_IOS)
+
+  // Make the local bookmark bar node non-empty. Nodes that were previously
+  // hidden because there were no local bookmarks are now visible.
+  model_->AddURL(model_->bookmark_bar_node(), 0, u"Chromium",
+                 GURL("http://www.chromium.org"));
+  EXPECT_TRUE(model_->IsNodeVisible(*model_->bookmark_bar_node()));
+#if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_IOS)
+  // On mobile, the other node is always hidden when empty and the mobile node
+  // is always visible (so there is no change as a result of the bookmark bar
+  // becoming non-empty).
+  EXPECT_FALSE(model_->IsNodeVisible(*model_->other_node()));
+  EXPECT_TRUE(model_->IsNodeVisible(*model_->mobile_node()));
+#else
+  // On desktop, the other node was previously hidden and is now visible.
+  EXPECT_TRUE(model_->IsNodeVisible(*model_->other_node()));
+#endif
+
+  // Make the account mobile node folder non-empty. It is now visible.
+  model_->AddURL(model_->account_mobile_node(), 0, u"Chromium",
+                 GURL("http://www.chromium.org"));
+  EXPECT_TRUE(model_->IsNodeVisible(*model_->account_mobile_node()));
 }
 
 }  // namespace

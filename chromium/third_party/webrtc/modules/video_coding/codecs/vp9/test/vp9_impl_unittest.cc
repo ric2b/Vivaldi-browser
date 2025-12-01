@@ -735,8 +735,6 @@ TEST(Vp9ImplTest, SpatialUpswitchNotAtGOFBoundary) {
 TEST_F(TestVp9Impl, DisableEnableBaseLayerTriggersKeyFrame) {
   // Configure encoder to produce N spatial layers. Encode frames for all
   // layers. Then disable all but the last layer. Then reenable all back again.
-  test::ScopedFieldTrials override_field_trials(
-      "WebRTC-Vp9ExternalRefCtrl/Enabled/");
   const size_t num_spatial_layers = 3;
   const size_t num_temporal_layers = 3;
   // Must not be multiple of temporal period to exercise all code paths.
@@ -808,16 +806,18 @@ TEST_F(TestVp9Impl, DisableEnableBaseLayerTriggersKeyFrame) {
   EXPECT_TRUE(seen_ss_data);
 
   // Force key-frame.
-  std::vector<VideoFrameType> frame_types = {VideoFrameType::kVideoFrameKey};
-  SetWaitForEncodedFramesThreshold(1);
-  EXPECT_EQ(WEBRTC_VIDEO_CODEC_OK,
-            encoder_->Encode(NextInputFrame(), &frame_types));
-  std::vector<EncodedImage> encoded_frame;
-  std::vector<CodecSpecificInfo> codec_specific_info;
-  ASSERT_TRUE(WaitForEncodedFrames(&encoded_frame, &codec_specific_info));
-  // Key-frame should be produced.
-  EXPECT_EQ(encoded_frame[0]._frameType, VideoFrameType::kVideoFrameKey);
-  EXPECT_EQ(encoded_frame[0].SpatialIndex().value_or(-1), 2);
+  {
+    std::vector<VideoFrameType> frame_types = {VideoFrameType::kVideoFrameKey};
+    SetWaitForEncodedFramesThreshold(1);
+    EXPECT_EQ(WEBRTC_VIDEO_CODEC_OK,
+              encoder_->Encode(NextInputFrame(), &frame_types));
+    std::vector<EncodedImage> encoded_frame;
+    std::vector<CodecSpecificInfo> codec_specific_info;
+    ASSERT_TRUE(WaitForEncodedFrames(&encoded_frame, &codec_specific_info));
+    // Key-frame should be produced.
+    EXPECT_EQ(encoded_frame[0]._frameType, VideoFrameType::kVideoFrameKey);
+    EXPECT_EQ(encoded_frame[0].SpatialIndex().value_or(-1), 2);
+  }
 
   // Encode some more frames.
   for (size_t frame_num = 0; frame_num < num_frames_to_encode; ++frame_num) {
@@ -1066,22 +1066,24 @@ TEST_F(TestVp9Impl, DisableEnableBaseLayerTriggersKeyFrameForScreenshare) {
   }
 
   // Force key-frame.
-  std::vector<VideoFrameType> frame_types = {VideoFrameType::kVideoFrameKey};
-  SetWaitForEncodedFramesThreshold(1);
-  EXPECT_EQ(WEBRTC_VIDEO_CODEC_OK,
-            encoder_->Encode(NextInputFrame(), &frame_types));
-  std::vector<EncodedImage> encoded_frame;
-  std::vector<CodecSpecificInfo> codec_specific_info;
-  ASSERT_TRUE(WaitForEncodedFrames(&encoded_frame, &codec_specific_info));
-  // Key-frame should be produced.
-  EXPECT_EQ(encoded_frame[0]._frameType, VideoFrameType::kVideoFrameKey);
+  {
+    std::vector<VideoFrameType> frame_types = {VideoFrameType::kVideoFrameKey};
+    SetWaitForEncodedFramesThreshold(1);
+    EXPECT_EQ(WEBRTC_VIDEO_CODEC_OK,
+              encoder_->Encode(NextInputFrame(), &frame_types));
+    std::vector<EncodedImage> encoded_frame;
+    std::vector<CodecSpecificInfo> codec_specific_info;
+    ASSERT_TRUE(WaitForEncodedFrames(&encoded_frame, &codec_specific_info));
+    // Key-frame should be produced.
+    EXPECT_EQ(encoded_frame[0]._frameType, VideoFrameType::kVideoFrameKey);
 
-  // Enable the second layer back.
-  // Allocate high bit rate to avoid frame dropping due to rate control.
-  bitrate_allocation.SetBitrate(
-      1, 0, codec_settings_.spatialLayers[0].targetBitrate * 1000 * 2);
-  encoder_->SetRates(VideoEncoder::RateControlParameters(
-      bitrate_allocation, codec_settings_.maxFramerate));
+    // Enable the second layer back.
+    // Allocate high bit rate to avoid frame dropping due to rate control.
+    bitrate_allocation.SetBitrate(
+        1, 0, codec_settings_.spatialLayers[0].targetBitrate * 1000 * 2);
+    encoder_->SetRates(VideoEncoder::RateControlParameters(
+        bitrate_allocation, codec_settings_.maxFramerate));
+  }
 
   for (size_t frame_num = 0; frame_num < num_frames_to_encode; ++frame_num) {
     SetWaitForEncodedFramesThreshold(2);
@@ -1615,17 +1617,20 @@ TEST_F(TestVp9Impl, ScreenshareFrameDropping) {
   EXPECT_TRUE(frame_dropped);
 
   // Enable the last layer.
-  bitrate_allocation.SetBitrate(
-      2, 0, codec_settings_.spatialLayers[2].targetBitrate * 1000);
-  encoder_->SetRates(VideoEncoder::RateControlParameters(
-      bitrate_allocation, codec_settings_.maxFramerate));
-  SetWaitForEncodedFramesThreshold(1);
-  EXPECT_EQ(WEBRTC_VIDEO_CODEC_OK, encoder_->Encode(NextInputFrame(), nullptr));
-  std::vector<EncodedImage> encoded_frames;
-  std::vector<CodecSpecificInfo> codec_specific_info;
-  ASSERT_TRUE(WaitForEncodedFrames(&encoded_frames, &codec_specific_info));
-  // No drop allowed.
-  EXPECT_EQ(encoded_frames.size(), 3u);
+  {
+    bitrate_allocation.SetBitrate(
+        2, 0, codec_settings_.spatialLayers[2].targetBitrate * 1000);
+    encoder_->SetRates(VideoEncoder::RateControlParameters(
+        bitrate_allocation, codec_settings_.maxFramerate));
+    SetWaitForEncodedFramesThreshold(1);
+    EXPECT_EQ(WEBRTC_VIDEO_CODEC_OK,
+              encoder_->Encode(NextInputFrame(), nullptr));
+    std::vector<EncodedImage> encoded_frames;
+    std::vector<CodecSpecificInfo> codec_specific_info;
+    ASSERT_TRUE(WaitForEncodedFrames(&encoded_frames, &codec_specific_info));
+    // No drop allowed.
+    EXPECT_EQ(encoded_frames.size(), 3u);
+  }
 
   // Verify that frame-dropping is re-enabled back.
   frame_dropped = false;
@@ -1954,18 +1959,14 @@ TEST_F(TestVp9Impl, EncoderInfoFpsAllocationFlexibleMode) {
 }
 
 class Vp9ImplWithLayeringTest
-    : public ::testing::TestWithParam<std::tuple<int, int, bool>> {
+    : public ::testing::TestWithParam<std::tuple<int, int>> {
  protected:
   Vp9ImplWithLayeringTest()
       : num_spatial_layers_(std::get<0>(GetParam())),
-        num_temporal_layers_(std::get<1>(GetParam())),
-        override_field_trials_(std::get<2>(GetParam())
-                                   ? "WebRTC-Vp9ExternalRefCtrl/Enabled/"
-                                   : "") {}
+        num_temporal_layers_(std::get<1>(GetParam())) {}
 
   const uint8_t num_spatial_layers_;
   const uint8_t num_temporal_layers_;
-  const test::ScopedFieldTrials override_field_trials_;
 };
 
 TEST_P(Vp9ImplWithLayeringTest, FlexibleMode) {
@@ -2032,8 +2033,7 @@ TEST_P(Vp9ImplWithLayeringTest, FlexibleMode) {
 INSTANTIATE_TEST_SUITE_P(All,
                          Vp9ImplWithLayeringTest,
                          ::testing::Combine(::testing::Values(1, 2, 3),
-                                            ::testing::Values(1, 2, 3),
-                                            ::testing::Bool()));
+                                            ::testing::Values(1, 2, 3)));
 
 class TestVp9ImplFrameDropping : public TestVp9Impl {
  protected:

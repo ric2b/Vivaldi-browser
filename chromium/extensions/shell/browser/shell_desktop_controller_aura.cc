@@ -9,6 +9,7 @@
 #include <string>
 
 #include "base/check_op.h"
+#include "base/compiler_specific.h"
 #include "base/memory/raw_ptr.h"
 #include "base/not_fatal_until.h"
 #include "base/run_loop.h"
@@ -111,6 +112,16 @@ class ShellNativeCursorManager : public wm::NativeCursorManager {
     delegate->CommitCursorSize(cursor_size);
     if (delegate->IsCursorVisible())
       SetCursor(delegate->GetCursor(), delegate);
+  }
+
+  void SetLargeCursorSizeInDip(
+      int large_cursor_size_in_dip,
+      ::wm::NativeCursorManagerDelegate* delegate) override {
+    cursor_loader_.SetLargeCursorSizeInDip(large_cursor_size_in_dip);
+    delegate->CommitLargeCursorSizeInDip(large_cursor_size_in_dip);
+    if (delegate->IsCursorVisible()) {
+      SetCursor(delegate->GetCursor(), delegate);
+    }
   }
 
   void SetMouseEventsEnabled(
@@ -433,7 +444,8 @@ gfx::Size ShellDesktopControllerAura::GetStartingWindowSize() {
     const std::string size_str =
         command_line->GetSwitchValueASCII(switches::kAppShellHostWindowSize);
     int width, height;
-    CHECK_EQ(2, sscanf(size_str.c_str(), "%dx%d", &width, &height));
+    CHECK_EQ(2,
+             UNSAFE_TODO(sscanf(size_str.c_str(), "%dx%d", &width, &height)));
     size = gfx::Size(width, height);
   }
   return size.IsEmpty() ? gfx::Size(1920, 1080) : size;

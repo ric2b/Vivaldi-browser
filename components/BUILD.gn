@@ -28,30 +28,21 @@ source_set("adverse_adblocking") {
   ]
 }
 
-source_set("panel_request_filter") {
-    sources = [
-      "panel/vivaldi_panels_filter.cc",
-      "panel/vivaldi_panels_filter.h",
-    ]
-    deps = [
-      "//components/subresource_filter/content/browser",
-    ]
-}
-
 source_set("panel_utils") {
     sources = [
-      "//vivaldi/components/extensions/vivaldi_panel_utils.cc",
-      "//vivaldi/components/extensions/vivaldi_panel_utils.h",
+      "extensions/vivaldi_panel_utils.cc",
+      "extensions/vivaldi_panel_utils.h",
     ]
     deps = [
       "//content/public/browser",
+      "//extensions/common",
     ]
 }
 
 source_set("panel") {
     sources = [
-      "//vivaldi/components/panel/panel_id.cc",
-      "//vivaldi/components/panel/panel_id.h",
+      "panel/panel_id.cc",
+      "panel/panel_id.h",
     ]
     deps = [
       "//base:base",
@@ -112,6 +103,19 @@ action("search_engines_prompt_inc") {
   ]
 }
 
+source_set("tabs") {
+  sources = [
+    "tabs/tab_helpers.cc",
+    "tabs/tab_helpers.h",
+  ]
+
+  deps = [
+    "//base",
+    "//content/public/browser",
+    "//vivaldi/prefs:prefs_files_generated",
+  ]
+}
+
 source_set("user_agent") {
     sources = [
       "//vivaldi/components/user_agent/vivaldi_user_agent.cc",
@@ -121,5 +125,17 @@ source_set("user_agent") {
     deps = [
       "//base:base",
       "//components/google/core/common",
+    ]
+}
+
+source_set("version_utils") {
+    sources = [
+      "//vivaldi/components/version_utils/vivaldi_version_utils.cc",
+      "//vivaldi/components/version_utils/vivaldi_version_utils.h",
+    ]
+    deps = [
+      "//base:base",
+      "//components/prefs",
+      "//vivaldi/prefs:prefs_files_generated",
     ]
 }

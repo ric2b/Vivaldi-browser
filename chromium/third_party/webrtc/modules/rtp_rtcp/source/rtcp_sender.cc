@@ -53,7 +53,6 @@
 #include "modules/rtp_rtcp/source/rtcp_packet/tmmbn.h"
 #include "modules/rtp_rtcp/source/rtcp_packet/tmmbr.h"
 #include "modules/rtp_rtcp/source/rtp_rtcp_config.h"
-#include "modules/rtp_rtcp/source/rtp_rtcp_impl2.h"
 #include "modules/rtp_rtcp/source/rtp_rtcp_interface.h"
 #include "modules/rtp_rtcp/source/tmmbr_help.h"
 #include "rtc_base/checks.h"
@@ -467,7 +466,7 @@ void RTCPSender::BuildTMMBR(const RtcpContext& ctx, PacketSender& sender) {
   bool tmmbr_owner = false;
 
   // holding mutex_rtcp_sender_ while calling RTCPreceiver which
-  // will accuire criticalSectionRTCPReceiver_ is a potental deadlock but
+  // will acquire criticalSectionRTCPReceiver_ is a potential deadlock but
   // since RTCPreceiver is not doing the reverse we should be fine
   std::vector<rtcp::TmmbItem> candidates =
       ctx.feedback_state_.receiver->BoundingSet(&tmmbr_owner);
@@ -726,7 +725,7 @@ TimeDelta RTCPSender::ComputeTimeUntilNextReport(DataRate send_bitrate) {
 
   // The interval between RTCP packets is varied randomly over the
   // range [1/2,3/2] times the calculated interval.
-  int min_interval_int = rtc::dchecked_cast<int>(min_interval.ms());
+  int min_interval_int = dchecked_cast<int>(min_interval.ms());
   TimeDelta time_to_next = TimeDelta::Millis(
       random_.Rand(min_interval_int * 1 / 2, min_interval_int * 3 / 2));
 

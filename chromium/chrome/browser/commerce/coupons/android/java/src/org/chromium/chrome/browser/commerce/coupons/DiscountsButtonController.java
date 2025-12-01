@@ -16,11 +16,17 @@ import org.chromium.chrome.browser.commerce.CommerceBottomSheetContentController
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.toolbar.BaseButtonDataProvider;
 import org.chromium.chrome.browser.toolbar.adaptive.AdaptiveToolbarButtonVariant;
+import org.chromium.components.browser_ui.bottomsheet.BottomSheetController;
+import org.chromium.components.browser_ui.bottomsheet.BottomSheetController.SheetState;
+import org.chromium.components.browser_ui.bottomsheet.BottomSheetObserver;
+import org.chromium.components.browser_ui.bottomsheet.EmptyBottomSheetObserver;
 import org.chromium.ui.modaldialog.ModalDialogManager;
 
 /** This class is responsible for providing UI resources for showing the Discounts action. */
 public class DiscountsButtonController extends BaseButtonDataProvider {
 
+    private final BottomSheetController mBottomSheetController;
+    private final BottomSheetObserver mBottomSheetObserver;
     private @NonNull Supplier<CommerceBottomSheetContentController>
             mCommerceBottomSheetContentController;
 
@@ -28,6 +34,7 @@ public class DiscountsButtonController extends BaseButtonDataProvider {
             Context context,
             Supplier<Tab> activeTabSupplier,
             ModalDialogManager modalDialogManager,
+            BottomSheetController bottomSheetController,
             @NonNull
                     Supplier<CommerceBottomSheetContentController>
                             commerceBottomSheetContentController) {
@@ -35,13 +42,24 @@ public class DiscountsButtonController extends BaseButtonDataProvider {
                 activeTabSupplier,
                 modalDialogManager,
                 AppCompatResources.getDrawable(context, R.drawable.ic_shoppingmode_24dp),
-                context.getString(R.string.discount_icon_expanded_text),
-                R.string.discount_icon_expanded_text,
+                context.getString(R.string.discount_container_title),
+                R.string.discount_container_title,
                 true,
                 null,
                 AdaptiveToolbarButtonVariant.DISCOUNTS,
                 Resources.ID_NULL,
                 false);
+
+        mBottomSheetController = bottomSheetController;
+        mBottomSheetObserver =
+                new EmptyBottomSheetObserver() {
+                    @Override
+                    public void onSheetStateChanged(int newState, int reason) {
+                        mButtonData.setEnabled(newState == SheetState.HIDDEN);
+                        notifyObservers(mButtonData.canShow());
+                    }
+                };
+        mBottomSheetController.addObserver(mBottomSheetObserver);
 
         mCommerceBottomSheetContentController = commerceBottomSheetContentController;
     }
@@ -49,5 +67,12 @@ public class DiscountsButtonController extends BaseButtonDataProvider {
     @Override
     public void onClick(View view) {
         mCommerceBottomSheetContentController.get().requestShowContent();
+    }
+
+    @Override
+    public void destroy() {
+        super.destroy();
+
+        mBottomSheetController.removeObserver(mBottomSheetObserver);
     }
 }

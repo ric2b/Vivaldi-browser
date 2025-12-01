@@ -68,13 +68,15 @@ class IntegrationTestCommands
   virtual void ExpectPing(ScopedServer* test_server,
                           int event_type,
                           std::optional<GURL> target_url) const = 0;
-  virtual void ExpectAppCommandPing(ScopedServer* test_server,
-                                    const std::string& appid,
-                                    const std::string& appcommandid,
-                                    int errorcode,
-                                    int eventresult,
-                                    int event_type,
-                                    const base::Version& version) const = 0;
+  virtual void ExpectAppCommandPing(
+      ScopedServer* test_server,
+      const std::string& appid,
+      const std::string& appcommandid,
+      int errorcode,
+      int eventresult,
+      int event_type,
+      const base::Version& version,
+      const base::Version& updater_version) const = 0;
   virtual void ExpectUpdateCheckRequest(ScopedServer* test_server) const = 0;
   virtual void ExpectUpdateCheckSequence(
       ScopedServer* test_server,
@@ -211,7 +213,8 @@ class IntegrationTestCommands
   virtual void RunOfflineInstall(bool is_legacy_install,
                                  bool is_silent_install) = 0;
   virtual void RunOfflineInstallOsNotSupported(bool is_legacy_install,
-                                               bool is_silent_install) = 0;
+                                               bool is_silent_install,
+                                               const std::string& language) = 0;
   virtual void DMPushEnrollmentToken(const std::string& enrollment_token) = 0;
   virtual void DMDeregisterDevice() = 0;
   virtual void DMCleanup() = 0;

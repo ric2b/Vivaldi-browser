@@ -14,6 +14,7 @@
 <translation id="1454726940098520109">Не показывать подтверждение</translation>
 <translation id="1462666970065907900">Вы действительно хотите закрыть это окно?</translation>
 <translation id="1480046233931937785">Благодарности</translation>
+<translation id="1490502035430975848">Инспектировать Portal Document</translation>
 <translation id="1521774566618522728">Активен сегодня</translation>
 <translation id="1526344461589023948">Произошла ошибка при сохранении загруженного обновления. Проверьте наличие дискового пространства и повторите попытку.</translation>
 <translation id="1635542496948266458">Переключить профили</translation>
@@ -34,9 +35,11 @@
 <translation id="2141974047387702305">Произошла ошибка при загрузке обновления. Проверьте сетевое подключение и повторите попытку.</translation>
 <translation id="2226825946708954262">⚠ Продолжить с потерей данных</translation>
 <translation id="2339641773402824483">Проверка обновлений...</translation>
+<translation id="2429571091666452569">Из списка:</translation>
 <translation id="2441056087170876076">Монстр 2</translation>
 <translation id="2444387452209867610">Вставить заметку</translation>
 <translation id="2486841023299517366">Зверушка 4</translation>
+<translation id="2501278716633472235">Вернуться</translation>
 <translation id="2612127540243995147">Обновление готово к установке. Vivaldi будет перезапущен.</translation>
 <translation id="2613387515621326337">Перейти к странице обновления</translation>
 <translation id="2645477450146475243">К сожалению, ваши настройки Opera недоступны во время работы этого браузера. Чтобы импортировать эти настройки в Vivaldi закройте все окна Opera, затем нажмите Продолжить.</translation>
@@ -61,6 +64,7 @@
 <translation id="3259769196742189631">Валидация на W3C</translation>
 <translation id="3291915639428159043">Автовоспроизведение блокировано</translation>
 <translation id="3302905971452834934">Монстр 1</translation>
+<translation id="3308738399950580893">рекламу</translation>
 <translation id="3334610655141903168">(без названия)</translation>
 <translation id="3372505110412186107">Версия Vivaldi <ph name="VERSION" /> является самой новой.</translation>
 <translation id="3383198080133834965">Обновление завершено!</translation>
@@ -71,9 +75,11 @@
 <translation id="3521635864657970829">Вы действительно хотите закрыть это окно?</translation>
 <translation id="3540597690227428180">Зверушка 9</translation>
 <translation id="3542768452570884558">Открыть ссылку в новом окне</translation>
+<translation id="3586931643579894722">Скрыть детали</translation>
 <translation id="3588820906588687999">Открыть картинку в новой вкладке</translation>
 <translation id="3601066750251199488">Монстр 3</translation>
 <translation id="3620979700683094848">Сайты могут автоматически воспроизводить видео</translation>
+<translation id="3650023731264842343">При загрузке следующей страницы:</translation>
 <translation id="3658651522139217005">Opera GX</translation>
 <translation id="3680031241659195730">Доступна новая версия Vivaldi!</translation>
 <translation id="3708982624815781692">Загрузка была отменена.</translation>
@@ -83,6 +89,7 @@
 <translation id="3795800845758778870">К сожалению, настройки Brave недоступны, пока браузер работает. Для импортирования настроек в Vivaldi сохраните свою работу и закройте все окна Brave. Затем продолжите импортирование.</translation>
 <translation id="3822431842304177896">Новый разделитель</translation>
 <translation id="3832132597516774400">Пейзаж 5</translation>
+<translation id="3894751534882749287">Если вы всё равно хотите просмотреть эту страницу, измените настройки блокировки или нажмите кнопку Разрешить</translation>
 <translation id="3914946330804881301">Импортировано из Opera</translation>
 <translation id="3921292902397893431">Монстр 8</translation>
 <translation id="3943857333388298514">Вставить</translation>
@@ -107,6 +114,7 @@
 <translation id="4582480609585453144">Открыть ссылку в фоновой вкладке</translation>
 <translation id="4636708767492582204">Отправить по почте</translation>
 <translation id="4677434526832593569">Зверушка 8</translation>
+<translation id="4736016046474602958">Блокировщик слежки</translation>
 <translation id="474217410105706308">Заглушить вкладку</translation>
 <translation id="4861715717329665002">Автосохранённые сессии</translation>
 <translation id="4881695831933465202">Открыть</translation>
@@ -133,9 +141,11 @@
 <translation id="588258955323874662">Полноэкранный режим</translation>
 <translation id="5916080360077521750">К сожалению, настройки Chrome недоступны при работающем браузере. Для импорта этих настроек в Vivaldi, сохраните свои данные и закройте все окна Chrome. Затем нажмите "Продолжить".</translation>
 <translation id="6040143037577758943">Закрыть</translation>
+<translation id="6140948187512243695">Показать детали</translation>
 <translation id="6229528619562190452">Нажмите здесь для обновления Vivaldi.</translation>
 <translation id="6234173136417926046">Установить фоном Экспресс-панели</translation>
 <translation id="6339818817272922368">Локальная учётная запись</translation>
+<translation id="6376435169746695498">Загрузка страницы блокирована списком <ph name="BLOCKER_NAME" /></translation>
 <translation id="6398710281890660037">Защитить мой профиль</translation>
 <translation id="6438786710866753178">Пейзаж 4</translation>
 <translation id="6477028720702061455">Выберите папку профиля Opera для импорта</translation>
@@ -152,6 +162,7 @@
 <translation id="7086554968911045110">Пейзаж 7</translation>
 <translation id="7099506190679014195">Безопасное обновление хранилища ключей</translation>
 <translation id="7111492742514999492">Пейзаж 9</translation>
+<translation id="7113310725918019676">Разрешить <ph name="BLOCKED_TYPE" /> с сервера <ph name="DOMAIN" /></translation>
 <translation id="7208252576848052204">К сожалению, ваши настройки Arc недоступны во время работы этого браузера. Чтобы импортировать эти настройки в Vivaldi, закройте все окна Arc, затем нажмите Продолжить.</translation>
 <translation id="7321500017121629018">Активен вчера</translation>
 <translation id="7337881442233988129">Chromium</translation>
@@ -167,12 +178,13 @@
 <translation id="8027581147000338959">Открыть в новом окне</translation>
 <translation id="8044382196220116469">Не позволять сайтам автоматически воспроизводить видео</translation>
 <translation id="8099620695029051217">Копировать адрес страницы</translation>
+<translation id="8119307142152921512">слежку и рекламу</translation>
 <translation id="8197810018650377191">Поместить страницу в закладки</translation>
 <translation id="8261506727792406068">Удалить</translation>
-<translation id="8263047843452521549">Инспектировать фоновые сервисы</translation>
 <translation id="8331671104904436324">Открыть в фоновой вкладке</translation>
 <translation id="8373293945112511707">Пейзаж 1</translation>
 <translation id="8388552048012645975">Загрузка обновления...</translation>
+<translation id="8392904568172593155">Без параметров</translation>
 <translation id="8427094907586191051">Пейзаж 17</translation>
 <translation id="8439034818057146672">Новая версия Vivaldi готова к установке.</translation>
 <translation id="8446668873108041390">Выполнение JavaScript через AppleScript отключено. В настройках Settings &gt; Privacy &gt; Apple Events вы можете разрешить JavaScript из Apple Events.</translation>
@@ -183,14 +195,15 @@
 <translation id="8651348004684669199">Добавить активную</translation>
 <translation id="8669345741879513971">Монстр 10</translation>
 <translation id="867544375504146191">Яндекс</translation>
-<translation id="8689295374912158752">Инспектировать документы</translation>
 <translation id="875142999698251063">Выйти сейчас</translation>
 <translation id="8768970203213061953">Пейзаж 14</translation>
 <translation id="8773635261052182196">Вы больше не будете получать уведомления. Вы можете включить их в настройках Vivaldi.</translation>
 <translation id="8774017153185436870">Сайты могут автоматически воспроизводить видео</translation>
 <translation id="8813277370772331957">Напомнить позже</translation>
+<translation id="8837256239226739065">Инспектировать фоновый Service Worker</translation>
 <translation id="8894900864683381599">Добавить ссылку на веб-панель</translation>
 <translation id="8912720443398351457">Вы хотите выйти из Vivaldi?</translation>
+<translation id="8940028675168378100">Блокировано <ph name="BLOCKER_NAME" /></translation>
 <translation id="8947109330183116400">Выбрать HTML файл закладок</translation>
 <translation id="9017566390391482291">Выберите папку профиля Vivaldi для импорта</translation>
 <translation id="9048058608784130603">Готово обновление <ph name="VERSION" /></translation>
@@ -201,6 +214,7 @@
 <translation id="912022491595344261">Открыть картинку как <ph name="USER" /></translation>
 <translation id="9157539936604258187">Открыть ссылку</translation>
 <translation id="9169060351863393881">Opera 12.x</translation>
+<translation id="9180553614777056266">Блокировщик рекламы</translation>
 <translation id="939305735877869636">Brave</translation>
 <translation id="970294721402795299">Пейзаж 16</translation>
 </translationbundle>

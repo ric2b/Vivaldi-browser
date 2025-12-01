@@ -4,10 +4,10 @@
 
 #include "chrome/browser/ui/views/page_action/page_action_controller.h"
 
-#include "chrome/browser/ui/tabs/public/tab_interface.h"
 #include "chrome/browser/ui/toolbar/pinned_toolbar/pinned_toolbar_actions_model.h"
 #include "chrome/browser/ui/views/page_action/page_action_model.h"
 #include "chrome/browser/ui/views/page_action/page_action_view.h"
+#include "components/tab_collections/public/tab_interface.h"
 #include "ui/actions/action_id.h"
 #include "ui/actions/actions.h"
 
@@ -51,11 +51,25 @@ void PageActionController::Register(actions::ActionId action_id,
 }
 
 void PageActionController::Show(actions::ActionId action_id) {
-  FindPageActionModel(action_id).SetShowRequested(PassKey(), true);
+  FindPageActionModel(action_id).SetShowRequested(PassKey(),
+                                                  /*requested=*/true);
 }
 
 void PageActionController::Hide(actions::ActionId action_id) {
-  FindPageActionModel(action_id).SetShowRequested(PassKey(), false);
+  FindPageActionModel(action_id).SetShowRequested(PassKey(),
+                                                  /*requested=*/false);
+}
+
+void PageActionController::ShowSuggestionChip(actions::ActionId action_id,
+                                              SuggestionChipConfig config) {
+  PageActionModelInterface& model = FindPageActionModel(action_id);
+  model.SetShouldAnimateChip(PassKey(), config.should_animate);
+  model.SetShowSuggestionChip(PassKey(), /*show_suggestion_chip=*/true);
+}
+
+void PageActionController::HideSuggestionChip(actions::ActionId action_id) {
+  FindPageActionModel(action_id).SetShowSuggestionChip(
+      PassKey(), /*show_suggestion_chip=*/false);
 }
 
 void PageActionController::ActionItemChanged(
@@ -65,11 +79,11 @@ void PageActionController::ActionItemChanged(
 }
 
 void PageActionController::OnTabActivated(tabs::TabInterface* tab) {
-  SetModelsTabActive(true);
+  SetModelsTabActive(/*is_active=*/true);
 }
 
 void PageActionController::OnTabWillDeactivate(tabs::TabInterface* tab) {
-  SetModelsTabActive(false);
+  SetModelsTabActive(/*is_active=*/false);
 }
 
 void PageActionController::SetModelsTabActive(bool is_active) {
@@ -86,6 +100,28 @@ void PageActionController::OverrideText(actions::ActionId action_id,
 void PageActionController::ClearOverrideText(actions::ActionId action_id) {
   FindPageActionModel(action_id).SetOverrideText(
       PassKey(), /*override_text=*/std::nullopt);
+}
+
+void PageActionController::OverrideImage(actions::ActionId action_id,
+                                         const ui::ImageModel& override_image) {
+  FindPageActionModel(action_id).SetOverrideImage(PassKey(), override_image);
+}
+
+void PageActionController::ClearOverrideImage(actions::ActionId action_id) {
+  FindPageActionModel(action_id).SetOverrideImage(
+      PassKey(), /*override_image=*/std::nullopt);
+}
+
+void PageActionController::OverrideTooltip(
+    actions::ActionId action_id,
+    const std::u16string& override_tooltip) {
+  FindPageActionModel(action_id).SetOverrideTooltip(PassKey(),
+                                                    override_tooltip);
+}
+
+void PageActionController::ClearOverrideTooltip(actions::ActionId action_id) {
+  FindPageActionModel(action_id).SetOverrideTooltip(
+      PassKey(), /*override_tooltip=*/std::nullopt);
 }
 
 void PageActionController::AddObserver(
@@ -106,14 +142,13 @@ PageActionController::CreateActionItemSubscription(
   return subscription;
 }
 
-void PageActionController::OnActionAddedLocally(const actions::ActionId& id) {}
-
-void PageActionController::OnActionRemovedLocally(const actions::ActionId& id) {
+void PageActionController::SetShouldHidePageActions(
+    bool should_hide_page_actions) {
+  for (auto& [id, model] : page_actions_) {
+    model->SetShouldHidePageAction(PassKey(), should_hide_page_actions);
+  }
 }
 
-void PageActionController::OnActionMovedLocally(const actions::ActionId& id,
-                                                int from_index,
-                                                int to_index) {}
 void PageActionController::OnActionsChanged() {
   PinnedActionsModelChanged();
 }

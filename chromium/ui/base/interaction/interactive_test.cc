@@ -6,6 +6,7 @@
 
 #include <functional>
 #include <memory>
+#include <sstream>
 #include <string>
 #include <string_view>
 #include <variant>
@@ -174,6 +175,22 @@ InteractionSequence::StepBuilder InteractiveTestApi::ActivateSurface(
   return builder;
 }
 
+InteractionSequence::StepBuilder InteractiveTestApi::FocusElement(
+    ElementSpecifier element) {
+  RequireInteractiveTest();
+  StepBuilder builder;
+  builder.SetDescription("FocusElement()");
+  internal::SpecifyElement(builder, element);
+  builder.SetStartCallback(base::BindOnce(
+      [](InteractiveTestApi* test, InteractionSequence* seq,
+         TrackedElement* el) {
+        test->private_test_impl().HandleActionResult(
+            seq, el, "FocusElement", test->test_util().FocusElement(el));
+      },
+      base::Unretained(this)));
+  return builder;
+}
+
 #if !BUILDFLAG(IS_IOS)
 InteractionSequence::StepBuilder InteractiveTestApi::SendAccelerator(
     ElementSpecifier element,
@@ -193,6 +210,27 @@ InteractionSequence::StepBuilder InteractiveTestApi::SendAccelerator(
       accelerator, base::Unretained(this)));
   return builder;
 }
+
+InteractionSequence::StepBuilder InteractiveTestApi::SendKeyPress(
+    ElementSpecifier element,
+    KeyboardCode key,
+    int flags) {
+  StepBuilder builder;
+  std::ostringstream oss;
+  oss << "SendKeyPress( " << key << ", " << flags << " )";
+  builder.SetDescription(oss.str());
+  internal::SpecifyElement(builder, element);
+  builder.SetStartCallback(base::BindOnce(
+      [](KeyboardCode key, int flags, InteractiveTestApi* test,
+         InteractionSequence* seq, TrackedElement* el) {
+        test->private_test_impl().HandleActionResult(
+            seq, el, "SendKeyPress",
+            test->test_util().SendKeyPress(el, key, flags));
+      },
+      key, flags, base::Unretained(this)));
+  return builder;
+}
+
 #endif  // !BUILDFLAG(IS_IOS)
 
 InteractionSequence::StepBuilder InteractiveTestApi::Confirm(
@@ -313,63 +351,6 @@ InteractionSequence::StepBuilder InteractiveTestApi::NameElement(
                              GetFindElementCallback(std::move(spec)));
 }
 
-// static
-InteractiveTestApi::MultiStep InteractiveTestApi::InAnyContext(
-    MultiStep steps) {
-  for (auto& step : steps) {
-    step.SetContext(InteractionSequence::ContextMode::kAny)
-        .AddDescriptionPrefix("InAnyContext()");
-  }
-  return steps;
-}
-
-// static
-InteractiveTestApi::MultiStep InteractiveTestApi::InSameContext(
-    MultiStep steps) {
-  for (auto& step : steps) {
-    step.SetContext(InteractionSequence::ContextMode::kFromPreviousStep)
-        .AddDescriptionPrefix("InSameContext()");
-  }
-  return steps;
-}
-
-// static
-InteractiveTestApi::MultiStep InteractiveTestApi::InContext(
-    ElementContext context,
-    MultiStep steps) {
-  // This context may not yet exist, but we want the pivot element to exist.
-  private_test_impl_->MaybeAddPivotElement(context);
-  const std::string caller =
-      base::StringPrintf("InContext( %p, )", static_cast<const void*>(context));
-  for (auto& step : steps) {
-    step.SetContext(context).AddDescriptionPrefix(caller);
-  }
-
-  return steps;
-}
-
-// static
-InteractiveTestApi::MultiStep InteractiveTestApi::InSameContextAs(
-    ElementSpecifier element,
-    MultiStep steps) {
-  return Steps(
-      std::move(
-          WithElement(element, base::DoNothing())
-              .SetContext(InteractionSequence::ContextMode::kAny)
-              .SetDescription("InSameContextAs() - locate reference element")),
-      InSameContext(std::move(steps)));
-}
-
-// static
-InteractiveTestApi::MultiStep InteractiveTestApi::WithoutDelay(
-    MultiStep steps) {
-  for (auto& step : steps) {
-    step.SetStepStartMode(InteractionSequence::StepStartMode::kImmediate)
-        .AddDescriptionPrefix("WithoutDelay()");
-  }
-  return steps;
-}
-
 InteractiveTestApi::StepBuilder InteractiveTestApi::SetOnIncompatibleAction(
     OnIncompatibleAction action,
     const char* reason) {
@@ -445,12 +426,35 @@ bool InteractiveTestApi::RunTestSequenceImpl(
                     InteractionSequence::AbortedReason::kSequenceTimedOut);
                 oss << internal::kInteractiveTestFailedMessagePrefix << data;
                 context = data.context;
+                if (data.step_type != InteractionSequence::StepType::kHidden &&
+                    context && !data.element && data.element_id) {
+                  const size_t elements_in_context =
+                      ui::ElementTracker::GetElementTracker()
+                          ->GetAllMatchingElements(data.element_id, context)
+                          .size();
+                  const size_t total_elements =
+                      ui::ElementTracker::GetElementTracker()
+                          ->GetAllMatchingElementsInAnyContext(data.element_id)
+                          .size();
+                  if (elements_in_context == 0U && total_elements > 0U) {
+                    oss << "\nNote that there were matching elements in other "
+                           "contexts; did you forget InSameContext() or "
+                           "InAnyContext()?";
+                  }
+                }
               } else {
                 oss << "Interactive test: timeout after test sequence "
                        "destroyed; a failure message may already have been "
                        "logged.";
               }
               if (impl) {
+                const auto additional_context = impl->GetAdditionalContext();
+                if (!additional_context.empty()) {
+                  oss << "\nAdditional test context:";
+                  for (const auto& ctx : additional_context) {
+                    oss << "\n * " << ctx;
+                  }
+                }
                 impl->DebugDumpElements(context).PrintTo(oss);
               }
               return oss.str();

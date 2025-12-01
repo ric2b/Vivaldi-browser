@@ -16,19 +16,24 @@
 #import "ios/chrome/browser/shared/model/application_context/application_context.h"
 #import "ios/chrome/browser/shared/model/browser/browser.h"
 #import "ios/chrome/browser/shared/model/profile/profile_ios.h"
+#import "ios/chrome/browser/signin/model/chrome_account_manager_service.h"
+#import "ios/chrome/browser/signin/model/chrome_account_manager_service_factory.h"
 #import "ios/chrome/browser/signin/model/identity_manager_factory.h"
+#import "ios/chrome/browser/signin/model/system_identity.h"
 
 @interface ManagedProfileCreationCoordinator () <
+    ManagedProfileCreationMediatorDelegate,
     ManagedProfileCreationViewControllerDelegate,
     LearnMoreCoordinatorDelegate,
     UINavigationControllerDelegate>
 @end
 
 @implementation ManagedProfileCreationCoordinator {
-  NSString* _userEmail;
+  id<SystemIdentity> _identity;
   NSString* _hostedDomain;
   BOOL _skipBrowsingDataMigration;
   BOOL _mergeBrowsingDataByDefault;
+  BOOL _browsingDataMigrationDisabledByPolicy;
   ManagedProfileCreationViewController* _viewController;
   // Used to display `_viewController` initially and
   // `_browsingDataMigrationViewController` if the user tries to modify how
@@ -40,47 +45,61 @@
 }
 
 - (instancetype)initWithBaseViewController:(UIViewController*)viewController
-                                 userEmail:(NSString*)userEmail
+                                  identity:(id<SystemIdentity>)identity
                               hostedDomain:(NSString*)hostedDomain
                                    browser:(Browser*)browser
                  skipBrowsingDataMigration:(BOOL)skipBrowsingDataMigration
-                mergeBrowsingDataByDefault:(BOOL)mergeBrowsingDataByDefault {
+                mergeBrowsingDataByDefault:(BOOL)mergeBrowsingDataByDefault
+     browsingDataMigrationDisabledByPolicy:
+         (BOOL)browsingDataMigrationDisabledByPolicy {
   // TODO(crbug.com/381853288): Add a mediator to listen to the identity
   // changes.
   DCHECK(viewController);
   self = [super initWithBaseViewController:viewController browser:browser];
   if (self) {
-    _userEmail = userEmail;
+    _identity = identity;
     _hostedDomain = hostedDomain;
     _skipBrowsingDataMigration = skipBrowsingDataMigration;
     _mergeBrowsingDataByDefault = mergeBrowsingDataByDefault;
+    _browsingDataMigrationDisabledByPolicy =
+        browsingDataMigrationDisabledByPolicy;
   }
   return self;
 }
 
 - (void)start {
   _viewController = [[ManagedProfileCreationViewController alloc]
-      initWithUserEmail:_userEmail
+      initWithUserEmail:_identity.userEmail
            hostedDomain:_hostedDomain];
   _viewController.delegate = self;
   _viewController.managedProfileCreationViewControllerPresentationDelegate =
       self;
   _viewController.modalInPresentation = YES;
 
-  ProfileIOS* profile = self.browser->GetProfile()->GetOriginalProfile();
+  ProfileIOS* profile = self.profile->GetOriginalProfile();
   signin::IdentityManager* identityManager =
       IdentityManagerFactory::GetForProfile(profile);
+  ChromeAccountManagerService* accountManagerService =
+      ChromeAccountManagerServiceFactory::GetForProfile(profile);
 
   _mediator = [[ManagedProfileCreationMediator alloc]
-         initWithIdentityManager:identityManager
-       skipBrowsingDataMigration:_skipBrowsingDataMigration
-      mergeBrowsingDataByDefault:_mergeBrowsingDataByDefault];
+                    initWithIdentityManager:identityManager
+                      accountManagerService:accountManagerService
+                  skipBrowsingDataMigration:_skipBrowsingDataMigration
+                 mergeBrowsingDataByDefault:_mergeBrowsingDataByDefault
+      browsingDataMigrationDisabledByPolicy:
+          _browsingDataMigrationDisabledByPolicy
+                                     gaiaID:_identity.gaiaID];
   _mediator.consumer = _viewController;
+  _mediator.delegate = self;
 
   _navigationController = [[UINavigationController alloc]
       initWithRootViewController:_viewController];
   _navigationController.delegate = self;
   [_navigationController setNavigationBarHidden:YES animated:NO];
+
+  _navigationController.navigationBar.accessibilityIdentifier =
+      kManagedProfileCreationNavigationBarAccessibilityIdentifier;
   [self.baseViewController presentViewController:_navigationController
                                         animated:YES
                                       completion:nil];
@@ -126,7 +145,7 @@
   CHECK(!_browsingDataMigrationViewController);
   _browsingDataMigrationViewController =
       [[BrowsingDataMigrationViewController alloc]
-                 initWithUserEmail:_userEmail
+                 initWithUserEmail:_identity.userEmail
           keepBrowsingDataSeparate:_mediator.keepBrowsingDataSeparate];
   _browsingDataMigrationViewController.mutator = _mediator;
   [_navigationController pushViewController:_browsingDataMigrationViewController
@@ -159,7 +178,7 @@
 #pragma mark - Private
 
 - (void)dismissViewControllerAnimated:(BOOL)animated {
-  _mediator.consumer = nil;
+  [_mediator disconnect];
   _mediator = nil;
   _viewController.delegate = nil;
   _viewController.managedProfileCreationViewControllerPresentationDelegate =
@@ -172,11 +191,11 @@
 
 - (void)showLearnMorePage {
   DCHECK(!_learnMoreCoordinator);
-  _learnMoreCoordinator =
-      [[LearnMoreCoordinator alloc] initWithBaseViewController:_viewController
-                                                       browser:self.browser
-                                                     userEmail:_userEmail
-                                                  hostedDomain:_hostedDomain];
+  _learnMoreCoordinator = [[LearnMoreCoordinator alloc]
+      initWithBaseViewController:_viewController
+                         browser:self.browser
+                       userEmail:_identity.userEmail
+                    hostedDomain:_hostedDomain];
   _learnMoreCoordinator.delegate = self;
   [_learnMoreCoordinator start];
 }
@@ -185,6 +204,15 @@
   [_learnMoreCoordinator stop];
   _learnMoreCoordinator.delegate = nil;
   _learnMoreCoordinator = nil;
+}
+
+#pragma mark - ManagedProfileCreationMediatorDelegate
+
+- (void)identityRemovedFromDevice {
+  if (_learnMoreCoordinator) {
+    [self stopLearnMoreCoordinator];
+  }
+  [self dismissViewControllerAnimated:YES];
 }
 
 @end

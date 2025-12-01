@@ -108,10 +108,9 @@ void PopulateConsumerItems(id<TabCollectionConsumer> consumer,
 @implementation InactiveTabsMediator
 
 - (instancetype)initWithWebStateList:(WebStateList*)webStateList
-                         prefService:(PrefService*)prefService
+                  profilePrefService:(PrefService*)prefService
                      snapshotStorage:(SnapshotStorageWrapper*)snapshotStorage
                           tabsCloser:(std::unique_ptr<TabsCloser>)tabsCloser {
-  CHECK(IsInactiveTabsAvailable());
   CHECK(webStateList);
   CHECK(prefService);
   CHECK(snapshotStorage);
@@ -166,7 +165,7 @@ void PopulateConsumerItems(id<TabCollectionConsumer> consumer,
   // Push the tabs to the consumer.
   PopulateConsumerItems(_consumer, _webStateList);
   // Push the info to the consumer.
-  NSInteger daysThreshold = InactiveTabsTimeThreshold().InDays();
+  NSInteger daysThreshold = InactiveTabsTimeThreshold(_prefService).InDays();
   [_consumer updateInactiveTabsDaysThreshold:daysThreshold];
 }
 
@@ -214,7 +213,9 @@ void PopulateConsumerItems(id<TabCollectionConsumer> consumer,
   if (preferenceName == prefs::kInactiveTabsTimeThreshold) {
     NSInteger daysThreshold =
         _prefService->GetInteger(prefs::kInactiveTabsTimeThreshold);
-    [_consumer updateInactiveTabsDaysThreshold:daysThreshold];
+    if (daysThreshold >= 0) {
+      [_consumer updateInactiveTabsDaysThreshold:daysThreshold];
+    }
   }
 }
 
@@ -315,7 +316,12 @@ void PopulateConsumerItems(id<TabCollectionConsumer> consumer,
   DCHECK_EQ(_webStateList, webStateList);
 
   AddWebStateObservations(_scopedWebStateObservation.get(), _webStateList);
-  PopulateConsumerItems(_consumer, _webStateList);
+
+  if (_webStateList->count() == 0) {
+    [_delegate inactiveTabsMediatorEmpty:self];
+  } else {
+    PopulateConsumerItems(_consumer, _webStateList);
+  }
 }
 
 - (void)webStateListDestroyed:(WebStateList*)webStateList {

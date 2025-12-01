@@ -2,12 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifndef V8_COMPILER_TURBOSHAFT_WASM_REVEC_REDUCER_H_
+#define V8_COMPILER_TURBOSHAFT_WASM_REVEC_REDUCER_H_
+
 #if !V8_ENABLE_WEBASSEMBLY
 #error This header should only be included if WebAssembly is enabled.
 #endif  // !V8_ENABLE_WEBASSEMBLY
-
-#ifndef V8_COMPILER_TURBOSHAFT_WASM_REVEC_REDUCER_H_
-#define V8_COMPILER_TURBOSHAFT_WASM_REVEC_REDUCER_H_
 
 #include <algorithm>
 
@@ -986,6 +986,7 @@ class WasmRevecReducer : public UniformReducerAdapter<WasmRevecReducer, Next> {
     if (!p) {
       return Adapter::ReduceInputGraphSimd128Shuffle(ig_index, op);
     }
+    DCHECK_EQ(op.kind, Simd128ShuffleOp::Kind::kI8x16);
 
     ShufflePackNode* pnode = p->AsShufflePackNode();
     V<Simd256> og_index = pnode->RevectorizedNode();

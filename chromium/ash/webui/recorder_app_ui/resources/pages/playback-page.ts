@@ -109,6 +109,8 @@ export function setInitialAudio(audio: ReactiveAudio|null): void {
 export class PlaybackPage extends ReactiveLitElement {
   static override styles = css`
     :host {
+      --header-padding: 8px;
+
       background-color: var(--cros-sys-app_base_shaded);
       box-sizing: border-box;
       display: flex;
@@ -116,6 +118,10 @@ export class PlaybackPage extends ReactiveLitElement {
       height: 100%;
       padding: 16px;
       width: 100%;
+
+      @container style(--small-viewport: 1) {
+        --header-padding: 2px;
+      }
     }
 
     #main-area {
@@ -123,7 +129,7 @@ export class PlaybackPage extends ReactiveLitElement {
       display: flex;
       flex: 1;
       flex-flow: column;
-      gap: 2px;
+      gap: 4px;
 
       /* To have the border-radius applied to content. */
       overflow: hidden;
@@ -138,11 +144,7 @@ export class PlaybackPage extends ReactiveLitElement {
       align-items: center;
       display: flex;
       flex-flow: row;
-      padding: 8px;
-
-      @container style(--small-viewport: 1) {
-        padding: 2px;
-      }
+      padding: var(--header-padding);
 
       & > recording-title {
         margin: 0 auto 0 -4px;

@@ -66,9 +66,10 @@ typedef LiteRtStatus (*LiteRtDispatchUnregisterTensorBufferT)(
 
 typedef LiteRtStatus (*LiteRtDispatchInvocationContextCreateT)(
     LiteRtDispatchDeviceContext device_context,
-    LiteRtDispatchExecutableType exec_type, const void* exec_bytecode,
-    size_t exec_bytecode_size, const char* function_name, int num_inputs,
-    int num_outputs, LiteRtDispatchInvocationContext* invocation_context);
+    LiteRtDispatchExecutableType exec_type,
+    const LiteRtMemBuffer* exec_bytecode_buffer, const char* function_name,
+    int num_inputs, int num_outputs,
+    LiteRtDispatchInvocationContext* invocation_context);
 
 typedef LiteRtStatus (*LiteRtDispatchInvocationContextDestroyT)(
     LiteRtDispatchInvocationContext invocation_context);
@@ -92,6 +93,23 @@ typedef LiteRtStatus (*LiteRtDispatchDetachOutputT)(
 typedef LiteRtStatus (*LiteRtDispatchInvokeT)(
     LiteRtDispatchInvocationContext invocation_context);
 
+typedef LiteRtStatus (*LiteRtDispatchStartMetricsCollectionT)(
+    LiteRtDispatchInvocationContext invocation_context, int detail_level);
+
+typedef LiteRtStatus (*LiteRtDispatchStopMetricsCollectionT)(
+    LiteRtDispatchInvocationContext invocation_context,
+    LiteRtDispatchMetrics* metrics);
+
+typedef LiteRtStatus (*LiteRtDispatchGetNumMetricsT)(
+    LiteRtDispatchMetrics metrics, int* num_metrics);
+
+typedef LiteRtStatus (*LiteRtDispatchGetMetricT)(LiteRtDispatchMetrics metrics,
+                                                 int metric_index,
+                                                 LiteRtMetric* metric);
+
+typedef LiteRtStatus (*LiteRtDispatchDestroyMetricsT)(
+    LiteRtDispatchMetrics metrics);
+
 typedef struct LiteRtDispatchInterface {
   LiteRtDispatchInitializeT initialize;
   LiteRtDispatchGetVendorIdT get_vendor_id;
@@ -110,6 +128,11 @@ typedef struct LiteRtDispatchInterface {
   LiteRtDispatchDetachInputT detach_input;
   LiteRtDispatchDetachOutputT detach_output;
   LiteRtDispatchInvokeT invoke;
+  LiteRtDispatchStartMetricsCollectionT start_metrics_collection;
+  LiteRtDispatchStopMetricsCollectionT stop_metrics_collection;
+  LiteRtDispatchGetNumMetricsT get_num_metrics;
+  LiteRtDispatchGetMetricT get_metric;
+  LiteRtDispatchDestroyMetricsT destroy_metrics;
 } LiteRtDispatchInterface;
 
 // /////////////////////////////////////////////////////////////////////////////
@@ -157,8 +180,8 @@ typedef LiteRtStatus (*LiteRtDispatchConnectGraphOutputT)(
 
 typedef LiteRtStatus (*LiteRtDispatchLoadExecutableT)(
     LiteRtDispatchDeviceContext device_context,
-    LiteRtDispatchExecutableType type, const void* bytecode_ptr,
-    size_t bytecode_size, LiteRtDispatchExecutableHandle* exec_handle);
+    LiteRtDispatchExecutableType type, const LiteRtMemBuffer* bytecode_buffer,
+    LiteRtDispatchExecutableHandle* exec_handle);
 
 typedef LiteRtStatus (*LiteRtDispatchUnloadExecutableT)(
     LiteRtDispatchDeviceContext device_context,

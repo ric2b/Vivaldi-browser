@@ -152,7 +152,6 @@ void TestStereo::Perform() {
                      {110, {"PCMU", 8000, 2}},
                      {8, {"PCMA", 8000, 1}},
                      {118, {"PCMA", 8000, 2}},
-                     {102, {"ILBC", 8000, 1}},
                      {9, {"G722", 8000, 1}},
                      {119, {"G722", 8000, 2}},
                      {120, {"OPUS", 48000, 2, {{"stereo", "1"}}}},
@@ -603,7 +602,7 @@ void TestStereo::Run(TestPackStereo* channel,
 
 void TestStereo::OpenOutFile(int16_t test_number) {
   std::string file_name;
-  rtc::StringBuilder file_stream;
+  StringBuilder file_stream;
   file_stream << webrtc::test::OutputPath() << "teststereo_out_" << test_number
               << ".pcm";
   file_name = file_stream.str();

@@ -27,14 +27,16 @@ class CanvasRenderingContext;
 class CanvasResource;
 class CanvasResourceDispatcher;
 class ComputedStyle;
-class FontSelector;
 class KURL;
+class LayoutLocale;
+class PlainTextPainter;
 class StaticBitmapImage;
+class UniqueFontSelector;
 
-class CORE_EXPORT CanvasRenderingContextHost : public CanvasResourceHost,
+class CORE_EXPORT CanvasRenderingContextHost : public GarbageCollectedMixin,
+                                               public CanvasResourceHost,
                                                public CanvasImageSource,
-                                               public ImageBitmapSource,
-                                               public GarbageCollectedMixin {
+                                               public ImageBitmapSource {
  public:
   enum class HostType {
     kNone,
@@ -42,6 +44,7 @@ class CORE_EXPORT CanvasRenderingContextHost : public CanvasResourceHost,
     kOffscreenCanvasHost,
   };
   CanvasRenderingContextHost(HostType host_type, const gfx::Size& size);
+  void Trace(Visitor* visitor) const override;
 
   void RecordCanvasSizeToUMA();
 
@@ -76,7 +79,8 @@ class CORE_EXPORT CanvasRenderingContextHost : public CanvasResourceHost,
   // computed style for the host. If nullptr is passed, the style will be
   // computed within the method.
   virtual TextDirection GetTextDirection(const ComputedStyle*) = 0;
-  virtual FontSelector* GetFontSelector() = 0;
+  virtual const LayoutLocale* GetLocale() const = 0;
+  virtual UniqueFontSelector* GetFontSelector() = 0;
 
   virtual bool ShouldAccelerate2dContext() const = 0;
 
@@ -111,6 +115,7 @@ class CORE_EXPORT CanvasRenderingContextHost : public CanvasResourceHost,
   viz::SharedImageFormat GetRenderingContextFormat() const;
   sk_sp<SkColorSpace> GetRenderingContextSkColorSpace() const;
   gfx::ColorSpace GetRenderingContextColorSpace() const;
+  PlainTextPainter& GetPlainTextPainter();
 
   // blink::CanvasImageSource
   bool IsOffscreenCanvas() const override;
@@ -147,6 +152,8 @@ class CORE_EXPORT CanvasRenderingContextHost : public CanvasResourceHost,
   IdentifiableToken IdentifiabilityInputDigest(
       const CanvasRenderingContext* const context) const;
 
+  Member<PlainTextPainter> plain_text_painter_;
+  Member<UniqueFontSelector> unique_font_selector_;
   // `did_fail_to_create_resource_provider_` prevents repeated attempts in
   // allocating resources after the first attempt failed.
   bool did_fail_to_create_resource_provider_ = false;

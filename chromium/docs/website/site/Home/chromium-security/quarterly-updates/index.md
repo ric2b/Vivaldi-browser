@@ -16,6 +16,53 @@ if you're interested in updates, discussion, or feisty rants related to Chromium
 security.
 
 
+## Q4 2024
+
+# Chrome Security **2024 Q4** Update
+
+
+Hello everyone,
+
+Here's an update on what Chrome Security was up to in Q4 of 2024.
+
+To wrap up the year, we announced our [top 20 Chrome VRP researchers for 2024](https://issues.chromium.org/issues/386306231). Congratulations to all who made the list and thank you to our greater Chrome VRP security researcher community for another year of amazing contributions to help make Chrome more secure for all users!
+
+In the realm of the Web PKI, the Chrome distrust of Entrust, previously [announced](https://security.googleblog.com/2024/06/sustaining-digital-certificate-security.html) in June, went into effect on November 12th. The CA/Browser Forum passed a [ballot](https://cabforum.org/2024/11/14/ballot-sc-80v3-sunset-the-use-of-whois-to-identify-domain-contacts-and-relying-dcv-methods/), drafted by the Chrome Root Program, that set a timeline for deprecating [insecure](https://labs.watchtowr.com/we-spent-20-to-achieve-rce-and-accidentally-became-the-admins-of-mobi/) and non-automated validation methods, including WHOIS. We also [announced](https://groups.google.com/u/1/a/chromium.org/g/ct-policy/c/nuJOpwj06QA) our plan for trusting the new "tiled log" format for Certificate Transparency logs in Chrome, and began monitoring publicly available tiled logs.
+
+NIST published the final standards for post-quantum cryptography key exchange and signature algorithms, ML-KEM (previously named Kyber), and ML-DSA (previously named Dilithium), respectively. ML-KEM is now enabled by default in Chrome on Windows, Mac, Linux, ChromeOS, and Android, as of Chrome 131. This protects Chrome users from "[store now, decrypt later](https://en.wikipedia.org/wiki/Harvest_now,_decrypt_later)" attacks.
+
+Within the web platform, the first milestone of [Document Isolation Policy](https://wicg.github.io/document-isolation-policy/) is fully implemented and available as an [origin trial](https://developer.chrome.com/origintrials/#/view_trial/3670996646260375553) starting in Chrome 132. This offers an easier path for sites to become [cross-origin isolated](https://developer.mozilla.org/en-US/docs/Web/API/Window/crossOriginIsolated) compared to existing headers.
+
+The Security Architecture team wrapped up 2024 by moving several long-running projects towards launch, and starting a new effort to gain security by improving performance. An optimization for [RenderDocument](https://crbug.com/936696) unblocked its launch on desktop devices, and the feature to [compute origins in the browser process](https://crbug.com/40092527) is rolling out to Stable channel. [SiteInstanceGroup](https://crbug.com/1447896) for data URLs is now live on Canary/Dev/Beta, the [process reuse threshold](https://crbug.com/40259123) experiment is now on Stable, and we started an experiment with a faster and more accurate Site Isolation check in [ChildProcessSecurityPolicy](https://crbug.com/40148776). Meanwhile, our annual [CSA hackathon](https://crbug.com/382303496) focused on improving navigation related metrics and trace events, and identified a few optimizations to pursue. Combined, all this work will help us use process isolation in more contexts, hopefully including both Android Site Isolation and the (now-live) [Origin Isolation](https://crbug.com/40259221) experiment.
+
+The platform security team completed implementation of and began experimenting on Windows with app-bound encryption for login-scoped tokens, making theft of these valuable credentials significantly harder. On macOS, we deployed peer process validation, which prevents malicious software from impersonating Chrome via IPC mechanisms. We also made some minor improvements to Linux process launching to avoid crashes in startup in some rare cases.
+
+In collaboration with Microsoft Edge we enabled parallel process launching in the Windows sandbox, and made other changes to limit unused dependencies on Windows that resulted in faster process startup.
+
+We also continued our ongoing cross-platform work to allow the ANGLE OpenGL implementation to target the Dawn graphics stack, which will ultimately permit us to move ANGLE from the GPU process into the more tightly sandboxed renderer process. During this quarter, we focused on the shader translator and specifically on filling out support for GL uniforms and more texture formats.
+
+We continued to advance our C++ hardening efforts by [rewriting](https://chromium-review.googlesource.com/q/bug:378069401+is:merged) uses of built-in arrays with std::array, which benefit from the bounds checks we have enabled in libc++. We ended the year with just over nine million lines of C++ protected by -Wunsafe-buffer-usage and we intend to improve coverage even more.
+
+We worked with our colleagues in Google's core security team on their [blog post](https://security.googleblog.com/2024/11/retrofitting-spatial-safety-to-hundreds.html) about the benefits of libc++ hardening as applied to Google's server-side codebase. We heartily join them in encouraging "organizations using C++ to enable their standard library's hardened mode universally by default".
+
+Our [project](https://crbug.com/40278281) to replace Chrome's PNG codec with a Rust implementation has progressed to the point we can begin tests in Chrome's Dev and Canary channels.
+
+Chrome has also been helping out with some strategic changes to the Rust language to benefit future C++/Rust interop. Specifically, most of the work has now landed (behind a feature flag) for [Arbitrary Self Types](https://github.com/rust-lang/rfcs/blob/master/text/3519-arbitrary-self-types-v2.md), which will allow future interop tools to model C++ reference and pointer semantics in Rust types with good ergonomics.
+
+On the V8 side we reached another milestone with the V8 Sandbox project when we launched the second iteration of the [V8 Sandbox VRP](https://bughunters.google.com/about/rules/chrome-friends/5745167867576320/chrome-vulnerability-reward-program-rules#v8-sandbox-bypass-rewards): now all relevant attack surfaces are included and reward amounts have been increased. Besides that we were busy fixing more of the remaining sandbox issues (see the [v8-hotlist](https://issues.chromium.org/hotlists/4802478) for a full list of issues), which included [big refactorings](https://crbug.com/363975785) to the way function calls work in WebAssembly to ensure control-flow integrity.
+
+Ops security have been working on improving processes for managing third party dependencies. License checks have moved from being hardcoded in the [//third_party/PRESUBMIT.py](https://source.chromium.org/chromium/chromium/src/+/main:third_party/PRESUBMIT.py) to [depot_tools/metadata](https://source.chromium.org/chromium/chromium/src/+/main:third_party/depot_tools/metadata/fields/custom/license_allowlist.py) where we can provide better feedback to OWNERS and a more reusable interface for validation. Soon, we'll surface these validation results directly in CLs which touch third party files to ensure data is kept fresh.
+
+In a highlight of the year, we met up with some of our top Chrome VRP researchers at BugSWAT as part of Google ESCAL8 2024 in Málaga, Spain in October for a long weekend of live hacking, fun events, and chatting about all things security.
+
+In the fuzzing team, we've made [FuzzTest](https://chromium.googlesource.com/chromium/src/+/main/testing/libfuzzer/getting_started.md) available in existing unit test suites. This makes it much easier for Chromies to add small coverage-guided fuzzers. We've also made a first version of a system-wide WebIDL fuzzer using DomatoLPM and we've been working a lot on improving Fuzzilli's capabilities in Chrome.
+
+Thank you for reading!
+
+Jasika & Ade
+
+On behalf of Chrome Security
+
 ## Q3 2024
 
 # Chrome Security **2024 Q3** Update

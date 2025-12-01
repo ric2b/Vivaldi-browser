@@ -55,6 +55,7 @@ import {
   type KeyDownEvent,
   type LoadNetworkResourceResult,
   type ResizeEvent,
+  type SettingAccessEvent,
   type ShowSurveyResult,
   type SyncInformation,
 } from './InspectorFrontendHostAPI.js';
@@ -74,7 +75,7 @@ const UIStrings = {
    *@example {example.com} PH1
    */
   devtoolsS: 'DevTools - {PH1}',
-};
+} as const;
 const str_ = i18n.i18n.registerUIStrings('core/host/InspectorFrontendHost.ts', UIStrings);
 const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
 
@@ -93,18 +94,16 @@ const OVERRIDES_FILE_SYSTEM_PATH = '/overrides' as Platform.DevToolsPath.RawPath
  * The native implementations live in devtools_ui_bindings.cc: https://source.chromium.org/chromium/chromium/src/+/main:chrome/browser/devtools/devtools_ui_bindings.cc
  */
 export class InspectorFrontendHostStub implements InspectorFrontendHostAPI {
-  readonly #urlsBeingSaved: Map<Platform.DevToolsPath.RawPathString|Platform.DevToolsPath.UrlString, string[]>;
+  readonly #urlsBeingSaved = new Map<Platform.DevToolsPath.RawPathString|Platform.DevToolsPath.UrlString, string[]>();
   events!: Common.EventTarget.EventTarget<EventTypes>;
   #fileSystem: FileSystem|null = null;
 
   recordedCountHistograms:
-      {histogramName: string, sample: number, min: number, exclusiveMax: number, bucketSize: number}[] = [];
-  recordedEnumeratedHistograms: {actionName: EnumeratedHistogram, actionCode: number}[] = [];
-  recordedPerformanceHistograms: {histogramName: string, duration: number}[] = [];
+      Array<{histogramName: string, sample: number, min: number, exclusiveMax: number, bucketSize: number}> = [];
+  recordedEnumeratedHistograms: Array<{actionName: EnumeratedHistogram, actionCode: number}> = [];
+  recordedPerformanceHistograms: Array<{histogramName: string, duration: number}> = [];
 
   constructor() {
-    this.#urlsBeingSaved = new Map();
-
     // Guard against errors should this file ever be imported at the top level
     // within a worker - in which case this constructor is run. If there's no
     // document, we can early exit.
@@ -121,7 +120,7 @@ export class InspectorFrontendHostStub implements InspectorFrontendHostAPI {
     }
 
     document.addEventListener('keydown', event => {
-      stopEventPropagation.call(this, (event as KeyboardEvent));
+      stopEventPropagation.call(this, (event));
     }, true);
   }
 
@@ -186,6 +185,9 @@ export class InspectorFrontendHostStub implements InspectorFrontendHostAPI {
   }
 
   openInNewTab(url: Platform.DevToolsPath.UrlString): void {
+    if (Common.ParsedURL.schemeIs(url, 'javascript:')) {
+      return;
+    }
     window.open(url, '_blank');
   }
 
@@ -271,6 +273,18 @@ export class InspectorFrontendHostStub implements InspectorFrontendHostAPI {
   recordUserMetricsAction(umaName: string): void {
   }
 
+  connectAutomaticFileSystem(
+      _fileSystemPath: Platform.DevToolsPath.RawPathString,
+      _fileSystemUUID: string,
+      _addIfMissing: boolean,
+      callback: (result: {success: boolean}) => void,
+      ): void {
+    queueMicrotask(() => callback({success: false}));
+  }
+
+  disconnectAutomaticFileSystem(fileSystemPath: Platform.DevToolsPath.RawPathString): void {
+  }
+
   requestFileSystems(): void {
     this.events.dispatchEventToListeners(Events.FileSystemsLoaded, []);
   }
@@ -282,7 +296,7 @@ export class InspectorFrontendHostStub implements InspectorFrontendHostAPI {
         fileSystemName: 'sandboxedRequestedFileSystem',
         fileSystemPath: OVERRIDES_FILE_SYSTEM_PATH,
         rootURL: 'filesystem:devtools://devtools/isolated/',
-        type: 'overrides',
+        type: 'overrides' as const,
       };
       this.events.dispatchEventToListeners(Events.FileSystemAdded, {fileSystem});
     };
@@ -394,7 +408,7 @@ export class InspectorFrontendHostStub implements InspectorFrontendHostAPI {
 
   getSyncInformation(callback: (arg0: SyncInformation) => void): void {
     if ('getSyncInformationForTesting' in globalThis) {
-      // @ts-ignore for testing
+      // @ts-expect-error for testing
       return callback(globalThis.getSyncInformationForTesting());
     }
     callback({
@@ -403,46 +417,16 @@ export class InspectorFrontendHostStub implements InspectorFrontendHostAPI {
     });
   }
 
-  getHostConfig(callback: (arg0: Root.Runtime.HostConfig) => void): void {
-    const result: Root.Runtime.HostConfig = {
-      aidaAvailability: {
-        enabled: true,
-        blockedByAge: false,
-        blockedByEnterprisePolicy: false,
-        blockedByGeo: false,
-        disallowLogging: true,
-        enterprisePolicyValue: 0,
-      },
-      devToolsConsoleInsights: {
-        modelId: '',
-        temperature: -1,
-        enabled: false,
-      },
-      devToolsFreestyler: {
-        modelId: '',
-        temperature: -1,
-        enabled: false,
-      },
-      devToolsImprovedWorkspaces: {
-        enabled: false,
-      },
+  getHostConfig(callback: (hostConfig: Root.Runtime.HostConfig) => void): void {
+    // This HostConfig config is used in the hosted mode (see the
+    // comment on top of this class). Only add non-default config params
+    // here that you want to also apply in the hosted mode. For tests
+    // use the hostConfigForTesting override.
+    const hostConfigForHostedMode: Root.Runtime.HostConfig = {
       devToolsVeLogging: {
         enabled: true,
-        testing: false,
       },
-      devToolsPrivacyUI: {
-        enabled: false,
-      },
-      devToolsEnableOriginBoundCookies: {
-        portBindingEnabled: false,
-        schemeBindingEnabled: false,
-      },
-      devToolsAnimationStylesInStylesTab: {
-        enabled: false,
-      },
-      isOffTheRecord: false,
       thirdPartyCookieControls: {
-        thirdPartyCookieRestrictionEnabled: false,
         thirdPartyCookieMetadataEnabled: true,
         thirdPartyCookieHeuristicsEnabled: true,
         managedBlockThirdPartyCookies: 'Unset',
@@ -452,19 +436,19 @@ export class InspectorFrontendHostStub implements InspectorFrontendHostAPI {
       const {hostConfigForTesting} = (globalThis as unknown as {hostConfigForTesting: Root.Runtime.HostConfig});
       for (const key of Object.keys(hostConfigForTesting)) {
         const mergeEntry = <K extends keyof Root.Runtime.HostConfig>(key: K): void => {
-          if (typeof result[key] === 'object' && typeof hostConfigForTesting[key] === 'object') {
+          if (typeof hostConfigForHostedMode[key] === 'object' && typeof hostConfigForTesting[key] === 'object') {
             // If the config is an object, merge the settings, but preferring
             // the hostConfigForTesting values over the result values.
-            result[key] = {...result[key], ...hostConfigForTesting[key]};
+            hostConfigForHostedMode[key] = {...hostConfigForHostedMode[key], ...hostConfigForTesting[key]};
           } else {
             // Override with the testing config if the value is present + not null/undefined.
-            result[key] = hostConfigForTesting[key] ?? result[key];
+            hostConfigForHostedMode[key] = hostConfigForTesting[key] ?? hostConfigForHostedMode[key];
           }
         };
         mergeEntry(key as keyof Root.Runtime.HostConfig);
       }
     }
-    callback(result);
+    callback(hostConfigForHostedMode);
   }
 
   upgradeDraggedFileSystemPermissions(fileSystem: FileSystem): void {
@@ -519,9 +503,6 @@ export class InspectorFrontendHostStub implements InspectorFrontendHostAPI {
   setDevicesUpdatesEnabled(enabled: boolean): void {
   }
 
-  performActionOnRemotePage(pageId: string, action: string): void {
-  }
-
   openRemotePage(browserId: string, url: string): void {
   }
 
@@ -529,7 +510,7 @@ export class InspectorFrontendHostStub implements InspectorFrontendHostAPI {
   }
 
   showContextMenuAtPoint(x: number, y: number, items: ContextMenuDescriptor[], document: Document): void {
-    throw 'Soft context menu should be used';
+    throw new Error('Soft context menu should be used');
   }
 
   isHostedMode(): boolean {
@@ -570,16 +551,18 @@ export class InspectorFrontendHostStub implements InspectorFrontendHostAPI {
   }
   recordKeyDown(event: KeyDownEvent): void {
   }
+  recordSettingAccess(event: SettingAccessEvent): void {
+  }
 }
 
-// @ts-ignore Global injected by devtools_compatibility.js
+// @ts-expect-error Global injected by devtools_compatibility.js
 // eslint-disable-next-line @typescript-eslint/naming-convention
 export let InspectorFrontendHostInstance: InspectorFrontendHostStub = globalThis.InspectorFrontendHost;
 
 class InspectorFrontendAPIImpl {
   constructor() {
     for (const descriptor of EventDescriptors) {
-      // @ts-ignore Dispatcher magic
+      // @ts-expect-error Dispatcher magic
       this[descriptor[1]] = this.dispatch.bind(this, descriptor[0], descriptor[2], descriptor[3]);
     }
   }
@@ -620,7 +603,7 @@ function initializeInspectorFrontendHost(): void {
   let proto;
   if (!InspectorFrontendHostInstance) {
     // Instantiate stub for web-hosted mode if necessary.
-    // @ts-ignore Global injected by devtools_compatibility.js
+    // @ts-expect-error Global injected by devtools_compatibility.js
     globalThis.InspectorFrontendHost = InspectorFrontendHostInstance = new InspectorFrontendHostStub();
   } else {
     // Otherwise add stubs for missing methods that are declared in the interface.
@@ -629,13 +612,13 @@ function initializeInspectorFrontendHost(): void {
       // TODO(crbug.com/1172300) Ignored during the jsdoc to ts migration)
       // @ts-expect-error
       const stub = proto[name];
-      // @ts-ignore Global injected by devtools_compatibility.js
+      // @ts-expect-error Global injected by devtools_compatibility.js
       if (typeof stub !== 'function' || InspectorFrontendHostInstance[name]) {
         continue;
       }
 
       console.error(`Incompatible embedder: method Host.InspectorFrontendHost.${name} is missing. Using stub instead.`);
-      // @ts-ignore Global injected by devtools_compatibility.js
+      // @ts-expect-error Global injected by devtools_compatibility.js
       InspectorFrontendHostInstance[name] = stub;
     }
   }
@@ -647,7 +630,7 @@ function initializeInspectorFrontendHost(): void {
 // FIXME: This file is included into both apps, since the devtools_app needs the InspectorFrontendHostAPI only,
 // so the host instance should not be initialized there.
 initializeInspectorFrontendHost();
-// @ts-ignore Global injected by devtools_compatibility.js
+// @ts-expect-error Global injected by devtools_compatibility.js
 globalThis.InspectorFrontendAPI = new InspectorFrontendAPIImpl();
 })();
 

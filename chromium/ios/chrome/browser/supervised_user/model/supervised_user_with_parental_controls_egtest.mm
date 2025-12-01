@@ -8,12 +8,15 @@
 #import "components/signin/internal/identity_manager/account_capabilities_constants.h"
 #import "components/supervised_user/core/browser/supervised_user_url_filter.h"
 #import "components/supervised_user/core/common/features.h"
+#import "components/supervised_user/core/common/supervised_user_constants.h"
 #import "ios/chrome/browser/authentication/ui_bundled/signin_earl_grey.h"
 #import "ios/chrome/browser/authentication/ui_bundled/signin_earl_grey_ui_test_util.h"
+#import "ios/chrome/browser/content_suggestions/ui_bundled/content_suggestions_constants.h"
 #import "ios/chrome/browser/metrics/model/metrics_app_interface.h"
 #import "ios/chrome/browser/policy/model/policy_app_interface.h"
 #import "ios/chrome/browser/policy/model/policy_earl_grey_utils.h"
 #import "ios/chrome/browser/policy/model/policy_util.h"
+#import "ios/chrome/browser/popup_menu/ui_bundled/popup_menu_constants.h"
 #import "ios/chrome/browser/settings/ui_bundled/clear_browsing_data/features.h"
 #import "ios/chrome/browser/settings/ui_bundled/google_services/manage_sync_settings_constants.h"
 #import "ios/chrome/browser/settings/ui_bundled/supervised_user_settings_app_interface.h"
@@ -21,8 +24,6 @@
 #import "ios/chrome/browser/signin/model/capabilities_types.h"
 #import "ios/chrome/browser/signin/model/fake_system_identity.h"
 #import "ios/chrome/browser/supervised_user/ui/constants.h"
-#import "ios/chrome/browser/ui/content_suggestions/content_suggestions_constants.h"
-#import "ios/chrome/browser/ui/popup_menu/popup_menu_constants.h"
 #import "ios/chrome/grit/ios_strings.h"
 #import "ios/chrome/test/earl_grey/chrome_earl_grey.h"
 #import "ios/chrome/test/earl_grey/chrome_earl_grey_ui.h"
@@ -60,15 +61,40 @@ static const char* kInterstitialDetails = "Details";
 
 - (AppLaunchConfiguration)appConfigurationForTestCase {
   AppLaunchConfiguration config = [super appConfigurationForTestCase];
-  config.features_enabled.push_back(kIOSQuickDelete);
+  config.features_enabled_and_params.push_back({kIOSQuickDelete, {}});
 
   if ([self isRunningTest:@selector
-            (testSupervisedUserInterstitialCanRequestLocalWebApproval)] ||
+            (testSupervisedUserLocalWebApprovalDismissedAfterTimeout)]) {
+    // Sets the local web approval (LWA) load timeout to 0 to simulate a LWA
+    // load error.
+    config.features_enabled_and_params.push_back(
+        {supervised_user::kLocalWebApprovals,
+         {{{"LocalWebApprovalBottomSheetLoadTimeoutMs", "0"}}}});
+    config.features_enabled_and_params.push_back(
+        {supervised_user::kSupervisedUserBlockInterstitialV3, {}});
+  } else if (
+      [self isRunningTest:@selector
+            (testSupervisedUserShowInterstitialDetailsLinkForNarrowScreen)] ||
       [self
           isRunningTest:@selector
-          (testSupervisedUserInterstitialCanRequestLocalWebApprovalWithOrientationChanges
-              )]) {
-    config.features_enabled.push_back(supervised_user::kLocalWebApprovals);
+          (testSupervisedUserShowInterstitialDetailsLinkOnClickForNarrowScreen)] ||
+      [self isRunningTest:@selector
+            (testSupervisedUserInterstitialOnBackButton)] ||
+      [self isRunningTest:@selector
+            (testSupervisedUserInterstitialShowBlockReasonAndDetails)]) {
+    // Tests that apply only in blocked url interstitial V2.
+    config.features_disabled.push_back(
+        supervised_user::kSupervisedUserBlockInterstitialV3);
+    if ([self isRunningTest:@selector
+              (testSupervisedUserInterstitialOnBackButton)]) {
+      config.features_disabled.push_back(supervised_user::kLocalWebApprovals);
+    }
+  } else {
+      config.features_enabled_and_params.push_back(
+          {supervised_user::kLocalWebApprovals,
+           {{{"LocalWebApprovalBottomSheetLoadTimeoutMs", "5000"}}}});
+      config.features_enabled_and_params.push_back(
+          {supervised_user::kSupervisedUserBlockInterstitialV3, {}});
   }
 
   // Makes sure the MVT is the top ranking magic stack module.
@@ -622,7 +648,8 @@ static const char* kInterstitialDetails = "Details";
   }
 }
 
-// Tests that the Back Button of the interstitial gets us to the previous page.
+// Test that the when Local Web Approval is disabled, the "Back" button of the interstitial
+// gets us to the previous page.
 - (void)testSupervisedUserInterstitialOnBackButton {
   [self signInSupervisedUser];
   [SupervisedUserSettingsAppInterface setFakePermissionCreator];
@@ -648,6 +675,47 @@ static const char* kInterstitialDetails = "Details";
   // (allowed) page.
   [ChromeEarlGrey tapWebStateElementWithID:@"back-button"];
   [ChromeEarlGrey waitForWebStateContainingText:kDefaultContent];
+}
+
+// Test that the when Local Web Approval is enabled, users can request a local web
+// approval from the waiting screen.
+- (void)testSupervisedUserInterstitialOnLocalApprovalRequestFromWaitingScreen {
+  [self signInSupervisedUser];
+  [SupervisedUserSettingsAppInterface setFakePermissionCreator];
+  [SupervisedUserSettingsAppInterface setFilteringToAllowAllSites];
+
+  GURL allowedURL = self.testServer->GetURL(kDefaultPath);
+  GURL blockedURL = self.testServer->GetURL(kHost, kEchoPath);
+  [SupervisedUserSettingsAppInterface
+      addWebsiteToBlockList:net::NSURLWithGURL(blockedURL)];
+
+  [ChromeEarlGrey loadURL:allowedURL];
+  [ChromeEarlGrey waitForWebStateContainingText:kDefaultContent];
+
+  [ChromeEarlGrey loadURL:blockedURL];
+  [self checkInterstitalIsShown];
+
+  // On clicking "Ask in a message" button, the interstitial "Waiting" screen is
+  // displayed.
+  [ChromeEarlGrey tapWebStateElementWithID:@"remote-approvals-button"];
+  [self checkInterstitalIsShownInWaitingScreen];
+
+  // In the waiting screen, when local approvals are supported only a dedicated
+  // local request button is visible.
+  [self checkElementDisplayStyleVisibility:
+            @"local-approvals-remote-request-sent-button"
+                                 isVisible:YES];
+  [self checkElementDisplayStyleVisibility:@"local-approvals-button"
+                                 isVisible:NO];
+  [self checkElementDisplayStyleVisibility:@"back-button" isVisible:NO];
+
+  // On clicking the "Ask in person button" the parent approval widget opens.
+  [ChromeEarlGrey
+      tapWebStateElementWithID:@"local-approvals-remote-request-sent-button"];
+  // Wait for the bottom sheet to be visible.
+  [ChromeEarlGrey
+      waitForSufficientlyVisibleElementWithMatcher:
+          grey_accessibilityID(kParentAccessViewAccessibilityIdentifier)];
 }
 
 // Tests that for already requested for approval urls, the interstitial is shown
@@ -701,6 +769,10 @@ static const char* kInterstitialDetails = "Details";
 
 // Tests that users can initiate the local web approval flow.
 - (void)testSupervisedUserInterstitialCanRequestLocalWebApproval {
+  // Set up histogram tracking.
+  chrome_test_util::GREYAssertErrorNil(
+      [MetricsAppInterface setupHistogramTester]);
+
   [self signInSupervisedUser];
   [SupervisedUserSettingsAppInterface setFakePermissionCreator];
   [SupervisedUserSettingsAppInterface setFilteringToAllowApprovedSites];
@@ -725,12 +797,42 @@ static const char* kInterstitialDetails = "Details";
   [ChromeEarlGrey
       waitForUIElementToDisappearWithMatcher:
           grey_accessibilityID(kParentAccessViewAccessibilityIdentifier)];
+
+  // Verify that metrics are recorded on bottom sheet dismissal.
+  GREYAssertNil(
+      [MetricsAppInterface
+          expectUniqueSampleWithCount:1
+                            forBucket:static_cast<int>(
+                                          supervised_user::LocalApprovalResult::
+                                              kCanceled)
+                         forHistogram:@"FamilyLinkUser.LocalWebApprovalResult"],
+      @"Unexpected value for local web approval result histogram.");
+  GREYAssertNil(
+      [MetricsAppInterface
+          expectTotalCount:1
+              forHistogram:@"FamilyLinkUser.LocalWebApprovalResult"],
+      @"Unexpected total count for local web approval result histogram.");
+  GREYAssertNil(
+      [MetricsAppInterface
+          expectTotalCount:0
+              forHistogram:@"FamilyLinkUser.LocalWebApprovalErrorType"],
+      @"Unexpected total count for local web approval error histogram.");
+  GREYAssertNil(
+      [MetricsAppInterface
+          expectTotalCount:0
+              forHistogram:@"FamilyLinkUser."
+                           @"LocalWebApprovalCompleteRequestTotalDuration"],
+      @"Unexpected total count for local web approval duration histogram.");
 }
 
 // Tests that users can initiate the local web approval flow, and ensures the UI
 // correctly adapts to orientation changes.
 - (void)
     testSupervisedUserInterstitialCanRequestLocalWebApprovalWithOrientationChanges {
+  // Set up histogram tracking.
+  chrome_test_util::GREYAssertErrorNil(
+      [MetricsAppInterface setupHistogramTester]);
+
   [self signInSupervisedUser];
   [SupervisedUserSettingsAppInterface setFakePermissionCreator];
   [SupervisedUserSettingsAppInterface setFilteringToAllowApprovedSites];
@@ -768,33 +870,112 @@ static const char* kInterstitialDetails = "Details";
                                    kParentAccessViewAccessibilityIdentifier)]
       assertWithMatcher:grey_sufficientlyVisible()];
 
-  // Tap outside to dimiss the bottom sheet.
-  [[EarlGrey selectElementWithMatcher:grey_keyWindow()]
+  // Tap the (x) button to dimiss the bottom sheet.
+  [[EarlGrey
+      selectElementWithMatcher:
+          grey_accessibilityID(kParentAccessCloseButtonAccessibilityIdentifier)]
       performAction:grey_tap()];
   [ChromeEarlGrey
       waitForUIElementToDisappearWithMatcher:
           grey_accessibilityID(kParentAccessViewAccessibilityIdentifier)];
+
+  // Verify that metrics are recorded on bottom sheet dismissal.
+  GREYAssertNil(
+      [MetricsAppInterface
+          expectUniqueSampleWithCount:1
+                            forBucket:static_cast<int>(
+                                          supervised_user::LocalApprovalResult::
+                                              kCanceled)
+                         forHistogram:@"FamilyLinkUser.LocalWebApprovalResult"],
+      @"Unexpected value for local web approval result histogram.");
+  GREYAssertNil(
+      [MetricsAppInterface
+          expectTotalCount:1
+              forHistogram:@"FamilyLinkUser.LocalWebApprovalResult"],
+      @"Unexpected total count for local web approval result histogram.");
+  GREYAssertNil(
+      [MetricsAppInterface
+          expectTotalCount:0
+              forHistogram:@"FamilyLinkUser.LocalWebApprovalErrorType"],
+      @"Unexpected total count for local web approval error histogram.");
+  GREYAssertNil(
+      [MetricsAppInterface
+          expectTotalCount:0
+              forHistogram:@"FamilyLinkUser."
+                           @"LocalWebApprovalCompleteRequestTotalDuration"],
+      @"Unexpected total count for local web approval duration histogram.");
+}
+
+// Tests that the local web approval bottom sheet dismisses after timeout upon
+// unresponsive network.
+- (void)testSupervisedUserLocalWebApprovalDismissedAfterTimeout {
+  // Set up histogram tracking.
+  chrome_test_util::GREYAssertErrorNil(
+      [MetricsAppInterface setupHistogramTester]);
+
+  [self signInSupervisedUser];
+  [SupervisedUserSettingsAppInterface setFakePermissionCreator];
+  [SupervisedUserSettingsAppInterface setFilteringToAllowApprovedSites];
+
+  GURL blockedURL = self.testServer->GetURL(kHost, kEchoPath);
+  [ChromeEarlGrey loadURL:blockedURL];
+
+  [self checkInterstitalIsShown];
+
+  // On clicking "Ask in person" button, the local web approval bottom sheet is
+  // displayed and immediately dismissed.
+  [ChromeEarlGrey tapWebStateElementWithID:@"local-approvals-button"];
+  [ChromeEarlGrey
+      waitForUIElementToDisappearWithMatcher:
+          grey_accessibilityID(kParentAccessViewAccessibilityIdentifier)];
+
+  // Wait for the error snackbar message to be visible and tap to dismiss it.
+  id<GREYMatcher> snackbarCloseButton =
+      grey_accessibilityID(kParentAccessSnackbarClose);
+  [ChromeEarlGrey
+      waitForSufficientlyVisibleElementWithMatcher:snackbarCloseButton];
+  [[EarlGrey selectElementWithMatcher:snackbarCloseButton]
+      performAction:grey_tap()];
+  [ChromeEarlGrey waitForUIElementToDisappearWithMatcher:snackbarCloseButton];
+
+  // Verify that metrics are recorded on bottom sheet dismissal.
+  GREYAssertNil(
+      [MetricsAppInterface
+          expectUniqueSampleWithCount:1
+                            forBucket:static_cast<int>(
+                                          supervised_user::LocalApprovalResult::
+                                              kError)
+                         forHistogram:@"FamilyLinkUser.LocalWebApprovalResult"],
+      @"Unexpected value for local web approval result histogram.");
+  GREYAssertNil(
+      [MetricsAppInterface
+          expectTotalCount:1
+              forHistogram:@"FamilyLinkUser.LocalWebApprovalResult"],
+      @"Unexpected total count for local web approval result histogram.");
+  GREYAssertNil(
+      [MetricsAppInterface
+          expectUniqueSampleWithCount:1
+                            forBucket:
+                                static_cast<int>(
+                                    supervised_user::LocalWebApprovalErrorType::
+                                        kPacpTimeoutExceeded)
+                         forHistogram:
+                             @"FamilyLinkUser.LocalWebApprovalErrorType"],
+      @"Unexpected value for local web approval error histogram.");
+  GREYAssertNil(
+      [MetricsAppInterface
+          expectTotalCount:1
+              forHistogram:@"FamilyLinkUser.LocalWebApprovalErrorType"],
+      @"Unexpected total count for local web approval error histogram.");
+  GREYAssertNil(
+      [MetricsAppInterface
+          expectTotalCount:0
+              forHistogram:@"FamilyLinkUser."
+                           @"LocalWebApprovalCompleteRequestTotalDuration"],
+      @"Unexpected total count for local web approval duration histogram.");
 }
 
 #pragma mark - Clear Content Behaviour
-
-// Tests that a user in the legacy "syncing" state remains signed in after
-// clearing the browsing data (Cookies and BrowsingHistory).
-// TODO(crbug.com/40066949): Delete this test after the syncing state is gone.
-- (void)testSupervisedUserWithLegacySyncStaysSignedInAfterClearingBrowsingData {
-  FakeSystemIdentity* fakeIdentity = [FakeSystemIdentity fakeIdentity1];
-  [SigninEarlGrey addFakeIdentity:fakeIdentity
-                 withCapabilities:@{
-                   @(kIsSubjectToParentalControlsCapabilityName) : @YES,
-                 }];
-  [SigninEarlGrey signinAndEnableLegacySyncFeature:fakeIdentity];
-  [SigninEarlGrey verifySignedInWithFakeIdentity:fakeIdentity];
-
-  [self clearBrowsingData];
-
-  // The user should be still signed in.
-  [SigninEarlGrey verifySignedInWithFakeIdentity:fakeIdentity];
-}
 
 // Tests that a signed in user remains signed in after clearing the browsing
 // data (Cookies and BrowsingHistory).

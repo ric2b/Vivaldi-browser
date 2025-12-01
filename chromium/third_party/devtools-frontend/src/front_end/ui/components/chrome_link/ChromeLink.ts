@@ -23,7 +23,7 @@ declare global {
 export class ChromeLink extends HTMLElement {
   readonly #shadow = this.attachShadow({mode: 'open'});
   readonly #boundRender = this.#render.bind(this);
-  #href: string = '';
+  #href = '';
 
   connectedCallback(): void {
     void ComponentHelpers.ScheduledRender.scheduleRender(this, this.#boundRender);
@@ -62,7 +62,7 @@ export class ChromeLink extends HTMLElement {
       /* x-link doesn't work with custom click/keydown handlers */
       /* eslint-disable rulesdir/no-a-tags-in-lit */
       html`
-        <style>${chromeLinkStyles.cssContent}</style>
+        <style>${chromeLinkStyles.cssText}</style>
         <a href=${this.#href} class="link" target="_blank"
           jslog=${VisualLogging.link().track({click: true}).context(jslogContext)}
           @click=${this.#handleClick}><slot></slot></a>

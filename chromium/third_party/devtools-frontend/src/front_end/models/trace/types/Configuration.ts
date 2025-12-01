@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+import type * as Platform from '../../../core/platform/platform.js';
+import type * as SDK from '../../../core/sdk/sdk.js';
+import type * as Protocol from '../../../generated/protocol.js';
+import type * as Lantern from '../lantern/lantern.js';
+
 import type * as File from './File.js';
 
 export interface Configuration {
@@ -64,4 +69,19 @@ export interface ParseOptions {
    */
   isCPUProfile?: boolean;
   metadata?: File.MetaData;
+  resolveSourceMap?: (params: ResolveSourceMapParams) => Promise<SDK.SourceMap.SourceMap|null>;
+  logger?: {
+    start: (id: string) => void,
+    end: (id: string) => void,
+  };
+  lanternSettings?: Omit<Lantern.Types.Simulation.Settings, 'networkAnalysis'>;
+}
+
+export interface ResolveSourceMapParams {
+  scriptId: string;
+  scriptUrl: Platform.DevToolsPath.UrlString;
+  sourceMapUrl: Platform.DevToolsPath.UrlString;
+  frame: Protocol.Page.FrameId;
+  /** Set only if the raw source map was found on the provided metadata. Never set for source maps from data urls. */
+  cachedRawSourceMap?: SDK.SourceMap.SourceMapV3;
 }

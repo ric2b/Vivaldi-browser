@@ -7,10 +7,13 @@
 #import "base/feature_list.h"
 #import "base/metrics/field_trial_params.h"
 #import "components/prefs/pref_service.h"
-#import "ios/chrome/browser/parcel_tracking/features.h"
 #import "ios/chrome/browser/shared/model/prefs/pref_names.h"
 #import "ios/chrome/browser/web/model/annotations/annotations_util.h"
 #import "ios/web/common/features.h"
+
+// Vivaldi
+#import "app/vivaldi_apptools.h"
+// End Vivaldi
 
 namespace {
 
@@ -72,6 +75,11 @@ WebAnnotationPolicyValue GetPolicyForType(PrefService* prefs,
 }
 
 bool IsAddressDetectionEnabled() {
+
+  // Note: (VIB-1163) This is a Google Maps feature. Disable it for us.
+  if (vivaldi::IsVivaldiRunning())
+    return false; // End Vivaldi
+
   if (@available(iOS 16.4, *)) {
     return base::FeatureList::IsEnabled(web::features::kOneTapForMaps);
   }
@@ -145,7 +153,8 @@ bool IsLongPressAnnotationEnabledForType(PrefService* prefs,
     case WebAnnotationType::kEMailAddresses:
       return true;
     case WebAnnotationType::kPackage:
-      return IsIOSParcelTrackingEnabled();
+      // Package tracking was turned down in https://crbug.com/377724731
+      return false;
     case WebAnnotationType::kPhoneNumbers:
       return true;
     case WebAnnotationType::kUnits:
@@ -170,7 +179,8 @@ bool IsOneTapAnnotationEnabledForType(PrefService* prefs,
     case WebAnnotationType::kEMailAddresses:
       return true;
     case WebAnnotationType::kPackage:
-      return IsIOSParcelTrackingEnabled();
+      // Package tracking was turned down in https://crbug.com/377724731
+      return false;
     case WebAnnotationType::kPhoneNumbers:
       return true;
     case WebAnnotationType::kUnits:

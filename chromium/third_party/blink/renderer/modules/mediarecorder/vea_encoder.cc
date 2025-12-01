@@ -134,6 +134,11 @@ void VEAEncoder::NotifyErrorStatus(const media::EncoderStatus& status) {
   error_notified_ = true;
 }
 
+void VEAEncoder::NotifyEncoderInfoChange(const media::VideoEncoderInfo& info) {
+  DVLOG(3) << __func__;
+  OnVideoEncoderInfo(info);
+}
+
 void VEAEncoder::UseOutputBitstreamBufferId(int32_t bitstream_buffer_id) {
   DVLOG(3) << __func__;
   metrics_provider_->IncrementEncodedFrameCount();
@@ -319,11 +324,15 @@ void VEAEncoder::ConfigureEncoder(const gfx::Size& size,
           media::VideoCodecProfileToVideoCodec(codec_))
           ? media::VideoEncodeAccelerator::Config::EncoderType::kNoPreference
           : media::VideoEncodeAccelerator::Config::EncoderType::kHardware;
-  if (!video_encoder_ ||
-      !video_encoder_->Initialize(config, this,
-                                  std::make_unique<media::NullMediaLog>())) {
+  if (!video_encoder_) {
     NotifyErrorStatus({media::EncoderStatus::Codes::kEncoderInitializationError,
-                       "Failed to initialize"});
+                       "Failed to initialize VEA encoder"});
+  } else if (auto status = video_encoder_->Initialize(
+                 config, this, std::make_unique<media::NullMediaLog>());
+             !status.is_ok()) {
+    NotifyErrorStatus(
+        {media::EncoderStatus::Codes::kEncoderInitializationError,
+         "Failed to initialize VEA encoder: " + status.message()});
   }
 }
 

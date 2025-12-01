@@ -14,12 +14,12 @@
 
 #include "base/containers/flat_map.h"
 #include "base/memory/raw_ptr.h"
-#include "base/task/single_thread_task_runner.h"
 #include "base/time/time.h"
 #include "ui/gl/gl_display.h"
 #include "ui/ozone/platform/wayland/common/wayland_object.h"
 #include "ui/ozone/platform/wayland/host/wayland_serial_tracker.h"
 #include "ui/ozone/platform/wayland/host/wayland_window_manager.h"
+#include "ui/ozone/platform/wayland/host/xdg_session_manager.h"
 
 class SkBitmap;
 
@@ -64,6 +64,7 @@ class WaylandZwpPointerGestures;
 class WaylandZwpRelativePointerManager;
 class XdgActivation;
 class XdgForeignWrapper;
+class XdgSessionManager;
 class ZwpIdleInhibitManager;
 class ZwpPrimarySelectionDeviceManager;
 
@@ -105,13 +106,6 @@ class WaylandConnection {
   // Sets a callback that that shutdowns the browser in case of unrecoverable
   // error. Called by WaylandEventWatcher.
   void SetShutdownCb(base::OnceCallback<void()> shutdown_cb);
-
-  void SetUserInputTaskRunner(
-      scoped_refptr<base::SingleThreadTaskRunner> user_input_task_runner);
-
-  scoped_refptr<base::SingleThreadTaskRunner> user_input_task_runner() const {
-    return user_input_task_runner_;
-  }
 
   wl_compositor* compositor() const { return compositor_.get(); }
   // The server version of the compositor interface (might be higher than the
@@ -269,12 +263,17 @@ class WaylandConnection {
     return single_pixel_buffer_.get();
   }
 
+  XdgSessionManager* session_manager() { return session_manager_.get(); }
+
   // Returns whether protocols that support setting window geometry are
   // available.
   bool SupportsSetWindowGeometry() const;
 
   // Returns true when there an active outgoing drag-and-drop session.
   bool IsDragInProgress() const;
+
+  // Returns true if a wl_keyboard is available.
+  bool IsKeyboardAvailable() const;
 
   // Creates a new wl_surface.
   wl::Object<wl_surface> CreateSurface();
@@ -313,6 +312,8 @@ class WaylandConnection {
 
   bool UseImplicitSyncInterop() const;
 
+  bool SupportsSessionManagement() const;
+
   // Returns a sync callback, which is invoked when the server has processed all
   // pending events prior to this sync point.
   struct wl_callback* GetSyncCallback();
@@ -347,6 +348,7 @@ class WaylandConnection {
   friend class WaylandCursorShape;
   friend class XdgActivation;
   friend class XdgForeignWrapper;
+  friend class XdgSessionManager;
   friend class ZwpIdleInhibitManager;
   friend class ZwpPrimarySelectionDeviceManager;
 
@@ -492,6 +494,8 @@ class WaylandConnection {
   std::unique_ptr<WaylandDataDragController> data_drag_controller_;
   std::unique_ptr<WaylandWindowDragController> window_drag_controller_;
 
+  std::unique_ptr<XdgSessionManager> session_manager_;
+
   // Describes the clock domain that wp_presentation timestamps are in.
   uint32_t presentation_clk_id_ = CLOCK_MONOTONIC;
 
@@ -505,8 +509,6 @@ class WaylandConnection {
   // This is set if wp_viewporter may be used to instruct the compositor to
   // properly scale fractional scaled surfaces.
   bool supports_viewporter_surface_scaling_ = false;
-
-  scoped_refptr<base::SingleThreadTaskRunner> user_input_task_runner_;
 
   wl::SerialTracker serial_tracker_;
 

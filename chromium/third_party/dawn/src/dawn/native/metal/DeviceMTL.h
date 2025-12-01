@@ -69,7 +69,7 @@ class Device final : public DeviceBase {
                                            uint64_t destinationOffset,
                                            uint64_t size) override;
     MaybeError CopyFromStagingToTextureImpl(const BufferBase* source,
-                                            const TextureDataLayout& dataLayout,
+                                            const TexelCopyBufferLayout& dataLayout,
                                             const TextureCopy& dst,
                                             const Extent3D& copySizePixels) override;
 
@@ -135,6 +135,10 @@ class Device final : public DeviceBase {
         const SharedTextureMemoryDescriptor* descriptor) override;
     ResultOrError<Ref<SharedFenceBase>> ImportSharedFenceImpl(
         const SharedFenceDescriptor* descriptor) override;
+
+    void StartTrace();
+    void StopTrace();
+    bool mTraceInProgress = false;
 
     void DestroyImpl() override;
 

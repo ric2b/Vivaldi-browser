@@ -118,6 +118,10 @@ BASE_DECLARE_FEATURE(kRestartToGainAccessToKeychain);
 BASE_DECLARE_FEATURE(kBiometricsAuthForPwdFill);
 #endif  // BUILDFLAG(IS_CHROMEOS)
 
+// Sets request criticality when calling leak check service to detect leaked
+// passwords.
+BASE_DECLARE_FEATURE(kSetLeakCheckRequestCriticality);
+
 // Displays at least the decryptable and never saved logins in the password
 // manager
 BASE_DECLARE_FEATURE(kSkipUndecryptablePasswords);
@@ -168,14 +172,6 @@ inline constexpr base::FeatureParam<int> kLoginDbDeprecationExportDelay = {
 // affiliation service. It fixes problem with incorrect password suggestions on
 // websites like slack.com.
 BASE_DECLARE_FEATURE(kUseExtensionListForPSLMatching);
-
-// Enables new prediction that is based on votes from Username First Flow with
-// Intermediate Values.
-BASE_DECLARE_FEATURE(kUsernameFirstFlowWithIntermediateValuesPredictions);
-
-// Enables voting for more text fields outside of the password form in Username
-// First Flow.
-BASE_DECLARE_FEATURE(kUsernameFirstFlowWithIntermediateValuesVoting);
 
 // Enables async implementation of OSCrypt inside LoginDatabase (Stage 1).
 BASE_DECLARE_FEATURE(kUseAsyncOsCryptInLoginDatabase);

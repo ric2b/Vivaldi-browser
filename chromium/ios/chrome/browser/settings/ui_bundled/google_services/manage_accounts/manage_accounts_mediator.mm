@@ -8,6 +8,7 @@
 #import "base/strings/sys_string_conversions.h"
 #import "components/signin/public/identity_manager/objc/identity_manager_observer_bridge.h"
 #import "components/sync/service/sync_service_utils.h"
+#import "ios/chrome/browser/authentication/ui_bundled/enterprise/enterprise_utils.h"
 #import "ios/chrome/browser/authentication/ui_bundled/signin/signin_utils.h"
 #import "ios/chrome/browser/ntp/ui_bundled/new_tab_page_feature.h"
 #import "ios/chrome/browser/settings/ui_bundled/cells/settings_image_detail_text_item.h"
@@ -154,7 +155,7 @@
       updateIdentityViewItem:[self identityViewItemForIdentity:identity]];
 }
 
-- (void)onEndBatchOfRefreshTokenStateChanges {
+- (void)onAccountsOnDeviceChanged {
   if (!_authService->HasPrimaryIdentity(signin::ConsentLevel::kSignin)) {
     // This accounts table view will be popped or dismissed when the user
     // is signed out. Avoid reloading it in that case as that would lead to an
@@ -173,15 +174,36 @@
 - (IdentityViewItem*)identityViewItemForIdentity:(id<SystemIdentity>)identity {
   IdentityViewItem* identityViewItem = [[IdentityViewItem alloc] init];
   identityViewItem.userEmail = identity.userEmail;
+  identityViewItem.userFullName = identity.userFullName;
   identityViewItem.gaiaID = identity.gaiaID;
-  IdentityAvatarSize avatarSize =
-      base::FeatureList::IsEnabled(kIdentityDiscAccountMenu)
-          ? IdentityAvatarSize::Regular
-          : IdentityAvatarSize::TableViewIcon;
+  identityViewItem.managed = [self isIdentityKnownToBeManaged:identity];
+  IdentityAvatarSize avatarSize = IsIdentityDiscAccountMenuEnabled()
+                                      ? IdentityAvatarSize::Regular
+                                      : IdentityAvatarSize::TableViewIcon;
   identityViewItem.avatar = [self identityAvatarWithSizeForIdentity:identity
                                                                size:avatarSize];
   identityViewItem.accessibilityIdentifier = identity.userEmail;
   return identityViewItem;
 }
 
+// Returns true if `identity` is known to be managed.
+// Returns false if the identity is known not to be managed or if the management
+// status is unknown. If the management status is unknown, it is fetched by
+// calling `FetchManagedStatusForIdentity`. `identityUpdated` will be called
+// asynchronously when the management status if retrieved and the identity is
+// managed.
+- (BOOL)isIdentityKnownToBeManaged:(id<SystemIdentity>)identity {
+  if (std::optional<BOOL> managed = IsIdentityManaged(identity);
+      managed.has_value()) {
+    return managed.value();
+  }
+
+  __weak __typeof(self) weakSelf = self;
+  FetchManagedStatusForIdentity(identity, base::BindOnce(^(bool managed) {
+                                  if (managed) {
+                                    [weakSelf identityUpdated:identity];
+                                  }
+                                }));
+  return NO;
+}
 @end

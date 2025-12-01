@@ -2,11 +2,13 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="zh-TW">
 <translation id="1038842779957582377">不明名稱</translation>
+<translation id="1068672505746868501">一律不翻譯 <ph name="SOURCE_LANGUAGE" /> 頁面</translation>
 <translation id="1089439967362294234">變更密碼</translation>
 <translation id="1110994991967754504">選取<ph name="PERMISSION_NAME" />權限設定</translation>
 <translation id="1158211211994409885"><ph name="HOST_NAME" /> 意外中斷連線。</translation>
 <translation id="1161325031994447685">重新連線至 Wi-Fi 網路</translation>
 <translation id="1175364870820465910">列印 (&amp;P)…</translation>
+<translation id="1285320974508926690">一律不翻譯此網站</translation>
 <translation id="1375198122581997741">關於版本</translation>
 <translation id="139305205187523129"><ph name="HOST_NAME" /> 未傳送任何資料。</translation>
 <translation id="1555191101192706055">您嘗試造訪的網站上的攻擊者，可能會誘騙您安裝有害軟體，以影響您的瀏覽方式 — 例如變更您的首頁，或在您造訪的網站上顯示額外廣告。</translation>
@@ -20,6 +22,7 @@
 <translation id="1768211456781949159"><ph name="BEGIN_LINK" />正在嘗試執行 Windows 網路診斷<ph name="END_LINK" />。</translation>
 <translation id="1974060860693918893">詳細資料</translation>
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />檢查代理和防火牆<ph name="END_LINK" /></translation>
+<translation id="2048261947532620704">正在翻譯頁面</translation>
 <translation id="2119505898009119320">核發對象：<ph name="ORGANIZATION" /> [<ph name="JURISDICTION" />]</translation>
 <translation id="2166378884831602661">這個網站無法提供安全連線</translation>
 <translation id="2178904466768126352">您嘗試造訪的網站上的攻擊者，可能會安裝有害軟體，以竊取或刪除您的密碼、照片、訊息或是信用卡號碼等資料。</translation>
@@ -35,7 +38,6 @@
 <translation id="2388886110302389394">在新無痕視窗中開啟頁面 (Ctrl-Shift-N)</translation>
 <translation id="2467694685043708798"><ph name="BEGIN_LINK" />正在執行網路診斷<ph name="END_LINK" /></translation>
 <translation id="2491414235131909199">此頁面已由擴充功能封鎖</translation>
-<translation id="2501278716633472235">返回</translation>
 <translation id="2539524384386349900">偵測</translation>
 <translation id="255002559098805027"><ph name="HOST_NAME" /> 傳送的回應無效。</translation>
 <translation id="2634124572758952069">找不到 <ph name="HOST_NAME" /> 的伺服器 IP位置。</translation>
@@ -45,6 +47,7 @@
 <translation id="2730326759066348565"><ph name="BEGIN_LINK" />正在執行連線診斷<ph name="END_LINK" /></translation>
 <translation id="2784949926578158345">連線已重設。</translation>
 <translation id="2826760142808435982">連線採用 <ph name="CIPHER" /> 加密，並設有 <ph name="KX" /> 金鑰交換機制。</translation>
+<translation id="290376772003165898">頁面語言不是 <ph name="LANGUAGE" /> 嗎？</translation>
 <translation id="2909946352844186028">系統偵測到網路變更。</translation>
 <translation id="2948083400971632585">您可以在設定頁面中為一個連線停用任意代理配置。</translation>
 <translation id="2954624054936281172">已儲存的付款方式表格</translation>
@@ -62,7 +65,6 @@
 <ph name="PLATFORM_TEXT" /></translation>
 <translation id="3226128629678568754">按下重新載入按鈕，重新提交載入網頁所需的資料。</translation>
 <translation id="3234666976984236645">一律偵測這個網站的重要內容</translation>
-<translation id="3308738399950580893">廣告</translation>
 <translation id="3384522979010096022">貴機構不允許您瀏覽這個網站</translation>
 <translation id="3422472998109090673">目前無法連上 <ph name="HOST_NAME" />。</translation>
 <translation id="3427092606871434483">允許 (預設)</translation>
@@ -80,7 +82,7 @@
 <translation id="3681007416295224113">憑證資訊</translation>
 <translation id="3717027428350673159"><ph name="BEGIN_LINK" />檢查代理、防火牆和 DNS 設定<ph name="END_LINK" /></translation>
 <translation id="382518646247711829">如果您使用代理伺服器…</translation>
-<translation id="3894751534882749287">如果您仍然想查看此頁面，您可以在追蹤器攔截器彈出視窗中變更其追蹤保護等級，或點擊允許按鈕</translation>
+<translation id="3861977424605124250">啟動時顯示</translation>
 <translation id="3950820424414687140">登入</translation>
 <translation id="3973234410852337861"><ph name="HOST_NAME" /> 已遭封鎖</translation>
 <translation id="3987940399970879459">小於 1 MB</translation>
@@ -108,7 +110,6 @@
 <translation id="4701488924964507374"><ph name="SENTENCE1" /> <ph name="SENTENCE2" /></translation>
 <translation id="4708268264240856090">您的連線已中斷</translation>
 <translation id="4722547256916164131"><ph name="BEGIN_LINK" />正在執行 Windows 網路診斷<ph name="END_LINK" /></translation>
-<translation id="4736016046474602958">追蹤器攔截器</translation>
 <translation id="4744603770635761495">可執行檔路徑</translation>
 <translation id="4750917950439032686">您傳送給這個網站的資訊（例如密碼或信用卡號碼）不會外洩。</translation>
 <translation id="4764776831041365478"><ph name="URL" /> 的網頁可能暫時無法使用或被永久移至新網址。</translation>
@@ -153,27 +154,30 @@
 <translation id="6328639280570009161">建議停用網路預測功能</translation>
 <translation id="6348220984832452017">目前的變更</translation>
 <translation id="6358450015545214790">我需要進一步資訊？</translation>
+<translation id="6404511346730675251">編輯書籤</translation>
 <translation id="6433595998831338502"><ph name="HOST_NAME" /> 拒絕連線。</translation>
 <translation id="6447842834002726250">Cookie</translation>
 <translation id="6451458296329894277">確認重新提交表單</translation>
 <translation id="6569060085658103619">目前顯示的是擴充功能頁面</translation>
+<translation id="6653655836861174026">使用 Vivaldi 使用者設定檔，您可以將您所有的 Vivaldi 相關內容區隔開來。為朋友和家人建立不同的設定檔，或是將工作與娛樂區隔開來。</translation>
 <translation id="6657585470893396449">密碼</translation>
 <translation id="6711464428925977395">代理伺服器發生錯誤，或是網址不正確。</translation>
 <translation id="6757797048963528358">您的裝置已休眠。</translation>
 <translation id="6890956352250146925">Cookie 和網站資料的選項</translation>
 <translation id="6897140037006041989">使用者代理</translation>
+<translation id="6935179587384421592"><ph name="SIZE" />。下次造訪某些網站時，載入速度可能會變慢。</translation>
 <translation id="6957624206566198865">在新無痕分頁中開啟頁面</translation>
 <translation id="7053983685419859001">封鎖</translation>
+<translation id="7066262000446496119">誰正在使用 Vivaldi？</translation>
 <translation id="7096937462164235847">此網站的身份未經驗證。</translation>
 <translation id="7108819624672055576">依據擴充功能設定允許</translation>
 <translation id="7111012039238467737">（有效）</translation>
-<translation id="7113310725918019676">允許來自 <ph name="DOMAIN" /> 的 <ph name="BLOCKED_TYPE" /></translation>
 <translation id="7126644664682723998">貼上並搜尋</translation>
 <translation id="7210863904660874423"><ph name="HOST_NAME" /> 不符合安全性標準。</translation>
 <translation id="7219179957768738017">這個連線使用 <ph name="SSL_VERSION" />。</translation>
 <translation id="7221855153210829124">顯示通知</translation>
+<translation id="7283555985781738399">訪客模式</translation>
 <translation id="7353601530677266744">命令列</translation>
-<translation id="7364115444476960850">您嘗試造訪的網頁已遭 Vivaldi 的 <ph name="BLOCKER_NAME" /> 規則封鎖</translation>
 <translation id="7419106976560586862">設定檔路徑</translation>
 <translation id="7455133967321480974">使用全域預設值（封鎖）</translation>
 <translation id="7518003948725431193">找不到此網址的網頁：<ph name="URL" /></translation>
@@ -184,6 +188,7 @@
 <translation id="7714464543167945231">憑證</translation>
 <translation id="7716147886133743102">依據管理員的設定封鎖</translation>
 <translation id="7716424297397655342">無法從快取載入這個網站</translation>
+<translation id="773466115871691567">一律翻譯<ph name="SOURCE_LANGUAGE" />網頁</translation>
 <translation id="7758069387465995638">防火牆或防毒軟體可能封鎖了連線。</translation>
 <translation id="7800304661137206267">連線採用 <ph name="CIPHER" /> 加密，並設有 <ph name="MAC" /> 訊息驗證及 <ph name="KX" /> 金鑰交換機制。</translation>
 <translation id="7834399512844817676"><ph name="SITE" /> 通常使用加密方式保護您的資訊。但 Vivaldi 這次嘗試連線到 <ph name="SITE" /> 時，該網站傳回了異常且錯誤的憑證。這可能是因為有攻擊者企圖偽裝成 <ph name="SITE" />，或是受到 Wi-Fi 登入畫面影響而造成連線中斷。不過請放心，Vivaldi 已及時停止連線，並未傳輸任何資料，因此您的資訊仍然安全無虞。</translation>
@@ -193,7 +198,6 @@
 <translation id="8037357227543935929">詢問（預設）</translation>
 <translation id="8041940743680923270">使用全域預設值（要求確認）</translation>
 <translation id="808894953321890993">變更密碼</translation>
-<translation id="8119307142152921512">追蹤器和廣告</translation>
 <translation id="8149426793427495338">您的電腦已休眠。</translation>
 <translation id="8150722005171944719">無法讀取位於 <ph name="URL" /> 的檔案。這個檔案可能已遭移除或移動位置，或者檔案權限為禁止存取。</translation>
 <translation id="8184538546369750125">使用全域預設值（允許）</translation>
@@ -210,7 +214,6 @@
 <translation id="8703575177326907206">您到 <ph name="DOMAIN" /> 的連線未加密。</translation>
 <translation id="8740359287975076522">找不到 <ph name="HOST_NAME" /> 的 &lt;abbr id="dnsDefinition"&gt;DNS位置&lt;/abbr&gt;，正在診斷問題。</translation>
 <translation id="8820817407110198400">書籤</translation>
-<translation id="8940028675168378100">已遭 <ph name="BLOCKER_NAME" /> 封鎖</translation>
 <translation id="8963117664422609631">前往網站設定</translation>
 <translation id="8975012916872825179">包含電話號碼、電子郵件地址和送貨地址等資訊</translation>
 <translation id="9001074447101275817"><ph name="DOMAIN" /> Proxy 要求提供使用者名稱和密碼。</translation>
@@ -222,7 +225,6 @@
 <translation id="9073799351042754113">您已選擇關閉此網站的安全性警告。</translation>
 <translation id="9168814207360376865">允許網站檢查您是否有已儲存的付款方式</translation>
 <translation id="9169664750068251925">永遠禁止在這個網站執行</translation>
-<translation id="9180553614777056266">廣告攔截器</translation>
 <translation id="9183425211371246419"><ph name="HOST_NAME" /> 使用了不支援的通訊協定。</translation>
 <translation id="936602727769022409">您可能失去 Google 帳號存取權限，Chromium 建議立即變更密碼，系統會請求登入帳號。</translation>
 <translation id="969892804517981540">正式版本</translation>

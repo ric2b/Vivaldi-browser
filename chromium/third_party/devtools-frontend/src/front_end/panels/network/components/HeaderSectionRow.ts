@@ -20,7 +20,7 @@ import headerSectionRowStylesRaw from './HeaderSectionRow.css.js';
 
 // TODO(crbug.com/391381439): Fully migrate off of constructed style sheets.
 const headerSectionRowStyles = new CSSStyleSheet();
-headerSectionRowStyles.replaceSync(headerSectionRowStylesRaw.cssContent);
+headerSectionRowStyles.replaceSync(headerSectionRowStylesRaw.cssText);
 
 const {render, html} = Lit;
 
@@ -61,7 +61,7 @@ const UIStrings = {
    *@description The title of a button which removes a HTTP header override.
    */
   removeOverride: 'Remove this header override',
-};
+} as const;
 
 const str_ = i18n.i18n.registerUIStrings('panels/network/components/HeaderSectionRow.ts', UIStrings);
 const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
@@ -203,7 +203,7 @@ export class HeaderSectionRow extends HTMLElement {
               @paste=${this.#onHeaderNamePaste}
               .data=${{value: this.#header.name}}
             ></devtools-editable-span>` :
-            this.#header.name}:
+            this.#header.name}
         </div>
         <div
           class=${headerValueClasses}

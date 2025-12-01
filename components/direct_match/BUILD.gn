@@ -13,6 +13,7 @@ source_set("direct_match") {
   ]
   deps = [
     "//base",
+    "//services/network/public/cpp",
   ]
   if (!is_ios) {
     deps += [

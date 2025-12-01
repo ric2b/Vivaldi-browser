@@ -23,7 +23,6 @@ import org.chromium.base.CommandLineInitUtil;
 import org.chromium.base.ContextUtils;
 import org.chromium.base.EarlyTraceEvent;
 import org.chromium.base.IntentUtils;
-import org.chromium.base.JNIUtils;
 import org.chromium.base.LocaleUtils;
 import org.chromium.base.Log;
 import org.chromium.base.PathUtils;
@@ -36,6 +35,9 @@ import org.chromium.base.task.AsyncTask;
 import org.chromium.base.version_info.VersionConstants;
 import org.chromium.build.BuildConfig;
 import org.chromium.build.NativeLibraries;
+import org.chromium.build.annotations.Initializer;
+import org.chromium.build.annotations.NullMarked;
+import org.chromium.build.annotations.Nullable;
 import org.chromium.chrome.browser.ProductConfig;
 import org.chromium.chrome.browser.crash.ApplicationStatusTracker;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
@@ -58,6 +60,7 @@ import org.chromium.ui.base.ResourceBundle;
  * This is the base class of all Chrome applications. Logic specific to isolated splits should go in
  * {@link SplitChromeApplication}.
  */
+@NullMarked
 public class SplitCompatApplication extends Application {
     public static final String CHROME_SPLIT_NAME = "chrome";
     private static final String TAG = "SplitCompatApp";
@@ -71,8 +74,8 @@ public class SplitCompatApplication extends Application {
             "org.chromium.chrome.browser.init.LaunchFailedActivity";
 
     private Supplier<Impl> mImplSupplier;
-    private Impl mImpl;
-    private ServiceTracingProxyProvider mServiceTracingProxyProvider;
+    private @Nullable Impl mImpl;
+    private @Nullable ServiceTracingProxyProvider mServiceTracingProxyProvider;
     // This doesn't work in Monochrome, since we try to load the WebView library as well when
     // loading Chrome's library, and WebView requires attachBaseContext to have finished before
     // you may attempt to load it's library. See crbug.com/390730928.
@@ -85,6 +88,7 @@ public class SplitCompatApplication extends Application {
     public static class Impl {
         private SplitCompatApplication mApplication;
 
+        @Initializer
         private final void setApplication(SplitCompatApplication application) {
             mApplication = application;
         }
@@ -94,7 +98,7 @@ public class SplitCompatApplication extends Application {
         }
 
         @CallSuper
-        public void startActivity(Intent intent, Bundle options) {
+        public void startActivity(Intent intent, @Nullable Bundle options) {
             mApplication.superStartActivity(intent, options);
         }
 
@@ -105,6 +109,7 @@ public class SplitCompatApplication extends Application {
         public void onConfigurationChanged(Configuration newConfig) {}
     }
 
+    @Initializer
     public final void setImplSupplier(Supplier<Impl> implSupplier) {
         assert mImpl == null;
         assert mImplSupplier == null;
@@ -123,7 +128,7 @@ public class SplitCompatApplication extends Application {
      * This exposes the super method so it can be called inside the Impl class code instead of just
      * at the start.
      */
-    private void superStartActivity(Intent intent, Bundle options) {
+    private void superStartActivity(Intent intent, @Nullable Bundle options) {
         super.startActivity(intent, options);
     }
 
@@ -205,7 +210,6 @@ public class SplitCompatApplication extends Application {
         ModuleUtil.updateCrashKeys();
 
         AsyncTask.takeOverAndroidThreadPool();
-        JNIUtils.setClassLoader(getClassLoader());
         ResourceBundle.setAvailablePakLocales(ProductConfig.LOCALES);
         LibraryLoader.getInstance().setLinkerImplementation(ProductConfig.USE_CHROMIUM_LINKER);
 
@@ -313,7 +317,7 @@ public class SplitCompatApplication extends Application {
     }
 
     @Override
-    public void startActivity(Intent intent, Bundle options) {
+    public void startActivity(Intent intent, @Nullable Bundle options) {
         getImpl().startActivity(intent, options);
     }
 

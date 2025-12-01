@@ -140,10 +140,17 @@ SharedWorker* SharedWorker::CreateImpl(
   if (script_url.IsEmpty())
     return nullptr;
 
+  if (!worker->CheckAllowedByCSPForNoThrow(script_url)) {
+    // Return the unconnected worker. The port_ will be closed when remote_port
+    // goes out of scope after returning from this function.
+    return worker;
+  }
+
   mojo::PendingRemote<mojom::blink::BlobURLToken> blob_url_token;
   if (script_url.ProtocolIs("blob")) {
-    public_url_manager->ResolveForWorkerScriptFetch(
-        script_url, blob_url_token.InitWithNewPipeAndPassReceiver());
+    public_url_manager->ResolveAsBlobURLToken(
+        script_url, blob_url_token.InitWithNewPipeAndPassReceiver(),
+        /*is_top_level_navigation=*/false);
   }
 
   auto options = mojom::blink::WorkerOptions::New();

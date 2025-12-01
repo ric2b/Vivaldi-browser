@@ -454,7 +454,7 @@ class ContextVk : public ContextImpl, public vk::Context, public MultisampleText
     angle::Result optimizeRenderPassForPresent(vk::ImageViewHelper *colorImageView,
                                                vk::ImageHelper *colorImage,
                                                vk::ImageHelper *colorImageMS,
-                                               vk::PresentMode presentMode,
+                                               bool isSharedPresentMode,
                                                bool *imageResolved);
 
     vk::DynamicQueryPool *getQueryPool(gl::QueryType queryType);
@@ -1459,8 +1459,6 @@ class ContextVk : public ContextImpl, public vk::Context, public MultisampleText
 
     vk::PipelineHelper *mCurrentGraphicsPipeline;
     vk::PipelineHelper *mCurrentGraphicsPipelineShaders;
-    vk::PipelineHelper *mCurrentGraphicsPipelineVertexInput;
-    vk::PipelineHelper *mCurrentGraphicsPipelineFragmentOutput;
     vk::PipelineHelper *mCurrentComputePipeline;
     gl::PrimitiveMode mCurrentDrawMode;
 
@@ -1729,6 +1727,8 @@ class ContextVk : public ContextImpl, public vk::Context, public MultisampleText
     VulkanCacheStats mVulkanCacheStats;
 
     RangedSerialFactory mOutsideRenderPassSerialFactory;
+
+    uint32_t mCommandsPendingSubmissionCount;
 };
 
 ANGLE_INLINE angle::Result ContextVk::endRenderPassIfTransformFeedbackBuffer(

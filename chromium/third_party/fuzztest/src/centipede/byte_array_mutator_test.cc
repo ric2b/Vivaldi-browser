@@ -106,23 +106,23 @@ TEST(DictEntry, DictEntry) {
 
 TEST(CmpDictionary, CmpDictionary) {
   CmpDictionary dict;
-  ExecutionMetadata metadata{.cmp_data = {
-                                 2,               // size
-                                 1,  2,           // a
-                                 3,  4,           // b
-                                 3,               // size
-                                 5,  6,  7,       // a
-                                 8,  9,  10,      // b
-                                 4,               // size
-                                 11, 12, 13, 14,  // a
-                                 15, 16, 17, 18,  // b
-                                 3,               // size
-                                 20, 21, 22,      // a
-                                 15, 16, 17,      // b
-                                 3,               // size
-                                 15, 16, 20,      // a
-                                 30, 40, 50,      // b
-                             }};
+  ExecutionMetadata metadata{/*cmp_data=*/{
+      2,               // size
+      1,  2,           // a
+      3,  4,           // b
+      3,               // size
+      5,  6,  7,       // a
+      8,  9,  10,      // b
+      4,               // size
+      11, 12, 13, 14,  // a
+      15, 16, 17, 18,  // b
+      3,               // size
+      20, 21, 22,      // a
+      15, 16, 17,      // b
+      3,               // size
+      15, 16, 20,      // a
+      30, 40, 50,      // b
+  }};
   EXPECT_TRUE(dict.SetFromMetadata(metadata));
 
   using S = ByteSpan;
@@ -206,7 +206,7 @@ void TestMutatorFn(ByteArrayMutator::Fn fn, const ByteArray &seed,
   EXPECT_TRUE(mutator.set_size_alignment(size_alignment));
   EXPECT_TRUE(mutator.set_max_len(max_len));
   mutator.AddToDictionary(dictionary);
-  mutator.SetMetadata({.cmp_data = {cmp_data.begin(), cmp_data.end()}});
+  mutator.SetMetadata({/*cmp_data=*/{cmp_data.begin(), cmp_data.end()}});
   absl::flat_hash_set<ByteArray> expected(expected_mutants.begin(),
                                           expected_mutants.end());
   absl::flat_hash_set<ByteArray> unexpected(unexpected_mutants.begin(),
@@ -895,7 +895,6 @@ TEST(ByteArrayMutator, MutateManyWithAlignedInputs) {
   ByteArrayMutator mutator(knobs, /*seed=*/1);
   EXPECT_TRUE(mutator.set_size_alignment(kSizeAlignment));
   constexpr size_t kNumMutantsToGenerate = 10000;
-  std::vector<ByteArray> mutants;
 
   // If all inputs are aligned, expect all generated mutants to be aligned.
   const std::vector<ByteArray> aligned_inputs = {
@@ -903,8 +902,9 @@ TEST(ByteArrayMutator, MutateManyWithAlignedInputs) {
       {0, 1, 2, 3, 4, 5, 6, 7},
       {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11},
   };
-  mutator.MutateMany(GetMutationInputRefsFromDataInputs(aligned_inputs),
-                     kNumMutantsToGenerate, mutants);
+  const std::vector<ByteArray> mutants =
+      mutator.MutateMany(GetMutationInputRefsFromDataInputs(aligned_inputs),
+                         kNumMutantsToGenerate);
   EXPECT_EQ(mutants.size(), kNumMutantsToGenerate);
   for (const ByteArray &mutant : mutants) {
     EXPECT_EQ(mutant.size() % kSizeAlignment, 0);
@@ -917,7 +917,6 @@ TEST(ByteArrayMutator, MutateManyWithUnalignedInputs) {
   ByteArrayMutator mutator(knobs, /*seed=*/1);
   EXPECT_TRUE(mutator.set_size_alignment(kSizeAlignment));
   constexpr size_t kNumMutantsToGenerate = 10000;
-  std::vector<ByteArray> mutants;
 
   // If there are unaligned inputs, most mutants should be aligned, but the ones
   // that are unaligned should be the same size as the unaligned inputs (as they
@@ -933,8 +932,9 @@ TEST(ByteArrayMutator, MutateManyWithUnalignedInputs) {
       {0, 1, 2, 3, 4, 5, 6, 7, 8, 9},
       {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10},
   };
-  mutator.MutateMany(GetMutationInputRefsFromDataInputs(unaligned_inputs),
-                     kNumMutantsToGenerate, mutants);
+  const std::vector<ByteArray> mutants =
+      mutator.MutateMany(GetMutationInputRefsFromDataInputs(unaligned_inputs),
+                         kNumMutantsToGenerate);
   EXPECT_EQ(mutants.size(), kNumMutantsToGenerate);
   for (const ByteArray &mutant : mutants) {
     if (mutant.size() % kSizeAlignment != 0) {
@@ -949,7 +949,6 @@ TEST(ByteArrayMutator, MutateManyWithMaxLen) {
   ByteArrayMutator mutator(knobs, /*seed=*/1);
   EXPECT_TRUE(mutator.set_max_len(kMaxLen));
   constexpr size_t kNumMutantsToGenerate = 10000;
-  std::vector<ByteArray> mutants;
 
   const std::vector<ByteArray> inputs = {
       {0},
@@ -957,8 +956,8 @@ TEST(ByteArrayMutator, MutateManyWithMaxLen) {
       {0, 1, 2},
       {0, 1, 2, 3},
   };
-  mutator.MutateMany(GetMutationInputRefsFromDataInputs(inputs),
-                     kNumMutantsToGenerate, mutants);
+  const std::vector<ByteArray> mutants = mutator.MutateMany(
+      GetMutationInputRefsFromDataInputs(inputs), kNumMutantsToGenerate);
   EXPECT_EQ(mutants.size(), kNumMutantsToGenerate);
 
   for (const ByteArray &mutant : mutants) {
@@ -972,13 +971,12 @@ TEST(ByteArrayMutator, MutateManyWithMaxLenWithStartingLargeInput) {
   ByteArrayMutator mutator(knobs, /*seed=*/1);
   EXPECT_TRUE(mutator.set_max_len(kMaxLen));
   constexpr size_t kNumMutantsToGenerate = 10000;
-  std::vector<ByteArray> mutants;
 
   const std::vector<ByteArray> large_input = {
       {0, 1, 2, 3, 4, 5, 6, 7}, {0}, {0, 1}, {0, 1, 2}, {0, 1, 2, 3},
   };
-  mutator.MutateMany(GetMutationInputRefsFromDataInputs(large_input),
-                     kNumMutantsToGenerate, mutants);
+  const std::vector<ByteArray> mutants = mutator.MutateMany(
+      GetMutationInputRefsFromDataInputs(large_input), kNumMutantsToGenerate);
   EXPECT_EQ(mutants.size(), kNumMutantsToGenerate);
 
   for (const ByteArray &mutant : mutants) {

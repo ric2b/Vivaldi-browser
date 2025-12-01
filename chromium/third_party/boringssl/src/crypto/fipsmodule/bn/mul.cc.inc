@@ -403,6 +403,10 @@ static int bn_mul_impl(BIGNUM *r, const BIGNUM *a, const BIGNUM *b,
   }
 
   top = al + bl;
+  // TODO(crbug.com/406497222): The recursive implementation is actually worse
+  // for cryptographic use cases, but we need to retain it in |BN_mul| for the
+  // projects misusing BIGNUM as a general-purpose calculator library with
+  // giant integers. Disconnect this code from our cryptographic primitives.
   static const int kMulNormalSize = 16;
   if (al >= kMulNormalSize && bl >= kMulNormalSize) {
     if (-1 <= i && i <= 1) {
@@ -646,6 +650,12 @@ int bn_sqr_consttime(BIGNUM *r, const BIGNUM *a, BN_CTX *ctx) {
       bn_sqr_normal(rr->d, a->d, al, t);
     } else {
       // If |al| is a power of two, we can use |bn_sqr_recursive|.
+      //
+      // TODO(crbug.com/406497222): The recursive implementation is actually
+      // worse for cryptographic use cases, but we need to retain it in |BN_mul|
+      // for the projects misusing BIGNUM as a general-purpose calculator
+      // library with giant integers. Disconnect this code from our
+      // cryptographic primitives.
       if (al != 0 && (al & (al - 1)) == 0) {
         if (!bn_wexpand(tmp, al * 4)) {
           goto err;

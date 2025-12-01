@@ -46,11 +46,16 @@ public class NavigationHandle {
     private long mNavigationId;
     private boolean mIsPageActivation;
     private boolean mIsReload;
+    private boolean mIsHistory;
+    private boolean mIsBack;
+    private boolean mIsForward;
+    private boolean mIsRestore;
     private @Nullable UserDataHost mUserDataHost;
     private boolean mIsPdf;
     private @Nullable String mMimeType;
     private boolean mIsSaveableNavigation;
     private @Nullable WebContents mWebContents;
+    private @Nullable Page mCommittedPage;
 
     private boolean mStarted;
 
@@ -115,6 +120,10 @@ public class NavigationHandle {
                 /* navigationId= */ 0,
                 /* isPageActivation= */ false,
                 isReload,
+                /* isHistory= */ false,
+                /* isBack= */ false,
+                /* isForward= */ false,
+                /* isRestore= */ false,
                 /* isPdf= */ false,
                 /* mimeType= */ "",
                 isSaveableNavigation,
@@ -144,6 +153,10 @@ public class NavigationHandle {
             long navigationId,
             boolean isPageActivation,
             boolean isReload,
+            boolean isHistory,
+            boolean isBack,
+            boolean isForward,
+            boolean isRestore,
             boolean isPdf,
             String mimeType,
             boolean isSaveableNavigation,
@@ -163,6 +176,10 @@ public class NavigationHandle {
         mNavigationId = navigationId;
         mIsPageActivation = isPageActivation;
         mIsReload = isReload;
+        mIsHistory = isHistory;
+        mIsBack = isBack;
+        mIsForward = isForward;
+        mIsRestore = isRestore;
         mIsPdf = isPdf;
         mMimeType = mimeType;
         mIsSaveableNavigation = isSaveableNavigation;
@@ -200,7 +217,8 @@ public class NavigationHandle {
             boolean isExternalProtocol,
             boolean isPdf,
             String mimeType,
-            boolean isSaveableNavigation) {
+            boolean isSaveableNavigation,
+            Page currentPage) {
         mUrl = url;
         mIsErrorPage = isErrorPage;
         mHasCommitted = hasCommitted;
@@ -214,6 +232,9 @@ public class NavigationHandle {
         mIsPdf = isPdf;
         mMimeType = mimeType;
         mIsSaveableNavigation = isSaveableNavigation;
+        if (mHasCommitted && !mIsSameDocument && mIsInPrimaryMainFrame) {
+            mCommittedPage = currentPage;
+        }
     }
 
     /** Release the C++ pointer. */
@@ -407,6 +428,30 @@ public class NavigationHandle {
         return mIsReload;
     }
 
+    /** Whether this navigation is a history navigation or not. */
+    public boolean isHistory() {
+        assert mStarted;
+        return mIsHistory;
+    }
+
+    /** Whether this navigation is a back history navigation or not (offset < 0). */
+    public boolean isBack() {
+        assert mStarted;
+        return mIsBack;
+    }
+
+    /** Whether this navigation is a back history navigation or not (offset > 0). */
+    public boolean isForward() {
+        assert mStarted;
+        return mIsForward;
+    }
+
+    /** Whether this navigation was initiated by a session restore. */
+    public boolean isRestore() {
+        assert mStarted;
+        return mIsRestore;
+    }
+
     /** Return any user data which has been set on the NavigationHandle. */
     public UserDataHost getUserDataHost() {
         if (mUserDataHost == null) {
@@ -442,5 +487,14 @@ public class NavigationHandle {
     public WebContents getWebContents() {
         assert mStarted;
         return assumeNonNull(mWebContents);
+    }
+
+    /*
+     * The Page that the navigation commits into. Set to null if the navigation doesn't commit or
+     * result in a Page (e.g. 204/download)
+     */
+    public @Nullable Page getCommittedPage() {
+        assert mStarted;
+        return mCommittedPage;
     }
 }

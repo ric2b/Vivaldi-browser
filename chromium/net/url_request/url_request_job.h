@@ -25,7 +25,6 @@
 #include "net/cookies/canonical_cookie.h"
 #include "net/cookies/cookie_setting_override.h"
 #include "net/cookies/cookie_util.h"
-#include "net/filter/source_stream.h"
 #include "net/http/http_raw_request_headers.h"
 #include "net/http/http_response_headers.h"
 #include "net/socket/connection_attempts.h"
@@ -43,6 +42,7 @@ class HttpResponseInfo;
 class IOBuffer;
 struct LoadTimingInfo;
 class ProxyChain;
+class SourceStream;
 class SSLCertRequestInfo;
 class SSLInfo;
 class SSLPrivateKey;
@@ -128,6 +128,12 @@ class NET_EXPORT URLRequestJob {
   // doesn't have a charset will return false.
   virtual bool GetCharset(std::string* charset);
 
+  // Get the content encoding types (e.g., gzip, deflate) that were specified
+  // in the Content-Encoding response header but not decoded by the net stack,
+  // indicating how the response body needs to be decoded on the client side.
+  virtual void GetClientSideContentDecodingTypes(
+      std::vector<net::SourceStreamType>* types) const;
+
   // Called to get response info.
   virtual void GetResponseInfo(HttpResponseInfo* info);
 
@@ -135,6 +141,10 @@ class NET_EXPORT URLRequestJob {
   // each event blocked the request.  See FixupLoadTimingInfo in url_request.h
   // for more information on the difference.
   virtual void GetLoadTimingInfo(LoadTimingInfo* load_timing_info) const;
+
+  // Populates load timing internal information.
+  virtual void PopulateLoadTimingInternalInfo(
+      LoadTimingInternalInfo* load_timing_internal_info) const;
 
   // Gets the remote endpoint that the network stack is currently fetching the
   // URL from. Returns true and fills in |endpoint| if it is available; returns

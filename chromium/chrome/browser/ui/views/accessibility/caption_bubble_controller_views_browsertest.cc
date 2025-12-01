@@ -37,12 +37,14 @@
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/events/base_event_utils.h"
 #include "ui/events/keycodes/keyboard_codes.h"
+#include "ui/views/accessibility/ax_virtual_view.h"
 #include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/controls/button/image_button.h"
 #include "ui/views/controls/button/md_text_button.h"
 #include "ui/views/controls/image_view.h"
 #include "ui/views/controls/label.h"
 #include "ui/views/layout/box_layout.h"
+#include "ui/views/test/views_test_utils.h"
 #include "ui/views/test/widget_activation_waiter.h"
 #include "ui/views/test/widget_test.h"
 #include "ui/views/view.h"
@@ -92,6 +94,14 @@ class CaptionBubbleControllerViewsTest : public InProcessBrowserTest {
           browser()->tab_strip_model()->GetActiveWebContents());
     }
     return caption_bubble_context_.get();
+  }
+
+  CaptionBubbleContext* GetCaptionBubbleContext2() {
+    if (!caption_bubble_context2_) {
+      caption_bubble_context2_ = CaptionBubbleContextBrowser::Create(
+          browser()->tab_strip_model()->GetActiveWebContents());
+    }
+    return caption_bubble_context2_.get();
   }
 
   CaptionBubble* GetBubble() {
@@ -315,7 +325,7 @@ class CaptionBubbleControllerViewsTest : public InProcessBrowserTest {
     }
     auto& ax_lines = GetLabel()->GetViewAccessibility().virtual_children();
     for (auto& ax_line : ax_lines) {
-      node_datas.push_back(ax_line->GetCustomData());
+      node_datas.push_back(ax_line->GetData());
     }
     return node_datas;
   }
@@ -356,6 +366,7 @@ class CaptionBubbleControllerViewsTest : public InProcessBrowserTest {
   std::unique_ptr<LiveCaptionBubbleSettings> caption_bubble_settings_;
   std::unique_ptr<CaptionBubbleControllerViews> controller_;
   std::unique_ptr<CaptionBubbleContext> caption_bubble_context_;
+  std::unique_ptr<CaptionBubbleContext> caption_bubble_context2_;
 };
 
 IN_PROC_BROWSER_TEST_F(CaptionBubbleControllerViewsTest, ShowsCaptionInBubble) {
@@ -512,9 +523,8 @@ IN_PROC_BROWSER_TEST_F(CaptionBubbleControllerViewsTest, ShowsAndHidesError) {
   OnError();
 
   // The error should not be visible on a different media stream.
-  auto media_1 = CaptionBubbleContextBrowser::Create(
-      browser()->tab_strip_model()->GetActiveWebContents());
-  OnPartialTranscription("Elephants are vegetarians.", media_1.get());
+  OnPartialTranscription("Elephants are vegetarians.",
+                         GetCaptionBubbleContext2());
   EXPECT_TRUE(GetTitle()->GetVisible());
   EXPECT_TRUE(GetLabel()->GetVisible());
   EXPECT_FALSE(GetErrorMessage()->GetVisible());
@@ -836,7 +846,7 @@ IN_PROC_BROWSER_TEST_F(CaptionBubbleControllerViewsTest,
 
   GetController()->UpdateCaptionStyle(std::nullopt);
   OnPartialTranscription("Most marsupials are nocturnal.");
-  EXPECT_EQ(default_color, GetBubble()->color());
+  EXPECT_EQ(default_color, GetBubble()->background_color());
   EXPECT_EQ(ui::kColorLiveCaptionBubbleButtonBackground,
             GetSourceLanguageButton()->GetBgColorIdOverride());
   EXPECT_EQ(ui::kColorLiveCaptionBubbleButtonBackground,
@@ -855,64 +865,64 @@ IN_PROC_BROWSER_TEST_F(CaptionBubbleControllerViewsTest,
 #endif
   caption_style.background_color = "";
   GetController()->UpdateCaptionStyle(caption_style);
-  EXPECT_EQ(SkColorSetA(SK_ColorRED, a), GetBubble()->color());
+  EXPECT_EQ(SkColorSetA(SK_ColorRED, a), GetBubble()->background_color());
 
   // Set the background color to blue. When no window color is supplied, the
   // background color is applied to the caption bubble color.
   caption_style.window_color = "";
   caption_style.background_color = "rgba(0,0,255,1)";
   GetController()->UpdateCaptionStyle(caption_style);
-  EXPECT_EQ(SK_ColorBLUE, GetBubble()->color());
+  EXPECT_EQ(SK_ColorBLUE, GetBubble()->background_color());
 
   // Set both to the empty string.
   caption_style.window_color = "";
   caption_style.background_color = "";
   GetController()->UpdateCaptionStyle(caption_style);
-  EXPECT_EQ(default_color, GetBubble()->color());
+  EXPECT_EQ(default_color, GetBubble()->background_color());
 
   // Set the window color to green and the background color to magenta. The
   // window color is applied to the caption bubble.
   caption_style.window_color = "rgba(0,255,0,1)";
   caption_style.background_color = "rgba(255,0,255,1)";
   GetController()->UpdateCaptionStyle(caption_style);
-  EXPECT_EQ(SK_ColorGREEN, GetBubble()->color());
+  EXPECT_EQ(SK_ColorGREEN, GetBubble()->background_color());
 
   // Set the window color to transparent and the background color to magenta.
   // The non-transparent color is applied to the caption bubble.
   caption_style.window_color = "rgba(0,255,0,0)";
   caption_style.background_color = "rgba(255,0,255,1)";
   GetController()->UpdateCaptionStyle(caption_style);
-  EXPECT_EQ(SK_ColorMAGENTA, GetBubble()->color());
+  EXPECT_EQ(SK_ColorMAGENTA, GetBubble()->background_color());
   // Set the window color to yellow and the background color to transparent.
   // The non-transparent color is applied to the caption bubble.
   caption_style.window_color = "rgba(255,255,0,1)";
   caption_style.background_color = "rgba(0,0,0,0)";
   GetController()->UpdateCaptionStyle(caption_style);
-  EXPECT_EQ(SK_ColorYELLOW, GetBubble()->color());
+  EXPECT_EQ(SK_ColorYELLOW, GetBubble()->background_color());
 
   // Set both to transparent.
   caption_style.window_color = "rgba(255,0,0,0)";
   caption_style.background_color = "rgba(0,255,0,0)";
   GetController()->UpdateCaptionStyle(caption_style);
-  EXPECT_EQ(default_color, GetBubble()->color());
+  EXPECT_EQ(default_color, GetBubble()->background_color());
 
   // Set the background color to blue !important.
   caption_style.window_color = "";
   caption_style.background_color = "rgba(0,0,255,1.0) !important";
   GetController()->UpdateCaptionStyle(caption_style);
-  EXPECT_EQ(SK_ColorBLUE, GetBubble()->color());
+  EXPECT_EQ(SK_ColorBLUE, GetBubble()->background_color());
 
   // Set the background color to a bad string.
   caption_style.window_color = "";
   caption_style.background_color = "green";
   GetController()->UpdateCaptionStyle(caption_style);
-  EXPECT_EQ(default_color, GetBubble()->color());
+  EXPECT_EQ(default_color, GetBubble()->background_color());
 
   // Set the window color to green with spaces between the commas.
   caption_style.window_color = "";
   caption_style.background_color = "rgba(0, 255, 0, 1)";
   GetController()->UpdateCaptionStyle(caption_style);
-  EXPECT_EQ(SK_ColorGREEN, GetBubble()->color());
+  EXPECT_EQ(SK_ColorGREEN, GetBubble()->background_color());
 }
 
 IN_PROC_BROWSER_TEST_F(CaptionBubbleControllerViewsTest,
@@ -970,8 +980,6 @@ IN_PROC_BROWSER_TEST_F(CaptionBubbleControllerViewsTest, ChangeMedia) {
   // Media 0 has the text "Polar bears are the largest carnivores on land".
   // Media 1 has the text "A snail can sleep for two years".
   CaptionBubbleContext* media_0 = GetCaptionBubbleContext();
-  auto media_1 = CaptionBubbleContextBrowser::Create(
-      browser()->tab_strip_model()->GetActiveWebContents());
 
   // Send final transcription from media 0.
   OnPartialTranscription("Polar bears are the largest", media_0);
@@ -980,7 +988,7 @@ IN_PROC_BROWSER_TEST_F(CaptionBubbleControllerViewsTest, ChangeMedia) {
 
   // Send transcriptions from media 1. Check that the caption bubble now shows
   // text from media 1.
-  OnPartialTranscription("A snail can sleep", media_1.get());
+  OnPartialTranscription("A snail can sleep", GetCaptionBubbleContext2());
   EXPECT_TRUE(IsWidgetVisible());
   EXPECT_EQ("A snail can sleep", GetLabelText());
 
@@ -994,7 +1002,8 @@ IN_PROC_BROWSER_TEST_F(CaptionBubbleControllerViewsTest, ChangeMedia) {
   // Close the bubble. Check that the bubble is still closed.
   ClickButton(GetCloseButton());
   EXPECT_FALSE(IsWidgetVisible());
-  OnPartialTranscription("A snail can sleep for two years", media_1.get());
+  OnPartialTranscription("A snail can sleep for two years",
+                         GetCaptionBubbleContext2());
   EXPECT_FALSE(IsWidgetVisible());
   EXPECT_EQ("", GetLabelText());
 
@@ -1044,6 +1053,9 @@ IN_PROC_BROWSER_TEST_F(CaptionBubbleControllerViewsTest, ExpandsAndCollapses) {
   EXPECT_EQ(line_height, GetLabel()->GetBoundsInScreen().height());
 
   ClickButton(GetExpandButton());
+
+  // RunScheduledLayout() is needed due to widget auto-resize.
+  views::test::RunScheduledLayout(GetBubble());
   EXPECT_TRUE(GetCollapseButton()->GetVisible());
   EXPECT_FALSE(GetExpandButton()->GetVisible());
   EXPECT_EQ(7 * line_height, GetLabel()->GetBoundsInScreen().height());
@@ -1051,26 +1063,28 @@ IN_PROC_BROWSER_TEST_F(CaptionBubbleControllerViewsTest, ExpandsAndCollapses) {
       prefs::kLiveCaptionBubbleExpanded));
 
   // Switch media. The bubble should remain expanded.
-  auto media_1 = CaptionBubbleContextBrowser::Create(
-      browser()->tab_strip_model()->GetActiveWebContents());
-  OnPartialTranscription("Nearly all ants are female.", media_1.get());
+  OnPartialTranscription("Nearly all ants are female.",
+                         GetCaptionBubbleContext2());
   EXPECT_TRUE(GetCollapseButton()->GetVisible());
   EXPECT_FALSE(GetExpandButton()->GetVisible());
   EXPECT_EQ(7 * line_height, GetLabel()->GetBoundsInScreen().height());
 
   ClickButton(GetCollapseButton());
+
+  // RunScheduledLayout() is needed due to widget auto-resize.
+  views::test::RunScheduledLayout(GetBubble());
   EXPECT_TRUE(GetExpandButton()->GetVisible());
   EXPECT_FALSE(GetCollapseButton()->GetVisible());
   EXPECT_EQ(line_height, GetLabel()->GetBoundsInScreen().height());
 
   // The expand and collapse buttons are not visible when there is an error.
-  OnError(media_1.get());
+  OnError(GetCaptionBubbleContext2());
   EXPECT_FALSE(GetCollapseButton()->GetVisible());
   EXPECT_FALSE(GetExpandButton()->GetVisible());
 
   // Clear the error message. The expand button should appear.
   OnPartialTranscription("An ant can lift 20 times its own body weight.",
-                         media_1.get());
+                         GetCaptionBubbleContext2());
   EXPECT_TRUE(GetExpandButton()->GetVisible());
   EXPECT_FALSE(GetCollapseButton()->GetVisible());
   EXPECT_EQ(line_height, GetLabel()->GetBoundsInScreen().height());
@@ -1183,14 +1197,13 @@ IN_PROC_BROWSER_TEST_F(CaptionBubbleControllerViewsTest,
 IN_PROC_BROWSER_TEST_F(CaptionBubbleControllerViewsTest,
                        AccessibleTextChangesWhenMediaChanges) {
   CaptionBubbleContext* media_0 = GetCaptionBubbleContext();
-  auto media_1 = CaptionBubbleContextBrowser::Create(
-      browser()->tab_strip_model()->GetActiveWebContents());
 
   OnPartialTranscription("3 dogs survived the Titanic sinking.", media_0);
   EXPECT_EQ(1u, GetAXLineText().size());
   EXPECT_EQ("3 dogs survived the Titanic sinking.", GetAXLineText()[0]);
 
-  OnFinalTranscription("30% of Dalmations are deaf in one ear.", media_1.get());
+  OnFinalTranscription("30% of Dalmations are deaf in one ear.",
+                       GetCaptionBubbleContext2());
   EXPECT_EQ(1u, GetAXLineText().size());
   EXPECT_EQ("30% of Dalmations are deaf in one ear.", GetAXLineText()[0]);
 
@@ -1257,11 +1270,14 @@ IN_PROC_BROWSER_TEST_F(CaptionBubbleControllerViewsTest,
 IN_PROC_BROWSER_TEST_F(CaptionBubbleControllerViewsTest,
                        BackToTabButtonActivatesTab) {
   OnPartialTranscription("Whale sharks are the world's largest fish.");
+  ASSERT_FALSE(GetBackToTabButton()->GetVisible());
   chrome::AddTabAt(browser(), GURL(), -1, true);
   browser()->tab_strip_model()->ActivateTabAt(1);
   EXPECT_EQ(1, browser()->tab_strip_model()->active_index());
+  ASSERT_TRUE(GetBackToTabButton()->GetVisible());
   ClickButton(GetBackToTabButton());
   EXPECT_EQ(0, browser()->tab_strip_model()->active_index());
+  ASSERT_FALSE(GetBackToTabButton()->GetVisible());
   // TODO(crbug.com/40119836): Test that browser window is active. It works in
   // app but the tests aren't working.
 }
@@ -1348,7 +1364,7 @@ IN_PROC_BROWSER_TEST_F(CaptionBubbleControllerViewsTest, HeaderView) {
                    left_header_container->GetLayoutManager())
                    ->inside_border_insets()
                    .left());
-  EXPECT_EQ(488, left_header_container->GetPreferredSize().width());
+  EXPECT_EQ(512, left_header_container->GetPreferredSize().width());
 
   EXPECT_EQ(u"English", source_language_button->GetText());
 
@@ -1512,6 +1528,7 @@ IN_PROC_BROWSER_TEST_F(CaptionBubbleControllerViewsTest,
       "bone with a bite four times their own weight.");
   ASSERT_EQ(u"Downloading French language pack\x2026 12%",
             GetDownloadProgressLabel()->GetText());
+  ASSERT_EQ(48, GetDownloadProgressLabel()->GetPreferredSize().height());
 
   OnSodaInstalled();
   ASSERT_TRUE(GetLabel()->GetVisible());
@@ -1530,4 +1547,19 @@ IN_PROC_BROWSER_TEST_F(CaptionBubbleControllerViewsTest,
 }
 #endif  // !BUILDFLAG(IS_CHROMEOS)
 
+IN_PROC_BROWSER_TEST_F(CaptionBubbleControllerViewsTest,
+                       SpaceBetweenFinalAndPartial) {
+  OnFinalTranscription(
+      "Sea otters hold hands while they sleep so they don't drift apart.");
+  EXPECT_EQ("Sea otters hold hands while they sleep so they don't drift apart.",
+            GetLabelText());
+  OnPartialTranscription(
+      "Red pandas use their bushy tails for balance and as a cozy blanket in "
+      "cold weather.");
+  EXPECT_EQ(
+      "Sea otters hold hands while they sleep so they don't drift apart. Red "
+      "pandas use their bushy tails for balance and as a cozy blanket in cold "
+      "weather.",
+      GetLabelText());
+}
 }  // namespace captions

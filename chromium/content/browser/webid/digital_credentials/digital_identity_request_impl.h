@@ -24,6 +24,8 @@ namespace content {
 class DigitalIdentityProvider;
 class RenderFrameHost;
 
+using ProtocolAndParsedRequest =
+    std::pair<std::string, data_decoder::DataDecoder::ValueOrError>;
 // DigitalIdentityRequestImpl handles mojo connections from the renderer to
 // fulfill digital identity requests.
 //
@@ -44,8 +46,7 @@ class CONTENT_EXPORT DigitalIdentityRequestImpl
   static std::optional<DigitalIdentityInterstitialType> ComputeInterstitialType(
       const url::Origin& rp_origin,
       const DigitalIdentityProvider* provider,
-      const std::string& protocol,
-      const data_decoder::DataDecoder::ValueOrError& request_data);
+      const std::vector<ProtocolAndParsedRequest>& parsed_requests);
 
   DigitalIdentityRequestImpl(const DigitalIdentityRequestImpl&) = delete;
   DigitalIdentityRequestImpl& operator=(const DigitalIdentityRequestImpl&) =
@@ -72,9 +73,9 @@ class CONTENT_EXPORT DigitalIdentityRequestImpl
 
   // Called when the get request JSON has been parsed.
   void OnGetRequestJsonParsed(
-      std::string protocol,
+      std::optional<std::string> protocol,
       base::Value request_to_send,
-      data_decoder::DataDecoder::ValueOrError parsed_result);
+      const std::vector<ProtocolAndParsedRequest>& parsed_requests);
 
   // Called when the create request JSON has been parsed.
   void OnCreateRequestJsonParsed(
@@ -92,7 +93,7 @@ class CONTENT_EXPORT DigitalIdentityRequestImpl
   // Called when the user has fulfilled the interstitial requirement. Will be
   // called immediately after OnGetRequestJsonParsed() if no interstitial is
   // needed.
-  void OnInterstitialDone(std::string protocol,
+  void OnInterstitialDone(std::optional<std::string> protocol,
                           base::Value request_to_send,
                           DigitalIdentityProvider::RequestStatusForMetrics
                               status_after_interstitial);
@@ -101,8 +102,8 @@ class CONTENT_EXPORT DigitalIdentityRequestImpl
   // `status_for_metrics`.
   void CompleteRequest(
       std::optional<std::string> protocol,
-      const base::expected<std::string,
-                           DigitalIdentityProvider::RequestStatusForMetrics>&
+      base::expected<DigitalIdentityProvider::DigitalCredential,
+                     DigitalIdentityProvider::RequestStatusForMetrics>
           status_for_metrics);
 
   void CompleteRequestWithError(
@@ -111,8 +112,8 @@ class CONTENT_EXPORT DigitalIdentityRequestImpl
   void CompleteRequestWithStatus(
       std::optional<std::string> protocol,
       blink::mojom::RequestDigitalIdentityStatus status,
-      const base::expected<std::string,
-                           DigitalIdentityProvider::RequestStatusForMetrics>&
+      base::expected<DigitalIdentityProvider::DigitalCredential,
+                     DigitalIdentityProvider::RequestStatusForMetrics>
           response);
 
   std::unique_ptr<DigitalIdentityProvider> provider_;

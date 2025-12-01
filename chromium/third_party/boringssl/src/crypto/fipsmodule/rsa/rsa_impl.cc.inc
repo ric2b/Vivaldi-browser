@@ -31,6 +31,10 @@
 #include "internal.h"
 
 
+static_assert(OPENSSL_RSA_MAX_MODULUS_BITS <=
+                  BN_MONTGOMERY_MAX_WORDS * BN_BITS2,
+              "Max RSA size too big for Montgomery arithmetic");
+
 int rsa_check_public_key(const RSA *rsa) {
   if (rsa->n == NULL) {
     OPENSSL_PUT_ERROR(RSA, RSA_R_VALUE_MISSING);

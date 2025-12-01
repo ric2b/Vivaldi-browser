@@ -66,7 +66,7 @@
 #include <windows.h>
 #endif
 
-#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)
+#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX)
 // If a font name in prefs default values starts with a comma, consider it's a
 // comma-separated font list and resolve it to the first available font.
 #define PREFS_FONT_LIST 1
@@ -144,7 +144,7 @@ struct FontDefault {
 // all platforms have fonts for all scripts for all generic families.
 // TODO(falken): add proper defaults when possible for all
 // platforms/scripts/generic families.
-const auto kFontDefaults = std::to_array<FontDefault>({
+constexpr auto kFontDefaults = std::to_array<FontDefault>({
     {prefs::kWebKitStandardFontFamily, IDS_STANDARD_FONT_FAMILY},
     {prefs::kWebKitFixedFontFamily, IDS_FIXED_FONT_FAMILY},
     {prefs::kWebKitSerifFontFamily, IDS_SERIF_FONT_FAMILY},

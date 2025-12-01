@@ -267,6 +267,9 @@ class URLDatabase {
       base::OnceCallback<void(sql::Statement&&)> callback,
       int max_results,
       KeywordID keyword_id);
+  void GetRecentTypedUrlItems(
+      base::OnceCallback<void(sql::Statement&&)> callback,
+      int max_results);
 
 #include "components/history/vivaldi_url_database.h.inc"
 

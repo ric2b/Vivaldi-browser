@@ -8,6 +8,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "chrome/browser/ui/views/event_utils.h"
@@ -99,7 +100,7 @@ class SavedTabGroupButton : public views::MenuButton,
   void SetTextProperties(const SavedTabGroup& group);
   void UpdateButtonLayout();
   void UpdateAccessibleName();
-  void SetText(const std::u16string& text) override;
+  void SetText(std::u16string_view text) override;
   int GetAndIncrementLatestCommandId();
 
   raw_ptr<Browser> browser_;
@@ -118,10 +119,6 @@ class SavedTabGroupButton : public views::MenuButton,
 
   // The local guid used to identify the group in the tabstrip if it is open.
   std::optional<tab_groups::TabGroupId> local_group_id_;
-
-  // The tabs to be displayed in the context menu. Currently supports tab
-  // title, url, and favicon.
-  std::vector<SavedTabGroupTab> tabs_;
 
   // The command id that gets updated and assigned to the context menu
   // commands.

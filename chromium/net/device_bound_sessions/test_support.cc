@@ -41,6 +41,7 @@ std::unique_ptr<net::test_server::HttpResponse> RequestHandler(
         "Sec-Session-Registration",
         "(RS256 "
         "ES256);challenge=\"challenge_value\";path=\"dbsc_register_session\"");
+    response->set_content_type("text/html");
     return response;
   } else if (request.relative_url == "/dbsc_register_session") {
     response->AddCustomHeader("Set-Cookie", "auth_cookie=abcdef0123;");
@@ -280,25 +281,26 @@ ScopedTestRegistrationFetcher ScopedTestRegistrationFetcher::CreateWithSuccess(
         SessionParams::Scope scope;
         scope.include_site = true;
         scope.origin = origin_string;
-        SessionParams session_params(session_id, refresh_url_string,
-                                     std::move(scope),
-                                     std::move(cookie_credentials));
-        unexportable_keys::UnexportableKeyId key_id;
-        return std::make_optional<
-            RegistrationFetcher::RegistrationCompleteParams>(
-            std::move(session_params), std::move(key_id),
-            GURL(refresh_url_string));
+        return base::expected<SessionParams, SessionError>(SessionParams(
+            session_id, GURL(refresh_url_string), refresh_url_string,
+            std::move(scope), std::move(cookie_credentials),
+            unexportable_keys::UnexportableKeyId()));
       },
       std::string(session_id), std::string(refresh_url_string),
       std::string(origin_string)));
 }
 
 // static
-ScopedTestRegistrationFetcher
-ScopedTestRegistrationFetcher::CreateWithFailure() {
-  return ScopedTestRegistrationFetcher(base::BindRepeating([]() {
-    return std::optional<RegistrationFetcher::RegistrationCompleteParams>();
-  }));
+ScopedTestRegistrationFetcher ScopedTestRegistrationFetcher::CreateWithFailure(
+    SessionError::ErrorType error_type,
+    std::string_view refresh_url_string) {
+  return ScopedTestRegistrationFetcher(base::BindRepeating(
+      [](SessionError::ErrorType error_type, const GURL& refresh_url) {
+        return base::expected<SessionParams, SessionError>(base::unexpected(
+            SessionError{error_type, net::SchemefulSite(refresh_url),
+                         /*session_id=*/std::nullopt}));
+      },
+      error_type, GURL(refresh_url_string)));
 }
 
 // static
@@ -308,11 +310,10 @@ ScopedTestRegistrationFetcher::CreateWithTermination(
     std::string_view refresh_url_string) {
   return ScopedTestRegistrationFetcher(base::BindRepeating(
       [](const std::string& session_id, const std::string& refresh_url_string) {
-        unexportable_keys::UnexportableKeyId key_id;
-        return std::make_optional<
-            RegistrationFetcher::RegistrationCompleteParams>(
-            SessionTerminationParams{session_id}, std::move(key_id),
-            GURL(refresh_url_string));
+        return base::expected<SessionParams, SessionError>(
+            base::unexpected(SessionError{
+                SessionError::ErrorType::kServerRequestedTermination,
+                net::SchemefulSite(GURL(refresh_url_string)), session_id}));
       },
       std::string(session_id), std::string(refresh_url_string)));
 }

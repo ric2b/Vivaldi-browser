@@ -8,7 +8,7 @@
 
 #include "src/base/platform/mutex.h"
 #include "src/base/platform/time.h"
-#include "src/execution/isolate.h"
+#include "src/execution/isolate-inl.h"
 #include "src/execution/vm-state-inl.h"
 #include "src/flags/flags.h"
 #include "src/heap/base/incremental-marking-schedule.h"
@@ -53,7 +53,7 @@ IncrementalMarkingJob::IncrementalMarkingJob(Heap* heap)
 }
 
 void IncrementalMarkingJob::ScheduleTask(TaskPriority priority) {
-  base::SpinningMutexGuard guard(&mutex_);
+  base::MutexGuard guard(&mutex_);
 
   if (pending_task_ || heap_->IsTearingDown()) {
     return;
@@ -90,16 +90,16 @@ void IncrementalMarkingJob::Task::RunInternal() {
   VMState<GC> state(isolate());
   TRACE_EVENT_CALL_STATS_SCOPED(isolate(), "v8",
                                 "V8.IncrementalMarkingJob.Task");
-  // In case multi-cage pointer compression mode is enabled ensure that
-  // current thread's cage base values are properly initialized.
-  PtrComprCageAccessScope ptr_compr_cage_access_scope(isolate());
+  // Set the current isolate such that trusted pointer tables etc are
+  // available and the cage base is set correctly for multi-cage mode.
+  SetCurrentIsolateScope isolate_scope(isolate());
 
   isolate()->stack_guard()->ClearStartIncrementalMarking();
 
   Heap* heap = isolate()->heap();
 
   {
-    base::SpinningMutexGuard guard(&job_->mutex_);
+    base::MutexGuard guard(&job_->mutex_);
     heap->tracer()->RecordTimeToIncrementalMarkingTask(
         v8::base::TimeTicks::Now() - job_->scheduled_time_);
     job_->scheduled_time_ = v8::base::TimeTicks();
@@ -123,7 +123,7 @@ void IncrementalMarkingJob::Task::RunInternal() {
   // Clear this flag after StartIncrementalMarking() call to avoid scheduling a
   // new task when starting incremental marking from a task.
   {
-    base::SpinningMutexGuard guard(&job_->mutex_);
+    base::MutexGuard guard(&job_->mutex_);
     if (V8_UNLIKELY(v8_flags.trace_incremental_marking)) {
       job_->heap_->isolate()->PrintWithTimestamp(
           "[IncrementalMarking] Job: Run\n");

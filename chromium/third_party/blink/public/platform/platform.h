@@ -69,6 +69,7 @@ class SkBitmap;
 
 namespace base {
 class SingleThreadTaskRunner;
+class RefCountedMemory;
 }  // namespace base
 
 namespace cc {
@@ -81,7 +82,6 @@ class ColorSpace;
 
 namespace gpu {
 class GpuChannelHost;
-class GpuMemoryBufferManager;
 }
 
 namespace media {
@@ -212,6 +212,7 @@ class BLINK_PLATFORM_EXPORT Platform {
       const WebAudioSinkDescriptor& sink_descriptor,
       unsigned number_of_output_channels,
       const WebAudioLatencyHint& latency_hint,
+      std::optional<float> context_sample_rate,
       media::AudioRendererSink::RenderCallback*) {
     return nullptr;
   }
@@ -399,6 +400,19 @@ class BLINK_PLATFORM_EXPORT Platform {
     return std::string();
   }
 
+  // Returns the raw bytes of a data resource for the specified `resource_id`.
+  // Can be called from any thread.
+  virtual base::RefCountedMemory* GetDataResourceBytes(int resource_id) {
+    return nullptr;
+  }
+
+  // Returns the resource ID for the webui bundled code cache corresponding to
+  // the `webui_resource_url`, if it exists.
+  virtual std::optional<int> GetWebUIBundledCodeCacheResourceId(
+      const GURL& webui_resource_url) {
+    return std::nullopt;
+  }
+
   // Decodes the in-memory audio file data and returns the linear PCM audio data
   // in the |destination_bus|.
   // Returns true on success.
@@ -520,10 +534,6 @@ class BLINK_PLATFORM_EXPORT Platform {
       const blink::WebURL& document_url,
       base::OnceCallback<
           void(std::unique_ptr<blink::WebGraphicsContext3DProvider>)> callback);
-
-  virtual gpu::GpuMemoryBufferManager* GetGpuMemoryBufferManager() {
-    return nullptr;
-  }
 
   // When true, animations will run on a compositor thread independently from
   // the blink main thread.

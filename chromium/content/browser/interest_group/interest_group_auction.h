@@ -59,6 +59,10 @@ namespace blink {
 struct AuctionConfig;
 }
 
+namespace network {
+class SharedURLLoaderFactory;
+}
+
 namespace content {
 
 class AdAuctionNegativeTargeter;
@@ -499,11 +503,16 @@ class CONTENT_EXPORT InterestGroupAuction
   // `owned_auction_config_` field. `parent` should be the parent
   // InterestGroupAuction if this is a component auction, and null, otherwise.
   //
+  // `url_loader_factory` is a trusted URLLoaderFactory configured to make
+  // requests associated with the frame running the auction. See
+  // AdAuctionServiceImpl::CreateUnderlyingTrustedURLLoaderFactory().
+  //
   // `is_interest_group_api_allowed_callback` will be used to check whether the
   // sellers of the auction and bids provided via interest groups or
   // additionalBids are permitted to participate.
   InterestGroupAuction(
       auction_worklet::mojom::KAnonymityBidMode kanon_mode,
+      scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
       const url::Origin& main_frame_origin,
       network::mojom::IPAddressSpace ip_address_space,
       const blink::AuctionConfig* config,
@@ -588,7 +597,6 @@ class CONTENT_EXPORT InterestGroupAuction
   std::unique_ptr<InterestGroupAuctionReporter> CreateReporter(
       BrowserContext* browser_context,
       PrivateAggregationManager* private_aggregation_manager,
-      scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
       AdAuctionPageDataCallback ad_auction_page_data_callback,
       std::unique_ptr<blink::AuctionConfig> auction_config,
       const url::Origin& main_frame_origin,
@@ -705,10 +713,9 @@ class CONTENT_EXPORT InterestGroupAuction
 
   // Retrieves all requests with non-reserved event type to the Private
   // Aggregation API returned by GenerateBid(). The return value is keyed by
-  // event type of the associated requests. May only be called by external
-  // consumers after an auction has failed (on success, used internally to pass
-  // them to the InterestGroupAuctionReporter). May only be called once, since
-  // it takes ownership of stored reporting URLs.
+  // event type of the associated requests. Used internally to pass them to the
+  // InterestGroupAuctionReporter. May only be called once, since it takes
+  // ownership of stored reporting URLs.
   std::map<std::string, PrivateAggregationRequests>
   TakeNonReservedPrivateAggregationRequests();
 
@@ -810,6 +817,8 @@ class CONTENT_EXPORT InterestGroupAuction
   std::optional<AuctionResult> final_auction_result() const {
     return final_auction_result_;
   }
+
+  void SetReceivedAbortSignal() { received_abort_signal_ = true; }
 
   // Gets the buyer experiment ID in `config` for buyer. Public so that
   // InterestGroupAuctionReporter can use it.
@@ -1358,6 +1367,8 @@ class CONTENT_EXPORT InterestGroupAuction
   // Whether k-anonymity enforcement or simulation (or none) are performed.
   const auction_worklet::mojom::KAnonymityBidMode kanon_mode_;
 
+  const scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory_;
+
   const url::Origin main_frame_origin_;
   const network::mojom::IPAddressSpace ip_address_space_;
 
@@ -1641,6 +1652,11 @@ class CONTENT_EXPORT InterestGroupAuction
   // auctions, their sizes are not included.
   size_t interest_groups_bytes_for_metrics_ = 0u;
   size_t ads_and_ad_components_bytes_for_metrics_ = 0u;
+
+  // If true, indicates that this auction received an abort signal. Used for UMA
+  // only, to differentiate frame destruction from receiving an abort signal in
+  // Auction.Result.
+  bool received_abort_signal_ = false;
 
   base::WeakPtrFactory<InterestGroupAuction> weak_ptr_factory_{this};
 };

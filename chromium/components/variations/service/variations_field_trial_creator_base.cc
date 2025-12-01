@@ -19,6 +19,7 @@
 #include <set>
 #include <utility>
 
+#include "base/base64.h"
 #include "base/base_switches.h"
 #include "base/command_line.h"
 #include "base/debug/dump_without_crashing.h"
@@ -31,6 +32,7 @@
 #include "base/process/process.h"
 #include "base/sequence_checker.h"
 #include "base/strings/pattern.h"
+#include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
 #include "base/system/sys_info.h"
@@ -318,8 +320,8 @@ bool VariationsFieldTrialCreatorBase::SetUpFieldTrials(
   }
 #endif  // BUILDFLAG(FIELDTRIAL_TESTING_ENABLED)
   if (command_line->HasSwitch(switches::kVariationsTestSeedJsonPath)) {
-    LoadSeedFromJsonFile(
-        command_line->GetSwitchValuePath(switches::kVariationsTestSeedJsonPath));
+    LoadSeedFromJsonFile(command_line->GetSwitchValuePath(
+        switches::kVariationsTestSeedJsonPath));
   }
 
   // Get client filterable state to be used by CreateTrialsFromSeed()
@@ -783,14 +785,14 @@ void VariationsFieldTrialCreatorBase::LoadSeedFromJsonFile(
 
   if (!seed_data || !seed_data->is_string()) {
     ExitWithMessage(
-        base::StringPrintf("Missing or invalid seed data in contents of \"%s\"",
-                           json_seed_path.AsUTF8Unsafe().c_str()));
+        base::StrCat({"Missing or invalid seed data in contents of \"",
+                      json_seed_path.AsUTF8Unsafe(), "\""}));
   }
 
   if (!seed_signature || !seed_signature->is_string()) {
-    ExitWithMessage(base::StringPrintf(
-        "Missing or invalid seed signature in contents of \"%s\"",
-        json_seed_path.AsUTF8Unsafe().c_str()));
+    ExitWithMessage(
+        base::StrCat({"Missing or invalid seed signature in contents of \"",
+                      json_seed_path.AsUTF8Unsafe(), "\""}));
   }
 
   // Set fail counters to 0 to make sure Chrome doesn't run in variations safe
@@ -799,13 +801,19 @@ void VariationsFieldTrialCreatorBase::LoadSeedFromJsonFile(
   local_state()->SetInteger(prefs::kVariationsFailedToFetchSeedStreak, 0);
 
   // Override Local State seed prefs.
-  // TODO(crbug.com/369080917): Use SeedReaderWriter to store a seed.
-  local_state()->SetString(prefs::kVariationsCompressedSeed,
-                           seed_data->GetString());
-  local_state()->SetString(prefs::kVariationsSeedSignature,
-                           seed_signature->GetString());
-
-  local_state()->CommitPendingWrite();  // Schedule a write to Local State.
+  std::string decoded_seed;
+  if (!base::Base64Decode(seed_data->GetString(), &decoded_seed)) {
+    ExitWithMessage(
+        base::StrCat({"Failed to decode seed data in contents of \"",
+                      json_seed_path.AsUTF8Unsafe(), "\""}));
+  }
+  seed_store_->StoreSeedData(decoded_seed, seed_signature->GetString(),
+                             /*country_code=*/"",
+                             /*date_fetched=*/base::Time(),
+                             /*is_delta_compressed=*/false,
+                             /*is_gzip_compressed=*/true,
+                             /*done_callback=*/base::DoNothing(),
+                             /*require_synchronous=*/true);
 }
 
 VariationsSeedStore* VariationsFieldTrialCreatorBase::GetSeedStore() {

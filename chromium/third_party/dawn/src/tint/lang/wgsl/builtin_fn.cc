@@ -480,6 +480,18 @@ BuiltinFn ParseBuiltinFn(std::string_view name) {
     if (name == "quadSwapDiagonal") {
         return BuiltinFn::kQuadSwapDiagonal;
     }
+    if (name == "subgroupMatrixLoad") {
+        return BuiltinFn::kSubgroupMatrixLoad;
+    }
+    if (name == "subgroupMatrixStore") {
+        return BuiltinFn::kSubgroupMatrixStore;
+    }
+    if (name == "subgroupMatrixMultiply") {
+        return BuiltinFn::kSubgroupMatrixMultiply;
+    }
+    if (name == "subgroupMatrixMultiplyAccumulate") {
+        return BuiltinFn::kSubgroupMatrixMultiplyAccumulate;
+    }
     if (name == "__tint_materialize") {
         return BuiltinFn::kTintMaterialize;
     }
@@ -784,6 +796,14 @@ const char* str(BuiltinFn i) {
             return "quadSwapY";
         case BuiltinFn::kQuadSwapDiagonal:
             return "quadSwapDiagonal";
+        case BuiltinFn::kSubgroupMatrixLoad:
+            return "subgroupMatrixLoad";
+        case BuiltinFn::kSubgroupMatrixStore:
+            return "subgroupMatrixStore";
+        case BuiltinFn::kSubgroupMatrixMultiply:
+            return "subgroupMatrixMultiply";
+        case BuiltinFn::kSubgroupMatrixMultiplyAccumulate:
+            return "subgroupMatrixMultiplyAccumulate";
         case BuiltinFn::kTintMaterialize:
             return "__tint_materialize";
     }
@@ -883,6 +903,18 @@ bool IsSubgroup(BuiltinFn f) {
         case BuiltinFn::kQuadSwapX:
         case BuiltinFn::kQuadSwapY:
         case BuiltinFn::kQuadSwapDiagonal:
+            return true;
+        default:
+            return false;
+    }
+}
+
+bool IsSubgroupMatrix(BuiltinFn f) {
+    switch (f) {
+        case BuiltinFn::kSubgroupMatrixLoad:
+        case BuiltinFn::kSubgroupMatrixStore:
+        case BuiltinFn::kSubgroupMatrixMultiply:
+        case BuiltinFn::kSubgroupMatrixMultiplyAccumulate:
             return true;
         default:
             return false;

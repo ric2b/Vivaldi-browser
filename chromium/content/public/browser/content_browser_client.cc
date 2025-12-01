@@ -51,6 +51,7 @@
 #include "content/public/browser/tracing_delegate.h"
 #include "content/public/browser/url_loader_request_interceptor.h"
 #include "content/public/browser/vpn_service_proxy.h"
+#include "content/public/browser/web_authentication_delegate.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_view_delegate.h"
 #include "content/public/common/alternative_error_page_override_info.mojom.h"
@@ -96,7 +97,6 @@
 #include "content/public/browser/tts_environment_android.h"
 #else
 #include "content/public/browser/authenticator_request_client_delegate.h"
-#include "content/public/browser/web_authentication_delegate.h"
 #include "third_party/blink/public/mojom/installedapp/related_application.mojom.h"
 #endif
 
@@ -125,6 +125,11 @@ void ContentBrowserClient::PostAfterStartupTask(
 
 bool ContentBrowserClient::IsBrowserStartupComplete() {
   return true;
+}
+
+void ContentBrowserClient::OnUiTaskRunnerReady(
+    base::OnceClosure enable_native_ui_task_execution_callback) {
+  std::move(enable_native_ui_task_execution_callback).Run();
 }
 
 void ContentBrowserClient::SetBrowserStartupIsCompleteForTesting() {}
@@ -304,11 +309,11 @@ size_t ContentBrowserClient::GetProcessCountToIgnoreForLimit() {
   return 0;
 }
 
-std::optional<blink::ParsedPermissionsPolicy>
+std::optional<network::ParsedPermissionsPolicy>
 ContentBrowserClient::GetPermissionsPolicyForIsolatedWebApp(
     WebContents* web_contents,
     const url::Origin& app_origin) {
-  return blink::ParsedPermissionsPolicy();
+  return network::ParsedPermissionsPolicy();
 }
 
 bool ContentBrowserClient::ShouldTryToUseExistingProcessHost(
@@ -729,6 +734,16 @@ std::string ContentBrowserClient::GetWebUIHostnameForCodeCacheMetrics(
   return std::string();
 }
 
+bool ContentBrowserClient::IsWebUIBundledCodeCachingEnabled(
+    const GURL& webui_lock_url) const {
+  return false;
+}
+
+base::flat_map<GURL, int>
+ContentBrowserClient::GetWebUIResourceUrlToCodeCacheMap() const {
+  return base::flat_map<GURL, int>();
+}
+
 void ContentBrowserClient::AllowCertificateError(
     WebContents* web_contents,
     int cert_error,
@@ -1048,10 +1063,6 @@ bool ContentBrowserClient::ShouldEnableAudioProcessHighPriority() {
   return false;
 }
 
-bool ContentBrowserClient::ShouldUseFontDataManager(const GURL& site_url) {
-  return false;
-}
-
 #endif  // BUILDFLAG(IS_WIN)
 
 std::vector<std::unique_ptr<blink::URLLoaderThrottle>>
@@ -1215,6 +1226,10 @@ bool ContentBrowserClient::ShouldOverrideUrlLoading(
 }
 #endif
 
+bool ContentBrowserClient::SupportsAvoidUnnecessaryBeforeUnloadCheckSync() {
+  return true;
+}
+
 bool ContentBrowserClient::ShouldAllowSameSiteRenderFrameHostChange(
     const RenderFrameHost& rfh) {
   return true;
@@ -1246,11 +1261,9 @@ void ContentBrowserClient::CreateSecurePaymentConfirmationService(
     mojo::PendingReceiver<payments::mojom::SecurePaymentConfirmationService>
         receiver) {}
 
-#if !BUILDFLAG(IS_ANDROID)
 SerialDelegate* ContentBrowserClient::GetSerialDelegate() {
   return nullptr;
 }
-#endif
 
 HidDelegate* ContentBrowserClient::GetHidDelegate() {
   return nullptr;
@@ -1293,13 +1306,13 @@ bool ContentBrowserClient::IsSecurityLevelAcceptableForWebAuthn(
   return true;
 }
 
-#if !BUILDFLAG(IS_ANDROID)
 WebAuthenticationDelegate*
 ContentBrowserClient::GetWebAuthenticationDelegate() {
   static base::NoDestructor<WebAuthenticationDelegate> delegate;
   return delegate.get();
 }
 
+#if !BUILDFLAG(IS_ANDROID)
 std::unique_ptr<AuthenticatorRequestClientDelegate>
 ContentBrowserClient::GetWebAuthenticationRequestDelegate(
     RenderFrameHost* render_frame_host) {
@@ -1314,7 +1327,7 @@ ContentBrowserClient::CreateClientCertStore(BrowserContext* browser_context) {
 
 std::unique_ptr<LoginDelegate> ContentBrowserClient::CreateLoginDelegate(
     const net::AuthChallengeInfo& auth_info,
-    content::WebContents* web_contents,
+    WebContents* web_contents,
     BrowserContext* browser_context,
     const GlobalRequestID& request_id,
     bool is_request_for_primary_main_frame_navigation,
@@ -1323,7 +1336,7 @@ std::unique_ptr<LoginDelegate> ContentBrowserClient::CreateLoginDelegate(
     scoped_refptr<net::HttpResponseHeaders> response_headers,
     bool first_auth_attempt,
     GuestPageHolder* guest,
-    LoginAuthRequiredCallback auth_required_callback) {
+    LoginDelegate::LoginAuthRequiredCallback auth_required_callback) {
   return nullptr;
 }
 
@@ -1348,6 +1361,11 @@ std::unique_ptr<VideoOverlayWindow>
 ContentBrowserClient::CreateWindowForVideoPictureInPicture(
     VideoPictureInPictureWindowController* controller) {
   return nullptr;
+}
+
+media::PictureInPictureEventsInfo::AutoPipReason
+ContentBrowserClient::GetAutoPipReason(const WebContents& web_contents) const {
+  return media::PictureInPictureEventsInfo::AutoPipReason::kUnknown;
 }
 
 void ContentBrowserClient::RegisterRendererPreferenceWatcher(
@@ -1780,6 +1798,11 @@ bool ContentBrowserClient::IsBlobUrlPartitioningEnabled(
   return true;
 }
 
+bool ContentBrowserClient::ShouldReduceAcceptLanguage(
+    content::BrowserContext* browser_context) {
+  return true;
+}
+
 bool ContentBrowserClient::UseOutermostMainFrameOrEmbedderForSubCaptureTargets()
     const {
   return false;
@@ -1938,6 +1961,26 @@ std::optional<network::CrossOriginEmbedderPolicy>
 ContentBrowserClient::MaybeOverrideLocalURLCrossOriginEmbedderPolicy(
     content::NavigationHandle* navigation_handle) {
   return std::nullopt;
+}
+
+bool ContentBrowserClient::ShouldEnableSubframeZoom() {
+  return false;
+}
+
+bool ContentBrowserClient::ShouldPrioritizeForBackForwardCache(
+    BrowserContext* browser_context,
+    const GURL& url) {
+  return false;
+}
+
+std::unique_ptr<KeepAliveRequestTracker>
+ContentBrowserClient::MaybeCreateKeepAliveRequestTracker(
+    const network::ResourceRequest& request,
+    std::optional<ukm::SourceId> ukm_source_id,
+    bool is_attribution_request,
+    KeepAliveRequestTracker::IsContextDetachedCallback
+        is_context_detached_callback) {
+  return nullptr;
 }
 
 }  // namespace content

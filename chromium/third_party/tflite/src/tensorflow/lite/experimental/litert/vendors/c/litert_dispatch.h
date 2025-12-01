@@ -36,6 +36,7 @@ extern "C" {
 
 LITERT_DEFINE_HANDLE(LiteRtDispatchDeviceContext);
 LITERT_DEFINE_HANDLE(LiteRtDispatchInvocationContext);
+LITERT_DEFINE_HANDLE(LiteRtDispatchMetrics);
 
 typedef uint64_t LiteRtTensorBufferHandle;
 
@@ -57,6 +58,18 @@ typedef struct LiteRtDispatchOption {
   const char* name;
   LiteRtAny value;
 } LiteRtDispatchOption;
+
+typedef struct LiteRtMetric {
+  const char* name;
+  LiteRtAny value;
+} LiteRtMetric;
+
+typedef struct LiteRtMemBuffer {
+  int fd;  // File descriptor for an mmapped buffer, -1 if unused.
+  const void* base_addr;  // Base address of the buffer.
+  size_t offset;          // Offset of the buffer from the base address.
+  size_t size;            // Buffer size.
+} LiteRtMemBuffer;
 
 // This option can be used to specify a directory from where to load shared
 // libraries.
@@ -142,9 +155,10 @@ LiteRtStatus LiteRtDispatchUnregisterTensorBuffer(
 // includes multiple functions.
 LiteRtStatus LiteRtDispatchInvocationContextCreate(
     LiteRtDispatchDeviceContext device_context,
-    LiteRtDispatchExecutableType exec_type, const void* exec_bytecode_ptr,
-    size_t exec_bytecode_size, const char* function_name, int num_inputs,
-    int num_outputs, LiteRtDispatchInvocationContext* invocation_context);
+    LiteRtDispatchExecutableType exec_type,
+    const LiteRtMemBuffer* exec_bytecode_buffer, const char* function_name,
+    int num_inputs, int num_outputs,
+    LiteRtDispatchInvocationContext* invocation_context);
 
 LiteRtStatus LiteRtDispatchInvocationContextDestroy(
     LiteRtDispatchInvocationContext invocation_context);
@@ -167,6 +181,26 @@ LiteRtStatus LiteRtDispatchDetachOutput(
 
 LiteRtStatus LiteRtDispatchInvoke(
     LiteRtDispatchInvocationContext invocation_context);
+
+// Start collection of HW-specific metrics at a specific level of detail (>= 0).
+LiteRtStatus LiteRtDispatchStartMetricsCollection(
+    LiteRtDispatchInvocationContext invocation_context, int detail_level);
+
+// Stop collection of HW-specific metrics and report the collected
+// metrics. Note: The caller is responsible for deallocating the returned
+// metrics by calling `LiteRtDispatchDestroyMetrics`.
+LiteRtStatus LiteRtDispatchStopMetricsCollection(
+    LiteRtDispatchInvocationContext invocation_context,
+    LiteRtDispatchMetrics* metrics);
+
+LiteRtStatus LiteRtDispatchGetNumMetrics(LiteRtDispatchMetrics metrics,
+                                         int* num_metrics);
+
+// Fetch a specific metric. The runtime owns the returned object.
+LiteRtStatus LiteRtDispatchGetMetric(LiteRtDispatchMetrics metrics,
+                                     int metric_index, LiteRtMetric* metric);
+
+LiteRtStatus LiteRtDispatchDestroyMetrics(LiteRtDispatchMetrics metrics);
 
 // /////////////////////////////////////////////////////////////////////////////
 // Async Execution API
@@ -237,8 +271,8 @@ LiteRtStatus LiteRtDispatchConnectGraphOutput(LiteRtDispatchGraph* graph,
 
 LiteRtStatus LiteRtDispatchLoadExecutable(
     LiteRtDispatchDeviceContext device_context,
-    LiteRtDispatchExecutableType type, const void* bytecode,
-    size_t bytecode_size, LiteRtDispatchExecutableHandle* exec_handle);
+    LiteRtDispatchExecutableType type, const LiteRtMemBuffer* bytecode_buffer,
+    LiteRtDispatchExecutableHandle* exec_handle);
 
 LiteRtStatus LiteRtDispatchUnloadExecutable(
     LiteRtDispatchDeviceContext device_context,

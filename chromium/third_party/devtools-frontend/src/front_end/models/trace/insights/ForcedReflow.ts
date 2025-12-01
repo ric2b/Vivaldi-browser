@@ -3,24 +3,22 @@
 // found in the LICENSE file.
 
 import * as i18n from '../../../core/i18n/i18n.js';
+import * as Platform from '../../../core/platform/platform.js';
 import type * as Protocol from '../../../generated/protocol.js';
-import type {Warning} from '../handlers/WarningsHandler.js';
+import * as Extras from '../extras/extras.js';
+import type * as Handlers from '../handlers/handlers.js';
 import * as Helpers from '../helpers/helpers.js';
 import * as Types from '../types/types.js';
 
 import {
-  type BottomUpCallStack,
-  type ForcedReflowAggregatedData,
   InsightCategory,
+  InsightKeys,
   type InsightModel,
-  type RequiredData,
+  type InsightSetContext,
+  type PartialInsightModel,
 } from './types.js';
 
-export function deps(): ['Warnings', 'Renderer'] {
-  return ['Warnings', 'Renderer'];
-}
-
-const UIStrings = {
+export const UIStrings = {
   /**
    *@description Title of an insight that provides details about Forced reflow.
    */
@@ -30,59 +28,65 @@ const UIStrings = {
    */
   description:
       'Many APIs, typically reading layout geometry, force the rendering engine to pause script execution in order to calculate the style and layout. Learn more about [forced reflow](https://developers.google.com/web/fundamentals/performance/rendering/avoid-large-complex-layouts-and-layout-thrashing#avoid-forced-synchronous-layouts) and its mitigations.',
-};
+  /**
+   *@description Title of a list to provide related stack trace data
+   */
+  relatedStackTrace: 'Stack trace',
+  /**
+   *@description Text to describe the top time-consuming function call
+   */
+  topTimeConsumingFunctionCall: 'Top function call',
+  /**
+   * @description Text to describe the total reflow time
+   */
+  totalReflowTime: 'Total reflow time',
+  /**
+   * @description Text to describe CPU processor tasks that could not be attributed to any specific source code.
+   */
+  unattributed: 'Unattributed',
+} as const;
 
 const str_ = i18n.i18n.registerUIStrings('models/trace/insights/ForcedReflow.ts', UIStrings);
-const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
+export const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
 
-export type ForcedReflowInsightModel = InsightModel<{
+export type ForcedReflowInsightModel = InsightModel<typeof UIStrings, {
   topLevelFunctionCallData: ForcedReflowAggregatedData | undefined,
   aggregatedBottomUpData: BottomUpCallStack[],
 }>;
 
-function aggregateForcedReflow(
-    data: Map<Warning, Types.Events.Event[]>,
-    entryToNodeMap: Map<Types.Events.Event, Helpers.TreeHelpers.TraceEntryNode>):
-    [ForcedReflowAggregatedData|undefined, BottomUpCallStack[]] {
+export interface BottomUpCallStack {
+  /**
+   * `null` indicates that this data is for unattributed force reflows.
+   */
+  bottomUpData: Types.Events.CallFrame|Protocol.Runtime.CallFrame|null;
+  totalTime: number;
+  relatedEvents: Types.Events.Event[];
+}
+
+export interface ForcedReflowAggregatedData {
+  topLevelFunctionCall: Types.Events.CallFrame|Protocol.Runtime.CallFrame;
+  totalReflowTime: number;
+  topLevelFunctionCallEvents: Types.Events.Event[];
+}
+
+function getCallFrameId(callFrame: Types.Events.CallFrame|Protocol.Runtime.CallFrame): string {
+  return callFrame.scriptId + ':' + callFrame.lineNumber + ':' + callFrame.columnNumber;
+}
+
+function getLargestTopLevelFunctionData(
+    forcedReflowEvents: Types.Events.Event[], traceParsedData: Handlers.Types.ParsedTrace): ForcedReflowAggregatedData|
+    undefined {
+  const entryToNodeMap = traceParsedData.Renderer.entryToNode;
   const dataByTopLevelFunction = new Map<string, ForcedReflowAggregatedData>();
-  const bottomUpDataMap = new Map<string, BottomUpCallStack>();
-  const forcedReflowEvents = data.get('FORCED_REFLOW');
-  if (!forcedReflowEvents || forcedReflowEvents.length === 0) {
-    return [undefined, []];
+  if (forcedReflowEvents.length === 0) {
+    return;
   }
 
-  forcedReflowEvents.forEach(e => {
+  for (const event of forcedReflowEvents) {
     // Gather the stack traces by searching in the tree
-    const traceNode = entryToNodeMap.get(e);
-
+    const traceNode = entryToNodeMap.get(event);
     if (!traceNode) {
-      return;
-    }
-    // Compute call stack fully
-    const bottomUpData: (Types.Events.CallFrame|Protocol.Runtime.CallFrame)[] = [];
-    let currentNode = traceNode;
-    let previousNode;
-    const childStack: Protocol.Runtime.CallFrame[] = [];
-
-    // Some profileCalls maybe constructed as its children in hierarchy tree
-    while (currentNode.children.length > 0) {
-      const childNode = currentNode.children[0];
-      if (!previousNode) {
-        previousNode = childNode;
-      }
-      const eventData = childNode.entry;
-      if (Types.Events.isProfileCall(eventData)) {
-        childStack.push(eventData.callFrame);
-      }
-      currentNode = childNode;
-    }
-
-    // In order to avoid too much information, we only contain 2 levels bottomUp data,
-    while (childStack.length > 0 && bottomUpData.length < 2) {
-      const traceData = childStack.pop();
-      if (traceData) {
-        bottomUpData.push(traceData);
-      }
+      continue;
     }
 
     let node = traceNode.parent;
@@ -91,119 +95,96 @@ function aggregateForcedReflow(
     while (node) {
       const eventData = node.entry;
       if (Types.Events.isProfileCall(eventData)) {
-        if (bottomUpData.length < 2) {
-          bottomUpData.push(eventData.callFrame);
-        }
+        topLevelFunctionCall = eventData.callFrame;
+        topLevelFunctionCallEvent = eventData;
       } else {
         // We have finished searching bottom up data
         if (Types.Events.isFunctionCall(eventData) && eventData.args.data &&
             Types.Events.objectIsCallFrame(eventData.args.data)) {
           topLevelFunctionCall = eventData.args.data;
           topLevelFunctionCallEvent = eventData;
-          if (bottomUpData.length === 0) {
-            bottomUpData.push(topLevelFunctionCall);
-          }
-        } else {
-          // Sometimes the top level task can be other JSInvocation event
-          // then we use the top level profile call as topLevelFunctionCall's data
-          const previousData = previousNode?.entry;
-          if (previousData && Types.Events.isProfileCall(previousData)) {
-            topLevelFunctionCall = previousData.callFrame;
-            topLevelFunctionCallEvent = previousNode?.entry;
-          }
         }
         break;
       }
-      previousNode = node;
       node = node.parent;
     }
 
-    if (!topLevelFunctionCall || !topLevelFunctionCallEvent || bottomUpData.length === 0) {
-      return;
+    if (!topLevelFunctionCall || !topLevelFunctionCallEvent) {
+      continue;
     }
-    const bottomUpDataId =
-        bottomUpData[0].scriptId + ':' + bottomUpData[0].lineNumber + ':' + bottomUpData[0].columnNumber + ':';
 
-    const data = bottomUpDataMap.get(bottomUpDataId) ?? {
-      bottomUpData: bottomUpData[0],
-      totalTime: 0,
-      relatedEvents: [],
-    };
-    data.totalTime += (e.dur ?? 0);
-    data.relatedEvents.push(e);
-    bottomUpDataMap.set(bottomUpDataId, data);
-
-    const aggregatedDataId =
-        topLevelFunctionCall.scriptId + ':' + topLevelFunctionCall.lineNumber + ':' + topLevelFunctionCall.columnNumber;
-    if (!dataByTopLevelFunction.has(aggregatedDataId)) {
-      dataByTopLevelFunction.set(aggregatedDataId, {
-        topLevelFunctionCall,
-        totalReflowTime: 0,
-        bottomUpData: new Set<string>(),
-        topLevelFunctionCallEvents: [],
-      });
-    }
-    const aggregatedData = dataByTopLevelFunction.get(aggregatedDataId);
-    if (aggregatedData) {
-      aggregatedData.totalReflowTime += (e.dur ?? 0);
-      aggregatedData.bottomUpData.add(bottomUpDataId);
-      aggregatedData.topLevelFunctionCallEvents.push(topLevelFunctionCallEvent);
-    }
-  });
-
-  let topTimeConsumingDataId = '';
-  let maxTime = 0;
-  dataByTopLevelFunction.forEach((value, key) => {
-    if (value.totalReflowTime > maxTime) {
-      maxTime = value.totalReflowTime;
-      topTimeConsumingDataId = key;
-    }
-  });
-
-  const aggregatedBottomUpData: BottomUpCallStack[] = [];
-  const topLevelFunctionCallData = dataByTopLevelFunction.get(topTimeConsumingDataId);
-  const dataSet = dataByTopLevelFunction.get(topTimeConsumingDataId)?.bottomUpData;
-  if (dataSet) {
-    dataSet.forEach(value => {
-      const callStackData = bottomUpDataMap.get(value);
-      if (callStackData && callStackData.totalTime > Helpers.Timing.milliToMicro(Types.Timing.Milli(1))) {
-        aggregatedBottomUpData.push(callStackData);
-      }
-    });
+    const aggregatedDataId = getCallFrameId(topLevelFunctionCall);
+    const aggregatedData =
+        Platform.MapUtilities.getWithDefault(dataByTopLevelFunction, aggregatedDataId, () => ({
+                                                                                         topLevelFunctionCall,
+                                                                                         totalReflowTime: 0,
+                                                                                         topLevelFunctionCallEvents: [],
+                                                                                       }));
+    aggregatedData.totalReflowTime += (event.dur ?? 0);
+    aggregatedData.topLevelFunctionCallEvents.push(topLevelFunctionCallEvent);
   }
 
-  return [topLevelFunctionCallData, aggregatedBottomUpData];
+  let topTimeConsumingData: ForcedReflowAggregatedData|undefined = undefined;
+  dataByTopLevelFunction.forEach(data => {
+    if (!topTimeConsumingData || data.totalReflowTime > topTimeConsumingData.totalReflowTime) {
+      topTimeConsumingData = data;
+    }
+  });
+
+  return topTimeConsumingData;
 }
 
-function finalize(partialModel: Omit<ForcedReflowInsightModel, 'title'|'description'|'category'|'shouldShow'>):
-    ForcedReflowInsightModel {
+function finalize(partialModel: PartialInsightModel<ForcedReflowInsightModel>): ForcedReflowInsightModel {
   return {
+    insightKey: InsightKeys.FORCED_REFLOW,
+    strings: UIStrings,
     title: i18nString(UIStrings.title),
     description: i18nString(UIStrings.description),
     category: InsightCategory.ALL,
-    shouldShow: partialModel.topLevelFunctionCallData !== undefined && partialModel.aggregatedBottomUpData.length !== 0,
+    state: partialModel.aggregatedBottomUpData.length !== 0 ? 'fail' : 'pass',
     ...partialModel,
   };
 }
 
-export function generateInsight(traceParsedData: RequiredData<typeof deps>): ForcedReflowInsightModel {
-  const warningsData = traceParsedData.Warnings;
-  const entryToNodeMap = traceParsedData.Renderer.entryToNode;
+function getBottomCallFrameForEvent(event: Types.Events.Event, traceParsedData: Handlers.Types.ParsedTrace):
+    Types.Events.CallFrame|Protocol.Runtime.CallFrame|null {
+  const profileStackTrace = Extras.StackTraceForEvent.get(event, traceParsedData);
+  const eventStackTrace = Helpers.Trace.getZeroIndexedStackTraceForEvent(event);
 
-  if (!warningsData) {
-    throw new Error('no warnings data');
+  return profileStackTrace?.callFrames[0] ?? eventStackTrace?.[0] ?? null;
+}
+
+export function generateInsight(
+    traceParsedData: Handlers.Types.ParsedTrace, context: InsightSetContext): ForcedReflowInsightModel {
+  const isWithinContext = (event: Types.Events.Event): boolean => {
+    const frameId = Helpers.Trace.frameIDForEvent(event);
+    if (frameId !== context.frameId) {
+      return false;
+    }
+
+    return Helpers.Timing.eventIsInBounds(event, context.bounds);
+  };
+
+  const bottomUpDataMap = new Map<string, BottomUpCallStack>();
+  const events = traceParsedData.Warnings.perWarning.get('FORCED_REFLOW')?.filter(isWithinContext) ?? [];
+  for (const event of events) {
+    const bottomCallFrame = getBottomCallFrameForEvent(event, traceParsedData);
+    const bottomCallId = bottomCallFrame ? getCallFrameId(bottomCallFrame) : 'UNATTRIBUTED';
+    const bottomUpData =
+        Platform.MapUtilities.getWithDefault(bottomUpDataMap, bottomCallId, () => ({
+                                                                              bottomUpData: bottomCallFrame,
+                                                                              totalTime: 0,
+                                                                              relatedEvents: [],
+                                                                            }));
+    bottomUpData.totalTime += event.dur ?? 0;
+    bottomUpData.relatedEvents.push(event);
   }
 
-  if (!entryToNodeMap) {
-    throw new Error('no renderer data');
-  }
-
-  const [topLevelFunctionCallData, aggregatedBottomUpData] =
-      aggregateForcedReflow(warningsData.perWarning, entryToNodeMap);
+  const topLevelFunctionCallData = getLargestTopLevelFunctionData(events, traceParsedData);
 
   return finalize({
-    relatedEvents: topLevelFunctionCallData?.topLevelFunctionCallEvents,
+    relatedEvents: events,
     topLevelFunctionCallData,
-    aggregatedBottomUpData,
+    aggregatedBottomUpData: [...bottomUpDataMap.values()],
   });
 }

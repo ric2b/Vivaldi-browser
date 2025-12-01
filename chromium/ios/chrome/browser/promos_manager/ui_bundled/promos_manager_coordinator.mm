@@ -21,6 +21,8 @@
 #import "ios/chrome/app/tests_hook.h"
 #import "ios/chrome/browser/app_store_rating/ui_bundled/app_store_rating_display_handler.h"
 #import "ios/chrome/browser/app_store_rating/ui_bundled/features.h"
+#import "ios/chrome/browser/authentication/ui_bundled/signin/features.h"
+#import "ios/chrome/browser/authentication/ui_bundled/signin/promo/signin_fullscreen_promo_display_handler.h"
 #import "ios/chrome/browser/credential_provider_promo/ui_bundled/credential_provider_promo_display_handler.h"
 #import "ios/chrome/browser/default_browser/model/utils.h"
 #import "ios/chrome/browser/default_promo/ui_bundled/all_tabs_default_browser_promo_view_provider.h"
@@ -53,8 +55,8 @@
 #import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/shared/public/features/system_flags.h"
 #import "ios/chrome/browser/sync/model/sync_service_factory.h"
-#import "ios/chrome/browser/ui/whats_new/promo/whats_new_promo_display_handler.h"
-#import "ios/chrome/browser/ui/whats_new/whats_new_util.h"
+#import "ios/chrome/browser/whats_new/coordinator/promo/whats_new_promo_display_handler.h"
+#import "ios/chrome/browser/whats_new/coordinator/whats_new_util.h"
 #import "ios/chrome/common/ui/confirmation_alert/confirmation_alert_action_handler.h"
 #import "ios/chrome/common/ui/confirmation_alert/confirmation_alert_view_controller.h"
 #import "ios/chrome/common/ui/promo_style/promo_style_view_controller.h"
@@ -180,8 +182,7 @@
   };
 
   feature_engagement::Tracker* tracker =
-      feature_engagement::TrackerFactory::GetForProfile(
-          self.browser->GetProfile());
+      feature_engagement::TrackerFactory::GetForProfile(self.profile);
   tracker->AddOnInitializedCallback(base::BindOnce(onInitializedBlock));
 }
 
@@ -215,8 +216,7 @@
     }
 
     feature_engagement::Tracker* tracker =
-        feature_engagement::TrackerFactory::GetForProfile(
-            self.browser->GetProfile());
+        feature_engagement::TrackerFactory::GetForProfile(self.profile);
     tracker->Dismissed(*it->feature_engagement_feature);
   }
   _currentPromoData = std::nullopt;
@@ -582,7 +582,7 @@
   _displayHandlerPromos[promos_manager::Promo::WhatsNew] =
       [[WhatsNewPromoDisplayHandler alloc]
           initWithPromosManager:PromosManagerFactory::GetForProfile(
-                                    self.browser->GetProfile())];
+                                    self.profile)];
 
   // Credentials provider promo handler.
   _displayHandlerPromos[promos_manager::Promo::CredentialProviderExtension] =
@@ -604,6 +604,12 @@
       [[DefaultBrowserPromoDisplayHandler alloc] init];
   _displayHandlerPromos[promos_manager::Promo::DefaultBrowserRemindMeLater] =
       [[DefaultBrowserRemindMeLaterPromoDisplayHandler alloc] init];
+
+  // Sign-in fullscreen promo handler.
+  if (IsFullscreenSigninPromoManagerMigrationEnabled()) {
+    _displayHandlerPromos[promos_manager::Promo::SigninFullscreen] =
+        [[SigninFullscreenPromoDisplayHandler alloc] init];
+  }
 }
 
 - (void)registerStandardPromoViewProviderPromos {

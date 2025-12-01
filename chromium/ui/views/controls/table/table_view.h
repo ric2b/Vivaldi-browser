@@ -14,10 +14,13 @@
 #include "ui/base/models/table_model.h"
 #include "ui/base/models/table_model_observer.h"
 #include "ui/color/color_id.h"
+#include "ui/compositor/layer.h"
 #include "ui/gfx/font_list.h"
 #include "ui/gfx/render_text.h"
+#include "ui/views/controls/table/table_grouper.h"
 #include "ui/views/layout/layout_provider.h"
 #include "ui/views/metadata/view_factory.h"
+#include "ui/views/style/platform_style.h"
 #include "ui/views/style/typography.h"
 #include "ui/views/view.h"
 #include "ui/views/views_export.h"
@@ -27,6 +30,14 @@ namespace ui {
 struct AXActionData;
 
 }  // namespace ui
+
+namespace task_manager {
+
+// Forward declaring TaskManagerView to use as a PassKey because it has
+// permission to disable alternating row colors on macOS.
+class TaskManagerView;
+
+}  // namespace task_manager
 
 // A TableView is a view that displays multiple rows with any number of columns.
 // TableView is driven by a TableModel. The model returns the contents
@@ -62,6 +73,10 @@ struct TableHeaderStyle {
   std::optional<ui::ColorId> separator_horizontal_color_id;
   std::optional<ui::ColorId> separator_vertical_color_id;
   std::optional<ui::ColorId> background_color_id;
+
+  // Applied to the top left corner of the first column, and top right corner
+  // of the last column. Applied to both if there is only one column.
+  std::optional<float> focus_ring_upper_corner_radius;
 };
 
 struct TableBackgroundStyle {
@@ -73,6 +88,12 @@ struct TableBackgroundStyle {
 
 struct TableStyle {
   TableBackgroundStyle background_tokens;
+
+  // Icons will be drawn with a rounded rect background if this is set to true.
+  bool icons_have_background = false;
+
+  // Focus Ring is drawn inside the cell, instead of outside the cell.
+  bool inset_focus_ring = false;
 };
 
 // The cell's in the first column of a table can contain:
@@ -225,6 +246,9 @@ class VIEWS_EXPORT TableView : public View, public ui::TableModelObserver {
 
   const VisibleColumn& GetVisibleColumn(size_t index);
 
+  // Get the column ids for visible columns.
+  std::vector<int> GetVisibleColumnIds() const;
+
   // Sets the width of the column. |index| is in terms of |visible_columns_|.
   void SetVisibleColumnWidth(size_t index, int width);
 
@@ -263,9 +287,20 @@ class VIEWS_EXPORT TableView : public View, public ui::TableModelObserver {
   bool GetSortOnPaint() const;
   void SetSortOnPaint(bool sort_on_paint);
 
-  // If enabled, hovering over a row causes the row's background color to
+  // TODO(crbug.com/406294165): Experimental, do not use in prod until bug is
+  // fixed. If enabled, hovering over a row causes the row's background color to
   // change.
   void SetMouseHoveringEnabled(bool enabled);
+
+  // Returns true if it was manually enabled via SetMouseHoveringEnabled().
+  bool IsHoverEffectEnabled() const;
+
+  // Updates whether table rows will render with alternating colors. Enabling
+  // only works on macOS, other platforms results in a no-op.
+  void SetAlternatingRowColorsEnabled(
+      base::PassKey<task_manager::TaskManagerView> key,
+      bool enabled);
+  void SetAlternatingRowColorsEnabledForTesting(bool enabled);
 
   // Returns the proper ax sort direction.
   ax::mojom::SortDirection GetFirstSortDescriptorDirection() const;
@@ -304,12 +339,14 @@ class VIEWS_EXPORT TableView : public View, public ui::TableModelObserver {
   void OnVisibleBoundsChanged() override;
   bool OnKeyPressed(const ui::KeyEvent& event) override;
   bool OnMousePressed(const ui::MouseEvent& event) override;
+  void OnMouseEntered(const ui::MouseEvent& event) override;
   void OnMouseMoved(const ui::MouseEvent& event) override;
   void OnMouseExited(const ui::MouseEvent& event) override;
   void OnGestureEvent(ui::GestureEvent* event) override;
   std::u16string GetRenderedTooltipText(const gfx::Point& p) const override;
   bool HandleAccessibleAction(const ui::AXActionData& action_data) override;
   void OnBoundsChanged(const gfx::Rect& previous_bounds) override;
+  void OnThemeChanged() override;
 
   // ui::TableModelObserver overrides:
   void OnModelChanged() override;
@@ -327,6 +364,7 @@ class VIEWS_EXPORT TableView : public View, public ui::TableModelObserver {
 
  private:
   friend class TableViewTestHelper;
+  friend class TaskManagerView;
 
   class HighlightPathGenerator;
   struct GroupSortHelper;
@@ -428,8 +466,7 @@ class VIEWS_EXPORT TableView : public View, public ui::TableModelObserver {
 
   // Invokes SchedulePaintForRect() on the old and new hovered rows.
   // If either parameter is nullopt, paint is not scheduled for that parameter.
-  void OnHoverChanged(std::optional<size_t> previous_hovered_row,
-                      std::optional<size_t> new_hovered_row);
+  void OnHoverChanged(std::optional<size_t> new_hovered_row);
 
   // Returns the TableColumn matching the specified id.
   ui::TableColumn FindColumnByID(int id) const;
@@ -559,12 +596,33 @@ class VIEWS_EXPORT TableView : public View, public ui::TableModelObserver {
                                          int view_index,
                                          int model_index);
 
+  // Installs a focus ring on the TableView.
+  void InstallFocusRing();
+
   // Updates the focus rings of the TableView and the TableHeader if necessary.
   void UpdateFocusRings();
 
   // Handles key events for keyboard navigation by cell. Returns true if the
   // event was handled.
   bool HandleKeyPressedForKeyboardNavigationByCell(const ui::KeyEvent& event);
+
+  // Updates `scroll_offset_` and redraws the hover layer based on the rows
+  // underneath the cursor.
+  void SyncHoverToScroll();
+
+  // As long as IsHoveringPossible(), guarantees that the hover layer is redrawn
+  // at the current mouse location and `scroll_offset_`.
+  void ForceHoverUpdate();
+
+  // Computes the row (or all grouped rows) at the specified coordinates, and
+  // updates the hover layer if necessary.
+  void SetHover(gfx::Point view_coordinates);
+
+  // Clears `hovered_rows_`, and hides the hover layer.
+  void ClearHover();
+
+  // Updates the transform of `hover_layer_` using `hovered_rows_`.
+  void UpdateHoverLayer();
 
   // TODO(327473315): Only one of raw_ptr in this class is dangling. Find which
   // one.
@@ -591,8 +649,16 @@ class VIEWS_EXPORT TableView : public View, public ui::TableModelObserver {
   // is the header row, since the selection model doesn't support that.
   bool header_row_is_active_ = false;
 
-  // The row beneath the cursor, if the table is focused.
-  std::optional<size_t> hovered_row_ = std::nullopt;
+  // The model index rows beneath the cursor, if the table is focused.
+  std::optional<GroupRange> hovered_rows_ = std::nullopt;
+
+  // The view index of the row underneath the cursor. Note: A single row.
+  std::optional<size_t> view_index_of_row_under_cursor_ = std::nullopt;
+
+  // If enabled, rows will alternate between kColorTableBackground and
+  // kColorTableBackgroundAlternate.
+  bool alternating_row_colors_ =
+      PlatformStyle::kTableViewSupportsAlternatingRowColors;
 
   TableType table_type_ = TableType::kTextOnly;
 
@@ -656,8 +722,17 @@ class VIEWS_EXPORT TableView : public View, public ui::TableModelObserver {
   // tokens are refined on all platforms.
   bool hovering_enabled_ = false;
 
+  // Hover Layer used to highlight a row based on mouse cursor position.
+  ui::Layer hover_layer_{ui::LAYER_SOLID_COLOR};
+
   // RenderText cache from row,col.
   std::vector<std::vector<std::unique_ptr<gfx::RenderText>>> render_text_cache_;
+
+  // Callback subscriptions.
+  base::CallbackListSubscription on_scroll_view_scrolled_;
+
+  // Last received offset from the on_scroll_view_scrolled_ callback
+  gfx::Point scroll_offset_{0, 0};
 
   // Weak pointer factory, enables using PostTask safely.
   base::WeakPtrFactory<TableView> weak_factory_;

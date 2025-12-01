@@ -92,6 +92,8 @@ class CORE_EXPORT InspectorTraceEvents
   InspectorTraceEvents(const InspectorTraceEvents&) = delete;
   InspectorTraceEvents& operator=(const InspectorTraceEvents&) = delete;
 
+  static uint64_t GetNextSampleTraceId();
+
   void WillSendRequest(ExecutionContext*,
                        DocumentLoader*,
                        const KURL& fetch_context_url,
@@ -214,6 +216,10 @@ void Data(perfetto::TracedValue context,
           const StyleChangeReasonForTracing&);
 }
 
+namespace inspector_style_resolver_resolve_style_event {
+void Data(perfetto::TracedValue context, Element*, PseudoId);
+}
+
 String DescendantInvalidationSetToIdString(const InvalidationSet&);
 
 namespace inspector_style_invalidator_invalidate_event {
@@ -226,6 +232,7 @@ extern const char kInvalidationSetMatchedClass[];
 extern const char kInvalidationSetMatchedId[];
 extern const char kInvalidationSetMatchedTagName[];
 extern const char kInvalidationSetMatchedPart[];
+extern const char kInvalidationSetInvalidatesTreeCounting[];
 
 void Data(perfetto::TracedValue context, Element&, const char* reason);
 void SelectorPart(perfetto::TracedValue context,
@@ -559,7 +566,8 @@ void Data(perfetto::TracedValue context, const Event&, v8::Isolate*);
 namespace inspector_time_stamp_event {
 void Data(perfetto::TracedValue context,
           ExecutionContext*,
-          const String& message);
+          const String& message,
+          const v8::LocalVector<v8::Value>& args);
 }
 
 namespace inspector_tracing_session_id_for_worker_event {
@@ -593,7 +601,7 @@ void Data(perfetto::TracedValue context, const Animation&);
 namespace inspector_animation_compositor_event {
 void Data(perfetto::TracedValue context,
           blink::CompositorAnimations::FailureReasons failure_reasons,
-          const blink::PropertyHandleSet& unsupported_properties);
+          const blink::PropertyHandleSet& unsupported_properties_for_tracing);
 }
 
 namespace inspector_hit_test_event {

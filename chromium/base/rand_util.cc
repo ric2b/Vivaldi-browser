@@ -12,6 +12,7 @@
 #include <atomic>
 #include <limits>
 
+#include "base/check.h"
 #include "base/check_op.h"
 #include "base/containers/span.h"
 #include "base/time/time.h"
@@ -26,6 +27,11 @@ namespace {
 // memory_order_relaxed because there are no dependent memory accesses.
 std::atomic<bool> g_subsampling_always_sample = false;
 std::atomic<bool> g_subsampling_never_sample = false;
+
+MetricsSubSampler* GetSharedSubsampler() {
+  static thread_local MetricsSubSampler g_shared_subsampler;
+  return &g_shared_subsampler;
+}
 
 }  // namespace
 
@@ -179,7 +185,12 @@ bool MetricsSubSampler::ShouldSample(double probability) const {
     return false;
   }
 
+  DCHECK(probability >= 0 && probability <= 1);
   return generator_.RandDouble() < probability;
+}
+
+void MetricsSubSampler::Reseed() {
+  generator_ = InsecureRandomGenerator();
 }
 
 MetricsSubSampler::ScopedAlwaysSampleForTesting::
@@ -206,6 +217,14 @@ MetricsSubSampler::ScopedNeverSampleForTesting::~ScopedNeverSampleForTesting() {
   DCHECK(!g_subsampling_always_sample);
   DCHECK(g_subsampling_never_sample);
   g_subsampling_never_sample.store(false, std::memory_order_relaxed);
+}
+
+bool ShouldRecordSubsampledMetric(double probability) {
+  return GetSharedSubsampler()->ShouldSample(probability);
+}
+
+void ReseedSharedMetricsSubsampler() {
+  GetSharedSubsampler()->Reseed();
 }
 
 }  // namespace base

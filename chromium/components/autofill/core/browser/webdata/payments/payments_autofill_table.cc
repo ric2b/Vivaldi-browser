@@ -14,6 +14,7 @@
 #include <set>
 #include <string_view>
 #include <utility>
+#include <variant>
 #include <vector>
 
 #include "base/check.h"
@@ -34,14 +35,14 @@
 #include "base/uuid.h"
 #include "components/autofill/core/browser/autofill_type.h"
 #include "components/autofill/core/browser/data_manager/personal_data_manager.h"
-#include "components/autofill/core/browser/data_model/autofill_offer_data.h"
-#include "components/autofill/core/browser/data_model/autofill_wallet_usage_data.h"
-#include "components/autofill/core/browser/data_model/bank_account.h"
-#include "components/autofill/core/browser/data_model/credit_card.h"
-#include "components/autofill/core/browser/data_model/credit_card_cloud_token_data.h"
-#include "components/autofill/core/browser/data_model/iban.h"
-#include "components/autofill/core/browser/data_model/payment_instrument.h"
-#include "components/autofill/core/browser/data_model/payments_metadata.h"
+#include "components/autofill/core/browser/data_model/payments/autofill_offer_data.h"
+#include "components/autofill/core/browser/data_model/payments/autofill_wallet_usage_data.h"
+#include "components/autofill/core/browser/data_model/payments/bank_account.h"
+#include "components/autofill/core/browser/data_model/payments/credit_card.h"
+#include "components/autofill/core/browser/data_model/payments/credit_card_cloud_token_data.h"
+#include "components/autofill/core/browser/data_model/payments/iban.h"
+#include "components/autofill/core/browser/data_model/payments/payment_instrument.h"
+#include "components/autofill/core/browser/data_model/payments/payments_metadata.h"
 #include "components/autofill/core/browser/field_type_utils.h"
 #include "components/autofill/core/browser/field_types.h"
 #include "components/autofill/core/browser/payments/payments_customer_data.h"
@@ -375,7 +376,7 @@ VirtualCardUsageData GetVirtualCardUsageDataFromStatement(sql::Statement& s) {
   int index = 0;
   std::string id = s.ColumnString(index++);
   int64_t instrument_id = s.ColumnInt64(index++);
-  std::string merchant_domain = s.ColumnString(index++);
+  std::string_view merchant_domain = s.ColumnStringView(index++);
   std::u16string last_four = s.ColumnString16(index++);
 
   return {VirtualCardUsageData::UsageDataId(id),
@@ -412,7 +413,7 @@ std::u16string DecryptU16StringFromColumn(
 
 std::unique_ptr<CreditCard> CreditCardFromStatement(
     sql::Statement& card_statement,
-    std::optional<std::reference_wrapper<sql::Statement>> cvc_statement,
+    base::optional_ref<sql::Statement> cvc_statement,
     const os_crypt_async::Encryptor& encryptor) {
   auto credit_card = std::make_unique<CreditCard>();
 
@@ -439,9 +440,9 @@ std::unique_ptr<CreditCard> CreditCardFromStatement(
   // Only set cvc if we retrieve cvc from local_stored_cvc table.
   if (cvc_statement) {
     credit_card->set_cvc(
-        DecryptU16StringFromColumn(cvc_statement.value(), 0, encryptor));
+        DecryptU16StringFromColumn(*cvc_statement, 0, encryptor));
     credit_card->set_cvc_modification_date(
-        base::Time::FromTimeT(cvc_statement->get().ColumnInt64(1)));
+        base::Time::FromTimeT(cvc_statement->ColumnInt64(1)));
   }
   return credit_card;
 }
@@ -867,11 +868,7 @@ std::unique_ptr<CreditCard> PaymentsAutofillTable::GetCreditCard(
 
   bool has_cvc = cvc_statement.Step();
   return CreditCardFromStatement(
-      card_statement,
-      has_cvc
-          ? std::optional<std::reference_wrapper<sql::Statement>>{cvc_statement}
-          : std::nullopt,
-      *encryptor());
+      card_statement, has_cvc ? &cvc_statement : nullptr, *encryptor());
 }
 
 bool PaymentsAutofillTable::GetCreditCards(
@@ -968,9 +965,9 @@ bool PaymentsAutofillTable::GetServerCreditCards(
     card->set_virtual_card_enrollment_type(
         static_cast<CreditCard::VirtualCardEnrollmentType>(
             s.ColumnInt(index++)));
-    card->set_card_art_url(GURL(s.ColumnString(index++)));
+    card->set_card_art_url(GURL(s.ColumnStringView(index++)));
     card->set_product_description(s.ColumnString16(index++));
-    card->set_product_terms_url(GURL(s.ColumnString(index++)));
+    card->set_product_terms_url(GURL(s.ColumnStringView(index++)));
     if (base::FeatureList::IsEnabled(
             features::kAutofillEnableCardInfoRuntimeRetrieval)) {
       card->set_card_info_retrieval_enrollment_state(
@@ -1312,7 +1309,7 @@ bool PaymentsAutofillTable::GetServerIbans(std::vector<std::unique_ptr<Iban>>& i
   while (s.Step()) {
     int index = 0;
     int64_t instrument_id = 0;
-    if (!base::StringToInt64(s.ColumnString(index++), &instrument_id)) {
+    if (!base::StringToInt64(s.ColumnStringView(index++), &instrument_id)) {
       continue;
     }
     std::unique_ptr<Iban> iban =
@@ -1467,7 +1464,7 @@ bool PaymentsAutofillTable::GetAutofillOffers(
     std::string offer_reward_amount = s.ColumnString(index++);
     base::Time expiry = base::Time::FromDeltaSinceWindowsEpoch(
         base::Milliseconds(s.ColumnInt64(index++)));
-    GURL offer_details_url = GURL(s.ColumnString(index++));
+    GURL offer_details_url = GURL(s.ColumnStringView(index++));
     std::string promo_code = s.ColumnString(index++);
     std::string value_prop_text = s.ColumnString(index++);
     std::string see_details_text = s.ColumnString(index++);
@@ -1633,24 +1630,24 @@ bool PaymentsAutofillTable::SetCreditCardBenefits(
   }
 
   for (const CreditCardBenefit& credit_card_benefit : credit_card_benefits) {
-    if (!absl::visit([](const auto& a) { return a.IsValidForWriteFromSync(); },
-                     credit_card_benefit)) {
+    if (!std::visit([](const auto& a) { return a.IsValidForWriteFromSync(); },
+                    credit_card_benefit)) {
       continue;
     }
-    const CreditCardBenefitBase& benefit_base = absl::visit(
+    const CreditCardBenefitBase& benefit_base = std::visit(
         [](const auto& a) -> const CreditCardBenefitBase& { return a; },
         credit_card_benefit);
 
     int benefit_type =
-        absl::visit(base::Overloaded{
-                        // WARNING: Do not renumber, since the identifiers are
-                        // stored in the database.
-                        [](const CreditCardFlatRateBenefit&) { return 0; },
-                        [](const CreditCardCategoryBenefit&) { return 1; },
-                        [](const CreditCardMerchantBenefit&) { return 2; },
-                        // Next free benefit type: 3.
-                    },
-                    credit_card_benefit);
+        std::visit(base::Overloaded{
+                       // WARNING: Do not renumber, since the identifiers are
+                       // stored in the database.
+                       [](const CreditCardFlatRateBenefit&) { return 0; },
+                       [](const CreditCardCategoryBenefit&) { return 1; },
+                       [](const CreditCardMerchantBenefit&) { return 2; },
+                       // Next free benefit type: 3.
+                   },
+                   credit_card_benefit);
 
     // Insert new card benefit data.
     sql::Statement insert_benefit;
@@ -1663,7 +1660,7 @@ bool PaymentsAutofillTable::SetCreditCardBenefits(
                              *benefit_base.linked_card_instrument_id());
     insert_benefit.BindInt(index++, benefit_type);
     insert_benefit.BindInt(
-        index++, base::to_underlying(absl::visit(
+        index++, base::to_underlying(std::visit(
                      base::Overloaded{
                          [](const CreditCardCategoryBenefit& a) {
                            return a.benefit_category();
@@ -1683,7 +1680,7 @@ bool PaymentsAutofillTable::SetCreditCardBenefits(
 
     // Insert merchant domains linked with the benefit.
     if (const auto* merchant_benefit =
-            absl::get_if<CreditCardMerchantBenefit>(&credit_card_benefit)) {
+            std::get_if<CreditCardMerchantBenefit>(&credit_card_benefit)) {
       for (const url::Origin& domain : merchant_benefit->merchant_domains()) {
         sql::Statement insert_benefit_merchant_domain;
         InsertBuilder(db(), insert_benefit_merchant_domain,
@@ -2225,7 +2222,7 @@ PaymentsAutofillTable::GetMerchantDomainsForBenefitId(
                 "WHERE benefit_id = ?");
   s.BindString(0, *benefit_id);
   while (s.Step()) {
-    merchant_domains.insert(url::Origin::Create(GURL(s.ColumnString(0))));
+    merchant_domains.insert(url::Origin::Create(GURL(s.ColumnStringView(0))));
   }
   return merchant_domains;
 }

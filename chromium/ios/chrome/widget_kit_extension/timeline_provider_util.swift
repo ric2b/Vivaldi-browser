@@ -10,19 +10,20 @@ struct ConfigureWidgetEntry: TimelineEntry {
   let date: Date
   let isPreview: Bool
   let avatar: Image?
+  let gaiaID: String?
 }
 
 struct Provider: TimelineProvider {
   typealias Entry = ConfigureWidgetEntry
   func placeholder(in context: Context) -> Entry {
-    Entry(date: Date(), isPreview: true, avatar: nil)
+    Entry(date: Date(), isPreview: true, avatar: nil, gaiaID: nil)
   }
 
   func getSnapshot(
     in context: Context,
     completion: @escaping (Entry) -> Void
   ) {
-    let entry = Entry(date: Date(), isPreview: context.isPreview, avatar: nil)
+    let entry = Entry(date: Date(), isPreview: context.isPreview, avatar: nil, gaiaID: nil)
     completion(entry)
   }
 
@@ -30,7 +31,7 @@ struct Provider: TimelineProvider {
     in context: Context,
     completion: @escaping (Timeline<Entry>) -> Void
   ) {
-    let entry = Entry(date: Date(), isPreview: context.isPreview, avatar: nil)
+    let entry = Entry(date: Date(), isPreview: context.isPreview, avatar: nil, gaiaID: nil)
     let timeline = Timeline(entries: [entry], policy: .never)
     completion(timeline)
   }
@@ -42,18 +43,23 @@ struct Provider: TimelineProvider {
     typealias Entry = ConfigureWidgetEntry
 
     func placeholder(in: Self.Context) -> Entry {
-      Entry(date: Date(), isPreview: true, avatar: nil)
+      Entry(date: Date(), isPreview: true, avatar: nil, gaiaID: nil)
     }
-    func snapshot(for configuration: SelectProfileIntent, in context: Context) async -> Entry {
-      let avatar: Image? = configuration.avatarForProfile(profile: configuration.profile)
-      return Entry(date: Date(), isPreview: context.isPreview, avatar: avatar)
+    func snapshot(for configuration: SelectAccountIntent, in context: Context) async -> Entry {
+      let avatar: Image? = configuration.avatar()
+      let gaiaID: String? = configuration.gaia()
+
+      return Entry(date: Date(), isPreview: context.isPreview, avatar: avatar, gaiaID: gaiaID)
     }
-    func timeline(for configuration: SelectProfileIntent, in context: Context) async -> Timeline<
+    func timeline(for configuration: SelectAccountIntent, in context: Context) async -> Timeline<
       Entry
     > {
-      let avatar: Image? = configuration.avatarForProfile(profile: configuration.profile)
+      let avatar: Image? = configuration.avatar()
+      let gaiaID: String? = configuration.gaia()
       return Timeline(
-        entries: [Entry(date: Date(), isPreview: context.isPreview, avatar: avatar)], policy: .never
+        entries: [
+          Entry(date: Date(), isPreview: context.isPreview, avatar: avatar, gaiaID: gaiaID)
+        ], policy: .never
       )
     }
 

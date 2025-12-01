@@ -49,13 +49,6 @@ void BookmarkProvider::Start(const AutocompleteInput& input,
   TRACE_EVENT0("omnibox", "BookmarkProvider::Start");
   matches_.clear();
 
-#if defined(VIVALDI_BUILD)
-  PrefService* prefs = client_->GetPrefs();
-  if (!prefs->GetBoolean(vivaldiprefs::kAddressBarOmniboxBookmarks)) {
-    return;
-  }
-#endif
-
   if (input.IsZeroSuggest() || input.text().empty()) {
     return;
   }
@@ -108,7 +101,7 @@ void BookmarkProvider::DoAutocomplete(const AutocompleteInput& input) {
   // complete details of how searches are performed against the user's
   // bookmarks.
   std::vector<TitledUrlMatch> matches = bookmark_model_->GetBookmarksMatching(
-      adjusted_input.text(), kMaxBookmarkMatches, matching_algorithm);
+      adjusted_input.text(), kMaxBookmarkMatches, matching_algorithm, true);
 
   if (matches.empty())
     return;  // There were no matches.
@@ -300,13 +293,17 @@ std::pair<int, int> BookmarkProvider::CalculateBookmarkMatchRelevance(
     return {relevance, /*bookmark_count=*/-1};
   }
 
+#if !defined(VIVALDI_BUILD)
   // Boost the score if the bookmark's URL is referenced by other bookmarks.
   constexpr std::array<int, 4> kURLCountBoost = {0, 75, 125, 150};
+#endif
 
   const size_t url_node_count = bookmark_model_->GetNodesByURL(url).size();
+#if !defined(VIVALDI_BUILD)
   DCHECK_GE(std::min(std::size(kURLCountBoost), url_node_count), 1U);
   relevance +=
       kURLCountBoost[std::min(kURLCountBoost.size(), url_node_count) - 1];
+#endif
   relevance = std::min(kMaxBookmarkScore, relevance);
   return {relevance, url_node_count};
 }

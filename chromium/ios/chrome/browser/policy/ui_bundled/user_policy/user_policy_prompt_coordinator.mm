@@ -14,6 +14,7 @@
 #import "ios/chrome/browser/shared/ui/elements/activity_overlay_coordinator.h"
 #import "ios/chrome/browser/signin/model/authentication_service.h"
 #import "ios/chrome/browser/signin/model/authentication_service_factory.h"
+#import "ios/chrome/browser/signin/model/identity_manager_factory.h"
 #import "ios/chrome/common/ui/confirmation_alert/confirmation_alert_action_handler.h"
 
 namespace {
@@ -43,15 +44,17 @@ constexpr CGFloat kHalfSheetCornerRadius = 20;
 // Returns the domain of the administrator hosting the primary account.
 // Returns an empty string if the account isn't managed.
 - (NSString*)managedDomain {
-  return base::SysUTF16ToNSString(HostedDomainForPrimaryAccount(self.browser));
+  signin::IdentityManager* identityManager =
+      IdentityManagerFactory::GetForProfile(self.profile);
+  return base::SysUTF16ToNSString(
+      HostedDomainForPrimaryAccount(identityManager));
 }
 
 // Returns the AuthenticationService of the browser.
 - (AuthenticationService*)authService {
-  ProfileIOS* profile = self.browser->GetProfile();
-  DCHECK(profile);
+  DCHECK(self.profile);
   AuthenticationService* authService =
-      AuthenticationServiceFactory::GetForProfile(profile);
+      AuthenticationServiceFactory::GetForProfile(self.profile);
   return authService;
 }
 
@@ -73,8 +76,8 @@ constexpr CGFloat kHalfSheetCornerRadius = 20;
       self.presentedViewController.sheetPresentationController;
   presentationController.prefersEdgeAttachedInCompactHeight = YES;
   presentationController.detents = @[
-    UISheetPresentationControllerDetent.mediumDetent,
-    UISheetPresentationControllerDetent.largeDetent
+    [UISheetPresentationControllerDetent mediumDetent],
+    [UISheetPresentationControllerDetent largeDetent]
   ];
   presentationController.preferredCornerRadius = kHalfSheetCornerRadius;
 

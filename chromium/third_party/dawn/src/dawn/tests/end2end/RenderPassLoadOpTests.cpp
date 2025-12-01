@@ -143,11 +143,11 @@ class RenderPassLoadOpTests : public DawnTest {
         bufferDescriptor.usage = wgpu::BufferUsage::CopySrc | wgpu::BufferUsage::CopyDst;
         wgpu::Buffer buffer = device.CreateBuffer(&bufferDescriptor);
 
-        wgpu::ImageCopyTexture imageCopyTexture =
-            utils::CreateImageCopyTexture(texture, 0, {0, 0, 0});
-        wgpu::ImageCopyBuffer imageCopyBuffer =
-            utils::CreateImageCopyBuffer(buffer, 0, kTextureBytesPerRowAlignment);
-        encoder.CopyTextureToBuffer(&imageCopyTexture, &imageCopyBuffer, &kTextureSize);
+        wgpu::TexelCopyTextureInfo texelCopyTextureInfo =
+            utils::CreateTexelCopyTextureInfo(texture, 0, {0, 0, 0});
+        wgpu::TexelCopyBufferInfo texelCopyBufferInfo =
+            utils::CreateTexelCopyBufferInfo(buffer, 0, kTextureBytesPerRowAlignment);
+        encoder.CopyTextureToBuffer(&texelCopyTextureInfo, &texelCopyBufferInfo, &kTextureSize);
 
         wgpu::CommandBuffer commandBuffer = encoder.Finish();
         queue.Submit(1, &commandBuffer);
@@ -486,10 +486,6 @@ TEST_P(RenderPassLoadOpTests, LoadOpClearNormalizedFormatsOutOfBound) {
 // Test clearing multiple color attachments with different big signed and unsigned integers can
 // still work correctly.
 TEST_P(RenderPassLoadOpTests, LoadOpClearWithBig32BitIntegralValuesOnMultipleColorAttachments) {
-    // TODO(crbug.com/388318201): investigate: framebuffer incomplete
-    DAWN_SUPPRESS_TEST_IF(IsCompatibilityMode() &&
-                          HasToggleEnabled("gl_force_es_31_and_no_extensions"));
-
     // TODO(383733873): ApplyClearBigIntegerColorValueWithDraw workaround doesn't work with multiple
     // outputs in compat mode.
     DAWN_TEST_UNSUPPORTED_IF(IsD3D11() && IsCompatibilityMode());
@@ -629,7 +625,7 @@ TEST_P(RenderPassLoadOpTests, LoadOpClearWithBig32BitIntegralValuesOnMultipleCol
             expectedDataForRGBA32Float)}};
 
     for (const TestCase& testCase : kTestCases) {
-        if (testCase.size() > GetSupportedLimits().limits.maxColorAttachments) {
+        if (testCase.size() > GetSupportedLimits().maxColorAttachments) {
             continue;
         }
         std::vector<wgpu::Texture> textures;
@@ -669,11 +665,11 @@ TEST_P(RenderPassLoadOpTests, LoadOpClearWithBig32BitIntegralValuesOnMultipleCol
         renderPass.End();
 
         for (uint32_t i = 0; i < testCase.size(); ++i) {
-            wgpu::ImageCopyTexture imageCopyTexture =
-                utils::CreateImageCopyTexture(textures[i], 0, {0, 0, 0});
-            wgpu::ImageCopyBuffer imageCopyBuffer =
-                utils::CreateImageCopyBuffer(outputBuffers[i], 0, kTextureBytesPerRowAlignment);
-            encoder.CopyTextureToBuffer(&imageCopyTexture, &imageCopyBuffer,
+            wgpu::TexelCopyTextureInfo texelCopyTextureInfo =
+                utils::CreateTexelCopyTextureInfo(textures[i], 0, {0, 0, 0});
+            wgpu::TexelCopyBufferInfo texelCopyBufferInfo =
+                utils::CreateTexelCopyBufferInfo(outputBuffers[i], 0, kTextureBytesPerRowAlignment);
+            encoder.CopyTextureToBuffer(&texelCopyTextureInfo, &texelCopyBufferInfo,
                                         &textureDescriptor.size);
         }
 
@@ -740,18 +736,18 @@ TEST_P(RenderPassLoadOpTests, MixedUseOfLoadOpLoadAndLoadOpClearWithBigIntegerVa
         bufferDescriptor.size = 2 * sizeof(uint32_t);
         outputBuffer = device.CreateBuffer(&bufferDescriptor);
 
-        wgpu::ImageCopyTexture imageCopyTextureForLoad =
-            utils::CreateImageCopyTexture(textureForLoad, 0, {0, 0, 0});
-        wgpu::ImageCopyBuffer imageCopyBufferForLoad =
-            utils::CreateImageCopyBuffer(outputBuffer, 0, kTextureBytesPerRowAlignment);
-        encoder.CopyTextureToBuffer(&imageCopyTextureForLoad, &imageCopyBufferForLoad,
+        wgpu::TexelCopyTextureInfo texelCopyTextureInfoForLoad =
+            utils::CreateTexelCopyTextureInfo(textureForLoad, 0, {0, 0, 0});
+        wgpu::TexelCopyBufferInfo texelCopyBufferInfoForLoad =
+            utils::CreateTexelCopyBufferInfo(outputBuffer, 0, kTextureBytesPerRowAlignment);
+        encoder.CopyTextureToBuffer(&texelCopyTextureInfoForLoad, &texelCopyBufferInfoForLoad,
                                     &textureDescriptor.size);
 
-        wgpu::ImageCopyTexture imageCopyTextureForClear =
-            utils::CreateImageCopyTexture(textureForClear, 0, {0, 0, 0});
-        wgpu::ImageCopyBuffer imageCopyBufferForClear = utils::CreateImageCopyBuffer(
+        wgpu::TexelCopyTextureInfo texelCopyTextureInfoForClear =
+            utils::CreateTexelCopyTextureInfo(textureForClear, 0, {0, 0, 0});
+        wgpu::TexelCopyBufferInfo texelCopyBufferInfoForClear = utils::CreateTexelCopyBufferInfo(
             outputBuffer, sizeof(uint32_t), kTextureBytesPerRowAlignment);
-        encoder.CopyTextureToBuffer(&imageCopyTextureForClear, &imageCopyBufferForClear,
+        encoder.CopyTextureToBuffer(&texelCopyTextureInfoForClear, &texelCopyBufferInfoForClear,
                                     &textureDescriptor.size);
 
         wgpu::CommandBuffer commandBuffer = encoder.Finish();

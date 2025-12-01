@@ -7,8 +7,18 @@
 
 #include "include/gpu/graphite/PrecompileContext.h"
 
+#include "src/gpu/graphite/ContextUtils.h"
+#include "src/gpu/graphite/GraphicsPipelineDesc.h"
+#include "src/gpu/graphite/Log.h"
+#include "src/gpu/graphite/RenderPassDesc.h"
+#include "src/gpu/graphite/RendererProvider.h"
 #include "src/gpu/graphite/ResourceProvider.h"
+#include "src/gpu/graphite/RuntimeEffectDictionary.h"
 #include "src/gpu/graphite/SharedContext.h"
+
+#if defined(SK_ENABLE_PRECOMPILE)
+#include "src/gpu/graphite/precompile/SerializationUtils.h"
+#endif
 
 namespace skgpu::graphite {
 
@@ -34,6 +44,74 @@ void PrecompileContext::purgePipelinesNotUsedInMs(std::chrono::milliseconds msNo
     auto purgeTime = skgpu::StdSteadyClock::now() - msNotUsed;
 
     fSharedContext->globalCache()->purgePipelinesNotUsedSince(purgeTime);
+}
+
+void PrecompileContext::reportPipelineStats() {
+    ASSERT_SINGLE_OWNER
+
+    fSharedContext->globalCache()->reportPipelineStats();
+}
+
+bool PrecompileContext::precompile(sk_sp<SkData> serializedPipelineKey) {
+#if defined(SK_ENABLE_PRECOMPILE)
+    auto rtEffectDict = std::make_unique<RuntimeEffectDictionary>();
+
+    GraphicsPipelineDesc pipelineDesc;
+    RenderPassDesc renderPassDesc;
+
+    if (!DataToPipelineDesc(fSharedContext->caps(),
+                            fSharedContext->shaderCodeDictionary(),
+                            serializedPipelineKey.get(),
+                            &pipelineDesc,
+                            &renderPassDesc)) {
+        return false;
+    }
+
+    sk_sp<GraphicsPipeline> pipeline = fResourceProvider->findOrCreateGraphicsPipeline(
+            rtEffectDict.get(),
+            pipelineDesc,
+            renderPassDesc,
+            PipelineCreationFlags::kForPrecompilation);
+    if (!pipeline) {
+        SKGPU_LOG_W("Failed to create GraphicsPipeline in precompile!");
+        return false;
+    }
+
+    SkASSERT(rtEffectDict->empty());
+
+    return true;
+#else
+    return false;
+#endif
+}
+
+std::string PrecompileContext::getPipelineLabel(sk_sp<SkData> serializedPipelineKey) {
+#if defined(SK_ENABLE_PRECOMPILE)
+    GraphicsPipelineDesc pipelineDesc;
+    RenderPassDesc renderPassDesc;
+
+    if (!DataToPipelineDesc(fSharedContext->caps(),
+                            fSharedContext->shaderCodeDictionary(),
+                            serializedPipelineKey.get(),
+                            &pipelineDesc,
+                            &renderPassDesc)) {
+        return "";
+    }
+
+    const RendererProvider* rendererProvider = fSharedContext->rendererProvider();
+
+    const RenderStep* renderStep = rendererProvider->lookup(pipelineDesc.renderStepID());
+    if (!renderStep) {
+        return "";
+    }
+
+    return GetPipelineLabel(fSharedContext->shaderCodeDictionary(),
+                            renderPassDesc,
+                            renderStep,
+                            pipelineDesc.paintParamsID());
+#else
+    return "";
+#endif
 }
 
 

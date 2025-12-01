@@ -20,6 +20,7 @@
           a zrušte zaškrtnutí políčka Použít pro síť LAN proxy server.</translation>
 <translation id="4622039161600275920">Tato stránka je blokována prohlížečem Chromium</translation>
 <translation id="48558539577516920">V nastavení firewallu a antivirového programu povolte prohlížeči Chromium přístup k síti.</translation>
+<translation id="4949828774841497663">Přejděte do části Aplikace &gt; Nastavení systému &gt; Síť, vyberte aktivní síť, klikněte na tlačítko Podrobnosti… a zrušte výběr všech proxy serverů, které jsou vybrány.</translation>
 <translation id="580822234363523061">Přejděte do
           nabídky Chromium &gt;
           <ph name="SETTINGS_TITLE" />
@@ -35,9 +36,6 @@
  pokračovat v párování. <ph name="IDS_BLUETOOTH_DEVICE_CHOOSER_AUTHORIZE_BLUETOOTH_LINK" /></translation>
 <translation id="7681937895330411637">Chromium staví na open source projektu <ph name="BEGIN_LINK_CHROMIUM" />Chromium<ph name="END_LINK_CHROMIUM" />.</translation>
 <translation id="7861509383340276692">Přejděte do nabídky Chromium &gt; <ph name="SETTINGS_TITLE" /> &gt; <ph name="ADVANCED_TITLE" /> a zrušte výběr možnosti <ph name="NO_PREFETCH_DESCRIPTION" />. Pokud to však problém nevyřeší, doporučujeme vám tuto možnost znovu vybrat (za účelem zlepšení výkonu).</translation>
-<translation id="8187289872471304532">Přejděte do nabídky
-          Aplikace &gt; Nastavení systému &gt; Síť &gt; Rozšířená nastavení &gt; Servery proxy
-          a zrušte výběr všech vybraných serverů proxy.</translation>
 <translation id="8597726643333341451">Prohlížíte si zabezpečenou stránku Chrome for Testing</translation>
 <translation id="8684913864886094367">Aplikace Chromium nebyla řádně ukončena.</translation>
 </translationbundle>

@@ -11,7 +11,7 @@
 
 namespace openscreen::osp {
 
-quic::QuicIpAddress ToQuicIpAddress(const IPAddress& address) {
+quiche::QuicheIpAddress ToQuicheIpAddress(const IPAddress& address) {
   if (address.IsV4()) {
     uint8_t address_8[IPAddress::kV4Size];
     address.CopyToV4(address_8);
@@ -20,7 +20,7 @@ quic::QuicIpAddress ToQuicIpAddress(const IPAddress& address) {
     const in_addr result = {address_32};
     static_assert(sizeof(result) == IPAddress::kV4Size,
                   "Address size mismatch");
-    return quic::QuicIpAddress(result);
+    return quiche::QuicheIpAddress(result);
   }
 
   if (address.IsV6()) {
@@ -28,14 +28,14 @@ quic::QuicIpAddress ToQuicIpAddress(const IPAddress& address) {
     address.CopyToV6(result.s6_addr);
     static_assert(sizeof(result) == IPAddress::kV6Size,
                   "Address size mismatch");
-    return quic::QuicIpAddress(result);
+    return quiche::QuicheIpAddress(result);
   }
 
-  return quic::QuicIpAddress();
+  return quiche::QuicheIpAddress();
 }
 
 quic::QuicSocketAddress ToQuicSocketAddress(const IPEndpoint& endpoint) {
-  return quic::QuicSocketAddress(ToQuicIpAddress(endpoint.address),
+  return quic::QuicSocketAddress(ToQuicheIpAddress(endpoint.address),
                                  endpoint.port);
 }
 

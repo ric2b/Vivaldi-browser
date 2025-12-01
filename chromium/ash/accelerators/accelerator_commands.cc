@@ -34,11 +34,13 @@
 #include "ash/public/cpp/annotator/annotator_controller_base.h"
 #include "ash/public/cpp/app_types_util.h"
 #include "ash/public/cpp/assistant/assistant_state.h"
+#include "ash/public/cpp/capture_mode/capture_mode_api.h"
 #include "ash/public/cpp/new_window_delegate.h"
 #include "ash/public/cpp/system/toast_data.h"
 #include "ash/quick_insert/quick_insert_controller.h"
 #include "ash/root_window_controller.h"
 #include "ash/rotator/window_rotation.h"
+#include "ash/scanner/scanner_metrics.h"
 #include "ash/session/session_controller_impl.h"
 #include "ash/shelf/shelf.h"
 #include "ash/shelf/shelf_focus_cycler.h"
@@ -683,6 +685,11 @@ bool CanStopScreenRecording() {
   return CaptureModeController::Get()->is_recording_in_progress();
 }
 
+bool CanStartSunfishSession() {
+  return CanShowSunfishOrScannerUi() &&
+         !Shell::Get()->session_controller()->IsUserSessionBlocked();
+}
+
 bool CanSwapPrimaryDisplay() {
   return display::Screen::GetScreen()->GetNumDisplays() > 1;
 }
@@ -1258,6 +1265,12 @@ void ShowShortcutCustomizationApp() {
 
 void ShowTaskManager() {
   NewWindowDelegate::GetInstance()->ShowTaskManager();
+}
+
+void StartSunfishSession() {
+  RecordScannerFeatureUserState(
+      ScannerFeatureUserState::kSunfishSessionStartedFromKeyboardShortcut);
+  CaptureModeController::Get()->StartSunfishSession();
 }
 
 void StopScreenRecording() {

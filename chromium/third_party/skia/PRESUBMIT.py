@@ -497,28 +497,44 @@ def _CheckBannedAPIs(input_api, output_api):
     (r'std::mutex', 'SkMutex'),
     (r'std::shared_mutex', 'SkSharedMutex'),
     (r'std::stop_token', ''),
-    (r'std::thread', '', ['tests/*']),
+    (r'std::thread', '', ['^tests/']),
 
     # We used to have separate symbols for this, but coalesced them to make the
     # Bazel build easier.
     (r'GR_TEST_UTILS', 'GPU_TEST_UTILS'),
     (r'GRAPHITE_TEST_UTILS', 'GPU_TEST_UTILS'),
-  ]
 
-  # Our Bazel rules have special copies of our cc_library rules with GPU_TEST_UTILS
-  # set. If GPU_TEST_UTILS is used outside of those files in Skia proper, the build
-  # will break/crash in mysterious ways (because files may get compiled in multiple
-  # conflicting ways as a result of the define being inconsistently set).
-  allowed_test_util_paths = [
-    'include/core/SkTypes.h',
-    'include/gpu/',
-    'include/private/gpu/',
-    'src/gpu/ganesh',
-    'src/gpu/graphite',
-    'tests/',
-    'tools/',
+    # This form of multi line string can unintentionally cause Skia to ship with
+    # extraneous spaces and newlines in its SkSL (or generated) code, which slightly
+    # increases code size and parse time. Instead, use normal quotes and C++'s
+    # auto-concatenation
+    #    "this string"
+    #       "and this"
+    #    "string will be joined without extra spaces"
+    (r'R"\(', 'implied string concatenation',
+       ['^bench/',
+        '^docs/',
+        '^gm/',
+        '^modules/skottie/tests/',
+        '^src/sksl/lex/Main.cpp',
+        '^tests/',
+        '^tools/']
+     ),
+
+    # Our Bazel rules have special copies of our cc_library rules with GPU_TEST_UTILS
+    # set. If GPU_TEST_UTILS is used outside of those files in Skia proper, the build
+    # will break/crash in mysterious ways (because files may get compiled in multiple
+    # conflicting ways as a result of the define being inconsistently set).
+    (r'GPU_TEST_UTILS', 'use only in GPU code and tests',
+      ['^include/core/SkTypes.h',
+       '^include/gpu/',
+       '^include/private/gpu/',
+       '^src/gpu/ganesh',
+       '^src/gpu/graphite',
+       '^tests/',
+       '^tools/']
+     ),
   ]
-  gpu_test_utils_re = input_api.re.compile('GPU_TEST_UTILS')
 
   # These defines are either there or not, and using them with just an #if is a
   # subtle, frustrating bug.
@@ -558,16 +574,6 @@ def _CheckBannedAPIs(input_api, output_api):
           else:
             errors.append('%s:%s: Instead of %s, please use %s.' % (
                 affected_filepath, line_num, match.group(), replacement))
-      # Now to an explicit search for use of GPU_TEST_UTILS outside of
-      # files that our Bazel rules that define to be set.
-      match = gpu_test_utils_re.search(line)
-      if match:
-        for exc in allowed_test_util_paths:
-          if affected_filepath.startswith(exc):
-            break
-        else:
-          errors.append('%s:%s: Only GPU code should use GPU_TEST_UTILS.' % (
-              affected_filepath, line_num))
 
   if errors:
     return [output_api.PresubmitError('\n'.join(errors))]

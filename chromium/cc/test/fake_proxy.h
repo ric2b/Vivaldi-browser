@@ -45,6 +45,7 @@ class FakeProxy : public Proxy {
   void StopDeferringCommits(PaintHoldingCommitTrigger) override {}
   bool IsDeferringCommits() const override;
   bool CommitRequested() const override;
+  void SetShouldThrottleFrameRate(bool flag) override {}
   void Start() override {}
   void Stop() override {}
   void QueueImageDecode(int request_id, const DrawImage& image) override;
@@ -62,6 +63,8 @@ class FakeProxy : public Proxy {
   void SetSourceURL(ukm::SourceId source_id, const GURL& url) override {}
   void SetUkmSmoothnessDestination(
       base::WritableSharedMemoryMapping ukm_smoothness_data) override {}
+  void SetUkmDroppedFramesDestination(
+      base::WritableSharedMemoryMapping ukm_dropped_frames_data) override {}
   void SetRenderFrameObserver(
       std::unique_ptr<RenderFrameMetadataObserver> observer) override {}
   void CompositeImmediatelyForTest(base::TimeTicks frame_begin_time,

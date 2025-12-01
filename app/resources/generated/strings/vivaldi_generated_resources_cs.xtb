@@ -170,6 +170,7 @@
 <translation id="3838085852053358637">Rozšíření se nepodařilo načíst</translation>
 <translation id="383891835335927981">Žádné stránky nebyly přiblížené ani oddálené</translation>
 <translation id="385051799172605136">Zpět</translation>
+<translation id="3858860766373142691">Název</translation>
 <translation id="3861977424605124250">Zobrazit při spuštění</translation>
 <translation id="3867944738977021751">Pole certifikátu</translation>
 <translation id="3905761538810670789">Opravit aplikaci</translation>
@@ -415,8 +416,12 @@ Svůj soubor klíče uchovávejte na bezpečném místě. Budete jej potřebovat
 <translation id="8004582292198964060">Prohlížeč</translation>
 <translation id="8018313076035239964">Určete, jaký obsah vám webové stránky mohou zobrazovat a jaké údaje mohou během vaší návštěvy využívat</translation>
 <translation id="8071432093239591881">Vytisknout jako obrázek</translation>
+<translation id="8118448640060360549">{EXTENSIONS_COUNT,plural,
+        =1 {# záložka}
+        other {# záložky/ek}}</translation>
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" /> kB</translation>
-<translation id="8212008074015601248">{NUM_DOWNLOAD,plural, =1{Probíhá stahování}few{Probíhají stahování}many{Probíhají stahování} other {Probíhají stahování}}</translation>
+<translation id="8212008074015601248">{NUM_DOWNLOAD, plural,
+        =1 {Probíhá stahování} other {Probíhá stahování}}</translation>
 <translation id="8230134520748321204">Uložit heslo pro <ph name="ORIGIN" />?</translation>
 <translation id="8248050856337841185">&amp;Vložit</translation>
 <translation id="8261378640211443080">Toto rozšíření není uvedeno na webu <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> a mohlo být přidáno bez vašeho vědomí.</translation>

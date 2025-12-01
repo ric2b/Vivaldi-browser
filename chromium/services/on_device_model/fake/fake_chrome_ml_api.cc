@@ -6,6 +6,7 @@
 
 #include "base/files/file.h"
 #include "base/files/file_util.h"
+#include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
 #include "services/on_device_model/ml/chrome_ml_api.h"
@@ -38,13 +39,17 @@ std::string PieceToString(const ml::InputPiece& piece) {
   NOTREACHED();
 }
 
-int g_active_non_clone_sessions = 0;
+std::string ReadFile(PlatformFile api_file) {
+  base::File file(static_cast<base::PlatformFile>(api_file));
+  std::vector<uint8_t> contents;
+  contents.resize(file.GetLength());
+  if (!file.ReadAndCheck(0, contents)) {
+    return std::string();
+  }
+  return std::string(contents.begin(), contents.end());
+}
 
 }  // namespace
-
-int GetActiveNonCloneSessions() {
-  return g_active_non_clone_sessions;
-}
 
 void InitDawnProcs(const DawnProcTable& procs) {}
 
@@ -64,42 +69,43 @@ bool QueryGPUAdapter(void (*adapter_callback_fn)(WGPUAdapter adapter,
   return false;
 }
 
+bool GetCapabilities(PlatformFile file, ChromeMLCapabilities& capabilities) {
+  std::string contents = ReadFile(file);
+  capabilities.image_input = contents.find("image") != std::string::npos;
+  capabilities.audio_input = contents.find("audio") != std::string::npos;
+  return true;
+}
+
 struct FakeModelInstance {
-  ml::ModelBackendType backend_type_;
+  ml::ModelBackendType backend_type;
   ml::ModelPerformanceHint performance_hint;
-  std::string model_data_;
+  std::string model_data;
 };
 
 struct FakeSessionInstance {
-  std::string adaptation_data_;
-  std::vector<std::string> context_;
+  std::string adaptation_data;
+  std::optional<uint32_t> adaptation_file_id;
+  std::vector<std::string> context;
   bool cloned;
   bool enable_image_input;
+  bool enable_audio_input;
+  uint32_t top_k;
+  float temperature;
 };
 
 struct FakeTsModelInstance {
-  std::string model_data_;
+  std::string model_data;
 };
 
 struct FakeCancelInstance {
   bool cancelled = false;
 };
 
-std::string ReadFile(PlatformFile api_file) {
-  base::File file(static_cast<base::PlatformFile>(api_file));
-  std::vector<uint8_t> contents;
-  contents.resize(file.GetLength());
-  if (!file.ReadAndCheck(0, contents)) {
-    return std::string();
-  }
-  return std::string(contents.begin(), contents.end());
-}
-
 ChromeMLModel SessionCreateModel(const ChromeMLModelDescriptor* descriptor,
                                  uintptr_t context,
                                  ChromeMLScheduleFn schedule) {
   return reinterpret_cast<ChromeMLModel>(new FakeModelInstance{
-      .backend_type_ = descriptor->backend_type,
+      .backend_type = descriptor->backend_type,
       .performance_hint = descriptor->performance_hint,
   });
 }
@@ -118,20 +124,23 @@ ChromeMLSafetyResult ClassifyTextSafety(ChromeMLModel model,
 
 ChromeMLSession CreateSession(ChromeMLModel model,
                               const ChromeMLAdaptationDescriptor* descriptor) {
-  g_active_non_clone_sessions++;
   auto* model_instance = reinterpret_cast<FakeModelInstance*>(model);
   auto* instance = new FakeSessionInstance{};
   if (descriptor) {
     instance->enable_image_input = descriptor->enable_image_input;
+    instance->enable_audio_input = descriptor->enable_audio_input;
+    instance->top_k = descriptor->top_k;
+    instance->temperature = descriptor->temperature;
     if (descriptor->model_data) {
-      if (model_instance->backend_type_ == ml::ModelBackendType::kGpuBackend) {
-        instance->adaptation_data_ =
+      instance->adaptation_file_id = descriptor->model_data->file_id;
+      if (model_instance->backend_type == ml::ModelBackendType::kGpuBackend) {
+        instance->adaptation_data =
             ReadFile(descriptor->model_data->weights_file);
-      } else if (model_instance->backend_type_ ==
+      } else if (model_instance->backend_type ==
                  ml::ModelBackendType::kApuBackend) {
         base::ReadFileToString(
             base::FilePath::FromUTF8Unsafe(descriptor->model_data->model_path),
-            &instance->adaptation_data_);
+            &instance->adaptation_data);
       }
     }
   }
@@ -141,18 +150,19 @@ ChromeMLSession CreateSession(ChromeMLModel model,
 ChromeMLSession CloneSession(ChromeMLSession session) {
   auto* instance = reinterpret_cast<FakeSessionInstance*>(session);
   return reinterpret_cast<ChromeMLSession>(new FakeSessionInstance{
-      .adaptation_data_ = instance->adaptation_data_,
-      .context_ = instance->context_,
+      .adaptation_data = instance->adaptation_data,
+      .adaptation_file_id = instance->adaptation_file_id,
+      .context = instance->context,
       .cloned = true,
       .enable_image_input = instance->enable_image_input,
+      .enable_audio_input = instance->enable_audio_input,
+      .top_k = instance->top_k,
+      .temperature = instance->temperature,
   });
 }
 
 void DestroySession(ChromeMLSession session) {
   auto* instance = reinterpret_cast<FakeSessionInstance*>(session);
-  if (!instance->cloned) {
-    g_active_non_clone_sessions--;
-  }
   delete instance;
 }
 
@@ -175,7 +185,8 @@ bool SessionExecuteModel(ChromeMLSession session,
 
     CHECK(!std::holds_alternative<SkBitmap>(piece) ||
           instance->enable_image_input);
-
+    CHECK(!std::holds_alternative<ml::AudioBuffer>(piece) ||
+          instance->enable_audio_input);
     text += PieceToString(piece);
   }
   if (options->token_offset > 0) {
@@ -186,7 +197,7 @@ bool SessionExecuteModel(ChromeMLSession session,
   }
 
   if (!text.empty()) {
-    instance->context_.push_back(text);
+    instance->context.push_back(text);
   }
   if (options->context_saved_fn) {
     (*options->context_saved_fn)(static_cast<int>(text.size()));
@@ -213,16 +224,26 @@ bool SessionExecuteModel(ChromeMLSession session,
       ml::ModelPerformanceHint::kFastestInference) {
     OutputChunk("Fastest inference\n");
   }
-  if (!instance->adaptation_data_.empty()) {
-    OutputChunk("Adaptation: " + instance->adaptation_data_ + "\n");
+  if (!instance->adaptation_data.empty()) {
+    std::string adaptation_str = "Adaptation: " + instance->adaptation_data;
+    if (instance->adaptation_file_id) {
+      adaptation_str +=
+          " (" + base::NumberToString(*instance->adaptation_file_id) + ")";
+    }
+    OutputChunk(adaptation_str + "\n");
   }
-  if (!instance->context_.empty()) {
-    const std::string last = instance->context_.back();
-    instance->context_.pop_back();
-    for (const std::string& context : instance->context_) {
+
+  // Only include sampling params if they're not the respective default values.
+  if (instance->top_k != 1 || instance->temperature != 0) {
+    OutputChunk(base::StrCat(
+        {"TopK: ", base::NumberToString(instance->top_k),
+         ", Temp: ", base::NumberToString(instance->temperature), "\n"}));
+  }
+
+  if (!instance->context.empty()) {
+    for (const std::string& context : instance->context) {
       OutputChunk("Context: " + context + "\n");
     }
-    OutputChunk("Input: " + last + "\n");
   }
   OutputChunk("");
   return true;
@@ -302,6 +323,7 @@ const ChromeMLAPI g_api = {
     .DestroyModel = &DestroyModel,
     .GetEstimatedPerformance = &GetEstimatedPerformance,
     .QueryGPUAdapter = &QueryGPUAdapter,
+    .GetCapabilities = &GetCapabilities,
     .SetFatalErrorNonGpuFn = &SetFatalErrorNonGpuFn,
 
     .SessionCreateModel = &SessionCreateModel,

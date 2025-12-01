@@ -18,7 +18,7 @@
 
 namespace media {
 
-bool CopyRGBATextureToVideoFrame(
+std::optional<gpu::SyncToken> CopyRGBATextureToVideoFrame(
     viz::RasterContextProvider* provider,
     const gfx::Size& src_size,
     scoped_refptr<gpu::ClientSharedImage> src_shared_image,
@@ -33,7 +33,7 @@ bool CopyRGBATextureToVideoFrame(
   // cannot distinguish between OOP and non-OOP raster based on GrContext().
   if (ri->GetGraphicsResetStatusKHR() != GL_NO_ERROR) {
     DLOG(ERROR) << "Raster context lost.";
-    return false;
+    return std::nullopt;
   }
 
   // With OOP raster, if RGB->YUV conversion is unsupported, the CopySharedImage
@@ -41,10 +41,12 @@ bool CopyRGBATextureToVideoFrame(
   // the client side. Check for support here and early out if it's unsupported.
   if (!provider->ContextCapabilities().supports_rgb_to_yuv_conversion) {
     DVLOG(1) << "RGB->YUV conversion not supported";
-    return false;
+    return std::nullopt;
   }
 
-  ri->WaitSyncTokenCHROMIUM(acquire_sync_token.GetConstData());
+  std::unique_ptr<gpu::RasterScopedAccess> ri_access =
+      src_shared_image->BeginRasterAccess(ri, acquire_sync_token,
+                                          /*readonly=*/true);
 
   auto dst_sync_token = dst_video_frame->acquire_sync_token();
   auto dst_mailbox = dst_video_frame->shared_image()->mailbox();
@@ -67,12 +69,12 @@ bool CopyRGBATextureToVideoFrame(
   // Make access to the `dst_video_frame` wait on copy completion. We also
   // update the ReleaseSyncToken here since it's used when the underlying
   // GpuMemoryBuffer and SharedImage resources are returned to the pool.
-  gpu::SyncToken completion_sync_token;
-  ri->GenUnverifiedSyncTokenCHROMIUM(completion_sync_token.GetData());
+  gpu::SyncToken completion_sync_token =
+      gpu::RasterScopedAccess::EndAccess(std::move(ri_access));
   SimpleSyncTokenClient simple_client(completion_sync_token);
-  dst_video_frame->UpdateAcquireSyncToken(&simple_client);
+  dst_video_frame->UpdateAcquireSyncToken(completion_sync_token);
   dst_video_frame->UpdateReleaseSyncToken(&simple_client);
-  return true;
+  return completion_sync_token;
 }
 
 }  // namespace media

@@ -14,6 +14,7 @@
 <translation id="1454726940098520109">Již nezobrazovat</translation>
 <translation id="1462666970065907900">Opravdu chcete uzavřít toto okno?</translation>
 <translation id="1480046233931937785">Titulky</translation>
+<translation id="1490502035430975848">Zkontrolovat dokument portálu</translation>
 <translation id="1521774566618522728">Aktivní dnes</translation>
 <translation id="1526344461589023948">Při pokusu o uložení stahované aktualizace došlo k chybě. Zkontrolujte, že má váš počítač dostatek volného místa na disku a zkuste to znovu.</translation>
 <translation id="1635542496948266458">Přepnout profily</translation>
@@ -34,9 +35,11 @@
 <translation id="2141974047387702305">Při stahování aktualizačního souboru došlo k chybě. Zkontrolujte své internetové připojení a zkuste to znovu.</translation>
 <translation id="2226825946708954262">⚠ Pokračovat a ztratit údaje</translation>
 <translation id="2339641773402824483">Vyhledávání aktualizací…</translation>
+<translation id="2429571091666452569">Ze seznamu:</translation>
 <translation id="2441056087170876076">Králičí zoubky (Příšerka 2)</translation>
 <translation id="2444387452209867610">Vložit poznámku</translation>
 <translation id="2486841023299517366">Psisko (Zvířena 4)</translation>
+<translation id="2501278716633472235">Přejít zpět</translation>
 <translation id="2612127540243995147">Připraveno k instalaci. Vivaldi bude ukončen a poté opět znovu spuštěn.</translation>
 <translation id="2613387515621326337">Zobrazit stránku s aktualizacemi</translation>
 <translation id="2645477450146475243">Je nám líto, ale nemůžeme získat nastavení prohlížeče Opera, když zrova běží. Pro import těchto nastavení do Vivaldi, uložte vše potřebné a ukončete všechna okna prohlížeče Opera. Pak klepněte na Pokračovat.</translation>
@@ -61,6 +64,7 @@
 <translation id="3259769196742189631">Ověřit správnost HTML zápisu</translation>
 <translation id="3291915639428159043">Automatické přehrávání blokováno</translation>
 <translation id="3302905971452834934">Darebák (Příšerka 1)</translation>
+<translation id="3308738399950580893">reklamy</translation>
 <translation id="3334610655141903168">(nepojmenováno)</translation>
 <translation id="3372505110412186107">Vivaldi <ph name="VERSION" /> je aktuálně nejnovější dostupná verze.</translation>
 <translation id="3383198080133834965">Aplikace je aktuální!</translation>
@@ -71,9 +75,11 @@
 <translation id="3521635864657970829">Opravdu chcete zavřít toto okno?</translation>
 <translation id="3540597690227428180">Jelen (Zvířena 9)</translation>
 <translation id="3542768452570884558">Otevřít odkaz v novém okně</translation>
+<translation id="3586931643579894722">Skrýt podrobnosti</translation>
 <translation id="3588820906588687999">Otevřít obrázek v novém listu</translation>
 <translation id="3601066750251199488">Mimozemšťan (Příšerka 3)</translation>
 <translation id="3620979700683094848">Weby mohou automaticky přehrávat video</translation>
+<translation id="3650023731264842343">Při načítání následující stránky:</translation>
 <translation id="3658651522139217005">Opera GX</translation>
 <translation id="3680031241659195730">Je dostupná nová verze Vivaldi!</translation>
 <translation id="3708982624815781692">Stahování bylo zrušeno.</translation>
@@ -83,6 +89,7 @@
 <translation id="3795800845758778870">Je nám líto, ale nemůžeme získat nastavení prohlížeče Brave, běží-li zrovna. K importování těchto nastavení do Vivaldi, uložte vše potřebné a ukončete všechna okna Brave. Pak klepněte na Pokračovat.</translation>
 <translation id="3822431842304177896">Nový oddělovač</translation>
 <translation id="3832132597516774400">Přímořský soumrak (Krajina 5)</translation>
+<translation id="3894751534882749287">Pokud chcete stránku zobrazit, můžete pro ni změnit úroveň ochrany proti sledování ve vyskakovacím panelu blokování sledování nebo kliknutím na tlačítko Povolit</translation>
 <translation id="3914946330804881301">Importováno z Opery</translation>
 <translation id="3921292902397893431">Vejtaha (Příšerka 8)</translation>
 <translation id="3943857333388298514">Vložit</translation>
@@ -107,6 +114,7 @@
 <translation id="4582480609585453144">Otevřít odkaz v listu na pozadí</translation>
 <translation id="4636708767492582204">Odeslat poštou</translation>
 <translation id="4677434526832593569">Vlk (Zvířena 8)</translation>
+<translation id="4736016046474602958">ochranou proti sledování</translation>
 <translation id="474217410105706308">Ztlumit zvuk listu</translation>
 <translation id="4861715717329665002">Automaticky uložené relace</translation>
 <translation id="4881695831933465202">Otevřít</translation>
@@ -133,9 +141,11 @@
 <translation id="588258955323874662">Celá obrazovka</translation>
 <translation id="5916080360077521750">Je nám líto, ale nemůžeme získat nastavení prohlížeče Chrome, běží-li zrovna. K importování těchto nastavení do Vivaldi, uložte vše potřebné a ukončete všechna okna Chromu. Pak klepněte na Pokračovat.</translation>
 <translation id="6040143037577758943">Zavřít</translation>
+<translation id="6140948187512243695">Zobrazit podrobnosti</translation>
 <translation id="6229528619562190452">Klepněte sem pro aktualizaci Vivaldi.</translation>
 <translation id="6234173136417926046">Použít obrázek jako pozadí úvodní stránky</translation>
 <translation id="6339818817272922368">Místní účet</translation>
+<translation id="6376435169746695498">Načítání této stránky bylo zablokováno protože <ph name="BLOCKER_NAME" /></translation>
 <translation id="6398710281890660037">Zabezpečit můj profil</translation>
 <translation id="6438786710866753178">Jehličnany (Krajina 4)</translation>
 <translation id="6477028720702061455">Vyberte složku s Opera profilem</translation>
@@ -152,6 +162,7 @@
 <translation id="7086554968911045110">Noc ve skalách (Krajina 7)</translation>
 <translation id="7099506190679014195">Povýšení bezpečného úložiště</translation>
 <translation id="7111492742514999492">Větrný mlýn (Krajina 9)</translation>
+<translation id="7113310725918019676">Povolit <ph name="BLOCKED_TYPE" /> z <ph name="DOMAIN" /></translation>
 <translation id="7208252576848052204">Je nám líto, ale nemůžeme získat nastavení prohlížeče Arc, když zrova běží. Pro import těchto nastavení do Vivaldi, uložte vše potřebné a ukončete všechna okna Arc. Pak klepněte na Pokračovat.</translation>
 <translation id="7321500017121629018">Aktivní včera</translation>
 <translation id="7337881442233988129">Chromium</translation>
@@ -167,12 +178,13 @@
 <translation id="8027581147000338959">Otevřít v novém okně</translation>
 <translation id="8044382196220116469">Nepovolovat webům automaticky přehrávat video</translation>
 <translation id="8099620695029051217">Kopírovat adresu stránky</translation>
+<translation id="8119307142152921512">sledovače a reklamy</translation>
 <translation id="8197810018650377191">Přidat stránku do záložek</translation>
 <translation id="8261506727792406068">Odstranit</translation>
-<translation id="8263047843452521549">Prozkoumat pracovní proces služby</translation>
 <translation id="8331671104904436324">Otevřít v listu na pozadí</translation>
 <translation id="8373293945112511707">Vodopád (Krajina 1)</translation>
 <translation id="8388552048012645975">Stahování aktualizace…</translation>
+<translation id="8392904568172593155">Bez parametrů</translation>
 <translation id="8427094907586191051">Savana (Krajina 17)</translation>
 <translation id="8439034818057146672">Nová verze Vivaldi je připravena k instalaci.</translation>
 <translation id="8446668873108041390">Vykonávání JavaScriptu skrze AppleScript je vypnuto. JavaScript z Apple událostí můžete povolit v Nastavení → Soukromí → Apple události.</translation>
@@ -183,14 +195,15 @@
 <translation id="8651348004684669199">Přidat aktivní list</translation>
 <translation id="8669345741879513971">Zaskočené prasítko (Příšerka 10)</translation>
 <translation id="867544375504146191">Yandex</translation>
-<translation id="8689295374912158752">Prozkoumat portal-document</translation>
 <translation id="875142999698251063">Ukončit</translation>
 <translation id="8768970203213061953">Americká poušť (Krajina 14)</translation>
 <translation id="8773635261052182196">Již dále neuvidíte tato upozornění. Znovu si je můžete zapnout v nastavení Vivaldi.</translation>
 <translation id="8774017153185436870">Weby mohou automaticky přehrávat video</translation>
 <translation id="8813277370772331957">Připomenout později</translation>
+<translation id="8837256239226739065">Zkontrolujte pracující služby na pozadí</translation>
 <translation id="8894900864683381599">Přidat odkaz jako webový panel</translation>
 <translation id="8912720443398351457">Opravdu chcete ukončit Vivaldi?</translation>
+<translation id="8940028675168378100">Zablokováno <ph name="BLOCKER_NAME" /></translation>
 <translation id="8947109330183116400">Vyberte HTML soubor se záložkami</translation>
 <translation id="9017566390391482291">Vyberte složku s Vivaldi profilem</translation>
 <translation id="9048058608784130603">Čekající aktualizace <ph name="VERSION" /></translation>
@@ -201,6 +214,7 @@
 <translation id="912022491595344261">Otevřít obrázek jako <ph name="USER" /></translation>
 <translation id="9157539936604258187">Otevřít odkaz v současném listu</translation>
 <translation id="9169060351863393881">Opera 12.x</translation>
+<translation id="9180553614777056266">blokováním reklam</translation>
 <translation id="939305735877869636">Brave</translation>
 <translation id="970294721402795299">Zámek (Krajina 16)</translation>
 </translationbundle>

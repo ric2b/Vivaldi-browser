@@ -5,6 +5,7 @@
 #include "android_webview/browser/gfx/overlay_processor_webview.h"
 
 #include <cstdlib>
+#include <variant>
 
 #include "android_webview/browser/gfx/gpu_service_webview.h"
 #include "android_webview/browser/gfx/viz_compositor_thread_runner_webview.h"
@@ -543,7 +544,7 @@ class OverlayProcessorWebView::Manager
       gfx::SurfaceControl::Transaction& transaction,
       gfx::SurfaceControl::Surface& surface,
       const viz::OverlayCandidate& candidate) {
-    DCHECK_EQ(absl::get<gfx::OverlayTransform>(candidate.transform),
+    DCHECK_EQ(std::get<gfx::OverlayTransform>(candidate.transform),
               gfx::OVERLAY_TRANSFORM_NONE);
     gfx::Rect dst = gfx::ToEnclosingRect(candidate.unclipped_display_rect);
 
@@ -596,7 +597,8 @@ class OverlayProcessorWebView::Manager
       transaction.SetBuffer(surface, buffer, resource->TakeBeginReadFence());
 
       if (gfx::SurfaceControl::SupportsSetFrameRate()) {
-        transaction.SetFrameRate(surface, resource->frame_rate());
+        transaction.SetFrameRate(surface,
+                                 {.frame_rate = resource->frame_rate()});
       }
     } else {
       // Android T has a bug where setting empty buffer to ASurfaceControl will
@@ -960,8 +962,7 @@ bool OverlayProcessorWebView::ProcessForFrameSinkId(
     const auto& frame = surface->GetActiveFrame();
     auto* quad = frame.render_pass_list.back()->quad_list.front();
 
-    if (gfx::SurfaceControl::SupportsSetFrameRate() &&
-        base::FeatureList::IsEnabled(features::kWebViewFrameRateHints)) {
+    if (gfx::SurfaceControl::SupportsSetFrameRate()) {
       float frame_rate = 0.f;
       const viz::FrameIntervalInputs& frame_interval_inputs =
           frame.metadata.frame_interval_inputs;
@@ -992,7 +993,7 @@ bool OverlayProcessorWebView::ProcessForFrameSinkId(
     // invalidate and normal draw would remove this overlay candidate.
     if (quad->material == viz::TextureDrawQuad::kMaterial) {
       auto* texture_quad = viz::TextureDrawQuad::MaterialCast(quad);
-      DCHECK(texture_quad->is_stream_video);
+      DCHECK(texture_quad->is_video_frame);
 
       auto uv_rect = gfx::BoundingRect(texture_quad->uv_top_left,
                                        texture_quad->uv_bottom_right);

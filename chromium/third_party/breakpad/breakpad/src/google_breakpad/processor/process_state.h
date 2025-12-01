@@ -91,7 +91,7 @@ enum ExploitabilityRating {
 
 class ProcessState {
  public:
-  ProcessState() : modules_(NULL), unloaded_modules_(NULL) { Clear(); }
+  ProcessState() : modules_(nullptr), unloaded_modules_(nullptr) { Clear(); }
   ~ProcessState();
 
   // Resets the ProcessState to its default values

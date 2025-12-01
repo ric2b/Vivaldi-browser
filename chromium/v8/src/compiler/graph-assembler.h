@@ -22,7 +22,7 @@ namespace v8 {
 namespace internal {
 
 class JSGraph;
-class Graph;
+class TFGraph;
 
 namespace compiler {
 
@@ -562,7 +562,7 @@ class V8_EXPORT_PRIVATE GraphAssembler {
   V8_INLINE Node* AddClonedNode(Node* node);
 
   MachineGraph* mcgraph() const { return mcgraph_; }
-  Graph* graph() const { return mcgraph_->graph(); }
+  TFGraph* graph() const { return mcgraph_->graph(); }
   Zone* temp_zone() const { return temp_zone_; }
   CommonOperatorBuilder* common() const { return mcgraph()->common(); }
   MachineOperatorBuilder* machine() const { return mcgraph()->machine(); }
@@ -967,7 +967,7 @@ class V8_EXPORT_PRIVATE JSGraphAssembler : public GraphAssembler {
     outermost_catch_scope_.set_gasm(this);
   }
 
-  Node* SmiConstant(int32_t value);
+  TNode<Smi> SmiConstant(int32_t value);
   TNode<HeapObject> HeapConstant(Handle<HeapObject> object);
   TNode<Object> Constant(ObjectRef ref);
   TNode<Number> NumberConstant(double value);

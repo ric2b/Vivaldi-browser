@@ -108,10 +108,6 @@ UserScriptListener* ExtensionsBrowserClient::GetUserScriptListener() {
 void ExtensionsBrowserClient::SignalContentScriptsLoaded(
     content::BrowserContext* context) {}
 
-std::string ExtensionsBrowserClient::GetUserAgent() const {
-  return std::string();
-}
-
 bool ExtensionsBrowserClient::ShouldSchemeBypassNavigationChecks(
     const std::string& scheme) const {
   return false;
@@ -261,6 +257,12 @@ media_device_salt::MediaDeviceSaltService*
 ExtensionsBrowserClient::GetMediaDeviceSaltService(
     content::BrowserContext* context) {
   return nullptr;
+}
+
+bool ExtensionsBrowserClient::HasControlledFrameCapability(
+    content::BrowserContext* context,
+    const GURL& url) {
+  return false;
 }
 
 }  // namespace extensions

@@ -256,7 +256,7 @@ AudioContext::AudioContext(LocalDOMWindow& window,
                            std::optional<float> sample_rate,
                            WebAudioSinkDescriptor sink_descriptor,
                            bool update_echo_cancellation_on_first_start)
-    : BaseAudioContext(&window, kRealtimeContext),
+    : BaseAudioContext(&window, ContextType::kRealtimeContext),
       FrameVisibilityObserver(GetLocalFrame()),
       context_id_(context_id++),
       audio_context_manager_(&window),
@@ -580,7 +580,7 @@ void AudioContext::DidClose() {
 
   // Reject all pending resolvers for setSinkId() before closing AudioContext.
   for (auto& set_sink_id_resolver : set_sink_id_resolvers_) {
-    set_sink_id_resolver->Resolver()->Reject(MakeGarbageCollected<DOMException>(
+    set_sink_id_resolver->Reject(MakeGarbageCollected<DOMException>(
         DOMExceptionCode::kInvalidStateError,
         "Cannot resolve pending promise from setSinkId(), AudioContext is "
         "going away"));
@@ -688,7 +688,7 @@ ScriptPromise<IDLUndefined> AudioContext::setSinkId(
 
   SetSinkIdResolver* resolver =
       MakeGarbageCollected<SetSinkIdResolver>(script_state, *this, *v8_sink_id);
-  auto promise = resolver->Resolver()->Promise();
+  auto promise = resolver->GetPromise();
 
   set_sink_id_resolvers_.push_back(resolver);
 
@@ -1244,6 +1244,7 @@ void AudioContext::OnDevicesChanged(mojom::blink::MediaDeviceType device_type,
       SendLogMessage(__func__,
                      "=> sink was not explicitly specified, falling back to "
                      "default sink.");
+      DispatchEvent(*Event::Create(event_type_names::kError));
       GetExecutionContext()->AddConsoleMessage(
           MakeGarbageCollected<ConsoleMessage>(
               mojom::ConsoleMessageSource::kOther,

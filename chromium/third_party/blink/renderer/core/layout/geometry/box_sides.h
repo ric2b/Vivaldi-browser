@@ -17,8 +17,6 @@ namespace blink {
 // insets), in the logical coordinate space. Note that all sides are set to true
 // initially.
 struct LogicalBoxSides {
-  STACK_ALLOCATED();
-
  public:
   bool inline_start = true;
   bool inline_end = true;
@@ -34,6 +32,14 @@ struct LogicalBoxSides {
         inline_end(inline_end),
         block_start(block_start),
         block_end(block_end) {}
+
+  bool operator==(const LogicalBoxSides& other) const {
+    return block_start == other.block_start && inline_end == other.inline_end &&
+           block_end == other.block_end && inline_start == other.inline_start;
+  }
+  bool IsEmpty() const {
+    return !block_start && !inline_start && !block_end && !inline_end;
+  }
 };
 
 // Presence of something pertaining to box sides (e.g. borders, padding or
@@ -67,14 +73,16 @@ struct LineLogicalBoxSides {
       std::swap(line_left, line_right);
     }
   }
+
+  bool IsEmpty() const {
+    return !block_start && !line_right && !block_end && !line_left;
+  }
 };
 
 // Presence of something pertaining to box sides (e.g. borders, padding or
 // inset), in the physical coordinate space. Note that all sides are set to true
 // initially.
 struct PhysicalBoxSides {
-  STACK_ALLOCATED();
-
  public:
   bool top = true;
   bool right = true;
@@ -131,6 +139,11 @@ struct PhysicalBoxSides {
       std::swap(logical.inline_start, logical.inline_end);
     }
     return logical;
+  }
+
+  bool operator==(const PhysicalBoxSides& other) const {
+    return top == other.top && right == other.right && bottom == other.bottom &&
+           left == other.left;
   }
 
   bool IsEmpty() const { return !top && !right && !bottom && !left; }

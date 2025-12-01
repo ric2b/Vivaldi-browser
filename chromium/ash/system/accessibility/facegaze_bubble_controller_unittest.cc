@@ -4,6 +4,8 @@
 
 #include "ash/system/accessibility/facegaze_bubble_controller.h"
 
+#include <string_view>
+
 #include "ash/accessibility/accessibility_controller.h"
 #include "ash/shell.h"
 #include "ash/system/accessibility/facegaze_bubble_view.h"
@@ -48,11 +50,13 @@ class FaceGazeBubbleControllerTest : public AshTestBase {
     return GetController()->facegaze_bubble_view_;
   }
 
+  const raw_ptr<FaceGazeBubbleCloseView> GetCloseView() {
+    return GetView()->GetCloseViewForTesting();
+  }
+
   bool IsVisible() { return GetController()->widget_->IsVisible(); }
 
-  const std::u16string& GetBubbleText() {
-    return GetView()->GetTextForTesting();
-  }
+  std::u16string_view GetBubbleText() { return GetView()->GetTextForTesting(); }
 
   bool IsShowTimerRunning() { return GetController()->show_timer_.IsRunning(); }
 
@@ -75,21 +79,18 @@ TEST_F(FaceGazeBubbleControllerTest, UpdateColor) {
   EXPECT_FALSE(GetView());
   Update(u"Default", /*is_warning=*/false);
   EXPECT_TRUE(GetView());
-  ui::ColorProvider* color_provider = GetView()->GetColorProvider();
-  EXPECT_EQ(
-      color_provider->GetColor(cros_tokens::kCrosSysSystemBaseElevatedOpaque),
-      GetView()->color());
+  EXPECT_EQ(cros_tokens::kCrosSysSystemBaseElevatedOpaque,
+            GetView()->background_color());
 
   Update(u"Warning", /*is_warning=*/true);
   EXPECT_TRUE(GetView());
-  EXPECT_EQ(color_provider->GetColor(cros_tokens::kCrosSysWarningContainer),
-            GetView()->color());
+  EXPECT_EQ(cros_tokens::kCrosSysWarningContainer,
+            GetView()->background_color());
 
   Update(u"Default", /*is_warning=*/false);
   EXPECT_TRUE(GetView());
-  EXPECT_EQ(
-      color_provider->GetColor(cros_tokens::kCrosSysSystemBaseElevatedOpaque),
-      GetView()->color());
+  EXPECT_EQ(cros_tokens::kCrosSysSystemBaseElevatedOpaque,
+            GetView()->background_color());
 }
 
 TEST_F(FaceGazeBubbleControllerTest, AccessibleProperties) {
@@ -180,6 +181,23 @@ TEST_F(FaceGazeBubbleControllerTest, UpdateWhileHidden) {
   Update(u"Hello world", /*is_warning=*/false);
   EXPECT_TRUE(GetView());
   EXPECT_FALSE(IsVisible());
+}
+
+TEST_F(FaceGazeBubbleControllerTest, CloseButton) {
+  Update(u"Face control active", /*is_warning=*/false);
+  EXPECT_TRUE(GetCloseView());
+}
+
+TEST_F(FaceGazeBubbleControllerTest, HoverCloseButton) {
+  Update(u"Testing", /*is_warning=*/false);
+  EXPECT_TRUE(GetView());
+  EXPECT_TRUE(IsVisible());
+
+  // Ensure that the bubble remains visible if the close button is hovered.
+  GetEventGenerator()->MoveMouseTo(
+      GetCloseView()->GetBoundsInScreen().CenterPoint());
+  EXPECT_TRUE(GetView());
+  EXPECT_TRUE(IsVisible());
 }
 
 }  // namespace ash

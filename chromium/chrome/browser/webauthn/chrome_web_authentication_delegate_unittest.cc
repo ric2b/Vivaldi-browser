@@ -16,10 +16,10 @@
 #include "base/rand_util.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_command_line.h"
+#include "base/test/scoped_feature_list.h"
 #include "build/build_config.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/webauthn/chrome_authenticator_request_delegate.h"
-#include "chrome/browser/webauthn/chrome_web_authentication_delegate.h"
 #include "chrome/browser/webauthn/passkey_model_factory.h"
 #include "chrome/browser/webauthn/webauthn_pref_names.h"
 #include "chrome/browser/webauthn/webauthn_switches.h"
@@ -98,6 +98,8 @@ class ChromeWebAuthenticationDelegateTest
  public:
   void SetUp() override {
     ChromeRenderViewHostTestHarness::SetUp();
+    scoped_feature_list_.InitAndDisableFeature(
+        device::kWebAuthnSignalApiHidePasskeys);
     PasskeyModelFactory::GetInstance()->SetTestingFactoryAndUse(
         profile(),
         base::BindRepeating(
@@ -108,12 +110,14 @@ class ChromeWebAuthenticationDelegateTest
   }
 
   void TearDown() override {
+    webauthn::PasskeyChangeQuotaTracker::GetInstance()->ResetForTesting();
     ChromeAuthenticatorRequestDelegate::SetGlobalObserverForTesting(nullptr);
     ChromeRenderViewHostTestHarness::TearDown();
   }
 
  protected:
   Observer observer_;
+  base::test::ScopedFeatureList scoped_feature_list_;
 };
 
 TEST_F(ChromeWebAuthenticationDelegateTest, IndividualAttestation) {
@@ -372,6 +376,7 @@ TEST_F(ChromeWebAuthenticationDelegateTest, MaybeGetRelyingPartyIdOverride) {
 }
 
 TEST_F(ChromeWebAuthenticationDelegateTest, DeletePasskey) {
+  const auto test_origin = url::Origin::Create(GURL("https://example.com"));
   ChromeWebAuthenticationDelegate delegate;
   sync_pb::WebauthnCredentialSpecifics passkey;
   passkey.set_credential_id(kCredentialId1);
@@ -383,7 +388,8 @@ TEST_F(ChromeWebAuthenticationDelegateTest, DeletePasskey) {
   {
     // Attempt removing an unknown credential.
     base::HistogramTester histogram_tester;
-    delegate.DeletePasskey(web_contents(), ToByteVector(kCredentialId2), kRpId);
+    delegate.PasskeyUnrecognized(web_contents(), test_origin,
+                                 ToByteVector(kCredentialId2), kRpId);
     EXPECT_TRUE(passkey_model->GetPasskeyByCredentialId(kRpId, kCredentialId1));
     histogram_tester.ExpectUniqueSample(
         "WebAuthentication.SignalUnknownCredentialRemovedGPMPasskey",
@@ -394,7 +400,8 @@ TEST_F(ChromeWebAuthenticationDelegateTest, DeletePasskey) {
   {
     // Remove a known credential.
     base::HistogramTester histogram_tester;
-    delegate.DeletePasskey(web_contents(), ToByteVector(kCredentialId1), kRpId);
+    delegate.PasskeyUnrecognized(web_contents(), test_origin,
+                                 ToByteVector(kCredentialId1), kRpId);
     EXPECT_FALSE(
         passkey_model->GetPasskeyByCredentialId(kRpId, kCredentialId1));
     histogram_tester.ExpectBucketCount(
@@ -406,6 +413,7 @@ TEST_F(ChromeWebAuthenticationDelegateTest, DeletePasskey) {
 }
 
 TEST_F(ChromeWebAuthenticationDelegateTest, DeleteUnacceptedPasskey) {
+  const auto test_origin = url::Origin::Create(GURL("https://example.com"));
   ChromeWebAuthenticationDelegate delegate;
   sync_pb::WebauthnCredentialSpecifics passkey;
   passkey.set_credential_id(kCredentialId1);
@@ -418,22 +426,22 @@ TEST_F(ChromeWebAuthenticationDelegateTest, DeleteUnacceptedPasskey) {
   {
     // Pass a known credential. It should not be removed.
     base::HistogramTester histogram_tester;
-    delegate.DeleteUnacceptedPasskeys(web_contents(), kRpId,
-                                      ToByteVector(kUserId),
-                                      {ToByteVector(kCredentialId1)});
+    delegate.SignalAllAcceptedCredentials(web_contents(), test_origin, kRpId,
+                                          ToByteVector(kUserId),
+                                          {ToByteVector(kCredentialId1)});
     EXPECT_TRUE(passkey_model->GetPasskeyByCredentialId(kRpId, kCredentialId1));
     histogram_tester.ExpectUniqueSample(
         "WebAuthentication.SignalAllAcceptedCredentialsRemovedGPMPasskey",
         ChromeWebAuthenticationDelegate::SignalAllAcceptedCredentialsResult::
-            kNoPasskeyRemoved,
+            kNoPasskeyChanged,
         1);
   }
   {
     // Do not pass the known credential. The known credential should be removed.
     base::HistogramTester histogram_tester;
-    delegate.DeleteUnacceptedPasskeys(web_contents(), kRpId,
-                                      ToByteVector(kUserId),
-                                      {ToByteVector(kCredentialId2)});
+    delegate.SignalAllAcceptedCredentials(web_contents(), test_origin, kRpId,
+                                          ToByteVector(kUserId),
+                                          {ToByteVector(kCredentialId2)});
     EXPECT_FALSE(
         passkey_model->GetPasskeyByCredentialId(kRpId, kCredentialId1));
     histogram_tester.ExpectUniqueSample(
@@ -509,285 +517,247 @@ TEST_F(ChromeWebAuthenticationDelegateTest, UpdatePasskey) {
   }
 }
 
-class OriginMayUseRemoteDesktopClientOverrideTest
+class ChromeWebAuthenticationSignalApiHidePasskeysTest
     : public ChromeWebAuthenticationDelegateTest {
+ public:
+  void SetUp() override {
+    ChromeWebAuthenticationDelegateTest::SetUp();
+    scoped_feature_list_.InitWithFeatureState(
+        device::kWebAuthnSignalApiHidePasskeys, true);
+    passkey_model_ = PasskeyModelFactory::GetForProfile(profile());
+    ASSERT_TRUE(passkey_model_);
+    histogram_tester_ = std::make_unique<base::HistogramTester>();
+  }
+
+  void TearDown() override {
+    passkey_model_ = nullptr;
+    ChromeWebAuthenticationDelegateTest::TearDown();
+  }
+
+  void AddPasskey(const std::string& credential_id) {
+    sync_pb::WebauthnCredentialSpecifics passkey;
+    passkey.set_credential_id(credential_id);
+    passkey.set_rp_id(kRpId);
+    passkey.set_user_id(kUserId);
+    passkey_model_->AddNewPasskeyForTesting(std::move(passkey));
+  }
+
+  void AddHiddenPasskey(const std::string& credential_id) {
+    sync_pb::WebauthnCredentialSpecifics passkey;
+    passkey.set_credential_id(credential_id);
+    passkey.set_rp_id(kRpId);
+    passkey.set_user_id(kUserId);
+    passkey.set_hidden(true);
+    passkey_model_->AddNewPasskeyForTesting(std::move(passkey));
+  }
+
  protected:
-  static constexpr char kCorpCrdOrigin[] =
-      "https://remotedesktop.corp.google.com";
-  static constexpr char kCorpCrdAutopushOrigin[] =
-      "https://remotedesktop-autopush.corp.google.com/";
-  static constexpr char kCorpCrdDailyOrigin[] =
-      "https://remotedesktop-daily-6.corp.google.com/";
+  sync_pb::WebauthnCredentialSpecifics GetPasskey(const std::string& cred_id) {
+    return *passkey_model_->GetPasskeyByCredentialId(kRpId, cred_id);
+  }
 
-  const std::array<const char*, 3> kCorpCrdOrigins = {
-      kCorpCrdOrigin, kCorpCrdAutopushOrigin, kCorpCrdDailyOrigin};
-
-  static constexpr char kExampleOrigin[] = "https://example.com";
-  static constexpr char kAnotherExampleOrigin[] = "https://another.example.com";
-
+  const url::Origin test_origin_ =
+      url::Origin::Create(GURL("https://example.com"));
+  ChromeWebAuthenticationDelegate delegate_;
+  raw_ptr<webauthn::PasskeyModel> passkey_model_;
   base::test::ScopedFeatureList scoped_feature_list_;
+  std::unique_ptr<base::HistogramTester> histogram_tester_;
 };
 
-TEST_F(OriginMayUseRemoteDesktopClientOverrideTest,
-       RemoteProxiedRequestsAllowedPolicy) {
-  // The "webauthn.remote_proxied_requests_allowed" policy pref should enable
-  // Google's internal CRD origin to use the RemoteDesktopClientOverride
-  // extension.
-  enum class Policy {
-    kUnset,
-    kDisabled,
-    kEnabled,
-  };
-  ChromeWebAuthenticationDelegate delegate;
-  PrefService* prefs =
-      Profile::FromBrowserContext(GetBrowserContext())->GetPrefs();
-  for (auto* origin : kCorpCrdOrigins) {
-    for (const auto policy :
-         {Policy::kUnset, Policy::kDisabled, Policy::kEnabled}) {
-      switch (policy) {
-        case Policy::kUnset:
-          prefs->ClearPref(webauthn::pref_names::kRemoteProxiedRequestsAllowed);
-          break;
-        case Policy::kDisabled:
-          prefs->SetBoolean(webauthn::pref_names::kRemoteProxiedRequestsAllowed,
-                            false);
-          break;
-        case Policy::kEnabled:
-          prefs->SetBoolean(webauthn::pref_names::kRemoteProxiedRequestsAllowed,
-                            true);
-          break;
-      }
+TEST_F(ChromeWebAuthenticationSignalApiHidePasskeysTest, Unrecognized_Found) {
+  AddPasskey(kCredentialId1);
+  ASSERT_FALSE(GetPasskey(kCredentialId1).hidden());
+  delegate_.PasskeyUnrecognized(web_contents(), test_origin_,
+                                ToByteVector(kCredentialId1), kRpId);
+  EXPECT_TRUE(GetPasskey(kCredentialId1).hidden());
 
-      constexpr const char* const crd_origins[] = {
-          kCorpCrdOrigin,
-          kCorpCrdAutopushOrigin,
-          kCorpCrdDailyOrigin,
-      };
-      EXPECT_EQ(
-          delegate.OriginMayUseRemoteDesktopClientOverride(
-              browser_context(), url::Origin::Create(GURL(origin))),
-          base::Contains(crd_origins, origin) && policy == Policy::kEnabled);
-    }
+  histogram_tester_->ExpectUniqueSample(
+      "WebAuthentication.SignalUnknownCredentialRemovedGPMPasskey",
+      ChromeWebAuthenticationDelegate::SignalUnknownCredentialResult::
+          kPasskeyHidden,
+      1);
+}
+
+TEST_F(ChromeWebAuthenticationSignalApiHidePasskeysTest,
+       Unrecognized_AlreadyHidden) {
+  AddPasskey(kCredentialId1);
+  passkey_model_->SetPasskeyHidden(kCredentialId1, true);
+  delegate_.PasskeyUnrecognized(web_contents(), test_origin_,
+                                ToByteVector(kCredentialId1), kRpId);
+  EXPECT_TRUE(GetPasskey(kCredentialId1).hidden());
+
+  histogram_tester_->ExpectUniqueSample(
+      "WebAuthentication.SignalUnknownCredentialRemovedGPMPasskey",
+      ChromeWebAuthenticationDelegate::SignalUnknownCredentialResult::
+          kPasskeyAlreadyHidden,
+      1);
+
+  // Check that the quota does not apply if no change happens.
+  for (int i = 0; i < webauthn::PasskeyChangeQuotaTracker::kMaxTokensPerRP;
+       ++i) {
+    delegate_.PasskeyUnrecognized(web_contents(), test_origin_,
+                                  ToByteVector(kCredentialId1), kRpId);
   }
+  passkey_model_->SetPasskeyHidden(kCredentialId1, false);
+  delegate_.PasskeyUnrecognized(web_contents(), test_origin_,
+                                ToByteVector(kCredentialId1), kRpId);
+  EXPECT_TRUE(GetPasskey(kCredentialId1).hidden());
+  histogram_tester_->ExpectBucketCount(
+      "WebAuthentication.SignalUnknownCredentialRemovedGPMPasskey",
+      ChromeWebAuthenticationDelegate::SignalUnknownCredentialResult::
+          kQuotaExceeded,
+      0);
 }
 
-TEST_F(OriginMayUseRemoteDesktopClientOverrideTest,
-       AdditionalOriginSwitch_WithGooglePolicy) {
-  // The --webauthn-remote-proxied-requests-allowed-additional-origin switch
-  // allows passing an additional origin for testing.
-  ChromeWebAuthenticationDelegate delegate;
-  base::test::ScopedCommandLine scoped_command_line;
-  scoped_command_line.GetProcessCommandLine()->AppendSwitchASCII(
-      webauthn::switches::kRemoteProxiedRequestsAllowedAdditionalOrigin,
-      kExampleOrigin);
-
-  // The flag shouldn't have an effect without the policy enabled.
-  EXPECT_FALSE(delegate.OriginMayUseRemoteDesktopClientOverride(
-      browser_context(), url::Origin::Create(GURL(kExampleOrigin))));
-  EXPECT_FALSE(delegate.OriginMayUseRemoteDesktopClientOverride(
-      browser_context(), url::Origin::Create(GURL(kCorpCrdOrigin))));
-
-  // With the policy enabled, both the hard-coded and flag origin should be
-  // allowed.
-  PrefService* prefs =
-      Profile::FromBrowserContext(GetBrowserContext())->GetPrefs();
-  prefs->SetBoolean(webauthn::pref_names::kRemoteProxiedRequestsAllowed, true);
-  EXPECT_TRUE(delegate.OriginMayUseRemoteDesktopClientOverride(
-      browser_context(), url::Origin::Create(GURL(kExampleOrigin))));
-  EXPECT_TRUE(delegate.OriginMayUseRemoteDesktopClientOverride(
-      browser_context(), url::Origin::Create(GURL(kCorpCrdOrigin))));
-
-  // Other origins still shouldn't be permitted.
-  EXPECT_FALSE(delegate.OriginMayUseRemoteDesktopClientOverride(
-      browser_context(),
-      url::Origin::Create(GURL("https://other.example.com"))));
+TEST_F(ChromeWebAuthenticationSignalApiHidePasskeysTest,
+       Unrecognized_NotFound) {
+  delegate_.PasskeyUnrecognized(web_contents(), test_origin_,
+                                ToByteVector(kCredentialId1), kRpId);
+  histogram_tester_->ExpectUniqueSample(
+      "WebAuthentication.SignalUnknownCredentialRemovedGPMPasskey",
+      ChromeWebAuthenticationDelegate::SignalUnknownCredentialResult::
+          kPasskeyNotFound,
+      1);
 }
 
-TEST_F(OriginMayUseRemoteDesktopClientOverrideTest,
-       AdditionalOriginSwitch_WithAllowedOriginsPolicy) {
-  // The --webauthn-remote-proxied-requests-allowed-additional-origin switch
-  // allows passing an additional origin for testing. This origin will be
-  // allowed if the kWebAuthnRemoteDesktopAllowedOriginsPolicy preference is set
-  // to a non-empty list of origins.  If the policy is set, the command-line
-  // origin is treated as another allowed origin in addition to those specified
-  // by the policy.
-  ChromeWebAuthenticationDelegate delegate;
-  base::test::ScopedCommandLine scoped_command_line;
-  scoped_command_line.GetProcessCommandLine()->AppendSwitchASCII(
-      webauthn::switches::kRemoteProxiedRequestsAllowedAdditionalOrigin,
-      kExampleOrigin);
-  scoped_feature_list_.InitAndEnableFeature(
-      device::kWebAuthnRemoteDesktopAllowedOriginsPolicy);
+TEST_F(ChromeWebAuthenticationSignalApiHidePasskeysTest,
+       Unrecognized_QuotaExceeded) {
+  AddPasskey(kCredentialId1);
+  for (int i = 0; i < webauthn::PasskeyChangeQuotaTracker::kMaxTokensPerRP;
+       ++i) {
+    delegate_.PasskeyUnrecognized(web_contents(), test_origin_,
+                                  ToByteVector(kCredentialId1), kRpId);
+    passkey_model_->SetPasskeyHidden(kCredentialId1, false);
+  }
+  base::HistogramTester histogram_tester;
+  delegate_.PasskeyUnrecognized(web_contents(), test_origin_,
+                                ToByteVector(kCredentialId1), kRpId);
+  histogram_tester.ExpectUniqueSample(
+      "WebAuthentication.SignalUnknownCredentialRemovedGPMPasskey",
+      ChromeWebAuthenticationDelegate::SignalUnknownCredentialResult::
+          kQuotaExceeded,
+      1);
+}
 
-  // Initially, no origins should be allowed because the allowed origins pref
-  // hasn't been set yet.
-  EXPECT_FALSE(delegate.OriginMayUseRemoteDesktopClientOverride(
-      browser_context(), url::Origin::Create(GURL(kExampleOrigin))));
-  EXPECT_FALSE(delegate.OriginMayUseRemoteDesktopClientOverride(
-      browser_context(), url::Origin::Create(GURL(kAnotherExampleOrigin))));
+TEST_F(ChromeWebAuthenticationSignalApiHidePasskeysTest,
+       SignalAllAcceptedCredentials_Hide) {
+  base::HistogramTester histogram_tester;
+  AddPasskey(kCredentialId1);
 
-  // Set the allowed origins pref to include another origin.
-  PrefService* prefs =
-      Profile::FromBrowserContext(GetBrowserContext())->GetPrefs();
-  prefs->SetList(webauthn::pref_names::kRemoteDesktopAllowedOrigins,
-                 base::Value::List().Append(kAnotherExampleOrigin));
+  // Pass a list that does not contain the hidden passkey.
+  std::vector<std::vector<uint8_t>> credentials = {
+      ToByteVector(kCredentialId2)};
+  delegate_.SignalAllAcceptedCredentials(web_contents(), test_origin_, kRpId,
+                                         ToByteVector(kUserId), credentials);
+  histogram_tester.ExpectUniqueSample(
+      "WebAuthentication.SignalAllAcceptedCredentialsRemovedGPMPasskey",
+      ChromeWebAuthenticationDelegate::SignalAllAcceptedCredentialsResult::
+          kPasskeyHidden,
+      1);
+  // The originally active passkey should be hidden.
+  EXPECT_TRUE(GetPasskey(kCredentialId1).hidden());
+}
 
-  // Both the origin specified by the command-line switch and the origin in the
-  // allowed origins pref should be allowed.
-  EXPECT_TRUE(delegate.OriginMayUseRemoteDesktopClientOverride(
-      browser_context(), url::Origin::Create(GURL(kExampleOrigin))));
-  EXPECT_TRUE(delegate.OriginMayUseRemoteDesktopClientOverride(
-      browser_context(), url::Origin::Create(GURL(kAnotherExampleOrigin))));
+TEST_F(ChromeWebAuthenticationSignalApiHidePasskeysTest,
+       SignalAllAcceptedCredentials_Restore) {
+  base::HistogramTester histogram_tester;
+  AddHiddenPasskey(kCredentialId1);
 
-  // Google Corp CRD origins are not affected by either the switch or this
-  // policy.
-  for (auto* origin : kCorpCrdOrigins) {
-    EXPECT_FALSE(delegate.OriginMayUseRemoteDesktopClientOverride(
-        browser_context(), url::Origin::Create(GURL(origin))));
+  // Pass a list that contains the hidden passkey.
+  std::vector<std::vector<uint8_t>> credentials = {
+      ToByteVector(kCredentialId1)};
+  delegate_.SignalAllAcceptedCredentials(web_contents(), test_origin_, kRpId,
+                                         ToByteVector(kUserId), credentials);
+  histogram_tester.ExpectUniqueSample(
+      "WebAuthentication.SignalAllAcceptedCredentialsRemovedGPMPasskey",
+      ChromeWebAuthenticationDelegate::SignalAllAcceptedCredentialsResult::
+          kPasskeyRestored,
+      1);
+  // The passkey should have been restored.
+  EXPECT_FALSE(GetPasskey(kCredentialId1).hidden());
+}
+
+TEST_F(ChromeWebAuthenticationSignalApiHidePasskeysTest,
+       SignalAllAcceptedCredentials_NoChanges) {
+  base::HistogramTester histogram_tester;
+  AddPasskey(kCredentialId1);
+
+  // Pass a list that contains the active passkey.
+  std::vector<std::vector<uint8_t>> credentials = {
+      ToByteVector(kCredentialId1)};
+  delegate_.SignalAllAcceptedCredentials(web_contents(), test_origin_, kRpId,
+                                         ToByteVector(kUserId), credentials);
+  histogram_tester.ExpectUniqueSample(
+      "WebAuthentication.SignalAllAcceptedCredentialsRemovedGPMPasskey",
+      ChromeWebAuthenticationDelegate::SignalAllAcceptedCredentialsResult::
+          kNoPasskeyChanged,
+      1);
+  // The passkey should still be visible.
+  EXPECT_FALSE(GetPasskey(kCredentialId1).hidden());
+}
+
+TEST_F(ChromeWebAuthenticationSignalApiHidePasskeysTest,
+       SignalAllAcceptedCredentials_NoPasskeysMatch_RpId) {
+  base::HistogramTester histogram_tester;
+  AddPasskey(kCredentialId1);
+
+  // Pass a list that contains passkeys from a different relying party.
+  std::vector<std::vector<uint8_t>> credentials = {
+      ToByteVector(kCredentialId1)};
+  delegate_.SignalAllAcceptedCredentials(web_contents(), test_origin_,
+                                         "another.com", ToByteVector(kUserId),
+                                         credentials);
+  histogram_tester.ExpectUniqueSample(
+      "WebAuthentication.SignalAllAcceptedCredentialsRemovedGPMPasskey",
+      ChromeWebAuthenticationDelegate::SignalAllAcceptedCredentialsResult::
+          kNoPasskeyChanged,
+      1);
+}
+
+TEST_F(ChromeWebAuthenticationSignalApiHidePasskeysTest,
+       SignalAllAcceptedCredentials_NoPasskeysMatch_UserId) {
+  base::HistogramTester histogram_tester;
+  AddPasskey(kCredentialId1);
+
+  // Pass a list that contains passkeys from a different user id.
+  std::vector<std::vector<uint8_t>> credentials = {
+      ToByteVector(kCredentialId1)};
+  delegate_.SignalAllAcceptedCredentials(web_contents(), test_origin_, kRpId,
+                                         ToByteVector("another-userid"),
+                                         credentials);
+  histogram_tester.ExpectUniqueSample(
+      "WebAuthentication.SignalAllAcceptedCredentialsRemovedGPMPasskey",
+      ChromeWebAuthenticationDelegate::SignalAllAcceptedCredentialsResult::
+          kNoPasskeyChanged,
+      1);
+}
+
+TEST_F(ChromeWebAuthenticationSignalApiHidePasskeysTest,
+       SignalAllAcceptedCredentials_QuotaExceeded) {
+  AddPasskey(kCredentialId1);
+
+  // Exceed the quota.
+  for (int i = 0; i < webauthn::PasskeyChangeQuotaTracker::kMaxTokensPerRP;
+       ++i) {
+    std::vector<std::vector<uint8_t>> credentials = {
+        ToByteVector(i % 2 == 0 ? kCredentialId2 : kCredentialId1)};
+    delegate_.SignalAllAcceptedCredentials(web_contents(), test_origin_, kRpId,
+                                           ToByteVector(kUserId), credentials);
   }
 
-  // Origins not listed in either the switch or the policy remain disallowed.
-  EXPECT_FALSE(delegate.OriginMayUseRemoteDesktopClientOverride(
-      browser_context(),
-      url::Origin::Create(GURL("https://very.other.example.com"))));
-}
-
-TEST_F(OriginMayUseRemoteDesktopClientOverrideTest,
-       AdditionalOriginSwitch_WithExplicitlyEmptyAllowedOriginsPolicy) {
-  // The --webauthn-remote-proxied-requests-allowed-additional-origin switch
-  // should be ignored when the allowed origins policy list is empty.
-  ChromeWebAuthenticationDelegate delegate;
-  base::test::ScopedCommandLine scoped_command_line;
-  scoped_command_line.GetProcessCommandLine()->AppendSwitchASCII(
-      webauthn::switches::kRemoteProxiedRequestsAllowedAdditionalOrigin,
-      kExampleOrigin);
-  scoped_feature_list_.InitAndEnableFeature(
-      device::kWebAuthnRemoteDesktopAllowedOriginsPolicy);
-
-  PrefService* prefs =
-      Profile::FromBrowserContext(GetBrowserContext())->GetPrefs();
-
-  // Test with policy unset.
-  prefs->ClearPref(webauthn::pref_names::kRemoteDesktopAllowedOrigins);
-  EXPECT_FALSE(delegate.OriginMayUseRemoteDesktopClientOverride(
-      browser_context(), url::Origin::Create(GURL(kExampleOrigin))));
-
-  // Test with policy explicitly empty.
-  prefs->SetList(webauthn::pref_names::kRemoteDesktopAllowedOrigins,
-                 base::Value::List());
-  EXPECT_FALSE(delegate.OriginMayUseRemoteDesktopClientOverride(
-      browser_context(), url::Origin::Create(GURL(kExampleOrigin))));
-}
-
-TEST_F(OriginMayUseRemoteDesktopClientOverrideTest,
-       AllowedOriginsPolicy_InvalidURLs) {
-  ChromeWebAuthenticationDelegate delegate;
-  scoped_feature_list_.InitAndEnableFeature(
-      device::kWebAuthnRemoteDesktopAllowedOriginsPolicy);
-
-  PrefService* prefs =
-      Profile::FromBrowserContext(GetBrowserContext())->GetPrefs();
-
-  const std::vector<std::string> invalid_origins = {
-      "invalid",
-      "http://",
-      "example.com",  // Missing scheme
-      "https://example.com:invalidport",
-  };
-
-  base::Value::List invalid_origins_list;
-  for (const auto& origin : invalid_origins) {
-    invalid_origins_list.Append(origin);
-  }
-  prefs->SetList(webauthn::pref_names::kRemoteDesktopAllowedOrigins,
-                 std::move(invalid_origins_list));
-
-  // None of the above invalid origins should grant access.
-  for (const auto& origin : invalid_origins) {
-    EXPECT_FALSE(delegate.OriginMayUseRemoteDesktopClientOverride(
-        browser_context(), url::Origin::Create(GURL(origin))));
-  }
-
-  // A valid one, added for good measure, should still work.
-  prefs->SetList(webauthn::pref_names::kRemoteDesktopAllowedOrigins,
-                 base::Value::List().Append(kExampleOrigin));
-  EXPECT_TRUE(delegate.OriginMayUseRemoteDesktopClientOverride(
-      browser_context(), url::Origin::Create(GURL(kExampleOrigin))));
-}
-
-TEST_F(OriginMayUseRemoteDesktopClientOverrideTest,
-       AllowedOriginsPolicy_FeatureDisabled) {
-  ChromeWebAuthenticationDelegate delegate;
-  // Feature explicitly disabled.
-  scoped_feature_list_.InitAndDisableFeature(
-      device::kWebAuthnRemoteDesktopAllowedOriginsPolicy);
-
-  PrefService* prefs =
-      Profile::FromBrowserContext(GetBrowserContext())->GetPrefs();
-  prefs->SetList(webauthn::pref_names::kRemoteDesktopAllowedOrigins,
-                 base::Value::List().Append(kExampleOrigin));
-
-  EXPECT_FALSE(delegate.OriginMayUseRemoteDesktopClientOverride(
-      browser_context(), url::Origin::Create(GURL(kExampleOrigin))));
-}
-
-TEST_F(OriginMayUseRemoteDesktopClientOverrideTest,
-       AllowedOriginsPolicy_MultipleValidURLs) {
-  ChromeWebAuthenticationDelegate delegate;
-  scoped_feature_list_.InitAndEnableFeature(
-      device::kWebAuthnRemoteDesktopAllowedOriginsPolicy);
-
-  PrefService* prefs =
-      Profile::FromBrowserContext(GetBrowserContext())->GetPrefs();
-  base::Value::List valid_origins;
-  valid_origins.Append(kExampleOrigin);
-  valid_origins.Append(kAnotherExampleOrigin);
-  prefs->SetList(webauthn::pref_names::kRemoteDesktopAllowedOrigins,
-                 std::move(valid_origins));
-
-  // Both origins specified in the policy should grant access.
-  EXPECT_TRUE(delegate.OriginMayUseRemoteDesktopClientOverride(
-      browser_context(), url::Origin::Create(GURL(kExampleOrigin))));
-  EXPECT_TRUE(delegate.OriginMayUseRemoteDesktopClientOverride(
-      browser_context(), url::Origin::Create(GURL(kAnotherExampleOrigin))));
-
-  // An unrelated origin should not be allowed.
-  EXPECT_FALSE(delegate.OriginMayUseRemoteDesktopClientOverride(
-      browser_context(),
-      url::Origin::Create(GURL("https://very.other.example.com"))));
-}
-
-TEST_F(OriginMayUseRemoteDesktopClientOverrideTest,
-       AllowedOriginsPolicy_SchemePortPathMismatch) {
-  ChromeWebAuthenticationDelegate delegate;
-  scoped_feature_list_.InitAndEnableFeature(
-      device::kWebAuthnRemoteDesktopAllowedOriginsPolicy);
-  PrefService* prefs =
-      Profile::FromBrowserContext(GetBrowserContext())->GetPrefs();
-
-  // Scheme mismatch.
-  prefs->SetList(webauthn::pref_names::kRemoteDesktopAllowedOrigins,
-                 base::Value::List().Append("https://example.com"));
-  EXPECT_FALSE(delegate.OriginMayUseRemoteDesktopClientOverride(
-      browser_context(), url::Origin::Create(GURL("http://example.com"))));
-
-  // Port mismatch.
-  prefs->SetList(webauthn::pref_names::kRemoteDesktopAllowedOrigins,
-                 base::Value::List().Append("https://example.com:1234"));
-  EXPECT_FALSE(delegate.OriginMayUseRemoteDesktopClientOverride(
-      browser_context(), url::Origin::Create(GURL("https://example.com"))));
-  EXPECT_FALSE(delegate.OriginMayUseRemoteDesktopClientOverride(
-      browser_context(),
-      url::Origin::Create(GURL("https://example.com:5678"))));
-
-  // Path mismatch (should be allowed because paths are ignored).
-  prefs->SetList(webauthn::pref_names::kRemoteDesktopAllowedOrigins,
-                 base::Value::List().Append("https://example.com/path"));
-  EXPECT_TRUE(delegate.OriginMayUseRemoteDesktopClientOverride(
-      browser_context(), url::Origin::Create(GURL("https://example.com"))));
-  EXPECT_TRUE(delegate.OriginMayUseRemoteDesktopClientOverride(
-      browser_context(),
-      url::Origin::Create(GURL("https://example.com/otherpath"))));
+  // Attempt making another change that would hide the passkey.
+  passkey_model_->SetPasskeyHidden(kCredentialId1, false);
+  base::HistogramTester histogram_tester;
+  std::vector<std::vector<uint8_t>> credentials = {
+      ToByteVector(kCredentialId2)};
+  delegate_.SignalAllAcceptedCredentials(web_contents(), test_origin_, kRpId,
+                                         ToByteVector(kUserId), credentials);
+  histogram_tester.ExpectUniqueSample(
+      "WebAuthentication.SignalAllAcceptedCredentialsRemovedGPMPasskey",
+      ChromeWebAuthenticationDelegate::SignalAllAcceptedCredentialsResult::
+          kQuotaExceeded,
+      1);
+  EXPECT_FALSE(GetPasskey(kCredentialId1).hidden());
 }
 
 }  // namespace

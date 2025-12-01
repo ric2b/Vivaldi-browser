@@ -34,7 +34,7 @@ class CodeRangeAddressHint {
                                               size_t code_range_size);
 
  private:
-  base::SpinningMutex mutex_;
+  base::Mutex mutex_;
   // A map from code range size to an array of recently freed code range
   // addresses. There should be O(1) different code range sizes.
   // The length of each array is limited by the peak number of code ranges,
@@ -45,15 +45,18 @@ class CodeRangeAddressHint {
 // A code range is a virtual memory cage that may contain executable code. It
 // has the following layout.
 //
-// +---------+-----+-----------------  ~~~  -+
-// |   RW    | ... |     ...                 |
-// +---------+-----+------------------ ~~~  -+
-// ^               ^
-// base            allocatable base
+// +---------+---------+-----------------  ~~~  -+
+// |   RW    |   ...   |     ...                 |
+// +---------+---------+------------------ ~~~  -+
+// ^                   ^
+// base                allocatable base
 //
-// <-------->      <------------------------->
-//  reserved            allocatable region
-// <----------------------------------------->
+// <------------------><------------------------->
+//   non-allocatable       allocatable region
+//   region
+// <-------->
+//  reserved
+// <--------------------------------------------->
 //                 CodeRange
 //
 // The start of the reservation may include reserved page with read-write access
@@ -64,8 +67,11 @@ class CodeRangeAddressHint {
 //
 // The following conditions hold:
 // 1) |reservation()->region()| == [base(), base() + size()[,
-// 2) if optional RW pages are not necessary, then |base| == |allocatable base|,
-// 3) both |base| and |allocatable base| are MemoryChunk::kAlignment-aligned.
+// 2) |base| is OS page size aligned,
+// 3) |allocatable base| is MemoryChunk::kAlignment-aligned,
+// 4) non-allocatable region might be empty (if |base| == |allocatable base|),
+// 5) if optional RW pages are necessary and they don't fit into non-allocatable
+//    region, then the first page is excluded from allocatable area.
 class CodeRange final : public VirtualMemoryCage {
  public:
   V8_EXPORT_PRIVATE ~CodeRange() override;
@@ -129,9 +135,9 @@ class CodeRange final : public VirtualMemoryCage {
 
   // When sharing a CodeRange among Isolates, calls to RemapEmbeddedBuiltins may
   // race during Isolate::Init.
-  base::SpinningMutex remap_embedded_builtins_mutex_;
+  base::Mutex remap_embedded_builtins_mutex_;
 
-#if !defined(V8_OS_WIN) && defined(DEBUG)
+#if !defined(V8_OS_WIN) && !defined(V8_OS_IOS) && defined(DEBUG)
   bool immutable_ = false;
 #endif
 };

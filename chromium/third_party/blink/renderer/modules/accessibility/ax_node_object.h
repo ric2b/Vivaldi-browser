@@ -81,7 +81,7 @@ class MODULES_EXPORT AXNodeObject : public AXObject {
   bool ShouldIncludeCustomElement() const;
   AXObjectInclusion ShouldIncludeBasedOnSemantics(
       IgnoredReasons* = nullptr) const;
-  bool ComputeIsIgnored(IgnoredReasons* = nullptr) const override;
+  bool ComputeIsIgnored(IgnoredReasons*) const override;
   ax::mojom::blink::Role DetermineRoleValue() override;
   ax::mojom::blink::Role NativeRoleIgnoringAria() const override;
   void AlterSliderOrSpinButtonValue(bool increase);
@@ -150,6 +150,7 @@ class MODULES_EXPORT AXNodeObject : public AXObject {
   bool IsSelectedFromFocusSupported() const override;
   bool IsSelectedFromFocus() const override;
   bool IsNotUserSelectable() const override;
+  bool ComputeIsOffScreen() const override;
   bool IsRequired() const final;
   bool IsControl() const override;
   AXRestriction Restriction() const override;
@@ -406,6 +407,7 @@ class MODULES_EXPORT AXNodeObject : public AXObject {
   void AddPseudoElementChildrenFromLayoutTree();
   bool CanAddLayoutChild(LayoutObject& child);
   void AddInlineTextBoxChildren();
+  void AddInlineTextBoxChildrenWithBlockFlowIterator();
   void AddImageMapChildren();
   void AddPopupChildren();
   bool HasValidHTMLTableStructureAndLayout() const;
@@ -413,23 +415,10 @@ class MODULES_EXPORT AXNodeObject : public AXObject {
   bool FindAllTableCellsWithRole(ax::mojom::blink::Role, AXObjectVector&) const;
   void AddValidationMessageChild();
   void AddAccessibleNodeChildren();
-  void AddMenuListChildren();
-  void AddMenuListPopupChildren();
   void AddOwnedChildren();
   void AddScrollMarkerGroupChildren();
 #if DCHECK_IS_ON()
   void CheckValidChild(AXObject* child);
-#endif
-
-#if EXPENSIVE_DCHECKS_ARE_ON()
-  // TODO(crbug.com/382235118): Remove temporary DCHECKS between current and
-  // AxBlockFlowIterator algorithm. Returns true if the DCHECKS that compare the
-  // old AxInlineTextBox creation algorithm with the new AxBlockFlowIterator
-  // approach should be skipped. Some cases should be skipped because the
-  // current algorithm produces results that should be investigated further
-  // before we mirror the behavior in the new algorithm.
-  bool ShouldSkipAxBlockFlowIteratorComparison() const;
-
 #endif
 
   ax::mojom::blink::TextPosition GetTextPositionFromRole() const;

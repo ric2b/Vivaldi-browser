@@ -23,6 +23,7 @@
 #include "third_party/blink/public/mojom/page/draggable_region.mojom-forward.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "third_party/skia/include/core/SkRegion.h"
+#include "ui/actions/action_id.h"
 #include "ui/color/color_provider.h"
 #include "ui/color/color_provider_key.h"
 #include "url/gurl.h"
@@ -83,10 +84,22 @@ class AppBrowserController : public ui::ColorProviderKey::InitializerSupplier,
     raw_ptr<Browser> browser = nullptr;
     int tab_index = -1;
   };
+  enum class HomeTabScope {
+    kDontCare,   // The caller doesn't care if the returned tab is a home tab.
+    kInScope,    // Only return tabs that are a pinned home tab.
+    kOutOfScope  // Only return tabs that are not a pinned home tab.
+  };
   static std::optional<BrowserAndTabIndex> FindTopLevelBrowsingContextForWebApp(
       const Profile& profile,
       const webapps::AppId& app_id,
-      BrowserWindowInterface::Type browser_type);
+      BrowserWindowInterface::Type browser_type,
+      bool for_focus_existing,
+      HomeTabScope home_tab_scope = HomeTabScope::kDontCare);
+  static std::optional<int> FindTabIndexForApp(
+      Browser* browser,
+      const webapps::AppId& app_id,
+      bool for_focus_existing,
+      HomeTabScope home_tab_scope = HomeTabScope::kDontCare);
 
   // Renders |url|'s origin as Unicode.
   static std::u16string FormatUrlOrigin(
@@ -126,8 +139,13 @@ class AppBrowserController : public ui::ColorProviderKey::InitializerSupplier,
   // Whether to show content settings in the titlebar toolbar.
   virtual bool HasTitlebarContentSettings() const;
 
-  // Returns which PageActionIconTypes should appear in the titlebar toolbar.
-  virtual std::vector<PageActionIconType> GetTitleBarPageActions() const;
+  // Returns which page actions which should should appear in the titlebar
+  // toolbar.
+  virtual std::vector<actions::ActionId> GetTitleBarPageActions() const;
+  // The page actions framework is currently undergoing a migration.
+  // This is method is used by the legacy framework and will be removed once
+  // the migration is complete.
+  virtual std::vector<PageActionIconType> GetTitleBarPageActionTypes() const;
 
   // Whether to show the Back and Refresh buttons in the web app toolbar.
   virtual bool HasMinimalUiButtons() const = 0;

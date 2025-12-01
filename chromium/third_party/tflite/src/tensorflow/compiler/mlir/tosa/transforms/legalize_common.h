@@ -147,6 +147,11 @@ std::optional<Value> convertStridedSliceOp(
     int32_t begin_mask, int32_t end_mask, int32_t ellipsis_mask,
     int32_t new_axis_mask, int32_t shrink_axis_mask);
 
+// Helper function to perform division with floor rounding mode (rounding result
+// down) for integer type inputs.
+Value floorIntDiv(PatternRewriter& rewriter, Operation* op, ShapedType outType,
+                  Value lhs, Value rhs);
+
 // Lowers FloorDiv to a sequence of TOSA operators.
 std::optional<Value> convertFloorDivOp(PatternRewriter& rewriter, Operation* op,
                                        Value result_value, Value lhs_value,
@@ -188,14 +193,16 @@ std::optional<Value> convertReduceMinOp(PatternRewriter& rewriter,
                                         Operation* op,
                                         RankedTensorType output_type,
                                         Value input_value,
-                                        ElementsAttr axes_elems);
+                                        ElementsAttr axes_elems,
+                                        StringRef nan_mode = "PROPAGATE");
 
 // Lowers ReduceMax to a sequence of TOSA ops.
 std::optional<Value> convertReduceMaxOp(PatternRewriter& rewriter,
                                         Operation* op,
                                         RankedTensorType output_type,
                                         Value input_value,
-                                        ElementsAttr axes_elems);
+                                        ElementsAttr axes_elems,
+                                        StringRef nan_mode = "PROPAGATE");
 
 // Lowers ReduceProd to a sequence of TOSA ops.
 std::optional<Value> convertReduceProdOp(PatternRewriter& rewriter,
@@ -296,6 +303,10 @@ std::optional<Value> convertOneHotOp(PatternRewriter& rewriter, Operation* op,
                                      Value result_value, Value indices_value,
                                      Value on_value, Value off_value,
                                      int32_t depth, int32_t axis);
+
+// Lowers cast operator to a sequence of TOSA ops.
+std::optional<Value> convertCastOp(PatternRewriter& rewriter, Operation* op,
+                                   Value input, RankedTensorType output_type);
 
 // Lowers Sign operator to a sequence of TOSA ops.
 std::optional<Value> convertSignOp(PatternRewriter& rewriter, Operation* op,

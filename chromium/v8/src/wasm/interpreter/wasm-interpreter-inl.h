@@ -2,16 +2,18 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifndef V8_WASM_INTERPRETER_WASM_INTERPRETER_INL_H_
+#define V8_WASM_INTERPRETER_WASM_INTERPRETER_INL_H_
+
 #if !V8_ENABLE_WEBASSEMBLY
 #error This header should only be included if WebAssembly is enabled.
 #endif  // !V8_ENABLE_WEBASSEMBLY
 
-#ifndef V8_WASM_INTERPRETER_WASM_INTERPRETER_INL_H_
-#define V8_WASM_INTERPRETER_WASM_INTERPRETER_INL_H_
+#include "src/wasm/interpreter/wasm-interpreter.h"
+// Include the non-inl header before the rest of the headers.
 
 #include "src/handles/handles-inl.h"
 #include "src/wasm/interpreter/wasm-interpreter-runtime.h"
-#include "src/wasm/interpreter/wasm-interpreter.h"
 #include "src/wasm/wasm-module.h"
 
 namespace v8 {

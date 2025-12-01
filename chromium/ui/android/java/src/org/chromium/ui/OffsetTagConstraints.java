@@ -8,8 +8,11 @@ import com.google.errorprone.annotations.DoNotMock;
 
 import org.jni_zero.CalledByNative;
 
+import org.chromium.build.annotations.NullMarked;
+
 /** Java counterpart to the native viz::OffsetTagConstraints. */
 @DoNotMock("This is a simple value object.")
+@NullMarked
 public final class OffsetTagConstraints {
     public float mMinX;
     public float mMinY;
@@ -21,6 +24,33 @@ public final class OffsetTagConstraints {
         mMaxX = maxX;
         mMinY = minY;
         mMaxY = maxY;
+    }
+
+    @Override
+    public String toString() {
+        return String.valueOf(mMinX)
+                + " "
+                + String.valueOf(mMaxX)
+                + " "
+                + String.valueOf(mMinY)
+                + " "
+                + String.valueOf(mMaxY);
+    }
+
+    public boolean isValid() {
+        return mMinX <= 0
+                && mMinY <= 0
+                && mMaxX >= 0
+                && mMaxY >= 0
+                && mMinX <= mMaxX
+                && mMinY <= mMaxY;
+    }
+
+    public void reset() {
+        mMinX = 0;
+        mMinY = 0;
+        mMaxX = 0;
+        mMaxY = 0;
     }
 
     @CalledByNative

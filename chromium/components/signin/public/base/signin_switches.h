@@ -37,6 +37,12 @@ COMPONENT_EXPORT(SIGNIN_SWITCHES)
 BASE_DECLARE_FEATURE(kHistoryOptInEntryPoints);
 
 COMPONENT_EXPORT(SIGNIN_SWITCHES)
+BASE_DECLARE_FEATURE(kHistoryOptInPromoCtaStringVariation);
+
+COMPONENT_EXPORT(SIGNIN_SWITCHES)
+BASE_DECLARE_FEATURE(kHistoryOptInIph);
+
+COMPONENT_EXPORT(SIGNIN_SWITCHES)
 BASE_DECLARE_FEATURE(kSkipCheckForAccountManagementOnSignin);
 
 COMPONENT_EXPORT(SIGNIN_SWITCHES)
@@ -45,6 +51,11 @@ BASE_DECLARE_FEATURE(kUnoForAuto);
 COMPONENT_EXPORT(SIGNIN_SWITCHES)
 BASE_DECLARE_FEATURE(kUseHostedDomainForManagementCheckOnSignin);
 #endif
+
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
+COMPONENT_EXPORT(SIGNIN_SWITCHES)
+BASE_DECLARE_FEATURE(kEnableHistorySyncOptin);
+#endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
 
 COMPONENT_EXPORT(SIGNIN_SWITCHES)
 extern const char kClearTokenService[];
@@ -79,7 +90,14 @@ BASE_DECLARE_FEATURE(kEnableChromeRefreshTokenBinding);
 
 COMPONENT_EXPORT(SIGNIN_SWITCHES)
 bool IsChromeRefreshTokenBindingEnabled(const PrefService* profile_prefs);
+
+COMPONENT_EXPORT(SIGNIN_SWITCHES)
+BASE_DECLARE_FEATURE(kBoundSessionCredentialsKillSwitch);
 #endif
+
+// Enables a separate account-scoped storage for preferences.
+COMPONENT_EXPORT(SIGNIN_SWITCHES)
+BASE_DECLARE_FEATURE(kEnablePreferencesAccountStorage);
 
 COMPONENT_EXPORT(SIGNIN_SWITCHES)
 BASE_DECLARE_FEATURE(kForceDisableExtendedSyncPromos);
@@ -94,19 +112,9 @@ COMPONENT_EXPORT(SIGNIN_SWITCHES)
 BASE_DECLARE_FEATURE(kForceStartupSigninPromo);
 #endif
 
-// Used for the launch of the UNO model on Desktop Phase 0.
 COMPONENT_EXPORT(SIGNIN_SWITCHES)
-BASE_DECLARE_FEATURE(kExplicitBrowserSigninUIOnDesktop);
-// Param to control whether the bubbles are dismissible by pressing on the
-// avatar button.
-COMPONENT_EXPORT(SIGNIN_SWITCHES)
-extern const base::FeatureParam<bool>
-    kInterceptBubblesDismissibleByAvatarButton;
+BASE_DECLARE_FEATURE(kInterceptBubblesDismissibleByAvatarButton);
 
-COMPONENT_EXPORT(SIGNIN_SWITCHES)
-bool IsExplicitBrowserSigninUIOnDesktopEnabled();
-
-// Requires `kExplicitBrowserSigninUIOnDesktop`.
 COMPONENT_EXPORT(SIGNIN_SWITCHES)
 BASE_DECLARE_FEATURE(kImprovedSigninUIOnDesktop);
 
@@ -121,6 +129,12 @@ bool IsImprovedSettingsUIOnDesktopEnabled();
 
 COMPONENT_EXPORT(SIGNIN_SWITCHES)
 BASE_DECLARE_FEATURE(kEnableSnackbarInSettings);
+
+COMPONENT_EXPORT(SIGNIN_SWITCHES)
+BASE_DECLARE_FEATURE(kEnableImprovedGuestProfileMenu);
+
+COMPONENT_EXPORT(SIGNIN_SWITCHES)
+BASE_DECLARE_FEATURE(kEnablePendingModePasswordsPromo);
 
 #if BUILDFLAG(IS_IOS)
 
@@ -146,14 +160,31 @@ BASE_DECLARE_FEATURE(kBatchUploadDesktop);
 COMPONENT_EXPORT(SIGNIN_SWITCHES)
 bool IsBatchUploadDesktopEnabled();
 
-// Temporary flag to test Profile Picker Glic version.
-// TODO(crbug.com/390212241): Cleanup the flag when the code triggering the
-// Profile Picker Glic mode is hooked to the Glic view.
-COMPONENT_EXPORT(SIGNIN_SWITCHES)
-BASE_DECLARE_FEATURE(kProfilePickerGlicTesting);
-
 COMPONENT_EXPORT(SIGNIN_SWITCHES)
 BASE_DECLARE_FEATURE(kShowEnterpriseDialogForAllManagedAccountsSignin);
+
+// Enables users to perform an explicit signin upon installing an extension.
+// After this, syncing for extensions will be enabled when in transport mode
+// (when a user is signed in but has not turned on full sync).
+COMPONENT_EXPORT(SIGNIN_SWITCHES)
+BASE_DECLARE_FEATURE(kEnableExtensionsExplicitBrowserSignin);
+
+// This gates the new single-model approach where account bookmarks are stored
+// in separate permanent folders in BookmarkModel. The flag controls whether
+// BOOKMARKS datatype is enabled in the transport mode.
+// TODO(crbug.com/40943550): Remove this.
+COMPONENT_EXPORT(SIGNIN_SWITCHES)
+BASE_DECLARE_FEATURE(kSyncEnableBookmarksInTransportMode);
+
+// Returns if the current browser supports an explicit sign in (signs the user
+// into transport mode, as defined above) for extension access points (e.g. the
+// `ExtensionInstalledBubbleView`).
+COMPONENT_EXPORT(SIGNIN_SWITCHES)
+bool IsExtensionsExplicitBrowserSigninEnabled();
+
+COMPONENT_EXPORT(SIGNIN_SWITCHES)
+BASE_DECLARE_FEATURE(kDeferWebSigninTrackerCreation);
+
 }  // namespace switches
 
 // TODO(crbug.com/337879458): Move switches below into the switches namespace.

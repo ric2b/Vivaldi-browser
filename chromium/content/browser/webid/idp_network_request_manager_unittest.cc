@@ -9,6 +9,7 @@
 #include <string>
 #include <tuple>
 #include <utility>
+
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
 #include "base/test/bind.h"
@@ -24,6 +25,7 @@
 #include "net/http/http_response_headers.h"
 #include "net/http/http_status_code.h"
 #include "services/data_decoder/public/cpp/test_support/in_process_data_decoder.h"
+#include "services/network/public/cpp/cors/cors_error_status.h"
 #include "services/network/public/cpp/url_loader_completion_status.h"
 #include "services/network/public/cpp/weak_wrapper_shared_url_loader_factory.h"
 #include "services/network/public/mojom/client_security_state.mojom.h"
@@ -127,7 +129,8 @@ class IdpNetworkRequestManagerTest : public ::testing::Test {
   void AddResponse(const GURL& url,
                    net::HttpStatusCode http_status,
                    const std::string& mime_type,
-                   const std::string& content) {
+                   const std::string& content,
+                   bool cors_error = false) {
     auto head = network::mojom::URLResponseHead::New();
     std::string raw_header = "HTTP/1.1 " + base::NumberToString(http_status) +
                              " " + net::GetHttpReasonPhrase(http_status) +
@@ -135,8 +138,12 @@ class IdpNetworkRequestManagerTest : public ::testing::Test {
                              "Content-type: " +
                              mime_type + "\n\n";
     head->headers = net::HttpResponseHeaders::TryToCreate(raw_header);
-    test_url_loader_factory().AddResponse(url, std::move(head), content,
-                                          network::URLLoaderCompletionStatus());
+    test_url_loader_factory().AddResponse(
+        url, std::move(head), content,
+        cors_error
+            ? network::URLLoaderCompletionStatus(network::CorsErrorStatus(
+                  network::mojom::CorsError::kMissingAllowOriginHeader))
+            : network::URLLoaderCompletionStatus());
   }
 
   std::tuple<FetchStatus, IdpNetworkRequestManager::WellKnown>
@@ -241,9 +248,10 @@ class IdpNetworkRequestManagerTest : public ::testing::Test {
       const std::string& mime_type = "application/json",
       const char* response = R"({"token": "token"})",
       bool idp_blindness = false,
-      const char* token_endpoint_str = kTestTokenEndpoint) {
+      const char* token_endpoint_str = kTestTokenEndpoint,
+      bool cors_error = false) {
     GURL token_endpoint{token_endpoint_str};
-    AddResponse(token_endpoint, http_status, mime_type, response);
+    AddResponse(token_endpoint, http_status, mime_type, response, cors_error);
 
     FetchStatus fetch_status;
     TokenResult token_result;
@@ -597,7 +605,7 @@ TEST_F(IdpNetworkRequestManagerTest, ParseAccountUnicode) {
         SendAccountsRequestAndWaitForResponse(accounts_json.c_str());
 
     EXPECT_EQ(1UL, accounts.size());
-    EXPECT_EQ(test_value, accounts[0]->name);
+    EXPECT_EQ(test_value, accounts[0]->display_name);
   }
 }
 
@@ -633,14 +641,76 @@ TEST_F(IdpNetworkRequestManagerTest, ParseAccountMalformed) {
       AccountsResponseInvalidReason::kResponseIsNotJsonOrDict, 1);
 }
 
-TEST_F(IdpNetworkRequestManagerTest, ParseAccountLabels) {
+TEST_F(IdpNetworkRequestManagerTest, ParseAccountLabelsOldSyntax) {
+  // New syntax should be ignored with the flag disabled.
   const auto* test_accounts_json = R"({
   "accounts" : [
     {
       "id": "1234",
       "email": "ken@idp.test",
       "name": "Ken R. Example",
+      "label_hints": ["x1", 42, "x2"],
       "labels": ["l1", 42, "l2"]
+    }
+  ]
+  })";
+
+  FetchStatus accounts_response;
+  std::vector<IdentityRequestAccountPtr> accounts;
+  std::tie(accounts_response, accounts) =
+      SendAccountsRequestAndWaitForResponse(test_accounts_json);
+
+  EXPECT_EQ(ParseStatus::kSuccess, accounts_response.parse_status);
+  EXPECT_EQ(net::HTTP_OK, accounts_response.response_code);
+  EXPECT_EQ("1234", accounts[0]->id);
+  // The integer in the second position should be ignored.
+  ASSERT_EQ(2u, accounts[0]->labels.size());
+  EXPECT_EQ("l1", accounts[0]->labels[0]);
+  EXPECT_EQ("l2", accounts[0]->labels[1]);
+}
+
+TEST_F(IdpNetworkRequestManagerTest, ParseAccountLabelsOldAndNewSyntax) {
+  base::test::ScopedFeatureList list;
+  list.InitAndEnableFeature(features::kFedCmUseOtherAccountAndLabelsNewSyntax);
+
+  // label_hints should take precedence.
+  const auto* test_accounts_json = R"({
+  "accounts" : [
+    {
+      "id": "1234",
+      "email": "ken@idp.test",
+      "name": "Ken R. Example",
+      "label_hints": ["l1", 42, "l2"],
+      "labels": ["x1", 42, "x2"]
+    }
+  ]
+  })";
+
+  FetchStatus accounts_response;
+  std::vector<IdentityRequestAccountPtr> accounts;
+  std::tie(accounts_response, accounts) =
+      SendAccountsRequestAndWaitForResponse(test_accounts_json);
+
+  ASSERT_EQ(ParseStatus::kSuccess, accounts_response.parse_status);
+  EXPECT_EQ(net::HTTP_OK, accounts_response.response_code);
+  EXPECT_EQ("1234", accounts[0]->id);
+  // The integer in the second position should be ignored.
+  ASSERT_EQ(2u, accounts[0]->labels.size());
+  EXPECT_EQ("l1", accounts[0]->labels[0]);
+  EXPECT_EQ("l2", accounts[0]->labels[1]);
+}
+
+TEST_F(IdpNetworkRequestManagerTest, ParseAccountLabelHints) {
+  base::test::ScopedFeatureList list;
+  list.InitAndEnableFeature(features::kFedCmUseOtherAccountAndLabelsNewSyntax);
+
+  const auto* test_accounts_json = R"({
+  "accounts" : [
+    {
+      "id": "1234",
+      "email": "ken@idp.test",
+      "name": "Ken R. Example",
+      "label_hints": ["l1", 42, "l2"]
     }
   ]
   })";
@@ -672,6 +742,59 @@ TEST_F(IdpNetworkRequestManagerTest, ComputeWellKnownUrl) {
 
   EXPECT_EQ(std::nullopt, IdpNetworkRequestManager::ComputeWellKnownUrl(
                               GURL("https://192.101.0.1/test/")));
+}
+
+TEST_F(IdpNetworkRequestManagerTest, ParseUsername) {
+  base::test::ScopedFeatureList list;
+  list.InitAndEnableFeature(features::kFedCmAlternativeIdentifiers);
+
+  const auto* test_accounts_json = R"({
+  "accounts" : [
+    {
+      "id": "1234",
+      "email": "ken@idp.test",
+      "username": "ken"
+    }
+  ]
+  })";
+
+  FetchStatus accounts_response;
+  std::vector<IdentityRequestAccountPtr> accounts;
+  std::tie(accounts_response, accounts) =
+      SendAccountsRequestAndWaitForResponse(test_accounts_json);
+
+  ASSERT_EQ(ParseStatus::kSuccess, accounts_response.parse_status);
+  EXPECT_EQ(net::HTTP_OK, accounts_response.response_code);
+  EXPECT_EQ("1234", accounts[0]->id);
+  EXPECT_EQ("ken@idp.test", accounts[0]->email);
+  EXPECT_EQ("ken@idp.test", accounts[0]->display_identifier);
+  EXPECT_EQ("ken", accounts[0]->display_name);
+}
+
+TEST_F(IdpNetworkRequestManagerTest, ParsePhoneNumber) {
+  base::test::ScopedFeatureList list;
+  list.InitAndEnableFeature(features::kFedCmAlternativeIdentifiers);
+
+  const auto* test_accounts_json = R"({
+  "accounts" : [
+    {
+      "id": "1234",
+      "phone": "111-111-1111"
+    }
+  ]
+  })";
+
+  FetchStatus accounts_response;
+  std::vector<IdentityRequestAccountPtr> accounts;
+  std::tie(accounts_response, accounts) =
+      SendAccountsRequestAndWaitForResponse(test_accounts_json);
+
+  ASSERT_EQ(ParseStatus::kSuccess, accounts_response.parse_status);
+  EXPECT_EQ(net::HTTP_OK, accounts_response.response_code);
+  EXPECT_EQ("1234", accounts[0]->id);
+  EXPECT_EQ("", accounts[0]->email);
+  EXPECT_EQ("", accounts[0]->display_identifier);
+  EXPECT_EQ("111-111-1111", accounts[0]->display_name);
 }
 
 // Test that IdpNetworkRequestManager::FetchWellKnown() fails when the
@@ -1089,12 +1212,59 @@ TEST_F(IdpNetworkRequestManagerTest,
   base::test::ScopedFeatureList list;
   list.InitAndEnableFeature(features::kFedCmUseOtherAccount);
 
+  // The toplevel field should be ignored with the flag disabled.
   const char test_json[] = R"({
+  "supports_use_other_account": false,
   "modes": {
     "passive": {
       "supports_use_other_account": true
     }
   }
+  })";
+
+  FetchStatus fetch_status;
+  IdentityProviderMetadata idp_metadata;
+  std::tie(fetch_status, idp_metadata) = SendConfigRequestAndWaitForResponse(
+      test_json, net::HTTP_OK, "application/json",
+      blink::mojom::RpMode::kPassive);
+
+  EXPECT_EQ(ParseStatus::kSuccess, fetch_status.parse_status);
+  EXPECT_EQ(net::HTTP_OK, fetch_status.response_code);
+  EXPECT_EQ(true, idp_metadata.supports_add_account);
+}
+
+TEST_F(IdpNetworkRequestManagerTest,
+       ParseConfigSupportsOtherAccountOldAndNewSyntax) {
+  base::test::ScopedFeatureList list;
+  list.InitAndEnableFeature(features::kFedCmUseOtherAccountAndLabelsNewSyntax);
+
+  // The toplevel field should take precedence.
+  const char test_json[] = R"({
+  "supports_use_other_account": true,
+  "modes": {
+    "passive": {
+      "supports_use_other_account": false
+    }
+  }
+  })";
+
+  FetchStatus fetch_status;
+  IdentityProviderMetadata idp_metadata;
+  std::tie(fetch_status, idp_metadata) = SendConfigRequestAndWaitForResponse(
+      test_json, net::HTTP_OK, "application/json",
+      blink::mojom::RpMode::kPassive);
+
+  EXPECT_EQ(ParseStatus::kSuccess, fetch_status.parse_status);
+  EXPECT_EQ(net::HTTP_OK, fetch_status.response_code);
+  EXPECT_EQ(true, idp_metadata.supports_add_account);
+}
+
+TEST_F(IdpNetworkRequestManagerTest, ParseConfigSupportsOtherAccountNewSyntax) {
+  base::test::ScopedFeatureList list;
+  list.InitAndEnableFeature(features::kFedCmUseOtherAccountAndLabelsNewSyntax);
+
+  const char test_json[] = R"({
+  "supports_use_other_account": true
   })";
 
   FetchStatus fetch_status;
@@ -1197,11 +1367,53 @@ TEST_F(IdpNetworkRequestManagerTest,
   EXPECT_EQ(false, idp_metadata.supports_add_account);
 }
 
-TEST_F(IdpNetworkRequestManagerTest, ParseConfigRequestedLabel) {
+TEST_F(IdpNetworkRequestManagerTest, ParseConfigRequestedLabelOldSyntax) {
+  // New syntax should be ignored with flag disabled.
   const char test_json[] = R"({
+    "account_label": "l1",
     "accounts": {
       "include": "l1"
     }
+  })";
+
+  FetchStatus fetch_status;
+  IdentityProviderMetadata idp_metadata;
+  std::tie(fetch_status, idp_metadata) =
+      SendConfigRequestAndWaitForResponse(test_json);
+
+  EXPECT_EQ(ParseStatus::kSuccess, fetch_status.parse_status);
+  EXPECT_EQ(net::HTTP_OK, fetch_status.response_code);
+  EXPECT_EQ("l1", idp_metadata.requested_label);
+}
+
+TEST_F(IdpNetworkRequestManagerTest, ParseConfigRequestedLabelOldAndNewSyntax) {
+  base::test::ScopedFeatureList list;
+  list.InitAndEnableFeature(features::kFedCmUseOtherAccountAndLabelsNewSyntax);
+
+  // New syntax should take precedence over old syntax.
+  const char test_json[] = R"({
+    "account_label": "l1",
+    "accounts": {
+      "include": "l5"
+    }
+  })";
+
+  FetchStatus fetch_status;
+  IdentityProviderMetadata idp_metadata;
+  std::tie(fetch_status, idp_metadata) =
+      SendConfigRequestAndWaitForResponse(test_json);
+
+  EXPECT_EQ(ParseStatus::kSuccess, fetch_status.parse_status);
+  EXPECT_EQ(net::HTTP_OK, fetch_status.response_code);
+  EXPECT_EQ("l1", idp_metadata.requested_label);
+}
+
+TEST_F(IdpNetworkRequestManagerTest, ParseConfigRequestedLabel) {
+  base::test::ScopedFeatureList list;
+  list.InitAndEnableFeature(features::kFedCmUseOtherAccountAndLabelsNewSyntax);
+
+  const char test_json[] = R"({
+    "account_label": "l1"
   })";
 
   FetchStatus fetch_status;
@@ -1346,6 +1558,7 @@ TEST_F(IdpNetworkRequestManagerTest, IdAssertionRequest) {
   EXPECT_EQ(ParseStatus::kSuccess, fetch_status.parse_status);
   EXPECT_EQ(net::HTTP_OK, fetch_status.response_code);
   ASSERT_EQ("token", token_result.token);
+  ASSERT_EQ(false, fetch_status.cors_error);
 }
 
 // Tests the ID assertion request implementation when CORS is enforced on the
@@ -1381,6 +1594,22 @@ TEST_F(IdpNetworkRequestManagerTest, IdAssertionRequestWithCORS) {
   EXPECT_EQ(ParseStatus::kSuccess, fetch_status.parse_status);
   EXPECT_EQ(net::HTTP_OK, fetch_status.response_code);
   ASSERT_EQ("token", token_result.token);
+  ASSERT_EQ(false, fetch_status.cors_error);
+}
+
+// Tests the ID assertion request implementation when CORS is enforced on the
+// endpoint and server responds with CORS Error
+TEST_F(IdpNetworkRequestManagerTest, IdAssertionRequestWithCORSError) {
+  FetchStatus fetch_status;
+  TokenResult token_result;
+  std::tie(fetch_status, token_result) = SendTokenRequestAndWaitForResponse(
+      "account", "request", net::HTTP_FORBIDDEN, "application/json",
+      R"({"token": ""})", false, kTestTokenEndpoint, true);
+
+  EXPECT_EQ(ParseStatus::kNoResponseError, fetch_status.parse_status);
+  EXPECT_EQ(net::ERR_FAILED, fetch_status.response_code);
+  ASSERT_EQ("", token_result.token);
+  ASSERT_EQ(true, fetch_status.cors_error);
 }
 
 // Tests the client metadata implementation.

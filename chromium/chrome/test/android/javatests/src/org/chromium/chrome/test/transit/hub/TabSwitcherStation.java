@@ -28,6 +28,7 @@ import org.chromium.base.test.transit.Transition;
 import org.chromium.base.test.transit.ViewElement;
 import org.chromium.base.test.transit.ViewSpec;
 import org.chromium.base.test.util.ViewActionOnDescendant;
+import org.chromium.chrome.browser.hub.HubToolbarMediator;
 import org.chromium.chrome.browser.hub.HubToolbarView;
 import org.chromium.chrome.browser.hub.PaneId;
 import org.chromium.chrome.browser.tabmodel.TabModel;
@@ -92,12 +93,12 @@ public abstract class TabSwitcherStation extends HubBaseStation {
             elements.declareElementFactory(
                     mActivityElement,
                     delayedElements -> {
-                        if (!mActivityElement.get().isTablet()) {
-                            delayedElements.declareView(SEARCH_BOX);
-                            delayedElements.declareNoView(SEARCH_LOUPE);
-                        } else {
-                            delayedElements.declareView(SEARCH_LOUPE);
+                        if (shouldHubSearchBoxBeVisible()) {
                             delayedElements.declareNoView(SEARCH_BOX);
+                            delayedElements.declareView(SEARCH_LOUPE);
+                        } else {
+                            delayedElements.declareNoView(SEARCH_LOUPE);
+                            delayedElements.declareView(SEARCH_BOX);
                         }
                     });
         }
@@ -240,5 +241,19 @@ public abstract class TabSwitcherStation extends HubBaseStation {
 
     public ViewElement getRecyclerViewElement() {
         return mRecyclerViewElement;
+    }
+
+    public TabSwitcherSearchStation openTabSwitcherSearch() {
+        TabSwitcherSearchStation searchStation = new TabSwitcherSearchStation(mIsIncognito);
+        travelToSync(
+                searchStation,
+                shouldHubSearchBoxBeVisible() ? SEARCH_LOUPE::click : SEARCH_BOX::click);
+        searchStation.focusAndDropSoftKeyboard();
+        return searchStation;
+    }
+
+    private boolean shouldHubSearchBoxBeVisible() {
+        return HubToolbarMediator.isScreenWidthTablet(
+                mActivityElement.get().getResources().getConfiguration().screenWidthDp);
     }
 }

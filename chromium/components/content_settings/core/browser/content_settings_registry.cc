@@ -17,6 +17,8 @@
 #include "components/content_settings/core/common/content_settings.h"
 #include "components/content_settings/core/common/features.h"
 
+#include "app/vivaldi_apptools.h"
+
 namespace content_settings {
 
 namespace {
@@ -138,6 +140,18 @@ void ContentSettingsRegistry::Init() {
            WebsiteSettingsRegistry::ALL_PLATFORMS,
            ContentSettingsInfo::INHERIT_IN_INCOGNITO,
            ContentSettingsInfo::EXCEPTIONS_ON_SECURE_AND_INSECURE_ORIGINS);
+
+  if (vivaldi::IsVivaldiRunning()) {
+    Register(ContentSettingsType::KEY_SHORTCUTS, "key_shortcuts",
+             CONTENT_SETTING_ALLOW, WebsiteSettingsInfo::UNSYNCABLE,
+             /*allowlisted_primary_schemes=*/
+             {kChromeUIScheme, kChromeDevToolsScheme, kExtensionScheme},
+             /*valid_settings=*/{CONTENT_SETTING_ALLOW, CONTENT_SETTING_BLOCK},
+             WebsiteSettingsInfo::TOP_ORIGIN_ONLY_SCOPE,
+             WebsiteSettingsRegistry::ALL_PLATFORMS,
+             ContentSettingsInfo::INHERIT_IN_INCOGNITO,
+             ContentSettingsInfo::EXCEPTIONS_ON_SECURE_AND_INSECURE_ORIGINS);
+  }
 
   Register(ContentSettingsType::GEOLOCATION, "geolocation", CONTENT_SETTING_ASK,
            WebsiteSettingsInfo::UNSYNCABLE, /*allowlisted_primary_schemes=*/{},
@@ -427,7 +441,8 @@ void ContentSettingsRegistry::Init() {
            /*allowlisted_primary_schemes=*/{},
            /*valid_settings=*/{CONTENT_SETTING_ASK, CONTENT_SETTING_BLOCK},
            WebsiteSettingsInfo::TOP_ORIGIN_ONLY_SCOPE,
-           WebsiteSettingsRegistry::DESKTOP,
+           WebsiteSettingsRegistry::DESKTOP |
+               WebsiteSettingsRegistry::PLATFORM_ANDROID,
            ContentSettingsInfo::INHERIT_IF_LESS_PERMISSIVE,
            ContentSettingsInfo::EXCEPTIONS_ON_SECURE_ORIGINS_ONLY);
 
@@ -859,8 +874,20 @@ void ContentSettingsRegistry::Init() {
            /*valid_settings=*/
            {CONTENT_SETTING_ALLOW, CONTENT_SETTING_BLOCK},
            WebsiteSettingsInfo::TOP_ORIGIN_ONLY_SCOPE,
-           WebsiteSettingsRegistry::DESKTOP,
+           WebsiteSettingsRegistry::DESKTOP |
+               WebsiteSettingsRegistry::PLATFORM_ANDROID,
            ContentSettingsInfo::INHERIT_IN_INCOGNITO,
+           ContentSettingsInfo::EXCEPTIONS_ON_SECURE_ORIGINS_ONLY);
+
+  Register(ContentSettingsType::LOCAL_NETWORK_ACCESS, "local-network-access",
+           CONTENT_SETTING_ASK, WebsiteSettingsInfo::UNSYNCABLE,
+           /*allowlisted_primary_schemes=*/{},
+           /*valid_settings=*/
+           {CONTENT_SETTING_ALLOW, CONTENT_SETTING_BLOCK, CONTENT_SETTING_ASK},
+           WebsiteSettingsInfo::TOP_ORIGIN_ONLY_SCOPE,
+           WebsiteSettingsRegistry::DESKTOP |
+               WebsiteSettingsRegistry::PLATFORM_ANDROID,
+           ContentSettingsInfo::INHERIT_IF_LESS_PERMISSIVE,
            ContentSettingsInfo::EXCEPTIONS_ON_SECURE_ORIGINS_ONLY);
 }
 

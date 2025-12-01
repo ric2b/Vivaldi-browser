@@ -36,7 +36,7 @@
 
 
 int pkcs12_iterations_acceptable(uint64_t iterations) {
-#if defined(BORINGSSL_UNSAFE_FUZZER_MODE)
+#if defined(FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION)
   static const uint64_t kIterationsLimit = 2048;
 #else
   // Windows imposes a limit of 600K. Mozilla say: “so them increasing
@@ -528,9 +528,9 @@ static int pkcs12_check_mac(int *out_mac_ok, const char *password,
   }
 
   *out_mac_ok = CBS_mem_equal(expected_mac, hmac, hmac_len);
-#if defined(BORINGSSL_UNSAFE_FUZZER_MODE)
-  *out_mac_ok = 1;
-#endif
+  if (CRYPTO_fuzzer_mode_enabled()) {
+    *out_mac_ok = 1;
+  }
   ret = 1;
 
 err:
@@ -1005,17 +1005,20 @@ static int add_cert_safe_contents(CBB *cbb, X509 *cert,
   return CBB_flush(cbb);
 }
 
-static int add_encrypted_data(CBB *out, int pbe_nid, const char *password,
-                              size_t password_len, uint32_t iterations,
-                              const uint8_t *in, size_t in_len) {
+// add_encrypted_data encrypts |in| with |pbe_nid| and |pbe_cipher|, writing the
+// result to |out|. It returns one on success and zero on error. |pbe_nid| and
+// |pbe_cipher| are interpreted as in |PKCS8_encrypt|.
+static int add_encrypted_data(CBB *out, int pbe_nid,
+                              const EVP_CIPHER *pbe_cipher,
+                              const char *password, size_t password_len,
+                              uint32_t iterations, const uint8_t *in,
+                              size_t in_len) {
   uint8_t salt[PKCS5_SALT_LEN];
   if (!RAND_bytes(salt, sizeof(salt))) {
     return 0;
   }
 
-  int ret = 0;
-  EVP_CIPHER_CTX ctx;
-  EVP_CIPHER_CTX_init(&ctx);
+  bssl::ScopedEVP_CIPHER_CTX ctx;
   CBB content_info, type, wrapper, encrypted_data, encrypted_content_info,
       inner_type, encrypted_content;
   if (  // Add the ContentInfo wrapping.
@@ -1033,44 +1036,39 @@ static int add_encrypted_data(CBB *out, int pbe_nid, const char *password,
       !CBB_add_asn1(&encrypted_content_info, &inner_type, CBS_ASN1_OBJECT) ||
       !CBB_add_bytes(&inner_type, kPKCS7Data, sizeof(kPKCS7Data)) ||
       // Set up encryption and fill in contentEncryptionAlgorithm.
-      !pkcs12_pbe_encrypt_init(&encrypted_content_info, &ctx, pbe_nid,
-                               iterations, password, password_len, salt,
-                               sizeof(salt)) ||
+      !pkcs12_pbe_encrypt_init(&encrypted_content_info, ctx.get(), pbe_nid,
+                               pbe_cipher, iterations, password, password_len,
+                               salt, sizeof(salt)) ||
       // Note this tag is primitive. It is an implicitly-tagged OCTET_STRING, so
       // it inherits the inner tag's constructed bit.
       !CBB_add_asn1(&encrypted_content_info, &encrypted_content,
                     CBS_ASN1_CONTEXT_SPECIFIC | 0)) {
-    goto err;
+    return 0;
   }
 
-  {
-    size_t max_out = in_len + EVP_CIPHER_CTX_block_size(&ctx);
-    if (max_out < in_len) {
-      OPENSSL_PUT_ERROR(PKCS8, PKCS8_R_TOO_LONG);
-      goto err;
-    }
-
-    uint8_t *ptr;
-    int n1, n2;
-    if (!CBB_reserve(&encrypted_content, &ptr, max_out) ||
-        !EVP_CipherUpdate(&ctx, ptr, &n1, in, in_len) ||
-        !EVP_CipherFinal_ex(&ctx, ptr + n1, &n2) ||
-        !CBB_did_write(&encrypted_content, n1 + n2) || !CBB_flush(out)) {
-      goto err;
-    }
+  size_t max_out = in_len + EVP_CIPHER_CTX_block_size(ctx.get());
+  if (max_out < in_len) {
+    OPENSSL_PUT_ERROR(PKCS8, PKCS8_R_TOO_LONG);
+    return 0;
   }
 
-  ret = 1;
+  uint8_t *ptr;
+  int n1, n2;
+  if (!CBB_reserve(&encrypted_content, &ptr, max_out) ||
+      !EVP_CipherUpdate(ctx.get(), ptr, &n1, in, in_len) ||
+      !EVP_CipherFinal_ex(ctx.get(), ptr + n1, &n2) ||
+      !CBB_did_write(&encrypted_content, n1 + n2) || !CBB_flush(out)) {
+    return 0;
+  }
 
-err:
-  EVP_CIPHER_CTX_cleanup(&ctx);
-  return ret;
+  return 1;
 }
 
 PKCS12 *PKCS12_create(const char *password, const char *name,
                       const EVP_PKEY *pkey, X509 *cert,
                       const STACK_OF(X509) *chain, int key_nid, int cert_nid,
                       int iterations, int mac_iterations, int key_type) {
+  // TODO(crbug.com/396434682): Improve these defaults.
   if (key_nid == 0) {
     key_nid = NID_pbe_WithSHA1And3_Key_TripleDES_CBC;
   }
@@ -1186,13 +1184,21 @@ PKCS12 *PKCS12_create(const char *password, const char *name,
         goto err;
       }
     } else {
+      // This function differs from other OpenSSL functions in how PBES1 and
+      // PBES2 schemes are selected. If the NID matches a cipher, treat this as
+      // PBES2 instead. Convert to the other convention.
+      const EVP_CIPHER *cipher = pkcs5_pbe2_nid_to_cipher(cert_nid);
+      if (cipher != nullptr) {
+        cert_nid = -1;
+      }
       CBB plaintext_cbb;
-      int ok = CBB_init(&plaintext_cbb, 0) &&
-               add_cert_safe_contents(&plaintext_cbb, cert, chain, name, key_id,
-                                      key_id_len) &&
-               add_encrypted_data(
-                   &content_infos, cert_nid, password, password_len, iterations,
-                   CBB_data(&plaintext_cbb), CBB_len(&plaintext_cbb));
+      int ok =
+          CBB_init(&plaintext_cbb, 0) &&
+          add_cert_safe_contents(&plaintext_cbb, cert, chain, name, key_id,
+                                 key_id_len) &&
+          add_encrypted_data(&content_infos, cert_nid, cipher, password,
+                             password_len, iterations, CBB_data(&plaintext_cbb),
+                             CBB_len(&plaintext_cbb));
       CBB_cleanup(&plaintext_cbb);
       if (!ok) {
         goto err;
@@ -1228,12 +1234,19 @@ PKCS12 *PKCS12_create(const char *password, const char *name,
         goto err;
       }
     } else {
+      // This function differs from other OpenSSL functions in how PBES1 and
+      // PBES2 schemes are selected. If the NID matches a cipher, treat this as
+      // PBES2 instead. Convert to the other convention.
+      const EVP_CIPHER *cipher = pkcs5_pbe2_nid_to_cipher(key_nid);
+      if (cipher != nullptr) {
+        key_nid = -1;
+      }
       if (!CBB_add_bytes(&bag_oid, kPKCS8ShroudedKeyBag,
                          sizeof(kPKCS8ShroudedKeyBag)) ||
           !CBB_add_asn1(&bag, &bag_contents,
                         CBS_ASN1_CONSTRUCTED | CBS_ASN1_CONTEXT_SPECIFIC | 0) ||
           !PKCS8_marshal_encrypted_private_key(
-              &bag_contents, key_nid, NULL, password, password_len,
+              &bag_contents, key_nid, cipher, password, password_len,
               NULL /* generate a random salt */,
               0 /* use default salt length */, iterations, pkey)) {
         goto err;

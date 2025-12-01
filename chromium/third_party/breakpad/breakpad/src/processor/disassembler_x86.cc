@@ -56,7 +56,7 @@ DisassemblerX86::DisassemblerX86(const uint8_t* bytecode,
                                      pushed_bad_value_(false),
                                      end_of_block_(false),
                                      flags_(0) {
-  libdis::x86_init(libdis::opt_none, NULL, NULL);
+  libdis::x86_init(libdis::opt_none, nullptr, nullptr);
 }
 
 DisassemblerX86::~DisassemblerX86() {

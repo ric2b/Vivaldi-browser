@@ -37,6 +37,9 @@ if (enable_java_templates) {
   java_library("build_java") {
     supports_android = true
 
+    # Caused odd errors: https://crbug.com/404877460
+    jacoco_never_instrument = true
+
     # Required to prevent circular dependency from //tools/android/errorprone_plugin.
     enable_errorprone = false
     srcjar_deps = [
@@ -56,6 +59,7 @@ if (enable_java_templates) {
       "java/src/org/chromium/build/annotations/IdentifierNameString.java",
       "java/src/org/chromium/build/annotations/Initializer.java",
       "java/src/org/chromium/build/annotations/MockedInTests.java",
+      "java/src/org/chromium/build/annotations/MonotonicNonNull.java",
       "java/src/org/chromium/build/annotations/NullMarked.java",
       "java/src/org/chromium/build/annotations/NullUnmarked.java",
       "java/src/org/chromium/build/annotations/Nullable.java",
@@ -114,6 +118,9 @@ if (defined(sanitizer_arch)) {
       "--output",
       rebase_path(outputs[0], root_build_dir),
     ]
+    if (is_hwasan) {
+      args += [ "--is_hwasan" ]
+    }
   }
 }
 
@@ -148,10 +155,10 @@ python_library("devil_chromium_py") {
 group("apk_installer_data") {
   # Other //build users let devil library fetch these from Google Storage.
   if (build_with_chromium) {
-    if (is_component_build) {
+    if (!is_component_build) {
       data_deps = [
         "//build/android/pylib/device/commands",
-        "//tools/android/md5sum",
+        "//tools/android/devil_util",
       ]
     }
     data =

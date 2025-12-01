@@ -16,7 +16,6 @@
 #include "components/input/native_web_keyboard_event.h"
 #include "components/prefs/pref_change_registrar.h"
 #include "components/sessions/core/session_id.h"
-#include "components/translate/content/browser/content_translate_driver.h"
 #include "components/zoom/zoom_observer.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/common/drop_data.h"
@@ -31,6 +30,8 @@
 #include "components/content/vivaldi_content_delegates.h"
 #include "extensions/schema/tabs_private.h"
 #include "renderer/mojo/vivaldi_frame_service.mojom.h"
+
+#include "extensions/vivaldi_browser_component_wrapper.h"
 
 using JSAccessKeysCallback =
     base::OnceCallback<void(std::vector<::vivaldi::mojom::AccessKeyPtr>)>;
@@ -49,16 +50,6 @@ class Browser;
 namespace extensions {
 
 class TabMutingHandler;
-
-bool IsTabMuted(const content::WebContents* web_contents);
-bool IsTabInAWorkspace(const content::WebContents* web_contents);
-bool IsTabInAWorkspace(const std::string& viv_extdata);
-std::optional<double> GetTabWorkspaceId(const std::string& viv_extdata);
-Browser* GetWorkspaceBrowser(const double workspace_id);
-int CountTabsInWorkspace(TabStripModel* tab_strip, const double workspace_id);
-base::Value::List getLinkRoutes(content::WebContents* contents);
-bool SetTabWorkspaceId(content::WebContents* contents, double workspace_id);
-bool IsWorkspacesEnabled(content::WebContents* contents);
 
 class TabsPrivateAPI : public BrowserContextKeyedAPI {
   friend class BrowserContextKeyedAPIFactory<TabsPrivateAPI>;
@@ -168,11 +159,10 @@ class VivaldiGuestViewContentObserver
 
 class VivaldiPrivateTabObserver
     : public content::WebContentsObserver,
-      public translate::ContentTranslateDriver::TranslationObserver,
-      public translate::TranslateDriver::LanguageDetectionObserver,
       public vivaldi_content::TabActivationDelegate,
       public content::WebContentsUserData<VivaldiPrivateTabObserver>,
-      public TabResourceUsageCollector::Observer {
+      public VivaldiBrowserComponentWrapper::TabResourceUsageCollectorBridge::
+          Observer {
  public:
   explicit VivaldiPrivateTabObserver(content::WebContents* web_contents);
   ~VivaldiPrivateTabObserver() override;
@@ -200,16 +190,6 @@ class VivaldiPrivateTabObserver
   void CaptureStarted() override;
   void CaptureFinished() override;
   void MediaPictureInPictureChanged(bool is_picture_in_picture) override;
-
-  // translate::ContentTranslateDriver::Observer implementation
-  void OnPageTranslated(const std::string& original_lang,
-                        const std::string& translated_lang,
-                        translate::TranslateErrors error_type) override;
-  void OnIsPageTranslatedChanged(content::WebContents* source) override;
-
-  // translate::TranslateDriver::LanguageDetectionObserver
-  void OnLanguageDetermined(
-      const translate::LanguageDetectionDetails& details) override;
 
   // Overridden from vivaldi_content::TabActivationDelegate:
   void ActivateTab(content::WebContents* contents) override;
@@ -243,14 +223,14 @@ class VivaldiPrivateTabObserver
 
   // If a page is accessing a resource controlled by a permission this will
   // fire.
-  void OnPermissionAccessed(ContentSettingsType type,
+  virtual void OnPermissionAccessed(ContentSettingsType type,
                             std::string origin,
                             ContentSetting content_setting);
 
  private:
   friend class content::WebContentsUserData<VivaldiPrivateTabObserver>;
 
-  // TabResourceUsageCollector::Observer:
+  // TabResourceUsageCollectorBridge::Observer:
   void OnTabResourceMetricsRefreshed() override;
 
   // Mimetype of displayed document.

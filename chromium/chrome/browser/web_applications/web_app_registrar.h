@@ -34,14 +34,16 @@
 #include "components/services/app_service/public/cpp/file_handler.h"
 #include "components/services/app_service/public/cpp/protocol_handler_info.h"
 #include "components/webapps/common/web_app_id.h"
-#include "third_party/blink/public/common/permissions_policy/permissions_policy.h"
+#include "services/network/public/cpp/permissions_policy/permissions_policy_declaration.h"
 #include "third_party/blink/public/mojom/installedapp/related_application.mojom.h"
 #include "third_party/skia/include/core/SkColor.h"
 
 class Profile;
 
 namespace apps {
+namespace proto {
 struct ShareTarget;
+}  // namespace proto
 }  // namespace apps
 
 namespace content {
@@ -163,24 +165,6 @@ class WebAppRegistrar {
       const GURL& url,
       const WebAppFilter& filter) const;
 
-  // This struct can be used `FindBestAppWithUrlInScope` and possible future
-  // methods to filter apps.
-  struct AppFilterOptions {
-    // TODO(crbug.com/341337420): Change this to default true.
-    bool include_extended_scope = false;
-  };
-
-  // DEPRECATED: Use `FindBestAppWithUrlInScope(GURL, WebAppFilter)` instead.
-  // Returns the app id of an app in the registry in one of the given
-  // `allowed_states` and the longest scope that is a prefix of `url`. Will
-  // CHECK-fail if `allowed_states` is empty.
-  // The 'best' criteria is a combination of the following:
-  // - The length of the scope of the potential controlling app.
-  std::optional<webapps::AppId> FindBestAppWithUrlInScope(
-      const GURL& url,
-      std::initializer_list<proto::InstallState> allowed_states,
-      AppFilterOptions options) const;
-
   // Finds all apps that have scopes that are nested within the given
   // `outer_scope`, and match the specified filter.
   std::vector<webapps::AppId> FindAllAppsNestedInUrl(
@@ -203,7 +187,7 @@ class WebAppRegistrar {
   // the app with |app_id|. This permissions policy is not yet parsed by the
   // PermissionsPolicyParser, and thus may contain invalid permissions and/or
   // origin allowlists.
-  blink::ParsedPermissionsPolicy GetPermissionsPolicy(
+  network::ParsedPermissionsPolicy GetPermissionsPolicy(
       const webapps::AppId& app_id) const;
 
   // Returns true if there exists a currently installed app that has been
@@ -438,8 +422,12 @@ class WebAppRegistrar {
   std::optional<GURL> GetAppPinnedHomeTabUrl(
       const webapps::AppId& app_id) const;
 
-  // Returns the current WebAppOsIntegrationState stored in the web_app DB.
-  std::optional<proto::WebAppOsIntegrationState>
+  // Returns true if the given `url` is in scope for the home tab for the given
+  // app, if it has tabbed mode enabled.
+  bool IsUrlInHomeTabScope(const GURL& url, const webapps::AppId& app_id) const;
+
+  // Returns the current WebAppOsIntegration stored in the web_app DB.
+  std::optional<proto::os_state::WebAppOsIntegration>
   GetAppCurrentOsIntegrationState(const webapps::AppId& app_id) const;
 
   // Returns the StoragePartitionConfig of all StoragePartitions used by
@@ -462,6 +450,9 @@ class WebAppRegistrar {
   // its scope. This returns false for apps that aren't installed.
   bool CanCaptureLinksInScope(const webapps::AppId& app_id) const;
 
+  // ChromeOS stores the per-app capturing setting in PreferredAppsImpl, not
+  // here.
+#if !BUILDFLAG(IS_CHROMEOS)
   // Returns true if a web app is set to be the default app to
   // capture links by the user. If an app is not locally installed, this returns
   // false.
@@ -489,13 +480,14 @@ class WebAppRegistrar {
   bool AppScopesMatchForUserLinkCapturing(const webapps::AppId& app_id1,
                                           const webapps::AppId& app_id2) const;
 
+  bool IsPreferredAppForCapturingUrl(const GURL& url,
+                                     const webapps::AppId& app_id);
+#endif
+
   // Returns information about apps that controls the input url, i.e. the app's
   // scope is a substring of the url passed to the API.
   base::flat_map<webapps::AppId, std::string> GetAllAppsControllingUrl(
       const GURL& url) const;
-
-  bool IsPreferredAppForCapturingUrl(const GURL& url,
-                                     const webapps::AppId& app_id);
 
   bool IsDiyApp(const webapps::AppId& app_id) const;
 

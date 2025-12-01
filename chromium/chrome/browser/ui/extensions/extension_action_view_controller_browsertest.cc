@@ -20,9 +20,9 @@
 #include "chrome/browser/extensions/extension_action_dispatcher.h"
 #include "chrome/browser/extensions/extension_action_runner.h"
 #include "chrome/browser/extensions/extension_action_test_util.h"
-#include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/extensions/extension_util.h"
 #include "chrome/browser/extensions/load_error_reporter.h"
+#include "chrome/browser/extensions/permissions/permissions_updater.h"
 #include "chrome/browser/extensions/permissions/scripting_permissions_modifier.h"
 #include "chrome/browser/extensions/permissions/site_permissions_helper.h"
 #include "chrome/browser/extensions/test_extension_system.h"
@@ -43,8 +43,8 @@
 #include "content/public/test/browser_test.h"
 #include "extensions/browser/extension_action.h"
 #include "extensions/browser/extension_action_manager.h"
+#include "extensions/browser/extension_registrar.h"
 #include "extensions/browser/extension_registry.h"
-#include "extensions/browser/extension_system.h"
 #include "extensions/browser/permissions_manager.h"
 #include "extensions/browser/test_extension_registry_observer.h"
 #include "extensions/common/api/extension_action/action_info.h"
@@ -124,6 +124,11 @@ class ExtensionActionViewControllerBrowserTest : public InProcessBrowserTest {
                                                            {});
   }
 
+  void GrantActivePermissions(const extensions::Extension* extension) {
+    extensions::PermissionsUpdater(browser()->profile())
+        .GrantActivePermissions(extension);
+  }
+
   scoped_refptr<const extensions::Extension>
   CreateAndAddExtensionWithGrantedHostPermissions(
       const std::string& name,
@@ -137,17 +142,17 @@ class ExtensionActionViewControllerBrowserTest : public InProcessBrowserTest {
             .Build();
 
     if (!permissions.empty()) {
-      extension_service()->GrantPermissions(extension.get());
+      GrantActivePermissions(extension.get());
     }
 
-    extension_service()->AddExtension(extension.get());
+    extension_registrar()->AddExtension(extension.get());
     return extension;
   }
 
-  extensions::ExtensionService* extension_service() {
-    return extensions::ExtensionSystem::Get(browser()->profile())
-        ->extension_service();
+  extensions::ExtensionRegistrar* extension_registrar() {
+    return extensions::ExtensionRegistrar::Get(browser()->profile());
   }
+
   ToolbarActionsModel* toolbar_model() {
     return ToolbarActionsModel::Get(browser()->profile());
   }
@@ -333,8 +338,8 @@ IN_PROC_BROWSER_TEST_P(ExtensionActionViewControllerFeatureRolloutBrowserTest,
           .AddHostPermission("https://www.google.com/*")
           .Build();
 
-  extension_service()->GrantPermissions(extension.get());
-  extension_service()->AddExtension(extension.get());
+  GrantActivePermissions(extension.get());
+  extension_registrar()->AddExtension(extension.get());
   extensions::ScriptingPermissionsModifier permissions_modifier(
       browser()->profile(), extension);
   permissions_modifier.SetWithholdHostPermissions(true);
@@ -552,8 +557,8 @@ IN_PROC_BROWSER_TEST_P(ExtensionActionViewControllerGrayscaleTest,
     std::string host_permission = "https://www.google.com/*";
     scoped_refptr<const extensions::Extension> extension =
         CreateExtension(permission_type, host_permission);
-    extension_service()->GrantPermissions(extension.get());
-    extension_service()->AddExtension(extension.get());
+    GrantActivePermissions(extension.get());
+    extension_registrar()->AddExtension(extension.get());
 
     extensions::ScriptingPermissionsModifier permissions_modifier(
         browser()->profile(), extension);
@@ -741,8 +746,8 @@ IN_PROC_BROWSER_TEST_P(ExtensionActionViewControllerFeatureRolloutBrowserTest,
           .AddAPIPermission("activeTab")
           .AddHostPermission(kGrantedHost.spec())
           .Build();
-  extension_service()->GrantPermissions(extension.get());
-  extension_service()->AddExtension(extension.get());
+  GrantActivePermissions(extension.get());
+  extension_registrar()->AddExtension(extension.get());
 
   // Navigate the browser to a site the extension doesn't have explicit access
   // to and verify the expected appearance.
@@ -808,8 +813,8 @@ IN_PROC_BROWSER_TEST_P(ExtensionActionViewControllerFeatureRolloutBrowserTest,
           .SetLocation(ManifestLocation::kInternal)
           .AddAPIPermission("activeTab")
           .Build();
-  extension_service()->GrantPermissions(extension.get());
-  extension_service()->AddExtension(extension.get());
+  GrantActivePermissions(extension.get());
+  extension_registrar()->AddExtension(extension.get());
 
   // Navigate the browser to google.com. Since clicking the extension would
   // grant access to the page, the page interaction status should show as
@@ -1210,8 +1215,8 @@ IN_PROC_BROWSER_TEST_P(ExtensionActionViewControllerFeatureRolloutBrowserTest,
           .AddAPIPermission("sidePanel")
           .Build();
 
-  extension_service()->GrantPermissions(extension.get());
-  extension_service()->AddExtension(extension.get());
+  GrantActivePermissions(extension.get());
+  extension_registrar()->AddExtension(extension.get());
   side_panel_service()->SetOpenSidePanelOnIconClick(extension->id(), true);
 
   ExtensionActionViewController* const action_controller =

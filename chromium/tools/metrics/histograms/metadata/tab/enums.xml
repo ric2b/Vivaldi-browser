@@ -45,11 +45,6 @@ chromium-metrics-reviews@google.com.
   <int value="1" label="Non-empty title"/>
 </enum>
 
-<enum name="BooleanOverlap">
-  <int value="0" label="No overlap"/>
-  <int value="1" label="Overlapped"/>
-</enum>
-
 <enum name="BooleanProtectedTab">
   <int value="0" label="Not Protected"/>
   <int value="1" label="Protected"/>
@@ -81,6 +76,16 @@ chromium-metrics-reviews@google.com.
 </enum>
 
 <!-- LINT.ThenChange(//chrome/browser/performance_manager/mechanisms/page_discarder.cc:DiscardPageOnUIThreadOutcome) -->
+
+<!-- LINT.IfChange(DiscardTabOutcome) -->
+
+<enum name="DiscardTabOutcome">
+  <int value="0" label="Success"/>
+  <int value="1" label="NotInTabStripModel"/>
+  <int value="2" label="AlreadyDiscarded"/>
+</enum>
+
+<!-- LINT.ThenChange(//chrome/browser/resource_coordinator/tab_lifecycle_unit.cc:DiscardTabOutcome) -->
 
 <enum name="ExternalLauncherOption">
   <int value="0" label="Cancel"/>
@@ -137,6 +142,7 @@ chromium-metrics-reviews@google.com.
       label="Invoked from session restore after autosave of a V1 group"/>
   <int value="8" label="Group shared from UI"/>
   <int value="9" label="Group un-shared from UI"/>
+  <int value="10" label="Open from toast action"/>
 </enum>
 
 <!-- LINT.ThenChange(//components/saved_tab_groups/public/types.h:OpeningSource) -->
@@ -250,34 +256,11 @@ chromium-metrics-reviews@google.com.
   <int value="1" label="Activate the context menu of a tab"/>
 </enum>
 
-<enum name="TabBackgroundLoadStatus">
-  <int value="0" label="Loaded on creation and shown"/>
-  <int value="1" label="Loaded on creation and lost"/>
-  <int value="2" label="Not loaded on creation"/>
-</enum>
-
 <enum name="TabDeclutterEntryPoint">
   <int value="0" label="Nudge"/>
   <int value="1" label="AppMenu"/>
   <int value="2" label="Selector"/>
 </enum>
-
-<!-- LINT.IfChange(TabGroupEvent) -->
-
-<enum name="TabGroupEvent">
-  <int value="0" label="Tab group created"/>
-  <int value="1" label="Tab group removed"/>
-  <int value="2" label="Tab group opened"/>
-  <int value="3" label="Tab group closed"/>
-  <int value="4" label="Tab group visuals changed"/>
-  <int value="5" label="Tab group tabs reordered"/>
-  <int value="6" label="Tab added"/>
-  <int value="7" label="Tab removed"/>
-  <int value="8" label="Tab navigated"/>
-  <int value="9" label="Tab selected"/>
-</enum>
-
-<!-- LINT.ThenChange(//components/saved_tab_groups/public/types.h:TabGroupEvent) -->
 
 <!-- LINT.IfChange(TabGroupLoadedEmptiness)-->
 
@@ -414,6 +397,12 @@ chromium-metrics-reviews@google.com.
   <int value="1" label="Failure Unknown Reason"/>
   <int value="2" label="Failure IndexOutOfBoundsException"/>
   <int value="3" label="Failure IllegalArgumentException"/>
+</enum>
+
+<enum name="TabStateMigrationStatus">
+  <int value="0" label="FlatBuffer TabState file only exists"/>
+  <int value="1" label="Legacy TabState file only exists"/>
+  <int value="2" label="Both FlatBuffer and legacy TabState files exist"/>
 </enum>
 
 <enum name="TabStateRestoreMethod">

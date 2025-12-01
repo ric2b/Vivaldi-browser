@@ -121,8 +121,12 @@ class RedirectURLLoader : public network::mojom::URLLoader {
 void InterceptNavigationDelegate::Associate(
     WebContents* web_contents,
     std::unique_ptr<InterceptNavigationDelegate> delegate) {
-  web_contents->SetUserData(kInterceptNavigationDelegateUserDataKey,
-                            std::move(delegate));
+  if (!delegate) {
+    web_contents->RemoveUserData(kInterceptNavigationDelegateUserDataKey);
+  } else {
+    web_contents->SetUserData(kInterceptNavigationDelegateUserDataKey,
+                              std::move(delegate));
+  }
 }
 
 // static
@@ -187,7 +191,8 @@ void InterceptNavigationDelegate::ShouldIgnoreNavigation(
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   // Avoid having two outstanding checks at once for simplicity.
   if (should_ignore_result_callback_) {
-    RequestFinishPendingShouldIgnoreCheck();
+    std::move(result_callback).Run(false);
+    return;
   }
   GURL escaped_url = escape_external_handler_value_
                          ? GURL(base::EscapeExternalHandlerValue(

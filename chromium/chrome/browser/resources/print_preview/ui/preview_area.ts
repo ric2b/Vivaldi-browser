@@ -54,13 +54,6 @@ export interface PrintPreviewPreviewAreaElement {
   $: {marginControlContainer: PrintPreviewMarginControlContainerElement};
 }
 
-// <if expr="is_chromeos">
-export function shouldShowCrosPrinterSetupError(
-    state: State, error: Error): boolean {
-  return state === State.ERROR && error === Error.INVALID_PRINTER;
-}
-// </if>
-
 const PrintPreviewPreviewAreaElementBase =
     WebUiListenerMixin(I18nMixin(SettingsMixin(DarkModeMixin(PolymerElement))));
 
@@ -114,26 +107,6 @@ export class PrintPreviewPreviewAreaElement extends
         notify: true,
         computed: 'computePreviewLoaded_(documentReady_, pluginLoadComplete_)',
       },
-
-      // <if expr="is_chromeos">
-      printerOffline_: {
-        type: Number,
-        value: PrinterSetupInfoMessageType.PRINTER_OFFLINE,
-        readOnly: true,
-      },
-
-      previewAreaInitiator_: {
-        type: Number,
-        value: PrinterSetupInfoInitiator.PREVIEW_AREA,
-        readOnly: true,
-      },
-      // </if>
-
-      showCrosPrinterSetupInfo_: {
-        type: Boolean,
-        computed: 'computeShowCrosPrinterSetupInfo(state, error)',
-        reflectToAttribute: true,
-      },
     };
   }
 
@@ -157,7 +130,6 @@ export class PrintPreviewPreviewAreaElement extends
   private documentReady_: boolean;
   private previewLoaded_: boolean;
 
-  private showCrosPrinterSetupInfo_: boolean = false;
   private nativeLayer_: NativeLayer|null = null;
   private lastTicket_: PreviewTicket|null = null;
   private inFlightRequestId_: number = -1;
@@ -313,6 +285,7 @@ export class PrintPreviewPreviewAreaElement extends
             this.error = Error.INVALID_PRINTER;
             this.previewState = PreviewAreaState.ERROR;
           } else if (type !== 'CANCELLED') {
+            console.warn('Preview failed in getPreview(): ' + type);
             this.error = Error.PREVIEW_FAILED;
             this.previewState = PreviewAreaState.ERROR;
           }
@@ -361,6 +334,7 @@ export class PrintPreviewPreviewAreaElement extends
     if (success) {
       this.pluginLoadComplete_ = true;
     } else {
+      console.warn('Preview failed in onPluginLoadComplete_()');
       this.error = Error.PREVIEW_FAILED;
       this.previewState = PreviewAreaState.ERROR;
     }
@@ -780,30 +754,11 @@ export class PrintPreviewPreviewAreaElement extends
           substitutions: [],
           tags: ['BR'],
         });
-      // <if expr="is_chromeos">
-      case Error.NO_DESTINATIONS:
-        return this.i18nAdvanced('noDestinationsMessage');
-      // </if>
       case Error.PREVIEW_FAILED:
         return this.i18nAdvanced('previewFailed');
       default:
         return window.trustedTypes!.emptyHTML;
     }
-  }
-
-  /**
-   * Determines if setup info element should be shown instead of the preview
-   * area message. For ChromeOS, setup assistance is shown if the
-   * `INVALID_PRINTER` error has occurred. All other platforms
-   * `computeShowCrosPrinterSetupInfo` will return false.
-   */
-  private computeShowCrosPrinterSetupInfo(): boolean {
-    // <if expr="is_chromeos">
-    return shouldShowCrosPrinterSetupError(this.state, this.error);
-    // </if>
-    // <if expr="not is_chromeos">
-    return false;
-    // </if>
   }
 }
 

@@ -392,8 +392,8 @@ GpuServiceImpl::GpuServiceImpl(
       // GpuServiceImpl holds the instance of DawnContextProvider, so it
       // outlives the DawnContextProvider.
       auto cache_blob_callback = base::BindRepeating(
-          [](GpuServiceImpl* self, gpu::GpuDiskCacheType type,
-             const std::string& key, const std::string& blob) {
+          [](GpuServiceImpl* self, const std::string& key,
+             const std::string& blob) {
             self->StoreBlobToDisk(gpu::kGraphiteDawnGpuDiskCacheHandle, key,
                                   blob);
           },
@@ -523,11 +523,6 @@ void GpuServiceImpl::UpdateGPUInfo() {
         image_decode_accelerator_worker_->GetSupportedProfiles();
   }
 
-#if BUILDFLAG(IS_WIN)
-  gpu_info_.shared_image_d3d =
-      gpu::D3DImageBackingFactory::IsD3DSharedImageSupported(gpu_preferences_);
-#endif
-
   // Record initialization only after collecting the GPU info because that can
   // take a significant amount of time.
   base::TimeTicks now = base::TimeTicks::Now();
@@ -617,6 +612,20 @@ void GpuServiceImpl::InitializeWithHost(
       std::move(pending_gpu_host), std::move(use_shader_cache_shm_count),
       default_offscreen_surface, std::move(creation_params), sync_point_manager,
       shared_image_manager, scheduler, shutdown_event);
+
+#if BUILDFLAG(IS_WIN)
+  // shared_image_d3d must be initialized after we call
+  // InitializeWithHostInternal as that is where the shared context state is
+  // created.
+  auto shared_context_state = GetContextState();
+  if (shared_context_state) {
+    gpu_info_.shared_image_d3d =
+        gpu::D3DImageBackingFactory::IsD3DSharedImageSupported(
+            shared_context_state->GetD3D11Device().Get(), gpu_preferences_);
+
+    gpu_host_->DidUpdateGPUInfo(gpu_info_);
+  }
+#endif
 }
 #endif
 
@@ -920,23 +929,6 @@ void GpuServiceImpl::CreateVideoEncodeAcceleratorProvider(
       media_gpu_channel_manager_->AsWeakPtr(), main_runner_);
 }
 
-void GpuServiceImpl::BindClientGmbInterface(
-    mojo::PendingReceiver<gpu::mojom::ClientGmbInterface> pending_receiver,
-    int client_id) {
-  // Bind the receiver to the IO tread. All IPC in this interface will be
-  // then received on the IO thread.
-  if (main_runner_->BelongsToCurrentThread()) {
-    bind_task_tracker_.PostTask(
-        io_runner_.get(), FROM_HERE,
-        base::BindOnce(&GpuServiceImpl::BindClientGmbInterface,
-                       base::Unretained(this), std::move(pending_receiver),
-                       client_id));
-    return;
-  }
-  gmb_clients_[client_id] = std::make_unique<ClientGmbInterfaceImpl>(
-      client_id, std::move(pending_receiver), this, io_runner_);
-}
-
 void GpuServiceImpl::BindWebNNContextProvider(
     mojo::PendingReceiver<webnn::mojom::WebNNContextProvider> pending_receiver,
     int client_id) {
@@ -986,7 +978,6 @@ void GpuServiceImpl::CreateGpuMemoryBuffer(
     gfx::GpuMemoryBufferHandle shm_handle;
     shm_handle = gpu::GpuMemoryBufferImplSharedMemory::CreateGpuMemoryBuffer(
         id, size, format, usage);
-    DCHECK_EQ(gfx::SHARED_MEMORY_BUFFER, shm_handle.type);
     std::move(callback).Run(std::move(shm_handle));
     return;
   }

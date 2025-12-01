@@ -2,12 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifndef V8_WASM_WASM_JS_H_
+#define V8_WASM_WASM_JS_H_
+
 #if !V8_ENABLE_WEBASSEMBLY
 #error This header should only be included if WebAssembly is enabled.
 #endif  // !V8_ENABLE_WEBASSEMBLY
-
-#ifndef V8_WASM_WASM_JS_H_
-#define V8_WASM_WASM_JS_H_
 
 #include <memory>
 
@@ -45,7 +45,10 @@ V8_EXPORT_PRIVATE std::unique_ptr<WasmStreaming> StartStreamingForTesting(
   V(WebAssemblyMemoryMapDescriptor)        \
   V(WebAssemblyMemoryGetBuffer)            \
   V(WebAssemblyMemoryGrow)                 \
-  V(WebAssemblyMemoryMap)                  \
+  V(WebAssemblyMemoryMapDescriptorMap)     \
+  V(WebAssemblyMemoryMapDescriptorUnmap)   \
+  V(WebAssemblyMemoryToFixedLengthBuffer)  \
+  V(WebAssemblyMemoryToResizableBuffer)    \
   V(WebAssemblyModule)                     \
   V(WebAssemblyModuleCustomSections)       \
   V(WebAssemblyModuleExports)              \
@@ -94,6 +97,10 @@ class WasmJs {
       DirectHandle<JSObject> webassembly);
 
   V8_EXPORT_PRIVATE static bool InstallJSPromiseIntegration(
+      Isolate* isolate, DirectHandle<NativeContext> context,
+      DirectHandle<JSObject> webassembly);
+
+  V8_EXPORT_PRIVATE static void InstallResizableBufferIntegration(
       Isolate* isolate, DirectHandle<NativeContext> context,
       DirectHandle<JSObject> webassembly);
 };

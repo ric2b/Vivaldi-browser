@@ -89,6 +89,7 @@
 #include "content/browser/scheduler/responsiveness/watcher.h"
 #include "content/browser/screenlock_monitor/screenlock_monitor.h"
 #include "content/browser/screenlock_monitor/screenlock_monitor_device_source.h"
+#include "content/browser/service_host/utility_process_host.h"
 #include "content/browser/sms/sms_provider.h"
 #include "content/browser/speech/speech_recognition_manager_impl.h"
 #include "content/browser/speech/tts_controller_impl.h"
@@ -97,7 +98,6 @@
 #include "content/browser/tracing/background_tracing_manager_impl.h"
 #include "content/browser/tracing/startup_tracing_controller.h"
 #include "content/browser/tracing/tracing_controller_impl.h"
-#include "content/browser/utility_process_host.h"
 #include "content/browser/webrtc/webrtc_internals.h"
 #include "content/browser/webui/content_web_ui_configs.h"
 #include "content/browser/webui/url_data_manager.h"
@@ -172,8 +172,10 @@
 #if BUILDFLAG(IS_ANDROID)
 #include "base/android/jni_android.h"
 #include "base/trace_event/cpufreq_monitor_android.h"
+#include "components/input/android/input_token_forwarder.h"
 #include "components/tracing/common/graphics_memory_dump_provider_android.h"
 #include "content/browser/android/browser_startup_controller.h"
+#include "content/browser/android/input_token_forwarder_manager.h"
 #include "content/browser/android/launcher_thread.h"
 #include "content/browser/android/scoped_surface_request_manager.h"
 #include "content/browser/android/tracing_controller_android.h"
@@ -705,7 +707,9 @@ void BrowserMainLoop::PostCreateMainMessageLoop() {
 
   // TODO(boliu): kSingleProcess check is a temporary workaround for
   // in-process Android WebView. crbug.com/503724 tracks proper fix.
-  if (!parsed_command_line_->HasSwitch(switches::kSingleProcess)) {
+  // Also check to see if a discardable memory manager was set (e.g. unit tests)
+  if (!parsed_command_line_->HasSwitch(switches::kSingleProcess) &&
+      !base::DiscardableMemoryAllocator::HasInstance()) {
     base::DiscardableMemoryAllocator::SetInstance(
         discardable_memory::DiscardableSharedMemoryManager::Get());
   }
@@ -720,6 +724,8 @@ void BrowserMainLoop::PostCreateMainMessageLoop() {
     if (UsingInProcessGpu()) {
       gpu::ScopedSurfaceRequestConduit::SetInstance(
           ScopedSurfaceRequestManager::GetInstance());
+      input::InputTokenForwarder::SetInstance(
+          InputTokenForwarderManager::GetInstance());
     }
   }
 
@@ -760,7 +766,6 @@ void BrowserMainLoop::PostCreateMainMessageLoop() {
     TRACE_EVENT0("startup",
                  "BrowserMainLoop::Subsystem:BrowserAccessibilityStateImpl");
     browser_accessibility_state_ = BrowserAccessibilityStateImpl::Create();
-    browser_accessibility_state_->InitBackgroundTasks();
   }
 }
 
@@ -1503,12 +1508,16 @@ bool BrowserMainLoop::InitializeToolkit() {
 }
 
 void BrowserMainLoop::InitializeMojo() {
+// iOS browser process does sync calls using mojo (mainly for in process
+// unzipper, so do not enable these checks right now).
+#if !BUILDFLAG(IS_IOS)
   if (!parsed_command_line_->HasSwitch(switches::kSingleProcess)) {
     // Disallow mojo sync calls in the browser process. Note that we allow sync
     // calls in single-process mode since renderer IPCs are made from a browser
     // thread.
     mojo::SyncCallRestrictions::DisallowSyncCall();
   }
+#endif
 
   // Start startup tracing through TracingController's interface. TraceLog has
   // been enabled in content_main_runner where threads are not available. Now We

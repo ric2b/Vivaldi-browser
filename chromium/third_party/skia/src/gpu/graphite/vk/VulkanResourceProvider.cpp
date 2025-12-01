@@ -18,13 +18,14 @@
 #include "src/gpu/graphite/RenderPassDesc.h"
 #include "src/gpu/graphite/Sampler.h"
 #include "src/gpu/graphite/Texture.h"
+#include "src/gpu/graphite/TextureInfoPriv.h"
 #include "src/gpu/graphite/vk/VulkanBuffer.h"
 #include "src/gpu/graphite/vk/VulkanCommandBuffer.h"
 #include "src/gpu/graphite/vk/VulkanDescriptorPool.h"
 #include "src/gpu/graphite/vk/VulkanDescriptorSet.h"
 #include "src/gpu/graphite/vk/VulkanFramebuffer.h"
 #include "src/gpu/graphite/vk/VulkanGraphicsPipeline.h"
-#include "src/gpu/graphite/vk/VulkanGraphiteTypesPriv.h"
+#include "src/gpu/graphite/vk/VulkanGraphiteUtils.h"
 #include "src/gpu/graphite/vk/VulkanRenderPass.h"
 #include "src/gpu/graphite/vk/VulkanSampler.h"
 #include "src/gpu/graphite/vk/VulkanSharedContext.h"
@@ -87,24 +88,6 @@ VulkanResourceProvider::~VulkanResourceProvider() {
                                          fPipelineCache,
                                          nullptr));
     }
-    if (fMSAALoadVertShaderModule != VK_NULL_HANDLE) {
-        VULKAN_CALL(this->vulkanSharedContext()->interface(),
-                    DestroyShaderModule(this->vulkanSharedContext()->device(),
-                                        fMSAALoadVertShaderModule,
-                                        nullptr));
-    }
-    if (fMSAALoadFragShaderModule != VK_NULL_HANDLE) {
-        VULKAN_CALL(this->vulkanSharedContext()->interface(),
-                    DestroyShaderModule(this->vulkanSharedContext()->device(),
-                                        fMSAALoadFragShaderModule,
-                                        nullptr));
-    }
-    if (fMSAALoadPipelineLayout != VK_NULL_HANDLE) {
-        VULKAN_CALL(this->vulkanSharedContext()->interface(),
-                    DestroyPipelineLayout(this->vulkanSharedContext()->device(),
-                                          fMSAALoadPipelineLayout,
-                                          nullptr));
-    }
     if (fMockPushConstantPipelineLayout) {
         VULKAN_CALL(this->vulkanSharedContext()->interface(),
                     DestroyPipelineLayout(this->vulkanSharedContext()->device(),
@@ -119,9 +102,9 @@ const VulkanSharedContext* VulkanResourceProvider::vulkanSharedContext() const {
 
 sk_sp<Texture> VulkanResourceProvider::onCreateWrappedTexture(const BackendTexture& texture) {
     sk_sp<VulkanYcbcrConversion> ycbcrConversion;
-    if (TextureInfos::GetVulkanYcbcrConversionInfo(texture.info()).isValid()) {
-        ycbcrConversion = this->findOrCreateCompatibleYcbcrConversion(
-                TextureInfos::GetVulkanYcbcrConversionInfo(texture.info()));
+    const auto& vkInfo = TextureInfoPriv::Get<VulkanTextureInfo>(texture.info());
+    if (vkInfo.fYcbcrConversionInfo.isValid()) {
+        ycbcrConversion = this->findOrCreateCompatibleYcbcrConversion(vkInfo.fYcbcrConversionInfo);
         if (!ycbcrConversion) {
             return nullptr;
         }
@@ -159,9 +142,9 @@ sk_sp<ComputePipeline> VulkanResourceProvider::createComputePipeline(const Compu
 sk_sp<Texture> VulkanResourceProvider::createTexture(SkISize size,
                                                      const TextureInfo& info) {
     sk_sp<VulkanYcbcrConversion> ycbcrConversion;
-    if (TextureInfos::GetVulkanYcbcrConversionInfo(info).isValid()) {
-        ycbcrConversion = this->findOrCreateCompatibleYcbcrConversion(
-                TextureInfos::GetVulkanYcbcrConversionInfo(info));
+    const auto& vkInfo = TextureInfoPriv::Get<VulkanTextureInfo>(info);
+    if (vkInfo.fYcbcrConversionInfo.isValid()) {
+        ycbcrConversion = this->findOrCreateCompatibleYcbcrConversion(vkInfo.fYcbcrConversionInfo);
         if (!ycbcrConversion) {
             return nullptr;
         }
@@ -200,10 +183,7 @@ sk_sp<Sampler> VulkanResourceProvider::createSampler(const SamplerDesc& samplerD
 
 BackendTexture VulkanResourceProvider::onCreateBackendTexture(SkISize dimensions,
                                                               const TextureInfo& info) {
-    VulkanTextureInfo vkTexInfo;
-    if (!TextureInfos::GetVulkanTextureInfo(info, &vkTexInfo)) {
-        return {};
-    }
+    const auto& vkTexInfo = TextureInfoPriv::Get<VulkanTextureInfo>(info);
     VulkanTexture::CreatedImageInfo createdTextureInfo;
     if (!VulkanTexture::MakeVkImage(this->vulkanSharedContext(), dimensions, info,
                                     &createdTextureInfo)) {
@@ -490,12 +470,64 @@ VkPipelineCache VulkanResourceProvider::pipelineCache() {
     return fPipelineCache;
 }
 
+namespace {
+
+void gather_attachment_views(skia_private::TArray<VkImageView>& attachmentViews,
+                             VulkanTexture* colorTexture,
+                             VulkanTexture* resolveTexture,
+                             VulkanTexture* depthStencilTexture) {
+    if (colorTexture) {
+        VkImageView& colorAttachmentView = attachmentViews.push_back();
+        colorAttachmentView =
+                colorTexture->getImageView(VulkanImageView::Usage::kAttachment)->imageView();
+
+        if (resolveTexture) {
+            VkImageView& resolveView = attachmentViews.push_back();
+            resolveView =
+                    resolveTexture->getImageView(VulkanImageView::Usage::kAttachment)->imageView();
+        }
+    }
+
+    if (depthStencilTexture) {
+        VkImageView& stencilView = attachmentViews.push_back();
+        stencilView =
+                depthStencilTexture->getImageView(VulkanImageView::Usage::kAttachment)->imageView();
+    }
+}
+
+} // anonymous namespace
+
 sk_sp<VulkanFramebuffer> VulkanResourceProvider::createFramebuffer(
         const VulkanSharedContext* context,
-        const skia_private::TArray<VkImageView>& attachmentViews,
+        VulkanTexture* colorTexture,
+        VulkanTexture* resolveTexture,
+        VulkanTexture* depthStencilTexture,
+        const RenderPassDesc& renderPassDesc,
         const VulkanRenderPass& renderPass,
         const int width,
         const int height) {
+
+    VulkanTexture* mainTexture = nullptr;
+    if (colorTexture) {
+        mainTexture = resolveTexture ? resolveTexture: colorTexture;
+    } else {
+        SkASSERT(depthStencilTexture);
+        mainTexture = depthStencilTexture;
+    }
+    SkASSERT(mainTexture);
+    VulkanTexture* msaaTexture = resolveTexture ? colorTexture: nullptr;
+
+    sk_sp<VulkanFramebuffer> fb = mainTexture->getCachedFramebuffer(renderPassDesc,
+                                                                    msaaTexture,
+                                                                    depthStencilTexture);
+    if (fb) {
+        return fb;
+    }
+
+    // Gather attachment views neeeded for frame buffer creation.
+    skia_private::TArray<VkImageView> attachmentViews;
+    gather_attachment_views(attachmentViews, colorTexture, resolveTexture, depthStencilTexture);
+
     // TODO: Consider caching these in the future. If we pursue that, it may make more sense to
     // use a compatible renderpass rather than a full one to make each frame buffer more versatile.
     VkFramebufferCreateInfo framebufferInfo;
@@ -509,7 +541,13 @@ sk_sp<VulkanFramebuffer> VulkanResourceProvider::createFramebuffer(
     framebufferInfo.width = width;
     framebufferInfo.height = height;
     framebufferInfo.layers = 1;
-    return VulkanFramebuffer::Make(context, framebufferInfo);
+    fb = VulkanFramebuffer::Make(context,
+                                 framebufferInfo,
+                                 renderPassDesc,
+                                 sk_ref_sp(msaaTexture),
+                                 sk_ref_sp(depthStencilTexture));
+    mainTexture->addCachedFramebuffer(fb);
+    return fb;
 }
 
 void VulkanResourceProvider::onDeleteBackendTexture(const BackendTexture& texture) {
@@ -572,7 +610,6 @@ sk_sp<VulkanYcbcrConversion> VulkanResourceProvider::findOrCreateCompatibleYcbcr
 
 sk_sp<VulkanGraphicsPipeline> VulkanResourceProvider::findOrCreateLoadMSAAPipeline(
         const RenderPassDesc& renderPassDesc) {
-
     if (!renderPassDesc.fColorResolveAttachment.fTextureInfo.isValid() ||
         !renderPassDesc.fColorAttachment.fTextureInfo.isValid()) {
         SKGPU_LOG_E("Loading MSAA from resolve texture requires valid color & resolve attachment");
@@ -588,41 +625,18 @@ sk_sp<VulkanGraphicsPipeline> VulkanResourceProvider::findOrCreateLoadMSAAPipeli
         }
     }
 
-    // If any of the load MSAA pipeline creation structures are null then we need to initialize
-    // those before proceeding. If the creation of one of them fails, all are assigned to null, so
-    // we only need to check one of the structures.
-    if (fMSAALoadVertShaderModule   == VK_NULL_HANDLE) {
-        SkASSERT(fMSAALoadFragShaderModule  == VK_NULL_HANDLE &&
-                 fMSAALoadPipelineLayout == VK_NULL_HANDLE);
-        if (!VulkanGraphicsPipeline::InitializeMSAALoadPipelineStructs(
-                    this->vulkanSharedContext(),
-                    &fMSAALoadVertShaderModule,
-                    &fMSAALoadFragShaderModule,
-                    &fMSAALoadShaderStageInfo[0],
-                    &fMSAALoadPipelineLayout)) {
+    if (!fLoadMSAAProgram) {
+        // Lazily create the modules and pipeline layout the first time we need to load MSAA
+        fLoadMSAAProgram =
+                VulkanGraphicsPipeline::CreateLoadMSAAProgram(this->vulkanSharedContext());
+        if (!fLoadMSAAProgram) {
             SKGPU_LOG_E("Failed to initialize MSAA load pipeline creation structure(s)");
             return nullptr;
         }
     }
 
-    sk_sp<VulkanRenderPass> compatibleRenderPass =
-            this->findOrCreateRenderPassWithKnownKey(renderPassDesc,
-                                                     /*compatibleOnly=*/true,
-                                                     renderPassKey);
-    if (!compatibleRenderPass) {
-        SKGPU_LOG_E("Failed to make compatible render pass for loading MSAA");
-    }
-
     sk_sp<VulkanGraphicsPipeline> pipeline = VulkanGraphicsPipeline::MakeLoadMSAAPipeline(
-            this->vulkanSharedContext(),
-            fMSAALoadVertShaderModule,
-            fMSAALoadFragShaderModule,
-            &fMSAALoadShaderStageInfo[0],
-            fMSAALoadPipelineLayout,
-            compatibleRenderPass,
-            this->pipelineCache(),
-            renderPassDesc.fColorAttachment.fTextureInfo);
-
+            this, *fLoadMSAAProgram, renderPassDesc);
     if (!pipeline) {
         SKGPU_LOG_E("Failed to create MSAA load pipeline");
         return nullptr;

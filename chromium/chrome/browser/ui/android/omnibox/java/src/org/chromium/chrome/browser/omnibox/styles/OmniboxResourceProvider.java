@@ -22,6 +22,7 @@ import androidx.annotation.Px;
 import androidx.annotation.StringRes;
 import androidx.annotation.VisibleForTesting;
 import androidx.appcompat.content.res.AppCompatResources;
+import androidx.core.content.ContextCompat;
 
 import com.google.android.material.color.MaterialColors;
 
@@ -30,7 +31,6 @@ import org.chromium.chrome.browser.night_mode.NightModeUtils;
 import org.chromium.chrome.browser.omnibox.R;
 import org.chromium.chrome.browser.theme.ThemeUtils;
 import org.chromium.chrome.browser.ui.theme.BrandedColorScheme;
-import org.chromium.components.browser_ui.styles.ChromeColors;
 import org.chromium.components.browser_ui.styles.SemanticColorUtils;
 import org.chromium.ui.base.DeviceFormFactor;
 import org.chromium.ui.util.ColorUtils;
@@ -387,19 +387,25 @@ public class OmniboxResourceProvider {
             Context context, @BrandedColorScheme int colorScheme) {
         return colorScheme == BrandedColorScheme.INCOGNITO
                 ? context.getColor(R.color.omnibox_suggestion_bg_incognito)
-                : ChromeColors.getSurfaceColor(context, R.dimen.omnibox_suggestion_bg_elevation);
+                : ContextCompat.getColor(context, R.color.omnibox_suggestion_bg);
     }
 
-    /**
-     * Returns the background hover color for suggestions in a "standard" (non-incognito) model with
-     * the given context.
-     */
-    public static @ColorInt int getHoverSuggestionBackgroundColor(
+    /** Returns the background hover color for suggestions in a model with the given context. */
+    private static @ColorInt int getHoverSuggestionBackgroundColor(
             Context context, @BrandedColorScheme int colorScheme) {
-        return colorScheme == BrandedColorScheme.INCOGNITO
-                ? context.getColor(R.color.default_bg_color_dark_elev_1_baseline)
-                : ChromeColors.getSurfaceColor(
-                        context, R.dimen.omnibox_suggestion_bg_hover_elevation);
+
+        if (colorScheme == BrandedColorScheme.INCOGNITO) {
+            return context.getColor(R.color.omnibox_suggestion_bg_hover_incognito);
+        }
+
+        // omnibox_suggestion_bg + 8% colorOnSurface
+        @ColorInt int baseColor = ContextCompat.getColor(context, R.color.omnibox_suggestion_bg);
+        @ColorInt int hoverColor = MaterialColors.getColor(context, R.attr.colorOnSurface, TAG);
+        float fraction =
+                context.getResources()
+                        .getFraction(R.fraction.omnibox_suggestion_bg_hover_overlay_fraction, 1, 1);
+
+        return ColorUtils.overlayColor(baseColor, hoverColor, fraction);
     }
 
     /** Returns a stateful suggestion background with the select default state. */
@@ -430,8 +436,7 @@ public class OmniboxResourceProvider {
             Context context, @BrandedColorScheme int brandedColorScheme) {
         return brandedColorScheme == BrandedColorScheme.INCOGNITO
                 ? context.getColor(R.color.omnibox_dropdown_bg_incognito)
-                : ChromeColors.getSurfaceColor(
-                        context, R.dimen.omnibox_suggestion_dropdown_bg_elevation);
+                : ContextCompat.getColor(context, R.color.omnibox_suggestion_dropdown_bg);
     }
 
     /**

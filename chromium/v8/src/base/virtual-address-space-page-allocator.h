@@ -9,6 +9,7 @@
 
 #include "include/v8-platform.h"
 #include "src/base/base-export.h"
+#include "src/base/platform/mutex.h"
 #include "src/base/platform/platform.h"
 
 namespace v8 {
@@ -68,7 +69,7 @@ class V8_BASE_EXPORT VirtualAddressSpacePageAllocator
   std::unordered_map<Address, size_t> resized_allocations_;
 
   // Mutex guarding the above map.
-  SpinningMutex mutex_;
+  Mutex mutex_;
 };
 
 }  // namespace base

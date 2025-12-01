@@ -21,8 +21,7 @@
 #include "ui/accessibility/platform/inspect/ax_script_instruction.h"
 #include "ui/accessibility/platform/inspect/ax_transform_mac.h"
 
-// This file uses the deprecated NSObject accessibility interface.
-// TODO(crbug.com/41450813): Migrate to the new NSAccessibility interface.
+// TODO(https://crbug.com/406190900): Remove this deprecation pragma.
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wdeprecated-declarations"
 
@@ -79,7 +78,7 @@ base::Value::Dict AXTreeFormatterMac::BuildTreeForAXUIElement(
   return BuildTree((__bridge id)node);
 }
 
-base::Value::Dict AXTreeFormatterMac::BuildTree(const id root) const {
+base::Value::Dict AXTreeFormatterMac::BuildTree(id root) const {
   DCHECK(root);
 
   AXTreeIndexerMac indexer(root);
@@ -180,7 +179,7 @@ base::Value::Dict AXTreeFormatterMac::BuildNodeForSelector(
   return BuildNode((__bridge id)node.get());
 }
 
-base::Value::Dict AXTreeFormatterMac::BuildNode(const id node) const {
+base::Value::Dict AXTreeFormatterMac::BuildNode(id node) const {
   DCHECK(node);
 
   AXTreeIndexerMac indexer(node);

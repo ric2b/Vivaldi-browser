@@ -9,7 +9,7 @@
   position: relative;
   width: auto;
   height: auto;
-  margin: var(--sys-size-6) 0;
+  margin: var(--sys-size-5) 0;
   border-radius: var(--sys-shape-corner-extra-small);
   overflow: hidden;
   border: var(--sys-size-1) solid var(--sys-color-divider);
@@ -26,7 +26,7 @@
   }
 
   header {
-    padding: var(--sys-size-5) var(--sys-size-6);
+    padding: var(--sys-size-5) var(--sys-size-4);
 
     h3 {
       font: var(--sys-typescale-body4-medium);
@@ -52,16 +52,11 @@
   border-radius: var(--sys-shape-corner-full);
   background: var(--sys-color-cdt-base-container);
   opacity: 0%;
-  transition: opacity 0.2s ease;
 
   /* Ensure that the icon appears when the user hovers, or focuses the header */
   .insight:hover &,
   header:focus-within & {
     opacity: 100%;
-  }
-
-  devtools-button {
-    transition: transform 0.2s ease;
   }
 
   &.active devtools-button {
@@ -76,7 +71,7 @@
 }
 
 .insight-body {
-  padding: 0 var(--sys-size-6) var(--sys-size-5) var(--sys-size-6);
+  padding: 0 var(--sys-size-4) var(--sys-size-5);
 
   .list-title {
     margin-top: var(--sys-size-4);
@@ -124,21 +119,6 @@ dd.dl-title {
   font-weight: bold;
 }
 
-.metric-value-bad {
-  color: var(--app-color-performance-bad);
-}
-
-.metric-value-good {
-  color: var(--app-color-performance-good);
-}
-
-.insight-entry {
-  font: var(--sys-typescale-body4-medium);
-  padding-block: var(--sys-size-3);
-  display: flex;
-  align-items: center;
-}
-
 .image-ref {
   display: inline-flex;
   align-items: center;
@@ -177,28 +157,10 @@ dd.dl-title {
   color: var(--sys-color-green);
 }
 
-ul.insight-icon-results {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-
-  li {
-    display: flex;
-    align-items: flex-start;
-    justify-content: flex-start;
-    gap: var(--sys-size-3);
-
-    span {
-      /* push the text down to align slightly better with the icons */
-      padding-top: 2px;
-    }
-  }
-}
-
 .timeline-link {
   cursor: pointer;
-  text-decoration: underline;
-  color: var(--sys-color-primary);
+  text-decoration: var(--override-timeline-link-text-decoration, underline);
+  color: var(--override-timeline-link-text-color, var(--sys-color-primary));
   /* for a11y reasons this is a button, so we have to remove some default
    * styling */
   background: none;
@@ -212,7 +174,9 @@ ul.insight-icon-results {
   color: var(--sys-color-state-disabled);
 }
 
-.insight-results:not(:last-child) {
-  border-bottom: var(--sys-size-1) solid var(--sys-color-divider);
-  padding-bottom: var(--sys-size-5);
+.ask-ai-btn-wrap {
+  border-top: var(--sys-size-1) solid var(--sys-color-divider);
+  padding-top: var(--sys-size-5);
+  margin-top: var(--sys-size-5);
+  text-align: center;
 }

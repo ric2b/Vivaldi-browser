@@ -59,7 +59,7 @@ class WEBDATA_EXPORT WebDatabaseTable {
   virtual bool MigrateToVersion(int version,
                                 bool* update_compatible_version) = 0;
 
-  virtual bool MigrateToVivaldiVersion(int version);
+  virtual bool MigrateToVivaldiVersion(int version) { return true; }
 
  protected:
   sql::Database* db() const { return db_; }

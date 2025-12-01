@@ -6,7 +6,7 @@
 #define COMPONENTS_AUTOFILL_CORE_BROWSER_METRICS_AUTOFILL_METRICS_UTILS_H_
 
 #include "components/autofill/core/browser/autofill_field.h"
-#include "components/autofill/core/browser/data_model/autofill_profile.h"
+#include "components/autofill/core/browser/data_model/addresses/autofill_profile.h"
 #include "components/autofill/core/browser/form_structure.h"
 #include "components/autofill/core/browser/metrics/autofill_metrics.h"
 
@@ -123,6 +123,13 @@ int GetBucketForAcceptanceMetricsGroupedByFieldType(FieldType field_type,
 // `std::numeric_limits<int>::max()` in case `min_incompatible_sets` is empty.
 int GetDuplicationRank(
     base::span<const DifferingProfileWithTypeSet> min_incompatible_sets);
+
+// Returns 64-bit hash of the string of form global id, which consists of
+// |frame_token| and |renderer_id|.
+uint64_t FormGlobalIdToHash64Bit(const FormGlobalId& form_global_id);
+// Returns 64-bit hash of the string of field global id, which consists of
+// |frame_token| and |renderer_id|.
+uint64_t FieldGlobalIdToHash64Bit(const FieldGlobalId& field_global_id);
 
 }  // namespace autofill::autofill_metrics
 

@@ -7,12 +7,13 @@
 #include <algorithm>
 #include <memory>
 #include <queue>
+#include <variant>
 
 #include "base/no_destructor.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/enterprise/data_controls/chrome_rules_service.h"
-#include "chrome/browser/enterprise/data_controls/reporting_service.h"
 #include "chrome/browser/enterprise/data_protection/paste_allowed_request.h"
+#include "chrome/browser/profiles/profile.h"
 #include "components/enterprise/common/files_scan_data.h"
 #include "components/enterprise/connectors/core/connectors_prefs.h"
 #include "components/enterprise/content/clipboard_restriction_service.h"
@@ -20,6 +21,7 @@
 #include "components/enterprise/data_controls/core/browser/data_controls_dialog_factory.h"
 #include "components/enterprise/data_controls/core/browser/prefs.h"
 #include "components/policy/core/common/policy_types.h"
+#include "components/safe_browsing/buildflags.h"
 #include "components/strings/grit/components_strings.h"
 #include "content/public/browser/clipboard_types.h"
 #include "content/public/browser/web_contents.h"
@@ -44,6 +46,10 @@
 #include "chrome/browser/enterprise/data_controls/android_data_controls_dialog_factory.h"
 #include "components/enterprise/data_controls/core/browser/features.h"
 #endif  // BUILDFLAG(IS_ANDROID)
+
+#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+#include "chrome/browser/enterprise/data_controls/reporting_service.h"
+#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
 
 namespace enterprise_data_protection {
 
@@ -215,7 +221,7 @@ void MaybeReportDataControlsPaste(const content::ClipboardEndpoint& source,
                                   const content::ClipboardMetadata& metadata,
                                   const data_controls::Verdict& verdict,
                                   bool bypassed = false) {
-#if !BUILDFLAG(IS_ANDROID)
+#if !BUILDFLAG(IS_ANDROID) && BUILDFLAG(SAFE_BROWSING_AVAILABLE)
   auto* reporting_service =
       data_controls::ReportingServiceFactory::GetInstance()
           ->GetForBrowserContext(destination.browser_context());
@@ -239,7 +245,7 @@ void MaybeReportDataControlsCopy(const content::ClipboardEndpoint& source,
                                  const content::ClipboardMetadata& metadata,
                                  const data_controls::Verdict& verdict,
                                  bool bypassed = false) {
-#if !BUILDFLAG(IS_ANDROID)
+#if !BUILDFLAG(IS_ANDROID) && BUILDFLAG(SAFE_BROWSING_AVAILABLE)
   auto* reporting_service =
       data_controls::ReportingServiceFactory::GetInstance()
           ->GetForBrowserContext(source.browser_context());
@@ -508,7 +514,7 @@ void PasteIfAllowedByPolicy(
   }
 #else
   if (ui::DataTransferPolicyController::HasInstance()) {
-    absl::variant<size_t, std::vector<base::FilePath>> pasted_content;
+    std::variant<size_t, std::vector<base::FilePath>> pasted_content;
     if (clipboard_paste_data.file_paths.empty()) {
       DCHECK(metadata.size.has_value());
       pasted_content = *metadata.size;

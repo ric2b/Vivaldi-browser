@@ -16,9 +16,10 @@
 #if BUILDFLAG(ENABLE_GLIC)
 // This causes a gn error on Android builds, because gn does not understand
 // buildflags, so we include it only on platforms where it is used.
+#include "chrome/browser/background/glic/glic_background_mode_manager.h"  // nogncheck
 #include "chrome/browser/glic/glic_enabling.h"         // nogncheck
 #include "chrome/browser/glic/glic_profile_manager.h"  // nogncheck
-#include "chrome/browser/glic/launcher/glic_background_mode_manager.h"  // nogncheck
+#include "chrome/browser/glic/host/glic_synthetic_trial_manager.h"  // nogncheck
 #endif
 
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
@@ -65,11 +66,14 @@ void GlobalFeatures::Init() {
 #endif
 
 #if BUILDFLAG(ENABLE_GLIC)
-  if (GlicEnabling::IsEnabledByFlags()) {
+  if (glic::GlicEnabling::IsEnabledByFlags()) {
     glic_profile_manager_ = std::make_unique<glic::GlicProfileManager>();
     glic_background_mode_manager_ =
         std::make_unique<glic::GlicBackgroundModeManager>(
             g_browser_process->status_tray());
+    synthetic_trial_manager_ =
+        std::make_unique<glic::GlicSyntheticTrialManager>(
+            g_browser_process->GetMetricsServicesManager());
   }
 #endif
 }
@@ -80,6 +84,7 @@ void GlobalFeatures::Shutdown() {
     glic_background_mode_manager_->Shutdown();
     glic_background_mode_manager_.reset();
   }
+  synthetic_trial_manager_.reset();
 #endif
 }
 

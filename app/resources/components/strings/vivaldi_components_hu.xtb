@@ -21,6 +21,9 @@
           &gt;
           <ph name="PROXIES_TITLE" />,
           és gondoskodj róla, hogy a konfiguráció beállítása "nincs proxy" vagy "közvetlen" legyen</translation>
+<translation id="4949828774841497663">Lépj az Alkalmazások &gt; Rendszerbeállítások &gt; Hálózat menüpontra,
+          válaszd ki az aktív hálózatot, kattints a Részletek… gombra, és szüntesd meg
+          a kiválasztott proxyk kijelölését.</translation>
 <translation id="5248344925342018662">Jelenleg biztonságos Vivaldi oldalt tekintesz meg</translation>
 <translation id="6690242244468452299">Ez az oldal információkat jelenít meg a legutóbbi rendszerösszeomlásokról, ha engedélyezted a hibabejelentést.</translation>
 <translation id="7023871570427738255">Lépj ide:
@@ -32,7 +35,4 @@
         Ha ettől nem szűnik meg a probléma, javasoljuk, hogy jelöld be ismét
         ezt a lehetőséget a jobb teljesítmény érdekében.</translation>
 <translation id="7496505986576158197">A Vivaldi létrejöttét a <ph name="BEGIN_LINK_CHROMIUM" />Chromium<ph name="END_LINK_CHROMIUM" /> nyílt forráskódú projekt és más <ph name="BEGIN_LINK_OSS" />nyílt forráskódú szoftverek<ph name="END_LINK_OSS" /> tették lehetővé.</translation>
-<translation id="8187289872471304532">Az
-          Alkalmazások &gt; Rendszerbeállítások &gt; Hálózat &gt; Haladó &gt; Proxyk
-          menüpont alatt töröld a jelet minden kijelölt proxy mellől.</translation>
 </translationbundle>

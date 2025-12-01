@@ -2,47 +2,95 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="si">
 <translation id="1397811292916898096"><ph name="PRODUCT_NAME" /> සමඟ සොයන්න</translation>
+<translation id="1456207338570705181">සෙවීමට ස්පර්ශ කිරීම යනු ගූගල් විවාල්ඩි හි පෙරනිමි සෙවුම් යන්ත්‍රය ලෙස සකසා ඇති විට පමණක් ලබා ගත හැකි විශේෂාංගයකි. එය තෝරාගත් වචනය සහ වත්මන් පිටුව සන්දර්භය ලෙස ගූගල් සෙවුමට යවයි. ඔබට එය <ph name="BEGIN_LINK" />සැකසුම්<ph name="END_LINK" />තුළ අක්‍රිය කළ හැකිය.</translation>
 <translation id="1598449788754183301">සාමාන්‍ය/පෞද්ගලික පටිති අරින්න</translation>
 <translation id="1644574205037202324">ඉතිහාසය</translation>
 <translation id="1829244130665387512">පිටුවේ සොයන්න</translation>
+<translation id="1910514478706885609">නව ටැබ් තොගයක විවෘත කරන්න</translation>
+<translation id="1925021887439448749">අභිරුචි වෙබ් ලිපිනය ඇතුළත් කරන්න</translation>
 <translation id="2038563949887743358">වැඩතල අඩවිය ඉල්ලීම සක්‍රිය කරන්න</translation>
+<translation id="2149973817440762519">පිටු සලකුණ සංස්කරණය කරන්න</translation>
 <translation id="2306442503286132111"><ph name="FOLDER_NAME" /> බහාලුමේ පොත්යොමුව සුරැකිණි</translation>
 <translation id="2433507940547922241">පෙනුම</translation>
 <translation id="2501278716633472235">ආපසු යන්න</translation>
 <translation id="2633278372998075009">පෞද්. පටිති</translation>
+<translation id="265156376773362237">සම්මත පූර්ව පැටවීම</translation>
+<translation id="272026394418727548">විවාල්ඩිගේ මුල් පිටුව</translation>
+<translation id="2871733351037274014">පිටු පූර්ව පූරණය කරන්න</translation>
+<translation id="2951071800649516099">පසුව කියවීම සඳහා ඔබේ කියවීමේ ලැයිස්තුවට පිටු එක් කරන්න</translation>
 <translation id="3060635849835183725">{BOOKMARKS_COUNT, plural,
           =1 {පොත්යොමු <ph name="BOOKMARKS_COUNT_ONE" />}
           other {පොත්යොමු <ph name="BOOKMARKS_COUNT_MANY" />}}</translation>
 <translation id="3076631378407175873">ප්‍රකාශන අයිතිය <ph name="YEAR" /> Vivaldi Technologies AS. සියළුම හිමිකම් ඇවිරිණි.</translation>
+<translation id="3232293466644486101">බ්‍රවුසින් දත්ත මකන්න…</translation>
 <translation id="3234355010754616171">නව පෞද්. පටිත්ත</translation>
+<translation id="3237087289225714896">සම්මත පූර්ව පැටවීම:</translation>
 <translation id="3377025655491224618">පෞද්. පටිත්ත</translation>
+<translation id="3504699618187058974">ටැබ් ගොඩගසන්න</translation>
 <translation id="3518985090088779359">පිළිගන්න සහ ඉදිරියට</translation>
+<translation id="3571177741182643350">නොකියවූ ලිපි - නොබැඳිව ලබා ගත හැකිය:</translation>
+<translation id="3602290021589620013">පෙරදසුන</translation>
 <translation id="3700829948786686853">විවාල්ඩි වෙත පිළිගනිමු</translation>
 <translation id="3719826155360621982">මුල් පිටුව</translation>
+<translation id="3738139272394829648">සෙවීමට ස්පර්ශ කරන්න</translation>
 <translation id="385051799172605136">ආපසු</translation>
+<translation id="399014816462153200">ලිපි කියවන්න:</translation>
 <translation id="4121750346708795461">මෙම යෙදුම භාවිතා කිරීමෙන් ඔබ විවාල්ඩි <ph name="BEGIN_LINK1" />පරිශ්‍රීලක බලපත්‍ර එකඟතාව<ph name="END_LINK1" /> සහ <ph name="BEGIN_LINK2" />පෞද්ගලිකත්ව ප්‍රතිපත්තියට<ph name="END_LINK2" /> එකඟ වේ.</translation>
-<translation id="4243710787042215766">පෞද්. පටිත්තක අරින්න</translation>
+<translation id="4137746084635924146">වත්මන් උපාංග භාෂාව</translation>
+<translation id="4167670741834902166">නව පුද්ගලික ටැබය</translation>
+<translation id="4195643157523330669">නව ටැබයක විවෘත කරන්න</translation>
+<translation id="4225895483398857530">මෙවලම් තීරු කෙටිමඟ</translation>
+<translation id="4243710787042215766">පුද්ගලික ටැබයක විවෘත කරන්න</translation>
+<translation id="4291407919474070700"><ph name="BEGIN_LINK" />Android සැකසුම් තුළ තිර අගුල සක්‍රිය කරන්න<ph name="END_LINK" /></translation>
+<translation id="4304713468139749426">මුරපද කළමනාකරු</translation>
+<translation id="451872707440238414">ඔබගේ පිටු සලකුණු සොයන්න</translation>
 <translation id="4526803704855831732">පෞද්. පටිති</translation>
+<translation id="4719086422742491124">පිටුවෙන් ඉවත් නොවී වෙබ් අඩවිවල මාතෘකා ගැන ඉගෙන ගන්න. ඒවා සෙවීමට පිටුවේ වචන එකක් හෝ කිහිපයක් තෝරන්න.
+
+සෙවීමට ස්පර්ශ කරන්න යනු Vivaldi හි Google පෙරනිමි සෙවුම් යන්ත්‍රය ලෙස සකසා ඇති විට පමණක් ලබා ගත හැකි විශේෂාංගයකි.</translation>
 <translation id="4759238208242260848">බාගැනීම්</translation>
+<translation id="4850886885716139402">දැක්ම</translation>
 <translation id="4883379392681899581">පෞද්. ප්‍රකාරය හැරයන්න</translation>
 <translation id="4943872375798546930">ප්‍රතිඵල නැත</translation>
 <translation id="49576331685473090">අන්තර්ගත අවහිරය</translation>
+<translation id="5079259810715830221">ගූගල් අඩවියක් තම පිටුවේ සබැඳි පුද්ගලිකව පූර්ව පූරණය කිරීමට ඉල්ලා සිටින විට, විවාල්ඩි කුකීස් නොමැතිව ගූගල් සේවාදායකයන් හරහා පිටු සංකේතනය කර පූර්ව පූරණය කරයි. මෙය ඔබගේ අනන්‍යතාවය පූර්ව පූරණය කළ අඩවියෙන් සඟවයි.</translation>
 <translation id="5118676864324397542"><ph name="APP_NAME" /> ආචයනය</translation>
 <translation id="5186185447130319458">පෞද්ගලික</translation>
 <translation id="5233638681132016545">නව පටිත්ත</translation>
+<translation id="5375131951310889874">පිටුවෙන් ඉවත් නොවී වෙබ් අඩවිවල මාතෘකා ගැන ඉගෙන ගන්න. සෙවීමට ස්පර්ශ කරන්න යනු ගූගල් විවාල්ඩි හි පෙරනිමි සෙවුම් යන්ත්‍රය ලෙස සකසා ඇති විට පමණක් ලබා ගත හැකි විශේෂාංගයකි. එය වචනයක් සහ එහි අවට සන්දර්භය ගූගල් සෙවුමට යවන අතර, අර්ථ දැක්වීම්, පින්තූර, සෙවුම් ප්‍රතිඵල සහ අනෙකුත් විස්තර ආපසු ලබා දෙයි.
+
+ඔබේ සෙවුම් පදය සකස් කිරීමට, තේරීමට දිගු ඔබන්න. ඔබේ සෙවුම පිරිපහදු කිරීමට, පැනලය ඉහළට ලිස්සා ගොස් සෙවුම් කොටුව තට්ටු කරන්න.</translation>
 <translation id="572328651809341494">මෑත පටිති</translation>
 <translation id="6150320133806434356">පොත්යොමුව සුරැකිණි</translation>
 <translation id="6336451774241870485">නව පෞද්. පටිත්ත</translation>
+<translation id="6337323516034698937">මෙම ටැබය වෙනත් උපාංගයකට යැවීමට, උපාංග දෙකෙහිම Vivaldi Sync වෙත පුරනය වන්න. අවශ්‍ය නම් සංකේතාංකන මුරපදය ඇතුළත් කිරීමට වග බලා ගන්න.</translation>
+<translation id="6404511346730675251">පිටු සලකුණ සංස්කරණය කරන්න</translation>
 <translation id="6585139692466700358">වෙනත් භාෂා වල පිටු පරිවර්තනයට විවාල්ඩි පරිවර්තන සේවාව පිරිනමයි</translation>
+<translation id="6588043302623806746">ආරක්ෂිත DNS භාවිතා කරන්න</translation>
 <translation id="6593061639179217415">වැඩතල අඩවිය</translation>
 <translation id="6610147964972079463">පෞද්. පටිති වසන්න</translation>
+<translation id="7029995644714925509">වෙබ් අඩවියක් තම පිටුවේ සබැඳි පුද්ගලිකව පූර්ව පූරණය කිරීමට ඉල්ලා සිටින විට, විවාල්ඩි කුකීස් නොමැතිව ගූගල් සේවාදායකයන් හරහා පිටු සංකේතනය කර පූර්ව පූරණය කරයි. මෙය ඔබගේ අනන්‍යතාවය පූර්ව පූරණය කළ අඩවියෙන් සඟවයි.</translation>
 <translation id="706339621163631076">අතිරික්සුවේ රහස්‍යතා ප්‍රතිපත්තිය</translation>
 <translation id="732145680195464316"><ph name="PRODUCT_NAME" /> හි පොත්යොමුව සුරැකිණි</translation>
+<translation id="7324354302972299151">"ලුහුබැඳ නොයන්න" ඉල්ලීමක් යවන්න</translation>
+<translation id="7359002509206457351">ගෙවීම් ක්‍රම වෙත ප්‍රවේශ වන්න</translation>
+<translation id="7419565702166471774">සැමවිටම ආරක්ෂිත සම්බන්ධතා භාවිතා කරන්න</translation>
 <translation id="7427132068601343474">විවාල්ඩි පිළිබඳව</translation>
+<translation id="7456774706094330779">දීර්ඝ කළ පූර්ව පැටවීම</translation>
 <translation id="7465104139234185284">සියලුම පෞද්. පටිති වසන්න</translation>
+<translation id="7481312909269577407">ඉදිරියට</translation>
+<translation id="7968014550143838305">කියවීමේ ලැයිස්තුවට එක් කරන ලදී</translation>
 <translation id="804786196054284061">පරිශ්‍රීලක බලපත්‍ර එකඟතාව</translation>
+<translation id="8062594758852531064">දීර්ඝ කළ පූර්ව පැටවීම:</translation>
+<translation id="8127542551745560481">මුල් පිටුව සංස්කරණය කරන්න</translation>
+<translation id="8348430946834215779">හැකි සෑම විටම HTTPS භාවිතා කරන්න සහ එයට සහාය නොදක්වන අඩවි පූරණය කිරීමට පෙර අනතුරු ඇඟවීමක් ලබා ගන්න</translation>
+<translation id="8560602726703398413">පිටුසන් තුළ ඔබේ කියවීමේ ලැයිස්තුව සොයා ගන්න</translation>
 <translation id="85991616550051997">මුල් පිටුවට යන්න</translation>
 <translation id="8820817407110198400">පොත්යොමු</translation>
+<translation id="9042893549633094279">පෞද්ගලිකත්වය සහ ආරක්ෂාව</translation>
 <translation id="9063523880881406963">වැඩතල අඩවිය ඉල්ලීම අක්‍රිය කරන්න</translation>
 <translation id="9080642952018487277">පෞද්ගලික ප්‍රකාරයට යන්න</translation>
+<translation id="930124987204876019">ඉතිහාසය, කුකීස්, අඩවි දත්ත, හැඹිලිය මකන්න…</translation>
+<translation id="961856697154696964">බ්‍රවුස් කිරීමේ දත්ත මකන්න</translation>
+<translation id="96681097142096641">සරල කළ පිටුව බලන්නද?</translation>
 </translationbundle>

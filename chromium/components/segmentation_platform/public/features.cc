@@ -203,7 +203,7 @@ BASE_FEATURE(kSegmentationPlatformEphemeralCardRanker,
 BASE_FEATURE(kSegmentationPlatformTipsEphemeralCard,
              "SegmentationPlatformTipsEphemeralCard",
 #if BUILDFLAG(IS_IOS)
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 #else
              base::FEATURE_DISABLED_BY_DEFAULT);
 #endif
@@ -217,9 +217,7 @@ std::string TipsExperimentTrainEnabled() {
       kTipsEphemeralCardExperimentTrainParam,
       /*default_value=*/
       base::StrCat({kLensEphemeralModuleSearchVariation, ",",
-                    kSavePasswordsEphemeralModule, ",",
-                    kEnhancedSafeBrowsingEphemeralModule, ",",
-                    kAddressBarPositionEphemeralModule}));
+                    kEnhancedSafeBrowsingEphemeralModule}));
 }
 
 const char kTipsEphemeralCardModuleMaxImpressionCount[] =

@@ -50,10 +50,6 @@ export class WorkspaceDiffImpl extends Common.ObjectWrapper.ObjectWrapper<EventT
     return Array.from(this.#modified);
   }
 
-  isUISourceCodeModified(uiSourceCode: Workspace.UISourceCode.UISourceCode): boolean {
-    return this.#modified.has(uiSourceCode) || this.loadingUISourceCodes.has(uiSourceCode);
-  }
-
   private uiSourceCodeDiff(uiSourceCode: Workspace.UISourceCode.UISourceCode): UISourceCodeDiff {
     let diff = this.#diffs.get(uiSourceCode);
     if (!diff) {
@@ -115,20 +111,22 @@ export class WorkspaceDiffImpl extends Common.ObjectWrapper.ObjectWrapper<EventT
   }
 
   #shouldTrack(uiSourceCode: Workspace.UISourceCode.UISourceCode): boolean {
-    // We track differences for all Network resources.
-    if (uiSourceCode.project().type() === Workspace.Workspace.projectTypes.Network) {
-      return true;
-    }
+    switch (uiSourceCode.project().type()) {
+      case Workspace.Workspace.projectTypes.Network:
+        // We track differences for all Network resources.
+        return true;
 
-    // Additionally we also track differences for FileSystem resources that don't have
-    // a binding (as part of the kDevToolsImprovedWorkspaces feature).
-    if (uiSourceCode.project().type() === Workspace.Workspace.projectTypes.FileSystem &&
-        this.#persistence.binding(uiSourceCode) === null &&
-        Common.Settings.Settings.instance().getHostConfig().devToolsImprovedWorkspaces?.enabled) {
-      return true;
-    }
+      case Workspace.Workspace.projectTypes.FileSystem:
+        // We track differences for FileSystem resources without bindings.
+        return this.#persistence.binding(uiSourceCode) === null;
 
-    return false;
+      case Workspace.Workspace.projectTypes.Inspector:
+        // We track differences for all Inspector resources (style sheets).
+        return true;
+
+      default:
+        return false;
+    }
   }
 
   private async updateModifiedState(uiSourceCode: Workspace.UISourceCode.UISourceCode): Promise<void> {
@@ -244,7 +242,7 @@ export class UISourceCodeDiff extends Common.ObjectWrapper.ObjectWrapper<UISourc
         Persistence.NetworkPersistenceManager.NetworkPersistenceManager.instance().originalContentForUISourceCode(
             this.uiSourceCode);
     if (originalNetworkContent) {
-      return originalNetworkContent;
+      return await originalNetworkContent;
     }
 
     const content = await this.uiSourceCode.project().requestFileContent(this.uiSourceCode);
@@ -310,8 +308,8 @@ export interface UISourceCodeDiffEventTypes {
 
 let workspaceDiffImplInstance: WorkspaceDiffImpl|null = null;
 
-export function workspaceDiff(): WorkspaceDiffImpl {
-  if (!workspaceDiffImplInstance) {
+export function workspaceDiff({forceNew}: {forceNew?: boolean} = {}): WorkspaceDiffImpl {
+  if (!workspaceDiffImplInstance || forceNew) {
     workspaceDiffImplInstance = new WorkspaceDiffImpl(Workspace.Workspace.WorkspaceImpl.instance());
   }
   return workspaceDiffImplInstance;

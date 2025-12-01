@@ -53,3 +53,15 @@ grit("resources") {
     "vivaldi_extension_resources.pak",
   ]
 }
+
+source_set("vivaldi_extension_component_wrapper") {
+  sources = [
+    "vivaldi_browser_component_wrapper.cc",
+    "vivaldi_browser_component_wrapper.h",
+    "vivaldi_extension_handover.cc",
+    "vivaldi_extension_handover.h",
+  ]
+  deps = [
+    "//base:base",
+  ]
+}

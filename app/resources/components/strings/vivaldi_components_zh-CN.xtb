@@ -21,6 +21,9 @@
           &gt;
           <ph name="PROXIES_TITLE" />
           &gt;确定你的设置为“不使用代理”或“直接连接”</translation>
+<translation id="4949828774841497663">转到应用程序 &gt; 系统设置 &gt; 网络，选择
+          活动网络，点击详情...按钮，取消
+          所有选中的代理。</translation>
 <translation id="5248344925342018662">您正在查看安全的 Vivaldi 网页</translation>
 <translation id="6690242244468452299">如果您启用崩溃报告，此页面会显示有关您最近崩溃的信息。</translation>
 <translation id="7023871570427738255">前往
@@ -32,7 +35,4 @@
     如果这无法解决该问题，我们建议您重新选中此选项，
     以便改善性能。</translation>
 <translation id="7496505986576158197">Vivaldi 的开发依赖于 <ph name="BEGIN_LINK_CHROMIUM" />Chromium<ph name="END_LINK_CHROMIUM" /> 开源项目及其他<ph name="BEGIN_LINK_OSS" />开源软件<ph name="END_LINK_OSS" />。</translation>
-<translation id="8187289872471304532">前往
-          “应用”&gt;“系统偏好设置”&gt;“网络”&gt;“高级”&gt;“代理”
-          然后取消所有已选中的代理。</translation>
 </translationbundle>

@@ -24,6 +24,9 @@ specific_include_rules = {
   "dom_timer_test\.cc": [
     "+base/test/scoped_command_line.h",
   ],
+  "dom_window\.cc" : [
+    "+base/containers/fixed_flat_map.h"
+  ],
   "frame_view\.cc": [
     "+ui/gfx/transform.h"
   ],
@@ -61,8 +64,12 @@ specific_include_rules = {
   "mhtml_archive_test\.cc": [
     "+services/network/public/cpp/is_potentially_trustworthy.h",
   ],
+  "picture_in_picture_controller\.h": [
+    "+services/media_session/public/mojom/media_session.mojom-blink.h",
+  ],
   "remote_frame\.h": [
     "+components/viz/common/surfaces/parent_local_surface_id_allocator.h",
+    "+services/network/public/cpp/permissions_policy/permissions_policy_declaration.h",
   ],
   "remote_frame\.cc": [
     "+ui/base/window_open_disposition.h",
@@ -73,6 +80,9 @@ specific_include_rules = {
     "+printing/buildflags/buildflags.h",
     "+printing/metafile_skia.h",
     "+ui/gfx/transform_util.h",
+  ],
+  "navigator_language\.cc" : [
+    "+base/command_line.h"
   ],
   "visual_viewport\.cc": [
     "+cc/layers/solid_color_scrollbar_layer.h",

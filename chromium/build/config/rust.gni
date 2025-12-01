@@ -12,7 +12,8 @@ if (is_android) {
 }
 
 if (is_ios) {
-  import("//build/config/apple/mobile_config.gni")  # For `target_environment`
+  # For `target_environment` and `target_platform`.
+  import("//build/config/apple/mobile_config.gni")
 }
 
 declare_args() {
@@ -108,7 +109,7 @@ declare_args() {
 use_chromium_rust_toolchain = rust_sysroot_absolute == ""
 
 # Platform support for the Rust toolchain.
-chromium_toolchain_supports_platform = !is_nacl
+chromium_toolchain_supports_platform = !is_nacl && !is_wasm
 custom_toolchain_supports_platform = !is_nacl || rust_toolchain_supports_nacl
 
 # Not all target triples (GN toolchains) are supported by the Rust compiler.
@@ -189,8 +190,21 @@ if (is_linux || is_chromeos) {
       float_suffix = ""
     }
     if (arm_arch == "armv7-a" || arm_arch == "armv7") {
-      # No way to inform Rust about the -a suffix.
-      rust_abi_target = "armv7-unknown-linux-gnueabi" + float_suffix
+      # We have no way to inform Rust about the -a suffix, so we end up
+      # targeting armv7 in both cases.
+      #
+      # We also try to propagate the availability of NEON without feature
+      # detection; in C++ this is done by -mfpu=neon, but in Rust we need to
+      # use a different ABI target.
+      #
+      # The thumbv7 vs. armv7 distinction is for legacy reasons and both
+      # targets in fact target Thumb, see:
+      # https://github.com/rust-lang/rust/issues/44722
+      if (arm_use_neon) {
+        rust_abi_target = "thumbv7neon-unknown-linux-gnueabi" + float_suffix
+      } else {
+        rust_abi_target = "armv7-unknown-linux-gnueabi" + float_suffix
+      }
       cargo_target_abi = "eabi" + float_suffix
     } else {
       rust_abi_target = "arm-unknown-linux-gnueabi" + float_suffix
@@ -211,8 +225,14 @@ if (is_linux || is_chromeos) {
     cargo_target_abi = ""
   } else if (android_abi_target == "arm-linux-androideabi") {
     # Android clang target specifications mostly match Rust, but this
-    # is an exception
-    rust_abi_target = "armv7-linux-androideabi"
+    # is an exception.
+    # See section above for Linux for thumbv7neon vs. armv7.
+    # Note that on Android, NEON is enabled for all builds except Cronet.
+    if (arm_use_neon) {
+      rust_abi_target = "thumbv7neon-linux-androideabi"
+    } else {
+      rust_abi_target = "armv7-linux-androideabi"
+    }
     cargo_target_abi = "eabi"
   } else if (android_abi_target == "mipsel-linux-android") {
     # There is no MIPS android target.
@@ -246,26 +266,55 @@ if (is_linux || is_chromeos) {
   }
 } else if (is_ios) {
   if (current_cpu == "arm64") {
-    if (target_environment == "simulator") {
-      rust_abi_target = "aarch64-apple-ios-sim"
-      cargo_target_abi = "sim"
-    } else if (target_environment == "catalyst") {
-      rust_abi_target = "aarch64-apple-ios-macabi"
-      cargo_target_abi = "macabi"
+    if (target_platform == "iphoneos") {
+      if (target_environment == "simulator") {
+        rust_abi_target = "aarch64-apple-ios-sim"
+        cargo_target_abi = "sim"
+      } else if (target_environment == "device") {
+        rust_abi_target = "aarch64-apple-ios"
+        cargo_target_abi = ""
+      } else if (target_environment == "catalyst") {
+        rust_abi_target = "aarch64-apple-ios-macabi"
+        cargo_target_abi = "macabi"
+      } else {
+        assert(false, "unsupported target_environment=$target_environment")
+      }
+    } else if (target_platform == "tvos") {
+      if (target_environment == "simulator") {
+        rust_abi_target = "aarch64-apple-tvos-sim"
+        cargo_target_abi = "sim"
+      } else if (target_environment == "device") {
+        rust_abi_target = "aarch64-apple-tvos"
+        cargo_target_abi = ""
+      } else {
+        assert(false, "unsupported target_environment=$target_environment")
+      }
     } else {
-      rust_abi_target = "aarch64-apple-ios"
-      cargo_target_abi = ""
+      assert(false, "unsupported target_platform=$target_platform")
     }
   } else if (current_cpu == "arm") {
     rust_abi_target = "armv7s-apple-ios"
     cargo_target_abi = ""
   } else if (current_cpu == "x64") {
-    if (target_environment == "catalyst") {
-      rust_abi_target = "x86_64-apple-ios-macabi"
-      cargo_target_abi = "macabi"
+    if (target_platform == "iphoneos") {
+      if (target_environment == "simulator") {
+        rust_abi_target = "x86_64-apple-ios"
+        cargo_target_abi = "sim"
+      } else if (target_environment == "catalyst") {
+        rust_abi_target = "x86_64-apple-ios-macabi"
+        cargo_target_abi = "macabi"
+      } else {
+        assert(false, "unsupported target_environment=$target_environment")
+      }
+    } else if (target_platform == "tvos") {
+      if (target_environment == "simulator") {
+        rust_abi_target = "x86_64-apple-tvos"
+        cargo_target_abi = "sim"
+      } else {
+        assert(false, "unsupported target_environment=$target_environment")
+      }
     } else {
-      rust_abi_target = "x86_64-apple-ios"
-      cargo_target_abi = "sim"
+      assert(false, "unsupported target_platform=$target_platform")
     }
   } else if (current_cpu == "x86") {
     rust_abi_target = "i386-apple-ios"

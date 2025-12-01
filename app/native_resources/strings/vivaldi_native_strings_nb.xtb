@@ -14,6 +14,7 @@
 <translation id="1454726940098520109">Ikke vis bekreftelse igjen</translation>
 <translation id="1462666970065907900">Sikker på at du vil lukke dette vinduet?</translation>
 <translation id="1480046233931937785">Anerkjennelser</translation>
+<translation id="1490502035430975848">Inspiser portaldokument</translation>
 <translation id="1521774566618522728">Aktiv i dag</translation>
 <translation id="1526344461589023948">En feil oppstod ved lagring av en nedlastet oppdatering. Sjekk at datamaskinen har nok ledig diskplass og prøv igjen.</translation>
 <translation id="1635542496948266458">Bytt profil</translation>
@@ -37,6 +38,7 @@
 <translation id="2441056087170876076">Monster 2</translation>
 <translation id="2444387452209867610">Lim inn notat</translation>
 <translation id="2486841023299517366">Dyr 4</translation>
+<translation id="2501278716633472235">Gå tilbake</translation>
 <translation id="2612127540243995147">Klar til å installere. Vivaldi vil bli lukket og startet på nytt etter installasjonen.</translation>
 <translation id="2613387515621326337">Vis oppdateringsnettsiden</translation>
 <translation id="2645477450146475243">Dessverre er ikke dine Opera-innstillinger tilgjengelige mens den nettleseren kjører. For å importere disse instillingene til Vivaldi, lagre arbeidet ditt og lukk alle Opera-vinduer. Klikk deretter Fortsett.</translation>
@@ -61,6 +63,7 @@
 <translation id="3259769196742189631">Valider siden</translation>
 <translation id="3291915639428159043">Automatisk avspilling blokkert</translation>
 <translation id="3302905971452834934">Monster 1</translation>
+<translation id="3308738399950580893">reklame</translation>
 <translation id="3334610655141903168">(ingen tittel)</translation>
 <translation id="3372505110412186107">Vivaldi <ph name="VERSION" /> er nyeste tilgjengelige versjon.</translation>
 <translation id="3383198080133834965">Du er oppdatert!</translation>
@@ -71,6 +74,7 @@
 <translation id="3521635864657970829">Er du sikker på at du vil lukke vinduet?</translation>
 <translation id="3540597690227428180">Dyr 9</translation>
 <translation id="3542768452570884558">Åpne lenken i nytt vindu</translation>
+<translation id="3586931643579894722">Skjul detaljer</translation>
 <translation id="3588820906588687999">Åpne bilde i ny fane</translation>
 <translation id="3601066750251199488">Monster 3</translation>
 <translation id="3620979700683094848">Nettsteder kan spille av video automatisk</translation>
@@ -83,6 +87,7 @@
 <translation id="3795800845758778870">Dessverre er ikke Brave-innstillingene tilgjengelige når nettleseren kjører. For å importere innstillingene til Vivaldi, lagre arbeidet ditt og lukk alle Brave-vinduer. Klikk så fortsett.</translation>
 <translation id="3822431842304177896">Nytt skilletegn</translation>
 <translation id="3832132597516774400">Landskap 5</translation>
+<translation id="3894751534882749287">Hvis du vil vise siden likevel, kan du endre nivået av sporingsbeskyttelse i menyen for sporingsblokkering, eller ved å trykke på Tillat-knappen</translation>
 <translation id="3914946330804881301">Importert fra Opera</translation>
 <translation id="3921292902397893431">Monster 8</translation>
 <translation id="3943857333388298514">Lim inn</translation>
@@ -107,6 +112,7 @@
 <translation id="4582480609585453144">Åpne lenken i bakgrunnsfane</translation>
 <translation id="4636708767492582204">Send med epost</translation>
 <translation id="4677434526832593569">Dyr 8</translation>
+<translation id="4736016046474602958">Sporingsblokkering</translation>
 <translation id="474217410105706308">Slå av lyd for fane</translation>
 <translation id="4861715717329665002">Automatisk lagrede økter</translation>
 <translation id="4881695831933465202">Åpne</translation>
@@ -133,6 +139,7 @@
 <translation id="588258955323874662">Fullskjerm</translation>
 <translation id="5916080360077521750">Chrome-innstillingene er ikke tilgjengelige når nettleseren kjører. Hvis du vil importere disse innstillingene til Vivaldi, lagre arbeidet ditt og lukk alle Chrome-vinduer. Deretter klikker du på Fortsett.</translation>
 <translation id="6040143037577758943">Lukk</translation>
+<translation id="6140948187512243695">Vis detaljer</translation>
 <translation id="6229528619562190452">Klikk her for å oppdatere Vivaldi.</translation>
 <translation id="6234173136417926046">Bruk bildet som startsidebakgrunn</translation>
 <translation id="6339818817272922368">Lokal konto</translation>
@@ -152,6 +159,7 @@
 <translation id="7086554968911045110">Landskap 7</translation>
 <translation id="7099506190679014195">Sikker oppgradering av nøkkellager</translation>
 <translation id="7111492742514999492">Landskap 9</translation>
+<translation id="7113310725918019676">Tillat <ph name="BLOCKED_TYPE" /> fra <ph name="DOMAIN" /></translation>
 <translation id="7208252576848052204">Dessverre er ikke dine Arc-innstillinger tilgjengelige mens den nettleseren kjører. For å importere disse instillingene til Vivaldi, lagre arbeidet ditt og lukk alle Arc-vinduer. Klikk deretter Fortsett.</translation>
 <translation id="7321500017121629018">Aktiv i går</translation>
 <translation id="7337881442233988129">Chromium</translation>
@@ -167,12 +175,13 @@
 <translation id="8027581147000338959">Åpne i nytt vindu</translation>
 <translation id="8044382196220116469">Ikke tillat sider å automatisk spille av video</translation>
 <translation id="8099620695029051217">Kopier adresse</translation>
+<translation id="8119307142152921512">sporing og reklame</translation>
 <translation id="8197810018650377191">Bokmerk siden</translation>
 <translation id="8261506727792406068">Slett</translation>
-<translation id="8263047843452521549">Inspiser bakgrunnstjenestearbeider</translation>
 <translation id="8331671104904436324">Åpne i ny bakgrunnsfane</translation>
 <translation id="8373293945112511707">Landskap 1</translation>
 <translation id="8388552048012645975">Laster ned oppdatering...</translation>
+<translation id="8392904568172593155">Uten parametre</translation>
 <translation id="8427094907586191051">Landskap 17</translation>
 <translation id="8439034818057146672">En ny versjon av Vivaldi er klar til å installeres.</translation>
 <translation id="8446668873108041390">Kjøring av JavaScript gjennom AppleScript er skrudd av. Under Innstillinger &gt; Personvern &gt; Apple Events, er det en innstilling for å tillate JavaScript fra Apple Events.</translation>
@@ -183,7 +192,6 @@
 <translation id="8651348004684669199">Legg til aktiv fane</translation>
 <translation id="8669345741879513971">Monster 10</translation>
 <translation id="867544375504146191">Yandex</translation>
-<translation id="8689295374912158752">Inspiser portaldokument</translation>
 <translation id="875142999698251063">Avslutt nå</translation>
 <translation id="8768970203213061953">Landskap 14</translation>
 <translation id="8773635261052182196">Du får ikke lenger se disse meldingene. Du kan aktivere dem igjen fra Vivaldi innstillinger.</translation>
@@ -191,6 +199,7 @@
 <translation id="8813277370772331957">Minn meg på dette senere</translation>
 <translation id="8894900864683381599">Legg til lenken som nettpanel</translation>
 <translation id="8912720443398351457">Er du sikker på at du vil avslutte Vivaldi?</translation>
+<translation id="8940028675168378100">Blokkert av <ph name="BLOCKER_NAME" /></translation>
 <translation id="8947109330183116400">Velg HTML bokmerkefil</translation>
 <translation id="9017566390391482291">Velg Vivaldi profilkatalog for import</translation>
 <translation id="9048058608784130603">Venter på oppdatering <ph name="VERSION" /></translation>
@@ -201,6 +210,7 @@
 <translation id="912022491595344261">Åpne bilde som <ph name="USER" /></translation>
 <translation id="9157539936604258187">Åpne lenke</translation>
 <translation id="9169060351863393881">Opera 12.x</translation>
+<translation id="9180553614777056266">Reklameblokkering</translation>
 <translation id="939305735877869636">Brave</translation>
 <translation id="970294721402795299">Landskap 16</translation>
 </translationbundle>

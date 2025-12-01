@@ -243,12 +243,31 @@
       ],
     },
     {
+      name: "H1UserAgentFontSizeInSection",
+      message: "Found an <h1> tag within an <article>, <aside>, <nav>, or <section> which does not have a specified font-size. The size of this heading text will be changing in this browser in the near future. See https://developer.mozilla.org/en-US/docs/Web/HTML/Element/Heading_Elements#specifying_a_uniform_font_size_for_h1 for more information.",
+      translation_note: "This warning occurs when a site uses <h1> inside <article>, <aside>, <nav>, or <section>. It means the behavior (font size) may change in a future Chrome release, when some special rules are removed from the browser.",
+      web_features: [
+        "kH1UserAgentFontSizeInSectionApplied",
+      ],
+      chrome_status_feature: 6192419898654720,
+      milestone: 136,
+    },
+    {
       name: "HostCandidateAttributeGetter",
       message: "`RTCPeerConnectionIceErrorEvent.hostCandidate` is deprecated. Please use `RTCPeerConnectionIceErrorEvent.address` or `RTCPeerConnectionIceErrorEvent.port` instead.",
       translation_note: "A deprecation warning shown to developers in the DevTools Issues tab when code tries to use the deprecated hostCandidate field, guiding developers to use the equivalent information in the .address and .port fields instead.",
       web_features: [
         "kHostCandidateAttributeGetter",
       ],
+    },
+    {
+      name: "IdentityDigitalCredentials",
+      message: "This format for the navigator.credentials.get() request for digital credentials is deprecated, please update your call to use the new format.",
+      translation_note: "A deprecation warning shown in the DevTools Issues tab, when a request for digital credentials API is formatted using a deprecated format.",
+      web_features: [
+        "kIdentityDigitalCredentials",
+      ],
+      chrome_status_feature: 5166035265650688,
     },
     {
       name: "IdentityInCanMakePaymentEvent",
@@ -277,6 +296,14 @@
       translation_note: "This is a deprecated warning to developers that a field in a structure has been renamed.",
       web_features: [
         "kDeprecatedInterestGroupDailyUpdateUrl",
+      ],
+    },
+    {
+      name: "IntlV8BreakIterator",
+      message: "`Intl.v8BreakIterator` is deprecated. Please use `Intl.Segmenter` instead.",
+      translation_note: "Warning displayed to developers that instead of calling the `Intl.v8BreakIterator` constructor, which is not a standard JavaScript API, use ECMA402 standard API Intl.Segmenter shipped in end of 2020 instead.",
+      web_features: [
+        "kBreakIterator",
       ],
     },
     {
@@ -348,7 +375,7 @@
     },
     {
       name: "ObsoleteCreateImageBitmapImageOrientationNone",
-      message: "Option `imageOrientation: 'none'` in createImageBitmap is deprecated. Please use createImageBitmap with option {imageOrientation: 'from-image'} instead.",
+      message: "Option `imageOrientation: 'none'` in createImageBitmap is deprecated. Please use createImageBitmap with option '{imageOrientation: 'from-image'}' instead.",
       translation_note: "Warning displayed to developers when CreateImageBitmap is used with the newly deprecated option imageOrientation: 'none'.",
       web_features: [
         "kObsoleteCreateImageBitmapImageOrientationNone",
@@ -575,26 +602,6 @@
       milestone: 96,
     },
     {
-      name: "WebGPULimitMaxInterStageShaderComponents",
-      message: "The WebGPU limit `maxInterStageShaderComponents` is deprecated, instead use the WebGPU limit `maxInterStageShaderVariables`.",
-      translation_note: "This warning occurs when the website attempts to use the deprecated WebGPU limit `maxInterStageShaderComponents`.",
-      web_features: [
-        "kMaxInterStageShaderComponentsRequiredLimit",
-        "kV8GPUSupportedLimits_MaxInterStageShaderComponents_AttributeGetter",
-      ],
-      chrome_status_feature: 4853767735083008,
-    },
-    {
-      name: "WebSQL",
-      message: "Web SQL is deprecated. Please use SQLite WebAssembly or Indexed Database",
-      translation_note: "Warning displayed to developers when the Web SQL API is used to let them know this API is deprecated.",
-      web_features: [
-        "kOpenWebDatabase",
-      ],
-      chrome_status_feature: 5134293578285056,
-      milestone: 115,
-    },
-    {
       name: "XHRJSONEncodingDetection",
       message: "UTF-16 is not supported by response json in `XMLHttpRequest`",
       translation_note: "Warning displayed to developers that they are using `XMLHttpRequest` API in a way that they expect an unsupported character encoding `UTF-16` could be used in the server reply.",
@@ -610,15 +617,6 @@
       web_features: [
         "kXMLHttpRequestSynchronousInNonWorkerOutsideBeforeUnload",
       ],
-    },
-    {
-      name: "XRSupportsSession",
-      message: "`supportsSession()` is deprecated. Please use `isSessionSupported()` and check the resolved boolean value instead.",
-      translation_note: "Warning displayed to developers that instead of using `supportsSession()`, which returns a promise that resolves if the XR session can be supported and rejects if not, they should use `isSessionSupported()` which will return a promise which resolves to a boolean indicating if the XR session can be supported or not, but may reject to throw an exception.",
-      web_features: [
-        "kXRSupportsSession",
-      ],
-      milestone: 80,
     },
   ],
 }

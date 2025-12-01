@@ -67,7 +67,7 @@
 <translation id="2144536955299248197">Visor de certificados: <ph name="CERTIFICATE_NAME" /></translation>
 <translation id="2148892889047469596">Transmitir pestaña</translation>
 <translation id="2150139952286079145">Buscar destinos</translation>
-<translation id="215753907730220065">Desactivar pantalla completa</translation>
+<translation id="215753907730220065">Salir del modo pantalla completa</translation>
 <translation id="2158475082070321257">Copiar enlace con texto resaltado</translation>
 <translation id="2177950615300672361">Pestaña de incógnito: <ph name="TAB_NAME" /></translation>
 <translation id="219008588003277019">Módulo de cliente nativo: <ph name="NEXE_NAME" /></translation>
@@ -170,6 +170,7 @@
 <translation id="3838085852053358637">Error al cargar la extensión</translation>
 <translation id="383891835335927981">No se ha ampliado ni reducido ningún sitio</translation>
 <translation id="385051799172605136">Atrás</translation>
+<translation id="3858860766373142691">Nombre</translation>
 <translation id="3861977424605124250">Mostrar al iniciar</translation>
 <translation id="3867944738977021751">Campos de certificado</translation>
 <translation id="3905761538810670789">Reparar aplicación</translation>
@@ -195,7 +196,7 @@
 <translation id="4109898769411476438">Cerrar navegador antes de importar</translation>
 <translation id="4131410914670010031">Blanco y negro</translation>
 <translation id="4165986682804962316">Ajustes del sitio</translation>
-<translation id="4170314459383239649">Borrar al salir</translation>
+<translation id="4170314459383239649">Eliminar al salir</translation>
 <translation id="4176463684765177261">Desactivado</translation>
 <translation id="4200983522494130825">Nueva pes&amp;taña</translation>
 <translation id="4225397296022057997">En todos los sitios</translation>
@@ -326,7 +327,7 @@ Exponente público (<ph name="PUBLIC_EXPONENT_NUM_BITS" /> bits):
 <translation id="6315493146179903667">Mover todo al frente</translation>
 <translation id="6326855256003666642">Número de actividades en curso</translation>
 <translation id="6374469231428023295">Reintentar</translation>
-<translation id="6398765197997659313">Desactivar pantalla completa</translation>
+<translation id="6398765197997659313">Salir del modo pantalla completa</translation>
 <translation id="6406303162637086258">Simular reinicio del navegador</translation>
 <translation id="6445450263907939268">Si no querías realizar estos cambios, puedes restaurar los ajustes anteriores.</translation>
 <translation id="6447842834002726250">Cookies</translation>
@@ -380,7 +381,7 @@ Exponente público (<ph name="PUBLIC_EXPONENT_NUM_BITS" /> bits):
 <translation id="7629827748548208700">Pestaña: <ph name="TAB_NAME" /></translation>
 <translation id="7658239707568436148">Cancelar</translation>
 <translation id="7659154729610375585">¿Quieres salir del modo de incógnito de todos modos?</translation>
-<translation id="7661259717474717992">Permitir a los sitios guardar y leer datos de las cookies</translation>
+<translation id="7661259717474717992">Permitir que los sitios guarden y lean datos de las cookies</translation>
 <translation id="7663719505383602579">Receptor: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7684212569183643648">Instalada por tu administrador</translation>
 <translation id="7685038817958445325">No se puede enviar</translation>
@@ -415,6 +416,9 @@ Guarda tu archivo de clave en un lugar seguro. Lo necesitarás para crear versio
 <translation id="8004582292198964060">Navegador</translation>
 <translation id="8018313076035239964">Controla la información que los sitios web pueden usar y el contenido que pueden mostrarte</translation>
 <translation id="8071432093239591881">Imprimir como imagen</translation>
+<translation id="8118448640060360549">{EXTENSIONS_COUNT,plural,
+        =1{# marcador}
+        other{# marcadores}}</translation>
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" /> kB</translation>
 <translation id="8212008074015601248">{NUM_DOWNLOAD, plural,
         =1 {Descarga en curso} other {Descargas en curso}}</translation>
@@ -439,7 +443,7 @@ Guarda tu archivo de clave en un lugar seguro. Lo necesitarás para crear versio
 <translation id="8661290697478713397">Abrir enlace en una ventana de incó&amp;gnito</translation>
 <translation id="8664389313780386848">Ver código &amp;fuente de la página</translation>
 <translation id="8705331520020532516">Número de serie</translation>
-<translation id="8708000541097332489">Borrar al salir</translation>
+<translation id="8708000541097332489">Eliminar al salir</translation>
 <translation id="8714838604780058252">Gráficos de fondo</translation>
 <translation id="8725066075913043281">Reintentar</translation>
 <translation id="8774934320277480003">Margen superior</translation>
@@ -466,10 +470,10 @@ Guarda tu archivo de clave en un lugar seguro. Lo necesitarás para crear versio
 <translation id="916607977885256133">Imagen en imagen</translation>
 <translation id="9170848237812810038">&amp;Deshacer</translation>
 <translation id="9215293857209265904">"<ph name="EXTENSION_NAME" />" añadida</translation>
-<translation id="9218430445555521422">Establecer por defecto</translation>
+<translation id="9218430445555521422">Establecer como predeterminado</translation>
 <translation id="93766956588638423">Reparar extensión</translation>
 <translation id="961012016278832836">Microsoft Edge Legacy</translation>
-<translation id="961856697154696964">Borrar datos de navegación</translation>
+<translation id="961856697154696964">Eliminar datos de navegación</translation>
 <translation id="994289308992179865">&amp;En bucle</translation>
 <translation id="998747458861718449">I&amp;nspeccionar</translation>
 </translationbundle>

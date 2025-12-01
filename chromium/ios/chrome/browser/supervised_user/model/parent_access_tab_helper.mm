@@ -4,7 +4,6 @@
 
 #import "ios/chrome/browser/supervised_user/model/parent_access_tab_helper.h"
 
-#import "base/base64.h"
 #import "base/logging.h"
 #import "base/notreached.h"
 #import "base/strings/sys_string_conversions.h"
@@ -45,20 +44,48 @@ void ParentAccessTabHelper::ShouldAllowRequest(
     return;
   }
 
-  auto parsed_result = supervised_user::ParentAccessCallbackParsedResult::
-      ParseParentAccessCallbackResult(encoded_callback.value(),
-                                      base::Base64DecodePolicy::kForgiving);
-  if (!parsed_result.GetCallback()) {
-    // Early return on malformed results.
-    [delegate_ hideParentAccessBottomSheetWithResult:
-                   supervised_user::LocalApprovalResult::kError];
+  if (encoded_callback.value().empty()) {
+    // The `result` query param was empty.
+    [delegate_
+        hideParentAccessBottomSheetWithResult:supervised_user::
+                                                  LocalApprovalResult::kError
+                                    errorType:supervised_user::
+                                                  LocalWebApprovalErrorType::
+                                                      kPacpEmptyResponse];
     std::move(callback).Run(PolicyDecision::Allow());
     return;
   }
 
+  auto parsed_result = supervised_user::ParentAccessCallbackParsedResult::
+      ParseParentAccessCallbackResult(encoded_callback.value());
+
+  if (parsed_result.GetError().has_value()) {
+    supervised_user::LocalWebApprovalErrorType parseErrorType;
+    switch (parsed_result.GetError().value()) {
+      case supervised_user::ParentAccessWidgetError::kDecodingError:
+        parseErrorType = supervised_user::LocalWebApprovalErrorType::
+            kFailureToDecodePacpResponse;
+        break;
+      case supervised_user::ParentAccessWidgetError::kParsingError:
+        parseErrorType = supervised_user::LocalWebApprovalErrorType::
+            kFailureToParsePacpResponse;
+        break;
+      default:
+        NOTREACHED();
+    }
+    [delegate_ hideParentAccessBottomSheetWithResult:
+                   supervised_user::LocalApprovalResult::kError
+                                           errorType:parseErrorType];
+    std::move(callback).Run(PolicyDecision::Allow());
+    return;
+  }
+
+  CHECK(parsed_result.GetCallback().has_value());
   ParentAccessCallback parent_access_callback =
       parsed_result.GetCallback().value();
   supervised_user::LocalApprovalResult result;
+  std::optional<supervised_user::LocalWebApprovalErrorType> errorType;
+
   switch (parent_access_callback.callback_case()) {
     case ParentAccessCallback::CallbackCase::kOnParentVerified:
       result = supervised_user::LocalApprovalResult::kApproved;
@@ -67,9 +94,12 @@ void ParentAccessTabHelper::ShouldAllowRequest(
       // once PACP returns it for the approval flow.
     default:
       result = supervised_user::LocalApprovalResult::kError;
+      errorType =
+          supervised_user::LocalWebApprovalErrorType::kUnexpectedPacpResponse;
       break;
   }
-  [delegate_ hideParentAccessBottomSheetWithResult:result];
+
+  [delegate_ hideParentAccessBottomSheetWithResult:result errorType:errorType];
   std::move(callback).Run(PolicyDecision::Allow());
 }
 

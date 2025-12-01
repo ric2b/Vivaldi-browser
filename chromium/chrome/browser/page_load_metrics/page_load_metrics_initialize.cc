@@ -12,6 +12,7 @@
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/heavy_ad_intervention/heavy_ad_service_factory.h"
+#include "chrome/browser/history/history_service_factory.h"
 #include "chrome/browser/page_load_metrics/observers/bookmark_bar_page_load_metrics_observer.h"
 #include "chrome/browser/page_load_metrics/observers/chrome_gws_abandoned_page_load_metrics_observer.h"
 #include "chrome/browser/page_load_metrics/observers/chrome_gws_page_load_metrics_observer.h"
@@ -55,6 +56,7 @@
 #include "components/page_load_metrics/browser/page_load_metrics_embedder_base.h"
 #include "components/page_load_metrics/browser/page_load_metrics_memory_tracker.h"
 #include "components/page_load_metrics/browser/page_load_tracker.h"
+#include "components/page_load_metrics/google/browser/from_gws_abandoned_page_load_metrics_observer.h"
 #include "components/page_load_metrics/google/browser/gws_abandoned_page_load_metrics_observer.h"
 #include "content/public/browser/web_contents.h"
 #include "extensions/buildflags/buildflags.h"
@@ -70,7 +72,7 @@
 #include "chrome/browser/ui/webui/top_chrome/top_chrome_webui_config.h"
 #endif
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
 #include "chrome/browser/page_load_metrics/observers/ash_session_restore_page_load_metrics_observer.h"
 #endif
 
@@ -168,6 +170,8 @@ void PageLoadMetricsEmbedder::RegisterObservers(
     tracker->AddObserver(std::make_unique<SchemePageLoadMetricsObserver>());
     tracker->AddObserver(std::make_unique<FromGWSPageLoadMetricsObserver>());
     tracker->AddObserver(std::make_unique<ChromeGWSPageLoadMetricsObserver>());
+    tracker->AddObserver(
+        std::make_unique<FromGWSAbandonedPageLoadMetricsObserver>());
     tracker->AddObserver(std::make_unique<AbandonedPageLoadMetricsObserver>());
     tracker->AddObserver(
         std::make_unique<ChromeGWSAbandonedPageLoadMetricsObserver>());
@@ -195,6 +199,10 @@ void PageLoadMetricsEmbedder::RegisterObservers(
                 tracker->GetWebContents(),
                 HeavyAdServiceFactory::GetForBrowserContext(
                     tracker->GetWebContents()->GetBrowserContext()),
+                HistoryServiceFactory::GetForProfile(
+                    Profile::FromBrowserContext(
+                        web_contents()->GetBrowserContext()),
+                    ServiceAccessType::EXPLICIT_ACCESS),
                 base::BindRepeating(&GetApplicationLocale), is_incognito);
     if (ads_observer)
       tracker->AddObserver(std::move(ads_observer));
@@ -245,7 +253,7 @@ void PageLoadMetricsEmbedder::RegisterObservers(
     tracker->AddObserver(std::move(translate_observer));
   tracker->AddObserver(std::make_unique<ZstdPageLoadMetricsObserver>());
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
   if (AshSessionRestorePageLoadMetricsObserver::ShouldBeInstantiated(
           Profile::FromBrowserContext(web_contents()->GetBrowserContext()))) {
     tracker->AddObserver(

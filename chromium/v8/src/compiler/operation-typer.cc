@@ -582,19 +582,6 @@ Type OperationTyper::NumberToUint8Clamped(Type type) {
   return cache_->kUint8;
 }
 
-Type OperationTyper::NumberToFloat16RawBits(Type type) {
-  DCHECK(type.Is(Type::Number()));
-
-  if (type.Is(cache_->kUint16)) return type;
-  return cache_->kUint16;
-}
-
-Type OperationTyper::Float16RawBitsToNumber(Type type) {
-  DCHECK(type.Is(Type::Number()));
-  if (type.Is(cache_->kFloat64)) return type;
-  return cache_->kFloat64;
-}
-
 Type OperationTyper::Integral32OrMinusZeroToBigInt(Type type) {
   DCHECK(type.Is(Type::Number()));
 
@@ -718,7 +705,26 @@ Type OperationTyper::NumberSubtract(Type lhs, Type rhs) {
   return type;
 }
 
-Type OperationTyper::SpeculativeSafeIntegerAdd(Type lhs, Type rhs) {
+Type OperationTyper::SpeculativeAdditiveSafeIntegerAdd(Type lhs, Type rhs) {
+  Type result = SpeculativeNumberAdd(lhs, rhs);
+  if (lhs.Is(cache_->kAdditiveSafeInteger) ||
+      rhs.Is(cache_->kAdditiveSafeInteger)) {
+    return Type::Intersect(result, cache_->kAdditiveSafeInteger, zone());
+  }
+  return result;
+}
+
+Type OperationTyper::SpeculativeAdditiveSafeIntegerSubtract(Type lhs,
+                                                            Type rhs) {
+  Type result = SpeculativeNumberSubtract(lhs, rhs);
+  if (lhs.Is(cache_->kAdditiveSafeInteger) ||
+      rhs.Is(cache_->kAdditiveSafeInteger)) {
+    return Type::Intersect(result, cache_->kAdditiveSafeInteger, zone());
+  }
+  return result;
+}
+
+Type OperationTyper::SpeculativeSmallIntegerAdd(Type lhs, Type rhs) {
   Type result = SpeculativeNumberAdd(lhs, rhs);
   // If we have a Smi or Int32 feedback, the representation selection will
   // either truncate or it will check the inputs (i.e., deopt if not int32).
@@ -728,7 +734,7 @@ Type OperationTyper::SpeculativeSafeIntegerAdd(Type lhs, Type rhs) {
   return Type::Intersect(result, cache_->kSafeIntegerOrMinusZero, zone());
 }
 
-Type OperationTyper::SpeculativeSafeIntegerSubtract(Type lhs, Type rhs) {
+Type OperationTyper::SpeculativeSmallIntegerSubtract(Type lhs, Type rhs) {
   Type result = SpeculativeNumberSubtract(lhs, rhs);
   // If we have a Smi or Int32 feedback, the representation selection will
   // either truncate or it will check the inputs (i.e., deopt if not int32).

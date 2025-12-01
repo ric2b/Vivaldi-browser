@@ -58,8 +58,7 @@ AuthenticatorSupportedOptions AuthenticatorOptions() {
       UserVerificationAvailability::kSupportedAndConfigured;
   options.supports_user_presence = true;
   if (@available(macOS 15.0, *)) {
-    options.supports_prf =
-        base::FeatureList::IsEnabled(kWebAuthniCloudKeychainPrf);
+    options.supports_prf = true;
   }
   return options;
 }
@@ -249,13 +248,20 @@ class API_AVAILABLE(macos(13.3)) Authenticator : public FidoAuthenticator {
                     -> bool { return allow_list_cred.id == cred_id; })) {
           continue;
         }
+        std::optional<std::string> provider_name;
+        if (@available(macOS 14.0, *)) {
+          // `providerName` is documented available in 13.3+, but appears broken
+          // in 13.* (see https://crbug.com/407900955)
+          provider_name = cred.providerName.UTF8String;
+        }
         ret.emplace_back(AuthenticatorType::kICloudKeychain, rp_id,
                          std::move(cred_id),
                          PublicKeyCredentialUserEntity(
                              ToVector(cred.userHandle), cred.name.UTF8String,
                              /* iCloud Keychain does not store
                                 a displayName for passkeys */
-                             std::nullopt));
+                             std::nullopt),
+                         std::move(provider_name));
       }
       const auto has_credentials =
           ret.empty() ? FidoRequestHandlerBase::RecognizedCredential::
@@ -535,15 +541,10 @@ bool IsSupported() {
   return false;
 }
 
-std::unique_ptr<FidoDiscoveryBase> NewDiscovery(uintptr_t ns_window) {
+std::unique_ptr<FidoDiscoveryBase> NewDiscovery(
+    base::apple::WeakNSWindow ns_window) {
   if (@available(macOS 13.5, *)) {
-    NSWindow* window = nullptr;
-    if (ns_window != kFakeNSWindowForTesting) {
-      window = (__bridge NSWindow*)(void*)ns_window;
-      static_assert(sizeof(window) == sizeof(ns_window));
-    }
-
-    return std::make_unique<Discovery>(window);
+    return std::make_unique<Discovery>(ns_window.Get());
   }
 
   NOTREACHED();

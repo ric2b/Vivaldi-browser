@@ -152,8 +152,8 @@ class TestInterfaceFactory : public media::mojom::InterfaceFactory {
   // Stub out other `mojom::InterfaceFactory` interfaces.
   void CreateVideoDecoder(
       mojo::PendingReceiver<media::mojom::VideoDecoder> receiver,
-      mojo::PendingRemote<media::stable::mojom::StableVideoDecoder>
-          dst_video_decoder) override {}
+      mojo::PendingRemote<media::mojom::VideoDecoder> dst_video_decoder)
+      override {}
   void CreateAudioDecoder(
       mojo::PendingReceiver<media::mojom::AudioDecoder> receiver) override {}
   void CreateDefaultRenderer(
@@ -703,21 +703,25 @@ class AudioTrackRecorderTest : public testing::TestWithParam<ATRTestParams> {
   void ValidateOpusData(scoped_refptr<media::DecoderBuffer> encoded_data) {
     // Decode |encoded_data| and check we get the expected number of frames
     // per buffer.
-    ASSERT_GE(static_cast<size_t>(opus_buffer_size_), encoded_data->size());
-    EXPECT_EQ(kDefaultSampleRate * kOpusBufferDurationMs / 1000,
-              opus_decode_float(opus_decoder_, encoded_data->data(),
-                                static_cast<wtf_size_t>(encoded_data->size()),
-                                opus_buffer_.get(), opus_buffer_size_, 0));
+    auto encoded_data_span = base::span(*encoded_data);
+    ASSERT_GE(static_cast<size_t>(opus_buffer_size_), encoded_data_span.size());
+    EXPECT_EQ(
+        kDefaultSampleRate * kOpusBufferDurationMs / 1000,
+        opus_decode_float(opus_decoder_, encoded_data_span.data(),
+                          static_cast<wtf_size_t>(encoded_data_span.size()),
+                          opus_buffer_.get(), opus_buffer_size_, 0));
   }
 
   void ValidatePcmData(scoped_refptr<media::DecoderBuffer> encoded_data) {
     // Manually confirm that we're getting the same data out as what we
     // generated from the sine wave.
+    const size_t kSampleSize = 4;
     for (size_t b = 0; b + 3 < encoded_data->size() &&
                        first_source_cache_pos_ < first_source_cache_.size();
          b += sizeof(first_source_cache_[0]), ++first_source_cache_pos_) {
       float sample;
-      memcpy(&sample, encoded_data->AsSpan().subspan(b).data(), 4);
+      memcpy(&sample, (*encoded_data).subspan(b, kSampleSize).data(),
+             kSampleSize);
       ASSERT_FLOAT_EQ(sample, first_source_cache_[first_source_cache_pos_])
           << "(Sample " << first_source_cache_pos_ << ")";
     }

@@ -27,7 +27,7 @@ struct CommandNameEntry {
   EditingCommandType type;
 };
 
-const auto kCommandNameEntries = std::to_array<CommandNameEntry>({
+constexpr auto kCommandNameEntries = std::to_array<CommandNameEntry>({
 #define V(name) {#name, EditingCommandType::k##name},
     FOR_EACH_BLINK_EDITING_COMMAND_NAME(V)
 #undef V
@@ -158,7 +158,7 @@ TEST_F(EditingCommandTest, DeleteSoftLineBackwardTargetRanges) {
       div, FocusParams(SelectionBehaviorOnFocus::kNone,
                        mojom::blink::FocusType::kNone, nullptr));
   EXPECT_TRUE(command.IsEnabled());
-  const StaticRangeVector* ranges = command.GetTargetRanges();
+  const GCedStaticRangeVector* ranges = command.GetTargetRanges();
   EXPECT_EQ(1u, ranges->size());
   const StaticRange& range = *ranges->at(0);
   EXPECT_EQ("123", range.startContainer()->textContent());

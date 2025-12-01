@@ -13,7 +13,6 @@
 #include "base/memory/ptr_util.h"
 #include "base/task/sequenced_task_runner.h"
 #include "build/build_config.h"
-#include "build/chromeos_buildflags.h"
 #include "chrome/common/google_url_loader_throttle.h"
 #include "chrome/renderer/chrome_content_renderer_client.h"
 #include "chrome/renderer/chrome_render_frame_observer.h"
@@ -23,9 +22,9 @@
 #include "components/fingerprinting_protection_filter/renderer/renderer_url_loader_throttle.h"
 #include "components/fingerprinting_protection_filter/renderer/unverified_ruleset_dealer.h"
 #include "components/no_state_prefetch/renderer/no_state_prefetch_helper.h"
-#include "components/safe_browsing/content/renderer/renderer_url_loader_throttle.h"
 #include "components/safe_browsing/core/common/features.h"
 #include "components/signin/public/base/signin_buildflags.h"
+#include "components/subresource_filter/core/common/first_party_origin.h"
 #include "content/public/common/content_features.h"
 #include "content/public/common/web_identity.h"
 #include "content/public/renderer/render_frame.h"
@@ -45,9 +44,13 @@
 #include "extensions/renderer/extension_throttle_manager.h"
 #endif
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
 #include "chrome/renderer/ash_merge_session_loader_throttle.h"
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+#endif  // BUILDFLAG(IS_CHROMEOS)
+
+#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+#include "components/safe_browsing/content/renderer/renderer_url_loader_throttle.h"
+#endif
 
 namespace {
 
@@ -175,6 +178,7 @@ URLLoaderThrottleProviderImpl::CreateThrottles(
   DCHECK(!is_frame_resource ||
          type_ == blink::URLLoaderThrottleProviderType::kFrame);
 
+#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
   if (!is_frame_resource) {
     if (pending_safe_browsing_) {
       safe_browsing_.Bind(std::move(pending_safe_browsing_));
@@ -188,12 +192,21 @@ URLLoaderThrottleProviderImpl::CreateThrottles(
     auto throttle = std::make_unique<safe_browsing::RendererURLLoaderThrottle>(
         safe_browsing_.get(), local_frame_token,
         extension_web_request_reporter_.get());
+
+    // NOTE(ondrej@vivaldi.com): VB-113318 - the URLLoader may
+    // be deleted before the throttle instance. We have to detect this situation
+    // in order to prevent the crash. I created a follow up VB-116637 to
+    // investigate and fix the real cause of the issue since this should
+    // probably not happen.
+    vivaldi_throttle_guard_.AddObserver(throttle.get());
+    throttle->SetVivaldiGuard(vivaldi_throttle_guard_.GetWeakPtr());
 #else
     auto throttle = std::make_unique<safe_browsing::RendererURLLoaderThrottle>(
         safe_browsing_.get(), local_frame_token);
 #endif  // BUILDFLAG(ENABLE_EXTENSIONS)
     throttles.emplace_back(std::move(throttle));
   }
+#endif
 
   if (fingerprinting_protection_filter::features::
           IsFingerprintingProtectionFeatureEnabled()) {
@@ -204,12 +217,16 @@ URLLoaderThrottleProviderImpl::CreateThrottles(
     //   * The request matches our URL filtering criteria.
     //   * There is a valid frame token we can use to retrieve information
     //     about the current `Document`.
+    //   * The resource requested is not cross-origin. Uses
+    //   net::SchemefulSite::IsSameSite to reduce memory performance impact.
     bool should_check_request =
         !is_frame_resource &&
         type_ == blink::URLLoaderThrottleProviderType::kFrame &&
         !fingerprinting_protection_filter::RendererURLLoaderThrottle::
             WillIgnoreRequest(request.url, request.destination) &&
-        local_frame_token.has_value();
+        local_frame_token.has_value() &&
+        !net::SchemefulSite::IsSameSite(url::Origin::Create(request.url),
+                                        request.request_initiator.value());
     if (should_check_request) {
       throttles.emplace_back(
           std::make_unique<
@@ -222,13 +239,15 @@ URLLoaderThrottleProviderImpl::CreateThrottles(
       !is_frame_resource && local_frame_token.has_value()) {
     auto throttle = prerender::NoStatePrefetchHelper::MaybeCreateThrottle(
         local_frame_token.value());
-    if (throttle)
+    if (throttle) {
       throttles.emplace_back(std::move(throttle));
+    }
   }
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
-  if (!extension_throttle_manager_)
+  if (!extension_throttle_manager_) {
     extension_throttle_manager_ = CreateExtensionThrottleManager();
+  }
 
   if (extension_throttle_manager_) {
     if (base::CommandLine::ForCurrentProcess()->HasSwitch(
@@ -238,8 +257,9 @@ URLLoaderThrottleProviderImpl::CreateThrottles(
 
     std::unique_ptr<blink::URLLoaderThrottle> throttle =
         extension_throttle_manager_->MaybeCreateURLLoaderThrottle(request);
-    if (throttle)
+    if (throttle) {
       throttles.emplace_back(std::move(throttle));
+    }
   }
   std::unique_ptr<blink::URLLoaderThrottle> localization_throttle =
       extensions::ExtensionLocalizationThrottle::MaybeCreate(local_frame_token,
@@ -268,11 +288,11 @@ URLLoaderThrottleProviderImpl::CreateThrottles(
       chrome_content_renderer_client_->GetChromeObserver()
           ->GetDynamicParams()));
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
   throttles.emplace_back(std::make_unique<AshMergeSessionLoaderThrottle>(
       chrome_content_renderer_client_->GetChromeObserver()
           ->chromeos_listener()));
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+#endif  // BUILDFLAG(IS_CHROMEOS)
 
   if (local_frame_token.has_value()) {
     auto throttle =
@@ -293,8 +313,9 @@ URLLoaderThrottleProviderImpl::CreateThrottles(
               }
             },
             local_frame_token.value(), main_thread_task_runner_));
-    if (throttle)
+    if (throttle) {
       throttles.push_back(std::move(throttle));
+    }
   }
 
   return throttles;
@@ -302,8 +323,9 @@ URLLoaderThrottleProviderImpl::CreateThrottles(
 
 void URLLoaderThrottleProviderImpl::SetOnline(bool is_online) {
 #if BUILDFLAG(ENABLE_EXTENSIONS)
-  if (extension_throttle_manager_)
+  if (extension_throttle_manager_) {
     extension_throttle_manager_->SetOnline(is_online);
+  }
 #endif
 }
 

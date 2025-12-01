@@ -59,7 +59,7 @@ class Debug::TemporaryObjectsTracker : public HeapObjectAllocationTracker {
 
   void MoveEvent(Address from, Address to, int size) override {
     if (from == to) return;
-    base::SpinningMutexGuard guard(&mutex_);
+    base::MutexGuard guard(&mutex_);
     if (RemoveFromRegions(from, from + size)) {
       // We had the object tracked as temporary, so we will track the
       // new location as temporary, too.
@@ -165,7 +165,7 @@ class Debug::TemporaryObjectsTracker : public HeapObjectAllocationTracker {
   // (exclusive) address of regions. We index by end address for faster lookup.
   // Map: end address => start address
   std::map<Address, Address> regions_;
-  base::SpinningMutex mutex_;
+  base::Mutex mutex_;
 };
 
 Debug::Debug(Isolate* isolate)
@@ -178,7 +178,8 @@ Debug::Debug(Isolate* isolate)
       break_on_uncaught_exception_(false),
       side_effect_check_failed_(false),
       debug_infos_(isolate),
-      isolate_(isolate) {
+      isolate_(isolate),
+      isolate_id_(0) {
   ThreadInit();
 }
 
@@ -546,7 +547,7 @@ void Debug::Iterate(RootVisitor* v, ThreadLocal* thread_local_data) {
 void DebugInfoCollection::Insert(Tagged<SharedFunctionInfo> sfi,
                                  Tagged<DebugInfo> debug_info) {
   DisallowGarbageCollection no_gc;
-  base::SpinningMutexGuard mutex_guard(isolate_->shared_function_info_access());
+  base::MutexGuard mutex_guard(isolate_->shared_function_info_access());
 
   DCHECK_EQ(sfi, debug_info->shared());
   DCHECK(!Contains(sfi));
@@ -591,7 +592,7 @@ Tagged<DebugInfo> DebugInfoCollection::EntryAsDebugInfo(size_t index) const {
 }
 
 void DebugInfoCollection::DeleteIndex(size_t index) {
-  base::SpinningMutexGuard mutex_guard(isolate_->shared_function_info_access());
+  base::MutexGuard mutex_guard(isolate_->shared_function_info_access());
 
   Tagged<DebugInfo> debug_info = EntryAsDebugInfo(index);
   Tagged<SharedFunctionInfo> sfi = debug_info->shared();
@@ -3053,8 +3054,10 @@ void Debug::StartSideEffectCheckMode() {
   DirectHandle<RegExpMatchInfo> current_match_info(
       isolate_->native_context()->regexp_last_match_info(), isolate_);
   int register_count = current_match_info->number_of_capture_registers();
-  regexp_match_info_ = RegExpMatchInfo::New(
-      isolate_, JSRegExp::CaptureCountForRegisters(register_count));
+  regexp_match_info_ = indirect_handle(
+      RegExpMatchInfo::New(isolate_,
+                           JSRegExp::CaptureCountForRegisters(register_count)),
+      isolate_);
   DCHECK_EQ(regexp_match_info_->number_of_capture_registers(),
             current_match_info->number_of_capture_registers());
   regexp_match_info_->set_last_subject(current_match_info->last_subject());

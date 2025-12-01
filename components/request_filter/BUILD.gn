@@ -2,12 +2,24 @@
 
 import("//extensions/buildflags/buildflags.gni")
 
-source_set("request_filter") {
+source_set("request_filter_registry") {
   sources = [
     "filtered_request_info.cc",
     "filtered_request_info.h",
-    "request_filter_manager_factory.cc",
-    "request_filter_manager_factory.h",
+    "request_filter_registry.cc",
+    "request_filter_registry.h",
+    "request_filter.cc",
+    "request_filter.h",
+  ]
+
+  deps = [
+    "//base:base",
+    "//content/public/browser",
+  ]
+}
+
+source_set("request_filter") {
+  sources = [
     "request_filter_manager.cc",
     "request_filter_manager.h",
     "request_filter_proxying_url_loader_factory.cc",
@@ -16,8 +28,6 @@ source_set("request_filter") {
     "request_filter_proxying_websocket.h",
     "request_filter_proxying_webtransport.cc",
     "request_filter_proxying_webtransport.h",
-    "request_filter.cc",
-    "request_filter.h",
   ]
 
   deps = [
@@ -27,15 +37,12 @@ source_set("request_filter") {
     "//content/public/browser",
     "//content/public/common",
     "//extensions/buildflags",
-    "//vivaldi/components/request_filter/adblock_filter",
     "//third_party/blink/public/common",
   ]
   if (enable_extensions) {
     deps += [
+      ":request_filter_registry",
       "//extensions/browser",
     ]
   }
-  allow_circular_includes_from = [
-    "//vivaldi/components/request_filter/adblock_filter",
-  ]
 }

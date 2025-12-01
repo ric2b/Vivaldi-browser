@@ -67,13 +67,13 @@ std::optional<Value> buildReshapeWithDynamicDims(PatternRewriter& rewriter,
 Value buildRescale(PatternRewriter& rewriter, Operation* op,
                    ShapedType output_type, Value input_val,
                    int32_t scale_multiplier, int32_t scale_shit,
-                   int64_t input_zp, int64_t output_zp, bool double_round,
+                   int64_t input_zp, int64_t output_zp, StringRef rounding_mode,
                    bool scale32);
 
 // Create a TOSA rescale op from TFLite scaling, zero points and rounding mode
 Value buildRescale(PatternRewriter& rewriter, Operation* op,
                    ShapedType output_type, Value input_val, double scale,
-                   int64_t input_zp, int64_t output_zp, bool double_round,
+                   int64_t input_zp, int64_t output_zp, StringRef rounding_mode,
                    bool scale32);
 
 // Removes the zero point and cast to int32, no need to handle roundings modes
@@ -233,8 +233,10 @@ void CreateReplaceOpAndInfer(PatternRewriter& rewriter, Operation* op,
   rewriter.replaceOp(op, result->getResults());
 }
 
+// Nan propagation mode is only applied to maximum and mininum.
 template <typename TOSA_OP>
-LogicalResult ConvertBinaryOp(Operation* op, PatternRewriter& rewriter) {
+LogicalResult ConvertBinaryOp(Operation* op, PatternRewriter& rewriter,
+                              StringRef nan_mode = "") {
   TensorType output_type = dyn_cast<TensorType>(op->getResults()[0].getType());
   if (!output_type) return failure();
 
@@ -245,7 +247,16 @@ LogicalResult ConvertBinaryOp(Operation* op, PatternRewriter& rewriter) {
   RankedTensorType y_type = dyn_cast<RankedTensorType>(y.getType());
   if (!x_type || !y_type) return failure();
 
-  CreateReplaceOpAndInfer<TOSA_OP>(rewriter, op, output_type, x, y);
+  if constexpr (std::is_same_v<tosa::ReduceMaxOp, TOSA_OP> ||
+                std::is_same_v<tosa::ReduceMinOp, TOSA_OP>) {
+    if (nan_mode != "PROPAGATE" && nan_mode != "IGNORE") {
+      (void)rewriter.notifyMatchFailure(op, "invalid NaN mode: must be either 'PROPAGATE' or 'IGNORE'");
+      return failure();
+    }
+    CreateReplaceOpAndInfer<TOSA_OP>(rewriter, op, output_type, x, y, nan_mode);
+  } else
+    CreateReplaceOpAndInfer<TOSA_OP>(rewriter, op, output_type, x, y);
+
   return success();
 }
 
@@ -271,6 +282,11 @@ inline bool IsTFLDoubleRoundingMode() {
   return true;
 #endif  // TFLITE_SINGLE_ROUNDING
 }
+
+Value reshapeScalarTo1D(PatternRewriter& rewriter, Location loc, Value value);
+
+LogicalResult broadcastLowRankTensor(PatternRewriter &rewriter, Operation* op,
+                                     Value &input1, Value &input2);
 
 }  // namespace tosa
 }  // namespace mlir

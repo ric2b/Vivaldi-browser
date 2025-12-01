@@ -78,7 +78,8 @@ TEST(AdBlockIosRuleCompilerTest, SimpleRule) {
     "version": 1
   })===");
   ASSERT_TRUE(FormatJSON(expected));
-  EXPECT_EQ(CompileIosRulesToString(parse_result, settings, true), expected);
+  EXPECT_EQ(CompileIosRulesToString(false, parse_result, settings, true),
+            expected);
 }
 
 TEST(AdBlockIosRuleCompilerTest, RuleWithResource) {
@@ -123,7 +124,8 @@ TEST(AdBlockIosRuleCompilerTest, RuleWithResource) {
     "version": 1
   })===");
   ASSERT_TRUE(FormatJSON(expected));
-  EXPECT_EQ(CompileIosRulesToString(parse_result, settings, true), expected);
+  EXPECT_EQ(CompileIosRulesToString(false, parse_result, settings, true),
+            expected);
 }
 
 TEST(AdBlockIosRuleCompilerTest, SubdocumentRule) {
@@ -158,7 +160,8 @@ TEST(AdBlockIosRuleCompilerTest, SubdocumentRule) {
     "version": 1
   })===");
   ASSERT_TRUE(FormatJSON(expected));
-  EXPECT_EQ(CompileIosRulesToString(parse_result, settings, true), expected);
+  EXPECT_EQ(CompileIosRulesToString(false, parse_result, settings, true),
+            expected);
 }
 
 TEST(AdBlockIosRuleCompilerTest, RuleWithParty) {
@@ -209,7 +212,8 @@ TEST(AdBlockIosRuleCompilerTest, RuleWithParty) {
     "version": 1
   })===");
   ASSERT_TRUE(FormatJSON(expected));
-  EXPECT_EQ(CompileIosRulesToString(parse_result, settings, true), expected);
+  EXPECT_EQ(CompileIosRulesToString(false, parse_result, settings, true),
+            expected);
 }
 
 TEST(AdBlockIosRuleCompilerTest, AllowRuleWithResource) {
@@ -239,7 +243,8 @@ TEST(AdBlockIosRuleCompilerTest, AllowRuleWithResource) {
     "version": 1
   })===");
   ASSERT_TRUE(FormatJSON(expected));
-  EXPECT_EQ(CompileIosRulesToString(parse_result, settings, true), expected);
+  EXPECT_EQ(CompileIosRulesToString(false, parse_result, settings, true),
+            expected);
 }
 
 TEST(AdBlockIosRuleCompilerTest, AnchoredRules) {
@@ -298,7 +303,8 @@ TEST(AdBlockIosRuleCompilerTest, AnchoredRules) {
     "version": 1
   })===");
   ASSERT_TRUE(FormatJSON(expected));
-  EXPECT_EQ(CompileIosRulesToString(parse_result, settings, true), expected);
+  EXPECT_EQ(CompileIosRulesToString(false, parse_result, settings, true),
+            expected);
 }
 
 TEST(AdBlockIosRuleCompilerTest, WildcardsAndSpecialCharsRules) {
@@ -356,7 +362,8 @@ TEST(AdBlockIosRuleCompilerTest, WildcardsAndSpecialCharsRules) {
     "version": 1
   })===");
   ASSERT_TRUE(FormatJSON(expected));
-  EXPECT_EQ(CompileIosRulesToString(parse_result, settings, true), expected);
+  EXPECT_EQ(CompileIosRulesToString(false, parse_result, settings, true),
+            expected);
 }
 
 TEST(AdBlockIosRuleCompilerTest, RulesWithHost) {
@@ -466,7 +473,8 @@ TEST(AdBlockIosRuleCompilerTest, RulesWithHost) {
     "version": 1
   })===");
   ASSERT_TRUE(FormatJSON(expected));
-  EXPECT_EQ(CompileIosRulesToString(parse_result, settings, true), expected);
+  EXPECT_EQ(CompileIosRulesToString(false, parse_result, settings, true),
+            expected);
 }
 
 TEST(AdBlockIosRuleCompilerTest, RegexRules) {
@@ -499,7 +507,8 @@ TEST(AdBlockIosRuleCompilerTest, RegexRules) {
     "version": 1
   })===");
   ASSERT_TRUE(FormatJSON(expected));
-  EXPECT_EQ(CompileIosRulesToString(parse_result, settings, true), expected);
+  EXPECT_EQ(CompileIosRulesToString(false, parse_result, settings, true),
+            expected);
 }
 
 TEST(AdBlockIosRuleCompilerTest, DocumentActivationRules) {
@@ -585,7 +594,8 @@ TEST(AdBlockIosRuleCompilerTest, DocumentActivationRules) {
     "version": 1
   })===");
   ASSERT_TRUE(FormatJSON(expected));
-  EXPECT_EQ(CompileIosRulesToString(parse_result, settings, true), expected);
+  EXPECT_EQ(CompileIosRulesToString(false, parse_result, settings, true),
+            expected);
 }
 
 TEST(AdBlockIosRuleCompilerTest, OtherActivations) {
@@ -643,7 +653,8 @@ TEST(AdBlockIosRuleCompilerTest, OtherActivations) {
     "version": 1
   })===");
   ASSERT_TRUE(FormatJSON(expected));
-  EXPECT_EQ(CompileIosRulesToString(parse_result, settings, true), expected);
+  EXPECT_EQ(CompileIosRulesToString(false, parse_result, settings, true),
+            expected);
 }
 
 TEST(AdBlockIosRuleCompilerTest, RulesWithIncludedDomains) {
@@ -694,7 +705,8 @@ TEST(AdBlockIosRuleCompilerTest, RulesWithIncludedDomains) {
     "version": 1
   })===");
   ASSERT_TRUE(FormatJSON(expected));
-  EXPECT_EQ(CompileIosRulesToString(parse_result, settings, true), expected);
+  EXPECT_EQ(CompileIosRulesToString(false, parse_result, settings, true),
+            expected);
 }
 
 TEST(AdBlockIosRuleCompilerTest, RulesWithExcludedDomains) {
@@ -745,7 +757,8 @@ TEST(AdBlockIosRuleCompilerTest, RulesWithExcludedDomains) {
     "version": 1
   })===");
   ASSERT_TRUE(FormatJSON(expected));
-  EXPECT_EQ(CompileIosRulesToString(parse_result, settings, true), expected);
+  EXPECT_EQ(CompileIosRulesToString(false, parse_result, settings, true),
+            expected);
 }
 
 TEST(AdBlockIosRuleCompilerTest, BlockRuleWithInclusionsAndExclusions) {
@@ -818,7 +831,8 @@ TEST(AdBlockIosRuleCompilerTest, BlockRuleWithInclusionsAndExclusions) {
     "version": 1
   })===");
   ASSERT_TRUE(FormatJSON(expected));
-  EXPECT_EQ(CompileIosRulesToString(parse_result, settings, true), expected);
+  EXPECT_EQ(CompileIosRulesToString(false, parse_result, settings, true),
+            expected);
 }
 
 TEST(AdBlockIosRuleCompilerTest, BlockRuleWithInclusionsCancelledByExclusions) {
@@ -833,7 +847,8 @@ TEST(AdBlockIosRuleCompilerTest, BlockRuleWithInclusionsCancelledByExclusions) {
     "version": 1
   })===");
   ASSERT_TRUE(FormatJSON(expected));
-  EXPECT_EQ(CompileIosRulesToString(parse_result, settings, true), expected);
+  EXPECT_EQ(CompileIosRulesToString(false, parse_result, settings, true),
+            expected);
 }
 
 TEST(AdBlockIosRuleCompilerTest, BlockRuleWithSuperfluousExclusions) {
@@ -867,7 +882,8 @@ TEST(AdBlockIosRuleCompilerTest, BlockRuleWithSuperfluousExclusions) {
     "version": 1
   })===");
   ASSERT_TRUE(FormatJSON(expected));
-  EXPECT_EQ(CompileIosRulesToString(parse_result, settings, true), expected);
+  EXPECT_EQ(CompileIosRulesToString(false, parse_result, settings, true),
+            expected);
 }
 
 TEST(AdBlockIosRuleCompilerTest, AllowRuleWithInclusionsAndExclusions) {
@@ -905,7 +921,8 @@ TEST(AdBlockIosRuleCompilerTest, AllowRuleWithInclusionsAndExclusions) {
     "version": 1
   })===");
   ASSERT_TRUE(FormatJSON(expected));
-  EXPECT_EQ(CompileIosRulesToString(parse_result, settings, true), expected);
+  EXPECT_EQ(CompileIosRulesToString(false, parse_result, settings, true),
+            expected);
 }
 
 TEST(AdBlockIosRuleCompilerTest, GenericCosmeticHideRule) {
@@ -956,7 +973,8 @@ TEST(AdBlockIosRuleCompilerTest, GenericCosmeticHideRule) {
     "version": 1
   })===");
   ASSERT_TRUE(FormatJSON(expected));
-  EXPECT_EQ(CompileIosRulesToString(parse_result, settings, true), expected);
+  EXPECT_EQ(CompileIosRulesToString(false, parse_result, settings, true),
+            expected);
 }
 
 TEST(AdBlockIosRuleCompilerTest, SpecificCosmeticHideRule) {
@@ -994,7 +1012,8 @@ TEST(AdBlockIosRuleCompilerTest, SpecificCosmeticHideRule) {
     "version": 1
   })===");
   ASSERT_TRUE(FormatJSON(expected));
-  EXPECT_EQ(CompileIosRulesToString(parse_result, settings, true), expected);
+  EXPECT_EQ(CompileIosRulesToString(false, parse_result, settings, true),
+            expected);
 }
 
 TEST(AdBlockIosRuleCompilerTest, CosmeticAllowRule) {
@@ -1043,6 +1062,7 @@ TEST(AdBlockIosRuleCompilerTest, CosmeticAllowRule) {
     "version": 1
   })===");
   ASSERT_TRUE(FormatJSON(expected));
-  EXPECT_EQ(CompileIosRulesToString(parse_result, settings, true), expected);
+  EXPECT_EQ(CompileIosRulesToString(false, parse_result, settings, true),
+            expected);
 }
 }  // namespace adblock_filter

@@ -18,6 +18,7 @@
 #include "base/uuid.h"
 #include "base/values.h"
 #include "components/search_engines/regulatory_extension_type.h"
+#include "components/search_engines/search_engines_switches.h"
 #include "crypto/hash.h"
 #include "components/search_engines/prepopulated_engines.h"
 
@@ -54,7 +55,7 @@ TemplateURLData::TemplateURLData()
       last_modified(base::Time::Now()),
       policy_origin(PolicyOrigin::kNoPolicy),
       enforced_by_policy(false),
-      created_from_play_api(false),
+      regulatory_origin(RegulatoryExtensionType::kDefault),
       usage_count(0),
       prepopulate_id(0),
       sync_guid(base::Uuid::GenerateRandomV4().AsLowercaseString()),
@@ -113,7 +114,7 @@ TemplateURLData::TemplateURLData(
       id(0),
       policy_origin(PolicyOrigin::kNoPolicy),
       enforced_by_policy(false),
-      created_from_play_api(false),
+      regulatory_origin(RegulatoryExtensionType::kDefault),
       usage_count(0),
       prepopulate_id(prepopulate_id),
       sync_guid(GenerateGUID(prepopulate_id, 0)),
@@ -130,7 +131,6 @@ TemplateURLData::TemplateURLData(
       alternate_urls.push_back(*alternate_url);
     }
   }
-
   regulatory_extensions = base::MakeFlatMap<
       RegulatoryExtensionType,
       raw_ptr<const TemplateURLData::RegulatoryExtension, CtnExperimental>>(
@@ -221,4 +221,8 @@ bool TemplateURLData::CreatedByDefaultSearchProviderPolicy() const {
 
 bool TemplateURLData::CreatedByNonDefaultSearchProviderPolicy() const {
   return CreatedByPolicy() && !CreatedByDefaultSearchProviderPolicy();
+}
+
+bool TemplateURLData::CreatedByEnterpriseSearchAggregatorPolicy() const {
+  return policy_origin == PolicyOrigin::kSearchAggregator;
 }

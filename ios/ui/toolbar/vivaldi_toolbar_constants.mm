@@ -12,7 +12,7 @@ const CGFloat vPrimaryToolbarLocationContainerTrailingPadding = 8;
 
 // Secondary toolbar
 const CGFloat vBottomButtonsTopMargin = 8.0;
-const CGFloat vBottomAdaptiveLocationBarTopMargin = 10.0;
+const CGFloat vBottomAdaptiveLocationBarTopMargin = 8.0;
 const CGFloat vBottomAdaptiveLocationBarBottomMargin = 12.0;
 const CGFloat vAdaptiveToolbarMargin = 4.0;
 const CGFloat vBottomToolbarSteadyViewTopPadding = 2.0;
@@ -39,6 +39,7 @@ NSString* vToolbarHomeButtonIcon = @"toolbar_home";
 NSString* vToolbarForwardButtonIcon = @"toolbar_forward";
 NSString* vToolbarBackButtonIcon = @"toolbar_back";
 NSString* vToolbarTabSwitcherButtonIcon = @"toolbar_switcher";
+NSString* vToolbarTabSwitcherStackButtonIcon = @"toolbar_switcher_stack";
 NSString* vToolbarMoreButtonIcon = @"toolbar_more";
 NSString* vToolbarNTPButtonIcon = @"toolbar_new_tab_page";
 NSString* vToolbarTabSwitcherOveflowButtonIcon = @"toolbar_switcher_overflow";

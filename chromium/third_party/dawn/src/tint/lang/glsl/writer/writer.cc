@@ -27,9 +27,6 @@
 
 #include "src/tint/lang/glsl/writer/writer.h"
 
-#include <memory>
-#include <utility>
-
 #include "src/tint/lang/core/ir/core_builtin_call.h"
 #include "src/tint/lang/core/ir/module.h"
 #include "src/tint/lang/core/ir/var.h"
@@ -41,6 +38,13 @@
 namespace tint::glsl::writer {
 
 Result<SuccessType> CanGenerate(const core::ir::Module& ir, const Options& options) {
+    // Check for unsupported types.
+    for (auto* ty : ir.Types()) {
+        if (ty->Is<core::type::SubgroupMatrix>()) {
+            return Failure("subgroup matrices are not supported by the GLSL backend");
+        }
+    }
+
     // Make sure that every texture variable is in the texture_builtins_from_uniform binding list,
     // otherwise TextureBuiltinsFromUniform will fail.
     // Also make sure there is at most one user-declared push_constant, and make a note of its size.
@@ -55,7 +59,7 @@ Result<SuccessType> CanGenerate(const core::ir::Module& ir, const Options& optio
 
         // The pixel_local extension is not supported by the GLSL backend.
         if (ptr->AddressSpace() == core::AddressSpace::kPixelLocal) {
-            return Failure("pixel_local address space is not supported by the ");
+            return Failure("pixel_local address space is not supported by the GLSL backend");
         }
 
         if (ptr->StoreType()->Is<core::type::Texture>()) {

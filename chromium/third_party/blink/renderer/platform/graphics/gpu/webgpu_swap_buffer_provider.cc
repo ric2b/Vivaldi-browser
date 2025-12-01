@@ -51,11 +51,11 @@ WebGPUSwapBufferProvider::WebGPUSwapBufferProvider(
       internal_usage_(internal_usage),
       color_space_(color_space),
       hdr_metadata_(hdr_metadata) {
-  wgpu::SupportedLimits limits = {};
+  wgpu::Limits limits = {};
   auto get_limits_succeeded = device_.GetLimits(&limits);
   CHECK(get_limits_succeeded);
 
-  max_texture_size_ = limits.limits.maxTextureDimension2D;
+  max_texture_size_ = limits.maxTextureDimension2D;
 }
 
 WebGPUSwapBufferProvider::~WebGPUSwapBufferProvider() {
@@ -222,7 +222,7 @@ scoped_refptr<WebGPUMailboxTexture> WebGPUSwapBufferProvider::GetNewTexture(
   if (!layer_) {
     // Create a layer that will be used by the canvas and will ask for a
     // SharedImage each frame.
-    layer_ = cc::TextureLayer::CreateForMailbox(this);
+    layer_ = cc::TextureLayer::Create(this);
     if (client_) {
       client_->InitializeLayer(layer_.get());
     }
@@ -310,6 +310,9 @@ WebGPUSwapBufferProvider::ExportCurrentSharedImage(
 bool WebGPUSwapBufferProvider::PrepareTransferableResource(
     viz::TransferableResource* out_resource,
     viz::ReleaseCallback* out_release_callback) {
+  front_buffer_shared_image_ = nullptr;
+  front_buffer_sync_token_ = gpu::SyncToken();
+
   gpu::SyncToken sync_token;
 
   scoped_refptr<gpu::ClientSharedImage> shared_image =
@@ -317,6 +320,9 @@ bool WebGPUSwapBufferProvider::PrepareTransferableResource(
   if (!shared_image) {
     return false;
   }
+
+  front_buffer_shared_image_ = shared_image;
+  front_buffer_sync_token_ = sync_token;
 
   // Populate the output resource.
   *out_resource = viz::TransferableResource::Make(
@@ -429,6 +435,15 @@ scoped_refptr<gpu::ClientSharedImage>
 WebGPUSwapBufferProvider::GetCurrentSharedImage() {
   return current_swap_buffer_ ? current_swap_buffer_->GetSharedImage()
                               : nullptr;
+}
+
+scoped_refptr<gpu::ClientSharedImage>
+WebGPUSwapBufferProvider::GetFrontBufferSharedImage() {
+  return front_buffer_shared_image_;
+}
+
+gpu::SyncToken WebGPUSwapBufferProvider::GetFrontBufferSyncToken() {
+  return front_buffer_sync_token_;
 }
 
 gpu::Mailbox WebGPUSwapBufferProvider::GetCurrentMailboxForTesting() const {

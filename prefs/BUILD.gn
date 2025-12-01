@@ -49,8 +49,6 @@ static_library("prefs") {
   sources = [
     "vivaldi_prefs_definitions.h",
     "vivaldi_prefs_definitions.cc",
-    "vivaldi_local_state_prefs.h",
-    "vivaldi_local_state_prefs.cc",
   ]
   if (is_mac) {
     sources += [
@@ -74,15 +72,16 @@ static_library("prefs") {
     "//components/prefs",
     "//components/version_info",
     "//components/search_engines",
+    "//vivaldi/components/datasource:resource_reader",
     "//skia",
     ":prefs_strings",
   ]
   if(!is_android && !is_ios) {
-    deps += [ "//apps:apps" ]
+    #deps += [ "//apps:apps" ]
   }
   if(!is_ios) {
     deps += [
-    "//chrome/common:constants",
+      "//chrome/common:constants",
     ]
   }
 }

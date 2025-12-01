@@ -62,7 +62,7 @@ class RequestAdapterEvent : public TrackedEvent {
                          WGPURequestAdapterStatus status,
                          WGPUStringView message,
                          const WGPUAdapterInfo* info,
-                         const WGPUSupportedLimits* limits,
+                         const WGPULimits* limits,
                          uint32_t featuresCount,
                          const WGPUFeatureName* features) {
         DAWN_ASSERT(mAdapter != nullptr);
@@ -79,7 +79,7 @@ class RequestAdapterEvent : public TrackedEvent {
   private:
     void CompleteImpl(FutureID futureID, EventCompletionType completionType) override {
         if (completionType == EventCompletionType::Shutdown) {
-            mStatus = WGPURequestAdapterStatus_InstanceDropped;
+            mStatus = WGPURequestAdapterStatus_CallbackCancelled;
             mMessage = "A valid external Instance reference no longer exists.";
         }
 
@@ -144,12 +144,11 @@ WireResult Instance::Initialize(const WGPUInstanceDescriptor* descriptor) {
         return WireResult::Success;
     }
 
-    if (descriptor->capabilities.timedWaitAnyEnable || descriptor->features.timedWaitAnyEnable) {
+    if (descriptor->capabilities.timedWaitAnyEnable) {
         dawn::ErrorLog() << "Wire client instance doesn't support timedWaitAnyEnable = true";
         return WireResult::FatalError;
     }
-    if (descriptor->capabilities.timedWaitAnyMaxCount > 0 ||
-        descriptor->features.timedWaitAnyMaxCount > 0) {
+    if (descriptor->capabilities.timedWaitAnyMaxCount > 0) {
         dawn::ErrorLog() << "Wire client instance doesn't support non-zero timedWaitAnyMaxCount";
         return WireResult::FatalError;
     }
@@ -204,7 +203,7 @@ WireResult Client::DoInstanceRequestAdapterCallback(ObjectHandle eventManager,
                                                     WGPURequestAdapterStatus status,
                                                     WGPUStringView message,
                                                     const WGPUAdapterInfo* info,
-                                                    const WGPUSupportedLimits* limits,
+                                                    const WGPULimits* limits,
                                                     uint32_t featuresCount,
                                                     const WGPUFeatureName* features) {
     return GetEventManager(eventManager)

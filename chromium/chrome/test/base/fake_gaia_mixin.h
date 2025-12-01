@@ -10,7 +10,7 @@
 #include <string>
 #include <string_view>
 
-#include "build/chromeos_buildflags.h"
+#include "build/build_config.h"
 #include "chrome/test/base/mixin_based_in_process_browser_test.h"
 #include "google_apis/gaia/fake_gaia.h"
 #include "google_apis/gaia/gaia_id.h"
@@ -57,9 +57,9 @@ class FakeGaiaMixin : public InProcessBrowserTestMixin {
   // For your convenience, the e-mail addresses for users that have been set up
   // in this way are provided below.
   static const char kEnterpriseUser1[];
-  static const char kEnterpriseUser1GaiaId[];
+  static const GaiaId::Literal kEnterpriseUser1GaiaId;
   static const char kEnterpriseUser2[];
-  static const char kEnterpriseUser2GaiaId[];
+  static const GaiaId::Literal kEnterpriseUser2GaiaId;
 
   static const char kTestUserinfoToken1[];
   static const char kTestRefreshToken1[];
@@ -101,9 +101,9 @@ class FakeGaiaMixin : public InProcessBrowserTestMixin {
                                  const std::string& refresh_token,
                                  bool issue_any_scope_token);
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
   void SetupFakeGaiaForLoginManager();
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+#endif  // BUILDFLAG(IS_CHROMEOS)
 
   bool initialize_configuration() { return initialize_configuration_; }
   void set_initialize_configuration(bool value) {

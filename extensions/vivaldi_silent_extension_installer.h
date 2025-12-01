@@ -17,7 +17,8 @@ class SilentWebstoreInstaller : public extensions::WebstoreInstallWithPrompt {
                       Profile* profile,
                       Callback callback) {
     scoped_refptr<SilentWebstoreInstaller> installer =
-        new SilentWebstoreInstaller(id, profile, nullptr, std::move(callback));
+        new SilentWebstoreInstaller(id, profile, gfx::NativeWindow(),
+                                    std::move(callback));
     installer->BeginInstall();
   }
 

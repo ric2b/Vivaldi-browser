@@ -244,8 +244,7 @@ class TextureLayerTest : public testing::Test {
 };
 
 TEST_F(TextureLayerTest, CheckPropertyChangeCausesCorrectBehavior) {
-  scoped_refptr<TextureLayer> test_layer =
-      TextureLayer::CreateForMailbox(nullptr);
+  scoped_refptr<TextureLayer> test_layer = TextureLayer::Create(nullptr);
   EXPECT_SET_NEEDS_COMMIT(1, layer_tree_host_->SetRootLayer(test_layer));
 
   // Test properties that should call SetNeedsCommit.  All properties need to
@@ -301,7 +300,7 @@ TEST_F(TextureLayerTest, ShutdownWithResource) {
     client.SetLayerTreeHost(host.get());
     client.SetUseSoftwareCompositing(!gpu);
 
-    scoped_refptr<TextureLayer> layer = TextureLayer::CreateForMailbox(nullptr);
+    scoped_refptr<TextureLayer> layer = TextureLayer::Create(nullptr);
     layer->SetIsDrawable(true);
     layer->SetBounds(gfx::Size(10, 10));
     if (gpu) {
@@ -374,8 +373,7 @@ class TextureLayerWithResourceTest : public TextureLayerTest {
 };
 
 TEST_F(TextureLayerWithResourceTest, ReplaceMailboxOnMainThreadBeforeCommit) {
-  scoped_refptr<TextureLayer> test_layer =
-      TextureLayer::CreateForMailbox(nullptr);
+  scoped_refptr<TextureLayer> test_layer = TextureLayer::Create(nullptr);
   ASSERT_TRUE(test_layer.get());
 
   EXPECT_CALL(*layer_tree_host_, SetNeedsCommit()).Times(AnyNumber());
@@ -428,8 +426,7 @@ TEST_F(TextureLayerWithResourceTest, ReplaceMailboxOnMainThreadBeforeCommit) {
 }
 
 TEST_F(TextureLayerWithResourceTest, AffectedByHdr) {
-  scoped_refptr<TextureLayer> test_layer =
-      TextureLayer::CreateForMailbox(nullptr);
+  scoped_refptr<TextureLayer> test_layer = TextureLayer::Create(nullptr);
   ASSERT_TRUE(test_layer.get());
   EXPECT_CALL(*layer_tree_host_, SetNeedsCommit()).Times(AnyNumber());
   layer_tree_host_->SetRootLayer(test_layer);
@@ -505,8 +502,7 @@ class TextureLayerMailboxHolderTest : public TextureLayerTest {
 };
 
 TEST_F(TextureLayerMailboxHolderTest, TwoCompositors_BothReleaseThenMain) {
-  scoped_refptr<TextureLayer> test_layer =
-      TextureLayer::CreateForMailbox(nullptr);
+  scoped_refptr<TextureLayer> test_layer = TextureLayer::Create(nullptr);
   ASSERT_TRUE(test_layer.get());
 
   main_thread_.task_runner()->PostTask(
@@ -558,8 +554,7 @@ TEST_F(TextureLayerMailboxHolderTest, TwoCompositors_BothReleaseThenMain) {
 }
 
 TEST_F(TextureLayerMailboxHolderTest, TwoCompositors_MainReleaseBetween) {
-  scoped_refptr<TextureLayer> test_layer =
-      TextureLayer::CreateForMailbox(nullptr);
+  scoped_refptr<TextureLayer> test_layer = TextureLayer::Create(nullptr);
   ASSERT_TRUE(test_layer.get());
 
   main_thread_.task_runner()->PostTask(
@@ -612,8 +607,7 @@ TEST_F(TextureLayerMailboxHolderTest, TwoCompositors_MainReleaseBetween) {
 }
 
 TEST_F(TextureLayerMailboxHolderTest, TwoCompositors_MainReleasedFirst) {
-  scoped_refptr<TextureLayer> test_layer =
-      TextureLayer::CreateForMailbox(nullptr);
+  scoped_refptr<TextureLayer> test_layer = TextureLayer::Create(nullptr);
   ASSERT_TRUE(test_layer.get());
 
   main_thread_.task_runner()->PostTask(
@@ -679,9 +673,9 @@ class TextureLayerImplWithMailboxThreadedCallback : public LayerTreeTest {
         !layer_tree_host()->GetSettings().single_thread_proxy_scheduler;
     return std::make_unique<TestLayerTreeFrameSink>(
         compositor_context_provider, std::move(worker_context_provider),
-        /*shared_image_interface=*/nullptr, gpu_memory_buffer_manager(),
-        renderer_settings, &debug_settings_, task_runner_provider(),
-        synchronous_composite, disable_display_vsync, refresh_rate);
+        /*shared_image_interface=*/nullptr, renderer_settings, &debug_settings_,
+        task_runner_provider(), synchronous_composite, disable_display_vsync,
+        refresh_rate);
   }
 
   void AdvanceTestCase() {
@@ -799,7 +793,7 @@ class TextureLayerImplWithMailboxThreadedCallback : public LayerTreeTest {
     root_ = Layer::Create();
     root_->SetBounds(bounds);
 
-    layer_ = TextureLayer::CreateForMailbox(nullptr);
+    layer_ = TextureLayer::Create(nullptr);
     layer_->SetIsDrawable(true);
     layer_->SetBounds(bounds);
 
@@ -845,7 +839,7 @@ class TextureLayerImplWithResourceTest : public TextureLayerTest {
 
   std::unique_ptr<TextureLayerImpl> CreateTextureLayer() {
     auto layer = TextureLayerImpl::Create(host_impl_.active_tree(), 1);
-    layer->set_visible_layer_rect(gfx::Rect(100, 100));
+    layer->SetVisibleLayerRectForTesting(gfx::Rect(100, 100));
     return layer;
   }
 
@@ -1031,7 +1025,7 @@ class TextureLayerNoExtraCommitForMailboxTest : public LayerTreeTest,
     root->SetBounds(gfx::Size(10, 10));
     root->SetIsDrawable(true);
 
-    texture_layer_ = TextureLayer::CreateForMailbox(this);
+    texture_layer_ = TextureLayer::Create(this);
     texture_layer_->SetBounds(gfx::Size(10, 10));
     texture_layer_->SetIsDrawable(true);
     root->AddChild(texture_layer_);
@@ -1126,7 +1120,7 @@ class TextureLayerChangeInvisibleMailboxTest : public LayerTreeTest,
     parent_layer_->SetIsDrawable(true);
     root->AddChild(parent_layer_);
 
-    texture_layer_ = TextureLayer::CreateForMailbox(this);
+    texture_layer_ = TextureLayer::Create(this);
     texture_layer_->SetBounds(gfx::Size(10, 10));
     texture_layer_->SetIsDrawable(true);
     parent_layer_->AddChild(texture_layer_);
@@ -1253,8 +1247,7 @@ class TextureLayerReleaseResourcesBase : public LayerTreeTest,
   void SetupTree() override {
     LayerTreeTest::SetupTree();
 
-    scoped_refptr<TextureLayer> texture_layer =
-        TextureLayer::CreateForMailbox(this);
+    scoped_refptr<TextureLayer> texture_layer = TextureLayer::Create(this);
     texture_layer->SetBounds(gfx::Size(10, 10));
     texture_layer->SetIsDrawable(true);
 
@@ -1327,7 +1320,7 @@ class TextureLayerWithResourceMainThreadDeleted : public LayerTreeTest {
     root_ = Layer::Create();
     root_->SetBounds(bounds);
 
-    layer_ = TextureLayer::CreateForMailbox(nullptr);
+    layer_ = TextureLayer::Create(nullptr);
     layer_->SetIsDrawable(true);
     layer_->SetBounds(bounds);
 
@@ -1398,7 +1391,7 @@ class TextureLayerWithResourceImplThreadDeleted : public LayerTreeTest {
     root_ = Layer::Create();
     root_->SetBounds(bounds);
 
-    layer_ = TextureLayer::CreateForMailbox(nullptr);
+    layer_ = TextureLayer::Create(nullptr);
     layer_->SetIsDrawable(true);
     layer_->SetBounds(bounds);
 
@@ -1492,7 +1485,7 @@ class SoftwareTextureLayerTest : public LayerTreeTest {
     solid_color_layer_->SetBounds(gfx::Size(10, 10));
     root_->AddChild(solid_color_layer_);
 
-    texture_layer_ = TextureLayer::CreateForMailbox(&client_);
+    texture_layer_ = TextureLayer::Create(&client_);
     texture_layer_->SetIsDrawable(true);
     texture_layer_->SetBounds(gfx::Size(10, 10));
     layer_tree_host()->SetRootLayer(root_);
@@ -1514,10 +1507,9 @@ class SoftwareTextureLayerTest : public LayerTreeTest {
         !HasImplThread() &&
         !layer_tree_host()->GetSettings().single_thread_proxy_scheduler;
     auto sink = std::make_unique<TestLayerTreeFrameSink>(
-        nullptr, nullptr, shared_image_interface_sw,
-        gpu_memory_buffer_manager(), renderer_settings, &debug_settings_,
-        task_runner_provider(), synchronous_composite, disable_display_vsync,
-        refresh_rate);
+        nullptr, nullptr, shared_image_interface_sw, renderer_settings,
+        &debug_settings_, task_runner_provider(), synchronous_composite,
+        disable_display_vsync, refresh_rate);
     frame_sink_ = sink.get();
     num_frame_sinks_created_++;
     return sink;
@@ -1859,7 +1851,7 @@ class TextureLayerNoResourceTest : public LayerTreeTest, TextureLayerClient {
   void SetupTree() override {
     SetInitialRootBounds(gfx::Size(100, 100));
     LayerTreeTest::SetupTree();
-    auto texture_layer = TextureLayer::CreateForMailbox(this);
+    auto texture_layer = TextureLayer::Create(this);
     texture_layer->SetIsDrawable(true);
     texture_layer->SetContentsOpaque(true);
     texture_layer->SetBounds(gfx::Size(100, 100));

@@ -4,10 +4,14 @@
 
 #import "ios/chrome/browser/authentication/ui_bundled/signin/signin_utils.h"
 
+#import "base/barrier_closure.h"
 #import "base/command_line.h"
 #import "base/strings/sys_string_conversions.h"
 #import "base/time/time.h"
 #import "base/version.h"
+#import "components/feature_engagement/public/event_constants.h"
+#import "components/feature_engagement/public/feature_constants.h"
+#import "components/feature_engagement/public/tracker.h"
 #import "components/policy/policy_constants.h"
 #import "components/prefs/pref_service.h"
 #import "components/signin/ios/browser/features.h"
@@ -23,10 +27,14 @@
 #import "ios/chrome/browser/authentication/ui_bundled/change_profile/change_profile_signout_continuation.h"
 #import "ios/chrome/browser/authentication/ui_bundled/history_sync/history_sync_coordinator.h"
 #import "ios/chrome/browser/authentication/ui_bundled/history_sync/history_sync_utils.h"
+#import "ios/chrome/browser/authentication/ui_bundled/signin/features.h"
 #import "ios/chrome/browser/authentication/ui_bundled/signin/signin_constants.h"
+#import "ios/chrome/browser/feature_engagement/model/tracker_factory.h"
 #import "ios/chrome/browser/shared/coordinator/scene/scene_state.h"
 #import "ios/chrome/browser/shared/model/application_context/application_context.h"
 #import "ios/chrome/browser/shared/model/browser/browser.h"
+#import "ios/chrome/browser/shared/model/browser/browser_list.h"
+#import "ios/chrome/browser/shared/model/browser/browser_list_factory.h"
 #import "ios/chrome/browser/shared/model/browser/browser_provider.h"
 #import "ios/chrome/browser/shared/model/browser/browser_provider_interface.h"
 #import "ios/chrome/browser/shared/model/prefs/pref_names.h"
@@ -93,6 +101,41 @@ bool IsStrictSubset(NSArray<NSString*>* recorded_gaia_ids,
          ![recorded_gaia_ids_set isEqualToSet:identities_on_device_gaia_ids];
 }
 
+// Returns true if profile separation is enabled and the current profile is not
+// the personal one (a managed profile).
+bool ShouldSwitchProfileAtSignout(AuthenticationService* authentication_service,
+                                  const std::string& profile_name) {
+  ProfileManagerIOS* profile_manager =
+      GetApplicationContext()->GetProfileManager();
+  bool is_work_profile = profile_manager->GetProfileAttributesStorage()
+                             ->GetPersonalProfileName() != profile_name;
+  return AreSeparateProfilesForManagedAccountsEnabled() &&
+         authentication_service->HasPrimaryIdentityManaged(
+             signin::ConsentLevel::kSignin) &&
+         is_work_profile;
+}
+
+// Switch from a managed profile to a personal profile then run `continuation`.
+void SwitchToPersonalProfile(Browser* browser,
+                             ChangeProfileContinuation continuation) {
+  SceneState* scene_state = browser->GetSceneState();
+
+  ProfileManagerIOS* profile_manager =
+      GetApplicationContext()->GetProfileManager();
+  std::string default_profile_name =
+      profile_manager->GetProfileAttributesStorage()->GetPersonalProfileName();
+
+  CHECK(profile_manager->HasProfileWithName(default_profile_name));
+
+  id<ChangeProfileCommands> change_profile_handler =
+      HandlerForProtocol(scene_state.profileState.appState.appCommandDispatcher,
+                         ChangeProfileCommands);
+
+  [change_profile_handler changeProfile:default_profile_name
+                               forScene:scene_state
+                           continuation:std::move(continuation)];
+}
+
 }  // namespace
 
 #pragma mark - Public
@@ -148,9 +191,6 @@ bool ShouldPresentUserSigninUpgrade(ProfileIOS* profile,
 
   AuthenticationService* auth_service =
       AuthenticationServiceFactory::GetForProfile(profile);
-  if (auth_service->HasPrimaryIdentity(signin::ConsentLevel::kSync)) {
-    return false;
-  }
   if (auth_service->HasPrimaryIdentity(signin::ConsentLevel::kSignin)) {
     syncer::SyncService* sync_service =
         SyncServiceFactory::GetForProfile(profile);
@@ -218,11 +258,33 @@ bool ShouldPresentUserSigninUpgrade(ProfileIOS* profile,
     return false;
   }
 
-  // The sign-in promo should be shown twice, even if no account has been added.
-  NSInteger display_count =
-      [defaults integerForKey:kSigninPromoViewDisplayCountKey];
-  if (display_count <= 1) {
-    return true;
+  if (IsFullscreenSigninPromoManagerMigrationEnabled()) {
+    feature_engagement::Tracker* tracker =
+        feature_engagement::TrackerFactory::GetForProfile(profile);
+    unsigned int interactions = 0;
+    std::vector<std::pair<feature_engagement::EventConfig, int>> events =
+        tracker->ListEvents(
+            feature_engagement::kIPHiOSPromoSigninFullscreenFeature);
+    for (const auto& event : events) {
+      if (event.first.name ==
+          feature_engagement::events::kIOSSigninFullscreenPromoTrigger) {
+        interactions = event.second;
+        break;
+      }
+    }
+
+    if (interactions <= 1) {
+      return true;
+    }
+
+  } else {
+    // The sign-in promo should be shown twice, even if no account has been
+    // added.
+    NSInteger display_count =
+        [defaults integerForKey:kSigninPromoViewDisplayCountKey];
+    if (display_count <= 1) {
+      return true;
+    }
   }
 
   // Otherwise, it can be shown only if a new account has been added.
@@ -307,22 +369,6 @@ void RecordUpgradePromoSigninStarted(
   [defaults setInteger:display_count forKey:kSigninPromoViewDisplayCountKey];
 }
 
-IdentitySigninState GetPrimaryIdentitySigninState(ProfileIOS* profile) {
-  AuthenticationService* auth_service =
-      AuthenticationServiceFactory::GetForProfile(profile);
-  syncer::SyncService* syncService = SyncServiceFactory::GetForProfile(profile);
-  // TODO(crbug.com/40066949): After phase 3 migration of kSync users, Remove
-  // this usage.
-  if (auth_service->HasPrimaryIdentity(signin::ConsentLevel::kSync) &&
-      syncService->GetUserSettings()->IsInitialSyncFeatureSetupComplete()) {
-    return IdentitySigninStateSignedInWithSyncEnabled;
-  } else if (auth_service->HasPrimaryIdentity(signin::ConsentLevel::kSignin)) {
-    return IdentitySigninStateSignedInWithSyncDisabled;
-  } else {
-    return IdentitySigninStateSignedOut;
-  }
-}
-
 Tribool TriboolFromCapabilityResult(SystemIdentityCapabilityResult result) {
   switch (result) {
     case SystemIdentityCapabilityResult::kTrue:
@@ -370,56 +416,100 @@ void MultiProfileSignOut(Browser* browser,
                          signin_metrics::ProfileSignout signout_source,
                          bool force_snackbar_over_toolbar,
                          MDCSnackbarMessage* snackbar_message,
-                         ProceduralBlock signout_completion) {
+                         ProceduralBlock signout_completion,
+                         bool should_record_metrics) {
   // The regular browser should be used to execute the signout.
   CHECK_EQ(browser->type(), Browser::Type::kRegular);
-
-  AuthenticationService* authentication_service =
-      AuthenticationServiceFactory::GetForProfile(browser->GetProfile());
-
-  BOOL should_switch_profile_at_signout =
-      AreSeparateProfilesForManagedAccountsEnabled() &&
-      authentication_service->HasPrimaryIdentityManaged(
-          signin::ConsentLevel::kSignin);
+  SceneState* scene_state = browser->GetSceneState();
 
   ChangeProfileContinuation continuation =
       CreateChangeProfileSignoutContinuation(
-          signout_source, force_snackbar_over_toolbar, snackbar_message,
-          signout_completion);
+          signout_source, force_snackbar_over_toolbar, should_record_metrics,
+          snackbar_message, signout_completion);
+  ProfileIOS* profile = browser->GetProfile();
+  AuthenticationService* authentication_service =
+      AuthenticationServiceFactory::GetForProfile(profile);
 
-  SceneState* scene_state = browser->GetSceneState();
-  if (!should_switch_profile_at_signout) {
+  if (signout_source == signin_metrics::ProfileSignout::kPrefChanged) {
+    ChangeProfileContinuation postSignoutContinuation =
+        CreateChangeProfileForceSignoutContinuation();
+    continuation = ChainChangeProfileContinuations(
+        std::move(continuation), std::move(postSignoutContinuation));
+  }
+
+  if (!ShouldSwitchProfileAtSignout(authentication_service,
+                                    profile->GetProfileName())) {
     std::move(continuation).Run(scene_state, base::DoNothing());
     return;
   }
 
   if (signout_source ==
       signin_metrics::ProfileSignout::kUserClickedSignoutSettings) {
-    // TODO(crbug.com/375605174): Verify that This signout source is only used
-    // when signing out from Accounts settings page. For now, it is also used
-    // in the signout button in ManageAccounts view, which will no longer be
-    // shown once kSeparateProfilesForManagedAccounts is enabled.
     ChangeProfileContinuation postSignoutContinuation =
         CreateChangeProfileSettingsContinuation();
     continuation = ChainChangeProfileContinuations(
         std::move(continuation), std::move(postSignoutContinuation));
   }
 
-  ProfileManagerIOS* profile_manager =
-      GetApplicationContext()->GetProfileManager();
-  std::string default_profile_name =
-      profile_manager->GetProfileAttributesStorage()->GetPersonalProfileName();
+  SwitchToPersonalProfile(browser, std::move(continuation));
+}
 
-  CHECK(profile_manager->HasProfileWithName(default_profile_name) ||
-        profile_manager->CanCreateProfileWithName(default_profile_name));
+void MultiProfileSignOutForProfile(
+    ProfileIOS* profile,
+    signin_metrics::ProfileSignout signout_source,
+    base::OnceClosure signout_completion_closure) {
+  // Simply sign out if no profile switching is needed.
+  AuthenticationService* authentication_service =
+      AuthenticationServiceFactory::GetForProfile(profile);
+  if (!ShouldSwitchProfileAtSignout(authentication_service,
+                                    profile->GetProfileName())) {
+    authentication_service->SignOut(
+        signout_source,
+        base::CallbackToBlock(std::move(signout_completion_closure)));
+    return;
+  }
 
-  id<ChangeProfileCommands> change_profile_handler =
-      HandlerForProtocol(scene_state.profileState.appState.appCommandDispatcher,
-                         ChangeProfileCommands);
+  // The API to change a profile work on a `SceneState`. Each `SceneState` has a
+  // regular, inactive and incognito browser associated.
+  // All three Browser points to the same `SceneState`, so this code only need
+  // to consider the regular Browser.
+  auto browser_list =
+      BrowserListFactory::GetForProfile(profile)->BrowsersOfType(
+          BrowserList::BrowserType::kRegular);
 
-  [change_profile_handler changeProfile:default_profile_name
-                               forScene:scene_state
-                           continuation:std::move(continuation)];
+  // Only call `signout_completion_closure` after all browsers have switched to
+  // the personal profile
+  base::RepeatingClosure barrier = base::BarrierClosure(
+      browser_list.size(), std::move(signout_completion_closure));
+
+  // Sign the user out in all browsers
+  for (Browser* browser : browser_list) {
+    ChangeProfileContinuation continuation =
+        CreateChangeProfileSignoutContinuation(
+            signout_source, /*force_snackbar_over_toolbar=*/false,
+            /*should_record_metrics=*/false, /*snackbar_message =*/nil,
+            base::CallbackToBlock(barrier));
+    SwitchToPersonalProfile(browser, std::move(continuation));
+  }
+}
+
+bool IsFullscreenSigninPromoManagerMigrationDone() {
+  NSUserDefaults* defaults = [NSUserDefaults standardUserDefaults];
+  return [defaults boolForKey:kFullscreenSigninPromoManagerMigrationDone];
+}
+
+void LogFullscreenSigninPromoManagerMigrationDone() {
+  NSUserDefaults* defaults = [NSUserDefaults standardUserDefaults];
+  [defaults setBool:YES forKey:kFullscreenSigninPromoManagerMigrationDone];
+}
+
+void FetchUnsyncedDataForSignOutOrProfileSwitching(
+    syncer::SyncService* sync_service,
+    UnsyncedDataForSignoutOrProfileSwitchingCallback callback) {
+  constexpr syncer::DataTypeSet kDataTypesToQuery =
+      syncer::TypesRequiringUnsyncedDataCheckOnSignout();
+  sync_service->GetTypesWithUnsyncedData(kDataTypesToQuery,
+                                         std::move(callback));
 }
 
 }  // namespace signin

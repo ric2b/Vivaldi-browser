@@ -28,11 +28,13 @@
 #include "content/public/browser/serial_chooser.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/window_container_type.mojom-forward.h"
+#include "third_party/blink/public/common/input/web_mouse_event.h"
 #include "third_party/blink/public/common/mediastream/media_stream_request.h"
 #include "third_party/blink/public/common/page/drag_operation.h"
 #include "third_party/blink/public/mojom/choosers/color_chooser.mojom-forward.h"
 #include "third_party/blink/public/mojom/frame/blocked_navigation_types.mojom.h"
 #include "third_party/blink/public/mojom/frame/fullscreen.mojom-forward.h"
+#include "third_party/blink/public/mojom/installedapp/related_application.mojom.h"
 #include "third_party/blink/public/mojom/manifest/display_mode.mojom.h"
 #include "third_party/blink/public/mojom/page/draggable_region.mojom-forward.h"
 #include "third_party/skia/include/core/SkColor.h"
@@ -48,6 +50,10 @@
 #endif
 
 class GURL;
+
+namespace vivaldi {
+class VivaldiPostponedCalls;
+}
 
 namespace base {
 class FilePath;
@@ -85,6 +91,7 @@ class Origin;
 
 namespace blink {
 class WebGestureEvent;
+class WebMouseEvent;
 enum class ProtocolHandlerSecurityLevel;
 }
 
@@ -324,6 +331,13 @@ class CONTENT_EXPORT WebContentsDelegate {
   virtual bool HandleContextMenu(RenderFrameHost& render_frame_host,
                                  const ContextMenuParams& params);
 
+  // Allows delegates to handle mouse events before sending to the renderer.
+  // Returns true if the event was handled, false otherwise. A true value means
+  // no more processing should happen on the event. The default return value is
+  // false.
+  virtual bool PreHandleMouseEvent(WebContents* source,
+                                   const blink::WebMouseEvent& event);
+
   // Allows delegates to handle keyboard events before sending to the renderer.
   // See enum for description of return values.
   virtual KeyboardEventProcessingResult PreHandleKeyboardEvent(
@@ -494,7 +508,7 @@ class CONTENT_EXPORT WebContentsDelegate {
 
   // Notifies `BrowserView` about the resizable boolean having been set vith
   // `window.setResizable(bool)` API.
-  virtual void OnCanResizeFromWebAPIChanged() {}
+  virtual void OnWebApiWindowResizableChanged() {}
   // Returns the overall resizability of the `BrowserView` when considering
   // both the value set by the AWC API and browser's "native" resizability.
   virtual bool GetCanResize();
@@ -879,6 +893,16 @@ class CONTENT_EXPORT WebContentsDelegate {
   GetBackForwardTransitionFallbackUXConfig();
 #endif  // BUILDFLAG(IS_ANDROID)
 
+  // Returns the saved related_applications web app manifest field associated
+  // with the given `web_contents`. The information is saved via the
+  // installation of a web app, where the url of the `web_contents` is in-scope
+  // of an installed web app. Returns an empty vector if `web_contents` is not
+  // associated with an installed web app or `related_applications` is empty.
+  // See:
+  // https://wicg.github.io/manifest-incubations/index.html#related_applications-member
+  virtual std::vector<blink::mojom::RelatedApplicationPtr>
+  GetSavedRelatedApplications(WebContents* web_contents);
+
   // Vivaldi
   virtual void CreateSearch(const base::Value::List& search) {}
 
@@ -891,6 +915,13 @@ class CONTENT_EXPORT WebContentsDelegate {
     return &download_info_;
   }
 
+  // note(ondrej@vivaldi): VB-114624
+  ::vivaldi::VivaldiPostponedCalls * GetVivaldiPostponedCalls();
+  void RunVivaldiPostponedCalls();
+  virtual bool IsVivaldiGuestView() { return false; }
+  virtual void VivaldiCanDownload(const GURL& url,
+                           const std::string& request_method,
+                           base::OnceCallback<void(bool)> callback);
  protected:
   virtual ~WebContentsDelegate();
 
@@ -908,6 +939,7 @@ class CONTENT_EXPORT WebContentsDelegate {
 
   // The WebContents that this is currently a delegate for.
   std::set<raw_ptr<WebContents, SetExperimental>> attached_contents_;
+  std::unique_ptr<::vivaldi::VivaldiPostponedCalls> vivaldi_postponed_calls_;
 };
 
 }  // namespace content

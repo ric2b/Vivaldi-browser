@@ -148,6 +148,9 @@ class PDFDocumentHelper
   // Callbacks to invoke when document load is completed.
   std::vector<base::OnceClosure> document_load_complete_callbacks_;
 
+#if BUILDFLAG(ENABLE_SCREEN_AI_SERVICE)
+  bool searchify_started_ = false;
+#endif
   mojo::Remote<mojom::PdfListener> remote_pdf_client_;
 
   DOCUMENT_USER_DATA_KEY_DECL();

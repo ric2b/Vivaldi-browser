@@ -18,8 +18,7 @@
 #include "src/gpu/graphite/dawn/DawnCaps.h"
 #include "src/gpu/graphite/dawn/DawnComputePipeline.h"
 #include "src/gpu/graphite/dawn/DawnGraphicsPipeline.h"
-#include "src/gpu/graphite/dawn/DawnGraphiteTypesPriv.h"
-#include "src/gpu/graphite/dawn/DawnGraphiteUtilsPriv.h"
+#include "src/gpu/graphite/dawn/DawnGraphiteUtils.h"
 #include "src/gpu/graphite/dawn/DawnQueueManager.h"
 #include "src/gpu/graphite/dawn/DawnSampler.h"
 #include "src/gpu/graphite/dawn/DawnSharedContext.h"
@@ -27,6 +26,11 @@
 
 #if defined(__EMSCRIPTEN__)
 #include <emscripten/version.h>
+
+namespace wgpu {
+using TexelCopyBufferInfo = ImageCopyBuffer;
+using TexelCopyTextureInfo = ImageCopyTexture;
+}  // namespace wgpu
 #endif
 
 namespace skgpu::graphite {
@@ -218,15 +222,7 @@ bool DawnCommandBuffer::onAddRenderPass(const RenderPassDesc& renderPassDesc,
                                         SkIRect viewport,
                                         const DrawPassList& drawPasses) {
     // `viewport` has already been translated by the replay translation by the base CommandBuffer.
-    // All GPU backends support viewports that are defined to extend beyond the render target
-    // (allowing for a stable linear transformation from NDC to viewport coordinates as the replay
-    // translation pushes the viewport off the final deferred target's edges).
-    // However, WebGPU validation layers currently require that the viewport is contained within
-    // the attachment so we intersect the viewport before setting the intrinsic constants or
-    // viewport state.
-    // TODO(https://github.com/gpuweb/gpuweb/issues/373): Hopefully the validation layers can be
-    // relaxed and then this extra intersection can be removed.
-    if (!viewport.intersect(SkIRect::MakeSize(fColorAttachmentSize))) SK_UNLIKELY {
+    if (!SkIRect::Intersects(viewport, fRenderPassBounds)) SK_UNLIKELY {
         // The entire pass is offscreen
         return true;
     }
@@ -253,8 +249,7 @@ bool DawnCommandBuffer::onAddRenderPass(const RenderPassDesc& renderPassDesc,
         }
     }
 
-    this->endRenderPass();
-    return true;
+    return this->endRenderPass();
 }
 
 bool DawnCommandBuffer::onAddComputePass(DispatchGroupSpan groups) {
@@ -314,7 +309,11 @@ bool DawnCommandBuffer::beginRenderPass(const RenderPassDesc& renderPassDesc,
 #endif
 
 #if WGPU_TIMESTAMP_WRITES_DEFINED
+#if defined(__EMSCRIPTEN__)
     wgpu::RenderPassTimestampWrites wgpuTimestampWrites;
+#else
+    wgpu::PassTimestampWrites wgpuTimestampWrites;
+#endif
     if (!fSharedContext->dawnCaps()->supportsCommandBufferTimestamps() && fTimestampQueryBuffer) {
         SkASSERT(fTimestampQuerySet);
         wgpuTimestampWrites.querySet = fTimestampQuerySet;
@@ -330,7 +329,7 @@ bool DawnCommandBuffer::beginRenderPass(const RenderPassDesc& renderPassDesc,
 #endif
 
     auto& colorInfo = renderPassDesc.fColorAttachment;
-    bool loadMSAAFromResolveExplicitly = false;
+    bool emulateLoadStoreResolveTexture = false;
     if (colorTexture) {
         wgpuRenderPass.colorAttachments = &wgpuColorAttachment;
         wgpuRenderPass.colorAttachmentCount = 1;
@@ -357,9 +356,12 @@ bool DawnCommandBuffer::beginRenderPass(const RenderPassDesc& renderPassDesc,
             // Inclusion of a resolve texture implies the client wants to finish the
             // renderpass with a resolve.
             SkASSERT(wgpuColorAttachment.storeOp == wgpu::StoreOp::Discard);
+            // But it also means we might have to load the resolve texture into the MSAA color attachment
 
-            // But it also means we have to load the resolve texture into the MSAA color attachment
-            if (renderPassDesc.fColorResolveAttachment.fLoadOp == LoadOp::kLoad) {
+            if (fSharedContext->dawnCaps()->emulateLoadStoreResolve()) {
+                // TODO(b/399640773): Remove this once Dawn natively supports the feature.
+                emulateLoadStoreResolveTexture = true;
+            } else  if (renderPassDesc.fColorResolveAttachment.fLoadOp == LoadOp::kLoad) {
                 std::optional<wgpu::LoadOp> resolveLoadOp =
                         fSharedContext->dawnCaps()->resolveTextureLoadOp();
                 if (resolveLoadOp.has_value()) {
@@ -375,7 +377,7 @@ bool DawnCommandBuffer::beginRenderPass(const RenderPassDesc& renderPassDesc,
 #endif
                 } else {
                     // No Dawn built-in support, we need to manually load the resolve texture.
-                    loadMSAAFromResolveExplicitly = true;
+                    emulateLoadStoreResolveTexture = true;
                 }
             }
             // TODO: If the color resolve texture is read-only we can use a private (vs. memoryless)
@@ -405,7 +407,7 @@ bool DawnCommandBuffer::beginRenderPass(const RenderPassDesc& renderPassDesc,
     auto& depthStencilInfo = renderPassDesc.fDepthStencilAttachment;
     if (depthStencilTexture) {
         const auto* dawnDepthStencilTexture = static_cast<const DawnTexture*>(depthStencilTexture);
-        auto format = TextureInfos::GetDawnViewFormat(dawnDepthStencilTexture->textureInfo());
+        auto format = dawnDepthStencilTexture->dawnTextureInfo().getViewFormat();
         SkASSERT(DawnFormatIsDepthOrStencil(format));
 
         // TODO: check Texture matches RenderPassDesc
@@ -433,14 +435,13 @@ bool DawnCommandBuffer::beginRenderPass(const RenderPassDesc& renderPassDesc,
         SkASSERT(!depthStencilInfo.fTextureInfo.isValid());
     }
 
-    if (loadMSAAFromResolveExplicitly) {
-        // Manually load the contents of the resolve texture into the MSAA attachment as a draw,
-        // so the actual load op for the MSAA attachment had better have been discard.
-
-        if (!this->loadMSAAFromResolveAndBeginRenderPassEncoder(
+    if (emulateLoadStoreResolveTexture) {
+        if (!this->emulateLoadMSAAFromResolveAndBeginRenderPassEncoder(
                     renderPassDesc,
                     wgpuRenderPass,
-                    static_cast<const DawnTexture*>(colorTexture))) {
+                    renderPassBounds,
+                    static_cast<const DawnTexture*>(colorTexture),
+                    static_cast<const DawnTexture*>(resolveTexture))) {
             return false;
         }
     }
@@ -451,102 +452,93 @@ bool DawnCommandBuffer::beginRenderPass(const RenderPassDesc& renderPassDesc,
     return true;
 }
 
-bool DawnCommandBuffer::loadMSAAFromResolveAndBeginRenderPassEncoder(
-        const RenderPassDesc& frontendRenderPassDesc,
-        const wgpu::RenderPassDescriptor& wgpuRenderPassDesc,
-        const DawnTexture* msaaTexture) {
+bool DawnCommandBuffer::emulateLoadMSAAFromResolveAndBeginRenderPassEncoder(
+        const RenderPassDesc& intendedRenderPassDesc,
+        const wgpu::RenderPassDescriptor& intendedDawnRenderPassDesc,
+        const SkIRect& renderPassBounds,
+        const DawnTexture* msaaTexture,
+        const DawnTexture* resolveTexture) {
     SkASSERT(!fActiveRenderPassEncoder);
 
-    // Copy from resolve texture to an intermediate texture. Using blit with draw
-    // pipeline because the resolveTexture might be created from a swapchain, and it
-    // is possible that only its texture view is available. So onCopyTextureToTexture()
-    // which operates on wgpu::Texture instead of wgpu::TextureView cannot be used in that case.
-    auto msaaLoadTexture = fResourceProvider->findOrCreateDiscardableMSAALoadTexture(
-            msaaTexture->dimensions(), msaaTexture->textureInfo());
-    if (!msaaLoadTexture) {
-        SKGPU_LOG_E("DawnCommandBuffer::loadMSAAFromResolveAndBeginRenderPassEncoder: "
-                    "Can't create MSAA Load Texture.");
-        return false;
+    const bool loadResolve =
+            intendedRenderPassDesc.fColorResolveAttachment.fLoadOp == LoadOp::kLoad;
+
+    // Override the render pass to exclude the resolve texture. We will emulate the loading &
+    // resolve via blit. The resovle step will be done separately after endRenderPass()
+    RenderPassDesc renderPassWithoutResolveDesc = intendedRenderPassDesc;
+    renderPassWithoutResolveDesc.fColorResolveAttachment.fTextureInfo = {};
+
+    wgpu::RenderPassColorAttachment dawnColorAttachmentWithoutResolve =
+            intendedDawnRenderPassDesc.colorAttachments[0];
+    dawnColorAttachmentWithoutResolve.resolveTarget = nullptr;
+    dawnColorAttachmentWithoutResolve.storeOp = wgpu::StoreOp::Store;
+
+    if (loadResolve) {
+        // If we intend to load the resolve texture, then override the loadOp of the MSAA attachment
+        // to Load instead of Clear.
+        // This path is intended to be used when the device doesn't support transient attachments.
+        // Which most likely means it is a non-tiled GPU. On non-tiled GPUs, load is a no-op so it
+        // should be faster than clearing the whole MSAA attachment. Note: Dawn doesn't have any
+        // DontCare loadOp.
+        dawnColorAttachmentWithoutResolve.loadOp = wgpu::LoadOp::Load;
     }
 
-    this->trackCommandBufferResource(msaaLoadTexture);
+    wgpu::RenderPassDescriptor dawnRenderPassDescWithoutResolve = intendedDawnRenderPassDesc;
+    dawnRenderPassDescWithoutResolve.colorAttachments = &dawnColorAttachmentWithoutResolve;
+    dawnRenderPassDescWithoutResolve.colorAttachmentCount = 1;
 
-    // Creating intermediate render pass (copy from resolve texture -> MSAA load texture)
-    RenderPassDesc intermediateRenderPassDesc = {};
-    intermediateRenderPassDesc.fColorAttachment.fLoadOp = LoadOp::kDiscard;
-    intermediateRenderPassDesc.fColorAttachment.fStoreOp = StoreOp::kStore;
-    intermediateRenderPassDesc.fColorAttachment.fTextureInfo =
-            frontendRenderPassDesc.fColorResolveAttachment.fTextureInfo;
+    auto renderPassEncoder = fCommandEncoder.BeginRenderPass(&dawnRenderPassDescWithoutResolve);
 
-    wgpu::RenderPassColorAttachment wgpuIntermediateColorAttachment;
-     // Dawn doesn't support actual DontCare so use LoadOp::Clear.
-    wgpuIntermediateColorAttachment.loadOp = wgpu::LoadOp::Clear;
-    wgpuIntermediateColorAttachment.clearValue = {1, 1, 1, 1};
-    wgpuIntermediateColorAttachment.storeOp = wgpu::StoreOp::Store;
-    wgpuIntermediateColorAttachment.view = msaaLoadTexture->renderTextureView();
+    SkIRect resolveArea = renderPassBounds;
+    resolveArea.intersect(SkIRect::MakeSize(msaaTexture->dimensions()));
+    resolveArea.intersect(SkIRect::MakeSize(resolveTexture->dimensions()));
 
-    wgpu::RenderPassDescriptor wgpuIntermediateRenderPassDesc;
-    wgpuIntermediateRenderPassDesc.colorAttachmentCount = 1;
-    wgpuIntermediateRenderPassDesc.colorAttachments = &wgpuIntermediateColorAttachment;
-
-    auto renderPassEncoder = fCommandEncoder.BeginRenderPass(&wgpuIntermediateRenderPassDesc);
-
-    bool blitSucceeded = this->doBlitWithDraw(
-            renderPassEncoder,
-            intermediateRenderPassDesc,
-            /*sourceTextureView=*/wgpuRenderPassDesc.colorAttachments[0].resolveTarget,
-            msaaTexture->dimensions().width(),
-            msaaTexture->dimensions().height());
-
-    renderPassEncoder.End();
-
-    if (!blitSucceeded) {
-        return false;
-    }
-
-    // Start actual render pass (blit from MSAA load texture -> MSAA texture)
-    renderPassEncoder = fCommandEncoder.BeginRenderPass(&wgpuRenderPassDesc);
-
-    if (!this->doBlitWithDraw(renderPassEncoder,
-                              frontendRenderPassDesc,
-                              /*sourceTextureView=*/msaaLoadTexture->renderTextureView(),
-                              msaaTexture->dimensions().width(),
-                              msaaTexture->dimensions().height())) {
-        renderPassEncoder.End();
-        return false;
+    if (loadResolve) {
+        // Blit from the resolve texture to the MSAA texture
+        if (!this->doBlitWithDraw(renderPassEncoder,
+                                  renderPassWithoutResolveDesc,
+                                  /*srcTextureView=*/resolveTexture->renderTextureView(),
+                                  /*srcSampleCount=*/1,
+                                  resolveArea)) {
+            renderPassEncoder.End();
+            return false;
+        }
     }
 
     fActiveRenderPassEncoder = renderPassEncoder;
+
+    fResolveStepEmulationInfo = {msaaTexture, resolveTexture, resolveArea};
 
     return true;
 }
 
 bool DawnCommandBuffer::doBlitWithDraw(const wgpu::RenderPassEncoder& renderEncoder,
-                                       const RenderPassDesc& frontendRenderPassDesc,
-                                       const wgpu::TextureView& sourceTextureView,
-                                       int width,
-                                       int height) {
-    auto loadPipeline = fResourceProvider->findOrCreateBlitWithDrawPipeline(frontendRenderPassDesc);
-    if (!loadPipeline) {
+                                       const RenderPassDesc& frontendRenderPassDescKey,
+                                       const wgpu::TextureView& srcTextureView,
+                                       int srcSampleCount,
+                                       const SkIRect& bounds) {
+    auto blitPipeline = fResourceProvider->findOrCreateBlitWithDrawPipeline(
+            frontendRenderPassDescKey, srcSampleCount);
+    if (!blitPipeline) {
         SKGPU_LOG_E("Unable to create pipeline to blit with draw");
         return false;
     }
 
     SkASSERT(renderEncoder);
 
-    renderEncoder.SetPipeline(loadPipeline);
+    renderEncoder.SetPipeline(blitPipeline);
 
-    // The load msaa pipeline takes no uniforms, no vertex/instance attributes and only uses
+    // The blit pipeline takes no uniforms, no vertex/instance attributes and only uses
     // one texture that does not require a sampler.
 
     // TODO: b/260368758
     // cache single texture's bind group creation.
     wgpu::BindGroupEntry entry;
     entry.binding = 0;
-    entry.textureView = sourceTextureView;
+    entry.textureView = srcTextureView;
 
     wgpu::BindGroupDescriptor desc;
-    desc.layout = loadPipeline.GetBindGroupLayout(0);
+    desc.layout = blitPipeline.GetBindGroupLayout(0);
     desc.entryCount = 1;
     desc.entries = &entry;
 
@@ -554,8 +546,8 @@ bool DawnCommandBuffer::doBlitWithDraw(const wgpu::RenderPassEncoder& renderEnco
 
     renderEncoder.SetBindGroup(0, bindGroup);
 
-    renderEncoder.SetScissorRect(0, 0, width, height);
-    renderEncoder.SetViewport(0, 0, width, height, 0, 1);
+    renderEncoder.SetScissorRect(bounds.x(), bounds.y(), bounds.width(), bounds.height());
+    renderEncoder.SetViewport(bounds.x(), bounds.y(), bounds.width(), bounds.height(), 0, 1);
 
     // Fullscreen triangle
     renderEncoder.Draw(3);
@@ -563,10 +555,47 @@ bool DawnCommandBuffer::doBlitWithDraw(const wgpu::RenderPassEncoder& renderEnco
     return true;
 }
 
-void DawnCommandBuffer::endRenderPass() {
+bool DawnCommandBuffer::endRenderPass() {
     SkASSERT(fActiveRenderPassEncoder);
     fActiveRenderPassEncoder.End();
     fActiveRenderPassEncoder = nullptr;
+
+    // Return early if no resolve step's emulation is needed.
+    if (!fResolveStepEmulationInfo.has_value()) {
+        return true;
+    }
+
+    // Creating an intermediate render pass to copy from the MSAA texture -> resolve texture.
+    RenderPassDesc intermediateRenderPassDesc = {};
+    intermediateRenderPassDesc.fColorAttachment.fLoadOp = LoadOp::kLoad;
+    intermediateRenderPassDesc.fColorAttachment.fStoreOp = StoreOp::kStore;
+    intermediateRenderPassDesc.fColorAttachment.fTextureInfo =
+            fResolveStepEmulationInfo->fResolveTexture->textureInfo();
+
+    wgpu::RenderPassColorAttachment dawnIntermediateColorAttachment;
+    dawnIntermediateColorAttachment.loadOp = wgpu::LoadOp::Load;
+    dawnIntermediateColorAttachment.storeOp = wgpu::StoreOp::Store;
+    dawnIntermediateColorAttachment.view =
+            fResolveStepEmulationInfo->fResolveTexture->renderTextureView();
+
+    wgpu::RenderPassDescriptor dawnIntermediateRenderPassDesc;
+    dawnIntermediateRenderPassDesc.colorAttachmentCount = 1;
+    dawnIntermediateRenderPassDesc.colorAttachments = &dawnIntermediateColorAttachment;
+
+    auto renderPassEncoder = fCommandEncoder.BeginRenderPass(&dawnIntermediateRenderPassDesc);
+
+    bool blitSucceeded = this->doBlitWithDraw(
+            renderPassEncoder,
+            intermediateRenderPassDesc,
+            /*srcTextureView=*/fResolveStepEmulationInfo->fMSAATexture->renderTextureView(),
+            /*srcSampleCount=*/fResolveStepEmulationInfo->fMSAATexture->textureInfo().numSamples(),
+            fResolveStepEmulationInfo->fResolveArea);
+
+    renderPassEncoder.End();
+
+    fResolveStepEmulationInfo.reset();
+
+    return blitSucceeded;
 }
 
 bool DawnCommandBuffer::addDrawPass(const DrawPass* drawPass) {
@@ -643,6 +672,10 @@ bool DawnCommandBuffer::addDrawPass(const DrawPass* drawPass) {
             case DrawPassCommands::Type::kDrawIndexedIndirect: {
                 auto draw = static_cast<DrawPassCommands::DrawIndexedIndirect*>(cmdPtr);
                 this->drawIndexedIndirect(draw->fType);
+                break;
+            }
+            case DrawPassCommands::Type::kAddBarrier: {
+                SKGPU_LOG_E("DawnCommandBuffer does not support the addition of barriers.");
                 break;
             }
         }
@@ -756,7 +789,7 @@ void DawnCommandBuffer::bindTextureAndSamplers(
 #if !defined(__EMSCRIPTEN__)
     if (command.fNumTexSamplers == 1) {
         const wgpu::YCbCrVkDescriptor& ycbcrDesc =
-                TextureInfos::GetDawnTextureSpec(
+                TextureInfoPriv::Get<DawnTextureInfo>(
                         drawPass.getTexture(command.fTextureIndices[0])->textureInfo())
                         .fYcbcrVkDescriptor;
         usingSingleStaticSampler = DawnDescriptorIsValid(ycbcrDesc);
@@ -791,10 +824,8 @@ void DawnCommandBuffer::bindTextureAndSamplers(
             // 2 * i as base binding index of the sampler and texture.
             // TODO: https://b.corp.google.com/issues/259457090:
             // Better configurable way of assigning samplers and textures' bindings.
-
-            DawnTextureInfo dawnTextureInfo;
-            TextureInfos::GetDawnTextureInfo(texture->textureInfo(), &dawnTextureInfo);
-            const wgpu::YCbCrVkDescriptor& ycbcrDesc = dawnTextureInfo.fYcbcrVkDescriptor;
+            const wgpu::YCbCrVkDescriptor& ycbcrDesc =
+                    texture->dawnTextureInfo().fYcbcrVkDescriptor;
 
             // Only add a sampler as a bind group entry if it's a regular dynamic sampler. A valid
             // YCbCrVkDescriptor indicates the usage of a static sampler, which should not be
@@ -881,7 +912,7 @@ void DawnCommandBuffer::syncUniformBuffers() {
 
 void DawnCommandBuffer::setScissor(const Scissor& scissor) {
     SkASSERT(fActiveRenderPassEncoder);
-    SkIRect rect = scissor.getRect(fReplayTranslation, fReplayClip);
+    SkIRect rect = scissor.getRect(fReplayTranslation, fRenderPassBounds);
     fActiveRenderPassEncoder.SetScissorRect(rect.x(), rect.y(), rect.width(), rect.height());
 }
 
@@ -992,7 +1023,11 @@ void DawnCommandBuffer::beginComputePass() {
     SkASSERT(!fActiveComputePassEncoder);
     wgpu::ComputePassDescriptor wgpuComputePassDescriptor = {};
 #if WGPU_TIMESTAMP_WRITES_DEFINED
+#if defined(__EMSCRIPTEN__)
     wgpu::ComputePassTimestampWrites wgpuTimestampWrites;
+#else
+    wgpu::PassTimestampWrites wgpuTimestampWrites;
+#endif
     if (!fSharedContext->dawnCaps()->supportsCommandBufferTimestamps() && fTimestampQueryBuffer) {
         SkASSERT(fTimestampQuerySet);
         wgpuTimestampWrites.querySet = fTimestampQuerySet;
@@ -1107,13 +1142,13 @@ bool DawnCommandBuffer::onCopyTextureToBuffer(const Texture* texture,
     const auto* wgpuTexture = static_cast<const DawnTexture*>(texture);
     auto& wgpuBuffer = static_cast<const DawnBuffer*>(buffer)->dawnBuffer();
 
-    wgpu::ImageCopyTexture src;
+    wgpu::TexelCopyTextureInfo src;
     src.texture = wgpuTexture->dawnTexture();
     src.origin.x = srcRect.x();
     src.origin.y = srcRect.y();
-    src.aspect = TextureInfos::GetDawnAspect(wgpuTexture->textureInfo());
+    src.aspect = wgpuTexture->dawnTextureInfo().fAspect;
 
-    wgpu::ImageCopyBuffer dst;
+    wgpu::TexelCopyBufferInfo dst;
     dst.buffer = wgpuBuffer;
     dst.layout.offset = bufferOffset;
     dst.layout.bytesPerRow = bufferRowBytes;
@@ -1135,10 +1170,10 @@ bool DawnCommandBuffer::onCopyBufferToTexture(const Buffer* buffer,
     auto& wgpuTexture = static_cast<const DawnTexture*>(texture)->dawnTexture();
     auto& wgpuBuffer = static_cast<const DawnBuffer*>(buffer)->dawnBuffer();
 
-    wgpu::ImageCopyBuffer src;
+    wgpu::TexelCopyBufferInfo src;
     src.buffer = wgpuBuffer;
 
-    wgpu::ImageCopyTexture dst;
+    wgpu::TexelCopyTextureInfo dst;
     dst.texture = wgpuTexture;
 
     for (int i = 0; i < count; ++i) {
@@ -1169,12 +1204,12 @@ bool DawnCommandBuffer::onCopyTextureToTexture(const Texture* src,
     auto& wgpuTextureSrc = static_cast<const DawnTexture*>(src)->dawnTexture();
     auto& wgpuTextureDst = static_cast<const DawnTexture*>(dst)->dawnTexture();
 
-    wgpu::ImageCopyTexture srcArgs;
+    wgpu::TexelCopyTextureInfo srcArgs;
     srcArgs.texture = wgpuTextureSrc;
     srcArgs.origin.x = srcRect.fLeft;
     srcArgs.origin.y = srcRect.fTop;
 
-    wgpu::ImageCopyTexture dstArgs;
+    wgpu::TexelCopyTextureInfo dstArgs;
     dstArgs.texture = wgpuTextureDst;
     dstArgs.origin.x = dstPoint.fX;
     dstArgs.origin.y = dstPoint.fY;

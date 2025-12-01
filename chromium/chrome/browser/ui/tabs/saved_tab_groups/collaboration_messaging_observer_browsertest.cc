@@ -8,6 +8,7 @@
 
 #include "chrome/browser/collaboration/messaging/messaging_backend_service_factory.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/tab_group_sync/tab_group_sync_service_factory.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_element_identifiers.h"
 #include "chrome/browser/ui/browser_window.h"
@@ -26,6 +27,7 @@
 #include "components/collaboration/public/messaging/messaging_backend_service.h"
 #include "components/data_sharing/public/features.h"
 #include "components/saved_tab_groups/public/features.h"
+#include "components/saved_tab_groups/public/tab_group_sync_service.h"
 #include "content/public/test/browser_test.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/views/controls/button/button_controller.h"
@@ -80,12 +82,13 @@ PersistentMessage CreateMessage(std::string given_name,
   return message;
 }
 
-InstantMessage CreateInstantMessage(std::string given_name,
-                                    CollaborationEvent event,
-                                    std::string tab_url,
-                                    std::string tab_title,
-                                    tab_groups::LocalTabGroupID tab_group_id,
-                                    std::string group_name) {
+InstantMessage CreateInstantMessage(
+    std::string given_name,
+    CollaborationEvent event,
+    std::string tab_url,
+    std::string tab_title,
+    std::optional<tab_groups::LocalTabGroupID> tab_group_id,
+    std::string group_name) {
   GroupMember member;
   member.given_name = given_name;
 
@@ -98,17 +101,24 @@ InstantMessage CreateInstantMessage(std::string given_name,
   tab_group_metadata.last_known_title = group_name;
 
   MessageAttribution attribution;
-  attribution.triggering_user = member;
+  if (event == CollaborationEvent::COLLABORATION_MEMBER_ADDED ||
+      event == CollaborationEvent::COLLABORATION_MEMBER_REMOVED) {
+    attribution.affected_user = member;
+  } else {
+    attribution.triggering_user = member;
+  }
+
   attribution.tab_metadata = tab_metadata;
   attribution.tab_group_metadata = tab_group_metadata;
 
   InstantMessage message;
-  message.attribution = attribution;
+  message.attributions.emplace_back(attribution);
   message.type = event == CollaborationEvent::TAB_REMOVED
                      ? InstantNotificationType::CONFLICT_TAB_REMOVED
                      : InstantNotificationType::UNDEFINED;
   message.level = InstantNotificationLevel::BROWSER;
   message.collaboration_event = event;
+  message.localized_message = u"Sample instant message";
 
   return message;
 }
@@ -121,7 +131,6 @@ class CollaborationMessagingObserverBrowserTest
   CollaborationMessagingObserverBrowserTest() {
     features_.InitWithFeatures(
         {
-            tab_groups::kTabGroupsSaveV2,
             tab_groups::kTabGroupSyncServiceDesktopMigration,
             data_sharing::features::kDataSharingFeature,
             toast_features::kToastFramework,
@@ -312,6 +321,22 @@ IN_PROC_BROWSER_TEST_F(CollaborationMessagingObserverBrowserTest,
     EXPECT_FALSE(GetTabDataAtIndex(browser(), 0)->HasMessage());
   }
 
+  // Message has no tab group id.
+  {
+    auto message = CreateMessage("User", "URL", CollaborationEvent::TAB_ADDED,
+                                 PersistentNotificationType::DIRTY_TAB_GROUP,
+                                 tab0_id, group_id);
+
+    // Remove tab group id.
+    message.attribution.tab_group_metadata->local_tab_group_id =
+        tab_groups::LocalTabGroupID::CreateEmpty();
+
+    // No messages are delivered.
+    EXPECT_FALSE(GetTabDataAtIndex(browser(), 0)->HasMessage());
+    observer()->DisplayPersistentMessage(message);
+    EXPECT_FALSE(GetTabDataAtIndex(browser(), 0)->HasMessage());
+  }
+
   // Message has no tab metadata.
   {
     auto message =
@@ -381,6 +406,10 @@ IN_PROC_BROWSER_TEST_F(CollaborationMessagingObserverBrowserTest,
   EXPECT_NE(observer(), nullptr);
 
   auto group_id = browser()->tab_strip_model()->AddToNewGroup({0});
+  tab_groups::TabGroupSyncService* tab_group_service =
+      TabGroupSyncServiceFactory::GetForProfile(browser()->profile());
+  tab_group_service->MakeTabGroupSharedForTesting(group_id,
+                                                  "fake_collaboration_id");
   base::MockCallback<SuccessCallback> cb;
   std::string test_url = chrome::kChromeUISettingsURL;
   auto message = CreateInstantMessage(
@@ -405,7 +434,60 @@ IN_PROC_BROWSER_TEST_F(CollaborationMessagingObserverBrowserTest,
 }
 
 IN_PROC_BROWSER_TEST_F(CollaborationMessagingObserverBrowserTest,
-                       InstantMessageForCollaborationRemoved) {
+                       InstantMessageManagesSharingWithClosedGroup) {
+  EXPECT_EQ(1, browser()->tab_strip_model()->count());
+
+  // Observer is initialized
+  EXPECT_NE(observer(), nullptr);
+
+  // Create a new group, get the sync tab group id, close it.
+  AddTab(browser());
+  auto group_id = browser()->tab_strip_model()->AddToNewGroup({0});
+  tab_groups::TabGroupSyncService* tab_group_service =
+      TabGroupSyncServiceFactory::GetForProfile(browser()->profile());
+  auto sync_tab_group_id = tab_group_service->GetGroup(group_id)->saved_guid();
+  tab_group_service->MakeTabGroupSharedForTesting(group_id,
+                                                  "fake_collaboration_id");
+  browser()->tab_strip_model()->CloseAllTabsInGroup(group_id);
+
+  // Create an instant message with sync tab group id.
+  base::MockCallback<SuccessCallback> cb;
+  std::string test_url = chrome::kChromeUISettingsURL;
+  auto message = CreateInstantMessage(
+      "User", CollaborationEvent::COLLABORATION_MEMBER_ADDED, test_url,
+      "Chrome Settings", std::nullopt, "Vacation");
+  message.attributions[0].tab_group_metadata->sync_tab_group_id =
+      sync_tab_group_id;
+
+  EXPECT_CALL(cb, Run(true));
+  observer()->DisplayInstantaneousMessage(message, cb.Get());
+
+  auto* toast_controller =
+      browser()->browser_window_features()->toast_controller();
+  EXPECT_TRUE(toast_controller->IsShowingToast());
+
+  // Ensure tab group is closed.
+  EXPECT_FALSE(tab_group_service->GetGroup(sync_tab_group_id)
+                   ->local_group_id()
+                   .has_value());
+
+  toast_controller->GetToastViewForTesting()
+      ->action_button_for_testing()
+      ->button_controller()
+      ->NotifyClick();
+
+  // Ensure tab group is open.
+  EXPECT_TRUE(tab_group_service->GetGroup(sync_tab_group_id)
+                  ->local_group_id()
+                  .has_value());
+
+  auto bubble = DataSharingBubbleController::GetOrCreateForBrowser(browser())
+                    ->BubbleViewForTesting();
+  EXPECT_NE(bubble, nullptr);
+}
+
+IN_PROC_BROWSER_TEST_F(CollaborationMessagingObserverBrowserTest,
+                       InstantMessageForTabGroupRemoved) {
   EXPECT_EQ(1, browser()->tab_strip_model()->count());
 
   // Observer is initialized
@@ -415,7 +497,7 @@ IN_PROC_BROWSER_TEST_F(CollaborationMessagingObserverBrowserTest,
   base::MockCallback<SuccessCallback> cb;
   std::string test_url = chrome::kChromeUISettingsURL;
   auto message =
-      CreateInstantMessage("User", CollaborationEvent::COLLABORATION_REMOVED,
+      CreateInstantMessage("User", CollaborationEvent::TAB_GROUP_REMOVED,
                            test_url, "Chrome Settings", group_id, "Vacation");
 
   EXPECT_CALL(cb, Run(true));

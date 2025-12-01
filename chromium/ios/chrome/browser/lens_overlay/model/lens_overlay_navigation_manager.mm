@@ -123,10 +123,13 @@ void LensOverlayNavigationManager::DidStartNavigation(
   if (navigation_context && !navigation_context->IsSameDocument()) {
     GURL navigation_url = navigation_context->GetUrl();
 
-    if (lens::IsLensOverlaySRP(navigation_url)) {
+    BOOL isLensOverLaySRP = lens::IsLensOverlaySRP(navigation_url);
+    BOOL isLensMultimodalSRP = lens::IsLensMultimodalSRP(navigation_url);
+    if (isLensOverLaySRP || isLensMultimodalSRP) {
       NSString* omnibox_text = [NSString
           cr_fromString:lens::ExtractQueryFromLensOverlaySRP(navigation_url)];
-      [mutator_ onSRPLoadWithOmniboxText:omnibox_text];
+      [mutator_ onSRPLoadWithOmniboxText:omnibox_text
+                            isMultimodal:isLensMultimodalSRP];
       RegisterSubNavigation(navigation_url, omnibox_text.cr_UTF16String);
     } else {
       RegisterSubNavigation(navigation_url, PreviousOmniboxText());
@@ -162,11 +165,11 @@ void LensOverlayNavigationManager::RegisterSubNavigation(
   }
 
   // To prevent dark mode toggles from creating new navigation history entries,
-  // remove the dark mode parameter from the URL. The parameter that determines
-  // the interface style is kept in sync with the system preference and appended
-  // before the URL is loaded.
+  // set a default dark mode parameter for the URL. The parameter that
+  // determines the interface style is kept in sync with the system preference
+  // and updated before the URL is loaded.
   if (url.has_query()) {
-    url = net::AppendOrReplaceQueryParameter(url, "cs", std::nullopt);
+    url = net::AppendOrReplaceQueryParameter(url, "cs", "0");
   }
 
   // Add sub navigation if it's not a reload.

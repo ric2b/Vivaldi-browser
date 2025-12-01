@@ -190,10 +190,10 @@ DeleteCookiePredicate CookieSettings::CreateDeleteCookieOnExitPredicate()
   for (const auto& index :
        GetHostIndexedContentSettings(ContentSettingsType::COOKIES)) {
     for (const auto& entry : index) {
-      settings.emplace_back(entry.first.primary_pattern,
-                            entry.first.secondary_pattern,
-                            entry.second.value.Clone(), index.source(),
-                            *index.off_the_record(), entry.second.metadata);
+      settings.emplace_back(
+          entry.first.primary_pattern, entry.first.secondary_pattern,
+          entry.second.value.Clone(), index.source(), *index.off_the_record(),
+          entry.second.metadata.Clone());
     }
   }
 
@@ -349,8 +349,9 @@ ContentSetting CookieSettings::GetContentSetting(
     const GURL& secondary_url,
     ContentSettingsType content_type,
     content_settings::SettingInfo* info) const {
-  SCOPED_UMA_HISTOGRAM_TIMER_MICROS(
-      "ContentSettings.GetContentSetting.Network.Duration");
+  SCOPED_UMA_HISTOGRAM_TIMER_MICROS_SUBSAMPLED(
+      "ContentSettings.GetContentSetting.Network.Duration",
+      base::ShouldRecordSubsampledMetric(0.001));
 
   if (content_type == ContentSettingsType::TPCD_METADATA_GRANTS) {
     if (tpcd_metadata_manager_) {
@@ -385,8 +386,12 @@ bool CookieSettings::IsThirdPartyCookiesAllowedScheme(
   return base::Contains(third_party_cookies_allowed_schemes_, scheme);
 }
 
-bool CookieSettings::ShouldBlockThirdPartyCookies() const {
-  return block_third_party_cookies_;
+bool CookieSettings::ShouldBlockThirdPartyCookies(
+    base::optional_ref<const url::Origin> top_frame_origin,
+    net::CookieSettingOverrides overrides) const {
+  return block_third_party_cookies_ ||
+         Are3pcsForceDisabledByOverride(overrides) ||
+         IsThirdPartyPhaseoutEnabled(top_frame_origin, overrides);
 }
 
 bool CookieSettings::IsThirdPartyPhaseoutEnabled(
@@ -433,8 +438,7 @@ void CookieSettings::AugmentInclusionStatus(
       return;
     }
 
-    if (ShouldBlockThirdPartyCookies() ||
-        IsThirdPartyPhaseoutEnabled(top_frame_origin, overrides)) {
+    if (ShouldBlockThirdPartyCookies(top_frame_origin, overrides)) {
       CHECK(has_exemption);
       out_status.MaybeSetExemptionReason(GetExemptionReason(allow_mechanism));
     } else {
@@ -469,19 +473,12 @@ void CookieSettings::AugmentInclusionStatus(
       net::CookieInclusionStatus::ExclusionReason::EXCLUDE_USER_PREFERENCES);
 }
 
+// TODO(crbug.com/366284840): Deprecate this function when moving storage access
+// status out of //net.
 bool CookieSettings::IsStorageAccessHeadersEnabled(
     const GURL& url,
     base::optional_ref<const url::Origin> top_frame_origin) const {
-  if (base::FeatureList::IsEnabled(network::features::kStorageAccessHeaders)) {
-    return true;
-  }
-  return top_frame_origin &&
-         base::FeatureList::IsEnabled(
-             network::features::kStorageAccessHeadersTrial) &&
-         GetContentSetting(
-             url, top_frame_origin->GetURL(),
-             ContentSettingsType::STORAGE_ACCESS_HEADER_ORIGIN_TRIAL,
-             /*info=*/nullptr) == CONTENT_SETTING_ALLOW;
+  return base::FeatureList::IsEnabled(network::features::kStorageAccessHeaders);
 }
 
 bool CookieSettings::ShouldAlwaysAllowCookiesForTesting(

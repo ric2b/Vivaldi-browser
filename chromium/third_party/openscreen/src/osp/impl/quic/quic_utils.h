@@ -10,7 +10,7 @@
 
 namespace openscreen::osp {
 
-quic::QuicIpAddress ToQuicIpAddress(const IPAddress& address);
+quiche::QuicheIpAddress ToQuicheIpAddress(const IPAddress& address);
 
 quic::QuicSocketAddress ToQuicSocketAddress(const IPEndpoint& endpoint);
 

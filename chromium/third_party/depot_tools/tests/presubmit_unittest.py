@@ -1353,6 +1353,12 @@ class InputApiUnittest(PresubmitTestsBase):
         self.assertEqual(got_files[3].LocalPath(),
                          presubmit.normpath(files[7][1]))
 
+        self.assertIn('foo/blat.cc', input_api.UnixLocalPaths())
+        if sys.platform == 'win32':
+            self.assertIn(r'foo\blat.cc', input_api.LocalPaths())
+        else:
+            self.assertIn('foo/blat.cc', input_api.LocalPaths())
+
     def testDefaultFilesToCheckFilesToSkipFilters(self):
         def f(x):
             return presubmit.AffectedFile(x, 'M', self.fake_root_dir, None)

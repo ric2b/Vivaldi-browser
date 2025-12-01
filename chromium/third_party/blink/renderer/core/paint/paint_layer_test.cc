@@ -70,7 +70,7 @@ TEST_P(PaintLayerTest, RootLayerScrollBounds) {
 
 TEST_P(PaintLayerTest, CompositedScrollingNoNeedsRepaint) {
   SetBodyInnerHTML(R"HTML(
-    <div id='scroll' style='width: 100px; height: 100px; overflow: scroll;
+    <div id='scroll' style='width: 400px; height: 400px; overflow: scroll;
         will-change: transform'>
       <div id='content' style='position: relative; background: blue;
           width: 2000px; height: 2000px'></div>
@@ -98,7 +98,7 @@ TEST_P(PaintLayerTest, NonCompositedScrollingNeedsRepaint) {
      /* to prevent the mock overlay scrollbar from affecting compositing. */
      ::-webkit-scrollbar { display: none; }
     </style>
-    <div id='scroll' style='width: 100px; height: 100px; overflow: scroll'>
+    <div id='scroll' style='width: 400px; height: 400px; overflow: scroll'>
       <div id='content' style='position: relative; background: blue;
           width: 2000px; height: 2000px'></div>
     </div>
@@ -248,7 +248,7 @@ TEST_P(PaintLayerTest, HasSelfPaintingParentNotSelfPainting) {
   EXPECT_FALSE(child->HasSelfPaintingLayerDescendant());
 }
 
-static const HeapVector<Member<PaintLayer>>*
+static const GCedHeapVector<Member<PaintLayer>>*
 LayersPaintingOverlayOverflowControlsAfter(const PaintLayer* layer) {
   return PaintLayerPaintOrderIterator(layer->AncestorStackingContext(),
                                       kPositiveZOrderChildren)

@@ -19,6 +19,7 @@
 #include "base/memory/weak_ptr.h"
 #include "base/system/system_monitor.h"
 #include "base/timer/timer.h"
+#include "base/types/strong_alias.h"
 #include "build/build_config.h"
 #include "content/browser/media/media_devices_util.h"
 #include "content/common/content_export.h"
@@ -73,6 +74,38 @@ class CONTENT_EXPORT MediaDevicesManager
     BoolDeviceTypes() { fill(false); }
   };
 
+  enum class DeviceStartMonitoringMode {
+    kNone,
+    kStartAudio,          // Start audio monitoring, leave video unmodified.
+    kStartVideo,          // Start video monitoring, leave audio unmodified.
+    kStartAudioAndVideo,  // Start audio and video monitoring.
+  };
+
+  enum class DeviceStopMonitoringMode {
+    kNone,
+    kStopAudio,          // Stop audio monitoring, leave video unmodified.
+    kStopVideo,          // Stop video monitoring, leave audio unmodified.
+    kStopAudioAndVideo,  // Stop audio and video monitoring.
+  };
+
+  // These constants are parameters that control how caching works.
+  // A spurious invalidation is one where a subsequent enumeration has the same
+  // result as before the invalidation. If a device class receives
+  // `kMaxSpuriousInvalidations` consecutive invalidations, the cache for that
+  // device class enters a relaxed mode, where the cache becomes less
+  // aggressive in trying to return the latest enumeration value.
+  // This situation has been observed in practice when issuing an enumeration
+  // causes some monitors to always report a new invalidation, even if the set
+  // of devices does not change. See crbug.com/325590346.
+  // In relaxed mode, cache entries have an expiration time
+  // (`kExpireTimeInRelaxedMode`). In this mode, new cached values are assumed
+  // valid until they expire and any invalidations received during this period
+  // are ignored. Effectively, this works as a rate limiter in relaxed
+  // mode and protects against a situation where a buggy device or device
+  // monitor continuously produces repeated invalidations.
+  static constexpr int kMaxSpuriousInvalidations = 5;
+  static constexpr base::TimeDelta kExpireTimeInRelaxedMode = base::Seconds(4);
+
   enum class PermissionDeniedState { kDenied, kNotDenied };
 
   using EnumerationCallback =
@@ -87,6 +120,8 @@ class CONTENT_EXPORT MediaDevicesManager
   using UIInputDeviceChangeCallback = base::RepeatingCallback<void(
       MediaDeviceType stream_type,
       const blink::WebMediaDeviceInfoArray& devices)>;
+
+  static bool IsRelaxedCacheFeatureEnabled();
 
   MediaDevicesManager(
       media::AudioSystem* audio_system,
@@ -156,8 +191,14 @@ class CONTENT_EXPORT MediaDevicesManager
   // enumeration results for the device types supported by the monitor.
   void StartMonitoring();
 
+  // Attempts to start device monitoring for audio and/or video.
+  void StartMonitoring(DeviceStartMonitoringMode start_monitoring_mode);
+
   // Stops device monitoring and disables caching for all device types.
   void StopMonitoring();
+
+  // Attempts to stop device monitoring for audio and/or video.
+  void StopMonitoring(DeviceStopMonitoringMode start_monitoring_mode);
 
   // Implements base::SystemMonitor::DevicesChangedObserver.
   // This function is only called in response to physical audio/video device
@@ -235,6 +276,17 @@ class CONTENT_EXPORT MediaDevicesManager
         mojo_device_notifier_;
   };
 
+  // The NO_CACHE policy is such that no previous results are used when
+  // EnumerateDevices is called. The results of a new or in-progress low-level
+  // device enumeration are used.
+  // The SYSTEM_MONITOR policy is such that previous results are reused,
+  // provided they were produced by a low-level device enumeration issued after
+  // the last call to OnDevicesChanged.
+  enum class CachePolicy {
+    NO_CACHE,
+    SYSTEM_MONITOR,
+  };
+
  private:
   friend class MediaDevicesManagerTest;
   struct EnumerationRequest;
@@ -278,17 +330,6 @@ class CONTENT_EXPORT MediaDevicesManager
     int num_pending_audio_input_capabilities;
     MediaDeviceEnumeration raw_enumeration_results;
     std::vector<blink::WebMediaDeviceInfoArray> hashed_enumeration_results;
-  };
-
-  // The NO_CACHE policy is such that no previous results are used when
-  // EnumerateDevices is called. The results of a new or in-progress low-level
-  // device enumeration are used.
-  // The SYSTEM_MONITOR policy is such that previous results are re-used,
-  // provided they were produced by a low-level device enumeration issued after
-  // the last call to OnDevicesChanged.
-  enum class CachePolicy {
-    NO_CACHE,
-    SYSTEM_MONITOR,
   };
 
   // Manually sets a caching policy for a given device type.
@@ -354,8 +395,8 @@ class CONTENT_EXPORT MediaDevicesManager
                          const blink::WebMediaDeviceInfoArray& snapshot);
   void UpdateSnapshot(MediaDeviceType type,
                       const blink::WebMediaDeviceInfoArray& new_snapshot,
-                      bool ignore_group_id = true);
-  void ProcessRequests();
+                      bool use_group_id = false);
+  void ProcessClientRequests();
   bool IsEnumerationRequestReady(const EnumerationRequest& request_info);
 
   // Helpers to handle device-change notification.
@@ -394,8 +435,8 @@ class CONTENT_EXPORT MediaDevicesManager
 
 #if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)
   void RegisterVideoCaptureDevicesChangedObserver();
-  void OnDisconectVideoSourceProviderTimer();
-  void MaybeScheduleDisconectVideoSourceProviderTimer();
+  void OnDisconnectVideoSourceProviderTimer();
+  void MaybeScheduleDisconnectVideoSourceProviderTimer();
 
   bool is_video_capture_hosts_set_empty_ = true;
   base::OneShotTimer disconnect_video_source_provider_timer_;
@@ -420,9 +461,12 @@ class CONTENT_EXPORT MediaDevicesManager
   CacheInfos cache_infos_;
 
   BoolDeviceTypes cache_is_populated_;
-  std::vector<EnumerationRequest> requests_;
+  std::vector<EnumerationRequest> client_requests_;
   MediaDeviceEnumeration current_snapshot_;
-  bool monitoring_started_;
+  bool monitoring_started_for_audio_ = false;
+  bool monitoring_started_for_video_ = false;
+
+  bool added_device_changed_observer_ = false;
 
   uint32_t last_subscription_id_ = 0u;
   base::flat_map<uint32_t, SubscriptionRequest> subscriptions_;

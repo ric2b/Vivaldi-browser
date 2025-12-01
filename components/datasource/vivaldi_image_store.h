@@ -49,7 +49,7 @@ enum class BatchItemState {
   kError,
 };
 
-const base::FilePath::StringPieceType kDirectMatchImageDirectory =
+const base::FilePath::StringViewType kDirectMatchImageDirectory =
     FILE_PATH_LITERAL("VivaldiDirectMatchIcons");
 
 struct BatchItem {

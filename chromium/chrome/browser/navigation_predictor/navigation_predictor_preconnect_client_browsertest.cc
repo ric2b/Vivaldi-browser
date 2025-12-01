@@ -16,6 +16,7 @@
 #include "chrome/browser/navigation_predictor/navigation_predictor_keyed_service.h"
 #include "chrome/browser/navigation_predictor/navigation_predictor_keyed_service_factory.h"
 #include "chrome/browser/navigation_predictor/search_engine_preconnector.h"
+#include "chrome/browser/navigation_predictor/search_engine_preconnector_keyed_service_factory.h"
 #include "chrome/browser/predictors/loading_predictor.h"
 #include "chrome/browser/predictors/loading_predictor_factory.h"
 #include "chrome/browser/predictors/preconnect_manager.h"
@@ -56,6 +57,20 @@ class NavigationPredictorPreconnectClientBrowserTest
   NavigationPredictorPreconnectClientBrowserTest& operator=(
       const NavigationPredictorPreconnectClientBrowserTest&) = delete;
 
+  SearchEnginePreconnector* GetSearchEnginePreconnector() {
+    if (SearchEnginePreconnector::ShouldBeEnabledAsKeyedService()) {
+      return SearchEnginePreconnectorKeyedServiceFactory::GetForProfile(
+          browser()->profile());
+    }
+
+    NavigationPredictorKeyedService* navigation_predictor_keyed_service =
+        NavigationPredictorKeyedServiceFactory::GetForProfile(
+            browser()->profile());
+    EXPECT_TRUE(navigation_predictor_keyed_service);
+
+    return navigation_predictor_keyed_service->search_engine_preconnector();
+  }
+
   void SetUp() override {
     https_server_->ServeFilesFromSourceDirectory(
         "chrome/test/data/navigation_predictor");
@@ -70,11 +85,17 @@ class NavigationPredictorPreconnectClientBrowserTest
     NavigationPredictorPreconnectClient::EnablePreconnectsForLocalIPsForTesting(
         true);
 
+    // Get notified for Loading predictor's preconnect observer.
     auto* loading_predictor =
         predictors::LoadingPredictorFactory::GetForProfile(
             browser()->profile());
     ASSERT_TRUE(loading_predictor);
     loading_predictor->preconnect_manager()->SetObserverForTesting(this);
+
+    // Also get notified for the SearchEnginePreconnect's preconnect observer.
+    SearchEnginePreconnector* preconnector = GetSearchEnginePreconnector();
+    ASSERT_TRUE(preconnector);
+    preconnector->GetPreconnectManager().SetObserverForTesting(this);
   }
 
   const GURL GetTestURL(const char* file) const {
@@ -325,10 +346,9 @@ IN_PROC_BROWSER_TEST_P(NavigationPredictorPreconnectClientBrowserTestWithSearch,
   model->SetUserSelectedDefaultSearchProvider(template_url);
   const GURL& url = GetTestURL("/anchors_different_area.html?q=cats");
 
-  NavigationPredictorKeyedServiceFactory::GetForProfile(
-      Profile::FromBrowserContext(browser()->profile()))
-      ->search_engine_preconnector()
-      ->StartPreconnecting(/*with_startup_delay=*/false);
+  SearchEnginePreconnector* preconnector = GetSearchEnginePreconnector();
+  ASSERT_TRUE(preconnector);
+  preconnector->StartPreconnecting(/*with_startup_delay=*/false);
 
   if (PreconnectWithPrivacyModeEnabled()) {
     // There should be 2 DSE preconnects (2 NAKs).

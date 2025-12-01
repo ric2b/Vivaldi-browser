@@ -17,7 +17,6 @@
 #include "chrome/browser/ash/app_mode/kiosk_controller.h"
 #include "chrome/browser/ash/app_mode/test/kiosk_mixin.h"
 #include "chrome/browser/ash/app_mode/test/kiosk_test_utils.h"
-#include "chrome/browser/ash/login/app_mode/test/kiosk_base_test.h"
 #include "chrome/browser/chromeos/app_mode/kiosk_web_app_install_util.h"
 #include "chrome/browser/ui/ash/login/login_display_host.h"
 #include "chrome/browser/ui/browser_list.h"
@@ -28,14 +27,19 @@
 #include "extensions/browser/app_window/app_window.h"
 #include "extensions/browser/app_window/app_window_registry.h"
 #include "extensions/browser/extension_registry.h"
+#include "extensions/common/mojom/manifest.mojom-shared.h"
 #include "extensions/components/native_app_window/native_app_window_views.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/views/window/non_client_view.h"
 
 namespace ash {
 
+using kiosk::test::LaunchAppManually;
+using kiosk::test::WaitKioskLaunched;
+
 namespace {
 
+using extensions::mojom::ManifestLocation;
 using kiosk::test::CurrentProfile;
 using kiosk::test::TheKioskChromeApp;
 
@@ -65,7 +69,7 @@ class KioskChromeAppTest : public MixinBasedInProcessBrowserTest {
 
   void SetUpOnMainThread() override {
     MixinBasedInProcessBrowserTest::SetUpOnMainThread();
-    ASSERT_TRUE(kiosk_.WaitSessionLaunched());
+    ASSERT_TRUE(WaitKioskLaunched());
   }
 
   KioskMixin kiosk_{&mixin_host_,
@@ -122,9 +126,9 @@ class KioskAutoLaunchWithZeroDelayTest
 
 IN_PROC_BROWSER_TEST_P(KioskAutoLaunchWithZeroDelayTest, SetsFlagCorrectly) {
   if (!HasAutoLaunchApp()) {
-    ASSERT_TRUE(kiosk_.LaunchManually(TheKioskChromeApp()));
+    ASSERT_TRUE(LaunchAppManually(TheKioskChromeApp()));
   }
-  ASSERT_TRUE(kiosk_.WaitSessionLaunched());
+  ASSERT_TRUE(WaitKioskLaunched());
 
   auto app = GetAppFromManager(TheKioskChromeApp());
   EXPECT_EQ(app.was_auto_launched_with_zero_delay, HasAutoLaunchApp());

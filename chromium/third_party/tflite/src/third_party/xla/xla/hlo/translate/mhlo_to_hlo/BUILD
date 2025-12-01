@@ -1,6 +1,6 @@
 load("@bazel_skylib//rules:build_test.bzl", "build_test")
 load("@llvm-project//mlir:tblgen.bzl", "gentbl_cc_library")
-load("//xla:xla.bzl", "xla_cc_test")
+load("//xla:xla.default.bzl", "xla_cc_test")
 load("//xla/tsl:tsl.bzl", "internal_visibility")
 load("//xla/tsl:tsl.default.bzl", "get_compatible_with_portable")
 load("//xla/tsl/platform:rules_cc.bzl", "cc_binary", "cc_library")
@@ -63,6 +63,7 @@ cc_library(
         "//xla:literal",
         "//xla:literal_util",
         "//xla:shape_util",
+        "//xla:xla_data_proto_cc",
         "//xla/tsl/platform:errors",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/status:statusor",
@@ -96,6 +97,7 @@ cc_library(
         "//xla/service:hlo_module_config",
         "//xla/service:hlo_proto_cc",
         "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
         "@llvm-project//llvm:Support",
         "@llvm-project//mlir:IR",
         "@llvm-project//mlir:Support",
@@ -222,7 +224,7 @@ xla_cc_test(
         "//xla/tsl/platform:status_matchers",
         "//xla/tsl/platform:test",
         "//xla/tsl/platform:test_main",
-        "@com_google_googletest//:gtest_main",
+        "@com_google_googletest//:gtest",
         "@llvm-project//mlir:FuncDialect",
         "@llvm-project//mlir:IR",
         "@llvm-project//mlir:Parser",
@@ -312,9 +314,10 @@ xla_cc_test(
         "//xla/mlir_hlo",
         "//xla/tsl/platform:test_main",
         "@com_google_absl//absl/status:statusor",
-        "@com_google_googletest//:gtest_main",
+        "@com_google_googletest//:gtest",
         "@llvm-project//llvm:Support",
         "@llvm-project//mlir:IR",
         "@local_tsl//tsl/platform:protobuf",
+        "@stablehlo//:stablehlo_ops",
     ],
 )

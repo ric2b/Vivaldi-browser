@@ -23,6 +23,7 @@ const ADDITIONAL_TEXT_MIME_TYPES = new Set([
   'application/javascript',
   'application/json',
   'application/json+protobuf',
+  'application/mpegurl',
   'application/vnd.apple.mpegurl',
   'application/vnd.dart',
   'application/xml',
@@ -30,7 +31,9 @@ const ADDITIONAL_TEXT_MIME_TYPES = new Set([
   'application/x-javascript',
   'application/x-jsp',
   'application/x-httpd-php',
+  'application/x-mpegurl',
   'audio/mpegurl',
+  'audio/x-mpegurl',
 ]);
 
 /**
@@ -148,7 +151,7 @@ function parseMimeType(contentType: string): {mimeType: string|null, params: Map
  * @returns the smallest index of any character in 'characters' or -1 if none of
  * the characters occur in 'searchString'
  */
-function findFirstIndexOf(searchString: string, characters: string, pos: number = 0): number {
+function findFirstIndexOf(searchString: string, characters: string, pos = 0): number {
   for (let i = pos; i < searchString.length; i++) {
     if (characters.includes(searchString[i])) {
       return i;
@@ -161,7 +164,7 @@ function findFirstIndexOf(searchString: string, characters: string, pos: number 
  * @returns the smallest index of any character not in 'characters' or -1 if only
  * 'characters' occur in 'searchString'
  */
-function findFirstIndexNotOf(searchString: string, characters: string, pos: number = 0): number {
+function findFirstIndexNotOf(searchString: string, characters: string, pos = 0): number {
   for (let i = pos; i < searchString.length; i++) {
     if (!characters.includes(searchString[i])) {
       return i;

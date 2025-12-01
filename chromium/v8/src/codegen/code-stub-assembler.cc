@@ -1993,8 +1993,7 @@ TNode<TrustedObject> CodeStubAssembler::ResolveIndirectPointerHandle(
 
 TNode<Code> CodeStubAssembler::ResolveCodePointerHandle(
     TNode<IndirectPointerHandleT> handle) {
-  TNode<RawPtrT> table =
-      ExternalConstant(ExternalReference::code_pointer_table_address());
+  TNode<RawPtrT> table = LoadCodePointerTableBase();
   TNode<UintPtrT> offset = ComputeCodePointerTableEntryOffset(handle);
   offset = UintPtrAdd(offset,
                       UintPtrConstant(kCodePointerTableEntryCodeObjectOffset));
@@ -2046,8 +2045,7 @@ TNode<RawPtrT> CodeStubAssembler::LoadCodeEntrypointViaCodePointerField(
 
 TNode<RawPtrT> CodeStubAssembler::LoadCodeEntryFromIndirectPointerHandle(
     TNode<IndirectPointerHandleT> handle, CodeEntrypointTag tag) {
-  TNode<RawPtrT> table =
-      ExternalConstant(ExternalReference::code_pointer_table_address());
+  TNode<RawPtrT> table = LoadCodePointerTableBase();
   TNode<UintPtrT> offset = ComputeCodePointerTableEntryOffset(handle);
   TNode<UintPtrT> entry = Load<UintPtrT>(table, offset);
   if (tag != 0) {
@@ -2056,6 +2054,17 @@ TNode<RawPtrT> CodeStubAssembler::LoadCodeEntryFromIndirectPointerHandle(
   return UncheckedCast<RawPtrT>(UncheckedCast<WordT>(entry));
 }
 
+TNode<RawPtrT> CodeStubAssembler::LoadCodePointerTableBase() {
+#ifdef V8_COMPRESS_POINTERS_IN_MULTIPLE_CAGES
+  // Embed the code pointer table address into the code.
+  return ExternalConstant(
+      ExternalReference::code_pointer_table_base_address(isolate()));
+#else
+  // Embed the code pointer table address into the code.
+  return ExternalConstant(
+      ExternalReference::global_code_pointer_table_base_address());
+#endif  // V8_COMPRESS_POINTERS_IN_MULTIPLE_CAGES
+}
 #endif  // V8_ENABLE_SANDBOX
 
 void CodeStubAssembler::SetSupportsDynamicParameterCount(
@@ -2370,8 +2379,8 @@ TNode<DescriptorArray> CodeStubAssembler::LoadMapDescriptors(TNode<Map> map) {
   return LoadObjectField<DescriptorArray>(map, Map::kInstanceDescriptorsOffset);
 }
 
-TNode<HeapObject> CodeStubAssembler::LoadMapPrototype(TNode<Map> map) {
-  return LoadObjectField<HeapObject>(map, Map::kPrototypeOffset);
+TNode<JSPrototype> CodeStubAssembler::LoadMapPrototype(TNode<Map> map) {
+  return LoadObjectField<JSPrototype>(map, Map::kPrototypeOffset);
 }
 
 TNode<IntPtrT> CodeStubAssembler::LoadMapInstanceSizeInWords(TNode<Map> map) {
@@ -5254,9 +5263,9 @@ TNode<FixedArrayBase> CodeStubAssembler::AllocateFixedArray(
   CSA_DCHECK(this,
              IntPtrOrSmiGreaterThan(capacity, IntPtrOrSmiConstant<TIndex>(0)));
 
-  const intptr_t kMaxLength = IsDoubleElementsKind(kind)
-                                  ? FixedDoubleArray::kMaxLength
-                                  : FixedArray::kMaxLength;
+  static_assert(FixedArray::kMaxLength == FixedDoubleArray::kMaxLength);
+  constexpr intptr_t kMaxLength = FixedArray::kMaxLength;
+
   intptr_t capacity_constant;
   if (ToParameterConstant(capacity, &capacity_constant)) {
     CHECK_LE(capacity_constant, kMaxLength);
@@ -5812,16 +5821,13 @@ void CodeStubAssembler::FillFixedDoubleArrayWithZero(
 
 void CodeStubAssembler::TrySkipWriteBarrier(TNode<Object> object,
                                             Label* if_needs_write_barrier) {
+  static_assert(WriteBarrier::kUninterestingPagesCanBeSkipped);
   TNode<BoolT> may_need_write_barrier =
       IsPageFlagSet(BitcastTaggedToWord(object),
                     MemoryChunk::kPointersFromHereAreInterestingMask);
   // TODO(olivf): Also skip the WB with V8_ENABLE_STICKY_MARK_BITS if the mark
   // bit is set.
   GotoIf(may_need_write_barrier, if_needs_write_barrier);
-
-  CSA_DCHECK(this, TaggedEqual(CallRuntime(Runtime::kIsNoWriteBarrierNeeded,
-                                           NoContextConstant(), object),
-                               TrueConstant()));
 }
 
 void CodeStubAssembler::MoveElements(ElementsKind kind,
@@ -6795,6 +6801,42 @@ TNode<Int32T> CodeStubAssembler::TryFloat64ToInt32(TNode<Float64T> value,
   return value32;
 }
 
+TNode<AdditiveSafeIntegerT> CodeStubAssembler::TryFloat64ToAdditiveSafeInteger(
+    TNode<Float64T> value, Label* if_failed) {
+  DCHECK(Is64());
+  TNode<Int64T> value_int64 = TruncateFloat64ToInt64(value);
+  TNode<Float64T> value_roundtrip = ChangeInt64ToFloat64(value_int64);
+  Label if_int64(this);
+  GotoIfNot(Float64Equal(value, value_roundtrip), if_failed);
+  GotoIfNot(Word64Equal(value_int64, Int64Constant(0)), &if_int64);
+
+  // if (value == -0.0)
+  Branch(Word64Equal(BitcastFloat64ToInt64(value), Int64Constant(0)), &if_int64,
+         if_failed);
+
+  BIND(&if_int64);
+  // Check if AdditiveSafeInteger: (value - kMinAdditiveSafeInteger) >> 53 == 0
+  TNode<Int64T> shifted_value =
+      Word64Shr(Int64Sub(value_int64, Int64Constant(kMinAdditiveSafeInteger)),
+                Uint64Constant(kAdditiveSafeIntegerBitLength));
+  GotoIfNot(Word64Equal(shifted_value, Int64Constant(0)), if_failed);
+  return UncheckedCast<AdditiveSafeIntegerT>(value_int64);
+}
+
+TNode<BoolT> CodeStubAssembler::IsAdditiveSafeInteger(TNode<Float64T> value) {
+  if (!Is64()) return BoolConstant(false);
+
+  Label done(this);
+  TVARIABLE(BoolT, result, BoolConstant(false));
+
+  TryFloat64ToAdditiveSafeInteger(value, &done);
+  result = BoolConstant(true);
+  Goto(&done);
+
+  BIND(&done);
+  return result.value();
+}
+
 TNode<Float16RawBitsT> CodeStubAssembler::TruncateFloat64ToFloat16(
     TNode<Float64T> value) {
   TVARIABLE(Float16RawBitsT, float16_out);
@@ -7271,12 +7313,12 @@ TNode<WordT> CodeStubAssembler::TimesDoubleSize(TNode<WordT> value) {
   return WordShl(value, kDoubleSizeLog2);
 }
 
-TNode<Object> CodeStubAssembler::ToThisValue(TNode<Context> context,
-                                             TNode<Object> input_value,
-                                             PrimitiveType primitive_type,
-                                             char const* method_name) {
+TNode<JSAny> CodeStubAssembler::ToThisValue(TNode<Context> context,
+                                            TNode<JSAny> input_value,
+                                            PrimitiveType primitive_type,
+                                            char const* method_name) {
   // We might need to loop once due to JSPrimitiveWrapper unboxing.
-  TVARIABLE(Object, var_value, input_value);
+  TVARIABLE(JSAny, var_value, input_value);
   Label loop(this, &var_value), done_loop(this),
       done_throw(this, Label::kDeferred);
   Goto(&loop);
@@ -7303,7 +7345,8 @@ TNode<Object> CodeStubAssembler::ToThisValue(TNode<Context> context,
     BIND(&if_valueiswrapper);
     {
       // Load the actual value from the {value}.
-      var_value = LoadObjectField(value, JSPrimitiveWrapper::kValueOffset);
+      var_value =
+          CAST(LoadObjectField(value, JSPrimitiveWrapper::kValueOffset));
       Goto(&loop);
     }
 
@@ -7465,12 +7508,14 @@ void CodeStubAssembler::TerminateExecution(TNode<Context> context) {
   Unreachable();
 }
 
-TNode<HeapObject> CodeStubAssembler::GetPendingMessage() {
+TNode<Union<Hole, JSMessageObject>> CodeStubAssembler::GetPendingMessage() {
   TNode<ExternalReference> pending_message = ExternalConstant(
       ExternalReference::address_of_pending_message(isolate()));
-  return UncheckedCast<HeapObject>(LoadFullTagged(pending_message));
+  return UncheckedCast<Union<Hole, JSMessageObject>>(
+      LoadFullTagged(pending_message));
 }
-void CodeStubAssembler::SetPendingMessage(TNode<HeapObject> message) {
+void CodeStubAssembler::SetPendingMessage(
+    TNode<Union<Hole, JSMessageObject>> message) {
   CSA_DCHECK(this, Word32Or(IsTheHole(message),
                             InstanceTypeEqual(LoadInstanceType(message),
                                               JS_MESSAGE_OBJECT_TYPE)));
@@ -10499,7 +10544,7 @@ void CodeStubAssembler::NumberDictionaryLookup(
   }
 }
 
-TNode<Object> CodeStubAssembler::BasicLoadNumberDictionaryElement(
+TNode<JSAny> CodeStubAssembler::BasicLoadNumberDictionaryElement(
     TNode<NumberDictionary> dictionary, TNode<IntPtrT> intptr_index,
     Label* not_data, Label* if_hole) {
   TVARIABLE(IntPtrT, var_entry);
@@ -10517,7 +10562,7 @@ TNode<Object> CodeStubAssembler::BasicLoadNumberDictionaryElement(
       Word32Equal(kind, Int32Constant(static_cast<int>(PropertyKind::kData))),
       not_data);
   // Finally, load the value.
-  return LoadValueByKeyIndex(dictionary, index);
+  return CAST(LoadValueByKeyIndex(dictionary, index));
 }
 
 template <class Dictionary>
@@ -11370,11 +11415,11 @@ void CodeStubAssembler::TryHasOwnProperty(TNode<HeapObject> object,
   }
 }
 
-TNode<Object> CodeStubAssembler::GetMethod(TNode<Context> context,
-                                           TNode<Object> object,
-                                           Handle<Name> name,
-                                           Label* if_null_or_undefined) {
-  TNode<Object> method = GetProperty(context, object, name);
+TNode<JSAny> CodeStubAssembler::GetMethod(TNode<Context> context,
+                                          TNode<JSAny> object,
+                                          Handle<Name> name,
+                                          Label* if_null_or_undefined) {
+  TNode<JSAny> method = GetProperty(context, object, name);
 
   GotoIf(IsUndefined(method), if_null_or_undefined);
   GotoIf(IsNull(method), if_null_or_undefined);
@@ -11382,18 +11427,18 @@ TNode<Object> CodeStubAssembler::GetMethod(TNode<Context> context,
   return method;
 }
 
-TNode<Object> CodeStubAssembler::GetIteratorMethod(
-    TNode<Context> context, TNode<HeapObject> heap_obj,
-    Label* if_iteratorundefined) {
+TNode<JSAny> CodeStubAssembler::GetIteratorMethod(TNode<Context> context,
+                                                  TNode<JSAnyNotSmi> heap_obj,
+                                                  Label* if_iteratorundefined) {
   return GetMethod(context, heap_obj, isolate()->factory()->iterator_symbol(),
                    if_iteratorundefined);
 }
 
-TNode<Object> CodeStubAssembler::CreateAsyncFromSyncIterator(
-    TNode<Context> context, TNode<Object> sync_iterator) {
+TNode<JSAny> CodeStubAssembler::CreateAsyncFromSyncIterator(
+    TNode<Context> context, TNode<JSAny> sync_iterator) {
   Label not_receiver(this, Label::kDeferred);
   Label done(this);
-  TVARIABLE(Object, return_value);
+  TVARIABLE(JSAny, return_value);
 
   GotoIf(TaggedIsSmi(sync_iterator), &not_receiver);
   GotoIfNot(IsJSReceiver(CAST(sync_iterator)), &not_receiver);
@@ -11406,7 +11451,8 @@ TNode<Object> CodeStubAssembler::CreateAsyncFromSyncIterator(
 
   BIND(&not_receiver);
   {
-    return_value = CallRuntime(Runtime::kThrowSymbolIteratorInvalid, context);
+    return_value =
+        CallRuntime<JSAny>(Runtime::kThrowSymbolIteratorInvalid, context);
 
     // Unreachable due to the Throw in runtime call.
     Goto(&done);
@@ -11579,13 +11625,13 @@ template void CodeStubAssembler::LoadPropertyFromDictionary(
     TVariable<Uint32T>* var_details, TVariable<Object>* var_value);
 
 // |value| is the property backing store's contents, which is either a value or
-// an accessor pair, as specified by |details|. |holder| is a JSObject or a
-// PropertyCell (TODO: use Union). Returns either the original value, or the
-// result of the getter call.
+// an accessor pair, as specified by |details|. |holder| is a JSReceiver or a
+// PropertyCell. Returns either the original value, or the result of the getter
+// call.
 TNode<Object> CodeStubAssembler::CallGetterIfAccessor(
-    TNode<Object> value, TNode<HeapObject> holder, TNode<Uint32T> details,
-    TNode<Context> context, TNode<Object> receiver, TNode<Object> name,
-    Label* if_bailout, GetOwnPropertyMode mode,
+    TNode<Object> value, TNode<Union<JSReceiver, PropertyCell>> holder,
+    TNode<Uint32T> details, TNode<Context> context, TNode<JSAny> receiver,
+    TNode<Object> name, Label* if_bailout, GetOwnPropertyMode mode,
     ExpectedReceiverMode expected_receiver_mode) {
   TVARIABLE(Object, var_value, value);
   Label done(this), if_accessor_info(this, Label::kDeferred);
@@ -11650,8 +11696,9 @@ TNode<Object> CodeStubAssembler::CallGetterIfAccessor(
             js_receiver = ToObject_Inline(context, receiver);
             break;
         }
+        TNode<JSReceiver> holder_receiver = CAST(holder);
         TNode<NativeContext> creation_context =
-            GetCreationContext(CAST(holder), if_bailout);
+            GetCreationContext(holder_receiver, if_bailout);
         TNode<Context> caller_context = context;
         var_value = CallBuiltin(
             Builtin::kCallFunctionTemplate_Generic, creation_context, getter,
@@ -11661,7 +11708,8 @@ TNode<Object> CodeStubAssembler::CallGetterIfAccessor(
         if (mode == kCallJSGetterUseCachedName) {
           Bind(&use_cached_property);
 
-          var_value = GetProperty(context, holder, cached_property_name);
+          var_value =
+              GetProperty(context, holder_receiver, cached_property_name);
 
           Goto(&done);
         }
@@ -11733,7 +11781,7 @@ TNode<Object> CodeStubAssembler::CallGetterIfAccessor(
 }
 
 void CodeStubAssembler::TryGetOwnProperty(
-    TNode<Context> context, TNode<Object> receiver, TNode<JSReceiver> object,
+    TNode<Context> context, TNode<JSAny> receiver, TNode<JSReceiver> object,
     TNode<Map> map, TNode<Int32T> instance_type, TNode<Name> unique_name,
     Label* if_found_value, TVariable<Object>* var_value, Label* if_not_found,
     Label* if_bailout, ExpectedReceiverMode expected_receiver_mode) {
@@ -11746,7 +11794,7 @@ void CodeStubAssembler::TryGetOwnProperty(
 }
 
 void CodeStubAssembler::TryGetOwnProperty(
-    TNode<Context> context, TNode<Object> receiver, TNode<JSReceiver> object,
+    TNode<Context> context, TNode<JSAny> receiver, TNode<JSReceiver> object,
     TNode<Map> map, TNode<Int32T> instance_type, TNode<Name> unique_name,
     Label* if_found_value, TVariable<Object>* var_value,
     TVariable<Uint32T>* var_details, TVariable<Object>* var_raw_value,
@@ -11964,19 +12012,19 @@ TNode<BoolT> CodeStubAssembler::IsInterestingProperty(TNode<Name> name) {
   return var_result.value();
 }
 
-TNode<Object> CodeStubAssembler::GetInterestingProperty(
+TNode<JSAny> CodeStubAssembler::GetInterestingProperty(
     TNode<Context> context, TNode<JSReceiver> receiver, TNode<Name> name,
     Label* if_not_found) {
-  TVARIABLE(HeapObject, var_holder, receiver);
+  TVARIABLE(JSAnyNotSmi, var_holder, receiver);
   TVARIABLE(Map, var_holder_map, LoadMap(receiver));
 
   return GetInterestingProperty(context, receiver, &var_holder, &var_holder_map,
                                 name, if_not_found);
 }
 
-TNode<Object> CodeStubAssembler::GetInterestingProperty(
-    TNode<Context> context, TNode<Object> receiver,
-    TVariable<HeapObject>* var_holder, TVariable<Map>* var_holder_map,
+TNode<JSAny> CodeStubAssembler::GetInterestingProperty(
+    TNode<Context> context, TNode<JSAny> receiver,
+    TVariable<JSAnyNotSmi>* var_holder, TVariable<Map>* var_holder_map,
     TNode<Name> name, Label* if_not_found) {
   CSA_DCHECK(this, IsInterestingProperty(name));
   // The lookup starts at the var_holder and var_holder_map must contain
@@ -11994,7 +12042,7 @@ TNode<Object> CodeStubAssembler::GetInterestingProperty(
   BIND(&loop);
   {
     Label interesting_properties(this);
-    TNode<HeapObject> holder = (*var_holder).value();
+    TNode<JSAnyNotSmi> holder = (*var_holder).value();
     TNode<Map> holder_map = (*var_holder_map).value();
     GotoIf(IsNull(holder), if_not_found);
     TNode<Uint32T> holder_bit_field3 = LoadMapBitField3(holder_map);
@@ -12031,9 +12079,9 @@ TNode<Object> CodeStubAssembler::GetInterestingProperty(
   }
 
   BIND(&lookup);
-  return CallBuiltin(Builtin::kGetPropertyWithReceiver, context,
-                     (*var_holder).value(), name, receiver,
-                     SmiConstant(OnNonExistent::kReturnUndefined));
+  return CallBuiltin<JSAny>(Builtin::kGetPropertyWithReceiver, context,
+                            (*var_holder).value(), name, receiver,
+                            SmiConstant(OnNonExistent::kReturnUndefined));
 }
 
 void CodeStubAssembler::TryLookupElement(
@@ -12240,13 +12288,13 @@ void CodeStubAssembler::BranchIfMaybeSpecialIndex(TNode<String> name_string,
 }
 
 void CodeStubAssembler::TryPrototypeChainLookup(
-    TNode<Object> receiver, TNode<Object> object_arg, TNode<Object> key,
+    TNode<JSAny> receiver, TNode<JSAny> object_arg, TNode<Object> key,
     const LookupPropertyInHolder& lookup_property_in_holder,
     const LookupElementInHolder& lookup_element_in_holder, Label* if_end,
     Label* if_bailout, Label* if_proxy, bool handle_private_names) {
   // Ensure receiver is JSReceiver, otherwise bailout.
   GotoIf(TaggedIsSmi(receiver), if_bailout);
-  TNode<HeapObject> object = CAST(object_arg);
+  TNode<JSAnyNotSmi> object = CAST(object_arg);
 
   TNode<Map> map = LoadMap(object);
   TNode<Uint16T> instance_type = LoadMapInstanceType(map);
@@ -12268,7 +12316,7 @@ void CodeStubAssembler::TryPrototypeChainLookup(
 
   BIND(&if_iskeyunique);
   {
-    TVARIABLE(HeapObject, var_holder, object);
+    TVARIABLE(JSAnyNotSmi, var_holder, object);
     TVARIABLE(Map, var_holder_map, map);
     TVARIABLE(Int32T, var_holder_instance_type, instance_type);
 
@@ -12301,7 +12349,7 @@ void CodeStubAssembler::TryPrototypeChainLookup(
         GotoIf(IsPrivateSymbol(CAST(key)), if_end);
       }
 
-      TNode<HeapObject> proto = LoadMapPrototype(holder_map);
+      TNode<JSPrototype> proto = LoadMapPrototype(holder_map);
 
       GotoIf(IsNull(proto), if_end);
 
@@ -12316,7 +12364,7 @@ void CodeStubAssembler::TryPrototypeChainLookup(
   }
   BIND(&if_keyisindex);
   {
-    TVARIABLE(HeapObject, var_holder, object);
+    TVARIABLE(JSAnyNotSmi, var_holder, object);
     TVARIABLE(Map, var_holder_map, map);
     TVARIABLE(Int32T, var_holder_instance_type, instance_type);
 
@@ -12331,7 +12379,7 @@ void CodeStubAssembler::TryPrototypeChainLookup(
                                var_index.value(), &next_proto, if_bailout);
       BIND(&next_proto);
 
-      TNode<HeapObject> proto = LoadMapPrototype(var_holder_map.value());
+      TNode<JSPrototype> proto = LoadMapPrototype(var_holder_map.value());
 
       GotoIf(IsNull(proto), if_end);
 
@@ -12736,7 +12784,7 @@ void CodeStubAssembler::CheckForAssociatedProtector(TNode<Name> name,
 }
 
 void CodeStubAssembler::DCheckReceiver(ConvertReceiverMode mode,
-                                       TNode<Object> receiver) {
+                                       TNode<JSAny> receiver) {
   switch (mode) {
     case ConvertReceiverMode::kNullOrUndefined:
       CSA_DCHECK(this, IsNullOrUndefined(receiver));
@@ -13303,15 +13351,11 @@ TorqueStructInt64AsInt32Pair CodeStubAssembler::BigIntToRawBytes(
 TNode<RawPtrT> CodeStubAssembler::AllocateBuffer(TNode<IntPtrT> size) {
   TNode<ExternalReference> function =
       ExternalConstant(ExternalReference::allocate_buffer());
-  return UncheckedCast<RawPtrT>(
-      CallCFunction(function, MachineType::UintPtr(),
-                    std::make_pair(MachineType::IntPtr(), size)));
-}
-
-void CodeStubAssembler::DeallocateBuffer(TNode<RawPtrT> buffer) {
-  TNode<ExternalReference> function =
-      ExternalConstant(ExternalReference::deallocate_buffer());
-  CallCFunction(function, {}, std::make_pair(MachineType::UintPtr(), buffer));
+  return UncheckedCast<RawPtrT>(CallCFunction(
+      function, MachineType::UintPtr(),
+      std::make_pair(MachineType::Pointer(),
+                     IsolateField(IsolateFieldId::kIsolateAddress)),
+      std::make_pair(MachineType::IntPtr(), size)));
 }
 #endif  // V8_ENABLE_WEBASSEMBLY
 
@@ -15947,7 +15991,7 @@ void CodeStubAssembler::BranchIfSameNumberValue(TNode<Float64T> lhs_value,
 }
 
 TNode<Boolean> CodeStubAssembler::HasProperty(TNode<Context> context,
-                                              TNode<Object> object,
+                                              TNode<JSAny> object,
                                               TNode<Object> key,
                                               HasPropertyLookupMode mode) {
   Label call_runtime(this, Label::kDeferred), return_true(this),
@@ -16278,13 +16322,13 @@ void CodeStubAssembler::FindNonDefaultConstructor(
 }
 
 TNode<JSReceiver> CodeStubAssembler::SpeciesConstructor(
-    TNode<Context> context, TNode<Object> object,
+    TNode<Context> context, TNode<JSAny> object,
     TNode<JSReceiver> default_constructor) {
   Isolate* isolate = this->isolate();
   TVARIABLE(JSReceiver, var_result, default_constructor);
 
   // 2. Let C be ? Get(O, "constructor").
-  TNode<Object> constructor =
+  TNode<JSAny> constructor =
       GetProperty(context, object, isolate->factory()->constructor_string());
 
   // 3. If C is undefined, return defaultConstructor.
@@ -16318,7 +16362,7 @@ TNode<JSReceiver> CodeStubAssembler::SpeciesConstructor(
 }
 
 TNode<Boolean> CodeStubAssembler::InstanceOf(TNode<Object> object,
-                                             TNode<Object> callable,
+                                             TNode<JSAny> callable,
                                              TNode<Context> context) {
   TVARIABLE(Boolean, var_result);
   Label if_notcallable(this, Label::kDeferred),
@@ -17061,12 +17105,13 @@ bool CodeStubArguments::MayHavePaddingArguments() const {
   return assembler_->HasDynamicJSParameterCount();
 }
 
-TNode<Object> CodeStubArguments::GetReceiver() const {
+TNode<JSAny> CodeStubArguments::GetReceiver() const {
   intptr_t offset = -kSystemPointerSize;
-  return assembler_->LoadFullTagged(base_, assembler_->IntPtrConstant(offset));
+  return assembler_->CAST(
+      assembler_->LoadFullTagged(base_, assembler_->IntPtrConstant(offset)));
 }
 
-void CodeStubArguments::SetReceiver(TNode<Object> object) const {
+void CodeStubArguments::SetReceiver(TNode<JSAny> object) const {
   intptr_t offset = -kSystemPointerSize;
   assembler_->StoreFullTaggedNoWriteBarrier(
       base_, assembler_->IntPtrConstant(offset), object);
@@ -17078,13 +17123,13 @@ TNode<RawPtrT> CodeStubArguments::AtIndexPtr(TNode<IntPtrT> index) const {
   return assembler_->RawPtrAdd(base_, offset);
 }
 
-TNode<Object> CodeStubArguments::AtIndex(TNode<IntPtrT> index) const {
+TNode<JSAny> CodeStubArguments::AtIndex(TNode<IntPtrT> index) const {
   CSA_DCHECK(assembler_, assembler_->UintPtrOrSmiLessThan(
                              index, GetLengthWithoutReceiver()));
-  return assembler_->LoadFullTagged(AtIndexPtr(index));
+  return assembler_->CAST(assembler_->LoadFullTagged(AtIndexPtr(index)));
 }
 
-TNode<Object> CodeStubArguments::AtIndex(int index) const {
+TNode<JSAny> CodeStubArguments::AtIndex(int index) const {
   return AtIndex(assembler_->IntPtrConstant(index));
 }
 
@@ -17097,9 +17142,9 @@ TNode<IntPtrT> CodeStubArguments::GetLengthWithReceiver() const {
   return argc_;
 }
 
-TNode<Object> CodeStubArguments::GetOptionalArgumentValue(
-    TNode<IntPtrT> index, TNode<Object> default_value) {
-  CodeStubAssembler::TVariable<Object> result(assembler_);
+TNode<JSAny> CodeStubArguments::GetOptionalArgumentValue(
+    TNode<IntPtrT> index, TNode<JSAny> default_value) {
+  CodeStubAssembler::TVariable<JSAny> result(assembler_);
   CodeStubAssembler::Label argument_missing(assembler_),
       argument_done(assembler_, &result);
 
@@ -17118,7 +17163,7 @@ TNode<Object> CodeStubArguments::GetOptionalArgumentValue(
 }
 
 void CodeStubArguments::SetArgumentValue(TNode<IntPtrT> index,
-                                         TNode<Object> value) {
+                                         TNode<JSAny> value) {
   TNode<RawPtrT> slot = AtIndexPtr(index);
   assembler_->StoreFullTaggedNoWriteBarrier(slot, value);
 }
@@ -17140,14 +17185,15 @@ void CodeStubArguments::ForEach(
   assembler_->BuildFastLoop<RawPtrT>(
       vars, start, end,
       [&](TNode<RawPtrT> current) {
-        TNode<Object> arg = assembler_->LoadFullTagged(current);
+        TNode<JSAny> arg =
+            assembler_->CAST(assembler_->LoadFullTagged(current));
         body(arg);
       },
       increment, CodeStubAssembler::LoopUnrollingMode::kNo,
       CodeStubAssembler::IndexAdvanceMode::kPost);
 }
 
-void CodeStubArguments::PopAndReturn(TNode<Object> value) {
+void CodeStubArguments::PopAndReturn(TNode<JSAny> value) {
   TNode<IntPtrT> argument_count = GetLengthWithReceiver();
   if (MayHavePaddingArguments()) {
     // If there may be padding arguments, we need to remove the maximum of the
@@ -17708,14 +17754,14 @@ TNode<Map> CodeStubAssembler::CheckEnumCache(TNode<JSReceiver> receiver,
   return receiver_map;
 }
 
-TNode<Object> CodeStubAssembler::GetArgumentValue(TorqueStructArguments args,
-                                                  TNode<IntPtrT> index) {
+TNode<JSAny> CodeStubAssembler::GetArgumentValue(TorqueStructArguments args,
+                                                 TNode<IntPtrT> index) {
   return CodeStubArguments(this, args).GetOptionalArgumentValue(index);
 }
 
 void CodeStubAssembler::SetArgumentValue(TorqueStructArguments args,
                                          TNode<IntPtrT> index,
-                                         TNode<Object> value) {
+                                         TNode<JSAny> value) {
   CodeStubArguments(this, args).SetArgumentValue(index, value);
 }
 
@@ -17865,7 +17911,7 @@ void CodeStubAssembler::PerformStackCheck(TNode<Context> context) {
 }
 
 TNode<Object> CodeStubAssembler::CallRuntimeNewArray(
-    TNode<Context> context, TNode<Object> receiver, TNode<Object> length,
+    TNode<Context> context, TNode<JSAny> receiver, TNode<Object> length,
     TNode<Object> new_target, TNode<Object> allocation_site) {
   // Runtime_NewArray receives arguments in the JS order (to avoid unnecessary
   // copy). Except the last two (new_target and allocation_site) which are add
@@ -17875,7 +17921,7 @@ TNode<Object> CodeStubAssembler::CallRuntimeNewArray(
 }
 
 void CodeStubAssembler::TailCallRuntimeNewArray(TNode<Context> context,
-                                                TNode<Object> receiver,
+                                                TNode<JSAny> receiver,
                                                 TNode<Object> length,
                                                 TNode<Object> new_target,
                                                 TNode<Object> allocation_site) {
@@ -17932,7 +17978,7 @@ TNode<JSArray> CodeStubAssembler::ArrayCreate(TNode<Context> context,
 }
 
 void CodeStubAssembler::SetPropertyLength(TNode<Context> context,
-                                          TNode<Object> array,
+                                          TNode<JSAny> array,
                                           TNode<Number> length) {
   SetPropertyStrict(context, array, CodeStubAssembler::LengthStringConstant(),
                     length);

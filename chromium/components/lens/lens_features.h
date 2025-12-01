@@ -53,6 +53,26 @@ BASE_DECLARE_FEATURE(kLensOverlaySurvey);
 COMPONENT_EXPORT(LENS_FEATURES)
 BASE_DECLARE_FEATURE(kLensOverlaySidePanelOpenInNewTab);
 
+// Enables the Lens overlay simplified selection flow.
+COMPONENT_EXPORT(LENS_FEATURES)
+BASE_DECLARE_FEATURE(kLensOverlaySimplifiedSelection);
+
+// Enables the Lens overlay updated client context.
+COMPONENT_EXPORT(LENS_FEATURES)
+BASE_DECLARE_FEATURE(kLensOverlayUpdatedClientContext);
+
+// Enables opening the Lens overlay MGT feature in the side panel.
+COMPONENT_EXPORT(LENS_FEATURES)
+BASE_DECLARE_FEATURE(kLensOverlayMGTInSidePanel);
+
+// Enables uploading chunking for the Lens overlay.
+COMPONENT_EXPORT(LENS_FEATURES)
+BASE_DECLARE_FEATURE(kLensOverlayUploadChunking);
+
+// Enables recontextualizing on each query for the Lens overlay.
+COMPONENT_EXPORT(LENS_FEATURES)
+BASE_DECLARE_FEATURE(kLensOverlayRecontextualizeOnQuery);
+
 // The base URL for Lens.
 COMPONENT_EXPORT(LENS_FEATURES)
 extern const base::FeatureParam<std::string> kHomepageURLForLens;
@@ -346,6 +366,11 @@ extern bool UseWebpageInteractionType();
 COMPONENT_EXPORT(LENS_FEATURES)
 extern int GetScannedPdfCharacterPerPageHeuristic();
 
+// Returns whether to use the new content fields when sending content data
+// in the request payload.
+COMPONENT_EXPORT(LENS_FEATURES)
+extern bool UseUpdatedContextFields();
+
 // Returns whether to include PDFs from the underlying page in the request to be
 // used as page context.
 COMPONENT_EXPORT(LENS_FEATURES)
@@ -353,19 +378,30 @@ extern bool UsePdfsAsContext();
 
 // Returns whether to include the inner text from the underlying page in the
 // request to be used as page context. This is for webpages and sends text
-// equivalent to document.body.innerText.
+// equivalent to document.body.innerText. Must have UseUpdatedContextFields
+// enabled when combined with other page content types.
 COMPONENT_EXPORT(LENS_FEATURES)
 extern bool UseInnerTextAsContext();
 
 // Returns whether to include the inner html from the underlying page in the
-// request to be used as page context. Does nothing if UseInnerTextAsContext is
-// enabled.
+// request to be used as page context. Must have UseUpdatedContextFields enabled
+// when combined with other page content types.
 COMPONENT_EXPORT(LENS_FEATURES)
 extern bool UseInnerHtmlAsContext();
+
+// Returns whether to include the Annotated Page Content from the underlying
+// page in the inner HTML requests used as page context. Must have
+// UseUpdatedContextFields enabled when combined with other page content types.
+COMPONENT_EXPORT(LENS_FEATURES)
+extern bool UseApcAsContext();
 
 // Returns whether to include the page URL in the page content upload request.
 COMPONENT_EXPORT(LENS_FEATURES)
 extern bool SendPageUrlForContextualization();
+
+// Returns whether to include the page title in the page content upload request.
+COMPONENT_EXPORT(LENS_FEATURES)
+extern bool SendPageTitleForContextualization();
 
 // The timeout set for page content upload requests in milliseconds.
 COMPONENT_EXPORT(LENS_FEATURES)
@@ -583,7 +619,16 @@ extern bool IsLensOverlayTranslateLanguagesFetchEnabled();
 COMPONENT_EXPORT(LENS_FEATURES)
 extern std::string GetLensOverlayTranslateEndpointURL();
 
-// Returns whether to show the ghost loader in the contextual searchbox.
+// Returns whether to show the ghost loader component for the contextual
+// searchbox. This includes the loading indicator, the error state, and the hint
+// text if the loading state is disabled via the feature flag below.
+COMPONENT_EXPORT(LENS_FEATURES)
+extern bool EnableContextualSearchboxGhostLoader();
+
+// Returns whether to show the ghost loader loading state in the contextual
+// searchbox. If this is false, but the ghost loader is enabled, the ghost
+// loader will still be shown on searchbox focuswith hint text instead of the
+// loading indicator.
 COMPONENT_EXPORT(LENS_FEATURES)
 extern bool ShowContextualSearchboxGhostLoaderLoadingState();
 
@@ -623,6 +668,14 @@ extern bool IsLensOverlayRoutingInfoEnabled();
 COMPONENT_EXPORT(LENS_FEATURES)
 extern bool HandleSidePanelTextDirectivesEnabled();
 
+// Whether to hold contextual queries until the user acknowledges the
+// contextual searchbox. If this is disabled, the contextual queries will be
+// sent immediately after the page content upload request is sent. If this is
+// enabled, the contextual queries will be sent after the server responds to the
+// page content upload request.
+COMPONENT_EXPORT(LENS_FEATURES)
+extern bool ShouldHoldContextualQueriesUntilAck();
+
 // Whether to compress the PDF bytes using zstd before sending them to the
 // server.
 COMPONENT_EXPORT(LENS_FEATURES)
@@ -635,11 +688,110 @@ extern bool ShouldZstdCompressPdfBytes();
 COMPONENT_EXPORT(LENS_FEATURES)
 extern int GetZstdCompressionLevel();
 
+// Whether to show the upload progress bar in the side panel.
+COMPONENT_EXPORT(LENS_FEATURES)
+extern bool ShouldShowUploadProgressBar();
+
+// This is a heuristic value that determines when to show the upload progress
+// bar. The value is a percentage of the total page content upload that is
+// received in the progress handler. If one call to the progress handler
+// receives a value greater than this heuristic, the progress bar will not be
+// shown. For example, if the heuristic is 0.3, and the first call to the
+// progress handler receives 31% of the total page content, the progress bar
+// will not be shown because it is assumed that the upload will finish quickly.
+COMPONENT_EXPORT(LENS_FEATURES)
+extern double GetUploadProgressBarShowHeuristic();
+
+// Whether the contextual searchbox should be auto-focused when the overlay is
+// first opened.
+COMPONENT_EXPORT(LENS_FEATURES)
+extern bool ShouldAutoFocusSearchbox();
+
+// Whether to enable the simplified selection flow in the Lens overlay.
+COMPONENT_EXPORT(LENS_FEATURES)
+extern bool IsSimplifiedSelectionEnabled();
+
+// The text received timeout for the simplified selection feature. Time to wait
+// for Lens text response before displaying the selected region context menu, in
+// milliseconds.
+COMPONENT_EXPORT(LENS_FEATURES)
+extern int GetSimplifiedSelectionTextReceivedTimeout();
+
+// The copy text received timeout for the simplified selection feature. Time to
+// wait for text in the interaction response before falling back to using the
+// full image response to copy text from a region.
+COMPONENT_EXPORT(LENS_FEATURES)
+extern int GetCopyTextReceivedTimeout();
+
+// The translate text received timeout for the simplified selection feature.
+// Time to wait for text in the interaction response before falling back to
+// using the full image response to translate text from a region.
+COMPONENT_EXPORT(LENS_FEATURES)
+extern int GetTranslateTextReceivedTimeout();
+
+// Whether the copy keyboard command (ex: CMD+C) should copy the selected region
+// as an image or copy the text within the region when the simplified selection
+// feature is enabled.
+COMPONENT_EXPORT(LENS_FEATURES)
+extern bool GetShouldCopyAsImage();
+
 // Whether to fix the request id for page content upload requests. When enabled,
 // this will not increment the image upload request ID when the page content
 // upload request is sent.
 COMPONENT_EXPORT(LENS_FEATURES)
 extern bool PageContentUploadRequestIdFixEnabled();
-}  // namespace lens::features
 
+// Whether to update the viewport on each contextual query.
+COMPONENT_EXPORT(LENS_FEATURES)
+extern bool UpdateViewportEachQueryEnabled();
+
+// Whether to send the current page for PDFs.
+COMPONENT_EXPORT(LENS_FEATURES)
+extern bool SendPdfCurrentPageEnabled();
+
+// Whether to show zero prefix suggestions in the contextual searchbox.
+COMPONENT_EXPORT(LENS_FEATURES)
+extern bool ShowContextualSearchboxZeroPrefixSuggest();
+
+// Whether to use the updated client context.
+COMPONENT_EXPORT(LENS_FEATURES)
+extern bool IsUpdatedClientContextEnabled();
+
+// Whether to show open MGT search pages in the side panel.
+COMPONENT_EXPORT(LENS_FEATURES)
+extern bool ShouldShowMGTInSidePanel();
+
+// Whether to use the alt loading hint when overlay is opened on web pages.
+COMPONENT_EXPORT(LENS_FEATURES)
+extern bool ShouldUseAltLoadingHintWeb();
+
+// Whether to use the alt loading hint when overlay is opened on pdfs.
+COMPONENT_EXPORT(LENS_FEATURES)
+extern bool ShouldUseAltLoadingHintPdf();
+
+// Whether to enable upload chunking in the Lens Overlay.
+COMPONENT_EXPORT(LENS_FEATURES)
+extern bool IsLensOverlayUploadChunkingEnabled();
+
+// Returns the max number of bytes to allow for upload chunking.
+COMPONENT_EXPORT(LENS_FEATURES)
+uint32_t GetLensOverlayChunkSizeBytes();
+
+// The endpoint URL for upload chunking.
+COMPONENT_EXPORT(LENS_FEATURES)
+extern std::string GetLensOverlayUploadChunkEndpointURL();
+
+// Whether to enable debug options for upload chunking.
+COMPONENT_EXPORT(LENS_FEATURES)
+bool IsLensOverlayUploadChunkingUseDebugOptionsEnabled();
+
+// The timeout set for upload chunk requests in milliseconds.
+COMPONENT_EXPORT(LENS_FEATURES)
+extern int GetLensOverlayUploadChunkRequestTimeoutMs();
+
+// Whether to recontextualize on each query.
+COMPONENT_EXPORT(LENS_FEATURES)
+bool ShouldLensOverlayRecontextualizeOnQuery();
+
+}  // namespace lens::features
 #endif  // COMPONENTS_LENS_LENS_FEATURES_H_

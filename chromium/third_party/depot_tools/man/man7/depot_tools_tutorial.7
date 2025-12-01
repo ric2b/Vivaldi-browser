@@ -2,12 +2,12 @@
 .\"     Title: depot_tools_tutorial
 .\"    Author: [FIXME: author] [see http://www.docbook.org/tdg5/en/html/author]
 .\" Generator: DocBook XSL Stylesheets vsnapshot <http://docbook.sf.net/>
-.\"      Date: 08/26/2022
+.\"      Date: 02/20/2025
 .\"    Manual: Chromium depot_tools Manual
-.\"    Source: depot_tools 59e95c91
+.\"    Source: depot_tools 8a5ec2b9
 .\"  Language: English
 .\"
-.TH "DEPOT_TOOLS_TUTORIAL" "7" "08/26/2022" "depot_tools 59e95c91" "Chromium depot_tools Manual"
+.TH "DEPOT_TOOLS_TUTORIAL" "7" "02/20/2025" "depot_tools 8a5ec2b9" "Chromium depot_tools Manual"
 .\" -----------------------------------------------------------------
 .\" * Define some portability stuff
 .\" -----------------------------------------------------------------
@@ -407,6 +407,8 @@ One thing to look out for are \fImerge conflicts\fR\&. These happen for exactly 
 Sometimes you\(cqre pretty certain that you\(cqve committed a certain branch, but \fBgit rebase\-update\fR isn\(cqt able to tell that for sure\&. This is usually because your branch doesn\(cqt rebase cleanly\&. You could just delete the branch with \fBgit branch \-D <branch>\fR, but you\(cqd like to double check the diff of your branch against its upstream before deleting it\&. If this is the case you can abort the rebase started by \fBgit rebase\-update\fR, and then run \fBgit-squash-branch\fR(1) to flatten your branch into a single commit\&. When you run \fBgit rebase\-update\fR again, you\(cqll get a (hopefully) much smaller / saner diff\&. If it turns out you were wrong about your branch being fully committed, you can use \fBgit-reflog\fR(1) to reset your branch back to where it was before\&. If the diff looks inconsequential, you can use \fBgit rebase \-\-skip\fR to ignore it, and then \fBgit rebase\-update\fR will clean it up for you\&.
 .sp
 Once you\(cqre done resolving all of the merge conflict, just run \fBgit rebase\-update\fR, and it will pick up where it left off\&. Once the command has finished updating all of your branches, it will return you back to the branch you started on\&.
+.sp
+As an alternative, or if you experience issues with multiple merge conflicts on the same changes you can run \fBgit squash\-branch\fR on the conflicted branch (either after running \fBgit rebase \-\-abort\fR or before running \fBgit rebase\-update\fR)\&. This will convert the branch to a single commit, which should apply more cleanly, or at least result in only needing to resolve the merge conflicts once\&. Running \fBgit cl squash\-closed\fR prior to \fBgit rebase\-update\fR will perform this \fBgit squash\-branch\fR on all branches that gerrit thinks are closed\&. These now\-closed branches should have a single commit that will cleanly apply (and then subsequently be deleted by the rebase process), and can reduce the risk of running into merge conflicts during the rebase\&.
 .if n \{\
 .sp
 .\}

@@ -2,12 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifndef V8_CODEGEN_PPC_MACRO_ASSEMBLER_PPC_H_
+#define V8_CODEGEN_PPC_MACRO_ASSEMBLER_PPC_H_
+
 #ifndef INCLUDED_FROM_MACRO_ASSEMBLER_H
 #error This header must be included via macro-assembler.h
 #endif
-
-#ifndef V8_CODEGEN_PPC_MACRO_ASSEMBLER_PPC_H_
-#define V8_CODEGEN_PPC_MACRO_ASSEMBLER_PPC_H_
 
 #include "src/base/numbers/double.h"
 #include "src/base/platform/platform.h"
@@ -49,7 +49,7 @@ class V8_EXPORT_PRIVATE MacroAssembler : public MacroAssemblerBase {
 
   void CallBuiltin(Builtin builtin, Condition cond = al);
   void TailCallBuiltin(Builtin builtin, Condition cond = al,
-                       CRegister cr = cr7);
+                       CRegister cr = cr0);
   void Popcnt32(Register dst, Register src);
   void Popcnt64(Register dst, Register src);
   // Converts the integer (untagged smi) in |src| to a double, storing
@@ -143,18 +143,18 @@ class V8_EXPORT_PRIVATE MacroAssembler : public MacroAssemblerBase {
   void ComputeCodeStartAddress(Register dst);
 
   void CmpS64(Register src1, const Operand& src2, Register scratch,
-              CRegister cr = cr7);
-  void CmpS64(Register src1, Register src2, CRegister cr = cr7);
+              CRegister cr = cr0);
+  void CmpS64(Register src1, Register src2, CRegister cr = cr0);
   void CmpU64(Register src1, const Operand& src2, Register scratch,
-              CRegister cr = cr7);
-  void CmpU64(Register src1, Register src2, CRegister cr = cr7);
+              CRegister cr = cr0);
+  void CmpU64(Register src1, Register src2, CRegister cr = cr0);
   void CmpS32(Register src1, const Operand& src2, Register scratch,
-              CRegister cr = cr7);
-  void CmpS32(Register src1, Register src2, CRegister cr = cr7);
+              CRegister cr = cr0);
+  void CmpS32(Register src1, Register src2, CRegister cr = cr0);
   void CmpU32(Register src1, const Operand& src2, Register scratch,
-              CRegister cr = cr7);
-  void CmpU32(Register src1, Register src2, CRegister cr = cr7);
-  void CompareTagged(Register src1, Register src2, CRegister cr = cr7) {
+              CRegister cr = cr0);
+  void CmpU32(Register src1, Register src2, CRegister cr = cr0);
+  void CompareTagged(Register src1, Register src2, CRegister cr = cr0) {
     if (COMPRESS_POINTERS_BOOL) {
       CmpS32(src1, src2, cr);
     } else {
@@ -671,10 +671,10 @@ class V8_EXPORT_PRIVATE MacroAssembler : public MacroAssemblerBase {
   // Calls Abort(msg) if the condition cond is not satisfied.
   // Use --debug_code to enable.
   void Assert(Condition cond, AbortReason reason,
-              CRegister cr = cr7) NOOP_UNLESS_DEBUG_CODE;
+              CRegister cr = cr0) NOOP_UNLESS_DEBUG_CODE;
 
   // Like Assert(), but always enabled.
-  void Check(Condition cond, AbortReason reason, CRegister cr = cr7);
+  void Check(Condition cond, AbortReason reason, CRegister cr = cr0);
 
   // Print a message to stdout and abort execution.
   void Abort(AbortReason reason);
@@ -699,12 +699,12 @@ class V8_EXPORT_PRIVATE MacroAssembler : public MacroAssemblerBase {
   // Jump, Call, and Ret pseudo instructions implementing inter-working.
   void Jump(Register target);
   void Jump(Address target, RelocInfo::Mode rmode, Condition cond = al,
-            CRegister cr = cr7);
+            CRegister cr = cr0);
   void Jump(Handle<Code> code, RelocInfo::Mode rmode, Condition cond = al,
-            CRegister cr = cr7);
+            CRegister cr = cr0);
   void Jump(const ExternalReference& reference);
   void Jump(intptr_t target, RelocInfo::Mode rmode, Condition cond = al,
-            CRegister cr = cr7);
+            CRegister cr = cr0);
   void Call(Register target);
   void Call(Address target, RelocInfo::Mode rmode, Condition cond = al);
   void Call(Handle<Code> code, RelocInfo::Mode rmode = RelocInfo::CODE_TARGET,
@@ -747,7 +747,7 @@ class V8_EXPORT_PRIVATE MacroAssembler : public MacroAssemblerBase {
   void Drop(Register count, Register scratch = r0);
 
   void Ret() { blr(); }
-  void Ret(Condition cond, CRegister cr = cr7) { bclr(cond, cr); }
+  void Ret(Condition cond, CRegister cr = cr0) { bclr(cond, cr); }
   void Ret(int drop) {
     Drop(drop);
     blr();
@@ -786,7 +786,7 @@ class V8_EXPORT_PRIVATE MacroAssembler : public MacroAssemblerBase {
   void Move(Register dst, Register src, Condition cond = al);
   void Move(DoubleRegister dst, DoubleRegister src);
   void Move(Register dst, const MemOperand& src) {
-    // TODO: use scratch register scope instead of r0
+    // TODO(johnyan): Use scratch register scope instead of r0.
     LoadU64(dst, src, r0);
   }
 
@@ -911,7 +911,7 @@ class V8_EXPORT_PRIVATE MacroAssembler : public MacroAssemblerBase {
                           Label* fbv_undef);
 
   inline void TestIfInt32(Register value, Register scratch,
-                          CRegister cr = cr7) {
+                          CRegister cr = cr0) {
     // High bits must be identical to fit into an 32-bit integer
     extsw(scratch, value);
     CmpS64(scratch, value, cr);
@@ -1071,6 +1071,10 @@ class V8_EXPORT_PRIVATE MacroAssembler : public MacroAssemblerBase {
                                         MemOperand field_operand,
                                         Register scratch = no_reg);
 
+  // Load the value of Code pointer table corresponding to
+  // IsolateGroup::current()->code_pointer_table_.
+  // Only available when the sandbox is enabled.
+  void LoadCodePointerTableBase(Register destination);
 #endif
 
   // ---------------------------------------------------------------------------
@@ -1605,9 +1609,9 @@ class V8_EXPORT_PRIVATE MacroAssembler : public MacroAssemblerBase {
   void SubSmiLiteral(Register dst, Register src, Tagged<Smi> smi,
                      Register scratch);
   void CmpSmiLiteral(Register src1, Tagged<Smi> smi, Register scratch,
-                     CRegister cr = cr7);
+                     CRegister cr = cr0);
   void CmplSmiLiteral(Register src1, Tagged<Smi> smi, Register scratch,
-                      CRegister cr = cr7);
+                      CRegister cr = cr0);
   void AndSmiLiteral(Register dst, Register src, Tagged<Smi> smi,
                      Register scratch, RCBit rc = LeaveRC);
 

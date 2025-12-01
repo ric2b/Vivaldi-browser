@@ -96,6 +96,7 @@
 #include "src/trace_processor/perfetto_sql/intrinsics/functions/layout_functions.h"
 #include "src/trace_processor/perfetto_sql/intrinsics/functions/math.h"
 #include "src/trace_processor/perfetto_sql/intrinsics/functions/pprof_functions.h"
+#include "src/trace_processor/perfetto_sql/intrinsics/functions/replace_numbers_function.h"
 #include "src/trace_processor/perfetto_sql/intrinsics/functions/sqlite3_str_split.h"
 #include "src/trace_processor/perfetto_sql/intrinsics/functions/stack_functions.h"
 #include "src/trace_processor/perfetto_sql/intrinsics/functions/structural_tree_partition.h"
@@ -124,10 +125,11 @@
 #include "src/trace_processor/sqlite/sql_stats_table.h"
 #include "src/trace_processor/sqlite/stats_table.h"
 #include "src/trace_processor/storage/trace_storage.h"
-#include "src/trace_processor/summary/summary.h"
 #include "src/trace_processor/tp_metatrace.h"
 #include "src/trace_processor/trace_processor_storage_impl.h"
 #include "src/trace_processor/trace_reader_registry.h"
+#include "src/trace_processor/trace_summary/summary.h"
+#include "src/trace_processor/trace_summary/trace_summary.descriptor.h"
 #include "src/trace_processor/types/trace_processor_context.h"
 #include "src/trace_processor/util/descriptors.h"
 #include "src/trace_processor/util/gzip_utils.h"
@@ -498,6 +500,13 @@ TraceProcessorImpl::TraceProcessorImpl(const Config& cfg)
       kAllWebviewMetricsDescriptor.data(), kAllWebviewMetricsDescriptor.size(),
       skip_prefixes);
 
+  // Add the summary descriptor to the summary pool.
+  {
+    base::Status status = context_.descriptor_pool_->AddFromFileDescriptorSet(
+        kTraceSummaryDescriptor.data(), kTraceSummaryDescriptor.size());
+    PERFETTO_CHECK(status.ok());
+  }
+
   RegisterAdditionalModules(&context_);
   InitPerfettoSqlEngine();
 
@@ -634,12 +643,13 @@ base::Status TraceProcessorImpl::RegisterSqlModule(SqlModule module) {
 // |  Trace-based metrics (v2) related functionality starts here   |
 // =================================================================
 
-base::Status TraceProcessorImpl::ComputeV2Metrics(
+base::Status TraceProcessorImpl::Summarize(
+    const TraceSummaryComputationSpec& computation,
     const std::vector<TraceSummarySpecBytes>& specs,
     std::vector<uint8_t>* output,
-    TraceSummaryOutputFormat format,
-    const std::vector<std::string>& metric_ids) {
-  return summary::ComputeV2Metrics(this, specs, output, format, metric_ids);
+    const TraceSummaryOutputSpec& output_spec) {
+  return summary::Summarize(this, *context_.descriptor_pool_, computation,
+                            specs, output, output_spec);
 }
 
 // =================================================================
@@ -657,14 +667,26 @@ void TraceProcessorImpl::EnableMetatrace(MetatraceConfig config) {
 base::Status TraceProcessorImpl::AnalyzeStructuredQueries(
     const std::vector<StructuredQueryBytes>& sqs,
     std::vector<AnalyzedStructuredQuery>* output) {
+  auto opt_idx = metrics_descriptor_pool_.FindDescriptorIdx(
+      ".perfetto.protos.TraceSummarySpec");
+  if (!opt_idx) {
+    metrics_descriptor_pool_.AddFromFileDescriptorSet(
+        kTraceSummaryDescriptor.data(), kTraceSummaryDescriptor.size());
+  }
   perfetto_sql::generator::StructuredQueryGenerator sqg;
   for (const auto& sq : sqs) {
-    AnalyzedStructuredQuery newAnalyzedSq;
-    ASSIGN_OR_RETURN(newAnalyzedSq.sql, sqg.Generate(sq.ptr, sq.size));
-    newAnalyzedSq.modules = sqg.ComputeReferencedModules();
-    newAnalyzedSq.preambles = sqg.ComputePreambles();
-    sqg.AddSharedQuery(sq.ptr, sq.size);
-    output->push_back(newAnalyzedSq);
+    AnalyzedStructuredQuery analyzed_sq;
+    ASSIGN_OR_RETURN(analyzed_sq.sql, sqg.Generate(sq.ptr, sq.size));
+    analyzed_sq.textproto =
+        perfetto::trace_processor::protozero_to_text::ProtozeroToText(
+            metrics_descriptor_pool_,
+            ".perfetto.protos.PerfettoSqlStructuredQuery",
+            protozero::ConstBytes{sq.ptr, sq.size},
+            perfetto::trace_processor::protozero_to_text::kIncludeNewLines);
+    analyzed_sq.modules = sqg.ComputeReferencedModules();
+    analyzed_sq.preambles = sqg.ComputePreambles();
+    sqg.AddQuery(sq.ptr, sq.size);
+    output->push_back(analyzed_sq);
   }
   return base::OkStatus();
 }
@@ -972,6 +994,11 @@ void TraceProcessorImpl::InitPerfettoSqlEngine() {
   }
   {
     base::Status status = RegisterStackFunctions(engine_.get(), &context_);
+    if (!status.ok())
+      PERFETTO_FATAL("%s", status.c_message());
+  }
+  {
+    base::Status status = RegisterStripHexFunction(engine_.get(), &context_);
     if (!status.ok())
       PERFETTO_FATAL("%s", status.c_message());
   }

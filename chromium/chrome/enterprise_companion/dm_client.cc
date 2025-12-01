@@ -8,6 +8,7 @@
 #include <cstdint>
 #include <memory>
 #include <ostream>
+#include <queue>
 #include <string>
 #include <utility>
 
@@ -17,11 +18,16 @@
 #include "base/functional/callback_helpers.h"
 #include "base/logging.h"
 #include "base/memory/scoped_refptr.h"
+#include "base/memory/weak_ptr.h"
 #include "base/sequence_checker.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/system/sys_info.h"
+#include "base/task/sequenced_task_runner.h"
+#include "base/time/time.h"
+#include "base/timer/timer.h"
+#include "chrome/enterprise_companion/constants.h"
 #include "chrome/enterprise_companion/device_management_storage/dm_storage.h"
 #include "chrome/enterprise_companion/enterprise_companion_branding.h"
 #include "chrome/enterprise_companion/enterprise_companion_status.h"
@@ -144,6 +150,97 @@ class FetchedPolicyValidator final : public policy::CloudPolicyValidatorBase {
   }
 };
 
+// `BufferedDMClient` sequences calls to another DMClient ensuring that no
+// operations overlap. This is useful as the CloudPolicyClient backing
+// DMClientImpl does not provide any means to discriminate the origin of
+// overlapping calls nor does it make any guarantees of the behavior of such
+// calls.
+class BufferedDMClient : public DMClient {
+ public:
+  explicit BufferedDMClient(std::unique_ptr<DMClient> client)
+      : client_(std::move(client)) {}
+
+  ~BufferedDMClient() override {
+    DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+    VLOG_IF(1, !tasks_.empty())
+        << "BufferedDMClient destroyed while " << tasks_.size()
+        << " tasks were pending. Callbacks will be dropped.";
+    VLOG_IF(1, task_running_) << "BufferedDMClient destroyed while a task was "
+                                 "in-flight; its callback will be dropped.";
+  }
+
+  void RegisterPolicyAgent(scoped_refptr<EnterpriseCompanionEventLogger> logger,
+                           StatusCallback callback) override {
+    DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+    Enqueue(base::BindOnce(&BufferedDMClient::DoRegisterPolicyAgent,
+                           weak_ptr_factory_.GetWeakPtr(), logger,
+                           std::move(callback)));
+  }
+
+  void FetchPolicies(policy::PolicyFetchReason reason,
+                     scoped_refptr<EnterpriseCompanionEventLogger> logger,
+                     StatusCallback callback) override {
+    DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+    Enqueue(base::BindOnce(&BufferedDMClient::DoFetchPolicies,
+                           weak_ptr_factory_.GetWeakPtr(), reason, logger,
+                           std::move(callback)));
+  }
+
+ private:
+  void DoRegisterPolicyAgent(
+      scoped_refptr<EnterpriseCompanionEventLogger> logger,
+      StatusCallback callback) {
+    DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+    client_->RegisterPolicyAgent(
+        logger, base::BindOnce(&BufferedDMClient::OnTaskComplete,
+                               base::Unretained(this), std::move(callback)));
+  }
+
+  void DoFetchPolicies(policy::PolicyFetchReason reason,
+                       scoped_refptr<EnterpriseCompanionEventLogger> logger,
+                       StatusCallback callback) {
+    DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+    client_->FetchPolicies(
+        reason, logger,
+        base::BindOnce(&BufferedDMClient::OnTaskComplete,
+                       base::Unretained(this), std::move(callback)));
+  }
+
+  void OnTaskComplete(StatusCallback callback,
+                      const EnterpriseCompanionStatus& status) {
+    DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+        FROM_HERE, base::BindOnce(std::move(callback), status));
+    task_running_ = false;
+    ScheduleNextTask();
+  }
+
+  // Adds a task to the queue. Tasks should reference the BufferedDMClient by
+  // weak_ptr as they are posted.
+  void Enqueue(base::OnceClosure task) {
+    DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+    tasks_.push(std::move(task));
+    ScheduleNextTask();
+  }
+
+  void ScheduleNextTask() {
+    DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+    if (task_running_ || tasks_.empty()) {
+      return;
+    }
+    task_running_ = true;
+    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+        FROM_HERE, std::move(tasks_.front()));
+    tasks_.pop();
+  }
+
+  SEQUENCE_CHECKER(sequence_checker_);
+  std::unique_ptr<DMClient> client_;
+  std::queue<base::OnceClosure> tasks_;
+  bool task_running_ = false;
+  base::WeakPtrFactory<BufferedDMClient> weak_ptr_factory_{this};
+};
+
 // Interface to a CloudPolicyClient which interacts with the device management
 // server. May perform blocking IO.
 class DMClientImpl : public DMClient, policy::CloudPolicyClient::Observer {
@@ -152,8 +249,10 @@ class DMClientImpl : public DMClient, policy::CloudPolicyClient::Observer {
       std::unique_ptr<policy::DeviceManagementService::Configuration> config,
       CloudPolicyClientProvider cloud_policy_client_provider,
       scoped_refptr<device_management_storage::DMStorage> dm_storage,
-      PolicyFetchResponseValidator policy_fetch_response_validator)
-      : dm_service_(std::move(config)),
+      PolicyFetchResponseValidator policy_fetch_response_validator,
+      base::TimeDelta task_timeout)
+      : task_timeout_(task_timeout),
+        dm_service_(std::move(config)),
         cloud_policy_client_(
             std::move(cloud_policy_client_provider).Run(&dm_service_)),
         dm_storage_(dm_storage),
@@ -170,14 +269,20 @@ class DMClientImpl : public DMClient, policy::CloudPolicyClient::Observer {
     }
     UpdateCachedPolicyInfo();
   }
-  ~DMClientImpl() override { cloud_policy_client_->RemoveObserver(this); }
+
+  ~DMClientImpl() override {
+    DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+    cloud_policy_client_->RemoveObserver(this);
+    VLOG_IF(1, pending_callback_)
+        << "DMClient destroyed while task in-flight. Callback will be dropped";
+  }
 
   // Overrides for DMClient.
   void RegisterPolicyAgent(
       scoped_refptr<EnterpriseCompanionEventLogger> event_logger,
       StatusCallback callback) override {
     DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-    CHECK(!pending_callback_);
+    CHECK(!pending_callback_) << "DMClientImpl calls may not overlap";
 
     if (ShouldSkipRegistration()) {
       std::move(callback).Run(EnterpriseCompanionStatus::Success());
@@ -185,18 +290,19 @@ class DMClientImpl : public DMClient, policy::CloudPolicyClient::Observer {
     }
 
     dm_storage_->RemoveAllPolicies();
-    pending_callback_ = base::BindPostTaskToCurrentDefault(base::BindOnce(
+    SetPendingCallback(base::BindPostTaskToCurrentDefault(base::BindOnce(
         &EnterpriseCompanionEventLogger::LogRegisterPolicyAgentEvent,
-        event_logger, base::Time::Now(), std::move(callback)));
+        event_logger, base::Time::Now(), std::move(callback))));
     cloud_policy_client_->RegisterPolicyAgentWithEnrollmentToken(
         dm_storage_->GetEnrollmentToken(), dm_storage_->GetDeviceID(),
         client_data_delegate_);
   }
 
-  void FetchPolicies(scoped_refptr<EnterpriseCompanionEventLogger> event_logger,
+  void FetchPolicies(policy::PolicyFetchReason reason,
+                     scoped_refptr<EnterpriseCompanionEventLogger> event_logger,
                      StatusCallback callback) override {
     DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-    CHECK(!pending_callback_);
+    CHECK(!pending_callback_) << "DMClientImpl calls may not overlap";
     // Wrap the callback with event logging early to ensure that precondition
     // errors are logged.
     callback = base::BindPostTaskToCurrentDefault(
@@ -217,9 +323,9 @@ class DMClientImpl : public DMClient, policy::CloudPolicyClient::Observer {
       return;
     }
 
-    pending_callback_ = std::move(callback);
+    SetPendingCallback(std::move(callback));
     UpdateCachedPolicyInfo();
-    cloud_policy_client_->FetchPolicy(policy::PolicyFetchReason::kUnspecified);
+    cloud_policy_client_->FetchPolicy(reason);
   }
 
   // Overrides for policy::CloudPolicyClient::Observer.
@@ -305,17 +411,6 @@ class DMClientImpl : public DMClient, policy::CloudPolicyClient::Observer {
   }
 
  private:
-  SEQUENCE_CHECKER(sequence_checker_);
-
-  policy::DeviceManagementService dm_service_;
-  std::unique_ptr<policy::CloudPolicyClient> cloud_policy_client_;
-  scoped_refptr<device_management_storage::DMStorage> dm_storage_;
-  PolicyFetchResponseValidator policy_fetch_response_validator_;
-  ClientDataDelegate client_data_delegate_;
-  StatusCallback pending_callback_;
-  std::unique_ptr<device_management_storage::CachedPolicyInfo>
-      cached_policy_info_;
-
   bool ShouldSkipRegistration() {
     DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
     if (dm_storage_->GetEnrollmentToken().empty()) {
@@ -357,6 +452,37 @@ class DMClientImpl : public DMClient, policy::CloudPolicyClient::Observer {
           cached_policy_info_->key_version());
     }
   }
+
+  void HandleTaskTimeout() {
+    DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+    // If the callback has already been responded to, the task did not time out.
+    if (pending_callback_) {
+      VLOG(1) << "DMClient task timed out before CloudPolicyClient response";
+      std::move(pending_callback_)
+          .Run(EnterpriseCompanionStatus(
+              ApplicationError::kCloudPolicyClientTimeout));
+    }
+  }
+
+  void SetPendingCallback(StatusCallback callback) {
+    DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+    task_timer_.Start(FROM_HERE, task_timeout_,
+                      base::BindOnce(&DMClientImpl::HandleTaskTimeout,
+                                     base::Unretained(this)));
+    pending_callback_ = std::move(callback);
+  }
+
+  SEQUENCE_CHECKER(sequence_checker_);
+  const base::TimeDelta task_timeout_;
+  policy::DeviceManagementService dm_service_;
+  std::unique_ptr<policy::CloudPolicyClient> cloud_policy_client_;
+  scoped_refptr<device_management_storage::DMStorage> dm_storage_;
+  PolicyFetchResponseValidator policy_fetch_response_validator_;
+  ClientDataDelegate client_data_delegate_;
+  StatusCallback pending_callback_;
+  base::OneShotTimer task_timer_;
+  std::unique_ptr<device_management_storage::CachedPolicyInfo>
+      cached_policy_info_;
 };
 
 }  // namespace
@@ -411,10 +537,11 @@ std::unique_ptr<DMClient> CreateDMClient(
     CloudPolicyClientProvider cloud_policy_client_provider,
     scoped_refptr<device_management_storage::DMStorage> dm_storage,
     PolicyFetchResponseValidator policy_fetch_response_validator,
-    std::unique_ptr<policy::DeviceManagementService::Configuration> config) {
-  return std::make_unique<DMClientImpl>(
+    std::unique_ptr<policy::DeviceManagementService::Configuration> config,
+    base::TimeDelta task_timeout) {
+  return std::make_unique<BufferedDMClient>(std::make_unique<DMClientImpl>(
       std::move(config), std::move(cloud_policy_client_provider), dm_storage,
-      policy_fetch_response_validator);
+      policy_fetch_response_validator, task_timeout));
 }
 
 }  // namespace enterprise_companion

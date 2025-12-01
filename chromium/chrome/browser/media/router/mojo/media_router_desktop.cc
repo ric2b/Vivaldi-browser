@@ -19,7 +19,6 @@
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "build/build_config.h"
-#include "build/chromeos_buildflags.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/media/cast_mirroring_service_host.h"
 #include "chrome/browser/media/cast_remoting_connector.h"
@@ -71,7 +70,7 @@ constexpr char kLoggerComponent[] = "MediaRouterDesktop";
 
 DesktopMediaPickerController::Params MakeDesktopPickerParams(
     content::WebContents* web_contents) {
-#if !BUILDFLAG(IS_CHROMEOS_ASH)
+#if !BUILDFLAG(IS_CHROMEOS)
   DCHECK(web_contents);
 #endif
 

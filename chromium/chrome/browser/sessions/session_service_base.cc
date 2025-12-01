@@ -17,7 +17,6 @@
 #include "base/strings/to_string.h"
 #include "base/task/sequenced_task_runner.h"
 #include "build/build_config.h"
-#include "build/chromeos_buildflags.h"
 #include "chrome/browser/apps/app_service/web_contents_app_id_utils.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/profile.h"
@@ -52,6 +51,11 @@
 #include "chrome/browser/web_applications/web_app_provider.h"
 #include "chrome/browser/web_applications/web_app_registrar.h"
 #endif  // BUILDFLAG(IS_CHROMEOS)
+
+#if BUILDFLAG(IS_OZONE)
+#include "ui/ozone/public/ozone_platform.h"
+#include "ui/ozone/public/platform_session_manager.h"
+#endif
 
 #include "app/vivaldi_apptools.h"
 #include "components/sessions/vivaldi_session_service_commands.h"
@@ -536,10 +540,13 @@ void SessionServiceBase::OnGotSessionCommands(
     bool read_error) {
   std::vector<std::unique_ptr<sessions::SessionWindow>> valid_windows;
   SessionID active_window_id = SessionID::InvalidValue();
+  std::string platform_session_id;
 
   sessions::RestoreSessionFromCommands(commands, &valid_windows,
-                                       &active_window_id);
+                                       &active_window_id, &platform_session_id);
   RemoveUnusedRestoreWindows(&valid_windows);
+
+  InitializePlatformSessionIfNeeded(platform_session_id);
 
   std::move(callback).Run(std::move(valid_windows), active_window_id,
                           read_error);
@@ -829,4 +836,46 @@ void SessionServiceBase::SetSavingEnabled(bool enabled) {
   } else {
     ScheduleResetCommands();
   }
+}
+
+std::optional<std::string> SessionServiceBase::GetPlatformSessionId() {
+  InitializePlatformSessionIfNeeded(/*restored_platform_session_id=*/{});
+  return platform_session_id_;
+}
+
+void SessionServiceBase::SetPlatformSessionIdForTesting(const std::string& id) {
+  platform_session_id_ = id;
+  ScheduleCommand(sessions::CreateSetPlatformSessionIdCommand(
+      platform_session_id_.value()));
+}
+
+void SessionServiceBase::InitializePlatformSessionIfNeeded(
+    const std::string& restored_platform_session_id) {
+#if BUILDFLAG(IS_OZONE)
+  ui::OzonePlatform* platform = ui::OzonePlatform::GetInstance();
+  if (!platform->GetPlatformRuntimeProperties().supports_session_management ||
+      platform_session_id_.has_value()) {
+    return;
+  }
+
+  DCHECK(platform->GetSessionManager());
+  ui::PlatformSessionManager* session_manager = platform->GetSessionManager();
+  const bool should_restore = !restored_platform_session_id.empty();
+
+  // TODO(crbug.com/352081012): Support post-crash restore reason.
+  std::optional<std::string> actual_platform_session_id =
+      should_restore ? session_manager->RestoreSession(
+                           restored_platform_session_id,
+                           ui::PlatformSessionManager::RestoreReason::kLaunch)
+                     : platform->GetSessionManager()->CreateSession();
+
+  if (actual_platform_session_id.has_value()) {
+    DVLOG(1) << "Successfully initialized platform session."
+             << " session_service=" << this
+             << " session_id=" << actual_platform_session_id.value();
+    platform_session_id_ = std::move(actual_platform_session_id);
+    ScheduleCommand(sessions::CreateSetPlatformSessionIdCommand(
+        platform_session_id_.value()));
+  }
+#endif
 }

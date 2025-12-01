@@ -9,6 +9,11 @@
 
 @protocol VivaldiSpeedDialContainerDelegate
 
+/// Triggered when contents are loaded in collection view and notify
+/// consumers whether collection view contains scrollable contents
+- (void)collectionViewHasScrollableContent:(BOOL)hasScrollableContents
+                                    parent:(VivaldiSpeedDialItem*)parent;
+
 /// Triggers when an item is selected with single tap, provides the
 /// item itself and the parent if any.
 - (void)didSelectItem:(VivaldiSpeedDialItem*)item
@@ -76,7 +81,7 @@
                       parent:(VivaldiSpeedDialItem*)parent
                     fromView:(UIView*)view;
 
-/// Trigerred when empty area of the speed dial view is tapped.
+/// Triggered when empty area of the speed dial view is tapped.
 /// i.e. not an item or folder.
 - (void)didTapOnCollectionViewEmptyArea;
 

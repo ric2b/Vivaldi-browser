@@ -36,105 +36,100 @@ dictionary MLBinarySupportLimits {
 };
 
 dictionary MLBatchNormalizationSupportLimits {
-  MLDataTypeLimits input;
-  MLDataTypeLimits mean;
-  MLDataTypeLimits variance;
-  MLDataTypeLimits scale;
-  MLDataTypeLimits bias;
+  MLTensorLimits input;
+  MLTensorLimits mean;
+  MLTensorLimits variance;
+  MLTensorLimits scale;
+  MLTensorLimits bias;
   MLDataTypeLimits output;
 };
 
 dictionary MLConcatSupportLimits {
-  MLDataTypeLimits inputs;
+  MLTensorLimits inputs;
   MLDataTypeLimits output;
 };
 
 dictionary MLConv2dSupportLimits {
-  MLDataTypeLimits input;
-  MLDataTypeLimits filter;
-  MLDataTypeLimits bias;
-  MLDataTypeLimits output;
-};
-
-dictionary MLCumulativeSumSupportLimits {
-  MLDataTypeLimits input;
+  MLTensorLimits input;
+  MLTensorLimits filter;
+  MLTensorLimits bias;
   MLDataTypeLimits output;
 };
 
 dictionary MLGatherSupportLimits {
-  MLDataTypeLimits input;
-  MLDataTypeLimits indices;
+  MLTensorLimits input;
+  MLTensorLimits indices;
   MLDataTypeLimits output;
 };
 
 dictionary MLGemmSupportLimits {
-  MLDataTypeLimits a;
-  MLDataTypeLimits b;
-  MLDataTypeLimits c;
+  MLTensorLimits a;
+  MLTensorLimits b;
+  MLTensorLimits c;
   MLDataTypeLimits output;
 };
 
 dictionary MLGruSupportLimits {
-  MLDataTypeLimits input;
-  MLDataTypeLimits weight;
-  MLDataTypeLimits recurrentWeight;
-  MLDataTypeLimits bias;
-  MLDataTypeLimits recurrentBias;
-  MLDataTypeLimits initialHiddenState;
+  MLTensorLimits input;
+  MLTensorLimits weight;
+  MLTensorLimits recurrentWeight;
+  MLTensorLimits bias;
+  MLTensorLimits recurrentBias;
+  MLTensorLimits initialHiddenState;
   MLDataTypeLimits outputs;
 };
 
 dictionary MLGruCellSupportLimits {
-  MLDataTypeLimits input;
-  MLDataTypeLimits weight;
-  MLDataTypeLimits recurrentWeight;
-  MLDataTypeLimits hiddenState;
-  MLDataTypeLimits bias;
-  MLDataTypeLimits recurrentBias;
+  MLTensorLimits input;
+  MLTensorLimits weight;
+  MLTensorLimits recurrentWeight;
+  MLTensorLimits hiddenState;
+  MLTensorLimits bias;
+  MLTensorLimits recurrentBias;
   MLDataTypeLimits output;
 };
 
 dictionary MLLstmSupportLimits {
-  MLDataTypeLimits input;
-  MLDataTypeLimits weight;
-  MLDataTypeLimits recurrentWeight;
-  MLDataTypeLimits bias;
-  MLDataTypeLimits recurrentBias;
-  MLDataTypeLimits peepholeWeight;
-  MLDataTypeLimits initialHiddenState;
-  MLDataTypeLimits initialCellState;
+  MLTensorLimits input;
+  MLTensorLimits weight;
+  MLTensorLimits recurrentWeight;
+  MLTensorLimits bias;
+  MLTensorLimits recurrentBias;
+  MLTensorLimits peepholeWeight;
+  MLTensorLimits initialHiddenState;
+  MLTensorLimits initialCellState;
   MLDataTypeLimits outputs;
 };
 
 dictionary MLLstmCellSupportLimits {
-  MLDataTypeLimits input;
-  MLDataTypeLimits weight;
-  MLDataTypeLimits recurrentWeight;
-  MLDataTypeLimits hiddenState;
-  MLDataTypeLimits cellState;
-  MLDataTypeLimits bias;
-  MLDataTypeLimits recurrentBias;
-  MLDataTypeLimits peepholeWeight;
+  MLTensorLimits input;
+  MLTensorLimits weight;
+  MLTensorLimits recurrentWeight;
+  MLTensorLimits hiddenState;
+  MLTensorLimits cellState;
+  MLTensorLimits bias;
+  MLTensorLimits recurrentBias;
+  MLTensorLimits peepholeWeight;
   MLDataTypeLimits outputs;
 };
 
 dictionary MLNormalizationSupportLimits {
-  MLDataTypeLimits input;
-  MLDataTypeLimits scale;
-  MLDataTypeLimits bias;
+  MLTensorLimits input;
+  MLTensorLimits scale;
+  MLTensorLimits bias;
   MLDataTypeLimits output;
 };
 
 dictionary MLPreluSupportLimits {
-  MLDataTypeLimits input;
-  MLDataTypeLimits slope;
+  MLTensorLimits input;
+  MLTensorLimits slope;
   MLDataTypeLimits output;
 };
 
 dictionary MLQuantizeDequantizeLinearSupportLimits {
-  MLDataTypeLimits input;
-  MLDataTypeLimits scale;
-  MLDataTypeLimits zeroPoint;
+  MLTensorLimits input;
+  MLTensorLimits scale;
+  MLTensorLimits zeroPoint;
   MLDataTypeLimits output;
 };
 
@@ -149,9 +144,9 @@ dictionary MLSingleInputSupportLimits {
 };
 
 dictionary MLScatterSupportLimits {
-  MLDataTypeLimits input;
-  MLDataTypeLimits indices;
-  MLDataTypeLimits updates;
+  MLTensorLimits input;
+  MLTensorLimits indices;
+  MLTensorLimits updates;
   MLDataTypeLimits output;
 };
 
@@ -285,7 +280,7 @@ typedef record<USVString, MLTensor> MLNamedTensors;
 [
   RuntimeEnabled=MachineLearningNeuralNetwork,
   SecureContext,
-  Exposed=(Window, DedicatedWorker)
+  Exposed=(Window, Worker)
 ] interface MLContext {
   [
     RuntimeEnabled=MachineLearningNeuralNetwork,

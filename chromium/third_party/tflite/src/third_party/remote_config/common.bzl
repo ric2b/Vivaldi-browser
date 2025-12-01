@@ -228,10 +228,10 @@ def execute(
       The result of repository_ctx.execute(cmdline)
     """
     result = raw_exec(repository_ctx, cmdline, env_vars)
-    if (result.stderr or not result.stdout) and not allow_failure:
+    if (result.return_code != 0 or not result.stdout) and not allow_failure:
         fail(
             "\n".join([
-                error_msg.strip() if error_msg else "Repository command failed",
+                error_msg.strip() if error_msg else "Repository command failed (code {})".format(result.return_code),
                 result.stderr.strip(),
                 error_details if error_details else "",
             ]),
@@ -291,6 +291,23 @@ def realpath(repository_ctx, path, bash_bin = None):
         bash_bin = get_bash_bin(repository_ctx)
 
     return execute(repository_ctx, [bash_bin, "-c", "realpath \"%s\"" % path]).stdout.strip()
+
+def relative_to(repository_ctx, base, path, bash_bin = None):
+    """Returns the result of "realpath --relative-to".
+
+    Args:
+      repository_ctx: the repository_ctx
+      base: a path on the file system
+      path: a path on the file system
+      bash_bin: path to the bash interpreter
+
+    Returns:
+      Returns the result of "realpath --relative-to"
+    """
+    if bash_bin == None:
+        bash_bin = get_bash_bin(repository_ctx)
+
+    return execute(repository_ctx, [bash_bin, "-c", "realpath --relative-to \"%s\" \"%s\"" % (base, path)]).stdout.strip()
 
 def err_out(result):
     """Returns stderr if set, else stdout.

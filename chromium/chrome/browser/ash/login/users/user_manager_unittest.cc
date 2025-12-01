@@ -485,18 +485,19 @@ TEST_F(UserManagerTest, IsEphemeralAccountIdRespectsEnableEphemeralMode) {
 TEST_F(UserManagerTest, DoNotSaveKioskAccountsToKRegularUsersPref) {
   SetKioskAccountPrefs(policy::DeviceLocalAccount::EphemeralMode::kEnable);
   user_manager::UserManager::Get()->UserLoggedIn(
-      kKioskAccountId, kKioskAccountId.GetUserEmail(),
-      false /* browser_restart */, false /* is_child */);
+      kKioskAccountId,
+      user_manager::TestHelper::GetFakeUsernameHash(kKioskAccountId));
   ResetUserManager();
+  ASSERT_TRUE(user_manager::TestHelper(user_manager::UserManager::Get())
+                  .AddRegularUser(kAccountId0));
   user_manager::UserManager::Get()->UserLoggedIn(
-      kAccountId0, kAccountId0.GetUserEmail(), false /* browser_restart */,
-      false /* is_child */);
+      kAccountId0, user_manager::TestHelper::GetFakeUsernameHash(kAccountId0));
   ResetUserManager();
 
   EXPECT_EQ(1U, local_state_->Get()
                     ->GetList(user_manager::prefs::kRegularUsersPref)
                     .size());
-  EXPECT_EQ(2U, user_manager::UserManager::Get()->GetUsers().size());
+  EXPECT_EQ(2U, user_manager::UserManager::Get()->GetPersistedUsers().size());
 
   SetDeviceSettings(
       /* ephemeral_users_enabled= */ true,
@@ -506,33 +507,36 @@ TEST_F(UserManagerTest, DoNotSaveKioskAccountsToKRegularUsersPref) {
   EXPECT_TRUE(local_state_->Get()
                   ->GetList(user_manager::prefs::kRegularUsersPref)
                   .empty());
-  EXPECT_EQ(1U, user_manager::UserManager::Get()->GetUsers().size());
+  EXPECT_EQ(1U, user_manager::UserManager::Get()->GetPersistedUsers().size());
 }
 
 TEST_F(UserManagerTest, RemoveUser) {
   // Create owner account and login in.
-  user_manager_->UserLoggedIn(kOwnerAccountId, kOwnerAccountId.GetUserEmail(),
-                              false /* browser_restart */,
-                              false /* is_child */);
+  ASSERT_TRUE(user_manager::TestHelper(user_manager_.get())
+                  .AddRegularUser(kOwnerAccountId));
+  user_manager_->UserLoggedIn(
+      kOwnerAccountId,
+      user_manager::TestHelper::GetFakeUsernameHash(kOwnerAccountId));
 
   // Recreate the user manager to log out all accounts.
   ResetUserManager();
 
   // Create non-owner account  and login in.
-  user_manager_->UserLoggedIn(kAccountId0, kAccountId0.GetUserEmail(),
-                              false /* browser_restart */,
-                              false /* is_child */);
+  ASSERT_TRUE(user_manager::TestHelper(user_manager_.get())
+                  .AddRegularUser(kAccountId0));
+  user_manager_->UserLoggedIn(
+      kAccountId0, user_manager::TestHelper::GetFakeUsernameHash(kAccountId0));
   // Log-in owner account.
-  user_manager_->UserLoggedIn(kOwnerAccountId, kOwnerAccountId.GetUserEmail(),
-                              false /* browser_restart */,
-                              false /* is_child */);
+  user_manager_->UserLoggedIn(
+      kOwnerAccountId,
+      user_manager::TestHelper::GetFakeUsernameHash(kOwnerAccountId));
 
-  ASSERT_EQ(2U, user_manager_->GetUsers().size());
+  ASSERT_EQ(2U, user_manager_->GetPersistedUsers().size());
 
   // Removing logged-in account is unacceptable.
   user_manager_->RemoveUser(kAccountId0,
                             user_manager::UserRemovalReason::UNKNOWN);
-  EXPECT_EQ(2U, user_manager_->GetUsers().size());
+  EXPECT_EQ(2U, user_manager_->GetPersistedUsers().size());
 
   // Recreate the user manager to log out all accounts.
   ResetUserManager();
@@ -542,12 +546,12 @@ TEST_F(UserManagerTest, RemoveUser) {
                           user_manager::UserManager::Observer>
       observation{&observer_test};
   observation.Observe(user_manager_.get());
-  ASSERT_EQ(2U, user_manager_->GetUsers().size());
+  ASSERT_EQ(2U, user_manager_->GetPersistedUsers().size());
   ASSERT_EQ(0U, user_manager_->GetLoggedInUsers().size());
 
   // Get a pointer to the user that will be removed.
   user_manager::User* user_to_remove = nullptr;
-  for (user_manager::User* user : user_manager_->GetUsers()) {
+  for (user_manager::User* user : user_manager_->GetPersistedUsers()) {
     if (user->GetAccountId() == kAccountId0) {
       user_to_remove = user;
       break;
@@ -562,7 +566,7 @@ TEST_F(UserManagerTest, RemoveUser) {
                             user_manager::UserRemovalReason::UNKNOWN);
   EXPECT_EQ(1, observer_test.OnUserToBeRemovedCallCount());
   EXPECT_EQ(1, observer_test.OnUserRemovedCallCount());
-  EXPECT_EQ(1U, user_manager_->GetUsers().size());
+  EXPECT_EQ(1U, user_manager_->GetPersistedUsers().size());
 
   // Removing owner account is unacceptable.
   observer_test.ResetCallCounts();
@@ -570,31 +574,35 @@ TEST_F(UserManagerTest, RemoveUser) {
                             user_manager::UserRemovalReason::UNKNOWN);
   EXPECT_EQ(0, observer_test.OnUserToBeRemovedCallCount());
   EXPECT_EQ(0, observer_test.OnUserRemovedCallCount());
-  EXPECT_EQ(1U, user_manager_->GetUsers().size());
+  EXPECT_EQ(1U, user_manager_->GetPersistedUsers().size());
 }
 
 TEST_F(UserManagerTest, RemoveRegularUsersExceptOwnerFromList) {
+  ASSERT_TRUE(user_manager::TestHelper(user_manager::UserManager::Get())
+                  .AddRegularUser(kOwnerAccountId));
   user_manager::UserManager::Get()->UserLoggedIn(
-      kOwnerAccountId, kOwnerAccountId.GetUserEmail(),
-      false /* browser_restart */, false /* is_child */);
+      kOwnerAccountId,
+      user_manager::TestHelper::GetFakeUsernameHash(kOwnerAccountId));
   ResetUserManager();
+  ASSERT_TRUE(user_manager::TestHelper(user_manager::UserManager::Get())
+                  .AddRegularUser(kAccountId0));
   user_manager::UserManager::Get()->UserLoggedIn(
-      kAccountId0, kAccountId0.GetUserEmail(), false /* browser_restart */,
-      false /* is_child */);
+      kAccountId0, user_manager::TestHelper::GetFakeUsernameHash(kAccountId0));
   ResetUserManager();
+  ASSERT_TRUE(user_manager::TestHelper(user_manager::UserManager::Get())
+                  .AddRegularUser(kAccountId1));
   user_manager::UserManager::Get()->UserLoggedIn(
-      kAccountId1, kAccountId1.GetUserEmail(), false /* browser_restart */,
-      false /* is_child */);
+      kAccountId1, user_manager::TestHelper::GetFakeUsernameHash(kAccountId1));
   ResetUserManager();
 
   SetKioskAccountPrefs(policy::DeviceLocalAccount::EphemeralMode::kEnable);
   user_manager::UserManager::Get()->UserLoggedIn(
-      kKioskAccountId, kKioskAccountId.GetUserEmail(),
-      false /* browser_restart */, false /* is_child */);
+      kKioskAccountId,
+      user_manager::TestHelper::GetFakeUsernameHash(kKioskAccountId));
   ResetUserManager();
 
   const user_manager::UserList* users =
-      &user_manager::UserManager::Get()->GetUsers();
+      &user_manager::UserManager::Get()->GetPersistedUsers();
   ASSERT_EQ(4U, users->size());
   EXPECT_EQ((*users)[0]->GetAccountId(), kKioskAccountId);
   EXPECT_EQ((*users)[1]->GetAccountId(), kAccountId1);
@@ -606,7 +614,7 @@ TEST_F(UserManagerTest, RemoveRegularUsersExceptOwnerFromList) {
       /* owner= */ kOwnerAccountId.GetUserEmail());
   RetrieveTrustedDevicePolicies();
 
-  users = &user_manager::UserManager::Get()->GetUsers();
+  users = &user_manager::UserManager::Get()->GetPersistedUsers();
   EXPECT_EQ(2U, users->size());
   // Kiosk is not a regular user and is not removed.
   EXPECT_EQ((*users)[0]->GetAccountId(), kKioskAccountId);
@@ -619,26 +627,31 @@ TEST_F(UserManagerTest, RegularUserLoggedInAsEphemeral) {
       /* owner= */ kOwnerAccountId.GetUserEmail());
   RetrieveTrustedDevicePolicies();
 
+  ASSERT_TRUE(user_manager::TestHelper(user_manager::UserManager::Get())
+                  .AddRegularUser(kOwnerAccountId));
   user_manager::UserManager::Get()->UserLoggedIn(
-      kOwnerAccountId, kOwnerAccountId.GetUserEmail(),
-      false /* browser_restart */, false /* is_child */);
+      kOwnerAccountId,
+      user_manager::TestHelper::GetFakeUsernameHash(kOwnerAccountId));
   ResetUserManager();
+  ASSERT_TRUE(user_manager::TestHelper(user_manager::UserManager::Get())
+                  .AddRegularUser(kAccountId0));
   user_manager::UserManager::Get()->UserLoggedIn(
-      kAccountId0, kAccountId0.GetUserEmail(), false /* browser_restart */,
-      false /* is_child */);
+      kAccountId0, user_manager::TestHelper::GetFakeUsernameHash(kAccountId0));
   ResetUserManager();
 
   const user_manager::UserList* users =
-      &user_manager::UserManager::Get()->GetUsers();
+      &user_manager::UserManager::Get()->GetPersistedUsers();
   EXPECT_EQ(1U, users->size());
   EXPECT_EQ((*users)[0]->GetAccountId(), kOwnerAccountId);
 }
 
 TEST_F(UserManagerTest, ScreenLockAvailability) {
   // Log in the user and create the profile.
+  ASSERT_TRUE(user_manager::TestHelper(user_manager::UserManager::Get())
+                  .AddRegularUser(kOwnerAccountId));
   user_manager::UserManager::Get()->UserLoggedIn(
-      kOwnerAccountId, kOwnerAccountId.GetUserEmail(),
-      false /* browser_restart */, false /* is_child */);
+      kOwnerAccountId,
+      user_manager::TestHelper::GetFakeUsernameHash(kOwnerAccountId));
 
   TestingPrefServiceSimple prefs;
   user_manager::UserManagerImpl::RegisterProfilePrefs(prefs.registry());
@@ -663,8 +676,11 @@ TEST_F(UserManagerTest, ScreenLockAvailability) {
 }
 
 TEST_F(UserManagerTest, ProfileRequiresPolicyUnknown) {
+  ASSERT_TRUE(user_manager::TestHelper(user_manager::UserManager::Get())
+                  .AddRegularUser(kOwnerAccountId));
   user_manager::UserManager::Get()->UserLoggedIn(
-      kOwnerAccountId, kOwnerAccountId.GetUserEmail(), false, false);
+      kOwnerAccountId,
+      user_manager::TestHelper::GetFakeUsernameHash(kOwnerAccountId));
   user_manager::KnownUser known_user(local_state_->Get());
   EXPECT_EQ(user_manager::ProfileRequiresPolicy::kUnknown,
             known_user.GetProfileRequiresPolicy(kOwnerAccountId));
@@ -731,9 +747,10 @@ TEST_F(UserManagerTest,
 // callback.
 TEST_F(UserManagerTest, ProfilePrefs) {
   // Simulates login.
-  user_manager_->UserLoggedIn(kAccountId0, kAccountId0.GetUserEmail(),
-                              /*browser_restart=*/false,
-                              /*is_child=*/false);
+  ASSERT_TRUE(user_manager::TestHelper(user_manager_.get())
+                  .AddRegularUser(kAccountId0));
+  user_manager_->UserLoggedIn(
+      kAccountId0, user_manager::TestHelper::GetFakeUsernameHash(kAccountId0));
 
   // Adds a profile created callback and verifies profile prefs is available
   // when the callback runs.
@@ -754,6 +771,98 @@ TEST_F(UserManagerTest, ProfilePrefs) {
 
   // Cleans up references to `prefs` since it will go out of scope.
   user_manager_->OnUserProfileWillBeDestroyed(kAccountId0);
+}
+
+TEST_F(UserManagerTest, EnsureUserRegular) {
+  EXPECT_EQ(user_manager_->GetPersistedUsers().size(), 0u);
+  EXPECT_FALSE(user_manager_->FindUser(kAccountId0));
+  EXPECT_TRUE(user_manager_->EnsureUser(kAccountId0,
+                                        user_manager::UserType::kRegular,
+                                        /*is_ephemeral=*/false));
+  EXPECT_EQ(user_manager_->GetPersistedUsers().size(), 1u);
+  EXPECT_TRUE(user_manager_->FindUser(kAccountId0));
+
+  // Calling EnsureUser for the existing user is no-op.
+  EXPECT_FALSE(user_manager_->EnsureUser(kAccountId0,
+                                         user_manager::UserType::kRegular,
+                                         /*is_ephemeral=*/false));
+  EXPECT_EQ(user_manager_->GetPersistedUsers().size(), 1u);
+}
+
+TEST_F(UserManagerTest, EnsureUserEphemeralRegular) {
+  EXPECT_EQ(user_manager_->GetPersistedUsers().size(), 0u);
+  EXPECT_FALSE(user_manager_->FindUser(kAccountId0));
+  EXPECT_TRUE(user_manager_->EnsureUser(kAccountId0,
+                                        user_manager::UserType::kRegular,
+                                        /*is_ephemeral=*/true));
+  // Ephemeral user should not be listed in persisted list.
+  EXPECT_EQ(user_manager_->GetPersistedUsers().size(), 0u);
+  EXPECT_TRUE(user_manager_->FindUser(kAccountId0));
+}
+
+TEST_F(UserManagerTest, EnsureUserChild) {
+  EXPECT_EQ(user_manager_->GetPersistedUsers().size(), 0u);
+  EXPECT_FALSE(user_manager_->FindUser(kAccountId0));
+  EXPECT_TRUE(user_manager_->EnsureUser(kAccountId0,
+                                        user_manager::UserType::kChild,
+                                        /*is_ephemeral=*/false));
+  EXPECT_EQ(user_manager_->GetPersistedUsers().size(), 1u);
+  EXPECT_TRUE(user_manager_->FindUser(kAccountId0));
+
+  // Calling EnsureUser for the existing user is no-op.
+  EXPECT_FALSE(user_manager_->EnsureUser(kAccountId0,
+                                         user_manager::UserType::kChild,
+                                         /*is_ephemeral=*/false));
+  EXPECT_EQ(user_manager_->GetPersistedUsers().size(), 1u);
+}
+
+TEST_F(UserManagerTest, EnsureUserTypeSwitch) {
+  // EnsureUser may switch UserType between kRegular and kChild.
+  ASSERT_TRUE(user_manager_->EnsureUser(kAccountId0,
+                                        user_manager::UserType::kRegular,
+                                        /*is_ephemeral=*/false));
+  auto* user = user_manager_->FindUser(kAccountId0);
+  ASSERT_TRUE(user);
+  EXPECT_EQ(user->GetType(), user_manager::UserType::kRegular);
+
+  // Switch from kRegular to kChild.
+  EXPECT_FALSE(user_manager_->EnsureUser(kAccountId0,
+                                         user_manager::UserType::kChild,
+                                         /*is_ephemeral=*/false));
+  EXPECT_EQ(user->GetType(), user_manager::UserType::kChild);
+
+  // Move back from kChild to kRegular.
+  EXPECT_FALSE(user_manager_->EnsureUser(kAccountId0,
+                                         user_manager::UserType::kRegular,
+                                         /*is_ephemeral=*/false));
+  EXPECT_EQ(user->GetType(), user_manager::UserType::kRegular);
+}
+
+TEST_F(UserManagerTest, EnsureUserGuest) {
+  EXPECT_FALSE(user_manager_->FindUser(user_manager::GuestAccountId()));
+  EXPECT_TRUE(user_manager_->EnsureUser(user_manager::GuestAccountId(),
+                                        user_manager::UserType::kGuest,
+                                        /*is_ephemeral=*/false));
+  auto* user = user_manager_->FindUser(user_manager::GuestAccountId());
+  ASSERT_TRUE(user);
+  EXPECT_EQ(user->GetType(), user_manager::UserType::kGuest);
+
+  // Guest user is not in a persisted list.
+  EXPECT_EQ(user_manager_->GetPersistedUsers().size(), 0u);
+}
+
+TEST_F(UserManagerTest, EnsureUserPublicAccount) {
+  EXPECT_FALSE(user_manager_->FindUser(kAccountId0));
+  EXPECT_TRUE(user_manager_->EnsureUser(kAccountId0,
+                                        user_manager::UserType::kPublicAccount,
+                                        /*is_ephemeral=*/false));
+  EXPECT_TRUE(user_manager_->FindUser(kAccountId0));
+
+  // Creation of a PublicAccount User happens only when, in the previous
+  // chrome process, it's marked as deleted, then Chrome is restarted (e.g.
+  // due to crash). In the case, the created user should not be listed in
+  // the persisted list.
+  EXPECT_EQ(user_manager_->GetPersistedUsers().size(), 0u);
 }
 
 }  // namespace ash

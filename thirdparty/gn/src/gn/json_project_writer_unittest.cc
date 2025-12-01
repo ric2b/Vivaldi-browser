@@ -129,6 +129,15 @@ TEST_F(JSONWriter, ActionWithResponseFile) {
             "outputs": [ "{{source_out_dir}}/{{target_output_name}}.{{source_name_part}}.o" ],
             "weak_framework_switch": "-weak_framework "
          },
+         "cxx_module": {
+            "command": "c++ {{source}} {{cflags}} {{cflags_cc}} {{defines}} {{include_dirs}} -o {{output}}",
+            "framework_dir_switch": "-F",
+            "framework_switch": "-framework ",
+            "lib_dir_switch": "-L",
+            "lib_switch": "-l",
+            "outputs": [ "{{source_out_dir}}/{{target_output_name}}.{{source_name_part}}.pcm" ],
+            "weak_framework_switch": "-weak_framework "
+         },
          "link": {
             "command": "ld -o {{target_output_name}} {{source}} {{ldflags}} {{libs}}",
             "framework_dir_switch": "-F",
@@ -358,6 +367,15 @@ TEST_F(JSONWriter, RustTarget) {
             "lib_dir_switch": "-L",
             "lib_switch": "-l",
             "outputs": [ "{{source_out_dir}}/{{target_output_name}}.{{source_name_part}}.o" ],
+            "weak_framework_switch": "-weak_framework "
+         },
+         "cxx_module": {
+            "command": "c++ {{source}} {{cflags}} {{cflags_cc}} {{defines}} {{include_dirs}} -o {{output}}",
+            "framework_dir_switch": "-F",
+            "framework_switch": "-framework ",
+            "lib_dir_switch": "-L",
+            "lib_switch": "-l",
+            "outputs": [ "{{source_out_dir}}/{{target_output_name}}.{{source_name_part}}.pcm" ],
             "weak_framework_switch": "-weak_framework "
          },
          "link": {
@@ -613,6 +631,15 @@ TEST_F(JSONWriter, ForEachWithResponseFile) {
             "lib_dir_switch": "-L",
             "lib_switch": "-l",
             "outputs": [ "{{source_out_dir}}/{{target_output_name}}.{{source_name_part}}.o" ],
+            "weak_framework_switch": "-weak_framework "
+         },
+         "cxx_module": {
+            "command": "c++ {{source}} {{cflags}} {{cflags_cc}} {{defines}} {{include_dirs}} -o {{output}}",
+            "framework_dir_switch": "-F",
+            "framework_switch": "-framework ",
+            "lib_dir_switch": "-L",
+            "lib_switch": "-l",
+            "outputs": [ "{{source_out_dir}}/{{target_output_name}}.{{source_name_part}}.pcm" ],
             "weak_framework_switch": "-weak_framework "
          },
          "link": {

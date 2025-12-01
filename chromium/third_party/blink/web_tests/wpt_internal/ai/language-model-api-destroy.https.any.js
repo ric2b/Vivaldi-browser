@@ -2,14 +2,10 @@
 // META: script=resources/workaround-for-382640509.js
 
 promise_test(async t => {
-  // Make sure the prompt api is enabled.
-  assert_true(!!ai);
-  // Make sure the session could be created.
-  const capabilities = await ai.languageModel.capabilities();
-  const status = capabilities.available;
-  assert_true(status !== "no");
+  await ensureLanguageModel();
+
   // Start a new session.
-  const session = await ai.languageModel.create();
+  const session = await LanguageModel.create();
 
   // Calling `session.destroy()` immediately after `session.prompt()` will
   // trigger the "The model execution session has been destroyed." exception.
@@ -28,9 +24,20 @@ promise_test(async t => {
   );
 
   // After destroying the session, the properties should be still accessible.
-  assert_true(typeof session.maxTokens === "number", "maxTokens must be accessible.");
-  assert_true(typeof session.tokensSoFar === "number", "tokensSoFar must be accessible.");
-  assert_true(typeof session.tokensLeft === "number", "tokensLeft must be accessible.");
-  assert_true(typeof session.temperature === "number", "temperature must be accessible.");
-  assert_true(typeof session.topK === "number", "topK must be accessible.");
+  assert_equals(
+    typeof session.inputQuota, "number",
+    "inputQuota must be accessible."
+  );
+  assert_equals(
+    typeof session.inputUsage, "number",
+    "inputUsage must be accessible."
+  );
+  assert_equals(
+    typeof session.temperature, "number",
+    "temperature must be accessible."
+  );
+  assert_equals(
+    typeof session.topK, "number",
+    "topK must be accessible."
+  );
 });

@@ -14,6 +14,7 @@
 #include "build/build_config.h"
 #include "content/public/browser/content_browser_client.h"
 #include "content/shell/browser/shell_speech_recognition_manager_delegate.h"
+#include "services/network/public/cpp/permissions_policy/permissions_policy_declaration.h"
 #include "services/network/public/mojom/network_context.mojom-forward.h"
 
 class PrefService;
@@ -136,7 +137,7 @@ class ShellContentBrowserClient : public ContentBrowserClient {
       scoped_refptr<net::HttpResponseHeaders> response_headers,
       bool first_auth_attempt,
       GuestPageHolder* guest,
-      LoginAuthRequiredCallback auth_required_callback) override;
+      LoginDelegate::LoginAuthRequiredCallback auth_required_callback) override;
   base::Value::Dict GetNetLogConstants() override;
   base::FilePath GetSandboxedStorageServiceDataDirectory() override;
   base::FilePath GetFirstPartySetsDirectory() override;
@@ -178,7 +179,7 @@ class ShellContentBrowserClient : public ContentBrowserClient {
 
   // Turns on features via permissions policy for Isolated App
   // Web Platform Tests.
-  std::optional<blink::ParsedPermissionsPolicy>
+  std::optional<network::ParsedPermissionsPolicy>
   GetPermissionsPolicyForIsolatedWebApp(WebContents* web_contents,
                                         const url::Origin& app_origin) override;
 

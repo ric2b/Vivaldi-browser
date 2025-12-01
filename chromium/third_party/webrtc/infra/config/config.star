@@ -52,7 +52,8 @@ def os_from_name(name):
 # Add names of builders to remove from LKGR finder to this list. This is
 # useful when a failure can be safely ignored while fixing it without
 # blocking the LKGR finder on it.
-skipped_lkgr_bots = []
+skipped_lkgr_bots = [
+]
 
 # Use LUCI Scheduler BBv2 names and add Scheduler realms configs.
 lucicfg.enable_experiment("crbug.com/1182002")
@@ -289,6 +290,10 @@ luci.bucket(
             "project-webrtc-ci-schedulers",
         ]),
     ],
+    constraints = luci.bucket_constraints(
+        pools = ["luci.webrtc.ci"],
+        service_accounts = ["webrtc-ci-builder@chops-service-accounts.iam.gserviceaccount.com"],
+    ),
 )
 
 luci.bucket(
@@ -302,6 +307,10 @@ luci.bucket(
             "service-account-chromeperf",
         ]),
     ],
+    constraints = luci.bucket_constraints(
+        pools = ["luci.webrtc.perf"],
+        service_accounts = ["webrtc-ci-builder@chops-service-accounts.iam.gserviceaccount.com"],
+    ),
 )
 
 luci.bucket(
@@ -750,6 +759,7 @@ ios_try_job("ios_compile_arm64_dbg")
 ios_builder("iOS64 Release", "iOS|arm64|rel")
 ios_try_job("ios_compile_arm64_rel")
 ios_builder("iOS Debug (simulator)", "iOS|x64|sim")
+
 ios_try_job("ios_dbg_simulator")
 ios_builder("iOS API Framework Builder", "iOS|fat|size", recipe = "ios_api_framework", prioritized = True)
 ios_try_job("ios_api_framework", recipe = "ios_api_framework")
@@ -838,7 +848,7 @@ try_builder("win11_debug", cq = None)
 chromium_try_builder("win_chromium_compile")
 chromium_try_builder("win_chromium_compile_dbg")
 
-try_builder("iwyu_verifier", cq = None)
+try_builder("iwyu_verifier")
 
 try_builder(
     "presubmit",

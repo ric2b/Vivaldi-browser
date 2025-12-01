@@ -418,6 +418,9 @@ TEST_F(NavigatorTest, BeforeUnloadDenialCancelNavigation) {
   const GURL kUrl2("http://www.chromium.org/");
 
   contents()->NavigateAndCommit(kUrl1);
+  // This test assumes a beforeunload handler is present.
+  main_test_rfh()->SuddenTerminationDisablerChanged(
+      true, blink::mojom::SuddenTerminationDisablerType::kBeforeUnloadHandler);
 
   // Start a new navigation.
   FrameTreeNode* node = main_test_rfh()->frame_tree_node();
@@ -451,6 +454,9 @@ TEST_F(NavigatorTest, BeginNavigation) {
   FrameTreeNode* root_node = contents()->GetPrimaryFrameTree().root();
   TestRenderFrameHost* subframe_rfh = main_test_rfh()->AppendChild("Child");
   ASSERT_TRUE(subframe_rfh);
+  // This test assumes a beforeunload handler is present on the subframe.
+  subframe_rfh->SuddenTerminationDisablerChanged(
+      true, blink::mojom::SuddenTerminationDisablerType::kBeforeUnloadHandler);
 
   // Start a navigation at the subframe.
   FrameTreeNode* subframe_node = subframe_rfh->frame_tree_node();
@@ -489,9 +495,9 @@ TEST_F(NavigatorTest, BeginNavigation) {
   EXPECT_FALSE(GetSpeculativeRenderFrameHost(root_node));
 
   // Subframe navigations should never create a speculative RenderFrameHost,
-  // unless site-per-process or ProcessSharingWithStrictSiteInstances is
-  // enabled. In that case, as the subframe navigation is to a different site
-  // and is still ongoing, it should have one.
+  // unless site-per-process or another mode where a SiteInstance cannot contain
+  // multiple sites is enabled. In that case, as the subframe navigation is to a
+  // different site and is still ongoing, it should have one.
   bool expect_site_instance_change = AreStrictSiteInstancesEnabled();
   if (expect_site_instance_change) {
     EXPECT_TRUE(GetSpeculativeRenderFrameHost(subframe_node));
@@ -1396,7 +1402,7 @@ TEST_F(NavigatorTest, PermissionsPolicySameSiteNavigation) {
   contents()->NavigateAndCommit(kUrl1);
 
   // Check the permissions policy before navigation.
-  const blink::PermissionsPolicy* original_permissions_policy =
+  const network::PermissionsPolicy* original_permissions_policy =
       main_test_rfh()->GetPermissionsPolicy();
   ASSERT_TRUE(original_permissions_policy);
 
@@ -1404,7 +1410,7 @@ TEST_F(NavigatorTest, PermissionsPolicySameSiteNavigation) {
   contents()->NavigateAndCommit(kUrl2);
 
   // Check the permissions policy after navigation.
-  const blink::PermissionsPolicy* final_permissions_policy =
+  const network::PermissionsPolicy* final_permissions_policy =
       main_test_rfh()->GetPermissionsPolicy();
   ASSERT_TRUE(final_permissions_policy);
   ASSERT_NE(original_permissions_policy, final_permissions_policy);
@@ -1419,7 +1425,7 @@ TEST_F(NavigatorTest, PermissionsPolicyFragmentNavigation) {
   contents()->NavigateAndCommit(kUrl1);
 
   // Check the permissions policy before navigation.
-  const blink::PermissionsPolicy* original_permissions_policy =
+  const network::PermissionsPolicy* original_permissions_policy =
       main_test_rfh()->GetPermissionsPolicy();
   ASSERT_TRUE(original_permissions_policy);
 
@@ -1427,7 +1433,7 @@ TEST_F(NavigatorTest, PermissionsPolicyFragmentNavigation) {
   contents()->NavigateAndCommit(kUrl2);
 
   // Check the permissions policy after navigation.
-  const blink::PermissionsPolicy* final_permissions_policy =
+  const network::PermissionsPolicy* final_permissions_policy =
       main_test_rfh()->GetPermissionsPolicy();
   ASSERT_EQ(original_permissions_policy, final_permissions_policy);
 }
@@ -1445,7 +1451,7 @@ TEST_F(NavigatorTest, PermissionsPolicyNewChild) {
       contents()->GetPrimaryMainFrame()->AppendChild("child");
   NavigationSimulator::NavigateAndCommitFromDocument(kUrl2, subframe_rfh);
 
-  const blink::PermissionsPolicy* subframe_permissions_policy =
+  const network::PermissionsPolicy* subframe_permissions_policy =
       subframe_rfh->GetPermissionsPolicy();
   ASSERT_TRUE(subframe_permissions_policy);
   ASSERT_FALSE(subframe_permissions_policy->GetOriginForTest().opaque());

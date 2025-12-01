@@ -5,6 +5,7 @@
 #include "ui/views/controls/scroll_view.h"
 
 #include <algorithm>
+#include <utility>
 
 #include "base/check_op.h"
 #include "base/feature_list.h"
@@ -67,10 +68,10 @@ class ScrollCornerView : public View {
   void OnPaint(gfx::Canvas* canvas) override {
 #if BUILDFLAG(IS_APPLE)
     ui::NativeTheme::ExtraParams params(
-        absl::in_place_type<ui::NativeTheme::ScrollbarExtraParams>);
+        std::in_place_type<ui::NativeTheme::ScrollbarExtraParams>);
 #else
     ui::NativeTheme::ExtraParams params(
-        absl::in_place_type<ui::NativeTheme::ScrollbarTrackExtraParams>);
+        std::in_place_type<ui::NativeTheme::ScrollbarTrackExtraParams>);
 #endif
     GetNativeTheme()->Paint(canvas->sk_canvas(), GetColorProvider(),
                             ui::NativeTheme::kScrollbarCorner,
@@ -397,7 +398,8 @@ void ScrollView::SetContents(std::nullptr_t) {
 void ScrollView::SetContentsLayerType(ui::LayerType layer_type) {
   // This function should only be called when scroll with layers is enabled and
   // before `contents_` is set.
-  DCHECK(ScrollsWithLayers() && !contents_);
+  DCHECK(ScrollsWithLayers());
+  DCHECK(!contents_);
 
   // Currently only allow LAYER_TEXTURED and LAYER_NOT_DRAWN. If other types of
   // layer are needed, consult with the owner.
@@ -1163,7 +1165,7 @@ void ScrollView::SetControlVisibility(View* control, bool should_show) {
   }
   if (should_show) {
     if (!control->GetVisible()) {
-      AddChildView(control);
+      AddChildViewRaw(control);
       control->SetVisible(true);
     }
   } else {
@@ -1194,11 +1196,6 @@ void ScrollView::UpdateScrollBarPositions() {
   GetViewAccessibility().SetScrollYMax(vert_sb_->GetMaxPosition());
 }
 
-gfx::PointF ScrollView::CurrentOffset() const {
-  return ScrollsWithLayers() ? contents_->layer()->CurrentScrollOffset()
-                             : gfx::PointF(-contents_->x(), -contents_->y());
-}
-
 void ScrollView::ScrollByOffset(const gfx::PointF& offset) {
   if (!contents_) {
     return;
@@ -1218,6 +1215,11 @@ void ScrollView::ScrollToOffset(const gfx::PointF& offset) {
   GetViewAccessibility().SetScrollX(offset.x());
   GetViewAccessibility().SetScrollY(offset.y());
   OnScrolled(offset);
+}
+
+gfx::PointF ScrollView::CurrentOffset() const {
+  return ScrollsWithLayers() ? contents_->layer()->CurrentScrollOffset()
+                             : gfx::PointF(-contents_->x(), -contents_->y());
 }
 
 bool ScrollView::ScrollsWithLayers() const {
@@ -1266,8 +1268,8 @@ void ScrollView::OnScrolled(const gfx::PointF& offset) {
 
   on_contents_scrolled_.Notify();
 
-  NotifyAccessibilityEvent(ax::mojom::Event::kScrollPositionChanged,
-                           /*send_native_event=*/true);
+  NotifyAccessibilityEventDeprecated(ax::mojom::Event::kScrollPositionChanged,
+                                     /*send_native_event=*/true);
 }
 
 void ScrollView::ScrollHeader() {

@@ -313,14 +313,14 @@ IN_PROC_BROWSER_TEST_P(DiscountsBubbleDialogInteractiveTest,
       WaitForShow(kDiscountsChipElementId),
       PressButton(kDiscountsChipElementId),
       WaitForShow(kDiscountsBubbleDialogId),
-      InSameContext(Steps(
+      InSameContext(
           PressButton(kDiscountsBubbleCopyButtonElementId), Check([&]() {
             ui::Clipboard* clipboard = ui::Clipboard::GetForCurrentThread();
             std::u16string clipboard_text;
             clipboard->ReadText(ui::ClipboardBuffer::kCopyPaste,
                                 /* data_dst = */ nullptr, &clipboard_text);
             return clipboard_text == u"WELCOME10";
-          }))));
+          })));
 }
 
 IN_PROC_BROWSER_TEST_P(DiscountsBubbleDialogInteractiveTest,
@@ -332,7 +332,7 @@ IN_PROC_BROWSER_TEST_P(DiscountsBubbleDialogInteractiveTest,
       WaitForShow(kDiscountsChipElementId),
       PressButton(kDiscountsChipElementId),
       WaitForShow(kDiscountsBubbleDialogId),
-      InSameContext(Steps(
+      InSameContext(
           CheckViewProperty(kDiscountsBubbleCopyButtonElementId,
                             &views::Button::GetTooltipText,
                             l10n_util::GetStringUTF16(
@@ -342,17 +342,16 @@ IN_PROC_BROWSER_TEST_P(DiscountsBubbleDialogInteractiveTest,
               kDiscountsBubbleCopyButtonElementId,
               &views::Button::GetTooltipText,
               l10n_util::GetStringUTF16(
-                  IDS_DISCOUNTS_COUPON_CODE_BUTTON_TOOLTIP_CLICKED)))));
+                  IDS_DISCOUNTS_COUPON_CODE_BUTTON_TOOLTIP_CLICKED))));
 }
 
 IN_PROC_BROWSER_TEST_P(DiscountsBubbleDialogInteractiveTest,
                        AccessibleNameChangedOnCopyButtonPress) {
-  static auto is_accessible_name_equal = [](views::MdTextButton* copy_button,
-                                            int expected_message_id) {
-    std::u16string expected_name =
-        copy_button->GetText() + u" " +
-        l10n_util::GetStringUTF16(expected_message_id);
-    return copy_button->GetViewAccessibility().GetCachedName() == expected_name;
+  static auto is_accessible_name_expected = [](views::MdTextButton* copy_button,
+                                               int expected_message_id) {
+    return copy_button->GetViewAccessibility().GetCachedName() ==
+           base::StrCat({copy_button->GetText(), u" ",
+                         l10n_util::GetStringUTF16(expected_message_id)});
   };
 
   RunTestSequence(
@@ -364,13 +363,13 @@ IN_PROC_BROWSER_TEST_P(DiscountsBubbleDialogInteractiveTest,
       WaitForShow(kDiscountsBubbleDialogId),
       CheckView(kDiscountsBubbleCopyButtonElementId,
                 base::BindOnce([&](views::MdTextButton* copy_button) {
-                  return is_accessible_name_equal(
+                  return is_accessible_name_expected(
                       copy_button, IDS_DISCOUNTS_COUPON_CODE_BUTTON_TOOLTIP);
                 })),
       PressButton(kDiscountsBubbleCopyButtonElementId),
       CheckView(kDiscountsBubbleCopyButtonElementId,
                 base::BindOnce([&](views::MdTextButton* copy_button) {
-                  return is_accessible_name_equal(
+                  return is_accessible_name_expected(
                       copy_button,
                       IDS_DISCOUNTS_COUPON_CODE_BUTTON_TOOLTIP_CLICKED);
                 })));
@@ -399,7 +398,7 @@ IN_PROC_BROWSER_TEST_P(DiscountsBubbleDialogInteractiveTest,
                 kEntryName);
         ASSERT_EQ(1u, entries.size());
       }),
-      InSameContext(Steps(
+      InSameContext(
           PressButton(kDiscountsBubbleCopyButtonElementId), Check([&]() {
             return user_action_tester.GetActionCount(
                        "Commerce.Discounts.DiscountsBubbleCopyButtonClicked") ==
@@ -415,7 +414,7 @@ IN_PROC_BROWSER_TEST_P(DiscountsBubbleDialogInteractiveTest,
                 ukm::builders::Shopping_ShoppingAction::kDiscountCopiedName, 1);
             test_ukm_recorder.ExpectEntrySourceHasUrl(
                 entries[1], embedded_test_server()->GetURL(kShoppingURL));
-          }))));
+          })));
 }
 
 IN_PROC_BROWSER_TEST_P(DiscountsBubbleDialogInteractiveTest,
@@ -430,17 +429,17 @@ IN_PROC_BROWSER_TEST_P(DiscountsBubbleDialogInteractiveTest,
       PressButton(kDiscountsChipElementId),
       WaitForShow(kDiscountsBubbleDialogId),
       InSameContext(
-          Steps(HideDiscountBubbleDialog(),
-                WaitForHide(kDiscountsBubbleDialogId), Do([&]() {
-                  histogram_tester.ExpectBucketCount(
-                      "Commerce.Discounts.DiscountsBubbleCouponCodeIsCopied",
-                      false, 1);
-                  if (commerce::kDiscountOnShoppyPage.Get()) {
-                    histogram_tester.ExpectBucketCount(
-                        "Commerce.Discounts.DiscountsBubble.TypeOnCopy",
-                        test_discount_cluster_type_, 0);
-                  }
-                }))));
+          HideDiscountBubbleDialog(), WaitForHide(kDiscountsBubbleDialogId),
+          Do([&]() {
+            histogram_tester.ExpectBucketCount(
+                "Commerce.Discounts.DiscountsBubbleCouponCodeIsCopied", false,
+                1);
+            if (commerce::kDiscountOnShoppyPage.Get()) {
+              histogram_tester.ExpectBucketCount(
+                  "Commerce.Discounts.DiscountsBubble.TypeOnCopy",
+                  test_discount_cluster_type_, 0);
+            }
+          })));
 }
 
 IN_PROC_BROWSER_TEST_P(DiscountsBubbleDialogInteractiveTest,
@@ -455,18 +454,18 @@ IN_PROC_BROWSER_TEST_P(DiscountsBubbleDialogInteractiveTest,
       PressButton(kDiscountsChipElementId),
       WaitForShow(kDiscountsBubbleDialogId),
       InSameContext(
-          Steps(PressButton(kDiscountsBubbleCopyButtonElementId),
-                HideDiscountBubbleDialog(),
-                WaitForHide(kDiscountsBubbleDialogId), Do([&]() {
-                  histogram_tester.ExpectBucketCount(
-                      "Commerce.Discounts.DiscountsBubbleCouponCodeIsCopied",
-                      true, 1);
-                  if (commerce::kDiscountOnShoppyPage.Get()) {
-                    histogram_tester.ExpectBucketCount(
-                        "Commerce.Discounts.DiscountsBubble.TypeOnCopy",
-                        test_discount_cluster_type_, 1);
-                  }
-                }))));
+          PressButton(kDiscountsBubbleCopyButtonElementId),
+          HideDiscountBubbleDialog(), WaitForHide(kDiscountsBubbleDialogId),
+          Do([&]() {
+            histogram_tester.ExpectBucketCount(
+                "Commerce.Discounts.DiscountsBubbleCouponCodeIsCopied", true,
+                1);
+            if (commerce::kDiscountOnShoppyPage.Get()) {
+              histogram_tester.ExpectBucketCount(
+                  "Commerce.Discounts.DiscountsBubble.TypeOnCopy",
+                  test_discount_cluster_type_, 1);
+            }
+          })));
 }
 
 IN_PROC_BROWSER_TEST_P(DiscountsBubbleDialogInteractiveTest,
@@ -556,8 +555,8 @@ IN_PROC_BROWSER_TEST_P(DiscountDialogAutoPopupCounterfactual,
       WaitForViewProperty(kDiscountsChipElementId, DiscountsIconView,
                           IsLabelExpanded, true),
       If([&]() { return is_counterfactual_enabled; },
-         EnsureNotPresent(kDiscountsBubbleDialogId),
-         WaitForShow(kDiscountsBubbleDialogId)),
+         Then(EnsureNotPresent(kDiscountsBubbleDialogId)),
+         Else(WaitForShow(kDiscountsBubbleDialogId))),
       Do([&]() {
         entries = test_ukm_recorder.GetEntriesByName(
             ukm::builders::Shopping_Discounts::kEntryName);

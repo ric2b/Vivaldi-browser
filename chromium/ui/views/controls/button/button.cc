@@ -5,6 +5,7 @@
 #include "ui/views/controls/button/button.h"
 
 #include <utility>
+#include <variant>
 
 #include "base/functional/bind.h"
 #include "base/functional/callback.h"
@@ -12,7 +13,6 @@
 #include "base/functional/overloaded.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
-#include "third_party/abseil-cpp/absl/types/variant.h"
 #include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/actions/actions.h"
@@ -124,12 +124,12 @@ Button::PressedCallback& Button::PressedCallback::operator=(PressedCallback&&) =
 Button::PressedCallback::~PressedCallback() = default;
 
 Button::PressedCallback::operator bool() const {
-  return absl::visit([](const auto& callback) { return !callback.is_null(); },
-                     callback_);
+  return std::visit([](const auto& callback) { return !callback.is_null(); },
+                    callback_);
 }
 
 void Button::PressedCallback::Run(const ui::Event& event) {
-  return absl::visit(
+  return std::visit(
       base::Overloaded{
           [](base::OnceClosure& closure) { std::move(closure).Run(); },
           [](const base::RepeatingClosure& closure) { closure.Run(); },
@@ -384,7 +384,7 @@ void Button::SetHotTracked(bool is_hot_tracked) {
   }
 
   if (is_hot_tracked) {
-    NotifyAccessibilityEvent(ax::mojom::Event::kHover, true);
+    NotifyAccessibilityEventDeprecated(ax::mojom::Event::kHover, true);
   }
 }
 
@@ -835,9 +835,9 @@ ButtonActionViewInterface::ButtonActionViewInterface(Button* action_view)
 void ButtonActionViewInterface::ActionItemChangedImpl(
     actions::ActionItem* action_item) {
   BaseActionViewInterface::ActionItemChangedImpl(action_item);
-  std::u16string tooltip_text = action_item->GetTooltipText();
+  std::u16string tooltip_text(action_item->GetTooltipText());
   if (!tooltip_text.empty()) {
-    action_view_->SetTooltipText(tooltip_text);
+    action_view_->SetTooltipText(std::move(tooltip_text));
   }
 }
 

@@ -75,6 +75,10 @@ NSString* const vNTPToolbarMoreDarkTintColor =
 NSString* vNTPSearchIcon = @"vivaldi_ntp_search";
 // Image name for toolbar more icon
 NSString* vNTPToolbarMoreIcon = @"vivaldi_ntp_toolbar_more";
+// Image name for toolbar add icon
+NSString* vNTPToolbarAddIcon = @"vivaldi_ntp_toolbar_add";
+// Image name for toolbar customize
+NSString* vNTPToolbarCustomizeIcon = @"vivaldi_ntp_toolbar_customize";
 // Image name for private mode page background
 NSString* vNTPPrivateTabBG = @"vivaldi_private_tab_bg";
 // Image name for private mode page ghost

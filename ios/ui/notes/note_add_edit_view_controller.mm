@@ -14,6 +14,7 @@
 #import "base/check_op.h"
 #import "base/ios/block_types.h"
 #import "base/strings/sys_string_conversions.h"
+#import "components/prefs/pref_service.h"
 #import "components/url_formatter/url_fixer.h"
 #import "ios/chrome/browser/features/vivaldi_features.h"
 #import "ios/chrome/browser/keyboard/ui_bundled/UIKeyCommand+Chrome.h"
@@ -52,6 +53,7 @@
 #import "ios/ui/notes/note_parent_folder_view.h"
 #import "ios/ui/notes/note_ui_constants.h"
 #import "ios/ui/notes/note_utils_ios.h"
+#import "prefs/vivaldi_pref_names.h"
 #import "ui/base/l10n/l10n_util_mac.h"
 #import "ui/base/l10n/l10n_util.h"
 #import "ui/gfx/image/image.h"
@@ -298,6 +300,12 @@ NSString* vMarkdownToggleOff = @"markdown_toggle_off";
   // Whevener this VC is displayed the bottom toolbar will be shown.
   self.navigationController.toolbarHidden = NO;
   [self updateFolderState];
+
+  BOOL showMarkdownEditor = _profile->GetPrefs()->GetBoolean(
+      vivaldiprefs::kVivaldiNotesShowMarkdownEditor);
+  if (showMarkdownEditor && self.webView.hidden) {
+    [self toggleMarkdown];
+  }
 }
 
 /// Updates the textfields if editing an item, and the parent folder components.
@@ -739,11 +747,15 @@ NSString* vMarkdownToggleOff = @"markdown_toggle_off";
     [self.webView reloadFromOrigin];
     [self setWebViewHidden:NO];
     [self setWebViewFocus];
+    _profile->GetPrefs()->SetBoolean(
+        vivaldiprefs::kVivaldiNotesShowMarkdownEditor, YES);
   } else {
     [self commitNoteChanges];
     [self setWebViewHidden:YES];
     [self updateUIFromNote];
     [self.noteTextView setFocus];
+    _profile->GetPrefs()->SetBoolean(
+        vivaldiprefs::kVivaldiNotesShowMarkdownEditor, NO);
   }
 
   // set toggle button
@@ -924,21 +936,23 @@ NSString* vMarkdownToggleOff = @"markdown_toggle_off";
          self.note, [self inputNoteName], GURL(),
          self.folder, self.noteModel, self.profile)];
   } else {
-    NSString* noteString = [self.inputNoteName stringByTrimmingCharactersInSet:
+    NSString* inputString = [self.inputNoteName stringByTrimmingCharactersInSet:
                             [NSCharacterSet whitespaceAndNewlineCharacterSet]];
-    if ([noteString length] == 0) {
+    if ([inputString length] == 0) {
       return;
     }
     std::u16string folderTitle =
-    l10n_util::GetStringUTF16(IDS_VIVALDI_NOTE_CONTEXT_BAR_NEW_NOTE);
-    std::u16string titleString = base::SysNSStringToUTF16(noteString);
+      l10n_util::GetStringUTF16(IDS_VIVALDI_NOTE_CONTEXT_BAR_NEW_NOTE);
+    std::u16string noteString = base::SysNSStringToUTF16(inputString);
 
     if(!self.note) {
       self.note = self.noteModel->AddNote(self.folder,
                                           self.folder->children().size(),
-                                          titleString,
+                                          // Passing empty string as title
+                                          // for new note
+                                          std::u16string(),
                                           GURL(),
-                                          titleString);
+                                          noteString);
       self.editingExistingItem = YES;
     }
   }

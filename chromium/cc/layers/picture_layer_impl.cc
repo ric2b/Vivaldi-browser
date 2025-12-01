@@ -26,11 +26,12 @@
 #include "cc/base/math_util.h"
 #include "cc/benchmarks/micro_benchmark_impl.h"
 #include "cc/debug/debug_colors.h"
+#include "cc/layers/append_quads_context.h"
 #include "cc/layers/append_quads_data.h"
-#include "cc/layers/solid_color_layer_impl.h"
 #include "cc/paint/display_item_list.h"
 #include "cc/tiles/tile_manager.h"
 #include "cc/tiles/tiling_set_raster_queue_all.h"
+#include "cc/trees/draw_property_utils.h"
 #include "cc/trees/effect_node.h"
 #include "cc/trees/layer_tree_impl.h"
 #include "cc/trees/occlusion.h"
@@ -203,7 +204,8 @@ void PictureLayerImpl::PushPropertiesTo(LayerImpl* base_layer) {
   layer_impl->SanityCheckTilingState();
 }
 
-void PictureLayerImpl::AppendQuads(viz::CompositorRenderPass* render_pass,
+void PictureLayerImpl::AppendQuads(const AppendQuadsContext& context,
+                                   viz::CompositorRenderPass* render_pass,
                                    AppendQuadsData* append_quads_data) {
   // RenderSurfaceImpl::AppendQuads sets mask properties in the DrawQuad for
   // the masked surface, which will apply to both the backdrop filter and the
@@ -216,34 +218,8 @@ void PictureLayerImpl::AppendQuads(viz::CompositorRenderPass* render_pass,
       render_pass->CreateAndAppendSharedQuadState();
 
   if (raster_source_->IsSolidColor()) {
-    // TODO(crbug.com/41468388): This is still hard-coded at 1.0. This has some
-    // history:
-    //  - for crbug.com/769319, the contents scale was allowed to change, to
-    //    avoid blurring on high-dpi screens.
-    //  - for crbug.com/796558, the max device scale was hard-coded back to 1.0
-    //    for single-tile masks, to avoid problems with transforms.
-    // To avoid those transform/scale bugs, this is currently left at 1.0. See
-    // crbug.com/979672 for more context and test links.
-    float max_contents_scale = 1;
-
-    // The downstream CA layers use shared_quad_state to generate resources of
-    // the right size even if it is a solid color picture layer.
-    PopulateScaledSharedQuadState(shared_quad_state, max_contents_scale,
-                                  contents_opaque());
-
-    AppendDebugBorderQuad(render_pass, gfx::Rect(bounds()), shared_quad_state,
-                          append_quads_data);
-
-    gfx::Rect scaled_visible_layer_rect =
-        shared_quad_state->visible_quad_layer_rect;
-    Occlusion occlusion = draw_properties().occlusion_in_content_space;
-
-    EffectNode* effect_node = GetEffectTree().Node(effect_tree_index());
-    SolidColorLayerImpl::AppendSolidQuads(
-        render_pass, occlusion, shared_quad_state, scaled_visible_layer_rect,
-        raster_source_->GetSolidColor(),
-        !layer_tree_impl()->settings().enable_edge_anti_aliasing,
-        effect_node->blend_mode, append_quads_data);
+    AppendSolidQuad(render_pass, append_quads_data,
+                    raster_source_->GetSolidColor());
     return;
   }
 
@@ -284,7 +260,7 @@ void PictureLayerImpl::AppendQuads(viz::CompositorRenderPass* render_pass,
           .occlusion_in_content_space.GetOcclusionWithGivenDrawTransform(
               shared_quad_state->quad_to_target_transform);
 
-  if (current_draw_mode_ == DRAW_MODE_RESOURCELESS_SOFTWARE) {
+  if (context.draw_mode == DRAW_MODE_RESOURCELESS_SOFTWARE) {
     DCHECK(shared_quad_state->quad_layer_rect.origin() == gfx::Point(0, 0));
     AppendDebugBorderQuad(
         render_pass, shared_quad_state->quad_layer_rect, shared_quad_state,
@@ -933,8 +909,8 @@ LCDTextDisallowedReason PictureLayerImpl::ComputeLCDTextDisallowedReason(
   }
 
   EffectNode* effect_node = GetEffectTree().Node(effect_tree_index());
-  if (effect_node->node_or_ancestor_has_filters ||
-      effect_node->affected_by_backdrop_filter) {
+  if (effect_node->lcd_text_disallowed_by_filter ||
+      effect_node->lcd_text_disallowed_by_backdrop_filter) {
     return LCDTextDisallowedReason::kPixelOrColorEffect;
   }
 
@@ -981,9 +957,10 @@ void PictureLayerImpl::NotifyTileStateChanged(const Tile* tile) {
   }
 
   if (layer_tree_impl()->settings().UseLayerContextForDisplay() &&
-      !IsActive()) {
-    // Accumulate tile changes on the pending tree only. These are pushed to the
-    // active tree in PushPropertiesTo().
+      (!IsActive() || layer_tree_impl()->settings().commit_to_active_tree)) {
+    // Tiles for the tree currently being committed to (Pending or Active)
+    // are pushed to the display during UpdateDisplayTree. Accumulate those
+    // changes. These are pushed to the active tree in PushPropertiesTo().
     updated_tiles_[tile->contents_scale_key()].emplace(tile->tiling_i_index(),
                                                        tile->tiling_j_index());
   }
@@ -1815,51 +1792,21 @@ bool PictureLayerImpl::CalculateRasterTranslation(
     return false;
   }
 
-  const gfx::Transform& screen_transform = ScreenSpaceTransform();
-  gfx::Transform draw_transform = DrawTransform();
-
-  if (!screen_transform.IsScaleOrTranslation() ||
-      !draw_transform.IsScaleOrTranslation()) {
+  // Besides the RasterScalesApproximatelyEqual() condition for
+  // ScreenSpaceTransform() and DrawTransform() in PixelAlignmentOffset(),
+  // here we also check if the scale of DrawTransform() approximately equals
+  // raster_contents_scale_.
+  if (!draw_property_utils::RasterScalesApproximatelyEqual(
+          DrawTransform().To2dScale(), raster_contents_scale_)) {
     return false;
   }
 
-  // It is only useful to align the content space to the target space if their
-  // relative pixel ratio is some small rational number. Currently we only
-  // align if the relative pixel ratio is 1:1 (i.e. the scale components of
-  // both the screen transform and the draw transform are approximately the same
-  // as |raster_contents_scale_|). Good match if the maximum alignment error on
-  // a layer of size 10000px does not exceed 0.001px.
-  static constexpr float kPixelErrorThreshold = 0.001f;
-  static constexpr float kScaleErrorThreshold = kPixelErrorThreshold / 10000;
-  auto is_raster_scale = [this](const gfx::Transform& transform) -> bool {
-    // The matrix has the X scale at (0,0), and the Y scale at (1,1).
-    gfx::Vector2dF scale_diff = transform.To2dScale() - raster_contents_scale_;
-    return std::abs(scale_diff.x()) <= kScaleErrorThreshold &&
-           std::abs(scale_diff.y()) <= kScaleErrorThreshold;
-  };
-  if (!is_raster_scale(screen_transform) || !is_raster_scale(draw_transform))
-    return false;
-
-  // Extract the fractional part of layer origin in the screen space and in the
-  // target space.
-  auto fraction = [](float f) -> float { return f - floorf(f); };
-  gfx::Vector2dF screen_translation = screen_transform.To2dTranslation();
-  float screen_x_fraction = fraction(screen_translation.x());
-  float screen_y_fraction = fraction(screen_translation.y());
-  gfx::Vector2dF draw_translation = draw_transform.To2dTranslation();
-  float target_x_fraction = fraction(draw_translation.x());
-  float target_y_fraction = fraction(draw_translation.y());
-
-  // If the origin is different in the screen space and in the target space,
-  // it means the render target is not aligned to physical pixels, and the
-  // text content will be blurry regardless of raster translation.
-  if (std::abs(screen_x_fraction - target_x_fraction) > kPixelErrorThreshold ||
-      std::abs(screen_y_fraction - target_y_fraction) > kPixelErrorThreshold) {
-    return false;
+  if (auto offset = draw_property_utils::PixelAlignmentOffset(
+          ScreenSpaceTransform(), DrawTransform())) {
+    raster_translation = *offset;
+    return true;
   }
-
-  raster_translation = gfx::Vector2dF(target_x_fraction, target_y_fraction);
-  return true;
+  return false;
 }
 
 float PictureLayerImpl::MinimumContentsScale() const {
@@ -2288,12 +2235,11 @@ gfx::ContentColorUsage PictureLayerImpl::GetContentColorUsage() const {
 }
 
 DamageReasonSet PictureLayerImpl::GetDamageReasons() const {
-  DamageReasonSet reasons;
+  DamageReasonSet reasons = GetDamageReasonsFromLayerPropertyChange();
   if (has_animated_image_update_rect_) {
     reasons.Put(DamageReason::kAnimatedImage);
   }
-  if (LayerPropertyChanged() || has_non_animated_image_update_rect_ ||
-      !damage_rect_.IsEmpty()) {
+  if (has_non_animated_image_update_rect_ || !damage_rect_.IsEmpty()) {
     reasons.Put(DamageReason::kUntracked);
   }
   return reasons;

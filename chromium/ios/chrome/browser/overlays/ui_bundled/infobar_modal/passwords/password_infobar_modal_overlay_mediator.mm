@@ -147,8 +147,7 @@ using vivaldi::IsVivaldiRunning;
 
   id<SettingsCommands> settings_command_handler =
       HandlerForProtocol(delegate_->GetDispatcher(), SettingsCommands);
-  [settings_command_handler showSavedPasswordsSettingsFromViewController:nil
-                                                        showCancelButton:YES];
+  [settings_command_handler showSavedPasswordsSettingsFromViewController:nil];
 
   UMA_HISTOGRAM_ENUMERATION(
       "PasswordManager.ManagePasswordsReferrer",

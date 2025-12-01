@@ -2620,6 +2620,14 @@ class TurboshaftAssemblerOpInterface
         input, frame_state, ChangeOrDeoptOp::Kind::kFloat64ToUint32,
         minus_zero_mode, feedback));
   }
+  V<Word64> ChangeFloat64ToAdditiveSafeIntegerOrDeopt(
+      V<Float64> input, V<turboshaft::FrameState> frame_state,
+      CheckForMinusZeroMode minus_zero_mode, const FeedbackSource& feedback) {
+    return V<Word64>::Cast(
+        ChangeOrDeopt(input, frame_state,
+                      ChangeOrDeoptOp::Kind::kFloat64ToAdditiveSafeInteger,
+                      minus_zero_mode, feedback));
+  }
   V<Word64> ChangeFloat64ToInt64OrDeopt(V<Float64> input,
                                         V<turboshaft::FrameState> frame_state,
                                         CheckForMinusZeroMode minus_zero_mode,
@@ -3290,7 +3298,7 @@ class TurboshaftAssemblerOpInterface
     int cache_location = index - kMinParameterIndex;
     DCHECK_GE(cache_location, 0);
     if (static_cast<size_t>(cache_location) >= cached_parameters_.size()) {
-      cached_parameters_.resize_and_init(cache_location + 1);
+      cached_parameters_.resize(cache_location + 1, {});
     }
     OpIndex& cached_param = cached_parameters_[cache_location];
     if (!cached_param.valid()) {
@@ -4623,11 +4631,6 @@ class TurboshaftAssemblerOpInterface
     return ReduceIfReachableLoadStackArgument(base, index);
   }
 
-  V<Float64OrWord32> Float16Change(V<Float64OrWord32> input,
-                                   Float16ChangeOp::Kind op) {
-    return ReduceIfReachableFloat16Change(input, op);
-  }
-
   void StoreTypedElement(OpIndex buffer, V<Object> base, V<WordPtr> external,
                          V<WordPtr> index, OpIndex value,
                          ExternalArrayType array_type) {
@@ -4712,8 +4715,8 @@ class TurboshaftAssemblerOpInterface
     return ReduceIfReachableSameValue(left, right, mode);
   }
 
-  V<Word32> Float64SameValue(V<Float64> left, V<Float64> right) {
-    return ReduceIfReachableFloat64SameValue(left, right);
+  V<Word32> Float64SameValue(ConstOrV<Float64> left, ConstOrV<Float64> right) {
+    return ReduceIfReachableFloat64SameValue(resolve(left), resolve(right));
   }
 
   OpIndex FastApiCall(V<turboshaft::FrameState> frame_state,
@@ -4770,12 +4773,6 @@ class TurboshaftAssemblerOpInterface
     return FindOrderedHashEntry(
         table, key,
         FindOrderedHashEntryOp::Kind::kFindOrderedHashMapEntryForInt32Key);
-  }
-  V<Object> SpeculativeNumberBinop(V<Object> left, V<Object> right,
-                                   V<turboshaft::FrameState> frame_state,
-                                   SpeculativeNumberBinopOp::Kind kind) {
-    return ReduceIfReachableSpeculativeNumberBinop(left, right, frame_state,
-                                                   kind);
   }
 
   V<Object> LoadRoot(RootIndex root_index) {
@@ -4863,6 +4860,14 @@ class TurboshaftAssemblerOpInterface
   OpIndex GlobalSet(V<WasmTrustedInstanceData> trusted_instance_data,
                     V<Any> value, const wasm::WasmGlobal* global) {
     return ReduceIfReachableGlobalSet(trusted_instance_data, value, global);
+  }
+
+  V<HeapObject> RootConstant(RootIndex index) {
+    return ReduceIfReachableRootConstant(index);
+  }
+
+  V<Word32> IsRootConstant(V<Object> input, RootIndex index) {
+    return ReduceIfReachableIsRootConstant(input, index);
   }
 
   V<HeapObject> Null(wasm::ValueType type) {
@@ -5023,9 +5028,19 @@ class TurboshaftAssemblerOpInterface
   }
 
   V<Simd128> Simd128Shuffle(V<Simd128> left, V<Simd128> right,
+                            Simd128ShuffleOp::Kind kind,
                             const uint8_t shuffle[kSimd128Size]) {
-    return ReduceIfReachableSimd128Shuffle(left, right, shuffle);
+    return ReduceIfReachableSimd128Shuffle(left, right, kind, shuffle);
   }
+
+#if V8_ENABLE_WASM_DEINTERLEAVED_MEM_OPS
+  V<Simd256> Simd128LoadPairDeinterleave(
+      V<WordPtr> base, V<WordPtr> index, LoadOp::Kind load_kind,
+      Simd128LoadPairDeinterleaveOp::Kind kind) {
+    return ReduceIfReachableSimd128LoadPairDeinterleave(base, index, load_kind,
+                                                        kind);
+  }
+#endif  // V8_ENABLE_WASM_DEINTERLEAVED_MEM_OPS
 
   // SIMD256
 #if V8_ENABLE_WASM_SIMD256_REVEC

@@ -24,8 +24,8 @@
 #include "components/autofill/core/browser/autofill_browser_util.h"
 #include "components/autofill/core/browser/data_manager/addresses/address_data_manager.h"
 #include "components/autofill/core/browser/data_manager/personal_data_manager.h"
-#include "components/autofill/core/browser/data_model/autofill_profile.h"
-#include "components/autofill/core/browser/data_model/autofill_profile_comparator.h"
+#include "components/autofill/core/browser/data_model/addresses/autofill_profile.h"
+#include "components/autofill/core/browser/data_model/addresses/autofill_profile_comparator.h"
 #include "components/autofill/core/browser/data_model/transliterator.h"
 #include "components/autofill/core/browser/data_quality/autofill_data_util.h"
 #include "components/autofill/core/browser/field_type_utils.h"
@@ -600,7 +600,24 @@ std::vector<Suggestion> CreateSuggestionsFromProfiles(
     if (GroupTypeOfFieldType(trigger_field_type) == FieldTypeGroup::kEmail) {
       suggestion.icon = Suggestion::Icon::kEmail;
     } else if (contains_profile_related_fields) {
-      suggestion.icon = Suggestion::Icon::kAccount;
+      if (base::FeatureList::IsEnabled(
+              features::kAutofillEnableSupportForHomeAndWork)) {
+        // TODO(crbug.com/6373444): Confirm that the distance between icon and
+        // text is correct.
+        switch (profile.record_type()) {
+          case AutofillProfile::RecordType::kAccountHome:
+            suggestion.icon = Suggestion::Icon::kHome;
+            break;
+          case AutofillProfile::RecordType::kAccountWork:
+            suggestion.icon = Suggestion::Icon::kWork;
+            break;
+          case AutofillProfile::RecordType::kLocalOrSyncable:
+          case AutofillProfile::RecordType::kAccount:
+            suggestion.icon = Suggestion::Icon::kAccount;
+        }
+      } else {
+        suggestion.icon = Suggestion::Icon::kAccount;
+      }
     }
     // This is intentionally not using `profile.IsAccountProfile()` because the
     // IPH should only be shown for non-H/W profiles.
@@ -610,6 +627,14 @@ std::vector<Suggestion> CreateSuggestionsFromProfiles(
       suggestion.iph_metadata = Suggestion::IPHMetadata(
           &feature_engagement::
               kIPHAutofillExternalAccountProfileSuggestionFeature);
+    }
+
+    if ((profile.record_type() == AutofillProfile::RecordType::kAccountHome ||
+         profile.record_type() == AutofillProfile::RecordType::kAccountWork) &&
+        base::FeatureList::IsEnabled(
+            features::kAutofillEnableSupportForHomeAndWork)) {
+      suggestion.iph_metadata = Suggestion::IPHMetadata(
+          &feature_engagement::kIPHAutofillHomeWorkProfileSuggestionFeature);
     }
   }
   return suggestions;

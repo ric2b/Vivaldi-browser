@@ -12,9 +12,11 @@
 
 #include "base/containers/unique_ptr_adapters.h"
 #include "base/memory/raw_ptr.h"
+#include "base/memory/weak_ptr.h"
 #include "base/task/sequenced_task_runner.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "components/request_filter/request_filter.h"
+#include "components/request_filter/request_filter_registry.h"
 #include "content/public/browser/content_browser_client.h"
 #include "net/base/completion_once_callback.h"
 #include "services/network/public/mojom/url_loader_factory.mojom.h"
@@ -44,7 +46,7 @@ struct FilteredRequestInfo;
 
 // Manages filtering of requests. Lives on the UI thread. There is one instance
 // per BrowserContext which is shared with incognito.
-class RequestFilterManager : public KeyedService {
+class RequestFilterManager : public KeyedService, public RequestFilterRegistry {
  public:
   using RequestFilterList = std::vector<std::unique_ptr<RequestFilter>>;
 
@@ -280,21 +282,13 @@ class RequestFilterManager : public KeyedService {
           forwarding_header_client,
       scoped_refptr<base::SequencedTaskRunner> navigation_response_task_runner);
 
-  static void ProxiedProxyWebSocket(
-      content::BrowserContext* context,
+  content::ContentBrowserClient::WebSocketFactory ForwardProxyWebSocket(
       int process_id,
       int frame_id,
       const url::Origin& frame_origin,
       content::ContentBrowserClient::WebSocketFactory factory,
       const net::SiteForCookies& site_for_cookies,
-      const std::optional<std::string>& user_agent,
-      const GURL& url,
-      std::vector<network::mojom::HttpHeaderPtr> additional_headers,
-      mojo::PendingRemote<network::mojom::WebSocketHandshakeClient>
-          handshake_client,
-      mojo::PendingRemote<network::mojom::WebSocketAuthenticationHandler>
-          authentication_handler,
-      mojo::PendingRemote<network::mojom::TrustedHeaderClient> header_client);
+      const std::optional<std::string>& user_agent);
 
   // Starts proxying the connection with |factory|.
   void ProxyWebSocket(
@@ -312,15 +306,13 @@ class RequestFilterManager : public KeyedService {
           authentication_handler,
       mojo::PendingRemote<network::mojom::TrustedHeaderClient> header_client);
 
-  static void ProxiedProxyWebTransport(
+  content::ContentBrowserClient::WillCreateWebTransportCallback
+  ForwardProxyWebTransport(
       int process_id,
       int frame_routing_id,
       const GURL& url,
       const url::Origin& initiator_origin,
-      content::ContentBrowserClient::WillCreateWebTransportCallback callback,
-      mojo::PendingRemote<network::mojom::WebTransportHandshakeClient>
-          handshake_client,
-      std::optional<network::mojom::WebTransportErrorPtr> error);
+      content::ContentBrowserClient::WillCreateWebTransportCallback callback);
 
   void ProxyWebTransport(
       content::RenderProcessHost& render_process_host,
@@ -331,12 +323,13 @@ class RequestFilterManager : public KeyedService {
       mojo::PendingRemote<network::mojom::WebTransportHandshakeClient>
           handshake_client);
 
-  void AddFilter(std::unique_ptr<RequestFilter> new_filter);
-  void RemoveFilter(RequestFilter* filter);
-
-  void ClearCacheOnNavigation();
-
+  // Implementing KeyedService
   void Shutdown() override;
+
+  // Implementing RequestFilterRegistry
+  void AddFilter(std::unique_ptr<RequestFilter> new_filter) override;
+  void RemoveFilter(RequestFilter* filter) override;
+  void ClearCacheOnNavigation() override;
 
  private:
   const raw_ptr<content::BrowserContext> browser_context_;
@@ -347,6 +340,8 @@ class RequestFilterManager : public KeyedService {
   RequestFilterList request_filters_;
 
   RequestHandler request_handler_;
+
+  base::WeakPtrFactory<RequestFilterManager> weak_factory_{this};
 };
 }  // namespace vivaldi
 

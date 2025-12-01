@@ -136,6 +136,9 @@ SurfaceTreeHost::~SurfaceTreeHost() {
   context_provider_->RemoveObserver(this);
 
   SetRootSurface(nullptr);
+  // We can delete frame_timing_history_ give that we don't
+  // care about metrics at this point.
+  layer_tree_frame_sink_holder_->DeleteFrameTimingHistory();
   LayerTreeFrameSinkHolder::DeleteWhenLastResourceHasBeenReclaimed(
       std::move(layer_tree_frame_sink_holder_));
   CleanUpCallbacks();
@@ -552,8 +555,6 @@ SurfaceTreeHost::CreateLayerTreeFrameSink() {
       frame_sink_id_, std::move(sink_receiver), std::move(client_remote));
 
   cc::mojo_embedder::AsyncLayerTreeFrameSink::InitParams params;
-  params.gpu_memory_buffer_manager =
-      aura::Env::GetInstance()->context_factory()->GetGpuMemoryBufferManager();
   params.pipes.compositor_frame_sink_remote = std::move(sink_remote);
   params.pipes.client_receiver = std::move(client_receiver);
 

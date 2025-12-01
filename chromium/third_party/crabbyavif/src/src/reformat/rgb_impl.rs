@@ -726,7 +726,7 @@ mod tests {
                 yuv_range: YuvRange::Limited,
                 ..Default::default()
             };
-            assert!(yuv.allocate_planes(decoder::Category::Color).is_ok());
+            assert!(yuv.allocate_planes(Category::Color).is_ok());
             for plane in image::YUV_PLANES {
                 let samples = if plane == Plane::Y {
                     &y

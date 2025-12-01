@@ -15,6 +15,7 @@
 #include "chrome/browser/ui/ui_features.h"
 #include "chrome/browser/ui/views/data_sharing/data_sharing_bubble_controller.h"
 #include "components/data_sharing/public/features.h"
+#include "components/saved_tab_groups/internal/tab_group_sync_service_impl.h"
 #include "components/saved_tab_groups/public/features.h"
 #include "components/saved_tab_groups/public/tab_group_sync_service.h"
 #include "components/signin/public/identity_manager/identity_manager.h"
@@ -102,7 +103,6 @@ class DataSharingLiveTest : public signin::test::LiveTest {
   void SetUp() override {
     scoped_feature_list_.InitWithFeatures(
         {data_sharing::features::kDataSharingFeature,
-         tab_groups::kTabGroupsSaveV2,
          tab_groups::kTabGroupSyncServiceDesktopMigration},
         {});
     constexpr char SYNC_URL[] =
@@ -207,8 +207,11 @@ IN_PROC_BROWSER_TEST_F(DataSharingLiveTest, ShareUnsharedTabGroup) {
   std::optional<tab_groups::TabGroupId> tab_group_id =
       OpenTabGroupByTitle(tab_group_service(), unshared_group_title);
   CHECK(tab_group_id.has_value());
+
+  data_sharing::RequestInfo request_info(tab_group_id.value(),
+                                         data_sharing::FlowType::kShare);
   DataSharingBubbleController::GetOrCreateForBrowser(browser())->Show(
-      tab_group_id.value());
+      request_info);
 
   WaitForSDKToLoad();
 }
@@ -223,8 +226,17 @@ IN_PROC_BROWSER_TEST_F(DataSharingLiveTest, ManageSharedTabGroup) {
   std::optional<tab_groups::TabGroupId> tab_group_id =
       OpenTabGroupByTitle(tab_group_service(), shared_group_title);
   CHECK(tab_group_id.has_value());
+
+  // Share the group.
+  data_sharing::RequestInfo request_info(tab_group_id.value(),
+                                         data_sharing::FlowType::kShare);
   DataSharingBubbleController::GetOrCreateForBrowser(browser())->Show(
-      tab_group_id.value());
+      request_info);
+
+  // Manage the group.
+  request_info.type = data_sharing::FlowType::kManage;
+  DataSharingBubbleController::GetOrCreateForBrowser(browser())->Show(
+      request_info);
 
   WaitForSDKToLoad();
 }

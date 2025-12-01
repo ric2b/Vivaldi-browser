@@ -14,6 +14,7 @@
 <translation id="1454726940098520109">Повече не показвай потвърждението</translation>
 <translation id="1462666970065907900">Наистина ли затваряте прозореца?</translation>
 <translation id="1480046233931937785">Признание</translation>
+<translation id="1490502035430975848">Обследвай документа на портала</translation>
 <translation id="1521774566618522728">Действителна от днес</translation>
 <translation id="1526344461589023948">Възникна грешка при запис на изтеглено обновяване. Моля, проверете дали компютърът разполага с достатъчно свободно място и по-късно опитайте отново.</translation>
 <translation id="1635542496948266458">Превключи профилите</translation>
@@ -34,9 +35,11 @@
 <translation id="2141974047387702305">Възникна грешка при изтегляне на файловете с обновяване. Моля, проверете съединението с интернет и по-късно опитайте отново.</translation>
 <translation id="2226825946708954262">⚠ Продължи със загуба на данни</translation>
 <translation id="2339641773402824483">Проверка за обновяване…</translation>
+<translation id="2429571091666452569">От списъка:</translation>
 <translation id="2441056087170876076">Чудовище 2</translation>
 <translation id="2444387452209867610">Вмъкни записка</translation>
 <translation id="2486841023299517366">Животно 4</translation>
+<translation id="2501278716633472235">Върни назад</translation>
 <translation id="2612127540243995147">Готовност за инсталиране. Vivaldi ще бъде презареден.</translation>
 <translation id="2613387515621326337">Покажи сайта на обновяването</translation>
 <translation id="2645477450146475243">Настройките на Opera са, уви, недостъпни, докато браузърът работи. За тяхното внасяне във Vivaldi, приключете работа и затворете всички прозорци на Opera. После натиснете „Напред“.</translation>
@@ -61,6 +64,7 @@
 <translation id="3259769196742189631">Удостовери във W3C</translation>
 <translation id="3291915639428159043">Блокирано самопускане</translation>
 <translation id="3302905971452834934">Чудовище 1</translation>
+<translation id="3308738399950580893">реклами</translation>
 <translation id="3334610655141903168">(без название)</translation>
 <translation id="3372505110412186107">Vivaldi <ph name="VERSION" /> е най-новата версия в момента.</translation>
 <translation id="3383198080133834965">Всичко е обновено!</translation>
@@ -71,9 +75,11 @@
 <translation id="3521635864657970829">Наистина ли затваряте прозореца?</translation>
 <translation id="3540597690227428180">Животно 9</translation>
 <translation id="3542768452570884558">Отвори препратката в нов прозорец</translation>
+<translation id="3586931643579894722">Скрий подробностите</translation>
 <translation id="3588820906588687999">Отвори картината в нов раздел</translation>
 <translation id="3601066750251199488">Чудовище 3</translation>
 <translation id="3620979700683094848">Сайтовете могат сами да пускат видео</translation>
+<translation id="3650023731264842343">При зареждане на следната страница:</translation>
 <translation id="3658651522139217005">Opera GX</translation>
 <translation id="3680031241659195730">Има нова версия на Vivaldi!</translation>
 <translation id="3708982624815781692">Изтеглянето е отменено.</translation>
@@ -83,6 +89,7 @@
 <translation id="3795800845758778870">Настройките на Brave са, уви, недостъпни, докато браузърът работи. За тяхното внасяне във Vivaldi, приключете работа и затворете всички прозорци на Brave. После натиснете „Напред“.</translation>
 <translation id="3822431842304177896">Създай разделител</translation>
 <translation id="3832132597516774400">Пейзаж 5</translation>
+<translation id="3894751534882749287">Ако все пак искате да я видите, може да промените защитата срещу проследяване в изскачащия диалог на блокера на тракери или като щракнете върху „Позволи“.</translation>
 <translation id="3914946330804881301">Внесени от Opera</translation>
 <translation id="3921292902397893431">Чудовище 8</translation>
 <translation id="3943857333388298514">Постави</translation>
@@ -107,6 +114,7 @@
 <translation id="4582480609585453144">Отвори препратката във фонов раздел</translation>
 <translation id="4636708767492582204">Изпрати по пощата</translation>
 <translation id="4677434526832593569">Животно 8</translation>
+<translation id="4736016046474602958">Блокер на тракери</translation>
 <translation id="474217410105706308">Заглушаване на раздела</translation>
 <translation id="4861715717329665002">Самозаписани сесии</translation>
 <translation id="4881695831933465202">Отвори</translation>
@@ -133,9 +141,11 @@
 <translation id="588258955323874662">Целоекранен режим</translation>
 <translation id="5916080360077521750">Настройките на Chrome са, уви, недостъпни, докато браузърът работи. За тяхното внасяне във Vivaldi, приключете работа и затворете всички прозорци на Chrome. После натиснете „Напред“.</translation>
 <translation id="6040143037577758943">Затвори</translation>
+<translation id="6140948187512243695">Покажи подробности</translation>
 <translation id="6229528619562190452">Щракнете за обновяване на Vivaldi</translation>
 <translation id="6234173136417926046">Ползвай картината за фон на решетката</translation>
 <translation id="6339818817272922368">Локален профил</translation>
+<translation id="6376435169746695498">Зареждането на страницата се блокира от съвпадение с <ph name="BLOCKER_NAME" /></translation>
 <translation id="6398710281890660037">Защити моя профил</translation>
 <translation id="6438786710866753178">Пейзаж 4</translation>
 <translation id="6477028720702061455">Изберете папка с профил на Opera за внасяне.</translation>
@@ -152,6 +162,7 @@
 <translation id="7086554968911045110">Пейзаж 7</translation>
 <translation id="7099506190679014195">Надграждане на защитено хранилище на ключове</translation>
 <translation id="7111492742514999492">Пейзаж 9</translation>
+<translation id="7113310725918019676">Позволи <ph name="BLOCKED_TYPE" /> от <ph name="DOMAIN" /></translation>
 <translation id="7208252576848052204">Настройките на Arc са, уви, недостъпни, докато браузърът работи. За тяхното внасяне във Vivaldi, приключете работа и затворете всички прозорци на Arc. После натиснете „Напред“.</translation>
 <translation id="7321500017121629018">Действителна от вчера</translation>
 <translation id="7337881442233988129">Chromium</translation>
@@ -167,12 +178,13 @@
 <translation id="8027581147000338959">Отвори в нов прозорец</translation>
 <translation id="8044382196220116469">Не позволявай на сайтове сами да пускат видео</translation>
 <translation id="8099620695029051217">Копирай адреса на страницата</translation>
+<translation id="8119307142152921512">тракери и реклами</translation>
 <translation id="8197810018650377191">Отметни страницата</translation>
 <translation id="8261506727792406068">Изтрий</translation>
-<translation id="8263047843452521549">Обследвай фоновия подпроцес</translation>
 <translation id="8331671104904436324">Отвори във фонов раздел</translation>
 <translation id="8373293945112511707">Пейзаж 1</translation>
 <translation id="8388552048012645975">Изтегляне на обновяването…</translation>
+<translation id="8392904568172593155">Без параметри</translation>
 <translation id="8427094907586191051">Пейзаж 17</translation>
 <translation id="8439034818057146672">Има нова версия на Vivaldi, която е готова за инсталиране.</translation>
 <translation id="8446668873108041390">Изпълнението на JavaScript през AppleScript е изключено. В Настройки &gt; Поверителност &gt; Събития Apple Events има настройка, която позволява JavaScript от Apple Events.</translation>
@@ -183,14 +195,15 @@
 <translation id="8651348004684669199">Добави показания раздел</translation>
 <translation id="8669345741879513971">Чудовище 10</translation>
 <translation id="867544375504146191">Яндекс</translation>
-<translation id="8689295374912158752">Обследвай портал-документа</translation>
 <translation id="875142999698251063">Изход сега</translation>
 <translation id="8768970203213061953">Пейзаж 14</translation>
 <translation id="8773635261052182196">Повече няма да виждате известяване. Може да го разрешите отново от настройките на Vivaldi.</translation>
 <translation id="8774017153185436870">Сайтовете трябва сами да пускат видео</translation>
 <translation id="8813277370772331957">Напомни по-късно</translation>
+<translation id="8837256239226739065">Обследвай фоновия служебен подпроцес</translation>
 <translation id="8894900864683381599">Добави препратката като панел</translation>
 <translation id="8912720443398351457">Наистина ли излизате от Vivaldi?</translation>
+<translation id="8940028675168378100">Блокирана от <ph name="BLOCKER_NAME" /></translation>
 <translation id="8947109330183116400">Изберете файл с отметки HTML.</translation>
 <translation id="9017566390391482291">Изберете папка с профил на Vivaldi за внасяне.</translation>
 <translation id="9048058608784130603">Изчакващо обновяване <ph name="VERSION" /></translation>
@@ -201,6 +214,7 @@
 <translation id="912022491595344261">Отвори картината като <ph name="USER" /></translation>
 <translation id="9157539936604258187">Отвори препратката</translation>
 <translation id="9169060351863393881">Opera 12.x</translation>
+<translation id="9180553614777056266">Блокер на реклами</translation>
 <translation id="939305735877869636">Brave</translation>
 <translation id="970294721402795299">Пейзаж 16</translation>
 </translationbundle>

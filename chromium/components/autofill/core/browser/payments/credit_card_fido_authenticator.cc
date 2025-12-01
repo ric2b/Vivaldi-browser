@@ -19,7 +19,7 @@
 #include "build/build_config.h"
 #include "components/autofill/core/browser/autofill_progress_dialog_type.h"
 #include "components/autofill/core/browser/data_manager/payments/payments_data_manager.h"
-#include "components/autofill/core/browser/data_model/credit_card.h"
+#include "components/autofill/core/browser/data_model/payments/credit_card.h"
 #include "components/autofill/core/browser/foundations/autofill_client.h"
 #include "components/autofill/core/browser/metrics/autofill_metrics.h"
 #include "components/autofill/core/browser/metrics/payments/better_auth_metrics.h"
@@ -178,9 +178,11 @@ UserOptInIntention CreditCardFidoAuthenticator::GetUserOptInIntention(
   user_is_opted_in_ = IsUserOptedIn();
   bool user_local_opt_in_status = IsUserOptedIn();
 
-  // If payments is offering to opt-in, then that means user is not opted in
-  // from Payments. Only take action if the local pref mismatches.
-  if (unmask_details.offer_fido_opt_in && user_local_opt_in_status) {
+  // If payments is offering FIDO opt-in, then that means the user is not opted
+  // in payments, but is eligible for opt-in. Only take action if the local pref
+  // mismatches.
+  if (unmask_details.server_denotes_fido_eligible_but_not_opted_in &&
+      user_local_opt_in_status) {
 #if BUILDFLAG(IS_ANDROID)
     // For Android, if local pref says user is opted in while payments not, it
     // denotes that user intended to opt in from settings page. We will opt user

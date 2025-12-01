@@ -31,6 +31,7 @@ import org.chromium.chrome.test.util.browser.signin.SigninTestRule;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetController;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetControllerProvider;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetTestSupport;
+import org.chromium.components.signin.test.util.TestAccounts;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.content_public.browser.test.util.DOMUtils;
 import org.chromium.net.test.EmbeddedTestServer;
@@ -63,12 +64,20 @@ public class TouchToFillMainFlowIntegrationTest {
 
     @Rule public SigninTestRule mSigninTestRule = new SigninTestRule();
 
+    public TouchToFillMainFlowIntegrationTest() {
+        // This test suite relies on the real password store. However, that can only store
+        // passwords if the device it runs on has the required min GMS Core version.
+        // To ensure the tests don't depend on the device configuration, set up a fake GMS
+        // Core version instead.
+        PasswordManagerTestHelper.setUpPwmRequiredMinGmsVersion();
+    }
+
     @Before
     public void setUp() {
         mActivityTestRule.startMainActivityOnBlankPage();
         PasswordManagerTestHelper.setAccountForPasswordStore(SigninTestRule.TEST_ACCOUNT_EMAIL);
         PasswordManagerTestUtilsBridge.disableServerPredictions();
-        mSigninTestRule.addTestAccountThenSigninAndEnableSync();
+        mSigninTestRule.addAccountThenSignin(TestAccounts.ACCOUNT1);
 
         mTestServer =
                 EmbeddedTestServer.createAndStartHTTPSServer(

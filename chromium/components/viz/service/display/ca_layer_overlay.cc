@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <limits>
+#include <variant>
 
 #include "base/metrics/histogram_macros.h"
 #include "build/build_config.h"
@@ -151,7 +152,7 @@ gfx::CALayerResult FromTextureQuad(
   const bool y_flipped =
       resource_provider->GetOrigin(resource_id) == kBottomLeft_GrSurfaceOrigin;
   if (y_flipped) {
-    auto transform = absl::get<gfx::Transform>(ca_layer_overlay->transform);
+    auto transform = std::get<gfx::Transform>(ca_layer_overlay->transform);
     // The anchor point is at the bottom-left corner of the CALayer. The
     // transformation that flips the contents of the layer without changing its
     // frame is the composition of a vertical flip about the anchor point, and a
@@ -253,9 +254,7 @@ class CALayerOverlayProcessorInternal {
       case DrawQuad::Material::kTextureContent: {
         const TextureDrawQuad* texture_draw_quad =
             TextureDrawQuad::MaterialCast(quad);
-        // Stream video and video frame counts as a yuv draw quad.
-        if (texture_draw_quad->is_stream_video ||
-            texture_draw_quad->is_video_frame) {
+        if (texture_draw_quad->is_video_frame) {
           yuv_draw_quad_count += 1;
         }
         return FromTextureQuad(resource_provider, texture_draw_quad,

@@ -22,6 +22,7 @@
 #include "content/browser/interest_group/auction_process_manager.h"
 #include "content/public/browser/site_instance.h"
 #include "content/services/auction_worklet/public/mojom/auction_worklet_service.mojom.h"
+#include "content/services/auction_worklet/public/mojom/bidder_worklet.mojom-forward.h"
 #include "content/services/auction_worklet/public/mojom/bidder_worklet.mojom.h"
 #include "content/services/auction_worklet/public/mojom/private_aggregation_request.mojom.h"
 #include "content/services/auction_worklet/public/mojom/real_time_reporting.mojom.h"
@@ -83,6 +84,7 @@ void MockBidderWorklet::BeginGenerateBid(
     const url::Origin& browser_signal_seller_origin,
     const std::optional<url::Origin>& browser_signal_top_level_seller_origin,
     const base::TimeDelta browser_signal_recency,
+    bool browser_signal_for_debugging_only_sampling,
     blink::mojom::BiddingBrowserSignalsPtr bidding_browser_signals,
     base::Time auction_start_time,
     const std::optional<blink::AdSize>& requested_ad_size,
@@ -347,11 +349,12 @@ void MockBidderWorklet::InvokeReportWinCallback(
     base::flat_map<std::string, std::string> ad_macro_map,
     std::vector<auction_worklet::mojom::PrivateAggregationRequestPtr>
         pa_requests,
+    auction_worklet::mojom::PrivateModelTrainingRequestDataPtr pmt_request_data,
     std::vector<std::string> errors) {
   DCHECK(report_win_callback_);
   std::move(report_win_callback_)
       .Run(report_url, std::move(ad_beacon_map), std::move(ad_macro_map),
-           std::move(pa_requests),
+           std::move(pa_requests), std::move(pmt_request_data),
            auction_worklet::mojom::BidderTimingMetrics::New(
                /*js_fetch_latency=*/js_fetch_latency_,
                /*wasm_fetch_latency=*/wasm_fetch_latency_,
@@ -428,6 +431,7 @@ void MockSellerWorklet::ScoreAd(
         browser_signal_buyer_and_seller_reporting_id,
     uint32_t browser_signal_bidding_duration_msecs,
     bool browser_signal_for_debugging_only_in_cooldown_or_lockout,
+    bool browser_signal_for_debugging_only_sampling,
     const std::optional<base::TimeDelta> seller_timeout,
     uint64_t trace_id,
     const url::Origin& bidder_joining_origin,

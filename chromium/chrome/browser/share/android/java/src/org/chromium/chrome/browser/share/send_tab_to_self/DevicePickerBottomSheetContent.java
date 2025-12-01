@@ -15,13 +15,12 @@ import android.widget.ListView;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.StringRes;
 
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetContent;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetController;
-import org.chromium.components.sync_device_info.FormFactor;
 import org.chromium.ui.widget.Toast;
 
 import java.util.List;
@@ -140,17 +139,17 @@ class DevicePickerBottomSheetContent implements BottomSheetContent, OnItemClickL
     }
 
     @Override
-    public int getSheetHalfHeightAccessibilityStringId() {
+    public @StringRes int getSheetHalfHeightAccessibilityStringId() {
         return R.string.send_tab_to_self_sheet_half_height;
     }
 
     @Override
-    public int getSheetFullHeightAccessibilityStringId() {
+    public @StringRes int getSheetFullHeightAccessibilityStringId() {
         return R.string.send_tab_to_self_sheet_full_height;
     }
 
     @Override
-    public int getSheetClosedAccessibilityStringId() {
+    public @StringRes int getSheetClosedAccessibilityStringId() {
         return R.string.send_tab_to_self_sheet_closed;
     }
 
@@ -163,21 +162,9 @@ class DevicePickerBottomSheetContent implements BottomSheetContent, OnItemClickL
 
         Resources res = mContext.getResources();
 
-        if (ChromeFeatureList.isEnabled(ChromeFeatureList.SEND_TAB_TO_SELF_V2)) {
-            String deviceType = res.getString(R.string.send_tab_to_self_device_type_generic);
-            if (targetDeviceInfo.formFactor == FormFactor.PHONE) {
-                deviceType = res.getString(R.string.send_tab_to_self_device_type_phone);
-            } else if (targetDeviceInfo.formFactor == FormFactor.DESKTOP) {
-                deviceType = res.getString(R.string.send_tab_to_self_device_type_computer);
-            }
-
-            String toastMessage = res.getString(R.string.send_tab_to_self_v2_toast, deviceType);
-            Toast.makeText(mContext, toastMessage, Toast.LENGTH_SHORT).show();
-        } else {
-            String toastMessage =
-                    res.getString(R.string.send_tab_to_self_toast, targetDeviceInfo.deviceName);
-            Toast.makeText(mContext, toastMessage, Toast.LENGTH_SHORT).show();
-        }
+        String toastMessage =
+                res.getString(R.string.send_tab_to_self_toast, targetDeviceInfo.deviceName);
+        Toast.makeText(mContext, toastMessage, Toast.LENGTH_SHORT).show();
 
         mController.hideContent(this, true);
     }

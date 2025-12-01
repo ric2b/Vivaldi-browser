@@ -5,6 +5,7 @@
 #include "base/no_destructor.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/search_engines/template_url_service_factory.h"
 #include "components/country_codes/country_codes.h"
@@ -272,14 +273,12 @@ ExtensionFunction::ResponseAction SearchEnginesGetTemplateUrlsFunction::Run() {
         SearchEnginesManagersFactory::GetInstance()->GetSearchEnginesManager();
 
     auto* prefs = Profile::FromBrowserContext(browser_context())->GetPrefs();
-    const auto app_locale = prefs->GetString(prefs::kLanguageAtInstall);
-    // GetEnginesByCountryId expect only the first 2 chars of locale
-    std::string lang(app_locale.begin(),
-                     std::find(app_locale.begin(), app_locale.end(), '-'));
+    CHECK(prefs);
 
     const auto version = search_engines_manager->GetCurrentDataVersion();
     const auto engines = search_engines_manager->GetEnginesByCountryId(
-        country_codes::GetCurrentCountryID(), lang);
+        country_codes::GetCurrentCountryID(),
+        g_browser_process->GetApplicationLocale(), *prefs);
     const auto default_search_engine_id =
         engines.list[engines.default_index]->id;
 
@@ -549,31 +548,6 @@ ExtensionFunction::ResponseAction SearchEnginesGetSearchRequestFunction::Run() {
 }
 
 ExtensionFunction::ResponseAction
-SearchEnginesGetSuggestRequestFunction::Run() {
-  std::optional<vivaldi::search_engines::GetSuggestRequest::Params> params(
-      vivaldi::search_engines::GetSuggestRequest::Params::Create(args()));
-
-  EXTENSION_FUNCTION_VALIDATE(params);
-
-  auto* service = TemplateURLServiceFactory::GetForProfile(
-      Profile::FromBrowserContext(browser_context()));
-  if (!service) {
-    return RespondNow(Error(kTemplateServiceNotAvailable));
-  }
-
-  TemplateURL* template_url = service->GetTemplateURLForGUID(params->guid);
-
-  if (!template_url)
-    return RespondNow(Error("No search engine with this id"));
-
-  return RespondNow(
-      ArgumentList(vivaldi::search_engines::GetSuggestRequest::Results::Create(
-          BuildSearchRequest(template_url->suggestions_url_ref(),
-                             service->search_terms_data(),
-                             params->search_terms))));
-}
-
-ExtensionFunction::ResponseAction
 SearchEnginesRepairPrepopulatedTemplateUrlsFunction::Run() {
   std::optional<vivaldi::search_engines::RepairPrepopulatedTemplateUrls::Params>
       params(vivaldi::search_engines::RepairPrepopulatedTemplateUrls::Params::
@@ -622,16 +596,24 @@ SearchEnginesGetSwitchPromptDataFunction::Run() {
   current_search = template_url_service->GetDefaultSearchProvider(
       TemplateURLService::kDefaultSearchMain);
 
-  const auto maybe_default_search =
+  const auto search_engines_prompt_manager =
       SearchEnginesManagersFactory::GetInstance()
-          ->GetSearchEnginesPromptManager()
-          ->GetDefaultSearchEngineToPrompt(prefs, template_url_service,
-                                           rules_service);
+          ->GetSearchEnginesPromptManager();
 
-  data.should_prompt = maybe_default_search != nullptr;
+  data.should_prompt = search_engines_prompt_manager->ShouldPrompt(
+      prefs, template_url_service, rules_service);
   if (data.should_prompt) {
+    const auto maybe_default_search =
+        search_engines_prompt_manager->GetPartnerSearchEnginesToPrompt(
+            country_codes::GetCurrentCountryID(),
+            g_browser_process->GetApplicationLocale(), *prefs,
+            template_url_service);
+    std::transform(maybe_default_search.begin(), maybe_default_search.end(),
+                   std::back_inserter(data.partner_search_engines),
+                   [](const auto& it) { return TemplateURLToJSType(it); });
+
     data.current_search_engine = TemplateURLToJSType(current_search);
-    data.partner_search_engine = TemplateURLToJSType(maybe_default_search);
+    data.prompt_type = search_engines_prompt_manager->GetDialogType();
   }
   return RespondNow(ArgumentList(
       vivaldi::search_engines::GetSwitchPromptData::Results::Create(data)));

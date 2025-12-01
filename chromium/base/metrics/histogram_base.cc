@@ -26,6 +26,7 @@
 #include "base/rand_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/synchronization/lock.h"
+#include "base/trace_event/histogram_scope.h"  // no-presubmit-check
 #include "base/values.h"
 
 namespace base {
@@ -85,23 +86,27 @@ HistogramBase::CountAndBucketData& HistogramBase::CountAndBucketData::operator=(
 
 const HistogramBase::Sample32 HistogramBase::kSampleType_MAX = INT_MAX;
 
-HistogramBase::HistogramBase(const char* name)
-    : histogram_name_(name), flags_(kNoFlags) {}
+HistogramBase::HistogramBase(DurableStringView name)
+    : histogram_name_(name->data()),
+      histogram_name_length_(base::saturated_cast<uint16_t>(name->length())),
+      flags_(kNoFlags) {
+  DCHECK_LT(name->length(), static_cast<size_t>(UINT16_MAX));
+}
 
 HistogramBase::~HistogramBase() = default;
 
 void HistogramBase::CheckName(std::string_view name) const {
-  DCHECK_EQ(std::string_view(histogram_name()), name)
+  DCHECK_EQ(histogram_name(), name)
       << "Provided histogram name doesn't match instance name. Are you using a "
          "dynamic string in a macro?";
 }
 
 void HistogramBase::SetFlags(int32_t flags) {
-  flags_.fetch_or(flags, std::memory_order_relaxed);
+  flags_.fetch_or(static_cast<uint16_t>(flags), std::memory_order_relaxed);
 }
 
 void HistogramBase::ClearFlags(int32_t flags) {
-  flags_.fetch_and(~flags, std::memory_order_relaxed);
+  flags_.fetch_and(static_cast<uint16_t>(~flags), std::memory_order_relaxed);
 }
 
 bool HistogramBase::HasFlags(int32_t flags) const {
@@ -183,10 +188,11 @@ void HistogramBase::WriteJSON(std::string* output,
 }
 
 void HistogramBase::FindAndRunCallbacks(HistogramBase::Sample32 sample) const {
+  auto event_id = trace_event::HistogramScope::GetFlowId();
   StatisticsRecorder::GlobalSampleCallback global_sample_callback =
       StatisticsRecorder::global_sample_callback();
   if (global_sample_callback) {
-    global_sample_callback(histogram_name(), name_hash(), sample);
+    global_sample_callback(histogram_name(), name_hash(), sample, event_id);
   }
 
   // We check the flag first since it is very cheap and we can avoid the
@@ -196,7 +202,8 @@ void HistogramBase::FindAndRunCallbacks(HistogramBase::Sample32 sample) const {
   }
 
   StatisticsRecorder::FindAndRunHistogramCallbacks(
-      base::PassKey<HistogramBase>(), histogram_name(), name_hash(), sample);
+      base::PassKey<HistogramBase>(), histogram_name(), name_hash(), sample,
+      event_id);
 }
 
 HistogramBase::CountAndBucketData HistogramBase::GetCountAndBucketData() const {
@@ -258,10 +265,12 @@ void HistogramBase::WriteAscii(std::string* output) const {
 }
 
 // static
-char const* HistogramBase::GetPermanentName(std::string_view name) {
-  // A set of histogram names that provides the "permanent" lifetime required
-  // by histogram objects for those strings that are not already code constants
-  // or held in persistent memory.
+DurableStringView HistogramBase::GetPermanentName(std::string_view name) {
+  // A set of histogram names that provides the "permanent" lifetime required by
+  // histogram objects for those strings that are not already code constants or
+  // held in persistent memory. The container used for `permanent_names` MUST
+  // support pointer-stability for its keys, due to small-string-optimization
+  // in std::string.
   static base::NoDestructor<std::set<std::string, std::less<>>> permanent_names;
   static base::NoDestructor<Lock> permanent_names_lock;
 
@@ -270,7 +279,7 @@ char const* HistogramBase::GetPermanentName(std::string_view name) {
   if (it == permanent_names->end() || *it != name) {
     it = permanent_names->emplace_hint(it, name);
   }
-  return it->c_str();
+  return DurableStringView(*it);
 }
 
 }  // namespace base

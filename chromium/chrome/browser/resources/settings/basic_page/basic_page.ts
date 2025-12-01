@@ -12,16 +12,15 @@ import 'chrome://resources/cr_elements/cr_icon/cr_icon.js';
 import 'chrome://resources/cr_elements/cr_shared_style.css.js';
 import 'chrome://resources/cr_elements/cr_shared_vars.css.js';
 import '../ai_page/ai_page.js';
+// <if expr="enable_glic">
+import '../glic_page/glic_page.js';
+// </if>
 import '../appearance_page/appearance_page.js';
 // import '../privacy_page/privacy_guide/privacy_guide_promo.js';
 import '../privacy_page/privacy_page.js';
 import '../safety_hub/safety_hub_entry_point.js';
 import '../autofill_page/autofill_page.js';
 import '../controls/settings_idle_load.js';
-// <if expr="enable_glic">
-import '../glic_page/glic_data_page.js';
-import '../glic_page/glic_page.js';
-// </if>
 import '../on_startup_page/on_startup_page.js';
 import '../people_page/people_page.js';
 import '../performance_page/battery_page.js';
@@ -88,12 +87,6 @@ export class SettingsBasicPageElement extends SettingsBasicPageElementBase {
 
   static get properties() {
     return {
-      /** Preferences state. */
-      prefs: {
-        type: Object,
-        notify: true,
-      },
-
       // <if expr="not chromeos_ash">
       /**
        * Read-only reference to the languages model provided by the
@@ -180,6 +173,13 @@ export class SettingsBasicPageElement extends SettingsBasicPageElementBase {
         type: String,
         computed: 'computeAiPageTitle_(enableAiSettingsPageRefresh_)',
       },
+
+      // <if expr="enable_glic">
+      showGlicSection_: {
+        type: Boolean,
+        value: () => loadTimeData.getBoolean('showGlicSettings'),
+      },
+      // </if>
     };
   }
 
@@ -203,6 +203,9 @@ export class SettingsBasicPageElement extends SettingsBasicPageElementBase {
   private showAdvancedFeaturesMainControl_: boolean;
   private enableAiSettingsPageRefresh_: boolean;
   private aiPageTitle_: string;
+  // <if expr="enable_glic">
+  private showGlicSection_: boolean;
+  // </if>
   private showPrivacyGuidePromo_: boolean;
   private privacyGuidePromoWasShown_: boolean;
   private privacyGuideBrowserProxy_: PrivacyGuideBrowserProxy =
@@ -348,17 +351,6 @@ export class SettingsBasicPageElement extends SettingsBasicPageElementBase {
 
     return this.inSearchMode || routes.BASIC.contains(this.currentRoute_);
   }
-
-  // <if expr="enable_glic">
-  private showGlicPage_(visibility?: boolean): boolean {
-    return loadTimeData.getBoolean('showGlicSettings') &&
-        this.showPage_(visibility);
-  }
-
-  private isGlicPolicyDisabled_(): boolean {
-    return this.getPref<number>('glic.settings_policy').value === 1;
-  }
-  // </if>
 
   private showAdvancedSettings_(visibility?: boolean): boolean {
     return this.showPage_(visibility);

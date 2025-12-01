@@ -5,7 +5,6 @@
 #ifndef COMPONENTS_AUTOFILL_CORE_BROWSER_FORM_PROCESSING_OPTIMIZATION_GUIDE_PROTO_UTIL_H_
 #define COMPONENTS_AUTOFILL_CORE_BROWSER_FORM_PROCESSING_OPTIMIZATION_GUIDE_PROTO_UTIL_H_
 
-#include "base/containers/flat_map.h"
 #include "components/autofill/core/common/unique_ids.h"
 
 namespace optimization_guide::proto {
@@ -13,19 +12,21 @@ class FormData;
 }  // namespace optimization_guide::proto
 
 namespace autofill {
-class FormStructure;
 class FormData;
 
-// Converts `form_structure` to its corresponding form data proto.
+// The same proto is used to make model requests and to collect data through the
+// extension API. In the former case, only a subset of fields are necessary and
+// thus the proto is only partially populated in this case.
+enum class FormDataProtoConversionReason {
+  kModelRequest = 0,
+  kExtensionAPI = 1,
+};
+
+// Converts `form_data` to its corresponding form data proto, populating all
+// fields necessary for the `conversion_reason`.
 optimization_guide::proto::FormData ToFormDataProto(
     const FormData& form_data,
-    const base::flat_map<FieldGlobalId, bool>& field_eligibility_map,
-    const base::flat_map<FieldGlobalId, bool>& field_value_sensitivity_map);
-
-// Convenience overload that calls the function above with an empty
-// field_eligibility_map.
-optimization_guide::proto::FormData ToFormDataProto(
-    const FormStructure& form_structure);
+    FormDataProtoConversionReason conversion_reason);
 }  // namespace autofill
 
 #endif  // COMPONENTS_AUTOFILL_CORE_BROWSER_FORM_PROCESSING_OPTIMIZATION_GUIDE_PROTO_UTIL_H_

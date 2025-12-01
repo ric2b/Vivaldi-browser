@@ -1,9 +1,17 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="pt-BR">
+<translation id="2277224997687551299">Editar nome do grupo</translation>
+<translation id="2330212241471632770">{TABS_COUNT, plural,
+          =1 {Salvar aba nos marcadores}
+          other {Salvar abas nos marcadores}
+        }</translation>
 <translation id="2947471979790858922">Sua atividade nessas abas privadas será removida deste dispositivo</translation>
 <translation id="3870643923290313246">{INCOGNITO_TABS_COUNT, plural,
         =1 {Você pode encontrar suas abas fechadas em Abas Recentes, no menu principal do Vivaldi. Sua aba privada não estará disponível.}
         other {Você pode encontrar suas abas fechadas em Abas Recentes, no menu principal do Vivaldi. Suas # abas privadas não estarão disponíveis.}}</translation>
+<translation id="4460014764210899310">Desagrupar</translation>
 <translation id="4871187110787939393">Fechar todas as abas privadas?</translation>
+<translation id="5494920125229734069">Selecionar tudo</translation>
+<translation id="6744956528665271406">Editar cor do grupo</translation>
 </translationbundle>

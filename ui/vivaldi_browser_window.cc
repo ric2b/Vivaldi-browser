@@ -26,6 +26,7 @@
 #include "chrome/browser/devtools/devtools_window.h"
 #include "chrome/browser/extensions/browser_extension_window_controller.h"
 #include "chrome/browser/extensions/chrome_extension_web_contents_observer.h"
+#include "chrome/browser/extensions/extension_uninstall_dialog.h"
 #include "chrome/browser/extensions/window_controller.h"
 #include "chrome/browser/favicon/favicon_utils.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
@@ -35,7 +36,6 @@
 #include "chrome/browser/printing/printing_init.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/renderer_preferences_util.h"
-#include "chrome/browser/send_tab_to_self/receiving_ui_handler_registry.h"
 #include "chrome/browser/themes/theme_service.h"
 #include "chrome/browser/ui/autofill/autofill_bubble_handler.h"
 #include "chrome/browser/ui/autofill/chrome_autofill_client.h"
@@ -55,7 +55,6 @@
 #include "chrome/browser/ui/tab_dialogs.h"
 
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
-//#include "chrome/browser/ui/toasts/toast_controller.h"
 #include "chrome/browser/ui/toasts/api/toast_specification.h"
 #include "chrome/browser/ui/views/autofill/autofill_bubble_handler_impl.h"
 #include "chrome/browser/ui/views/download/download_in_progress_dialog_view.h"
@@ -74,6 +73,7 @@
 #include "components/send_tab_to_self/send_tab_to_self_entry.h"
 #include "components/sessions/content/session_tab_helper.h"
 #include "components/sharing_message/sharing_dialog_data.h"
+#include "components/tabs/tab_helpers.h"
 #include "components/web_modal/web_contents_modal_dialog_host.h"
 #include "components/web_modal/web_contents_modal_dialog_manager.h"
 #include "components/web_modal/web_contents_modal_dialog_manager_delegate.h"
@@ -117,9 +117,6 @@
 #include "extensions/schema/vivaldi_utilities.h"
 #include "extensions/schema/window_private.h"
 #include "extensions/tools/vivaldi_tools.h"
-#if defined(ENABLE_RELAY_PROXY)
-#include "proxy/launcher.h"
-#endif
 #include "ui/infobar_container_web_proxy.h"
 #include "ui/views/vivaldi_native_widget.h"
 #include "ui/views/vivaldi_window_widget_delegate.h"
@@ -154,6 +151,43 @@
 #include "browser/win/vivaldi_utils.h"
 #endif
 
+namespace extensions {
+// Copied from
+// chromium/chrome/browser/extensions/extension_context_menu_model.cc
+class UninstallDialogHelper : public ExtensionUninstallDialog::Delegate {
+ public:
+  // Kicks off the asynchronous process to confirm and uninstall the given
+  // |extension|.
+  static void UninstallExtension(Browser* browser, const Extension* extension) {
+    UninstallDialogHelper* helper = new UninstallDialogHelper();
+    helper->BeginUninstall(browser, extension);
+  }
+
+ private:
+  // This class handles its own lifetime.
+  UninstallDialogHelper() {}
+  ~UninstallDialogHelper() override {}
+  UninstallDialogHelper(const UninstallDialogHelper&) = delete;
+  UninstallDialogHelper& operator=(const UninstallDialogHelper&) = delete;
+
+  void BeginUninstall(Browser* browser, const Extension* extension) {
+     uninstall_dialog_ = ExtensionUninstallDialog::Create(
+        browser->profile(), browser->window()->GetNativeWindow(), this);
+     uninstall_dialog_->ConfirmUninstall(extension,
+                                        UNINSTALL_REASON_USER_INITIATED,
+                                        UNINSTALL_SOURCE_TOOLBAR_CONTEXT_MENU);
+  }
+
+  // ExtensionUninstallDialog::Delegate:
+  void OnExtensionUninstallDialogClosed(bool did_start_uninstall,
+                                        const std::u16string& error) override {
+    delete this;
+  }
+
+  std::unique_ptr<ExtensionUninstallDialog> uninstall_dialog_;
+};
+}  // namespace extensions
+
 // Used by Chrome's send tab to self functionality to pass data as events to JS.
 VivaldiUIRelay::VivaldiUIRelay(Profile* profile)
   :profile_(profile) {}
@@ -182,11 +216,6 @@ void VivaldiUIRelay::DismissEntries(const std::vector<std::string>& guids) {
       extensions::vivaldi::tabs_private::OnSendTabToSelfDismissed::Create(guids),
       profile_);
 }
-
-const Profile* VivaldiUIRelay::profile() const {
-  return profile_;
-}
-
 
 namespace {
 
@@ -246,7 +275,7 @@ class VivaldiBrowserWindow::InterfaceHelper final
 
   bool IsFullscreen() const override { return window_->IsFullscreen(); }
 
-  void EnterFullscreen(const GURL& url,
+  void EnterFullscreen(const url::Origin& origin,
                        ExclusiveAccessBubbleType bubble_type,
                        int64_t display_id) override {
     window_->SetFullscreen(true);
@@ -295,14 +324,6 @@ class VivaldiBrowserWindow::InterfaceHelper final
         web_contents, controller, is_user_gesture);
   }
 
-  autofill::AutofillBubbleBase* ShowLocalCardMigrationBubble(
-      content::WebContents* web_contents,
-      autofill::LocalCardMigrationBubbleController* controller,
-      bool is_user_gesture) override {
-    return GetAutofillBubbleHandler()->ShowLocalCardMigrationBubble(
-        web_contents, controller, is_user_gesture);
-  }
-
   autofill::AutofillBubbleBase* ShowIbanBubble(
       content::WebContents* web_contents,
       autofill::IbanBubbleController* controller,
@@ -322,7 +343,7 @@ class VivaldiBrowserWindow::InterfaceHelper final
 
   autofill::AutofillBubbleBase* ShowSaveAutofillAiDataBubble(
       content::WebContents* web_contents,
-      autofill_ai::SaveAutofillAiDataController* controller)
+      autofill_ai::SaveOrUpdateAutofillAiDataController* controller)
       override {
     return GetAutofillBubbleHandler()->ShowSaveAutofillAiDataBubble(
         web_contents, controller);
@@ -697,9 +718,6 @@ gfx::Rect GetInitialWindowBounds(const VivaldiBrowserWindowParams& params,
 
 }  // namespace
 
-VivaldiBrowserWindowParams::VivaldiBrowserWindowParams() = default;
-VivaldiBrowserWindowParams::~VivaldiBrowserWindowParams() = default;
-
 // VivaldiBrowserWindow --------------------------------------------------------
 
 VivaldiBrowserWindow::VivaldiBrowserWindow()
@@ -710,23 +728,6 @@ VivaldiBrowserWindow::VivaldiBrowserWindow()
 }
 
 VivaldiBrowserWindow::~VivaldiBrowserWindow() {
-#if defined(ENABLE_RELAY_PROXY)
-  // Mac closes connection on exit (app_controller_mac.mm),
-#if !BUILDFLAG(IS_MAC)
-  if (BrowserList::GetInstance()->size() <= 1) {
-    // Disconnect no matter what.
-    vivaldi::proxy::disconnect();
-  } else if (type() == NORMAL) {
-    // Disconnect if last normal window is closing.
-    int num_normal = vivaldi::GetBrowserCountOfType(Browser::TYPE_NORMAL) +
-      vivaldi::GetBrowserCountOfType(Browser::TYPE_POPUP);
-    if (num_normal == 1) {
-      vivaldi::proxy::disconnect();
-    }
-  }
-#endif
-#endif
-
   // The WindowRegistryService can return null.
   if (vivaldi::WindowRegistryService::Get(GetProfile())) {
     vivaldi::WindowRegistryService::Get(GetProfile())
@@ -898,15 +899,6 @@ void VivaldiBrowserWindow::CreateWebContents(
   autofill_bubble_handler_ =
       std::make_unique<autofill::AutofillBubbleHandlerImpl>(
           toolbar_button_provider_.get());
-
-  // This will create a new instance of a VivaldiUIRelay maintained and owned by
-  // the registry. The profile is key, there is only one relay per profile and
-  // it is removed when profile dies. Note: This is only true for "regular"
-  // profiles.
-  if (!browser_->profile()->IsOffTheRecord()) {
-    (void)send_tab_to_self::ReceivingUiHandlerRegistry::GetInstance()
-        ->GetVivaldiUIRelayForProfile(browser_->profile());
-  }
 }
 
 void VivaldiBrowserWindow::InitWidget(
@@ -918,7 +910,9 @@ void VivaldiBrowserWindow::InitWidget(
   widget_ = new views::Widget();
   widget_->AddObserver(interface_helper_.get());
 
-  views::Widget::InitParams init_params(views::Widget::InitParams::TYPE_WINDOW);
+  views::Widget::InitParams init_params(
+      views::Widget::InitParams::NATIVE_WIDGET_OWNS_WIDGET,
+      views::Widget::InitParams::TYPE_WINDOW);
 
   init_params.delegate = widget_delegate_.get();
 
@@ -1178,7 +1172,7 @@ bool VivaldiBrowserWindow::HasPersistentTabs() {
       return true;
     }
     content::WebContents* content = tab_strip_model->GetWebContentsAt(i);
-    if (extensions::IsTabInAWorkspace(content)) {
+    if (::vivaldi::IsTabInAWorkspace(content)) {
       return true;
     }
   }
@@ -1194,7 +1188,7 @@ std::vector<int> VivaldiBrowserWindow::GetPersistentTabIds() {
       ids.push_back(sessions::SessionTabHelper::IdForTab(content).id());
     } else {
       content::WebContents* content = tab_strip_model->GetWebContentsAt(i);
-      if (extensions::IsTabInAWorkspace(content)) {
+      if (::vivaldi::IsTabInAWorkspace(content)) {
         ids.push_back(sessions::SessionTabHelper::IdForTab(content).id());
       }
     }
@@ -1219,7 +1213,7 @@ void VivaldiBrowserWindow::MovePersistentTabsToOtherWindowIfNeeded() {
     if (tab_strip_model->IsTabPinned(i)) {
       pinned_tabs_to_move.push_back(
           sessions::SessionTabHelper::IdForTab(content).id());
-    } else if (extensions::IsTabInAWorkspace(content)) {
+    } else if (::vivaldi::IsTabInAWorkspace(content)) {
       workspace_tabs_to_move.push_back(
           sessions::SessionTabHelper::IdForTab(content).id());
     }
@@ -1564,8 +1558,8 @@ gfx::NativeWindow VivaldiBrowserWindow::GetNativeWindow() const {
   return widget_->GetNativeWindow();
 }
 
-StatusBubble* VivaldiBrowserWindow::GetStatusBubble() {
-  return NULL;
+std::vector<StatusBubble*> VivaldiBrowserWindow::GetStatusBubbles() {
+  return std::vector<StatusBubble*>();
 }
 
 gfx::Rect VivaldiBrowserWindow::GetRestoredBounds() const {
@@ -1723,6 +1717,10 @@ void VivaldiBrowserWindow::HandleMouseChange(bool motion) {
   last_motion_ = motion;
 }
 
+bool VivaldiBrowserWindow::PreHandleMouseEvent(const blink::WebMouseEvent& event) {
+  return false;
+}
+
 content::KeyboardEventProcessingResult
 VivaldiBrowserWindow::PreHandleKeyboardEvent(
     const input::NativeWebKeyboardEvent& event) {
@@ -1789,6 +1787,10 @@ DownloadShelf* VivaldiBrowserWindow::GetDownloadShelf() {
 views::View* VivaldiBrowserWindow::GetTopContainer() {
   // TODO: Will implement js-events in VB-111658.
 //  return GetContentsView();
+  return nullptr;
+}
+
+views::View* VivaldiBrowserWindow::GetLensOverlayView() {
   return nullptr;
 }
 
@@ -2340,6 +2342,11 @@ VivaldiBrowserWindow::GetFeaturePromoControllerImpl() {
   return nullptr;
 }
 
+bool VivaldiBrowserWindow::IsFeaturePromoQueued(
+    const base::Feature& iph_feature) const {
+  return false;
+}
+
 bool VivaldiBrowserWindow::IsFeaturePromoActive(
     const base::Feature& iph_feature) const {
   return false;
@@ -2400,7 +2407,7 @@ bool VivaldiBrowserWindow::IsBorderlessModeEnabled() const {
   return false;
 }
 
-void VivaldiBrowserWindow::OnCanResizeFromWebAPIChanged() {
+void VivaldiBrowserWindow::OnWebApiWindowResizableChanged() {
   // NOTE(andre@vivaldi.com) : Lifted from BrowserView.
   // TODO(laurila, crbug.com/1493617): Support multi-tab apps.
   // The value can only be set in web apps, where there currently can only be 1
@@ -2500,6 +2507,12 @@ void VivaldiBrowserWindow::ShowToast(
       browser_->profile());
 }
 
+void VivaldiBrowserWindow::UninstallExtensionViaDialog(
+    const extensions::Extension* extension) {
+  extensions::UninstallDialogHelper::UninstallExtension(browser_.get(),
+                                                        extension);
+}
+
 /*********************/
 
 VivaldiToolbarButtonProvider::VivaldiToolbarButtonProvider(
@@ -2512,6 +2525,11 @@ VivaldiToolbarButtonProvider::~VivaldiToolbarButtonProvider() {
 
 ExtensionsToolbarContainer*
 VivaldiToolbarButtonProvider::GetExtensionsToolbarContainer() {
+  return nullptr;
+}
+
+PinnedToolbarActionsContainer*
+VivaldiToolbarButtonProvider::GetPinnedToolbarActionsContainer() {
   return nullptr;
 }
 
@@ -2578,7 +2596,7 @@ IntentChipButton* VivaldiToolbarButtonProvider::GetIntentChipButton() {
   return nullptr;
 }
 
-DownloadToolbarButtonView* VivaldiToolbarButtonProvider::GetDownloadButton() {
+ToolbarButton* VivaldiToolbarButtonProvider::GetDownloadButton() {
   return nullptr;
 }
 

@@ -46,8 +46,8 @@ suite('DestinationDropdown', () => {
         destinationManager, 'getActiveDestination');
     getActiveDestinationFn.returnValue = PDF_DESTINATION;
 
-    element = document.createElement(DestinationDropdownElement.is) as
-        DestinationDropdownElement;
+    element = document.createElement(DestinationDropdownElement.is);
+    DestinationDropdownElement;
     assertTrue(!!element);
     document.body.append(element);
 
@@ -120,7 +120,7 @@ suite('DestinationDropdown', () => {
   });
 
   // Verify dropdown element has a controller configured.
-  test('has element controller', async () => {
+  test('has element controller', () => {
     assertTrue(
         !!controller,
         `${DestinationDropdownElement.is} should have controller configured`);

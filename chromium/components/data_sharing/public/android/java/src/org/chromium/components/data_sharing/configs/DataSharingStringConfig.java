@@ -6,12 +6,16 @@ package org.chromium.components.data_sharing.configs;
 
 import androidx.annotation.IntDef;
 
+import org.chromium.build.annotations.NullMarked;
+import org.chromium.build.annotations.Nullable;
+
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.util.HashMap;
 import java.util.Map;
 
 /** Config class for the Data Sharing UI Strings. */
+@NullMarked
 public class DataSharingStringConfig {
 
     private Map<Integer, Integer> mResourceIds;
@@ -24,7 +28,7 @@ public class DataSharingStringConfig {
         this.mResourceIds = builder.mResourceIds;
     }
 
-    public Integer getResourceId(@StringKey.Key int key) {
+    public @Nullable Integer getResourceId(@StringKey.Key int key) {
         return mResourceIds.get(key);
     }
 
@@ -77,6 +81,10 @@ public class DataSharingStringConfig {
             TABS_COUNT_TITLE,
             LEARN_ABOUT_SHARED_TAB_GROUPS,
             LEARN_ABOUT_BLOCKED_ACCOUNTS,
+            JOIN_GROUP_IS_FULL_ERROR_TITLE,
+            JOIN_GROUP_IS_FULL_ERROR_BODY,
+            ACTIVITY_LOGS_TITLE,
+            LET_ANYONE_JOIN_GROUP_WHEN_FULL_DESCRIPTION,
         })
         public @interface Key {}
 
@@ -100,5 +108,9 @@ public class DataSharingStringConfig {
         public static final int TABS_COUNT_TITLE = 17;
         public static final int LEARN_ABOUT_SHARED_TAB_GROUPS = 18;
         public static final int LEARN_ABOUT_BLOCKED_ACCOUNTS = 19;
+        public static final int JOIN_GROUP_IS_FULL_ERROR_TITLE = 20;
+        public static final int JOIN_GROUP_IS_FULL_ERROR_BODY = 21;
+        public static final int ACTIVITY_LOGS_TITLE = 22;
+        public static final int LET_ANYONE_JOIN_GROUP_WHEN_FULL_DESCRIPTION = 23;
     }
 }

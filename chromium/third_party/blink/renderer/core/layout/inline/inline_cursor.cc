@@ -43,7 +43,8 @@ LogicalRect ExpandedSelectionRectForSoftLineBreakIfNeeded(
   if (layout_block_flow && layout_block_flow->ShouldTruncateOverflowingText())
     return rect;
   // Copy from InlineTextBoxPainter::PaintSelection.
-  const LayoutUnit space_width(cursor.Current().Style().GetFont().SpaceWidth());
+  const LayoutUnit space_width(
+      cursor.Current().Style().GetFont()->SpaceWidth());
   return {rect.offset,
           {rect.size.inline_size + space_width, rect.size.block_size}};
 }
@@ -139,16 +140,6 @@ bool ShouldIgnoreForPositionForPoint(const InlineCursor& line) {
 }
 
 }  // namespace
-
-inline void InlineCursor::MoveToItem(const ItemsSpan::iterator& iter) {
-  DCHECK(HasRoot());
-  DCHECK(iter >= items_.begin() && iter <= items_.end());
-  if (iter != items_.end()) {
-    current_.Set(iter);
-    return;
-  }
-  MakeNull();
-}
 
 void InlineCursor::SetRoot(const PhysicalBoxFragment& box_fragment,
                            const FragmentItems& fragment_items,
@@ -425,13 +416,14 @@ UBiDiLevel InlineCursorPosition::BidiLevel() const {
       return 0;
     }
     const TextOffsetRange offset = TextOffset();
-    auto* const item =
-        std::ranges::find_if(*items, [offset](const InlineItem& item) {
+    const auto item_it = std::ranges::find_if(
+        *items, [offset](const Member<InlineItem>& item_ptr) {
+          const InlineItem& item = *item_ptr;
           return item.StartOffset() <= offset.start &&
                  item.EndOffset() >= offset.end;
         });
-    CHECK(item != items->end(), base::NotFatalUntil::M130) << this;
-    return item->BidiLevel();
+    CHECK(item_it != items->end(), base::NotFatalUntil::M130) << this;
+    return (*item_it)->BidiLevel();
   }
 
   if (IsAtomicInline()) {
@@ -443,7 +435,7 @@ UBiDiLevel InlineCursorPosition::BidiLevel() const {
     const auto item = std::ranges::find(items, GetLayoutObject(),
                                         &InlineItem::GetLayoutObject);
     CHECK(item != items.end(), base::NotFatalUntil::M130) << this;
-    return item->BidiLevel();
+    return (*item)->BidiLevel();
   }
 
   NOTREACHED();
@@ -510,7 +502,7 @@ PhysicalRect InlineCursor::CurrentLocalSelectionRectForText(
       // This is for old compatible that old doesn't paint last br in a page.
       !IsLastBRInPage(*Current().GetLayoutObject())) {
     logical_rect.size.inline_size =
-        LayoutUnit(Current().Style().GetFont().SpaceWidth());
+        LayoutUnit(Current().Style().GetFont()->SpaceWidth());
   }
   const LogicalRect line_break_extended_rect =
       Current().IsLineBreak() ? logical_rect
@@ -927,11 +919,6 @@ inline wtf_size_t InlineCursor::GetTextOffsetForEndOfLine(
   return text_offset;
 }
 
-void InlineCursor::MoveTo(const InlineCursorPosition& position) {
-  CheckValid(position);
-  current_ = position;
-}
-
 inline wtf_size_t InlineCursor::SpanBeginItemIndex() const {
   DCHECK(HasRoot());
   DCHECK(!items_.empty());
@@ -952,6 +939,21 @@ inline wtf_size_t InlineCursor::SpanIndexFromItemIndex(unsigned index) const {
       fragment_items_->Items().data() - items_.data() + index);
   DCHECK_LT(span_index, items_.size());
   return span_index;
+}
+
+void InlineCursor::MoveTo(const InlineCursorPosition& position) {
+  CheckValid(position);
+  current_ = position;
+}
+
+inline void InlineCursor::MoveToItem(const ItemsSpan::iterator& iter) {
+  DCHECK(HasRoot());
+  DCHECK(iter >= items_.begin() && iter <= items_.end());
+  if (iter != items_.end()) {
+    current_.Set(iter);
+    return;
+  }
+  MakeNull();
 }
 
 void InlineCursor::MoveTo(const FragmentItem& fragment_item) {

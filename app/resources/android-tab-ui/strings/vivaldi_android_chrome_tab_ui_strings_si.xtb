@@ -1,4 +1,9 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="si">
+<translation id="2947471979790858922">මෙම පුද්ගලික ටැබ් තුළ ඔබගේ ක්‍රියාකාරකම් මෙම උපාංගයෙන් ඉවත් කරනු ලැබේ</translation>
+<translation id="3870643923290313246">{INCOGNITO_TABS_COUNT, plural,
+        =1 {ඔබගේ සංවෘත ටැබ් Vivaldi ප්‍රධාන මෙනුව යටතේ ඇති මෑත ටැබ් තුළ සොයාගත හැකිය. ඔබගේ පුද්ගලික ටැබ් ලබා ගත නොහැක.}
+        other {ඔබගේ සංවෘත ටැබ් Vivaldi ප්‍රධාන මෙනුව යටතේ ඇති මෑත ටැබ් තුළ සොයාගත හැකිය. ඔබගේ # පුද්ගලික ටැබ් ලබා ගත නොහැක.}}</translation>
+<translation id="4871187110787939393">සියලුම පුද්ගලික ටැබ් වසන්නද?</translation>
 </translationbundle>

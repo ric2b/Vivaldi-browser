@@ -836,6 +836,8 @@ Called by update_protocol_commands_enum.py.-->
   <int value="179" label="AI Assistance - Side effect confirmed"/>
   <int value="180" label="AI Assistance - Side effect rejected"/>
   <int value="181" label="AI Assistance - Error"/>
+  <int value="182"
+      label="Performance Insight agent opened from Insights sidebar"/>
 </enum>
 
 <enum name="DevToolsAnimationPlaybackRateChanged">
@@ -870,18 +872,13 @@ Called by update_protocol_commands_enum.py.-->
   <int value="13" label="FontVariationSettings"/>
 </enum>
 
-<enum name="DevToolsCSSPropertyDocumentation">
-  <int value="0" label="Documentation shown"/>
-  <int value="1" label="Feature toggled on"/>
-  <int value="2" label="Feature toggled off"/>
-</enum>
-
 <enum name="DevToolsDebuggingUserDataDirStatus">
   <int value="0" label="Not being debugged"/>
-  <int value="1" label="Being debugged with a non-default user data dir"/>
-  <int value="2" label="Being debugged with a default user data dir"/>
+  <int value="1" label="Debugging requested with a non-default user data dir"/>
+  <int value="2" label="Debugging requested with a default user data dir"/>
   <int value="3"
-      label="Being debugged but was unable to determine the user data dir"/>
+      label="Debugging requested but was unable to determine the user data
+             dir"/>
 </enum>
 
 <enum name="DevToolsDeveloperResourceLoaded">
@@ -1001,6 +998,11 @@ Called by update_protocol_commands_enum.py.-->
   <int value="95" label="timeline-rpp-sidebar"/>
   <int value="96" label="timelineObservations"/>
   <int value="97" label="genAISettingsPanel"/>
+  <int value="98" label="timelineServerTimings"/>
+  <int value="101" label="floatingEntrypointsForAiAssistance"/>
+  <int value="102" label="timelineExperimentalInsights"/>
+  <int value="103" label="timelineDimUnrelatedEvents"/>
+  <int value="104" label="timelineAlternativeNavigation"/>
 </enum>
 
 <enum name="DevToolsIssueCreated">
@@ -1123,6 +1125,47 @@ Called by update_protocol_commands_enum.py.-->
       label="SelectElementAccessibilityIssue::InteractiveContentOptionChild"/>
   <int value="90"
       label="SelectElementAccessibilityIssue::InteractiveContentLegendChild"/>
+  <int value="91" label="SRIMessageSignatureIssue::MissingSignatureHeader"/>
+  <int value="92"
+      label="SRIMessageSignatureIssue::MissingSignatureInputHeader"/>
+  <int value="93" label="SRIMessageSignatureIssue::InvalidSignatureHeader"/>
+  <int value="94"
+      label="SRIMessageSignatureIssue::InvalidSignatureInputHeader"/>
+  <int value="95"
+      label="SRIMessageSignatureIssue::SignatureHeaderValueIsNotByteSequence"/>
+  <int value="96"
+      label="SRIMessageSignatureIssue::SignatureHeaderValueIsParameterized"/>
+  <int value="97"
+      label="SRIMessageSignatureIssue::SignatureHeaderValueIsIncorrectLength"/>
+  <int value="98"
+      label="SRIMessageSignatureIssue::SignatureInputHeaderMissingLabel"/>
+  <int value="99"
+      label="SRIMessageSignatureIssue::SignatureInputHeaderValueNotInnerList"/>
+  <int value="100"
+      label="SRIMessageSignatureIssue::SignatureInputHeaderValueMissingComponents"/>
+  <int value="101"
+      label="SRIMessageSignatureIssue::SignatureInputHeaderInvalidComponentType"/>
+  <int value="102"
+      label="SRIMessageSignatureIssue::SignatureInputHeaderInvalidComponentName"/>
+  <int value="103"
+      label="SRIMessageSignatureIssue::SignatureInputHeaderInvalidHeaderComponentParameter"/>
+  <int value="104"
+      label="SRIMessageSignatureIssue::SignatureInputHeaderInvalidDerivedComponentParameter"/>
+  <int value="105"
+      label="SRIMessageSignatureIssue::SignatureInputHeaderKeyIdLength"/>
+  <int value="106"
+      label="SRIMessageSignatureIssue::SignatureInputHeaderInvalidParameter"/>
+  <int value="107"
+      label="SRIMessageSignatureIssue::SignatureInputHeaderMissingRequiredParameters"/>
+  <int value="108"
+      label="SRIMessageSignatureIssue::ValidationFailedSignatureExpired"/>
+  <int value="109"
+      label="SRIMessageSignatureIssue::ValidationFailedInvalidLength"/>
+  <int value="110"
+      label="SRIMessageSignatureIssue::ValidationFailedSignatureMismatch"/>
+  <int value="111" label="CorsIssue::LocalNetworkAccessPermissionDenied"/>
+  <int value="112"
+      label="SRIMessageSignatureIssue::ValidationFailedIntegrityMismatch"/>
 </enum>
 
 <enum name="DevToolsIssuesPanelIssueExpanded">
@@ -1725,19 +1768,6 @@ Called by update_protocol_commands_enum.py.-->
   <int value="10" label="Sources - Overrides"/>
   <int value="11" label="Sources - Content Scripts"/>
   <int value="12" label="Sources - Snippets"/>
-</enum>
-
-<enum name="DevToolsStyleTextCopied">
-  <int value="1" label="Declaration from changed line"/>
-  <int value="2" label="All changes from Styles pane"/>
-  <int value="3" label="Declaration from context menu"/>
-  <int value="4" label="Property from context menu"/>
-  <int value="5" label="Value from context menu"/>
-  <int value="6" label="Declaration as JS from context menu"/>
-  <int value="7" label="Rule from context menu"/>
-  <int value="8" label="All declarations from context menu"/>
-  <int value="9" label="All declarations as JS from context menu"/>
-  <int value="10" label="Selector from context menu"/>
 </enum>
 
 <enum name="DevToolsSwatchActivated">

@@ -37,6 +37,7 @@
 <translation id="2441056087170876076">Τέρας 2</translation>
 <translation id="2444387452209867610">Εισαγωγή Σημείωσης</translation>
 <translation id="2486841023299517366">Ζώο 4</translation>
+<translation id="2501278716633472235">Πήγαινε πίσω</translation>
 <translation id="2612127540243995147">Έτοιμο για εγκατάσταση. Το Vivaldi θα είναι κλειστό και θα ξαναρχίσει.</translation>
 <translation id="2613387515621326337">Εμφάνιση ιστότοπου ενημέρωσης</translation>
 <translation id="2645477450146475243">Δυστυχώς, οι ρυθμίσεις Opera δεν είναι διαθέσιμες ενώ εκτελείται αυτό το πρόγραμμα περιήγησης. Για να εισαγάγετε αυτές τις ρυθμίσεις στο Vivaldi, αποθηκεύστε την εργασία σας και κλείστε όλα τα παράθυρα του Opera. Στη συνέχεια κάντε κλικ στο 'Συνέχεια'.</translation>
@@ -61,6 +62,7 @@
 <translation id="3259769196742189631">Επικύρωση</translation>
 <translation id="3291915639428159043">Αποκλείστηκε η αυτόματη αναπαραγωγή</translation>
 <translation id="3302905971452834934">Τέρας 1</translation>
+<translation id="3308738399950580893">Διαφημίσεις</translation>
 <translation id="3334610655141903168">(χωρίς τίτλο)</translation>
 <translation id="3372505110412186107">Το Vivaldi <ph name="VERSION" /> είναι προς το παρόν η πιο πρόσφατη διαθέσιμη έκδοση.</translation>
 <translation id="3383198080133834965">Είστε ενημερωμένοι!</translation>
@@ -83,6 +85,7 @@
 <translation id="3795800845758778870">Δυστυχώς, οι ρυθμίσεις σας στο Brave δεν είναι διαθέσιμες κατά την εκτέλεση του. Για να εισαγάγετε αυτές τις ρυθμίσεις στο Vivaldi, αποθηκεύστε την εργασία σας και κλείστε όλα τα παράθυρα του Brave. Έπειτα, κάντε κλικ στο Συνέχεια.</translation>
 <translation id="3822431842304177896">Νέο Διαχωριστικό</translation>
 <translation id="3832132597516774400">Τοπίο 5</translation>
+<translation id="3894751534882749287">Αν θέλετε να προβάλετε τη σελίδα ούτως ή άλλως, μπορείτε να αλλάξετε το επίπεδο προστασίας παρακολούθησης στο αναδυόμενο παράθυρο Αποκλεισμού Παρακολούθησης ή κάνοντας κλικ στο κουμπί Επιτρέπεται</translation>
 <translation id="3914946330804881301">Εισαγωγή από Opera</translation>
 <translation id="3921292902397893431">Τέρας 8</translation>
 <translation id="3943857333388298514">Επικόλληση</translation>
@@ -107,6 +110,7 @@
 <translation id="4582480609585453144">Άνοιγμα Συνδέσμου σε Καρτέλα Παρασκηνίου</translation>
 <translation id="4636708767492582204">Αποστολή μέσω Ηλεκτρονικού Ταχυδρομείου</translation>
 <translation id="4677434526832593569">Ζώο 8</translation>
+<translation id="4736016046474602958">Αποκλεισμός Παρακολούθησης</translation>
 <translation id="474217410105706308">Σίγαση Καρτέλας</translation>
 <translation id="4861715717329665002">Αυτόματα αποθηκευμένες περίοδοι σύνδεσης</translation>
 <translation id="4881695831933465202">Άνοιγμα</translation>
@@ -152,6 +156,7 @@
 <translation id="7086554968911045110">Τοπίο 7</translation>
 <translation id="7099506190679014195">Ασφαλής αναβάθμιση αποθήκευσης κλειδιών</translation>
 <translation id="7111492742514999492">Τοπίο 9</translation>
+<translation id="7113310725918019676">Επιτρέψτε <ph name="BLOCKED_TYPE" /> από <ph name="DOMAIN" /></translation>
 <translation id="7208252576848052204">Δυστυχώς, οι ρυθμίσεις Arc δεν είναι διαθέσιμες ενώ εκτελείται αυτό το πρόγραμμα περιήγησης. Για να εισαγάγετε αυτές τις ρυθμίσεις στο Vivaldi, αποθηκεύστε την εργασία σας και κλείστε όλα τα παράθυρα του Arc. Στη συνέχεια κάντε κλικ στο 'Συνέχεια'.</translation>
 <translation id="7321500017121629018">Ενεργό χθες</translation>
 <translation id="7337881442233988129">Chromium</translation>
@@ -167,9 +172,9 @@
 <translation id="8027581147000338959">Άνοιγμα σε Νέο Παράθυρο</translation>
 <translation id="8044382196220116469">Να μην επιτρέπεται στους ιστότοπους η αυτόματη αναπαραγωγή βίντεο</translation>
 <translation id="8099620695029051217">Αντιγραφή της Διεύθυνσης της Σελίδας</translation>
+<translation id="8119307142152921512">ιχνηλάτες και διαφημίσεις</translation>
 <translation id="8197810018650377191">Προσθήκη Σελίδας στους Σελιδοδείκτες</translation>
 <translation id="8261506727792406068">Διαγραφή</translation>
-<translation id="8263047843452521549">Έλεγχος υπηρεσιών παρασκηνίου</translation>
 <translation id="8331671104904436324">Άνοιγμα σε Καρτέλα στο Παρασκήνιο</translation>
 <translation id="8373293945112511707">Τοπίο 1</translation>
 <translation id="8388552048012645975">Λήψη ενημέρωσης...</translation>
@@ -183,7 +188,6 @@
 <translation id="8651348004684669199">Προσθήκη της Ενεργής Καρτέλας</translation>
 <translation id="8669345741879513971">Τέρας 10</translation>
 <translation id="867544375504146191">Yandex</translation>
-<translation id="8689295374912158752">Επιθεώρηση των πυλών διατήρησης εγγράφων</translation>
 <translation id="875142999698251063">Έξοδος τώρα</translation>
 <translation id="8768970203213061953">Τοπίο 14</translation>
 <translation id="8773635261052182196">Δεν θα δείτε πλέον αυτές τις ειδοποιήσεις. Μπορείτε να τα ενεργοποιήσετε ξανά από τις ρυθμίσεις του vivaldi.</translation>
@@ -191,6 +195,7 @@
 <translation id="8813277370772331957">Θύμισέ μου αργότερα</translation>
 <translation id="8894900864683381599">Προσθήκη Συνδέσμου σε Πίνακα Ιστού</translation>
 <translation id="8912720443398351457">Θέλετε πραγματικά να κλείσετε τον Vivaldi;</translation>
+<translation id="8940028675168378100">Αποκλείστηκε από <ph name="BLOCKER_NAME" /></translation>
 <translation id="8947109330183116400">Επιλέξτε αρχείο σελιδοδεικτών HTML</translation>
 <translation id="9017566390391482291">Επιλέξτε το φάκελο προφίλ Vivaldi για εισαγωγή</translation>
 <translation id="9048058608784130603">Εκκρεμεί ενημέρωση <ph name="VERSION" /></translation>
@@ -201,6 +206,7 @@
 <translation id="912022491595344261">Άνοιγμα εικόνας ως <ph name="USER" /></translation>
 <translation id="9157539936604258187">Άνοιγμα Συνδέσμου</translation>
 <translation id="9169060351863393881">Opera 12.x</translation>
+<translation id="9180553614777056266">Αποκλεισμός Διαφημίσεων</translation>
 <translation id="939305735877869636">Brave</translation>
 <translation id="970294721402795299">Τοπίο 16</translation>
 </translationbundle>

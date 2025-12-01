@@ -260,35 +260,11 @@ impl CodecConfiguration {
     }
 }
 
-#[derive(Clone, Debug, Default)]
-pub struct Nclx {
-    pub color_primaries: ColorPrimaries,
-    pub transfer_characteristics: TransferCharacteristics,
-    pub matrix_coefficients: MatrixCoefficients,
-    pub yuv_range: YuvRange,
-}
-
 #[derive(Clone, Debug)]
 pub enum ColorInformation {
     Icc(Vec<u8>),
     Nclx(Nclx),
     Unknown,
-}
-
-/// cbindgen:rename-all=CamelCase
-#[derive(Clone, Copy, Debug, Default, PartialEq)]
-#[repr(C)]
-pub struct PixelAspectRatio {
-    pub h_spacing: u32,
-    pub v_spacing: u32,
-}
-
-/// cbindgen:field-names=[maxCLL, maxPALL]
-#[repr(C)]
-#[derive(Clone, Copy, Debug, Default)]
-pub struct ContentLightLevelInformation {
-    pub max_cll: u16,
-    pub max_pall: u16,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -459,7 +435,7 @@ fn parse_ftyp(stream: &mut IStream) -> AvifResult<FileTypeBox> {
     })
 }
 
-fn parse_hdlr(stream: &mut IStream) -> AvifResult<()> {
+fn parse_hdlr(stream: &mut IStream) -> AvifResult<String> {
     // Section 8.4.3.2 of ISO/IEC 14496-12.
     let (_version, _flags) = stream.read_and_enforce_version_and_flags(0)?;
     // unsigned int(32) pre_defined = 0;
@@ -471,16 +447,6 @@ fn parse_hdlr(stream: &mut IStream) -> AvifResult<()> {
     }
     // unsigned int(32) handler_type;
     let handler_type = stream.read_string(4)?;
-    if handler_type != "pict" {
-        // Section 6.2 of ISO/IEC 23008-12:
-        //   The handler type for the MetaBox shall be 'pict'.
-        // https://aomediacodec.github.io/av1-avif/v1.1.0.html#image-sequences does not apply
-        // because this function is only called for the MetaBox but it would work too:
-        //   The track handler for an AV1 Image Sequence shall be pict.
-        return Err(AvifError::BmffParseFailed(
-            "Box[hdlr] handler_type is not 'pict'".into(),
-        ));
-    }
     // const unsigned int(32)[3] reserved = 0;
     if stream.read_u32()? != 0 || stream.read_u32()? != 0 || stream.read_u32()? != 0 {
         return Err(AvifError::BmffParseFailed(
@@ -492,7 +458,7 @@ fn parse_hdlr(stream: &mut IStream) -> AvifResult<()> {
     //   name gives a human-readable name for the track type (for debugging and inspection
     //   purposes).
     stream.read_c_string()?;
-    Ok(())
+    Ok(handler_type)
 }
 
 fn parse_iloc(stream: &mut IStream) -> AvifResult<ItemLocationBox> {
@@ -980,7 +946,7 @@ fn parse_clli(stream: &mut IStream) -> AvifResult<ItemProperty> {
     Ok(ItemProperty::ContentLightLevelInformation(clli))
 }
 
-fn parse_ipco(stream: &mut IStream) -> AvifResult<Vec<ItemProperty>> {
+fn parse_ipco(stream: &mut IStream, is_track: bool) -> AvifResult<Vec<ItemProperty>> {
     // Section 8.11.14.2 of ISO/IEC 14496-12.
     let mut properties: Vec<ItemProperty> = Vec::new();
     while stream.has_bytes_left()? {
@@ -992,7 +958,8 @@ fn parse_ipco(stream: &mut IStream) -> AvifResult<Vec<ItemProperty>> {
             "av1C" => properties.push(parse_av1C(&mut sub_stream)?),
             "colr" => properties.push(parse_colr(&mut sub_stream)?),
             "pasp" => properties.push(parse_pasp(&mut sub_stream)?),
-            "auxC" => properties.push(parse_auxC(&mut sub_stream)?),
+            "auxC" if !is_track => properties.push(parse_auxC(&mut sub_stream)?),
+            "auxi" if is_track => properties.push(parse_auxC(&mut sub_stream)?),
             "clap" => properties.push(parse_clap(&mut sub_stream)?),
             "irot" => properties.push(parse_irot(&mut sub_stream)?),
             "imir" => properties.push(parse_imir(&mut sub_stream)?),
@@ -1072,7 +1039,7 @@ fn parse_iprp(stream: &mut IStream) -> AvifResult<ItemPropertyBox> {
     // Parse ipco box.
     {
         let mut sub_stream = stream.sub_stream(&header.size)?;
-        iprp.properties = parse_ipco(&mut sub_stream)?;
+        iprp.properties = parse_ipco(&mut sub_stream, /*is_track=*/ false)?;
     }
     // Parse ipma boxes.
     while stream.has_bytes_left()? {
@@ -1240,7 +1207,17 @@ fn parse_meta(stream: &mut IStream) -> AvifResult<MetaBox> {
                 "first box in meta is not hdlr".into(),
             ));
         }
-        parse_hdlr(&mut stream.sub_stream(&header.size)?)?;
+        let handler_type = parse_hdlr(&mut stream.sub_stream(&header.size)?)?;
+        if handler_type != "pict" {
+            // Section 6.2 of ISO/IEC 23008-12:
+            //   The handler type for the MetaBox shall be 'pict'.
+            // https://aomediacodec.github.io/av1-avif/v1.1.0.html#image-sequences does not apply
+            // because this function is only called for the MetaBox but it would work too:
+            //   The track handler for an AV1 Image Sequence shall be pict.
+            return Err(AvifError::BmffParseFailed(
+                "Box[hdlr] handler_type is not 'pict'".into(),
+            ));
+        }
     }
 
     let mut boxes_seen: HashSet<String> = HashSet::with_hasher(NonRandomHasherState);
@@ -1339,11 +1316,6 @@ fn parse_tkhd(stream: &mut IStream, track: &mut Track) -> AvifResult<()> {
     // unsigned int(32) height;
     track.height = stream.read_u32()? >> 16;
 
-    if track.width == 0 || track.height == 0 {
-        return Err(AvifError::BmffParseFailed(
-            "invalid track dimensions".into(),
-        ));
-    }
     Ok(())
 }
 
@@ -1576,7 +1548,10 @@ fn parse_sample_entry(stream: &mut IStream, format: String) -> AvifResult<Sample
         // PixelAspectRatioBox pasp; // optional
 
         // Now read any of 'av1C', 'clap', 'pasp' etc.
-        sample_entry.properties = parse_ipco(&mut stream.sub_stream(&BoxSize::UntilEndOfStream)?)?;
+        sample_entry.properties = parse_ipco(
+            &mut stream.sub_stream(&BoxSize::UntilEndOfStream)?,
+            /*is_track=*/ true,
+        )?;
 
         if !sample_entry
             .properties
@@ -1687,6 +1662,7 @@ fn parse_mdia(stream: &mut IStream, track: &mut Track) -> AvifResult<()> {
         match header.box_type.as_str() {
             "mdhd" => parse_mdhd(&mut sub_stream, track)?,
             "minf" => parse_minf(&mut sub_stream, track)?,
+            "hdlr" => track.handler_type = parse_hdlr(&mut sub_stream)?,
             _ => {}
         }
     }
@@ -1842,7 +1818,13 @@ fn parse_moov(stream: &mut IStream) -> AvifResult<Vec<Track>> {
         let header = parse_header(stream, /*top_level=*/ false)?;
         let mut sub_stream = stream.sub_stream(&header.size)?;
         if header.box_type == "trak" {
-            tracks.push(parse_trak(&mut sub_stream)?);
+            let track = parse_trak(&mut sub_stream)?;
+            if track.is_video_handler() && (track.width == 0 || track.height == 0) {
+                return Err(AvifError::BmffParseFailed(
+                    "invalid track dimensions".into(),
+                ));
+            }
+            tracks.push(track);
         }
     }
     if tracks.is_empty() {
@@ -2022,6 +2004,7 @@ pub(crate) fn parse_tmap(stream: &mut IStream) -> AvifResult<Option<GainMapMetad
             "invalid trailing bytes in tmap box".into(),
         ));
     }
+    metadata.is_valid()?;
     Ok(Some(metadata))
 }
 

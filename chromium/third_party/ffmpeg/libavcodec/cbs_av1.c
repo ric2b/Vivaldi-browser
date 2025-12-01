@@ -24,7 +24,7 @@
 #include "cbs_internal.h"
 #include "cbs_av1.h"
 #include "defs.h"
-#include "refstruct.h"
+#include "libavutil/refstruct.h"
 
 
 static int cbs_av1_read_uvlc(CodedBitstreamContext *ctx, GetBitContext *gbc,
@@ -728,16 +728,16 @@ static int cbs_av1_split_fragment(CodedBitstreamContext *ctx,
     }
 
     while (size > 0) {
-        AV1RawOBUHeader header;
+        AV1RawOBUHeader obu_header;
         uint64_t obu_size;
 
         init_get_bits(&gbc, data, 8 * size);
 
-        err = cbs_av1_read_obu_header(ctx, &gbc, &header);
+        err = cbs_av1_read_obu_header(ctx, &gbc, &obu_header);
         if (err < 0)
             goto fail;
 
-        if (header.obu_has_size_field) {
+        if (obu_header.obu_has_size_field) {
             if (get_bits_left(&gbc) < 8) {
                 av_log(ctx->log_ctx, AV_LOG_ERROR, "Invalid OBU: fragment "
                        "too short (%"SIZE_SPECIFIER" bytes).\n", size);
@@ -748,7 +748,7 @@ static int cbs_av1_split_fragment(CodedBitstreamContext *ctx,
             if (err < 0)
                 goto fail;
         } else
-            obu_size = size - 1 - header.obu_extension_flag;
+            obu_size = size - 1 - obu_header.obu_extension_flag;
 
         pos = get_bits_count(&gbc);
         av_assert0(pos % 8 == 0 && pos / 8 <= size);
@@ -763,7 +763,7 @@ static int cbs_av1_split_fragment(CodedBitstreamContext *ctx,
             goto fail;
         }
 
-        err = ff_cbs_append_unit_data(frag, header.obu_type,
+        err = ff_cbs_append_unit_data(frag, obu_header.obu_type,
                                       data, obu_length, frag->data_ref);
         if (err < 0)
             goto fail;
@@ -878,7 +878,7 @@ static int cbs_av1_read_unit(CodedBitstreamContext *ctx,
                 priv->operating_point_idc = sequence_header->operating_point_idc[priv->operating_point];
             }
 
-            ff_refstruct_replace(&priv->sequence_header_ref, unit->content_ref);
+            av_refstruct_replace(&priv->sequence_header_ref, unit->content_ref);
             priv->sequence_header = &obu->obu.sequence_header;
         }
         break;
@@ -997,7 +997,7 @@ static int cbs_av1_write_obu(CodedBitstreamContext *ctx,
     av1ctx = *priv;
 
     if (priv->sequence_header_ref) {
-        av1ctx.sequence_header_ref = ff_refstruct_ref(priv->sequence_header_ref);
+        av1ctx.sequence_header_ref = av_refstruct_ref(priv->sequence_header_ref);
     }
 
     if (priv->frame_header_ref) {
@@ -1035,14 +1035,14 @@ static int cbs_av1_write_obu(CodedBitstreamContext *ctx,
             if (err < 0)
                 goto error;
 
-            ff_refstruct_unref(&priv->sequence_header_ref);
+            av_refstruct_unref(&priv->sequence_header_ref);
             priv->sequence_header = NULL;
 
             err = ff_cbs_make_unit_refcounted(ctx, unit);
             if (err < 0)
                 goto error;
 
-            priv->sequence_header_ref = ff_refstruct_ref(unit->content_ref);
+            priv->sequence_header_ref = av_refstruct_ref(unit->content_ref);
             priv->sequence_header = &obu->obu.sequence_header;
         }
         break;
@@ -1146,7 +1146,7 @@ static int cbs_av1_write_obu(CodedBitstreamContext *ctx,
     av_assert0(data_pos <= start_pos);
 
     if (8 * obu->obu_size > put_bits_left(pbc)) {
-        ff_refstruct_unref(&priv->sequence_header_ref);
+        av_refstruct_unref(&priv->sequence_header_ref);
         av_buffer_unref(&priv->frame_header_ref);
         *priv = av1ctx;
 
@@ -1175,7 +1175,7 @@ static int cbs_av1_write_obu(CodedBitstreamContext *ctx,
     err = 0;
 
 error:
-    ff_refstruct_unref(&av1ctx.sequence_header_ref);
+    av_refstruct_unref(&av1ctx.sequence_header_ref);
     av_buffer_unref(&av1ctx.frame_header_ref);
 
     return err;
@@ -1227,11 +1227,11 @@ static void cbs_av1_close(CodedBitstreamContext *ctx)
 {
     CodedBitstreamAV1Context *priv = ctx->priv_data;
 
-    ff_refstruct_unref(&priv->sequence_header_ref);
+    av_refstruct_unref(&priv->sequence_header_ref);
     av_buffer_unref(&priv->frame_header_ref);
 }
 
-static void cbs_av1_free_metadata(FFRefStructOpaque unused, void *content)
+static void cbs_av1_free_metadata(AVRefStructOpaque unused, void *content)
 {
     AV1RawOBU *obu = content;
     AV1RawMetadata *md;

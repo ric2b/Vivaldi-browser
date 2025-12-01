@@ -63,9 +63,13 @@ const UIStrings = {
   cantLoadProfileWhileAnother: 'Can’t load profile while another profile is being recorded.',
   /**
    *@description Text in Profiles Panel of a profiler tool
+   */
+  profileLoadingFailed: 'Profile loading failed',
+  /**
+   *@description Text in Profiles Panel of a profiler tool
    *@example {cannot open file} PH1
    */
-  profileLoadingFailedS: 'Profile loading failed: {PH1}.',
+  failReason: 'Reason: {PH1}.',
   /**
    *@description Text in Profiles Panel of a profiler tool
    *@example {2} PH1
@@ -75,7 +79,7 @@ const UIStrings = {
    *@description Text in Profiles Panel of a profiler tool
    */
   profiles: 'Profiles',
-};
+} as const;
 const str_ = i18n.i18n.registerUIStrings('panels/profiler/ProfilesPanel.ts', UIStrings);
 const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
 export class ProfilesPanel extends UI.Panel.PanelWithSidebar implements DataDisplayDelegate {
@@ -88,13 +92,13 @@ export class ProfilesPanel extends UI.Panel.PanelWithSidebar implements DataDisp
   readonly toggleRecordButton: UI.Toolbar.ToolbarButton;
   readonly #saveToFileAction: UI.ActionRegistration.Action;
   readonly profileViewToolbar: UI.Toolbar.Toolbar;
-  profileGroups: {};
+  profileGroups: Record<string, ProfileGroup>;
   launcherView: ProfileLauncherView;
   visibleView!: UI.Widget.Widget|undefined;
-  readonly profileToView: {
+  readonly profileToView: Array<{
     profile: ProfileHeader,
     view: UI.Widget.Widget,
-  }[];
+  }>;
   typeIdToSidebarSection: {
     [x: string]: ProfileTypeSidebarSection,
   };
@@ -194,7 +198,7 @@ export class ProfilesPanel extends UI.Panel.PanelWithSidebar implements DataDisp
     // TODO(crbug.com/1172300) Ignored during the jsdoc to ts migration)
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const visibleView = (this.visibleView as any);
-    return visibleView && visibleView.searchableView ? visibleView.searchableView() : null;
+    return visibleView?.searchableView ? visibleView.searchableView() : null;
   }
 
   createFileSelectorElement(): void {
@@ -230,7 +234,8 @@ export class ProfilesPanel extends UI.Panel.PanelWithSidebar implements DataDisp
     const error = await profileType.loadFromFile(file);
     if (error && 'message' in error) {
       void UI.UIUtils.MessageDialog.show(
-          i18nString(UIStrings.profileLoadingFailedS, {PH1: error.message}), undefined, 'profile-loading-failed');
+          i18nString(UIStrings.profileLoadingFailed), i18nString(UIStrings.failReason, {PH1: error.message}), undefined,
+          'profile-loading-failed');
     }
   }
 

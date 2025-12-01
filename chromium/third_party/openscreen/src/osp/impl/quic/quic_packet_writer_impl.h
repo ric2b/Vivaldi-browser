@@ -23,7 +23,7 @@ class PacketWriterImpl final : public quic::QuicPacketWriter {
   quic::WriteResult WritePacket(
       const char* buffer,
       size_t buffer_length,
-      const quic::QuicIpAddress& self_address,
+      const quiche::QuicheIpAddress& self_address,
       const quic::QuicSocketAddress& peer_address,
       quic::PerPacketOptions* options,
       const quic::QuicPacketWriterParams& params) override;
@@ -36,7 +36,7 @@ class PacketWriterImpl final : public quic::QuicPacketWriter {
   bool IsBatchMode() const override;
   bool SupportsEcn() const override;
   quic::QuicPacketBuffer GetNextWriteLocation(
-      const quic::QuicIpAddress& self_address,
+      const quiche::QuicheIpAddress& self_address,
       const quic::QuicSocketAddress& peer_address) override;
   quic::WriteResult Flush() override;
 

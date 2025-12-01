@@ -52,7 +52,7 @@ void VideoFrameResourceProvider::Initialize(
 
   resource_updater_ = std::make_unique<media::VideoResourceUpdater>(
       media_context_provider, resource_provider_.get(),
-      std::move(shared_image_interface), settings_.use_stream_video_draw_quad,
+      std::move(shared_image_interface),
       settings_.use_gpu_memory_buffer_resources, max_texture_size);
 }
 
@@ -114,6 +114,12 @@ void VideoFrameResourceProvider::AppendQuads(
   if (media_transform.mirrored) {
     transform.RotateAboutYAxis(180.0);
     transform.Translate(-quad_rect.width(), 0);
+
+    if (media_transform.rotation == media::VIDEO_ROTATION_90 ||
+        media_transform.rotation == media::VIDEO_ROTATION_270) {
+      transform.RotateAboutZAxis(180.0);
+      transform.Translate(-quad_rect.width(), -quad_rect.height());
+    }
   }
 
   gfx::Rect visible_quad_rect = quad_rect;

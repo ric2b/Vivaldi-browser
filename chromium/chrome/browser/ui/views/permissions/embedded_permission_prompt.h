@@ -55,6 +55,7 @@ class EmbeddedPermissionPrompt
   bool IsAskPrompt() const override;
   std::optional<permissions::feature_params::PermissionElementPromptPosition>
   GetPromptPosition() const override;
+  std::optional<gfx::Rect> GetViewBoundsInScreen() const override;
 
   // EmbeddedPermissionPromptViewDelegate:
   void Allow() override;
@@ -63,6 +64,7 @@ class EmbeddedPermissionPrompt
   void Acknowledge() override;
   void StopAllowing() override;
   void ShowSystemSettings() override;
+  void SystemPermissionsNoLongerDenied() override;
   base::WeakPtr<permissions::PermissionPrompt::Delegate>
   GetPermissionPromptDelegate() const override;
   const std::vector<

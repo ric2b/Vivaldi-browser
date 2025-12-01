@@ -16,6 +16,14 @@
             "issue": "b/266235549"
         },
         {
+            "name": "allow_pipeline_statistics_for_primitives_generated_query",
+            "category": "Workarounds",
+            "description": [
+                "On devices where primitivesGeneratedQuery vulkan feature is not available, allows pipelineStatisticsQuery vulkan feature to substitute primitivesGeneratedQuery if it generates the same results as primitivesGeneratedQuery"
+            ],
+            "issue:": "b/333987915"
+        },
+        {
             "name": "bresenham_line_rasterization",
             "category": "Features",
             "description": [
@@ -101,13 +109,6 @@
             "category": "Features",
             "description": [
                 "VkDevice supports the VK_ANDROID_external_memory_android_hardware_buffer extension"
-            ]
-        },
-        {
-            "name": "supports_GGP_frame_token",
-            "category": "Features",
-            "description": [
-                "VkDevice supports the VK_GGP_frame_token extension"
             ]
         },
         {
@@ -280,6 +281,14 @@
             "issue": "http://anglebug.com/42267057"
         },
         {
+            "name": "supports_device_fault",
+            "category": "Features",
+            "description": [
+                "VkDevice supports the VK_EXT_device_fault extension"
+            ],
+            "issue": "http://issuetracker.google.com/399478440"
+        },
+        {
             "name": "supports_multiview",
             "category": "Features",
             "description": [
@@ -305,12 +314,14 @@
             "issue": "http://anglebug.com/42262161"
         },
         {
-            "name": "per_frame_window_size_query",
+            "name": "avoid_invisible_window_swapchain_recreate",
             "category": "Workarounds",
             "description": [
-                "Vulkan swapchain is not returning VK_ERROR_OUT_OF_DATE when window resizing"
+                "Do not recreate a swapchain when window is invisible even if its size is ",
+                "changed. This is a workaround for the bug when vkAcquireNextImageKHR constantly ",
+                "returns VK_ERROR_OUT_OF_DATE if recreate the swapchain while window is invisible."
             ],
-            "issue": "http://anglebug.com/40096601, http://anglebug.com/42262286, http://anglebug.com/42262287"
+            "issue": "http://anglebug.com/397848903"
         },
         {
             "name": "pad_buffers_to_max_vertex_attrib_stride",
@@ -553,6 +564,17 @@
                 "Works around a bug on platforms which destroy oldSwapchain in vkCreateSwapchainKHR."
             ],
             "issue": "http://anglebug.com/42263629"
+        },
+        {
+            "name": "destroy_old_swapchain_in_shared_present_mode",
+            "category": "Workarounds",
+            "description": [
+                "Instead of passing an oldSwapchain to VkSwapchainCreateInfoKHR, wait for queue to ",
+                "be idle and destroy the swapchain immediately. Works around a bug on platforms ",
+                "which may return VK_ERROR_NATIVE_WINDOW_IN_USE_KHR from vkCreateSwapchainKHR ",
+                "if use the oldSwapchain pointer."
+            ],
+            "issue": "http://anglebug.com/42262606"
         },
         {
             "name": "force_texture_lod_offset_1",
@@ -1106,7 +1128,7 @@
             "name": "supports_yuv_target",
             "category": "Features",
             "description": [
-                "VkDevice supports VK_ANDROID_render_to_external_format and VK_EXT_ycbcr_attachment"
+                "VkDevice supports VK_ANDROID_external_format_resolve with nullColorAttachmentWithExternalFormatResolve"
             ]
         },
         {
@@ -1241,12 +1263,12 @@
             "issue": "https://anglebug.com/42265839"
         },
         {
-            "name": "has_effective_pipeline_cache_serialization",
+            "name": "skip_pipeline_cache_serialization",
             "category": "Features",
             "description": [
-                "Whether the implementation serializes the Vulkan pipeline cache effectively. ",
-                "On some implementations, pipeline cache serialization returns no data, so there ",
-                "is no benefit to serializing it"
+                "Whether to serialize the Vulkan pipeline cache data. ",
+                "On some implementations, pipeline cache serialization returns no data",
+                "or very big data,so there is no benefit to serializing it."
             ],
             "issue": "https://anglebug.com/42265839"
         },
@@ -1265,14 +1287,6 @@
                 "VkDevice supports the VK_EXT_pipeline_protected_access extension"
             ],
             "issue": "https://anglebug.com/42266183"
-        },
-        {
-            "name": "supports_mixed_read_write_depth_stencil_layouts",
-            "category": "Features",
-            "description": [
-                "VkDevice supports the mixed read and write depth/stencil layouts introduced by VK_KHR_maintenance2"
-            ],
-            "issue": "https://anglebug.com/42266364"
         },
         {
             "name": "supports_maintenance5",
@@ -1338,12 +1352,20 @@
             "issue": "https://issuetracker.google.com/253522366"
         },
         {
-            "name": "async_command_buffer_reset_and_garbage_cleanup",
+            "name": "async_garbage_cleanup",
             "category": "Features",
             "description": [
-                "Reset command buffer and cleanup garbage in async thread."
+                "cleanup garbage in async thread."
             ],
             "issue": "https://issuetracker.google.com/255411748"
+        },
+        {
+            "name": "async_command_buffer_reset",
+            "category": "Features",
+            "description": [
+                "Reset command buffer in async thread."
+            ],
+            "issue": "https://issuetracker.google.com/378718508"
         },
         {
             "name": "use_reset_command_buffer_bit_for_secondary_pools",
@@ -1888,6 +1910,14 @@
             "description": [
                 "Enable the use of native builtin kernel in place of the libclc version"
             ]
+        },
+        {
+            "name": "supports_swapchain_mutable_format",
+            "category": "Features",
+            "description": [
+                "VkDevice supports VK_KHR_swapchain_mutable_format extension"
+            ],
+            "issue": "http://anglebug.com/386688871"
         }
     ]
 }

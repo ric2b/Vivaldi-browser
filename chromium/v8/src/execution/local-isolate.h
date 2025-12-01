@@ -73,10 +73,10 @@ class V8_EXPORT_PRIVATE LocalIsolate final : private HiddenLocalFactory {
   }
 
   StringTable* string_table() const { return isolate_->string_table(); }
-  base::SpinningMutex* internalized_string_access() {
+  base::Mutex* internalized_string_access() {
     return isolate_->internalized_string_access();
   }
-  base::SpinningMutex* shared_function_info_access() {
+  base::Mutex* shared_function_info_access() {
     return isolate_->shared_function_info_access();
   }
   const AstStringConstants* ast_string_constants() {
@@ -100,6 +100,8 @@ class V8_EXPORT_PRIVATE LocalIsolate final : private HiddenLocalFactory {
     // undefined behavior (as static_cast cannot cast across private bases).
     return (v8::internal::LocalFactory*)this;
   }
+
+  IsolateGroup* isolate_group() const { return isolate_->isolate_group(); }
 
   AccountingAllocator* allocator() { return isolate_->allocator(); }
 
@@ -212,7 +214,7 @@ class V8_EXPORT_PRIVATE LocalIsolate final : private HiddenLocalFactory {
 template <>
 class V8_NODISCARD MutexGuardIfOffThread<LocalIsolate> final {
  public:
-  MutexGuardIfOffThread(base::SpinningMutex* mutex, LocalIsolate* isolate) {
+  MutexGuardIfOffThread(base::Mutex* mutex, LocalIsolate* isolate) {
     DCHECK_NOT_NULL(mutex);
     DCHECK_NOT_NULL(isolate);
     if (!isolate->is_main_thread()) mutex_guard_.emplace(mutex);
@@ -222,7 +224,7 @@ class V8_NODISCARD MutexGuardIfOffThread<LocalIsolate> final {
   MutexGuardIfOffThread& operator=(const MutexGuardIfOffThread&) = delete;
 
  private:
-  std::optional<base::SpinningMutexGuard> mutex_guard_;
+  std::optional<base::MutexGuard> mutex_guard_;
 };
 
 }  // namespace internal

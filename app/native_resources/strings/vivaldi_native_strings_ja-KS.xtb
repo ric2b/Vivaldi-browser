@@ -37,6 +37,7 @@
 <translation id="2441056087170876076">怪獣２</translation>
 <translation id="2444387452209867610">メモ入れ込む</translation>
 <translation id="2486841023299517366">動物４</translation>
+<translation id="2501278716633472235">戻る</translation>
 <translation id="2612127540243995147">インストール準備できたわ。Vivaldi閉じて再起動するで。</translation>
 <translation id="2613387515621326337">アップデートサイト出す</translation>
 <translation id="2645477450146475243">ごめん、Opera起動中やから設定が使えへんわ。Vivaldiに設定取り込むんやったら、作業中の処理保存してOperaのウィンドウ全部閉じてからやってみて。</translation>
@@ -61,6 +62,7 @@
 <translation id="3259769196742189631">W3Cサービスで検証</translation>
 <translation id="3291915639428159043">自動再生、ブロックされてるで</translation>
 <translation id="3302905971452834934">怪獣１</translation>
+<translation id="3308738399950580893">広告</translation>
 <translation id="3334610655141903168">（無名）</translation>
 <translation id="3372505110412186107"><ph name="VERSION" /> は最新版のVivaldiやで。</translation>
 <translation id="3383198080133834965">ばっちり最新版や！</translation>
@@ -83,6 +85,7 @@
 <translation id="3795800845758778870">ごめん、Brave起動中やから設定が使えへんわ。Vivaldiに設定取り込むんやったら、作業中の処理保存してBraveのウィンドウ全部閉じてからやってみて。</translation>
 <translation id="3822431842304177896">さらの区切り線</translation>
 <translation id="3832132597516774400">風景５</translation>
+<translation id="3894751534882749287">ページ見たいんやったら、トラッカーブロッカーポップアップで許可ボタンを押したらトラッキング保護レベル変えれるで</translation>
 <translation id="3914946330804881301">Operaからインポート</translation>
 <translation id="3921292902397893431">怪獣８</translation>
 <translation id="3943857333388298514">貼り付け</translation>
@@ -107,6 +110,7 @@
 <translation id="4582480609585453144">リンクをバックグラウンドタブで開く</translation>
 <translation id="4636708767492582204">メールで送る</translation>
 <translation id="4677434526832593569">動物８</translation>
+<translation id="4736016046474602958">トラッカーブロッカー</translation>
 <translation id="474217410105706308">ミュート</translation>
 <translation id="4861715717329665002">自動保存したセッション</translation>
 <translation id="4881695831933465202">開く</translation>
@@ -152,6 +156,7 @@
 <translation id="7086554968911045110">風景７</translation>
 <translation id="7099506190679014195">安全なキーストアアップグレード</translation>
 <translation id="7111492742514999492">風景９</translation>
+<translation id="7113310725918019676"><ph name="DOMAIN" />からの<ph name="BLOCKED_TYPE" />はOKする</translation>
 <translation id="7208252576848052204">ごめん、Arc起動中やから設定が使えへんわ。Vivaldiに設定取り込むんやったら、作業中の処理保存してArcのウィンドウ全部閉じてからやってみて。</translation>
 <translation id="7321500017121629018">昨日アクティブ</translation>
 <translation id="7337881442233988129">Chromium</translation>
@@ -167,9 +172,9 @@
 <translation id="8027581147000338959">さらのウィンドウで開く</translation>
 <translation id="8044382196220116469">サイトに自動で動画再生できへんようにする</translation>
 <translation id="8099620695029051217">アドレスをコピー</translation>
+<translation id="8119307142152921512">トラッカーと広告</translation>
 <translation id="8197810018650377191">ブックマークに追加</translation>
 <translation id="8261506727792406068">消す</translation>
-<translation id="8263047843452521549">裏で走ってるサービスワーカー調べる</translation>
 <translation id="8331671104904436324">バックグラウンドのタブで開く</translation>
 <translation id="8373293945112511707">風景１</translation>
 <translation id="8388552048012645975">アップデートとってくるわ...</translation>
@@ -183,7 +188,6 @@
 <translation id="8651348004684669199">今出てるタブ追加</translation>
 <translation id="8669345741879513971">怪獣１０</translation>
 <translation id="867544375504146191">Yandex</translation>
-<translation id="8689295374912158752">ポータルドキュメント調べる</translation>
 <translation id="875142999698251063">今すぐやめる</translation>
 <translation id="8768970203213061953">風景１４</translation>
 <translation id="8773635261052182196">この通知を見ることはもうないわ。また出したいんやったら、Vivaldiの設定からやっといて。</translation>
@@ -191,6 +195,7 @@
 <translation id="8813277370772331957">また後にして</translation>
 <translation id="8894900864683381599">リンク先をウェブパネルに追加する</translation>
 <translation id="8912720443398351457">ほんまにVivaldi終了すんの？</translation>
+<translation id="8940028675168378100"><ph name="BLOCKER_NAME" />にブロックされたわ</translation>
 <translation id="8947109330183116400">HTMLブックマークファイルどれにするん</translation>
 <translation id="9017566390391482291">インポートするVivaldiのプロファイルフォルダーどれにするん</translation>
 <translation id="9048058608784130603">アップデートちょっとタンマ<ph name="VERSION" /></translation>
@@ -201,6 +206,7 @@
 <translation id="912022491595344261"><ph name="USER" />で画像開く</translation>
 <translation id="9157539936604258187">リンク開く</translation>
 <translation id="9169060351863393881">Opera 12.x</translation>
+<translation id="9180553614777056266">広告ブロッカー</translation>
 <translation id="939305735877869636">Brave</translation>
 <translation id="970294721402795299">風景１６</translation>
 </translationbundle>

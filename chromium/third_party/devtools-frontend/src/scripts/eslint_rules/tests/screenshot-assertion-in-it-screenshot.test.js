@@ -3,19 +3,11 @@
 // found in the LICENSE file.
 
 'use strict';
-
-const tsParser = require('@typescript-eslint/parser');
-
 const rule = require('../lib/screenshot-assertion-in-it-screenshot.js');
-const ruleTester = new (require('eslint').RuleTester)({
-  languageOptions: {
-    ecmaVersion: 'latest',
-    sourceType: 'module',
-    parser: tsParser,
-  },
-});
 
-ruleTester.run('screenshot-assertion-in-it-screenshot', rule, {
+const {RuleTester} = require('./utils/utils.js');
+
+new RuleTester().run('screenshot-assertion-in-it-screenshot', rule, {
   valid: [
     {
       code: `itScreenshot('does a thing', () => {

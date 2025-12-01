@@ -22,6 +22,7 @@ namespace internal {
   V(kAllocationIsNotDoubleAligned, "Allocation is not double aligned")         \
   V(kExpectedOptimizationSentinel,                                             \
     "Expected optimized code cell or optimization sentinel")                   \
+  V(kExpectedOsrCode, "Expected OSR code")                                     \
   V(kExpectedUndefinedOrCell, "Expected undefined or cell in register")        \
   V(kExpectedFeedbackCell, "Expected feedback cell")                           \
   V(kExpectedFeedbackVector, "Expected feedback vector")                       \
@@ -114,8 +115,9 @@ namespace internal {
     "Tag mismatch during external pointer access")                             \
   V(kJSSignatureMismatch, "Signature mismatch during JS function call")        \
   V(kWasmSignatureMismatch, "Signature mismatch during Wasm indirect call")    \
-  V(kFastCallFallbackInvalid, "Fast call fallback returned incorrect type")
-
+  V(kFastCallFallbackInvalid, "Fast call fallback returned incorrect type")    \
+  V(k32BitValueInRegisterIsNotSignExtended,                                    \
+    "32 bit value in register is not sign-extended")
 #define BAILOUT_MESSAGES_LIST(V)                                             \
   V(kNoReason, "no reason")                                                  \
                                                                              \

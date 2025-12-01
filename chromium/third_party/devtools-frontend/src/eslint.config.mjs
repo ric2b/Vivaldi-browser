@@ -2,11 +2,10 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-/* eslint-disable import/no-default-export */
-
 import stylisticPlugin from '@stylistic/eslint-plugin';
 import typescriptPlugin from '@typescript-eslint/eslint-plugin';
 import tsParser from '@typescript-eslint/parser';
+import eslintPlugin from 'eslint-plugin-eslint-plugin';
 import importPlugin from 'eslint-plugin-import';
 import jsdocPlugin from 'eslint-plugin-jsdoc';
 import mochaPlugin from 'eslint-plugin-mocha';
@@ -31,6 +30,11 @@ export default [
       // Git submodules that are not in third_party
       'build/',
       'buildtools/',
+
+      // Don't include the common build directory
+      'out/',
+      // Don't include third party code
+      'third_party/',
 
       'front_end/diff/diff_match_patch.jD',
       'front_end/models/javascript_metadata/NativeFunctions.js',
@@ -68,7 +72,6 @@ export default [
       'test/**/fixtures/',
       'test/e2e/**/*.js',
       'test/shared/**/*.js',
-      '**/*.d.ts',
     ],
   },
   {
@@ -76,6 +79,7 @@ export default [
     plugins: {
       '@typescript-eslint': typescriptPlugin,
       '@stylistic': stylisticPlugin,
+      '@eslint-plugin': eslintPlugin,
       mocha: mochaPlugin,
       rulesdir: rulesdirPlugin,
       import: importPlugin,
@@ -167,6 +171,14 @@ export default [
         },
       ],
 
+      'no-empty': [
+        'error',
+        {
+          allowEmptyCatch: true,
+        },
+      ],
+      'no-lonely-if': 'error',
+
       'no-empty-character-class': 'error',
       'no-global-assign': 'error',
       'no-implied-eval': 'error',
@@ -193,7 +205,9 @@ export default [
       radix: 'error',
       'valid-typeof': 'error',
       'no-return-assign': ['error', 'always'],
-      'no-implicit-coercion': 'error',
+      'no-implicit-coercion': ['error', { allow: ['!!'] }],
+
+      'no-array-constructor': 'error',
 
       // es2015 features
       'require-yield': 'error',
@@ -301,6 +315,7 @@ export default [
       parser: tsParser,
       parserOptions: {
         allowAutomaticSingleRunInference: true,
+        projectService: true,
         project: join(
           import.meta.dirname,
           'config',
@@ -311,6 +326,12 @@ export default [
     },
 
     rules: {
+      '@typescript-eslint/array-type': [
+        'error',
+        {
+          default: 'array-simple',
+        },
+      ],
       '@typescript-eslint/no-explicit-any': [
         'error',
         {
@@ -486,8 +507,53 @@ export default [
 
       '@typescript-eslint/consistent-type-definitions': ['error', 'interface'],
 
+      // Disable eslint base rule
+      'no-throw-literal': 'off',
+      '@typescript-eslint/only-throw-error': 'error',
+
+      // Disabled this rule while investigating why it creates
+      // certain TypeScript compilation errors after fixes
+      '@typescript-eslint/no-unnecessary-type-assertion': 'off',
+
+      '@typescript-eslint/no-inferrable-types': 'error',
+
+      '@typescript-eslint/consistent-generic-constructors': [
+        'error',
+        'constructor',
+      ],
+
+      // This is more performant
+      // And should provide better stack trace when debugging
+      // see https://v8.dev/blog/fast-async.
+      '@typescript-eslint/return-await': ['error', 'always'],
+
+      '@typescript-eslint/ban-ts-comment': [
+        'error',
+        {
+          // Change after we add some placeholder for old errors
+          minimumDescriptionLength: 0,
+          'ts-check': false,
+          'ts-expect-error': 'allow-with-description',
+          'ts-ignore': true,
+          'ts-nocheck': true,
+        },
+      ],
+
+      '@typescript-eslint/prefer-optional-chain': 'error',
+
+      '@typescript-eslint/no-unsafe-function-type': 'error',
+
+      '@typescript-eslint/no-empty-object-type': [
+        'error',
+        {
+          allowInterfaces: 'with-single-extends',
+        },
+      ],
+
+      'no-array-constructor': 'off',
+      '@typescript-eslint/no-array-constructor': 'error',
+
       'rulesdir/no-underscored-properties': 'error',
-      'rulesdir/prefer-readonly-keyword': 'error',
       'rulesdir/inline-type-imports': 'error',
 
       'rulesdir/enforce-default-import-name': [
@@ -512,6 +578,7 @@ export default [
     rules: {
       'no-console': 'off',
       'rulesdir/es-modules-import': 'off',
+      'import/no-default-export': 'off',
     },
   },
   {
@@ -563,6 +630,13 @@ export default [
       'rulesdir/jslog-context-list': 'error',
       'rulesdir/es-modules-import': 'error',
       'rulesdir/html-tagged-template': 'error',
+      'rulesdir/enforce-custom-element-definitions-location': [
+        'error',
+        {
+          rootFrontendDirectory: join(import.meta.dirname, 'front_end'),
+        },
+      ],
+      'rulesdir/enforce-ui-strings-as-const': 'error',
     },
   },
   {
@@ -588,6 +662,7 @@ export default [
       'test/**/*.ts',
       '**/testing/*.ts',
       'scripts/eslint_rules/test/**/*.js',
+      'extensions/cxx_debugging/e2e/**',
     ],
 
     rules: {
@@ -604,6 +679,20 @@ export default [
       '@typescript-eslint/no-non-null-assertion': 'off',
       '@typescript-eslint/explicit-function-return-type': 'off',
 
+      '@typescript-eslint/only-throw-error': [
+        'error',
+        {
+          allow: [
+            {
+              // Chai AssertionError does not extend Error
+              from: 'package',
+              package: 'chai',
+              name: ['AssertionError'],
+            },
+          ],
+        },
+      ],
+
       'rulesdir/check-test-definitions': 'error',
       'rulesdir/no-assert-strict-equal-for-arrays-and-objects': 'error',
       'rulesdir/no-assert-deep-strict-equal': 'error',
@@ -615,6 +704,7 @@ export default [
       'rulesdir/prefer-assert-length-of': 'error',
       'rulesdir/prefer-url-string': 'error',
       'rulesdir/trace-engine-test-timeouts': 'error',
+      'rulesdir/enforce-custom-element-definitions-location': 'off',
     },
 
     settings: {
@@ -684,9 +774,9 @@ export default [
   },
   {
     name: 'EsLint rules test',
-    files: ['scripts/eslint_rules/test/**/*.js'],
+    files: ['scripts/eslint_rules/tests/**/*.js'],
     rules: {
-      'rulesdir/no-only-eslint-tests': 'error',
+      '@eslint-plugin/no-only-tests': 'error',
     },
   },
   {
@@ -741,6 +831,24 @@ export default [
       // expensive rule to run and we do not need it
       // for any code that doesn't use Canvas.
       'rulesdir/canvas-context-tracking': 'error',
+    },
+  },
+  {
+    name: 'TypeScript type-definitions',
+    files: ['**/*.d.ts'],
+    rules: {
+      // Not a useful rule for .d.ts files where we are
+      // representing an existing module.
+      'import/no-default-export': 'off',
+    },
+  },
+  {
+    name: 'Config files',
+    files: ['eslint.config.mjs', '**/*/rollup.config.mjs'],
+    rules: {
+      // The config operate on the default export
+      // So allow it for them
+      'import/no-default-export': 'off',
     },
   },
 ];

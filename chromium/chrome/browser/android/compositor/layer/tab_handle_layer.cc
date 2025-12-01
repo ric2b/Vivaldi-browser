@@ -15,7 +15,6 @@
 #include "ui/android/resources/nine_patch_resource.h"
 #include "ui/base/l10n/l10n_util_android.h"
 
-
 #include "app/vivaldi_apptools.h"
 
 namespace android {
@@ -52,7 +51,6 @@ void TabHandleLayer::SetProperties(
     bool is_loading,
     float spinner_rotation,
     float opacity,
-
     float tab_alpha, // Vivaldi
     bool is_shown_as_favicon, // Vivaldi
     float title_offset) { // Vivaldi
@@ -205,6 +203,13 @@ void TabHandleLayer::SetProperties(
 
     title_layer->setBounds(
         gfx::Size(width - padding_right - padding_left - close_width, height));
+
+    // Note(david@vivaldi.com): Center the favicon when the background tab is
+    // shown as a favicon.
+    if (vivaldi::IsVivaldiRunning() && is_shown_as_favicon &&
+        close_button_alpha == 0.f)
+      title_x = (width / 2) - (title_layer->icon_size().width() / 2);
+
     title_layer->layer()->SetPosition(gfx::PointF(title_x, title_y));
     if (is_loading) {
       title_layer->SetIsLoading(true);

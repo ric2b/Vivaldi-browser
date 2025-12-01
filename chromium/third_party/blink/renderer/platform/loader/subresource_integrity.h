@@ -20,6 +20,7 @@
 
 namespace blink {
 
+class FeatureContext;
 class IntegrityReport;
 class KURL;
 class Resource;
@@ -44,6 +45,7 @@ class PLATFORM_EXPORT SubresourceIntegrity final {
       const SegmentedBuffer* buffer,
       const KURL& resource_url,
       const Resource&,
+      const FeatureContext*,
       IntegrityReport&,
       HashMap<HashAlgorithm, String>* computed_hashes);
   static bool CheckSubresourceIntegrity(const IntegrityMetadataSet&,
@@ -51,19 +53,21 @@ class PLATFORM_EXPORT SubresourceIntegrity final {
                                         const KURL& resource_url,
                                         const FetchResponseType,
                                         const String& raw_headers,
+                                        const FeatureContext*,
                                         IntegrityReport&);
-  static std::optional<String> GetSubresourceIntegrityHash(
-      const SegmentedBuffer*,
-      HashAlgorithm);
+  static String GetSubresourceIntegrityHash(const SegmentedBuffer*,
+                                            HashAlgorithm);
 
   static HashAlgorithm IntegrityAlgorithmToHashAlgorithm(IntegrityAlgorithm);
 
   // The IntegrityMetadataSet argument is an out parameters which contains the
   // set of all valid, parsed metadata from |attribute|.
   static void ParseIntegrityAttribute(const WTF::String& attribute,
-                                      IntegrityMetadataSet&);
+                                      IntegrityMetadataSet&,
+                                      const FeatureContext*);
   static void ParseIntegrityAttribute(const WTF::String& attribute,
                                       IntegrityMetadataSet&,
+                                      const FeatureContext*,
                                       IntegrityReport*);
 
   // Returns true if the element's `integrity` and `signature` attributes
@@ -72,7 +76,8 @@ class PLATFORM_EXPORT SubresourceIntegrity final {
   // https://mikewest.github.io/inline-integrity/
   static bool VerifyInlineIntegrity(const String& integrity,
                                     const String& signatures,
-                                    const String& source_code);
+                                    const String& source_code,
+                                    const FeatureContext*);
 
  private:
   friend class SubresourceIntegrityTest;
@@ -91,18 +96,20 @@ class PLATFORM_EXPORT SubresourceIntegrity final {
       const SegmentedBuffer* buffer,
       const KURL& resource_url,
       const String& raw_headers,
+      const FeatureContext*,
       IntegrityReport&,
       HashMap<HashAlgorithm, String>* computed_hashes);
 
   // Handles hash validation during SRI checks.
-  static bool CheckHashesImpl(const WTF::HashSet<IntegrityMetadataPair>&,
+  static bool CheckHashesImpl(const WTF::Vector<IntegrityMetadata>&,
                               const SegmentedBuffer*,
                               const KURL&,
+                              const FeatureContext*,
                               IntegrityReport&,
                               HashMap<HashAlgorithm, String>* computed_hashes);
 
   // Handles signature-based matching during SRI checks
-  static bool CheckSignaturesImpl(const WTF::HashSet<IntegrityMetadataPair>&,
+  static bool CheckSignaturesImpl(const WTF::Vector<IntegrityMetadata>&,
                                   const KURL& resource_url,
                                   const String& raw_headers,
                                   IntegrityReport&);
@@ -111,12 +118,13 @@ class PLATFORM_EXPORT SubresourceIntegrity final {
   using AlgorithmParseResult = base::expected<size_t, AlgorithmParseError>;
 
   static IntegrityAlgorithm FindBestAlgorithm(
-      const WTF::HashSet<IntegrityMetadataPair>&);
+      const WTF::Vector<IntegrityMetadata>&);
 
   static bool CheckSubresourceIntegrityDigest(const IntegrityMetadata&,
                                               const SegmentedBuffer* buffer);
 
   static AlgorithmParseResult ParseAttributeAlgorithm(std::string_view token,
+                                                      const FeatureContext*,
                                                       IntegrityAlgorithm&);
   typedef std::pair<const char*, IntegrityAlgorithm> AlgorithmPrefixPair;
   static bool ParseDigest(std::string_view maybe_digest, String& digest);

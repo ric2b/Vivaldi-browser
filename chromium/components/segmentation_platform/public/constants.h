@@ -222,6 +222,7 @@ const char kSafetyCheck[] = "SafetyCheck";
 const char kTabResumption[] = "TabResumption";
 const char kParcelTracking[] = "ParcelTracking";
 const char kPriceTrackingPromo[] = "PriceTrackingPromo";
+const char kShopCard[] = "ShopCard";
 
 // Input Context keys for freshness for IOS modules.
 const char kMostVisitedTilesFreshness[] = "most_visited_tiles_freshness";
@@ -230,6 +231,7 @@ const char kSafetyCheckFreshness[] = "safety_check_freshness";
 const char kTabResumptionFreshness[] = "tab_resumption_freshness";
 const char kParcelTrackingFreshness[] = "parcel_tracking_freshness";
 const char kIsShowingStartSurface[] = "is_showing_start_surface";
+const char kShopCardFreshness[] = "shop_card_freshness";
 
 // Labels for desktop new tab page drive module model.
 // Any updates to these strings need to also update the field trials allowlist
@@ -254,6 +256,13 @@ constexpr char kModelExecutionSamplingRateKey[] =
 // Finch parameter key for introducing delay(in ms) in model initialization at
 // startup.
 constexpr char kModelInitializationDelay[] = "model_initialization_delay";
+
+// Input Context keys for FedCM clickthrough rates.
+const char kPerPageLoadClickthroughRate[] = "per_page_load_clickthrough_rate";
+const char kPerClientClickthroughRate[] = "per_client_clickthrough_rate";
+const char kPerImpressionClickthroughRate[] =
+    "per_impression_clickthrough_rate";
+const char kLikelyToSignin[] = "likely_to_signin";
 
 }  // namespace segmentation_platform
 

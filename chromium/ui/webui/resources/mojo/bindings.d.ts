@@ -163,8 +163,8 @@ export namespace mojo {
         getConnectionErrorEventRouter(): ConnectionErrorEventRouter;
         sendMessage(
             ordinal: number, paramStruct: mojo.internal.MojomType,
-            maybeResponseStruct: mojo.internal.MojomType|null,
-            args: any[]): Promise<any>;
+            maybeResponseStruct: mojo.internal.MojomType|null, args: any[],
+            useResultResponse: boolean): Promise<any>;
       }
 
       class InterfaceRemoteBaseWrapper<T> {
@@ -193,8 +193,8 @@ export namespace mojo {
         constructor(remoteType: RemoteType<T>);
         registerHandler(
             ordinal: number, paramStruct: mojo.internal.MojomType,
-            responseStruct: mojo.internal.MojomType|null,
-            handler: Function): void;
+            responseStruct: mojo.internal.MojomType|null, handler: Function,
+            useResultResponse: boolean): void;
         getConnectionErrorEventRouter(): ConnectionErrorEventRouter;
       }
 
@@ -204,9 +204,11 @@ export namespace mojo {
         bindNewPipeAndPassRemote(): T;
         associateAndPassRemote(): T;
         close(): void;
-        flushForTesting(): Promise<void>;
+        flush(): Promise<void>;
       }
     }
+
+    class Decoder {}
 
     interface MojomType {}
     class Bool implements MojomType {}
@@ -275,8 +277,15 @@ export namespace mojo {
       );
     }
 
+    class MojoDataView<StructType> {
+      constructor(
+          decoder: mojo.internal.Decoder, version: number,
+          fieldSpecs: Array<mojo.internal.StructFieldSpec<StructType, any>>);
+    }
+
     function TypemappedStruct<MappedType, MojoType>(
         objectToBlessAsType: object, name: string,
+        dataViewType: MojoDataView<MappedType>,
         adapter: TypemapAdapter<MappedType, MojoType>,
         fields: Array<StructFieldSpec<MappedType, any>>,
         versionData: number[][]): void;
@@ -296,5 +305,11 @@ export namespace mojo {
     function InterfaceRequest(type: {name: string}): MojomType;
     function AssociatedInterfaceProxy(type: {name: string}): MojomType;
     function AssociatedInterfaceRequest(type: {name: string}): MojomType;
+    function decodeStructField(
+        decoder: Decoder, fieldSpec: StructFieldSpec<any, any>,
+        version: number): any;
+    function decodeStructNullableValueField(
+        decoder: Decoder, flagFieldSpec: StructFieldSpec<any, any>,
+        fieldSpecs: Array<StructFieldSpec<any, any>>, version: number): any;
   }
 }

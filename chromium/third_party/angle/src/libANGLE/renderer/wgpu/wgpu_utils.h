@@ -241,7 +241,7 @@ wgpu::RenderPassDepthStencilAttachment CreateNewDepthStencilAttachment(
     bool hasStencilValue = false);
 
 bool IsWgpuError(wgpu::WaitStatus waitStatus);
-bool IsWgpuError(WGPUBufferMapAsyncStatus mapBufferStatus);
+bool IsWgpuError(wgpu::MapAsyncStatus mapAsyncStatus);
 
 bool IsStripPrimitiveTopology(wgpu::PrimitiveTopology topology);
 
@@ -274,6 +274,9 @@ wgpu::IndexFormat GetIndexFormat(gl::DrawElementsType drawElementsTYpe);
 wgpu::FrontFace GetFrontFace(GLenum frontFace);
 wgpu::CullMode GetCullMode(gl::CullFaceMode mode, bool cullFaceEnabled);
 wgpu::ColorWriteMask GetColorWriteMask(bool r, bool g, bool b, bool a);
+
+wgpu::BlendFactor GetBlendFactor(gl::BlendFactorType blendFactor);
+wgpu::BlendOperation GetBlendEquation(gl::BlendEquationType blendEquation);
 
 wgpu::CompareFunction GetCompareFunc(const GLenum glCompareFunc, bool testEnabled);
 wgpu::StencilOperation getStencilOp(const GLenum glStencilOp);

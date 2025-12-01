@@ -6,6 +6,7 @@
 #define COMPONENTS_AUTOFILL_CONTENT_RENDERER_FORM_TRACKER_H_
 
 #include <optional>
+#include <variant>
 
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
@@ -104,8 +105,16 @@ class FormTracker : public content::RenderFrameObserver,
   // by PWM.
   void TrackAutofilledElement(const blink::WebFormControlElement& element);
 
+  // Called in order to update submission data when a form is autofilled.
+  // `filled_fields_and_forms` represent the fields and forms that were affected
+  // by the corresponding autofill operation  and is used to determine an
+  // appropriate single element to track.
+  void TrackAutofilledElement(
+      const base::flat_map<FieldRendererId, FormRendererId>&
+          filled_fields_and_forms);
+
   void UpdateLastInteractedElement(
-      absl::variant<FormRendererId, FieldRendererId> element_id);
+      std::variant<FormRendererId, FieldRendererId> element_id);
   void ResetLastInteractedElements();
 
   // Set whether a user gesture is required to accept text changes. If

@@ -402,6 +402,10 @@ MemOperand MacroAssembler::ExternalReferenceAsOperand(
   return MemOperand(scratch, 0);
 }
 
+void MacroAssembler::GetLabelAddress(Register dest, Label* target) {
+  larl(dest, target);
+}
+
 void MacroAssembler::Jump(Register target, Condition cond) { b(cond, target); }
 
 void MacroAssembler::Jump(intptr_t target, RelocInfo::Mode rmode,
@@ -570,6 +574,15 @@ void MacroAssembler::Drop(int count) {
 void MacroAssembler::Drop(Register count, Register scratch) {
   ShiftLeftU64(scratch, count, Operand(kSystemPointerSizeLog2));
   AddS64(sp, sp, scratch);
+}
+
+// Enforce alignment of sp.
+void MacroAssembler::EnforceStackAlignment() {
+  int frame_alignment = ActivationFrameAlignment();
+  DCHECK(base::bits::IsPowerOfTwo(frame_alignment));
+
+  uint64_t frame_alignment_mask = ~(static_cast<uint64_t>(frame_alignment) - 1);
+  AndP(sp, sp, Operand(frame_alignment_mask));
 }
 
 void MacroAssembler::TestCodeIsMarkedForDeoptimization(Register code,
@@ -1055,6 +1068,22 @@ void MacroAssembler::RecordWriteField(Register object, int offset,
     mov(value, Operand(base::bit_cast<intptr_t>(kZapValue + 4)));
     mov(slot_address, Operand(base::bit_cast<intptr_t>(kZapValue + 8)));
   }
+}
+
+void MacroAssembler::Zero(const MemOperand& dest) {
+  ASM_CODE_COMMENT(this);
+  Register scratch = r0;
+
+  mov(scratch, Operand::Zero());
+  StoreU64(scratch, dest);
+}
+void MacroAssembler::Zero(const MemOperand& dest1, const MemOperand& dest2) {
+  ASM_CODE_COMMENT(this);
+  Register scratch = r0;
+
+  mov(scratch, Operand::Zero());
+  StoreU64(scratch, dest1);
+  StoreU64(scratch, dest2);
 }
 
 void MacroAssembler::MaybeSaveRegisters(RegList registers) {
@@ -2285,7 +2314,7 @@ void MacroAssembler::Abort(AbortReason reason) {
   }
 
   // Without debug code, save the code size and just trap.
-  if (!v8_flags.debug_code) {
+  if (!v8_flags.debug_code || v8_flags.trap_on_abort) {
     stop();
     return;
   }
@@ -4207,14 +4236,14 @@ void MacroAssembler::StoreU16LE(Register src, const MemOperand& mem,
 
 void MacroAssembler::StoreF64LE(DoubleRegister src, const MemOperand& opnd,
                                 Register scratch) {
-  DCHECK(is_uint12(opnd.offset()));
+  DCHECK(is_int20(opnd.offset()));
   lgdr(scratch, src);
   strvg(scratch, opnd);
 }
 
 void MacroAssembler::StoreF32LE(DoubleRegister src, const MemOperand& opnd,
                                 Register scratch) {
-  DCHECK(is_uint12(opnd.offset()));
+  DCHECK(is_int20(opnd.offset()));
   lgdr(scratch, src);
   ShiftRightU64(scratch, scratch, Operand(32));
   strv(scratch, opnd);
@@ -6343,7 +6372,8 @@ void MacroAssembler::S128Const(Simd128Register dst, uint64_t high, uint64_t low,
 void MacroAssembler::I8x16Swizzle(Simd128Register dst, Simd128Register src1,
                                   Simd128Register src2, Register scratch1,
                                   Register scratch2, Simd128Register scratch3) {
-  DCHECK(!AreAliased(src1, src2, scratch3));
+  DCHECK(!AreAliased(src1, scratch3));
+  DCHECK(!AreAliased(src2, scratch3));
   // Saturate the indices to 5 bits. Input indices more than 31 should
   // return 0.
   vrepi(scratch3, Operand(31), Condition(0));
@@ -6417,7 +6447,8 @@ void MacroAssembler::I16x8Q15MulRSatS(Simd128Register dst, Simd128Register src1,
                                       Simd128Register scratch1,
                                       Simd128Register scratch2,
                                       Simd128Register scratch3) {
-  DCHECK(!AreAliased(src1, src2, scratch1, scratch2, scratch3));
+  DCHECK(!AreAliased(src1, scratch1, scratch2, scratch3));
+  DCHECK(!AreAliased(src2, scratch1, scratch2, scratch3));
   vrepi(scratch1, Operand(0x4000), Condition(2));
   Q15_MUL_ROAUND(scratch2, src1, src2, scratch1, scratch3, vupl)
   Q15_MUL_ROAUND(dst, src1, src2, scratch1, scratch3, vuph)

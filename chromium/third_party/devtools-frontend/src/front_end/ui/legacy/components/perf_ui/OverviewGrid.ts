@@ -52,7 +52,7 @@ const UIStrings = {
    *@description Label for right window resizer for Overview grids
    */
   rightResizer: 'Right Resizer',
-};
+} as const;
 const str_ = i18n.i18n.registerUIStrings('ui/legacy/components/perf_ui/OverviewGrid.ts', UIStrings);
 const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
 export class OverviewGrid {
@@ -178,8 +178,8 @@ export class Window extends Common.ObjectWrapper.ObjectWrapper<EventTypes> {
   private resizeEnabled?: boolean;
   private clickHandler?: ((arg0: Event) => boolean)|null;
   private resizerParentOffsetLeft?: number;
-  #breadcrumbsEnabled: boolean = false;
-  #mouseOverGridOverview: boolean = false;
+  #breadcrumbsEnabled = false;
+  #mouseOverGridOverview = false;
   constructor(parentElement: HTMLElement, dividersLabelBarElement?: Element, calculator?: Calculator) {
     super();
     this.parentElement = parentElement;
@@ -399,7 +399,7 @@ export class Window extends Common.ObjectWrapper.ObjectWrapper<EventTypes> {
     delete this.overviewWindowSelector;
     const clickThreshold = 3;
     if (window.end - window.start < clickThreshold) {
-      if (this.clickHandler && this.clickHandler.call(null, event)) {
+      if (this.clickHandler?.call(null, event)) {
         return;
       }
       const middle = window.end;

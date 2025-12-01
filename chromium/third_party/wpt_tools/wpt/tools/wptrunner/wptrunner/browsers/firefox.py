@@ -219,8 +219,9 @@ def run_info_extras(logger, default_prefs=None, **kwargs):
           "sessionHistoryInParent": (not kwargs.get("disable_fission") or
                                      not bool_pref("fission.disableSessionHistoryInParent")),
           "swgl": bool_pref("gfx.webrender.software"),
-          "privateBrowsing": (kwargs["tags"] is not None and ("privatebrowsing" in kwargs["tags"])),
+          "privateBrowsing": bool_pref("browser.privatebrowsing.autostart"),
           "remoteAsyncEvents": bool_pref("remote.events.async.enabled"),
+          "incOriginInit": os.environ.get("MOZ_ENABLE_INC_ORIGIN_INIT") == "1",
           }
     rv.update(run_info_browser_version(**kwargs))
 
@@ -376,7 +377,8 @@ class FirefoxInstanceManager:
                           self.e10s)
 
         args = self.binary_args[:] if self.binary_args else []
-        args += [cmd_arg("marionette"), "about:blank"]
+        args += [cmd_arg("marionette"),
+                 cmd_arg("remote-allow-system-access"), "about:blank"]
 
         debug_args, cmd = browser_command(self.binary,
                                           args,
@@ -905,7 +907,8 @@ class FirefoxBrowser(Browser):
             extensions.append(self.specialpowers_path)
         return ExecutorBrowser, {"marionette_port": self.instance.marionette_port,
                                  "extensions": extensions,
-                                 "supports_devtools": True}
+                                 "supports_devtools": True,
+                                 "supports_window_resize": True}
 
     def check_crash(self, process, test):
         return log_gecko_crashes(self.logger,

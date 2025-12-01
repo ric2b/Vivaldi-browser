@@ -12,6 +12,7 @@
 #include "base/json/json_string_value_serializer.h"
 #include "base/strings/strcat.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/version.h"
 #include "components/country_codes/country_codes.h"
 #include "components/search_engines/prepopulated_engines.h"
 #include "components/search_engines/search_engines_helper.h"
@@ -51,6 +52,7 @@ constexpr char kPreconnectToSearchUrl[] = "preconnect_to_search_url";
 constexpr char kPrefetchLikelyNavigations[] = "prefetch_likely_navigations";
 constexpr char kId[] = "id";
 constexpr char kRegulatoryExtensions[] = "regulatory_extensions";
+constexpr char kIsPartner[] = "is_partner";
 
 constexpr char kVariant[] = "variant";
 constexpr char kSearchParams[] = "search_params";
@@ -69,9 +71,11 @@ constexpr char kGoogle[] = "google";
 constexpr char kEcosia[] = "ecosia";
 #endif  // defined(OEM_LYNKCO_BUILD)
 
+namespace {
+
 struct LocaleMaps {
   ParsedSearchEngines::EnginesForLocale engines_for_locale;
-  std::unordered_map<std::string, int> default_country_for_language;
+  ParsedSearchEngines::LanguageForCountry default_country_for_language;
 };
 
 std::unique_ptr<std::string> ToStringUniquePtr(std::string* s) {
@@ -89,6 +93,45 @@ std::unique_ptr<std::u16string> ToStringUniquePtr16(std::string* s) {
 
   return nullptr;
 }
+
+std::optional<std::string> GetVersionKeyFromEngines(const std::string& key) {
+  if (!key.starts_with(kEngines)) {
+    return std::nullopt;
+  }
+  const auto pos = key.find('_');
+  // "engines"
+  if (pos == std::string::npos) {
+    return "default";
+  }
+  // "engines_"
+  if ((pos + 1) >= key.size()) {
+    return std::nullopt;
+  }
+  // Other keys can also start with "engines_", (e.g. "engines_by_country")
+  const auto maybe_version = key.substr(pos + 1);
+  return base::Version(maybe_version).IsValid() ? maybe_version
+                                                : std::optional<std::string>();
+}
+
+void AddOrCreateVersionedEngines(
+    const auto& language,
+    const auto& version,
+    ParsedSearchEngines::LocaleEngines& locale_engines,
+    ParsedSearchEngines::EnginesListWithDefaults& prepopulated_engines) {
+  for (auto& [language_code_key, versioned_engines] : locale_engines) {
+    if (language_code_key == language) {
+      versioned_engines[version] = prepopulated_engines;
+      return;
+    }
+  }
+
+  // Not found, create a new versioned_engines map and insert
+  ParsedSearchEngines::VersionedEngines versioned_engines;
+  versioned_engines.emplace(version, prepopulated_engines);
+  locale_engines.emplace_back(language, versioned_engines);
+}
+
+}  // namespace
 
 class RegulatoryExtensionStorage {
  public:
@@ -204,10 +247,10 @@ bool SplitCodeAndDefaultMark(const std::string& code_and_default_mark,
 std::optional<ParsedSearchEngines::EnginesListWithDefaults>
 GetEnginesListWithDefaultsForLocale(
     std::string locale,
-    const ParsedSearchEngines::EnginesMap& engines_map,
-    base::Value::Dict& locales_dict,
+    const ParsedSearchEngines::EnginesMap& engines,
+    base::Value::Dict& engines_for_locale,
     std::string& error) {
-  base::Value::List* engines_list = locales_dict.FindList(locale);
+  base::Value::List* engines_list = engines_for_locale.FindList(locale);
   if (!engines_list) {
     error =
         base::StrCat({"Locale ", locale, " not found in ", kEngines, " list"});
@@ -226,35 +269,42 @@ GetEnginesListWithDefaultsForLocale(
       return std::nullopt;
     }
 
+    const auto get_special_markers_prefix = [](const auto& s) {
+      const auto first_alnum_char = std::find_if(
+          s.begin(), s.end(), [](unsigned char c) { return std::isalnum(c); });
+      return s.substr(0, first_alnum_char - s.begin());
+    };
+
     std::string_view engine_name_view(engine_name.GetString());
 
     bool is_default = false;
     bool is_private_default = false;
-    bool reading_special_markers = true;
-    while(reading_special_markers) {
-      if (engine_name_view.front() == '*') {
-        engine_name_view.remove_prefix(1);
+
+    std::string_view special_markers_prefix =
+        get_special_markers_prefix(engine_name_view);
+    std::string_view search_engine_name =
+        engine_name_view.substr(special_markers_prefix.size());
+    for (const auto& ch : special_markers_prefix) {
+      if (ch == '*') {
         is_default = true;
-      } else if (engine_name_view.front() == '!') {
-        engine_name_view.remove_prefix(1);
+      } else if (ch == '!') {
         is_private_default = true;
-      } else {
-        reading_special_markers = false;
       }
     }
 
-    auto prepopulate_engine = engines_map.find(std::string(engine_name_view));
-    if (prepopulate_engine == engines_map.end()) {
-      error = base::StrCat({"Search engines ", engine_name_view, " for locale ",
-                            locale, " not found."});
+    const auto prepopulate_engine =
+        engines.find(std::string(search_engine_name));
+    if (prepopulate_engine == engines.end()) {
+      error = base::StrCat({"Search engines ", search_engine_name,
+                            " for locale ", locale, " not found."});
       return std::nullopt;
     }
     result.list.push_back(prepopulate_engine->second);
 
 #if defined(OEM_POLESTAR_BUILD)
-    is_default = engine_name_view == kGoogle;
+    is_default = search_engine_name == kGoogle;
 #elif defined(OEM_LYNKCO_BUILD)
-    is_default = engine_name_view == kEcosia;
+    is_default = search_engine_name == kEcosia;
 #endif
 
     if (is_default) {
@@ -302,19 +352,17 @@ GetEnginesListWithDefaultsForLocale(
   return result;
 }
 
-std::optional<LocaleMaps> BuildLocaleMaps(
-    const ParsedSearchEngines::EnginesMap& engines_map,
-    base::Value::Dict& locales_dict,
-    base::Value::List& country_list,
-    std::string& error) {
-  LocaleMaps results;
-  std::set<std::string> explicit_default_language_set;
-
+bool BuildLocaleMaps(const std::string& version_key,
+                     const ParsedSearchEngines::EnginesMap& engines,
+                     base::Value::Dict& engines_for_locale,
+                     base::Value::List& country_list,
+                     std::string& error,
+                     LocaleMaps& locale_maps) {
   for (auto& country_list_entry : country_list) {
     if (!country_list_entry.is_list()) {
       error = base::StrCat(
           {"Expected type list for entry in list ", kEnginesByCountry});
-      return std::nullopt;
+      return false;
     }
 
     base::Value::List& country_and_language = country_list_entry.GetList();
@@ -322,7 +370,7 @@ std::optional<LocaleMaps> BuildLocaleMaps(
     if (country_and_language.size() != 2) {
       error =
           base::StrCat({"Expected 2 items in ", kEnginesByCountry, " entry"});
-      return std::nullopt;
+      return false;
     }
 
     const std::string* language_code_and_default_mark =
@@ -330,7 +378,7 @@ std::optional<LocaleMaps> BuildLocaleMaps(
     if (!language_code_and_default_mark) {
       error = base::StrCat(
           {"Expected string for second item in ", kEnginesByCountry, " entry"});
-      return std::nullopt;
+      return false;
     }
 
     std::string language_code;
@@ -341,48 +389,46 @@ std::optional<LocaleMaps> BuildLocaleMaps(
           "Expected 2 letter language code, optionally followed by '*' for "
           "first item in ") +
           kEnginesByCountry + " entry";
-      return std::nullopt;
+      return false;
     }
 
     const std::string* country_code = country_and_language[1].GetIfString();
     if (!country_code) {
       error = base::StrCat(
           {"Expected string for second item in ", kEnginesByCountry, " entry"});
-      return std::nullopt;
+      return false;
     }
 
     if (country_code->size() != 2) {
       error =
           base::StrCat({"Expected 2 letter country code for second item in ",
                         kEnginesByCountry, " entry"});
-      return std::nullopt;
+      return false;
     }
 
-    int country_id = country_codes::CountryCharsToCountryID((*country_code)[0],
-                                                            (*country_code)[1]);
+    country_codes::CountryId country_id(*country_code);
 
-    if (!explicit_default_language_set.contains(language_code)) {
-      if (is_default) {
-        results.default_country_for_language[language_code] = country_id;
-
-        // Remember we have the default coutry for this language,
-        explicit_default_language_set.insert(language_code);
-      } else {
-        results.default_country_for_language[language_code] = country_id;
-      }
+    locale_maps.default_country_for_language.try_emplace(language_code,
+                                                         country_id);
+    // If '*' is present we want to override the default country for language.
+    if (is_default) {
+      locale_maps.default_country_for_language[language_code] = country_id;
     }
 
-    auto prepopulated_engines_for_locales = GetEnginesListWithDefaultsForLocale(
-        base::StrCat({language_code, "_", *country_code}), engines_map,
-        locales_dict, error);
-    if (!prepopulated_engines_for_locales) {
-      return std::nullopt;
+    auto prepopulated_engines_list = GetEnginesListWithDefaultsForLocale(
+        base::StrCat({language_code, "_", *country_code}), engines,
+        engines_for_locale, error);
+    if (!prepopulated_engines_list) {
+      return false;
     }
-    results.engines_for_locale[country_id].push_back(std::make_pair(
-        language_code, std::move(*prepopulated_engines_for_locales)));
+
+    auto& locale_engines =
+        locale_maps.engines_for_locale[country_id.Serialize()];
+    AddOrCreateVersionedEngines(language_code, version_key, locale_engines,
+                                *prepopulated_engines_list);
   }
 
-  return results;
+  return true;
 }
 }  // namespace
 
@@ -408,7 +454,7 @@ class ParsedSearchEngines::PrepopulatedEngineStorage {
         dict.FindList(kSearchIntentParams), dict.FindList(kAlternateUrls),
         dict.FindString(kType), dict.FindString(kPreconnectToSearchUrl),
         dict.FindString(kPrefetchLikelyNavigations), dict.FindInt(kId),
-        dict.FindList(kRegulatoryExtensions), error);
+        dict.FindList(kRegulatoryExtensions), dict.FindInt(kIsPartner), error);
   }
 
   ~PrepopulatedEngineStorage() = default;
@@ -463,7 +509,8 @@ class ParsedSearchEngines::PrepopulatedEngineStorage {
                  ? prefetch_likely_navigations_->c_str()
                  : nullptr,
          .id = id_,
-         .regulatory_extensions = regulatory_extensions_}};
+         .regulatory_extensions = regulatory_extensions_,
+         .is_partner = is_partner_}};
   }
 
  private:
@@ -495,6 +542,7 @@ class ParsedSearchEngines::PrepopulatedEngineStorage {
       std::string* prefetch_likely_navigations,
       std::optional<int> id,
       base::Value::List* regulatory_extensions_list,
+      std::optional<int> is_partner,
       std::string& error) {
     if (!name) {
       error = base::StrCat({"Search engine property missing: ", kName});
@@ -575,7 +623,8 @@ class ParsedSearchEngines::PrepopulatedEngineStorage {
         TemplateURLPrepopulateData::StringToSearchEngine(*type),
         ToStringUniquePtr(preconnect_to_search_url),
         ToStringUniquePtr(prefetch_likely_navigations), *id,
-        std::move(regulatory_extensions_storage));
+        std::move(regulatory_extensions_storage),
+        is_partner.value_or(0) ? 1 : 0);
   }
 
   PrepopulatedEngineStorage(
@@ -605,7 +654,8 @@ class ParsedSearchEngines::PrepopulatedEngineStorage {
       std::unique_ptr<std::string> preconnect_to_search_url,
       std::unique_ptr<std::string> prefetch_likely_navigations,
       int id,
-      std::vector<RegulatoryExtensionStorage> regulatory_extensions_storage)
+      std::vector<RegulatoryExtensionStorage> regulatory_extensions_storage,
+      int is_partner)
       : name_(std::move(name)),
         keyword_(std::move(keyword)),
         favicon_url_(std::move(favicon_url)),
@@ -638,7 +688,8 @@ class ParsedSearchEngines::PrepopulatedEngineStorage {
         search_intent_params_ptr_(MakeStringPtrVector(search_intent_params_)),
         alternate_urls_ptr_(MakeStringPtrVector(alternate_urls_)),
         regulatory_extensions_(
-            MakeRegulatoryExtensionVector(regulatory_extension_storage_)) {}
+            MakeRegulatoryExtensionVector(regulatory_extension_storage_)),
+        is_partner_(is_partner) {}
 
   std::unique_ptr<const std::u16string> name_;
   std::unique_ptr<const std::u16string> keyword_;
@@ -671,6 +722,7 @@ class ParsedSearchEngines::PrepopulatedEngineStorage {
   std::vector<const char*> alternate_urls_ptr_;
   std::vector<TemplateURLPrepopulateData::RegulatoryExtension>
       regulatory_extensions_;
+  int is_partner_;
 };
 
 /* static */
@@ -724,7 +776,7 @@ std::unique_ptr<ParsedSearchEngines> ParsedSearchEngines::FromJsonString(
   std::vector<PrepopulatedEngineStorage> prepopulated_engines_storage;
   std::vector<std::unique_ptr<TemplateURLPrepopulateData::PrepopulatedEngine>>
       all_engines;
-  EnginesMap engines_map;
+  EnginesMap engines;
 
   for (auto [entry_name, element] : *elements) {
     if (!element.is_dict()) {
@@ -745,7 +797,7 @@ std::unique_ptr<ParsedSearchEngines> ParsedSearchEngines::FromJsonString(
     all_engines.push_back(
         std::make_unique<TemplateURLPrepopulateData::PrepopulatedEngine>(
             prepopulated_engines_storage.back().MakePrepopulateEngine()));
-    engines_map[entry_name] = all_engines.back().get();
+    engines[entry_name] = all_engines.back().get();
   }
 
   base::Value::List* country_list = root.FindList(kEnginesByCountry);
@@ -754,43 +806,43 @@ std::unique_ptr<ParsedSearchEngines> ParsedSearchEngines::FromJsonString(
     return nullptr;
   }
 
-  base::Value::Dict* locales_dict = root.FindDict(kEngines);
-  if (!locales_dict) {
-    error = base::StrCat({"Missing key: ", kEngines});
-    return nullptr;
-  }
+  VersionedEngines versioned_engines;
+  LocaleMaps locale_maps;
 
-  std::optional<LocaleMaps> locale_maps;
-  std::optional<EnginesListWithDefaults> default_engines_list;
+  for (const auto [maybe_engines_key, dict] : root) {
+    const auto maybe_version_key = GetVersionKeyFromEngines(maybe_engines_key);
+    if (!maybe_version_key) {
+      continue;
+    }
 
-  if (vivaldi::IsVivaldiRunning()) {
-    locale_maps =
-        BuildLocaleMaps(engines_map, *locales_dict, *country_list, error);
-    if (!locale_maps) {
+    if (!dict.is_dict()) {
+      error = "Search engine elements " + maybe_engines_key +
+              " should be JSON Dict";
       return nullptr;
     }
 
-    default_engines_list = GetEnginesListWithDefaultsForLocale(
-        kDefault, engines_map, *locales_dict, error);
-    if (!default_engines_list) {
-      return nullptr;
+    if (vivaldi::IsVivaldiRunning()) {
+      if (!BuildLocaleMaps(*maybe_version_key, engines, dict.GetDict(),
+                           *country_list, error, locale_maps)) {
+        return nullptr;
+      }
     }
-  } else {
-    locale_maps = LocaleMaps();
 
-    default_engines_list = GetEnginesListWithDefaultsForLocale(
-        kUnittests, engines_map, *locales_dict, error);
-    if (!default_engines_list) {
+    const auto default_engine_list = GetEnginesListWithDefaultsForLocale(
+        vivaldi::IsVivaldiRunning() ? kDefault : kUnittests, engines,
+        dict.GetDict(), error);
+    if (!default_engine_list) {
       return nullptr;
     }
+    versioned_engines.emplace(*maybe_version_key, *default_engine_list);
   }
 
   // Cannot use make_unique because of private destructor
   return std::unique_ptr<ParsedSearchEngines>(new ParsedSearchEngines(
       std::move(prepopulated_engines_storage), std::move(all_engines),
-      std::move(*default_engines_list), std::move(engines_map),
-      std::move(locale_maps->engines_for_locale),
-      std::move(locale_maps->default_country_for_language),
+      std::move(versioned_engines), std::move(engines),
+      std::move(locale_maps.engines_for_locale),
+      std::move(locale_maps.default_country_for_language),
       *max_prepopulated_engine_id, *current_data_version));
 }
 
@@ -798,10 +850,10 @@ ParsedSearchEngines::ParsedSearchEngines(
     std::vector<PrepopulatedEngineStorage> storage,
     std::vector<std::unique_ptr<TemplateURLPrepopulateData::PrepopulatedEngine>>
         all_engines,
-    EnginesListWithDefaults default_engines_list,
-    EnginesMap engines_map,
+    VersionedEngines default_engines_list,
+    EnginesMap engines,
     EnginesForLocale engines_for_locale,
-    std::unordered_map<std::string, int> default_country_for_language,
+    LanguageForCountry default_country_for_language,
     int max_prepopulated_engine_id,
     int current_data_version)
     : storage_(std::move(storage)),
@@ -814,7 +866,7 @@ ParsedSearchEngines::ParsedSearchEngines(
         return all_engines_ptr;
       }()),
       default_engines_list_(std::move(default_engines_list)),
-      engines_map_(std::move(engines_map)),
+      engines_map_(std::move(engines)),
       engines_for_locale_(std::move(engines_for_locale)),
       default_country_for_language_(std::move(default_country_for_language)),
       max_prepopulated_engine_id_(max_prepopulated_engine_id),

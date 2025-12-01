@@ -218,6 +218,7 @@
     <messages fallback_to_english="true">
       <part file="vivaldi_autoplay_strings.grdp" />
       <part file="vivaldi_native_browser_strings.grdp" />
+      <part file="document_blocked_interstitial_strings.grdp" />
       <if expr="pp_if('update_notifier')">
         <part file="vivaldi_update_notifier_strings.grdp" />
       </if>

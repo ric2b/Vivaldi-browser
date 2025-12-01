@@ -138,7 +138,7 @@ Despite the existing domain control validation requirements defined by the CA/Br
 
 Multi-Perspective Issuance Corroboration (referred to as "MPIC"), sometimes referred to as "Multi-Perspective Domain Validation" ("MPDV") or "Multi-VA", enhances existing domain control validation methods by reducing the likelihood that routing attacks can result in fraudulently issued certificates. Rather than performing domain control validation and authorization from a single geographic or routing vantage point, which an adversary could influence as demonstrated by security researchers, MPIC implementations perform the same validation from multiple geographic locations and/or Internet Service Providers and have been [observed](https://drive.google.com/file/d/15e4Z9InYbThwJsDuH0oS7vfXKvdSBzi9/view) as an effective countermeasure against ethically conducted, real-world BGP hijacks ([4](https://arxiv.org/abs/2302.08000)).
 
-The Chrome Root Program [led](https://drive.google.com/file/d/1LTwtAwHXcSaPVSsqKQztNJrV2ozHJ7ZL/view?usp=sharing) a work team of ecosystem participants which culminated in a CA/Browser Forum Ballot to require adoption of MPIC via [Ballot SC-067](https://cabforum.org/2024/08/05/ballot-sc-67-v3-require-domain-validation-and-caa-checks-to-be-performed-from-multiple-network-perspectives-corroboration/). The ballot received unanimous support from organizations who participated in voting, and the adoption process is ongoing.
+The Chrome Root Program [led](https://drive.google.com/file/d/1LTwtAwHXcSaPVSsqKQztNJrV2ozHJ7ZL/view?usp=sharing) a work team of ecosystem participants which culminated in a CA/Browser Forum Ballot to require adoption of MPIC via [Ballot SC-067](https://cabforum.org/2024/08/05/ballot-sc067v3-require-domain-validation-and-caa-checks-to-be-performed-from-multiple-network-perspectives-corroboration/). The ballot received unanimous support from organizations who participated in voting, and the adoption process is ongoing.
 
 **Why it matters:**
 
@@ -152,7 +152,7 @@ The Chrome Root Program [led](https://drive.google.com/file/d/1LTwtAwHXcSaPVSsqK
 
 Linting refers to the automated process of analyzing X.509 certificates for errors, inconsistencies, and adherence to best practices and industry standards. Linting ensures certificates are well-formatted and include the necessary data for their intended use, such as website authentication. There are numerous open-source linting projects in existence (e.g., [certlint](https://github.com/certlint/certlint), [pkilint](https://github.com/digicert/pkilint), [pkimetal](https://github.com/pkimetal/pkimetal), [x509lint](https://github.com/kroeckx/x509lint), and [zlint](https://github.com/zmap/zlint)), in addition to numerous custom linting projects maintained by members of the Web PKI ecosystem.
 
-The Chrome Root Program participated in drafting CA/Browser Forum [Ballot SC-075](https://cabforum.org/2024/08/05/ballot-sc-75-pre-sign-linting/) to require adoption of certificate linting. The ballot received unanimous support from organizations who participated in voting, and the adoption process is ongoing.
+The Chrome Root Program participated in drafting CA/Browser Forum [Ballot SC-075](https://cabforum.org/2024/08/05/ballot-sc075-pre-sign-linting/) to require adoption of certificate linting. The ballot received unanimous support from organizations who participated in voting, and the adoption process is ongoing.
 
 **Why it matters:**
 
@@ -163,7 +163,7 @@ The Chrome Root Program participated in drafting CA/Browser Forum [Ballot SC-075
 
 **Theme:** "Encouraging modern infrastructures and agility"
 
-In Chrome Root Program Policy 1.5, we [landed](/Home/chromium-security/root-ca-policy/#root-ca-term-limit) changes that set a maximum "term-limit" (i.e., period of inclusion) for root CA certificates included in the Chrome Root Store to 15 years.
+In Chrome Root Program Policy 1.5, we [landed](/Home/chromium-security/root-ca-policy/policy-archive/version-1-5/#root-ca-term-limit) changes that set a maximum "term-limit" (i.e., period of inclusion) for root CA certificates included in the Chrome Root Store to 15 years.
 
 While we still prefer a more agile approach, and may again explore this in the future, we encourage CA Owners to explore how they can adopt more frequent root rotation.
 

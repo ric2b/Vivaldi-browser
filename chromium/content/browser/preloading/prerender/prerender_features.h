@@ -38,6 +38,31 @@ CONTENT_EXPORT extern const base::FeatureParam<
 CONTENT_EXPORT extern const base::FeatureParam<size_t>
     kPrerender2FallbackBodySizeLimit;
 
+// Controls whether `PrefetchMatchResolver` use timeout for prefetch ahead of
+// prerender. We are going not to use timeout as it makes prerender fail. For
+// more details, see
+// https://docs.google.com/document/d/1ZP7lYrtqZL9jC2xXieNY_UBMJL1sCrfmzTB8K6v4sD4/edit?resourcekey=0-fkbeQhkT3PhBb9FnnPgnZA&tab=t.wphan8fb23kr
+CONTENT_EXPORT extern const base::FeatureParam<bool>
+    kPrerender2FallbackPrefetchUseBlockUntilHeadTimetout;
+
+enum class Prerender2FallbackPrefetchSchedulerPolicy {
+  // Do not use `PrefetchScheduler` code path.
+  kNotUse,
+  // Prioritize prefetch ahead of prerender.
+  kPrioritize,
+  // Burst prefetch ahead of prerender.
+  kBurst,
+};
+CONTENT_EXPORT extern const base::FeatureParam<
+    Prerender2FallbackPrefetchSchedulerPolicy>
+    kPrerender2FallbackPrefetchSchedulerPolicy;
+
+// This feature was used to launch Prerender2 support for No-Vary-Search header.
+// This work has finished and the old implementation was deleted. Now this flag
+// is just for injecting parameters through field trials as an umberella
+// feature.
+CONTENT_EXPORT BASE_DECLARE_FEATURE(kPrerender2NoVarySearch);
+
 // A field trial param that controls the timeout for waiting on headers
 // during navigation for the prerender URL matched by No-Vary-Search hint before
 // falling back to the default navigation path.

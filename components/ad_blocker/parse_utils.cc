@@ -54,8 +54,8 @@ std::string BuildNgramSearchString(const std::string_view& pattern) {
         ngram_search_string.push_back('*');
         break;
       case '{':
-        // Don't try to work out numbers. Assume the previous
-        // assume the previous character doesn't need to be pre-matched.
+        // Don't try to work out numbers. Assume the previous character doesn't
+        // need to be pre-matched.
         while (++c < pattern.end()) {
           if (*c == '}' && *(c - 1) != '\\')
             break;

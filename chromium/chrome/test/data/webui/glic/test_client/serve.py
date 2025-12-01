@@ -11,6 +11,7 @@ import http.server
 import os
 import shutil
 import socketserver
+import time
 import subprocess
 import sys
 
@@ -25,12 +26,21 @@ def build(outdir: str):
                    check=True)
 
 
-
 class RequestHandler(http.server.SimpleHTTPRequestHandler):
     directory = None
+    flaky = False
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=RequestHandler.directory, **kwargs)
+
+    def do_GET(self):
+        if self.flaky:
+            if time.localtime().tm_min % 2 != 0:
+                self.send_response(404)
+                self.send_header('Content-type', 'text/html')
+                self.end_headers()
+                return
+        super().do_GET()
 
     def end_headers(self):
         self.send_header("Cache-Control", "no-cache, no-store")
@@ -53,9 +63,16 @@ def main():
                         '--nobuild',
                         help='Skips the build step',
                         action='store_true')
+    parser.add_argument('--flaky',
+                        help="Alternates between 200 and" +
+                        " 404 responses, every minute",
+                        action="store_true")
     args = parser.parse_args()
 
     RequestHandler.directory = f'{args.outdir}/gen/chrome/test/data/webui/glic'
+    RequestHandler.extensions_map['.js'] = 'text/javascript'
+    RequestHandler.flaky = args.flaky
+
     if not args.nobuild:
         try:
             build(args.outdir)
@@ -69,7 +86,8 @@ def main():
               file=sys.stderr)
         sys.exit(1)
 
-    with socketserver.TCPServer(("", args.port), RequestHandler) as httpd:
+    with socketserver.ThreadingTCPServer(("", args.port),
+                                         RequestHandler) as httpd:
         print("Server started at localhost:" + str(args.port))
         httpd.serve_forever()
 

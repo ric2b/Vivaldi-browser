@@ -82,29 +82,22 @@ enable f16;`,
     enable f16;`,
     pass: true,
   },
+  in_comment_f16: {
+    code: `
+    /* enable f16; */
+    var<private> v: f16;
+    `,
+    pass: false,
+  },
 };
 
 g.test('enable')
   .desc(`Tests that enables are validated correctly`)
-  .beforeAllSubcases(t => {
-    const features: GPUFeatureName[] = [];
-    const name: string = t.params.case as string;
-    if (name.includes('subgroups')) {
-      features.push('subgroups' as GPUFeatureName);
-      if (name.includes('f16')) {
-        features.push('shader-f16');
-      }
-    } else {
-      features.push('shader-f16');
-    }
-    t.selectDeviceOrSkipTestCase(features);
-  })
   .params(u => u.combine('case', keysOf(kCases)))
   .fn(t => {
     if (t.params.case === 'requires_before') {
       t.skipIfLanguageFeatureNotSupported('readonly_and_readwrite_storage_textures');
     }
-
     const c = kCases[t.params.case];
     t.expectCompileResult(c.pass, c.code);
   });

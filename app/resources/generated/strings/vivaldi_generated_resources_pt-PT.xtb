@@ -170,6 +170,7 @@
 <translation id="3838085852053358637">Falha ao carregar a extensão</translation>
 <translation id="383891835335927981">A ampliação dos websites não foi aumentada nem diminuída</translation>
 <translation id="385051799172605136">Voltar</translation>
+<translation id="3858860766373142691">Nome</translation>
 <translation id="3861977424605124250">Mostrar no arranque</translation>
 <translation id="3867944738977021751">Campos do certificado</translation>
 <translation id="3905761538810670789">Reparar aplicação</translation>
@@ -415,6 +416,7 @@ Mantenha o seu ficheiro de chave num local seguro, pois irá precisar dele para 
 <translation id="8004582292198964060">Navegador</translation>
 <translation id="8018313076035239964">Controle as informações que os websites podem utilizar e os conteúdos que podem apresentar</translation>
 <translation id="8071432093239591881">Imprimir como imagem</translation>
+<translation id="8118448640060360549">{EXTENSIONS_COUNT,plural, =1{# marcador}other{# marcadores}}</translation>
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" />K</translation>
 <translation id="8212008074015601248">{NUM_DOWNLOAD, plural,
         =1 {Transferência em curso} other {Transferências em curso}}</translation>

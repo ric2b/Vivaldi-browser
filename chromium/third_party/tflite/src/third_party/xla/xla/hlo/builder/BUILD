@@ -1,7 +1,7 @@
 # Description:
 #   XLA builder libraries.
 
-load("//xla:xla.bzl", "xla_cc_test")
+load("//xla:xla.default.bzl", "xla_cc_test")
 load("//xla/tsl:tsl.default.bzl", "filegroup")
 load("//xla/tsl/platform:rules_cc.bzl", "cc_library")
 
@@ -108,6 +108,29 @@ cc_library(
         "@com_google_absl//absl/types:span",
         "@local_tsl//tsl/platform:errors",
         "@local_tsl//tsl/platform:statusor",
+    ],
+)
+
+xla_cc_test(
+    name = "value_inference_test",
+    srcs = ["value_inference_test.cc"],
+    deps = [
+        ":value_inference",
+        ":xla_builder",
+        ":xla_computation",
+        "//xla:comparison_util",
+        "//xla:literal",
+        "//xla:literal_util",
+        "//xla:shape_util",
+        "//xla:xla_data_proto_cc",
+        "//xla/hlo/builder/lib:arithmetic",
+        "//xla/hlo/builder/lib:prng",
+        "//xla/hlo/testlib:test",
+        "//xla/tsl/platform:errors",
+        "//xla/tsl/platform:statusor",
+        "//xla/tsl/platform:test_main",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/types:span",
     ],
 )
 

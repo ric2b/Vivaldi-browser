@@ -295,6 +295,7 @@
 <translation id="2867808975387772810">Bibliografia</translation>
 <translation id="2873259058405069099">Ir para o início da tabela</translation>
 <translation id="287383510823843610">Laranja-escuro</translation>
+<translation id="2876760662374103627">Controle facial ativado</translation>
 <translation id="2879867157561757640">Deslize para baixo usando três dedos</translation>
 <translation id="288178314850623291">Use comandos de avanço e retorno para acessar tipos específicos de elementos. Para avançar entre cabeçalhos, pressione Pesquisa + H ou pressione Pesquisa + Shift + H para retroceder.</translation>
 <translation id="2885764457467528513">{COUNT,plural, =1{minuto}one{minuto}other{minutos}}</translation>
@@ -524,7 +525,7 @@
 <translation id="423428485095722850">Pressione as teclas Pesquisar e Espaço para alternar</translation>
 <translation id="4243624244759495699"><ph name="LOCALE" />, Grade <ph name="GRADE" /></translation>
 <translation id="4246217262268234757">Azul-metálico</translation>
-<translation id="4253168017788158739">Nota</translation>
+<translation id="4253168017788158739">Observação</translation>
 <translation id="4254798249533888099">Árvore</translation>
 <translation id="4255016471934258618">Abrir bem a boca</translation>
 <translation id="4259220820964911921">Ativar o controle facial?</translation>
@@ -1115,6 +1116,7 @@
 <translation id="8316881042119029234">Palha</translation>
 <translation id="8326783648485765113">Verde-grama</translation>
 <translation id="8345569862449483843">{COUNT,plural, =1{sinal de cerquilha}one{# indicadores de cerquilha}other{# indicadores de cerquilha}}</translation>
+<translation id="8351821207686449674">Ativar/desativar legendas</translation>
 <translation id="8378855320830505539">Região</translation>
 <translation id="8382679411218029383">Preenchimento automático em linha e lista</translation>
 <translation id="8394908167088220973">Reproduzir/pausar mídia</translation>

@@ -20,11 +20,11 @@ limitations under the License.
 #include <string>
 
 #include "absl/log/check.h"
+#include "xla/tsl/platform/status.h"
 #include "tensorflow/core/platform/env.h"
 #include "tensorflow/core/platform/stringpiece.h"
 #include "tensorflow/core/platform/types.h"
 #include "tensorflow/java/src/gen/cc/java_defs.h"
-#include "tsl/platform/status.h"
 
 namespace tensorflow {
 namespace java {
@@ -55,7 +55,7 @@ SourceWriter& SourceWriter::Prefix(const char* line_prefix) {
   return *this;
 }
 
-SourceWriter& SourceWriter::Write(const StringPiece& str) {
+SourceWriter& SourceWriter::Write(const absl::string_view& str) {
   size_t line_pos = 0;
   do {
     size_t start_pos = line_pos;
@@ -78,7 +78,7 @@ SourceWriter& SourceWriter::WriteFromFile(const string& fname, Env* env) {
   return Write(data_);
 }
 
-SourceWriter& SourceWriter::Append(const StringPiece& str) {
+SourceWriter& SourceWriter::Append(const absl::string_view& str) {
   if (!str.empty()) {
     if (newline_) {
       DoAppend(left_margin_ + line_prefix_);

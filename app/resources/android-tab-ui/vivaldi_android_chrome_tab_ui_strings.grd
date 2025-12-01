@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!-- android_chrome_strings.grd contains strings for tab ui DFM of Chrome for Android. -->
-<grit current_release="1" latest_public_release="0" output_all_resource_defines="false">
+<grit current_release="1" latest_public_release="0">
   <outputs>
     <output filename="values-b+ca+valencia/android_chrome_tab_ui_strings.xml" type="android" lang="ca@valencia" />
     <output filename="values-de-rCH/android_chrome_tab_ui_strings.xml" type="android" lang="de-CH" />
@@ -127,6 +127,42 @@
       </message>
       <message name="IDS_CLOSE_ALL_TABS_DIALOG_MESSAGE_INCOGNITO" desc="When users click the menu item 'Close all tabs' in tab switcher, a dialog will pop up and this text is the message of the dialog.">
         Your activity in these private tabs will be removed from this device
+      </message>
+      <!-- Tab Grid Dialog strings -->
+      <message name="IDS_TAB_GRID_DIALOG_REMOVE_FROM_GROUP" desc="This text shows on the ungroup bar in TabGridDialog. When user drags a tab and drops it on the ungroup bar, this tab will be moved out of the stack.">
+        Remove from stack
+      </message>
+      <message name="IDS_TAB_GRID_DIALOG_TOOLBAR_EDIT_GROUP_NAME" desc="This text shows in the TabGridDialog toolbar menu as one menu item. When user selects this item, the stack name field will be focused and the keyboard will show for users to edit the stack name.">
+        Edit stack name
+      </message>
+      <message name="IDS_TAB_GRID_DIALOG_TOOLBAR_EDIT_GROUP_COLOR" desc="This text shows in the TabGridDialog toolbar menu as one menu item. When user selects this item, a color picker popup window will appear and allow the user to update the color for this tab stack.">
+        Edit stack color
+      </message>
+      <message name="IDS_TAB_GRID_DIALOG_TOOLBAR_DELETE_GROUP" desc="This text shows in the TabGridDialog toolbar menu as one menu item. When user selects this item, the tab stack is deleted. All references to the stack go away including those in sync.">
+        Delete stack
+      </message>
+      <message name="IDS_TAB_GRID_DIALOG_TOOLBAR_CLOSE_GROUP" desc="This text shows in the TabGridDialog toolbar menu as one menu item. When user selects this item, the tab stack is closed. It may still be possible to access the stack from tab stack sync if enabled.">
+        Close stack
+      </message>
+      <message name="IDS_TAB_GRID_DIALOG_TOOLBAR_LEAVE_GROUP" desc="This text shows in the TabGridDialog toolbar menu as one menu item. When user selects this item, the user leaves a collaboration for a tab stack. All references to the stack go away including those in sync.">
+        Leave stack
+      </message>
+      <!-- Tab stack related strings -->
+      <message name="IDS_REMOVE_LAST_TAB_ACTION" desc="The text shown on the bottom bar when the user is dragging the last tab of a stack around. Indicates removing this tab will also delete the stack.">
+        Remove tab and delete stack
+      </message>
+      <message name="IDS_REMOVE_LAST_TAB_ACTION_MEMBER" desc="The text shown on the bottom bar when the user is dragging the last tab of a stack around and they are a member of a shared tab stack. Indicates removing this tab will also trigger the leave shared stack flow (with a confirmation dialog).">
+        Remove tab and leave stack
+      </message>
+      <!-- New Tab Stack dialog strings -->
+      <message name="IDS_TAB_GROUP_CREATION_DIALOG_TITLE" desc="When users create a new tab stack, a dialog will pop up and this text is the title of the dialog. [CHAR_LIMIT=24]">
+        New tab stack
+      </message>
+      <message name="IDS_TAB_GROUP_CREATION_DIALOG_DESCRIPTION_TEXT_SYNC_ON" desc="A subtitle on the dialog for new tab stack creations. Explains the stack automatically saves and updates across all devices.">
+        Your tab stacks automatically save and update across all your signed-in devices
+      </message>
+      <message name="IDS_TAB_GROUP_CREATION_DIALOG_DESCRIPTION_TEXT_SYNC_OFF" desc="A subtitle on the dialog for new tab stack creations. Explains the stack automatically saves.">
+        Your tab stacks automatically save
       </message>
     </messages>
   </release>

@@ -144,9 +144,9 @@ BUILTIN(AtomicsNotify) {
   if (IsUndefined(*count, isolate)) {
     c = kMaxUInt32;
   } else {
-    ASSIGN_RETURN_FAILURE_ON_EXCEPTION(isolate, count,
-                                       Object::ToInteger(isolate, count));
-    double count_double = Object::NumberValue(*count);
+    double count_double;
+    MAYBE_ASSIGN_RETURN_FAILURE_ON_EXCEPTION(
+        isolate, count_double, Object::IntegerValue(isolate, count));
     if (count_double < 0) {
       count_double = 0;
     } else if (count_double > kMaxUInt32) {
@@ -236,7 +236,7 @@ Tagged<Object> DoWait(Isolate* isolate, FutexEmulation::WaitMode mode,
                                   "Atomics.wait")));
   }
 
-  Handle<JSArrayBuffer> array_buffer = sta->GetBuffer();
+  DirectHandle<JSArrayBuffer> array_buffer = sta->GetBuffer();
 
   if (sta->type() == kExternalBigInt64Array) {
     return FutexEmulation::WaitJs64(

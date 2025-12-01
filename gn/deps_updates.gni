@@ -75,7 +75,7 @@ if (!is_ios) {
     _targets = [
       "//chrome/browser:test_support",
       "//chrome/browser/ui:test_support",
-      "//apps:apps"
+      # "//apps:apps"
     ]
 
     foreach(_target, _targets) {
@@ -189,7 +189,7 @@ if (!is_ios) {
   }
 
   update_target("//chrome/browser/updates/announcement_notification:announcement_notification") {
-    deps = ["//chrome/app:generated_resources"]
+    deps += ["//chrome/app:generated_resources"]
   }
 
   update_target("//content/public/browser:browser_sources") {

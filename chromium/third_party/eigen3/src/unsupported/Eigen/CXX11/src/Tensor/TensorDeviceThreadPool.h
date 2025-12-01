@@ -15,35 +15,6 @@
 
 namespace Eigen {
 
-// Runs an arbitrary function and then calls Notify() on the passed in
-// Notification.
-template <typename Function, typename... Args>
-struct FunctionWrapperWithNotification {
-  static void run(Notification* n, Function f, Args... args) {
-    f(args...);
-    if (n) {
-      n->Notify();
-    }
-  }
-};
-
-template <typename Function, typename... Args>
-struct FunctionWrapperWithBarrier {
-  static void run(Barrier* b, Function f, Args... args) {
-    f(args...);
-    if (b) {
-      b->Notify();
-    }
-  }
-};
-
-template <typename SyncType>
-static EIGEN_STRONG_INLINE void wait_until_ready(SyncType* n) {
-  if (n) {
-    n->Wait();
-  }
-}
-
 // An abstract interface to a device specific memory allocator.
 class Allocator {
  public:
@@ -98,8 +69,9 @@ struct ThreadPoolDevice {
       Barrier barrier(static_cast<int>(num_threads - 1));
       // Launch the last 3 blocks on worker threads.
       for (size_t i = 1; i < num_threads; ++i) {
-        enqueue_with_barrier(&barrier, [n, i, src_ptr, dst_ptr, blocksize] {
+        pool_->Schedule([n, i, src_ptr, dst_ptr, blocksize, &barrier] {
           ::memcpy(dst_ptr + i * blocksize, src_ptr + i * blocksize, numext::mini(blocksize, n - (i * blocksize)));
+          barrier.Notify();
         });
       }
       // Launch the first block on the main thread.
@@ -140,24 +112,22 @@ struct ThreadPoolDevice {
     return 1;
   }
 
-  template <class Function, class... Args>
-  EIGEN_STRONG_INLINE Notification* enqueue(Function&& f, Args&&... args) const {
-    Notification* n = new Notification();
-    pool_->Schedule(
-        std::bind(&FunctionWrapperWithNotification<Function, Args...>::run, n, std::forward<Function>(f), args...));
-    return n;
-  }
-
-  template <class Function, class... Args>
-  EIGEN_STRONG_INLINE void enqueue_with_barrier(Barrier* b, Function&& f, Args&&... args) const {
-    pool_->Schedule(
-        std::bind(&FunctionWrapperWithBarrier<Function, Args...>::run, b, std::forward<Function>(f), args...));
-  }
-
+  // TODO(rmlarsen): Remove this deprecated interface when all users have been converted.
   template <class Function, class... Args>
   EIGEN_STRONG_INLINE void enqueueNoNotification(Function&& f, Args&&... args) const {
+    enqueue(std::forward<Function>(f), std::forward<Args>(args)...);
+  }
+
+  template <class Function, class... Args>
+  EIGEN_STRONG_INLINE void enqueue(Function&& f, Args&&... args) const {
+#if EIGEN_COMP_CXXVER >= 20
+    if constexpr (sizeof...(args) > 0) {
+      auto run_f = [f = std::forward<Function>(f), ... args = std::forward<Args>(args)]() { f(args...); };
+#else
     if (sizeof...(args) > 0) {
-      pool_->Schedule(std::bind(std::forward<Function>(f), args...));
+      auto run_f = [f = std::forward<Function>(f), &args...]() { f(args...); };
+#endif
+      pool_->Schedule(std::move(run_f));
     } else {
       pool_->Schedule(std::forward<Function>(f));
     }
@@ -191,27 +161,14 @@ struct ThreadPoolDevice {
     // Division code rounds mid to block_size, so we are guaranteed to get
     // block_count leaves that do actual computations.
     Barrier barrier(static_cast<unsigned int>(block.count));
-    std::function<void(Index, Index)> handleRange;
-    handleRange = [this, block, &handleRange, &barrier, &f](Index firstIdx, Index lastIdx) {
-      while (lastIdx - firstIdx > block.size) {
-        // Split into halves and schedule the second half on a different thread.
-        const Index midIdx = firstIdx + numext::div_ceil((lastIdx - firstIdx) / 2, block.size) * block.size;
-        pool_->Schedule([=, &handleRange]() { handleRange(midIdx, lastIdx); });
-        lastIdx = midIdx;
-      }
-      // Single block or less, execute directly.
-      f(firstIdx, lastIdx);
-      barrier.Notify();
-    };
-
     if (block.count <= numThreads()) {
       // Avoid a thread hop by running the root of the tree and one block on the
       // main thread.
-      handleRange(0, n);
+      handleRange(0, n, block.size, &barrier, pool_, f);
     } else {
       // Execute the root in the thread pool to avoid running work on more than
       // numThreads() threads.
-      pool_->Schedule([=, &handleRange]() { handleRange(0, n); });
+      pool_->Schedule([this, n, &block, &barrier, &f]() { handleRange(0, n, block.size, &barrier, pool_, f); });
     }
 
     barrier.Wait();
@@ -286,6 +243,19 @@ struct ThreadPoolDevice {
 
  private:
   typedef TensorCostModel<ThreadPoolDevice> CostModel;
+
+  static void handleRange(Index firstIdx, Index lastIdx, Index granularity, Barrier* barrier, ThreadPoolInterface* pool,
+                          const std::function<void(Index, Index)>& f) {
+    while (lastIdx - firstIdx > granularity) {
+      // Split into halves and schedule the second half on a different thread.
+      const Index midIdx = firstIdx + numext::div_ceil((lastIdx - firstIdx) / 2, granularity) * granularity;
+      pool->Schedule([=, &f]() { handleRange(midIdx, lastIdx, granularity, barrier, pool, f); });
+      lastIdx = midIdx;
+    }
+    // Single block or less, execute directly.
+    f(firstIdx, lastIdx);
+    barrier->Notify();
+  }
 
   // For parallelForAsync we must keep passed in closures on the heap, and
   // delete them only after `done` callback finished.

@@ -38,11 +38,11 @@ class SpeechRecognizer;
 // the browser process and can serve several requests. Each recognition request
 // corresponds to a session, initiated via |CreateSession|.
 //
-// In any moment, the manager has a single session known as the primary session,
-// |primary_session_id_|.
-// This is the session that is capturing audio, waiting for user permission,
-// etc. There may also be other, non-primary, sessions living in parallel that
-// are waiting for results but not recording audio.
+// In any moment, the manager has at most a single session using the microphone
+// known as the, |microphone_session_id_|. This is the session that is capturing
+// audio, waiting for user permission, etc. There may also be other,
+// non-primary, sessions living in parallel that are waiting for results but not
+// recording audio.
 //
 // The SpeechRecognitionManager has the following responsibilities:
 //  - Handles requests received from various render frames and makes sure only
@@ -61,7 +61,7 @@ class CONTENT_EXPORT SpeechRecognitionManagerImpl
   // issued when it is not created yet or destroyed (by BrowserMainLoop).
   static SpeechRecognitionManagerImpl* GetInstance();
 
-  static bool IsOnDeviceSpeechRecognitionAvailable(
+  static bool IsOnDeviceSpeechRecognitionInstalled(
       const SpeechRecognitionSessionConfig& config);
 
   // SpeechRecognitionManager implementation.
@@ -110,8 +110,9 @@ class CONTENT_EXPORT SpeechRecognitionManagerImpl
   SpeechRecognitionManagerDelegate* delegate() const { return delegate_.get(); }
 
  protected:
-  // BrowserMainLoop is the only one allowed to instantiate this class.
+  // Only BrowserMainLoop and tests are allowed to instantiate this class.
   friend class BrowserMainLoop;
+  friend class SpeechRecognitionManagerImplTest;
 
   // Needed for deletion on the IO thread.
   friend std::default_delete<SpeechRecognitionManagerImpl>;
@@ -203,9 +204,9 @@ class CONTENT_EXPORT SpeechRecognitionManagerImpl
   raw_ptr<media::AudioSystem> audio_system_;
   raw_ptr<MediaStreamManager> media_stream_manager_;
   base::flat_map<int, std::unique_ptr<Session>> sessions_;
-  int primary_session_id_;
-  int last_session_id_;
-  bool is_dispatching_event_;
+  int microphone_session_id_ = kSessionIDInvalid;
+  int last_session_id_ = kSessionIDInvalid;
+  bool is_dispatching_event_ = false;
   std::unique_ptr<SpeechRecognitionManagerDelegate> delegate_;
   const int requester_id_;
 

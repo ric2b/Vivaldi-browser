@@ -72,9 +72,10 @@ id<GREYMatcher> ManageUMALinkMatcher() {
 
 - (AppLaunchConfiguration)appConfigurationForTestCase {
   AppLaunchConfiguration config = [super appConfigurationForTestCase];
-  config.features_enabled.push_back(kNewSyncOptInIllustration);
   config.additional_args.push_back(
       "--disable-features=UpdatedFirstRunSequence");
+  config.additional_args.push_back(
+      "--disable-features=AnimatedDefaultBrowserPromoInFRE");
   return config;
 }
 
@@ -92,11 +93,8 @@ id<GREYMatcher> ManageUMALinkMatcher() {
                       scrollViewIdentifier:
                           kPromoStyleScrollViewAccessibilityIdentifier]
       performAction:grey_tap()];
-  [[self elementInteractionWithGreyMatcher:
-             chrome_test_util::PromoScreenSecondaryButtonMatcher()
-                      scrollViewIdentifier:
-                          kPromoStyleScrollViewAccessibilityIdentifier]
-      performAction:grey_tap()];
+  // Skip remaining screens.
+  [[self class] dismissDefaultBrowserAndRemainingScreens];
   [ChromeEarlGreyUI waitForAppToIdle];
   // Tests that the sentinel file has been created.
   GREYAssertTrue([ChromeEarlGrey hasFirstRunSentinel],
@@ -148,7 +146,7 @@ id<GREYMatcher> ManageUMALinkMatcher() {
       performAction:grey_tap()];
   // Skip sign-in.
   [[self elementInteractionWithGreyMatcher:
-             chrome_test_util::PromoStyleSecondaryActionButtonMatcher()
+             chrome_test_util::PromoScreenSecondaryButtonMatcher()
                       scrollViewIdentifier:
                           kPromoStyleScrollViewAccessibilityIdentifier]
       performAction:grey_tap()];
@@ -212,7 +210,7 @@ id<GREYMatcher> ManageUMALinkMatcher() {
       performAction:grey_tap()];
   // Skip sign-in.
   [[self elementInteractionWithGreyMatcher:
-             chrome_test_util::PromoStyleSecondaryActionButtonMatcher()
+             chrome_test_util::PromoScreenSecondaryButtonMatcher()
                       scrollViewIdentifier:
                           kPromoStyleScrollViewAccessibilityIdentifier]
       performAction:grey_tap()];
@@ -268,7 +266,7 @@ id<GREYMatcher> ManageUMALinkMatcher() {
       performAction:grey_tap()];
   // Skip sign-in.
   [[self elementInteractionWithGreyMatcher:
-             chrome_test_util::PromoStyleSecondaryActionButtonMatcher()
+             chrome_test_util::PromoScreenSecondaryButtonMatcher()
                       scrollViewIdentifier:
                           kPromoStyleScrollViewAccessibilityIdentifier]
       performAction:grey_tap()];
@@ -322,7 +320,7 @@ id<GREYMatcher> ManageUMALinkMatcher() {
   // Check signed in.
   [SigninEarlGrey verifySignedInWithFakeIdentity:fakeIdentity];
   // Check sync is on.
-  [[self class] dismissDefaultBrowser];
+  [[self class] dismissDefaultBrowserAndRemainingScreens];
   [ChromeEarlGreyUI openSettingsMenu];
   [self verifySyncOrHistoryEnabled:YES];
 }
@@ -350,7 +348,7 @@ id<GREYMatcher> ManageUMALinkMatcher() {
   // Check signed in.
   [SigninEarlGrey verifySignedInWithFakeIdentity:fakeIdentity];
   // Check sync is on.
-  [[self class] dismissDefaultBrowser];
+  [[self class] dismissDefaultBrowserAndRemainingScreens];
   [ChromeEarlGreyUI openSettingsMenu];
   [self verifySyncOrHistoryEnabled:YES];
 }
@@ -371,7 +369,7 @@ id<GREYMatcher> ManageUMALinkMatcher() {
       performAction:grey_tap()];
   // Refuse sync.
   [[self elementInteractionWithGreyMatcher:
-             chrome_test_util::PromoStyleSecondaryActionButtonMatcher()
+             chrome_test_util::PromoScreenSecondaryButtonMatcher()
                       scrollViewIdentifier:
                           kPromoStyleScrollViewAccessibilityIdentifier]
       performAction:grey_tap()];
@@ -382,7 +380,7 @@ id<GREYMatcher> ManageUMALinkMatcher() {
   // Check signed in.
   [SigninEarlGrey verifySignedInWithFakeIdentity:fakeIdentity];
   // Check sync is off.
-  [[self class] dismissDefaultBrowser];
+  [[self class] dismissDefaultBrowserAndRemainingScreens];
   [ChromeEarlGreyUI openSettingsMenu];
   [self verifySyncOrHistoryEnabled:NO];
 }
@@ -436,7 +434,7 @@ id<GREYMatcher> ManageUMALinkMatcher() {
   // Check signed in.
   [SigninEarlGrey verifySignedInWithFakeIdentity:fakeIdentity];
   // Check sync is on.
-  [[self class] dismissDefaultBrowser];
+  [[self class] dismissDefaultBrowserAndRemainingScreens];
   [ChromeEarlGreyUI openSettingsMenu];
   [self verifySyncOrHistoryEnabled:YES];
   // Close settings.
@@ -444,8 +442,8 @@ id<GREYMatcher> ManageUMALinkMatcher() {
       performAction:grey_tap()];
 }
 
-// Tests forced sign-in policy, and refuse sync.
-- (void)testForceSigninByPolicyWithoutSync {
+// Tests forced sign-in policy, and refuse history sync.
+- (void)testForceSigninByPolicyWithoutHistorySync {
   // Configure the policy to force sign-in.
   [self relaunchAppWithBrowserSigninMode:BrowserSigninMode::kForced];
   FakeSystemIdentity* fakeIdentity = [FakeSystemIdentity fakeIdentity1];
@@ -461,9 +459,9 @@ id<GREYMatcher> ManageUMALinkMatcher() {
                       scrollViewIdentifier:
                           kPromoStyleScrollViewAccessibilityIdentifier]
       performAction:grey_tap()];
-  // Refuse sync.
+  // Refuse history sync.
   [[self elementInteractionWithGreyMatcher:
-             chrome_test_util::PromoStyleSecondaryActionButtonMatcher()
+             chrome_test_util::PromoScreenSecondaryButtonMatcher()
                       scrollViewIdentifier:
                           kPromoStyleScrollViewAccessibilityIdentifier]
       performAction:grey_tap()];
@@ -474,7 +472,7 @@ id<GREYMatcher> ManageUMALinkMatcher() {
   // Check signed in.
   [SigninEarlGrey verifySignedInWithFakeIdentity:fakeIdentity];
   // Check sync is on.
-  [[self class] dismissDefaultBrowser];
+  [[self class] dismissDefaultBrowserAndRemainingScreens];
   [ChromeEarlGreyUI openSettingsMenu];
   [self verifySyncOrHistoryEnabled:NO];
   // Close settings.
@@ -507,7 +505,7 @@ id<GREYMatcher> ManageUMALinkMatcher() {
   // Check signed in.
   [SigninEarlGrey verifySignedInWithFakeIdentity:fakeIdentity];
   // Check sync is on.
-  [[self class] dismissDefaultBrowser];
+  [[self class] dismissDefaultBrowserAndRemainingScreens];
   [ChromeEarlGreyUI openSettingsMenu];
   [self verifySyncOrHistoryEnabled:NO];
 }
@@ -527,7 +525,7 @@ id<GREYMatcher> ManageUMALinkMatcher() {
             FRESigninIntentSigninWithPolicy];
   // Refuse sign-in.
   [[self elementInteractionWithGreyMatcher:
-             chrome_test_util::PromoStyleSecondaryActionButtonMatcher()
+             chrome_test_util::PromoScreenSecondaryButtonMatcher()
                       scrollViewIdentifier:
                           kPromoStyleScrollViewAccessibilityIdentifier]
       performAction:grey_tap()];
@@ -637,7 +635,7 @@ id<GREYMatcher> ManageUMALinkMatcher() {
   // Check signed in.
   [SigninEarlGrey verifySignedInWithFakeIdentity:fakeSupervisedIdentity];
   // Check sync is on.
-  [[self class] dismissDefaultBrowser];
+  [[self class] dismissDefaultBrowserAndRemainingScreens];
   [ChromeEarlGreyUI openSettingsMenu];
   [self verifySyncOrHistoryEnabled:YES];
 }
@@ -990,7 +988,7 @@ id<GREYMatcher> ManageUMALinkMatcher() {
 - (void)testHistorySyncSkipIfNoSignIn {
   // Skip sign-in.
   [[self elementInteractionWithGreyMatcher:
-             chrome_test_util::PromoStyleSecondaryActionButtonMatcher()
+             chrome_test_util::PromoScreenSecondaryButtonMatcher()
                       scrollViewIdentifier:
                           kPromoStyleScrollViewAccessibilityIdentifier]
       performAction:grey_tap()];
@@ -1266,7 +1264,7 @@ id<GREYMatcher> ManageUMALinkMatcher() {
       performAction:grey_tap()];
   // Refuse History Sync.
   [[self elementInteractionWithGreyMatcher:
-             chrome_test_util::PromoStyleSecondaryActionButtonMatcher()
+             chrome_test_util::PromoScreenSecondaryButtonMatcher()
                       scrollViewIdentifier:
                           kPromoStyleScrollViewAccessibilityIdentifier]
       performAction:grey_tap()];
@@ -1321,14 +1319,15 @@ id<GREYMatcher> ManageUMALinkMatcher() {
               grey_accessibilityID(
                   kPromoStyleHeaderViewBackgroundAccessibilityIdentifier),
               chrome_test_util::ImageViewWithImageNamed(
-                  @"sync_opt_in_background"),
+                  @"history_sync_opt_in_background"),
               grey_sufficientlyVisible(), nil)]
       assertWithMatcher:grey_notNil()];
 }
 
 @end
 
-// Test first run stages with the updated FRE sequence.
+// Test first run stages with the updated FRE sequence. The Best Features screen
+// feature is disabled when the updated FRE sequence feature is enabled.
 @interface FirstRunWithUpdatedFRESequenceTestCase : FirstRunTestCaseBase
 
 @end

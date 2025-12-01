@@ -125,9 +125,9 @@ class MatrixVectorMultiplyPerf : public DawnPerfTestWithParams<MatrixVectorMulti
         return requirements;
     }
 
-    wgpu::RequiredLimits GetRequiredLimits(const wgpu::SupportedLimits& supported) override {
-        wgpu::RequiredLimits required = {};
-        required.limits.maxStorageBufferBindingSize =
+    wgpu::Limits GetRequiredLimits(const wgpu::Limits& supported) override {
+        wgpu::Limits required = {};
+        required.maxStorageBufferBindingSize =
             BytesPerElement() * GetParam().mRows * GetParam().mCols;
         return required;
     }
@@ -470,9 +470,9 @@ void MatrixVectorMultiplyPerf::Step() {
     {
         wgpu::CommandEncoder encoder = device.CreateCommandEncoder();
         wgpu::ComputePassDescriptor computePassDesc;
-        wgpu::ComputePassTimestampWrites timestampWrites;
+        wgpu::PassTimestampWrites timestampWrites;
         if (useTimestamps) {
-            timestampWrites = GetComputePassTimestampWrites();
+            timestampWrites = GetPassTimestampWrites();
             computePassDesc.timestampWrites = &timestampWrites;
         }
         wgpu::ComputePassEncoder pass = encoder.BeginComputePass(&computePassDesc);

@@ -2,11 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/342213636): Remove this and spanify to fix the errors.
-#pragma allow_unsafe_buffers
-#endif
-
 #include "content/browser/gpu/gpu_process_host.h"
 
 #include <stddef.h>
@@ -17,9 +12,11 @@
 #include <memory>
 #include <utility>
 
+#include "ash/constants/ash_switches.h"
 #include "base/base64.h"
 #include "base/base_switches.h"
 #include "base/command_line.h"
+#include "base/compiler_specific.h"
 #include "base/feature_list.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback_helpers.h"
@@ -163,7 +160,10 @@ const char* GetProcessLifetimeUmaName(gpu::GpuMode gpu_mode) {
     case gpu::GpuMode::HARDWARE_GRAPHITE:
     case gpu::GpuMode::HARDWARE_VULKAN:
       return kProcessLifetimeEventsHardwareAccelerated;
-    case gpu::GpuMode::SWIFTSHADER:
+    case gpu::GpuMode::SOFTWARE_GL:
+      // All software modes currently share the SwiftShader metric because we
+      // cant differentiate different software backends at this level (and
+      // probably don't want to).
       return kProcessLifetimeEventsSwiftShader;
     case gpu::GpuMode::DISPLAY_COMPOSITOR:
       return nullptr;
@@ -304,6 +304,7 @@ static const char* const kSwitchNames[] = {
     switches::kDisableExplicitDmaFences,
     switches::kOzoneDumpFile,
     switches::kEnableNativeGpuMemoryBuffers,
+    switches::kRenderNodeOverride,
 #endif
 #if BUILDFLAG(IS_LINUX)
     switches::kX11Display,
@@ -319,6 +320,8 @@ static const char* const kSwitchNames[] = {
     switches::kDisableAdpf,
 #endif
 #if BUILDFLAG(IS_CHROMEOS)
+    // TODO(crbug.com/371609830): Remove reven switch on experiment end.
+    ash::switches::kRevenBranding,
     switches::kSchedulerBoostUrgent,
 #endif
 #if BUILDFLAG(USE_CHROMEOS_MEDIA_ACCELERATION)
@@ -1297,11 +1300,16 @@ bool GpuProcessHost::LaunchGpuProcess() {
   cmd_line->CopySwitchesFrom(browser_command_line, kSwitchNames);
   cmd_line->CopySwitchesFrom(
       browser_command_line,
-      {switches::kGLSwitchesCopiedFromGpuProcessHost,
-       switches::kGLSwitchesCopiedFromGpuProcessHostNumSwitches});
+      UNSAFE_TODO({switches::kGLSwitchesCopiedFromGpuProcessHost,
+                   switches::kGLSwitchesCopiedFromGpuProcessHostNumSwitches}));
 
   if (browser_command_line.HasSwitch(switches::kDisableFrameRateLimit))
     cmd_line->AppendSwitch(switches::kDisableGpuVsync);
+
+  if (browser_command_line.HasSwitch(switches::kForceHighPerformanceGPU)) {
+    cmd_line->AppendSwitch(gpu::GpuDriverBugWorkaroundTypeToString(
+        gpu::FORCE_HIGH_PERFORMANCE_GPU));
+  }
 
   std::vector<const char*> gpu_workarounds;
   gpu::GpuDriverBugList::AppendAllWorkarounds(&gpu_workarounds);
@@ -1414,7 +1422,7 @@ void GpuProcessHost::RecordProcessCrash() {
   if (recent_crash_count_ >= GetFallbackCrashLimit() && !disable_crash_limit) {
     base::UmaHistogramEnumeration(kFallbackEventCause,
                                   GPUFallbackEventCauseType::kCrashLimit);
-    GpuDataManagerImpl::GetInstance()->FallBackToNextGpuMode();
+    GpuDataManagerImpl::GetInstance()->FallBackToNextGpuModeDueToCrash();
   }
 }
 

@@ -4,8 +4,6 @@
 
 #include "content/browser/preloading/prerender/prerender_features.h"
 
-#include "third_party/blink/public/common/features.h"
-
 namespace features {
 
 // Allows activation in background tab. For now, this is used only on web
@@ -43,25 +41,46 @@ const base::FeatureParam<size_t> kPrerender2FallbackBodySizeLimit{
     &kPrerender2FallbackPrefetchSpecRules, "kPrerender2FallbackBodySizeLimit",
     65536};
 
+const base::FeatureParam<bool>
+    kPrerender2FallbackPrefetchUseBlockUntilHeadTimetout{
+        &kPrerender2FallbackPrefetchSpecRules,
+        "kPrerender2FallbackPrefetchUseBlockUntilHeadTimetout", true};
+
+constexpr base::FeatureParam<Prerender2FallbackPrefetchSchedulerPolicy>::Option
+    kPrerender2FallbackPrefetchSchedulerPolicyOptios[] = {
+        {Prerender2FallbackPrefetchSchedulerPolicy::kNotUse, "NotUse"},
+        {Prerender2FallbackPrefetchSchedulerPolicy::kPrioritize, "Prioritize"},
+        {Prerender2FallbackPrefetchSchedulerPolicy::kBurst, "Burst"},
+};
+const base::FeatureParam<Prerender2FallbackPrefetchSchedulerPolicy>
+    kPrerender2FallbackPrefetchSchedulerPolicy{
+        &kPrerender2FallbackPrefetchSpecRules,
+        "kPrerender2FallbackPrefetchSchedulerPolicy",
+        Prerender2FallbackPrefetchSchedulerPolicy::kNotUse,
+        &kPrerender2FallbackPrefetchSchedulerPolicyOptios};
+
+BASE_FEATURE(kPrerender2NoVarySearch,
+             "Prerender2NoVarySearch",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+
 const base::FeatureParam<int>
     kPrerender2NoVarySearchWaitForHeadersTimeoutEagerPrerender{
-        &blink::features::kPrerender2NoVarySearch,
-        "wait_for_headers_timeout_eager_prerender", 1000};
+        &kPrerender2NoVarySearch, "wait_for_headers_timeout_eager_prerender",
+        1000};
 
 const base::FeatureParam<int>
     kPrerender2NoVarySearchWaitForHeadersTimeoutModeratePrerender{
-        &blink::features::kPrerender2NoVarySearch,
-        "wait_for_headers_timeout_moderate_prerender", 0};
+        &kPrerender2NoVarySearch, "wait_for_headers_timeout_moderate_prerender",
+        0};
 
 const base::FeatureParam<int>
     kPrerender2NoVarySearchWaitForHeadersTimeoutConservativePrerender{
-        &blink::features::kPrerender2NoVarySearch,
+        &kPrerender2NoVarySearch,
         "wait_for_headers_timeout_conservative_prerender", 0};
 
 const base::FeatureParam<int>
     kPrerender2NoVarySearchWaitForHeadersTimeoutForEmbedders{
-        &blink::features::kPrerender2NoVarySearch,
-        "wait_for_headers_timeout_embedders", 1000};
+        &kPrerender2NoVarySearch, "wait_for_headers_timeout_embedders", 1000};
 
 // If enabled, suppresses prerendering on slow network.
 BASE_FEATURE(kSuppressesPrerenderingOnSlowNetwork,

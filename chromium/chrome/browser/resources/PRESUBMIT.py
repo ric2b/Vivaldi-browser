@@ -86,7 +86,7 @@ def IsBoolean(new_content_lines, metric_name, input_api):
 
   html_element_re = r'<(.*?)(^|\s+)metric\s*=\s*"%s"(.*?)>' % (metric_name)
   type_re = (r'datatype\s*=\s*"boolean"|type\s*=\s*"checkbox"|'
-      'type\s*=\s*"radio".*?value\s*=\s*("true"|"false")')
+      r'type\s*=\s*"radio".*?value\s*=\s*("true"|"false")')
 
   match = input_api.re.search(html_element_re, new_content, input_api.re.DOTALL)
   return (match and
@@ -134,6 +134,9 @@ def CheckNoNewJs(input_api, output_api):
     'chrome/browser/resources/bluetooth_internals/',
     'chrome/browser/resources/chromeos/',
     'chrome/browser/resources/device_log/',
+    # TODO(crbug.com/403113291): Migrate incognito_navigation_blocked_page to
+    # TypeScript and remove exception.
+    'chrome/browser/resources/enterprise/incognito_navigation_blocked_page/',
     'chrome/browser/resources/gaia_auth_host/',
     'chrome/browser/resources/hangout_services/',
     'chrome/browser/resources/inspect/',

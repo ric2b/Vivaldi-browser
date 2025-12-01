@@ -21,6 +21,7 @@
 #include "ui/base/mojom/menu_source_type.mojom.h"
 #include "ui/events/event_utils.h"
 #include "ui/events/keycodes/dom/dom_code.h"
+#include "ui/gfx/native_widget_types.h"
 #include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/context_menu_controller.h"
 #include "ui/views/test/ax_event_counter.h"
@@ -283,7 +284,7 @@ TEST_F(RootViewTest, EventHandlersNotResetWhenReparented) {
   // Reparent the child within the hierarchy and expect that it's still the
   // mouse handler.
   View* other_parent = state.AddChildView(std::make_unique<View>());
-  other_parent->AddChildView(event_handler);
+  other_parent->AddChildViewRaw(event_handler);
   EXPECT_EQ(event_handler, root_view->gesture_handler_for_testing());
 }
 
@@ -358,11 +359,11 @@ TEST_F(RootViewTest, ContextMenuFromLongPress) {
 
   View* gesture_handling_child_view = new GestureHandlingView;
   gesture_handling_child_view->SetBoundsRect(gfx::Rect(10, 10));
-  parent_view->AddChildView(gesture_handling_child_view);
+  parent_view->AddChildViewRaw(gesture_handling_child_view);
 
   View* other_child_view = new View;
   other_child_view->SetBoundsRect(gfx::Rect(20, 0, 10, 10));
-  parent_view->AddChildView(other_child_view);
+  parent_view->AddChildViewRaw(other_child_view);
 
   // |parent_view| should not show a context menu as a result of a long press on
   // |gesture_handling_child_view|.
@@ -428,11 +429,11 @@ TEST_F(RootViewTest, ContextMenuFromLongPressOnDisabledView) {
 
   View* gesture_handling_child_view = new GestureHandlingView;
   gesture_handling_child_view->SetBoundsRect(gfx::Rect(10, 10));
-  parent_view->AddChildView(gesture_handling_child_view);
+  parent_view->AddChildViewRaw(gesture_handling_child_view);
 
   View* other_child_view = new View;
   other_child_view->SetBoundsRect(gfx::Rect(20, 0, 10, 10));
-  parent_view->AddChildView(other_child_view);
+  parent_view->AddChildViewRaw(other_child_view);
 
   // |parent_view| should not show a context menu as a result of a long press on
   // |gesture_handling_child_view|.
@@ -649,7 +650,7 @@ TEST_F(RootViewTest, RemoveViewOnMouseEnterDispatch) {
   // to prevent test memory leak.
   RemoveViewOnEvent child(ui::EventType::kMouseEntered);
 
-  content->AddChildView(&child);
+  content->AddChildViewRaw(&child);
 
   // Make |child| smaller than the containing Widget and RootView.
   child.SetBounds(100, 100, 100, 100);
@@ -865,7 +866,6 @@ TEST_F(RootViewTest, DeleteWidgetOnMouseExitDispatchFromChild) {
   EXPECT_FALSE(widget_deletion_observer.IsWidgetAlive());
 }
 
-namespace {
 class RootViewTestDialogDelegate : public DialogDelegateView {
  public:
   RootViewTestDialogDelegate() {
@@ -898,14 +898,13 @@ class RootViewTestDialogDelegate : public DialogDelegateView {
 
   int layout_count_ = 0;
 };
-}  // namespace
 
 // Ensure only one layout happens during Widget initialization, and ensure it
 // happens at the ContentView's preferred size.
 TEST_F(RootViewTest, SingleLayoutDuringInit) {
   RootViewTestDialogDelegate* delegate = new RootViewTestDialogDelegate();
-  Widget* widget =
-      DialogDelegate::CreateDialogWidget(delegate, GetContext(), nullptr);
+  Widget* widget = DialogDelegate::CreateDialogWidget(delegate, GetContext(),
+                                                      gfx::NativeView());
   EXPECT_EQ(1, delegate->layout_count());
   widget->CloseNow();
 }
@@ -915,8 +914,8 @@ using RootViewDesktopNativeWidgetTest = ViewsTestWithDesktopNativeWidget;
 // Also test Aura desktop Widget codepaths.
 TEST_F(RootViewDesktopNativeWidgetTest, SingleLayoutDuringInit) {
   RootViewTestDialogDelegate* delegate = new RootViewTestDialogDelegate();
-  Widget* widget =
-      DialogDelegate::CreateDialogWidget(delegate, GetContext(), nullptr);
+  Widget* widget = DialogDelegate::CreateDialogWidget(delegate, GetContext(),
+                                                      gfx::NativeView());
   EXPECT_EQ(1, delegate->layout_count());
   widget->CloseNow();
 }
@@ -1015,9 +1014,9 @@ TEST_F(RootViewTest, MouseEventDispatchedToClosestEnabledView) {
   v2->SetBoundsRect(gfx::Rect(0, 0, 10, 10));
   v3->SetBoundsRect(gfx::Rect(0, 0, 10, 10));
 
-  v1->set_handle_mode(EventCountView::CONSUME_EVENTS);
-  v2->set_handle_mode(EventCountView::CONSUME_EVENTS);
-  v3->set_handle_mode(EventCountView::CONSUME_EVENTS);
+  v1->set_handle_mode(EventCountView::HandleMode::kConsumeEvents);
+  v2->set_handle_mode(EventCountView::HandleMode::kConsumeEvents);
+  v3->set_handle_mode(EventCountView::HandleMode::kConsumeEvents);
 
   ui::MouseEvent pressed_event(ui::EventType::kMousePressed, gfx::Point(5, 5),
                                gfx::Point(5, 5), ui::EventTimeForNow(), 0, 0);
@@ -1066,19 +1065,19 @@ TEST_F(RootViewTest, DoubleClickHandledIffFirstClickHandled) {
                                 gfx::Point(5, 5), ui::EventTimeForNow(), 0, 0);
 
   // First click handled, second click unhandled.
-  v1->set_handle_mode(EventCountView::CONSUME_EVENTS);
+  v1->set_handle_mode(EventCountView::HandleMode::kConsumeEvents);
   pressed_event.SetClickCount(1);
   released_event.SetClickCount(1);
   EXPECT_TRUE(root_view->OnMousePressed(pressed_event));
   root_view->OnMouseReleased(released_event);
-  v1->set_handle_mode(EventCountView::PROPAGATE_EVENTS);
+  v1->set_handle_mode(EventCountView::HandleMode::kPropagateEvents);
   pressed_event.SetClickCount(2);
   released_event.SetClickCount(2);
   EXPECT_TRUE(root_view->OnMousePressed(pressed_event));
   root_view->OnMouseReleased(released_event);
 
   // Both clicks unhandled.
-  v1->set_handle_mode(EventCountView::PROPAGATE_EVENTS);
+  v1->set_handle_mode(EventCountView::HandleMode::kPropagateEvents);
   pressed_event.SetClickCount(1);
   released_event.SetClickCount(1);
   EXPECT_FALSE(root_view->OnMousePressed(pressed_event));
@@ -1135,7 +1134,7 @@ TEST_F(RootViewTest, AccessibleNameChangeEvent) {
       ::features::kBlockRootWindowAccessibleNameChangeEvent};
 #endif
 
-  views::test::AXEventCounter counter(views::AXEventManager::Get());
+  views::test::AXEventCounter counter(views::AXUpdateNotifier::Get());
 
   state.widget()->widget_delegate()->SetTitle(u"Sample Title");
 #if BUILDFLAG(IS_MAC)

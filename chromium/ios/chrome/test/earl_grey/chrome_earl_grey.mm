@@ -945,6 +945,13 @@ id<GREYAction> grey_longPressWithDuration(base::TimeDelta duration) {
                                          visitTimestamp:visitTimestamp];
 }
 
+- (void)setHistoryServiceTitle:(const std::string_view&)title
+                       forPage:(const GURL&)URL {
+  NSString* spec = base::SysUTF8ToNSString(URL.spec());
+  NSString* stringTitle = [NSString stringWithUTF8String:title.data()];
+  [ChromeEarlGreyAppInterface setHistoryServiceTitle:stringTitle forPage:spec];
+}
+
 - (void)deleteHistoryServiceTypedURL:(const GURL&)URL {
   NSString* spec = base::SysUTF8ToNSString(URL.spec());
   [ChromeEarlGreyAppInterface deleteHistoryServiceTypedURL:spec];
@@ -979,13 +986,6 @@ id<GREYAction> grey_longPressWithDuration(base::TimeDelta duration) {
   NSString* GUID = base::SysUTF8ToNSString(UTF8GUID);
   [ChromeEarlGreyAppInterface
       deleteAutofillProfileFromFakeSyncServerWithGUID:GUID];
-}
-
-- (void)waitForSyncFeatureEnabled:(BOOL)isEnabled
-                      syncTimeout:(base::TimeDelta)timeout {
-  EG_TEST_HELPER_ASSERT_NO_ERROR([ChromeEarlGreyAppInterface
-      waitForSyncFeatureEnabled:isEnabled
-                    syncTimeout:timeout]);
 }
 
 - (void)waitForSyncTransportStateActiveWithTimeout:(base::TimeDelta)timeout {
@@ -1370,6 +1370,10 @@ id<GREYAction> grey_longPressWithDuration(base::TimeDelta duration) {
 
 - (BOOL)isUKMEnabled {
   return [ChromeEarlGreyAppInterface isUKMEnabled];
+}
+
+- (BOOL)isDWAEnabled {
+  return [ChromeEarlGreyAppInterface isDWAEnabled];
 }
 
 - (BOOL)isTestFeatureEnabled {

@@ -7,6 +7,7 @@
 
 #include <map>
 #include <optional>
+#include <ostream>
 
 #include "content/common/content_export.h"
 #include "third_party/blink/public/common/messaging/cloneable_message.h"
@@ -32,24 +33,42 @@ class CONTENT_EXPORT SharedStorageEventParams {
     SharedStorageUrlSpecWithMetadata& operator=(
         const SharedStorageUrlSpecWithMetadata&);
     bool operator==(const SharedStorageUrlSpecWithMetadata&) const;
+    friend std::ostream& operator<<(
+        std::ostream& os,
+        const SharedStorageUrlSpecWithMetadata& url_with_metadata);
   };
 
   static SharedStorageEventParams CreateForAddModule(
-      const GURL& script_source_url);
-
+      const GURL& script_source_url,
+      int worklet_id);
+  static SharedStorageEventParams CreateForCreateWorklet(
+      const GURL& script_source_url,
+      const std::string& data_origin,
+      int worklet_id);
   static SharedStorageEventParams CreateForRun(
       const std::string& operation_name,
-      const blink::CloneableMessage& serialized_data);
+      const blink::CloneableMessage& serialized_data,
+      int worklet_id);
   static SharedStorageEventParams CreateForSelectURL(
       const std::string& operation_name,
       const blink::CloneableMessage& serialized_data,
-      std::vector<SharedStorageUrlSpecWithMetadata> urls_with_metadata);
-  static SharedStorageEventParams CreateForSet(const std::string& key,
-                                               const std::string& value,
-                                               bool ignore_if_present);
-  static SharedStorageEventParams CreateForAppend(const std::string& key,
-                                                  const std::string& value);
-  static SharedStorageEventParams CreateForGetOrDelete(const std::string& key);
+      std::vector<SharedStorageUrlSpecWithMetadata> urls_with_metadata,
+      int worklet_id);
+
+  static SharedStorageEventParams CreateForSet(
+      const std::string& key,
+      const std::string& value,
+      bool ignore_if_present,
+      std::optional<int> worklet_id = std::nullopt);
+  static SharedStorageEventParams CreateForAppend(
+      const std::string& key,
+      const std::string& value,
+      std::optional<int> worklet_id = std::nullopt);
+  static SharedStorageEventParams CreateForGetOrDelete(
+      const std::string& key,
+      std::optional<int> worklet_id = std::nullopt);
+
+  static SharedStorageEventParams CreateWithWorkletId(int worklet_id);
   static SharedStorageEventParams CreateDefault();
 
   SharedStorageEventParams(const SharedStorageEventParams&);
@@ -57,6 +76,7 @@ class CONTENT_EXPORT SharedStorageEventParams {
   SharedStorageEventParams& operator=(const SharedStorageEventParams&);
 
   std::optional<std::string> script_source_url;
+  std::optional<std::string> data_origin;
   std::optional<std::string> operation_name;
   std::optional<std::string> serialized_data;
   std::optional<std::vector<SharedStorageUrlSpecWithMetadata>>
@@ -64,19 +84,46 @@ class CONTENT_EXPORT SharedStorageEventParams {
   std::optional<std::string> key;
   std::optional<std::string> value;
   std::optional<bool> ignore_if_present;
+  std::optional<int> worklet_id;
 
  private:
   SharedStorageEventParams();
   SharedStorageEventParams(
       std::optional<std::string> script_source_url,
+      std::optional<std::string> data_origin,
       std::optional<std::string> operation_name,
       std::optional<std::string> serialized_data,
       std::optional<std::vector<SharedStorageUrlSpecWithMetadata>>
           urls_with_metadata,
       std::optional<std::string> key,
       std::optional<std::string> value,
-      std::optional<bool> ignore_if_present);
+      std::optional<bool> ignore_if_present,
+      std::optional<int> worklet_id);
+
+  static SharedStorageEventParams CreateForWorkletCreation(
+      const GURL& script_source_url,
+      std::optional<std::string> data_origin,
+      int worklet_id);
+
+  static SharedStorageEventParams CreateForWorkletOperation(
+      const std::string& operation_name,
+      const blink::CloneableMessage& serialized_data,
+      std::optional<std::vector<SharedStorageUrlSpecWithMetadata>>
+          urls_with_metadata,
+      int worklet_id);
+
+  static SharedStorageEventParams CreateForModifierMethod(
+      std::optional<std::string> key,
+      std::optional<std::string> value,
+      std::optional<bool> ignore_if_present,
+      std::optional<int> worklet_id);
 };
+
+CONTENT_EXPORT bool operator==(const SharedStorageEventParams& lhs,
+                               const SharedStorageEventParams& rhs);
+
+CONTENT_EXPORT std::ostream& operator<<(std::ostream& os,
+                                        const SharedStorageEventParams& params);
 
 }  // namespace content
 

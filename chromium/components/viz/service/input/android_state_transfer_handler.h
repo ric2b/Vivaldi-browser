@@ -18,6 +18,11 @@
 
 namespace viz {
 
+class AndroidStateTransferHandlerClient {
+ public:
+  virtual bool TransferInputBackToBrowser() = 0;
+};
+
 // AndroidStateTransferHandler listens to input events coming from Android
 // platform and receives |TouchTransferState| coming from Browser. Input events
 // are queued until state for corresponding touch sequence is received from
@@ -26,10 +31,14 @@ namespace viz {
 class VIZ_SERVICE_EXPORT AndroidStateTransferHandler
     : public input::AndroidInputCallbackClient {
  public:
-  AndroidStateTransferHandler();
+  explicit AndroidStateTransferHandler(
+      AndroidStateTransferHandlerClient& client);
   ~AndroidStateTransferHandler();
 
-  // AndroidInputCallbackClient implementation.
+  // `root_frame_sink_id` could be invalid. In cases when root frame sink is
+  // destroyed and there was an ongoing touch sequence, OS may send a few events
+  // before a touch cancel is sent for the ongoing touch sequence -
+  // https://crbug.com/388478270#comment2 for more context.
   bool OnMotionEvent(base::android::ScopedInputEvent input_event,
                      const FrameSinkId& root_frame_sink_id) override;
 
@@ -41,6 +50,9 @@ class VIZ_SERVICE_EXPORT AndroidStateTransferHandler
       base::WeakPtr<RenderInputRouterSupportAndroidInterface> rir_support);
 
   size_t GetEventsBufferSizeForTesting() const { return events_buffer_.size(); }
+  size_t GetPendingTransferredStatesSizeForTesting() const {
+    return pending_transferred_states_.size();
+  }
 
   static constexpr const char* kPendingTransfersHistogramNonNull =
       "Android.InputOnViz.Viz.PendingStateTransfers.NonNullCurrentState";
@@ -56,9 +68,6 @@ class VIZ_SERVICE_EXPORT AndroidStateTransferHandler
       const input::mojom::TouchTransferStatePtr& state);
   void EmitPendingTransfersHistogram();
   void ValidateRootFrameSinkId(const FrameSinkId& root_frame_sink_id);
-
-  // We currently only support a single active root frame sink.
-  FrameSinkId active_root_frame_sink_id_;
 
   bool ignore_remaining_touch_sequence_ = false;
 
@@ -84,6 +93,8 @@ class VIZ_SERVICE_EXPORT AndroidStateTransferHandler
   // Stores input events until we have received state from Browser for the
   // currently transferred touch sequence.
   base::queue<base::android::ScopedInputEvent> events_buffer_;
+
+  const raw_ref<AndroidStateTransferHandlerClient> client_;
 };
 
 }  // namespace viz

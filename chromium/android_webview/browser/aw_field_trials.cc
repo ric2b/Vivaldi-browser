@@ -32,12 +32,6 @@
 
 namespace internal {
 
-// Duplicated from content/browser/file_system_access/features.cc to allow
-// WebView-only override.
-BASE_FEATURE(kFileSystemAccessDirectoryIterationBlocklistCheck,
-             "FileSystemAccessDirectoryIterationBlocklistCheck",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
 AwFeatureOverrides::AwFeatureOverrides(base::FeatureList& feature_list)
     : feature_list_(feature_list) {}
 
@@ -96,8 +90,6 @@ void AwFieldTrials::RegisterFeatureOverrides(base::FeatureList* feature_list) {
   }
   internal::AwFeatureOverrides aw_feature_overrides(*feature_list);
 
-  aw_feature_overrides.EnableFeature(::features::kWebViewFrameRateHints);
-
   // Disable third-party storage partitioning on WebView.
   aw_feature_overrides.DisableFeature(
       net::features::kThirdPartyStoragePartitioning);
@@ -131,7 +123,7 @@ void AwFieldTrials::RegisterFeatureOverrides(base::FeatureList* feature_list) {
       blink::features::kLowLatencyWebGLImageChromium);
 
   // Disable Shared Storage on WebView.
-  aw_feature_overrides.DisableFeature(blink::features::kSharedStorageAPI);
+  aw_feature_overrides.DisableFeature(network::features::kSharedStorageAPI);
 
   // Disable scrollbar-color on WebView.
   aw_feature_overrides.DisableFeature(blink::features::kScrollbarColor);
@@ -200,6 +192,9 @@ void AwFieldTrials::RegisterFeatureOverrides(base::FeatureList* feature_list) {
 
   // TODO(crbug.com/41441927): WebUSB is not yet supported on WebView.
   aw_feature_overrides.DisableFeature(::features::kWebUsb);
+
+  // Disable Web Serial API on WebView.
+  aw_feature_overrides.DisableFeature(blink::features::kWebSerialAPI);
 
   // Disable TFLite based language detection on webview until webview supports
   // ML model delivery via Optimization Guide component.
@@ -306,13 +301,19 @@ void AwFieldTrials::RegisterFeatureOverrides(base::FeatureList* feature_list) {
       base::features::kPartitionAllocMemoryTagging);
 
   // Disable Topics on WebView.
-  aw_feature_overrides.DisableFeature(blink::features::kBrowsingTopics);
+  aw_feature_overrides.DisableFeature(network::features::kBrowsingTopics);
 
   // Sharing ANGLE's Vulkan queue is not supported on WebView.
   aw_feature_overrides.DisableFeature(::features::kVulkanFromANGLE);
 
-  // Temporarily turn off kFileSystemAccessDirectoryIterationBlocklistCheck for
-  // a kill switch. https://crbug.com/393606977
+  // Viz has no internal differentiation for WebView. We will roll out these
+  // combined features separately.
   aw_feature_overrides.DisableFeature(
-      internal::kFileSystemAccessDirectoryIterationBlocklistCheck);
+      ::features::kDrawImmediatelyWhenInteractive);
+  aw_feature_overrides.DisableFeature(
+      ::features::kAckOnSurfaceActivationWhenInteractive);
+
+  // Partitioned :visited links history is not supported on WebView.
+  aw_feature_overrides.DisableFeature(
+      blink::features::kPartitionVisitedLinkDatabaseWithSelfLinks);
 }

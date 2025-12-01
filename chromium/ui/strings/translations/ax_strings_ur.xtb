@@ -66,7 +66,6 @@
 <translation id="3670698553867754311">ہفتہ کا منتخب کنندہ</translation>
 <translation id="3706100364254443312">سوئچ کریں</translation>
 <translation id="3808586225841795776">اصطلاح</translation>
-<translation id="3914173277599553213">مطلوب</translation>
 <translation id="3920932319529768807">اختتامیہ</translation>
 <translation id="3924558731517983934">ایپلیکیشن</translation>
 <translation id="3944740393230681990">تمہید</translation>
@@ -87,6 +86,7 @@
 <translation id="4661075872484491155">ٹری</translation>
 <translation id="4668956016107839909">ضمیمہ</translation>
 <translation id="4698212723196775569">کوڈ</translation>
+<translation id="4710792130811321440">آڈیو ٹریک کے انتخاب کا مینیو دکھائيں</translation>
 <translation id="4742539557769756338">سر ورق</translation>
 <translation id="4748357248530471599">ڈسپلے کٹ آؤٹ فل اسکرین ٹوگل کریں</translation>
 <translation id="4757246831282535685">ٹیب پینل</translation>
@@ -167,6 +167,7 @@
 <translation id="6845533974506654842">دبائیں</translation>
 <translation id="6885760532393684712">ڈائریکٹری</translation>
 <translation id="689129560213475294">خاتمہ کتاب</translation>
+<translation id="6919089238568236262">ویڈیو ٹریک کے انتخاب کا مینیو دکھائیں</translation>
 <translation id="6934078000481955284">بلاک کوٹ</translation>
 <translation id="693476918119313863">ہیڈر</translation>
 <translation id="6941933287844615239">میڈیا ڈاؤن لوڈ کریں</translation>

@@ -209,30 +209,46 @@ void TabStripPageHandler::NotifyContextMenuClosed() {
 // TabStripModelObserver:
 void TabStripPageHandler::OnTabGroupChanged(const TabGroupChange& change) {
   TRACE_EVENT0("browser", "TabStripPageHandler:OnTabGroupChanged");
-  switch (change.type) {
-    case TabGroupChange::kCreated:
-    case TabGroupChange::kEditorOpened:
-    case TabGroupChange::kContentsChanged: {
-      // TabGroupChange::kCreated events are unnecessary as the front-end will
-      // assume a group was created if there is a tab-group-state-changed event
-      // with a new group ID. TabGroupChange::kContentsChanged events are
-      // handled by TabGroupStateChanged.
-      break;
-    }
+  DCHECK(browser_->tab_strip_model()->SupportsTabGroups());
+  TabGroupModel* group_model = browser_->tab_strip_model()->group_model();
 
-    case TabGroupChange::kVisualsChanged: {
-      TabGroupModel* group_model = browser_->tab_strip_model()->group_model();
-      if (group_model) {
+  if (!group_model) {
+    return;
+  }
+
+  switch (change.type) {
+    case TabGroupChange::kCreated: {
+      if (change.GetCreateChange()->reason() ==
+          TabGroupChange::TabGroupCreationReason::
+              kInsertedFromAnotherTabstrip) {
+        // Set the group information of all the tabs and create group webUI
+        // object.
+        for (tabs::TabInterface* tab :
+             change.GetCreateChange()->GetDetachedTabs()) {
+          const SessionID::id_type tab_id =
+              extensions::ExtensionTabUtil::GetTabId(tab->GetContents());
+          page_->TabGroupStateChanged(tab_id, change.model->GetIndexOfTab(tab),
+                                      change.group.ToString());
+        }
+
+        // Notify webUI of initial visual information.
         page_->TabGroupVisualsChanged(
             change.group.ToString(),
             GetTabGroupData(group_model->GetTabGroup(change.group)));
       }
       break;
     }
+    case TabGroupChange::kEditorOpened:
+      break;
+    case TabGroupChange::kVisualsChanged: {
+        page_->TabGroupVisualsChanged(
+            change.group.ToString(),
+            GetTabGroupData(group_model->GetTabGroup(change.group)));
+      break;
+    }
 
     case TabGroupChange::kMoved: {
       DCHECK(browser_->tab_strip_model()->SupportsTabGroups());
-      TabGroupModel* group_model = browser_->tab_strip_model()->group_model();
       const int start_tab =
           group_model->GetTabGroup(change.group)->ListTabs().start();
       page_->TabGroupMoved(change.group.ToString(), start_tab);
@@ -248,14 +264,16 @@ void TabStripPageHandler::OnTabGroupChanged(const TabGroupChange& change) {
 }
 
 void TabStripPageHandler::TabGroupedStateChanged(
-    std::optional<tab_groups::TabGroupId> group,
+    TabStripModel* tab_strip_model,
+    std::optional<tab_groups::TabGroupId> old_group,
+    std::optional<tab_groups::TabGroupId> new_group,
     tabs::TabInterface* tab,
     int index) {
   TRACE_EVENT0("browser", "TabStripPageHandler:TabGroupedStateChanged");
   const SessionID::id_type tab_id =
       extensions::ExtensionTabUtil::GetTabId(tab->GetContents());
-  if (group.has_value()) {
-    page_->TabGroupStateChanged(tab_id, index, group.value().ToString());
+  if (new_group.has_value()) {
+    page_->TabGroupStateChanged(tab_id, index, new_group.value().ToString());
   } else {
     page_->TabGroupStateChanged(tab_id, index, std::optional<std::string>());
   }
@@ -645,38 +663,8 @@ void TabStripPageHandler::MoveGroup(const std::string& group_id_string,
     return;
   }
 
-  MaybePauseTrackingSavedTabGroup(source_browser, group_id.value());
   tab_strip_ui::MoveGroupAcrossWindows(source_browser, target_browser, to_index,
                                        group_id.value());
-  MaybeResumeTrackingSavedTabGroup(target_browser);
-}
-
-void TabStripPageHandler::MaybePauseTrackingSavedTabGroup(
-    Browser* browser,
-    const tab_groups::TabGroupId& group_id) {
-  tab_groups::TabGroupSyncService* tab_group_service =
-      tab_groups::SavedTabGroupUtils::GetServiceForProfile(browser->profile());
-
-  if (!tab_group_service || !tab_group_service->GetGroup(group_id)) {
-    return;
-  }
-
-  observation_pauser_ = tab_group_service->CreateScopedLocalObserverPauser();
-}
-
-void TabStripPageHandler::MaybeResumeTrackingSavedTabGroup(Browser* browser) {
-  if (!observation_pauser_) {
-    return;
-  }
-
-  tab_groups::TabGroupSyncService* tab_group_service =
-      tab_groups::SavedTabGroupUtils::GetServiceForProfile(browser->profile());
-
-  if (!tab_group_service) {
-    return;
-  }
-
-  observation_pauser_.reset();
 }
 
 void TabStripPageHandler::MoveTab(int32_t tab_id, int32_t to_index) {

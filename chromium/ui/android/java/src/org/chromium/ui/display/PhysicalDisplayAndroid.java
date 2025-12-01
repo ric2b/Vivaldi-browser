@@ -22,10 +22,11 @@ import android.view.WindowInsets;
 import android.view.WindowManager;
 
 import androidx.annotation.RequiresApi;
+import androidx.core.os.BuildCompat;
 
-import org.chromium.base.BuildInfo;
 import org.chromium.base.CommandLine;
 import org.chromium.base.ContextUtils;
+import org.chromium.base.DeviceInfo;
 import org.chromium.base.Log;
 import org.chromium.base.StrictModeContext;
 import org.chromium.base.ThreadUtils;
@@ -161,7 +162,9 @@ import java.util.function.Consumer;
         if (USE_CONFIGURATION) {
             Context appContext = ContextUtils.getApplicationContext();
             // `createWindowContext` on some devices writes to disk. See crbug.com/1408587.
-            try (StrictModeContext ignored = StrictModeContext.allowAllThreadPolicies()) {
+            try (@SuppressWarnings("unused")
+                    StrictModeContext strictModeContext =
+                            StrictModeContext.allowAllThreadPolicies()) {
                 mWindowContext =
                         appContext.createWindowContext(
                                 display, WindowManager.LayoutParams.TYPE_APPLICATION, null);
@@ -219,7 +222,7 @@ import java.util.function.Consumer;
 
         DisplayMetrics displayMetrics = mWindowContext.getResources().getDisplayMetrics();
 
-        if (BuildInfo.getInstance().isAutomotive
+        if (DeviceInfo.isAutomotive()
                 && CommandLine.getInstance()
                         .hasSwitch(DisplaySwitches.AUTOMOTIVE_WEB_UI_SCALE_UP_ENABLED)) {
             mDisplay.getRealMetrics(displayMetrics);
@@ -240,8 +243,7 @@ import java.util.function.Consumer;
                 mWindowContext.getDisplay());
     }
 
-    /* package */
-    void onDisplayRemoved() {
+    /* package */ void onDisplayRemoved() {
         if (USE_CONFIGURATION) {
             assumeNonNull(mWindowContext);
             assumeNonNull(mComponentCallbacks);
@@ -267,7 +269,7 @@ import java.util.function.Consumer;
         display.getRealSize(size);
         display.getRealMetrics(displayMetrics);
 
-        if (BuildInfo.getInstance().isAutomotive
+        if (DeviceInfo.isAutomotive()
                 && CommandLine.getInstance()
                         .hasSwitch(DisplaySwitches.AUTOMOTIVE_WEB_UI_SCALE_UP_ENABLED)) {
             DisplayUtil.scaleUpDisplayMetricsForAutomotive(
@@ -307,7 +309,8 @@ import java.util.function.Consumer;
                 /* supportedModes= */ null,
                 isHdr(mDisplay),
                 getHdrSdrRatio(mDisplay),
-                /* isInternal= */ null);
+                /* isInternal= */ null,
+                /* arrInfo= */ null);
     }
 
     private void updateCommon(
@@ -346,6 +349,26 @@ import java.util.function.Consumer;
             }
         }
 
+        AdaptiveRefreshRateInfo arrInfo = null;
+        if (BuildCompat.isAtLeastB()) {
+            boolean hasArrSupport = display.hasArrSupport();
+            float suggestedFrameRateNormal = 0.0f;
+            float suggestedFrameRateHigh = 0.0f;
+            float[] supportedFrameRates = null;
+            if (hasArrSupport) {
+                suggestedFrameRateNormal =
+                        display.getSuggestedFrameRate(Display.FRAME_RATE_CATEGORY_NORMAL);
+                suggestedFrameRateHigh =
+                        display.getSuggestedFrameRate(Display.FRAME_RATE_CATEGORY_HIGH);
+                supportedFrameRates = display.getSupportedRefreshRates();
+            }
+            arrInfo =
+                    new AdaptiveRefreshRateInfo(
+                            hasArrSupport,
+                            suggestedFrameRateNormal,
+                            suggestedFrameRateHigh,
+                            supportedFrameRates);
+        }
         super.update(
                 display.getName(),
                 bounds,
@@ -363,6 +386,7 @@ import java.util.function.Consumer;
                 supportedModes,
                 isHdr(display),
                 getHdrSdrRatio(display),
-                isInternal);
+                isInternal,
+                arrInfo);
     }
 }

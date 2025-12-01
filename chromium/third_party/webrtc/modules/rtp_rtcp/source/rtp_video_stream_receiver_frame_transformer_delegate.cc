@@ -10,6 +10,7 @@
 
 #include "modules/rtp_rtcp/source/rtp_video_stream_receiver_frame_transformer_delegate.h"
 
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -83,6 +84,32 @@ class TransformableVideoReceiverFrame
     return mime_type + CodecTypeToPayloadString(frame_->codec_type());
   }
 
+  std::optional<Timestamp> ReceiveTime() const override {
+    return frame_->ReceivedTimestamp();
+  }
+
+  std::optional<Timestamp> CaptureTime() const override {
+    if (auto& absolute_capture_time =
+            frame_->GetRtpVideoHeader().absolute_capture_time) {
+      if (absolute_capture_time->absolute_capture_timestamp) {
+        return Timestamp::Micros(UQ32x32ToInt64Us(
+            absolute_capture_time->absolute_capture_timestamp));
+      }
+    }
+    return std::nullopt;
+  }
+
+  std::optional<TimeDelta> SenderCaptureTimeOffset() const override {
+    if (auto& absolute_capture_time =
+            frame_->GetRtpVideoHeader().absolute_capture_time) {
+      if (absolute_capture_time->estimated_capture_clock_offset) {
+        return TimeDelta::Micros(Q32x32ToInt64Us(
+            *absolute_capture_time->estimated_capture_clock_offset));
+      }
+    }
+    return std::nullopt;
+  }
+
   const RtpVideoFrameReceiver* Receiver() { return receiver_; }
 
  private:
@@ -96,7 +123,7 @@ RtpVideoStreamReceiverFrameTransformerDelegate::
         RtpVideoFrameReceiver* receiver,
         Clock* clock,
         rtc::scoped_refptr<FrameTransformerInterface> frame_transformer,
-        rtc::Thread* network_thread,
+        Thread* network_thread,
         uint32_t ssrc)
     : receiver_(receiver),
       frame_transformer_(std::move(frame_transformer)),

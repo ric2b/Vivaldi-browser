@@ -132,6 +132,8 @@ class NearbyShareCertificateManagerImplTest
     // Set default device data.
     local_device_data_manager_->SetDeviceName(
         GetNearbyShareTestMetadata().device_name());
+    // Disable Identity API.
+    local_device_data_manager_->SetUsingIdentityRpc(false);
     SetBluetoothMacAddress(kTestUnparsedBluetoothMacAddress);
     SetMockBluetoothAddress(kTestUnparsedBluetoothMacAddress);
 
@@ -173,7 +175,6 @@ class NearbyShareCertificateManagerImplTest
     cert_manager_->RemoveObserver(this);
     NearbyShareSchedulerFactory::SetFactoryForTesting(nullptr);
     NearbyShareCertificateStorageImpl::Factory::SetFactoryForTesting(nullptr);
-    NearbyFlags::GetInstance().ResetOverridedValues();
   }
 
   void SetBluetoothMacAddress(absl::string_view bluetooth_mac_address) {
@@ -289,7 +290,7 @@ class NearbyShareCertificateManagerImplTest
               std::max(max_not_after_self_share, cert.not_after());
           break;
         default:
-          NL_DCHECK(false);
+          DCHECK(false);
           break;
       }
 
@@ -775,18 +776,16 @@ TEST_F(NearbyShareCertificateManagerImplTest,
 }
 
 TEST_F(NearbyShareCertificateManagerImplTest, QuerySharedCredentialsSuccess) {
-  NearbyFlags::GetInstance().OverrideBoolFlagValue(
-      config_package_nearby::nearby_sharing_feature::kCallNearbyIdentityApi,
-      true);
+  // Enable Identity API.
+  local_device_data_manager_->SetUsingIdentityRpc(true);
   ASSERT_NO_FATAL_FAILURE(QuerySharedCredentialsFlow(
       /*num_pages=*/2, DownloadPublicCertificatesResult::kSuccess));
 }
 
 TEST_F(NearbyShareCertificateManagerImplTest,
        QuerySharedCredentialsRPCFailure) {
-  NearbyFlags::GetInstance().OverrideBoolFlagValue(
-      config_package_nearby::nearby_sharing_feature::kCallNearbyIdentityApi,
-      true);
+  // Enable Identity API.
+  local_device_data_manager_->SetUsingIdentityRpc(true);
   ASSERT_NO_FATAL_FAILURE(QuerySharedCredentialsFlow(
       /*num_pages=*/2, DownloadPublicCertificatesResult::kHttpError));
 }
@@ -824,9 +823,8 @@ TEST_F(NearbyShareCertificateManagerImplTest,
 
 TEST_F(NearbyShareCertificateManagerImplTest,
        RefreshPrivateCertificates_PublishDevice_NoCertificates_UploadSuccess) {
-  NearbyFlags::GetInstance().OverrideBoolFlagValue(
-      config_package_nearby::nearby_sharing_feature::kCallNearbyIdentityApi,
-      true);
+  // Enable Identity API.
+  local_device_data_manager_->SetUsingIdentityRpc(true);
   cert_store_->ReplacePrivateCertificates({});
 
   HandlePrivateCertificateRefresh(/*expect_private_cert_refresh=*/true,
@@ -837,9 +835,8 @@ TEST_F(NearbyShareCertificateManagerImplTest,
 
 TEST_F(NearbyShareCertificateManagerImplTest,
        RefreshPrivateCertificates_PublishDevice_ForceUploadSuccess) {
-  NearbyFlags::GetInstance().OverrideBoolFlagValue(
-      config_package_nearby::nearby_sharing_feature::kCallNearbyIdentityApi,
-      true);
+  // Enable Identity API.
+  local_device_data_manager_->SetUsingIdentityRpc(true);
   // All private certificates are valid.
   cert_store_->ReplacePrivateCertificates(private_certificates_);
   cert_manager_->PrivateCertificateRefresh(/*force_upload=*/true);
@@ -858,9 +855,8 @@ TEST_F(NearbyShareCertificateManagerImplTest,
 
 TEST_F(NearbyShareCertificateManagerImplTest,
        RefreshPrivateCertificates_NotLoggedIn_DoesNotCallPublishDevice) {
-  NearbyFlags::GetInstance().OverrideBoolFlagValue(
-      config_package_nearby::nearby_sharing_feature::kCallNearbyIdentityApi,
-      true);
+  // Enable Identity API.
+  local_device_data_manager_->SetUsingIdentityRpc(true);
   fake_account_manager_.SetAccount(std::nullopt);
   // All private certificates are valid.
   cert_store_->ReplacePrivateCertificates({});
@@ -1047,6 +1043,26 @@ TEST_F(NearbyShareCertificateManagerImplTest,
 
   EXPECT_EQ(public_cert_exp_scheduler_->handled_results().size(), 1u);
   EXPECT_FALSE(public_cert_exp_scheduler_->handled_results().back());
+}
+
+TEST_F(
+    NearbyShareCertificateManagerImplTest,
+    RefreshPrivateCertificates_NotLoggedIn_DisablesPrivateCertExpirationTimer) {
+  // Enable Identity API.
+  local_device_data_manager_->SetUsingIdentityRpc(true);
+  fake_account_manager_.SetAccount(std::nullopt);
+  // All private certificates are valid.
+  cert_store_->ReplacePrivateCertificates({});
+  cert_manager_->PrivateCertificateRefresh(/*force_upload=*/true);
+  Sync();
+
+  std::optional<absl::Time> next_schedule_time =
+      scheduler_factory_.pref_name_to_expiration_instance()
+          .find(prefs::kNearbySharingSchedulerPrivateCertificateExpirationName)
+          ->second.expiration_time_functor();
+
+  // Next expiration time is set to nullopt to disable the timer.
+  EXPECT_FALSE(next_schedule_time.has_value());
 }
 
 }  // namespace sharing

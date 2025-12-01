@@ -19,6 +19,7 @@ import android.app.Instrumentation.ActivityMonitor;
 import android.app.PendingIntent;
 import android.view.KeyEvent;
 
+import androidx.core.content.ContextCompat;
 import androidx.test.filters.MediumTest;
 import androidx.test.filters.SmallTest;
 import androidx.test.platform.app.InstrumentationRegistry;
@@ -31,7 +32,6 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.Mock;
-import org.mockito.MockitoAnnotations;
 import org.mockito.junit.MockitoJUnit;
 import org.mockito.junit.MockitoRule;
 
@@ -52,6 +52,7 @@ import org.chromium.chrome.browser.customtabs.CustomTabActivityTestRule;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.locale.LocaleManager;
 import org.chromium.chrome.browser.locale.LocaleManagerDelegate;
+import org.chromium.chrome.browser.night_mode.ChromeNightModeTestUtils;
 import org.chromium.chrome.browser.omnibox.LocationBarCoordinator;
 import org.chromium.chrome.browser.omnibox.UrlBar;
 import org.chromium.chrome.browser.omnibox.suggestions.AutocompleteController;
@@ -63,6 +64,7 @@ import org.chromium.chrome.browser.search_engines.SearchEnginePromoType;
 import org.chromium.chrome.browser.search_engines.TemplateUrlServiceFactory;
 import org.chromium.chrome.browser.searchwidget.SearchActivity.SearchActivityDelegate;
 import org.chromium.chrome.browser.tab.Tab;
+import org.chromium.chrome.browser.ui.edge_to_edge.EdgeToEdgeUtils;
 import org.chromium.chrome.browser.ui.searchactivityutils.SearchActivityExtras.IntentOrigin;
 import org.chromium.chrome.browser.ui.searchactivityutils.SearchActivityExtras.ResolutionType;
 import org.chromium.chrome.browser.ui.searchactivityutils.SearchActivityExtras.SearchType;
@@ -71,6 +73,7 @@ import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
 import org.chromium.chrome.test.R;
 import org.chromium.chrome.test.util.ActivityTestUtils;
 import org.chromium.chrome.test.util.OmniboxTestUtils;
+import org.chromium.components.browser_ui.edge_to_edge.EdgeToEdgeSystemBarColorHelper;
 import org.chromium.components.embedder_support.util.UrlConstants;
 import org.chromium.components.metrics.OmniboxEventProtos.OmniboxEventProto.PageClassification;
 import org.chromium.components.omnibox.AutocompleteMatch;
@@ -184,7 +187,6 @@ public class SearchActivityTest {
 
     @Before
     public void setUp() {
-        MockitoAnnotations.initMocks(this);
         doReturn(true).when(mHandler).isVoiceSearchEnabled();
 
         AutocompleteControllerJni.setInstanceForTesting(mAutocompleteControllerJniMock);
@@ -209,6 +211,8 @@ public class SearchActivityTest {
     @After
     public void tearDown() {
         AutocompleteControllerJni.setInstanceForTesting(null);
+        ThreadUtils.runOnUiThreadBlocking(
+                ChromeNightModeTestUtils::tearDownNightModeAfterChromeActivityDestroyed);
     }
 
     private AutocompleteMatch buildSimpleAutocompleteMatch(String url) {
@@ -559,6 +563,85 @@ public class SearchActivityTest {
                                             .build());
                         });
         assertTrue(searchActivity.getProfileSupplierForTesting().get().isOffTheRecord());
+    }
+
+    @Test
+    @SmallTest
+    public void statusAndNavigationBarColor_lightMode() {
+        ThreadUtils.runOnUiThreadBlocking(
+                () -> ChromeNightModeTestUtils.setUpNightModeForChromeActivity(false));
+        SearchActivity searchActivity = startSearchActivity();
+        assertStatusAndNavigationBarColors(
+                searchActivity, getExpectedOmniboxBackgroundColor(searchActivity));
+    }
+
+    @Test
+    @SmallTest
+    public void statusAndNavigationBarColor_darkMode() {
+        ThreadUtils.runOnUiThreadBlocking(
+                () -> ChromeNightModeTestUtils.setUpNightModeForChromeActivity(true));
+        SearchActivity searchActivity = startSearchActivity();
+        assertStatusAndNavigationBarColors(
+                searchActivity, getExpectedOmniboxBackgroundColor(searchActivity));
+    }
+
+    @Test
+    @SmallTest
+    public void statusAndNavigationBarColor_incognito() {
+        mActivityTestRule.startMainActivityOnBlankPage();
+        SearchActivity searchActivity =
+                ActivityTestUtils.waitForActivity(
+                        InstrumentationRegistry.getInstrumentation(),
+                        SearchActivity.class,
+                        () -> {
+                            SearchActivityClientImpl client =
+                                    new SearchActivityClientImpl(
+                                            mActivityTestRule.getActivity(), IntentOrigin.HUB);
+                            client.requestOmniboxForResult(
+                                    client.newIntentBuilder()
+                                            .setPageUrl(new GURL(UrlConstants.NTP_NON_NATIVE_URL))
+                                            .setIncognito(true)
+                                            .setResolutionType(ResolutionType.SEND_TO_CALLER)
+                                            .build());
+                        });
+        assertStatusAndNavigationBarColors(
+                searchActivity, searchActivity.getColor(R.color.omnibox_dropdown_bg_incognito));
+    }
+
+    private void assertStatusAndNavigationBarColors(
+            SearchActivity searchActivity, int expectedColor) {
+        EdgeToEdgeSystemBarColorHelper edgeToEdgeSystemBarColorHelper =
+                searchActivity.getEdgeToEdgeManager().getEdgeToEdgeSystemBarColorHelper();
+
+        // Assert status bar color.
+        if (EdgeToEdgeUtils.isEdgeToEdgeEverywhereEnabled()) {
+            assertColorsEqual(expectedColor, edgeToEdgeSystemBarColorHelper.getStatusBarColor());
+        } else {
+            assertColorsEqual(expectedColor, searchActivity.getWindow().getStatusBarColor());
+        }
+
+        // Assert navigation bar color.
+        assertColorsEqual(expectedColor, edgeToEdgeSystemBarColorHelper.getNavigationBarColor());
+    }
+
+    /**
+     * Returns the expected background color for the omnibox in {@code searchActivity}.
+     *
+     * @param searchActivity The {@link SearchActivity} to use as the context.
+     * @return The expected background color for the omnibox in {@code searchActivity}.
+     */
+    private int getExpectedOmniboxBackgroundColor(SearchActivity searchActivity) {
+        return ContextCompat.getColor(searchActivity, R.color.omnibox_suggestion_dropdown_bg);
+    }
+
+    private void assertColorsEqual(int expected, int actual) {
+        String message =
+                String.format("Expected %s but got %s", intToHex(expected), intToHex(actual));
+        Assert.assertEquals(message, expected, actual);
+    }
+
+    private String intToHex(int color) {
+        return String.format("#%06X", (0xFFFFFF & color));
     }
 
     private SearchActivity startSearchActivity() {

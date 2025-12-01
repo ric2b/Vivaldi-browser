@@ -21,7 +21,6 @@
 #include "include/gpu/ganesh/GrBackendSurface.h"
 #include "include/gpu/ganesh/GrRecordingContext.h"
 #include "include/gpu/ganesh/GrTypes.h"
-#include "include/private/SkColorData.h"
 #include "include/private/base/SkAssert.h"
 #include "include/private/base/SkDebug.h"
 #include "include/private/base/SkMath.h"
@@ -32,6 +31,7 @@
 #include "src/base/SkArenaAlloc.h"
 #include "src/base/SkMathPriv.h"
 #include "src/base/SkVx.h"
+#include "src/core/SkColorData.h"
 #include "src/core/SkColorSpacePriv.h"
 #include "src/core/SkRasterPipeline.h"
 #include "src/core/SkRasterPipelineOpContexts.h"
@@ -930,7 +930,7 @@ std::unique_ptr<GrFragmentProcessor> MakeGradientFP(const SkGradientBaseShader& 
             SkPMColor4f borderColors[2] = { colors[0], colors[colorCount - 1] };
             SkArenaAlloc alloc(/*firstHeapAllocation=*/0);
             SkRasterPipeline p(&alloc);
-            SkRasterPipeline_MemoryCtx ctx = { borderColors, 0 };
+            SkRasterPipelineContexts::MemoryCtx ctx = {borderColors, 0};
 
             p.append(SkRasterPipelineOp::load_f32, &ctx);
             SkGradientBaseShader::AppendInterpolatedToDstStages(

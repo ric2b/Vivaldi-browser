@@ -65,12 +65,11 @@ BASE_FEATURE(kHidePastePopupOnGSB,
              base::FEATURE_ENABLED_BY_DEFAULT);
 #endif
 
-// If enabled, changes to the zoom level are temporary and are forgotten when
-// the tab is closed. If disabled, changes to the zoom level persist, as though
-// the user affected them through the browser's UX.
-BASE_FEATURE(kCapturedSurfaceControlTemporaryZoom,
-             "CapturedSurfaceControlTemporaryZoom",
-             base::FEATURE_ENABLED_BY_DEFAULT);
+// Holdback the removal of debug reason strings in crrev.com/c/6312375
+// to measure the impact.
+BASE_FEATURE(kHoldbackDebugReasonStringRemoval,
+             "HoldbackDebugReasonStringRemoval",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
 // If Canvas2D Image Chromium is allowed, this feature controls whether it is
 // enabled.
@@ -143,6 +142,12 @@ BASE_FEATURE(kExperimentalContentSecurityPolicyFeatures,
 BASE_FEATURE(kFedCmFlexibleFields,
              "FedCmFlexibleFields",
              base::FEATURE_ENABLED_BY_DEFAULT);
+
+// Whether to support the newer syntax for the "Use Other Account"
+// and account labels features.
+BASE_FEATURE(kFedCmUseOtherAccountAndLabelsNewSyntax,
+             "FedCmUseOtherAccountAndLabelsNewSyntax",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
 // Enables sending SameSite=Lax cookies in credentialed FedCM requests
 // (accounts endpoint, ID assertion endpoint and disconnect endpoint).
@@ -359,13 +364,6 @@ BASE_FEATURE(kProcessReuseOnPrerenderCOOPSwap,
 #endif
 );
 
-// Whether cross-site frames should get their own SiteInstance even when
-// strict site isolation is disabled. These SiteInstances will still be
-// grouped into a shared default process based on BrowsingInstance.
-BASE_FEATURE(kProcessSharingWithStrictSiteInstances,
-             "ProcessSharingWithStrictSiteInstances",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
 // Causes hidden tabs with crashed subframes to be marked for reload, meaning
 // that if a user later switches to that tab, the current page will be
 // reloaded.  This will hide crashed subframes from the user at the cost of
@@ -378,6 +376,17 @@ BASE_FEATURE(kReloadHiddenTabsWithCrashedSubframes,
              base::FEATURE_DISABLED_BY_DEFAULT
 #endif
 );
+
+#if BUILDFLAG(IS_ANDROID)
+// If enabled, then orientation lock won't claim to work on anything but phone
+// form factors.  Tablets already do unpredictable things, such as letterboxing
+// vs rotating and/or (successfully) ignoring the request entirely.  Setting
+// this flag turns off those use-cases which nobody should be relying on right
+// now anyway; they don't work.
+BASE_FEATURE(kRestrictOrientationLockToPhones,
+             "RestrictOrientationLockToPhones",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+#endif
 
 BASE_FEATURE(kServiceWorkerAvoidMainThreadForInitialization,
              "ServiceWorkerAvoidMainThreadForInitialization",
@@ -406,7 +415,7 @@ const base::FeatureParam<std::string>
 // same service worker that controls their parent.
 BASE_FEATURE(kServiceWorkerSrcdocSupport,
              "ServiceWorkerSrcdocSupport",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 // (crbug.com/340949948): Killswitch for the fix to address the ServiceWorker
 // main and subreosurce loader lifetime issue, which introduces fetch() failure
@@ -422,11 +431,27 @@ BASE_FEATURE(kServiceWorkerStaticRouterStartServiceWorker,
              "ServiceWorkerStaticRouterStartServiceWorker",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
+// (crbug.com/41337436): Enabled feature will have the ServiceWorker Client.url
+// property be the creation URL. This means it does not reflect changes to the
+// URL made by history.pushState() or similar history APIs.
+// When disabled the ServiceWorker Client.url property will be the document URL
+// including changes to history.pushState().
+BASE_FEATURE(kServiceWorkerClientUrlIsCreationUrl,
+             "ServiceWorkerClientUrlIsCreationUrl",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+
 // Enables skipping the early call to CommitPending when navigating away from a
 // crashed frame.
 BASE_FEATURE(kSkipEarlyCommitPendingForCrashedFrame,
              "SkipEarlyCommitPendingForCrashedFrame",
              base::FEATURE_DISABLED_BY_DEFAULT);
+
+#if BUILDFLAG(IS_WIN)
+// Skip granting access to the data path if it has already been set.
+BASE_FEATURE(kSkipGrantAccessToDataPathIfAlreadySet,
+             "SkipGrantAccessToDataPathIfAlreadySet",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+#endif
 
 #if BUILDFLAG(IS_MAC)
 BASE_FEATURE(kTextInputClient,

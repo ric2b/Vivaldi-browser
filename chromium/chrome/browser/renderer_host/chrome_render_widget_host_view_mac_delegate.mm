@@ -14,13 +14,13 @@
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_finder.h"
-#include "chrome/browser/ui/tabs/public/tab_interface.h"
 #include "chrome/browser/ui/webui/top_chrome/webui_url_utils.h"
 #include "chrome/common/url_constants.h"
 #include "components/prefs/pref_service.h"
 #include "components/spellcheck/browser/pref_names.h"
 #include "components/spellcheck/browser/spellcheck_platform.h"
 #include "components/spellcheck/common/spellcheck_panel.mojom.h"
+#include "components/tab_collections/public/tab_interface.h"
 #include "components/web_modal/web_contents_modal_dialog_manager.h"
 #include "content/public/browser/preloading.h"
 #include "content/public/browser/render_frame_host.h"
@@ -31,6 +31,12 @@
 #include "content/public/browser/web_contents.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "services/service_manager/public/cpp/interface_provider.h"
+
+#if BUILDFLAG(ENABLE_GLIC)
+#include "chrome/browser/glic/glic_enabling.h"
+#include "chrome/browser/glic/glic_keyed_service.h"
+#include "chrome/browser/glic/glic_keyed_service_factory.h"
+#endif
 
 #include "app/vivaldi_apptools.h"
 #include "content/browser/web_contents/web_contents_impl.h"
@@ -172,7 +178,7 @@
 
 
   // Vivaldi
-  Browser* browser = chrome::FindBrowserWithWindow(window);
+  Browser* browser = chrome::FindBrowserWithWindow(gfx::NativeWindow(window));
   // Note(tomas@vivaldi.com): VB-70626, VB-96150, VB-101337.
   // self.webContents is our UI webcontents. This breaks
   // history swipe, use the active webcontents instead.
@@ -198,7 +204,7 @@
 
 
   // Vivaldi
-  Browser* browser = chrome::FindBrowserWithWindow(window);
+  Browser* browser = chrome::FindBrowserWithWindow(gfx::NativeWindow(window));
   // Note(tomas@vivaldi.com): VB-96150.
   // self.webContents is our UI webcontents. This breaks
   // history swipe, use the active webcontents instead.
@@ -272,11 +278,6 @@
   }
 
   return NO;
-}
-
-- (void)rendererHandledWheelEvent:(const blink::WebMouseWheelEvent&)event
-                         consumed:(BOOL)consumed {
-  [_historySwiper rendererHandledWheelEvent:event consumed:consumed];
 }
 
 - (void)rendererHandledGestureScrollEvent:(const blink::WebGestureEvent&)event
@@ -460,6 +461,22 @@
       IsTopChromeUntrustedWebUIURL(webContents->GetVisibleURL())) {
     return kAcceptMouseEventsInActiveApp;
   }
+
+#if BUILDFLAG(ENABLE_GLIC)
+  // WebContents managed by glic should be allowed to accept mouse events while
+  // inactive, aligning with the expected behavior of native chrome dialogs.
+  // TODO(crbug.com/399119513): Consider making this a single WebContents
+  // scoped setting, allowing this behavior to be configured by feature code.
+  if (Profile* profile =
+          Profile::FromBrowserContext(webContents->GetBrowserContext());
+      glic::GlicEnabling::IsProfileEligible(profile)) {
+    glic::GlicKeyedService* glic_service =
+        glic::GlicKeyedServiceFactory::GetGlicKeyedService(profile);
+    if (glic_service && glic_service->IsActiveWebContents(webContents)) {
+      return kAcceptMouseEventsInActiveApp;
+    }
+  }
+#endif
 
   return kAcceptMouseEventsInActiveWindow;
 }

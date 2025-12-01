@@ -1,9 +1,17 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="hu">
+<translation id="2277224997687551299">Csoportnév szerkesztése</translation>
+<translation id="2330212241471632770">{TABS_COUNT, plural,
+          =1 {Könyvjelző lap}
+          other {Könyvjelző lap}
+        }</translation>
 <translation id="2947471979790858922">A privát lapokon végzett tevékenységeid eltávolításra kerülnek erről az eszközről</translation>
 <translation id="3870643923290313246">{INCOGNITO_TABS_COUNT, plural,
         =1 {A bezárt lapokat a Nemrég megnyitott lapok alatt találod, a Vivaldi főmenün belül. A privát lapod nem lesz elérhető.}
         other {A bezárt lapokat a Nemrég megnyitott lapok alatt találod, a Vivaldi főmenün belül. A(z) # privát lapod nem lesz elérhető.}}</translation>
+<translation id="4460014764210899310">Csoportosítás megszüntetése</translation>
 <translation id="4871187110787939393">Minden privát lap bezárása?</translation>
+<translation id="5494920125229734069">Minden kijelölése</translation>
+<translation id="6744956528665271406">Csoport színének szerkesztése</translation>
 </translationbundle>

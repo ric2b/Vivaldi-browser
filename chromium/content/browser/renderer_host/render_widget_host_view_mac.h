@@ -8,6 +8,7 @@
 #import <Cocoa/Cocoa.h>
 
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "base/gtest_prod_util.h"
@@ -232,11 +233,9 @@ class CONTENT_EXPORT RenderWidgetHostViewMac
                                     bool did_update_state) override;
   void OnImeCancelComposition(TextInputManager* text_input_manager,
                               RenderWidgetHostViewBase* updated_view) override;
-  void OnImeCompositionRangeChanged(
-      TextInputManager* text_input_manager,
-      RenderWidgetHostViewBase* updated_view,
-      bool character_bounds_changed,
-      const std::optional<std::vector<gfx::Rect>>& line_bounds) override;
+  void OnImeCompositionRangeChanged(TextInputManager* text_input_manager,
+                                    RenderWidgetHostViewBase* updated_view,
+                                    bool character_bounds_changed) override;
   void OnSelectionBoundsChanged(
       TextInputManager* text_input_manager,
       RenderWidgetHostViewBase* updated_view) override;
@@ -547,7 +546,8 @@ class CONTENT_EXPORT RenderWidgetHostViewMac
   void UpdateBackgroundColor() override;
   bool HasFallbackSurface() const override;
   std::optional<DisplayFeature> GetDisplayFeature() override;
-  void SetDisplayFeatureForTesting(
+  void DisableDisplayFeatureOverrideForEmulation() override;
+  void OverrideDisplayFeatureForEmulation(
       const DisplayFeature* display_feature) override;
   void NotifyHostAndDelegateOnWasShown(
       blink::mojom::RecordContentToVisibleTimeRequestPtr visible_time_request)
@@ -559,7 +559,7 @@ class CONTENT_EXPORT RenderWidgetHostViewMac
 
   // Gets a textual view of the page's contents, and passes it to the callback
   // provided.
-  using SpeechCallback = base::OnceCallback<void(const std::u16string&)>;
+  using SpeechCallback = base::OnceCallback<void(std::u16string_view)>;
   void GetPageTextForSpeech(SpeechCallback callback);
 
   // Calls RenderWidgetHostNSView::SetTooltipText and call the observer's

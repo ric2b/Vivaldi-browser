@@ -21,8 +21,11 @@ cc_library(
     name = "litert_compiler_plugin",
     hdrs = ["litert_compiler_plugin.h"],
     deps = [
+        "//tensorflow/lite/experimental/litert/c:litert_common",
         "//tensorflow/lite/experimental/litert/cc:litert_macros",
         "//tensorflow/lite/experimental/litert/vendors/c:litert_compiler_plugin",
+        "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/strings:string_view",
     ],
 )
 
@@ -113,7 +116,7 @@ cc_test(
         "//tensorflow/lite/experimental/litert/core/model",
         "//tensorflow/lite/experimental/litert/core/model:model_graph",
         "//tensorflow/lite/experimental/litert/core/util:flatbuffer_tools",
-        "//tensorflow/lite/experimental/litert/test:test_macros",
+        "//tensorflow/lite/experimental/litert/test:matchers",
         "//tensorflow/lite/experimental/litert/vendors/examples:example_conversion_impl",
         "//tensorflow/lite/experimental/litert/vendors/examples:example_ir",
         "@com_google_absl//absl/strings:string_view",

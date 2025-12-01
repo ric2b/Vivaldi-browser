@@ -1,9 +1,14 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="sl">
+<translation id="2277224997687551299">Uredi ime skupine</translation>
+<translation id="2330212241471632770">{TABS_COUNT,plural, =1{Dodaj zavihek med zaznamke}one{Dodaj zavihke med zaznamke}two{Dodaj zavihke med zaznamke}few{Dodaj zavihke med zaznamke}other{Dodaj zavihke med zaznamke}}</translation>
 <translation id="2947471979790858922">Vaša dejavnost v teh zasebnih zavihkih bo odstranjena iz te naprave</translation>
 <translation id="3870643923290313246">{INCOGNITO_TABS_COUNT, plural,
         =1 {Svoje zaprte zavihke najdete v Nedavnih zavihkih v glavnem meniju Vivaldi. Vaš zasebni zavihek ne bo na voljo.}
         other {Zaprte zavihke lahko najdete v Nedavnih zavihkih v glavnem meniju Vivaldi. Vaših # zasebnih zavihkov ne bo na voljo.}}</translation>
+<translation id="4460014764210899310">Razdruži</translation>
 <translation id="4871187110787939393">Zapreti vse zasebne zavihke?</translation>
+<translation id="5494920125229734069">Izberi vse</translation>
+<translation id="6744956528665271406">Uredi barvo skupine</translation>
 </translationbundle>

@@ -313,13 +313,6 @@ TEST_F(WebStateImplTest, ObserverTest) {
   ASSERT_TRUE(observer->title_was_set_info());
   EXPECT_EQ(web_state.get(), observer->title_was_set_info()->web_state);
 
-  // Test that UnderPageBackgroundColorChanged() is called.
-  ASSERT_FALSE(observer->under_page_background_color_changed_info());
-  web_state->OnUnderPageBackgroundColorChanged();
-  ASSERT_TRUE(observer->under_page_background_color_changed_info());
-  EXPECT_EQ(web_state.get(),
-            observer->under_page_background_color_changed_info()->web_state);
-
   // Test that WebStateDestroyed() is called.
   EXPECT_FALSE(observer->web_state_destroyed_info());
   web_state.reset();
@@ -868,10 +861,10 @@ TEST_F(WebStateImplTest, UncommittedRestoreSessionOptimisedStorage) {
   active_page->set_page_title("Title");
   active_page->set_page_url(url.spec());
 
-  WebStateImpl web_state =
-      WebStateImpl(GetBrowserState(), web::WebStateID::NewUnique(), metadata,
-                   base::ReturnValueOnce(std::move(storage)),
-                   base::ReturnValueOnce<NSData*>(nil));
+  WebStateImpl web_state = WebStateImpl(
+      GetBrowserState(), web::WebStateID::NewUnique(), metadata,
+      base::ReturnValueOnce(std::make_optional(std::move(storage))),
+      base::ReturnValueOnce<NSData*>(nil));
 
   // Check that the title and url are correct.
   ASSERT_FALSE(web_state.IsRealized());
@@ -1184,10 +1177,10 @@ TEST_F(WebStateImplTest, SerializeMetadataToProto) {
   original_metadata.Swap(storage.mutable_metadata());
 
   // Create an unrealized WebState.
-  web::WebStateImpl web_state =
-      WebStateImpl(GetBrowserState(), WebStateID::NewUnique(),
-                   original_metadata, base::ReturnValueOnce(std::move(storage)),
-                   base::ReturnValueOnce<NSData*>(nil));
+  web::WebStateImpl web_state = WebStateImpl(
+      GetBrowserState(), WebStateID::NewUnique(), original_metadata,
+      base::ReturnValueOnce(std::make_optional(std::move(storage))),
+      base::ReturnValueOnce<NSData*>(nil));
 
   // Check that the metadata can be fetched from the unrealized WebState.
   {

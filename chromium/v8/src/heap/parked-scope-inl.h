@@ -5,12 +5,14 @@
 #ifndef V8_HEAP_PARKED_SCOPE_INL_H_
 #define V8_HEAP_PARKED_SCOPE_INL_H_
 
+#include "src/heap/parked-scope.h"
+// Include the non-inl header before the rest of the headers.
+
 #include "src/base/platform/condition-variable.h"
 #include "src/base/platform/mutex.h"
 #include "src/base/platform/semaphore.h"
 #include "src/execution/local-isolate.h"
 #include "src/heap/local-heap-inl.h"
-#include "src/heap/parked-scope.h"
 
 namespace v8 {
 namespace internal {
@@ -42,11 +44,11 @@ V8_INLINE ParkedRecursiveMutexGuard::ParkedRecursiveMutexGuard(
 }
 
 V8_INLINE ParkedMutexGuardIf::ParkedMutexGuardIf(LocalIsolate* local_isolate,
-                                                 base::SpinningMutex* mutex,
+                                                 base::Mutex* mutex,
                                                  bool enable_mutex)
     : ParkedMutexGuardIf(local_isolate -> heap(), mutex, enable_mutex) {}
 V8_INLINE ParkedMutexGuardIf::ParkedMutexGuardIf(LocalHeap* local_heap,
-                                                 base::SpinningMutex* mutex,
+                                                 base::Mutex* mutex,
                                                  bool enable_mutex) {
   DCHECK(AllowGarbageCollection::IsAllowed());
   if (!enable_mutex) return;

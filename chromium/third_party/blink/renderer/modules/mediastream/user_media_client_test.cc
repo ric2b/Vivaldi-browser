@@ -26,6 +26,7 @@
 #include "media/capture/mojom/video_capture_types.mojom-blink.h"
 #include "mojo/public/cpp/bindings/receiver.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/common/mediastream/media_device_id.h"
 #include "third_party/blink/public/common/mediastream/media_devices.h"
 #include "third_party/blink/public/mojom/media/capture_handle_config.mojom-blink.h"
@@ -573,8 +574,9 @@ class UserMediaProcessorUnderTest : public UserMediaProcessor {
     return source;
   }
 
-  void GetUserMediaRequestSucceeded(MediaStreamDescriptorVector* descriptors,
-                                    UserMediaRequest* request_info) override {
+  void GetUserMediaRequestSucceeded(
+      GCedMediaStreamDescriptorVector* descriptors,
+      UserMediaRequest* request_info) override {
     // TODO(crbug.com/1300883): Generalize to multiple streams.
     DCHECK_EQ(descriptors->size(), 1u);
     last_generated_descriptor_ = (*descriptors)[0];

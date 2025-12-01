@@ -13,6 +13,7 @@
     "symbol_level": 0,
     "target_cpu": "x64",
     "target_os": "linux",
+    "use_bundled_mutter": true,
     "use_bundled_weston": true,
     "use_clang_coverage": true,
     "use_reclient": false,

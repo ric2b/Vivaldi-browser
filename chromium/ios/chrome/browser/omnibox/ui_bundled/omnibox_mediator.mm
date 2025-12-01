@@ -15,6 +15,7 @@
 #import "ios/chrome/browser/favicon/model/favicon_loader.h"
 #import "ios/chrome/browser/lens/ui_bundled/lens_entrypoint.h"
 #import "ios/chrome/browser/net/model/crurl.h"
+#import "ios/chrome/browser/omnibox/model/omnibox_text_controller.h"
 #import "ios/chrome/browser/omnibox/public/omnibox_ui_features.h"
 #import "ios/chrome/browser/omnibox/ui_bundled/omnibox_constants.h"
 #import "ios/chrome/browser/omnibox/ui_bundled/omnibox_consumer.h"
@@ -119,6 +120,11 @@ using base::UserMetricsAction;
   return self;
 }
 
+- (void)setThumbnailImage:(UIImage*)image {
+  [self.consumer setThumbnailImage:image];
+  [self.omniboxTextController onThumbnailSet:image != nil];
+}
+
 #pragma mark - Setters
 
 - (void)setConsumer:(id<OmniboxConsumer>)consumer {
@@ -195,6 +201,65 @@ using base::UserMetricsAction;
 
 }
 
+#pragma mark - OmniboxMutator
+
+- (void)removeThumbnail {
+  base::RecordAction(UserMetricsAction("Mobile.OmniboxThumbnail.Deleted"));
+  // Update the UI.
+  [self.consumer setThumbnailImage:nil];
+  [self.omniboxTextController onUserRemoveThumbnail];
+}
+
+- (void)removeAdditionalText {
+  [self.omniboxTextController onUserRemoveAdditionalText];
+}
+
+- (void)clearText {
+  [self.omniboxTextController clearText];
+}
+
+- (void)prepareForScribble {
+  [self.omniboxTextController prepareForScribble];
+}
+
+- (void)cleanupAfterScribble {
+  [self.omniboxTextController cleanupAfterScribble];
+}
+
+#pragma mark Textfield delegate forwaring
+
+- (void)onDidBeginEditing {
+  [self.omniboxTextController onDidBeginEditing];
+}
+
+- (BOOL)shouldChangeCharactersInRange:(NSRange)range
+                    replacementString:(NSString*)newText {
+  return [self.omniboxTextController shouldChangeCharactersInRange:range
+                                                 replacementString:newText];
+}
+
+- (void)textDidChangeWithUserEvent:(BOOL)isProcessingUserEvent {
+  [self.omniboxTextController textDidChangeWithUserEvent:isProcessingUserEvent];
+}
+
+- (void)onAcceptAutocomplete {
+  [self.omniboxTextController onAcceptAutocomplete];
+}
+
+- (void)onCopy {
+  [self.omniboxTextController onCopy];
+}
+
+- (void)willPaste {
+  [self.omniboxTextController willPaste];
+}
+
+- (void)onDeleteBackward {
+  [self.omniboxTextController onDeleteBackward];
+}
+
+#pragma mark - OmniboxTextControllerDelegate
+
 #pragma mark - PopupMatchPreviewDelegate
 
 - (void)setPreviewSuggestion:(id<AutocompleteSuggestion>)suggestion
@@ -202,9 +267,7 @@ using base::UserMetricsAction;
   // On first update, don't set the preview text, as omnibox will automatically
   // receive the suggestion as inline autocomplete through OmniboxViewIOS.
   if (!isFirstUpdate) {
-    // Remove additional text when previewing suggestions.
-    [self.consumer updateAdditionalText:nil];
-    [self.consumer updateText:suggestion.omniboxPreviewText];
+    [self.omniboxTextController previewSuggestion:suggestion];
   }
 
   // When no suggestion is previewed, just show the default image.

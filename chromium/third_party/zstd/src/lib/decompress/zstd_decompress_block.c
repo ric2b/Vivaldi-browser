@@ -1935,12 +1935,6 @@ ZSTD_decompressSequencesLong_bmi2(ZSTD_DCtx* dctx,
 
 #endif /* DYNAMIC_BMI2 */
 
-typedef size_t (*ZSTD_decompressSequences_t)(
-                            ZSTD_DCtx* dctx,
-                            void* dst, size_t maxDstSize,
-                            const void* seqStart, size_t seqSize, int nbSeq,
-                            const ZSTD_longOffset_e isLongOffset);
-
 #ifndef ZSTD_FORCE_DECOMPRESS_SEQUENCES_LONG
 static size_t
 ZSTD_decompressSequences(ZSTD_DCtx* dctx, void* dst, size_t maxDstSize,

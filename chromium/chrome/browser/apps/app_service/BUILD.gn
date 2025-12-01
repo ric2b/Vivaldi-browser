@@ -2,7 +2,6 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-import("//build/config/chromeos/ui_mode.gni")
 import("//extensions/buildflags/buildflags.gni")
 
 assert(!is_android)
@@ -62,7 +61,6 @@ source_set("app_service") {
     "//chrome/app/theme:chrome_unscaled_resources",
     "//chrome/browser/apps/app_service/app_icon",
     "//chrome/browser/apps/app_service/app_icon:util",
-    "//chrome/browser/apps/link_capturing:features",
     "//chrome/browser/content_settings",
     "//chrome/browser/content_settings:content_settings_factory",
     "//chrome/browser/prefs",
@@ -73,6 +71,7 @@ source_set("app_service") {
     "//chrome/browser/ui:browser_navigator_params_headers",
     "//chrome/browser/ui/tabs:tab_enums",
     "//chrome/browser/web_applications",
+    "//chrome/browser/web_applications:features",
     "//components/app_constants",
     "//components/crx_file",
     "//components/keyed_service/content",
@@ -158,6 +157,8 @@ source_set("app_service") {
       "publishers/borealis_apps.h",
       "publishers/bruschetta_apps.cc",
       "publishers/bruschetta_apps.h",
+      "publishers/chrome_app_deprecation.cc",
+      "publishers/chrome_app_deprecation.h",
       "publishers/crostini_apps.cc",
       "publishers/crostini_apps.h",
       "publishers/extension_apps_chromeos.cc",
@@ -168,10 +169,6 @@ source_set("app_service") {
       "publishers/plugin_vm_apps.h",
       "publishers/remote_apps.cc",
       "publishers/remote_apps.h",
-      "subscriber_crosapi.cc",
-      "subscriber_crosapi.h",
-      "subscriber_crosapi_factory.cc",
-      "subscriber_crosapi_factory.h",
       "uninstall_dialog.cc",
       "uninstall_dialog.h",
       "webapk/webapk_install_queue.cc",
@@ -259,6 +256,7 @@ source_set("app_service") {
       "//chrome/browser/ui/webui/ash/add_supervision",
       "//chrome/browser/ui/webui/ash/settings/app_management",
       "//chromeos/ash/components/browser_context_helper",
+      "//chromeos/ash/components/demo_mode",
       "//chromeos/ash/components/file_manager:constants",
       "//chromeos/ash/components/login/login_state",
       "//chromeos/ash/experiences/arc",
@@ -387,7 +385,6 @@ source_set("unit_tests") {
     ":test_support",
     "//base",
     "//base/test:test_support",
-    "//build:chromeos_buildflags",
     "//cc:test_support",
     "//chrome/app/theme:chrome_unscaled_resources_grit",
     "//chrome/browser/apps:icon_standardizer",
@@ -447,6 +444,7 @@ source_set("unit_tests") {
       "promise_apps/promise_app_wrapper_unittest.cc",
       "publishers/arc_apps_unittest.cc",
       "publishers/bruschetta_apps_unittest.cc",
+      "publishers/chrome_app_deprecation_unittest.cc",
       "publishers/crostini_apps_unittest.cc",
       "publishers/guest_os_apps_unittest.cc",
       "publishers/plugin_vm_apps_unittest.cc",
@@ -468,7 +466,6 @@ source_set("unit_tests") {
       "//chrome/browser/ash/borealis/testing:test_support",
       "//chrome/browser/ash/bruschetta",
       "//chrome/browser/ash/bruschetta:test_support",
-      "//chrome/browser/ash/crosapi:browser_util",
       "//chrome/browser/ash/crosapi:test_support",
       "//chrome/browser/ash/crostini:test_support",
       "//chrome/browser/ash/file_manager",
@@ -517,7 +514,6 @@ source_set("test_support") {
   public_deps = [ ":app_service" ]
 
   deps = [
-    "//build:chromeos_buildflags",
     "//chrome/browser/sync",
     "//chrome/test:test_support",
     "//components/services/app_service",
@@ -551,7 +547,6 @@ source_set("app_registry_cache_waiter") {
 
   deps = [
     ":app_service",
-    "//build:chromeos_buildflags",
     "//url",
   ]
 }

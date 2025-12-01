@@ -28,8 +28,8 @@ limitations under the License.
 #include "xla/layout.h"
 #include "xla/printer.h"
 #include "xla/shape.h"
+#include "xla/tsl/platform/logging.h"  // IWYU pragma: keep
 #include "xla/xla_data.pb.h"
-#include "tsl/platform/logging.h"  // IWYU pragma: keep
 
 namespace xla {
 
@@ -303,6 +303,9 @@ class LayoutUtil {
   // stored in a particular split. This can be useful for calculating how much
   // memory to allocate in each of the memories.
   static int64_t MaxElementsInPerSplit(const Shape& shape);
+
+  // Returns a shape's split config if present.
+  static std::optional<SplitConfig> GetSplitConfig(const Shape& shape);
 };
 
 }  // namespace xla

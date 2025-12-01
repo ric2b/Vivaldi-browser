@@ -7,7 +7,6 @@ import("//build/config/android/config.gni")
 import("//build/config/c++/c++.gni")
 import("//build/config/chrome_build.gni")
 import("//build/config/chromeos/args.gni")
-import("//build/config/chromeos/ui_mode.gni")
 import("//build/config/clang/clang.gni")
 import("//build/config/compiler/compiler.gni")
 import("//build/config/coverage/coverage.gni")
@@ -313,6 +312,7 @@ config("compiler") {
     ":compiler_cpu_abi",
     ":compiler_codegen",
     ":compiler_deterministic",
+    ":clang_warning_suppression",
   ]
 
   # Here we enable -fno-delete-null-pointer-checks, which makes various nullptr
@@ -333,9 +333,9 @@ config("compiler") {
   # When UBSan is enabled, we want to continue flagging overflows as a bug.
   if (!is_ubsan && (!is_win || is_clang)) {
     if (is_win) {
-      cflags += [ "/clang:-fwrapv" ]
+      cflags += [ "/clang:-fno-strict-overflow" ]
     } else {
-      cflags += [ "-fwrapv" ]
+      cflags += [ "-fno-strict-overflow" ]
     }
   }
 
@@ -402,17 +402,6 @@ config("compiler") {
     if (fatal_linker_warnings && is_apple) {
       ldflags += [ "-Wl,-fatal_warnings" ]
     }
-  }
-
-  if (is_clang && is_debug) {
-    # Allow comparing the address of references and 'this' against 0
-    # in debug builds. Technically, these can never be null in
-    # well-defined C/C++ and Clang can optimize such checks away in
-    # release builds, but they may be used in asserts in debug builds.
-    cflags_cc += [
-      "-Wno-undefined-bool-conversion",
-      "-Wno-tautological-undefined-compare",
-    ]
   }
 
   # Non-Apple Posix and Fuchsia compiler flags setup.
@@ -898,7 +887,7 @@ config("compiler") {
 
   # TODO(crbug.com/40242425): Cleanup undefined symbol errors caught by
   # --no-undefined-version.
-  if (use_lld && !is_win && !is_mac && !is_ios) {
+  if (use_lld && !is_win && !is_mac && !is_ios && !is_wasm) {
     ldflags += [ "-Wl,--undefined-version" ]
   }
 
@@ -913,7 +902,8 @@ config("compiler") {
   if (use_lld && !enable_call_graph_profile_sort) {
     if (is_win) {
       ldflags += [ "/call-graph-profile-sort:no" ]
-    } else {
+    } else if (!is_wasm) {
+      # Emscripten compiler does not support this linker flag.
       ldflags += [ "-Wl,--no-call-graph-profile-sort" ]
     }
   }
@@ -1212,17 +1202,6 @@ config("compiler_cpu_abi") {
         "-m64",
         "-msse3",
       ]
-
-      # Minimum SIMD support for devices running lacros.
-      # See https://crbug.com/1475858
-      if (is_chromeos_lacros) {
-        cflags += [
-          "-mssse3",
-          "-msse4",
-          "-msse4.1",
-          "-msse4.2",
-        ]
-      }
       ldflags += [ "-m64" ]
     } else if (current_cpu == "x86") {
       cflags += [ "-m32" ]
@@ -1662,6 +1641,31 @@ config("clang_revision") {
   }
 }
 
+# Controls the usage of a warning suppression mapping (WSM) file to suppress
+# warnings based on the path of the file they come from. It's controlled by the
+# `clang_warning_suppression_file` gn argument , which points to a text file
+# defining which warnings should be suppressed where.
+# See //build/config/warning_suppression.txt for an example file; this is the
+# file used by Chromium.
+#
+# To use a different file, or to use this functionality outside of chromium,
+# set the `clang_warning_suppression_file` argument to point to the new file,
+# e.g. by setting in the the project's .gn file.
+config("clang_warning_suppression") {
+  # Some build configs use older versions of clang that don't support WSMs
+  if (!is_nacl && default_toolchain != "//build/toolchain/cros:target" &&
+      !llvm_android_mainline && is_clang &&
+      clang_warning_suppression_file != "") {
+    from_build_root =
+        rebase_path(clang_warning_suppression_file, root_build_dir)
+    inputs = [ clang_warning_suppression_file ]
+    cflags = [
+      "-Xclang",
+      "--warning-suppression-mappings=" + from_build_root,
+    ]
+  }
+}
+
 config("rustc_revision") {
   if (rustc_revision != "") {
     # Similar to the above config, this is here so that all files get recompiled
@@ -1706,10 +1710,12 @@ config("libcxx_module") {
     cflags_cc = [
       "-fmodules",
       "-fmodule-map-file=" + modulemap,
-      "-fno-implicit-module-maps",
       "-fbuiltin-module-map",
-      "-fmodules-cache-path=" +
-          rebase_path("$libcxx_module_prefix/module_cache", root_build_dir),
+      "-fno-implicit-module-maps",
+
+      # This removes absolute paths from .pcm files.
+      "-Xclang",
+      "-fmodule-file-home-is-cwd",
 
       "-Xclang",
       "-fmodules-local-submodule-visibility",  # required for builtins
@@ -1724,6 +1730,21 @@ config("libcxx_module") {
       # unnecessarily using extern "C".
       "-Wno-module-import-in-extern-c",
     ]
+
+    if (use_explicit_libcxx_modules) {
+      cflags_cc += [
+        "-fno-implicit-modules",
+
+        # This is for exception handling mismatch.
+        "-Wno-module-file-config-mismatch",
+      ]
+    } else {
+      cflags_cc += [
+        "-fbuiltin-module-map",
+        "-fmodules-cache-path=" +
+            rebase_path("$libcxx_module_prefix/module_cache", root_build_dir),
+      ]
+    }
   }
 }
 
@@ -1965,25 +1986,36 @@ config("default_warnings") {
 
         # TODO(crbug.com/40284799): Fix and re-enable.
         "-Wno-thread-safety-reference-return",
+
+        # TODO(crbug.com/376641662): Fix and re-enable.
+        "-Wno-nontrivial-memcall",
       ]
 
       cflags_cc += [
         # TODO(crbug.com/328490295): Fix and re-enable for C flags.
         "-Wenum-compare-conditional",
+
+        # nullability-completeness is an on-by-default diagnostic in Clang,
+        # but we don't want it in chromium.
+        # These trigger build errors during transitional patches that will
+        # progressively roll out nullability annotations across third-party
+        # code. Once there is a widly used file-level pragma that
+        # nullability-completeness check can detect or an alternate check for
+        # annotation completeness, this warning exception can be removed.
+        "-Wno-nullability-completeness",
       ]
+    }
 
-      if (!is_nacl) {
-        cflags_cc += [
-          # TODO(crbug.com/41486292): Fix and re-enable.
-          "-Wno-c++11-narrowing-const-reference",
-        ]
+    if (is_wasm) {
+      # Abseil's `symbolize_emscripten.inc` file currently has macros that are
+      # not compatible with C++98, so turn off the warnings.
+      cflags_cc += [ "-Wno-c++98-compat-extra-semi" ]
 
-        # TODO(crbug.com/344680447): Fix and re-enable.
-        cflags_cc += [ "-Wno-missing-template-arg-list-after-template-kw" ]
-
-        # TODO(crbug.com/376641662): Fix and re-enable.
-        cflags += [ "-Wno-nontrivial-memcall" ]
-      }
+      # Emscripten's LLVM version may not match with the shipped LLVM version,
+      # so turn off the explicit version check knowing that this could cause
+      # other issues if the versions are incompatible.
+      cflags += [ "-Wno-version-check" ]
+      ldflags += [ "-Wno-version-check" ]
     }
 
     # Some builders, such as Cronet, use a different version of Clang than
@@ -1995,6 +2027,15 @@ config("default_warnings") {
         "-Wno-error=unused-command-line-argument",
         "-Wno-error=unknown-pragmas",
       ]
+    }
+
+    # Disable the GNU line marker warning when building a target with Icecc,
+    # ccache, or both. This warning appears frequently when compiling
+    # files that use GNU-style line markers with Clang and Icecc. It can
+    # negatively impact build performance and make it more difficult to identify
+    # other errors or warning messages.
+    if (cc_wrapper == "ccache" || cc_wrapper == "icecc") {
+      cflags += [ "-Wno-gnu-line-marker" ]
     }
   }
 
@@ -2042,8 +2083,8 @@ config("default_warnings") {
 config("prevent_unsafe_narrowing") {
   if (is_clang) {
     cflags = [
-      "-Wshorten-64-to-32",
       "-Wimplicit-int-conversion",
+      "-Wshorten-64-to-32",
       "-Wsign-compare",
       "-Wsign-conversion",
     ]
@@ -2266,8 +2307,7 @@ config("no_rtti") {
 # (de)allocate memory on a different heap, which would spell trouble if pointers
 # to heap-allocated memory are passed over shared library boundaries.
 config("export_dynamic") {
-  # TODO(crbug.com/40118868): Revisit after target_os flip is completed.
-  if (is_linux || is_chromeos_lacros || export_libcxxabi_from_executables) {
+  if (is_linux || export_libcxxabi_from_executables) {
     ldflags = [ "-rdynamic" ]
   }
 }
@@ -2287,9 +2327,10 @@ config("export_dynamic") {
 # 2. Remove the thin_archive config, so that the .a file actually contains all
 #    .o files, instead of just references to .o files in the build directoy
 config("thin_archive") {
-  if ((is_apple && use_lld) || (is_linux && !is_clang)) {
+  if ((is_apple && use_lld) || (is_linux && !is_clang) || current_os == "aix") {
     # The macOS and iOS linker ld64.ldd doesn't support thin archive without
     # symbol table, gcc on linux also throws the error `archive has no index`.
+    # AIX does support -s option, not -S option.
     arflags = [
       "-T",
       "-s",
@@ -2372,7 +2413,7 @@ config("no_incompatible_pointer_warnings") {
     cflags += [ "-Wno-incompatible-pointer-types" ]
   } else if (current_cpu == "mipsel" || current_cpu == "mips64el") {
     cflags += [ "-w" ]
-  } else if (is_chromeos_ash && current_cpu == "arm") {
+  } else if (is_chromeos && current_cpu == "arm") {
     cflags += [ "-w" ]
   }
 }
@@ -2589,17 +2630,12 @@ config("no_optimize") {
   } else if (is_android && !android_full_debug) {
     # On Android we kind of optimize some things that don't affect debugging
     # much even when optimization is disabled to get the binary size down.
-    if (is_clang) {
-      cflags = [ "-Oz" ] + common_optimize_on_cflags
-    } else {
-      cflags = [ "-Os" ] + common_optimize_on_cflags
-    }
+    cflags = [ "-Os" ] + common_optimize_on_cflags
 
-    if (!is_component_build) {
-      # Required for library partitions. Without this all symbols just end up
-      # in the base partition.
-      ldflags = [ "-Wl,--gc-sections" ]
-    }
+    # Required to keep file sizes down. Excessive file size slows down apk
+    # installation, and for fat binaries, can lead to signing failure
+    # https://crbug.com/402645059
+    ldflags = [ "-Wl,--gc-sections" ]
   } else if (is_fuchsia) {
     # On Fuchsia, we optimize for size here to reduce the size of debug build
     # packages so they can be run in a KVM. See crbug.com/910243 for details.
@@ -2908,7 +2944,7 @@ config("symbols") {
     # sections" there.  Maybe just a bug in nacl_switch_32.S.
     _enable_gdb_index =
         symbol_level == 2 && !is_apple && !is_nacl && current_cpu != "x86" &&
-        current_os != "zos" && use_lld &&
+        current_os != "zos" && use_lld && !is_wasm &&
         # Disable on non-fission 32-bit Android because it pushes
         # libcomponents_unittests over the 4gb size limit.
         !(is_android && !use_debug_fission && current_cpu != "x64" &&
@@ -3147,10 +3183,25 @@ config("default_init_stack_vars") {
 buildflag_header("compiler_buildflags") {
   header = "compiler_buildflags.h"
 
-  flags = [
-    "CLANG_PGO=$chrome_pgo_phase",
-    "SYMBOL_LEVEL=$symbol_level",
-  ]
+  flags = []
+
+  if (chrome_pgo_phase == 1) {
+    flags += [ "CLANG_PGO_PROFILING=true" ]
+  } else {
+    flags += [ "CLANG_PGO_PROFILING=false" ]
+  }
+
+  if (chrome_pgo_phase == 2) {
+    flags += [ "CLANG_PGO_OPTIMIZED=true" ]
+  } else {
+    flags += [ "CLANG_PGO_OPTIMIZED=false" ]
+  }
+
+  if (symbol_level > 0) {
+    flags += [ "HAS_SYMBOLS=true" ]
+  } else {
+    flags += [ "HAS_SYMBOLS=false" ]
+  }
 }
 
 config("cet_shadow_stack") {

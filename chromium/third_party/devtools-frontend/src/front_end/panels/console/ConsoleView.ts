@@ -258,7 +258,7 @@ const UIStrings = {
    */
   filteredMessagesInConsole: '{PH1} messages in console',
 
-};
+} as const;
 const str_ = i18n.i18n.registerUIStrings('panels/console/ConsoleView.ts', UIStrings);
 const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
 let consoleViewInstance: ConsoleView;
@@ -323,7 +323,7 @@ export class ConsoleView extends UI.Widget.VBox implements
   private issueToolbarThrottle: Common.Throttler.Throttler;
   private requestResolver = new Logs.RequestResolver.RequestResolver();
   private issueResolver = new IssuesManager.IssueResolver.IssueResolver();
-  #isDetached: boolean = false;
+  #isDetached = false;
   #onIssuesCountUpdateBound = this.#onIssuesCountUpdate.bind(this);
 
   constructor(viewportThrottlerTimeout: number) {
@@ -998,7 +998,7 @@ export class ConsoleView extends UI.Widget.VBox implements
 
     const currentGroup = viewMessage.consoleGroup();
 
-    if (!currentGroup || !currentGroup.messagesHidden()) {
+    if (!currentGroup?.messagesHidden()) {
       const originatingMessage = viewMessage.consoleMessage().originatingMessage();
       const adjacent = Boolean(originatingMessage && lastMessage?.consoleMessage() === originatingMessage);
       viewMessage.setAdjacentUserCommandResult(adjacent);
@@ -1184,7 +1184,7 @@ export class ConsoleView extends UI.Widget.VBox implements
   }
 
   private async copyConsole(): Promise<void> {
-    const messageContents: Array<string> = [];
+    const messageContents: string[] = [];
     for (let i = 0; i < this.itemCount(); i++) {
       const message = (this.itemElement(i) as ConsoleViewMessage);
       messageContents.push(message.toExportString());
@@ -1470,7 +1470,7 @@ export class ConsoleView extends UI.Widget.VBox implements
 
   private innerSearch(index: number): void {
     delete this.innerSearchTimeoutId;
-    if (this.searchProgressIndicator && this.searchProgressIndicator.isCanceled()) {
+    if (this.searchProgressIndicator?.isCanceled()) {
       this.cleanupAfterSearch();
       return;
     }
@@ -1609,9 +1609,9 @@ export class ConsoleView extends UI.Widget.VBox implements
   }
 }
 
-// @ts-ignore exported for Tests.js
+// @ts-expect-error exported for Tests.js
 globalThis.Console = globalThis.Console || {};
-// @ts-ignore exported for Tests.js
+// @ts-expect-error exported for Tests.js
 globalThis.Console.ConsoleView = ConsoleView;
 
 export class ConsoleViewFilter {

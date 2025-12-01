@@ -26,6 +26,7 @@
 #include "extensions/browser/extension_function.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/shell_dialogs/select_file_dialog.h"
+#include "vivaldi_status/vivaldi_status.h"
 
 #include "browser/translate/vivaldi_translate_server_request.h"
 #include "components/datasource/vivaldi_image_store.h"
@@ -44,7 +45,8 @@ class VivaldiUtilitiesAPI : public BrowserContextKeyedAPI,
                             public base::PowerSuspendObserver,
                             public content::DownloadManager::Observer,
                             public download::DownloadItem::Observer,
-                            public history::TopSitesObserver {
+                            public history::TopSitesObserver,
+                            public vivaldi_status::VivaldiStatus::Observer {
  public:
   using MutexAvailableCallback = base::OnceCallback<void(int)>;
 
@@ -125,6 +127,10 @@ class VivaldiUtilitiesAPI : public BrowserContextKeyedAPI,
       history::TopSites* top_sites,
       history::TopSitesObserver::ChangeReason change_reason) override;
 
+  // vivaldi_status::VivaldiStatus::Observer
+  void OnVivaldiSyncStatusUpdated(
+      vivaldi_status::VivaldiStatus::Mode mode) override;
+
   // Call OnSessionRecoveryStart callback and subscribe to
   // on_session_restore_done_subscription_
   void OnSessionRecoveryStart();
@@ -183,7 +189,7 @@ class VivaldiUtilitiesAPI : public BrowserContextKeyedAPI,
   std::vector<std::unique_ptr<DialogPosition>> dialog_to_point_list_;
 
   // Used to anchor the auth dialog.
-  gfx::NativeWindow native_window_ = nullptr;
+  gfx::NativeWindow native_window_ = gfx::NativeWindow();
 
   // Razer Chroma integration, if available.
   std::unique_ptr<RazerChromaHandler> razer_chroma_handler_;
@@ -1160,6 +1166,28 @@ class UtilitiesSilentlyInstallExtensionFunction : public ExtensionFunction {
   void OnExtensionInstalled(bool success,
                             const std::string& error,
                             webstore_install::Result result);
+};
+
+class UtilitiesAllowVPNIncognitoFunction : public ExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("utilities.allowVPNIncognito",
+                             UTILITIES_ALLOW_VPN_INCOGNITO)
+  UtilitiesAllowVPNIncognitoFunction() = default;
+
+ private:
+  ~UtilitiesAllowVPNIncognitoFunction() override = default;
+  ResponseAction Run() override;
+};
+
+class UtilitiesRequestVivaldiSyncStatusFunction : public ExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("utilities.requestVivaldiSyncStatus",
+                             UTILITIES_REQUEST_VIVALDI_SYNC_STATUS)
+  UtilitiesRequestVivaldiSyncStatusFunction() = default;
+
+ private:
+  ~UtilitiesRequestVivaldiSyncStatusFunction() override = default;
+  ResponseAction Run() override;
 };
 
 }  // namespace extensions

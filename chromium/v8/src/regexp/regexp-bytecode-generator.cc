@@ -391,12 +391,12 @@ void RegExpBytecodeGenerator::IfRegisterEqPos(int register_index,
   EmitOrLink(on_eq);
 }
 
-Handle<HeapObject> RegExpBytecodeGenerator::GetCode(Handle<String> source,
-                                                    RegExpFlags flags) {
+DirectHandle<HeapObject> RegExpBytecodeGenerator::GetCode(
+    DirectHandle<String> source, RegExpFlags flags) {
   Bind(&backtrack_);
   Backtrack();
 
-  Handle<TrustedByteArray> array;
+  DirectHandle<TrustedByteArray> array;
   if (v8_flags.regexp_peephole_optimization) {
     array = RegExpBytecodePeepholeOptimization::OptimizeBytecode(
         isolate_, zone(), source, buffer_.data(), length(), jump_edges_);

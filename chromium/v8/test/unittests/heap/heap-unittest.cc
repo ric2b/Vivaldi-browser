@@ -236,7 +236,7 @@ TEST_F(HeapTest, HeapLayout) {
 namespace {
 void ShrinkNewSpace(NewSpace* new_space) {
   if (!v8_flags.minor_ms) {
-    SemiSpaceNewSpace::From(new_space)->Shrink();
+    new_space->heap()->ReduceNewSpaceSizeForTesting();
     return;
   }
   // MinorMS shrinks the space as part of sweeping. Here we fake a GC cycle, in
@@ -251,7 +251,7 @@ void ShrinkNewSpace(NewSpace* new_space) {
                      GarbageCollectionReason::kTesting, "heap unittest",
                      GCTracer::MarkingType::kAtomic);
   tracer->StartAtomicPause();
-  paged_new_space->StartShrinking();
+  paged_new_space->StartShrinking(paged_new_space->MinimumCapacity());
   for (auto it = paged_new_space->begin();
        it != paged_new_space->end() &&
        (paged_new_space->ShouldReleaseEmptyPage());) {
@@ -440,7 +440,7 @@ static size_t GetRememberedSetSize(Tagged<HeapObject> obj) {
 TEST_F(HeapTest, RememberedSet_InsertOnPromotingObjectToOld) {
   if (v8_flags.single_generation || v8_flags.stress_incremental_marking) return;
   v8_flags.stress_concurrent_allocation = false;  // For SealCurrentObjects.
-  v8_flags.scavenger_precise_pinning_objects = false;
+  v8_flags.scavenger_precise_object_pinning = false;
   ManualGCScope manual_gc_scope(isolate());
   Factory* factory = isolate()->factory();
   Heap* heap = isolate()->heap();
@@ -448,7 +448,7 @@ TEST_F(HeapTest, RememberedSet_InsertOnPromotingObjectToOld) {
   HandleScope handle_scope(isolate());
 
   // Create a young object and age it one generation inside the new space.
-  DirectHandle<FixedArray> arr = factory->NewFixedArray(1);
+  IndirectHandle<FixedArray> arr = factory->NewFixedArray(1);
   std::vector<Handle<FixedArray>> handles;
   if (v8_flags.minor_ms) {
     NewSpace* new_space = heap->new_space();
@@ -457,7 +457,7 @@ TEST_F(HeapTest, RememberedSet_InsertOnPromotingObjectToOld) {
     SimulateFullSpace(new_space, &handles);
     IsolateSafepointScope scope(heap);
     // New empty pages should remain in new space.
-    new_space->Grow();
+    heap->ExpandNewSpaceSizeForTesting();
     CHECK(new_space->EnsureCurrentCapacity());
   }
   InvokeMinorGC();
@@ -788,14 +788,121 @@ TEST_F(HeapTest, Regress364396306) {
 }
 #endif  // defined(V8_COMPRESS_POINTERS) && defined(V8_ENABLE_SANDBOX)
 
+TEST_F(HeapTest,
+       PinningScavengerDoesntMoveObjectReachableFromStackNoPromotion) {
+  if (v8_flags.single_generation) return;
+  if (v8_flags.minor_ms) return;
+  v8_flags.scavenger_conservative_object_pinning = true;
+  v8_flags.scavenger_precise_object_pinning = false;
+  v8_flags.scavenger_promote_quarantined_pages = false;
+  ManualGCScope manual_gc_scope(isolate());
+
+  IndirectHandle<HeapObject> number =
+      isolate()->factory()->NewHeapNumber<AllocationType::kYoung>(42);
+
+  // The conservative stack visitor will find this on the stack, so `number`
+  // will not move during GCs with stack.
+  Address number_address = number->address();
+
+  CHECK(HeapLayout::InYoungGeneration(*number));
+
+  for (int i = 0; i < 10; i++) {
+    InvokeMinorGC();
+    CHECK(HeapLayout::InYoungGeneration(*number));
+    CHECK_EQ(number_address, number->address());
+  }
+
+  // `number` is already in the intermediate generation. A stackless GC should
+  // now evacuate the object to the old generation.
+  {
+    DisableConservativeStackScanningScopeForTesting no_stack_scanning(
+        isolate()->heap());
+    InvokeMinorGC();
+  }
+  CHECK(!HeapLayout::InYoungGeneration(*number));
+  CHECK_NE(number_address, number->address());
+}
+
 TEST_F(HeapTest, PinningScavengerDoesntMoveObjectReachableFromStack) {
   if (v8_flags.single_generation) return;
   if (v8_flags.minor_ms) return;
-  if (!v8_flags.scavenger_pinning_objects) return;
-  v8_flags.scavenger_precise_pinning_objects = false;
+  v8_flags.scavenger_conservative_object_pinning = true;
+  v8_flags.scavenger_precise_object_pinning = false;
+  v8_flags.scavenger_promote_quarantined_pages = true;
   ManualGCScope manual_gc_scope(isolate());
 
-  DirectHandle<HeapObject> number =
+  IndirectHandle<HeapObject> number =
+      isolate()->factory()->NewHeapNumber<AllocationType::kYoung>(42);
+
+  // The conservative stack visitor will find this on the stack, so `number`
+  // will not move during a GC with stack.
+  Address number_address = number->address();
+
+  CHECK(HeapLayout::InYoungGeneration(*number));
+
+  InvokeMinorGC();
+  CHECK(HeapLayout::InYoungGeneration(*number));
+  CHECK_EQ(number_address, number->address());
+
+  // `number` is already in the intermediate generation. Another GC should
+  // now promote the page to the old generation, again not moving the object.
+  InvokeMinorGC();
+  CHECK(!HeapLayout::InYoungGeneration(*number));
+  CHECK_EQ(number_address, number->address());
+}
+
+TEST_F(HeapTest, PinningScavengerObjectWithSelfReference) {
+  if (v8_flags.single_generation) return;
+  if (v8_flags.minor_ms) return;
+  v8_flags.scavenger_conservative_object_pinning = true;
+  ManualGCScope manual_gc_scope(isolate());
+
+  static constexpr int kArraySize = 10;
+  DirectHandle<FixedArray> array =
+      isolate()->factory()->NewFixedArray(kArraySize, AllocationType::kYoung);
+  CHECK(HeapLayout::InYoungGeneration(*array));
+
+  for (int i = 0; i < kArraySize; i++) {
+    array->set(i, *array);
+  }
+
+  InvokeMinorGC();
+}
+
+TEST_F(HeapTest,
+       PrecisePinningScavengerDoesntMoveObjectReachableFromHandlesNoPromotion) {
+  if (v8_flags.single_generation) return;
+  if (v8_flags.minor_ms) return;
+  v8_flags.scavenger_precise_object_pinning = true;
+  v8_flags.scavenger_conservative_object_pinning = false;
+  v8_flags.scavenger_promote_quarantined_pages = false;
+  ManualGCScope manual_gc_scope(isolate());
+
+  v8::HandleScope handle_scope(reinterpret_cast<v8::Isolate*>(isolate()));
+  IndirectHandle<HeapObject> number =
+      isolate()->factory()->NewHeapNumber<AllocationType::kYoung>(42);
+
+  Address number_address = number->address();
+
+  CHECK(HeapLayout::InYoungGeneration(*number));
+
+  for (int i = 0; i < 10; i++) {
+    InvokeMinorGC();
+    CHECK(HeapLayout::InYoungGeneration(*number));
+    CHECK_EQ(number_address, number->address());
+  }
+}
+
+TEST_F(HeapTest, PrecisePinningScavengerDoesntMoveObjectReachableFromHandles) {
+  if (v8_flags.single_generation) return;
+  if (v8_flags.minor_ms) return;
+  v8_flags.scavenger_precise_object_pinning = true;
+  v8_flags.scavenger_conservative_object_pinning = false;
+  v8_flags.scavenger_promote_quarantined_pages = true;
+  ManualGCScope manual_gc_scope(isolate());
+
+  v8::HandleScope handle_scope(reinterpret_cast<v8::Isolate*>(isolate()));
+  IndirectHandle<HeapObject> number =
       isolate()->factory()->NewHeapNumber<AllocationType::kYoung>(42);
 
   Address number_address = number->address();
@@ -813,22 +920,44 @@ TEST_F(HeapTest, PinningScavengerDoesntMoveObjectReachableFromStack) {
   CHECK_EQ(number_address, number->address());
 }
 
-TEST_F(HeapTest, PinningScavengerObjectWithSelfReference) {
+TEST_F(HeapTest,
+       PrecisePinningFullGCDoesntMoveYoungObjectReachableFromHandles) {
   if (v8_flags.single_generation) return;
-  if (v8_flags.minor_ms) return;
-  if (!v8_flags.scavenger_pinning_objects) return;
+  v8_flags.precise_object_pinning = true;
   ManualGCScope manual_gc_scope(isolate());
 
-  static constexpr int kArraySize = 10;
-  DirectHandle<FixedArray> array =
-      isolate()->factory()->NewFixedArray(kArraySize, AllocationType::kYoung);
-  CHECK(HeapLayout::InYoungGeneration(*array));
+  v8::HandleScope handle_scope(reinterpret_cast<v8::Isolate*>(isolate()));
+  IndirectHandle<HeapObject> number =
+      isolate()->factory()->NewHeapNumber<AllocationType::kYoung>(42);
 
-  for (int i = 0; i < kArraySize; i++) {
-    array->set(i, *array);
-  }
+  Address number_address = number->address();
 
-  InvokeMinorGC();
+  CHECK(HeapLayout::InYoungGeneration(*number));
+  InvokeMajorGC();
+  CHECK(!HeapLayout::InYoungGeneration(*number));
+
+  CHECK_EQ(number_address, number->address());
+}
+
+TEST_F(HeapTest, PrecisePinningFullGCDoesntMoveOldObjectReachableFromHandles) {
+  v8_flags.precise_object_pinning = true;
+  v8_flags.manual_evacuation_candidates_selection = true;
+  ManualGCScope manual_gc_scope(isolate());
+
+  v8::HandleScope handle_scope(reinterpret_cast<v8::Isolate*>(isolate()));
+  IndirectHandle<HeapObject> number =
+      isolate()->factory()->NewHeapNumber<AllocationType::kOld>(42);
+
+  CHECK(!HeapLayout::InYoungGeneration(*number));
+
+  Address number_address = number->address();
+
+  i::MemoryChunk::FromHeapObject(*number)->SetFlagNonExecutable(
+      i::MemoryChunk::FORCE_EVACUATION_CANDIDATE_FOR_TESTING);
+
+  InvokeMajorGC();
+
+  CHECK_EQ(number_address, number->address());
 }
 
 }  // namespace internal

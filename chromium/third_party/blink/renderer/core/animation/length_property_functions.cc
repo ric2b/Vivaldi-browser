@@ -39,6 +39,7 @@ Length::ValueRange LengthPropertyFunctions::GetValueRange(
     case CSSPropertyID::kColumnGap:
     case CSSPropertyID::kRowGap:
     case CSSPropertyID::kColumnWidth:
+    case CSSPropertyID::kColumnHeight:
     case CSSPropertyID::kWidth:
     case CSSPropertyID::kTabSize:
       return Length::ValueRange::kNonNegative;
@@ -102,6 +103,7 @@ bool LengthPropertyFunctions::GetPixelsForKeyword(const CSSProperty& property,
     case CSSPropertyID::kBorderRightWidth:
     case CSSPropertyID::kBorderTopWidth:
     case CSSPropertyID::kColumnRuleWidth:
+    case CSSPropertyID::kRowRuleWidth:
     case CSSPropertyID::kOutlineWidth:
       if (value_id == CSSValueID::kThin) {
         result = 1;
@@ -157,7 +159,10 @@ bool LengthPropertyFunctions::GetInitialLength(
           Length::Fixed(ComputedStyleInitialValues::InitialColumnRuleWidth()
                             .GetLegacyValue());
       return true;
-
+    case CSSPropertyID::kRowRuleWidth:
+      result = Length::Fixed(
+          ComputedStyleInitialValues::InitialRowRuleWidth().GetLegacyValue());
+      return true;
     default:
       return GetLength(property, initial_style, result);
   }
@@ -359,7 +364,15 @@ bool LengthPropertyFunctions::GetLength(const CSSProperty& property,
       }
       break;
     case CSSPropertyID::kColumnRuleWidth:
+      // TODO(crbug.com/357648037): Investigate whether we'll need a new way of
+      // handling multiple lengths.
       result = Length::Fixed(style.ColumnRuleWidth().GetLegacyValue());
+      success = true;
+      break;
+    case CSSPropertyID::kRowRuleWidth:
+      // TODO(crbug.com/357648037): Investigate whether we'll need a new way of
+      // handling multiple lengths.
+      result = Length::Fixed(style.RowRuleWidth().GetLegacyValue());
       success = true;
       break;
     case CSSPropertyID::kWebkitTransformOriginZ:
@@ -412,6 +425,12 @@ bool LengthPropertyFunctions::GetLength(const CSSProperty& property,
     case CSSPropertyID::kColumnWidth:
       if (!style.HasAutoColumnWidth()) {
         result = Length::Fixed(style.ColumnWidth());
+        success = true;
+      }
+      break;
+    case CSSPropertyID::kColumnHeight:
+      if (!style.HasAutoColumnHeight()) {
+        result = Length::Fixed(style.ColumnHeight());
         success = true;
       }
       break;
@@ -555,26 +574,7 @@ bool LengthPropertyFunctions::SetLength(const CSSProperty& property,
 
     // TODO(alancutter): Support setters that take a numeric value (need to
     // resolve percentages).
-    case CSSPropertyID::kBorderBottomWidth:
-    case CSSPropertyID::kBorderLeftWidth:
-    case CSSPropertyID::kBorderRightWidth:
-    case CSSPropertyID::kBorderTopWidth:
-    case CSSPropertyID::kLetterSpacing:
-    case CSSPropertyID::kOutlineOffset:
-    case CSSPropertyID::kOutlineWidth:
-    case CSSPropertyID::kPerspective:
-    case CSSPropertyID::kStrokeWidth:
-    case CSSPropertyID::kVerticalAlign:
-    case CSSPropertyID::kWebkitBorderHorizontalSpacing:
-    case CSSPropertyID::kWebkitBorderVerticalSpacing:
-    case CSSPropertyID::kColumnGap:
-    case CSSPropertyID::kRowGap:
-    case CSSPropertyID::kColumnRuleWidth:
-    case CSSPropertyID::kColumnWidth:
-    case CSSPropertyID::kWebkitTransformOriginZ:
-    case CSSPropertyID::kWordSpacing:
-    case CSSPropertyID::kTabSize:
-      return false;
+    // One example of such a property: border-bottom-width
 
     default:
       return false;

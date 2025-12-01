@@ -198,6 +198,8 @@ std::string GetDisplayTypeString(gl::DisplayType type) {
       return "ANGLE_METAL";
     case gl::ANGLE_METAL_NULL:
       return "ANGLE_METAL_NULL";
+    case gl::ANGLE_D3D11_WARP:
+      return "ANGLE_D3D11_WARP";
     default:
       NOTREACHED();
   }
@@ -291,11 +293,6 @@ void GetDawnTogglesForSkiaGraphite(
 #endif  // BUILDFLAG(SKIA_USE_DAWN)
 
 void ReportWebGPUAdapterMetrics(dawn::native::Instance* instance) {
-  static BASE_FEATURE(kCollectDawnGpuMetrics, "CollectDawnGpuMetrics",
-                      base::FEATURE_ENABLED_BY_DEFAULT);
-  if (!base::FeatureList::IsEnabled(kCollectDawnGpuMetrics)) {
-    return;
-  }
   WGPULimits max_limits{};
   wgpu::AdapterType adapter_type = wgpu::AdapterType::Unknown;
 
@@ -309,7 +306,6 @@ void ReportWebGPUAdapterMetrics(dawn::native::Instance* instance) {
   adapter_options.backendType = wgpu::BackendType::Vulkan;
 #endif
 
-  bool supports_shader_f16 = false;
   for (dawn::native::Adapter& nativeAdapter :
        instance->EnumerateAdapters(&adapter_options)) {
     nativeAdapter.SetUseTieredLimits(false);
@@ -322,21 +318,17 @@ void ReportWebGPUAdapterMetrics(dawn::native::Instance* instance) {
       continue;
     }
 
-    wgpu::SupportedLimits limits;
-    limits.nextInChain = nullptr;
+    wgpu::Limits limits = {};
     if (adapter.GetLimits(&limits) != wgpu::Status::Success) {
       continue;
     }
 
     // Prefer the adapter with larger buffer binding size.
-    if (limits.limits.maxStorageBufferBindingSize >
+    if (limits.maxStorageBufferBindingSize >
         max_limits.maxStorageBufferBindingSize) {
-      max_limits = limits.limits;
+      max_limits = limits;
       adapter_type = info.adapterType;
     }
-
-    supports_shader_f16 |=
-        wgpu::Adapter(adapter.Get()).HasFeature(wgpu::FeatureName::ShaderF16);
   }
 
   bool has_gpu_adapter = adapter_type != wgpu::AdapterType::Unknown;
@@ -351,9 +343,6 @@ void ReportWebGPUAdapterMetrics(dawn::native::Instance* instance) {
     base::UmaHistogramCounts100000(
         "GPU.WebGPU.MaxTextureDimension2D." + adapter_string,
         max_limits.maxTextureDimension2D);
-
-    base::UmaHistogramBoolean("GPU.WebGPU.Support.ShaderF16",
-                              supports_shader_f16);
   }
 }
 
@@ -584,11 +573,6 @@ bool CollectGraphicsInfoGL(GPUInfo* gpu_info, gl::GLDisplay* display) {
   GPU_STARTUP_TRACE_EVENT("gpu_info_collector::CollectGraphicsInfoGL");
   DCHECK_NE(gl::GetGLImplementationParts(), gl::kGLImplementationNone);
   gl::GLDisplayEGL* egl_display = display->GetAs<gl::GLDisplayEGL>();
-
-  // Now that we can check GL extensions, update passthrough support info.
-  if (!gl::PassthroughCommandDecoderSupported()) {
-    gpu_info->passthrough_cmd_decoder = false;
-  }
 
   scoped_refptr<gl::GLSurface> surface(InitializeGLSurface(display));
   if (!surface.get()) {

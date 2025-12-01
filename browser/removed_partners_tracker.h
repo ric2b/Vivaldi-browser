@@ -13,7 +13,7 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/profiles/profile_manager_observer.h"
-#endif //!IS_IOS
+#endif  //! IS_IOS
 #include "components/bookmarks/browser/bookmark_model_observer.h"
 
 class PrefService;
@@ -30,18 +30,15 @@ class LegacyBookmarkModel;
 namespace vivaldi_partners {
 class RemovedPartnersTracker : public bookmarks::BookmarkModelObserver
 #if !BUILDFLAG(IS_IOS)
-, public ProfileManagerObserver
-#endif //!BUILDFLAG(IS_IOS)
- {
+    , public ProfileManagerObserver
+#endif  //! BUILDFLAG(IS_IOS)
+{
  public:
 #if !BUILDFLAG(IS_IOS)
   static void Create(Profile* profile, bookmarks::BookmarkModel* model);
 #else
   static void Create(PrefService* prefs, bookmarks::BookmarkModel* model);
 #endif
-  static std::set<base::Uuid> ReadRemovedPartners(
-      const base::Value::List& deleted_partners,
-      bool& upgraded_old_id);
 
  private:
   class MetaInfoChangeFilter;
@@ -58,15 +55,14 @@ class RemovedPartnersTracker : public bookmarks::BookmarkModelObserver
 #if !BUILDFLAG(IS_IOS)
   // ProfileManagerObserver implementation.
   void OnProfileMarkedForPermanentDeletion(Profile* profile) override;
-#endif //!BUILDFLAG(IS_IOS)
+#endif  //! BUILDFLAG(IS_IOS)
   // Implementing BookmarkModelObserver
   void BookmarkNodeChanged(const bookmarks::BookmarkNode* node) override;
-  void BookmarkNodeRemoved(
-      const bookmarks::BookmarkNode* parent,
-      size_t old_index,
-      const bookmarks::BookmarkNode* node,
-      const std::set<GURL>& no_longer_bookmarked,
-      const base::Location& location) override {}
+  void BookmarkNodeRemoved(const bookmarks::BookmarkNode* parent,
+                           size_t old_index,
+                           const bookmarks::BookmarkNode* node,
+                           const std::set<GURL>& no_longer_bookmarked,
+                           const base::Location& location) override {}
   void OnWillRemoveBookmarks(const bookmarks::BookmarkNode* parent,
                              size_t old_index,
                              const bookmarks::BookmarkNode* node,
@@ -103,7 +99,7 @@ class RemovedPartnersTracker : public bookmarks::BookmarkModelObserver
   base::ScopedObservation<ProfileManager, ProfileManagerObserver>
       profile_manager_observation_{this};
   const raw_ptr<Profile> profile_ = nullptr;
-#endif //!IS_IOS
+#endif  //! IS_IOS
   std::unique_ptr<MetaInfoChangeFilter> change_filter_;
 
   base::WeakPtrFactory<RemovedPartnersTracker> weak_factory_{this};

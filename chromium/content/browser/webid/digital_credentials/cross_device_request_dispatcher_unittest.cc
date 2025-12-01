@@ -4,6 +4,7 @@
 
 #include "content/browser/webid/digital_credentials/cross_device_request_dispatcher.h"
 
+#include "base/json/json_reader.h"
 #include "base/test/bind.h"
 #include "base/test/task_environment.h"
 #include "base/test/test_future.h"
@@ -26,6 +27,7 @@
 #include "url/gurl.h"
 #include "url/origin.h"
 
+using base::JSONReader;
 using testing::NiceMock;
 
 namespace content::digital_credentials::cross_device {
@@ -132,13 +134,14 @@ class DigitalCredentialsCrossDeviceRequestDispatcherTest
   base::test::TaskEnvironment task_environment;
 };
 
-TEST_P(DigitalCredentialsCrossDeviceRequestDispatcherTest, Valid) {
-  base::expected<Response, RequestDispatcher::Error> result =
-      Transact(device::cablev2::PayloadType::kJSON,
-               R"({"response": {"digital": {"data": "ok"}}})");
+TEST_P(DigitalCredentialsCrossDeviceRequestDispatcherTest, ValidLegacyFormat) {
+  base::expected<Response, RequestDispatcher::Error> result = Transact(
+      device::cablev2::PayloadType::kJSON,
+      R"({"response": {"digital": {"data": {"vp_token" : "token"}}}})");
   ASSERT_TRUE(result.has_value());
-  ASSERT_TRUE(result.value()->is_string());
-  ASSERT_EQ(result.value()->GetString(), "ok");
+  ASSERT_EQ(result.value()->data,
+            JSONReader::Read(R"({"vp_token":"token"})").value());
+  EXPECT_FALSE(result.value()->protocol.has_value());
 }
 
 TEST_P(DigitalCredentialsCrossDeviceRequestDispatcherTest, InvalidJson) {
@@ -189,6 +192,44 @@ TEST_P(DigitalCredentialsCrossDeviceRequestDispatcherTest, CTAPResponse) {
   ASSERT_FALSE(result.has_value());
   EXPECT_EQ(result.error(),
             RequestDispatcher::Error(ProtocolError::kTransportError));
+}
+
+TEST_P(DigitalCredentialsCrossDeviceRequestDispatcherTest, NewResponseFormat) {
+  base::expected<Response, RequestDispatcher::Error> result =
+      Transact(device::cablev2::PayloadType::kJSON,
+               R"({
+           "response": {
+             "digital": {
+               "data": {
+                 "data": {"key": "value"},
+                 "protocol" : "ProtocolInResponse"
+               }
+             }
+           }
+         })");
+  ASSERT_TRUE(result.has_value());
+  EXPECT_EQ(result.value()->data,
+            JSONReader::Read(R"({"key":"value"})").value());
+  EXPECT_EQ(result.value()->protocol, "ProtocolInResponse");
+}
+
+TEST_P(DigitalCredentialsCrossDeviceRequestDispatcherTest,
+       NewResponseFormatWithoutProtocol) {
+  base::expected<Response, RequestDispatcher::Error> result =
+      Transact(device::cablev2::PayloadType::kJSON,
+               R"({
+           "response": {
+             "digital": {
+               "data": {
+                 "data": {"key": "value"}
+               }
+             }
+           }
+         })");
+  ASSERT_TRUE(result.has_value());
+  EXPECT_EQ(result.value()->data,
+            JSONReader::Read(R"({"key":"value"})").value());
+  EXPECT_FALSE(result.value()->protocol.has_value());
 }
 
 INSTANTIATE_TEST_SUITE_P(,

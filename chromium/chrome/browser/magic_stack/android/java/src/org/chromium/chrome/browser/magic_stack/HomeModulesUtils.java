@@ -12,10 +12,11 @@ import static org.chromium.chrome.browser.magic_stack.ModuleDelegate.ModuleType.
 import static org.chromium.chrome.browser.magic_stack.ModuleDelegate.ModuleType.SINGLE_TAB;
 import static org.chromium.chrome.browser.magic_stack.ModuleDelegate.ModuleType.TAB_GROUP_PROMO;
 import static org.chromium.chrome.browser.magic_stack.ModuleDelegate.ModuleType.TAB_GROUP_SYNC_PROMO;
-import static org.chromium.chrome.browser.magic_stack.ModuleDelegate.ModuleType.TAB_RESUMPTION;
 
+import android.content.res.Resources;
 import android.os.SystemClock;
 
+import androidx.annotation.NonNull;
 import androidx.annotation.VisibleForTesting;
 
 import org.chromium.base.TimeUtils;
@@ -39,8 +40,6 @@ public class HomeModulesUtils {
     private static final String SINGLE_TAB_FRESHNESS_INPUT_CONTEXT = "single_tab_freshness";
 
     private static final String PRICE_CHANGE_FRESHNESS_INPUT_CONTEXT = "price_change_freshness";
-
-    private static final String TAB_RESUMPTION_FRESHNESS_INPUT_CONTEXT = "tab_resumption_freshness";
 
     private static final String SAFETY_HUB_FRESHNESS_INPUT_CONTEXT = "safety_hub_freshness";
 
@@ -75,12 +74,39 @@ public class HomeModulesUtils {
                 return SINGLE_TAB_FRESHNESS_INPUT_CONTEXT;
             case PRICE_CHANGE:
                 return PRICE_CHANGE_FRESHNESS_INPUT_CONTEXT;
-            case TAB_RESUMPTION:
-                return TAB_RESUMPTION_FRESHNESS_INPUT_CONTEXT;
             case SAFETY_HUB:
                 return SAFETY_HUB_FRESHNESS_INPUT_CONTEXT;
             case AUXILIARY_SEARCH:
                 return AUXILIARY_SEARCH_FRESHNESS_INPUT_CONTEXT;
+            default:
+                assert false : "Module type not supported!";
+                return null;
+        }
+    }
+
+    /**
+     * @param moduleType Type of the home module
+     * @param resources The {@link Resources} instance to load Android resources from.
+     * @return The string of switch title for the module type.
+     */
+    @NonNull
+    public static String getTitleForModuleType(
+            @ModuleType int moduleType, @NonNull Resources resources) {
+        switch (moduleType) {
+            case SINGLE_TAB:
+                return resources.getQuantityString(R.plurals.home_modules_tab_resumption_title, 1);
+            case PRICE_CHANGE:
+                return resources.getString(R.string.price_change_module_name);
+            case SAFETY_HUB:
+                return resources.getString(R.string.safety_hub_magic_stack_module_name);
+            case DEFAULT_BROWSER_PROMO:
+            case TAB_GROUP_PROMO:
+            case TAB_GROUP_SYNC_PROMO:
+            case QUICK_DELETE_PROMO:
+                // All tips use the same name.
+                return resources.getString(R.string.educational_tip_module_name);
+            case AUXILIARY_SEARCH:
+                return resources.getString(R.string.auxiliary_search_module_name);
             default:
                 assert false : "Module type not supported!";
                 return null;

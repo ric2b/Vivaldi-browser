@@ -4,6 +4,7 @@
 
 #include "chrome/test/interaction/interactive_browser_test.h"
 
+#include <list>
 #include <sstream>
 #include <tuple>
 
@@ -12,6 +13,9 @@
 #include "base/files/scoped_temp_dir.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback_helpers.h"
+#include "base/test/bind.h"
+#include "base/time/time.h"
+#include "base/timer/timer.h"
 #include "build/build_config.h"
 #include "chrome/browser/ui/browser_element_identifiers.h"
 #include "chrome/test/base/test_switches.h"
@@ -60,6 +64,32 @@ class InteractiveBrowserTestBrowsertest : public InteractiveBrowserTest {
     EXPECT_TRUE(embedded_test_server()->ShutdownAndWaitUntilComplete());
     InteractiveBrowserTest::TearDownOnMainThread();
   }
+
+  static constexpr base::TimeDelta kDelayedActionDelay =
+      base::Milliseconds(500);
+
+  void PostDelayedAction(base::OnceClosure action) {
+    delayed_actions_.push_back(std::move(action));
+    if (!delayed_action_timer_.IsRunning()) {
+      delayed_action_timer_.Start(
+          FROM_HERE, kDelayedActionDelay,
+          base::BindRepeating(
+              &InteractiveBrowserTestBrowsertest::OnDelayedActionTimer,
+              base::Unretained(this)));
+    }
+  }
+
+ private:
+  void OnDelayedActionTimer() {
+    std::move(delayed_actions_.front()).Run();
+    delayed_actions_.pop_front();
+    if (delayed_actions_.empty()) {
+      delayed_action_timer_.Stop();
+    }
+  }
+
+  std::list<base::OnceClosure> delayed_actions_;
+  base::RepeatingTimer delayed_action_timer_;
 };
 
 // This test checks that all of the UI elements in the browser can be dumped.
@@ -537,6 +567,257 @@ IN_PROC_BROWSER_TEST_F(InteractiveBrowserTestBrowsertest, ScrollIntoView) {
 }
 
 IN_PROC_BROWSER_TEST_F(InteractiveBrowserTestBrowsertest,
+                       WaitForJsResultTrueAtStart) {
+  const GURL url1 = embedded_test_server()->GetURL(kDocumentWithNamedElement);
+  RunTestSequence(
+      InstrumentTab(kWebContentsId), NavigateWebContents(kWebContentsId, url1),
+      ExecuteJs(kWebContentsId,
+                R"(() => {
+            window.intValue = 1;
+            window.boolValue = true;
+            window.doubleValue = 2.0;
+            window.stringValue = 'a string';
+          })"),
+      WaitForJsResult(kWebContentsId, "() => window.intValue", 1),
+      WaitForJsResult(kWebContentsId, "() => window.boolValue", true),
+      WaitForJsResult(kWebContentsId, "() => window.doubleValue",
+                      testing::Ge(1.0)),
+      WaitForJsResult(kWebContentsId, "() => window.stringValue", "a string"),
+      WaitForJsResult(kWebContentsId, "() => window.stringValue",
+                      testing::HasSubstr("stri")),
+      WaitForJsResult(kWebContentsId, "() => window.intValue",
+                      testing::AnyOf(4, 3, 1, 0)));
+}
+
+IN_PROC_BROWSER_TEST_F(InteractiveBrowserTestBrowsertest,
+                       WaitForJsResultTrueAfterDelay) {
+  const GURL url1 = embedded_test_server()->GetURL(kDocumentWithNamedElement);
+  RunTestSequence(
+      InstrumentTab(kWebContentsId), NavigateWebContents(kWebContentsId, url1),
+      ExecuteJs(kWebContentsId,
+                R"(() => {
+            window.intValue = 0;
+            window.boolValue = false;
+            window.doubleValue = 0.0;
+            window.stringValue = 'nothing';
+          })"),
+      WithElement(kWebContentsId,
+                  [this](ui::TrackedElement* el) {
+                    auto* const util = AsInstrumentedWebContents(el);
+                    PostDelayedAction(base::BindLambdaForTesting([util]() {
+                      util->Execute("() => window.intValue = 1");
+                    }));
+                    PostDelayedAction(base::BindLambdaForTesting([util]() {
+                      util->Execute("() => window.boolValue = true");
+                    }));
+                    PostDelayedAction(base::BindLambdaForTesting([util]() {
+                      util->Execute("() => window.doubleValue = 2.0");
+                    }));
+                    PostDelayedAction(base::BindLambdaForTesting([util]() {
+                      util->Execute("() => window.stringValue = 'a string'");
+                    }));
+                  }),
+      WaitForJsResult(kWebContentsId, "() => window.intValue", 1),
+      WaitForJsResult(kWebContentsId, "() => window.boolValue", true),
+      WaitForJsResult(kWebContentsId, "() => window.doubleValue",
+                      testing::Ge(1.0)),
+      WaitForJsResult(kWebContentsId, "() => window.stringValue",
+                      testing::HasSubstr("stri")));
+}
+
+IN_PROC_BROWSER_TEST_F(InteractiveBrowserTestBrowsertest,
+                       WaitForJsResultTargetChangesAfterDelay) {
+  const GURL url1 = embedded_test_server()->GetURL(kDocumentWithNamedElement);
+  int target = 0;
+  RunTestSequence(
+      InstrumentTab(kWebContentsId), NavigateWebContents(kWebContentsId, url1),
+      ExecuteJs(kWebContentsId,
+                R"(() => {
+            window.intValue = 1;
+            window.boolValue = true;
+            window.doubleValue = 2.0;
+            window.stringValue = 'a string';
+          })"),
+      Do([this, &target]() {
+        PostDelayedAction(
+            base::BindLambdaForTesting([&target]() { target = 1; }));
+      }),
+      WaitForJsResult(kWebContentsId, "() => window.intValue",
+                      std::ref(target)));
+}
+
+IN_PROC_BROWSER_TEST_F(InteractiveBrowserTestBrowsertest,
+                       WaitForJsResultIsTruthyAfterDelay) {
+  const GURL url1 = embedded_test_server()->GetURL(kDocumentWithNamedElement);
+  RunTestSequence(
+      InstrumentTab(kWebContentsId), NavigateWebContents(kWebContentsId, url1),
+      ExecuteJs(kWebContentsId,
+                R"(() => {
+            window.intValue = 0;
+            window.boolValue = false;
+            window.doubleValue = 0.0;
+            window.stringValue = null;
+          })"),
+      CheckJsResult(kWebContentsId, "() => window.intValue",
+                    testing::Not(IsTruthy())),
+      CheckJsResult(kWebContentsId, "() => window.boolValue",
+                    testing::Not(IsTruthy())),
+      CheckJsResult(kWebContentsId, "() => window.doubleValue",
+                    testing::Not(IsTruthy())),
+      CheckJsResult(kWebContentsId, "() => window.stringValue",
+                    testing::Not(IsTruthy())),
+      WithElement(kWebContentsId,
+                  [this](ui::TrackedElement* el) {
+                    auto* const util = AsInstrumentedWebContents(el);
+                    PostDelayedAction(base::BindLambdaForTesting([util]() {
+                      util->Execute("() => window.intValue = 1");
+                    }));
+                    PostDelayedAction(base::BindLambdaForTesting([util]() {
+                      util->Execute("() => window.boolValue = true");
+                    }));
+                    PostDelayedAction(base::BindLambdaForTesting([util]() {
+                      util->Execute("() => window.doubleValue = 2.0");
+                    }));
+                    PostDelayedAction(base::BindLambdaForTesting([util]() {
+                      util->Execute("() => window.stringValue = 'a string'");
+                    }));
+                  }),
+      WaitForJsResult(kWebContentsId, "() => window.intValue"),
+      WaitForJsResult(kWebContentsId, "() => window.boolValue"),
+      WaitForJsResult(kWebContentsId, "() => window.doubleValue"),
+      WaitForJsResult(kWebContentsId, "() => window.stringValue"));
+}
+
+IN_PROC_BROWSER_TEST_F(InteractiveBrowserTestBrowsertest,
+                       WaitForJsResultAtTrueAtStart) {
+  const GURL url1 = embedded_test_server()->GetURL(kDocumentWithNamedElement);
+  const DeepQuery kWhere{"#select"};
+  RunTestSequence(
+      InstrumentTab(kWebContentsId), NavigateWebContents(kWebContentsId, url1),
+      ExecuteJsAt(kWebContentsId, kWhere,
+                  R"(el => {
+            el.intValue = 1;
+            el.boolValue = true;
+            el.doubleValue = 2.0;
+            el.stringValue = 'a string';
+          })"),
+      WaitForJsResultAt(kWebContentsId, kWhere, "el => el.intValue", 1),
+      WaitForJsResultAt(kWebContentsId, kWhere, "el => el.boolValue", true),
+      WaitForJsResultAt(kWebContentsId, kWhere, "el => el.doubleValue",
+                        testing::Ge(1.0)),
+      WaitForJsResultAt(kWebContentsId, kWhere, "el => el.stringValue",
+                        "a string"),
+      WaitForJsResultAt(kWebContentsId, kWhere, "el => el.stringValue",
+                        testing::HasSubstr("stri")),
+      WaitForJsResultAt(kWebContentsId, kWhere, "el => el.intValue",
+                        testing::AnyOf(4, 3, 1, 0)));
+}
+
+IN_PROC_BROWSER_TEST_F(InteractiveBrowserTestBrowsertest,
+                       WaitForJsResultAtTrueAfterDelay) {
+  const GURL url1 = embedded_test_server()->GetURL(kDocumentWithNamedElement);
+  const DeepQuery kWhere{"#select"};
+  RunTestSequence(
+      InstrumentTab(kWebContentsId), NavigateWebContents(kWebContentsId, url1),
+      ExecuteJsAt(kWebContentsId, kWhere,
+                  R"(el => {
+            el.intValue = 0;
+            el.boolValue = false;
+            el.doubleValue = 0.0;
+            el.stringValue = 'nothing';
+          })"),
+      WithElement(
+          kWebContentsId,
+          [this, kWhere](ui::TrackedElement* el) {
+            auto* const util = AsInstrumentedWebContents(el);
+            PostDelayedAction(base::BindLambdaForTesting([util, kWhere]() {
+              util->ExecuteAt(kWhere, "el => el.intValue = 1");
+            }));
+            PostDelayedAction(base::BindLambdaForTesting([util, kWhere]() {
+              util->ExecuteAt(kWhere, "el => el.boolValue = true");
+            }));
+            PostDelayedAction(base::BindLambdaForTesting([util, kWhere]() {
+              util->ExecuteAt(kWhere, "el => el.doubleValue = 2.0");
+            }));
+            PostDelayedAction(base::BindLambdaForTesting([util, kWhere]() {
+              util->ExecuteAt(kWhere, "el => el.stringValue = 'a string'");
+            }));
+          }),
+      WaitForJsResultAt(kWebContentsId, kWhere, "el => el.intValue", 1),
+      WaitForJsResultAt(kWebContentsId, kWhere, "el => el.boolValue", true),
+      WaitForJsResultAt(kWebContentsId, kWhere, "el => el.doubleValue",
+                        testing::Ge(1.0)),
+      WaitForJsResultAt(kWebContentsId, kWhere, "el => el.stringValue",
+                        testing::HasSubstr("stri")));
+}
+
+IN_PROC_BROWSER_TEST_F(InteractiveBrowserTestBrowsertest,
+                       WaitForJsResultAtTargetChangesAfterDelay) {
+  const GURL url1 = embedded_test_server()->GetURL(kDocumentWithNamedElement);
+  const DeepQuery kWhere{"#select"};
+  int target = 0;
+  RunTestSequence(
+      InstrumentTab(kWebContentsId), NavigateWebContents(kWebContentsId, url1),
+      ExecuteJsAt(kWebContentsId, kWhere,
+                  R"(el => {
+            el.intValue = 1;
+            el.boolValue = true;
+            el.doubleValue = 2.0;
+            el.stringValue = 'a string';
+          })"),
+      Do([this, &target]() {
+        PostDelayedAction(
+            base::BindLambdaForTesting([&target]() { target = 1; }));
+      }),
+      WaitForJsResultAt(kWebContentsId, kWhere, "el => el.intValue",
+                        std::ref(target)));
+}
+
+IN_PROC_BROWSER_TEST_F(InteractiveBrowserTestBrowsertest,
+                       WaitForJsResultAtIsTruthyAfterDelay) {
+  const GURL url1 = embedded_test_server()->GetURL(kDocumentWithNamedElement);
+  const DeepQuery kWhere{"#select"};
+  RunTestSequence(
+      InstrumentTab(kWebContentsId), NavigateWebContents(kWebContentsId, url1),
+      ExecuteJsAt(kWebContentsId, kWhere,
+                  R"(el => {
+            el.intValue = 0;
+            el.boolValue = false;
+            el.doubleValue = 0.0;
+            el.stringValue = '';
+          })"),
+      CheckJsResultAt(kWebContentsId, kWhere, "el => el.intValue",
+                      testing::Not(IsTruthy())),
+      CheckJsResultAt(kWebContentsId, kWhere, "el => el.boolValue",
+                      testing::Not(IsTruthy())),
+      CheckJsResultAt(kWebContentsId, kWhere, "el => el.doubleValue",
+                      testing::Not(IsTruthy())),
+      CheckJsResultAt(kWebContentsId, kWhere, "el => el.stringValue",
+                      testing::Not(IsTruthy())),
+      WithElement(
+          kWebContentsId,
+          [this, kWhere](ui::TrackedElement* el) {
+            auto* const util = AsInstrumentedWebContents(el);
+            PostDelayedAction(base::BindLambdaForTesting([util, kWhere]() {
+              util->ExecuteAt(kWhere, "el => el.intValue = 1");
+            }));
+            PostDelayedAction(base::BindLambdaForTesting([util, kWhere]() {
+              util->ExecuteAt(kWhere, "el => el.boolValue = true");
+            }));
+            PostDelayedAction(base::BindLambdaForTesting([util, kWhere]() {
+              util->ExecuteAt(kWhere, "el => el.doubleValue = 2.0");
+            }));
+            PostDelayedAction(base::BindLambdaForTesting([util, kWhere]() {
+              util->ExecuteAt(kWhere, "el => el.stringValue = 'a string'");
+            }));
+          }),
+      WaitForJsResultAt(kWebContentsId, kWhere, "el => el.intValue"),
+      WaitForJsResultAt(kWebContentsId, kWhere, "el => el.boolValue"),
+      WaitForJsResultAt(kWebContentsId, kWhere, "el => el.doubleValue"),
+      WaitForJsResultAt(kWebContentsId, kWhere, "el => el.stringValue"));
+}
+
+IN_PROC_BROWSER_TEST_F(InteractiveBrowserTestBrowsertest,
                        WaitForStateChangeAcrossNavigation) {
   DEFINE_LOCAL_ELEMENT_IDENTIFIER_VALUE(kTabId);
   DEFINE_LOCAL_CUSTOM_ELEMENT_EVENT_TYPE(kFoundElementEvent);
@@ -551,9 +832,9 @@ IN_PROC_BROWSER_TEST_F(InteractiveBrowserTestBrowsertest,
 
   RunTestSequence(
       InstrumentTab(kTabId),
-      InParallel(Steps(NavigateWebContents(kTabId, url1),
-                       NavigateWebContents(kTabId, url2)),
-                 WaitForStateChange(kTabId, state_change)));
+      InParallel(RunSubsequence(NavigateWebContents(kTabId, url1),
+                                NavigateWebContents(kTabId, url2)),
+                 RunSubsequence(WaitForStateChange(kTabId, state_change))));
 }
 
 IN_PROC_BROWSER_TEST_F(InteractiveBrowserTestBrowsertest,
@@ -572,9 +853,9 @@ IN_PROC_BROWSER_TEST_F(InteractiveBrowserTestBrowsertest,
 
   RunTestSequence(
       InstrumentTab(kTabId),
-      InParallel(Steps(NavigateWebContents(kTabId, url1),
-                       NavigateWebContents(kTabId, url2)),
-                 WaitForStateChange(kTabId, state_change)));
+      InParallel(RunSubsequence(NavigateWebContents(kTabId, url1),
+                                NavigateWebContents(kTabId, url2)),
+                 RunSubsequence(WaitForStateChange(kTabId, state_change))));
 }
 
 IN_PROC_BROWSER_TEST_F(InteractiveBrowserTestBrowsertest,
@@ -856,14 +1137,14 @@ IN_PROC_BROWSER_TEST_P(InteractiveBrowserTestCodeCoverageBrowsertest,
       NavigateWebContents(kWebContentsId, GURL("chrome://history")));
 }
 
-namespace {
-
-class TestDialog : public views::DialogDelegateView {
+class InteractiveBrowserTestDialog : public views::DialogDelegateView {
  public:
   DECLARE_CLASS_ELEMENT_IDENTIFIER_VALUE(kElementId);
 
-  TestDialog() { SetProperty(views::kElementIdentifierKey, kElementId); }
-  ~TestDialog() override = default;
+  InteractiveBrowserTestDialog() {
+    SetProperty(views::kElementIdentifierKey, kElementId);
+  }
+  ~InteractiveBrowserTestDialog() override = default;
 
   gfx::Size CalculatePreferredSize(
       const views::SizeBounds& available_size) const override {
@@ -871,7 +1152,7 @@ class TestDialog : public views::DialogDelegateView {
   }
 
   static views::Widget* Show(Browser* parent, ui::mojom::ModalType modal_type) {
-    auto dialog = std::make_unique<TestDialog>();
+    auto dialog = std::make_unique<InteractiveBrowserTestDialog>();
     dialog->SetModalType(modal_type);
     views::Widget* widget = nullptr;
     switch (modal_type) {
@@ -887,7 +1168,7 @@ class TestDialog : public views::DialogDelegateView {
       case ui::mojom::ModalType::kSystem:
       case ui::mojom::ModalType::kNone:
         widget = views::DialogDelegate::CreateDialogWidget(
-            std::move(dialog), nullptr,
+            std::move(dialog), gfx::NativeWindow(),
             BrowserView::GetBrowserViewForBrowser(parent)
                 ->GetWidget()
                 ->GetNativeView());
@@ -897,6 +1178,10 @@ class TestDialog : public views::DialogDelegateView {
     return widget;
   }
 };
+
+DEFINE_CLASS_ELEMENT_IDENTIFIER_VALUE(InteractiveBrowserTestDialog, kElementId);
+
+namespace {
 
 // Scoped object that closes a widget it does not own.
 class SafeWidgetRef {
@@ -926,8 +1211,6 @@ class SafeWidgetRef {
  private:
   raw_ptr<views::Widget> widget_ = nullptr;
 };
-
-DEFINE_CLASS_ELEMENT_IDENTIFIER_VALUE(TestDialog, kElementId);
 
 }  // namespace
 
@@ -970,16 +1253,16 @@ IN_PROC_BROWSER_TEST_P(InteractiveBrowserTestDialogBrowsertest,
   SafeWidgetRef widget;
   RunTestSequence(
       Do([this, &widget]() {
-        widget = TestDialog::Show(browser(), GetParam());
+        widget = InteractiveBrowserTestDialog::Show(browser(), GetParam());
       }),
-      InAnyContext(WaitForShow(TestDialog::kElementId)),
-      InSameContext(Steps(
+      InAnyContext(WaitForShow(InteractiveBrowserTestDialog::kElementId)),
+      InSameContext(
           CheckView(
-              TestDialog::kElementId,
+              InteractiveBrowserTestDialog::kElementId,
               [](views::View* view) { return view->GetWidget()->parent(); },
               BrowserView::GetBrowserViewForBrowser(browser())->GetWidget()),
           CheckElement(
-              TestDialog::kElementId,
+              InteractiveBrowserTestDialog::kElementId,
               [](ui::TrackedElement* el) { return el->context(); },
-              browser()->window()->GetElementContext()))));
+              browser()->window()->GetElementContext())));
 }

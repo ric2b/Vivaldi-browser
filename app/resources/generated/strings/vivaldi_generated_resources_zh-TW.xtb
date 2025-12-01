@@ -55,7 +55,7 @@
 <translation id="1886996562706621347">允許網站要求成為通訊協定的預設處理常式 (建議)</translation>
 <translation id="1901303067676059328">選取全部 (&amp;A)</translation>
 <translation id="1921584744613111023"><ph name="DPI" /> dpi</translation>
-<translation id="1925021887439448749">輸入自訂網址</translation>
+<translation id="1925021887439448749">輸入自訂網頁網址</translation>
 <translation id="1932098463447129402">此日期之後</translation>
 <translation id="1936931585862840749">使用數字指定列印份數（1 至 <ph name="MAX_COPIES" />）。</translation>
 <translation id="2019718679933488176">在新分頁中開啟音訊 (&amp;O)</translation>
@@ -170,6 +170,7 @@
 <translation id="3838085852053358637">無法載入擴充功能</translation>
 <translation id="383891835335927981">未針對任何網站設定縮放等級</translation>
 <translation id="385051799172605136">返回</translation>
+<translation id="3858860766373142691">名稱</translation>
 <translation id="3861977424605124250">啟動時顯示</translation>
 <translation id="3867944738977021751">憑證欄位</translation>
 <translation id="3905761538810670789">修復應用程式</translation>
@@ -415,6 +416,9 @@
 <translation id="8004582292198964060">瀏覽器</translation>
 <translation id="8018313076035239964">控制網站可使用的資訊，以及可對您顯示的內容</translation>
 <translation id="8071432093239591881">以圖片形式列印</translation>
+<translation id="8118448640060360549">{EXTENSIONS_COUNT,plural,
+        =1{# 個書籤}
+        other{# 個書籤}}</translation>
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" />K</translation>
 <translation id="8212008074015601248">{NUM_DOWNLOAD,plural,
 	=1{正在執行一項下載作業}other{正在執行多項下載作業}}</translation>

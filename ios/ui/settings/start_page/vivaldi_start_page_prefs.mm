@@ -44,7 +44,7 @@ static PrefService *_localPrefService = nil;
   registry->RegisterBooleanPref(
       vivaldiprefs::kVivaldiStartPageShowSpeedDials, YES);
   registry->RegisterBooleanPref(
-      vivaldiprefs::kVivaldiStartPageShowCustomizeButton, NO);
+      vivaldiprefs::kVivaldiStartPageShowCustomizeButton, YES);
   registry->RegisterStringPref(vivaldiprefs::kVivaldiStartupWallpaper, "");
   registry->RegisterStringPref(vivaldiprefs::kVivaldiStartpagePortraitImage,"");
   registry->RegisterStringPref(vivaldiprefs::kVivaldiStartpageLandscapeImage,"");
@@ -55,6 +55,8 @@ static PrefService *_localPrefService = nil;
                                 VivaldiStartPageStartItemTypeFirstGroup);
   registry->RegisterIntegerPref(vivaldiprefs::kVivaldiStartPageLastVisitedGroup,
                                 0);
+  registry->RegisterBooleanPref(vivaldiprefs::kVivaldiStartPageShowAddButton,
+                                YES);
 }
 
 #pragma mark - GETTERS
@@ -193,6 +195,12 @@ static PrefService *_localPrefService = nil;
       vivaldiprefs::kVivaldiStartPageShowCustomizeButton);
 }
 
++ (BOOL)showAddButton {
+  PrefService *prefService = [VivaldiStartPagePrefs localPrefService];
+  return prefService->GetBoolean(
+      vivaldiprefs::kVivaldiStartPageShowAddButton);
+}
+
 + (NSString*)getWallpaperName {
   PrefService *prefService = [VivaldiStartPagePrefs prefService];
   NSString *name = base::SysUTF8ToNSString(
@@ -270,6 +278,12 @@ static PrefService *_localPrefService = nil;
   PrefService *prefService = [VivaldiStartPagePrefs prefService];
   prefService->SetBoolean(
       vivaldiprefs::kVivaldiStartPageShowCustomizeButton, show);
+}
+
++ (void)setShowAddButton:(BOOL)show {
+  PrefService *prefService = [VivaldiStartPagePrefs prefService];
+  prefService->SetBoolean(
+      vivaldiprefs::kVivaldiStartPageShowAddButton, show);
 }
 
 + (void)setWallpaperName:(NSString*)name {

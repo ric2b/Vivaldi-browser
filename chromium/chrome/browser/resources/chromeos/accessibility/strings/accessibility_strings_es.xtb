@@ -295,6 +295,7 @@
 <translation id="2867808975387772810">Bibliografía</translation>
 <translation id="2873259058405069099">Accede al principio de la tabla</translation>
 <translation id="287383510823843610">Naranja oscuro</translation>
+<translation id="2876760662374103627">Control con gestos faciales activo</translation>
 <translation id="2879867157561757640">Desliza tres dedos hacia abajo</translation>
 <translation id="288178314850623291">Utiliza los comandos de salto para acceder a los tipos específicos de elementos. Para desplazarte hacia adelante por los títulos, pulsa la tecla de búsqueda+H. Para desplazarte hacia atrás, pulsa la tecla de búsqueda+Mayús+H.</translation>
 <translation id="2885764457467528513">{COUNT,plural, =1{minuto}other{minutos}}</translation>
@@ -1115,6 +1116,7 @@
 <translation id="8316881042119029234">Naranja pálido</translation>
 <translation id="8326783648485765113">Verde césped</translation>
 <translation id="8345569862449483843">{COUNT,plural, =1{almohadilla}other{# almohadillas}}</translation>
+<translation id="8351821207686449674">Activar/desactivar subtítulos</translation>
 <translation id="8378855320830505539">Región</translation>
 <translation id="8382679411218029383">Autocompletados insertados y lista de autocompletados</translation>
 <translation id="8394908167088220973">Pausar/Reproducir contenido multimedia</translation>

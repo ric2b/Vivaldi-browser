@@ -77,6 +77,7 @@
 #include "third_party/blink/renderer/core/svg/svg_use_element.h"
 #include "third_party/blink/renderer/core/svg_names.h"
 #include "third_party/blink/renderer/core/xml_names.h"
+#include "third_party/blink/renderer/platform/heap/disallow_new_wrapper.h"
 #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
 #include "third_party/blink/renderer/platform/wtf/threading.h"
 
@@ -338,41 +339,13 @@ Node::InsertionNotificationRequest SVGElement::InsertedInto(
     ContainerNode& root_parent) {
   Element::InsertedInto(root_parent);
   HideNonce();
-  UpdateRelativeLengthsInformation();
   return kInsertionDone;
 }
 
 void SVGElement::RemovedFrom(ContainerNode& root_parent) {
-  bool was_in_document = root_parent.isConnected();
-
-  if (!RuntimeEnabledFeatures::SvgViewportOptimizationEnabled()) {
-    auto* root_parent_svg_element = DynamicTo<SVGElement>(
-        root_parent.IsShadowRoot() ? root_parent.ParentOrShadowHostElement()
-                                   : &root_parent);
-
-    if (was_in_document && HasRelativeLengths()) {
-      // The root of the subtree being removed should take itself out from its
-      // parent's relative length set. For the other nodes in the subtree we
-      // don't need to do anything: they will get their own removedFrom()
-      // notification and just clear their sets.
-      if (root_parent_svg_element && !ParentOrShadowHostElement()) {
-        DCHECK(
-            root_parent_svg_element->elements_with_relative_lengths_.Contains(
-                this));
-        root_parent_svg_element->UpdateRelativeLengthsInformation(false, this);
-      }
-
-      elements_with_relative_lengths_.clear();
-    }
-
-    DCHECK(!root_parent_svg_element ||
-           !root_parent_svg_element->elements_with_relative_lengths_.Contains(
-               this));
-  }
-
   Element::RemovedFrom(root_parent);
 
-  if (was_in_document) {
+  if (root_parent.isConnected()) {
     if (SVGElement* corresponding_element =
             HasSVGRareData() ? SvgRareData()->CorrespondingElement()
                              : nullptr) {
@@ -477,99 +450,6 @@ CSSPropertyID SVGElement::CssPropertyIdForSVGAttributeName(
   return it->value;
 }
 
-void SVGElement::UpdateRelativeLengthsInformation(
-    bool client_has_relative_lengths,
-    SVGElement* client_element) {
-  DCHECK(client_element);
-
-  if (RuntimeEnabledFeatures::SvgViewportOptimizationEnabled()) {
-    return;
-  }
-
-  // Through an unfortunate chain of events, we can end up calling this while a
-  // subtree is being removed, and before the subtree has been properly
-  // "disconnected". Hence check the entire ancestor chain to avoid propagating
-  // relative length clients up into ancestors that have already been
-  // disconnected.
-  // If we're not yet in a document, this function will be called again from
-  // insertedInto(). Do nothing now.
-  for (Node* current_node = this; current_node;
-       current_node = current_node->ParentOrShadowHostNode()) {
-    if (!current_node->isConnected())
-      return;
-  }
-
-  // An element wants to notify us that its own relative lengths state changed.
-  // Register it in the relative length map, and register us in the parent
-  // relative length map.  Register the parent in the grandparents map, etc.
-  // Repeat procedure until the root of the SVG tree.
-  for (Element* current_node = this; current_node;
-       current_node = current_node->ParentOrShadowHostElement()) {
-    auto* current_element = DynamicTo<SVGElement>(current_node);
-    if (!current_element)
-      break;
-
-#if DCHECK_IS_ON()
-    DCHECK(!current_element->in_relative_length_clients_invalidation_);
-#endif
-
-    bool had_relative_lengths = current_element->HasRelativeLengths();
-    if (client_has_relative_lengths)
-      current_element->elements_with_relative_lengths_.insert(client_element);
-    else
-      current_element->elements_with_relative_lengths_.erase(client_element);
-
-    // If the relative length state hasn't changed, we can stop propagating the
-    // notification.
-    if (had_relative_lengths == current_element->HasRelativeLengths())
-      return;
-
-    client_element = current_element;
-    client_has_relative_lengths = client_element->HasRelativeLengths();
-  }
-
-  // Register root SVG elements for top level viewport change notifications.
-  if (auto* svg = DynamicTo<SVGSVGElement>(*client_element)) {
-    SVGDocumentExtensions& svg_extensions = GetDocument().AccessSVGExtensions();
-    if (client_element->HasRelativeLengths())
-      svg_extensions.AddSVGRootWithRelativeLengthDescendents(svg);
-    else
-      svg_extensions.RemoveSVGRootWithRelativeLengthDescendents(svg);
-  }
-}
-
-void SVGElement::InvalidateRelativeLengthClients() {
-  if (RuntimeEnabledFeatures::SvgViewportOptimizationEnabled()) {
-    return;
-  }
-
-  if (!isConnected())
-    return;
-
-#if DCHECK_IS_ON()
-  DCHECK(!in_relative_length_clients_invalidation_);
-  base::AutoReset<bool> in_relative_length_clients_invalidation_change(
-      &in_relative_length_clients_invalidation_, true);
-#endif
-
-  if (LayoutObject* layout_object = GetLayoutObject()) {
-    if (HasRelativeLengths() && layout_object->IsSVGResourceContainer()) {
-      auto* resource_container = To<LayoutSVGResourceContainer>(layout_object);
-      resource_container->SetNeedsLayoutAndFullPaintInvalidation(
-          layout_invalidation_reason::kSizeChanged);
-      resource_container->InvalidateCache();
-    } else if (SelfHasRelativeLengths()) {
-      layout_object->SetNeedsLayoutAndFullPaintInvalidation(
-          layout_invalidation_reason::kUnknown, kMarkContainerChain);
-    }
-  }
-
-  for (SVGElement* element : elements_with_relative_lengths_) {
-    if (element != this)
-      element->InvalidateRelativeLengthClients();
-  }
-}
-
 SVGSVGElement* SVGElement::ownerSVGElement() const {
   if (IsOutermostSVGSVGElement()) {
     return nullptr;
@@ -624,10 +504,11 @@ void SVGElement::RemoveInstance(SVGElement* instance) {
 }
 
 static HeapHashSet<WeakMember<SVGElement>>& EmptyInstances() {
-  DEFINE_STATIC_LOCAL(
-      Persistent<HeapHashSet<WeakMember<SVGElement>>>, empty_instances,
-      (MakeGarbageCollected<HeapHashSet<WeakMember<SVGElement>>>()));
-  return *empty_instances;
+  using EmptyInstanceHolder =
+      DisallowNewWrapper<HeapHashSet<WeakMember<SVGElement>>>;
+  DEFINE_STATIC_LOCAL(Persistent<EmptyInstanceHolder>, empty_instances,
+                      (MakeGarbageCollected<EmptyInstanceHolder>()));
+  return empty_instances->Value();
 }
 
 const HeapHashSet<WeakMember<SVGElement>>& SVGElement::InstancesForElement()
@@ -1401,9 +1282,11 @@ void SVGElement::AddReferenceTo(SVGElement* target_element) {
 SVGElementSet& SVGElement::GetDependencyTraversalVisitedSet() {
   // This strong reference is safe, as it is guaranteed that this set will be
   // emptied at the end of recursion in NotifyIncomingReferences.
-  DEFINE_STATIC_LOCAL(Persistent<SVGElementSet>, invalidating_dependencies,
-                      (MakeGarbageCollected<SVGElementSet>()));
-  return *invalidating_dependencies;
+  using SVGElementSetHolder = DisallowNewWrapper<SVGElementSet>;
+  DEFINE_STATIC_LOCAL(Persistent<SVGElementSetHolder>,
+                      invalidating_dependencies,
+                      (MakeGarbageCollected<SVGElementSetHolder>()));
+  return invalidating_dependencies->Value();
 }
 
 void SVGElement::RemoveAllIncomingReferences() {
@@ -1441,7 +1324,6 @@ SVGElementResourceClient& SVGElement::EnsureSVGResourceClient() {
 }
 
 void SVGElement::Trace(Visitor* visitor) const {
-  visitor->Trace(elements_with_relative_lengths_);
   visitor->Trace(svg_rare_data_);
   visitor->Trace(class_name_);
   Element::Trace(visitor);

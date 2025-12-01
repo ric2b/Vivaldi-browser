@@ -89,7 +89,6 @@ class DesktopAndroidExtensionSystem : public ExtensionSystem {
   void Shutdown() override;
 
   bool AddExtension(scoped_refptr<Extension> extension, std::string& error);
-  void DisableExtension(const std::string& extension_id, int disable_reasons);
   void ReloadExtension(const std::string& extension_id);
 
   const Extension* LoadExtensionFromDirectory(const base::FilePath& file_path);
@@ -133,7 +132,7 @@ class DesktopAndroidExtensionSystem : public ExtensionSystem {
   scoped_refptr<value_store::ValueStoreFactory> store_factory_;
 
   std::unique_ptr<ExtensionRegistrar::Delegate> registrar_delegate_;
-  std::unique_ptr<ExtensionRegistrar> registrar_;
+  raw_ptr<ExtensionRegistrar> registrar_;  // Not owned
 
   // Signaled when the extension system has completed its startup tasks.
   base::OneShotEvent ready_;

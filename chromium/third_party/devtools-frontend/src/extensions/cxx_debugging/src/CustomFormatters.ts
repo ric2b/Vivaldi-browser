@@ -33,7 +33,7 @@ export interface TypeInfo {
 }
 
 export interface WasmInterface {
-  readMemory(offset: number, length: number): Uint8Array;
+  readMemory(offset: number, length: number): Uint8Array<ArrayBuffer>;
   getOp(op: number): WasmValue;
   getLocal(local: number): WasmValue;
   getGlobal(global: number): WasmValue;
@@ -53,7 +53,7 @@ export interface Value {
   asInt64: () => bigint;
   asFloat32: () => number;
   asFloat64: () => number;
-  asDataView: (offset?: number, size?: number) => DataView;
+  asDataView: (offset?: number, size?: number) => DataView<ArrayBuffer>;
   $: (member: string|number) => Value;
   getMembers(): string[];
 }
@@ -97,7 +97,7 @@ export class MemorySlice {
     return this.length + this.begin;
   }
 
-  view(begin: number, length: number): DataView {
+  view(begin: number, length: number): DataView<ArrayBuffer> {
     return new DataView(this.buffer, begin - this.begin, length);
   }
 }
@@ -174,7 +174,7 @@ export class WasmMemoryView {
     return {page, offset, count};
   }
 
-  private getPages(page: number, count: number): DataView {
+  private getPages(page: number, count: number): DataView<ArrayBuffer> {
     if (page & (WasmMemoryView.PAGE_SIZE - 1)) {
       throw new Error('Not a valid page');
     }
@@ -240,7 +240,7 @@ export class WasmMemoryView {
     const view = this.getPages(page, count);
     return view.getBigUint64(offset, littleEndian);
   }
-  asDataView(byteOffset: number, byteLength: number): DataView {
+  asDataView(byteOffset: number, byteLength: number): DataView<ArrayBuffer> {
     const {offset, page, count} = this.page(byteOffset, byteLength);
     const view = this.getPages(page, count);
     return new DataView(view.buffer, view.byteOffset + offset, byteLength);
@@ -251,7 +251,7 @@ export class CXXValue implements Value, LazyObject {
   readonly location: number;
   private readonly type: TypeInfo;
   private readonly data?: number[];
-  private readonly memoryOrDataView: DataView|WasmMemoryView;
+  private readonly memoryOrDataView: DataView<ArrayBuffer>|WasmMemoryView;
   private readonly wasm: WasmInterface;
   private readonly typeMap: Map<unknown, TypeInfo>;
   private readonly memoryView: WasmMemoryView;
@@ -325,7 +325,7 @@ export class CXXValue implements Value, LazyObject {
         this.typeMap, data);
   }
 
-  async getProperties(): Promise<{name: string, property: LazyObject}[]> {
+  async getProperties(): Promise<Array<{name: string, property: LazyObject}>> {
     const properties = [];
     if (this.type.arraySize > 0) {
       for (let index = 0; index < this.type.arraySize; ++index) {
@@ -361,7 +361,8 @@ export class CXXValue implements Value, LazyObject {
 
       try {
         const formattedValue = await formatter.format(this.wasm, value);
-        return lazyObjectFromAny(formattedValue, this.objectStore, this.type, this.displayValue, this.memoryAddress)
+        return await lazyObjectFromAny(
+                   formattedValue, this.objectStore, this.type, this.displayValue, this.memoryAddress)
             .asRemoteObject();
       } catch {
         // Fallthrough
@@ -418,7 +419,7 @@ export class CXXValue implements Value, LazyObject {
   asFloat64(): number {
     return this.memoryOrDataView.getFloat64(this.location, true);
   }
-  asDataView(offset?: number, size?: number): DataView {
+  asDataView(offset?: number, size?: number): DataView<ArrayBuffer> {
     offset = this.location + (offset ?? 0);
     size = size ?? this.size;
     if (this.memoryOrDataView instanceof DataView) {
@@ -461,7 +462,7 @@ export class CXXValue implements Value, LazyObject {
 }
 
 export interface LazyObject {
-  getProperties(): Promise<{name: string, property: LazyObject}[]>;
+  getProperties(): Promise<Array<{name: string, property: LazyObject}>>;
   asRemoteObject(): Promise<Chrome.DevTools.RemoteObject|Chrome.DevTools.ForeignObject>;
 }
 
@@ -505,8 +506,8 @@ function lazyObjectFromAny(
 }
 
 export class LazyObjectStore {
-  private nextObjectId: number = 0;
-  private objects: Map<string, LazyObject> = new Map();
+  private nextObjectId = 0;
+  private objects = new Map<string, LazyObject>();
 
   store(lazyObject: LazyObject): string {
     const objectId = `${this.nextObjectId++}`;
@@ -543,7 +544,7 @@ export class PrimitiveLazyObject<T> implements LazyObject {
     this.linearMemorySize = linearMemorySize;
   }
 
-  async getProperties(): Promise<{name: string, property: LazyObject}[]> {
+  async getProperties(): Promise<Array<{name: string, property: LazyObject}>> {
     return [];
   }
 
@@ -568,7 +569,7 @@ export class LocalLazyObject implements LazyObject {
     this.linearMemoryAddress = linearMemoryAddress;
   }
 
-  async getProperties(): Promise<{name: string, property: LazyObject}[]> {
+  async getProperties(): Promise<Array<{name: string, property: LazyObject}>> {
     return Object.entries(this.value).map(([name, value]) => {
       const property = lazyObjectFromAny(value, this.objectStore);
       return {name, property};
@@ -592,22 +593,21 @@ export class LocalLazyObject implements LazyObject {
 export type FormatterResult = number|string|boolean|bigint|undefined|CXXValue|object|(() => LazyObject);
 export type FormatterCallback = (wasm: WasmInterface, value: Value) => FormatterResult;
 export interface Formatter {
-  types: Array<string>|((t: TypeInfo) => boolean);
-  imports?: Array<FormatterCallback>;
+  types: string[]|((t: TypeInfo) => boolean);
+  imports?: FormatterCallback[];
   format: FormatterCallback;
 }
 
 export class HostWasmInterface {
   private readonly hostInterface: HostInterface;
   private readonly stopId: unknown;
-  private readonly cache: Chrome.DevTools.ForeignObject[] = [];
   readonly view: WasmMemoryView;
   constructor(hostInterface: HostInterface, stopId: unknown) {
     this.hostInterface = hostInterface;
     this.stopId = stopId;
     this.view = new WasmMemoryView(this);
   }
-  readMemory(offset: number, length: number): Uint8Array {
+  readMemory(offset: number, length: number): Uint8Array<ArrayBuffer> {
     return new Uint8Array(this.hostInterface.getWasmLinearMemory(offset, length, this.stopId));
   }
   getOp(op: number): WasmValue {
@@ -646,7 +646,7 @@ export class DebuggerProxy {
 }
 
 export class CustomFormatters {
-  private static formatters: Map<string, Formatter> = new Map();
+  private static formatters = new Map<string, Formatter>();
   private static genericFormatters: Formatter[] = [];
 
   static addFormatter(formatter: Formatter): void {

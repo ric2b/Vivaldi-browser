@@ -56,7 +56,6 @@ void ChromePrefetchManager::StartPrefetchFromCCT(
       preloading_data->AddPreloadingAttempt(
           chrome_preloading_predictor::kChromeCustomTabs,
           content::PreloadingType::kPrefetch, std::move(matcher),
-          /*planned_max_preloading_type=*/std::nullopt,
           /*triggering_primary_page_source_id=*/ukm::kInvalidSourceId);
 
   std::optional<content::PreloadingHoldbackStatus> holdback_status_override;
@@ -67,10 +66,14 @@ void ChromePrefetchManager::StartPrefetchFromCCT(
   // TODO(crbug.com/40288091): Specify appropriate referrer value that comes
   // from CCT.
   std::unique_ptr<content::PrefetchHandle> prefetch_handle =
-      GetWebContents().StartPrefetch(prefetch_url, use_prefetch_proxy,
-                                     blink::mojom::Referrer(), referring_origin,
-                                     preloading_attempt->GetWeakPtr(),
-                                     holdback_status_override);
+      GetWebContents().StartPrefetch(
+          prefetch_url, use_prefetch_proxy, blink::mojom::Referrer(),
+          referring_origin,
+          /*no_vary_search_hint=*/std::nullopt,
+          content::PreloadPipelineInfo::Create(
+              /*planned_max_preloading_type=*/content::PreloadingType::
+                  kPrefetch),
+          preloading_attempt->GetWeakPtr(), holdback_status_override);
   // TODO(crbug.com/40288091): Clean up staled handles. Please see
   // crrev.com/c/5534282/comment/cea1fdce_ada24c2b/ for more discussions,
   if (prefetch_handle) {

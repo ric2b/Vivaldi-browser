@@ -474,7 +474,7 @@ void NavigationEntryImpl::SetURL(const GURL& url) {
   cached_display_title_.clear();
 }
 
-const GURL& NavigationEntryImpl::GetURL() {
+const GURL& NavigationEntryImpl::GetURL() const {
   return frame_tree_->frame_entry->url();
 }
 
@@ -516,7 +516,7 @@ void NavigationEntryImpl::SetVirtualURL(const GURL& url) {
   cached_display_title_.clear();
 }
 
-const GURL& NavigationEntryImpl::GetVirtualURL() {
+const GURL& NavigationEntryImpl::GetVirtualURL() const {
   return virtual_url_.is_empty() ? GetURL() : virtual_url_;
 }
 
@@ -1005,7 +1005,8 @@ NavigationEntryImpl::ConstructCommitNavigationParams(
           /*visited_link_salt=*/std::nullopt,
           /*local_surface_id=*/std::nullopt,
           /*initial_permission_statuses=*/std::nullopt,
-          /*should_skip_screenshot*/ false);
+          /*should_skip_screenshot*/ false,
+          /*force_new_document_sequence_number=*/false);
 #if BUILDFLAG(IS_ANDROID)
   // `data_url_as_string` is saved in NavigationEntry but should only be used by
   // main frames, because loadData* navigations can only happen on the main

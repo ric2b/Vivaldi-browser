@@ -57,15 +57,15 @@ std::string RegistrationRequestToString(
   base::Value::Dict value;
   value.Set("app_id", registration.app_id);
   value.Set("brand_code", registration.brand_code);
-  value.Set("brand_path", registration.brand_path.MaybeAsASCII());
+  value.Set("brand_path", registration.brand_path.AsUTF8Unsafe());
   value.Set("ap", registration.ap);
-  value.Set("ap_path", registration.ap_path.MaybeAsASCII());
+  value.Set("ap_path", registration.ap_path.AsUTF8Unsafe());
   value.Set("ap_key", registration.ap_key);
   value.Set("version", registration.version.GetString());
-  value.Set("version_path", registration.version_path.MaybeAsASCII());
+  value.Set("version_path", registration.version_path.AsUTF8Unsafe());
   value.Set("version_key", registration.version_key);
   value.Set("existence_checker_path",
-            registration.existence_checker_path.MaybeAsASCII());
+            registration.existence_checker_path.AsUTF8Unsafe());
   value.Set("cohort", registration.cohort);
   value.Set("cohort_name", registration.cohort_name);
   value.Set("cohort_hint", registration.cohort_hint);
@@ -134,7 +134,7 @@ class IntegrationTestCommandsSystem : public IntegrationTestCommands {
          Param("expected_exit_code", base::NumberToString(expected_exit_code)),
          Param("additional_switches",
                StringFromValue(base::Value(additional_switches.Clone()))),
-         Param("updater_path", updater_path.MaybeAsASCII())});
+         Param("updater_path", updater_path.AsUTF8Unsafe())});
   }
 
   void ExpectInstalled() const override { RunCommand("expect_installed"); }
@@ -193,16 +193,18 @@ class IntegrationTestCommandsSystem : public IntegrationTestCommands {
                               target_url);
   }
 
-  void ExpectAppCommandPing(ScopedServer* test_server,
-                            const std::string& appid,
-                            const std::string& appcommandid,
-                            int errorcode,
-                            int eventresult,
-                            int event_type,
-                            const base::Version& version) const override {
+  void ExpectAppCommandPing(
+      ScopedServer* test_server,
+      const std::string& appid,
+      const std::string& appcommandid,
+      int errorcode,
+      int eventresult,
+      int event_type,
+      const base::Version& version,
+      const base::Version& updater_version) const override {
     updater::test::ExpectAppCommandPing(updater_scope_, test_server, appid,
                                         appcommandid, errorcode, eventresult,
-                                        event_type, version);
+                                        event_type, version, updater_version);
   }
 
   void ExpectUpdateCheckRequest(ScopedServer* test_server) const override {
@@ -297,13 +299,13 @@ class IntegrationTestCommandsSystem : public IntegrationTestCommands {
 
   void SetupRealUpdater(const base::FilePath& updater_path) const override {
     RunCommand("setup_real_updater",
-               {Param("updater_path", updater_path.MaybeAsASCII())});
+               {Param("updater_path", updater_path.AsUTF8Unsafe())});
   }
 
   void SetExistenceCheckerPath(const std::string& app_id,
                                const base::FilePath& path) const override {
     RunCommand("set_existence_checker_path",
-               {Param("app_id", app_id), Param("path", path.MaybeAsASCII())});
+               {Param("app_id", app_id), Param("path", path.AsUTF8Unsafe())});
   }
 
   void SetServerStarts(int value) const override {
@@ -407,7 +409,7 @@ class IntegrationTestCommandsSystem : public IntegrationTestCommands {
   }
 
   void DeleteFile(const base::FilePath& path) const override {
-    RunCommand("delete_file", {Param("path", path.MaybeAsASCII())});
+    RunCommand("delete_file", {Param("path", path.AsUTF8Unsafe())});
   }
 
   void InstallApp(const std::string& app_id,
@@ -537,7 +539,7 @@ class IntegrationTestCommandsSystem : public IntegrationTestCommands {
   void ExpectPrepareToRunBundleSuccess(
       const base::FilePath& bundle_path) const override {
     RunCommand("expect_prepare_to_run_bundle_success",
-               {Param("bundle_path", bundle_path.MaybeAsASCII())});
+               {Param("bundle_path", bundle_path.AsUTF8Unsafe())});
   }
 
   void ExpectKSAdminFetchTag(
@@ -585,10 +587,12 @@ class IntegrationTestCommandsSystem : public IntegrationTestCommands {
   }
 
   void RunOfflineInstallOsNotSupported(bool is_legacy_install,
-                                       bool is_silent_install) override {
+                                       bool is_silent_install,
+                                       const std::string& language) override {
     RunCommand("run_offline_install_os_not_supported",
                {Param("legacy_install", BoolToString(is_legacy_install)),
-                Param("silent", BoolToString(is_silent_install))});
+                Param("silent", BoolToString(is_silent_install)),
+                Param("language", language)});
   }
 
   void DMPushEnrollmentToken(const std::string& enrollment_token) override {
@@ -655,14 +659,14 @@ class IntegrationTestCommandsSystem : public IntegrationTestCommands {
     base::CommandLine helper_command(path);
     helper_command.AppendSwitch(command_switch);
     for (const Param& param : params) {
-      helper_command.AppendSwitchASCII(param.name, param.value);
+      helper_command.AppendSwitchUTF8(param.name, param.value);
     }
 
     // Avoids the test runner banner about test debugging.
     helper_command.AppendSwitch("single-process-tests");
-    helper_command.AppendSwitchASCII("gtest_filter",
-                                     "TestHelperCommandRunner.Run");
-    helper_command.AppendSwitchASCII("gtest_brief", "1");
+    helper_command.AppendSwitchUTF8("gtest_filter",
+                                    "TestHelperCommandRunner.Run");
+    helper_command.AppendSwitchUTF8("gtest_brief", "1");
     for (const std::string& s :
          {switches::kUiTestActionTimeout, switches::kUiTestActionMaxTimeout,
           switches::kTestTinyTimeout, switches::kTestLauncherTimeout}) {

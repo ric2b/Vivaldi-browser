@@ -18,10 +18,10 @@
 #include "base/test/metrics/histogram_enum_reader.h"
 #include "build/build_config.h"
 #include "chrome/common/chrome_version.h"
-#include "components/flags_ui/feature_entry.h"
-#include "components/flags_ui/feature_entry_macros.h"
-#include "components/flags_ui/flags_test_helpers.h"
-#include "components/flags_ui/flags_ui_metrics.h"
+#include "components/webui/flags/feature_entry.h"
+#include "components/webui/flags/feature_entry_macros.h"
+#include "components/webui/flags/flags_test_helpers.h"
+#include "components/webui/flags/flags_ui_metrics.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace about_flags {
@@ -68,14 +68,14 @@ std::set<std::string> GetAllPublicSwitchesAndFeaturesForTesting() {
         result.insert(std::string(entry.feature.feature->name) + ":enabled");
         result.insert(std::string(entry.feature.feature->name) + ":disabled");
         break;
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
       case flags_ui::FeatureEntry::PLATFORM_FEATURE_NAME_VALUE:
       case flags_ui::FeatureEntry::PLATFORM_FEATURE_NAME_WITH_PARAMS_VALUE:
         std::string name(entry.platform_feature_name.name);
         result.insert(name + ":enabled");
         result.insert(name + ":disabled");
         break;
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+#endif  // BUILDFLAG(IS_CHROMEOS)
     }
   }
   return result;
@@ -88,10 +88,10 @@ std::vector<std::string> GetAllVariationIds() {
     // Only FEATURE_WITH_PARAMS_VALUE or PLATFORM_FEATURE_NAME_WITH_PARAMS_VALUE
     // entries can have a variation id.
     if (entry.type != flags_ui::FeatureEntry::FEATURE_WITH_PARAMS_VALUE
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
         && entry.type !=
                flags_ui::FeatureEntry::PLATFORM_FEATURE_NAME_WITH_PARAMS_VALUE
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+#endif  // BUILDFLAG(IS_CHROMEOS)
     ) {
       continue;
     }

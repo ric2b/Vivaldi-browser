@@ -30,7 +30,7 @@ namespace jni {
 // order to onFrameCaptured().
 class AndroidVideoTrackSource : public rtc::AdaptedVideoTrackSource {
  public:
-  AndroidVideoTrackSource(rtc::Thread* signaling_thread,
+  AndroidVideoTrackSource(Thread* signaling_thread,
                           JNIEnv* jni,
                           bool is_screencast,
                           bool align_timestamps);
@@ -84,10 +84,10 @@ class AndroidVideoTrackSource : public rtc::AdaptedVideoTrackSource {
   void SetIsScreencast(JNIEnv* env, jboolean j_is_screencast);
 
  private:
-  rtc::Thread* signaling_thread_;
+  Thread* signaling_thread_;
   std::atomic<SourceState> state_;
   std::atomic<bool> is_screencast_;
-  rtc::TimestampAligner timestamp_aligner_;
+  TimestampAligner timestamp_aligner_;
   const bool align_timestamps_;
 };
 

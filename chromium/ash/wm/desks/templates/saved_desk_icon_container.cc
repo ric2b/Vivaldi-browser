@@ -119,10 +119,7 @@ void InsertIconIdentifierToIconInfoFromLaunchList(
         const GURL& url = urls[it->second];
 
         InsertIconIdentifierToIconInfo(
-            app_id, app_title,
-            {.url_or_id = url.spec(),
-             .lacros_profile_id =
-                 browser_extra_info.lacros_profile_id.value_or(0)},
+            app_id, app_title, {.url_or_id = url.spec()},
             active_tab_index == i ? activation_index
                                   : kInactiveTabOffset + activation_index,
             out_icon_identifier_to_icon_info);
@@ -259,7 +256,7 @@ void SavedDeskIconContainer::SortIcons() {
 
   // Notify the a11y API so that the spoken feedback order matches the view
   // order.
-  NotifyAccessibilityEvent(ax::mojom::Event::kTreeChanged, true);
+  NotifyAccessibilityEventDeprecated(ax::mojom::Event::kTreeChanged, true);
 }
 
 void SavedDeskIconContainer::UpdateOverflowIcon() {

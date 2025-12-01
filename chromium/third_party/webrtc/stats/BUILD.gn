@@ -24,10 +24,11 @@ rtc_library("rtc_stats") {
 
   deps = [
     "../api:rtc_stats_api",
+    "../api:scoped_refptr",
+    "../api/units:timestamp",
     "../rtc_base:checks",
     "../rtc_base:macromagic",
     "../rtc_base:stringutils",
-    "//third_party/abseil-cpp/absl/types:variant",
   ]
 }
 

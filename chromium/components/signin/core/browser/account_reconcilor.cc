@@ -140,22 +140,6 @@ AccountReconcilor::Lock::~Lock() {
   }
 }
 
-AccountReconcilor::ScopedSyncedDataDeletion::ScopedSyncedDataDeletion(
-    AccountReconcilor* reconcilor)
-    : reconcilor_(reconcilor->weak_factory_.GetWeakPtr()) {
-  DCHECK(reconcilor_);
-  ++reconcilor_->synced_data_deletion_in_progress_count_;
-}
-
-AccountReconcilor::ScopedSyncedDataDeletion::~ScopedSyncedDataDeletion() {
-  if (!reconcilor_) {
-    return;  // The reconcilor was destroyed.
-  }
-
-  DCHECK_GT(reconcilor_->synced_data_deletion_in_progress_count_, 0);
-  --reconcilor_->synced_data_deletion_in_progress_count_;
-}
-
 #if BUILDFLAG(IS_CHROMEOS)
 AccountReconcilor::AccountReconcilor(
     signin::IdentityManager* identity_manager,
@@ -348,11 +332,6 @@ AccountReconcilorState AccountReconcilor::GetState() const {
   return state_;
 }
 
-std::unique_ptr<AccountReconcilor::ScopedSyncedDataDeletion>
-AccountReconcilor::GetScopedSyncDataDeletion() {
-  return base::WrapUnique(new ScopedSyncedDataDeletion(this));
-}
-
 void AccountReconcilor::AddObserver(Observer* observer) {
   observer_list_.AddObserver(observer);
 }
@@ -391,9 +370,8 @@ void AccountReconcilor::OnPrimaryAccountChanged(
   // Perform the "clear on exit" migration if applicable.
   MaybeMigrateClearOnExit(*client_, *identity_manager_);
 
-  if (switches::IsExplicitBrowserSigninUIOnDesktopEnabled() &&
-      event_details.GetEventTypeFor(ConsentLevel::kSignin) ==
-          signin::PrimaryAccountChangeEvent::Type::kCleared) {
+  if (event_details.GetEventTypeFor(ConsentLevel::kSignin) ==
+      signin::PrimaryAccountChangeEvent::Type::kCleared) {
     VLOG(1) << "AccountReconcilor::OnPrimaryAccountChanged";
     StartReconcile(Trigger::kPrimaryAccountChanged);
   }
@@ -687,8 +665,7 @@ void AccountReconcilor::OnAccountsInCookieUpdated(
 }
 
 void AccountReconcilor::OnAccountsCookieDeletedByUserAction() {
-  delegate_->OnAccountsCookieDeletedByUserAction(
-      synced_data_deletion_in_progress_count_ != 0);
+  delegate_->OnAccountsCookieDeletedByUserAction();
 }
 
 std::vector<CoreAccountId>

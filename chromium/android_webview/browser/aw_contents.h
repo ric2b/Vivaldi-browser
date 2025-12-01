@@ -135,7 +135,8 @@ class AwContents : public FindHelper::Listener,
   void OnDetachedFromWindow(JNIEnv* env);
   bool IsVisible(JNIEnv* env);
   bool IsDisplayingInterstitialForTesting(JNIEnv* env);
-  base::android::ScopedJavaLocalRef<jbyteArray> GetOpaqueState(JNIEnv* env);
+  base::android::ScopedJavaLocalRef<jbyteArray>
+  GetOpaqueState(JNIEnv* env, jint max_size, jboolean include_forward_state);
   jboolean RestoreFromOpaqueState(
       JNIEnv* env,
       const base::android::JavaParamRef<jbyteArray>& state);
@@ -326,8 +327,6 @@ class AwContents : public FindHelper::Listener,
 
   void RendererUnresponsive(content::RenderProcessHost* render_process_host);
   void RendererResponsive(content::RenderProcessHost* render_process_host);
-
-  bool UseLegacyGeolocationPermissionAPI();
 
   // content::WebContentsObserver overrides
   void PrimaryPageChanged(content::Page& page) override;

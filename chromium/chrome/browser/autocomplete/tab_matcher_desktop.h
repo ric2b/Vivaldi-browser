@@ -20,12 +20,19 @@ class TabMatcherDesktop : public TabMatcher {
 
   // TabMatcher implementation.
   bool IsTabOpenWithURL(const GURL& gurl,
-                        const AutocompleteInput* input) const override;
+                        const AutocompleteInput* input,
+                        bool exclude_active_tab = true) const override;
+  bool IsTabOpenWithSameTitleOrSimilarURL(
+      const std::u16string& title,
+      const GURL& url,
+      const GURL::Replacements& replacements,
+      bool exclude_active_tab) const override;
   std::vector<TabMatcher::TabWrapper> GetOpenTabs(
       const AutocompleteInput* input) const override;
 
  private:
-  std::vector<content::WebContents*> GetOpenWebContents() const;
+  std::vector<content::WebContents*> GetOpenWebContents(
+      bool exclude_active_tab = true) const;
 
   bool IsStrippedURLEqualToWebContentsURL(
       const GURL& stripped_url,

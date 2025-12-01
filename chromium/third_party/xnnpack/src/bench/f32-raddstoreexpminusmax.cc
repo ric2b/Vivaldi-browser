@@ -6,17 +6,18 @@
 #include <algorithm>
 #include <cmath>
 #include <functional>
+#include <limits>
 #include <random>
 #include <vector>
 
-#include "utils.h"
-#include "xnnpack.h"
-#include "xnnpack/common.h"
-#include "xnnpack/microfnptr.h"
-#include "xnnpack/microparams-init.h"
-#include "xnnpack/raddstoreexpminusmax.h"
-#include "xnnpack/reduce.h"
-#include "xnnpack/buffer.h"
+#include "bench/utils.h"
+#include "include/xnnpack.h"
+#include "src/xnnpack/common.h"
+#include "src/xnnpack/microfnptr.h"
+#include "src/xnnpack/microparams-init.h"
+#include "src/xnnpack/raddstoreexpminusmax.h"
+#include "src/xnnpack/reduce.h"
+#include "src/xnnpack/buffer.h"
 #include <benchmark/benchmark.h>
 
 static void f32_raddstoreexpminusmax(
@@ -50,7 +51,7 @@ static void f32_raddstoreexpminusmax(
   size_t buffer_index = 0;
   for (auto _ : state) {
     state.PauseTiming();
-    float x_max;
+    float x_max = -std::numeric_limits<float>::infinity();
     rmax(elements * sizeof(float), x.data(), &x_max, /*params=*/nullptr);
     if (++buffer_index == num_buffers) {
       buffer_index = 0;

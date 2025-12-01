@@ -21,6 +21,9 @@
 <translation id="4622039161600275920">Chromium bloqueou esta páxina</translation>
 <translation id="48558539577516920">Configura o teu firewall ou o teu antivirus para permitir o acceso
         de Chromium á rede.</translation>
+<translation id="4949828774841497663">Vai a Aplicacións &gt; Configuración do sistema &gt; Rede, selecciona a
+          rede activa, fai clic no botón Detalles e anula a selección de calquera proxy
+          que poida estar seleccionado.</translation>
 <translation id="580822234363523061">Accede ao
           menú de Chromium &gt;
           <ph name="SETTINGS_TITLE" />
@@ -42,9 +45,6 @@
         e desmarca a opción "<ph name="NO_PREFETCH_DESCRIPTION" />".
         Se esta acción non resolve o problema, é recomendable volver seleccionar
         esta opción para mellorar o rendemento.</translation>
-<translation id="8187289872471304532">Acede a
-          Aplicacións &gt; Preferencias do sistema &gt; Rede &gt; Avanzado &gt; Servidores proxy
-          e anula a selección dos servidores proxy que estean seleccionados.</translation>
 <translation id="8597726643333341451">Estás vendo unha páxina de Chrome for Testing segura</translation>
 <translation id="8684913864886094367">Chromium non pechou correctamente.</translation>
 </translationbundle>

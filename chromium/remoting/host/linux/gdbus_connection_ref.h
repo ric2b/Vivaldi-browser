@@ -22,10 +22,11 @@
 #include "base/location.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
-#include "base/task/bind_post_task.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/types/expected.h"
+#include "remoting/host/base/loggable.h"
 #include "remoting/host/linux/dbus_interfaces/org_freedesktop_DBus_Properties.h"
+#include "remoting/host/linux/gdbus_fd_list.h"
 #include "remoting/host/linux/gvariant_ref.h"
 #include "remoting/host/linux/gvariant_type.h"
 #include "ui/base/glib/scoped_gobject.h"
@@ -40,14 +41,22 @@ namespace remoting {
 // thread, as obtained by base::SequencedTaskRunner::GetCurrentDefault().
 class GDBusConnectionRef {
  public:
+  // Callback to receive the connection created by one of the Create* methods.
   using CreateCallback =
-      base::OnceCallback<void(base::expected<GDBusConnectionRef, std::string>)>;
+      base::OnceCallback<void(base::expected<GDBusConnectionRef, Loggable>)>;
+  // Callback to receive the result of a method call.
   template <typename ReturnType>
   using CallCallback =
-      base::OnceCallback<void(base::expected<ReturnType, std::string>)>;
+      base::OnceCallback<void(base::expected<ReturnType, Loggable>)>;
+  // Callback to receive the result of a method call that returns one or more
+  // file descriptors.
+  template <typename ReturnType>
+  using CallFdCallback = base::OnceCallback<void(
+      base::expected<std::pair<ReturnType, GDBusFdList>, Loggable>)>;
+  // Callback to receive subscribed signal messages.
   template <typename ArgType>
   using SignalCallback = base::RepeatingCallback<void(ArgType arguments)>;
-  // Can be passed in lieu of SignalCallback when more details of the emitted
+  // Can be passed in lieu of SignalCallback when details of the source of the
   // signal are needed (e.g., when registering the same callback for multiple
   // signals).
   template <typename ArgType>
@@ -113,11 +122,62 @@ class GDBusConnectionRef {
   //     default, or G_MAXINT for no timeout.
   template <typename ArgType, typename ReturnType>
   void Call(const char* bus_name,
-            const char* object_path,
+            gvariant::ObjectPathCStr object_path,
             const char* interface_name,
             const char* method_name,
             const ArgType& arguments,
             CallCallback<ReturnType> callback,
+            GDBusCallFlags flags = G_DBUS_CALL_FLAGS_NONE,
+            gint timeout_msec = -1) const
+    requires requires(GVariantRef<"r"> variant) {
+      GVariantRef<"r">::TryFrom(arguments);
+      variant.TryInto<ReturnType>();
+    };
+
+  // Variant of dynamically-checked Call that can return one or more file
+  // descriptors in the response.
+  template <typename ArgType, typename ReturnType>
+  void Call(const char* bus_name,
+            gvariant::ObjectPathCStr object_path,
+            const char* interface_name,
+            const char* method_name,
+            const ArgType& arguments,
+            CallFdCallback<ReturnType> callback,
+            GDBusCallFlags flags = G_DBUS_CALL_FLAGS_NONE,
+            gint timeout_msec = -1) const
+    requires requires(GVariantRef<"r"> variant) {
+      GVariantRef<"r">::TryFrom(arguments);
+      variant.TryInto<ReturnType>();
+    };
+
+  // Variant of dynamically-checked Call that can accept one or more file
+  // descriptors to be sent along with the call.
+  template <typename ArgType, typename ReturnType>
+  void Call(const char* bus_name,
+            gvariant::ObjectPathCStr object_path,
+            const char* interface_name,
+            const char* method_name,
+            const ArgType& arguments,
+            GDBusFdList fds,
+            CallCallback<ReturnType> callback,
+            GDBusCallFlags flags = G_DBUS_CALL_FLAGS_NONE,
+            gint timeout_msec = -1) const
+    requires requires(GVariantRef<"r"> variant) {
+      GVariantRef<"r">::TryFrom(arguments);
+      variant.TryInto<ReturnType>();
+    };
+
+  // Variant of dynamically-checked Call that can accept one or more file
+  // descriptors to be sent along with the call and can return one or more file
+  // descriptors in the response.
+  template <typename ArgType, typename ReturnType>
+  void Call(const char* bus_name,
+            gvariant::ObjectPathCStr object_path,
+            const char* interface_name,
+            const char* method_name,
+            const ArgType& arguments,
+            GDBusFdList fds,
+            CallFdCallback<ReturnType> callback,
             GDBusCallFlags flags = G_DBUS_CALL_FLAGS_NONE,
             gint timeout_msec = -1) const
     requires requires(GVariantRef<"r"> variant) {
@@ -139,7 +199,7 @@ class GDBusConnectionRef {
   //     GVariantRef<> to handle any value type.
   template <typename ValueType>
   void GetProperty(const char* bus_name,
-                   const char* object_path,
+                   gvariant::ObjectPathCStr object_path,
                    const char* interface_name,
                    const char* property_name,
                    CallCallback<ValueType> callback,
@@ -161,7 +221,7 @@ class GDBusConnectionRef {
   //     if something goes wrong.
   template <typename ValueType>
   void SetProperty(const char* bus_name,
-                   const char* object_path,
+                   gvariant::ObjectPathCStr object_path,
                    const char* interface_name,
                    const char* property_name,
                    const ValueType& value,
@@ -176,7 +236,7 @@ class GDBusConnectionRef {
   //     well-known bus name. If this is a direct peer connection rather than a
   //     bus connection, pass nullptr.
   // object_path - The remote object from which to receive signals. May be
-  //     nullptr to receive signals from all objects owned by the sender.
+  //     std::nullopt to receive signals from all objects owned by the sender.
   // interface_name - The interface from which to receive signals. May be
   //     nullptr to receive signals from all interfaces.
   // signal_name - The name of the signals to receive. May be nullptr to
@@ -191,7 +251,7 @@ class GDBusConnectionRef {
   template <typename ArgType>
   std::unique_ptr<SignalSubscription> SignalSubscribe(
       const char* bus_name,
-      const char* object_path,
+      std::optional<gvariant::ObjectPathCStr> object_path,
       const char* interface_name,
       const char* signal_name,
       SignalCallback<ArgType> callback)
@@ -214,7 +274,7 @@ class GDBusConnectionRef {
   template <typename ArgType>
   std::unique_ptr<SignalSubscription> SignalSubscribe(
       const char* bus_name,
-      const char* object_path,
+      std::optional<gvariant::ObjectPathCStr> object_path,
       const char* interface_name,
       const char* signal_name,
       DetailedSignalCallback<ArgType> callback)
@@ -240,9 +300,54 @@ class GDBusConnectionRef {
   //     default, or G_MAXINT for no timeout.
   template <typename MethodSpec, typename ArgType, typename ReturnType>
   void Call(const char* bus_name,
-            const char* object_path,
+            gvariant::ObjectPathCStr object_path,
             const ArgType& arguments,
             CallCallback<ReturnType> callback,
+            GDBusCallFlags flags = G_DBUS_CALL_FLAGS_NONE,
+            gint timeout_msec = -1) const
+    requires requires(GVariantRef<MethodSpec::kOutType> variant) {
+      GVariantRef<MethodSpec::kInType>::From(arguments);
+      variant.template Into<ReturnType>();
+    };
+
+  // Variant of statically-checked Call that can return one or more file
+  // descriptors in the response.
+  template <typename MethodSpec, typename ArgType, typename ReturnType>
+  void Call(const char* bus_name,
+            gvariant::ObjectPathCStr object_path,
+            const ArgType& arguments,
+            CallFdCallback<ReturnType> callback,
+            GDBusCallFlags flags = G_DBUS_CALL_FLAGS_NONE,
+            gint timeout_msec = -1) const
+    requires requires(GVariantRef<MethodSpec::kOutType> variant) {
+      GVariantRef<MethodSpec::kInType>::From(arguments);
+      variant.template Into<ReturnType>();
+    };
+
+  // Variant of statically-checked Call that can accept one or more file
+  // descriptors to be sent along with the call.
+  template <typename MethodSpec, typename ArgType, typename ReturnType>
+  void Call(const char* bus_name,
+            gvariant::ObjectPathCStr object_path,
+            const ArgType& arguments,
+            GDBusFdList fds,
+            CallCallback<ReturnType> callback,
+            GDBusCallFlags flags = G_DBUS_CALL_FLAGS_NONE,
+            gint timeout_msec = -1) const
+    requires requires(GVariantRef<MethodSpec::kOutType> variant) {
+      GVariantRef<MethodSpec::kInType>::From(arguments);
+      variant.template Into<ReturnType>();
+    };
+
+  // Variant of statically-checked Call that can accept one or more file
+  // descriptors to be sent along with the call and can return one or more file
+  // descriptors in the response.
+  template <typename MethodSpec, typename ArgType, typename ReturnType>
+  void Call(const char* bus_name,
+            gvariant::ObjectPathCStr object_path,
+            const ArgType& arguments,
+            GDBusFdList fds,
+            CallFdCallback<ReturnType> callback,
             GDBusCallFlags flags = G_DBUS_CALL_FLAGS_NONE,
             gint timeout_msec = -1) const
     requires requires(GVariantRef<MethodSpec::kOutType> variant) {
@@ -261,7 +366,7 @@ class GDBusConnectionRef {
   //     PropertySpec must be infallibly convertible to ValueType.
   template <typename PropertySpec, typename ValueType>
   void GetProperty(const char* bus_name,
-                   const char* object_path,
+                   gvariant::ObjectPathCStr object_path,
                    CallCallback<ValueType> callback,
                    GDBusCallFlags flags = G_DBUS_CALL_FLAGS_NONE,
                    gint timeout_msec = -1) const
@@ -284,7 +389,7 @@ class GDBusConnectionRef {
   //     if something goes wrong.
   template <typename PropertySpec, typename ValueType>
   void SetProperty(const char* bus_name,
-                   const char* object_path,
+                   gvariant::ObjectPathCStr object_path,
                    const ValueType& value,
                    CallCallback<void> callback,
                    GDBusCallFlags flags = G_DBUS_CALL_FLAGS_NONE,
@@ -308,7 +413,7 @@ class GDBusConnectionRef {
   template <typename SignalSpec, typename ArgType>
   std::unique_ptr<SignalSubscription> SignalSubscribe(
       const char* bus_name,
-      const char* object_path,
+      std::optional<gvariant::ObjectPathCStr> object_path,
       SignalCallback<ArgType> callback)
     requires requires(GVariantRef<SignalSpec::kType> variant) {
       variant.template Into<ArgType>();
@@ -331,7 +436,7 @@ class GDBusConnectionRef {
   template <typename SignalSpec, typename ArgType>
   std::unique_ptr<SignalSubscription> SignalSubscribe(
       const char* bus_name,
-      const char* object_path,
+      std::optional<gvariant::ObjectPathCStr> object_path,
       DetailedSignalCallback<ArgType> callback)
     requires requires(GVariantRef<SignalSpec::kType> variant) {
       variant.template Into<ArgType>();
@@ -342,13 +447,20 @@ class GDBusConnectionRef {
 
   // Common logic for all Calls.
   void CallInternal(const char* bus_name,
-                    const char* object_path,
+                    gvariant::ObjectPathCStr object_path,
                     const char* interface_name,
                     const char* method_name,
                     const GVariantRef<"r">& arguments,
-                    CallCallback<GVariantRef<"r">> callback,
-                    GDBusCallFlags flags = G_DBUS_CALL_FLAGS_NONE,
-                    gint timeout_msec = -1) const;
+                    GDBusFdList fds,
+                    CallFdCallback<GVariantRef<"r">> callback,
+                    GDBusCallFlags flags,
+                    gint timeout_msec) const;
+
+  // Convert CallCallback to a CallFdCallback that discards (and thus closes)
+  // any returned file descriptors.
+  template <typename ReturnType>
+  static CallFdCallback<ReturnType> IgnoreFds(
+      CallCallback<ReturnType>&& callback);
 
   ScopedGObject<GDBusConnection> connection_;
 };
@@ -363,7 +475,7 @@ class GDBusConnectionRef::SignalSubscription {
   // Subscribes to the signal with the given callback.
   SignalSubscription(GDBusConnectionRef connection,
                      const char* sender,
-                     const char* object_path,
+                     std::optional<gvariant::ObjectPathCStr> object_path,
                      const char* interface_name,
                      const char* signal_name,
                      DetailedSignalCallback<GVariantRef<"r">> callback);
@@ -385,11 +497,67 @@ class GDBusConnectionRef::SignalSubscription {
 
 template <typename ArgType, typename ReturnType>
 void GDBusConnectionRef::Call(const char* bus_name,
-                              const char* object_path,
+                              gvariant::ObjectPathCStr object_path,
                               const char* interface_name,
                               const char* method_name,
                               const ArgType& arguments,
                               CallCallback<ReturnType> callback,
+                              GDBusCallFlags flags,
+                              gint timeout_msec) const
+  requires requires(GVariantRef<"r"> variant) {
+    GVariantRef<"r">::TryFrom(arguments);
+    variant.TryInto<ReturnType>();
+  }
+{
+  Call(bus_name, object_path, interface_name, method_name, arguments,
+       GDBusFdList(), IgnoreFds(std::move(callback)), flags, timeout_msec);
+}
+
+template <typename ArgType, typename ReturnType>
+void GDBusConnectionRef::Call(const char* bus_name,
+                              gvariant::ObjectPathCStr object_path,
+                              const char* interface_name,
+                              const char* method_name,
+                              const ArgType& arguments,
+                              CallFdCallback<ReturnType> callback,
+                              GDBusCallFlags flags,
+                              gint timeout_msec) const
+  requires requires(GVariantRef<"r"> variant) {
+    GVariantRef<"r">::TryFrom(arguments);
+    variant.TryInto<ReturnType>();
+  }
+{
+  Call(bus_name, object_path, interface_name, method_name, arguments,
+       GDBusFdList(), std::move(callback), flags, timeout_msec);
+}
+
+template <typename ArgType, typename ReturnType>
+void GDBusConnectionRef::Call(const char* bus_name,
+                              gvariant::ObjectPathCStr object_path,
+                              const char* interface_name,
+                              const char* method_name,
+                              const ArgType& arguments,
+                              GDBusFdList fds,
+                              CallCallback<ReturnType> callback,
+                              GDBusCallFlags flags,
+                              gint timeout_msec) const
+  requires requires(GVariantRef<"r"> variant) {
+    GVariantRef<"r">::TryFrom(arguments);
+    variant.TryInto<ReturnType>();
+  }
+{
+  Call(bus_name, object_path, interface_name, method_name, arguments,
+       std::move(fds), IgnoreFds(std::move(callback)), flags, timeout_msec);
+}
+
+template <typename ArgType, typename ReturnType>
+void GDBusConnectionRef::Call(const char* bus_name,
+                              gvariant::ObjectPathCStr object_path,
+                              const char* interface_name,
+                              const char* method_name,
+                              const ArgType& arguments,
+                              GDBusFdList fds,
+                              CallFdCallback<ReturnType> callback,
                               GDBusCallFlags flags,
                               gint timeout_msec) const
   requires requires(GVariantRef<"r"> variant) {
@@ -403,27 +571,41 @@ void GDBusConnectionRef::Call(const char* bus_name,
   if (!arg_variant.has_value()) {
     base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
         FROM_HERE,
-        base::BindOnce(std::move(callback),
-                       base::unexpected(std::move(arg_variant).error())));
+        base::BindOnce(
+            std::move(callback),
+            std::move(arg_variant)
+                .error()
+                .UnexpectedWithContext(
+                    FROM_HERE, "While converting D-Bus call arguments")));
     return;
   }
 
   // Attempt to convert return value into the target type.
-  auto convert_result =
-      base::BindOnce([](base::expected<GVariantRef<"r">, std::string> result) {
-        return std::move(result).and_then([](GVariantRef<"r"> variant) {
-          return variant.TryInto<ReturnType>();
+  auto convert_result = base::BindOnce(
+      [](base::expected<std::pair<GVariantRef<"r">, GDBusFdList>, Loggable>
+             result) {
+        return std::move(result).and_then([](auto&& inner) {
+          return inner.first.template TryInto<ReturnType>()
+              .transform([&](ReturnType&& value) {
+                return std::pair(std::move(value), std::move(inner.second));
+              })
+              .transform_error([](Loggable&& loggable) {
+                loggable.AddContext(FROM_HERE,
+                                    "While converting D-Bus call return value");
+                return std::move(loggable);
+              });
         });
       });
 
   CallInternal(bus_name, object_path, interface_name, method_name,
-               arg_variant.value(),
-               std::move(convert_result).Then(std::move(callback)));
+               arg_variant.value(), std::move(fds),
+               std::move(convert_result).Then(std::move(callback)), flags,
+               timeout_msec);
 }
 
 template <typename ValueType>
 void GDBusConnectionRef::GetProperty(const char* bus_name,
-                                     const char* object_path,
+                                     gvariant::ObjectPathCStr object_path,
                                      const char* interface_name,
                                      const char* property_name,
                                      CallCallback<ValueType> callback,
@@ -436,18 +618,34 @@ void GDBusConnectionRef::GetProperty(const char* bus_name,
       GVariantRef<"(ss)">::TryFrom(std::tuple(interface_name, property_name));
   if (!args.has_value()) {
     base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
-        FROM_HERE, base::BindOnce(std::move(callback),
-                                  base::unexpected(std::move(args).error())));
+        FROM_HERE,
+        base::BindOnce(
+            std::move(callback),
+            std::move(args).error().UnexpectedWithContext(
+                FROM_HERE, "While checking D-Bus get-property args")));
     return;
   }
 
   // Unboxes the returned "v" value and attempts to convert it to the expected
   // type.
-  auto convert_result = base::BindOnce(
-      [](base::expected<GVariantRef<"(v)">, std::string> result) {
-        return std::move(result).and_then([](GVariantRef<"(v)"> variant) {
-          return variant.get<0>().get<0>().TryInto<ValueType>();
-        });
+  auto convert_result =
+      base::BindOnce([](base::expected<GVariantRef<"(v)">, Loggable> result) {
+        return std::move(result)
+            .transform_error([](Loggable&& loggable) {
+              loggable.AddContext(FROM_HERE,
+                                  "While getting D-Bus property value");
+              return std::move(loggable);
+            })
+            .and_then([](GVariantRef<"(v)"> variant) {
+              return variant.get<0>()
+                  .get<0>()
+                  .TryInto<ValueType>()
+                  .transform_error([](Loggable&& loggable) {
+                    loggable.AddContext(
+                        FROM_HERE, "While converting D-Bus property value");
+                    return std::move(loggable);
+                  });
+            });
       });
 
   Call<remoting::org_freedesktop_DBus_Properties::Get>(
@@ -457,7 +655,7 @@ void GDBusConnectionRef::GetProperty(const char* bus_name,
 
 template <typename ValueType>
 void GDBusConnectionRef::SetProperty(const char* bus_name,
-                                     const char* object_path,
+                                     gvariant::ObjectPathCStr object_path,
                                      const char* interface_name,
                                      const char* property_name,
                                      const ValueType& value,
@@ -472,15 +670,24 @@ void GDBusConnectionRef::SetProperty(const char* bus_name,
       interface_name, property_name, gvariant::Boxed<const ValueType&>{value}));
   if (!args.has_value()) {
     base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
-        FROM_HERE, base::BindOnce(std::move(callback),
-                                  base::unexpected(std::move(args).error())));
+        FROM_HERE,
+        base::BindOnce(
+            std::move(callback),
+            std::move(args).error().UnexpectedWithContext(
+                FROM_HERE, "While checking D-Bus set-property args")));
     return;
   }
 
   // Ignores the returned std::tuple() and returns void instead.
   auto convert_result =
-      base::BindOnce([](base::expected<std::tuple<>, std::string> result) {
-        return std::move(result).transform([](std::tuple<>) {});
+      base::BindOnce([](base::expected<std::tuple<>, Loggable> result) {
+        return std::move(result)
+            .transform([](std::tuple<>) {})
+            .transform_error([](Loggable&& loggable) {
+              loggable.AddContext(FROM_HERE,
+                                  "While setting D-Bus property value");
+              return std::move(loggable);
+            });
       });
 
   Call<remoting::org_freedesktop_DBus_Properties::Set>(
@@ -490,11 +697,12 @@ void GDBusConnectionRef::SetProperty(const char* bus_name,
 
 template <typename ArgType>
 std::unique_ptr<GDBusConnectionRef::SignalSubscription>
-GDBusConnectionRef::SignalSubscribe(const char* bus_name,
-                                    const char* object_path,
-                                    const char* interface_name,
-                                    const char* signal_name,
-                                    SignalCallback<ArgType> callback)
+GDBusConnectionRef::SignalSubscribe(
+    const char* bus_name,
+    std::optional<gvariant::ObjectPathCStr> object_path,
+    const char* interface_name,
+    const char* signal_name,
+    SignalCallback<ArgType> callback)
   requires requires(GVariantRef<"r"> variant) { variant.TryInto<ArgType>(); }
 {
   return SignalSubscribe(
@@ -505,20 +713,22 @@ GDBusConnectionRef::SignalSubscribe(const char* bus_name,
 
 template <typename ArgType>
 std::unique_ptr<GDBusConnectionRef::SignalSubscription>
-GDBusConnectionRef::SignalSubscribe(const char* bus_name,
-                                    const char* object_path,
-                                    const char* interface_name,
-                                    const char* signal_name,
-                                    DetailedSignalCallback<ArgType> callback)
+GDBusConnectionRef::SignalSubscribe(
+    const char* bus_name,
+    std::optional<gvariant::ObjectPathCStr> object_path,
+    const char* interface_name,
+    const char* signal_name,
+    DetailedSignalCallback<ArgType> callback)
   requires requires(GVariantRef<"r"> variant) { variant.TryInto<ArgType>(); }
 {
   // Attempts to convert return value into the target type and invokes the
-  // provided callback if it matches.
+  // provided callback if it matches. If the signal is of the wrong type, it is
+  // ignored.
   auto callback_wrapper = base::BindRepeating(
       [](const DetailedSignalCallback<ArgType>& callback, std::string sender,
          gvariant::ObjectPath object_path, std::string interface_name,
          std::string signal_name, GVariantRef<"r"> arguments) {
-        base::expected<ArgType, std::string> try_result =
+        base::expected<ArgType, Loggable> try_result =
             arguments.TryInto<ArgType>();
         if (try_result.has_value()) {
           callback.Run(std::move(sender), std::move(object_path),
@@ -535,7 +745,7 @@ GDBusConnectionRef::SignalSubscribe(const char* bus_name,
 
 template <typename MethodSpec, typename ArgType, typename ReturnType>
 void GDBusConnectionRef::Call(const char* bus_name,
-                              const char* object_path,
+                              gvariant::ObjectPathCStr object_path,
                               const ArgType& arguments,
                               CallCallback<ReturnType> callback,
                               GDBusCallFlags flags,
@@ -550,9 +760,62 @@ void GDBusConnectionRef::Call(const char* bus_name,
        timeout_msec);
 }
 
+template <typename MethodSpec, typename ArgType, typename ReturnType>
+void GDBusConnectionRef::Call(const char* bus_name,
+                              gvariant::ObjectPathCStr object_path,
+                              const ArgType& arguments,
+                              CallFdCallback<ReturnType> callback,
+                              GDBusCallFlags flags,
+                              gint timeout_msec) const
+  requires requires(GVariantRef<MethodSpec::kOutType> variant) {
+    GVariantRef<MethodSpec::kInType>::From(arguments);
+    variant.template Into<ReturnType>();
+  }
+{
+  Call(bus_name, object_path, MethodSpec::kInterfaceName,
+       MethodSpec::kMethodName, arguments, std::move(callback), flags,
+       timeout_msec);
+}
+
+template <typename MethodSpec, typename ArgType, typename ReturnType>
+void GDBusConnectionRef::Call(const char* bus_name,
+                              gvariant::ObjectPathCStr object_path,
+                              const ArgType& arguments,
+                              GDBusFdList fds,
+                              CallCallback<ReturnType> callback,
+                              GDBusCallFlags flags,
+                              gint timeout_msec) const
+  requires requires(GVariantRef<MethodSpec::kOutType> variant) {
+    GVariantRef<MethodSpec::kInType>::From(arguments);
+    variant.template Into<ReturnType>();
+  }
+{
+  Call(bus_name, object_path, MethodSpec::kInterfaceName,
+       MethodSpec::kMethodName, arguments, std::move(fds), std::move(callback),
+       flags, timeout_msec);
+}
+
+template <typename MethodSpec, typename ArgType, typename ReturnType>
+void GDBusConnectionRef::Call(const char* bus_name,
+                              gvariant::ObjectPathCStr object_path,
+                              const ArgType& arguments,
+                              GDBusFdList fds,
+                              CallFdCallback<ReturnType> callback,
+                              GDBusCallFlags flags,
+                              gint timeout_msec) const
+  requires requires(GVariantRef<MethodSpec::kOutType> variant) {
+    GVariantRef<MethodSpec::kInType>::From(arguments);
+    variant.template Into<ReturnType>();
+  }
+{
+  Call(bus_name, object_path, MethodSpec::kInterfaceName,
+       MethodSpec::kMethodName, arguments, std::move(fds), std::move(callback),
+       flags, timeout_msec);
+}
+
 template <typename PropertySpec, typename ValueType>
 void GDBusConnectionRef::GetProperty(const char* bus_name,
-                                     const char* object_path,
+                                     gvariant::ObjectPathCStr object_path,
                                      CallCallback<ValueType> callback,
                                      GDBusCallFlags flags,
                                      gint timeout_msec) const
@@ -568,7 +831,7 @@ void GDBusConnectionRef::GetProperty(const char* bus_name,
 
 template <typename PropertySpec, typename ValueType>
 void GDBusConnectionRef::SetProperty(const char* bus_name,
-                                     const char* object_path,
+                                     gvariant::ObjectPathCStr object_path,
                                      const ValueType& value,
                                      CallCallback<void> callback,
                                      GDBusCallFlags flags,
@@ -583,9 +846,10 @@ void GDBusConnectionRef::SetProperty(const char* bus_name,
 
 template <typename SignalSpec, typename ArgType>
 std::unique_ptr<GDBusConnectionRef::SignalSubscription>
-GDBusConnectionRef::SignalSubscribe(const char* bus_name,
-                                    const char* object_path,
-                                    SignalCallback<ArgType> callback)
+GDBusConnectionRef::SignalSubscribe(
+    const char* bus_name,
+    std::optional<gvariant::ObjectPathCStr> object_path,
+    SignalCallback<ArgType> callback)
   requires requires(GVariantRef<SignalSpec::kType> variant) {
     variant.template Into<ArgType>();
   }
@@ -596,15 +860,28 @@ GDBusConnectionRef::SignalSubscribe(const char* bus_name,
 
 template <typename SignalSpec, typename ArgType>
 std::unique_ptr<GDBusConnectionRef::SignalSubscription>
-GDBusConnectionRef::SignalSubscribe(const char* bus_name,
-                                    const char* object_path,
-                                    DetailedSignalCallback<ArgType> callback)
+GDBusConnectionRef::SignalSubscribe(
+    const char* bus_name,
+    std::optional<gvariant::ObjectPathCStr> object_path,
+    DetailedSignalCallback<ArgType> callback)
   requires requires(GVariantRef<SignalSpec::kType> variant) {
     variant.template Into<ArgType>();
   }
 {
   return SignalSubscribe(bus_name, object_path, SignalSpec::kInterfaceName,
                          SignalSpec::kSignalName, std::move(callback));
+}
+
+// static
+template <typename ReturnType>
+GDBusConnectionRef::CallFdCallback<ReturnType> GDBusConnectionRef::IgnoreFds(
+    CallCallback<ReturnType>&& callback) {
+  auto drop_fds = base::BindOnce(
+      [](base::expected<std::pair<ReturnType, GDBusFdList>, Loggable> result) {
+        return result.transform(
+            [](auto&& inner) { return std::move(inner).first; });
+      });
+  return std::move(drop_fds).Then(std::move(callback));
 }
 
 }  // namespace remoting

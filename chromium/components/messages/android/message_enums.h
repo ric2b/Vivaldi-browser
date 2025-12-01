@@ -15,6 +15,8 @@ namespace messages {
 // TODO(crbug.com/40755174): Revisit enum values. TAB_SWITCHED is not currently
 // used. Likely the same for TAB_DESTROYED and ACTIVITY_DESTROYED. We also need
 // a dedicated value for message dismissed from feature code.
+//
+// LINT.IfChange(DismissReason)
 enum class DismissReason {
   // Dismiss reasons that are fully controlled by clients (i.e. are not used
   // inside the Messages implementation are marked "Controlled by client" on
@@ -48,6 +50,7 @@ enum class DismissReason {
 
   kMaxValue = COUNT,
 };
+// LINT.ThenChange(//tools/metrics/histograms/metadata/safe_browsing/enums.xml:DismissReason)
 
 // "Urgent" means the user should take actions ASAP, such as responding to
 // permissions or safety warnings.
@@ -91,7 +94,7 @@ enum class MessageIdentifier {
   SAVE_ADDRESS_PROFILE = 6,
   MERCHANT_TRUST = 7,
   // Removed: ADD_TO_HOMESCREEN_IPH = 8,
-  SEND_TAB_TO_SELF = 9,
+  // Removed: SEND_TAB_TO_SELF = 9,
   READER_MODE = 10,
   CHROME_SURVEY = 11,
   SAVE_CARD = 12,
@@ -142,6 +145,7 @@ enum class MessageIdentifier {
   COLLABORATION_REMOVED = 57,
   CCT_ACCOUNT_MISMATCH_NOTICE = 58,
   PROMPT_HATS_CLEAR_BROWSING_DATA = 59,
+  OS_ADVANCED_PROTECTION_SETTING_CHANGED_MESSAGE = 60,
   // Insert new values before this line.
   COUNT
 };

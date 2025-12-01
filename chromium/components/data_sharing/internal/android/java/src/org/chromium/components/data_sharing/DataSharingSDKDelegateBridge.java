@@ -13,6 +13,7 @@ import org.jni_zero.NativeMethods;
 import org.chromium.base.ResettersForTesting;
 import org.chromium.base.task.PostTask;
 import org.chromium.base.task.TaskTraits;
+import org.chromium.build.annotations.NullMarked;
 import org.chromium.components.data_sharing.DataSharingSDKDelegateProtoResponseCallback.Status;
 import org.chromium.components.data_sharing.protocol.AddAccessTokenParams;
 import org.chromium.components.data_sharing.protocol.AddAccessTokenResult;
@@ -23,12 +24,14 @@ import org.chromium.components.data_sharing.protocol.DeleteGroupParams;
 import org.chromium.components.data_sharing.protocol.LeaveGroupParams;
 import org.chromium.components.data_sharing.protocol.LookupGaiaIdByEmailParams;
 import org.chromium.components.data_sharing.protocol.LookupGaiaIdByEmailResult;
+import org.chromium.components.data_sharing.protocol.ReadGroupWithTokenParams;
 import org.chromium.components.data_sharing.protocol.ReadGroupsParams;
 import org.chromium.components.data_sharing.protocol.ReadGroupsResult;
 import org.chromium.components.data_sharing.protocol.RemoveMemberParams;
 
 /** Java counterpart to the C++ DataSharingSDKDelegateAndroid class. */
 @JNINamespace("data_sharing")
+@NullMarked
 public class DataSharingSDKDelegateBridge {
 
     private DataSharingSDKDelegate mSDKDelegateImpl;
@@ -94,6 +97,31 @@ public class DataSharingSDKDelegateBridge {
             return;
         }
         mSDKDelegateImpl.readGroups(
+                params,
+                (byte[] serializedProto, int status) -> {
+                    DataSharingSDKDelegateBridgeJni.get()
+                            .runReadGroupsCallback(nativeCallbackPtr, serializedProto, status);
+                });
+    }
+
+    @CalledByNative
+    public void readGroupWithToken(String protoParams, long nativeCallbackPtr) {
+        ReadGroupWithTokenParams params;
+        try {
+            params = ReadGroupWithTokenParams.parseFrom(protoParams.getBytes());
+        } catch (InvalidProtocolBufferException e) {
+            PostTask.postTask(
+                    TaskTraits.USER_VISIBLE,
+                    () -> {
+                        DataSharingSDKDelegateBridgeJni.get()
+                                .runReadGroupsCallback(
+                                        nativeCallbackPtr,
+                                        ReadGroupsResult.newBuilder().build().toByteArray(),
+                                        Status.FAILURE);
+                    });
+            return;
+        }
+        mSDKDelegateImpl.readGroupWithToken(
                 params,
                 (byte[] serializedProto, int status) -> {
                     DataSharingSDKDelegateBridgeJni.get()

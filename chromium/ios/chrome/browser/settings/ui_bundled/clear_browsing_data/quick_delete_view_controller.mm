@@ -10,7 +10,7 @@
 #import "base/metrics/histogram_functions.h"
 #import "base/metrics/user_metrics.h"
 #import "components/browsing_data/core/browsing_data_utils.h"
-#import "ios/chrome/browser/intents/intents_donation_helper.h"
+#import "ios/chrome/browser/intents/model/intents_donation_helper.h"
 #import "ios/chrome/browser/keyboard/ui_bundled/UIKeyCommand+Chrome.h"
 #import "ios/chrome/browser/net/model/crurl.h"
 #import "ios/chrome/browser/settings/ui_bundled/cells/clear_browsing_data_constants.h"
@@ -239,13 +239,10 @@ typedef NS_ENUM(NSInteger, ItemIdentifier) {
         DeleteBrowsingDataDialogAction::kBrowsingDataSelected);
     [self.presentationHandler showBrowsingDataPageWithTimeRange:_timeRange];
   } else if (itemType == ItemIdentifierTimeRange) {
-    // TODO(crbug.com/383066554): Investigate why a row other than the browsing
-    // data triggers this code path.
-    NOTREACHED(base::NotFatalUntil::M137);
+    // No-op, should be handled by the UIButton inside the
+    // ItemIdentifierTimeRange.
   } else {
-    // TODO(crbug.com/383066554): Investigate why a row other than the browsing
-    // data triggers this code path.
-    NOTREACHED(base::NotFatalUntil::M137) << itemType;
+    NOTREACHED() << itemType;
   }
 }
 

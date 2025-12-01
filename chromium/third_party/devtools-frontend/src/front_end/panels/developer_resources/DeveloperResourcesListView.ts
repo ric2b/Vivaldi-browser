@@ -33,6 +33,10 @@ const UIStrings = {
    */
   totalBytes: 'Total Bytes',
   /**
+   * @description Column header. The column contains the time it took to load a resource.
+   */
+  duration: 'Duration',
+  /**
    *@description Text for errors
    */
   error: 'Error',
@@ -65,7 +69,7 @@ const UIStrings = {
    *@description Accessible text for the value in bytes in memory allocation.
    */
   sBytes: '{n, plural, =1 {# byte} other {# bytes}}',
-};
+} as const;
 const str_ = i18n.i18n.registerUIStrings('panels/developer_resources/DeveloperResourcesListView.ts', UIStrings);
 const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
 const {withThousandsSeparator} = Platform.NumberUtilities;
@@ -79,17 +83,16 @@ export interface ViewInput {
   onInitiatorMouseLeave: () => void;
 }
 
-export interface ViewOutput {}
-
-export type View = (input: ViewInput, output: ViewOutput, target: HTMLElement) => void;
+export type View = (input: ViewInput, output: object, target: HTMLElement) => void;
 
 export class DeveloperResourcesListView extends UI.Widget.VBox {
   #items: SDK.PageResourceLoader.PageResource[] = [];
   #selectedItem: SDK.PageResourceLoader.PageResource|null = null;
   readonly #view: View;
   #filters: TextUtils.TextUtils.ParsedFilter[] = [];
-  constructor(view: View = (input, output, target) => {
-    // clang-format off
+  constructor(
+      view: View = (input, _, target) => {
+        // clang-format off
         render(html`
             <devtools-data-grid
               name=${i18nString(UIStrings.developerResources)}
@@ -111,6 +114,9 @@ export class DeveloperResourcesListView extends UI.Widget.VBox {
                   </th>
                   <th id="size" sortable fixed width="80px" align="right">
                     ${i18nString(UIStrings.totalBytes)}
+                  </th>
+                  <th id="duration" sortable fixed width="80px" align="right">
+                    ${i18nString(UIStrings.duration)}
                   </th>
                   <th id="error-message" sortable width="200px">
                     ${i18nString(UIStrings.error)}
@@ -136,6 +142,9 @@ export class DeveloperResourcesListView extends UI.Widget.VBox {
                     <td aria-label=${item.size !== null ? i18nString(UIStrings.sBytes, {n: item.size}) : nothing}
                         data-value=${item.size ?? nothing}>${
                       item.size !== null ?  html`<span>${withThousandsSeparator(item.size)}</span>` : ''}</td>
+                    <td aria-label=${item.duration !== null ? i18n.TimeUtilities.millisToString(item.duration) : nothing}
+                        data-value=${item.duration ?? nothing}>${
+                        item.duration !== null ? html`<span>${i18n.TimeUtilities.millisToString(item.duration)}</span>` : ''}</td>
                     <td class="error-message">${(() => {
                         const cell = document.createElement('span');
                         if (item.errorMessage) {
@@ -148,21 +157,21 @@ export class DeveloperResourcesListView extends UI.Widget.VBox {
               </table>
             </devtools-data-grid>`,
             target, {host: input});
-    // clang-format on
-    function renderUrl(url: string): HTMLElement {
-      const outer = document.createElement('div');
-      UI.ARIAUtils.setHidden(outer, true);
-      outer.setAttribute('part', 'url-outer');
-      const domain = outer.createChild('div');
-      domain.setAttribute('part', 'url-prefix');
-      const path = outer.createChild('div');
-      path.setAttribute('part', 'url-suffix');
-      const splitURL = /^(.*)(\/[^/]*)$/.exec(url);
-      domain.textContent = splitURL ? splitURL[1] : url;
-      path.textContent = splitURL ? splitURL[2] : '';
-      return outer;
-    }
-  }) {
+        // clang-format on
+        function renderUrl(url: string): HTMLElement {
+          const outer = document.createElement('div');
+          UI.ARIAUtils.setHidden(outer, true);
+          outer.setAttribute('part', 'url-outer');
+          const domain = outer.createChild('div');
+          domain.setAttribute('part', 'url-prefix');
+          const path = outer.createChild('div');
+          path.setAttribute('part', 'url-suffix');
+          const splitURL = /^(.*)(\/[^/]*)$/.exec(url);
+          domain.textContent = splitURL ? splitURL[1] : url;
+          path.textContent = splitURL ? splitURL[2] : '';
+          return outer;
+        }
+      }) {
     super(true);
     this.#view = view;
     this.registerRequiredCSS(developerResourcesListViewStyles);
@@ -243,7 +252,7 @@ export class DeveloperResourcesListView extends UI.Widget.VBox {
       return;
     }
     const matches = filter.regex.exec(textContent);
-    if (!matches || !matches.length) {
+    if (!matches?.length) {
       return;
     }
     const range = new TextUtils.TextRange.SourceRange(matches.index, matches[0].length);

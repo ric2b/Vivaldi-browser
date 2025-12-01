@@ -169,6 +169,7 @@ void ReadOnlyDeserializer::DeserializeIntoIsolate() {
   ReadOnlyRoots roots(isolate());
   roots.VerifyNameForProtectorsPages();
 #ifdef DEBUG
+  roots.VerifyTypes();
   roots.VerifyNameForProtectors();
 #endif
 
@@ -214,6 +215,7 @@ class ObjectPostProcessor final {
   }
 #define POST_PROCESS_TYPE_LIST(V) \
   V(AccessorInfo)                 \
+  V(JSExternalObject)             \
   V(FunctionTemplateInfo)         \
   V(Code)                         \
   V(SharedFunctionInfo)
@@ -277,6 +279,11 @@ class ObjectPostProcessor final {
                                      AccessorInfo::kMaybeRedirectedGetterOffset,
                                      kAccessorInfoGetterTag));
     if (USE_SIMULATOR_BOOL) o->init_getter_redirection(isolate_);
+  }
+  void PostProcessJSExternalObject(Tagged<JSExternalObject> o) {
+    DecodeExternalPointerSlot(
+        o, o->RawExternalPointerField(JSExternalObject::kValueOffset,
+                                      kExternalObjectValueTag));
   }
   void PostProcessFunctionTemplateInfo(Tagged<FunctionTemplateInfo> o) {
     DecodeExternalPointerSlot(

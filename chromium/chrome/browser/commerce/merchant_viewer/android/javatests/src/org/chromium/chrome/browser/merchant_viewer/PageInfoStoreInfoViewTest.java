@@ -29,12 +29,14 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.Mock;
-import org.mockito.MockitoAnnotations;
+import org.mockito.junit.MockitoJUnit;
+import org.mockito.junit.MockitoRule;
 import org.mockito.stubbing.Answer;
 
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.test.util.Batch;
 import org.chromium.base.test.util.CommandLineFlags;
+import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.Features.EnableFeatures;
 import org.chromium.base.test.util.Restriction;
@@ -71,6 +73,8 @@ public class PageInfoStoreInfoViewTest {
     public static final ChromeTabbedActivityTestRule sActivityTestRule =
             new ChromeTabbedActivityTestRule();
 
+    @Rule public final MockitoRule mMockitoRule = MockitoJUnit.rule();
+
     @Rule
     public final BlankCTATabInitialStateRule mInitialStateRule =
             new BlankCTATabInitialStateRule(sActivityTestRule, false);
@@ -89,7 +93,6 @@ public class PageInfoStoreInfoViewTest {
 
     @Before
     public void setUp() {
-        MockitoAnnotations.initMocks(this);
         ShoppingServiceFactory.setShoppingServiceForTesting(mMockShoppingService);
         doReturn(true).when(mMockShoppingService).isMerchantViewerEnabled();
     }
@@ -134,6 +137,7 @@ public class PageInfoStoreInfoViewTest {
     @Test
     @MediumTest
     @Feature({"RenderTest"})
+    @DisabledTest(message = "crbug.com/394345850")
     public void testStoreInfoRowVisibleWithData_Highlight() throws IOException {
         mockShoppingServiceResponse(mFakeMerchantTrustSignals);
         openPageInfoFromStoreIcon(true, false); // fromStoreIcon, dialogCheck

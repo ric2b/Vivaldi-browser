@@ -9,8 +9,7 @@
 
 #include "base/strings/string_util.h"
 #include "components/ad_blocker/adblock_resources.h"
-#include "components/request_filter/adblock_filter/adblock_rule_service_content.h"
-#include "components/request_filter/adblock_filter/adblock_rule_service_factory.h"
+#include "components/request_filter/adblock_filter/adblock_rule_service_impl.h"
 #include "components/request_filter/adblock_filter/adblock_rules_index.h"
 #include "components/request_filter/adblock_filter/adblock_state_and_logs_impl.h"
 #include "components/request_filter/adblock_filter/utils.h"
@@ -110,23 +109,20 @@ bool IsRequestWanted(GURL url) {
           url.SchemeIsWSOrWSS());
 }
 
-bool IsOriginWanted(content::BrowserContext* browser_context,
+bool IsOriginWanted(RuleService* rule_service,
                     RuleGroup group,
                     url::Origin origin) {
-  auto* service = RuleServiceFactory::GetForBrowserContext(browser_context);
-  return !service->GetRuleManager()->IsExemptOfFiltering(group, origin);
+  return !rule_service->GetRuleManager()->IsExemptOfFiltering(group, origin);
 }
 }  // namespace
 
 AdBlockRequestFilter::AdBlockRequestFilter(
-    base::WeakPtr<RulesIndexManager> rules_index_manager,
-    base::WeakPtr<StateAndLogsImpl> state_and_logs,
-    base::WeakPtr<Resources> resources)
+    base::WeakPtr<RuleServiceImpl> rules_service,
+    RuleGroup group)
     : vivaldi::RequestFilter(vivaldi::RequestFilter::kAdBlock,
-                             RuleGroupToPriority(rules_index_manager->group())),
-      rules_index_manager_(std::move(rules_index_manager)),
-      state_and_logs_(std::move(state_and_logs)),
-      resources_(std::move(resources)) {}
+                             RuleGroupToPriority(group)),
+      rule_service_(std::move(rules_service)),
+      group_(group) {}
 
 AdBlockRequestFilter::~AdBlockRequestFilter() = default;
 
@@ -143,17 +139,22 @@ bool AdBlockRequestFilter::DoesAdAttributionMatch(
     content::RenderFrameHost* frame,
     std::string_view tracker_url_spec,
     std::string_view ad_domain_and_query_trigger) {
-  if (!state_and_logs_) {
+  if (!rule_service_) {
     return false;
   }
-  return state_and_logs_->DoesAdAttributionMatch(frame, tracker_url_spec,
-                                                 ad_domain_and_query_trigger);
+  return rule_service_->GetStateAndLogsImpl().DoesAdAttributionMatch(
+      frame, tracker_url_spec, ad_domain_and_query_trigger);
 }
 
 bool AdBlockRequestFilter::OnBeforeRequest(
     content::BrowserContext* browser_context,
     const vivaldi::FilteredRequestInfo* request,
     BeforeRequestCallback callback) {
+  if (!rule_service_) {
+    std::move(callback).Run(RequestFilter::kAllow, false, GURL());
+    return true;
+  }
+
   auto destination = request->request.destination;
 
   bool is_main_frame =
@@ -171,12 +172,14 @@ bool AdBlockRequestFilter::OnBeforeRequest(
   content::RenderFrameHost* frame = content::RenderFrameHost::FromID(
       request->render_process_id, request->render_frame_id);
 
-  if (is_frame && state_and_logs_) {
-    state_and_logs_->ResetFrameBlockState(rules_index_manager_->group(), frame);
+  if (is_frame) {
+    rule_service_->GetStateAndLogsImpl().ResetFrameBlockState(group_, frame);
   }
 
+  RulesIndex* rules_index = rule_service_->GetRuleIndex(group_);
+
   // TODO(julien): Add filtering of csp reports
-  if (!rules_index_manager_ || !rules_index_manager_->rules_index() ||
+  if (!rules_index ||
       destination == network::mojom::RequestDestination::kReport ||
       !IsRequestWanted(request->request.url)) {
     std::move(callback).Run(RequestFilter::kAllow, false, GURL());
@@ -188,8 +191,7 @@ bool AdBlockRequestFilter::OnBeforeRequest(
   // For requests happening outside of pages, we can't rely on the activation
   // checks to discard requests from an allow-listed origin. Just check it
   // directly instead.
-  if (!frame && !IsOriginWanted(browser_context, rules_index_manager_->group(),
-                                document_origin)) {
+  if (!frame && !IsOriginWanted(rule_service_.get(), group_, document_origin)) {
     std::move(callback).Run(RequestFilter::kAllow, false, GURL());
     return true;
   }
@@ -202,15 +204,14 @@ bool AdBlockRequestFilter::OnBeforeRequest(
   }
 
   RulesIndex::ActivationResults activations =
-      rules_index_manager_->rules_index()->GetActivationsForFrame(
-          base::BindRepeating(&IsOriginWanted, browser_context,
-                              rules_index_manager_->group()),
+      rules_index->GetActivationsForFrame(
+          base::BindRepeating(&IsOriginWanted, rule_service_.get(), group_),
           frame, url_for_activations, origin_for_activations);
 
-  if (state_and_logs_ && is_main_frame) {
+  if (is_main_frame) {
     // This will also arm ad attribution.
-    state_and_logs_->ReportTabActivations(rules_index_manager_->group(), frame,
-                                       activations);
+    rule_service_->GetStateAndLogsImpl().ReportTabActivations(group_, frame,
+                                                              activations);
   }
 
   std::optional<flat::Decision> document_decision =
@@ -226,12 +227,15 @@ bool AdBlockRequestFilter::OnBeforeRequest(
           flat::Decision_MODIFY) == flat::Decision_PASS;
 
   const flat::ResourceType resource_type = ResourceTypeFromRequest(*request);
-  std::optional<RulesIndex::RuleAndSource> rule_and_source =
-      rules_index_manager_->rules_index()->FindMatchingBeforeRequestRule(
-          request->request.url, document_origin, resource_type, is_third_party,
-          disable_generic_rules,
-          base::BindRepeating(&AdBlockRequestFilter::DoesAdAttributionMatch,
-                              base::Unretained(this), frame));
+  std::optional<RulesIndex::RuleAndSource> rule_and_source;
+  if (!is_main_frame || allow_blocking_documents_) {
+    rule_and_source =
+        rules_index->FindMatchingBeforeRequestRule(
+            request->request.url, document_origin, resource_type,
+            is_third_party, disable_generic_rules,
+            base::BindRepeating(&AdBlockRequestFilter::DoesAdAttributionMatch,
+                                base::Unretained(this), frame));
+  }
 
   CHECK(!rule_and_source ||
         rule_and_source->rule->options() & flat::OptionFlag_MODIFY_BLOCK);
@@ -240,7 +244,7 @@ bool AdBlockRequestFilter::OnBeforeRequest(
       rule_and_source->rule->decision() == flat::Decision_PASS ||
       allow_whole_document) {
     RulesIndex::FoundModifiersByType modifiers_by_type =
-        rules_index_manager_->rules_index()->FindMatchingModifierRules(
+        rules_index->FindMatchingModifierRules(
             RulesIndex::kAllowedRequest, request->request.url, document_origin,
             resource_type, is_third_party, disable_generic_rules);
     if (is_main_frame) {
@@ -254,8 +258,8 @@ bool AdBlockRequestFilter::OnBeforeRequest(
           ad_query_triggers.push_back(ad_query_trigger);
         }
       }
-      if (!ad_query_triggers.empty() && state_and_logs_) {
-        state_and_logs_->SetTabAdQueryTriggers(
+      if (!ad_query_triggers.empty()) {
+        rule_service_->GetStateAndLogsImpl().SetTabAdQueryTriggers(
             request->request.url, std::move(ad_query_triggers), frame);
       }
     }
@@ -270,36 +274,39 @@ bool AdBlockRequestFilter::OnBeforeRequest(
     return true;
   }
 
-  if (state_and_logs_ && frame)
-    state_and_logs_->OnUrlBlocked(rules_index_manager_->group(),
-                                  document_origin, request->request.url, frame);
+  if (frame)
+    rule_service_->GetStateAndLogsImpl().OnUrlBlocked(
+        group_, document_origin, request->request.url, frame);
 
   RulesIndex::FoundModifiersByType modifiers_by_type =
-      rules_index_manager_->rules_index()->FindMatchingModifierRules(
+      rules_index->FindMatchingModifierRules(
           RulesIndex::kBlockedRequest, request->request.url, document_origin,
           resource_type, is_third_party, disable_generic_rules);
 
   RulesIndex::FoundModifiers& redirects =
       modifiers_by_type[flat::Modifier_REDIRECT];
 
-  if (!redirects.value_with_decision.empty() && resources_) {
-    auto redirect = std::max_element(
-        redirects.value_with_decision.begin(),
-        redirects.value_with_decision.end(),
-        [this, resource_type](auto& lhs, auto& rhs) {
-          if (!resources_->GetRedirect(lhs.first, resource_type)) {
-            return true;
-          }
-          if (!resources_->GetRedirect(rhs.first, resource_type)) {
-            return false;
-          }
+  if (!redirects.value_with_decision.empty()) {
+    auto redirect =
+        std::max_element(redirects.value_with_decision.begin(),
+                         redirects.value_with_decision.end(),
+                         [this, resource_type](auto& lhs, auto& rhs) {
+                           if (!rule_service_->GetResources().GetRedirect(
+                                   lhs.first, resource_type)) {
+                             return true;
+                           }
+                           if (!rule_service_->GetResources().GetRedirect(
+                                   rhs.first, resource_type)) {
+                             return false;
+                           }
 
-          return GetRulePriority(*lhs.second.rule) <
-                 GetRulePriority(*rhs.second.rule);
-        });
+                           return GetRulePriority(*lhs.second.rule) <
+                                  GetRulePriority(*rhs.second.rule);
+                         });
 
     std::optional<std::string> resource(
-        resources_->GetRedirect(redirect->first, resource_type));
+        rule_service_->GetResources().GetRedirect(redirect->first,
+                                                  resource_type));
     if (resource) {
       std::move(callback).Run(RequestFilter::kAllow, false,
                               GURL(resource.value()));
@@ -307,13 +314,9 @@ bool AdBlockRequestFilter::OnBeforeRequest(
     }
   }
 
-  if (is_main_frame && !allow_blocking_documents_) {
-    std::move(callback).Run(RequestFilter::kAllow, false, GURL());
-    return true;
-  }
-
-  if (is_frame && state_and_logs_) {
-    state_and_logs_->SetFrameBlockState(rules_index_manager_->group(), frame);
+  if (is_frame) {
+    rule_service_->GetStateAndLogsImpl().SetFrameBlockState(
+        group_, *rule_and_source, frame);
   }
 
   std::move(callback).Run(RequestFilter::kCancel,
@@ -342,12 +345,19 @@ bool AdBlockRequestFilter::OnHeadersReceived(
     const vivaldi::FilteredRequestInfo* request,
     const net::HttpResponseHeaders* headers,
     HeadersReceivedCallback callback) {
+  if (!rule_service_) {
+    std::move(callback).Run(RequestFilter::kAllow, false, GURL(),
+                            vivaldi::RequestFilter::ResponseHeaderChanges());
+    return true;
+  }
+
   auto destination = request->request.destination;
 
   url::Origin document_origin = request->request.request_initiator.value_or(
       url::Origin::Create(request->request.url));
 
-  if (!rules_index_manager_ || !rules_index_manager_->rules_index() ||
+  RulesIndex* rules_index = rule_service_->GetRuleIndex(group_);
+  if (!rules_index ||
       destination == network::mojom::RequestDestination::kReport ||
       !IsRequestWanted(request->request.url)) {
     std::move(callback).Run(RequestFilter::kAllow, false, GURL(),
@@ -372,9 +382,8 @@ bool AdBlockRequestFilter::OnHeadersReceived(
   }
 
   RulesIndex::ActivationResults activations =
-      rules_index_manager_->rules_index()->GetActivationsForFrame(
-          base::BindRepeating(&IsOriginWanted, browser_context,
-                              rules_index_manager_->group()),
+      rules_index->GetActivationsForFrame(
+          base::BindRepeating(&IsOriginWanted, rule_service_.get(), group_),
           frame, url_for_activations, origin_for_activations);
 
   if (activations[flat::ActivationType_DOCUMENT].GetDecision().value_or(
@@ -385,7 +394,7 @@ bool AdBlockRequestFilter::OnHeadersReceived(
   }
 
   RulesIndex::FoundModifiersByType modifiers_by_type =
-      rules_index_manager_->rules_index()->FindMatchingModifierRules(
+      rules_index->FindMatchingModifierRules(
           RulesIndex::kHeadersReceived, request->request.url, document_origin,
           flat::ResourceType_ANY, is_third_party,
           (activations[flat::ActivationType_GENERIC_BLOCK]

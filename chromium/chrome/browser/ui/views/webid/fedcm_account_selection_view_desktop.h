@@ -82,7 +82,7 @@ class FedCmAccountSelectionView : public AccountSelectionView,
 
   // AccountSelectionView:
   bool Show(
-      const std::string& rp_for_display,
+      const content::RelyingPartyData& rp_data,
       const std::vector<IdentityProviderDataPtr>& idp_list,
       const std::vector<IdentityRequestAccountPtr>& accounts,
       Account::SignInMode sign_in_mode,
@@ -308,10 +308,6 @@ class FedCmAccountSelectionView : public AccountSelectionView,
     // Shown after the user has triggered a button flow and while the accounts
     // are being fetched.
     LOADING,
-
-    // Shown when we wish to display only a single returning account. Used when
-    // there are multiple IDPs and exactly one returning account.
-    SINGLE_RETURNING_ACCOUNT_PICKER
   };
 
   // This enum describes the outcome of the mismatch dialog and is used for
@@ -319,9 +315,9 @@ class FedCmAccountSelectionView : public AccountSelectionView,
   // values at the end. This enum should be kept in sync with
   // FedCmMismatchDialogResult in tools/metrics/histograms/enums.xml.
   enum class MismatchDialogResult {
-    kContinued,
-    kDismissedByCloseIcon,
-    kDismissedForOtherReasons,
+    kContinued = 0,
+    kDismissedByCloseIcon = 1,
+    kDismissedForOtherReasons = 2,
 
     kMaxValue = kDismissedForOtherReasons
   };
@@ -332,10 +328,10 @@ class FedCmAccountSelectionView : public AccountSelectionView,
   // FedCmPopupWindowResult in
   // tools/metrics/histograms/metadata/blink/enums.xml.
   enum class PopupWindowResult {
-    kAccountsReceivedAndPopupClosedByIdp,
-    kAccountsReceivedAndPopupNotClosedByIdp,
-    kAccountsNotReceivedAndPopupClosedByIdp,
-    kAccountsNotReceivedAndPopupNotClosedByIdp,
+    kAccountsReceivedAndPopupClosedByIdp = 0,
+    kAccountsReceivedAndPopupNotClosedByIdp = 1,
+    kAccountsNotReceivedAndPopupClosedByIdp = 2,
+    kAccountsNotReceivedAndPopupNotClosedByIdp = 3,
 
     kMaxValue = kAccountsNotReceivedAndPopupNotClosedByIdp
   };
@@ -347,16 +343,16 @@ class FedCmAccountSelectionView : public AccountSelectionView,
   // chrome/browser/ui/android/webid/AccountSelectionMediator.java as well as
   // FedCmAccountChooserResult in tools/metrics/histograms/enums.xml.
   enum class AccountChooserResult {
-    kAccountRow,
-    kCancelButton,
-    kUseOtherAccountButton,
-    kTabClosed,
+    kAccountRow = 0,
+    kCancelButton = 1,
+    kUseOtherAccountButton = 2,
+    kTabClosed = 3,
     // Android-specific
-    kSwipe,
+    kSwipe = 4,
     // Android-specific
-    kBackPress,
+    kBackPress = 5,
     // Android-specific
-    kTapScrim,
+    kTapScrim = 6,
 
     kMaxValue = kTapScrim
   };
@@ -368,16 +364,16 @@ class FedCmAccountSelectionView : public AccountSelectionView,
   // chrome/browser/ui/android/webid/AccountSelectionMediator.java as well as
   // FedCmLoadingDialogResult in tools/metrics/histograms/enums.xml.
   enum class LoadingDialogResult {
-    kProceed,
-    kCancel,
-    kProceedThroughPopup,
-    kDestroy,
+    kProceed = 0,
+    kCancel = 1,
+    kProceedThroughPopup = 2,
+    kDestroy = 3,
     // Android-specific
-    kSwipe,
+    kSwipe = 4,
     // Android-specific
-    kBackPress,
+    kBackPress = 5,
     // Android-specific
-    kTapScrim,
+    kTapScrim = 6,
 
     kMaxValue = kTapScrim
   };
@@ -389,16 +385,16 @@ class FedCmAccountSelectionView : public AccountSelectionView,
   // chrome/browser/ui/android/webid/AccountSelectionMediator.java as well as
   // FedCmDisclosureDialogResult in tools/metrics/histograms/enums.xml.
   enum class DisclosureDialogResult {
-    kContinue,
-    kCancel,
-    kBack,
-    kDestroy,
+    kContinue = 0,
+    kCancel = 1,
+    kBack = 2,
+    kDestroy = 3,
     // Android-specific
-    kSwipe,
+    kSwipe = 4,
     // Android-specific
-    kBackPress,
+    kBackPress = 5,
     // Android-specific
-    kTapScrim,
+    kTapScrim = 6,
 
     kMaxValue = kTapScrim
   };
@@ -436,8 +432,8 @@ class FedCmAccountSelectionView : public AccountSelectionView,
   void ShowMultiAccountPicker(
       const std::vector<IdentityRequestAccountPtr>& accounts,
       const std::vector<IdentityProviderDataPtr>& idp_list,
-      bool show_back_button,
-      bool is_choose_an_account);
+      const gfx::Image& rp_icon,
+      bool show_back_button);
 
   // PictureInPictureOcclusionObserver:
   void OnOcclusionStateChanged(bool occluded) override;
@@ -485,7 +481,8 @@ class FedCmAccountSelectionView : public AccountSelectionView,
   // are multiple accounts, but it is size 0 when there are no new accounts.
   std::vector<IdentityRequestAccountPtr> new_accounts_;
 
-  std::u16string rp_for_display_;
+  // The RP icon to be displayed in the UI when needed.
+  gfx::Image rp_icon_;
 
   State state_{State::MULTI_ACCOUNT_PICKER};
 
@@ -527,16 +524,6 @@ class FedCmAccountSelectionView : public AccountSelectionView,
   // completing the flow, this boolean prevents us from double counting the
   // Blink.FedCm.IdpSigninStatus.MismatchDialogResult metric.
   bool is_mismatch_continue_clicked_{false};
-
-  // Whether the current dialog started as a single returning account dialog.
-  // Used to determine whether the multi IDP picker needs to show a back button
-  // or not.
-  bool started_as_single_returning_account_{false};
-
-  // Whether the last ShowMultiAccountPicker() is from a "Choose an account"
-  // button. This is used to determine whether to show this title when coming
-  // back from the single account confirmation dialog.
-  bool last_multi_account_is_choose_an_account_{false};
 
   // Time when IdentityProvider.close() was called for metrics purposes.
   base::TimeTicks idp_close_popup_time_;

@@ -12,11 +12,14 @@
 #import "ios/chrome/browser/browser_container/ui_bundled/browser_container_view_controller.h"
 #import "ios/chrome/browser/browser_container/ui_bundled/browser_edit_menu_handler.h"
 #import "ios/chrome/browser/browser_container/ui_bundled/edit_menu_alert_delegate.h"
+#import "ios/chrome/browser/explain_with_gemini/coordinator/explain_with_gemini_mediator.h"
 #import "ios/chrome/browser/fullscreen/ui_bundled/fullscreen_controller.h"
+#import "ios/chrome/browser/intelligence/features/features.h"
 #import "ios/chrome/browser/link_to_text/model/link_to_text_payload.h"
 #import "ios/chrome/browser/link_to_text/ui_bundled/link_to_text_mediator.h"
 #import "ios/chrome/browser/overlays/model/public/overlay_presenter.h"
 #import "ios/chrome/browser/overlays/ui_bundled/overlay_container_coordinator.h"
+#import "ios/chrome/browser/partial_translate/ui_bundled/partial_translate_mediator.h"
 #import "ios/chrome/browser/screen_time/model/screen_time_buildflags.h"
 #import "ios/chrome/browser/search_engines/model/template_url_service_factory.h"
 #import "ios/chrome/browser/search_with/ui_bundled/search_with_mediator.h"
@@ -29,7 +32,8 @@
 #import "ios/chrome/browser/shared/public/commands/browser_coordinator_commands.h"
 #import "ios/chrome/browser/shared/public/commands/command_dispatcher.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
-#import "ios/chrome/browser/ui/partial_translate/partial_translate_mediator.h"
+#import "ios/chrome/browser/signin/model/authentication_service_factory.h"
+#import "ios/chrome/browser/signin/model/identity_manager_factory.h"
 #import "url/gurl.h"
 
 #if BUILDFLAG(IOS_SCREEN_TIME_ENABLED)
@@ -45,28 +49,12 @@ using vivaldi::IsVivaldiRunning;
 #endif // End Vivaldi
 
 @interface BrowserContainerCoordinator () <EditMenuAlertDelegate>
-// Whether the coordinator is started.
-@property(nonatomic, assign, getter=isStarted) BOOL started;
+
 // Redefine property as readwrite.
 @property(nonatomic, strong, readwrite)
     BrowserContainerViewController* viewController;
-// The mediator used to configure the BrowserContainerConsumer.
-@property(nonatomic, strong) BrowserContainerMediator* mediator;
-// The mediator used for the Link to Text feature.
-@property(nonatomic, strong) LinkToTextMediator* linkToTextMediator;
-// The mediator used for the Partial Translate feature.
-@property(nonatomic, strong) PartialTranslateMediator* partialTranslateMediator;
-// The mediator used for the Search With feature.
-@property(nonatomic, strong) SearchWithMediator* searchWithMediator;
 // The handler for the edit menu.
 @property(nonatomic, strong) BrowserEditMenuHandler* browserEditMenuHandler;
-// The overlay container coordinator for OverlayModality::kWebContentArea.
-@property(nonatomic, strong)
-    OverlayContainerCoordinator* webContentAreaOverlayContainerCoordinator;
-// The coodinator that manages ScreenTime.
-@property(nonatomic, strong) ChromeCoordinator* screenTimeCoordinator;
-// Coordinator used to present alerts to the user.
-@property(nonatomic, strong) AlertCoordinator* alertCoordinator;
 
 #if defined(VIVALDI_BUILD)
 // The mediator used for the Copy To Note feature.
@@ -75,15 +63,34 @@ using vivaldi::IsVivaldiRunning;
 
 @end
 
-@implementation BrowserContainerCoordinator
+@implementation BrowserContainerCoordinator {
+  // Whether the coordinator is started.
+  BOOL _started;
+  // Coordinator used to present alerts to the user.
+  AlertCoordinator* _alertCoordinator;
+  // The mediator used for the Search With feature.
+  SearchWithMediator* _searchWithMediator;
+  // The coodinator that manages ScreenTime.
+  ChromeCoordinator* _screenTimeCoordinator;
+  // The overlay container coordinator for OverlayModality::kWebContentArea.
+  OverlayContainerCoordinator* _webContentAreaOverlayContainerCoordinator;
+  // The mediator used for the Partial Translate feature.
+  PartialTranslateMediator* _partialTranslateMediator;
+  // The mediator used to configure the BrowserContainerConsumer.
+  BrowserContainerMediator* _mediator;
+  // The mediator used for the Link to Text feature.
+  LinkToTextMediator* _linkToTextMediator;
+  // The mediator used for the Explain With Gemini feature.
+  ExplainWithGeminiMediator* _explainWithGeminiMediator;
+}
 
 #pragma mark - ChromeCoordinator
 
 - (void)start {
-  if (self.started) {
+  if (_started) {
     return;
   }
-  self.started = YES;
+  _started = YES;
   DCHECK(self.browser);
   DCHECK(!_viewController);
   Browser* browser = self.browser;
@@ -91,67 +98,84 @@ using vivaldi::IsVivaldiRunning;
   ProfileIOS* profile = browser->GetProfile();
   BOOL incognito = profile->IsOffTheRecord();
   self.viewController = [[BrowserContainerViewController alloc] init];
-  self.webContentAreaOverlayContainerCoordinator =
+  _webContentAreaOverlayContainerCoordinator =
       [[OverlayContainerCoordinator alloc]
           initWithBaseViewController:self.viewController
                              browser:browser
                             modality:OverlayModality::kWebContentArea];
 
-  self.linkToTextMediator =
+  _linkToTextMediator =
       [[LinkToTextMediator alloc] initWithWebStateList:webStateList];
-  self.linkToTextMediator.alertDelegate = self;
-  self.linkToTextMediator.activityServiceHandler = HandlerForProtocol(
+  _linkToTextMediator.alertDelegate = self;
+  _linkToTextMediator.activityServiceHandler = HandlerForProtocol(
       browser->GetCommandDispatcher(), ActivityServiceCommands);
 
   self.browserEditMenuHandler = [[BrowserEditMenuHandler alloc] init];
   self.viewController.browserEditMenuHandler = self.browserEditMenuHandler;
-  self.browserEditMenuHandler.linkToTextDelegate = self.linkToTextMediator;
-  self.viewController.linkToTextDelegate = self.linkToTextMediator;
+  self.browserEditMenuHandler.linkToTextDelegate = _linkToTextMediator;
+  self.viewController.linkToTextDelegate = _linkToTextMediator;
 
   PrefService* prefService = profile->GetOriginalProfile()->GetPrefs();
   FullscreenController* fullscreenController =
       FullscreenController::FromBrowser(self.browser);
 
-  self.partialTranslateMediator = [[PartialTranslateMediator alloc]
+  _partialTranslateMediator = [[PartialTranslateMediator alloc]
         initWithWebStateList:webStateList
       withBaseViewController:self.viewController
                  prefService:prefService
         fullscreenController:fullscreenController
                    incognito:incognito];
-  self.partialTranslateMediator.alertDelegate = self;
+  _partialTranslateMediator.alertDelegate = self;
   CommandDispatcher* dispatcher = browser->GetCommandDispatcher();
   id<BrowserCoordinatorCommands> browserCommandsHandler =
       HandlerForProtocol(dispatcher, BrowserCoordinatorCommands);
-  self.partialTranslateMediator.browserHandler = browserCommandsHandler;
+  _partialTranslateMediator.browserHandler = browserCommandsHandler;
   self.browserEditMenuHandler.partialTranslateDelegate =
-      self.partialTranslateMediator;
+      _partialTranslateMediator;
 
   if (IsVivaldiRunning()) {
-    self.partialTranslateMediator.browser = self.browser;
+    _partialTranslateMediator.browser = self.browser;
   } // End Vivaldi
 
   TemplateURLService* templateURLService =
       ios::TemplateURLServiceFactory::GetForProfile(profile);
-  self.searchWithMediator =
+  _searchWithMediator =
       [[SearchWithMediator alloc] initWithWebStateList:webStateList
                                     templateURLService:templateURLService
                                              incognito:incognito];
+
   id<ApplicationCommands> applicationCommandsHandler =
       HandlerForProtocol(dispatcher, ApplicationCommands);
-  self.searchWithMediator.applicationCommandHandler =
-      applicationCommandsHandler;
-  self.browserEditMenuHandler.searchWithDelegate = self.searchWithMediator;
 
-  [self.webContentAreaOverlayContainerCoordinator start];
+  _searchWithMediator.applicationCommandHandler = applicationCommandsHandler;
+  self.browserEditMenuHandler.searchWithDelegate = _searchWithMediator;
+
+  if (ExplainGeminiEditMenuPosition() !=
+          PositionForExplainGeminiEditMenu::kDisabled &&
+      !incognito) {
+    _explainWithGeminiMediator = [[ExplainWithGeminiMediator alloc]
+        initWithWebStateList:webStateList
+             identityManager:IdentityManagerFactory::GetForProfile(profile)
+                 authService:AuthenticationServiceFactory::GetForProfile(
+                                 profile)];
+
+    _explainWithGeminiMediator.applicationCommandHandler =
+        applicationCommandsHandler;
+    self.browserEditMenuHandler.explainWithGeminiDelegate =
+        _explainWithGeminiMediator;
+  }
+
+  [_webContentAreaOverlayContainerCoordinator start];
+
   self.viewController.webContentsOverlayContainerViewController =
-      self.webContentAreaOverlayContainerCoordinator.viewController;
+      _webContentAreaOverlayContainerCoordinator.viewController;
   OverlayPresenter* overlayPresenter =
       OverlayPresenter::FromBrowser(browser, OverlayModality::kWebContentArea);
-  self.mediator =
+  _mediator =
       [[BrowserContainerMediator alloc] initWithWebStateList:webStateList
                               webContentAreaOverlayPresenter:overlayPresenter];
 
-  self.mediator.consumer = self.viewController;
+  _mediator.consumer = self.viewController;
 
   [self setUpScreenTimeIfEnabled];
 
@@ -172,20 +196,20 @@ using vivaldi::IsVivaldiRunning;
 }
 
 - (void)stop {
-  if (!self.started) {
+  if (!_started) {
     return;
   }
   [self dismissAlertCoordinator];
-  self.started = NO;
-  [self.webContentAreaOverlayContainerCoordinator stop];
-  [self.screenTimeCoordinator stop];
-  [self.partialTranslateMediator shutdown];
-  [self.searchWithMediator shutdown];
+  _started = NO;
+  [_webContentAreaOverlayContainerCoordinator stop];
+  [_screenTimeCoordinator stop];
+  [_partialTranslateMediator shutdown];
+  [_searchWithMediator shutdown];
   self.viewController = nil;
-  self.mediator = nil;
-  self.linkToTextMediator = nil;
-  self.partialTranslateMediator = nil;
-  self.searchWithMediator = nil;
+  _mediator = nil;
+  _linkToTextMediator = nil;
+  _partialTranslateMediator = nil;
+  _searchWithMediator = nil;
 
   if (IsVivaldiRunning()) {
     self.vivaldiCopyToNoteMediator = nil;
@@ -203,23 +227,23 @@ using vivaldi::IsVivaldiRunning;
 - (void)showAlertWithTitle:(NSString*)title
                    message:(NSString*)message
                    actions:(NSArray<EditMenuAlertDelegateAction*>*)actions {
-  self.alertCoordinator =
+  _alertCoordinator =
       [[AlertCoordinator alloc] initWithBaseViewController:self.viewController
                                                    browser:self.browser
                                                      title:title
                                                    message:message];
   __weak BrowserContainerCoordinator* weakSelf = self;
   for (EditMenuAlertDelegateAction* action in actions) {
-    [self.alertCoordinator addItemWithTitle:action.title
-                                     action:^{
-                                       action.action();
-                                       [weakSelf dismissAlertCoordinator];
-                                     }
-                                      style:action.style
-                                  preferred:action.preferred
-                                    enabled:YES];
+    [_alertCoordinator addItemWithTitle:action.title
+                                 action:^{
+                                   action.action();
+                                   [weakSelf dismissAlertCoordinator];
+                                 }
+                                  style:action.style
+                              preferred:action.preferred
+                                enabled:YES];
   }
-  [self.alertCoordinator start];
+  [_alertCoordinator start];
 }
 
 #pragma mark - Private methods
@@ -238,14 +262,14 @@ using vivaldi::IsVivaldiRunning;
   [screenTimeCoordinator start];
   self.viewController.screenTimeViewController =
       screenTimeCoordinator.viewController;
-  self.screenTimeCoordinator = screenTimeCoordinator;
+  _screenTimeCoordinator = screenTimeCoordinator;
 
 #endif
 }
 
 - (void)dismissAlertCoordinator {
-  [self.alertCoordinator stop];
-  self.alertCoordinator = nil;
+  [_alertCoordinator stop];
+  _alertCoordinator = nil;
 }
 
 @end

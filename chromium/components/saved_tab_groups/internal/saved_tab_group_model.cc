@@ -845,7 +845,7 @@ void SavedTabGroupModel::MarkTransitionedToShared(
   }
 }
 
-void SavedTabGroupModel::MarkTransitionCompleted(
+void SavedTabGroupModel::SetGroupHidden(
     const base::Uuid& originating_group_id) {
   SavedTabGroup* group = GetMutableGroup(originating_group_id);
   CHECK(group);
@@ -853,6 +853,17 @@ void SavedTabGroupModel::MarkTransitionCompleted(
   for (SavedTabGroupModelObserver& observer : observers_) {
     observer.SavedTabGroupUpdatedLocally(group->saved_guid(),
                                          /*tab_guid=*/std::nullopt);
+  }
+}
+
+void SavedTabGroupModel::RestoreHiddenGroupFromSync(
+    const base::Uuid& group_id) {
+  SavedTabGroup* group = GetMutableGroup(group_id);
+  CHECK(group);
+  group->SetIsHidden(false);
+  for (SavedTabGroupModelObserver& observer : observers_) {
+    observer.SavedTabGroupUpdatedFromSync(group->saved_guid(),
+                                          /*tab_guid=*/std::nullopt);
   }
 }
 

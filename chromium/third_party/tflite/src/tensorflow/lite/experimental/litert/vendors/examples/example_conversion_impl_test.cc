@@ -28,7 +28,7 @@
 #include "tensorflow/lite/experimental/litert/core/model/model.h"
 #include "tensorflow/lite/experimental/litert/core/model/model_graph.h"
 #include "tensorflow/lite/experimental/litert/core/util/flatbuffer_tools.h"
-#include "tensorflow/lite/experimental/litert/test/test_macros.h"
+#include "tensorflow/lite/experimental/litert/test/matchers.h"
 #include "tensorflow/lite/experimental/litert/vendors/cc/conversion.h"
 #include "tensorflow/lite/experimental/litert/vendors/examples/example_ir.h"
 #include "tensorflow/lite/schema/schema_generated.h"
@@ -77,10 +77,10 @@ TEST(ExampleConversionImplTest, ExampleGraphBuilder) {
   static constexpr absl::string_view kName = "FOO_GRAPH";
 
   builder.InitGraph(std::string(kName));
-  LITERT_ASSERT_STATUS_OK(builder.RegisterTensor(input));
-  LITERT_ASSERT_STATUS_OK(builder.RegisterOp(op));
-  LITERT_ASSERT_STATUS_OK(builder.RegisterTensor(output));
-  LITERT_ASSERT_STATUS_OK(builder.FinalizeGraph());
+  LITERT_ASSERT_OK(builder.RegisterTensor(input));
+  LITERT_ASSERT_OK(builder.RegisterOp(op));
+  LITERT_ASSERT_OK(builder.RegisterTensor(output));
+  LITERT_ASSERT_OK(builder.FinalizeGraph());
 
   const auto serialized = builder.Serialize();
   EXPECT_THAT(serialized, HasSubstr("1FLOAT[2, 2]"));
@@ -118,7 +118,7 @@ TEST(ExampleConversionImplTest, LegalizeAddSimpleResult) {
   add_opts.fused_activation_function = tflite::ActivationFunctionType_NONE;
   internal::TflOptions tfl_opts;
   tfl_opts.Set(std::move(add_opts));
-  detail::SetTflOptions(op, std::move(tfl_opts));
+  litert::internal::SetTflOptions(op, std::move(tfl_opts));
 
   ExampleTensorAllocator tensor_alloc;
   ExampleOpAllocator op_alloc;
@@ -171,7 +171,7 @@ TEST(ExampleConversionImplTest, LegalizeAddGeneralResult) {
   add_opts.fused_activation_function = tflite::ActivationFunctionType_RELU;
   internal::TflOptions tfl_opts;
   tfl_opts.Set(std::move(add_opts));
-  detail::SetTflOptions(op, std::move(tfl_opts));
+  litert::internal::SetTflOptions(op, std::move(tfl_opts));
 
   ExampleTensorAllocator tensor_alloc;
   ExampleOpAllocator op_alloc;

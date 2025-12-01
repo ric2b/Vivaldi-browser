@@ -14,6 +14,7 @@
 <translation id="1454726940098520109">Ekki sýna staðfestingu aftur</translation>
 <translation id="1462666970065907900">Ertu alveg viss um að þú viljir loka þessum glugga?</translation>
 <translation id="1480046233931937785">Kreditlisti</translation>
+<translation id="1490502035430975848">Atburðaskrá fyrir bakvinnsluþráð (portal-document)</translation>
 <translation id="1521774566618522728">Virkt í dag</translation>
 <translation id="1526344461589023948">Villa kom upp þegar reynt var að vista niðurhalsuppfærslur. Vinsamlegast athugaðu hvort tölvan sé með nóg diskapláss og prófaðu aftur síðar.</translation>
 <translation id="1635542496948266458">Skipta um prófíl</translation>
@@ -34,9 +35,11 @@
 <translation id="2141974047387702305">Það kom upp villa við niðurhal á uppfærsluskrám. Vinsamlegast athugaðu nettenginguna og prófaðu aftur síðar.</translation>
 <translation id="2226825946708954262">⚠ Halda áfram þrátt fyrir gagnatap</translation>
 <translation id="2339641773402824483">Leita að uppfærslum...</translation>
+<translation id="2429571091666452569">Úr listanum:</translation>
 <translation id="2441056087170876076">Skrímsli 2</translation>
 <translation id="2444387452209867610">Bæta við minnisblaði</translation>
 <translation id="2486841023299517366">Dýr 4</translation>
+<translation id="2501278716633472235">Farðu tilbaka</translation>
 <translation id="2612127540243995147">Tilbúið til uppsetningar. Vivaldi mun nú lokast og endurræsast.</translation>
 <translation id="2613387515621326337">Sýna uppfærsluvefsíðu</translation>
 <translation id="2645477450146475243">Því miður eru Opera stillingarnar þínar ekki aðgengilegar þegar sá vafri er í gangi. Til þess að flytja inn stillingarnar þínar í Vivaldi þarftu að vista vinnuna þína og loka öllum Opera gluggum. Ýttu svo á halda áfram.</translation>
@@ -61,6 +64,7 @@
 <translation id="3259769196742189631">Sannreyna</translation>
 <translation id="3291915639428159043">Lokað á sjálfvirka spilun</translation>
 <translation id="3302905971452834934">Skrímsli 1</translation>
+<translation id="3308738399950580893">Auglýsingar</translation>
 <translation id="3334610655141903168">(án titils)</translation>
 <translation id="3372505110412186107">Vivaldi <ph name="VERSION" /> er nýjasta útgáfa sem er í boði.</translation>
 <translation id="3383198080133834965">Hugbúnaður er uppfærður!</translation>
@@ -71,9 +75,11 @@
 <translation id="3521635864657970829">Ertu viss um að þú viljir loka glugganum?</translation>
 <translation id="3540597690227428180">Dýr 9</translation>
 <translation id="3542768452570884558">Opna hlekk í nýjum glugga</translation>
+<translation id="3586931643579894722">Fela frekari upplýsingar</translation>
 <translation id="3588820906588687999">Opna mynd í nýjum flipa</translation>
 <translation id="3601066750251199488">Skrímsli 3</translation>
 <translation id="3620979700683094848">Síður geta spilað myndbönd sjálfvirkt</translation>
+<translation id="3650023731264842343">Á meðan þessari síðu var hlaðið niður:</translation>
 <translation id="3658651522139217005">Opera GX</translation>
 <translation id="3680031241659195730">Nú útgáfa af Vivaldi er í boði!</translation>
 <translation id="3708982624815781692">Niðurhal var stöðvað.</translation>
@@ -83,6 +89,7 @@
 <translation id="3795800845758778870">Því miður þá eru Brave stillingarnar ekki aðgengilegar þegar sá vafri er í gangi. Til þess að flytja inn stillingarnar í Vivaldi þarftu að vista vinnuna þína og loka öllum Brave gluggum. Smelltu svo á áfram.</translation>
 <translation id="3822431842304177896">Ný skiptilína</translation>
 <translation id="3832132597516774400">Landslag 5</translation>
+<translation id="3894751534882749287">Ef þú vilt sjá síðuna þrátt fyrir allt, geturðu breytt stigi rekjaravarna á síðunni í sprettiglugga fyrir rekjaravarnir eða með því að smella á Leyfa-hnappinn</translation>
 <translation id="3914946330804881301">Flutt inn úr Óperu</translation>
 <translation id="3921292902397893431">Skrímsli 8</translation>
 <translation id="3943857333388298514">Líma</translation>
@@ -107,6 +114,7 @@
 <translation id="4582480609585453144">Opna hlekk í bakgrunnsflipa</translation>
 <translation id="4636708767492582204">Senda sem tölvupóst</translation>
 <translation id="4677434526832593569">Dýr 8</translation>
+<translation id="4736016046474602958">Rekjaravörn</translation>
 <translation id="474217410105706308">Þagga niður í flipa</translation>
 <translation id="4861715717329665002">Sjálfvirkt vistaðar setur</translation>
 <translation id="4881695831933465202">Opna</translation>
@@ -133,9 +141,11 @@
 <translation id="588258955323874662">Útfylltur skjár</translation>
 <translation id="5916080360077521750">Því miður eru Chrome stillingarnar þínar ekki aðgengilegar á meðan Chrome er í gangi. Til þess að flytja inn stillingarnar þínar í Vivaldi vistaðu vinnuna þína og lokaðu öllum Chrome gluggum. Ýttu síðan á Halda áfram.</translation>
 <translation id="6040143037577758943">Loka</translation>
+<translation id="6140948187512243695">Sýna frekari upplýsingar</translation>
 <translation id="6229528619562190452">Smelltu hér til þess að uppfæra Vivaldi.</translation>
 <translation id="6234173136417926046">Nota bakgrunnsmynd á bakgrunni upphafssíðu</translation>
 <translation id="6339818817272922368">Staðbundinn reikningur</translation>
+<translation id="6376435169746695498">Niðurhal þessarar síðu var blokkað af samsvarandi <ph name="BLOCKER_NAME" /></translation>
 <translation id="6398710281890660037">Tryggja prófílinn minn</translation>
 <translation id="6438786710866753178">Landslag 4</translation>
 <translation id="6477028720702061455">Veldu möppu sem inniheldur Óperu notendamöppu til að flytja inn</translation>
@@ -152,6 +162,7 @@
 <translation id="7086554968911045110">Landslag 7</translation>
 <translation id="7099506190679014195">Uppfærsla á öruggu lyklaboxi</translation>
 <translation id="7111492742514999492">Landslag 9</translation>
+<translation id="7113310725918019676">Leyfa <ph name="BLOCKED_TYPE" />frá <ph name="DOMAIN" /></translation>
 <translation id="7208252576848052204">Því miður eru Arc stillingarnar þínar ekki aðgengilegar þegar sá vafri er í gangi. Til þess að flytja inn stillingarnar þínar í Vivaldi þarftu að vista vinnuna þína og loka öllum Arc gluggum. Ýttu svo á halda áfram.</translation>
 <translation id="7321500017121629018">Virkt í gær</translation>
 <translation id="7337881442233988129">Chromium</translation>
@@ -167,12 +178,13 @@
 <translation id="8027581147000338959">Opna í nýjum glugga</translation>
 <translation id="8044382196220116469">Ekki leyfa sjálfvirka spilun myndbanda á síðum</translation>
 <translation id="8099620695029051217">Afrita veffang síðu</translation>
+<translation id="8119307142152921512">Rekjarar og auglýsingar</translation>
 <translation id="8197810018650377191">Bókamerkja síðu</translation>
 <translation id="8261506727792406068">Eyða</translation>
-<translation id="8263047843452521549">Atburðaskrá fyrir bakvinnslu (service-worker)</translation>
 <translation id="8331671104904436324">Opnist í bakgrunnsflipa</translation>
 <translation id="8373293945112511707">Landslag 1</translation>
 <translation id="8388552048012645975">Sæki uppfærslu...</translation>
+<translation id="8392904568172593155">Án færibreyta</translation>
 <translation id="8427094907586191051">Landslag 17</translation>
 <translation id="8439034818057146672">Nú getur þú sett upp nýja útgáfu af Vivaldi.</translation>
 <translation id="8446668873108041390">Slökkt er á að keyra JavaScript úr AppleScript. Í Stillingar &gt; Friðhelgi &gt; Apple viðburðir, er stilling til að leyfa þetta.</translation>
@@ -183,14 +195,15 @@
 <translation id="8651348004684669199">Bættu við virkum flipa</translation>
 <translation id="8669345741879513971">Skrímsli 10</translation>
 <translation id="867544375504146191">Yandex</translation>
-<translation id="8689295374912158752">Atburðaskrá fyrir bakvinnsluþráð (portal-document)</translation>
 <translation id="875142999698251063">Hætta núna</translation>
 <translation id="8768970203213061953">Landslag 14</translation>
 <translation id="8773635261052182196">Þú munt ekki lengur sjá tilkynningar. Þú getur virkjað þær aftur í vivaldi stillingum.</translation>
 <translation id="8774017153185436870">Síður gætu hugsanlega leyft sjálfvirka spilun myndbanda</translation>
 <translation id="8813277370772331957">Fá áminningu síðar</translation>
+<translation id="8837256239226739065">Atburðaskrá fyrir bakvinnslu (service-worker)</translation>
 <translation id="8894900864683381599">Gera hlekk að vefspjaldi</translation>
 <translation id="8912720443398351457">Ertu viss um að þú viljir hætta í Vivaldi?</translation>
+<translation id="8940028675168378100">Lokað á af <ph name="BLOCKER_NAME" /></translation>
 <translation id="8947109330183116400">Velja HTML bókamerkjaskrá</translation>
 <translation id="9017566390391482291">Veldu möppu sem inniheldur Vivaldi notendamöppu til að flytja inn</translation>
 <translation id="9048058608784130603">Uppfærsla á bið <ph name="VERSION" /></translation>
@@ -201,6 +214,7 @@
 <translation id="912022491595344261">Opna mynd sem <ph name="USER" /></translation>
 <translation id="9157539936604258187">Opna hlekk</translation>
 <translation id="9169060351863393881">Ópera 12.x</translation>
+<translation id="9180553614777056266">Auglýsingavörn</translation>
 <translation id="939305735877869636">Brave</translation>
 <translation id="970294721402795299">Landslag 16</translation>
 </translationbundle>

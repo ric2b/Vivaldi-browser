@@ -15,11 +15,11 @@
 #include <vector>
 
 #include <gtest/gtest.h>
-#include "xnnpack/math.h"
-#include "xnnpack/microfnptr.h"
-#include "xnnpack/microparams.h"
-#include "xnnpack/buffer.h"
-#include "replicable_random_device.h"
+#include "src/xnnpack/math.h"
+#include "src/xnnpack/microfnptr.h"
+#include "src/xnnpack/microparams.h"
+#include "src/xnnpack/buffer.h"
+#include "test/replicable_random_device.h"
 
 class SpMMMicrokernelTester {
  public:
@@ -307,7 +307,7 @@ class SpMMMicrokernelTester {
       std::generate(bias.begin(), bias.end(), [&]() { return f32dist(rng); });
       std::fill(nmap.begin(), nmap.end(), 0);
       std::fill(dmap.begin(), dmap.end(), 0);
-      std::fill(w.begin(), w.end(), 0);
+      std::fill(w.begin(), w.end(), 0.0f);
 
       for (xnn_float16& b_value : b) {
         if (pdist(rng) <= sparsity()) {

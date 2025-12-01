@@ -49,8 +49,8 @@ class AudioCodingModuleImpl final : public AudioCodingModule {
   //   Sender
   //
 
-  void ModifyEncoder(rtc::FunctionView<void(std::unique_ptr<AudioEncoder>*)>
-                         modifier) override;
+  void ModifyEncoder(
+      FunctionView<void(std::unique_ptr<AudioEncoder>*)> modifier) override;
 
   // Register a transport callback which will be
   // called to deliver the encoded buffers.
@@ -220,7 +220,7 @@ int32_t AudioCodingModuleImpl::Encode(
       first_frame_
           ? input_data.input_timestamp
           : last_rtp_timestamp_ +
-                rtc::dchecked_cast<uint32_t>(rtc::CheckedDivExact(
+                dchecked_cast<uint32_t>(rtc::CheckedDivExact(
                     int64_t{input_data.input_timestamp - last_timestamp_} *
                         encoder_stack_->RtpTimestampRateHz(),
                     int64_t{encoder_stack_->SampleRateHz()}));
@@ -300,7 +300,7 @@ void AudioCodingModuleImpl::Reset() {
 }
 
 void AudioCodingModuleImpl::ModifyEncoder(
-    rtc::FunctionView<void(std::unique_ptr<AudioEncoder>*)> modifier) {
+    FunctionView<void(std::unique_ptr<AudioEncoder>*)> modifier) {
   MutexLock lock(&acm_mutex_);
   modifier(&encoder_stack_);
 }

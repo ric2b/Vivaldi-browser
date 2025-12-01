@@ -10,17 +10,18 @@
 #include "base/check.h"
 #include "base/check_deref.h"
 #include "base/functional/callback_helpers.h"
-#include "base/logging.h"
 #include "base/time/time.h"
 #include "components/autofill/core/browser/data_manager/payments/payments_data_manager.h"
-#include "components/autofill/core/browser/data_model/bank_account.h"
+#include "components/autofill/core/browser/data_model/payments/bank_account.h"
 #include "components/autofill/core/browser/payments/payments_util.h"
 #include "components/facilitated_payments/core/browser/facilitated_payments_client.h"
 #include "components/facilitated_payments/core/browser/network_api/facilitated_payments_network_interface.h"
+#include "components/facilitated_payments/core/browser/network_api/multiple_request_facilitated_payments_network_interface.h"
 #include "components/facilitated_payments/core/features/features.h"
 #include "components/facilitated_payments/core/metrics/facilitated_payments_metrics.h"
 #include "components/facilitated_payments/core/utils/facilitated_payments_ui_utils.h"
 #include "components/facilitated_payments/core/utils/facilitated_payments_utils.h"
+#include "components/optimization_guide/core/optimization_guide_decider.h"
 
 namespace payments::facilitated {
 namespace {
@@ -28,8 +29,6 @@ namespace {
 static constexpr base::TimeDelta kProgressScreenDismissDelay = base::Seconds(2);
 static constexpr FacilitatedPaymentsType kPaymentsType =
     FacilitatedPaymentsType::kPix;
-// TODO(crbug.com/375501469): Remove logging after investigating the bug.
-static constexpr char kClassName[] = "PixManager";
 
 }  // namespace
 
@@ -38,18 +37,15 @@ PixManager::PixManager(
     FacilitatedPaymentsApiClientCreator api_client_creator,
     optimization_guide::OptimizationGuideDecider* optimization_guide_decider)
     : client_(CHECK_DEREF(client)),
-      api_client_creator_(std::move(api_client_creator)),
+      api_client_creator_(api_client_creator),
       optimization_guide_decider_(optimization_guide_decider),
       initiate_payment_request_details_(
           std::make_unique<
               FacilitatedPaymentsInitiatePaymentRequestDetails>()) {
   DCHECK(optimization_guide_decider_);
-  RegisterPixAllowlist();
 }
 
 PixManager::~PixManager() {
-  // TODO(crbug.com/375501469): Remove logging after investigating the bug.
-  LOG(WARNING) << kClassName << " - Destroyed.";
   DismissPrompt();
 }
 
@@ -88,12 +84,14 @@ void PixManager::OnPixCodeCopiedToClipboard(const GURL& render_frame_host_url,
                                base::TimeTicks::Now()));
 }
 
-void PixManager::RegisterPixAllowlist() const {
-  optimization_guide_decider_->RegisterOptimizationTypes(
-      {optimization_guide::proto::PIX_MERCHANT_ORIGINS_ALLOWLIST});
-}
-
 bool PixManager::IsMerchantAllowlisted(const GURL& url) const {
+  if (base::FeatureList::IsEnabled(
+          kDisableFacilitatedPaymentsMerchantAllowlist)) {
+    // If the merchant allowlist check is disabled, simply return true. This is
+    // mainly used for manual testing of new domains before being added to the
+    // allowlist.
+    return true;
+  }
   // Since the optimization guide decider integration corresponding to PIX
   // merchant lists are allowlists for the question "Can this site be
   // optimized?", a match on the allowlist answers the question with "yes".
@@ -157,25 +155,25 @@ void PixManager::OnPixCodeValidated(
   }
 
   initiate_payment_request_details_->pix_code_ = std::move(pix_code);
-  api_availability_check_start_time_ = base::TimeTicks::Now();
-  GetApiClient()->IsAvailable(base::BindOnce(
-      &PixManager::OnApiAvailabilityReceived, weak_ptr_factory_.GetWeakPtr()));
+  GetApiClient()->IsAvailable(
+      base::BindOnce(&PixManager::OnApiAvailabilityReceived,
+                     weak_ptr_factory_.GetWeakPtr(), base::TimeTicks::Now()));
 }
 
 FacilitatedPaymentsApiClient* PixManager::GetApiClient() {
   if (!api_client_) {
     if (api_client_creator_) {
-      api_client_ = std::move(api_client_creator_).Run();
+      api_client_ = api_client_creator_.Run();
     }
   }
 
   return api_client_.get();
 }
 
-void PixManager::OnApiAvailabilityReceived(bool is_api_available) {
+void PixManager::OnApiAvailabilityReceived(base::TimeTicks start_time,
+                                           bool is_api_available) {
   LogApiAvailabilityCheckResultAndLatency(
-      kPaymentsType, is_api_available,
-      (base::TimeTicks::Now() - api_availability_check_start_time_));
+      kPaymentsType, is_api_available, (base::TimeTicks::Now() - start_time));
   if (!is_api_available) {
     LogPixFlowExitedReason(PixFlowExitedReason::kApiClientNotAvailable);
     return;
@@ -187,18 +185,13 @@ void PixManager::OnApiAvailabilityReceived(bool is_api_available) {
 
   ShowPixPaymentPrompt(
       client_->GetPaymentsDataManager()->GetMaskedBankAccounts(),
-      base::BindOnce(&PixManager::OnPixPaymentPromptResult,
+      base::BindOnce(&PixManager::OnPixAccountSelected,
                      weak_ptr_factory_.GetWeakPtr(), base::TimeTicks::Now()));
 }
 
-void PixManager::OnPixPaymentPromptResult(
+void PixManager::OnPixAccountSelected(
     base::TimeTicks fop_selector_shown_timestamp,
-    bool is_prompt_accepted,
     int64_t selected_instrument_id) {
-  if (!is_prompt_accepted) {
-    // The metric for the reason of this early-return is logged in `OnUiEvent`.
-    return;
-  }
   LogPixFopSelectedAndLatency(base::TimeTicks::Now() -
                               fop_selector_shown_timestamp);
   LogPixFopSelectorResultUkm(/*accepted=*/true, ukm_source_id_);
@@ -223,15 +216,15 @@ void PixManager::OnRiskDataLoaded(base::TimeTicks start_time,
   }
   initiate_payment_request_details_->risk_data_ = risk_data;
 
-  get_client_token_loading_start_time_ = base::TimeTicks::Now();
-  GetApiClient()->GetClientToken(base::BindOnce(
-      &PixManager::OnGetClientToken, weak_ptr_factory_.GetWeakPtr()));
+  GetApiClient()->GetClientToken(base::BindOnce(&PixManager::OnGetClientToken,
+                                                weak_ptr_factory_.GetWeakPtr(),
+                                                base::TimeTicks::Now()));
 }
 
-void PixManager::OnGetClientToken(std::vector<uint8_t> client_token) {
-  LogGetClientTokenResultAndLatency(
-      kPaymentsType, !client_token.empty(),
-      (base::TimeTicks::Now() - get_client_token_loading_start_time_));
+void PixManager::OnGetClientToken(base::TimeTicks start_time,
+                                  std::vector<uint8_t> client_token) {
+  LogGetClientTokenResultAndLatency(kPaymentsType, !client_token.empty(),
+                                    (base::TimeTicks::Now() - start_time));
   if (client_token.empty()) {
     ShowErrorScreen();
     LogPixFlowExitedReason(PixFlowExitedReason::kClientTokenNotAvailable);
@@ -245,24 +238,38 @@ void PixManager::OnGetClientToken(std::vector<uint8_t> client_token) {
 }
 
 void PixManager::SendInitiatePaymentRequest() {
-  initiate_payment_network_start_time_ = base::TimeTicks::Now();
-  if (FacilitatedPaymentsNetworkInterface* payments_network_interface =
-          client_->GetFacilitatedPaymentsNetworkInterface()) {
-    LogInitiatePaymentAttempt(kPaymentsType);
-    payments_network_interface->InitiatePayment(
-        std::move(initiate_payment_request_details_),
-        base::BindOnce(&PixManager::OnInitiatePaymentResponseReceived,
-                       weak_ptr_factory_.GetWeakPtr()),
-        client_->GetPaymentsDataManager()->app_locale());
+  if (base::FeatureList::IsEnabled(
+          kSupportMultipleServerRequestsForPixPayments)) {
+    if (auto* payments_network_interface =
+            client_->GetMultipleRequestFacilitatedPaymentsNetworkInterface()) {
+      LogInitiatePaymentAttempt(kPaymentsType);
+      payments_network_interface->InitiatePayment(
+          std::move(initiate_payment_request_details_),
+          base::BindOnce(&PixManager::OnInitiatePaymentResponseReceived,
+                         weak_ptr_factory_.GetWeakPtr(),
+                         base::TimeTicks::Now()),
+          client_->GetPaymentsDataManager()->app_locale());
+    }
+  } else {
+    if (auto* payments_network_interface =
+            client_->GetFacilitatedPaymentsNetworkInterface()) {
+      LogInitiatePaymentAttempt(kPaymentsType);
+      payments_network_interface->InitiatePayment(
+          std::move(initiate_payment_request_details_),
+          base::BindOnce(&PixManager::OnInitiatePaymentResponseReceived,
+                         weak_ptr_factory_.GetWeakPtr(),
+                         base::TimeTicks::Now()),
+          client_->GetPaymentsDataManager()->app_locale());
+    }
   }
 }
 
 void PixManager::OnInitiatePaymentResponseReceived(
+    base::TimeTicks start_time,
     autofill::payments::PaymentsAutofillClient::PaymentsRpcResult result,
     std::unique_ptr<FacilitatedPaymentsInitiatePaymentResponseDetails>
         response_details) {
-  base::TimeDelta latency =
-      base::TimeTicks::Now() - initiate_payment_network_start_time_;
+  base::TimeDelta latency = base::TimeTicks::Now() - start_time;
   if (result !=
       autofill::payments::PaymentsAutofillClient::PaymentsRpcResult::kSuccess) {
     LogInitiatePaymentResultAndLatency(kPaymentsType, /*result=*/false,
@@ -290,11 +297,10 @@ void PixManager::OnInitiatePaymentResponseReceived(
   }
 
   LogInitiatePurchaseActionAttempt(kPaymentsType);
-  purchase_action_start_time_ = base::TimeTicks::Now();
   GetApiClient()->InvokePurchaseAction(
       account_info.value(), response_details->secure_payload_,
       base::BindOnce(&PixManager::OnPurchaseActionResult,
-                     weak_ptr_factory_.GetWeakPtr()));
+                     weak_ptr_factory_.GetWeakPtr(), base::TimeTicks::Now()));
 
   // Close the progress screen just after the platform screen appears.
   ui_timer_.Start(FROM_HERE, kProgressScreenDismissDelay,
@@ -302,7 +308,8 @@ void PixManager::OnInitiatePaymentResponseReceived(
                                  weak_ptr_factory_.GetWeakPtr()));
 }
 
-void PixManager::OnPurchaseActionResult(PurchaseActionResult result) {
+void PixManager::OnPurchaseActionResult(base::TimeTicks start_time,
+                                        PurchaseActionResult result) {
   switch (result) {
     case PurchaseActionResult::kCouldNotInvoke:
       LogPixFlowExitedReason(
@@ -310,20 +317,14 @@ void PixManager::OnPurchaseActionResult(PurchaseActionResult result) {
       ShowErrorScreen();
       break;
     case PurchaseActionResult::kResultOk:
-      // TODO(crbug.com/375501469): Remove logging after investigating the bug.
-      LOG(WARNING) << kClassName << " - PurchaseActionResult is kResultOk.";
-      DismissPrompt();
-      break;
+      [[fallthrough]];  // Intentional fallthrough.
     case PurchaseActionResult::kResultCanceled:
-      // TODO(crbug.com/375501469): Remove logging after investigating the bug.
-      LOG(WARNING) << kClassName
-                   << " - PurchaseActionResult is kResultCanceled.";
       DismissPrompt();
       break;
   }
   // Log the general histograms.
   LogPixInitiatePurchaseActionResultAndLatency(
-      result, base::TimeTicks::Now() - purchase_action_start_time_);
+      result, base::TimeTicks::Now() - start_time);
   LogInitiatePurchaseActionResultUkm(result, ukm_source_id_);
   LogPixTransactionResultAndLatency(
       result, base::TimeTicks::Now() - pix_code_copied_timestamp_);
@@ -342,12 +343,6 @@ void PixManager::OnUiEvent(UiEvent ui_event_type) {
       break;
     }
     case UiEvent::kScreenClosedNotByUser: {
-      if (ui_state_ == UiState::kProgressScreen) {
-        // TODO(crbug.com/375501469): Remove logging after investigating the
-        // bug.
-        LOG(WARNING) << kClassName
-                     << " - The progress screen is closed (not by user).";
-      }
       if (ui_state_ == UiState::kFopSelector) {
         LogPixFlowExitedReason(
             PixFlowExitedReason::kFopSelectorClosedNotByUser);
@@ -356,12 +351,6 @@ void PixManager::OnUiEvent(UiEvent ui_event_type) {
       break;
     }
     case UiEvent::kScreenClosedByUser: {
-      if (ui_state_ == UiState::kProgressScreen) {
-        // TODO(crbug.com/375501469): Remove logging after investigating the
-        // bug.
-        LOG(WARNING) << kClassName
-                     << " - The user has closed the progress screen.";
-      }
       if (ui_state_ == UiState::kFopSelector) {
         LogPixFlowExitedReason(PixFlowExitedReason::kFopSelectorClosedByUser);
         LogPixFopSelectorResultUkm(/*accepted=*/false, ukm_source_id_);
@@ -373,45 +362,30 @@ void PixManager::OnUiEvent(UiEvent ui_event_type) {
 }
 
 void PixManager::DismissPrompt() {
-  if (ui_state_ != UiState::kHidden) {
-    // TODO(crbug.com/375501469): Remove logging after investigating the bug.
-    LOG(WARNING) << kClassName << " - Dismissing the prompt.";
-  }
   ui_state_ = UiState::kHidden;
   client_->DismissPrompt();
 }
 
 void PixManager::ShowPixPaymentPrompt(
     base::span<const autofill::BankAccount> bank_account_suggestions,
-    base::OnceCallback<void(bool, int64_t)> on_user_decision_callback) {
+    base::OnceCallback<void(int64_t)> on_pix_account_selected) {
   ui_state_ = UiState::kFopSelector;
   client_->ShowPixPaymentPrompt(std::move(bank_account_suggestions),
-                                std::move(on_user_decision_callback));
+                                std::move(on_pix_account_selected));
 }
 
 void PixManager::ShowProgressScreen() {
   ui_state_ = UiState::kProgressScreen;
-  // TODO(crbug.com/375501469): Remove logging after investigating the bug.
-  LOG(WARNING) << kClassName << " - Showing pogress screen.";
   client_->ShowProgressScreen();
 }
 
 void PixManager::ShowErrorScreen() {
-  if (ui_state_ == UiState::kProgressScreen) {
-    // TODO(crbug.com/375501469): Remove logging after investigating the bug.
-    LOG(WARNING) << kClassName
-                 << " - Showing error screen after the progress screen.";
-  }
   ui_state_ = UiState::kErrorScreen;
   client_->ShowErrorScreen();
 }
 
 void PixManager::DismissProgressScreen() {
   if (ui_state_ == UiState::kProgressScreen) {
-    // TODO(crbug.com/375501469): Remove logging after investigating the bug.
-    LOG(WARNING)
-        << kClassName
-        << " - Progress screen closed shortly after invoking purchase action.";
     DismissPrompt();
   }
 }

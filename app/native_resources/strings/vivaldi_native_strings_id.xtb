@@ -14,6 +14,7 @@
 <translation id="1454726940098520109">Jangan Tampilkan Konfirmasi Lagi</translation>
 <translation id="1462666970065907900">Anda yakin ingin menutup jendela ini?</translation>
 <translation id="1480046233931937785">Akuan</translation>
+<translation id="1490502035430975848">Inspeksi Dokumen Portal</translation>
 <translation id="1521774566618522728">Aktif hari ini</translation>
 <translation id="1526344461589023948">Galat terjadi saat mencoba menyimpan pemutakhiran terunduh. Mohon periksa kecukupan ruang diska Anda dan coba lagi nanti.</translation>
 <translation id="1635542496948266458">Ganti profil</translation>
@@ -34,9 +35,11 @@
 <translation id="2141974047387702305">Galat terjadi saat mengunduh berkas pemutakhiran. Mohon periksa sambungan internet Anda dan coba lagi nanti.</translation>
 <translation id="2226825946708954262">⚠ Lanjutkan dengn Kehilangan Data</translation>
 <translation id="2339641773402824483">Memeriksa pemutakhiran...</translation>
+<translation id="2429571091666452569">Dari daftar:</translation>
 <translation id="2441056087170876076">Monster 2</translation>
 <translation id="2444387452209867610">Masukkan Catatan</translation>
 <translation id="2486841023299517366">Hewan 4</translation>
+<translation id="2501278716633472235">Kembali</translation>
 <translation id="2612127540243995147">Siap memasang. Vivaldi akan ditutup dan diluncurkan ulang.</translation>
 <translation id="2613387515621326337">Tampilkan situs web pemutakhiran</translation>
 <translation id="2645477450146475243">Sayangnya, pengaturan Opera Anda tidak tersedia saat peramban sedang berjalan. Untuk mengimpornya ke Vivaldi, simpan kerjaan Anda lalu tutup semua jendela Opera. Lalu klik Lanjutkan.</translation>
@@ -61,6 +64,7 @@
 <translation id="3259769196742189631">Memvalidasi</translation>
 <translation id="3291915639428159043">Putar otomatis diblokir</translation>
 <translation id="3302905971452834934">Monster 1</translation>
+<translation id="3308738399950580893">iklan</translation>
 <translation id="3334610655141903168">(tidak ada judul)</translation>
 <translation id="3372505110412186107">Vivaldi <ph name="VERSION" /> adalah versi terbaru yang tersedia sekarang.</translation>
 <translation id="3383198080133834965">Versi sudah mutakhir!</translation>
@@ -71,9 +75,11 @@
 <translation id="3521635864657970829">Anda Yakin Ingin Menutup Jendela Ini?</translation>
 <translation id="3540597690227428180">Hewan 9</translation>
 <translation id="3542768452570884558">Buka Tautan di Jendela Baru</translation>
+<translation id="3586931643579894722">Sembunyikan detail</translation>
 <translation id="3588820906588687999">Buka gambar di Tab Baru</translation>
 <translation id="3601066750251199488">Monster 3</translation>
 <translation id="3620979700683094848">Situs dapat memutar otomatis video</translation>
+<translation id="3650023731264842343">Saat memuat halaman berikut:</translation>
 <translation id="3658651522139217005">Opera GX</translation>
 <translation id="3680031241659195730">Versi baru Vivaldi sudah tersedia!</translation>
 <translation id="3708982624815781692">Unduhan dibatalkan.</translation>
@@ -83,6 +89,7 @@
 <translation id="3795800845758778870">Sayangnya, pengaturan Brave Anda tidak tersedia jika peramban tersebut sedang berjalan. Untuk mengimpor pengaturan ke Vivaldi, simpan pekerjaan Anda dan tutup semua jendela Brave. Lalu klik Lanjutkan.</translation>
 <translation id="3822431842304177896">Pembatas Baru</translation>
 <translation id="3832132597516774400">Lanskap 5</translation>
+<translation id="3894751534882749287">Jika Anda ingin tetap melihat halaman, Anda dapat mengubah level proteksi pelacakan pada sembulan Pemblokir-pelacak atau dengan mengklik tombol Izinkan</translation>
 <translation id="3914946330804881301">Diimpor dari Opera</translation>
 <translation id="3921292902397893431">Monster 8</translation>
 <translation id="3943857333388298514">Tempel</translation>
@@ -107,6 +114,7 @@
 <translation id="4582480609585453144">Buka Tautan di Tab Latar Belakang</translation>
 <translation id="4636708767492582204">Kirim melalui Surat</translation>
 <translation id="4677434526832593569">Hewan 8</translation>
+<translation id="4736016046474602958">Pemblokir Pelacak</translation>
 <translation id="474217410105706308">Bisukan Tab</translation>
 <translation id="4861715717329665002">Sesi yang Disimpan Otomatis</translation>
 <translation id="4881695831933465202">Buka</translation>
@@ -133,9 +141,11 @@
 <translation id="588258955323874662">Layar Penuh</translation>
 <translation id="5916080360077521750">Sayangnya, semua pengaturan Chrome anda tidak tersedia ketika peramban itu sedang berjalan. Untuk mengimpor pengaturan ke Vivaldi, simpan pekerjaan anda dan tutup semua jendela Chrome. Kemudian klik Lanjutkan.</translation>
 <translation id="6040143037577758943">Tutup</translation>
+<translation id="6140948187512243695">Tampilkan detailnya</translation>
 <translation id="6229528619562190452">Klik di sini untuk memperbarui Vivaldi.</translation>
 <translation id="6234173136417926046">Gunakan Gambar sebagai Latar Belakang Halaman Awal</translation>
 <translation id="6339818817272922368">Akun Lokal</translation>
+<translation id="6376435169746695498">Pemuatan halaman ini diblokir oleh pencocokan <ph name="BLOCKER_NAME" /></translation>
 <translation id="6398710281890660037">Amankan profil saya</translation>
 <translation id="6438786710866753178">Lanskap 4</translation>
 <translation id="6477028720702061455">Pilih folder profil Opera untuk diimpor</translation>
@@ -152,6 +162,7 @@
 <translation id="7086554968911045110">Lanskap 7</translation>
 <translation id="7099506190679014195">Pemutakhiran simpanan kunci aman</translation>
 <translation id="7111492742514999492">Lanskap 9</translation>
+<translation id="7113310725918019676">Izinkan <ph name="BLOCKED_TYPE" /> dari <ph name="DOMAIN" /></translation>
 <translation id="7208252576848052204">Sayangnya, pengaturan Arc Anda tidak tersedia saat peramban sedang berjalan. Untuk mengimpornya ke Vivaldi, simpan kerjaan Anda lalu tutup semua jendela Arc. Lalu klik Lanjutkan.</translation>
 <translation id="7321500017121629018">Aktif kemarin</translation>
 <translation id="7337881442233988129">Chromium</translation>
@@ -167,12 +178,13 @@
 <translation id="8027581147000338959">Buka di Jendela Baru</translation>
 <translation id="8044382196220116469">Jangan izinkan situs memutar otomatis video</translation>
 <translation id="8099620695029051217">Salin Alamat Halaman</translation>
+<translation id="8119307142152921512">pelacak dan iklan</translation>
 <translation id="8197810018650377191">Tandai Halaman</translation>
 <translation id="8261506727792406068">Hapus</translation>
-<translation id="8263047843452521549">Inspeksi service-worker latar belakang</translation>
 <translation id="8331671104904436324">Buka di Tab Latar Belakang</translation>
 <translation id="8373293945112511707">Lanskap 1</translation>
 <translation id="8388552048012645975">Mengunduh pemutakhiran...</translation>
+<translation id="8392904568172593155">Tanpa parameter</translation>
 <translation id="8427094907586191051">Lanskap 17</translation>
 <translation id="8439034818057146672">Versi baru Vivaldi siap dipasang.</translation>
 <translation id="8446668873108041390">Eksekusi JavaScript lewat AppleScript dimatikan. Di bawah Pengaturan &gt; Privasi &gt; Apple Events, ada pengaturan untuk mengizinkan JavaScript dari Apple Events.</translation>
@@ -183,14 +195,15 @@
 <translation id="8651348004684669199">Tambah Tab Aktif</translation>
 <translation id="8669345741879513971">Monster 10</translation>
 <translation id="867544375504146191">Yandex</translation>
-<translation id="8689295374912158752">Inspeksi dokumen-portal</translation>
 <translation id="875142999698251063">Keluar sekarang</translation>
 <translation id="8768970203213061953">Lanskap 14</translation>
 <translation id="8773635261052182196">Anda tidak akan melihat lagi semua notifikasi ini. Anda dapat menyalakan mereka kembali di pengaturan vivaldi.</translation>
 <translation id="8774017153185436870">Situs mungkin memutar otomatis video</translation>
 <translation id="8813277370772331957">Ingatkan saya nanti</translation>
+<translation id="8837256239226739065">Inspeksi Service Worker Latar Belakang</translation>
 <translation id="8894900864683381599">Tambahkan Tautan ke Panel Web</translation>
 <translation id="8912720443398351457">Anda Yakin Ingin Keluar Dari Vivaldi?</translation>
+<translation id="8940028675168378100">Diblokir oleh <ph name="BLOCKER_NAME" /></translation>
 <translation id="8947109330183116400">Pilih berkas penanda HTML</translation>
 <translation id="9017566390391482291">Pilih folder profil Vivaldi untuk diimpor</translation>
 <translation id="9048058608784130603">Pemutakhiran tertunda <ph name="VERSION" /></translation>
@@ -201,6 +214,7 @@
 <translation id="912022491595344261">Buka Gambar sebagai <ph name="USER" /></translation>
 <translation id="9157539936604258187">Buka Tautan</translation>
 <translation id="9169060351863393881">Opera 12.x</translation>
+<translation id="9180553614777056266">Pemblokir Iklan</translation>
 <translation id="939305735877869636">Brave</translation>
 <translation id="970294721402795299">Lanskap 16</translation>
 </translationbundle>

@@ -8,18 +8,12 @@
 #include <utility>
 #include <vector>
 
-#include "chrome/browser/content_settings/mixed_content_settings_tab_helper.h"
-#include "chrome/browser/content_settings/page_specific_content_settings_delegate.h"
 #include "chrome/browser/devtools/devtools_window.h"
-#include "chrome/browser/extensions/api/web_navigation/web_navigation_api.h"
 #include "chrome/browser/extensions/extension_tab_util.h"
 #include "chrome/browser/picture_in_picture/picture_in_picture_window_manager.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/repost_form_warning_controller.h"
-#include "chrome/browser/sessions/tab_restore_service_factory.h"
 #include "chrome/browser/ssl/chrome_security_state_tab_helper.h"
 #include "chrome/browser/tab_contents/tab_util.h"
-#include "chrome/browser/task_manager/web_contents_tags.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_list.h"
@@ -27,20 +21,16 @@
 #include "chrome/browser/ui/browser_navigator_params.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/tab_dialogs.h"
-#include "chrome/browser/ui/tab_modal_confirm_dialog.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/tabs/tab_utils.h"
 #include "chrome/browser/ui/views/eye_dropper/eye_dropper.h"
 #include "chrome/browser/ui/webui/settings/site_settings_helper.h"
-#include "chrome/common/chrome_render_frame.mojom.h"
 #include "chrome/grit/generated_resources.h"
-#include "components/content_settings/common/content_settings_agent.mojom.h"
 #include "components/guest_view/browser/guest_view_event.h"
 #include "components/guest_view/browser/guest_view_manager.h"
 #include "components/paint_preview/buildflags/buildflags.h"
 #include "components/security_state/content/content_utils.h"
 #include "components/security_state/core/security_state.h"
-#include "components/sessions/core/tab_restore_service.h"
 #include "components/web_cache/browser/web_cache_manager.h"
 #include "content/browser/browser_plugin/browser_plugin_guest.h"  // nogncheck
 #include "content/browser/renderer_host/page_impl.h"
@@ -79,12 +69,14 @@
 #include "extensions/api/guest_view/vivaldi_web_view_constants.h"
 #include "extensions/api/tabs/tabs_private_api.h"
 #include "extensions/helper/vivaldi_init_helpers.h"
+#include "extensions/vivaldi_browser_component_wrapper.h"
 #include "extensions/tools/vivaldi_tools.h"
 #include "prefs/vivaldi_gen_prefs.h"
 #include "ui/content/vivaldi_tab_check.h"
 #include "ui/devtools/devtools_connector.h"
 #include "ui/vivaldi_browser_window.h"
 #include "ui/vivaldi_ui_utils.h"
+
 
 #if defined(USE_AURA)
 #include "ui/aura/client/cursor_client.h"
@@ -95,6 +87,7 @@
 #if BUILDFLAG(ENABLE_PAINT_PREVIEW)
 #include "components/paint_preview/browser/paint_preview_client.h"
 #endif
+
 
 using content::RenderProcessHost;
 using content::StoragePartition;
@@ -108,6 +101,13 @@ namespace extensions {
 
 namespace {
 
+bool IsPanelSensitiveUrl(const GURL& url) {
+  // Http and https pages only can be displayed in the incognito window
+  // web-panels.
+  if (url.SchemeIs("http") || url.SchemeIs("https"))
+    return false;
+  return true;
+}
 
 // local function copied from web_view_guest.cc
 /*
@@ -173,13 +173,6 @@ std::string WindowOpenDispositionToString(
   }
 }
 
-void SetAllowRunningInsecureContent(content::RenderFrameHost* frame) {
-  mojo::AssociatedRemote<content_settings::mojom::ContentSettingsAgent>
-      renderer;
-  frame->GetRemoteAssociatedInterfaces()->GetInterface(&renderer);
-  renderer->SetAllowRunningInsecureContent();
-}
-
 static std::string SSLStateToString(SecurityStateTabHelper* helper) {
   security_state::SecurityLevel status = helper->GetSecurityLevel();
   switch (status) {
@@ -193,10 +186,6 @@ static std::string SSLStateToString(SecurityStateTabHelper* helper) {
       // HTTPS
       return "secure";
     }
-    case security_state::SECURE_WITH_POLICY_INSTALLED_CERT:
-      // HTTPS, but the certificate verification chain is anchored on a
-      // certificate that was installed by the system administrator
-      return "security_policy_warning";
     case security_state::DANGEROUS:
       // Attempted HTTPS and failed, page not authenticated
       return "security_error";
@@ -274,7 +263,8 @@ bool IsPanelId(const std::string &name) {
 }
 
 void AttachWebContentsObservers(content::WebContents* contents) {
-  extensions::WebNavigationTabObserver::CreateForWebContents(contents);
+  VivaldiBrowserComponentWrapper::GetInstance()
+      ->CreateWebNavigationTabObserver(contents);
   ::vivaldi::InitHelpers(contents);
 }
 }  // namespace
@@ -302,6 +292,13 @@ WebViewGuest::CursorHider::~CursorHider() {
 }
 #endif  // USE_AURA
 
+Browser* WebViewGuest::GetBrowser(content::WebContents* web_contents) {
+  Browser* browser =
+      VivaldiBrowserComponentWrapper::GetInstance()->FindBrowserWithTab(
+          web_contents);
+  return browser;
+}
+
 void WebViewGuest::VivaldiSetLoadProgressEventExtraArgs(
     base::Value::Dict& dictionary) {
   if (!IsVivaldiRunning())
@@ -321,8 +318,6 @@ void WebViewGuest::ToggleFullscreenModeForTab(
     return;
   is_fullscreen_ = enter_fullscreen;
 
-  Browser* browser = chrome::FindBrowserWithTab(web_contents);
-
 #if defined(USE_AURA)
   PrefService* pref_service =
       Profile::FromBrowserContext(web_contents->GetBrowserContext())
@@ -338,6 +333,7 @@ void WebViewGuest::ToggleFullscreenModeForTab(
   }
 #endif  // USE_AURA
 
+  Browser* browser = GetBrowser(web_contents);
   base::Value::Dict args;
   args.Set("windowId", browser ? browser->session_id().id() : -1);
   args.Set("enterFullscreen", enter_fullscreen);
@@ -349,17 +345,14 @@ void WebViewGuest::BeforeUnloadFired(content::WebContents* web_contents,
                                      bool* proceed_to_fire_unload) {
   // Call the Browser class as it already has an instance of the
   // active unload controller.
-  Browser* browser = ::vivaldi::FindBrowserWithTab(web_contents);
-  DCHECK(browser);
-  if (browser) {
-    browser->DoBeforeUnloadFired(web_contents, proceed, proceed_to_fire_unload);
-  }
+  VivaldiBrowserComponentWrapper::GetInstance()->DoBeforeUnloadFired(
+      web_contents, proceed, proceed_to_fire_unload);
 }
 
 void WebViewGuest::SetContentsBounds(content::WebContents* source,
                                      const gfx::Rect& bounds) {
   DCHECK_EQ(web_contents(), source);
-  Browser* browser = ::vivaldi::FindBrowserWithTab(source);
+  Browser* browser = GetBrowser(source);
   if (browser && browser->window() && !browser->is_type_normal() &&
       !browser->is_type_picture_in_picture()) {
     browser->window()->SetBounds(bounds);
@@ -388,17 +381,18 @@ void WebViewGuest::ShowPageInfo(gfx::Point pos) {
     return;
   }
 
-  const GURL url = controller.GetActiveEntry()->GetURL();
-  Browser* browser = chrome::FindBrowserWithTab(web_contents());
   Profile* profile =
       Profile::FromBrowserContext(web_contents()->GetBrowserContext());
 
-  // Happens for WebContents not in a tabstrip.
+  Browser* browser = GetBrowser(web_contents());
   if (!browser) {
-    browser = chrome::FindLastActiveWithProfile(profile);
+    // Happens for WebContents not in a tabstrip.
+    browser = VivaldiBrowserComponentWrapper::GetInstance()
+        ->FindLastActiveBrowserWithProfile(profile);
   }
 
   if (browser->window()) {
+    const GURL url = controller.GetActiveEntry()->GetURL();
     browser->window()->VivaldiShowWebsiteSettingsAt(profile, web_contents(),
                                                     url, pos);
   }
@@ -409,16 +403,16 @@ void WebViewGuest::NavigationStateChanged(
     content::InvalidateTypes changed_flags) {
   // This class is the WebContentsDelegate, so forward this event
   // to the normal delegate here.
-  Browser* browser = chrome::FindBrowserWithTab(web_contents());
+  Browser* browser = GetBrowser(web_contents());
   if (browser) {
     static_cast<content::WebContentsDelegate*>(browser)->NavigationStateChanged(
         web_contents(), changed_flags);
     // Notify the Vivaldi browser window about load state.
-    VivaldiBrowserWindow* app_win =
-        static_cast<VivaldiBrowserWindow*>(browser->window());
-    if (app_win) {
-      app_win->NavigationStateChanged(web_contents(), changed_flags);
-    }
+    VivaldiBrowserWindow* browser_window =
+        VivaldiBrowserComponentWrapper::GetInstance()
+            ->VivaldiBrowserWindowFromBrowser(browser);
+    VivaldiBrowserComponentWrapper::GetInstance()
+        ->NavigationStateChanged(browser_window, web_contents(), changed_flags);
   }
 }
 
@@ -535,100 +529,9 @@ void WebViewGuest::AddGuestToTabStripModel(WebViewGuest* guest,
                                            int windowId,
                                            bool activePage,
                                            bool inherit_opener) {
-  Browser* browser =
-      chrome::FindBrowserWithID(SessionID::FromSerializedValue(windowId));
-
-  if (extension_host_) {
-    // This is an extension popup, split mode extensions (incognito) will have a
-    // regular profile for the webcontents. So make sure we add the tab to the
-    // correct browser.
-    content::BrowserContext* context =
-        guest->web_contents()->GetBrowserContext();
-
-    Profile* profile = Profile::FromBrowserContext(context);
-
-    browser = chrome::FindTabbedBrowser(profile, false);
-    if (!browser) {
-      sessions::TabRestoreService* trs =
-          TabRestoreServiceFactory::GetForProfile(profile);
-      DCHECK(trs);
-      // Restores the last closed browser-window including the tabs.
-      trs->RestoreMostRecentEntry(nullptr);
-      browser = chrome::FindTabbedBrowser(profile, false);
-    }
-  }
-
-  if (!browser || !browser->window()) {
-    if (windowId) {
-      NOTREACHED();
-      //return;
-    }
-    // Find a suitable window.
-    browser = chrome::FindTabbedBrowser(
-        Profile::FromBrowserContext(guest->web_contents()->GetBrowserContext()),
-        true);
-    if (!browser || !browser->window()) {
-      NOTREACHED();
-      //return;
-    }
-  }
-
-  TabStripModel* tab_strip = browser->tab_strip_model();
-  content::WebContents* existing_tab =
-      tab_strip->count() == 1 ? tab_strip->GetWebContentsAt(0) : nullptr;
-
-  // Default to foreground for the new tab. The presence of 'active' property
-  // will override this default.
-  bool active = activePage;
-  // Default to not pinning the tab. Setting the 'pinned' property to true
-  // will override this default.
-  bool pinned = false;
-  // If index is specified, honor the value, but keep it bound to
-  // -1 <= index <= tab_strip->count() where -1 invokes the default behavior.
-  int index = -1;
-  index = std::min(std::max(index, -1), tab_strip->count());
-
-  int add_types = active ? AddTabTypes::ADD_ACTIVE : AddTabTypes::ADD_NONE;
-  add_types |= AddTabTypes::ADD_FORCE_INDEX;
-  if (pinned)
-    add_types |= AddTabTypes::ADD_PINNED;
-  if (inherit_opener) {
-    add_types |= AddTabTypes::ADD_INHERIT_OPENER;
-  }
-
-  NavigateParams navigate_params(
-      browser, std::unique_ptr<WebContents>(guest->web_contents()));
-  navigate_params.disposition = active
-                                    ? WindowOpenDisposition::NEW_FOREGROUND_TAB
-                                    : WindowOpenDisposition::NEW_BACKGROUND_TAB;
-  navigate_params.tabstrip_index = index;
-  navigate_params.tabstrip_add_types = add_types;
-  navigate_params.source_contents = web_contents();
-
-  Navigate(&navigate_params);
-
-  if (!browser->is_vivaldi()) {
-    if (active)
-      navigate_params.navigated_or_inserted_contents->SetInitialFocus();
-  }
-  if (navigate_params.navigated_or_inserted_contents) {
-    content::RenderFrameHost* host =
-        navigate_params.navigated_or_inserted_contents->GetPrimaryMainFrame();
-    DCHECK(host);
-    mojo::AssociatedRemote<chrome::mojom::ChromeRenderFrame> client;
-    host->GetRemoteAssociatedInterfaces()->GetInterface(&client);
-    client->SetWindowFeatures(blink::mojom::WindowFeatures().Clone());
-  }
-  if (existing_tab) {
-    // We had a single tab open, check if it's speed dial.
-    GURL url = existing_tab->GetURL();
-    if (url == GURL(::vivaldi::kVivaldiNewTabURL)) {
-      // If it's Speed Dial, close it immediately. New windows always
-      // get a Speed Dial tab initially as some extensions expect it.
-      tab_strip->CloseWebContentsAt(
-          tab_strip->GetIndexOfWebContents(existing_tab), 0);
-    }
-  }
+  VivaldiBrowserComponentWrapper::GetInstance()->AddGuestToTabStripModel(
+      web_contents(), guest->web_contents(), windowId, activePage,
+      inherit_opener, extension_host_ != nullptr);
 }
 
 void WebViewGuest::OnContentAllowed(ContentSettingsType settings_type) {
@@ -670,22 +573,15 @@ void WebViewGuest::OnWindowBlocked(
 }
 
 void WebViewGuest::AllowRunningInsecureContent() {
-  MixedContentSettingsTabHelper* mixed_content_settings =
-      MixedContentSettingsTabHelper::FromWebContents(web_contents());
-  if (mixed_content_settings) {
-    // Update browser side settings to allow active mixed content.
-    mixed_content_settings->AllowRunningOfInsecureContent(
-        *web_contents()->GetOpener());
-  }
-
-  web_contents()->ForEachRenderFrameHost(&SetAllowRunningInsecureContent);
+  VivaldiBrowserComponentWrapper::GetInstance()->AllowRunningInsecureContent(
+      web_contents());
 }
 
 bool WebViewGuest::ShouldAllowRunningInsecureContent(WebContents* web_contents,
                                                      bool allowed_per_prefs,
                                                      const url::Origin& origin,
                                                      const GURL& resource_url) {
-  Browser* browser = chrome::FindBrowserWithTab(web_contents);
+  Browser* browser = GetBrowser(web_contents);
   if (browser) {
     return browser->ShouldAllowRunningInsecureContent(
         web_contents, allowed_per_prefs, origin, resource_url);
@@ -713,24 +609,26 @@ void WebViewGuest::OnMouseLeave() {
 }
 
 void WebViewGuest::ShowRepostFormWarningDialog(WebContents* source) {
-  TabModalConfirmDialog::Create(
-      std::make_unique<RepostFormWarningController>(source), source);
+  VivaldiBrowserComponentWrapper::GetInstance()->ShowRepostFormWarningDialog(
+      source);
 }
 
 content::PictureInPictureResult WebViewGuest::EnterPictureInPicture(
     WebContents* web_contents) {
-  return PictureInPictureWindowManager::GetInstance()
-      ->EnterVideoPictureInPicture(web_contents);
+  return VivaldiBrowserComponentWrapper::GetInstance()
+      ->EnterPictureInPicture(web_contents);
 }
 
 void WebViewGuest::ExitPictureInPicture() {
-  PictureInPictureWindowManager::GetInstance()->ExitPictureInPicture();
+  VivaldiBrowserComponentWrapper::GetInstance()->ExitPictureInPicture();
 }
 
 std::unique_ptr<content::EyeDropper> WebViewGuest::OpenEyeDropper(
     content::RenderFrameHost* frame,
     content::EyeDropperListener* listener) {
-  return ShowEyeDropper(frame, listener);
+  return VivaldiBrowserComponentWrapper::GetInstance()->OpenEyeDropper(
+      frame,
+      listener);
 }
 
 void WebViewGuest::CapturePaintPreviewOfSubframe(
@@ -750,23 +648,8 @@ void WebViewGuest::CapturePaintPreviewOfSubframe(
 void WebViewGuest::LoadTabContentsIfNecessary() {
   web_contents()->GetController().LoadIfNecessary();
 
-  TabStripModel* tab_strip;
-  int tab_index;
-  ::vivaldi::VivaldiStartupTabUserData* viv_startup_data =
-      static_cast<::vivaldi::VivaldiStartupTabUserData*>(
-          web_contents()->GetUserData(
-              ::vivaldi::kVivaldiStartupTabUserDataKey));
-
-  if (viv_startup_data && ExtensionTabUtil::GetTabStripModel(
-                              web_contents(), &tab_strip, &tab_index)) {
-    // Check if we need to make a tab active, this must be done when
-    // starting with tabs through the commandline or through start with pages.
-    if (viv_startup_data && viv_startup_data->start_as_active()) {
-      tab_strip->ActivateTabAt(tab_index);
-    }
-  }
-  web_contents()->SetUserData(::vivaldi::kVivaldiStartupTabUserDataKey,
-                              nullptr);
+  VivaldiBrowserComponentWrapper::GetInstance()->LoadTabContentsIfNecessary(
+      web_contents());
 
   // Make sure security state is updated.
   VisibleSecurityStateChanged(web_contents());
@@ -778,10 +661,99 @@ content::WebContentsDelegate* WebViewGuest::GetDevToolsConnector() {
   return this;
 }
 
+bool WebViewGuest::ShortcutFoundInPrefs(std::string shortcut_text) {
+  Browser* browser = GetBrowser(web_contents());
+  if (!browser || !browser->is_vivaldi())
+    return false;
+
+  PrefService* prefs = browser->profile()->GetPrefs();
+  const PrefService::Preference* actions =
+      prefs->FindPreference(vivaldiprefs::kActions);
+
+  const base::Value::List& action_list = actions->GetValue()->GetList();
+  auto* shortcut_dict = &(action_list[0].GetDict());
+  for (auto dict_entry = shortcut_dict->begin();
+     dict_entry != shortcut_dict->end(); ++dict_entry) {
+    auto* shortcuts = dict_entry->second.GetDict().Find("shortcuts");
+    if (shortcuts) {
+      const auto* shortcut_list = &(shortcuts[0].GetList());
+      if (shortcut_list && shortcut_list->size()) {
+        for (auto list_entry = shortcut_list->begin();
+             list_entry != shortcut_list->end(); ++list_entry) {
+          if (list_entry->GetString() == shortcut_text) {
+            return true;
+          }
+        }
+      }
+    }
+  }
+  return false;
+}
+
+// Website has shortcut priority set to 'browser' and shortcut matches browser
+// shortcut.
+bool WebViewGuest::ShouldForwardShortcutToBrowser(
+    const input::NativeWebKeyboardEvent& event) {
+  Browser* browser = GetBrowser(web_contents());
+  if (!browser || !browser->is_vivaldi()) {
+    return false;
+  }
+
+  std::string shortcut_text = ::vivaldi::ShortcutTextFromEvent(event);
+  std::transform(shortcut_text.begin(), shortcut_text.end(),
+                 shortcut_text.begin(),
+                 [](unsigned char c) { return std::tolower(c); });
+
+  PrefService* prefs = browser->profile()->GetPrefs();
+
+  // TODO (daniel): This is getting a little complicated and should soon be
+  // split up and possibly put into its own file. It also remains to check how
+  // much of this is also done in the js side and can be simplified over there.
+
+  // Handling for single key shortcuts.
+  int c = event.windows_key_code;
+  if (shortcut_text.length() == 1 || c == ui::VKEY_BACK ||
+      (c >= ui::VKEY_NUMPAD0 && c <= ui::VKEY_NUMPAD9)) {
+    const PrefService::Preference* single_key_pref =
+        prefs->FindPreference(vivaldiprefs::kKeyboardShortcutsEnableSingleKey);
+    if (single_key_pref) {
+       if (!single_key_pref->GetValue()->GetBool()) {
+         return false;
+       }
+       if (web_contents()->IsFocusedElementEditable()) {
+         return false;
+       }
+    }
+  }
+
+  const PrefService::Preference* browser_priority_keys =
+      prefs->FindPreference(
+          vivaldiprefs::kKeyboardShortcutsBrowserPriorityList);
+  const base::Value::List& browser_priority_list =
+      browser_priority_keys->GetValue()->GetList();
+  for (auto entry = browser_priority_list.begin();
+       entry != browser_priority_list.end(); ++entry) {
+    if (entry->GetString() == shortcut_text) {
+      return true;
+    }
+  }
+  Profile* profile =
+      Profile::FromBrowserContext(browser_context())->GetOriginalProfile();
+  bool browser_priority = VivaldiBrowserComponentWrapper::GetInstance()
+      ->HasBrowserShortcutPriority(profile, web_contents()->GetURL());
+  return browser_priority && ShortcutFoundInPrefs(shortcut_text);
+}
+
 content::KeyboardEventProcessingResult WebViewGuest::PreHandleKeyboardEvent(
     content::WebContents* source,
     const input::NativeWebKeyboardEvent& event) {
   DCHECK(source == web_contents());
+
+  // No need to do anything here since char events are just for typing.
+  if (event.GetType() == blink::WebInputEvent::Type::kChar) {
+    return content::KeyboardEventProcessingResult::NOT_HANDLED;
+  }
+
   // We need override this at an early stage since |KeyboardEventManager| will
   // block the delegate(WebViewGuest::HandleKeyboardEvent) if the page does
   // event.preventDefault
@@ -789,7 +761,7 @@ content::KeyboardEventProcessingResult WebViewGuest::PreHandleKeyboardEvent(
     bool handled = false;
     // Go out of fullscreen or mouse-lock and pass the event as
     // handled if any of these modes are ended.
-    Browser* browser = chrome::FindBrowserWithTab(web_contents());
+    Browser* browser = GetBrowser(web_contents());
     if (browser && browser->is_vivaldi()) {
       // If we have both an html5 full screen and a mouse lock, follow Chromium
       // and unlock both.
@@ -814,45 +786,13 @@ content::KeyboardEventProcessingResult WebViewGuest::PreHandleKeyboardEvent(
 
   // Check if our shortcut has browser priority, i.e. should be handled by
   // the browser and not by the website.
-  std::string shortcut_text = ::vivaldi::ShortcutTextFromEvent(event);
-  std::transform(shortcut_text.begin(), shortcut_text.end(),
-                 shortcut_text.begin(),
-                 [](unsigned char c) { return std::tolower(c); });
-
-
-  Browser* browser = chrome::FindBrowserWithTab(web_contents());
-  if (browser && browser->is_vivaldi()) {
-    PrefService* prefs = browser->profile()->GetPrefs();
-
-   const PrefService::Preference* browser_priority_keys =
-        prefs->FindPreference(
-            vivaldiprefs::kKeyboardShortcutsBrowserPriorityList);
-    const base::Value::List& browser_priority_list =
-        browser_priority_keys->GetValue()->GetList();
-    for (auto entry = browser_priority_list.begin();
-         entry != browser_priority_list.end(); ++entry) {
-      if (entry->GetString() == shortcut_text) {
-        extensions::VivaldiUIEvents::SendKeyboardShortcutEvent(
-            browser->session_id().id(), browser->profile(), event, false, true);
-        return content::KeyboardEventProcessingResult::HANDLED;
-      }
-    }
-
-    std::string current_website_url = web_contents()->GetURL().host();
-    const PrefService::Preference* webpage_exceptions =
-        prefs->FindPreference(vivaldiprefs::kWebpagesExceptionsKeystroke);
-
-    const base::Value::List& webpage_exception_list =
-        webpage_exceptions->GetValue()->GetList();
-    for (auto entry = webpage_exception_list.begin();
-         entry != webpage_exception_list.end(); ++entry) {
-      if (entry->GetString() == current_website_url) {
-        extensions::VivaldiUIEvents::SendKeyboardShortcutEvent(
-            browser->session_id().id(), browser->profile(), event, false, true);
-        return content::KeyboardEventProcessingResult::HANDLED;
-      }
-    }
+  Browser* browser = GetBrowser(web_contents());
+  if (browser && ShouldForwardShortcutToBrowser(event)) {
+    extensions::VivaldiUIEvents::SendKeyboardShortcutEvent(
+        browser->session_id().id(), browser->profile(), event, false, true);
+    return content::KeyboardEventProcessingResult::HANDLED;
   }
+
   return content::KeyboardEventProcessingResult::NOT_HANDLED;
 }
 
@@ -869,20 +809,19 @@ void WebViewGuest::VivaldiCreateWebContents(
   content::BrowserContext* context = browser_context();
   std::unique_ptr<WebContents> new_contents;
 
+  parent_tab_id_ = std::nullopt;
+
   // Optimize for the most common path.
   if (auto tab_id = create_params.FindInt("tab_id")) {
     // If we created the WebContents through CreateNewWindow and created this
     // guest with InitWithWebContents we cannot delete the tabstrip contents,
     // and we don't need to recreate the webcontents either. Just use the
     // WebContents owned by the tab-strip.
-    content::WebContents* tabstrip_contents = nullptr;
-    bool include_incognito = true;
-    WindowController* browser;
-    int tab_index;
+    content::WebContents* tabstrip_contents =
+        VivaldiBrowserComponentWrapper::GetInstance()
+            ->GetWebContentsFromTabStrip(browser_context(), *tab_id, nullptr);
 
-    if (extensions::ExtensionTabUtil::GetTabById(
-            *tab_id, profile, include_incognito, &browser,
-            &tabstrip_contents, &tab_index)) {
+    if (tabstrip_contents) {
       new_contents.reset(
           tabstrip_contents);  // Tabstrip must not lose ownership. Will
                                // override and release in
@@ -900,11 +839,11 @@ void WebViewGuest::VivaldiCreateWebContents(
         web_view_guest->WebContentsDestroyed();
       }
 
-      std::optional<int> parent_tab_id = create_params.FindInt("parent_tab_id");
-      if (parent_tab_id) {
+      parent_tab_id_ = create_params.FindInt("parent_tab_id");
+      if (parent_tab_id_) {
         auto* tab_data = ::vivaldi::ParentTabUserData::GetParentTabUserData(
             new_contents.get());
-        tab_data->SetParentTabId(*parent_tab_id);
+        tab_data->SetParentTabId(*parent_tab_id_);
       }
 
       CreatePluginGuest(new_contents.get());
@@ -1013,8 +952,8 @@ void WebViewGuest::VivaldiCreateWebContents(
     // currently used for DevTools.
     if (inspecting_tab_id_ == 0 || inspecting_tab_id_ != *tab_id) {
       content::WebContents* inspected_contents =
-          ::vivaldi::ui_tools::GetWebContentsFromTabStrip(
-              *tab_id, Profile::FromBrowserContext(browser_context()));
+          VivaldiBrowserComponentWrapper::GetInstance()
+              ->GetWebContentsFromTabStrip(browser_context(), *tab_id, nullptr);
       if (inspected_contents) {
         // NOTE(david@vivaldi.com): This returns always the |main_web_contents_|
         // which is required when the dev tools window is undocked.
@@ -1032,13 +971,14 @@ void WebViewGuest::VivaldiCreateWebContents(
           if (*paramstr == "vivaldi-devtools-undocked") {
             // Make sure we always use the toolbox_contents_ from
             // DevtoolsWindow.
-            devtools_contents = devtools_contents =
-                DevToolsWindow::GetInTabWebContents(inspected_contents,
-                                                    nullptr);
+            devtools_contents = VivaldiBrowserComponentWrapper::GetInstance()
+                                    ->DevToolsWindowGetInTabWebContents(
+                                        inspected_contents, nullptr);
           } else if (*paramstr == "vivaldi-devtools-main") {
             // Make sure we always use the main_contents_ from DevtoolsWindow.
             devtools_contents =
-                DevToolsWindow::GetDevtoolsWebContentsForInspectedWebContents(
+                VivaldiBrowserComponentWrapper::GetInstance()
+                    ->DevToolsWindowGetDevtoolsWebContentsForInspectedWebContents(
                     inspected_contents);
           }
         }
@@ -1053,19 +993,9 @@ void WebViewGuest::VivaldiCreateWebContents(
         content::WebContentsImpl* contents =
             static_cast<content::WebContentsImpl*>(devtools_contents);
 
-        DevtoolsConnectorAPI* api =
-            DevtoolsConnectorAPI::GetFactoryInstance()->Get(
-                Profile::FromBrowserContext(browser_context()));
-        DCHECK(api);
-
-        DevToolsWindow* devWindow =
-            DevToolsWindow::GetInstanceForInspectedWebContents(
-                inspected_contents);
-        DCHECK(devWindow);
-        devWindow->set_guest_delegate(this);
-        connector_item_ = api->GetOrCreateDevtoolsConnectorItem(*tab_id);
-        DCHECK(connector_item_);
-        connector_item_->set_devtools_delegate(devWindow);
+        connector_item_ = VivaldiBrowserComponentWrapper::GetInstance()
+            ->ConnectDevToolsWindow(browser_context(), *tab_id,
+                                    inspected_contents, this);
 
         VivaldiTabCheck::MarkAsDevToolContents(devtools_contents);
 
@@ -1088,17 +1018,14 @@ void WebViewGuest::VivaldiCreateWebContents(
     // This is for opening content for webviews used in various parts in our ui.
     // Devtools and extension popups.
     if (auto* window_id = create_params.FindString(webview::kWindowID)) {
-      int windowId = atoi(window_id->c_str());
-      BrowserList* list = BrowserList::GetInstance();
-      for (size_t i = 0; i < list->size(); i++) {
-        if (list->get(i)->session_id().id() == windowId) {
-          context = list->get(i)->profile();
-          if (auto* src_string = create_params.FindString("src")) {
-            guest_site = GURL(*src_string);
-            guest_site_instance =
-                content::SiteInstance::CreateForURL(context, guest_site);
-          }
-          break;
+      Browser* browser = VivaldiBrowserComponentWrapper::GetInstance()
+          ->FindBrowserWithWindowId(atoi(window_id->c_str()));
+      if (browser) {
+        context = browser->profile();
+        if (auto* src_string = create_params.FindString("src")) {
+          guest_site = GURL(*src_string);
+          guest_site_instance =
+            content::SiteInstance::CreateForURL(context, guest_site);
         }
       }
     }
@@ -1133,8 +1060,8 @@ void WebViewGuest::VivaldiCreateWebContents(
           extension_host_ = std::make_unique<::vivaldi::VivaldiExtensionHost>(
               context, popup_url, mojom::ViewType::kExtensionPopup,
               new_contents.get());
-          task_manager::WebContentsTags::CreateForTabContents(
-              new_contents.get());
+          VivaldiBrowserComponentWrapper::GetInstance()
+              ->TaskManagerCreateForTabContents(new_contents.get());
         }
       }
     }
@@ -1154,10 +1081,9 @@ void WebViewGuest::VivaldiCreateWebContents(
 
         // Let us register protocol handlers from webpanels. Tabs are set up in
         // TabHelpers::AttachTabHelpers.
-        content_settings::PageSpecificContentSettings::CreateForWebContents(
-            new_contents.get(),
-            std::make_unique<PageSpecificContentSettingsDelegate>(
-                new_contents.get()));
+        VivaldiBrowserComponentWrapper::GetInstance()
+            ->PageSpecificContentSettingsCreateForTabContents(
+                  new_contents.get());
         // TODO: Is this used for panels now that it is owned by the tabstrip?
         if (view_name && IsPanelId(*view_name)) {
           VivaldiPanelHelper::CreateForWebContents(new_contents.get(), *view_name);
@@ -1171,25 +1097,29 @@ void WebViewGuest::VivaldiCreateWebContents(
     }
   }
   DCHECK(new_contents);
-  if (owner_web_contents()->IsAudioMuted()
-      && LastMuteMetadata::FromWebContents(owner_web_contents())) {
+  if (owner_web_contents()->IsAudioMuted()) {
+    // Note: We have earlier been using
+    // LastMuteMetadata::FromWebContents(owner_web_contents())->extension_id)
+    // to get the ext id. Probably not needed.
+    //
     // NOTE(pettern@vivaldi.com): If the owner is muted it means the webcontents
     // of the AppWindow has been muted due to thumbnail capturing, so we also
     // mute the webview webcontents.
-    SetTabAudioMuted(
-        new_contents.get(), true, TabMutedReason::EXTENSION,
-        LastMuteMetadata::FromWebContents(owner_web_contents())->extension_id);
+    VivaldiBrowserComponentWrapper::GetInstance()
+        ->SetTabAudioMuted(new_contents.get(), true, TabMutedReason::EXTENSION,
+              ::vivaldi::kVivaldiAppId);
   }
-
   // Grant access to the origin of the embedder to the guest process. This
   // allows blob: and filesystem: URLs with the embedder origin to be created
   // inside the guest. It is possible to do this by running embedder code
   // through webview accessible_resources.
   //
   // TODO(dcheng): Is granting commit origin really the right thing to do here?
-  content::ChildProcessSecurityPolicy::GetInstance()->GrantCommitOrigin(
-      new_contents->GetPrimaryMainFrame()->GetProcess()->GetID().value(),
-      url::Origin::Create(GetOwnerSiteURL()));
+  if (new_contents->GetPrimaryMainFrame()) {
+    content::ChildProcessSecurityPolicy::GetInstance()->GrantCommitOrigin(
+        new_contents->GetPrimaryMainFrame()->GetProcess()->GetID().value(),
+        url::Origin::Create(GetOwnerSiteURL()));
+  }
 
   AttachWebContentsObservers(new_contents.get());
 
@@ -1210,7 +1140,7 @@ void WebViewGuest::ActivateContents(content::WebContents* web_contents) {
     return;
 
   if (VivaldiTabCheck::IsVivaldiTab(web_contents)) {
-    Browser* browser = chrome::FindBrowserWithTab(web_contents);
+    Browser* browser = GetBrowser(web_contents);
     if (browser) {
       browser->ActivateContents(web_contents);
     }
@@ -1227,7 +1157,6 @@ void WebViewGuest::VivaldiCanDownload(const GURL& url,
                                       const std::string& request_method,
                                       base::OnceCallback<void(bool)> callback) {
   GURL tab_url = web_contents()->GetURL();
-
   // Since we do not yet have a DownloadItem we need to mimic the behavior in
   // |GetInsecureDownloadStatusForDownload|
 
@@ -1299,4 +1228,30 @@ void WebViewGuest::RegisterProtocolHandler(
       requesting_frame, protocol, url, user_gesture);
 }
 
+bool WebViewGuest::IsVivaldiGuestView() {
+  return true;
+}
+
+void WebViewGuest::VivaldiSanitizeUrl(GURL& url) {
+  if (!IsVivaldiApp(owner_host())) {
+    return;
+  }
+
+  // Is it a private window?
+  if (!browser_context()->IsOffTheRecord()) {
+    return;
+  }
+
+  // Is it a panel?
+  if (!parent_tab_id_) {
+    return;
+  }
+
+  // Is it panel-sensitive url?
+  if (!IsPanelSensitiveUrl(url)) {
+    return;
+  }
+
+  url = GURL("about:blank");
+}
 }  // namespace extensions

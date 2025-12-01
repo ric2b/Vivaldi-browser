@@ -223,6 +223,13 @@ export class Service implements ServiceInterface {
     });
   }
 
+  setItemAllowedUserScripts(id: string, isAllowedUserScripts: boolean) {
+    chrome.developerPrivate.updateExtensionConfiguration({
+      extensionId: id,
+      userScriptsAccess: isAllowedUserScripts,
+    });
+  }
+
   setItemAllowedOnFileUrls(id: string, isAllowedOnFileUrls: boolean) {
     chrome.developerPrivate.updateExtensionConfiguration({
       extensionId: id,
@@ -278,12 +285,17 @@ export class Service implements ServiceInterface {
   }
 
   repairItem(id: string): void {
-    chrome.developerPrivate.repairExtension(id);
+    chrome.developerPrivate.repairExtension(id).catch(
+        _ => {
+            // This can legitimately fail (e.g. if a reinstall is already
+            // in progress). Ignore the error to avoid crashing the browser,
+            // since WebUI errors are treated as crashes.
+        });
   }
 
   showItemOptionsPage(extension: chrome.developerPrivate.ExtensionInfo): void {
     assert(extension && extension.optionsPage);
-    if (extension.optionsPage!.openInTab) {
+    if (extension.optionsPage.openInTab) {
       chrome.developerPrivate.showOptions(extension.id);
     } else {
       navigation.navigateTo({
@@ -523,7 +535,7 @@ export class Service implements ServiceInterface {
     return chrome.developerPrivate.dismissMv2DeprecationNoticeForExtension(id);
   }
 
-  uploadItemToAccount(id: string): Promise<void> {
+  uploadItemToAccount(id: string): Promise<boolean> {
     return chrome.developerPrivate.uploadExtensionToAccount(id);
   }
 

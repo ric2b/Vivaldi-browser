@@ -92,6 +92,31 @@ jobs:
         sudo apt install liblzma-dev
         FUZZERTEST=-T1mn ZSTREAM_TESTTIME=-T1mn make cmakebuild V=1
 
+  cmake-source-directory-with-spaces:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            generator: "Unix Makefiles"
+          - os: windows-latest
+            generator: "NMake Makefiles"
+          - os: macos-latest
+            generator: "Unix Makefiles"
+    env:
+      SRC_DIR: "source directory with spaces"
+    steps:
+    - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # tag=v4.1.1
+      with:
+        path: "${{ env.SRC_DIR }}"
+    - uses: ilammy/msvc-dev-cmd@v1
+      if: ${{ matrix.generator == 'NMake Makefiles' }}
+    - name: cmake build on a source directory with spaces
+      run: |
+        cmake -S "${{ env.SRC_DIR }}/build/cmake" -B build -DBUILD_TESTING=ON -G "${{ matrix.generator }}" -DCMAKE_BUILD_TYPE=Release --install-prefix "${{ runner.temp }}/install"
+        cmake --build build --config Release
+        cmake --install build --config Release
+
   cpp-gnu90-c99-compatibility:
     runs-on: ubuntu-latest
     steps:
@@ -337,6 +362,8 @@ jobs:
           - generator: "MinGW Makefiles"
           - generator: "Visual Studio 17 2022"
             flags: "-T ClangCL"
+          - generator: "Visual Studio 17 2022"
+            flags: "-T ClangCL -A x64 -DCMAKE_C_FLAGS=/arch:AVX2"
     runs-on: windows-2022
     steps:
     - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # tag=v4.1.1
@@ -348,7 +375,7 @@ jobs:
         cd build\cmake
         mkdir build
         cd build
-        cmake.exe -G "${{matrix.generator}}" ${{matrix.flags}} -DCMAKE_BUILD_TYPE=Debug -DZSTD_BUILD_TESTS:BOOL=ON -DZSTD_ZSTREAM_FLAGS=-T30s -DZSTD_FUZZER_FLAGS=-T30s -DZSTD_FULLBENCH_FLAGS=-i0 ..
+        cmake.exe -G "${{matrix.generator}}" ${{matrix.flags}} -DCMAKE_BUILD_TYPE=Debug -DCMAKE_COMPILE_WARNING_AS_ERROR=ON -DZSTD_BUILD_TESTS:BOOL=ON -DZSTD_ZSTREAM_FLAGS=-T30s -DZSTD_FUZZER_FLAGS=-T30s -DZSTD_FULLBENCH_FLAGS=-i0 ..
         cmake.exe --build .
         ctest.exe -V -C Debug
 

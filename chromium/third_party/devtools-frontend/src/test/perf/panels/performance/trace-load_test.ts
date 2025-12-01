@@ -29,11 +29,11 @@ async function timeFixture(fixture: string): Promise<number> {
   });
   const uploadProfileHandle = await waitFor<HTMLInputElement>('input[type=file]');
   await uploadProfileHandle.uploadFile(path.join(GEN_DIR, `front_end/panels/timeline/fixtures/traces/${fixture}.gz`));
-  return eventPromise;
+  return await eventPromise;
 }
 
 describe('Performance panel trace load performance', () => {
-  const allTestValues: {name: string, values: number[]}[] = [];
+  const allTestValues: Array<{name: string, values: number[]}> = [];
   // Slow test
   describe.skip('[crbug.com/383713603]: Large CPU profile load benchmark', () => {
     beforeEach(async () => {

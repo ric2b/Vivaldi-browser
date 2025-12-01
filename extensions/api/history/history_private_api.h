@@ -121,34 +121,6 @@ class HistoryPrivateVisitSearchFunction : public HistoryFunctionWithCallback {
   void VisitsComplete(const history::Visit::VisitsList& visit_list);
 };
 
-class HistoryPrivateGetTypedHistoryFunction
-    : public HistoryFunctionWithCallback {
- public:
-  DECLARE_EXTENSION_FUNCTION("historyPrivate.getTypedHistory",
-                             HISTORYPRIVATE_GETTYPEDURLSANDSEARCHES)
-
- private:
-  ~HistoryPrivateGetTypedHistoryFunction() override = default;
-  ExtensionFunction::ResponseAction Run() override;
-  void TypedHistorySearchComplete(const history::TypedUrlResults& results);
-  bool HasTermInResponse(
-      std::vector<vivaldi::history_private::TypedHistoryItem>& response,
-      std::string term);
-};
-
-class HistoryPrivateGetDetailedHistoryFunction
-    : public HistoryFunctionWithCallback {
- public:
-  DECLARE_EXTENSION_FUNCTION("historyPrivate.getDetailedHistory",
-                             HISTORYPRIVATE_GETDETAILEDHISTORY)
-
- private:
-  ~HistoryPrivateGetDetailedHistoryFunction() override {}
-  ExtensionFunction::ResponseAction Run() override;
-  // Callback for the history function to provide results.
-  void SearchComplete(const history::DetailedUrlResults& results);
-};
-
 class HistoryPrivateUpdateTopSitesFunction : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("historyPrivate.updateTopSites",

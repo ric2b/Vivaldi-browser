@@ -5,19 +5,21 @@
 <translation id="1097355661841455597">Wir würden gerne Ihre Meinung hören.</translation>
 <translation id="1137850887415122856">Touch ID, Face ID oder einen Passcode einrichten, um private Tabs zu sperren.</translation>
 <translation id="1310184829257917508">Nachfragen zum Öffnen von Links aus anderen Apps im privaten Modus</translation>
-<translation id="1561609750546413721">Vivaldi Übersetzer</translation>
+<translation id="1743244221910283364">Änderungen verwerfen</translation>
 <translation id="207677936531967364">Neue private Tab Seite</translation>
 <translation id="2353953000228441783">Website Standardansicht</translation>
 <translation id="2394192052244849643">Einfügen und Suchen</translation>
 <translation id="2418705169960294134">Neuer privater Tab</translation>
 <translation id="2783161812871838616">Desktopwebsite anfordern</translation>
-<translation id="2899836479226240291">Sie können Links in Vivaldi automatisch öffnen, indem Sie ihn zu Ihrer Standard-Browser-App machen.</translation>
+<translation id="2899836479226240291">Sie können Links in Vivaldi automatisch öffnen, indem Sie ihn zu Ihrem Standardbrowser machen.</translation>
 <translation id="3365529507898144230">In Fotos speichern</translation>
 <translation id="3434473769478814796">Einfügen und aufrufen</translation>
 <translation id="3463990832590571933">In neuem privaten Tab öffnen</translation>
 <translation id="3473652525653758699">Neues privates Fenster</translation>
 <translation id="3501504415290398157"><ph name="BIOMETRIC_AUTHENITCATION_TYPE" /> verwenden, um private Tabs zu entsperren.</translation>
+<translation id="3607792383367580513">Übersetzen</translation>
 <translation id="3692650606013198282">Privat öffnen</translation>
+<translation id="3922395466317605522">Menü anpassen</translation>
 <translation id="3981599532037327317">${url} privat öffnen</translation>
 <translation id="398477389655464998">Link zum Hervorheben kopieren</translation>
 <translation id="4026745073321351206">🙄 Ein Problem entdeckt?</translation>
@@ -33,16 +35,17 @@
 <translation id="570209299585559496">Sie können die Standardansicht der Website unter Einstellungen und dann unter Inhaltseinstellungen auf Desktop ändern</translation>
 <translation id="5962477178930921574">Einfügen und Suchen</translation>
 <translation id="6233792867654386826">Öffnet eingegebene URLs in Vivaldi.</translation>
+<translation id="6532106788206463496">Änderungen speichern</translation>
 <translation id="6680416467695217368">Menü anpassen</translation>
 <translation id="6827597288286078054">Private Suche</translation>
 <translation id="6851516051005285358">Desktopwebsite anfordern</translation>
 <translation id="7307970171564921489">Private Tabs mit <ph name="BIOMETRIC_AUTHENITCATION_TYPE" /> entsperren</translation>
 <translation id="7347289093190902150">Privat öffnen?</translation>
+<translation id="7498234416455752244">Weiter bearbeiten</translation>
 <translation id="7549299604720382000">Neuer privater Tab</translation>
-<translation id="755255281989213264">Menü anpassen</translation>
-<translation id="7920949005883349320">Datenschutz und Sicherheit</translation>
 <translation id="7961015016161918242">Niemals</translation>
 <translation id="8326104954595890674">Neuer privater Tab</translation>
 <translation id="8756969031206844760">Passwort aktualisieren?</translation>
+<translation id="9042893549633094279">Datenschutz und Sicherheit</translation>
 <translation id="9094033019050270033">Passwort aktualisieren</translation>
 </translationbundle>

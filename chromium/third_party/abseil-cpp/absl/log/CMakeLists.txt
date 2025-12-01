@@ -379,6 +379,7 @@ absl_cc_library(
     ${ABSL_DEFAULT_LINKOPTS}
   DEPS
     absl::config
+    absl::core_headers
 )
 
 absl_cc_library(
@@ -557,8 +558,6 @@ absl_cc_library(
 absl_cc_library(
   NAME
     log_entry
-  SRCS
-    "log_entry.cc"
   HDRS
     "log_entry.h"
   COPTS
@@ -748,6 +747,7 @@ absl_cc_library(
     absl::log_internal_fnmatch
     absl::memory
     absl::no_destructor
+    absl::nullability
     absl::strings
     absl::synchronization
     absl::optional
@@ -1006,6 +1006,7 @@ absl_cc_test(
     ${ABSL_DEFAULT_LINKOPTS}
   DEPS
     absl::check
+    absl::config
     absl::log
     absl::log_internal_test_matchers
     absl::optional

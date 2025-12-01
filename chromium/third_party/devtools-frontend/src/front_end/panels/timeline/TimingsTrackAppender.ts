@@ -5,7 +5,7 @@ import type * as Common from '../../core/common/common.js';
 import * as i18n from '../../core/i18n/i18n.js';
 import * as Trace from '../../models/trace/trace.js';
 
-import {buildGroupStyle, buildTrackHeader, getFormattedTime} from './AppenderUtils.js';
+import {buildGroupStyle, buildTrackHeader, getDurationString} from './AppenderUtils.js';
 import {
   type CompatibilityTracksAppender,
   type PopoverInfo,
@@ -23,7 +23,7 @@ const UIStrings = {
    *@description Text in Timeline Flame Chart Data Provider of the Performance panel
    */
   timings: 'Timings',
-};
+} as const;
 
 const str_ = i18n.i18n.registerUIStrings('panels/timeline/TimingsTrackAppender.ts', UIStrings);
 const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
@@ -77,7 +77,6 @@ export class TimingsTrackAppender implements TrackAppender {
         m => !Trace.Handlers.ModelHandlers.ExtensionTraceData.extensionDataInPerformanceTiming(m));
     const timestampEvents = this.#parsedTrace.UserTimings.timestampEvents;
     const consoleTimings = this.#parsedTrace.UserTimings.consoleTimings;
-
     if (extensionMarkersAreEmpty && performanceMarks.length === 0 && performanceMeasures.length === 0 &&
         timestampEvents.length === 0 && consoleTimings.length === 0) {
       return trackStartLevel;
@@ -244,7 +243,7 @@ export class TimingsTrackAppender implements TrackAppender {
       }
     }
     if (Trace.Types.Events.isConsoleTimeStamp(event)) {
-      return `TimeStamp: ${event.args.data?.name ?? '(name unknown)'}`;
+      return `TimeStamp: ${event.args.data?.message ?? '(name unknown)'}`;
     }
     if (Trace.Types.Events.isPerformanceMark(event)) {
       return `[mark]: ${event.name}`;
@@ -268,7 +267,7 @@ export class TimingsTrackAppender implements TrackAppender {
           this.#parsedTrace.Meta.navigationsByNavigationId,
           this.#parsedTrace.Meta.navigationsByFrameId,
       );
-      info.formattedTime = getFormattedTime(timeOfEvent);
+      info.formattedTime = getDurationString(timeOfEvent);
     }
   }
 }

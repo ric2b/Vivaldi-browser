@@ -1,7 +1,10 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="sr">
+<translation id="1204037785786432551">Преузми везу</translation>
+<translation id="1206892813135768548">Копирај текст везе</translation>
 <translation id="1397811292916898096">Претражи помоћу: <ph name="PRODUCT_NAME" /></translation>
+<translation id="1435593198351412143">Аутоматски отвори PDF датотеке</translation>
 <translation id="1456207338570705181">Додирните за претрагу је функција која је доступна само када је Google постављен као подразумевани претраживач у Vivaldi прегледачу. Шаље изабрану реч и тренутну страницу као контекст Google претрази. Можете је искључити у <ph name="BEGIN_LINK" />Подешавањима<ph name="END_LINK" />.</translation>
 <translation id="1598449788754183301">Пребацуј нормалне/приватне картице</translation>
 <translation id="1644574205037202324">Историја</translation>
@@ -14,10 +17,14 @@
 <translation id="2433507940547922241">Изглед</translation>
 <translation id="2501278716633472235">Иди назад</translation>
 <translation id="2633278372998075009">Приватне картице</translation>
+<translation id="2650751991977523696">Преузети датотеку поново?</translation>
 <translation id="265156376773362237">Стандардно предучитавање</translation>
 <translation id="272026394418727548">Vivaldi-јева матична страница</translation>
+<translation id="2842985007712546952">Надређена фасцикла</translation>
 <translation id="2871733351037274014">Предучитавање страница</translation>
+<translation id="2904300462646366554">Преузете PDF датотеке ће се аутоматски отворити помоћу једног од PDF приказивача на вашем уређају</translation>
 <translation id="2951071800649516099">Додајте странице на листу за читање за касније</translation>
+<translation id="3029276696788198026">Без предучитавања</translation>
 <translation id="3060635849835183725">{BOOKMARKS_COUNT, plural,
           =1 {<ph name="BOOKMARKS_COUNT_ONE" /> обележивач}
           other {<ph name="BOOKMARKS_COUNT_MANY" /> обележивача}}</translation>
@@ -34,6 +41,7 @@
 <translation id="3719826155360621982">Матична страница</translation>
 <translation id="3738139272394829648">Додир за претрагу</translation>
 <translation id="385051799172605136">Назад</translation>
+<translation id="3987993985790029246">Копирај везу</translation>
 <translation id="399014816462153200">Прочитани чланци:</translation>
 <translation id="4121750346708795461">Коришћењем ове апликације прихватате <ph name="BEGIN_LINK1" />Уговор о лиценцирању са крајњим корисником<ph name="END_LINK1" /> и <ph name="BEGIN_LINK2" />Политику приватности<ph name="END_LINK2" /> Vivaldi прегледача.</translation>
 <translation id="4137746084635924146">Тренутни језик уређаја</translation>
@@ -41,10 +49,13 @@
 <translation id="4195643157523330669">Отвори у новој картици</translation>
 <translation id="4225895483398857530">Пречица на алатној траци</translation>
 <translation id="4243710787042215766">Отвори у приватној картици</translation>
+<translation id="4269820728363426813">Копирај адресу везе</translation>
 <translation id="4291407919474070700"><ph name="BEGIN_LINK" />Укључите закључавање екрана у Android подешавањима<ph name="END_LINK" /></translation>
 <translation id="4304713468139749426">Управљач лозинкама</translation>
 <translation id="451872707440238414">Претражи обележиваче</translation>
 <translation id="4526803704855831732">Приватне картице</translation>
+<translation id="4532845899244822526">Одаберите фасциклу</translation>
+<translation id="4699172675775169585">Кеширане слике и датотеке</translation>
 <translation id="4719086422742491124">Сазнајте више о темама на веб сајтовима без напуштања странице. Изаберите једну или више речи на страници да бисте их потражили.
 
 Додирните за претрагу је функција која је доступна само када је Google постављен као подразумевани претраживач у Vivaldi прегледачу.</translation>
@@ -55,20 +66,36 @@
 <translation id="49576331685473090">Блокатор садржаја</translation>
 <translation id="5079259810715830221">Када Google сајт затражи да приватно унапред учита везе на својој страници, Vivaldi шифрује и учитава странице преко Google сервера без колачића. Ово скрива ваш идентитет од унапред учитаног сајта.</translation>
 <translation id="5118676864324397542"><ph name="APP_NAME" /> складиште</translation>
+<translation id="5144385790872094440">Неке од страница које посећујете се предучитавају. Странице могу бити предучитане преко Google сервера када до њих води веза са Google сајта или апликације.</translation>
 <translation id="5186185447130319458">Приватно</translation>
+<translation id="5206168361184759344">{FILE_COUNT, plural,
+            =1 {Преузима се датотека…}
+            few {Преузимају се # датотеке…}
+            other {Преузима се # датотека…}}</translation>
 <translation id="5233638681132016545">Нова картица</translation>
 <translation id="5375131951310889874">Сазнајте више о темама на веб сајтовима без напуштања странице. Додирните за претрагу је функција која је доступна само када је Google постављен као подразумевани претраживач у Vivaldi прегледачу. Шаље реч и њен околни контекст Google претрази, враћајући дефиниције, слике, резултате претраге и друге детаље.
 
 За подешавање термина за претрагу, дуго притисните да бисте га изабрали. За прецизирње претраге, повуците панел до краја и додирните поље за претрагу.</translation>
+<translation id="543338862236136125">Уређивање лозинке</translation>
 <translation id="572328651809341494">Недавне картице</translation>
+<translation id="5833984609253377421">Подели везу</translation>
 <translation id="6150320133806434356">Обележивач је сачуван</translation>
+<translation id="6193448654517602979">Изабери картице</translation>
 <translation id="6336451774241870485">Нова приватна картица</translation>
 <translation id="6337323516034698937">Да бисте послали ову картицу на други уређај, пријавите се на Vivaldi синхронизацију на оба уређаја. Уверите се да сте унели лозинку за шифровање ако је потребно.</translation>
+<translation id="6341580099087024258">Питај где сачувати датотеке</translation>
 <translation id="6404511346730675251">Уреди обележивач</translation>
+<translation id="650224091954855786">{FILE_COUNT, plural,
+            =1 {Датотека је преузета}
+            few {# преузимања су завршена}
+            other {# преузимања је завршено}}</translation>
 <translation id="6585139692466700358">Понуди превод страница на друге језике користећи Vivald-јеву услугу превођења</translation>
 <translation id="6588043302623806746">Коришћење безбедног DNS-а</translation>
 <translation id="6593061639179217415">Десктоп верзија сајта</translation>
 <translation id="6610147964972079463">Затвори приватне картице</translation>
+<translation id="6627583120233659107">Уређивање фасцикле</translation>
+<translation id="6865313869410766144">Подаци аутоматског попуњавања образаца</translation>
+<translation id="6909589135458168665">Предучитавање страница</translation>
 <translation id="7029995644714925509">Када сајт затражи да приватно унапред учита везе на својој страници, Vivaldi шифрује и учитава странице преко Google сервера без колачића. Ово скрива ваш идентитет од унапред учитаног сајта.</translation>
 <translation id="706339621163631076">Политика приватности прегледача</translation>
 <translation id="732145680195464316">Обележивач је сачуван у <ph name="PRODUCT_NAME" /></translation>
@@ -79,10 +106,13 @@
 <translation id="7456774706094330779">Проширено предучитавање</translation>
 <translation id="7465104139234185284">Затвори све приватне картице</translation>
 <translation id="7481312909269577407">Напред</translation>
+<translation id="7764225426217299476">Додај адресу</translation>
 <translation id="7968014550143838305">Додато на листу за читање</translation>
 <translation id="804786196054284061">Уговор о лиценцирању са крајњим корисником</translation>
 <translation id="8062594758852531064">Проширено предучитавање:</translation>
+<translation id="8073388330009372546">Отвори слику у новој картици</translation>
 <translation id="8127542551745560481">Уреди матичну страницу</translation>
+<translation id="8266862848225348053">Локација преузимања</translation>
 <translation id="8348430946834215779">Користите HTTPS кад год је то могуће и добијajте упозорење пре учитавања сајтова који га не подржавају</translation>
 <translation id="8560602726703398413">Пронађите своју листу за читање у обележивачима</translation>
 <translation id="85991616550051997">Иди на матичну страницу</translation>

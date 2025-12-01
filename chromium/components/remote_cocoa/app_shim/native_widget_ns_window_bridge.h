@@ -80,8 +80,7 @@ class REMOTE_COCOA_APP_SHIM_EXPORT NativeWidgetNSWindowBridge
   // Retrieve a NativeWidgetNSWindowBridge* from its id or window.
   static NativeWidgetNSWindowBridge* GetFromId(
       uint64_t bridged_native_widget_id);
-  static NativeWidgetNSWindowBridge* GetFromNativeWindow(
-      gfx::NativeWindow window);
+  static NativeWidgetNSWindowBridge* GetFromNSWindow(NSWindow* window);
 
   // Create an NSWindow for the specified parameters.
   static NativeWidgetMacNSWindow* CreateNSWindow(
@@ -136,6 +135,12 @@ class REMOTE_COCOA_APP_SHIM_EXPORT NativeWidgetNSWindowBridge
   // Called once by the NSWindowDelegate when the position of the window has
   // changed.
   void OnPositionChanged();
+
+  // Called when the user will start resizing the window.
+  void OnWindowWillStartLiveResize();
+
+  // Called when the user ended resizing the window.
+  void OnWindowDidEndLiveResize();
 
   // Called by the NSWindowDelegate when the visibility of the window may have
   // changed. For example, due to a (de)miniaturize operation, or the window
@@ -234,7 +239,9 @@ class REMOTE_COCOA_APP_SHIM_EXPORT NativeWidgetNSWindowBridge
   void InitWindow(
       remote_cocoa::mojom::NativeWidgetNSWindowInitParamsPtr params) override;
   void InitCompositorView(InitCompositorViewCallback callback) override;
-  void CreateContentView(uint64_t ns_view_id, const gfx::Rect& bounds) override;
+  void CreateContentView(uint64_t ns_view_id,
+                         const gfx::Rect& bounds,
+                         std::optional<int> corner_radius) override;
   void DestroyContentView() override;
   void CloseWindow() override;
   void CloseWindowNow() override;
@@ -385,7 +392,7 @@ class REMOTE_COCOA_APP_SHIM_EXPORT NativeWidgetNSWindowBridge
   std::unique_ptr<CocoaWindowMoveLoop> window_move_loop_;
   ui::mojom::ModalType modal_type_ = ui::mojom::ModalType::kNone;
   bool is_translucent_window_ = false;
-  id __strong key_down_event_monitor_;
+  id __strong local_event_monitor_;
 
   raw_ptr<NativeWidgetNSWindowBridge> parent_ =
       nullptr;  // Weak. If non-null, owns this.

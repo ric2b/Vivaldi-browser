@@ -32,7 +32,6 @@
 #include "ash/shell.h"
 #include "ash/test/ash_test_helper.h"
 #include "chrome/browser/ash/login/users/fake_chrome_user_manager.h"
-#include "chrome/browser/ui/ash/system/system_tray_client_impl.h"
 #include "components/user_manager/scoped_user_manager.h"
 #include "content/public/test/browser_task_environment.h"
 #include "ui/display/manager/display_configurator.h"
@@ -906,6 +905,25 @@ TEST_F(RelaunchNotificationControllerTest, NotifyAllWithShortestPeriod) {
 
 #if BUILDFLAG(IS_CHROMEOS)
 
+// RelaunchNotificationControllerPlatformImpl but SetRelaunchNotificationState
+// and ResetRelaunchNotification are fake for testing.
+class FakeRelaunchNotificationControllerPlatformImpl
+    : public RelaunchNotificationControllerPlatformImpl {
+ public:
+  const std::vector<ash::RelaunchNotificationState>& states() const {
+    return states_;
+  }
+
+ private:
+  void SetRelaunchNotificationState(const ash::RelaunchNotificationState&
+                                        relaunch_notification_state) override {
+    states_.push_back(relaunch_notification_state);
+  }
+  void ResetRelaunchNotification() override {}
+
+  std::vector<ash::RelaunchNotificationState> states_;
+};
+
 class RelaunchNotificationControllerPlatformImplTest : public ::testing::Test {
  protected:
   RelaunchNotificationControllerPlatformImplTest()
@@ -925,13 +943,15 @@ class RelaunchNotificationControllerPlatformImplTest : public ::testing::Test {
 
     const char test_user_email[] = "test_user@example.com";
     const AccountId test_account_id(AccountId::FromUserEmail(test_user_email));
-    user_manager_->AddUser(test_account_id);
+    auto* user = user_manager_->AddUser(test_account_id);
     user_manager_->LoginUser(test_account_id);
 
     // SessionManager is created by
     // |AshTestHelper::bluetooth_config_test_helper()|.
     session_manager::SessionManager::Get()->CreateSession(
-        test_account_id, test_user_email, false);
+        user->GetAccountId(), test_user_email,
+        /*new_user=*/false,
+        /*has_active_session=*/false);
     session_manager::SessionManager::Get()->SetSessionState(
         session_manager::SessionState::ACTIVE);
 
@@ -974,13 +994,20 @@ class RelaunchNotificationControllerPlatformImplTest : public ::testing::Test {
   }
 
   RelaunchNotificationControllerPlatformImpl& platform_impl() { return impl_; }
+  FakeRelaunchNotificationControllerPlatformImpl& fake_platform_impl() {
+    return impl_;
+  }
 
   // Returns the TaskEnvironment's MockClock.
   const base::Clock* GetMockClock() { return task_environment_.GetMockClock(); }
 
  private:
   content::BrowserTaskEnvironment task_environment_;
-  RelaunchNotificationControllerPlatformImpl impl_;
+
+  // NOTE: This is mostly the real implementation except for two methods:
+  // SetRelaunchNotificationState and ResetRelaunchNotification.
+  FakeRelaunchNotificationControllerPlatformImpl impl_;
+
   std::unique_ptr<ash::AshTestHelper> ash_test_helper_;
   user_manager::TypedScopedUserManager<ash::FakeChromeUserManager>
       user_manager_;
@@ -1080,27 +1107,16 @@ TEST_F(RelaunchNotificationControllerPlatformImplTest,
   ::testing::Mock::VerifyAndClearExpectations(&callback);
 }
 
-class MockSystemTrayClientImpl : public SystemTrayClientImpl {
- public:
-  MockSystemTrayClientImpl() : SystemTrayClientImpl(this) {}
-  MOCK_METHOD(void,
-              SetRelaunchNotificationState,
-              (const ash::RelaunchNotificationState&),
-              (override));
-};
-
 // Correct relaunch notification state for required notification type.
 TEST_F(RelaunchNotificationControllerPlatformImplTest,
        RelaunchNotificationStateRequired) {
-  base::MockOnceCallback<base::Time()> callback;
-  MockSystemTrayClientImpl system_tray_client_impl;
-  ash::RelaunchNotificationState relaunch_notification_state;
-  EXPECT_CALL(system_tray_client_impl, SetRelaunchNotificationState(_))
-      .WillOnce(testing::SaveArg<0>(&relaunch_notification_state));
-
   platform_impl().NotifyRelaunchRequired(
       GetMockClock()->Now(), /*is_notification_type_overriden=*/false,
-      callback.Get());
+      base::BindOnce([]() { return base::Time(); }));
+
+  const auto& states = fake_platform_impl().states();
+  ASSERT_EQ(states.size(), static_cast<size_t>(1));
+  const auto& relaunch_notification_state = states[0];
 
   EXPECT_EQ(relaunch_notification_state.requirement_type,
             ash::RelaunchNotificationState::kRequired);
@@ -1114,15 +1130,14 @@ TEST_F(RelaunchNotificationControllerPlatformImplTest,
 // override.
 TEST_F(RelaunchNotificationControllerPlatformImplTest,
        RelaunchNotificationStateRequiredWithOverride) {
-  base::MockOnceCallback<base::Time()> callback;
-  MockSystemTrayClientImpl system_tray_client_impl;
-  ash::RelaunchNotificationState relaunch_notification_state;
-  EXPECT_CALL(system_tray_client_impl, SetRelaunchNotificationState(_))
-      .WillOnce(testing::SaveArg<0>(&relaunch_notification_state));
-
   platform_impl().NotifyRelaunchRequired(
-      GetMockClock()->Now(), /*is_notification_type_overriden=*/true,
-      callback.Get());
+      GetMockClock()->Now(),
+      /*is_notification_type_overriden=*/true,
+      base::BindOnce([]() { return base::Time(); }));
+
+  const auto& states = fake_platform_impl().states();
+  ASSERT_EQ(states.size(), static_cast<size_t>(1));
+  const auto& relaunch_notification_state = states[0];
 
   EXPECT_EQ(relaunch_notification_state.requirement_type,
             ash::RelaunchNotificationState::kRequired);

@@ -112,7 +112,9 @@ class VIZ_SERVICE_EXPORT SkiaOutputSurfaceImpl : public SkiaOutputSurface {
   base::ScopedClosureRunner GetCacheBackBufferCb() override;
 #endif
   gfx::Rect GetCurrentFramebufferDamage() const override;
-  void SetFrameRate(float frame_rate) override;
+#if BUILDFLAG(IS_ANDROID)
+  void SetFrameRate(gfx::SurfaceControlFrameRate frame_rate) override;
+#endif
   void SetNeedsMeasureNextDrawLatency() override;
 
   // SkiaOutputSurface implementation:
@@ -185,6 +187,7 @@ class VIZ_SERVICE_EXPORT SkiaOutputSurfaceImpl : public SkiaOutputSurface {
       bool maybe_concurrent_reads,
       const std::optional<gpu::VulkanYCbCrInfo>& ycbcr_info,
       sk_sp<SkColorSpace> color_space,
+      GrSurfaceOrigin origin,
       bool raw_draw_if_possible) override;
 
   void InitDelegatedInkPointRendererReceiver(

@@ -29,6 +29,8 @@
 #include "components/content_settings/core/common/third_party_site_data_access_type.h"
 #include "components/content_settings/core/common/tracking_protection_feature.h"
 #include "components/fingerprinting_protection_filter/browser/fingerprinting_protection_web_contents_helper.h"
+#include "components/ip_protection/common/ip_protection_status.h"
+#include "components/ip_protection/common/ip_protection_status_observer.h"
 #include "components/prefs/pref_service.h"
 #include "components/privacy_sandbox/privacy_sandbox_features.h"
 #include "components/privacy_sandbox/tracking_protection_settings.h"
@@ -181,6 +183,10 @@ void CookieControlsController::OnSubresourceBlocked() {
   UpdateUserBypass();
 }
 
+void CookieControlsController::OnFirstSubresourceProxiedOnCurrentPrimaryPage() {
+  UpdateUserBypass();
+}
+
 CookieControlsController::Status CookieControlsController::GetStatus(
     content::WebContents* web_contents) {
   if (!cookie_settings_->ShouldBlockThirdPartyCookies()) {
@@ -217,18 +223,27 @@ CookieControlsController::Status CookieControlsController::GetStatus(
   }
 
   SettingInfo info;
-  bool is_allowed = cookie_settings_->IsThirdPartyAccessAllowed(url, &info);
+  bool cookies_allowed =
+      cookie_settings_->IsThirdPartyAccessAllowed(url, &info);
   CookieControlsEnforcement enforcement =
       GetEnforcementForThirdPartyCookieBlocking(blocking_status, url, info,
-                                                is_allowed);
+                                                cookies_allowed);
+
+  // If 3PC blocking is the only protection controllable on a site, reflect
+  // that state. If ACT features are controllable, reflect ACT state.
+  bool protections_disabled =
+      ShowActFeatures()
+          ? tracking_protection_settings_->HasTrackingProtectionException(url,
+                                                                          &info)
+          : cookies_allowed;
 
   std::vector<TrackingProtectionFeature> features =
       CreateTrackingProtectionFeatureList(
-          enforcement, is_allowed,
+          enforcement, cookies_allowed,
           tracking_protection_settings_->HasTrackingProtectionException(url));
   return {// Hide controls if the exception is from a metadata grant.
           enforcement != CookieControlsEnforcement::kEnforcedByTpcdGrant,
-          /*protections_on=*/!is_allowed,
+          /*protections_on=*/!protections_disabled,
           enforcement,
           blocking_status,
           info.metadata.expiration(),
@@ -237,6 +252,7 @@ CookieControlsController::Status CookieControlsController::GetStatus(
 
 bool CookieControlsController::ShowActFeatures() {
   return base::FeatureList::IsEnabled(privacy_sandbox::kActUserBypassUx) &&
+         ShouldUpdateTpContentSetting() &&
          (tracking_protection_settings_->IsIpProtectionEnabled() ||
           tracking_protection_settings_->IsFpProtectionEnabled());
 }
@@ -261,21 +277,22 @@ CookieControlsController::CreateTrackingProtectionFeatureList(
 
   std::vector<TrackingProtectionFeature> features = {
       {FeatureType::kThirdPartyCookies, enforcement, status_label}};
-
-  if (tracking_protection_settings_->IsIpProtectionEnabled()) {
-    features.push_back(
-        {FeatureType::kIpProtection, CookieControlsEnforcement::kNoEnforcement,
-         act_exception ? TrackingProtectionBlockingStatus::kVisible
-                       : TrackingProtectionBlockingStatus::kHidden});
+  if (ShowActFeatures()) {
+    if (tracking_protection_settings_->IsIpProtectionEnabled()) {
+      features.push_back({FeatureType::kIpProtection,
+                          CookieControlsEnforcement::kNoEnforcement,
+                          act_exception
+                              ? TrackingProtectionBlockingStatus::kVisible
+                              : TrackingProtectionBlockingStatus::kHidden});
+    }
+    if (tracking_protection_settings_->IsFpProtectionEnabled()) {
+      features.push_back({FeatureType::kFingerprintingProtection,
+                          CookieControlsEnforcement::kNoEnforcement,
+                          act_exception
+                              ? TrackingProtectionBlockingStatus::kAllowed
+                              : TrackingProtectionBlockingStatus::kLimited});
+    }
   }
-  if (tracking_protection_settings_->IsFpProtectionEnabled()) {
-    features.push_back({FeatureType::kFingerprintingProtection,
-                        CookieControlsEnforcement::kNoEnforcement,
-                        act_exception
-                            ? TrackingProtectionBlockingStatus::kAllowed
-                            : TrackingProtectionBlockingStatus::kLimited});
-  }
-
   return features;
 }
 
@@ -283,7 +300,7 @@ CookieControlsEnforcement
 CookieControlsController::GetEnforcementForThirdPartyCookieBlocking(
     CookieBlocking3pcdStatus status,
     const GURL url,
-    SettingInfo info,
+    const SettingInfo& info,
     bool cookies_allowed) {
   const bool is_default_setting =
       info.primary_pattern == ContentSettingsPattern::Wildcard() &&
@@ -441,6 +458,19 @@ bool CookieControlsController::GetIsSubresourceBlocked() const {
           GetWebContents());
   return fpf_web_contents_helper != nullptr &&
          fpf_web_contents_helper->subresource_blocked_in_current_primary_page();
+}
+
+bool CookieControlsController::GetIsSubresourceProxied() const {
+  // Check WebContents are valid. A possible race condition on Android causes
+  // this to be called before WebContents are instantiated.
+  if (GetWebContents() == nullptr) {
+    return false;
+  }
+
+  auto* ip_protection_status =
+      ip_protection::IpProtectionStatus::FromWebContents(GetWebContents());
+  return ip_protection_status != nullptr &&
+         ip_protection_status->IsSubresourceProxiedOnCurrentPrimaryPage();
 }
 
 void CookieControlsController::UpdateUserBypass() {
@@ -658,7 +688,8 @@ bool CookieControlsController::ShouldUserBypassIconBeVisible(
   // contexts.
   return controls_visible &&
          (HasOriginSandboxedTopLevelDocument() || !protections_on ||
-          site_data_access_attempted || GetIsSubresourceBlocked());
+          site_data_access_attempted || GetIsSubresourceBlocked() ||
+          GetIsSubresourceProxied());
 }
 
 CookieControlsController::TabObserver::TabObserver(
@@ -675,12 +706,19 @@ CookieControlsController::TabObserver::TabObserver(
   if (fpf_web_contents_helper) {
     fpf_observation_.Observe(fpf_web_contents_helper);
   }
+
+  auto* ip_protection_status =
+      ip_protection::IpProtectionStatus::FromWebContents(web_contents);
+  if (ip_protection_status) {
+    ip_protection_observation_.Observe(ip_protection_status);
+  }
 }
 
 CookieControlsController::TabObserver::~TabObserver() = default;
 
 void CookieControlsController::TabObserver::WebContentsDestroyed() {
   fpf_observation_.Reset();
+  ip_protection_observation_.Reset();
 }
 
 void CookieControlsController::TabObserver::OnSiteDataAccessed(
@@ -718,6 +756,11 @@ void CookieControlsController::TabObserver::OnStatefulBounceDetected() {
 
 void CookieControlsController::TabObserver::OnSubresourceBlocked() {
   cookie_controls_->OnSubresourceBlocked();
+}
+
+void CookieControlsController::TabObserver::
+    OnFirstSubresourceProxiedOnCurrentPrimaryPage() const {
+  cookie_controls_->OnFirstSubresourceProxiedOnCurrentPrimaryPage();
 }
 
 void CookieControlsController::TabObserver::PrimaryPageChanged(

@@ -2,12 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifndef V8_WASM_WASM_MODULE_BUILDER_H_
+#define V8_WASM_WASM_MODULE_BUILDER_H_
+
 #if !V8_ENABLE_WEBASSEMBLY
 #error This header should only be included if WebAssembly is enabled.
 #endif  // !V8_ENABLE_WEBASSEMBLY
-
-#ifndef V8_WASM_WASM_MODULE_BUILDER_H_
-#define V8_WASM_WASM_MODULE_BUILDER_H_
 
 #include <optional>
 
@@ -198,6 +198,7 @@ class V8_EXPORT_PRIVATE WasmFunctionBuilder : public ZoneObject {
   void EmitWithU32V(WasmOpcode opcode, ModuleTypeIndex index) {
     EmitWithU32V(opcode, index.index);
   }
+  void EmitHeapType(HeapType type);
   void EmitValueType(ValueType type);
   void EmitDirectCallIndex(uint32_t index);
   void EmitFromInitializerExpression(const WasmInitExpr& init_expr);

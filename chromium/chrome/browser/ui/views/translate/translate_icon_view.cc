@@ -12,7 +12,7 @@
 #include "chrome/browser/ui/actions/chrome_action_id.h"
 #include "chrome/browser/ui/browser_command_controller.h"
 #include "chrome/browser/ui/browser_commands.h"
-#include "chrome/browser/ui/ui_features.h"
+#include "chrome/browser/ui/browser_window/public/browser_window_features.h"
 #include "chrome/browser/ui/view_ids.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/toolbar/pinned_toolbar_actions_container.h"
@@ -28,7 +28,6 @@
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/base/resource/resource_bundle.h"
-#include "ui/base/ui_base_features.h"
 
 #include "app/vivaldi_apptools.h"
 
@@ -65,30 +64,22 @@ TranslateIconView::TranslateIconView(
 TranslateIconView::~TranslateIconView() = default;
 
 views::BubbleDialogDelegate* TranslateIconView::GetBubble() const {
-  if (GetWebContents()) {
-    TranslateBubbleController* translate_bubble_controller =
-        TranslateBubbleController::FromWebContents(GetWebContents());
+  TranslateBubbleController* translate_bubble_controller =
+      browser_->GetFeatures().translate_bubble_controller();
 
-    if (translate_bubble_controller) {
-      return translate_bubble_controller->GetTranslateBubble();
-    }
-  }
-
-  return nullptr;
+  return translate_bubble_controller
+             ? translate_bubble_controller->GetTranslateBubble()
+             : nullptr;
 }
 
 views::BubbleDialogDelegate* TranslateIconView::GetPartialTranslateBubble()
     const {
-  if (GetWebContents()) {
-    TranslateBubbleController* translate_bubble_controller =
-        TranslateBubbleController::FromWebContents(GetWebContents());
+  TranslateBubbleController* translate_bubble_controller =
+      browser_->GetFeatures().translate_bubble_controller();
 
-    if (translate_bubble_controller) {
-      return translate_bubble_controller->GetPartialTranslateBubble();
-    }
-  }
-
-  return nullptr;
+  return translate_bubble_controller
+             ? translate_bubble_controller->GetPartialTranslateBubble()
+             : nullptr;
 }
 
 void TranslateIconView::ActiveTabChanged(
@@ -146,27 +137,25 @@ void TranslateIconView::UpdateImpl() {
   bool enabled = language_state.translate_enabled();
 
   bool show_page_action = true;
-  if (features::IsToolbarPinningEnabled()) {
-    CHECK(browser_);
-    BrowserView* browser_view = BrowserView::GetBrowserViewForBrowser(browser_);
-    CHECK(browser_view);
-    auto* pinned_toolbar_actions_container =
-        browser_view->toolbar()->pinned_toolbar_actions_container();
-    if (pinned_toolbar_actions_container &&
-        pinned_toolbar_actions_container->IsActionPinnedOrPoppedOut(
-            action_id().value())) {
-      show_page_action = false;
-    }
+  CHECK(browser_);
+  BrowserView* browser_view = BrowserView::GetBrowserViewForBrowser(browser_);
+  CHECK(browser_view);
+  auto* pinned_toolbar_actions_container =
+      browser_view->toolbar()->pinned_toolbar_actions_container();
+  if (pinned_toolbar_actions_container &&
+      pinned_toolbar_actions_container->IsActionPinnedOrPoppedOut(
+          action_id().value())) {
+    show_page_action = false;
   }
+
   ChromeTranslateClient::FromWebContents(GetWebContents())
       ->GetTranslateManager()
       ->GetActiveTranslateMetricsLogger()
       ->LogOmniboxIconChange(show_page_action && enabled);
   SetVisible(show_page_action && enabled);
 
-  if (!enabled &&
-      TranslateBubbleController::FromWebContents(GetWebContents())) {
-    TranslateBubbleController::FromWebContents(GetWebContents())->CloseBubble();
+  if (!enabled) {
+    browser_->GetFeatures().translate_bubble_controller()->CloseBubble();
   }
 }
 

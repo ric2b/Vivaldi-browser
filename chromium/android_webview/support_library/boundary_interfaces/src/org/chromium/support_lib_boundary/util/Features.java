@@ -290,7 +290,7 @@ public class Features {
 
     // Profile.prefetchUrl
     // Profile.clearPrefetch
-    public static final String PREFETCH_WITH_URL = "PREFETCH_URL_V3";
+    public static final String PREFETCH_WITH_URL = "PREFETCH_URL_V4";
 
     // WebviewCompat.setDefaultTrafficStatsTag
     // WebviewCompat.setDefaultTrafficStatsUid
@@ -309,5 +309,59 @@ public class Features {
             "WEB_STORAGE_DELETE_BROWSING_DATA";
 
     // Profile.setSpeculativeLoadingConfig
-    public static final String SPECULATIVE_LOADING_CONFIG = "SPECULATIVE_LOADING_CONFIG";
+    public static final String SPECULATIVE_LOADING_CONFIG = "SPECULATIVE_LOADING_CONFIG_V2";
+
+    // WebViewCompat.saveState
+    public static final String SAVE_STATE = "SAVE_STATE";
+
+    // Navigation & navigation client set/getter and callbacks:
+    //
+    // WebView.getWebViewNavigation
+    // WebView.getWebViewNavigationClient
+    // WebView.setWebViewNavigationClient
+    //
+    // WebViewNavigationClient.onNavigationStarted()
+    // WebViewNavigationClient.onNavigationRedirected()
+    // WebViewNavigationClient.onNavigationCompleted()
+    // WebViewNavigationClient.onPageDeleted()
+    // WebViewNavigationClient.onPageLoadEventFired()
+    // WebViewNavigationClient.onPageDOMContentLoadedEventFired()
+    // WebViewNavigationClient.onFirstContentfulPaint()
+    //
+    // WebViewNavigation.getUrl()
+    // WebViewNavigation.isPageInitiated()
+    // WebViewNavigation.isSameDocument()
+    // WebViewNavigation.isReload()
+    // WebViewNavigation.isHistory()
+    // WebViewNavigation.isRestore()
+    // WebViewNavigation.isBack()
+    // WebViewNavigation.isForward()
+    // WebViewNavigation.hasCommitted()
+    // WebViewNavigation.didCommitErrorPage()
+    // WebViewNavigation.getStatusCode()
+    public static final String WEB_VIEW_NAVIGATION_CLIENT_BASIC_USAGE =
+            "WEB_VIEW_NAVIGATION_CLIENT_BASIC_USAGE";
+
+    // WebViewCompat.setAsyncShouldInterceptRequestCallback
+    // WebViewCompat.clearAsyncShouldInterceptRequestCallback
+    // ServiceWorkerControllerCompat.setAsyncShouldInterceptRequestCallback
+    // ServiceWorkerControllerCompat.clearAsyncShouldInterceptRequestCallback
+    // AsyncShouldInterceptRequestCallback.shouldInterceptRequestAsync
+    // WebResponseCallback.intercept
+    // WebResponseCallback.doNotIntercept
+    // WebResourceRequest#getRequestHeadersMultiMap
+    // WebResourceResponse#setResponseHeaders
+    // WebResourceResponse#getResponseHeaders
+    // WebResourceResponse#setResponseHeadersMultiMap
+    // WebResourceResponse#getResponseHeadersMultiMap
+    public static final String ASYNC_SHOULD_INTERCEPT_REQUEST = "ASYNC_SHOULD_INTERCEPT_REQUEST";
+
+    // SupportLibWebViewChromium weakly reference WebView
+    public static final String PROVIDER_WEAKLY_REF_WEBVIEW = "PROVIDER_WEAKLY_REF_WEBVIEW";
+
+    // WebSettingsCompat#setPaymentRequestEnabled
+    // WebSettingsCompat#getPaymentRequestEnabled
+    // WebSettingsCompat#setHasEnrolledInstrumentEnabled
+    // WebSettingsCompat#getHasEnrolledInstrumentEnabled
+    public static final String PAYMENT_REQUEST = "PAYMENT_REQUEST";
 }

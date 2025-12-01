@@ -61,6 +61,9 @@ class ScreenAIService : public mojom::ScreenAIServiceFactory,
   // mojom::ScreenAIAnnotator:
   void SetClientType(mojom::OcrClientType client) override;
 
+  // mojom::Screen2xMainContentExtractor:
+  void SetClientType(mojom::MceClientType client) override;
+
   // mojom::ScreenAIAnnotator:
   void PerformOcrAndReturnAXTreeUpdate(
       const SkBitmap& image,
@@ -76,6 +79,8 @@ class ScreenAIService : public mojom::ScreenAIServiceFactory,
                           ExtractMainContentCallback callback) override;
   void ExtractMainNode(const ui::AXTreeUpdate& snapshot,
                        ExtractMainNodeCallback callback) override;
+  void IdentifyMainNode(const ui::AXTreeUpdate& snapshot,
+                        IdentifyMainNodeCallback callback) override;
 
   // mojom::ScreenAIServiceFactory:
   void InitializeMainContentExtraction(
@@ -95,6 +100,11 @@ class ScreenAIService : public mojom::ScreenAIServiceFactory,
   // mojom::ScreenAIServiceFactory:
   void ShutDownIfNoClients() override;
 
+  // mojom::ScreenAIServiceFactory:
+  void BindShutdownHandler(
+      mojo::PendingRemote<mojom::ScreenAIServiceShutdownHandler>
+          shutdown_handler) override;
+
   // mojom::OCRService:
   void BindAnnotator(
       mojo::PendingReceiver<mojom::ScreenAIAnnotator> annotator) override;
@@ -108,7 +118,7 @@ class ScreenAIService : public mojom::ScreenAIServiceFactory,
   // vector of ints. Unserializes `snapshot` into `tree`. Runs the library
   // `ExtractMainContent` function whose return value sets `content_node_ids`.
   // If `content_node_ids` is empty; returns false; otherwise, returns true.
-  bool ExtractMainContentInternal(
+  bool ExtractMainContentInternalAndRecordMetrics(
       const ui::AXTreeUpdate& snapshot,
       ui::AXTree& tree,
       std::optional<std::vector<int32_t>>& content_node_ids);
@@ -139,6 +149,13 @@ class ScreenAIService : public mojom::ScreenAIServiceFactory,
 
   // Client type for each OCR receiver.
   std::map<mojo::ReceiverId, mojom::OcrClientType> ocr_client_types_;
+
+  // Client type for each MCE receiver.
+  std::map<mojo::ReceiverId, mojom::MceClientType> mce_client_types_;
+
+  // Browser side shutdown handler.
+  mojo::Remote<mojom::ScreenAIServiceShutdownHandler>
+      screen_ai_shutdown_handler_;
 
   // The set of receivers used to receive messages from annotators.
   mojo::ReceiverSet<mojom::ScreenAIAnnotator> screen_ai_annotators_;

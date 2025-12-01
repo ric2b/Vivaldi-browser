@@ -6,6 +6,7 @@
 # pylint: disable=too-many-lines
 
 import collections
+from collections.abc import Generator
 import datetime
 from enum import Enum
 import gzip
@@ -16,7 +17,7 @@ import posixpath
 import subprocess
 import sys
 import tempfile
-from typing import Any, Generator, List, Optional, Set, Tuple
+from typing import Any
 import unittest
 
 import dataclasses  # Built-in, but pylint gives an ordering false positive.
@@ -114,7 +115,8 @@ basic_test_harness_script = r"""
 _GET_STATISTICS_EVENT_NAME = 'GetFrameStatisticsMedia'
 _SWAP_CHAIN_PRESENT_EVENT_NAME = 'SwapChain::Present'
 _BEGIN_OVERLAY_ACCESS_EVENT_NAME = 'SkiaOutputDeviceDComp::BeginOverlayAccess'
-_PRESENT_SWAP_CHAIN_EVENT_NAME = 'IDXGISwapChain1::Present1'
+_PRESENT_SWAP_CHAIN_EVENT_NAME =\
+    'DXGISwapChainImageBacking::Present'
 
 _HTML_CANVAS_NOTIFY_LISTENERS_CANVAS_CHANGED_EVENT_NAME =\
     'HTMLCanvasElement::NotifyListenersCanvasChanged'
@@ -158,7 +160,7 @@ class _TraceTestOrigin(Enum):
 @dataclasses.dataclass
 class _TraceTestArguments():
   """Struct-like object for passing trace test arguments instead of dicts."""
-  browser_args: List[str]
+  browser_args: list[str]
   category: str
   test_harness_script: str
   finish_js_condition: str
@@ -193,13 +195,13 @@ class _CacheTraceTestArguments():
   for the restarted browser case because each browser restart seeds a new
   temporary directory with only the contents after the first load page.
   """
-  browser_args: List[str]
+  browser_args: list[str]
   category: str
   test_harness_script: str
   finish_js_condition: str
   first_load_eval_func: str
   cache_eval_func: str
-  cache_pages: List[str]
+  cache_pages: list[str]
   cache_page_origin: _TraceTestOrigin = _TraceTestOrigin.DEFAULT
   test_renavigation: bool = True
 
@@ -214,8 +216,8 @@ class _CacheTraceTestArguments():
                                restart_browser=True)
 
   def GenerateCacheHitTests(
-      self, cache_args: Optional[dict]
-  ) -> Generator[Tuple[str, _TraceTestArguments], None, None]:
+      self, cache_args: dict | None
+  ) -> Generator[tuple[str, _TraceTestArguments], None, None]:
     """Returns a generator for all cache hit trace tests.
 
     First pass of tests just do a re-navigation, second pass restarts with a
@@ -270,7 +272,7 @@ class TraceIntegrationTest(gpu_integration_test.GpuIntegrationTest):
   def _SuiteSupportsParallelTests(cls) -> bool:
     return True
 
-  def _GetSerialGlobs(self) -> Set[str]:
+  def _GetSerialGlobs(self) -> set[str]:
     serial_globs = set()
     if host_information.IsWindows():
       serial_globs |= {
@@ -284,7 +286,7 @@ class TraceIntegrationTest(gpu_integration_test.GpuIntegrationTest):
       }
     return serial_globs
 
-  def _GetSerialTests(self) -> Set[str]:
+  def _GetSerialTests(self) -> set[str]:
     serial_tests = set()
     if host_information.IsMac():
       serial_tests |= {
@@ -448,7 +450,7 @@ class TraceIntegrationTest(gpu_integration_test.GpuIntegrationTest):
                      test_renavigation=False)
              ])
 
-  def _GetLocalPerfettoTraceProcessorPath(self) -> Optional[str]:
+  def _GetLocalPerfettoTraceProcessorPath(self) -> str | None:
     """Gets the path to the local Perfetto trace_processor_shell binary.
 
     Returns:
@@ -497,6 +499,7 @@ class TraceIntegrationTest(gpu_integration_test.GpuIntegrationTest):
     #   * Mac/Debug (due to slower binaries?)
     #   * Mac/NVIDIA (due to old/slow hardware)
     #   * Linux (unknown cause)
+    #   * ChromeOS VMs (extra load from VM slows down system)
     load_timeout = 2
     slow_load_timeout = 10
     os_name = self.browser.platform.GetOSName()
@@ -507,6 +510,10 @@ class TraceIntegrationTest(gpu_integration_test.GpuIntegrationTest):
         load_timeout = slow_load_timeout
     elif os_name == 'linux':
       load_timeout = slow_load_timeout
+    elif os_name == 'chromeos':
+      if 'chromeos-board-amd64-generic' in self.__class__.GetPlatformTags(
+          self.browser):
+        load_timeout = slow_load_timeout
 
     processor_path = self._GetLocalPerfettoTraceProcessorPath()
     if processor_path:
@@ -521,8 +528,8 @@ class TraceIntegrationTest(gpu_integration_test.GpuIntegrationTest):
   def _RunActualGpuTraceTest(self,
                              test_path: str,
                              args: _TraceTestArguments,
-                             profile_dir: Optional[str] = None,
-                             profile_type: Optional[str] = None) -> dict:
+                             profile_dir: str | None = None,
+                             profile_type: str | None = None) -> dict:
     """Returns a dictionary generated via the success evaluation."""
     if args.restart_browser:
       # The version of this test in the old GPU test harness restarted the
@@ -627,7 +634,7 @@ class TraceIntegrationTest(gpu_integration_test.GpuIntegrationTest):
     super().TearDownProcess()
 
   @classmethod
-  def GenerateBrowserArgs(cls, additional_args: List[str]) -> List[str]:
+  def GenerateBrowserArgs(cls, additional_args: list[str]) -> list[str]:
     """Adds default arguments to |additional_args|.
 
     See the parent class' method documentation for additional information.
@@ -646,7 +653,7 @@ class TraceIntegrationTest(gpu_integration_test.GpuIntegrationTest):
 
   @staticmethod
   def _SwapChainPresentationModeListToStr(
-      presentation_mode_list: List[int]) -> str:
+      presentation_mode_list: list[int]) -> str:
     modes = [
         overlay_support.PresentationModeEventToStr(m)
         for m in presentation_mode_list
@@ -655,7 +662,7 @@ class TraceIntegrationTest(gpu_integration_test.GpuIntegrationTest):
 
   @staticmethod
   def _DisabledByDefaultTraceCategory(category: str) -> str:
-    return 'disabled-by-default-%s' % category
+    return f'disabled-by-default-{category}'
 
   def _MaybeSavePerfettoTraceAsArtifact(self, trace: bytes) -> None:
     if self.artifacts:
@@ -692,7 +699,7 @@ WHERE
 """
     for row in trace_processor.query(query):
       if row.cnt <= 0:
-        self.fail('Trace markers for GPU category %s were not found' % category)
+        self.fail(f'Trace markers for GPU category {category} were not found')
 
   def _GetVideoExpectations(self, other_args: dict) -> '_VideoExpectations':
     """Helper for creating expectations for CheckVideoPath and CheckOverlayMode.
@@ -871,15 +878,15 @@ WHERE
         continue
       if (overlay_support.PresentationModeEventToStr(mode)
           != expected.presentation_mode):
-        self.fail('SwapChain presentation mode mismatch, expected %s got %s' %
-                  (expected.presentation_mode,
-                   TraceIntegrationTest._SwapChainPresentationModeListToStr(
-                       presentation_mode_history)))
+        history_str = TraceIntegrationTest._SwapChainPresentationModeListToStr(
+            presentation_mode_history)
+        self.fail(f'SwapChain presentation mode mismatch, expected '
+                  f'{expected.presentation_mode} got {history_str}')
       valid_entry_found = True
     if not valid_entry_found:
-      self.fail(
-          'No valid frame statistics being collected: %s' % TraceIntegrationTest
-          ._SwapChainPresentationModeListToStr(presentation_mode_history))
+      history_str = TraceIntegrationTest._SwapChainPresentationModeListToStr(
+          presentation_mode_history)
+      self.fail(f'No valid frame statistics being collected: {history_str}')
 
   def _EvaluateSuccess_CheckSwapChainPath(self, category: str,
                                           trace_processor: tp.TraceProcessor,
@@ -916,13 +923,11 @@ WHERE
       break
 
     if expect_overlay and not found_overlay:
-      self.fail(
-          'Overlay expected but not found: matching %s events were not found' %
-          _BEGIN_OVERLAY_ACCESS_EVENT_NAME)
+      self.fail(f'Overlay expected but not found: matching '
+                f'{_BEGIN_OVERLAY_ACCESS_EVENT_NAME} events were not found')
     elif expect_no_overlay and found_overlay:
-      self.fail(
-          'Overlay not expected but found: matching %s events were found' %
-          _BEGIN_OVERLAY_ACCESS_EVENT_NAME)
+      self.fail(f'Overlay not expected but found: matching '
+                f'{_BEGIN_OVERLAY_ACCESS_EVENT_NAME} events were found')
 
   def _EvaluateSuccess_CheckSwapChainHasAlpha(
       self, category: str, trace_processor: tp.TraceProcessor,
@@ -1169,7 +1174,7 @@ FROM
         self.fail(f'No {event_name} events found')
 
   @classmethod
-  def ExpectationsFiles(cls) -> List[str]:
+  def ExpectationsFiles(cls) -> list[str]:
     return [
         os.path.join(
             os.path.dirname(os.path.abspath(__file__)), 'test_expectations',
@@ -1180,10 +1185,10 @@ FROM
 @dataclasses.dataclass
 class _VideoExpectations():
   """Struct-like object for passing around video test expectations."""
-  pixel_format: Optional[str] = None
-  zero_copy: Optional[bool] = None
-  no_overlay: Optional[bool] = None
-  presentation_mode: Optional[str] = None
+  pixel_format: str | None = None
+  zero_copy: bool | None = None
+  no_overlay: bool | None = None
+  presentation_mode: str | None = None
 
 
 def _MergePerfettoTraces(trace_builder: trace_data.TraceDataBuilder) -> bytes:

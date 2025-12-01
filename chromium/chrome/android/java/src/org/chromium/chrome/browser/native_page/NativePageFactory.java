@@ -28,6 +28,7 @@ import org.chromium.chrome.browser.history.HistoryPage;
 import org.chromium.chrome.browser.lifecycle.ActivityLifecycleDispatcher;
 import org.chromium.chrome.browser.magic_stack.ModuleRegistry;
 import org.chromium.chrome.browser.management.ManagementPage;
+import org.chromium.chrome.browser.metrics.StartupMetricsTracker;
 import org.chromium.chrome.browser.ntp.IncognitoNewTabPage;
 import org.chromium.chrome.browser.ntp.NewTabPage;
 import org.chromium.chrome.browser.ntp.NewTabPageUma;
@@ -82,6 +83,7 @@ public class NativePageFactory {
     private final ObservableSupplier<Integer> mTabStripHeightSupplier;
     private final OneshotSupplier<ModuleRegistry> mModuleRegistrySupplier;
     private final ObservableSupplier<EdgeToEdgeController> mEdgeToEdgeControllerSupplier;
+    private final StartupMetricsTracker mStartupMetricsTracker;
     private NewTabPageUma mNewTabPageUma;
 
     private NativePageBuilder mNativePageBuilder;
@@ -103,7 +105,8 @@ public class NativePageFactory {
             @Nullable ObservableSupplier<TabContentManager> tabContentManagerSupplier,
             @NonNull ObservableSupplier<Integer> tabStripHeightSupplier,
             @NonNull OneshotSupplier<ModuleRegistry> moduleRegistrySupplier,
-            @NonNull ObservableSupplier<EdgeToEdgeController> edgeToEdgeControllerSupplier) {
+            @NonNull ObservableSupplier<EdgeToEdgeController> edgeToEdgeControllerSupplier,
+            @NonNull StartupMetricsTracker startupMetricsTracker) {
         mActivity = activity;
         mBottomSheetController = sheetController;
         mBrowserControlsManager = browserControlsManager;
@@ -120,6 +123,7 @@ public class NativePageFactory {
         mTabStripHeightSupplier = tabStripHeightSupplier;
         mModuleRegistrySupplier = moduleRegistrySupplier;
         mEdgeToEdgeControllerSupplier = edgeToEdgeControllerSupplier;
+        mStartupMetricsTracker = startupMetricsTracker;
     }
 
     private NativePageBuilder getBuilder() {
@@ -142,7 +146,8 @@ public class NativePageFactory {
                             mTabContentManagerSupplier,
                             mTabStripHeightSupplier,
                             mModuleRegistrySupplier,
-                            mEdgeToEdgeControllerSupplier);
+                            mEdgeToEdgeControllerSupplier,
+                            mStartupMetricsTracker);
         }
         return mNativePageBuilder;
     }
@@ -174,6 +179,7 @@ public class NativePageFactory {
         private final ObservableSupplier<Integer> mTabStripHeightSupplier;
         private final OneshotSupplier<ModuleRegistry> mModuleRegistrySupplier;
         private final ObservableSupplier<EdgeToEdgeController> mEdgeToEdgeControllerSupplier;
+        private final StartupMetricsTracker mStartupMetricsTracker;
 
         public NativePageBuilder(
                 Activity activity,
@@ -192,7 +198,8 @@ public class NativePageFactory {
                 ObservableSupplier<TabContentManager> tabContentManagerSupplier,
                 ObservableSupplier<Integer> tabStripHeightSupplier,
                 OneshotSupplier<ModuleRegistry> moduleRegistrySupplier,
-                ObservableSupplier<EdgeToEdgeController> edgeToEdgeControllerSupplier) {
+                ObservableSupplier<EdgeToEdgeController> edgeToEdgeControllerSupplier,
+                StartupMetricsTracker startupMetricsTracker) {
             mActivity = activity;
             mUma = uma;
             mBottomSheetController = sheetController;
@@ -210,6 +217,7 @@ public class NativePageFactory {
             mTabStripHeightSupplier = tabStripHeightSupplier;
             mModuleRegistrySupplier = moduleRegistrySupplier;
             mEdgeToEdgeControllerSupplier = edgeToEdgeControllerSupplier;
+            mStartupMetricsTracker = startupMetricsTracker;
         }
 
         protected NativePage buildNewTabPage(Tab tab, String url) {
@@ -246,15 +254,16 @@ public class NativePageFactory {
                     mTabContentManagerSupplier,
                     mTabStripHeightSupplier,
                     mModuleRegistrySupplier,
-                    mEdgeToEdgeControllerSupplier);
+                    mEdgeToEdgeControllerSupplier,
+                    mStartupMetricsTracker);
         }
 
         protected NativePage buildBookmarksPage(Tab tab) {
             return new BookmarkPage(
-                    mActivity.getComponentName(),
                     mSnackbarManagerSupplier.get(),
                     tab.getProfile(),
-                    new TabShim(tab, mBrowserControlsManager, mTabModelSelector));
+                    new TabShim(tab, mBrowserControlsManager, mTabModelSelector),
+                    mActivity.getComponentName());
         }
 
         protected NativePage buildDownloadsPage(Tab tab) {
@@ -287,9 +296,7 @@ public class NativePageFactory {
                             mActivity,
                             () ->
                                     HistoryManagerUtils.showHistoryManager(
-                                            mActivity,
-                                            tab,
-                                            mTabModelSelector.isIncognitoSelected()));
+                                            mActivity, tab, tab.getProfile()));
             return new RecentTabsPage(
                     mActivity,
                     recentTabsManager,

@@ -50,6 +50,11 @@ export interface Setting {
   // restrictions will be applied to all the printers available for a user.
   // The property is set to false otherwise.
   setByGlobalPolicy: boolean;
+  // This property is set to true when this setting has a single value allowed
+  // by a per-printer job options policy. These restrictions are
+  // destination-specific and are applied only to the current printer.
+  // The property is set to false otherwise.
+  setByDestinationPolicy: boolean;
   setFromUi: boolean;
   key: string;
   updatesPreview: boolean;
@@ -307,6 +312,7 @@ function createSettings(): Settings {
       valid: true,
       available: true,
       setByGlobalPolicy: false,
+      setByDestinationPolicy: false,
       setFromUi: false,
       key: '',
       updatesPreview: false,
@@ -317,6 +323,7 @@ function createSettings(): Settings {
       valid: true,
       available: true,
       setByGlobalPolicy: false,
+      setByDestinationPolicy: false,
       setFromUi: false,
       key: '',
       updatesPreview: false,
@@ -327,6 +334,7 @@ function createSettings(): Settings {
       valid: true,
       available: true,
       setByGlobalPolicy: false,
+      setByDestinationPolicy: false,
       setFromUi: false,
       key: 'isCollateEnabled',
       updatesPreview: false,
@@ -337,6 +345,7 @@ function createSettings(): Settings {
       valid: true,
       available: true,
       setByGlobalPolicy: false,
+      setByDestinationPolicy: false,
       setFromUi: false,
       key: 'isLandscapeEnabled',
       updatesPreview: true,
@@ -347,6 +356,7 @@ function createSettings(): Settings {
       valid: true,
       available: true,
       setByGlobalPolicy: false,
+      setByDestinationPolicy: false,
       setFromUi: false,
       key: 'isColorEnabled',
       updatesPreview: true,
@@ -364,6 +374,7 @@ function createSettings(): Settings {
       valid: true,
       available: true,
       setByGlobalPolicy: false,
+      setByDestinationPolicy: false,
       setFromUi: false,
       key: 'mediaSize',
       updatesPreview: true,
@@ -374,6 +385,7 @@ function createSettings(): Settings {
       valid: true,
       available: false,
       setByGlobalPolicy: false,
+      setByDestinationPolicy: false,
       setFromUi: false,
       key: 'borderless',
       updatesPreview: true,
@@ -384,6 +396,7 @@ function createSettings(): Settings {
       valid: true,
       available: false,
       setByGlobalPolicy: false,
+      setByDestinationPolicy: false,
       setFromUi: false,
       key: 'mediaType',
       updatesPreview: false,
@@ -394,6 +407,7 @@ function createSettings(): Settings {
       valid: true,
       available: true,
       setByGlobalPolicy: false,
+      setByDestinationPolicy: false,
       setFromUi: false,
       key: 'marginsType',
       updatesPreview: true,
@@ -404,6 +418,7 @@ function createSettings(): Settings {
       valid: true,
       available: true,
       setByGlobalPolicy: false,
+      setByDestinationPolicy: false,
       setFromUi: false,
       key: 'customMargins',
       updatesPreview: true,
@@ -414,6 +429,7 @@ function createSettings(): Settings {
       valid: true,
       available: true,
       setByGlobalPolicy: false,
+      setByDestinationPolicy: false,
       setFromUi: false,
       key: 'dpi',
       updatesPreview: false,
@@ -424,6 +440,7 @@ function createSettings(): Settings {
       valid: true,
       available: true,
       setByGlobalPolicy: false,
+      setByDestinationPolicy: false,
       setFromUi: false,
       key: 'scaling',
       updatesPreview: true,
@@ -434,6 +451,7 @@ function createSettings(): Settings {
       valid: true,
       available: true,
       setByGlobalPolicy: false,
+      setByDestinationPolicy: false,
       setFromUi: false,
       key: 'scalingType',
       updatesPreview: true,
@@ -444,6 +462,7 @@ function createSettings(): Settings {
       valid: true,
       available: true,
       setByGlobalPolicy: false,
+      setByDestinationPolicy: false,
       setFromUi: false,
       key: 'scalingTypePdf',
       updatesPreview: true,
@@ -454,6 +473,7 @@ function createSettings(): Settings {
       valid: true,
       available: true,
       setByGlobalPolicy: false,
+      setByDestinationPolicy: false,
       setFromUi: false,
       key: 'isDuplexEnabled',
       updatesPreview: false,
@@ -464,6 +484,7 @@ function createSettings(): Settings {
       valid: true,
       available: true,
       setByGlobalPolicy: false,
+      setByDestinationPolicy: false,
       setFromUi: false,
       key: 'isDuplexShortEdge',
       updatesPreview: false,
@@ -474,6 +495,7 @@ function createSettings(): Settings {
       valid: true,
       available: true,
       setByGlobalPolicy: false,
+      setByDestinationPolicy: false,
       setFromUi: false,
       key: 'isCssBackgroundEnabled',
       updatesPreview: true,
@@ -484,6 +506,7 @@ function createSettings(): Settings {
       valid: true,
       available: true,
       setByGlobalPolicy: false,
+      setByDestinationPolicy: false,
       setFromUi: false,
       key: '',
       updatesPreview: true,
@@ -494,6 +517,7 @@ function createSettings(): Settings {
       valid: true,
       available: true,
       setByGlobalPolicy: false,
+      setByDestinationPolicy: false,
       setFromUi: false,
       key: 'isHeaderFooterEnabled',
       updatesPreview: true,
@@ -504,6 +528,7 @@ function createSettings(): Settings {
       valid: true,
       available: true,
       setByGlobalPolicy: false,
+      setByDestinationPolicy: false,
       setFromUi: false,
       key: '',
       updatesPreview: true,
@@ -514,6 +539,7 @@ function createSettings(): Settings {
       valid: true,
       available: true,
       setByGlobalPolicy: false,
+      setByDestinationPolicy: false,
       setFromUi: false,
       key: 'vendorOptions',
       updatesPreview: false,
@@ -524,6 +550,7 @@ function createSettings(): Settings {
       valid: true,
       available: true,
       setByGlobalPolicy: false,
+      setByDestinationPolicy: false,
       setFromUi: false,
       key: '',
       updatesPreview: true,
@@ -536,6 +563,7 @@ function createSettings(): Settings {
       valid: true,
       available: true,
       setByGlobalPolicy: false,
+      setByDestinationPolicy: false,
       setFromUi: false,
       key: '',
       updatesPreview: false,
@@ -548,6 +576,7 @@ function createSettings(): Settings {
       valid: true,
       available: true,
       setByGlobalPolicy: false,
+      setByDestinationPolicy: false,
       setFromUi: false,
       key: '',
       updatesPreview: true,
@@ -558,6 +587,7 @@ function createSettings(): Settings {
       valid: true,
       available: true,
       setByGlobalPolicy: false,
+      setByDestinationPolicy: false,
       setFromUi: false,
       key: 'recentDestinations',
       updatesPreview: false,
@@ -569,6 +599,7 @@ function createSettings(): Settings {
       valid: true,
       available: true,
       setByGlobalPolicy: false,
+      setByDestinationPolicy: false,
       setFromUi: false,
       key: 'isPinEnabled',
       updatesPreview: false,
@@ -579,6 +610,7 @@ function createSettings(): Settings {
       valid: true,
       available: true,
       setByGlobalPolicy: false,
+      setByDestinationPolicy: false,
       setFromUi: false,
       key: 'pinValue',
       updatesPreview: false,
@@ -856,15 +888,15 @@ export class PrintPreviewModelElement extends PolymerElement {
 
     const capsHasDuplex = !!caps && !!caps.duplex && !!caps.duplex.option;
     const capsHasLongEdge = capsHasDuplex &&
-        caps!.duplex!.option.some(o => o.type === DuplexType.LONG_EDGE);
+        caps.duplex!.option.some(o => o.type === DuplexType.LONG_EDGE);
     const capsHasShortEdge = capsHasDuplex &&
-        caps!.duplex!.option.some(o => o.type === DuplexType.SHORT_EDGE);
+        caps.duplex!.option.some(o => o.type === DuplexType.SHORT_EDGE);
     this.setSettingPath_(
         'duplexShortEdge.available', capsHasLongEdge && capsHasShortEdge);
     this.setSettingPath_(
         'duplex.available',
         (capsHasLongEdge || capsHasShortEdge) &&
-            caps!.duplex!.option.some(o => o.type === DuplexType.NO_DUPLEX));
+            caps.duplex!.option.some(o => o.type === DuplexType.NO_DUPLEX));
 
     this.setSettingPath_(
         'vendorItems.available', !!caps && !!caps.vendor_capability);
@@ -1096,8 +1128,8 @@ export class PrintPreviewModelElement extends PolymerElement {
         caps.media_type && caps.media_type.option &&
         caps.media_type.option.length > 0) {
       const unavailableValue =
-          caps.media_type!.option.find(o => !!o.is_default) ||
-          caps.media_type!.option[0];
+          caps.media_type.option.find(o => !!o.is_default) ||
+          caps.media_type.option[0];
       this.setSettingPath_('mediaType.unavailableValue', unavailableValue);
     }
 
@@ -1113,7 +1145,7 @@ export class PrintPreviewModelElement extends PolymerElement {
       this.setSetting('dpi', matchingOption || defaultOption, true);
     } else if (caps.dpi && caps.dpi.option && caps.dpi.option.length > 0) {
       const unavailableValue =
-          caps.dpi!.option.find(o => !!o.is_default) || caps.dpi!.option[0];
+          caps.dpi.option.find(o => !!o.is_default) || caps.dpi.option[0];
       this.setSettingPath_('dpi.unavailableValue', unavailableValue);
     }
 
@@ -1177,9 +1209,9 @@ export class PrintPreviewModelElement extends PolymerElement {
         caps.duplex.option) {
       // In this case, there must only be one option.
       const hasLongEdge =
-          caps.duplex!.option.some(o => o.type === DuplexType.LONG_EDGE);
+          caps.duplex.option.some(o => o.type === DuplexType.LONG_EDGE);
       const hasShortEdge =
-          caps.duplex!.option.some(o => o.type === DuplexType.SHORT_EDGE);
+          caps.duplex.option.some(o => o.type === DuplexType.SHORT_EDGE);
       // If the only option available is long edge, the value should always be
       // true.
       this.setSettingPath_(
@@ -1686,10 +1718,7 @@ export class PrintPreviewModelElement extends PolymerElement {
    * The default values override all the other option values sources (including
    * values specified by the user).
    */
-  // TODO(crbug.com/374066702): Decide if we want to fork this function and
-  // related classes to be ChromeOS specific.
-  // <if expr="is_chromeos">
-  private applyDestinationManagedJobOptions() {
+  private applyDestinationManagedJobOptionsDefaults_() {
     const managedPrintOptions = this.destination.managedPrintOptions;
     if (!managedPrintOptions) {
       return;
@@ -1708,7 +1737,7 @@ export class PrintPreviewModelElement extends PolymerElement {
     if (!this.settings.mediaType.setFromUi &&
         managedPrintOptions.mediaType?.defaultValue) {
       const mediaType = this.destination.getMediaType(
-          managedPrintOptions.mediaType!.defaultValue);
+          managedPrintOptions.mediaType.defaultValue);
       if (mediaType) {
         this.setSetting('mediaType', mediaType, /*noSticky=*/ true);
       }
@@ -1791,7 +1820,54 @@ export class PrintPreviewModelElement extends PolymerElement {
           /*noSticky=*/ true);
     }
   }
-  // </if>
+
+  /**
+   * Updates `setByDestinationPolicy` property for all the settings.
+   *
+   * Only settings that are supported by the per-printer job options policy are
+   * present here, for other settings this property is not used anyway.
+   */
+  private updateSetByDestinationPolicyProperties_() {
+    const allowedManagedPrintOptionsApplied =
+        this.destination.allowedManagedPrintOptionsApplied;
+    const capabilities = this.destination.capabilities;
+
+    this.set(
+        'settings.mediaSize.setByDestinationPolicy',
+        allowedManagedPrintOptionsApplied?.mediaSize &&
+            capabilities?.printer.media_size?.option.length === 1);
+
+    this.set(
+        'settings.mediaType.setByDestinationPolicy',
+        allowedManagedPrintOptionsApplied?.mediaType &&
+            capabilities?.printer.media_type?.option.length === 1);
+
+    if (allowedManagedPrintOptionsApplied?.duplex &&
+        capabilities?.printer.duplex?.option.length === 1) {
+      this.set('settings.duplex.setByDestinationPolicy', true);
+      this.set('settings.duplexShortEdge.setByDestinationPolicy', true);
+    } else if (
+        allowedManagedPrintOptionsApplied?.duplex &&
+        !this.destination.supportsDuplex(DuplexType.NO_DUPLEX)) {
+      // This means that all the allowed duplex values are two-sided, but there
+      // are multiple duplex modes allowed by the policy.
+      this.set('settings.duplex.setByDestinationPolicy', true);
+      this.set('settings.duplexShortEdge.setByDestinationPolicy', false);
+    } else {
+      this.set('settings.duplex.setByDestinationPolicy', false);
+      this.set('settings.duplexShortEdge.setByDestinationPolicy', false);
+    }
+
+    this.set(
+        'settings.color.setByDestinationPolicy',
+        allowedManagedPrintOptionsApplied?.color &&
+            capabilities?.printer.color?.option.length === 1);
+
+    this.set(
+        'settings.dpi.setByDestinationPolicy',
+        allowedManagedPrintOptionsApplied?.dpi &&
+            capabilities?.printer.dpi?.option.length === 1);
+  }
 
   /**
    * Restricts settings and applies defaults as defined by policy applicable to
@@ -1813,7 +1889,8 @@ export class PrintPreviewModelElement extends PolymerElement {
     // <if expr="is_chromeos">
     if (loadTimeData.getBoolean(
             'isUseManagedPrintJobOptionsInPrintPreviewEnabled')) {
-      this.applyDestinationManagedJobOptions();
+      this.applyDestinationManagedJobOptionsDefaults_();
+      this.updateSetByDestinationPolicyProperties_();
     }
     // </if>
 
@@ -1835,7 +1912,7 @@ export class PrintPreviewModelElement extends PolymerElement {
     // <if expr="is_chromeos">
     if (this.destination) {
       this.settingsManaged = this.settingsManaged ||
-          this.destination.allowedManagedPrintOptionsApplied;
+          this.destination.allowedManagedPrintOptionsAppliedForAnySetting();
     }
     // </if>
   }
@@ -1989,7 +2066,7 @@ export class PrintPreviewModelElement extends PolymerElement {
       } else {
         cjt.print.color = {type: selectedOption.type};
         if (selectedOption.hasOwnProperty('vendor_id')) {
-          cjt.print.color!.vendor_id = selectedOption.vendor_id;
+          cjt.print.color.vendor_id = selectedOption.vendor_id;
         }
       }
     } else {
@@ -2001,7 +2078,7 @@ export class PrintPreviewModelElement extends PolymerElement {
       if (defaultOption) {
         cjt.print.color = {type: defaultOption.type};
         if (defaultOption.hasOwnProperty('vendor_id')) {
-          cjt.print.color!.vendor_id = defaultOption.vendor_id;
+          cjt.print.color.vendor_id = defaultOption.vendor_id;
         }
       }
     }
@@ -2026,8 +2103,8 @@ export class PrintPreviewModelElement extends PolymerElement {
       // In this case "orientation" option is hidden from user, so user can't
       // adjust it for page content, see Landscape.isCapabilityAvailable().
       // We can improve results if we set AUTO here.
-      const capability = destination.capabilities!.printer ?
-          destination.capabilities!.printer.page_orientation :
+      const capability = destination.capabilities.printer ?
+          destination.capabilities.printer.page_orientation :
           null;
       if (capability && capability.option &&
           capability.option.some(option => option.type === 'AUTO')) {

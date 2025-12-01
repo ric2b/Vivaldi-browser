@@ -38,6 +38,7 @@ limitations under the License.
 #include "tensorflow/compiler/mlir/lite/stablehlo/transforms/transforms.h"
 #include "tensorflow/compiler/mlir/lite/transforms/converter_pass_options_setter.h"
 #include "tensorflow/compiler/mlir/lite/transforms/optimize_broadcast_like_pass.h"
+#include "tensorflow/compiler/mlir/lite/transforms/optimize_pass.h"
 #include "tensorflow/compiler/mlir/lite/transforms/pass.h"
 #include "tensorflow/compiler/mlir/lite/transforms/pass_registry_utils.h"
 #include "tensorflow/compiler/mlir/lite/transforms/passes.h"
@@ -61,26 +62,62 @@ namespace {
 constexpr mlir::StringRef kTFLiteDataLayout = "NHWC";
 }  // namespace
 
-void AddStrictQDQQuantizationPasses(const mlir::TFL::PassConfig& pass_config,
-                                    mlir::OpPassManager& pass_manager) {
-  mlir::quant::QuantizationSpecs updated_quant_specs;
-  updated_quant_specs = pass_config.quant_specs;
-  // TODO(majiddadashi): setting QDQCOnversionMode to static to enable per-axis
-  // propagation of parameters for transpose in the prepare quantize pass. The
-  // flag likely should become an enum value of QDQConversionMode.
-  updated_quant_specs.qdq_conversion_mode =
-      mlir::quant::QDQConversionMode::kQDQStatic;
+void AddOptimizationPasses(const tflite::ConverterFlags& converter_flags,
+                           const mlir::TFL::PassConfig& pass_config,
+                           mlir::OpPassManager* pass_manager) {
+  mlir::TFL::ConverterPassOptionsSetter converter_pass_options_setter(
+      converter_flags, pass_config);
+
+  pass_manager->addPass(mlir::TFL::CreatePushTransposeThroughEwisePass());
+
+  pass_manager->addNestedPass<mlir::func::FuncOp>(
+      mlir::TFL::Create<mlir::TFL::OptimizeBroadcastLikePass>());
+
+  // Add TFLite optimize pass.
+  mlir::TFL::OptimizePassOptions optimize_pass_options;
+  optimize_pass_options.enable_strict_qdq_mode =
+      (pass_config.quant_specs.qdq_conversion_mode ==
+       mlir::quant::QDQConversionMode::kQDQStrict);
+  std::unique_ptr<mlir::Pass> optimize_pass =
+      mlir::TFL::Create<mlir::TFL::OptimizePass>(optimize_pass_options);
+  auto pass_ptr =
+      dynamic_cast<mlir::TFL::MutableOptionsPass*>(optimize_pass.get());
+  if (pass_ptr) pass_ptr->ApplyOptionsVisitor(converter_pass_options_setter);
+  pass_manager->addNestedPass<mlir::func::FuncOp>(std::move(optimize_pass));
+
+  if (!pass_config.unfold_batch_matmul) {
+    // Enable an optimization pass that transforms BatchMatmul to FC only
+    // when `unfold_batch_matmul=false`.
+    pass_manager->addNestedPass<mlir::func::FuncOp>(
+        mlir::TFL::CreateOptimizeBatchMatmulPass());
+  }
+}
+
+void AddStrictQDQQuantizationPasses(
+    const tflite::ConverterFlags& converter_flags,
+    const mlir::TFL::PassConfig& pass_config,
+    mlir::OpPassManager& pass_manager) {
   pass_manager.addNestedPass<mlir::func::FuncOp>(
-      mlir::TFL::CreatePrepareQuantizePass(updated_quant_specs));
+      mlir::TFL::CreatePrepareQuantizePass(pass_config.quant_specs));
 
   pass_manager.addNestedPass<mlir::func::FuncOp>(
       mlir::TFL::CreateQuantizePass(pass_config.quant_specs));
+
+  // clean up DRQ FQ decomposition functions
+  pass_manager.addPass(mlir::createSymbolDCEPass());
+
   pass_manager.addNestedPass<mlir::func::FuncOp>(
       mlir::TFL::CreatePostQuantizePass(true));
 
   // So that quantized clipping activations get fused into preceding ops.
+  AddOptimizationPasses(converter_flags, pass_config, &pass_manager);
+
+  // TODO(b/399468842): This is a temporary fix to enable constant folding on
+  // quantized TFL_TransposeOp and TFL_ReshapeOp. Ideally TFL constant folders
+  // should handle quantized types (or anything that is supported by TFLite
+  // runtime).
   pass_manager.addNestedPass<mlir::func::FuncOp>(
-      mlir::TFL::CreateOptimizePass());
+      mlir::TFL::CreatePostQuantizePass(true));
 }
 
 void AddQuantizationPasses(const mlir::TFL::PassConfig& pass_config,
@@ -222,7 +259,7 @@ void AddPreQuantizationStableHloToTfPasses(
   // Expand backward compatibility with the given StableHLO version by
   // decomposing newer StableHLO operations into equivalent operations supported
   // by that older version.
-  pass_manager.addNestedPass<mlir::func::FuncOp>(
+  pass_manager.addPass(
       mlir::stablehlo::createStablehloCompatibilityExpanderPass(
           {tflite_supported_stablehlo_version}));
 
@@ -256,24 +293,18 @@ void AddPreQuantizationStableHloToTfPasses(
       mlir::TFL::CreateLegalizeJaxRandomPass());
 
   // Canonicalize, CSE etc.
-  pass_manager.addPass(mlir::mhlo::createStablehloLegalizeToHloPass());
   pass_manager.addNestedPass<mlir::func::FuncOp>(
       mlir::createCanonicalizerPass());
   pass_manager.addNestedPass<mlir::func::FuncOp>(mlir::createCSEPass());
   // DCE for private symbols.
   pass_manager.addPass(mlir::createSymbolDCEPass());
-
   pass_manager.addPass(mlir::TF::CreateStripNoinlineAttributePass());
   // Add inline pass.
   pass_manager.addPass(mlir::createInlinerPass());
-
-  // Expands mhlo.tuple ops.
-  pass_manager.addPass(
-      mlir::mhlo::createExpandHloTuplesPass(entry_function_name.str()));
-  // Flatten tuples for control flows.
+  // Flatten tuples in entry computations and custom calls.
   pass_manager.addNestedPass<mlir::func::FuncOp>(
-      mlir::mhlo::createFlattenTuplePass());
-
+      mlir::stablehlo_ext::createStablehloCanonicalizeFromHloImportPass(
+          {entry_function_name.str()}));
   mlir::odml::AddMhloOptimizationPasses(
       pass_manager,
       /*add_fold_broadcast_pass=*/pass_config.enable_stablehlo_quantizer);
@@ -408,33 +439,6 @@ void AddPreVariableFreezingTFToTFLConversionPasses(
       mlir::TFDevice::CreateDecomposeResourceOpsPass());
 
   pass_manager->addPass(mlir::TF::CreateTFRegionControlFlowToFunctional());
-}
-
-void AddOptimizationPasses(const tflite::ConverterFlags& converter_flags,
-                           const mlir::TFL::PassConfig& pass_config,
-                           mlir::OpPassManager* pass_manager) {
-  mlir::TFL::ConverterPassOptionsSetter converter_pass_options_setter(
-      converter_flags, pass_config);
-
-  pass_manager->addPass(mlir::TFL::CreatePushTransposeThroughEwisePass());
-
-  pass_manager->addNestedPass<mlir::func::FuncOp>(
-      mlir::TFL::Create<mlir::TFL::OptimizeBroadcastLikePass>());
-
-  // Add TFLite optimize pass.
-  std::unique_ptr<mlir::Pass> optimize_pass =
-      mlir::TFL::Create<mlir::TFL::OptimizePass>();
-  auto pass_ptr =
-      dynamic_cast<mlir::TFL::MutableOptionsPass*>(optimize_pass.get());
-  if (pass_ptr) pass_ptr->ApplyOptionsVisitor(converter_pass_options_setter);
-  pass_manager->addNestedPass<mlir::func::FuncOp>(std::move(optimize_pass));
-
-  if (!pass_config.unfold_batch_matmul) {
-    // Enable an optimization pass that transforms BatchMatmul to FC only
-    // when `unfold_batch_matmul=false`.
-    pass_manager->addNestedPass<mlir::func::FuncOp>(
-        mlir::TFL::CreateOptimizeBatchMatmulPass());
-  }
 }
 
 // This is the later part of the conversion in isolation. This enables a caller
@@ -580,7 +584,8 @@ void AddPostVariableFreezingTFToTFLConversionPasses(
     pass_manager->addPass(mlir::TFL::CreateLegalizeVariablesPass());
     pass_manager->addPass(mlir::TFL::CreateLegalizeHashTablesPass());
 
-    if (pass_config.quant_specs.strict_qdq_mode) {
+    if (pass_config.quant_specs.qdq_conversion_mode ==
+        mlir::quant::QDQConversionMode::kQDQStrict) {
       pass_manager->addPass(mlir::TFL::CreateLowerQuantAnnotationsPass());
 
       // To remove the quant annotation decompositions.
@@ -605,8 +610,10 @@ void AddPostVariableFreezingTFToTFLConversionPasses(
         mlir::createCanonicalizerPass());
     pass_manager->addNestedPass<mlir::func::FuncOp>(mlir::createCSEPass());
 
-    if (pass_config.quant_specs.strict_qdq_mode) {
-      AddStrictQDQQuantizationPasses(pass_config, *pass_manager);
+    if (pass_config.quant_specs.qdq_conversion_mode ==
+        mlir::quant::QDQConversionMode::kQDQStrict) {
+      AddStrictQDQQuantizationPasses(converter_flags, pass_config,
+                                     *pass_manager);
     } else {
       // Run quantization after all the floating point model conversion is
       // completed. Add either full integer quantization or dynamic range

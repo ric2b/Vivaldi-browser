@@ -23,6 +23,7 @@
 #include "cc/debug/layer_tree_debug_state.h"
 #include "cc/input/scroll_state.h"
 #include "cc/layers/layer.h"
+#include "cc/layers/solid_color_layer_impl.h"
 #include "cc/trees/clip_node.h"
 #include "cc/trees/draw_property_utils.h"
 #include "cc/trees/effect_node.h"
@@ -104,8 +105,7 @@ LayerImpl::LayerImpl(LayerTreeImpl* tree_impl,
       transform_tree_index_(kInvalidPropertyNodeId),
       effect_tree_index_(kInvalidPropertyNodeId),
       clip_tree_index_(kInvalidPropertyNodeId),
-      scroll_tree_index_(kInvalidPropertyNodeId),
-      current_draw_mode_(DRAW_MODE_NONE) {
+      scroll_tree_index_(kInvalidPropertyNodeId) {
   DCHECK_GT(layer_id_, 0);
 
   DCHECK(layer_tree_impl_);
@@ -293,12 +293,7 @@ bool LayerImpl::WillDraw(DrawMode draw_mode,
       return false;
   }
 
-  current_draw_mode_ = draw_mode;
   return true;
-}
-
-void LayerImpl::DidDraw(viz::ClientResourceProvider* resource_provider) {
-  current_draw_mode_ = DRAW_MODE_NONE;
 }
 
 bool LayerImpl::ShowDebugBorders(DebugBorderType type) const {
@@ -491,6 +486,27 @@ bool LayerImpl::IsAffectedByPageScale() const {
       ->in_subtree_of_page_scale_layer;
 }
 
+DamageReasonSet LayerImpl::GetDamageReasonsFromLayerPropertyChange() const {
+  DamageReasonSet reasons;
+  if (layer_property_changed_not_from_property_trees_ ||
+      layer_property_changed_from_property_trees_ ||
+      GetPropertyTrees()->full_tree_damaged()) {
+    reasons.Put(DamageReason::kUntracked);
+  }
+  if (transform_tree_index() != kInvalidPropertyNodeId) {
+    TransformNode* transform_node =
+        GetTransformTree().Node(transform_tree_index());
+    reasons.PutAll(transform_node->damage_reasons());
+  }
+  if (effect_tree_index() != kInvalidPropertyNodeId) {
+    EffectNode* effect_node = GetEffectTree().Node(effect_tree_index());
+    if (effect_node && effect_node->effect_changed) {
+      reasons.Put(DamageReason::kUntracked);
+    }
+  }
+  return reasons;
+}
+
 bool LayerImpl::LayerPropertyChanged() const {
   return layer_property_changed_not_from_property_trees_ ||
          LayerPropertyChangedFromPropertyTrees();
@@ -504,8 +520,9 @@ bool LayerImpl::LayerPropertyChangedFromPropertyTrees() const {
     return false;
   TransformNode* transform_node =
       GetTransformTree().Node(transform_tree_index());
-  if (transform_node && transform_node->transform_changed)
+  if (transform_node && transform_node->transform_changed()) {
     return true;
+  }
   if (effect_tree_index() == kInvalidPropertyNodeId)
     return false;
   EffectNode* effect_node = GetEffectTree().Node(effect_tree_index());
@@ -712,9 +729,8 @@ gfx::Rect LayerImpl::GetDamageRect() const {
 }
 
 DamageReasonSet LayerImpl::GetDamageReasons() const {
-  DamageReasonSet reasons;
-  if (LayerPropertyChanged() || !update_rect_.IsEmpty() ||
-      !GetDamageRect().IsEmpty()) {
+  DamageReasonSet reasons = GetDamageReasonsFromLayerPropertyChange();
+  if (!update_rect_.IsEmpty() || !GetDamageRect().IsEmpty()) {
     reasons.Put(DamageReason::kUntracked);
   }
   return reasons;
@@ -1072,6 +1088,40 @@ gfx::ContentColorUsage LayerImpl::GetContentColorUsage() const {
 viz::ViewTransitionElementResourceId LayerImpl::ViewTransitionResourceId()
     const {
   return viz::ViewTransitionElementResourceId();
+}
+
+void LayerImpl::AppendSolidQuad(viz::CompositorRenderPass* render_pass,
+                                AppendQuadsData* append_quads_data,
+                                SkColor4f color) {
+  // TODO(crbug.com/41468388): This is still hard-coded at 1.0. This has some
+  // history:
+  //   - for crbug.com/769319, the contents scale was allowed to change, to
+  //     avoid blurring on high-dpi screens.
+  //   - for crbug.com/796558, the max device scale was hard-coded back to 1.0
+  //     for single-tile masks, to avoid problems with transforms.
+  // To avoid those transform/scale bugs, this is currently left at 1.0. See
+  // crbug.com/979672 for more context and test links.
+  float max_contents_scale = 1;
+
+  // The downstream CA layers use shared_quad_state to generate resources of
+  // the right size even if it is a solid color picture layer.
+  viz::SharedQuadState* shared_quad_state =
+      render_pass->CreateAndAppendSharedQuadState();
+  PopulateScaledSharedQuadState(shared_quad_state, max_contents_scale,
+                                contents_opaque());
+
+  AppendDebugBorderQuad(render_pass, gfx::Rect(bounds()), shared_quad_state,
+                        append_quads_data);
+
+  gfx::Rect scaled_visible_layer_rect =
+      shared_quad_state->visible_quad_layer_rect;
+  Occlusion occlusion = draw_properties().occlusion_in_content_space;
+
+  EffectNode* effect_node = GetEffectTree().Node(effect_tree_index());
+  SolidColorLayerImpl::AppendSolidQuads(
+      render_pass, occlusion, shared_quad_state, scaled_visible_layer_rect,
+      color, !layer_tree_impl()->settings().enable_edge_anti_aliasing,
+      effect_node->blend_mode, append_quads_data);
 }
 
 }  // namespace cc

@@ -31,6 +31,17 @@ inline constexpr std::array kSpanifyManualPathsToIgnore = {
     // win:pe_image target that uses this file does not depend on base/.
     "base/no_destructor.h",
 
+    // dwarf_helpers from //base/BUILD.gn is a dependency of base and can't
+    // depend on it and thus can't use base::span.
+    "base/debug/buffered_dwarf_reader.cc",
+    "base/debug/buffered_dwarf_reader.h",
+    "base/debug/dwarf_line_no.cc",
+    "base/debug/dwarf_line_no.h",
+
+    // span_unittests explicitly wants to test compatibility of certain types,
+    // rewriting would break that.
+    "base/containers/span_unittest.cc"
+
     // Can't depend on //base, pointers/references under this directory can't be
     // rewritten.
     "testing/rust_gtest_interop/",
@@ -96,6 +107,57 @@ inline constexpr std::array kSpanifyManualPathsToIgnore = {
     "third_party/blink/renderer/platform/wtf/",
     "url/url_canon_host.cc",
     "url/url_canon_path.cc",
+
+    // Exclude auto generated files. These are files that contain the string
+    // "This file is auto-generated from".
+    "gpu/GLES2/gl2chromium_autogen.h",
+    "gpu/command_buffer/client/gles2_implementation_impl_autogen.h",
+    "gpu/command_buffer/client/gles2_implementation_unittest_autogen.h",
+    "gpu/command_buffer/client/raster_implementation_impl_autogen.h",
+    "gpu/command_buffer/client/raster_implementation_unittest_autogen.h",
+    "gpu/command_buffer/common/gles2_cmd_format_autogen.h",
+    "gpu/command_buffer/service/context_state_impl_autogen.h",
+    "gpu/command_buffer/service/gles2_cmd_decoder_autogen.h",
+    "gpu/command_buffer/service/gles2_cmd_decoder_unittest_2_autogen.h",
+    "gpu/command_buffer/service/raster_decoder_autogen.h",
+    "gpu/config/gpu_control_list_testing_autogen.cc",
+    "gpu/config/gpu_control_list_testing_autogen.h",
+    "gpu/config/gpu_control_list_testing_entry_enums_autogen.h",
+    "gpu/config/gpu_control_list_testing_exceptions_autogen.h",
+    "gpu/ipc/common/vulkan_types.mojom",
+    "gpu/ipc/common/vulkan_types_mojom_traits.cc",
+    "gpu/ipc/common/vulkan_types_mojom_traits.h",
+    "gpu/vulkan/vulkan_function_pointers.cc",
+    "gpu/vulkan/vulkan_function_pointers.h",
+    "ppapi/c/dev/ppb_opengles2ext_dev.h",
+    "ppapi/c/ppb_opengles2.h",
+    "ppapi/lib/gl/gles2/gles2.c",
+    "ppapi/shared_impl/ppb_opengles2_shared.cc",
+    "ui/gl/egl_bindings_autogen_mock.cc",
+    "ui/gl/egl_bindings_autogen_mock.h",
+    "ui/gl/gl_bindings_api_autogen_egl.h",
+    "ui/gl/gl_bindings_api_autogen_gl.h",
+    "ui/gl/gl_bindings_autogen_egl.cc",
+    "ui/gl/gl_bindings_autogen_egl.h",
+    "ui/gl/gl_bindings_autogen_gl.cc",
+    "ui/gl/gl_bindings_autogen_gl.h",
+    "ui/gl/gl_bindings_autogen_mock.cc",
+    "ui/gl/gl_bindings_autogen_mock.h",
+    "ui/gl/gl_enums_implementation_autogen.h",
+    "ui/gl/gl_mock_autogen_egl.h",
+    "ui/gl/gl_mock_autogen_gl.h",
+    "ui/gl/gl_stub_autogen_gl.cc",
+    "ui/gl/gl_stub_autogen_gl.h",
+
+    // Exclude these generated files.
+    //
+    // An example of `spanify` picking them up can be seen at
+    // https://crrev.com/c/6389460/1/third_party/blink/renderer/core/xml/xpath_grammar_generated.cc
+    //
+    // while a proper "rewrite" would require manipulating bison, e.g.
+    // https://crrev.com/c/6357073
+    "third_party/blink/renderer/core/xml/xpath_grammar_generated.h",
+    "third_party/blink/renderer/core/xml/xpath_grammar_generated.cc",
 };
 
 #endif  // TOOLS_CLANG_SPANIFY_SPANIFYMANUALPATHSTOIGNORE_H_

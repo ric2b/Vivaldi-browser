@@ -212,7 +212,6 @@ IGNORED_INCLUDES = {
     b'libANGLE/renderer/vulkan/android/DisplayVkAndroid.h',
     b'libANGLE/renderer/vulkan/DisplayVk_api.h',
     b'libANGLE/renderer/vulkan/fuchsia/DisplayVkFuchsia.h',
-    b'libANGLE/renderer/vulkan/ggp/DisplayVkGGP.h',
     b'libANGLE/renderer/vulkan/mac/DisplayVkMac.h',
     b'libANGLE/renderer/vulkan/win32/DisplayVkWin32.h',
     b'libANGLE/renderer/vulkan/xcb/DisplayVkXcb.h',
@@ -244,9 +243,8 @@ IGNORED_INCLUDES = {
     # comments. Since the script doesn't skip comments they are
     # erroneously marked as valid includes
     b'rapidjson/...',
-    # Validation layers support building with robin hood hashing, but we are not enabling that
-    # See http://anglebug.com/42264327
-    b'robin_hood.h',
+    # Conditionally included in http://github.com/KhronosGroup/Vulkan-ValidationLayers/pull/9790
+    b'parallel_hashmap/phmap.h',
     # Validation layers optionally use mimalloc
     b'mimalloc-new-delete.h',
     # From the Vulkan-Loader

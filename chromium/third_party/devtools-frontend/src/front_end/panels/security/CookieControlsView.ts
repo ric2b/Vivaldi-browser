@@ -10,7 +10,7 @@ import * as Common from '../../core/common/common.js';
 import * as Host from '../../core/host/host.js';
 import * as i18n from '../../core/i18n/i18n.js';
 import type * as Platform from '../../core/platform/platform.js';
-import type * as Root from '../../core/root/root.js';
+import * as Root from '../../core/root/root.js';
 import * as SDK from '../../core/sdk/sdk.js';
 import * as Buttons from '../../ui/components/buttons/buttons.js';
 import * as ChromeLink from '../../ui/components/chrome_link/chrome_link.js';
@@ -110,7 +110,7 @@ const UIStrings = {
    *@description Text used for link within the enableFlag to show users where they can enable the Third-party Cookie Heuristics Grants flag.
    */
   tpcdHeuristicsGrants: '#tpcd-heuristics-grants',
-};
+} as const;
 
 const str_ = i18n.i18n.registerUIStrings('panels/security/CookieControlsView.ts', UIStrings);
 export const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
@@ -120,9 +120,8 @@ export interface ViewInput {
   inputChanged: (newValue: boolean, setting: Common.Settings.Setting<boolean>) => void;
   openChromeCookieSettings: () => void;
 }
-export interface ViewOutput {}
 
-export type View = (input: ViewInput, output: ViewOutput, target: HTMLElement) => void;
+export type View = (input: ViewInput, output: object, target: HTMLElement) => void;
 
 export function showInfobar(): void {
   UI.InspectorView.InspectorView.instance().displayDebuggedTabReloadRequiredWarning(
@@ -134,7 +133,7 @@ export class CookieControlsView extends UI.Widget.VBox {
   #isGracePeriodActive: boolean;
   #thirdPartyControlsDict: Root.Runtime.HostConfig['thirdPartyCookieControls'];
 
-  constructor(element?: HTMLElement, view: View = (input, output, target) => {
+  constructor(element?: HTMLElement, view: View = (input, _, target) => {
     // createSetting() allows us to initialize the settings with the UI binding values the first
     // time that the browser starts, and use the existing setting value for all subsequent uses.
     const enterpriseEnabledSetting = Common.Settings.Settings.instance().createSetting(
@@ -308,7 +307,7 @@ export class CookieControlsView extends UI.Widget.VBox {
     super(true, undefined, element);
     this.#view = view;
     this.#isGracePeriodActive = false;
-    this.#thirdPartyControlsDict = Common.Settings.Settings.instance().getHostConfig().thirdPartyCookieControls;
+    this.#thirdPartyControlsDict = Root.Runtime.hostConfig.thirdPartyCookieControls;
     this.registerRequiredCSS(Input.checkboxStylesRaw, cookieControlsViewStyles);
 
     SDK.TargetManager.TargetManager.instance().addModelListener(
@@ -353,8 +352,6 @@ export class CookieControlsView extends UI.Widget.VBox {
     this.checkGracePeriodActive().catch(error => {
       console.error(error);
     });
-
-    UI.InspectorView.InspectorView.instance().removeDebuggedTabReloadRequiredWarning();
   }
 
   async checkGracePeriodActive(event?: Common.EventTarget.EventTargetEvent<SDK.Resource.Resource>): Promise<void> {

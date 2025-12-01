@@ -29,9 +29,8 @@
 
 #include "base/memory/scoped_refptr.h"
 #include "third_party/blink/renderer/core/core_export.h"
-#include "third_party/blink/renderer/platform/graphics/graphics_types.h"
+#include "third_party/blink/renderer/platform/graphics/flush_reason.h"
 #include "third_party/blink/renderer/platform/graphics/image_orientation.h"
-#include "third_party/blink/renderer/platform/graphics/static_bitmap_image.h"
 #include "third_party/blink/renderer/platform/weborigin/kurl.h"
 #include "ui/gfx/geometry/size_f.h"
 
@@ -52,11 +51,9 @@ enum SourceImageStatus {
 
 class CORE_EXPORT CanvasImageSource {
  public:
-  virtual scoped_refptr<Image> GetSourceImageForCanvas(
-      FlushReason,
-      SourceImageStatus*,
-      const gfx::SizeF&,
-      const AlphaDisposition alpha_disposition) = 0;
+  virtual scoped_refptr<Image> GetSourceImageForCanvas(FlushReason,
+                                                       SourceImageStatus*,
+                                                       const gfx::SizeF&) = 0;
 
   // IMPORTANT: Result must be independent of whether destinationContext is
   // already tainted because this function may be used to determine whether

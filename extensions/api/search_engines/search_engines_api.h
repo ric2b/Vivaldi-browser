@@ -132,17 +132,6 @@ class SearchEnginesGetSearchRequestFunction : public ExtensionFunction {
   ExtensionFunction::ResponseAction Run() override;
 };
 
-class SearchEnginesGetSuggestRequestFunction : public ExtensionFunction {
- public:
-  DECLARE_EXTENSION_FUNCTION("searchEngines.getSuggestRequest",
-                             SEARCH_ENGINES_GET_SUGGEST_REQUEST)
-  SearchEnginesGetSuggestRequestFunction() = default;
-
- private:
-  ~SearchEnginesGetSuggestRequestFunction() override = default;
-  ExtensionFunction::ResponseAction Run() override;
-};
-
 class SearchEnginesRepairPrepopulatedTemplateUrlsFunction
     : public ExtensionFunction {
  public:

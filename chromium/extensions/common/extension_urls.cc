@@ -14,7 +14,6 @@
 #include "components/safe_browsing/core/common/features.h"
 #include "components/safe_browsing/core/common/hashprefix_realtime/hash_realtime_utils.h"
 #include "extensions/common/constants.h"
-#include "extensions/common/extension_features.h"
 #include "extensions/common/extension_id.h"
 #include "extensions/common/extensions_client.h"
 #include "net/base/url_util.h"
@@ -43,6 +42,7 @@ const char kChromeWebstoreBaseURL[] = "https://chrome.google.com/webstore";
 const char kNewChromeWebstoreBaseURL[] = "https://chromewebstore.google.com/";
 const char kChromeWebstoreUpdateURL[] =
     "https://clients2.google.com/service/update2/crx";
+const char kChromeWebstoreApiURL[] = "https://chromewebstore.googleapis.com/";
 
 const char kAppMenuUtmSource[] = "ext_app_menu";
 const char kExtensionsMenuUtmSource[] = "ext_extensions_menu";
@@ -77,11 +77,6 @@ std::string GetWebstoreItemDetailURLPrefix() {
   return GetNewWebstoreLaunchURL().spec() + "detail/";
 }
 
-GURL GetWebstoreItemJsonDataURL(const extensions::ExtensionId& extension_id) {
-  return GURL(GetWebstoreLaunchURL().spec() + "/inlineinstall/detail/" +
-              extension_id);
-}
-
 GURL GetWebstoreItemSnippetURL(const extensions::ExtensionId& extension_id) {
   if (g_item_snippet_url_for_test_) {
     // Return `<base URL><extension_id>`. There is no suffix if the URL is
@@ -92,9 +87,9 @@ GURL GetWebstoreItemSnippetURL(const extensions::ExtensionId& extension_id) {
   }
 
   // Return `<base URL><extension_id><suffix>`.
-  return GURL(base::StringPrintf(
-      "https://chromewebstore.googleapis.com/v2/items/%s:fetchItemSnippet",
-      extension_id.c_str()));
+  return GURL(kChromeWebstoreApiURL)
+      .Resolve(base::StringPrintf("v2/items/%s:fetchItemSnippet",
+                                  extension_id.c_str()));
 }
 
 base::AutoReset<const GURL*> SetItemSnippetURLForTesting(const GURL* test_url) {
@@ -114,8 +109,8 @@ GURL GetWebstoreUpdateUrl() {
 
 GURL GetWebstoreReportAbuseUrl(const extensions::ExtensionId& extension_id,
                                const std::string& referrer_id) {
-  return GURL(base::StringPrintf("%s/report/%s?utm_source=%s",
-                                 GetWebstoreLaunchURL().spec().c_str(),
+  return GURL(base::StringPrintf("%sdetail/%s/report?utm_source=%s",
+                                 GetNewWebstoreLaunchURL().spec().c_str(),
                                  extension_id.c_str(), referrer_id.c_str()));
 }
 
@@ -140,6 +135,11 @@ bool IsWebstoreUpdateUrl(const GURL& update_url) {
   GURL store_url = GetWebstoreUpdateUrl();
   return (update_url.host_piece() == store_url.host_piece() &&
           update_url.path_piece() == store_url.path_piece());
+}
+
+bool IsWebstoreApiUrl(const GURL& url) {
+  url::Origin origin = url::Origin::Create(url);
+  return origin.IsSameOriginWith(GURL(kChromeWebstoreApiURL));
 }
 
 bool IsBlocklistUpdateUrl(const GURL& url) {

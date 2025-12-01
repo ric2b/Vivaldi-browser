@@ -5,6 +5,7 @@
 #include "services/network/network_service.h"
 
 #include <algorithm>
+#include <cstdint>
 #include <map>
 #include <optional>
 #include <utility>
@@ -17,6 +18,7 @@
 #include "base/debug/dump_without_crashing.h"
 #include "base/environment.h"
 #include "base/feature_list.h"
+#include "base/files/file.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/functional/bind.h"
@@ -37,7 +39,9 @@
 #include "base/values.h"
 #include "build/build_config.h"
 #include "build/chromecast_buildflags.h"
+#include "components/ip_protection/common/ip_protection_telemetry.h"
 #include "components/ip_protection/common/masked_domain_list_manager.h"
+#include "components/ip_protection/common/probabilistic_reveal_token_registry.h"
 #include "components/network_session_configurator/common/network_features.h"
 #include "components/os_crypt/sync/os_crypt.h"
 #include "components/privacy_sandbox/masked_domain_list/masked_domain_list.pb.h"
@@ -82,6 +86,7 @@
 #include "services/network/net_log_exporter.h"
 #include "services/network/net_log_proxy_sink.h"
 #include "services/network/network_context.h"
+#include "services/network/public/cpp/content_decoding_interceptor.h"
 #include "services/network/public/cpp/crash_keys.h"
 #include "services/network/public/cpp/features.h"
 #include "services/network/public/cpp/initiator_lock_compatibility.h"
@@ -226,14 +231,22 @@ void HandleBadMessage(const std::string& error) {
           switches::kIgnoreBadMessageForTesting)) {
     return;
   }
-  mojo::debug::ScopedMessageErrorCrashKey crash_key_value(error);
   // Don't expect bad message in normal testing and usage, but it could happen
-  // if a compromised renderer process sends a bad message. Therefore, use
-  // DUMP_WILL_BE_NOTREACHED to create dump in official build and crash
-  // otherwise so that it is more visible when unexpected bad message is
-  // encountered in tests.
-  DUMP_WILL_BE_NOTREACHED();
+  // if a compromised renderer process sends a bad message. Therefore, create
+  // dump in official build or ipc fuzzer build where it is expected to received
+  // bad message, and crash otherwise so that it is more visible when unexpected
+  // bad message is encountered in tests.
+  // Also create dump instead of crash for builds without DCHECK on as some
+  // fuzzing tests are done using builds without ENABLE_IPC_FUZZER, but those
+  // builds are always with DCHECK disabled. As DCHECK is on for most builds,
+  // we still have enough coverage for crashing upon bad message behavior.
+#if defined(OFFICIAL_BUILD) || defined(ENABLE_IPC_FUZZER) || !DCHECK_IS_ON()
+  mojo::debug::ScopedMessageErrorCrashKey crash_key_value(error);
+  base::debug::DumpWithoutCrashing();
   network::debug::ClearDeserializationCrashKeyString();
+#else
+  LOG(FATAL) << error;
+#endif
 }
 
 // Runs `results_cb` on `sequenced_task_runner` with an empty result and
@@ -479,6 +492,9 @@ void NetworkService::Initialize(mojom::NetworkServiceParamsPtr params,
       std::make_unique<ip_protection::MaskedDomainListManager>(
           params->ip_protection_proxy_bypass_policy);
 
+  probabilistic_reveal_token_registry_ =
+      std::make_unique<ip_protection::ProbabilisticRevealTokenRegistry>();
+
 #if BUILDFLAG(IS_CT_SUPPORTED)
   constexpr size_t kMaxSCTAuditingCacheEntries = 1024;
   sct_auditing_cache_ =
@@ -675,6 +691,7 @@ void NetworkService::CreateNetworkContext(
 
 void NetworkService::ConfigureStubHostResolver(
     bool insecure_dns_client_enabled,
+    bool happy_eyeballs_v3_enabled,
     net::SecureDnsMode secure_dns_mode,
     const net::DnsOverHttpsConfig& dns_over_https_config,
     bool additional_dns_types_enabled) {
@@ -695,6 +712,17 @@ void NetworkService::ConfigureStubHostResolver(
       base::FeatureList::IsEnabled(features::kDnsOverHttpsUpgrade);
 
   host_resolver_manager_->SetDnsConfigOverrides(overrides);
+
+  const bool happy_eyeballs_v3_changed =
+      happy_eyeballs_v3_enabled !=
+      host_resolver_manager_->IsHappyEyeballsV3Enabled();
+  host_resolver_manager_->SetIsHappyEyeballsV3Enabled(
+      happy_eyeballs_v3_enabled);
+  if (happy_eyeballs_v3_changed) {
+    for (NetworkContext* network_context : network_contexts_) {
+      network_context->CloseAllConnections(base::DoNothing());
+    }
+  }
 }
 
 void NetworkService::DisableQuic() {
@@ -853,6 +881,9 @@ void NetworkService::ParseHeaders(
     const GURL& url,
     const scoped_refptr<net::HttpResponseHeaders>& headers,
     ParseHeadersCallback callback) {
+  base::ScopedUmaHistogramTimer parse_headers_time(
+      "NetworkService.ParsedHeaders.IPCHandleTime",
+      base::ScopedUmaHistogramTimer::ScopedHistogramTiming::kMicrosecondTimes);
   std::move(callback).Run(PopulateParsedHeaders(headers.get(), url));
 }
 
@@ -931,25 +962,29 @@ void NetworkService::UpdateMaskedDomainList(
   const base::Time start_time = base::Time::Now();
   auto mdl = masked_domain_list.As<masked_domain_list::MaskedDomainList>();
   if (mdl.has_value()) {
-    UMA_HISTOGRAM_MEMORY_KB("NetworkService.MaskedDomainList.SizeInKB",
-                            mdl->ByteSizeLong() / 1024);
-
+    ip_protection::Telemetry().MdlSize(mdl->ByteSizeLong());
     masked_domain_list_manager_->UpdateMaskedDomainList(mdl.value(),
                                                         exclusion_list);
-
-    base::UmaHistogramBoolean(
-        "NetworkService.IpProtection.ProxyAllowList."
-        "UpdateSuccess",
-        true);
-  } else {
-    base::UmaHistogramBoolean(
-        "NetworkService.IpProtection.ProxyAllowList.UpdateSuccess", false);
-    LOG(ERROR) << "Unable to parse MDL in NetworkService";
   }
 
   base::UmaHistogramTimes(
       "NetworkService.IpProtection.ProxyAllowList.UpdateProcessTime",
       base::Time::Now() - start_time);
+}
+
+void NetworkService::UpdateMaskedDomainListFlatbuffer(
+    base::File default_file,
+    uint64_t default_file_size,
+    base::File regular_browsing_file,
+    uint64_t regular_browsing_file_size) {
+  masked_domain_list_manager_->UpdateMaskedDomainListFlatbuffer(
+      std::move(default_file), default_file_size,
+      std::move(regular_browsing_file), regular_browsing_file_size);
+}
+
+void NetworkService::UpdateProbabilisticRevealTokenRegistry(
+    base::Value::Dict registry) {
+  probabilistic_reveal_token_registry_->UpdateRegistry(std::move(registry));
 }
 
 #if BUILDFLAG(IS_ANDROID)
@@ -989,6 +1024,24 @@ void NetworkService::SetGssapiLibraryLoadObserver(
   gssapi_library_load_observer_.Bind(std::move(gssapi_library_load_observer));
 }
 #endif  // BUILDFLAG(IS_LINUX)
+
+void NetworkService::InterceptUrlLoaderForBodyDecoding(
+    const std::vector<net::SourceStreamType>& content_encoding_types,
+    mojo::ScopedDataPipeConsumerHandle source_body,
+    mojo::ScopedDataPipeProducerHandle dest_body,
+    mojo::PendingRemote<network::mojom::URLLoader> source_url_loader,
+    mojo::PendingReceiver<network::mojom::URLLoaderClient>
+        source_url_loader_client,
+    mojo::PendingReceiver<network::mojom::URLLoader> dest_url_loader,
+    mojo::PendingRemote<network::mojom::URLLoaderClient>
+        dest_url_loader_client) {
+  ContentDecodingInterceptor::Intercept(
+      content_encoding_types, std::move(source_body), std::move(dest_body),
+      std::move(source_url_loader), std::move(source_url_loader_client),
+      std::move(dest_url_loader), std::move(dest_url_loader_client),
+      base::ThreadPool::CreateSequencedTaskRunner(
+          {base::TaskPriority::USER_BLOCKING}));
+}
 
 void NetworkService::StartNetLogBounded(base::File file,
                                         uint64_t max_total_size,

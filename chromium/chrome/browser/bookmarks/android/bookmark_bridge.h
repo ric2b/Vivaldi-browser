@@ -352,6 +352,11 @@ class BookmarkBridge : public ProfileObserver,
                       const jlong id,
                       const GURL& url);
 
+  bool IsDirectChildOfRoot(
+                        JNIEnv* env,
+                        const base::android::JavaParamRef<jobject>& obj,
+                        const jlong id);
+
   // Vivaldi --->
 
  private:

@@ -7,11 +7,12 @@
 
 #include "src/sandbox/isolate.h"
 
-#ifdef V8_ENABLE_SANDBOX
-
 namespace v8::internal {
 
 class DisallowJavascriptExecution;
+
+#ifdef V8_ENABLE_SANDBOX
+
 struct TrustedPointerTableEntry;
 
 // A TrustedPointerPublishingScope is an optional facility for tracking
@@ -21,7 +22,7 @@ struct TrustedPointerTableEntry;
 // untrusted code (not even via existing in-sandbox corruption).
 class TrustedPointerPublishingScope {
  public:
-  TrustedPointerPublishingScope(IsolateForSandbox isolate,
+  TrustedPointerPublishingScope(Isolate* isolate,
                                 const DisallowJavascriptExecution& no_js);
   ~TrustedPointerPublishingScope();
 
@@ -42,11 +43,37 @@ class TrustedPointerPublishingScope {
     TrustedPointerTableEntry* singleton_{nullptr};
     std::vector<TrustedPointerTableEntry*>* vector_;
   };
-  IsolateForSandbox isolate_;
+  Isolate* isolate_;
 };
 
-}  // namespace v8::internal
+// Temporarily disables a TrustedPointerPublishingScope.
+class DisableTrustedPointerPublishingScope {
+ public:
+  explicit DisableTrustedPointerPublishingScope(Isolate* isolate);
+  ~DisableTrustedPointerPublishingScope();
+
+ private:
+  Isolate* isolate_;
+  TrustedPointerPublishingScope* saved_{nullptr};
+};
+
+#else  // V8_ENABLE_SANDBOX
+
+class TrustedPointerPublishingScope {
+ public:
+  TrustedPointerPublishingScope(Isolate* isolate,
+                                const DisallowJavascriptExecution& no_js) {}
+  void MarkSuccess() {}
+  void MarkFailure() {}
+};
+
+class DisableTrustedPointerPublishingScope {
+ public:
+  explicit DisableTrustedPointerPublishingScope(Isolate* isolate) {}
+};
 
 #endif  // V8_ENABLE_SANDBOX
+
+}  // namespace v8::internal
 
 #endif  // V8_SANDBOX_TRUSTED_POINTER_SCOPE_H_

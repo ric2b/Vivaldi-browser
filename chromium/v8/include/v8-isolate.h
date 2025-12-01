@@ -240,8 +240,8 @@ class V8_EXPORT IsolateGroup {
   IsolateGroup(IsolateGroup&& other);
   IsolateGroup& operator=(IsolateGroup&& other);
 
-  IsolateGroup(const IsolateGroup&) = delete;
-  IsolateGroup& operator=(const IsolateGroup&) = delete;
+  IsolateGroup(const IsolateGroup&);
+  IsolateGroup& operator=(const IsolateGroup&);
 
   ~IsolateGroup();
 
@@ -255,6 +255,7 @@ class V8_EXPORT IsolateGroup {
 
  private:
   friend class Isolate;
+  friend class ArrayBuffer::Allocator;
 
   // The isolate_group pointer should be already acquired.
   explicit IsolateGroup(internal::IsolateGroup*&& isolate_group);
@@ -629,6 +630,10 @@ class V8_EXPORT Isolate {
     kWeakReferences = 161,
     kErrorIsError = 162,
     kInvalidatedTypedArrayLengthLookupChainProtector = 163,
+    kRegExpEscape = 164,
+    kFloat16Array = 165,
+    kExplicitResourceManagement = 166,
+    kWasmBranchHinting = 167,
 
     // If you add new values here, you'll also need to update Chromium's:
     // web_feature.mojom, use_counter_callback.cc, and enums.xml. V8 changes to
@@ -1167,29 +1172,6 @@ class V8_EXPORT Isolate {
    */
   void SetEmbedderRootsHandler(EmbedderRootsHandler* handler);
 
-  /**
-   * Attaches a managed C++ heap as an extension to the JavaScript heap. The
-   * embedder maintains ownership of the CppHeap. At most one C++ heap can be
-   * attached to V8.
-   *
-   * Multi-threaded use requires the use of v8::Locker/v8::Unlocker, see
-   * CppHeap.
-   *
-   * If a CppHeap is set via CreateParams, then this call is a noop.
-   */
-  V8_DEPRECATE_SOON(
-      "Set the heap on Isolate creation using CreateParams instead.")
-  void AttachCppHeap(CppHeap*);
-
-  /**
-   * Detaches a managed C++ heap if one was attached using `AttachCppHeap()`.
-   *
-   * If a CppHeap is set via CreateParams, then this call is a noop.
-   */
-  V8_DEPRECATE_SOON(
-      "Set the heap on Isolate creation using CreateParams instead.")
-  void DetachCppHeap();
-
   using ReleaseCppHeapCallback = void (*)(std::unique_ptr<CppHeap>);
 
   /**
@@ -1204,97 +1186,6 @@ class V8_EXPORT Isolate {
    *   attached using `AttachCppHeap()`.
    */
   CppHeap* GetCppHeap() const;
-
-  /**
-   * Use for |AtomicsWaitCallback| to indicate the type of event it receives.
-   */
-  enum class AtomicsWaitEvent {
-    /** Indicates that this call is happening before waiting. */
-    kStartWait,
-    /** `Atomics.wait()` finished because of an `Atomics.wake()` call. */
-    kWokenUp,
-    /** `Atomics.wait()` finished because it timed out. */
-    kTimedOut,
-    /** `Atomics.wait()` was interrupted through |TerminateExecution()|. */
-    kTerminatedExecution,
-    /** `Atomics.wait()` was stopped through |AtomicsWaitWakeHandle|. */
-    kAPIStopped,
-    /** `Atomics.wait()` did not wait, as the initial condition was not met. */
-    kNotEqual
-  };
-
-  /**
-   * Passed to |AtomicsWaitCallback| as a means of stopping an ongoing
-   * `Atomics.wait` call.
-   */
-#if !defined(__clang__) && defined(V8_CC_GNU)
-  // We cannot mix the usage of [[deprecated]] syntax with the __ attribute __
-  // syntax (from V8_EXPORT) due to a gcc bug:
-  // https://gcc.gnu.org/bugzilla/show_bug.cgi?id=69585
-  class __attribute__((
-      deprecated("AtomicsWaitWakeHandle is unused and will be removed.")))
-#else
-  class V8_DEPRECATED("AtomicsWaitWakeHandle is unused and will be removed.")
-#endif
-  V8_EXPORT AtomicsWaitWakeHandle {
-   public:
-    /**
-     * Stop this `Atomics.wait()` call and call the |AtomicsWaitCallback|
-     * with |kAPIStopped|.
-     *
-     * This function may be called from another thread. The caller has to ensure
-     * through proper synchronization that it is not called after
-     * the finishing |AtomicsWaitCallback|.
-     *
-     * Note that the ECMAScript specification does not plan for the possibility
-     * of wakeups that are neither coming from a timeout or an `Atomics.wake()`
-     * call, so this may invalidate assumptions made by existing code.
-     * The embedder may accordingly wish to schedule an exception in the
-     * finishing |AtomicsWaitCallback|.
-     */
-    void Wake();
-  };
-
-  /**
-   * Embedder callback for `Atomics.wait()` that can be added through
-   * |SetAtomicsWaitCallback|.
-   *
-   * This will be called just before starting to wait with the |event| value
-   * |kStartWait| and after finishing waiting with one of the other
-   * values of |AtomicsWaitEvent| inside of an `Atomics.wait()` call.
-   *
-   * |array_buffer| will refer to the underlying SharedArrayBuffer,
-   * |offset_in_bytes| to the location of the waited-on memory address inside
-   * the SharedArrayBuffer.
-   *
-   * |value| and |timeout_in_ms| will be the values passed to
-   * the `Atomics.wait()` call. If no timeout was used, |timeout_in_ms|
-   * will be `INFINITY`.
-   *
-   * In the |kStartWait| callback, |stop_handle| will be an object that
-   * is only valid until the corresponding finishing callback and that
-   * can be used to stop the wait process while it is happening.
-   *
-   * This callback may schedule exceptions, *unless* |event| is equal to
-   * |kTerminatedExecution|.
-   */
-  START_ALLOW_USE_DEPRECATED()
-  using AtomicsWaitCallback = void (*)(AtomicsWaitEvent event,
-                                       Local<SharedArrayBuffer> array_buffer,
-                                       size_t offset_in_bytes, int64_t value,
-                                       double timeout_in_ms,
-                                       AtomicsWaitWakeHandle* stop_handle,
-                                       void* data);
-  END_ALLOW_USE_DEPRECATED()
-
-  /**
-   * Set a new |AtomicsWaitCallback|. This overrides an earlier
-   * |AtomicsWaitCallback|, if there was any. If |callback| is nullptr,
-   * this unsets the callback. |data| will be passed to the callback
-   * as its last parameter.
-   */
-  V8_DEPRECATED("SetAtomicsWaitCallback is unused and will be removed.")
-  void SetAtomicsWaitCallback(AtomicsWaitCallback callback, void* data);
 
   using GetExternallyAllocatedMemoryInBytesCallback = size_t (*)();
 
@@ -1882,6 +1773,11 @@ class V8_EXPORT Isolate {
    * Otherwise returns an empty string.
    */
   std::string GetDefaultLocale();
+
+  /**
+   * Returns the hash seed for that isolate, for testing purposes.
+   */
+  uint64_t GetHashSeed();
 
   Isolate() = delete;
   ~Isolate() = delete;

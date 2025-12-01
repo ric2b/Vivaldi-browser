@@ -1498,6 +1498,10 @@ typedef struct LOOP_FILTER_SPEED_FEATURES {
   // level.
   int use_coarse_filter_level_search;
 
+  // Reset luma filter levels to zero based on minimum filter levels of
+  // reference frames and current frame's pyramid level.
+  int adaptive_luma_loop_filter_skip;
+
   // Control how the CDEF strength is determined.
   CDEF_PICK_METHOD cdef_pick_method;
 
@@ -1635,7 +1639,7 @@ typedef struct REAL_TIME_SPEED_FEATURES {
   // palette mode is used. Disabling it leads to better compression efficiency.
   // 0: off
   // 1: less aggressive pruning mode
-  // 2: more aggressive pruning mode
+  // 2, 3: more aggressive pruning mode
   int prune_palette_search_nonrd;
 
   // Compute variance/sse on source difference, prior to encoding superblock.
@@ -1929,6 +1933,9 @@ typedef struct REAL_TIME_SPEED_FEATURES {
   // Flag to indicate more aggressive QP downward adjustment for screen static
   // content, to make convergence to min_qp faster.
   int rc_faster_convergence_static;
+
+  // Skip NEWMV mode evaluation based on sad for screen content.
+  int skip_newmv_mode_sad_screen;
 } REAL_TIME_SPEED_FEATURES;
 
 /*!\endcond */

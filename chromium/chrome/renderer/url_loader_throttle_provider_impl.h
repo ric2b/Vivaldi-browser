@@ -22,6 +22,8 @@
 #include "extensions/renderer/extension_throttle_manager.h"
 #endif
 
+#include "components/safe_browsing/content/renderer/vivaldi_throttle_guard.h"
+
 namespace base {
 class SequencedTaskRunner;
 }  // namespace base
@@ -90,6 +92,9 @@ class URLLoaderThrottleProviderImpl : public blink::URLLoaderThrottleProvider {
   // Set only when `this` was created on the main thread, or cloned from a
   // provider which was created on the main thread.
   scoped_refptr<base::SequencedTaskRunner> main_thread_task_runner_;
+
+  // NOTE(ondrej@vivaldi.com): VB-113318
+  vivaldi::ThrottleGuard vivaldi_throttle_guard_;
 
   SEQUENCE_CHECKER(sequence_checker_);
 };

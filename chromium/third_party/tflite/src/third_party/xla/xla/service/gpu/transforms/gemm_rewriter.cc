@@ -127,7 +127,7 @@ bool IsF8Type(const HloInstruction *instr) {
 Shape PadShapeToMultipleOf16(const Shape old_shape,
                              const absl::Span<const int64_t> batch_dims) {
   Shape padded_shape = old_shape;
-  for (int i = 0; i < old_shape.rank(); ++i) {
+  for (int i = 0; i < old_shape.dimensions_size(); ++i) {
     if (!absl::c_linear_search(batch_dims, i)) {
       int64_t padded_dimension =
           RoundUpTo<int64_t>(old_shape.dimensions(i), 16);
@@ -146,7 +146,7 @@ HloInstruction *PadOperandToTargetShape(const Shape &target,
   }
 
   PaddingConfig padding_config;
-  for (int i = 0; i < x->shape().rank(); ++i) {
+  for (int i = 0; i < x->shape().dimensions_size(); ++i) {
     auto dimension = padding_config.add_dimensions();
     dimension->set_edge_padding_low(0);
     dimension->set_edge_padding_high(target.dimensions(i) -
@@ -1049,8 +1049,9 @@ class GemmRewriterVisitor : public DfsHloRewriteVisitor {
                                           MatchedFp8Param b) {
     GemmBackendConfig &gemm_backend_config =
         *gpu_backend_config.mutable_gemm_backend_config();
+    se::CudaComputeCapability cuda_compute_capability;
     if (IsCuda(gpu_version_)) {
-      TF_ASSIGN_OR_RETURN(auto cuda_compute_capability,
+      TF_ASSIGN_OR_RETURN(cuda_compute_capability,
                           GetCudaComputeCapability(gpu_version_));
       // FP8 GEMM kernels are only available on Ada, Hopper, and later
       // architectures.
@@ -1208,7 +1209,7 @@ class GemmRewriterVisitor : public DfsHloRewriteVisitor {
       const HloInstruction *input = param.commutative_ops.empty()
                                         ? param.fp8_input
                                         : param.commutative_ops.back().first;
-      if (input->shape().rank() != num_batch_dims + 2) {
+      if (input->shape().dimensions_size() != num_batch_dims + 2) {
         VLOG(1) << "Failed to rewrite " << instr->ToShortString()
                 << "into FP8 Custom Call. Inputs must have exactly one "
                    "contracting and one non-contracting dimension.";
@@ -1268,35 +1269,37 @@ class GemmRewriterVisitor : public DfsHloRewriteVisitor {
     DotDimensionNumbers *dim_nums =
         gemm_backend_config.mutable_dot_dimension_numbers();
 
-    // cuBLASLt FP8 GEMM kernels currently require the first operand, i.e. A, to
-    // be row-major. If A is column-major, swap the contracting and
-    // non-contracting dimension and transpose the matrix to effectively make it
-    // column-major.
-    // TODO(philipphack): Remove once cuBLASLt supports A being column-major
-    if (gemm_config.lhs_layout.order == MatrixLayout::Order::kColumnMajor) {
-      CHECK(a_contracting_dims[0] == num_batch_dims ||
-            a_contracting_dims[0] == num_batch_dims + 1);
-      if (a_contracting_dims[0] == num_batch_dims) {
-        dim_nums->set_lhs_contracting_dimensions(0, num_batch_dims + 1);
-      } else {
-        dim_nums->set_lhs_contracting_dimensions(0, num_batch_dims);
+    // On non-Blackwell systems, cuBLASLt FP8 GEMM kernels require the first
+    // operand, i.e. A, to be row-major. If A is column-major, swap the
+    // contracting and non-contracting dimension and transpose the matrix to
+    // effectively make it column-major.
+    if (!cuda_compute_capability.IsBlackwell()) {
+      if (gemm_config.lhs_layout.order == MatrixLayout::Order::kColumnMajor) {
+        CHECK(a_contracting_dims[0] == num_batch_dims ||
+              a_contracting_dims[0] == num_batch_dims + 1);
+        if (a_contracting_dims[0] == num_batch_dims) {
+          dim_nums->set_lhs_contracting_dimensions(0, num_batch_dims + 1);
+        } else {
+          dim_nums->set_lhs_contracting_dimensions(0, num_batch_dims);
+        }
+        a.fp8_input =
+            TransposeMatrix(a.fp8_input, a_contracting_dims[0], a_batch_dims);
       }
-      a.fp8_input =
-          TransposeMatrix(a.fp8_input, a_contracting_dims[0], a_batch_dims);
-    }
 
-    // Similarly, cuBLASLt requires the second operand to be column-major, so
-    // make it column-major if it is currently row-major.
-    if (gemm_config.rhs_layout.order == MatrixLayout::Order::kRowMajor) {
-      CHECK(b_contracting_dims[0] == num_batch_dims ||
-            b_contracting_dims[0] == num_batch_dims + 1);
-      if (b_contracting_dims[0] == num_batch_dims) {
-        dim_nums->set_rhs_contracting_dimensions(0, num_batch_dims + 1);
-      } else {
-        dim_nums->set_rhs_contracting_dimensions(0, num_batch_dims);
+      // Similarly, cuBLASLt requires the second operand to be column-major on
+      // non-Blackwell systems, so make it column-major if it is currently
+      // row-major.
+      if (gemm_config.rhs_layout.order == MatrixLayout::Order::kRowMajor) {
+        CHECK(b_contracting_dims[0] == num_batch_dims ||
+              b_contracting_dims[0] == num_batch_dims + 1);
+        if (b_contracting_dims[0] == num_batch_dims) {
+          dim_nums->set_rhs_contracting_dimensions(0, num_batch_dims + 1);
+        } else {
+          dim_nums->set_rhs_contracting_dimensions(0, num_batch_dims);
+        }
+        b.fp8_input =
+            TransposeMatrix(b.fp8_input, b_contracting_dims[0], b_batch_dims);
       }
-      b.fp8_input =
-          TransposeMatrix(b.fp8_input, b_contracting_dims[0], b_batch_dims);
     }
 
     a.fp8_input = PadOperandToMultipleOf16(a_batch_dims, a.fp8_input);
@@ -1321,8 +1324,8 @@ class GemmRewriterVisitor : public DfsHloRewriteVisitor {
     // Slice the result of the GEMM if the operands were padded.
     HloInstruction *slice = nullptr;
     if (new_output_shape.dimensions() != instr->shape().dimensions()) {
-      std::vector<int64_t> start_indices(instr->shape().rank(), 0);
-      std::vector<int64_t> strides(instr->shape().rank(), 1);
+      std::vector<int64_t> start_indices(instr->shape().dimensions_size(), 0);
+      std::vector<int64_t> strides(instr->shape().dimensions_size(), 1);
       slice = instr->AddInstruction(HloInstruction::CreateSlice(
           instr->shape(), new_custom_call, start_indices,
           instr->shape().dimensions(), strides));
@@ -1556,7 +1559,7 @@ class GemmRewriterVisitor : public DfsHloRewriteVisitor {
     // To ensure correctness, only slices that chop off the ends of dimensions
     // are supported.
     if (slice) {
-      int slice_op_dim = slice->operand(0)->shape().rank();
+      int slice_op_dim = slice->operand(0)->shape().dimensions_size();
       if (slice->slice_starts() != std::vector<int64_t>(slice_op_dim, 0) ||
           slice->slice_strides() != std::vector<int64_t>(slice_op_dim, 1)) {
         return absl::OkStatus();
@@ -1694,13 +1697,13 @@ class GemmRewriterVisitor : public DfsHloRewriteVisitor {
     GemmBackendConfig &config = *gpu_config.mutable_gemm_backend_config();
     // # output column dims == # non-contracting rhs operand dims.
     const DotDimensionNumbers &dot_dims = config.dot_dimension_numbers();
-    size_t num_col_dims = gemm->operand(1)->shape().rank() -
+    size_t num_col_dims = gemm->operand(1)->shape().dimensions_size() -
                           dot_dims.rhs_batch_dimensions_size() -
                           dot_dims.rhs_contracting_dimensions_size();
 
     if ((gemm->user_count() != 1) ||
         (config.epilogue() != GemmBackendConfig::DEFAULT) ||
-        (bias->shape().rank() != num_col_dims)) {
+        (bias->shape().dimensions_size() != num_col_dims)) {
       return false;
     }
     // We require the bias vector to have been broadcast in the most major
@@ -1777,21 +1780,22 @@ class GemmRewriterVisitor : public DfsHloRewriteVisitor {
     // Replace add(gemm, broadcast) with fused new_gemm.
     operands.push_back(bias);
     config.set_epilogue(GemmBackendConfig::BIAS);
-    std::unique_ptr<HloInstruction> result =
-        gemm->CloneWithNewOperands(gemm->shape(), operands);
+    HloComputation *computation = gemm->parent();
+    HloInstruction *result = computation->AddInstruction(
+        gemm->CloneWithNewOperands(gemm->shape(), operands));
+
     TF_RETURN_IF_ERROR(result->set_backend_config(gpu_config));
-    TF_RETURN_IF_ERROR(SetName(result->GetModule(), result.get()));
+    TF_RETURN_IF_ERROR(SetName(gemm->GetModule(), result));
     if (slice) {
-      result = slice->CloneWithNewOperands(
-          slice->shape(), {slice->parent()->AddInstruction(std::move(result))});
+      result = computation->AddInstruction(
+          slice->CloneWithNewOperands(slice->shape(), {result}));
     }
 
     if (bitcast) {
-      result = bitcast->CloneWithNewOperands(
-          bitcast->shape(),
-          {bitcast->parent()->AddInstruction(std::move(result))});
+      result = computation->AddInstruction(
+          bitcast->CloneWithNewOperands(bitcast->shape(), {result}));
     }
-    TF_RETURN_IF_ERROR(ReplaceWithNewInstruction(instr, std::move(result)));
+    TF_RETURN_IF_ERROR(ReplaceInstruction(instr, result));
     return true;
   }
 
@@ -1822,17 +1826,18 @@ class GemmRewriterVisitor : public DfsHloRewriteVisitor {
       return absl::OkStatus();
     }
 
-    std::unique_ptr<HloInstruction> result = gemm->Clone();
+    HloComputation *computation = gemm->parent();
+    HloInstruction *result = computation->AddInstruction(gemm->Clone());
     TF_RETURN_IF_ERROR(result->set_backend_config(gpu_config));
-    TF_RETURN_IF_ERROR(SetName(result->GetModule(), result.get()));
+    TF_RETURN_IF_ERROR(SetName(gemm->GetModule(), result));
 
     if (slice_or_bitcast) {
-      result = slice_or_bitcast->CloneWithNewOperands(
-          slice_or_bitcast->shape(),
-          {slice_or_bitcast->parent()->AddInstruction(std::move(result))});
+      result =
+          computation->AddInstruction(slice_or_bitcast->CloneWithNewOperands(
+              slice_or_bitcast->shape(), {result}));
     }
 
-    return ReplaceWithNewInstruction(instr, std::move(result));
+    return ReplaceInstruction(instr, result);
   }
 
   absl::Status FuseGeluActivation(HloInstruction *multiply,

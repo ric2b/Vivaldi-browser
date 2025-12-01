@@ -11,6 +11,7 @@
 #include "src/objects/heap-number-inl.h"
 #include "src/objects/js-array-buffer-inl.h"
 #include "src/objects/objects-inl.h"
+#include "src/objects/simd.h"
 #include "third_party/simdutf/simdutf.h"
 
 namespace v8 {
@@ -29,20 +30,11 @@ BUILTIN(TypedArrayPrototypeBuffer) {
 
 namespace {
 
-int64_t CapRelativeIndex(DirectHandle<Object> num, int64_t minimum,
-                         int64_t maximum) {
-  if (V8_LIKELY(IsSmi(*num))) {
-    int64_t relative = Smi::ToInt(*num);
-    return relative < 0 ? std::max<int64_t>(relative + maximum, minimum)
-                        : std::min<int64_t>(relative, maximum);
-  } else {
-    DCHECK(IsHeapNumber(*num));
-    double relative = Cast<HeapNumber>(*num)->value();
-    DCHECK(!std::isnan(relative));
-    return static_cast<int64_t>(
-        relative < 0 ? std::max<double>(relative + maximum, minimum)
-                     : std::min<double>(relative, maximum));
-  }
+int64_t CapRelativeIndex(double relative, int64_t minimum, int64_t maximum) {
+  DCHECK(!std::isnan(relative));
+  return static_cast<int64_t>(
+      relative < 0 ? std::max<double>(relative + maximum, minimum)
+                   : std::min<double>(relative, maximum));
 }
 
 }  // namespace
@@ -62,20 +54,20 @@ BUILTIN(TypedArrayPrototypeCopyWithin) {
   int64_t final = len;
 
   if (V8_LIKELY(args.length() > 1)) {
-    DirectHandle<Object> num;
-    ASSIGN_RETURN_FAILURE_ON_EXCEPTION(
-        isolate, num, Object::ToInteger(isolate, args.at<Object>(1)));
+    double num;
+    MAYBE_ASSIGN_RETURN_FAILURE_ON_EXCEPTION(
+        isolate, num, Object::IntegerValue(isolate, args.at<Object>(1)));
     to = CapRelativeIndex(num, 0, len);
 
     if (args.length() > 2) {
-      ASSIGN_RETURN_FAILURE_ON_EXCEPTION(
-          isolate, num, Object::ToInteger(isolate, args.at<Object>(2)));
+      MAYBE_ASSIGN_RETURN_FAILURE_ON_EXCEPTION(
+          isolate, num, Object::IntegerValue(isolate, args.at<Object>(2)));
       from = CapRelativeIndex(num, 0, len);
 
       DirectHandle<Object> end = args.atOrUndefined(isolate, 3);
       if (!IsUndefined(*end, isolate)) {
-        ASSIGN_RETURN_FAILURE_ON_EXCEPTION(isolate, num,
-                                           Object::ToInteger(isolate, end));
+        MAYBE_ASSIGN_RETURN_FAILURE_ON_EXCEPTION(
+            isolate, num, Object::IntegerValue(isolate, end));
         final = CapRelativeIndex(num, 0, len);
       }
     }
@@ -173,14 +165,15 @@ BUILTIN(TypedArrayPrototypeFill) {
   if (args.length() > 2) {
     // 6. Let relativeStart be ? ToIntegerOrInfinity(start).
     DirectHandle<Object> num = args.atOrUndefined(isolate, 2);
-    ASSIGN_RETURN_FAILURE_ON_EXCEPTION(isolate, num,
-                                       Object::ToInteger(isolate, num));
+    double double_num;
+    MAYBE_ASSIGN_RETURN_FAILURE_ON_EXCEPTION(
+        isolate, double_num, Object::IntegerValue(isolate, num));
 
     // 7. If relativeStart = -∞, let startIndex be 0.
     // 8. Else if relativeStart < 0, let startIndex be max(len + relativeStart,
     //    0).
     // 9. Else, let startIndex be min(relativeStart, len).
-    start = CapRelativeIndex(num, 0, len);
+    start = CapRelativeIndex(double_num, 0, len);
 
     // 10. If end is undefined, let relativeEnd be len; else let relativeEnd be
     //     ? ToIntegerOrInfinity(end).
@@ -189,9 +182,9 @@ BUILTIN(TypedArrayPrototypeFill) {
       // 11. If relativeEnd = -∞, let endIndex be 0.
       // 12. Else if relativeEnd < 0, let endIndex be max(len + relativeEnd, 0).
       // 13. Else, let endIndex be min(relativeEnd, len).
-      ASSIGN_RETURN_FAILURE_ON_EXCEPTION(isolate, num,
-                                         Object::ToInteger(isolate, num));
-      end = CapRelativeIndex(num, 0, len);
+      MAYBE_ASSIGN_RETURN_FAILURE_ON_EXCEPTION(
+          isolate, double_num, Object::IntegerValue(isolate, num));
+      end = CapRelativeIndex(double_num, 0, len);
     }
   }
 
@@ -252,9 +245,9 @@ BUILTIN(TypedArrayPrototypeIncludes) {
 
   int64_t index = 0;
   if (args.length() > 2) {
-    DirectHandle<Object> num;
-    ASSIGN_RETURN_FAILURE_ON_EXCEPTION(
-        isolate, num, Object::ToInteger(isolate, args.at<Object>(2)));
+    double num;
+    MAYBE_ASSIGN_RETURN_FAILURE_ON_EXCEPTION(
+        isolate, num, Object::IntegerValue(isolate, args.at<Object>(2)));
     index = CapRelativeIndex(num, 0, len);
   }
 
@@ -280,9 +273,9 @@ BUILTIN(TypedArrayPrototypeIndexOf) {
 
   int64_t index = 0;
   if (args.length() > 2) {
-    DirectHandle<Object> num;
-    ASSIGN_RETURN_FAILURE_ON_EXCEPTION(
-        isolate, num, Object::ToInteger(isolate, args.at<Object>(2)));
+    double num;
+    MAYBE_ASSIGN_RETURN_FAILURE_ON_EXCEPTION(
+        isolate, num, Object::IntegerValue(isolate, args.at<Object>(2)));
     index = CapRelativeIndex(num, 0, len);
   }
 
@@ -314,9 +307,9 @@ BUILTIN(TypedArrayPrototypeLastIndexOf) {
 
   int64_t index = len - 1;
   if (args.length() > 2) {
-    DirectHandle<Object> num;
-    ASSIGN_RETURN_FAILURE_ON_EXCEPTION(
-        isolate, num, Object::ToInteger(isolate, args.at<Object>(2)));
+    double num;
+    MAYBE_ASSIGN_RETURN_FAILURE_ON_EXCEPTION(
+        isolate, num, Object::IntegerValue(isolate, args.at<Object>(2)));
     // Set a negative value (-1) for returning -1 if num is negative and
     // len + num is still negative. Upper bound is len - 1.
     index = std::min<int64_t>(CapRelativeIndex(num, -1, len), len - 1);
@@ -574,7 +567,7 @@ BUILTIN(Uint8ArrayFromBase64) {
 }
 
 // https://tc39.es/proposal-arraybuffer-base64/spec/#sec-uint8array.prototype.tobase64
-BUILTIN(Uint8ArrayToBase64) {
+BUILTIN(Uint8ArrayPrototypeToBase64) {
   HandleScope scope(isolate);
   const char method_name[] = "Uint8Array.prototype.toBase64";
 
@@ -629,7 +622,10 @@ BUILTIN(Uint8ArrayToBase64) {
     omit_padding = true;
   }
 
-  if (uint8array->IsDetachedOrOutOfBounds()) {
+  bool out_of_bounds = false;
+  size_t length = uint8array->GetLengthOrOutOfBounds(out_of_bounds);
+
+  if (out_of_bounds || uint8array->WasDetached()) {
     THROW_NEW_ERROR_RETURN_FAILURE(
         isolate, NewTypeError(MessageTemplate::kDetachedOperation,
                               isolate->factory()->NewStringFromAsciiChecked(
@@ -644,14 +640,18 @@ BUILTIN(Uint8ArrayToBase64) {
     alphabet = simdutf::base64_options::base64_url_with_padding;
   }
 
-  size_t output_length =
-      simdutf::base64_length_from_binary(uint8array->byte_length(), alphabet);
+  size_t output_length = simdutf::base64_length_from_binary(length, alphabet);
+
+  if (output_length > String::kMaxLength) {
+    THROW_NEW_ERROR_RETURN_FAILURE(
+        isolate, NewTypeError(MessageTemplate::kInvalidStringLength));
+  }
 
   if (output_length == 0) {
     return *isolate->factory()->empty_string();
   }
 
-  Handle<SeqOneByteString> output;
+  DirectHandle<SeqOneByteString> output;
   ASSIGN_RETURN_FAILURE_ON_EXCEPTION(
       isolate, output,
       isolate->factory()->NewRawOneByteString(static_cast<int>(output_length)));
@@ -675,8 +675,7 @@ BUILTIN(Uint8ArrayToBase64) {
     // simdutf library got updated. Also, add a test for it.
     size_t simd_result_size = simdutf::binary_to_base64(
         std::bit_cast<const char*>(uint8array->GetBuffer()->backing_store()),
-        uint8array->byte_length(),
-        reinterpret_cast<char*>(output->GetChars(no_gc)), alphabet);
+        length, reinterpret_cast<char*>(output->GetChars(no_gc)), alphabet);
     DCHECK_EQ(simd_result_size, output_length);
     USE(simd_result_size);
   }
@@ -685,6 +684,130 @@ BUILTIN(Uint8ArrayToBase64) {
   // without padding, so we do not need to modify the output based on
   // padding here.
   return *output;
+}
+
+// https://tc39.es/proposal-arraybuffer-base64/spec/#sec-uint8array.fromhex
+BUILTIN(Uint8ArrayFromHex) {
+  HandleScope scope(isolate);
+  const char method_name[] = "Uint8Array.fromHex";
+
+  // 1. If string is not a String, throw a TypeError exception.
+  DirectHandle<Object> input = args.atOrUndefined(isolate, 1);
+  if (!IsString(*input)) {
+    THROW_NEW_ERROR_RETURN_FAILURE(
+        isolate, NewTypeError(MessageTemplate::kArgumentIsNonString,
+                              isolate->factory()->input_string()));
+  }
+
+  DirectHandle<String> input_string =
+      String::Flatten(isolate, Cast<String>(input));
+
+  // 2. Let result be FromHex(string).
+  // 3. If result.[[Error]] is not none, then
+  //  a. Throw result.[[Error]].
+  // 4. Let resultLength be the length of result.[[Bytes]].
+  DirectHandle<JSArrayBuffer> buffer;
+
+  size_t input_length = input_string->length();
+  if (input_length % 2 != 0) {
+    THROW_NEW_ERROR_RETURN_FAILURE(
+        isolate, NewSyntaxError(MessageTemplate::kInvalidHexString));
+  }
+
+  size_t output_length = (input_length / 2);
+
+  MaybeDirectHandle<JSArrayBuffer> result_buffer =
+      isolate->factory()->NewJSArrayBufferAndBackingStore(
+          output_length, InitializedFlag::kUninitialized);
+
+  if (!result_buffer.ToHandle(&buffer)) {
+    THROW_NEW_ERROR_RETURN_FAILURE(
+        isolate, NewRangeError(MessageTemplate::kOutOfMemory,
+                               isolate->factory()->NewStringFromAsciiChecked(
+                                   method_name)));
+  }
+
+  bool result;
+  {
+    DisallowGarbageCollection no_gc;
+    String::FlatContent input_content = input_string->GetFlatContent(no_gc);
+
+      if (input_content.IsOneByte()) {
+        base::Vector<const uint8_t> input_vector =
+            input_content.ToOneByteVector();
+        result = ArrayBufferFromHex(input_vector, buffer, output_length);
+      } else {
+        base::Vector<const base::uc16> input_vector =
+            input_content.ToUC16Vector();
+        result = ArrayBufferFromHex(input_vector, buffer, output_length);
+      }
+  }
+
+  if (!result) {
+    THROW_NEW_ERROR_RETURN_FAILURE(
+        isolate, NewSyntaxError(MessageTemplate::kInvalidHexString));
+  }
+  // 5. Let ta be ? AllocateTypedArray("Uint8Array", %Uint8Array%,
+  //  "%Uint8Array.prototype%", resultLength).
+  // 6. Set the value at each index of
+  //  ta.[[ViewedArrayBuffer]].[[ArrayBufferData]] to the value at the
+  //  corresponding index of result.[[Bytes]].
+  // 7. Return ta.
+  DirectHandle<JSTypedArray> result_typed_array =
+      isolate->factory()->NewJSTypedArray(kExternalUint8Array, buffer, 0,
+                                          output_length);
+  return *result_typed_array;
+}
+
+// https://tc39.es/proposal-arraybuffer-base64/spec/#sec-uint8array.prototype.tohex
+BUILTIN(Uint8ArrayPrototypeToHex) {
+  HandleScope scope(isolate);
+  const char method_name[] = "Uint8Array.prototype.toHex";
+
+  //  1. Let O be the this value.
+  //  2. Perform ? ValidateUint8Array(O).
+  CHECK_RECEIVER(JSTypedArray, uint8array, method_name);
+  if (uint8array->GetElementsKind() != ElementsKind::UINT8_ELEMENTS) {
+    THROW_NEW_ERROR_RETURN_FAILURE(
+        isolate, NewTypeError(MessageTemplate::kIncompatibleMethodReceiver,
+                              isolate->factory()->NewStringFromAsciiChecked(
+                                  method_name)));
+  }
+
+  //  3. Let toEncode be ? GetUint8ArrayBytes(O).
+  bool out_of_bounds = false;
+  size_t length = uint8array->GetLengthOrOutOfBounds(out_of_bounds);
+
+  if (out_of_bounds || uint8array->WasDetached()) {
+    THROW_NEW_ERROR_RETURN_FAILURE(
+        isolate, NewTypeError(MessageTemplate::kDetachedOperation,
+                              isolate->factory()->NewStringFromAsciiChecked(
+                                  method_name)));
+  }
+
+  if (length > String::kMaxLength / 2) {
+    THROW_NEW_ERROR_RETURN_FAILURE(
+        isolate, NewTypeError(MessageTemplate::kInvalidStringLength));
+  }
+
+  if (length == 0) {
+    return *isolate->factory()->empty_string();
+  }
+
+  const char* bytes =
+      std::bit_cast<const char*>(uint8array->GetBuffer()->backing_store());
+
+  //   4. Let out be the empty String.
+  DirectHandle<SeqOneByteString> output;
+  ASSIGN_RETURN_FAILURE_ON_EXCEPTION(
+      isolate, output,
+      isolate->factory()->NewRawOneByteString(static_cast<int>(length) * 2));
+  //  5. For each byte byte of toEncode, do
+  //    a. Let hex be Number::toString(𝔽(byte), 16).
+  //    b. Set hex to StringPad(hex, 2, "0", start).
+  //    c. Set out to the string-concatenation of out and hex.
+  //  6. Return out.
+  return Uint8ArrayToHex(bytes, length, output);
 }
 
 }  // namespace internal

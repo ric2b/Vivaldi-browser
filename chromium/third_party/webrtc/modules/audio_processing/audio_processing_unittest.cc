@@ -160,7 +160,7 @@ void OpenFileAndWriteMessage(absl::string_view filename,
   FILE* file = fopen(std::string(filename).c_str(), "wb");
   ASSERT_TRUE(file != NULL);
 
-  int32_t size = rtc::checked_cast<int32_t>(msg.ByteSizeLong());
+  int32_t size = checked_cast<int32_t>(msg.ByteSizeLong());
   ASSERT_GT(size, 0);
   std::unique_ptr<uint8_t[]> array(new uint8_t[size]);
   ASSERT_TRUE(msg.SerializeToArray(array.get(), size));
@@ -172,7 +172,7 @@ void OpenFileAndWriteMessage(absl::string_view filename,
 }
 
 std::string ResourceFilePath(absl::string_view name, int sample_rate_hz) {
-  rtc::StringBuilder ss;
+  StringBuilder ss;
   // Resource files are all stereo.
   ss << name << sample_rate_hz / 1000 << "_stereo";
   return test::ResourcePath(ss.str(), "pcm");
@@ -193,7 +193,7 @@ std::string OutputFilePath(absl::string_view name,
                            size_t num_reverse_input_channels,
                            size_t num_reverse_output_channels,
                            StreamDirection file_direction) {
-  rtc::StringBuilder ss;
+  StringBuilder ss;
   ss << name << "_i" << num_input_channels << "_" << input_rate / 1000 << "_ir"
      << num_reverse_input_channels << "_" << reverse_input_rate / 1000 << "_";
   if (num_output_channels == 1) {
@@ -670,15 +670,15 @@ void ApmTest::ProcessDelayVerificationTest(int delay_ms,
   // Calculate expected delay estimate and acceptable regions. Further,
   // limit them w.r.t. AEC delay estimation support.
   const size_t samples_per_ms =
-      rtc::SafeMin<size_t>(16u, frame_.samples_per_channel() / 10);
+      SafeMin<size_t>(16u, frame_.samples_per_channel() / 10);
   const int expected_median =
-      rtc::SafeClamp<int>(delay_ms - system_delay_ms, delay_min, delay_max);
-  const int expected_median_high = rtc::SafeClamp<int>(
-      expected_median + rtc::dchecked_cast<int>(96 / samples_per_ms), delay_min,
-      delay_max);
-  const int expected_median_low = rtc::SafeClamp<int>(
-      expected_median - rtc::dchecked_cast<int>(96 / samples_per_ms), delay_min,
-      delay_max);
+      SafeClamp<int>(delay_ms - system_delay_ms, delay_min, delay_max);
+  const int expected_median_high =
+      SafeClamp<int>(expected_median + dchecked_cast<int>(96 / samples_per_ms),
+                     delay_min, delay_max);
+  const int expected_median_low =
+      SafeClamp<int>(expected_median - dchecked_cast<int>(96 / samples_per_ms),
+                     delay_min, delay_max);
   // Verify delay metrics.
   AudioProcessingStats stats = apm_->GetStatistics();
   ASSERT_TRUE(stats.delay_median_ms.has_value());
@@ -1500,7 +1500,7 @@ void ApmTest::ProcessDebugDump(absl::string_view in_filename,
 }
 
 void ApmTest::VerifyDebugDumpTest(Format format) {
-  rtc::ScopedFakeClock fake_clock;
+  ScopedFakeClock fake_clock;
   const std::string in_filename = test::ResourcePath("ref03", "aecdump");
   std::string format_string;
   switch (format) {
@@ -1823,7 +1823,7 @@ TEST_F(ApmTest, Process) {
       const int kMaxOutputAverageNear = 26;
 #else
       const int kMaxOutputAverageOffset = 0;
-      const int kMaxOutputAverageNear = kIntNear;
+      const int kMaxOutputAverageNear = 7;
 #endif
       EXPECT_NEAR(test->analog_level_average(), analog_level_average, kIntNear);
       EXPECT_NEAR(test->max_output_average(),
@@ -2341,7 +2341,7 @@ std::string ProduceDebugText(int render_input_sample_rate_hz,
                              size_t render_output_num_channels,
                              size_t capture_input_num_channels,
                              size_t capture_output_num_channels) {
-  rtc::StringBuilder ss;
+  StringBuilder ss;
   ss << "Sample rates:"
         "\n Render input: "
      << render_input_sample_rate_hz

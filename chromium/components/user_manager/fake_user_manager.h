@@ -15,6 +15,7 @@ class PrefService;
 
 namespace user_manager {
 
+// DEPRECATED: please use UserManagerImpl with TestHelper.
 // Fake user manager with a barebones implementation. Users can be added
 // and set as logged in, and those users can be returned.
 class USER_MANAGER_EXPORT FakeUserManager : public UserManagerImpl {
@@ -26,15 +27,15 @@ class USER_MANAGER_EXPORT FakeUserManager : public UserManagerImpl {
 
   ~FakeUserManager() override;
 
-  // Returns the fake username hash for testing.
-  // Valid AccountId must be used, otherwise DCHECKed.
+  // DEPRECATED: please use TestHelper::GetFakeUsernameHash.
   static std::string GetFakeUsernameHash(const AccountId& account_id);
 
   // UserManager overrides.
   void UserLoggedIn(const AccountId& account_id,
-                    const std::string& username_hash,
-                    bool browser_restart,
-                    bool is_child) override;
+                    const std::string& username_hash) override;
+  bool EnsureUser(const AccountId& account_id,
+                  UserType user_type,
+                  bool is_ephemeral) override;
   void SwitchActiveUser(const AccountId& account_id) override;
 
   // Just make it public for tests.

@@ -1469,7 +1469,8 @@ const char kLibDirs_Help[] =
   Specifies additional directories passed to the linker for searching for the
   required libraries. If an item is not an absolute path, it will be treated as
   being relative to the current build file.
-)" COMMON_LIB_INHERITANCE_HELP COMMON_ORDERING_HELP LIBS_AND_LIB_DIRS_ORDERING_HELP
+)" COMMON_LIB_INHERITANCE_HELP
+        COMMON_ORDERING_HELP LIBS_AND_LIB_DIRS_ORDERING_HELP
     R"(
 Example
 

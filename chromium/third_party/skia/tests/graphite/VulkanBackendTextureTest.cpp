@@ -13,7 +13,7 @@
 #include "include/gpu/graphite/vk/VulkanGraphiteTypes.h"
 #include "src/gpu/graphite/Caps.h"
 #include "src/gpu/graphite/ContextPriv.h"
-#include "src/gpu/graphite/vk/VulkanGraphiteTypesPriv.h"
+#include "src/gpu/graphite/vk/VulkanGraphiteUtils.h"
 
 using namespace skgpu::graphite;
 
@@ -22,7 +22,7 @@ const SkISize kSize = {16, 16};
 }
 
 DEF_GRAPHITE_TEST_FOR_VULKAN_CONTEXT(VulkanBackendTextureSimpleCreationTest, reporter, context,
-                                     CtsEnforcement::kApiLevel_V) {
+                                     CtsEnforcement::kApiLevel_202404) {
     auto recorder = context->makeRecorder();
 
     bool isProtected = context->priv().caps()->protectedSupport();
@@ -49,7 +49,7 @@ DEF_GRAPHITE_TEST_FOR_VULKAN_CONTEXT(VulkanBackendTextureSimpleCreationTest, rep
 
 // Test that copying BackendTexture variables works.
 DEF_GRAPHITE_TEST_FOR_VULKAN_CONTEXT(VulkanBackendTextureCopyVariableTest, reporter, context,
-                                     CtsEnforcement::kApiLevel_V) {
+                                     CtsEnforcement::kApiLevel_202404) {
     auto recorder = context->makeRecorder();
 
     bool isProtected = context->priv().caps()->protectedSupport();

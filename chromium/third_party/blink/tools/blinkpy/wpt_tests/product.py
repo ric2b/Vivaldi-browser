@@ -120,13 +120,33 @@ class DesktopProduct(Product):
 
     def additional_binary_args(self) -> List[str]:
         # Base args applicable to all embedders.
-        return [
+        args = [
             '--enable-blink-test-features',
             # Expose the non-standard `window.gc()` for `wpt_internal/` tests.
             '--js-flags=--expose-gc',
             # Disable overlay scrollbar fadeout for consistent screenshots.
             '--disable-features=ScrollbarAnimations',
         ]
+        fs = self._host.filesystem
+        if (self._options.wrapper
+                and fs.basename(self._options.wrapper[0]) == 'rr'):
+            debug_args = [
+                '--no-sandbox',
+                '--disable-hang-monitor',
+            ]
+            args.extend(debug_args)
+            _log.info(f'Running {self.name!r} with {" ".join(debug_args)!r} '
+                      'because of debugging option `--wrapper=rr`')
+        if self._options.wrapper and self._host.platform.is_win():
+            # The adapter will generate a batch file wrapping the browser
+            # command. Because `cmd.exe` doesn't have an equivalent of Unix's
+            # `exec`, there will be a real process in between chromedriver and
+            # the browser process. Because the batch file doesn't know how to
+            # relay the file handles it receives to the browser, the default
+            # `--remote-debugging-pipe` won't work. Use any free network port
+            # instead for chromedriver-browser traffic.
+            args.append('--remote-debugging-port=0')
+        return args
 
 
 class Chrome(DesktopProduct):
@@ -137,8 +157,6 @@ class HeadlessShell(DesktopProduct):
     name = 'headless_shell'
 
     def additional_binary_args(self):
-        # TODO(crbug.com/40887057): Support `--enable-leak-detection` and plumb
-        # the flag here.
         rv = [
             *super().additional_binary_args(),
             "--canvas-2d-layers",

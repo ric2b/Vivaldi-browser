@@ -36,6 +36,7 @@
 #include "content/browser/renderer_host/render_process_host_impl.h"
 #include "content/browser/service_worker/service_worker_process_manager.h"
 #include "content/common/features.h"
+#include "content/public/browser/frame_tree_node_id.h"
 #include "content/public/browser/site_instance.h"
 #include "content/public/browser/site_isolation_mode.h"
 #include "content/public/browser/site_isolation_policy.h"
@@ -57,6 +58,7 @@
 #include "mojo/public/cpp/bindings/receiver_set.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "mojo/public/cpp/system/message_pipe.h"
+#include "services/network/public/cpp/shared_url_loader_factory.h"
 #include "services/network/public/mojom/ip_address_space.mojom.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/gurl.h"
@@ -430,8 +432,6 @@ class AuctionProcessManagerTest
         break;
       case ProcessMode::kInRendererSharedProcess:
         disabled_features.emplace_back(
-            features::kProcessSharingWithStrictSiteInstances);
-        disabled_features.emplace_back(
             features::kOriginKeyedProcessesByDefault);
         scoped_command_line_.GetProcessCommandLine()->RemoveSwitch(
             switches::kSitePerProcess);
@@ -542,6 +542,8 @@ class AuctionProcessManagerTest
       case AuctionProcessManager::WorkletType::kBidder:
         trusted_signals_handle =
             trusted_signals_cache_.RequestTrustedBiddingSignals(
+                /*url_loader_factory=*/nullptr, FrameTreeNodeId(1),
+                {"devtools_auction_id"},
                 url::Origin::Create(GURL("https://main-frame-origin.test")),
                 network::mojom::IPAddressSpace::kPublic, origin,
                 "Interest Group Name",
@@ -555,6 +557,8 @@ class AuctionProcessManagerTest
       case AuctionProcessManager::WorkletType::kSeller:
         trusted_signals_handle =
             trusted_signals_cache_.RequestTrustedScoringSignals(
+                /*url_loader_factory=*/nullptr, FrameTreeNodeId(1),
+                {"devtools_auction_id"},
                 url::Origin::Create(GURL("https://main-frame-origin.test")),
                 network::mojom::IPAddressSpace::kPublic, origin,
                 GURL("https://trusted-signals-url/"),
@@ -723,9 +727,9 @@ class AuctionProcessManagerTest
   scoped_refptr<SiteInstance> site_instance2_;
 
   TrustedSignalsCacheImpl trusted_signals_cache_{
-      /*url_loader_factory=*/nullptr,
       base::BindRepeating(
-          [](const std::optional<url::Origin>& coordinator,
+          [](const url::Origin& scope_origin,
+             const std::optional<url::Origin>& coordinator,
              base::OnceCallback<void(base::expected<BiddingAndAuctionServerKey,
                                                     std::string>)> callback) {
             std::move(callback).Run(

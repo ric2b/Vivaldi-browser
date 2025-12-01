@@ -41,6 +41,9 @@ using bookmarks::BookmarkNode;
 /// Notifies the subscriber to show/hide customize start page button.
 - (void)setShowCustomizeStartPageButtonEnabled:(BOOL)enabled;
 
+/// Notifies the subscriber to show/hide Add button.
+- (void)setShowAddButtonEnabled:(BOOL)enabled;
+
 /// Notifies the subscriber to refresh the layout when style is changed.
 - (void)reloadLayout;
 

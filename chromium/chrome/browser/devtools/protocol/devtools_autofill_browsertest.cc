@@ -6,7 +6,6 @@
 #include "base/strings/strcat.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/scoped_feature_list.h"
-#include "build/chromeos_buildflags.h"
 #include "chrome/browser/autofill/autofill_uitest_util.h"
 #include "chrome/browser/devtools/protocol/devtools_protocol_test_support.h"
 #include "chrome/browser/ui/browser.h"
@@ -115,8 +114,8 @@ class TestAutofillManager : public autofill::BrowserAutofillManager {
   const FormStructure* WaitForFormWithNFields(int n) {
     return WaitForMatchingForm(this, base::BindRepeating(
                                          [](int n, const FormStructure& form) {
-                                           return form.active_field_count() ==
-                                                  (size_t)n;
+                                           return form.fields().size() ==
+                                                  static_cast<size_t>(n);
                                          },
                                          n));
   }

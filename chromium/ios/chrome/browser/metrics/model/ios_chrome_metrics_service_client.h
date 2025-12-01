@@ -104,6 +104,7 @@ class IOSChromeMetricsServiceClient : public metrics::MetricsServiceClient,
   bool IsDwaAllowedForAllProfiles() override;
   bool AreNotificationListenersEnabledOnAllProfiles() override;
   std::string GetUploadSigningKey() override;
+  bool ShouldStartUpFast() const override;
 
   // ukm::HistoryDeleteObserver:
   void OnHistoryDeleted() override;
@@ -127,6 +128,7 @@ class IOSChromeMetricsServiceClient : public metrics::MetricsServiceClient,
                       Browser* browser) override;
   void OnBrowserRemoved(const BrowserList* browser_list,
                         Browser* browser) override;
+  void OnBrowserListShutdown(BrowserList* browser_list) override;
 
   // WebStateListObserver:
   void WebStateListDidChange(WebStateList* web_state_list,

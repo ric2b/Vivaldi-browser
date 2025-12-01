@@ -6,6 +6,7 @@
 #define COMPONENTS_AUTOFILL_CORE_BROWSER_UI_AUTOFILL_EXTERNAL_DELEGATE_H_
 
 #include <string>
+#include <variant>
 #include <vector>
 
 #include "base/compiler_specific.h"
@@ -42,6 +43,9 @@ class CreditCard;
 class AutofillExternalDelegate : public AutofillSuggestionDelegate {
  public:
   class ScopedSuggestionSelectionShortcut;
+  using UpdateSuggestionsCallback =
+      base::RepeatingCallback<void(std::vector<Suggestion>,
+                                   AutofillSuggestionTriggerSource)>;
 
   // Creates an AutofillExternalDelegate for the specified
   // BrowserAutofillManager and AutofillDriver.
@@ -57,7 +61,7 @@ class AutofillExternalDelegate : public AutofillSuggestionDelegate {
   static bool IsAutofillAndFirstLayerSuggestionId(SuggestionType item_id);
 
   // AutofillSuggestionDelegate implementation.
-  absl::variant<AutofillDriver*, password_manager::PasswordManagerDriver*>
+  std::variant<AutofillDriver*, password_manager::PasswordManagerDriver*>
   GetDriver() override;
   void OnSuggestionsShown(base::span<const Suggestion> suggestions) override;
   void OnSuggestionsHidden() override;
@@ -219,9 +223,6 @@ class AutofillExternalDelegate : public AutofillSuggestionDelegate {
       const Suggestion& suggestion,
       const SuggestionMetadata& metadata);
 
-  // Fills `suggestion.values_to_fill` into the fields of `query_form_`.
-  void FillAutofillAiData(const Suggestion& suggestion);
-
   // Handle applying any Autofill option listings to the Autofill popup.
   // This function should only get called when there is at least one
   // multi-field suggestion in the list of suggestions.
@@ -262,8 +263,6 @@ class AutofillExternalDelegate : public AutofillSuggestionDelegate {
   FormFieldData query_field_;
   // The method how suggestions were triggered on the current form.
   AutofillSuggestionTriggerSource trigger_source_;
-
-  bool show_cards_from_account_suggestion_was_shown_ = false;
 
   std::vector<SuggestionType> shown_suggestion_types_;
 

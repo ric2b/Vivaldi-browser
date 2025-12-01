@@ -3,18 +3,11 @@
 // found in the LICENSE file.
 'use strict';
 
-const tsParser = require('@typescript-eslint/parser');
-
 const rule = require('../lib/check-enumerated-histograms.js');
-const ruleTester = new (require('eslint').RuleTester)({
-  languageOptions: {
-    ecmaVersion: 'latest',
-    sourceType: 'module',
-    parser: tsParser,
-  },
-});
 
-ruleTester.run('check-enumerated-histograms', rule, {
+const {RuleTester} = require('./utils/utils.js');
+
+new RuleTester().run('check-enumerated-histograms', rule, {
   valid: [
     {
       code: 'InspectorFrontendHostInstance.recordEnumeratedHistogram(\'someparam\', 1, foo.MAX_VALUE);',

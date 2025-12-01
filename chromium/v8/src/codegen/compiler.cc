@@ -298,9 +298,9 @@ class CompilerTracer : public AllStatic {
 void Compiler::LogFunctionCompilation(Isolate* isolate,
                                       LogEventListener::CodeTag code_type,
                                       DirectHandle<Script> script,
-                                      Handle<SharedFunctionInfo> shared,
+                                      DirectHandle<SharedFunctionInfo> shared,
                                       DirectHandle<FeedbackVector> vector,
-                                      Handle<AbstractCode> abstract_code,
+                                      DirectHandle<AbstractCode> abstract_code,
                                       CodeKind kind, double time_taken_ms) {
   DCHECK_NE(*abstract_code,
             Cast<AbstractCode>(*BUILTIN_CODE(isolate, CompileLazy)));
@@ -314,10 +314,10 @@ void Compiler::LogFunctionCompilation(Isolate* isolate,
   Script::GetPositionInfo(script, shared->StartPosition(), &info);
   int line_num = info.line + 1;
   int column_num = info.column + 1;
-  Handle<String> script_name(IsString(script->name())
-                                 ? Cast<String>(script->name())
-                                 : ReadOnlyRoots(isolate).empty_string(),
-                             isolate);
+  DirectHandle<String> script_name(IsString(script->name())
+                                       ? Cast<String>(script->name())
+                                       : ReadOnlyRoots(isolate).empty_string(),
+                                   isolate);
   LogEventListener::CodeTag log_tag =
       V8FileLogger::ToNativeByScript(code_type, *script);
   PROFILE(isolate, CodeCreateEvent(log_tag, abstract_code, shared, script_name,
@@ -419,14 +419,14 @@ CompilationJob::Status UnoptimizedCompilationJob::FinalizeJob(
 
 namespace {
 void LogUnoptimizedCompilation(Isolate* isolate,
-                               Handle<SharedFunctionInfo> shared,
+                               DirectHandle<SharedFunctionInfo> shared,
                                LogEventListener::CodeTag code_type,
                                base::TimeDelta time_taken_to_execute,
                                base::TimeDelta time_taken_to_finalize) {
-  Handle<AbstractCode> abstract_code;
+  DirectHandle<AbstractCode> abstract_code;
   if (shared->HasBytecodeArray()) {
-    abstract_code =
-        handle(Cast<AbstractCode>(shared->GetBytecodeArray(isolate)), isolate);
+    abstract_code = direct_handle(
+        Cast<AbstractCode>(shared->GetBytecodeArray(isolate)), isolate);
   } else {
 #if V8_ENABLE_WEBASSEMBLY
     DCHECK(shared->HasAsmWasmData());
@@ -628,7 +628,7 @@ void TurbofanCompilationJob::RecordCompilationStats(ConcurrencyMode mode,
 
 void TurbofanCompilationJob::RecordFunctionCompilation(
     LogEventListener::CodeTag code_type, Isolate* isolate) const {
-  Handle<AbstractCode> abstract_code =
+  DirectHandle<AbstractCode> abstract_code =
       Cast<AbstractCode>(compilation_info()->code());
 
   double time_taken_ms = time_taken_to_prepare_.InMillisecondsF() +
@@ -677,7 +677,7 @@ bool UseAsmWasm(FunctionLiteral* literal, bool asm_wasm_broken) {
 }  // namespace
 
 void Compiler::InstallInterpreterTrampolineCopy(
-    Isolate* isolate, Handle<SharedFunctionInfo> shared_info,
+    Isolate* isolate, DirectHandle<SharedFunctionInfo> shared_info,
     LogEventListener::CodeTag log_tag) {
   DCHECK(isolate->interpreted_frames_native_stack());
   if (!IsBytecodeArray(shared_info->GetTrustedData(isolate))) {
@@ -687,7 +687,7 @@ void Compiler::InstallInterpreterTrampolineCopy(
   DirectHandle<BytecodeArray> bytecode_array(
       shared_info->GetBytecodeArray(isolate), isolate);
 
-  Handle<Code> code =
+  DirectHandle<Code> code =
       Builtins::CreateInterpreterEntryTrampolineForProfiling(isolate);
 
   DirectHandle<InterpreterData> interpreter_data =
@@ -702,15 +702,15 @@ void Compiler::InstallInterpreterTrampolineCopy(
   }
 
   DirectHandle<Script> script(Cast<Script>(shared_info->script()), isolate);
-  Handle<AbstractCode> abstract_code = Cast<AbstractCode>(code);
+  DirectHandle<AbstractCode> abstract_code = Cast<AbstractCode>(code);
   Script::PositionInfo info;
   Script::GetPositionInfo(script, shared_info->StartPosition(), &info);
   int line_num = info.line + 1;
   int column_num = info.column + 1;
-  Handle<String> script_name =
-      handle(IsString(script->name()) ? Cast<String>(script->name())
-                                      : ReadOnlyRoots(isolate).empty_string(),
-             isolate);
+  DirectHandle<String> script_name(IsString(script->name())
+                                       ? Cast<String>(script->name())
+                                       : ReadOnlyRoots(isolate).empty_string(),
+                                   isolate);
   PROFILE(isolate, CodeCreateEvent(log_tag, abstract_code, shared_info,
                                    script_name, line_num, column_num));
 }
@@ -1258,9 +1258,9 @@ MaybeHandle<Code> CompileTurbofan(Isolate* isolate, Handle<JSFunction> function,
 // TODO(v8:7700): Record maglev compilations better.
 void RecordMaglevFunctionCompilation(Isolate* isolate,
                                      DirectHandle<JSFunction> function,
-                                     Handle<AbstractCode> code) {
+                                     DirectHandle<AbstractCode> code) {
   PtrComprCageBase cage_base(isolate);
-  Handle<SharedFunctionInfo> shared(function->shared(cage_base), isolate);
+  DirectHandle<SharedFunctionInfo> shared(function->shared(cage_base), isolate);
   DirectHandle<Script> script(Cast<Script>(shared->script(cage_base)), isolate);
   DirectHandle<FeedbackVector> feedback_vector(
       function->feedback_vector(cage_base), isolate);
@@ -1345,6 +1345,12 @@ MaybeHandle<Code> GetOrCompileOptimized(
     Isolate* isolate, DirectHandle<JSFunction> function, ConcurrencyMode mode,
     CodeKind code_kind, BytecodeOffset osr_offset = BytecodeOffset::None(),
     CompileResultBehavior result_behavior = CompileResultBehavior::kDefault) {
+  if (IsOSR(osr_offset)) {
+    function->TraceOptimizationStatus(
+        "^%s (osr %i)", CodeKindToString(code_kind), osr_offset.ToInt());
+  } else {
+    function->TraceOptimizationStatus("^%s", CodeKindToString(code_kind));
+  }
   DCHECK(CodeKindIsOptimizedJSFunction(code_kind));
 
   DirectHandle<SharedFunctionInfo> shared(function->shared(), isolate);
@@ -1357,7 +1363,7 @@ MaybeHandle<Code> GetOrCompileOptimized(
   // Clear the optimization marker on the function so that we don't try to
   // re-optimize.
   if (!IsOSR(osr_offset)) {
-    function->ResetTieringRequests(isolate);
+    function->ResetTieringRequests();
     // Always reset the OSR urgency to ensure we reset it on function entry.
     int invocation_count =
         function->feedback_vector()->invocation_count(kRelaxedLoad);
@@ -1400,9 +1406,7 @@ MaybeHandle<Code> GetOrCompileOptimized(
 
     if (IsOSR(osr_offset)) {
       // One OSR job per function at a time.
-      if (function->osr_tiering_in_progress()) {
-        return {};
-      }
+      if (function->osr_tiering_in_progress()) return {};
     }
   }
 
@@ -1497,7 +1501,8 @@ void FinalizeUnoptimizedCompilation(
       (!flags.collect_source_positions() && isolate->NeedsSourcePositions());
 
   for (const auto& finalize_data : finalize_unoptimized_compilation_data_list) {
-    Handle<SharedFunctionInfo> shared_info = finalize_data.function_handle();
+    DirectHandle<SharedFunctionInfo> shared_info =
+        finalize_data.function_handle();
     // It's unlikely, but possible, that the bytecode was flushed between being
     // allocated and now, so guard against that case, and against it being
     // flushed in the middle of this loop.
@@ -1717,6 +1722,9 @@ BackgroundCompileTask::BackgroundCompileTask(
   flags_.set_compile_hints_magic_enabled(
       options &
       ScriptCompiler::CompileOptions::kFollowCompileHintsMagicComment);
+  flags_.set_compile_hints_per_function_magic_enabled(
+      options & ScriptCompiler::CompileOptions::
+                    kFollowCompileHintsPerFunctionMagicComment);
 }
 
 BackgroundCompileTask::BackgroundCompileTask(
@@ -2628,7 +2636,7 @@ MaybeHandle<SharedFunctionInfo> BackgroundCompileTask::FinalizeScript(
     script->set_origin_options(origin_options);
 
     // The one post-hoc fix-up: Add the script to the script list.
-    Handle<WeakArrayList> scripts = isolate->factory()->script_list();
+    DirectHandle<WeakArrayList> scripts = isolate->factory()->script_list();
     scripts = WeakArrayList::Append(isolate, scripts,
                                     MaybeObjectDirectHandle::Weak(script));
     isolate->heap()->SetRootScriptList(*scripts);
@@ -2966,13 +2974,13 @@ bool Compiler::Compile(Isolate* isolate, Handle<SharedFunctionInfo> shared_info,
 
   if (script->produce_compile_hints()) {
     // Log lazy function compilation.
-    Handle<ArrayList> list;
+    DirectHandle<ArrayList> list;
     if (IsUndefined(script->compiled_lazy_function_positions())) {
       constexpr int kInitialLazyFunctionPositionListSize = 100;
       list = ArrayList::New(isolate, kInitialLazyFunctionPositionListSize);
     } else {
-      list = handle(Cast<ArrayList>(script->compiled_lazy_function_positions()),
-                    isolate);
+      list = direct_handle(
+          Cast<ArrayList>(script->compiled_lazy_function_positions()), isolate);
     }
     list = ArrayList::Add(isolate, list,
                           Smi::FromInt(shared_info->StartPosition()));
@@ -2992,7 +3000,7 @@ bool Compiler::Compile(Isolate* isolate, DirectHandle<JSFunction> function,
   // optimized.
   DCHECK(!function->is_compiled(isolate));
   DCHECK_IMPLIES(function->has_feedback_vector() &&
-                     function->IsTieringRequestedOrInProgress(isolate),
+                     function->IsTieringRequestedOrInProgress(),
                  function->shared()->is_compiled());
   DCHECK_IMPLIES(function->HasAvailableOptimizedCode(isolate),
                  function->shared()->is_compiled());
@@ -3020,7 +3028,7 @@ bool Compiler::Compile(Isolate* isolate, DirectHandle<JSFunction> function,
   // TODO(verwaest/mythria): Investigate if allocating feedback vector
   // immediately after a flush would be better.
   JSFunction::InitializeFeedbackCell(function, is_compiled_scope, true);
-  function->ResetTieringRequests(isolate);
+  function->ResetTieringRequests();
 
   function->UpdateCode(*code);
 
@@ -3087,7 +3095,7 @@ bool Compiler::CompileSharedWithBaseline(Isolate* isolate,
   }
 
   CompilerTracer::TraceStartBaselineCompile(isolate, shared);
-  Handle<Code> code;
+  DirectHandle<Code> code;
   base::TimeDelta time_taken;
   {
     base::ScopedTimer timer(
@@ -3163,6 +3171,7 @@ bool Compiler::FinalizeBackgroundCompileTask(BackgroundCompileTask* task,
 void Compiler::CompileOptimized(Isolate* isolate,
                                 DirectHandle<JSFunction> function,
                                 ConcurrencyMode mode, CodeKind code_kind) {
+  function->TraceOptimizationStatus("^%s", CodeKindToString(code_kind));
   DCHECK(CodeKindIsOptimizedJSFunction(code_kind));
   DCHECK(AllowCompilation::IsAllowed(isolate));
 
@@ -3208,7 +3217,7 @@ void Compiler::CompileOptimized(Isolate* isolate,
   DCHECK(function->is_compiled(isolate));
   DCHECK(function->shared()->HasBytecodeArray());
 
-  DCHECK_IMPLIES(function->IsTieringRequestedOrInProgress(isolate) &&
+  DCHECK_IMPLIES(function->IsTieringRequestedOrInProgress() &&
                      !function->IsLoggingRequested(isolate),
                  function->tiering_in_progress());
   if (!v8_flags.always_turbofan) {
@@ -3518,6 +3527,7 @@ struct ScriptCompileTimerScope {
     kNoCacheBecauseInDocumentWrite,
     kNoCacheBecauseResourceWithNoCacheHandler,
     kHitIsolateCacheWhenStreamingSource,
+    kNoCacheBecauseStaticCodeCache,
     kCount
   };
 
@@ -3624,6 +3634,8 @@ struct ScriptCompileTimerScope {
         return CacheBehaviour::kNoCacheBecauseResourceWithNoCacheHandler;
       case ScriptCompiler::kNoCacheBecauseDeferredProduceCodeCache:
         return CacheBehaviour::kProduceCodeCache;
+      case ScriptCompiler::kNoCacheBecauseStaticCodeCache:
+        return CacheBehaviour::kNoCacheBecauseStaticCodeCache;
       }
     UNREACHABLE();
   }
@@ -3675,6 +3687,7 @@ struct ScriptCompileTimerScope {
       case CacheBehaviour::kNoCacheBecausePacScript:
       case CacheBehaviour::kNoCacheBecauseInDocumentWrite:
       case CacheBehaviour::kNoCacheBecauseResourceWithNoCacheHandler:
+      case CacheBehaviour::kNoCacheBecauseStaticCodeCache:
         return isolate_->counters()->compile_script_no_cache_other();
 
       case CacheBehaviour::kCount:
@@ -4007,6 +4020,9 @@ MaybeDirectHandle<SharedFunctionInfo> GetSharedFunctionInfoForScriptImpl(
       flags.set_is_eager(compile_options & ScriptCompiler::kEagerCompile);
       flags.set_compile_hints_magic_enabled(
           compile_options & ScriptCompiler::kFollowCompileHintsMagicComment);
+      flags.set_compile_hints_per_function_magic_enabled(
+          compile_options &
+          ScriptCompiler::kFollowCompileHintsPerFunctionMagicComment);
 
       if (DirectHandle<Script> script; maybe_script.ToHandle(&script)) {
         flags.set_script_id(script->id());
@@ -4468,15 +4484,17 @@ void Compiler::FinalizeMaglevCompilationJob(maglev::MaglevCompilationJob* job,
 
   DirectHandle<JSFunction> function = job->function();
   BytecodeOffset osr_offset = job->osr_offset();
-  function->SetTieringInProgress(false, osr_offset);
 
   if (function->ActiveTierIsTurbofan(isolate) && !job->is_osr()) {
+    function->SetTieringInProgress(false, osr_offset);
     CompilerTracer::TraceAbortedMaglevCompile(
         isolate, function, BailoutReason::kHigherTierAvailable);
     return;
   }
   // Discard code compiled for a discarded native context without finalization.
   if (function->native_context()->global_object()->IsDetached()) {
+    CompilerTracer::TraceAbortedMaglevCompile(
+        isolate, function, BailoutReason::kDetachedNativeContext);
     return;
   }
 
@@ -4493,7 +4511,7 @@ void Compiler::FinalizeMaglevCompilationJob(maglev::MaglevCompilationJob* job,
     // Note the finalized InstructionStream object has already been installed on
     // the function by MaglevCompilationJob::FinalizeJobImpl.
 
-    Handle<Code> code = job->code().ToHandleChecked();
+    DirectHandle<Code> code = job->code().ToHandleChecked();
     if (!job->is_osr()) {
       job->function()->UpdateOptimizedCode(isolate, *code);
     }
@@ -4515,7 +4533,11 @@ void Compiler::FinalizeMaglevCompilationJob(maglev::MaglevCompilationJob* job,
     CompilerTracer::TraceFinishMaglevCompile(
         isolate, function, job->is_osr(), job->prepare_in_ms(),
         job->execute_in_ms(), job->finalize_in_ms());
+  } else {
+    CompilerTracer::TraceAbortedMaglevCompile(isolate, function,
+                                              job->bailout_reason_);
   }
+  function->SetTieringInProgress(false, osr_offset);
 #endif
 }
 
@@ -4564,96 +4586,19 @@ void Compiler::PostInstantiation(Isolate* isolate,
     // If it's a top-level script, report compilation to the debugger.
     DirectHandle<Script> script(Cast<Script>(shared->script()), isolate);
     isolate->debug()->OnAfterCompile(script);
-    TRACE_EVENT1(TRACE_DISABLED_BY_DEFAULT("devtools.v8-source-rundown"),
-                 "ScriptCompiled", "data",
-                 AddScriptCompiledTrace(isolate, shared));
-    bool tracing_enabled;
+    bool source_rundown_enabled;
+    TRACE_EVENT_CATEGORY_GROUP_ENABLED(
+        TRACE_DISABLED_BY_DEFAULT("devtools.v8-source-rundown"),
+        &source_rundown_enabled);
+    if (source_rundown_enabled) {
+      script->TraceScriptRundown();
+    }
+    bool source_rundown_sources_enabled;
     TRACE_EVENT_CATEGORY_GROUP_ENABLED(
         TRACE_DISABLED_BY_DEFAULT("devtools.v8-source-rundown-sources"),
-        &tracing_enabled);
-    if (tracing_enabled) {
-      EmitScriptSourceTextTrace(isolate, shared);
-    }
-  }
-}
-
-std::unique_ptr<v8::tracing::TracedValue> Compiler::AddScriptCompiledTrace(
-    Isolate* isolate, DirectHandle<SharedFunctionInfo> shared) {
-  DirectHandle<Script> script(Cast<Script>(shared->script()), isolate);
-  i::Tagged<i::Object> context_value =
-      isolate->native_context()->debug_context_id();
-  int contextId = (IsSmi(context_value)) ? i::Smi::ToInt(context_value) : 0;
-  Script::InitLineEnds(isolate, script);
-  Script::PositionInfo endInfo;
-  Script::GetPositionInfo(
-      script, i::Cast<i::String>(script->source())->length(), &endInfo);
-  Script::PositionInfo startInfo;
-  Script::GetPositionInfo(script, shared->StartPosition(), &startInfo);
-  auto value = v8::tracing::TracedValue::Create();
-  value->SetString("isolate",
-                   std::to_string(reinterpret_cast<size_t>(isolate)));
-  value->SetInteger("executionContextId", contextId);
-  value->SetInteger("scriptId", script->id());
-  value->SetInteger("startLine", startInfo.line);
-  value->SetInteger("startColumn", startInfo.column);
-  value->SetInteger("endLine", endInfo.line);
-  value->SetInteger("endColumn", endInfo.column);
-  value->SetBoolean("isModule", script->origin_options().IsModule());
-  value->SetBoolean("hasSourceUrl", script->HasValidSource());
-  if (script->HasValidSource() && IsString(script->GetNameOrSourceURL())) {
-    value->SetString(
-        "sourceMapUrl",
-        i::Cast<i::String>(script->GetNameOrSourceURL())->ToCString().get());
-  }
-  if (IsString(script->name())) {
-    value->SetString("url",
-                     i::Cast<i::String>(script->name())->ToCString().get());
-  }
-  value->SetString("hash",
-                   i::Script::GetScriptHash(isolate, script,
-                                            /* forceForInspector: */ false)
-                       ->ToCString()
-                       .get());
-  return value;
-}
-
-void Compiler::EmitScriptSourceTextTrace(
-    Isolate* isolate, DirectHandle<SharedFunctionInfo> shared) {
-  DirectHandle<Script> script(Cast<Script>(shared->script()), isolate);
-  if (IsString(script->source())) {
-    Tagged<String> source = i::Cast<i::String>(script->source());
-    auto script_id = script->id();
-    auto isolate_string = std::to_string(reinterpret_cast<size_t>(isolate));
-    int32_t source_length = source->length();
-    const int32_t kSplitMaxLength = 1000000;
-    if (source_length <= kSplitMaxLength) {
-      auto value = v8::tracing::TracedValue::Create();
-      value->SetString("isolate", isolate_string);
-      value->SetInteger("scriptId", script_id);
-      value->SetInteger("length", source_length);
-      value->SetString("sourceText", source->ToCString().get());
-      TRACE_EVENT1(
-          TRACE_DISABLED_BY_DEFAULT("devtools.v8-source-rundown-sources"),
-          "ScriptCompiled", "data", std::move(value));
-    } else {
-      Handle<String> handle_source(source, isolate);
-      int32_t split_count = source_length / kSplitMaxLength + 1;
-      for (int32_t i = 0; i < split_count; i++) {
-        int32_t begin = i * kSplitMaxLength;
-        int32_t end = std::min(begin + kSplitMaxLength, source_length);
-        DirectHandle<String> partial_source =
-            isolate->factory()->NewSubString(handle_source, begin, end);
-        auto split_trace_value = v8::tracing::TracedValue::Create();
-        split_trace_value->SetInteger("splitIndex", i);
-        split_trace_value->SetInteger("splitCount", split_count);
-        split_trace_value->SetString("isolate", isolate_string);
-        split_trace_value->SetInteger("scriptId", script_id);
-        split_trace_value->SetString("sourceText",
-                                     partial_source->ToCString().get());
-        TRACE_EVENT1(
-            TRACE_DISABLED_BY_DEFAULT("devtools.v8-source-rundown-sources"),
-            "LargeScriptCompiledSplits", "data", std::move(split_trace_value));
-      }
+        &source_rundown_sources_enabled);
+    if (source_rundown_sources_enabled) {
+      script->TraceScriptRundownSources();
     }
   }
 }

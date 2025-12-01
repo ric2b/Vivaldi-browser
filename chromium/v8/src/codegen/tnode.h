@@ -71,6 +71,11 @@ struct Word64T : IntegralT {
   static const MachineRepresentation kMachineRepresentation =
       MachineRepresentation::kWord64;
 };
+
+struct AdditiveSafeIntegerT : Word64T {
+  static constexpr MachineType kMachineType = MachineType::Int64();
+};
+
 struct Int64T : Word64T {
   static constexpr MachineType kMachineType = MachineType::Int64();
 };
@@ -193,6 +198,15 @@ struct MachineTypeOf<MaybeObject> {
   static constexpr MachineType value = MachineType::AnyTagged();
 };
 template <>
+struct MachineTypeOf<MaybeWeak<HeapObject>> {
+  // TODO(leszeks): Can this be TaggedPointer?
+  static constexpr MachineType value = MachineType::AnyTagged();
+};
+template <>
+struct MachineTypeOf<HeapObject> {
+  static constexpr MachineType value = MachineType::TaggedPointer();
+};
+template <>
 struct MachineTypeOf<Smi> {
   static constexpr MachineType value = MachineType::TaggedSigned();
 };
@@ -232,6 +246,13 @@ struct MachineTypeOf<Union<T, Ts...>> {
 
   static_assert(value.representation() != MachineRepresentation::kNone,
                 "no common representation");
+};
+
+// Special case for Union<HeapObject,TaggedIndex>, which torque uses for
+// TaggedZeroPattern and can be treated as an AnyTagged
+template <>
+struct MachineTypeOf<Union<HeapObject, TaggedIndex>> {
+  static constexpr MachineType value = MachineType::AnyTagged();
 };
 
 template <class Type, class Enable = void>
@@ -322,6 +343,10 @@ struct types_have_common_values<Int32T, U> {
 };
 template <class U>
 struct types_have_common_values<Uint64T, U> {
+  static const bool value = types_have_common_values<Word64T, U>::value;
+};
+template <class U>
+struct types_have_common_values<AdditiveSafeIntegerT, U> {
   static const bool value = types_have_common_values<Word64T, U>::value;
 };
 template <class U>

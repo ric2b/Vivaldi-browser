@@ -127,11 +127,8 @@ public class TabListFaviconProvider {
         }
 
         @Override
-        public boolean equals(Object other) {
-            if (!(other instanceof UrlTabFavicon)) {
-                return false;
-            }
-            return Objects.equals(mGurl, ((UrlTabFavicon) other).mGurl);
+        public boolean equals(Object obj) {
+            return (obj instanceof UrlTabFavicon other) && Objects.equals(mGurl, other.mGurl);
         }
     }
 
@@ -152,11 +149,8 @@ public class TabListFaviconProvider {
         }
 
         @Override
-        public boolean equals(Object other) {
-            if (!(other instanceof ComposedTabFavicon)) {
-                return false;
-            }
-            return Arrays.equals(mGurls, ((ComposedTabFavicon) other).mGurls);
+        public boolean equals(Object obj) {
+            return (obj instanceof ComposedTabFavicon other) && Arrays.equals(mGurls, other.mGurls);
         }
     }
 
@@ -210,11 +204,8 @@ public class TabListFaviconProvider {
         }
 
         @Override
-        public boolean equals(Object other) {
-            if (!(other instanceof ResourceTabFavicon)) {
-                return false;
-            }
-            return this.mType == ((ResourceTabFavicon) other).mType;
+        public boolean equals(Object obj) {
+            return (obj instanceof ResourceTabFavicon other) && mType == other.mType;
         }
     }
 
@@ -708,7 +699,7 @@ public class TabListFaviconProvider {
 
     private Drawable processBitmap(Bitmap bitmap, boolean isTabStrip) {
         if (isTabStrip) {
-            return processBitampWithBackground(
+            return processBitmapWithBackground(
                     mContext, bitmap, mStripFaviconSize, mFaviconCornerRadius, mFaviconInset);
         } else {
             return processBitmapNoBackground(
@@ -724,7 +715,7 @@ public class TabListFaviconProvider {
                 cornerRadius);
     }
 
-    private static Drawable processBitampWithBackground(
+    private static Drawable processBitmapWithBackground(
             Context context, Bitmap bitmap, int size, int cornerRadius, int inset) {
         Drawable favicon = processBitmapNoBackground(context, bitmap, size, cornerRadius);
         Drawable circleBackground =
@@ -876,7 +867,7 @@ public class TabListFaviconProvider {
                                         AppCompatResources.getDrawable(
                                                 context, R.drawable.ic_globe_24dp);
                                 return new ResourceTabFavicon(
-                                        processBitampWithBackground(
+                                        processBitmapWithBackground(
                                                 context,
                                                 getResizedBitmapFromDrawable(
                                                         globeDrawable, stripFaviconSize),
@@ -894,7 +885,7 @@ public class TabListFaviconProvider {
                                         AppCompatResources.getDrawable(
                                                 context, R.drawable.chromelogo16);
                                 return new ResourceTabFavicon(
-                                        processBitampWithBackground(
+                                        processBitmapWithBackground(
                                                 context,
                                                 getResizedBitmapFromDrawable(
                                                         chromeDrawable, stripFaviconSize),

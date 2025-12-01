@@ -6,8 +6,10 @@
 
 #include <memory>
 #include <string>
+#include <string_view>
 
 #include "base/memory/raw_ptr.h"
+#include "base/strings/strcat.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/bind.h"
@@ -89,12 +91,10 @@ class BookmarkEditorViewTest : public testing::Test {
     }
   }
 
-  std::u16string GetURLText() const {
-    if (editor_->details_.type != BookmarkEditor::EditDetails::NEW_FOLDER) {
-      return editor_->url_tf_->GetText();
-    }
-
-    return std::u16string();
+  std::u16string_view GetURLText() const {
+    return (editor_->details_.type == BookmarkEditor::EditDetails::NEW_FOLDER)
+               ? std::u16string_view()
+               : editor_->url_tf_->GetText();
   }
 
   void ApplyEdits() { editor_->ApplyEdits(); }
@@ -372,7 +372,7 @@ TEST_F(BookmarkEditorViewTest, EditKeepsScheme) {
                BookmarkEditorView::SHOW_TREE);
 
   // We expect only the trailing / to be trimmed when userinfo is present
-  EXPECT_EQ(ASCIIToUTF16(kUrl.spec()), GetURLText() + u"/");
+  EXPECT_EQ(ASCIIToUTF16(kUrl.spec()), base::StrCat({GetURLText(), u"/"}));
 
   const std::u16string& kTitle = u"EditingKeepsScheme";
   SetTitleText(kTitle);
@@ -639,4 +639,39 @@ TEST_F(BookmarkEditorViewTest, AccessibleProperties) {
   editor()->GetViewAccessibility().GetAccessibleNodeData(&data);
   EXPECT_EQ(l10n_util::GetStringUTF8(IDS_BOOKMARK_EDITOR_TITLE),
             data.GetStringAttribute(ax::mojom::StringAttribute::kName));
+}
+
+TEST_F(BookmarkEditorViewTest,
+       MoveDialog_SaveButtonDisabledForDescendingNodes) {
+  const BookmarkNode* F1 = model()->bookmark_bar_node()->children()[1].get();
+  ASSERT_EQ(u"F1", F1->GetTitle());
+  CreateEditor(profile_.get(), BookmarkEditor::EditDetails::MoveNodes({F1}),
+               BookmarkEditorView::SHOW_TREE);
+  ASSERT_TRUE(editor());
+
+  // By default, the parent of the selected node is chosen as a location. The
+  // dialog button should be enabled.
+  ASSERT_EQ(model()->bookmark_bar_node()->GetTitle(),
+            tree_view()->GetSelectedNode()->GetTitle());
+  EXPECT_TRUE(editor()->IsDialogButtonEnabled(ui::mojom::DialogButton::kOk));
+
+  // Select F1 (the node itself) as a location. The dialog button should be
+  // disabled.
+  tree_view()->SetSelectedNode(editor_tree_model()
+                                   ->AsNode(tree_view()->GetSelectedNode())
+                                   ->children()
+                                   .at(0)
+                                   .get());
+  ASSERT_EQ(u"F1", tree_view()->GetSelectedNode()->GetTitle());
+  EXPECT_FALSE(editor()->IsDialogButtonEnabled(ui::mojom::DialogButton::kOk));
+
+  // Select F11 (a descendant of the node itself) as a location. The dialog
+  // button should be disabled.
+  tree_view()->SetSelectedNode(editor_tree_model()
+                                   ->AsNode(tree_view()->GetSelectedNode())
+                                   ->children()
+                                   .at(0)
+                                   .get());
+  ASSERT_EQ(u"F11", tree_view()->GetSelectedNode()->GetTitle());
+  EXPECT_FALSE(editor()->IsDialogButtonEnabled(ui::mojom::DialogButton::kOk));
 }

@@ -5,6 +5,7 @@
 #import <Cocoa/Cocoa.h>
 #include <objc/runtime.h>
 
+#include <cstddef>
 #include <memory>
 #include <string>
 
@@ -671,7 +672,7 @@ Textfield* BridgedNativeWidgetTest::InstallTextField(
   textfield->SetTextInputType(text_input_type);
   textfield->set_controller(this);
   view_->RemoveAllChildViews();
-  view_->AddChildView(textfield);
+  view_->AddChildViewRaw(textfield);
   textfield->SetBoundsRect(bounds_);
 
   // Request focus so the InputMethod can dispatch events to the RootView, and
@@ -763,7 +764,7 @@ void BridgedNativeWidgetTest::SetUp() {
   EXPECT_TRUE([window delegate]);
   GetNSWindowHost()->SetRootView(view_.get());
   bridge()->CreateContentView(GetNSWindowHost()->GetRootViewNSViewId(),
-                              view_->bounds());
+                              view_->bounds(), std::nullopt);
   ns_view_ = bridge()->ns_view();
 
   // Pretend it has been shown via NativeWidgetMac::Show().

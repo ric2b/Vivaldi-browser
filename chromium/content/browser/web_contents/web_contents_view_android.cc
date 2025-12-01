@@ -89,12 +89,7 @@ bool IsDragAndDropEnabled() {
 }
 
 bool IsDragEnabledForDropData(const DropData& drop_data) {
-  if (!IsDragAndDropEnabled()) {
-    return drop_data.text.has_value();
-  }
-  return !drop_data.url.is_empty() || !drop_data.file_contents.empty() ||
-         drop_data.text.has_value() ||
-         base::FeatureList::IsEnabled(features::kDragDropEmpty);
+  return IsDragAndDropEnabled() || drop_data.text.has_value();
 }
 }
 
@@ -243,8 +238,7 @@ void WebContentsViewAndroid::FocusThroughTabTraversal(bool reverse) {
 }
 
 DropData* WebContentsViewAndroid::GetDropData() const {
-  NOTIMPLEMENTED();
-  return NULL;
+  return drop_data_.get();
 }
 
 gfx::Rect WebContentsViewAndroid::GetViewBounds() const {
@@ -498,31 +492,30 @@ bool WebContentsViewAndroid::OnDragEvent(const ui::DragEventAndroid& event) {
       OnDragUpdated(event.location(), event.screen_location());
       break;
     case JNI_DragEvent::ACTION_DROP: {
-      auto drop_data = std::make_unique<DropData>();
-      drop_data->did_originate_from_renderer = false;
-      drop_data->document_is_handling_drag = document_is_handling_drag_;
+      drop_data_ = std::make_unique<DropData>();
+      drop_data_->did_originate_from_renderer = false;
+      drop_data_->document_is_handling_drag = document_is_handling_drag_;
       JNIEnv* env = AttachCurrentThread();
       std::vector<std::vector<std::string>> filenames;
       base::android::Java2dStringArrayTo2dStringVector(
           env, event.GetJavaFilenames(), &filenames);
       for (const auto& info : filenames) {
         CHECK_EQ(info.size(), 2u);
-        drop_data->filenames.push_back(
+        drop_data_->filenames.push_back(
             ui::FileInfo(base::FilePath(info[0]), base::FilePath(info[1])));
       }
       if (!event.GetJavaText().is_null()) {
-        drop_data->text = ConvertJavaStringToUTF16(env, event.GetJavaText());
+        drop_data_->text = ConvertJavaStringToUTF16(env, event.GetJavaText());
       }
       if (!event.GetJavaHtml().is_null()) {
-        drop_data->html = ConvertJavaStringToUTF16(env, event.GetJavaHtml());
+        drop_data_->html = ConvertJavaStringToUTF16(env, event.GetJavaHtml());
       }
       if (!event.GetJavaUrl().is_null()) {
-        drop_data->url =
+        drop_data_->url =
             GURL(ConvertJavaStringToUTF16(env, event.GetJavaUrl()));
       }
 
-      OnPerformDrop(std::move(drop_data), event.location(),
-                    event.screen_location());
+      OnPerformDrop(event.location(), event.screen_location());
       break;
     }
     case JNI_DragEvent::ACTION_DRAG_EXITED:
@@ -676,8 +669,7 @@ void WebContentsViewAndroid::OnDragExited() {
   }
 }
 
-void WebContentsViewAndroid::OnPerformDrop(std::unique_ptr<DropData> drop_data,
-                                           const gfx::PointF& location,
+void WebContentsViewAndroid::OnPerformDrop(const gfx::PointF& location,
                                            const gfx::PointF& screen_location) {
   if (drag_drop_oopif_enabled_) {
     web_contents_->GetRenderWidgetHostAtPointAsynchronously(
@@ -685,20 +677,19 @@ void WebContentsViewAndroid::OnPerformDrop(std::unique_ptr<DropData> drop_data,
             web_contents_->GetRenderWidgetHostView()),
         location,
         base::BindOnce(&WebContentsViewAndroid::PerformDropCallback,
-                       weak_ptr_factory_.GetWeakPtr(), std::move(drop_data),
-                       location, screen_location));
+                       weak_ptr_factory_.GetWeakPtr(), location,
+                       screen_location));
     return;
   }
 
   web_contents_->Focus();
   web_contents_->GetRenderViewHost()->GetWidget()->FilterDropData(
-      drop_data.get());
+      drop_data_.get());
   web_contents_->GetRenderViewHost()->GetWidget()->DragTargetDrop(
-      *drop_data, location, screen_location, 0, base::DoNothing());
+      *drop_data_, location, screen_location, 0, base::DoNothing());
 }
 
 void WebContentsViewAndroid::PerformDropCallback(
-    std::unique_ptr<DropData> drop_data,
     const gfx::PointF& location,
     const gfx::PointF& screen_location,
     base::WeakPtr<RenderWidgetHostViewBase> target,
@@ -721,8 +712,8 @@ void WebContentsViewAndroid::PerformDropCallback(
   }
 
   web_contents_->Focus();
-  target_rwh->FilterDropData(drop_data.get());
-  target_rwh->DragTargetDrop(*drop_data, *transformed_pt, screen_location, 0,
+  target_rwh->FilterDropData(drop_data_.get());
+  target_rwh->DragTargetDrop(*drop_data_, *transformed_pt, screen_location, 0,
                              base::DoNothing());
 }
 
@@ -916,6 +907,14 @@ void WebContentsViewAndroid::NotifyVirtualKeyboardOverlayRect(
   auto* rwhv = GetRenderWidgetHostViewAndroid();
   if (rwhv)
     rwhv->NotifyVirtualKeyboardOverlayRect(keyboard_rect);
+}
+
+void WebContentsViewAndroid::NotifyContextMenuInsetsObservers(
+    const gfx::Rect& safe_area) {
+  auto* rwhv = GetRenderWidgetHostViewAndroid();
+  if (rwhv) {
+    rwhv->NotifyContextMenuInsetsObservers(safe_area);
+  }
 }
 
 } // namespace content

@@ -18,71 +18,6 @@
         "description": "The transition type for this visit from its referrer."
       },
       {
-        "id": "TypedHistoryItem",
-        "type": "object",
-        "description": "An object containing informations of one typed history entry",
-        "properties": {
-          "url": {
-            "type": "string",
-            "description": "The URL navigated to by a user."
-          },
-          "title": {
-            "type": "string",
-            "description": "The title of the page when it was last loaded."
-          },
-          "terms": {
-            "type": "string",
-            "description": "The terms that the user searched for."
-          },
-          "visitCount": {
-            "type": "integer",
-            "description": "The number of times the user has navigated to this page."
-          }
-        }
-      },
-      {
-        "id": "DetailedHistoryItem",
-        "type": "object",
-        "description": "An object encapsulating one result of a top url history query.",
-        "properties": {
-          "id": {
-            "type": "string",
-            "minimum": 0,
-            "description": "The unique identifier for the item."
-          },
-          "url": {
-            "type": "string",
-            "description": "The URL navigated to by a user."
-          },
-          "title": {
-            "type": "string",
-            "description": "The title of the page when it was last loaded."
-          },
-          "lastVisitTime": {
-            "type": "number",
-            "optional": true,
-            "description": "When this page was last loaded, represented in milliseconds since the epoch."
-          },
-          "visitCount": {
-            "type": "integer",
-            "description": "The number of times the user has navigated to this page."
-          },
-          "typedCount": {
-            "type": "integer",
-            "optional": true,
-            "description": "The number of times the user has navigated to this page by typing in the address."
-          },
-          "isBookmarked": {
-            "type": "boolean",
-            "description": "States if the URL is bookmarked."
-          },
-          "score": {
-            "type": "integer",
-            "description": "The relavancy score given to the URL."
-          }
-        }
-      },
-      {
         "id": "HistoryPrivateItem",
         "type": "object",
         "description": "An object encapsulating one result of a history query. Properties marked with 'Used for statistics' can be removed if we make a new API function for stats.",
@@ -205,60 +140,6 @@
               "name": "results",
               "type": "array",
               "items": { "$ref": "HistoryPrivateItem" }
-            }
-          ]
-        }
-      },
-      {
-        "name": "getTypedHistory",
-        "type": "function",
-        "description": "Retrieves a list of items used to populate the typed URL results of the address bar",
-        "parameters": [
-          {
-            "name": "query",
-            "type": "string",
-            "description": "A piece of text that the results should contain"
-          },
-          {
-            "name": "maxResults",
-            "type": "integer",
-            "description": "The maximum number of items to return"
-          }
-        ],
-        "returns_async": {
-          "name": "callback",
-          "parameters": [
-            {
-              "name": "results",
-              "type": "array",
-              "items": { "$ref": "TypedHistoryItem" }
-            }
-          ]
-        }
-      },
-      {
-        "name": "getDetailedHistory",
-        "type": "function",
-        "description": "",
-        "parameters": [
-          {
-            "name": "query",
-            "type": "string",
-            "description": "A piece of text that the results should contain"
-          },
-          {
-            "name": "maxResults",
-            "type": "integer",
-            "description": "The maximum number of items to return"
-          }
-        ],
-        "returns_async": {
-          "name": "callback",
-          "parameters": [
-            {
-              "name": "results",
-              "type": "array",
-              "items": { "$ref": "DetailedHistoryItem" }
             }
           ]
         }

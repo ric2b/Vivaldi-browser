@@ -9,12 +9,14 @@
 
 #include <map>
 #include <optional>
+#include <utility>
 #include <vector>
 
 #include "base/gtest_prod_util.h"
 #include "build/build_config.h"
 #include "components/omnibox/browser/autocomplete_match.h"
 #include "components/omnibox/browser/match_compare.h"
+#include "components/omnibox/browser/omnibox_metrics_provider.h"
 #include "components/omnibox/browser/search_suggestion_parser.h"
 #include "components/omnibox/browser/suggestion_group_util.h"
 #include "third_party/omnibox_proto/groups.pb.h"
@@ -51,10 +53,13 @@ class AutocompleteResult {
   static size_t GetMaxMatches(
       bool is_zero_suggest = false,
       AutocompleteInput::FeaturedKeywordMode featured_keyword_mode =
-          AutocompleteInput::FeaturedKeywordMode::kFalse);
+          AutocompleteInput::FeaturedKeywordMode::kFalse,
+      AutocompleteProviderClient* client = nullptr);
+
   // Defaults to GetMaxMatches if omnibox::kDynamicMaxAutocomplete is disabled;
   // otherwise returns the boosted dynamic limit.
-  static size_t GetDynamicMaxMatches();
+  static size_t GetDynamicMaxMatches(
+      AutocompleteProviderClient* client = nullptr);
 
   AutocompleteResult();
   ~AutocompleteResult();
@@ -122,7 +127,8 @@ class AutocompleteResult {
                    TemplateURLService* template_url_service,
                    OmniboxTriggeredFeatureService* triggered_feature_service,
                    std::optional<AutocompleteMatch> default_match_to_preserve =
-                       std::nullopt);
+                      std::nullopt,
+                   AutocompleteProviderClient* client = nullptr);
 
   // Removes duplicates, puts the list in sorted order. Sets the default match
   // to the best match and updates the alternate nav URL.
@@ -180,6 +186,9 @@ class AutocompleteResult {
   void AttachPedalsToMatches(const AutocompleteInput& input,
                              const AutocompleteProviderClient& client);
 
+  // Sets a takeover action on all matches to issue a contextual search.
+  void AttachContextualSearchFulfillmentActionToMatches();
+
   // Sets |has_tab_match| in matches whose URL matches an open tab's URL.
   // Also, fixes up the description if not using another UI element to
   // annotate (e.g. tab switch button). |input| can be null; if provided,
@@ -226,7 +235,8 @@ class AutocompleteResult {
       bool is_zero_suggest,
       AutocompleteInput::FeaturedKeywordMode featured_keyword_mode,
       const ACMatches& matches,
-      const CompareWithDemoteByType<AutocompleteMatch>& comparing_object);
+      const CompareWithDemoteByType<AutocompleteMatch>& comparing_object,
+      AutocompleteProviderClient* client = nullptr);
   // Determines how many matches to keep depending on how many URLs would be
   // shown. Increases the match limit if there are TYPE_UNSCOPED_EXTENSION
   // suggestions available so they don't replace other match types.
@@ -237,7 +247,8 @@ class AutocompleteResult {
   // 3) `kDynamicMaxAutocomplete` feature is enabled.
   static size_t CalculateNumMatchesPerUrlCount(
       const ACMatches& matches,
-      const CompareWithDemoteByType<AutocompleteMatch>& comparing_object);
+      const CompareWithDemoteByType<AutocompleteMatch>& comparing_object,
+      AutocompleteProviderClient* client = nullptr);
 
   const omnibox::GroupConfigMap& suggestion_groups_map() const {
     return suggestion_groups_map_;
@@ -271,6 +282,37 @@ class AutocompleteResult {
     session_.gws_event_id_hashes_.clear();
   }
 
+  std::pair<bool, bool> suggestions_shown_in_session(bool is_zero_suggest) {
+    if (is_zero_suggest) {
+      return {session_.zero_prefix_search_suggestions_shown_in_session_,
+              session_.zero_prefix_url_suggestions_shown_in_session_};
+    } else {
+      return {session_.typed_search_suggestions_shown_in_session_,
+              session_.typed_url_suggestions_shown_in_session_};
+    }
+  }
+
+  void set_suggestions_shown_in_session(bool is_zero_suggest,
+                                        const AutocompleteMatch& match) {
+    bool is_search = OmniboxMetricsProvider::GetClientSummarizedResultType(
+                         match.GetOmniboxEventResultType()) ==
+                     ClientSummarizedResultType::kSearch;
+
+    if (is_zero_suggest) {
+      if (is_search) {
+        session_.zero_prefix_search_suggestions_shown_in_session_ = true;
+      } else {
+        session_.zero_prefix_url_suggestions_shown_in_session_ = true;
+      }
+    } else {
+      if (is_search) {
+        session_.typed_search_suggestions_shown_in_session_ = true;
+      } else {
+        session_.typed_url_suggestions_shown_in_session_ = true;
+      }
+    }
+  }
+
   // Clears this result set - i.e., `matches_` and `suggestion_groups_map_`.
   void ClearMatches();
 
@@ -279,10 +321,13 @@ class AutocompleteResult {
   // AutocompleteController::Stop() with `clear_result=true` is called.
   void Reset();
 
+  // Vivaldi
+#if !BUILDFLAG(IS_ANDROID)
 #if DCHECK_IS_ON()
   // Does a data integrity check on this result.
   void Validate() const;
 #endif  // DCHECK_IS_ON()
+#endif  // !IS_ANDROID
 
   // Returns a URL to offer the user as an alternative navigation when they
   // open |match| after typing in |input|.
@@ -368,7 +413,7 @@ class AutocompleteResult {
 
   // This value should be comfortably larger than any max-autocomplete-matches
   // under consideration.
-  static constexpr size_t kMaxAutocompletePositionValue = 30;
+  static constexpr size_t kMaxAutocompletePositionValue = 60;
 
  private:
   friend class AutocompleteController;
@@ -403,6 +448,18 @@ class AutocompleteResult {
 
     // List of GWS event ID hashes accumulated during the course of the session.
     std::vector<int64_t> gws_event_id_hashes_;
+
+    // Whether at least one zero-prefix Search/URL suggestion was shown in the
+    // session. This is used in order to ensure that the relevant client-side
+    // metrics logging code emits the proper values.
+    bool zero_prefix_search_suggestions_shown_in_session_ = false;
+    bool zero_prefix_url_suggestions_shown_in_session_ = false;
+
+    // Whether at least one typed Search/URL suggestion was shown in the
+    // session. This is used in order to ensure that the relevant client-side
+    // metrics logging code emits the proper values.
+    bool typed_search_suggestions_shown_in_session_ = false;
+    bool typed_url_suggestions_shown_in_session_ = false;
   };
 
   // Swaps this result set - i.e., `matches_` and `suggestion_groups_map_` -
@@ -498,9 +555,12 @@ class AutocompleteResult {
   mutable base::android::ScopedJavaGlobalRef<jobject> java_result_;
 #endif
 
+  // For LOG debugging.
+  friend std::ostream& operator<<(std::ostream& os,
+                                  const AutocompleteResult& result);
+
   // Vivaldi
-  static constexpr size_t VIVALDI_DESKTOP_MAX_MATCHES = 12;
-  static constexpr size_t VIVALDI_DESKTOP_ZERO_SUGGEST_MAX_MATCHES = 20;
+  static constexpr size_t VIVALDI_DESKTOP_DEFAULT_MAX_MATCHES = 12;
 };
 
 #endif  // COMPONENTS_OMNIBOX_BROWSER_AUTOCOMPLETE_RESULT_H_

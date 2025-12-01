@@ -14,19 +14,19 @@
 #include "base/task/sequenced_task_runner.h"
 #include "base/test/task_environment.h"
 #include "components/performance_manager/public/mojom/coordination_unit.mojom.h"
+#include "components/performance_manager/scenario_api/performance_scenario_memory.h"
+#include "components/performance_manager/scenario_api/performance_scenarios.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/receiver.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/blink/public/common/performance/performance_scenarios.h"
 
 namespace content {
 namespace {
 
-using blink::performance_scenarios::ScenarioScope;
-using blink::performance_scenarios::ScenarioState;
-using blink::performance_scenarios::ScopedReadOnlyScenarioMemory;
 using performance_manager::mojom::ChildProcessCoordinationUnit;
+using performance_scenarios::ScenarioScope;
+using performance_scenarios::ScenarioState;
 using ::testing::_;
 using ::testing::Invoke;
 
@@ -101,9 +101,9 @@ TEST_F(ChildPerformanceCoordinatorTest, NoScenarioRegion) {
                                       base::ReadOnlySharedMemoryRegion(),
                                       base::ReadOnlySharedMemoryRegion());
 
-  EXPECT_FALSE(ScopedReadOnlyScenarioMemory::GetMappingForTesting(
+  EXPECT_FALSE(performance_scenarios::GetScenarioMappingForScope(
       ScenarioScope::kGlobal));
-  EXPECT_FALSE(ScopedReadOnlyScenarioMemory::GetMappingForTesting(
+  EXPECT_FALSE(performance_scenarios::GetScenarioMappingForScope(
       ScenarioScope::kCurrentProcess));
 }
 
@@ -116,9 +116,9 @@ TEST_F(ChildPerformanceCoordinatorTest, GlobalScenarioRegion) {
                                       shared_memory->TakeReadOnlyRegion(),
                                       base::ReadOnlySharedMemoryRegion());
 
-  EXPECT_TRUE(ScopedReadOnlyScenarioMemory::GetMappingForTesting(
+  EXPECT_TRUE(performance_scenarios::GetScenarioMappingForScope(
       ScenarioScope::kGlobal));
-  EXPECT_FALSE(ScopedReadOnlyScenarioMemory::GetMappingForTesting(
+  EXPECT_FALSE(performance_scenarios::GetScenarioMappingForScope(
       ScenarioScope::kCurrentProcess));
 }
 
@@ -131,9 +131,9 @@ TEST_F(ChildPerformanceCoordinatorTest, ProcessScenarioRegion) {
                                       base::ReadOnlySharedMemoryRegion(),
                                       shared_memory->TakeReadOnlyRegion());
 
-  EXPECT_FALSE(ScopedReadOnlyScenarioMemory::GetMappingForTesting(
+  EXPECT_FALSE(performance_scenarios::GetScenarioMappingForScope(
       ScenarioScope::kGlobal));
-  EXPECT_TRUE(ScopedReadOnlyScenarioMemory::GetMappingForTesting(
+  EXPECT_TRUE(performance_scenarios::GetScenarioMappingForScope(
       ScenarioScope::kCurrentProcess));
 }
 

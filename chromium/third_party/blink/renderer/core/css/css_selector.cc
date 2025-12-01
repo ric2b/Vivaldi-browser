@@ -24,16 +24,13 @@
  * Boston, MA 02110-1301, USA.
  */
 
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
-#pragma allow_unsafe_buffers
-#endif
-
 #include "third_party/blink/renderer/core/css/css_selector.h"
 
 #include <algorithm>
+#include <iterator>
 #include <memory>
 
+#include "base/compiler_specific.h"
 #include "style_rule.h"
 #include "third_party/blink/renderer/core/css/css_markup.h"
 #include "third_party/blink/renderer/core/css/css_selector_list.h"
@@ -43,6 +40,7 @@
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/pseudo_element.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context.h"
+#include "third_party/blink/renderer/core/html/forms/html_select_element.h"
 #include "third_party/blink/renderer/core/html/html_document.h"
 #include "third_party/blink/renderer/core/html_names.h"
 #include "third_party/blink/renderer/platform/runtime_enabled_features.h"
@@ -713,13 +711,11 @@ CSSSelector::PseudoType CSSSelector::NameToPseudoType(
   const NameToPseudoStruct* pseudo_type_map;
   const NameToPseudoStruct* pseudo_type_map_end;
   if (has_arguments) {
-    pseudo_type_map = kPseudoTypeWithArgumentsMap;
-    pseudo_type_map_end =
-        kPseudoTypeWithArgumentsMap + std::size(kPseudoTypeWithArgumentsMap);
+    pseudo_type_map = std::begin(kPseudoTypeWithArgumentsMap);
+    pseudo_type_map_end = std::end(kPseudoTypeWithArgumentsMap);
   } else {
-    pseudo_type_map = kPseudoTypeWithoutArgumentsMap;
-    pseudo_type_map_end = kPseudoTypeWithoutArgumentsMap +
-                          std::size(kPseudoTypeWithoutArgumentsMap);
+    pseudo_type_map = std::begin(kPseudoTypeWithoutArgumentsMap);
+    pseudo_type_map_end = std::end(kPseudoTypeWithoutArgumentsMap);
   }
   const NameToPseudoStruct* match = std::lower_bound(
       pseudo_type_map, pseudo_type_map_end, name,
@@ -728,9 +724,10 @@ CSSSelector::PseudoType CSSSelector::NameToPseudoType(
         DCHECK(entry.string);
         // If strncmp returns 0, then either the keys are equal, or |name| sorts
         // before |entry|.
-        return strncmp(entry.string,
-                       reinterpret_cast<const char*>(name.Characters8()),
-                       name.length()) < 0;
+        return UNSAFE_TODO(
+                   strncmp(entry.string,
+                           reinterpret_cast<const char*>(name.Characters8()),
+                           name.length())) < 0;
       });
   if (match == pseudo_type_map_end || match->string != name.GetString()) {
     return CSSSelector::kPseudoUnknown;
@@ -791,7 +788,7 @@ CSSSelector::PseudoType CSSSelector::NameToPseudoType(
   }
 
   if (match->type == CSSSelector::kPseudoPicker &&
-      !RuntimeEnabledFeatures::CustomizableSelectEnabled()) {
+      !HTMLSelectElement::CustomizableSelectEnabled(document)) {
     return CSSSelector::kPseudoUnknown;
   }
 
@@ -802,7 +799,8 @@ CSSSelector::PseudoType CSSSelector::NameToPseudoType(
   }
 
   if (match->type == CSSSelector::kPseudoHasInterest &&
-      !RuntimeEnabledFeatures::HTMLInterestTargetAttributeEnabled()) {
+      !RuntimeEnabledFeatures::HTMLInterestTargetAttributeEnabled(
+          document ? document->GetExecutionContext() : nullptr)) {
     return CSSSelector::kPseudoUnknown;
   }
 
@@ -2044,8 +2042,8 @@ constexpr bool IsPseudoMapSorted(const NameToPseudoStruct* map, unsigned size) {
   for (unsigned i = 0; i < size - 1; i++) {
     // strcmp/strncmp would be much better here, but unfortunately they aren't
     // constexpr.
-    const char* current_string = map[i].string;
-    const char* next_string = map[i + 1].string;
+    const char* current_string = UNSAFE_TODO(map[i].string);
+    const char* next_string = UNSAFE_TODO(map[i + 1].string);
     while (true) {
       if (*current_string > *next_string) {
         return false;
@@ -2059,8 +2057,8 @@ constexpr bool IsPseudoMapSorted(const NameToPseudoStruct* map, unsigned size) {
       if (!*next_string) {
         return false;
       }
-      current_string++;
-      next_string++;
+      UNSAFE_TODO(current_string++);
+      UNSAFE_TODO(next_string++);
     }
   }
   return true;

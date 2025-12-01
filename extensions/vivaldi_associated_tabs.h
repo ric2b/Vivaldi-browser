@@ -12,6 +12,7 @@ namespace content {
 }
 
 namespace vivaldi {
+// This is to clean up tabstrip and webcontents after a webpanel is removed.
 void HandleDetachedTab(int tab_id);
 void HandleAssociatedTabs(TabStripModel* tab_strip_model,
                           const TabStripModelChange& change);

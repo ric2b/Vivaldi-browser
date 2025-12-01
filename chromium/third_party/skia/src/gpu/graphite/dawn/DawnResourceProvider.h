@@ -8,7 +8,7 @@
 #ifndef skgpu_graphite_DawnResourceProvider_DEFINED
 #define skgpu_graphite_DawnResourceProvider_DEFINED
 
-#include "include/gpu/graphite/dawn/DawnTypes.h"
+#include "include/gpu/graphite/dawn/DawnGraphiteTypes.h"
 #include "src/core/SkLRUCache.h"
 #include "src/core/SkTHash.h"
 #include "src/gpu/graphite/PipelineData.h"
@@ -39,7 +39,8 @@ public:
     sk_sp<DawnTexture> findOrCreateDiscardableMSAALoadTexture(SkISize dimensions,
                                                               const TextureInfo& msaaInfo);
 
-    wgpu::RenderPipeline findOrCreateBlitWithDrawPipeline(const RenderPassDesc& renderPassDesc);
+    wgpu::RenderPipeline findOrCreateBlitWithDrawPipeline(const RenderPassDesc& renderPassDesc,
+                                                          int srcSampleCount);
 
     sk_sp<DawnBuffer> findOrCreateDawnBuffer(size_t size,
                                              BufferType type,
@@ -110,6 +111,8 @@ private:
     class IntrinsicBuffer;
     class IntrinsicConstantsManager;
     std::unique_ptr<IntrinsicConstantsManager> fIntrinsicConstantsManager;
+
+    SingleOwner* fSingleOwner = nullptr;
 };
 
 }  // namespace skgpu::graphite

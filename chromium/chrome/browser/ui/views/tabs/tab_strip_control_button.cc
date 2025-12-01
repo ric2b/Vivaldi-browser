@@ -6,6 +6,7 @@
 
 #include <utility>
 
+#include "chrome/browser/ui/ui_features.h"
 #include "chrome/browser/ui/views/frame/browser_non_client_frame_view.h"
 #include "chrome/browser/ui/views/tabs/tab_strip.h"
 #include "chrome/browser/ui/views/tabs/tab_strip_controller.h"
@@ -122,7 +123,7 @@ TabStripControlButton::TabStripControlButton(
   views::FocusRing::Get(this)->SetColorId(kColorNewTabButtonFocusRing);
 
   if (text.size() > 0) {
-    SetEnabledTextColorIds(foreground_frame_active_color_id_);
+    SetEnabledTextColors(foreground_frame_active_color_id_);
     // Required for text to be visible on hover
     label()->SetPaintToLayer();
     label()->SetSkipSubpixelRenderingOpacityCheck(true);
@@ -199,7 +200,7 @@ void TabStripControlButton::UpdateColors() {
     return;
   }
 
-  SetEnabledTextColorIds(foreground_frame_active_color_id_);
+  SetEnabledTextColors(foreground_frame_active_color_id_);
   UpdateBackground();
   UpdateInkDrop();
   UpdateIcon();
@@ -234,13 +235,13 @@ void TabStripControlButton::UpdateBackground() {
 }
 
 int TabStripControlButton::GetCornerRadius() const {
-  return features::IsTabstripComboButtonEnabled()
+  return features::IsTabSearchMoving() && !features::HasTabSearchToolbarButton()
              ? kTabstripComboButtonCornerRadius
              : TabStripControlButton::kButtonSize.width() / 2;
 }
 
 int TabStripControlButton::GetFlatCornerRadius() const {
-  return features::IsTabstripComboButtonEnabled()
+  return features::IsTabSearchMoving() && !features::HasTabSearchToolbarButton()
              ? kTabstripComboButtonFlatCornerRadius
              : 0;
 }

@@ -15,6 +15,7 @@
 #include <utility>
 
 #include "base/auto_reset.h"
+#include "base/compiler_specific.h"
 #include "base/containers/heap_array.h"
 #include "base/debug/gdi_debug_util_win.h"
 #include "base/functional/bind.h"
@@ -32,6 +33,7 @@
 #include "base/win/dark_mode_support.h"
 #include "base/win/scoped_gdi_object.h"
 #include "base/win/win_util.h"
+#include "base/win/windows_version.h"
 #include "services/tracing/public/cpp/perfetto/macros.h"
 #include "third_party/perfetto/protos/perfetto/trace/track_event/chrome_window_handle_event_info.pbzero.h"
 #include "third_party/skia/include/core/SkPath.h"
@@ -51,6 +53,7 @@
 #include "ui/base/win/session_change_observer.h"
 #include "ui/base/win/touch_input.h"
 #include "ui/base/win/win_cursor.h"
+#include "ui/display/screen.h"
 #include "ui/display/types/display_constants.h"
 #include "ui/display/win/dpi.h"
 #include "ui/display/win/screen_win.h"
@@ -300,6 +303,10 @@ constexpr auto kTouchDownContextResetTimeout = base::Milliseconds(500);
 // same location as the cursor.
 constexpr int kSynthesizedMouseMessagesTimeDifference = 500;
 
+// TODO(dloehr): As of SDK version 10.0.26100.0, IsWindowArranged is now
+// declared in a header file, so we no longer need this version. Remove this
+// code once the SDK update is finalized.
+#ifndef NTDDI_WIN11_GE
 // Returns true if the window is arranged via Snap. For example, the browser
 // window is snapped via buttons shown when the mouse is hovered over window
 // maximize button.
@@ -312,6 +319,7 @@ bool IsWindowArranged(HWND window) {
           base::win::GetUser32FunctionPointer("IsWindowArranged"));
   return is_window_arranged_func ? is_window_arranged_func(window) : false;
 }
+#endif  // NTDDI_WIN11_GE
 
 }  // namespace
 
@@ -409,11 +417,11 @@ bool HWNDMessageHandler::handle_pen_events_in_client_area_ = true;
 // static
 std::unique_ptr<HWNDMessageHandler> HWNDMessageHandler::Create(
     HWNDMessageHandlerDelegate* delegate,
-    const std::string& debugging_id,
-    bool headless_mode) {
+    const std::string& debugging_id) {
   HWNDMessageHandler* message_handler =
-      headless_mode ? new HWNDMessageHandlerHeadless(delegate, debugging_id)
-                    : new HWNDMessageHandler(delegate, debugging_id);
+      display::Screen::GetScreen()->IsHeadless()
+          ? new HWNDMessageHandlerHeadless(delegate, debugging_id)
+          : new HWNDMessageHandler(delegate, debugging_id);
   return base::WrapUnique(message_handler);
 }
 
@@ -436,6 +444,7 @@ HWNDMessageHandler::HWNDMessageHandler(HWNDMessageHandlerDelegate* delegate,
       menu_depth_(0),
       id_generator_(0),
       pen_processor_(&id_generator_, true),
+      user_resize_detector_(delegate),
       touch_down_contexts_(0),
       last_mouse_hwheel_time_(0),
       dwm_transition_desired_(false),
@@ -467,7 +476,9 @@ void HWNDMessageHandler::Init(HWND parent, const gfx::Rect& bounds) {
 }
 
 void HWNDMessageHandler::InitModalType(ui::mojom::ModalType modal_type) {
-  if (modal_type == ui::mojom::ModalType::kNone) {
+  // Windows only knows about window-level modality. Ignore other modalities:
+  // Child-modal is handled by the client. System-modal is not supported on Win.
+  if (modal_type != ui::mojom::ModalType::kWindow) {
     return;
   }
   // We implement modality by crawling up the hierarchy of windows starting
@@ -650,14 +661,21 @@ void HWNDMessageHandler::SetRegion(HRGN region) {
 void HWNDMessageHandler::StackAbove(HWND other_hwnd) {
   // Windows API allows to stack behind another windows only.
   DCHECK(other_hwnd);
-  HWND next_window = GetNextWindow(other_hwnd, GW_HWNDPREV);
-  SetWindowPos(hwnd(), next_window ? next_window : HWND_TOP, 0, 0, 0, 0,
-               SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE);
+  HWND next_window = ::GetNextWindow(other_hwnd, GW_HWNDPREV);
+
+  // ::SetWindowPos can trigger a nested message loop with WindowPosChanged
+  // which can cause an unneeded resize.
+  base::AutoReset<bool> auto_reset(&ignore_window_pos_changes_, true);
+  ::SetWindowPos(hwnd(), next_window ? next_window : HWND_TOP, 0, 0, 0, 0,
+                 SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE);
 }
 
 void HWNDMessageHandler::StackAtTop() {
-  SetWindowPos(hwnd(), HWND_TOP, 0, 0, 0, 0,
-               SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE);
+  // ::SetWindowPos can trigger a nested message loop with WindowPosChanged
+  // which can cause an unneeded resize.
+  base::AutoReset<bool> auto_reset(&ignore_window_pos_changes_, true);
+  ::SetWindowPos(hwnd(), HWND_TOP, 0, 0, 0, 0,
+                 SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE);
 }
 
 void HWNDMessageHandler::Show(ui::mojom::WindowShowState show_state,
@@ -674,7 +692,8 @@ void HWNDMessageHandler::Show(ui::mojom::WindowShowState show_state,
     SetWindowPlacement(hwnd(), &placement);
     native_show_state = SW_SHOWMAXIMIZED;
   } else {
-    const bool is_maximized = IsMaximized();
+    const bool is_maximized_or_arranged =
+        IsMaximized() || IsWindowArranged(hwnd());
 
     // Use SW_SHOW/SW_SHOWNA instead of SW_SHOWNORMAL/SW_SHOWNOACTIVATE so that
     // the window is not restored to its original position if it is maximized.
@@ -684,7 +703,8 @@ void HWNDMessageHandler::Show(ui::mojom::WindowShowState show_state,
     // position, some do not. See crbug.com/1296710
     switch (show_state) {
       case ui::mojom::WindowShowState::kInactive:
-        native_show_state = is_maximized ? SW_SHOWNA : SW_SHOWNOACTIVATE;
+        native_show_state =
+            is_maximized_or_arranged ? SW_SHOWNA : SW_SHOWNOACTIVATE;
         break;
       case ui::mojom::WindowShowState::kMaximized:
         native_show_state = SW_SHOWMAXIMIZED;
@@ -695,9 +715,11 @@ void HWNDMessageHandler::Show(ui::mojom::WindowShowState show_state,
       case ui::mojom::WindowShowState::kNormal:
         if ((GetWindowLong(hwnd(), GWL_EXSTYLE) & WS_EX_TRANSPARENT) ||
             (GetWindowLong(hwnd(), GWL_EXSTYLE) & WS_EX_NOACTIVATE)) {
-          native_show_state = is_maximized ? SW_SHOWNA : SW_SHOWNOACTIVATE;
+          native_show_state =
+              is_maximized_or_arranged ? SW_SHOWNA : SW_SHOWNOACTIVATE;
         } else {
-          native_show_state = is_maximized ? SW_SHOW : SW_SHOWNORMAL;
+          native_show_state =
+              is_maximized_or_arranged ? SW_SHOW : SW_SHOWNORMAL;
         }
         break;
       case ui::mojom::WindowShowState::kFullscreen:
@@ -1010,27 +1032,43 @@ void HWNDMessageHandler::SetAspectRatio(float aspect_ratio,
 
 void HWNDMessageHandler::SizeConstraintsChanged() {
   LONG style = GetWindowLong(hwnd(), GWL_STYLE);
+
   // Ignore if this is not a standard window.
   if (style & static_cast<LONG>(WS_POPUP | WS_CHILD)) {
-    return;
+    // Allow Glic to become resizable dynamically.
+    // TODO(404947780): this should be allowed for all widgets. thestig@
+    // suggested to scope the change to glic and and let other widgets to bypass
+    // the restriction on their own schedule.
+    if (debugging_id() != "GlicWidget") {
+      return;
+    }
   }
 
-  // Windows cannot have WS_THICKFRAME set if translucent.
-  // See CalculateWindowStylesFromInitParams().
-  if (delegate_->CanResize() && !is_translucent_) {
-    style |= WS_THICKFRAME | WS_MAXIMIZEBOX;
-    if (!delegate_->CanMaximize()) {
-      style &= ~WS_MAXIMIZEBOX;
+  // Key style considerations:
+  // - WS_THICKFRAME: Enables resizing. Cannot be used with translucent
+  //   windows (see CalculateWindowStylesFromInitParams() for details).
+  // - WS_CAPTION: Influences the default non-client frame thickness. It is used
+  //   in conjunction with WS_THICKFRAME to align with TYPE_WINDOW behavior,
+  //   allowing ui::GetResizableFrameThickness() to be used consistently when
+  //   removing the visible system frame.
+  const bool had_caption_on_init = window_style() & WS_CAPTION;
+  const bool can_resize = !is_translucent_ && delegate_->CanResize();
+  const bool can_maximize = can_resize && delegate_->CanMaximize();
+
+  auto set_style_func = [&style](LONG bit, bool should_set) {
+    if (should_set) {
+      style |= bit;
+    } else {
+      style &= ~bit;
     }
-  } else {
-    style &= ~(WS_THICKFRAME | WS_MAXIMIZEBOX);
-  }
-  if (delegate_->CanMinimize()) {
-    style |= WS_MINIMIZEBOX;
-  } else {
-    style &= ~WS_MINIMIZEBOX;
-  }
+  };
+  set_style_func(WS_THICKFRAME, can_resize);
+  set_style_func(WS_CAPTION, can_resize | had_caption_on_init);
+  set_style_func(WS_MAXIMIZEBOX, can_maximize);
+  set_style_func(WS_MINIMIZEBOX, delegate_->CanMinimize());
+
   SetWindowLong(hwnd(), GWL_STYLE, style);
+  SendFrameChanged();
 }
 
 // static
@@ -1247,13 +1285,6 @@ LRESULT HWNDMessageHandler::HandleNcHitTestMessage(unsigned int message,
       gfx::Point(CR_GET_X_LPARAM(l_param), CR_GET_Y_LPARAM(l_param)));
   *handled = !ref.get() || msg_handled_;
   return ret;
-}
-
-void HWNDMessageHandler::HandleParentChanged() {
-  // If the forwarder window's parent is changed then we need to reset our
-  // context as we will not receive touch releases if the touch was initiated
-  // in the forwarder window.
-  touch_ids_.clear();
 }
 
 void HWNDMessageHandler::ApplyPinchZoomScale(float scale) {
@@ -1639,7 +1670,8 @@ void HWNDMessageHandler::ResetWindowRegion(bool force, bool redraw) {
     mi.cbSize = sizeof mi;
     GetMonitorInfo(monitor, &mi);
     RECT work_rect = mi.rcWork;
-    OffsetRect(&work_rect, -window_rect.left, -window_rect.top);
+    OffsetRect(&work_rect, static_cast<int>(-window_rect.left),
+               static_cast<int>(-window_rect.top));
     new_region.reset(CreateRectRgnIndirect(&work_rect));
   } else {
     SkPath window_mask;
@@ -1774,6 +1806,13 @@ LRESULT HWNDMessageHandler::OnCreate(CREATESTRUCT* create_struct) {
     ::SetProp(hwnd(), ui::kWindowTranslucent, reinterpret_cast<HANDLE>(1));
   }
 
+  if (base::win::GetVersion() >= base::win::Version::WIN11 &&
+      use_rounded_corner_) {
+    DWM_WINDOW_CORNER_PREFERENCE corner_pref = DWMWCP_ROUND;
+    DwmSetWindowAttribute(hwnd(), DWMWA_WINDOW_CORNER_PREFERENCE, &corner_pref,
+                          sizeof(corner_pref));
+  }
+
   fullscreen_handler_->set_hwnd(hwnd());
 
   base::win::AllowDarkModeForWindow(hwnd(), true);
@@ -1816,7 +1855,7 @@ LRESULT HWNDMessageHandler::OnCreate(CREATESTRUCT* create_struct) {
 
 void HWNDMessageHandler::OnDestroy() {
   ::RemoveProp(hwnd(), ui::kWindowTranslucent);
-  session_change_observer_.reset(nullptr);
+  session_change_observer_.reset();
   delegate_->HandleDestroying();
   // If the window going away is a fullscreen window then remove its references
   // from the full screen window map.
@@ -1913,6 +1952,7 @@ void HWNDMessageHandler::OnEnterMenuLoop(BOOL from_track_popup_menu) {
 }
 
 void HWNDMessageHandler::OnEnterSizeMove() {
+  user_resize_detector_.OnEnterSizeMove();
   delegate_->HandleBeginWMSizeMove();
   SetMsgHandled(FALSE);
 }
@@ -1943,6 +1983,7 @@ void HWNDMessageHandler::OnExitMenuLoop(BOOL is_shortcut_menu) {
 }
 
 void HWNDMessageHandler::OnExitSizeMove() {
+  user_resize_detector_.OnExitSizeMove();
   delegate_->HandleEndWMSizeMove();
   SetMsgHandled(FALSE);
   // If the window was moved to a monitor which has a fullscreen window active,
@@ -2135,9 +2176,6 @@ LRESULT HWNDMessageHandler::OnMouseActivate(UINT message,
   if (delegate_->HasNonClientView()) {
     if (delegate_->CanActivate()) {
       return MA_ACTIVATE;
-    }
-    if (delegate_->WantsMouseEventsWhenInactive()) {
-      return MA_NOACTIVATE;
     }
     return MA_NOACTIVATEANDEAT;
   }
@@ -2502,7 +2540,8 @@ void HWNDMessageHandler::OnNCPaint(HRGN rgn) {
     }
 
     // rgn_bounding_box is in screen coordinates. Map it to window coordinates.
-    OffsetRect(&dirty_region, -window_rect.left, -window_rect.top);
+    OffsetRect(&dirty_region, static_cast<int>(-window_rect.left),
+               static_cast<int>(-window_rect.top));
   }
 
   // We only do non-client painting if we're not using the system frame.
@@ -2518,7 +2557,8 @@ void HWNDMessageHandler::OnNCPaint(HRGN rgn) {
     ::GetClientRect(hwnd(), &client_rect);
     ::MapWindowPoints(hwnd(), nullptr, reinterpret_cast<POINT*>(&client_rect),
                       2);
-    ::OffsetRect(&client_rect, -window_rect.left, -window_rect.top);
+    ::OffsetRect(&client_rect, static_cast<int>(-window_rect.left),
+                 static_cast<int>(-window_rect.top));
     // client_rect now is in window space.
 
     base::win::ScopedGDIObject<HRGN> base(
@@ -2761,6 +2801,8 @@ void HWNDMessageHandler::OnSize(UINT param, const gfx::Size& size) {
 }
 
 void HWNDMessageHandler::OnSizing(UINT param, RECT* rect) {
+  user_resize_detector_.OnSizing();
+
   // If the aspect ratio was not specified for the window, do nothing.
   if (!aspect_ratio_.has_value()) {
     return;
@@ -3547,7 +3589,8 @@ bool HWNDMessageHandler::IsSynthesizedMouseMessage(unsigned int message,
     ::ClientToScreen(hwnd(), &mouse_location);
     POINT cursor_pos = {0};
     ::GetCursorPos(&cursor_pos);
-    return memcmp(&cursor_pos, &mouse_location, sizeof(POINT)) == 0;
+    return UNSAFE_TODO(memcmp(&cursor_pos, &mouse_location, sizeof(POINT))) ==
+           0;
   }
   return false;
 }

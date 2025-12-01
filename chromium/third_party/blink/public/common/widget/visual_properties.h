@@ -73,8 +73,7 @@ struct BLINK_COMMON_EXPORT VisualProperties {
   // is entirely scrolled out of the main frame's viewport. It may also be
   // smaller than the widget's size in |new_size| due to the UI hiding part of
   // the widget, such as with an on-screen keyboard.
-  // TODO(chrishtr): rename to visible_viewport_size_device_px.
-  gfx::Size visible_viewport_size;
+  gfx::Size visible_viewport_size_device_px;
 
   // The rect of compositor's viewport in device pixels. Note that for top level
   // widgets this is the same as |new_size| (when UseDevicePixelsForWidgetSizing
@@ -96,8 +95,7 @@ struct BLINK_COMMON_EXPORT VisualProperties {
   // If shown and resizing the renderer, returns the height of the virtual
   // keyboard in device pixels. Otherwise, returns 0. Always 0 in a
   // non-outermost main frame.
-  // TODO(chrishtr): rename to virtual_keyboard_resize_height_device_px.
-  int virtual_keyboard_resize_height_physical_px = 0;
+  int virtual_keyboard_resize_height_device_px = 0;
 
   // Whether or not the focused node should be scrolled into view after the
   // resize.

@@ -17,6 +17,7 @@
 #include <vector>
 
 #include "base/check.h"
+#include "base/containers/flat_set.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback.h"
 #include "base/location.h"
@@ -33,6 +34,7 @@
 #include "base/values.h"
 #include "content/browser/interest_group/bidding_and_auction_server_key_fetcher.h"
 #include "content/browser/interest_group/trusted_signals_fetcher.h"
+#include "content/public/browser/frame_tree_node_id.h"
 #include "content/services/auction_worklet/public/mojom/trusted_signals_cache.mojom.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
@@ -122,6 +124,8 @@ bool TrustedSignalsCacheImpl::NetworkPartitionNonceKey::operator<(
 TrustedSignalsCacheImpl::FetchKey::FetchKey() = default;
 
 TrustedSignalsCacheImpl::FetchKey::FetchKey(
+    scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
+    FrameTreeNodeId frame_tree_node_id,
     const url::Origin& main_frame_origin,
     network::mojom::IPAddressSpace ip_address_space,
     SignalsType signals_type,
@@ -131,9 +135,11 @@ TrustedSignalsCacheImpl::FetchKey::FetchKey(
     : network_partition_nonce_key(script_origin,
                                   signals_type,
                                   trusted_signals_url),
+      url_loader_factory(std::move(url_loader_factory)),
       main_frame_origin(main_frame_origin),
       coordinator(coordinator),
-      ip_address_space(ip_address_space) {}
+      ip_address_space(ip_address_space),
+      frame_tree_node_id(frame_tree_node_id) {}
 
 TrustedSignalsCacheImpl::FetchKey::FetchKey(const FetchKey&) = default;
 TrustedSignalsCacheImpl::FetchKey::FetchKey(FetchKey&&) = default;
@@ -146,10 +152,12 @@ TrustedSignalsCacheImpl::FetchKey& TrustedSignalsCacheImpl::FetchKey::operator=(
 TrustedSignalsCacheImpl::FetchKey::~FetchKey() = default;
 
 bool TrustedSignalsCacheImpl::FetchKey::operator<(const FetchKey& other) const {
-  return std::tie(network_partition_nonce_key, main_frame_origin, coordinator,
-                  ip_address_space) <
-         std::tie(other.network_partition_nonce_key, other.main_frame_origin,
-                  other.coordinator, other.ip_address_space);
+  return std::tie(network_partition_nonce_key, url_loader_factory,
+                  main_frame_origin, coordinator, ip_address_space,
+                  frame_tree_node_id) <
+         std::tie(other.network_partition_nonce_key, other.url_loader_factory,
+                  other.main_frame_origin, other.coordinator,
+                  other.ip_address_space, other.frame_tree_node_id);
 }
 
 struct TrustedSignalsCacheImpl::Fetch {
@@ -200,6 +208,18 @@ struct TrustedSignalsCacheImpl::Fetch {
   explicit Fetch(TrustedSignalsCacheImpl* trusted_signals_cache)
       : weak_ptr_factory(trusted_signals_cache) {}
 
+  // Adds devtools auction ID to the Fetch, if the Fetch hasn't yet started.
+  // Note that devtools IDs cannot currently be removed from fetches, to make
+  // bookkeeping simpler, and are only logged on fetch start.
+  void AddDevtoolsAuctionId(const std::string& devtools_auction_id) {
+    // If fetch has started, do nothing.
+    if (fetcher) {
+      return;
+    }
+
+    devtools_auction_ids.insert(devtools_auction_id);
+  }
+
   CompressionGroupMap compression_groups;
 
   std::unique_ptr<TrustedSignalsFetcher> fetcher;
@@ -210,6 +230,13 @@ struct TrustedSignalsCacheImpl::Fetch {
   // retrieved by the GetCoordinatorKeyCallback.
   bool can_start = false;
   std::optional<BiddingAndAuctionServerKey> coordinator_key;
+
+  // Devtools IDs of all associated auctions. They're all logged on fetch start,
+  // and the set is permanently cleared. Use `flat_set` because expected use
+  // case is a few Fetches shared by a lot of IGs in a small number of auctions,
+  // so most insertion attempts should not modify the set, and the better lookup
+  // performance seems more likely to matter.
+  base::flat_set<std::string> devtools_auction_ids;
 
   // Weak reference to the TrustedSignalsCacheImpl. Used for calls to
   // GetCoordinatorKeyCallback, and delayed calls to set `can_start` to true, so
@@ -224,12 +251,16 @@ TrustedSignalsCacheImpl::BiddingCacheKey::BiddingCacheKey(
     std::optional<std::string> interest_group_name,
     const GURL& trusted_signals_url,
     const url::Origin& coordinator,
+    scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
+    FrameTreeNodeId frame_tree_node_id,
     const url::Origin& main_frame_origin,
     network::mojom::IPAddressSpace ip_address_space,
     const url::Origin& joining_origin,
     base::Value::Dict additional_params)
     : interest_group_name(std::move(interest_group_name)),
-      fetch_key(main_frame_origin,
+      fetch_key(std::move(url_loader_factory),
+                frame_tree_node_id,
+                main_frame_origin,
                 ip_address_space,
                 SignalsType::kBidding,
                 interest_group_owner,
@@ -350,6 +381,8 @@ TrustedSignalsCacheImpl::ScoringCacheKey::ScoringCacheKey(
     const url::Origin& seller,
     const GURL& trusted_signals_url,
     const url::Origin& coordinator,
+    scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
+    FrameTreeNodeId frame_tree_node_id,
     const url::Origin& main_frame_origin,
     network::mojom::IPAddressSpace ip_address_space,
     const url::Origin& interest_group_owner,
@@ -360,7 +393,9 @@ TrustedSignalsCacheImpl::ScoringCacheKey::ScoringCacheKey(
     : render_url(render_url),
       component_render_urls(component_render_urls.begin(),
                             component_render_urls.end()),
-      fetch_key(main_frame_origin,
+      fetch_key(std::move(url_loader_factory),
+                frame_tree_node_id,
+                main_frame_origin,
                 ip_address_space,
                 SignalsType::kScoring,
                 seller,
@@ -776,10 +811,8 @@ bool TrustedSignalsCacheImpl::ReceiverRestrictions::operator==(
     const ReceiverRestrictions& other) const = default;
 
 TrustedSignalsCacheImpl::TrustedSignalsCacheImpl(
-    scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
     GetCoordinatorKeyCallback get_coordinator_key_callback)
-    : url_loader_factory_(std::move(url_loader_factory)),
-      get_coordinator_key_callback_(std::move(get_coordinator_key_callback)),
+    : get_coordinator_key_callback_(std::move(get_coordinator_key_callback)),
       network_partition_nonce_cache_(kNonceCacheSize) {}
 
 TrustedSignalsCacheImpl::~TrustedSignalsCacheImpl() {
@@ -806,6 +839,9 @@ TrustedSignalsCacheImpl::CreateRemote(SignalsType signals_type,
 
 std::unique_ptr<TrustedSignalsCacheImpl::Handle>
 TrustedSignalsCacheImpl::RequestTrustedBiddingSignals(
+    scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
+    FrameTreeNodeId frame_tree_node_id,
+    const std::string& devtools_auction_id,
     const url::Origin& main_frame_origin,
     network::mojom::IPAddressSpace ip_address_space,
     const url::Origin& interest_group_owner,
@@ -825,8 +861,9 @@ TrustedSignalsCacheImpl::RequestTrustedBiddingSignals(
       interest_group_owner,
       is_group_by_origin ? std::nullopt
                          : std::make_optional(interest_group_name),
-      trusted_signals_url, coordinator, main_frame_origin, ip_address_space,
-      joining_origin, std::move(additional_params));
+      trusted_signals_url, coordinator, std::move(url_loader_factory),
+      frame_tree_node_id, main_frame_origin, ip_address_space, joining_origin,
+      std::move(additional_params));
 
   BiddingCacheEntryMap::iterator cache_entry_it =
       bidding_cache_entries_.find(cache_key);
@@ -838,11 +875,13 @@ TrustedSignalsCacheImpl::RequestTrustedBiddingSignals(
     // If `cache_entry`'s Fetch hasn't yet started, update the BiddingCacheEntry
     // to include any new keys, and return the entry's CompressionGroupData. The
     // Fetch will get the updated keys when it's started, so it does not need to
-    // be modified.
+    // be modified, other than adding `devtools_auction_id`.
     if (!compression_group_data->has_data() &&
         !compression_group_data->fetch()->second.fetcher) {
       cache_entry->AddInterestGroup(interest_group_name,
                                     trusted_bidding_signals_keys);
+      compression_group_data->fetch()->second.AddDevtoolsAuctionId(
+          devtools_auction_id);
       partition_id = cache_entry->partition_id;
       return std::make_unique<Handle>(this,
                                       scoped_refptr(compression_group_data));
@@ -890,6 +929,7 @@ TrustedSignalsCacheImpl::RequestTrustedBiddingSignals(
   scoped_refptr<CompressionGroupData> compression_group_data =
       FindOrCreateCompressionGroupDataAndQueueFetch(
           cache_entry_it->first.fetch_key, cache_entry_it->first.joining_origin,
+          devtools_auction_id,
           /*interest_group_owner_if_scoring_signals=*/std::nullopt);
 
   // The only thing left to do is set up pointers so objects can look up each
@@ -912,6 +952,9 @@ TrustedSignalsCacheImpl::RequestTrustedBiddingSignals(
 
 std::unique_ptr<TrustedSignalsCacheImpl::Handle>
 TrustedSignalsCacheImpl::RequestTrustedScoringSignals(
+    scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
+    FrameTreeNodeId frame_tree_node_id,
+    const std::string& devtools_auction_id,
     const url::Origin& main_frame_origin,
     network::mojom::IPAddressSpace ip_address_space,
     const url::Origin& seller,
@@ -924,9 +967,10 @@ TrustedSignalsCacheImpl::RequestTrustedScoringSignals(
     base::Value::Dict additional_params,
     int& partition_id) {
   ScoringCacheKey cache_key(
-      seller, trusted_signals_url, coordinator, main_frame_origin,
-      ip_address_space, interest_group_owner, joining_origin, render_url,
-      component_render_urls, std::move(additional_params));
+      seller, trusted_signals_url, coordinator, std::move(url_loader_factory),
+      frame_tree_node_id, main_frame_origin, ip_address_space,
+      interest_group_owner, joining_origin, render_url, component_render_urls,
+      std::move(additional_params));
 
   ScoringCacheEntryMap::iterator cache_entry_it =
       scoring_cache_entries_.find(cache_key);
@@ -941,6 +985,11 @@ TrustedSignalsCacheImpl::RequestTrustedScoringSignals(
     // all parameters are in the key, which must match exactly.
     if (!compression_group_data->has_data() ||
         !compression_group_data->IsExpired()) {
+      // If there's a pending fetch, need to call AddDevtoolsAuctionId().
+      if (!compression_group_data->has_data()) {
+        compression_group_data->fetch()->second.AddDevtoolsAuctionId(
+            devtools_auction_id);
+      }
       partition_id = cache_entry->partition_id;
       return std::make_unique<Handle>(this,
                                       scoped_refptr(compression_group_data));
@@ -971,7 +1020,7 @@ TrustedSignalsCacheImpl::RequestTrustedScoringSignals(
   scoped_refptr<CompressionGroupData> compression_group_data =
       FindOrCreateCompressionGroupDataAndQueueFetch(
           cache_entry_it->first.fetch_key, cache_entry_it->first.joining_origin,
-          interest_group_owner);
+          devtools_auction_id, interest_group_owner);
 
   // The only thing left to do is set up pointers so objects can look up each
   // other and return the result. When it's time to send a request, the Fetch
@@ -995,6 +1044,7 @@ scoped_refptr<TrustedSignalsCacheImpl::CompressionGroupData>
 TrustedSignalsCacheImpl::FindOrCreateCompressionGroupDataAndQueueFetch(
     const FetchKey& fetch_key,
     const url::Origin& joining_origin,
+    const std::string& devtools_auction_id,
     base::optional_ref<const url::Origin>
         interest_group_owner_if_scoring_signals) {
   // If there are any Fetches with the correct FetchKey, check if the last one
@@ -1035,6 +1085,7 @@ TrustedSignalsCacheImpl::FindOrCreateCompressionGroupDataAndQueueFetch(
   }
 
   Fetch* fetch = &fetch_it->second;
+  fetch->AddDevtoolsAuctionId(devtools_auction_id);
 
   // Now that we have a matching Fetch, check if there's an existing compression
   // group that can be reused.
@@ -1116,6 +1167,7 @@ void TrustedSignalsCacheImpl::GetCoordinatorKey(FetchMap::iterator fetch_it) {
   // request body, or the information needed to create it, while waiting for the
   // key to be received.
   get_coordinator_key_callback_.Run(
+      url::Origin::Create(fetch_it->first.trusted_signals_url()),
       fetch_it->first.coordinator,
       base::BindOnce(&TrustedSignalsCacheImpl::OnCoordinatorKeyReceived,
                      fetch_it->second.weak_ptr_factory.GetWeakPtr(), fetch_it));
@@ -1208,7 +1260,8 @@ void TrustedSignalsCacheImpl::StartBiddingSignalsFetch(
     }
   }
   fetch->fetcher->FetchBiddingSignals(
-      url_loader_factory_.get(), fetch_key->main_frame_origin,
+      fetch_key->url_loader_factory.get(), fetch_key->frame_tree_node_id,
+      std::move(fetch->devtools_auction_ids), fetch_key->main_frame_origin,
       fetch_key->ip_address_space,
       GetNetworkPartitionNonce(fetch_key->network_partition_nonce_key),
       fetch_key->script_origin(), fetch_key->trusted_signals_url(),
@@ -1254,13 +1307,15 @@ void TrustedSignalsCacheImpl::StartScoringSignalsFetch(
     }
   }
   fetch->fetcher->FetchScoringSignals(
-      url_loader_factory_.get(), fetch_key->main_frame_origin,
+      fetch_key->url_loader_factory.get(), fetch_key->frame_tree_node_id,
+      std::move(fetch->devtools_auction_ids), fetch_key->main_frame_origin,
       fetch_key->ip_address_space,
       GetNetworkPartitionNonce(fetch_key->network_partition_nonce_key),
       fetch_key->script_origin(), fetch_key->trusted_signals_url(),
       *fetch->coordinator_key, scoring_partition_map,
       base::BindOnce(&TrustedSignalsCacheImpl::OnFetchComplete,
                      base::Unretained(this), fetch_it));
+  fetch->devtools_auction_ids.clear();
 }
 
 void TrustedSignalsCacheImpl::OnFetchComplete(

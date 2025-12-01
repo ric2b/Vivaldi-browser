@@ -5,6 +5,7 @@
 #include "ash/system/accessibility/mouse_keys/mouse_keys_bubble_view.h"
 
 #include <memory>
+#include <string_view>
 #include <vector>
 
 #include "ash/public/cpp/accessibility_controller_enums.h"
@@ -37,7 +38,7 @@ std::unique_ptr<views::Label> CreateLabelView(
     raw_ptr<views::Label>* destination_view) {
   return views::Builder<views::Label>()
       .SetText(text)
-      .SetEnabledColorId(enabled_color_id)
+      .SetEnabledColor(enabled_color_id)
       .SetHorizontalAlignment(gfx::HorizontalAlignment::ALIGN_LEFT)
       .SetMultiLine(false)
       .CopyAddressTo(destination_view)
@@ -111,7 +112,7 @@ void MouseKeysBubbleView::OnBeforeBubbleWidgetInit(
   params->name = "MouseKeysBubbleView";
 }
 
-std::u16string MouseKeysBubbleView::GetTextForTesting() const {
+std::u16string_view MouseKeysBubbleView::GetTextForTesting() const {
   return label_->GetText();
 }
 

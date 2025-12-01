@@ -15,6 +15,7 @@
 #include "extensions/api/menubar_menu/menubar_menu_api.h"
 #include "extensions/schema/context_menu.h"
 #include "extensions/tools/vivaldi_tools.h"
+#include "extensions/vivaldi_browser_component_wrapper.h"
 #include "ui/vivaldi_browser_window.h"
 
 namespace extensions {
@@ -56,7 +57,9 @@ ExtensionFunction::ResponseAction ContextMenuShowFunction::Run() {
   EXTENSION_FUNCTION_VALIDATE(params);
 
   VivaldiBrowserWindow* window =
-      VivaldiBrowserWindow::FromId(params->properties.window_id);
+      VivaldiBrowserComponentWrapper::GetInstance()->
+          VivaldiBrowserWindowFromId(
+            params->properties.window_id);
   if (!window) {
     return RespondNow(Error("No such window"));
   }

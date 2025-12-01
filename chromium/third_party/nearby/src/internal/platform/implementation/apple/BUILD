@@ -23,6 +23,7 @@ package(default_visibility = [
 objc_library(
     name = "apple",
     srcs = [
+        "awdl.mm",
         "crypto.mm",
         "device_info.mm",
         "multi_thread_executor.mm",
@@ -30,15 +31,19 @@ objc_library(
         "preferences_manager.mm",
         "scheduled_executor.mm",
         "timer.mm",
+        "wifi_hotspot.mm",
         "wifi_lan.mm",
     ],
     hdrs = [
+        "awdl.h",
         "device_info.h",
         "multi_thread_executor.h",
         "preferences_manager.h",
         "scheduled_executor.h",
         "single_thread_executor.h",
         "timer.h",
+        "wifi.h",
+        "wifi_hotspot.h",
         "wifi_lan.h",
     ],
     # Prevent Objective-C++ headers from being pulled into swift.

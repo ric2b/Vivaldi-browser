@@ -161,6 +161,9 @@ found in the LICENSE file.
     <dimen name="recent_tabs_default_group_item_height">48dp</dimen>
     <dimen name="recent_tabs_count_text_size">10dp</dimen>
 
+    <!-- New Tab Animation -->
+    <dimen name="new_tab_animation_rect_corner_radius">10dp</dimen>
+
     <!-- Bookmarks dimensions -->
     <dimen name="bookmark_minimum_dialog_size_tablet">500dp</dimen>
     <dimen name="bookmark_dialog_toolbar_shadow_height">4dp</dimen>
@@ -200,6 +203,7 @@ found in the LICENSE file.
     <dimen name="bookmark_bar_divider_width">2dp</dimen>
     <dimen name="bookmark_bar_item_max_width">187dp</dimen>
     <dimen name="bookmark_bar_item_spacing">@dimen/bookmark_bar_spacing</dimen>
+    <dimen name="bookmark_bar_overflow_button_size">24dp</dimen>
     <dimen name="bookmark_bar_padding">8dp</dimen>
     <dimen name="bookmark_bar_spacing">8dp</dimen>
 
@@ -214,20 +218,23 @@ found in the LICENSE file.
     <dimen name="custom_tabs_url_text_size">12sp</dimen>
     <dimen name="custom_tabs_title_text_size">16sp</dimen>
     <dimen name="custom_tabs_bottom_bar_max_height">120dp</dimen>
+    <dimen name="custom_tabs_bottom_bar_shadow_height">4dp</dimen>
     <dimen name="custom_tabs_handle_height">16dp</dimen>
     <dimen name="custom_tabs_elevation">8dp</dimen>
     <dimen name="custom_tabs_shadow_offset">4dp</dimen>
     <dimen name="custom_tabs_outline_width">1dp</dimen>
     <dimen name="custom_tabs_default_corner_radius">16dp</dimen>
-    <dimen name="custom_tabs_security_icon_width">44dp</dimen>
-    <dimen name="custom_tabs_security_icon_padding_left">12dp</dimen>
+    <dimen name="custom_tabs_security_icon_width">32dp</dimen>
+    <dimen name="custom_tabs_security_icon_padding_left">0dp</dimen>
     <dimen name="custom_tabs_security_icon_padding_right">8dp</dimen>
     <dimen name="custom_tabs_security_icon_width_nested">20dp</dimen>
     <dimen name="custom_tabs_security_icon_padding_left_nested">0dp</dimen>
     <dimen name="custom_tabs_security_icon_padding_right_nested">4dp</dimen>
+    <dimen name="custom_tabs_location_bar_horizontal_padding">12dp</dimen>
     <dimen name="custom_tabs_menu_footer_icon_size">16sp</dimen>
     <dimen name="custom_tabs_menu_footer_margin_horizontal">8dp</dimen>
     <dimen name="custom_tabs_menu_footer_margin_vertical">12dp</dimen>
+    <dimen name="custom_tabs_toolbar_icon_spacing">16dp</dimen>
 
     <dimen name="custom_tabs_toast_branding_icon_size">28dp</dimen>
     <dimen name="custom_tabs_toast_branding_height">50dp</dimen>
@@ -390,4 +397,6 @@ found in the LICENSE file.
 
     <!-- tab strip context menu-->
     <dimen name="tab_strip_group_context_menu_max_width">392dp</dimen>
+    <dimen name="tab_strip_context_menu_min_width">200dp</dimen>
+    <dimen name="tab_strip_context_menu_max_width">300dp</dimen>
 </resources>

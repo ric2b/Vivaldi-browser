@@ -7,6 +7,8 @@
 #include <memory>
 
 #include "base/memory/raw_ptr.h"
+#include "chrome/browser/ui/tabs/public/tab_features.h"
+#include "chrome/browser/ui/ui_features.h"
 #include "chrome/browser/ui/view_ids.h"
 #include "chrome/browser/ui/views/extensions/extensions_toolbar_button.h"
 #include "chrome/browser/ui/views/extensions/extensions_toolbar_container.h"
@@ -22,6 +24,7 @@
 #include "chrome/browser/ui/views/web_apps/frame_toolbar/web_app_navigation_button_container.h"
 #include "chrome/browser/ui/views/web_apps/frame_toolbar/web_app_toolbar_button_container.h"
 #include "chrome/browser/ui/views/web_apps/frame_toolbar/window_controls_overlay_toggle_button.h"
+#include "chrome/browser/ui/views/zoom/zoom_view_controller.h"
 #include "chrome/browser/ui/web_applications/app_browser_controller.h"
 #include "ui/base/hit_test.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
@@ -189,6 +192,11 @@ WebAppFrameToolbarView::GetExtensionsToolbarContainer() {
   return right_container_->extensions_container();
 }
 
+PinnedToolbarActionsContainer*
+WebAppFrameToolbarView::GetPinnedToolbarActionsContainer() {
+  return right_container_->pinned_toolbar_actions_container();
+}
+
 gfx::Size WebAppFrameToolbarView::GetToolbarButtonSize() const {
   const int size = GetLayoutConstant(WEB_APP_MENU_BUTTON_SIZE);
   return gfx::Size(size, size);
@@ -210,9 +218,8 @@ PageActionIconView* WebAppFrameToolbarView::GetPageActionIconView(
 
 page_actions::PageActionView* WebAppFrameToolbarView::GetPageActionView(
     actions::ActionId action_id) {
-  // TODO(crbug.com/386376455): Return the appropriate view once web apps
-  // support the new Page Actions framework.
-  return nullptr;
+  return right_container_->page_action_container()->GetPageActionView(
+      action_id);
 }
 
 AppMenuButton* WebAppFrameToolbarView::GetAppMenuButton() {
@@ -255,6 +262,17 @@ views::View* WebAppFrameToolbarView::GetAnchorView(
 }
 
 void WebAppFrameToolbarView::ZoomChangedForActiveTab(bool can_show_bubble) {
+  if (IsPageActionMigrated(PageActionIconType::kZoom)) {
+    auto* zoom_view_controller = browser_view_->browser()
+                                     ->GetActiveTabInterface()
+                                     ->GetTabFeatures()
+                                     ->zoom_view_controller();
+    CHECK(zoom_view_controller);
+    zoom_view_controller->UpdatePageActionIconAndBubbleVisibility(
+        /*prefer_to_show_bubble=*/can_show_bubble, /*from_user_gesture=*/false);
+    return;
+  }
+
   right_container_->page_action_icon_controller()->ZoomChangedForActiveTab(
       can_show_bubble);
 }
@@ -275,8 +293,8 @@ IntentChipButton* WebAppFrameToolbarView::GetIntentChipButton() {
   return nullptr;
 }
 
-DownloadToolbarButtonView* WebAppFrameToolbarView::GetDownloadButton() {
-  return right_container_ ? right_container_->download_button() : nullptr;
+ToolbarButton* WebAppFrameToolbarView::GetDownloadButton() {
+  return right_container_ ? right_container_->GetDownloadButton() : nullptr;
 }
 
 bool WebAppFrameToolbarView::DoesIntersectRect(const View* target,

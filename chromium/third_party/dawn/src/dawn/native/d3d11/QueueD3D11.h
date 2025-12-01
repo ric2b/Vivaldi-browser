@@ -58,22 +58,25 @@ class Queue : public d3d::Queue {
                                wgpu::MapMode mode,
                                ExecutionSerial readySerial);
 
+    const Ref<SharedFence>& GetSharedFence() const { return mSharedFence; }
+
   protected:
     using d3d::Queue::Queue;
 
     ~Queue() override = default;
 
     MaybeError Initialize(bool isMonitored);
+    MaybeError InitializeD3DFence(bool isMonitored);
 
     MaybeError SubmitImpl(uint32_t commandCount, CommandBufferBase* const* commands) override;
     MaybeError WriteBufferImpl(BufferBase* buffer,
                                uint64_t bufferOffset,
                                const void* data,
                                size_t size) override;
-    MaybeError WriteTextureImpl(const ImageCopyTexture& destination,
+    MaybeError WriteTextureImpl(const TexelCopyTextureInfo& destination,
                                 const void* data,
                                 size_t dataSize,
-                                const TextureDataLayout& dataLayout,
+                                const TexelCopyBufferLayout& dataLayout,
                                 const Extent3D& writeSizePixel) override;
 
     void DestroyImpl() override;

@@ -21,6 +21,9 @@
           &gt;
           <ph name="PROXIES_TITLE" />
           et assurez-vous que vos paramètres sont définis sur « sans proxy » ou « direct ».</translation>
+<translation id="4949828774841497663">Allez dans Applications &gt; Réglages système &gt; Réseau, puis sélectionnez le
+          réseau actif, cliquez sur le bouton « Détails… » et désélectionnez
+          tous les proxies qui auraient pu être sélectionnés.</translation>
 <translation id="5248344925342018662">Cette page Vivaldi est sécurisée</translation>
 <translation id="6690242244468452299">Cette page donne des informations sur les plantages récents, si vous avez activé le rapport automatique.</translation>
 <translation id="7023871570427738255">Accédez au
@@ -32,7 +35,4 @@
         Si le problème persiste, nous vous conseillons de réactiver
         cette option pour des performances optimales.</translation>
 <translation id="7496505986576158197">Vivaldi est rendu possible grâce au projet Open Source <ph name="BEGIN_LINK_CHROMIUM" />Chromium<ph name="END_LINK_CHROMIUM" /> et à d’autres <ph name="BEGIN_LINK_OSS" />logiciels Open Source<ph name="END_LINK_OSS" />.</translation>
-<translation id="8187289872471304532">Sélectionnez
-          Applications &gt; Préférences système &gt; Réseau &gt; Avancé &gt; Proxys
-          et désélectionnez les serveurs proxy sélectionnés.</translation>
 </translationbundle>

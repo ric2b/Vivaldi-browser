@@ -19,6 +19,7 @@ build_webui_tests("build") {
     "anti_abuse_page_test.ts",
     "appearance_fonts_page_test.ts",
     "appearance_page_test.ts",
+    "autofill_ai_add_or_edit_dialog_test.ts",
     "autofill_ai_section_test.ts",
     "autofill_fake_data.ts",
     "autofill_page_test.ts",
@@ -34,6 +35,8 @@ build_webui_tests("build") {
     "chooser_exception_list_entry_test.ts",
     "chooser_exception_list_test.ts",
     "clear_browsing_data_test.ts",
+    "clear_browsing_data_dialog_v2_test.ts",
+    "clear_browsing_data_time_picker_test.ts",
     "collapse_radio_button_test.ts",
     "controlled_button_test.ts",
     "controlled_radio_button_test.ts",
@@ -49,9 +52,11 @@ build_webui_tests("build") {
     "file_system_site_entry_test.ts",
     "file_system_site_list_test.ts",
     "fingerprint_progress_arc_test.ts",
+    "geolocation_page_test.ts",
     "help_page_test.ts",
     "idle_load_test.ts",
     "memory_page_test.ts",
+    "notifications_page_test.ts",
     "offer_writing_help_page_test.ts",
     "on_startup_page_test.ts",
     "payments_section_card_dialogs_test.ts",
@@ -59,6 +64,8 @@ build_webui_tests("build") {
     "payments_section_focus_test.ts",
     "payments_section_iban_test.ts",
     "payments_section_interactive_test.ts",
+    "payments_section_pay_over_time_test.ts",
+    "payments_section_payments_list_test.ts",
     "payments_section_test.ts",
     "payments_section_utils.ts",
     "people_page_sync_controls_test.ts",
@@ -140,6 +147,8 @@ build_webui_tests("build") {
     "tab_discard_exception_dialog_test.ts",
     "test_about_page_browser_proxy.ts",
     "test_clear_browsing_data_browser_proxy.ts",
+    "test_country_detail_manager_proxy.ts",
+    "test_entity_data_manager_proxy.ts",
     "test_extension_control_browser_proxy.ts",
     "test_hats_browser_proxy.ts",
     "test_lifetime_browser_proxy.ts",
@@ -157,14 +166,13 @@ build_webui_tests("build") {
     "test_security_keys_browser_proxy.ts",
     "test_site_settings_prefs_browser_proxy.ts",
     "test_sync_browser_proxy.ts",
-    "test_user_annotations_manager_proxy.ts",
     "test_util.ts",
     "zoom_levels_test.ts",
   ]
 
   if (enable_glic) {
     files += [
-      "glic_data_page_test.ts",
+      "glic_page_focus_test.ts",
       "glic_page_test.ts",
       "test_glic_browser_proxy.ts",
     ]
@@ -178,6 +186,7 @@ build_webui_tests("build") {
     ]
   } else {
     files += [
+      "clear_browsing_data_account_indicator_test.ts",
       "default_browser_test.ts",
       "fake_language_settings_private.ts",
       "import_data_dialog_test.ts",

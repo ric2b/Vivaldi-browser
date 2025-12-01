@@ -10,13 +10,12 @@ import type * as PerfUI from '../../ui/legacy/components/perf_ui/perf_ui.js';
 import * as ThemeSupport from '../../ui/legacy/theme_support/theme_support.js';
 
 import {AnimationsTrackAppender} from './AnimationsTrackAppender.js';
-import {getEventLevel, getFormattedTime, type LastTimestampByLevel} from './AppenderUtils.js';
+import {getDurationString, getEventLevel, type LastTimestampByLevel} from './AppenderUtils.js';
 import * as TimelineComponents from './components/components.js';
 import {ExtensionTrackAppender} from './ExtensionTrackAppender.js';
 import {GPUTrackAppender} from './GPUTrackAppender.js';
 import {InteractionsTrackAppender} from './InteractionsTrackAppender.js';
 import {LayoutShiftsTrackAppender} from './LayoutShiftsTrackAppender.js';
-import {ServerTimingsTrackAppender} from './ServerTimingsTrackAppender.js';
 import {ThreadAppender} from './ThreadAppender.js';
 import {
   EntryType,
@@ -47,7 +46,7 @@ function isShowPostMessageEventsEnabled(): boolean {
 
 export function entryIsVisibleInTimeline(
     entry: Trace.Types.Events.Event, parsedTrace?: Trace.Handlers.Types.ParsedTrace): boolean {
-  if (parsedTrace && parsedTrace.Meta.traceIsGeneric) {
+  if (parsedTrace?.Meta.traceIsGeneric) {
     return true;
   }
 
@@ -68,7 +67,7 @@ export function entryIsVisibleInTimeline(
     }
   }
 
-  if (Trace.Types.Extensions.isSyntheticExtensionEntry(entry) || Trace.Types.Events.isSyntheticServerTiming(entry)) {
+  if (Trace.Types.Extensions.isSyntheticExtensionEntry(entry)) {
     return true;
   }
 
@@ -76,8 +75,7 @@ export function entryIsVisibleInTimeline(
   // events are hidden by default.
   const eventStyle = TimelineUtils.EntryStyles.getEventStyle(entry.name as Trace.Types.Events.Name);
   const eventIsTiming = Trace.Types.Events.isConsoleTime(entry) || Trace.Types.Events.isPerformanceMeasure(entry) ||
-      Trace.Types.Events.isPerformanceMark(entry);
-
+      Trace.Types.Events.isPerformanceMark(entry) || Trace.Types.Events.isConsoleTimeStamp(entry);
   return (eventStyle && !eventStyle.hidden) || eventIsTiming;
 }
 
@@ -192,7 +190,7 @@ export class CompatibilityTracksAppender {
   #entryData: Trace.Types.Events.Event[];
   #colorGenerator: Common.Color.Generator;
   #allTrackAppenders: TrackAppender[] = [];
-  #visibleTrackNames: Set<TrackAppenderName> = new Set([...TrackNames]);
+  #visibleTrackNames = new Set<TrackAppenderName>([...TrackNames]);
 
   #legacyEntryTypeByLevel: EntryType[];
   #timingsTrackAppender: TimingsTrackAppender;
@@ -201,7 +199,7 @@ export class CompatibilityTracksAppender {
   #gpuTrackAppender: GPUTrackAppender;
   #layoutShiftsTrackAppender: LayoutShiftsTrackAppender;
   #threadAppenders: ThreadAppender[] = [];
-  #serverTimingsTrackAppender: ServerTimingsTrackAppender;
+  #entityMapper: TimelineUtils.EntityMapper.EntityMapper|null;
 
   /**
    * @param flameChartData the data used by the flame chart renderer on
@@ -215,12 +213,15 @@ export class CompatibilityTracksAppender {
    * is needed only for compatibility with the legacy flamechart
    * architecture and should be removed once all tracks use the new
    * system.
+   * @param entityMapper 3P entity data for the trace.
    */
   constructor(
       flameChartData: PerfUI.FlameChart.FlameChartTimelineData, parsedTrace: Trace.Handlers.Types.ParsedTrace,
-      entryData: Trace.Types.Events.Event[], legacyEntryTypeByLevel: EntryType[]) {
+      entryData: Trace.Types.Events.Event[], legacyEntryTypeByLevel: EntryType[],
+      entityMapper: TimelineUtils.EntityMapper.EntityMapper|null) {
     this.#flameChartData = flameChartData;
     this.#parsedTrace = parsedTrace;
+    this.#entityMapper = entityMapper;
     this.#entryData = entryData;
     this.#colorGenerator = new Common.Color.Generator(
         /* hueSpace= */ {min: 30, max: 55, count: undefined},
@@ -243,8 +244,6 @@ export class CompatibilityTracksAppender {
     this.#layoutShiftsTrackAppender = new LayoutShiftsTrackAppender(this, this.#parsedTrace);
     this.#allTrackAppenders.push(this.#layoutShiftsTrackAppender);
 
-    this.#serverTimingsTrackAppender = new ServerTimingsTrackAppender(this, this.#parsedTrace);
-    this.#allTrackAppenders.push(this.#serverTimingsTrackAppender);
     this.#addThreadAppenders();
     this.#addExtensionAppenders();
 
@@ -380,10 +379,6 @@ export class CompatibilityTracksAppender {
     return this.#threadAppenders;
   }
 
-  serverTimingsTrackAppender(): ServerTimingsTrackAppender {
-    return this.#serverTimingsTrackAppender;
-  }
-
   eventsInTrack(trackAppender: TrackAppender): Trace.Types.Events.Event[] {
     const cachedData = this.#eventsForTrack.get(trackAppender);
     if (cachedData) {
@@ -410,7 +405,7 @@ export class CompatibilityTracksAppender {
     const events = [];
     for (let i = 0; i < entryLevels.length; i++) {
       if (trackStartLevel <= entryLevels[i] && entryLevels[i] <= trackEndLevel) {
-        events.push(this.#entryData[i] as Trace.Types.Events.Event);
+        events.push(this.#entryData[i]);
       }
     }
     events.sort((a, b) => a.ts - b.ts);  // TODO(paulirish): Remove as I'm 90% it's already sorted.
@@ -459,8 +454,8 @@ export class CompatibilityTracksAppender {
    * Returns number of tracks of given type already appended.
    * Used to name the "Raster Thread 6" tracks, etc
    */
-  getCurrentTrackCountForThreadType(threadType: Trace.Handlers.Threads.ThreadType.RASTERIZER|
-                                    Trace.Handlers.Threads.ThreadType.THREAD_POOL): number {
+  getCurrentTrackCountForThreadType(
+      threadType: Trace.Handlers.Threads.ThreadType.RASTERIZER|Trace.Handlers.Threads.ThreadType.THREAD_POOL): number {
     return this.#threadAppenders.filter(appender => appender.threadType === threadType && appender.headerAppended())
         .length;
   }
@@ -489,18 +484,6 @@ export class CompatibilityTracksAppender {
       return null;
     }
     return this.eventsForTreeView(track);
-  }
-
-  /**
-   * Caches the track appender that owns a level. An appender takes
-   * ownership of a level when it appends data to it.
-   * The cache is useful to determine what appender should handle a
-   * query from the flame chart renderer when an event's feature (like
-   * style, title, etc.) is needed.
-   */
-  registerTrackForLevel(level: number, appender: TrackAppender): void {
-    // TODO(crbug.com/1442454) Figure out how to avoid the circular calls.
-    this.#trackForLevel.set(level, appender);
   }
 
   groupForLevel(level: number): PerfUI.FlameChart.Group|null {
@@ -654,7 +637,7 @@ export class CompatibilityTracksAppender {
     // Defaults here, though tracks may chose to redefine title/formattedTime
     const info: PopoverInfo = {
       title: this.titleForEvent(event, level),
-      formattedTime: getFormattedTime(event.dur),
+      formattedTime: getDurationString(event.dur),
       warningElements: TimelineComponents.DetailsView.buildWarningElementsForEvent(event, this.#parsedTrace),
       additionalElements: [],
       url: null,
@@ -671,13 +654,14 @@ export class CompatibilityTracksAppender {
         '');
     if (url) {
       const MAX_PATH_LENGTH = 45;
-      const MAX_ORIGIN_LENGTH = 30;
       const path = Platform.StringUtilities.trimMiddle(url.href.replace(url.origin, ''), MAX_PATH_LENGTH);
-      const origin =
-          Platform.StringUtilities.trimEndWithMaxLength(url.origin.replace('https://', ''), MAX_ORIGIN_LENGTH);
       const urlElems = document.createElement('div');
       urlElems.createChild('span', 'popoverinfo-url-path').textContent = path;
-      urlElems.createChild('span', 'popoverinfo-url-origin').textContent = `(${origin})`;
+      const entity = this.#entityMapper ? this.#entityMapper.entityForEvent(event) : null;
+      // Include entity with origin if it's non made-up entity, otherwise there'd be
+      // repetition with the origin.
+      const originWithEntity = TimelineUtils.Helpers.formatOriginWithEntity(url, entity);
+      urlElems.createChild('span', 'popoverinfo-url-origin').textContent = `(${originWithEntity})`;
       info.additionalElements.push(urlElems);
     }
 

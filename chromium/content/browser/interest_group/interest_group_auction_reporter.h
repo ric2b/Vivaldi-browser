@@ -31,8 +31,8 @@
 #include "content/browser/interest_group/interest_group_storage.h"
 #include "content/browser/interest_group/subresource_url_authorizations.h"
 #include "content/browser/private_aggregation/private_aggregation_manager.h"
-#include "content/browser/renderer_host/frame_tree_node.h"
 #include "content/common/content_export.h"
+#include "content/public/browser/frame_tree_node_id.h"
 #include "content/services/auction_worklet/public/mojom/bidder_worklet.mojom.h"
 #include "content/services/auction_worklet/public/mojom/private_aggregation_request.mojom.h"
 #include "content/services/auction_worklet/public/mojom/seller_worklet.mojom.h"
@@ -421,6 +421,8 @@ class CONTENT_EXPORT InterestGroupAuctionReporter {
       const base::flat_map<std::string, GURL>& bidder_ad_beacon_map,
       const base::flat_map<std::string, std::string>& bidder_ad_macro_map,
       PrivateAggregationRequests pa_requests,
+      auction_worklet::mojom::PrivateModelTrainingRequestDataPtr
+          pmt_request_data,
       auction_worklet::mojom::BidderTimingMetricsPtr timing_metrics,
       const std::vector<std::string>& errors);
 

@@ -37,6 +37,7 @@
 #include "extensions/api/zoom/zoom_api.h"
 #include "extensions/tools/vivaldi_tools.h"
 #include "extensions/vivaldi_associated_tabs.h"
+#include "extensions/vivaldi_browser_component_wrapper.h"
 #include "ui/vivaldi_browser_window.h"
 #include "ui/vivaldi_ui_utils.h"
 #include "ui/window_registry_service.h"
@@ -366,62 +367,14 @@ ExtensionFunction::ResponseAction WindowPrivateCreateFunction::Run() {
         Error("New guest window can only be opened from incognito window"));
   }
 
-  VivaldiBrowserWindow* window =
-      ::vivaldi::WindowRegistryService::Get(profile)->GetNamedWindow(
-          window_key);
-  if (window) {
-    window->Activate();
-    return RespondNow(ArgumentList(Results::Create(window->id())));
-  } else {
-    window = new VivaldiBrowserWindow();
+  int window_id =
+      VivaldiBrowserComponentWrapper::GetInstance()->WindowPrivateCreate(
+          profile, params->type, window_params, window_bounds, window_key,
+          viv_ext_data, tab_url,
+          base::BindOnce(&WindowPrivateCreateFunction::OnAppUILoaded, this));
+  if (window_id) {
+    return RespondNow(ArgumentList(Results::Create(window_id)));
   }
-
-  if (!window_key.empty()) {
-    window->SetWindowKey(window_key);
-    ::vivaldi::WindowRegistryService::Get(profile)->AddWindow(window, window_key);
-  }
-  // Delay sending the response until the newly created window has finished its
-  // navigation or was closed during that process.
-  window->SetDidFinishNavigationCallback(
-      base::BindOnce(&WindowPrivateCreateFunction::OnAppUILoaded, this));
-
-  Browser::Type window_type = Browser::TYPE_NORMAL;
-  // Popup and settingswindow should open as popup and not stored in session.
-  if (params->type == vivaldi::window_private::WindowType::kPopup ||
-      params->type == vivaldi::window_private::WindowType::kSettings) {
-    window_type = Browser::TYPE_POPUP;
-  } else if (params->type ==
-             vivaldi::window_private::WindowType::kDevtools) {
-    window_type = Browser::TYPE_DEVTOOLS;
-  }
-
-  Browser::CreateParams create_params(window_type, profile, false);
-
-  create_params.initial_bounds = window_bounds;
-
-  create_params.creation_source = Browser::CreationSource::kStartupCreator;
-  create_params.is_vivaldi = true;
-  create_params.window = window;
-  create_params.viv_ext_data = viv_ext_data;
-#if BUILDFLAG(IS_WIN)
-  // see VB-109884
-  create_params.initial_show_state = window_params.state;
-#endif
-  std::unique_ptr<Browser> browser(Browser::Create(create_params));
-  DCHECK(browser->window() == window);
-  window->SetWindowURL(window_params.resource_relative_url);
-  window->CreateWebContents(std::move(browser), window_params);
-
-  if (!tab_url.empty()) {
-    content::OpenURLParams urlparams(GURL(tab_url), content::Referrer(),
-                                     WindowOpenDisposition::NEW_FOREGROUND_TAB,
-                                     ui::PAGE_TRANSITION_AUTO_TOPLEVEL, false);
-    window->browser()->OpenURL(urlparams, /* navigation_handle = */ {});
-  }
-
-  // TODO(pettern): If we ever need to open unfocused windows, we need to
-  // add a new method for open delayed and unfocused.
-  //  window->Show(focused ? AppWindow::SHOW_ACTIVE : AppWindow::SHOW_INACTIVE);
 
   return RespondLater();
 }
@@ -441,7 +394,8 @@ ExtensionFunction::ResponseAction WindowPrivateGetCurrentIdFunction::Run() {
   // It is OK to use GetSenderWebContents() as JS will call this function from
   // the proper window.
   content::WebContents* web_contents = GetSenderWebContents();
-  Browser* browser = ::vivaldi::FindBrowserForEmbedderWebContents(web_contents);
+  Browser* browser = VivaldiBrowserComponentWrapper::GetInstance()
+                         ->FindBrowserForEmbedderWebContents(web_contents);
   if (!browser)
     return RespondNow(Error("No Browser instance"));
 
@@ -457,9 +411,8 @@ ExtensionFunction::ResponseAction WindowPrivateSetStateFunction::Run() {
   extensions::WindowController* controller;
   std::string error;
   bool was_fullscreen;
-  if (!windows_util::GetControllerFromWindowID(
-          this, params->window_id, WindowController::GetAllWindowFilter(),
-          &controller, &error)) {
+  if (!VivaldiBrowserComponentWrapper::GetInstance()->GetControllerFromWindowID(
+          this, params->window_id, &controller, &error)) {
     return RespondNow(Error(error));
   }
   Browser* browser = controller->GetBrowser();
@@ -554,7 +507,9 @@ WindowPrivateGetFocusedElementInfoFunction::Run() {
   EXTENSION_FUNCTION_VALIDATE(params);
 
   VivaldiBrowserWindow* window =
-      VivaldiBrowserWindow::FromId(params->window_id);
+      VivaldiBrowserComponentWrapper::GetInstance()->
+          VivaldiBrowserWindowFromId(
+            params->window_id);
   if (!window) {
     return RespondNow(Error("No such window"));
   }
@@ -599,7 +554,9 @@ ExtensionFunction::ResponseAction WindowPrivateIsOnScreenWithNotchFunction::Run(
   EXTENSION_FUNCTION_VALIDATE(params);
 
   VivaldiBrowserWindow* window =
-      VivaldiBrowserWindow::FromId(params->window_id);
+      VivaldiBrowserComponentWrapper::GetInstance()->
+          VivaldiBrowserWindowFromId(
+            params->window_id);
   if (!window) {
     return RespondNow(Error("No such window"));
   }

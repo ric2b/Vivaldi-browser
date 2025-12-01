@@ -271,6 +271,18 @@ struct is_trivially_copyable {
   static_assert(!::v8::base::is_trivially_copyable<T>::value, \
                 #T " should not be trivially copyable")
 
+// Be aware that base::is_trivially_destructible will differ from
+// std::is_trivially_destructible for cases like DirectHandle<T>.
+template <typename T>
+struct is_trivially_destructible : public std::is_trivially_destructible<T> {};
+
+#define ASSERT_TRIVIALLY_DESTRUCTIBLE(T)                         \
+  static_assert(::v8::base::is_trivially_destructible<T>::value, \
+                #T " should be trivially destructible")
+#define ASSERT_NOT_TRIVIALLY_DESTRUCTIBLE(T)                      \
+  static_assert(!::v8::base::is_trivially_destructible<T>::value, \
+                #T " should not be trivially destructible")
+
 // The USE(x, ...) template is used to silence C++ compiler warnings
 // issued for (yet) unused variables (typically parameters).
 // The arguments are guaranteed to be evaluated from left to right.
@@ -440,18 +452,14 @@ bool is_inbounds(float_t v) {
 #else  // V8_OS_WIN
 
 // Setup for Linux shared library export.
-#if V8_HAS_ATTRIBUTE_VISIBILITY
-#ifdef BUILDING_V8_SHARED_PRIVATE
+#if V8_HAS_ATTRIBUTE_VISIBILITY && \
+    (defined(BUILDING_V8_SHARED_PRIVATE) || USING_V8_SHARED_PRIVATE)
 #define V8_EXPORT_PRIVATE __attribute__((visibility("default")))
 #define V8_EXPORT_ENUM V8_EXPORT_PRIVATE
 #else
 #define V8_EXPORT_PRIVATE
 #define V8_EXPORT_ENUM
-#endif
-#else
-#define V8_EXPORT_PRIVATE
-#define V8_EXPORT_ENUM
-#endif
+#endif  // V8_HAS_ATTRIBUTE_VISIBILITY && ..
 
 #endif  // V8_OS_WIN
 

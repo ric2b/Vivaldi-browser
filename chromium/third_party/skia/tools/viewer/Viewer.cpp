@@ -14,7 +14,6 @@
 #include "include/core/SkBlendMode.h"
 #include "include/core/SkCanvas.h"
 #include "include/core/SkColor.h"
-#include "include/core/SkColorPriv.h"
 #include "include/core/SkColorType.h"
 #include "include/core/SkData.h"
 #include "include/core/SkFontTypes.h"
@@ -41,6 +40,7 @@
 #include "src/base/SkTSort.h"
 #include "src/base/SkUTF.h"
 #include "src/core/SkAutoPixmapStorage.h"
+#include "src/core/SkColorPriv.h"
 #include "src/core/SkLRUCache.h"
 #include "src/core/SkMD5.h"
 #include "src/core/SkOSFile.h"
@@ -272,8 +272,6 @@ static DEFINE_string(lotties, PATH_PREFIX "lotties", "Directory to read (Bodymov
 #undef PATH_PREFIX
 
 static DEFINE_string(svgs, "", "Directory to read SVGs from, or a single SVG file.");
-
-static DEFINE_string(rives, "", "Directory to read RIVs from, or a single .riv file.");
 
 static DEFINE_int_2(threads, j, -1,
                "Run threadsafe tests on a threadpool with this many extra threads, "
@@ -1971,7 +1969,7 @@ void Viewer::onPaint(SkSurface* surface) {
     }
 }
 
-void Viewer::onResize(int width, int height) {
+void Viewer::resizeCurrentSlide(int width, int height) {
     if (fCurrentSlide >= 0) {
         // Resizing can reset the context on some backends so just tear it all down.
         // We'll rebuild these resources on the next draw.
@@ -1983,7 +1981,10 @@ void Viewer::onResize(int width, int height) {
         }
         fSlides[fCurrentSlide]->resize(width / scaleFactor, height / scaleFactor);
     }
+}
 
+void Viewer::onResize(int width, int height) {
+    this->resizeCurrentSlide(width, height);
     fImGuiLayer.setScaleFactor(fWindow->scaleFactor());
     fStatsLayer.setDisplayScale((fZoomUI ? 2.0f : 1.0f) * fWindow->scaleFactor());
 }
@@ -2414,7 +2415,10 @@ void Viewer::drawImGui() {
             if (ImGui::CollapsingHeader("Transform")) {
                 if (ImGui::Checkbox("Apply Backing Scale", &fApplyBackingScale)) {
                     this->updateGestureTransLimit();
-                    this->onResize(fWindow->width(), fWindow->height());
+                    // NOTE: Do not call onResize() as we are in the middle of ImgGui processing,
+                    // and onResize() modifies ImgGui state that is otherwise locked. The backing
+                    // scale factor only affects the slide itself, so adjust that directly.
+                    this->resizeCurrentSlide(fWindow->width(), fWindow->height());
                     // This changes how we manipulate the canvas transform, it's not changing the
                     // window's actual parameters.
                     uiParamsChanged = true;

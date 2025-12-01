@@ -275,6 +275,11 @@ struct BLINK_COMMON_EXPORT
     return data.explicitly_allowed_network_ports;
   }
 
+  static const uint64_t& canvas_noise_token(
+      const ::blink::RendererPreferences& data) {
+    return data.canvas_noise_token;
+  }
+
   /* Vivaldi*/
   static const bool& allow_tab_cycle_from_webpage_into_ui(
       const ::blink::RendererPreferences& data) {
@@ -290,7 +295,7 @@ struct BLINK_COMMON_EXPORT
       const ::blink::RendererPreferences& data) {
     return data.allow_access_keys;
   }
-  /* End vivaldi*/
+  /* End Vivaldi*/
 
   static bool Read(blink::mojom::RendererPreferencesDataView,
                    ::blink::RendererPreferences* out);

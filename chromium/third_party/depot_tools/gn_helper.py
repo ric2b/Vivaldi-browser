@@ -5,6 +5,7 @@
 
 import os
 import re
+import sys
 
 
 def _find_root(output_dir):

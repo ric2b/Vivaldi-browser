@@ -99,7 +99,7 @@ const char kRustflags[] = "rustflags";
 const char kRustflags_HelpShort[] =
     "rustflags: [string list] Flags passed to the Rust compiler.";
 const char kRustflags_Help[] =
-      R"(rustflags: Flags passed to the Rust compiler.
+    R"(rustflags: Flags passed to the Rust compiler.
 
   A list of strings.
 
@@ -120,8 +120,7 @@ void InsertRustVariables(VariableInfoMap* info_map) {
       kRustCrateRoot,
       VariableInfo(kRustCrateRoot_HelpShort, kRustCrateRoot_Help)));
   info_map->insert(std::make_pair(
-      kRustflags,
-      VariableInfo(kRustflags_HelpShort, kRustflags_Help)));
+      kRustflags, VariableInfo(kRustflags_HelpShort, kRustflags_Help)));
 }
 
 }  // namespace variables

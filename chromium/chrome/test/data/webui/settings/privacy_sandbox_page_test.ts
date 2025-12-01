@@ -8,7 +8,7 @@ import {assert} from 'chrome://resources/js/assert.js';
 import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
 import type {CrExpandButtonElement, SettingsPrivacySandboxAdMeasurementSubpageElement, SettingsPrivacySandboxManageTopicsSubpageElement, SettingsPrivacySandboxPageElement, SettingsPrivacySandboxTopicsSubpageElement, SettingsSimpleConfirmationDialogElement} from 'chrome://settings/lazy_load.js';
 import {SettingsPrivacySandboxFledgeSubpageElement} from 'chrome://settings/lazy_load.js';
-import type {CrButtonElement, CrLinkRowElement, FirstLevelTopicsState, SettingsPrefsElement, TopicsState} from 'chrome://settings/settings.js';
+import type {CrButtonElement, CrLinkRowElement, FirstLevelTopicsState, SettingsPrefsElement, SettingsToggleButtonElement, TopicsState} from 'chrome://settings/settings.js';
 import {CrSettingsPrefs, MetricsBrowserProxyImpl, PrivacySandboxBrowserProxyImpl, Router, routes} from 'chrome://settings/settings.js';
 import {assertDeepEquals, assertEquals, assertFalse, assertTrue} from 'chrome://webui-test/chai_assert.js';
 import {flushTasks, waitAfterNextRender} from 'chrome://webui-test/polymer_test_util.js';
@@ -216,7 +216,7 @@ suite('FledgeSubpage', function() {
     Router.getInstance().resetRouteForTesting();
   });
 
-  test('secondDescription', async function() {
+  test('secondDescription', function() {
     const secondDescription =
         page.shadowRoot!.querySelector<HTMLElement>('#secondDescription');
     assert(secondDescription);
@@ -224,7 +224,7 @@ suite('FledgeSubpage', function() {
         secondDescription?.innerText, page.i18n('fledgePageExplanation'));
   });
 
-  test('footerLinks', async function() {
+  test('footerLinks', function() {
     assertTrue(isChildVisible(page, '#footer'));
     const links =
         page.shadowRoot!.querySelectorAll<HTMLAnchorElement>('#footer a[href]');
@@ -258,7 +258,7 @@ suite('FledgeSubpage', function() {
     assertTrue(!!learnMoreLink);
     assertTrue(isVisible(learnMoreLink));
     assertFalse(isVisible(page.shadowRoot!.querySelector('#learnMoreLinkV2')));
-    learnMoreLink!.click();
+    learnMoreLink.click();
     await flushTasks();
     assertTrue(isVisible(page.shadowRoot!.querySelector('#body')));
     assertFalse(isVisible(page.shadowRoot!.querySelector('#bodyV2')));
@@ -303,7 +303,7 @@ suite('SiteSuggestedAdsSubpageAdsApiUxEnhancement', function() {
     Router.getInstance().resetRouteForTesting();
   });
 
-  test('footerLinksV2', async function() {
+  test('footerLinksV2', function() {
     assertTrue(isVisible(page.shadowRoot!.querySelector('#footerV2')));
     const links = page.shadowRoot!.querySelectorAll<HTMLAnchorElement>(
         '#footerV2 a[href]');
@@ -347,7 +347,7 @@ suite('SiteSuggestedAdsSubpageAdsApiUxEnhancement', function() {
     const privacyPolicyLink =
         page.shadowRoot!.querySelector<HTMLElement>('#privacyPolicyLink');
     assertTrue(!!privacyPolicyLink);
-    privacyPolicyLink!.click();
+    privacyPolicyLink.click();
     assertEquals(
         'Settings.PrivacySandbox.SiteSuggestedAds.PrivacyPolicyLinkClicked',
         await metricsBrowserProxy.whenCalled('recordAction'));
@@ -574,7 +574,7 @@ suite('TopicsSubpage', function() {
     idsToBeHidden.forEach(id => assertFalse(isChildVisible(page, id)));
   });
 
-  test('disclaimerLinks', async function() {
+  test('disclaimerLinks', function() {
     const disclaimer = page.shadowRoot!.querySelector('#disclaimer');
     assertTrue(!!disclaimer);
     assertTrue(isVisible(disclaimer));
@@ -940,7 +940,7 @@ suite('TopicsSubpage', function() {
     assertFalse(isChildVisible(page, '#currentTopicsSection'));
   });
 
-  test('footerLinks', async function() {
+  test('footerLinks', function() {
     assertTrue(isChildVisible(page, '#footer'));
     const links =
         page.shadowRoot!.querySelectorAll<HTMLAnchorElement>('#footer a[href]');
@@ -959,7 +959,7 @@ suite('TopicsSubpage', function() {
     assertDeepEquals(hrefs, expectedLinks);
   });
 
-  test('manageTopicsRow', async function() {
+  test('manageTopicsRow', function() {
     const manageTopicsRow = page.shadowRoot!.querySelector<CrLinkRowElement>(
         '#privacySandboxManageTopicsLinkRow');
     assertTrue(!!manageTopicsRow);
@@ -971,7 +971,7 @@ suite('TopicsSubpage', function() {
         manageTopicsRow.subLabel);
   });
 
-  test('clickManageTopicsRow', async function() {
+  test('clickManageTopicsRow', function() {
     const manageTopicsRow = page.shadowRoot!.querySelector<CrLinkRowElement>(
         '#privacySandboxManageTopicsLinkRow');
     assertTrue(!!manageTopicsRow);
@@ -981,7 +981,7 @@ suite('TopicsSubpage', function() {
         Router.getInstance().getCurrentRoute());
   });
 
-  test('navigateToManageTopicsPrefDisabled', async function() {
+  test('navigateToManageTopicsPrefDisabled', function() {
     page.setPrefValue('privacy_sandbox.m1.topics_enabled', false);
     document.body.innerHTML = window.trustedTypes!.emptyHTML;
     const manageTopicsPage = document.createElement(
@@ -1030,7 +1030,7 @@ suite('TopicsSubpageAdsApiUxEnhancementsDisabled', function() {
     Router.getInstance().resetRouteForTesting();
   });
 
-  test('footerLinksV2NotShown', async function() {
+  test('footerLinksV2NotShown', function() {
     assertTrue(isVisible(page.shadowRoot!.querySelector('#footer')));
     const links =
         page.shadowRoot!.querySelectorAll<HTMLAnchorElement>('#footer a[href]');
@@ -1049,7 +1049,7 @@ suite('TopicsSubpageAdsApiUxEnhancementsDisabled', function() {
     assertDeepEquals(hrefs, expectedLinks);
   });
 
-  test('TopicsPageContentV2NotShown', async function() {
+  test('TopicsPageContentV2NotShown', function() {
     assertTrue(isVisible(page.shadowRoot!.querySelector('#footer')));
     assertFalse(isVisible(page.shadowRoot!.querySelector('#footerV2')));
     const footerDisclaimer =
@@ -1095,7 +1095,7 @@ suite('TopicsSubpageAdsApiUxEnhancements', function() {
   });
 
 
-  test('footerLinksV2', async function() {
+  test('footerLinksV2', function() {
     assertTrue(isVisible(page.shadowRoot!.querySelector('#footerV2')));
     const links = page.shadowRoot!.querySelectorAll<HTMLAnchorElement>(
         '#footerV2 a[href]');
@@ -1113,7 +1113,7 @@ suite('TopicsSubpageAdsApiUxEnhancements', function() {
     assertDeepEquals(hrefs, expectedLinks);
   });
 
-  test('TopicsPageContentV2', async function() {
+  test('TopicsPageContentV2', function() {
     assertFalse(isVisible(page.shadowRoot!.querySelector('#footer')));
     assertTrue(isVisible(page.shadowRoot!.querySelector('#footerV2')));
     const footerDisclaimer =
@@ -1125,7 +1125,7 @@ suite('TopicsSubpageAdsApiUxEnhancements', function() {
     const privacyPolicyLink =
         page.shadowRoot!.querySelector<HTMLElement>('#privacyPolicyLink');
     assertTrue(!!privacyPolicyLink);
-    privacyPolicyLink!.click();
+    privacyPolicyLink.click();
     assertEquals(
         'Settings.PrivacySandbox.AdTopics.PrivacyPolicyLinkClicked',
         await metricsBrowserProxy.whenCalled('recordAction'));
@@ -1843,7 +1843,7 @@ suite('FledgeSubpageSeeAllSites', function() {
         page.shadowRoot!.querySelector('#blockedSitesList')!;
     const blockedSites = blockedSitesList.querySelector('dom-repeat');
     assertTrue(!!blockedSites);
-    assertEquals(0, blockedSites!.items!.length);
+    assertEquals(0, blockedSites.items!.length);
     const blockedSitesDescription = page.shadowRoot!.querySelector<HTMLElement>(
         '#blockedSitesDescription')!;
     assertTrue(isVisible(blockedSitesDescription));
@@ -1870,13 +1870,12 @@ suite('FledgeSubpageSeeAllSites', function() {
         SettingsPrivacySandboxFledgeSubpageElement.maxFledgeSites,
         mainSitesList!.items!.length);
     assertEquals(2, remainingSitesList!.items!.length);
-    assertEquals(sitesList[0], mainSitesList!.items![0].site!);
-    assertEquals(
-        sitesList[sitesCount - 2], remainingSitesList!.items![0].site!);
+    assertEquals(sitesList[0], mainSitesList!.items![0].site);
+    assertEquals(sitesList[sitesCount - 2], remainingSitesList!.items![0].site);
 
     // Block site from the main current sites section.
     let items =
-        currentSitesSection!.querySelectorAll('privacy-sandbox-interest-item');
+        currentSitesSection.querySelectorAll('privacy-sandbox-interest-item');
     assertEquals(sitesCount, items.length);
     items[0]!.shadowRoot!.querySelector('cr-button')!.click();
     await testPrivacySandboxBrowserProxy.whenCalled('setFledgeJoiningAllowed');
@@ -1890,22 +1889,21 @@ suite('FledgeSubpageSeeAllSites', function() {
         SettingsPrivacySandboxFledgeSubpageElement.maxFledgeSites,
         mainSitesList!.items!.length);
     assertEquals(1, remainingSitesList!.items!.length);
-    assertEquals(sitesList[1], mainSitesList!.items![0].site!);
-    assertEquals(sitesList[sitesCount - 2], mainSitesList!.items!.at(-1).site!);
-    assertEquals(
-        sitesList[sitesCount - 1], remainingSitesList!.items![0].site!);
+    assertEquals(sitesList[1], mainSitesList!.items![0].site);
+    assertEquals(sitesList[sitesCount - 2], mainSitesList!.items!.at(-1).site);
+    assertEquals(sitesList[sitesCount - 1], remainingSitesList!.items![0].site);
     items = mainSitesList!.querySelectorAll('privacy-sandbox-interest-item');
 
     // Check that site was blocked.
     assertEquals(1, blockedSites.items!.length);
-    assertEquals(sitesList[0], blockedSites.items![0].site!);
+    assertEquals(sitesList[0], blockedSites.items![0].site);
     assertEquals(
         loadTimeData.getString('fledgePageBlockedSitesDescription'),
         blockedSitesDescription.innerText);
 
     // Block site from the "See all sites" section.
     items =
-        currentSitesSection!.querySelectorAll('privacy-sandbox-interest-item');
+        currentSitesSection.querySelectorAll('privacy-sandbox-interest-item');
     assertEquals(sitesCount - 1, items.length);
     items[SettingsPrivacySandboxFledgeSubpageElement.maxFledgeSites]!
         .shadowRoot!.querySelector('cr-button')!.click();
@@ -1920,8 +1918,8 @@ suite('FledgeSubpageSeeAllSites', function() {
 
     // Check that site was blocked.
     assertEquals(2, blockedSites.items!.length);
-    assertEquals(sitesList[0], blockedSites.items![0].site!);
-    assertEquals(sitesList[sitesCount - 1], blockedSites.items![1].site!);
+    assertEquals(sitesList[0], blockedSites.items![0].site);
+    assertEquals(sitesList[sitesCount - 1], blockedSites.items![1].site);
 
     // Allow first blocked site.
     let blockedItems =
@@ -1938,7 +1936,7 @@ suite('FledgeSubpageSeeAllSites', function() {
     blockedItems =
         blockedSitesList.querySelectorAll('privacy-sandbox-interest-item');
     assertEquals(1, blockedItems.length);
-    assertEquals(sitesList[sitesCount - 1], blockedSites.items![0].site!);
+    assertEquals(sitesList[sitesCount - 1], blockedSites.items![0].site);
     blockedItems[0]!.shadowRoot!.querySelector('cr-button')!.click();
     await testPrivacySandboxBrowserProxy.whenCalled('setFledgeJoiningAllowed');
     assertEquals(
@@ -2076,7 +2074,7 @@ suite('AdMeasurementSubpageAdsApiUxEnhancementsDisabled', function() {
     Router.getInstance().resetRouteForTesting();
   });
 
-  test('contentV2NotShown', async function() {
+  test('contentV2NotShown', function() {
     const disclaimer = page.shadowRoot!.querySelector('#disclaimer');
     assertFalse(isVisible(disclaimer));
   });
@@ -2114,7 +2112,7 @@ suite('AdMeasurementSubpageAdsApiUxEnhancements', function() {
     Router.getInstance().resetRouteForTesting();
   });
 
-  test('contentV2', async function() {
+  test('contentV2', function() {
     const disclaimer = page.shadowRoot!.querySelector('#disclaimer');
     assertTrue(isVisible(disclaimer));
   });
@@ -2123,9 +2121,211 @@ suite('AdMeasurementSubpageAdsApiUxEnhancements', function() {
     const privacyPolicyLink =
         page.shadowRoot!.querySelector<HTMLElement>('#privacyPolicyLink');
     assertTrue(!!privacyPolicyLink);
-    privacyPolicyLink!.click();
+    privacyPolicyLink.click();
     assertEquals(
         'Settings.PrivacySandbox.AdMeasurement.PrivacyPolicyLinkClicked',
         await metricsBrowserProxy.whenCalled('recordAction'));
   });
 });
+
+// PrivacySandboxAdsTopicsContentParity and PrivacySandboxAdsApiUxEnhancements
+// are enabled.
+suite('TopicsSubpageAdTopicsContentParity', function() {
+  let page: SettingsPrivacySandboxTopicsSubpageElement;
+  let testPrivacySandboxBrowserProxy: TestPrivacySandboxBrowserProxy;
+  let settingsPrefs: SettingsPrefsElement;
+  let metricsBrowserProxy: TestMetricsBrowserProxy;
+
+  suiteSetup(function() {
+    loadTimeData.overrideValues({
+      isPrivacySandboxRestricted: false,
+      isPrivacySandboxAdsApiUxEnhancementsEnabled: true,
+    });
+    settingsPrefs = document.createElement('settings-prefs');
+    return CrSettingsPrefs.initialized;
+  });
+
+  setup(async function() {
+    testPrivacySandboxBrowserProxy = new TestPrivacySandboxBrowserProxy();
+    testPrivacySandboxBrowserProxy
+        .setShouldShowPrivacySandboxAdTopicsContentParity(true);
+    PrivacySandboxBrowserProxyImpl.setInstance(testPrivacySandboxBrowserProxy);
+    metricsBrowserProxy = new TestMetricsBrowserProxy();
+    MetricsBrowserProxyImpl.setInstance(metricsBrowserProxy);
+
+    document.body.innerHTML = window.trustedTypes!.emptyHTML;
+    document.body.appendChild(settingsPrefs);
+    page = document.createElement('settings-privacy-sandbox-topics-subpage');
+    page.prefs = settingsPrefs.prefs!;
+    page.set('prefs.privacy_sandbox.m1.topics_enabled', {value: true});
+    Router.getInstance().navigateTo(routes.PRIVACY_SANDBOX_TOPICS);
+    document.body.appendChild(page);
+    await testPrivacySandboxBrowserProxy.whenCalled('getTopicsState');
+    return flushTasks();
+  });
+
+  teardown(function() {
+    Router.getInstance().resetRouteForTesting();
+  });
+
+  test('AdTopicsContentParity', function() {
+    const topicsToggle =
+        page.shadowRoot!.querySelector<SettingsToggleButtonElement>(
+            '#topicsToggle');
+    assert(topicsToggle);
+    assertTrue(isVisible(topicsToggle));
+    assertEquals(
+        loadTimeData.getString('adTopicsPageToggleSubLabel'),
+        topicsToggle.subLabel);
+    assertTrue(
+        isVisible(page.shadowRoot!.querySelector('#footerDisclaimerV2')));
+    assertTrue(isVisible(
+        page.shadowRoot!.querySelector('#currentTopicsDescriptionV2')));
+    assertFalse(isVisible(page.shadowRoot!.querySelector('#footerDisclaimer')));
+    assertFalse(
+        isVisible(page.shadowRoot!.querySelector('#currentTopicsDescription')));
+  });
+
+  test('privacyPolicyLink', async function() {
+    const privacyPolicyLink =
+        page.shadowRoot!.querySelector<HTMLElement>('#privacyPolicyLinkV2');
+    assertTrue(!!privacyPolicyLink);
+    privacyPolicyLink.click();
+    assertEquals(
+        'Settings.PrivacySandbox.AdTopics.PrivacyPolicyLinkClicked',
+        await metricsBrowserProxy.whenCalled('recordAction'));
+  });
+});
+
+// PrivacySandboxAdsTopicsContentParity is disabled and
+// PrivacySandboxAdsApiUxEnhancements is enabled.
+suite('TopicsSubpageAdTopicsContentParityDisabled', function() {
+  let page: SettingsPrivacySandboxTopicsSubpageElement;
+  let testPrivacySandboxBrowserProxy: TestPrivacySandboxBrowserProxy;
+  let settingsPrefs: SettingsPrefsElement;
+  let metricsBrowserProxy: TestMetricsBrowserProxy;
+
+  suiteSetup(function() {
+    loadTimeData.overrideValues({
+      isPrivacySandboxRestricted: false,
+      isPrivacySandboxAdsApiUxEnhancementsEnabled: true,
+    });
+    settingsPrefs = document.createElement('settings-prefs');
+    return CrSettingsPrefs.initialized;
+  });
+
+  setup(async function() {
+    testPrivacySandboxBrowserProxy = new TestPrivacySandboxBrowserProxy();
+    testPrivacySandboxBrowserProxy
+        .setShouldShowPrivacySandboxAdTopicsContentParity(false);
+    PrivacySandboxBrowserProxyImpl.setInstance(testPrivacySandboxBrowserProxy);
+    metricsBrowserProxy = new TestMetricsBrowserProxy();
+    MetricsBrowserProxyImpl.setInstance(metricsBrowserProxy);
+
+    document.body.innerHTML = window.trustedTypes!.emptyHTML;
+    document.body.appendChild(settingsPrefs);
+    page = document.createElement('settings-privacy-sandbox-topics-subpage');
+    page.prefs = settingsPrefs.prefs!;
+    page.set('prefs.privacy_sandbox.m1.topics_enabled', {value: true});
+    Router.getInstance().navigateTo(routes.PRIVACY_SANDBOX_TOPICS);
+    document.body.appendChild(page);
+    await testPrivacySandboxBrowserProxy.whenCalled('getTopicsState');
+    return flushTasks();
+  });
+
+  teardown(function() {
+    Router.getInstance().resetRouteForTesting();
+  });
+
+  test('privacyPolicyLink', async function() {
+    const privacyPolicyLink =
+        page.shadowRoot!.querySelector<HTMLElement>('#privacyPolicyLink');
+    assertTrue(!!privacyPolicyLink);
+    privacyPolicyLink.click();
+    assertEquals(
+        'Settings.PrivacySandbox.AdTopics.PrivacyPolicyLinkClicked',
+        await metricsBrowserProxy.whenCalled('recordAction'));
+  });
+
+  test('AdTopicsContentParityNotShown', function() {
+    const topicsToggle =
+        page.shadowRoot!.querySelector<SettingsToggleButtonElement>(
+            '#topicsToggle');
+    assert(topicsToggle);
+    assertTrue(isVisible(topicsToggle));
+    assertEquals(
+        loadTimeData.getString('topicsPageToggleSubLabel'),
+        topicsToggle.subLabel);
+    assertFalse(
+        isVisible(page.shadowRoot!.querySelector('#footerDisclaimerV2')));
+    assertFalse(isVisible(
+        page.shadowRoot!.querySelector('#currentTopicsDescriptionV2')));
+    assertTrue(isVisible(page.shadowRoot!.querySelector('#footerDisclaimer')));
+    assertTrue(
+        isVisible(page.shadowRoot!.querySelector('#currentTopicsDescription')));
+  });
+});
+
+// PrivacySandboxAdsTopicsContentParity is enabled and
+// PrivacySandboxAdsApiUxEnhancements is disabled.
+suite(
+    'TopicsSubpageAdTopicsContentParityAdsApiUxEnhancementDisabled',
+    function() {
+      let page: SettingsPrivacySandboxTopicsSubpageElement;
+      let testPrivacySandboxBrowserProxy: TestPrivacySandboxBrowserProxy;
+      let settingsPrefs: SettingsPrefsElement;
+      let metricsBrowserProxy: TestMetricsBrowserProxy;
+
+      suiteSetup(function() {
+        loadTimeData.overrideValues({
+          isPrivacySandboxRestricted: false,
+          isPrivacySandboxAdsApiUxEnhancementsEnabled: false,
+        });
+        settingsPrefs = document.createElement('settings-prefs');
+        return CrSettingsPrefs.initialized;
+      });
+
+      setup(async function() {
+        testPrivacySandboxBrowserProxy = new TestPrivacySandboxBrowserProxy();
+        testPrivacySandboxBrowserProxy
+            .setShouldShowPrivacySandboxAdTopicsContentParity(true);
+        PrivacySandboxBrowserProxyImpl.setInstance(
+            testPrivacySandboxBrowserProxy);
+        metricsBrowserProxy = new TestMetricsBrowserProxy();
+        MetricsBrowserProxyImpl.setInstance(metricsBrowserProxy);
+
+        document.body.innerHTML = window.trustedTypes!.emptyHTML;
+        document.body.appendChild(settingsPrefs);
+        page =
+            document.createElement('settings-privacy-sandbox-topics-subpage');
+        page.prefs = settingsPrefs.prefs!;
+        page.set('prefs.privacy_sandbox.m1.topics_enabled', {value: true});
+        Router.getInstance().navigateTo(routes.PRIVACY_SANDBOX_TOPICS);
+        document.body.appendChild(page);
+        await testPrivacySandboxBrowserProxy.whenCalled('getTopicsState');
+        return flushTasks();
+      });
+
+      teardown(function() {
+        Router.getInstance().resetRouteForTesting();
+      });
+
+      test('AdsApiUxEnhancementsDisabled', function() {
+        const topicsToggle =
+            page.shadowRoot!.querySelector<SettingsToggleButtonElement>(
+                '#topicsToggle');
+        assert(topicsToggle);
+        assertTrue(isVisible(topicsToggle));
+        assertEquals(
+            loadTimeData.getString('adTopicsPageToggleSubLabel'),
+            topicsToggle.subLabel);
+        assertTrue(isVisible(
+            page.shadowRoot!.querySelector('#currentTopicsDescriptionV2')));
+        assertFalse(isVisible(
+            page.shadowRoot!.querySelector('#currentTopicsDescription')));
+        assertFalse(
+            isVisible(page.shadowRoot!.querySelector('#footerDisclaimerV2')));
+        assertFalse(
+            isVisible(page.shadowRoot!.querySelector('#footerDisclaimer')));
+      });
+    });

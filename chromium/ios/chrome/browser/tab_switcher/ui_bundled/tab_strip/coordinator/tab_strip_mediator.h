@@ -13,6 +13,8 @@
 class Browser;
 class BrowserList;
 class ProfileIOS;
+class ShareKitService;
+enum class TabGroupActionType;
 @protocol TabStripCommands;
 @protocol TabStripConsumer;
 class UrlLoadingBrowserAgent;
@@ -22,9 +24,12 @@ namespace base {
 class Uuid;
 }  // namespace base
 
-namespace collaboration::messaging {
+namespace collaboration {
+class CollaborationService;
+namespace messaging {
 class MessagingBackendService;
-}  // namespace collaboration::messaging
+}  // namespace messaging
+}  // namespace collaboration
 
 namespace tab_groups {
 class TabGroupId;
@@ -59,11 +64,14 @@ class WebStateID;
 // Designated initializer. Initializer with a TabStripConsumer, a
 // `tabGroupSyncService` and the `browserList`.
 - (instancetype)
-       initWithConsumer:(id<TabStripConsumer>)consumer
-    tabGroupSyncService:(tab_groups::TabGroupSyncService*)tabGroupSyncService
-            browserList:(BrowserList*)browserList
-       messagingService:
-           (collaboration::messaging::MessagingBackendService*)messagingService
+        initWithConsumer:(id<TabStripConsumer>)consumer
+     tabGroupSyncService:(tab_groups::TabGroupSyncService*)tabGroupSyncService
+             browserList:(BrowserList*)browserList
+        messagingService:
+            (collaboration::messaging::MessagingBackendService*)messagingService
+    collaborationService:
+        (collaboration::CollaborationService*)collaborationService
+         shareKitService:(ShareKitService*)shareKitService
     NS_DESIGNATED_INITIALIZER;
 - (instancetype)init NS_UNAVAILABLE;
 
@@ -89,6 +97,17 @@ class WebStateID;
 
 // Closes and deletes all tabs in `tabGroupItem`.
 - (void)deleteGroup:(TabGroupItem*)tabGroupItem;
+
+// Leaves the shared group in `tabGroupItem`.
+- (void)leaveSharedGroup:(TabGroupItem*)tabGroupItem;
+
+// Deletes the shared group in `tabGroupItem`.
+- (void)deleteSharedGroup:(TabGroupItem*)tabGroupItem;
+
+// Completes the final removal of the last tab from its shared group. The last
+// tab is temporarily saved until this function is triggered upon user
+// confirmation.
+- (void)closeSavedTabFromGroup:(TabGroupItem*)tabGroupItem;
 
 @end
 

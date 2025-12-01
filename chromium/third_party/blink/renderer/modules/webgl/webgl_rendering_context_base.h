@@ -34,7 +34,7 @@
 #include "base/memory/raw_ptr_exclusion.h"
 #include "base/numerics/checked_math.h"
 #include "base/task/single_thread_task_runner.h"
-#include "device/vr/public/mojom/vr_service.mojom-blink.h"
+#include "device/vr/public/mojom/vr_service.mojom-blink-forward.h"
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/public/platform/web_graphics_context_3d_provider.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise_resolver.h"
@@ -42,7 +42,6 @@
 #include "third_party/blink/renderer/bindings/modules/v8/v8_webgl_context_attributes.h"
 #include "third_party/blink/renderer/core/html/canvas/canvas_context_creation_attributes_core.h"
 #include "third_party/blink/renderer/core/html/canvas/canvas_rendering_context.h"
-#include "third_party/blink/renderer/core/html/canvas/html_canvas_element.h"
 #include "third_party/blink/renderer/core/html/canvas/ukm_parameters.h"
 #include "third_party/blink/renderer/core/layout/content_change_type.h"
 #include "third_party/blink/renderer/core/typed_arrays/array_buffer_view_helpers.h"
@@ -52,6 +51,7 @@
 #include "third_party/blink/renderer/modules/webgl/webgl_uniform_location.h"
 #include "third_party/blink/renderer/modules/webgl/webgl_vertex_array_object_base.h"
 #include "third_party/blink/renderer/platform/bindings/name_client.h"
+#include "third_party/blink/renderer/platform/bindings/script_wrappable.h"
 #include "third_party/blink/renderer/platform/graphics/gpu/drawing_buffer.h"
 #include "third_party/blink/renderer/platform/graphics/gpu/extensions_3d_util.h"
 #include "third_party/blink/renderer/platform/graphics/gpu/webgl_image_conversion.h"
@@ -85,6 +85,7 @@ class CanvasResourceProvider;
 class EXTDisjointTimerQuery;
 class EXTDisjointTimerQueryWebGL2;
 class ExceptionState;
+class HTMLCanvasElement;
 class HTMLImageElement;
 class HTMLVideoElement;
 class ImageBitmap;
@@ -135,7 +136,8 @@ class ScopedRGBEmulationColorMask {
   const bool requires_emulation_;
 };
 
-class MODULES_EXPORT WebGLRenderingContextBase : public CanvasRenderingContext,
+class MODULES_EXPORT WebGLRenderingContextBase : public ScriptWrappable,
+                                                 public CanvasRenderingContext,
                                                  public DrawingBuffer::Client {
  public:
   WebGLRenderingContextBase(const WebGLRenderingContextBase&) = delete;
@@ -144,11 +146,7 @@ class MODULES_EXPORT WebGLRenderingContextBase : public CanvasRenderingContext,
 
   ~WebGLRenderingContextBase() override;
 
-  HTMLCanvasElement* canvas() const {
-    if (Host()->IsOffscreenCanvas())
-      return nullptr;
-    return static_cast<HTMLCanvasElement*>(Host());
-  }
+  HTMLCanvasElement* canvas() const;
 
   const UkmParameters GetUkmParameters() const {
     return Host()->GetUkmParameters();
@@ -636,7 +634,6 @@ class MODULES_EXPORT WebGLRenderingContextBase : public CanvasRenderingContext,
   };
 
   SkAlphaType GetAlphaType() const override;
-  SkColorType GetSkColorType() const override;
   viz::SharedImageFormat GetSharedImageFormat() const override;
   gfx::ColorSpace GetColorSpace() const override;
   scoped_refptr<StaticBitmapImage> GetImage(FlushReason) override;
@@ -906,10 +903,10 @@ class MODULES_EXPORT WebGLRenderingContextBase : public CanvasRenderingContext,
     LRUCanvasResourceProviderCache(wtf_size_t capacity, CacheType type);
     // The pointer returned is owned by the image buffer map.
     CanvasResourceProvider* GetCanvasResourceProvider(
-        SkISize size,
-        SkColorType sk_color_type,
+        gfx::Size size,
+        viz::SharedImageFormat format,
         SkAlphaType alpha_type,
-        sk_sp<SkColorSpace> sk_color_space);
+        const gfx::ColorSpace& color_space);
 
    private:
     void BubbleToFront(wtf_size_t idx);
@@ -1889,7 +1886,7 @@ class MODULES_EXPORT WebGLRenderingContextBase : public CanvasRenderingContext,
   friend class ScopedRGBEmulationColorMask;
   unsigned active_scoped_rgb_emulation_color_masks_;
 
-  ImageBitmap* TransferToImageBitmapBase(ScriptState*);
+  ImageBitmap* TransferToImageBitmapBase(ScriptState*, ExceptionState&);
 
   // Helper functions for tex(Sub)Image2D && texSubImage3D
   void TexImageHelperDOMArrayBufferView(TexImageParams params,

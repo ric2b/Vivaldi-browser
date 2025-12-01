@@ -33,7 +33,7 @@ const UIStrings = {
    *@description Next button title in Film Strip View of the Performance panel
    */
   nextFrame: 'Next frame',
-};
+} as const;
 const str_ = i18n.i18n.registerUIStrings('ui/legacy/components/perf_ui/FilmStripView.ts', UIStrings);
 const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
 export class FilmStripView extends Common.ObjectWrapper.eventMixin<EventTypes, typeof UI.Widget.HBox>(UI.Widget.HBox) {
@@ -45,7 +45,7 @@ export class FilmStripView extends Common.ObjectWrapper.eventMixin<EventTypes, t
     super(true);
     this.registerRequiredCSS(filmStripViewStyles);
     this.contentElement.classList.add('film-strip-view');
-    this.statusLabel = this.contentElement.createChild('div', 'label');
+    this.statusLabel = this.contentElement.createChild('div', 'gray-info-message');
     this.reset();
   }
 
@@ -173,13 +173,13 @@ export class Dialog {
     const nextButton = UI.UIUtils.createTextButton('\u25B6', this.onNextFrame.bind(this));
     UI.Tooltip.Tooltip.install(nextButton, i18nString(UIStrings.nextFrame));
     this.fragment = UI.Fragment.Fragment.build`
-      <x-widget flex=none margin=12px>
-        <x-hbox overflow=auto border='1px solid #ddd'>
+      <x-widget flex=none margin='var(--sys-size-7) var(--sys-size-8) var(--sys-size-8) var(--sys-size-8)'>
+        <x-hbox overflow=auto border='var(--sys-size-1) solid var(--sys-color-divider)'>
           <img $='image' data-film-strip-dialog-img style="max-height: 80vh; max-width: 80vw;"></img>
         </x-hbox>
-        <x-hbox x-center justify-content=center margin-top=10px>
+        <x-hbox x-center justify-content=center margin-top='var(--sys-size-6)'>
           ${prevButton}
-          <x-hbox $='time' margin=8px></x-hbox>
+          <x-hbox $='time' margin='var(--sys-size-5)'></x-hbox>
           ${nextButton}
         </x-hbox>
       </x-widget>

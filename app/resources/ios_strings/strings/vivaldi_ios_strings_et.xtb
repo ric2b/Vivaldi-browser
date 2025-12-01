@@ -5,7 +5,6 @@
 <translation id="1097355661841455597">Kas oleksid nõus oma arvamust jagama?</translation>
 <translation id="1137850887415122856">Privaatsete kaartide lukustamiseks on vaja Touch ID’d, Face ID’d või lukustuskoodi.</translation>
 <translation id="1310184829257917508">Küsitakse, kas avada link teisest rakendusest privaatsel kaardil</translation>
-<translation id="1561609750546413721">Vivaldi tõlge</translation>
 <translation id="207677936531967364">Uue privaatse kaardi sisu</translation>
 <translation id="2353953000228441783">Saitide vaikeversioon</translation>
 <translation id="2394192052244849643">Aseta ja otsi</translation>
@@ -17,7 +16,9 @@
 <translation id="3463990832590571933">Ava uuel privaatsel kaardil</translation>
 <translation id="3473652525653758699">Uus privaatne aken</translation>
 <translation id="3501504415290398157">Ava privaatsete kaartide lukk <ph name="BIOMETRIC_AUTHENITCATION_TYPE" />’ga</translation>
+<translation id="3607792383367580513">Tõlgi</translation>
 <translation id="3692650606013198282">Ava privaatsel kaardil</translation>
+<translation id="3922395466317605522">Menüü kohandamine</translation>
 <translation id="3981599532037327317">Ava ${url} privaatsel kaardil</translation>
 <translation id="398477389655464998">Kopeeri link esiletõstu juurde</translation>
 <translation id="4026745073321351206">🙄 Kas midagi oli valesti?</translation>
@@ -39,10 +40,9 @@
 <translation id="7307970171564921489">Ava privaatsete kaartide lukk <ph name="BIOMETRIC_AUTHENITCATION_TYPE" />’ga</translation>
 <translation id="7347289093190902150">Kas avada privaatsel kaardil?</translation>
 <translation id="7549299604720382000">Uus privaatne kaart</translation>
-<translation id="755255281989213264">Menüü kohandamine</translation>
-<translation id="7920949005883349320">Privaatsus ja turvalisus</translation>
 <translation id="7961015016161918242">Mitte kunagi</translation>
 <translation id="8326104954595890674">Uus privaatne kaart</translation>
 <translation id="8756969031206844760">Kas uuendada parooli?</translation>
+<translation id="9042893549633094279">Privaatsus ja turvalisus</translation>
 <translation id="9094033019050270033">Parooli uuendamine</translation>
 </translationbundle>

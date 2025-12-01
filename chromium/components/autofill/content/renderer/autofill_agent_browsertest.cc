@@ -39,7 +39,6 @@
 #include "content/public/test/test_utils.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/abseil-cpp/absl/types/variant.h"
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/common/features_generated.h"
 #include "third_party/blink/public/common/metrics/document_update_reason.h"
@@ -118,6 +117,11 @@ auto HasFormId(FormRendererId expectation) {
 auto HasFormIdAttribute(std::u16string id_attribute) {
   return Property("FormData::id_attribute", &FormData::id_attribute,
                   std::move(id_attribute));
+}
+
+auto HasButtonTitles(ButtonTitleList titles) {
+  return Property("FormFieldData::button_titles", &FormData::button_titles,
+                  std::move(titles));
 }
 
 auto HasFieldIdAttribute(std::u16string id_attribute) {
@@ -330,6 +334,46 @@ TEST_F(AutofillAgentTestWithFeatures, TriggerFormExtractionWithResponse) {
   task_environment_.FastForwardBy(AutofillAgent::kFormsSeenThrottle / 2);
   EXPECT_CALL(mock_callback, Run(true));
   task_environment_.FastForwardBy(AutofillAgent::kFormsSeenThrottle / 2);
+}
+
+// Tests that button titles are extracted and reported to the browser.
+TEST_F(AutofillAgentTestWithFeatures, ButtonTitlesExtractedForForm) {
+  ButtonTitleInfo expected_button = {
+      u"Submit", mojom::ButtonTitleType::INPUT_ELEMENT_SUBMIT_TYPE};
+  EXPECT_CALL(
+      autofill_driver(),
+      FormsSeen(HasSingleElementWhich(HasFormIdAttribute(u"f1"),
+                                      HasFieldsWithIdAttributes(u"t1", u"t2"),
+                                      HasButtonTitles({expected_button})),
+                IsEmpty()));
+  LoadHTML(
+      R"(<body>
+         <form id="f1">
+           <input type="text" id="t1">
+           <input type="text" id="t2">
+           <input type="submit" value="Submit" id="b1">
+         </form>
+         </body>)");
+  WaitForFormsSeen();
+}
+
+// Tests that button titles are not extracted for fields that are not under a
+// <form> tag.
+TEST_F(AutofillAgentTestWithFeatures,
+       ButtonTitlesNotExtractedForFormlessFields) {
+  EXPECT_CALL(
+      autofill_driver(),
+      FormsSeen(HasSingleElementWhich(HasFormIdAttribute(u""),
+                                      HasFieldsWithIdAttributes(u"t1", u"t2"),
+                                      HasButtonTitles({})),
+                IsEmpty()));
+  LoadHTML(
+      R"(<body>
+         <input type="text" id="t1">
+         <input type="text" id="t2">
+         <input type="submit" id="b1">
+         </body>)");
+  WaitForFormsSeen();
 }
 
 using AutofillAgentShadowDomTest = AutofillAgentTestWithFeatures;
@@ -591,6 +635,51 @@ TEST_F(AutofillAgentTestExtractLabeledTextNodeValue,
                                                callback.Get());
 }
 
+// This test checks if latency metrics record as failure case when
+// the final checkout amount is not found.
+TEST_F(AutofillAgentTestExtractLabeledTextNodeValue,
+       ExtractLabeledTextNodeValueIsNotFound_Renderer_Latency_Metrics) {
+  base::HistogramTester histogram_tester;
+  LoadHTML(R"(
+    <body>
+      <div>
+        <span>I'm not a total amount keyword</span>
+        <div>I'm not a total amount</div>
+      </div>
+    </body>)");
+  Callback callback;
+  EXPECT_CALL(callback, Run(Eq("")));
+  autofill_agent().ExtractLabeledTextNodeValue(u"^.448.60$", u"^Total$", 4,
+                                               callback.Get());
+  // Check the failure case records amount extraction latency spent in renderer
+  // in ms
+  histogram_tester.ExpectTotalCount(
+      "Autofill.RendererLabeledAmountExtractionLatency.Success", 0);
+  histogram_tester.ExpectTotalCount(
+      "Autofill.RendererLabeledAmountExtractionLatency.Failure", 1);
+}
+
+// This test checks if latency metrics record as success case when
+// the final checkout amount is found.
+TEST_F(AutofillAgentTestExtractLabeledTextNodeValue,
+       ExtractLabeledTextNodeValueIsFound_Renderer_Latency_Metrics) {
+  base::HistogramTester histogram_tester;
+  LoadHTML(R"(
+  <div>
+    <div>Total: <span>$56.70</span></div>
+  </div>)");
+  Callback callback;
+  EXPECT_CALL(callback, Run(Eq("$56.70")));
+  autofill_agent().ExtractLabeledTextNodeValue(u"^\\$56\\.70$", u"^Total:", 2,
+                                               callback.Get());
+  // Check the success case records amount extraction latency spent in renderer
+  // in ms
+  histogram_tester.ExpectTotalCount(
+      "Autofill.RendererLabeledAmountExtractionLatency.Success", 1);
+  histogram_tester.ExpectTotalCount(
+      "Autofill.RendererLabeledAmountExtractionLatency.Failure", 0);
+}
+
 class AutofillAgentTestExtractForms : public AutofillAgentTestWithFeatures {
  public:
   using Callback = base::MockCallback<
@@ -720,7 +809,8 @@ TEST_F(AutofillAgentTest, PreviewThenClear) {
   ASSERT_EQ(1U, forms.size());
   FormData form = *form_util::ExtractFormData(
       forms[0].GetDocument(), forms[0],
-      *base::MakeRefCounted<FieldDataManager>(), kCallTimerStateDummy);
+      *base::MakeRefCounted<FieldDataManager>(), kCallTimerStateDummy,
+      /*button_titles_cache=*/nullptr);
   ASSERT_EQ(form.fields().size(), 1u);
   blink::WebFormControlElement field =
       GetWebElementById("text_id").DynamicTo<blink::WebFormControlElement>();
@@ -737,57 +827,6 @@ TEST_F(AutofillAgentTest, PreviewThenClear) {
   EXPECT_EQ(field.GetAutofillState(), blink::WebAutofillState::kPreviewed);
   autofill_agent().ClearPreviewedForm();
   EXPECT_EQ(field.GetAutofillState(), blink::WebAutofillState::kNotFilled);
-}
-
-// Tests that when JS modifies a value, the autofill state is only lost if the
-// changes were not simple reformatting changes.
-TEST_F(AutofillAgentTest, JavaScriptChangedValue_AutofillState) {
-  base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitWithFeatures(
-      {blink::features::kAllowJavaScriptToResetAutofillState,
-       features::kAutofillFixCachingOnJavaScriptChanges},
-      /*disabled_features=*/{});
-  LoadHTML(R"(
-    <form id="form_id">
-      <input id="cc_number">
-      <input id="phone_number">
-      <input id="full_name">
-    </form>
-  )");
-  blink::WebFormControlElement cc_field =
-      GetWebElementById("cc_number").DynamicTo<blink::WebFormControlElement>();
-  blink::WebFormControlElement phone_field =
-      GetWebElementById("phone_number")
-          .DynamicTo<blink::WebFormControlElement>();
-  blink::WebFormControlElement name_field =
-      GetWebElementById("full_name").DynamicTo<blink::WebFormControlElement>();
-
-  cc_field.SetAutofillValue("4111111111111111");
-  ASSERT_EQ(cc_field.Value().Ascii(), "4111111111111111");
-  ASSERT_TRUE(cc_field.IsAutofilled());
-
-  phone_field.SetAutofillValue("12345678900");  //+1 [234] 567-8900
-  ASSERT_EQ(phone_field.Value().Ascii(), "12345678900");
-  ASSERT_TRUE(phone_field.IsAutofilled());
-
-  name_field.SetAutofillValue("John Doe");
-  ASSERT_EQ(name_field.Value().Ascii(), "John Doe");
-  ASSERT_TRUE(name_field.IsAutofilled());
-
-  ExecuteJavaScriptForTests(R"(
-    document.forms[0].elements[0].value = '4111 1111 1111 1111';
-    document.forms[0].elements[1].value = '+1 (234) 567-8900';
-    document.forms[0].elements[2].value = 'Mr. John Doe';
-  )");
-
-  ASSERT_EQ(cc_field.Value().Ascii(), "4111 1111 1111 1111");
-  EXPECT_TRUE(cc_field.IsAutofilled());
-
-  ASSERT_EQ(phone_field.Value().Ascii(), "+1 (234) 567-8900");
-  EXPECT_TRUE(phone_field.IsAutofilled());
-
-  ASSERT_EQ(name_field.Value().Ascii(), "Mr. John Doe");
-  EXPECT_FALSE(name_field.IsAutofilled());
 }
 
 // Tests that when JS adds a non-autofillable element to the DOM, we do not
@@ -1019,7 +1058,8 @@ TEST_P(AutofillAgentSubmissionTest,
 
   FormData form = *form_util::ExtractFormData(
       form_element.GetDocument(), form_element,
-      *base::MakeRefCounted<FieldDataManager>(), kCallTimerStateDummy);
+      *base::MakeRefCounted<FieldDataManager>(), kCallTimerStateDummy,
+      /*button_titles_cache=*/nullptr);
 
   ASSERT_EQ(1u, form.fields().size());
   test_api(form).field(0).set_value(u"autofilled");
@@ -1242,7 +1282,7 @@ TEST_P(AutofillAgentSubmissionTest,
   ASSERT_TRUE(form_element);
   std::optional<FormData> form = form_util::ExtractFormData(
       GetDocument(), form_element, autofill_agent().field_data_manager(),
-      kCallTimerStateDummy);
+      kCallTimerStateDummy, /*button_titles_cache=*/nullptr);
   ASSERT_TRUE(form.has_value());
 
   std::vector<blink::WebFormControlElement> field_elements =
@@ -1511,9 +1551,10 @@ class AutofillAgentTestCaret
       case FormControlType::kInputText:
       case FormControlType::kTextArea:
         test_api(autofill_agent())
-            .QueryAutofillSuggestions(
+            .ShowSuggestions(
                 GetElement().DynamicTo<blink::WebFormControlElement>(),
-                /*trigger_source=*/{}, /*form_cache=*/{});
+                AutofillSuggestionTriggerSource::kFormControlElementClicked,
+                /*form_cache=*/{});
         break;
       default:
         NOTREACHED();
@@ -1719,13 +1760,27 @@ TEST_P(AutofillAgentTestClick, MAYBE_AskForValuesToFillOnClick) {
         .Times(AtMost(1));
   }
 
+  // Makes sure the next AskForValuesToFill() event is not throttled in
+  // AutofillAgent.
+  auto skip_throttle = [this]() {
+    task_environment_.FastForwardBy(base::Seconds(1));
+  };
+
   WaitForFormsSeen();
+
+  skip_throttle();
   checkpoint.Call("click on field");
   Click("f");
+
+  skip_throttle();
   checkpoint.Call("click on field");
   Click("f");
+
+  skip_throttle();
   checkpoint.Call("click outside of field");
   Click("other");
+
+  skip_throttle();
   checkpoint.Call("right click on field");
   RightClick("f");
 }

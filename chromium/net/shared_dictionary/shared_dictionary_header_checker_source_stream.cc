@@ -11,6 +11,7 @@
 #include "net/base/hash_value.h"
 #include "net/base/io_buffer.h"
 #include "net/base/net_errors.h"
+#include "net/filter/source_stream_type.h"
 
 namespace net {
 namespace {
@@ -72,7 +73,7 @@ SharedDictionaryHeaderCheckerSourceStream::
         std::unique_ptr<SourceStream> upstream,
         Type type,
         const SHA256HashValue& dictionary_hash)
-    : SourceStream(SourceStream::TYPE_NONE),
+    : SourceStream(SourceStreamType::kNone),
       upstream_(std::move(upstream)),
       type_(type),
       dictionary_hash_(dictionary_hash),
@@ -144,7 +145,7 @@ bool SharedDictionaryHeaderCheckerSourceStream::CheckHeaderBuffer() const {
   if (GetSignatureInBuffer() != GetExpectedSignature(type_)) {
     return false;
   }
-  if (GetHashInBuffer() != base::span(dictionary_hash_.data)) {
+  if (GetHashInBuffer() != dictionary_hash_) {
     return false;
   }
   return true;

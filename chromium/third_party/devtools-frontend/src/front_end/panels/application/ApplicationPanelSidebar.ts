@@ -187,7 +187,7 @@ const UIStrings = {
   /**
    *@description Text in App Manifest View of the Application panel
    */
-  appManifest: 'App Manifest',
+  appManifest: 'Manifest',
   /**
    *@description Text in Application Panel Sidebar of the Application panel
    */
@@ -292,7 +292,7 @@ const UIStrings = {
    * @description Description text in the Application Panel describing a frame's resources
    */
   resourceDescription: 'On this page you can view the frame\'s resources.'
-};
+} as const;
 const str_ = i18n.i18n.registerUIStrings('panels/application/ApplicationPanelSidebar.ts', UIStrings);
 const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
 
@@ -568,8 +568,6 @@ export class ApplicationPanelSidebar extends UI.Widget.VBox implements SDK.Targe
     this.sharedStorageTreeElementDispatcher =
         new Common.ObjectWrapper.ObjectWrapper<SharedStorageTreeElementDispatcher.EventTypes>();
 
-    // Work-around for crbug.com/1152713: Something is wrong with custom scrollbars and size containment.
-    // @ts-ignore
     this.contentElement.style.contain = 'layout style';
   }
 
@@ -641,13 +639,13 @@ export class ApplicationPanelSidebar extends UI.Widget.VBox implements SDK.Targe
     for (const frame of SDK.ResourceTreeModel.ResourceTreeModel.frames()) {
       this.addCookieDocument(frame);
     }
-    const interestGroupModel = this.target && this.target.model(InterestGroupStorageModel);
+    const interestGroupModel = this.target?.model(InterestGroupStorageModel);
     if (interestGroupModel) {
       interestGroupModel.enable();
     }
 
     this.cacheStorageListTreeElement.initialize();
-    const backgroundServiceModel = this.target && this.target.model(BackgroundServiceModel) || null;
+    const backgroundServiceModel = this.target?.model(BackgroundServiceModel) || null;
     this.backgroundFetchTreeElement && this.backgroundFetchTreeElement.initialize(backgroundServiceModel);
     this.backgroundSyncTreeElement && this.backgroundSyncTreeElement.initialize(backgroundServiceModel);
     this.notificationsTreeElement.initialize(backgroundServiceModel);
@@ -758,7 +756,7 @@ export class ApplicationPanelSidebar extends UI.Widget.VBox implements SDK.Targe
     const elementPath = [element as UI.TreeOutline.TreeElement | ApplicationPanelTreeElement];
     for (let parent = element.parent as UI.TreeOutline.TreeElement | ApplicationPanelTreeElement | null;
          parent && 'itemURL' in parent && parent.itemURL; parent = parent.parent) {
-      elementPath.push(parent as ApplicationPanelTreeElement);
+      elementPath.push(parent);
     }
 
     let i = selection.length - 1;
@@ -816,7 +814,7 @@ export class ApplicationPanelSidebar extends UI.Widget.VBox implements SDK.Targe
   }
 
   private domStorageAdded(event: Common.EventTarget.EventTargetEvent<DOMStorage>): void {
-    const domStorage = (event.data as DOMStorage);
+    const domStorage = (event.data);
     this.addDOMStorage(domStorage);
   }
 
@@ -840,7 +838,7 @@ export class ApplicationPanelSidebar extends UI.Widget.VBox implements SDK.Targe
   }
 
   private domStorageRemoved(event: Common.EventTarget.EventTargetEvent<DOMStorage>): void {
-    const domStorage = (event.data as DOMStorage);
+    const domStorage = (event.data);
     this.removeDOMStorage(domStorage);
   }
 
@@ -946,10 +944,8 @@ export class ApplicationPanelSidebar extends UI.Widget.VBox implements SDK.Targe
       if (this.useTreeViewForExtensionStorage(extensionStorage) && parentListTreeElement.childCount() === 0) {
         this.extensionStorageListTreeElement?.removeChild(parentListTreeElement);
         this.extensionIdToStorageTreeParentElement.delete(extensionStorage.extensionId);
-      } else {
-        if (wasSelected) {
-          parentListTreeElement.select();
-        }
+      } else if (wasSelected) {
+        parentListTreeElement.select();
       }
     }
     this.extensionStorageTreeElements.delete(extensionStorage.key);
@@ -1005,10 +1001,6 @@ export class ApplicationPanelSidebar extends UI.Widget.VBox implements SDK.Targe
 
   showFrame(frame: SDK.ResourceTreeModel.ResourceTreeFrame): void {
     this.resourcesSection.revealAndSelectFrame(frame);
-  }
-
-  showFileSystem(view: UI.Widget.Widget): void {
-    this.innerShowView(view);
   }
 
   private innerShowView(view: UI.Widget.Widget): void {
@@ -1252,7 +1244,7 @@ export class ManifestChildTreeElement extends ApplicationPanelTreeElement {
     }
     const checkBoxElement = this.#sectionFieldElement.querySelector('.mask-checkbox');
     let focusableElement: HTMLElement|null = this.#sectionFieldElement.querySelector('[tabindex="0"]');
-    if (checkBoxElement && checkBoxElement.shadowRoot) {
+    if (checkBoxElement?.shadowRoot) {
       focusableElement = checkBoxElement.shadowRoot.querySelector('input') || null;
     } else if (!focusableElement) {
       // special case for protocol handler section since it is a custom Element and has different structure than the others
@@ -1633,8 +1625,8 @@ export class IDBObjectStoreTreeElement extends ApplicationPanelTreeElement {
     }
     for (const [indexName, treeElement] of this.idbIndexTreeElements.entries()) {
       if (!indexNames.has(indexName)) {
-        this.removeChild((treeElement as IDBIndexTreeElement));
-        this.idbIndexTreeElements.delete((indexName as string));
+        this.removeChild((treeElement));
+        this.idbIndexTreeElements.delete((indexName));
       }
     }
 

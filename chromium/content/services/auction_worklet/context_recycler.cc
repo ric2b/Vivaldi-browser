@@ -12,6 +12,7 @@
 #include "content/services/auction_worklet/bidder_lazy_filler.h"
 #include "content/services/auction_worklet/for_debugging_only_bindings.h"
 #include "content/services/auction_worklet/private_aggregation_bindings.h"
+#include "content/services/auction_worklet/private_model_training_bindings.h"
 #include "content/services/auction_worklet/real_time_reporting_bindings.h"
 #include "content/services/auction_worklet/register_ad_beacon_bindings.h"
 #include "content/services/auction_worklet/register_ad_macro_bindings.h"
@@ -22,6 +23,7 @@
 #include "content/services/auction_worklet/set_priority_bindings.h"
 #include "content/services/auction_worklet/set_priority_signals_override_bindings.h"
 #include "content/services/auction_worklet/shared_storage_bindings.h"
+#include "content/services/auction_worklet/text_conversion_helpers.h"
 #include "v8/include/v8-context.h"
 
 namespace auction_worklet {
@@ -85,6 +87,13 @@ void ContextRecycler::AddReportBindings(
   AddBindings(report_bindings_.get());
 }
 
+void ContextRecycler::AddPrivateModelTrainingBindings() {
+  DCHECK(!private_model_training_bindings_);
+  private_model_training_bindings_ =
+      std::make_unique<PrivateModelTrainingBindings>(v8_helper_);
+  AddBindings(private_model_training_bindings_.get());
+}
+
 void ContextRecycler::AddSetBidBindings() {
   DCHECK(!set_bid_bindings_);
   set_bid_bindings_ = std::make_unique<SetBidBindings>(v8_helper_);
@@ -106,6 +115,13 @@ void ContextRecycler::AddSharedStorageBindings(
       v8_helper_, shared_storage_host, source_auction_worklet_function,
       shared_storage_permissions_policy_allowed);
   AddBindings(shared_storage_bindings_.get());
+}
+
+void ContextRecycler::AddTextConversionHelpers() {
+  DCHECK(!text_conversion_helpers_);
+  text_conversion_helpers_ =
+      std::make_unique<TextConversionHelpers>(v8_helper_);
+  AddBindings(text_conversion_helpers_.get());
 }
 
 void ContextRecycler::AddInterestGroupLazyFiller() {

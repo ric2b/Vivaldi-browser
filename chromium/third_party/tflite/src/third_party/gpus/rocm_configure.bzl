@@ -28,10 +28,12 @@ load(
     "get_python_bin",
     "raw_exec",
     "realpath",
+    "relative_to",
     "which",
 )
 load(
     ":compiler_common_tools.bzl",
+    "get_cxx_inc_directories",
     "to_list_of_strings",
 )
 load(
@@ -55,6 +57,8 @@ _OS = "OS"
 _ROCM_VERSION = "ROCM_VERSION"
 
 _DEFAULT_ROCM_TOOLKIT_PATH = "/opt/rocm"
+_TF_ROCM_MULTIPLE_PATHS = "TF_ROCM_MULTIPLE_PATHS"
+_LLVM_PATH = "LLVM_PATH"
 
 def verify_build_defines(params):
     """Verify all variables that crosstool/BUILD.rocm.tpl expects are substituted.
@@ -106,80 +110,6 @@ def find_cc(repository_ctx, use_rocm_clang):
               " environment variable").format(target_cc_name, cc_path_envvar))
     return cc
 
-_INC_DIR_MARKER_BEGIN = "#include <...>"
-
-def _cxx_inc_convert(path):
-    """Convert path returned by cc -E xc++ in a complete path."""
-    path = path.strip()
-    return path
-
-def _get_cxx_inc_directories_impl(repository_ctx, cc, lang_is_cpp, tf_sysroot):
-    """Compute the list of default C or C++ include directories."""
-    if lang_is_cpp:
-        lang = "c++"
-    else:
-        lang = "c"
-    sysroot = []
-    if tf_sysroot:
-        sysroot += ["--sysroot", tf_sysroot]
-
-    # TODO: We pass -no-canonical-prefixes here to match the compiler flags,
-    #       but in rocm_clang CROSSTOOL file that is a `feature` and we should
-    #       handle the case when it's disabled and no flag is passed
-    result = raw_exec(repository_ctx, [
-        cc,
-        "-E",
-        "-x" + lang,
-        "-",
-        "-v",
-    ] + sysroot)
-    stderr = err_out(result)
-    index1 = stderr.find(_INC_DIR_MARKER_BEGIN)
-    if index1 == -1:
-        return []
-    index1 = stderr.find("\n", index1)
-    if index1 == -1:
-        return []
-    index2 = stderr.rfind("\n ")
-    if index2 == -1 or index2 < index1:
-        return []
-    index2 = stderr.find("\n", index2 + 1)
-    if index2 == -1:
-        inc_dirs = stderr[index1 + 1:]
-    else:
-        inc_dirs = stderr[index1 + 1:index2].strip()
-
-    return [
-        str(repository_ctx.path(_cxx_inc_convert(p)))
-        for p in inc_dirs.split("\n")
-    ]
-
-def get_cxx_inc_directories(repository_ctx, cc, tf_sysroot):
-    """Compute the list of default C and C++ include directories."""
-
-    # For some reason `clang -xc` sometimes returns include paths that are
-    # different from the ones from `clang -xc++`. (Symlink and a dir)
-    # So we run the compiler with both `-xc` and `-xc++` and merge resulting lists
-    includes_cpp = _get_cxx_inc_directories_impl(
-        repository_ctx,
-        cc,
-        True,
-        tf_sysroot,
-    )
-    includes_c = _get_cxx_inc_directories_impl(
-        repository_ctx,
-        cc,
-        False,
-        tf_sysroot,
-    )
-
-    includes_cpp_set = depset(includes_cpp)
-    return includes_cpp + [
-        inc
-        for inc in includes_c
-        if inc not in includes_cpp_set.to_list()
-    ]
-
 def auto_configure_fail(msg):
     """Output failure message when rocm configuration fails."""
     red = "\033[0;31m"
@@ -195,45 +125,36 @@ def auto_configure_warning(msg):
 # END cc_configure common functions (see TODO above).
 
 def _rocm_include_path(repository_ctx, rocm_config, bash_bin):
-    """Generates the cxx_builtin_include_directory entries for rocm inc dirs.
+    """Generates the entries for rocm inc dirs based on rocm_config.
 
     Args:
       repository_ctx: The repository context.
       rocm_config: The path to the gcc host compiler.
+      bash_bin: path to the bash interpreter.
 
     Returns:
-      A string containing the Starlark string for each of the gcc
-      host compiler include directories, which can be added to the CROSSTOOL
+      A string containing the Starlark string for each of the hipcc
+      compiler include directories, which can be added to the CROSSTOOL
       file.
     """
     inc_dirs = []
 
-    # Add full paths
-    rocm_toolkit_path = str(repository_ctx.path(rocm_config.rocm_toolkit_path))
-    inc_dirs.append(rocm_toolkit_path + "/llvm/lib/clang/8.0/include")
-    inc_dirs.append(rocm_toolkit_path + "/llvm/lib/clang/9.0.0/include")
-    inc_dirs.append(rocm_toolkit_path + "/llvm/lib/clang/10.0.0/include")
-    inc_dirs.append(rocm_toolkit_path + "/llvm/lib/clang/11.0.0/include")
-    inc_dirs.append(rocm_toolkit_path + "/llvm/lib/clang/12.0.0/include")
-    inc_dirs.append(rocm_toolkit_path + "/llvm/lib/clang/13.0.0/include")
-    inc_dirs.append(rocm_toolkit_path + "/llvm/lib/clang/14.0.0/include")
-    inc_dirs.append(rocm_toolkit_path + "/llvm/lib/clang/15.0.0/include")
-    inc_dirs.append(rocm_toolkit_path + "/llvm/lib/clang/16.0.0/include")
-    inc_dirs.append(rocm_toolkit_path + "/llvm/lib/clang/17.0.0/include")
-    inc_dirs.append(rocm_toolkit_path + "/llvm/lib/clang/17/include")
-    inc_dirs.append(rocm_toolkit_path + "/lib/llvm/lib/clang/17/include")
-    inc_dirs.append(rocm_toolkit_path + "/llvm/lib/clang/18/include")
-    if int(rocm_config.rocm_version_number) >= 60200:
-        inc_dirs.append(rocm_toolkit_path + "/lib/llvm/lib/clang/18/include")
-        inc_dirs.append(rocm_toolkit_path + "/lib/llvm/lib/clang/19/include")
-        inc_dirs.append(rocm_toolkit_path + "/lib/llvm/lib/clang/20/include")
+    # Add HIP-Clang headers (relative to rocm root)
+    rocm_path = repository_ctx.path(rocm_config.rocm_toolkit_path)
+    clang_path = rocm_path.get_child("llvm/bin/clang")
+    resource_dir_result = execute(repository_ctx, [str(clang_path), "-print-resource-dir"])
 
-    # Support hcc based off clang 10.0.0 (for ROCm 3.3)
-    inc_dirs.append(rocm_toolkit_path + "/hcc/compiler/lib/clang/10.0.0/include/")
-    inc_dirs.append(rocm_toolkit_path + "/hcc/lib/clang/10.0.0/include")
+    if resource_dir_result.return_code:
+        auto_configure_fail("Failed to run hipcc -print-resource-dir: %s" % err_out(resource_dir_result))
 
-    # Add hcc headers
-    inc_dirs.append(rocm_toolkit_path + "/hcc/include")
+    resource_dir_abs = resource_dir_result.stdout.strip()
+
+    resource_dir_rel = relative_to(repository_ctx, str(rocm_path.realpath), resource_dir_abs, bash_bin)
+
+    resource_dir = str(rocm_path.get_child(resource_dir_rel))
+
+    inc_dirs.append(resource_dir + "/include")
+    inc_dirs.append(resource_dir + "/share")
 
     return inc_dirs
 
@@ -603,12 +524,31 @@ def _setup_rocm_distro_dir(repository_ctx):
     bash_bin = get_bash_bin(repository_ctx)
     os = repository_ctx.os.environ.get(_OS)
     rocm_version = repository_ctx.os.environ.get(_ROCM_VERSION)
+    multiple_paths = repository_ctx.os.environ.get(_TF_ROCM_MULTIPLE_PATHS)
     if os and rocm_version:
         redist = rocm_redist[os][rocm_version]
         repository_ctx.file("rocm/.index")
         for archive in redist["archives"]:
             _download_package(repository_ctx, archive)
         return _get_rocm_config(repository_ctx, bash_bin, "{}/{}".format(_DISTRIBUTION_PATH, redist["rocm_root"]), "/{}".format(redist["rocm_root"]))
+    elif multiple_paths:
+        paths_list = multiple_paths.split(":")
+        for rocm_custom_path in paths_list:
+            cmd = "find " + rocm_custom_path + "/* \\( -type f -o -type l \\)"
+            result = execute(repository_ctx, [bash_bin, "-c", cmd]).stdout.strip().split("\n")
+            for file_path in result:
+                relative_path = file_path[len(rocm_custom_path):]
+                symlink_path = _DISTRIBUTION_PATH + relative_path
+                if files_exist(repository_ctx, [symlink_path], bash_bin)[0]:
+                    fail("File already present: " + relative_path)
+                else:
+                    repository_ctx.symlink(file_path, symlink_path)
+        llvm_path = repository_ctx.os.environ.get(_LLVM_PATH)
+        if llvm_path:
+            repository_ctx.symlink(llvm_path, _DISTRIBUTION_PATH + "/llvm")
+            repository_ctx.symlink(llvm_path, _DISTRIBUTION_PATH + "/lib/llvm")
+            repository_ctx.symlink(llvm_path + "/amdgcn", _DISTRIBUTION_PATH + "/amdgcn")
+        return _get_rocm_config(repository_ctx, bash_bin, _DISTRIBUTION_PATH, _DISTRIBUTION_PATH)
     else:
         rocm_path = repository_ctx.os.environ.get(_ROCM_TOOLKIT_PATH, _DEFAULT_ROCM_TOOLKIT_PATH)
         repository_ctx.report_progress("Using local rocm installation {}".format(rocm_path))  # buildifier: disable=print
@@ -683,6 +623,16 @@ def _create_local_rocm_repository(repository_ctx):
     if rocm_version_number >= 40500:
         repository_dict["%{hipsolver_lib}"] = rocm_libs["hipsolver"].file_name
         repository_dict["%{hipblas_lib}"] = rocm_libs["hipblas"].file_name
+
+    multiple_paths = repository_ctx.os.environ.get(_TF_ROCM_MULTIPLE_PATHS)
+    if multiple_paths:
+        paths_list = multiple_paths.split(":")
+        rocm_lib_paths = []
+        for rocm_custom_path in paths_list:
+            lib_path = rocm_custom_path + "/lib/"
+            if files_exist(repository_ctx, [lib_path], bash_bin)[0] and not lib_path in rocm_lib_paths:
+                rocm_lib_paths.append(lib_path)
+        repository_dict["%{rocm_lib_paths}"] = ":".join(rocm_lib_paths)
 
     repository_ctx.template(
         "rocm/BUILD",
@@ -885,7 +835,7 @@ remote_rocm_configure = repository_rule(
     attrs = {
         "environ": attr.string_dict(),
         "_find_rocm_config": attr.label(
-            default = Label("@local_tsl//third_party/gpus:find_rocm_config.py"),
+            default = Label("@local_xla//third_party/gpus:find_rocm_config.py"),
         ),
     },
 )
@@ -895,7 +845,7 @@ rocm_configure = repository_rule(
     environ = _ENVIRONS + [_TF_ROCM_CONFIG_REPO],
     attrs = {
         "_find_rocm_config": attr.label(
-            default = Label("@local_tsl//third_party/gpus:find_rocm_config.py"),
+            default = Label("@local_xla//third_party/gpus:find_rocm_config.py"),
         ),
     },
 )

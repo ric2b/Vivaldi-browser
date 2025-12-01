@@ -37,6 +37,7 @@ luci.bucket(
                 # or fix yet.
                 "mdb/chrome-active-sheriffs",
                 "mdb/chrome-gpu",
+                "mdb/clank-engprod",
                 "mdb/bling-engprod",
             ],
             users = [
@@ -149,6 +150,16 @@ luci.gitiles_poller(
     ("mirrors", "{} CQ Mirrors Console".format(settings.project_title)),
 )]
 
+def register_gardener_rotation_consoles():
+    rotations = [getattr(builders.gardener_rotations, a) for a in dir(builders.gardener_rotations)]
+    for rotation in rotations:
+        if rotation:
+            consoles.console_view(name = rotation.console_name)
+            if rotation.tree_closer_console:
+                consoles.console_view(name = rotation.tree_closer_console)
+
+register_gardener_rotation_consoles()
+
 # The main console includes some entries for builders from the chrome project
 [branches.console_view_entry(
     console_view = "main",
@@ -190,7 +201,7 @@ consoles.console_view(
     ("fuchsia-fyi-astro", "hardware", "ast"),
     ("fuchsia-fyi-nelson", "hardware", "nsn"),
     ("fuchsia-fyi-sherlock", "hardware", "sher"),
-    ("fuchsia-fyi-sherlock-qemu", "hardware|emu", "sher"),
+    ("fuchsia-fyi-sherlock-qemu", "hardware", "emu-sher"),
     ("fuchsia-smoke-astro", "hardware|smoke", "ast"),
     ("fuchsia-smoke-nelson", "hardware|smoke", "nsn"),
     ("fuchsia-smoke-sherlock", "hardware|smoke", "sher"),
@@ -200,6 +211,7 @@ consoles.console_view(
     ("fuchsia-webgl-astro", "hardware|webgl", "ast"),
     ("fuchsia-webgl-nelson", "hardware|webgl", "nsn"),
     ("fuchsia-webgl-sherlock", "hardware|webgl", "sher"),
+    ("fuchsia-webgl-sherlock-qemu", "hardware|webgl", "emu-sher"),
     ("fuchsia-x64", "p/chrome|official", "x64"),
     ("fuchsia-x64-nest-sd", "p/chrome|official", "nest-x64"),
 )]
@@ -209,8 +221,9 @@ exec("./ci/checks.star")
 exec("./ci/chromium.star")
 exec("./ci/chromium.accessibility.star")
 exec("./ci/chromium.android.star")
-exec("./ci/chromium.android.desktop.star")
 exec("./ci/chromium.android.fyi.star")
+exec("./ci/chromium.android.desktop.star")
+exec("./ci/chromium.android.desktop.fyi.star")
 exec("./ci/chromium.angle.star")
 exec("./ci/chromium.cft.star")
 exec("./ci/chromium.chromiumos.star")

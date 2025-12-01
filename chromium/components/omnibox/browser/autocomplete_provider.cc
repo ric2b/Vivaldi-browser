@@ -12,6 +12,7 @@
 #include <algorithm>
 #include <string>
 
+#include "base/i18n/time_formatting.h"
 #include "base/notreached.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
@@ -87,6 +88,10 @@ const char* AutocompleteProvider::TypeToString(Type type) {
       return "EnterpriseSearchAggregator";
     case TYPE_UNSCOPED_EXTENSION:
       return "UnscopedExtension";
+    case TYPE_RECENTLY_CLOSED_TABS:
+      return "RecentlyClosedTabs";
+    case TYPE_CONTEXTUAL_SEARCH:
+      return "ContextualSearch";
 
     // Vivaldi
     case TYPE_BOOKMARK_NICKNAME:
@@ -101,6 +106,29 @@ const char* AutocompleteProvider::TypeToString(Type type) {
           << "Unhandled AutocompleteProvider::Type " << type;
       return "Unknown";
   }
+}
+
+const std::u16string AutocompleteProvider::LocalizedLastModifiedString(
+    base::Time now,
+    base::Time modified_time) {
+  // Use shorthand if the times fall on the same day or in the same year.
+  base::Time::Exploded exploded_modified_time;
+  base::Time::Exploded exploded_now;
+  modified_time.LocalExplode(&exploded_modified_time);
+  now.LocalExplode(&exploded_now);
+  if (exploded_modified_time.year == exploded_now.year) {
+    if (exploded_modified_time.month == exploded_now.month &&
+        exploded_modified_time.day_of_month == exploded_now.day_of_month) {
+      // Same local calendar day - use localized time.
+      return base::TimeFormatTimeOfDay(modified_time);
+    }
+
+    // Same year but not the same day: use abbreviated month/day ("Jan 1").
+    return base::LocalizedTimeFormatWithPattern(modified_time, "MMMd");
+  }
+
+  // No shorthand; display full MM/DD/YYYY.
+  return base::TimeFormatShortDateNumeric(modified_time);
 }
 
 void AutocompleteProvider::AddListener(AutocompleteProviderListener* listener) {
@@ -160,7 +188,7 @@ AutocompleteProvider::AsOmniboxEventProviderType() const {
     case TYPE_QUERY_TILE:
       return metrics::OmniboxEventProto::QUERY_TILE;
     case TYPE_MOST_VISITED_SITES:
-      return metrics::OmniboxEventProto::ZERO_SUGGEST;
+      return metrics::OmniboxEventProto::MOST_VISITED_SITES;
     case TYPE_VERBATIM_MATCH:
       return metrics::OmniboxEventProto::ZERO_SUGGEST;
     case TYPE_VOICE_SUGGEST:
@@ -181,6 +209,10 @@ AutocompleteProvider::AsOmniboxEventProviderType() const {
       return metrics::OmniboxEventProto::ENTERPRISE_SEARCH_AGGREGATOR;
     case TYPE_UNSCOPED_EXTENSION:
       return metrics::OmniboxEventProto::UNSCOPED_EXTENSION;
+    case TYPE_RECENTLY_CLOSED_TABS:
+      return metrics::OmniboxEventProto::RECENTLY_CLOSED_TABS;
+    case TYPE_CONTEXTUAL_SEARCH:
+      return metrics::OmniboxEventProto::CONTEXTUAL_SEARCH_PROVIDER;
 
     // Vivaldi
     case TYPE_BOOKMARK_NICKNAME:
@@ -189,6 +221,8 @@ AutocompleteProvider::AsOmniboxEventProviderType() const {
       return metrics::OmniboxEventProto::DIRECT_MATCH;
     case TYPE_RECENT_TYPED_HISTORY:
       return metrics::OmniboxEventProto::RECENT_TYPED_HISTORY;
+    // End Vivaldi
+
     default:
       // TODO(crbug.com/40940012) This was a NOTREACHED that we converted to
       //   help debug crbug.com/1499235 since NOTREACHED's don't log their

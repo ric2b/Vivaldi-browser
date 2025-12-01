@@ -22,6 +22,14 @@ class MessagingBackendService;
 }  // namespace messaging
 }  // namespace collaboration
 
+namespace data_sharing {
+class DataSharingService;
+}  // namespace data_sharing
+
+namespace tab_groups {
+class TabGroupSyncService;
+}  // namespace tab_groups
+
 class BrowserList;
 class FaviconLoader;
 @protocol GridToolbarsMutator;
@@ -30,10 +38,6 @@ class ShareKitService;
 @protocol TabGroupsPanelConsumer;
 @protocol TabGroupsPanelMediatorDelegate;
 class WebStateList;
-
-namespace tab_groups {
-class TabGroupSyncService;
-}  // namespace tab_groups
 
 // TabGroupsPanelMediator controls the Tab Groups panel in Tab Grid.
 @interface TabGroupsPanelMediator : NSObject <TabGridPageMutator,
@@ -65,6 +69,8 @@ class TabGroupSyncService;
                messagingService:
                    (collaboration::messaging::MessagingBackendService*)
                        messagingService
+             dataSharingService:
+                 (data_sharing::DataSharingService*)dataSharingService
             regularWebStateList:(WebStateList*)regularWebStateList
                   faviconLoader:(FaviconLoader*)faviconLoader
                disabledByPolicy:(BOOL)disabled
@@ -74,6 +80,12 @@ class TabGroupSyncService;
 
 // Deletes a synced group for `syncID`.
 - (void)deleteSyncedTabGroup:(const base::Uuid&)syncID;
+
+// Deletes a shared group for `syncID`.
+- (void)deleteSharedTabGroup:(const base::Uuid&)syncID;
+
+// Leaves a shared group for `syncID`.
+- (void)leaveSharedTabGroup:(const base::Uuid&)syncID;
 
 // Disconnects the mediator.
 - (void)disconnect;

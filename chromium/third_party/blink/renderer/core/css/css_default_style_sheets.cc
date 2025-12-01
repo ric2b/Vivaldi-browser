@@ -141,6 +141,7 @@ void CSSDefaultStyleSheets::Reset() {
   fullscreen_style_sheet_.Clear();
   marker_style_sheet_.Clear();
   scroll_button_style_sheet_.Clear();
+  scroll_marker_style_sheet_.Clear();
   permission_element_style_sheet_.Clear();
   // Recreate the default style sheet to clean up possible SVG resources.
   String default_rules = UncompressResourceAsASCIIString(IDR_UASTYLE_HTML_CSS) +
@@ -177,7 +178,7 @@ void CSSDefaultStyleSheets::VerifyUniversalRuleCount() {
 
   if (media_controls_style_sheet_) {
     default_media_controls_style_->CompactRulesIfNeeded();
-    DCHECK_EQ(default_media_controls_style_->UniversalRules().size(), 4u);
+    DCHECK_EQ(default_media_controls_style_->UniversalRules().size(), 5u);
   }
 
   if (fullscreen_style_sheet_) {
@@ -188,14 +189,18 @@ void CSSDefaultStyleSheets::VerifyUniversalRuleCount() {
            default_fullscreen_style_->UniversalRules().size() == 8u);
   }
 
-  if (marker_style_sheet_ || scroll_button_style_sheet_) {
+  if (marker_style_sheet_ || scroll_button_style_sheet_ ||
+      scroll_marker_style_sheet_) {
     default_pseudo_element_style_->CompactRulesIfNeeded();
     size_t expected_rule_count = 0u;
     if (marker_style_sheet_) {
       expected_rule_count += 3u;
     }
     if (scroll_button_style_sheet_) {
-      expected_rule_count += 32u;
+      expected_rule_count += 5u;
+    }
+    if (scroll_marker_style_sheet_) {
+      expected_rule_count += 6u;
     }
     DCHECK_EQ(default_pseudo_element_style_->UniversalRules().size(),
               expected_rule_count);
@@ -321,8 +326,7 @@ bool CSSDefaultStyleSheets::EnsureDefaultStyleSheetsForElement(
   }
 
   // FIXME: We should assert that the sheet only styles MathML elements.
-  if (element.namespaceURI() == mathml_names::kNamespaceURI &&
-      !mathml_style_sheet_) {
+  if (element.IsMathMLElement() && !mathml_style_sheet_) {
     mathml_style_sheet_ =
         ParseUASheet(UncompressResourceAsASCIIString(IDR_UASTYLE_MATHML_CSS));
     AddRulesToDefaultStyleSheets(mathml_style_sheet_, NamespaceType::kMathML);
@@ -366,8 +370,7 @@ bool CSSDefaultStyleSheets::EnsureDefaultStyleSheetsForElement(
       builder.Append("video::cue { ");
       if (CSSParser::ParseColor(
               color,
-              MaybeRemoveCSSImportant(settings->GetTextTrackWindowColor()),
-              /*strict=*/true) &&
+              MaybeRemoveCSSImportant(settings->GetTextTrackWindowColor())) &&
           color.Alpha() > 0) {
         AddTextTrackCSSProperties(&builder, CSSPropertyID::kBackgroundColor,
                                   settings->GetTextTrackWindowColor());
@@ -425,6 +428,28 @@ bool CSSDefaultStyleSheets::EnsureDefaultStyleSheetsForPseudoElement(
       default_pseudo_element_style_->AddRulesFromSheet(ScrollButtonStyleSheet(),
                                                        ScreenEval());
       default_pseudo_element_style_->CompactRulesIfNeeded();
+      // We just added a new :focus-visible rule to the UA stylesheet, and
+      // RuleSetGroup caches whether we have any such rules or not, so we need
+      // to clear the cache.
+      rule_set_group_cache_.clear();
+      return true;
+    }
+    case kPseudoIdScrollMarker: {
+      if (scroll_marker_style_sheet_) {
+        return false;
+      }
+      scroll_marker_style_sheet_ = ParseUASheet(
+          UncompressResourceAsASCIIString(IDR_UASTYLE_SCROLL_MARKER_CSS));
+      if (!default_pseudo_element_style_) {
+        default_pseudo_element_style_ = MakeGarbageCollected<RuleSet>();
+      }
+      default_pseudo_element_style_->AddRulesFromSheet(ScrollMarkerStyleSheet(),
+                                                       ScreenEval());
+      default_pseudo_element_style_->CompactRulesIfNeeded();
+      // We just added a new :focus-visible rule to the UA stylesheet, and
+      // RuleSetGroup caches whether we have any such rules or not, so we need
+      // to clear the cache.
+      rule_set_group_cache_.clear();
       return true;
     }
     case kPseudoIdMarker: {
@@ -573,6 +598,7 @@ void CSSDefaultStyleSheets::Trace(Visitor* visitor) const {
   visitor->Trace(fullscreen_style_sheet_);
   visitor->Trace(marker_style_sheet_);
   visitor->Trace(scroll_button_style_sheet_);
+  visitor->Trace(scroll_marker_style_sheet_);
   visitor->Trace(default_json_document_style_);
   visitor->Trace(default_forced_colors_media_controls_style_);
   visitor->Trace(rule_set_group_cache_);

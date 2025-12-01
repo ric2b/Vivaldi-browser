@@ -62,19 +62,20 @@ export class BatchUploadAppElement extends BatchUploadAppElementBase {
       BatchUploadBrowserProxyImpl.getInstance();
 
   // Account information displayed in the view.
-  protected accountInfo_: BatchUploadAccountInfo = createEmptyAccountInfo();
-  protected dialogSubtitle_: string = '';
+  protected accessor accountInfo_: BatchUploadAccountInfo =
+      createEmptyAccountInfo();
+  protected accessor dialogSubtitle_: string = '';
 
   // Stores the input coming from the browser initialized in
   // `initializeInputAndOutputData_()`.
-  protected dataSections_: DataContainer[] = [];
+  protected accessor dataSections_: DataContainer[] = [];
 
   // State of the section toggles, this is needed to control the save button
   // state.
   protected dataSectionsToggles_: boolean[] = [];
 
   // Whether save to account button is enabled or not.
-  protected isSaveEnabled_: boolean = true;
+  protected accessor isSaveEnabled_: boolean = true;
 
   // Observes the size of `dataSections` to know whether to show a border or not
   // if scrolling is possible.
@@ -109,12 +110,18 @@ export class BatchUploadAppElement extends BatchUploadAppElementBase {
     this.resizeObserver_ = new ResizeObserver(() => {
       const scrollbarVisible =
           dataContainer.scrollHeight > dataContainer.clientHeight;
-      // Show the container border line if the scroll bar is visible.
-      dataContainer.classList.toggle('border-line', scrollbarVisible);
-      // Adapt the section padding if the scrollbar is visible by overriding the
-      // value (removing the scrollbar width).
-      this.$.dataSections.classList.toggle(
-          'data-sections-with-scrollbar', scrollbarVisible);
+      // Defer style changes to after the browser repaints to avoid triggering a
+      // resize loop. Applying the style changes would not interfere with the
+      // previously computed value of `scrollbarVisible` on the newer
+      // notification. Check crbug.com/397366630.
+      requestAnimationFrame(() => {
+        // Show the container border line if the scroll bar is visible.
+        dataContainer.classList.toggle('border-line', scrollbarVisible);
+        // Adapt the section padding if the scrollbar is visible by overriding
+        // the value (removing the scrollbar width).
+        this.$.dataSections.classList.toggle(
+            'data-sections-with-scrollbar', scrollbarVisible);
+      });
     });
     this.resizeObserver_.observe(dataContainer);
   }
@@ -168,7 +175,7 @@ export class BatchUploadAppElement extends BatchUploadAppElementBase {
     const idsToMove: number[][] = [];
 
     // Get the section element list.
-    const dataSections = this.shadowRoot!.querySelectorAll(`data-section`);
+    const dataSections = this.shadowRoot.querySelectorAll(`data-section`);
     // Getting the output from each section.
     for (let i = 0; i < dataSections.length; ++i) {
       const selectedIds = dataSections[i]!.dataSelected;

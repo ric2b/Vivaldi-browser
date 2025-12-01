@@ -138,7 +138,7 @@ bool TestShellDelegate::CanGoBack(gfx::NativeWindow window) const {
   return can_go_back_;
 }
 
-void TestShellDelegate::SetTabScrubberChromeOSEnabled(bool enabled) {
+void TestShellDelegate::SetTabScrubberEnabled(bool enabled) {
   tab_scrubber_enabled_ = enabled;
 }
 
@@ -173,10 +173,6 @@ void TestShellDelegate::BindMultiDeviceSetup(
         receiver) {
   if (multidevice_setup_binder_)
     multidevice_setup_binder_.Run(std::move(receiver));
-}
-
-void TestShellDelegate::BindMultiCaptureService(
-    mojo::PendingReceiver<video_capture::mojom::MultiCaptureService> receiver) {
 }
 
 void TestShellDelegate::SetCanGoBack(bool can_go_back) {

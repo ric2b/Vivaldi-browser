@@ -2,12 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifndef V8_COMPILER_WASM_COMPILER_H_
+#define V8_COMPILER_WASM_COMPILER_H_
+
 #if !V8_ENABLE_WEBASSEMBLY
 #error This header should only be included if WebAssembly is enabled.
 #endif  // !V8_ENABLE_WEBASSEMBLY
-
-#ifndef V8_COMPILER_WASM_COMPILER_H_
-#define V8_COMPILER_WASM_COMPILER_H_
 
 #include <memory>
 #include <utility>
@@ -40,7 +40,7 @@ class TurbofanCompilationJob;
 namespace compiler {
 // Forward declarations for some compiler data structures.
 class CallDescriptor;
-class Graph;
+class TFGraph;
 class MachineGraph;
 class Node;
 class NodeOriginTable;
@@ -203,7 +203,7 @@ class WasmGraphBuilder {
   bool has_simd() const { return has_simd_; }
 
   MachineGraph* mcgraph() { return mcgraph_; }
-  Graph* graph();
+  TFGraph* graph();
   Zone* graph_zone();
 
  protected:

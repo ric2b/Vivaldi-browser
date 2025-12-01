@@ -82,12 +82,14 @@ cc_library(
 cc_library(
     name = "util",
     srcs = [
-        "base_input_stream.cc",
         "byte_utils.cc",
+        "stream_reader.cc",
+        "stream_writer.cc",
     ],
     hdrs = [
-        "base_input_stream.h",
         "byte_utils.h",
+        "stream_reader.h",
+        "stream_writer.h",
     ],
     visibility = [
         "//connections:__subpackages__",
@@ -291,6 +293,7 @@ cc_library(
 cc_library(
     name = "comm",
     srcs = [
+        "awdl.cc",
         "ble.cc",
         "ble_v2.cc",
         "bluetooth_classic.cc",
@@ -301,6 +304,7 @@ cc_library(
         "wifi_lan.cc",
     ],
     hdrs = [
+        "awdl.h",
         "ble.h",
         "ble_v2.h",
         "bluetooth_adapter.h",
@@ -334,9 +338,11 @@ cc_library(
         # TODO: Support WebRTC
         "@com_google_absl//absl/base:core_headers",
         "@com_google_absl//absl/container:flat_hash_map",
+        "@com_google_absl//absl/container:flat_hash_set",
         "@com_google_absl//absl/functional:any_invocable",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/strings:str_format",
         "@com_google_absl//absl/types:optional",
     ],
 )
@@ -398,6 +404,8 @@ cc_test(
     name = "platform_util_test",
     srcs = [
         "byte_utils_test.cc",
+        "stream_reader_test.cc",
+        "stream_writer_test.cc",
     ],
     deps = [
         ":base",
@@ -476,6 +484,7 @@ cc_test(
         ":types",
         "//connections/implementation/flags:connections_flags",
         "//internal/flags:nearby_flags",
+        "//internal/platform:uuid",
         "//internal/platform/implementation:comm",
         "//internal/platform/implementation/g3",  # build_cleaner: keep
         "//proto:connections_enums_cc_proto",

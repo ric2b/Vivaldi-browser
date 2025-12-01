@@ -111,7 +111,7 @@ class V8_EXPORT_PRIVATE ExternalEntityTable
 
     // Similar to `num_segments()` but also locks the mutex.
     uint32_t NumSegmentsForTesting() {
-      base::SpinningMutexGuard guard(&mutex_);
+      base::MutexGuard guard(&mutex_);
       return num_segments();
     }
 
@@ -143,7 +143,7 @@ class V8_EXPORT_PRIVATE ExternalEntityTable
     bool is_internal_read_only_space_ = false;
 
     // Mutex guarding access to the segments_ set.
-    base::SpinningMutex mutex_;
+    base::Mutex mutex_;
   };
 
   // A Space that supports black allocations.
@@ -167,6 +167,7 @@ class V8_EXPORT_PRIVATE ExternalEntityTable
   // allocating a new segment.
   // This method is atomic and can be called from background threads.
   uint32_t AllocateEntry(Space* space);
+  std::optional<uint32_t> TryAllocateEntry(Space* space);
 
   // Attempts to allocate an entry in the given space below the specified index.
   //
@@ -182,12 +183,12 @@ class V8_EXPORT_PRIVATE ExternalEntityTable
   // thereby allocating the entry at the start of the freelist.
   bool TryAllocateEntryFromFreelist(Space* space, FreelistHead freelist);
 
-  // Allocate a new segment and add it to the given space.
+  // Trey to allocate a new segment and add it to the given space.
   //
   // This should only be called when the freelist of the space is currently
   // empty. It will then refill the freelist with all entries in the newly
-  // allocated segment.
-  FreelistHead Extend(Space* space);
+  // allocated segment. Fails if there is no space left.
+  std::optional<FreelistHead> TryExtend(Space* space);
 
   // Sweeps the given space.
   //

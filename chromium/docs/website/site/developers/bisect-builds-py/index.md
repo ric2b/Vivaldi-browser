@@ -43,13 +43,13 @@ Run it like this:
 For example,
 
 ```none
-python tools/bisect-builds.py -a mac -g 782793 -b 800218 --use-local-cache --verify-range -- --no-first-run --user-data-dir=/tmp http://example.com
+python tools/bisect-builds.py -a mac -g 782793 -b 800218 --verify-range -- --no-first-run --user-data-dir=/tmp http://example.com
 ```
 
 Also, you can specify either end of the bisect range using version numbers.
 
 ```none
-python tools/bisect-builds.py -a mac -g 85.0.4183.121 -b 86.0.4240.193 --use-local-cache --verify-range
+python tools/bisect-builds.py -a mac -g 85.0.4183.121 -b 86.0.4240.193 --verify-range
 ```
 
 The two range specifications above are equivalent. Note that in all cases the
@@ -81,11 +81,13 @@ and FAILURE_REV with the range start and end):
 
 <https://test-results.appspot.com/revision_range?start=SUCCESS_REV&end=FAILURE_REV>
 
-**Notes:** The default option is snapshot(Chromium build). There are also
-release build(-r) and official build(-o) available for Googlers.
-Googlers should use official build(-o) whenever possible to bisect to a
-single commit. Please refer to
-[go/chrome-bisect](http://go/chrome-bisect) for more information.
+**Notes:** The default option is snapshot (Chromium build). We also offer
+[CfT](https://developer.chrome.com/blog/chrome-for-testing) builds (-cft) that
+are as close to regular Chrome as possible with a single commit for public use.
+For Googlers, there are release builds (-r) and official builds (-o) available.
+Googlers should use official builds (-o) whenever possible to bisect to a single
+commit. Please refer to [go/chrome-bisect](http://go/chrome-bisect) for more
+information.
 
 **Getting an initial revision range**
 

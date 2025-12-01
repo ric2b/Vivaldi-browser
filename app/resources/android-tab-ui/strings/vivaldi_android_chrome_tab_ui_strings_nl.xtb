@@ -1,9 +1,14 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="nl">
+<translation id="2277224997687551299">Groepsnaam bewerken</translation>
+<translation id="2330212241471632770">{TABS_COUNT,plural, =1{Tabblad toevoegen aan bladwijzers}other{Tabbladen toevoegen aan bladwijzers}}</translation>
 <translation id="2947471979790858922">Jouw activiteit in deze privétabbladen wordt van dit apparaat verwijderd</translation>
 <translation id="3870643923290313246">{INCOGNITO_TABS_COUNT, plural,
         =1 {Je kunt je gesloten tabbladen vinden in Recente tabbladen onder het hoofdmenu van Vivaldi. Jouw privétab is niet beschikbaar.}
         other {Je kunt je gesloten tabbladen vinden in Recente tabbladen onder het hoofdmenu van Vivaldi. Jouw # privétabbladen zijn niet beschikbaar.}}</translation>
+<translation id="4460014764210899310">Groepering ongedaan maken</translation>
 <translation id="4871187110787939393">Alle privétabs sluiten?</translation>
+<translation id="5494920125229734069">Alles selecteren</translation>
+<translation id="6744956528665271406">Groepskleur bewerken</translation>
 </translationbundle>

@@ -31,10 +31,10 @@ import androidx.annotation.VisibleForTesting;
 import androidx.appcompat.content.res.AppCompatResources;
 
 import org.chromium.base.Callback;
-import org.chromium.base.Log;
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.base.supplier.ObservableSupplierImpl;
+import org.chromium.base.supplier.Supplier;
 import org.chromium.cc.input.BrowserControlsState;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.browser_controls.BrowserControlsOffsetTagsInfo;
@@ -66,6 +66,7 @@ import org.chromium.chrome.browser.lifecycle.PauseResumeWithNativeObserver;
 import org.chromium.chrome.browser.lifecycle.TopResumedActivityChangedObserver;
 import org.chromium.chrome.browser.multiwindow.MultiInstanceManager;
 import org.chromium.chrome.browser.multiwindow.MultiWindowUtils;
+import org.chromium.chrome.browser.share.ShareDelegate;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.Tab.LoadUrlResult;
 import org.chromium.chrome.browser.tab.TabCreationState;
@@ -88,6 +89,7 @@ import org.chromium.chrome.browser.toolbar.top.tab_strip.StripVisibilityState;
 import org.chromium.chrome.browser.toolbar.top.tab_strip.TabStripTransitionCoordinator.TabStripTransitionDelegate;
 import org.chromium.chrome.browser.ui.desktop_windowing.AppHeaderUtils;
 import org.chromium.chrome.browser.ui.system.StatusBarColorController;
+import org.chromium.components.browser_ui.bottomsheet.BottomSheetController;
 import org.chromium.components.browser_ui.desktop_windowing.AppHeaderState;
 import org.chromium.components.browser_ui.desktop_windowing.DesktopWindowStateManager;
 import org.chromium.components.browser_ui.desktop_windowing.DesktopWindowStateManager.AppHeaderObserver;
@@ -137,8 +139,6 @@ public class StripLayoutHelperManager
                 TabStripTransitionDelegate,
                 TopResumedActivityChangedObserver,
                 AppHeaderObserver {
-    private static final String TAG = "StripLayoutHelperMgr";
-
     /**
      * POD type that contains the necessary tab model info on startup. Used in the startup flicker
      * fix experiment where we create a placeholder tab strip on startup to mitigate jank as tabs
@@ -284,20 +284,17 @@ public class StripLayoutHelperManager
 
     private class TabStripEventHandler implements MotionEventHandler {
         @Override
-        public void onDown(float x, float y, boolean fromMouse, int buttons) {
+        public void onDown(float x, float y, int buttons) {
             if (DragDropGlobalState.hasValue()) {
                 return;
             }
 
-            // Note(david@vivaldi.com): We need to manipulate the y value of the event when the
-            // toolbar is at the bottom in order to handle the input events.
-            if (ChromeApplicationImpl.isVivaldi()) y = getValueOfY(y);
+            y = getValueOfY(y); // Vivaldi - Adjust the offset in case of bottom address bar.
 
-            if (mModelSelectorButton != null
-                    && mModelSelectorButton.onDown(x, y, fromMouse, buttons)) {
+            if (mModelSelectorButton != null && mModelSelectorButton.onDown(x, y, buttons)) {
                 return;
             }
-            getActiveStripLayoutHelper().onDown(x, y, fromMouse, buttons);
+            getActiveStripLayoutHelper().onDown(x, y, buttons);
         }
 
         @Override
@@ -321,6 +318,9 @@ public class StripLayoutHelperManager
             if (DragDropGlobalState.hasValue()) {
                 return;
             }
+
+            y = getValueOfY(y); // Vivaldi - Adjust the offset in case of bottom address bar.
+
             if (mModelSelectorButton != null) {
                 mModelSelectorButton.drag(x, y);
             }
@@ -328,20 +328,19 @@ public class StripLayoutHelperManager
         }
 
         @Override
-        public void click(float x, float y, boolean fromMouse, int buttons) {
+        public void click(float x, float y, int buttons) {
             if (DragDropGlobalState.hasValue()) {
                 return;
             }
 
-            // Vivaldi - consider the offset of y when the toolbar is at the bottom
-            if (ChromeApplicationImpl.isVivaldi()) y = getValueOfY(y);
+            y = getValueOfY(y); // Vivaldi - Adjust the offset in case of bottom address bar.
+
             long time = time();
-            if (mModelSelectorButton != null
-                    && mModelSelectorButton.click(x, y, fromMouse, buttons)) {
+            if (mModelSelectorButton != null && mModelSelectorButton.click(x, y, buttons)) {
                 mModelSelectorButton.handleClick(time);
                 return;
             }
-            getActiveStripLayoutHelper().click(time(), x, y, fromMouse, buttons);
+            getActiveStripLayoutHelper().click(time(), x, y, buttons);
         }
 
         @Override
@@ -349,6 +348,9 @@ public class StripLayoutHelperManager
             if (DragDropGlobalState.hasValue()) {
                 return;
             }
+
+            y = getValueOfY(y); // Vivaldi - Adjust the offset in case of bottom address bar.
+
             getActiveStripLayoutHelper().fling(time(), x, y, velocityX, velocityY);
         }
 
@@ -364,10 +366,10 @@ public class StripLayoutHelperManager
                     showTabSwitcherPopupMenu();
                     return;
                 }
-            }
-            /* Vivaldi - Consider the offset in case of bottom address bar **/
+                y = getValueOfY(y); // Vivaldi - Adjust the offset in case of bottom address bar.
+            } // End Vivaldi
 
-            getActiveStripLayoutHelper().onLongPress(time(), x, y);
+            getActiveStripLayoutHelper().onLongPress(x, y);
         }
 
         @Override
@@ -391,6 +393,8 @@ public class StripLayoutHelperManager
                 mTabStripTooltipViewStub.inflate();
             }
 
+            y = getValueOfY(y); // Vivaldi - Adjust the offset in case of bottom address bar.
+
             getActiveStripLayoutHelper().onHoverEnter(x, y);
         }
 
@@ -399,6 +403,9 @@ public class StripLayoutHelperManager
             if (DragDropGlobalState.hasValue()) {
                 return;
             }
+
+            y = getValueOfY(y); // Vivaldi - Adjust the offset in case of bottom address bar.
+
             getActiveStripLayoutHelper().onHoverMove(x, y);
         }
 
@@ -409,6 +416,12 @@ public class StripLayoutHelperManager
 
         private long time() {
             return LayoutManagerImpl.time();
+        }
+
+        /** Vivaldi */
+        @Override
+        public void onUpOrCancel(float x, float y) {
+            getActiveStripLayoutHelper().onUpOrCancel(x, getValueOfY(y), time());
         }
     }
 
@@ -449,7 +462,8 @@ public class StripLayoutHelperManager
      * @param tabModelStartupInfoSupplier A supplier for the TabModelStartupInfo.
      * @param lifecycleDispatcher The ActivityLifecycleDispatcher for registering this class to
      *     lifecycle events.
-     * @param multiInstanceManager MultiInstanceManager passed to TabDragSource for drag and drop.
+     * @param multiInstanceManager The {@link MultiInstanceManager} used to move tabs to other
+     *     windows.
      * @param dragDropDelegate DragAndDropDelegate passed to TabDragSource to initiate tab drag and
      *     drop.
      * @param toolbarContainerView View passed to TabDragSource for drag and drop.
@@ -459,6 +473,11 @@ public class StripLayoutHelperManager
      * @param browserControlsStateProvider BrowserControlsStateProvider for drag drop.
      * @param toolbarManager The ToolbarManager instance.
      * @param desktopWindowStateManager The DesktopWindowStateManager for the app header.
+     * @param actionConfirmationManager The {@link ActionConfirmationManager} for group actions.
+     * @param modalDialogManager The {@link ModalDialogManager} for the context menu.
+     * @param dataSharingTabManager The {@link DataSharingTabManager} for shared groups.
+     * @param bottomSheetController The {@link BottomSheetController} used to show bottom sheets.
+     * @param shareDelegateSupplier Supplies {@link ShareDelegate} to share tab URLs.
      */
     public StripLayoutHelperManager(
             Context context,
@@ -482,7 +501,10 @@ public class StripLayoutHelperManager
             @Nullable DesktopWindowStateManager desktopWindowStateManager,
             ActionConfirmationManager actionConfirmationManager,
             ModalDialogManager modalDialogManager,
-            DataSharingTabManager dataSharingTabManager) {
+            DataSharingTabManager dataSharingTabManager,
+            @NonNull BottomSheetController bottomSheetController,
+            @NonNull Supplier<ShareDelegate> shareDelegateSupplier) {
+        mContext = context;
         Resources res = context.getResources();
         mUpdateHost = updateHost;
         mLayerTitleCacheSupplier = layerTitleCacheSupplier;
@@ -564,7 +586,10 @@ public class StripLayoutHelperManager
                         actionConfirmationManager,
                         modalDialogManager,
                         dataSharingTabManager,
-                        () -> getStripVisibilityState() == StripVisibilityState.VISIBLE);
+                        () -> getStripVisibilityState() == StripVisibilityState.VISIBLE,
+                        bottomSheetController,
+                        multiInstanceManager,
+                        shareDelegateSupplier);
         mIncognitoHelper =
                 new StripLayoutHelper(
                         context,
@@ -579,7 +604,10 @@ public class StripLayoutHelperManager
                         actionConfirmationManager,
                         modalDialogManager,
                         dataSharingTabManager,
-                        () -> getStripVisibilityState() == StripVisibilityState.VISIBLE);
+                        () -> getStripVisibilityState() == StripVisibilityState.VISIBLE,
+                        bottomSheetController,
+                        multiInstanceManager,
+                        shareDelegateSupplier);
 
         tabHoverCardViewStub.setOnInflateListener(
                 (viewStub, view) -> {
@@ -613,7 +641,6 @@ public class StripLayoutHelperManager
                     mIncognitoHelper.setLayerTitleCache(layerTitleCache);
                 });
 
-        onContextChanged(context);
         if (mDesktopWindowStateManager != null) {
             mDesktopWindowStateManager.addObserver(this);
             mIsTopResumedActivity = !mDesktopWindowStateManager.isInUnfocusedDesktopWindow();
@@ -742,7 +769,10 @@ public class StripLayoutHelperManager
             mTabModelSelectorTabModelObserver.destroy();
             mTabModelSelectorTabObserver.destroy();
         }
-        mTabDragSource = null;
+        if (mTabDragSource != null) {
+            mTabDragSource.destroy();
+            mTabDragSource = null;
+        }
         if (mDesktopWindowStateManager != null) {
             mDesktopWindowStateManager.removeObserver(this);
         }
@@ -784,8 +814,8 @@ public class StripLayoutHelperManager
     }
 
     @VisibleForTesting
-    public void simulateClick(float x, float y, boolean fromMouse, int buttons) {
-        mTabStripEventHandler.click(x, y, fromMouse, buttons);
+    public void simulateClick(float x, float y, int buttons) {
+        mTabStripEventHandler.click(x, y, buttons);
     }
 
     @VisibleForTesting
@@ -993,18 +1023,9 @@ public class StripLayoutHelperManager
 
     @Override
     public void onHeightChanged(int newHeightPx, boolean applyScrimOverlay) {
-        if (applyScrimOverlay
-                && mFadeTransitionAnimator != null
-                && mFadeTransitionAnimator.isRunning()) {
-            Log.w(
-                    TAG,
-                    "Scrim update may be conflicted due to simultaneous fade and height"
-                            + " transitions.");
-        }
-        if (applyScrimOverlay) {
+        if (applyScrimOverlay && !isFadeTransitionRunning()) {
             mIsHeightTransitioning = true;
             boolean hideStrip = newHeightPx == 0;
-            setStripVisibilityState(StripVisibilityState.HIDDEN_BY_HEIGHT_TRANSITION, !hideStrip);
             mStripTransitionScrimOpacity = hideStrip ? 0f : 1f;
             // Update the strip visibility state in StatusBarController just after the margins are
             // updated during a hide->show transition so that the status bar assumes the base tab
@@ -1015,6 +1036,10 @@ public class StripLayoutHelperManager
             // Set the status bar color and scrim overlay at the start of the transition.
             mStatusBarColorController.setTabStripColorOverlay(
                     getStripTransitionScrimColor(), mStripTransitionScrimOpacity);
+            // The height transition is running to update strip visibility. Ensure that any stale
+            // state set by a previous fade transition is cleared at this time.
+            setStripVisibilityState(StripVisibilityState.HIDDEN_BY_HEIGHT_TRANSITION, !hideStrip);
+            setStripVisibilityState(StripVisibilityState.HIDDEN_BY_FADE, /* clear= */ true);
         }
 
         if (mIsLayoutOptimizationsEnabled) {
@@ -1032,9 +1057,13 @@ public class StripLayoutHelperManager
         // Opacity is already the desired value, return early.
         if (newOpacity == mStripTransitionScrimOpacity) return;
 
-        assert !mIsHeightTransitioning
-                : "Fade transition is requested when height transition to update the scrim is in"
-                        + " progress.";
+        if (mIsHeightTransitioning) {
+            // If a height transition is currently running to update the scrim when a fade
+            // transition is also requested, the fade transition should be prioritized to update the
+            // strip visibility so immediately set this boolean to false to avoid a race to update
+            // the strip scrim opacity.
+            mIsHeightTransitioning = false;
+        }
         boolean showStrip = newOpacity == 0f;
 
         // Update the status bar color to ensure that it reflects the current strip visibility state
@@ -1044,7 +1073,7 @@ public class StripLayoutHelperManager
         mStatusBarColorController.setTabStripColorOverlay(
                 getStripTransitionScrimColor(), newOpacity);
 
-        if (mFadeTransitionAnimator != null && mFadeTransitionAnimator.isRunning()) {
+        if (isFadeTransitionRunning()) {
             mFadeTransitionAnimator.cancel();
         }
         mFadeTransitionAnimator =
@@ -1070,14 +1099,22 @@ public class StripLayoutHelperManager
                 : "Height transition to update the scrim should not be running when a fade"
                         + " transition is finishing.";
         mFadeTransitionAnimator = null;
+        // The fade transition is running to update strip visibility. Ensure that any stale
+        // state set by a previous height transition is cleared at this time.
         setStripVisibilityState(StripVisibilityState.HIDDEN_BY_FADE, showStrip);
+        setStripVisibilityState(
+                StripVisibilityState.HIDDEN_BY_HEIGHT_TRANSITION, /* clear= */ true);
+    }
+
+    private boolean isFadeTransitionRunning() {
+        return mFadeTransitionAnimator != null && mFadeTransitionAnimator.isRunning();
     }
 
     @Override
     public void onHeightTransitionFinished() {
         if (!mIsHeightTransitioning) return;
 
-        assert mFadeTransitionAnimator == null || !mFadeTransitionAnimator.isRunning()
+        assert !isFadeTransitionRunning()
                 : "Fade transition should not be running when a height transition to update the"
                         + " scrim is finishing.";
         mIsHeightTransitioning = false;
@@ -1099,11 +1136,6 @@ public class StripLayoutHelperManager
     float calculateScrimOpacityDuringHeightTransition(float visibleHeight) {
         if (!duringTabStripHeightTransition()) {
             return 0.0f;
-        }
-
-        // Stop any running fade transition animation that is updating the scrim opacity.
-        if (mFadeTransitionAnimator != null && mFadeTransitionAnimator.isRunning()) {
-            mFadeTransitionAnimator.cancel();
         }
 
         // Otherwise, the alpha fraction is based on the percent of the tab strip visibility.
@@ -1285,11 +1317,19 @@ public class StripLayoutHelperManager
 
     public @DrawableRes int getRightFadeDrawable() {
         @DrawableRes int rightFadeDrawable;
+        // Note(david@vivaldi.com): In order to get more space between the new tab button and the
+        // tabs we always set the fade width to medium. See ref. VAB-10777.
+        if (ChromeApplicationImpl.isVivaldi()) {
+            rightFadeDrawable = R.drawable.tab_strip_fade_medium;
+            mNormalHelper.setRightFadeWidth(FADE_MEDIUM_WIDTH_DP);
+            mIncognitoHelper.setRightFadeWidth(FADE_MEDIUM_WIDTH_DP);
+            return rightFadeDrawable;
+        }
         if (!LocalizationUtils.isLayoutRtl()) {
             if (mModelSelectorButton != null && mModelSelectorButton.isVisible()) {
-                rightFadeDrawable = R.drawable.tab_strip_fade_short; // Vivaldi
-                mNormalHelper.setRightFadeWidth(FADE_SHORT_WIDTH_DP); // Vivaldi
-                mIncognitoHelper.setRightFadeWidth(FADE_SHORT_WIDTH_DP); // Vivaldi
+                rightFadeDrawable = R.drawable.tab_strip_fade_long;
+                mNormalHelper.setRightFadeWidth(FADE_LONG_WIDTH_DP);
+                mIncognitoHelper.setRightFadeWidth(FADE_LONG_WIDTH_DP);
             } else {
                 // Use fade_medium for right fade when model selector button not visible.
                 rightFadeDrawable = R.drawable.tab_strip_fade_medium;
@@ -1596,7 +1636,7 @@ public class StripLayoutHelperManager
         new ActivityTabProvider.ActivityTabTabObserver(mActivity.getActivityTabProvider()) {
             @Override
             public void onObservingDifferentTab(Tab tab, boolean hint) {
-                if (tab != null && !tab.isBeingRestored() && mTabStripTreeProvider != null)
+                if (tab != null  && mTabStripTreeProvider != null) // Vivaldi VAB-10496
                     mTabStripTreeProvider.setTabStripBackgroundColor(
                             getBackgroundStripColor(tab.getThemeColor()));
             }
@@ -1663,21 +1703,11 @@ public class StripLayoutHelperManager
     }
 
     public @ColorInt int getBackgroundColor() {
-        return AppHeaderUtils.isAppInDesktopWindow(mDesktopWindowStateManager)
-                ? TabUiThemeUtil.getTabStripBackgroundColorForActivityState(
-                        mContext, mIsIncognito, mIsTopResumedActivity)
-                : TabUiThemeUtil.getTabStripBackgroundColor(mContext, mIsIncognito);
-    }
-
-    /**
-     * Updates all internal resources and dimensions.
-     *
-     * @param context The current Android Context.
-     */
-    public void onContextChanged(Context context) {
-        mContext = context;
-        mNormalHelper.onContextChanged(context);
-        mIncognitoHelper.onContextChanged(context);
+        return TabUiThemeUtil.getTabStripBackgroundColor(
+                mContext,
+                mIsIncognito,
+                AppHeaderUtils.isAppInDesktopWindow(mDesktopWindowStateManager),
+                mIsTopResumedActivity);
     }
 
     @Override
@@ -1804,8 +1834,8 @@ public class StripLayoutHelperManager
         }
     }
 
-    void simulateOnDownForTesting(float x, float y, boolean fromMouse, int buttons) {
-        mTabStripEventHandler.onDown(x, y, fromMouse, buttons);
+    void simulateOnDownForTesting(float x, float y, int buttons) {
+        mTabStripEventHandler.onDown(x, y, buttons);
     }
 
     void setTabStripTreeProviderForTesting(TabStripSceneLayer tabStripTreeProvider) {

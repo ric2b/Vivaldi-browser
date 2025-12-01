@@ -48,6 +48,7 @@
 #include "mojo/public/cpp/bindings/unique_receiver_set.h"
 #include "net/http/http_status_code.h"
 #include "net/third_party/quiche/src/quiche/oblivious_http/oblivious_http_gateway.h"
+#include "services/network/public/cpp/features.h"
 #include "services/network/public/mojom/shared_storage.mojom.h"
 #include "services/network/test/test_url_loader_factory.h"
 #include "testing/gmock/include/gmock/gmock-matchers.h"
@@ -90,13 +91,13 @@ const char kTrustedScoringSignalsResponse[] = R"(
   }
 )";
 
-const auto kTestPrivateKey = std::to_array<uint8_t>({
+constexpr auto kTestPrivateKey = std::to_array<uint8_t>({
     0xff, 0x1f, 0x47, 0xb1, 0x68, 0xb6, 0xb9, 0xea, 0x65, 0xf7, 0x97,
     0x4f, 0xf2, 0x2e, 0xf2, 0x36, 0x94, 0xe2, 0xf6, 0xb6, 0x8d, 0x66,
     0xf3, 0xa7, 0x64, 0x14, 0x28, 0xd4, 0x45, 0x35, 0x01, 0x8f,
 });
 
-const auto kTestPublicKey = std::to_array<uint8_t>({
+constexpr auto kTestPublicKey = std::to_array<uint8_t>({
     0xa1, 0x5f, 0x40, 0x65, 0x86, 0xfa, 0xc4, 0x7b, 0x99, 0x59, 0x70,
     0xf1, 0x85, 0xd9, 0xd8, 0x91, 0xc7, 0x4d, 0xcf, 0x1e, 0xb9, 0x1a,
     0x7d, 0x50, 0xa5, 0x8b, 0x01, 0x68, 0x3e, 0x60, 0x05, 0x2d,
@@ -303,6 +304,7 @@ class SellerWorkletTest : public testing::Test,
     browser_signal_bidding_duration_msecs_ = 0;
     browser_signal_render_size_ = std::nullopt;
     browser_signal_for_debugging_only_in_cooldown_or_lockout_ = false;
+    browser_signal_for_debugging_only_sampling_ = false;
     browser_signal_desireability_ = 1;
     seller_timeout_ = std::nullopt;
     bidder_joining_origin_ = url::Origin::Create(GURL("https://joining.test/"));
@@ -462,7 +464,7 @@ class SellerWorkletTest : public testing::Test,
         browser_signal_buyer_and_seller_reporting_id_,
         browser_signal_bidding_duration_msecs_,
         browser_signal_for_debugging_only_in_cooldown_or_lockout_,
-        seller_timeout_,
+        browser_signal_for_debugging_only_sampling_, seller_timeout_,
         /*trace_id=*/1, bidder_joining_origin_,
         TestScoreAdClient::Create(base::BindOnce(
             [](double expected_score,
@@ -563,7 +565,7 @@ class SellerWorkletTest : public testing::Test,
         browser_signal_buyer_and_seller_reporting_id_,
         browser_signal_bidding_duration_msecs_,
         browser_signal_for_debugging_only_in_cooldown_or_lockout_,
-        seller_timeout_,
+        browser_signal_for_debugging_only_sampling_, seller_timeout_,
         /*trace_id=*/1, bidder_joining_origin_,
         TestScoreAdClient::Create(
             TestScoreAdClient::ScoreAdNeverInvokedCallback()));
@@ -958,6 +960,7 @@ class SellerWorkletTest : public testing::Test,
   uint32_t browser_signal_bidding_duration_msecs_;
   std::optional<blink::AdSize> browser_signal_render_size_;
   bool browser_signal_for_debugging_only_in_cooldown_or_lockout_;
+  bool browser_signal_for_debugging_only_sampling_;
   double browser_signal_desireability_;
   double browser_signal_highest_scoring_other_bid_;
   std::optional<blink::AdCurrency>
@@ -1003,6 +1006,16 @@ class SellerWorkletTest : public testing::Test,
 class SellerWorkletTwoThreadsTest : public SellerWorkletTest {
  private:
   size_t NumThreads() override { return 2u; }
+};
+
+class SellerWorkletTextConversionsTest : public SellerWorkletTest {
+ public:
+  SellerWorkletTextConversionsTest() {
+    feature_list_.InitAndEnableFeature(features::kFledgeTextConversionHelpers);
+  }
+
+ protected:
+  base::test::ScopedFeatureList feature_list_;
 };
 
 class SellerWorkletMultiThreadingTest
@@ -1936,6 +1949,38 @@ TEST_F(SellerWorkletTest, ScoreAdAdComponentsCreativeScanningMetadata) {
       3);
 }
 
+TEST_F(SellerWorkletTest, ScoreAdTextConversions) {
+  RunScoreAdWithReturnValueExpectingResult(
+      R"('protectedAudience' in globalThis? 3 : 2)", 2);
+}
+
+TEST_F(SellerWorkletTextConversionsTest, ScoreAdTextConversions) {
+  RunScoreAdWithReturnValueExpectingResult(
+      R"('encodeUtf8' in protectedAudience? 3 : 2)", 3);
+  RunScoreAdWithReturnValueExpectingResult(
+      R"('decodeUtf8' in protectedAudience? 3 : 2)", 3);
+
+  RunScoreAdWithReturnValueExpectingResult(
+      "protectedAudience.encodeUtf8('A')[0]", 65);
+  RunScoreAdWithReturnValueExpectingResult(
+      "protectedAudience.decodeUtf8(new Uint8Array([65, 68])) === 'AD' ? 3 : 2",
+      3);
+}
+
+TEST_F(SellerWorkletTextConversionsTest, ScoreAdNoGlobalStomp) {
+  const char kScript[] = R"(
+    function protectedAudience() {
+      return 5;
+    }
+
+    function scoreAd() {
+      return protectedAudience();
+    }
+
+  )";
+  RunScoreAdWithJavascriptExpectingResult(kScript, 5);
+}
+
 TEST_F(SellerWorkletTest, ScoreAdBid) {
   bid_ = 5;
   RunScoreAdWithReturnValueExpectingResult("bid", 5);
@@ -2536,7 +2581,7 @@ TEST_F(SellerWorkletTest, ScoreAdJsFetchLatency) {
       browser_signal_buyer_and_seller_reporting_id_,
       browser_signal_bidding_duration_msecs_,
       browser_signal_for_debugging_only_in_cooldown_or_lockout_,
-      seller_timeout_,
+      browser_signal_for_debugging_only_sampling_, seller_timeout_,
       /*trace_id=*/1, bidder_joining_origin_,
       TestScoreAdClient::Create(base::BindLambdaForTesting(
           [&run_loop](double score, mojom::RejectReason reject_reason,
@@ -2602,8 +2647,19 @@ TEST_F(SellerWorkletTest, ScoreAdExperimentGroupId) {
 
 // Test the case of a bunch of ScoreAd() calls in parallel, all started before
 // the worklet script has loaded.
+//
+// In the single-threaded case, make sure that Javascript scoreAd() calls are
+// made in the order in which they are queued. That is done by having each
+// script call console.log() and checking the order - can't rely on callback
+// invocation order, since Mojo doesn't guarantee that.
 TEST_P(SellerWorkletMultiThreadingTest, ScoreAdParallelBeforeLoadComplete) {
-  auto seller_worklet = CreateWorklet(/*pause_for_debugger_on_start=*/false);
+  ScopedInspectorSupport inspector_support(v8_helper().get());
+  SellerWorklet* worklet_impl = nullptr;
+  auto seller_worklet =
+      CreateWorklet(/*pause_for_debugger_on_start=*/false, &worklet_impl);
+  int id = worklet_impl->context_group_ids_for_testing()[0];
+  TestChannel* channel =
+      inspector_support.ConnectDebuggerSessionAndRuntimeEnable(id);
 
   const size_t kNumWorklets = 10;
   size_t num_completed_worklets = 0;
@@ -2640,21 +2696,46 @@ TEST_P(SellerWorkletMultiThreadingTest, ScoreAdParallelBeforeLoadComplete) {
   // score. The worklet should report a successful load.
   AddJavascriptResponse(
       &url_loader_factory_, decision_logic_url_,
-      CreateScoreAdScript("parseInt(browserSignals.renderURL.slice(-1))"));
+      CreateScoreAdScript("parseInt(browserSignals.renderURL.slice(-1))",
+                          "console.log(browserSignals.renderURL.slice(-1));"));
 
   // All scripts should complete successfully.
   run_loop.Run();
+
+  // Verify that calls were made in FIFO order.
+  if (NumThreads() == 1) {
+    for (size_t i = 0; i < kNumWorklets; ++i) {
+      channel->WaitForAndValidateConsoleMessage(
+          "log", /*json_args=*/
+          base::StringPrintf("[{\"type\":\"string\", \"value\":\"%i\"}]", i),
+          /*stack_trace_size=*/1, /*function=*/"scoreAd", decision_logic_url_,
+          /*line_number=*/3);
+    }
+  }
 }
 
 // Test the case of a bunch of ScoreAd() calls in parallel, all started after
 // the worklet script has loaded.
+//
+// In the single-threaded case, make sure that Javascript scoreAd() calls are
+// made in the order in which they are queued. That is done by having each
+// script call console.log() and checking the order - can't rely on callback
+// invocation order, since Mojo doesn't guarantee that.
 TEST_P(SellerWorkletMultiThreadingTest, ScoreAdParallelAfterLoadComplete) {
   base::HistogramTester histogram_tester;
   // Seller script that uses the last character of `renderURL` as the score.
   AddJavascriptResponse(
       &url_loader_factory_, decision_logic_url_,
-      CreateScoreAdScript("parseInt(browserSignals.renderURL.slice(-1))"));
-  auto seller_worklet = CreateWorklet();
+      CreateScoreAdScript("parseInt(browserSignals.renderURL.slice(-1))",
+                          "console.log(browserSignals.renderURL.slice(-1));"));
+
+  ScopedInspectorSupport inspector_support(v8_helper().get());
+  SellerWorklet* worklet_impl = nullptr;
+  auto seller_worklet =
+      CreateWorklet(/*pause_for_debugger_on_start=*/false, &worklet_impl);
+  int id = worklet_impl->context_group_ids_for_testing()[0];
+  TestChannel* channel =
+      inspector_support.ConnectDebuggerSessionAndRuntimeEnable(id);
 
   // Let the script load.
   task_environment_.RunUntilIdle();
@@ -2686,6 +2767,17 @@ TEST_P(SellerWorkletMultiThreadingTest, ScoreAdParallelAfterLoadComplete) {
                              }));
   }
   run_loop.Run();
+
+  // Verify that calls were made in FIFO order.
+  if (NumThreads() == 1) {
+    for (size_t i = 0; i < kNumWorklets; ++i) {
+      channel->WaitForAndValidateConsoleMessage(
+          "log", /*json_args=*/
+          base::StringPrintf("[{\"type\":\"string\", \"value\":\"%i\"}]", i),
+          /*stack_trace_size=*/1, /*function=*/"scoreAd", decision_logic_url_,
+          /*line_number=*/3);
+    }
+  }
 
   // MaxSellerContextsPerThread doesn't come into effect because the scoring
   // tasks are processed as they come.
@@ -2819,6 +2911,11 @@ TEST_P(SellerWorkletMultiThreadingTest,
 // 1) The worklet script load completes.
 // 2) ScoreAd() calls are made.
 // 3) The trusted bidding signals are loaded.
+//
+// In the single-threaded case, make sure that Javascript scoreAd() calls are
+// made in the order in which they are queued. That is done by having each
+// script call console.log() and checking the order - can't rely on callback
+// invocation order, since Mojo doesn't guarantee that.
 TEST_P(SellerWorkletMultiThreadingTest,
        ScoreAdParallelTrustedScoringSignalsBatched1) {
   // Seller script that gets the score from the `trustedScoringSignals` value of
@@ -2826,10 +2923,19 @@ TEST_P(SellerWorkletMultiThreadingTest,
   AddJavascriptResponse(
       &url_loader_factory_, decision_logic_url_,
       CreateScoreAdScript(
-          "trustedScoringSignals.renderURL[browserSignals.renderURL]"));
+          "trustedScoringSignals.renderURL[browserSignals.renderURL]",
+          "console.log(browserSignals.renderURL.slice(-1));"));
+
   trusted_scoring_signals_url_ =
       GURL("https://url.test/trusted_scoring_signals");
-  auto seller_worklet = CreateWorklet();
+
+  ScopedInspectorSupport inspector_support(v8_helper().get());
+  SellerWorklet* worklet_impl = nullptr;
+  auto seller_worklet =
+      CreateWorklet(/*pause_for_debugger_on_start=*/false, &worklet_impl);
+  int id = worklet_impl->context_group_ids_for_testing()[0];
+  TestChannel* channel =
+      inspector_support.ConnectDebuggerSessionAndRuntimeEnable(id);
 
   // Start scoring a bunch of worklets. Don't provide JSON responses, to make
   // sure they all reside in the worklet's task list at once.
@@ -2884,9 +2990,21 @@ TEST_P(SellerWorkletMultiThreadingTest,
 
   // All ScoreAd() calls should succeed with the expected scores.
   run_loop.Run();
+
+  // Verify that calls were made in FIFO order.
+  if (NumThreads() == 1) {
+    for (size_t i = 0; i < kNumWorklets; ++i) {
+      channel->WaitForAndValidateConsoleMessage(
+          "log", /*json_args=*/
+          base::StringPrintf("[{\"type\":\"string\", \"value\":\"%i\"}]", i),
+          /*stack_trace_size=*/1, /*function=*/"scoreAd", decision_logic_url_,
+          /*line_number=*/3);
+    }
+  }
 }
 
-// Same as above, but with different ordering.
+// Same as above, but with different ordering, and without checking scoreAd()
+// invocation order in the single-threaded case, for simplicity.
 //
 // In this test, the ordering is:
 // 1) ScoreAd() calls are made.
@@ -3423,6 +3541,40 @@ TEST_F(SellerWorkletTest, ReportResultNoAdComponentsCreativeScanningMetadata) {
   RunReportResultCreatedScriptExpectingResult(
       "1", kScript,
       /*expected_signals_for_winner=*/"1", GURL("https://foo.test/?2"));
+}
+
+TEST_F(SellerWorkletTest, ReportResultTextConversions) {
+  RunReportResultCreatedScriptExpectingResult(
+      "('protectedAudience' in globalThis) ? 2 : 1",
+      /*extra_code=*/std::string(), "1",
+      /*expected_report_url=*/std::nullopt);
+}
+
+TEST_F(SellerWorkletTextConversionsTest, ReportResultTextConversions) {
+  RunReportResultCreatedScriptExpectingResult(
+      "('encodeUtf8' in protectedAudience) ? 2 : 1",
+      /*extra_code=*/std::string(), "2",
+      /*expected_report_url=*/std::nullopt);
+  RunReportResultCreatedScriptExpectingResult(
+      "('decodeUtf8' in protectedAudience) ? 2 : 1",
+      /*extra_code=*/std::string(), "2",
+      /*expected_report_url=*/std::nullopt);
+}
+
+TEST_F(SellerWorkletTextConversionsTest, ReportResultNoGlobalStomp) {
+  const char kScript[] = R"(
+    function protectedAudience() {
+      sendReportTo('https://report.test/');
+    }
+
+    function reportResult() {
+      protectedAudience();
+    }
+  )";
+  RunReportResultWithJavascriptExpectingResult(
+      kScript,
+      /*expected_signals_for_winner=*/"null",
+      /*expected_report_url=*/GURL("https://report.test"));
 }
 
 TEST_F(SellerWorkletTest, ReportResultTopWindowOrigin) {
@@ -4496,7 +4648,7 @@ TEST_P(SellerWorkletMultiThreadingTest, ScriptIsolation) {
           browser_signal_buyer_and_seller_reporting_id_,
           browser_signal_bidding_duration_msecs_,
           browser_signal_for_debugging_only_in_cooldown_or_lockout_,
-          seller_timeout_,
+          browser_signal_for_debugging_only_sampling_, seller_timeout_,
           /*trace_id=*/1, bidder_joining_origin_,
           TestScoreAdClient::Create(base::BindLambdaForTesting(
               [&run_loop](
@@ -4598,7 +4750,7 @@ TEST_F(SellerWorkletTest,
         browser_signal_buyer_and_seller_reporting_id_,
         browser_signal_bidding_duration_msecs_,
         browser_signal_for_debugging_only_in_cooldown_or_lockout_,
-        seller_timeout_,
+        browser_signal_for_debugging_only_sampling_, seller_timeout_,
         /*trace_id=*/1, bidder_joining_origin_,
         TestScoreAdClient::Create(base::BindLambdaForTesting(
             [&run_loop, &expected_score](
@@ -4703,7 +4855,7 @@ TEST_F(
         browser_signal_buyer_and_seller_reporting_id_,
         browser_signal_bidding_duration_msecs_,
         browser_signal_for_debugging_only_in_cooldown_or_lockout_,
-        seller_timeout_,
+        browser_signal_for_debugging_only_sampling_, seller_timeout_,
         /*trace_id=*/1, bidder_joining_origin_,
         TestScoreAdClient::Create(base::BindLambdaForTesting(
             [&run_loop, &expected_score](
@@ -4816,7 +4968,7 @@ TEST_F(
             browser_signal_buyer_and_seller_reporting_id_,
             browser_signal_bidding_duration_msecs_,
             browser_signal_for_debugging_only_in_cooldown_or_lockout_,
-            seller_timeout_,
+            browser_signal_for_debugging_only_sampling_, seller_timeout_,
             /*trace_id=*/1, bidder_joining_origin_,
             TestScoreAdClient::Create(base::BindLambdaForTesting(
                 [&run_loop, &expected_score](
@@ -4933,7 +5085,7 @@ TEST_F(SellerWorkletTwoThreadsTest,
         browser_signal_buyer_and_seller_reporting_id_,
         browser_signal_bidding_duration_msecs_,
         browser_signal_for_debugging_only_in_cooldown_or_lockout_,
-        seller_timeout_,
+        browser_signal_for_debugging_only_sampling_, seller_timeout_,
         /*trace_id=*/1, bidder_joining_origin_,
         TestScoreAdClient::Create(base::BindLambdaForTesting(
             [&run_loop, &expected_score](
@@ -4995,7 +5147,7 @@ TEST_F(SellerWorkletTest, ContextReuseDoesNotCrashLazyFiller) {
         browser_signal_buyer_and_seller_reporting_id_,
         browser_signal_bidding_duration_msecs_,
         browser_signal_for_debugging_only_in_cooldown_or_lockout_,
-        seller_timeout_,
+        browser_signal_for_debugging_only_sampling_, seller_timeout_,
         /*trace_id=*/1, bidder_joining_origin_,
         TestScoreAdClient::Create(base::BindLambdaForTesting(
             [&run_loop, &expected_score](
@@ -5041,7 +5193,7 @@ TEST_F(SellerWorkletTest, DeleteBeforeScoreAdCallback) {
       browser_signal_buyer_and_seller_reporting_id_,
       browser_signal_bidding_duration_msecs_,
       browser_signal_for_debugging_only_in_cooldown_or_lockout_,
-      seller_timeout_,
+      browser_signal_for_debugging_only_sampling_, seller_timeout_,
       /*trace_id=*/1, bidder_joining_origin_,
       TestScoreAdClient::Create(
           // Callback should not be invoked since worklet deleted
@@ -6062,7 +6214,7 @@ TEST_F(SellerWorkletTest, Cancelation) {
       browser_signal_buyer_and_seller_reporting_id_,
       browser_signal_bidding_duration_msecs_,
       browser_signal_for_debugging_only_in_cooldown_or_lockout_,
-      seller_timeout_,
+      browser_signal_for_debugging_only_sampling_, seller_timeout_,
       /*trace_id=*/1, bidder_joining_origin_,
       client_receiver.BindNewPipeAndPassRemote());
 
@@ -6128,7 +6280,7 @@ TEST_F(SellerWorkletTest, CancelBeforeFetch) {
       browser_signal_buyer_and_seller_reporting_id_,
       browser_signal_bidding_duration_msecs_,
       browser_signal_for_debugging_only_in_cooldown_or_lockout_,
-      seller_timeout_,
+      browser_signal_for_debugging_only_sampling_, seller_timeout_,
       /*trace_id=*/1, bidder_joining_origin_,
       client_receiver.BindNewPipeAndPassRemote());
   task_environment_.RunUntilIdle();
@@ -6139,28 +6291,6 @@ TEST_F(SellerWorkletTest, CancelBeforeFetch) {
 
   // Make sure cancellation happens before ~SellerWorklet.
   task_environment_.RunUntilIdle();
-}
-
-TEST_F(SellerWorkletTest, ForDebuggingOnlyReportsWithDebugFeatureDisabled) {
-  base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitAndDisableFeature(
-      blink::features::kBiddingAndScoringDebugReportingAPI);
-
-  RunScoreAdWithJavascriptExpectingResult(
-      CreateScoreAdScript(
-          "1", R"(forDebuggingOnly.reportAdAuctionLoss("https://loss.url"))"),
-      1, /*expected_errors=*/{}, mojom::ComponentAuctionModifiedBidParamsPtr(),
-      /*expected_data_version=*/std::nullopt,
-      /*expected_debug_loss_report_url=*/std::nullopt,
-      /*expected_debug_win_report_url=*/std::nullopt);
-
-  RunScoreAdWithJavascriptExpectingResult(
-      CreateScoreAdScript(
-          "1", R"(forDebuggingOnly.reportAdAuctionWin("https://win.url"))"),
-      1, /*expected_errors=*/{}, mojom::ComponentAuctionModifiedBidParamsPtr(),
-      /*expected_data_version=*/std::nullopt,
-      /*expected_debug_loss_report_url=*/std::nullopt,
-      /*expected_debug_win_report_url=*/std::nullopt);
 }
 
 TEST_F(SellerWorkletTest, AuctionRequestedSizeIsPresentInScoreAdJavascript) {
@@ -6247,6 +6377,13 @@ TEST_F(SellerWorkletTest,
       3);
 }
 
+TEST_F(SellerWorkletTest, ScoreAdBrowserSignalForDebuggingOnlySampling) {
+  RunScoreAdWithReturnValueExpectingResult(
+      R"(browserSignals.hasOwnProperty('forDebuggingOnlySampling') ?
+            3 : 0)",
+      0);
+}
+
 class ScoreAdBrowserSignalRenderSizeTest
     : public base::test::WithFeatureOverride,
       public SellerWorkletTest {
@@ -6275,7 +6412,7 @@ INSTANTIATE_FEATURE_OVERRIDE_TEST_SUITE(ScoreAdBrowserSignalRenderSizeTest);
 class SellerWorkletSharedStorageAPIDisabledTest : public SellerWorkletTest {
  public:
   SellerWorkletSharedStorageAPIDisabledTest() {
-    feature_list_.InitAndDisableFeature(blink::features::kSharedStorageAPI);
+    feature_list_.InitAndDisableFeature(network::features::kSharedStorageAPI);
   }
 
  protected:
@@ -6313,7 +6450,7 @@ TEST_F(SellerWorkletSharedStorageAPIDisabledTest, SharedStorageNotExposed) {
 class SellerWorkletSharedStorageAPIEnabledTest : public SellerWorkletTest {
  public:
   SellerWorkletSharedStorageAPIEnabledTest() {
-    feature_list_.InitAndEnableFeature(blink::features::kSharedStorageAPI);
+    feature_list_.InitAndEnableFeature(network::features::kSharedStorageAPI);
     permissions_policy_state_ =
         mojom::AuctionWorkletPermissionsPolicyState::New(
             /*private_aggregation_allowed=*/true,
@@ -7447,22 +7584,9 @@ TEST_F(SellerWorkletRealTimeTest, ReportResultTopLevelTimeout) {
       {"https://url.test/ top-level execution timed out."});
 }
 
-class SellerWorkletBiddingAndScoringDebugReportingAPIEnabledTest
-    : public SellerWorkletRealTimeTest {
- public:
-  SellerWorkletBiddingAndScoringDebugReportingAPIEnabledTest() {
-    feature_list_.InitAndEnableFeature(
-        blink::features::kBiddingAndScoringDebugReportingAPI);
-  }
-
- protected:
-  base::test::ScopedFeatureList feature_list_;
-};
-
 // Test forDebuggingOnly.reportAdAuctionLoss() and
 // forDebuggingOnly.reportAdAuctionWin() called in scoreAd().
-TEST_F(SellerWorkletBiddingAndScoringDebugReportingAPIEnabledTest,
-       ForDebuggingOnlyReports) {
+TEST_F(SellerWorkletRealTimeTest, ForDebuggingOnlyReports) {
   RunScoreAdWithJavascriptExpectingResult(
       CreateScoreAdScript(
           "1",
@@ -7524,7 +7648,7 @@ TEST_F(SellerWorkletBiddingAndScoringDebugReportingAPIEnabledTest,
 
 // Debugging loss/win report URLs should be nullopt if scoreAd() parameters are
 // invalid.
-TEST_F(SellerWorkletBiddingAndScoringDebugReportingAPIEnabledTest,
+TEST_F(SellerWorkletRealTimeTest,
        ForDebuggingOnlyReportsInvalidScoreAdParameter) {
   // Auction config param is invalid.
   auction_ad_config_non_shared_params_.auction_signals =
@@ -7554,8 +7678,7 @@ TEST_F(SellerWorkletBiddingAndScoringDebugReportingAPIEnabledTest,
 }
 
 // Loss report URLs before seller script times out should be kept.
-TEST_F(SellerWorkletBiddingAndScoringDebugReportingAPIEnabledTest,
-       ScoreAdHasError) {
+TEST_F(SellerWorkletRealTimeTest, ScoreAdHasError) {
   // The seller script has an endless while loop. It will time out due to
   // AuctionV8Helper's default script timeout (50 ms).
   RunScoreAdWithJavascriptExpectingResult(
@@ -7570,8 +7693,7 @@ TEST_F(SellerWorkletBiddingAndScoringDebugReportingAPIEnabledTest,
 }
 
 // Loss report URLs before seller script times out should be kept.
-TEST_F(SellerWorkletBiddingAndScoringDebugReportingAPIEnabledTest,
-       ScoreAdTimedOut) {
+TEST_F(SellerWorkletRealTimeTest, ScoreAdTimedOut) {
   // The seller script has an endless while loop. It will time out due to
   // AuctionV8Helper's default script timeout (50 ms).
   AddJavascriptResponse(
@@ -7604,8 +7726,7 @@ TEST_F(SellerWorkletBiddingAndScoringDebugReportingAPIEnabledTest,
 }
 
 // Subsequent runs of the same script should not affect each other.
-TEST_F(SellerWorkletBiddingAndScoringDebugReportingAPIEnabledTest,
-       ForDebuggingOnlyReportsScriptIsolation) {
+TEST_F(SellerWorkletRealTimeTest, ForDebuggingOnlyReportsScriptIsolation) {
   AddJavascriptResponse(&url_loader_factory_, decision_logic_url_,
                         R"(
         function scoreAd(adMetadata, bid, auctionConfig, trustedScoringSignals,
@@ -7640,7 +7761,7 @@ TEST_F(SellerWorkletBiddingAndScoringDebugReportingAPIEnabledTest,
         browser_signal_buyer_and_seller_reporting_id_,
         browser_signal_bidding_duration_msecs_,
         browser_signal_for_debugging_only_in_cooldown_or_lockout_,
-        seller_timeout_,
+        browser_signal_for_debugging_only_sampling_, seller_timeout_,
         /*trace_id=*/1, bidder_joining_origin_,
         TestScoreAdClient::Create(base::BindLambdaForTesting(
             [&run_loop](double score, mojom::RejectReason reject_reason,
@@ -7690,6 +7811,28 @@ TEST_F(SellerWorkletSampleDebugReportsDisabledTest,
       R"(browserSignals.hasOwnProperty('forDebuggingOnlyInCooldownOrLockout') ?
             3 : 0)",
       0);
+}
+
+class SellerWorkletEnableSampleDebugReportOnCookieSettingTest
+    : public SellerWorkletTest {
+ public:
+  SellerWorkletEnableSampleDebugReportOnCookieSettingTest() {
+    scoped_feature_list_.InitAndEnableFeature(
+        blink::features::kFledgeEnableSampleDebugReportOnCookieSetting);
+  }
+
+ private:
+  base::test::ScopedFeatureList scoped_feature_list_;
+};
+
+TEST_F(SellerWorkletEnableSampleDebugReportOnCookieSettingTest,
+       ScoreAdBrowserSignalForDebuggingOnlySampling) {
+  RunScoreAdWithReturnValueExpectingResult(
+      R"(browserSignals.forDebuggingOnlySampling === false ? 3 : 0)", 3);
+
+  browser_signal_for_debugging_only_sampling_ = true;
+  RunScoreAdWithReturnValueExpectingResult(
+      R"(browserSignals.forDebuggingOnlySampling === true ? 3 : 0)", 3);
 }
 
 class SellerWorkletPrivateAggregationEnabledTest : public SellerWorkletTest {

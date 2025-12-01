@@ -49,17 +49,29 @@ update_target("//extensions/browser:browser_sources") {
   sources += [
     "//vivaldi/extensions/vivaldi_extensions_guest_view.cc",
     "//vivaldi/extensions/vivaldi_extension_prefs.cc",
+    "//vivaldi/extensions/api/events/vivaldi_ui_events_keys.cc",
+    "//vivaldi/extensions/api/events/vivaldi_ui_events.h",
+    "//vivaldi/extensions/api/extension_action_utils/vivaldi_extension_host.cc",
+    "//vivaldi/extensions/api/extension_action_utils/vivaldi_extension_host.h",
+    "//vivaldi/extensions/api/guest_view/vivaldi_web_view_constants.cpp",
+    "//vivaldi/extensions/api/guest_view/vivaldi_web_view_constants.h",
     "//vivaldi/extensions/api/guest_view/vivaldi_web_view_guest.cpp",
     "//vivaldi/extensions/api/guest_view/parent_tab_user_data.cpp",
     "//vivaldi/extensions/api/guest_view/parent_tab_user_data.h",
   ]
   deps += [
+    "//chrome/browser/ui/webui/tab_search:mojo_bindings",
     "//chrome/common:mojo_bindings",
     "//components/language_detection/content/common:common",
+    "//components/custom_handlers",
+    "//components/security_state/content",
     "//components/sharing_message/proto",
     "//components/translate/content/browser",
     "//third_party/blink/public:blink_headers",
+    #"//vivaldi/extensions/api:apis", # !!!DO NOT!!! re-enable, causes link errors for linux debug builds
     "//vivaldi/extensions/schema",
+    "//vivaldi/extensions/tools",
+    "//vivaldi/extensions/helper",
     "//vivaldi/prefs:prefs_files_generator",
   ]
 }

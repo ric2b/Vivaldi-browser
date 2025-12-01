@@ -112,7 +112,7 @@ uint32_t H264ToAnnexBBitstreamConverter::CalculateNeededOutputBufferSize(
       nal_unit_length |= *input;
     }
 
-    if (nal_unit_length == 0) {
+    if (nal_unit_length == 0 || data_left == 0) {
       break;  // Signifies that no more data left in the buffer
     } else if (nal_unit_length > data_left) {
       return 0;  // Error: Not enough data for correct conversion
@@ -194,7 +194,7 @@ bool H264ToAnnexBBitstreamConverter::ConvertNalUnitStreamToByteStream(
       nal_unit_length |= *inscan;
     }
 
-    if (nal_unit_length == 0) {
+    if (nal_unit_length == 0 || data_left == 0) {
       break;  // Successful conversion, end of buffer
     } else if (nal_unit_length > data_left) {
       *output_size = 0;

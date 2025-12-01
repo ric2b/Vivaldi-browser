@@ -9,6 +9,7 @@
 
 #include <memory>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "base/gtest_prod_util.h"
@@ -29,10 +30,12 @@
 #include "components/permissions/permission_prompt.h"
 #include "components/security_state/core/security_state.h"
 #include "services/device/public/cpp/geolocation/buildflags.h"
+#include "third_party/skia/include/core/SkColor.h"
 #include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/base/mojom/menu_source_type.mojom-forward.h"
 #include "ui/base/pointer/touch_ui_controller.h"
 #include "ui/gfx/animation/slide_animation.h"
+#include "ui/gfx/color_palette.h"
 #include "ui/gfx/font.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/image/image.h"
@@ -64,6 +67,7 @@ class SelectedKeywordView;
 
 namespace page_actions {
 class PageActionContainerView;
+class PageActionController;
 }  // namespace page_actions
 
 namespace views {
@@ -161,15 +165,13 @@ class LocationBarView
   // Shows |text| as an inline autocompletion.  This is useful for IMEs, where
   // we can't show the autocompletion inside the actual OmniboxView.  See
   // comments on |ime_inline_autocomplete_view_|.
-  void SetImePrefixAutocompletion(const std::u16string& text);
-  std::u16string GetImePrefixAutocompletion() const;
-  void SetImeInlineAutocompletion(const std::u16string& text);
-  std::u16string GetImeInlineAutocompletion() const;
+  void SetImeInlineAutocompletion(std::u16string_view text);
+  std::u16string_view GetImeInlineAutocompletion() const;
 
   // Sets the additional omnibox text. E.g. the title corresponding to the URL
   // displayed in the OmniboxView.
-  void SetOmniboxAdditionalText(const std::u16string& text);
-  std::u16string GetOmniboxAdditionalText() const;
+  void SetOmniboxAdditionalText(std::u16string_view text);
+  std::u16string_view GetOmniboxAdditionalText() const;
 
   // Select all of the text. Needed when the user tabs through controls
   // in the toolbar in full keyboard accessibility mode.
@@ -228,7 +230,6 @@ class LocationBarView
   void ChildPreferredSizeChanged(views::View* child) override;
 
   // views::FocusChangeListener:
-  void OnWillChangeFocus(views::View* before, views::View* now) override;
   void OnDidChangeFocus(views::View* before, views::View* now) override;
 
   // IconLabelBubbleView::Delegate:
@@ -299,6 +300,8 @@ class LocationBarView
     confirmation_chip_collapsed_time_ = time;
   }
 
+  SkColor GetBackgroundColorForTesting() const { return background_color_; }
+
  private:
   FRIEND_TEST_ALL_PREFIXES(SecurityIndicatorTest, CheckIndicatorText);
   FRIEND_TEST_ALL_PREFIXES(TouchLocationBarViewBrowserTest,
@@ -332,8 +335,10 @@ class LocationBarView
   void RefreshPageActionIconViews();
 
   // Updates PageActionContainerView's action controller to the active tab's
-  // controller.
-  void RefreshPageActionContainerView();
+  // controller. At the same time, the page actions visibility will be set based
+  // on the omnibox state.
+  void RefreshPageActionContainerViewAndIconsVisibility(
+      bool should_hide_page_actions);
 
   // Updates the color of the icon for the "clear all" button.
   void RefreshClearAllButtonIcon();
@@ -350,9 +355,8 @@ class LocationBarView
                               bool reload_prompt);
 
   // Helper to set the texts of labels adjacent to the omnibox:
-  // `ime_prefix_autocomplete_view_`, `ime_inline_autocomplete_view_`, and
-  // `omnibox_additional_text_view_`.
-  void SetOmniboxAdjacentText(views::Label* label, const std::u16string& text);
+  // `ime_inline_autocomplete_view_`, and `omnibox_additional_text_view_`.
+  void SetOmniboxAdjacentText(views::Label* label, std::u16string_view text);
 
   // LocationBar:
   void FocusSearch() override;
@@ -427,6 +431,11 @@ class LocationBarView
 
   bool GetPopupMode() const;
 
+  // Returns the `PageActionController` for the currently active tab, or nullptr
+  // if there is no valid active tab or the tab is in the process of being
+  // destroyed.
+  page_actions::PageActionController* GetPageActionController();
+
 #if BUILDFLAG(IS_MAC)
   // Called when app shims change.
   void OnAppShimChanged(const webapps::AppId& app_id);
@@ -483,7 +492,6 @@ class LocationBarView
   // we shouldn't change the text or selection inside the OmniboxView itself,
   // since this will conflict with the IME's control over the text.  So instead
   // we show any autocompletion in a separate field after the OmniboxView.
-  raw_ptr<views::Label> ime_prefix_autocomplete_view_ = nullptr;
   raw_ptr<views::Label> ime_inline_autocomplete_view_ = nullptr;
 
   // The complementary omnibox label displaying the selected suggestion's title
@@ -527,7 +535,9 @@ class LocationBarView
   bool is_initialized_ = false;
 
   // Used for metrics collection.
-  base::TimeTicks confirmation_chip_collapsed_time_ = base::TimeTicks();
+  base::TimeTicks confirmation_chip_collapsed_time_;
+
+  SkColor background_color_ = gfx::kPlaceholderColor;
 
   // The focus manager associated with this view. The focus manager is expected
   // to outlive this view.

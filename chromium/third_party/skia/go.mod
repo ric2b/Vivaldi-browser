@@ -1,6 +1,6 @@
 module go.skia.org/skia
 
-go 1.21
+go 1.22.0
 
 require (
 	cloud.google.com/go/pubsub v1.33.0
@@ -11,7 +11,7 @@ require (
 	github.com/stretchr/testify v1.8.4
 	github.com/trietmn/go-wiki v1.0.1
 	go.chromium.org/luci v0.0.0-20240206071351-fb32c458db6e // indirect
-	go.skia.org/infra v0.0.0-20250202221659-f69f215a2ce4
+	go.skia.org/infra v0.0.0-20250208010729-21597fbbfeb0
 	google.golang.org/api v0.160.0
 	google.golang.org/protobuf v1.32.0
 )
@@ -88,13 +88,13 @@ require (
 	go.opentelemetry.io/otel v1.22.0 // indirect
 	go.opentelemetry.io/otel/metric v1.22.0 // indirect
 	go.opentelemetry.io/otel/trace v1.22.0 // indirect
-	golang.org/x/crypto v0.20.0 // indirect
-	golang.org/x/net v0.21.0 // indirect
+	golang.org/x/crypto v0.31.0 // indirect
+	golang.org/x/net v0.33.0 // indirect
 	golang.org/x/oauth2 v0.16.0 // indirect
-	golang.org/x/sync v0.6.0 // indirect
-	golang.org/x/sys v0.17.0 // indirect
-	golang.org/x/term v0.17.0 // indirect
-	golang.org/x/text v0.14.0 // indirect
+	golang.org/x/sync v0.10.0 // indirect
+	golang.org/x/sys v0.28.0 // indirect
+	golang.org/x/term v0.27.0 // indirect
+	golang.org/x/text v0.21.0 // indirect
 	golang.org/x/time v0.5.0 // indirect
 	google.golang.org/appengine v1.6.8 // indirect
 	google.golang.org/genproto v0.0.0-20240116215550-a9fa1716bcac // indirect

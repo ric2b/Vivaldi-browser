@@ -25,6 +25,7 @@ namespace task_manager {
 // static
 void TaskManagerInterface::RegisterPrefs(PrefRegistrySimple* registry) {
   registry->RegisterDictionaryPref(prefs::kTaskManagerWindowPlacement);
+  registry->RegisterIntegerPref(prefs::kTaskManagerCategory, 1);
   registry->RegisterDictionaryPref(prefs::kTaskManagerColumnVisibility);
   registry->RegisterBooleanPref(prefs::kTaskManagerEndProcessEnabled, true);
 }
@@ -107,6 +108,10 @@ void TaskManagerInterface::RecalculateRefreshFlags() {
     flags |= observer.desired_resources_flags();
 
   SetEnabledResourceFlags(flags);
+}
+
+bool TaskManagerInterface::IsTaskValid(TaskId task_id) const {
+  return true;
 }
 
 bool TaskManagerInterface::IsResourceRefreshEnabled(RefreshType type) const {

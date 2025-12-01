@@ -169,7 +169,7 @@ public class PeerConnectionEndToEndTest {
     // TODO(bugs.webrtc.org/8491): Remove NoSynchronizedMethodCheck suppression.
     @SuppressWarnings("NoSynchronizedMethodCheck")
     public synchronized void onSignalingChange(SignalingState newState) {
-      assertEquals(expectedSignalingChanges.remove(), newState);
+      assertEquals(newState, expectedSignalingChanges.remove());
     }
 
     // TODO(bugs.webrtc.org/8491): Remove NoSynchronizedMethodCheck suppression.
@@ -199,7 +199,7 @@ public class PeerConnectionEndToEndTest {
         return;
       }
 
-      assertEquals(expectedIceConnectionChanges.remove(), newState);
+      assertEquals(newState, expectedIceConnectionChanges.remove());
     }
 
     @Override
@@ -215,7 +215,7 @@ public class PeerConnectionEndToEndTest {
         return;
       }
 
-      assertEquals(expectedStandardizedIceConnectionChanges.remove(), newState);
+      assertEquals(newState, expectedStandardizedIceConnectionChanges.remove());
     }
 
     // TODO(bugs.webrtc.org/8491): Remove NoSynchronizedMethodCheck suppression.
@@ -233,7 +233,7 @@ public class PeerConnectionEndToEndTest {
         return;
       }
 
-      assertEquals(expectedConnectionChanges.remove(), newState);
+      assertEquals(newState, expectedConnectionChanges.remove());
     }
 
     @Override
@@ -262,7 +262,7 @@ public class PeerConnectionEndToEndTest {
       if (expectedIceGatheringChanges.isEmpty()) {
         Logging.d(TAG, name + "Got an unexpected ICE gathering change " + newState);
       }
-      assertEquals(expectedIceGatheringChanges.remove(), newState);
+      assertEquals(newState, expectedIceGatheringChanges.remove());
     }
 
     // TODO(bugs.webrtc.org/8491): Remove NoSynchronizedMethodCheck suppression.
@@ -810,10 +810,10 @@ public class PeerConnectionEndToEndTest {
     assertEquals(answeringPC.getLocalDescription().type, answerSdp.type);
     assertEquals(answeringPC.getRemoteDescription().type, offerSdp.type);
 
-    assertEquals(offeringPC.getSenders().size(), 2);
-    assertEquals(offeringPC.getReceivers().size(), 2);
-    assertEquals(answeringPC.getSenders().size(), 2);
-    assertEquals(answeringPC.getReceivers().size(), 2);
+    assertEquals(2, offeringPC.getSenders().size());
+    assertEquals(2, offeringPC.getReceivers().size());
+    assertEquals(2, answeringPC.getSenders().size());
+    assertEquals(2, answeringPC.getReceivers().size());
 
     offeringExpectations.expectFirstPacketReceived();
     answeringExpectations.expectFirstPacketReceived();
@@ -1461,8 +1461,8 @@ public class PeerConnectionEndToEndTest {
     assertTrue(sdpLatch.await());
     // Sanity check that we get one remote stream with one audio track.
     MediaStream remoteStream = expectations.gotRemoteStreams.iterator().next();
-    assertEquals(remoteStream.audioTracks.size(), 1);
-    assertEquals(remoteStream.videoTracks.size(), 0);
+    assertEquals(1, remoteStream.audioTracks.size());
+    assertEquals(0, remoteStream.videoTracks.size());
 
     // Add a video track...
     final CameraEnumerator enumerator = new Camera1Enumerator(false /* captureToTexture */);
@@ -1488,8 +1488,8 @@ public class PeerConnectionEndToEndTest {
     pcUnderTest.setRemoteDescription(sdpLatch, offerSdp);
     assertTrue(sdpLatch.await());
     // The remote stream should now have a video track.
-    assertEquals(remoteStream.audioTracks.size(), 1);
-    assertEquals(remoteStream.videoTracks.size(), 1);
+    assertEquals(1, remoteStream.audioTracks.size());
+    assertEquals(1, remoteStream.videoTracks.size());
 
     // Finally, create another offer with the audio track removed.
     offeringExpectations.expectRenegotiationNeeded();
@@ -1506,8 +1506,8 @@ public class PeerConnectionEndToEndTest {
     pcUnderTest.setRemoteDescription(sdpLatch, offerSdp);
     assertTrue(sdpLatch.await());
     // The remote stream should no longer have an audio track.
-    assertEquals(remoteStream.audioTracks.size(), 0);
-    assertEquals(remoteStream.videoTracks.size(), 1);
+    assertEquals(0, remoteStream.audioTracks.size());
+    assertEquals(1, remoteStream.videoTracks.size());
 
     // Free the Java-land objects. Video capturer and source aren't owned by
     // the PeerConnection and need to be disposed separately.

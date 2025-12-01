@@ -36,6 +36,7 @@
 #include "net/base/load_flags.h"
 #include "net/base/load_flags_to_string.h"
 #include "net/cookies/site_for_cookies.h"
+#include "net/filter/source_stream_type.h"
 #include "net/http/http_request_headers.h"
 #include "services/network/public/cpp/data_element.h"
 #include "services/network/public/cpp/resource_request.h"
@@ -79,7 +80,7 @@ namespace {
   DO_FIELD(credentials_mode) __VA_ARGS__                       \
   DO_FIELD(redirect_mode) __VA_ARGS__                          \
   DO_FIELD(fetch_integrity) __VA_ARGS__                        \
-  DO_FIELD(expected_signatures) __VA_ARGS__                    \
+  DO_FIELD(expected_public_keys) __VA_ARGS__                   \
   DO_FIELD(destination) __VA_ARGS__                            \
   DO_FIELD(original_destination) __VA_ARGS__                   \
   DO_FIELD(request_body) __VA_ARGS__                           \
@@ -119,9 +120,12 @@ namespace {
   DO_FIELD(shared_dictionary_writer_enabled) __VA_ARGS__       \
   DO_FIELD(attribution_reporting_src_token) __VA_ARGS__        \
   DO_FIELD(is_ad_tagged) __VA_ARGS__                           \
+  DO_FIELD(client_side_content_decoding_enabled) __VA_ARGS__   \
   DO_FIELD(prefetch_token) __VA_ARGS__                         \
   DO_FIELD(socket_tag) __VA_ARGS__                             \
-  DO_FIELD(keepalive_token)
+  DO_FIELD(keepalive_token) __VA_ARGS__                        \
+  DO_FIELD(allows_device_bound_sessions) __VA_ARGS__           \
+  DO_FIELD(permissions_policy)
 
 // clang-format on
 
@@ -218,8 +222,10 @@ enum class FieldsForUma {
   kAttributionReportingSrcToken = 61,
   kIsAdTagged = 62,
   kKeepaliveToken = 63,
-  kExpectedSignatures = 64,
-  kMaxValue = kExpectedSignatures,
+  kExpectedPublicKeys = 64,
+  kPermissionsPolicy = 65,
+  kClientSideContentDecodingEnabled = 66,
+  kMaxValue = kClientSideContentDecodingEnabled,
 };
 // LINT.ThenChange(//tools/metrics/histograms/metadata/network/enums.xml:PrefetchMatchesResourceRequestField)
 
@@ -250,7 +256,7 @@ constexpr auto kUmaEnumMap = base::MakeFixedFlatMap<Fields, FieldsForUma>({
     {Fields::kcredentials_mode, FieldsForUma::kCredentialsMode},
     {Fields::kredirect_mode, FieldsForUma::kRedirectMode},
     {Fields::kfetch_integrity, FieldsForUma::kFetchIntegrity},
-    {Fields::kexpected_signatures, FieldsForUma::kExpectedSignatures},
+    {Fields::kexpected_public_keys, FieldsForUma::kExpectedPublicKeys},
     {Fields::kdestination, FieldsForUma::kDestination},
     {Fields::koriginal_destination, FieldsForUma::kOriginalDestination},
     {Fields::krequest_body, FieldsForUma::kRequestBody},
@@ -297,7 +303,10 @@ constexpr auto kUmaEnumMap = base::MakeFixedFlatMap<Fields, FieldsForUma>({
     {Fields::kattribution_reporting_src_token,
      FieldsForUma::kAttributionReportingSrcToken},
     {Fields::kis_ad_tagged, FieldsForUma::kIsAdTagged},
+    {Fields::kclient_side_content_decoding_enabled,
+     FieldsForUma::kClientSideContentDecodingEnabled},
     {Fields::kkeepalive_token, FieldsForUma::kKeepaliveToken},
+    {Fields::kpermissions_policy, FieldsForUma::kPermissionsPolicy},
 });
 
 // Fields that should be completely ignored for the purposes of matching should

@@ -60,16 +60,16 @@ export class AutoTabGroupsGroupElement extends CrLitElement {
     };
   }
 
-  tabs: Tab[] = [];
-  firstNewTabIndex: number = 0;
-  name: string = '';
-  organizationId: number = -1;
-  showReject: boolean = false;
+  accessor tabs: Tab[] = [];
+  accessor firstNewTabIndex: number = 0;
+  accessor name: string = '';
+  accessor organizationId: number = -1;
+  accessor showReject: boolean = false;
 
-  private lastFocusedIndex_: number = 0;
-  protected showInput_: boolean = false;
-  protected tabDatas_: TabData[] = [];
-  private changedName_: boolean = false;
+  private accessor lastFocusedIndex_: number = 0;
+  protected accessor showInput_: boolean = false;
+  protected accessor tabDatas_: TabData[] = [];
+  private accessor changedName_: boolean = false;
 
   static override get styles() {
     return getCss();
@@ -118,7 +118,7 @@ export class AutoTabGroupsGroupElement extends CrLitElement {
     if (!this.showInput_) {
       return null;
     }
-    return this.shadowRoot!.querySelector<CrInputElement>('#input');
+    return this.shadowRoot.querySelector<CrInputElement>('#input');
   }
 
   private computeTabDatas_(): TabData[] {
@@ -189,8 +189,8 @@ export class AutoTabGroupsGroupElement extends CrLitElement {
       // Explicitly focus the element prior to the list in focus order and
       // override the default behavior, which would be to focus the row that
       // the currently focused close button is in.
-      this.shadowRoot!.querySelector<CrIconButtonElement>(
-                          `#rejectButton`)!.focus();
+      this.shadowRoot.querySelector<CrIconButtonElement>(
+                         `#rejectButton`)!.focus();
       handled = true;
     } else if (!event.shiftKey) {
       if (event.key === 'ArrowUp') {
@@ -212,7 +212,7 @@ export class AutoTabGroupsGroupElement extends CrLitElement {
     if (this.$.selector.selectedItem) {
       const selectedItem = this.$.selector.selectedItem as TabSearchItemElement;
       const selectedItemCloseButton =
-          selectedItem.shadowRoot!.querySelector(`cr-icon-button`)!;
+          selectedItem.shadowRoot.querySelector(`cr-icon-button`)!;
       selectedItemCloseButton.focus();
       this.lastFocusedIndex_ =
           Number.parseInt(selectedItem.dataset['index']!, 10);

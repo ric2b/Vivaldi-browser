@@ -9,6 +9,7 @@
 #include "chromeos/ash/components/settings/cros_settings.h"
 #include "components/account_id/account_id.h"
 #include "components/user_manager/fake_user_manager_delegate.h"
+#include "components/user_manager/test_helper.h"
 #include "components/user_manager/user.h"
 #include "components/user_manager/user_type.h"
 
@@ -24,20 +25,11 @@ FakeUserManager::FakeUserManager(PrefService* local_state)
 FakeUserManager::~FakeUserManager() = default;
 
 std::string FakeUserManager::GetFakeUsernameHash(const AccountId& account_id) {
-  // Consistent with the
-  // kUserDataDirNameSuffix in fake_userdataauth_client.cc and
-  // UserDataAuthClient::GetStubSanitizedUsername.
-  // TODO(crbug.com/1347837): After resolving the dependent code,
-  // consolidate the all implementation to cryptohome utilities,
-  // and remove this.
-  DCHECK(account_id.is_valid());
-  return account_id.GetUserEmail() + "-hash";
+  return TestHelper::GetFakeUsernameHash(account_id);
 }
 
 void FakeUserManager::UserLoggedIn(const AccountId& account_id,
-                                   const std::string& username_hash,
-                                   bool browser_restart,
-                                   bool is_child) {
+                                   const std::string& username_hash) {
   // Please keep the implementation in sync with
   // FakeChromeUserManager::UserLoggedIn. We're in process to merge.
   for (auto& user : user_storage_) {
@@ -57,16 +49,13 @@ void FakeUserManager::UserLoggedIn(const AccountId& account_id,
     }
   }
 
-  if (!active_user_ && IsEphemeralAccountId(account_id)) {
-    // TODO(crbug.com/278643115): Temporarily duplicate the logic
-    // of ephemeral user creation. This method should be unified with
-    // UserManagerImpl::UserLoggedIn eventually.
-    active_user_ = AddEphemeralUser(account_id, UserType::kRegular);
-    SetIsCurrentUserNew(true);
-    is_current_user_ephemeral_regular_user_ = true;
-  }
-
   NotifyOnLogin();
+}
+
+bool FakeUserManager::EnsureUser(const AccountId& account_id,
+                                 UserType user_type,
+                                 bool is_ephemeral) {
+  NOTREACHED();
 }
 
 void FakeUserManager::SwitchActiveUser(const AccountId& account_id) {

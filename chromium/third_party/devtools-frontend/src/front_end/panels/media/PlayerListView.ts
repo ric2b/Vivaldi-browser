@@ -30,7 +30,7 @@ const UIStrings = {
    *@description Side-panel entry title text for the players section.
    */
   players: 'Players',
-};
+} as const;
 const str_ = i18n.i18n.registerUIStrings('panels/media/PlayerListView.ts', UIStrings);
 const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
 export interface PlayerStatus {
@@ -127,7 +127,7 @@ export class PlayerListView extends UI.Widget.VBox implements TriggerDispatcher 
       return;
     }
     const fragment = this.playerEntryFragments.get(playerID);
-    if (fragment === undefined || fragment.element() === undefined) {
+    if (fragment?.element() === undefined) {
       return;
     }
     fragment.$('frame-title').textContent = frameTitle;
@@ -160,7 +160,8 @@ export class PlayerListView extends UI.Widget.VBox implements TriggerDispatcher 
     icon.appendChild(IconButton.Icon.create(iconName, 'media-player'));
   }
 
-  private formatAndEvaluate(playerID: string, func: Function, candidate: string, min: number, max: number): void {
+  private formatAndEvaluate(
+      playerID: string, func: (...args: any[]) => unknown, candidate: string, min: number, max: number): void {
     if (candidate.length <= min) {
       return;
     }
@@ -182,7 +183,7 @@ export class PlayerListView extends UI.Widget.VBox implements TriggerDispatcher 
       return;
     }
     const fragment = this.playerEntryFragments.get(playerID);
-    if (fragment === undefined || fragment.element() === undefined) {
+    if (fragment?.element() === undefined) {
       return;
     }
     this.contentElement.removeChild(fragment.element());

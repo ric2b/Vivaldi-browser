@@ -358,7 +358,7 @@ class FileSystemAccessManagerImplTest : public testing::Test {
     base::test::TestFuture<storage::QuotaErrorOr<storage::BucketInfo>>
         bucket_future;
     quota_manager_proxy_->CreateBucketForTesting(
-        kTestStorageKey, "custom_bucket", blink::mojom::StorageType::kTemporary,
+        kTestStorageKey, "custom_bucket",
         base::SequencedTaskRunner::GetCurrentDefault(),
         bucket_future.GetCallback());
     return bucket_future.Take().transform(
@@ -386,8 +386,7 @@ class FileSystemAccessManagerImplTest : public testing::Test {
 
     // Check default bucket exists.
     return quota_manager_proxy_sync
-        .GetBucket(kTestStorageKey, storage::kDefaultBucketName,
-                   blink::mojom::StorageType::kTemporary)
+        .GetBucket(kTestStorageKey, storage::kDefaultBucketName)
         .transform([&](storage::BucketInfo result) {
           EXPECT_EQ(result.name, storage::kDefaultBucketName);
           EXPECT_EQ(result.storage_key, kTestStorageKey);
@@ -467,7 +466,7 @@ TEST_F(FileSystemAccessManagerImplTest, GetSandboxedFileSystem_CustomBucket) {
   base::test::TestFuture<storage::QuotaErrorOr<storage::BucketInfo>>
       bucket_future;
   quota_manager_proxy_->CreateBucketForTesting(
-      kTestStorageKey, "custom_bucket", blink::mojom::StorageType::kTemporary,
+      kTestStorageKey, "custom_bucket",
       base::SequencedTaskRunner::GetCurrentDefault(),
       bucket_future.GetCallback());
   ASSERT_OK_AND_ASSIGN(auto bucket, bucket_future.Take());
@@ -526,7 +525,7 @@ TEST_F(FileSystemAccessManagerImplTest,
   base::test::TestFuture<storage::QuotaErrorOr<storage::BucketInfo>>
       bucket_future;
   quota_manager_proxy_->CreateBucketForTesting(
-      kTestStorageKey, "custom_bucket", blink::mojom::StorageType::kTemporary,
+      kTestStorageKey, "custom_bucket",
       base::SequencedTaskRunner::GetCurrentDefault(),
       bucket_future.GetCallback());
   ASSERT_OK_AND_ASSIGN(auto bucket, bucket_future.Take());
@@ -870,7 +869,8 @@ TEST_F(FileSystemAccessManagerImplTest,
       base::FilePath::FromUTF8Unsafe("test/foo/bar"));
   test_file_url.SetBucket(default_bucket);
   FileSystemAccessFileHandleImpl file(manager_.get(), kBindingContext,
-                                      test_file_url, {ask_grant_, ask_grant_});
+                                      test_file_url, "bar",
+                                      {ask_grant_, ask_grant_});
   mojo::PendingRemote<blink::mojom::FileSystemAccessTransferToken> token_remote;
   manager_->CreateTransferToken(file,
                                 token_remote.InitWithNewPipeAndPassReceiver());
@@ -898,7 +898,8 @@ TEST_F(FileSystemAccessManagerImplTest,
   ASSERT_OK_AND_ASSIGN(auto bucket, CreateBucketForTesting());
   test_file_url.SetBucket(std::move(bucket));
   FileSystemAccessFileHandleImpl file(manager_.get(), kBindingContext,
-                                      test_file_url, {ask_grant_, ask_grant_});
+                                      test_file_url, "bar",
+                                      {ask_grant_, ask_grant_});
   mojo::PendingRemote<blink::mojom::FileSystemAccessTransferToken> token_remote;
   manager_->CreateTransferToken(file,
                                 token_remote.InitWithNewPipeAndPassReceiver());
@@ -1923,6 +1924,7 @@ TEST_F(FileSystemAccessManagerImplTest, GetUniqueId) {
   test_url.SetBucket(default_bucket);
 
   FileSystemAccessFileHandleImpl file(manager_.get(), kBindingContext, test_url,
+                                      kTestPathInfo.display_name,
                                       {ask_grant_, ask_grant_});
   auto file_id = manager_->GetUniqueId(file);
   // Ensure a valid ID is provided.
@@ -1942,8 +1944,9 @@ TEST_F(FileSystemAccessManagerImplTest, GetUniqueId) {
       kTestStorageKey, storage::kFileSystemTypeTemporary,
       kTestPathInfo.path.AppendASCII("bar"));
   other_url.SetBucket(default_bucket);
-  FileSystemAccessFileHandleImpl other_file(
-      manager_.get(), kBindingContext, other_url, {ask_grant_, ask_grant_});
+  FileSystemAccessFileHandleImpl other_file(manager_.get(), kBindingContext,
+                                            other_url, "bar",
+                                            {ask_grant_, ask_grant_});
   auto other_id = manager_->GetUniqueId(other_file);
   EXPECT_TRUE(other_id.is_valid());
   EXPECT_NE(other_id, file_id);

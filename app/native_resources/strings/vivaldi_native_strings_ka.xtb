@@ -14,6 +14,7 @@
 <translation id="1454726940098520109">ეს გაფრთხილება აღარ მაჩვენო</translation>
 <translation id="1462666970065907900">მართლა გნებავთ ამ ფანჯრის დახურვა?</translation>
 <translation id="1480046233931937785">კრედიტები</translation>
+<translation id="1490502035430975848">პორტალის დოკუმენტის ინსპექცია</translation>
 <translation id="1521774566618522728">აქტიური დღეს</translation>
 <translation id="1526344461589023948">შეცდომა გადმოწერილი განახლების შენახვისას. შეამოწმეთ, გაქვთ თუ არა თავისუფალი ადგილი და თავიდან სცადეთ.</translation>
 <translation id="1635542496948266458">პროფილის გადართვა</translation>
@@ -34,9 +35,11 @@
 <translation id="2141974047387702305">შეცდომა განახლების ფაილის გადმოწერისას. შეამოწმეთ თქვენ ინტერნეტკავშირი და მოგვიანებით სცადეთ.</translation>
 <translation id="2226825946708954262">⚠ მონაცემების კარგვით გაგრძელება</translation>
 <translation id="2339641773402824483">განახლებების შემოწმება...</translation>
+<translation id="2429571091666452569">სიიდან:</translation>
 <translation id="2441056087170876076">მონსტრი 2</translation>
 <translation id="2444387452209867610">შენიშვნის ჩასმა</translation>
 <translation id="2486841023299517366">ცხოველი 4</translation>
+<translation id="2501278716633472235">უკან დაბრუნება</translation>
 <translation id="2612127540243995147">დასაყენებლად მზადაა. Vivaldi დაიხურება და თავიდან გაეშვება.</translation>
 <translation id="2613387515621326337">განახლების ვებგვერდის ჩვენება</translation>
 <translation id="2645477450146475243">სამწუხაროდ, თქვენი Opera-ის პარამეტრები ხელმიუწვდომელია, როცა ის ბრაუზერი გაშვებულია. პარამეტრების Vivaldi-ში შემოსატანად შეინახეთ, რასაც აკეთებდით და დახურეთ Opera-ის ყველა ფანჯარა. შემდეგ კი გაგრძელებას დააჭირეთ.</translation>
@@ -57,10 +60,11 @@
 <translation id="3127383884976966729">ცხოველი 7</translation>
 <translation id="3131120041041402952">Arc</translation>
 <translation id="3156398087075132709">ახალი სანიშნე</translation>
-<translation id="3255747772218936245">მონიშნული განახლების დაყენება</translation>
+<translation id="3255747772218936245">არჩეული განახლების დაყენება</translation>
 <translation id="3259769196742189631">დადასტურება</translation>
 <translation id="3291915639428159043">ავტოდაკვრა გათიშულია</translation>
 <translation id="3302905971452834934">მონსტრი 1</translation>
+<translation id="3308738399950580893">რეკლამა</translation>
 <translation id="3334610655141903168">(უსათაურო)</translation>
 <translation id="3372505110412186107">Vivaldi <ph name="VERSION" /> ამჟამად ხელმისაწვდომი უახლესი ვერსიაა.</translation>
 <translation id="3383198080133834965">თქვენ ბოლო ვერსია გაქვთ!</translation>
@@ -71,9 +75,11 @@
 <translation id="3521635864657970829">მართლა გნებავთ ამ ფანჯრის დახურვა?</translation>
 <translation id="3540597690227428180">ცხოველი 9</translation>
 <translation id="3542768452570884558">ბმულის ახალ ფანჯარაში გახსნა</translation>
+<translation id="3586931643579894722">დეტალების დამალვა</translation>
 <translation id="3588820906588687999">გამოსახულების ახალ ჩანართში გახსნა</translation>
 <translation id="3601066750251199488">მონსტრი 3</translation>
 <translation id="3620979700683094848">საიტებს შეუძლიათ, ვიდეო ავტომატურად დაუკრან</translation>
+<translation id="3650023731264842343">შემდეგი გვერდის ჩატვირთვისას:</translation>
 <translation id="3658651522139217005">Opera GX</translation>
 <translation id="3680031241659195730">ხელმისაწვდომია Vivaldi-ის ახალი ვერსია!</translation>
 <translation id="3708982624815781692">გადმოწერა გაუქმდა.</translation>
@@ -83,6 +89,7 @@
 <translation id="3795800845758778870">სამწუხაროდ, თქვენი Brave-ის პარამეტრები ხელმისაწვდომი არაა, სანამ ბრაუზერი გაშვებულია. ამ პარამეტრების Vivaldi-ში შემოსატანად შეინახეთ, რასაც აკეთებდით და დახურეთ Brave-ის ყველა ფანჯარა. შემდეგ კი გაგრძელებაზე დააწკაპუნეთ.</translation>
 <translation id="3822431842304177896">ახალი გამყოფი</translation>
 <translation id="3832132597516774400">ლანდშაფტი 5</translation>
+<translation id="3894751534882749287">თუ მაინც გნებავთ, ეს ვებგვერდი იხილოთ, ტრეკინგის დონის დაწევა ტრეკერის-მბლოკავის მხტუნარა ფანჯარაში ან დაშვების ღილაკზე დაწკაპუნებით შეგიძლიათ</translation>
 <translation id="3914946330804881301">შემოტანილია Opera-დან</translation>
 <translation id="3921292902397893431">მონსტრი 8</translation>
 <translation id="3943857333388298514">ჩასმა</translation>
@@ -107,6 +114,7 @@
 <translation id="4582480609585453144">ბმულის გახსნა ფონურ ჩანართში</translation>
 <translation id="4636708767492582204">ფოსტით გაგზავნა</translation>
 <translation id="4677434526832593569">ცხოველი 8</translation>
+<translation id="4736016046474602958">ტრეკერების მბლოკავი</translation>
 <translation id="474217410105706308">ჩანართის დადუმება</translation>
 <translation id="4861715717329665002">ავტოშენახული სესიები</translation>
 <translation id="4881695831933465202">გახსნა</translation>
@@ -133,9 +141,11 @@
 <translation id="588258955323874662">მთელ ეკრანზე</translation>
 <translation id="5916080360077521750">სამწუხაროდ, თქვენი Chrome-ის პარამეტრები ხელმისაწვდომი არაა, სანამ ბრაუზერი გაშვებულია. ამ პარამეტრების Vivaldi-ში შემოსატანად შეინახეთ, რასაც აკეთებდით და დახურეთ Chrome-ის ყველა ფანჯარა. შემდეგ კი გაგრძელებაზე დააწკაპუნეთ.</translation>
 <translation id="6040143037577758943">დახურვა</translation>
+<translation id="6140948187512243695">დეტალების ჩვენება</translation>
 <translation id="6229528619562190452">დააწკაპუნეთ Vivaldi-ის განახლებისთვის.</translation>
 <translation id="6234173136417926046">გამოსახულების გამოყენება საწყისი გვერდის ფონად</translation>
 <translation id="6339818817272922368">ლოკალური ანგარიში</translation>
+<translation id="6376435169746695498">ამ გვერდის ჩატვირთვა აიკრძალა <ph name="BLOCKER_NAME" />-ის მიერ</translation>
 <translation id="6398710281890660037">ჩემი პროფილის დაცვა</translation>
 <translation id="6438786710866753178">ლანდშაფტი 4</translation>
 <translation id="6477028720702061455">აირჩიეთ Opera-ის პროფილის საქაღალდე, რომლის შემოტანაც გნებავთ</translation>
@@ -152,6 +162,7 @@
 <translation id="7086554968911045110">ლანდშაფტი 7</translation>
 <translation id="7099506190679014195">უსაფრთხო გასაღებების საცავის განახლება</translation>
 <translation id="7111492742514999492">ლანდშაფტი 9</translation>
+<translation id="7113310725918019676"><ph name="BLOCKED_TYPE" />-ის დაშვება <ph name="DOMAIN" />-დან</translation>
 <translation id="7208252576848052204">სამწუხაროდ, თქვენი Arc-ის პარამეტრები ხელმიუწვდომელია, როცა ის ბრაუზერი გაშვებულია. პარამეტრების Vivaldi-ში შემოსატანად შეინახეთ, რასაც აკეთებდით და დახურეთ Arc-ის ყველა ფანჯარა. შემდეგ კი გაგრძელებას დააჭირეთ.</translation>
 <translation id="7321500017121629018">აქტიური გუშინ</translation>
 <translation id="7337881442233988129">Chromium</translation>
@@ -167,12 +178,13 @@
 <translation id="8027581147000338959">ახალ ფანჯარაში გახსნა</translation>
 <translation id="8044382196220116469">საიტებისტვის ვიდეოს ავტომატური დაკვრის უფლების ჩამორთმევა</translation>
 <translation id="8099620695029051217">ვებგვერდის მისამართის კოპირება</translation>
+<translation id="8119307142152921512">ტრეკერები და რეკლამა</translation>
 <translation id="8197810018650377191">მიმდინარე გვერდის ჩანიშვნა</translation>
 <translation id="8261506727792406068">წაშლა</translation>
-<translation id="8263047843452521549">ფონური დამხმარე პროგრამის ინსპექტირება</translation>
 <translation id="8331671104904436324">ფონურ ჩანართში გახსნა</translation>
 <translation id="8373293945112511707">ლანდშაფტი 1</translation>
 <translation id="8388552048012645975">განახლების გადმოწერა...</translation>
+<translation id="8392904568172593155">პარამეტრების გარეშე</translation>
 <translation id="8427094907586191051">ლანდშაფტი 17</translation>
 <translation id="8439034818057146672">Vivaldi-ის ახალი ვერსია დასაყენებლად მზადაა.</translation>
 <translation id="8446668873108041390">JavaScript-ის AppleScript-ით შესრულება გამორთულია. ჩართვა შეგიძლიათ მენიუდან მორგება &gt; კონფიდენციალობა &gt; Apple-ის მოვლენები, სადაც არს პარამეტრი, რომელიც Apple-ის მოვლენებიდან JavaScript-ის დაშვების საშუალებას გაძლევთ.</translation>
@@ -183,14 +195,15 @@
 <translation id="8651348004684669199">აქტიური ჩანართის დამატება</translation>
 <translation id="8669345741879513971">მონსტრი 10</translation>
 <translation id="867544375504146191">Yandex</translation>
-<translation id="8689295374912158752">დოკუმენტების ინსპექტირება</translation>
 <translation id="875142999698251063">გასვლა ახლავე</translation>
 <translation id="8768970203213061953">ლანდშაფტი 14</translation>
 <translation id="8773635261052182196">ამ გაფრთხილებებს აღარ გაჩვენებთ. მათი თავიდან ჩართვა Vivaldi-ის პარამეტრების გვერდიდან შეგიძლიათ.</translation>
 <translation id="8774017153185436870">საიტებს შეუძლიათ, ვიდეო ავტომატურად დაუკრან</translation>
 <translation id="8813277370772331957">მოგვიანებით შემახსენე</translation>
+<translation id="8837256239226739065">ფონური სერვისის დამხმარე პროგრამის ინსპექცია</translation>
 <translation id="8894900864683381599">ვებპანელზე ბმულის დამატება</translation>
 <translation id="8912720443398351457">მართლა გნებავთ Vivaldi-დან გასვლა?</translation>
+<translation id="8940028675168378100">დაბლოკილია <ph name="BLOCKER_NAME" />-ის მიერ</translation>
 <translation id="8947109330183116400">აირჩიეთ HTML სანიშნეების ფაილი</translation>
 <translation id="9017566390391482291">აირჩიეთ Vivaldi-ის პროფილის საქაღალდე, რომლის შემოტანაც გნებავთ</translation>
 <translation id="9048058608784130603">დარჩენილია განახლება <ph name="VERSION" /></translation>
@@ -201,6 +214,7 @@
 <translation id="912022491595344261">გამოსახულების გახსნა, როგორც <ph name="USER" /></translation>
 <translation id="9157539936604258187">ბმულის გახსნა</translation>
 <translation id="9169060351863393881">Opera 12.x</translation>
+<translation id="9180553614777056266">რეკლამთმბლოკავი</translation>
 <translation id="939305735877869636">Brave</translation>
 <translation id="970294721402795299">ლანდშაფტი 16</translation>
 </translationbundle>

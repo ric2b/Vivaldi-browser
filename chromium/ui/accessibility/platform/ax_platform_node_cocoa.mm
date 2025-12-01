@@ -8,6 +8,7 @@
 #include <Foundation/Foundation.h>
 
 #include "base/apple/foundation_util.h"
+#include "base/compiler_specific.h"
 #include "base/logging.h"
 #include "base/mac/mac_util.h"
 #include "base/memory/raw_ptr_exclusion.h"
@@ -446,17 +447,18 @@ const ui::CocoaActionList& GetCocoaActionListForTesting() {
         @selector(accessibilityPerformConfirm)
   });
 
-  static std::unordered_set<SEL> methodSelectorsForParameterizedAttributes = {
-      @selector(accessibilityCellForColumn:row:),
-      @selector(accessibilityRangeForIndex:),
-      @selector(accessibilityRangeForLine:),
-      @selector(accessibilityRangeForPosition:),
-  };
+  static base::NoDestructor<std::unordered_set<SEL>>
+      methodSelectorsForParameterizedAttributes({
+        @selector(accessibilityCellForColumn:row:),
+            @selector(accessibilityRangeForIndex:),
+            @selector(accessibilityRangeForLine:),
+            @selector(accessibilityRangeForPosition:),
+      });
 
   // See if the method is permitted by checking its corresponding parameterized
   // attribute counterpart.
-  if (methodSelectorsForParameterizedAttributes.find(selector) !=
-      methodSelectorsForParameterizedAttributes.end()) {
+  if (methodSelectorsForParameterizedAttributes->find(selector) !=
+      methodSelectorsForParameterizedAttributes->end()) {
     NSString* selectorString = NSStringFromSelector(selector);
     NSString* attribute =
         [[AXPlatformNodeCocoa newAccessibilityAPIMethodToAttributeMap]
@@ -488,19 +490,20 @@ const ui::CocoaActionList& GetCocoaActionListForTesting() {
   // If we're in old-accessibility-API mode, disable methods that we've added
   // to support the new API.
   if (!features::IsMacAccessibilityAPIMigrationEnabled()) {
-    static std::unordered_set<SEL> newAccessibilityAPISelectors;
+    static base::NoDestructor<std::unordered_set<SEL>>
+        newAccessibilityAPISelectors;
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
       NSSet<NSString*>* methodNames =
           [AXPlatformNodeCocoa newAccessibilityAPIMethods];
       for (NSString* methodName in methodNames) {
         SEL methodSelector = NSSelectorFromString(methodName);
-        newAccessibilityAPISelectors.insert(methodSelector);
+        newAccessibilityAPISelectors->insert(methodSelector);
       }
     });
 
-    if (newAccessibilityAPISelectors.find(selector) !=
-        newAccessibilityAPISelectors.end()) {
+    if (newAccessibilityAPISelectors->find(selector) !=
+        newAccessibilityAPISelectors->end()) {
       return NO;
     }
   } else {
@@ -508,14 +511,12 @@ const ui::CocoaActionList& GetCocoaActionListForTesting() {
     // that are expected to continue to work independent of the flag. For any
     // such API, ensure the corresponding old API is not available when the flag
     // is enabled.
-    static std::unordered_set<SEL> deprecatedSelectors = {
-        @selector(AXInsertionPointLineNumber),
-        @selector(AXNumberOfCharacters),
-        @selector(AXPlaceholderValue),
-        @selector(AXSelectedText),
-        @selector(AXSelectedTextRange),
-        @selector(AXVisibleCharacterRange)};
-    if (deprecatedSelectors.find(selector) != deprecatedSelectors.end()) {
+    static base::NoDestructor<std::unordered_set<SEL>> deprecatedSelectors({
+      @selector(AXInsertionPointLineNumber), @selector(AXNumberOfCharacters),
+          @selector(AXPlaceholderValue), @selector(AXSelectedText),
+          @selector(AXSelectedTextRange), @selector(AXVisibleCharacterRange)
+    });
+    if (deprecatedSelectors->find(selector) != deprecatedSelectors->end()) {
       return NO;
     }
   }
@@ -1018,12 +1019,14 @@ const ui::CocoaActionList& GetCocoaActionListForTesting() {
   return self;
 }
 
-- (void)detach {
+- (void)detachAndNotifyDestroyed:(BOOL)shouldNotify {
   if (!_node)
     return;
   _node = nil;
-  NSAccessibilityPostNotification(
-      self, NSAccessibilityUIElementDestroyedNotification);
+  if (shouldNotify) {
+    NSAccessibilityPostNotification(
+        self, NSAccessibilityUIElementDestroyedNotification);
+  }
 }
 
 - (NSRect)boundsInScreen {
@@ -2484,8 +2487,9 @@ const ui::CocoaActionList& GetCocoaActionListForTesting() {
 
 - (id)AXStringForRange:(id)parameter {
   if (![parameter isKindOfClass:[NSValue class]] ||
-      (0 != strcmp([parameter objCType], @encode(NSRange))))
+      (0 != UNSAFE_TODO(strcmp([parameter objCType], @encode(NSRange))))) {
     return nil;
+  }
 
   return [self accessibilityStringForRange:[parameter rangeValue]];
 }

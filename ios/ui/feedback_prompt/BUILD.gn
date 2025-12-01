@@ -52,6 +52,7 @@ swift_source_set("vivaldi_feedback_prompt_swift") {
   ]
 
   deps = [
+    "//vivaldi/app:vivaldi_ios_native_strings",
     "//vivaldi/ios/ui/helpers:helpers_swift",
     "//vivaldi/ios/ui/lottie_swiftui:lottie_swiftui",
     "//vivaldi/ios/ui/lottie_swiftui:lottie_objc_wrapper",

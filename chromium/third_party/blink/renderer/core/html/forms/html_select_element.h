@@ -163,6 +163,20 @@ class CORE_EXPORT HTMLSelectElement final
   // We prefer |optionList()| to |listItems()|.
   const ListItems& GetListItems() const;
 
+  // NearestAncestorSelectNoNesting is called with <hr>, <option>, and
+  // <optgroup> elements to determine if they have an ancestor <select> which
+  // they are associated with. An ancestor <select> will not be returned in some
+  // cases, such as nested <option>s, in order to match the logic in
+  // RecalcListItems and OptionList.
+  // `insertion_point` and `passed_insertion_point` are optional parameters used
+  // by HTMLOptionElement::InsertedInto. If `insertion_point` is encountered
+  // during the ancestor traversal, then `passed_insertion_point` will be set to
+  // true.
+  static HTMLSelectElement* NearestAncestorSelectNoNesting(
+      const Element& element,
+      ContainerNode* insertion_point = nullptr,
+      bool* passed_insertion_point = nullptr);
+
   void AccessKeyAction(SimulatedClickCreationScope creation_scope) override;
   void SelectOptionByAccessKey(HTMLOptionElement*);
 
@@ -227,6 +241,14 @@ class CORE_EXPORT HTMLSelectElement final
   void CloneNonAttributePropertiesFrom(const Element&,
                                        NodeCloningData&) override;
 
+  // These are all utilities that check the relevant runtime flag, *plus* check
+  // that the SelectParserRelaxationOptOut origin trial is not enabled.
+  static bool SelectParserRelaxationEnabled(const Document* document);
+  static bool SelectParserRelaxationEnabled(const Node* node);
+  static bool CustomizableSelectEnabled(const Document* document);
+  static bool CustomizableSelectEnabled(const Node* node);
+  static bool CustomizableSelectEnabledNoDocument();
+
   // InnerElement and PopupRootAXObject should be called only if UsesMenuList().
   // InnerElement is the in-page <div> element in the UA shadowroot for MenuList
   // rendering. It is excluded from the layout tree if the author sets
@@ -275,11 +297,12 @@ class CORE_EXPORT HTMLSelectElement final
   // in-page rendering of the button, and IsAppearanceBasePicker should be used
   // for code which is concerned with the popup/popover and the other elements
   // which are rendered in it.
-  // |no_update| prevents these methods from running an UpdateStyleAndLayoutTree
-  // which is needed in some cases to prevent nested style/layout recalc.
-  enum class StyleUpdateBehavior { kUpdateStyle, kDontUpdateStyle };
-  bool IsAppearanceBaseButton(StyleUpdateBehavior) const;
+  // SetIsAppearanceBasePickerForDisplayNone is called during style recalc for
+  // the case where the picker is closed and is therefore display:none and
+  // doesn't have a computed style to look at inside IsAppearanceBasePicker.
+  bool IsAppearanceBaseButton() const;
   bool IsAppearanceBasePicker() const;
+  void SetIsAppearanceBasePickerForDisplayNone(bool);
 
   void SelectedContentElementInserted(
       HTMLSelectedContentElement* selectedcontent);
@@ -399,7 +422,6 @@ class CORE_EXPORT HTMLSelectElement final
   mutable ListItems list_items_;
   TypeAhead type_ahead_;
   unsigned size_;
-  Member<HTMLSlotElement> option_slot_;
   Member<HTMLOptionElement> last_on_change_option_;
   Member<HTMLOptionElement> suggested_option_;
   TreeOrderedList<HTMLSelectedContentElement> descendant_selectedcontents_;

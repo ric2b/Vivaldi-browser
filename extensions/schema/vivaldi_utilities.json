@@ -620,6 +620,64 @@
             "description": "Mime type of the read image."
           }
         }
+      },
+      {
+        "id": "VivaldiService",
+        "type": "string",
+        "description": "Name of service",
+        "enum": [ "sync" ]
+      },
+      {
+        "id": "VivaldiStatus",
+        "type": "string",
+        "description": "The states of a remote service",
+        "enum": [
+          {
+            "name": "operational",
+            "description": "Up an running."
+          },
+          {
+            "name": "maintenance",
+            "description": "Down for maintenance."
+          },
+          {
+            "name": "minoroutage",
+            "description": "Down for a minor problem."
+          },
+          {
+            "name": "majoroutage",
+            "description": "Down for a major problem."
+          }
+        ]
+      },
+      {
+        "id": "VivaldiServiceState",
+        "type": "object",
+        "description": "The actual state of a remote service",
+        "properties": {
+          "service": {
+            "$ref": "VivaldiService"
+          },
+          "status": {
+            "$ref": "VivaldiStatus"
+          }
+        }
+      },
+      {
+        "id": "ExtensionInstallResult",
+        "type": "object",
+        "description": "An object holding result of extension installation request.",
+        "properties": {
+          "success" : {
+            "name": "success",
+            "type": "boolean"
+          },
+          "error" : {
+            "name": "error",
+            "type": "string",
+            "description": "Installation error description, in case installation failed."
+          }
+        }
       }
     ],
     "functions": [
@@ -2107,8 +2165,35 @@
           "name": "callback",
           "parameters": [
             {
-              "name": "success",
-              "type": "boolean"
+              "name": "result",
+              "$ref": "ExtensionInstallResult"
+            }
+          ]
+        }
+      },
+      {
+        "name": "allowVPNIncognito",
+        "type": "function",
+        "description": "A single-purpose call that grants incognito access to ProtonVPN extension.",
+        "parameters": [
+        ],
+        "returns_async": {
+          "name": "callback",
+          "parameters": []
+        }
+      },
+      {
+        "name": "requestVivaldiSyncStatus",
+        "type": "function",
+        "description": "Looks up status. Status can be returned in callback, but if not, arrive later as an onVivaldiSyncStatusChange event.",
+        "parameters": [],
+        "returns_async": {
+          "name": "callback",
+          "optional": true,
+          "parameters": [
+            {
+              "name": "result",
+              "$ref": "VivaldiStatus"
             }
           ]
         }
@@ -2232,6 +2317,18 @@
         "type": "function",
         "description": "Fired when the session recovery is done.",
         "parameters": []
+      },
+      {
+        "name": "onVivaldiSyncStatusUpdated",
+        "type": "function",
+        "description": "Fired when backend has received information of Vivaldi sync service.",
+        "parameters": [
+          {
+            "name": "mode",
+            "$ref": "VivaldiStatus",
+            "description": "The state of the remote service."
+          }
+        ]
       }
     ]
   }

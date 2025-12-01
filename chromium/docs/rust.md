@@ -76,21 +76,12 @@ To use a third-party crate "bar" version 3 from first party code:
    * `vpython3 ./tools/crates/run_gnrt.py gen`
    * Or, directly through (nightly) cargo:
      `cargo run --release --manifest-path tools/crates/gnrt/Cargo.toml --target-dir out/gnrt gen`
-1. Verify if all new dependencies are already audited by running `cargo vet`
-   See [`rust-unsafe.md#cargo-vet-policy`](rust-unsafe.md#cargo-vet-policy) for
-   more details.  This boils down to:
-   * `./tools/crates/run_cargo_vet.py check`
-   * If `check` fails, then there are missing audits, which need to be added to
-     `//third_party/rust/chromium_crates_io/supply-chain/audits.toml`.
 1. Add the new files to git:
    * `git add -f third_party/rust/chromium_crates_io/vendor`.
      (The `-f` is important, as files may be skipped otherwise from a
      `.gitignore` inside the crate.)
    * `git add third_party/rust`
-1. Upload the CL. If there is any `unsafe` usage then Security experts will need to
-   audit the "ub-risk" level.  See
-   [`rust-unsafe.md#code-review-policy`](rust-unsafe.md#code-review-policy) for
-   more details.
+1. Upload the CL and get a review from `//third_party/rust/OWNERS`.
 
 ### Cargo features
 
@@ -113,6 +104,10 @@ might exist if the "foo" crate was patched with a couple of changes:
 //third_party/rust/chromium_crates_io/patches/foo/patches/0001-Edit-the-Cargo-toml.diff
 //third_party/rust/chromium_crates_io/patches/foo/patches/0002-Other-changes.diff
 ```
+
+Patches are applied with `-p6 --directory
+third_party/rust/chromium_crates_io/vendor/<crate>-<version>`, effectively
+ignoring the version numbers in the patch files.
 
 The recommended procedure to create such patches is:
 
@@ -233,15 +228,7 @@ GN template (not the built-in `rust_library`) to integrate properly into the
 mixed-language Chromium build and get the correct compiler options applied to
 them.
 
-The [CXX](https://cxx.rs) tool is used for generating C++ bindings to Rust
-code. Since it requires explicit declarations in Rust, an wrapper shim around a
-pure Rust library is needed. Add these Rust shims that contain the CXX
-`bridge` macro to the `cxx_bindings` GN variable in the `rust_static_library`
-to have CXX generate a C++ header for that file. To include the C++ header
-file, rooted in the `gen` output directory, use
-```
-#include "the/path/to/the/rust/file.rs.h"
-```
+See `rust-ffi.md` for information on C++/Rust FFI.
 
 # Logging
 

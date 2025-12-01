@@ -5,8 +5,7 @@
 <translation id="1097355661841455597">Radi si vypočujeme vaše názory.</translation>
 <translation id="1137850887415122856">Ak chcete uzamknúť súkromné listy, nastavte Touch ID, Face ID alebo prístupový kód.</translation>
 <translation id="1310184829257917508">Opýtať sa na otvorenie odkazov z iných aplikácií v súkromnom okne</translation>
-<translation id="1561609750546413721">Prekladač Vivaldi</translation>
-<translation id="207677936531967364">Stránka novej súkromnej karty</translation>
+<translation id="207677936531967364">Stránka nového súkromného listu</translation>
 <translation id="2353953000228441783">Predvolené zobrazenie webu</translation>
 <translation id="2394192052244849643">Vložiť a vyhľadať</translation>
 <translation id="2418705169960294134">Nový súkromný list</translation>
@@ -17,7 +16,9 @@
 <translation id="3463990832590571933">Otvoriť v novom súkromnom liste</translation>
 <translation id="3473652525653758699">Nové súkromné okno</translation>
 <translation id="3501504415290398157">Použiť<ph name="BIOMETRIC_AUTHENITCATION_TYPE" /> pre odomknutie súkromných listov.</translation>
+<translation id="3607792383367580513">Preložiť</translation>
 <translation id="3692650606013198282">Otvoriť v súkromí</translation>
+<translation id="3922395466317605522">Prispôsobiť ponuku</translation>
 <translation id="3981599532037327317">Otvoriť ${url} in súkromí</translation>
 <translation id="398477389655464998">Kopírovať odkaz na zvýraznenie</translation>
 <translation id="4026745073321351206">🙄 Všimli ste si problém?</translation>
@@ -36,13 +37,12 @@
 <translation id="6680416467695217368">Prispôsobiť ponuku</translation>
 <translation id="6827597288286078054">Súkromné vyhľadávanie</translation>
 <translation id="6851516051005285358">Vyžiadať stránky pre počítač</translation>
-<translation id="7307970171564921489">Odomknúť súkromné karty pomocou <ph name="BIOMETRIC_AUTHENITCATION_TYPE" /></translation>
+<translation id="7307970171564921489">Odomknúť súkromné listy pomocou <ph name="BIOMETRIC_AUTHENITCATION_TYPE" /></translation>
 <translation id="7347289093190902150">Otvoriť v súkromí?</translation>
-<translation id="7549299604720382000">Nová súkromná karta</translation>
-<translation id="755255281989213264">Prispôsobiť ponuku</translation>
-<translation id="7920949005883349320">Ochrana súkromia a bezpečnosť</translation>
+<translation id="7549299604720382000">Nový súkromný list</translation>
 <translation id="7961015016161918242">Nikdy</translation>
-<translation id="8326104954595890674">Nová súkromná karta</translation>
+<translation id="8326104954595890674">Nový súkromný list</translation>
 <translation id="8756969031206844760">Aktualizovať heslo?</translation>
+<translation id="9042893549633094279">Ochrana súkromia a zabezpečenie</translation>
 <translation id="9094033019050270033">Aktualizovať heslo</translation>
 </translationbundle>

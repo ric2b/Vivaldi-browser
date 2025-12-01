@@ -11,6 +11,7 @@
 
 #include "base/scoped_observation.h"
 #include "chrome/browser/profiles/profile.h"
+#include "components/direct_match/direct_match_favicon_installer.h"
 #include "components/direct_match/direct_match_service.h"
 #include "extensions/browser/browser_context_keyed_api_factory.h"
 #include "extensions/browser/extension_function.h"
@@ -40,6 +41,11 @@ class DirectMatchAPI : public BrowserContextKeyedAPI,
  private:
   friend class BrowserContextKeyedAPIFactory<DirectMatchAPI>;
   const raw_ptr<content::BrowserContext> browser_context_;
+  // Piggyback code. Included here as the installer depends on code from the
+  // chrome module. It can not be added directly to the direct match service
+  // which is in components. Code in components can not have that dependecy
+  // (will not link).
+  std::unique_ptr<direct_match::DirectMatchFaviconInstaller> favicon_installer_;
 
   // BrowserContextKeyedAPI implementation.
   static const char* service_name() { return "DirectMatchAPI"; }
@@ -54,16 +60,6 @@ class DirectMatchAPI : public BrowserContextKeyedAPI,
   void OnExtensionUnloaded(content::BrowserContext* browser_context,
                            const extensions::Extension* extension,
                            extensions::UnloadedExtensionReason reason) override;
-};
-
-class DirectMatchGetFunction : public ExtensionFunction {
- public:
-  DECLARE_EXTENSION_FUNCTION("directMatch.get", DIRECT_MATCH_GET)
-  DirectMatchGetFunction() = default;
-
- private:
-  ~DirectMatchGetFunction() override = default;
-  ResponseAction Run() override;
 };
 
 class DirectMatchHideFunction : public ExtensionFunction {

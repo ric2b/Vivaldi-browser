@@ -9,21 +9,25 @@ import 'chrome://resources/polymer/v3_0/iron-icon/iron-icon.js';
 import '/strings.m.js';
 
 import {getInstance} from 'chrome://resources/ash/common/cr_elements/cr_a11y_announcer/cr_a11y_announcer.js';
-import {CrDialogElement} from 'chrome://resources/ash/common/cr_elements/cr_dialog/cr_dialog.js';
-import {CrToastElement} from 'chrome://resources/ash/common/cr_elements/cr_toast/cr_toast.js';
+import type {CrDialogElement} from 'chrome://resources/ash/common/cr_elements/cr_dialog/cr_dialog.js';
+import type {CrToastElement} from 'chrome://resources/ash/common/cr_elements/cr_toast/cr_toast.js';
 import {I18nMixin} from 'chrome://resources/ash/common/cr_elements/i18n_mixin.js';
-import {BottomLeftLayout as DiagramBottomLeftLayout, BottomRightLayout as DiagramBottomRightLayout, KeyboardDiagramElement, MechanicalLayout as DiagramMechanicalLayout, NumberPadLayout as DiagramNumberPadLayout, PhysicalLayout as DiagramPhysicalLayout, SplitModifierTopRowKey as DiagramSplitModifierTopRowKey, TopRightKey as DiagramTopRightKey, TopRowKey as DiagramTopRowKey} from 'chrome://resources/ash/common/keyboard_diagram.js';
+import type {KeyboardDiagramElement} from 'chrome://resources/ash/common/keyboard_diagram.js';
+import {BottomLeftLayout as DiagramBottomLeftLayout, BottomRightLayout as DiagramBottomRightLayout, MechanicalLayout as DiagramMechanicalLayout, NumberPadLayout as DiagramNumberPadLayout, PhysicalLayout as DiagramPhysicalLayout, SplitModifierTopRowKey as DiagramSplitModifierTopRowKey, TopRightKey as DiagramTopRightKey, TopRowKey as DiagramTopRowKey} from 'chrome://resources/ash/common/keyboard_diagram.js';
 import {KeyboardKeyState} from 'chrome://resources/ash/common/keyboard_key.js';
 import {loadTimeData} from 'chrome://resources/ash/common/load_time_data.m.js';
 import {assert} from 'chrome://resources/js/assert.js';
 import {EventTracker} from 'chrome://resources/js/event_tracker.js';
-import {PolymerElementProperties} from 'chrome://resources/polymer/v3_0/polymer/interfaces.js';
+import type {PolymerElementProperties} from 'chrome://resources/polymer/v3_0/polymer/interfaces.js';
 import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
-import {BottomLeftLayout, BottomRightLayout, KeyboardInfo, MechanicalLayout, NumberPadPresence, NumpadLayout, PhysicalLayout, TopRightKey, TopRowKey} from './input.mojom-webui.js';
-import {InputDataProviderInterface, KeyboardObserverReceiver, KeyEvent, KeyEventType} from './input_data_provider.mojom-webui.js';
+import type {KeyboardInfo} from './input.mojom-webui.js';
+import {BottomLeftLayout, BottomRightLayout, MechanicalLayout, NumberPadPresence, NumpadLayout, PhysicalLayout, TopRightKey, TopRowKey} from './input.mojom-webui.js';
+import type {InputDataProviderInterface, KeyEvent} from './input_data_provider.mojom-webui.js';
+import {KeyboardObserverReceiver, KeyEventType} from './input_data_provider.mojom-webui.js';
 import {getTemplate} from './keyboard_tester.html.js';
-import {getInputDataProvider} from './mojo_interface_provider.js';
+import {getInputDataProvider, getSystemDataProvider} from './mojo_interface_provider.js';
+import type {SystemDataProviderInterface, SystemInfo} from './system_data_provider.mojom-webui.js';
 
 export interface KeyboardTesterElement {
   $: {
@@ -132,6 +136,11 @@ const standardNumberPadCodes: Set<number> = new Set([
   111,  // KEY_DELETE
 ]);
 
+const acerSplitModifierKeyboardWithNumpadBoards = [
+  'ruke',
+  'jubileum',
+];
+
 const DISPLAY_TOAST_INDEFINITELY_MS = 0;
 const TOAST_LINGER_MS = 1000;
 
@@ -217,6 +226,21 @@ export class KeyboardTesterElement extends KeyboardTesterElementBase {
     };
   }
 
+  constructor() {
+    // For acer split modifier keyboard w/ numpad, the top row is different
+    // from standard reference design, therefore need a physical layout
+    // exception.
+    super();
+    this.systemDataProvider.getSystemInfo().then(
+        (result: {systemInfo: SystemInfo}) => {
+          this.onSystemInfoReceived(result.systemInfo);
+        });
+  }
+
+  private onSystemInfoReceived(systemInfo: SystemInfo): void {
+    this.boardName = systemInfo.boardName;
+  }
+
   keyboard: KeyboardInfo;
   isLoggedIn: boolean;
   protected diagramTopRightKey: DiagramTopRightKey|null;
@@ -225,10 +249,17 @@ export class KeyboardTesterElement extends KeyboardTesterElementBase {
   private diagramMechanicalLayout: DiagramMechanicalLayout|null;
   private diagramPhysicalLayout: DiagramPhysicalLayout|null;
   private showNumberPad: boolean;
+  private showAssistantKey: boolean;
+  private boardName: string = '';
   private topRowKeys: KeyboardDiagramTopRowKey[];
+  private bottomLeftLayout: string;
+  private bottomRightLayout: string;
+  private numberPadLayout: string;
   private receiver: KeyboardObserverReceiver|null = null;
   private inputDataProvider: InputDataProviderInterface =
       getInputDataProvider();
+  private systemDataProvider: SystemDataProviderInterface =
+      getSystemDataProvider();
   private eventTracker: EventTracker = new EventTracker();
 
   override disconnectedCallback(): void {
@@ -275,10 +306,16 @@ export class KeyboardTesterElement extends KeyboardTesterElementBase {
     if (!keyboardInfo) {
       return null;
     }
+
+    if (acerSplitModifierKeyboardWithNumpadBoards.includes(this.boardName)) {
+      return DiagramPhysicalLayout.ACER_SPLIT_MODIFIER_WITH_NUMPAD;
+    }
+
     if (keyboardInfo.bottomLeftLayout !== BottomLeftLayout.kUnknown &&
         keyboardInfo.bottomRightLayout !== BottomRightLayout.kUnknown) {
       return DiagramPhysicalLayout.SPLIT_MODIFIER;
     }
+
     return {
       [PhysicalLayout.kUnmappedEnumField]: null,
       [PhysicalLayout.kUnknown]: null,
@@ -311,9 +348,11 @@ export class KeyboardTesterElement extends KeyboardTesterElementBase {
   }
 
   private computeShowAssistantKey(keyboard?: KeyboardInfo): boolean {
+    const physicalLayout = this.computeDiagramPhysicalLayout(keyboard);
     return !!keyboard && keyboard.hasAssistantKey &&
-        this.computeDiagramPhysicalLayout(keyboard) !==
-        DiagramPhysicalLayout.SPLIT_MODIFIER;
+        physicalLayout !== DiagramPhysicalLayout.SPLIT_MODIFIER &&
+        physicalLayout !==
+        DiagramPhysicalLayout.ACER_SPLIT_MODIFIER_WITH_NUMPAD;
   }
 
   private computeTopRowKeys(keyboard?: KeyboardInfo):

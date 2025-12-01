@@ -33,7 +33,6 @@
 <translation id="2388886110302389394">Sayfayı yeni bir Gizli sekmede aç (Ctrl-Shift-N)</translation>
 <translation id="2467694685043708798"><ph name="BEGIN_LINK" />Ağ Tanılayıcıları Çalıştırmak<ph name="END_LINK" /></translation>
 <translation id="2491414235131909199">Bu sayfa bir eklenti tarafından engellendi</translation>
-<translation id="2501278716633472235">Geri dön</translation>
 <translation id="2539524384386349900">Algıla</translation>
 <translation id="255002559098805027"><ph name="HOST_NAME" /> geçersiz bir yanıt gönderdi.</translation>
 <translation id="2634124572758952069"><ph name="HOST_NAME" /> ana makinesinin sunucu IP adresi bulunamadı.</translation>
@@ -59,7 +58,6 @@
     <ph name="PLATFORM_TEXT" /></translation>
 <translation id="3226128629678568754">Sayfayı yüklemek üzere gereken verileri tekrar göndermek için yeniden yükle düğmesine basın.</translation>
 <translation id="3234666976984236645">Bu sitedeki önemli içeriği her zaman algıla</translation>
-<translation id="3308738399950580893">reklamlar</translation>
 <translation id="3384522979010096022">Kuruluşunuz bu siteyi görüntülemenize izin vermiyor</translation>
 <translation id="3422472998109090673"><ph name="HOST_NAME" /> ana makinesine şu anda ulaşılamıyor.</translation>
 <translation id="3427092606871434483">İzin ver (varsayılan)</translation>
@@ -77,7 +75,6 @@
 <translation id="3681007416295224113">Sertifika bilgisi</translation>
 <translation id="3717027428350673159"><ph name="BEGIN_LINK" />Proxy, güvenlik duvarı ve DNS yapılandırmasını kontrol edin<ph name="END_LINK" /></translation>
 <translation id="382518646247711829">Proxy sunucu kullanıyorsanız...</translation>
-<translation id="3894751534882749287">Eğer sayfayı yine de görmek istiyorsanız, İzleme-engelleme açılır peneresınden ya da İzin ver düğmesine tıklayarak sayfanın izleme koruma düzeyini değiştirebilirsiniz</translation>
 <translation id="3950820424414687140">Giriş yap</translation>
 <translation id="3973234410852337861"><ph name="HOST_NAME" /> engellendi</translation>
 <translation id="3987940399970879459">1 MB'tan az</translation>
@@ -105,7 +102,6 @@
 <translation id="4701488924964507374"><ph name="SENTENCE1" /> <ph name="SENTENCE2" /></translation>
 <translation id="4708268264240856090">Bağlantınız kesildi</translation>
 <translation id="4722547256916164131"><ph name="BEGIN_LINK" />Windows Ağ Tanılamayı Çalıştırmak<ph name="END_LINK" /></translation>
-<translation id="4736016046474602958">İzleyici Engelleyici</translation>
 <translation id="4744603770635761495">Çalıştırılabilir Yol</translation>
 <translation id="4750917950439032686">Bilgileriniz (örneğin, parolalar veya kredi kartı numaraları) bu siteye gönderilirken gizli olur.</translation>
 <translation id="4764776831041365478"><ph name="URL" /> adresindeki web sayfası, geçici olarak kullanılamıyor veya kalıcı olarak yeni bir web adresine taşınmış olabilir.</translation>
@@ -164,13 +160,11 @@
 <translation id="7096937462164235847">Bu web sitesinin kimliği doğrulanmamış.</translation>
 <translation id="7108819624672055576">Bir eklenti tarafından izin verildi</translation>
 <translation id="7111012039238467737">(Geçerli)</translation>
-<translation id="7113310725918019676"><ph name="DOMAIN" /> adresinden <ph name="BLOCKED_TYPE" /> içeriğine izin ver</translation>
 <translation id="7126644664682723998">Yapıştır ve Ara</translation>
 <translation id="7210863904660874423"><ph name="HOST_NAME" /> güvenlik standartlarına uymuyor.</translation>
 <translation id="7219179957768738017">Bağlantı <ph name="SSL_VERSION" /> kullanıyor.</translation>
 <translation id="7221855153210829124">Bildirimleri göster</translation>
 <translation id="7353601530677266744">Komut Satırı</translation>
-<translation id="7364115444476960850">Ulaşmaya çalıştığınız sayda Vivaldi'nin <ph name="BLOCKER_NAME" /> engelleyicisi tarafından engellendi</translation>
 <translation id="7419106976560586862">Profil Yolu</translation>
 <translation id="7455133967321480974">Genel varsayılanı kullan (Engelle)</translation>
 <translation id="7518003948725431193">Şu web adresi için web sayfası bulunamadı:<ph name="URL" /></translation>
@@ -190,7 +184,6 @@
 <translation id="8037357227543935929">Sor (varsayılan)</translation>
 <translation id="8041940743680923270">Genel varsayılanı kullan (Sor)</translation>
 <translation id="808894953321890993">Parolayı değiştir</translation>
-<translation id="8119307142152921512">izleyiciler ve reklamlar</translation>
 <translation id="8149426793427495338">Bilgisayarınız uyku moduna geçti.</translation>
 <translation id="8150722005171944719"><ph name="URL" /> konumundaki dosya okunamıyor. Kaldırılmış ya da taşınmış olabilir veya dosya izinleri erişimi önlüyordur.</translation>
 <translation id="8184538546369750125">Genel varsayılanı kullan (İzin ver)</translation>
@@ -206,7 +199,6 @@
 <translation id="8703575177326907206"><ph name="DOMAIN" /> alan adına bağlantınız şifrelenmedi.</translation>
 <translation id="8740359287975076522"><ph name="HOST_NAME" /> ana makinesinin &lt;abbr id="dnsDefinition"&gt;DNS adresi&lt;/abbr&gt; bulunamadı. Sorun teşhis ediliyor.</translation>
 <translation id="8820817407110198400">Yer imleri</translation>
-<translation id="8940028675168378100"><ph name="BLOCKER_NAME" /> tarafından engellendi</translation>
 <translation id="8963117664422609631">Site ayarlarına gidin</translation>
 <translation id="8975012916872825179">Telefon numaraları, e-posta adresleri ve teslimat adresleri gibi bilgileri içerir</translation>
 <translation id="9001074447101275817"><ph name="DOMAIN" /> proxy'si için kullanıcı adı ve parola gerekiyor.</translation>
@@ -217,7 +209,6 @@
 <translation id="9069693763241529744">Bir eklenti tarafından engellendi</translation>
 <translation id="9073799351042754113">Bu site için güvenlik uyarılarını kapatmayı seçtiniz.</translation>
 <translation id="9169664750068251925">Bu sitede her zaman engelle</translation>
-<translation id="9180553614777056266">Reklam Engelleyici</translation>
 <translation id="9183425211371246419"><ph name="HOST_NAME" /> desteklenmeyen bir protokol kullanıyor.</translation>
 <translation id="936602727769022409">Google Hesabınıza erişimi kaybedebilirsiniz. Chromium, parolanızı hemen değiştirmenizi önerir. Oturum açmanız istenecektir.</translation>
 <translation id="969892804517981540">Resmî Derleme</translation>

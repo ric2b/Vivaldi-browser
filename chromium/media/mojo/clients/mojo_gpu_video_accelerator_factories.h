@@ -15,6 +15,7 @@
 #include "base/callback_list.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/scoped_refptr.h"
+#include "base/memory/weak_ptr.h"
 #include "base/unguessable_token.h"
 #include "build/build_config.h"
 #include "components/viz/common/gpu/context_lost_observer.h"
@@ -28,7 +29,6 @@ class SequencedTaskRunner;
 
 namespace gpu {
 class GpuChannelHost;
-class GpuMemoryBufferManager;
 }  // namespace gpu
 
 namespace viz {
@@ -58,7 +58,6 @@ class MojoGpuVideoAcceleratorFactories
       const scoped_refptr<base::SequencedTaskRunner>& task_runner,
       const scoped_refptr<viz::ContextProviderCommandBuffer>& context_provider,
       std::unique_ptr<MojoCodecFactory> codec_factory,
-      gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager,
       bool enable_video_gpu_memory_buffers,
       bool enable_media_stream_gpu_memory_buffers,
       bool enable_video_decode_accelerator,
@@ -95,7 +94,6 @@ class MojoGpuVideoAcceleratorFactories
   // Called on the media thread. Returns the SharedImageInterface unless the
   // ContextProvider has been lost, in which case it returns null.
   gpu::SharedImageInterface* SharedImageInterface() override;
-  gpu::GpuMemoryBufferManager* GpuMemoryBufferManager() override;
   // Called on the media thread. Verifies if the ContextProvider is lost and
   // notifies the main thread of loss if it has occured, which can be seen later
   // from CheckContextProviderLost().
@@ -134,7 +132,6 @@ class MojoGpuVideoAcceleratorFactories
       const scoped_refptr<base::SequencedTaskRunner>& task_runner,
       const scoped_refptr<viz::ContextProviderCommandBuffer>& context_provider,
       std::unique_ptr<MojoCodecFactory> codec_factory,
-      gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager,
       bool enable_gpu_memory_buffer_video_frames_for_video,
       bool enable_gpu_memory_buffer_video_frames_for_media_stream,
       bool enable_video_decode_accelerator,
@@ -144,12 +141,8 @@ class MojoGpuVideoAcceleratorFactories
 
   // viz::ContextLostObserver implementation.
   void OnContextLost() override;
-  void SetContextProviderLostOnMainThread();
 
   void OnChannelTokenReady(const base::UnguessableToken& token);
-
-  // Implementation of VideoFrameOutputFormat method.
-  OutputFormat VideoFrameOutputFormatImpl(media::VideoPixelFormat pixel_format);
 
   const scoped_refptr<base::SequencedTaskRunner> main_thread_task_runner_;
   const scoped_refptr<base::SequencedTaskRunner> task_runner_;
@@ -161,9 +154,11 @@ class MojoGpuVideoAcceleratorFactories
   // thread, but all subsequent access and destruction should happen only on the
   // media thread.
   scoped_refptr<viz::ContextProviderCommandBuffer> context_provider_;
+
   // Signals if |context_provider_| is alive on the media thread. For use on the
-  // main thread.
-  bool context_provider_lost_ = false;
+  // main thread, and is deleted separately on the main thread to ensure there
+  // are no access violations.
+  std::unique_ptr<bool> context_provider_lost_ = std::make_unique<bool>(false);
   // A shadow of |context_provider_lost_| for the media thread.
   bool context_provider_lost_on_media_thread_ = false;
 
@@ -180,7 +175,9 @@ class MojoGpuVideoAcceleratorFactories
 
   gfx::ColorSpace rendering_color_space_;
 
-  const raw_ptr<gpu::GpuMemoryBufferManager> gpu_memory_buffer_manager_;
+  // Safe only for use on `task_runner_`.
+  base::WeakPtrFactory<MojoGpuVideoAcceleratorFactories>
+      task_runner_weak_factory_{this};
 };
 
 }  // namespace media

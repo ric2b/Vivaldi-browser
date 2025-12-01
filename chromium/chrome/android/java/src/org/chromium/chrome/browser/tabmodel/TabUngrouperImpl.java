@@ -60,18 +60,6 @@ public class TabUngrouperImpl implements TabUngrouper {
 
     @Override
     public void ungroupTabGroup(
-            int rootId,
-            boolean trailing,
-            boolean allowDialog,
-            @Nullable TabModelActionListener listener) {
-        Function<TabGroupModelFilter, List<Tab>> tabsFetcher =
-                (filter) -> PassthroughTabUngrouper.getTabsToUngroup(filter, rootId);
-
-        ungroupTabsInternal(tabsFetcher, trailing, /* isTabGroup= */ true, allowDialog, listener);
-    }
-
-    @Override
-    public void ungroupTabGroup(
             @NonNull Token tabGroupId,
             boolean trailing,
             boolean allowDialog,
@@ -139,7 +127,8 @@ public class TabUngrouperImpl implements TabUngrouper {
         }
 
         @Override
-        public void showTabGroupDeletionConfirmationDialog(@NonNull Callback<Integer> onResult) {
+        public void showTabGroupDeletionConfirmationDialog(
+                @NonNull Callback<@ActionConfirmationResult Integer> onResult) {
             @Nullable TabModelActionListener listener = takeListener();
             if (listener != null) {
                 boolean willSkipDialog =
@@ -219,9 +208,10 @@ public class TabUngrouperImpl implements TabUngrouper {
         };
     }
 
-    private static @NonNull Callback<Integer> adaptSyncOnResultCallback(
-            @NonNull Callback<Integer> callback, @Nullable TabModelActionListener listener) {
-        return (result) -> {
+    private static @NonNull Callback<@ActionConfirmationResult Integer> adaptSyncOnResultCallback(
+            @NonNull Callback<@ActionConfirmationResult Integer> callback,
+            @Nullable TabModelActionListener listener) {
+        return (@ActionConfirmationResult Integer result) -> {
             callback.onResult(result);
             if (listener != null) {
                 @DialogType

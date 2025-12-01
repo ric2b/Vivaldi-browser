@@ -69,7 +69,7 @@ struct CORE_EXPORT InlineItemResult {
 
  public:
   InlineItemResult() = default;
-  InlineItemResult(const InlineItem*,
+  InlineItemResult(const InlineItem&,
                    unsigned index,
                    const TextOffsetRange& text_offset,
                    bool break_anywhere_if_overflow,
@@ -101,8 +101,9 @@ struct CORE_EXPORT InlineItemResult {
                   const String& indent = "") const;
 
   // The InlineItem and its index.
-  GC_PLUGIN_IGNORE("GC API violation: https://crbug.com/389707047")
-  const InlineItem* item = nullptr;
+  // Note that use `item_index` with caution, which may not always be the actual
+  // item index in the items list. See `LineBreaker::AddItem`.
+  Member<const InlineItem> item;
   unsigned item_index = 0;
 
   // The range of text content for this item.

@@ -12,6 +12,7 @@
 #include <vector>
 
 #include "base/functional/callback.h"
+#include "base/memory/scoped_refptr.h"
 #include "base/observer_list.h"
 #include "base/time/time.h"
 #include "content/common/content_export.h"
@@ -19,13 +20,19 @@
 #include "content/public/browser/federated_identity_auto_reauthn_permission_context_delegate.h"
 #include "content/public/browser/federated_identity_permission_context_delegate.h"
 #include "net/base/schemeful_site.h"
+#include "third_party/blink/public/mojom/webid/federated_auth_request.mojom-forward.h"
 #include "url/gurl.h"
 
 namespace url {
 class Origin;
 }
 
+namespace blink::common::webid {
+struct LoginStatusOptions;
+}  // namespace blink::common::webid
+
 namespace content {
+class IdentityRequestAccount;
 
 // This class implements the various FedCM delegates. It is used to store
 // permission and login state in memory as a default implementation.
@@ -43,6 +50,8 @@ class InMemoryFederatedPermissionContext
   void RecordDismissAndEmbargo(
       const url::Origin& relying_party_embedder) override;
   void RemoveEmbargoAndResetCounts(
+      const url::Origin& relying_party_embedder) override;
+  void RecordIgnoreAndEmbargo(
       const url::Origin& relying_party_embedder) override;
   bool ShouldCompleteRequestImmediately() const override;
   bool HasThirdPartyCookiesAccess(
@@ -94,11 +103,17 @@ class InMemoryFederatedPermissionContext
       const std::string& account_id) override;
   std::optional<bool> GetIdpSigninStatus(
       const url::Origin& idp_origin) override;
-  void SetIdpSigninStatus(const url::Origin& idp_origin,
-                          bool idp_signin_status) override;
+  std::vector<scoped_refptr<IdentityRequestAccount>> GetAccounts(
+      const url::Origin& identity_provider) override;
+  void SetIdpSigninStatus(
+      const url::Origin& idp_origin,
+      bool idp_signin_status,
+      base::optional_ref<const blink::common::webid::LoginStatusOptions>)
+      override;
 
   void RegisterIdP(const ::GURL&) override;
   void UnregisterIdP(const ::GURL&) override;
+
   std::vector<GURL> GetRegisteredIdPs() override;
   void OnSetRequiresUserMediation(const url::Origin& relying_party,
                                   base::OnceClosure callback) override;
@@ -123,6 +138,10 @@ class InMemoryFederatedPermissionContext
   std::map<std::string, std::optional<bool>> idp_signin_status_;
   // Pairs of <IDP, RP embedder>
   std::set<std::pair<std::string, std::string>> has_third_party_cookies_access_;
+
+  // Map of IDPs to login status configurations, including account information.
+  std::map<std::string, blink::common::webid::LoginStatusOptions>
+      idp_login_status_options_;
 
   base::ObserverList<IdpSigninStatusObserver> idp_signin_status_observer_list_;
   base::RepeatingClosure idp_signin_status_closure_;

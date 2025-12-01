@@ -80,7 +80,6 @@ static_library("shelf") {
     "//ash/webui/projector_app/public/cpp",
     "//chrome/app/theme:chrome_unscaled_resources",
     "//chrome/app/vector_icons",
-    "//chrome/browser:browser_process",
     "//chrome/browser/apps:icon_standardizer",
     "//chrome/browser/apps/app_service:constants",
     "//chrome/browser/ash/accessibility",
@@ -95,7 +94,6 @@ static_library("shelf") {
     "//chrome/browser/ash/arc/fileapi",
     "//chrome/browser/ash/arc/pip",
     "//chrome/browser/ash/arc/session",
-    "//chrome/browser/ash/crosapi:browser_util",
     "//chrome/browser/ash/crostini",
     "//chrome/browser/ash/eche_app",
     "//chrome/browser/ash/extensions",
@@ -141,6 +139,7 @@ static_library("shelf") {
     "//components/prefs",
     "//components/sync_preferences",
     "//components/webapps/common",
+    "//extensions/browser",
     "//extensions/common",
     "//ui/chromeos/styles:cros_tokens_color_mappings_generator",
   ]

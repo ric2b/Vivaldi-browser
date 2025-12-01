@@ -38,14 +38,8 @@ namespace dawn::native {
 
 DynamicUploader::DynamicUploader(DeviceBase* device) : mDevice(device) {}
 
-void DynamicUploader::ReleaseStagingBuffer(Ref<BufferBase> stagingBuffer) {
-    mReleasedStagingBuffers.Enqueue(std::move(stagingBuffer),
-                                    mDevice->GetQueue()->GetPendingCommandSerial());
-}
-
-ResultOrError<UploadHandle> DynamicUploader::AllocateInternal(uint64_t allocationSize,
-                                                              ExecutionSerial serial,
-                                                              uint64_t offsetAlignment) {
+ResultOrError<UploadReservation> DynamicUploader::Reserve(uint64_t allocationSize,
+                                                          uint64_t offsetAlignment) {
     // Disable further sub-allocation should the request be too large.
     if (allocationSize > kRingBufferSize) {
         BufferDescriptor bufferDesc = {};
@@ -58,13 +52,16 @@ ResultOrError<UploadHandle> DynamicUploader::AllocateInternal(uint64_t allocatio
         Ref<BufferBase> stagingBuffer;
         DAWN_TRY_ASSIGN(stagingBuffer, mDevice->CreateBuffer(&bufferDesc));
 
-        UploadHandle uploadHandle;
-        uploadHandle.mappedBuffer = static_cast<uint8_t*>(stagingBuffer->GetMappedPointer());
-        uploadHandle.stagingBuffer = stagingBuffer.Get();
-
-        ReleaseStagingBuffer(std::move(stagingBuffer));
-        return uploadHandle;
+        UploadReservation reservation;
+        reservation.mappedPointer = static_cast<uint8_t*>(stagingBuffer->GetMappedPointer());
+        reservation.offsetInBuffer = 0;
+        reservation.buffer = std::move(stagingBuffer);
+        return reservation;
     }
+
+    // Request is small, we sub-allocate transiently in one of our ring buffers. The reservation
+    // will only be valid for the pending serial.
+    ExecutionSerial serial = mDevice->GetQueue()->GetPendingCommandSerial();
 
     if (mRingBuffers.empty()) {
         mRingBuffers.emplace_back(std::unique_ptr<RingBuffer>(
@@ -115,13 +112,13 @@ ResultOrError<UploadHandle> DynamicUploader::AllocateInternal(uint64_t allocatio
 
     DAWN_ASSERT(targetRingBuffer->mStagingBuffer != nullptr);
 
-    UploadHandle uploadHandle;
-    uploadHandle.stagingBuffer = targetRingBuffer->mStagingBuffer.Get();
-    uploadHandle.mappedBuffer =
-        static_cast<uint8_t*>(uploadHandle.stagingBuffer->GetMappedPointer()) + startOffset;
-    uploadHandle.startOffset = startOffset;
+    UploadReservation reservation;
+    reservation.buffer = targetRingBuffer->mStagingBuffer;
+    reservation.mappedPointer =
+        static_cast<uint8_t*>(reservation.buffer->GetMappedPointer()) + startOffset;
+    reservation.offsetInBuffer = startOffset;
 
-    return uploadHandle;
+    return reservation;
 }
 
 void DynamicUploader::Deallocate(ExecutionSerial lastCompletedSerial, bool freeAll) {
@@ -140,14 +137,6 @@ void DynamicUploader::Deallocate(ExecutionSerial lastCompletedSerial, bool freeA
             i++;
         }
     }
-    mReleasedStagingBuffers.ClearUpTo(lastCompletedSerial);
-}
-
-ResultOrError<UploadHandle> DynamicUploader::Allocate(uint64_t allocationSize,
-                                                      ExecutionSerial serial,
-                                                      uint64_t offsetAlignment) {
-    DAWN_ASSERT(offsetAlignment > 0);
-    return AllocateInternal(allocationSize, serial, offsetAlignment);
 }
 
 bool DynamicUploader::ShouldFlush() const {
@@ -159,9 +148,6 @@ bool DynamicUploader::ShouldFlush() const {
 
 uint64_t DynamicUploader::GetTotalAllocatedSize() const {
     uint64_t size = 0;
-    for (const auto& buffer : mReleasedStagingBuffers.IterateAll()) {
-        size += buffer->GetSize();
-    }
     for (const auto& buffer : mRingBuffers) {
         if (buffer->mStagingBuffer != nullptr) {
             size += buffer->mStagingBuffer->GetSize();

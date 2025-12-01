@@ -7,8 +7,8 @@
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/uuid.h"
-#include "components/autofill/core/browser/data_model/autofill_profile.h"
-#include "components/autofill/core/browser/data_model/autofill_structured_address_component.h"
+#include "components/autofill/core/browser/data_model/addresses/autofill_profile.h"
+#include "components/autofill/core/browser/data_model/addresses/autofill_structured_address_component.h"
 #include "components/autofill/core/browser/data_quality/autofill_data_util.h"
 #include "components/autofill/core/browser/field_types.h"
 #include "components/autofill/core/browser/geo/country_names.h"
@@ -114,6 +114,12 @@ std::unique_ptr<EntityData> CreateEntityDataFromAutofillProfile(
       base::UTF16ToUTF8(entry.GetRawInfo(NAME_MIDDLE))));
   specifics->add_name_last(
       data_util::TruncateUTF8(base::UTF16ToUTF8(entry.GetRawInfo(NAME_LAST))));
+  if (base::FeatureList::IsEnabled(features::kAutofillSupportLastNamePrefix)) {
+    specifics->add_name_last_prefix(data_util::TruncateUTF8(
+        base::UTF16ToUTF8(entry.GetRawInfo(NAME_LAST_PREFIX))));
+    specifics->add_name_last_core(data_util::TruncateUTF8(
+        base::UTF16ToUTF8(entry.GetRawInfo(NAME_LAST_CORE))));
+  }
   specifics->add_name_last_first(data_util::TruncateUTF8(
       base::UTF16ToUTF8(entry.GetRawInfo(NAME_LAST_FIRST))));
   specifics->add_name_last_second(data_util::TruncateUTF8(
@@ -129,6 +135,14 @@ std::unique_ptr<EntityData> CreateEntityDataFromAutofillProfile(
       entry.GetVerificationStatus(NAME_MIDDLE)));
   specifics->add_name_last_status(ConvertProfileToSpecificsVerificationStatus(
       entry.GetVerificationStatus(NAME_LAST)));
+  if (base::FeatureList::IsEnabled(features::kAutofillSupportLastNamePrefix)) {
+    specifics->add_name_last_prefix_status(
+        ConvertProfileToSpecificsVerificationStatus(
+            entry.GetVerificationStatus(NAME_LAST_PREFIX)));
+    specifics->add_name_last_core_status(
+        ConvertProfileToSpecificsVerificationStatus(
+            entry.GetVerificationStatus(NAME_LAST_CORE)));
+  }
   specifics->add_name_last_first_status(
       ConvertProfileToSpecificsVerificationStatus(
           entry.GetVerificationStatus(NAME_LAST_FIRST)));
@@ -371,6 +385,29 @@ std::optional<AutofillProfile> CreateAutofillProfileFromSpecifics(
               : AutofillProfileSpecifics::VerificationStatus::
                     AutofillProfileSpecifics_VerificationStatus_VERIFICATION_STATUS_UNSPECIFIED));
 
+  if (base::FeatureList::IsEnabled(features::kAutofillSupportLastNamePrefix)) {
+    profile.SetRawInfoWithVerificationStatus(
+        NAME_LAST_PREFIX,
+        base::UTF8ToUTF16(specifics.name_last_prefix_size()
+                              ? specifics.name_last_prefix(0)
+                              : std::string()),
+        ConvertSpecificsToProfileVerificationStatus(
+            specifics.name_last_prefix_status_size()
+                ? specifics.name_last_prefix_status(0)
+                : AutofillProfileSpecifics::VerificationStatus::
+                      AutofillProfileSpecifics_VerificationStatus_VERIFICATION_STATUS_UNSPECIFIED));
+
+    profile.SetRawInfoWithVerificationStatus(
+        NAME_LAST_CORE,
+        base::UTF8ToUTF16(specifics.name_last_core_size()
+                              ? specifics.name_last_core(0)
+                              : std::string()),
+        ConvertSpecificsToProfileVerificationStatus(
+            specifics.name_last_core_status_size()
+                ? specifics.name_last_core_status(0)
+                : AutofillProfileSpecifics::VerificationStatus::
+                      AutofillProfileSpecifics_VerificationStatus_VERIFICATION_STATUS_UNSPECIFIED));
+  }
   profile.SetRawInfoWithVerificationStatus(
       NAME_LAST_FIRST,
       base::UTF8ToUTF16(specifics.name_last_first_size()
@@ -605,7 +642,7 @@ std::optional<AutofillProfile> CreateAutofillProfileFromSpecifics(
   // When adding field types, ensure that they don't need to be added here and
   // update the last checked value.
   // TODO(crbug.com/359768803): Handle alternative names here.
-  static_assert(FieldType::MAX_VALID_FIELD_TYPE == 175,
+  static_assert(FieldType::MAX_VALID_FIELD_TYPE == 187,
                 "New field type needs to be reviewed for inclusion in sync");
 
   // The profile may be in a legacy state. By calling |FinalizeAfterImport()|

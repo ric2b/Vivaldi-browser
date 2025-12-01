@@ -40,9 +40,11 @@ class TestSharedStorageRuntimeManager : public SharedStorageRuntimeManager {
       SharedStorageDocumentServiceImpl& document_service,
       const url::Origin& frame_origin,
       const url::Origin& data_origin,
+      blink::mojom::SharedStorageDataOriginType data_origin_type,
       const GURL& script_source_url,
       network::mojom::CredentialsMode credentials_mode,
       blink::mojom::SharedStorageWorkletCreationMethod creation_method,
+      int worklet_id,
       const std::vector<blink::mojom::OriginTrialFeature>&
           origin_trial_features,
       mojo::PendingAssociatedReceiver<blink::mojom::SharedStorageWorkletHost>
@@ -63,6 +65,12 @@ class TestSharedStorageRuntimeManager : public SharedStorageRuntimeManager {
   // `SharedStorageWorkletHost` for that document service.
   TestSharedStorageWorkletHost* GetAttachedWorkletHostForFrame(
       RenderFrameHost* frame);
+
+  // Gets the host with `script_source_url` that was most recently attached for
+  // `frame`'s document service. Returns nullptr if there is no such host.
+  TestSharedStorageWorkletHost* GetLastAttachedWorkletHostForFrameWithScriptSrc(
+      RenderFrameHost* frame,
+      const GURL& script_src_url);
 
   // Precondition: `frame` is associated with a
   // `SharedStorageDocumentServiceImpl`.

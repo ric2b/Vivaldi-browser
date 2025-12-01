@@ -300,7 +300,8 @@ void WasmGCTypeAnalyzer::ProcessGlobalGet(const GlobalGetOp& global_get) {
 void WasmGCTypeAnalyzer::ProcessRefFunc(const WasmRefFuncOp& ref_func) {
   wasm::ModuleTypeIndex sig_index =
       module_->functions[ref_func.function_index].sig_index;
-  RefineTypeKnowledge(graph_.Index(ref_func), wasm::ValueType::Ref(sig_index),
+  RefineTypeKnowledge(graph_.Index(ref_func),
+                      wasm::ValueType::Ref(module_->heap_type(sig_index)),
                       ref_func);
 }
 
@@ -309,15 +310,40 @@ void WasmGCTypeAnalyzer::ProcessAllocateArray(
   wasm::ModuleTypeIndex type_index =
       graph_.Get(allocate_array.rtt()).Cast<RttCanonOp>().type_index;
   RefineTypeKnowledge(graph_.Index(allocate_array),
-                      wasm::ValueType::Ref(type_index), allocate_array);
+                      wasm::ValueType::Ref(module_->heap_type(type_index)),
+                      allocate_array);
 }
 
 void WasmGCTypeAnalyzer::ProcessAllocateStruct(
     const WasmAllocateStructOp& allocate_struct) {
-  wasm::ModuleTypeIndex type_index =
-      graph_.Get(allocate_struct.rtt()).Cast<RttCanonOp>().type_index;
+  Operation& rtt = graph_.Get(allocate_struct.rtt());
+  wasm::ModuleTypeIndex type_index;
+  if (RttCanonOp* canon = rtt.TryCast<RttCanonOp>()) {
+    type_index = canon->type_index;
+  } else if (LoadOp* load = rtt.TryCast<LoadOp>()) {
+    DCHECK(load->kind.tagged_base && load->offset == WasmStruct::kHeaderSize);
+    OpIndex descriptor = load->base();
+    wasm::ValueType desc_type = types_table_.Get(descriptor);
+    if (!desc_type.has_index()) {
+      // We hope that this happens rarely or never. If there is evidence that
+      // we get this case a lot, we should store the original struct.new
+      // operation's type index immediate on the {WasmAllocateStructOp} to
+      // use it as a better upper bound than "structref" here.
+      RefineTypeKnowledge(graph_.Index(allocate_struct), wasm::kWasmStructRef,
+                          allocate_struct);
+      return;
+    }
+    const wasm::TypeDefinition& desc_typedef =
+        module_->type(desc_type.ref_index());
+    DCHECK(desc_typedef.is_descriptor());
+    type_index = desc_typedef.describes;
+  } else {
+    // The graph builder only emits the two patterns above.
+    UNREACHABLE();
+  }
   RefineTypeKnowledge(graph_.Index(allocate_struct),
-                      wasm::ValueType::Ref(type_index), allocate_struct);
+                      wasm::ValueType::Ref(module_->heap_type(type_index)),
+                      allocate_struct);
 }
 
 wasm::ValueType WasmGCTypeAnalyzer::GetTypeForPhiInput(const PhiOp& phi,

@@ -743,14 +743,14 @@ void GlobalHandles::ProcessWeakYoungObjects(
 }
 
 void GlobalHandles::InvokeSecondPassPhantomCallbacks() {
-  AllowJavascriptExecution js(isolate());
+  DCHECK(!AllowJavascriptExecution::IsAllowed(isolate()));
   DCHECK(AllowGarbageCollection::IsAllowed());
 
   if (second_pass_callbacks_.empty()) return;
 
-  // The callbacks may execute JS, which in turn may lead to another GC run.
-  // If we are already processing the callbacks, we do not want to start over
-  // from within the inner GC. Newly added callbacks will always be run by the
+  // The callbacks may allocate, which in turn may lead to another GC run. If we
+  // are already processing the callbacks, we do not want to start over from
+  // within the inner GC. Newly added callbacks will always be run by the
   // outermost GC run only.
   GCCallbacksScope scope(isolate()->heap());
   if (scope.CheckReenter()) {
@@ -893,6 +893,7 @@ void GlobalHandles::PostGarbageCollectionProcessing(
         ->PostTask(MakeCancelableTask(isolate(), [this] {
           DCHECK(second_pass_callbacks_task_posted_);
           second_pass_callbacks_task_posted_ = false;
+          DisallowJavascriptExecution no_js(isolate());
           InvokeSecondPassPhantomCallbacks();
         }));
   }
@@ -955,19 +956,19 @@ void GlobalHandles::IterateAllRootsForTesting(
 }
 
 void GlobalHandles::RecordStats(HeapStats* stats) {
-  *stats->global_handle_count = 0;
-  *stats->weak_global_handle_count = 0;
-  *stats->pending_global_handle_count = 0;
-  *stats->near_death_global_handle_count = 0;
-  *stats->free_global_handle_count = 0;
+  stats->global_handle_count = 0;
+  stats->weak_global_handle_count = 0;
+  stats->pending_global_handle_count = 0;
+  stats->near_death_global_handle_count = 0;
+  stats->free_global_handle_count = 0;
   for (Node* node : *regular_nodes_) {
-    *stats->global_handle_count += 1;
+    stats->global_handle_count += 1;
     if (node->state() == Node::WEAK) {
-      *stats->weak_global_handle_count += 1;
+      stats->weak_global_handle_count += 1;
     } else if (node->state() == Node::NEAR_DEATH) {
-      *stats->near_death_global_handle_count += 1;
+      stats->near_death_global_handle_count += 1;
     } else if (node->state() == Node::FREE) {
-      *stats->free_global_handle_count += 1;
+      stats->free_global_handle_count += 1;
     }
   }
 }

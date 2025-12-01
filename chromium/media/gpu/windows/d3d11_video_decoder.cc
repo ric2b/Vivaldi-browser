@@ -564,6 +564,11 @@ void D3D11VideoDecoder::DoDecode() {
       // cb now.
       std::move(current_decode_cb_).Run(DecoderStatus::Codes::kOk);
       return;
+    } else if (current_buffer_->empty()) {
+      // Treat an empty buffer as no-op.
+      current_buffer_ = nullptr;
+      std::move(current_decode_cb_).Run(DecoderStatus::Codes::kOk);
+      return;
     }
     // This must be after checking for EOS because there is no timestamp for an
     // EOS buffer.
@@ -866,6 +871,9 @@ bool D3D11VideoDecoder::OutputResult(const CodecPicture* picture,
     NotifyError(std::move(result).AddHere());
     return false;
   }
+  // If the output texture is in RGB pixel format, then the color space needs to
+  // be updated using the color space of the output texture.
+  picture_color_space = shared_image->color_space();
 
   scoped_refptr<VideoFrame> frame = VideoFrame::WrapSharedImage(
       texture_selector_->PixelFormat(), shared_image,

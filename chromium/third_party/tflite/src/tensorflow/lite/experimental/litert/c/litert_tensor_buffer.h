@@ -18,10 +18,14 @@
 #include <memory.h>
 #include <stddef.h>
 
-#include <CL/cl.h>
 #include "tensorflow/lite/experimental/litert/c/litert_common.h"
 #include "tensorflow/lite/experimental/litert/c/litert_event.h"
 #include "tensorflow/lite/experimental/litert/c/litert_model.h"
+#if LITERT_HAS_OPENCL_SUPPORT
+#include <CL/cl.h>
+#endif  // LITERT_HAS_OPENCL_SUPPORT
+#include "tensorflow/lite/experimental/litert/c/litert_gl_types.h"
+#include "tensorflow/lite/experimental/litert/c/litert_tensor_buffer_types.h"
 
 #if LITERT_HAS_AHWB_SUPPORT
 #include <android/hardware_buffer.h>
@@ -44,22 +48,14 @@ LITERT_DEFINE_HANDLE(LiteRtTensorBuffer);
 
 #define LITERT_HOST_MEMORY_BUFFER_ALIGNMENT 64
 
-typedef enum {
-  kLiteRtTensorBufferTypeUnknown = 0,
-  kLiteRtTensorBufferTypeHostMemory = 1,
-  kLiteRtTensorBufferTypeAhwb = 2,
-  kLiteRtTensorBufferTypeIon = 3,
-  kLiteRtTensorBufferTypeDmaBuf = 4,
-  kLiteRtTensorBufferTypeFastRpc = 5,
-  kLiteRtTensorBufferTypeOpenCl = 6,
-} LiteRtTensorBufferType;
-
 typedef void (*LiteRtHostMemoryDeallocator)(void* addr);
 typedef void (*LiteRtAhwbDeallocator)(AHardwareBuffer* ahwb);
 typedef void (*LiteRtIonDeallocator)(void* ion_buffer_addr);
 typedef void (*LiteRtDmaBufDeallocator)(void* dmabuf_buffer_addr);
 typedef void (*LiteRtFastRpcDeallocator)(void* fastrpc_buffer_addr);
 typedef void (*LiteRtOpenClDeallocator)(void* opencl_buffer_addr);
+typedef void (*LiteRtGlBufferDeallocator)(void* gl_buffer_addr);
+typedef void (*LiteRtGlTextureDeallocator)(void* gl_texture_addr);
 
 // /////////////////////////////////////////////////////////////////////////////
 // TensorBuffers.
@@ -150,6 +146,7 @@ LiteRtStatus LiteRtGetTensorBufferFastRpcBuffer(
     int* fastrpc_buffer_fd);
 #endif  // LITERT_HAS_FASTRPC_SUPPORT
 
+#if LITERT_HAS_OPENCL_SUPPORT
 // Create a tensor buffer from an existing OpenCL buffer of a given size, with
 // optional opencl memory buffer deallocator (it can be NULL). An non-zero
 // `opencl_buffer_offset` can be used to specify multiple tensor buffers sharing
@@ -157,14 +154,34 @@ LiteRtStatus LiteRtGetTensorBufferFastRpcBuffer(
 // `opencl_buffer_size` must be the entire size of the underlying OpenCL
 // memory buffer, including the allocation needed for all tensor buffers
 // sharing it.
-LiteRtStatus LiteRtCreateTensorBufferFromOpenCLBuffer(
+LiteRtStatus LiteRtCreateTensorBufferFromOpenClBuffer(
     const LiteRtRankedTensorType* tensor_type, cl_mem cl_mem_addr,
     size_t opencl_buffer_size, LiteRtOpenClDeallocator deallocator,
     LiteRtTensorBuffer* buffer);
 
 // Return an error if the backing buffer is not a OpenCL buffer.
-LiteRtStatus LiteRtGetTensorBufferOpenCLBuffer(LiteRtTensorBuffer tensor_buffer,
-                                               void** cl_mem_addr);
+LiteRtStatus LiteRtGetTensorBufferOpenClBuffer(LiteRtTensorBuffer tensor_buffer,
+                                               cl_mem* cl_mem_addr);
+#endif  // LITERT_HAS_OPENCL_SUPPORT
+
+LiteRtStatus LiteRtCreateTensorBufferFromGlBuffer(
+    const LiteRtRankedTensorType* tensor_type, LiteRtGLenum target,
+    LiteRtGLuint id, size_t size_bytes, size_t offset,
+    LiteRtGlBufferDeallocator deallocator, LiteRtTensorBuffer* buffer);
+
+LiteRtStatus LiteRtGetTensorBufferGlBuffer(LiteRtTensorBuffer tensor_buffer,
+                                           LiteRtGLenum* target,
+                                           LiteRtGLuint* id, size_t* size_bytes,
+                                           size_t* offset);
+
+LiteRtStatus LiteRtCreateTensorBufferFromGlTexture(
+    const LiteRtRankedTensorType* tensor_type, LiteRtGLenum target,
+    LiteRtGLuint id, LiteRtGLenum format, size_t size_bytes, LiteRtGLint layer,
+    LiteRtGlTextureDeallocator deallocator, LiteRtTensorBuffer* buffer);
+
+LiteRtStatus LiteRtGetTensorBufferGlTexture(
+    LiteRtTensorBuffer tensor_buffer, LiteRtGLenum* target, LiteRtGLuint* id,
+    LiteRtGLenum* format, size_t* size_bytes, LiteRtGLint* layer);
 
 // Create a buffer backed by managed memory for a given size.
 LiteRtStatus LiteRtCreateManagedTensorBuffer(

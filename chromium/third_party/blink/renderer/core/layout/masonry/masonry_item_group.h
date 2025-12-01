@@ -26,6 +26,9 @@ class MasonryItemGroupProperties {
   MasonryItemGroupProperties(WTF::HashTableDeletedValueType)
       : is_deleted_(true) {}
 
+  explicit MasonryItemGroupProperties(const GridSpan& item_span)
+      : item_span_(item_span) {}
+
   bool operator==(const MasonryItemGroupProperties& other) const {
     return is_deleted_ == other.is_deleted_ && item_span_ == other.item_span_;
   }
@@ -41,6 +44,11 @@ class MasonryItemGroupProperties {
 
   bool IsHashTableDeletedValue() const { return is_deleted_; }
 
+  const GridSpan& Span() const {
+    DCHECK(item_span_);
+    return *item_span_;
+  }
+
  private:
   // `HashTraits` requires a way to create a "deleted value". In this class it's
   // the same as the default value but has this flag set to `true`.
@@ -49,10 +57,22 @@ class MasonryItemGroupProperties {
   std::optional<GridSpan> item_span_;
 };
 
-using MasonryItemGroups =
+struct MasonryItemGroup {
+  DISALLOW_NEW();
+
+  void Trace(Visitor* visitor) const { visitor->Trace(items); }
+
+  HeapVector<BlockNode, 16> items;
+  MasonryItemGroupProperties properties;
+};
+
+using MasonryItemGroupMap =
     HeapHashMap<MasonryItemGroupProperties, HeapVector<BlockNode, 16>>;
+using MasonryItemGroups = HeapVector<MasonryItemGroup, 16>;
 
 }  // namespace blink
+
+WTF_ALLOW_MOVE_INIT_AND_COMPARE_WITH_MEM_FUNCTIONS(blink::MasonryItemGroup)
 
 namespace WTF {
 

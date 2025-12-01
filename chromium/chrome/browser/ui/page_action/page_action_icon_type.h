@@ -10,6 +10,8 @@
 // tools/metrics/histograms/metadata/page/enums.xml and
 // tools/metrics/histograms/metadata/page/histograms.xml and add a static assert
 // below.
+//
+// LINT.IfChange(PageActionIconType)
 enum class PageActionIconType {
   kBookmarkStar = 0,
   kClickToCall = 1,
@@ -18,7 +20,7 @@ enum class PageActionIconType {
   kFind = 4,
   kMemorySaver = 5,
   kIntentPicker = 6,
-  kLocalCardMigration = 7,
+  // DEPRECATED: kLocalCardMigration = 7,
   kManagePasswords = 8,
   kPaymentsOfferNotification = 9,
   kPriceTracking = 10,
@@ -47,6 +49,7 @@ enum class PageActionIconType {
   kChangePassword = 33,
   kMaxValue = kChangePassword,
 };
+// LINT.ThenChange(//tools/metrics/histograms/metadata/page/enums.xml:PageActionIconType)
 
 static_assert(static_cast<int>(PageActionIconType::kBookmarkStar) == 0);
 static_assert(static_cast<int>(PageActionIconType::kClickToCall) == 1);
@@ -55,7 +58,6 @@ static_assert(static_cast<int>(PageActionIconType::kFileSystemAccess) == 3);
 static_assert(static_cast<int>(PageActionIconType::kFind) == 4);
 static_assert(static_cast<int>(PageActionIconType::kMemorySaver) == 5);
 static_assert(static_cast<int>(PageActionIconType::kIntentPicker) == 6);
-static_assert(static_cast<int>(PageActionIconType::kLocalCardMigration) == 7);
 static_assert(static_cast<int>(PageActionIconType::kManagePasswords) == 8);
 static_assert(
     static_cast<int>(PageActionIconType::kPaymentsOfferNotification) == 9);
@@ -81,4 +83,10 @@ static_assert(static_cast<int>(PageActionIconType::kOptimizationGuide) == 31);
 static_assert(static_cast<int>(PageActionIconType::kCollaborationMessaging) ==
               32);
 static_assert(static_cast<int>(PageActionIconType::kChangePassword) == 33);
+
+// Returns a bool indicating whether the given page action type has been
+// migrated to the new framework, which is based on ActionItems instead of
+// PageActionIconType.
+bool IsPageActionMigrated(PageActionIconType page_action);
+
 #endif  // CHROME_BROWSER_UI_PAGE_ACTION_PAGE_ACTION_ICON_TYPE_H_

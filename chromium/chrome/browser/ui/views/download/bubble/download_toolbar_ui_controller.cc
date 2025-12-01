@@ -22,6 +22,7 @@
 #include "chrome/browser/download/bubble/download_display_controller.h"
 #include "chrome/browser/platform_util.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/ui/actions/chrome_action_id.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_actions.h"
 #include "chrome/browser/ui/browser_element_identifiers.h"
@@ -88,7 +89,10 @@ constexpr base::TimeDelta kAutoClosePartialViewDelay = base::Seconds(5);
 
 PinnedToolbarActionsContainer* GetPinnedToolbarActionsContainer(
     BrowserView* browser_view) {
-  return browser_view->toolbar()->pinned_toolbar_actions_container();
+  auto* toolbar_button_provider = browser_view->toolbar_button_provider();
+  return toolbar_button_provider
+             ? toolbar_button_provider->GetPinnedToolbarActionsContainer()
+             : nullptr;
 }
 
 ToolbarButton* GetDownloadsButton(BrowserView* browser_view) {
@@ -331,17 +335,19 @@ class DownloadsImageBadge : public views::ImageView {
                    int progress_download_count,
                    SkColor badge_text_color,
                    SkColor badge_background_color) {
-    // Only display the badge if there are multiple downloads.
-    if (!is_active || progress_download_count < 2) {
+    const int badge_size = std::min(bounds().height(), bounds().width());
+    // Only display the badge if there are multiple downloads, or this image
+    // view is visible. Use 2dp to make sure that the image has size even with
+    // scale factor < 1.0. (this can happen on CrOS).
+    if (!is_active || progress_download_count < 2 || badge_size < 2) {
       SetImage(ui::ImageModel());
       return;
     }
-    const int badge_height = bounds().height();
     // base::Unretained is safe because this owns the ImageView to which the
     // image source is applied.
     SetImage(ui::ImageModel::FromImageSkia(
         gfx::CanvasImageSource::MakeImageSkia<CircleBadgeImageSource>(
-            gfx::Size(badge_height, badge_height), badge_background_color,
+            gfx::Size(badge_size, badge_size), badge_background_color,
             base::BindRepeating(&DownloadsImageBadge::GetBadgeText,
                                 base::Unretained(this), progress_download_count,
                                 badge_text_color))));
@@ -510,10 +516,11 @@ void DownloadToolbarUIController::UpdateDownloadIcon(
 
   if (updates.show_animation && show_download_started_animation_) {
     has_pending_download_started_animation_ = true;
-    auto* container = GetPinnedToolbarActionsContainer(browser_view_);
-    container->GetAnimatingLayoutManager()->PostOrQueueAction(base::BindOnce(
-        &DownloadToolbarUIController::ShowPendingDownloadStartedAnimation,
-        base::Unretained(this)));
+    if (auto* container = GetPinnedToolbarActionsContainer(browser_view_)) {
+      container->GetAnimatingLayoutManager()->PostOrQueueAction(base::BindOnce(
+          &DownloadToolbarUIController::ShowPendingDownloadStartedAnimation,
+          weak_factory_.GetWeakPtr()));
+    }
   }
   if (updates.new_state && *updates.new_state != state_) {
     update_icon = true;
@@ -864,9 +871,9 @@ views::ImageView* DownloadToolbarUIController::GetImageBadgeForTesting() {
 
 DownloadToolbarUIController::BubbleCloser::BubbleCloser(
     views::Button* toolbar_button,
-    base::OnceClosure press_callback)
-    : toolbar_button_(toolbar_button), callback_(std::move(press_callback)) {
-  CHECK(toolbar_button_);
+    base::WeakPtr<DownloadDisplay> download_display)
+    : download_display_(download_display) {
+  CHECK(toolbar_button);
   if (toolbar_button->GetWidget() &&
       toolbar_button->GetWidget()->GetNativeWindow()) {
     event_monitor_ = views::EventMonitor::CreateWindowMonitor(
@@ -885,7 +892,9 @@ void DownloadToolbarUIController::BubbleCloser::OnEvent(
     return;
   }
 
-  std::move(callback_).Run();
+  if (download_display_) {
+    download_display_->HideDetails();
+  }
   // `this` will be deleted.
 }
 
@@ -916,6 +925,7 @@ void DownloadToolbarUIController::CreateBubbleDialogDelegate() {
   bubble_delegate->SetTitle(
       l10n_util::GetStringUTF16(IDS_DOWNLOAD_BUBBLE_HEADER_LABEL));
   bubble_delegate->SetShowTitle(false);
+  bubble_delegate->set_internal_name(kBubbleName);
   bubble_delegate->SetShowCloseButton(false);
   bubble_delegate->SetButtons(static_cast<int>(ui::mojom::DialogButton::kNone));
   bubble_delegate->SetDefaultButton(
@@ -961,9 +971,8 @@ void DownloadToolbarUIController::CreateBubbleDialogDelegate() {
   if (ShouldShowBubbleAsInactive()) {
     if (button) {
       bubble_delegate_->GetWidget()->ShowInactive();
-      bubble_closer_ = std::make_unique<BubbleCloser>(
-          button, base::BindOnce(&DownloadToolbarUIController::HideDetails,
-                                 base::Unretained(this)));
+      bubble_closer_ =
+          std::make_unique<BubbleCloser>(button, weak_factory_.GetWeakPtr());
       bubble_delegate_->GetWidget()
           ->GetRootView()
           ->GetViewAccessibility()
@@ -1012,6 +1021,10 @@ void DownloadToolbarUIController::OnPartialViewClosed() {
 
 void DownloadToolbarUIController::ShowIphPromo() {
 #if BUILDFLAG(GOOGLE_CHROME_BRANDING)
+  if (auto* button = GetDownloadsButton(browser_view_)) {
+    button->SetProperty(views::kElementIdentifierKey,
+                        kToolbarDownloadButtonElementId);
+  }
   Profile* profile = browser_view_->GetProfile();
   // Don't show IPH Promo if safe browsing level is set by policy.
   if (safe_browsing::SafeBrowsingPolicyHandler::

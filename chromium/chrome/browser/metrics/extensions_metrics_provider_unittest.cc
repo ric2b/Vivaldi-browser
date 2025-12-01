@@ -18,6 +18,7 @@
 #include "base/test/task_environment.h"
 #include "base/time/time.h"
 #include "base/values.h"
+#include "build/build_config.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/extensions/extension_service_test_base.h"
 #include "chrome/browser/extensions/extension_util.h"
@@ -41,7 +42,7 @@
 #include "third_party/metrics_proto/extension_install.pb.h"
 #include "third_party/metrics_proto/system_profile.pb.h"
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
 #include "chrome/browser/ash/login/users/fake_chrome_user_manager.h"
 #include "components/account_id/account_id.h"
 #include "components/user_manager/scoped_user_manager.h"
@@ -131,7 +132,7 @@ class ExtensionsMetricsProviderTest : public testing::Test {
     testing::Test::SetUp();
     EXPECT_TRUE(profile_manager_.SetUp());
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
     auto* fake_user_manager = new ash::FakeChromeUserManager();
     scoped_user_manager_enabler_ =
         std::make_unique<user_manager::ScopedUserManager>(
@@ -150,8 +151,7 @@ class ExtensionsMetricsProviderTest : public testing::Test {
   void TearDown() override { profile_manager_.DeleteAllTestingProfiles(); }
 
   Profile* CreateTestingProfile(const std::string& test_email) {
-    Profile* profile = profile_manager_.CreateTestingProfile(
-        test_email, /* is_main_profile= */ true);
+    Profile* profile = profile_manager_.CreateTestingProfile(test_email);
     profiles::SetLastUsedProfile(profile->GetBaseName());
     return profile;
   }
@@ -163,7 +163,7 @@ class ExtensionsMetricsProviderTest : public testing::Test {
   TestingProfileManager profile_manager_;
   base::HistogramTester histogram_tester_;
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
   std::unique_ptr<user_manager::ScopedUserManager> scoped_user_manager_enabler_;
 #endif
 
@@ -249,7 +249,7 @@ class ExtensionMetricsProviderInstallsTest
 // extension installation.
 TEST_F(ExtensionMetricsProviderInstallsTest, TestProtoConstruction) {
   auto add_extension = [this](const Extension* extension) {
-    prefs()->OnExtensionInstalled(extension, Extension::ENABLED,
+    prefs()->OnExtensionInstalled(extension, /*disable_reasons=*/{},
                                   syncer::StringOrdinal(), std::string());
   };
 
@@ -383,8 +383,8 @@ TEST_F(ExtensionMetricsProviderInstallsTest, TestProtoConstruction) {
             .SetLocation(ManifestLocation::kInternal)
             .Build();
     add_extension(extension.get());
-    prefs()->SetExtensionDisabled(
-        extension->id(), {extensions::disable_reason::DISABLE_USER_ACTION});
+    prefs()->AddDisableReason(extension->id(),
+                              extensions::disable_reason::DISABLE_USER_ACTION);
     {
       ExtensionInstallProto install = ConstructProto(*extension);
       ASSERT_EQ(1, install.disable_reasons_size());

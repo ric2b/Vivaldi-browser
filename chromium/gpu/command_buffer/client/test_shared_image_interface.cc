@@ -325,16 +325,12 @@ void TestSharedImageInterface::UpdateSharedImage(
   DCHECK(shared_images_.find(mailbox) != shared_images_.end());
 }
 
-scoped_refptr<ClientSharedImage>
-TestSharedImageInterface::ImportSharedImage(
-    const ExportedSharedImage& exported_shared_image) {
+scoped_refptr<ClientSharedImage> TestSharedImageInterface::ImportSharedImage(
+    ExportedSharedImage exported_shared_image) {
   shared_images_.insert(exported_shared_image.mailbox_);
 
   return base::WrapRefCounted<ClientSharedImage>(
-      new ClientSharedImage(
-          exported_shared_image.mailbox_, exported_shared_image.metadata_,
-          exported_shared_image.creation_sync_token_, holder_,
-          exported_shared_image.texture_target_));
+      new ClientSharedImage(std::move(exported_shared_image), holder_));
 }
 
 void TestSharedImageInterface::DestroySharedImage(
@@ -421,16 +417,6 @@ void TestSharedImageInterface::VerifySyncToken(SyncToken& sync_token) {
 
 void TestSharedImageInterface::WaitSyncToken(const SyncToken& sync_token) {
   NOTREACHED();
-}
-
-void TestSharedImageInterface::Flush() {
-  // No need to flush in this implementation. DoFlush() is for mock.
-  DoFlush();
-}
-
-scoped_refptr<gfx::NativePixmap> TestSharedImageInterface::GetNativePixmap(
-    const Mailbox& mailbox) {
-  return nullptr;
 }
 
 bool TestSharedImageInterface::CheckSharedImageExists(

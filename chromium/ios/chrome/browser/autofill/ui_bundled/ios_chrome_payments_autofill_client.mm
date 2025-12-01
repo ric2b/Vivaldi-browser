@@ -58,6 +58,18 @@ std::unique_ptr<infobars::InfoBar> CreateSaveCardInfoBarMobile(
   return std::make_unique<InfoBarIOS>(InfobarType::kInfobarTypeSaveCard,
                                       std::move(delegate));
 }
+
+// Returns true if the card to be saved has 0 strikes (i.e the user has not
+// rejected upload offer for the card previously) and, both cardholder name
+// and expiration date are present and `kAutofillSaveCardBottomSheet` feature
+// is enabled.
+bool ShowSaveCardBottomSheet(
+    const PaymentsAutofillClient::SaveCreditCardOptions& options) {
+  return options.num_strikes.has_value() && options.num_strikes.value() == 0 &&
+         !options.should_request_name_from_user &&
+         !options.should_request_expiration_date_from_user &&
+         base::FeatureList::IsEnabled(features::kAutofillSaveCardBottomSheet);
+}
 }  // namespace
 
 IOSChromePaymentsAutofillClient::IOSChromePaymentsAutofillClient(
@@ -108,25 +120,36 @@ void IOSChromePaymentsAutofillClient::ConfirmSaveCreditCardToCloud(
       client_->GetIdentityManager()->FindExtendedAccountInfo(
           client_->GetIdentityManager()->GetPrimaryAccountInfo(
               signin::ConsentLevel::kSignin));
+  AutofillSaveCardUiInfo ui_info = AutofillSaveCardUiInfo::CreateForUploadSave(
+      options, card, legal_message_lines, account_info);
+  // Delegate providing callbacks for the save card UI.
+  std::unique_ptr<AutofillSaveCardDelegate> common_delegate =
+      std::make_unique<AutofillSaveCardDelegate>(std::move(callback), options);
+
+  if (ShowSaveCardBottomSheet(options)) {
+    AutofillBottomSheetTabHelper* bottom_sheet_tab_helper =
+        AutofillBottomSheetTabHelper::FromWebState(web_state_);
+    std::unique_ptr<SaveCardBottomSheetModel> model =
+        std::make_unique<SaveCardBottomSheetModel>(std::move(ui_info),
+                                                   std::move(common_delegate));
+    save_card_bottom_sheet_model_ = model->GetWeakPtr();
+    bottom_sheet_tab_helper->ShowSaveCardBottomSheet(std::move(model));
+    return;
+  }
+
   infobar_manager_->AddInfoBar(CreateSaveCardInfoBarMobile(
       std::make_unique<AutofillSaveCardInfoBarDelegateIOS>(
-          AutofillSaveCardUiInfo::CreateForUploadSave(
-              options, card, legal_message_lines, account_info),
-          std::make_unique<AutofillSaveCardDelegate>(std::move(callback),
-                                                     options))));
+          std::move(ui_info), std::move(common_delegate))));
 }
 
 void IOSChromePaymentsAutofillClient::CreditCardUploadCompleted(
     PaymentsRpcResult result,
     std::optional<OnConfirmationClosedCallback>
         on_confirmation_closed_callback) {
+  // TODO(crbug.com/402134138): Use `save_card_bottom_sheet_model_` to update
+  // the SaveCardBottomSheetModel on credit card upload completion for it to be
+  // observed by the mediator.
   const bool card_saved = result == PaymentsRpcResult::kSuccess;
-  if (!base::FeatureList::IsEnabled(
-          features::kAutofillEnableSaveCardLoadingAndConfirmation)) {
-    autofill_metrics::LogCreditCardUploadConfirmationViewShownMetric(
-        /*is_shown=*/false, card_saved);
-    return;
-  }
   if (client_->GetAutofillSaveCardInfoBarDelegateIOS()) {
     client_->GetAutofillSaveCardInfoBarDelegateIOS()->CreditCardUploadCompleted(
         card_saved, std::move(on_confirmation_closed_callback));
@@ -183,10 +206,7 @@ void IOSChromePaymentsAutofillClient::ShowVirtualCardEnrollDialog(
   std::unique_ptr<VirtualCardEnrollUiModel> model =
       std::make_unique<VirtualCardEnrollUiModel>(
           virtual_card_enrollment_fields);
-  if (base::FeatureList::IsEnabled(
-          features::kAutofillEnableVcnEnrollLoadingAndConfirmation)) {
-    virtual_card_enroll_ui_model_ = model->GetWeakPtr();
-  }
+  virtual_card_enroll_ui_model_ = model->GetWeakPtr();
   bottom_sheet_tab_helper->ShowVirtualCardEnrollmentBottomSheet(
       std::move(model),
       VirtualCardEnrollmentCallbacks(std::move(accept_virtual_card_callback),
@@ -195,10 +215,6 @@ void IOSChromePaymentsAutofillClient::ShowVirtualCardEnrollDialog(
 
 void IOSChromePaymentsAutofillClient::VirtualCardEnrollCompleted(
     PaymentsRpcResult result) {
-  if (!base::FeatureList::IsEnabled(
-          features::kAutofillEnableVcnEnrollLoadingAndConfirmation)) {
-    return;
-  }
   if (virtual_card_enroll_ui_model_) {
     virtual_card_enroll_ui_model_->SetEnrollmentProgress(
         result == PaymentsRpcResult::kSuccess
@@ -394,8 +410,7 @@ IOSChromePaymentsAutofillClient::GetOrCreatePaymentsMandatoryReauthManager() {
   return payments_reauth_manager_.get();
 }
 
-const PaymentsDataManager&
-IOSChromePaymentsAutofillClient::GetPaymentsDataManager() const {
+PaymentsDataManager& IOSChromePaymentsAutofillClient::GetPaymentsDataManager() {
   return client_->GetPersonalDataManager().payments_data_manager();
 }
 

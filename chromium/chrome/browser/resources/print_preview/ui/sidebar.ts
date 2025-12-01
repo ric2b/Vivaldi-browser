@@ -130,13 +130,6 @@ export class PrintPreviewSidebarElement extends PrintPreviewSidebarElementBase {
             'settings.duplex.available, settings.otherOptions.available, ' +
             'settings.vendorItems.available)',
       },
-
-      // <if expr="is_chromeos">
-      isPinValid_: {
-        type: Boolean,
-        value: true,
-      },
-      // </if>
     };
   }
 
@@ -151,34 +144,25 @@ export class PrintPreviewSidebarElement extends PrintPreviewSidebarElementBase {
   private firstLoad_: boolean;
   private isInAppKioskMode_: boolean;
   private settingsExpandedByUser_: boolean;
+  maxSheets: number;
   private sheetCount_: number;
   private shouldShowMoreSettings_: boolean;
-  // <if expr="is_chromeos">
-  private isPinValid_: boolean;
-  // </if>
 
   /**
    * @param defaultPrinter The system default printer ID.
    * @param serializedDestinationSelectionRulesStr String with rules
    *     for selecting the default destination.
    * @param pdfPrinterDisabled Whether the PDF printer is disabled.
-   * @param isDriveMounted Whether Google Drive is mounted. Only used
-        on Chrome OS.
    */
   init(
       appKioskMode: boolean, defaultPrinter: string,
       serializedDestinationSelectionRulesStr: string|null,
-      pdfPrinterDisabled: boolean, isDriveMounted: boolean) {
+      pdfPrinterDisabled: boolean) {
     this.isInAppKioskMode_ = appKioskMode;
     pdfPrinterDisabled = this.isInAppKioskMode_ || pdfPrinterDisabled;
 
-    // 'Save to Google Drive' is almost the same as PDF printing. The only
-    // difference is the default location shown in the file picker when user
-    // clicks 'Save'. Therefore, we should disable the 'Save to Google Drive'
-    // destination if the user should be blocked from using PDF printing.
-    const saveToDriveDisabled = pdfPrinterDisabled || !isDriveMounted;
     this.$.destinationSettings.init(
-        defaultPrinter, pdfPrinterDisabled, saveToDriveDisabled,
+        defaultPrinter, pdfPrinterDisabled,
         serializedDestinationSelectionRulesStr);
   }
 
@@ -257,24 +241,12 @@ export class PrintPreviewSidebarElement extends PrintPreviewSidebarElementBase {
     }
   }
 
-  // <if expr="not is_chromeos">
   /** @return Whether the system dialog link is available. */
   systemDialogLinkAvailable(): boolean {
     const linkContainer =
         this.shadowRoot!.querySelector('print-preview-link-container');
     return !!linkContainer && linkContainer.systemDialogLinkAvailable();
   }
-  // </if>
-
-  // <if expr="is_chromeos">
-  /**
-   * Returns true if at least one non-PDF printer destination is shown in the
-   * destination dropdown.
-   */
-  printerExistsInDisplayedDestinations(): boolean {
-    return this.$.destinationSettings.printerExistsInDisplayedDestinations();
-  }
-  // </if>
 }
 
 declare global {

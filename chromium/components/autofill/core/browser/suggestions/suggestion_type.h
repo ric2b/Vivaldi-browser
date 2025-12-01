@@ -18,10 +18,9 @@ namespace autofill {
 // enum (not necessarily at the end). Set its value to the current `kMaxValue`
 // and increase `kMaxValue` by 1.
 //
-// Keep this enum up to date with the one in
-// tools/metrics/histograms/metadata/autofill/enums.xml.
-//
 // GENERATED_JAVA_ENUM_PACKAGE: org.chromium.components.autofill
+//
+// LINT.IfChange(SuggestionType)
 enum class SuggestionType {
   // Autocomplete suggestions.
   kAutocompleteEntry = 0,
@@ -43,9 +42,11 @@ enum class SuggestionType {
   kAddressEntryOnTyping = 63,
 
   kManageAddress = 10,
+  kManageAutofillAi = 64,
   kManageCreditCard = 11,
   kManageIban = 12,
   kManagePlusAddress = 13,
+  kManageLoyaltyCard = 68,
 
   // Compose popup suggestion shown when no Compose session exists.
   kComposeProactiveNudge = 14,
@@ -93,7 +94,7 @@ enum class SuggestionType {
   kViewPasswordDetails = 32,
 
   // Payment suggestions.
-  kShowAccountCards = 24,
+  // kShowAccountCards = 24, // DEPRECATED
   kCreditCardEntry = 33,
   kInsecureContextPaymentDisabledMessage = 34,
   kScanCreditCard = 35,
@@ -112,6 +113,12 @@ enum class SuggestionType {
   // Promotion suggestions.
   kMerchantPromoCodeEntry = 41,
   kSeePromoCodeDetails = 42,
+
+  // Federated profiles suggestions.
+  kIdentityCredential = 66,
+
+  // Loyalty card suggestions.
+  kLoyaltyCardEntry = 67,
 
   // Webauthn suggestions.
   kWebauthnCredential = 43,
@@ -135,23 +142,23 @@ enum class SuggestionType {
   // suggestions with country names as main text mean.
   kDevtoolsTestAddressByCountry = 51,
 
-  // Trigger for retrieving Autofill AI suggestions. Part of the footer.
-  kRetrieveAutofillAi = 53,
-  // Loading indicator shown while retrieving Autofill AI suggestions.
-  kAutofillAiLoadingState = 54,
+  // kRetrieveAutofillAi = 53, // DEPRECATED
+  // kAutofillAiLoadingState = 54, // DEPRECATED
   // Autofill AI filling suggestion.
   kFillAutofillAi = 55,
-  // Suggestion that provides users the possibility to give feedback about
-  // Autofill AI.
-  kAutofillAiFeedback = 56,
-  // kPredictionImprovementsDetails = 58, // DEPRECATED due to UX changes.
-  // Suggestion displayed when there is an error with Autofill AI.
-  kAutofillAiError = 59,
-  // Suggestion for editing Autofill AI information.
-  kEditAutofillAiData = 60,
+  // kAutofillAiFeedback = 56, // DEPRECATED
+  // kPredictionImprovementsDetails = 58, // DEPRECATED
+  // kAutofillAiError = 59, // DEPRECATED
+  // kEditAutofillAiData = 60, // DEPRECATED
 
-  kMaxValue = kAddressEntryOnTyping
+  // kPendingStateSignin suggestion is displayed when the user is in the pending
+  // state. On click the user will be directed to sign in.
+  kPendingStateSignin = 65,
+
+  // Next ID: 69
+  kMaxValue = kManageLoyaltyCard
 };
+// LINT.ThenChange(/tools/metrics/histograms/metadata/autofill/enums.xml:SuggestionType)
 
 std::string_view SuggestionTypeToStringView(SuggestionType type);
 std::string SuggestionTypeToString(SuggestionType type);

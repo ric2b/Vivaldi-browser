@@ -35,8 +35,15 @@ class TestCase(unittest.TestCase):
     # Allows a test to mark a programmatic skip (through calling self.skipTest)
     # as expected.
     programmaticSkipIsExpected = False
+    # Allows a test to signal that associated bugs should not be output when
+    # printing test finished information. This is mostly for cases when a
+    # programmatic skip is used and a relevant Skip expectation is not
+    # responsible. In such cases, the associated bugs are liable to be confusing
+    # to users since they were not actually responsible for the skip.
+    shouldNotOutputAssociatedBugs = False
     # Any additional key/value pairs to report through ResultDB.
     additionalTags = {}
+    chromium_build_directory = None
 
     def set_artifacts(self, artifacts):
         # We need this setter instead of setting artifacts directly so that

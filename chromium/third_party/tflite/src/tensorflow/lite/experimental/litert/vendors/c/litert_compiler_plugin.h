@@ -62,18 +62,26 @@ LiteRtStatus LiteRtGetCompilerPluginSupportedSocModel(
 // Select desired ops for compilation. This will only be called once
 // per subgraph, plugins should select all supportable ops.
 LiteRtStatus LiteRtCompilerPluginPartition(LiteRtCompilerPlugin compiler_plugin,
+                                           const char* soc_model,
                                            LiteRtSubgraph subgraph,
                                            LiteRtOpList selected_ops);
 
-// Prepare result to pass to the runtime for given partition and, optionally,
-// for a given SoC model (parameter `soc_model` can be NULL to specify a default
-// SoC model). The given subgraphs are valid sub-DAG within the ops selected in
-// partition step.
+// Prepare result to pass to the runtime for given model containing partitioned
+// subgraphs. Optionally, handles a SoC model (parameter `soc_model` can be NULL
+// to specify a default SoC model).
 LiteRtStatus LiteRtCompilerPluginCompile(LiteRtCompilerPlugin compiler_plugin,
                                          const char* soc_model,
-                                         LiteRtSubgraph* partitions,
-                                         LiteRtParamIndex num_partitions,
+                                         LiteRtModel partitions,
                                          LiteRtCompiledResult* compiled_result);
+
+// Set any flags for the compiler do use during compilation. Flag data may be
+// released or reused after this function returns. Flags are string key ->
+// optional string value pairs. A non-existent value is represented by an empty
+// string. Calling this function will unset any previously set flags.
+LiteRtStatus LiteRtCompilerPluginSetFlags(LiteRtCompilerPlugin compiler_plugin,
+                                          LiteRtParamIndex num_flags,
+                                          const char** keys,
+                                          const char** values);
 
 //
 // Compiled Partition

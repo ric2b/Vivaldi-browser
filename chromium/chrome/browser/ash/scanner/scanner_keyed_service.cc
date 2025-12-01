@@ -11,6 +11,7 @@
 
 #include "ash/constants/ash_features.h"
 #include "ash/constants/ash_pref_names.h"
+#include "ash/constants/generative_ai_country_restrictions.h"
 #include "base/check_deref.h"
 #include "base/containers/span.h"
 #include "base/feature_list.h"
@@ -21,6 +22,7 @@
 #include "base/memory/scoped_refptr.h"
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
+#include "base/time/time.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
@@ -78,8 +80,9 @@ constexpr auto kTrafficAnnotation =
 
 specialized_features::FeatureAccessConfig CreateFeatureAccessConfig() {
   specialized_features::FeatureAccessConfig config;
-  config.settings_toggle_pref = ash::prefs::kSunfishEnabled;
+  config.settings_toggle_pref = ash::prefs::kScannerEnabled;
   config.disabled_in_kiosk_mode = true;
+  config.consent_accepted_pref = ash::prefs::kScannerConsentDisclaimerAccepted;
 
   // Dogfood devices ignore all other checks.
   // On actual launch, we will be using the ScannerUpdate flag instead of
@@ -94,25 +97,7 @@ specialized_features::FeatureAccessConfig CreateFeatureAccessConfig() {
       base::BindRepeating([](AccountCapabilities capabilities) {
         return capabilities.can_use_manta_service();
       });
-  config.country_codes = {
-      "ae", "ag", "ai", "am", "ao", "aq", "ar", "as", "at", "au", "aw", "az",
-      "bb", "bd", "be", "bf", "bg", "bh", "bi", "bj", "bl", "bm", "bn", "bo",
-      "bq", "br", "bs", "bt", "bw", "bz", "ca", "cc", "cd", "cf", "cg", "ch",
-      "ci", "ck", "cl", "cm", "co", "cr", "cv", "cw", "cx", "cy", "cz", "de",
-      "dj", "dk", "dm", "do", "dz", "ec", "ee", "eg", "eh", "er", "es", "et",
-      "fi", "fj", "fk", "fm", "fr", "ga", "gb", "gd", "ge", "gg", "gh", "gi",
-      "gm", "gn", "gq", "gr", "gs", "gt", "gu", "gw", "gy", "hm", "hn", "hr",
-      "ht", "hu", "id", "ie", "il", "im", "in", "io", "iq", "is", "it", "je",
-      "jm", "jo", "jp", "ke", "kg", "kh", "ki", "km", "kn", "kr", "kw", "ky",
-      "kz", "la", "lb", "lc", "li", "lk", "lr", "ls", "lt", "lu", "lv", "ly",
-      "ma", "mg", "mh", "ml", "mn", "mp", "mr", "ms", "mt", "mu", "mv", "mw",
-      "mx", "my", "mz", "na", "nc", "ne", "nf", "ng", "ni", "nl", "no", "np",
-      "nr", "nu", "nz", "om", "pa", "pe", "pg", "ph", "pk", "pl", "pm", "pn",
-      "pr", "ps", "pt", "pw", "py", "qa", "ro", "rw", "sa", "sb", "sc", "sd",
-      "se", "sg", "sh", "si", "sk", "sl", "sn", "so", "sr", "ss", "st", "sv",
-      "sz", "tc", "td", "tg", "th", "tj", "tk", "tl", "tm", "tn", "to", "tr",
-      "tt", "tv", "tw", "tz", "ug", "um", "us", "uy", "uz", "vc", "ve", "vg",
-      "vi", "vn", "vu", "wf", "ws", "ye", "za", "zm", "zw"};
+  config.country_codes = ash::GetGenerativeAiCountryAllowlist();
   return config;
 }
 
@@ -195,6 +180,8 @@ void ScannerKeyedService::FetchActionDetailsForImage(
   }
   manta::proto::ScannerInput scanner_input;
   scanner_input.set_image(std::string(base::as_string_view(*jpeg_bytes)));
+  scanner_input.mutable_current_timestamp()->set_seconds(
+      base::Time::Now().InSecondsFSinceUnixEpoch());
   *scanner_input.mutable_selected_action() = std::move(selected_action);
   scanner_provider_->Call(scanner_input, std::move(callback));
 }

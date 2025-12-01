@@ -30,6 +30,7 @@
 #include "components/autofill/core/common/mojom/autofill_types.mojom.h"
 #include "components/autofill/core/common/password_form_fill_data.h"
 #include "components/autofill/core/common/unique_ids.h"
+#include "components/signin/public/base/signin_buildflags.h"
 #include "content/public/renderer/render_frame_observer.h"
 #include "mojo/public/cpp/bindings/associated_receiver.h"
 #include "mojo/public/cpp/bindings/associated_remote.h"
@@ -148,7 +149,8 @@ class PasswordAutofillAgent : public content::RenderFrameObserver,
                                      FieldRendererId password_element_id,
                                      const std::u16string& username,
                                      const std::u16string& password) override;
-  void InformNoSavedCredentials() override;
+  void InformNoSavedCredentials(
+      bool should_show_popup_without_passwords) override;
   void FillIntoFocusedField(bool is_password,
                             const std::u16string& credential) override;
   void PreviewField(FieldRendererId field_id,
@@ -167,7 +169,6 @@ class PasswordAutofillAgent : public content::RenderFrameObserver,
   void AnnotateFieldsWithParsingResult(
       const ParsingResult& parsing_result) override;
 #if BUILDFLAG(IS_ANDROID)
-  void KeyboardReplacingSurfaceClosed(bool show_virtual_keyboard) override;
   void TriggerFormSubmission() override;
 #endif
 
@@ -199,16 +200,6 @@ class PasswordAutofillAgent : public content::RenderFrameObserver,
   // Sends a reputation check request in case if `element` has type password and
   // no check request were sent from this frame load.
   void MaybeCheckSafeBrowsingReputation(const blink::WebInputElement& element);
-
-#if BUILDFLAG(IS_ANDROID)
-  // Returns whether the soft keyboard should be suppressed.
-  bool ShouldSuppressKeyboard();
-
-  // Asks the agent to show the keyboard replacing surface for
-  // `control_element`. Returns whether the agent was able to do so.
-  bool TryToShowKeyboardReplacingSurface(
-      const blink::WebFormControlElement& control_element);
-#endif
 
   // Queries password suggestions for the given `element` and `trigger_source`.
   // If `generation_popup_showing` is true, this function will return false
@@ -336,23 +327,13 @@ class PasswordAutofillAgent : public content::RenderFrameObserver,
         const blink::WebFormControlElement& node);
     void NotifyIfChanged(mojom::FocusedFieldType new_focused_field_type,
                          FieldRendererId new_focused_field_id);
+    std::pair<mojom::FocusedFieldType, FieldRendererId> GetFocusedFieldInfo(
+        const blink::WebElement& element);
 
     FieldRendererId focused_field_id_;
     mojom::FocusedFieldType focused_field_type_ =
         mojom::FocusedFieldType::kUnknown;
     const raw_ref<PasswordAutofillAgent> agent_;
-  };
-
-  // Enumeration representing possible keyboard replacing surface states. A
-  // keyboard replacing surface can be either Touch To Fill UI or Android
-  // Credential Manager UI. This is used to make sure that keyboard replacing
-  // surface will only be shown in response to the first password form focus
-  // during a frame's life time and to suppress the soft keyboard when
-  // credential selector sheet is shown.
-  enum class KeyboardReplacingSurfaceState {
-    kShouldShow,
-    kIsShowing,
-    kWasShown,
   };
 
   struct PasswordInfo {
@@ -605,6 +586,9 @@ class PasswordAutofillAgent : public content::RenderFrameObserver,
   void SetLastUpdatedFormAndField(const blink::WebFormElement& form,
                                   const blink::WebFormControlElement& input);
 
+  bool CanShowPopupWithoutPasswords(
+      const blink::WebInputElement& password_element) const;
+
   // Returns true if the element is of type 'password' and has either user typed
   // input or input autofilled on user trigger.
   bool IsPasswordFieldFilledByUser(
@@ -644,6 +628,13 @@ class PasswordAutofillAgent : public content::RenderFrameObserver,
 
   // Set of fields that are reliably identified as non-credential fields.
   base::flat_set<FieldRendererId> suggestion_banned_fields_;
+
+#if BUILDFLAG(ENABLE_DICE_SUPPORT)
+  // The Password Manager normally shows passwords if there are passwords to
+  // fill, there are cases, when PWM might show other suggestions (e.g. promos)
+  // on password fields.
+  bool should_show_popup_without_passwords_ = false;
+#endif
 
   PasswordValueGatekeeper gatekeeper_;
 
@@ -689,10 +680,6 @@ class PasswordAutofillAgent : public content::RenderFrameObserver,
   // username predictions.
   UsernameDetectorCache username_detector_cache_;
 
-  // Stores the mapping from a form element's ID to results of button titles
-  // heuristics for that form.
-  form_util::ButtonTitlesCache button_titles_cache_;
-
   // Flag to prevent that multiple PasswordManager.FirstRendererFillingResult
   // UMA metrics are recorded per page load. This is reset on
   // DidCommitProvisionalLoad() but only for non-same-document-navigations.
@@ -711,13 +698,6 @@ class PasswordAutofillAgent : public content::RenderFrameObserver,
   // This notifier is used to avoid sending redundant messages to the password
   // manager driver mojo interface.
   FocusStateNotifier focus_state_notifier_{this};
-
-#if BUILDFLAG(IS_ANDROID)
-  // Current state of the keyboard replacing surface. This is reset during
-  // CleanupOnDocumentShutdown.
-  KeyboardReplacingSurfaceState keyboard_replacing_surface_state_ =
-      KeyboardReplacingSurfaceState::kShouldShow;
-#endif
 };
 
 }  // namespace autofill

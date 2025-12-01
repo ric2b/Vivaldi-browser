@@ -524,7 +524,7 @@ async function printStyleSection(section, omitLonghands, includeSelectorGroupMar
   const selector =
       section.titleElement.querySelector('.selector') || section.titleElement.querySelector('.keyframe-key');
   let selectorText = (includeSelectorGroupMarks ? buildMarkedSelectors(selector) : text(selector));
-  selectorText += text(selector.nextSibling);
+  selectorText += text(selector.nextSibling.nextSibling);
   const anchor = section.element.querySelector('.styles-section-subtitle');
 
   if (anchor) {
@@ -726,7 +726,7 @@ ElementsTestRunner.dumpStyleTreeItem = function(treeItem, prefix, depth, printIn
     const children = treeItem.children();
 
     for (let i = 0; children && i < children.length; ++i) {
-      ElementsTestRunner.dumpStyleTreeItem(children[i], prefix + '    ', depth);
+      ElementsTestRunner.dumpStyleTreeItem(children[i], prefix + '    ', depth, printInnerText);
     }
   }
 };

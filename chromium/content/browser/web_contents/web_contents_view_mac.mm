@@ -39,6 +39,7 @@
 #include "ui/base/dragdrop/mojom/drag_drop_types.mojom.h"
 #include "ui/display/display_util.h"
 #include "ui/gfx/mac/coordinate_conversion.h"
+#include "ui/gfx/native_widget_types.h"
 
 #include "ui/content/vivaldi_tab_check.h"
 
@@ -132,23 +133,26 @@ WebContentsViewCocoa* WebContentsViewMac::GetInProcessNSView() const {
 }
 
 gfx::NativeView WebContentsViewMac::GetNativeView() const {
-  return GetInProcessNSView();
+  return gfx::NativeView(GetInProcessNSView());
 }
 
 gfx::NativeView WebContentsViewMac::GetContentNativeView() const {
   RenderWidgetHostView* rwhv = web_contents_->GetRenderWidgetHostView();
-  if (!rwhv)
-    return nullptr;
+  if (!rwhv) {
+    return gfx::NativeView();
+  }
   return rwhv->GetNativeView();
 }
 
 gfx::NativeWindow WebContentsViewMac::GetTopLevelNativeWindow() const {
   NSWindow* window = [GetInProcessNSView() window];
-  if (window)
-    return window;
-  if (delegate_)
+  if (window) {
+    return gfx::NativeWindow(window);
+  }
+  if (delegate_) {
     return delegate_->GetNativeWindow();
-  return nullptr;
+  }
+  return gfx::NativeWindow();
 }
 
 gfx::Rect WebContentsViewMac::GetContainerBounds() const {
@@ -618,7 +622,20 @@ bool WebContentsViewMac::DragPromisedFileTo(const base::FilePath& file_path,
 void WebContentsViewMac::EndDrag(uint32_t drag_operation,
                                  const gfx::PointF& local_point,
                                  const gfx::PointF& screen_point) {
-  [drag_dest_ endDrag];
+  [drag_dest_
+      endDrag:base::BindOnce(&WebContentsViewMac::PerformEndDrag,
+                             deferred_close_weak_ptr_factory_.GetWeakPtr(),
+                             drag_operation, local_point, screen_point)];
+}
+
+void WebContentsViewMac::PerformEndDrag(uint32_t drag_operation,
+                                        const gfx::PointF& local_point,
+                                        const gfx::PointF& screen_point) {
+  // Validate internal members are non-null as this method can be called
+  // asynchronously.
+  if (!web_contents_ || !drag_source_start_rwh_) {
+    return;
+  }
 
   web_contents_->SystemDragEnded(drag_source_start_rwh_.get());
 

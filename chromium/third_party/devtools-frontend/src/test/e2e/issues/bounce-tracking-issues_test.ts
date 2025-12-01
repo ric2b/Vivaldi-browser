@@ -21,7 +21,7 @@ describe('Bounce Tracking issue', () => {
   it.skip('[crbug.com/380046260] should display correct information', async () => {
     await navigateToIssuesTab();
     const {frontend} = getBrowserAndPages();
-    frontend.evaluate(() => {
+    await frontend.evaluate(() => {
       const issue = {
         code: 'BounceTrackingIssue',
         details: {
@@ -30,7 +30,7 @@ describe('Bounce Tracking issue', () => {
           },
         },
       };
-      // @ts-ignore
+      // @ts-expect-error
       window.addIssueForTest(issue);
       const issue2 = {
         code: 'BounceTrackingIssue',
@@ -40,7 +40,7 @@ describe('Bounce Tracking issue', () => {
           },
         },
       };
-      // @ts-ignore
+      // @ts-expect-error
       window.addIssueForTest(issue2);
     });
     await expandIssue();

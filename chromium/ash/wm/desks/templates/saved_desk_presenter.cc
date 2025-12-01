@@ -430,9 +430,10 @@ void SavedDeskPresenter::LaunchSavedDesk(
   Desk* new_desk = desks_controller->CreateNewDeskForSavedDesk(
       saved_desk_type, saved_desk->template_name());
 
-  // Set the lacros profile ID for the newly created desk. This is effectively a
-  // no-op if `lacros_profile_id` returns zero.
-  new_desk->SetLacrosProfileId(saved_desk->lacros_profile_id());
+  if (saved_desk->type() == DeskTemplateType::kCoral) {
+    new_desk->set_tab_app_entities(
+        mojo::Clone(saved_desk->coral_tab_app_entities()));
+  }
 
   LaunchSavedDeskIntoNewDesk(std::move(saved_desk), root_window, new_desk);
 

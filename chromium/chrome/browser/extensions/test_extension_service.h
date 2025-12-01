@@ -13,7 +13,6 @@
 
 namespace extensions {
 class CWSInfoServiceInterface;
-class CrxInstaller;
 class Extension;
 }  // namespace extensions
 
@@ -26,18 +25,10 @@ class TestExtensionService : public extensions::ExtensionServiceInterface {
   ~TestExtensionService() override;
 
   // ExtensionServiceInterface implementation.
-  extensions::PendingExtensionManager* pending_extension_manager() override;
-  extensions::CorruptedExtensionReinstaller* corrupted_extension_reinstaller()
-      override;
-
-  scoped_refptr<extensions::CrxInstaller> CreateUpdateInstaller(
-      const extensions::CRXFileInfo& file,
-      bool file_ownership_passed) override;
   const extensions::Extension* GetPendingExtensionUpdate(
       const std::string& extension_id) const override;
   bool FinishDelayedInstallationIfReady(const std::string& extension_id,
                                         bool install_immediately) override;
-  bool IsExtensionEnabled(const std::string& extension_id) const override;
 
   void CheckManagementPolicy() override;
   void CheckForUpdatesSoon() override;
@@ -51,8 +42,6 @@ class TestExtensionService : public extensions::ExtensionServiceInterface {
 
   bool UserCanDisableInstalledExtension(
       const std::string& extension_id) override;
-
-  void ReinstallProviderExtensions() override;
 
   base::WeakPtr<ExtensionServiceInterface> AsWeakPtr() override;
 

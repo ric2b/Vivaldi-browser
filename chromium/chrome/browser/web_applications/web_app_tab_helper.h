@@ -13,9 +13,9 @@
 #include "base/memory/weak_ptr.h"
 #include "base/scoped_observation.h"
 #include "base/unguessable_token.h"
-#include "chrome/browser/ui/tabs/public/tab_interface.h"
 #include "chrome/browser/web_applications/web_app_install_manager.h"
 #include "chrome/browser/web_applications/web_app_install_manager_observer.h"
+#include "components/tab_collections/public/tab_interface.h"
 #include "components/webapps/common/web_app_id.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/browser/web_contents_user_data.h"
@@ -24,10 +24,13 @@ namespace content {
 class WebContents;
 }
 
+namespace webapps {
+class LaunchQueue;
+}
+
 namespace web_app {
 
 class WebAppProvider;
-class WebAppLaunchQueue;
 
 // Per-tab web app helper. Allows to associate a tab (web page) with a web app.
 class WebAppTabHelper : public content::WebContentsUserData<WebAppTabHelper>,
@@ -120,18 +123,30 @@ class WebAppTabHelper : public content::WebContentsUserData<WebAppTabHelper>,
     is_pinned_home_tab_ = is_pinned_home_tab;
   }
 
-  WebAppLaunchQueue& EnsureLaunchQueue();
+  webapps::LaunchQueue& EnsureLaunchQueue();
 
   // content::WebContentsObserver:
   void ReadyToCommitNavigation(
       content::NavigationHandle* navigation_handle) override;
   void PrimaryPageChanged(content::Page& page) override;
+  void DidFinishLoad(content::RenderFrameHost* render_frame_host,
+                     const GURL& validated_url) override;
 
   // Because the launch queue is communicated via a dedicated mojo pipe,
   // ordering can be tricky in tests. This method allows tests to call
   // `FlushForTesting()` on the launch queue mojo connection to ensure that all
   // launch queue messages have been sent to the renderer.
   void FlushLaunchQueueForTesting() const;
+
+  // Returns if the current web contents can be used for the 'focus-existing'
+  // behavior of navigation capturing, where the tab is focused and a
+  // 'LaunchParams' is given to a javascript 'launch consumer' on the page. This
+  // returns if the current page can feasibly run javascript to actually set
+  // this launch consumer, as without that, any captured links would simply do
+  // nothing.
+  // Specifically, this turns `true` if the current page's mime-type is html or
+  // xhtml.
+  bool CanBeUsedForFocusExisting() const;
 
  private:
   friend class WebAppAudioFocusBrowserTest;
@@ -170,6 +185,16 @@ class WebAppTabHelper : public content::WebContentsUserData<WebAppTabHelper>,
   // changed.
   void MaybeNotifyTabChanged();
 
+  // Cache the information that an app launch has happened and a WebFeature use
+  // counter needs to be measured. Trigger measurement which may or may not
+  // happen depending on whether page load has finished.
+  void ScheduleManifestAppliedUseCounter();
+
+  // Record the `UseCounter` for an app launch after page loading has
+  // completed. Resets all flags post `UseCounter` measurement so that this
+  // happens only once.
+  void MaybeRecordManifestAppliedUseCounter();
+
   std::optional<webapps::AppId> app_id_;
   std::optional<webapps::AppId> window_app_id_;
 
@@ -182,7 +207,7 @@ class WebAppTabHelper : public content::WebContentsUserData<WebAppTabHelper>,
 
   // Use unique_ptr for lazy instantiation as most browser tabs have no need to
   // incur this memory overhead.
-  std::unique_ptr<WebAppLaunchQueue> launch_queue_;
+  std::unique_ptr<webapps::LaunchQueue> launch_queue_;
 
   // A callback that runs whenever the `tab` is destroyed, navigates or goes to
   // the background.
@@ -191,6 +216,13 @@ class WebAppTabHelper : public content::WebContentsUserData<WebAppTabHelper>,
   // Used to subscribe to various changes happening in the current tab from the
   // `TabInterface`.
   std::vector<base::CallbackListSubscription> tab_subscriptions_;
+
+  // Listen to whether page load has completed in the web contents to measure
+  // the `UseCounter` of launching a web app.
+  bool can_record_manifest_applied_ = false;
+
+  // Cache the information that an app launch `UseCounter` needs to be measured.
+  bool meaure_manifest_applied_use_counter_ = false;
 
   base::ScopedObservation<WebAppInstallManager, WebAppInstallManagerObserver>
       observation_{this};

@@ -160,6 +160,10 @@ static int scale_vt_filter_frame(AVFilterLink *link, AVFrame *in)
     out->crop_top = 0;
     out->crop_right = 0;
     out->crop_bottom = 0;
+    if (out->width != in->width || out->height != in->height) {
+        av_frame_side_data_remove_by_props(&out->side_data, &out->nb_side_data,
+                                           AV_SIDE_DATA_PROP_SIZE_DEPENDENT);
+    }
 
     av_reduce(&out->sample_aspect_ratio.num, &out->sample_aspect_ratio.den,
               (int64_t)in->sample_aspect_ratio.num * outlink->h * link->w,
@@ -316,16 +320,16 @@ static const AVFilterPad scale_vt_outputs[] = {
     },
 };
 
-const AVFilter ff_vf_scale_vt = {
-    .name           = "scale_vt",
-    .description    = NULL_IF_CONFIG_SMALL("Scale Videotoolbox frames"),
+const FFFilter ff_vf_scale_vt = {
+    .p.name         = "scale_vt",
+    .p.description  = NULL_IF_CONFIG_SMALL("Scale Videotoolbox frames"),
+    .p.priv_class   = &scale_vt_class,
+    .p.flags        = AVFILTER_FLAG_HWDEVICE,
     .priv_size      = sizeof(ScaleVtContext),
     .init           = scale_vt_init,
     .uninit         = scale_vt_uninit,
     FILTER_INPUTS(scale_vt_inputs),
     FILTER_OUTPUTS(scale_vt_outputs),
     FILTER_SINGLE_PIXFMT(AV_PIX_FMT_VIDEOTOOLBOX),
-    .priv_class     = &scale_vt_class,
-    .flags          = AVFILTER_FLAG_HWDEVICE,
     .flags_internal = FF_FILTER_FLAG_HWFRAME_AWARE,
 };

@@ -28,6 +28,8 @@
 #include "ui/base/ui_base_types.h"
 #include "ui/gfx/geometry/rect.h"
 
+#include "components/content/vivaldi_postponed_calls.h"
+
 namespace content {
 
 WebContentsDelegate::WebContentsDelegate() = default;
@@ -98,14 +100,14 @@ bool WebContentsDelegate::TakeFocus(WebContents* source, bool reverse) {
   return false;
 }
 
-void WebContentsDelegate::CanDownload(const GURL& url,
-                                      const std::string& request_method,
-                                      base::OnceCallback<void(bool)> callback) {
-  std::move(callback).Run(true);
-}
-
 bool WebContentsDelegate::HandleContextMenu(RenderFrameHost& render_frame_host,
                                             const ContextMenuParams& params) {
+  return false;
+}
+
+bool WebContentsDelegate::PreHandleMouseEvent(
+    WebContents* source,
+    const blink::WebMouseEvent& event) {
   return false;
 }
 
@@ -470,5 +472,10 @@ WebContentsDelegate::GetBackForwardTransitionFallbackUXConfig() {
   return BackForwardTransitionAnimationManager::FallbackUXConfig();
 }
 #endif  // BUILDFLAG(IS_ANDROID)
+
+std::vector<blink::mojom::RelatedApplicationPtr>
+WebContentsDelegate::GetSavedRelatedApplications(WebContents* web_contents) {
+  return {};
+}
 
 }  // namespace content

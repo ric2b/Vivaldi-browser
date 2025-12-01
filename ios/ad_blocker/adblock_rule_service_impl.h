@@ -21,7 +21,10 @@
 #include "components/ad_blocker/adblock_rule_source_handler.h"
 #include "components/ad_blocker/adblock_types.h"
 #include "components/keyed_service/core/keyed_service.h"
+#include "components/prefs/pref_change_registrar.h"
 #include "ios/ad_blocker/adblock_organized_rules_manager.h"
+
+class PrefService;
 
 namespace base {
 class SequencedTaskRunner;
@@ -36,6 +39,7 @@ class ContentInjectionHandler;
 class RuleServiceImpl : public RuleService, public RuleManager::Observer {
  public:
   explicit RuleServiceImpl(web::BrowserState* browser_state,
+                           PrefService* prefs,
                            RuleSourceHandler::RulesCompiler rules_compiler,
                            std::string locale);
   ~RuleServiceImpl() override;
@@ -56,6 +60,7 @@ class RuleServiceImpl : public RuleService, public RuleManager::Observer {
   RuleManager* GetRuleManager() override;
   KnownRuleSourcesHandler* GetKnownSourcesHandler() override;
   StateAndLogs* GetStateAndLogs() override;
+  StatsStore* GetStatsStore() override;
   void SetIncognitoBrowserState(web::BrowserState* browser_state) override;
   bool IsPartnerListAllowedDocument(RuleGroup group, GURL url) override;
 
@@ -77,8 +82,13 @@ class RuleServiceImpl : public RuleService, public RuleManager::Observer {
   void OnStartApplyingRules(RuleGroup group);
   void OnDoneApplyingRules(RuleGroup group);
 
-  web::BrowserState* browser_state_;
-  web::BrowserState* incognito_browser_state_ = nullptr;
+  void OnEnableDocumentBlockingChanged();
+
+  const raw_ptr<web::BrowserState> browser_state_;
+  raw_ptr<web::BrowserState> incognito_browser_state_ = nullptr;
+  const raw_ptr<PrefService> prefs_;
+  PrefChangeRegistrar pref_change_registrar_;
+
   RuleSourceHandler::RulesCompiler rules_compiler_;
   std::string locale_;
 

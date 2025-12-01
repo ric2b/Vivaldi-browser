@@ -2,12 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifndef V8_WASM_WASM_VALUE_H_
+#define V8_WASM_WASM_VALUE_H_
+
 #if !V8_ENABLE_WEBASSEMBLY
 #error This header should only be included if WebAssembly is enabled.
 #endif  // !V8_ENABLE_WEBASSEMBLY
-
-#ifndef V8_WASM_WASM_VALUE_H_
-#define V8_WASM_WASM_VALUE_H_
 
 #include "src/base/memory.h"
 #include "src/common/simd128.h"
@@ -28,25 +28,25 @@ struct WasmModule;
 // - wasm type
 // - c type
 #define FOREACH_PRIMITIVE_WASMVAL_TYPE(V) \
-  V(i8, kCanonicalI8, int8_t)             \
-  V(i16, kCanonicalI16, int16_t)          \
-  V(i32, kCanonicalI32, int32_t)          \
-  V(u32, kCanonicalI32, uint32_t)         \
-  V(i64, kCanonicalI64, int64_t)          \
-  V(u64, kCanonicalI64, uint64_t)         \
-  V(f16, kCanonicalF16, uint16_t)         \
-  V(f32, kCanonicalF32, float)            \
-  V(f32_boxed, kCanonicalF32, Float32)    \
-  V(f64, kCanonicalF64, double)           \
-  V(f64_boxed, kCanonicalF64, Float64)    \
-  V(s128, kCanonicalS128, Simd128)
+  V(i8, kWasmI8, int8_t)                  \
+  V(i16, kWasmI16, int16_t)               \
+  V(i32, kWasmI32, int32_t)               \
+  V(u32, kWasmI32, uint32_t)              \
+  V(i64, kWasmI64, int64_t)               \
+  V(u64, kWasmI64, uint64_t)              \
+  V(f16, kWasmF16, uint16_t)              \
+  V(f32, kWasmF32, float)                 \
+  V(f32_boxed, kWasmF32, Float32)         \
+  V(f64, kWasmF64, double)                \
+  V(f64_boxed, kWasmF64, Float64)         \
+  V(s128, kWasmS128, Simd128)
 
-ASSERT_TRIVIALLY_COPYABLE(Handle<Object>);
+ASSERT_TRIVIALLY_COPYABLE(DirectHandle<Object>);
 
 // A wasm value with type information.
 class WasmValue {
  public:
-  WasmValue() : type_(CanonicalValueType::Primitive(kVoid)), bit_pattern_{} {}
+  WasmValue() : type_(kWasmVoid), bit_pattern_{} {}
 
 #define DEFINE_TYPE_SPECIFIC_METHODS(name, localtype, ctype)                  \
   explicit WasmValue(ctype v) : type_(localtype), bit_pattern_{} {            \
@@ -73,18 +73,18 @@ class WasmValue {
     memcpy(bit_pattern_, raw_bytes, type.value_kind_size());
   }
 
-  WasmValue(Handle<Object> ref, CanonicalValueType type)
+  WasmValue(DirectHandle<Object> ref, CanonicalValueType type)
       : type_(type), bit_pattern_{} {
-    static_assert(sizeof(Handle<Object>) <= sizeof(bit_pattern_),
+    static_assert(sizeof(DirectHandle<Object>) <= sizeof(bit_pattern_),
                   "bit_pattern_ must be large enough to fit a Handle");
     DCHECK(type.is_reference());
-    base::WriteUnalignedValue<Handle<Object>>(
+    base::WriteUnalignedValue<DirectHandle<Object>>(
         reinterpret_cast<Address>(bit_pattern_), ref);
   }
 
-  Handle<Object> to_ref() const {
+  DirectHandle<Object> to_ref() const {
     DCHECK(type_.is_reference());
-    return base::ReadUnalignedValue<Handle<Object>>(
+    return base::ReadUnalignedValue<DirectHandle<Object>>(
         reinterpret_cast<Address>(bit_pattern_));
   }
 
@@ -96,7 +96,7 @@ class WasmValue {
   bool operator==(const WasmValue& other) const {
     return type_ == other.type_ &&
            !memcmp(bit_pattern_, other.bit_pattern_,
-                   type_.is_reference() ? sizeof(Handle<Object>)
+                   type_.is_reference() ? sizeof(DirectHandle<Object>)
                                         : type_.value_kind_size());
   }
 
@@ -111,11 +111,11 @@ class WasmValue {
   // Otherwise, return this object.
   WasmValue Packed(ValueType packed_type) const {
     if (packed_type == kWasmI8) {
-      DCHECK_EQ(type_, kCanonicalI32);
+      DCHECK_EQ(type_, kWasmI32);
       return WasmValue(static_cast<int8_t>(to_i32()));
     }
     if (packed_type == kWasmI16) {
-      DCHECK_EQ(type_, kCanonicalI32);
+      DCHECK_EQ(type_, kWasmI32);
       return WasmValue(static_cast<int16_t>(to_i32()));
     }
     return *this;
@@ -160,8 +160,7 @@ class WasmValue {
       }
       case kRefNull:
       case kRef:
-      case kRtt:
-        return "Handle [" + std::to_string(to_ref().address()) + "]";
+        return "DirectHandle [" + std::to_string(to_ref().address()) + "]";
       case kVoid:
       case kTop:
       case kBottom:

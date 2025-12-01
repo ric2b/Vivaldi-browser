@@ -82,6 +82,13 @@ struct SameSizeAsRunInfo {
 
 ASSERT_SIZE(ShapeResult::RunInfo, SameSizeAsRunInfo);
 
+struct SameSizeAsShapeResultCharacterData {
+  LayoutUnit x_position;
+  unsigned bitfields : 32;
+};
+
+ASSERT_SIZE(ShapeResultCharacterData, SameSizeAsShapeResultCharacterData);
+
 struct SameSizeAsShapeResult {
   float width;
   UntracedMember<void*> deprecated_ink_bounds_;
@@ -98,15 +105,17 @@ unsigned ShapeResult::RunInfo::NextSafeToBreakOffset(unsigned offset) const {
   DCHECK_LE(offset, num_characters_);
   if (IsLtr()) {
     for (const auto& glyph_data : glyph_data_) {
-      if (glyph_data.safe_to_break_before &&
-          glyph_data.character_index >= offset)
+      if (glyph_data.IsSafeToBreakBefore() &&
+          glyph_data.character_index >= offset) {
         return glyph_data.character_index;
+      }
     }
   } else {
     for (const auto& glyph_data : base::Reversed(glyph_data_)) {
-      if (glyph_data.safe_to_break_before &&
-          glyph_data.character_index >= offset)
+      if (glyph_data.IsSafeToBreakBefore() &&
+          glyph_data.character_index >= offset) {
         return glyph_data.character_index;
+      }
     }
   }
 
@@ -120,15 +129,17 @@ unsigned ShapeResult::RunInfo::PreviousSafeToBreakOffset(
     return num_characters_;
   if (IsLtr()) {
     for (const auto& glyph_data : base::Reversed(glyph_data_)) {
-      if (glyph_data.safe_to_break_before &&
-          glyph_data.character_index <= offset)
+      if (glyph_data.IsSafeToBreakBefore() &&
+          glyph_data.character_index <= offset) {
         return glyph_data.character_index;
+      }
     }
   } else {
     for (const auto& glyph_data : glyph_data_) {
-      if (glyph_data.safe_to_break_before &&
-          glyph_data.character_index <= offset)
+      if (glyph_data.IsSafeToBreakBefore() &&
+          glyph_data.character_index <= offset) {
         return glyph_data.character_index;
+      }
     }
   }
 
@@ -463,7 +474,7 @@ bool ShapeResult::IsStartSafeToBreak() const {
     run = runs_.back().Get();
     glyph_data = &run->glyph_data_.back();
   }
-  return glyph_data->safe_to_break_before &&
+  return glyph_data->IsSafeToBreakBefore() &&
          // If the glyph for the first character is missing, consider not safe.
          StartIndex() == run->start_index_ + glyph_data->character_index;
 }
@@ -540,7 +551,7 @@ void ShapeResult::AddUnsafeToBreak(Iterator offsets_iter,
     }
     for (HarfBuzzRunGlyphData& glyph_data : run->glyph_data_) {
       if (glyph_data.character_index == run_offset) {
-        glyph_data.safe_to_break_before = false;
+        glyph_data.SetSafeToBreakBefore(SafeToBreak::kUnsafe);
         if (++offsets_iter == offsets_end) {
           return;
         }
@@ -1285,33 +1296,34 @@ inline TextRunLayoutUnit HarfBuzzPositionToTextLayoutUnit(hb_position_t value) {
 }
 
 // Checks whether it's safe to break without reshaping before the given glyph.
-bool IsSafeToBreakBefore(const hb_glyph_info_t* glyph_infos,
-                         unsigned i,
-                         unsigned num_glyph,
-                         TextDirection direction) {
+SafeToBreak SafeToBreakBefore(const hb_glyph_info_t* glyph_infos,
+                              unsigned i,
+                              unsigned num_glyph,
+                              TextDirection direction) {
   if (direction == TextDirection::kLtr) {
     // Before the first glyph is safe to break.
     if (!i)
-      return true;
+      return SafeToBreak::kSafe;
 
     // Not at a cluster boundary.
     if (glyph_infos[i].cluster == glyph_infos[i - 1].cluster)
-      return false;
+      return SafeToBreak::kUnsafe;
   } else {
     DCHECK_EQ(direction, TextDirection::kRtl);
     // Before the first glyph is safe to break.
     if (i == num_glyph - 1)
-      return true;
+      return SafeToBreak::kSafe;
 
     // Not at a cluster boundary.
     if (glyph_infos[i].cluster == glyph_infos[i + 1].cluster)
-      return false;
+      return SafeToBreak::kUnsafe;
   }
 
   // The HB_GLYPH_FLAG_UNSAFE_TO_BREAK flag is set for all glyphs in a
   // given cluster so we only need to check the last one.
   hb_glyph_flags_t flags = hb_glyph_info_get_glyph_flags(glyph_infos + i);
-  return (flags & HB_GLYPH_FLAG_UNSAFE_TO_BREAK) == 0;
+  return (flags & HB_GLYPH_FLAG_UNSAFE_TO_BREAK) ? SafeToBreak::kUnsafe
+                                                 : SafeToBreak::kSafe;
 }
 
 }  // anonymous namespace
@@ -1470,8 +1482,8 @@ void ShapeResult::ComputeGlyphPositions(ShapeResult::RunInfo* run,
     DCHECK_LE(character_index, HarfBuzzRunGlyphData::kMaxCharacterIndex);
     DCHECK_LT(character_index, run->num_characters_);
     run->glyph_data_[i] = {glyph.codepoint, character_index,
-                           IsSafeToBreakBefore(glyph_infos + start_glyph, i,
-                                               num_glyphs, Direction()),
+                           SafeToBreakBefore(glyph_infos + start_glyph, i,
+                                             num_glyphs, Direction()),
                            advance};
 
     // Offset is primarily used when painting glyphs. Keep it in physical.
@@ -1558,10 +1570,10 @@ ShapeResult::RunInfo* ShapeResult::InsertRunForTesting(
       CanvasRotationInVertical::kRegular, HB_SCRIPT_COMMON, start_index,
       num_characters, num_characters);
   for (unsigned i = 0; i < run->glyph_data_.size(); i++) {
-    run->glyph_data_[i] = {0, i, false, TextRunLayoutUnit()};
+    run->glyph_data_[i] = {0, i, SafeToBreak::kUnsafe, TextRunLayoutUnit()};
   }
   for (uint16_t offset : safe_break_offsets)
-    run->glyph_data_[offset].safe_to_break_before = true;
+    run->glyph_data_[offset].SetSafeToBreakBefore(SafeToBreak::kSafe);
   // RTL runs have glyphs in the descending order of character_index.
   if (IsRtl())
     run->glyph_data_.Reverse();
@@ -1824,7 +1836,8 @@ const ShapeResult* ShapeResult::CreateForTabulationCharacters(
             font->TabWidth(font_data, tab_size));
       }
       const unsigned index = blink::IsLtr(direction) ? i : length - 1 - i;
-      run->glyph_data_[i] = {font_data->SpaceGlyph(), index, true, advance};
+      run->glyph_data_[i] = {font_data->SpaceGlyph(), index, SafeToBreak::kSafe,
+                             advance};
       run_width += advance;
     }
     run->width_ = run_width;
@@ -1861,7 +1874,8 @@ const ShapeResult* ShapeResult::CreateForSpaces(const Font* font,
   TextRunLayoutUnit glyph_width = TextRunLayoutUnit::FromFloatRound(width);
   for (unsigned i = 0; i < length; i++) {
     const unsigned index = blink::IsLtr(direction) ? i : length - 1 - i;
-    run->glyph_data_[i] = {font_data->SpaceGlyph(), index, true, glyph_width};
+    run->glyph_data_[i] = {font_data->SpaceGlyph(), index, SafeToBreak::kSafe,
+                           glyph_width};
     glyph_width = TextRunLayoutUnit();
   }
   result->runs_.push_back(run);
@@ -1884,7 +1898,7 @@ const ShapeResult* ShapeResult::CreateForStretchyMathOperator(
       font->PrimaryFont(), hb_direction, CanvasRotationInVertical::kRegular,
       HB_SCRIPT_COMMON, start_index, 1 /* num_glyph */, num_characters);
   run->glyph_data_[glyph_index] = {
-      glyph_variant, 0 /* character index */, true /* IsSafeToBreakBefore */,
+      glyph_variant, 0 /* character index */, SafeToBreak::kSafe,
       TextRunLayoutUnit::FromFloatRound(stretch_size)};
   run->width_ = std::max(0.0f, stretch_size);
 
@@ -1940,7 +1954,7 @@ const ShapeResult* ShapeResult::CreateForStretchyMathOperator(
                                : part.full_advance - overlap;
       run->glyph_data_[glyph_index] = {
           part.glyph, 0 /* character index */,
-          !glyph_index /* IsSafeToBreakBefore */,
+          !glyph_index ? SafeToBreak::kSafe : SafeToBreak::kUnsafe,
           TextRunLayoutUnit::FromFloatRound(full_advance)};
       if (!is_horizontal_assembly) {
         GlyphOffset glyph_offset(
@@ -2011,25 +2025,27 @@ template <bool rtl>
 void ShapeResult::ComputePositionData() const {
   unsigned next_character_index = 0;
   InlineLayoutUnit total_advance;
-  InlineLayoutUnit last_x_position;
+  LayoutUnit last_x_position;
 
   // Iterate runs/glyphs in the visual order; i.e., from the left edge
   // regardless of the directionality, so that |x_position| is always in
   // ascending order.
   // TODO(kojii): It does not work when large negative letter-/word-
   // spacing is applied.
-  for (const auto& run : runs_) {
-    if (!run)
+  for (const auto& run_ptr : runs_) {
+    if (!run_ptr) [[unlikely]] {
       continue;
+    }
+    const RunInfo& run = *run_ptr;
 
     // Assumes all runs have the same directionality as the ShapeResult so that
     // |x_position| is in ascending order.
-    DCHECK_EQ(IsRtl(), run->IsRtl());
+    DCHECK_EQ(IsRtl(), run.IsRtl());
 
-    for (const auto& glyph_data : run->glyph_data_) {
-      DCHECK_GE(run->start_index_, start_index_);
+    for (const auto& glyph_data : run.glyph_data_) {
+      DCHECK_GE(run.start_index_, start_index_);
       const unsigned logical_index =
-          run->start_index_ + glyph_data.character_index - start_index_;
+          run.start_index_ + glyph_data.character_index - start_index_;
 
       // Make |character_index| to the visual offset.
       DCHECK_LT(logical_index, num_characters_);
@@ -2051,17 +2067,16 @@ void ShapeResult::ComputePositionData() const {
           // the logical order; i.e., the last position for LTR or this position
           // for RTL.
           const LayoutUnit x_position =
-              (!rtl ? last_x_position : total_advance).ToCeil<LayoutUnit>();
+              (!rtl ? last_x_position : total_advance.ToCeil<LayoutUnit>());
           for (unsigned i = next_character_index; i < character_index; i++) {
             DCHECK_LT(i, num_characters_);
             character_position_[i].SetCachedData(x_position, false, false);
           }
         }
 
-        const LayoutUnit x_position = total_advance.ToCeil<LayoutUnit>();
+        last_x_position = total_advance.ToCeil<LayoutUnit>();
         character_position_[character_index].SetCachedData(
-            x_position, true, glyph_data.safe_to_break_before);
-        last_x_position = total_advance;
+            last_x_position, true, glyph_data.IsSafeToBreakBefore());
       }
 
       total_advance += glyph_data.advance;
@@ -2073,7 +2088,7 @@ void ShapeResult::ComputePositionData() const {
   // corresponding glyphs.
   if (next_character_index < num_characters_) {
     const LayoutUnit x_position =
-        (!rtl ? last_x_position : total_advance).ToCeil<LayoutUnit>();
+        (!rtl ? last_x_position : total_advance.ToCeil<LayoutUnit>());
     for (unsigned i = next_character_index; i < num_characters_; i++) {
       character_position_[i].SetCachedData(x_position, false, false);
     }

@@ -22,6 +22,7 @@
 class RemovingIndexes;
 class TabGroup;
 class WebStateListDelegate;
+class WebStateListGroupsDelegate;
 class WebStateListObserver;
 
 namespace tab_groups {
@@ -178,7 +179,8 @@ class WebStateList {
     raw_ptr<WebStateList> web_state_list_ = nullptr;
   };
 
-  explicit WebStateList(WebStateListDelegate* delegate);
+  explicit WebStateList(WebStateListDelegate* delegate,
+                        WebStateListGroupsDelegate* groups_delegate = nullptr);
 
   WebStateList(const WebStateList&) = delete;
   WebStateList& operator=(const WebStateList&) = delete;
@@ -507,10 +509,19 @@ class WebStateList {
   // there is no active WebState.
   void OnActiveWebStateChanged();
 
+  // Returns true if a web state insertion is necessary to prevent an
+  // undesirable state. For instance, this function returns true when detaching
+  // the last tab of a shared group, as it avoids accidental group deletion by
+  // inserting a web state.
+  bool ShouldInsertWebState(DetachParams params, const TabGroup* group);
+
   SEQUENCE_CHECKER(sequence_checker_);
 
   // The WebStateList delegate.
   raw_ptr<WebStateListDelegate> delegate_ = nullptr;
+
+  // The WebStateList groups delegate.
+  raw_ptr<WebStateListGroupsDelegate> groups_delegate_ = nullptr;
 
   // Wrappers to the WebStates hosted by the WebStateList.
   std::vector<std::unique_ptr<WebStateWrapper>> web_state_wrappers_;

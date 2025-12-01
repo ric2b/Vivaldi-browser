@@ -57,10 +57,4 @@ void BookmarkSyncService::SetBookmarksLimitForTesting(size_t limit) {
           limit);
 }
 
-void BookmarkSyncService::SetVivaldiSyncedFileStore(
-    file_sync::SyncedFileStore* synced_file_store) {
-  bookmark_data_type_processor_.set_vivaldi_synced_file_store(
-        synced_file_store);
-}
-
 }  // namespace sync_bookmarks

@@ -85,6 +85,9 @@ public class ToolbarPositionControllerTest {
                 }
 
                 @Override
+                public void setBottomControlsAdditionalHeight(int height) {}
+
+                @Override
                 public void setTopControlsHeight(int topControlsHeight, int topControlsMinHeight) {
                     mTopControlsHeight = topControlsHeight;
                     mTopControlsMinHeight = topControlsMinHeight;
@@ -185,11 +188,6 @@ public class ToolbarPositionControllerTest {
                 }
 
                 @Override
-                public boolean shouldUpdateOffsetsWhenConstraintsChange() {
-                    return false;
-                }
-
-                @Override
                 public int getBottomControlOffset() {
                     return mRendererBottomControlsOffset;
                 }
@@ -224,6 +222,7 @@ public class ToolbarPositionControllerTest {
             new CoordinatorLayout.LayoutParams(400, TOOLBAR_HEIGHT);
     private CoordinatorLayout.LayoutParams mProgressBarLayoutParams =
             new CoordinatorLayout.LayoutParams(400, 5);
+    private FrameLayout.LayoutParams mToolbarLayoutPrams = new LayoutParams(400, 80);
     private FrameLayout.LayoutParams mHairlineLayoutParams = new LayoutParams(400, 5);
     @Mock private ControlContainer mControlContainer;
     @Mock private View mControlContainerView;
@@ -266,6 +265,7 @@ public class ToolbarPositionControllerTest {
         doReturn(mControlContainerLayoutParams).when(mControlContainer).mutateLayoutParams();
         mHairlineLayoutParams.topMargin = TOOLBAR_HEIGHT;
         doReturn(mHairlineLayoutParams).when(mControlContainer).mutateHairlineLayoutParams();
+        doReturn(mToolbarLayoutPrams).when(mControlContainer).mutateToolbarLayoutParams();
         doReturn(mControlContainerView).when(mControlContainer).getView();
         doReturn(CONTROL_CONTAINER_ID).when(mControlContainerView).getId();
         doReturn(mProgressBarLayoutParams).when(mProgressBarContainer).getLayoutParams();
@@ -385,6 +385,16 @@ public class ToolbarPositionControllerTest {
 
     @Test
     @Config(qualifiers = "sw400dp")
+    @EnableFeatures(ChromeFeatureList.ANDROID_BOTTOM_TOOLBAR + ":default_to_top/false")
+    public void testDefaultBottom() {
+        assertControlsAtBottom();
+
+        setUserToolbarAnchorPreference(/* showToolbarOnTop= */ true);
+        assertControlsAtTop();
+    }
+
+    @Test
+    @Config(qualifiers = "sw400dp")
     @EnableFeatures(ChromeFeatureList.ANDROID_BOTTOM_TOOLBAR)
     public void testUpdatePositionChangesWithPref() {
         assertControlsAtTop();
@@ -490,7 +500,7 @@ public class ToolbarPositionControllerTest {
         assertEquals(LayerVisibility.VISIBLE, toolbarLayer.getLayerVisibility());
         assertEquals(LayerScrollBehavior.DEFAULT_SCROLL_OFF, toolbarLayer.getScrollBehavior());
 
-        toolbarLayer.onBrowserControlsOffsetUpdate(12, false);
+        toolbarLayer.onBrowserControlsOffsetUpdate(12);
         verify(mControlContainerView).setTranslationY(12);
         assertEquals(12, mBottomToolbarOffsetSupplier.get().intValue());
 
@@ -500,7 +510,7 @@ public class ToolbarPositionControllerTest {
         assertEquals(LayerVisibility.VISIBLE, progressBarLayer.getLayerVisibility());
         assertEquals(LayerScrollBehavior.DEFAULT_SCROLL_OFF, progressBarLayer.getScrollBehavior());
 
-        progressBarLayer.onBrowserControlsOffsetUpdate(-12, false);
+        progressBarLayer.onBrowserControlsOffsetUpdate(-12);
         verify(mProgressBarContainer).setTranslationY(-12);
 
         mIsOmniboxFocused.set(true);
@@ -758,9 +768,9 @@ public class ToolbarPositionControllerTest {
         assertEquals(ControlsPosition.BOTTOM, mBrowserControlsSizer.getControlsPosition());
         assertEquals(0, mBrowserControlsSizer.getTopControlsHeight());
         assertEquals(TOOLBAR_HEIGHT, mBrowserControlsSizer.getBottomControlsHeight());
-        assertEquals(0, mHairlineLayoutParams.topMargin);
         assertEquals(TOOLBAR_HEIGHT, mHairlineLayoutParams.bottomMargin);
         assertEquals(Gravity.START | Gravity.BOTTOM, mControlContainerLayoutParams.gravity);
+        assertEquals(1, mToolbarLayoutPrams.topMargin);
         assertEquals(Gravity.BOTTOM, mProgressBarLayoutParams.gravity);
         assertEquals(Gravity.NO_GRAVITY, mProgressBarLayoutParams.anchorGravity);
         assertEquals(View.NO_ID, mProgressBarLayoutParams.getAnchorId());

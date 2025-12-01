@@ -118,11 +118,10 @@ void TabManager::Start() {
   // TODO(sebmarchand): Remove the "IsAvailable" check, or merge the TM into the
   // PM. The TM and PM must always exist together.
   if (performance_manager::PerformanceManager::IsAvailable()) {
-    performance_manager::PerformanceManager::CallOnGraph(
-        FROM_HERE, base::BindOnce([](performance_manager::Graph* graph) {
-          graph->PassToGraph(
-              std::make_unique<TabManagerResourceCoordinatorSignalObserver>());
-        }));
+    performance_manager::Graph* graph =
+        performance_manager::PerformanceManager::GetGraph();
+    graph->PassToGraph(
+        std::make_unique<TabManagerResourceCoordinatorSignalObserver>());
   }
 
   g_browser_process->resource_coordinator_parts()
@@ -141,11 +140,6 @@ LifecycleUnitVector TabManager::GetSortedLifecycleUnits() {
   return sorted_lifecycle_units;
 }
 
-void TabManager::DiscardTab(LifecycleUnitDiscardReason reason,
-                            TabDiscardDoneCB tab_discard_done) {
-  DiscardTabImpl(reason, std::move(tab_discard_done));
-}
-
 WebContents* TabManager::DiscardTabByExtension(content::WebContents* contents) {
   if (contents) {
     TabLifecycleUnitExternal* tab_lifecycle_unit_external =
@@ -159,14 +153,6 @@ WebContents* TabManager::DiscardTabByExtension(content::WebContents* contents) {
   }
 
   return DiscardTabImpl(LifecycleUnitDiscardReason::EXTERNAL);
-}
-
-void TabManager::AddObserver(TabLifecycleObserver* observer) {
-  TabLifecycleUnitExternal::AddTabLifecycleObserver(observer);
-}
-
-void TabManager::RemoveObserver(TabLifecycleObserver* observer) {
-  TabLifecycleUnitExternal::RemoveTabLifecycleObserver(observer);
 }
 
 ///////////////////////////////////////////////////////////////////////////////

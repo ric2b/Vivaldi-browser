@@ -103,6 +103,26 @@ message PrelaunchCapabilities {
   cast.common.Duration polling_frequency = 2;
 }
 
+message ForegroundBehavior {
+  enum Type {
+    // Bring runtime to foreground only after the application is started
+    // (default behavior on Linux TVs).
+    ON_APPLICATION_STARTED = 0;
+    // Bring runtime to foreground as application is visible (default behavior
+    // on Android TVs).
+    ON_APPLICATION_VISIBLE = 1;
+  }
+}
+
+message RuntimeAuthentication {
+  enum Type {
+    // No authentication required by default.
+    NO_AUTHENTICATION = 0;
+    // Runtime requires authentication.
+    TOKEN_AUTHENTICATION = 1;
+  }
+}
+
 message RuntimeCapabilities {
   // Media capabilities of the runtime.
   MediaCapabilities media_capabilities = 1;
@@ -110,4 +130,8 @@ message RuntimeCapabilities {
   ApplicationCapabilities application_capabilities = 2;
   // Runtime prelaunch capabilities.
   PrelaunchCapabilities prelaunch_capabilities = 5;
+  // Defines when to bring runtime to foreground.
+  ForegroundBehavior.Type foreground_behavior = 6;
+  // Defines the authentication type of the runtime.
+  RuntimeAuthentication.Type runtime_authentication = 7;
 }

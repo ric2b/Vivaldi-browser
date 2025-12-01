@@ -36,12 +36,10 @@ namespace {
 
 class PixelLocalStorageTests : public DawnTest {
   protected:
-    wgpu::RequiredLimits GetRequiredLimits(const wgpu::SupportedLimits& supported) override {
-        wgpu::RequiredLimits required = {};
-        required.limits.maxStorageBuffersInFragmentStage =
-            supported.limits.maxStorageBuffersInFragmentStage;
-        required.limits.maxStorageBuffersPerShaderStage =
-            supported.limits.maxStorageBuffersPerShaderStage;
+    wgpu::Limits GetRequiredLimits(const wgpu::Limits& supported) override {
+        wgpu::Limits required = {};
+        required.maxStorageBuffersInFragmentStage = supported.maxStorageBuffersInFragmentStage;
+        required.maxStorageBuffersPerShaderStage = supported.maxStorageBuffersPerShaderStage;
         return required;
     }
 
@@ -51,7 +49,7 @@ class PixelLocalStorageTests : public DawnTest {
             !device.HasFeature(wgpu::FeatureName::PixelLocalStorageCoherent) &&
             !device.HasFeature(wgpu::FeatureName::PixelLocalStorageNonCoherent));
 
-        DAWN_TEST_UNSUPPORTED_IF(GetSupportedLimits().limits.maxStorageBuffersInFragmentStage < 1);
+        DAWN_TEST_UNSUPPORTED_IF(GetSupportedLimits().maxStorageBuffersInFragmentStage < 1);
 
         supportsCoherent = device.HasFeature(wgpu::FeatureName::PixelLocalStorageCoherent);
     }
@@ -216,8 +214,8 @@ class PixelLocalStorageTests : public DawnTest {
                 pass.End();
 
                 // Copy clearedTexture -> attachment.
-                wgpu::ImageCopyTexture src = utils::CreateImageCopyTexture(clearedTexture);
-                wgpu::ImageCopyTexture dst = utils::CreateImageCopyTexture(attachment);
+                wgpu::TexelCopyTextureInfo src = utils::CreateTexelCopyTextureInfo(clearedTexture);
+                wgpu::TexelCopyTextureInfo dst = utils::CreateTexelCopyTextureInfo(attachment);
                 wgpu::Extent3D copySize = {1, 1, 1};
                 encoder.CopyTextureToTexture(&src, &dst, &copySize);
 

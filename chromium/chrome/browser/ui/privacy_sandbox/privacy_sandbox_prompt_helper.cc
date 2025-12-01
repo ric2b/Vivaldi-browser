@@ -6,6 +6,7 @@
 
 #include "base/hash/hash.h"
 #include "base/metrics/histogram_functions.h"
+#include "chrome/browser/privacy_sandbox/privacy_sandbox_queue_manager.h"
 #include "chrome/browser/privacy_sandbox/privacy_sandbox_service.h"
 #include "chrome/browser/privacy_sandbox/privacy_sandbox_service_factory.h"
 #include "chrome/browser/profiles/profile.h"
@@ -27,8 +28,6 @@
 #include "extensions/browser/extension_registry.h"
 
 namespace {
-using NoticeQueueState = ::PrivacySandboxService::NoticeQueueState;
-
 constexpr char kPrivacySandboxPromptHelperEventHistogram[] =
     "Settings.PrivacySandbox.PromptHelperEvent";
 
@@ -109,8 +108,7 @@ void PrivacySandboxPromptHelper::DidFinishNavigation(
 #if BUILDFLAG(IS_CHROMEOS)
   // TODO(crbug.com/1315580, crbug.com/1315579): When navigating to a NTP that
   // isn't Chrome-controlled on ChromeOS, open an about blank tab to display the
-  // prompt. On other platforms, it's being handled during the startup. This
-  // logic can be removed when Lacros is ready.
+  // prompt. On other platforms, it's being handled during the startup.
   if (web_contents()->GetLastCommittedURL() == chrome::kChromeUINewTabURL) {
     const bool has_extention_override =
         HasExtensionNtpOverride(extensions::ExtensionRegistry::Get(profile()));
@@ -167,16 +165,16 @@ void PrivacySandboxPromptHelper::DidFinishNavigation(
     base::UmaHistogramEnumeration(kPrivacySandboxPromptHelperEventHistogram,
                                   SettingsPrivacySandboxPromptHelperEvent::
                                       kSearchEngineChoiceDialogShown);
-#if !BUILDFLAG(IS_ANDROID)
     if (auto* privacy_sandbox_service =
             PrivacySandboxServiceFactory::GetForProfile(profile())) {
-      privacy_sandbox_service->MaybeUnqueueNotice(
-          NoticeQueueState::kReleaseOnDMA);
-      // Set suppress queue to prevent queue operations after DMA notice is
+      privacy_sandbox::PrivacySandboxQueueManager& queue_manager =
+          privacy_sandbox_service->GetPrivacySandboxNoticeQueueManager();
+
+      queue_manager.MaybeUnqueueNotice();
+      // Set suppress queue to prevent queueing after DMA notice is
       // shown.
-      privacy_sandbox_service->SetSuppressQueue(true);
+      queue_manager.SetSuppressQueue(true);
     }
-#endif  // !BUILDFLAG(IS_ANDROID)
     return;
   }
 
@@ -203,7 +201,6 @@ void PrivacySandboxPromptHelper::DidFinishNavigation(
 
   // If a Privacy Sandbox prompt already exists for this browser, do not attempt
   // to open another one.
-  // Or if the handle is not being held, do not attempt to show the prompt.
   if (auto* privacy_sandbox_service =
           PrivacySandboxServiceFactory::GetForProfile(profile())) {
     if (privacy_sandbox_service->IsPromptOpenForBrowser(browser)) {
@@ -212,14 +209,6 @@ void PrivacySandboxPromptHelper::DidFinishNavigation(
                                         kPromptAlreadyExistsForBrowser);
       return;
     }
-
-#if !BUILDFLAG(IS_ANDROID)
-    if (base::FeatureList::IsEnabled(
-            privacy_sandbox::kPrivacySandboxNoticeQueue) &&
-        !privacy_sandbox_service->IsHoldingHandle()) {
-      return;
-    }
-#endif  // !BUILDFLAG(IS_ANDROID)
   }
 
   // The PrivacySandbox prompt can always fit inside a normal tabbed window due
@@ -246,6 +235,21 @@ void PrivacySandboxPromptHelper::DidFinishNavigation(
     return;
   }
 
+  // If the handle is not being held, do not attempt to show the prompt.
+  // We want to check this constraint at the very end for histogram emitting
+  // reasons.
+  if (auto* privacy_sandbox_service =
+          PrivacySandboxServiceFactory::GetForProfile(profile())) {
+    privacy_sandbox::PrivacySandboxQueueManager& queue_manager =
+        privacy_sandbox_service->GetPrivacySandboxNoticeQueueManager();
+    if (base::FeatureList::IsEnabled(
+            privacy_sandbox::kPrivacySandboxNoticeQueue) &&
+        !queue_manager.IsHoldingHandle()) {
+      queue_manager.MaybeEmitQueueStateMetrics();
+      return;
+    }
+  }
+
   // Record the URL that the prompt was displayed over.
   uint32_t host_hash = base::Hash(navigation_handle->GetURL().IsAboutBlank()
                                       ? "about:blank"
@@ -262,6 +266,14 @@ void PrivacySandboxPromptHelper::DidFinishNavigation(
   base::UmaHistogramEnumeration(
       kPrivacySandboxPromptHelperEventHistogram,
       SettingsPrivacySandboxPromptHelperEvent::kPromptShown);
+
+  if (auto* privacy_sandbox_service =
+          PrivacySandboxServiceFactory::GetForProfile(profile())) {
+    privacy_sandbox::PrivacySandboxQueueManager& queue_manager =
+        privacy_sandbox_service->GetPrivacySandboxNoticeQueueManager();
+
+    queue_manager.SetQueueHandleShown();
+  }
 }
 
 // static
@@ -272,18 +284,15 @@ bool PrivacySandboxPromptHelper::ProfileRequiresPrompt(Profile* profile) {
 #if !BUILDFLAG(IS_ANDROID)
   if (auto* privacy_sandbox_service =
           PrivacySandboxServiceFactory::GetForProfile(profile)) {
+    privacy_sandbox::PrivacySandboxQueueManager& queue_manager =
+        privacy_sandbox_service->GetPrivacySandboxNoticeQueueManager();
     // When checking profile eligibility also update the queue.
     // Case 1: Profile is eligible, but not in the queue. Add to queue.
     // Case 2: Profile is ineligible, but we are queued, so we must unqueue. OR
     //         We are holding the handle, so we must release the handle and
     //         prevent showing.
-    if (eligible) {
-      privacy_sandbox_service->MaybeQueueNotice(
-          NoticeQueueState::kQueueOnThOrNav);
-    } else {
-      privacy_sandbox_service->MaybeUnqueueNotice(
-          NoticeQueueState::kReleaseOnThOrNav);
-    }
+    eligible ? queue_manager.MaybeQueueNotice()
+             : queue_manager.MaybeUnqueueNotice();
   }
 #endif  // !BUILDFLAG(IS_ANDROID)
 

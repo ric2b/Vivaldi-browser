@@ -14,9 +14,11 @@
 #include "base/lazy_instance.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/autocomplete/chrome_autocomplete_provider_client.h"
+#include "chrome/browser/autocomplete/shortcuts_backend_factory.h"
 #include "chrome/browser/search_engines/template_url_service_factory.h"
 #include "components/omnibox/browser/autocomplete_classifier.h"
 #include "components/omnibox/browser/autocomplete_match_type.h"
+#include "components/omnibox/browser/shortcuts_backend.h"
 #include "components/omnibox/omnibox_input.h"
 #include "components/omnibox/omnibox_service.h"
 #include "components/omnibox/omnibox_service_factory.h"
@@ -24,6 +26,7 @@
 #include "extensions/schema/omnibox_private.h"
 #include "extensions/tools/vivaldi_tools.h"
 #include "third_party/metrics_proto/omnibox_event.pb.h"
+#include "url/gurl.h"
 
 namespace extensions {
 
@@ -36,6 +39,7 @@ namespace OnOmniboxResultChanged =
     vivaldi::omnibox_private::OnOmniboxResultChanged;
 
 using vivaldi::omnibox_private::OmniboxItem;
+using vivaldi::omnibox_private::OmniboxItemCategory;
 }  // namespace
 
 OmniboxPrivateAPI::OmniboxPrivateAPI(content::BrowserContext* context)
@@ -94,60 +98,59 @@ void OmniboxEventRouter::DispatchEvent(Profile* profile,
   }
 }
 
-vivaldi::omnibox_private::OmniboxItemCategory GetProviderCategory(
+OmniboxItemCategory GetProviderCategory(
     std::string type) {
   if (type == "history-url" || type == "history-title" ||
       type == "history-body" || type == "history-keyword" ||
       type == "history-cluster" || type == "history-embeddings" ||
-      type == "history-embeddings-answer") {
-    return vivaldi::omnibox_private::OmniboxItemCategory::kHistory;
+      type == "history-embeddings-answer" || type == "search-history") {
+    return OmniboxItemCategory::kHistory;
   }
-  if (type == "search-what-you-typed" || type == "search-history" ||
-      type == "search-other-engine") {
-    return vivaldi::omnibox_private::OmniboxItemCategory::kSearch;
+  if (type == "search-what-you-typed" || type == "search-other-engine") {
+    return OmniboxItemCategory::kSearch;
   }
   if (type == "search-suggest" || type == "search-suggest-entity" ||
       type == "search-suggest-infinite" ||
       type == "search-suggest-personalized" ||
       type == "search-suggest-profile" || type == "query-tiles") {
-    return vivaldi::omnibox_private::OmniboxItemCategory::kSearchSuggestion;
+    return OmniboxItemCategory::kSearchSuggestion;
   }
   if (type == "bookmark-title") {
-    return vivaldi::omnibox_private::OmniboxItemCategory::kBookmark;
+    return OmniboxItemCategory::kBookmark;
   }
   if (type == "open-tab") {
-    return vivaldi::omnibox_private::OmniboxItemCategory::kOpenTab;
+    return OmniboxItemCategory::kOpenTab;
   }
   if (type == "url-from-clipboard" || type == "text-from-clipboard" ||
       type == "image-from-clipboard") {
-    return vivaldi::omnibox_private::OmniboxItemCategory::kClipboard;
+    return OmniboxItemCategory::kClipboard;
   }
   if (type == "search-calculator-answer") {
-    return vivaldi::omnibox_private::OmniboxItemCategory::kCalculator;
+    return OmniboxItemCategory::kCalculator;
   }
   if (type == "navsuggest" || type == "navsuggest-personalized" ||
       type == "navsuggest-tiles") {
-    return vivaldi::omnibox_private::OmniboxItemCategory::kUrlSuggestion;
+    return OmniboxItemCategory::kUrlSuggestion;
   }
   if (type == "null-result-message") {
-    return vivaldi::omnibox_private::OmniboxItemCategory::kInternalMessage;
+    return OmniboxItemCategory::kInternalMessage;
   }
   if (type == "most-visited-site-tile") {
-    return vivaldi::omnibox_private::OmniboxItemCategory::kTopSites;
+    return OmniboxItemCategory::kTopSites;
   }
   // Vivaldi provider types
   if (type == "bookmark-nickname") {
-    return vivaldi::omnibox_private::OmniboxItemCategory::kNickname;
+    return OmniboxItemCategory::kNickname;
   }
   if (type == "direct-match") {
-    return vivaldi::omnibox_private::OmniboxItemCategory::kDirectMatch;
+    return OmniboxItemCategory::kDirectMatch;
   }
   if (type == "recent-typed-history") {
-    return vivaldi::omnibox_private::OmniboxItemCategory::kRecentTypedHistory;
+    return OmniboxItemCategory::kRecentTypedHistory;
   }
   // "url-what-you-typed" is included in kOther.
   // It correspond to a fully typed url and shouldn't be in a category.
-  return vivaldi::omnibox_private::OmniboxItemCategory::kOther;
+  return OmniboxItemCategory::kOther;
 }
 
 // This function reflect AutocompleteProvider::TypeToString but convert it
@@ -252,22 +255,37 @@ OmniboxItem CreateOmniboxItem(AutocompleteMatch match,  TemplateURLService* temp
   res.category =
       GetProviderCategory(AutocompleteMatchType::ToString(match.type));
   res.deletable = match.deletable;
-  res.type = AutocompleteMatchType::ToString(match.type);
-  if (res.category ==
-      vivaldi::omnibox_private::OmniboxItemCategory::kDirectMatch) {
+  res.type = match.type;
+  if (res.category == OmniboxItemCategory::kDirectMatch) {
     res.favicon_url = base::UTF16ToUTF8(match.local_favicon_path);
     res.favicon_type = "url";
   } else {
-    if (!match.keyword.empty() && template_url_service) {
-      TemplateURL* template_url = template_url_service->GetTemplateURLForKeyword(match.keyword);
-      res.favicon_url = template_url ? template_url->favicon_url().spec().c_str() : res.destination_url;
-    } else {
-      res.favicon_url = res.destination_url;
-    }
+    res.favicon_url = res.destination_url;
     res.favicon_type = "favicon";
+    if (!match.keyword.empty() && template_url_service) {
+      TemplateURL* template_url =
+        template_url_service->GetTemplateURLForKeyword(match.keyword);
+      if (template_url) {
+        res.favicon_url = template_url->favicon_url().spec().c_str();
+        // img is needed for proper lookup of icon urls
+        res.favicon_type = "img";
+      }
+    }
   }
 
   return res;
+}
+
+AutocompleteMatch CreateAutocompleteMatchForShortcutsBackend(OmniboxItem &item) {
+  AutocompleteMatch match;
+  match.contents = base::UTF8ToUTF16(item.contents);
+  match.description = base::UTF8ToUTF16(item.description);
+  match.destination_url = GURL(item.destination_url);
+  match.fill_into_edit = base::UTF8ToUTF16(item.fill_into_edit);
+  match.transition = HistoryPrivateAPI::PrivateHistoryTransitionToUiTransition(
+      item.transition);
+  AutocompleteMatchType::FromInteger(item.type, &match.type);
+  return match;
 }
 
 void OmniboxEventRouter::OnResultChanged(AutocompleteController* controller,
@@ -328,6 +346,37 @@ ExtensionFunction::ResponseAction OmniboxPrivateStartOmniboxFunction::Run() {
       base::UTF8ToUTF16(params->parameters.query),
       input,
       GetPageClassification(params->parameters.page_classification));
+  return RespondNow(NoArguments());
+}
+
+ExtensionFunction::ResponseAction OmniboxPrivateAddOrUpdateShortcutFunction::Run() {
+  std::optional<vivaldi::omnibox_private::AddOrUpdateShortcut::Params> params(
+      vivaldi::omnibox_private::AddOrUpdateShortcut::Params::Create(args()));
+  EXTENSION_FUNCTION_VALIDATE(params);
+
+  Profile* profile = GetFunctionCallerProfile(*this);
+  auto shortcuts_backend = ShortcutsBackendFactory::GetForProfile(profile);
+  // Can be null in incognito.
+  if (shortcuts_backend) {
+    auto text = base::UTF8ToUTF16(params->text);
+    auto match = CreateAutocompleteMatchForShortcutsBackend(params->item);
+    shortcuts_backend->AddOrUpdateShortcut(text, match);
+  }
+  return RespondNow(NoArguments());
+}
+
+ExtensionFunction::ResponseAction OmniboxPrivateDeleteShortcutFunction::Run() {
+  std::optional<vivaldi::omnibox_private::DeleteShortcut::Params> params(
+      vivaldi::omnibox_private::DeleteShortcut::Params::Create(args()));
+  EXTENSION_FUNCTION_VALIDATE(params);
+
+  Profile* profile = GetFunctionCallerProfile(*this);
+  auto shortcuts_backend = ShortcutsBackendFactory::GetForProfile(profile);
+  // Can be null in incognito.
+  if (shortcuts_backend) {
+    const GURL url = GURL(base::UTF8ToUTF16(params->url));
+    shortcuts_backend->DeleteShortcutsWithURL(url);
+  }
   return RespondNow(NoArguments());
 }
 

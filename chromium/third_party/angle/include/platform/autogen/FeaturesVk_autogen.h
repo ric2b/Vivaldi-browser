@@ -26,6 +26,12 @@ struct FeaturesVk : FeatureSetBase
         &members,
     };
 
+    FeatureInfo allowPipelineStatisticsForPrimitivesGeneratedQuery = {
+        "allowPipelineStatisticsForPrimitivesGeneratedQuery",
+        FeatureCategory::VulkanWorkarounds,
+        &members,
+    };
+
     FeatureInfo bresenhamLineRasterization = {
         "bresenhamLineRasterization",
         FeatureCategory::VulkanFeatures,
@@ -94,12 +100,6 @@ struct FeaturesVk : FeatureSetBase
 
     FeatureInfo supportsAndroidHardwareBuffer = {
         "supportsAndroidHardwareBuffer",
-        FeatureCategory::VulkanFeatures,
-        &members,
-    };
-
-    FeatureInfo supportsGGPFrameToken = {
-        "supportsGGPFrameToken",
         FeatureCategory::VulkanFeatures,
         &members,
     };
@@ -236,6 +236,12 @@ struct FeaturesVk : FeatureSetBase
         &members,
     };
 
+    FeatureInfo supportsDeviceFault = {
+        "supportsDeviceFault",
+        FeatureCategory::VulkanFeatures,
+        &members,
+    };
+
     FeatureInfo supportsMultiview = {
         "supportsMultiview",
         FeatureCategory::VulkanFeatures,
@@ -254,8 +260,8 @@ struct FeaturesVk : FeatureSetBase
         &members,
     };
 
-    FeatureInfo perFrameWindowSizeQuery = {
-        "perFrameWindowSizeQuery",
+    FeatureInfo avoidInvisibleWindowSwapchainRecreate = {
+        "avoidInvisibleWindowSwapchainRecreate",
         FeatureCategory::VulkanWorkarounds,
         &members,
     };
@@ -430,6 +436,12 @@ struct FeaturesVk : FeatureSetBase
 
     FeatureInfo waitIdleBeforeSwapchainRecreation = {
         "waitIdleBeforeSwapchainRecreation",
+        FeatureCategory::VulkanWorkarounds,
+        &members,
+    };
+
+    FeatureInfo destroyOldSwapchainInSharedPresentMode = {
+        "destroyOldSwapchainInSharedPresentMode",
         FeatureCategory::VulkanWorkarounds,
         &members,
     };
@@ -956,8 +968,8 @@ struct FeaturesVk : FeatureSetBase
         &members,
     };
 
-    FeatureInfo hasEffectivePipelineCacheSerialization = {
-        "hasEffectivePipelineCacheSerialization",
+    FeatureInfo skipPipelineCacheSerialization = {
+        "skipPipelineCacheSerialization",
         FeatureCategory::VulkanFeatures,
         &members,
     };
@@ -970,12 +982,6 @@ struct FeaturesVk : FeatureSetBase
 
     FeatureInfo supportsPipelineProtectedAccess = {
         "supportsPipelineProtectedAccess",
-        FeatureCategory::VulkanFeatures,
-        &members,
-    };
-
-    FeatureInfo supportsMixedReadWriteDepthStencilLayouts = {
-        "supportsMixedReadWriteDepthStencilLayouts",
         FeatureCategory::VulkanFeatures,
         &members,
     };
@@ -1028,8 +1034,14 @@ struct FeaturesVk : FeatureSetBase
         &members,
     };
 
-    FeatureInfo asyncCommandBufferResetAndGarbageCleanup = {
-        "asyncCommandBufferResetAndGarbageCleanup",
+    FeatureInfo asyncGarbageCleanup = {
+        "asyncGarbageCleanup",
+        FeatureCategory::VulkanFeatures,
+        &members,
+    };
+
+    FeatureInfo asyncCommandBufferReset = {
+        "asyncCommandBufferReset",
         FeatureCategory::VulkanFeatures,
         &members,
     };
@@ -1438,6 +1450,12 @@ struct FeaturesVk : FeatureSetBase
 
     FeatureInfo usesNativeBuiltinClKernel = {
         "usesNativeBuiltinClKernel",
+        FeatureCategory::VulkanFeatures,
+        &members,
+    };
+
+    FeatureInfo supportsSwapchainMutableFormat = {
+        "supportsSwapchainMutableFormat",
         FeatureCategory::VulkanFeatures,
         &members,
     };

@@ -29,6 +29,12 @@ class MockBrowserWindowInterface : public BrowserWindowInterface {
               (override));
   MOCK_METHOD(bool, IsAttemptingToCloseBrowser, (), (const, override));
   MOCK_METHOD(views::View*, TopContainer, (), (override));
+  MOCK_METHOD(bool, IsMinimized, (), (const, override));
+  MOCK_METHOD(base::WeakPtr<BrowserWindowInterface>,
+              GetWeakPtr,
+              (),
+              (override));
+  MOCK_METHOD(views::View*, LensOverlayView, (), (override));
   MOCK_METHOD(base::CallbackListSubscription,
               RegisterActiveTabDidChange,
               (ActiveTabChangeCallback callback),
@@ -39,7 +45,7 @@ class MockBrowserWindowInterface : public BrowserWindowInterface {
               GetWebContentsModalDialogHostForWindow,
               (),
               (override));
-  MOCK_METHOD(bool, IsActive, (), (override));
+  MOCK_METHOD(bool, IsActive, (), (const, override));
   MOCK_METHOD(base::CallbackListSubscription,
               RegisterDidBecomeActive,
               (DidBecomeActiveCallback callback),
@@ -50,6 +56,10 @@ class MockBrowserWindowInterface : public BrowserWindowInterface {
               (override));
   MOCK_METHOD(ExclusiveAccessManager*,
               GetExclusiveAccessManager,
+              (),
+              (override));
+  MOCK_METHOD(ImmersiveModeController*,
+              GetImmersiveModeController,
               (),
               (override));
   MOCK_METHOD(BrowserActions*, GetActions, (), (override));

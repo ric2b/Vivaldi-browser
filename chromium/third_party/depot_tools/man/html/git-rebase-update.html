@@ -4,7 +4,7 @@
 <html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en">
 <head>
 <meta http-equiv="Content-Type" content="application/xhtml+xml; charset=UTF-8" />
-<meta name="generator" content="AsciiDoc 10.2.0" />
+<meta name="generator" content="AsciiDoc 10.2.1" />
 <title>git-rebase-update(1)</title>
 <style type="text/css">
 /* Shared CSS for AsciiDoc xhtml11 and html5 backends */
@@ -756,7 +756,7 @@ git-rebase-update(1) Manual Page
 <h2 id="_synopsis">SYNOPSIS</h2>
 <div class="sectionbody">
 <div class="verseblock">
-<pre class="content"><em>git rebase-update</em> [-v | --verbose] [-n | --no-fetch] [-k | --keep-going]</pre>
+<pre class="content"><em>git rebase-update</em> [-v | --verbose] [-n | --no-fetch] [-k | --keep-going] [--no-squash]</pre>
 <div class="attribution">
 </div></div>
 </div>
@@ -803,8 +803,10 @@ Rebasing
 <div class="paragraph"><p>Things get interesting when there are merge conflicts on rebase. The <strong>most
 common</strong> cause for conflicts is when your branch has been committed to the
 upstream in squashed form, ala <a href="git-squash-branch.html">git-squash-branch(1)</a>, which is what
-<a href="git-cl.html">git-cl(1)</a> and the <em>Commit Queue</em> will do.</p></div>
-<div class="paragraph"><p>If it does not apply cleanly, then your original branch will be
+<a href="git-cl.html">git-cl(1)</a> and the <em>Commit Queue</em> will do. Because of that, <code>git
+rebase-update</code> will attempt to squash your conflicted branch to see if the
+squashed version applies cleanly to its upstream.</p></div>
+<div class="paragraph"><p>If it does not apply cleanly, then your original (non-squashed) branch will be
 left in mid-rebase and <code>git rebase-update</code> will exit. You can deal with this
 like any other conflicted rebase. When you&#8217;re done, just <code>git rebase-update</code>
 again to pick up where you left off.</p></div>
@@ -867,6 +869,14 @@ Restoration
 </p>
 </dd>
 <dt class="hdlist1">
+--no-squash
+</dt>
+<dd>
+<p>
+  Skip the squash phase of rebase-update if there are merge conflicts.
+</p>
+</dd>
+<dt class="hdlist1">
 -v
 </dt>
 <dt class="hdlist1">
@@ -883,6 +893,15 @@ Restoration
 <dd>
 <p>
   Only rebase the current branch.
+</p>
+</dd>
+<dt class="hdlist1">
+--tree
+</dt>
+<dd>
+<p>
+  Also rebase any branches downstream from the selected branches. Use with
+  named branches or <code>--current</code> to selectively rebase a branch tree.
 </p>
 </dd>
 </dl></div>
@@ -954,7 +973,7 @@ by checking out the <a href="https://chromium.googlesource.com/chromium/tools/de
 <div id="footer">
 <div id="footer-text">
 Last updated
- 2022-08-26 21:13:38 PDT
+ 2025-02-20 16:05:41 PST
 </div>
 </div>
 </body>

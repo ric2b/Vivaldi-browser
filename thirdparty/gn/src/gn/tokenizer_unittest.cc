@@ -100,6 +100,20 @@ TEST(Tokenizer, Operator) {
       CheckTokenizer("- + = += -= != ==  < > <= >= ! || && . ,", operators));
 }
 
+TEST(Tokenizer, DoubleMinus) {
+  TokenExpectation tokens[] = {{Token::INTEGER, "1"},
+                               {Token::MINUS, "-"},
+                               {Token::INTEGER, "-1"}};
+  EXPECT_TRUE(CheckTokenizer("  1 - -1 ", tokens));
+}
+
+TEST(Tokenizer, DoubleMinusNoSpace) {
+  TokenExpectation tokens[] = {{Token::INTEGER, "1"},
+                               {Token::MINUS, "-"},
+                               {Token::INTEGER, "-1"}};
+  EXPECT_TRUE(CheckTokenizer("  1--1 ", tokens));
+}
+
 TEST(Tokenizer, Scoper) {
   TokenExpectation scopers[] = {
       {Token::LEFT_BRACE, "{"},    {Token::LEFT_BRACKET, "["},

@@ -28,27 +28,6 @@ BASE_DECLARE_FEATURE(kAllowEyeDropperWGCScreenCapture);
 
 BASE_DECLARE_FEATURE(kCloseOmniboxPopupOnInactiveAreaClick);
 
-BASE_DECLARE_FEATURE(kDefaultBrowserPromptRefresh);
-BASE_DECLARE_FEATURE(kDefaultBrowserPromptRefreshTrial);
-
-// String representation of the study group for running a synthetic trial.
-extern const base::FeatureParam<std::string>
-    kDefaultBrowserPromptRefreshStudyGroup;
-
-// Whether to show the default browser info bar prompt.
-extern const base::FeatureParam<bool> kShowDefaultBrowserInfoBar;
-
-// Whether to show the default browser app menu item anytime the browser isn't
-// default, even if the app menu chip prompt isn't enabled.
-extern const base::FeatureParam<bool> kShowDefaultBrowserAppMenuItem;
-
-// Base duration after which the user may be remprompted.
-extern const base::FeatureParam<base::TimeDelta> kRepromptDuration;
-
-// Maximum number of times a user will be prompted. When set to a negative
-// value, the user will be prompted indefinitely.
-extern const base::FeatureParam<int> kMaxPromptCount;
-
 BASE_DECLARE_FEATURE(kExtensionsMenuInAppMenu);
 bool IsExtensionMenuInRootAppMenu();
 
@@ -56,19 +35,16 @@ bool IsExtensionMenuInRootAppMenu();
 BASE_DECLARE_FEATURE(kFewerUpdateConfirmations);
 #endif
 
-#if !BUILDFLAG(IS_ANDROID)
-BASE_DECLARE_FEATURE(kIOSPromoRefreshedPasswordBubble);
-BASE_DECLARE_FEATURE(kIOSPromoAddressBubble);
-BASE_DECLARE_FEATURE(kIOSPromoPaymentBubble);
-
-// String params for the Desktop to iOS promos' QR code URLs.
-extern const base::FeatureParam<std::string> kIOSPromoPasswordBubbleQRCodeURL;
-extern const base::FeatureParam<std::string> kIOSPromoAddressBubbleQRCodeURL;
-extern const base::FeatureParam<std::string> kIOSPromoPaymentBubbleQRCodeURL;
-#endif  // !BUILDFLAG(IS_ANDROID)
-
 #if BUILDFLAG(ENABLE_EXTENSIONS)
 BASE_DECLARE_FEATURE(kLightweightExtensionOverrideConfirmations);
+#endif
+
+#if BUILDFLAG(IS_WIN)
+BASE_DECLARE_FEATURE(kOfferPinToTaskbarWhenSettingToDefault);
+#endif
+
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC)
+BASE_DECLARE_FEATURE(kPdfInfoBar);
 #endif
 
 BASE_DECLARE_FEATURE(kPreloadTopChromeWebUI);
@@ -203,15 +179,13 @@ extern const base::FeatureParam<bool> KTabOrganizationTriggerDemoMode;
 
 BASE_DECLARE_FEATURE(kTearOffWebAppTabOpensWebAppWindow);
 
-BASE_DECLARE_FEATURE(kToolbarPinning);
-
 bool IsToolbarPinningEnabled();
 
 BASE_DECLARE_FEATURE(kPinnedCastButton);
-BASE_DECLARE_FEATURE(kPinnableDownloadsButton);
 
 BASE_DECLARE_FEATURE(kEnterpriseProfileBadgingForAvatar);
 BASE_DECLARE_FEATURE(kEnterpriseProfileBadgingForMenu);
+BASE_DECLARE_FEATURE(kEnterpriseBadgingForNtpFooter);
 BASE_DECLARE_FEATURE(kEnterpriseProfileBadgingPolicies);
 BASE_DECLARE_FEATURE(kEnterpriseManagementDisclaimerUsesCustomLabel);
 BASE_DECLARE_FEATURE(kEnterpriseUpdatedProfileCreationScreen);
@@ -251,14 +225,23 @@ BASE_DECLARE_FEATURE(kInlineFullscreenPerfExperiment);
 // Controls whether the new page actions framework should be displaying page
 // actions.
 BASE_DECLARE_FEATURE(kPageActionsMigration);
+// For development only, set this to enable all page actions.
+extern const base::FeatureParam<bool> kPageActionsMigrationEnableAll;
+// The following feature params indicate whether individual features should
+// have their page actions controlled using the new framework.
+extern const base::FeatureParam<bool> kPageActionsMigrationLensOverlay;
+extern const base::FeatureParam<bool> kPageActionsMigrationMemorySaver;
+extern const base::FeatureParam<bool> kPageActionsMigrationTranslate;
+extern const base::FeatureParam<bool> kPageActionsMigrationIntentPicker;
+extern const base::FeatureParam<bool> kPageActionsMigrationZoom;
+extern const base::FeatureParam<bool> kPageActionsMigrationOfferNotification;
 
 // Controls whether browser tab loading animations are driven by the compositor
 // vs. a repeating timer.
 BASE_DECLARE_FEATURE(kCompositorLoadingAnimations);
 
-// If enabled, when no given_name is provided, the FedCM Continue button will
-// say "Continue" instead of "Continue as Firstname Lastname".
-BASE_DECLARE_FEATURE(kFedCmContinueWithoutName);
+// If enabled, the by date history will show in the side panel.
+BASE_DECLARE_FEATURE(kByDateHistoryInSidePanel);
 
 }  // namespace features
 

@@ -36,6 +36,7 @@
 <translation id="2441056087170876076">රාක්ෂයා 2</translation>
 <translation id="2444387452209867610">සටහන ඇතුළු කරන්න</translation>
 <translation id="2486841023299517366">සත්වයා 4</translation>
+<translation id="2501278716633472235">ආපසු යන්න</translation>
 <translation id="2612127540243995147">ස්ථාපනයට සූදානම්. විවාල්ඩි වැසී නැවත දියත් වනු ඇත.</translation>
 <translation id="2613387515621326337">යාවත්කාලීන වෙබ් අඩවිය පෙන්වන්න</translation>
 <translation id="2645477450146475243">කණගාටුවට කරුණක් නම්, එම බ්‍රවුසරය ක්‍රියාත්මක වන අතරතුර ඔබේ ඔපෙරා සැකසුම් ලබා ගත නොහැකි වීමයි. එම සැකසුම් විවාල්ඩි වෙත ආයාත කිරීමට, ඔබේ වැඩ සුරකින්න සහ සියලු ඔපෙරා කවුළු වසා දමන්න. ඉන්පසු ඉදිරියට යන්න ක්ලික් කරන්න.</translation>
@@ -60,6 +61,7 @@
 <translation id="3259769196742189631">වලංගු කරන්න</translation>
 <translation id="3291915639428159043">ස්වයං ධාවනය අවහිර කර ඇත</translation>
 <translation id="3302905971452834934">රාක්ෂයා 1</translation>
+<translation id="3308738399950580893">දැන්වීම්</translation>
 <translation id="3334610655141903168">(සිරැසියක් නැත)</translation>
 <translation id="3372505110412186107">විවාල්ඩි <ph name="VERSION" /> දැනට පවතින නවතම අනුවාදය වේ.</translation>
 <translation id="3383198080133834965">ඔබ යාවත්කාලීනයි!</translation>
@@ -82,6 +84,7 @@
 <translation id="3795800845758778870">කණගාටුයි, ‌බ්‍රේව් අතිරික්සුව ධාවනය වන අතරතුර එහි ඔබගේ සැකසුම් ලබා ගැනීමට නොහැකිය. විවාල්ඩි වෙත එම සැකසුම් ආයාත කිරීමට ඔබගේ කාර්ය සුරකින්න සහ සියලු බ්‍රේව් කවුළු වසන්න. ඉන්පසු ඉදිරියට ඔබන්න.</translation>
 <translation id="3822431842304177896">නව බෙදුම්කරු</translation>
 <translation id="3832132597516774400">තිරස් 5</translation>
+<translation id="3894751534882749287">ඔබට කෙසේ වුවත් පිටුව බැලීමට වුවමනා නම් ලුහුබැඳීම් අවහිර උත්පතන වල හෝ ඉඩ දෙන්න බොත්තම එබීමෙන් ලුහුබැඳීමේ ආරක්ෂණ මට්ටම වෙනස් කිරීමට හැකිය</translation>
 <translation id="3914946330804881301">ඔපෙරා වෙතින් ආනයනය කරන ලදී</translation>
 <translation id="3921292902397893431">රාක්ෂයා 8</translation>
 <translation id="3943857333388298514">අලවන්න</translation>
@@ -106,6 +109,7 @@
 <translation id="4582480609585453144">පසුබිම් පටිත්තෙහි සබැඳිය විවෘත කරන්න</translation>
 <translation id="4636708767492582204">තැපෑලෙන් යවන්න</translation>
 <translation id="4677434526832593569">සත්වයා 8</translation>
+<translation id="4736016046474602958">ට්රැකර් අවහිර කරන්නා</translation>
 <translation id="474217410105706308">ටැබ් නිශ්ශබ්ද කරන්න</translation>
 <translation id="4861715717329665002">ස්වයංක්‍රීයව සුරැකි සැසි</translation>
 <translation id="4881695831933465202">විවෘත</translation>
@@ -150,6 +154,7 @@
 <translation id="7086554968911045110">තිරස් 7</translation>
 <translation id="7099506190679014195">ආරක්ෂිත යතුරු ගබඩා උත්ශ්‍රේණි කිරීම</translation>
 <translation id="7111492742514999492">තිරස් 9</translation>
+<translation id="7113310725918019676"><ph name="DOMAIN" /> වෙතින් <ph name="BLOCKED_TYPE" /> ඉඩදෙන්න</translation>
 <translation id="7208252576848052204">කණගාටුවට කරුණක් නම්, එම බ්‍රවුසරය ක්‍රියාත්මක වන අතරතුර ඔබගේ Arc සැකසුම් ලබා ගත නොහැක. එම සැකසුම් Vivaldi වෙත ආයාත කිරීමට, ඔබගේ කාර්යය සුරකින්න සහ සියලු Arc කවුළු වසා දමන්න. ඉන්පසු ඉදිරියට යන්න ක්ලික් කරන්න.</translation>
 <translation id="7321500017121629018">ඊයේ සක්‍රියයි</translation>
 <translation id="7337881442233988129">ක්රෝමියම්</translation>
@@ -165,9 +170,9 @@
 <translation id="8027581147000338959">නව කවුළුවක විවෘත කරන්න</translation>
 <translation id="8044382196220116469">අඩවි වලට ස්වයංක්‍රීයව වීඩියෝ වාදනය කිරීමට ඉඩ නොදෙන්න.</translation>
 <translation id="8099620695029051217">පිටු ලිපිනය පිටපත් කරන්න</translation>
+<translation id="8119307142152921512">ලුහුබැඳීම් සහ දැන්වීම්</translation>
 <translation id="8197810018650377191">පොත්යොමු පිටුව</translation>
 <translation id="8261506727792406068">මකන්න</translation>
-<translation id="8263047843452521549">පසුබිම් සේවා සේවකයා පරීක්ෂා කරන්න</translation>
 <translation id="8331671104904436324">පසුබිම් පටිත්තෙහි විවෘත කරන්න</translation>
 <translation id="8373293945112511707">තිරස් 1</translation>
 <translation id="8388552048012645975">යාවත්කාලීනය බාගනිමින්...</translation>
@@ -181,7 +186,6 @@
 <translation id="8651348004684669199">සක්‍රිය පටිත්තක් එක් කරන්න</translation>
 <translation id="8669345741879513971">රාක්ෂයා 10</translation>
 <translation id="867544375504146191">Yandex</translation>
-<translation id="8689295374912158752">ද්වාර ලේඛනය පරීක්ෂා කරන්න</translation>
 <translation id="875142999698251063">දැන් ඉවත් වන්න</translation>
 <translation id="8768970203213061953">තිරස් 14</translation>
 <translation id="8773635261052182196">ඔබ තවදුරටත් මෙවැනි දැනුම්දීම් නොදකිනු ඇත. ඔබට විවාල්ඩි සැකසුම් වලින් නැවත සබල කිරීමට හැකිය.</translation>
@@ -189,6 +193,7 @@
 <translation id="8813277370772331957">මට පසුව මතක් කරන්න</translation>
 <translation id="8894900864683381599">මඬලට සබැඳිය එක් කරන්න</translation>
 <translation id="8912720443398351457">ඔබට විවාල්ඩි වෙතින් පිටවීමට වුවමනාද?</translation>
+<translation id="8940028675168378100"><ph name="BLOCKER_NAME" /> මගින් අවහිරයි</translation>
 <translation id="8947109330183116400">HTML පොත්යොමු ගොනුව තෝරන්න</translation>
 <translation id="9017566390391482291">ආයාත කිරීමට විවාල්ඩි පැතිකඩ බහාලුම තෝරන්න</translation>
 <translation id="9048058608784130603">යාවත්කාලීන කිරීම පොරොත්තුයි <ph name="VERSION" /></translation>
@@ -199,6 +204,7 @@
 <translation id="912022491595344261">රූපය <ph name="USER" />ලෙස විවෘත කරන්න</translation>
 <translation id="9157539936604258187">විවෘත ලින්ක්</translation>
 <translation id="9169060351863393881">ඔපෙරා 12.x</translation>
+<translation id="9180553614777056266">දැන්වීම් අවහිරකය</translation>
 <translation id="939305735877869636">බ්‍රේව්</translation>
 <translation id="970294721402795299">තිරස් 16</translation>
 </translationbundle>

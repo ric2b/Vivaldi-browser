@@ -11,3 +11,19 @@ BASE_FEATURE(kNonModalPromoMigration,
 bool IsNonModalPromoMigrationEnabled() {
   return base::FeatureList::IsEnabled(kNonModalPromoMigration);
 }
+
+BASE_FEATURE(kTailoredNonModalDBPromo,
+             "TailoredNonModalDBPromo",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+bool IsTailoredNonModalDBPromoEnabled() {
+  return base::FeatureList::IsEnabled(kTailoredNonModalDBPromo);
+}
+
+BASE_FEATURE(kShareDefaultBrowserStatus,
+             "ShareDefaultBrowserStatus",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+
+bool IsShareDefaultBrowserStatusEnabled() {
+  return base::FeatureList::IsEnabled(kShareDefaultBrowserStatus);
+}

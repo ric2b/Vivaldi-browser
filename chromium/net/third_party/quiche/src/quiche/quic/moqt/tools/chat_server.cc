@@ -38,9 +38,8 @@ ChatServer::ChatServerSessionHandler::OnIncomingAnnounce(
                                                 GetChatId(track_namespace));
   if (!track_name_.has_value()) {
     std::cout << "Malformed ANNOUNCE namespace\n";
-    return MoqtAnnounceErrorReason(
-        MoqtAnnounceErrorCode::kNotASubscribedNamespace,
-        "Not a valid namespace for this chat.");
+    return MoqtAnnounceErrorReason(SubscribeErrorCode::kDoesNotExist,
+                                   "Not a valid namespace for this chat.");
   }
   if (announce_type == AnnounceEvent::kUnannounce) {
     std::cout << "Received UNANNOUNCE for " << track_namespace.ToString()
@@ -50,8 +49,8 @@ ChatServer::ChatServerSessionHandler::OnIncomingAnnounce(
     return std::nullopt;
   }
   std::cout << "Received ANNOUNCE for " << track_namespace.ToString() << "\n";
-  session_->SubscribeCurrentGroup(*track_name_,
-                                  server_->remote_track_visitor());
+  session_->SubscribeCurrentObject(
+      *track_name_, server_->remote_track_visitor(), MoqtSubscribeParameters());
   server_->AddUser(*track_name_);
   return std::nullopt;
 }
@@ -95,7 +94,7 @@ ChatServer::ChatServerSessionHandler::ChatServerSessionHandler(
         if (!IsValidChatNamespace(chat_namespace)) {
           std::cout << "Not a valid moq-chat namespace.\n";
           return std::make_optional(
-              MoqtSubscribeErrorReason{SubscribeErrorCode::kTrackDoesNotExist,
+              MoqtSubscribeErrorReason{SubscribeErrorCode::kDoesNotExist,
                                        "Not a valid namespace for this chat."});
         }
         if (subscribe_type == SubscribeEvent::kUnsubscribe) {

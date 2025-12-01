@@ -69,11 +69,6 @@ class VIEWS_EXPORT HWNDMessageHandlerDelegate {
   virtual bool CanMinimize() const = 0;
   virtual bool CanActivate() const = 0;
 
-  // Returns true if the delegate wants mouse events when inactive and the
-  // window is clicked and should not become activated. A return value of false
-  // indicates the mouse events will be dropped.
-  virtual bool WantsMouseEventsWhenInactive() const = 0;
-
   virtual bool WidgetSizeIsClientSize() const = 0;
 
   // Returns true if the delegate represents a modal window.
@@ -84,7 +79,7 @@ class VIEWS_EXPORT HWNDMessageHandlerDelegate {
   virtual int GetInitialShowState() const = 0;
 
   virtual int GetNonClientComponent(const gfx::Point& point) const = 0;
-  virtual void GetWindowMask(const gfx::Size& size, SkPath* mask) = 0;
+  virtual void GetWindowMask(const gfx::Size& size_px, SkPath* mask) = 0;
 
   // Returns true if the delegate modifies |insets| to define a custom client
   // area for the window, false if the default client area should be used. If
@@ -164,6 +159,11 @@ class VIEWS_EXPORT HWNDMessageHandlerDelegate {
   // manager.
   virtual void HandleBeginWMSizeMove() = 0;
   virtual void HandleEndWMSizeMove() = 0;
+
+  // Called when the user begins or ends resizing the window by dragging the
+  // resize handle.
+  virtual void HandleBeginUserResize() = 0;
+  virtual void HandleEndUserResize() = 0;
 
   // Called when the window's position changed.
   virtual void HandleMove() = 0;

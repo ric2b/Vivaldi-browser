@@ -7,10 +7,8 @@
 #include "base/functional/callback.h"
 #include "base/strings/string_util.h"
 #include "components/country_codes/country_codes.h"
-
-#if BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_LINUX)
+#include "components/regional_capabilities/regional_capabilities_utils.h"
 #include "components/variations/service/variations_service.h"
-#endif
 
 #if BUILDFLAG(IS_ANDROID)
 #include "base/android/jni_android.h"
@@ -19,26 +17,79 @@
 #include "chrome/browser/regional_capabilities/android/jni_headers/RegionalCapabilitiesServiceClientAndroid_jni.h"
 #endif
 
+#if BUILDFLAG(IS_CHROMEOS)
+#include "base/metrics/histogram_functions.h"
+#include "chromeos/ash/components/system/statistics_provider.h"
+#endif
+
+using ::country_codes::CountryId;
+
 namespace regional_capabilities {
-#if BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_LINUX)
+namespace {
+#if BUILDFLAG(IS_CHROMEOS)
+std::optional<CountryId> GetVpdCountry() {
+  using enum ChromeOSFallbackCountry;
+
+  ash::system::StatisticsProvider* sys_info =
+      ash::system::StatisticsProvider::GetInstance();
+  if (!sys_info) {
+    base::UmaHistogramEnumeration(kCrOSMissingVariationData,
+                                  kNoStatisticsProvider);
+    return {};
+  }
+
+  if (sys_info->GetLoadingState() !=
+      ash::system::StatisticsProvider::LoadingState::kFinished) {
+    base::UmaHistogramEnumeration(kCrOSMissingVariationData,
+                                  kStatisticsLoadingNotFinished);
+    return {};
+  }
+
+  const std::string vpd_region = base::ToUpperASCII(
+      sys_info->GetMachineStatistic(ash::system::kRegionKey).value_or(""));
+  if (vpd_region == "GCC" || vpd_region == "LATAM-ES-419" ||
+      vpd_region == "NORDIC") {
+    // TODO: crbug.com/377475851 - Implement a lookup for the groupings.
+    base::UmaHistogramEnumeration(kCrOSMissingVariationData, kGroupedRegion);
+    return {};
+  }
+
+  if (vpd_region.size() < 2) {
+    base::UmaHistogramEnumeration(kCrOSMissingVariationData, kRegionTooShort);
+    return {};
+  } else if (vpd_region.size() > 2) {
+    base::UmaHistogramEnumeration(kCrOSMissingVariationData, kRegionTooLong);
+    return {};
+  }
+
+  const CountryId country_code(vpd_region);
+  base::UmaHistogramEnumeration(kCrOSMissingVariationData, kValidCountryCode);
+  return country_code;
+}
+#endif
+}  // namespace
 
 RegionalCapabilitiesServiceClient::RegionalCapabilitiesServiceClient(
     variations::VariationsService* variations_service)
-    : variations_country_id_(
-          variations_service
-              ? country_codes::CountryStringToCountryID(
-                    base::ToUpperASCII(variations_service->GetLatestCountry()))
-              : country_codes::kCountryIDUnknown) {}
-#else
-RegionalCapabilitiesServiceClient::RegionalCapabilitiesServiceClient() =
-    default;
-
-#endif
+    : variations_latest_country_id_(
+          variations_service ? CountryId(base::ToUpperASCII(
+                                   variations_service->GetLatestCountry()))
+                             : CountryId()) {}
 
 RegionalCapabilitiesServiceClient::~RegionalCapabilitiesServiceClient() =
     default;
 
-int RegionalCapabilitiesServiceClient::GetFallbackCountryId() {
+CountryId RegionalCapabilitiesServiceClient::GetVariationsLatestCountryId() {
+  return variations_latest_country_id_;
+}
+
+CountryId RegionalCapabilitiesServiceClient::GetFallbackCountryId() {
+#if BUILDFLAG(IS_CHROMEOS)
+  if (const std::optional<CountryId> vpd_country = GetVpdCountry();
+      vpd_country.has_value()) {
+    return *vpd_country;
+  }
+#endif
   return country_codes::GetCurrentCountryID();
 }
 
@@ -59,7 +110,7 @@ void RegionalCapabilitiesServiceClient::FetchCountryId(
 #elif BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_LINUX)
 void RegionalCapabilitiesServiceClient::FetchCountryId(
     CountryIdCallback on_country_id_fetched) {
-  std::move(on_country_id_fetched).Run(variations_country_id_);
+  std::move(on_country_id_fetched).Run(variations_latest_country_id_);
 }
 #else
 // On other platforms, defer to `GetCurrentCountryID()`.
@@ -84,11 +135,9 @@ void JNI_RegionalCapabilitiesServiceClientAndroid_ProcessDeviceCountryResponse(
   if (!j_device_country) {
     return;
   }
-  std::string device_country =
-      base::android::ConvertJavaStringToUTF8(env, j_device_country);
-  int device_country_id =
-      country_codes::CountryStringToCountryID(device_country);
-  std::move(*heap_callback).Run(device_country_id);
+  std::string device_country_code = base::ToUpperASCII(
+      base::android::ConvertJavaStringToUTF8(env, j_device_country));
+  std::move(*heap_callback).Run(CountryId(device_country_code));
 }
 
 #endif  // BUILDFLAG(IS_ANDROID)

@@ -23,11 +23,11 @@ import type {BooleanSetting, EnumSetting, LayoutElement, Setting} from './Layout
 
 // TODO(crbug.com/391381439): Fully migrate off of constructed style sheets.
 const inspectorCommonStyles = new CSSStyleSheet();
-inspectorCommonStyles.replaceSync(inspectorCommonStylesRaw.cssContent);
+inspectorCommonStyles.replaceSync(inspectorCommonStylesRaw.cssText);
 
 // TODO(crbug.com/391381439): Fully migrate off of constructed style sheets.
 const layoutPaneStyles = new CSSStyleSheet();
-layoutPaneStyles.replaceSync(layoutPaneStylesRaw.cssContent);
+layoutPaneStyles.replaceSync(layoutPaneStylesRaw.cssText);
 
 const UIStrings = {
   /**
@@ -70,7 +70,7 @@ const UIStrings = {
    *@description Screen reader announcement when opening color picker tool.
    */
   colorPickerOpened: 'Color picker opened.',
-};
+} as const;
 const str_ = i18n.i18n.registerUIStrings('panels/elements/components/LayoutPane.ts', UIStrings);
 const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
 export {LayoutElement};
@@ -85,7 +85,7 @@ const nodeToLayoutElement = (node: SDK.DOMModel.DOMNode): LayoutElement => {
     color: 'var(--sys-color-inverse-surface)',
     name: node.localName(),
     domId: node.getAttribute('id'),
-    domClasses: className ? className.split(/\s+/).filter(s => Boolean(s)) : undefined,
+    domClasses: className ? className.split(/\s+/).filter(s => !!s) : undefined,
     enabled: false,
     reveal: () => {
       void Common.Revealer.reveal(node);
@@ -176,7 +176,7 @@ let layoutPaneWrapperInstance: LegacyWrapper.LegacyWrapper.LegacyWrapper<UI.Widg
 
 export class LayoutPane extends LegacyWrapper.LegacyWrapper.WrappableComponent {
   readonly #shadow = this.attachShadow({mode: 'open'});
-  #settings: Readonly<Setting[]> = [];
+  #settings: readonly Setting[] = [];
   readonly #uaShadowDOMSetting: Common.Settings.Setting<boolean>;
   #domModels: SDK.DOMModel.DOMModel[];
 
@@ -217,10 +217,10 @@ export class LayoutPane extends LegacyWrapper.LegacyWrapper.WrappableComponent {
     this.#domModels = this.#domModels.filter(model => model !== domModel);
   }
 
-  async #fetchNodesByStyle(style: {
+  async #fetchNodesByStyle(style: Array<{
     name: string,
     value: string,
-  }[]): Promise<SDK.DOMModel.DOMNode[]> {
+  }>): Promise<SDK.DOMModel.DOMNode[]> {
     const showUAShadowDOM = this.#uaShadowDOMSetting.get();
 
     const nodes = [];
@@ -488,7 +488,7 @@ export class LayoutPane extends LegacyWrapper.LegacyWrapper.WrappableComponent {
                                            .variant=${Buttons.Button.Variant.ICON}
                                            @click=${onElementClick}></devtools-button>
     </div>`;
-            // clang-format on
+          // clang-format on
   }
 
   #renderBooleanSetting(setting: BooleanSetting): Lit.TemplateResult {

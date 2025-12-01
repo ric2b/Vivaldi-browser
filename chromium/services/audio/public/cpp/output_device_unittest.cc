@@ -26,7 +26,6 @@
 #include "services/audio/sync_reader.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/abseil-cpp/absl/utility/utility.h"
 
 using testing::_;
 using testing::Invoke;
@@ -212,7 +211,8 @@ TEST_F(AudioServiceOutputDeviceTest, CreatePlayPause) {
 }
 
 // Flaky on Linux Chromium OS ASan LSan (https://crbug.com/889845)
-#if BUILDFLAG(IS_CHROMEOS) && defined(ADDRESS_SANITIZER)
+// Disabled on Android (crbug.com/395710100).
+#if BUILDFLAG(IS_CHROMEOS) && defined(ADDRESS_SANITIZER) || BUILDFLAG(IS_ANDROID)
 #define MAYBE_VerifyDataFlow DISABLED_VerifyDataFlow
 #else
 #define MAYBE_VerifyDataFlow VerifyDataFlow

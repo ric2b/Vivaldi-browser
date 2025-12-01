@@ -48,14 +48,6 @@ export class SettingsPrivacySandboxFledgeSubpageElement extends
 
   static get properties() {
     return {
-      /**
-       * Preferences state.
-       */
-      prefs: {
-        type: Object,
-        notify: true,
-      },
-
       sitesList_: {
         type: Array,
         observer: 'onSitesListChanged_',
@@ -147,6 +139,7 @@ export class SettingsPrivacySandboxFledgeSubpageElement extends
   private isLearnMoreDialogOpen_: boolean;
   private seeAllSitesExpanded_: boolean;
   private blockedSitesExpanded_: boolean;
+  private shouldShowV2_: boolean;
   private privacySandboxBrowserProxy_: PrivacySandboxBrowserProxy =
       PrivacySandboxBrowserProxyImpl.getInstance();
   private metricsBrowserProxy_: MetricsBrowserProxy =
@@ -231,7 +224,7 @@ export class SettingsPrivacySandboxFledgeSubpageElement extends
 
   private onCloseDialog_() {
     this.isLearnMoreDialogOpen_ = false;
-    afterNextRender(this, async () => {
+    afterNextRender(this, () => {
       // `learnMoreLink` might be null if the toggle was disabled after the
       // dialog was opened.
       this.shadowRoot!.querySelector<HTMLElement>('#learnMoreLink')?.focus();
@@ -264,7 +257,7 @@ export class SettingsPrivacySandboxFledgeSubpageElement extends
 
     // After allowing or blocking the last item, the focus is lost after the
     // item is removed. Set the focus to the #blockedSitesRow element.
-    afterNextRender(this, async () => {
+    afterNextRender(this, () => {
       if (!this.shadowRoot!.activeElement) {
         this.shadowRoot!.querySelector<HTMLElement>('#blockedSitesRow')
             ?.focus();

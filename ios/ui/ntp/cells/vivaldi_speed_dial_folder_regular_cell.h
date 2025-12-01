@@ -16,7 +16,6 @@
 
 // SETTERS
 - (void)configureCellWith:(VivaldiSpeedDialItem*)item
-                   addNew:(bool)addNew
               layoutStyle:(VivaldiStartPageLayoutStyle)style;
 
 @end

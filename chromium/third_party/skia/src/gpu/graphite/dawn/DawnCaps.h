@@ -46,7 +46,8 @@ public:
                                           Discardable discardable) const override;
     TextureInfo getDefaultDepthStencilTextureInfo(SkEnumBitMask<DepthStencilFlags>,
                                                   uint32_t sampleCount,
-                                                  Protected) const override;
+                                                  Protected,
+                                                  Discardable discardable) const override;
     TextureInfo getDefaultStorageTextureInfo(SkColorType) const override;
     SkISize getDepthAttachmentDimensions(const TextureInfo&,
                                          const SkISize colorAttachmentDimensions) const override;
@@ -58,7 +59,6 @@ public:
                               const RendererProvider*) const override;
     UniqueKey makeComputePipelineKey(const ComputePipelineDesc&) const override;
     ImmutableSamplerInfo getImmutableSamplerInfo(const TextureInfo&) const override;
-    uint32_t channelMask(const TextureInfo&) const override;
     bool isRenderable(const TextureInfo&) const override;
     bool isStorage(const TextureInfo&) const override;
 
@@ -66,13 +66,29 @@ public:
         return fSupportedResolveTextureLoadOp.has_value();
     }
 
+    bool serializeTextureInfo(const TextureInfo&, SkWStream*) const override;
+    bool deserializeTextureInfo(SkStream*, TextureInfo* out) const override;
+
     void buildKeyForTexture(SkISize dimensions,
                             const TextureInfo&,
                             ResourceType,
                             GraphiteResourceKey*) const override;
-    uint32_t getRenderPassDescKeyForPipeline(const RenderPassDesc& renderPassDesc) const;
+    // Compute render pass desc's key as 32 bits key. The key has room for additional flag which can
+    // optionally be provided.
+    uint32_t getRenderPassDescKeyForPipeline(const RenderPassDesc&,
+                                             bool additionalFlag = false) const;
 
     bool supportsCommandBufferTimestamps() const { return fSupportsCommandBufferTimestamps; }
+
+    // Whether we should emulate load/resolve with separate render passes.
+    // TODO(b/399640773): This is currently used until Dawn supports true partial resolve feature
+    // that can resolve a MSAA texture to a resolve texture with different size.
+    bool emulateLoadStoreResolve() const { return fEmulateLoadStoreResolve; }
+
+    // Check whether the texture is texturable, ignoring its sample count. This is needed
+    // instead of isTextureable() because graphite frontend treats multisampled textures as
+    // non-textureable.
+    bool isTexturableIgnoreSampleCount(const TextureInfo& info) const;
 
 private:
     const ColorTypeInfo* getColorTypeInfo(SkColorType, const TextureInfo&) const override;
@@ -98,6 +114,7 @@ private:
     }
 
     uint32_t maxRenderTargetSampleCount(wgpu::TextureFormat format) const;
+    using Caps::isTexturable;
     bool isTexturable(wgpu::TextureFormat format) const;
     bool isRenderable(wgpu::TextureFormat format, uint32_t numSamples) const;
 
@@ -148,6 +165,8 @@ private:
     // and resolve. With this feature, we can do that partially according to the actual damage
     // region.
     bool fSupportsPartialLoadResolve = false;
+
+    bool fEmulateLoadStoreResolve = false;
 
     bool fUseAsyncPipelineCreation = true;
     bool fAllowScopedErrorChecks = true;

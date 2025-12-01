@@ -1,17 +1,42 @@
 /* Copyright (c) 2020 Vivaldi Technologies AS. All rights reserved */
 
 .document-blocked .icon {
-  background-image: -webkit-image-set(
-      url(../../../../app/resources/components_resources/neterror/default_100_percent/vivaldi/100-error-offline.png) 1x,
-      url(../../../../app/resources/components_resources/neterror/default_200_percent/vivaldi/200-error-offline.png) 2x);
+  background-image: image-set(
+      url(../../../../app/resources/components_resources/ad_blocker/blocker_shield_trackers_ads_errorpage_144_360.png) 1x,
+      url(../../../../app/resources/components_resources/ad_blocker/blocker_shield_trackers_ads_errorpage_72_360.png) 2x);
 }
 
 .document-blocked button {
   background: #656565;
 }
 
+code {
+  background-color: var(--google-gray-300);
+  padding: 2px 4px;
+}
+
+#request-url:has(#url-details.hidden) #show-url-details > span:first-of-type {
+  display:none;
+}
+
+#request-url:not(:has(#url-details.hidden)) #show-url-details > span:last-of-type {
+  display:none;
+}
+
+#url-details li > span {
+  font-weight: bold;
+}
+
+#url-details li {
+  white-space: nowrap;
+}
+
 @media (prefers-color-scheme: dark) {
   .document-blocked .icon {
     filter: invert(1);
+  }
+
+  code {
+    background-color: var(--google-gray-800);
   }
 }

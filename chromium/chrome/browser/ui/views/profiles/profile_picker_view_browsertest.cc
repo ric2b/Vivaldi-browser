@@ -9,6 +9,7 @@
 
 #include "base/barrier_closure.h"
 #include "base/cfi_buildflags.h"
+#include "base/feature_list.h"
 #include "base/files/file_path.h"
 #include "base/json/values_util.h"
 #include "base/memory/raw_ptr.h"
@@ -63,6 +64,7 @@
 #include "chrome/browser/ui/profiles/profile_ui_test_utils.h"
 #include "chrome/browser/ui/startup/first_run_service.h"
 #include "chrome/browser/ui/tab_dialogs.h"
+#include "chrome/browser/ui/ui_features.h"
 #include "chrome/browser/ui/views/profiles/avatar_toolbar_button.h"
 #include "chrome/browser/ui/views/profiles/profile_picker_dice_reauth_provider.h"
 #include "chrome/browser/ui/views/profiles/profile_picker_test_base.h"
@@ -517,12 +519,16 @@ class ProfilePickerCreationFlowBrowserTest
     return account_info;
   }
 
+  static bool HasPromoBeenShown(Browser* browser,
+                                const base::Feature& feature) {
+    return browser->window()->IsFeaturePromoActive(feature) ||
+           browser->window()->IsFeaturePromoQueued(feature);
+  }
+
   // Returns true if the profile switch IPH has been shown.
-  bool ProfileSwitchPromoHasBeenShown(Browser* browser) {
-    return feature_engagement::TrackerFactory::GetForBrowserContext(
-               browser->profile())
-        ->HasEverTriggered(feature_engagement::kIPHProfileSwitchFeature,
-                           /*from_window=*/false);
+  static bool ProfileSwitchPromoHasBeenShown(Browser* browser) {
+    return HasPromoBeenShown(browser,
+                             feature_engagement::kIPHProfileSwitchFeature);
   }
 
   // Simulates a click on a profile card. The profile picker must be already
@@ -1018,6 +1024,72 @@ IN_PROC_BROWSER_TEST_F(ForceSigninProfilePickerCreationFlowBrowserTest,
   EXPECT_FALSE(entry->IsSigninRequired());
   histogram_tester()->ExpectUniqueSample(
       kReauthResultHistogramName, ProfilePickerReauthResult::kSuccess, 1);
+}
+
+IN_PROC_BROWSER_TEST_F(ForceSigninProfilePickerCreationFlowBrowserTest,
+                       ForceSigninReauthInGlicModeShowsErrorDialog) {
+  size_t initial_browser_count = BrowserList::GetInstance()->size();
+  ASSERT_EQ(initial_browser_count, 0u);
+
+  const std::vector<Profile*> profiles =
+      g_browser_process->profile_manager()->GetLoadedProfiles();
+  ASSERT_GE(profiles.size(), 1u);
+  Profile* profile = profiles[0];
+  ProfileAttributesEntry* entry =
+      g_browser_process->profile_manager()
+          ->GetProfileAttributesStorage()
+          .GetProfileAttributesWithPath(profile->GetPath());
+
+  ASSERT_TRUE(entry->IsSigninRequired());
+
+  signin::IdentityManager* identity_manager =
+      IdentityManagerFactory::GetForProfile(profile);
+
+  const std::string email("test@managedchrome.com");
+  signin::MakePrimaryAccountAvailable(identity_manager, email,
+                                      signin::ConsentLevel::kSignin);
+  // Only managed accounts are allowed to reauth.
+  entry->SetUserAcceptedAccountManagement(true);
+  // Only glic eligible profiles are shown in the Glic version of the picker.
+  entry->SetIsGlicEligible(true);
+
+  CoreAccountId primary_account =
+      identity_manager->GetPrimaryAccountId(signin::ConsentLevel::kSignin);
+  ASSERT_FALSE(primary_account.empty());
+
+  // Simulate an invalid account.
+  signin::SetInvalidRefreshTokenForPrimaryAccount(identity_manager);
+
+  // Ensure picker is closed and open the picker in the Glic Version.
+  ProfilePicker::Hide();
+  base::MockCallback<base::OnceCallback<void(Profile*)>> mock_callback;
+  ProfilePicker::Show(
+      ProfilePicker::Params::ForGlicManager(mock_callback.Get()));
+  WaitForPickerClosedAndReopenedImmediately();
+
+  EXPECT_CALL(mock_callback, Run(testing::_)).Times(0);
+  ASSERT_TRUE(ProfilePicker::IsOpen());
+  ASSERT_FALSE(IsForceSigninErrorDialogShown());
+
+  // Attempt to open the locked profile that can be reauthed.
+  OpenProfileFromPicker(entry->GetPath(), false);
+
+  // Profile remains locked and an error message is displayed as Glic does not
+  // support the reauth step.
+  EXPECT_TRUE(ProfilePicker::IsOpen());
+  EXPECT_TRUE(IsForceSigninErrorDialogShown());
+  // Check error dialog content.
+  ForceSigninUIError::UiTexts errors =
+      ForceSigninUIError::ReauthNotSupportedByGlicFlow().GetErrorTexts();
+  EXPECT_EQ(GetForceSigninErrorDialogTitleText(), errors.first);
+  EXPECT_EQ(GetForceSigninErrorDialogBodyText(), errors.second);
+  EXPECT_EQ(BrowserList::GetInstance()->size(), initial_browser_count);
+  EXPECT_TRUE(entry->IsSigninRequired());
+
+  testing::Mock::VerifyAndClearExpectations(&mock_callback);
+  EXPECT_CALL(mock_callback, Run(nullptr)).Times(1);
+  ProfilePicker::Hide();
+  WaitForPickerClosed();
 }
 
 IN_PROC_BROWSER_TEST_F(ForceSigninProfilePickerCreationFlowBrowserTest,
@@ -2304,11 +2376,8 @@ class SupervisedUserProfileIPHTest
 
   // Returns true if the supervised user profile IPH has been shown.
   bool SupervisedProfilePromoHasBeenShown(Browser* browser) {
-    return feature_engagement::TrackerFactory::GetForBrowserContext(
-               browser->profile())
-        ->HasEverTriggered(
-            feature_engagement::kIPHSupervisedUserProfileSigninFeature,
-            /*from_window=*/false);
+    return HasPromoBeenShown(
+        browser, feature_engagement::kIPHSupervisedUserProfileSigninFeature);
   }
 
   static bool ShouldIphShow(
@@ -2413,6 +2482,10 @@ class ProfilePickerEnterpriseCreationFlowBrowserTest
         context, base::BindRepeating(
                      &policy::FakeUserPolicySigninService::BuildForEnterprise));
   }
+  // `GetLocalProfileName` assertions would fail without enabling the feature
+  // in non-fieldtrial tests.
+  base::test::ScopedFeatureList feature_list_{
+      features::kEnterpriseProfileBadgingForAvatar};
 };
 
 IN_PROC_BROWSER_TEST_F(ProfilePickerEnterpriseCreationFlowBrowserTest,
@@ -2730,7 +2803,7 @@ IN_PROC_BROWSER_TEST_F(ProfilePickerEnterpriseCreationFlowBrowserTest,
   // Fake sync is enabled in this profile with Joe's account.
   other_entry->SetAuthInfo(test_gaia_id, u"joe.consumer@gmail.com",
                            /*is_consented_primary_account=*/true);
-  other_entry->SetGaiaIds({test_gaia_id.ToString()});
+  other_entry->SetGaiaIds({test_gaia_id});
 
   size_t initial_profile_count = g_browser_process->profile_manager()
                                      ->GetProfileAttributesStorage()
@@ -2789,7 +2862,7 @@ IN_PROC_BROWSER_TEST_F(ProfilePickerEnterpriseCreationFlowBrowserTest,
   // Fake sync is enabled in this profile with Joe's account.
   other_entry->SetAuthInfo(test_gaia_id, u"joe.consumer@gmail.com",
                            /*is_consented_primary_account=*/true);
-  other_entry->SetGaiaIds({test_gaia_id.ToString()});
+  other_entry->SetGaiaIds({test_gaia_id});
 
   size_t initial_profile_count = g_browser_process->profile_manager()
                                      ->GetProfileAttributesStorage()

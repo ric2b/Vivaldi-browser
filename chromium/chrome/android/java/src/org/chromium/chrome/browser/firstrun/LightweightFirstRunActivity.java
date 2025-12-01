@@ -4,7 +4,6 @@
 
 package org.chromium.chrome.browser.firstrun;
 
-import android.os.Bundle;
 import android.os.Handler;
 import android.os.SystemClock;
 import android.text.method.LinkMovementMethod;
@@ -23,7 +22,6 @@ import org.chromium.base.ThreadUtils;
 import org.chromium.base.TimeUtils;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.back_press.SecondaryActivityBackPressUma.SecondaryActivity;
 import org.chromium.chrome.browser.customtabs.CustomTabActivity;
 import org.chromium.chrome.browser.enterprise.util.EnterpriseInfo;
 import org.chromium.chrome.browser.signin.services.SigninPreferencesManager;
@@ -82,15 +80,7 @@ public class LightweightFirstRunActivity extends FirstRunActivityBase
                 new FirstRunFlowSequencer(
                         getProfileProviderSupplier(), getChildAccountStatusSupplier()) {
                     @Override
-                    public void onFlowIsKnown(Bundle freProperties) {
-                        if (freProperties == null) {
-                            completeFirstRunExperience();
-                            return;
-                        }
-
-                        boolean isChild =
-                                freProperties.getBoolean(
-                                        SyncConsentFirstRunFragment.IS_CHILD_ACCOUNT, false);
+                    public void onFlowIsKnown(boolean isChild) {
                         initializeViews(isChild);
                     }
                 };
@@ -231,11 +221,6 @@ public class LightweightFirstRunActivity extends FirstRunActivityBase
     public @BackPressResult int handleBackPress() {
         abortFirstRunExperience();
         return BackPressResult.SUCCESS;
-    }
-
-    @Override
-    public int getSecondaryActivity() {
-        return SecondaryActivity.LIGHTWEIGHT_FIRST_RUN;
     }
 
     private void abortFirstRunExperience() {

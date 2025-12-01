@@ -9,12 +9,14 @@
 #include <vector>
 
 #include "base/time/time.h"
+#include "base/timer/elapsed_timer.h"
 #include "components/metrics/metrics_provider.h"
 #include "content/browser/accessibility/scoped_mode_collection.h"
 #include "content/common/content_export.h"
 #include "content/public/browser/browser_accessibility_state.h"
 #include "content/public/browser/render_widget_host.h"
 #include "ui/accessibility/ax_mode.h"
+#include "ui/accessibility/platform/assistive_tech.h"
 #include "ui/accessibility/platform/ax_platform.h"
 
 namespace content {
@@ -56,32 +58,26 @@ class CONTENT_EXPORT BrowserAccessibilityStateImpl
   // time.
   static std::unique_ptr<BrowserAccessibilityStateImpl> Create();
 
-  // This needs to be called explicitly by content::BrowserMainLoop during
-  // initialization, in order to schedule tasks that need to be done, but
-  // don't need to block the main thread.
-  //
-  // This is called explicitly and not automatically just by
-  // instantiating this class so that tests can use
-  // BrowserAccessibilityState without worrying about threading.
-  virtual void InitBackgroundTasks();
-
   // BrowserAccessibilityState implementation.
-  void EnableAccessibility() override;
-  void DisableAccessibility() override;
-  bool IsRendererAccessibilityEnabled() override;
+  void EnableProcessAccessibility() override;
+  void DisableProcessAccessibility() override;
+  bool IsAccessibilityAllowed() override;
   ui::AXMode GetAccessibilityMode() override;
   ui::AXMode GetAccessibilityModeForBrowserContext(
       BrowserContext* browser_context) override;
+  // TODO(aleventhal): Rename this to Add/RemoveProcessAccessibilityFlags()
   void AddAccessibilityModeFlags(ui::AXMode mode) override;
   void RemoveAccessibilityModeFlags(ui::AXMode mode) override;
-  void ResetAccessibilityMode() override;
-  void OnScreenReaderDetected() override;
-  void OnScreenReaderStopped() override;
-  bool IsAccessibleBrowser() override;
-  void AddUIThreadHistogramCallback(base::OnceClosure callback) override;
-  void AddOtherThreadHistogramCallback(base::OnceClosure callback) override;
-  void UpdateUniqueUserHistograms() override;
-  void UpdateHistogramsForTesting() override;
+  // Some platforms have a strong signal indicating the presence of a
+  // screen reader and can call in to let us know when one has
+  // been enabled/disabled.
+  // Other platforms require looking through running processes or modules
+  // attached to the process, for the name of known assistive tech such as
+  // screen readers, which takes time, and must override RefreshAssistiveTech().
+  void SetScreenReaderAppActive(bool is_active) override;
+  // Any currently running assistive tech that should prevent accessibility from
+  // being auto-disabled.
+  ui::AssistiveTech ActiveAssistiveTech() const override;
   void SetPerformanceFilteringAllowed(bool enabled) override;
   bool IsPerformanceFilteringAllowed() override;
   base::CallbackListSubscription RegisterFocusChangedCallback(
@@ -113,30 +109,30 @@ class CONTENT_EXPORT BrowserAccessibilityStateImpl
   // API usage, we automatically disable accessibility.
   void OnUserInputEvent();
 
-  // Calls InitBackgroundTasks with short delays for scheduled tasks,
-  // and then calls the given completion callback when done.
-  void CallInitBackgroundTasksForTesting(base::RepeatingClosure done_callback);
-
   // Notifies listeners that the focused element changed inside a WebContents.
   void OnFocusChangedInPage(const FocusedNodeDetails& details);
+
+  // Return true if auto-disable should be blocked.
+  bool ShouldBlockAutoDisable();
+
+  // Signal to BrowserAccessibilityState that a page navigation has occurred.
+  void OnPageNavigationComplete();
 
  protected:
   BrowserAccessibilityStateImpl();
 
-  // Called a short while after startup to allow time for the accessibility
-  // state to be determined. Updates histograms with the current state.
-  // Two variants - one for things that must be run on the UI thread, and
-  // another that can be run on another thread.
-  virtual void UpdateHistogramsOnUIThread();
-  virtual void UpdateHistogramsOnOtherThread();
+  // Notifies the instance that `assistive_tech` is the most significant of any
+  // assistive technologies discovered. AXPlatform observers are notified if
+  // `assistive_tech` differs from the most recent discovery. Called by
+  // subclasses when they detect a the presence of assistive tech via
+  // platform-specific means.
+  void OnAssistiveTechFound(ui::AssistiveTech assistive_tech);
 
  private:
   // Called by `OnScreenReaderStopped` as a delayed task. If accessibility
   // support has not been re-enabled by the time the delay has expired, we clear
   // `process_accessibility_mode_` so that all WebContentses are updated.
   void MaybeResetAccessibilityMode();
-
-  void OnOtherThreadDone();
 
   void UpdateAccessibilityActivityTask();
 
@@ -153,17 +149,13 @@ class CONTENT_EXPORT BrowserAccessibilityStateImpl
                                    ui::AXMode old_mode,
                                    ui::AXMode new_mode);
 
+  // Refreshes the instance's notion of active assistive technologies.
+  // Implementations must call `OnAssistiveTechFound()` with the results of any
+  // discovery. Does nothing by default.
+  virtual void RefreshAssistiveTech() {}
+
   // The process's single AXPlatform instance.
   ui::AXPlatform ax_platform_;
-
-  base::TimeDelta histogram_delay_;
-
-  std::vector<base::OnceClosure> ui_thread_histogram_callbacks_;
-  std::vector<base::OnceClosure> other_thread_histogram_callbacks_;
-
-  bool ui_thread_done_ = false;
-  bool other_thread_done_ = false;
-  base::RepeatingClosure background_thread_done_callback_;
 
   // Whether there is a pending task to run UpdateAccessibilityActivityTask.
   bool accessibility_update_task_pending_ = false;
@@ -177,6 +169,18 @@ class CONTENT_EXPORT BrowserAccessibilityStateImpl
   // Default is true to defer to feature flag. Value may be set to false by
   // prefs.
   bool performance_filtering_allowed_ = true;
+
+  // Tracks whether the accessibility engine has been used in any form during
+  // the current session. Toggled to true when accessibility is first enabled,
+  // and never toggled back to false.
+  bool has_enabled_accessibility_in_session_ = false;
+
+  // Timer used to track the time between start-up and engine first-use.
+  base::ElapsedTimer first_use_timer_;
+
+  // Counter used to track the number of page navigations between start-up
+  // and engine first-use.
+  uint32_t num_page_navs_before_first_use_ = 0;
 
   // The time of the first user input event; if we receive multiple
   // user input events within a 30-second period and no
@@ -217,8 +221,6 @@ class CONTENT_EXPORT BrowserAccessibilityStateImpl
   // ResetAccessibilityMode(); and applies them to all WebContentses in the
   // process. Guaranteed to hold at least an instance with no mode flags set.
   std::unique_ptr<ScopedAccessibilityMode> process_accessibility_mode_;
-
-  base::WeakPtrFactory<BrowserAccessibilityStateImpl> weak_factory_{this};
 };
 
 }  // namespace content

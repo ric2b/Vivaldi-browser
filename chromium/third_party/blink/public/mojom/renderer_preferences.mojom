@@ -202,6 +202,10 @@ struct RendererPreferences {
 
   array<uint16> explicitly_allowed_network_ports;
 
+  // A randomized 64 bit token that is generated per browser session,
+  // used for canvas noising.
+  uint64 canvas_noise_token = 0;
+
   // Vivaldi specific:
   // Maps to the Cycle focus setting in Vivaldi.
   bool allow_tab_cycle_from_webpage_into_ui = false;

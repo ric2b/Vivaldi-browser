@@ -437,27 +437,10 @@ const BookmarkNode* GetStartPageNode(BookmarkModel* model) {
   if (!model)
     return nullptr;
 
-  // Prepare root nodes, including mobile and other nodes only if they
-  // have children.
-  std::vector<const BookmarkNode*> root_nodes;
-
-  const BookmarkNode* bookmark_bar_node = model->bookmark_bar_node();
-  if (bookmark_bar_node && !bookmark_bar_node->children().empty())
-    root_nodes.push_back(bookmark_bar_node);
-
-  const BookmarkNode* mobile_node = model->mobile_node();
-  if (mobile_node && !mobile_node->children().empty())
-    root_nodes.push_back(mobile_node);
-
-  const BookmarkNode* other_node = model->other_node();
-  if (other_node && !other_node->children().empty())
-    root_nodes.push_back(other_node);
-
-  // Return early if there are no root nodes to process.
+  std::vector<const BookmarkNode*> root_nodes = GetRootNodes(model);
   if (root_nodes.empty())
     return nullptr;
 
-  // Search through root nodes.
   for (const BookmarkNode* root_node : root_nodes) {
     if (!root_node || root_node->children().empty())
       continue;
@@ -513,6 +496,44 @@ bool IsURLAddedToNode(BookmarkModel* model,
     }
   }
   return false;
+}
+
+bool IsDirectChildOfRoot(BookmarkModel* model, const BookmarkNode* node) {
+  if (!model || !node)
+    return false;
+
+  std::vector<const BookmarkNode*> root_nodes = GetRootNodes(model);
+  if (root_nodes.empty())
+    return false;
+
+  for (const BookmarkNode* root_node : root_nodes) {
+    if (!root_node || root_node->children().empty())
+      continue;
+    return node && node->parent() == root_node;
+  }
+
+  return false;
+}
+
+std::vector<const BookmarkNode*> GetRootNodes(
+    BookmarkModel* model) {
+  std::vector<const BookmarkNode*> root_nodes;
+  if (!model)
+    return root_nodes;
+
+  const BookmarkNode* bookmark_bar_node = model->bookmark_bar_node();
+  if (bookmark_bar_node && !bookmark_bar_node->children().empty())
+    root_nodes.push_back(bookmark_bar_node);
+
+  const BookmarkNode* mobile_node = model->mobile_node();
+  if (mobile_node && !mobile_node->children().empty())
+    root_nodes.push_back(mobile_node);
+
+  const BookmarkNode* other_node = model->other_node();
+  if (other_node && !other_node->children().empty())
+    root_nodes.push_back(other_node);
+
+  return root_nodes;
 }
 
 const BookmarkNode* FindStartPageNode(const BookmarkNode* node) {

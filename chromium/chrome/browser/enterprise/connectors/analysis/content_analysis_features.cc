@@ -4,18 +4,25 @@
 
 #include "chrome/browser/enterprise/connectors/analysis/content_analysis_features.h"
 
-namespace enterprise_connectors {
+#include "base/feature_list.h"
 
-BASE_FEATURE(kStopRegisterFcmEnabled,
-             "StopRegisterFcmEnabled",
-             base::FEATURE_ENABLED_BY_DEFAULT);
+namespace enterprise_connectors {
 
 BASE_FEATURE(kEnableAsyncUploadAfterVerdict,
              "EnableAsyncUploadAfterVerdict",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
-bool IsStopRegisterFcmEnabled() {
-  return base::FeatureList::IsEnabled(kStopRegisterFcmEnabled);
-}
+BASE_FEATURE(kEnableResumableUploadOnConsumerScan,
+             "EnableResumableUploadOnConsumerScan",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+// The default value 5 is set for historical reasons, there is no reasoning
+// behind it. This finch flag will be used to help determine a more suitable
+// value.
+BASE_FEATURE_PARAM(size_t,
+                   kParallelContentAnalysisRequestCount,
+                   &kEnableAsyncUploadAfterVerdict,
+                   "max_parallel_requests",
+                   /*default_value=*/5);
 
 }  // namespace enterprise_connectors

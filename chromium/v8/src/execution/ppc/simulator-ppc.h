@@ -2,15 +2,15 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifndef V8_EXECUTION_PPC_SIMULATOR_PPC_H_
+#define V8_EXECUTION_PPC_SIMULATOR_PPC_H_
+
 // Declares a Simulator for PPC instructions if we are not generating a native
 // PPC binary. This Simulator allows us to run and debug PPC code generation on
 // regular desktop machines.
 // V8 calls into generated code via the GeneratedCode wrapper,
 // which will start execution in the Simulator or forwards to the real entry
 // on a PPC HW platform.
-
-#ifndef V8_EXECUTION_PPC_SIMULATOR_PPC_H_
-#define V8_EXECUTION_PPC_SIMULATOR_PPC_H_
 
 // globals.h defines USE_SIMULATOR.
 #include "src/common/globals.h"
@@ -25,6 +25,10 @@
 #include "src/codegen/ppc/constants-ppc.h"
 #include "src/execution/simulator-base.h"
 #include "src/utils/allocation.h"
+
+namespace heap::base {
+class StackVisitor;
+}
 
 namespace v8 {
 namespace internal {
@@ -204,9 +208,14 @@ class Simulator : public SimulatorBase {
   // margin to prevent overflows.
   uintptr_t StackLimit(uintptr_t c_limit) const;
 
+  uintptr_t StackBase() const;
+
   // Return central stack view, without additional safety margins.
   // Users, for example wasm::StackMemory, can add their own.
   base::Vector<uint8_t> GetCentralStackView() const;
+  static constexpr int JSStackLimitMargin() { return kStackProtectionSize; }
+
+  void IterateRegistersAndStack(::heap::base::StackVisitor* visitor);
 
   // Executes PPC instructions until the PC reaches end_sim_pc.
   void Execute();

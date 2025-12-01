@@ -59,6 +59,8 @@ public class ChromeApplicationImpl extends SplitCompatApplication.Impl {
                             ChromeFeatureList.sAsyncNotificationManager.isEnabled());
 
             if (ChromeFeatureList.sTraceBinderIpc.isEnabled()) {
+                BinderCallsListener.setExceptionReporter(
+                        ChromePureJavaExceptionReporter::reportJavaException);
                 BinderCallsListener.getInstance().installListener();
             }
 

@@ -41,9 +41,9 @@ limitations under the License.
 #include "xla/shape_tree.h"
 #include "xla/stream_executor/device_memory_allocator.h"
 #include "xla/stream_executor/stream_executor.h"
+#include "xla/tsl/platform/errors.h"
+#include "xla/tsl/platform/statusor.h"
 #include "xla/xla_data.pb.h"
-#include "tsl/platform/errors.h"
-#include "tsl/platform/statusor.h"
 
 namespace xla {
 
@@ -86,6 +86,10 @@ class LocalExecutable {
   // build device.
   absl::Status VerifyRunDeviceCompatible(int run_device_ordinal) const;
 
+  absl::StatusOr<std::pair<ServiceExecutableRunOptions, StreamPool::Ptr>>
+  RunHelper(absl::Span<const Shape* const> argument_shapes,
+            ExecutableRunOptions run_options);
+
  private:
   absl::StatusOr<ExecutionOutput> RunAsync(
       absl::Span<Shape const* const> argument_host_shapes,
@@ -102,10 +106,6 @@ class LocalExecutable {
   // Returns a literal containing the contents of the given ShapedBuffer.
   absl::StatusOr<Literal> LiteralFromShapedBuffer(
       const ShapedBuffer& shaped_buffer);
-
-  absl::StatusOr<std::pair<ServiceExecutableRunOptions, StreamPool::Ptr>>
-  RunHelper(absl::Span<const Shape* const> argument_shapes,
-            ExecutableRunOptions run_options);
 
   // The ordinal of the device which this executable was compiled for. The
   // executable can run on all equivalent devices (as determined by

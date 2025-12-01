@@ -129,6 +129,7 @@
 #include "third_party/blink/renderer/core/fragment_directive/text_fragment_handler.h"
 #include "third_party/blink/renderer/core/frame/ad_tracker.h"
 #include "third_party/blink/renderer/core/frame/attribution_src_loader.h"
+#include "third_party/blink/renderer/core/frame/context_menu_insets_changed_observer.h"
 #include "third_party/blink/renderer/core/frame/csp/content_security_policy.h"
 #include "third_party/blink/renderer/core/frame/event_handler_registry.h"
 #include "third_party/blink/renderer/core/frame/frame_console.h"
@@ -200,7 +201,6 @@
 #include "third_party/blink/renderer/core/probe/core_probes.h"
 #include "third_party/blink/renderer/core/script/classic_script.h"
 #include "third_party/blink/renderer/core/scroll/scroll_snapshot_client.h"
-#include "third_party/blink/renderer/core/scroll/smooth_scroll_sequencer.h"
 #include "third_party/blink/renderer/core/svg/svg_document_extensions.h"
 #include "third_party/blink/renderer/core/timing/dom_window_performance.h"
 #include "third_party/blink/renderer/platform/back_forward_cache_utils.h"
@@ -216,6 +216,7 @@
 #include "third_party/blink/renderer/platform/graphics/paint/scoped_paint_chunk_properties.h"
 #include "third_party/blink/renderer/platform/heap/collection_support/heap_hash_set.h"
 #include "third_party/blink/renderer/platform/heap/collection_support/heap_vector.h"
+#include "third_party/blink/renderer/platform/heap/disallow_new_wrapper.h"
 #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
 #include "third_party/blink/renderer/platform/heap/persistent.h"
 #include "third_party/blink/renderer/platform/image-encoders/image_encoder_utils.h"
@@ -264,9 +265,10 @@ constexpr unsigned kMaxDocumentChunkSize = 1000000;
 // of hashing the |frame_token| passed on creation of a LocalFrame object.
 using LocalFramesByTokenMap = HeapHashMap<uint64_t, WeakMember<LocalFrame>>;
 static LocalFramesByTokenMap& GetLocalFramesMap() {
-  DEFINE_STATIC_LOCAL(Persistent<LocalFramesByTokenMap>, map,
-                      (MakeGarbageCollected<LocalFramesByTokenMap>()));
-  return *map;
+  using LocalFramesByTokenMapHolder = DisallowNewWrapper<LocalFramesByTokenMap>;
+  DEFINE_STATIC_LOCAL(Persistent<LocalFramesByTokenMapHolder>, holder,
+                      (MakeGarbageCollected<LocalFramesByTokenMapHolder>()));
+  return holder->Value();
 }
 
 // Maximum number of burst download requests allowed.
@@ -512,10 +514,10 @@ void LocalFrame::Trace(Visitor* visitor) const {
   visitor->Trace(selection_);
   visitor->Trace(event_handler_);
   visitor->Trace(console_);
-  visitor->Trace(smooth_scroll_sequencer_);
   visitor->Trace(content_capture_manager_);
   visitor->Trace(system_clipboard_);
   visitor->Trace(virtual_keyboard_overlay_changed_observers_);
+  visitor->Trace(context_menu_insets_changed_observers_);
   visitor->Trace(widget_creation_observers_);
   visitor->Trace(pause_handle_receivers_);
   visitor->Trace(frame_color_overlay_);
@@ -968,8 +970,6 @@ void LocalFrame::DidAttachDocument() {
   Selection().DidAttachDocument(document);
   notified_color_scheme_ = false;
 
-  smooth_scroll_sequencer_.Clear();
-
 #if !BUILDFLAG(IS_ANDROID)
   // For PWAs with display_override "window-controls-overlay", titlebar area
   // rect bounds sent from the browser need to persist on navigation to keep the
@@ -1042,8 +1042,8 @@ bool LocalFrame::CanAccessEvent(
           target_document->domWindow()->GetSecurityOrigin());
     }
     case WebInputEventAttribution::kFocusedFrame:
-      return GetPage() ? GetPage()->GetFocusController().FocusedFrame() == this
-                       : false;
+      return GetPage() &&
+             GetPage()->GetFocusController().FocusedFrame() == this;
     case WebInputEventAttribution::kUnknown:
       return false;
   }
@@ -1153,7 +1153,7 @@ void LocalFrame::NotifyFrameWidgetCreated() {
 }
 
 bool LocalFrame::IsCaretBrowsingEnabled() const {
-  return GetSettings() ? GetSettings()->GetCaretBrowsingEnabled() : false;
+  return GetSettings() && GetSettings()->GetCaretBrowsingEnabled();
 }
 
 void LocalFrame::HookBackForwardCacheEviction() {
@@ -2291,6 +2291,11 @@ WebContentSettingsClient* LocalFrame::GetContentSettingsClient() {
   return Client() ? Client()->GetContentSettingsClient() : nullptr;
 }
 
+const mojom::RendererContentSettingsPtr& LocalFrame::GetContentSettings()
+    const {
+  return Loader().GetDocumentLoader()->GetContentSettings();
+}
+
 PluginData* LocalFrame::GetPluginData() const {
   if (!Loader().AllowPlugins())
     return nullptr;
@@ -2693,46 +2698,6 @@ void LocalFrame::ResumeSubresourceLoading() {
   pause_handle_receivers_.Clear();
 }
 
-SmoothScrollSequencer* LocalFrame::CreateNewSmoothScrollSequence() {
-  if (RuntimeEnabledFeatures::MultiSmoothScrollIntoViewEnabled()) {
-    // If MultiSmoothScrollIntoView is enabled, we run smooth scrolls in
-    // parallel, not in sequence.
-    return nullptr;
-  }
-  if (!IsLocalRoot()) {
-    return LocalFrameRoot().CreateNewSmoothScrollSequence();
-  }
-
-  SmoothScrollSequencer* old_sequencer = smooth_scroll_sequencer_;
-  smooth_scroll_sequencer_ = MakeGarbageCollected<SmoothScrollSequencer>(*this);
-  return old_sequencer;
-}
-
-void LocalFrame::ReinstateSmoothScrollSequence(
-    SmoothScrollSequencer* sequencer) {
-  if (!IsLocalRoot()) {
-    LocalFrameRoot().ReinstateSmoothScrollSequence(sequencer);
-    return;
-  }
-
-  smooth_scroll_sequencer_ = sequencer;
-}
-
-void LocalFrame::FinishedScrollSequence() {
-  if (!IsLocalRoot()) {
-    LocalFrameRoot().FinishedScrollSequence();
-    return;
-  }
-
-  smooth_scroll_sequencer_.Clear();
-}
-
-SmoothScrollSequencer* LocalFrame::GetSmoothScrollSequencer() const {
-  if (!IsLocalRoot())
-    return LocalFrameRoot().GetSmoothScrollSequencer();
-  return smooth_scroll_sequencer_.Get();
-}
-
 void LocalFrame::UpdateTaskTime(base::TimeDelta time) {
   Client()->DidChangeCpuTiming(time);
 }
@@ -2817,14 +2782,14 @@ void LocalFrame::NotifyUserActivation(
 
 // static
 bool LocalFrame::HasTransientUserActivation(LocalFrame* frame) {
-  return frame ? frame->Frame::HasTransientUserActivation() : false;
+  return frame && frame->Frame::HasTransientUserActivation();
 }
 
 // static
 bool LocalFrame::ConsumeTransientUserActivation(
     LocalFrame* frame,
     UserActivationUpdateSource update_source) {
-  return frame ? frame->ConsumeTransientUserActivation(update_source) : false;
+  return frame && frame->ConsumeTransientUserActivation(update_source);
 }
 
 void LocalFrame::NotifyUserActivation(
@@ -3322,8 +3287,7 @@ void LocalFrame::SetIsCapturingMediaCallback(
 }
 
 bool LocalFrame::IsCapturingMedia() const {
-  return is_capturing_media_callback_ ? is_capturing_media_callback_.Run()
-                                      : false;
+  return is_capturing_media_callback_ && is_capturing_media_callback_.Run();
 }
 
 SystemClipboard* LocalFrame::GetSystemClipboard() {
@@ -3515,6 +3479,28 @@ void LocalFrame::NotifyVirtualKeyboardOverlayRectObservers(
     observer->VirtualKeyboardOverlayChanged(rect);
 }
 
+void LocalFrame::RegisterContextMenuInsetsChangedObserver(
+    ContextMenuInsetsChangedObserver* observer) {
+  context_menu_insets_changed_observers_.insert(observer);
+}
+
+void LocalFrame::NotifyContextMenuInsetsObservers(
+    const gfx::Rect& safe_area) const {
+  gfx::Size viewport =
+      gfx::ScaleToEnclosingRect(gfx::Rect(GetOutermostMainFrameSize()),
+                                1.0 / DevicePixelRatio())
+          .size();
+  // Convert from a rect within the window to viewport insets.
+  auto insets = gfx::Insets::TLBR(safe_area.y(), safe_area.x(),
+                                  viewport.height() - safe_area.bottom(),
+                                  viewport.width() - safe_area.right());
+  HeapVector<Member<ContextMenuInsetsChangedObserver>, 32> observers(
+      context_menu_insets_changed_observers_);
+  for (ContextMenuInsetsChangedObserver* observer : observers) {
+    observer->ContextMenuInsetsChanged(safe_area.IsEmpty() ? nullptr : &insets);
+  }
+}
+
 void LocalFrame::AddInspectorIssue(AuditsIssue info) {
   if (GetPage()) {
     GetPage()->GetInspectorIssueStorage().AddInspectorIssue(DomWindow(),
@@ -3692,7 +3678,7 @@ void LocalFrame::DownloadURL(
     network::mojom::blink::RedirectMode cross_origin_redirect_behavior) {
   mojo::PendingRemote<mojom::blink::BlobURLToken> blob_url_token;
   if (request.Url().ProtocolIs("blob")) {
-    DomWindow()->GetPublicURLManager().ResolveForNavigation(
+    DomWindow()->GetPublicURLManager().ResolveAsBlobURLToken(
         request.Url(), blob_url_token.InitWithNewPipeAndPassReceiver(),
         /*is_top_level_navigation=*/false);
   }
@@ -3772,7 +3758,7 @@ void LocalFrame::PostMessageEvent(
   DOMWindow* window = nullptr;
   if (source_frame)
     window = source_frame->DomWindow();
-  MessagePortArray* ports = nullptr;
+  GCedMessagePortArray* ports = nullptr;
   if (GetDocument()) {
     ports = MessagePort::EntanglePorts(*GetDocument()->GetExecutionContext(),
                                        std::move(message.ports));

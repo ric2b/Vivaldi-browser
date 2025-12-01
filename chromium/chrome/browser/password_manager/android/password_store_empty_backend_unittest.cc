@@ -4,12 +4,15 @@
 
 #include "chrome/browser/password_manager/android/password_store_empty_backend.h"
 
+#include <variant>
 #include <vector>
 
+#include "base/functional/callback_helpers.h"
 #include "base/test/mock_callback.h"
 #include "base/test/task_environment.h"
 #include "base/test/test_future.h"
 #include "chrome/browser/password_manager/android/password_store_android_account_backend.h"
+#include "chrome/browser/password_manager/android/password_store_android_backend.h"
 #include "components/password_manager/core/browser/password_store/password_store_consumer.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -61,7 +64,7 @@ TEST_F(PasswordStoreEmptyBackendTest, GetAllLoginsAsyncReturnsEmpty) {
   base::test::TestFuture<LoginsResultOrError> future;
   backend->GetAllLoginsAsync(future.GetCallback());
   const LoginsResultOrError& result = future.Get();
-  EXPECT_TRUE(absl::get<LoginsResult>(result).empty());
+  EXPECT_TRUE(std::get<LoginsResult>(result).empty());
 }
 
 TEST_F(PasswordStoreEmptyBackendTest,
@@ -70,7 +73,7 @@ TEST_F(PasswordStoreEmptyBackendTest,
   base::test::TestFuture<LoginsResultOrError> future;
   backend->GetAllLoginsWithAffiliationAndBrandingAsync(future.GetCallback());
   const LoginsResultOrError& result = future.Get();
-  EXPECT_TRUE(absl::get<LoginsResult>(result).empty());
+  EXPECT_TRUE(std::get<LoginsResult>(result).empty());
 }
 
 TEST_F(PasswordStoreEmptyBackendTest, FillMatchingLoginsAsyncReturnsEmpty) {
@@ -81,7 +84,7 @@ TEST_F(PasswordStoreEmptyBackendTest, FillMatchingLoginsAsyncReturnsEmpty) {
   backend->FillMatchingLoginsAsync(future.GetCallback(), /*include_psl=*/false,
                                    forms);
   const LoginsResultOrError& result = future.Get();
-  EXPECT_TRUE(absl::get<LoginsResult>(result).empty());
+  EXPECT_TRUE(std::get<LoginsResult>(result).empty());
 }
 
 TEST_F(PasswordStoreEmptyBackendTest,
@@ -92,7 +95,7 @@ TEST_F(PasswordStoreEmptyBackendTest,
                                  GURL(kTestUrl));
   backend->GetGroupedMatchingLoginsAsync(form_digest, future.GetCallback());
   const LoginsResultOrError& result = future.Get();
-  EXPECT_TRUE(absl::get<LoginsResult>(result).empty());
+  EXPECT_TRUE(std::get<LoginsResult>(result).empty());
 }
 
 TEST_F(PasswordStoreEmptyBackendTest,
@@ -107,7 +110,15 @@ TEST_F(PasswordStoreEmptyBackendTest,
                                            future.GetCallback());
 
   const PasswordChangesOrError& result = future.Get();
-  EXPECT_TRUE(absl::get<PasswordChanges>(result).value().empty());
+  EXPECT_TRUE(std::get<PasswordChanges>(result).value().empty());
 }
 
+TEST_F(PasswordStoreEmptyBackendTest,
+       DisableAutoSignInForOriginsRunsCompletion) {
+  PasswordStoreBackend* backend = CreateAndInitBackend();
+  base::test::TestFuture<void> future;
+  backend->DisableAutoSignInForOriginsAsync(base::NullCallback(),
+                                            future.GetCallback());
+  EXPECT_TRUE(future.Wait());
+}
 }  // namespace password_manager

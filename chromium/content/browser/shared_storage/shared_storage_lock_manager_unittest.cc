@@ -12,6 +12,7 @@
 #include "content/public/browser/web_contents.h"
 #include "content/public/test/shared_storage_test_utils.h"
 #include "content/public/test/test_renderer_host.h"
+#include "services/network/public/cpp/features.h"
 #include "services/network/public/mojom/shared_storage.mojom.h"
 #include "third_party/blink/public/common/features.h"
 
@@ -19,7 +20,7 @@ namespace content {
 
 namespace {
 
-using AccessScope = SharedStorageLockManager::AccessScope;
+using AccessScope = blink::SharedStorageAccessScope;
 
 class TestLockRequest : public blink::mojom::LockRequest {
  public:
@@ -63,8 +64,10 @@ class TestLockRequest : public blink::mojom::LockRequest {
 class SharedStorageLockManagerTest : public RenderViewHostTestHarness {
  public:
   SharedStorageLockManagerTest() {
-    scoped_feature_list_.InitAndEnableFeature(
+    web_locks_feature_.InitAndEnableFeature(
         blink::features::kSharedStorageWebLocks);
+    transactional_batch_update_feature_.InitAndEnableFeature(
+        network::features::kSharedStorageTransactionalBatchUpdate);
   }
 
   void SetUp() override {
@@ -115,6 +118,8 @@ class SharedStorageLockManagerTest : public RenderViewHostTestHarness {
   std::unique_ptr<SharedStorageLockManager> test_lock_manager_;
   std::unique_ptr<TestLockRequest> external_lock_request1_;
   std::unique_ptr<TestLockRequest> external_lock_request2_;
+  base::test::ScopedFeatureList web_locks_feature_;
+  base::test::ScopedFeatureList transactional_batch_update_feature_;
 
  private:
   void CreateExternalLockRequestHelper(
@@ -156,7 +161,6 @@ class SharedStorageLockManagerTest : public RenderViewHostTestHarness {
 
   mojo::Remote<blink::mojom::LockManager> external_lock_manager1_;
   mojo::Remote<blink::mojom::LockManager> external_lock_manager2_;
-  base::test::ScopedFeatureList scoped_feature_list_;
 };
 
 TEST_F(SharedStorageLockManagerTest,
@@ -172,7 +176,8 @@ TEST_F(SharedStorageLockManagerTest,
   test_lock_manager_->SharedStorageUpdate(
       std::move(method_with_options), origin,
       AccessScope::kSharedStorageWorklet,
-      /*main_frame_id=*/FrameTreeNodeId(), error_message_future.GetCallback());
+      /*main_frame_id=*/FrameTreeNodeId(), /*worklet_id=*/0,
+      error_message_future.GetCallback());
   task_environment()->RunUntilIdle();
 
   // There's no other outstanding lock request. Thus, the `SharedStorageUpdate`
@@ -198,7 +203,8 @@ TEST_F(SharedStorageLockManagerTest,
   test_lock_manager_->SharedStorageUpdate(
       std::move(method_with_options), origin,
       AccessScope::kSharedStorageWorklet,
-      /*main_frame_id=*/FrameTreeNodeId(), error_message_future.GetCallback());
+      /*main_frame_id=*/FrameTreeNodeId(), /*worklet_id=*/0,
+      error_message_future.GetCallback());
   task_environment()->RunUntilIdle();
 
   // The external lock is granted but not yet released. The
@@ -234,7 +240,8 @@ TEST_F(SharedStorageLockManagerTest,
   test_lock_manager_->SharedStorageUpdate(
       std::move(method_with_options), origin,
       AccessScope::kSharedStorageWorklet,
-      /*main_frame_id=*/FrameTreeNodeId(), error_message_future.GetCallback());
+      /*main_frame_id=*/FrameTreeNodeId(), /*worklet_id=*/0,
+      error_message_future.GetCallback());
   task_environment()->RunUntilIdle();
 
   // The external lock is granted but not yet released. The
@@ -259,7 +266,8 @@ TEST_F(SharedStorageLockManagerTest,
   test_lock_manager_->SharedStorageUpdate(
       std::move(method_with_options), origin,
       AccessScope::kSharedStorageWorklet,
-      /*main_frame_id=*/FrameTreeNodeId(), error_message_future.GetCallback());
+      /*main_frame_id=*/FrameTreeNodeId(), /*worklet_id=*/0,
+      error_message_future.GetCallback());
 
   EXPECT_FALSE(error_message_future.IsReady());
 
@@ -285,13 +293,16 @@ TEST_F(SharedStorageLockManagerTest, BatchUpdateWithLock_ImmediatelyHandled) {
       methods_with_options;
   methods_with_options.push_back(MojomSetMethod(/*key=*/u"a", /*value=*/u"b",
                                                 /*ignore_if_present=*/true));
+  methods_with_options.push_back(MojomSetMethod(/*key=*/u"c", /*value=*/u"d",
+                                                /*ignore_if_present=*/true));
 
   base::test::TestFuture<const std::string&> error_message_future;
 
   test_lock_manager_->SharedStorageBatchUpdate(
       std::move(methods_with_options),
       /*with_lock=*/"lock1", origin, AccessScope::kWindow,
-      /*main_frame_id=*/FrameTreeNodeId(), error_message_future.GetCallback());
+      /*main_frame_id=*/FrameTreeNodeId(), /*worklet_id=*/std::nullopt,
+      error_message_future.GetCallback());
   task_environment()->RunUntilIdle();
 
   // There's no other outstanding lock request. Thus, the
@@ -299,6 +310,7 @@ TEST_F(SharedStorageLockManagerTest, BatchUpdateWithLock_ImmediatelyHandled) {
   EXPECT_TRUE(error_message_future.IsReady());
   EXPECT_TRUE(error_message_future.Take().empty());
   EXPECT_EQ(SharedStorageGet(origin, /*key=*/u"a"), u"b");
+  EXPECT_EQ(SharedStorageGet(origin, /*key=*/u"c"), u"d");
 }
 
 TEST_F(SharedStorageLockManagerTest, BatchUpdateWithLock_WaitForGranted) {
@@ -312,13 +324,16 @@ TEST_F(SharedStorageLockManagerTest, BatchUpdateWithLock_WaitForGranted) {
       methods_with_options;
   methods_with_options.push_back(MojomSetMethod(/*key=*/u"a", /*value=*/u"b",
                                                 /*ignore_if_present=*/true));
+  methods_with_options.push_back(MojomSetMethod(/*key=*/u"c", /*value=*/u"d",
+                                                /*ignore_if_present=*/true));
 
   base::test::TestFuture<const std::string&> error_message_future;
 
   test_lock_manager_->SharedStorageBatchUpdate(
       std::move(methods_with_options),
       /*with_lock=*/"lock1", origin, AccessScope::kWindow,
-      /*main_frame_id=*/FrameTreeNodeId(), error_message_future.GetCallback());
+      /*main_frame_id=*/FrameTreeNodeId(), /*worklet_id=*/std::nullopt,
+      error_message_future.GetCallback());
   task_environment()->RunUntilIdle();
 
   // The external lock is granted but not yet released. The
@@ -326,6 +341,7 @@ TEST_F(SharedStorageLockManagerTest, BatchUpdateWithLock_WaitForGranted) {
   EXPECT_TRUE(external_lock_request1_->granted());
   EXPECT_FALSE(error_message_future.IsReady());
   EXPECT_EQ(SharedStorageGet(origin, /*key=*/u"a"), u"");
+  EXPECT_EQ(SharedStorageGet(origin, /*key=*/u"c"), u"");
 
   // After the external lock is released, the `SharedStorageBatchUpdate()` gets
   // handled.
@@ -335,11 +351,22 @@ TEST_F(SharedStorageLockManagerTest, BatchUpdateWithLock_WaitForGranted) {
   EXPECT_TRUE(error_message_future.IsReady());
   EXPECT_TRUE(error_message_future.Take().empty());
   EXPECT_EQ(SharedStorageGet(origin, /*key=*/u"a"), u"b");
+  EXPECT_EQ(SharedStorageGet(origin, /*key=*/u"c"), u"d");
 }
+
+class SharedStorageLockManagerTransactionalBatchUpdateDisabledTest
+    : public SharedStorageLockManagerTest {
+ public:
+  SharedStorageLockManagerTransactionalBatchUpdateDisabledTest() {
+    transactional_batch_update_feature_.Reset();
+    transactional_batch_update_feature_.InitAndDisableFeature(
+        network::features::kSharedStorageTransactionalBatchUpdate);
+  }
+};
 
 // Test `SharedStorageBatchUpdate` with two methods. The first method requests a
 // lock and waits for it to be granted. The second method is handled first.
-TEST_F(SharedStorageLockManagerTest,
+TEST_F(SharedStorageLockManagerTransactionalBatchUpdateDisabledTest,
        BatchUpdate_FirstMethodLockWaitForGranted) {
   url::Origin origin = url::Origin::Create(GURL("https://foo.com"));
 
@@ -360,7 +387,8 @@ TEST_F(SharedStorageLockManagerTest,
   test_lock_manager_->SharedStorageBatchUpdate(
       std::move(methods_with_options),
       /*with_lock=*/std::nullopt, origin, AccessScope::kWindow,
-      /*main_frame_id=*/FrameTreeNodeId(), error_message_future.GetCallback());
+      /*main_frame_id=*/FrameTreeNodeId(), /*worklet_id=*/std::nullopt,
+      error_message_future.GetCallback());
   task_environment()->RunUntilIdle();
 
   // The external lock is granted but not yet released. The batch update hasn't
@@ -384,7 +412,8 @@ TEST_F(SharedStorageLockManagerTest,
 // Test `SharedStorageBatchUpdate` with two methods, both requesting locks and
 // waiting for them to be granted. The second method's lock is granted first,
 // and thus the second method is handled first.
-TEST_F(SharedStorageLockManagerTest, BatchUpdate_SecondMethodLockGrantedFirst) {
+TEST_F(SharedStorageLockManagerTransactionalBatchUpdateDisabledTest,
+       BatchUpdate_SecondMethodLockGrantedFirst) {
   url::Origin origin = url::Origin::Create(GURL("https://foo.com"));
 
   CreateExternalLockRequest1(origin, /*lock_name=*/"lock1",
@@ -409,7 +438,8 @@ TEST_F(SharedStorageLockManagerTest, BatchUpdate_SecondMethodLockGrantedFirst) {
   test_lock_manager_->SharedStorageBatchUpdate(
       std::move(methods_with_options),
       /*with_lock=*/std::nullopt, origin, AccessScope::kWindow,
-      /*main_frame_id=*/FrameTreeNodeId(), error_message_future.GetCallback());
+      /*main_frame_id=*/FrameTreeNodeId(), /*worklet_id=*/std::nullopt,
+      error_message_future.GetCallback());
   task_environment()->RunUntilIdle();
 
   // The external locks are granted but not yet released. None of the methods
@@ -440,7 +470,7 @@ TEST_F(SharedStorageLockManagerTest, BatchUpdate_SecondMethodLockGrantedFirst) {
   EXPECT_EQ(SharedStorageGet(origin, /*key=*/u"c"), u"d");
 }
 
-TEST_F(SharedStorageLockManagerTest,
+TEST_F(SharedStorageLockManagerTransactionalBatchUpdateDisabledTest,
        BatchUpdate_BatchLockSameWithInnerMethodLock_Deadlock) {
   url::Origin origin = url::Origin::Create(GURL("https://foo.com"));
 
@@ -455,7 +485,8 @@ TEST_F(SharedStorageLockManagerTest,
   test_lock_manager_->SharedStorageBatchUpdate(
       std::move(methods_with_options),
       /*with_lock=*/"lock1", origin, AccessScope::kWindow,
-      /*main_frame_id=*/FrameTreeNodeId(), error_message_future.GetCallback());
+      /*main_frame_id=*/FrameTreeNodeId(), /*worklet_id=*/std::nullopt,
+      error_message_future.GetCallback());
   task_environment()->RunUntilIdle();
 
   // The batch lock is blocking the inner method lock, but the batch lock won't
@@ -465,7 +496,7 @@ TEST_F(SharedStorageLockManagerTest,
   EXPECT_EQ(SharedStorageGet(origin, /*key=*/u"a"), u"");
 }
 
-TEST_F(SharedStorageLockManagerTest,
+TEST_F(SharedStorageLockManagerTransactionalBatchUpdateDisabledTest,
        BatchUpdate_TwoInnerMethodsWithSameLock_ImmediatelyHandled) {
   url::Origin origin = url::Origin::Create(GURL("https://foo.com"));
 
@@ -483,7 +514,8 @@ TEST_F(SharedStorageLockManagerTest,
   test_lock_manager_->SharedStorageBatchUpdate(
       std::move(methods_with_options),
       /*with_lock=*/std::nullopt, origin, AccessScope::kWindow,
-      /*main_frame_id=*/FrameTreeNodeId(), error_message_future.GetCallback());
+      /*main_frame_id=*/FrameTreeNodeId(), /*worklet_id=*/std::nullopt,
+      error_message_future.GetCallback());
   task_environment()->RunUntilIdle();
 
   // Each method acquires and releases the lock internally. The batch update

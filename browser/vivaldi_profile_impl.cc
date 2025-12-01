@@ -48,6 +48,7 @@
 #include "ui/lazy_load_service_factory.h"
 #include "vivaldi/prefs/vivaldi_gen_pref_enums.h"
 #include "vivaldi/prefs/vivaldi_gen_prefs.h"
+#include "vivaldi_status/vivaldi_status_factory.h"
 
 // locked keystore handling
 #include "extraparts/vivaldi_keystore_checker.h"
@@ -195,7 +196,12 @@ void VivaldiInitProfile(Profile* profile) {
 #if !BUILDFLAG(IS_ANDROID)
   PrefService* pref_service = profile->GetPrefs();
 
+
   if (vivaldi::IsVivaldiRunning()) {
+    // Deals with monitoring up/down state of various components on vivaldi.com
+    // Loading starts on first status request from client.
+    vivaldi_status::VivaldiStatusFactory::GetForBrowserContext(profile);
+
     menus::Menu_Model* menu_model =
         menus::MainMenuServiceFactory::GetForBrowserContext(profile);
     menu_model->AddObserver(new menus::MenuModelLoadedObserver());

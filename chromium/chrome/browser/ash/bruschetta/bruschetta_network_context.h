@@ -74,6 +74,8 @@ class BruschettaNetworkContext
       const std::optional<std::string>& private_network_device_id,
       const std::optional<std::string>& private_network_device_name,
       OnPrivateNetworkAccessPermissionRequiredCallback callback) override;
+  void OnLocalNetworkAccessPermissionRequired(
+      OnLocalNetworkAccessPermissionRequiredCallback callback) override;
   void OnClearSiteData(
       const GURL& url,
       const std::string& header_value,
@@ -92,6 +94,8 @@ class BruschettaNetworkContext
           methods_with_options,
       const std::optional<std::string>& with_lock,
       OnSharedStorageHeaderReceivedCallback callback) override;
+  void OnAdAuctionEventRecordHeaderReceived(
+      network::AdAuctionEventRecord event_record) override;
   void Clone(
       mojo::PendingReceiver<network::mojom::URLLoaderNetworkServiceObserver>
           listener) override;

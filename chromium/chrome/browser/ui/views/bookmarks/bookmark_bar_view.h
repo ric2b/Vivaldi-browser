@@ -7,6 +7,7 @@
 
 #include <memory>
 #include <set>
+#include <string_view>
 #include <utility>
 
 #include "base/functional/callback_forward.h"
@@ -14,6 +15,7 @@
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
 #include "chrome/browser/bookmarks/bookmark_merged_surface_service.h"
+#include "chrome/browser/bookmarks/bookmark_merged_surface_service_observer.h"
 #include "chrome/browser/ui/bookmarks/bookmark_bar.h"
 #include "chrome/browser/ui/bookmarks/bookmark_stats.h"
 #include "chrome/browser/ui/tabs/tab_group_theme.h"
@@ -76,7 +78,7 @@ class LabelButton;
 // waits until the HistoryService for the profile has been loaded before
 // creating the BookmarkModel.
 class BookmarkBarView : public views::AccessiblePaneView,
-                        public bookmarks::BookmarkModelObserver,
+                        public BookmarkMergedSurfaceServiceObserver,
                         public views::ContextMenuController,
                         public views::DragController,
                         public views::AnimationDelegateViews,
@@ -170,7 +172,7 @@ class BookmarkBarView : public views::AccessiblePaneView,
       int max_tooltip_width,
       const gfx::FontList& font_list,
       const GURL& url,
-      const std::u16string& title);
+      std::u16string_view title);
 
   // views::View:
   gfx::Size CalculatePreferredSize(
@@ -202,27 +204,23 @@ class BookmarkBarView : public views::AccessiblePaneView,
   void BookmarkMenuControllerDeleted(
       BookmarkMenuController* controller) override;
 
-  // bookmarks::BookmarkModelObserver:
-  void BookmarkModelLoaded(bool ids_reassigned) override;
-  void BookmarkModelBeingDeleted() override;
-  void BookmarkNodeMoved(const bookmarks::BookmarkNode* old_parent,
+  // BookmarkMergedSurfaceServiceObserver:
+  void BookmarkMergedSurfaceServiceLoaded() override;
+  void BookmarkMergedSurfaceServiceBeingDeleted() override;
+  void BookmarkNodeAdded(const BookmarkParentFolder& parent,
+                         size_t index) override;
+  void BookmarkNodesRemoved(
+      const BookmarkParentFolder& parent,
+      const base::flat_set<const bookmarks::BookmarkNode*>& nodes) override;
+  void BookmarkNodeMoved(const BookmarkParentFolder& old_parent,
                          size_t old_index,
-                         const bookmarks::BookmarkNode* new_parent,
+                         const BookmarkParentFolder& new_parent,
                          size_t new_index) override;
-  void BookmarkNodeAdded(const bookmarks::BookmarkNode* parent,
-                         size_t index,
-                         bool added_by_user) override;
-  void BookmarkNodeRemoved(const bookmarks::BookmarkNode* parent,
-                           size_t old_index,
-                           const bookmarks::BookmarkNode* node,
-                           const std::set<GURL>& removed_urls,
-                           const base::Location& location) override;
-  void BookmarkAllUserNodesRemoved(const std::set<GURL>& removed_urls,
-                                   const base::Location& location) override;
   void BookmarkNodeChanged(const bookmarks::BookmarkNode* node) override;
-  void BookmarkNodeChildrenReordered(
-      const bookmarks::BookmarkNode* node) override;
   void BookmarkNodeFaviconChanged(const bookmarks::BookmarkNode* node) override;
+  void BookmarkParentFolderChildrenReordered(
+      const BookmarkParentFolder& folder) override;
+  void BookmarkAllUserNodesRemoved() override;
 
   // views::DragController:
   void WriteDragDataForView(views::View* sender,
@@ -320,11 +318,13 @@ class BookmarkBarView : public views::AccessiblePaneView,
 
   // Implementation for BookmarkNodeAddedImpl. Returns true if LayoutAndPaint()
   // is required.
-  bool BookmarkNodeAddedImpl(const bookmarks::BookmarkNode* node);
+  bool BookmarkNodeAddedImpl(const BookmarkParentFolder& parent, size_t index);
 
   // Implementation for BookmarkNodeRemoved. Returns true if LayoutAndPaint() is
   // required.
-  bool BookmarkNodeRemovedImpl(const bookmarks::BookmarkNode* node);
+  bool BookmarkNodeRemovedImpl(const BookmarkParentFolder& old_parent,
+                               size_t old_index,
+                               const bookmarks::BookmarkNode* node);
 
   // If the node is a child of the root node, the button is updated
   // appropriately.
@@ -407,6 +407,11 @@ class BookmarkBarView : public views::AccessiblePaneView,
   const views::View* GetSavedTabGroupsSeparatorViewForTesting() const;
 
   void MaybeShowSavedTabGroupsIntroPromo() const;
+
+  // True if BookmarkMergedSurfaceServiceLoaded() has been invoked,
+  // either by manually checking `bookmark_service_->loaded()` or by
+  // notification via BookmarkMergedSurfaceServiceObserver.
+  bool bookmark_service_loaded_signal_processed_ = false;
 
   // Needed to react to bookmark bar pref changes.
   PrefChangeRegistrar profile_pref_registrar_;

@@ -15,8 +15,10 @@
 #include "chrome/browser/extensions/crx_installer.h"
 #include "chrome/browser/extensions/cws_info_service.h"
 #include "chrome/browser/extensions/cws_info_service_factory.h"
+#include "chrome/browser/extensions/extension_error_controller.h"
 #include "chrome/browser/extensions/extension_management.h"
 #include "chrome/browser/extensions/extension_service.h"
+#include "chrome/browser/extensions/external_provider_manager.h"
 #include "chrome/browser/extensions/shared_module_service.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/chrome_switches.h"
@@ -144,14 +146,15 @@ ExtensionService* TestExtensionSystem::CreateExtensionService(
   extension_service_ = std::make_unique<ExtensionService>(
       profile_, command_line, install_directory, unpacked_install_directory,
       ExtensionPrefs::Get(profile_), Blocklist::Get(profile_),
-      autoupdate_enabled, extensions_enabled, &ready_);
+      ExtensionErrorController::Get(profile_), autoupdate_enabled,
+      extensions_enabled, &ready_);
 
   unzip::SetUnzipperLaunchOverrideForTesting(
       base::BindRepeating(&unzip::LaunchInProcessUnzipper));
   in_process_data_decoder_ =
       std::make_unique<data_decoder::test::InProcessDataDecoder>();
 
-  extension_service_->ClearProvidersForTesting();
+  ExternalProviderManager::Get(profile_)->ClearProvidersForTesting();
   return extension_service_.get();
 }
 

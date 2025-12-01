@@ -2148,11 +2148,15 @@ int MacroAssembler::CallCFunction(Register function, int num_of_reg_args,
     Adr(pc_scratch, &get_pc);
 
     CHECK(root_array_available());
-    static_assert(IsolateData::GetOffset(IsolateFieldId::kFastCCallCallerPC) ==
-                  IsolateData::GetOffset(IsolateFieldId::kFastCCallCallerFP) +
+    // Note that the field for PC is just before the FP. This ensures that in
+    // simulator builds the `Stp` below stores the PC (the lower address) first
+    // and only then the FP. This is necessary because during profiling we
+    // assume that once the FP field is set, the PC is also set already.
+    static_assert(IsolateData::GetOffset(IsolateFieldId::kFastCCallCallerFP) ==
+                  IsolateData::GetOffset(IsolateFieldId::kFastCCallCallerPC) +
                       8);
-    Stp(fp, pc_scratch,
-        ExternalReferenceAsOperand(IsolateFieldId::kFastCCallCallerFP));
+    Stp(pc_scratch, fp,
+        ExternalReferenceAsOperand(IsolateFieldId::kFastCCallCallerPC));
   }
 
   // Call directly. The function called cannot cause a GC, or allow preemption,
@@ -4037,7 +4041,7 @@ void MacroAssembler::ResolveCodePointerHandle(Register destination,
   DCHECK(!AreAliased(handle, destination));
 
   Register table = destination;
-  Mov(table, ExternalReference::code_pointer_table_address());
+  LoadCodePointerTableBase(table);
   Mov(handle, Operand(handle, LSR, kCodePointerHandleShift));
   Add(destination, table, Operand(handle, LSL, kCodePointerTableEntrySizeLog2));
   Ldr(destination,
@@ -4055,7 +4059,7 @@ void MacroAssembler::LoadCodeEntrypointViaCodePointer(Register destination,
   ASM_CODE_COMMENT(this);
   UseScratchRegisterScope temps(this);
   Register scratch = temps.AcquireX();
-  Mov(scratch, ExternalReference::code_pointer_table_address());
+  LoadCodePointerTableBase(scratch);
   Ldr(destination.W(), field_operand);
   // TODO(saelo): can the offset computation be done more efficiently?
   Mov(destination, Operand(destination, LSR, kCodePointerHandleShift));
@@ -4065,6 +4069,26 @@ void MacroAssembler::LoadCodeEntrypointViaCodePointer(Register destination,
     Mov(scratch, Immediate(tag));
     Eor(destination, destination, scratch);
   }
+}
+
+void MacroAssembler::LoadCodePointerTableBase(Register destination) {
+#ifdef V8_COMPRESS_POINTERS_IN_MULTIPLE_CAGES
+  if (!options().isolate_independent_code && isolate()) {
+    // Embed the code pointer table address into the code.
+    Mov(destination,
+        ExternalReference::code_pointer_table_base_address(isolate()));
+  } else {
+    // Force indirect load via root register as a workaround for
+    // isolate-independent code (for example, for Wasm).
+    Ldr(destination,
+        ExternalReferenceAsOperand(
+            ExternalReference::address_of_code_pointer_table_base_address(),
+            destination));
+  }
+#else
+  // Embed the code pointer table address into the code.
+  Mov(destination, ExternalReference::global_code_pointer_table_base_address());
+#endif  // V8_COMPRESS_POINTERS_IN_MULTIPLE_CAGES
 }
 #endif  // V8_ENABLE_SANDBOX
 
@@ -4374,7 +4398,7 @@ void MacroAssembler::Abort(AbortReason reason) {
   }
 
   // Without debug code, save the code size and just trap.
-  if (!v8_flags.debug_code) {
+  if (!v8_flags.debug_code || v8_flags.trap_on_abort) {
     Brk(0);
     return;
   }

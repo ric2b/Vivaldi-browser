@@ -295,6 +295,7 @@
 <translation id="2867808975387772810">قائمة مراجع</translation>
 <translation id="2873259058405069099">الانتقال إلى بداية الجدول</translation>
 <translation id="287383510823843610">برتقالي داكن</translation>
+<translation id="2876760662374103627">ميزة "التحكّم بالوجه" مفعَّلة</translation>
 <translation id="2879867157561757640">التمرير السريع بثلاثة أصابع إلى الأسفل</translation>
 <translation id="288178314850623291">‏استخدم أوامر الانتقال السريع للتخطي إلى أنواع محددة من العناصر. للانتقال السريع للأمام بين العناوين، اضغط على بحث + H، أو للانتقال السريع للخلف، اضغط على بحث + Shift + H.</translation>
 <translation id="2885764457467528513">{COUNT,plural, =1{دقيقة واحدة}zero{دقائق}two{دقيقتان}few{دقائق}many{دقيقةً}other{دقيقة}}</translation>
@@ -1114,6 +1115,7 @@
 <translation id="8316881042119029234">برتقالي مصفر عتيق</translation>
 <translation id="8326783648485765113">أخضر عشبي</translation>
 <translation id="8345569862449483843">{COUNT,plural, =1{علامة جنيه واحدة}zero{# pound signs}two{علامتا جنيه (#)}few{# علامات جنيه}many{# علامة جنيه}other{# من علامات الجنيه}}</translation>
+<translation id="8351821207686449674">عرض الشرح أو إخفاؤه</translation>
 <translation id="8378855320830505539">منطقة</translation>
 <translation id="8382679411218029383">إكمال تلقائي على السطر وعلى هيئة قائمة</translation>
 <translation id="8394908167088220973">تشغيل/إيقاف الوسائط</translation>

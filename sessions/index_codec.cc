@@ -110,7 +110,7 @@ bool IndexCodec::GetVersion(std::string* version, const base::Value& value) {
 
 bool IndexCodec::Decode(Index_Node* items,
                         const base::FilePath& directory,
-                        const base::FilePath::StringPieceType& index_name) {
+                        const base::FilePath::StringViewType& index_name) {
   AddToParent(items, directory, false);
   std::unique_ptr<Index_Node> trash = std::make_unique<Index_Node>(
       Index_Node::trash_node_guid(), Index_Node::trash_node_id(),
@@ -362,7 +362,7 @@ void IndexCodec::GetSessionContentInfo(base::FilePath name,
   std::vector<std::unique_ptr<sessions::SessionCommand>> commands;
   commands.swap(cmds);
   sessions::IdToSessionTab tabs;
-  sessions::TokenToSessionTabGroup tab_groups;
+  sessions::GroupIdToSessionTabGroup tab_groups;
   sessions::IdToSessionWindow windows;
   SessionID active_window_id = SessionID::InvalidValue();
   sessions::VivaldiCreateTabsAndWindows(commands, &tabs, &tab_groups, &windows,

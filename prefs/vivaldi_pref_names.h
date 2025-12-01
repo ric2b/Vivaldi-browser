@@ -56,6 +56,7 @@ extern const char kVivaldiNoteCachedTopMostRow[];
 extern const char kVivaldiNoteCachedFolderId[];
 extern const char kVivaldiNotesSortingMode[];
 extern const char kVivaldiNotesSortingOrder[];
+extern const char kVivaldiNotesShowMarkdownEditor[];
 
 // Setting for folder visiblity on bookmark folder page
 extern const char kVivaldiBookmarkFoldersViewMode[];
@@ -93,6 +94,8 @@ extern const char kVivaldiNewTabSetting[];
 extern const char kVivaldiHomepageURL[];
 // Show Homepage Button
 extern const char kVivaldiHomepageEnabled[];
+// Allow audio to play in background tab
+extern const char kVivaldiBackgroundAudioEnabled[];
 
 // Apearance
 // Selected browser theme i.e. Light, Dark, System
@@ -124,6 +127,8 @@ extern const char kVivaldiStartPageShowFrequentlyVisited[];
 extern const char kVivaldiStartPageShowSpeedDials[];
 // Start page show/hide customize button
 extern const char kVivaldiStartPageShowCustomizeButton[];
+// Start page show/hide Add button
+extern const char kVivaldiStartPageShowAddButton[];
 // Start page Custom background Image
 extern const char kVivaldiStartpagePortraitImage[];
 extern const char kVivaldiStartpageLandscapeImage[];

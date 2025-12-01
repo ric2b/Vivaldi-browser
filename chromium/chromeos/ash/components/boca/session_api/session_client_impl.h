@@ -8,6 +8,7 @@
 #include <memory>
 
 #include "base/functional/callback_forward.h"
+#include "student_heartbeat_request.h"
 
 namespace google_apis {
 class RequestSender;
@@ -21,6 +22,8 @@ class UpdateSessionRequest;
 class UpdateStudentActivitiesRequest;
 class UploadTokenRequest;
 class JoinSessionRequest;
+class StudentHeartbeatRequest;
+class AddStudentsRequest;
 
 class SessionClientImpl {
  public:
@@ -39,7 +42,10 @@ class SessionClientImpl {
   virtual void UpdateStudentActivity(
       std::unique_ptr<UpdateStudentActivitiesRequest> request);
   virtual void RemoveStudent(std::unique_ptr<RemoveStudentRequest> request);
+  virtual void AddStudents(std::unique_ptr<AddStudentsRequest> request);
   virtual void JoinSession(std::unique_ptr<JoinSessionRequest> request);
+  virtual void StudentHeartbeat(
+      std::unique_ptr<StudentHeartbeatRequest> request);
   google_apis::RequestSender* sender() { return sender_.get(); }
 
  private:

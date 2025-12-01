@@ -24,6 +24,7 @@
 #include "media/base/media_log.h"
 #include "media/base/media_switches.h"
 #include "media/base/media_util.h"
+#include "media/gpu/chromeos/default_video_frame_converter.h"
 #include "media/gpu/chromeos/dmabuf_video_frame_pool.h"
 #include "media/gpu/chromeos/frame_registry.h"
 #include "media/gpu/chromeos/image_processor.h"
@@ -133,45 +134,6 @@ int GetMaxNumDecoderInstances(const gpu::GpuDriverBugWorkarounds& workarounds) {
   return kDefaultMaxNumDecoderInstances;
 }
 
-// DefaultFrameConverter uses the FrameResource built-in converters to handle
-// conversion to VideoFrame objects. It is used by VideoDecoderPipeline when a
-// client doesn't specify a FrameConverter.
-class DefaultFrameConverter : public FrameResourceConverter {
- public:
-  static std::unique_ptr<FrameResourceConverter> Create() {
-    return base::WrapUnique<FrameResourceConverter>(
-        new DefaultFrameConverter());
-  }
-
-  DefaultFrameConverter(const DefaultFrameConverter&) = delete;
-  DefaultFrameConverter& operator=(const DefaultFrameConverter&) = delete;
-
- private:
-  DefaultFrameConverter() = default;
-  ~DefaultFrameConverter() override = default;
-
-  // FrameConverter overrides.
-  void ConvertFrameImpl(scoped_refptr<FrameResource> frame) override {
-    DVLOGF(4);
-
-    if (!frame) {
-      return OnError(FROM_HERE, "Invalid frame.");
-    }
-    LOG_ASSERT(frame->AsVideoFrameResource() ||
-               frame->AsNativePixmapFrameResource())
-        << "|frame| is expected to be a VideoFrameResource or "
-           "NativePixmapFrameResource";
-    scoped_refptr<VideoFrame> video_frame =
-        frame->AsVideoFrameResource()
-            ? frame->AsVideoFrameResource()->GetMutableVideoFrame()
-            : frame->AsNativePixmapFrameResource()->CreateVideoFrame();
-    if (!video_frame) {
-      return OnError(FROM_HERE,
-                     "Failed to convert FrameResource to VideoFrame.");
-    }
-    Output(std::move(video_frame));
-  }
-};
 }  //  namespace
 
 VideoDecoderMixin::VideoDecoderMixin(
@@ -255,7 +217,7 @@ std::unique_ptr<VideoDecoder> VideoDecoderPipeline::Create(
     std::unique_ptr<FrameResourceConverter> frame_converter,
     std::vector<Fourcc> renderable_fourccs,
     std::unique_ptr<MediaLog> media_log,
-    mojo::PendingRemote<stable::mojom::StableVideoDecoder> oop_video_decoder,
+    mojo::PendingRemote<mojom::VideoDecoder> oop_video_decoder,
     bool in_video_decoder_process) {
   DCHECK(client_task_runner);
   DCHECK(frame_pool);
@@ -362,7 +324,7 @@ std::unique_ptr<VideoDecoder> VideoDecoderPipeline::CreateForTesting(
   auto* pipeline = new VideoDecoderPipeline(
       std::move(decoder_reservation), gpu::GpuDriverBugWorkarounds(),
       std::move(client_task_runner), std::make_unique<PlatformVideoFramePool>(),
-      /*frame_converter=*/nullptr,
+      DefaultFrameConverter::Create(),
       VideoDecoderPipeline::DefaultPreferredRenderableFourccs(),
       std::move(media_log), std::move(create_decoder_function_cb),
       /*uses_oop_video_decoder=*/false,
@@ -389,9 +351,8 @@ std::vector<Fourcc> VideoDecoderPipeline::DefaultPreferredRenderableFourccs() {
 
 // static
 void VideoDecoderPipeline::NotifySupportKnown(
-    mojo::PendingRemote<stable::mojom::StableVideoDecoder> oop_video_decoder,
-    base::OnceCallback<
-        void(mojo::PendingRemote<stable::mojom::StableVideoDecoder>)> cb) {
+    mojo::PendingRemote<mojom::VideoDecoder> oop_video_decoder,
+    base::OnceCallback<void(mojo::PendingRemote<mojom::VideoDecoder>)> cb) {
   if (oop_video_decoder) {
     OOPVideoDecoder::NotifySupportKnown(std::move(oop_video_decoder),
                                         std::move(cb));
@@ -483,8 +444,7 @@ VideoDecoderPipeline::VideoDecoderPipeline(
               ? client_task_runner_
               : GetDecoderTaskRunner(in_video_decoder_process)),
       main_frame_pool_(std::move(frame_pool)),
-      frame_converter_(frame_converter ? std::move(frame_converter)
-                                       : DefaultFrameConverter::Create()),
+      frame_converter_(std::move(frame_converter)),
       renderable_fourccs_(std::move(renderable_fourccs)),
       media_log_(std::move(media_log)),
       create_decoder_function_cb_(std::move(create_decoder_function_cb)),
@@ -495,6 +455,7 @@ VideoDecoderPipeline::VideoDecoderPipeline(
   DETACH_FROM_SEQUENCE(decoder_sequence_checker_);
   DCHECK(main_frame_pool_);
   DCHECK(client_task_runner_);
+  CHECK(frame_converter_);
   DVLOGF(2);
 
   decoder_weak_this_ = decoder_weak_this_factory_.GetWeakPtr();
@@ -982,6 +943,8 @@ void VideoDecoderPipeline::OnFrameConverted(
   // Flag that the video frame was decoded in a power efficient way.
   video_frame->metadata().power_efficient = true;
 
+  video_frame->metadata().read_lock_fences_enabled = true;
+
   // MojoVideoDecoderService expects the |output_cb_| to be called on the client
   // task runner, even though media::VideoDecoder states frames should be output
   // without any thread jumping.
@@ -1182,14 +1145,7 @@ VideoDecoderPipeline::PickDecoderOutputFormat(
     main_frame_pool_.reset();
     return *viable_candidate;
   }
-#elif BUILDFLAG(IS_CHROMEOS_LACROS)
-  // Lacros should always use a PlatformVideoFramePool outside of tests (because
-  // it doesn't need to handle ARC++/ARCVM requests) with no custom allocator
-  // (because buffers are allocated with minigbm).
-  CHECK(!allocator.has_value());
-  CHECK(main_frame_pool_->AsPlatformVideoFramePool() ||
-        main_frame_pool_->IsFakeVideoFramePool());
-#elif BUILDFLAG(IS_CHROMEOS_ASH)
+#elif BUILDFLAG(IS_CHROMEOS)
   // Ash Chrome can use any type of frame pool (because it may get requests from
   // ARC++/ARCVM) but never a custom allocator.
   CHECK(!allocator.has_value());
@@ -1256,9 +1212,8 @@ VideoDecoderPipeline::PickDecoderOutputFormat(
     // that callers of this method don't need to inspect GetGpuBufferLayout()
     // of this class' GetVideoFramePool().
 
-#if BUILDFLAG(USE_VAAPI) && BUILDFLAG(IS_CHROMEOS_ASH)
-    // Linux and Lacros do not check the modifiers,
-    // since they do not set any.
+#if BUILDFLAG(USE_VAAPI) && BUILDFLAG(IS_CHROMEOS)
+    // Linux does not check the modifiers since it does not set any.
     const GpuBufferLayout layout(std::move(status_or_layout).value());
     if (layout.modifier() == viable_candidate->modifier) {
       return *viable_candidate;
@@ -1275,7 +1230,7 @@ VideoDecoderPipeline::PickDecoderOutputFormat(
     }
 #else
     return *viable_candidate;
-#endif  // BUILDFLAG(USE_VAAPI) && BUILDFLAG(IS_CHROMEOS_ASH)
+#endif  // BUILDFLAG(USE_VAAPI) && BUILDFLAG(IS_CHROMEOS)
   }
 
   // We haven't found a |viable_candidate|, and need to instantiate an

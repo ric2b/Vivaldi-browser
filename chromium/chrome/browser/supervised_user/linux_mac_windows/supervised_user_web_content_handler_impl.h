@@ -9,6 +9,8 @@
 
 #include "base/memory/weak_ptr.h"
 #include "chrome/browser/supervised_user/chrome_supervised_user_web_content_handler_base.h"
+#include "chrome/browser/supervised_user/linux_mac_windows/parent_access_dialog_result_observer.h"
+#include "ui/views/widget/widget.h"
 
 namespace content {
 class WebContents;
@@ -19,7 +21,7 @@ class UrlFormatter;
 }  // namespace supervised_user
 
 class ParentAccessView;
-class ParentAccessDialogWebContentsObserver;
+class ParentAccessDialogResultObserver;
 
 // Windows / Mac / Linux implementation of web content handler, which
 // forces unsupported methods to fail.
@@ -44,19 +46,38 @@ class SupervisedUserWebContentHandlerImpl
       ApprovalRequestInitiatedCallback callback) override;
   void MaybeCloseLocalApproval() override;
 
- private:
-  void CreateObserverFromContents(base::TimeTicks start_time,
-                                  const GURL& target_url,
-                                  content::WebContents* contents);
+  content::WebContents* GetObserverContentsForTesting() {
+    CHECK(dialog_web_contents_observer_);
+    return dialog_web_contents_observer_->GetWebContentsForTesting();
+  }
 
-  void CompleteUrlApprovalAndCloseDialog(
+  base::WeakPtr<ParentAccessView> GetWeakParentAccessViewForTesting() {
+    return weak_parent_access_view_;
+  }
+
+ private:
+  void StartObservingPacpContents(content::WebContents* contents);
+
+  void CompleteUrlApprovalAndCloseOrUpdateDialog(
       const GURL& target_url,
       base::TimeTicks start_time,
-      supervised_user::LocalApprovalResult result);
+      supervised_user::LocalApprovalResult result,
+      std::optional<supervised_user::LocalWebApprovalErrorType> error_type);
 
   void CloseDialog();
+  void DisplayErrorMessageInDialog();
 
-  std::unique_ptr<ParentAccessDialogWebContentsObserver>
+  // Aborts the local web approval flow with an Error result and closes any open
+  // parent approval dialog.
+  void AbortUrlApprovalDialogOnTimeout();
+
+  // Stops WebContents observation by the `dialog_web_contents_observer_`
+  // and resets the unique pointer.
+  void ResetDialogResultContentObserver();
+
+  bool IsLocalApprovalInProgress();
+
+  std::unique_ptr<ParentAccessDialogResultObserver>
       dialog_web_contents_observer_;
   base::WeakPtr<ParentAccessView> weak_parent_access_view_;
   base::WeakPtrFactory<SupervisedUserWebContentHandlerImpl> weak_ptr_factory_{

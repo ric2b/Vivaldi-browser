@@ -376,6 +376,54 @@ class BleServerSocket {
   virtual Exception Close() = 0;
 };
 
+// A BLE L2CAP client socket for requesting L2CAP socket.
+class BleL2capSocket {
+ public:
+  virtual ~BleL2capSocket() = default;
+
+  // Returns the InputStream of the BleL2capSocket.
+  // On error, returned stream will report Exception::kIo on any operation.
+  //
+  // The returned object is not owned by the caller, and can be invalidated once
+  // the BleL2capSocket object is destroyed.
+  virtual InputStream& GetInputStream() = 0;
+
+  // Returns the OutputStream of the BleL2capSocket.
+  // On error, returned stream will report Exception::kIo on any operation.
+  //
+  // The returned object is not owned by the caller, and can be invalidated once
+  // the BleL2capSocket object is destroyed.
+  virtual OutputStream& GetOutputStream() = 0;
+
+  // Returns Exception::kIo on error, Exception::kSuccess otherwise.
+  virtual Exception Close() = 0;
+
+  // Sets the close notifier by client side.
+  virtual void SetCloseNotifier(absl::AnyInvocable<void()> notifier) {}
+
+  // Returns valid BlePeripheral pointer if there is a connection, and
+  // nullptr otherwise.
+  virtual BlePeripheral* GetRemotePeripheral() = 0;
+};
+
+// A BLE L2CAP server socket for listening incoming L2CAP socket.
+class BleL2capServerSocket {
+ public:
+  virtual ~BleL2capServerSocket() = default;
+
+  // Blocks until either:
+  // - at least one incoming connection request is available, or
+  // - ServerSocket is closed.
+  // On success, returns connected socket, ready to exchange data.
+  // Returns nullptr on error.
+  // Once error is reported, it is permanent, and L2CAP ServerSocket has to be
+  // closed.
+  virtual std::unique_ptr<BleL2capSocket> Accept() = 0;
+
+  // Closes the L2CAP server socket.
+  virtual Exception Close() = 0;
+};
+
 // The main BLE medium used inside of Nearby. This serves as the entry point
 // for all BLE and GATT related operations.
 class BleMedium {
@@ -398,7 +446,7 @@ class BleMedium {
     absl::AnyInvocable<absl::Status()> stop_advertising;
   };
 
-  // Async interface for StartAdertising.
+  // Async interface for StartAdvertising.
   // Result status will be passed to start_advertising_result callback.
   // To stop advertising, invoke the stop_advertising callback in
   // AdvertisingSession.
@@ -445,6 +493,20 @@ class BleMedium {
                              TxPowerLevel tx_power_level,
                              ScanCallback callback) = 0;
 
+  // Starts multiple services scanning and returns whether or not it was
+  // successful.
+  //
+  // service_uuids: The UUIDs of the services to scan for. They are logical OR'd
+  // together.
+  // tx_power_level: The power level to use for the scan.
+  // callback: The callback to invoke for every discovered advertisement.
+
+  virtual bool StartMultipleServicesScanning(
+      const std::vector<Uuid>& service_uuids, TxPowerLevel tx_power_level,
+      ScanCallback callback) {
+    return false;
+  }
+
   // https://developer.android.com/reference/android/bluetooth/le/BluetoothLeScanner.html#stopScan(android.bluetooth.le.ScanCallback)
   //
   // Stops scanning.
@@ -460,8 +522,8 @@ class BleMedium {
     absl::AnyInvocable<void(BlePeripheral& peripheral,
                             BleAdvertisementData advertisement_data)>
         advertisement_found_cb = [](BlePeripheral&, BleAdvertisementData) {};
-    absl::AnyInvocable<void(BlePeripheral& peripheral)>
-        advertisement_lost_cb = [](BlePeripheral&) {};
+    absl::AnyInvocable<void(BlePeripheral& peripheral)> advertisement_lost_cb =
+        [](BlePeripheral&) {};
   };
 
   // Async interface for StartScanning.
@@ -501,6 +563,15 @@ class BleMedium {
   virtual std::unique_ptr<BleServerSocket> OpenServerSocket(
       const std::string& service_id) = 0;
 
+  // Opens a BLE l2cap server socket based on service ID.
+  //
+  // On success, returns a new BleL2capServerSocket.
+  // On error, returns nullptr.
+  virtual std::unique_ptr<BleL2capServerSocket> OpenL2capServerSocket(
+      const std::string& service_id) {
+    return nullptr;
+  }
+
   // Connects to a BLE peripheral.
   //
   // On success, returns a new BleSocket.
@@ -508,6 +579,16 @@ class BleMedium {
   virtual std::unique_ptr<BleSocket> Connect(
       const std::string& service_id, TxPowerLevel tx_power_level,
       BlePeripheral& peripheral, CancellationFlag* cancellation_flag) = 0;
+
+  // Connects to a BLE peripheral over L2CAP.
+  //
+  // On success, returns a new BleL2capSocket.
+  // On error, returns nullptr.
+  virtual std::unique_ptr<BleL2capSocket> ConnectOverL2cap(
+      const std::string& service_id, TxPowerLevel tx_power_level,
+      BlePeripheral& peripheral, CancellationFlag* cancellation_flag) {
+    return nullptr;
+  }
 
   // Requests if support extended advertisement.
   virtual bool IsExtendedAdvertisementsAvailable() = 0;
@@ -524,6 +605,9 @@ class BleMedium {
   // Otherwise, does not call the callback and returns false.
   virtual bool GetRemotePeripheral(BlePeripheral::UniqueId id,
                                    GetRemotePeripheralCallback callback) = 0;
+
+  virtual void AddAlternateUuidForService(uint16_t uuid,
+                                          const std::string& service_id) {}
 };
 
 }  // namespace ble_v2

@@ -27,7 +27,7 @@ proposal_flags = [
     {
         'name': 'memory64',
         # The memory64 repository is rebased on exnref, so also enable that.
-        'flags': ['--experimental-wasm-memory64', '--experimental-wasm-exnref']
+        'flags': ['--experimental-wasm-exnref']
     },
     {
         'name': 'extended-const',
@@ -48,6 +48,14 @@ proposal_flags = [
     {
         'name': 'exception-handling',
         'flags': ['--experimental-wasm-exnref']
+    },
+]
+
+
+wpt_flags = [
+    {
+        'name': 'memory',
+        'flags': ['--experimental-wasm-rab-integration', '--wasm-staging']
     },
 ]
 
@@ -127,6 +135,9 @@ class TestCase(testcase.D8TestCase):
     for proposal in proposal_flags:
       if get_proposal_identifier(proposal) in self.name:
         return proposal['flags']
+    for wpt_entry in wpt_flags:
+      if f"wpt/{wpt_entry['name']}" in self.name:
+        return wpt_entry['flags']
     return ['--wasm-staging']
 
   def _get_source_path(self):

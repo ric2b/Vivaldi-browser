@@ -58,8 +58,7 @@ std::optional<MoqtAnnounceErrorReason> ChatClient::OnIncomingAnnounce(
   if (!track_name.has_value()) {
     std::cout << "ANNOUNCE rejected, invalid namespace\n";
     return std::make_optional<MoqtAnnounceErrorReason>(
-        MoqtAnnounceErrorCode::kNotASubscribedNamespace,
-        "Not a subscribed namespace");
+        SubscribeErrorCode::kDoesNotExist, "Not a subscribed namespace");
   }
   if (other_users_.contains(*track_name)) {
     std::cout << "Duplicate ANNOUNCE, send OK and ignore\n";
@@ -70,7 +69,7 @@ std::optional<MoqtAnnounceErrorReason> ChatClient::OnIncomingAnnounce(
                  "do not subscribe\n";
     return std::nullopt;
   }
-  if (session_->SubscribeCurrentGroup(
+  if (session_->SubscribeCurrentObject(
           *track_name, &remote_track_visitor_,
           MoqtSubscribeParameters{std::string(GetUsername(my_track_name_)),
                                   std::nullopt, std::nullopt, std::nullopt})) {
@@ -111,6 +110,12 @@ ChatClient::ChatClient(const quic::QuicServerId& server_id,
     std::cout << "Session established\n";
     session_is_open_ = true;
   };
+  session_callbacks_.goaway_received_callback =
+      [](absl::string_view new_session_uri) {
+        std::cout << "GoAway received, new session uri = " << new_session_uri
+                  << "\n";
+        // TODO (martinduke): Connect to the new session uri.
+      };
   session_callbacks_.session_terminated_callback =
       [this](absl::string_view error_message) {
         std::cerr << "Closed session, reason = " << error_message << "\n";

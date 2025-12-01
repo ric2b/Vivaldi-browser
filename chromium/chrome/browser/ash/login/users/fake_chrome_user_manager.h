@@ -23,6 +23,7 @@ class Profile;
 
 namespace ash {
 
+// DEPRECATED: please use UserManagerImpl with TestHelper.
 // Fake chrome user manager with a barebones implementation. Users can be added
 // and set as logged in, and those users can be returned.
 class FakeChromeUserManager : public user_manager::UserManagerImpl {
@@ -68,23 +69,20 @@ class FakeChromeUserManager : public user_manager::UserManagerImpl {
   void SimulateUserProfileLoad(const AccountId& account_id);
 
   // user_manager::UserManager override.
-  const user_manager::UserList& GetUsers() const override;
   user_manager::UserList GetUsersAllowedForMultiUserSignIn() const override;
   const user_manager::UserList& GetLoggedInUsers() const override;
   const user_manager::UserList& GetLRULoggedInUsers() const override;
   user_manager::UserList GetUnlockUsers() const override;
   const AccountId& GetLastSessionActiveAccountId() const override;
   void UserLoggedIn(const AccountId& account_id,
-                    const std::string& user_id_hash,
-                    bool browser_restart,
-                    bool is_child) override;
+                    const std::string& user_id_hash) override;
+  bool EnsureUser(const AccountId& account_id,
+                  user_manager::UserType user_type,
+                  bool is_ephemeral) override;
   void SwitchActiveUser(const AccountId& account_id) override;
   void SwitchToLastActiveUser() override;
   void OnSessionStarted() override;
   bool IsKnownUser(const AccountId& account_id) const override;
-  const user_manager::User* FindUser(
-      const AccountId& account_id) const override;
-  user_manager::User* FindUserAndModify(const AccountId& account_id) override;
   const user_manager::User* GetActiveUser() const override;
   user_manager::User* GetActiveUser() override;
   const user_manager::User* GetPrimaryUser() const override;

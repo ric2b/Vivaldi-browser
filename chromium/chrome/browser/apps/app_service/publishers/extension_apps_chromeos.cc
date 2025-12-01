@@ -4,6 +4,7 @@
 
 #include "chrome/browser/apps/app_service/publishers/extension_apps_chromeos.h"
 
+#include <cstddef>
 #include <memory>
 #include <optional>
 #include <string>
@@ -32,6 +33,7 @@
 #include "chrome/browser/apps/app_service/launch_utils.h"
 #include "chrome/browser/apps/app_service/menu_util.h"
 #include "chrome/browser/apps/app_service/metrics/app_service_metrics.h"
+#include "chrome/browser/apps/app_service/publishers/chrome_app_deprecation.h"
 #include "chrome/browser/apps/app_service/publishers/extension_apps_util.h"
 #include "chrome/browser/ash/app_list/arc/arc_app_utils.h"
 #include "chrome/browser/ash/app_list/extension_app_utils.h"
@@ -82,6 +84,7 @@
 #include "extensions/browser/app_window/app_window.h"
 #include "extensions/browser/extension_system.h"
 #include "extensions/browser/extension_util.h"
+#include "extensions/browser/launch_util.h"
 #include "extensions/browser/management_policy.h"
 #include "extensions/browser/path_util.h"
 #include "extensions/browser/ui_util.h"
@@ -301,7 +304,6 @@ void ExtensionAppsChromeOs::Initialize() {
   }
 }
 
-#if BUILDFLAG(IS_CHROMEOS)
 void ExtensionAppsChromeOs::GetCompressedIconData(
     const std::string& app_id,
     int32_t size_in_dip,
@@ -310,7 +312,6 @@ void ExtensionAppsChromeOs::GetCompressedIconData(
   apps::GetChromeAppCompressedIconData(profile(), app_id, size_in_dip,
                                        scale_factor, std::move(callback));
 }
-#endif
 
 void ExtensionAppsChromeOs::LaunchAppWithParamsImpl(AppLaunchParams&& params,
                                                     LaunchCallback callback) {
@@ -856,6 +857,10 @@ void ExtensionAppsChromeOs::OnSystemFeaturesPrefChanged() {
   UpdateAppDisabledState(disabled_system_features_pref,
                          static_cast<int>(policy::SystemFeature::kWebStore),
                          extensions::kWebStoreAppId, is_disabled_mode_changed);
+  UpdateAppDisabledState(disabled_system_features_pref,
+                         static_cast<int>(policy::SystemFeature::kTextEditor),
+                         extension_misc::kTextEditorAppId,
+                         is_disabled_mode_changed);
 }
 
 bool ExtensionAppsChromeOs::Accepts(const extensions::Extension* extension) {
@@ -1065,6 +1070,11 @@ void ExtensionAppsChromeOs::RegisterInstance(extensions::AppWindow* app_window,
 
 content::WebContents* ExtensionAppsChromeOs::LaunchImpl(
     AppLaunchParams&& params) {
+  if (chrome_app_deprecation::HandleDeprecation(params.app_id, profile()) ==
+      chrome_app_deprecation::DeprecationStatus::kLaunchBlocked) {
+    return nullptr;
+  }
+
   AppLaunchParams params_for_restore(
       params.app_id, params.container, params.disposition, params.launch_source,
       params.display_id, params.launch_files, params.intent);

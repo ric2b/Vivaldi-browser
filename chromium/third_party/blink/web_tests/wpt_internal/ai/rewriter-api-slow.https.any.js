@@ -6,14 +6,14 @@ const kTestInputString = 'hello';
 const kTestContextString = 'Hello world.';
 
 promise_test(async () => {
-  const rewriter = await ai.rewriter.create();
+  const rewriter = await Rewriter.create();
   const result =
       await rewriter.rewrite(kTestInputString, {context: kTestContextString});
   assert_equals(typeof result, 'string');
-}, 'Simple AIRewriter.rewrite() call');
+}, 'Simple Rewriter.rewrite() call');
 
 promise_test(async () => {
-  const rewriter = await ai.rewriter.create();
+  const rewriter = await Rewriter.create();
   const streamingResponse = rewriter.rewriteStreaming(
       kTestInputString, {context: kTestContextString});
   assert_equals(
@@ -23,11 +23,11 @@ promise_test(async () => {
   for await (const chunk of streamingResponse) {
     result += chunk;
   }
-  assert_true(result.length > 0);
-}, 'Simple AIRewriter.rewriteStreaming() call');
+  assert_greater_than(result.length, 0);
+}, 'Simple Rewriter.rewriteStreaming() call');
 
 promise_test(async (t) => {
-  const rewriter = await ai.rewriter.create();
+  const rewriter = await Rewriter.create();
   const controller = new AbortController();
   const streamingResponse = rewriter.rewriteStreaming(
       kTestInputString,
@@ -35,4 +35,4 @@ promise_test(async (t) => {
   for await (const chunk of streamingResponse) {
   }
   controller.abort();
-}, 'Aborting AIRewriter.rewriteStreaming() after finished reading');
+}, 'Aborting Rewriter.rewriteStreaming() after finished reading');

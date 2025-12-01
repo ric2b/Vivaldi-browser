@@ -7,7 +7,7 @@ buffer f_a_block_ssbo {
   int inner;
 } v;
 bool continue_execution = true;
-uniform highp sampler2D t_s;
+uniform highp sampler2D f_t_s;
 layout(location = 0) in float tint_interstage_location0;
 layout(location = 1) in vec2 tint_interstage_location1;
 layout(location = 0) out int foo_loc0_Output;
@@ -18,12 +18,12 @@ int foo_inner(float v_1, vec2 coord) {
   if ((v_1 == 0.0f)) {
     continue_execution = false;
   }
-  int result = tint_f32_to_i32(texture(t_s, coord).x);
+  int result = tint_f32_to_i32(texture(f_t_s, coord).x);
   {
-    uvec2 tint_loop_idx = uvec2(0u);
+    uvec2 tint_loop_idx = uvec2(4294967295u);
     int i = 0;
     while(true) {
-      if (all(equal(tint_loop_idx, uvec2(4294967295u)))) {
+      if (all(equal(tint_loop_idx, uvec2(0u)))) {
         break;
       }
       if ((i < 10)) {
@@ -32,10 +32,10 @@ int foo_inner(float v_1, vec2 coord) {
       }
       result = (result + i);
       {
-        uint tint_low_inc = (tint_loop_idx.x + 1u);
+        uint tint_low_inc = (tint_loop_idx.x - 1u);
         tint_loop_idx.x = tint_low_inc;
-        uint tint_carry = uint((tint_low_inc == 0u));
-        tint_loop_idx.y = (tint_loop_idx.y + tint_carry);
+        uint tint_carry = uint((tint_low_inc == 4294967295u));
+        tint_loop_idx.y = (tint_loop_idx.y - tint_carry);
         int v_2 = 0;
         if (continue_execution) {
           v_2 = atomicAdd(v.inner, 1);

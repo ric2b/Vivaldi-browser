@@ -663,6 +663,16 @@ void ManagePasswordsUIController::UpdateIconAndBubbleState(
   }
 }
 
+void ManagePasswordsUIController::OnPasswordChangeFinishedSuccessfully() {
+  // If the password change finished successfully, don't show save/update
+  // bubble.
+  if (passwords_data_.state() ==
+          password_manager::ui::PENDING_PASSWORD_UPDATE_STATE ||
+      passwords_data_.state() == password_manager::ui::PENDING_PASSWORD_STATE) {
+    passwords_data_.TransitionToState(password_manager::ui::MANAGE_STATE);
+  }
+}
+
 base::WeakPtr<PasswordsModelDelegate>
 ManagePasswordsUIController::GetModelDelegateProxy() {
   return weak_ptr_factory_.GetWeakPtr();
@@ -1076,24 +1086,12 @@ void ManagePasswordsUIController::AuthenticateUserWithMessage(
 }
 
 void ManagePasswordsUIController::MaybeShowIOSPasswordPromo() {
-// TODO(crbug.com/339262105): Extract out of Chrome branding when the legacy
-// promo is cleaned up.
-#if BUILDFLAG(GOOGLE_CHROME_BRANDING)
   Browser* browser = chrome::FindBrowserWithTab(web_contents());
   if (!browser) {
     return;
   }
 
-  if (base::FeatureList::IsEnabled(
-          features::kIOSPromoRefreshedPasswordBubble)) {
-    ios_promos_utils::VerifyIOSPromoEligibility(IOSPromoType::kPassword,
-                                                browser);
-  } else {
-    // TODO(crbug.com/339262105): Clean up the old password promo methods after
-    // the generic promo launch.
-    browser->window()->VerifyUserEligibilityIOSPasswordPromoBubble();
-  }
-#endif  // BUILDFLAG(GOOGLE_CHROME_BRANDING)
+  ios_promos_utils::VerifyIOSPromoEligibility(IOSPromoType::kPassword, browser);
 }
 
 void ManagePasswordsUIController::RelaunchChrome() {

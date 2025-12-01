@@ -7,8 +7,8 @@ import("//third_party/jni_zero/jni_zero.gni")
 
 java_cpp_enum("autofill_generated_enums") {
   sources = [
-    "//chrome/browser/android/preferences/autofill/autofill_profile_bridge.h",
     "//chrome/browser/autofill/android/android_autofill_availability_status.h",
+    "//chrome/browser/autofill/android/autofill_profile_bridge.h",
   ]
 }
 
@@ -18,6 +18,8 @@ android_library("third_party_provider_java") {
   sources = [ "java/src/org/chromium/chrome/browser/autofill/AutofillThirdPartyModeContentProvider.java" ]
   deps = [
     "//base:base_java",
+    "//base:base_shared_preferences_java",
+    "//chrome/browser/preferences:java",
     "//third_party/android_deps:com_android_support_support_annotations_java",
   ]
 }
@@ -29,6 +31,7 @@ android_library("java") {
     "java/src/org/chromium/chrome/browser/autofill/AutofillClientProviderUtils.java",
     "java/src/org/chromium/chrome/browser/autofill/AutofillEditorBase.java",
     "java/src/org/chromium/chrome/browser/autofill/AutofillImageFetcher.java",
+    "java/src/org/chromium/chrome/browser/autofill/AutofillImageFetcherFactory.java",
     "java/src/org/chromium/chrome/browser/autofill/AutofillImageFetcherUtils.java",
     "java/src/org/chromium/chrome/browser/autofill/AutofillProfileBridge.java",
     "java/src/org/chromium/chrome/browser/autofill/AutofillUiUtils.java",
@@ -78,6 +81,7 @@ android_library("java") {
     "//chrome/browser/settings:java",
     "//chrome/browser/signin/services/android:java",
     "//chrome/browser/sync/android:java",
+    "//chrome/browser/ui/android/edge_to_edge:java",
     "//chrome/browser/ui/android/favicon:java",
     "//chrome/browser/util:java",
     "//components/autofill/android:autofill_features_java",
@@ -146,6 +150,7 @@ generate_jni("jni_headers") {
     "java/src/org/chromium/chrome/browser/autofill/AddressNormalizerFactory.java",
     "java/src/org/chromium/chrome/browser/autofill/AutofillClientProviderUtils.java",
     "java/src/org/chromium/chrome/browser/autofill/AutofillImageFetcher.java",
+    "java/src/org/chromium/chrome/browser/autofill/AutofillImageFetcherFactory.java",
     "java/src/org/chromium/chrome/browser/autofill/AutofillProfileBridge.java",
     "java/src/org/chromium/chrome/browser/autofill/PersonalDataManager.java",
     "java/src/org/chromium/chrome/browser/autofill/PhoneNumberUtil.java",
@@ -185,6 +190,7 @@ android_library("test_java") {
 
   deps = [
     ":java",
+    ":third_party_provider_java",
     "//base:base_java",
     "//base:base_java_test_support",
     "//chrome/android:chrome_java",

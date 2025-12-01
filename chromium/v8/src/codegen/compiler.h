@@ -274,20 +274,14 @@ class V8_EXPORT_PRIVATE Compiler : public AllStatic {
   static void LogFunctionCompilation(Isolate* isolate,
                                      LogEventListener::CodeTag code_type,
                                      DirectHandle<Script> script,
-                                     Handle<SharedFunctionInfo> shared,
+                                     DirectHandle<SharedFunctionInfo> shared,
                                      DirectHandle<FeedbackVector> vector,
-                                     Handle<AbstractCode> abstract_code,
+                                     DirectHandle<AbstractCode> abstract_code,
                                      CodeKind kind, double time_taken_ms);
 
   static void InstallInterpreterTrampolineCopy(
-      Isolate* isolate, Handle<SharedFunctionInfo> shared_info,
+      Isolate* isolate, DirectHandle<SharedFunctionInfo> shared_info,
       LogEventListener::CodeTag log_tag);
-
- private:
-  static std::unique_ptr<v8::tracing::TracedValue> AddScriptCompiledTrace(
-      Isolate* isolate, DirectHandle<SharedFunctionInfo> shared);
-  static void EmitScriptSourceTextTrace(
-      Isolate* isolate, DirectHandle<SharedFunctionInfo> shared);
 };
 
 // A base class for compilation jobs intended to run concurrent to the main

@@ -58,29 +58,7 @@ void RemovedPartnersTracker::Create(PrefService* prefs,
                                     bookmarks::BookmarkModel* model) {
   new RemovedPartnersTracker(prefs, model);
 }
-#endif // !IS_IOS
-
-/*static*/
-std::set<base::Uuid> RemovedPartnersTracker::ReadRemovedPartners(
-    const base::Value::List& deleted_partners,
-    bool& upgraded_old_id) {
-  upgraded_old_id = false;
-  std::set<base::Uuid> removed_partners;
-
-  for (const base::Value& deleted_partner : deleted_partners) {
-    if (!deleted_partner.is_string())
-      continue;
-    base::Uuid migrated_removed_partner =
-        base::Uuid::ParseCaseInsensitive(deleted_partner.GetString());
-    if (migrated_removed_partner.is_valid()) {
-      // Upgrade from old, locale-based id to new id.
-      upgraded_old_id = upgraded_old_id || vivaldi_partners::MapLocaleIdToUuid(
-                                               migrated_removed_partner);
-      removed_partners.insert(migrated_removed_partner);
-    }
-  }
-  return removed_partners;
-}
+#endif  // !IS_IOS
 
 #if !BUILDFLAG(IS_IOS)
 RemovedPartnersTracker::RemovedPartnersTracker(Profile* profile,
@@ -98,7 +76,7 @@ RemovedPartnersTracker::RemovedPartnersTracker(PrefService* prefs,
   if (model_->loaded())
     BookmarkModelLoaded(model);
 }
-#endif // !IS_IOS
+#endif  // !IS_IOS
 
 RemovedPartnersTracker::~RemovedPartnersTracker() {
   model_->RemoveObserver(this);
@@ -133,12 +111,12 @@ void RemovedPartnersTracker::BookmarkMetaInfoChanged(
   change_filter_.reset();
 }
 
-void RemovedPartnersTracker::BookmarkModelLoaded(
-    bool ids_reassigned) {
+void RemovedPartnersTracker::BookmarkModelLoaded(bool ids_reassigned) {
   const base::Value::List& deleted_partners =
       prefs_->GetList(vivaldiprefs::kBookmarksDeletedPartners);
   bool upgraded_old_id;
-  removed_partners_ = ReadRemovedPartners(deleted_partners, upgraded_old_id);
+  removed_partners_ = vivaldi_default_bookmarks::ReadRemovedPartners(
+      deleted_partners, upgraded_old_id);
   if (upgraded_old_id)
     SaveRemovedPartners();
 }
@@ -189,6 +167,6 @@ void RemovedPartnersTracker::OnProfileMarkedForPermanentDeletion(
     delete this;
   }
 }
-#endif // !BUILDFLAG(IS_IOS)
+#endif  // !BUILDFLAG(IS_IOS)
 
 }  // namespace vivaldi_partners

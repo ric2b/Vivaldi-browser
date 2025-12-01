@@ -4,6 +4,7 @@ update_target("//chrome/renderer:renderer") {
   sources += [
     "//vivaldi/renderer/vivaldi_frame_service_impl.cc",
     "//vivaldi/renderer/vivaldi_frame_service_impl.h",
+    "//vivaldi/renderer/vivaldi_net_error_helper.cc",
     "//vivaldi/renderer/vivaldi_render_frame_blink_proxy_impl.cc",
     "//vivaldi/renderer/vivaldi_render_frame_blink_proxy_impl.h",
     "//vivaldi/renderer/blink/vivaldi_spatnav_quad.cc",

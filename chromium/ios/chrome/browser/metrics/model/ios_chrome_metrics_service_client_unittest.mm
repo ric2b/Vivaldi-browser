@@ -92,7 +92,7 @@ TEST_F(IOSChromeMetricsServiceClientTest, TestRegisterMetricsServiceProviders) {
 
   // This is the number of metrics providers that are registered inside
   // IOSChromeMetricsServiceClient::Initialize().
-  expected_providers += 20;
+  expected_providers += 23;
 
   std::unique_ptr<IOSChromeMetricsServiceClient> chrome_metrics_service_client =
       IOSChromeMetricsServiceClient::Create(metrics_state_manager_.get(),
@@ -136,11 +136,9 @@ TEST_F(IOSChromeMetricsServiceClientTest,
   // Verify that the UKM service is instantiated when enabled.
   EXPECT_TRUE(ukmService);
 
-  // Number of providers registered by
-  // IOSChromeMetricsServiceClient::RegisterMetricsServiceProviders(), namely
-  // CPUMetricsProvider, ScreenInfoMetricsProvider, FormFactorMetricsProvider,
-  // and FieldTrialsProvider.
-  const size_t expected_providers = 4;
+  // The number of providers registered in
+  // IOSChromeMetricsServiceClient::RegisterMetricsServiceProviders().
+  const size_t expected_providers = 6;
 
   EXPECT_EQ(expected_providers,
             ukmService->metrics_providers_.GetProviders().size());

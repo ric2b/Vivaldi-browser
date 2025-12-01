@@ -79,13 +79,14 @@
 #include "extensions/common/extension.h"
 #endif
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
 #include "chrome/browser/ash/login/users/fake_chrome_user_manager.h"
 #include "chrome/browser/ash/policy/dlp/dlp_files_controller_ash.h"
 #include "chrome/browser/chromeos/policy/dlp/dlp_file_destination.h"
 #include "chrome/browser/chromeos/policy/dlp/dlp_rules_manager.h"
 #include "chrome/browser/chromeos/policy/dlp/dlp_rules_manager_factory.h"
 #include "chrome/browser/chromeos/policy/dlp/test/mock_dlp_rules_manager.h"
+#include "components/user_manager/test_helper.h"
 #endif
 
 using download::DownloadItem;
@@ -476,6 +477,7 @@ DownloadTargetDeterminerTest::CreateActiveDownloadItem(
       .WillByDefault(Return(ui::PAGE_TRANSITION_LINK));
   ON_CALL(*item, GetURL())
       .WillByDefault(ReturnRefOfCopy(download_url));
+  ON_CALL(*item, GetOriginalUrl()).WillByDefault(ReturnRefOfCopy(download_url));
   ON_CALL(*item, GetUrlChain())
       .WillByDefault(ReturnRefOfCopy(url_chain));
   ON_CALL(*item, HasUserGesture())
@@ -2966,7 +2968,7 @@ TEST_F(DownloadTargetDeterminerTest, DetermineLocalPathReturnsContentUri) {
 }
 #endif  // BUILDFLAG(IS_ANDROID)
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
 // Tests that DLP policies are checked before determining the download path.
 class DownloadTargetDeterminerDlpTest : public DownloadTargetDeterminerTest {
  protected:
@@ -2995,13 +2997,11 @@ class DownloadTargetDeterminerDlpTest : public DownloadTargetDeterminerTest {
     AccountId account_id =
         AccountId::FromUserEmailGaiaId("test@example.com", GaiaId("12345"));
     profile_->SetIsNewProfile(true);
-    user_manager::User* user =
-        user_manager_->AddUserWithAffiliationAndTypeAndProfile(
-            account_id, /*is_affiliated=*/false,
-            user_manager::UserType::kRegular, profile_.get());
-    user_manager_->UserLoggedIn(account_id, user->username_hash(),
-                                /*browser_restart=*/false,
-                                /*is_child=*/false);
+    user_manager_->AddUserWithAffiliationAndTypeAndProfile(
+        account_id, /*is_affiliated=*/false, user_manager::UserType::kRegular,
+        profile_.get());
+    user_manager_->UserLoggedIn(
+        account_id, user_manager::TestHelper::GetFakeUsernameHash(account_id));
     user_manager_->SimulateUserProfileLoad(account_id);
   }
 

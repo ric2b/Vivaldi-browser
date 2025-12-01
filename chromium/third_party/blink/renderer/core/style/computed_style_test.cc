@@ -90,8 +90,8 @@ TEST_F(ComputedStyleTest, ShapeOutsideBoxEqual) {
 }
 
 TEST_F(ComputedStyleTest, ShapeOutsideCircleEqual) {
-  scoped_refptr<BasicShapeCircle> circle1 = BasicShapeCircle::Create();
-  scoped_refptr<BasicShapeCircle> circle2 = BasicShapeCircle::Create();
+  BasicShapeCircle* circle1 = MakeGarbageCollected<BasicShapeCircle>();
+  BasicShapeCircle* circle2 = MakeGarbageCollected<BasicShapeCircle>();
   auto* shape1 = MakeGarbageCollected<ShapeValue>(std::move(circle1),
                                                   CSSBoxType::kContent);
   auto* shape2 = MakeGarbageCollected<ShapeValue>(std::move(circle2),
@@ -104,7 +104,7 @@ TEST_F(ComputedStyleTest, ShapeOutsideCircleEqual) {
 }
 
 TEST_F(ComputedStyleTest, ClipPathEqual) {
-  scoped_refptr<BasicShapeCircle> shape = BasicShapeCircle::Create();
+  BasicShapeCircle* shape = MakeGarbageCollected<BasicShapeCircle>();
   ShapeClipPathOperation* path1 = MakeGarbageCollected<ShapeClipPathOperation>(
       shape, GeometryBox::kBorderBox);
   ShapeClipPathOperation* path2 = MakeGarbageCollected<ShapeClipPathOperation>(
@@ -1663,14 +1663,14 @@ TEST_F(ComputedStyleTest, DerivedDebugDiff) {
   ASSERT_EQ(2u, style1->DebugDiffFields(*style2).size());
 
   EXPECT_EQ(DebugField::forces_stacking_context_,
-            style1->DebugDiffFields(*style2)[0].field);
-  EXPECT_EQ("1", style1->DebugDiffFields(*style2)[0].actual);
-  EXPECT_EQ("0", style1->DebugDiffFields(*style2)[0].correct);
+            style1->DebugDiffFields(*style2)[1].field);
+  EXPECT_EQ("1", style1->DebugDiffFields(*style2)[1].actual);
+  EXPECT_EQ("0", style1->DebugDiffFields(*style2)[1].correct);
 
   EXPECT_EQ(DebugField::is_stacking_context_without_containment_,
-            style1->DebugDiffFields(*style2)[1].field);
-  EXPECT_EQ("true", style1->DebugDiffFields(*style2)[1].actual);
-  EXPECT_EQ("false", style1->DebugDiffFields(*style2)[1].correct);
+            style1->DebugDiffFields(*style2)[0].field);
+  EXPECT_EQ("true", style1->DebugDiffFields(*style2)[0].actual);
+  EXPECT_EQ("false", style1->DebugDiffFields(*style2)[0].correct);
 }
 
 TEST_F(ComputedStyleTest, DerivedDebugDiffLazy) {
@@ -1999,7 +1999,7 @@ TEST_F(ComputedStyleTest, DynamicRangeLimitMixStandardToConstrainedHigh) {
   ASSERT_NE(dynamic_range_limit_mix_value, nullptr);
 
   EXPECT_EQ(dynamic_range_limit_mix_value->CssText(),
-            "dynamic-range-limit-mix(standard 30%, constrained-high 70%)");
+            "dynamic-range-limit-mix(standard 30%, constrained 70%)");
 
   Document& document = GetDocument();
   const ComputedStyle* initial =
@@ -2033,7 +2033,7 @@ TEST_F(ComputedStyleTest, DynamicRangeLimitMixStandardToHigh) {
   ASSERT_NE(dynamic_range_limit_mix_value, nullptr);
 
   EXPECT_EQ(dynamic_range_limit_mix_value->CssText(),
-            "dynamic-range-limit-mix(standard 40%, high 60%)");
+            "dynamic-range-limit-mix(standard 40%, no-limit 60%)");
 
   Document& document = GetDocument();
   const ComputedStyle* initial =
@@ -2067,7 +2067,7 @@ TEST_F(ComputedStyleTest, DynamicRangeLimitMixConstrainedHighToHigh) {
   ASSERT_NE(dynamic_range_limit_mix_value, nullptr);
 
   EXPECT_EQ(dynamic_range_limit_mix_value->CssText(),
-            "dynamic-range-limit-mix(constrained-high 55%, high 45%)");
+            "dynamic-range-limit-mix(constrained 55%, no-limit 45%)");
 
   Document& document = GetDocument();
   const ComputedStyle* initial =
@@ -2102,7 +2102,7 @@ TEST_F(ComputedStyleTest, DynamicRangeLimitMixAllThree) {
 
   EXPECT_EQ(
       dynamic_range_limit_mix_value->CssText(),
-      "dynamic-range-limit-mix(standard 20%, constrained-high 60%, high 20%)");
+      "dynamic-range-limit-mix(standard 20%, constrained 60%, no-limit 20%)");
 
   Document& document = GetDocument();
   const ComputedStyle* initial =
@@ -2218,14 +2218,37 @@ TEST_F(ComputedStyleTest, BottomRelativeToSafeAreaInset) {
     <div id="f3" style="bottom: env(safe-area-inset-top)"></div>
     <div id="f4" style="bottom: calc(env(safe-area-inset-top))"></div>
     <div id="f5" style="bottom: calc(env(safe-area-inset-bottom) * 2)"></div>
+    <div id="f5" style="bottom: calc(env(safe-area-inset-bottom) + 2)"></div>
     <div id="f6" style="bottom: calc(-env(safe-area-inset-bottom))"></div>
+    <div id="f7" style="bottom: calc(env( safe-area-inset-bottom ,3px )*11px+ 22px+ 33px)"></div>
+    <div id="f8" style="bottom: calc(env( safe-area-inset-bottom, 2px)+ env(-foo) )"></div>
+    <div id="f9" style="bottom: calc(env( safe-area-inset-bottom, 2px)+ var(-foo) )"></div>
+    <div id="f10" style="--foo:env(safe-area-inset-bottom,2px); bottom: calc(var(--foo) - 2px)"></div>
+    <div id="f11" style="--foo:1px; bottom: calc(var(--foo) - 1px + 4 * env(safe-area-inset-bottom))"></div>
+    <div id="f12" style="--foo:3; bottom: calc(var(--foo) * env(safe-area-inset-bottom))"></div>
 
     <div id="t1" style="bottom: env(safe-area-inset-bottom)"></div>
-    <div id="t2" style="bottom:   env(  safe-area-inset-bottom, 0px)"></div>
-    <div id="t3" style="bottom: calc(env(safe-area-inset-bottom))"></div>
-    <div id="t4" style="bottom: calc( env( safe-area-inset-bottom , 0px) )"></div>
-    <div id="t5" style="bottom: calc(env(safe-area-inset-bottom, 0px)+999px)"></div>
-    <div id="t6" style="--foo:1px; bottom: calc(env(safe-area-inset-bottom, 0px)-var(--foo))"></div>
+    <div id="t2" style="bottom: env( safe-area-inset-bottom )"></div>
+    <div id="t3" style="bottom: env(safe-area-inset-bottom,0px)"></div>
+    <div id="t4" style="bottom:   env(  safe-area-inset-bottom , 2px )"></div>
+
+    <div id="t5" style="bottom: calc(env(safe-area-inset-bottom))"></div>
+    <div id="t6" style="bottom:  calc( env( safe-area-inset-bottom ) )"></div>
+    <div id="t7" style="bottom: calc(env(safe-area-inset-bottom,2px))"></div>
+    <div id="t8" style="bottom: calc( env( safe-area-inset-bottom, 2px ) )"></div>
+    <div id="t9" style="bottom: calc(1px - env(safe-area-inset-bottom, 2px))"></div>
+    <div id="t10" style="bottom: calc( env(safe-area-inset-bottom, 1px ) + 999px )"></div>
+    <div id="t11" style="bottom: calc( env(safe-area-inset-bottom ,3px) + 999px)"></div>
+    <div id="t12" style="bottom: calc(11px - 22em + env( safe-area-inset-bottom, 3px) + 35ch + 3cqw)"></div>
+    <div id="t13" style="bottom: calc(env(safe-area-inset-bottom) + env(safe-area-max-inset-bottom))"></div>
+    <div id="t14" style="bottom: calc(env(safe-area-inset-bottom, 2px) - env(safe-area-max-inset-bottom, 1px))"></div>
+
+    <div id="t15" style="--foo:1px; bottom: calc(env(safe-area-inset-bottom, 2px) - var(--foo))"></div>
+    <div id="t16" style="--foo: 1px;  bottom: calc(env(safe-area-inset-bottom,3px) - var( --foo ) - var(--foo))"></div>
+    <div id="t17" style="--foo:1px; bottom: calc(env(safe-area-inset-bottom, 3px) + var(--foo) + 1px - 2em + 3cqw)"></div>
+    <div id="t18" style="--foo:1px; bottom: calc(var(--foo) - 1px + 2em + env(safe-area-inset-bottom) + env(safe-area-max-inset-bottom))"></div>
+    <div id="t19" style="--foo:1px; bottom: calc(env(safe-area-inset-bottom) + env(safe-area-max-inset-bottom) + var(--foo)  - 1px +  2cqw)"></div>
+
   )HTML");
   document.View()->UpdateAllLifecyclePhasesForTest();
 
@@ -2235,6 +2258,12 @@ TEST_F(ComputedStyleTest, BottomRelativeToSafeAreaInset) {
   EXPECT_FALSE(StyleForElement("f4").IsBottomRelativeToSafeAreaInset());
   EXPECT_FALSE(StyleForElement("f5").IsBottomRelativeToSafeAreaInset());
   EXPECT_FALSE(StyleForElement("f6").IsBottomRelativeToSafeAreaInset());
+  EXPECT_FALSE(StyleForElement("f7").IsBottomRelativeToSafeAreaInset());
+  EXPECT_FALSE(StyleForElement("f8").IsBottomRelativeToSafeAreaInset());
+  EXPECT_FALSE(StyleForElement("f9").IsBottomRelativeToSafeAreaInset());
+  EXPECT_FALSE(StyleForElement("f10").IsBottomRelativeToSafeAreaInset());
+  EXPECT_FALSE(StyleForElement("f11").IsBottomRelativeToSafeAreaInset());
+  EXPECT_FALSE(StyleForElement("f12").IsBottomRelativeToSafeAreaInset());
 
   EXPECT_TRUE(StyleForElement("t1").IsBottomRelativeToSafeAreaInset());
   EXPECT_TRUE(StyleForElement("t2").IsBottomRelativeToSafeAreaInset());
@@ -2242,6 +2271,19 @@ TEST_F(ComputedStyleTest, BottomRelativeToSafeAreaInset) {
   EXPECT_TRUE(StyleForElement("t4").IsBottomRelativeToSafeAreaInset());
   EXPECT_TRUE(StyleForElement("t5").IsBottomRelativeToSafeAreaInset());
   EXPECT_TRUE(StyleForElement("t6").IsBottomRelativeToSafeAreaInset());
+  EXPECT_TRUE(StyleForElement("t7").IsBottomRelativeToSafeAreaInset());
+  EXPECT_TRUE(StyleForElement("t8").IsBottomRelativeToSafeAreaInset());
+  EXPECT_TRUE(StyleForElement("t9").IsBottomRelativeToSafeAreaInset());
+  EXPECT_TRUE(StyleForElement("t10").IsBottomRelativeToSafeAreaInset());
+  EXPECT_TRUE(StyleForElement("t11").IsBottomRelativeToSafeAreaInset());
+  EXPECT_TRUE(StyleForElement("t12").IsBottomRelativeToSafeAreaInset());
+  EXPECT_TRUE(StyleForElement("t13").IsBottomRelativeToSafeAreaInset());
+  EXPECT_TRUE(StyleForElement("t14").IsBottomRelativeToSafeAreaInset());
+  EXPECT_TRUE(StyleForElement("t15").IsBottomRelativeToSafeAreaInset());
+  EXPECT_TRUE(StyleForElement("t16").IsBottomRelativeToSafeAreaInset());
+  EXPECT_TRUE(StyleForElement("t17").IsBottomRelativeToSafeAreaInset());
+  EXPECT_TRUE(StyleForElement("t18").IsBottomRelativeToSafeAreaInset());
+  EXPECT_TRUE(StyleForElement("t19").IsBottomRelativeToSafeAreaInset());
 }
 
 TEST_F(ComputedStyleTest, HasEnvSafeAreaInsetBottom) {

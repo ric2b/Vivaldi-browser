@@ -26,7 +26,6 @@
 #include "ash/ime/ime_switch_type.h"
 #include "ash/public/cpp/accelerator_actions.h"
 #include "ash/public/cpp/accelerators.h"
-#include "ash/public/cpp/debug_delegate.h"
 #include "ash/public/mojom/input_device_settings.mojom-shared.h"
 #include "ash/session/session_controller_impl.h"
 #include "ash/shell.h"
@@ -771,11 +770,6 @@ bool AcceleratorControllerImpl::IsReserved(
   return action_ptr && base::Contains(reserved_actions_, *action_ptr);
 }
 
-void AcceleratorControllerImpl::SetDebugDelegate(DebugDelegate* delegate) {
-  DCHECK(!delegate || !debug_delegate_);
-  debug_delegate_ = delegate;
-}
-
 ////////////////////////////////////////////////////////////////////////////////
 // AcceleratorControllerImpl, ui::AcceleratorTarget implementation:
 
@@ -1080,6 +1074,8 @@ bool AcceleratorControllerImpl::CanPerformAction(
     case AcceleratorAction::kTakeWindowScreenshot:
       return accelerators::CanScreenshot(action ==
                                          AcceleratorAction::kTakeScreenshot);
+    case AcceleratorAction::kStartSunfishSession:
+      return accelerators::CanStartSunfishSession();
     case AcceleratorAction::kToggleProjectorMarker:
       return accelerators::CanToggleProjectorMarker();
     case AcceleratorAction::kToggleResizeLockMenu:
@@ -1272,7 +1268,6 @@ void AcceleratorControllerImpl::PerformAction(
     case AcceleratorAction::kDebugToggleVideoConferenceCameraTrayIcon:
     case AcceleratorAction::kDebugSystemUiStyleViewer:
       debug::PerformDebugActionIfEnabled(action);
-      PerformDebugActionOnDelegateIfEnabled(action);
       break;
     case AcceleratorAction::kDebugToggleShowDebugBorders:
       debug::ToggleShowDebugBorders();
@@ -1538,6 +1533,9 @@ void AcceleratorControllerImpl::PerformAction(
     case AcceleratorAction::kStartAssistant:
       RecordToggleAssistant(accelerator);
       accelerators::ToggleAssistant();
+      break;
+    case AcceleratorAction::kStartSunfishSession:
+      accelerators::StartSunfishSession();
       break;
     case AcceleratorAction::kSuspend:
       base::RecordAction(UserMetricsAction("Accel_Suspend"));
@@ -1867,27 +1865,6 @@ bool AcceleratorControllerImpl::ShouldPreventProcessingAccelerators() const {
 
 void AcceleratorControllerImpl::RecordVolumeSource() {
   accelerators::RecordVolumeSource();
-}
-
-void AcceleratorControllerImpl::PerformDebugActionOnDelegateIfEnabled(
-    AcceleratorAction action) {
-  if (!debug_delegate_) {
-    return;
-  }
-
-  switch (action) {
-    case AcceleratorAction::kDebugPrintLayerHierarchy:
-      debug_delegate_->PrintLayerHierarchy();
-      break;
-    case AcceleratorAction::kDebugPrintWindowHierarchy:
-      debug_delegate_->PrintWindowHierarchy();
-      break;
-    case AcceleratorAction::kDebugPrintViewHierarchy:
-      debug_delegate_->PrintViewHierarchy();
-      break;
-    default:
-      break;
-  }
 }
 
 }  // namespace ash

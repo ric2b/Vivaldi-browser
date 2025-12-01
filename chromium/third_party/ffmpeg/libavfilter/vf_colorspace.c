@@ -25,6 +25,7 @@
 
 #include "libavutil/avassert.h"
 #include "libavutil/csp.h"
+#include "libavutil/frame.h"
 #include "libavutil/mem.h"
 #include "libavutil/mem_internal.h"
 #include "libavutil/opt.h"
@@ -750,6 +751,12 @@ static int filter_frame(AVFilterLink *link, AVFrame *in)
     } else {
         out->color_trc   = s->user_trc;
     }
+
+    if (out->color_primaries != in->color_primaries || out->color_trc != in->color_trc) {
+        av_frame_side_data_remove_by_props(&out->side_data, &out->nb_side_data,
+                                           AV_SIDE_DATA_PROP_COLOR_DEPENDENT);
+    }
+
     if (rgb_sz != s->rgb_sz) {
         const AVPixFmtDescriptor *desc = av_pix_fmt_desc_get(out->format);
         int uvw = in->width >> desc->log2_chroma_w;
@@ -1030,15 +1037,15 @@ static const AVFilterPad outputs[] = {
     },
 };
 
-const AVFilter ff_vf_colorspace = {
-    .name            = "colorspace",
-    .description     = NULL_IF_CONFIG_SMALL("Convert between colorspaces."),
+const FFFilter ff_vf_colorspace = {
+    .p.name          = "colorspace",
+    .p.description   = NULL_IF_CONFIG_SMALL("Convert between colorspaces."),
+    .p.priv_class    = &colorspace_class,
+    .p.flags         = AVFILTER_FLAG_SUPPORT_TIMELINE_GENERIC | AVFILTER_FLAG_SLICE_THREADS,
     .init            = init,
     .uninit          = uninit,
     .priv_size       = sizeof(ColorSpaceContext),
-    .priv_class      = &colorspace_class,
     FILTER_INPUTS(inputs),
     FILTER_OUTPUTS(outputs),
     FILTER_QUERY_FUNC2(query_formats),
-    .flags           = AVFILTER_FLAG_SUPPORT_TIMELINE_GENERIC | AVFILTER_FLAG_SLICE_THREADS,
 };

@@ -8,6 +8,7 @@
 #include <optional>
 
 #include "base/android/jni_android.h"
+#include "base/compiler_specific.h"
 #include "base/containers/contains.h"
 #include "base/containers/span.h"
 #include "base/functional/bind.h"
@@ -101,7 +102,7 @@ void ReleaseArCoreCubemap(ArImageCubemap* cube_map) {
     ArImage_release(image);
   }
 
-  memset(cube_map, 0, sizeof(*cube_map));
+  UNSAFE_TODO(memset(cube_map, 0, sizeof(*cube_map)));
 }
 
 // Helper, copies ARCore image to the passed in buffer, assuming that the caller
@@ -1142,8 +1143,7 @@ base::TimeDelta ArCoreImpl::GetFrameTimestamp() {
 
 mojom::XRPlaneDetectionDataPtr ArCoreImpl::GetDetectedPlanesData() {
   DVLOG(2) << __func__;
-
-  TRACE_EVENT0("gpu", __func__);
+  TRACE_EVENT0("gpu", "GetDetectedPlanesData");
 
   // ArCoreGl::ProcessFrame only calls this method if the feature is enabled.
   DCHECK(plane_manager_);
@@ -1153,8 +1153,7 @@ mojom::XRPlaneDetectionDataPtr ArCoreImpl::GetDetectedPlanesData() {
 
 mojom::XRAnchorsDataPtr ArCoreImpl::GetAnchorsData() {
   DVLOG(2) << __func__;
-
-  TRACE_EVENT0("gpu", __func__);
+  TRACE_EVENT0("gpu", "GetAnchorsData");
 
   // ArCoreGl::ProcessFrame only calls this method if the feature is enabled.
   DCHECK(anchor_manager_);
@@ -1163,7 +1162,8 @@ mojom::XRAnchorsDataPtr ArCoreImpl::GetAnchorsData() {
 }
 
 mojom::XRLightEstimationDataPtr ArCoreImpl::GetLightEstimationData() {
-  TRACE_EVENT0("gpu", __func__);
+  DVLOG(2) << __func__;
+  TRACE_EVENT0("gpu", "GetLightEstimationData");
 
   // ArCoreGl::ProcessFrame only calls this method if the feature is enabled.
   DCHECK(arcore_light_estimate_.get());

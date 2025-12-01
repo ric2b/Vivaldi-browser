@@ -1,68 +1,44 @@
-promise_test(
-    async (t) => {
-      // Create the iframe and append it to the document.
-      const iframe = document.createElement('iframe');
-      document.childNodes[document.childNodes.length - 1].appendChild(iframe);
-      iframe.contentWindow.ai.rewriter.create();
-      // Detach the iframe.
-      iframe.remove();
-    },
-    'Detaching iframe while runing AIRewriterFactory.create() should not cause ' +
-        'memory leak');
+promise_test(async (t) => {
+  const iframe = document.body.appendChild(document.createElement('iframe'));
+  iframe.contentWindow.Rewriter.create();
+  iframe.remove();
+}, 'Detaching iframe during Rewriter.create() should not leak memory');
 
 promise_test(async (t) => {
-  // Create the iframe and append it to the document.
-  const iframe = document.createElement('iframe');
-  document.childNodes[document.childNodes.length - 1].appendChild(iframe);
+  const iframe = document.body.appendChild(document.createElement('iframe'));
   const iframeWindow = iframe.contentWindow;
   const iframeDOMException = iframeWindow.DOMException;
-
-  // Detach the iframe.
+  const iframeRewriter = iframeWindow.Rewriter;
   iframe.remove();
 
   await promise_rejects_dom(
-      t, 'InvalidStateError', iframeDOMException,
-      iframeWindow.ai.rewriter.create());
-}, 'AIRewriterFactory.create() fails on a detached iframe.');
+      t, 'InvalidStateError', iframeDOMException, iframeRewriter.create());
+}, 'Rewriter.create() fails on a detached iframe.');
 
 promise_test(async (t) => {
-  // Create the iframe and append it to the document.
-  const iframe = document.createElement('iframe');
-  document.childNodes[document.childNodes.length - 1].appendChild(iframe);
+  const iframe = document.body.appendChild(document.createElement('iframe'));
   const iframeDOMException = iframe.contentWindow.DOMException;
-
-  const rewriter = await iframe.contentWindow.ai.rewriter.create();
-
-  // Detach the iframe.
+  const rewriter = await iframe.contentWindow.Rewriter.create();
   iframe.remove();
 
   await promise_rejects_dom(
       t, 'InvalidStateError', iframeDOMException, rewriter.rewrite('hello'));
-}, 'AIRewriter.rewrite() fails on a detached iframe.');
+}, 'Rewriter.rewrite() fails on a detached iframe.');
 
 promise_test(async (t) => {
-  // Create the iframe and append it to the document.
-  const iframe = document.createElement('iframe');
-  document.childNodes[document.childNodes.length - 1].appendChild(iframe);
+  const iframe = document.body.appendChild(document.createElement('iframe'));
   const iframeWindow = iframe.contentWindow;
   const iframeDOMException = iframeWindow.DOMException;
-
-  const rewriter = await iframeWindow.ai.rewriter.create();
-
-  // Detach the iframe.
+  const rewriter = await iframeWindow.Rewriter.create();
   iframe.remove();
 
   assert_throws_dom(
-      'InvalidStateError', iframeDOMException,
-      () => rewriter.rewriteStreaming('hello'));
-}, 'AIRewriter.rewriteStreaming() fails on a detached iframe.');
+      'InvalidStateError', iframeDOMException, () => rewriter.rewriteStreaming('hello'));
+}, 'Rewriter.rewriteStreaming() fails on a detached iframe.');
 
 promise_test(async (t) => {
-  // Create the iframe and append it to the document.
-  const iframe = document.createElement('iframe');
-  document.childNodes[document.childNodes.length - 1].appendChild(iframe);
-  const rewriter = await iframe.contentWindow.ai.rewriter.create();
+  const iframe = document.body.appendChild(document.createElement('iframe'));
+  const rewriter = await iframe.contentWindow.Rewriter.create();
   rewriter.rewrite('hello');
-  // Detach the iframe.
   iframe.remove();
-}, 'Detaching iframe while runing AIRewriter.rewrite() should not cause memory leak');
+}, 'Detaching iframe during Rewriter.rewrite() should not leak memory');

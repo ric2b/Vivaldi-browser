@@ -12,8 +12,13 @@
 
 #include <stdint.h>
 
+#include <cstddef>
+#include <string>
+#include <vector>
+
 #include "media/base/test_utils.h"
 #include "rtc_base/arraysize.h"
+#include "rtc_base/unique_id_generator.h"
 #include "test/gmock.h"
 #include "test/gtest.h"
 
@@ -232,7 +237,7 @@ TEST(StreamParams, ToString) {
 }
 
 TEST(StreamParams, TestGenerateSsrcs_SingleStreamWithRtxAndFlex) {
-  rtc::UniqueRandomIdGenerator generator;
+  webrtc::UniqueRandomIdGenerator generator;
   cricket::StreamParams stream;
   stream.GenerateSsrcs(1, true, true, &generator);
   uint32_t primary_ssrc = stream.first_ssrc();
@@ -250,7 +255,7 @@ TEST(StreamParams, TestGenerateSsrcs_SingleStreamWithRtxAndFlex) {
 }
 
 TEST(StreamParams, TestGenerateSsrcs_SingleStreamWithRtx) {
-  rtc::UniqueRandomIdGenerator generator;
+  webrtc::UniqueRandomIdGenerator generator;
   cricket::StreamParams stream;
   stream.GenerateSsrcs(1, true, false, &generator);
   uint32_t primary_ssrc = stream.first_ssrc();
@@ -267,7 +272,7 @@ TEST(StreamParams, TestGenerateSsrcs_SingleStreamWithRtx) {
 }
 
 TEST(StreamParams, TestGenerateSsrcs_SingleStreamWithFlex) {
-  rtc::UniqueRandomIdGenerator generator;
+  webrtc::UniqueRandomIdGenerator generator;
   cricket::StreamParams stream;
   stream.GenerateSsrcs(1, false, true, &generator);
   uint32_t primary_ssrc = stream.first_ssrc();
@@ -285,7 +290,7 @@ TEST(StreamParams, TestGenerateSsrcs_SingleStreamWithFlex) {
 
 TEST(StreamParams, TestGenerateSsrcs_SimulcastLayersAndRtx) {
   const size_t kNumStreams = 3;
-  rtc::UniqueRandomIdGenerator generator;
+  webrtc::UniqueRandomIdGenerator generator;
   cricket::StreamParams stream;
   stream.GenerateSsrcs(kNumStreams, true, false, &generator);
   EXPECT_EQ(kNumStreams * 2, stream.ssrcs.size());

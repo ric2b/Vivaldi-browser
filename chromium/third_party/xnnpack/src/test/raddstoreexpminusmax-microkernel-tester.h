@@ -16,12 +16,12 @@
 #include <vector>
 
 #include <gtest/gtest.h>
-#include "xnnpack.h"
-#include "xnnpack/buffer.h"
-#include "xnnpack/math.h"
-#include "xnnpack/microfnptr.h"
-#include "xnnpack/microparams.h"
-#include "replicable_random_device.h"
+#include "include/xnnpack.h"
+#include "src/xnnpack/buffer.h"
+#include "src/xnnpack/math.h"
+#include "src/xnnpack/microfnptr.h"
+#include "src/xnnpack/microparams.h"
+#include "test/replicable_random_device.h"
 
 class RAddStoreExpMinusMaxMicrokernelTester {
  public:
@@ -75,7 +75,7 @@ class RAddStoreExpMinusMaxMicrokernelTester {
 
       // Verify results.
       for (size_t i = 0; i < elements(); i++) {
-      EXPECT_NEAR(y_ref[i], y[i], std::abs(y_ref[i]) * 5.0e-3f)
+      ASSERT_NEAR(y_ref[i], y[i], std::abs(y_ref[i]) * 5.0e-3f)
         << "element " << i << " / " << elements() << ", x_max " << x_max_as_float;
       }
       ASSERT_NEAR(sum_ref, sum, std::abs(sum_ref) * 5.0e-3f)
@@ -110,7 +110,7 @@ class RAddStoreExpMinusMaxMicrokernelTester {
 
       // Verify results.
       for (size_t i = 0; i < elements(); i++) {
-      EXPECT_NEAR(y_ref[i], double(y[i]), std::abs(y_ref[i]) * 1.0e-6)
+      ASSERT_NEAR(y_ref[i], double(y[i]), std::abs(y_ref[i]) * 1.0e-6)
         << "element " << i << " / " << elements() << ", x_max " << x_max;
       }
       ASSERT_NEAR(sum_ref, double(sum), std::abs(sum_ref) * 1.0e-6)

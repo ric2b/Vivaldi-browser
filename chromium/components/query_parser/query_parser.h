@@ -105,7 +105,8 @@ class QueryParser {
   // for bar.
   static void ParseQueryWords(const std::u16string& query,
                               MatchingAlgorithm matching_algorithm,
-                              std::vector<std::u16string>* words);
+                              std::vector<std::u16string>* words,
+                              bool special_characters = false);
 
   // Parses |query|, returning the nodes that constitute the valid words in the
   // query. This is intended for later usage with DoesQueryMatch. Ownership of
@@ -133,7 +134,8 @@ class QueryParser {
   // |text| must already be lowercased by the caller, as otherwise the output
   // will NEVER match anything.
   static void ExtractQueryWords(const std::u16string& text,
-                                QueryWordVector* words);
+                                QueryWordVector* words,
+                                bool special_characters = false);
 
   // Sorts the match positions in |matches| by their first index, then
   // coalesces any match positions that intersect each other.
@@ -144,7 +146,8 @@ class QueryParser {
   // This is invoked from both of the ParseQuery methods.
   static bool ParseQueryImpl(const std::u16string& query,
                              MatchingAlgorithm matching_algorithm,
-                             QueryNodeList* root);
+                             QueryNodeList* root,
+                             bool special_characters = false);
 };
 
 }  // namespace query_parser

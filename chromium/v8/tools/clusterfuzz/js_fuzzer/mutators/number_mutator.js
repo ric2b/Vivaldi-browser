@@ -27,7 +27,8 @@ const SKIP_LARGE_ARRAYS_PROB = 0.9;
 function isMethodOrObjectKey(path) {
   return (path.parent &&
           (babelTypes.isObjectMember(path.parent) ||
-           babelTypes.isClassMethod(path.parent)) &&
+           babelTypes.isClassMethod(path.parent) ||
+           babelTypes.isClassProperty(path.parent)) &&
           path.parent.key === path.node);
 }
 
@@ -52,11 +53,6 @@ function createRandomNumber(value) {
 }
 
 class NumberMutator extends mutator.Mutator {
-  constructor(settings) {
-    super();
-    this.settings = settings;
-  }
-
   ignore(path) {
     return !random.choose(this.settings.MUTATE_NUMBERS) ||
            common.isInForLoopCondition(path) ||

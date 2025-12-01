@@ -4,26 +4,22 @@
 
 /* #css_wrapper_metadata_start
  * #type=style-lit
+ * #import=./pdf_shared.css.js
  * #import=./shared_vars.css.js
+ * #include=pdf-shared
  * #css_wrapper_metadata_end */
 
 :host {
   display: inline-block;
 }
 
-div {
+cr-radio-group {
+  --cr-radio-group-item-padding: 6px;
   display: flex;
   justify-content: center;
 }
 
-cr-icon-button {
-  --cr-icon-button-fill-color: var(--viewer-icon-ink-fill-color);
-  --cr-icon-button-icon-size: 24px;
-  --cr-icon-button-size: 36px;
-  margin: 6px;
-}
-
-cr-icon-button[data-selected="true"] {
-  --cr-icon-button-fill-color: var(--viewer-icon-ink-selected-fill-color);
-  background-color: var(--viewer-icon-ink-selected-background-color);
+selectable-icon-button {
+  --selectable-icon-button-size: 36px;
+  --selectable-icon-button-icon-size: 24px;
 }

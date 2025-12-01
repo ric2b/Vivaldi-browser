@@ -37,6 +37,7 @@
 #include "src/tint/lang/core/ir/block_param.h"
 #include "src/tint/lang/core/ir/break_if.h"
 #include "src/tint/lang/core/ir/constant.h"
+#include "src/tint/lang/core/ir/constexpr_if.h"
 #include "src/tint/lang/core/ir/construct.h"
 #include "src/tint/lang/core/ir/continue.h"
 #include "src/tint/lang/core/ir/convert.h"
@@ -60,6 +61,7 @@
 #include "src/tint/lang/core/ir/multi_in_block.h"
 #include "src/tint/lang/core/ir/next_iteration.h"
 #include "src/tint/lang/core/ir/override.h"
+#include "src/tint/lang/core/ir/phony.h"
 #include "src/tint/lang/core/ir/return.h"
 #include "src/tint/lang/core/ir/store.h"
 #include "src/tint/lang/core/ir/store_vector_element.h"
@@ -82,6 +84,7 @@
 #include "src/tint/lang/core/type/pointer.h"  // IWYU pragma: export
 #include "src/tint/lang/core/type/type.h"     // IWYU pragma: export
 #include "src/tint/lang/core/type/u32.h"      // IWYU pragma: export
+#include "src/tint/lang/core/type/u64.h"      // IWYU pragma: export
 #include "src/tint/lang/core/type/u8.h"       // IWYU pragma: export
 #include "src/tint/lang/core/type/vector.h"
 #include "src/tint/lang/core/type/void.h"  // IWYU pragma: export
@@ -314,6 +317,15 @@ class Builder {
         return Append(ir.CreateInstruction<ir::If>(cond_val, Block(), Block()));
     }
 
+    /// Creates an const expression if instruction
+    /// @param condition the const expression if condition
+    /// @returns the instruction
+    template <typename T>
+    ir::ConstExprIf* ConstExprIf(T&& condition) {
+        auto* cond_val = Value(std::forward<T>(condition));
+        return Append(ir.CreateInstruction<ir::ConstExprIf>(cond_val, Block(), Block()));
+    }
+
     /// Creates a loop instruction
     /// @returns the instruction
     ir::Loop* Loop();
@@ -366,6 +378,11 @@ class Builder {
     /// @returns the new constant
     ir::Constant* Constant(core::u32 v) { return Constant(ConstantValue(v)); }
 
+    /// Creates a ir::Constant for a u64 Scalar
+    /// @param v the value
+    /// @returns the new constant
+    ir::Constant* Constant(core::u64 v) { return Constant(ConstantValue(v)); }
+
     /// Creates a ir::Constant for a u8 Scalar
     /// @param v the value
     /// @returns the new constant
@@ -412,6 +429,11 @@ class Builder {
     /// @param v the value
     /// @returns the new constant
     const core::constant::Value* ConstantValue(core::u32 v) { return ir.constant_values.Get(v); }
+
+    /// Creates a core::constant::Value for a u64 Scalar
+    /// @param v the value
+    /// @returns the new constant
+    const core::constant::Value* ConstantValue(core::u64 v) { return ir.constant_values.Get(v); }
 
     /// Creates a core::constant::Value for a u8 Scalar
     /// @param v the value
@@ -1194,6 +1216,21 @@ class Builder {
                                              Values(std::forward<ARGS>(args)...));
     }
 
+    /// Creates a core builtin call instruction with explicit parameters
+    /// @param type the return type of the call
+    /// @param func the builtin function to call
+    /// @param explicit_params the explicit parameters
+    /// @param args the call arguments
+    /// @returns the instruction
+    template <typename... ARGS>
+    ir::CoreBuiltinCall* CallExplicit(const core::type::Type* type,
+                                      core::BuiltinFn func,
+                                      VectorRef<const core::type::Type*> explicit_params,
+                                      ARGS&&... args) {
+        return CallExplicitWithResult<core::ir::CoreBuiltinCall>(
+            InstructionResult(type), func, explicit_params, Values(std::forward<ARGS>(args)...));
+    }
+
     /// Creates a builtin call instruction
     /// @param type the return type of the call
     /// @param func the builtin function to call
@@ -1753,6 +1790,19 @@ class Builder {
     /// Creates an unused instruction
     /// @returns the instruction
     ir::Unused* Unused();
+
+    /// Creates a new phony assignment declaration
+    /// @param value the assignment value
+    /// @returns the instruction
+    template <typename VALUE>
+    ir::Phony* Phony(VALUE&& value) {
+        auto* val = Value(std::forward<VALUE>(value));
+        if (DAWN_UNLIKELY(!val)) {
+            TINT_ASSERT(val);
+            return nullptr;
+        }
+        return Append(ir.CreateInstruction<ir::Phony>(val));
+    }
 
     /// Creates a new runtime value
     /// @param type the return type

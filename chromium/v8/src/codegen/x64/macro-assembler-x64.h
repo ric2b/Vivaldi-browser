@@ -2,12 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifndef V8_CODEGEN_X64_MACRO_ASSEMBLER_X64_H_
+#define V8_CODEGEN_X64_MACRO_ASSEMBLER_X64_H_
+
 #ifndef INCLUDED_FROM_MACRO_ASSEMBLER_H
 #error This header must be included via macro-assembler.h
 #endif
-
-#ifndef V8_CODEGEN_X64_MACRO_ASSEMBLER_X64_H_
-#define V8_CODEGEN_X64_MACRO_ASSEMBLER_X64_H_
 
 #include "src/base/flags.h"
 #include "src/codegen/bailout-reason.h"
@@ -843,6 +843,11 @@ class V8_EXPORT_PRIVATE MacroAssembler
   void LoadCodeEntrypointViaCodePointer(Register destination,
                                         Operand field_operand,
                                         CodeEntrypointTag tag);
+
+  // Load the value of Code pointer table corresponding to
+  // IsolateGroup::current()->code_pointer_table_.
+  // Only available when the sandbox is enabled.
+  void LoadCodePointerTableBase(Register destination);
 #endif  // V8_ENABLE_SANDBOX
 
 #ifdef V8_ENABLE_LEAPTIERING

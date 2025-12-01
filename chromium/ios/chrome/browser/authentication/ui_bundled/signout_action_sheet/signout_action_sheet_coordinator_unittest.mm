@@ -25,6 +25,7 @@
 #import "ios/chrome/browser/shared/model/browser/test/test_browser.h"
 #import "ios/chrome/browser/shared/model/prefs/pref_names.h"
 #import "ios/chrome/browser/shared/model/profile/test/test_profile_ios.h"
+#import "ios/chrome/browser/shared/model/profile/test/test_profile_manager_ios.h"
 #import "ios/chrome/browser/shared/public/commands/command_dispatcher.h"
 #import "ios/chrome/browser/shared/public/commands/snackbar_commands.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
@@ -53,6 +54,19 @@ class SignoutActionSheetCoordinatorTest : public PlatformTest {
   void SetUp() override {
     PlatformTest::SetUp();
 
+    TestProfileIOS::Builder builder;
+    builder.SetName(GetApplicationContext()
+                        ->GetProfileManager()
+                        ->GetProfileAttributesStorage()
+                        ->GetPersonalProfileName());
+    builder.AddTestingFactory(
+        AuthenticationServiceFactory::GetInstance(),
+        AuthenticationServiceFactory::GetFactoryWithDelegate(
+            std::make_unique<FakeAuthenticationServiceDelegate>()));
+    builder.AddTestingFactory(SyncServiceFactory::GetInstance(),
+                              base::BindRepeating(&CreateMockSyncService));
+    profile_ = profile_manager_.AddProfileWithBuilder(std::move(builder));
+
     identity_ = [FakeSystemIdentity fakeIdentity1];
     managed_identity_ = [FakeSystemIdentity fakeManagedIdentity];
     FakeSystemIdentityManager* system_identity_manager =
@@ -60,14 +74,7 @@ class SignoutActionSheetCoordinatorTest : public PlatformTest {
             GetApplicationContext()->GetSystemIdentityManager());
     system_identity_manager->AddIdentity(identity_);
     system_identity_manager->AddIdentity(managed_identity_);
-    TestProfileIOS::Builder builder;
-    builder.AddTestingFactory(
-        AuthenticationServiceFactory::GetInstance(),
-        AuthenticationServiceFactory::GetFactoryWithDelegate(
-            std::make_unique<FakeAuthenticationServiceDelegate>()));
-    builder.AddTestingFactory(SyncServiceFactory::GetInstance(),
-                              base::BindRepeating(&CreateMockSyncService));
-    profile_ = std::move(builder).Build();
+
     AppState* app_state = [[AppState alloc] initWithStartupInformation:nil];
     SceneState* scene_state = [[SceneState alloc] initWithAppState:app_state];
     browser_ = std::make_unique<TestBrowser>(profile_.get(), scene_state);
@@ -86,6 +93,11 @@ class SignoutActionSheetCoordinatorTest : public PlatformTest {
     [browser_->GetCommandDispatcher()
         startDispatchingToTarget:snackbar_handler_
                      forProtocol:@protocol(SnackbarCommands)];
+
+    // Ensure the AuthenticationService is created: It does some first-time
+    // setup on construction, and it's confusing if that happens implicitly on
+    // the first access, potentially in the middle of a test.
+    authentication_service();
   }
 
   void TearDown() override {
@@ -102,17 +114,19 @@ class SignoutActionSheetCoordinatorTest : public PlatformTest {
 
   // Sign-out coordinator.
   SignoutActionSheetCoordinator* CreateCoordinator() {
+    constexpr signin_metrics::ProfileSignout metricSignOut =
+        signin_metrics::ProfileSignout::kUserClickedSignoutSettings;
+
     signout_coordinator_ = [[SignoutActionSheetCoordinator alloc]
         initWithBaseViewController:view_controller_
                            browser:browser_.get()
                               rect:view_controller_.view.frame
                               view:view_controller_.view
           forceSnackbarOverToolbar:NO
-                        withSource:signin_metrics::ProfileSignout::
-                                       kUserClickedSignoutSettings];
-    signout_coordinator_.signoutCompletion = ^(BOOL success) {
-      completion_callback_.Run(success);
-    };
+                        withSource:metricSignOut
+                        completion:^(BOOL success) {
+                          completion_callback_.Run(success);
+                        }];
     return signout_coordinator_;
   }
 
@@ -121,6 +135,35 @@ class SignoutActionSheetCoordinatorTest : public PlatformTest {
   }
 
   PrefService* GetPrefs() { return profile_->GetPrefs(); }
+
+  void SignInManagedIdentity() {
+    if (!AreSeparateProfilesForManagedAccountsEnabled()) {
+      authentication_service()->SignIn(managed_identity_,
+                                       signin_metrics::AccessPoint::kUnknown);
+    } else {
+      // With kSeparateProfilesForManagedAccounts, these tests only apply when a
+      // managed account is signed in to the personal profile (which, in prod,
+      // can only happen if the account was already signed in before
+      // kSeparateProfilesForManagedAccounts was enabled). This situation is
+      // tricky to replicate in a unit test; it's done here by first converting
+      // the (single) test profile to a managed profile, then marking it as the
+      // personal profile again.
+      GetApplicationContext()
+          ->GetAccountProfileMapper()
+          ->MakePersonalProfileManagedWithGaiaID(
+              GaiaId(managed_identity_.gaiaID));
+
+      authentication_service()->SignIn(managed_identity_,
+                                       signin_metrics::AccessPoint::kUnknown);
+
+      GetApplicationContext()
+          ->GetProfileManager()
+          ->GetProfileAttributesStorage()
+          ->SetPersonalProfileName(profile_->GetProfileName());
+    }
+    ASSERT_TRUE(authentication_service()->HasPrimaryIdentityManaged(
+        signin::ConsentLevel::kSignin));
+  }
 
  protected:
   // Needed for test profile created by TestProfileIOS().
@@ -137,7 +180,8 @@ class SignoutActionSheetCoordinatorTest : public PlatformTest {
   SceneState* scene_state_mock_;
   StubBrowserProviderInterface* stub_browser_interface_provider_;
   std::unique_ptr<Browser> browser_;
-  std::unique_ptr<TestProfileIOS> profile_;
+  raw_ptr<TestProfileIOS> profile_;
+  TestProfileManagerIOS profile_manager_;
   id<SystemIdentity> identity_ = nil;
   id<SystemIdentity> managed_identity_ = nil;
   id<SnackbarCommands> snackbar_handler_ =
@@ -206,10 +250,8 @@ TEST_F(SignoutActionSheetCoordinatorTest, ShouldShowActionSheetIfUnsyncedData) {
 TEST_F(SignoutActionSheetCoordinatorTest,
        ShouldShowActionSheetForManagedUserMigratedFromSyncing) {
   // Sign in with a *managed* account.
-  authentication_service()->SignIn(managed_identity_,
-                                   signin_metrics::AccessPoint::kUnknown);
-  ASSERT_TRUE(authentication_service()->HasPrimaryIdentityManaged(
-      signin::ConsentLevel::kSignin));
+  SignInManagedIdentity();
+
   // Mark the user as "migrated from previously syncing".
   GetPrefs()->SetString(
       prefs::kGoogleServicesSyncingGaiaIdMigratedToSignedIn,
@@ -237,10 +279,7 @@ TEST_F(SignoutActionSheetCoordinatorTest,
 TEST_F(SignoutActionSheetCoordinatorTest,
        ShouldShowActionSheetForManagedUserWithClearDataonSignoutFeature) {
   // Sign in with a *managed* account.
-  authentication_service()->SignIn(managed_identity_,
-                                   signin_metrics::AccessPoint::kUnknown);
-  ASSERT_TRUE(authentication_service()->HasPrimaryIdentityManaged(
-      signin::ConsentLevel::kSignin));
+  SignInManagedIdentity();
 
   CreateCoordinator();
 

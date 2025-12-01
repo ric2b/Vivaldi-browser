@@ -11,6 +11,7 @@ import android.util.Pair;
 import android.view.View;
 import android.view.ViewGroup.LayoutParams;
 
+import org.chromium.build.annotations.NullMarked;
 import org.chromium.components.payments.R;
 import org.chromium.ui.base.DeviceFormFactor;
 import org.chromium.ui.modelutil.PropertyKey;
@@ -23,6 +24,7 @@ import org.chromium.ui.text.SpanApplier.SpanInfo;
  * The view binder of the SecurePaymentConfirmation Authn UI, which is stateless. It is called to
  * bind a given model to a given view. Should contain as little business logic as possible.
  */
+@NullMarked
 /* package */ class SecurePaymentConfirmationAuthnViewBinder {
     /* package */ static void bind(
             PropertyModel model, SecurePaymentConfirmationAuthnView view, PropertyKey propertyKey) {
@@ -67,6 +69,21 @@ import org.chromium.ui.text.SpanApplier.SpanInfo;
                         model.get(SecurePaymentConfirmationAuthnProperties.CANCEL_BUTTON_CALLBACK)
                                 .run();
                     });
+        } else if (SecurePaymentConfirmationAuthnProperties.SHOWS_ISSUER_NETWORK_ICONS
+                == propertyKey) {
+            if (model.get(SecurePaymentConfirmationAuthnProperties.SHOWS_ISSUER_NETWORK_ICONS)) {
+                view.mIssuerNetworkIconsRow.setVisibility(View.VISIBLE);
+                view.mHeaderImage.setVisibility(View.GONE);
+            } else {
+                view.mHeaderImage.setVisibility(View.VISIBLE);
+                view.mIssuerNetworkIconsRow.setVisibility(View.GONE);
+            }
+        } else if (SecurePaymentConfirmationAuthnProperties.ISSUER_ICON == propertyKey) {
+            view.mIssuerIcon.setImageDrawable(
+                    model.get(SecurePaymentConfirmationAuthnProperties.ISSUER_ICON));
+        } else if (SecurePaymentConfirmationAuthnProperties.NETWORK_ICON == propertyKey) {
+            view.mNetworkIcon.setImageDrawable(
+                    model.get(SecurePaymentConfirmationAuthnProperties.NETWORK_ICON));
         }
     }
 

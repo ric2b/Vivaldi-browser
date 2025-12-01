@@ -8,6 +8,7 @@
 #include "src/gpu/graphite/RenderPassDesc.h"
 
 #include "src/gpu/graphite/Caps.h"
+#include "src/gpu/graphite/TextureInfoPriv.h"
 
 namespace skgpu::graphite {
 
@@ -41,7 +42,8 @@ RenderPassDesc RenderPassDesc::Make(const Caps* caps,
                                     SkEnumBitMask<DepthStencilFlags> depthStencilFlags,
                                     const std::array<float, 4>& clearColor,
                                     bool requiresMSAA,
-                                    Swizzle writeSwizzle) {
+                                    Swizzle writeSwizzle,
+                                    const DstReadStrategy targetReadStrategy) {
     RenderPassDesc desc;
     desc.fWriteSwizzle = writeSwizzle;
     desc.fSampleCount = 1;
@@ -92,7 +94,7 @@ RenderPassDesc RenderPassDesc::Make(const Caps* caps,
 
     if (depthStencilFlags != DepthStencilFlags::kNone) {
         desc.fDepthStencilAttachment.fTextureInfo = caps->getDefaultDepthStencilTextureInfo(
-                depthStencilFlags, desc.fSampleCount, targetInfo.isProtected());
+                depthStencilFlags, desc.fSampleCount, targetInfo.isProtected(), Discardable::kYes);
         // Always clear the depth and stencil to 0 at the start of a DrawPass, but discard at the
         // end since their contents do not affect the next frame.
         desc.fDepthStencilAttachment.fLoadOp = LoadOp::kClear;
@@ -101,10 +103,18 @@ RenderPassDesc RenderPassDesc::Make(const Caps* caps,
         desc.fDepthStencilAttachment.fStoreOp = StoreOp::kDiscard;
     }
 
+    // Should a dst read be required later on, record what dst read strategy should be used. Must be
+    // a valid strategy.
+    SkASSERT(targetReadStrategy != DstReadStrategy::kNoneRequired);
+    desc.fDstReadStrategyIfRequired = targetReadStrategy;
+
     return desc;
 }
 
 SkString RenderPassDesc::toString() const {
+    // Note: Purposefully omitting the fDstReadStrategyIfRequired attribute. Since the shader /
+    // pipeline actually determines whether a dst read is needed, it would make more sense to
+    // report the actual used dst read strategy there.
     return SkStringPrintf("RP(color: %s, resolve: %s, ds: %s, samples: %u, swizzle: %s, "
                           "clear: c(%f,%f,%f,%f), d(%f), s(0x%02x))",
                           fColorAttachment.toString().c_str(),
@@ -122,17 +132,30 @@ SkString RenderPassDesc::toPipelineLabel() const {
     // We include the load op of the color attachment when there is a resolve attachment because
     // the load may trigger a different renderpass description.
     const char* colorLoadStr = "";
-    if (fColorAttachment.fLoadOp == LoadOp::kLoad &&
-        (fColorResolveAttachment.fTextureInfo.isValid() || fSampleCount > 1)) {
+
+    const bool loadMsaaFromResolve =
+            fColorResolveAttachment.fTextureInfo.isValid() &&
+            fColorResolveAttachment.fLoadOp == LoadOp::kLoad;
+
+    // This should, technically, check Caps::loadOpAffectsMSAAPipelines before adding the extra
+    // string. Only the Metal backend doesn't set that flag, however, so we just assume it is set
+    // to reduce plumbing. Since the Metal backend doesn't differentiate its UniqueKeys wrt
+    // resolve-loads, this can lead to instances where two Metal Pipeline labels will map to the
+    // same UniqueKey (i.e., one with "w/ msaa load" and one without it).
+    if (loadMsaaFromResolve /* && Caps::loadOpAffectsMSAAPipelines() */) {
         colorLoadStr = " w/ msaa load";
     }
+
+    const auto& colorTexInfo = fColorAttachment.fTextureInfo;
+    const auto& resolveTexInfo = fColorResolveAttachment.fTextureInfo;
+    const auto& dsTexInfo = fDepthStencilAttachment.fTextureInfo;
     // TODO: Remove `fSampleCount` in label when the Dawn backend manages its MSAA color attachments
     // directly instead of relying on msaaRenderToSingleSampledSupport().
     return SkStringPrintf("RP(color: %s%s, resolve: %s, ds: %s, samples: %u, swizzle: %s)",
-                          fColorAttachment.fTextureInfo.toRPAttachmentString().c_str(),
+                          TextureInfoPriv::GetAttachmentLabel(colorTexInfo).c_str(),
                           colorLoadStr,
-                          fColorResolveAttachment.fTextureInfo.toRPAttachmentString().c_str(),
-                          fDepthStencilAttachment.fTextureInfo.toRPAttachmentString().c_str(),
+                          TextureInfoPriv::GetAttachmentLabel(resolveTexInfo).c_str(),
+                          TextureInfoPriv::GetAttachmentLabel(dsTexInfo).c_str(),
                           fSampleCount,
                           fWriteSwizzle.asString().c_str());
 }

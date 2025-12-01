@@ -2,12 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifndef V8_WASM_NAMES_PROVIDER_H_
+#define V8_WASM_NAMES_PROVIDER_H_
+
 #if !V8_ENABLE_WEBASSEMBLY
 #error This header should only be included if WebAssembly is enabled.
 #endif  // !V8_ENABLE_WEBASSEMBLY
-
-#ifndef V8_WASM_NAMES_PROVIDER_H_
-#define V8_WASM_NAMES_PROVIDER_H_
 
 #include <map>
 #include <string>
@@ -87,7 +87,7 @@ class V8_EXPORT_PRIVATE NamesProvider {
 
   // Lazy loading must guard against concurrent modifications from multiple
   // {WasmModuleObject}s.
-  mutable base::SpinningMutex mutex_;
+  mutable base::Mutex mutex_;
   bool has_decoded_{false};
   bool has_computed_function_import_names_{false};
   bool has_computed_import_names_{false};
@@ -127,7 +127,7 @@ class CanonicalTypeNamesProvider {
 
   std::vector<StringT> type_names_;
   std::map<uint32_t, std::vector<StringT>> field_names_;
-  mutable base::SpinningMutex mutex_;
+  mutable base::Mutex mutex_;
   size_t payload_size_estimate_{0};
 };
 

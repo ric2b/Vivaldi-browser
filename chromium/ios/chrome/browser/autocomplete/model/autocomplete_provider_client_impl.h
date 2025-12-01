@@ -13,6 +13,7 @@
 
 // Vivaldi
 #include "components/direct_match/direct_match_service.h"
+#import "components/history/core/browser/web_history_service.h"
 // End Vivaldi
 
 class AutocompleteScoringModelService;
@@ -108,9 +109,15 @@ class AutocompleteProviderClientImpl : public AutocompleteProviderClient {
   void OpenIncognitoClearBrowsingDataDialog() override {}
   void CloseIncognitoWindows() override {}
   void PromptPageTranslation() override {}
+  void OpenLensOverlay(bool show) override {}
+  void IssueContextualSearchRequest(
+      const GURL& destination_url,
+      AutocompleteMatchType::Type match_type,
+      bool is_zero_prefix_suggestion) override {}
 
   // Vivaldi
   direct_match::DirectMatchService* GetDirectMatchService() override;
+  history::WebHistoryService* GetWebHistoryService() override;
   // End Vivaldi
 
  private:

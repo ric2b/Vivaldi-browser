@@ -24,6 +24,7 @@ import "services/network/public/mojom/http_request_headers.mojom";
 import "services/network/public/mojom/ip_address_space.mojom";
 import "services/network/public/mojom/isolation_info.mojom";
 import "services/network/public/mojom/network_param.mojom";
+import "services/network/public/mojom/permissions_policy/permissions_policy.mojom";
 import "services/network/public/mojom/referrer_policy.mojom";
 import "services/network/public/mojom/request_priority.mojom";
 import "services/network/public/mojom/shared_dictionary_access_observer.mojom";
@@ -316,7 +317,7 @@ struct URLRequest {
   // to populate an `Accept-Signatures` header.
   //
   // https://www.rfc-editor.org/rfc/rfc9421.html#name-the-accept-signature-field
-  array<string> expected_signatures;
+  array<string> expected_public_keys;
 
   // https://fetch.spec.whatwg.org/#concept-request-destination
   RequestDestination destination;
@@ -579,9 +580,25 @@ struct URLRequest {
   // CompressionDictionaryTransport feature.
   bool shared_dictionary_writer_enabled = false;
 
+  // If true, disables content decoding (e.g., gzip, brotli) within the network
+  // service for this request. The client becomes responsible for decoding the
+  // response body and setting `decoded_body_length` of
+  // `URLLoaderCompletionStatus`.
+  bool client_side_content_decoding_enabled = false;
+
   // The socket tag to associate this request with. This is typically set by the
   // embedder.
   SocketTag socket_tag;
+
+  // Whether this request is allowed to register new device bound
+  // sessions or process challenges for existing device bound sessions
+  // (e.g. due to an Origin Trial).
+  bool allows_device_bound_sessions;
+
+  // Permissions Policy of the request.
+  // If it's nullopt then the request's initiator didn't set the permissions
+  // policy. Example: https://crrev.com/c/6295903
+  network.mojom.PermissionsPolicy? permissions_policy;
 };
 
 // URLRequestBody represents body (i.e. upload data) of a HTTP request.

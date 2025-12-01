@@ -87,15 +87,15 @@ suite('PrivacyPage', function() {
   });
 
   function createPage() {
+    document.body.innerHTML = window.trustedTypes!.emptyHTML;
     page = document.createElement('settings-privacy-page');
     page.prefs = settingsPrefs.prefs!;
     document.body.appendChild(page);
+
     return flushTasks();
   }
 
   setup(function() {
-    document.body.innerHTML = window.trustedTypes!.emptyHTML;
-
     testClearBrowsingDataBrowserProxy = new TestClearBrowsingDataBrowserProxy();
     ClearBrowsingDataBrowserProxyImpl.setInstance(
         testClearBrowsingDataBrowserProxy);
@@ -110,6 +110,7 @@ suite('PrivacyPage', function() {
   teardown(function() {
     page.remove();
     Router.getInstance().navigateTo(routes.BASIC);
+    resetRouterForTesting();
   });
 
   // <if expr="use_nss_certs">
@@ -123,18 +124,18 @@ suite('PrivacyPage', function() {
   });
   // </if>
 
-  test('showClearBrowsingDataDialog', function() {
+  test('showDeleteBrowsingDataDialog', function() {
     assertFalse(!!page.shadowRoot!.querySelector(
-        'settings-clear-browsing-data-dialog'));
+        'settings-clear-browsing-data-dialog-v2'));
     page.$.clearBrowsingData.click();
     flush();
 
-    const dialog =
-        page.shadowRoot!.querySelector('settings-clear-browsing-data-dialog');
+    const dialog = page.shadowRoot!.querySelector(
+        'settings-clear-browsing-data-dialog-v2');
     assertTrue(!!dialog);
   });
 
-  test('cookiesLinkRowSublabel', async function() {
+  test('cookiesLinkRowSublabel', function() {
     page.set(
         'prefs.profile.cookie_controls_mode.value', CookieControlsMode.OFF);
     const thirdPartyCookiesLinkRow =
@@ -184,26 +185,33 @@ suite('PrivacyPage', function() {
     redesignedPages.forEach(route => Router.getInstance().navigateTo(route));
     await flushTasks();
 
-    // All redesigned pages, except notifications, location, protocol handlers,
-    // pdf documents and protected content (except chromeos and win), will use a
+    // All redesigned pages, except protocol handlers, pdf documents and
+    // protected content (except chromeos and win), will use a
     // settings-category-default-radio-group.
     // <if expr="is_chromeos or is_win">
     assertEquals(
         page.shadowRoot!
             .querySelectorAll('settings-category-default-radio-group')
             .length,
-        redesignedPages.length - 3);
+        redesignedPages.length - 2);
     // </if>
     // <if expr="not is_chromeos and not is_win">
     assertEquals(
         page.shadowRoot!
             .querySelectorAll('settings-category-default-radio-group')
             .length,
-        redesignedPages.length - 4);
+        redesignedPages.length - 3);
     // </if>
   });
 
+  // TODO(crbug.com/340743074): Clean up tests after
+  // `PermissionSiteSettingsRadioButton` launched.
   test('NotificationPage', async function() {
+    loadTimeData.overrideValues({
+      enablePermissionSiteSettingsRadioButton: false,
+    });
+    await createPage();
+
     Router.getInstance().navigateTo(routes.SITE_SETTINGS_NOTIFICATIONS);
     await flushTasks();
 
@@ -217,10 +225,51 @@ suite('PrivacyPage', function() {
   });
 
   test('LocationPage', async function() {
+    loadTimeData.overrideValues({
+      enablePermissionSiteSettingsRadioButton: false,
+    });
+    await createPage();
+
     Router.getInstance().navigateTo(routes.SITE_SETTINGS_LOCATION);
     await flushTasks();
 
     assertTrue(isChildVisible(page, '#locationRadioGroup'));
+    const categorySettingExceptions =
+        page.shadowRoot!.querySelector('category-setting-exceptions');
+    assertTrue(!!categorySettingExceptions);
+    assertTrue(isVisible(categorySettingExceptions));
+    assertEquals(
+        ContentSettingsTypes.GEOLOCATION, categorySettingExceptions.category);
+  });
+
+  test('NotificationPage2', async function() {
+    loadTimeData.overrideValues({
+      enablePermissionSiteSettingsRadioButton: true,
+    });
+    await createPage();
+
+    Router.getInstance().navigateTo(routes.SITE_SETTINGS_NOTIFICATIONS);
+    await flushTasks();
+
+    assertTrue(isChildVisible(page, '#notificationDefaultRadioGroup'));
+    const categorySettingExceptions =
+        page.shadowRoot!.querySelector('category-setting-exceptions');
+    assertTrue(!!categorySettingExceptions);
+    assertTrue(isVisible(categorySettingExceptions));
+    assertEquals(
+        ContentSettingsTypes.NOTIFICATIONS, categorySettingExceptions.category);
+  });
+
+  test('LocationPage2', async function() {
+    loadTimeData.overrideValues({
+      enablePermissionSiteSettingsRadioButton: true,
+    });
+    await createPage();
+
+    Router.getInstance().navigateTo(routes.SITE_SETTINGS_LOCATION);
+    await flushTasks();
+
+    assertTrue(isChildVisible(page, '#locationDefaultRadioGroup'));
     const categorySettingExceptions =
         page.shadowRoot!.querySelector('category-setting-exceptions');
     assertTrue(!!categorySettingExceptions);
@@ -521,6 +570,53 @@ suite(`TrackingProtectionSubpage`, function() {
     await flushTasks();
     assertEquals(
         routes.COOKIES, Router.getInstance().getCurrentRoute());
+  });
+});
+
+suite(`AllSitesSubpage`, function() {
+  let page: SettingsPrivacyPageElement;
+  let settingsPrefs: SettingsPrefsElement;
+
+  suiteSetup(function() {
+    resetRouterForTesting();
+
+    settingsPrefs = document.createElement('settings-prefs');
+    return CrSettingsPrefs.initialized;
+  });
+
+  setup(function() {
+    document.body.innerHTML = window.trustedTypes!.emptyHTML;
+
+    page = document.createElement('settings-privacy-page');
+    page.prefs = settingsPrefs.prefs!;
+    document.body.appendChild(page);
+    return flushTasks();
+  });
+
+  test('allSitesViewShowsAllSitesTitle', async function() {
+    Router.getInstance().navigateTo(routes.SITE_SETTINGS_ALL);
+    await flushTasks();
+
+    const allSitesSubpage =
+        page.shadowRoot!.querySelector<PolymerElement>('#allSites');
+    assertTrue(!!allSitesSubpage);
+    assertEquals(
+        page.i18n('siteSettingsAllSites'),
+        allSitesSubpage.getAttribute('page-title'));
+  });
+
+  test('rwsFilterViewShowsRwsTitle', async function() {
+    const searchParams =
+        new URLSearchParams('searchSubpage=related:foobar.com');
+    Router.getInstance().navigateTo(routes.SITE_SETTINGS_ALL, searchParams);
+    await flushTasks();
+
+    const allSitesSubpage =
+        page.shadowRoot!.querySelector<PolymerElement>('#allSites');
+    assertTrue(!!allSitesSubpage);
+    assertEquals(
+        loadTimeData.getStringF('allSitesRwsFilterViewTitle', 'foobar.com'),
+        allSitesSubpage.getAttribute('page-title'));
   });
 });
 
@@ -1014,5 +1110,40 @@ suite('EnableWebBluetoothNewPermissionsBackend', function() {
     assertEquals(
         settingsSubpage.learnMoreUrl,
         'https://support.google.com/chrome?p=bluetooth&hl=en-US');
+  });
+});
+
+// TODO(crbug.com/397187800): Remove once kDbdRevampDesktop is launched.
+suite('DeleteBrowsingDataRevampDisabled', () => {
+  let page: SettingsPrivacyPageElement;
+  let settingsPrefs: SettingsPrefsElement;
+
+  suiteSetup(function() {
+    settingsPrefs = document.createElement('settings-prefs');
+    return CrSettingsPrefs.initialized;
+  });
+
+  setup(function() {
+    loadTimeData.overrideValues({
+      enableDeleteBrowsingDataRevamp: false,
+    });
+    resetRouterForTesting();
+
+    document.body.innerHTML = window.trustedTypes!.emptyHTML;
+    page = document.createElement('settings-privacy-page');
+    page.prefs = settingsPrefs.prefs!;
+    document.body.appendChild(page);
+    return flushTasks();
+  });
+
+  test('showClearBrowsingDataDialog', function() {
+    assertFalse(!!page.shadowRoot!.querySelector(
+        'settings-clear-browsing-data-dialog'));
+    page.$.clearBrowsingData.click();
+    flush();
+
+    const dialog =
+        page.shadowRoot!.querySelector('settings-clear-browsing-data-dialog');
+    assertTrue(!!dialog);
   });
 });

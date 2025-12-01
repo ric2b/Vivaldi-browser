@@ -36,7 +36,7 @@ class ThreadGroupImpl::ScopedCommandsExecutor
     CheckedLock::AssertNoLockHeldOnCurrentThread();
 
     // Wake up workers.
-    for (auto worker : workers_to_wake_up_) {
+    for (auto& worker : workers_to_wake_up_) {
       worker->WakeUp();
     }
   }
@@ -231,22 +231,28 @@ void ThreadGroupImpl::Start(
     WorkerEnvironment worker_environment,
     bool synchronous_thread_start_for_testing,
     std::optional<TimeDelta> may_block_threshold) {
-  ThreadGroup::StartImpl(
-      max_tasks, max_best_effort_tasks, suggested_reclaim_time,
-      service_thread_task_runner, worker_thread_observer, worker_environment,
-      synchronous_thread_start_for_testing, may_block_threshold);
+#if DCHECK_IS_ON()
+  DCHECK(!in_start().start_called);
+  in_start().start_called = true;
+#endif
+  {
+    ScopedCommandsExecutor executor(this);
+    CheckedAutoLock auto_lock(lock_);
 
-  // Create thread group profiler if profiling is enabled after the thread group
-  // start but before worker threads are created.
+    ThreadGroup::StartImplLockRequired(
+        max_tasks, max_best_effort_tasks, suggested_reclaim_time,
+        service_thread_task_runner, worker_thread_observer, worker_environment,
+        synchronous_thread_start_for_testing, may_block_threshold);
+
+    DCHECK(workers_.empty());
+    EnsureEnoughWorkersLockRequired(&executor);
+  }
+
   if (ThreadGroupProfiler::IsProfilingEnabled()) {
+    // This call posts a task, so do it outside of the lock.
     thread_group_profiler_.emplace(service_thread_task_runner,
                                    thread_group_type_);
   }
-
-  ScopedCommandsExecutor executor(this);
-  CheckedAutoLock auto_lock(lock_);
-  DCHECK(workers_.empty());
-  EnsureEnoughWorkersLockRequired(&executor);
 }
 
 ThreadGroupImpl::~ThreadGroupImpl() {
@@ -926,6 +932,10 @@ void ThreadGroupImpl::EnsureEnoughWorkersLockRequired(
   if (max_tasks_ == 0) {
     return;
   }
+#if DCHECK_IS_ON()
+  // CHECK() that Start() is complete, if workers are to be created.
+  after_start();
+#endif
   if (join_for_testing_started_) [[unlikely]] {
     return;
   }

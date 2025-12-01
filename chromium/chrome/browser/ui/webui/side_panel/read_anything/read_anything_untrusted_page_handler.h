@@ -16,7 +16,6 @@
 #include "chrome/browser/ui/views/side_panel/read_anything/read_anything_side_panel_controller.h"
 #include "chrome/browser/ui/webui/side_panel/read_anything/read_anything_screenshotter.h"
 #include "chrome/common/read_anything/read_anything.mojom.h"
-#include "chrome/common/read_anything/read_anything_constants.h"
 #include "components/translate/core/browser/translate_client.h"
 #include "content/public/browser/tts_controller.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
@@ -29,6 +28,7 @@
 #if BUILDFLAG(IS_CHROMEOS)
 #include "ash/public/cpp/session/session_observer.h"
 #else
+#include "components/component_updater/component_updater_service.h"
 #include "extensions/browser/extension_registry_observer.h"
 #endif
 
@@ -90,6 +90,7 @@ class ReadAnythingUntrustedPageHandler :
 #else
     public content::UpdateLanguageStatusDelegate,
     public extensions::ExtensionRegistryObserver,
+    public component_updater::ServiceObserver,
 #endif
     public ui::AXActionHandlerObserver,
     public read_anything::mojom::UntrustedPageHandler,
@@ -143,6 +144,9 @@ class ReadAnythingUntrustedPageHandler :
       const translate::LanguageDetectionDetails& details) override;
   void OnTranslateDriverDestroyed(translate::TranslateDriver* driver) override;
 
+  // ReadAnythingSidePanelController::Observer:
+  void OnTabWillDetach() override;
+
   // ash::SessionObserver
 #if BUILDFLAG(IS_CHROMEOS)
   void OnLockStateChanged(bool locked) override;
@@ -169,6 +173,10 @@ class ReadAnythingUntrustedPageHandler :
   // which read anything needs to know about to access the new voices.
   void OnExtensionReady(content::BrowserContext* browser_context,
                         const extensions::Extension* extension) override;
+
+  // component_updater::ServiceObserver:
+  void OnEvent(const update_client::CrxUpdateItem& item) override;
+
 #endif
 
   // ui::AXActionHandlerObserver:
@@ -193,15 +201,13 @@ class ReadAnythingUntrustedPageHandler :
 
   // ReadAnythingSidePanelController::Observer:
   void Activate(bool active) override;
+  void OnSidePanelControllerDestroyed() override;
 
   void SetDefaultLanguageCode(const std::string& code);
 
   // Sends the language code of the new page, or the default if a language can't
   // be determined.
   void SetLanguageCode(const std::string& code);
-
-  // ReadAnythingSidePanelController::Observer:
-  void OnSidePanelControllerDestroyed() override;
 
   void SetUpPdfObserver();
 
@@ -237,6 +243,8 @@ class ReadAnythingUntrustedPageHandler :
   // Whether the Read Anything feature is currently active. The feature is
   // active when it is currently shown in the Side Panel.
   bool active_ = true;
+  // Whether the tab is going to detach soon.
+  bool tab_will_detach_ = false;
 
   // The current language being used in the app.
   std::string current_language_code_ = "en-US";
@@ -265,6 +273,12 @@ class ReadAnythingUntrustedPageHandler :
   void OnDependencyParserModelFileAvailabilityChanged(
       GetDependencyParserModelCallback callback,
       bool is_available);
+
+#if !BUILDFLAG(IS_CHROMEOS)
+  base::ScopedObservation<component_updater::ComponentUpdateService,
+                          component_updater::ComponentUpdateService::Observer>
+      component_updater_observation_{this};
+#endif
 
   base::WeakPtrFactory<ReadAnythingUntrustedPageHandler> weak_factory_{this};
 };

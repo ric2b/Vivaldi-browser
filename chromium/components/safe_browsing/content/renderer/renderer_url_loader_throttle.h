@@ -24,6 +24,8 @@
 #include "third_party/blink/public/common/tokens/tokens.h"
 #include "url/gurl.h"
 
+#include "components/safe_browsing/content/renderer/vivaldi_throttle_guard.h"
+
 namespace safe_browsing {
 
 // RendererURLLoaderThrottle is used in renderer processes to query
@@ -47,6 +49,10 @@ class RendererURLLoaderThrottle : public blink::URLLoaderThrottle {
       mojom::ExtensionWebRequestReporter* extension_web_request_reporter);
 #endif  // BUILDFLAG(ENABLE_EXTENSIONS)
   ~RendererURLLoaderThrottle() override;
+
+  // NOTE(ondrej@vivaldi.com): VB-113318
+  void SetVivaldiGuard(base::WeakPtr<vivaldi::ThrottleGuard> guard);
+  void OnURLLoaderThrottleProviderDestroyed() override;
 
  private:
   FRIEND_TEST_ALL_PREFIXES(SBRendererUrlLoaderThrottleTest,
@@ -121,6 +127,9 @@ class RendererURLLoaderThrottle : public blink::URLLoaderThrottle {
 #endif  // BUILDFLAG(ENABLE_EXTENSIONS)
 
   base::WeakPtrFactory<RendererURLLoaderThrottle> weak_factory_{this};
+
+  // NOTE(ondrej@vivaldi.com): VB-113318
+  base::WeakPtr<vivaldi::ThrottleGuard> vivaldi_throttle_guard_;
 };
 
 }  // namespace safe_browsing

@@ -28,10 +28,12 @@
 #include "chrome/browser/bookmarks/bookmark_merged_surface_service.h"
 #include "chrome/browser/bookmarks/bookmark_merged_surface_service_factory.h"
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
+#include "chrome/browser/bookmarks/bookmark_test_helpers.h"
 #include "chrome/browser/bookmarks/managed_bookmark_service_factory.h"
 #include "chrome/browser/chrome_content_browser_client.h"
 #include "chrome/browser/gcm/gcm_profile_service_factory.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/ui/actions/chrome_action_id.h"
 #include "chrome/browser/ui/actions/chrome_actions.h"
 #include "chrome/browser/ui/bookmarks/bookmark_utils.h"
 #include "chrome/browser/ui/bookmarks/bookmark_utils_desktop.h"
@@ -340,7 +342,8 @@ class BookmarkBarViewEventTestBase : public ViewEventTestBase {
         BookmarkMergedSurfaceServiceFactory::GetDefaultFactory());
     profile_ = profile_builder.Build();
     model_ = BookmarkModelFactory::GetForBrowserContext(profile_.get());
-    bookmarks::test::WaitForBookmarkModelToLoad(model_);
+    WaitForBookmarkMergedSurfaceServiceToLoad(
+        BookmarkMergedSurfaceServiceFactory::GetForProfile(profile_.get()));
     profile_->GetPrefs()->SetBoolean(bookmarks::prefs::kShowBookmarkBar, true);
 
     Browser::CreateParams native_params(profile_.get(), true);
@@ -538,7 +541,7 @@ class BookmarkBarViewDragTestBase : public BookmarkBarViewEventTestBase,
     GetDragTaskRunner()->PostTask(
         FROM_HERE,
         base::BindOnce(base::IgnoreResult(&ui_controls::SendMouseMove),
-                       target.x(), target.y(), ui_controls::kNoWindowHint));
+                       target.x(), target.y(), gfx::NativeWindow()));
   }
 
   void OnWidgetDragComplete(views::Widget* widget) override {
@@ -598,8 +601,7 @@ class BookmarkBarViewDragTestBase : public BookmarkBarViewEventTestBase,
         FROM_HERE,
         base::BindOnce(base::IgnoreResult(&ui_controls::SendMouseEvents),
                        ui_controls::LEFT, ui_controls::UP,
-                       ui_controls::kNoAccelerator,
-                       ui_controls::kNoWindowHint));
+                       ui_controls::kNoAccelerator, gfx::NativeWindow()));
   }
 
   // Called after the drag ends; returns the node the test thinks should be the
@@ -981,7 +983,7 @@ class BookmarkBarViewTest7 : public BookmarkBarViewDragTestBase {
     GetDragTaskRunner()->PostTask(
         FROM_HERE,
         base::BindOnce(base::IgnoreResult(&ui_controls::SendMouseMove),
-                       target.x(), target.y(), ui_controls::kNoWindowHint));
+                       target.x(), target.y(), gfx::NativeWindow()));
   }
 
   void OnWidgetDragComplete(views::Widget* widget) override {
@@ -1043,7 +1045,7 @@ class BookmarkBarViewTest8 : public BookmarkBarViewDragTestBase {
     GetDragTaskRunner()->PostTask(
         FROM_HERE,
         base::BindOnce(base::IgnoreResult(&ui_controls::SendMouseMove),
-                       target.x(), target.y(), ui_controls::kNoWindowHint));
+                       target.x(), target.y(), gfx::NativeWindow()));
   }
 
   void OnWidgetDragComplete(views::Widget* widget) override {
@@ -1130,9 +1132,6 @@ class BookmarkBarViewTest9 : public BookmarkBarViewEventTestBase {
         ui_test_utils::GetCenterInScreenCoordinates(scroll_down_button);
     const gfx::NativeWindow window =
         scroll_down_button->GetWidget()->GetNativeWindow();
-    // TODO(pkasting): As of November 2023, LaCrOS fails without this first
-    // mouse move, which seems wrong.
-    ASSERT_TRUE(ui_controls::SendMouseMove(loc.x() - 1, loc.y() - 1, window));
     ASSERT_TRUE(ui_controls::SendMouseMove(loc.x(), loc.y(), window));
   }
 
@@ -1837,7 +1836,7 @@ class BookmarkBarViewTest20 : public BookmarkBarViewEventTestBase {
     layout->SetIgnoreDefaultMainAxisMargins(true)
         .SetCollapseMargins(true)
         .SetDefault(views::kMarginsKey, gfx::Insets::VH(0, 2));
-    container_view->AddChildView(bb_view_.get());
+    container_view->AddChildViewRaw(bb_view_.get());
     bb_view_->SetProperty(
         views::kFlexBehaviorKey,
         views::FlexSpecification(views::MinimumFlexSizeRule::kScaleToZero,
@@ -2336,7 +2335,7 @@ class BookmarkBarViewTest29 : public BookmarkBarViewDragTestBase {
     GetDragTaskRunner()->PostTask(
         FROM_HERE,
         base::BindOnce(base::IgnoreResult(&ui_controls::SendMouseMove),
-                       target.x(), target.y(), ui_controls::kNoWindowHint));
+                       target.x(), target.y(), gfx::NativeWindow()));
   }
 
  protected:
@@ -2359,9 +2358,8 @@ class BookmarkBarViewTest29 : public BookmarkBarViewDragTestBase {
   }
 };
 
-// TODO(crbug.com/40943907): Flaky on Mac.
-// TODO(crbug.com/40947483): Flaky on Windows.
-#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)
+// Fails on Mac. crbug.com/405061054
+#if BUILDFLAG(IS_MAC)
 #define MAYBE_DNDToEmptyMenu DISABLED_DNDToEmptyMenu
 #else
 #define MAYBE_DNDToEmptyMenu DNDToEmptyMenu

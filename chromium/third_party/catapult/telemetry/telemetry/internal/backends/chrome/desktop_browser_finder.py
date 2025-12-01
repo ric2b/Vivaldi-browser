@@ -297,8 +297,14 @@ def FindAllBrowserTypes():
       'reference',
       'release',
       'release_x64',
+      'release_full_x64',
+      'release_x86',
+      'release_full_x86',
       'debug',
       'debug_x64',
+      'debug_full_x64',
+      'debug_x86',
+      'debug_full_x86',
       'default',
       'stable',
       'beta',
@@ -356,11 +362,11 @@ def FindAllAvailableBrowsers(finder_options, device):
           'exact', finder_options, normalized_executable,
           is_content_shell,
           browser_directory))
-    else:
-      raise exceptions.PathMissingError(
-          '%s specified by --browser-executable does not exist or is not '
-          'executable' %
-          normalized_executable)
+      return browsers
+
+    raise exceptions.PathMissingError(
+        '%s specified by --browser-executable does not exist or is not '
+        'executable' % normalized_executable)
 
   def AddIfFound(browser_type, build_path, app_name, content_shell):
     app = os.path.join(build_path, app_name)

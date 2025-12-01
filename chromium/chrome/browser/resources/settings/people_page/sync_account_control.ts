@@ -55,14 +55,6 @@ export class SettingsSyncAccountControlElement extends
   static get properties() {
     return {
       /**
-       * Preferences state.
-       */
-      prefs: {
-        type: Object,
-        notify: true,
-      },
-
-      /**
        * The current sync status, supplied by parent element.
        */
       syncStatus: Object,
@@ -233,7 +225,7 @@ export class SettingsSyncAccountControlElement extends
       return loadTimeData.substituteString(syncingLabel, email);
     }
 
-    return (this.shownAccount_! && this.shownAccount_!!.isPrimaryAccount) ?
+    return (this.shownAccount_! && this.shownAccount_.isPrimaryAccount) ?
         loadTimeData.substituteString(signedInLabel, email) :
         email;
   }
@@ -404,8 +396,19 @@ export class SettingsSyncAccountControlElement extends
       return true;
     }
 
+    if (this.syncStatus.domain) {
+      return true;
+    }
+
     return this.syncStatus.signedInState !== SignedInState.SIGNED_IN ||
         this.syncStatus.statusAction !== StatusAction.NO_ACTION;
+  }
+
+  /**
+   * Determines if the remove account button should be hidden.
+   */
+  private shouldHideRemoveAccountButton_(): boolean {
+    return !!this.syncStatus.domain;
   }
 
   /**
@@ -482,7 +485,7 @@ export class SettingsSyncAccountControlElement extends
   }
 
   private shouldShowTurnOffButton_(): boolean {
-    if (this.hideButtons) {
+    if (this.hideButtons || this.showSetupButtons_) {
       return false;
     }
 
@@ -491,7 +494,7 @@ export class SettingsSyncAccountControlElement extends
       return true;
     }
 
-    return !this.showSetupButtons_ && this.isSyncing_();
+    return this.isSyncing_();
   }
 
   private getTurnOffSyncLabel_(turnOffSync: string): string {
@@ -518,7 +521,7 @@ export class SettingsSyncAccountControlElement extends
   }
 
   private shouldShowErrorActionButton_(): boolean {
-    if (this.hideButtons) {
+    if (this.hideButtons || this.showSetupButtons_) {
       return false;
     }
 
@@ -533,8 +536,7 @@ export class SettingsSyncAccountControlElement extends
       return true;
     }
 
-    return !this.showSetupButtons_ && this.isSyncing_() &&
-        !!this.syncStatus.hasError &&
+    return this.isSyncing_() && !!this.syncStatus.hasError &&
         this.syncStatus.statusAction !== StatusAction.NO_ACTION;
   }
 
@@ -591,7 +593,11 @@ export class SettingsSyncAccountControlElement extends
   }
 
   private shouldHideSignoutDropdownButton_(): boolean {
-    return loadTimeData.getBoolean('isImprovedSettingsUIOnDesktopEnabled');
+    if (loadTimeData.getBoolean('isImprovedSettingsUIOnDesktopEnabled')) {
+      return true;
+    }
+
+    return !!this.syncStatus.domain;
   }
 
 
@@ -652,10 +658,10 @@ export class SettingsSyncAccountControlElement extends
     assert(this.shownAccount_);
     assert(this.storedAccounts_.length > 0);
     const isDefaultPromoAccount =
-        (this.shownAccount_!.email === this.storedAccounts_[0].email);
+        (this.shownAccount_.email === this.storedAccounts_[0].email);
 
     this.syncBrowserProxy_.startSyncingWithEmail(
-        this.shownAccount_!.email, isDefaultPromoAccount);
+        this.shownAccount_.email, isDefaultPromoAccount);
   }
 
   private onTurnOffButtonClick_() {

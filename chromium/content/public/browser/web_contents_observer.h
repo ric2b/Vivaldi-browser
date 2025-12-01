@@ -65,6 +65,10 @@ namespace net::device_bound_sessions {
 struct SessionAccess;
 }  // namespace net::device_bound_sessions
 
+namespace network {
+struct ResourceRequest;
+}  // namespace network
+
 namespace network::mojom {
 class SharedDictionaryAccessDetails;
 }  // namespace network::mojom
@@ -242,11 +246,17 @@ class CONTENT_EXPORT WebContentsObserver : public base::CheckedObserver {
   // This method is invoked when a write-access Captured Surface Control API is
   // successfully invoked by a tab-capturing Web application. These include:
   // * CaptureController.sendWheel()
-  // * CaptureController.setZoomLevel()
+  // * CaptureController.increaseZoomLevel()
+  // * CaptureController.decreaseZoomLevel()
+  // * CaptureController.resetZoomLevel()
   //
   // Observing this occurrence allows us to update the UX accordingly; for
   // example, show the user an indicator that the capturing tab is being
   // controlled by the capturing tab.
+  //
+  // TODO(crbug.com/40276312): Update the sendWheel() portion of the
+  // comment when moving from sendWheel() to forwardWheel() or
+  // to forwardGestures(), whichever the case ends up being.
   virtual void OnCapturedSurfaceControl() {}
 
   // This method is invoked when the `blink::WebView` of the current
@@ -1000,6 +1010,18 @@ class CONTENT_EXPORT WebContentsObserver : public base::CheckedObserver {
 
   // Called when a first contentful paint happened in the primary main frame.
   virtual void OnFirstContentfulPaintInPrimaryMainFrame() {}
+
+  // Invoked when a fetch keepalive request is created in this WebContents.
+  //
+  // Note that such request is usually initiated from corresponding renderer
+  // process. This method just captures the time when the request is proxied in
+  // the browser process.
+  //
+  // `resource_request` is the fetch keepalive request that is created.
+  // `initiator_rfh` is the RenderFrameHost that initiates the request.
+  virtual void OnKeepAliveRequestCreated(
+      const network::ResourceRequest& resource_request,
+      RenderFrameHost* initiator_rfh) {}
 
   WebContents* web_contents() const;
 

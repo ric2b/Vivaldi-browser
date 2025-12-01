@@ -5,9 +5,9 @@
 #import "components/search_engines/template_url.h"
 #import "ios/chrome/app/application_delegate/app_state.h"
 #import "ios/chrome/app/profile/profile_state.h"
+#import "ios/chrome/browser/device_orientation/ui_bundled/scoped_force_portrait_orientation.h"
 #import "ios/chrome/browser/shared/coordinator/scene/scene_state.h"
 #import "ios/chrome/browser/shared/model/browser/browser.h"
-#import "ios/chrome/browser/ui/device_orientation/scoped_force_portrait_orientation.h"
 #import "ios/ui/se_change_prompt/search_engine_change_prompt_swift.h"
 #import "ios/ui/se_change_prompt/vivaldi_search_engine_change_prompt_mediator.h"
 

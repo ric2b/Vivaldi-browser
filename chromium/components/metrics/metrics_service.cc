@@ -167,6 +167,7 @@
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
 #include "components/variations/entropy_provider.h"
+#include "third_party/metrics_proto/chrome_user_metrics_extension.pb.h"
 
 #if !BUILDFLAG(IS_ANDROID)
 #include "components/keep_alive_registry/keep_alive_registry.h"
@@ -419,7 +420,7 @@ void MetricsService::InitializeMetricsRecordingState() {
       // MetricsRotationScheduler is tied to the lifetime of |this|.
       base::BindRepeating(&MetricsServiceClient::GetUploadInterval,
                           base::Unretained(client_)),
-      client_->ShouldStartUpFastForTesting());
+      client_->ShouldStartUpFast());
 
   // Init() has to be called after LogCrash() in order for LogCrash() to work.
   delegating_provider_.Init();
@@ -831,7 +832,7 @@ MetricsService::GetSyntheticTrialRegistry() {
 
 base::TimeDelta MetricsService::GetInitializationDelay() {
   return base::Seconds(
-      client_->ShouldStartUpFastForTesting() ? 0 : kInitializationDelaySeconds);
+      client_->ShouldStartUpFast() ? 0 : kInitializationDelaySeconds);
 }
 
 base::TimeDelta MetricsService::GetUpdateLastAliveTimestampDelay() {
@@ -1108,6 +1109,10 @@ void MetricsService::CloseCurrentLog(
   RecordCurrentEnvironment(current_log.get(), /*complete=*/true);
   current_log->AssignFinalizedRecordId(local_state_);
   current_log->RecordCurrentSessionData(&delegating_provider_, local_state_);
+  current_log->SetLogCreationType(
+      reason == MetricsLogsEventManager::CreateReason::kOutOfBand
+          ? ChromeUserMetricsExtension::OUT_OF_BAND
+          : ChromeUserMetricsExtension::UNKNOWN);
 
   auto log_histogram_writer =
       std::make_unique<MetricsLogHistogramWriter>(current_log.get());
@@ -1201,6 +1206,9 @@ void MetricsService::PushPendingLogsToPersistentStorage(
   base::UmaHistogramBoolean("UMA.MetricsService.PendingOngoingLog",
                             pending_ongoing_log_);
 
+  base::UmaHistogramEnumeration(
+      "UMA.MetricsService.PushPendingLogsToPersistentStorageReason", reason);
+
   // Close and store a log synchronously because this is usually called in
   // critical code paths (e.g., shutdown) where we may not have time to run
   // background tasks.
@@ -1223,6 +1231,29 @@ void MetricsService::StartSchedulerIfNecessary() {
     rotation_scheduler_->Start();
     reporting_service_.Start();
   }
+}
+
+bool MetricsService::StartOutOfBandUploadIfPossible(
+    OutOfBandUploadPasskey passkey) {
+  DVLOG(1) << "StartOutOfBandUploadIfPossible";
+
+  // If the service has not uploaded the initial logs, don't upload.
+  if (IsTooEarlyToCloseLog()) {
+    return false;
+  }
+
+  // If recording or reporting are off, don't upload.
+  if (!recording_active() || !reporting_active()) {
+    return false;
+  }
+
+  // Upload current log and open a new log.
+  PushPendingLogsToPersistentStorage(
+      MetricsLogsEventManager::CreateReason::kOutOfBand);
+  OpenNewLog();
+  StartSchedulerIfNecessary();
+
+  return true;
 }
 
 void MetricsService::StartScheduledUpload() {
@@ -1492,6 +1523,8 @@ void MetricsService::PrepareProviderMetricsLogDone(
                       MetricsLogsEventManager::CreateReason::kIndependent,
                       /*done_callback=*/base::DoNothing(),
                       loader->ReleaseFinalizedLog());
+    // Allow new logs to be uploaded.
+    StartSchedulerIfNecessary();
   }
 
   independent_loader_active_ = false;

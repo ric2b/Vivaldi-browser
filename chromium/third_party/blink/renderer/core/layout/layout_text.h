@@ -439,7 +439,7 @@ class CORE_EXPORT LayoutText : public LayoutObject {
  private:
   ContentCaptureManager* GetOrResetContentCaptureManager();
   void DetachAxHooks();
-  void ClearBlockFlowCachedData(const LayoutBlockFlow* block_flow);
+  void ClearBlockFlowCachedData();
 
   virtual unsigned NonCollapsedCaretMaxOffset() const;
 
@@ -466,12 +466,14 @@ class CORE_EXPORT LayoutText : public LayoutObject {
 };
 
 inline wtf_size_t LayoutText::FirstInlineFragmentItemIndex() const {
+  NOT_DESTROYED();
   if (!IsInLayoutNGInlineFormattingContext())
     return 0u;
   return first_fragment_item_index_;
 }
 
 inline void LayoutText::DetachAxHooksIfNeeded() {
+  NOT_DESTROYED();
   if (has_abstract_inline_text_box_) [[unlikely]] {
     DetachAxHooks();
   }
@@ -479,7 +481,7 @@ inline void LayoutText::DetachAxHooksIfNeeded() {
     return;
   }
 
-  ClearBlockFlowCachedData(FragmentItemsContainer());
+  ClearBlockFlowCachedData();
 }
 
 template <>

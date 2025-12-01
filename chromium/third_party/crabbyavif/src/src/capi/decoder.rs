@@ -18,6 +18,7 @@ use super::io::*;
 use super::types::*;
 
 use std::ffi::CStr;
+use std::num::NonZero;
 use std::os::raw::c_char;
 
 use crate::decoder::track::*;
@@ -192,9 +193,9 @@ impl From<&avifDecoder> for Settings {
                 // Silently treat all other choices the same as Auto.
                 _ => CodecChoice::Auto,
             },
-            image_size_limit: decoder.imageSizeLimit,
-            image_dimension_limit: decoder.imageDimensionLimit,
-            image_count_limit: decoder.imageCountLimit,
+            image_size_limit: NonZero::new(decoder.imageSizeLimit),
+            image_dimension_limit: NonZero::new(decoder.imageDimensionLimit),
+            image_count_limit: NonZero::new(decoder.imageCountLimit),
             max_threads: u32::try_from(decoder.maxThreads).unwrap_or(0),
             android_mediacodec_output_color_format: decoder.androidMediaCodecOutputColorFormat,
         }

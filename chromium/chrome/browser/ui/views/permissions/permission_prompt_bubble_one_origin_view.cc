@@ -172,7 +172,8 @@ PermissionPromptBubbleOneOriginView::PermissionPromptBubbleOneOriginView(
     CreateExtraTextLabel(extra_text.value());
   }
 
-  CreatePermissionButtons(GetAllowAlwaysText(visible_requests));
+  CreatePermissionButtons(GetAllowAlwaysText(visible_requests),
+                          GetBlockText(visible_requests));
 
   for (std::size_t i = 0; i < visible_requests.size(); i++) {
     AddRequestLine(visible_requests[i], i);
@@ -247,7 +248,7 @@ void PermissionPromptBubbleOneOriginView::AddRequestLine(
 #endif
 
   label->SetTextStyle(views::style::STYLE_BODY_3);
-  label->SetEnabledColorId(kColorPermissionPromptRequestText);
+  label->SetEnabledColor(kColorPermissionPromptRequestText);
 
   if (index == 0u) {
     constexpr int kPermissionBodyTopMargin = 10;

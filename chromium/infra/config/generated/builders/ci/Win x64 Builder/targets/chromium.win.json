@@ -955,6 +955,26 @@
         "test_id_prefix": "ninja://ui/latency:latency_unittests/"
       },
       {
+        "args": [
+          "--test-launcher-filter-file=../../testing/buildbot/filters/layer_list_mode.cc_unittests.filter",
+          "--enable-features=UseLayerListsByDefault"
+        ],
+        "isolate_profile_data": true,
+        "merge": {
+          "script": "//testing/merge_scripts/standard_gtest_merge.py"
+        },
+        "name": "layer_list_mode_cc_unittests",
+        "swarming": {
+          "dimensions": {
+            "cpu": "x86-64",
+            "os": "Windows-10-19045"
+          },
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
+        },
+        "test": "cc_unittests",
+        "test_id_prefix": "ninja://cc:cc_unittests/"
+      },
+      {
         "ci_only": true,
         "isolate_profile_data": true,
         "merge": {
@@ -1527,7 +1547,7 @@
             "os": "Windows-10-19045"
           },
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com",
-          "shards": 2
+          "shards": 3
         },
         "test": "updater_tests",
         "test_id_prefix": "ninja://chrome/updater:updater_tests/"
@@ -1545,7 +1565,7 @@
           },
           "hard_timeout": 7200,
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com",
-          "shards": 4
+          "shards": 5
         },
         "test": "updater_tests_system",
         "test_id_prefix": "ninja://chrome/updater:updater_tests_system/"
@@ -1994,7 +2014,7 @@
             "os": "Windows-10-19045"
           },
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com",
-          "shards": 15
+          "shards": 17
         },
         "test": "headless_shell_wpt",
         "test_id_prefix": "ninja://:headless_shell_wpt/"
@@ -2137,6 +2157,22 @@
         },
         "test": "views_perftests",
         "test_id_prefix": "ninja://ui/views:views_perftests/"
+      },
+      {
+        "isolate_profile_data": true,
+        "merge": {
+          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
+        },
+        "name": "webui_resources_tools_python_unittests",
+        "swarming": {
+          "dimensions": {
+            "cpu": "x86-64",
+            "os": "Windows-10-19045"
+          },
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
+        },
+        "test": "webui_resources_tools_python_unittests",
+        "test_id_prefix": "ninja://ui/webui/resources/tools:webui_resources_tools_python_unittests/"
       },
       {
         "isolate_profile_data": true,

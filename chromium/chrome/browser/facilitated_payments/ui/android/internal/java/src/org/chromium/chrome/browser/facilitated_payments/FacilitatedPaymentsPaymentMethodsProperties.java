@@ -5,6 +5,7 @@
 package org.chromium.chrome.browser.facilitated_payments;
 
 import android.graphics.Bitmap;
+import android.graphics.drawable.Drawable;
 import android.view.View.OnClickListener;
 
 import org.chromium.base.Callback;
@@ -25,13 +26,11 @@ class FacilitatedPaymentsPaymentMethodsProperties {
     static final WritableIntPropertyKey SCREEN = new WritableIntPropertyKey("screen");
     static final WritableObjectPropertyKey<PropertyModel> SCREEN_VIEW_MODEL =
             new WritableObjectPropertyKey("screen_view_model");
-    static final ReadableObjectPropertyKey<Callback<Integer>> DISMISS_HANDLER =
-            new ReadableObjectPropertyKey<>("dismiss_handler");
     static final ReadableObjectPropertyKey<Callback<Integer>> UI_EVENT_LISTENER =
             new ReadableObjectPropertyKey<>("ui_event_listener");
 
     static final PropertyKey[] ALL_KEYS = {
-        VISIBLE_STATE, SCREEN, SCREEN_VIEW_MODEL, DISMISS_HANDLER, UI_EVENT_LISTENER
+        VISIBLE_STATE, SCREEN, SCREEN_VIEW_MODEL, UI_EVENT_LISTENER
     };
 
     // TODO: b/348595414 - Rename to FopSelectorItemType and move to a separate directory.
@@ -99,23 +98,26 @@ class FacilitatedPaymentsPaymentMethodsProperties {
     static class BankAccountProperties {
         static final ReadableObjectPropertyKey<String> BANK_NAME =
                 new ReadableObjectPropertyKey("bank_name");
-        static final ReadableObjectPropertyKey<String> BANK_ACCOUNT_SUMMARY =
-                new ReadableObjectPropertyKey("bank_account_summary");
+        static final ReadableObjectPropertyKey<String> BANK_ACCOUNT_PAYMENT_RAIL =
+                new ReadableObjectPropertyKey("bank_account_payment_rail");
+        static final ReadableObjectPropertyKey<String> BANK_ACCOUNT_TYPE =
+                new ReadableObjectPropertyKey("bank_account_type");
+        static final ReadableObjectPropertyKey<String> BANK_ACCOUNT_NUMBER =
+                new ReadableObjectPropertyKey("bank_account_number");
         static final ReadableObjectPropertyKey<String> BANK_ACCOUNT_TRANSACTION_LIMIT =
                 new ReadableObjectPropertyKey("bank_account_transaction_limit");
-        static final ReadableIntPropertyKey BANK_ACCOUNT_DRAWABLE_ID =
-                new ReadableIntPropertyKey("bank_account_drawable_id");
+        static final ReadableObjectPropertyKey<Drawable> BANK_ACCOUNT_ICON =
+                new ReadableObjectPropertyKey<>("bank_account_icon");
         static final ReadableObjectPropertyKey<Runnable> ON_BANK_ACCOUNT_CLICK_ACTION =
                 new ReadableObjectPropertyKey<>("on_bank_account_click_action");
-        static final ReadableObjectPropertyKey<Bitmap> BANK_ACCOUNT_ICON_BITMAP =
-                new ReadableObjectPropertyKey<>("bank_account_icon_bitmap");
         static final PropertyKey[] NON_TRANSFORMING_KEYS = {
             BANK_NAME,
-            BANK_ACCOUNT_SUMMARY,
+            BANK_ACCOUNT_PAYMENT_RAIL,
+            BANK_ACCOUNT_TYPE,
+            BANK_ACCOUNT_NUMBER,
             BANK_ACCOUNT_TRANSACTION_LIMIT,
-            BANK_ACCOUNT_DRAWABLE_ID,
-            ON_BANK_ACCOUNT_CLICK_ACTION,
-            BANK_ACCOUNT_ICON_BITMAP
+            BANK_ACCOUNT_ICON,
+            ON_BANK_ACCOUNT_CLICK_ACTION
         };
 
         private BankAccountProperties() {}

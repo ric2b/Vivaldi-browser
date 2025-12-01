@@ -10,6 +10,7 @@
 #include <map>
 #include <memory>
 #include <string>
+#include <string_view>
 
 #include "base/compiler_specific.h"
 #include "base/gtest_prod_util.h"
@@ -196,19 +197,21 @@ class OmniboxEditModel {
   // Opens given selection. Most kinds of selection invoke an action or
   // otherwise call `OpenMatch`, but some may `AcceptInput` which is not
   // guaranteed to open a match or commit the omnibox.
-  void OpenSelection(
+  virtual void OpenSelection(
       OmniboxPopupSelection selection,
       base::TimeTicks timestamp = base::TimeTicks(),
       WindowOpenDisposition disposition = WindowOpenDisposition::CURRENT_TAB);
 
   // A simplified version of OpenSelection that opens the model's current
   // selection.
-  void OpenSelection(
+  virtual void OpenSelection(
       base::TimeTicks timestamp = base::TimeTicks(),
       WindowOpenDisposition disposition = WindowOpenDisposition::CURRENT_TAB);
 
   OmniboxFocusState focus_state() const { return focus_state_; }
   bool has_focus() const { return focus_state_ != OMNIBOX_FOCUS_NONE; }
+
+  base::TimeTicks last_omnibox_focus() const { return last_omnibox_focus_; }
 
   // This is the same as when the Omnibox is visibly focused.
   bool is_caret_visible() const {
@@ -232,10 +235,17 @@ class OmniboxEditModel {
   bool AcceptKeyword(
       metrics::OmniboxEventProto::KeywordModeEntryMethod entry_method);
 
-  // Sets the current keyword to that of the user's default search provider and
-  // updates the view so the user sees the keyword chip in the omnibox.  Adjusts
+  // Sets the current keyword to that of the given `template_url` and updates
+  // the view so the user sees the keyword chip in the omnibox.  Adjusts
   // user_text_ and the selection based on the display text and the keyword
-  // entry method.
+  // entry method. Note, the default match may be updated in this process
+  // so the match must support this keyword mode or it will be exited.
+  void EnterKeywordMode(
+      metrics::OmniboxEventProto::KeywordModeEntryMethod entry_method,
+      const TemplateURL* template_url,
+      const std::u16string& placeholder_text);
+
+  // Enters keyword mode for user's default search provider, if enabled.
   void EnterKeywordModeForDefaultSearchProvider(
       metrics::OmniboxEventProto::KeywordModeEntryMethod entry_method);
 
@@ -310,7 +320,7 @@ class OmniboxEditModel {
   // for starter pack '@' keywords. Returns true if keyword mode was
   // entered; returns false if feature is disabled or special input
   // conditions were not detected, in which case this is a no-op.
-  bool MaybeAccelerateKeywordSelection(const std::u16string& input_text,
+  bool MaybeAccelerateKeywordSelection(std::u16string_view input_text,
                                        char16_t ch);
 
   // Called when any relevant data changes.  This rolls together several
@@ -323,8 +333,7 @@ class OmniboxEditModel {
   //     `is_temporary_test` is false.
   //   `is_temporary_text` is true if invoked because of a temporary text change
   //     or false if `temporary_text` should be ignored.
-  //   `inline_autocompletion` and `prefix_autocompletion` are the
-  //     autocompletions.
+  //   `inline_autocompletion` is the autocompletion.
   //   `destination_for_temporary_text_change` is NULL (if temporary text should
   //     not change) or the pre-change destination URL (if temporary text should
   //     change) so we can save it off to restore later.
@@ -340,7 +349,6 @@ class OmniboxEditModel {
   virtual void OnPopupDataChanged(const std::u16string& temporary_text,
                                   bool is_temporary_text,
                                   const std::u16string& inline_autocompletion,
-                                  const std::u16string& prefix_autocompletion,
                                   const std::u16string& keyword,
                                   const std::u16string& keyword_placeholder,
                                   bool is_keyword_hint,
@@ -362,8 +370,9 @@ class OmniboxEditModel {
   // Called when the current match has changed in the OmniboxController.
   void OnCurrentMatchChanged();
 
-  // Used for testing purposes only.
   std::u16string GetUserTextForTesting() const { return user_text_; }
+
+  AutocompleteInput GetInputForTesting() const { return input_; }
 
   // Name of the histogram tracking cut or copy omnibox commands.
   static const char kCutOrCopyAllTextHistogram[];
@@ -382,6 +391,9 @@ class OmniboxEditModel {
   // Gets the icon for the given `match`.
   gfx::Image GetMatchIcon(const AutocompleteMatch& match,
                           SkColor vector_icon_color) const;
+  // Gets the icon for the given `match` if the match was provided by an omnibox
+  // API extension, otherwise returns empty image.
+  gfx::Image GetMatchIconIfExtension(const AutocompleteMatch& match) const;
 #endif
 
   // Returns true if the popup exists and is open. Virtual for testing.
@@ -442,12 +454,26 @@ class OmniboxEditModel {
   // Lookup the bitmap for |result_index|. Returns nullptr if not found.
   const SkBitmap* GetPopupRichSuggestionBitmap(int result_index) const;
 
+  // Lookup the bitmap for the first `match` that has `keyword` as its
+  // `associated_keyword`. Used to fetch bitmap where the `result_index` is
+  // unknown.  Returns nullptr if not found.
+  const SkBitmap* GetPopupRichSuggestionBitmap(
+      const std::u16string& keyword) const;
+
+  // Lookup the bitmap for `match` based on the image URL.  Similar to above,
+  // but Used to fetch bitmap where the `result_index` is unknown and where
+  // there are possibly multiple suggestions with the same `keyword` but not the
+  // `image_url` being looked up. Returns nullptr if not found.
+  const SkBitmap* GetPopupRichSuggestionBitmap(const GURL& image_url) const;
+
   // Stores the image in a local data member and schedules a repaint.
   void SetPopupRichSuggestionBitmap(int result_index, const SkBitmap& bitmap);
 
   // Updates the popup view when the visibility of a group changes.
   void SetPopupSuggestionGroupVisibility(size_t match_index,
                                          bool suggestion_group_hidden);
+
+  void SetAutocompleteInput(AutocompleteInput input);
 
   // Called to indicate a navigation may occur based on
   // |navigation_predictor| to the suggestion on |line|.
@@ -478,6 +504,12 @@ class OmniboxEditModel {
   FRIEND_TEST_ALL_PREFIXES(OmniboxEditModelTest, ConsumeCtrlKey);
   FRIEND_TEST_ALL_PREFIXES(OmniboxEditModelTest, ConsumeCtrlKeyOnRequestFocus);
   FRIEND_TEST_ALL_PREFIXES(OmniboxEditModelTest, ConsumeCtrlKeyOnCtrlAction);
+  FRIEND_TEST_ALL_PREFIXES(
+      OmniboxEditModelPopupTest,
+      GetPopupRichSuggestionBitmapForMatchWithoutAssociatedKeyword);
+  FRIEND_TEST_ALL_PREFIXES(
+      OmniboxEditModelPopupTest,
+      GetPopupRichSuggestionBitmapForMatchWithAssociatedKeyword);
 
   enum PasteState {
     NONE,     // Most recent edit was not a paste.
@@ -606,14 +638,13 @@ class OmniboxEditModel {
   // changes.
   void OnFaviconFetched(const GURL& page_url, const gfx::Image& icon) const;
 
-  // Returns view text if there is a view. Until the model is made the primary
-  // data source, this should not be called when there's no view.
+  // Returns view text if there is a view. Until the model is made the
+  // primary data source, this should not be called when there's no view.
   std::u16string GetText() const;
 
-  // Lookup the bitmap for `match` based on keyword. Returns nullptr if not
-  // found.
-  const SkBitmap* GetPopupRichSuggestionBitmap(
-      const std::u16string& keyword) const;
+  // Always use these to set keyword members instead of mutating them directly.
+  void SetKeyword(const std::u16string& keyword);
+  void SetKeywordPlaceholder(const std::u16string& keyword_placeholder);
 
   // Owns this.
   raw_ptr<OmniboxController> controller_;
@@ -697,7 +728,6 @@ class OmniboxEditModel {
   // it to a normal selection, or change the edit entirely).
   bool just_deleted_text_;
   std::u16string inline_autocompletion_;
-  std::u16string prefix_autocompletion_;
 
   // Used by OnPopupDataChanged to keep track of whether there is currently a
   // temporary text.

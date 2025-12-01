@@ -8,6 +8,7 @@ import android.animation.Animator;
 import android.animation.AnimatorListenerAdapter;
 import android.animation.AnimatorSet;
 import android.animation.ObjectAnimator;
+import android.animation.ValueAnimator;
 import android.content.Context;
 import android.content.res.ColorStateList;
 import android.content.res.Configuration;
@@ -41,9 +42,10 @@ import androidx.core.widget.ImageViewCompat;
 import org.chromium.base.Callback;
 import org.chromium.base.MathUtils;
 import org.chromium.base.ResettersForTesting;
-import org.chromium.chrome.browser.flags.ChromeFeatureList;
+import org.chromium.chrome.browser.hub.RoundedCornerAnimatorUtil;
 import org.chromium.chrome.browser.tab_ui.TabThumbnailView;
 import org.chromium.chrome.tab_ui.R;
+import org.chromium.components.browser_ui.widget.RoundedCornerImageView;
 import org.chromium.components.browser_ui.widget.scrim.ScrimManager;
 import org.chromium.components.browser_ui.widget.scrim.ScrimProperties;
 import org.chromium.components.browser_ui.widget.scrim.ScrimView;
@@ -56,6 +58,7 @@ import org.chromium.ui.widget.ButtonCompat;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -91,7 +94,7 @@ public class TabGridDialogView extends FrameLayout {
     private FrameLayout mAnimationClip;
     private FrameLayout mToolbarContainer;
     private FrameLayout mRecyclerViewContainer;
-    private View mBackgroundFrame;
+    private RoundedCornerImageView mBackgroundFrame;
     private View mAnimationCardView;
     private View mItemView;
     private View mUngroupBar;
@@ -191,6 +194,7 @@ public class TabGridDialogView extends FrameLayout {
         mParent.getViewTreeObserver().addOnGlobalLayoutListener(mParentGlobalLayoutListener);
         updateDialogWithOrientation(mOrientation);
         setVisibility(GONE);
+        notifyVisibilityListenerOnHide();
     }
 
     @Override
@@ -301,9 +305,7 @@ public class TabGridDialogView extends FrameLayout {
                         mCurrentDialogAnimator = null;
                         mDialogContainerView.clearFocus();
                         restoreBackgroundViewAccessibilityImportance();
-                        if (mVisibilityListener != null) {
-                            mVisibilityListener.finishedHidingDialogView();
-                        }
+                        notifyVisibilityListenerOnHide();
                     }
                 };
 
@@ -376,7 +378,7 @@ public class TabGridDialogView extends FrameLayout {
             if (view == TabGridDialogView.this) {
                 continue;
             }
-            if (!ChromeFeatureList.isEnabled(ChromeFeatureList.DATA_SHARING)) {
+            if (!TabUiUtils.isDataSharingFunctionalityEnabled()) {
                 assert mAccessibilityImportanceMap.containsKey(view);
             }
             Integer importance = mAccessibilityImportanceMap.get(view);
@@ -387,7 +389,17 @@ public class TabGridDialogView extends FrameLayout {
     }
 
     void setVisibilityListener(VisibilityListener visibilityListener) {
+        // Treat the old visibility listener as if it is hiding as it no longer controls the View so
+        // it is effectively hidden.
+        notifyVisibilityListenerOnHide();
+
         mVisibilityListener = visibilityListener;
+    }
+
+    private void notifyVisibilityListenerOnHide() {
+        if (mVisibilityListener != null) {
+            mVisibilityListener.finishedHidingDialogView();
+        }
     }
 
     void setupDialogAnimation(View sourceView) {
@@ -604,6 +616,21 @@ public class TabGridDialogView extends FrameLayout {
                 .with(frameZoomOutScaleYAnimator)
                 .with(frameZoomOutScaleXAnimator);
 
+        int endRadius =
+                mContext.getResources().getDimensionPixelSize(R.dimen.tab_grid_dialog_bg_radius);
+        int[] endRadii = new int[4];
+        int[] startRadii = new int[4];
+
+        Arrays.fill(endRadii, endRadius);
+        Arrays.fill(startRadii, (int) (endRadius * cardScale));
+
+        // While background frame is zooming out, the corners scale down along with the animation.
+        final ValueAnimator frameZoomOutCornerAnimator =
+                RoundedCornerAnimatorUtil.createRoundedCornerAnimator(
+                        mBackgroundFrame, startRadii, endRadii);
+        frameZoomOutCornerAnimator.setDuration(DIALOG_ANIMATION_DURATION);
+        frameZoomOutCornerAnimator.setInterpolator(Interpolators.EMPHASIZED);
+
         // After the dialog showing animation starts, the original card in grid tab switcher fades
         // out.
         final ObjectAnimator tabFadeOutAnimator =
@@ -650,6 +677,7 @@ public class TabGridDialogView extends FrameLayout {
                 .play(cardZoomOutAnimatorSet)
                 .with(cardZoomOutAlphaAnimator)
                 .with(frameZoomOutAnimatorSet)
+                .with(frameZoomOutCornerAnimator)
                 .with(dialogZoomOutAnimatorSet)
                 .with(dialogZoomOutAlphaAnimator)
                 .with(tabFadeOutAnimator);
@@ -783,6 +811,13 @@ public class TabGridDialogView extends FrameLayout {
                     }
                 });
 
+        // While background frame is zooming in, the corners scale up along with the animation.
+        final ValueAnimator frameZoomInCornerAnimator =
+                RoundedCornerAnimatorUtil.createRoundedCornerAnimator(
+                        mBackgroundFrame, endRadii, startRadii);
+        frameZoomOutCornerAnimator.setDuration(DIALOG_ANIMATION_DURATION);
+        frameZoomOutCornerAnimator.setInterpolator(Interpolators.EMPHASIZED);
+
         // At the end of the dialog hiding animation, the original tab grid card fades in.
         final ObjectAnimator tabFadeInAnimator =
                 ObjectAnimator.ofFloat(mItemView, View.ALPHA, 0f, 1f);
@@ -795,6 +830,7 @@ public class TabGridDialogView extends FrameLayout {
                 .play(dialogZoomInAnimatorSet)
                 .with(dialogZoomInAlphaAnimator)
                 .with(frameZoomInAnimatorSet)
+                .with(frameZoomInCornerAnimator)
                 .with(cardZoomInAnimatorSet)
                 .with(cardZoomInAlphaAnimator)
                 .with(tabFadeInAnimator);
@@ -1050,7 +1086,7 @@ public class TabGridDialogView extends FrameLayout {
     void updateDialogContainerBackgroundColor(int backgroundColor) {
         mBackgroundDrawableColor = backgroundColor;
         DrawableCompat.setTint(mDialogContainerView.getBackground(), backgroundColor);
-        DrawableCompat.setTint(mBackgroundFrame.getBackground(), backgroundColor);
+        mBackgroundFrame.setRoundedFillColor(backgroundColor);
     }
 
     void updateHairlineColor(@ColorInt int hairlineColor) {
@@ -1058,7 +1094,7 @@ public class TabGridDialogView extends FrameLayout {
     }
 
     void setHairlineVisibility(boolean visible) {
-        mHairline.setVisibility(visible ? View.VISIBLE : View.GONE);
+        mHairline.setVisibility(visible ? VISIBLE : GONE);
     }
 
     /**
@@ -1117,7 +1153,7 @@ public class TabGridDialogView extends FrameLayout {
      * animations.
      */
     void setSendFeedbackVisible(boolean visible) {
-        mSendFeedbackButton.setVisibility(visible ? View.VISIBLE : View.GONE);
+        mSendFeedbackButton.setVisibility(visible ? VISIBLE : GONE);
         updateDialogWithOrientation(mOrientation);
     }
 

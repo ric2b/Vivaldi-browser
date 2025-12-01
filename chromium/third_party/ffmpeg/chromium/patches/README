@@ -970,21 +970,6 @@ Affects:
     libavcodec/aac/aacdec.c
 
 ------------------------------------------------------------------
-commit 3ea8d0a2ce7dde53c1574d8f032b803e584a6355
-Author: Eugene Zemtsov <eugene@chromium.org>
-Date:   Wed Oct 23 18:29:41 2024 -0700
-
-    Fix crash when trying to get a fragment time for a non-existing fragment
-
-    Bug: https://issues.chromium.org/issues/372994341
-    Change-Id: I695d625717c078ed6f84f44e58c34da858af4d3b
-    Reviewed-on: https://chromium-review.googlesource.com/c/chromium/third_party/ffmpeg/+/5958151
-    Reviewed-by: Dale Curtis <dalecurtis@chromium.org>
-
-Affects:
-    libavformat/mov.c
-
-------------------------------------------------------------------
 commit 590dd6169ac0b8ee102086cfb40c51dee5a47072
 Author: Ted Meyer <tmathmeyer@chromium.org>
 Date:   Mon Dec 9 16:16:13 2024 -0800
@@ -1020,7 +1005,6 @@ Date:   Thu Dec 12 17:19:33 2024 -0800
 
     Bug: 383824580
 
-
 Affects:
     libavcodec/cabac.c
 
@@ -1036,6 +1020,126 @@ Date:   Fri Dec 13 16:55:41 2024 -0800
     argument for memmove, leading to massive out of bounds memory writes.
 
     Bug: 383454674
+
+Affects:
+    libavformat/mov.c
+
+------------------------------------------------------------------
+commit a5f42b5e823887837696c61dae0448265272bd67
+Author: Michael Niedermayer <michael@niedermayer.cc>
+Date:   Tue Jan 7 23:21:32 2025 +0100
+
+    avformat/mov: perform sanity checks for heif before index building
+
+    Fixes: undefined NULL pointer use
+    Fixes: clusterfuzz-testcase-minimized-audio_decoder_fuzzer-6363211175493632
+
+    This performs equivalent sanity checks as are done in mov_read_trak()
+    before mov_build_index()
+
+    Reported-by: Dale Curtis <dalecurtis@chromium.org>
+    Signed-off-by: Michael Niedermayer <michael@niedermayer.cc>
+
+Affects:
+    libavformat/mov.c
+
+------------------------------------------------------------------
+commit cae04bf9414c582fcc28edc6078ebfd3800e7838
+Merge: d10a0f8bf5 d5873be583
+Author: Frank Liberato <liberato@chromium.org>
+Date:   Mon Jan 13 20:41:30 2025 +0000
+
+    Merge remote-tracking branch 'upstream/master' into sushi-2025-01-13-20-34-05
+
+     Conflicts:
+            libavcodec/h2645_sei.c
+            libavcodec/hevc/hevcdec.c
+            libavformat/mov.c
+
+Affects:
+    libavformat/mov.c
+
+------------------------------------------------------------------
+commit c21ed81ae4d19f58ab1b681d836ca8b9ffd856a3
+Author: James Almer <jamrial@gmail.com>
+Date:   Mon Jan 13 18:17:06 2025 -0300
+
+    avformat/mov: fix potential unsigned underflow in loop condition
+
+    if sc->tts_count is 0, this condition will wrap around to UINT_MAX and the
+    code will try to dereference a NULL pointer.
+
+    Fixes ticket #11417
+
+    Signed-off-by: James Almer <jamrial@gmail.com>
+
+Affects:
+    libavformat/mov.c
+
+------------------------------------------------------------------
+commit b6701d3e05cf0f823978b558822a7b810d897a5a
+Author: Frank Liberato <liberato@chromium.org>
+Date:   Tue Jan 14 00:37:44 2025 +0000
+
+    [ffmpeg] ffmpeg roll for M134
+
+    == new patch ==
+    Remove aom_film_grain
+
+    This was added as a dep in the latest roll, which brings in files that
+    we don't need.
+
+    == usual stuff ==
+    README.chromium file
+    Chromium patches file
+    GN Configuration
+
+    Bug: 389777787
+    Change-Id: Ia373b13d4268651550fee1a14aaa4bcad7d7cd84
+    Reviewed-on: https://chromium-review.googlesource.com/c/chromium/third_party/ffmpeg/+/6172268
+    Reviewed-by: Ted (Chromium) Meyer <tmathmeyer@chromium.org>
+    Reviewed-by: Thomas Guilbert <tguilbert@chromium.org>
+    Reviewed-by: Dale Curtis <dalecurtis@chromium.org>
+
+Affects:
+    libavcodec/Makefile
+
+------------------------------------------------------------------
+commit d9ba911e510995cf769bd0e2dd8a988eb903b77c
+Author: James Almer <jamrial@gmail.com>
+Date:   Tue Jan 28 21:23:11 2025 -0300
+
+    avformat/mov: fix overflow in drift timestamp calculation
+
+    Fixes: signed integer overflow: 7803923888585309955 - -3407677434275325337 cannot be represented in type 'int64_t' (aka 'long')
+    Fixes: 377736723/clusterfuzz-testcase-minimized-media_pipeline_integration_fuzzer-5052449500889088
+
+    Signed-off-by: James Almer <jamrial@gmail.com>
+
+Affects:
+    libavformat/mov.c
+
+------------------------------------------------------------------
+commit dc0b6ad4dd1d4d483fa1704142b6a1f14e6dad33
+Author: Frank Liberato <liberato@chromium.org>
+Date:   Fri Jan 31 19:02:31 2025 +0000
+
+    Check for `!tts_count` before accessing `tts_data`
+
+Affects:
+    libavformat/mov.c
+
+------------------------------------------------------------------
+commit cc6ef549b065e0dfc20856f6d32fcba935a98a95
+Author: Ted Meyer <tmathmeyer@chromium.org>
+Date:   Fri Feb 14 11:06:26 2025 -0800
+
+    Fix Null-dereference READ
+
+    Upstream patch pending:
+    https://patchwork.ffmpeg.org/project/ffmpeg/patch/20250213155232.59-1-jamrial@gmail.com
+
+    Bug: 396192874
 
 Affects:
     libavformat/mov.c

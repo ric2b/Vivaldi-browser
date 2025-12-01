@@ -6,14 +6,30 @@ package org.chromium.chrome.browser.browser_controls;
 
 import androidx.annotation.ColorInt;
 
+import org.chromium.build.annotations.NullMarked;
+
 /**
  * Allows for sizing the browser controls, as well as manipulating visibility and retrieving state.
  *
  * <p>Note that only top-level UI coordinator classes should change the browser controls size.
  */
+@NullMarked
 public interface BrowserControlsSizer extends BrowserControlsVisibilityManager {
     /** Sets the height of the bottom controls. */
     void setBottomControlsHeight(int bottomControlsHeight, int bottomControlsMinHeight);
+
+    /**
+     * Sets the additional height of the bottom controls. This is the extra distance on top of
+     * the bottom controls height that represent visual effects that extend past the top of the
+     * bottom controls.
+     *
+     * For example, the bottom tabgroup has a shadow. The height is the distance from the
+     * bottom of the screen to the top of the tabgroup (not including the shadow) while the
+     * additional height is the distance from the top of the tabgroup to the end of the shadow.
+     * When changing the position of the tabgroup, only the height should be changed. The
+     * additional height should only be changed when the shadow's height changes.
+     */
+    void setBottomControlsAdditionalHeight(int height);
 
     /** Sets the height of the top controls. */
     void setTopControlsHeight(int topControlsHeight, int topControlsMinHeight);

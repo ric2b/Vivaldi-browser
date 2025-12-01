@@ -42,35 +42,35 @@ TEST(ByteBufferTest, TestByteOrder) {
   uint32_t n32 = 1;
   uint64_t n64 = 1;
 
-  EXPECT_EQ(n16, NetworkToHost16(HostToNetwork16(n16)));
-  EXPECT_EQ(n32, NetworkToHost32(HostToNetwork32(n32)));
-  EXPECT_EQ(n64, NetworkToHost64(HostToNetwork64(n64)));
+  EXPECT_EQ(n16, webrtc::NetworkToHost16(webrtc::HostToNetwork16(n16)));
+  EXPECT_EQ(n32, webrtc::NetworkToHost32(webrtc::HostToNetwork32(n32)));
+  EXPECT_EQ(n64, webrtc::NetworkToHost64(webrtc::HostToNetwork64(n64)));
 
-  if (IsHostBigEndian()) {
+  if (webrtc::IsHostBigEndian()) {
     // The host is the network (big) endian.
-    EXPECT_EQ(n16, HostToNetwork16(n16));
-    EXPECT_EQ(n32, HostToNetwork32(n32));
-    EXPECT_EQ(n64, HostToNetwork64(n64));
+    EXPECT_EQ(n16, webrtc::HostToNetwork16(n16));
+    EXPECT_EQ(n32, webrtc::HostToNetwork32(n32));
+    EXPECT_EQ(n64, webrtc::HostToNetwork64(n64));
 
     // GetBE converts big endian to little endian here.
-    EXPECT_EQ(n16 >> 8, GetBE16(&n16));
-    EXPECT_EQ(n32 >> 24, GetBE32(&n32));
-    EXPECT_EQ(n64 >> 56, GetBE64(&n64));
+    EXPECT_EQ(n16 >> 8, webrtc::GetBE16(&n16));
+    EXPECT_EQ(n32 >> 24, webrtc::GetBE32(&n32));
+    EXPECT_EQ(n64 >> 56, webrtc::GetBE64(&n64));
   } else {
     // The host is little endian.
-    EXPECT_NE(n16, HostToNetwork16(n16));
-    EXPECT_NE(n32, HostToNetwork32(n32));
-    EXPECT_NE(n64, HostToNetwork64(n64));
+    EXPECT_NE(n16, webrtc::HostToNetwork16(n16));
+    EXPECT_NE(n32, webrtc::HostToNetwork32(n32));
+    EXPECT_NE(n64, webrtc::HostToNetwork64(n64));
 
     // GetBE converts little endian to big endian here.
-    EXPECT_EQ(GetBE16(&n16), HostToNetwork16(n16));
-    EXPECT_EQ(GetBE32(&n32), HostToNetwork32(n32));
-    EXPECT_EQ(GetBE64(&n64), HostToNetwork64(n64));
+    EXPECT_EQ(webrtc::GetBE16(&n16), webrtc::HostToNetwork16(n16));
+    EXPECT_EQ(webrtc::GetBE32(&n32), webrtc::HostToNetwork32(n32));
+    EXPECT_EQ(webrtc::GetBE64(&n64), webrtc::HostToNetwork64(n64));
 
     // GetBE converts little endian to big endian here.
-    EXPECT_EQ(n16 << 8, GetBE16(&n16));
-    EXPECT_EQ(n32 << 24, GetBE32(&n32));
-    EXPECT_EQ(n64 << 56, GetBE64(&n64));
+    EXPECT_EQ(n16 << 8, webrtc::GetBE16(&n16));
+    EXPECT_EQ(n32 << 24, webrtc::GetBE32(&n32));
+    EXPECT_EQ(n64 << 56, webrtc::GetBE64(&n64));
   }
 }
 
@@ -168,12 +168,24 @@ TEST(ByteBufferTest, TestReadWriteBuffer) {
 
   // Write and read bytes
   uint8_t write_bytes[] = {3, 2, 1};
-  buffer.WriteBytes(write_bytes, 3);
+  buffer.Write(webrtc::ArrayView<const uint8_t>(write_bytes, 3));
   ByteBufferReader read_buf7(buffer);
   uint8_t read_bytes[3];
   EXPECT_TRUE(read_buf7.ReadBytes(read_bytes));
   EXPECT_THAT(read_bytes, ElementsAreArray(write_bytes));
   EXPECT_EQ(read_buf7.Length(), 0U);
+  buffer.Clear();
+
+  // Write and read bytes with deprecated function
+  // TODO: issues.webrtc.org/42225170 - delete
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+  buffer.WriteBytes(write_bytes, 3);
+#pragma clang diagnostic pop
+  ByteBufferReader read_buf75(buffer);
+  EXPECT_TRUE(read_buf75.ReadBytes(read_bytes));
+  EXPECT_THAT(read_bytes, ElementsAreArray(write_bytes));
+  EXPECT_EQ(read_buf75.Length(), 0U);
   buffer.Clear();
 
   // Write and read reserved buffer space

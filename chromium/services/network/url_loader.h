@@ -36,9 +36,11 @@
 #include "net/socket/socket_tag.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
 #include "net/url_request/url_request.h"
+#include "services/network/ad_auction/event_record_request_helper.h"
 #include "services/network/attribution/attribution_request_helper.h"
 #include "services/network/keepalive_statistics_recorder.h"
 #include "services/network/network_service.h"
+#include "services/network/partial_decoder.h"
 #include "services/network/private_network_access_checker.h"
 #include "services/network/public/cpp/cors/cors_error_status.h"
 #include "services/network/public/cpp/initiator_lock_compatibility.h"
@@ -152,10 +154,6 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) URLLoader
   // `dev_tools_observer`, `cookie_access_observer`,
   // `url_loader_network_observer`, or `device_bound_session_observer`
   // are not provided.
-  //
-  // `third_party_cookies_enabled` is also false if all cookies are disabled.
-  // The mojom::kURLLoadOptionBlockThirdPartyCookies can be set or unset
-  // independently of this option.
   URLLoader(
       URLLoaderContext& context,
       DeleteCallback delete_callback,
@@ -299,6 +297,12 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) URLLoader
 
   void SetEnableReportingRawHeaders(bool enable);
 
+  void set_partial_decoder_decoding_buffer_size_for_testing(
+      int partial_decoder_decoding_buffer_size) {
+    partial_decoder_decoding_buffer_size_ =
+        partial_decoder_decoding_buffer_size;
+  }
+
   // Gets the URLLoader associated with this request.
   static URLLoader* ForRequest(const net::URLRequest& request);
 
@@ -362,11 +366,12 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) URLLoader
       net::ReferrerPolicy referrer_policy,
       bool upgrade_if_insecure,
       bool is_ad_tagged,
+      bool client_side_content_decoding_enabled,
       std::optional<net::IsolationInfo> isolation_info,
       bool force_main_frame_for_same_site_cookies,
       net::SecureDnsPolicy secure_dns_policy,
       net::HttpRequestHeaders extra_request_headers,
-      const std::optional<std::vector<net::SourceStream::SourceType>>&
+      const std::optional<std::vector<net::SourceStreamType>>&
           accepted_stream_types,
       const std::optional<url::Origin>& initiator,
       net::RedirectInfo::FirstPartyURLPolicy first_party_url_policy,
@@ -374,12 +379,26 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) URLLoader
       bool priority_incremental,
       net::CookieSettingOverrides cookie_setting_overrides,
       std::optional<net::SharedDictionaryGetter> shared_dictionary_getter,
-      net::SocketTag socket_tag);
+      net::SocketTag socket_tag,
+      bool allows_device_bound_sessions);
 
   void OpenFilesForUpload(const ResourceRequest& request);
   void SetUpUpload(const ResourceRequest& request,
                    int error_code,
                    const std::vector<base::File> opened_files);
+
+  // A continuation of `OnConnected` to process the result of the asynchronous
+  // Local Network Access permission check.
+  void ProcessLocalNetworkAccessPermissionResultOnConnected(
+      const net::TransportInfo& info,
+      net::URLRequest* url_request,
+      net::CompletionOnceCallback callback,
+      bool permission_granted);
+
+  // A continuation of `OnConnected` to handle an ACCEPT_CH frame, if present.
+  int ProcessAcceptCHFrameOnConnected(const net::TransportInfo& info,
+                                      net::URLRequest* url_request,
+                                      net::CompletionOnceCallback callback);
 
   // A `ResourceRequest` where `shared_storage_writable_eligible` is true, is
   // eligible for shared storage operations via response headers.
@@ -414,8 +433,8 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) URLLoader
   // Storage operations to call
   // - If the request has not received the `kSharedStorageWriteHeader` response
   // header, or if parsing fails to produce any valid operations, then
-  // immediately call `ContinueOnReceivedRedirect`
-  // - Otherwise, `ContinueOnReceivedRedirect` will be run asynchronously after
+  // immediately call `ContinueOnReceiveRedirect`
+  // - Otherwise, `ContinueOnReceiveRedirect` will be run asynchronously after
   // forwarding the operations to `URLLoaderNetworkServiceObserver` to queue via
   // Mojo
   //
@@ -450,7 +469,7 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) URLLoader
   //
   // Start in `ProcessOutboundAttributionInterceptor`
   // - If `attribution_request_helper_` is not defined, immediately
-  //   calls`ScheduleStart`.
+  //   calls `ScheduleStart`.
   // - Otherwise:
   //   - Execute `AttributionRequestHelper::Begin`
   //   - On Begin's callback, calls `ScheduleStart`
@@ -468,17 +487,43 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) URLLoader
   // Inbound control flow:
   //
   // Start in `ProcessInboundAttributionInterceptorOnResponseStarted`
-  //  - If `attribution_request_helper_` is not defined, immediately
-  //    calls`ProcessInboundSharedStorageInterceptorOnResponseStarted`.
+  //  - If `attribution_request_helper_` is not defined,
+  //    immediately calls
+  //    `ProcessInboundAdAuctionEventRecordInterceptorOnResponseStarted`.
   // - Otherwise:
   //   - Execute `AttributionRequestHelper::Finalize`
   //   - On Finalize's callback, calls
-  //   `ProcessInboundSharedStorageInterceptorOnResponseStarted`
+  //    `ProcessInboundAdAuctionEventRecordInterceptorOnResponseStarted`.
   void ProcessOutboundAttributionInterceptor();
   void ProcessInboundAttributionInterceptorOnReceivedRedirect(
       const ::net::RedirectInfo& redirect_info,
       mojom::URLResponseHeadPtr response);
   void ProcessInboundAttributionInterceptorOnResponseStarted();
+
+  // All inbound responses will invoke
+  // `ad_auction_event_record_request_helper_.HandleResponse()`, which
+  // always returns immediately without blocking, and also exits early for
+  // ineligible responses.
+  //
+  // Outbound control flow:
+  //
+  // There are no outbound flow methods as the request headers are set by
+  // ComputeAttributionReportingHeaders() in the URLLoader() constructor.
+  //
+  // Redirection control flow:
+  //
+  // Redirection isn't handled yet. TODO(crbug.com/394108643): Support
+  // capturing headers on redirection responses.
+  //
+  // Inbound control flow:
+  //
+  // Start in
+  // `ProcessInboundAdAuctionEventRecordInterceptorOnResponseStarted()`
+  //  - Execute
+  //   `ad_auction_event_record_request_helper_::HandleResponse()`.
+  //  - Afterwards, execute
+  //   `ProcessInboundSharedStorageInterceptorOnResponseStarted()`.
+  void ProcessInboundAdAuctionEventRecordInterceptorOnResponseStarted();
 
   // Continuation of `OnReceivedRedirect` after possibly asynchronously
   // concluding the request's Attribution and/or Shared Storage operations.
@@ -652,6 +697,19 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) URLLoader
   // `load_with_storage_access` field should be set.
   bool ShouldSetLoadWithStorageAccess() const;
 
+  // Reads more decoded data from the PartialDecoder.
+  void ReadDecodedDataFromPartialDecoder();
+
+  // Callback function to asynchronously receive the result from the
+  // PartialDecoder.
+  void OnReadDecodedDataFromPartialDecoder(int result);
+
+  // Checks the result from the PartialDecoder, performs MIME and ORB sniffing
+  // on the decoded data, and determines if more sniffing is needed.
+  // If no further decoding is needed, `partial_decoder_` is reset, and
+  // `partial_decoder_result_` is set unless an error occurred during decoding.
+  void CheckPartialDecoderResult(int result);
+
   // Records metrics about GET requests.
   void RecordRequestMetrics();
 
@@ -707,6 +765,7 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) URLLoader
   // Sniffing state and ORB state.
   bool is_more_orb_sniffing_needed_ = false;
   bool is_more_mime_sniffing_needed_ = false;
+  std::optional<std::string> mime_type_before_sniffing_;
   const raw_ref<orb::PerFactoryState> per_factory_orb_state_;
   // `orb_analyzer_` must be destructed before `per_factory_orb_state_`.
   std::unique_ptr<orb::ResponseAnalyzer> orb_analyzer_;
@@ -750,7 +809,7 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) URLLoader
   const mojom::RequestDestination request_destination_ =
       mojom::RequestDestination::kEmpty;
 
-  const std::vector<std::string> expected_signatures_ = {};
+  const std::vector<std::string> expected_public_keys_;
 
   scoped_refptr<ResourceSchedulerClient> resource_scheduler_client_;
 
@@ -848,6 +907,11 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) URLLoader
   // (https://github.com/WICG/shared-storage#from-response-headers).
   std::unique_ptr<SharedStorageRequestHelper> shared_storage_request_helper_;
 
+  // Request helper responsible for processing Ad Auction record event
+  // headers.
+  // (https://github.com/WICG/turtledove/pull/1279)
+  AdAuctionEventRecordRequestHelper ad_auction_event_record_request_helper_;
+
   // Indicates |url_request_| is fetch upload request and that has streaming
   // body.
   const bool has_fetch_streaming_upload_body_;
@@ -866,6 +930,9 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) URLLoader
   const bool include_request_cookies_with_response_ = false;
   net::cookie_util::ParsedRequestCookies request_cookies_;
 
+  // Specifies that the response head should include load timing internal info.
+  const bool include_load_timing_internal_info_with_response_;
+
   std::vector<network::mojom::CookieAccessDetailsPtr> cookie_access_details_;
 
   const bool provide_data_use_updates_;
@@ -874,6 +941,17 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) URLLoader
   // high-priority requests that cannot yet be written to the mojo data pipe
   // because it is full.
   std::unique_ptr<SlopBucket> slop_bucket_;
+
+  // For decoding a small part of the response body to check its type (for ORB
+  // and MIME sniffing) when the response might be compressed and client-side
+  // content decoding is enabled.
+  std::unique_ptr<PartialDecoder> partial_decoder_;
+
+  // Keeps the original, compressed data from `partial_decoder_`.
+  std::optional<PartialDecoderResult> partial_decoder_result_;
+
+  // How much decoded data `partial_decoder_` should hold for the type check.
+  int partial_decoder_decoding_buffer_size_;
 
   // Keeps the result of IsSharedDictionaryReadAllowed(). Used only for metrics.
   bool shared_dictionary_allowed_check_passed_ = false;

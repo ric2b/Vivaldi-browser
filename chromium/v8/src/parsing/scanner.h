@@ -2,10 +2,10 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-// Features shared by parsing and pre-parsing scanners.
-
 #ifndef V8_PARSING_SCANNER_H_
 #define V8_PARSING_SCANNER_H_
+
+// Features shared by parsing and pre-parsing scanners.
 
 #include <algorithm>
 #include <memory>
@@ -438,6 +438,8 @@ class V8_EXPORT_PRIVATE Scanner {
     return saw_magic_comment_compile_hints_all_;
   }
 
+  bool HasPerFunctionCompileHint(int position);
+
   bool FoundHtmlComment() const { return found_html_comment_; }
 
   const Utf16CharacterStream* stream() const { return source_; }
@@ -764,6 +766,9 @@ class V8_EXPORT_PRIVATE Scanner {
   LiteralBuffer source_mapping_url_;
   bool saw_source_mapping_url_magic_comment_at_sign_ = false;
   bool saw_magic_comment_compile_hints_all_ = false;
+  bool saw_non_comment_ = false;
+  std::vector<int> per_function_compile_hint_positions_;
+  size_t per_function_compile_hint_positions_idx_ = 0;
 
   // Last-seen positions of potentially problematic tokens.
   Location octal_pos_;

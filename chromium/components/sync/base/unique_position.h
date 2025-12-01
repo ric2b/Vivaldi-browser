@@ -90,6 +90,7 @@ class UniquePosition {
 
   bool LessThan(const UniquePosition& other) const;
   bool Equals(const UniquePosition& other) const;
+  bool operator ==(const UniquePosition & other) const { return Equals(other); }
 
   // Serializes the position's internal state to a protobuf.
   sync_pb::UniquePosition ToProto() const;

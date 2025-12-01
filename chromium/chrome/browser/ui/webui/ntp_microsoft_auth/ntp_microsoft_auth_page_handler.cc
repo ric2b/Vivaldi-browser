@@ -4,13 +4,17 @@
 
 #include "chrome/browser/ui/webui/ntp_microsoft_auth/ntp_microsoft_auth_page_handler.h"
 
+#include <string>
 #include <utility>
 
+#include "base/hash/hash.h"
 #include "base/metrics/histogram_functions.h"
 #include "chrome/browser/new_tab_page/microsoft_auth/microsoft_auth_service.h"
 #include "chrome/browser/new_tab_page/microsoft_auth/microsoft_auth_service_factory.h"
+#include "chrome/browser/new_tab_page/new_tab_page_util.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/webui/ntp_microsoft_auth/ntp_microsoft_auth_untrusted_ui.mojom.h"
+#include "components/search/ntp_features.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 
 MicrosoftAuthUntrustedPageHandler::MicrosoftAuthUntrustedPageHandler(
@@ -33,17 +37,13 @@ void MicrosoftAuthUntrustedPageHandler::ClearAuthData() {
   auth_service_->ClearAuthData();
 }
 
-// TODO(crbug.com/396144770): Update logic to something that simply calls
-// `OnAuthStateUpdated` after merges for M134 are complete, instead of the
-// renderer calling this and deciding for itself based on the response.
-void MicrosoftAuthUntrustedPageHandler::GetAuthState(
-    GetAuthStateCallback callback) {
-  auto state = auth_service_->GetAuthState();
-  if (state == new_tab_page::mojom::AuthState::kNone) {
+void MicrosoftAuthUntrustedPageHandler::MaybeAcquireTokenSilent() {
+  MicrosoftAuthService::AuthState auth_state = auth_service_->GetAuthState();
+  if (auth_state == MicrosoftAuthService::AuthState::kNone) {
+    document_->AcquireTokenSilent();
     base::UmaHistogramEnumeration("NewTabPage.MicrosoftAuth.AuthStarted",
                                   new_tab_page::mojom::AuthType::kSilent);
   }
-  std::move(callback).Run(std::move(state));
 }
 
 void MicrosoftAuthUntrustedPageHandler::SetAccessToken(
@@ -51,15 +51,20 @@ void MicrosoftAuthUntrustedPageHandler::SetAccessToken(
   auth_service_->SetAccessToken(std::move(token));
 }
 
-void MicrosoftAuthUntrustedPageHandler::SetAuthStateError() {
+void MicrosoftAuthUntrustedPageHandler::SetAuthStateError(
+    const std::string& error_code,
+    const std::string& error_message) {
+  // All authentication errors are currently treated the same:
+  // the service is marked as errored, which cancels the current
+  // authentication attempt and triggers UI updates to prompt
+  // the user to retry authenticating.
   auth_service_->SetAuthStateError();
+  base::UmaHistogramSparse("NewTabPage.MicrosoftAuth.AuthError",
+                           base::PersistentHash(error_code));
+  LogModuleError(ntp_features::kNtpMicrosoftAuthenticationModule,
+                 error_message);
 }
 
 void MicrosoftAuthUntrustedPageHandler::OnAuthStateUpdated() {
-  new_tab_page::mojom::AuthState auth_state = auth_service_->GetAuthState();
-  if (auth_state == new_tab_page::mojom::AuthState::kNone) {
-    document_->AcquireTokenSilent();
-    base::UmaHistogramEnumeration("NewTabPage.MicrosoftAuth.AuthStarted",
-                                  new_tab_page::mojom::AuthType::kSilent);
-  }
+  MaybeAcquireTokenSilent();
 }

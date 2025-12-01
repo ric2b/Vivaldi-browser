@@ -144,9 +144,6 @@ class BASE_EXPORT TraceLog : public perfetto::TrackEventSessionObserver {
       const MetadataFilterPredicate& metadata_filter_predicate);
   MetadataFilterPredicate GetMetadataFilterPredicate() const;
 
-  void SetRecordHostAppPackageName(bool record_host_app_package_name);
-  bool ShouldRecordHostAppPackageName() const;
-
   // Flush all collected events to the given output callback. The callback will
   // be called one or more times either synchronously or asynchronously from
   // the current thread with IPC-bite-size chunks. The string format is
@@ -174,22 +171,11 @@ class BASE_EXPORT TraceLog : public perfetto::TrackEventSessionObserver {
 
   ProcessId process_id() const { return process_id_; }
 
-  std::unordered_map<int, std::string> process_labels() const {
-    AutoLock lock(lock_);
-    return process_labels_;
-  }
-
   // Exposed for unittesting:
   // Allows clearing up our singleton instance.
   static void ResetForTesting();
 
   void SetProcessID(ProcessId process_id);
-
-  // Processes can have labels in addition to their names. Use labels, for
-  // instance, to list out the web page titles that a process is handling.
-  int GetNewProcessLabelId();
-  void UpdateProcessLabel(int label_id, const std::string& current_label);
-  void RemoveProcessLabel(int label_id);
 
   size_t GetObserverCountForTest() const;
 
@@ -221,7 +207,7 @@ class BASE_EXPORT TraceLog : public perfetto::TrackEventSessionObserver {
 
   struct RegisteredAsyncObserver;
 
-  explicit TraceLog(int generation);
+  explicit TraceLog();
   ~TraceLog() override;
 
   void SetDisabledWhileLocked() EXCLUSIVE_LOCKS_REQUIRED(lock_);
@@ -248,15 +234,11 @@ class BASE_EXPORT TraceLog : public perfetto::TrackEventSessionObserver {
   std::vector<std::unique_ptr<EnabledStateObserver>>
       owned_enabled_state_observer_copy_ GUARDED_BY(observers_lock_);
 
-  int next_process_label_id_ GUARDED_BY(lock_) = 0;
-  std::unordered_map<int, std::string> process_labels_;
-
   ProcessId process_id_;
 
   // Set when asynchronous Flush is in progress.
   ArgumentFilterPredicate argument_filter_predicate_;
   MetadataFilterPredicate metadata_filter_predicate_;
-  bool record_host_app_package_name_{false};
 
   std::unique_ptr<perfetto::TracingSession> tracing_session_;
   perfetto::TraceConfig perfetto_config_;

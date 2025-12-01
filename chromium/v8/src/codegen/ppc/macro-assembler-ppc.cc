@@ -119,7 +119,7 @@ void MacroAssembler::GetLabelAddress(Register dest, Label* target) {
   // RegExpMacroAssemblerARM::PushBacktrack() without mov_label_offset().
   mov_label_offset(dest, target);
   // mov_label_offset computes offset of the |target| relative to the "current
-  // InstructionStream object pointer" which is essentally pc_offset() of the
+  // InstructionStream object pointer" which is essentially pc_offset() of the
   // label added with (InstructionStream::kHeaderSize - kHeapObjectTag).
   // Compute "current InstructionStream object pointer" and add it to the
   // offset in |lr| register.
@@ -362,7 +362,7 @@ void MacroAssembler::TailCallBuiltin(Builtin builtin, Condition cond,
       UNREACHABLE();
     case BuiltinCallJumpMode::kIndirect: {
       Label skip;
-      LoadU64(ip, EntryFromBuiltinAsOperand(builtin));
+      LoadU64(ip, EntryFromBuiltinAsOperand(builtin), r0);
       if (cond != al) b(NegateCondition(cond), &skip, cr);
       Jump(ip);
       bind(&skip);
@@ -1020,7 +1020,7 @@ void MacroAssembler::ResolveCodePointerHandle(Register destination,
   DCHECK(!AreAliased(handle, destination));
 
   Register table = destination;
-  Move(table, ExternalReference::code_pointer_table_address());
+  LoadCodePointerTableBase(table);
   ShiftRightU64(handle, handle, Operand(kCodePointerHandleShift));
   ShiftLeftU64(handle, handle, Operand(kCodePointerTableEntrySizeLog2));
   AddS64(handle, table, handle);
@@ -1041,12 +1041,33 @@ void MacroAssembler::LoadCodeEntrypointViaCodePointer(Register destination,
   DCHECK(destination != r0);
   Register table = scratch;
   LoadU32(destination, field_operand, scratch);
-  Move(table, ExternalReference::code_pointer_table_address());
+  LoadCodePointerTableBase(table);
   // TODO(tpearson): can the offset computation be done more efficiently?
   ShiftRightU64(destination, destination, Operand(kCodePointerHandleShift));
   ShiftLeftU64(destination, destination,
                Operand(kCodePointerTableEntrySizeLog2));
   LoadU64(destination, MemOperand(destination, table));
+}
+
+void MacroAssembler::LoadCodePointerTableBase(Register destination) {
+#ifdef V8_COMPRESS_POINTERS_IN_MULTIPLE_CAGES
+  if (!options().isolate_independent_code && isolate()) {
+    // Embed the code pointer table address into the code.
+    Move(destination,
+         ExternalReference::code_pointer_table_base_address(isolate()));
+  } else {
+    // Force indirect load via root register as a workaround for
+    // isolate-independent code (for example, for Wasm).
+    LoadU64(destination,
+            ExternalReferenceAsOperand(
+                ExternalReference::address_of_code_pointer_table_base_address(),
+                destination));
+  }
+#else
+  // Embed the code pointer table address into the code.
+  Move(destination,
+       ExternalReference::global_code_pointer_table_base_address());
+#endif  // V8_COMPRESS_POINTERS_IN_MULTIPLE_CAGES
 }
 #endif  // V8_ENABLE_SANDBOX
 
@@ -2447,7 +2468,7 @@ void MacroAssembler::Abort(AbortReason reason) {
   }
 
   // Without debug code, save the code size and just trap.
-  if (!v8_flags.debug_code) {
+  if (!v8_flags.debug_code || v8_flags.trap_on_abort) {
     stop();
     return;
   }

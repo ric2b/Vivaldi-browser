@@ -1,5 +1,5 @@
 import { assert, unreachable } from '../../../../../common/util/util.js';
-import { GPUTest } from '../../../../gpu_test.js';
+import { AllFeaturesMaxLimitsGPUTest } from '../../../../gpu_test.js';
 import { checkElementsEqualEither } from '../../../../util/check_contents.js';
 import { OperationContext, OperationContextHelper } from '../operation_context_helper.js';
 
@@ -150,7 +150,7 @@ const kDummyVertexShader = `
 
 // Note: If it would be useful to have any of these helpers be separate from the fixture,
 // they can be refactored into standalone functions.
-export class BufferSyncTest extends GPUTest {
+export class BufferSyncTest extends AllFeaturesMaxLimitsGPUTest {
   // Vertex and index buffers used in read render pass
   vertexBuffer?: GPUBuffer;
   indexBuffer?: GPUBuffer;

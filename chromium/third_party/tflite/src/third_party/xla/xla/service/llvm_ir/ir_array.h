@@ -33,9 +33,9 @@ limitations under the License.
 #include "xla/map_util.h"
 #include "xla/shape.h"
 #include "xla/shape_util.h"
+#include "xla/tsl/platform/logging.h"
 #include "xla/types.h"
 #include "xla/xla_data.pb.h"
-#include "tsl/platform/logging.h"
 
 namespace xla {
 namespace llvm_ir {
@@ -72,7 +72,7 @@ class IrArray {
     Index(llvm::Value* linear, const Shape& shape, llvm::IRBuilderBase* b);
 
     // As before, but also take a multidim to reuse.  multidim.size()
-    // == shape.rank() must be true.  If some of the multidim element
+    // == shape.dimensions_size() must be true.  If some of the multidim element
     // are null we will use the value that would be used if
     // deliearized from linear.
     Index(llvm::Value* linear, absl::Span<llvm::Value* const> multidim,

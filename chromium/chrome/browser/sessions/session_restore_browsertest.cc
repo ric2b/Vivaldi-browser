@@ -32,7 +32,6 @@
 #include "base/threading/thread_restrictions.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
-#include "build/chromeos_buildflags.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/buildflags.h"
 #include "chrome/browser/defaults.h"
@@ -96,6 +95,7 @@
 #include "components/keep_alive_registry/keep_alive_types.h"
 #include "components/keep_alive_registry/scoped_keep_alive.h"
 #include "components/memory_pressure/fake_memory_pressure_monitor.h"
+#include "components/saved_tab_groups/internal/saved_tab_group_model.h"
 #include "components/saved_tab_groups/public/features.h"
 #include "components/saved_tab_groups/public/saved_tab_group.h"
 #include "components/saved_tab_groups/public/tab_group_sync_service.h"
@@ -192,7 +192,7 @@ class SessionRestoreTest : public InProcessBrowserTest {
   ~SessionRestoreTest() override = default;
 
  protected:
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
   void SetUpCommandLine(base::CommandLine* command_line) override {
     // TODO(nkostylev): Investigate if we can remove this switch.
     command_line->AppendSwitch(switches::kCreateBrowserOnStartupForTests);
@@ -202,7 +202,7 @@ class SessionRestoreTest : public InProcessBrowserTest {
   void SetUpOnMainThread() override {
     active_browser_list_ = BrowserList::GetInstance();
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
     const testing::TestInfo* const test_info =
         testing::UnitTest::GetInstance()->current_test_info();
     if (strcmp(test_info->name(), "NoSessionRestoreNewWindowChromeOS") != 0) {
@@ -354,7 +354,7 @@ class SessionRestoreTest : public InProcessBrowserTest {
     return count;
   }
 
-#if !BUILDFLAG(IS_CHROMEOS_ASH)
+#if !BUILDFLAG(IS_CHROMEOS)
   Profile* CreateSecondaryProfile(int profile_num) {
     base::ScopedAllowBlockingForTesting allow_blocking;
     ProfileManager* profile_manager = g_browser_process->profile_manager();
@@ -366,7 +366,7 @@ class SessionRestoreTest : public InProcessBrowserTest {
     SessionStartupPref::SetStartupPref(profile, pref);
     return profile;
   }
-#endif  // !BUILDFLAG(IS_CHROMEOS_ASH)
+#endif  // !BUILDFLAG(IS_CHROMEOS)
 
   raw_ptr<const BrowserList> active_browser_list_ = nullptr;
 
@@ -525,7 +525,7 @@ IN_PROC_BROWSER_TEST_F(SessionRestoreTest, RestoredTabsHaveCorrectInitialSize) {
   }
 }
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
 // Verify that session restore does not occur when a user opens a browser window
 // when no other browser windows are open on ChromeOS.
 // TODO(pkotwicz): Add test which doesn't open incognito browser once
@@ -592,7 +592,7 @@ IN_PROC_BROWSER_TEST_F(SessionRestoreTest, MaximizedApps) {
   EXPECT_TRUE(app_browser->window()->IsMaximized());
   EXPECT_TRUE(app_browser->is_type_app());
 }
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+#endif  // BUILDFLAG(IS_CHROMEOS)
 
 // Creates a tabbed browser and popup and makes sure we restore both.
 IN_PROC_BROWSER_TEST_F(SessionRestoreTest, NormalAndPopup) {
@@ -704,49 +704,7 @@ IN_PROC_BROWSER_TEST_F(SessionRestoreTest,
   EXPECT_EQ(http_status_code, entry->GetHttpStatusCode());
 }
 
-// Flaky on Linux. https://crbug.com/537592.
-// Flaky on Mac. https://crbug.com/1334914.
-#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_MAC)
-#define MAYBE_WindowWithOneTab DISABLED_WindowWithOneTab
-#else
-#define MAYBE_WindowWithOneTab WindowWithOneTab
-#endif
-IN_PROC_BROWSER_TEST_F(SessionRestoreTest, MAYBE_WindowWithOneTab) {
-  GURL url(ui_test_utils::GetTestUrl(
-      base::FilePath(base::FilePath::kCurrentDirectory),
-      base::FilePath(FILE_PATH_LITERAL("title1.html"))));
-
-  // Add a single tab.
-  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), url));
-
-  sessions::TabRestoreService* service =
-      TabRestoreServiceFactory::GetForProfile(browser()->profile());
-  service->ClearEntries();
-  EXPECT_EQ(0U, service->entries().size());
-
-  // Close the window.
-  browser()->window()->Close();
-
-  // Expect the window to be converted to a tab by the TRS.
-  EXPECT_EQ(1U, service->entries().size());
-  ASSERT_EQ(sessions::tab_restore::Type::TAB, service->entries().front()->type);
-  auto* tab = static_cast<const sessions::tab_restore::Tab*>(
-      service->entries().front().get());
-
-  // Restore the tab.
-  std::vector<sessions::LiveTab*> content = service->RestoreEntryById(
-      nullptr, tab->id, WindowOpenDisposition::UNKNOWN);
-  ASSERT_EQ(1U, content.size());
-  ASSERT_TRUE(content[0]);
-  EXPECT_EQ(url, static_cast<sessions::ContentLiveTab*>(content[0])
-                     ->web_contents()
-                     ->GetURL());
-
-  // Make sure the restore was successful.
-  EXPECT_EQ(0U, service->entries().size());
-}
-
-#if !BUILDFLAG(IS_CHROMEOS_ASH)
+#if !BUILDFLAG(IS_CHROMEOS)
 // This test does not apply to ChromeOS as ChromeOS does not do session
 // restore when a new window is open.
 
@@ -777,7 +735,7 @@ IN_PROC_BROWSER_TEST_F(SessionRestoreTest, IncognitotoNonIncognito) {
   ASSERT_TRUE(new_browser);
   EXPECT_EQ(url, new_browser->tab_strip_model()->GetWebContentsAt(0)->GetURL());
 }
-#endif  // !BUILDFLAG(IS_CHROMEOS_ASH)
+#endif  // !BUILDFLAG(IS_CHROMEOS)
 
 namespace {
 
@@ -1406,7 +1364,7 @@ IN_PROC_BROWSER_TEST_F(SessionRestoreTest, MemoryPressureLoadsNotAllTabs) {
 }
 
 IN_PROC_BROWSER_TEST_F(SessionRestoreTest, RestoreWebUI) {
-  const GURL webui_url(chrome::kChromeUIOmniboxURL);
+  const GURL webui_url(chrome::kChromeUIDownloadsURL);
   ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), webui_url));
   content::WebContents* old_tab =
       browser()->tab_strip_model()->GetActiveWebContents();
@@ -1698,11 +1656,9 @@ IN_PROC_BROWSER_TEST_F(SessionRestoreTest, ActiveIndexUpdatedAtInsert) {
   ASSERT_EQ(new_browser->tab_strip_model()->active_index(), 1);
 }
 
-#if !BUILDFLAG(IS_MAC) && !BUILDFLAG(IS_CHROMEOS_LACROS) && \
-    !BUILDFLAG(IS_CHROMEOS_ASH)
-// This test doesn't apply to Mac or Lacros; see GetCommandLineForRelaunch
-// for details. It was disabled for a long time so might never have worked on
-// Chrome OS Ash.
+#if !BUILDFLAG(IS_MAC) && !BUILDFLAG(IS_CHROMEOS)
+// This test doesn't apply to Mac; see GetCommandLineForRelaunch for details. It
+// was disabled for ChromeOS a long time so might never have worked there.
 
 // Launches an app window, closes tabbed browser, launches and makes sure
 // we restore the tabbed browser url.
@@ -1732,8 +1688,7 @@ IN_PROC_BROWSER_TEST_F(SessionRestoreTest,
             new_browser->tab_strip_model()->GetActiveWebContents()->GetURL());
 }
 
-#endif  // !!BUILDFLAG(IS_MAC) && !BUILDFLAG(IS_CHROMEOS_LACROS) &&
-        // !BUILDFLAG(IS_CHROMEOS_ASH)
+#endif  // !BUILDFLAG(IS_MAC) && !BUILDFLAG(IS_CHROMEOS)
 
 // Creates two windows, closes one, restores, make sure only one window open.
 IN_PROC_BROWSER_TEST_F(SessionRestoreTest, TwoWindowsCloseOneRestoreOnlyOne) {
@@ -2138,7 +2093,7 @@ IN_PROC_BROWSER_TEST_F(SessionRestoreTest,
 }
 
 // Test is flaky on Linux and Windows: https://crbug.com/1181867
-#if !BUILDFLAG(IS_CHROMEOS_ASH) && !BUILDFLAG(IS_LINUX) && !BUILDFLAG(IS_WIN)
+#if !BUILDFLAG(IS_CHROMEOS) && !BUILDFLAG(IS_LINUX) && !BUILDFLAG(IS_WIN)
 namespace {
 
 class MultiBrowserObserver : public BrowserListObserver {
@@ -2279,7 +2234,7 @@ IN_PROC_BROWSER_TEST_F(SessionRestoreTest, RestoreAllBrowsers) {
                .possibly_invalid_spec();
   }
 }
-#endif  // !BUILDFLAG(IS_CHROMEOS_ASH)
+#endif  // !BUILDFLAG(IS_CHROMEOS)
 
 // Tracks the load order of tabs in a new browser.
 class LoadOrderObserver : public BrowserListObserver,
@@ -2346,8 +2301,7 @@ class LoadOrderObserver : public BrowserListObserver,
 
 // PRE_CorrectLoadingOrder is flaky on ChromeOS MSAN and Mac.
 // See http://crbug.com/493167.
-#if (BUILDFLAG(IS_CHROMEOS_ASH) && defined(MEMORY_SANITIZER)) || \
-    BUILDFLAG(IS_MAC)
+#if (BUILDFLAG(IS_CHROMEOS) && defined(MEMORY_SANITIZER)) || BUILDFLAG(IS_MAC)
 #define MAYBE_PRE_CorrectLoadingOrder DISABLED_PRE_CorrectLoadingOrder
 #define MAYBE_CorrectLoadingOrder DISABLED_CorrectLoadingOrder
 #else
@@ -3020,10 +2974,6 @@ IN_PROC_BROWSER_TEST_F(SessionRestoreTest, RestoreWithTabRemovedFromGroup) {
           browser()->profile());
   ASSERT_NE(saved_tab_group_keyed_service, nullptr);
 
-  if (!tab_groups::IsTabGroupsSaveV2Enabled()) {
-    saved_tab_group_keyed_service->SaveGroup(tab_group_id);
-  }
-
   ASSERT_TRUE(saved_tab_group_keyed_service);
 
   auto* saved_tab_group =
@@ -3372,7 +3322,7 @@ IN_PROC_BROWSER_TEST_F(SessionRestoreTest, OmitFromSessionRestore) {
                            ->GetLastCommittedURL());
 }
 
-#if !BUILDFLAG(IS_CHROMEOS_ASH)
+#if !BUILDFLAG(IS_CHROMEOS)
 // Skip for ChromeOS because the keep alive is not created for ChromeOS.
 // See https://crbug.com/1174627.
 class SessionRestoreSilentLaunchTest : public SessionRestoreTest {
@@ -4063,10 +4013,9 @@ IN_PROC_BROWSER_TEST_F(AppSessionRestoreTest,
 
 // This test ensures AppSessionService is notified of app restorations
 // correctly.
-// Note: This test is ported for Lacros in
-// app_session_restore_lacros_browsertest.cc (in lacros_chrome_browsertests).
-#if !BUILDFLAG(IS_CHROMEOS_LACROS)
-IN_PROC_BROWSER_TEST_F(AppSessionRestoreTest, CtrlShiftTRestoresAppsCorrectly) {
+// TODO(crbug.com/398704258): Re-enable this test
+IN_PROC_BROWSER_TEST_F(AppSessionRestoreTest,
+                       DISABLED_CtrlShiftTRestoresAppsCorrectly) {
   Profile* profile = browser()->profile();
   auto example_url = GURL("https://www.example.com");
   auto example_url2 = GURL("https://www.example2.com");
@@ -4123,7 +4072,6 @@ IN_PROC_BROWSER_TEST_F(AppSessionRestoreTest, CtrlShiftTRestoresAppsCorrectly) {
   EXPECT_TRUE(app2_seen);
   EXPECT_TRUE(app3_seen);
 }
-#endif  //  !BUILDFLAG(IS_CHROMEOS_LACROS)
 
 // Request a no app restore and ensure no app was reopened.
 IN_PROC_BROWSER_TEST_F(AppSessionRestoreTest, NoAppRestore) {
@@ -4513,13 +4461,10 @@ class SavedTabGroupSessionRestoreTest
   SavedTabGroupSessionRestoreTest() {
     if (GetParam()) {
       feature_list_.InitWithFeatures(
-          {tab_groups::kTabGroupsSaveV2,
-           tab_groups::kTabGroupSyncServiceDesktopMigration},
-          {});
+          {tab_groups::kTabGroupSyncServiceDesktopMigration}, {});
     } else {
       feature_list_.InitWithFeatures(
-          {tab_groups::kTabGroupsSaveV2},
-          {tab_groups::kTabGroupSyncServiceDesktopMigration});
+          {}, {tab_groups::kTabGroupSyncServiceDesktopMigration});
     }
   }
   SavedTabGroupSessionRestoreTest(const SavedTabGroupSessionRestoreTest&) =
@@ -4565,14 +4510,18 @@ IN_PROC_BROWSER_TEST_P(SavedTabGroupSessionRestoreTest,
           browser()->profile());
   ASSERT_TRUE(service);
 
-  service->SetIsInitializedForTesting(true);
-  EXPECT_EQ(0u, service->GetAllGroups().size());
+  service->SetIsInitializedForTesting(false);
+  WaitForPostedTasks();
 
   // Close the browser and restore the last session
   Browser* restored = QuitBrowserAndRestore(browser());
   TabStripModel* tab_strip_model = restored->tab_strip_model();
   const int tabs = tab_strip_model->count();
+
   ASSERT_EQ(2, tabs);
+
+  service->SetIsInitializedForTesting(true);
+  WaitForPostedTasks();
 
   // Expect the unsaved group has been saved at this point.
   EXPECT_EQ(1u, service->GetAllGroups().size());

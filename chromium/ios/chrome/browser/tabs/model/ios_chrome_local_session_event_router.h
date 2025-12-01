@@ -13,6 +13,10 @@
 #include "components/sync/model/syncable_service.h"
 #include "components/sync_sessions/local_session_event_router.h"
 
+// Vivaldi
+#include "components/sync_sessions/vivaldi_specific.h"
+// End Vivaldi
+
 class BrowserList;
 namespace web {
 class WebState;
@@ -43,6 +47,11 @@ class IOSChromeLocalSessionEventRouter
   void StartRoutingTo(
       sync_sessions::LocalSessionEventHandler* handler) override;
   void Stop() override;
+
+  // Vivaldi
+  void UpdateVivExtData(const sync_sessions::VivaldiSpecific &data);
+  void UpdateDeviceName(const std::string &device_name);
+  // End Vivaldi
 
  private:
   // Observer implementation for all Browsers.

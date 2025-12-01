@@ -26,8 +26,6 @@ try_.defaults.set(
     reclient_enabled = False,
     service_account = try_.DEFAULT_SERVICE_ACCOUNT,
     siso_enabled = True,
-    # Fast deps may make builds slower.
-    siso_experiments = ["no-fast-deps"],
     siso_project = siso.project.DEFAULT_UNTRUSTED,
 )
 
@@ -123,6 +121,7 @@ try_.builder(
         "ci/mac-fieldtrial-tester",
     ],
     gn_args = "ci/mac-arm64-rel",
+    cpu = cpu.ARM64,
     execution_timeout = 6 * time.hour,
     siso_remote_jobs = siso.remote_jobs.LOW_JOBS_FOR_CQ,
 )
@@ -184,8 +183,6 @@ try_.orchestrator_builder(
         "chromium.add_one_test_shard": 10,
         # crbug/940930
         "chromium.enable_cleandead": 100,
-        # b/346598710
-        "chromium.luci_analysis_v2": 100,
     },
     main_list_view = "try",
     tryjob = try_.job(),
@@ -508,7 +505,7 @@ try_.builder(
     name = "mac_upload_clang",
     executable = "recipe:chromium_toolchain/package_clang",
     builderless = False,
-    execution_timeout = 6 * time.hour,
+    execution_timeout = 8 * time.hour,
 )
 
 try_.builder(
@@ -560,6 +557,7 @@ ios_builder(
     builderless = True,
     cpu = cpu.ARM64,
     execution_timeout = 4 * time.hour,
+    xcode = xcode.x16betabots,
 )
 
 ios_builder(
@@ -576,7 +574,12 @@ ios_builder(
     mirrors = [
         "ci/ios-device",
     ],
-    gn_args = "ci/ios-device",
+    gn_args = gn_args.config(
+        configs = [
+            "ci/ios-device",
+            "ios_disable_code_signing",
+        ],
+    ),
     cpu = cpu.ARM64,
     siso_remote_jobs = siso.remote_jobs.LOW_JOBS_FOR_CQ,
 )
@@ -613,8 +616,6 @@ try_.orchestrator_builder(
     experiments = {
         # go/nplus1shardsproposal
         "chromium.add_one_test_shard": 10,
-        # b/346598710
-        "chromium.luci_analysis_v2": 100,
     },
     main_list_view = "try",
     tryjob = try_.job(),
@@ -709,6 +710,8 @@ ios_builder(
         "ci/ios-wpt-fyi-rel",
     ],
     gn_args = "ci/ios-wpt-fyi-rel",
+    builderless = True,
+    cpu = cpu.ARM64,
 )
 
 ios_builder(
@@ -772,6 +775,8 @@ ios_builder(
 try_.gpu.optional_tests_builder(
     name = "mac_optional_gpu_tests_rel",
     branch_selector = branches.selector.IOS_BRANCHES,
+    description_html = ("Runs GPU tests on Mac Minis with Intel UHD 630 GPUs and Macbook Pros with AMD GPUs. " +
+                        "Only automatically added to CLs that touch GPU-related files."),
     builder_spec = builder_config.builder_spec(
         gclient_config = builder_config.gclient_config(
             config = "chromium",
@@ -809,9 +814,14 @@ try_.gpu.optional_tests_builder(
         browser_config = targets.browser_config.RELEASE,
         os_type = targets.os_type.MAC,
     ),
+    pool = "luci.chromium.gpu.try",
+    builderless = True,
     cpu = cpu.ARM64,
     ssd = None,
+    free_space = None,
+    contact_team_email = "chrome-gpu-infra@google.com",
     main_list_view = "try",
+    max_concurrent_builds = 7,
     tryjob = try_.job(
         location_filters = [
             # Inclusion filters.

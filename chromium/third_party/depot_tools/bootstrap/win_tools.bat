@@ -58,9 +58,12 @@ set BOOTSTRAP_EXTRA_ARGS=--bootstrap-name "%BOOTSTRAP_NAME%"
 :: See "//cipd.bat" and "//.cipd_impl.ps1" for more information.
 set CIPD_EXE=%BOOTSTRAP_ROOT_DIR%\cipd.bat
 call "%CIPD_EXE%" ensure -log-level warning -ensure-file "%~dp0%CIPD_MANIFEST%" -root "%BOOTSTRAP_PATH%"
-if errorlevel 1 goto :END
+if errorlevel 1 (
+  echo Error installing CIPD packages.
+  goto :END
+)
 
-:: This executes "win_tools.py" using the bundle's Python interpreter.
+:: This executes "bootstrap.py" using the bundle's Python interpreter.
 set BOOTSTRAP_PYTHON_BIN=%BOOTSTRAP_PATH%\python3\bin\python3.exe
 call "%BOOTSTRAP_PYTHON_BIN%" "%~dp0bootstrap.py" %BOOTSTRAP_EXTRA_ARGS%
 

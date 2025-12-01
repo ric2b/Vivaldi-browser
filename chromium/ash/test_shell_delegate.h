@@ -101,7 +101,7 @@ class TestShellDelegate : public ShellDelegate {
   scoped_refptr<network::SharedURLLoaderFactory>
   GetBrowserProcessUrlLoaderFactory() const override;
   bool CanGoBack(gfx::NativeWindow window) const override;
-  void SetTabScrubberChromeOSEnabled(bool enabled) override;
+  void SetTabScrubberEnabled(bool enabled) override;
   void ShouldExitFullscreenBeforeLock(
       ShouldExitFullscreenCallback callback) override;
   bool ShouldWaitForTouchPressAck(gfx::NativeWindow window) override;
@@ -111,9 +111,6 @@ class TestShellDelegate : public ShellDelegate {
   void BindMultiDeviceSetup(
       mojo::PendingReceiver<multidevice_setup::mojom::MultiDeviceSetup>
           receiver) override;
-  void BindMultiCaptureService(
-      mojo::PendingReceiver<video_capture::mojom::MultiCaptureService> receiver)
-      override;
   bool IsSessionRestoreInProgress() const override;
   void SetUpEnvironmentForLockedFullscreen(
       const WindowState& window_state) override {}

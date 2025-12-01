@@ -114,12 +114,8 @@ class CheckFileTest(unittest.TestCase):
             filepath=os.path.join(_THIS_DIR, "data", "MISSING.chromium"),
             repo_root_dir=_THIS_DIR,
         )
-        # TODO(aredulla): update this test once validation errors can be
-        # returned as errors. Bug: b/285453019.
-        # self.assertEqual(len(errors), 1)
-        # self.assertEqual(len(warnings), 0)
-        self.assertEqual(len(errors), 0)
-        self.assertEqual(len(warnings), 1)
+        self.assertEqual(len(errors), 1)
+        self.assertEqual(len(warnings), 0)
 
     def test_valid(self):
         # Check file with valid content (no errors or warnings).
@@ -136,12 +132,8 @@ class CheckFileTest(unittest.TestCase):
             filepath=_INVALID_METADATA_FILEPATH,
             repo_root_dir=_THIS_DIR,
         )
-        # TODO(aredulla): update this test once validation errors can be
-        # returned as errors. Bug: b/285453019.
-        # self.assertEqual(len(errors), 7)
-        # self.assertEqual(len(warnings), 2)
-        self.assertEqual(len(errors), 0)
-        self.assertEqual(len(warnings), 9)
+        self.assertEqual(len(errors), 7)
+        self.assertEqual(len(warnings), 2)
 
 
 class ValidationResultTest(unittest.TestCase):

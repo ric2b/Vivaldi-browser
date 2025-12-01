@@ -77,12 +77,13 @@ enum FeatureState {
 // Provides a forward declaration for `feature_object_name` in a header file,
 // e.g.
 //
-//   BASE_DECLARE_FEATURE_PARAM(kMyFeatureParam);
+//   BASE_DECLARE_FEATURE_PARAM(int, kMyFeatureParam);
 //
 // If the feature needs to be marked as exported, i.e. it is referenced by
 // multiple components, then write:
 //
-//   COMPONENT_EXPORT(MY_COMPONENT) BASE_DECLARE_FEATURE_PARAM(kMyFeatureParam);
+//   COMPONENT_EXPORT(MY_COMPONENT)
+//   BASE_DECLARE_FEATURE_PARAM(int, kMyFeatureParam);
 //
 // This macro enables optimizations to make the second and later calls faster,
 // but requires additional memory uses. If you obtain the parameter only once,
@@ -95,16 +96,19 @@ enum FeatureState {
 // Provides a definition for `feature_object_name` with `T`, `feature`, `name`
 // and `default_value`, with an internal parsed value cache, e.g.
 //
-//   BASE_FEATURE_PARAM(int, kMyFeatureParam, kMyFeature, "MyFeatureParam", 0);
+//   BASE_FEATURE_PARAM(int, kMyFeatureParam, &kMyFeature, "my_feature_param",
+//                      0);
 //
 // `T` is a parameter type, one of bool, int, size_t, double, std::string, and
 // base::TimeDelta. Enum types are not supported for now.
 //
-// For now, ScopedFeatureList doesn't work to change the value dynamically when
-// the cache is used with this macro.
-//
 // It should *not* be defined in header files; do not use this macro in header
 // files.
+//
+// WARNING: If the feature is not enabled, the parameter is not set, or set to
+// an invalid value (per the param type), then Get() will return the default
+// value passed to this C++ macro. In particular this will typically return the
+// default value regardless of the server-side config in control groups.
 #define BASE_FEATURE_PARAM(T, feature_object_name, feature, name,       \
                            default_value)                               \
   namespace field_trial_params_internal {                               \
@@ -502,7 +506,7 @@ class BASE_EXPORT FeatureList {
       std::string_view input);
 
   // Checks and parses the |enable_feature| (e.g.
-  // FeatureName<Study.Group:Param1/value1/) obtained by applying
+  // FeatureName<Study.Group:param1/value1/) obtained by applying
   // SplitFeatureListString() to the |enable_features| flag, and sets
   // |feature_name| to be the feature's name, |study_name| and |group_name| to
   // be the field trial name and its group name if the field trial is specified

@@ -1,5 +1,5 @@
-load("//xla:strict.default.bzl", "py_strict_binary", "py_strict_library", "py_strict_test")
-load("//xla:xla.bzl", "xla_cc_binary")
+load("//xla:py_strict.bzl", "py_strict_binary", "py_strict_library", "py_strict_test")
+load("//xla:xla.default.bzl", "xla_cc_binary")
 
 package(
     # copybara:uncomment default_applicable_licenses = ["//tensorflow:license"],
@@ -111,7 +111,6 @@ xla_cc_binary(
 py_strict_binary(
     name = "ncu_rep",
     srcs = ["ncu_rep.py"],
-    srcs_version = "PY3",
     deps = [
         ":ncu_rep_lib",
         "@absl_py//absl:app",
@@ -122,7 +121,6 @@ py_strict_binary(
 py_strict_library(
     name = "ncu_rep_lib",
     srcs = ["ncu_rep_lib.py"],
-    srcs_version = "PY3",
     deps = [
         "@absl_py//absl:app",
         "@absl_py//absl/flags",

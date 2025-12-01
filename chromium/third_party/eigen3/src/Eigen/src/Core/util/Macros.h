@@ -426,6 +426,16 @@
 // note: ANDROID is defined when using ndk_build, __ANDROID__ is defined when using a standalone toolchain.
 #if defined(__ANDROID__) || defined(ANDROID)
 #define EIGEN_OS_ANDROID 1
+
+// Since NDK r16, `__NDK_MAJOR__` and `__NDK_MINOR__` are defined in
+// <android/ndk-version.h>. For NDK < r16, users should define these macros,
+// e.g. `-D__NDK_MAJOR__=11 -D__NKD_MINOR__=0` for NDK r11.
+#if defined __has_include
+#if __has_include(<android/ndk-version.h>)
+#include <android/ndk-version.h>
+#endif
+#endif
+
 #else
 #define EIGEN_OS_ANDROID 0
 #endif

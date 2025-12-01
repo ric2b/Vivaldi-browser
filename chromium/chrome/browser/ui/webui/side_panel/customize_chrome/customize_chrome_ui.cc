@@ -16,7 +16,6 @@
 #include "chrome/browser/search/background/ntp_custom_background_service_factory.h"
 #include "chrome/browser/search/background/wallpaper_search/wallpaper_search_background_manager.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
-#include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/ui_features.h"
 #include "chrome/browser/ui/views/side_panel/customize_chrome/customize_chrome_utils.h"
 #include "chrome/browser/ui/webui/cr_components/customize_color_scheme_mode/customize_color_scheme_mode_handler.h"
@@ -99,6 +98,7 @@ CustomizeChromeUI::CustomizeChromeUI(content::WebUI* web_ui)
       {"appearanceHeader", IDS_NTP_CUSTOMIZE_APPEARANCE_LABEL},
       {"cardsHeader", IDS_NTP_CUSTOMIZE_MENU_MODULES_LABEL},
       {"categoriesHeader", IDS_NTP_CUSTOMIZE_THEMES_HEADER},
+      {"footerHeader", IDS_NTP_CUSTOMIZE_FOOTER_HEADER},
       {"shortcutsHeader", IDS_NTP_CUSTOMIZE_MENU_SHORTCUTS_LABEL},
       {"toolbarHeader", IDS_NTP_CUSTOMIZE_MENU_TOOLBAR_LABEL},
       {"extensionsHeader", IDS_NTP_CUSTOMIZE_MENU_EXTENSIONS_LABEL},
@@ -141,6 +141,8 @@ CustomizeChromeUI::CustomizeChromeUI(content::WebUI* web_ui)
       {"showShortcutsToggle", IDS_NTP_CUSTOMIZE_SHOW_SHORTCUTS_LABEL},
       // Card strings.
       {"showCardsToggleTitle", IDS_NTP_CUSTOMIZE_SHOW_CARDS_LABEL},
+      // Footer strings.
+      {"showFooterToggleTitle", IDS_NTP_CUSTOMIZE_SHOW_FOOTER_LABEL},
       // Required by <managed-dialog>.
       {"controlledSettingPolicy", IDS_CONTROLLED_SETTING_POLICY},
       {"close", IDS_NEW_TAB_VOICE_CLOSE_TOOLTIP},
@@ -235,6 +237,8 @@ CustomizeChromeUI::CustomizeChromeUI(content::WebUI* web_ui)
       {"webstoreProductivityCategoryLabel",
        IDS_NTP_WEBSTORE_PRODUCTIVITY_CATEOGRY_LABEL},
       // Customize Toolbar strings.
+      {"enterpriseEnabledLabel",
+       IDS_NTP_CUSTOMIZE_TOOLBAR_ENTERPRISE_ENABLED_LABEL},
       {"toolbarButtonA11yLabel", IDS_NTP_CUSTOMIZE_TOOLBAR_BUTTON_A11Y_LABEL},
       {"chooseToolbarIconsLabel", IDS_NTP_CUSTOMIZE_TOOLBAR_CHOOSE_ICONS_LABEL},
       {"resetToDefaultButtonLabel",
@@ -242,6 +246,7 @@ CustomizeChromeUI::CustomizeChromeUI(content::WebUI* web_ui)
       {"resetToDefaultButtonAnnouncement",
        IDS_NTP_CUSTOMIZE_TOOLBAR_RESET_TO_DEFAULT_ANNOUNCEMENT},
       {"reorderTipLabel", IDS_NTP_CUSTOMIZE_TOOLBAR_REORDER_TIP_LABEL},
+      {"managedA11yLabel", IDS_MANAGED},
       {"newBadgeLabel", IDS_NEW_BADGE},
   };
   source->AddLocalizedStrings(kLocalizedStrings);
@@ -274,11 +279,12 @@ CustomizeChromeUI::CustomizeChromeUI(content::WebUI* web_ui)
       wallpaper_search_enabled &&
           base::FeatureList::IsEnabled(
               ntp_features::kCustomizeChromeWallpaperSearchButton));
-  source->AddBoolean("toolbarCustomizationEnabled",
-                     base::FeatureList::IsEnabled(features::kToolbarPinning));
   source->AddBoolean("imageErrorDetectionEnabled",
                      base::FeatureList::IsEnabled(
                          ntp_features::kNtpBackgroundImageErrorDetection));
+
+  source->AddBoolean("footerEnabled",
+                     base::FeatureList::IsEnabled(ntp_features::kNtpFooter));
 
   webui::SetupWebUIDataSource(
       source, kSidePanelCustomizeChromeResources,
@@ -306,6 +312,14 @@ void CustomizeChromeUI::AttachedTabStateUpdated(
         is_source_tab_first_party_ntp);
   } else {
     is_source_tab_first_party_ntp_ = is_source_tab_first_party_ntp;
+  }
+}
+
+void CustomizeChromeUI::UpdateThemeEditable(bool is_theme_editable) {
+  if (customize_chrome_page_handler_) {
+    customize_chrome_page_handler_->UpdateThemeEditable(is_theme_editable);
+  } else {
+    is_theme_editable_ = is_theme_editable;
   }
 }
 
@@ -400,6 +414,11 @@ void CustomizeChromeUI::CreatePageHandler(
         is_source_tab_first_party_ntp_.value());
     is_source_tab_first_party_ntp_.reset();
   }
+  if (is_theme_editable_.has_value()) {
+    customize_chrome_page_handler_->UpdateThemeEditable(
+        is_theme_editable_.value());
+    is_theme_editable_.reset();
+  }
 }
 
 void CustomizeChromeUI::CreateHelpBubbleHandler(
@@ -465,10 +484,6 @@ void CustomizeChromeUI::CreateCustomizeToolbarHandler(
     return;
   }
 
-  const raw_ptr<Browser> browser =
-      chrome::FindBrowserWithWindow(web_contents_->GetTopLevelNativeWindow());
-  CHECK(browser);
-
   customize_toolbar_handler_ = std::make_unique<CustomizeToolbarHandler>(
-      std::move(handler), std::move(client), browser);
+      std::move(handler), std::move(client), web_contents_);
 }

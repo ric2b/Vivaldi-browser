@@ -425,9 +425,6 @@ class ExtensionsBrowserClient {
   // for the given BrowserContext.
   virtual void SignalContentScriptsLoaded(content::BrowserContext* context);
 
-  // Returns the user agent used by the content module.
-  virtual std::string GetUserAgent() const;
-
   // Returns whether |scheme| should bypass extension-specific navigation checks
   // (e.g. whether the |scheme| is allowed to initiate navigations to extension
   // resources that are not declared as web accessible).
@@ -556,6 +553,11 @@ class ExtensionsBrowserClient {
   // device IDs. Can be null if the embedder does not support persistent salts.
   virtual media_device_salt::MediaDeviceSaltService* GetMediaDeviceSaltService(
       content::BrowserContext* context);
+
+  // TODO(crbug.com/399198255): as per rdcronin@: this doesn't belong here,
+  // since extensions shouldn't have knowledge of Controlled Frame.
+  virtual bool HasControlledFrameCapability(content::BrowserContext* context,
+                                            const GURL& url);
 
  private:
   std::vector<std::unique_ptr<ExtensionsBrowserAPIProvider>> providers_;

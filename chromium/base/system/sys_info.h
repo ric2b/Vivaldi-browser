@@ -8,6 +8,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <compare>
+#include <iosfwd>
 #include <map>
 #include <optional>
 #include <string>
@@ -33,7 +35,7 @@ namespace base {
 BASE_EXPORT BASE_DECLARE_FEATURE(kNumberOfCoresWithCpuSecurityMitigation);
 #endif
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
 // Strings for environment variables.
 BASE_EXPORT extern const char kLsbReleaseKey[];
 BASE_EXPORT extern const char kLsbReleaseTimeKey[];
@@ -193,6 +195,27 @@ class BASE_EXPORT SysInfo {
   static void OperatingSystemVersionNumbers(int32_t* major_version,
                                             int32_t* minor_version,
                                             int32_t* bugfix_version);
+
+#if BUILDFLAG(IS_POSIX)
+  // Struct containing the the kernel version number of the host operating
+  // system.
+  struct BASE_EXPORT KernelVersionNumber {
+    // Queries the current kernel version number using uname and parses the
+    // release string to construct the KernelVersionNumber struct. This does not
+    // cache the result.
+    static KernelVersionNumber Current();
+
+    friend bool operator==(const KernelVersionNumber& v1,
+                           const KernelVersionNumber& v2) = default;
+
+    friend auto operator<=>(const KernelVersionNumber& v1,
+                            const KernelVersionNumber& v2) = default;
+
+    int32_t major = 0;
+    int32_t minor = 0;
+    int32_t bugfix = 0;
+  };
+#endif  // BUILDFLAG(IS_POSIX)
 
   // Returns the architecture of the running operating system.
   // Exact return value may differ across platforms.
@@ -355,6 +378,13 @@ class BASE_EXPORT SysInfo {
       uint64_t amount_of_memory_mb);
   static void ClearAmountOfPhysicalMemoryMbForTesting();
 };
+
+#if BUILDFLAG(IS_POSIX)
+// Stream operator so that SysInfo::KernelVersionNumber can be logged with a
+// consistent format.
+BASE_EXPORT std::ostream& operator<<(std::ostream& out,
+                                     const SysInfo::KernelVersionNumber& v);
+#endif  // BUILDFLAG(IS_POSIX)
 
 }  // namespace base
 

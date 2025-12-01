@@ -11,15 +11,15 @@
 #import "components/strings/grit/components_strings.h"
 #import "ios/chrome/browser/authentication/ui_bundled/signin_earl_grey.h"
 #import "ios/chrome/browser/authentication/ui_bundled/signin_earl_grey_ui_test_util.h"
+#import "ios/chrome/browser/content_suggestions/ui_bundled/ntp_home_constant.h"
 #import "ios/chrome/browser/metrics/model/metrics_app_interface.h"
 #import "ios/chrome/browser/ntp/ui_bundled/new_tab_page_constants.h"
 #import "ios/chrome/browser/ntp/ui_bundled/new_tab_page_feature.h"
 #import "ios/chrome/browser/policy/model/policy_earl_grey_utils.h"
+#import "ios/chrome/browser/popup_menu/ui_bundled/popup_menu_constants.h"
 #import "ios/chrome/browser/settings/ui_bundled/google_services/manage_sync_settings_constants.h"
 #import "ios/chrome/browser/shared/model/url/chrome_url_constants.h"
 #import "ios/chrome/browser/signin/model/fake_system_identity.h"
-#import "ios/chrome/browser/ui/content_suggestions/ntp_home_constant.h"
-#import "ios/chrome/browser/ui/popup_menu/popup_menu_constants.h"
 #import "ios/chrome/grit/ios_strings.h"
 #import "ios/chrome/test/earl_grey/chrome_earl_grey.h"
 #import "ios/chrome/test/earl_grey/chrome_earl_grey_ui.h"
@@ -88,7 +88,7 @@ BOOL WaitForHistoryToDisappear() {
 - (AppLaunchConfiguration)appConfigurationForTestCase {
   AppLaunchConfiguration config = [super appConfigurationForTestCase];
 
-  if ([self isRunningTest:@selector(testErrorBadge)]) {
+  if ([self isRunningTest:@selector(DISABLED_testErrorBadge)]) {
     config.features_enabled.push_back(
         switches::kEnableErrorBadgeOnIdentityDisc);
     config.features_disabled.push_back(kIdentityDiscAccountMenu);
@@ -417,7 +417,7 @@ BOOL WaitForHistoryToDisappear() {
 
 // Tests that the error badge is shown on top of the identity disc when the
 // primary account has a persistent error.
-- (void)testErrorBadge {
+- (void)DISABLED_testErrorBadge {
   [SigninEarlGrey signinWithFakeIdentity:kPrimaryIdentity];
   [ChromeEarlGrey addBookmarkWithSyncPassphrase:kPassphrase];
   [ChromeEarlGreyUI waitForAppToIdle];

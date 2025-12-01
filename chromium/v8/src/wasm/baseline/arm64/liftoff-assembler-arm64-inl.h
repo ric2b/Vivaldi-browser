@@ -59,7 +59,6 @@ inline CPURegister GetRegFromType(const LiftoffRegister& reg, ValueKind kind) {
     case kI64:
     case kRef:
     case kRefNull:
-    case kRtt:
       return reg.gp().X();
     case kF32:
       return reg.fp().S();
@@ -404,6 +403,7 @@ void LiftoffAssembler::PatchPrepareStackFrame(
         Operand(stack_param_slots * kStackSlotSize +
                 CommonFrameConstants::kFixedFrameSizeAboveFp));
     CallBuiltin(Builtin::kWasmHandleStackOverflow);
+    safepoint_table_builder->DefineSafepoint(this);
     PopRegisters(regs_to_save);
   } else {
     Call(static_cast<Address>(Builtin::kWasmStackOverflow),
@@ -2115,7 +2115,6 @@ void LiftoffAssembler::emit_cond_jump(Condition cond, Label* label,
       break;
     case kRef:
     case kRefNull:
-    case kRtt:
       DCHECK(rhs.is_valid());
       DCHECK(cond == kEqual || cond == kNotEqual);
 #if defined(V8_COMPRESS_POINTERS)
@@ -2235,13 +2234,15 @@ void LiftoffAssembler::LoadTransform(LiftoffRegister dst, Register src_addr,
                                      Register offset_reg, uintptr_t offset_imm,
                                      LoadType type,
                                      LoadTransformationKind transform,
-                                     uint32_t* protected_load_pc) {
+                                     uint32_t* protected_load_pc,
+                                     bool i64_offset) {
   UseScratchRegisterScope temps(this);
   MemOperand src_op =
       transform == LoadTransformationKind::kSplat
           ? MemOperand{liftoff::GetEffectiveAddress(this, &temps, src_addr,
                                                     offset_reg, offset_imm)}
-          : liftoff::GetMemOp(this, &temps, src_addr, offset_reg, offset_imm);
+          : liftoff::GetMemOp(this, &temps, src_addr, offset_reg, offset_imm,
+                              i64_offset);
   *protected_load_pc = pc_offset();
   MachineType memtype = type.mem_type();
 

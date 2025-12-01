@@ -401,9 +401,8 @@ bool FindNavigatorShouldBePresentedInBrowser(Browser* browser) {
   [self.inactiveTabsCoordinator hide];
 
   if (_bookmarksCoordinator) {
-    [_bookmarksCoordinator dismissBookmarkModalControllerAnimated:YES];
+  [_bookmarksCoordinator dismissBookmarkModalControllerAnimated:YES];
   }
-
 
   // History may be presented on top of the tab grid.
   if (self.historyCoordinator) {
@@ -411,6 +410,7 @@ bool FindNavigatorShouldBePresentedInBrowser(Browser* browser) {
   } else if (completion) {
     completion();
   }
+  [_historySyncPopupCoordinator interruptAnimated:NO];
 }
 
 - (void)setActiveMode:(TabGridMode)mode {
@@ -445,6 +445,24 @@ bool FindNavigatorShouldBePresentedInBrowser(Browser* browser) {
   // before the block gets executed, for example when closing the last tab in
   // incognito (crbug.com/1136882).
   TabGridPage currentActivePage = self.baseViewController.activePage;
+
+  // We force the entire window into dark mode to ensure that we will have
+  // the context menu on dark. However, this action causes an unintended switch
+  // to dark mode when deleting tab data while the user interface style is set
+  // to light. To mitigate this problem, we need to override all VC back to
+  // light when the UserInterfaceStyle on the device is set to light.
+  UIWindow* window = [sceneState window];
+  if (window.screen.traitCollection.userInterfaceStyle ==
+      UIUserInterfaceStyleLight) {
+    UIViewController* presentedViewController =
+        self.baseViewController.presentedViewController;
+
+    while (presentedViewController) {
+      presentedViewController.overrideUserInterfaceStyle =
+          UIUserInterfaceStyleLight;
+      presentedViewController = presentedViewController.presentedViewController;
+    }
+  }
 
   // Show "Bring Android Tabs" prompt if the user is an Android switcher and has
   // open tabs from their previous Android device.
@@ -841,8 +859,9 @@ bool FindNavigatorShouldBePresentedInBrowser(Browser* browser) {
   std::unique_ptr<collaboration::CollaborationControllerDelegate> delegate =
       std::make_unique<collaboration::IOSCollaborationControllerDelegate>(
           browser, self.baseViewController);
-  collaborationService->StartShareOrManageFlow(std::move(delegate),
-                                               tabGroup->tab_group_id());
+  collaborationService->StartShareOrManageFlow(
+      std::move(delegate), tabGroup->tab_group_id(),
+      collaboration::CollaborationServiceShareOrManageEntryPoint::kUnknown);
 }
 
 #pragma mark - ChromeCoordinator
@@ -926,13 +945,12 @@ bool FindNavigatorShouldBePresentedInBrowser(Browser* browser) {
   // Offer to manage inactive regular tabs iff the regular tabs grid is
   // available. The regular tabs can be disabled by policy, making the grid
   // unavailable.
-  if (IsInactiveTabsAvailable() &&
-      _pageConfiguration != TabGridPageConfiguration::kIncognitoPageOnly) {
+  if (_pageConfiguration != TabGridPageConfiguration::kIncognitoPageOnly) {
     CHECK(_regularGridCoordinator.gridViewController);
     self.inactiveTabsButtonMediator = [[InactiveTabsButtonMediator alloc]
-        initWithConsumer:_regularGridCoordinator.gridViewController
-            webStateList:_inactiveBrowser->GetWebStateList()
-             prefService:GetApplicationContext()->GetLocalState()];
+          initWithConsumer:_regularGridCoordinator.gridViewController
+              webStateList:_inactiveBrowser->GetWebStateList()
+        profilePrefService:_inactiveBrowser->GetProfile()->GetPrefs()];
   }
 
   baseViewController.priceCardDataSource = self.priceCardMediator;
@@ -1049,20 +1067,18 @@ bool FindNavigatorShouldBePresentedInBrowser(Browser* browser) {
         _remoteGridContainerViewController;
   }
 
-  if (IsInactiveTabsAvailable()) {
-    self.inactiveTabsCoordinator = [[InactiveTabsCoordinator alloc]
-        initWithBaseViewController:self.baseViewController
-                           browser:_inactiveBrowser
-                          delegate:self];
-    self.inactiveTabsCoordinator.tabContextMenuDelegate = self;
+  self.inactiveTabsCoordinator = [[InactiveTabsCoordinator alloc]
+      initWithBaseViewController:self.baseViewController
+                         browser:_inactiveBrowser
+                        delegate:self];
+  self.inactiveTabsCoordinator.tabContextMenuDelegate = self;
 
-    [self.inactiveTabsCoordinator start];
+  [self.inactiveTabsCoordinator start];
 
-    self.regularTabsMediator.containedGridToolbarsProvider =
-        self.inactiveTabsCoordinator.toolbarsConfigurationProvider;
-    self.regularTabsMediator.inactiveTabsGridCommands =
-        self.inactiveTabsCoordinator.gridCommandsHandler;
-  }
+  self.regularTabsMediator.containedGridToolbarsProvider =
+      self.inactiveTabsCoordinator.toolbarsConfigurationProvider;
+  self.regularTabsMediator.inactiveTabsGridCommands =
+      self.inactiveTabsCoordinator.gridCommandsHandler;
 
   // Vivaldi
   _closedGridContainerViewController =
@@ -1196,7 +1212,8 @@ bool FindNavigatorShouldBePresentedInBrowser(Browser* browser) {
   [self.historyCoordinator stop];
   self.historyCoordinator = nil;
 
-  [self stopHistorySyncPopupCoordinator];
+  [_historySyncPopupCoordinator interruptAnimated:NO];
+  _historySyncPopupCoordinator = nil;
 
   [_bookmarksCoordinator stop];
   _bookmarksCoordinator = nil;
@@ -1374,7 +1391,8 @@ bool FindNavigatorShouldBePresentedInBrowser(Browser* browser) {
 }
 
 - (void)showInactiveTabs {
-  CHECK(IsInactiveTabsEnabled());
+  CHECK(!IsInactiveTabsExplicitlyDisabledByUser(
+      _inactiveBrowser->GetProfile()->GetPrefs()));
   [self.inactiveTabsCoordinator show];
 }
 
@@ -1431,7 +1449,6 @@ bool FindNavigatorShouldBePresentedInBrowser(Browser* browser) {
 
 - (void)inactiveTabsCoordinatorDidFinish:
     (InactiveTabsCoordinator*)inactiveTabsCoordinator {
-  CHECK(IsInactiveTabsAvailable());
   [self.inactiveTabsCoordinator hide];
 }
 
@@ -1804,7 +1821,7 @@ bool FindNavigatorShouldBePresentedInBrowser(Browser* browser) {
   // From recent tabs, the tab grid might not be visible. As such, the animation
   // should never run in this flow.
   // TODO(crbug.com/335387869): Reenable animation for when tab groups sync is
-  // enabled for iPads. To trigger the animation, the HistoryCoordiantor owned
+  // enabled for iPads. To trigger the animation, the HistoryCoordinator owned
   // by this TabGridCoordinator needs to be stoped before the animation is ran.
   self.historyCoordinator.canPerformTabsClosureAnimation = NO;
   [self.historyCoordinator start];

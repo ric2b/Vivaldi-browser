@@ -69,18 +69,18 @@ static void* thread_crash(void*) {
   sleep(3);
   a = foo(a);
   printf("%x\n", a);
-  return NULL;
+  return nullptr;
 }
 
 static void* thread_main(void*) {
   while (!should_exit)
     sleep(1);
-  return NULL;
+  return nullptr;
 }
 
 static void CreateCrashThread() {
   pthread_t h;
-  pthread_create(&h, NULL, thread_crash, NULL);
+  pthread_create(&h, nullptr, thread_crash, nullptr);
   pthread_detach(h);
 }
 
@@ -88,7 +88,7 @@ static void CreateCrashThread() {
 static void CreateThread(int num) {
   pthread_t h;
   for (int i = 0; i < num; ++i) {
-    pthread_create(&h, NULL, thread_main, NULL);
+    pthread_create(&h, nullptr, thread_main, nullptr);
     pthread_detach(h);
   }
 }
@@ -109,7 +109,7 @@ static bool MinidumpCallback(const char* dump_path,
 
 int main(int argc, char* argv[]) {
   int handler_index = 1;
-  ExceptionHandler handler_ignore(".", NULL, MinidumpCallback,
+  ExceptionHandler handler_ignore(".", nullptr, MinidumpCallback,
                                   (void*)handler_index, true);
   CreateCrashThread();
   CreateThread(10);

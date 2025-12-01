@@ -524,8 +524,9 @@ void SharedFunctionInfo::DisableOptimization(Isolate* isolate,
     CodeKind kind = abstract_code(isolate)->kind(isolate);
     CHECK(kind == CodeKind::INTERPRETED_FUNCTION || kind == CodeKind::BUILTIN);
   }
-  PROFILE(isolate, CodeDisableOptEvent(handle(abstract_code(isolate), isolate),
-                                       handle(*this, isolate)));
+  PROFILE(isolate,
+          CodeDisableOptEvent(direct_handle(abstract_code(isolate), isolate),
+                              direct_handle(*this, isolate)));
   if (v8_flags.trace_opt) {
     CodeTracer::Scope scope(isolate->GetCodeTracer());
     PrintF(scope.file(), "[disabled optimization for ");
@@ -765,6 +766,9 @@ int SharedFunctionInfo::EndPosition() const {
 void SharedFunctionInfo::UpdateFromFunctionLiteralForLiveEdit(
     IsolateForSandbox isolate, FunctionLiteral* lit) {
   Tagged<Object> maybe_scope_info = name_or_scope_info(kAcquireLoad);
+  // TODO(crbug.com/401059828): remove once crashes are gone.
+  set_live_edited(true);
+
   if (IsScopeInfo(maybe_scope_info)) {
     // Updating the ScopeInfo is safe since they are identical modulo
     // source positions.
@@ -840,7 +844,7 @@ void SharedFunctionInfo::InstallDebugBytecode(
 
   {
     DisallowGarbageCollection no_gc;
-    base::SpinningMutexGuard guard(isolate->shared_function_info_access());
+    base::MutexGuard guard(isolate->shared_function_info_access());
     Tagged<DebugInfo> debug_info = shared->GetDebugInfo(isolate);
     debug_info->set_original_bytecode_array(*original_bytecode_array,
                                             kReleaseStore);
@@ -853,7 +857,7 @@ void SharedFunctionInfo::InstallDebugBytecode(
 void SharedFunctionInfo::UninstallDebugBytecode(
     Tagged<SharedFunctionInfo> shared, Isolate* isolate) {
   DisallowGarbageCollection no_gc;
-  base::SpinningMutexGuard guard(isolate->shared_function_info_access());
+  base::MutexGuard guard(isolate->shared_function_info_access());
   Tagged<DebugInfo> debug_info = shared->GetDebugInfo(isolate);
   Tagged<BytecodeArray> original_bytecode_array =
       debug_info->OriginalBytecodeArray(isolate);

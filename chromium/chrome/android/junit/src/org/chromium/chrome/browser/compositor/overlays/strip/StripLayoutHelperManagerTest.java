@@ -6,6 +6,7 @@ package org.chromium.chrome.browser.compositor.overlays.strip;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
@@ -77,6 +78,7 @@ import org.chromium.chrome.browser.layouts.components.VirtualView;
 import org.chromium.chrome.browser.lifecycle.ActivityLifecycleDispatcher;
 import org.chromium.chrome.browser.multiwindow.MultiInstanceManager;
 import org.chromium.chrome.browser.profiles.Profile;
+import org.chromium.chrome.browser.share.ShareDelegate;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab_group_sync.TabGroupSyncServiceFactory;
 import org.chromium.chrome.browser.tab_ui.TabContentManager;
@@ -91,6 +93,7 @@ import org.chromium.chrome.browser.toolbar.ToolbarFeatures;
 import org.chromium.chrome.browser.toolbar.ToolbarManager;
 import org.chromium.chrome.browser.toolbar.top.tab_strip.StripVisibilityState;
 import org.chromium.chrome.browser.ui.system.StatusBarColorController;
+import org.chromium.components.browser_ui.bottomsheet.BottomSheetController;
 import org.chromium.components.browser_ui.desktop_windowing.AppHeaderState;
 import org.chromium.components.browser_ui.desktop_windowing.DesktopWindowStateManager;
 import org.chromium.components.browser_ui.styles.ChromeColors;
@@ -144,17 +147,19 @@ public class StripLayoutHelperManagerTest {
     @Mock private DesktopWindowStateManager mDesktopWindowStateManager;
     @Mock private ActionConfirmationManager mActionConfirmationManager;
     @Mock private DataSharingTabManager mDataSharingTabManager;
+    @Mock private BottomSheetController mBottomSheetController;
+    @Mock private ShareDelegate mShareDelegate;
     @Mock private CollaborationService mCollaborationService;
     @Mock private TabGroupSyncService mTabGroupSyncService;
     @Mock private ServiceStatus mServiceStatus;
     @Mock private Tracker mTracker;
+    @Mock private ModalDialogManager mModalDialogManager;
     @Captor private ArgumentCaptor<List<Rect>> mSystemExclusionRectCaptor;
 
     private StripLayoutHelperManager mStripLayoutHelperManager;
     private Activity mActivity;
     private ObservableSupplierImpl<TabModelStartupInfo> mTabModelStartupInfoSupplier;
     private ObservableSupplierImpl<Integer> mTabStripHeightSupplier;
-    private ModalDialogManager mModalDialogManager;
     private int mToolbarPrimaryColor;
     private static final float SCREEN_WIDTH = 800.f;
     private static final float SCREEN_HEIGHT = 1600.f;
@@ -233,7 +238,9 @@ public class StripLayoutHelperManagerTest {
                         mDesktopWindowStateManager,
                         mActionConfirmationManager,
                         mModalDialogManager,
-                        mDataSharingTabManager);
+                        mDataSharingTabManager,
+                        mBottomSheetController,
+                        () -> mShareDelegate);
         mStripLayoutHelperManager.setTabModelSelector(mTabModelSelector, mTabCreatorManager);
         mStripLayoutHelperManager.setIsTabStripHiddenByHeightTransition(false);
     }
@@ -525,7 +532,7 @@ public class StripLayoutHelperManagerTest {
         // Verify model selector button is in pressed state, not hover state, when click is from
         // mouse.
         mStripLayoutHelperManager.simulateOnDownForTesting(
-                mStripLayoutHelperManager.getModelSelectorButton().getDrawX() + 1, 0, true, 1);
+                mStripLayoutHelperManager.getModelSelectorButton().getDrawX() + 1, 0, 1);
         assertFalse(
                 "Model selector button should not be hovered",
                 mStripLayoutHelperManager.getModelSelectorButton().isHovered());
@@ -1320,6 +1327,70 @@ public class StripLayoutHelperManagerTest {
         showTransition
                 .verify(mStatusBarColorController)
                 .setTabStripColorOverlay(mToolbarPrimaryColor, 0f);
+    }
+
+    @Test
+    public void testHeightTransitionAcrossWindowingModes() {
+        // Simulate a height transition to hide the strip.
+        mStripLayoutHelperManager.onHeightChanged(0, /* applyScrimOverlay= */ true);
+        mStripLayoutHelperManager.onHeightTransitionFinished();
+        // Verify the strip visibility.
+        assertNotEquals(
+                "StripVisibilityState.HIDDEN_BY_HEIGHT_TRANSITION should be set.",
+                0,
+                StripVisibilityState.HIDDEN_BY_HEIGHT_TRANSITION
+                        & mStripLayoutHelperManager.getStripVisibilityState());
+
+        // Simulate a switch to a small desktop window.
+        int topPadding = 5;
+        mStripLayoutHelperManager.onHeightChanged(
+                TAB_STRIP_HEIGHT_PX + topPadding, /* applyScrimOverlay= */ false);
+        mStripLayoutHelperManager.onHeightTransitionFinished();
+        mStripLayoutHelperManager.onFadeTransitionRequested(1f, 0);
+
+        // Verify the strip visibility.
+        assertEquals(
+                "StripVisibilityState.HIDDEN_BY_HEIGHT_TRANSITION should be unset.",
+                0,
+                StripVisibilityState.HIDDEN_BY_HEIGHT_TRANSITION
+                        & mStripLayoutHelperManager.getStripVisibilityState());
+        assertNotEquals(
+                "StripVisibilityState.HIDDEN_BY_FADE should be set.",
+                0,
+                StripVisibilityState.HIDDEN_BY_FADE
+                        & mStripLayoutHelperManager.getStripVisibilityState());
+    }
+
+    @Test
+    public void testFadeTransitionAcrossWindowingModes() {
+        // Simulate a fade transition to hide the strip.
+        mStripLayoutHelperManager.onFadeTransitionRequested(1f, 0);
+        // Verify the strip visibility.
+        assertNotEquals(
+                "StripVisibilityState.HIDDEN_BY_FADE should be set.",
+                0,
+                StripVisibilityState.HIDDEN_BY_FADE
+                        & mStripLayoutHelperManager.getStripVisibilityState());
+
+        // Simulate switching out of desktop windowing mode.
+        mStripLayoutHelperManager.onHeightChanged(
+                TAB_STRIP_HEIGHT_PX, /* applyScrimOverlay= */ true);
+        mStripLayoutHelperManager.onHeightTransitionFinished();
+        // Verify the strip visibility.
+        assertEquals(
+                "Strip visibility is incorrect.",
+                0,
+                mStripLayoutHelperManager.getStripVisibilityState());
+        assertEquals(
+                "StripVisibilityState.HIDDEN_BY_HEIGHT_TRANSITION should be unset.",
+                0,
+                StripVisibilityState.HIDDEN_BY_HEIGHT_TRANSITION
+                        & mStripLayoutHelperManager.getStripVisibilityState());
+        assertEquals(
+                "StripVisibilityState.HIDDEN_BY_FADE should be unset.",
+                0,
+                StripVisibilityState.HIDDEN_BY_FADE
+                        & mStripLayoutHelperManager.getStripVisibilityState());
     }
 
     private void resizeDesktopWindowAndTriggerFadeTransition(boolean showStrip) {

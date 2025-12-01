@@ -17,7 +17,6 @@
 #include "services/device/fingerprint/fingerprint.h"
 #include "services/device/generic_sensor/platform_sensor_provider.h"
 #include "services/device/generic_sensor/sensor_provider_impl.h"
-#include "services/device/geolocation/geolocation_config.h"
 #include "services/device/geolocation/geolocation_context.h"
 #include "services/device/geolocation/public_ip_address_geolocator.h"
 #include "services/device/geolocation/public_ip_address_location_notifier.h"
@@ -150,6 +149,12 @@ void DeviceService::OverrideTimeZoneMonitorBinderForTesting(
   internal::GetTimeZoneMonitorBinderOverride() = std::move(binder);
 }
 
+// static
+void DeviceService::OverrideUsbDeviceManagerBinderForTesting(
+    UsbDeviceManagerBinder binder) {
+  internal::GetUsbDeviceManagerBinderOverride() = std::move(binder);
+}
+
 void DeviceService::BindBatteryMonitor(
     mojo::PendingReceiver<mojom::BatteryMonitor> receiver) {
 #if BUILDFLAG(IS_ANDROID)
@@ -232,11 +237,6 @@ void DeviceService::BindInputDeviceManager(
 void DeviceService::BindFingerprint(
     mojo::PendingReceiver<mojom::Fingerprint> receiver) {
   Fingerprint::Create(std::move(receiver));
-}
-
-void DeviceService::BindGeolocationConfig(
-    mojo::PendingReceiver<mojom::GeolocationConfig> receiver) {
-  GeolocationConfig::Create(std::move(receiver));
 }
 
 void DeviceService::BindGeolocationContext(
@@ -335,6 +335,12 @@ void DeviceService::BindWakeLockProvider(
 
 void DeviceService::BindUsbDeviceManager(
     mojo::PendingReceiver<mojom::UsbDeviceManager> receiver) {
+  const auto& binder_override = internal::GetUsbDeviceManagerBinderOverride();
+  if (binder_override) {
+    binder_override.Run(std::move(receiver));
+    return;
+  }
+
   // TODO(crbug.com/40141825): usb::DeviceManagerImpl depends on the
   // permission_broker service on Chromium OS. We will need to redirect
   // connections for LaCrOS here.

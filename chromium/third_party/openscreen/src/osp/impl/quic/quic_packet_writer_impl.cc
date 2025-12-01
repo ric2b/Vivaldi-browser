@@ -21,7 +21,7 @@ PacketWriterImpl::~PacketWriterImpl() = default;
 quic::WriteResult PacketWriterImpl::WritePacket(
     const char* buffer,
     size_t buffer_length,
-    const quic::QuicIpAddress& /*self_address*/,
+    const quiche::QuicheIpAddress& /*self_address*/,
     const quic::QuicSocketAddress& peer_address,
     quic::PerPacketOptions* /*options*/,
     const quic::QuicPacketWriterParams& /*params*/) {
@@ -62,7 +62,7 @@ bool PacketWriterImpl::SupportsEcn() const {
 }
 
 quic::QuicPacketBuffer PacketWriterImpl::GetNextWriteLocation(
-    const quic::QuicIpAddress& /*self_address*/,
+    const quiche::QuicheIpAddress& /*self_address*/,
     const quic::QuicSocketAddress& /*peer_address*/) {
   return {};
 }

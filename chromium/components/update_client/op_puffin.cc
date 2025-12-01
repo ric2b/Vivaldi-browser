@@ -25,6 +25,7 @@
 #include "components/update_client/configurator.h"
 #include "components/update_client/crx_cache.h"
 #include "components/update_client/patcher.h"
+#include "components/update_client/protocol_definition.h"
 #include "components/update_client/task_traits.h"
 #include "components/update_client/update_client_errors.h"
 #include "third_party/puffin/src/include/puffin/puffpatch.h"
@@ -46,13 +47,37 @@ namespace {
 //
 // All errors shortcut to PatchDone.
 
+base::Value::Dict MakeEvent(
+    base::expected<base::FilePath, CategorizedError> result) {
+  base::Value::Dict event;
+  event.Set("eventtype", protocol_request::kEventPuff);
+  event.Set("eventresult",
+            static_cast<int>(result.has_value()
+                                 ? protocol_request::kEventResultSuccess
+                                 : protocol_request::kEventResultError));
+
+  if (!result.has_value()) {
+    CategorizedError error = result.error();
+    if (error.category_ != ErrorCategory::kNone) {
+      event.Set("errorcat", static_cast<int>(error.category_));
+    }
+    if (error.code_ != 0) {
+      event.Set("errorcode", error.code_);
+    }
+    if (error.extra_ != 0) {
+      event.Set("extracode1", error.extra_);
+    }
+  }
+  return event;
+}
+
 // Runs on the original sequence. Adds events and calls the original callback.
 void PatchDone(
     base::OnceCallback<void(base::expected<base::FilePath, CategorizedError>)>
         callback,
     base::RepeatingCallback<void(base::Value::Dict)> event_adder,
     base::expected<base::FilePath, CategorizedError> result) {
-  // TODO(crbug.com/353249967): Add an event describing the patch's outcome.
+  event_adder.Run(MakeEvent(result));
   base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE, base::BindOnce(std::move(callback), result));
 }
@@ -84,7 +109,7 @@ void Patch(
     const base::FilePath& temp_dir,
     base::OnceCallback<void(base::expected<base::FilePath, CategorizedError>)>
         callback) {
-  base::FilePath new_file = temp_dir.AppendASCII("puffpatch_out");
+  base::FilePath new_file = temp_dir.Append(FILE_PATH_LITERAL("puffpatch_out"));
   patcher->PatchPuffPatch(
       base::File(old_file, base::File::FLAG_OPEN | base::File::FLAG_READ),
       base::File(patch_file, base::File::FLAG_OPEN | base::File::FLAG_READ),
@@ -129,12 +154,12 @@ base::OnceClosure PuffOperation(
     scoped_refptr<Patcher> patcher,
     base::RepeatingCallback<void(base::Value::Dict)> event_adder,
     const std::string& id,
-    const std::string& prev_fp,
+    const std::string& prev_hash,
     const base::FilePath& patch_file,
     base::OnceCallback<void(base::expected<base::FilePath, CategorizedError>)>
         callback) {
-  crx_cache->Get(
-      id, prev_fp,
+  crx_cache->GetByHash(
+      prev_hash,
       base::BindOnce(&CacheLookupDone, event_adder, patcher, patch_file,
                      patch_file.DirName(), std::move(callback)));
   return base::DoNothing();

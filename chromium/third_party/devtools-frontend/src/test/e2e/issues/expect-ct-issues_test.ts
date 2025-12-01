@@ -16,7 +16,7 @@ describe('Expect-CT Issue', () => {
   it('should display deprecation issue for Expect-CT header', async () => {
     await navigateToIssuesTab();
     const {frontend} = getBrowserAndPages();
-    frontend.evaluate(() => {
+    await frontend.evaluate(() => {
       const issue = {
         code: 'DeprecationIssue',
         details: {
@@ -30,7 +30,7 @@ describe('Expect-CT Issue', () => {
           },
         },
       };
-      // @ts-ignore
+      // @ts-expect-error
       window.addIssueForTest(issue);
     });
 

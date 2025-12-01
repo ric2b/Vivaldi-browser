@@ -59,8 +59,7 @@ std::vector<Resolution> GetStreamResolutions(
     const std::vector<VideoStream>& streams) {
   std::vector<Resolution> res;
   for (const auto& s : streams) {
-    res.push_back(
-        {rtc::checked_cast<int>(s.width), rtc::checked_cast<int>(s.height)});
+    res.push_back({checked_cast<int>(s.width), checked_cast<int>(s.height)});
   }
   return res;
 }
@@ -487,5 +486,21 @@ TEST(EncoderStreamFactory, H265TemporalLayerCountTransferToStreamSettings) {
   EXPECT_EQ(streams[0].num_temporal_layers, 3);
 }
 #endif
+
+TEST(EncoderStreamFactory, VP9SetsMaxBitrateToConfiguredEncodingValue) {
+  VideoEncoderConfig encoder_config;
+  VideoCodecVP9 vp9_settings = VideoEncoder::GetDefaultVp9Settings();
+  encoder_config.encoder_specific_settings =
+      rtc::make_ref_counted<VideoEncoderConfig::Vp9EncoderSpecificSettings>(
+          vp9_settings);
+  encoder_config.codec_type = VideoCodecType::kVideoCodecVP9;
+  encoder_config.number_of_streams = 1;
+  encoder_config.simulcast_layers.resize(3);
+  encoder_config.simulcast_layers[0].max_bitrate_bps = 5000000;
+  auto streams = CreateEncoderStreams(ExplicitKeyValueConfig(""), {1280, 720},
+                                      encoder_config);
+  ASSERT_THAT(streams, SizeIs(1));
+  EXPECT_EQ(streams[0].max_bitrate_bps, 5000000);
+}
 
 }  // namespace webrtc

@@ -1,4 +1,32 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="pa">
+<translation id="3830627370375585318">ਆਪਣੇ ਫ਼ਾਇਰਵਾਲ ਤੇ ਐਂਟੀਵਾਇਰਸ ਦੀਆਂ ਸੈਟਿੰਗਾਂ ਵਿੱਚ ਵਿਵਾਲਡੀ ਦੇ ਨੈੱਟਵਰਕ ਦੀ ਪਹੁੰਚ ਨੂੰ ਪ੍ਰਵਾਨ ਕਰੋ।</translation>
+<translation id="4200102020577305737">ਇਸ 'ਤੇ ਜਾਓ
+          ਵਿਵਾਲਡੀ ਮੇਨੂ &gt;
+          <ph name="SETTINGS_TITLE" />
+          &gt;
+          <ph name="ADVANCED_TITLE" />
+          &gt;
+          <ph name="PROXIES_TITLE" />
+          &gt;
+          LAN ਦੀਆਂ ਸੈਟਿੰਗਾਂ
+          ਅਤੇ "ਆਪਣੇ LAN ਲਈ ਮੁਖਤਿਆਰੀ ਸਰਵਰ ਵਰਤੋ" ਨੂੰ ਅਣ-ਚੁਣਿਆ ਕਰੋ।</translation>
+<translation id="4932161901409251843">ਇਸ 'ਤੇ ਜਾਓ
+          ਵਿਵਾਲਡੀ ਮੇਨੂ &gt;
+          <ph name="SETTINGS_TITLE" />
+          &gt;
+          <ph name="ADVANCED_TITLE" />
+          &gt;
+          <ph name="PROXIES_TITLE" />
+          ਅਤੇ ਇਹ ਪੱਕਾ ਕਰੋ ਕਿ ਤੁਹਾਡੀ ਰੂਪ-ਰੇਖਾ "ਕੋਈ ਮੁਖਤਿਆਰੀ ਨਹੀਂ" ਜਾਂ "ਸਿੱਧੀ" 'ਤੇ ਸੈੱਟ ਹੋਵੇ।</translation>
+<translation id="5248344925342018662">ਤੁਸੀਂ ਸੁਰੱਖਿਅਤ ਵਿਵਾਲਡੀ ਪੰਨਾ ਦੇਖ ਰਹੇ ਹੋ</translation>
+<translation id="7023871570427738255">ਇਸ 'ਤੇ ਜਾਓ
+          ਵਿਵਾਲਡੀ ਮੇਨੂ &gt;
+          <ph name="SETTINGS_TITLE" />
+          &gt;
+          <ph name="ADVANCED_TITLE" />
+          ਅਤੇ "<ph name="NO_PREFETCH_DESCRIPTION" />" ਨੂੰ ਅਣ-ਚੁਣਿਆ ਕਰ ਦਿਉ।
+          ਜੇ ਇਸ ਨਾਲ ਮੁੱਦਾ ਹੱਲ ਨਹੀਂ ਹੁੰਦਾ, ਤਾਂ ਸਾਡਾ ਸੁਝਾਅ ਹੈ ਕਿ ਚੰਗੀ ਕਾਰਗੁਜ਼ਾਰੀ ਲਈ ਇਸ
+          ਵਿਕਲਪ ਦੀ ਦੁਬਾਰਾ ਚੋਣ ਕਰ ਲਵੋ।</translation>
 </translationbundle>

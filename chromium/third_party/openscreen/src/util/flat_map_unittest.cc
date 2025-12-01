@@ -47,7 +47,7 @@ TEST(FlatMapTest, Access) {
   // NOTE: Google Test doesn't support death tests on some platforms, such
   // as iOS.
 #if defined(GTEST_HAS_DEATH_TEST)
-  EXPECT_DEATH(kSimpleFlatMap.at(31337), ".*");
+  EXPECT_DEATH(std::ignore = kSimpleFlatMap.at(31337), ".*");
 #endif
 }
 

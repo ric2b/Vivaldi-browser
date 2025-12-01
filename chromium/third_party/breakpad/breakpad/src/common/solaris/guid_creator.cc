@@ -50,7 +50,7 @@
 class GUIDGenerator {
  public:
   GUIDGenerator() {
-    srandom(time(NULL));
+    srandom(time(nullptr));
   }
 
   bool CreateGUID(GUID *guid) const {

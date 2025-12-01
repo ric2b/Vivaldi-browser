@@ -1,4 +1,5 @@
-load("//xla:xla.bzl", "xla_cc_test")
+load("//xla:xla.default.bzl", "xla_cc_test")
+load("//xla/tsl:tsl.bzl", "if_oss", "internal_visibility")
 load("//xla/tsl:tsl.default.bzl", "tsl_grpc_cc_dependencies")
 load("//xla/tsl/platform:build_config.bzl", "tf_proto_library")
 load("//xla/tsl/platform:rules_cc.bzl", "cc_library")
@@ -7,7 +8,7 @@ licenses(["notice"])
 
 package(
     # copybara:uncomment default_applicable_licenses = ["//tensorflow:license"],
-    default_visibility = ["//xla:internal"],
+    default_visibility = internal_visibility(["//xla/pjrt:friends"]),
 )
 
 tf_proto_library(
@@ -138,6 +139,7 @@ xla_cc_test(
     name = "client_server_test",
     size = "medium",
     srcs = ["client_server_test.cc"],
+    tags = if_oss(["not_run:arm"]),
     deps = [
         ":client",
         ":distributed",
@@ -148,6 +150,7 @@ xla_cc_test(
         "//xla:status_macros",
         "//xla/tsl/distributed_runtime/coordination:coordination_service_agent",
         "//xla/tsl/lib/core:status_test_util",
+        "//xla/tsl/platform:env",
         "@com_google_absl//absl/log",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/strings",

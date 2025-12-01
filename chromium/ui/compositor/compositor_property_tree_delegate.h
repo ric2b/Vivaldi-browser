@@ -13,7 +13,11 @@
 #include "cc/trees/property_tree_delegate.h"
 #include "cc/trees/property_tree_layer_tree_delegate.h"
 #include "ui/compositor/compositor_export.h"
-#include "ui/gfx/geometry/vector2d_f.h"
+
+namespace gfx {
+class Vector2dF;
+class Transform;
+}  // namespace gfx
 
 namespace cc {
 class LayerTreeHost;
@@ -21,6 +25,8 @@ struct ViewportPropertyIds;
 }
 
 namespace ui {
+
+class Compositor;
 
 // TODO(crbug.com/389771428): This class exists to gradually move the
 // Compositor from using the cc::Compositor in legacy layer tree mode
@@ -48,6 +54,8 @@ class COMPOSITOR_EXPORT CompositorPropertyTreeDelegate
       const CompositorPropertyTreeDelegate&) = delete;
   ~CompositorPropertyTreeDelegate() override = default;
 
+  void set_compositor(Compositor* compositor) { compositor_ = compositor; }
+
   void SetObserverForTesting(Observer*);
 
   // PropertyTreeDelegate overrides.
@@ -72,8 +80,12 @@ class COMPOSITOR_EXPORT CompositorPropertyTreeDelegate
   void OnElementOpacityMutated(cc::ElementId element_id,
                                cc::ElementListType list_type,
                                float opacity) override;
+  void OnElementTransformMutated(cc::ElementId element_id,
+                                 cc::ElementListType list_type,
+                                 const gfx::Transform& transform) override;
 
  private:
+  raw_ptr<Compositor> compositor_ = nullptr;
   raw_ptr<Observer> observer_ = nullptr;
 };
 

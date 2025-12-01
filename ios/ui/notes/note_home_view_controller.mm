@@ -2700,8 +2700,14 @@ const int kRowsHiddenByNavigationBar = 3;
                   delegate:self];
   UISheetPresentationController *sheetPc =
       self.settingsNavigationController.sheetPresentationController;
-  sheetPc.detents = @[UISheetPresentationControllerDetent.mediumDetent,
-                      UISheetPresentationControllerDetent.largeDetent];
+  // When iPad full screen or 2/3 SplitView support only large detent because
+  // medium detent cuts the contents makes the dialog small and off centered.
+  if (IsSplitToolbarMode(self.settingsNavigationController)) {
+    sheetPc.detents = @[UISheetPresentationControllerDetent.mediumDetent,
+                        UISheetPresentationControllerDetent.largeDetent];
+  } else {
+    sheetPc.detents = @[UISheetPresentationControllerDetent.largeDetent];
+  }
   sheetPc.prefersScrollingExpandsWhenScrolledToEdge = NO;
   sheetPc.widthFollowsPreferredContentSizeWhenEdgeAttached = YES;
   [self presentViewController:self.settingsNavigationController

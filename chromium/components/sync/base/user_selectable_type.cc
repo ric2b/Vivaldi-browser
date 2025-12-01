@@ -40,8 +40,8 @@ constexpr char kProductComparisonTypeName[] = "productComparison";
 constexpr char kCookiesTypeName[] = "cookies";
 
 UserSelectableTypeInfo GetUserSelectableTypeInfo(UserSelectableType type) {
-  static_assert(53 + 1 /* notes */ == syncer::GetNumDataTypes(),
-                "Almost always when adding a new DataType, you must tie it to "
+  static_assert(55 + 1 /* notes */ == syncer::GetNumDataTypes(),
+                "Almost always when adding a new Data, you must tie it to "
                 "a UserSelectableType below (new or existing) so the user can "
                 "disable syncing of that data. Today you must also update the "
                 "UI code yourself; crbug.com/1067282 and related bugs will "
@@ -88,7 +88,7 @@ UserSelectableTypeInfo GetUserSelectableTypeInfo(UserSelectableType type) {
       return {kTabsTypeName,
               SESSIONS,
               {SESSIONS, SAVED_TAB_GROUP, SHARED_TAB_GROUP_DATA,
-               COLLABORATION_GROUP}};
+               COLLABORATION_GROUP, SHARED_TAB_GROUP_ACCOUNT_DATA}};
 #else
       return {kTabsTypeName, SESSIONS, {SESSIONS}};
 #endif
@@ -99,7 +99,8 @@ UserSelectableTypeInfo GetUserSelectableTypeInfo(UserSelectableType type) {
       // together with open tabs same as mobile.
       return {kSavedTabGroupsTypeName,
               SAVED_TAB_GROUP,
-              {SAVED_TAB_GROUP, SHARED_TAB_GROUP_DATA, COLLABORATION_GROUP}};
+              {SAVED_TAB_GROUP, SHARED_TAB_GROUP_DATA, COLLABORATION_GROUP,
+               SHARED_TAB_GROUP_ACCOUNT_DATA}};
     case UserSelectableType::kSharedTabGroupData:
       // Note: COLLABORATION_GROUP might be re-used for other
       // features. If this happens, it should probably be in
@@ -108,13 +109,14 @@ UserSelectableTypeInfo GetUserSelectableTypeInfo(UserSelectableType type) {
       // needed any more.
       return {kSharedTabGroupDataTypeName,
               SHARED_TAB_GROUP_DATA,
-              {SHARED_TAB_GROUP_DATA, COLLABORATION_GROUP}};
+              {SHARED_TAB_GROUP_DATA, COLLABORATION_GROUP,
+               SHARED_TAB_GROUP_ACCOUNT_DATA}};
     case UserSelectableType::kPayments:
       return {kPaymentsTypeName,
               AUTOFILL_WALLET_DATA,
               {AUTOFILL_WALLET_CREDENTIAL, AUTOFILL_WALLET_DATA,
                AUTOFILL_WALLET_METADATA, AUTOFILL_WALLET_OFFER,
-               AUTOFILL_WALLET_USAGE}};
+               AUTOFILL_WALLET_USAGE, AUTOFILL_VALUABLE}};
     case UserSelectableType::kProductComparison:
       return {
           kProductComparisonTypeName, PRODUCT_COMPARISON, {PRODUCT_COMPARISON}};

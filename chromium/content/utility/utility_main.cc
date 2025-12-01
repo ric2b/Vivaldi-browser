@@ -66,9 +66,9 @@
 
 #endif  // BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
 
-#if BUILDFLAG(ENABLE_VIDEO_EFFECTS) && BUILDFLAG(IS_LINUX)
+#if BUILDFLAG(IS_LINUX)
 #include "services/video_effects/video_effects_sandbox_hook_linux.h"  // nogncheck
-#endif  // BUILDFLAG(ENABLE_VIDEO_EFFECTS) && BUILDFLAG(IS_LINUX)
+#endif  // BUILDFLAG(IS_LINUX)
 
 #if BUILDFLAG(IS_CHROMEOS)
 #include "chromeos/ash/components/assistant/buildflags.h"
@@ -363,9 +363,7 @@ int UtilityMain(MainFunctionParams parameters) {
 
 #elif BUILDFLAG(IS_WIN)
   std::optional<base::win::ScopedCOMInitializer> scoped_com_initializer;
-  if (message_pump_type == base::MessagePumpType::UI &&
-      base::FeatureList::IsEnabled(
-          features::kUtilityWithUiPumpInitializesCom)) {
+  if (message_pump_type == base::MessagePumpType::UI) {
     scoped_com_initializer.emplace();
     CHECK(scoped_com_initializer->Succeeded());
   }

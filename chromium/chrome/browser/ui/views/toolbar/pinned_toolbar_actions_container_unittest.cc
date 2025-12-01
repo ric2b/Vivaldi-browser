@@ -7,13 +7,15 @@
 #include <vector>
 
 #include "base/functional/bind.h"
+#include "base/test/metrics/action_suffix_reader.h"
+#include "chrome/browser/history/history_service_factory.h"
+#include "chrome/browser/ui/actions/chrome_action_id.h"
 #include "chrome/browser/ui/actions/chrome_actions.h"
 #include "chrome/browser/ui/browser_actions.h"
 #include "chrome/browser/ui/browser_element_identifiers.h"
 #include "chrome/browser/ui/toolbar/pinned_toolbar/pinned_toolbar_actions_model.h"
 #include "chrome/browser/ui/toolbar/pinned_toolbar/pinned_toolbar_actions_model_factory.h"
 #include "chrome/browser/ui/toolbar/toolbar_pref_names.h"
-#include "chrome/browser/ui/ui_features.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/frame/test_with_browser_view.h"
 #include "chrome/browser/ui/views/toolbar/pinned_action_toolbar_button.h"
@@ -21,6 +23,7 @@
 #include "chrome/browser/ui/views/toolbar/pinned_toolbar_button_status_indicator.h"
 #include "chrome/browser/ui/views/toolbar/toolbar_button.h"
 #include "chrome/browser/ui/views/toolbar/toolbar_view.h"
+#include "chrome/common/chrome_features.h"
 #include "chrome/grit/generated_resources.h"
 #include "chrome/test/base/browser_with_test_window_test.h"
 #include "components/keyed_service/core/keyed_service.h"
@@ -39,7 +42,6 @@
 class PinnedToolbarActionsContainerTest : public TestWithBrowserView {
  public:
   void SetUp() override {
-    feature_list_.InitAndEnableFeature(features::kToolbarPinning);
     InitializeActionIdStringMapping();
     TestWithBrowserView::SetUp();
     AddTab(browser_view()->browser(), GURL("http://foo1.com"));
@@ -65,6 +67,8 @@ class PinnedToolbarActionsContainerTest : public TestWithBrowserView {
         PinnedToolbarActionsModelFactory::GetInstance(),
         base::BindRepeating(&PinnedToolbarActionsContainerTest::
                                 BuildPinnedToolbarActionsModel));
+    factories.emplace_back(HistoryServiceFactory::GetInstance(),
+                           HistoryServiceFactory::GetDefaultFactory());
     return factories;
   }
 
@@ -140,6 +144,9 @@ class PinnedToolbarActionsContainerTest : public TestWithBrowserView {
         ui::ImageModel::FromVectorIcon(vector_icons::kDogfoodIcon));
     action->SetVisible(true);
     action->SetEnabled(true);
+    action->SetProperty(actions::kActionItemPinnableKey,
+                        std::underlying_type_t<actions::ActionPinnableState>(
+                            actions::ActionPinnableState::kPinnable));
     action->SetInvokeActionCallback(base::DoNothing());
   }
 
@@ -180,9 +187,6 @@ class PinnedToolbarActionsContainerTest : public TestWithBrowserView {
                                      ui::EventTimeForNow()));
   }
 
- protected:
-  base::test::ScopedFeatureList feature_list_;
-
  private:
   raw_ptr<PinnedToolbarActionsModel> model_;
 };
@@ -215,8 +219,10 @@ TEST_F(PinnedToolbarActionsContainerTest, PinningAndUnpinning) {
   pinned_buttons = GetChildToolbarButtons();
   ASSERT_EQ(pinned_buttons.size(), 1u);
   // Check the context menu
+  EXPECT_FALSE(pinned_buttons[0]->menu_model()->IsVisibleAt(0));
+  EXPECT_TRUE(pinned_buttons[0]->menu_model()->IsVisibleAt(1));
   EXPECT_EQ(
-      pinned_buttons[0]->menu_model()->GetLabelAt(0),
+      pinned_buttons[0]->menu_model()->GetLabelAt(1),
       l10n_util::GetStringUTF16(IDS_SIDE_PANEL_TOOLBAR_BUTTON_CXMENU_UNPIN));
   // Verify pressing the toolbar button invokes the action.
   ASSERT_EQ(actions::ActionManager::Get()
@@ -248,6 +254,8 @@ TEST_F(PinnedToolbarActionsContainerTest,
   CheckIsPinned(actions::kActionCut, false);
   toolbar_buttons = GetChildToolbarButtons();
   // Check the context menu
+  EXPECT_TRUE(toolbar_buttons[0]->menu_model()->IsVisibleAt(0));
+  EXPECT_FALSE(toolbar_buttons[0]->menu_model()->IsVisibleAt(1));
   EXPECT_EQ(
       toolbar_buttons[0]->menu_model()->GetLabelAt(0),
       l10n_util::GetStringUTF16(IDS_SIDE_PANEL_TOOLBAR_BUTTON_CXMENU_PIN));
@@ -381,6 +389,8 @@ TEST_F(PinnedToolbarActionsContainerTest, MovingActionsUpdateOrderUsingDrag) {
   ASSERT_EQ(toolbar_buttons.size(), 2u);
   ASSERT_EQ(toolbar_buttons[0]->GetActionId(), actions::kActionCut);
   ASSERT_EQ(toolbar_buttons[1]->GetActionId(), actions::kActionCopy);
+  WaitForAnimations();
+
   // Drag to reorder the two actions.
   auto* drag_view = toolbar_buttons[1];
   EXPECT_TRUE(
@@ -405,6 +415,51 @@ TEST_F(PinnedToolbarActionsContainerTest, MovingActionsUpdateOrderUsingDrag) {
   ASSERT_EQ(toolbar_buttons[1]->GetActionId(), actions::kActionCut);
 }
 
+// TODO(crbug.com/40670141): Test currently disabled on MacOS since waiting
+// for animations is disabled on there and hence we do not wait for the bounds
+// to be updated for the toolbar buttons.
+#if !BUILDFLAG(IS_MAC)
+TEST_F(PinnedToolbarActionsContainerTest,
+       MovingWithExtraActionsInModelUsingDrag) {
+  UpdateActionItem(actions::kActionCut);
+  UpdateActionItem(actions::kActionCopy);
+
+  // Set pinned state for an action item that isn't registered
+  model()->UpdatePinnedState(kActionRouteMedia, true);
+  model()->UpdatePinnedState(actions::kActionCut, true);
+  model()->UpdatePinnedState(actions::kActionCopy, true);
+
+  auto toolbar_buttons = GetChildToolbarButtons();
+  ASSERT_EQ(toolbar_buttons.size(), 2u);
+  ASSERT_EQ(toolbar_buttons[0]->GetActionId(), actions::kActionCut);
+  ASSERT_EQ(toolbar_buttons[1]->GetActionId(), actions::kActionCopy);
+  WaitForAnimations();
+
+  // Drag to reorder the two actions.
+  auto* drag_view = toolbar_buttons[0];
+  EXPECT_TRUE(
+      container()->CanStartDragForView(drag_view, gfx::Point(), gfx::Point()));
+  ui::OSExchangeData drag_data;
+  container()->WriteDragDataForView(drag_view, gfx::Point(), &drag_data);
+  gfx::Point drag_location = toolbar_buttons[1]->bounds().CenterPoint();
+  ui::DropTargetEvent drop_event(drag_data, gfx::PointF(drag_location),
+                                 gfx::PointF(drag_location),
+                                 ui::DragDropTypes::DRAG_MOVE);
+  container()->OnDragUpdated(drop_event);
+  auto drop_cb = container()->GetDropCallback(drop_event);
+  ui::mojom::DragOperation output_drag_op = ui::mojom::DragOperation::kNone;
+  std::move(drop_cb).Run(drop_event, output_drag_op,
+                         /*drag_image_layer_owner=*/nullptr);
+  WaitForAnimations();
+
+  // Verify the order gets updated in the ui.
+  toolbar_buttons = GetChildToolbarButtons();
+  ASSERT_EQ(toolbar_buttons.size(), 2u);
+  ASSERT_EQ(toolbar_buttons[0]->GetActionId(), actions::kActionCopy);
+  ASSERT_EQ(toolbar_buttons[1]->GetActionId(), actions::kActionCut);
+}
+#endif
+
 TEST_F(PinnedToolbarActionsContainerTest, ContextMenuPinTest) {
   // clang-format on
   UpdateActionItem(actions::kActionCut);
@@ -417,13 +472,15 @@ TEST_F(PinnedToolbarActionsContainerTest, ContextMenuPinTest) {
   pinned_buttons = GetChildToolbarButtons();
   ASSERT_EQ(pinned_buttons.size(), 1u);
   // Check the context menu. Callback should unpin the button.
+  EXPECT_EQ(pinned_buttons[0]->menu_model()->GetItemCount(), 3u);
+  EXPECT_FALSE(pinned_buttons[0]->menu_model()->IsVisibleAt(0));
+  EXPECT_TRUE(pinned_buttons[0]->menu_model()->IsVisibleAt(1));
   EXPECT_EQ(
-      pinned_buttons[0]->menu_model()->GetLabelAt(0),
+      pinned_buttons[0]->menu_model()->GetLabelAt(1),
       l10n_util::GetStringUTF16(IDS_SIDE_PANEL_TOOLBAR_BUTTON_CXMENU_UNPIN));
-  // Skip index 1, which is a divider with no string.
   EXPECT_EQ(pinned_buttons[0]->menu_model()->GetLabelAt(2),
             l10n_util::GetStringUTF16(IDS_SHOW_CUSTOMIZE_CHROME_TOOLBAR));
-  pinned_buttons[0]->ExecuteCommand(IDC_UPDATE_SIDE_PANEL_PIN_STATE, 0);
+  pinned_buttons[0]->menu_model()->ActivatedAt(1);
   WaitForAnimations();
   pinned_buttons = GetChildToolbarButtons();
   ASSERT_EQ(pinned_buttons.size(), 0u);
@@ -432,10 +489,12 @@ TEST_F(PinnedToolbarActionsContainerTest, ContextMenuPinTest) {
   auto child_views = container()->children();
   auto* pop_out_button =
       static_cast<PinnedActionToolbarButton*>(child_views[1]);
+  EXPECT_TRUE(pop_out_button->menu_model()->IsVisibleAt(0));
+  EXPECT_FALSE(pop_out_button->menu_model()->IsVisibleAt(1));
   EXPECT_EQ(
       pop_out_button->menu_model()->GetLabelAt(0),
       l10n_util::GetStringUTF16(IDS_SIDE_PANEL_TOOLBAR_BUTTON_CXMENU_PIN));
-  pop_out_button->ExecuteCommand(IDC_UPDATE_SIDE_PANEL_PIN_STATE, 0);
+  pop_out_button->menu_model()->ActivatedAt(0);
   CheckIsPinned(actions::kActionCut, true);
 }
 
@@ -621,4 +680,33 @@ TEST_F(PinnedToolbarActionsContainerTest, ActiveActionSkipsExecution) {
   pinned_button->OnMouseReleased(release_event);
 
   EXPECT_FALSE(pinned_button->ShouldSkipExecutionForTesting());
+}
+
+TEST_F(PinnedToolbarActionsContainerTest, MetricsRecordedForPinnableActions) {
+  // Verify all pinnable buttons have a suffix listed in actions.xml.
+  actions::ActionItemVector action_items;
+  actions::ActionManager::Get().GetActions(
+      action_items,
+      browser_view()->browser()->GetActions()->root_action_item());
+  size_t pinnable_count =
+      std::ranges::count_if(action_items, [](actions::ActionItem* action) {
+        return action->GetProperty(actions::kActionItemPinnableKey) ==
+               std::underlying_type_t<actions::ActionPinnableState>(
+                   actions::ActionPinnableState::kPinnable);
+      });
+  const auto pinnable_action_suffixes = base::ReadActionSuffixesForAction(
+      "Actions.PinnedToolbarButtonActivation");
+  EXPECT_EQ(1U, pinnable_action_suffixes.size());
+  // Only one of history or history clusters should be pinnable.
+  size_t expected_pinnable_count = pinnable_action_suffixes[0].size() - 1;
+  if (!features::HasTabSearchToolbarButton()) {
+    // Tab search is not pinnable if the feature is disabled.
+    expected_pinnable_count -= 1;
+  }
+#if BUILDFLAG(IS_CHROMEOS)
+  // Downloads action item does not exist for ChromeOS.
+  EXPECT_EQ(pinnable_count, expected_pinnable_count - 1);
+#else
+  EXPECT_EQ(pinnable_count, expected_pinnable_count);
+#endif  // BUILDFLAG(IS_CHROMEOS)
 }

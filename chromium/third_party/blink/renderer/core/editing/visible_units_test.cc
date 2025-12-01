@@ -1019,10 +1019,8 @@ TEST_F(VisibleUnitsTest, SnapForwardWithSelect) {
             MostForwardCaretPosition(PositionInFlatTree(select, 2)));
   EXPECT_EQ(PositionInFlatTree::BeforeNode(select),
             MostForwardCaretPosition(PositionInFlatTree(select, 3)));
-  EXPECT_EQ(PositionInFlatTree::BeforeNode(select),
-            MostForwardCaretPosition(PositionInFlatTree(select, 4)));
   EXPECT_EQ(PositionInFlatTree::AfterNode(select),
-            MostForwardCaretPosition(PositionInFlatTree(select, 5)));
+            MostForwardCaretPosition(PositionInFlatTree(select, 4)));
 
   EXPECT_EQ(
       PositionInFlatTree::AfterNode(select),
@@ -1135,6 +1133,17 @@ TEST_F(VisibleUnitsTest, FirstRectForRangeVerticalWrap) {
       SetSelectionTextToBody("<div>^abc def|</div>");
   const gfx::Rect rect = FirstRectForRange(selection.ComputeRange());
   EXPECT_EQ(gfx::Rect(28, 8, 20, 59), rect);
+}
+
+// crbug.com/402791086
+TEST_F(VisibleUnitsTest, ComputeTextRect) {
+  LoadAhem();
+  InsertStyleElement("div { font:10px Ahem; white-space:pre}");
+  const gfx::Rect rect = ComputeTextRect(
+      SetSelectionTextToBody("<div>^start<br>end|</div>").ComputeRange());
+  const gfx::Rect reference = ComputeTextRect(
+      SetSelectionTextToBody("<div>^start\nend|</div>").ComputeRange());
+  EXPECT_EQ(reference, rect);
 }
 
 }  // namespace visible_units_test

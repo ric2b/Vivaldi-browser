@@ -19,7 +19,9 @@
 #include "base/test/scoped_feature_list.h"
 #include "base/time/time.h"
 #include "net/base/features.h"
+#include "net/cookies/canonical_cookie.h"
 #include "net/cookies/cookie_constants.h"
+#include "net/cookies/cookie_inclusion_status.h"
 #include "net/cookies/cookie_options.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -282,6 +284,14 @@ TEST(CookieUtilTest, GetCookieDomainWithString_UrlHostIP_DomainCookie) {
   EXPECT_EQ(cookie_util::GetCookieDomainWithString(GURL("http://192.0.2.3/"),
                                                    ".192.0.2.3", status),
             "192.0.2.3");  // No dot.
+}
+
+TEST(CookieUtilTest, GetCookieDomainWithString_Invalid_UrlHostIP_SubDomain) {
+  CookieInclusionStatus status;
+  EXPECT_FALSE(cookie_util::GetCookieDomainWithString(GURL("http://192.0.2.3/"),
+                                                      "192", status));
+  EXPECT_FALSE(cookie_util::GetCookieDomainWithString(
+      GURL("http://0.0.16.0/0000000"), "00000000", status));
 }
 
 // A URL containing a TLD that is unknown as a registry is allowed, if it

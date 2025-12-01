@@ -24,6 +24,8 @@ import("//ui/qt/qt.gni")
 if (is_android) {
   import("//build/config/android/config.gni")
   import("//build/config/android/rules.gni")
+} else if (is_ios) {
+  import("//build/config/apple/mobile_config.gni")
 } else if (is_mac) {
   import("//build/config/mac/rules.gni")
 }
@@ -486,6 +488,8 @@ component("base") {
     "//skia",
     "//third_party/abseil-cpp:absl",
     "//ui/base/mojom:ui_base_types",
+    "//ui/color",
+    "//ui/color:color_headers",
     "//ui/gfx",
     "//ui/gfx/geometry",
   ]
@@ -544,11 +548,9 @@ component("base") {
 
   if (use_blink) {
     deps += [
-      "//ui/color",
       "//ui/events",
       "//ui/events/devices",
     ]
-    public_deps += [ "//ui/color:color_headers" ]
   }
 
   if (is_win) {
@@ -615,6 +617,7 @@ component("base") {
       "CoreVideo.framework",
       "Foundation.framework",
       "QuartzCore.framework",
+      "UniformTypeIdentifiers.framework",
     ]
 
     weak_frameworks = [
@@ -763,6 +766,7 @@ static_library("test_support") {
     "interaction/interaction_sequence_test_util.h",
     "interaction/interactive_test.cc",
     "interaction/interactive_test.h",
+    "interaction/interactive_test_definitions.h",
     "interaction/interactive_test_internal.cc",
     "interaction/interactive_test_internal.h",
     "interaction/polling_state_observer.h",
@@ -819,11 +823,16 @@ static_library("test_support") {
     ]
   } else {
     sources += [
-      "test/ios/keyboard_appearance_listener.h",
-      "test/ios/keyboard_appearance_listener.mm",
       "test/ios/ui_image_test_utils.h",
       "test/ios/ui_image_test_utils.mm",
     ]
+
+    if (target_platform == "iphoneos") {
+      sources += [
+        "test/ios/keyboard_appearance_listener.h",
+        "test/ios/keyboard_appearance_listener.mm",
+      ]
+    }
   }
 
   if (use_aura && (is_win || is_chromeos || is_castos)) {
@@ -835,6 +844,8 @@ static_library("test_support") {
 
   public_deps = [
     ":base",
+    "//testing/gmock",
+    "//testing/gtest",
     "//ui/base/idle",
     "//ui/base/interaction:test_support",
   ]
@@ -848,8 +859,6 @@ static_library("test_support") {
     "//base/test:test_config",
     "//base/test:test_support",
     "//skia",
-    "//testing/gmock",
-    "//testing/gtest",
     "//ui/base/clipboard:file_info",
     "//ui/base/data_transfer_policy",
     "//ui/display:test_support",
@@ -1059,6 +1068,7 @@ test("ui_base_unittests") {
     "//ui/base/data_transfer_policy:unittests",
     "//ui/base/metadata:metadata_tests",
     "//ui/base/prediction:prediction",
+    "//ui/color",
     "//ui/display",
     "//ui/gfx:test_support",
     "//ui/resources",
@@ -1082,6 +1092,7 @@ test("ui_base_unittests") {
   if (is_mac) {
     sources += [
       "accelerators/platform_accelerator_cocoa_unittest.mm",
+      "cocoa/appkit_utils_unittest.mm",
       "cocoa/base_view_unittest.mm",
       "cocoa/bubble_closer_unittest.mm",
       "cocoa/cocoa_base_utils_unittest.mm",
@@ -1094,6 +1105,10 @@ test("ui_base_unittests") {
       "interaction/element_tracker_mac_unittest.mm",
       "l10n/l10n_util_mac_unittest.mm",
       "test/view_tree_validator_unittest.mm",
+    ]
+    frameworks = [
+      "Foundation.framework",
+      "UniformTypeIdentifiers.framework",
     ]
   }
 
@@ -1109,6 +1124,7 @@ test("ui_base_unittests") {
       "accelerators/accelerator_manager_unittest.cc",
       "accelerators/accelerator_map_unittest.cc",
       "accelerators/accelerator_unittest.cc",
+      "accelerators/command_unittest.cc",
       "accelerators/menu_label_accelerator_util_unittest.cc",
       "models/dialog_model_menu_model_adapter_unittest.cc",
       "models/dialog_model_unittest.cc",
@@ -1123,7 +1139,6 @@ test("ui_base_unittests") {
 
   if (use_blink) {
     deps += [
-      "//ui/color",
       "//ui/events:events_base",
       "//ui/events:test_support",
     ]

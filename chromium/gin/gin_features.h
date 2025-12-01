@@ -50,6 +50,8 @@ GIN_EXPORT BASE_DECLARE_FEATURE(kV8Maglev);
 GIN_EXPORT BASE_DECLARE_FEATURE(kV8ConcurrentMaglevHighPriorityThreads);
 GIN_EXPORT BASE_DECLARE_FEATURE(kV8MemoryReducer);
 GIN_EXPORT extern const base::FeatureParam<int> kV8MemoryReducerGCCount;
+GIN_EXPORT BASE_DECLARE_FEATURE(kV8PreconfigureOldGen);
+GIN_EXPORT extern const base::FeatureParam<int> kV8PreconfigureOldGenSize;
 GIN_EXPORT BASE_DECLARE_FEATURE(kV8MinorMS);
 GIN_EXPORT BASE_DECLARE_FEATURE(kV8MegaDomIC);
 GIN_EXPORT BASE_DECLARE_FEATURE(kV8NoReclaimUnmodifiedWrappers);
@@ -59,7 +61,6 @@ GIN_EXPORT BASE_DECLARE_FEATURE(kV8PerContextMarkingWorklist);
 GIN_EXPORT BASE_DECLARE_FEATURE(kV8ReduceConcurrentMarkingTasks);
 GIN_EXPORT BASE_DECLARE_FEATURE(kV8ScavengerHigherCapacity);
 GIN_EXPORT extern const base::FeatureParam<int> kV8ScavengerMaxCapacity;
-GIN_EXPORT BASE_DECLARE_FEATURE(kV8SeparateGCPhases);
 GIN_EXPORT BASE_DECLARE_FEATURE(kV8ShortBuiltinCalls);
 GIN_EXPORT BASE_DECLARE_FEATURE(kV8SideStepTransitions);
 GIN_EXPORT BASE_DECLARE_FEATURE(kV8SingleThreadedGCInBackground);
@@ -81,23 +82,16 @@ GIN_EXPORT BASE_DECLARE_FEATURE(kV8Turbofan);
 GIN_EXPORT BASE_DECLARE_FEATURE(kV8Turboshaft);
 GIN_EXPORT BASE_DECLARE_FEATURE(kV8TurboshaftInstructionSelection);
 GIN_EXPORT BASE_DECLARE_FEATURE(kV8TurboFastApiCalls);
-GIN_EXPORT BASE_DECLARE_FEATURE(kV8UpdateLimitAfterLoading);
 GIN_EXPORT BASE_DECLARE_FEATURE(kV8UseLibmTrigFunctions);
 GIN_EXPORT BASE_DECLARE_FEATURE(kV8UseOriginalMessageForStackTrace);
 GIN_EXPORT extern const base::FeatureParam<base::TimeDelta>
     kV8MemoryReducerStartDelay;
-GIN_EXPORT BASE_DECLARE_FEATURE(kJavaScriptIteratorHelpers);
-GIN_EXPORT BASE_DECLARE_FEATURE(kJavaScriptPromiseWithResolvers);
 GIN_EXPORT BASE_DECLARE_FEATURE(kJavaScriptRegExpModifiers);
 GIN_EXPORT BASE_DECLARE_FEATURE(kJavaScriptImportAttributes);
-GIN_EXPORT BASE_DECLARE_FEATURE(kJavaScriptSetMethods);
 GIN_EXPORT BASE_DECLARE_FEATURE(kJavaScriptRegExpDuplicateNamedGroups);
 GIN_EXPORT BASE_DECLARE_FEATURE(kJavaScriptPromiseTry);
 GIN_EXPORT BASE_DECLARE_FEATURE(kWebAssemblyDeopt);
 GIN_EXPORT BASE_DECLARE_FEATURE(kWebAssemblyInliningCallIndirect);
-GIN_EXPORT BASE_DECLARE_FEATURE(kWebAssemblyMultipleMemories);
-GIN_EXPORT BASE_DECLARE_FEATURE(kWebAssemblyTurboshaft);
-GIN_EXPORT BASE_DECLARE_FEATURE(kWebAssemblyTurboshaftInstructionSelection);
 
 }  // namespace features
 

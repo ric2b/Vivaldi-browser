@@ -11,6 +11,7 @@
 #import "ios/chrome/browser/shared/model/profile/profile_ios.h"
 #import "ios/chrome/browser/shared/public/commands/command_dispatcher.h"
 #import "ios/chrome/browser/shared/public/commands/snackbar_commands.h"
+#import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
 #import "ios/ui/bookmarks_editor/vivaldi_bookmarks_editor_consumer.h"
 #import "ios/ui/bookmarks_editor/vivaldi_bookmarks_editor_mediator.h"
 #import "ios/ui/bookmarks_editor/vivaldi_bookmarks_editor_swift.h"
@@ -226,8 +227,14 @@ using bookmarks::BookmarkNode;
 - (void)setupSheetPresentationController {
   UISheetPresentationController *sheetPc =
       _navigationController.sheetPresentationController;
-  sheetPc.detents = @[UISheetPresentationControllerDetent.mediumDetent,
-                      UISheetPresentationControllerDetent.largeDetent];
+  // When iPad full screen or 2/3 SplitView support only large detent because
+  // medium detent cuts the contents makes the dialog small and off centered.
+  if (IsSplitToolbarMode(self.baseViewController)) {
+    sheetPc.detents = @[UISheetPresentationControllerDetent.mediumDetent,
+                        UISheetPresentationControllerDetent.largeDetent];
+  } else {
+    sheetPc.detents = @[UISheetPresentationControllerDetent.largeDetent];
+  }
   sheetPc.prefersScrollingExpandsWhenScrolledToEdge = NO;
   sheetPc.widthFollowsPreferredContentSizeWhenEdgeAttached = YES;
 }

@@ -23,7 +23,7 @@
 #include "build/build_config.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/app/vector_icons/vector_icons.h"
-#include "chrome/browser/autocomplete/autocomplete_classifier_factory.h"
+#include "chrome/browser/autocomplete/chrome_autocomplete_scheme_classifier.h"
 #include "chrome/browser/extensions/context_menu_matcher.h"
 #include "chrome/browser/renderer_context_menu/context_menu_content_type_factory.h"
 #include "chrome/browser/renderer_context_menu/spelling_options_submenu_observer.h"
@@ -35,7 +35,6 @@
 #include "chrome/common/url_constants.h"
 #include "chromium/content/public/browser/navigation_entry.h"
 #include "components/notes/notes_submenu_observer.h"
-#include "components/omnibox/browser/autocomplete_classifier.h"
 #include "components/omnibox/browser/autocomplete_match.h"
 #include "components/password_manager/content/browser/content_password_manager_driver.h"
 #include "components/password_manager/core/browser/password_manager_util.h"
@@ -43,7 +42,6 @@
 #include "components/search_engines/template_url.h"
 #include "components/user_prefs/user_prefs.h"
 #include "components/vector_icons/vector_icons.h"
-#include "content/public/browser/child_process_security_policy.h"
 #include "content/public/browser/render_view_host.h"
 #include "content/public/browser/render_widget_host.h"
 #include "content/public/browser/render_widget_host_view.h"
@@ -207,7 +205,6 @@ VivaldiRenderViewContextMenu::VivaldiRenderViewContextMenu(
       id_(active_id_counter_++),
       parent_view_(parent_view),
       embedder_web_contents_(GetWebContentsToUse(source_web_contents_)) {
-
   active_controller_ = this;
 }
 
@@ -261,17 +258,14 @@ void VivaldiRenderViewContextMenu::InitMenu() {
   request.pagetitle = base::UTF16ToUTF8(source_web_contents_->GetTitle());
   request.srcurl = params_.src_url.spec();
   request.selection = base::UTF16ToUTF8(params_.selection_text);
+
   if (request.selection.length() > 0) {
-    AutocompleteMatch match;
-    AutocompleteClassifierFactory::GetForProfile(GetProfile())
-        ->Classify(params_.selection_text, false, false,
-                   metrics::OmniboxEventProto::INVALID_SPEC, &match, nullptr);
-    if (match.destination_url.is_valid() &&
-        match.destination_url != params_.link_url &&
-        !AutocompleteMatch::IsSearchType(match.type) &&
-        content::ChildProcessSecurityPolicy::GetInstance()->IsWebSafeScheme(
-            match.destination_url.scheme())) {
-      request.selectionurl = match.destination_url.spec();
+    auto input = AutocompleteInput(
+        params_.selection_text, metrics::OmniboxEventProto::OTHER,
+        ChromeAutocompleteSchemeClassifier(GetProfile()));
+
+    if (input.canonicalized_url().is_valid()) {
+      request.selectionurl = input.canonicalized_url().spec();
     }
     base::TrimWhitespace(params_.selection_text, base::TRIM_ALL,
                          &params_.selection_text);
@@ -304,14 +298,14 @@ void VivaldiRenderViewContextMenu::InitMenu() {
           ContextMenuContentType::ITEM_GROUP_ALL_EXTENSION) ||
       content_type->SupportsGroup(
           ContextMenuContentType::ITEM_GROUP_CURRENT_EXTENSION);
-  request.support.sendtodevices = send_tab_to_self::ShouldDisplayEntryPoint(
+  request.support.sendtodevices = DeviceMenuController::HasSupport(
       embedder_web_contents_);
 
   request.support.qrcode = QRCodeGeneratorEnabled(embedder_web_contents_);
   request.support.emoji = params_.form_control_type.has_value()
-    ? DoesFormControlTypeSupportEmoji(*params_.form_control_type) &&
-        ui::IsEmojiPanelSupported()
-    : false;
+          ? DoesFormControlTypeSupportEmoji(*params_.form_control_type) &&
+                ui::IsEmojiPanelSupported()
+          : false;
   request.support.editoptions =
       params_.misspelled_word.empty() &&
       !content_type->SupportsGroup(
@@ -703,7 +697,7 @@ bool VivaldiRenderViewContextMenu::GetAcceleratorForCommandId(
     int command_id,
     ui::Accelerator* accelerator) const {
   if (is_webpage_widget_) {
-    return false; // Always
+    return false;  // Always
   }
 
   if (menu_delegate_ && !menu_delegate_->GetShowShortcuts()) {
@@ -724,7 +718,7 @@ void VivaldiRenderViewContextMenu::VivaldiCommandIdHighlighted(int command_id) {
   if (sendtopage_controller_ &&
       sendtopage_controller_->GetHighlightText(command_id, text)) {
   } else if (sendtolink_controller_ &&
-      sendtolink_controller_->GetHighlightText(command_id, text)) {
+             sendtolink_controller_->GetHighlightText(command_id, text)) {
   }
 
   extensions::MenubarMenuAPI::SendHover(GetProfile(), window_id_, text);
@@ -918,7 +912,7 @@ VivaldiRenderViewContextMenu::HandleCommand(int command_id, int event_flags) {
     case IDC_WRITING_DIRECTION_DEFAULT:
       // WebKit's current behavior is for this menu item to always be disabled.
       NOTREACHED();
-      //break;
+      // break;
     case IDC_WRITING_DIRECTION_RTL:
     case IDC_WRITING_DIRECTION_LTR: {
       content::RenderFrameHost* rfh = GetRenderFrameHost();
@@ -1049,7 +1043,7 @@ void VivaldiRenderViewContextMenu::PopulateContainer(
           new DeviceMenuController(
               this,
               params_.page_url,
-              base::UTF16ToUTF8(source_web_contents_->GetTitle())));
+          base::UTF16ToUTF8(source_web_contents_->GetTitle())));
       if (GetBrowser()) {
         sendtopage_controller_->Populate(
             GetBrowser(), base::UTF8ToUTF16(container.name), container.icons,
@@ -1061,7 +1055,7 @@ void VivaldiRenderViewContextMenu::PopulateContainer(
           new DeviceMenuController(
               this,
               params_.link_url,
-              base::UTF16ToUTF8(source_web_contents_->GetTitle())));
+          base::UTF16ToUTF8(source_web_contents_->GetTitle())));
       if (GetBrowser()) {
         sendtolink_controller_->Populate(
             GetBrowser(), base::UTF8ToUTF16(container.name), container.icons,
@@ -1073,7 +1067,7 @@ void VivaldiRenderViewContextMenu::PopulateContainer(
           new DeviceMenuController(
               this,
               params_.src_url,
-              base::UTF16ToUTF8(source_web_contents_->GetTitle())));
+          base::UTF16ToUTF8(source_web_contents_->GetTitle())));
       if (GetBrowser()) {
         sendtolink_controller_->Populate(
             GetBrowser(), base::UTF8ToUTF16(container.name), container.icons,
@@ -1157,8 +1151,10 @@ int VivaldiRenderViewContextMenu::GetStaticIdForAction(std::string command) {
       {"DOCUMENT_LOOP", IDC_CONTENT_CONTEXT_LOOP},
       {"DOCUMENT_SHOW_CONTROLS", IDC_CONTENT_CONTEXT_CONTROLS},
       {"DOCUMENT_OPEN_AV_NEW_TAB", IDC_CONTENT_CONTEXT_OPENAVNEWTAB},
+      {"DOCUMENT_SAVE_VIDEO_FRAME", IDC_CONTENT_CONTEXT_SAVEVIDEOFRAMEAS},
       {"DOCUMENT_SAVE_AV", IDC_CONTENT_CONTEXT_SAVEAVAS},
       {"DOCUMENT_COPY_AV_ADDRESS", IDC_CONTENT_CONTEXT_COPYAVLOCATION},
+      {"DOCUMENT_COPY_VIDEO_FRAME", IDC_CONTENT_CONTEXT_COPYVIDEOFRAME},
       {"DOCUMENT_PICTURE_IN_PICTURE", IDC_CONTENT_CONTEXT_PICTUREINPICTURE},
       {"DOCUMENT_ROTATE_CLOCKWISE", IDC_CONTENT_CONTEXT_ROTATECW},
       {"DOCUMENT_ROTATE_COUNTERCLOCKWISE", IDC_CONTENT_CONTEXT_ROTATECCW},

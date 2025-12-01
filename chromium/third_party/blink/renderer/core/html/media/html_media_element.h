@@ -29,6 +29,7 @@
 
 #include <memory>
 #include <optional>
+#include <variant>
 
 #include "base/synchronization/lock.h"
 #include "base/thread_annotations.h"
@@ -36,7 +37,6 @@
 #include "base/timer/elapsed_timer.h"
 #include "media/mojo/mojom/media_player.mojom-blink.h"
 #include "media/renderers/remote_playback_client_wrapper.h"
-#include "third_party/abseil-cpp/absl/types/variant.h"
 #include "third_party/blink/public/common/media/display_type.h"
 #include "third_party/blink/public/platform/web_audio_source_provider_impl.h"
 #include "third_party/blink/renderer/bindings/core/v8/active_script_wrappable.h"
@@ -122,7 +122,6 @@ class CORE_EXPORT HTMLMediaElement
 
   enum class PlayPromiseError {
     kNotSupported,
-    kPaused_Unknown,
     kPaused_PauseCalled,
     kPaused_EndOfPlayback,
     kPaused_RemovedFromDocument,
@@ -133,6 +132,7 @@ class CORE_EXPORT HTMLMediaElement
     kPaused_PauseRequestedByUser,
     kPaused_PauseRequestedInternally,
     kPaused_FrameHidden,
+    kPaused_LetAudioDescriptionFinish
   };
 
   bool IsMediaElement() const override { return true; }
@@ -195,7 +195,7 @@ class CORE_EXPORT HTMLMediaElement
   }
 
   using SrcObjectVariant =
-      absl::variant<MediaStreamDescriptor*, MediaSourceHandle*>;
+      std::variant<MediaStreamDescriptor*, MediaSourceHandle*>;
   void SetSrcObjectVariant(SrcObjectVariant src_object_variant);
   SrcObjectVariant GetSrcObjectVariant() const;
 
@@ -581,7 +581,7 @@ class CORE_EXPORT HTMLMediaElement
   bool WasAutoplayInitiated() override;
   bool IsInAutoPIP() const override { return false; }
   void ResumePlayback() final;
-  void PausePlayback(PauseReason) final;
+  void PausePlayback(WebMediaPlayer::PauseReason) final;
   void DidPlayerStartPlaying() override;
   void DidPlayerPaused(bool stream_ended) override;
   void DidPlayerMutedStatusChange(bool muted) override;
@@ -676,10 +676,11 @@ class CORE_EXPORT HTMLMediaElement
 
   // This does not stop autoplay visibility observation.
   // By default, will pause the video and speech.
-  void PauseInternal(PlayPromiseError code, bool pause_speech = true);
+  void PauseInternal(WebMediaPlayer::PauseReason pause_reason);
 
   // By default, will pause the video and speech.
-  void UpdatePlayState(bool pause_speech = true);
+  void UpdatePlayState(
+      std::optional<WebMediaPlayer::PauseReason> pause_reason = std::nullopt);
 
   bool PotentiallyPlaying() const;
   bool StoppedDueToErrors() const;

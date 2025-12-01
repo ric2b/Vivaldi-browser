@@ -61,7 +61,7 @@ struct ContextCreationAttribs {
   bool enable_gles2_interface = true;
   bool enable_grcontext = false;
   bool enable_raster_interface = false;
-  bool enable_oop_rasterization = false;
+  bool enable_gpu_rasterization = false;
 
   ContextType context_type = kOpenGLES2;
 };
@@ -72,6 +72,7 @@ struct CreateCommandBufferParams {
   SchedulingPriority stream_priority;
   ContextCreationAttribs attribs;
   url.mojom.Url active_url;
+  string label;
 };
 
 // Corresponds to the definition in gpu/command_buffer/common/constants.h.

@@ -44,6 +44,7 @@ static_library("browser") {
     "//third_party/blink/public:blink_headers",
     "//ui/events:events_base",
     "//vivaldi/components:adverse_adblocking",
+    "//vivaldi/components/capture:capture_page",
     "//vivaldi/prefs:prefs_strings",
   ]
   if (!is_android) {
@@ -62,6 +63,7 @@ static_library("browser") {
     deps += [
       "//chrome/browser/web_applications/extensions",
       "//chrome/browser/extensions",
+      "//vivaldi/browser:vivaldi_browser_component_wrapper_impl",
     ]
   }
   allow_circular_includes_from = [
@@ -92,8 +94,6 @@ static_library("browser") {
     "vivaldi_default_bookmarks_updater_client_impl.cc",
     "vivaldi_default_bookmarks_updater_client_impl.h",
     "vivaldi_gitignore.cc",
-    "vivaldi_version_utils.cc",
-    "vivaldi_version_utils.h",
   ]
 
   if (!is_android) {
@@ -101,6 +101,8 @@ static_library("browser") {
       "../app/vivaldi_command_controller.cpp",
       "../app/vivaldi_command_controller.h",
       "../app/vivaldi_commands.h",
+      "../components/direct_match/direct_match_favicon_installer.cc",
+      "../components/direct_match/direct_match_favicon_installer.h",
       "menus/vivaldi_bookmark_context_menu.cpp",
       "menus/vivaldi_bookmark_context_menu.h",
       "menus/vivaldi_context_menu_controller.h",
@@ -127,6 +129,8 @@ static_library("browser") {
       "vivaldi_browser_finder.h",
       "vivaldi_webcontents_util.cc",
       "vivaldi_webcontents_util.h",
+#      "vivaldi_browser_component_wrapper_impl.cc",
+#      "vivaldi_browser_component_wrapper_impl.h",
     ]
   }
   if (is_mac) {
@@ -147,7 +151,7 @@ static_library("browser") {
   }
 }
 
-source_set("internal_handlers") {
+static_library("internal_handlers") {
   sources = [
     "vivaldi_internal_handlers.cc",
     "vivaldi_internal_handlers_util.h",
@@ -187,8 +191,6 @@ source_set("default_bookmarks") {
   sources = [
     "vivaldi_default_bookmarks.cc",
     "vivaldi_default_bookmarks.h",
-    "removed_partners_tracker.cc",
-    "removed_partners_tracker.h",
   ]
 
   public_deps=[
@@ -204,6 +206,34 @@ source_set("default_bookmarks") {
     "//vivaldi/components/datasource:resource_reader",
     "//vivaldi/prefs:prefs_files_generator",
   ]
+}
+
+source_set("removed_partners_tracker") {
+  sources = [
+    "removed_partners_tracker.cc",
+    "removed_partners_tracker.h",
+  ]
+
+  public_deps=[
+    "//vivaldi/components/bookmarks:bookmark_locales_include",
+    "//components/bookmarks/browser",
+  ]
+
+  deps= [
+    ":default_bookmarks",
+    "//base:base",
+    "//components/favicon/core",
+    "//components/prefs",
+    "//ui/base",
+    "//vivaldi/components/datasource:resource_reader",
+    "//vivaldi/prefs:prefs_files_generator",
+  ]
+
+  if (!is_ios) {
+    deps +=[
+      "//chrome/browser/profiles"
+    ]
+  }
 }
 
 source_set("stats_reporter") {
@@ -254,7 +284,7 @@ source_set("stats_reporter") {
 
     deps += [
       "//chrome/browser:browser_process",
-      "//components/embedder_support:browser_util",
+      "//components/embedder_support:user_agent",
     ]
   } else {
     sources += [
@@ -266,4 +296,18 @@ source_set("stats_reporter") {
       "//ios/web/public",
     ]
   }
+}
+
+source_set("vivaldi_browser_component_wrapper_impl") {
+  sources = [
+    "vivaldi_browser_component_wrapper_impl.cc",
+    "vivaldi_browser_component_wrapper_impl.h",
+    "vivaldi_extension_handover_impl.cc",
+    "vivaldi_extension_handover_impl.h",
+  ]
+  deps = [
+    "//chrome/browser/profiles:profile",
+    "//content/public/browser:browser",
+    "//vivaldi/components:tabs",
+  ]
 }

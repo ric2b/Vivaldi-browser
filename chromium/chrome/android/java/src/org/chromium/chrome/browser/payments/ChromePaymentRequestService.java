@@ -6,13 +6,13 @@ package org.chromium.chrome.browser.payments;
 
 import android.app.Activity;
 import android.content.Context;
+import android.graphics.drawable.BitmapDrawable;
 
 import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 import androidx.appcompat.app.AlertDialog;
 
 import org.chromium.base.Callback;
-import org.chromium.chrome.R;
 import org.chromium.chrome.browser.app.ChromeActivity;
 import org.chromium.chrome.browser.autofill.PersonalDataManagerFactory;
 import org.chromium.chrome.browser.lifecycle.ActivityLifecycleDispatcher;
@@ -23,6 +23,7 @@ import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.components.autofill.EditableOption;
 import org.chromium.components.page_info.CertificateChainHelper;
 import org.chromium.components.payments.AbortReason;
+import org.chromium.components.payments.AndroidIntentLauncher;
 import org.chromium.components.payments.BrowserPaymentRequest;
 import org.chromium.components.payments.DialogController;
 import org.chromium.components.payments.ErrorStrings;
@@ -79,6 +80,7 @@ public class ChromePaymentRequestService
 
     private final PaymentUiService mPaymentUiService;
     private final DialogController mDialogController;
+    private final AndroidIntentLauncher mAndroidIntentLauncher;
 
     private boolean mWasRetryCalled;
     private boolean mHasClosed;
@@ -224,6 +226,7 @@ public class ChromePaymentRequestService
                         (context, style) -> {
                             return new AlertDialog.Builder(context, style);
                         });
+        mAndroidIntentLauncher = new WindowAndroidIntentLauncher(mWebContents);
         if (PaymentRequestService.getNativeObserverForTest() != null) {
             PaymentRequestService.getNativeObserverForTest()
                     .onPaymentUiServiceCreated(mPaymentUiService);
@@ -397,6 +400,25 @@ public class ChromePaymentRequestService
                                 ErrorStrings.SPC_USER_OPTED_OUT, PaymentErrorReason.USER_OPT_OUT);
                         mSpcAuthnUiController = null;
                     };
+
+            BitmapDrawable issuerIcon = null;
+            BitmapDrawable networkIcon = null;
+            Context context = mDelegate.getContext(mRenderFrameHost);
+            if (context != null) {
+                if (getSelectedPaymentApp().getIssuerIcon() != null) {
+                    issuerIcon =
+                            new BitmapDrawable(
+                                    context.getResources(),
+                                    getSelectedPaymentApp().getIssuerIcon());
+                }
+                if (getSelectedPaymentApp().getNetworkIcon() != null) {
+                    networkIcon =
+                            new BitmapDrawable(
+                                    context.getResources(),
+                                    getSelectedPaymentApp().getNetworkIcon());
+                }
+            }
+
             boolean success =
                     mSpcAuthnUiController.show(
                             getSelectedPaymentApp().getDrawableIcon(),
@@ -407,7 +429,9 @@ public class ChromePaymentRequestService
                             spcMethodData.securePaymentConfirmation.payeeName,
                             payeeOrigin,
                             spcMethodData.securePaymentConfirmation.showOptOut,
-                            spcMethodData.securePaymentConfirmation.rpId);
+                            spcMethodData.securePaymentConfirmation.rpId,
+                            issuerIcon,
+                            networkIcon);
 
             if (success) {
                 mJourneyLogger.setShown();
@@ -629,13 +653,6 @@ public class ChromePaymentRequestService
 
     // Implements BrowserPaymentRequest:
     @Override
-    public boolean onPaymentAppCreated(PaymentApp paymentApp) {
-        paymentApp.setHaveRequestedAutofillData(mPaymentUiService.haveRequestedAutofillData());
-        return true;
-    }
-
-    // Implements BrowserPaymentRequest:
-    @Override
     public void notifyPaymentUiOfPendingApps(List<PaymentApp> pendingApps) {
         mPaymentUiService.setPaymentApps(pendingApps);
     }
@@ -701,9 +718,14 @@ public class ChromePaymentRequestService
 
     // Implements BrowserPaymentRequest:
     @Override
-    @Nullable
-    public Integer getPayIntentErrorStringId() {
-        return R.string.payments_android_app_error;
+    public AndroidIntentLauncher getAndroidIntentLauncher() {
+        return mAndroidIntentLauncher;
+    }
+
+    // Implements BrowserPaymentRequest:
+    @Override
+    public boolean isFullDelegationRequired() {
+        return PaymentFeatureList.isEnabled(PaymentFeatureList.ENFORCE_FULL_DELEGATION);
     }
 
     // Implement PaymentUiService.Delegate:

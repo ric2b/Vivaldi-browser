@@ -15,6 +15,7 @@
 #include <string>
 #include <vector>
 
+#include "absl/strings/match.h"
 #include "absl/strings/string_view.h"
 #include "api/rtp_parameters.h"
 #include "api/test/create_frame_generator.h"
@@ -67,8 +68,8 @@ class LogObserver {
       // Ignore log lines that are due to missing AST extensions, these are
       // logged when we switch back from AST to TOF until the wrapping bitrate
       // estimator gives up on using AST.
-      if (message.find("BitrateEstimator") != absl::string_view::npos &&
-          message.find("packet is missing") == absl::string_view::npos) {
+      if (absl::StrContains(message, "BitrateEstimator") &&
+          !absl::StrContains(message, "packet is missing")) {
         received_log_lines_.push_back(std::string(message));
       }
 
@@ -103,7 +104,7 @@ class LogObserver {
     Mutex mutex_;
     Strings received_log_lines_ RTC_GUARDED_BY(mutex_);
     Strings expected_log_lines_ RTC_GUARDED_BY(mutex_);
-    rtc::Event done_;
+    Event done_;
   };
 
   Callback callback_;

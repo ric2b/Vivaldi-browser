@@ -41,6 +41,8 @@ class RuleServiceStorage : public base::ImportantFileWriter::DataSerializer {
         kRuleGroupCount>
         exceptions;
     std::array<std::string, kRuleGroupCount> index_checksums;
+
+    // Keep for migration
     base::Time blocked_reporting_start;
     StateAndLogs::CounterGroup blocked_domains_counters;
     StateAndLogs::CounterGroup blocked_for_origin_counters;

@@ -25,6 +25,7 @@
 #include "device/fido/fido_transport_protocol.h"
 #include "device/fido/fido_types.h"
 #include "device/fido/public_key_credential_descriptor.h"
+#include "third_party/blink/public/mojom/credentialmanagement/credential_manager.mojom.h"
 #include "url/gurl.h"
 
 namespace device {
@@ -49,6 +50,8 @@ class CONTENT_EXPORT AuthenticatorRequestClientDelegate
  public:
   using AccountPreselectedCallback =
       base::RepeatingCallback<void(device::DiscoverableCredentialMetadata)>;
+  using PasswordSelectedCallback =
+      base::RepeatingCallback<void(password_manager::CredentialInfo)>;
 
   // Failure reasons that might be of interest to the user, so the embedder may
   // decide to inform the user.
@@ -101,6 +104,8 @@ class CONTENT_EXPORT AuthenticatorRequestClientDelegate
   enum class UIPresentation {
     // The default tab-modal dialog shown for .get() and .create() request.
     kModal,
+    // Tab modal for .get() requests with mediation = "immediate".
+    kModalImmediate,
     // Passkey autofill UI for .get() requests with `mediation = "conditional"`.
     kAutofill,
     // Passkey upgrade request, i.e. .create() requests with `mediation =
@@ -150,13 +155,16 @@ class CONTENT_EXPORT AuthenticatorRequestClientDelegate
       device::AuthenticatorType authenticator_type);
 
   // Supplies callbacks that the embedder can invoke to initiate certain
-  // actions, namely: cancel the request, start the request over, preselect an
-  // account, dispatch request to connected authenticators, power on the
-  // bluetooth adapter, and request permission to use the bluetooth adapter.
+  // actions, namely: cancel the request, report no immediate mechanisms, start
+  // the request over, preselect an account, dispatch request to connected
+  // authenticators, power on the bluetooth adapter, and request permission to
+  // use the bluetooth adapter.
   virtual void RegisterActionCallbacks(
       base::OnceClosure cancel_callback,
+      base::OnceClosure immediate_not_found_callback,
       base::RepeatingClosure start_over_callback,
       AccountPreselectedCallback account_preselected_callback,
+      PasswordSelectedCallback password_selected_callback,
       device::FidoRequestHandlerBase::RequestCallback request_callback,
       base::RepeatingClosure bluetooth_adapter_power_on_callback,
       base::RepeatingCallback<
@@ -226,9 +234,10 @@ class CONTENT_EXPORT AuthenticatorRequestClientDelegate
 
   bool IsVirtualEnvironmentEnabled();
 
-  // Set the credential types that are expected by the Ambient UI.
-  // Credential types are defined in `credential_types.mojom`.
-  virtual void SetAmbientCredentialTypes(int credential_type_flags);
+  // Set the credential types that are expected by the delegate. The types can
+  // be used by the Ambient UI or modal requests. Credential types are defined
+  // in `credential_type_flags.mojom`.
+  virtual void SetCredentialTypes(int credential_type_flags);
 
   // Sets a credential filter for conditional mediation requests, which will
   // only allow passkeys with matching credential IDs to be displayed to the

@@ -287,9 +287,13 @@ bool PrerendererImpl::MaybePrerender(
             url::Origin::Create(candidate->url).Serialize().c_str()));
   }
 
+  std::optional<SpeculationRulesTags> tags;
+  if (!candidate->tags.empty()) {
+    tags = SpeculationRulesTags(candidate->tags);
+  }
+
   std::optional<net::HttpNoVarySearchData> no_vary_search_hint;
-  if (base::FeatureList::IsEnabled(blink::features::kPrerender2NoVarySearch) &&
-      candidate->no_vary_search_hint) {
+  if (candidate->no_vary_search_hint) {
     no_vary_search_hint = no_vary_search::ParseHttpNoVarySearchDataFromMojom(
         candidate->no_vary_search_hint);
   }
@@ -299,14 +303,16 @@ bool PrerendererImpl::MaybePrerender(
       PreloadingTriggerTypeFromSpeculationInjectionType(
           candidate->injection_type),
       /*embedder_histogram_suffix=*/"",
-      candidate->target_browsing_context_name_hint,
-      Referrer{*candidate->referrer}, candidate->eagerness, no_vary_search_hint,
-      &rfhi, web_contents->GetWeakPtr(), ui::PAGE_TRANSITION_LINK,
+      SpeculationRulesParams(candidate->target_browsing_context_name_hint,
+                             candidate->eagerness, std::move(tags)),
+      Referrer{*candidate->referrer}, no_vary_search_hint, &rfhi,
+      web_contents->GetWeakPtr(), ui::PAGE_TRANSITION_LINK,
       /*should_warm_up_compositor=*/false,
       /*should_prepare_paint_tree=*/false,
       /*url_match_predicate=*/{},
       /*prerender_navigation_handle_callback=*/{},
-      base::MakeRefCounted<PreloadPipelineInfo>());
+      PreloadPipelineInfoImpl::Create(
+          /*planned_max_preloading_type=*/PreloadingType::kPrerender));
 
   PreloadingTriggerType trigger_type =
       PreloadingTriggerTypeFromSpeculationInjectionType(
@@ -322,6 +328,9 @@ bool PrerendererImpl::MaybePrerender(
       case blink::mojom::SpeculationTargetHint::kBlank: {
         if (base::FeatureList::IsEnabled(
                 blink::features::kPrerender2InNewTab)) {
+          GetContentClient()->browser()->LogWebFeatureForCurrentPage(
+              &rfhi,
+              blink::mojom::WebFeature::kSpeculationRulesTargetHintBlank);
           // For the prerender-in-new-tab, PreloadingAttempt will be managed by
           // a prerender WebContents to be created later.
           return registry_->CreateAndStartHostForNewTab(
@@ -354,7 +363,6 @@ bool PrerendererImpl::MaybePrerender(
             preloading_data->AddPreloadingAttempt(
                 creating_predictor, enacting_predictor,
                 PreloadingType::kPrerender, std::move(same_url_matcher),
-                /*planned_max_preloading_type=*/PreloadingType::kPrerender,
                 web_contents->GetPrimaryMainFrame()->GetPageUkmSourceId()));
         preloading_attempt->SetSpeculationEagerness(candidate->eagerness);
         return registry_->CreateAndStartHost(attributes, preloading_attempt);

@@ -170,6 +170,7 @@
 <translation id="3838085852053358637">Mistókst að hlaða upp viðbót</translation>
 <translation id="383891835335927981">Engin síða hefur verið þysjuð út eða inn</translation>
 <translation id="385051799172605136">Til baka</translation>
+<translation id="3858860766373142691">Heiti</translation>
 <translation id="3861977424605124250">Birta við ræsingu</translation>
 <translation id="3867944738977021751">Vottorðsreitir</translation>
 <translation id="3905761538810670789">Laga app</translation>
@@ -415,6 +416,9 @@ Geymdu lyklaskrána þína á öruggum stað. Þú munt þurfa á henni að hald
 <translation id="8004582292198964060">Vafri</translation>
 <translation id="8018313076035239964">Hafðu stjórn á hvaða upplýsingar vefsíður geta notað og hvaða efni þær geta sýnt þér</translation>
 <translation id="8071432093239591881">Prenta sem mynd</translation>
+<translation id="8118448640060360549">{EXTENSIONS_COUNT, plural,
+        =1 {# bookmark}
+        other {# bookmarks}}</translation>
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" />kB</translation>
 <translation id="8212008074015601248">{NUM_DOWNLOAD, plural,
         =1 {Niðurhal í gangi} other {Niðurhöl í gangi}}</translation>

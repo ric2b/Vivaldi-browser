@@ -295,6 +295,9 @@ static const char * const sqlite3azCompileOpt[] = {
 #ifdef SQLITE_ENABLE_OFFSET_SQL_FUNC
   "ENABLE_OFFSET_SQL_FUNC",
 #endif
+#ifdef SQLITE_ENABLE_ORDERED_SET_AGGREGATES
+  "ENABLE_ORDERED_SET_AGGREGATES",
+#endif
 #ifdef SQLITE_ENABLE_OVERSIZE_CELL_CHECK
   "ENABLE_OVERSIZE_CELL_CHECK",
 #endif
@@ -763,9 +766,6 @@ static const char * const sqlite3azCompileOpt[] = {
 #endif
 #ifdef SQLITE_UNTESTABLE
   "UNTESTABLE",
-#endif
-#ifdef SQLITE_USER_AUTHENTICATION
-  "USER_AUTHENTICATION",
 #endif
 #ifdef SQLITE_USE_ALLOCA
   "USE_ALLOCA",

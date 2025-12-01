@@ -37,6 +37,7 @@ class DataTypeControllerDelegate;
 namespace data_sharing {
 class DataSharingNetworkLoader;
 class DataSharingSDKDelegate;
+class Logger;
 class PreviewServerProxy;
 
 // The core class for managing data sharing.
@@ -227,11 +228,12 @@ class DataSharingService : public KeyedService, public base::SupportsUserData {
       const GroupId& group_id,
       base::OnceCallback<void(PeopleGroupActionOutcome)> callback) = 0;
 
-  // Returns whether the current user has attempted to leave a group in the
-  // current session that they had joined before. This is different than if the
-  // member is removed from the group by someone else. Returns true for the
-  // entire current session even after leave attempt has been committed.
-  virtual bool IsLeavingGroup(const GroupId& group_id) = 0;
+  // Returns whether the current user has attempted to leave or delete a group
+  // in the current session that they had joined or created before. This is
+  // different than if the member is removed from the group by someone else.
+  // Returns true for the entire current session even after leave / delete
+  // attempt has been committed.
+  virtual bool IsLeavingOrDeletingGroup(const GroupId& group_id) = 0;
 
   // Returns group events since the DataSharingService was started. This is
   // similar to events exposed to Observers, but allows to collect changes by
@@ -292,6 +294,8 @@ class DataSharingService : public KeyedService, public base::SupportsUserData {
   // Get the current DataSharingUIDelegate instance.
   virtual DataSharingUIDelegate* GetUiDelegate() = 0;
 
+  virtual Logger* GetLogger() = 0;
+
   // Sets a group for testing. When ReadGroup is called, the GroupData that
   // matches GroupId will be returned. This function does not notify observers
   // of the group being added. Settings 2 groups with the same GroupId will
@@ -302,6 +306,10 @@ class DataSharingService : public KeyedService, public base::SupportsUserData {
   virtual void SetPreviewServerProxyForTesting(
       std::unique_ptr<PreviewServerProxy> preview_server_proxy) = 0;
   virtual PreviewServerProxy* GetPreviewServerProxyForTesting() = 0;
+
+  // Called when a collaboration group is removed by the user locally. This
+  // happens when user leaves or deletes a group.
+  virtual void OnCollaborationGroupRemoved(const GroupId& group_id) = 0;
 };
 
 }  // namespace data_sharing

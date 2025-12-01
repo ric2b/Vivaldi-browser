@@ -16,7 +16,7 @@ import stylesRaw from './codeBlock.css.js';
 
 // TODO(crbug.com/391381439): Fully migrate off of constructed style sheets.
 const styles = new CSSStyleSheet();
-styles.replaceSync(stylesRaw.cssContent);
+styles.replaceSync(stylesRaw.cssText);
 
 const {html} = Lit;
 
@@ -37,7 +37,7 @@ const UIStrings = {
    * @description Disclaimer shown in the code blocks.
    */
   disclaimer: 'Use code snippets with caution',
-};
+} as const;
 const str_ = i18n.i18n.registerUIStrings('ui/components/markdown_view/CodeBlock.ts', UIStrings);
 const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
 

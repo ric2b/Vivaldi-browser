@@ -86,10 +86,7 @@ public class OmniboxFeatures {
     public static final CachedFlag sTouchDownTriggerForPrefetch =
             newFlag(
                     OmniboxFeatureList.OMNIBOX_TOUCH_DOWN_TRIGGER_FOR_PREFETCH,
-                    FeatureState.ENABLED_IN_TEST);
-
-    public static final CachedFlag sRichInlineAutocomplete =
-            newFlag(OmniboxFeatureList.RICH_AUTOCOMPLETION, FeatureState.ENABLED_IN_PROD);
+                    FeatureState.ENABLED_IN_PROD);
 
     /**
      * Whether GeolocationHeader should use {@link
@@ -115,8 +112,7 @@ public class OmniboxFeatures {
                     FeatureState.ENABLED_IN_PROD); // Vivaldi VAB-10175
 
     public static final CachedFlag sAndroidHubSearch =
-            newFlag(OmniboxFeatureList.ANDROID_HUB_SEARCH,
-                    FeatureState.ENABLED_IN_PROD); // Vivaldi
+            newFlag(OmniboxFeatureList.ANDROID_HUB_SEARCH, FeatureState.ENABLED_IN_PROD);
 
     public static final CachedFlag sPostDelayedTaskFocusTab =
             newFlag(OmniboxFeatureList.POST_DELAYED_TASK_FOCUS_TAB, FeatureState.ENABLED_IN_PROD);
@@ -160,9 +156,6 @@ public class OmniboxFeatures {
                     "max_prefetches_per_omnibox_session",
                     DEFAULT_MAX_PREFETCHES_PER_OMNIBOX_SESSION);
 
-    public static final BooleanCachedFeatureParam sRichInlineShowFullUrl =
-            newBooleanParam(sRichInlineAutocomplete, "rich_autocomplete_full_url", true);
-
     public static final IntCachedFeatureParam sJumpStartOmniboxMemoryThresholdKb =
             newIntParam(sJumpStartOmnibox, "jump_start_memory_threshold_kb", 2 * 1024 * 1024);
 
@@ -183,7 +176,13 @@ public class OmniboxFeatures {
     // This parameter allows the user to click enter when on hub search to perform a search on the
     // listed suggestions or perform a google search on the query if no suggestions are found.
     public static final BooleanCachedFeatureParam sAndroidHubSearchEnterPerformsSearch =
-            newBooleanParam(sAndroidHubSearch, "enable_press_enter_to_search", false);
+            newBooleanParam(sAndroidHubSearch, "enable_press_enter_to_search", true);
+
+    // Omnibox Diagnostics
+    private static final CachedFlag sDiagnostics =
+            newFlag(OmniboxFeatureList.DIAGNOSTICS, FeatureState.DISABLED);
+    public static final BooleanCachedFeatureParam sDiagInputConnection =
+            newBooleanParam(sDiagnostics, "omnibox_diag_input_connection", false);
 
     /** See {@link #setShouldRetainOmniboxOnFocusForTesting(boolean)}. */
     private static @Nullable Boolean sShouldRetainOmniboxOnFocusForTesting;
@@ -340,9 +339,7 @@ public class OmniboxFeatures {
      * @return Whether the rich inline autocomplete URL should be shown.
      */
     public static boolean shouldShowRichInlineAutocompleteUrl(int inputCount) {
-        return sRichInlineAutocomplete.isEnabled()
-                && sRichInlineShowFullUrl.getValue()
-                && inputCount >= DEFAULT_RICH_INLINE_MIN_CHAR;
+        return inputCount >= DEFAULT_RICH_INLINE_MIN_CHAR;
     }
 
     /** Modifies the output of {@link #shouldRetainOmniboxOnFocus()} for testing. */

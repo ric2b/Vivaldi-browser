@@ -45,9 +45,15 @@
 /* Configuration header */
 #include "threadpool-common.h"
 
-typedef atomic_uint_fast32_t pthreadpool_atomic_uint32_t;
-typedef atomic_size_t pthreadpool_atomic_size_t;
-typedef atomic_uintptr_t pthreadpool_atomic_void_p;
+/* Align the atomic values on the size of a cache line to avoid false sharing,
+ * i.e. two or more atomic variables sharing the same cache line will block
+ * each other during atomic operations.
+ */
+typedef atomic_uint_fast32_t PTHREADPOOL_CACHELINE_ALIGNED
+    pthreadpool_atomic_uint32_t;
+typedef atomic_size_t PTHREADPOOL_CACHELINE_ALIGNED pthreadpool_atomic_size_t;
+typedef atomic_uintptr_t PTHREADPOOL_CACHELINE_ALIGNED
+    pthreadpool_atomic_void_p;
 
 static inline uint32_t pthreadpool_load_relaxed_uint32_t(
     pthreadpool_atomic_uint32_t* address) {
@@ -107,6 +113,11 @@ static inline size_t pthreadpool_decrement_fetch_relaxed_size_t(
 static inline size_t pthreadpool_decrement_n_fetch_relaxed_size_t(
     pthreadpool_atomic_size_t* address, size_t n) {
   return atomic_fetch_sub_explicit(address, n, memory_order_relaxed) - n;
+}
+
+static inline size_t pthreadpool_fetch_decrement_n_relaxed_size_t(
+    pthreadpool_atomic_size_t* address, size_t n) {
+  return atomic_fetch_sub_explicit(address, n, memory_order_relaxed);
 }
 
 static inline size_t pthreadpool_decrement_fetch_release_size_t(

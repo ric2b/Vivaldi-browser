@@ -192,7 +192,6 @@ bool ShouldLogAutofillSuggestionShown(
     case AutofillSuggestionTriggerSource::kTextFieldDidReceiveKeyDown:
     case AutofillSuggestionTriggerSource::kOpenTextDataListChooser:
     case AutofillSuggestionTriggerSource::kComposeDialogLostFocus:
-    case AutofillSuggestionTriggerSource::kShowCardsFromAccount:
     case AutofillSuggestionTriggerSource::kPasswordManager:
     case AutofillSuggestionTriggerSource::kiOS:
     case AutofillSuggestionTriggerSource::
@@ -223,6 +222,18 @@ int GetDuplicationRank(
   return min_incompatible_sets.empty()
              ? std::numeric_limits<int>::max()
              : min_incompatible_sets.back().field_type_set.size();
+}
+
+uint64_t FormGlobalIdToHash64Bit(const FormGlobalId& form_global_id) {
+  return StrToHash64Bit(
+      base::NumberToString(form_global_id.renderer_id.value()) +
+      form_global_id.frame_token.ToString());
+}
+
+uint64_t FieldGlobalIdToHash64Bit(const FieldGlobalId& field_global_id) {
+  return StrToHash64Bit(
+      base::NumberToString(field_global_id.renderer_id.value()) +
+      field_global_id.frame_token.ToString());
 }
 
 }  // namespace autofill::autofill_metrics

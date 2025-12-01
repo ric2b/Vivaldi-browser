@@ -188,9 +188,6 @@ class Widget::PaintAsActiveLockImpl : public Widget::PaintAsActiveLock {
 ////////////////////////////////////////////////////////////////////////////////
 // Widget, InitParams:
 
-Widget::InitParams::InitParams(Type type)
-    : InitParams(NATIVE_WIDGET_OWNS_WIDGET, type) {}
-
 Widget::InitParams::InitParams(Ownership ownership, Type type)
     : type(type), ownership(ownership) {}
 
@@ -255,6 +252,7 @@ Widget::~Widget() {
   // DestroyRootView() will cause InvalidateLayout() to ScheduleLayout() which
   // is unnecessary.
   widget_closed_ = true;
+  autosize_task_factory_.InvalidateWeakPtrs();
 
   // The following Notification order is preserved here:
   //   1. WidgetObserver::OnWidgetDestroying
@@ -369,22 +367,17 @@ Widget* Widget::GetTopLevelWidgetForNativeView(gfx::NativeView native_view) {
 }
 
 // static
-void Widget::GetAllChildWidgets(gfx::NativeView native_view,
-                                Widgets* children) {
-  if (!native_view) {
-    return;
-  }
-
-  internal::NativeWidgetPrivate::GetAllChildWidgets(native_view, children);
+Widget::Widgets Widget::GetAllChildWidgets(gfx::NativeView native_view) {
+  return native_view
+             ? internal::NativeWidgetPrivate::GetAllChildWidgets(native_view)
+             : Widget::Widgets();
 }
 
 // static
-void Widget::GetAllOwnedWidgets(gfx::NativeView native_view, Widgets* owned) {
-  if (!native_view) {
-    return;
-  }
-
-  internal::NativeWidgetPrivate::GetAllOwnedWidgets(native_view, owned);
+Widget::Widgets Widget::GetAllOwnedWidgets(gfx::NativeView native_view) {
+  return native_view
+             ? internal::NativeWidgetPrivate::GetAllOwnedWidgets(native_view)
+             : Widget::Widgets();
 }
 
 // static
@@ -503,39 +496,15 @@ void Widget::Init(InitParams params) {
 
   sublevel_manager_ = std::make_unique<SublevelManager>(this, params.sublevel);
 
-  if (params.native_theme) {
-    native_theme_ = params.native_theme;
-  }
-
   internal::NativeWidgetPrivate* native_widget_raw_ptr =
       CreateNativeWidget(params, this)->AsNativeWidgetPrivate();
   native_widget_ = native_widget_raw_ptr->GetWeakPtr();
   if (params.ownership == InitParams::WIDGET_OWNS_NATIVE_WIDGET) {
     owned_native_widget_ = base::WrapUnique(native_widget_raw_ptr);
   }
+
   root_view_.reset(CreateRootView());
-
-  // The root view must always be fully initialized so we at least expose one
-  // accessible element to the platform APIs. This is necessary for us to detect
-  // accessibility API usage and fully enable accessibility support for all
-  // views.
-  root_view_->GetViewAccessibility().CompleteCacheInitialization();
-
-  // The root view must always be initialized as it is being added to widget,
-  // like setting kClassName correctly.
-  root_view_->GetViewAccessibility().OnViewAddedToWidget();
-
-  // Once the root view is added to the widget, it should be marked as ready to
-  // send accessible event notifications. From that point on, any view that is
-  // connected to the RootView will be able to send accessible events.
-  root_view_->GetViewAccessibility().SetRootViewIsReadyToNotifyEvents();
-
-  // We need to add the RootView's ViewAccessibility as an observer of the
-  // widget, so that when the widget is closed, the accessible data is set
-  // accordingly.
-  AddObserver(&root_view_->GetViewAccessibility());
-
-  ax_mode_observation_.Observe(&ui::AXPlatform::GetInstance());
+  InitAccessibility();  // Requires `root_view_`.
 
   // Copy the elements of params that will be used after it is moved.
   const InitParams::Type type = params.type;
@@ -549,9 +518,6 @@ void Widget::Init(InitParams params) {
   should_set_initial_bounds = !params.display_id.has_value();
 #endif
 #if BUILDFLAG(IS_WIN)
-  // These are mutually exclusive.
-  CHECK(!(params.force_show_in_taskbar && params.dont_show_in_taskbar));
-
   // force_system_menu_for_frameless only applies to frameless windows.
   CHECK(!params.force_system_menu_for_frameless ||
         params.type == Widget::InitParams::TYPE_WINDOW_FRAMELESS);
@@ -600,7 +566,6 @@ void Widget::Init(InitParams params) {
     // state, wait till window is maximized or minimized.
     non_client_view_->frame_view()->UpdateWindowRoundedCorners();
 #endif
-
   } else if (delegate) {
     SetContentsView(delegate->TransferOwnershipOfContentsView());
     if (should_set_initial_bounds) {
@@ -625,6 +590,30 @@ void Widget::Init(InitParams params) {
 
   internal::AnyWidgetObserverSingleton::GetInstance()->OnAnyWidgetInitialized(
       this);
+}
+
+void Widget::InitAccessibility() {
+  // The root view must always be fully initialized so we at least expose one
+  // accessible element to the platform APIs. This is necessary for us to detect
+  // accessibility API usage and fully enable accessibility support for all
+  // views.
+  root_view_->GetViewAccessibility().CompleteCacheInitialization();
+
+  // The root view must always be initialized as it is being added to widget,
+  // like setting kClassName correctly.
+  root_view_->GetViewAccessibility().OnViewAddedToWidget();
+
+  // Once the root view is added to the widget, it should be marked as ready to
+  // send accessible event notifications. From that point on, any view that is
+  // connected to the RootView will be able to send accessible events.
+  root_view_->GetViewAccessibility().SetRootViewIsReadyToNotifyEvents();
+
+  // We need to add the RootView's ViewAccessibility as an observer of the
+  // widget, so that when the widget is closed, the accessible data is set
+  // accordingly.
+  AddObserver(&root_view_->GetViewAccessibility());
+
+  ax_mode_observation_.Observe(&ui::AXPlatform::GetInstance());
 }
 
 void Widget::ShowEmojiPanel() {
@@ -1141,6 +1130,12 @@ void Widget::Restore() {
   }
 }
 
+void Widget::ShowWindowControlsMenu(const gfx::Point& point) {
+  if (native_widget_) {
+    native_widget_->ShowWindowControlsMenu(point);
+  }
+}
+
 bool Widget::IsMaximized() const {
   return native_widget_ ? native_widget_->IsMaximized() : false;
 }
@@ -1354,14 +1349,13 @@ void Widget::OnRootViewLayoutInvalidated() {
     return;
   }
 
-  // Check if the widget needs to be auto resized based on its content's size.
-  if (is_autosized() && IsNativeWidgetInitialized() && GetContentsView() &&
-      widget_delegate_) {
-    if (gfx::Rect desired_bounds = widget_delegate_->GetDesiredWidgetBounds();
-        !desired_bounds.IsEmpty() &&
-        desired_bounds != GetWindowBoundsInScreen()) {
-      SetBounds(desired_bounds);
-      return;
+  if (is_autosized()) {
+    // There is no need to post another async auto-resize task when there is
+    // already one.
+    if (!autosize_task_factory_.HasWeakPtrs()) {
+      base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
+          FROM_HERE, base::BindOnce(&Widget::ResizeToDelegateDesiredBounds,
+                                    autosize_task_factory_.GetWeakPtr()));
     }
   }
 
@@ -1876,7 +1870,7 @@ void Widget::OnNativeFocus() {
 }
 
 void Widget::OnNativeBlur() {
-  WidgetFocusManager::GetInstance()->OnNativeFocusChanged(nullptr);
+  WidgetFocusManager::GetInstance()->OnNativeFocusChanged(gfx::NativeView());
 }
 
 void Widget::OnNativeWidgetVisibilityChanged(bool visible) {
@@ -1965,6 +1959,14 @@ void Widget::OnNativeWidgetSizeChanged(const gfx::Size& new_size) {
     saved_show_state_ = show_state;
   }
 #endif
+}
+
+void Widget::OnNativeWidgetUserResizeStarted() {
+  observers_.Notify(&WidgetObserver::OnWidgetUserResizeStarted);
+}
+
+void Widget::OnNativeWidgetUserResizeEnded() {
+  observers_.Notify(&WidgetObserver::OnWidgetUserResizeEnded);
 }
 
 void Widget::OnNativeWidgetWorkspaceChanged() {}
@@ -2285,6 +2287,13 @@ bool Widget::ShouldDescendIntoChildForEventHandling(
 }
 
 void Widget::LayoutRootViewIfNecessary() {
+  if (is_autosized() && autosize_task_factory_.HasWeakPtrs()) {
+    // If there is an autosize task in the task queue, consume it before layout.
+    // Otherwise this layout may be incorrect.
+    autosize_task_factory_.InvalidateWeakPtrs();
+    ResizeToDelegateDesiredBounds();
+  }
+
   if (root_view_ && root_view_->needs_layout()) {
     // Widget name is only collected in local traces.
     TRACE_EVENT1("ui", "Widget::LayoutRootViewIfNecessary", "widget name",
@@ -2708,8 +2717,22 @@ void Widget::OnChildRemoved(Widget* child_widget) {
   observers_.Notify(&WidgetObserver::OnWidgetChildRemoved, this, child_widget);
 }
 
+void Widget::ResizeToDelegateDesiredBounds() {
+  if (!IsNativeWidgetInitialized() || !widget_delegate_ || !GetContentsView()) {
+    return;
+  }
+
+  gfx::Rect desired_bounds = widget_delegate_->GetDesiredWidgetBounds();
+  if (desired_bounds.IsEmpty() || desired_bounds == GetWindowBoundsInScreen()) {
+    return;
+  }
+
+  // Size to contents view.
+  SetBounds(desired_bounds);
+}
+
 BEGIN_METADATA_BASE(Widget)
-ADD_READONLY_PROPERTY_METADATA(const char*, ClassName)
+ADD_READONLY_PROPERTY_METADATA(std::string_view, ClassName)
 ADD_READONLY_PROPERTY_METADATA(gfx::Rect, ClientAreaBoundsInScreen)
 ADD_READONLY_PROPERTY_METADATA(std::string, Name)
 ADD_READONLY_PROPERTY_METADATA(gfx::Rect, RestoredBounds)

@@ -9,10 +9,12 @@
 #include "ash/constants/ash_features.h"
 #include "ash/public/cpp/desk_template.h"
 #include "ash/shell.h"
+#include "ash/system/session/logout_confirmation_controller.h"
 #include "ash/system/tray/system_tray_notifier.h"
 #include "ash/test/ash_test_helper.h"
 #include "ash/wm/desks/desk.h"
 #include "ash/wm/desks/templates/saved_desk_metrics_util.h"
+#include "base/check_deref.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/memory/raw_ptr.h"
 #include "base/strings/utf_string_conversions.h"
@@ -60,6 +62,7 @@
 #include "components/sync_sessions/synced_session.h"
 #include "components/user_manager/fake_user_manager.h"
 #include "components/user_manager/scoped_user_manager.h"
+#include "components/user_manager/test_helper.h"
 #include "content/public/test/browser_task_environment.h"
 #include "google_apis/gaia/gaia_id.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -385,6 +388,11 @@ class FloatingWorkspaceServiceTest : public testing::Test {
 
   AshTestHelper* ash_test_helper() { return &ash_test_helper_; }
 
+  TestSessionControllerClient* GetSessionControllerClient() {
+    return ash_test_helper()->test_session_controller_client(
+        base::PassKey<floating_workspace::FloatingWorkspaceServiceTest>());
+  }
+
   // We want to hold off on populating the apps cache before each test is run
   // because the list of initialization types do not get reset. To test that the
   // service is actually waiting for the app types to initialize, we need to
@@ -394,6 +402,22 @@ class FloatingWorkspaceServiceTest : public testing::Test {
     desks_storage::desk_test_util::PopulateFloatingWorkspaceAppRegistryCache(
         account_id_, cache_.get());
     task_environment_.RunUntilIdle();
+  }
+
+  // TODO(crbug.com/400730387): add proper variations to all tests in this file
+  // to account for differences between first and consequent sync scenarios. On
+  // the first sync `FloatingWorkspaceService` can open the desk once we get
+  // Sync data via `MergeFullSyncData` method of the bridge. On consequent syncs
+  // we are waiting for `UpToDate` signal from the sync server instead. Tests in
+  // this file were written when we could only rely on `UpToDate` signal. In
+  // these tests we don't mock the `MergeFullSyncData` method and by default our
+  // fake desk sync service executes the launch callback as soon as it is set
+  // from `FloatingWorkspaceService`. `SkipOnFirstSyncCallback` is a temporary
+  // workaround which allows to skip the execution of this callback in selected
+  // tests. It is mostly needed for tests which imitate different delay
+  // scenarios.
+  void SkipOnFirstSyncCallback() {
+    fake_desk_sync_service()->skip_on_first_sync_callback_ = true;
   }
 
   void CreateFloatingWorkspaceServiceForTesting(TestingProfile* profile) {
@@ -426,9 +450,7 @@ class FloatingWorkspaceServiceTest : public testing::Test {
                                      user_manager::UserType::kRegular);
     fake_user_manager()->UserLoggedIn(
         account_id_,
-        user_manager::FakeUserManager::GetFakeUsernameHash(account_id_),
-        /*browser_restart=*/false,
-        /*is_child=*/false);
+        user_manager::TestHelper::GetFakeUsernameHash(account_id_));
     CoreAccountInfo account_info;
     account_info.email = kTestAccount;
     account_info.gaia = GaiaId("gaia");
@@ -533,6 +555,27 @@ class FloatingWorkspaceServiceV2Test : public FloatingWorkspaceServiceTest {
   void TearDown() override {
     FloatingWorkspaceServiceTest::TearDown();
     scoped_feature_list().Reset();
+  }
+
+  FloatingWorkspaceService* InitAndPrepareTemplateForCapture(
+      const std::string& template_name,
+      base::Time creation_time) {
+    PopulateAppsCache();
+    CreateFloatingWorkspaceServiceForTesting(profile());
+    auto* floating_workspace_service =
+        FloatingWorkspaceServiceFactory::GetForProfile(profile());
+    floating_workspace_service->Init(test_sync_service(),
+                                     fake_desk_sync_service(),
+                                     fake_device_info_sync_service());
+    std::unique_ptr<DeskTemplate> floating_workspace_template =
+        MakeTestFloatingWorkspaceDeskTemplate(template_name, creation_time);
+    test_sync_service()->SetDownloadStatusFor(
+        {syncer::DataType::WORKSPACE_DESK},
+        syncer::SyncService::DataTypeDownloadStatus::kUpToDate);
+    test_sync_service()->FireStateChanged();
+    mock_desks_client()->SetCapturedDeskTemplate(
+        std::move(floating_workspace_template));
+    return floating_workspace_service;
   }
 };
 
@@ -782,6 +825,7 @@ TEST_F(FloatingWorkspaceServiceV2Test, NoNetworkForFloatingWorkspaceTemplate) {
 
 TEST_F(FloatingWorkspaceServiceV2Test,
        NoNetworkForFloatingWorkspaceTemplateAfterLongDelay) {
+  SkipOnFirstSyncCallback();
   PopulateAppsCache();
   CreateFloatingWorkspaceServiceForTesting(profile());
   auto* floating_workspace_service =
@@ -875,6 +919,7 @@ TEST_F(FloatingWorkspaceServiceV2Test,
 
 TEST_F(FloatingWorkspaceServiceV2Test,
        NoNetworkNotificationLogicWhenSyncIsInactiveAndOnceSyncIsActiveAgain) {
+  SkipOnFirstSyncCallback();
   PopulateAppsCache();
   CreateFloatingWorkspaceServiceForTesting(profile());
   auto* floating_workspace_service =
@@ -894,6 +939,7 @@ TEST_F(FloatingWorkspaceServiceV2Test,
 
 TEST_F(FloatingWorkspaceServiceV2Test,
        FloatingWorkspaceTemplateRestoreAfterTimeOut) {
+  SkipOnFirstSyncCallback();
   PopulateAppsCache();
   const std::string template_name = "floating_workspace_template";
   base::RunLoop loop;
@@ -938,6 +984,7 @@ TEST_F(FloatingWorkspaceServiceV2Test,
 
 TEST_F(FloatingWorkspaceServiceV2Test,
        FloatingWorkspaceTemplateDiscardAfterTimeOut) {
+  SkipOnFirstSyncCallback();
   PopulateAppsCache();
   const std::string template_name = "floating_workspace_template";
   base::RunLoop loop;
@@ -1015,6 +1062,7 @@ TEST_F(FloatingWorkspaceServiceV2Test, CanRecordTemplateLoadMetric) {
 }
 
 TEST_F(FloatingWorkspaceServiceV2Test, CanRecordTemplateLaunchTimeout) {
+  SkipOnFirstSyncCallback();
   PopulateAppsCache();
   base::HistogramTester histogram_tester;
 
@@ -1385,6 +1433,7 @@ TEST_F(FloatingWorkspaceServiceV2Test, PerformGarbageCollectionOnStaleEntries) {
 
 TEST_F(FloatingWorkspaceServiceV2Test,
        FloatingWorkspaceTemplateHasProgressStatus) {
+  SkipOnFirstSyncCallback();
   PopulateAppsCache();
   CreateFloatingWorkspaceServiceForTesting(profile());
   auto* floating_workspace_service =
@@ -1406,6 +1455,7 @@ TEST_F(FloatingWorkspaceServiceV2Test,
 
 TEST_F(FloatingWorkspaceServiceV2Test,
        FloatingWorkspaceTemplateProgressStatusGoneAfterTimeOut) {
+  SkipOnFirstSyncCallback();
   PopulateAppsCache();
   CreateFloatingWorkspaceServiceForTesting(profile());
   auto* floating_workspace_service =
@@ -1427,6 +1477,7 @@ TEST_F(FloatingWorkspaceServiceV2Test,
 
 TEST_F(FloatingWorkspaceServiceV2Test,
        FloatingWorkspaceTemplateProgressStatusGoneAfterSyncError) {
+  SkipOnFirstSyncCallback();
   PopulateAppsCache();
   CreateFloatingWorkspaceServiceForTesting(profile());
   auto* floating_workspace_service =
@@ -1448,6 +1499,7 @@ TEST_F(FloatingWorkspaceServiceV2Test,
 
 TEST_F(FloatingWorkspaceServiceV2Test,
        FloatingWorkspaceTemplateRestoreAfterTimeOutWithNewCapture) {
+  SkipOnFirstSyncCallback();
   PopulateAppsCache();
   const std::string template_name = "floating_workspace_template";
   base::RunLoop loop;
@@ -1730,24 +1782,10 @@ TEST_F(FloatingWorkspaceServiceV2Test, CaptureImmediatelyAfterRestore) {
 
 TEST_F(FloatingWorkspaceServiceV2Test,
        CaptureFloatingWorkspaceTemplateOnSystemTrayVisible) {
-  PopulateAppsCache();
-  CreateFloatingWorkspaceServiceForTesting(profile());
-  auto* floating_workspace_service =
-      FloatingWorkspaceServiceFactory::GetForProfile(profile());
-  floating_workspace_service->Init(test_sync_service(),
-                                   fake_desk_sync_service(),
-                                   fake_device_info_sync_service());
-
   const std::string template_name = "floating_workspace_captured_template";
   const base::Time creation_time = base::Time::Now();
-  std::unique_ptr<DeskTemplate> floating_workspace_template =
-      MakeTestFloatingWorkspaceDeskTemplate(template_name, creation_time);
-  test_sync_service()->SetDownloadStatusFor(
-      {syncer::DataType::WORKSPACE_DESK},
-      syncer::SyncService::DataTypeDownloadStatus::kUpToDate);
-  test_sync_service()->FireStateChanged();
-  mock_desks_client()->SetCapturedDeskTemplate(
-      std::move(floating_workspace_template));
+  auto* floating_workspace_service =
+      InitAndPrepareTemplateForCapture(template_name, creation_time);
   ash::Shell::Get()->system_tray_notifier()->NotifySystemTrayBubbleShown();
   ASSERT_TRUE(floating_workspace_service->GetLatestFloatingWorkspaceTemplate());
   EXPECT_EQ(floating_workspace_service->GetLatestFloatingWorkspaceTemplate()
@@ -1756,8 +1794,27 @@ TEST_F(FloatingWorkspaceServiceV2Test,
 }
 
 TEST_F(FloatingWorkspaceServiceV2Test,
+       CaptureFloatingWorkspaceTemplateOnSignOutConfirmation) {
+  const std::string template_name = "floating_workspace_captured_template";
+  const base::Time creation_time = base::Time::Now();
+  auto* floating_workspace_service =
+      InitAndPrepareTemplateForCapture(template_name, creation_time);
+  // Confirmation is only required when we set a non-zero `logout_time` to
+  // `LogoutConfirmationController::ConfirmLogout`.
+  base::TimeDelta non_zero_logout_confirmation_duration = base::Seconds(20);
+  ash::Shell::Get()->logout_confirmation_controller()->ConfirmLogout(
+      base::TimeTicks::Now() + non_zero_logout_confirmation_duration,
+      ash::LogoutConfirmationController::Source::kShelfExitButton);
+  ASSERT_TRUE(floating_workspace_service->GetLatestFloatingWorkspaceTemplate());
+  EXPECT_EQ(floating_workspace_service->GetLatestFloatingWorkspaceTemplate()
+                ->created_time(),
+            creation_time);
+}
+
+TEST_F(FloatingWorkspaceServiceV2Test,
        CaptureFloatingWorkspaceTemplateOnLockScreen) {
-  SessionControllerClientImpl client;
+  SessionControllerClientImpl client(
+      CHECK_DEREF(TestingBrowserProcess::GetGlobal()->local_state()));
   client.Init();
   PopulateAppsCache();
   CreateFloatingWorkspaceServiceForTesting(profile());
@@ -2035,6 +2092,7 @@ TEST_F(FloatingWorkspaceServiceV2Test,
 
 TEST_F(FloatingWorkspaceServiceV2Test,
        DoNotShowTimeOutNotificationAfterRestoreTimeoutFromSuspend) {
+  SkipOnFirstSyncCallback();
   PopulateAppsCache();
   const std::string template_name = "floating_workspace_template";
   base::RunLoop loop;
@@ -2097,10 +2155,7 @@ TEST_F(FloatingWorkspaceServiceV2Test, AutoSignoutWithDeviceInfo) {
       {syncer::DataType::DEVICE_INFO},
       syncer::SyncService::DataTypeDownloadStatus::kUpToDate);
   test_sync_service()->FireStateChanged();
-  EXPECT_EQ(ash_test_helper()
-                ->test_session_controller_client()
-                ->request_sign_out_count(),
-            1);
+  EXPECT_EQ(GetSessionControllerClient()->request_sign_out_count(), 1);
 }
 
 TEST_F(FloatingWorkspaceServiceV2Test,
@@ -2128,10 +2183,7 @@ TEST_F(FloatingWorkspaceServiceV2Test,
       {syncer::DataType::DEVICE_INFO},
       syncer::SyncService::DataTypeDownloadStatus::kUpToDate);
   test_sync_service()->FireStateChanged();
-  EXPECT_EQ(ash_test_helper()
-                ->test_session_controller_client()
-                ->request_sign_out_count(),
-            0);
+  EXPECT_EQ(GetSessionControllerClient()->request_sign_out_count(), 0);
 }
 
 TEST_F(FloatingWorkspaceServiceV2Test,
@@ -2157,10 +2209,7 @@ TEST_F(FloatingWorkspaceServiceV2Test,
       {syncer::DataType::DEVICE_INFO},
       syncer::SyncService::DataTypeDownloadStatus::kUpToDate);
   test_sync_service()->FireStateChanged();
-  EXPECT_EQ(ash_test_helper()
-                ->test_session_controller_client()
-                ->request_sign_out_count(),
-            0);
+  EXPECT_EQ(GetSessionControllerClient()->request_sign_out_count(), 0);
 }
 
 TEST_F(FloatingWorkspaceServiceV2Test, AutoSignoutWithWorkspaceDesk) {
@@ -2209,10 +2258,7 @@ TEST_F(FloatingWorkspaceServiceV2Test, AutoSignoutWithWorkspaceDesk) {
       syncer::SyncService::DataTypeDownloadStatus::kUpToDate);
   test_sync_service()->FireStateChanged();
   EXPECT_TRUE(floating_workspace_service->GetLatestFloatingWorkspaceTemplate());
-  EXPECT_EQ(ash_test_helper()
-                ->test_session_controller_client()
-                ->request_sign_out_count(),
-            1);
+  EXPECT_EQ(GetSessionControllerClient()->request_sign_out_count(), 1);
 }
 
 TEST_F(FloatingWorkspaceServiceV2Test,
@@ -2262,10 +2308,7 @@ TEST_F(FloatingWorkspaceServiceV2Test,
       syncer::SyncService::DataTypeDownloadStatus::kUpToDate);
   test_sync_service()->FireStateChanged();
   EXPECT_TRUE(floating_workspace_service->GetLatestFloatingWorkspaceTemplate());
-  EXPECT_EQ(ash_test_helper()
-                ->test_session_controller_client()
-                ->request_sign_out_count(),
-            0);
+  EXPECT_EQ(GetSessionControllerClient()->request_sign_out_count(), 0);
 }
 
 class FloatingWorkspaceServiceMultiUserTest
@@ -2313,9 +2356,7 @@ class FloatingWorkspaceServiceMultiUserTest
                                      user_manager::UserType::kRegular);
     fake_user_manager()->UserLoggedIn(
         account_id2_,
-        user_manager::FakeUserManager::GetFakeUsernameHash(account_id2_),
-        /*browser_restart=*/false,
-        /*is_child=*/false);
+        user_manager::TestHelper::GetFakeUsernameHash(account_id2_));
     CoreAccountInfo account_info;
     account_info.email = kTestAccount2;
     account_info.gaia = GaiaId("gaia2");

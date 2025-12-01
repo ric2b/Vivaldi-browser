@@ -117,6 +117,10 @@
     "show",
     "hide",
 
+    // hidden=until-found attribute
+    // https://html.spec.whatwg.org/#the-hidden-attribute
+    "until-found",
+
     // dialog closedby attribute
     // See https://github.com/whatwg/html/pull/10737.
     "any",
@@ -159,6 +163,7 @@
     // Blocking attributes
     // https://html.spec.whatwg.org/C/#blocking-attribute
     "render",
+    "full-frame-rate",
 
     // dropEffect IDL attribute
     // https://html.spec.whatwg.org/C/#dom-datatransfer-dropeffect

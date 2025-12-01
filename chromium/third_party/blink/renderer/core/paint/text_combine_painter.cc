@@ -9,6 +9,8 @@
 #include "third_party/blink/renderer/core/paint/paint_info.h"
 #include "third_party/blink/renderer/core/paint/text_decoration_painter.h"
 #include "third_party/blink/renderer/core/style/computed_style.h"
+#include "third_party/blink/renderer/platform/fonts/plain_text_node.h"
+#include "third_party/blink/renderer/platform/fonts/plain_text_painter.h"
 #include "third_party/blink/renderer/platform/fonts/shaping/caching_word_shaper.h"
 #include "third_party/blink/renderer/platform/fonts/text_fragment_paint_info.h"
 #include "third_party/blink/renderer/platform/fonts/text_run_paint_info.h"
@@ -25,10 +27,9 @@ TextCombinePainter::TextCombinePainter(
     const LineRelativeOffset& text_origin)
     : TextPainter(context,
                   svg_context_paints,
-                  style.GetFont(),
+                  *style.GetFont(),
                   visual_rect,
-                  text_origin,
-                  /* horizontal */ false),
+                  text_origin),
       style_(style) {}
 
 TextCombinePainter::~TextCombinePainter() = default;
@@ -96,7 +97,7 @@ void TextCombinePainter::Paint(const PaintInfo& paint_info,
   }
 
   if (has_emphasis_mark) {
-    text_painter.PaintEmphasisMark(text_style, style.GetFont());
+    text_painter.PaintEmphasisMark(text_style, *style.GetFont());
   }
 
   if (has_text_decoration) {
@@ -123,7 +124,7 @@ void TextCombinePainter::PaintEmphasisMark(const TextPaintStyle& text_style,
                                            const Font& emphasis_mark_font) {
   DCHECK_NE(style_.GetTextEmphasisMark(), TextEmphasisMark::kNone);
   SetEmphasisMark(style_.TextEmphasisMarkString(),
-                  style_.GetTextEmphasisPosition());
+                  style_.GetTextEmphasisLineLogicalSide());
   DCHECK(emphasis_mark_font.GetFontDescription().IsVerticalBaseline());
   DCHECK(emphasis_mark());
   const SimpleFontData* const font_data = font().PrimaryFont();
@@ -151,22 +152,35 @@ void TextCombinePainter::PaintEmphasisMark(const TextPaintStyle& text_style,
       gfx::Vector2dF(0, font_ascent + emphasis_mark_offset());
 
   if (RuntimeEnabledFeatures::TextCombineEmphasisNGEnabled()) {
-    // TODO(crbug.com/389726691): Remove the CachingWordShaper usage.
-    CachingWordShaper word_shaper(emphasis_mark_font);
-    ShapeResultBuffer buffer;
-    word_shaper.FillResultBuffer(placeholder_text_run, &buffer);
-    if (buffer.ShapeResultSize() == 0) {
-      return;
+    const ShapeResultView* shape_view = nullptr;
+    if (RuntimeEnabledFeatures::PlainTextPainterEnabled()) {
+      const PlainTextNode& node = PlainTextPainter::Shared().SegmentAndShape(
+          placeholder_text_run, emphasis_mark_font);
+      if (node.ItemList().empty()) {
+        return;
+      }
+      shape_view = node.ItemList()[0].EnsureView();
+      if (!shape_view) {
+        return;
+      }
+    } else {
+      CachingWordShaper word_shaper(emphasis_mark_font);
+      ShapeResultBuffer buffer;
+      word_shaper.FillResultBuffer(placeholder_text_run, &buffer);
+      if (buffer.ShapeResultSize() == 0) {
+        return;
+      }
+      shape_view = buffer.ViewAt(0);
     }
     graphics_context().DrawEmphasisMarks(
         emphasis_mark_font,
         TextFragmentPaintInfo{placeholder_text_run.ToStringView(), 0, 1,
-                              buffer.ViewAt(0)},
+                              shape_view},
         emphasis_mark(), emphasis_mark_text_origin,
         PaintAutoDarkMode(style_, DarkModeFilter::ElementRole::kForeground));
     return;
   }
-  graphics_context().DrawEmphasisMarks(
+  graphics_context().DeprecatedDrawEmphasisMarks(
       emphasis_mark_font, placeholder_text_run, emphasis_mark(),
       emphasis_mark_text_origin,
       PaintAutoDarkMode(style_, DarkModeFilter::ElementRole::kForeground));

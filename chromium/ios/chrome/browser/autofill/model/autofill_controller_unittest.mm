@@ -15,6 +15,7 @@
 #import "base/test/ios/wait_util.h"
 #import "base/test/metrics/histogram_tester.h"
 #import "base/test/scoped_feature_list.h"
+#import "base/test/test_future.h"
 #import "base/types/id_type.h"
 #import "base/uuid.h"
 #import "components/autofill/core/browser/data_manager/addresses/address_data_manager.h"
@@ -204,11 +205,6 @@ void CheckField(const FormStructure& form,
   FAIL() << "Missing field " << name;
 }
 
-AutocompleteEntry CreateAutocompleteEntry(const std::u16string& value) {
-  const base::Time kNow = AutofillClock::Now();
-  return AutocompleteEntry(AutocompleteKey(u"Name", value), kNow, kNow);
-}
-
 // Forces rendering of a UIView. This is used in tests to make sure that UIKit
 // optimizations don't have the views return the previous values (such as
 // zoomScale).
@@ -236,21 +232,6 @@ auto ChildFrameMatcher(int expected_predecessor) {
                        testing::Eq(expected_predecessor));
   return AllOf(valid_token_matcher, predecessor_matcher);
 }
-
-// WebDataServiceConsumer for receiving vectors of strings and making them
-// available to tests.
-class TestConsumer : public WebDataServiceConsumer {
- public:
-  void OnWebDataServiceRequestDone(
-      WebDataServiceBase::Handle handle,
-      std::unique_ptr<WDTypedResult> result) override {
-    DCHECK_EQ(result->GetType(), AUTOFILL_VALUE_RESULT);
-    result_ =
-        static_cast<WDResult<std::vector<AutocompleteEntry>>*>(result.get())
-            ->GetValue();
-  }
-  std::vector<AutocompleteEntry> result_;
-};
 
 // Text fixture to test autofill.
 class AutofillControllerTest : public PlatformTest {
@@ -864,8 +845,7 @@ TEST_F(AutofillControllerTest, ReadFormName) {
 // successfully imported into the PersonalDataManager.
 TEST_F(AutofillControllerTest, ProfileImport) {
   PersonalDataManager* personal_data_manager =
-      PersonalDataManagerFactory::GetForProfile(
-          ProfileIOS::FromBrowserState(profile_.get()));
+      PersonalDataManagerFactory::GetForProfile(profile_.get());
   test_api(personal_data_manager->address_data_manager())
       .set_auto_accept_address_imports(true);
   // Check there are no registered profiles already.
@@ -903,8 +883,7 @@ void AutofillControllerTest::SetUpForSuggestions(
     NSString* data,
     size_t expected_number_of_forms) {
   PersonalDataManager* personal_data_manager =
-      PersonalDataManagerFactory::GetForProfile(
-          ProfileIOS::FromBrowserState(profile_.get()));
+      PersonalDataManagerFactory::GetForProfile(profile_.get());
   AutofillProfile profile(
       autofill::i18n_model_definition::kLegacyHierarchyCountryCode);
   profile.SetRawInfo(NAME_FULL, u"Homer Simpson");
@@ -993,8 +972,7 @@ TEST_F(AutofillControllerTest, MultipleProfileSuggestions) {
   }
 
   PersonalDataManager* personal_data_manager =
-      PersonalDataManagerFactory::GetForProfile(
-          ProfileIOS::FromBrowserState(profile_.get()));
+      PersonalDataManagerFactory::GetForProfile(profile_.get());
   personal_data_manager->SetSyncServiceForTest(nullptr);
 
   AutofillProfile profile(
@@ -1041,32 +1019,43 @@ TEST_F(AutofillControllerTest, KeyValueImport) {
   scoped_refptr<AutofillWebDataService> web_data_service =
       ios::WebDataServiceFactory::GetAutofillWebDataForProfile(
           profile_.get(), ServiceAccessType::EXPLICIT_ACCESS);
-  TestConsumer consumer;
-  const int limit = 1;
-  consumer.result_ = {CreateAutocompleteEntry(u"Should"),
-                      CreateAutocompleteEntry(u"get"),
-                      CreateAutocompleteEntry(u"overwritten")};
-  web_data_service->GetFormValuesForElementName(u"greeting", std::u16string(),
-                                                limit, &consumer);
-  base::ThreadPoolInstance::Get()->FlushForTesting();
-  web::test::WaitForBackgroundTasks();
-  // No value should be returned before anything is loaded via form submission.
-  ASSERT_EQ(0U, consumer.result_.size());
-  web::test::ExecuteJavaScript(@"submit.click()", web_state());
-  // We can't make `consumer` a __block variable because TestConsumer lacks copy
-  // construction. We just pass a pointer instead as we know that the callback
-  // is executed within the life-cyle of `consumer`.
-  TestConsumer* consumer_ptr = &consumer;
-  WaitForCondition(^bool {
+
+  {
+    base::test::TestFuture<WebDataServiceBase::Handle,
+                           std::unique_ptr<WDTypedResult>>
+        future;
     web_data_service->GetFormValuesForElementName(u"greeting", std::u16string(),
-                                                  limit, consumer_ptr);
-    return consumer_ptr->result_.size();
-  });
-  base::ThreadPoolInstance::Get()->FlushForTesting();
-  web::test::WaitForBackgroundTasks();
-  // One result should be returned, matching the filled value.
-  ASSERT_EQ(1U, consumer.result_.size());
-  EXPECT_EQ(u"Hello", consumer.result_[0].key().value());
+                                                  /*limit=*/1,
+                                                  future.GetCallback());
+    base::ThreadPoolInstance::Get()->FlushForTesting();
+    web::test::WaitForBackgroundTasks();
+    std::vector<AutocompleteEntry> result =
+        static_cast<WDResult<std::vector<AutocompleteEntry>>&>(*future.Get<1>())
+            .GetValue();
+    // No value should be returned before anything is loaded via form
+    // submission.
+    EXPECT_THAT(result, IsEmpty());
+  }
+
+  web::test::ExecuteJavaScript(@"submit.click()", web_state());
+
+  {
+    base::test::TestFuture<WebDataServiceBase::Handle,
+                           std::unique_ptr<WDTypedResult>>
+        future;
+    web_data_service->GetFormValuesForElementName(u"greeting", std::u16string(),
+                                                  /*limit=*/1,
+                                                  future.GetCallback());
+    base::ThreadPoolInstance::Get()->FlushForTesting();
+    web::test::WaitForBackgroundTasks();
+    std::vector<AutocompleteEntry> result =
+        static_cast<WDResult<std::vector<AutocompleteEntry>>&>(*future.Get<1>())
+            .GetValue();
+    // One result should be returned, matching the filled value.
+    EXPECT_THAT(result, ElementsAre(Property(
+                            &AutocompleteEntry::key,
+                            Property(&AutocompleteKey::value, u"Hello"))));
+  }
 }
 
 void AutofillControllerTest::SetUpKeyValueData() {
@@ -1179,8 +1168,7 @@ TEST_F(AutofillControllerTest, NoKeyValueSuggestionsWithoutTyping) {
 TEST_F(AutofillControllerTest, CreditCardImport) {
   InfoBarManagerImpl::CreateForWebState(web_state());
   PersonalDataManager* personal_data_manager =
-      PersonalDataManagerFactory::GetForProfile(
-          ProfileIOS::FromBrowserState(profile_.get()));
+      PersonalDataManagerFactory::GetForProfile(profile_.get());
   personal_data_manager->SetSyncServiceForTest(nullptr);
 
   // Check there are no registered profiles already.
@@ -1204,6 +1192,10 @@ TEST_F(AutofillControllerTest, CreditCardImport) {
   });
   ExpectMetric("Autofill.CreditCardInfoBar.Local",
                AutofillMetrics::INFOBAR_SHOWN);
+  ExpectMetric("Autofill.SaveCreditCardPromptResult.IOS.Local.Banner."
+               "NumStrikes.0.NoFixFlow",
+               static_cast<int>(
+                   autofill_metrics::SaveCreditCardPromptResultIOS::kShown));
   ASSERT_EQ(1U, infobar_manager->infobars().size());
   infobars::InfoBarDelegate* infobar =
       infobar_manager->infobars()[0]->delegate();
@@ -1238,8 +1230,7 @@ TEST_F(AutofillControllerTest, CreditCardImport) {
 TEST_F(AutofillControllerTest, CreditCardImportAfterFormRemoval) {
   InfoBarManagerImpl::CreateForWebState(web_state());
   PersonalDataManager* personal_data_manager =
-      PersonalDataManagerFactory::GetForProfile(
-          ProfileIOS::FromBrowserState(profile_.get()));
+      PersonalDataManagerFactory::GetForProfile(profile_.get());
   personal_data_manager->SetSyncServiceForTest(nullptr);
 
   // Check there are no registered profiles already.
@@ -1271,6 +1262,10 @@ TEST_F(AutofillControllerTest, CreditCardImportAfterFormRemoval) {
   });
   ExpectMetric("Autofill.CreditCardInfoBar.Local",
                AutofillMetrics::INFOBAR_SHOWN);
+  ExpectMetric("Autofill.SaveCreditCardPromptResult.IOS.Local.Banner."
+               "NumStrikes.0.NoFixFlow",
+               static_cast<int>(
+                   autofill_metrics::SaveCreditCardPromptResultIOS::kShown));
   ASSERT_EQ(1U, infobar_manager->infobars().size());
   infobars::InfoBarDelegate* infobar =
       infobar_manager->infobars()[0]->delegate();
@@ -1308,8 +1303,7 @@ TEST_F(AutofillControllerTest,
        CreditCardImportWithFieldDataManagerValuesAfterFormRemoval) {
   InfoBarManagerImpl::CreateForWebState(web_state());
   PersonalDataManager* personal_data_manager =
-      PersonalDataManagerFactory::GetForProfile(
-          ProfileIOS::FromBrowserState(profile_.get()));
+      PersonalDataManagerFactory::GetForProfile(profile_.get());
   personal_data_manager->SetSyncServiceForTest(nullptr);
 
   // Check there are no registered profiles already.
@@ -1365,6 +1359,10 @@ TEST_F(AutofillControllerTest,
   });
   ExpectMetric("Autofill.CreditCardInfoBar.Local",
                AutofillMetrics::INFOBAR_SHOWN);
+  ExpectMetric("Autofill.SaveCreditCardPromptResult.IOS.Local.Banner."
+               "NumStrikes.0.NoFixFlow",
+               static_cast<int>(
+                   autofill_metrics::SaveCreditCardPromptResultIOS::kShown));
   ASSERT_EQ(1U, infobar_manager->infobars().size());
   infobars::InfoBarDelegate* infobar =
       infobar_manager->infobars()[0]->delegate();
@@ -1394,8 +1392,7 @@ TEST_F(AutofillControllerTest,
 // successfully imported into the PersonalDataManager.
 TEST_F(AutofillControllerTest, ProfileImportAfterFormlessFormRemoval) {
   PersonalDataManager* personal_data_manager =
-      PersonalDataManagerFactory::GetForProfile(
-          ProfileIOS::FromBrowserState(profile_.get()));
+      PersonalDataManagerFactory::GetForProfile(profile_.get());
   test_api(personal_data_manager->address_data_manager())
       .set_auto_accept_address_imports(true);
   // Check there are no registered profiles already.

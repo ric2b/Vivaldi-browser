@@ -3,17 +3,11 @@
 // found in the LICENSE file.
 'use strict';
 
-const tsParser = require('@typescript-eslint/parser');
 const path = require('path');
 
 const rule = require('../lib/enforce-default-import-name.js');
-const ruleTester = new (require('eslint').RuleTester)({
-  languageOptions: {
-    ecmaVersion: 'latest',
-    sourceType: 'module',
-    parser: tsParser,
-  },
-});
+
+const {RuleTester} = require('./utils/utils.js');
 
 const TEST_OPTIONS = [
   {
@@ -31,7 +25,7 @@ const TEST_OPTIONS = [
   },
 ];
 
-ruleTester.run('enforce-default-import-name', rule, {
+new RuleTester().run('enforce-default-import-name', rule, {
   valid: [
     {
       code: 'import * as Trace from "../models/trace/trace.js"',

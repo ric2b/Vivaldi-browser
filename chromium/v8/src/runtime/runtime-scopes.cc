@@ -244,31 +244,25 @@ RUNTIME_FUNCTION(Runtime_InitializeDisposableStack) {
   return *disposable_stack;
 }
 
-Tagged<Object> AddToDisposableStack(Isolate* isolate,
-                                    DirectHandle<JSDisposableStackBase> stack,
-                                    DirectHandle<JSAny> value,
-                                    DisposeMethodCallType type,
-                                    DisposeMethodHint hint) {
-  // a. If V is either null or undefined and hint is sync-dispose, return
-  // unused.
-  if (IsNullOrUndefined(*value) && hint == DisposeMethodHint::kSyncDispose) {
-    return *value;
-  } else if (IsNullOrUndefined(*value) &&
-             hint == DisposeMethodHint::kAsyncDispose) {
-    value = isolate->factory()->undefined_value();
-  }
-
+namespace {
+Maybe<bool> AddToDisposableStack(Isolate* isolate,
+                                 DirectHandle<JSDisposableStackBase> stack,
+                                 DirectHandle<JSAny> value,
+                                 DisposeMethodCallType type,
+                                 DisposeMethodHint hint) {
   DirectHandle<Object> method;
-  ASSIGN_RETURN_FAILURE_ON_EXCEPTION(
+  ASSIGN_RETURN_ON_EXCEPTION_VALUE(
       isolate, method,
       JSDisposableStackBase::CheckValueAndGetDisposeMethod(isolate, value,
-                                                           hint));
+                                                           hint),
+      Nothing<bool>());
 
   // Return the DisposableResource Record { [[ResourceValue]]: V, [[Hint]]:
   // hint, [[DisposeMethod]]: method }.
   JSDisposableStackBase::Add(isolate, stack, value, method, type, hint);
-  return *value;
+  return Just(true);
 }
+}  // namespace
 
 RUNTIME_FUNCTION(Runtime_AddDisposableValue) {
   HandleScope scope(isolate);
@@ -277,11 +271,15 @@ RUNTIME_FUNCTION(Runtime_AddDisposableValue) {
   DirectHandle<JSDisposableStackBase> stack = args.at<JSDisposableStackBase>(0);
   DirectHandle<JSAny> value = args.at<JSAny>(1);
 
-  // Return the DisposableResource Record { [[ResourceValue]]: V, [[Hint]]:
-  // hint, [[DisposeMethod]]: method }.
-  return AddToDisposableStack(isolate, stack, value,
-                              DisposeMethodCallType::kValueIsReceiver,
-                              DisposeMethodHint::kSyncDispose);
+  // a. If V is either null or undefined and hint is sync-dispose, return
+  // unused.
+  if (!IsNullOrUndefined(*value)) {
+    MAYBE_RETURN(AddToDisposableStack(isolate, stack, value,
+                                      DisposeMethodCallType::kValueIsReceiver,
+                                      DisposeMethodHint::kSyncDispose),
+                 ReadOnlyRoots(isolate).exception());
+  }
+  return *value;
 }
 
 RUNTIME_FUNCTION(Runtime_AddAsyncDisposableValue) {
@@ -291,33 +289,55 @@ RUNTIME_FUNCTION(Runtime_AddAsyncDisposableValue) {
   DirectHandle<JSDisposableStackBase> stack = args.at<JSDisposableStackBase>(0);
   DirectHandle<JSAny> value = args.at<JSAny>(1);
 
-  // Return the DisposableResource Record { [[ResourceValue]]: V, [[Hint]]:
-  // hint, [[DisposeMethod]]: method }.
-  return AddToDisposableStack(isolate, stack, value,
-                              DisposeMethodCallType::kValueIsReceiver,
-                              DisposeMethodHint::kAsyncDispose);
+  // CreateDisposableResource
+  // 1. If method is not present, then
+  //   a. If V is either null or undefined, then
+  //     i. Set V to undefined.
+  //     ii. Set method to undefined.
+  MAYBE_RETURN(AddToDisposableStack(isolate, stack,
+                                    IsNullOrUndefined(*value)
+                                        ? isolate->factory()->undefined_value()
+                                        : value,
+                                    DisposeMethodCallType::kValueIsReceiver,
+                                    DisposeMethodHint::kAsyncDispose),
+               ReadOnlyRoots(isolate).exception());
+  return *value;
 }
 
 RUNTIME_FUNCTION(Runtime_DisposeDisposableStack) {
   HandleScope scope(isolate);
-  DCHECK_EQ(4, args.length());
+  DCHECK_EQ(5, args.length());
 
   DirectHandle<JSDisposableStackBase> disposable_stack =
       args.at<JSDisposableStackBase>(0);
   DirectHandle<Smi> continuation_token = args.at<Smi>(1);
   Handle<Object> continuation_error = args.at<Object>(2);
-  DirectHandle<Smi> has_await_using = args.at<Smi>(3);
+  Handle<Object> continuation_message = args.at<Object>(3);
+  DirectHandle<Smi> has_await_using = args.at<Smi>(4);
+
+  // If state is not kDisposed, then the disposing of the resources has
+  // not started yet. So, if the continuation token is kRethrow we need
+  // to set error and error message on the disposable stack.
+  if (disposable_stack->state() != DisposableStackState::kDisposed &&
+      *continuation_token ==
+          Smi::FromInt(static_cast<int>(
+              interpreter::TryFinallyContinuationToken::kRethrowToken))) {
+    disposable_stack->set_error(*continuation_error);
+    disposable_stack->set_error_message(*continuation_message);
+  }
+
+  DCHECK_IMPLIES(
+      disposable_stack->state() == DisposableStackState::kDisposed,
+      static_cast<DisposableStackResourcesType>(Smi::ToInt(*has_await_using)) ==
+          DisposableStackResourcesType::kAtLeastOneAsync);
+
+  disposable_stack->set_state(DisposableStackState::kDisposed);
 
   DirectHandle<Object> result;
   ASSIGN_RETURN_FAILURE_ON_EXCEPTION(
       isolate, result,
       JSDisposableStackBase::DisposeResources(
           isolate, disposable_stack,
-          (*continuation_token !=
-           Smi::FromInt(static_cast<int>(
-               interpreter::TryFinallyContinuationToken::kRethrowToken)))
-              ? MaybeHandle<Object>()
-              : continuation_error,
           static_cast<DisposableStackResourcesType>(
               Smi::ToInt(*has_await_using))));
   return *result;
@@ -329,7 +349,7 @@ RUNTIME_FUNCTION(Runtime_HandleExceptionsInDisposeDisposableStack) {
 
   DirectHandle<JSDisposableStackBase> disposable_stack =
       args.at<JSDisposableStackBase>(0);
-  Handle<Object> exception = args.at<Object>(1);
+  DirectHandle<Object> exception = args.at<Object>(1);
   DirectHandle<Object> message = args.at<Object>(2);
 
   if (!isolate->is_catchable_by_javascript(*exception)) {

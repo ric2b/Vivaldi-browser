@@ -32,6 +32,8 @@ std::optional<double> NumberPropertyFunctions::GetNumber(
       return style.Order();
     case CSSPropertyID::kOrphans:
       return style.Orphans();
+    case CSSPropertyID::kReadingOrder:
+      return style.ReadingOrder();
     case CSSPropertyID::kShapeImageThreshold:
       return style.ShapeImageThreshold();
     case CSSPropertyID::kStopOpacity:
@@ -63,7 +65,7 @@ std::optional<double> NumberPropertyFunctions::GetNumber(
       // Numbers are represented by percentages.
       if (!length.IsPercent())
         return std::optional<double>();
-      double value = length.Value();
+      double value = length.Percent();
       // -100% represents the keyword "normal".
       if (value == -100)
         return std::optional<double>();
@@ -112,6 +114,7 @@ double NumberPropertyFunctions::ClampNumber(const CSSProperty& property,
       return ClampTo<uint16_t>(round(value), 1);
 
     case CSSPropertyID::kOrder:
+    case CSSPropertyID::kReadingOrder:
     case CSSPropertyID::kZIndex:
       return ClampTo<int>(RoundHalfTowardsPositiveInfinity(value));
 
@@ -151,6 +154,9 @@ bool NumberPropertyFunctions::SetNumber(const CSSProperty& property,
       return true;
     case CSSPropertyID::kOrphans:
       builder.SetOrphans(value);
+      return true;
+    case CSSPropertyID::kReadingOrder:
+      builder.SetReadingOrder(value);
       return true;
     case CSSPropertyID::kShapeImageThreshold:
       builder.SetShapeImageThreshold(value);

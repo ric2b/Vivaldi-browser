@@ -60,7 +60,8 @@ class ContentPasswordManagerDriver final
   int GetId() const override;
   void SetPasswordFillData(
       const autofill::PasswordFormFillData& form_data) override;
-  void InformNoSavedCredentials() override;
+  void InformNoSavedCredentials(
+      bool should_show_popup_without_passwords) override;
   void FormEligibleForGenerationFound(
       const autofill::PasswordFormGenerationData& form) override;
   void GeneratedPasswordAccepted(const std::u16string& password) override;
@@ -93,8 +94,6 @@ class ContentPasswordManagerDriver final
   void FillIntoFocusedField(bool is_password,
                             const std::u16string& credential) override;
 #if BUILDFLAG(IS_ANDROID)
-  void KeyboardReplacingSurfaceClosed(
-      ToShowVirtualKeyboard show_virtual_keyboard) override;
   void TriggerFormSubmission() override;
 #endif
   void PreviewField(autofill::FieldRendererId field_id,
@@ -129,6 +128,11 @@ class ContentPasswordManagerDriver final
   // Notify the renderer that the user wants to trigger password generation.
   void GeneratePassword(autofill::mojom::PasswordGenerationAgent::
                             TriggeredGeneratePasswordCallback callback);
+
+  // Notify the associated `PasswordAutofillManager` that password suggestions
+  // for the triggering field can be shown.
+  void ShowPasswordSuggestionsForField(
+      const autofill::TriggeringField& triggering_field);
 
   // Returns true if the field is any of the following cases:
   // 1) The field has type="password".
@@ -175,11 +179,6 @@ class ContentPasswordManagerDriver final
                                     bool is_likely_otp) override;
   void ShowPasswordSuggestions(
       const autofill::PasswordSuggestionRequest& request) override;
-#if BUILDFLAG(IS_ANDROID)
-  void ShowKeyboardReplacingSurface(
-      autofill::mojom::SubmissionReadinessState submission_readiness,
-      bool is_webauthn_form) override;
-#endif
   void CheckSafeBrowsingReputation(const GURL& form_action,
                                    const GURL& frame_url) override;
   void FocusedInputChanged(

@@ -27,9 +27,6 @@
 
 #include "src/tint/lang/core/ir/transform/zero_init_workgroup_memory.h"
 
-#include <map>
-#include <utility>
-
 #include "src/tint/lang/core/ir/builder.h"
 #include "src/tint/lang/core/ir/module.h"
 #include "src/tint/lang/core/ir/referenced_module_vars.h"

@@ -52,6 +52,7 @@ TranslateError ToVivaldiTranslateError(translate::TranslateErrors error);
 class VivaldiTranslateClient
     : public translate::TranslateClient,
       public translate::ContentTranslateDriver::LanguageDetectionObserver,
+      public translate::ContentTranslateDriver::TranslationObserver,
       public content::WebContentsObserver,
       public content::WebContentsUserData<VivaldiTranslateClient> {
  public:
@@ -102,6 +103,12 @@ class VivaldiTranslateClient
   // TranslateDriver::LanguageDetectionObserver implementation.
   void OnLanguageDetermined(
       const translate::LanguageDetectionDetails& details) override;
+
+  // translate::ContentTranslateDriver::Observer implementation
+  void OnPageTranslated(const std::string& original_lang,
+                        const std::string& translated_lang,
+                        translate::TranslateErrors error_type) override;
+  void OnIsPageTranslatedChanged(content::WebContents* source) override;
 
 #if BUILDFLAG(IS_ANDROID)
   // Trigger a manual translation when the necessary state (e.g. source

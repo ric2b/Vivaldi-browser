@@ -43,6 +43,9 @@ enum ContentSettingsType {
   DEPRECATED_PPAPI_BROKER,
   AUTOMATIC_DOWNLOADS,
 
+  // NOTE(daniel@vivaldi.com): Vivaldi addition.
+  KEY_SHORTCUTS,
+
   // Advanced device-specific functions on MIDI devices. MIDI-SysEx
   // communications can be used for changing the MIDI device's persistent state
   // such as firmware.
@@ -475,5 +478,13 @@ enum ContentSettingsType {
 
   // Content settings for access to the Controlled Frame API.
   CONTROLLED_FRAME,
+
+  // Website setting which is used for UnusedSitePermissionsService to
+  // store revoked notification permissions of disruptive sites.
+  REVOKED_DISRUPTIVE_NOTIFICATION_PERMISSIONS,
+
+  // Content setting for whether the site is allowed to make local network
+  // requests.
+  LOCAL_NETWORK_ACCESS,
 };
 // LINT.ThenChange(//components/content_settings/core/browser/content_settings_uma_util.cc:kHistogramValue)

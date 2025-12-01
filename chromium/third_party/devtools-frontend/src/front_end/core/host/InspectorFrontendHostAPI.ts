@@ -82,7 +82,7 @@ export interface EyeDropperPickedColorEvent {
 }
 
 export interface DevToolsFileSystem {
-  type: string;
+  type: ''|'automatic'|'snippets'|'overrides';
   fileSystemName: string;
   rootURL: string;
   fileSystemPath: Platform.DevToolsPath.RawPathString;
@@ -199,6 +199,12 @@ export interface KeyDownEvent {
   context?: number;
 }
 
+export interface SettingAccessEvent {
+  name: string;
+  numericValue?: number;
+  stringValue?: string;
+}
+
 // While `EventDescriptors` are used to dynamically dispatch host binding events,
 // the `EventTypes` "type map" is used for type-checking said events by TypeScript.
 // `EventTypes` is not used at runtime.
@@ -236,6 +242,15 @@ export interface EventTypes {
 }
 
 export interface InspectorFrontendHostAPI {
+  connectAutomaticFileSystem(
+      fileSystemPath: Platform.DevToolsPath.RawPathString,
+      fileSystemUUID: string,
+      addIfMissing: boolean,
+      callback: (result: {success: boolean}) => void,
+      ): void;
+
+  disconnectAutomaticFileSystem(fileSystemPath: Platform.DevToolsPath.RawPathString): void;
+
   addFileSystem(type?: string): void;
 
   loadCompleted(): void;
@@ -330,8 +345,6 @@ export interface InspectorFrontendHostAPI {
 
   setDevicesUpdatesEnabled(enabled: boolean): void;
 
-  performActionOnRemotePage(pageId: string, action: string): void;
-
   openRemotePage(browserId: string, url: string): void;
 
   openNodeFrontend(): void;
@@ -377,6 +390,7 @@ export interface InspectorFrontendHostAPI {
   recordDrag(event: DragEvent): void;
   recordChange(event: ChangeEvent): void;
   recordKeyDown(event: KeyDownEvent): void;
+  recordSettingAccess(event: SettingAccessEvent): void;
 }
 
 export interface AcceleratorDescriptor {
@@ -444,10 +458,10 @@ export interface SyncInformation {
  * Warning: There is another definition of this enum in the DevTools code
  * base, keep them in sync:
  * front_end/devtools_compatibility.js
- * @readonly
  */
 export const enum EnumeratedHistogram {
   /* eslint-disable @typescript-eslint/naming-convention -- Shadows a legacy enum */
+  // LINT.IfChange(EnumeratedHistogram)
   ActionTaken = 'DevTools.ActionTaken',
   PanelShown = 'DevTools.PanelShown',
   PanelShownInLocation = 'DevTools.PanelShownInLocation',
@@ -479,13 +493,11 @@ export const enum EnumeratedHistogram {
   SourcesPanelFileOpened = 'DevTools.SourcesPanelFileOpened',
   NetworkPanelResponsePreviewOpened = 'DevTools.NetworkPanelResponsePreviewOpened',
   TimelineNavigationSettingState = 'DevTools.TimelineNavigationSettingState',
-  StyleTextCopied = 'DevTools.StyleTextCopied',
   CSSHintShown = 'DevTools.CSSHintShown',
   LighthouseModeRun = 'DevTools.LighthouseModeRun',
   LighthouseCategoryUsed = 'DevTools.LighthouseCategoryUsed',
-  CSSPropertyDocumentation = 'DevTools.CSSPropertyDocumentation',
   SwatchActivated = 'DevTools.SwatchActivated',
   AnimationPlaybackRateChanged = 'DevTools.AnimationPlaybackRateChanged',
   AnimationPointDragged = 'DevTools.AnimationPointDragged',
-
+  // LINT.ThenChange(/front_end/devtools_compatibility.js:EnumeratedHistogram)
 }

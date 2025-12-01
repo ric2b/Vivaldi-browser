@@ -12,3 +12,4 @@ This is a wdspec test.
 [FAIL] test_override_modified_header_cookies
   AssertionError
 Harness: the test ran to completion.
+

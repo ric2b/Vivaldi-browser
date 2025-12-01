@@ -32,6 +32,7 @@ limitations under the License.
 #include "absl/log/log.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/match.h"
+#include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
 #include "absl/strings/substitute.h"
 #include "xla/autotune_results.pb.h"
@@ -100,7 +101,8 @@ class GpuCompilerTest : public HloTestBase {
   }
 };
 
-TEST_F(GpuCompilerTest, CompiledProgramsCount) {
+// TODO(b/399912696): Fix and enable this test.
+TEST_F(GpuCompilerTest, DISABLED_CompiledProgramsCount) {
   const char* hlo_text = R"(
 HloModule test
 
@@ -535,7 +537,7 @@ TEST_F(GpuCompilerTestWithAutotuneDb,
                 .cuda_compute_capability();
   if (!cc.IsAtLeastAmpere()) {
     GTEST_SKIP() << "Autotuning results have only been generated for Ampere "
-                 << "and Hopper GPUs";
+                 << "and later GPUs";
   }
   const absl::string_view hlo_string = R"(
 HloModule test
@@ -711,6 +713,9 @@ ENTRY main {
   const std::string fallback_convert_to_f16 =
       R"(CHECK: dot(f16{{[^)]*}}, f16{{[^)]*}}))";
 
+  HloPrintOptions print_options =
+      HloPrintOptions().set_print_operand_shape(true);
+
   {
     // Triton enabled, no fallback.
     TF_ASSERT_OK_AND_ASSIGN(auto optimized_module_no_fallback,
@@ -725,7 +730,7 @@ ENTRY main {
             : cublas_convert_to_f16;
     TF_ASSERT_OK_AND_ASSIGN(
         bool filecheck_matched,
-        RunFileCheck(optimized_module_no_fallback->ToString(),
+        RunFileCheck(optimized_module_no_fallback->ToString(print_options),
                      triton_expected_check));
     EXPECT_TRUE(filecheck_matched);
   }
@@ -743,9 +748,10 @@ ENTRY main {
             ? cublaslt_keep_types
             : cublas_convert_to_f16;
 
-    TF_ASSERT_OK_AND_ASSIGN(bool filecheck_matched,
-                            RunFileCheck(optimized_module_no_triton->ToString(),
-                                         blas_expected_check));
+    TF_ASSERT_OK_AND_ASSIGN(
+        bool filecheck_matched,
+        RunFileCheck(optimized_module_no_triton->ToString(print_options),
+                     blas_expected_check));
     EXPECT_TRUE(filecheck_matched);
   }
 
@@ -755,9 +761,10 @@ ENTRY main {
                             optimize_module(/*enable_triton=*/false,
                                             /*enable_blas=*/false,
                                             /*enable_blas_fallback=*/false));
-    TF_ASSERT_OK_AND_ASSIGN(bool filecheck_matched,
-                            RunFileCheck(optimized_module_nothing->ToString(),
-                                         fallback_convert_to_f16));
+    TF_ASSERT_OK_AND_ASSIGN(
+        bool filecheck_matched,
+        RunFileCheck(optimized_module_nothing->ToString(print_options),
+                     fallback_convert_to_f16));
     EXPECT_TRUE(filecheck_matched);
   }
 }
@@ -1036,7 +1043,10 @@ ENTRY e {
 
     TF_ASSERT_OK_AND_ASSIGN(
         std::unique_ptr<Executable> executable,
-        aot_result->LoadExecutable(compiler, aot_options.executor()));
+        std::move(*aot_result)
+            .LoadExecutable(compiler, aot_options.executor()));
+    std::unique_ptr<OpaqueExecutable> wrapped_executable =
+        test_runner_as_hlo_runner().WrapExecutable(std::move(executable));
 
     const xla::Literal literal_input =
         xla::LiteralUtil::CreateR0<int32_t>(input);
@@ -1044,8 +1054,8 @@ ENTRY e {
         xla::LiteralUtil::CreateR0<int32_t>(expected_result);
 
     TF_ASSERT_OK_AND_ASSIGN(Literal result,
-                            GetHloRunner().value()->ExecuteWithExecutable(
-                                executable.get(), {&literal_input}));
+                            test_runner_as_hlo_runner().ExecuteWithExecutable(
+                                wrapped_executable.get(), {&literal_input}));
 
     EXPECT_TRUE(LiteralTestUtil::Equal(result, literal_expected_result));
   };
@@ -1122,6 +1132,7 @@ TEST_F(GpuCompilerTest, TestFlag_xla_gpu_unsafe_pipelined_loop_annotator) {
   DebugOptions debug_options;
   HloModuleConfig config;
   debug_options.set_xla_gpu_unsafe_pipelined_loop_annotator(true);
+  debug_options.set_xla_gpu_enable_pipelined_p2p(true);
   config.set_debug_options(debug_options);
   config.set_num_partitions(4);
   config.set_use_spmd_partitioning(true);
@@ -1403,7 +1414,7 @@ TEST_F(GpuCompilerPassTest,
                 .cuda_compute_capability();
 
   bool expect_custom_kernel_fusion_rewriter_has_run =
-      cc.major == se::CudaComputeCapability::VOLTA;
+      cc.major == se::CudaComputeCapability::kVolta;
 
   constexpr absl::string_view constant_module = R"(
 HloModule noop
@@ -1486,9 +1497,12 @@ class PassOrderTest : public GpuCompilerTest {
   // or if none of the executed passes matches `first_pass_regex` or
   // `last_pass_regex`. Returns a PassRange with the latest run index of any
   // passes with names matching `first_pass_regex` and the earliest run index of
-  // any passes with names matching 'last_pass_regex'.
+  // any passes with names matching 'last_pass_regex'. Passes matching both
+  // regexes will be counted towards last_pass (i.e., overlap of the two ranges
+  // is allowed).
   PassRange VerifyPassOrder(absl::string_view first_pass_regex,
-                            absl::string_view last_pass_regex) {
+                            absl::string_view last_pass_regex,
+                            bool include_pipeline_name = false) {
     if (!optimized_module_) {
       CompileModule(GetModuleConfigForTest());
     }
@@ -1497,15 +1511,19 @@ class PassOrderTest : public GpuCompilerTest {
     int run_index = 0;
     for (const HloPassMetadata& pass_metadata :
          optimized_module_->metadata()->proto().pass_metadata()) {
-      if (RE2::FullMatch(pass_metadata.pass_name(), first_pass_regex)) {
-        VLOG(2) << "Pass " << pass_metadata.pass_name()
-                << " matches first_pass_regex." << std::endl;
-        first_pass_latest_run = std::max(first_pass_latest_run, run_index);
+      std::string name = pass_metadata.pass_name();
+      if (include_pipeline_name) {
+        name = absl::StrCat(pass_metadata.pipeline_name(), ".",
+                            pass_metadata.pass_name());
       }
-      if (RE2::FullMatch(pass_metadata.pass_name(), last_pass_regex)) {
+      if (RE2::FullMatch(name, last_pass_regex)) {
         VLOG(2) << "Pass " << pass_metadata.pass_name()
                 << " matches last_pass_regex." << std::endl;
         last_pass_earliest_run = std::min(last_pass_earliest_run, run_index);
+      } else if (RE2::FullMatch(name, first_pass_regex)) {
+        VLOG(2) << "Pass " << pass_metadata.pass_name()
+                << " matches first_pass_regex." << std::endl;
+        first_pass_latest_run = std::max(first_pass_latest_run, run_index);
       }
       ++run_index;
     }
@@ -1514,7 +1532,7 @@ class PassOrderTest : public GpuCompilerTest {
         << "Did not run a pass matching " << first_pass_regex;
     EXPECT_LT(last_pass_earliest_run, std::numeric_limits<int>::max())
         << "Did not run a pass matching " << last_pass_regex;
-    EXPECT_LE(first_pass_latest_run, last_pass_earliest_run)
+    EXPECT_LT(first_pass_latest_run, last_pass_earliest_run)
         << "One or more passes matching " << first_pass_regex
         << " ran after passes matching " << last_pass_regex;
     return {first_pass_latest_run, last_pass_earliest_run};
@@ -1581,13 +1599,13 @@ TEST_F(PassOrderTest, OffloadingPassesAreRunInCorrectOrder) {
   VerifyNotRunInBetween(pass_range, /*pass_regex=*/"cse");
 }
 
-TEST_F(PassOrderTest, FusionBlockLevelRewriterRunsAfterAllFusionPasses) {
+TEST_F(PassOrderTest, FusionDispatchRunsAfterAllFusionPasses) {
   auto cc = backend()
                 .default_stream_executor()
                 ->GetDeviceDescription()
                 .cuda_compute_capability();
   if (!cc.IsAtLeastAmpere()) {
-    GTEST_SKIP() << "FusionBlockLevelRewriter requires Ampere+ to run.";
+    GTEST_SKIP() << "fusion-dispatch requires Ampere+ to run.";
   }
 
   DebugOptions debug_options = GetDebugOptionsForTest();
@@ -1596,7 +1614,8 @@ TEST_F(PassOrderTest, FusionBlockLevelRewriterRunsAfterAllFusionPasses) {
   SetDebugOptions(debug_options);
 
   VerifyPassOrder(/*first_pass_regex=*/".*fusion.*",
-                  /*last_pass_regex=*/"fusion-block-level-rewriter");
+                  /*last_pass_regex=*/"fusion-dispatch-pipeline.*",
+                  /*include_pipeline_name=*/true);
 }
 
 TEST_F(PassOrderTest, CollectivePipelinerRunsAfterCollectiveQuantizer) {
@@ -1699,6 +1718,15 @@ TEST_F(PassOrderTest, GemmRewriterRunsAfterDotNormalizer) {
   VerifyNotRunInBetween(pass_range, /*pass_regex=*/"algsimp");
 }
 
+TEST_F(PassOrderTest, NestGemmFusionRunsAfterGemmFusionAutotuner) {
+  // NestGemmFusion expect to see __triton_gemm custom call with a backend
+  // config created by gemm_fusion_autotuner.
+  DebugOptions options = GetDebugOptionsForTest();
+  options.set_xla_gpu_unsupported_enable_generic_triton_emitter_for_gemms(true);
+  SetDebugOptions(options);
+  VerifyPassOrder("gemm-fusion-autotuner", "nest_gemm_fusion");
+}
+
 TEST_F(PassOrderTest,
        ReducePrecisionIsRemovedAfterAllCallsToSimplifyFPConversions) {
   // Because of an issue with JAX remat and `SimplifyFPConversions` (see PR:
@@ -1766,6 +1794,127 @@ p0 = f32[8,4,64]{2,1,0} parameter(0)
 p1 = f32[4,64,1024] parameter(1)
 ROOT dot = f32[4,8,1024]{2,1,0} dot(p0, p1), lhs_batch_dims={1}, lhs_contracting_dims={2}, rhs_batch_dims={0}, rhs_contracting_dims={1}
 })");
+}
+
+TEST_F(FixPointTest, DotWithReshapes) {
+  // Reduced test case for b/383729716.
+  ExpectPipelinesReachFixedPoint(
+      R"(ENTRY main {
+tmp_0 = f64[3]{0} parameter(0)
+tmp_1 = f64[3,1]{1,0} reshape(tmp_0)
+tmp_2 = f64[3]{0} reshape(tmp_1)
+tmp_3 = f64[3]{0} transpose(tmp_2), dimensions={0}
+tmp_4 = f64[3,1]{1,0} reshape(tmp_3)
+tmp_5 = f64[2]{0} parameter(1)
+tmp_6 = f64[1,2]{1,0} reshape(tmp_5)
+tmp_7 = f64[2]{0} reshape(tmp_6)
+tmp_8 = f64[2]{0} transpose(tmp_7), dimensions={0}
+tmp_9 = f64[1,2]{1,0} reshape(tmp_8)
+tmp_10 = f64[3,2]{1,0} dot(tmp_4, tmp_9), lhs_contracting_dims={1}, rhs_contracting_dims={0}
+ROOT tmp_11 = f64[3,2]{1,0} reshape(tmp_10)
+})");
+}
+
+TEST_F(GpuCompilerTest,
+       DynamicSliceFusionWithCollectiveShouldWrapInAsyncAndTestE2E) {
+  const char* hlo = R"(
+    HloModule test, replica_count=2
+    add {
+      x = s32[] parameter(0)
+      y = s32[] parameter(1)
+      ROOT add = s32[] add(x, y)
+    }
+    ENTRY main {
+      destination = s32[2,2,32] parameter(0)
+      c1 = s32[] constant(1)
+      c0 = s32[] constant(0)
+      c4 = s32[] constant(4)
+      source = s32[8,32] parameter(1)
+      a = s32[1024,1024] parameter(2)
+      b = s32[1024,1024] parameter(3)
+      slice = s32[4,32] slice(source), slice={[4:8], [0:32]}
+      rs = s32[2,32] reduce-scatter(slice), replica_groups={{0,1}}, dimensions={0}, to_apply=add
+      reshape = s32[1,2,32] reshape(rs)
+      dus = s32[2,2,32] dynamic-update-slice(destination, reshape, c1, c0, c0)
+      dot = s32[1024,1024] dot(a,b), lhs_contracting_dims={1}, rhs_contracting_dims={0}
+      ROOT tuple = tuple(dus,dot)
+    }
+  )";
+  TF_ASSERT_OK_AND_ASSIGN(std::unique_ptr<HloModule> m,
+                          ParseAndReturnVerifiedModule(hlo));
+  std::unique_ptr<HloModule> m_ref = m->Clone();
+  m->mutable_config()
+      .mutable_debug_options()
+      .set_xla_gpu_enable_dynamic_slice_fusion(true);
+  TF_ASSERT_OK_AND_ASSIGN(
+      std::unique_ptr<OpaqueExecutable> wrapped_exec,
+      CreateExecutable(m->Clone(), /*run_hlo_passes=*/true));
+  TF_ASSERT_OK_AND_ASSIGN(std::unique_ptr<Executable> exec,
+                          test_runner_as_hlo_runner().ExecutableFromWrapped(
+                              std::move(wrapped_exec)));
+  const char* kExpected = R"(
+    // CHECK:      dynamic-slice-fusion{{.+}} {
+    // CHECK:        %[[slice:.+]] = {{.+}} slice({{.+}}), slice={[4:8], [0:32]}
+    // CHECK:        %[[rs:.+]] = {{.+}} reduce-scatter(%[[slice]]),
+    // CHECK-SAME{LITERAL}:              replica_groups={{0,1}}, dimensions={0}
+    // CHECK:        %[[bitcast:.+]] = {{.+}} bitcast(%[[rs]])
+    // CHECK:        ROOT {{.+}} = {{.+}} dynamic-update-slice({{.+}}, %[[bitcast]], {{.+}})
+    // CHECK:      ENTRY
+    // CHECK:        %[[fusion_start:.+]] = {{.+}} fusion-start({{.+}}), kind=kCustom, {{.+}}"name":"dynamic_address_computation"
+    // CHECK-NEXT:   %[[wrapped_dot:.+]] = {{.+}} fusion({{.+}}), kind=kLoop
+    // CHECK-NEXT:   %[[fusion_done:.+]] = {{.+}} fusion-done(%[[fusion_start]]), {{.+}}"name":"dynamic_address_computation"
+    // CHECK:        ROOT {{.+}} = {{.+}} tuple(%[[fusion_done]], %[[wrapped_dot]])
+  )";
+  EXPECT_THAT(
+      RunFileCheck(exec->module().ToString(HloPrintOptions{}
+                                               .set_print_operand_shape(false)
+                                               .set_print_metadata(false)),
+                   kExpected),
+      ::tsl::testing::IsOkAndHolds(true));
+
+  if (test_runner().device_count() < 2) {
+    GTEST_SKIP() << "Skipping test as it requires at least 2 devices.";
+  }
+  EXPECT_TRUE(RunAndCompareTwoModulesReplicated(std::move(m), std::move(m_ref),
+                                                /*run_hlo_passes=*/true,
+                                                /*use_threads=*/true,
+                                                std::nullopt));
+}
+
+TEST_F(GpuCompilerTest, DynamicSliceFusionReduceScatterMultipleBuffers) {
+  const char* hlo = R"(
+    HloModule test, replica_count=2
+    add {
+      x = s32[] parameter(0)
+      y = s32[] parameter(1)
+      ROOT add = s32[] add(x, y)
+    }
+    ENTRY main {
+      p0 = s32[2,2,32] parameter(0)
+      p1 = s32[8,32] parameter(1)
+      slice = s32[4,32] slice(p1), slice={[4:8], [0:32]}
+      rs1 = s32[2,32] reduce-scatter(slice), replica_groups={{0,1}}, dimensions={0}, to_apply=add
+      slice2 = s32[4,32] slice(p1), slice={[0:4], [0:32]}
+      rs2 = s32[2,32] reduce-scatter(slice2), replica_groups={{0,1}}, dimensions={0}, to_apply=add
+      ROOT tuple = tuple(rs1, rs2)
+    }
+  )";
+  TF_ASSERT_OK_AND_ASSIGN(std::unique_ptr<HloModule> m,
+                          ParseAndReturnVerifiedModule(hlo));
+  m->mutable_config()
+      .mutable_debug_options()
+      .set_xla_gpu_enable_dynamic_slice_fusion(true);
+  TF_ASSERT_OK_AND_ASSIGN(m, GetOptimizedModule(std::move(m)));
+  const char* kExpected = R"(
+    // CHECK: dynamic-slice-fusion{{.*}} {
+    // CHECK-DAG: %[[slice1:.+]] = {{.+}} slice({{.+}}), slice={[4:8], [0:32]}
+    // CHECK-DAG: %[[slice2:.+]] = {{.+}} slice({{.+}}), slice={[0:4], [0:32]}
+    // CHECK-DAG: ROOT %[[rs:.+]] = {{.+}} reduce-scatter(%[[slice1]], %[[slice2]]),
+    // CHECK-SAME{LITERAL}:                                      replica_groups={{0,1}}, dimensions={0}, to_apply=%add
+    // CHECK: ENTRY
+  )";
+  EXPECT_THAT(RunFileCheck(m->ToString(), kExpected),
+              ::tsl::testing::IsOkAndHolds(true));
 }
 
 }  // namespace

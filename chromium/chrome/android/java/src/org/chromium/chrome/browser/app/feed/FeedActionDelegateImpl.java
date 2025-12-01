@@ -12,6 +12,7 @@ import androidx.annotation.Nullable;
 import org.chromium.base.Callback;
 import org.chromium.base.ThreadUtils;
 import org.chromium.chrome.browser.app.creator.CreatorActivity;
+import org.chromium.chrome.browser.bookmarks.BookmarkManagerOpenerImpl;
 import org.chromium.chrome.browser.bookmarks.BookmarkModel;
 import org.chromium.chrome.browser.bookmarks.BookmarkUtils;
 import org.chromium.chrome.browser.feed.FeedActionDelegate;
@@ -24,6 +25,7 @@ import org.chromium.chrome.browser.native_page.NativePageNavigationDelegate;
 import org.chromium.chrome.browser.ntp.NewTabPageUma;
 import org.chromium.chrome.browser.offlinepages.OfflinePageBridge;
 import org.chromium.chrome.browser.offlinepages.RequestCoordinatorBridge;
+import org.chromium.chrome.browser.price_tracking.PriceDropNotificationManagerFactory;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.signin.SigninAndHistorySyncActivityLauncherImpl;
 import org.chromium.chrome.browser.suggestions.SuggestionsConfig;
@@ -149,7 +151,9 @@ public class FeedActionDelegateImpl implements FeedActionDelegate {
                             new GURL(url),
                             mSnackbarManager,
                             mProfile,
-                            mBottomSheetController);
+                            mBottomSheetController,
+                            new BookmarkManagerOpenerImpl(),
+                            PriceDropNotificationManagerFactory.create(mProfile));
                 });
     }
 

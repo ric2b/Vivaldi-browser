@@ -111,13 +111,11 @@ void TabModel::OnRemovedFromModel() {
   opener_ = nullptr;
   reset_opener_on_active_tab_change_ = false;
 
-  // Pinned state, blocked state, and group membership are all preserved, at
+  // Blocked state is preserved, at
   // least in some cases, but for now let's leave that to the existing
   // mechanisms that were handling that.
   // TODO(tbergquist): Decide whether to stick with this approach or not.
-  pinned_ = false;
   blocked_ = false;
-  group_ = std::nullopt;
 }
 
 TabCollection* TabModel::GetParentCollection(
@@ -162,6 +160,10 @@ void TabModel::DidInsert(base::PassKey<TabStripModel>) {
   did_insert_callback_list_.Notify(this);
 }
 
+base::WeakPtr<TabInterface> TabModel::GetWeakPtr() {
+  return weak_factory_.GetWeakPtr();
+}
+
 content::WebContents* TabModel::GetContents() const {
   return contents_;
 }
@@ -172,7 +174,9 @@ base::CallbackListSubscription TabModel::RegisterWillDiscardContents(
 }
 
 bool TabModel::IsActivated() const {
-  return GetModelForTabInterface()->GetActiveTab() == this;
+  // TODO(crbug.com/407148703): Remove the `owning_model_` check once clients of
+  // TabInterface::MaybeGetFromContents() have been removed.
+  return owning_model_ && GetModelForTabInterface()->GetActiveTab() == this;
 }
 
 base::CallbackListSubscription TabModel::RegisterDidActivate(
@@ -249,6 +253,10 @@ bool TabModel::IsPinned() const {
 }
 
 bool TabModel::IsSplit() const {
+  return split_.has_value();
+}
+
+std::optional<split_tabs::SplitTabId> TabModel::GetSplit() const {
   return split_;
 }
 
@@ -296,7 +304,6 @@ TabStripModel* TabModel::GetModelForTabInterface() const {
 
 TabModel::ScopedTabModalUIImpl::ScopedTabModalUIImpl(TabModel* tab)
     : tab_(tab->weak_factory_.GetWeakPtr()) {
-  CHECK(!tab_->showing_modal_ui_);
   tab_->showing_modal_ui_ = true;
   tab_->modal_ui_changed_callback_list_.Notify(tab_.get());
 }

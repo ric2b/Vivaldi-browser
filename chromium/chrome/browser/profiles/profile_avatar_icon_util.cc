@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/390223051): Remove C-library calls to fix the errors.
+#pragma allow_unsafe_libc_calls
+#endif
+
 #include "chrome/browser/profiles/profile_avatar_icon_util.h"
 
 #include <algorithm>
@@ -23,7 +28,6 @@
 #include "base/strings/stringprintf.h"
 #include "base/values.h"
 #include "build/build_config.h"
-#include "build/chromeos_buildflags.h"
 #include "cc/paint/paint_flags.h"
 #include "chrome/app/vector_icons/vector_icons.h"
 #include "chrome/browser/browser_process.h"
@@ -427,7 +431,7 @@ constexpr base::FilePath::CharType kHighResAvatarFolderName[] =
 // The size of the function-static kDefaultAvatarIconResources array below.
 #if BUILDFLAG(IS_ANDROID)
 constexpr size_t kDefaultAvatarIconsCount = 38;
-#elif BUILDFLAG(IS_CHROMEOS_ASH)
+#elif BUILDFLAG(IS_CHROMEOS)
 constexpr size_t kDefaultAvatarIconsCount = 27;
 #else
 constexpr size_t kDefaultAvatarIconsCount = 38;
@@ -448,12 +452,15 @@ constexpr size_t kPlaceholderAvatarIndex = 0;
 #endif
 
 ui::ImageModel GetGuestAvatar(int size) {
-  return ui::ImageModel::FromVectorIcon(
-      kUserAccountAvatarRefreshIcon,
-      switches::IsExplicitBrowserSigninUIOnDesktopEnabled()
-          ? ui::kColorMenuIcon
-          : ui::kColorAvatarIconGuest,
-      size);
+  int color_id = ui::kColorMenuIcon;
+  const gfx::VectorIcon* vector_icon = &kUserAccountAvatarRefreshIcon;
+  if (base::FeatureList::IsEnabled(switches::kEnableImprovedGuestProfileMenu)) {
+    // Guest profiles generally use the default theme, no need to go through the
+    // `ThemeService`.
+    color_id = ui::kColorSysPrimary;
+    vector_icon = &kAccountBoxIcon;
+  }
+  return ui::ImageModel::FromVectorIcon(*vector_icon, color_id, size);
 }
 
 gfx::Image GetSizedAvatarIcon(const gfx::Image& image,
@@ -498,11 +505,7 @@ ui::ImageModel GetSizedAvatarImageModel(const ui::ImageModel& image, int size) {
             gfx::Size(size, size)));
   }
   const ui::VectorIconModel& model = image.GetVectorIcon();
-  if (model.has_color()) {
-    return ui::ImageModel::FromVectorIcon(*model.vector_icon(), model.color(),
-                                          size);
-  }
-  return ui::ImageModel::FromVectorIcon(*model.vector_icon(), model.color_id(),
+  return ui::ImageModel::FromVectorIcon(*model.vector_icon(), model.color(),
                                         size);
 }
 
@@ -609,7 +612,7 @@ size_t GetPlaceholderAvatarIndex() {
 }
 
 size_t GetModernAvatarIconStartIndex() {
-#if !BUILDFLAG(IS_CHROMEOS_ASH) && !BUILDFLAG(IS_ANDROID)
+#if !BUILDFLAG(IS_CHROMEOS) && !BUILDFLAG(IS_ANDROID)
   return GetPlaceholderAvatarIndex() + 1;
 #else
   // Only use the placeholder avatar on ChromeOS and Android.
@@ -792,7 +795,7 @@ const IconResourceInfo* GetDefaultAvatarIconResourceInfo(size_t index) {
           // Placeholder avatar icon:
           {IDR_PROFILE_AVATAR_26, nullptr, IDS_DEFAULT_AVATAR_LABEL_26},
 
-#if !BUILDFLAG(IS_CHROMEOS_ASH) && !BUILDFLAG(IS_ANDROID)
+#if !BUILDFLAG(IS_CHROMEOS) && !BUILDFLAG(IS_ANDROID)
           // Modern avatar icons:
           {IDR_PROFILE_AVATAR_27, "avatar_origami_cat.png",
            IDS_DEFAULT_AVATAR_LABEL_27},

@@ -631,6 +631,12 @@ public class WebContentsAccessibilityTreeTest {
 
     @Test
     @SmallTest
+    public void test_ariaLabelWithVisualContent() {
+        performAriaTest("aria-label-with-visual-content.html");
+    }
+
+    @Test
+    @SmallTest
     public void test_ariaLabelAugmentInnerText() {
         performAriaTest("aria-label-augment-inner-text.html");
     }
@@ -791,6 +797,12 @@ public class WebContentsAccessibilityTreeTest {
 
     @Test
     @SmallTest
+    public void test_ariaMultiselectableWithAriaLabelledBy() {
+        performAriaTest("aria-multiselectable-aria-labelledby.html");
+    }
+
+    @Test
+    @SmallTest
     public void test_ariaNavigation() {
         performAriaTest("aria-navigation.html");
     }
@@ -854,6 +866,12 @@ public class WebContentsAccessibilityTreeTest {
     @SmallTest
     public void test_ariaParagraph() {
         performAriaTest("aria-paragraph.html");
+    }
+
+    @Test
+    @SmallTest
+    public void test_ariaPosinset() {
+        performAriaTest("aria-posinset.html");
     }
 
     @Test
@@ -1785,6 +1803,18 @@ public class WebContentsAccessibilityTreeTest {
     @SmallTest
     public void test_header() {
         performHtmlTest("header.html");
+    }
+
+    @Test
+    @SmallTest
+    public void test_headingWithHeadingOffset() {
+        performHtmlTest("heading-with-headingoffset.html");
+    }
+
+    @Test
+    @SmallTest
+    public void test_headingWithHeadingOffsetDialog() {
+        performHtmlTest("heading-with-headingoffset-dialog.html");
     }
 
     @Test

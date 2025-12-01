@@ -10,6 +10,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include "api/array_view.h"
 #include "api/video/video_frame_type.h"
 #include "modules/rtp_rtcp/source/rtp_format.h"
 #include "modules/rtp_rtcp/source/rtp_packet_to_send.h"
@@ -34,12 +35,9 @@ void FuzzOneInput(const uint8_t* data, size_t size) {
   VideoFrameType frame_type = fuzz_input.SelectOneOf(kFrameTypes);
 
   // Main function under test: RtpPacketizerAv1's constructor.
-  // "even distribution" is transitional and still exercises the other code path
-  // so does not require another fuzzer.
   RtpPacketizerAv1 packetizer(fuzz_input.ReadByteArray(fuzz_input.BytesLeft()),
                               limits, frame_type,
-                              /*is_last_frame_in_picture=*/true,
-                              /*even_distribution=*/true);
+                              /*is_last_frame_in_picture=*/true);
 
   size_t num_packets = packetizer.NumPackets();
   if (num_packets == 0) {

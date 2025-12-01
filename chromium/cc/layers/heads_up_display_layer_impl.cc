@@ -167,6 +167,7 @@ void HeadsUpDisplayLayerImpl::DidDraw(
 }
 
 void HeadsUpDisplayLayerImpl::AppendQuads(
+    const AppendQuadsContext& context,
     viz::CompositorRenderPass* render_pass,
     AppendQuadsData* append_quads_data) {
   viz::SharedQuadState* shared_quad_state =
@@ -242,33 +243,21 @@ void HeadsUpDisplayLayerImpl::UpdateHudTexture(
     pool_resource = pool_->AcquireResource(
         internal_content_bounds_, raster_caps.tile_format, gfx::ColorSpace());
 
-    if (!pool_resource.gpu_backing()) {
-      auto backing = std::make_unique<ResourcePool::GpuBacking>();
+    if (!pool_resource.backing()) {
       auto* sii = raster_context_provider->SharedImageInterface();
-      backing->overlay_candidate = raster_caps.tile_overlay_candidate;
 
-      gpu::SharedImageUsageSet flags = gpu::SHARED_IMAGE_USAGE_DISPLAY_READ |
-                                       gpu::SHARED_IMAGE_USAGE_RASTER_WRITE;
-      if (raster_caps.use_gpu_rasterization) {
-        flags |= gpu::SHARED_IMAGE_USAGE_OOP_RASTERIZATION;
-      }
-      if (backing->overlay_candidate) {
-        flags |= gpu::SHARED_IMAGE_USAGE_SCANOUT;
-      }
-      backing->shared_image = sii->CreateSharedImage(
-          {pool_resource.format(), pool_resource.size(),
-           pool_resource.color_space(), flags, "HeadsUpDisplayLayer"},
-          gpu::kNullSurfaceHandle);
-      CHECK(backing->shared_image);
+      pool_resource.InstallGpuBacking(sii, raster_caps.tile_overlay_candidate,
+                                      raster_caps.use_gpu_rasterization,
+                                      "HeadsUpDisplayLayer");
+
       auto* ri = raster_context_provider->RasterInterface();
       ri->WaitSyncTokenCHROMIUM(sii->GenUnverifiedSyncToken().GetConstData());
-      pool_resource.set_gpu_backing(std::move(backing));
       needs_clear = true;
-    } else if (pool_resource.gpu_backing()->returned_sync_token.HasData()) {
+    } else if (pool_resource.backing()->returned_sync_token.HasData()) {
       auto* ri = raster_context_provider->RasterInterface();
       ri->WaitSyncTokenCHROMIUM(
-          pool_resource.gpu_backing()->returned_sync_token.GetConstData());
-      pool_resource.gpu_backing()->returned_sync_token = gpu::SyncToken();
+          pool_resource.backing()->returned_sync_token.GetConstData());
+      pool_resource.backing()->returned_sync_token = gpu::SyncToken();
     }
   } else {
     DCHECK_EQ(draw_mode, DRAW_MODE_SOFTWARE);
@@ -279,21 +268,14 @@ void HeadsUpDisplayLayerImpl::UpdateHudTexture(
                                            viz::SinglePlaneFormat::kBGRA_8888,
                                            gfx::ColorSpace());
 
-    if (!pool_resource.software_backing()) {
-      auto backing = std::make_unique<ResourcePool::SoftwareBacking>();
-      backing->shared_image_interface = sii;
-      backing->shared_image = sii->CreateSharedImageForSoftwareCompositor(
-          {pool_resource.format(), pool_resource.size(),
-           pool_resource.color_space(), gpu::SHARED_IMAGE_USAGE_CPU_WRITE_ONLY,
-           "HeadsUpDisplayLayer"});
-      CHECK(backing->shared_image);
-      pool_resource.set_software_backing(std::move(backing));
+    if (!pool_resource.backing()) {
+      pool_resource.InstallSoftwareBacking(sii, "HeadsUpDisplayLayer");
     }
   }
 
   if (draw_mode == DRAW_MODE_HARDWARE) {
-    DCHECK(pool_resource.gpu_backing());
-    auto* backing = pool_resource.gpu_backing();
+    DCHECK(pool_resource.backing());
+    auto* backing = pool_resource.backing();
     auto* ri = raster_context_provider->RasterInterface();
 
     if (raster_caps.use_gpu_rasterization) {
@@ -315,7 +297,7 @@ void HeadsUpDisplayLayerImpl::UpdateHudTexture(
                               gpu::raster::kNoMSAA, can_use_lcd_text,
                               /*visible=*/true, gfx::ColorSpace::CreateSRGB(),
                               /*hdr_headroom=*/1.f,
-                              backing->shared_image->mailbox().name);
+                              backing->shared_image()->mailbox().name);
       constexpr gfx::Vector2dF post_translate(0.f, 0.f);
       constexpr gfx::Vector2dF post_scale(1.f, 1.f);
       DummyImageProvider image_provider;
@@ -347,8 +329,8 @@ void HeadsUpDisplayLayerImpl::UpdateHudTexture(
       SkPixmap pixmap;
       staging_surface_->peekPixels(&pixmap);
 
-      uint32_t texture_target = backing->shared_image->GetTextureTarget();
-      ri->WritePixels(backing->shared_image->mailbox(), /*dst_x_offset=*/0,
+      uint32_t texture_target = backing->shared_image()->GetTextureTarget();
+      ri->WritePixels(backing->shared_image()->mailbox(), /*dst_x_offset=*/0,
                       /*dst_y_offset=*/0, texture_target, pixmap);
     }
 
@@ -359,14 +341,14 @@ void HeadsUpDisplayLayerImpl::UpdateHudTexture(
     // memory bitmap, wrapped in an SkSurface, that can be shared to the display
     // compositor.
     DCHECK_EQ(draw_mode, DRAW_MODE_SOFTWARE);
-    DCHECK(pool_resource.software_backing());
+    DCHECK(pool_resource.backing());
 
     SkImageInfo info = SkImageInfo::MakeN32Premul(
         pool_resource.size().width(), pool_resource.size().height());
     SkSurfaceProps props = skia::LegacyDisplayGlobals::GetSkSurfaceProps();
     const size_t row_bytes = info.minRowBytes();
-    auto* backing = pool_resource.software_backing();
-    auto mapping = backing->shared_image->Map();
+    auto* backing = pool_resource.backing();
+    auto mapping = backing->shared_image()->Map();
     base::span<uint8_t> mem = mapping->GetMemoryForPlane(0);
     CHECK_GE(mem.size(), info.computeByteSize(row_bytes));
     sk_sp<SkSurface> surface =

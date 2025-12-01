@@ -9,7 +9,6 @@ import android.app.ActivityOptions;
 import android.app.PendingIntent;
 import android.content.ClipData;
 import android.content.ClipData.Item;
-import android.content.ClipDescription;
 import android.content.Intent;
 import android.view.DragAndDropPermissions;
 import android.view.DragEvent;
@@ -25,10 +24,8 @@ import org.chromium.base.ResettersForTesting;
 import org.chromium.base.supplier.Supplier;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.multiwindow.MultiWindowUtils;
-import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.content_public.browser.ContentFeatureMap;
 import org.chromium.content_public.common.ContentFeatures;
-import org.chromium.ui.base.MimeTypeUtils;
 import org.chromium.ui.dragdrop.DragAndDropBrowserDelegate;
 import org.chromium.ui.dragdrop.DragDropMetricUtils.UrlIntentSource;
 import org.chromium.ui.dragdrop.DropDataAndroid;
@@ -44,15 +41,6 @@ public class ChromeDragAndDropBrowserDelegate implements DragAndDropBrowserDeleg
     private static Item sItemWithPendingIntentForTesting;
     private static boolean sDefinedItemWithPendingIntentForTesting;
     private static boolean sClipDataItemBuilderNotFound;
-
-    private final String[] mSupportedMimeTypes =
-            new String[] {
-                MimeTypeUtils.CHROME_MIMETYPE_TAB,
-                ClipDescription.MIMETYPE_TEXT_PLAIN,
-                ClipDescription.MIMETYPE_TEXT_INTENT,
-                MimeTypeUtils.CHROME_MIMETYPE_LINK
-            };
-
     private final Supplier<Activity> mActivitySupplier;
     private final boolean mSupportDropInChrome;
     private final boolean mSupportAnimatedImageDragShadow;
@@ -115,48 +103,59 @@ public class ChromeDragAndDropBrowserDelegate implements DragAndDropBrowserDeleg
         return intent;
     }
 
+    @SuppressWarnings("UnusedVariable")
     @Override
     public ClipData buildClipData(@NonNull DropDataAndroid dropData) {
         assert dropData instanceof ChromeDropDataAndroid;
         ChromeDropDataAndroid chromeDropDataAndroid = (ChromeDropDataAndroid) dropData;
-        if (chromeDropDataAndroid.hasTab() && chromeDropDataAndroid.allowTabDragToCreateInstance) {
-            ClipData clipData = buildClipDataForTabTearing(chromeDropDataAndroid.tab);
+
+        // Dragging to create new instance.
+        if (chromeDropDataAndroid.allowDragToCreateInstance) {
+            ClipData clipData =
+                    buildClipDataForTabOrGroupTearing(
+                            chromeDropDataAndroid,
+                            chromeDropDataAndroid.windowId,
+                            /* destWindowId= */ MultiWindowUtils.INVALID_INSTANCE_ID);
             if (clipData != null) return clipData;
         }
-        String text =
-                chromeDropDataAndroid.hasTab()
-                        ? chromeDropDataAndroid.buildTabClipDataText()
-                        : dropData.text;
-        return new ClipData(null, mSupportedMimeTypes, new Item(text));
+
+        // Dragging to existing instances.
+        String text = chromeDropDataAndroid.buildTabClipDataText();
+        return new ClipData(null, chromeDropDataAndroid.getSupportedMimeTypes(), new Item(text));
     }
 
-    private @Nullable ClipData buildClipDataForTabTearing(Tab tab) {
+    private @Nullable ClipData buildClipDataForTabOrGroupTearing(
+            ChromeDropDataAndroid chromeDropDataAndroid, int sourceWindowId, int destWindowId) {
+        @Nullable
         Intent intent =
-                DragAndDropLauncherActivity.getTabIntent(
-                        tab.getContext(), tab, MultiWindowUtils.INVALID_INSTANCE_ID);
-        if (intent != null) {
-            ActivityOptions opts = ActivityOptions.makeBasic();
-            ApiCompatibilityUtils.setCreatorActivityOptionsBackgroundActivityStartMode(opts);
-            PendingIntent pendingIntent =
-                    PendingIntent.getActivity(
-                            tab.getContext(),
-                            0,
-                            intent,
-                            PendingIntent.FLAG_IMMUTABLE,
-                            opts.toBundle());
-            Item item = buildClipDataItemWithPendingIntent(pendingIntent);
-            return item == null
-                    ? new ClipData(null, mSupportedMimeTypes, new Item(intent))
-                    : new ClipData(null, mSupportedMimeTypes, item);
-        }
-        return null;
+                DragAndDropLauncherActivity.buildTabOrGroupIntent(
+                        chromeDropDataAndroid,
+                        mActivitySupplier.get(),
+                        sourceWindowId,
+                        destWindowId);
+
+        if (intent == null) return null;
+        ActivityOptions opts = ActivityOptions.makeBasic();
+        ApiCompatibilityUtils.setCreatorActivityOptionsBackgroundActivityStartMode(opts);
+        PendingIntent pendingIntent =
+                PendingIntent.getActivity(
+                        mActivitySupplier.get(),
+                        0,
+                        intent,
+                        PendingIntent.FLAG_IMMUTABLE,
+                        opts.toBundle());
+        Item item = buildClipDataItemWithPendingIntent(pendingIntent);
+        return new ClipData(
+                null,
+                chromeDropDataAndroid.getSupportedMimeTypes(),
+                (item != null ? item : new Item(intent)));
     }
 
     @Override
     public int buildFlags(int originalFlag, DropDataAndroid dropData) {
         assert dropData instanceof ChromeDropDataAndroid;
         ChromeDropDataAndroid chromeDropData = (ChromeDropDataAndroid) dropData;
-        if (!chromeDropData.hasTab() || !chromeDropData.allowTabDragToCreateInstance) {
+        if (!chromeDropData.hasBrowserContent() || !chromeDropData.allowDragToCreateInstance) {
             return originalFlag;
         }
         return originalFlag

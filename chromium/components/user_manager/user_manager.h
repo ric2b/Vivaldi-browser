@@ -196,9 +196,15 @@ class USER_MANAGER_EXPORT UserManager {
 
   virtual ~UserManager();
 
-  // Returns a list of users who have logged into this device previously. This
-  // is sorted by last login date with the most recent user at the beginning.
-  virtual const UserList& GetUsers() const = 0;
+  // Returns a list of users who have logged into this device previously or
+  // device local users.
+  // Importantly, this does not include followings: Ephemeral users, guest
+  // user, public-account user being removed, even if while logged-in.
+  // They can be found by FindUser() but not included in the result of this
+  // method.
+  // For regular users, this is sorted by last login date with the most
+  // recent user at the beginning.
+  virtual const UserList& GetPersistedUsers() const = 0;
 
   // Returns list of users allowed for logging in into multi-profile session.
   // Users that have a policy that prevents them from being added to the
@@ -243,15 +249,21 @@ class USER_MANAGER_EXPORT UserManager {
   // Returns account Id of the user that was active in the previous session.
   virtual const AccountId& GetLastSessionActiveAccountId() const = 0;
 
-  // Indicates that a user with the given |account_id| has just logged in. The
-  // persistent list is updated accordingly if the user is not ephemeral.
-  // |browser_restart| is true when reloading Chrome after crash to distinguish
-  // from normal sign in flow.
-  // |username_hash| is used to identify homedir mount point.
+  // Indicates that a user with the given `account_id` has just logged in.
+  // `username_hash` is used to identify homedir mount point.
   virtual void UserLoggedIn(const AccountId& account_id,
-                            const std::string& username_hash,
-                            bool browser_restart,
-                            bool is_child) = 0;
+                            const std::string& username_hash) = 0;
+
+  // If there's no user for the given `account_id`, a new is created with
+  // the given `user_type`. `is_ephemeral` is respected only if the `user_type`
+  // is either kRegular or kChild.
+  // If there's the user of `account_id` already (i.e. persisted),
+  // the user is kRegular or kChild, and the given `user_type` is either one,
+  // the type will be updated properly.
+  // Returns whether the new user is created.
+  virtual bool EnsureUser(const AccountId& account_id,
+                          UserType user_type,
+                          bool is_ephemeral) = 0;
 
   // Called when the Profile instance for a user identified by `account_id`
   // is created. `prefs` should be the one that is owned by Profile.
@@ -267,6 +279,8 @@ class USER_MANAGER_EXPORT UserManager {
 
   // Switches to active user identified by |account_id|. User has to be logged
   // in.
+  // NOTE: Please do not call this method directly. Instead, please use
+  // SessionManager::SwitchActiveSession().
   virtual void SwitchActiveUser(const AccountId& account_id) = 0;
 
   // Switches to the last active user (called after crash happens and session

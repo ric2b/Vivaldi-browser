@@ -8,6 +8,7 @@
 #include <functional>
 #include <type_traits>
 #include <utility>
+#include <variant>
 
 #include "base/barrier_callback.h"
 #include "base/functional/callback.h"
@@ -27,7 +28,6 @@
 #include "mojo/public/cpp/bindings/message.h"
 #include "services/network/public/mojom/permissions_policy/permissions_policy_feature.mojom-shared.h"
 #include "third_party/blink/public/common/associated_interfaces/associated_interface_provider.h"
-#include "third_party/blink/public/common/permissions_policy/permissions_policy_features.h"
 #include "third_party/blink/public/common/tokens/tokens.h"
 #include "url/origin.h"
 
@@ -382,13 +382,13 @@ AutofillManager& ContentAutofillDriver::GetAutofillManager() {
 
 std::optional<LocalFrameToken> ContentAutofillDriver::Resolve(
     FrameToken query) {
-  if (absl::holds_alternative<LocalFrameToken>(query)) {
-    return absl::get<LocalFrameToken>(query);
+  if (std::holds_alternative<LocalFrameToken>(query)) {
+    return std::get<LocalFrameToken>(query);
   }
-  DCHECK(absl::holds_alternative<RemoteFrameToken>(query));
+  DCHECK(std::holds_alternative<RemoteFrameToken>(query));
   content::RenderProcessHost* rph = render_frame_host_->GetProcess();
   blink::RemoteFrameToken blink_remote_token(
-      absl::get<RemoteFrameToken>(query).value());
+      std::get<RemoteFrameToken>(query).value());
   content::RenderFrameHost* remote_rfh =
       content::RenderFrameHost::FromPlaceholderToken(rph->GetDeprecatedID(),
                                                      blink_remote_token);
@@ -621,12 +621,11 @@ void ContentAutofillDriver::SelectFieldOptionsDidChange(const FormData& form) {
 void ContentAutofillDriver::JavaScriptChangedAutofilledValue(
     const FormData& form,
     FieldRendererId field_id,
-    const std::u16string& old_value,
-    bool formatting_only) {
+    const std::u16string& old_value) {
   RouteToManager(*this, router(),
                  &AutofillDriverRouter::JavaScriptChangedAutofilledValue,
                  &AutofillManager::OnJavaScriptChangedAutofilledValue, form,
-                 field_id, old_value, formatting_only);
+                 field_id, old_value);
 }
 
 const mojo::AssociatedRemote<mojom::AutofillAgent>&

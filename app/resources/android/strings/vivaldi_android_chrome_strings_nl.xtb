@@ -1,7 +1,10 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="nl">
+<translation id="1204037785786432551">Koppeling downloaden</translation>
+<translation id="1206892813135768548">Koppelingstekst kopiëren</translation>
 <translation id="1397811292916898096">Zoeken met <ph name="PRODUCT_NAME" /></translation>
+<translation id="1435593198351412143">Pdf's automatisch openen</translation>
 <translation id="1456207338570705181">Tikken-om-te-zoeken is een functie die alleen beschikbaar is wanneer Google is ingesteld als standaardzoekmachine in Vivaldi. Het stuurt het geselecteerde woord en de huidige pagina als context naar Google Search. Je kunt het uitschakelen in <ph name="BEGIN_LINK" /> Instellingen <ph name="END_LINK" />.</translation>
 <translation id="1598449788754183301">Normale/Privétabbladen wisselen</translation>
 <translation id="1644574205037202324">Geschiedenis</translation>
@@ -14,10 +17,14 @@
 <translation id="2433507940547922241">Uiterlijk</translation>
 <translation id="2501278716633472235">Ga terug</translation>
 <translation id="2633278372998075009">Privétabs</translation>
+<translation id="2650751991977523696">Bestand opnieuw downloaden?</translation>
 <translation id="265156376773362237">Standaard vooraf laden</translation>
 <translation id="272026394418727548">Vivaldi's startpagina</translation>
+<translation id="2842985007712546952">Bovenliggende map</translation>
 <translation id="2871733351037274014">Pagina's vooraf laden</translation>
+<translation id="2904300462646366554">Gedownloade pdf's worden automatisch geopend met een van de pdf-viewers op je apparaat</translation>
 <translation id="2951071800649516099">Voeg pagina's aan je leeslijst toe voor later</translation>
+<translation id="3029276696788198026">Niet vooraf laden</translation>
 <translation id="3060635849835183725">{BOOKMARKS_COUNT, plural,
           =1 {<ph name="BOOKMARKS_COUNT_ONE" /> bladwijzer}
           other {<ph name="BOOKMARKS_COUNT_MANY" /> bladwijzers}}</translation>
@@ -34,6 +41,7 @@
 <translation id="3719826155360621982">Startpagina</translation>
 <translation id="3738139272394829648">Tikken om te zoeken</translation>
 <translation id="385051799172605136">Terug</translation>
+<translation id="3987993985790029246">Link kopiëren</translation>
 <translation id="399014816462153200">Te lezen artikelen:</translation>
 <translation id="4121750346708795461">Als je deze app gebruikt, ga je akkoord met de <ph name="BEGIN_LINK1" />Licentieovereenkomst voor eindgebruikers<ph name="END_LINK1" /> en het <ph name="BEGIN_LINK2" />Privacybeleid<ph name="END_LINK2" /> van Vivaldi.</translation>
 <translation id="4137746084635924146">Huidige taal van dit apparaat</translation>
@@ -41,10 +49,13 @@
 <translation id="4195643157523330669">Openen op nieuw tabblad</translation>
 <translation id="4225895483398857530">Snelkoppeling voor werkbalk</translation>
 <translation id="4243710787042215766">Openen in privétab</translation>
+<translation id="4269820728363426813">Koppelingsadres kopiëren</translation>
 <translation id="4291407919474070700"><ph name="BEGIN_LINK" />Schermvergrendeling aanzetten via Android-instellingen<ph name="END_LINK" /></translation>
 <translation id="4304713468139749426">Wachtwoordbeheer</translation>
 <translation id="451872707440238414">Bladwijzers doorzoeken</translation>
 <translation id="4526803704855831732">Privétabs</translation>
+<translation id="4532845899244822526">Map kiezen</translation>
+<translation id="4699172675775169585">Afbeeldingen en bestanden in tijdelijke opslag</translation>
 <translation id="4719086422742491124">Leer meer over onderwerpen op websites zonder de pagina te verlaten. Selecteer een of meer woorden op de pagina om ernaar te zoeken.
 
 Tikken-om-te-zoeken is een functie die alleen beschikbaar is wanneer Google is ingesteld als de standaardzoekmachine in Vivaldi.</translation>
@@ -53,23 +64,33 @@ Tikken-om-te-zoeken is een functie die alleen beschikbaar is wanneer Google is i
 <translation id="4883379392681899581">Privémodus verlaten</translation>
 <translation id="4943872375798546930">Geen resultaten</translation>
 <translation id="49576331685473090">Inhoudsblokkering</translation>
-<translation id="5079259810715830221">Wanneer een Google-site vraagt om links van hun pagina vooruit te laden, dan versleutelt Vivaldi en laadt deze pagina's zonder cookies van de Google-servers. Hierdoor blijft jouw identiteit verborgen voor de vooruit geladen website.</translation>
+<translation id="5079259810715830221">Wanneer een Google-site vraagt om koppelingen van hun pagina vooruit te laden, dan versleutelt Vivaldi en laadt deze pagina's zonder cookies van de Google-servers. Hierdoor blijft jouw identiteit verborgen voor de vooruit geladen website.</translation>
 <translation id="5118676864324397542">Opslag van <ph name="APP_NAME" /></translation>
+<translation id="5144385790872094440">Sommige pagina's die je bezoekt, zijn vooraf geladen. Pagina's kunnen vooraf worden geladen via Google-servers als ernaar wordt gelinkt vanaf een Google-site of -app.</translation>
 <translation id="5186185447130319458">Privé</translation>
+<translation id="5206168361184759344">{FILE_COUNT,plural, =1{Bestand downloaden…}other{# bestanden downloaden…}}</translation>
 <translation id="5233638681132016545">Nieuwe tab</translation>
 <translation id="5375131951310889874">Leer meer over onderwerpen op websites zonder de pagina te verlaten. Tikken-om-te-zoeken is een functie die alleen beschikbaar is wanneer Google is ingesteld als standaardzoekmachine in Vivaldi. Het stuurt een woord en de omringende context naar Google Search en retourneert definities, afbeeldingen, zoekresultaten en andere details.
 
 Druk lang op de zoekterm om de selectie aan te passen. Om de zoekopdracht te verfijnen, schuif het paneel helemaal naar boven en tik op het zoekvak.</translation>
+<translation id="543338862236136125">Wachtwoord bewerken</translation>
 <translation id="572328651809341494">Recente tabs</translation>
+<translation id="5833984609253377421">Koppeling delen</translation>
 <translation id="6150320133806434356">Bladwijzer opgeslagen</translation>
+<translation id="6193448654517602979">Tabs selecteren</translation>
 <translation id="6336451774241870485">Nieuwe privétab</translation>
 <translation id="6337323516034698937">Als je dit tabblad naar een ander apparaat wilt sturen, log je op beide apparaten in bij Vivaldi Synchronisatie. Zorg ervoor dat je indien nodig het coderingswachtwoord invoert.</translation>
+<translation id="6341580099087024258">Vragen waar bestanden moeten worden opgeslagen</translation>
 <translation id="6404511346730675251">Bladwijzer bewerken</translation>
+<translation id="650224091954855786">{FILE_COUNT,plural, =1{Bestand gedownload}other{# downloads voltooid}}</translation>
 <translation id="6585139692466700358">Aanbieden om pagina's in andere talen te vertalen met de vertaaldienst van Vivaldi</translation>
 <translation id="6588043302623806746">Beveiligde DNS gebruiken</translation>
 <translation id="6593061639179217415">Desktopwebsite</translation>
 <translation id="6610147964972079463">Privétabs sluiten</translation>
-<translation id="7029995644714925509">Wanneer een website vraagt om links van hun pagina vooruit te laden, dan versleutelt Vivaldi en laadt deze pagina's zonder cookies van de Google-servers. Hierdoor blijft jouw identiteit verborgen voor de vooruit geladen website.</translation>
+<translation id="6627583120233659107">Map bewerken</translation>
+<translation id="6865313869410766144">Formuliergegevens voor automatisch invullen</translation>
+<translation id="6909589135458168665">Pagina's vooraf laden</translation>
+<translation id="7029995644714925509">Wanneer een website vraagt om koppelingen van hun pagina vooruit te laden, dan versleutelt Vivaldi en laadt deze pagina's zonder cookies van de Google-servers. Hierdoor blijft jouw identiteit verborgen voor de vooruit geladen website.</translation>
 <translation id="706339621163631076">Privacybeleid van Vivaldi</translation>
 <translation id="732145680195464316">Bladwijzer opgeslagen in <ph name="PRODUCT_NAME" /></translation>
 <translation id="7324354302972299151">Een Do Not Track-verzoek sturen</translation>
@@ -79,10 +100,13 @@ Druk lang op de zoekterm om de selectie aan te passen. Om de zoekopdracht te ver
 <translation id="7456774706094330779">Uitgebreid vooraf laden</translation>
 <translation id="7465104139234185284">Alle privétabs sluiten</translation>
 <translation id="7481312909269577407">Vooruit</translation>
+<translation id="7764225426217299476">Adres toevoegen</translation>
 <translation id="7968014550143838305">Toegevoegd aan leeslijst</translation>
 <translation id="804786196054284061">Licentieovereenkomst voor eindgebruikers</translation>
 <translation id="8062594758852531064">Uitgebreid vooraf laden:</translation>
+<translation id="8073388330009372546">Afbeelding in nieuwe tab openen</translation>
 <translation id="8127542551745560481">Startpagina bewerken</translation>
+<translation id="8266862848225348053">Downloadlocatie</translation>
 <translation id="8348430946834215779">Waar mogelijk HTTPS gebruiken en waarschuwen voordat er sites worden geladen die dit niet ondersteunen</translation>
 <translation id="8560602726703398413">Bekijk je leeslijst in Bladwijzers</translation>
 <translation id="85991616550051997">Startpagina openen</translation>

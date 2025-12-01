@@ -194,14 +194,15 @@ class CORE_EXPORT LocalDOMWindow final : public DOMWindow,
   void ReportPermissionsPolicyViolation(
       network::mojom::PermissionsPolicyFeature,
       mojom::blink::PolicyDisposition,
-      const std::optional<String>& reporting_endpoint,
+      const String& reporting_endpoint,
       const String& message = g_empty_string) const final;
   void ReportPotentialPermissionsPolicyViolation(
       network::mojom::PermissionsPolicyFeature,
       mojom::blink::PolicyDisposition,
-      const std::optional<String>& reporting_endpoint,
+      const String& reporting_endpoint,
       const String& message = g_empty_string,
-      const String& allow_attribute = g_empty_string) const final;
+      const String& allow_attribute = g_empty_string,
+      const String& src_attribute = g_empty_string) const final;
   void ReportDocumentPolicyViolation(
       mojom::blink::DocumentPolicyFeature,
       mojom::blink::PolicyDisposition,
@@ -627,7 +628,7 @@ class CORE_EXPORT LocalDOMWindow final : public DOMWindow,
   Member<TextSuggestionController> text_suggestion_controller_;
 
   // Map from isolated world IDs to their ContentSecurityPolicy instances.
-  Member<HeapHashMap<int, Member<ContentSecurityPolicy>>>
+  Member<GCedHeapHashMap<int, Member<ContentSecurityPolicy>>>
       isolated_world_csp_map_;
 
   // Tracks which features have already been potentially violated in this

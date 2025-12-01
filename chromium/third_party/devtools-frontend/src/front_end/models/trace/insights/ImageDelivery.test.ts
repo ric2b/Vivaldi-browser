@@ -60,6 +60,22 @@ describeWithEnvironment('ImageDelivery', function() {
                 'https://raw.githubusercontent.com/GoogleChrome/lighthouse/refs/heads/main/cli/test/fixtures/dobetterweb/lighthouse-rotating.gif',
           },
           {
+            byteSavings: 176040,
+            optimizations: [
+              {
+                byteSavings: 134075,
+                type: ImageOptimizationType.MODERN_FORMAT_OR_COMPRESSION,
+              },
+              {
+                byteSavings: 162947,
+                type: ImageOptimizationType.RESPONSIVE_SIZE,
+                fileDimensions: {width: 640, height: 436},
+                displayDimensions: {width: 200, height: 136},
+              },
+            ],
+            url: 'https://onlinepngtools.com/images/examples-onlinepngtools/elephant-hd-quality.png',
+          },
+          {
             byteSavings: 49760,
             optimizations: [
               {
@@ -83,22 +99,29 @@ describeWithEnvironment('ImageDelivery', function() {
             url:
                 'https://raw.githubusercontent.com/GoogleChrome/lighthouse/refs/heads/main/cli/test/fixtures/byte-efficiency/lighthouse-2048x1356.webp',
           },
-          {
-            byteSavings: 176040,
-            optimizations: [
-              {
-                byteSavings: 134075,
-                type: ImageOptimizationType.MODERN_FORMAT_OR_COMPRESSION,
-              },
-              {
-                byteSavings: 162947,
-                type: ImageOptimizationType.RESPONSIVE_SIZE,
-                fileDimensions: {width: 640, height: 436},
-                displayDimensions: {width: 200, height: 136},
-              },
-            ],
-            url: 'https://onlinepngtools.com/images/examples-onlinepngtools/elephant-hd-quality.png',
-          },
+        ],
+    );
+  });
+
+  it('handles responsive image exceptions', async () => {
+    const {data, insights} = await processTrace(this, 'byte-efficiency.json.gz');
+
+    const insight =
+        getInsightOrError('ImageDelivery', insights, getFirstOrError(data.Meta.navigationsByNavigationId.values()));
+    assert.deepEqual(
+        insight.optimizableImages.map(o => o.request.args.data.url).sort(),
+        [
+          // Several additional images would be in this list if we did not ignore them
+          // - A <picture> image
+          // - An image with `srcset`
+          // - CSS background images
+          'http://localhost:10200/byte-efficiency/lighthouse-1024x680.jpg',
+          'http://localhost:10200/byte-efficiency/lighthouse-480x320.jpg',
+          'http://localhost:10200/byte-efficiency/lighthouse-480x320.jpg?attributesized',
+          'http://localhost:10200/byte-efficiency/lighthouse-480x320.webp',
+          // TODO(b/400518751): Assume 2 viewport size for image that isn't rendered.
+          // https://github.com/GoogleChrome/lighthouse/issues/7236
+          // 'localhost:10200/byte-efficiency/lighthouse-2048x1356.webp?size0'
         ],
     );
   });

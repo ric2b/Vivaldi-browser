@@ -8,6 +8,7 @@
 #include "base/memory/weak_ptr.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/threading/thread_checker.h"
+#include "third_party/blink/renderer/platform/graphics/skia/skia_utils.h"
 #include "third_party/blink/renderer/platform/graphics/static_bitmap_image.h"
 #include "third_party/blink/renderer/platform/scheduler/public/thread.h"
 
@@ -41,7 +42,25 @@ class PLATFORM_EXPORT UnacceleratedStaticBitmapImage final
   bool CopyToResourceProvider(CanvasResourceProvider* resource_provider,
                               const gfx::Rect& copy_rect) override;
 
-  SkImageInfo GetSkImageInfo() const override;
+  SkImageInfo GetSkImageInfo() const;
+  gfx::Size GetSize() const override {
+    return gfx::Size(GetSkImageInfo().width(), GetSkImageInfo().height());
+  }
+  SkAlphaType GetAlphaType() const override {
+    return GetSkImageInfo().alphaType();
+  }
+  SkColorType GetSkColorType() const override {
+    return GetSkImageInfo().colorType();
+  }
+  sk_sp<SkColorSpace> GetSkColorSpace() const override {
+    return GetSkImageInfo().refColorSpace();
+  }
+  gfx::ColorSpace GetColorSpace() const override {
+    return SkColorSpaceToGfxColorSpace(GetSkColorSpace());
+  }
+  viz::SharedImageFormat GetSharedImageFormat() const override {
+    return viz::SkColorTypeToSinglePlaneSharedImageFormat(GetSkColorType());
+  }
 
  private:
   UnacceleratedStaticBitmapImage(sk_sp<SkImage>, ImageOrientation);

@@ -27,14 +27,6 @@ const UIStrings = {
    */
   howSchemefulSamesiteWorks: 'How Schemeful Same-Site Works',
   /**
-   *@description Phrase used to describe the security of a context. Substitued like 'a secure context' or 'a secure origin'.
-   */
-  aSecure: 'a secure',  // eslint-disable-line rulesdir/l10n-no-unused-message
-  /**
-   * @description Phrase used to describe the security of a context. Substitued like 'an insecure context' or 'an insecure origin'.
-   */
-  anInsecure: 'an insecure',  // eslint-disable-line rulesdir/l10n-no-unused-message
-  /**
    * @description Label for a link for SameParty Issues. 'Attribute' refers to a cookie attribute.
    */
   firstPartySetsExplained: '`First-Party Sets` and the `SameParty` attribute',
@@ -57,7 +49,7 @@ const UIStrings = {
   consoleTpcdErrorMessage:
       'Third-party cookie is blocked in Chrome either because of Chrome flags or browser configuration.',
 
-};
+} as const;
 const str_ = i18n.i18n.registerUIStrings('models/issues_manager/CookieIssue.ts', UIStrings);
 const i18nLazyString = i18n.i18n.getLazilyComputedLocalizedString.bind(undefined, str_);
 
@@ -627,7 +619,7 @@ const placeholderDescriptionForInvisibleIssues: LazyMarkdownIssueDescription = {
   links: [],
 };
 
-const issueDescriptions: Map<string, LazyMarkdownIssueDescription> = new Map([
+const issueDescriptions = new Map<string, LazyMarkdownIssueDescription>([
   // These two don't have a deprecation date yet, but they need to be fixed eventually.
   ['CookieIssue::WarnSameSiteUnspecifiedLaxAllowUnsafe::ReadCookie', sameSiteUnspecifiedWarnRead],
   ['CookieIssue::WarnSameSiteUnspecifiedLaxAllowUnsafe::SetCookie', sameSiteUnspecifiedWarnSet],

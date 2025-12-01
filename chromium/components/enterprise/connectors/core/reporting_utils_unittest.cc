@@ -6,6 +6,7 @@
 
 #include "components/enterprise/common/proto/synced/browser_events.pb.h"
 #include "components/enterprise/connectors/core/common.h"
+#include "net/base/network_interfaces.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/gurl.h"
 
@@ -124,6 +125,50 @@ TEST(ReportingUtilsTest, GetBrowserCrashEvent) {
   ASSERT_EQ(event.version(), "100.0.0000.000");
   ASSERT_EQ(event.report_id(), "123");
   ASSERT_EQ(event.platform(), "Windows");
+}
+
+TEST(ReportingUtilsTest, TestEventLocalIp) {
+  std::vector<std::string> local_ips = GetLocalIpAddresses();
+  // TODO(crbug.com//394602691): Remove Android build exclusion once IP address
+  // support becomes a requirement for Android devices.
+#if !BUILDFLAG(IS_ANDROID)
+  EXPECT_FALSE(local_ips.empty());
+#endif
+  for (const auto& ip_address : local_ips) {
+    std::optional<net::IPAddress> local_ip =
+        net::IPAddress::FromIPLiteral(ip_address);
+    EXPECT_TRUE(local_ip->IsValid());
+    EXPECT_FALSE(local_ip->IsZero());
+  }
+}
+
+TEST(ReportingUtilsTest, TestMaskUserName) {
+  EXPECT_EQ(MaskUsername(u"fakeuser"), "*****");
+  EXPECT_EQ(MaskUsername(u"fakeuser@gmail.com"), "*****@gmail.com");
+}
+
+TEST(ReportingUtilsTest, TestUrlMatchingForOptInEventReturnsTrue) {
+  ReportingSettings settings;
+  std::map<std::string, std::vector<std::string>> enabled_opt_in_events;
+  enabled_opt_in_events["passwordBreachEvent"].push_back("*");
+  settings.enabled_opt_in_events.insert(enabled_opt_in_events.begin(),
+                                        enabled_opt_in_events.end());
+
+  auto url_matcher = CreateURLMatcherForOptInEvent(std::move(settings),
+                                                   kKeyPasswordBreachEvent);
+  EXPECT_TRUE(IsUrlMatched(url_matcher.get(), GURL("gmail.com")));
+}
+
+TEST(ReportingUtilsTest, TestUrlMatchingForOptInEventReturnsFalse) {
+  ReportingSettings settings;
+  std::map<std::string, std::vector<std::string>> enabled_opt_in_events;
+  enabled_opt_in_events["passwordBreachEvent"].push_back("https://google.com/");
+  settings.enabled_opt_in_events.insert(enabled_opt_in_events.begin(),
+                                        enabled_opt_in_events.end());
+
+  auto url_matcher = CreateURLMatcherForOptInEvent(std::move(settings),
+                                                   kKeyPasswordBreachEvent);
+  EXPECT_FALSE(IsUrlMatched(url_matcher.get(), GURL("gmail.com")));
 }
 
 }  // namespace enterprise_connectors

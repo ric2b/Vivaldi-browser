@@ -2,12 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifndef V8_WASM_WASM_CODE_MANAGER_H_
+#define V8_WASM_WASM_CODE_MANAGER_H_
+
 #if !V8_ENABLE_WEBASSEMBLY
 #error This header should only be included if WebAssembly is enabled.
 #endif  // !V8_ENABLE_WEBASSEMBLY
-
-#ifndef V8_WASM_WASM_CODE_MANAGER_H_
-#define V8_WASM_WASM_CODE_MANAGER_H_
 
 #include <atomic>
 #include <map>
@@ -273,7 +273,26 @@ class V8_EXPORT_PRIVATE WasmCode final {
     int old_count = ref_count_.load(std::memory_order_acquire);
     while (true) {
       DCHECK_LE(1, old_count);
-      if (V8_UNLIKELY(old_count == 1)) return DecRefOnPotentiallyDeadCode();
+      if (V8_UNLIKELY(old_count == 1)) {
+        if (is_dying()) {
+          // The code was already on the path to deletion, only temporary
+          // C++ references to it are left. Decrement the refcount, and
+          // return true if it drops to zero.
+          return DecRefOnDeadCode();
+        }
+        // Otherwise, the code enters the path to destruction now.
+        mark_as_dying();
+        old_count = ref_count_.load(std::memory_order_acquire);
+        if (V8_LIKELY(old_count == 1)) {
+          // No other thread got in the way. Commit to the decision.
+          DecRefOnPotentiallyDeadCode();
+          return false;
+        }
+        // Another thread managed to increment the refcount again, just
+        // before we set the "dying" bit. So undo that, and resume the
+        // loop to evaluate again what needs to be done.
+        undo_mark_as_dying();
+      }
       if (ref_count_.compare_exchange_weak(old_count, old_count - 1,
                                            std::memory_order_acq_rel)) {
         return false;
@@ -321,8 +340,7 @@ class V8_EXPORT_PRIVATE WasmCode final {
     return ForDebuggingField::decode(flags_);
   }
 
-  bool is_dying() const { return dying_; }
-  void mark_as_dying() { dying_ = true; }
+  bool is_dying() const { return dying_.load(std::memory_order_acquire); }
 
   // Returns {true} for Liftoff code that sets up a feedback vector slot in its
   // stack frame.
@@ -405,9 +423,14 @@ class V8_EXPORT_PRIVATE WasmCode final {
   // trap_handler_index.
   void RegisterTrapHandlerData();
 
-  // Slow path for {DecRef}: The code becomes potentially dead.
-  // Returns whether this code becomes dead and needs to be freed.
-  V8_NOINLINE bool DecRefOnPotentiallyDeadCode();
+  // Slow path for {DecRef}: The code becomes potentially dead. Schedule it
+  // for consideration in the next Code GC cycle.
+  V8_NOINLINE void DecRefOnPotentiallyDeadCode();
+
+  void mark_as_dying() { dying_.store(true, std::memory_order_release); }
+  // This is rarely necessary to mitigate a race condition. See the comment
+  // at its (only) call site.
+  void undo_mark_as_dying() { dying_.store(false, std::memory_order_release); }
 
   NativeModule* const native_module_ = nullptr;
   uint8_t* const instructions_;
@@ -557,7 +580,8 @@ class V8_EXPORT_PRIVATE NativeModule final {
   static constexpr ExternalPointerTag kManagedTag = kWasmNativeModuleTag;
 
 #if V8_TARGET_ARCH_X64 || V8_TARGET_ARCH_S390X || V8_TARGET_ARCH_ARM64 || \
-    V8_TARGET_ARCH_PPC64 || V8_TARGET_ARCH_LOONG64 || V8_TARGET_ARCH_RISCV64
+    V8_TARGET_ARCH_PPC64 || V8_TARGET_ARCH_LOONG64 ||                     \
+    V8_TARGET_ARCH_RISCV64 || V8_TARGET_ARCH_MIPS64
   static constexpr bool kNeedsFarJumpsBetweenCodeSpaces = true;
 #else
   static constexpr bool kNeedsFarJumpsBetweenCodeSpaces = false;
@@ -673,10 +697,6 @@ class V8_EXPORT_PRIVATE NativeModule final {
 
   using CallIndirectTargetMap = absl::flat_hash_map<WasmCodePointer, uint32_t>;
   CallIndirectTargetMap CreateIndirectCallTargetToFunctionIndexMap() const;
-
-  // For cctests, where we build both WasmModule and the runtime objects
-  // on the fly, and bypass the instance builder pipeline.
-  void ReserveCodeTableForTesting(uint32_t max_functions);
 
   // Log all owned code in the given isolate, using the given script as the
   // containing script. Use this after transferring the module to a new isolate
@@ -913,8 +933,7 @@ class V8_EXPORT_PRIVATE NativeModule final {
   // Private constructor, called via {WasmCodeManager::NewNativeModule()}.
   NativeModule(WasmEnabledFeatures enabled_features,
                WasmDetectedFeatures detected_features,
-               CompileTimeImports compile_imports,
-               DynamicTiering dynamic_tiering, VirtualMemory code_space,
+               CompileTimeImports compile_imports, VirtualMemory code_space,
                std::shared_ptr<const WasmModule> module,
                std::shared_ptr<Counters> async_counters,
                std::shared_ptr<NativeModule>* shared_this);
@@ -1132,19 +1151,14 @@ class V8_EXPORT_PRIVATE WasmCodeManager final {
   // the function body (wasm byte code).
   static size_t EstimateLiftoffCodeSize(int body_size);
   // Estimate the needed code space from a completely decoded module.
-  static size_t EstimateNativeModuleCodeSize(const WasmModule* module,
-                                             bool include_liftoff,
-                                             DynamicTiering dynamic_tiering);
+  static size_t EstimateNativeModuleCodeSize(const WasmModule*);
   // Estimate the needed code space from the number of functions and total code
   // section length.
   static size_t EstimateNativeModuleCodeSize(int num_functions,
-                                             int num_imported_functions,
-                                             int code_section_length,
-                                             bool include_liftoff,
-                                             DynamicTiering dynamic_tiering);
+                                             int code_section_length);
   // Estimate the size of metadata needed for the NativeModule, excluding
   // generated code. This data is stored on the C++ heap.
-  static size_t EstimateNativeModuleMetaDataSize(const WasmModule* module);
+  static size_t EstimateNativeModuleMetaDataSize(const WasmModule*);
 
   // Returns true if there is hardware support for PKU. Use
   // {MemoryProtectionKeysEnabled} to also check if PKU usage is enabled via
@@ -1191,7 +1205,7 @@ class V8_EXPORT_PRIVATE WasmCodeManager final {
   // and updated after each GC.
   std::atomic<size_t> critical_committed_code_space_;
 
-  mutable base::SpinningMutex native_modules_mutex_;
+  mutable base::Mutex native_modules_mutex_;
 
   //////////////////////////////////////////////////////////////////////////////
   // Protected by {native_modules_mutex_}:

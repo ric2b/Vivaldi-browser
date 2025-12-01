@@ -5,6 +5,7 @@
 #include "chrome/browser/direct_sockets/chrome_direct_sockets_delegate.h"
 
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
+#include "chrome/browser/profiles/profile.h"
 #include "chrome/common/url_constants.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "content/public/browser/render_frame_host.h"
@@ -68,6 +69,14 @@ bool ValidateAddressAndPortForIwa(const RequestDetails& request) {
   }
 }
 
+bool IsContentSettingAllowedForUrl(content::BrowserContext* browser_context,
+                                   const GURL& url,
+                                   ContentSettingsType content_setting) {
+  return HostContentSettingsMapFactory::GetForProfile(browser_context)
+             ->GetContentSetting(url, url, content_setting) ==
+         CONTENT_SETTING_ALLOW;
+}
+
 }  // namespace
 
 bool ChromeDirectSocketsDelegate::ValidateRequest(
@@ -83,9 +92,8 @@ bool ChromeDirectSocketsDelegate::ValidateRequest(
   }
 
   const GURL& url = rfh.GetMainFrame()->GetLastCommittedURL();
-  if (HostContentSettingsMapFactory::GetForProfile(rfh.GetBrowserContext())
-          ->GetContentSetting(url, url, ContentSettingsType::DIRECT_SOCKETS) !=
-      CONTENT_SETTING_ALLOW) {
+  if (!IsContentSettingAllowedForUrl(rfh.GetBrowserContext(), url,
+                                     ContentSettingsType::DIRECT_SOCKETS)) {
     return false;
   }
 
@@ -94,6 +102,24 @@ bool ChromeDirectSocketsDelegate::ValidateRequest(
   }
 
   return false;
+}
+
+bool ChromeDirectSocketsDelegate::ValidateRequestForSharedWorker(
+    content::BrowserContext* browser_context,
+    const GURL& shared_worker_url,
+    const RequestDetails& request) {
+  return IsContentSettingAllowedForUrl(browser_context, shared_worker_url,
+                                       ContentSettingsType::DIRECT_SOCKETS) &&
+         ValidateAddressAndPortForIwa(request);
+}
+
+bool ChromeDirectSocketsDelegate::ValidateRequestForServiceWorker(
+    content::BrowserContext* browser_context,
+    const url::Origin& origin,
+    const RequestDetails& request) {
+  return IsContentSettingAllowedForUrl(browser_context, origin.GetURL(),
+                                       ContentSettingsType::DIRECT_SOCKETS) &&
+         ValidateAddressAndPortForIwa(request);
 }
 
 void ChromeDirectSocketsDelegate::RequestPrivateNetworkAccess(
@@ -106,13 +132,26 @@ void ChromeDirectSocketsDelegate::RequestPrivateNetworkAccess(
     return;
   }
 
-  // TODO(crbug.com/368266657): Show a permission prompt for DS-PNA & ponder
-  // whether this requires transient activation.
-  const GURL& url = rfh.GetMainFrame()->GetLastCommittedURL();
-  std::move(callback).Run(
-      HostContentSettingsMapFactory::GetForProfile(rfh.GetBrowserContext())
-          ->GetContentSetting(
-              url, url,
-              ContentSettingsType::DIRECT_SOCKETS_PRIVATE_NETWORK_ACCESS) ==
-      CONTENT_SETTING_ALLOW);
+  // TODO(crbug.com/368266657): Show a permission prompt for DS-PNA &
+  // ponder whether this requires transient activation.
+  std::move(callback).Run(IsContentSettingAllowedForUrl(
+      rfh.GetBrowserContext(), rfh.GetMainFrame()->GetLastCommittedURL(),
+      ContentSettingsType::DIRECT_SOCKETS_PRIVATE_NETWORK_ACCESS));
+}
+
+bool ChromeDirectSocketsDelegate::IsPrivateNetworkAccessAllowedForSharedWorker(
+    content::BrowserContext* browser_context,
+    const GURL& shared_worker_url) {
+  return IsContentSettingAllowedForUrl(
+      browser_context, shared_worker_url,
+      ContentSettingsType::DIRECT_SOCKETS_PRIVATE_NETWORK_ACCESS);
+}
+
+bool ChromeDirectSocketsDelegate::IsPrivateNetworkAccessAllowedForServiceWorker(
+    content::BrowserContext* browser_context,
+    const url::Origin& origin) {
+  const GURL& url = origin.GetURL();
+  return IsContentSettingAllowedForUrl(
+      browser_context, url,
+      ContentSettingsType::DIRECT_SOCKETS_PRIVATE_NETWORK_ACCESS);
 }

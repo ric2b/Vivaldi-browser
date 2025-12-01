@@ -89,8 +89,7 @@ MagicBoostOptInCard::MagicBoostOptInCard(MagicBoostCardController* controller)
                   gfx::Insets::VH(kBetweenContentsAndButtonsSpacing, 0))
       .SetCollapseMargins(true)
       .SetIgnoreDefaultMainAxisMargins(true);
-  SetBackground(
-      views::CreateThemedSolidBackground(ui::kColorPrimaryBackground));
+  SetBackground(views::CreateSolidBackground(ui::kColorPrimaryBackground));
 
   // Painted to layer so view can be semi-transparent and set rounded corners.
   SetPaintToLayer();
@@ -121,7 +120,7 @@ MagicBoostOptInCard::MagicBoostOptInCard(MagicBoostCardController* controller)
                   .SetImage(ui::ImageModel::FromVectorIcon(
                       kMahiSparkIcon, ui::kColorSysOnPrimaryContainer,
                       kImageViewIconSize))
-                  .SetBackground(views::CreateThemedSolidBackground(
+                  .SetBackground(views::CreateSolidBackground(
                       ui::kColorSysPrimaryContainer))
                   // Painted to layer to set rounded corners.
                   .SetPaintToLayer()
@@ -159,7 +158,7 @@ MagicBoostOptInCard::MagicBoostOptInCard(MagicBoostCardController* controller)
                   .SetText(l10n_util::GetStringUTF16(
                       IDS_ASH_MAGIC_BOOST_OPT_IN_CARD_TITLE))
                   .SetHorizontalAlignment(gfx::ALIGN_LEFT)
-                  .SetEnabledColorId(ui::kColorSysOnSurface)
+                  .SetEnabledColor(ui::kColorSysOnSurface)
                   .SetAutoColorReadabilityEnabled(false)
                   .SetSubpixelRenderingEnabled(false)
                   .SetText(l10n_util::GetStringUTF16(
@@ -175,7 +174,7 @@ MagicBoostOptInCard::MagicBoostOptInCard(MagicBoostCardController* controller)
                   .SetText(l10n_util::GetStringUTF16(
                       IDS_ASH_MAGIC_BOOST_OPT_IN_CARD_BODY))
                   .SetHorizontalAlignment(gfx::ALIGN_LEFT)
-                  .SetEnabledColorId(ui::kColorSysOnSurface)
+                  .SetEnabledColor(ui::kColorSysOnSurface)
                   .SetAutoColorReadabilityEnabled(false)
                   .SetSubpixelRenderingEnabled(false)
                   .SetText(l10n_util::GetStringUTF16(

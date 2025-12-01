@@ -74,6 +74,12 @@
 #include "extensions/common/constants.h"
 #endif  // BUILDFLAG(ENABLE_EXTENSIONS)
 
+// Windows, Mac and CrOS do not clip child widgets to their parents, so we
+// don't have to worry about resizing quite as much.
+#if BUILDFLAG(IS_LINUX)
+#define PLATFORM_CLIPS_CHILD_WINDOWS
+#endif
+
 namespace {
 
 constexpr int kWindowIconImageSize = 16;
@@ -371,8 +377,14 @@ void PictureInPictureBrowserFrameView::ChildDialogObserverHelper::
   gfx::Rect adjusted_bounds = original_bounds;
   if (!child_dialog->IsModal()) {
     // Non-modal dialogs set their bounds directly.  Expand the pip window to
-    // include them, and that's it.
+    // include them, and that's it if we're on a platform that clips child
+    // windows.  If child windows can extend past their parents, then just leave
+    // it all as is.
+#if defined(PLATFORM_CLIPS_CHILD_WINDOWS)
     adjusted_bounds.Union(dialog_bounds);
+#else
+    return;
+#endif
   } else {
     // Modal dialogs will be resized / moved to use the available space, so we
     // only need to make sure that the pip window is big enough, accounting for
@@ -432,66 +444,35 @@ PictureInPictureBrowserFrameView::PictureInPictureBrowserFrameView(
     : BrowserNonClientFrameView(frame, browser_view),
       top_bar_color_animation_(this),
       move_camera_button_to_left_animation_(this),
-      move_camera_button_to_right_animation_(
-          std::vector<gfx::MultiAnimation::Part>{
-              gfx::MultiAnimation::Part(
-                  kMoveCameraButtonToRightAnimationDurations[0],
-                  gfx::Tween::Type::ZERO,
-                  1.0,
-                  1.0),
-              gfx::MultiAnimation::Part(
-                  kMoveCameraButtonToRightAnimationDurations[1],
-                  gfx::Tween::Type::EASE_OUT,
-                  1.0,
-                  0.0)}),
-      show_back_to_tab_button_animation_(std::vector<gfx::MultiAnimation::Part>{
-          gfx::MultiAnimation::Part(kShowBackToTabButtonAnimationDurations[0],
-                                    gfx::Tween::Type::ZERO,
-                                    0.0,
-                                    0.0),
-          gfx::MultiAnimation::Part(kShowBackToTabButtonAnimationDurations[1],
-                                    gfx::Tween::Type::LINEAR,
-                                    0.0,
-                                    1.0),
-          gfx::MultiAnimation::Part(kShowBackToTabButtonAnimationDurations[2],
-                                    gfx::Tween::Type::ZERO,
-                                    1.0,
-                                    1.0)}),
-      hide_back_to_tab_button_animation_(std::vector<gfx::MultiAnimation::Part>{
-          gfx::MultiAnimation::Part(kHideBackToTabButtonAnimationDurations[0],
-                                    gfx::Tween::Type::LINEAR,
-                                    1.0,
-                                    0.0),
-          gfx::MultiAnimation::Part(kHideBackToTabButtonAnimationDurations[1],
-                                    gfx::Tween::Type::ZERO,
-                                    0.0,
-                                    0.0)}),
-      show_close_button_animation_(std::vector<gfx::MultiAnimation::Part>{
-          gfx::MultiAnimation::Part(kCloseButtonAnimationDurations[0],
-                                    gfx::Tween::Type::ZERO,
-                                    0.0,
-                                    0.0),
-          gfx::MultiAnimation::Part(kCloseButtonAnimationDurations[1],
-                                    gfx::Tween::Type::LINEAR,
-                                    0.0,
-                                    1.0),
-          gfx::MultiAnimation::Part(kCloseButtonAnimationDurations[2],
-                                    gfx::Tween::Type::ZERO,
-                                    1.0,
-                                    1.0)}),
-      hide_close_button_animation_(std::vector<gfx::MultiAnimation::Part>{
-          gfx::MultiAnimation::Part(kCloseButtonAnimationDurations[0],
-                                    gfx::Tween::Type::ZERO,
-                                    1.0,
-                                    1.0),
-          gfx::MultiAnimation::Part(kCloseButtonAnimationDurations[1],
-                                    gfx::Tween::Type::LINEAR,
-                                    1.0,
-                                    0.0),
-          gfx::MultiAnimation::Part(kCloseButtonAnimationDurations[2],
-                                    gfx::Tween::Type::ZERO,
-                                    0.0,
-                                    0.0)}),
+      move_camera_button_to_right_animation_(gfx::MultiAnimation::Parts{
+          {kMoveCameraButtonToRightAnimationDurations[0],
+           gfx::Tween::Type::ZERO, 1.0, 1.0},
+          {kMoveCameraButtonToRightAnimationDurations[1],
+           gfx::Tween::Type::EASE_OUT, 1.0, 0.0}}),
+      show_back_to_tab_button_animation_(
+          gfx::MultiAnimation::Parts{{kShowBackToTabButtonAnimationDurations[0],
+                                      gfx::Tween::Type::ZERO, 0.0, 0.0},
+                                     {kShowBackToTabButtonAnimationDurations[1],
+                                      gfx::Tween::Type::LINEAR, 0.0, 1.0},
+                                     {kShowBackToTabButtonAnimationDurations[2],
+                                      gfx::Tween::Type::ZERO, 1.0, 1.0}}),
+      hide_back_to_tab_button_animation_(
+          gfx::MultiAnimation::Parts{{kHideBackToTabButtonAnimationDurations[0],
+                                      gfx::Tween::Type::LINEAR, 1.0, 0.0},
+                                     {kHideBackToTabButtonAnimationDurations[1],
+                                      gfx::Tween::Type::ZERO, 0.0, 0.0}}),
+      show_close_button_animation_(gfx::MultiAnimation::Parts{
+          {kCloseButtonAnimationDurations[0], gfx::Tween::Type::ZERO, 0.0, 0.0},
+          {kCloseButtonAnimationDurations[1], gfx::Tween::Type::LINEAR, 0.0,
+           1.0},
+          {kCloseButtonAnimationDurations[2], gfx::Tween::Type::ZERO, 1.0,
+           1.0}}),
+      hide_close_button_animation_(gfx::MultiAnimation::Parts{
+          {kCloseButtonAnimationDurations[0], gfx::Tween::Type::ZERO, 1.0, 1.0},
+          {kCloseButtonAnimationDurations[1], gfx::Tween::Type::LINEAR, 1.0,
+           0.0},
+          {kCloseButtonAnimationDurations[2], gfx::Tween::Type::ZERO, 0.0,
+           0.0}}),
       show_all_buttons_animation_(kShowHideAllButtonsAnimationDuration,
                                   gfx::LinearAnimation::kDefaultFrameRate,
                                   this),
@@ -659,8 +640,9 @@ PictureInPictureBrowserFrameView::PictureInPictureBrowserFrameView(
                             ->ShouldDrawRestoredFrameShadow();
 
     // This may return null, but that's handled below.
-    window_frame_provider_ =
-        linux_ui_theme->GetWindowFrameProvider(solid_frame, /*tiled=*/false);
+    window_frame_provider_ = linux_ui_theme->GetWindowFrameProvider(
+        solid_frame, /*tiled=*/false,
+        /*maximized=*/frame->IsMaximized());
   }
 
   // Only one of window_frame_provider_ and frame_background_ will be used.

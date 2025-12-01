@@ -12,11 +12,11 @@
 #include "include/android/graphite/SurfaceAndroid.h"
 #include "include/core/SkBitmap.h"
 #include "include/core/SkCanvas.h"
-#include "include/core/SkColorPriv.h"
 #include "include/core/SkColorSpace.h"
 #include "include/core/SkSurface.h"
 #include "include/gpu/graphite/Context.h"
 #include "include/gpu/graphite/Image.h"
+#include "src/core/SkColorPriv.h"
 #include "src/gpu/graphite/Caps.h"
 #include "src/gpu/graphite/ContextPriv.h"
 #include "tests/Test.h"
@@ -169,7 +169,7 @@ void delete_buffer(void* context) {
 DEF_GRAPHITE_TEST_FOR_RENDERING_CONTEXTS(Graphite_AHardwareBuffer_ImportAsSurface,
                                          reporter,
                                          context,
-                                         CtsEnforcement::kApiLevel_V) {
+                                         CtsEnforcement::kApiLevel_202404) {
     if (!context->priv().caps()->supportsAHardwareBufferImages()) {
         return;
     }

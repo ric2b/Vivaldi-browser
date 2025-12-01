@@ -56,16 +56,17 @@ export class AutoTabGroupsPageElement extends CrLitElement {
     };
   }
 
-  availableHeight: number = 0;
-  showBackButton: boolean = false;
+  accessor availableHeight: number = 0;
+  accessor showBackButton: boolean = false;
 
   private apiProxy_: TabSearchApiProxy = TabSearchApiProxyImpl.getInstance();
   private listenerIds_: number[] = [];
-  private state_: TabOrganizationState = TabOrganizationState.kInitializing;
-  protected session_: TabOrganizationSession|null = null;
-  protected showFRE_: boolean =
+  private accessor state_: TabOrganizationState =
+      TabOrganizationState.kInitializing;
+  protected accessor session_: TabOrganizationSession|null = null;
+  protected accessor showFRE_: boolean =
       loadTimeData.getBoolean('showTabOrganizationFRE');
-  protected modelStrategy_: TabOrganizationModelStrategy =
+  protected accessor modelStrategy_: TabOrganizationModelStrategy =
       TabOrganizationModelStrategy.kTopic;
   private documentVisibilityChangedListener_: () => void;
   private futureState_: TabOrganizationState|null = null;
@@ -127,7 +128,7 @@ export class AutoTabGroupsPageElement extends CrLitElement {
 
   override focus() {
     if (this.showBackButton) {
-      const backButton = this.shadowRoot!.querySelector('cr-icon-button')!;
+      const backButton = this.shadowRoot.querySelector('cr-icon-button')!;
       backButton.focus();
     } else {
       super.focus();
@@ -234,7 +235,7 @@ export class AutoTabGroupsPageElement extends CrLitElement {
 
   protected onBackClick_() {
     if (this.session_ && this.state_ !== TabOrganizationState.kNotStarted) {
-      this.apiProxy_.rejectSession(this.session_!.sessionId);
+      this.apiProxy_.rejectSession(this.session_.sessionId);
     } else {
       this.fire('back-click');
     }
@@ -283,15 +284,15 @@ export class AutoTabGroupsPageElement extends CrLitElement {
     switch (event.detail.value) {
       case CrFeedbackOption.UNSPECIFIED:
         this.apiProxy_.setUserFeedback(
-            this.session_!.sessionId, UserFeedback.kUserFeedBackUnspecified);
+            this.session_.sessionId, UserFeedback.kUserFeedBackUnspecified);
         break;
       case CrFeedbackOption.THUMBS_UP:
         this.apiProxy_.setUserFeedback(
-            this.session_!.sessionId, UserFeedback.kUserFeedBackPositive);
+            this.session_.sessionId, UserFeedback.kUserFeedBackPositive);
         break;
       case CrFeedbackOption.THUMBS_DOWN:
         this.apiProxy_.setUserFeedback(
-            this.session_!.sessionId, UserFeedback.kUserFeedBackNegative);
+            this.session_.sessionId, UserFeedback.kUserFeedBackNegative);
         break;
     }
     if (event.detail.value === CrFeedbackOption.THUMBS_DOWN) {

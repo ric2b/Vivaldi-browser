@@ -143,6 +143,37 @@ class MachineLoweringReducer : public Next {
 
         return ui32;
       }
+      case ChangeOrDeoptOp::Kind::kFloat64ToAdditiveSafeInteger: {
+        V<Float64> f64_input = V<Float64>::Cast(input);
+        V<Word64> i64 = __ TruncateFloat64ToInt64OverflowToMin(f64_input);
+        __ DeoptimizeIfNot(
+            __ Float64Equal(__ ChangeInt64ToFloat64(i64), f64_input),
+            frame_state, DeoptimizeReason::kLostPrecisionOrNaN, feedback);
+
+        if (minus_zero_mode == CheckForMinusZeroMode::kCheckForMinusZero) {
+          // Check if {value} is -0.
+          IF (UNLIKELY(__ Word64Equal(i64, 0))) {
+            // In case of 0, we need to check the high bits for the IEEE -0
+            // pattern.
+            V<Word32> check_negative =
+                __ Int32LessThan(__ Float64ExtractHighWord32(f64_input), 0);
+            __ DeoptimizeIf(check_negative, frame_state,
+                            DeoptimizeReason::kMinusZero, feedback);
+          }
+        }
+
+        // Check the value actually fits in AdditiveSafeInteger.
+        // (value - kMinAdditiveSafeInteger) >> 52 == 0.
+        V<Word32> check_is_zero =
+            __ Word64Equal(__ Word64ShiftRightArithmetic(
+                               __ Word64Sub(i64, kMinAdditiveSafeInteger),
+                               kAdditiveSafeIntegerBitLength),
+                           0);
+        __ DeoptimizeIfNot(check_is_zero, frame_state,
+                           DeoptimizeReason::kNotAdditiveSafeInteger, feedback);
+
+        return i64;
+      }
       case ChangeOrDeoptOp::Kind::kFloat64ToInt64: {
         V<Float64> f64_input = V<Float64>::Cast(input);
         V<Word64> i64 = __ TruncateFloat64ToInt64OverflowToMin(f64_input);
@@ -1194,6 +1225,30 @@ class MachineLoweringReducer : public Next {
           BIND(done, result);
           return result;
         }
+      }
+      case ConvertJSPrimitiveToUntaggedOrDeoptOp::UntaggedKind::
+          kAdditiveSafeInteger: {
+        DCHECK_EQ(
+            from_kind,
+            ConvertJSPrimitiveToUntaggedOrDeoptOp::JSPrimitiveKind::kNumber);
+        Label<Word64> done(this);
+
+        IF (LIKELY(__ ObjectIsSmi(object))) {
+          GOTO(done, __ ChangeInt32ToInt64(__ UntagSmi(V<Smi>::Cast(object))));
+        } ELSE {
+          V<Map> map = __ LoadMapField(object);
+          __ DeoptimizeIfNot(
+              __ TaggedEqual(map, __ HeapConstant(factory_->heap_number_map())),
+              frame_state, DeoptimizeReason::kNotAHeapNumber, feedback);
+          V<Float64> heap_number_value =
+              __ LoadHeapNumberValue(V<HeapNumber>::Cast(object));
+          GOTO(done,
+               __ ChangeFloat64ToAdditiveSafeIntegerOrDeopt(
+                   heap_number_value, frame_state, minus_zero_mode, feedback));
+        }
+
+        BIND(done, result);
+        return result;
       }
       case ConvertJSPrimitiveToUntaggedOrDeoptOp::UntaggedKind::kInt64: {
         DCHECK_EQ(
@@ -3148,6 +3203,7 @@ class MachineLoweringReducer : public Next {
   V<Word32> REDUCE(Float64SameValue)(V<Float64> left, V<Float64> right) {
     Label<Word32> done(this);
 
+    // TODO(dmercadier): Optimize if one of the sides is a constant.
     IF (__ Float64Equal(left, right)) {
       // Even if the values are float64-equal, we still need to distinguish
       // zero and minus zero.
@@ -3613,6 +3669,17 @@ class MachineLoweringReducer : public Next {
       case ConvertJSPrimitiveToUntaggedOrDeoptOp::JSPrimitiveKind::
           kNumberOrString:
         UNREACHABLE();
+      case ConvertJSPrimitiveToUntaggedOrDeoptOp::JSPrimitiveKind::
+          kAdditiveSafeInteger: {
+        V<Word32> is_number =
+            __ TaggedEqual(map, __ HeapConstant(factory_->heap_number_map()));
+        __ DeoptimizeIfNot(is_number, frame_state,
+                           DeoptimizeReason::kNotAHeapNumber, feedback);
+        __ ChangeFloat64ToAdditiveSafeIntegerOrDeopt(
+            __ LoadHeapNumberValue(V<HeapNumber>::Cast(heap_object)),
+            frame_state, CheckForMinusZeroMode::kCheckForMinusZero, feedback);
+        break;
+      }
       case ConvertJSPrimitiveToUntaggedOrDeoptOp::JSPrimitiveKind::kNumber: {
         V<Word32> is_number =
             __ TaggedEqual(map, __ HeapConstant(factory_->heap_number_map()));

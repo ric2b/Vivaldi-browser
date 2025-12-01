@@ -1013,6 +1013,13 @@ void ProxyImpl::SetUkmSmoothnessDestination(
   host_impl_->SetUkmSmoothnessDestination(std::move(ukm_smoothness_data));
 }
 
+void ProxyImpl::SetUkmDroppedFramesDestination(
+    base::WritableSharedMemoryMapping ukm_dropped_frames_data) {
+  DCHECK(IsImplThread());
+  host_impl_->SetUkmDroppedFramesDestination(
+      std::move(ukm_dropped_frames_data));
+}
+
 void ProxyImpl::ClearHistory() {
   DCHECK(IsImplThread());
   scheduler_->ClearHistory();
@@ -1047,6 +1054,10 @@ ProxyImpl::DataForCommit::~DataForCommit() = default;
 
 bool ProxyImpl::DataForCommit::IsValid() const {
   return commit_completion_event.get() && commit_state.get() && unsafe_state;
+}
+
+void ProxyImpl::SetShouldThrottleFrameRate(bool flag) {
+  scheduler_->SetShouldThrottleFrameRate(flag);
 }
 
 }  // namespace cc

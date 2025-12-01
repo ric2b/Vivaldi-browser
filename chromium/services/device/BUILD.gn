@@ -13,7 +13,7 @@ if (is_android) {
 }
 
 is_serial_enabled_platform =
-    is_win || ((is_linux || is_chromeos) && use_udev) || is_mac
+    is_win || ((is_linux || is_chromeos) && use_udev) || is_mac || is_android
 
 source_set("lib") {
   # This should be visible only to embedders of the Device Service, and the
@@ -99,6 +99,7 @@ component("binder_overrides") {
     "//base",
     "//mojo/public/cpp/bindings",
     "//services/device/public/mojom",
+    "//services/device/public/mojom:usb",
   ]
   defines = [ "IS_DEVICE_SERVICE_BINDER_OVERRIDES_IMPL" ]
 }
@@ -350,6 +351,10 @@ source_set("tests") {
 
     if (is_android || is_chromeos || is_linux) {
       sources += [ "usb/usb_device_handle_usbfs_unittest.cc" ]
+    }
+
+    if (is_android || is_linux) {
+      sources += [ "usb/usb_interface_detach_allowlist_unittest.cc" ]
     }
   }
 

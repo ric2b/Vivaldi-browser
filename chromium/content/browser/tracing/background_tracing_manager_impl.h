@@ -130,6 +130,8 @@ class BackgroundTracingManagerImpl
   // TracingScenario::Delegate:
   bool OnScenarioActive(TracingScenario* scenario) override;
   bool OnScenarioIdle(TracingScenario* scenario) override;
+  void OnScenarioError(TracingScenario* scenario,
+                       perfetto::TracingError error) override;
   bool OnScenarioCloned(TracingScenario* scenario) override;
   void OnScenarioRecording(TracingScenario* scenario) override;
   void SaveTrace(TracingScenario* scenario,
@@ -231,11 +233,13 @@ class BackgroundTracingManagerImpl
 #endif
 
   bool RequestActivateScenario();
+  void DisableScenarios();
   void AddMetadataGeneratorFunction();
 
   // Named triggers
   bool DoEmitNamedTrigger(const std::string& trigger_name,
-                          std::optional<int32_t>) override;
+                          std::optional<int32_t>,
+                          uint64_t) override;
 
   void OnScenarioAborted();
   static void AddPendingAgent(

@@ -56,9 +56,9 @@
 #include "components/infobars/core/infobar.h"
 #include "components/infobars/core/infobar_delegate.h"
 #include "components/privacy_sandbox/privacy_sandbox_attestations/privacy_sandbox_attestations.h"
+#include "content/public/browser/btm_redirect_info.h"
+#include "content/public/browser/btm_service.h"
 #include "content/public/browser/devtools_agent_host.h"
-#include "content/public/browser/dips_redirect_info.h"
-#include "content/public/browser/dips_service.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/page_navigator.h"
 #include "content/public/browser/ssl_status.h"
@@ -67,7 +67,7 @@
 #include "content/public/common/referrer.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
-#include "content/public/test/dips_service_test_utils.h"
+#include "content/public/test/btm_service_test_utils.h"
 #include "content/public/test/preloading_test_util.h"
 #include "content/public/test/prerender_test_util.h"
 #include "extensions/browser/api/extensions_api_client.h"
@@ -630,9 +630,10 @@ testing::AssertionResult SimulateDipsBounce(content::WebContents* web_contents,
   }
 
   const content::BtmRedirectInfo& redirect = *final_observer.redirects()->at(0);
-  if (redirect.url.url != bounce_url) {
-    return testing::AssertionFailure() << "Expected redirect at " << bounce_url
-                                       << "; found " << redirect.url.url;
+  if (redirect.redirecting_url.url != bounce_url) {
+    return testing::AssertionFailure()
+           << "Expected redirect at " << bounce_url << "; found "
+           << redirect.redirecting_url.url;
   }
 
   if (redirect.access_type != content::BtmDataAccessType::kWrite &&
@@ -1188,12 +1189,10 @@ IN_PROC_BROWSER_TEST_F(ExtensionProtocolTest,
       WaitForNotification("Target.attachedToTarget", true);
   base::Value* targetInfo = attached.Find("targetInfo");
   ASSERT_THAT(targetInfo, testing::NotNull());
-  EXPECT_THAT(
-      targetInfo->GetDict(),
-      base::test::DictionaryHasValue("type", base::Value("service_worker")));
-  EXPECT_THAT(targetInfo->GetDict(),
-              base::test::DictionaryHasValue(
-                  "url", CHECK_DEREF(ext_target.Find("url"))));
+  EXPECT_THAT(*targetInfo, base::test::DictionaryHasValue(
+                               "type", base::Value("service_worker")));
+  EXPECT_THAT(*targetInfo, base::test::DictionaryHasValue(
+                               "url", CHECK_DEREF(ext_target.Find("url"))));
   EXPECT_THAT(attached.FindBool("waitingForDebugger"),
               testing::Optional(false));
 

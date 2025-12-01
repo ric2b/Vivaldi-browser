@@ -1,15 +1,20 @@
 export const description = `
 Tests the behavior of different filtering modes in minFilter/magFilter/mipmapFilter.
+
+Note: It's possible these tests duplicated tests under shader/execution/expression/call/builtin/textureXXX.
+Further, these tests only test encodable/filterable/renderable color formats. Depth, sint, uint,
+and compressed formats are not tested.
 `;
 
 import { makeTestGroup } from '../../../../common/framework/test_group.js';
 import { kAddressModes, kMipmapFilterModes } from '../../../capability_info.js';
 import {
   EncodableTextureFormat,
-  kRenderableColorTextureFormats,
-  kTextureFormatInfo,
+  getTextureFormatType,
+  isTextureFormatColorRenderable,
+  kPossibleColorRenderableTextureFormats,
 } from '../../../format_info.js';
-import { GPUTest, TextureTestMixin } from '../../../gpu_test.js';
+import { AllFeaturesMaxLimitsGPUTest, TextureTestMixin } from '../../../gpu_test.js';
 import { getTextureCopyLayout } from '../../../util/texture/layout.js';
 import { TexelView } from '../../../util/texture/texel_view.js';
 
@@ -22,7 +27,18 @@ const kCheckerTextureData = [
   { R: 1.0, G: 1.0, B: 1.0, A: 1.0 },
 ];
 
-class FilterModeTest extends TextureTestMixin(GPUTest) {
+/**
+ * These formats are possibly renderable and possibly filterable.
+ * One more both may required certain features to be enabled.
+ */
+const kPossiblyRenderablePossiblyFilterableColorTextureFormats =
+  kPossibleColorRenderableTextureFormats.filter(
+    format =>
+      getTextureFormatType(format) === 'float' ||
+      getTextureFormatType(format) === 'unfilterable-float'
+  );
+
+class FilterModeTest extends TextureTestMixin(AllFeaturesMaxLimitsGPUTest) {
   runFilterRenderPipeline(
     sampler: GPUSampler,
     module: GPUShaderModule,
@@ -31,6 +47,12 @@ class FilterModeTest extends TextureTestMixin(GPUTest) {
     vertexCount: number,
     instanceCount: number
   ) {
+    let renderTargetFormat = format;
+    if (!isTextureFormatColorRenderable(this.device, format)) {
+      // If the format is not renderable, we use rgba32float as the render target format
+      // to verify the result, which is always renderable.
+      renderTargetFormat = 'rgba32float';
+    }
     const sampleTexture = this.createTextureFromTexelView(
       TexelView.fromTexelsAsColors(format, coord => {
         const id = coord.x + coord.y * kCheckerTextureSize;
@@ -42,7 +64,7 @@ class FilterModeTest extends TextureTestMixin(GPUTest) {
       }
     );
     const renderTexture = this.createTextureTracked({
-      format,
+      format: renderTargetFormat,
       size: renderSize,
       usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_SRC,
     });
@@ -55,7 +77,7 @@ class FilterModeTest extends TextureTestMixin(GPUTest) {
       fragment: {
         module,
         entryPoint: 'fs_main',
-        targets: [{ format }],
+        targets: [{ format: renderTargetFormat }],
       },
     });
     const bindgroup = this.device.createBindGroup({
@@ -81,7 +103,7 @@ class FilterModeTest extends TextureTestMixin(GPUTest) {
     renderPass.draw(vertexCount, instanceCount);
     renderPass.end();
     this.device.queue.submit([commandEncoder.finish()]);
-    return renderTexture;
+    return { texture: renderTexture, format: renderTargetFormat };
   }
 }
 
@@ -468,26 +490,15 @@ g.test('magFilter,nearest')
   )
   .params(u =>
     u
-      .combine('format', kRenderableColorTextureFormats)
-      .filter(t => {
-        return (
-          kTextureFormatInfo[t.format].color.type === 'float' ||
-          kTextureFormatInfo[t.format].color.type === 'unfilterable-float'
-        );
-      })
+      .combine('format', kPossiblyRenderablePossiblyFilterableColorTextureFormats)
       .beginSubcases()
       .combine('addressModeU', kAddressModes)
       .combine('addressModeV', kAddressModes)
   )
-  .beforeAllSubcases(t => {
-    t.skipIfTextureFormatNotSupported(t.params.format);
-    t.skipIfColorRenderableNotSupportedForFormat(t.params.format);
-    if (kTextureFormatInfo[t.params.format].color.type === 'unfilterable-float') {
-      t.selectDeviceOrSkipTestCase('float32-filterable');
-    }
-  })
   .fn(t => {
     const { format, addressModeU, addressModeV } = t.params;
+    t.skipIfTextureFormatNotSupported(format);
+    t.skipIfTextureFormatNotFilterable(format);
     const sampler = t.device.createSampler({
       addressModeU,
       addressModeV,
@@ -544,8 +555,8 @@ g.test('magFilter,nearest')
       instanceCount
     );
     t.expectTexelViewComparisonIsOkInTexture(
-      { texture: render },
-      expectedColors(format, 'nearest', addressModeU, addressModeV),
+      { texture: render.texture },
+      expectedColors(render.format, 'nearest', addressModeU, addressModeV),
       kNearestRenderDim
     );
   });
@@ -592,26 +603,15 @@ g.test('magFilter,linear')
   )
   .params(u =>
     u
-      .combine('format', kRenderableColorTextureFormats)
-      .filter(t => {
-        return (
-          kTextureFormatInfo[t.format].color.type === 'float' ||
-          kTextureFormatInfo[t.format].color.type === 'unfilterable-float'
-        );
-      })
+      .combine('format', kPossiblyRenderablePossiblyFilterableColorTextureFormats)
       .beginSubcases()
       .combine('addressModeU', kAddressModes)
       .combine('addressModeV', kAddressModes)
   )
-  .beforeAllSubcases(t => {
-    t.skipIfTextureFormatNotSupported(t.params.format);
-    t.skipIfColorRenderableNotSupportedForFormat(t.params.format);
-    if (kTextureFormatInfo[t.params.format].color.type === 'unfilterable-float') {
-      t.selectDeviceOrSkipTestCase('float32-filterable');
-    }
-  })
   .fn(t => {
     const { format, addressModeU, addressModeV } = t.params;
+    t.skipIfTextureFormatNotSupported(format);
+    t.skipIfTextureFormatNotFilterable(format);
     const sampler = t.device.createSampler({
       addressModeU,
       addressModeV,
@@ -670,8 +670,8 @@ g.test('magFilter,linear')
       instanceCount
     );
     t.expectTexelViewComparisonIsOkInTexture(
-      { texture: render },
-      expectedColors(format, 'linear', addressModeU, addressModeV),
+      { texture: render.texture },
+      expectedColors(render.format, 'linear', addressModeU, addressModeV),
       kLinearRenderDim
     );
   });
@@ -728,26 +728,15 @@ g.test('minFilter,nearest')
   )
   .params(u =>
     u
-      .combine('format', kRenderableColorTextureFormats)
-      .filter(t => {
-        return (
-          kTextureFormatInfo[t.format].color.type === 'float' ||
-          kTextureFormatInfo[t.format].color.type === 'unfilterable-float'
-        );
-      })
+      .combine('format', kPossiblyRenderablePossiblyFilterableColorTextureFormats)
       .beginSubcases()
       .combine('addressModeU', kAddressModes)
       .combine('addressModeV', kAddressModes)
   )
-  .beforeAllSubcases(t => {
-    t.skipIfTextureFormatNotSupported(t.params.format);
-    t.skipIfColorRenderableNotSupportedForFormat(t.params.format);
-    if (kTextureFormatInfo[t.params.format].color.type === 'unfilterable-float') {
-      t.selectDeviceOrSkipTestCase('float32-filterable');
-    }
-  })
   .fn(t => {
     const { format, addressModeU, addressModeV } = t.params;
+    t.skipIfTextureFormatNotSupported(format);
+    t.skipIfTextureFormatNotFilterable(format);
     const sampler = t.device.createSampler({
       addressModeU,
       addressModeV,
@@ -808,8 +797,8 @@ g.test('minFilter,nearest')
       instanceCount
     );
     t.expectTexelViewComparisonIsOkInTexture(
-      { texture: render },
-      expectedColors(format, 'nearest', addressModeU, addressModeV),
+      { texture: render.texture },
+      expectedColors(render.format, 'nearest', addressModeU, addressModeV),
       kNearestRenderDim
     );
   });
@@ -862,26 +851,15 @@ g.test('minFilter,linear')
   )
   .params(u =>
     u
-      .combine('format', kRenderableColorTextureFormats)
-      .filter(t => {
-        return (
-          kTextureFormatInfo[t.format].color.type === 'float' ||
-          kTextureFormatInfo[t.format].color.type === 'unfilterable-float'
-        );
-      })
+      .combine('format', kPossiblyRenderablePossiblyFilterableColorTextureFormats)
       .beginSubcases()
       .combine('addressModeU', kAddressModes)
       .combine('addressModeV', kAddressModes)
   )
-  .beforeAllSubcases(t => {
-    t.skipIfTextureFormatNotSupported(t.params.format);
-    t.skipIfColorRenderableNotSupportedForFormat(t.params.format);
-    if (kTextureFormatInfo[t.params.format].color.type === 'unfilterable-float') {
-      t.selectDeviceOrSkipTestCase('float32-filterable');
-    }
-  })
   .fn(t => {
     const { format, addressModeU, addressModeV } = t.params;
+    t.skipIfTextureFormatNotSupported(format);
+    t.skipIfTextureFormatNotFilterable(format);
     const sampler = t.device.createSampler({
       addressModeU,
       addressModeV,
@@ -944,8 +922,8 @@ g.test('minFilter,linear')
       instanceCount
     );
     t.expectTexelViewComparisonIsOkInTexture(
-      { texture: render },
-      expectedColors(format, 'linear', addressModeU, addressModeV),
+      { texture: render.texture },
+      expectedColors(render.format, 'linear', addressModeU, addressModeV),
       kLinearRenderDim
     );
   });
@@ -960,25 +938,20 @@ g.test('mipmapFilter')
   )
   .params(u =>
     u
-      .combine('format', kRenderableColorTextureFormats)
-      .filter(t => {
-        return (
-          kTextureFormatInfo[t.format].color.type === 'float' ||
-          kTextureFormatInfo[t.format].color.type === 'unfilterable-float'
-        );
-      })
+      .combine('format', kPossiblyRenderablePossiblyFilterableColorTextureFormats)
       .beginSubcases()
       .combine('filterMode', kMipmapFilterModes)
   )
-  .beforeAllSubcases(t => {
-    t.skipIfTextureFormatNotSupported(t.params.format);
-    t.skipIfColorRenderableNotSupportedForFormat(t.params.format);
-    if (kTextureFormatInfo[t.params.format].color.type === 'unfilterable-float') {
-      t.selectDeviceOrSkipTestCase('float32-filterable');
-    }
-  })
   .fn(t => {
     const { format, filterMode } = t.params;
+    t.skipIfTextureFormatNotSupported(format);
+    t.skipIfTextureFormatNotFilterable(format);
+    let renderTargetFormat = format;
+    if (!isTextureFormatColorRenderable(t.device, format)) {
+      // If the format is not renderable, we use rgba32float as the render target format
+      // to verify the result, which is always renderable.
+      renderTargetFormat = 'rgba32float';
+    }
     // Takes a 8x8/4x4 mipmapped texture and renders it on multiple quads with different UVs such
     // that each instanced quad from left to right emulates moving the quad further and further from
     // the camera. Each quad is then rendered to a single pixel in a 1-dimensional texture. Since
@@ -1006,7 +979,7 @@ g.test('mipmapFilter')
       }
     );
     const renderTexture = t.createTextureTracked({
-      format,
+      format: renderTargetFormat,
       size: [kRenderSize, 1],
       usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_SRC,
     });
@@ -1056,7 +1029,7 @@ g.test('mipmapFilter')
       fragment: {
         module,
         entryPoint: 'fs_main',
-        targets: [{ format }],
+        targets: [{ format: renderTargetFormat }],
       },
     });
     const bindgroup = t.device.createBindGroup({
@@ -1090,8 +1063,8 @@ g.test('mipmapFilter')
       buffer,
       actual => {
         // Convert the buffer to texel view so we can do comparisons.
-        const layout = getTextureCopyLayout(format, '2d', [kRenderSize, 1, 1]);
-        const view = TexelView.fromTextureDataByReference(format, actual, {
+        const layout = getTextureCopyLayout(renderTargetFormat, '2d', [kRenderSize, 1, 1]);
+        const view = TexelView.fromTextureDataByReference(renderTargetFormat, actual, {
           bytesPerRow: layout.bytesPerRow,
           rowsPerImage: layout.rowsPerImage,
           subrectOrigin: [0, 0, 0],
@@ -1131,7 +1104,7 @@ g.test('mipmapFilter')
             }
             if (changes !== 1) {
               return Error(
-                `Nearest filtering on mipmaps should change exacly once but found (${changes}):\n` +
+                `Nearest filtering on mipmaps should change exactly once but found (${changes}):\n` +
                   view.toString(
                     { x: 0, y: 0, z: 0 },
                     { width: kRenderSize, height: 1, depthOrArrayLayers: 1 }

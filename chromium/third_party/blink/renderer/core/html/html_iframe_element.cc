@@ -26,13 +26,14 @@
 
 #include "base/metrics/histogram_macros.h"
 #include "services/network/public/cpp/features.h"
+#include "services/network/public/cpp/permissions_policy/permissions_policy_declaration.h"
 #include "services/network/public/cpp/web_sandbox_flags.h"
+#include "services/network/public/mojom/permissions_policy/permissions_policy_feature.mojom-blink.h"
 #include "services/network/public/mojom/trust_tokens.mojom-blink.h"
 #include "services/network/public/mojom/web_sandbox_flags.mojom-blink.h"
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/common/permissions_policy/policy_helper_public.h"
 #include "third_party/blink/public/mojom/frame/frame.mojom-blink.h"
-#include "third_party/blink/public/mojom/permissions_policy/permissions_policy.mojom-blink.h"
 #include "third_party/blink/public/mojom/permissions_policy/policy_disposition.mojom-blink.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_html_iframe_element.h"
 #include "third_party/blink/renderer/core/css/css_property_names.h"
@@ -436,9 +437,10 @@ DocumentPolicyFeatureState HTMLIFrameElement::ConstructRequiredPolicy() const {
   return new_required_policy.feature_state;
 }
 
-ParsedPermissionsPolicy HTMLIFrameElement::ConstructContainerPolicy() const {
+network::ParsedPermissionsPolicy HTMLIFrameElement::ConstructContainerPolicy()
+    const {
   if (!GetExecutionContext()) {
-    return ParsedPermissionsPolicy();
+    return network::ParsedPermissionsPolicy();
   }
 
   scoped_refptr<const SecurityOrigin> src_origin =
@@ -449,7 +451,7 @@ ParsedPermissionsPolicy HTMLIFrameElement::ConstructContainerPolicy() const {
   PolicyParserMessageBuffer logger;
 
   // Start with the allow attribute
-  ParsedPermissionsPolicy container_policy =
+  network::ParsedPermissionsPolicy container_policy =
       PermissionsPolicyParser::ParseAttribute(allow_, self_origin, src_origin,
                                               logger, GetExecutionContext());
 
@@ -664,9 +666,11 @@ void HTMLIFrameElement::CheckPotentialPermissionsPolicyViolation() {
   scoped_refptr<const SecurityOrigin> src_origin =
       GetOriginForPermissionsPolicy();
   url::Origin src = src_origin->ToUrlOrigin();
-  ParsedPermissionsPolicy container_policy = ConstructContainerPolicy();
+  network::ParsedPermissionsPolicy container_policy =
+      ConstructContainerPolicy();
   auto& security_context = GetExecutionContext()->GetSecurityContext();
-  for (const auto& feature_desc : GetPermissionsPolicyFeatureList(src)) {
+  for (const auto& feature_desc :
+       network::GetPermissionsPolicyFeatureList(src)) {
     network::mojom::PermissionsPolicyFeature feature = feature_desc.first;
     if (!IsFeatureDeclared(feature, container_policy)) {
       continue;
@@ -674,24 +678,24 @@ void HTMLIFrameElement::CheckPotentialPermissionsPolicyViolation() {
 
     if (auto* permissions_policy = security_context.GetPermissionsPolicy();
         permissions_policy &&
-        !PermissionsPolicy::InheritedValueForFeature(
+        !network::PermissionsPolicy::InheritedValueForFeature(
             src, permissions_policy, feature_desc, container_policy)) {
-      auto endpoint = std::optional<String>(
-          permissions_policy->GetEndpointForFeature(feature));
+      auto endpoint =
+          String::FromUTF8(permissions_policy->GetEndpointForFeature(feature));
       GetExecutionContext()->ReportPotentialPermissionsPolicyViolation(
           feature, mojom::blink::PolicyDisposition::kEnforce, endpoint,
-          /*message*/ "", allow_);
+          /*message*/ "", allow_, src_);
     } else if (auto* report_only_permissions_policy =
                    security_context.GetReportOnlyPermissionsPolicy();
                report_only_permissions_policy &&
-               !PermissionsPolicy::InheritedValueForFeature(
+               !network::PermissionsPolicy::InheritedValueForFeature(
                    src, report_only_permissions_policy, feature_desc,
                    container_policy)) {
-      auto endpoint = std::optional<String>(
-          report_only_permissions_policy->GetEndpointForFeature(feature));
+      auto endpoint =
+          String::FromUTF8(permissions_policy->GetEndpointForFeature(feature));
       GetExecutionContext()->ReportPotentialPermissionsPolicyViolation(
           feature, mojom::blink::PolicyDisposition::kReport, endpoint,
-          /*message*/ "", allow_);
+          /*message*/ "", allow_, src_);
     }
   }
 }

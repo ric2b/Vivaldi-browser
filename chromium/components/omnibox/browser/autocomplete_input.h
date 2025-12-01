@@ -9,6 +9,7 @@
 
 #include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "components/lens/proto/server/lens_overlay_response.pb.h"
@@ -144,7 +145,7 @@ class AutocompleteInput {
     kPrefix,  // `text_` starts with '@'.
     kExact,   // `text_` is exactly '@'.
   };
-  static FeaturedKeywordMode GetFeaturedKeywordMode(const std::u16string& text);
+  static FeaturedKeywordMode GetFeaturedKeywordMode(std::u16string_view text);
 
   // If the input is in the keyword mode for a starter pack engine, returns the
   // starter pack's `TemplateURL` or nullptr. E.g. for "@Gemini text", Gemini
@@ -160,7 +161,7 @@ class AutocompleteInput {
   // updates `input`'s text and cursor position.
   // `model` must be non-null.
   static const TemplateURL* GetSubstitutingTemplateURLForInput(
-      TemplateURLService* model,
+      const TemplateURLService* model,
       AutocompleteInput* input);
 
   // Extracts the keyword from |input| into |keyword|. Any remaining characters
@@ -400,7 +401,7 @@ class AutocompleteInput {
   FeaturedKeywordMode GetFeaturedKeywordMode() const;
 
   // Vivaldi. Stating if omnibox query originates from search field or not.
-  bool from_search_field;
+  bool from_search_field = false;
   std::string search_engine_guid = "";
 
  private:

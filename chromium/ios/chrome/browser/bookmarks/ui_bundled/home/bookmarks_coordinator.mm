@@ -629,14 +629,13 @@ enum class PresentedState {
 
 #pragma mark - BookmarksCommands
 
-- (void)bookmarkWithWebState:(web::WebState*)webState {
+- (void)addBookmarkForWebState:(web::WebState*)webState {
   GURL URL = webState->GetLastCommittedURL();
   NSString* title = tab_util::GetTabTitle(webState);
-  [self createOrEditBookmarkWithURL:[[URLWithTitle alloc] initWithURL:URL
-                                                                title:title]];
+  [self addOrEditBookmark:[[URLWithTitle alloc] initWithURL:URL title:title]];
 }
 
-- (void)bulkCreateBookmarksWithURLs:(NSArray<NSURL*>*)URLs {
+- (void)addBookmarks:(NSArray<NSURL*>*)URLs {
   if (!_bookmarkModel->loaded()) {
     return;
   }
@@ -653,7 +652,7 @@ enum class PresentedState {
                                                        viewAction:viewAction]];
 }
 
-- (void)createOrEditBookmarkWithURL:(URLWithTitle*)URLWithTitle {
+- (void)addOrEditBookmark:(URLWithTitle*)URLWithTitle {
   DCHECK(URLWithTitle) << [self description];
   NSString* title = URLWithTitle.title;
   GURL URL = URLWithTitle.URL;
@@ -681,7 +680,7 @@ enum class PresentedState {
   }
 }
 
-- (void)bookmarkWithFolderChooser:(NSArray<URLWithTitle*>*)URLs {
+- (void)addBookmarksAndShowFolderChooser:(NSArray<URLWithTitle*>*)URLs {
   DCHECK(URLs.count > 0) << "URLs are missing " << [self description];
 
   if (!_bookmarkModel->loaded()) {
@@ -692,7 +691,7 @@ enum class PresentedState {
   [self presentFolderChooser];
 }
 
-- (void)openToExternalBookmark:(GURL)URL {
+- (void)showBookmarkInBookmarksUI:(GURL)URL {
   if (!_bookmarkModel->loaded()) {
     return;
   }

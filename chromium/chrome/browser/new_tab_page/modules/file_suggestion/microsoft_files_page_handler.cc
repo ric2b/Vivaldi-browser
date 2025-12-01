@@ -4,15 +4,14 @@
 
 #include "chrome/browser/new_tab_page/modules/file_suggestion/microsoft_files_page_handler.h"
 
-#include "base/containers/fixed_flat_map.h"
-#include "base/files/file_path.h"
+#include "base/i18n/time_formatting.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/new_tab_page/microsoft_auth/microsoft_auth_service_factory.h"
 #include "chrome/browser/new_tab_page/modules/file_suggestion/file_suggestion.mojom.h"
+#include "chrome/browser/new_tab_page/modules/microsoft_modules_helper.h"
 #include "chrome/grit/generated_resources.h"
-#include "components/search/ntp_features.h"
-#include "net/base/mime_util.h"
 #include "net/http/http_response_headers.h"
 #include "net/http/http_status_code.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
@@ -20,14 +19,12 @@
 #include "services/network/public/mojom/url_response_head.mojom.h"
 #include "ui/base/l10n/l10n_util.h"
 
+using ntp_features::NtpSharepointModuleDataType;
+
 namespace {
 
 const char kTrendingFilesEndpoint[] =
     "https://graph.microsoft.com/v1.0/me/insights/trending";
-
-const char kBaseIconUrl[] =
-    "https://res.cdn.office.net/files/fabric-cdn-prod_20240925.001/assets/"
-    "item-types/16/";
 
 constexpr net::NetworkTrafficAnnotationTag traffic_annotation =
     net::DefineNetworkTrafficAnnotation("microsoft_files_page_handler", R"(
@@ -82,6 +79,8 @@ constexpr net::NetworkTrafficAnnotationTag traffic_annotation =
         })");
 
 const int kMaxResponseSize = 1024 * 1024;
+
+const int kNumberOfDaysPerWeek = 7;
 
 const char kFakeTrendingData[] =
     R"({
@@ -153,7 +152,7 @@ const char kFakeTrendingData[] =
 
 constexpr base::TimeDelta kModuleDismissalDuration = base::Hours(12);
 
-const char kNonInsightsRequestUrl[] = "https://graph.microsoft.com/v1.0/$batch";
+const char kBatchRequestUrl[] = "https://graph.microsoft.com/v1.0/$batch";
 const char kNonInsightsRequestBody[] = R"({
   "requests": [
   {
@@ -184,9 +183,9 @@ const char kNonInsightsFakeData[] =
     R"(openxmlformats-officedocument.wordprocessingml.document"
             },
             "fileSystemInfo": {
-              "lastAccessedDateTime": "2024-01-07T19:13:00Z"
+              "lastAccessedDateTime": "%s"
             },
-            "lastModifiedDateTime": "2024-01-07T19:13:00Z"
+            "lastModifiedDateTime": "%s"
           },
           {
             "id": "2",
@@ -197,9 +196,9 @@ const char kNonInsightsFakeData[] =
     R"(openxmlformats-officedocument.presentationml.presentation"
             },
             "fileSystemInfo": {
-              "lastAccessedDateTime": "2024-01-08T19:13:00Z"
+              "lastAccessedDateTime": "%s"
             },
-            "lastModifiedDateTime": "2024-01-08T17:13:00Z"
+            "lastModifiedDateTime": "%s"
           },
           {
             "id": "3",
@@ -210,9 +209,9 @@ const char kNonInsightsFakeData[] =
     R"(openxmlformats-officedocument.wordprocessingml.document"
             },
             "fileSystemInfo": {
-              "lastAccessedDateTime": "2024-01-05T18:13:00Z"
+              "lastAccessedDateTime": "%s"
             },
-            "lastModifiedDateTime": "2024-05-08T17:12:00Z"
+            "lastModifiedDateTime": "%s"
           }
         ]
       }
@@ -230,10 +229,10 @@ const char kNonInsightsFakeData[] =
               "mimeType": "application/vnd.)"
     R"(openxmlformats-officedocument.spreadsheetml.sheet"
             },
-            "lastModifiedDateTime": "2024-01-17T11:13:00Z",
+            "lastModifiedDateTime": "%s",
             "remoteItem": {
               "shared": {
-                "sharedDateTime": "2024-01-07T11:13:00Z",
+                "sharedDateTime": "%s",
                 "sharedBy": {
                   "user": {
                     "displayName": "User 1"
@@ -250,10 +249,10 @@ const char kNonInsightsFakeData[] =
               "mimeType": "application/vnd.)"
     R"(openxmlformats-officedocument.wordprocessingml.document"
             },
-            "lastModifiedDateTime": "2024-01-08T11:13:00Z",
+            "lastModifiedDateTime": "%s",
             "remoteItem": {
               "shared": {
-                "sharedDateTime": "2024-01-07T11:13:00Z",
+                "sharedDateTime": "%s",
                 "sharedBy": {
                   "user": {
                     "displayName": "User 2"
@@ -270,10 +269,10 @@ const char kNonInsightsFakeData[] =
               "mimeType": "application/vnd.)"
     R"(openxmlformats-officedocument.presentationml.presentation"
             },
-            "lastModifiedDateTime": "2024-01-20T09:13:00Z",
+            "lastModifiedDateTime": "%s",
             "remoteItem": {
               "shared": {
-                "sharedDateTime": "2024-01-05T11:13:00Z",
+                "sharedDateTime": "%s",
                 "sharedBy": {
                   "user": {
                     "displayName": "User 1"
@@ -288,154 +287,35 @@ const char kNonInsightsFakeData[] =
   ]
 })";
 
-// The following are used to create file icon urls.
-constexpr char kAudioIconPartialPath[] = "audio";
-constexpr char kImagesIconPartialPath[] = "photo";
-constexpr char kVideoIconPartialPath[] = "video";
-constexpr char kCodeIconPartialPath[] = "code";
-constexpr char kVectorIconPartialPath[] = "vector";
-constexpr char kXmlDocumentIconPartialPath[] = "docx";
-constexpr char kXmlPresentationIconPartialPath[] = "pptx";
-constexpr char kXmlSpreadsheetIconPartialPath[] = "xlsx";
-constexpr char kPlainTextIconPartialPath[] = "txt";
-constexpr char kCsvIconPartialPath[] = "csv";
-constexpr char kPdfIconPartialPath[] = "pdf";
-constexpr char kRichTextPartialPath[] = "rtf";
-constexpr char kZipPartialPath[] = "zip";
-constexpr char kXmlPartialPath[] = "xml";
-
-std::string GetFileExtension(std::string mime_type) {
-  base::FilePath::StringType extension;
-  net::GetPreferredExtensionForMimeType(mime_type, &extension);
-  std::string result;
-
-#if BUILDFLAG(IS_WIN)
-  // `extension` will be of std::wstring type on Windows which needs to be
-  // handled differently than std::string. See base/files/file_path.h for more
-  // info.
-  result = base::WideToUTF8(extension);
-#else
-  result = extension;
-#endif
-
-  return result;
-}
-
-// Maps files to their icon url. These are simplified mappings derived from
-// https://github.com/microsoft/fluentui/blob/master/packages/react-file-type-icons/src/FileTypeIconMap.ts.
-// TODO(crbug.com/397728601): Investigate a better solution for getting file
-// icon urls and move solution to a helper file to eliminate duplication of url
-// retrieval.
-GURL GetFileIconUrl(std::string mime_type) {
-  const auto kIconMap =
-      base::MakeFixedFlatMap<std::string_view, std::string_view>({
-          // Audio files. Copied from `kStandardAudioTypes` in
-          // net/base/mime_util.cc.
-          {"audio/aac", kAudioIconPartialPath},
-          {"audio/aiff", kAudioIconPartialPath},
-          {"audio/amr", kAudioIconPartialPath},
-          {"audio/basic", kAudioIconPartialPath},
-          {"audio/flac", kAudioIconPartialPath},
-          {"audio/midi", kAudioIconPartialPath},
-          {"audio/mp3", kAudioIconPartialPath},
-          {"audio/mp4", kAudioIconPartialPath},
-          {"audio/mpeg", kAudioIconPartialPath},
-          {"audio/mpeg3", kAudioIconPartialPath},
-          {"audio/ogg", kAudioIconPartialPath},
-          {"audio/vorbis", kAudioIconPartialPath},
-          {"audio/wav", kAudioIconPartialPath},
-          {"audio/webm", kAudioIconPartialPath},
-          {"audio/x-m4a", kAudioIconPartialPath},
-          {"audio/x-ms-wma", kAudioIconPartialPath},
-          {"audio/vnd.rn-realaudio", kAudioIconPartialPath},
-          {"audio/vnd.wave", kAudioIconPartialPath},
-          // Image files. Copied from `kStandardImageTypes` in
-          // net/base/mime_util.cc.
-          {"image/avif", kImagesIconPartialPath},
-          {"image/bmp", kImagesIconPartialPath},
-          {"image/cis-cod", kImagesIconPartialPath},
-          {"image/gif", kImagesIconPartialPath},
-          {"image/heic", kImagesIconPartialPath},
-          {"image/heif", kImagesIconPartialPath},
-          {"image/ief", kImagesIconPartialPath},
-          {"image/jpeg", kImagesIconPartialPath},
-          {"image/pict", kImagesIconPartialPath},
-          {"image/pipeg", kImagesIconPartialPath},
-          {"image/png", kImagesIconPartialPath},
-          {"image/webp", kImagesIconPartialPath},
-          {"image/tiff", kImagesIconPartialPath},
-          {"image/vnd.microsoft.icon", kImagesIconPartialPath},
-          {"image/x-cmu-raster", kImagesIconPartialPath},
-          {"image/x-cmx", kImagesIconPartialPath},
-          {"image/x-icon", kImagesIconPartialPath},
-          {"image/x-portable-anymap", kImagesIconPartialPath},
-          {"image/x-portable-bitmap", kImagesIconPartialPath},
-          {"image/x-portable-graymap", kImagesIconPartialPath},
-          {"image/x-portable-pixmap", kImagesIconPartialPath},
-          {"image/x-rgb", kImagesIconPartialPath},
-          {"image/x-xbitmap", kImagesIconPartialPath},
-          {"image/x-xpixmap", kImagesIconPartialPath},
-          {"image/x-xwindowdump", kImagesIconPartialPath},
-          // Video files. Copied from `kStandardVideoTypes` in
-          // net/base/mime_util.cc.
-          {"video/avi", kVideoIconPartialPath},
-          {"video/divx", kVideoIconPartialPath},
-          {"video/flc", kVideoIconPartialPath},
-          {"video/mp4", kVideoIconPartialPath},
-          {"video/mpeg", kVideoIconPartialPath},
-          {"video/ogg", kVideoIconPartialPath},
-          {"video/quicktime", kVideoIconPartialPath},
-          {"video/sd-video", kVideoIconPartialPath},
-          {"video/webm", kVideoIconPartialPath},
-          {"video/x-dv", kVideoIconPartialPath},
-          {"video/x-m4v", kVideoIconPartialPath},
-          {"video/x-mpeg", kVideoIconPartialPath},
-          {"video/x-ms-asf", kVideoIconPartialPath},
-          {"video/x-ms-wmv", kVideoIconPartialPath},
-          // Older versions of Microsoft Office files.
-          {"application/msword", kXmlDocumentIconPartialPath},
-          {"application/vnd.ms-excel", kXmlSpreadsheetIconPartialPath},
-          {"application/vnd.ms-powerpoint", kXmlPresentationIconPartialPath},
-          // OpenXML files.
-          {"application/"
-           "vnd.openxmlformats-officedocument.presentationml.presentation",
-           kXmlPresentationIconPartialPath},
-          {"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-           kXmlSpreadsheetIconPartialPath},
-          {"application/"
-           "vnd.openxmlformats-officedocument.wordprocessingml.document",
-           kXmlDocumentIconPartialPath},
-          // Other file types.
-          {"text/plain", kPlainTextIconPartialPath},
-          {"application/csv", kCsvIconPartialPath},
-          {"text/csv", kCsvIconPartialPath},
-          {"application/pdf", kPdfIconPartialPath},
-          {"application/rtf", kRichTextPartialPath},
-          {"application/epub+zip", kRichTextPartialPath},
-          {"application/zip", kZipPartialPath},
-          {"text/xml", kXmlPartialPath},
-          {"text/css", kCodeIconPartialPath},
-          {"text/javascript", kCodeIconPartialPath},
-          {"application/json", kCodeIconPartialPath},
-          {"application/rdf+xml", kCodeIconPartialPath},
-          {"application/rss+xml", kCodeIconPartialPath},
-          {"text/x-sh", kCodeIconPartialPath},
-          {"application/xhtml+xml", kCodeIconPartialPath},
-          {"application/postscript", kVectorIconPartialPath},
-          {"image/svg+xml", kVectorIconPartialPath},
-      });
-
-  const auto it = kIconMap.find(mime_type);
-  if (it != kIconMap.end()) {
-    return GURL(kBaseIconUrl).Resolve(std::string(it->second) + ".png");
+const char kCombinedRequestBody[] =
+    R"({
+  "requests": [
+  {
+    "id": "recent",
+    "method": "GET",
+    "url": "/me/drive/recent?$top=50&?)"
+    R"(orderby=fileSystemInfo/lastAccessedDateTime+desc"
+  },
+  {
+    "id": "shared",
+    "method": "GET",
+    "url": "/me/drive/sharedWithMe"
+  },
+  {
+    "id": "trending",
+    "method": "GET",
+    "url": "me/insights/trending?$top=50"
   }
-  return GURL();
+  ]})";
+
+std::string GetTimeNowAsString() {
+  return TimeFormatAsIso8601(base::Time::Now());
 }
 
-// Remove the file extension that is appended to the file name.
-std::string GetFileName(std::string full_name, std::string file_extension) {
-  return full_name.substr(0, full_name.size() - file_extension.size() - 1);
-}
+// The number of responses that should be found in the response body of JSON
+// batch requests.
+constexpr size_t kNonInsightsRequiredResponseSize = 2;
+constexpr size_t kCombinedSuggestionsRequiredResponseSize = 3;
 
 // Emits the total number of Microsoft drive items found in the response. Note:
 // The Microsoft Graph API by default returns a max of 100 files per endpoint.
@@ -460,6 +340,13 @@ void RecordThrottlingWaitTime(base::TimeDelta seconds) {
                           seconds);
 }
 
+// Emits what type of substitution occurred in the third variation:
+// `ntp_features::NtpSharepointModuleDataType::kCombinedSuggestions.`
+void RecordSubstitutionType(MicrosoftFilesSubstitutionType substitution_type) {
+  base::UmaHistogramEnumeration("NewTabPage.MicrosoftFiles.SubstitutionType",
+                                substitution_type);
+}
+
 }  // namespace
 
 // static
@@ -479,7 +366,8 @@ MicrosoftFilesPageHandler::MicrosoftFilesPageHandler(
       microsoft_auth_service_(
           MicrosoftAuthServiceFactory::GetForProfile(profile)),
       pref_service_(profile->GetPrefs()),
-      url_loader_factory_(profile->GetURLLoaderFactory()) {}
+      url_loader_factory_(profile->GetURLLoaderFactory()),
+      variation_type_(ntp_features::kNtpSharepointModuleDataParam.Get()) {}
 
 MicrosoftFilesPageHandler::~MicrosoftFilesPageHandler() = default;
 
@@ -493,38 +381,33 @@ void MicrosoftFilesPageHandler::GetFiles(GetFilesCallback callback) {
     return;
   }
 
-  bool param_is_trending =
-      ntp_features::kNtpSharepointModuleDataParam.Get() ==
-      ntp_features::NtpSharepointModuleDataType::kTrendingInsights;
-  bool param_is_non_insights =
-      ntp_features::kNtpSharepointModuleDataParam.Get() ==
-      ntp_features::NtpSharepointModuleDataType::kNonInsights;
-
   // Ensure requests aren't made when a throttling error must be waited out.
   base::Time retry_after_time =
       pref_service_->GetTime(prefs::kNtpMicrosoftFilesModuleRetryAfterTime);
-  if ((param_is_trending || param_is_non_insights) &&
-      (retry_after_time != base::Time() &&
-       base::Time::Now() < retry_after_time)) {
+  bool is_fake_variation_enabled =
+      variation_type_ ==
+          NtpSharepointModuleDataType::kTrendingInsightsFakeData ||
+      variation_type_ == NtpSharepointModuleDataType::kNonInsightsFakeData;
+  if (!is_fake_variation_enabled && (retry_after_time != base::Time() &&
+                                     base::Time::Now() < retry_after_time)) {
     std::move(callback).Run(std::vector<file_suggestion::mojom::FilePtr>());
     return;
   }
-
-  if (param_is_trending) {
-    GetTrendingFiles(std::move(callback));
-  } else if (param_is_non_insights) {
-    GetRecentlyUsedAndSharedFiles(std::move(callback));
-  } else {
-    // Parse data immediately when displaying fake data.
-    const auto* fake_data = ntp_features::kNtpSharepointModuleDataParam.Get() ==
-                                    ntp_features::NtpSharepointModuleDataType::
-                                        kTrendingInsightsFakeData
-                                ? kFakeTrendingData
-                                : kNonInsightsFakeData;
-    data_decoder::DataDecoder::ParseJsonIsolated(
-        fake_data,
-        base::BindOnce(&MicrosoftFilesPageHandler::OnJsonParsed,
-                       weak_factory_.GetWeakPtr(), std::move(callback)));
+  switch (variation_type_) {
+    case NtpSharepointModuleDataType::kTrendingInsights:
+      RequestFiles(std::move(callback), kTrendingFilesEndpoint, std::nullopt);
+      break;
+    case NtpSharepointModuleDataType::kNonInsights:
+      RequestFiles(std::move(callback), kBatchRequestUrl,
+                   kNonInsightsRequestBody);
+      break;
+    case NtpSharepointModuleDataType::kCombinedSuggestions:
+      RequestFiles(std::move(callback), kBatchRequestUrl, kCombinedRequestBody);
+      break;
+    case NtpSharepointModuleDataType::kTrendingInsightsFakeData:
+    case NtpSharepointModuleDataType::kNonInsightsFakeData:
+      ParseFakeData(std::move(callback));
+      break;
   }
 }
 
@@ -538,10 +421,19 @@ void MicrosoftFilesPageHandler::RestoreModule() {
                          base::Time());
 }
 
-void MicrosoftFilesPageHandler::GetTrendingFiles(GetFilesCallback callback) {
+void MicrosoftFilesPageHandler::RequestFiles(
+    GetFilesCallback callback,
+    std::string request_url,
+    std::optional<std::string> request_body) {
   auto resource_request = std::make_unique<network::ResourceRequest>();
-  resource_request->method = "GET";
-  resource_request->url = GURL(kTrendingFilesEndpoint);
+  if (request_body.has_value()) {
+    resource_request->method = "POST";
+    resource_request->headers.SetHeader(net::HttpRequestHeaders::kContentType,
+                                        "application/json");
+  } else {
+    resource_request->method = "GET";
+  }
+  resource_request->url = GURL(request_url);
   const std::string access_token = microsoft_auth_service_->GetAccessToken();
   const std::string auth_header_value = "Bearer " + access_token;
   resource_request->headers.SetHeader(net::HttpRequestHeaders::kAuthorization,
@@ -551,6 +443,9 @@ void MicrosoftFilesPageHandler::GetTrendingFiles(GetFilesCallback callback) {
 
   url_loader_ = network::SimpleURLLoader::Create(std::move(resource_request),
                                                  traffic_annotation);
+  if (request_body.has_value()) {
+    url_loader_->AttachStringForUpload(request_body.value());
+  }
   url_loader_->DownloadToString(
       url_loader_factory_.get(),
       base::BindOnce(&MicrosoftFilesPageHandler::OnJsonReceived,
@@ -558,37 +453,28 @@ void MicrosoftFilesPageHandler::GetTrendingFiles(GetFilesCallback callback) {
       kMaxResponseSize);
 }
 
-void MicrosoftFilesPageHandler::GetRecentlyUsedAndSharedFiles(
-    GetFilesCallback callback) {
-  auto resource_request = std::make_unique<network::ResourceRequest>();
-  resource_request->method = "POST";
-  resource_request->url = GURL(kNonInsightsRequestUrl);
-  resource_request->headers.SetHeader(net::HttpRequestHeaders::kContentType,
-                                      "application/json");
-  resource_request->headers.SetHeader(net::HttpRequestHeaders::kCacheControl,
-                                      "no-cache");
-  const std::string access_token = microsoft_auth_service_->GetAccessToken();
-  const std::string auth_header_value = "Bearer " + access_token;
-  resource_request->headers.SetHeader(net::HttpRequestHeaders::kAuthorization,
-                                      auth_header_value);
-
-  url_loader_ = network::SimpleURLLoader::Create(std::move(resource_request),
-                                                 traffic_annotation);
-  url_loader_->AttachStringForUpload(kNonInsightsRequestBody);
-
-  url_loader_->DownloadToString(
-      url_loader_factory_.get(),
-      base::BindOnce(&MicrosoftFilesPageHandler::OnJsonReceived,
-                     weak_factory_.GetWeakPtr(), std::move(callback)),
-      kMaxResponseSize);
+void MicrosoftFilesPageHandler::ParseFakeData(GetFilesCallback callback) {
+  const std::string fake_data =
+      variation_type_ == NtpSharepointModuleDataType::kTrendingInsightsFakeData
+          ? kFakeTrendingData
+          : base::StringPrintf(kNonInsightsFakeData, GetTimeNowAsString(),
+                               GetTimeNowAsString(), GetTimeNowAsString(),
+                               GetTimeNowAsString(), GetTimeNowAsString(),
+                               GetTimeNowAsString(), GetTimeNowAsString(),
+                               GetTimeNowAsString(), GetTimeNowAsString(),
+                               GetTimeNowAsString(), GetTimeNowAsString(),
+                               GetTimeNowAsString());
+  data_decoder::DataDecoder::ParseJsonIsolated(
+      fake_data,
+      base::BindOnce(&MicrosoftFilesPageHandler::OnJsonParsed,
+                     weak_factory_.GetWeakPtr(), std::move(callback)));
 }
 
 void MicrosoftFilesPageHandler::OnJsonReceived(
     GetFilesCallback callback,
     std::unique_ptr<std::string> response_body) {
   const int net_error = url_loader_->NetError();
-  MicrosoftFilesRequestResult request_result =
-      MicrosoftFilesRequestResult::kNetworkError;
+  request_result_ = MicrosoftFilesRequestResult::kNetworkError;
 
   // Check for unauthorized and throttling errors.
   auto* response_info = url_loader_->ResponseInfo();
@@ -596,13 +482,13 @@ void MicrosoftFilesPageHandler::OnJsonReceived(
     int64_t wait_time =
         response_info->headers->GetInt64HeaderValue("Retry-After");
     if (wait_time != -1) {
-      request_result = MicrosoftFilesRequestResult::kThrottlingError;
+      request_result_ = MicrosoftFilesRequestResult::kThrottlingError;
       RecordThrottlingWaitTime(base::Seconds(wait_time));
       pref_service_->SetTime(prefs::kNtpMicrosoftFilesModuleRetryAfterTime,
                              base::Time::Now() + base::Seconds(wait_time));
     } else if (response_info->headers->response_code() ==
                net::HTTP_UNAUTHORIZED) {
-      request_result = MicrosoftFilesRequestResult::kAuthError;
+      request_result_ = MicrosoftFilesRequestResult::kAuthError;
       microsoft_auth_service_->SetAuthStateError();
     }
   }
@@ -615,7 +501,7 @@ void MicrosoftFilesPageHandler::OnJsonReceived(
         base::BindOnce(&MicrosoftFilesPageHandler::OnJsonParsed,
                        weak_factory_.GetWeakPtr(), std::move(callback)));
   } else {
-    RecordFilesRequestResult(request_result);
+    RecordFilesRequestResult(request_result_.value());
     std::move(callback).Run(std::vector<file_suggestion::mojom::FilePtr>());
   }
 }
@@ -629,29 +515,36 @@ void MicrosoftFilesPageHandler::OnJsonParsed(
     return;
   }
 
-  bool is_trending_data =
-      ntp_features::kNtpSharepointModuleDataParam.Get() ==
-          ntp_features::NtpSharepointModuleDataType::kTrendingInsights ||
-      ntp_features::kNtpSharepointModuleDataParam.Get() ==
-          ntp_features::NtpSharepointModuleDataType::kTrendingInsightsFakeData;
-  if (is_trending_data) {
-    CreateTrendingFiles(std::move(callback), std::move(result->GetDict()));
-  } else {
-    CreateRecentlyUsedAndSharedFiles(std::move(callback),
-                                     std::move(result->GetDict()));
+  std::vector<file_suggestion::mojom::FilePtr> suggestions;
+  switch (variation_type_) {
+    case NtpSharepointModuleDataType::kTrendingInsights:
+    case NtpSharepointModuleDataType::kTrendingInsightsFakeData:
+      suggestions = GetTrendingFiles(std::move(result->GetDict()));
+      break;
+    case NtpSharepointModuleDataType::kNonInsights:
+    case NtpSharepointModuleDataType::kNonInsightsFakeData:
+      suggestions = GetRecentlyUsedAndSharedFiles(std::move(result->GetDict()));
+      break;
+    case NtpSharepointModuleDataType::kCombinedSuggestions:
+      suggestions = GetAggregatedFileSuggestions(std::move(result->GetDict()));
+      break;
   }
+
+  RecordRequestMetrics();
+  std::move(callback).Run(std::move(suggestions));
 }
 
-void MicrosoftFilesPageHandler::CreateTrendingFiles(GetFilesCallback callback,
-                                                    base::Value::Dict result) {
+std::vector<file_suggestion::mojom::FilePtr>
+MicrosoftFilesPageHandler::GetTrendingFiles(base::Value::Dict result) {
   auto* suggestions = result.FindList("value");
   if (!suggestions) {
-    RecordFilesRequestResult(MicrosoftFilesRequestResult::kContentError);
-    std::move(callback).Run(std::vector<file_suggestion::mojom::FilePtr>());
-    return;
+    request_result_ = MicrosoftFilesRequestResult::kContentError;
+    return std::vector<file_suggestion::mojom::FilePtr>();
   }
-
-  RecordResponseValueCount(suggestions->size());
+  num_files_in_response_ =
+      num_files_in_response_.has_value()
+          ? num_files_in_response_.value() + suggestions->size()
+          : suggestions->size();
 
   std::vector<file_suggestion::mojom::FilePtr> created_suggestions;
   const size_t num_max_files =
@@ -670,12 +563,12 @@ void MicrosoftFilesPageHandler::CreateTrendingFiles(GetFilesCallback callback,
         "resourceVisualization.mediaType");
 
     if (!id || !title || !url || !mime_type) {
-      RecordFilesRequestResult(MicrosoftFilesRequestResult::kContentError);
-      std::move(callback).Run(std::vector<file_suggestion::mojom::FilePtr>());
-      return;
+      request_result_ = MicrosoftFilesRequestResult::kContentError;
+      return std::vector<file_suggestion::mojom::FilePtr>();
     }
 
-    std::string file_extension = GetFileExtension(*mime_type);
+    std::string file_extension =
+        microsoft_modules_helper::GetFileExtension(*mime_type);
     // Skip creating file suggestion if there's an error mapping the mime-type
     // to an extension as the extension is needed for the file's `icon_url.`
     if (file_extension.empty()) {
@@ -687,45 +580,162 @@ void MicrosoftFilesPageHandler::CreateTrendingFiles(GetFilesCallback callback,
     created_file->id = *id;
     created_file->justification_text = l10n_util::GetStringUTF8(
         IDS_NTP_MODULES_MICROSOFT_FILES_TRENDING_JUSTIFICATION_TEXT);
-    GURL icon_url = GetFileIconUrl(*mime_type);
+    GURL icon_url = microsoft_modules_helper::GetFileIconUrl(*mime_type);
     if (!icon_url.is_valid()) {
       continue;
     }
     created_file->icon_url = icon_url;
     created_file->title = *title;
     created_file->item_url = GURL(*url);
+    created_file->recommendation_type =
+        file_suggestion::mojom::RecommendationType::kTrending;
     created_suggestions.push_back(std::move(created_file));
   }
 
-  RecordFilesRequestResult(MicrosoftFilesRequestResult::kSuccess);
-  std::move(callback).Run(std::move(created_suggestions));
+  request_result_ = MicrosoftFilesRequestResult::kSuccess;
+  return created_suggestions;
 }
 
-void MicrosoftFilesPageHandler::CreateRecentlyUsedAndSharedFiles(
-    GetFilesCallback callback,
+std::vector<std::pair<base::Time, file_suggestion::mojom::FilePtr>>
+MicrosoftFilesPageHandler::GetNonInsightFiles(const base::Value::List* values,
+                                              std::string response_id) {
+  int num_recent_suggestions = 0;
+  std::vector<std::pair<base::Time, file_suggestion::mojom::FilePtr>>
+      unsorted_suggestions;
+
+  num_files_in_response_ = num_files_in_response_.has_value()
+                               ? num_files_in_response_.value() + values->size()
+                               : values->size();
+  const file_suggestion::mojom::RecommendationType recommendation_type =
+      response_id == "recent"
+          ? file_suggestion::mojom::RecommendationType::kUsed
+          : file_suggestion::mojom::RecommendationType::kShared;
+  for (const auto& suggestion : *values) {
+    // Only allow a couple suggestions from the recent endpoint as the
+    // response sends the files ordered by the
+    // `fileSystemInfo.lastAccessedTime` in descending order. All shared
+    // suggestions should be added because there isn't a great way to request
+    // for the files to be ordered by the shared date. The number of recent
+    // suggestions is limited to avoid having to sort more files than needed
+    // in `SortRecentlyUsedAndSharedFiles`.
+    if (recommendation_type ==
+            file_suggestion::mojom::RecommendationType::kUsed &&
+        (num_recent_suggestions ==
+         ntp_features::kNtpMicrosoftFilesModuleMaxFilesParam.Get())) {
+      break;
+    }
+
+    const auto& suggestion_dict = suggestion.GetDict();
+    const std::string* id = suggestion_dict.FindString("id");
+    const std::string* title = suggestion_dict.FindString("name");
+    const std::string* item_url = suggestion_dict.FindString("webUrl");
+    const std::string* mime_type =
+        suggestion_dict.FindStringByDottedPath("file.mimeType");
+    const std::string* last_opened_time_str =
+        suggestion_dict.FindStringByDottedPath(
+            "fileSystemInfo.lastAccessedDateTime");
+    const std::string* last_modified_time_str =
+        suggestion_dict.FindString("lastModifiedDateTime");
+    const std::string* shared_by = suggestion_dict.FindStringByDottedPath(
+        "remoteItem.shared.sharedBy.user.displayName");
+    const std::string* shared_time_str = suggestion_dict.FindStringByDottedPath(
+        "remoteItem.shared.sharedDateTime");
+
+    // There may be some suggestions that are not files (the file property
+    // will be null), so skip those.
+    if (!mime_type) {
+      continue;
+    }
+
+    // Time used to sort the file suggestions. Files with more recent time
+    // values will be ranked higher when displayed.
+    base::Time sort_time;
+
+    // `fileSystemInfo.lastAccessedTime` should be available for suggestions
+    // from recent files. Shared files should not have null `shared`
+    // properties.
+    bool suggestion_has_formatted_time =
+        response_id == "recent"
+            ? last_opened_time_str &&
+                  base::Time::FromUTCString(last_opened_time_str->c_str(),
+                                            &sort_time)
+            : shared_by && shared_time_str &&
+                  base::Time::FromUTCString(shared_time_str->c_str(),
+                                            &sort_time);
+    if (!id || !title || !item_url || !last_modified_time_str ||
+        !suggestion_has_formatted_time) {
+      request_result_ = MicrosoftFilesRequestResult::kContentError;
+      return std::vector<
+          std::pair<base::Time, file_suggestion::mojom::FilePtr>>();
+    }
+
+    std::string file_extension =
+        microsoft_modules_helper::GetFileExtension(*mime_type);
+    // Skip creating file suggestion if there's an error mapping the mime-type
+    // to an extension as the extension is needed for the file's `icon_url.`
+    if (file_extension.empty()) {
+      continue;
+    }
+
+    // Skip any recent files that were opened more than a week ago. It's safe
+    // to assume any other file that comes after this one has a greater time
+    // difference because the Microsoft Graph response is sorted in descending
+    // order. Also skip old shared files. All shared files will need to
+    // be checked because they may arrive unordered in the response.
+    base::TimeDelta time_difference =
+        base::Time::Now().LocalMidnight() - sort_time.LocalMidnight();
+    if (recommendation_type ==
+            file_suggestion::mojom::RecommendationType::kUsed &&
+        time_difference.InDays() > kNumberOfDaysPerWeek) {
+      break;
+    } else if (recommendation_type ==
+                   file_suggestion::mojom::RecommendationType::kShared &&
+               time_difference.InDays() > kNumberOfDaysPerWeek) {
+      continue;
+    }
+
+    file_suggestion::mojom::FilePtr created_file =
+        file_suggestion::mojom::File::New();
+    created_file->id = *id;
+    created_file->justification_text =
+        recommendation_type ==
+                file_suggestion::mojom::RecommendationType::kShared
+            ? CreateJustificationTextForSharedFile(*shared_by)
+            : CreateJustificationTextForRecentFile(sort_time);
+    GURL icon_url = microsoft_modules_helper::GetFileIconUrl(*mime_type);
+    if (!icon_url.is_valid()) {
+      continue;
+    }
+    created_file->icon_url = icon_url;
+    created_file->title =
+        microsoft_modules_helper::GetFileName(*title, file_extension);
+    created_file->item_url = GURL(*item_url);
+    created_file->recommendation_type = recommendation_type;
+    if (recommendation_type ==
+        file_suggestion::mojom::RecommendationType::kUsed) {
+      num_recent_suggestions++;
+    }
+    unsorted_suggestions.emplace_back(sort_time, std::move(created_file));
+  }
+
+  request_result_ = MicrosoftFilesRequestResult::kSuccess;
+  return unsorted_suggestions;
+}
+
+std::vector<file_suggestion::mojom::FilePtr>
+MicrosoftFilesPageHandler::GetRecentlyUsedAndSharedFiles(
     base::Value::Dict result) {
   auto* responses = result.FindList("responses");
   if (!responses) {
-    RecordFilesRequestResult(MicrosoftFilesRequestResult::kContentError);
-    std::move(callback).Run(std::vector<file_suggestion::mojom::FilePtr>());
-    return;
+    request_result_ = MicrosoftFilesRequestResult::kContentError;
+    return std::vector<file_suggestion::mojom::FilePtr>();
   }
 
   // The response body should contain a list that has 2 dictionaries - one for
   // each request, with their own lists containing file data.
-  if (responses->size() != 2) {
-    RecordFilesRequestResult(MicrosoftFilesRequestResult::kContentError);
-    std::move(callback).Run(std::vector<file_suggestion::mojom::FilePtr>());
-    return;
-  } else {
-    const base::Value::List* first_response =
-        (*responses)[0].GetDict().FindListByDottedPath("body.value");
-    const base::Value::List* second_response =
-        (*responses)[1].GetDict().FindListByDottedPath("body.value");
-    if (first_response && second_response) {
-      const int total_count = first_response->size() + second_response->size();
-      RecordResponseValueCount(total_count);
-    }
+  if (responses->size() != kNonInsightsRequiredResponseSize) {
+    request_result_ = MicrosoftFilesRequestResult::kContentError;
+    return std::vector<file_suggestion::mojom::FilePtr>();
   }
 
   std::vector<std::pair<base::Time, file_suggestion::mojom::FilePtr>>
@@ -735,107 +745,29 @@ void MicrosoftFilesPageHandler::CreateRecentlyUsedAndSharedFiles(
     const auto& response_dict = response.GetDict();
     const std::string* response_id = response_dict.FindString("id");
     auto* suggestions = response_dict.FindListByDottedPath("body.value");
-
-    if (!suggestions) {
-      RecordFilesRequestResult(MicrosoftFilesRequestResult::kContentError);
-      std::move(callback).Run(std::vector<file_suggestion::mojom::FilePtr>());
-      return;
+    if (!response_id || !suggestions) {
+      request_result_ = MicrosoftFilesRequestResult::kContentError;
+      return std::vector<file_suggestion::mojom::FilePtr>();
     }
-    int num_recent_suggestions = 0;
-    for (const auto& suggestion : *suggestions) {
-      // Only allow a couple suggestions from the recent endpoint as the
-      // response sends the files ordered by the
-      // `fileSystemInfo.lastAccessedTime` in descending order. All shared
-      // suggestions should be added because there isn't a great way to request
-      // for the files to be ordered by the shared date. The number of recent
-      // suggestions is limited to avoid having to sort more files than needed
-      // in `SortAndRemoveDuplicates`.
-      if (*response_id == "recent" &&
-          (num_recent_suggestions ==
-           ntp_features::kNtpMicrosoftFilesModuleMaxFilesParam.Get())) {
-        break;
-      }
-
-      const auto& suggestion_dict = suggestion.GetDict();
-      const std::string* id = suggestion_dict.FindString("id");
-      const std::string* title = suggestion_dict.FindString("name");
-      const std::string* item_url = suggestion_dict.FindString("webUrl");
-      const std::string* mime_type =
-          suggestion_dict.FindStringByDottedPath("file.mimeType");
-      const std::string* last_opened_time_str =
-          suggestion_dict.FindStringByDottedPath(
-              "fileSystemInfo.lastAccessedDateTime");
-      const std::string* last_modified_time_str =
-          suggestion_dict.FindString("lastModifiedDateTime");
-      const std::string* shared_by = suggestion_dict.FindStringByDottedPath(
-          "remoteItem.shared.sharedBy.user.displayName");
-      const std::string* shared_time_str =
-          suggestion_dict.FindStringByDottedPath(
-              "remoteItem.shared.sharedDateTime");
-
-      // There may be some suggestions that are not files (the file property
-      // will be null), so skip those.
-      if (!mime_type) {
-        continue;
-      }
-
-      // Time used to sort the file suggestions. Files with more recent time
-      // values will be ranked higher when displayed.
-      base::Time sort_time;
-
-      // `fileSystemInfo.lastAccessedTime` should be available for suggestions
-      // from recent files. Shared files should not have null `shared`
-      // properties.
-      bool suggestion_has_formatted_time =
-          *response_id == "recent"
-              ? last_opened_time_str &&
-                    base::Time::FromString(last_opened_time_str->c_str(),
-                                           &sort_time)
-              : shared_by && shared_time_str &&
-                    base::Time::FromString(shared_time_str->c_str(),
-                                           &sort_time);
-      if (!id || !title || !item_url || !last_modified_time_str ||
-          !suggestion_has_formatted_time) {
-        RecordFilesRequestResult(MicrosoftFilesRequestResult::kContentError);
-        std::move(callback).Run(std::vector<file_suggestion::mojom::FilePtr>());
-        return;
-      }
-
-      std::string file_extension = GetFileExtension(*mime_type);
-      // Skip creating file suggestion if there's an error mapping the mime-type
-      // to an extension as the extension is needed for the file's `icon_url.`
-      if (file_extension.empty()) {
-        continue;
-      }
-
-      file_suggestion::mojom::FilePtr created_file =
-          file_suggestion::mojom::File::New();
-      created_file->id = *id;
-      // TODO(386385623): Create justification text for file type.
-      created_file->justification_text = "Recently shared or used";
-      GURL icon_url = GetFileIconUrl(*mime_type);
-      if (!icon_url.is_valid()) {
-        continue;
-      }
-      created_file->icon_url = icon_url;
-      created_file->title = GetFileName(*title, file_extension);
-      created_file->item_url = GURL(*item_url);
-      if (*response_id == "recent") {
-        num_recent_suggestions++;
-      }
-      unsorted_suggestions.emplace_back(sort_time, std::move(created_file));
+    std::vector<std::pair<base::Time, file_suggestion::mojom::FilePtr>>
+        file_suggestions =
+            GetNonInsightFiles(std::move(suggestions), *response_id);
+    std::move(file_suggestions.begin(), file_suggestions.end(),
+              std::back_inserter(unsorted_suggestions));
+    // Do not continue if at any point the request result is not successful.
+    if (request_result_.value() != MicrosoftFilesRequestResult::kSuccess) {
+      return std::vector<file_suggestion::mojom::FilePtr>();
     }
   }
 
-  std::vector<file_suggestion::mojom::FilePtr> sorted_suggestions =
-      SortAndRemoveDuplicates(std::move(unsorted_suggestions));
-
-  RecordFilesRequestResult(MicrosoftFilesRequestResult::kSuccess);
-  std::move(callback).Run(std::move(sorted_suggestions));
+  std::vector<file_suggestion::mojom::FilePtr> final_suggestions =
+      DeduplicateAndLimitSuggestions(
+          SortRecentlyUsedAndSharedFiles(std::move(unsorted_suggestions)));
+  return final_suggestions;
 }
 
 std::vector<file_suggestion::mojom::FilePtr>
-MicrosoftFilesPageHandler::SortAndRemoveDuplicates(
+MicrosoftFilesPageHandler::SortRecentlyUsedAndSharedFiles(
     std::vector<std::pair<base::Time, file_suggestion::mojom::FilePtr>>
         suggestions) {
   // Sort the suggestions in descending order based on 1) for recent files - the
@@ -845,8 +777,19 @@ MicrosoftFilesPageHandler::SortAndRemoveDuplicates(
       suggestions, std::greater<base::Time>{},
       [&](const auto& suggestion) { return suggestion.first; });
 
-  std::vector<file_suggestion::mojom::FilePtr> final_suggestions;
+  std::vector<file_suggestion::mojom::FilePtr> sorted_suggestions;
+  std::transform(
+      suggestions.begin(), suggestions.end(),
+      std::back_inserter(sorted_suggestions),
+      [&](const auto& suggestion) { return suggestion.second.Clone(); });
 
+  return sorted_suggestions;
+}
+
+std::vector<file_suggestion::mojom::FilePtr>
+MicrosoftFilesPageHandler::DeduplicateAndLimitSuggestions(
+    std::vector<file_suggestion::mojom::FilePtr> suggestions) {
+  std::vector<file_suggestion::mojom::FilePtr> final_suggestions;
   const size_t num_max_files =
       ntp_features::kNtpMicrosoftFilesModuleMaxFilesParam.Get();
   for (const auto& suggestion : suggestions) {
@@ -856,15 +799,146 @@ MicrosoftFilesPageHandler::SortAndRemoveDuplicates(
     // Ensure duplicates are not added to the final file list.
     bool is_duplicate = false;
     for (const auto& file : final_suggestions) {
-      if (suggestion.second->id == file->id) {
+      if (suggestion->id == file->id) {
         is_duplicate = true;
         break;
       }
     }
     if (!is_duplicate) {
-      file_suggestion::mojom::FilePtr file_copy = suggestion.second->Clone();
+      file_suggestion::mojom::FilePtr file_copy = suggestion->Clone();
       final_suggestions.push_back(std::move(file_copy));
     }
   }
   return final_suggestions;
+}
+
+std::string MicrosoftFilesPageHandler::CreateJustificationTextForRecentFile(
+    base::Time opened_time) {
+  base::Time time_now = base::Time::Now();
+  base::TimeDelta time_difference =
+      time_now.LocalMidnight() - opened_time.LocalMidnight();
+  // The difference between the time now and `opened_time` in days.
+  int num_days_difference = time_difference.InDays();
+
+  switch (num_days_difference) {
+    case 0:
+      return l10n_util::GetStringUTF8(
+          IDS_NTP_MODULES_MICROSOFT_FILES_OPENED_TODAY_JUSTIFICATION_TEXT);
+    case 1:
+      return l10n_util::GetStringUTF8(
+          IDS_NTP_MODULES_MICROSOFT_FILES_OPENED_YESTERDAY_JUSTIFICATION_TEXT);
+    default:
+      return l10n_util::GetStringUTF8(
+          IDS_NTP_MODULES_MICROSOFT_FILES_OPENED_PAST_WEEK_JUSTIFICATION_TEXT);
+  }
+}
+
+std::string MicrosoftFilesPageHandler::CreateJustificationTextForSharedFile(
+    std::string shared_by) {
+  return l10n_util::GetStringFUTF8(
+      IDS_NTP_MODULES_MICROSOFT_FILES_SHARED_BY_JUSTIFICATION_TEXT,
+      base::UTF8ToUTF16(shared_by));
+}
+
+std::vector<file_suggestion::mojom::FilePtr>
+MicrosoftFilesPageHandler::GetAggregatedFileSuggestions(
+    base::Value::Dict result) {
+  auto* responses = result.FindList("responses");
+  if (!responses) {
+    request_result_ = MicrosoftFilesRequestResult::kContentError;
+    return std::vector<file_suggestion::mojom::FilePtr>();
+  }
+
+  // The response body should contain a list that has a dictionary for each
+  // request, with their own lists containing file data.
+  if (responses->size() != kCombinedSuggestionsRequiredResponseSize) {
+    request_result_ = MicrosoftFilesRequestResult::kContentError;
+    return std::vector<file_suggestion::mojom::FilePtr>();
+  }
+
+  std::vector<file_suggestion::mojom::FilePtr> trending_suggestions;
+  std::vector<std::pair<base::Time, file_suggestion::mojom::FilePtr>>
+      unsorted_non_insight_suggestions;
+  for (const auto& response : *responses) {
+    auto& response_dict = response.GetDict();
+    const std::string* response_id = response_dict.FindString("id");
+    auto response_body = response_dict.FindDict("body")->Clone();
+    auto* body_value = response_dict.FindListByDottedPath("body.value");
+    if (!response_id) {
+      request_result_ = MicrosoftFilesRequestResult::kContentError;
+      return std::vector<file_suggestion::mojom::FilePtr>();
+    } else if (*response_id == "trending") {
+      trending_suggestions = GetTrendingFiles(std::move(response_body));
+    } else {
+      std::vector<std::pair<base::Time, file_suggestion::mojom::FilePtr>>
+          non_insight_suggestions =
+              GetNonInsightFiles(std::move(body_value), *response_id);
+      std::move(non_insight_suggestions.begin(), non_insight_suggestions.end(),
+                std::back_inserter(unsorted_non_insight_suggestions));
+    }
+    // Do not continue if at any point the request result is not successful.
+    if (request_result_.value() != MicrosoftFilesRequestResult::kSuccess) {
+      return std::vector<file_suggestion::mojom::FilePtr>();
+    }
+  }
+
+  // Sort and deduplicate the non-insight suggestions.
+  std::vector<file_suggestion::mojom::FilePtr> sorted_non_insight_suggestions =
+      DeduplicateAndLimitSuggestions(SortRecentlyUsedAndSharedFiles(
+          std::move(unsorted_non_insight_suggestions)));
+
+  std::vector<file_suggestion::mojom::FilePtr> all_suggestions;
+
+  // Allow the trending files to be substituted by recently used/shared if there
+  // are less than `kNtpMicrosoftFilesModuleMaxTrendingFilesForCombinedParam.`
+  // It's possible that less than the max allowed non-insight files are added,
+  // in which case more trending files (if available) will be added to keep the
+  // card full.
+  const size_t initial_trending_files_limit =
+      ntp_features::kNtpMicrosoftFilesModuleMaxTrendingFilesForCombinedParam
+          .Get();
+  const size_t initial_non_insights_limit =
+      ntp_features::kNtpMicrosoftFilesModuleMaxNonInsightsFilesForCombinedParam
+          .Get();
+  const size_t non_insights_limit =
+      trending_suggestions.size() >= initial_trending_files_limit
+          ? initial_non_insights_limit
+          : ntp_features::kNtpMicrosoftFilesModuleMaxFilesParam.Get() -
+                trending_suggestions.size();
+
+  for (const auto& suggestion : sorted_non_insight_suggestions) {
+    if (all_suggestions.size() == non_insights_limit) {
+      break;
+    }
+    all_suggestions.push_back(suggestion->Clone());
+  }
+  // Check whether there were more files added of either non-insights or
+  // trending files than their initial limits.
+  MicrosoftFilesSubstitutionType substitution_type =
+      MicrosoftFilesSubstitutionType::kNone;
+  if (all_suggestions.size() < initial_non_insights_limit &&
+      trending_suggestions.size() > initial_trending_files_limit) {
+    substitution_type = MicrosoftFilesSubstitutionType::kExtraTrending;
+  } else if (all_suggestions.size() > initial_non_insights_limit) {
+    substitution_type = MicrosoftFilesSubstitutionType::kExtraNonInsights;
+  }
+
+  std::move(trending_suggestions.begin(), trending_suggestions.end(),
+            std::back_inserter(all_suggestions));
+  RecordSubstitutionType(substitution_type);
+  // Deduplicate to ensure trending suggestions are not duplicates of a used or
+  // shared file.
+  std::vector<file_suggestion::mojom::FilePtr> final_suggestions =
+      DeduplicateAndLimitSuggestions(std::move(all_suggestions));
+  return final_suggestions;
+}
+
+void MicrosoftFilesPageHandler::RecordRequestMetrics() {
+  if (num_files_in_response_.has_value()) {
+    RecordResponseValueCount(num_files_in_response_.value());
+  }
+  DCHECK(request_result_.has_value());
+  RecordFilesRequestResult(request_result_.value());
+  request_result_.reset();
+  num_files_in_response_.reset();
 }

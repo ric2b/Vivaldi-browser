@@ -6,6 +6,7 @@
 #define SYSTEM_API_DBUS_CHAPS_DBUS_CONSTANTS_H_
 
 #include <stdint.h>
+
 #include <cstdint>
 
 namespace chaps {

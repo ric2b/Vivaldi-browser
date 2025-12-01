@@ -5,6 +5,9 @@
 #ifndef V8_OBJECTS_SHARED_FUNCTION_INFO_INL_H_
 #define V8_OBJECTS_SHARED_FUNCTION_INFO_INL_H_
 
+#include "src/objects/shared-function-info.h"
+// Include the non-inl header before the rest of the headers.
+
 #include <optional>
 
 #include "src/base/macros.h"
@@ -22,17 +25,16 @@
 #include "src/objects/objects-inl.h"
 #include "src/objects/scope-info-inl.h"
 #include "src/objects/script-inl.h"
-#include "src/objects/shared-function-info.h"
 #include "src/objects/string.h"
 #include "src/objects/templates-inl.h"
-
-// Has to be the last include (doesn't have include guards):
-#include "src/objects/object-macros.h"
 
 #if V8_ENABLE_WEBASSEMBLY
 #include "src/wasm/wasm-module.h"
 #include "src/wasm/wasm-objects.h"
 #endif  // V8_ENABLE_WEBASSEMBLY
+
+// Has to be the last include (doesn't have include guards):
+#include "src/objects/object-macros.h"
 
 namespace v8::internal {
 
@@ -397,6 +399,8 @@ BIT_FIELD_ACCESSORS(SharedFunctionInfo, relaxed_flags, properties_are_final,
 BIT_FIELD_ACCESSORS(SharedFunctionInfo, relaxed_flags,
                     private_name_lookup_skips_outer_class,
                     SharedFunctionInfo::PrivateNameLookupSkipsOuterClassBit)
+BIT_FIELD_ACCESSORS(SharedFunctionInfo, relaxed_flags, live_edited,
+                    SharedFunctionInfo::LiveEditedBit)
 
 bool SharedFunctionInfo::optimization_disabled() const {
   return disabled_optimization_reason() != BailoutReason::kNoReason;
@@ -1011,7 +1015,9 @@ void SharedFunctionInfo::ClearPreparseData(IsolateForSandbox isolate) {
                 UncompiledData::kHeaderSize);
 
   // Fill the remaining space with filler and clear slots in the trimmed area.
-  heap->NotifyObjectSizeChange(data, UncompiledDataWithPreparseData::kSize,
+  int old_size = data->Size();
+  DCHECK_LE(UncompiledDataWithPreparseData::kSize, old_size);
+  heap->NotifyObjectSizeChange(data, old_size,
                                UncompiledDataWithoutPreparseData::kSize,
                                ClearRecordedSlots::kYes);
 
@@ -1025,7 +1031,7 @@ void SharedFunctionInfo::ClearPreparseData(IsolateForSandbox isolate) {
 }
 
 void UncompiledData::InitAfterBytecodeFlush(
-    IsolateForSandbox isolate, Tagged<String> inferred_name, int start_position,
+    Isolate* isolate, Tagged<String> inferred_name, int start_position,
     int end_position,
     std::function<void(Tagged<HeapObject> object, ObjectSlot slot,
                        Tagged<HeapObject> target)>

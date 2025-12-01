@@ -187,8 +187,6 @@ class PLATFORM_EXPORT PaintArtifactCompositor final
   // noncomposited nodes, and is used for Scroll Unification to generate scroll
   // nodes for noncomposited scrollers to complete the compositor's scroll
   // property tree.
-  using StackScrollTranslationVector =
-      HeapVector<Member<const TransformPaintPropertyNode>, 32>;
   void Update(const PaintArtifact& artifact,
               const ViewportProperties& viewport_properties,
               const StackScrollTranslationVector& scroll_translation_nodes,
@@ -235,6 +233,7 @@ class PLATFORM_EXPORT PaintArtifactCompositor final
   ContentLayerClientImpl* ContentLayerClientForTesting(wtf_size_t i) const;
 
   void SetLCDTextPreference(LCDTextPreference);
+  void SetDevicePixelRatio(float ratio);
 
   // Returns true if a property tree node associated with |element_id| exists
   // on any of the PropertyTrees constructed by |Update|.
@@ -328,6 +327,7 @@ class PLATFORM_EXPORT PaintArtifactCompositor final
   UpdateType previous_update_for_testing_ = UpdateType::kNone;
 
   LCDTextPreference lcd_text_preference_ = LCDTextPreference::kIgnored;
+  float device_pixel_ratio_ = 1.f;
 
   scoped_refptr<cc::Layer> root_layer_;
 

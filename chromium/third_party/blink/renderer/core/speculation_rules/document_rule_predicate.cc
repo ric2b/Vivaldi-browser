@@ -236,8 +236,8 @@ class CSSSelectorPredicate : public DocumentRulePredicate {
     const ComputedStyle* computed_style = link.GetComputedStyle();
     DCHECK(computed_style);
     DCHECK(!DisplayLockUtilities::LockedAncestorPreventingStyle(link));
-    const Persistent<HeapHashSet<WeakMember<StyleRule>>>& matched_selectors =
-        computed_style->DocumentRulesSelectors();
+    const Persistent<GCedHeapHashSet<WeakMember<StyleRule>>>&
+        matched_selectors = computed_style->DocumentRulesSelectors();
     if (!matched_selectors) {
       return false;
     }
@@ -543,11 +543,11 @@ DocumentRulePredicate* DocumentRulePredicate::Parse(
     }
     // Let patterns be an empty list.
     HeapVector<Member<URLPattern>> patterns;
+    v8::Isolate* isolate = execution_context->GetIsolate();
     // For each rawPattern of rawPatterns:
     for (JSONValue* raw_pattern : raw_patterns) {
-      URLPattern* pattern =
-          ParseRawPattern(execution_context->GetIsolate(), raw_pattern,
-                          base_url, IGNORE_EXCEPTION, out_error);
+      URLPattern* pattern = ParseRawPattern(
+          isolate, raw_pattern, base_url, IgnoreException(isolate), out_error);
       // If those steps throw, `pattern` will be null. Ignore the exception and
       // return null.
       if (!pattern) {

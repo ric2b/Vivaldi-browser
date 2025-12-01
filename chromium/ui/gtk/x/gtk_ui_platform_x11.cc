@@ -44,11 +44,6 @@ void GtkUiPlatformX11::OnInitialized(GtkWidget* widget) {
   x11::SetXlibErrorHandler();
 }
 
-GdkKeymap* GtkUiPlatformX11::GetGdkKeymap() {
-  DCHECK(!gtk::GtkCheckVersion(4));
-  return gdk_keymap_get_for_display(GetGdkDisplay());
-}
-
 GdkModifierType GtkUiPlatformX11::GetGdkKeyEventState(
     const ui::KeyEvent& key_event) {
   return gtk::GetGdkKeyEventState(key_event);
@@ -123,6 +118,12 @@ GtkUiPlatformX11::CreateInputMethodContext(
 
 bool GtkUiPlatformX11::IncludeFontScaleInDeviceScale() const {
   return true;
+}
+
+bool GtkUiPlatformX11::IncludeScaleInCursorSize() const {
+  // GTK4 supports per-monitor scaling in 4.9.2+, so the gtk-cursor-theme-size
+  // is not premultiplied by the scale factor.
+  return GtkCheckVersion(4, 9, 2);
 }
 
 }  // namespace gtk

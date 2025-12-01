@@ -19,6 +19,8 @@
 - (void)setPreferenceShowSpeedDials:(BOOL)showSpeedDials;
 // Updates the state with the show start page customize preference value.
 - (void)setPreferenceShowCustomizeStartPageButton:(BOOL)showCustomizeButton;
+// Updates the state with the show start page Add button preference value.
+- (void)setPreferenceShowAddButton:(BOOL)showAddButton;
 // Updates the state with the speed dial layout style preference value
 - (void)setPreferenceSpeedDialLayout:(VivaldiStartPageLayoutStyle)layout;
 // Updates the state with the speed dial maximum number columns preference value

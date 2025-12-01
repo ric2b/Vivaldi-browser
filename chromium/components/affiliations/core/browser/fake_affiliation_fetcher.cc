@@ -17,18 +17,27 @@ FakeAffiliationFetcher::FakeAffiliationFetcher(
 FakeAffiliationFetcher::~FakeAffiliationFetcher() = default;
 
 void FakeAffiliationFetcher::SimulateSuccess(
-    std::unique_ptr<AffiliationFetcherDelegate::Result> fake_result) {
-  delegate_->OnFetchSucceeded(this, std::move(fake_result));
+    const ParsedFetchResponse& fake_result_data) {
+  FetchResult result;
+  result.data = fake_result_data;
+  // TODO(crbug.com/371938601): clean up delegate.
+  delegate_->OnFetchSucceeded(
+      this, std::make_unique<ParsedFetchResponse>(fake_result_data));
+  std::move(result_callback_).Run(std::move(result));
 }
 
 void FakeAffiliationFetcher::SimulateFailure() {
+  // TODO(crbug.com/371938601): clean up delegate.
   delegate_->OnFetchFailed(this);
+  std::move(result_callback_).Run(FetchResult());
 }
 
 void FakeAffiliationFetcher::StartRequest(
     const std::vector<FacetURI>& facet_uris,
-    RequestInfo request_info) {
+    RequestInfo request_info,
+    base::OnceCallback<void(FetchResult)> result_callback) {
   facets_ = facet_uris;
+  result_callback_ = std::move(result_callback);
 }
 const std::vector<FacetURI>&
 FakeAffiliationFetcher::GetRequestedFacetURIs() const {

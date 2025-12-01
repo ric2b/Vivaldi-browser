@@ -101,9 +101,9 @@ void ImplementationVisitor::BeginGeneratedFiles() {
       file << "#include \"torque-generated/" +
                   SourceFileMap::PathFromV8RootWithoutExtension(source) +
                   "-tq-csa.h\"\n";
-      // Now that required include files are collected while generting the file,
-      // we only know the full set at the end. Insert a marker here that is
-      // replaced with the list of includes at the very end.
+      // Now that required include files are collected while generating the
+      // file, we only know the full set at the end. Insert a marker here that
+      // is replaced with the list of includes at the very end.
       // TODO(nicohartmann@): This is not the most beautiful way to do this,
       // replace once the cpp file builder is available, where this can be
       // handled easily.
@@ -655,16 +655,16 @@ void ImplementationVisitor::Visit(Builtin* builtin) {
                           TypeOracle::GetContextType()};
       } else if (param_name == "receiver") {
         csa_ccfile()
-            << "  TNode<Object> " << generated_name << " = "
+            << "  TNode<JSAny> " << generated_name << " = "
             << (builtin->IsVarArgsJavaScript()
                     ? "arguments.GetReceiver()"
-                    : "UncheckedParameter<Object>(Descriptor::kReceiver)")
+                    : "UncheckedParameter<JSAny>(Descriptor::kReceiver)")
             << ";\n";
         csa_ccfile() << "  USE(" << generated_name << ");\n";
         expected_types = {TypeOracle::GetJSAnyType()};
       } else if (param_name == "newTarget") {
-        csa_ccfile() << "  TNode<Object> " << generated_name
-                     << " = UncheckedParameter<Object>("
+        csa_ccfile() << "  TNode<JSAny> " << generated_name
+                     << " = UncheckedParameter<JSAny>("
                      << "Descriptor::kJSNewTarget);\n";
         csa_ccfile() << "  USE(" << generated_name << ");\n";
         expected_types = {TypeOracle::GetJSAnyType()};
@@ -4783,7 +4783,15 @@ void CppClassGenerator::EmitStoreFieldStatement(
           break;
       }
     }
-    const std::string value_to_write = is_smi ? "Smi::FromInt(value)" : "value";
+    std::string value_to_write;
+    if (const auto type_wrapped_in_smi = Type::MatchUnaryGeneric(
+            field_type, TypeOracle::GetSmiTaggedGeneric())) {
+      DCHECK(is_smi);
+      stream << "  // " << type_wrapped_in_smi.value()->ToString() << "\n";
+      value_to_write = "Smi::From31BitPattern(value)";
+    } else {
+      value_to_write = is_smi ? "Smi::FromInt(value)" : "value";
+    }
 
     if (!is_smi) {
       // Don't DCHECK types if the roots aren't initialized, so that we don't

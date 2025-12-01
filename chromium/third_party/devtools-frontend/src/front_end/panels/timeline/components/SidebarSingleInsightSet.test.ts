@@ -13,7 +13,7 @@ import * as Components from './components.js';
 import type * as InsightComponents from './insights/insights.js';
 
 type BaseInsightComponent =
-    InsightComponents.BaseInsightComponent.BaseInsightComponent<Trace.Insights.Types.InsightModel<{}>>;
+    InsightComponents.BaseInsightComponent.BaseInsightComponent<Trace.Insights.Types.InsightModel>;
 
 function getUserVisibleInsights(component: Components.SidebarSingleInsightSet.SidebarSingleInsightSet):
     BaseInsightComponent[] {
@@ -59,14 +59,20 @@ describeWithEnvironment('SidebarSingleInsightSet', () => {
       'LCP request discovery',
       'Render blocking requests',
       'Document request latency',
-      'Third parties',
+      '3rd parties',
       'INP by phase',
       'Layout shift culprits',
+      'Network dependency tree',
       'Improve image delivery',
+      'Font display',
       'Optimize viewport for mobile',
       'Optimize DOM size',
+      'Duplicated JavaScript',
       'CSS Selector costs',
       'Forced reflow',
+      'Use efficient cache lifetimes',
+      'Modern HTTP',
+      'Legacy JavaScript',
     ]);
 
     const passedInsightTitles = getPassedInsights(component).flatMap(component => {
@@ -75,11 +81,17 @@ describeWithEnvironment('SidebarSingleInsightSet', () => {
     assert.deepEqual(passedInsightTitles, [
       'INP by phase',
       'Layout shift culprits',
+      'Network dependency tree',
       'Improve image delivery',
+      'Font display',
       'Optimize viewport for mobile',
       'Optimize DOM size',
+      'Duplicated JavaScript',
       'CSS Selector costs',
       'Forced reflow',
+      'Use efficient cache lifetimes',
+      'Modern HTTP',
+      'Legacy JavaScript',
     ]);
   });
 
@@ -105,16 +117,22 @@ describeWithEnvironment('SidebarSingleInsightSet', () => {
     assert.deepEqual(userVisibleTitles, [
       'LCP by phase',
       'Layout shift culprits',
+      'Network dependency tree',
       'Improve image delivery',
-      'Third parties',
+      'Font display',
+      '3rd parties',
+      'Use efficient cache lifetimes',
       'INP by phase',
       'LCP request discovery',
       'Render blocking requests',
       'Document request latency',
       'Optimize viewport for mobile',
       'Optimize DOM size',
+      'Duplicated JavaScript',
       'CSS Selector costs',
       'Forced reflow',
+      'Modern HTTP',
+      'Legacy JavaScript',
     ]);
 
     const passedInsightTitles = getPassedInsights(component).flatMap(component => {
@@ -128,8 +146,11 @@ describeWithEnvironment('SidebarSingleInsightSet', () => {
       'Document request latency',
       'Optimize viewport for mobile',
       'Optimize DOM size',
+      'Duplicated JavaScript',
       'CSS Selector costs',
       'Forced reflow',
+      'Modern HTTP',
+      'Legacy JavaScript',
     ]);
   });
 
@@ -154,22 +175,25 @@ describeWithEnvironment('SidebarSingleInsightSet', () => {
     const userVisibleTitles = getUserVisibleInsights(component).flatMap(component => {
       return getCleanTextContentFromElements(component.shadowRoot!, '.insight-title');
     });
-    // Includes "font display", which is experimental.
     assert.deepEqual(userVisibleTitles, [
       'LCP by phase',
       'Layout shift culprits',
+      'Network dependency tree',
       'Improve image delivery',
       'Font display',
-      'Third parties',
+      '3rd parties',
+      'Use efficient cache lifetimes',
       'INP by phase',
       'LCP request discovery',
       'Render blocking requests',
       'Document request latency',
       'Optimize viewport for mobile',
       'Optimize DOM size',
+      'Duplicated JavaScript',
       'CSS Selector costs',
-      'Long critical network tree',
       'Forced reflow',
+      'Modern HTTP',
+      'Legacy JavaScript',
     ]);
 
     const passedInsightTitles = getPassedInsights(component).flatMap(component => {
@@ -182,9 +206,11 @@ describeWithEnvironment('SidebarSingleInsightSet', () => {
       'Document request latency',
       'Optimize viewport for mobile',
       'Optimize DOM size',
+      'Duplicated JavaScript',
       'CSS Selector costs',
-      'Long critical network tree',
       'Forced reflow',
+      'Modern HTTP',
+      'Legacy JavaScript',
     ]);
   });
 

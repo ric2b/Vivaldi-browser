@@ -347,3 +347,19 @@ void IOSChromeLocalSessionEventRouter::StartRoutingTo(
 void IOSChromeLocalSessionEventRouter::Stop() {
   handler_ = nullptr;
 }
+
+#pragma mark Vivaldi
+
+void IOSChromeLocalSessionEventRouter::UpdateVivExtData(
+    const sync_sessions::VivaldiSpecific& data) {
+  if (handler_) {
+    handler_->OnVivDataModified(data);
+  }
+}
+
+void IOSChromeLocalSessionEventRouter::UpdateDeviceName(
+    const std::string& device_name) {
+  if (handler_) {
+    handler_->OnDeviceNameModified(device_name);
+  }
+}

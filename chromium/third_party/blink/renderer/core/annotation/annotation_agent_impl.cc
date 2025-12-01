@@ -41,8 +41,24 @@ bool IsValidRange(const RangeInFlatTree* range) {
   // An attached range may have !IsCollapsed but converting to EphemeralRange
   // results in IsCollapsed. For an example, see
   // AnnotationAgentImplTest.ScrollIntoViewCollapsedRange.
-  return range && range->IsConnected() && !range->IsCollapsed() &&
-         !range->ToEphemeralRange().IsCollapsed();
+  bool is_valid = range && range->IsConnected() && !range->IsCollapsed() &&
+                  !range->ToEphemeralRange().IsCollapsed();
+
+  if (is_valid) {
+    // TODO(crbug.com/410033683): Temporary to work around a crash.
+    // DocumentMarkers work on EphemeralRange (i.e. not FlatTree) so when we try
+    // to add a marker in ProcessAttachmentFinished, a well-ordered range in a
+    // flat tree may become invalid due to slotted elements. DocumentMarkers
+    // should maybe work on FlatTree types but for now just invalidate this
+    // case.
+    Position start = ToPositionInDOMTree(range->StartPosition());
+    Position end = ToPositionInDOMTree(range->EndPosition());
+    if (start > end) {
+      return false;
+    }
+  }
+
+  return is_valid;
 }
 
 // There are several cases where text isn't visible/presented to the user but
@@ -253,6 +269,9 @@ void AnnotationAgentImpl::ScrollIntoView() const {
           ScrollAlignment::CenterAlways(), ScrollAlignment::CenterAlways(),
           mojom::blink::ScrollType::kProgrammatic);
   params->cross_origin_boundaries = false;
+  if (type_ == mojom::blink::AnnotationType::kGlic) {
+    params->behavior = mojom::blink::ScrollBehavior::kSmooth;
+  }
 
   scroll_into_view_util::ScrollRectToVisible(*first_node.GetLayoutObject(),
                                              bounding_box, std::move(params));
@@ -345,6 +364,8 @@ void AnnotationAgentImpl::ProcessAttachmentFinished() {
 
   // See IsValidRangeForTextFinder for why we treat kTextFinder differently
   // here.
+  // TODO(crbug.com/381438975): Consider using IsValidRangeForTextFinder for
+  // kGlic as well.
   bool pending_range_valid = type_ == mojom::blink::AnnotationType::kTextFinder
                                  ? IsValidRangeForTextFinder(pending_range_)
                                  : IsValidRange(pending_range_);

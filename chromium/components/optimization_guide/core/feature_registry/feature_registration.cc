@@ -76,9 +76,25 @@ BASE_FEATURE(kFormsAnnotationsMqlsLogging,
              "FormsAnnotationsMqlsLogging",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
+BASE_FEATURE(kFormsClassificationsMqlsLogging,
+             "FormsClassificationsMqlsLogging",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+BASE_FEATURE(kPasswordChangeSubmissionMqlsLogging,
+             "PasswordChangeSubmissionMqlsLogging",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
 }  // namespace features
 
 namespace {
+
+// Helper function that creates a `UserFeedbackCallback` for unspecified
+// feedback.
+UserFeedbackCallback FeedbackUnspecified() {
+  return base::BindRepeating([](proto::LogAiDataRequest&) {
+    return proto::UserFeedback::USER_FEEDBACK_UNSPECIFIED;
+  });
+}
 
 void RegisterCompose() {
   const char* kComposeName = "Compose";
@@ -171,16 +187,10 @@ void RegisterHistorySearch() {
       logging_callback_query);
   MqlsFeatureRegistry::GetInstance().Register(std::move(mqls_metadata_query));
 
-  UserFeedbackCallback logging_callback_answer =
-      base::BindRepeating([](proto::LogAiDataRequest& request_proto) {
-        // There is no user feedback on history answer. It's recorded on history
-        // query.
-        return proto::UserFeedback::USER_FEEDBACK_UNSPECIFIED;
-      });
   auto mqls_metadata_answer = std::make_unique<MqlsFeatureMetadata>(
       "HistoryAnswer", proto::LogAiDataRequest::FeatureCase::kHistoryAnswer,
       enterprise_policy, &features::kHistorySearchMqlsLogging,
-      logging_callback_answer);
+      FeedbackUnspecified());
   MqlsFeatureRegistry::GetInstance().Register(std::move(mqls_metadata_answer));
 
   auto ui_metadata = std::make_unique<SettingsUiMetadata>(
@@ -190,6 +200,7 @@ void RegisterHistorySearch() {
 }
 
 void RegisterPasswordChangeSubmission() {
+  const char* kPasswordChangeSubmissionName = "PasswordChangeSubmission";
   EnterprisePolicyPref enterprise_policy =
       EnterprisePolicyRegistry::GetInstance().Register(
           prefs::kPasswordChangeSubmissionEnterprisePolicyAllowed);
@@ -199,6 +210,13 @@ void RegisterPasswordChangeSubmission() {
       UserVisibleFeatureKey::kPasswordChangeSubmission,
       std::move(enterprise_policy));
   SettingsUiRegistry::GetInstance().Register(std::move(ui_metadata));
+
+  auto mqls_metadata = std::make_unique<MqlsFeatureMetadata>(
+      kPasswordChangeSubmissionName,
+      proto::LogAiDataRequest::FeatureCase::kPasswordChangeSubmission,
+      enterprise_policy, &features::kPasswordChangeSubmissionMqlsLogging,
+      FeedbackUnspecified());
+  MqlsFeatureRegistry::GetInstance().Register(std::move(mqls_metadata));
 }
 
 void RegisterProductSpecifications() {
@@ -245,6 +263,13 @@ void RegisterAutofillPredictions() {
       enterprise_policy, &features::kFormsAnnotationsMqlsLogging,
       fa_logging_callback);
   MqlsFeatureRegistry::GetInstance().Register(std::move(fa_mqls_metadata));
+
+  MqlsFeatureRegistry::GetInstance().Register(
+      std::make_unique<MqlsFeatureMetadata>(
+          "FormsClassifications",
+          proto::LogAiDataRequest::FeatureCase::kFormsClassifications,
+          enterprise_policy, &features::kFormsClassificationsMqlsLogging,
+          FeedbackUnspecified()));
 }
 
 }  // anonymous namespace

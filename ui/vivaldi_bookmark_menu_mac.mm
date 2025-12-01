@@ -16,6 +16,7 @@
 
 #include "app/vivaldi_commands.h"
 #include "app/vivaldi_resources.h"
+#include "browser/menus/vivaldi_bookmark_context_menu.h"
 #include "components/bookmarks/vivaldi_bookmark_kit.h"
 #include "prefs/vivaldi_gen_prefs.h"
 #include "vivaldi/prefs/vivaldi_gen_prefs.h"
@@ -122,8 +123,14 @@ void ClearBookmarkMenu() {
   }
 }
 
-void GetBookmarkNodes(const BookmarkNode* node,
+void GetBookmarkNodes(bookmarks::BookmarkModel* model,
+                      const BookmarkParentFolder& folder,
                       std::vector<bookmarks::BookmarkNode*>& nodes) {
+  const bookmarks::BookmarkNode* node = vivaldi::GetNodeByFolder(model, folder);
+  if (!node) {
+    return;
+  }
+
   SortFlags flags;
   flags.InitFromPrefs();
   vivaldi::BookmarkSorter sorter(flags.field_, flags.order_, true);
@@ -141,13 +148,19 @@ void GetBookmarkNodes(const BookmarkNode* node,
   sorter.sort(nodes);
 }
 
-void AddExtraBookmarkMenuItems(NSMenu* menu, unsigned int* menu_index,
-                               const BookmarkNode* node, bool on_top) {
+void AddExtraBookmarkMenuItems(NSMenu* menu, bookmarks::BookmarkModel* model,
+                               const BookmarkParentFolder& folder, bool on_top) {
+  unsigned int menu_index = [menu itemArray].count;
   std::string edge = on_top ? "above" : "below";
   if (edge == ContainerEdge) {
+    const bookmarks::BookmarkNode* node = vivaldi::GetNodeByFolder(
+        model, folder);
+    if (!node) {
+      return;
+    }
     if (edge == "below") {
-      [menu insertItem:[NSMenuItem separatorItem] atIndex:*menu_index];
-      *menu_index += 1;
+      [menu insertItem:[NSMenuItem separatorItem] atIndex:menu_index];
+      menu_index += 1;
     }
 
     // TODO: Test properly for problems wrt ARC transition
@@ -165,12 +178,47 @@ void AddExtraBookmarkMenuItems(NSMenu* menu, unsigned int* menu_index,
       [appController setVivaldiMenuItemAction:item];
     }
     [item setRepresentedObject:[NSString stringWithFormat:@"%lld", node->id()]];
-    [menu insertItem:item atIndex:*menu_index];
-    *menu_index += 1;
+    [menu insertItem:item atIndex:menu_index];
+    menu_index += 1;
 
     if (edge == "above") {
-      [menu insertItem:[NSMenuItem separatorItem] atIndex:*menu_index];
-      *menu_index += 1;
+      [menu insertItem:[NSMenuItem separatorItem] atIndex:menu_index];
+    }
+  }
+
+
+}
+
+void AddExtraBookmarkMenuItems(NSMenu* menu, const BookmarkNode* node,
+                               bool on_top) {
+  unsigned int menu_index = [menu itemArray].count;
+  std::string edge = on_top ? "above" : "below";
+  if (edge == ContainerEdge) {
+    if (edge == "below") {
+      [menu insertItem:[NSMenuItem separatorItem] atIndex:menu_index];
+      menu_index += 1;
+    }
+
+    // TODO: Test properly for problems wrt ARC transition
+    NSMenuItem* item = [[NSMenuItem alloc]
+            initWithTitle:l10n_util::GetNSString(
+                IDS_VIV_ADD_ACTIVE_TAB_TO_BOOKMARKS)
+                   action:nil
+            keyEquivalent:@""];
+    [item setTag:IDC_VIV_ADD_ACTIVE_TAB_TO_BOOKMARKS];
+    AppController* appController =
+      static_cast<AppController*>([NSApp delegate]);
+    [item setTarget:appController];
+    if (appController && [appController
+        respondsToSelector:@selector(setVivaldiMenuItemAction:)]) {
+      [appController setVivaldiMenuItemAction:item];
+    }
+    [item setRepresentedObject:[NSString stringWithFormat:@"%lld", node->id()]];
+    [menu insertItem:item atIndex:menu_index];
+    menu_index += 1;
+
+    if (edge == "above") {
+      [menu insertItem:[NSMenuItem separatorItem] atIndex:menu_index];
     }
   }
 }

@@ -69,7 +69,7 @@ export class CoverageDecorationManager {
    *                     the original content.
    */
   async usageByLine(uiSourceCode: Workspace.UISourceCode.UISourceCode, lineMappings: TextUtils.TextRange.TextRange[]):
-      Promise<(boolean | undefined)[]> {
+      Promise<Array<boolean|undefined>> {
     const result = [];
     await this.updateTexts(uiSourceCode, lineMappings);
 
@@ -141,7 +141,7 @@ export class CoverageDecorationManager {
     const contentType = uiSourceCode.contentType();
     if (contentType.hasScripts()) {
       let locations = await this.#debuggerBinding.uiLocationToRawLocations(uiSourceCode, line, column);
-      locations = locations.filter(location => Boolean(location.script()));
+      locations = locations.filter(location => !!location.script());
       for (const location of locations) {
         const script = location.script();
         if (!script) {

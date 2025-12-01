@@ -64,8 +64,10 @@
 #include "extensions/browser/disable_reason.h"
 #include "extensions/browser/extension_dialog_auto_confirm.h"
 #include "extensions/browser/extension_prefs.h"
+#include "extensions/browser/extension_registrar.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/browser/extension_system.h"
+#include "extensions/browser/launch_util.h"
 #include "extensions/browser/supervised_user_extensions_delegate.h"
 #include "extensions/common/api/management.h"
 #include "extensions/common/extension.h"
@@ -527,7 +529,7 @@ void ChromeManagementAPIDelegate::InstallOrLaunchReplacementWebApp(
           app_id, {web_app::proto::INSTALLED_WITHOUT_OS_INTEGRATION,
                    web_app::proto::INSTALLED_WITH_OS_INTEGRATION})) {
     LaunchWebApp(
-        web_app::GenerateAppId(/*manifest_id=*/std::nullopt, web_app_url),
+        web_app::GenerateAppId(/*manifest_id_path=*/std::nullopt, web_app_url),
         profile);
     std::move(callback).Run(InstallOrLaunchWebAppResult::kSuccess);
     return;
@@ -563,9 +565,8 @@ void ChromeManagementAPIDelegate::EnableExtension(
   // If the extension was disabled for a permissions increase, the Management
   // API will have displayed a re-enable prompt to the user, so we know it's
   // safe to grant permissions here.
-  extensions::ExtensionSystem::Get(context)
-      ->extension_service()
-      ->GrantPermissionsAndEnableExtension(extension);
+  extensions::ExtensionRegistrar::Get(context)
+      ->GrantPermissionsAndEnableExtension(*extension);
 }
 
 void ChromeManagementAPIDelegate::DisableExtension(
@@ -646,8 +647,9 @@ void ChromeManagementAPIDelegate::ShowMv2DeprecationReEnableDialog(
       return;
   }
 
-  gfx::NativeWindow parent =
-      web_contents ? web_contents->GetTopLevelNativeWindow() : nullptr;
+  gfx::NativeWindow parent = web_contents
+                                 ? web_contents->GetTopLevelNativeWindow()
+                                 : gfx::NativeWindow();
   extensions::ShowMv2DeprecationReEnableDialog(
       parent, extension.id(), extension.name(), std::move(done_callback));
 }

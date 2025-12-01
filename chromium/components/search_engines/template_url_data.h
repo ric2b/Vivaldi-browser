@@ -105,6 +105,9 @@ struct TemplateURLData {
   // Returns whether this search engine was created by an Enterprise policy that
   // doesn't define the Default Search Provider.
   bool CreatedByNonDefaultSearchProviderPolicy() const;
+  // Returns whether this search engine was created by the
+  // EnterpriseSearchAggregatorSettings policy.
+  bool CreatedByEnterpriseSearchAggregatorPolicy() const;
 
   // Optional additional raw URLs.
   std::string suggestions_url;
@@ -190,8 +193,16 @@ struct TemplateURLData {
   // the user to set another search engine as default.
   bool enforced_by_policy;
 
-  // True if this TemplateURL was created from metadata received from Play API.
-  bool created_from_play_api;
+  // The Regulatory program supplying this definition.
+  // This permits deduplication and election of the best supported TemplateURL
+  // definition from all known sources (see ReconcilingTemplateURLDataHolder).
+  //
+  // TODO(b:322513019): All definition origins could possibly be aggregated
+  // under a single enum for clarity and simplicity. This would allow for more
+  // consistent handling and detection (what should be processed, and how).
+  // The amount of work needed to do this seems very significant. Investigate
+  // whether this makes sense and is feasible.
+  RegulatoryExtensionType regulatory_origin;
 
   // True if this TemplateURL should be promoted in the Omnibox along with the
   // starter pack.
@@ -246,8 +257,8 @@ struct TemplateURLData {
   // starter_pack_id > 0.
   int starter_pack_id{0};
 
-  // friend bool operator==(const TemplateURLData&,
-  //                       const TemplateURLData&) = default;
+  friend bool operator==(const TemplateURLData&,
+                         const TemplateURLData&) = default;
 
  private:
   // Private so we can enforce using the setters and thus enforce that these

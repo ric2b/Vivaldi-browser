@@ -9,7 +9,6 @@
 #include "base/functional/callback.h"
 #include "base/memory/raw_ptr.h"
 #include "base/test/scoped_feature_list.h"
-#include "build/chromeos_buildflags.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/search_engine_choice/search_engine_choice_service_factory.h"
 #include "chrome/browser/search_engines/template_url_service_factory.h"
@@ -23,6 +22,7 @@
 #include "components/omnibox/browser/mock_autocomplete_provider_client.h"
 #include "components/omnibox/browser/omnibox_controller.h"
 #include "components/omnibox/browser/omnibox_view.h"
+#include "components/omnibox/common/omnibox_feature_configs.h"
 #include "components/omnibox/common/omnibox_features.h"
 #include "components/search_engines/template_url_service.h"
 #include "components/search_engines/template_url_service_client.h"
@@ -60,6 +60,8 @@ class ZeroSuggestPrefetchTabHelperBrowserTest : public InProcessBrowserTest {
     auto client_ = std::make_unique<MockAutocompleteProviderClient>();
     client_->set_template_url_service(template_url_service);
 
+    most_visited_prefetch_scoped_config_.Get().enabled = false;
+
     auto controller =
         std::make_unique<testing::NiceMock<MockAutocompleteController>>(
             std::move(client_), 0);
@@ -73,6 +75,9 @@ class ZeroSuggestPrefetchTabHelperBrowserTest : public InProcessBrowserTest {
   }
 
   base::test::ScopedFeatureList feature_list_;
+  omnibox_feature_configs::ScopedConfigForTesting<
+      omnibox_feature_configs::OmniboxUrlSuggestionsOnFocus>
+      most_visited_prefetch_scoped_config_;
   raw_ptr<testing::NiceMock<MockAutocompleteController>,
           AcrossTasksDanglingUntriaged>
       controller_;

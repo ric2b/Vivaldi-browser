@@ -20,6 +20,7 @@
 #include "base/task/thread_pool.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
+#include "chrome/browser/task_manager/common/task_manager_features.h"
 #include "chrome/browser/task_manager/providers/browser_process_task_provider.h"
 #include "chrome/browser/task_manager/providers/child_process_task_provider.h"
 #include "chrome/browser/task_manager/providers/fallback_task_provider.h"
@@ -58,9 +59,16 @@ base::LazyInstance<TaskManagerImpl>::Leaky lazy_task_manager_instance =
 TaskId ComputeRootTaskId(const Task* task) {
   CHECK(task);
 
-  // Walk up the tree to find the epoch task.
+  // Walk up the process tree to find the epoch task.
+  // Note: It is not guaranteed that the nodes returned are a tree (acyclic).
+  std::unordered_set<const Task*> visited;
   const Task* curr = task;
-  while (curr->HasParentTask()) {
+  while (curr != nullptr && curr->HasParentTask()) {
+    if (!visited.insert(curr).second) {
+      LOG(ERROR)
+          << "Cycle detected in task hierarchy. Returning original task id.";
+      return task->task_id();
+    }
     curr = curr->GetParentTask().get();
   }
   return curr->task_id();
@@ -356,10 +364,22 @@ const TaskIdList& TaskManagerImpl::GetTaskIdsList() const {
     // order is meaningful), and finally by task id (when all else is equal, put
     // the oldest tasks first).
     auto comparator = [](const Task* a, const Task* b) -> bool {
-      return std::make_tuple(a->HasParentTask(), a->GetType(), a->GetTabId(),
-                             a->task_id()) <
-             std::make_tuple(b->HasParentTask(), b->GetType(), b->GetTabId(),
-                             b->task_id());
+      bool should_make_adjustment = false;
+#if !BUILDFLAG(IS_ANDROID)
+      // Move vm processes up over the arc tasks.
+      should_make_adjustment =
+          base::FeatureList::IsEnabled(features::kTaskManagerDesktopRefresh) &&
+          ((a->GetType() == Task::ARC && b->GetType() == Task::CROSTINI) ||
+           (b->GetType() == Task::ARC && a->GetType() == Task::CROSTINI));
+#endif
+      return std::make_tuple(
+                 a->HasParentTask(),
+                 should_make_adjustment ? b->GetType() : a->GetType(),
+                 a->GetTabId(), a->task_id()) <
+             std::make_tuple(
+                 b->HasParentTask(),
+                 should_make_adjustment ? a->GetType() : b->GetType(),
+                 b->GetTabId(), b->task_id());
     };
 
     const size_t num_groups =
@@ -483,6 +503,10 @@ TaskId TaskManagerImpl::GetTaskIdForWebContents(
   if (!task)
     return -1;
   return task->task_id();
+}
+
+bool TaskManagerImpl::IsTaskValid(TaskId task_id) const {
+  return task_groups_by_task_id_.contains(task_id);
 }
 
 void TaskManagerImpl::TaskAdded(Task* task) {

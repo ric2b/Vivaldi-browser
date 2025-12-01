@@ -31,7 +31,6 @@
 #include "base/test/scoped_feature_list.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
-#include "build/chromeos_buildflags.h"
 #include "chrome/browser/autofill/autofill_flow_test_util.h"
 #include "chrome/browser/autofill/autofill_uitest.h"
 #include "chrome/browser/autofill/autofill_uitest_util.h"
@@ -56,7 +55,7 @@
 #include "components/autofill/content/browser/content_autofill_driver.h"
 #include "components/autofill/content/browser/test_autofill_manager_injector.h"
 #include "components/autofill/core/browser/crowdsourcing/votes_uploader_test_api.h"
-#include "components/autofill/core/browser/data_model/autofill_profile.h"
+#include "components/autofill/core/browser/data_model/addresses/autofill_profile.h"
 #include "components/autofill/core/browser/data_quality/validation.h"
 #include "components/autofill/core/browser/foundations/browser_autofill_manager.h"
 #include "components/autofill/core/browser/foundations/browser_autofill_manager_test_api.h"
@@ -90,6 +89,7 @@
 #include "net/dns/mock_host_resolver.h"
 #include "net/test/embedded_test_server/controllable_http_response.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
+#include "services/network/public/cpp/features.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/public/common/features.h"
@@ -101,14 +101,14 @@
 #include "ui/events/keycodes/keyboard_code_conversion.h"
 #include "ui/events/keycodes/keyboard_codes.h"
 
-#if BUILDFLAG(IS_CHROMEOS_ASH) && BUILDFLAG(ENABLE_EXTENSIONS)
+#if BUILDFLAG(IS_CHROMEOS) && BUILDFLAG(ENABLE_EXTENSIONS)
 // Includes for ChromeVox accessibility tests.
 #include "chrome/browser/ash/accessibility/accessibility_manager.h"
 #include "chrome/browser/ash/accessibility/speech_monitor.h"
 #include "chrome/browser/ui/aura/accessibility/automation_manager_aura.h"
 #include "extensions/browser/browsertest_util.h"
 #include "ui/base/test/ui_controls.h"
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH) && BUILDFLAG(ENABLE_EXTENSIONS)
+#endif  // BUILDFLAG(IS_CHROMEOS) && BUILDFLAG(ENABLE_EXTENSIONS)
 
 using ::base::ASCIIToUTF16;
 using ::base::test::RunClosure;
@@ -166,8 +166,8 @@ constexpr char kTestShippingFormString[] = R"(
     </form>
     )";
 
-// Searches all frames of the primary page in |web_contents| and returns one
-// called |name|. If there are none, returns null, if there are more, returns
+// Searches all frames of the primary page in `web_contents` and returns one
+// called `name`. If there are none, returns null, if there are more, returns
 // an arbitrary one.
 content::RenderFrameHost* RenderFrameHostForName(
     content::WebContents* web_contents,
@@ -280,7 +280,7 @@ const std::vector<FieldValue> kDefaultAddress{
     {"country", kDefaultAddressValues.country},
     {"phone", kDefaultAddressValues.phone}};
 
-// Returns a copy of |fields| except that the value of `update.id` is set to
+// Returns a copy of `fields` except that the value of `update.id` is set to
 // `update.value`.
 [[nodiscard]] std::vector<FieldValue> MergeValue(std::vector<FieldValue> fields,
                                                  const FieldValue& update) {
@@ -584,7 +584,7 @@ class AutofillInteractiveTestBase : public AutofillUiTest {
             embedded_test_server(), "/mock_translate_script.js",
             true /*relative_url_is_prefix*/);
 
-    // Ensure that |embedded_test_server()| serves both domains used below.
+    // Ensure that `embedded_test_server()` serves both domains used below.
     host_resolver()->AddRule("*", "127.0.0.1");
     embedded_test_server()->RegisterRequestHandler(base::BindRepeating(
         &AutofillInteractiveTestBase::HandleTestURL, base::Unretained(this)));
@@ -765,8 +765,8 @@ class AutofillInteractiveTestBase : public AutofillUiTest {
 
   void FillElementWithValue(const std::string& element_id,
                             const std::string& value) {
-    // Sends "|element_id|:|value|" to |msg_queue| if the |element_id|'s
-    // value has changed to |value|.
+    // Sends "`element_id`:`value`" to `msg_queue` if the `element_id`'s
+    // value has changed to `value`.
     std::string script = base::StringPrintf(
         R"( (function() {
               const element_id = '%s';
@@ -842,7 +842,7 @@ class AutofillInteractiveTestBase : public AutofillUiTest {
   // event the tests create and have the WebContents forward is handled by some
   // key press event callback. It is necessary to have this sink because if no
   // key press event callback handles the event (at least on Mac), a DCHECK
-  // ends up going off that the |event| doesn't have an |os_event| associated
+  // ends up going off that the `event` doesn't have an `os_event` associated
   // with it.
   content::RenderWidgetHost::KeyPressEventCallback key_press_event_sink_;
 
@@ -1437,7 +1437,7 @@ IN_PROC_BROWSER_TEST_F(AutofillInteractiveTest, InputFiresBeforeChange) {
   EXPECT_THAT(select_element_events, ElementsAre("input", "change"));
 }
 
-// Test that we can autofill forms distinguished only by their |id| attribute.
+// Test that we can autofill forms distinguished only by their `id` attribute.
 IN_PROC_BROWSER_TEST_F(AutofillInteractiveTest,
                        AutofillFormsDistinguishedById) {
   static const char kScript[] =
@@ -2338,7 +2338,7 @@ class AutofillInteractiveFencedFrameTest
     std::vector<base::test::FeatureRefAndParams> enabled;
     std::vector<base::test::FeatureRef> disabled;
     if (GetParam() != FrameType::kIFrame) {
-      enabled.push_back({blink::features::kBrowsingTopics, {}});
+      enabled.push_back({network::features::kBrowsingTopics, {}});
       enabled.push_back({blink::features::kFencedFramesAPIChanges, {}});
       scoped_feature_list_.InitWithFeaturesAndParameters(enabled, disabled);
       fenced_frame_test_helper_ =
@@ -2411,7 +2411,7 @@ IN_PROC_BROWSER_TEST_P(AutofillInteractiveFencedFrameTest,
   ContentAutofillDriver* cross_driver =
       ContentAutofillDriver::GetForRenderFrameHost(cross_frame_host);
   ASSERT_TRUE(cross_driver);
-  // Let |test_delegate()| also observe autofill events in the iframe.
+  // Let `test_delegate()` also observe autofill events in the iframe.
   test_delegate()->Observe(cross_driver->GetAutofillManager());
 
   ASSERT_TRUE(AutofillFlow(GetElementById("NAME_FIRST"), this,
@@ -2437,7 +2437,7 @@ IN_PROC_BROWSER_TEST_P(AutofillInteractiveFencedFrameTest,
   ContentAutofillDriver* cross_driver =
       ContentAutofillDriver::GetForRenderFrameHost(cross_frame_host);
   ASSERT_TRUE(cross_driver);
-  // Let |test_delegate()| also observe autofill events in the iframe.
+  // Let `test_delegate()` also observe autofill events in the iframe.
   test_delegate()->Observe(cross_driver->GetAutofillManager());
 
   auto Wait = [this] { DoNothingAndWait(base::Seconds(2)); };
@@ -2471,7 +2471,7 @@ IN_PROC_BROWSER_TEST_P(AutofillInteractiveFencedFrameTest,
   ContentAutofillDriver* cross_driver =
       ContentAutofillDriver::GetForRenderFrameHost(cross_frame_host);
   ASSERT_TRUE(cross_driver);
-  // Let |test_delegate()| also observe autofill events in the iframe.
+  // Let `test_delegate()` also observe autofill events in the iframe.
   test_delegate()->Observe(cross_driver->GetAutofillManager());
 
   // Open the Autofill popup but do not accept the suggestion yet. Deleting the
@@ -3189,7 +3189,7 @@ IN_PROC_BROWSER_TEST_P(AutofillInteractiveTestShadowDom,
 }
 
 // ChromeVox is only available on ChromeOS.
-#if BUILDFLAG(IS_CHROMEOS_ASH) && BUILDFLAG(ENABLE_EXTENSIONS)
+#if BUILDFLAG(IS_CHROMEOS) && BUILDFLAG(ENABLE_EXTENSIONS)
 
 class AutofillInteractiveTestChromeVox : public AutofillInteractiveTestBase {
  public:
@@ -3210,7 +3210,7 @@ class AutofillInteractiveTestChromeVox : public AutofillInteractiveTestBase {
     // fetched.
     ASSERT_FALSE(ash::AccessibilityManager::Get()->IsSpokenFeedbackEnabled());
     // TODO(accessibility): fix console error/warnings and instantiate
-    // |console_observer_| here.
+    // `console_observer_` here.
 
     // Load ChromeVox and block until it's fully loaded.
     ash::AccessibilityManager::Get()->EnableSpokenFeedback(true);
@@ -3283,7 +3283,7 @@ IN_PROC_BROWSER_TEST_F(AutofillInteractiveTestChromeVox,
   sm_.Replay();
 }
 
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH) && BUILDFLAG(ENABLE_EXTENSIONS)
+#endif  // BUILDFLAG(IS_CHROMEOS) && BUILDFLAG(ENABLE_EXTENSIONS)
 
 class AutofillInteractiveFormSubmissionTest
     : public AutofillInteractiveTestBase {
@@ -3330,7 +3330,7 @@ class AutofillInteractiveFormSubmissionTest
     ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), GetTestUrl()));
     ASSERT_TRUE(WaitForMatchingForm(
         autofill_manager(), base::BindRepeating([](const FormStructure& form) {
-          return form.active_field_count() == 5;
+          return form.fields().size() == 5;
         })));
   }
 
@@ -3370,8 +3370,7 @@ class AutofillInteractiveFormSubmissionTest
           ASSERT_TRUE(waiter.Wait(1));
           break;
         }
-        case kSelectOne:
-        case kSelectMultiple: {
+        case kSelectOne: {
           auto& waiter = autofill_manager()->select_field_change_waiter();
           ASSERT_TRUE(waiter.Wait(1));
           break;
@@ -3673,7 +3672,7 @@ class AutofillInteractiveFormlessFormSubmissionTest
     ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), GetTestUrl()));
     ASSERT_TRUE(WaitForMatchingForm(
         autofill_manager(), base::BindRepeating([](const FormStructure& form) {
-          return form.active_field_count() == 3;
+          return form.fields().size() == 3;
         })));
   }
 

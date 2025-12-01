@@ -56,6 +56,22 @@ TEST(DecoderTest, AlphaNoIspe) {
   EXPECT_GT(decoder->image->alphaRowBytes, 0u);
 }
 
+TEST(DecoderTest, AlphaPremultiplied) {
+  if (!testutil::Av1DecoderAvailable()) {
+    GTEST_SKIP() << "AV1 Codec unavailable, skip test.";
+  }
+  auto decoder = CreateDecoder("alpha_premultiplied.avif");
+  ASSERT_NE(decoder, nullptr);
+  ASSERT_EQ(avifDecoderParse(decoder.get()), AVIF_RESULT_OK);
+  EXPECT_EQ(decoder->compressionFormat, COMPRESSION_FORMAT_AVIF);
+  EXPECT_EQ(decoder->alphaPresent, AVIF_TRUE);
+  ASSERT_NE(decoder->image, nullptr);
+  EXPECT_EQ(decoder->image->alphaPremultiplied, AVIF_TRUE);
+  EXPECT_EQ(avifDecoderNextImage(decoder.get()), AVIF_RESULT_OK);
+  EXPECT_NE(decoder->image->alphaPlane, nullptr);
+  EXPECT_GT(decoder->image->alphaRowBytes, 0u);
+}
+
 TEST(DecoderTest, AnimatedImage) {
   if (!testutil::Av1DecoderAvailable()) {
     GTEST_SKIP() << "AV1 Codec unavailable, skip test.";

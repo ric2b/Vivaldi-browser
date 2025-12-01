@@ -22,14 +22,13 @@ suite('<connect-onedrive>', () => {
      called. */
   let testProxy: CloudUploadTestBrowserProxy;
 
-  async function setUp(options: ProxyOptions) {
+  function setUp(options: ProxyOptions) {
     testProxy = new CloudUploadTestBrowserProxy(options);
     CloudUploadBrowserProxy.setInstance(testProxy);
 
     // Creates and attaches the <connect-onedrive> element to the DOM
     // tree.
-    connectOneDriveApp =
-        document.createElement('connect-onedrive') as ConnectOneDriveElement;
+    connectOneDriveApp = document.createElement('connect-onedrive');
     container.appendChild(connectOneDriveApp);
   }
 
@@ -53,7 +52,7 @@ suite('<connect-onedrive>', () => {
   });
 
   test('Successful connection leads to finished page', async () => {
-    await setUp({
+    setUp({
       fileNames: [],
       officeWebAppInstalled: true,
       installOfficeWebAppResult: true,
@@ -63,9 +62,9 @@ suite('<connect-onedrive>', () => {
       },
     });
 
-    const svgSuccess = connectOneDriveApp.$('#success')!;
-    const title = connectOneDriveApp.$('#title')!;
-    const bodyText = connectOneDriveApp.$('#body-text')!;
+    const svgSuccess = connectOneDriveApp.$('#success');
+    const title = connectOneDriveApp.$('#title');
+    const bodyText = connectOneDriveApp.$('#body-text');
 
     assertEquals(svgSuccess.getAttribute('visibility'), 'hidden');
     assertTrue(title.innerText.includes('Connect to'), title.innerText);
@@ -82,7 +81,7 @@ suite('<connect-onedrive>', () => {
   });
 
   test('Failed connection leads to error page', async () => {
-    await setUp({
+    setUp({
       fileNames: [],
       officeWebAppInstalled: true,
       installOfficeWebAppResult: true,
@@ -94,7 +93,7 @@ suite('<connect-onedrive>', () => {
 
     testProxy.handler.setResultFor('signInToOneDrive', {success: false});
 
-    const errorMessage = connectOneDriveApp.$('#error-message')!;
+    const errorMessage = connectOneDriveApp.$('#error-message');
     assertTrue(errorMessage.hasAttribute('hidden'));
 
     connectOneDriveApp.$('.action-button').click();
@@ -114,7 +113,7 @@ suite('<connect-onedrive>', () => {
    * `respondWithUserActionAndClose` mojo request.
    */
   test('Cancel', async () => {
-    await setUp({
+    setUp({
       fileNames: [],
       officeWebAppInstalled: true,
       installOfficeWebAppResult: true,
@@ -139,7 +138,7 @@ suite('<connect-onedrive>', () => {
    * `respondWithUserActionAndClose` mojo request.
    */
   test('Escape', async () => {
-    await setUp({
+    setUp({
       fileNames: [],
       officeWebAppInstalled: true,
       installOfficeWebAppResult: true,

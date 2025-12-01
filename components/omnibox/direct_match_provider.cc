@@ -44,10 +44,6 @@ DirectMatchProvider::DirectMatchProvider(AutocompleteProviderClient* client)
 void DirectMatchProvider::Start(const AutocompleteInput& input,
                                 bool minimal_changes) {
   matches_.clear();
-  PrefService* prefs = client_->GetPrefs();
-  if (!prefs->GetBoolean(vivaldiprefs::kAddressBarSearchDirectMatchEnabled)) {
-    return;
-  }
 
   if (input.IsZeroSuggest() || input.text().empty()) {
     return;
@@ -119,7 +115,7 @@ AutocompleteMatch DirectMatchToAutocompleteMatch(
       input.text(), fixed_up_input_text, false, title);
 
   match.fill_into_edit = title;
-  if (match.TryRichAutocompletion(match.contents, match.description, input)) {
+  if (match.TryRichAutocompletion(input, match.contents, match.description)) {
     // If rich autocompletion applies, we skip trying the alternatives below.
   } else if (inline_autocomplete_offset != std::u16string::npos) {
     match.inline_autocompletion =

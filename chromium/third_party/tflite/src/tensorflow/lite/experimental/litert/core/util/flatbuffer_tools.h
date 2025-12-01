@@ -22,6 +22,7 @@
 #include <utility>
 #include <vector>
 
+#include "absl/container/inlined_vector.h"
 #include "absl/strings/string_view.h"
 #include "absl/types/span.h"
 #include "tensorflow/compiler/mlir/lite/allocation.h"
@@ -45,6 +46,7 @@ using TflOpCode = ::tflite::OperatorCodeT;
 using TflQuantization = ::tflite::QuantizationParametersT;
 using TflElementType = ::tflite::TensorType;
 using TflOptions = ::tflite::BuiltinOptionsUnion;
+using TflOptions2 = ::tflite::BuiltinOptions2Union;
 using TflSignature = ::tflite::SignatureDefT;
 using TflMetadata = ::tflite::MetadataT;
 
@@ -117,8 +119,11 @@ struct TflShapeInfo {
                         tfl_tensor.shape_signature.end()) {}
 
   explicit TflShapeInfo(const TflPackedTensor& tfl_tensor)
-      : has_rank(tfl_tensor.has_rank()),
-        shape(tfl_tensor.shape()->begin(), tfl_tensor.shape()->end()) {
+      : has_rank(tfl_tensor.has_rank()) {
+    if (tfl_tensor.shape()) {
+      shape.assign(tfl_tensor.shape()->begin(), tfl_tensor.shape()->end());
+    }
+
     if (tfl_tensor.shape_signature()) {
       shape_signature.assign(tfl_tensor.shape_signature()->begin(),
                              tfl_tensor.shape_signature()->end());

@@ -15,6 +15,7 @@
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/content_settings/page_specific_content_settings_delegate.h"
 #include "chrome/browser/history/history_service_factory.h"
+#include "chrome/browser/permissions/system/system_permission_settings.h"
 #include "chrome/browser/privacy_sandbox/mock_privacy_sandbox_service.h"
 #include "chrome/browser/privacy_sandbox/privacy_sandbox_service_factory.h"
 #include "chrome/browser/ssl/chrome_security_state_tab_helper.h"
@@ -41,6 +42,7 @@
 #include "chrome/test/views/chrome_test_views_delegate.h"
 #include "components/content_settings/core/browser/content_settings_uma_util.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
+#include "components/content_settings/core/common/content_settings_types.h"
 #include "components/content_settings/core/common/cookie_blocking_3pcd_status.h"
 #include "components/content_settings/core/common/features.h"
 #include "components/content_settings/core/common/pref_names.h"
@@ -75,6 +77,7 @@
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/ui_base_features.h"
 #include "ui/events/event_utils.h"
+#include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/controls/button/toggle_button.h"
 #include "ui/views/controls/combobox/combobox.h"
 #include "ui/views/controls/label.h"
@@ -220,7 +223,7 @@ class PageInfoBubbleViewTestApi {
     return GetPermissionToggleRowAt(index)->state_label_;
   }
 
-  std::u16string GetCookiesSubpageTitle() {
+  std::u16string_view GetCookiesSubpageTitle() {
     navigation_handler()->OpenCookiesPage();
     auto* title_label = bubble_delegate_->GetViewByID(
         PageInfoViewFactory::VIEW_ID_PAGE_INFO_SUBPAGE_TITLE);
@@ -231,7 +234,7 @@ class PageInfoBubbleViewTestApi {
   std::u16string GetTextOnView(views::View* view) {
     EXPECT_TRUE(view);
     ui::AXNodeData data;
-    view->GetAccessibleNodeData(&data);
+    view->GetViewAccessibility().GetAccessibleNodeData(&data);
     const std::string& name =
         data.GetStringAttribute(ax::mojom::StringAttribute::kName);
     return base::ASCIIToUTF16(name);
@@ -242,7 +245,7 @@ class PageInfoBubbleViewTestApi {
   std::u16string GetCookiesLinkText() {
     EXPECT_TRUE(cookie_button());
     ui::AXNodeData data;
-    cookie_button()->GetAccessibleNodeData(&data);
+    cookie_button()->GetViewAccessibility().GetAccessibleNodeData(&data);
     const std::string& name =
         data.GetStringAttribute(ax::mojom::StringAttribute::kName);
     return base::ASCIIToUTF16(name);
@@ -255,7 +258,7 @@ class PageInfoBubbleViewTestApi {
     return static_cast<RichHoverButton*>(button)->GetTitleText();
   }
 
-  std::u16string GetSecuritySummaryText() {
+  std::u16string_view GetSecuritySummaryText() {
     EXPECT_TRUE(security_summary_label());
     return static_cast<views::StyledLabel*>(security_summary_label())
         ->GetText();
@@ -267,7 +270,7 @@ class PageInfoBubbleViewTestApi {
     return static_cast<RichHoverButton*>(button)->GetTitleText();
   }
 
-  std::u16string GetPermissionLabelTextAt(int index) {
+  std::u16string_view GetPermissionLabelTextAt(int index) {
     return GetPermissionToggleRowAt(index)->row_view_->GetTitleForTesting();
   }
 
@@ -520,6 +523,10 @@ TEST_F(PageInfoBubbleViewTest, NotificationPermissionRevokeUkm) {
 // Test UI construction and reconstruction via
 // PageInfoBubbleView::SetPermissionInfo().
 TEST_F(PageInfoBubbleViewTest, SetPermissionInfo) {
+  // Mock system-level location permission.
+  system_permission_settings::ScopedSettingsForTesting system_location_settings(
+      ContentSettingsType::GEOLOCATION, /*blocked=*/false);
+
   PermissionInfoList list(1);
   list.back().type = ContentSettingsType::GEOLOCATION;
   list.back().setting = CONTENT_SETTING_BLOCK;

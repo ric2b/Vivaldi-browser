@@ -245,7 +245,33 @@ chromium-metrics-reviews@google.com.
   <int value="28" label="kPreflightMissingPrivateNetworkAccessName"/>
   <int value="29" label="kPrivateNetworkAccessPermissionUnavailable"/>
   <int value="30" label="kPrivateNetworkAccessPermissionDenied"/>
+  <int value="31" label="kLocalNetworkAccessPermissionDenied"/>
 </enum>
+
+<!-- LINT.IfChange(DeviceBoundSessionError) -->
+
+<enum name="DeviceBoundSessionError">
+  <int value="0" label="Success"/>
+  <int value="1" label="Key error"/>
+  <int value="2" label="Signing error"/>
+  <int value="3" label="Network error"/>
+  <int value="4" label="HTTP error"/>
+  <int value="5" label="Server requested termination"/>
+  <int value="6" label="Invalid configuration JSON"/>
+  <int value="7" label="Invalid session ID"/>
+  <int value="8" label="Invalid credentials"/>
+  <int value="9" label="Invalid challenge"/>
+  <int value="10" label="Too many challenges"/>
+  <int value="11" label="Invalid fetcher URL"/>
+  <int value="12" label="Invalid refresh URL"/>
+  <int value="13" label="Transient HTTP error"/>
+  <int value="14" label="Persistent HTTP error"/>
+  <int value="15" label="Same-site mismatch scope origin"/>
+  <int value="16" label="Same-site mismatch refresh URL"/>
+  <int value="17" label="Invalid scope origin"/>
+</enum>
+
+<!-- LINT.ThenChange(//net/device_bound_sessions/session_error.h:DeviceBoundSessionError) -->
 
 <enum name="DNS.AttemptType">
   <int value="0" label="DnsUDPAttempt"/>
@@ -447,13 +473,6 @@ chromium-metrics-reviews@google.com.
   <int value="9" label="SpdyProxy Reject (Deprecated)"/>
 </enum>
 
-<enum name="HttpAuthNtlmV2Usage">
-  <int value="0" label="Disabled over unsecured connection"/>
-  <int value="1" label="Disabled over secure connection"/>
-  <int value="2" label="Enabled over unsecured connection"/>
-  <int value="3" label="Enabled over secure connection"/>
-</enum>
-
 <enum name="HttpAuthTarget">
   <int value="0" label="Basic Proxy"/>
   <int value="1" label="Basic Secure Proxy"/>
@@ -550,6 +569,22 @@ chromium-metrics-reviews@google.com.
   <int value="8" label="REFUSED"/>
 </enum>
 
+<!-- LINT.IfChange(HttpStreamPoolInitialAttemptState) -->
+
+<enum name="HttpStreamPoolInitialAttemptState">
+  <int value="0" label="Other"/>
+  <int value="1" label="CanUseQuicWithKnownVersion"/>
+  <int value="2" label="CanUseQuicWithKnownVersionAndSupportsSpdy"/>
+  <int value="3" label="CanUseQuicWithUnknownVersion"/>
+  <int value="4" label="CanUseQuicWithUnknownVersionAndSupportsSpdy"/>
+  <int value="5" label="CannotUseQuicWithKnownVersion"/>
+  <int value="6" label="CannotUseQuicWithKnownVersionAndSupportsSpdy"/>
+  <int value="7" label="CannotUseQuicWithUnknownVersion"/>
+  <int value="8" label="CannotUseQuicWithUnknownVersionAndSupportsSpdy"/>
+</enum>
+
+<!-- LINT.ThenChange(//net/http/http_stream_pool_attempt_manager.h:InitialAttemptState) -->
+
 <enum name="InitialRttEstimateSource">
   <int value="0" label="Default"/>
   <int value="1" label="Cached"/>
@@ -618,12 +653,18 @@ chromium-metrics-reviews@google.com.
   <int value="3" label="Chain contained only one certificate"/>
 </enum>
 
-<enum name="NetCertVerifierNSSCertMigrationResult">
-  <int value="0" label="NSS DB empty"/>
-  <int value="1" label="Success"/>
-  <int value="2" label="Partial Success"/>
-  <int value="3" label="Failure"/>
+<!-- LINT.IfChange(NetCertVerifier1QwacResult) -->
+
+<enum name="NetCertVerifier1QwacResult">
+  <int value="0" label="Not a 1-QWAC"/>
+  <int value="1"
+      label="Has some QWAC-like indicators, but they are inconsistent or
+             incomplete"/>
+  <int value="2" label="1-QWAC verification failed"/>
+  <int value="3" label="1-QWAC verification succeeded"/>
 </enum>
+
+<!-- LINT.ThenChange(//net/cert/cert_verify_proc_builtin.h:NetCertVerifier1QwacResult) -->
 
 <enum name="NetErrorPageEvents">
   <int value="0" label="Error Page Shown">
@@ -736,32 +777,6 @@ chromium-metrics-reviews@google.com.
   <int value="30" label="Sign in to network button clicked">
     An error page was shown with at least a &quot;Sign in to network&quot;
     button on it and the user pressed that button.
-  </int>
-</enum>
-
-<enum name="NetFilterType2">
-  <summary>
-    Specific content decoding filter. See net::SourceStream::SourceType for more
-    details
-  </summary>
-  <int value="0" label="Brotli"/>
-  <int value="1" label="Deflate"/>
-  <int value="2" label="GZIP"/>
-  <int value="3" label="GZIPFallback"/>
-  <int value="4" label="SDCH"/>
-  <int value="5" label="SDCHPossible"/>
-  <int value="6" label="Invalid"/>
-  <int value="7" label="None"/>
-  <int value="8" label="Rejected">
-    Unlike other values, this one is reported from HttpNetworkTransaction in a
-    case when an unadvertised, but known encoding appears in a
-    &quot;Content-Encoding&quot; header, and is thus not comparable with the
-    other values, which are potentially returned from cached entries.
-  </int>
-  <int value="9" label="Unknown">
-    Reported from URLRequestHttpJob::SetUpSourceStream when an unknown encoding
-    appears in a &quot;Content-Encoding&quot; header. Despite being reported in
-    this histogram, this does not cause a CONTENT_DECODING_FAILED error.
   </int>
 </enum>
 
@@ -1966,6 +1981,10 @@ Called by update_net_trust_anchors.py.-->
   <int value="10" label="Updated">
     There was a match, and the original cache entry was updated.
   </int>
+  <int value="11" label="Cache lock timeout">
+    There was a match, but the cache lock timed out. The request then bypassed
+    the cache, so the match was not used.
+  </int>
 </enum>
 
 <!-- LINT.ThenChange(//net/http/http_cache_transaction.h:NoVarySearchUseResult) -->
@@ -2812,8 +2831,15 @@ Called by update_net_trust_anchors.py.-->
 <enum name="StorageAccessNetRequestKind">
   <int value="0" label="Same-origin request with storage access override"/>
   <int value="1"
-      label="Cross-origin, same-site request with storage access override"/>
+      label="Deprecated: Cross-origin, same-site request with storage access
+             override"/>
   <int value="2" label="Cross-site request with storage access override"/>
+  <int value="3"
+      label="Cross-origin, same-site request with storage access override
+             with credentials mode == 'include'"/>
+  <int value="4"
+      label="Cross-origin, same-site request with storage access override
+             with credentials mode != 'include'"/>
 </enum>
 
 <enum name="StorageAccessRedirectKind">

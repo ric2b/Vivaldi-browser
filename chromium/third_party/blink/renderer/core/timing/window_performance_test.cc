@@ -17,6 +17,7 @@
 #include "components/viz/common/frame_timing_details.h"
 #include "services/metrics/public/cpp/ukm_builders.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/common/responsiveness_metrics/user_interaction_latency.h"
 #include "third_party/blink/public/mojom/page/page_visibility_state.mojom-blink.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_binding_for_core.h"
@@ -2121,6 +2122,40 @@ TEST_P(InteractionIdTest, ClickIncorrectPointerId) {
   // Flush UKM logging mojo request.
   RunPendingTasks();
   CheckUKMValues({{40, 40, UserInteractionType::kTapOrClick}});
+}
+
+TEST_P(WindowPerformanceTest, ContainerTimingTraceEvent) {
+  using trace_analyzer::Query;
+  trace_analyzer::Start("*");
+  performance_->AddContainerTiming(
+      DOMPaintTimingInfo{.paint_time = 2000, .presentation_time = 2000},
+      gfx::Rect(10, 20, 30, 40), 1200, AtomicString("identifier"),
+      /*element*/ nullptr,
+      DOMPaintTimingInfo{.paint_time = 1000, .presentation_time = 1000});
+  auto analyzer = trace_analyzer::Stop();
+  trace_analyzer::TraceEventVector events;
+  Query q = Query::EventNameIs("PerformanceContainerTiming");
+  analyzer->FindEvents(q, &events);
+  EXPECT_EQ(1u, events.size());
+  EXPECT_EQ("loading", events[0]->category);
+  EXPECT_TRUE(events[0]->HasStringArg("frame"));
+
+  ASSERT_TRUE(events[0]->HasDictArg("data"));
+  base::Value::Dict arg_dict = events[0]->GetKnownArgAsDict("data");
+  std::string* element_type = arg_dict.FindString("elementType");
+  ASSERT_TRUE(element_type);
+  EXPECT_EQ(*element_type, "container-paints");
+  EXPECT_EQ(arg_dict.FindInt("startTime").value_or(-1), 2000);
+  EXPECT_EQ(arg_dict.FindInt("firstRenderTime").value_or(-1), 1000);
+  EXPECT_EQ(arg_dict.FindInt("duration").value_or(-1), 0);
+  EXPECT_EQ(arg_dict.FindDouble("rectLeft").value_or(-1), 10);
+  EXPECT_EQ(arg_dict.FindDouble("rectTop").value_or(-1), 20);
+  EXPECT_EQ(arg_dict.FindDouble("rectWidth").value_or(-1), 30);
+  EXPECT_EQ(arg_dict.FindDouble("rectHeight").value_or(-1), 40);
+  EXPECT_EQ(arg_dict.FindDouble("size").value_or(-1), 1200);
+  std::string* identifier = arg_dict.FindString("identifier");
+  ASSERT_TRUE(identifier);
+  EXPECT_EQ(*identifier, "identifier");
 }
 
 INSTANTIATE_TEST_SUITE_P(All, InteractionIdTest, ::testing::Bool());

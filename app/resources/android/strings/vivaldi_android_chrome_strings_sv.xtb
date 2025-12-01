@@ -1,7 +1,10 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="sv">
+<translation id="1204037785786432551">Ladda ner länk</translation>
+<translation id="1206892813135768548">Kopiera länktext</translation>
 <translation id="1397811292916898096">Sök med <ph name="PRODUCT_NAME" /></translation>
+<translation id="1435593198351412143">Öppna PDF-filer automatiskt</translation>
 <translation id="1456207338570705181">Tryck för Sök är en funktion som är tillgänglig när Google är vald som standardsökmotor i Vivaldi. Den skickar det markerade ordet och den aktuella sidan som kontext till Google Search. Du kan stänga av detta i <ph name="BEGIN_LINK" />Inställningar<ph name="END_LINK" />.</translation>
 <translation id="1598449788754183301">Växla vanliga/privata flikar</translation>
 <translation id="1644574205037202324">Historik</translation>
@@ -14,10 +17,14 @@
 <translation id="2433507940547922241">Utseende</translation>
 <translation id="2501278716633472235">Gå tillbaka</translation>
 <translation id="2633278372998075009">Privata flikar</translation>
+<translation id="2650751991977523696">Ladda ned filen igen?</translation>
 <translation id="265156376773362237">Standardförinläsning</translation>
 <translation id="272026394418727548">Vivaldis hemsida</translation>
+<translation id="2842985007712546952">Överordnad mapp</translation>
 <translation id="2871733351037274014">Läs in sidor i förväg</translation>
+<translation id="2904300462646366554">Nedladdade PDF-filer öppnas automatiskt med en av PDF-läsarna på din enhet</translation>
 <translation id="2951071800649516099">Lägg till sidor till din läslista för senare</translation>
+<translation id="3029276696788198026">Ingen förladdning</translation>
 <translation id="3060635849835183725">{BOOKMARKS_COUNT, plural,
           =1 {<ph name="BOOKMARKS_COUNT_ONE" /> bokmärke}
           other {<ph name="BOOKMARKS_COUNT_MANY" /> bokmärken}}</translation>
@@ -34,6 +41,7 @@
 <translation id="3719826155360621982">Hemsida</translation>
 <translation id="3738139272394829648">Tryck för att söka</translation>
 <translation id="385051799172605136">Tillbaka</translation>
+<translation id="3987993985790029246">Kopiera länk</translation>
 <translation id="399014816462153200">Läs artiklar:</translation>
 <translation id="4121750346708795461">Genom att använda det här programmet godkänner du Vivaldis <ph name="BEGIN_LINK1" />användarvillkor<ph name="END_LINK1" /> och <ph name="BEGIN_LINK2" />sekretesspolicy<ph name="END_LINK2" />.</translation>
 <translation id="4137746084635924146">Aktuellt enhetsspråk</translation>
@@ -41,10 +49,13 @@
 <translation id="4195643157523330669">Öppna i ny flik</translation>
 <translation id="4225895483398857530">Genväg till verktygsfältet</translation>
 <translation id="4243710787042215766">Öppna i privat flik</translation>
+<translation id="4269820728363426813">Kopiera länkadress</translation>
 <translation id="4291407919474070700"><ph name="BEGIN_LINK" />Aktivera skärmlås i Android-inställningar<ph name="END_LINK" /></translation>
 <translation id="4304713468139749426">Lösenordshanterare</translation>
 <translation id="451872707440238414">Sök bland dina bokmärken</translation>
 <translation id="4526803704855831732">Privata flikar</translation>
+<translation id="4532845899244822526">Välj mapp</translation>
+<translation id="4699172675775169585">Cachade bilder och filer</translation>
 <translation id="4719086422742491124">Lär dig om ämnen på webbsidor utan att lämna sidan. Markera ett eller fler ord på en sida för att söka efter dem.
 
 Tryck för Sök är en funktion som enbart är tillgänglig när Google är vald som standardsökmotorn i Vivaldi.</translation>
@@ -55,20 +66,34 @@ Tryck för Sök är en funktion som enbart är tillgänglig när Google är vald
 <translation id="49576331685473090">Innehållsblockerare</translation>
 <translation id="5079259810715830221">När en Google-webbplats ber om att privat förinläsa länkar på sin sida, krypterar Vivaldi och förladdar sidor via Googles servrar utan cookies. Detta döljer din identitet från den förladdade webbplatsen.</translation>
 <translation id="5118676864324397542"><ph name="APP_NAME" /> lagerplats</translation>
+<translation id="5144385790872094440">Vissa av sidorna du besöker är förladdade. Sidor kan laddas i förväg via Googles servrar när de länkas från en Google-webbplats eller app.</translation>
 <translation id="5186185447130319458">Privat</translation>
+<translation id="5206168361184759344">{FILE_COUNT, plural,
+            =1 {Laddar ner fil…}
+            other {Laddar ner # filer…}}</translation>
 <translation id="5233638681132016545">Ny flik</translation>
 <translation id="5375131951310889874">Lär dig om ämnen på webbsidor utan att lämna sidan. Tryck för Sök är en funktion som bara är tillgänglig när Google är vald som standardsökmotor i Vivaldi. Den skickar ett ord och dess omkringliggande kontext till Google Sök, och presenterar definitioner, bilder, sökresultat och andra detaljer.
 
 Gör ett långt tryck för att justera din sökterm. För att förfina sökningen kan du dra panelen hela vägen till toppen och trycka på sökrutan.</translation>
+<translation id="543338862236136125">Redigera lösenord</translation>
 <translation id="572328651809341494">Senaste flikar</translation>
+<translation id="5833984609253377421">Dela länk</translation>
 <translation id="6150320133806434356">Bokmärke sparat</translation>
+<translation id="6193448654517602979">Välj flikar</translation>
 <translation id="6336451774241870485">Ny privat flik</translation>
 <translation id="6337323516034698937">För att skicka den här fliken till en annan enhet, logga in på Vivaldi Sync på båda enheterna. Se till att du anger krypteringslösenordet om det behövs.</translation>
+<translation id="6341580099087024258">Fråga var filer ska sparas</translation>
 <translation id="6404511346730675251">Redigera bokmärke</translation>
+<translation id="650224091954855786">{FILE_COUNT, plural,
+ =1 {Fil nedladdad}
+ other {# nedladdningar slutförda}}</translation>
 <translation id="6585139692466700358">Erbjud översättning av sidor på andra språk med Vivaldis översättningstjänst</translation>
 <translation id="6588043302623806746">Använd säker DNS</translation>
 <translation id="6593061639179217415">Datoranpassad webbsida</translation>
 <translation id="6610147964972079463">Stäng privata flikar</translation>
+<translation id="6627583120233659107">Redigera mapp</translation>
+<translation id="6865313869410766144">Autofyll formuläruppgifter</translation>
+<translation id="6909589135458168665">Ladda in sidor i förväg</translation>
 <translation id="7029995644714925509">När en webbplats ber om att privat förinläsa länkar på sin sida, krypterar Vivaldi och förladdar sidor via Googles servrar utan cookies. Detta döljer din identitet från den förnedladdade webbplatsen.</translation>
 <translation id="706339621163631076">Webbläsarens sekretesspolicy</translation>
 <translation id="732145680195464316">Bokmärke sparat i <ph name="PRODUCT_NAME" /></translation>
@@ -79,10 +104,13 @@ Gör ett långt tryck för att justera din sökterm. För att förfina sökninge
 <translation id="7456774706094330779">Utökad förinläsning</translation>
 <translation id="7465104139234185284">Stäng alla privata flikar</translation>
 <translation id="7481312909269577407">Framåt</translation>
+<translation id="7764225426217299476">Lägg till adress</translation>
 <translation id="7968014550143838305">Lades till läslistan</translation>
 <translation id="804786196054284061">Användarvillkor</translation>
 <translation id="8062594758852531064">Utökad förinläsning:</translation>
+<translation id="8073388330009372546">Öppna bild i ny flik</translation>
 <translation id="8127542551745560481">Redigera startsida</translation>
+<translation id="8266862848225348053">Nedladdningsplats</translation>
 <translation id="8348430946834215779">Använd HTTPS när det är möjligt och bli varnad innan du laddar webbplatser som inte stöder det</translation>
 <translation id="8560602726703398413">Hitta din läslista i Bokmärken</translation>
 <translation id="85991616550051997">Gå till hemsida</translation>

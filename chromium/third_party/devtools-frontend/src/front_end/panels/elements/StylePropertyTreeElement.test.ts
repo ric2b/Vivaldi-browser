@@ -10,13 +10,14 @@ import type * as Protocol from '../../generated/protocol.js';
 import * as Bindings from '../../models/bindings/bindings.js';
 import * as Workspace from '../../models/workspace/workspace.js';
 import {renderElementIntoDOM} from '../../testing/DOMHelpers.js';
-import {createTarget, stubNoopSettings} from '../../testing/EnvironmentHelpers.js';
-import {expectCall} from '../../testing/ExpectStubCall.js';
+import {createTarget, updateHostConfig} from '../../testing/EnvironmentHelpers.js';
+import {expectCall, spyCall} from '../../testing/ExpectStubCall.js';
 import {describeWithMockConnection, setMockConnectionResponseHandler} from '../../testing/MockConnection.js';
 import {
   getMatchedStylesWithBlankRule,
 } from '../../testing/StyleHelpers.js';
 import * as CodeMirror from '../../third_party/codemirror.next/codemirror.next.js';
+import * as Tooltips from '../../ui/components/tooltips/tooltips.js';
 import * as InlineEditor from '../../ui/legacy/components/inline_editor/inline_editor.js';
 import * as LegacyUI from '../../ui/legacy/legacy.js';
 
@@ -30,18 +31,7 @@ describeWithMockConnection('StylePropertyTreeElement', () => {
   let fakeComputeCSSVariable: SinonStub<
       [style: SDK.CSSStyleDeclaration.CSSStyleDeclaration, variableName: string],
       SDK.CSSMatchedStyles.CSSVariableValue|null>;
-
-  async function setUpCSSModel() {
-    stubNoopSettings();
-    setMockConnectionResponseHandler('CSS.enable', () => ({}));
-    const cssModel = new SDK.CSSModel.CSSModel(createTarget());
-    await cssModel.resumeModel();
-    const domModel = cssModel.domModel();
-    const node = new SDK.DOMModel.DOMNode(domModel);
-    node.id = 0 as Protocol.DOM.NodeId;
-    LegacyUI.Context.Context.instance().setFlavor(SDK.DOMModel.DOMNode, node);
-    return {cssModel};
-  }
+  let cssModel: SDK.CSSModel.CSSModel;
 
   beforeEach(async () => {
     const computedStyleModel = new Elements.ComputedStyleModel.ComputedStyleModel();
@@ -72,12 +62,22 @@ describeWithMockConnection('StylePropertyTreeElement', () => {
         new Bindings.ResourceMapping.ResourceMapping(SDK.TargetManager.TargetManager.instance(), workspace);
     Bindings.CSSWorkspaceBinding.CSSWorkspaceBinding.instance(
         {forceNew: true, resourceMapping, targetManager: SDK.TargetManager.TargetManager.instance()});
+
+    setMockConnectionResponseHandler('CSS.enable', () => ({}));
+    cssModel = new SDK.CSSModel.CSSModel(createTarget());
+    await cssModel.resumeModel();
+    const domModel = cssModel.domModel();
+    const node = new SDK.DOMModel.DOMNode(domModel);
+    node.id = 0 as Protocol.DOM.NodeId;
+    LegacyUI.Context.Context.instance().setFlavor(SDK.DOMModel.DOMNode, node);
   });
 
   function addProperty(name: string, value: string, longhandProperties: Protocol.CSS.CSSProperty[] = []) {
-    return new SDK.CSSProperty.CSSProperty(
+    const property = new SDK.CSSProperty.CSSProperty(
         matchedStyles.nodeStyles()[0], matchedStyles.nodeStyles()[0].pastLastSourcePropertyIndex(), name, value, true,
         false, true, false, '', undefined, longhandProperties);
+    matchedStyles.nodeStyles()[0].allProperties().push(property);
+    return property;
   }
 
   function getTreeElement(name: string, value: string, longhandProperties: Protocol.CSS.CSSProperty[] = []) {
@@ -122,7 +122,6 @@ describeWithMockConnection('StylePropertyTreeElement', () => {
        });
 
     it('is able to expand longhands with vars', async () => {
-      await setUpCSSModel();
       setMockConnectionResponseHandler(
           'CSS.getLonghandProperties', (request: Protocol.CSS.GetLonghandPropertiesRequest) => {
             if (request.shorthandName !== 'shorthand') {
@@ -147,7 +146,7 @@ describeWithMockConnection('StylePropertyTreeElement', () => {
       stylePropertyTreeElement.updateTitle();
       stylePropertyTreeElement.expand();
       const children = stylePropertyTreeElement.children().map(
-          child => (child as Elements.StylePropertyTreeElement.StylePropertyTreeElement).valueElement?.textContent);
+          child => (child as Elements.StylePropertyTreeElement.StylePropertyTreeElement).valueElement?.innerText);
       assert.deepEqual(children, ['red', 'shorter', 'hue']);
     });
 
@@ -160,20 +159,21 @@ describeWithMockConnection('StylePropertyTreeElement', () => {
         const colorSwatches =
             Array.from(stylePropertyTreeElement.valueElement?.querySelectorAll('devtools-color-swatch') || []);
         assert.exists(colorMixSwatch);
-        assert.exists(colorSwatches.find(colorSwatch => colorSwatch.textContent === 'red'));
-        assert.exists(colorSwatches.find(colorSwatch => colorSwatch.textContent === 'blue'));
+        assert.exists(colorSwatches.find(colorSwatch => colorSwatch.innerText === 'red'));
+        assert.exists(colorSwatches.find(colorSwatch => colorSwatch.innerText === 'blue'));
       });
 
       it('should show color mix swatch when color-mix is used with a known variable as color', () => {
         const stylePropertyTreeElement = getTreeElement('color', 'color-mix(in srgb, var(--a), var(--b))');
         stylePropertyTreeElement.updateTitle();
+        renderElementIntoDOM(stylePropertyTreeElement.valueElement!);
 
         const colorMixSwatch = stylePropertyTreeElement.valueElement?.querySelector('devtools-color-mix-swatch');
         const cssVarSwatches =
-            Array.from(stylePropertyTreeElement.valueElement?.querySelectorAll('devtools-css-var-swatch') || []);
+            Array.from(stylePropertyTreeElement.valueElement?.querySelectorAll('devtools-link-swatch') || []);
         assert.exists(colorMixSwatch);
-        assert.exists(cssVarSwatches.find(cssVarSwatch => cssVarSwatch.textContent === 'var(--a)'));
-        assert.exists(cssVarSwatches.find(cssVarSwatch => cssVarSwatch.textContent === 'var(--b)'));
+        assert.exists(cssVarSwatches.find(cssVarSwatch => cssVarSwatch.innerText === '--a'));
+        assert.exists(cssVarSwatches.find(cssVarSwatch => cssVarSwatch.innerText === '--b'));
       });
 
       it('should not show color mix swatch when color-mix is used with an unknown variable as color', () => {
@@ -190,7 +190,6 @@ describeWithMockConnection('StylePropertyTreeElement', () => {
 
         const colorMixSwatch = stylePropertyTreeElement.valueElement?.querySelector('devtools-color-mix-swatch');
         assert.exists(colorMixSwatch);
-        assert.isTrue(colorMixSwatch.textContent?.includes('var(--space)'));
       });
 
       it('should show color mix swatch when color-mix is used with an known variable in interpolation method even if it is not a valid method',
@@ -201,7 +200,6 @@ describeWithMockConnection('StylePropertyTreeElement', () => {
 
            const colorMixSwatch = stylePropertyTreeElement.valueElement?.querySelector('devtools-color-mix-swatch');
            assert.exists(colorMixSwatch);
-           assert.isTrue(colorMixSwatch.textContent?.includes('var(--garbage-space)'));
          });
 
       it('should not show color mix swatch when color-mix is used with an unknown variable in interpolation method',
@@ -217,30 +215,31 @@ describeWithMockConnection('StylePropertyTreeElement', () => {
 
       it('shows a popover with it\'s computed color as RGB if possible', () => {
         const stylePropertyTreeElement = getTreeElement('color', 'color-mix(in srgb, red 50%, yellow)');
+        stylePropertyTreeElement.treeOutline = new LegacyUI.TreeOutline.TreeOutline();
 
-        const addPopoverSpy = sinon.spy(stylesSidebarPane, 'addPopover');
         stylePropertyTreeElement.updateTitle();
         const colorMixSwatch = stylePropertyTreeElement.valueElement?.querySelector('devtools-color-mix-swatch');
         assert.exists(colorMixSwatch);
-        renderElementIntoDOM(colorMixSwatch);
+        renderElementIntoDOM(stylePropertyTreeElement.valueElement as HTMLElement);
 
-        assert.isTrue(addPopoverSpy.calledOnce);
-        assert.strictEqual(addPopoverSpy.args[0][0], colorMixSwatch.icon);
-        assert.strictEqual(addPopoverSpy.args[0][1].contents()?.textContent, '#ff8000');
+        const tooltip: Tooltips.Tooltip.Tooltip|null|undefined =
+            stylePropertyTreeElement.valueElement?.querySelector('devtools-tooltip');
+        assert.exists(tooltip);
+        tooltip.showPopover();
+        assert.strictEqual(tooltip.innerText, '#ff8000');
       });
 
       it('shows a popover with it\'s computed color as wide gamut if necessary', () => {
         const stylePropertyTreeElement = getTreeElement('color', 'color-mix(in srgb, oklch(.5 .5 .5) 50%, yellow)');
 
-        const addPopoverSpy = sinon.spy(stylesSidebarPane, 'addPopover');
         stylePropertyTreeElement.updateTitle();
         const colorMixSwatch = stylePropertyTreeElement.valueElement?.querySelector('devtools-color-mix-swatch');
         assert.exists(colorMixSwatch);
-        renderElementIntoDOM(colorMixSwatch);
+        renderElementIntoDOM(stylePropertyTreeElement.valueElement as HTMLElement);
 
-        assert.isTrue(addPopoverSpy.calledOnce);
-        assert.strictEqual(addPopoverSpy.args[0][0], colorMixSwatch.icon);
-        assert.strictEqual(addPopoverSpy.args[0][1].contents()?.textContent, 'color(srgb 1 0.24 0.17)');
+        const tooltip = stylePropertyTreeElement.valueElement?.querySelector('devtools-tooltip');
+        tooltip?.showPopover();
+        assert.strictEqual(tooltip?.innerText, 'color(srgb 1 0.24 0.17)');
       });
 
       it('propagates updates to outer color-mixes', () => {
@@ -248,12 +247,14 @@ describeWithMockConnection('StylePropertyTreeElement', () => {
             getTreeElement('color', 'color-mix(in srgb, color-mix(in oklch, red, green), blue)');
         stylePropertyTreeElement.updateTitle();
 
-        const outerColorMix = stylePropertyTreeElement.valueElement?.querySelector('devtools-color-mix-swatch');
+        assert.exists(stylePropertyTreeElement.valueElement);
+
+        const [outerColorMix, innerColorMix] =
+            Array.from(stylePropertyTreeElement.valueElement.querySelectorAll('devtools-color-mix-swatch'));
         assert.exists(outerColorMix);
-        const handler = sinon.fake();
-        outerColorMix.addEventListener(InlineEditor.ColorMixSwatch.Events.COLOR_CHANGED, handler);
-        const innerColorMix = outerColorMix.querySelector('devtools-color-mix-swatch');
         assert.exists(innerColorMix);
+        const handler = sinon.fake();
+        outerColorMix.addEventListener(InlineEditor.ColorMixSwatch.ColorMixChangedEvent.eventName, handler);
         assert.strictEqual(outerColorMix.getText(), 'color-mix(in srgb, color-mix(in oklch, red, green), blue)');
         assert.strictEqual(innerColorMix.getText(), 'color-mix(in oklch, red, green)');
         innerColorMix.setFirstColor('blue');
@@ -262,7 +263,7 @@ describeWithMockConnection('StylePropertyTreeElement', () => {
 
         // setFirstColor does not actually update the rendered color swatches or the textContent, which is why the first
         // color is still red here.
-        const colorSwatch = innerColorMix.querySelector('devtools-color-swatch');
+        const colorSwatch = stylePropertyTreeElement.valueElement.querySelector('devtools-color-swatch');
         assert.isOk(colorSwatch);
         const newColor = colorSwatch.getColor()?.as(Common.Color.Format.HEX);
         assert.isOk(newColor);
@@ -270,6 +271,42 @@ describeWithMockConnection('StylePropertyTreeElement', () => {
         assert.strictEqual(outerColorMix.getText(), 'color-mix(in srgb, color-mix(in oklch, #ff0000, green), blue)');
         assert.deepEqual(
             handler.args[1][0].data, {text: 'color-mix(in srgb, color-mix(in oklch, #ff0000, green), blue)'});
+      });
+
+      it('supports evaluation during tracing', async () => {
+        const property = addProperty('color', 'color-mix(in srgb, black, white)');
+        setMockConnectionResponseHandler(
+            'CSS.resolveValues',
+            (request: Protocol.CSS.ResolveValuesRequest) =>
+                ({results: request.values.map(v => v === property.value ? 'grey' : v)}));
+        const matchedResult = property.parseValue(matchedStyles, new Map());
+
+        const context = new Elements.PropertyRenderer.TracingContext(new Elements.PropertyRenderer.Highlighting());
+        assert.isTrue(context.nextEvaluation());
+        const {valueElement} = Elements.PropertyRenderer.Renderer.renderValueElement(
+            property, matchedResult,
+            Elements.StylePropertyTreeElement.getPropertyRenderers(
+                matchedStyles.nodeStyles()[0], stylesSidebarPane, matchedStyles, null, new Map()),
+            context);
+
+        const colorSwatch = valueElement.querySelector('devtools-color-swatch');
+        assert.exists(colorSwatch);
+        const setColorTextCall = await spyCall(colorSwatch, 'setColorText');
+
+        assert.strictEqual(setColorTextCall.args[0].asString(), '#808080');
+        assert.strictEqual(valueElement.innerText, '#808080');
+      });
+
+      it('shows a value tracing tooltip on the var function', async () => {
+        updateHostConfig({devToolsCssValueTracing: {enabled: true}});
+        const stylePropertyTreeElement = getTreeElement('color', 'color-mix(in srgb, yellow, green)');
+        stylePropertyTreeElement.updateTitle();
+        assert.exists(stylePropertyTreeElement.valueElement);
+        renderElementIntoDOM(stylePropertyTreeElement.valueElement);
+        const tooltip = stylePropertyTreeElement.valueElement.querySelector('devtools-tooltip');
+        assert.exists(tooltip);
+        const widget = tooltip.firstElementChild && LegacyUI.Widget.Widget.get(tooltip.firstElementChild);
+        assert.instanceOf(widget, Elements.CSSValueTraceView.CSSValueTraceView);
       });
     });
 
@@ -294,15 +331,11 @@ describeWithMockConnection('StylePropertyTreeElement', () => {
 
       describe('jumping to animations panel', () => {
         let domModel: SDK.DOMModel.DOMModel;
-        beforeEach(() => {
+        beforeEach(async () => {
           const target = createTarget();
           const domModelBeforeAssertion = target.model(SDK.DOMModel.DOMModel);
           assert.exists(domModelBeforeAssertion);
           domModel = domModelBeforeAssertion;
-        });
-
-        afterEach(() => {
-          sinon.reset();
         });
 
         it('should render a jump-to icon when the animation with the given name exists for the node', async () => {
@@ -497,23 +530,16 @@ describeWithMockConnection('StylePropertyTreeElement', () => {
       const stylePropertyTreeElement = getTreeElement('prop', 'var(--prop)');
       stylePropertyTreeElement.updateTitle();
 
-      const varSwatch =
-          renderValueSpy.returnValues.find(value => value.firstChild instanceof InlineEditor.LinkSwatch.CSSVarSwatch)
-                  ?.firstChild as InlineEditor.LinkSwatch.CSSVarSwatch |
-          undefined;
+      const varSwatch = renderValueSpy.returnValues
+                            .map(fragment => Array.from(fragment.valueElement.querySelectorAll('devtools-link-swatch')))
+                            .flat()[0];
       assert.exists(varSwatch);
       const revealPropertySpy = sinon.spy(stylesSidebarPane, 'revealProperty');
-      varSwatch.link?.linkElement?.click();
+      varSwatch.linkElement?.click();
       assert.isTrue(revealPropertySpy.calledWith(cssCustomPropertyDef));
     });
 
     it('linkifies property definition to registrations', async () => {
-      const addElementPopoverHook = sinon.stub(stylesSidebarPane, 'addPopover');
-      const stylePropertyTreeElement = getTreeElement('--prop', 'value');
-      stylePropertyTreeElement.updateTitle();
-
-      assert.isTrue(addElementPopoverHook.calledOnce);
-
       const registration = sinon.createStubInstance(SDK.CSSMatchedStyles.CSSRegisteredProperty);
       sinon.stub(matchedStyles, 'getRegisteredProperty')
           .callsFake(name => name === '--prop' ? registration : undefined);
@@ -521,9 +547,15 @@ describeWithMockConnection('StylePropertyTreeElement', () => {
         value: 'computedvalue',
         declaration: new SDK.CSSMatchedStyles.CSSValueSource(sinon.createStubInstance(SDK.CSSProperty.CSSProperty)),
       });
-      const popoverContents = addElementPopoverHook.args[0][1].contents();
+
+      const stylePropertyTreeElement = getTreeElement('--prop', 'value');
+      stylePropertyTreeElement.treeOutline = new LegacyUI.TreeOutline.TreeOutline();
+      stylePropertyTreeElement.updateTitle();
+
+      const popoverContents =
+          stylePropertyTreeElement.listItemElement.querySelector('devtools-tooltip > devtools-css-variable-value-view');
       assert.instanceOf(popoverContents, ElementsComponents.CSSVariableValueView.CSSVariableValueView);
-      const {details} = popoverContents as ElementsComponents.CSSVariableValueView.CSSVariableValueView;
+      const {details} = popoverContents;
       assert.exists(details);
 
       const jumpToSectionSpy = sinon.spy(stylesSidebarPane, 'jumpToSection');
@@ -543,13 +575,12 @@ describeWithMockConnection('StylePropertyTreeElement', () => {
       const stylePropertyTreeElement = getTreeElement('prop', 'var(--prop)');
       stylePropertyTreeElement.updateTitle();
 
-      const varSwatch =
-          renderValueSpy.returnValues.find(value => value.firstChild instanceof InlineEditor.LinkSwatch.CSSVarSwatch)
-                  ?.firstChild as InlineEditor.LinkSwatch.CSSVarSwatch |
-          undefined;
+      const varSwatch = renderValueSpy.returnValues
+                            .map(fragment => Array.from(fragment.valueElement.querySelectorAll('devtools-link-swatch')))
+                            .flat()[0];
       assert.exists(varSwatch);
       const jumpToPropertySpy = sinon.spy(stylesSidebarPane, 'jumpToProperty');
-      varSwatch.link?.linkElement?.click();
+      varSwatch.linkElement?.click();
       assert.isTrue(jumpToPropertySpy.calledWith(
           'initial-value', '--prop', Elements.StylesSidebarPane.REGISTERED_PROPERTY_SECTION_NAME));
     });
@@ -561,15 +592,16 @@ describeWithMockConnection('StylePropertyTreeElement', () => {
       stylePropertyTreeElement.updateTitle();
       assert.exists(stylePropertyTreeElement.valueElement);
 
-      const cssVarSwatch = stylePropertyTreeElement.valueElement?.querySelector('devtools-css-var-swatch');
-      assert.exists(cssVarSwatch);
-
-      const linkSwatch = cssVarSwatch.shadowRoot?.querySelector('devtools-base-link-swatch');
+      const linkSwatch = stylePropertyTreeElement.valueElement?.querySelector('devtools-link-swatch');
       assert.exists(linkSwatch);
 
-      assert.strictEqual(cssVarSwatch.textContent, 'var(--a)');
-      assert.strictEqual(linkSwatch.shadowRoot?.textContent, '--a');
-      assert.strictEqual(stylePropertyTreeElement.valueElement.textContent, 'var(--a)');
+      const cssVarSwatch = linkSwatch.parentElement;
+      assert.exists(cssVarSwatch);
+
+      renderElementIntoDOM(stylePropertyTreeElement.valueElement);
+      assert.strictEqual(cssVarSwatch.innerText, 'var(--a)');
+      assert.strictEqual(linkSwatch.innerText, '--a');
+      assert.strictEqual(stylePropertyTreeElement.valueElement.innerText, 'var(--a)');
     });
 
     it('should render a CSSVarSwatch for variable usage with fallback', () => {
@@ -577,15 +609,16 @@ describeWithMockConnection('StylePropertyTreeElement', () => {
       stylePropertyTreeElement.updateTitle();
       assert.exists(stylePropertyTreeElement.valueElement);
 
-      const cssVarSwatch = stylePropertyTreeElement.valueElement?.querySelector('devtools-css-var-swatch');
-      assert.exists(cssVarSwatch);
-
-      const linkSwatch = cssVarSwatch.shadowRoot?.querySelector('devtools-base-link-swatch');
+      const linkSwatch = stylePropertyTreeElement.valueElement?.querySelector('devtools-link-swatch');
       assert.exists(linkSwatch);
 
-      assert.strictEqual(linkSwatch.shadowRoot?.textContent, '--not-existing');
-      assert.strictEqual(cssVarSwatch.deepTextContent(), 'var(--not-existing, red)');
-      assert.strictEqual(stylePropertyTreeElement.valueElement.textContent, 'var(--not-existing, red)');
+      const cssVarSwatch = linkSwatch.parentElement;
+      assert.exists(cssVarSwatch);
+      renderElementIntoDOM(stylePropertyTreeElement.valueElement);
+
+      assert.strictEqual(linkSwatch.innerText, '--not-existing');
+      assert.strictEqual(cssVarSwatch.innerText, 'var(--not-existing, red)');
+      assert.strictEqual(stylePropertyTreeElement.valueElement.innerText, 'var(--not-existing, red)');
     });
 
     it('should render a CSSVarSwatch inside CSSVarSwatch for variable usage with another variable fallback', () => {
@@ -593,17 +626,21 @@ describeWithMockConnection('StylePropertyTreeElement', () => {
       stylePropertyTreeElement.updateTitle();
       assert.exists(stylePropertyTreeElement.valueElement);
 
-      const cssVarSwatch = stylePropertyTreeElement.valueElement?.querySelector('devtools-css-var-swatch');
+      const [firstLinkSwatch, secondLinkSwatch] =
+          stylePropertyTreeElement.valueElement?.querySelectorAll('devtools-link-swatch');
+      assert.exists(firstLinkSwatch);
+      assert.exists(secondLinkSwatch);
+      const cssVarSwatch = firstLinkSwatch.parentElement;
       assert.exists(cssVarSwatch);
+      const insideCssVarSwatch = secondLinkSwatch.parentElement;
+      assert.exists(insideCssVarSwatch);
+      renderElementIntoDOM(stylePropertyTreeElement.valueElement);
 
-      const firstLinkSwatch = cssVarSwatch.shadowRoot?.querySelector('devtools-base-link-swatch');
-      const insideCssVarSwatch = cssVarSwatch.querySelector('devtools-css-var-swatch');
-      const secondLinkSwatch = insideCssVarSwatch?.shadowRoot?.querySelector('devtools-base-link-swatch');
-      assert.strictEqual(stylePropertyTreeElement.valueElement.textContent, 'var(--not-existing, var(--a))');
-      assert.strictEqual(firstLinkSwatch?.shadowRoot?.textContent, '--not-existing');
-      assert.strictEqual(cssVarSwatch.textContent, 'var(--not-existing, var(--a))');
-      assert.strictEqual(secondLinkSwatch?.shadowRoot?.textContent, '--a');
-      assert.strictEqual(insideCssVarSwatch?.textContent, 'var(--a)');
+      assert.strictEqual(stylePropertyTreeElement.valueElement.innerText, 'var(--not-existing, var(--a))');
+      assert.strictEqual(firstLinkSwatch?.innerText, '--not-existing');
+      assert.strictEqual(cssVarSwatch.innerText, 'var(--not-existing, var(--a))');
+      assert.strictEqual(secondLinkSwatch?.innerText, '--a');
+      assert.strictEqual(insideCssVarSwatch?.innerText, 'var(--a)');
     });
 
     it('should render a CSSVarSwatch inside CSSVarSwatch for variable usage with calc expression as fallback', () => {
@@ -611,14 +648,16 @@ describeWithMockConnection('StylePropertyTreeElement', () => {
       stylePropertyTreeElement.updateTitle();
       assert.exists(stylePropertyTreeElement.valueElement);
 
-      const cssVarSwatch = stylePropertyTreeElement.valueElement?.querySelector('devtools-css-var-swatch');
+      const linkSwatch = stylePropertyTreeElement.valueElement?.querySelector('devtools-link-swatch');
+      assert.exists(linkSwatch);
+      const cssVarSwatch = linkSwatch.parentElement;
       assert.exists(cssVarSwatch);
+      assert.exists(stylePropertyTreeElement.valueElement);
+      renderElementIntoDOM(stylePropertyTreeElement.valueElement);
 
-      const firstLinkSwatch = cssVarSwatch.shadowRoot?.querySelector('devtools-base-link-swatch');
-
-      assert.strictEqual(stylePropertyTreeElement.valueElement.textContent, 'var(--not-existing, calc(15px + 20px))');
-      assert.strictEqual(firstLinkSwatch?.shadowRoot?.textContent, '--not-existing');
-      assert.strictEqual(cssVarSwatch.textContent, 'var(--not-existing, calc(15px + 20px))');
+      assert.strictEqual(stylePropertyTreeElement.valueElement.innerText, 'var(--not-existing, calc(15px + 20px))');
+      assert.strictEqual(linkSwatch?.innerText, '--not-existing');
+      assert.strictEqual(cssVarSwatch.innerText, 'var(--not-existing, calc(15px + 20px))');
     });
 
     it('should render a CSSVarSwatch inside CSSVarSwatch for variable usage with color and also a color swatch', () => {
@@ -627,18 +666,21 @@ describeWithMockConnection('StylePropertyTreeElement', () => {
         stylePropertyTreeElement.updateTitle();
         assert.exists(stylePropertyTreeElement.valueElement);
 
-        const cssVarSwatch = stylePropertyTreeElement.valueElement?.querySelector('devtools-css-var-swatch');
-        assert.exists(cssVarSwatch);
-
-        const colorSwatch = cssVarSwatch.querySelector('devtools-color-swatch');
+        const colorSwatch = stylePropertyTreeElement.valueElement?.querySelector('devtools-color-swatch');
         assert.exists(colorSwatch);
         assert.isTrue(InlineEditor.ColorSwatch.ColorSwatch.isColorSwatch(colorSwatch));
 
-        const firstLinkSwatch = cssVarSwatch.shadowRoot?.querySelector('devtools-base-link-swatch');
+        const linkSwatch = stylePropertyTreeElement.valueElement?.querySelector('devtools-link-swatch');
+        assert.exists(linkSwatch);
+        const cssVarSwatch = linkSwatch.parentElement;
+        assert.exists(cssVarSwatch);
+        assert.exists(stylePropertyTreeElement.valueElement);
+        renderElementIntoDOM(stylePropertyTreeElement.valueElement);
 
-        assert.strictEqual(stylePropertyTreeElement.valueElement.textContent, `var(${varName}, var(--blue))`);
-        assert.strictEqual(firstLinkSwatch?.shadowRoot?.textContent, varName);
-        assert.strictEqual(cssVarSwatch.textContent, `var(${varName}, var(--blue))`);
+        assert.strictEqual(stylePropertyTreeElement.valueElement.innerText, `var(${varName}, var(--blue))`);
+        assert.strictEqual(linkSwatch?.innerText, varName);
+        assert.strictEqual(cssVarSwatch.innerText, `var(${varName}, var(--blue))`);
+        stylePropertyTreeElement.valueElement.remove();
       }
     });
 
@@ -646,22 +688,8 @@ describeWithMockConnection('StylePropertyTreeElement', () => {
       const stylePropertyTreeElement = getTreeElement('--shadow', 'var(--a) var(--b)');
       stylePropertyTreeElement.updateTitle();
 
-      const cssVarSwatches = stylePropertyTreeElement.valueElement?.querySelectorAll('devtools-css-var-swatch');
+      const cssVarSwatches = stylePropertyTreeElement.valueElement?.querySelectorAll('devtools-link-swatch');
       assert.strictEqual(cssVarSwatches?.length, 2);
-    });
-
-    it('should render a CSSVarSwatch for var() with spaces', () => {
-      const stylePropertyTreeElement = getTreeElement('color', 'var( --test    )');
-      stylePropertyTreeElement.updateTitle();
-      assert.exists(stylePropertyTreeElement.valueElement);
-
-      const cssVarSwatch = stylePropertyTreeElement.valueElement?.querySelector('devtools-css-var-swatch');
-      assert.exists(cssVarSwatch);
-
-      const linkSwatch = cssVarSwatch.shadowRoot?.querySelector('devtools-base-link-swatch');
-      assert.strictEqual(linkSwatch?.shadowRoot?.textContent, '--test');
-      assert.strictEqual(cssVarSwatch.textContent, 'var( --test    )');
-      assert.strictEqual(stylePropertyTreeElement.valueElement.textContent, 'var( --test    )');
     });
 
     it('connects nested color swatches', () => {
@@ -669,8 +697,12 @@ describeWithMockConnection('StylePropertyTreeElement', () => {
       stylePropertyTreeElement.updateTitle();
       assert.exists(stylePropertyTreeElement.valueElement);
 
-      const cssVarSwatch = stylePropertyTreeElement.valueElement?.querySelector('devtools-css-var-swatch');
+      const linkSwatch = stylePropertyTreeElement.valueElement?.querySelector('devtools-link-swatch');
+      assert.exists(linkSwatch);
+      const cssVarSwatch = linkSwatch.parentElement;
       assert.exists(cssVarSwatch);
+      renderElementIntoDOM(stylePropertyTreeElement.valueElement);
+
       const outerColorSwatch = stylePropertyTreeElement.valueElement?.querySelector('devtools-color-swatch');
       assert.exists(outerColorSwatch);
       const innerColorSwatch = cssVarSwatch.querySelector('devtools-color-swatch');
@@ -686,8 +718,11 @@ describeWithMockConnection('StylePropertyTreeElement', () => {
       stylePropertyTreeElement.updateTitle();
       assert.exists(stylePropertyTreeElement.valueElement);
 
-      const cssVarSwatch = stylePropertyTreeElement.valueElement?.querySelector('devtools-css-var-swatch');
+      const linkSwatch = stylePropertyTreeElement.valueElement?.querySelector('devtools-link-swatch');
+      assert.exists(linkSwatch);
+      const cssVarSwatch = linkSwatch.parentElement;
       assert.exists(cssVarSwatch);
+
       const outerColorSwatch = stylePropertyTreeElement.valueElement?.querySelector('devtools-color-swatch');
       assert.exists(outerColorSwatch);
       const innerColorSwatch = cssVarSwatch.querySelector('devtools-color-swatch');
@@ -709,9 +744,8 @@ describeWithMockConnection('StylePropertyTreeElement', () => {
             SDK.CSSPropertyParser.tokenizeDeclaration(stylePropertyTreeElement.name, stylePropertyTreeElement.value);
         assert.exists(ast);
         const matching = SDK.CSSPropertyParser.BottomUpTreeMatching.walk(
-            ast, [new Elements.StylePropertyTreeElement
-                      .VariableRenderer(stylePropertyTreeElement, stylePropertyTreeElement.property.ownerStyle)
-                      .matcher()]);
+            ast, [new SDK.CSSPropertyParserMatchers.VariableMatcher(
+                     stylePropertyTreeElement.matchedStyles(), stylePropertyTreeElement.property.ownerStyle)]);
 
         const res = {
           hasUnresolvedVars: matching.hasUnresolvedVars(ast.tree),
@@ -736,7 +770,19 @@ describeWithMockConnection('StylePropertyTreeElement', () => {
     it('layers correctly with the font renderer', () => {
       const stylePropertyTreeElement = getTreeElement('font-size', 'calc(1 + var(--no))');
       stylePropertyTreeElement.updateTitle();
-      assert.exists(stylePropertyTreeElement.valueElement?.querySelector('devtools-css-var-swatch'));
+      assert.exists(stylePropertyTreeElement.valueElement?.querySelector('devtools-link-swatch'));
+    });
+
+    it('shows a value tracing tooltip on the var function', async () => {
+      updateHostConfig({devToolsCssValueTracing: {enabled: true}});
+      const stylePropertyTreeElement = getTreeElement('color', 'var(--blue)');
+      stylePropertyTreeElement.updateTitle();
+      assert.exists(stylePropertyTreeElement.valueElement);
+      renderElementIntoDOM(stylePropertyTreeElement.valueElement);
+      const tooltip = stylePropertyTreeElement.valueElement.querySelector('devtools-tooltip');
+      assert.exists(tooltip);
+      const widget = tooltip.firstElementChild && LegacyUI.Widget.Widget.get(tooltip.firstElementChild);
+      assert.instanceOf(widget, Elements.CSSValueTraceView.CSSValueTraceView);
     });
   });
 
@@ -745,13 +791,15 @@ describeWithMockConnection('StylePropertyTreeElement', () => {
       const value = 'rgb(255, var(--zero), var(--zero))';
       const stylePropertyTreeElement = getTreeElement('color', value);
       stylePropertyTreeElement.updateTitle();
+      assert.exists(stylePropertyTreeElement.valueElement);
+      renderElementIntoDOM(stylePropertyTreeElement.valueElement);
 
-      assert.strictEqual(stylePropertyTreeElement.valueElement?.textContent, value);
+      assert.strictEqual(stylePropertyTreeElement.valueElement?.innerText, value);
       const colorSwatch = stylePropertyTreeElement.valueElement?.querySelector('devtools-color-swatch');
       assert.exists(colorSwatch);
       assert.strictEqual(colorSwatch.getColor()?.asString(Common.Color.Format.HEX), '#ff0000');
 
-      const varSwatches = stylePropertyTreeElement.valueElement?.querySelectorAll('devtools-css-var-swatch');
+      const varSwatches = stylePropertyTreeElement.valueElement?.querySelectorAll('devtools-link-swatch');
       assert.exists(varSwatches);
       assert.lengthOf(varSwatches, 2);
     });
@@ -760,6 +808,8 @@ describeWithMockConnection('StylePropertyTreeElement', () => {
       const stylePropertyTreeElement = getTreeElement('color', 'hsl(120deg, 50%, 25%)');
       stylePropertyTreeElement.updateTitle();
       const colorSwatch = stylePropertyTreeElement.valueElement?.querySelector('devtools-color-swatch');
+      assert.exists(stylePropertyTreeElement.valueElement);
+      renderElementIntoDOM(stylePropertyTreeElement.valueElement);
 
       assert.exists(colorSwatch);
       assert.strictEqual(colorSwatch.getColor()?.asString(Common.Color.Format.HSL), 'hsl(120deg 50% 25%)');
@@ -825,7 +875,7 @@ describeWithMockConnection('StylePropertyTreeElement', () => {
       const stylePropertyTreeElement = getTreeElement('--url', 'url(devtools:\\/\\/abc)');
       stylePropertyTreeElement.updateTitle();
 
-      assert.strictEqual(stylePropertyTreeElement.valueElement?.textContent, 'url(devtools://abc)');
+      assert.strictEqual(stylePropertyTreeElement.valueElement?.innerText, 'url(devtools://abc)');
     });
   });
 
@@ -849,7 +899,7 @@ describeWithMockConnection('StylePropertyTreeElement', () => {
         assert.strictEqual(
             stylePropertyTreeElement.valueElement?.firstElementChild instanceof InlineEditor.Swatches.CSSShadowSwatch,
             success);
-        assert.strictEqual(stylePropertyTreeElement.valueElement?.textContent, value);
+        assert.strictEqual(stylePropertyTreeElement.valueElement?.innerText, value);
       };
 
       const parseTextShadowSuccess = (value: string) => parseShadow('text-shadow', value, true);
@@ -930,8 +980,8 @@ describeWithMockConnection('StylePropertyTreeElement', () => {
       const swatches = stylePropertyTreeElement.valueElement?.querySelectorAll('css-shadow-swatch');
       assert.exists(swatches);
       assert.lengthOf(swatches, 2);
-      assert.strictEqual(swatches[0].textContent, 'inset 10px 11px blue');
-      assert.strictEqual(swatches[1].textContent, '6px 5px red');
+      assert.strictEqual(swatches[0].innerText, 'inset 10px 11px blue');
+      assert.strictEqual(swatches[1].innerText, '6px 5px red');
     });
 
     it('correctly parses text-shadow', () => {
@@ -941,7 +991,7 @@ describeWithMockConnection('StylePropertyTreeElement', () => {
       const swatches = stylePropertyTreeElement.valueElement?.querySelectorAll('css-shadow-swatch');
       assert.exists(swatches);
       assert.lengthOf(swatches, 1);
-      assert.strictEqual(swatches[0].textContent, '6px 5px red');
+      assert.strictEqual(swatches[0].innerText, '6px 5px red');
     });
 
     it('renders a color-mix child', () => {
@@ -959,11 +1009,13 @@ describeWithMockConnection('StylePropertyTreeElement', () => {
 
       const stylePropertyTreeElement = getTreeElement('box-shadow', 'var(--offset) red, var(--shadow)');
       stylePropertyTreeElement.updateTitle();
+      assert.exists(stylePropertyTreeElement.valueElement);
+      renderElementIntoDOM(stylePropertyTreeElement.valueElement);
       const swatches = stylePropertyTreeElement.valueElement?.querySelectorAll('css-shadow-swatch');
       assert.exists(swatches);
       assert.lengthOf(swatches, 2);
-      assert.strictEqual(swatches[0].textContent, 'var(--offset) red');
-      assert.strictEqual(swatches[1].textContent, 'var(--shadow)');
+      assert.strictEqual(swatches[0].innerText, 'var(--offset) red');
+      assert.strictEqual(swatches[1].innerText, 'var(--shadow)');
     });
 
     it('opens a shadow editor with the correct values', () => {
@@ -983,7 +1035,7 @@ describeWithMockConnection('StylePropertyTreeElement', () => {
               .map(
                   field => field.querySelector('input')?.value ??
                       Array.from(field.querySelectorAll('button'))
-                          .map(button => button.classList.contains('enabled') ? button.textContent : undefined)
+                          .map(button => button.classList.contains('enabled') ? button.innerText : undefined)
                           .filter((b): b is string => Boolean(b)))
               .flat();
 
@@ -991,7 +1043,7 @@ describeWithMockConnection('StylePropertyTreeElement', () => {
         swatches[0].iconElement().click();
         assert.isTrue(showPopoverStub.calledOnce);
         assert.instanceOf(showPopoverStub.args[0][0], InlineEditor.CSSShadowEditor.CSSShadowEditor);
-        const editor = showPopoverStub.args[0][0] as InlineEditor.CSSShadowEditor.CSSShadowEditor;
+        const editor = showPopoverStub.args[0][0];
         const text = editorProperties(editor);
         assert.deepEqual(text, ['Outset', '10px', '10px', '0', '0']);
       }
@@ -1000,7 +1052,7 @@ describeWithMockConnection('StylePropertyTreeElement', () => {
         swatches[1].iconElement().click();
         assert.isTrue(showPopoverStub.calledTwice);
         assert.instanceOf(showPopoverStub.args[1][0], InlineEditor.CSSShadowEditor.CSSShadowEditor);
-        const editor = showPopoverStub.args[1][0] as InlineEditor.CSSShadowEditor.CSSShadowEditor;
+        const editor = showPopoverStub.args[1][0];
         const text = editorProperties(editor);
         assert.deepEqual(text, ['Inset', '8px', '9px', '10px', '11px']);
       }
@@ -1114,10 +1166,10 @@ describeWithMockConnection('StylePropertyTreeElement', () => {
       getChildren(): CodeMirror.SyntaxNode[] {
         throw new Error('Method not implemented.');
       }
-      from: number = 0;
-      to: number = 0;
+      from = 0;
+      to = 0;
       type = new CodeMirror.NodeType();
-      name: string = '';
+      name = '';
       tree: CodeMirror.Tree|null = null;
       node: CodeMirror.SyntaxNode = this;
       matchContext(): boolean {
@@ -1178,7 +1230,7 @@ describeWithMockConnection('StylePropertyTreeElement', () => {
                                 return undefined;
                             }
                           })
-                          .filter((b): b is Text => Boolean(b));
+                          .filter(b => !!b);
         return {
           nodes,
           nodeGroups: [nodes],
@@ -1190,11 +1242,11 @@ describeWithMockConnection('StylePropertyTreeElement', () => {
 
       const container = document.createElement('div');
       model.renderContents(container);
-      assert.strictEqual(container.textContent, '10px y var()');
+      assert.strictEqual(container.innerText, '10px y var()');
 
       model.setBlurRadius(new InlineEditor.CSSShadowEditor.CSSLength(12, 'px'));
       model.renderContents(container);
-      assert.strictEqual(container.textContent, '10px y 12px spread');
+      assert.strictEqual(container.innerText, '10px y 12px spread');
       assert.deepEqual(properties.map(p => p.source), [null, null, null, null]);
     });
   });
@@ -1253,7 +1305,7 @@ describeWithMockConnection('StylePropertyTreeElement', () => {
 
       stylePropertyTreeElement.updateTitle();
 
-      assert.strictEqual(stylePropertyTreeElement.valueElement!.textContent, 'anchor(top)');
+      assert.strictEqual(stylePropertyTreeElement.valueElement!.innerText, 'anchor(top)');
     });
 
     it('renders `AnchorFunctionLinkSwatch` after decorating the element', async () => {
@@ -1264,8 +1316,7 @@ describeWithMockConnection('StylePropertyTreeElement', () => {
       stylePropertyTreeElement.updateTitle();
       await waitForDecorationPromise;
       const anchorFunctionLinkSwatch =
-          stylePropertyTreeElement.valueElement!.querySelector('devtools-anchor-function-link-swatch')! as
-          ElementsComponents.AnchorFunctionLinkSwatch.AnchorFunctionLinkSwatch;
+          stylePropertyTreeElement.valueElement!.querySelector('devtools-anchor-function-link-swatch')!;
 
       assert.strictEqual(anchorFunctionLinkSwatch.dataForTest().identifier, '--identifier');
     });
@@ -1278,8 +1329,7 @@ describeWithMockConnection('StylePropertyTreeElement', () => {
       stylePropertyTreeElement.updateTitle();
       await waitForDecorationPromise;
       const anchorFunctionLinkSwatch =
-          stylePropertyTreeElement.valueElement!.querySelector('devtools-anchor-function-link-swatch')! as
-          ElementsComponents.AnchorFunctionLinkSwatch.AnchorFunctionLinkSwatch;
+          stylePropertyTreeElement.valueElement!.querySelector('devtools-anchor-function-link-swatch')!;
       anchorFunctionLinkSwatch.dataForTest().onMouseEnter();
 
       assert.isTrue(highlightMock.calledOnce);
@@ -1293,8 +1343,7 @@ describeWithMockConnection('StylePropertyTreeElement', () => {
       stylePropertyTreeElement.updateTitle();
       await waitForDecorationPromise;
       const anchorFunctionLinkSwatch =
-          stylePropertyTreeElement.valueElement!.querySelector('devtools-anchor-function-link-swatch')! as
-          ElementsComponents.AnchorFunctionLinkSwatch.AnchorFunctionLinkSwatch;
+          stylePropertyTreeElement.valueElement!.querySelector('devtools-anchor-function-link-swatch')!;
       anchorFunctionLinkSwatch.dataForTest().onMouseLeave();
 
       assert.isTrue(hideDOMNodeHighlightStub.calledOnce);
@@ -1308,8 +1357,7 @@ describeWithMockConnection('StylePropertyTreeElement', () => {
       stylePropertyTreeElement.updateTitle();
       await waitForDecorationPromise;
       const anchorFunctionLinkSwatch =
-          stylePropertyTreeElement.valueElement!.querySelector('devtools-anchor-function-link-swatch')! as
-          ElementsComponents.AnchorFunctionLinkSwatch.AnchorFunctionLinkSwatch;
+          stylePropertyTreeElement.valueElement!.querySelector('devtools-anchor-function-link-swatch')!;
       anchorFunctionLinkSwatch.dataForTest().onLinkActivate();
 
       assert.isTrue(revealStub.calledOnce);
@@ -1352,7 +1400,7 @@ describeWithMockConnection('StylePropertyTreeElement', () => {
 
       stylePropertyTreeElement.updateTitle();
 
-      assert.strictEqual(stylePropertyTreeElement.valueElement!.textContent, '--anchor');
+      assert.strictEqual(stylePropertyTreeElement.valueElement!.innerText, '--anchor');
     });
 
     it('renders `position-anchor` property correctly after anchor is decorated', async () => {
@@ -1372,18 +1420,26 @@ describeWithMockConnection('StylePropertyTreeElement', () => {
     it('renders light-dark correctly', async () => {
       const colorSchemeSpy =
           sinon.spy(Elements.StylePropertyTreeElement.LightDarkColorRenderer.prototype, 'applyColorScheme');
+      const resolvePropertySpy = sinon.spy(SDK.CSSMatchedStyles.CSSMatchedStyles.prototype, 'resolveProperty');
+      const colorSchemeProperty = addProperty('color-scheme', 'light dark');
 
       async function check(colorScheme: SDK.CSSModel.ColorScheme, lightText: string, darkText: string) {
         const variableName = (text: string) => text.substring('var('.length, text.length - 1);
         const lightDark = `light-dark(${lightText}, ${darkText})`;
+        colorSchemeProperty.setLocalValue(colorScheme);
+        resolvePropertySpy.resetHistory();
         const stylePropertyTreeElement = getTreeElement('color', lightDark);
-        stylePropertyTreeElement.setComputedStyles(new Map([['color-scheme', colorScheme]]));
         stylePropertyTreeElement.updateTitle();
         await Promise.all(colorSchemeSpy.returnValues);
 
+        assert.isTrue(
+            resolvePropertySpy.calledOnceWithExactly('color-scheme', stylePropertyTreeElement.property.ownerStyle));
+
         const swatch = stylePropertyTreeElement.valueElement?.querySelector('devtools-color-swatch');
         assert.exists(swatch);
-        assert.strictEqual(swatch?.textContent, lightDark);
+        assert.exists(stylePropertyTreeElement.valueElement);
+        renderElementIntoDOM(stylePropertyTreeElement.valueElement);
+        assert.strictEqual(swatch?.innerText, lightDark);
         const activeColor = colorScheme === SDK.CSSModel.ColorScheme.LIGHT ? lightText : darkText;
         assert.strictEqual(
             swatch.getColor()?.getAuthoredText(), mockVariableMap[variableName(activeColor)] ?? activeColor);
@@ -1392,8 +1448,9 @@ describeWithMockConnection('StylePropertyTreeElement', () => {
         assert.exists(dark);
         const active = colorScheme === SDK.CSSModel.ColorScheme.LIGHT ? light : dark;
         const inactive = colorScheme === SDK.CSSModel.ColorScheme.LIGHT ? dark : light;
-        assert.strictEqual(inactive.parentElement?.style.textDecoration, 'line-through');
-        assert.strictEqual(active.parentElement?.style.textDecoration, '');
+        assert.isTrue(inactive.parentElement?.classList.contains('inactive-value'));
+        assert.isFalse(active.parentElement?.classList.contains('inactive-value'));
+        stylePropertyTreeElement.valueElement.remove();
       }
 
       await check(SDK.CSSModel.ColorScheme.LIGHT, 'red', 'blue');
@@ -1409,8 +1466,8 @@ describeWithMockConnection('StylePropertyTreeElement', () => {
       const cssModel = sinon.createStubInstance(SDK.CSSModel.CSSModel);
       sinon.stub(stylesSidebarPane, 'cssModel').returns(cssModel);
       cssModel.colorScheme.resolves(undefined);
+      addProperty('color-scheme', 'light dark');
       const stylePropertyTreeElement = getTreeElement('color', lightDark);
-      stylePropertyTreeElement.setComputedStyles(new Map([['color-scheme', 'light dark']]));
       const colorSchemeSpy =
           sinon.spy(Elements.StylePropertyTreeElement.LightDarkColorRenderer.prototype, 'applyColorScheme');
       stylePropertyTreeElement.updateTitle();
@@ -1420,9 +1477,9 @@ describeWithMockConnection('StylePropertyTreeElement', () => {
       assert.exists(swatches);
       assert.lengthOf(swatches, 3);
       assert.isNull(swatches[0].getColor());
-      assert.strictEqual(swatches[0].textContent, 'light-dark(red, blue)');
-      assert.strictEqual(swatches[1].textContent, 'red');
-      assert.strictEqual(swatches[2].textContent, 'blue');
+      assert.strictEqual(swatches[0].innerText, 'light-dark(red, blue)');
+      assert.strictEqual(swatches[1].innerText, 'red');
+      assert.strictEqual(swatches[2].innerText, 'blue');
     });
 
     it('renders light-dark without color-scheme correctly', async () => {
@@ -1438,15 +1495,15 @@ describeWithMockConnection('StylePropertyTreeElement', () => {
       assert.exists(swatches);
       assert.lengthOf(swatches, 3);
       assert.strictEqual(swatches[0].getText(), 'red');
-      assert.strictEqual(swatches[0].textContent, 'light-dark(red, blue)');
-      assert.strictEqual(swatches[1].textContent, 'red');
-      assert.strictEqual(swatches[2].textContent, 'blue');
+      assert.strictEqual(swatches[0].innerText, 'light-dark(red, blue)');
+      assert.strictEqual(swatches[1].innerText, 'red');
+      assert.strictEqual(swatches[2].innerText, 'blue');
     });
 
     it('renders light-dark with undefined vars correctly', async () => {
       const lightDark = 'light-dark(red, var(--undefined))';
+      addProperty('color-scheme', 'light dark');
       const stylePropertyTreeElement = getTreeElement('color', lightDark);
-      stylePropertyTreeElement.setComputedStyles(new Map([['color-scheme', 'light dark']]));
       const colorSchemeSpy =
           sinon.spy(Elements.StylePropertyTreeElement.LightDarkColorRenderer.prototype, 'applyColorScheme');
       stylePropertyTreeElement.updateTitle();
@@ -1455,17 +1512,18 @@ describeWithMockConnection('StylePropertyTreeElement', () => {
       const swatches = stylePropertyTreeElement.valueElement?.querySelectorAll('devtools-color-swatch');
       assert.exists(swatches);
       assert.lengthOf(swatches, 1);
-      assert.strictEqual(swatches[0].textContent, 'red');
+      assert.strictEqual(swatches[0].innerText, 'red');
       assert.strictEqual(swatches[0].parentElement?.style.textDecoration, '');
     });
 
     it('connects inner and outer swatches', async () => {
       const colorSchemeSpy =
           sinon.spy(Elements.StylePropertyTreeElement.LightDarkColorRenderer.prototype, 'applyColorScheme');
+      const colorSchemeProperty = addProperty('color-scheme', 'light dark');
       for (const colorScheme of [SDK.CSSModel.ColorScheme.LIGHT, SDK.CSSModel.ColorScheme.DARK]) {
         const lightDark = 'light-dark(red, blue)';
+        colorSchemeProperty.setLocalValue(colorScheme);
         const stylePropertyTreeElement = getTreeElement('color', lightDark);
-        stylePropertyTreeElement.setComputedStyles(new Map([['color-scheme', colorScheme]]));
         stylePropertyTreeElement.updateTitle();
         await Promise.all(colorSchemeSpy.returnValues);
 
@@ -1495,7 +1553,7 @@ describeWithMockConnection('StylePropertyTreeElement', () => {
       const swatch = stylePropertyTreeElement.valueElement?.querySelector('devtools-css-angle');
       assert.exists(swatch);
       swatch.data = {
-        angleText: swatch.textContent ?? '',
+        angleText: swatch.innerText ?? '',
         containingPane: document.createElement('div'),
       };
 
@@ -1529,11 +1587,14 @@ describeWithMockConnection('StylePropertyTreeElement', () => {
       const originalDeclaration = mockResolvedKeyword('width', keyword);
       const stylePropertyTreeElement = getTreeElement(originalDeclaration.name, keyword);
       stylePropertyTreeElement.updateTitle();
+      assert.exists(stylePropertyTreeElement.valueElement);
+      renderElementIntoDOM(stylePropertyTreeElement.valueElement);
 
-      const linkSwatch = stylePropertyTreeElement.valueElement?.querySelector('devtools-link-swatch');
+      const linkSwatch = stylePropertyTreeElement.valueElement.querySelector('devtools-link-swatch');
       assert.isOk(linkSwatch);
+      assert.strictEqual(linkSwatch.innerText, keyword);
       const spy = sinon.spy(stylePropertyTreeElement.parentPane(), 'revealProperty');
-      linkSwatch.shadowRoot?.querySelector('devtools-base-link-swatch')?.shadowRoot?.querySelector('button')?.click();
+      (linkSwatch.querySelector('button') as HTMLElement | undefined)?.click();
       assert.isTrue(spy.calledOnceWithExactly(originalDeclaration));
     });
 
@@ -1561,14 +1622,12 @@ describeWithMockConnection('StylePropertyTreeElement', () => {
       sinon.stub(matchedStyles, 'positionTryRules').returns([]);
       const stylePropertyTreeElement = getTreeElement('position-try-fallbacks', '--top, --left, --bottom');
       stylePropertyTreeElement.updateTitle();
-      const values =
-          stylePropertyTreeElement.valueElement?.querySelectorAll(':scope > span') as NodeListOf<HTMLElement>|
-          undefined;
+      const values = stylePropertyTreeElement.valueElement?.querySelectorAll(':scope > span');
       assert.exists(values);
       assert.strictEqual(values?.length, 3);
-      assert.strictEqual(values[0].style.textDecoration, 'line-through');
-      assert.strictEqual(values[1].style.textDecoration, '');
-      assert.strictEqual(values[2].style.textDecoration, 'line-through');
+      assert.isTrue(values[0].classList.contains('inactive-value'));
+      assert.isFalse(values[1].classList.contains('inactive-value'));
+      assert.isTrue(values[2].classList.contains('inactive-value'));
     });
 
     it('renders the position-try correctly with keyword', () => {
@@ -1578,19 +1637,17 @@ describeWithMockConnection('StylePropertyTreeElement', () => {
           getTreeElement('position-try', '/* comment */ most-height --top, --left, --bottom');
       stylePropertyTreeElement.updateTitle();
       const values =
-          stylePropertyTreeElement.valueElement?.querySelectorAll(':scope > span') as NodeListOf<HTMLElement>|
-          undefined;
+          stylePropertyTreeElement.valueElement?.querySelectorAll(':scope > span:has(> devtools-link-swatch)');
       assert.exists(values);
       assert.strictEqual(values?.length, 3);
-      assert.strictEqual(values[0].style.textDecoration, 'line-through');
-      assert.strictEqual(values[1].style.textDecoration, '');
-      assert.strictEqual(values[2].style.textDecoration, 'line-through');
+      assert.isTrue(values[0].classList.contains('inactive-value'));
+      assert.isFalse(values[1].classList.contains('inactive-value'));
+      assert.isTrue(values[2].classList.contains('inactive-value'));
     });
   });
 
   describe('LengthRenderer', () => {
     it('shows a popover with pixel values for relative units', async () => {
-      await setUpCSSModel();
       setMockConnectionResponseHandler(
           'CSS.resolveValues',
           (request: Protocol.CSS.ResolveValuesRequest) =>
@@ -1600,22 +1657,22 @@ describeWithMockConnection('StylePropertyTreeElement', () => {
       const node = new SDK.DOMModel.DOMNode(domModel);
       node.id = 0 as Protocol.DOM.NodeId;
       LegacyUI.Context.Context.instance().setFlavor(SDK.DOMModel.DOMNode, node);
+      const addPopoverPromise = Promise.withResolvers<void>();
+      sinon.stub(Elements.StylePropertyTreeElement.LengthRenderer.prototype, 'popOverAttachedForTest')
+          .callsFake(() => addPopoverPromise.resolve());
       const stylePropertyTreeElement = getTreeElement('margin', '5px 2em');
-      const addPopoverPromise = Promise.withResolvers<() => HTMLElement | undefined>();
-      sinon.stub(stylePropertyTreeElement.parentPane(), 'addPopover')
-          .callsFake((element, popover) => addPopoverPromise.resolve(popover.contents));
       setMockConnectionResponseHandler('CSS.getComputedStyleForNode', () => ({computedStyle: {}}));
 
       await stylePropertyTreeElement.onpopulate();
       stylePropertyTreeElement.updateTitle();
-      const popover = (await addPopoverPromise.promise)();
-      assert.strictEqual(popover?.textContent, '15px');
+      await addPopoverPromise.promise;
+      const popover = stylePropertyTreeElement.valueElement?.querySelector('devtools-tooltip');
+      assert.strictEqual(popover?.innerText, '15px');
     });
   });
 
-  describe('SelectFunctionRenderer', () => {
+  describe('MathFunctionRenderer', () => {
     it('strikes out non-selected values', async () => {
-      await setUpCSSModel();
       setMockConnectionResponseHandler(
           'CSS.resolveValues',
           (request: Protocol.CSS.ResolveValuesRequest) => ({
@@ -1623,38 +1680,76 @@ describeWithMockConnection('StylePropertyTreeElement', () => {
                 value => value.startsWith('min') ? '4px' : value.trim().replaceAll(/(em|pt)$/g, 'px'))
           }));
       const strikeOutSpy =
-          sinon.spy(Elements.StylePropertyTreeElement.SelectFunctionRenderer.prototype, 'applySelectFunction');
+          sinon.spy(Elements.StylePropertyTreeElement.MathFunctionRenderer.prototype, 'applyMathFunction');
       const stylePropertyTreeElement = getTreeElement('width', 'min(5em, 4px, 8pt)');
       stylePropertyTreeElement.updateTitle();
 
       assert.isTrue(strikeOutSpy.calledOnce);
       await strikeOutSpy.returnValues[0];
-      const args =
-          stylePropertyTreeElement.valueElement?.querySelectorAll(':scope > span') as NodeListOf<HTMLSpanElement>;
+      const args = stylePropertyTreeElement.valueElement?.querySelectorAll(':scope > span > span') as
+          NodeListOf<HTMLSpanElement>;
       assert.lengthOf(args, 3);
       assert.deepEqual(
-          Array.from(args.values()).map(arg => arg.style.textDecoration), ['line-through', '', 'line-through']);
+          Array.from(args.values()).map(arg => arg.classList.contains('inactive-value')), [true, false, true]);
+    });
+
+    it('shows a value tracing tooltip on the calc function', async () => {
+      updateHostConfig({devToolsCssValueTracing: {enabled: true}});
+      for (const property of ['calc(1px + 2px)', 'min(1px, 2px)', 'max(3px, 1px)']) {
+        const stylePropertyTreeElement = getTreeElement('width', property);
+        stylePropertyTreeElement.updateTitle();
+        assert.exists(stylePropertyTreeElement.valueElement);
+        renderElementIntoDOM(stylePropertyTreeElement.valueElement);
+        const tooltip = stylePropertyTreeElement.valueElement.querySelector('devtools-tooltip');
+        assert.exists(tooltip);
+        const widget = tooltip.firstElementChild && LegacyUI.Widget.Widget.get(tooltip.firstElementChild);
+        assert.instanceOf(widget, Elements.CSSValueTraceView.CSSValueTraceView);
+        stylePropertyTreeElement.valueElement.remove();
+      }
+    });
+
+    it('shows the original text during tracing when evaluation fails', async () => {
+      updateHostConfig({devToolsCssValueTracing: {enabled: true}});
+      setMockConnectionResponseHandler(
+          'CSS.resolveValues',
+          (request: Protocol.CSS.ResolveValuesRequest) => ({results: request.values.map(() => '')}));
+      const evaluationSpy =
+          sinon.spy(Elements.StylePropertyTreeElement.MathFunctionRenderer.prototype, 'applyEvaluation');
+      const property = addProperty('width', 'calc(1 + 1)');
+
+      const view = new Elements.CSSValueTraceView.CSSValueTraceView(undefined, () => {});
+      view.showTrace(
+          property, null, matchedStyles, new Map(),
+          Elements.StylePropertyTreeElement.getPropertyRenderers(
+              property.ownerStyle, stylesSidebarPane, matchedStyles, null, new Map()));
+
+      assert.isTrue(evaluationSpy.calledOnce);
+      const originalText = evaluationSpy.args[0][0].textContent;
+      await evaluationSpy.returnValues[0];
+      assert.strictEqual(originalText, evaluationSpy.args[0][0].textContent);
     });
   });
 
   describe('AutoBaseRenderer', () => {
     it('strikes out non-selected values', async () => {
-      await setUpCSSModel();
-
       const stylePropertyTreeElement = getTreeElement('display', '-internal-auto-base(inline, block)');
 
       stylePropertyTreeElement.updateTitle();
 
       let args = stylePropertyTreeElement.valueElement?.querySelectorAll('span') as NodeListOf<HTMLSpanElement>;
-      assert.lengthOf(args, 3);
-      assert.deepEqual(Array.from(args.values()).map(arg => arg.style.textDecoration), ['', '', 'line-through']);
+      assert.lengthOf(args, 5);
+      assert.deepEqual(
+          Array.from(args.values()).map(arg => arg.classList.contains('inactive-value')),
+          [false, false, false, true, false]);
 
       stylePropertyTreeElement.setComputedStyles(new Map([['appearance', 'base-select']]));
       stylePropertyTreeElement.updateTitle();
 
       args = stylePropertyTreeElement.valueElement?.querySelectorAll('span') as NodeListOf<HTMLSpanElement>;
-      assert.lengthOf(args, 3);
-      assert.deepEqual(Array.from(args.values()).map(arg => arg.style.textDecoration), ['', 'line-through', '']);
+      assert.lengthOf(args, 5);
+      assert.deepEqual(
+          Array.from(args.values()).map(arg => arg.classList.contains('inactive-value')),
+          [false, true, false, false, false]);
     });
   });
 
@@ -1663,7 +1758,6 @@ describeWithMockConnection('StylePropertyTreeElement', () => {
     beforeEach(async () => {
       promptStub = sinon.stub(Elements.StylesSidebarPane.CSSPropertyPrompt.prototype, 'initialize').resolves([]);
 
-      const {cssModel} = await setUpCSSModel();
       const gridNode = LegacyUI.Context.Context.instance().flavor(SDK.DOMModel.DOMNode);
       const currentNode = new SDK.DOMModel.DOMNode(cssModel.domModel());
       currentNode.id = 1 as Protocol.DOM.NodeId;
@@ -1730,5 +1824,56 @@ describeWithMockConnection('StylePropertyTreeElement', () => {
         'unset',
       ]);
     });
+  });
+
+  it('reopens open tooltips on updates', async () => {
+    const openTooltipStub = sinon.stub(Tooltips.Tooltip.Tooltip.prototype, 'showPopover');
+    const openTooltipPromise1 = new Promise<void>(r => openTooltipStub.callsFake(r));
+    const stylePropertyTreeElement = getTreeElement('color', 'color-mix(in srgb, red, blue)');
+    stylePropertyTreeElement.updateTitle();
+    const tooltip = stylePropertyTreeElement.valueElement?.querySelector('devtools-tooltip');
+    assert.exists(tooltip);
+    renderElementIntoDOM(tooltip);
+    tooltip.showTooltip();
+    await openTooltipPromise1;
+    tooltip.remove();
+
+    const openTooltipPromise2 = new Promise<void>(r => openTooltipStub.callsFake(r));
+    stylePropertyTreeElement.updateTitle();
+    const tooltip2 = stylePropertyTreeElement.valueElement?.querySelector('devtools-tooltip');
+    assert.exists(tooltip2);
+    renderElementIntoDOM(tooltip2);
+    await openTooltipPromise2;
+    assert.notStrictEqual(tooltip, tooltip2);
+  });
+
+  it('shows a property docs tooltip', async () => {
+    const webCustomDataStub = sinon.createStubInstance(Elements.WebCustomData.WebCustomData);
+    webCustomDataStub.findCssProperty.returns({name: 'color', description: 'test color'});
+    sinon.stub(stylesSidebarPane, 'webCustomData').get(() => webCustomDataStub);
+    Common.Settings.Settings.instance().moduleSetting('show-css-property-documentation-on-hover').set(false);
+    const treeElementWithoutTooltip = getTreeElement('color', 'blue');
+    treeElementWithoutTooltip.treeOutline = new LegacyUI.TreeOutline.TreeOutline();
+    treeElementWithoutTooltip.updateTitle();
+    assert.notExists(treeElementWithoutTooltip.listItemElement.querySelector(
+        'devtools-tooltip[jslogcontext="elements.css-property-doc"]'));
+
+    Common.Settings.Settings.instance().moduleSetting('show-css-property-documentation-on-hover').set(true);
+    const treeElementWithTooltip = getTreeElement('color', 'blue');
+    treeElementWithTooltip.treeOutline = new LegacyUI.TreeOutline.TreeOutline();
+    treeElementWithTooltip.updateTitle();
+    renderElementIntoDOM(treeElementWithTooltip.listItemElement);
+    const tooltip = treeElementWithTooltip.listItemElement.querySelector(
+        'devtools-tooltip[jslogcontext="elements.css-property-doc"]');
+    assert.instanceOf(tooltip, Tooltips.Tooltip.Tooltip);
+
+    tooltip.showPopover();
+    assert.isTrue(tooltip.open);
+    tooltip.hidePopover();
+    assert.isFalse(tooltip.open);
+
+    Common.Settings.Settings.instance().moduleSetting('show-css-property-documentation-on-hover').set(false);
+    tooltip.showPopover();
+    assert.isFalse(tooltip.open);
   });
 });

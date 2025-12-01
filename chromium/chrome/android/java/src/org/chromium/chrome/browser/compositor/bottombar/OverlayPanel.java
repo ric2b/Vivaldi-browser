@@ -874,7 +874,7 @@ public class OverlayPanel extends OverlayPanelAnimation
     // ============================================================================================
 
     @Override
-    public void onDown(float x, float y, boolean fromMouse, int buttons) {
+    public void onDown(float x, float y, int buttons) {
         mInitialPanelTouchY = y;
         handleSwipeStart();
     }
@@ -895,7 +895,7 @@ public class OverlayPanel extends OverlayPanelAnimation
     }
 
     @Override
-    public void click(float x, float y, boolean fromMouse, int buttons) {
+    public void click(float x, float y, int buttons) {
         handleClick(x, y);
     }
 
@@ -913,6 +913,10 @@ public class OverlayPanel extends OverlayPanelAnimation
 
     @Override
     public void onHoverExit() {}
+
+    /** Vivaldi */
+    @Override
+    public void onUpOrCancel(float x, float y) {}
 
     // SwipeHandler implementation.
 

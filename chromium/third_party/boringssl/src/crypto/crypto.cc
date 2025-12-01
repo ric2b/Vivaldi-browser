@@ -54,7 +54,7 @@ static_assert(sizeof(ossl_ssize_t) == sizeof(size_t),
 // archive, linking on OS X will fail to resolve common symbols. By
 // initialising it to zero, it becomes a "data symbol", which isn't so
 // affected.
-HIDDEN uint8_t BORINGSSL_function_hit[9] = {0};
+HIDDEN uint8_t BORINGSSL_function_hit[8] = {0};
 #endif
 
 #if defined(OPENSSL_X86) || defined(OPENSSL_X86_64)
@@ -68,8 +68,6 @@ uint32_t OPENSSL_get_ia32cap(int idx) {
 }
 
 #elif defined(OPENSSL_ARM) || defined(OPENSSL_AARCH64)
-
-#include <openssl/arm_arch.h>
 
 #if defined(OPENSSL_STATIC_ARMCAP)
 

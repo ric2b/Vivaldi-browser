@@ -190,7 +190,6 @@ if (is_android) {
       "be",
       "is",
       "ka",
-      "pa",
       "sr-Latn",
     ]
   } # End Vivaldi
@@ -216,6 +215,7 @@ if (is_chromeos) {
     # list.
     platform_pak_locales -= [
       "am",
+      "bn",
       "fil",
       "gu",
       "kn",

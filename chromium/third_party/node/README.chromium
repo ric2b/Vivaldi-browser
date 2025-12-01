@@ -1,9 +1,9 @@
 Name: Node JS
 Short Name: node
 URL: https://github.com/nodejs/node
-Version: 12.14.1
-Revision: f098f8295c407e5a5126b501ed5f1aa80bd86106
-Date: 2016-12-06
+Version: 22.11.0
+Revision: 4e0f2773ff9465148a654dd0a2c1668104c20fec
+Date: 2024-10-29
 License: Unicode-DFS-2016, NAIST-2003, MIT, HPND, BSD-3-Clause, OpenSSL, Zlib, ISC, BSD-2-Clause, Artistic-2.0, ICU, SSLeay
 License File: LICENSE
 Security Critical: no
@@ -22,7 +22,7 @@ URL: https://github.com/mochajs/mocha
 Version: 10.4.0
 Revision: 0501b9a278ae40a01f989d70801f4886ee686445
 License: MIT
-License File: LICENSE
+License File: node_modules/mocha/LICENSE
 Security Critical: no
 Shipped: no
 
@@ -43,7 +43,7 @@ Version: 5.1.1
 Revision: 37263c08b85f1f7a55d9522607a9b40f2ee651cd
 Date: 2024-06-20
 License: MIT
-License File: LICENSE
+License File: node_modules/chai/LICENSE
 Security Critical: no
 Shipped: no
 
@@ -81,7 +81,7 @@ Name: Typescript Compiler
 Short Name: typescript
 URL: https://www.npmjs.com/package/typescript
 Version: 5.7.2
-License: Apache 2.0
+License: Apache-2.0
 Security Critical: no
 Shipped: no
 
@@ -235,7 +235,7 @@ Name: ESLint JSDoc Plugin
 Short Name: eslint-plugin-jsdoc
 URL: https://www.npmjs.com/package/eslint-plugin-jsdoc
 Version: 50.2.2
-License: 3-Clause BSD
+License: BSD-3-Clause
 Security Critical: no
 Shipped: no
 
@@ -253,7 +253,7 @@ Name: ESLint Plugin TypeScript
 Short Name: @typescript-eslint/eslint-plugin
 URL: https://www.npmjs.com/package/@typescript-eslint/eslint-plugin
 Version: 8.4.0
-License: 2-Clause BSD
+License: BSD-2-Clause
 Security Critical: no
 Shipped: no
 
@@ -271,7 +271,7 @@ Name: TypeScript ESLint Parser
 Short Name: @typescript-eslint/parser
 URL: https://www.npmjs.com/package/@typescript-eslint/parser
 Version: 8.4.0
-License: 2-Clause BSD
+License: BSD-2-Clause
 Security Critical: no
 Shipped: no
 
@@ -463,10 +463,11 @@ Name: Lit
 Short Name: lit
 URL: https://lit.dev
 Version: 3.0.2
-License: BSD 3-Clause
-License File: LICENSE
+License: BSD-3-Clause
+License File: node_modules/lit/LICENSE
 Security Critical: no
 Shipped: yes
+License Android Compatible: yes
 
 Description:
 A thin library around native web component APIs, to be used in WebUI development
@@ -487,8 +488,8 @@ Name: Mediapipe Tasks Vision
 Short Name: @mediapipe/tasks-vision
 URL: https://www.npmjs.com/package/@mediapipe/tasks-vision
 Version: 0.10.9
-License: Apache 2.0
-License File: LICENSE
+License: Apache-2.0
+License File: Apache-LICENSE-2.0.txt
 Security Critical: no
 Shipped: yes
 License Android Compatible: Yes
@@ -502,26 +503,6 @@ component extension, which is only run on ChromeOS:
 separately via DLC)
 - vision_bundle.mjs, used to run the Face Landmarker API and supporting code
 - vision.d.ts, used during TypeScript compilation
-
--------------------- DEPENDENCY DIVIDER --------------------
-
-Name: Type Definitions for Dom View Transitions API
-Short Name: @types/dom-view-transitions
-URL: https://www.npmjs.com/package/@types/dom-view-transitions
-Version: 1.0.4
-License: MIT
-License File: LICENSE
-Security Critical: no
-Shipped: no
-
-Description:
-This package contains type definitions for dom-view-transitions
-(https://drafts.csswg.org/css-view-transitions-1/).
-
-The types are only used when type checking the Dom View Transitions API.
-
-Local Modifications:
-(none)
 
 -------------------- DEPENDENCY DIVIDER --------------------
 
@@ -563,11 +544,12 @@ Local Modifications:
 Name: Microsoft Authentication Library for JavaScript (MSAL.js) for Browser-Based Single-Page Applications
 Short Name: msal-browser
 URL: https://www.npmjs.com/package/@azure/msal-browser
-Version: 3.27.0
+Version: 4.2.1
 License: MIT
-License File: MSAL_LICENSE
+License File: node_modules/@azure/msal-browser/LICENSE
 Security Critical: yes
 Shipped: yes
+License Android Compatible: yes
 
 Description:
 Authentication for Microsoft integrations within client-side JS.

@@ -43,12 +43,12 @@ if (!is_android) {
       "be",
       "is",
       "ka",
-      "pa",
       "sr-Latn",
     ]
 
     vivaldi_pending_ios_locales += [
       "am",
+      "bn",
       "fil",
       "gu",
       "kn",

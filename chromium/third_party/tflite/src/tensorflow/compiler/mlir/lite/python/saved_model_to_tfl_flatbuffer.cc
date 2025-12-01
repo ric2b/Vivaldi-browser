@@ -43,14 +43,14 @@ limitations under the License.
 #include "tensorflow/compiler/mlir/quantization/common/quantization_lib/quantization_config.h"
 #include "tensorflow/compiler/mlir/quantization/tensorflow/python/py_function_lib.h"
 #include "tensorflow/compiler/mlir/tensorflow/translate/mlir_roundtrip_flags.h"
+#include "xla/tsl/platform/errors.h"
+#include "xla/tsl/platform/statusor.h"
 #include "tensorflow/core/framework/graph.pb.h"
 #include "tensorflow/core/framework/graph_debug_info.pb.h"
 #include "tensorflow/core/framework/types.pb.h"
 #include "tensorflow/core/lib/core/errors.h"
 #include "tensorflow/core/platform/status.h"
 #include "tensorflow/core/platform/types.h"
-#include "tsl/platform/errors.h"
-#include "tsl/platform/statusor.h"
 
 namespace tensorflow {
 
@@ -218,9 +218,10 @@ absl::Status ConvertSavedModelToTFLiteFlatBuffer(
   pass_config.canonicalizing_inf_as_min_max_float =
       converter_flags.canonicalizing_inf_as_min_max_float();
 
-  pass_config.quant_specs.strict_qdq_mode = converter_flags.strict_qdq_mode();
-
-  if (converter_flags.qdq_conversion_mode() == "STATIC") {
+  if (converter_flags.strict_qdq_mode()) {
+    pass_config.quant_specs.qdq_conversion_mode =
+        mlir::quant::QDQConversionMode::kQDQStrict;
+  } else if (converter_flags.qdq_conversion_mode() == "STATIC") {
     pass_config.quant_specs.qdq_conversion_mode =
         mlir::quant::QDQConversionMode::kQDQStatic;
   } else if (converter_flags.qdq_conversion_mode() == "DYNAMIC") {

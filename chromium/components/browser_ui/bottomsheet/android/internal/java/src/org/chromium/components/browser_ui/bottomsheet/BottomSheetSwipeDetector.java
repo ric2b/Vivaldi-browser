@@ -11,6 +11,8 @@ import android.view.VelocityTracker;
 
 import org.chromium.base.MathUtils;
 import org.chromium.base.ThreadUtils;
+import org.chromium.build.annotations.NullMarked;
+import org.chromium.build.annotations.Nullable;
 
 /* Vivaldi **/
 import android.view.View;
@@ -24,6 +26,7 @@ import android.view.View;
  * swipe or fling is converted into a sequence of calls to
  * {@link SwipeableBottomSheet#setSheetOffset(float, boolean)}.
  */
+@NullMarked
 class BottomSheetSwipeDetector extends GestureDetector.SimpleOnGestureListener {
     /** The minimum y/x ratio that a scroll must have to be considered vertical. */
     private static final float MIN_VERTICAL_SCROLL_SLOPE = 2.0f;
@@ -111,7 +114,8 @@ class BottomSheetSwipeDetector extends GestureDetector.SimpleOnGestureListener {
         }
 
         @Override
-        public boolean onScroll(MotionEvent e1, MotionEvent e2, float distanceX, float distanceY) {
+        public boolean onScroll(
+                @Nullable MotionEvent e1, MotionEvent e2, float distanceX, float distanceY) {
             if (e1 == null || !mSheetDelegate.shouldGestureMoveSheet(e1, e2)) return false;
 
             // Only start scrolling if the scroll is up or down. If the user is already scrolling,
@@ -169,7 +173,8 @@ class BottomSheetSwipeDetector extends GestureDetector.SimpleOnGestureListener {
         }
 
         @Override
-        public boolean onFling(MotionEvent e1, MotionEvent e2, float velocityX, float velocityY) {
+        public boolean onFling(
+                @Nullable MotionEvent e1, MotionEvent e2, float velocityX, float velocityY) {
             if (e1 == null || !mSheetDelegate.shouldGestureMoveSheet(e1, e2) || !mIsScrolling) {
                 return false;
             }

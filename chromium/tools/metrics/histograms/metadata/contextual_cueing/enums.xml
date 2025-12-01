@@ -48,9 +48,9 @@ chromium-metrics-reviews@google.com.
     The page was eligible for the nudge, but not enough page loads have been
     navigated to since the last nudge shown to the user.
   </int>
-  <int value="6" label="Not enough time has elapsed since last nudge">
+  <int value="6" label="Not enough time has elapsed since last nudge dismissal">
     The page was eligible for the nudge, but not enough time has elapsed since
-    the last nudge shown to the user.
+    the last nudge shown to the user after an explicit dismissal.
   </int>
   <int value="7" label="Too many nudges shown to the user">
     The page was eligible for the nudge, but too many nudges have been shown to
@@ -63,6 +63,16 @@ chromium-metrics-reviews@google.com.
   <int value="9" label="The Nudge was not shown as IPH was alraedy being Shown">
     The page was eligible for the nudge, but the user was currently being
     presented the IPH.
+  </int>
+  <int value="10"
+      label="The nudge was not shown as the user already has the feature
+             window open.">
+    The page was eligible for the nudge, but the user already has the feature
+    window open.
+  </int>
+  <int value="11"
+      label="User closes the tab/window as a nudge decision is being computed.">
+    User closes the tab/window as a nudge decision is being computed.
   </int>
 </enum>
 

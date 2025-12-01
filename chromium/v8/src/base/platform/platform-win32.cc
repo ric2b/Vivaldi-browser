@@ -34,6 +34,7 @@
 #include "src/base/bits.h"
 #include "src/base/lazy-instance.h"
 #include "src/base/macros.h"
+#include "src/base/platform/mutex.h"
 #include "src/base/platform/platform.h"
 #include "src/base/platform/time.h"
 #include "src/base/timezone-cache.h"
@@ -539,8 +540,7 @@ int OS::GetCurrentProcessId() {
   return static_cast<int>(::GetCurrentProcessId());
 }
 
-
-int OS::GetCurrentThreadId() {
+int OS::GetCurrentThreadIdInternal() {
   return static_cast<int>(::GetCurrentThreadId());
 }
 

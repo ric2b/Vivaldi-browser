@@ -127,7 +127,8 @@ inline constexpr char16_t kChromeUIFlagsURL16[] = u"chrome://flags/";
 inline constexpr char kChromeUIGCMInternalsHost[] = "gcm-internals";
 inline constexpr char kChromeUIGlicHost[] = "glic";
 inline constexpr char kChromeUIGlicURL[] = "chrome://glic/";
-inline constexpr char kChromeUIGlicFreURL[] = "chrome://glic/glic_fre/fre.html";
+inline constexpr char kChromeUIGlicFreHost[] = "glic-fre";
+inline constexpr char kChromeUIGlicFreURL[] = "chrome://glic-fre";
 inline constexpr char kChromeUIHangUIHost[] = "uithreadhang";
 inline constexpr char kChromeUIHelpHost[] = "help";
 inline constexpr char kChromeUIHelpURL[] = "chrome://help/";
@@ -286,6 +287,8 @@ inline constexpr char
         "privacy-policy";
 inline constexpr char kChromeUIUntrustedThemeURL[] =
     "chrome-untrusted://theme/";
+inline constexpr char kChromeUIUntrustedWebUITestURL[] =
+    "chrome-untrusted://webui-test/";
 inline constexpr char kChromeUIUsbInternalsHost[] = "usb-internals";
 inline constexpr char kChromeUIUserActionsHost[] = "user-actions";
 inline constexpr char kChromeUIUserEducationInternalsHost[] =
@@ -297,6 +300,7 @@ inline constexpr char kChromeUIVersionURL[] = "chrome://version/";
 inline constexpr char16_t kChromeUIVersionURL16[] = u"chrome://version/";
 inline constexpr char kChromeUIWebRtcLogsHost[] = "webrtc-logs";
 inline constexpr char kChromeUIWebuiGalleryHost[] = "webui-gallery";
+inline constexpr char kChromeUIWebUITestHost[] = "webui-test";
 
 #if BUILDFLAG(IS_ANDROID)
 inline constexpr char kChromeUIJavaCrashURL[] = "chrome://java-crash/";
@@ -318,6 +322,10 @@ inline constexpr char kChromeUICustomizeChromeSidePanelHost[] =
     "customize-chrome-side-panel.top-chrome";
 inline constexpr char kChromeUICustomizeChromeSidePanelURL[] =
     "chrome://customize-chrome-side-panel.top-chrome";
+inline constexpr char kChromeUIHistorySidePanelHost[] =
+    "history-side-panel.top-chrome";
+inline constexpr char kChromeUIHistorySidePanelURL[] =
+    "chrome://history-side-panel.top-chrome/";
 inline constexpr char kChromeUIHistoryClustersSidePanelHost[] =
     "history-clusters-side-panel.top-chrome";
 inline constexpr char kChromeUIHistoryClustersSidePanelURL[] =
@@ -350,12 +358,9 @@ inline constexpr char kChromeUIUntrustedReadAnythingSidePanelHost[] =
     "read-anything-side-panel.top-chrome";
 inline constexpr char kChromeUIUntrustedReadAnythingSidePanelURL[] =
     "chrome-untrusted://read-anything-side-panel.top-chrome/";
-inline constexpr char kChromeUIUntrustedWebUITestURL[] =
-    "chrome-untrusted://webui-test/";
 inline constexpr char kChromeUIWebAppInternalsHost[] = "web-app-internals";
 inline constexpr char kChromeUIWebUIJsErrorHost[] = "webuijserror";
 inline constexpr char kChromeUIWebUIJsErrorURL[] = "chrome://webuijserror/";
-inline constexpr char kChromeUIWebUITestHost[] = "webui-test";
 inline constexpr char kCookiesSubPagePath[] = "/cookies";
 inline constexpr char kTrackingProtectionSubPagePath[] = "/trackingProtection";
 #endif  // BUILDFLAG(IS_ANDROID)
@@ -555,6 +560,9 @@ inline constexpr char kChromeUIProfilePickerHost[] = "profile-picker";
 inline constexpr char kChromeUIProfilePickerStartupQuery[] = "startup";
 inline constexpr char kChromeUIProfilePickerGlicQuery[] = "glic";
 inline constexpr char kChromeUIProfilePickerUrl[] = "chrome://profile-picker/";
+inline constexpr char kChromeUIHistorySyncOptinHost[] = "history-sync-optin";
+inline constexpr char kChromeUIHistorySyncOptinURL[] =
+    "chrome://history-sync-optin/";
 #endif
 
 #if ((BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)) && \
@@ -600,6 +608,7 @@ inline constexpr char kExperimentalAISettingsSubPage[] = "ai";
 inline constexpr char kFileSystemSettingsSubpage[] =
     "content/filesystem/siteDetails";
 inline constexpr char kFileSystemSubpage[] = "content/filesystem";
+inline constexpr char kGlicSettingsSubpage[] = "ai/gemini";
 inline constexpr char kHandlerSettingsSubPage[] = "handlers";
 inline constexpr char kHistorySearchSubpage[] = "historySearch";
 inline constexpr char kImportDataSubPage[] = "importData";
@@ -641,6 +650,7 @@ inline constexpr char kCleanupSubPage[] = "cleanup";
 
 #if !BUILDFLAG(IS_ANDROID) && BUILDFLAG(GOOGLE_CHROME_BRANDING)
 inline constexpr char kChromeUICastFeedbackHost[] = "cast-feedback";
+inline constexpr char kChromeUICastFeedbackURL[] = "chrome://cast-feedback";
 #endif
 
 #if BUILDFLAG(CHROME_ROOT_STORE_CERT_MANAGEMENT_UI)

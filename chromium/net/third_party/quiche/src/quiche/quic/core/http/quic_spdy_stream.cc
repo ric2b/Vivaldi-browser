@@ -337,7 +337,7 @@ void QuicSpdyStream::WriteOrBufferBody(absl::string_view data, bool fin) {
   if (!AssertNotWebTransportDataStream("writing body data")) {
     return;
   }
-  if (!VersionUsesHttp3(transport_version()) || data.length() == 0) {
+  if (!VersionUsesHttp3(transport_version()) || data.empty()) {
     WriteOrBufferData(data, fin, nullptr);
     return;
   }
@@ -1038,15 +1038,13 @@ bool QuicSpdyStream::OnDataFrameEnd() {
 }
 
 // TODO(danzh): Remove this override once the flag is deprecated.
-bool QuicSpdyStream::OnStreamFrameAcked(QuicStreamOffset offset,
-                                        QuicByteCount data_length,
-                                        bool fin_acked,
-                                        QuicTime::Delta ack_delay_time,
-                                        QuicTime receive_timestamp,
-                                        QuicByteCount* newly_acked_length) {
+bool QuicSpdyStream::OnStreamFrameAcked(
+    QuicStreamOffset offset, QuicByteCount data_length, bool fin_acked,
+    QuicTime::Delta ack_delay_time, QuicTime receive_timestamp,
+    QuicByteCount* newly_acked_length, bool is_retransmission) {
   const bool new_data_acked = QuicStream::OnStreamFrameAcked(
       offset, data_length, fin_acked, ack_delay_time, receive_timestamp,
-      newly_acked_length);
+      newly_acked_length, is_retransmission);
 
   if (!notify_ack_listener_earlier()) {
     const QuicByteCount newly_acked_header_length =
@@ -1067,9 +1065,11 @@ void QuicSpdyStream::OnNewDataAcked(QuicStreamOffset offset,
                                     QuicByteCount data_length,
                                     QuicByteCount newly_acked_length,
                                     QuicTime receive_timestamp,
-                                    QuicTime::Delta ack_delay_time) {
+                                    QuicTime::Delta ack_delay_time,
+                                    bool is_retransmission) {
   QuicStream::OnNewDataAcked(offset, data_length, newly_acked_length,
-                             receive_timestamp, ack_delay_time);
+                             receive_timestamp, ack_delay_time,
+                             is_retransmission);
   const QuicByteCount newly_acked_header_length =
       GetNumFrameHeadersInInterval(offset, data_length);
   QUICHE_DCHECK_LE(newly_acked_header_length, newly_acked_length);
@@ -1574,7 +1574,18 @@ bool QuicSpdyStream::OnCapsule(const Capsule& capsule) {
       }
       return connect_ip_visitor_->OnRouteAdvertisementCapsule(
           capsule.route_advertisement_capsule());
-
+    case CapsuleType::COMPRESSION_ASSIGN:
+      if (connect_udp_bind_visitor_ == nullptr) {
+        return true;
+      }
+      return connect_udp_bind_visitor_->OnCompressionAssignCapsule(
+          capsule.compression_assign_capsule());
+    case CapsuleType::COMPRESSION_CLOSE:
+      if (connect_udp_bind_visitor_ == nullptr) {
+        return true;
+      }
+      return connect_udp_bind_visitor_->OnCompressionCloseCapsule(
+          capsule.compression_close_capsule());
     // Ignore WebTransport over HTTP/2 capsules.
     case CapsuleType::WT_RESET_STREAM:
     case CapsuleType::WT_STOP_SENDING:
@@ -1702,6 +1713,49 @@ void QuicSpdyStream::ReplaceConnectIpVisitor(ConnectIpVisitor* visitor) {
       << "Attempted to move missing CONNECT-IP visitor on HTTP/3 stream ID "
       << id();
   connect_ip_visitor_ = visitor;
+}
+
+void QuicSpdyStream::RegisterConnectUdpBindVisitor(
+    ConnectUdpBindVisitor* visitor) {
+  if (visitor == nullptr) {
+    QUIC_BUG(null connect - udp visitor)
+        << ENDPOINT << "Null connect-udp-bind visitor for stream ID " << id();
+    return;
+  }
+  QUIC_DLOG(INFO) << ENDPOINT
+                  << "Registering CONNECT-UDP-BIND visitor with stream ID "
+                  << id();
+
+  if (connect_udp_bind_visitor_ != nullptr) {
+    QUIC_BUG(connect - udp double registration)
+        << ENDPOINT
+        << "Attempted to doubly register CONNECT-UDP-BIND with stream ID "
+        << id();
+    return;
+  }
+  connect_udp_bind_visitor_ = visitor;
+}
+
+void QuicSpdyStream::UnregisterConnectUdpBindVisitor() {
+  if (connect_udp_bind_visitor_ == nullptr) {
+    QUIC_BUG(connect - udp visitor empty during unregistration)
+        << ENDPOINT
+        << "Cannot unregister CONNECT-UDP-BIND visitor for stream ID " << id();
+    return;
+  }
+  QUIC_DLOG(INFO) << ENDPOINT
+                  << "Unregistering CONNECT-UDP-BIND visitor for stream ID "
+                  << id();
+  connect_udp_bind_visitor_ = nullptr;
+}
+
+void QuicSpdyStream::ReplaceConnectUdpBindVisitor(
+    ConnectUdpBindVisitor* visitor) {
+  QUIC_BUG_IF(connect - udp unknown move, connect_udp_bind_visitor_ == nullptr)
+      << "Attempted to move missing CONNECT-UDP-BIND visitor on HTTP/3 stream "
+         "ID "
+      << id();
+  connect_udp_bind_visitor_ = visitor;
 }
 
 void QuicSpdyStream::SetMaxDatagramTimeInQueue(
@@ -1862,12 +1916,8 @@ bool QuicSpdyStream::AreHeaderFieldValuesValid(
 
 void QuicSpdyStream::StopReading() {
   QuicStream::StopReading();
-  if (GetQuicReloadableFlag(
-          quic_stop_reading_also_stops_header_decompression) &&
-      VersionUsesHttp3(transport_version()) && !fin_received() &&
+  if (VersionUsesHttp3(transport_version()) && !fin_received() &&
       spdy_session_->qpack_decoder()) {
-    QUIC_RELOADABLE_FLAG_COUNT(
-        quic_stop_reading_also_stops_header_decompression);
     // Clean up Qpack decoding states.
     spdy_session_->qpack_decoder()->OnStreamReset(id());
     qpack_decoded_headers_accumulator_.reset();

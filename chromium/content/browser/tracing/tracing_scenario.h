@@ -138,6 +138,8 @@ class CONTENT_EXPORT TracingScenario : public TracingScenarioBase,
     kEnabled,
     // The tracing session was setup and the scenario is ready to start.
     kSetup,
+    // The tracing session is starting.
+    kStarting,
     // The tracing session is recording.
     kRecording,
     // A stop rule was triggered and the tracing session is stopping.
@@ -163,6 +165,9 @@ class CONTENT_EXPORT TracingScenario : public TracingScenarioBase,
     virtual bool OnScenarioCloned(TracingScenario* scenario) = 0;
     // Called when |scenario| starts recording a trace.
     virtual void OnScenarioRecording(TracingScenario* scenario) = 0;
+    // Called when |scenario| has an error.
+    virtual void OnScenarioError(TracingScenario* scenario,
+                                 perfetto::TracingError error) = 0;
     // Called when a trace was collected.
     virtual void SaveTrace(TracingScenario* scenario,
                            base::Token trace_uuid,

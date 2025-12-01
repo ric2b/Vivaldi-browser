@@ -8,6 +8,8 @@
 #ifndef COMPONENTS_PERFORMANCE_MANAGER_PUBLIC_FEATURES_H_
 #define COMPONENTS_PERFORMANCE_MANAGER_PUBLIC_FEATURES_H_
 
+#include <string>
+
 #include "base/feature_list.h"
 #include "base/metrics/field_trial_params.h"
 #include "base/time/time.h"
@@ -50,79 +52,87 @@ BASE_DECLARE_FEATURE_PARAM(bool, kBackgroundTabLoadingRestoreMainFrameState);
 // toggling it.
 BASE_DECLARE_FEATURE(kBatterySaverModeAvailable);
 
-// Flag to control a baseline HaTS survey for Chrome performance.
+// Flags to control HaTS surveys about Chrome performance.
 BASE_DECLARE_FEATURE(kPerformanceControlsPerformanceSurvey);
 BASE_DECLARE_FEATURE(kPerformanceControlsBatteryPerformanceSurvey);
 BASE_DECLARE_FEATURE(kPerformanceControlsMemorySaverOptOutSurvey);
 BASE_DECLARE_FEATURE(kPerformanceControlsBatterySaverOptOutSurvey);
+BASE_DECLARE_FEATURE(kPerformanceControlsPPMSurvey);
 
 // Defines the time delta to look back when checking if a device has used
 // battery.
 extern const base::FeatureParam<base::TimeDelta>
     kPerformanceControlsBatterySurveyLookback;
 
-// Round 3 Performance Controls features
+// Defines the minimum and maximum delay before showing the PPM survey. It will
+// be shown the next time the user opens the New Tab Page after a random time in
+// this range.
+BASE_DECLARE_FEATURE_PARAM(base::TimeDelta,
+                           kPerformanceControlsPPMSurveyMinDelay);
+BASE_DECLARE_FEATURE_PARAM(base::TimeDelta,
+                           kPerformanceControlsPPMSurveyMaxDelay);
 
-// This enables the performance detection backend.
-BASE_DECLARE_FEATURE(kPerformanceIntervention);
+// Controls whether survey responses will be tagged as "Selected For Uniform
+// Sample". The subset of responses with this tag approximate the general
+// population, no matter how many responses are received in individual segments.
+BASE_DECLARE_FEATURE_PARAM(bool,
+                           kPerformanceControlsPPMSurveyUniformSampleValue);
 
-// This enables the performance intervention UI
-BASE_DECLARE_FEATURE(kPerformanceInterventionUI);
+// Defines the names and boundaries of up to 3 segments for the PPM survey.
+// There's no kPerformanceControlsPPMSurveySegmentMaxMemoryGB3 because there's
+// never a 4th segment, so segment 3 has no maximum.
+BASE_DECLARE_FEATURE_PARAM(std::string,
+                           kPerformanceControlsPPMSurveySegmentName1);
+BASE_DECLARE_FEATURE_PARAM(std::string,
+                           kPerformanceControlsPPMSurveySegmentName2);
+BASE_DECLARE_FEATURE_PARAM(std::string,
+                           kPerformanceControlsPPMSurveySegmentName3);
+BASE_DECLARE_FEATURE_PARAM(size_t,
+                           kPerformanceControlsPPMSurveySegmentMaxMemoryGB1);
+BASE_DECLARE_FEATURE_PARAM(size_t,
+                           kPerformanceControlsPPMSurveySegmentMaxMemoryGB2);
 
 // This enables performance intervention to run in demo mode. While in demo
 // mode, performance intervention will ignore rate throttling and CPU thresholds
 // to make it easier to trigger performance intervention for testing purposes.
 BASE_DECLARE_FEATURE(kPerformanceInterventionDemoMode);
 
-bool ShouldUsePerformanceInterventionBackend();
+// This enables performance intervention to use the improved notification
+// prompting algorithm to show the intervention more often.
+BASE_DECLARE_FEATURE(kPerformanceInterventionNotificationImprovements);
 
-// This represents the version number for the string displayed on the
-// Performance Intervention Dialog.
-extern const base::FeatureParam<int> kInterventionDialogStringVersion;
+// Minimum time needed before showing another performance intervention.
+BASE_DECLARE_FEATURE_PARAM(base::TimeDelta, kMinimumTimeBetweenReshow);
 
-// This represents whether we should show the performance intervention
-// UI when the suggested tabs to take action on include tabs from a
-// profile that is different from the last active browser.
-extern const base::FeatureParam<bool> kInterventionShowMixedProfileSuggestions;
+// Number of recent samples to be taken into consideration when determining
+// performance intervention acceptance rate.
+BASE_DECLARE_FEATURE_PARAM(int, kAcceptanceRateWindowSize);
 
-// This represents the duration that the performance intervention button
-// should remain in the toolbar after the user dismisses the intervention
-// dialog without taking the suggested action.
-extern const base::FeatureParam<base::TimeDelta> kInterventionButtonTimeout;
+// Upper bounds for showing performance intervention and will be scaled down
+// based on the acceptance rate.
+BASE_DECLARE_FEATURE_PARAM(int, kScaleMaxTimesPerDay);
+BASE_DECLARE_FEATURE_PARAM(int, kScaleMaxTimesPerWeek);
 
-// This represents the duration that CPU must be over the threshold before
-// a notification is triggered.
-extern const base::FeatureParam<base::TimeDelta> kCPUTimeOverThreshold;
+// The amount of time a user needs to wait before being shown performance
+// intervention with a 0% acceptance rate
+BASE_DECLARE_FEATURE_PARAM(base::TimeDelta, kNoAcceptanceBackOff);
 
-// Frequency to sample for cpu usage to ensure that the user is experiencing
-// consistent cpu issues before surfacing a notification
-extern const base::FeatureParam<base::TimeDelta> kCPUSampleFrequency;
+// This enables performance intervention to use the updated notification
+// strings.
+BASE_DECLARE_FEATURE(kPerformanceInterventionNotificationStringImprovements);
 
-// If the system CPU consistently exceeds these percent thresholds, then
-// the CPU health will be classified as the threshold it is exceeding
-extern const base::FeatureParam<int> kCPUDegradedHealthPercentageThreshold;
-extern const base::FeatureParam<int> kCPUUnhealthyPercentageThreshold;
-
-// Maximum number of tabs to be actionable
-extern const base::FeatureParam<int> kCPUMaxActionableTabs;
-
-// Minimum percentage to improve CPU health for a tab to be actionable
-extern const base::FeatureParam<int> kMinimumActionableTabCPUPercentage;
-
-// This represents the duration that Memory must be over the threshold before
-// a notification is triggered.
-extern const base::FeatureParam<base::TimeDelta> kMemoryTimeOverThreshold;
-
-// If available Memory percent and bytes are both under the specified thresholds
-// then we will trigger a notification.
-extern const base::FeatureParam<int> kMemoryFreePercentThreshold;
-extern const base::FeatureParam<int> kMemoryFreeBytesThreshold;
+// The version string that is used on the performance detection dialog.
+BASE_DECLARE_FEATURE_PARAM(int, kNotificationStringVersion);
 
 #endif
 
 BASE_DECLARE_FEATURE(kPMProcessPriorityPolicy);
 
 extern const base::FeatureParam<bool> kInheritParentPriority;
+
+extern const base::FeatureParam<bool> kRenderedOutOfViewIsNotVisible;
+
+extern const base::FeatureParam<bool> kNonSpareRendererHighInitialPriority;
 
 BASE_DECLARE_FEATURE(kPMLoadingPageVoter);
 

@@ -7,6 +7,7 @@ package org.chromium.chrome.browser.bookmarks.bar;
 import static android.view.ViewGroup.LayoutParams.MATCH_PARENT;
 import static android.view.ViewGroup.LayoutParams.WRAP_CONTENT;
 
+import static org.hamcrest.Matchers.equalTo;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.mockito.Mockito.verify;
@@ -19,6 +20,7 @@ import android.view.View;
 import android.view.ViewGroup.LayoutParams;
 import android.view.ViewGroup.MarginLayoutParams;
 import android.view.ViewStub;
+import android.widget.ImageButton;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -41,12 +43,18 @@ import org.chromium.base.Callback;
 import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.base.supplier.ObservableSupplierImpl;
 import org.chromium.base.test.BaseRobolectricTestRunner;
+import org.chromium.base.test.util.Criteria;
+import org.chromium.base.test.util.CriteriaHelper;
 import org.chromium.chrome.R;
+import org.chromium.chrome.browser.bookmarks.BookmarkManagerOpener;
 import org.chromium.chrome.browser.bookmarks.BookmarkModel;
+import org.chromium.chrome.browser.bookmarks.BookmarkOpener;
 import org.chromium.chrome.browser.bookmarks.FakeBookmarkModel;
 import org.chromium.chrome.browser.browser_controls.BrowserControlsStateProvider;
 import org.chromium.chrome.browser.fullscreen.BrowserControlsManager;
+import org.chromium.chrome.browser.page_image_service.ImageServiceBridgeJni;
 import org.chromium.chrome.browser.profiles.Profile;
+import org.chromium.chrome.browser.ui.favicon.FaviconHelperJni;
 import org.chromium.components.bookmarks.BookmarkId;
 import org.chromium.components.browser_ui.widget.CoordinatorLayoutForPointer;
 import org.chromium.ui.base.TestActivity;
@@ -55,6 +63,7 @@ import org.chromium.url.GURL;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 
 /** Unit tests for {@link BookmarkBarCoordinator}. */
 @RunWith(BaseRobolectricTestRunner.class)
@@ -67,14 +76,19 @@ public class BookmarkBarCoordinatorTest {
     @Rule public final MockitoRule mMockitoRule = MockitoJUnit.rule();
 
     @Mock private BrowserControlsManager mBrowserControlsManager;
+    @Mock private FaviconHelperJni mFaviconHelperJni;
     @Mock private Callback<Integer> mHeightChangeCallback;
     @Mock private Callback<Integer> mHeightSupplierObserver;
+    @Mock private ImageServiceBridgeJni mImageServiceBridgeJni;
     @Mock private Profile mProfile;
+    @Mock private BookmarkOpener mBookmarkOpener;
+    @Mock private BookmarkManagerOpener mBookmarkManagerOpener;
 
     private BookmarkBarCoordinator mCoordinator;
     private BookmarkId mDesktopFolderId;
     private RecyclerView mItemsContainer;
     private FakeBookmarkModel mModel;
+    private ImageButton mOverflowButton;
     private ObservableSupplierImpl<Profile> mProfileSupplier;
     private BookmarkBar mView;
 
@@ -83,7 +97,13 @@ public class BookmarkBarCoordinatorTest {
         mModel = FakeBookmarkModel.createModel();
         mDesktopFolderId = mModel.getDesktopFolderId();
         mProfileSupplier = new ObservableSupplierImpl<>(mProfile);
+
+        when(mFaviconHelperJni.init()).thenReturn(1L);
+
         BookmarkModel.setInstanceForTesting(mModel);
+        FaviconHelperJni.setInstanceForTesting(mFaviconHelperJni);
+        ImageServiceBridgeJni.setInstanceForTesting(mImageServiceBridgeJni);
+
         onActivity(this::createCoordinator);
     }
 
@@ -102,7 +122,8 @@ public class BookmarkBarCoordinatorTest {
     }
 
     private void assertItemsRenderedCount(int count) {
-        assertEquals(count, mItemsContainer.getChildCount());
+        // NOTE: Use `Criteria` rather than `Assert` to allow polling via `CriteriaHelper`.
+        Criteria.checkThat(mItemsContainer.getChildCount(), equalTo(count));
     }
 
     private void createCoordinator(@NonNull Activity activity) {
@@ -121,11 +142,16 @@ public class BookmarkBarCoordinatorTest {
                         mBrowserControlsManager,
                         mHeightChangeCallback,
                         mProfileSupplier,
-                        viewStub);
+                        viewStub,
+                        mBookmarkOpener,
+                        new ObservableSupplierImpl<>(mBookmarkManagerOpener));
         assertNotNull("Verify view stub inflation during construction.", mView);
 
         mItemsContainer = mView.findViewById(R.id.bookmark_bar_items_container);
         assertNotNull("Verify items container existence.", mItemsContainer);
+
+        mOverflowButton = mView.findViewById(R.id.bookmark_bar_overflow_button);
+        assertNotNull("Verify overflow button existence.", mOverflowButton);
     }
 
     private void moveItemToDesktopFolderAtIndex(@NonNull BookmarkId itemId, int index) {
@@ -321,6 +347,40 @@ public class BookmarkBarCoordinatorTest {
                     assertItemsRenderedCount(2);
                     assertItemRenderedAtIndex(itemIds.get(0), 0);
                     assertItemRenderedAtIndex(itemIds.get(1), 1);
+                });
+    }
+
+    @Test
+    @SmallTest
+    public void testOnItemsOverflowChanged() {
+        onActivity(
+                activity -> {
+                    // Test case: empty state.
+                    final var count = new AtomicInteger();
+                    assertItemsRenderedCount(count.get());
+                    assertEquals(View.INVISIBLE, mOverflowButton.getVisibility());
+
+                    // Test case: minimally-populated state.
+                    addItemToDesktopFolder("" + count.incrementAndGet());
+                    Robolectric.flushForegroundThreadScheduler();
+                    assertItemsRenderedCount(count.get());
+                    assertEquals(View.INVISIBLE, mOverflowButton.getVisibility());
+
+                    // Test case: populated-to-overflow state.
+                    final var id = new AtomicReference<BookmarkId>();
+                    CriteriaHelper.pollUiThreadForJUnit(
+                            () -> {
+                                id.set(addItemToDesktopFolder("" + count.incrementAndGet()));
+                                Robolectric.flushForegroundThreadScheduler();
+                                assertItemsRenderedCount(count.get() - 1);
+                                assertEquals(View.VISIBLE, mOverflowButton.getVisibility());
+                            });
+
+                    // Test case: maximally-populated state.
+                    removeItem(id.get());
+                    Robolectric.flushForegroundThreadScheduler();
+                    assertItemsRenderedCount(count.decrementAndGet());
+                    assertEquals(View.INVISIBLE, mOverflowButton.getVisibility());
                 });
     }
 

@@ -52,7 +52,6 @@
 using chrome_test_util::BookmarksNavigationBarDoneButton;
 using chrome_test_util::ButtonWithAccessibilityLabelId;
 using chrome_test_util::GoogleServicesSettingsButton;
-using chrome_test_util::GoogleSyncSettingsButton;
 using chrome_test_util::IdentityCellMatcherForEmail;
 using chrome_test_util::PrimarySignInButton;
 using chrome_test_util::SecondarySignInButton;
@@ -758,7 +757,7 @@ void SetSigninEnterprisePolicyValue(BrowserSigninMode signinMode) {
   [SigninEarlGreyUI assertFakeAddAccountMenuDisplayed];
 }
 
-// Tests that a signed-out user can open "Sign in and sync" screen from the NTP.
+// Tests that a signed-out user can open the "Sign in" screen from the NTP.
 - (void)testOpenSignInFromNTP {
   // Select the identity disc particle.
   [[EarlGrey selectElementWithMatcher:

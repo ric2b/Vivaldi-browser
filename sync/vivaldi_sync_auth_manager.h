@@ -22,8 +22,7 @@ class VivaldiSyncAuthManager : public syncer::SyncAuthManager,
 
   VivaldiSyncAuthManager(
       signin::IdentityManager* identity_manager,
-      const AccountStateChangedCallback& account_state_changed,
-      const CredentialsChangedCallback& credentials_changed,
+      Delegate* delegate,
       VivaldiAccountManager* account_manager);
 
   ~VivaldiSyncAuthManager() override;

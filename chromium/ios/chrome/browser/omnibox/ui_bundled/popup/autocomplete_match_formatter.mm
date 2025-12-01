@@ -361,6 +361,11 @@ UIColor* DimColorIncognito() {
          _match.type == AutocompleteMatchType::NAVSUGGEST_PERSONALIZED ||
          _match.type == AutocompleteMatchType::PHYSICAL_WEB_DEPRECATED ||
          _match.type == AutocompleteMatchType::SEARCH_HISTORY ||
+
+          // Vivaldi
+         _match.type == AutocompleteMatchType::RECENT_TYPED_HISTORY ||
+          // End Vivaldi
+
          _match.type == AutocompleteMatchType::SEARCH_SUGGEST ||
          _match.type == AutocompleteMatchType::SEARCH_SUGGEST_ENTITY ||
          _match.type == AutocompleteMatchType::SEARCH_SUGGEST_PERSONALIZED ||
@@ -373,7 +378,7 @@ UIColor* DimColorIncognito() {
 }
 
 - (id<OmniboxPedal>)pedal {
-  return self.pedalData;
+  return nil;
 }
 
 - (UIImage*)matchTypeIcon {

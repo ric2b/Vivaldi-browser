@@ -43,7 +43,7 @@ void StorageAccessHandle::Create(
     RenderFrameHost* host,
     mojo::PendingReceiver<blink::mojom::StorageAccessHandle> receiver) {
   CHECK(host);
-  if (!DoesFrameHaveStorageAccess(host)) {
+  if (!DoesDocumentHaveStorageAccess(host)) {
 #if DCHECK_IS_ON()
     mojo::ReportBadMessage(
         "Binding a StorageAccessHandle requires third-party cookie access or "
@@ -55,7 +55,7 @@ void StorageAccessHandle::Create(
 }
 
 // static
-bool StorageAccessHandle::DoesFrameHaveStorageAccess(RenderFrameHost* host) {
+bool StorageAccessHandle::DoesDocumentHaveStorageAccess(RenderFrameHost* host) {
   bool has_full_cookie_access =
       GetContentClient()->browser()->IsFullCookieAccessAllowed(
           host->GetBrowserContext(), WebContents::FromRenderFrameHost(host),
@@ -134,7 +134,6 @@ void StorageAccessHandle::Estimate(EstimateCallback callback) {
       ->GetBucketsForStorageKey(
           blink::StorageKey::CreateFirstParty(
               render_frame_host().GetStorageKey().origin()),
-          blink::mojom::StorageType::kTemporary,
           /*delete_expired=*/false,
           base::SequencedTaskRunner::GetCurrentDefault(),
           base::BindOnce(&StorageAccessHandle::EstimateImpl,
@@ -178,7 +177,15 @@ void StorageAccessHandle::BindBlobStorage(
                         render_frame_host().GetStorageKey().origin()),
                     render_frame_host().GetLastCommittedOrigin(),
                     render_frame_host().GetProcess()->GetDeprecatedID(),
-                    std::move(receiver), base::DoNothing(),
+                    std::move(receiver),
+                    /*partitioning_blob_url_closure=*/base::DoNothing(),
+                    // In the case that a context is granted storage access, the
+                    // StorageAccessHandle context still shouldn't bypass
+                    // partitioning check. (eg. using a Blob URL created with
+                    // URL.createObjectURL in the third-party context with the
+                    // StorageAccessHandle's SharedWorker constructor.)
+                    /*storage_access_check_callback= */
+                    base::BindRepeating([]() -> bool { return false; }),
                     /*partitioning_disabled_by_policy=*/false);
 }
 

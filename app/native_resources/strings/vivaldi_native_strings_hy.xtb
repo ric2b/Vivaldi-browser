@@ -14,6 +14,7 @@
 <translation id="1454726940098520109">Այլևս չպահանջել հաստատում</translation>
 <translation id="1462666970065907900">Դուք իրո՞ք ցանկանում եք փակել այս պատուհանը։</translation>
 <translation id="1480046233931937785">Շնորհակալություններ</translation>
+<translation id="1490502035430975848">Հետազոտել պորտալ փաստաթուղթը</translation>
 <translation id="1521774566618522728">Ակտիվ է եղել այսօր</translation>
 <translation id="1526344461589023948">Ներբեռնված թարմացումը պահպանելիս տեղի ունեցավ սխալ։ Խնդրում ենք ստուգել համակարգչի սկավառակում բավարար ծավալի առկայությունն ու փորձել նորից։</translation>
 <translation id="1635542496948266458">Անցնել այլ պրոֆիլի</translation>
@@ -34,9 +35,11 @@
 <translation id="2141974047387702305">Թարմացման ֆայլերը ներբեռնելիս տեղի ունեցավ սխալ։ Խնդրում ենք ստուգել Ձեր ինտերնետի միացումն ու փորձել նորից։</translation>
 <translation id="2226825946708954262">⚠ Շարունակել տվյալների կորստով</translation>
 <translation id="2339641773402824483">Թարմացումների ստուգում…</translation>
+<translation id="2429571091666452569">Հետևյալ ցանկից.</translation>
 <translation id="2441056087170876076">Հրեշ 2</translation>
 <translation id="2444387452209867610">Տեղադրել նոթ</translation>
 <translation id="2486841023299517366">Գազան 4</translation>
+<translation id="2501278716633472235">Հետ գնալ</translation>
 <translation id="2612127540243995147">Պատրաստ է տեղակայման։ Vivaldi-ն կփակվի ու նորից կմեկնարկի։</translation>
 <translation id="2613387515621326337">Գնալ թարմացման վեբ կայք</translation>
 <translation id="2645477450146475243">Ցավոք, Ձեր Opera-ի կարգավորումները հասանելի չեն, քանի դեռ այդ բրաուզերը բացված է։Այդ կարգավորումները Vivaldi ներկրելու համար, պահպանեք Ձեր աշխատանքը և փակեք Opera-ի բոլոր պատուհանները։ Հետո սեղմեք Շարունակել։</translation>
@@ -61,6 +64,7 @@
 <translation id="3259769196742189631">Վավերացնել</translation>
 <translation id="3291915639428159043">Ինքնանվագարկումն արգելափակված է</translation>
 <translation id="3302905971452834934">Հրեշ 1</translation>
+<translation id="3308738399950580893">գովազդը</translation>
 <translation id="3334610655141903168">(անվանում չկա)</translation>
 <translation id="3372505110412186107">Vivaldi <ph name="VERSION" />-ն այս պահին հասանելի ամենանոր տարբերակն է։</translation>
 <translation id="3383198080133834965">Թարմացումը կատարված է։</translation>
@@ -71,9 +75,11 @@
 <translation id="3521635864657970829">Դուք իրո՞ք ցանկանում եք փակել այս պատուհանը։</translation>
 <translation id="3540597690227428180">Գազան 9</translation>
 <translation id="3542768452570884558">Բացել հղումը նոր պատուհանում</translation>
+<translation id="3586931643579894722">Թաքցնել մանրամասները</translation>
 <translation id="3588820906588687999">Բացել պատկերը նոր ներդիրում</translation>
 <translation id="3601066750251199488">Հրեշ 3</translation>
 <translation id="3620979700683094848">Կայքերը կարող են ավտոմատ նվագարկել տեսանյութերը</translation>
+<translation id="3650023731264842343">Հետևյալ էջը բեռնելիս՝</translation>
 <translation id="3658651522139217005">Opera GX</translation>
 <translation id="3680031241659195730">Հասանելի է Vivaldi-ի նոր տարբերակ։</translation>
 <translation id="3708982624815781692">Ներբեռնումը չեղարկվել է։</translation>
@@ -83,6 +89,7 @@
 <translation id="3795800845758778870">Ցավոք՝ Ձեր Brave-ի կարգավորումները հասանելի չեն, քանի դեռ տվյալ բրաուզերը բաց է։ Այդ կարգավորումները Vivaldi ներկրելու համար պահպանեք Ձեր աշխատանքն ու փակեք Brave-ի բոլոր պատուհանները։ Հետո սեղմեք Շարունակել։</translation>
 <translation id="3822431842304177896">Նոր բաժանիչ գիծ</translation>
 <translation id="3832132597516774400">Բնապատկեր 5</translation>
+<translation id="3894751534882749287">Եթե այնուամենայնիվ ցանկանում եք դիտել էջը, կարող եք փոխել պաշտպանության մակարդակը հետևման արգելափակման մենյուից կամ սեղմել «Թույլատրել» կոճակը</translation>
 <translation id="3914946330804881301">Opera-ից ներկրված</translation>
 <translation id="3921292902397893431">Հրեշ 8</translation>
 <translation id="3943857333388298514">Փակցնել</translation>
@@ -93,7 +100,7 @@
     Խնդրում ենք հիմա դուրս եկեք, բացեք Ձեր բանալիների պահոցի կողպեքը կամ վերանորոգեք այն, ապա փորձեք նորից։ Դուք իրո՞ք ցանկանում եք շարունակել, բայց տվյալներ կորցնել։</translation>
 <translation id="4074744496918018786">Բացել պատկերը գաղտնի պատուհանում</translation>
 <translation id="410351446219883937">Ինքնանվագարկում</translation>
-<translation id="4281844954008187215">Ծառայության պայմաններ</translation>
+<translation id="4281844954008187215">Oգտագործման պայմաններ</translation>
 <translation id="4324492550286218827">Բնապատկեր 2</translation>
 <translation id="4406101500523955324">Բացել նոր գաղտնի պատուհանում</translation>
 <translation id="4420816922321010053">Դուք իրո՞ք ցանկանում եք դուրս գալ Vivaldi-ից։</translation>
@@ -107,6 +114,7 @@
 <translation id="4582480609585453144">Բացել հղումը հետին ներդիրում</translation>
 <translation id="4636708767492582204">Ուղարկել փոստով</translation>
 <translation id="4677434526832593569">Գազան 8</translation>
+<translation id="4736016046474602958">Հետևման արգելափակիչ</translation>
 <translation id="474217410105706308">Լռեցնել ներդիրը</translation>
 <translation id="4861715717329665002">Ավտոմատ պահպանված սեսիաներ</translation>
 <translation id="4881695831933465202">Բացել</translation>
@@ -133,9 +141,11 @@
 <translation id="588258955323874662">Լիաէկրան ռեժիմ</translation>
 <translation id="5916080360077521750">Ցավոք՝ Ձեր Chrome-ի կարգավորումները հասանելի չեն, քանի դեռ այդ բրաուզերն աշխատում է։ Այդ կարգավորումները Vivaldi ներկրելու համար պահպանեք Ձեր գործն ու փակեք Chrome-ի բոլոր պատուհանները։ Հետո սեղմեք «Շարունակել»։</translation>
 <translation id="6040143037577758943">Փակել</translation>
+<translation id="6140948187512243695">Ցույց տալ մանրամասները</translation>
 <translation id="6229528619562190452">Սեղմեք այստեղ՝ Vivaldi-ն թարմացնելու համար։</translation>
 <translation id="6234173136417926046">Պատկերն օգտագործել որպես սկզբնական էջի ֆոն</translation>
 <translation id="6339818817272922368">Լոկալ հաշիվ</translation>
+<translation id="6376435169746695498">Այս էջի բեռնումն արգելափակվել է համընկնող <ph name="BLOCKER_NAME" />ով</translation>
 <translation id="6398710281890660037">Պաշտպանել իմ պրոֆիլը</translation>
 <translation id="6438786710866753178">Բնապատկեր 4</translation>
 <translation id="6477028720702061455">Ընտրեք Opera-ի պրոֆիլի պանակը՝ ներկրելու համար</translation>
@@ -152,6 +162,7 @@
 <translation id="7086554968911045110">Բնապատկեր 7</translation>
 <translation id="7099506190679014195">Անվտանգ բանալիների պահոցի թարմացում</translation>
 <translation id="7111492742514999492">Բնապատկեր 9</translation>
+<translation id="7113310725918019676">Թույլատրել <ph name="BLOCKED_TYPE" /> <ph name="DOMAIN" />-ից</translation>
 <translation id="7208252576848052204">Ցավոք, Ձեր Arc-ի կարգավորումները հասանելի չեն, քանի դեռ այդ բրաուզերը բացված է։Այդ կարգավորումները Vivaldi ներկրելու համար, պահպանեք Ձեր աշխատանքը և փակեք Arc-ի բոլոր պատուհանները։ Հետո սեղմեք Շարունակել։</translation>
 <translation id="7321500017121629018">Ակտիվ է եղել երեկ</translation>
 <translation id="7337881442233988129">Chromium</translation>
@@ -167,12 +178,13 @@
 <translation id="8027581147000338959">Բացել նոր պատուհանում</translation>
 <translation id="8044382196220116469">Թույլ չտալ կայքերին ավտոմատ նվագարկել տեսանյութերը</translation>
 <translation id="8099620695029051217">Պատճենել էջի հասցեն</translation>
+<translation id="8119307142152921512">հետևիչներն ու գովազդը</translation>
 <translation id="8197810018650377191">Էջը հավելել էջանիշերին</translation>
 <translation id="8261506727792406068">Ջնջել</translation>
-<translation id="8263047843452521549">Հետազոտել հետին սերվիս-վորքերը</translation>
 <translation id="8331671104904436324">Բացել հետին ներդիրում</translation>
 <translation id="8373293945112511707">Բնապատկեր 1</translation>
 <translation id="8388552048012645975">Թարմացման ներբեռնում…</translation>
+<translation id="8392904568172593155">Առանց պարամետրերի</translation>
 <translation id="8427094907586191051">Բնապատկեր 17</translation>
 <translation id="8439034818057146672">Vivaldi-ի նոր տարբերակը պատրաստ է տեղակայման։</translation>
 <translation id="8446668873108041390">AppleScript-ի միջոցով JavaScript-ի կատարումն անջատված է։ Անցնելով Կարգավորումներ &gt; Գաղտնիություն &gt; Apple Events՝ կարող եք թույլատրել JavaScript-ը Apple Events-ից։</translation>
@@ -183,14 +195,15 @@
 <translation id="8651348004684669199">Ավելացնել ակտիվ ներդիրը</translation>
 <translation id="8669345741879513971">Հրեշ 10</translation>
 <translation id="867544375504146191">Yandex</translation>
-<translation id="8689295374912158752">Հետազոտել պորտալ-փաստաթուղթը</translation>
 <translation id="875142999698251063">Դուրս գալ հիմա</translation>
 <translation id="8768970203213061953">Բնապատկեր 14</translation>
 <translation id="8773635261052182196">Դուք այլևս չեք տեսնի այս ծանուցումները։ Կարող եք կրկին միացնել դրանք Vivaldi-ի կարգավորումներից։</translation>
 <translation id="8774017153185436870">Կայքերը հնարավորություն կունենան ավտոմատ նվագարկելու տեսանյութերը</translation>
 <translation id="8813277370772331957">Հիշեցնել հետո</translation>
+<translation id="8837256239226739065">Հետազոտել ֆոնային Service Worker-ը</translation>
 <translation id="8894900864683381599">Հղումը հավելել վեբ վահանակին</translation>
 <translation id="8912720443398351457">Դուք իրո՞ք ցանկանում եք դուրս գալ Vivaldi-ից։</translation>
+<translation id="8940028675168378100">Արգելափակված է <ph name="BLOCKER_NAME" />ի կողմից</translation>
 <translation id="8947109330183116400">Ընտրեք HTML էջանիշերի ֆայլ</translation>
 <translation id="9017566390391482291">Ընտրեք Vivaldi-ի պրոֆիլի պանակը՝ ներկրելու համար</translation>
 <translation id="9048058608784130603">Սպասում է թարմացում <ph name="VERSION" /></translation>
@@ -201,6 +214,7 @@
 <translation id="912022491595344261">Բացել պատկերը որպես <ph name="USER" /></translation>
 <translation id="9157539936604258187">Բացել հղումը</translation>
 <translation id="9169060351863393881">Opera 12.x</translation>
+<translation id="9180553614777056266">Գովազդի արգելափակիչ</translation>
 <translation id="939305735877869636">Brave</translation>
 <translation id="970294721402795299">Բնապատկեր 16</translation>
 </translationbundle>

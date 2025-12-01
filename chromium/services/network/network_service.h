@@ -5,6 +5,7 @@
 #ifndef SERVICES_NETWORK_NETWORK_SERVICE_H_
 #define SERVICES_NETWORK_NETWORK_SERVICE_H_
 
+#include <cstdint>
 #include <map>
 #include <memory>
 #include <optional>
@@ -18,6 +19,7 @@
 #include "base/containers/flat_set.h"
 #include "base/containers/unique_ptr_adapters.h"
 #include "base/feature_list.h"
+#include "base/files/file.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
@@ -25,6 +27,7 @@
 #include "base/timer/timer.h"
 #include "build/build_config.h"
 #include "components/ip_protection/common/masked_domain_list_manager.h"
+#include "components/ip_protection/common/probabilistic_reveal_token_registry.h"
 #include "components/privacy_sandbox/masked_domain_list/masked_domain_list.pb.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
@@ -168,6 +171,7 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) NetworkService
       mojom::NetworkContextParamsPtr params) override;
   void ConfigureStubHostResolver(
       bool insecure_dns_client_enabled,
+      bool happy_eyeballs_v3_enabled,
       net::SecureDnsMode secure_dns_mode,
       const net::DnsOverHttpsConfig& dns_over_https_config,
       bool additional_dns_types_enabled) override;
@@ -226,6 +230,15 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) NetworkService
       mojo_base::ProtoWrapper masked_domain_list,
       const std::vector<std::string>& exclusion_list) override;
 
+  void UpdateMaskedDomainListFlatbuffer(
+      base::File default_file,
+      uint64_t default_file_size,
+      base::File regular_browsing_file,
+      uint64_t regular_browsing_file_size) override;
+
+  void UpdateProbabilisticRevealTokenRegistry(
+      base::Value::Dict registry) override;
+
 #if BUILDFLAG(IS_ANDROID)
   void DumpWithoutCrashing(base::Time dump_request_time) override;
 #endif  // BUILDFLAG(IS_ANDROID)
@@ -242,6 +255,21 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) NetworkService
       mojo::PendingRemote<mojom::GssapiLibraryLoadObserver>
           gssapi_library_load_observer) override;
 #endif  // BUILDFLAG(IS_LINUX)
+
+  // Set up a content decoding interceptor for an existing URLLoader connection.
+  // See comments in services/network/public/mojom/network_service.mojom for
+  // more details.
+  void InterceptUrlLoaderForBodyDecoding(
+      const std::vector<net::SourceStreamType>& content_encoding_types,
+      mojo::ScopedDataPipeConsumerHandle source_body,
+      mojo::ScopedDataPipeProducerHandle dest_body,
+      mojo::PendingRemote<network::mojom::URLLoader> source_url_loader,
+      mojo::PendingReceiver<network::mojom::URLLoaderClient>
+          source_url_loader_client,
+      mojo::PendingReceiver<network::mojom::URLLoader> dest_url_loader,
+      mojo::PendingRemote<network::mojom::URLLoaderClient>
+          dest_url_loader_client) override;
+
   void StartNetLogBounded(base::File file,
                           uint64_t max_total_size,
                           net::NetLogCaptureMode capture_mode,
@@ -298,6 +326,11 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) NetworkService
 
   ip_protection::MaskedDomainListManager* masked_domain_list_manager() const {
     return masked_domain_list_manager_.get();
+  }
+
+  ip_protection::ProbabilisticRevealTokenRegistry*
+  probabilistic_reveal_token_registry() const {
+    return probabilistic_reveal_token_registry_.get();
   }
 
   void set_host_resolver_factory_for_testing(
@@ -468,6 +501,11 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) NetworkService
 
   std::unique_ptr<ip_protection::MaskedDomainListManager>
       masked_domain_list_manager_;
+
+  // Holds the list of domains that have registered to receive Probabilistic
+  // Reveal Tokens.
+  std::unique_ptr<ip_protection::ProbabilisticRevealTokenRegistry>
+      probabilistic_reveal_token_registry_;
 
   // A per-process_id map of origins that are white-listed to allow
   // them to request raw headers for resources they request.

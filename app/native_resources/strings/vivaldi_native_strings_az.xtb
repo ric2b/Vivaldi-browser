@@ -14,6 +14,7 @@
 <translation id="1454726940098520109">Təsdiqləməni göstərməmək</translation>
 <translation id="1462666970065907900">Bu pəncərəni doğrudan bağlamaq istəyirsiniz?</translation>
 <translation id="1480046233931937785">Minnətdarlıq</translation>
+<translation id="1490502035430975848">Portal sənədini yoxlamaq</translation>
 <translation id="1521774566618522728">Bu gün aktiv olub</translation>
 <translation id="1526344461589023948">Endirilmiş yenilənmələrin saxlanılmasına cəhd edilərkən xəta baş verdi. Kompyuterinizin diskində kifayət qədər boş yer olduğunu yoxlayın və sonra yenidən cəhd edin.</translation>
 <translation id="1635542496948266458">Başqa profilə keçid</translation>
@@ -34,9 +35,11 @@
 <translation id="2141974047387702305">Yenilənmə fayllarının yüklənməsi zamanı xəta baş verdi. İnternet bağlantınızı yoxlayın və yenidən cəhd edin.</translation>
 <translation id="2226825946708954262">⚠ Məlumatları itirməklə davam edək</translation>
 <translation id="2339641773402824483">Yenilənmələr yoxlanılır...</translation>
+<translation id="2429571091666452569">Siyahıdan:</translation>
 <translation id="2441056087170876076">Canavar 2</translation>
 <translation id="2444387452209867610">Qeyd əlavə etmək</translation>
 <translation id="2486841023299517366">Heyvan 4</translation>
+<translation id="2501278716633472235">Qayıtmaq</translation>
 <translation id="2612127540243995147">Quraşdırılmağa hazırdır. Vivaldi bağlanacaq və yenidən açılacaq.</translation>
 <translation id="2613387515621326337">Yenilənmə səhifəsini göstərmək</translation>
 <translation id="2645477450146475243">Təəssüf ki, bu veb-bələdçi işlədiyi zaman Opera ayarları əlçatan deyil. Bu ayarları Vivaldiyə daxil etmək üçün bütün Opera pəncərələrini bağlayın və sonra Davam edin düyməsinə vurun.</translation>
@@ -61,6 +64,7 @@
 <translation id="3259769196742189631">Təsdiqləmək</translation>
 <translation id="3291915639428159043">Avtomatik oynatma əngəllənib</translation>
 <translation id="3302905971452834934">Cnavar 1</translation>
+<translation id="3308738399950580893">reklamlar</translation>
 <translation id="3334610655141903168">(başlıqsız)</translation>
 <translation id="3372505110412186107">Vivaldi <ph name="VERSION" /> buraxılışı ən yenisidir.</translation>
 <translation id="3383198080133834965">Yenilənib!</translation>
@@ -71,9 +75,11 @@
 <translation id="3521635864657970829">Bu pəncərəni doğrudan bağlamaq istəyirsiniz?</translation>
 <translation id="3540597690227428180">Heyvan 9</translation>
 <translation id="3542768452570884558">Keçidi yeni pəncərədə açın</translation>
+<translation id="3586931643579894722">Təfərrrüatları gizlətmək</translation>
 <translation id="3588820906588687999">Şəkili yeni vərəqdə açın</translation>
 <translation id="3601066750251199488">Canavar 3</translation>
 <translation id="3620979700683094848">Saytlar videonu avtomatik göstərə bilər</translation>
+<translation id="3650023731264842343">Bu səhifəni yükləyərkən:</translation>
 <translation id="3658651522139217005">Opera GX</translation>
 <translation id="3680031241659195730">Yeni Vivaldi buraxılşı əlçatandır!</translation>
 <translation id="3708982624815781692">Endirilmə ləğv edildi.</translation>
@@ -83,6 +89,7 @@
 <translation id="3795800845758778870">Təssüf ki, veb-bələdçi işlədiyi müddətdə Brave ayarları əlçatan deyil. Bu ayarları Vivaıdiyə idxal etmək üçün, Brave'dəki işlərinizi yaddaşda saxlayın və bütün Brave pəncərələrini bağlayın. Bundan sonra idxalı davam etdirin.</translation>
 <translation id="3822431842304177896">Yeni ayırıcı</translation>
 <translation id="3832132597516774400">Portret 5</translation>
+<translation id="3894751534882749287">Əgər istənilən halda bu səhifəyə baxmaq istəyirsinizsə, əngəlləyicinin ayarlarını dəyişin və ya "İcazə verin" düyməsinə vurun</translation>
 <translation id="3914946330804881301">Operadan idxal olunub</translation>
 <translation id="3921292902397893431">Canavar 8</translation>
 <translation id="3943857333388298514">Yerləşdirin</translation>
@@ -107,6 +114,7 @@
 <translation id="4582480609585453144">Keçidi arxa vərəqdə açın</translation>
 <translation id="4636708767492582204">Poçt ilə göndərmək</translation>
 <translation id="4677434526832593569">Heyvan 8</translation>
+<translation id="4736016046474602958">İzlənmənin əngəllənməsi</translation>
 <translation id="474217410105706308">Vərəqi susdurmaq</translation>
 <translation id="4861715717329665002">Avtomatik saxlanılan sesiyalar</translation>
 <translation id="4881695831933465202">Açmaq</translation>
@@ -133,9 +141,11 @@
 <translation id="588258955323874662">Tam ekran</translation>
 <translation id="5916080360077521750">Təəssüf ki, bu veb-bələdçi işləyərkən Chrome ayarları əlçatmazdır. Bu ayarları Vivaldiyə idxal etmək üçün işinizi saxlayın və bütün Chrome pəncərələrini bağlayın. Sonra "Davam edin" vurun.</translation>
 <translation id="6040143037577758943">Bağlamaq</translation>
+<translation id="6140948187512243695">Təfərrüatları göstərmək</translation>
 <translation id="6229528619562190452">Vivaldini yeniləmək üçün buraya vurun.</translation>
 <translation id="6234173136417926046">Şəkili Başlanğıc Səhifə arxa fonu kimi istifadə edin</translation>
 <translation id="6339818817272922368">Yerli istifadəçi hesabı</translation>
+<translation id="6376435169746695498">Bu səhifənin yüklənməsi <ph name="BLOCKER_NAME" /> tərəfindən əngəllənib</translation>
 <translation id="6398710281890660037">Profilimi qorumaq</translation>
 <translation id="6438786710866753178">Portret 4</translation>
 <translation id="6477028720702061455">İdxal etmək üçün Opera profili qovluğunu seçin</translation>
@@ -152,6 +162,7 @@
 <translation id="7086554968911045110">Portret 7</translation>
 <translation id="7099506190679014195">Açar saxlama yaddaşının təhlükəsiz yenilənməsi</translation>
 <translation id="7111492742514999492">Portret 9</translation>
+<translation id="7113310725918019676"><ph name="DOMAIN" /> serverindən <ph name="BLOCKED_TYPE" /> icazə verin</translation>
 <translation id="7208252576848052204">Təəssüf ki, bu veb-bələdçi işlədiyi zaman Arc ayarları əlçatan deyil. Bu ayarları Vivaldiyə daxil etmək üçün bütün Arc pəncərələrini bağlayın və sonra Davam edin düyməsinə vurun.</translation>
 <translation id="7321500017121629018">Dünən aktiv olub</translation>
 <translation id="7337881442233988129">Chromium</translation>
@@ -167,12 +178,13 @@
 <translation id="8027581147000338959">Yeni pəncərədə açmaq</translation>
 <translation id="8044382196220116469">Sayta videonun avtomatik göstərilməsinə icazə verməyin</translation>
 <translation id="8099620695029051217">Səhifə ünvanını kopyalayın</translation>
+<translation id="8119307142152921512">izləyicilər və reklamlar</translation>
 <translation id="8197810018650377191">Əlfəcin səhifəsi</translation>
 <translation id="8261506727792406068">Silin</translation>
-<translation id="8263047843452521549">Arxa xidmət işi yoxlanılsın</translation>
 <translation id="8331671104904436324">Arxa vərəqdə açmaq</translation>
 <translation id="8373293945112511707">Portret 1</translation>
 <translation id="8388552048012645975">Yenilənmə endirilir...</translation>
+<translation id="8392904568172593155">Parametrlər omadan</translation>
 <translation id="8427094907586191051">Portret 17</translation>
 <translation id="8439034818057146672">Yeni Vivaldi buraxılışı quraşdırmaq üçün hazırdır.</translation>
 <translation id="8446668873108041390">JavaScript-in AppleScrip ilə icra olunması söndürülüb. Ayarlar &gt; Məxfilik &gt; Apple Events ayarlarında, Apple Events'dən JavaScript'ə icazə verə bilərsiniz.</translation>
@@ -183,14 +195,15 @@
 <translation id="8651348004684669199">Aktiv vərəq əlavə etmək</translation>
 <translation id="8669345741879513971">Canavar 10</translation>
 <translation id="867544375504146191">Yandeks</translation>
-<translation id="8689295374912158752">Portal-sənəd yoxlanılsın</translation>
 <translation id="875142999698251063">İndi çıxmaq</translation>
 <translation id="8768970203213061953">Portret 14</translation>
 <translation id="8773635261052182196">Siz artıq bu bildirişləri görməyəcəksiniz. Bunu istənilən vaxt Vivaldi ayarlarından aça bilərsiniz.</translation>
 <translation id="8774017153185436870">Saytlar videonu avtomatik göstərə bilərlər</translation>
 <translation id="8813277370772331957">Mənə sonra xatırlat</translation>
+<translation id="8837256239226739065">Arxa fon xidməti işləyicisini yoxlamaq</translation>
 <translation id="8894900864683381599">Keçidi veb-panelə əlavə edin</translation>
 <translation id="8912720443398351457">Vivaldi'dən çıxmaq istəyirsiniz?</translation>
+<translation id="8940028675168378100"><ph name="BLOCKER_NAME" /> tərəfindən əngəllənib</translation>
 <translation id="8947109330183116400">HTML əlfəcin faylını seçin</translation>
 <translation id="9017566390391482291">İdxal etmək üçün Vivaldi profili qovluğunu seçin</translation>
 <translation id="9048058608784130603"><ph name="VERSION" /> yenilənməsi hazılrdır</translation>
@@ -201,6 +214,7 @@
 <translation id="912022491595344261">Şəkili <ph name="USER" /> kimi açmaq</translation>
 <translation id="9157539936604258187">Keçidi açmaq</translation>
 <translation id="9169060351863393881">Opera 12.x</translation>
+<translation id="9180553614777056266">Reklam əngəlləyici</translation>
 <translation id="939305735877869636">Brave</translation>
 <translation id="970294721402795299">Portret 16</translation>
 </translationbundle>

@@ -39,19 +39,20 @@
 # Kind:      lib
 ################################################################################
 tint_add_target(tint_utils_command lib
+  utils/command/args.cc
+  utils/command/args.h
   utils/command/cli.cc
   utils/command/cli.h
   utils/command/command.h
 )
 
 tint_target_add_dependencies(tint_utils_command lib
+  tint_utils
   tint_utils_containers
-  tint_utils_diagnostic
   tint_utils_ice
   tint_utils_macros
   tint_utils_math
   tint_utils_memory
-  tint_utils_result
   tint_utils_rtti
   tint_utils_strconv
   tint_utils_system
@@ -90,14 +91,13 @@ tint_add_target(tint_utils_command_test test
 )
 
 tint_target_add_dependencies(tint_utils_command_test test
+  tint_utils
   tint_utils_command
   tint_utils_containers
-  tint_utils_diagnostic
   tint_utils_ice
   tint_utils_macros
   tint_utils_math
   tint_utils_memory
-  tint_utils_result
   tint_utils_rtti
   tint_utils_strconv
   tint_utils_text

@@ -52,6 +52,7 @@ tests_sources = [
   "$_tests/ColorTest.cpp",
   "$_tests/CompressedBackendAllocationTest.cpp",
   "$_tests/CopySurfaceTest.cpp",
+  "$_tests/CoreBlittersTest.cpp",
   "$_tests/CubicChopTest.cpp",
   "$_tests/CubicMapTest.cpp",
   "$_tests/CubicRootsTest.cpp",
@@ -387,6 +388,7 @@ precompile_tests_sources = [
   "$_tests/graphite/precompile/CombinationBuilderTest.cpp",
   "$_tests/graphite/precompile/PaintParamsKeyTest.cpp",
   "$_tests/graphite/precompile/ThreadedPrecompileTest.cpp",
+  "$_tests/graphite/precompile/UserdefinedStableKeyTest.cpp",
 ]
 
 graphite_dawn_tests_sources = [ "$_tests/graphite/DawnBackendTextureTest.cpp" ]

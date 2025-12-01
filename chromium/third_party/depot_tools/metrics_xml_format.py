@@ -12,6 +12,7 @@ import sys
 
 
 def GetMetricsDir(top_dir, path):
+    top_dir = os.path.realpath(top_dir)
     metrics_xml_dirs = [
         os.path.join(top_dir, 'tools', 'metrics', 'actions'),
         os.path.join(top_dir, 'tools', 'metrics', 'histograms'),
@@ -45,10 +46,12 @@ def FindMetricsXMLFormatterTool(path, verbose=False):
     if not top_dir:
         log('Not executed in a Chromium checkout; skip formatting', verbose)
         return ''
+
     xml_dir = GetMetricsDir(top_dir, path)
     if not xml_dir:
         log(f'{path} is not a metric XML; skip formatting', verbose)
         return ''
+
     # Just to ensure that the given file is located in the current checkout
     # folder. If not, skip the formatting.
     if not os.path.realpath(path).startswith(os.path.realpath(top_dir)):

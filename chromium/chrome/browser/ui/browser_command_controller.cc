@@ -24,7 +24,7 @@
 #include "chrome/browser/commerce/browser_utils.h"
 #include "chrome/browser/defaults.h"
 #include "chrome/browser/devtools/devtools_window.h"
-#include "chrome/browser/extensions/extension_service.h"
+#include "chrome/browser/feedback/public/feedback_source.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
 #include "chrome/browser/prefs/incognito_mode_prefs.h"
 #include "chrome/browser/profiles/profile.h"
@@ -101,7 +101,7 @@
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/common/profiling.h"
 #include "content/public/common/url_constants.h"
-#include "extensions/browser/extension_system.h"
+#include "extensions/browser/extension_registrar.h"
 #include "extensions/common/extension_urls.h"
 #include "printing/buildflags/buildflags.h"
 #include "ui/actions/actions.h"
@@ -127,6 +127,7 @@
 #endif
 
 #if BUILDFLAG(IS_LINUX)
+#include "ui/base/ime/text_edit_commands.h"
 #include "ui/base/ime/text_input_flags.h"
 #include "ui/linux/linux_ui.h"
 #endif
@@ -138,6 +139,14 @@
 #if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_WIN)
 #include "chrome/browser/ui/shortcuts/desktop_shortcuts_utils.h"
 #endif  // BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_WIN)
+
+#if BUILDFLAG(ENABLE_GLIC)
+#include "chrome/browser/glic/glic_enabling.h"
+#include "chrome/browser/glic/glic_enums.h"
+#include "chrome/browser/glic/glic_keyed_service_factory.h"
+#include "chrome/browser/glic/glic_pref_names.h"
+#include "chrome/browser/glic/glic_profile_manager.h"
+#endif
 
 // Vivaldi
 #include "app/vivaldi_apptools.h"
@@ -333,8 +342,9 @@ bool BrowserCommandController::IsReservedCommandOrKey(
   // it is not reserved.
   auto* linux_ui = ui::LinuxUi::instance();
   if (linux_ui && event.os_event &&
-      linux_ui->GetTextEditCommandsForEvent(
-          *event.os_event, ui::TEXT_INPUT_FLAG_NONE, nullptr)) {
+      linux_ui->GetTextEditCommandForEvent(*event.os_event,
+                                           ui::TEXT_INPUT_FLAG_NONE) !=
+          ui::TextEditCommand::INVALID_COMMAND) {
     return false;
   }
 #endif
@@ -379,7 +389,17 @@ void BrowserCommandController::LoadingStateChanged(bool is_loading,
 }
 
 void BrowserCommandController::FindBarVisibilityChanged() {
-  if (is_locked_fullscreen_) {
+  // Block find command updates in locked fullscreen mode unless the instance is
+  // locked for OnTask (only relevant for non-web browser scenarios).
+  // TODO(crbug.com/365146870): Remove once we consolidate locked fullscreen
+  // with OnTask.
+  bool should_block_command_update = is_locked_fullscreen_;
+#if BUILDFLAG(IS_CHROMEOS)
+  if (browser_->IsLockedForOnTask()) {
+    should_block_command_update = false;
+  }
+#endif
+  if (should_block_command_update) {
     return;
   }
   UpdateCloseFindOrStop();
@@ -659,9 +679,6 @@ bool BrowserCommandController::ExecuteCommandWithDisposition(
     case IDC_AUTOFILL_MANDATORY_REAUTH:
       ShowMandatoryReauthOptInPrompt(browser_);
       break;
-    case IDC_MIGRATE_LOCAL_CREDIT_CARD_FOR_PAGE:
-      MigrateLocalCards(browser_);
-      break;
     case IDC_SAVE_AUTOFILL_ADDRESS:
       SaveAutofillAddress(browser_);
       break;
@@ -700,6 +717,11 @@ bool BrowserCommandController::ExecuteCommandWithDisposition(
       break;
     case IDC_DECLUTTER_TABS:
       ShowTabDeclutter(browser_);
+      break;
+    case IDC_SEND_SHARED_TAB_GROUP_FEEDBACK:
+      OpenFeedbackDialog(browser_, feedback::kFeedbackSourceDesktopTabGroups,
+                         /*description_template=*/std::string(),
+                         /*category_tag=*/"tab_group_share");
       break;
     case IDC_SHOW_TRANSLATE:
       ShowTranslateBubble(browser_);
@@ -1154,6 +1176,33 @@ bool BrowserCommandController::ExecuteCommandWithDisposition(
           DefaultBrowserPromptManager::CloseReason::kAccept);
       break;
 #endif
+#if BUILDFLAG(ENABLE_GLIC)
+    case IDC_GLIC_TOGGLE_PIN: {
+      PrefService* profile_prefs = profile()->GetPrefs();
+      profile_prefs->SetBoolean(
+          glic::prefs::kGlicPinnedToTabstrip,
+          !profile_prefs->GetBoolean(glic::prefs::kGlicPinnedToTabstrip));
+      break;
+    }
+    case IDC_OPEN_GLIC: {
+      auto* service =
+          glic::GlicKeyedServiceFactory::GetGlicKeyedService(profile());
+      if (service) {
+        glic::GlicKeyedServiceFactory::GetGlicKeyedService(profile())->ToggleUI(
+            browser_,
+            /*prevent_close=*/true,
+            glic::mojom::InvocationSource::kThreeDotsMenu);
+      }
+      break;
+    }
+    case IDC_GLIC_TOGGLE_FOCUS: {
+      if (auto* glic_keyed_service =
+              glic::GlicProfileManager::GetInstance()->GetLastActiveGlic()) {
+        glic_keyed_service->FocusUI();
+      }
+      break;
+    }
+#endif
     default:
       if (!vivaldi::ExecuteVivaldiCommands(browser_, id)) {
       LOG(WARNING) << "Received Unimplemented Command: " << id;
@@ -1181,7 +1230,18 @@ void BrowserCommandController::RemoveCommandObserver(
 }
 
 bool BrowserCommandController::UpdateCommandEnabled(int id, bool state) {
-  if (is_locked_fullscreen_) {
+  // Block individual command updates in locked fullscreen mode unless the
+  // instance is locked for OnTask (only relevant for non-web browser
+  // scenarios).
+  // TODO(crbug.com/365146870): Remove once we consolidate locked fullscreen
+  // with OnTask.
+  bool should_block_command_update = is_locked_fullscreen_;
+#if BUILDFLAG(IS_CHROMEOS)
+  if (browser_->IsLockedForOnTask()) {
+    should_block_command_update = false;
+  }
+#endif
+  if (should_block_command_update) {
     return false;
   }
 
@@ -1477,6 +1537,16 @@ void BrowserCommandController::InitCommandState() {
   command_updater_.UpdateCommandEnabled(
       IDC_CREATE_NEW_COMPARISON_TABLE_WITH_TAB, true);
 
+#if BUILDFLAG(ENABLE_GLIC)
+  // Glic commands.
+  command_updater_.UpdateCommandEnabled(
+      IDC_GLIC_TOGGLE_PIN, glic::GlicEnabling::IsProfileEligible(profile()));
+  command_updater_.UpdateCommandEnabled(
+      IDC_OPEN_GLIC, glic::GlicEnabling::IsEnabledForProfile(profile()));
+  command_updater_.UpdateCommandEnabled(
+      IDC_GLIC_TOGGLE_FOCUS, glic::GlicEnabling::IsProfileEligible(profile()));
+#endif
+
   // Initialize other commands whose state changes based on various conditions.
   UpdateCommandsForFullscreenMode();
   UpdateCommandsForContentRestrictionState();
@@ -1510,10 +1580,10 @@ void BrowserCommandController::UpdateSharedCommandsForIncognitoAvailability(
   command_updater->UpdateCommandEnabled(
       IDC_SHOW_BOOKMARK_MANAGER,
       browser_defaults::bookmarks_enabled && !forced_incognito && !is_guest);
-  extensions::ExtensionService* extension_service =
-      extensions::ExtensionSystem::Get(profile)->extension_service();
+  extensions::ExtensionRegistrar* extension_registrar =
+      extensions::ExtensionRegistrar::Get(profile);
   const bool enable_extensions =
-      extension_service && extension_service->extensions_enabled();
+      extension_registrar && extension_registrar->extensions_enabled();
 
   command_updater->UpdateCommandEnabled(IDC_SHOW_FULL_URLS, true);
   command_updater->UpdateCommandEnabled(IDC_SHOW_GOOGLE_LENS_SHORTCUT, true);
@@ -1545,9 +1615,7 @@ void BrowserCommandController::UpdateCommandsForIncognitoAvailability() {
   // be done in UpdateSharedCommandsForIncognitoAvailability as the method is
   // static to also handle states for NSApplication where no browser window are
   // open.
-  if (auto* incognito_action = actions::ActionManager::Get().FindAction(
-          kActionNewIncognitoWindow,
-          browser_->GetActions()->root_action_item())) {
+  if (auto* const incognito_action = FindAction(kActionNewIncognitoWindow)) {
     incognito_action->SetEnabled(
         IncognitoModePrefs::IsIncognitoAllowed(profile()));
   }
@@ -1662,6 +1730,11 @@ void BrowserCommandController::UpdateCommandsForTabState() {
   command_updater_.UpdateCommandEnabled(
       IDC_OPEN_IN_CHROME,
       IsWebAppOrCustomTab(browser_) && !is_isolated_app && !is_pinned_home_tab);
+
+  command_updater_.UpdateCommandEnabled(
+      IDC_READING_LIST_MENU_ADD_TAB,
+      browser_->tab_strip_model()->IsReadLaterSupportedForAny(
+          {browser_->tab_strip_model()->active_index()}));
 
   command_updater_.UpdateCommandEnabled(
       IDC_TOGGLE_REQUEST_TABLET_SITE,
@@ -1900,14 +1973,16 @@ void BrowserCommandController::UpdateCommandsForLockedFullscreenMode() {
 #if DCHECK_IS_ON()
     NonAllowlistedCommandsAreDisabled(&command_updater_);
 #endif
-    // Enable commands that allow users to switch between tabs if the webapp is
-    // locked for OnTask (only relevant for non-web browser scenarios).
+    // Enable commands that allow users to switch between tabs and find content
+    // within a webpage if the webapp is locked for OnTask
+    // (only relevant for non-web browser scenarios).
     if (browser_->IsLockedForOnTask()) {
       bool supports_tabs =
           browser_->SupportsWindowFeature(Browser::FEATURE_TABSTRIP);
       command_updater_.UpdateCommandEnabled(IDC_SELECT_NEXT_TAB, supports_tabs);
       command_updater_.UpdateCommandEnabled(IDC_SELECT_PREVIOUS_TAB,
                                             supports_tabs);
+      UpdateCommandsForFind();
     }
   } else {
     // Do an init call to re-initialize command state after the
@@ -1939,7 +2014,17 @@ void BrowserCommandController::UpdateSaveAsState() {
 
 void BrowserCommandController::UpdateReloadStopState(bool is_loading,
                                                      bool force) {
-  if (is_locked_fullscreen_) {
+  // Skip command updates when in locked fullscreen mode unless the instance is
+  // locked for OnTask (only relevant for non-web browser scenarios).
+  // TODO(crbug.com/365146870): Remove once we consolidate locked fullscreen
+  // with OnTask.
+  bool should_skip_command_updates = is_locked_fullscreen_;
+#if BUILDFLAG(IS_CHROMEOS)
+  if (browser_->IsLockedForOnTask()) {
+    should_skip_command_updates = false;
+  }
+#endif
+  if (should_skip_command_updates) {
     return;
   }
 
@@ -2058,10 +2143,8 @@ void BrowserCommandController::UpdateCommandAndActionEnabled(
     actions::ActionId action_id,
     bool enabled) {
   command_updater_.UpdateCommandEnabled(command_id, enabled);
-  if (features::IsToolbarPinningEnabled()) {
-    if (auto* const action = FindAction(action_id)) {
-      action->SetEnabled(enabled);
-    }
+  if (auto* const action = FindAction(action_id)) {
+    action->SetEnabled(enabled);
   }
 }
 

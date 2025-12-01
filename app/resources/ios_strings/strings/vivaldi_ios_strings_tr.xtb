@@ -5,7 +5,6 @@
 <translation id="1097355661841455597">Düşüncelerinizi duymak isteriz.</translation>
 <translation id="1137850887415122856">Özel sekmelerinizi kilitlemek için Touch ID, Face ID veya Parola ayarlayın.</translation>
 <translation id="1310184829257917508">Diğer Uygulamalardan Bağlantıları Gizli Olarak Açmayı İsteyin</translation>
-<translation id="1561609750546413721">Vivaldi Çeviri</translation>
 <translation id="207677936531967364">Yeni Özel Sekme Sayfası</translation>
 <translation id="2353953000228441783">Varsayılan site görünümü</translation>
 <translation id="2394192052244849643">Yapıştır ve Ara</translation>
@@ -17,7 +16,9 @@
 <translation id="3463990832590571933">Yeni Özel sekmede aç</translation>
 <translation id="3473652525653758699">Yeni Özel Pencere</translation>
 <translation id="3501504415290398157">Özel sekmelerinizin kilidini açmak için <ph name="BIOMETRIC_AUTHENITCATION_TYPE" /> kullanın.</translation>
+<translation id="3607792383367580513">Çevir</translation>
 <translation id="3692650606013198282">Özel Olarak Aç</translation>
+<translation id="3922395466317605522">Menüyü Özelleştir</translation>
 <translation id="3981599532037327317">${url} adresini Özel olarak açın</translation>
 <translation id="398477389655464998">Bağlantıyı Vurguya Kopyala</translation>
 <translation id="4026745073321351206">🙄 Bir sorun mu fark ettiniz?</translation>
@@ -39,10 +40,9 @@
 <translation id="7307970171564921489"><ph name="BIOMETRIC_AUTHENITCATION_TYPE" /> İle Özel Sekmelerin Kilidini Açın</translation>
 <translation id="7347289093190902150">Özelde Aç?</translation>
 <translation id="7549299604720382000">Yeni Özel Sekme</translation>
-<translation id="755255281989213264">Menüyü özelleştir</translation>
-<translation id="7920949005883349320">Gizlilik ve Güvenlik</translation>
 <translation id="7961015016161918242">Hiçbir Zaman</translation>
 <translation id="8326104954595890674">Yeni Özel Sekme</translation>
 <translation id="8756969031206844760">Şifre güncellensin mi?</translation>
+<translation id="9042893549633094279">Gizlilik ve güvenlik</translation>
 <translation id="9094033019050270033">Şifreyi güncelle</translation>
 </translationbundle>

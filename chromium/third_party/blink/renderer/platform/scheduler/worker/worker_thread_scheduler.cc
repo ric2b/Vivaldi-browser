@@ -209,7 +209,7 @@ bool WorkerThreadScheduler::CanEnterLongIdlePeriod(base::TimeTicks,
 
 base::TimeTicks WorkerThreadScheduler::CurrentIdleTaskDeadlineForTesting()
     const {
-  return idle_helper_.CurrentIdleTaskDeadline();
+  return idle_helper_.CurrentIdleTaskDeadlineForTesting();
 }
 
 void WorkerThreadScheduler::OnLifecycleStateChanged(
@@ -293,12 +293,6 @@ void WorkerThreadScheduler::OnVirtualTimeResumed() {
 void WorkerThreadScheduler::PostIdleTask(const base::Location& location,
                                          Thread::IdleTask task) {
   IdleTaskRunner()->PostIdleTask(location, std::move(task));
-}
-
-void WorkerThreadScheduler::PostNonNestableIdleTask(
-    const base::Location& location,
-    Thread::IdleTask task) {
-  IdleTaskRunner()->PostNonNestableIdleTask(location, std::move(task));
 }
 
 void WorkerThreadScheduler::RemoveCancelledIdleTasks() {

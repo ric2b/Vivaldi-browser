@@ -170,6 +170,7 @@
 <translation id="3838085852053358637">Nie udało się wczytać rozszerzenia</translation>
 <translation id="383891835335927981">Żadna strona nie jest powiększana ani pomniejszana</translation>
 <translation id="385051799172605136">Wstecz</translation>
+<translation id="3858860766373142691">Nazwa</translation>
 <translation id="3861977424605124250">Pokaż po uruchomieniu</translation>
 <translation id="3867944738977021751">Pola certyfikatu</translation>
 <translation id="3905761538810670789">Napraw aplikację</translation>
@@ -415,6 +416,11 @@ Przechowuj plik klucza w bezpiecznym miejscu. Będzie on potrzebny do utworzenia
 <translation id="8004582292198964060">Przeglądarka</translation>
 <translation id="8018313076035239964">Określ z jakich informacji mogą korzystać strony internetowe i jakie treści mogą się na nich wyświetlać</translation>
 <translation id="8071432093239591881">Drukuj jako obraz</translation>
+<translation id="8118448640060360549">{EXTENSIONS_COUNT,plural,
+        =1 {# zakładka}
+        few {# zakładki}
+        many {# zakładek}
+        other {# zakładki}}</translation>
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" /> KB</translation>
 <translation id="8212008074015601248">{NUM_DOWNLOAD, plural,
         =1{Trwa pobieranie pliku}few{Trwa pobieranie plików}many{Trwa pobieranie plików}other{Trwa pobieranie plików}}</translation>

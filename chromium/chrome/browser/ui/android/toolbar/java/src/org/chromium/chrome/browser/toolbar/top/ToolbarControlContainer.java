@@ -85,6 +85,7 @@ public class ToolbarControlContainer extends OptimizedFrameLayout
     private final int mToolbarLayoutHeight;
 
     private View mToolbarHairline;
+    private View mToolbarView;
 
     // Vivaldi
     private Supplier<Boolean> mIsInOverviewModeSupplier;
@@ -202,6 +203,14 @@ public class ToolbarControlContainer extends OptimizedFrameLayout
     }
 
     @Override
+    public FrameLayout.LayoutParams mutateToolbarLayoutParams() {
+        FrameLayout.LayoutParams toolbarLayoutParams =
+                (LayoutParams) mToolbarView.getLayoutParams();
+        mToolbarView.setLayoutParams(toolbarLayoutParams);
+        return toolbarLayoutParams;
+    }
+
+    @Override
     public void destroy() {
         ((ToolbarViewResourceAdapter) getToolbarResourceAdapter()).destroy();
         if (mToolbarContainerDragListener != null) {
@@ -229,10 +238,14 @@ public class ToolbarControlContainer extends OptimizedFrameLayout
         // it'll block the real tab strip in the compositor.
         if (mIsCompositorInitialized) return;
 
+        boolean isInDesktopWindow = appHeaderState != null && appHeaderState.isInDesktopWindow();
         Drawable backgroundColor =
                 new ColorDrawable(
-                        TabUiThemeUtil.getTabStripBackgroundColorForActivityState(
-                                getContext(), mIncognito, !mIsAppInUnfocusedDesktopWindow));
+                        TabUiThemeUtil.getTabStripBackgroundColor(
+                                getContext(),
+                                mIncognito,
+                                isInDesktopWindow,
+                                !mIsAppInUnfocusedDesktopWindow));
         Drawable backgroundTabImage =
                 ResourcesCompat.getDrawable(
                         getContext().getResources(),
@@ -310,12 +323,12 @@ public class ToolbarControlContainer extends OptimizedFrameLayout
                 fullscreenManager,
                 () -> mMidVisibilityToggle);
 
-        View toolbarView = findViewById(R.id.toolbar);
-        assert toolbarView != null;
+        mToolbarView = findViewById(R.id.toolbar);
+        assert mToolbarView != null;
 
         // Note(david@vivaldi.com): This looks ugly in Vivaldi. Skip it.
         if (!BuildConfig.IS_VIVALDI)
-        if (toolbarView instanceof ToolbarTablet) {
+        if (mToolbarView instanceof ToolbarTablet) {
             // On tablet, draw a fake tab strip and toolbar until the compositor is
             // ready to draw the real tab strip. (On phone, the toolbar is made entirely
             // of Android views, which are already initialized.)
@@ -537,56 +550,53 @@ public class ToolbarControlContainer extends OptimizedFrameLayout
                 return false;
             }
 
-            if (ToolbarFeatures.shouldSuppressCaptures()) {
-                if (ChromeFeatureList.sShouldBlockCapturesForFullscreenParam.getValue()
-                        && mFullscreenManager.getPersistentFullscreenMode()) {
-                    // The toolbar is never shown during fullscreen, so no point in capturing. The
-                    // dimensions are likely wrong and will only be restored after fullscreen is
-                    // exited.
-                    CaptureReadinessResult.logCaptureReasonFromResult(
-                            CaptureReadinessResult.notReady(
-                                    TopToolbarBlockCaptureReason.FULLSCREEN));
-                    return false;
+            if (mFullscreenManager != null && mFullscreenManager.getPersistentFullscreenMode()) {
+                // The toolbar is never shown during fullscreen, so no point in capturing. The
+                // dimensions are likely wrong and will only be restored after fullscreen is
+                // exited.
+                CaptureReadinessResult.logCaptureReasonFromResult(
+                        CaptureReadinessResult.notReady(TopToolbarBlockCaptureReason.FULLSCREEN));
+                return false;
+            }
+
+            final @LayoutType int layoutType = getCurrentLayoutType();
+            if (layoutType != LayoutType.TOOLBAR_SWIPE) {
+                // With BCIV enabled, we need a capture after page load before the controls are
+                // unlocked. So, only go into this section that potentially blocks the capture
+                // if we didn't just load a page.
+                if (!mNeedCaptureAfterPageLoad
+                        && mConstraintsObserver != null
+                        && mTabSupplier != null) {
+                    Tab tab = mTabSupplier.get();
+
+                    // TODO(crbug.com/40859837): Understand and fix this for native
+                    // pages. It seems capturing is required for some part of theme observers to
+                    // work correctly, but it shouldn't be.
+                    boolean isNativePage = tab == null || tab.isNativePage();
+                    if (!isNativePage && mConstraintsObserver.areControlsLocked()) {
+                        mConstraintsObserver.scheduleRequestResourceOnUnlock();
+                        CaptureReadinessResult.logCaptureReasonFromResult(
+                                CaptureReadinessResult.notReady(
+                                        TopToolbarBlockCaptureReason.BROWSER_CONTROLS_LOCKED));
+                        return false;
+                    }
                 }
 
-                final @LayoutType int layoutType = getCurrentLayoutType();
-                if (layoutType != LayoutType.TOOLBAR_SWIPE) {
-                    // With BCIV enabled, we need a capture after page load before the controls are
-                    // unlocked. So, only go into this section that potentially blocks the capture
-                    // if we didn't just load a page.
-                    if (!mNeedCaptureAfterPageLoad
-                            && mConstraintsObserver != null
-                            && mTabSupplier != null) {
-                        Tab tab = mTabSupplier.get();
-
-                        // TODO(crbug.com/40859837): Understand and fix this for native
-                        // pages. It seems capturing is required for some part of theme observers to
-                        // work correctly, but it shouldn't be.
-                        boolean isNativePage = tab == null || tab.isNativePage();
-                        if (!isNativePage && mConstraintsObserver.areControlsLocked()) {
-                            mConstraintsObserver.scheduleRequestResourceOnUnlock();
-                            CaptureReadinessResult.logCaptureReasonFromResult(
-                                    CaptureReadinessResult.notReady(
-                                            TopToolbarBlockCaptureReason.BROWSER_CONTROLS_LOCKED));
-                            return false;
-                        }
-                    }
-
-                    // The heavy lifting is done by #onCompositorInMotionChange and the above
-                    // browser controls state check. This logic only needs to guard against a
-                    // capture when the controls were partially or fully scrolled off, in the middle
-                    // of motion, before the view became dirty.
-                    if (mCompositorInMotionSupplier != null) {
-                        Boolean compositorInMotion = mCompositorInMotionSupplier.get();
-                        if (Boolean.TRUE.equals(compositorInMotion)) {
-                            CaptureReadinessResult.logCaptureReasonFromResult(
-                                    CaptureReadinessResult.notReady(
-                                            TopToolbarBlockCaptureReason.COMPOSITOR_IN_MOTION));
-                            return false;
-                        }
+                // The heavy lifting is done by #onCompositorInMotionChange and the above
+                // browser controls state check. This logic only needs to guard against a
+                // capture when the controls were partially or fully scrolled off, in the middle
+                // of motion, before the view became dirty.
+                if (mCompositorInMotionSupplier != null) {
+                    Boolean compositorInMotion = mCompositorInMotionSupplier.get();
+                    if (Boolean.TRUE.equals(compositorInMotion)) {
+                        CaptureReadinessResult.logCaptureReasonFromResult(
+                                CaptureReadinessResult.notReady(
+                                        TopToolbarBlockCaptureReason.COMPOSITOR_IN_MOTION));
+                        return false;
                     }
                 }
             }
+
             return checkCaptureReadinessResult();
         }
 
@@ -654,8 +664,7 @@ public class ToolbarControlContainer extends OptimizedFrameLayout
         }
 
         public void onPageLoadStopped() {
-            if (ChromeFeatureList.sBrowserControlsInViz.isEnabled()
-                    && !ChromeFeatureList.sBcivWithSuppression.isEnabled()) {
+            if (ChromeFeatureList.sBrowserControlsInViz.isEnabled()) {
                 // With capture suppression, we don't capture after navigating. Instead, we schedule
                 // a capture to happen when the controls become unlocked. With BCIV, there is no
                 // surface sync, so it's more likely to scroll before the capture is complete. To
@@ -678,8 +687,7 @@ public class ToolbarControlContainer extends OptimizedFrameLayout
         }
 
         private void onCompositorInMotionChange(Boolean compositorInMotion) {
-            if (!ToolbarFeatures.shouldSuppressCaptures()
-                    || mToolbar == null
+            if (mToolbar == null
                     || mBrowserStateBrowserControlsVisibilityDelegate == null
                     || mControlContainerIsVisibleSupplier == null) {
                 return;

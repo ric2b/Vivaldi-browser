@@ -51,6 +51,7 @@ fuzztest_cc_library(
     fuzztest::remote_file
     fuzztest::status_macros
     absl::check
+    absl::core_headers
     absl::log
     absl::nullability
     absl::status
@@ -153,6 +154,19 @@ fuzztest_cc_library(
     absl::str_format
     GTest::gtest
   TESTONLY
+)
+
+fuzztest_cc_library(
+  NAME
+    temp_dir
+  HDRS
+    "temp_dir.h"
+  SRCS
+    "temp_dir.cc"
+  DEPS
+    absl::check
+    absl::string_view
+    absl::strings
 )
 
 ### Tests

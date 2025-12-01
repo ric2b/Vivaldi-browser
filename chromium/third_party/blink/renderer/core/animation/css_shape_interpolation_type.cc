@@ -34,7 +34,6 @@
 #include "third_party/blink/renderer/core/svg/svg_path_byte_stream_source.h"
 #include "third_party/blink/renderer/core/svg/svg_path_data.h"
 #include "third_party/blink/renderer/core/svg/svg_path_parser.h"
-#include "third_party/blink/renderer/platform/graphics/graphics_types.h"
 #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
 #include "third_party/blink/renderer/platform/wtf/casting.h"
 #include "ui/gfx/geometry/point_f.h"
@@ -65,14 +64,9 @@ class ShapeNonInterpolableValue : public NonInterpolableValue {
     bool operator==(const SegmentParams&) const = default;
   };
 
+  ShapeNonInterpolableValue(WindRule wind_rule, Vector<SegmentParams>&& params)
+      : params_(params), wind_rule_(wind_rule) {}
   ~ShapeNonInterpolableValue() override = default;
-
-  static scoped_refptr<ShapeNonInterpolableValue> Create(
-      WindRule wind_rule,
-      Vector<SegmentParams> params) {
-    return base::AdoptRef(
-        new ShapeNonInterpolableValue(wind_rule, std::move(params)));
-  }
 
   const Vector<SegmentParams>& GetParams() const { return params_; }
   WindRule GetWindRule() const { return wind_rule_; }
@@ -80,9 +74,6 @@ class ShapeNonInterpolableValue : public NonInterpolableValue {
   DECLARE_NON_INTERPOLABLE_VALUE_TYPE();
 
  private:
-  ShapeNonInterpolableValue(WindRule wind_rule, Vector<SegmentParams> params)
-      : params_(std::move(params)), wind_rule_(wind_rule) {}
-
   Vector<SegmentParams> params_;
   WindRule wind_rule_;
 };
@@ -298,8 +289,8 @@ InterpolationValue ConvertPath(const StylePath* style_path,
 
   return InterpolationValue(
       MakeGarbageCollected<InterpolableList>(std::move(interpolable_segments)),
-      ShapeNonInterpolableValue::Create(style_path->GetWindRule(),
-                                        std::move(non_interpolable_segments)));
+      MakeGarbageCollected<ShapeNonInterpolableValue>(
+          style_path->GetWindRule(), std::move(non_interpolable_segments)));
 }
 InterpolationValue ConvertShape(const StyleShape* style_shape,
                                 const CSSProperty& property,
@@ -320,8 +311,8 @@ InterpolationValue ConvertShape(const StyleShape* style_shape,
 
   return InterpolationValue(
       MakeGarbageCollected<InterpolableList>(std::move(interpolable_segments)),
-      ShapeNonInterpolableValue::Create(style_shape->GetWindRule(),
-                                        std::move(non_interpolable_segments)));
+      MakeGarbageCollected<ShapeNonInterpolableValue>(
+          style_shape->GetWindRule(), std::move(non_interpolable_segments)));
 }
 
 InterpolationValue ConvertShapeOrPath(const BasicShape* shape,
@@ -336,15 +327,14 @@ InterpolationValue ConvertShapeOrPath(const BasicShape* shape,
 class UnderlyingShapeConversionChecker final
     : public InterpolationType::ConversionChecker {
  public:
-  ~UnderlyingShapeConversionChecker() final = default;
-
-  static UnderlyingShapeConversionChecker* Create(
-      const InterpolationValue& underlying) {
-    return MakeGarbageCollected<UnderlyingShapeConversionChecker>(underlying);
-  }
-
   explicit UnderlyingShapeConversionChecker(const InterpolationValue& value)
       : value_(&To<ShapeNonInterpolableValue>(*value.non_interpolable_value)) {}
+  ~UnderlyingShapeConversionChecker() final = default;
+
+  void Trace(Visitor* visitor) const override {
+    InterpolationType::ConversionChecker::Trace(visitor);
+    visitor->Trace(value_);
+  }
 
   bool IsValid(const InterpolationEnvironment&,
                const InterpolationValue& underlying) const final {
@@ -356,7 +346,7 @@ class UnderlyingShapeConversionChecker final
   }
 
  private:
-  scoped_refptr<const ShapeNonInterpolableValue> value_;
+  Member<const ShapeNonInterpolableValue> value_;
 };
 
 class ShapeInterpolationReader {
@@ -445,24 +435,28 @@ const BasicShape* GetShapeOrPath(const CSSProperty& property,
 class InheritedShapeChecker
     : public CSSInterpolationType::CSSConversionChecker {
  public:
-  InheritedShapeChecker(const CSSProperty& property,
-                        scoped_refptr<const BasicShape> shape)
-      : property_(property), shape_(std::move(shape)) {}
+  InheritedShapeChecker(const CSSProperty& property, const BasicShape* shape)
+      : property_(property), shape_(shape) {}
+
+  void Trace(Visitor* visitor) const override {
+    visitor->Trace(shape_);
+    CSSInterpolationType::CSSConversionChecker::Trace(visitor);
+  }
 
  private:
   bool IsValid(const StyleResolverState& state,
                const InterpolationValue& underlying) const final {
-    return GetShapeOrPath(property_, *state.ParentStyle()) == shape_.get();
+    return GetShapeOrPath(property_, *state.ParentStyle()) == shape_.Get();
   }
 
   const CSSProperty& property_;
-  const scoped_refptr<const BasicShape> shape_;
+  const Member<const BasicShape> shape_;
 };
 
 }  // namespace
 
 // static
-scoped_refptr<BasicShape> CSSShapeInterpolationType::CreateShape(
+BasicShape* CSSShapeInterpolationType::CreateShape(
     const InterpolableValue& interpolable_value,
     const NonInterpolableValue* non_interpolable_value,
     const CSSToLengthConversionData& conversion_data) {
@@ -533,8 +527,9 @@ scoped_refptr<BasicShape> CSSShapeInterpolationType::CreateShape(
             NOTREACHED();
         }
       });
-  return StyleShape::Create(shape_non_interpolable_value.GetWindRule(),
-                            reader.Origin(), std::move(segments));
+  return MakeGarbageCollected<StyleShape>(
+      shape_non_interpolable_value.GetWindRule(), reader.Origin(),
+      std::move(segments));
 }
 
 DEFINE_NON_INTERPOLABLE_VALUE_TYPE(ShapeNonInterpolableValue);
@@ -554,8 +549,8 @@ void CSSShapeInterpolationType::ApplyStandardPropertyValue(
     StyleResolverState& state) const {
   // TODO(crbug.com/389713717) support also offset-path
   CHECK_EQ(CssProperty().PropertyID(), CSSPropertyID::kClipPath);
-  auto shape = CreateShape(interpolable_value, non_interpolable_value,
-                           state.CssToLengthConversionData());
+  auto* shape = CreateShape(interpolable_value, non_interpolable_value,
+                            state.CssToLengthConversionData());
 
   // TODO(nrosenthal): Handle geometry box.
   state.StyleBuilder().SetClipPath(
@@ -584,7 +579,7 @@ InterpolationValue CSSShapeInterpolationType::MaybeConvertNeutral(
     const InterpolationValue& underlying,
     ConversionCheckers& conversion_checkers) const {
   conversion_checkers.push_back(
-      UnderlyingShapeConversionChecker::Create(underlying));
+      MakeGarbageCollected<UnderlyingShapeConversionChecker>(underlying));
 
   HeapVector<Member<InterpolableValue>> values;
   auto WriteLength = [&](size_t number = 1) {
@@ -794,8 +789,8 @@ InterpolationValue CSSShapeInterpolationType::MaybeConvertValue(
 
   return InterpolationValue(
       MakeGarbageCollected<InterpolableList>(std::move(interpolable_segments)),
-      ShapeNonInterpolableValue::Create(shape_value->GetWindRule(),
-                                        std::move(non_interpolable_segments)));
+      MakeGarbageCollected<ShapeNonInterpolableValue>(
+          shape_value->GetWindRule(), std::move(non_interpolable_segments)));
 }
 
 InterpolationValue

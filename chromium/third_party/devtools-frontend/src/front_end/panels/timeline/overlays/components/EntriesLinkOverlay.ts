@@ -16,13 +16,13 @@ const UIStrings = {
    *@description Accessible label used to explain to a user that they are viewing an arrow representing a link between two entries.
    */
   diagram: 'Links bteween entries',
-};
+} as const;
 const str_ = i18n.i18n.registerUIStrings('panels/timeline/overlays/components/EntriesLinkOverlay.ts', UIStrings);
 const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
 
 // TODO(crbug.com/391381439): Fully migrate off of constructed style sheets.
 const styles = new CSSStyleSheet();
-styles.replaceSync(stylesRaw.cssContent);
+styles.replaceSync(stylesRaw.cssText);
 
 export class EntryLinkStartCreating extends Event {
   static readonly eventName = 'entrylinkstartcreating';
@@ -44,17 +44,17 @@ export class EntriesLinkOverlay extends HTMLElement {
   #entryToWrapper: HTMLElement|null = null;
   #entryFromConnector: SVGCircleElement|null = null;
   #entryToConnector: SVGCircleElement|null = null;
-  #entryFromVisible: boolean = true;
-  #entryToVisible: boolean = true;
+  #entryFromVisible = true;
+  #entryToVisible = true;
   #canvasRect: DOMRect|null = null;
 
   // These flags let us know if the entry we are drawing from/to are the
   // originals, or if they are the parent, which can happen if an entry is
   // collapsed. We care about this because if the entry is not the source, we
   // draw the border as dashed, not solid.
-  #fromEntryIsSource: boolean = true;
-  #toEntryIsSource: boolean = true;
-  #arrowHidden: boolean = false;
+  #fromEntryIsSource = true;
+  #toEntryIsSource = true;
+  #arrowHidden = false;
   #linkState: Trace.Types.File.EntriesLinkState;
 
   constructor(

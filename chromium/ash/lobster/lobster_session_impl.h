@@ -11,6 +11,7 @@
 #include "ash/ash_export.h"
 #include "ash/lobster/lobster_candidate_store.h"
 #include "ash/lobster/lobster_entry_point_enums.h"
+#include "ash/lobster/lobster_image_download_actuator.h"
 #include "ash/public/cpp/lobster/lobster_enums.h"
 #include "ash/public/cpp/lobster/lobster_feedback_preview.h"
 #include "ash/public/cpp/lobster/lobster_image_candidate.h"
@@ -31,10 +32,12 @@ class ASH_EXPORT LobsterSessionImpl : public LobsterSession {
       base::OnceCallback<void(const std::string&, StatusCallback)>;
 
   explicit LobsterSessionImpl(std::unique_ptr<LobsterClient> client,
-                              LobsterEntryPoint entry_point);
+                              LobsterEntryPoint entry_point,
+                              LobsterMode mode);
   LobsterSessionImpl(std::unique_ptr<LobsterClient> client,
                      const LobsterCandidateStore& candidate_store,
-                     LobsterEntryPoint entry_point);
+                     LobsterEntryPoint entry_point,
+                     LobsterMode mode);
 
   ~LobsterSessionImpl() override;
 
@@ -54,7 +57,8 @@ class ASH_EXPORT LobsterSessionImpl : public LobsterSession {
                        LobsterPreviewFeedbackCallback) override;
   bool SubmitFeedback(int candidate_id,
                       const std::string& description) override;
-  void ShowDisclaimerUIAndCacheQuery(std::optional<std::string> query) override;
+  void ShowDisclaimerUIAndCacheContext(std::optional<std::string> query,
+                                       const gfx::Rect& anchor_bounds) override;
   void LoadUI(std::optional<std::string> query,
               LobsterMode mode,
               const gfx::Rect& caret_bounds) override;
@@ -73,7 +77,12 @@ class ASH_EXPORT LobsterSessionImpl : public LobsterSession {
 
   LobsterEntryPoint entry_point_;
 
+  LobsterMode mode_;
+
+  LobsterImageDownloadActuator download_actuator_;
+
   std::optional<std::string> query_before_disclaimer_ui_;
+  gfx::Rect anchor_bounds_before_disclaimer_ui_;
 
   base::WeakPtrFactory<LobsterSessionImpl> weak_ptr_factory_{this};
 };

@@ -15,6 +15,7 @@ MATCHER_P(IsOkAndEquals, config, "") {
   const absl::StatusOr<Configuration>& other = arg;
   return other.ok() && config.corpus_database == other->corpus_database &&
          config.stats_root == other->stats_root &&
+         config.workdir_root == other->workdir_root &&
          config.binary_identifier == other->binary_identifier &&
          config.fuzz_tests == other->fuzz_tests &&
          config.fuzz_tests_in_current_shard ==
@@ -23,6 +24,7 @@ MATCHER_P(IsOkAndEquals, config, "") {
              other->reproduce_findings_as_separate_tests &&
          config.replay_coverage_inputs == other->replay_coverage_inputs &&
          config.only_replay == other->only_replay &&
+         config.replay_in_single_process == other->replay_in_single_process &&
          config.execution_id == other->execution_id &&
          config.print_subprocess_log == other->print_subprocess_log &&
          config.stack_limit == other->stack_limit &&
@@ -41,12 +43,14 @@ TEST(ConfigurationTest,
      DeserializeYieldsSerializedConfigurationWithoutOptionalValues) {
   Configuration configuration{"corpus_database",
                               "stats_root",
+                              "workdir_root",
                               "binary_identifier",
                               /*fuzz_tests=*/{},
                               /*fuzz_tests_in_current_shard=*/{},
                               /*reproduce_findings_as_separate_tests=*/true,
                               /*replay_coverage_inputs=*/true,
                               /*only_replay=*/true,
+                              /*replay_in_single_process=*/true,
                               "execution_id",
                               /*print_subprocess_log=*/true,
                               /*stack_limit=*/100,
@@ -66,12 +70,14 @@ TEST(ConfigurationTest,
      DeserializeYieldsSerializedConfigurationWithOptionalValues) {
   Configuration configuration{"corpus_database",
                               "stats_root",
+                              "workdir_root",
                               "binary_identifier",
                               {"FuzzTest1", "FuzzTest2"},
                               {"FuzzTest1"},
                               /*reproduce_findings_as_separate_tests=*/true,
                               /*replay_coverage_inputs=*/true,
                               /*only_replay=*/true,
+                              /*replay_in_single_process=*/true,
                               "execution_id",
                               /*print_subprocess_log=*/true,
                               /*stack_limit=*/100,

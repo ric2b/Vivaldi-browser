@@ -327,9 +327,16 @@ bool ValidateProgramUniformBase(const Context *context,
 {
     const LinkedUniform *uniform = nullptr;
     Program *programObject       = GetValidProgram(context, entryPoint, program);
-    return ValidateUniformCommonBase(context, entryPoint, programObject, location, count,
-                                     &uniform) &&
-           ValidateUniformValue(context, entryPoint, valueType, uniform->getType());
+    if (!ValidateUniformCommonBase(context, entryPoint, programObject, location, count, &uniform))
+    {
+        // Error already generated.
+        return false;
+    }
+    if (uniform == nullptr)
+    {
+        return true;  // no-op
+    }
+    return ValidateUniformValue(context, entryPoint, valueType, uniform->getType());
 }
 
 bool ValidateProgramUniformMatrixBase(const Context *context,
@@ -342,9 +349,16 @@ bool ValidateProgramUniformMatrixBase(const Context *context,
 {
     const LinkedUniform *uniform = nullptr;
     Program *programObject       = GetValidProgram(context, entryPoint, program);
-    return ValidateUniformCommonBase(context, entryPoint, programObject, location, count,
-                                     &uniform) &&
-           ValidateUniformMatrixValue(context, entryPoint, valueType, uniform->getType());
+    if (!ValidateUniformCommonBase(context, entryPoint, programObject, location, count, &uniform))
+    {
+        // Error already generated.
+        return false;
+    }
+    if (uniform == nullptr)
+    {
+        return true;  // no-op
+    }
+    return ValidateUniformMatrixValue(context, entryPoint, valueType, uniform->getType());
 }
 
 bool ValidateVertexAttribFormatCommon(const Context *context,
@@ -383,10 +397,9 @@ bool ValidateGetBooleani_v(const Context *context,
                            GLuint index,
                            const GLboolean *data)
 {
-    if (context->getClientVersion() < ES_3_1 && !context->getExtensions().drawBuffersIndexedAny())
+    if (context->getClientVersion() < ES_3_1)
     {
-        ANGLE_VALIDATION_ERROR(GL_INVALID_OPERATION,
-                               kES31OrDrawBuffersIndexedExtensionNotAvailable);
+        ANGLE_VALIDATION_ERROR(GL_INVALID_OPERATION, kES31Required);
         return false;
     }
 
@@ -406,10 +419,9 @@ bool ValidateGetBooleani_vRobustANGLE(const Context *context,
                                       const GLsizei *length,
                                       const GLboolean *data)
 {
-    if (context->getClientVersion() < ES_3_1 && !context->getExtensions().drawBuffersIndexedAny())
+    if (context->getClientVersion() < ES_3_1)
     {
-        ANGLE_VALIDATION_ERROR(GL_INVALID_OPERATION,
-                               kES31OrDrawBuffersIndexedExtensionNotAvailable);
+        ANGLE_VALIDATION_ERROR(GL_INVALID_OPERATION, kES31Required);
         return false;
     }
 
@@ -744,9 +756,16 @@ bool ValidateProgramUniform1ivBase(const Context *context,
 {
     const LinkedUniform *uniform = nullptr;
     Program *programObject       = GetValidProgram(context, entryPoint, program);
-    return ValidateUniformCommonBase(context, entryPoint, programObject, location, count,
-                                     &uniform) &&
-           ValidateUniform1ivValue(context, entryPoint, uniform->getType(), count, value);
+    if (!ValidateUniformCommonBase(context, entryPoint, programObject, location, count, &uniform))
+    {
+        // Error already generated.
+        return false;
+    }
+    if (uniform == nullptr)
+    {
+        return true;  // no-op
+    }
+    return ValidateUniform1ivValue(context, entryPoint, uniform->getType(), count, value);
 }
 
 bool ValidateProgramUniform2ivBase(const Context *context,
@@ -1344,7 +1363,7 @@ bool ValidateGetProgramResourceName(const Context *context,
 
     if (bufSize < 0)
     {
-        ANGLE_VALIDATION_ERROR(GL_INVALID_VALUE, kNegativeBufferSize);
+        ANGLE_VALIDATION_ERROR(GL_INVALID_VALUE, kNegativeBufSize);
         return false;
     }
 
@@ -1705,7 +1724,7 @@ bool ValidateGenProgramPipelinesBase(const Context *context,
                                      GLsizei n,
                                      const ProgramPipelineID *pipelines)
 {
-    return ValidateGenOrDelete(context, entryPoint, n);
+    return ValidateGenOrDelete(context, entryPoint, n, pipelines);
 }
 
 bool ValidateDeleteProgramPipelinesBase(const Context *context,
@@ -1713,7 +1732,7 @@ bool ValidateDeleteProgramPipelinesBase(const Context *context,
                                         GLsizei n,
                                         const ProgramPipelineID *pipelines)
 {
-    return ValidateGenOrDelete(context, entryPoint, n);
+    return ValidateGenOrDelete(context, entryPoint, n, pipelines);
 }
 
 bool ValidateBindProgramPipelineBase(const Context *context,
@@ -1767,7 +1786,7 @@ bool ValidateUseProgramStagesBase(const Context *context,
     // GL_INVALID_OPERATION is generated if pipeline is not a name previously returned from a call
     // to glGenProgramPipelines or if such a name has been deleted by a call to
     // glDeleteProgramPipelines.
-    if (!context->isProgramPipelineGenerated({pipeline}))
+    if ((pipeline.value == 0) || (!context->isProgramPipelineGenerated({pipeline})))
     {
         ANGLE_VALIDATION_ERROR(GL_INVALID_OPERATION, kObjectNotGenerated);
         return false;
@@ -1818,7 +1837,7 @@ bool ValidateActiveShaderProgramBase(const Context *context,
     // An INVALID_OPERATION error is generated if pipeline is not a name returned from a previous
     // call to GenProgramPipelines or if such a name has since been deleted by
     // DeleteProgramPipelines.
-    if (!context->isProgramPipelineGenerated({pipeline}))
+    if ((pipeline.value == 0) || (!context->isProgramPipelineGenerated({pipeline})))
     {
         ANGLE_VALIDATION_ERROR(GL_INVALID_OPERATION, kObjectNotGenerated);
         return false;
@@ -1954,12 +1973,10 @@ bool ValidateValidateProgramPipelineBase(const Context *context,
                                          angle::EntryPoint entryPoint,
                                          ProgramPipelineID pipeline)
 {
-    if (pipeline.value == 0)
-    {
-        return false;
-    }
-
-    if (!context->isProgramPipelineGenerated(pipeline))
+    // An INVALID_OPERATION error is generated if pipeline is not a name returned from a previous
+    // call to GenProgramPipelines or if such a name has since been deleted by
+    // DeleteProgramPipelines.
+    if ((pipeline.value == 0) || (!context->isProgramPipelineGenerated(pipeline)))
     {
         ANGLE_VALIDATION_ERROR(GL_INVALID_OPERATION, kProgramPipelineDoesNotExist);
         return false;
@@ -1977,7 +1994,13 @@ bool ValidateGetProgramPipelineInfoLogBase(const Context *context,
 {
     if (bufSize < 0)
     {
-        ANGLE_VALIDATION_ERROR(GL_INVALID_VALUE, kNegativeBufferSize);
+        ANGLE_VALIDATION_ERROR(GL_INVALID_VALUE, kNegativeBufSize);
+        return false;
+    }
+
+    if (bufSize > 0 && infoLog == nullptr)
+    {
+        ANGLE_VALIDATION_ERROR(GL_INVALID_VALUE, kProgramPipelineInfoLogNULL);
         return false;
     }
 

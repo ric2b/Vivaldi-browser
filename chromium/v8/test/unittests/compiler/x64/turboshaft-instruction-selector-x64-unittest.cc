@@ -1150,6 +1150,9 @@ TEST_F(TurboshaftInstructionSelectorTest, Int32Mul9BecomesLea) {
   EXPECT_EQ(s.ToVreg(p0), s.ToVreg(s[0]->InputAt(1)));
 }
 
+// TODO(dmercadier): copy all of the TurboshaftInstructionSelectorMultTest
+// unittests from IA32 (eg, Int32Mul9AddBecomesLea), and make sure they work.
+
 // -----------------------------------------------------------------------------
 // Word32ShiftLeft.
 
@@ -2284,7 +2287,8 @@ TEST_P(TurboshaftInstructionSelectorSIMDArchShuffleTest, SIMDArchShuffle) {
     // Tests various shuffle optimizations
     StreamBuilder m(this, type, type, type);
     auto param = GetParam();
-    OpIndex n = m.Simd128Shuffle(m.Parameter(0), m.Parameter(1), param.shuffle);
+    OpIndex n = m.Simd128Shuffle(m.Parameter(0), m.Parameter(1),
+                                 Simd128ShuffleOp::Kind::kI8x16, param.shuffle);
     m.Return(n);
     Stream s = m.Build();
     ASSERT_EQ(1U, s.size());
@@ -2375,7 +2379,8 @@ TEST_P(TurboshaftInstructionSelectorSIMDShuffleWithZeroInputTest,
     StreamBuilder m(this, type, type);
     auto param = GetParam();
     OpIndex const c = m.Simd128Constant(zeros);
-    OpIndex n = m.Simd128Shuffle(c, m.Parameter(0), param.shuffle_mask);
+    OpIndex n = m.Simd128Shuffle(
+        c, m.Parameter(0), Simd128ShuffleOp::Kind::kI8x16, param.shuffle_mask);
     m.Return(n);
     Stream s = m.Build();
     ASSERT_EQ(1U, s.size());

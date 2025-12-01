@@ -12,13 +12,24 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_tabstrip.h"
-#include "chrome/browser/ui/tabs/public/tab_interface.h"
 #include "chrome/common/chrome_isolated_world_ids.h"
 #include "chrome/common/webui_url_constants.h"
 #include "chrome/test/base/in_process_browser_test.h"
+#include "components/tab_collections/public/tab_interface.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/test_utils.h"
+#include "ui/webui/buildflags.h"
+
+#if BUILDFLAG(ENABLE_WEBUI_GENERATE_CODE_CACHE)
+#include "base/test/metrics/histogram_tester.h"
+#include "base/test/scoped_feature_list.h"
+#include "chrome/browser/ui/webui/webui_util_desktop.h"
+#include "components/metrics/content/subprocess_metrics_provider.h"
+#include "components/variations/variations_test_utils.h"
+#include "content/public/common/content_features.h"
+#include "ui/webui/resources/grit/webui_code_cache_resources_map.h"
+#endif  // BUILDFLAG(ENABLE_WEBUI_GENERATE_CODE_CACHE)
 
 class TabSearchUIBrowserTest : public InProcessBrowserTest {
  public:
@@ -84,13 +95,8 @@ IN_PROC_BROWSER_TEST_F(TabSearchUIBrowserTest, InitialTabItemsListed) {
   ASSERT_EQ(expected_tab_item_count, tab_item_count);
 }
 
-// Flaky on ChromeOS. See https://crbug.com/1484897
-#if BUILDFLAG(IS_CHROMEOS)
-#define MAYBE_SwitchToTabAction DISABLED_SwitchToTabAction
-#else
-#define MAYBE_SwitchToTabAction SwitchToTabAction
-#endif
-IN_PROC_BROWSER_TEST_F(TabSearchUIBrowserTest, MAYBE_SwitchToTabAction) {
+// Flaky - see https://crbug.com/40932977
+IN_PROC_BROWSER_TEST_F(TabSearchUIBrowserTest, DISABLED_SwitchToTabAction) {
   int tab_count = browser()->tab_strip_model()->GetTabCount();
   tabs::TabHandle tab_id =
       browser()->tab_strip_model()->GetTabAtIndex(tab_count - 1)->GetHandle();
@@ -185,3 +191,82 @@ IN_PROC_BROWSER_TEST_F(TabSearchUIBrowserTest,
   }
   ASSERT_FALSE(base::Contains(open_tab_ids, tab_id));
 }
+
+#if BUILDFLAG(ENABLE_WEBUI_GENERATE_CODE_CACHE)
+class TabSearchUIBundledCodeCacheBrowserTest
+    : public InProcessBrowserTest,
+      public testing::WithParamInterface<std::tuple<bool, bool>> {
+ public:
+  TabSearchUIBundledCodeCacheBrowserTest() {
+    scoped_feature_list_.InitWithFeatureState(features::kWebUIBundledCodeCache,
+                                              WebUIBundledCodeCacheEnabled());
+
+    // Bundled code caching should be resillient to fieldtrial variations.
+    if (ShouldEnableFieldTrialTestingConfig()) {
+      variations::EnableTestingConfig();
+    } else {
+      variations::DisableTestingConfig();
+    }
+  }
+
+  bool WebUIBundledCodeCacheEnabled() const { return std::get<0>(GetParam()); }
+  bool ShouldEnableFieldTrialTestingConfig() const {
+    return std::get<1>(GetParam());
+  }
+
+ private:
+  base::test::ScopedFeatureList scoped_feature_list_;
+};
+
+IN_PROC_BROWSER_TEST_P(TabSearchUIBundledCodeCacheBrowserTest,
+                       SuccessfullyLoadsCodeCache) {
+  // Assert the bundled code-cache map is non-empty.
+  EXPECT_FALSE(webui::GetWebUIResourceUrlToCodeCacheMap().empty());
+
+  base::HistogramTester histogram_tester;
+  EXPECT_EQ(histogram_tester.GetBucketCount(
+                "Blink.ResourceRequest.WebUIBundledCodeCacheFetcher."
+                "DidReceiveCachedCode",
+                true),
+            0);
+  EXPECT_EQ(histogram_tester.GetBucketCount(
+                "Blink.ResourceRequest.WebUIBundledCachedMetadataHandler."
+                "ConsumeCache",
+                true),
+            0);
+
+  // Load tab search and collect all renderer metrics.
+  content::WaitForLoadStop(chrome::AddAndReturnTabAt(
+      browser(), GURL(chrome::kChromeUITabSearchURL), -1, /*foreground=*/true));
+  content::FetchHistogramsFromChildProcesses();
+  metrics::SubprocessMetricsProvider::MergeHistogramDeltasForTesting();
+
+  // Assert code cache resources were successfully fetched and loaded by blink.
+  const int received_success_count = histogram_tester.GetBucketCount(
+      "Blink.ResourceRequest.WebUIBundledCodeCacheFetcher.DidReceiveCachedCode",
+      true);
+  const int consumed_success_count = histogram_tester.GetBucketCount(
+      "Blink.ResourceRequest.WebUIBundledCachedMetadataHandler.ConsumeCache",
+      true);
+  if (WebUIBundledCodeCacheEnabled()) {
+    EXPECT_GT(received_success_count, 0);
+    EXPECT_GT(consumed_success_count, 0);
+  } else {
+    EXPECT_EQ(received_success_count, 0);
+    EXPECT_EQ(consumed_success_count, 0);
+  }
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    ,
+    TabSearchUIBundledCodeCacheBrowserTest,
+    testing::Combine(testing::Bool(), testing::Bool()),
+    [](const ::testing::TestParamInfo<
+        TabSearchUIBundledCodeCacheBrowserTest::ParamType>& info) {
+      return base::StringPrintf(
+          "%s_%s",
+          std::get<0>(info.param) ? "BundledCodeCacheEnabled"
+                                  : "BundledCodeCacheDisabled",
+          std::get<1>(info.param) ? "WithFieldTrials" : "WithoutFieldTrials");
+    });
+#endif  // BUILDFLAG(ENABLE_WEBUI_GENERATE_CODE_CACHE)

@@ -7,6 +7,7 @@
 #include "base/check.h"
 #include "content/browser/webid/flags.h"
 #include "content/browser/webid/webid_utils.h"
+#include "net/base/schemeful_site.h"
 
 namespace content {
 
@@ -237,10 +238,10 @@ void FederatedProviderFetcher::ValidateAndMaybeSetError(FetchResult& result) {
 
   bool is_token_valid = webid::IsEndpointSameOrigin(
       result.identity_provider_config_url, result.endpoints.token);
-  bool is_accounts_valid = webid::IsEndpointSameOrigin(
-      result.identity_provider_config_url, result.endpoints.accounts);
-  url::Origin idp_origin =
-      url::Origin::Create(result.identity_provider_config_url);
+  bool is_accounts_valid =
+      webid::IsEndpointSameOrigin(result.identity_provider_config_url,
+                                  result.endpoints.accounts) ||
+      (IsFedCmLightweightModeEnabled() && result.endpoints.accounts.is_empty());
 
   bool is_login_url_valid =
       result.metadata &&
@@ -281,8 +282,11 @@ void FederatedProviderFetcher::ValidateAndMaybeSetError(FetchResult& result) {
   }
 
   // (b)
-  if (webid::IsFedCmAuthzEnabled(*render_frame_host_, idp_origin) &&
-      result.wellknown.accounts.is_valid() &&
+  bool is_wellknown_accounts_valid =
+      result.wellknown.accounts.is_valid() ||
+      (IsFedCmLightweightModeEnabled() && result.wellknown.accounts.is_empty());
+
+  if (webid::IsFedCmAuthzEnabled() && is_wellknown_accounts_valid &&
       result.wellknown.login_url.is_valid() && result.metadata &&
       result.metadata->idp_login_url.is_valid()) {
     // Behind the AuthZ flag, it is valid for IdPs to have valid configURLs
@@ -362,7 +366,7 @@ bool FederatedProviderFetcher::ShouldSkipWellKnownEnforcementForIdp(
   }
 
   // Skip if RP and IDP are same-site.
-  return webid::IsSameSite(
+  return net::SchemefulSite::IsSameSite(
       render_frame_host_->GetLastCommittedOrigin(),
       url::Origin::Create(fetch_result.identity_provider_config_url));
 }

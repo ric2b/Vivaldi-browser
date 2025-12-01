@@ -14,6 +14,7 @@
 <translation id="1454726940098520109">今後確認しない</translation>
 <translation id="1462666970065907900">このウィンドウを本当に閉じますか？</translation>
 <translation id="1480046233931937785">クレジット</translation>
+<translation id="1490502035430975848">ポータルドキュメントを検査する</translation>
 <translation id="1521774566618522728">今日アクティブ</translation>
 <translation id="1526344461589023948">ダウンロードした更新ファイルを保存できませんでした。お使いのコンピューターに十分な空き容量があることをご確認の上、もう一度お試しください。</translation>
 <translation id="1635542496948266458">プロファイルを切り替える</translation>
@@ -34,9 +35,11 @@
 <translation id="2141974047387702305">更新ファイルのダウンロード中にエラーが発生しました。インターネットに接続していることをご確認の上、後ほどもう一度お試しください。</translation>
 <translation id="2226825946708954262">⚠ データ損失を理解した上で続行</translation>
 <translation id="2339641773402824483">更新を確認中...</translation>
+<translation id="2429571091666452569">リストから：</translation>
 <translation id="2441056087170876076">怪獣２</translation>
 <translation id="2444387452209867610">メモを挿入</translation>
 <translation id="2486841023299517366">動物４</translation>
+<translation id="2501278716633472235">戻る</translation>
 <translation id="2612127540243995147">インストール準備ができました。Vivaldi を閉じて再起動します。</translation>
 <translation id="2613387515621326337">アップデートサイトを表示する</translation>
 <translation id="2645477450146475243">Opera が起動しているため、Vivaldi へ設定をインポートすることができません。作業内容を保存し、Opera のウィンドウを閉じてからもう一度やり直してください。</translation>
@@ -61,6 +64,7 @@
 <translation id="3259769196742189631">W3C のサービスによる検証</translation>
 <translation id="3291915639428159043">自動再生がブロックされています</translation>
 <translation id="3302905971452834934">怪獣１</translation>
+<translation id="3308738399950580893">広告</translation>
 <translation id="3334610655141903168">（無名）</translation>
 <translation id="3372505110412186107"><ph name="VERSION" /> は最新版のVivaldiです。</translation>
 <translation id="3383198080133834965">ばっちり最新版です！</translation>
@@ -71,9 +75,11 @@
 <translation id="3521635864657970829">本当にこのウィンドウを閉じますか？</translation>
 <translation id="3540597690227428180">動物９</translation>
 <translation id="3542768452570884558">新しいウィンドウで開く (&amp;W)</translation>
+<translation id="3586931643579894722">詳細を隠す</translation>
 <translation id="3588820906588687999">新しいタブで画像を開く</translation>
 <translation id="3601066750251199488">怪獣３</translation>
 <translation id="3620979700683094848">サイトは自動で動画再生できます</translation>
+<translation id="3650023731264842343">次のページの読み込み中に：</translation>
 <translation id="3658651522139217005">Opera GX</translation>
 <translation id="3680031241659195730">Vivaldi の新バージョンが出ました！</translation>
 <translation id="3708982624815781692">ダウンロードはキャンセルされました。</translation>
@@ -83,6 +89,7 @@
 <translation id="3795800845758778870">Brave ブラウザが起動しているため、Vivaldi へ設定をインポートすることができません。作業内容を保存し、Brave ブラウザのウィンドウを閉じてからもう一度やり直してください。</translation>
 <translation id="3822431842304177896">新しい区切り線</translation>
 <translation id="3832132597516774400">風景５</translation>
+<translation id="3894751534882749287">ページを表示したい場合、トラッカーブロッカーポップアップの許可ボタンを押することでトラッキング保護レベルを変更できます</translation>
 <translation id="3914946330804881301">Opera からインポートしたもの</translation>
 <translation id="3921292902397893431">怪獣８</translation>
 <translation id="3943857333388298514">貼り付け</translation>
@@ -107,6 +114,7 @@
 <translation id="4582480609585453144">リンクをバックグラウンドタブで開く</translation>
 <translation id="4636708767492582204">メールで送る</translation>
 <translation id="4677434526832593569">動物８</translation>
+<translation id="4736016046474602958">トラッカーブロッカー</translation>
 <translation id="474217410105706308">タブをミュート</translation>
 <translation id="4861715717329665002">自動保存したセッション</translation>
 <translation id="4881695831933465202">開く</translation>
@@ -133,9 +141,11 @@
 <translation id="588258955323874662">全画面表示</translation>
 <translation id="5916080360077521750">Chrome が起動しているため、Vivaldi へ設定をインポートすることができません。作業内容を保存し、Chrome のウィンドウを閉じてからもう一度やり直してください。</translation>
 <translation id="6040143037577758943">閉じる</translation>
+<translation id="6140948187512243695">詳細を表示する</translation>
 <translation id="6229528619562190452">クリックして Vivaldi を更新。</translation>
 <translation id="6234173136417926046">画像をスタートページの背景に使用する</translation>
 <translation id="6339818817272922368">ローカルアカウント</translation>
+<translation id="6376435169746695498">このページの読み込みは、<ph name="BLOCKER_NAME" /> によってブロックされました</translation>
 <translation id="6398710281890660037">プロファイルの保護</translation>
 <translation id="6438786710866753178">風景４</translation>
 <translation id="6477028720702061455">インポートする Opera のプロファイルフォルダーを選択してください</translation>
@@ -152,6 +162,7 @@
 <translation id="7086554968911045110">風景７</translation>
 <translation id="7099506190679014195">安全なキーストアのアップグレード</translation>
 <translation id="7111492742514999492">風景９</translation>
+<translation id="7113310725918019676"><ph name="DOMAIN" /> からの <ph name="BLOCKED_TYPE" /> を許可</translation>
 <translation id="7208252576848052204">Arc が起動しているため、Vivaldi へ設定をインポートすることができません。作業内容を保存し、Arc のウィンドウを閉じてからもう一度やり直してください。</translation>
 <translation id="7321500017121629018">昨日アクティブ</translation>
 <translation id="7337881442233988129">Chromium</translation>
@@ -167,12 +178,13 @@
 <translation id="8027581147000338959">新しいウィンドウで開く</translation>
 <translation id="8044382196220116469">サイトに動画の自動再生を許可しない</translation>
 <translation id="8099620695029051217">アドレスをコピー</translation>
+<translation id="8119307142152921512">トラッカーと広告</translation>
 <translation id="8197810018650377191">ブックマークに追加</translation>
 <translation id="8261506727792406068">削除</translation>
-<translation id="8263047843452521549">バックグラウンドのサービスワーカーを検証する</translation>
 <translation id="8331671104904436324">バックグラウンドのタブで開く</translation>
 <translation id="8373293945112511707">風景１</translation>
 <translation id="8388552048012645975">更新をダウンロード中...</translation>
+<translation id="8392904568172593155">パラメータなし</translation>
 <translation id="8427094907586191051">風景１７</translation>
 <translation id="8439034818057146672">新しい Vivaldi のインストール準備ができました。</translation>
 <translation id="8446668873108041390">AppleScript を通じた JavaScript 実行は無効になっています。設定 &gt; プライバシー &gt; Apple Events に、Apple Events からの JavaScript 実行を許可する設定があります。</translation>
@@ -183,14 +195,15 @@
 <translation id="8651348004684669199">表示中のタブを追加</translation>
 <translation id="8669345741879513971">怪獣１０</translation>
 <translation id="867544375504146191">Yandex</translation>
-<translation id="8689295374912158752">ポータルドキュメントを検証する</translation>
 <translation id="875142999698251063">今すぐ終了する</translation>
 <translation id="8768970203213061953">風景１４</translation>
 <translation id="8773635261052182196">更新の通知は今後表示されません。再度表示させたい場合は、Vivaldi の設定から行ってください。</translation>
 <translation id="8774017153185436870">サイトが自動で動画を再生する可能性があります</translation>
 <translation id="8813277370772331957">後ほど確認する</translation>
+<translation id="8837256239226739065">バックグラウンドサービスワーカーを検査する</translation>
 <translation id="8894900864683381599">ウェブパネルにリンク先を追加</translation>
 <translation id="8912720443398351457">本当に Vivaldi を終了しますか？</translation>
+<translation id="8940028675168378100"><ph name="BLOCKER_NAME" /> によりブロックされました</translation>
 <translation id="8947109330183116400">HTML ブックマークファイルを選択してください</translation>
 <translation id="9017566390391482291">インポートする Vivaldi のプロファイルフォルダーを選択してください</translation>
 <translation id="9048058608784130603">再起動待ち <ph name="VERSION" /></translation>
@@ -201,6 +214,7 @@
 <translation id="912022491595344261"><ph name="USER" /> で画像を開く</translation>
 <translation id="9157539936604258187">開く</translation>
 <translation id="9169060351863393881">Opera バージョン 12.x</translation>
+<translation id="9180553614777056266">広告ブロッカー</translation>
 <translation id="939305735877869636">Brave</translation>
 <translation id="970294721402795299">風景１６</translation>
 </translationbundle>

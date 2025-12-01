@@ -33,7 +33,6 @@
 <translation id="2388886110302389394">Адкрыць старонку ў новым прыватным акне(Ctrl-Shift-N)</translation>
 <translation id="2467694685043708798"><ph name="BEGIN_LINK" />Запуск дыягностыкі сеткі<ph name="END_LINK" /></translation>
 <translation id="2491414235131909199">Старонка была заблакаваная пашырэннем</translation>
-<translation id="2501278716633472235">Назад</translation>
 <translation id="2539524384386349900">Выяўляць</translation>
 <translation id="255002559098805027"><ph name="HOST_NAME" /> адправіў хібны адказ.</translation>
 <translation id="2634124572758952069">Не ўдалося знайсці IP-адрас сервера <ph name="HOST_NAME" /> .</translation>
@@ -59,7 +58,6 @@
       <ph name="PLATFORM_TEXT" /></translation>
 <translation id="3226128629678568754">Каб паўторна ўвесці даныя, неабходныя для загрузкі старонкі, неабходна яе перазагрузіць.</translation>
 <translation id="3234666976984236645">Заўседы выяўляць важнае змесціва на гэтым сайце</translation>
-<translation id="3308738399950580893">рэклама</translation>
 <translation id="3384522979010096022">Ваша арганізацыя не дазваляе вам праглядаць гэты сайт</translation>
 <translation id="3422472998109090673">Старонка <ph name="HOST_NAME" /> недаступная.</translation>
 <translation id="3427092606871434483">Дазваляць (прадвызначана)</translation>
@@ -77,7 +75,6 @@
 <translation id="3681007416295224113">Звесткі пра сертыфікат</translation>
 <translation id="3717027428350673159"><ph name="BEGIN_LINK" />Праверце канфігурацыю проксі-сервера, DNS і брандмаўэра<ph name="END_LINK" /></translation>
 <translation id="382518646247711829">Калі вы выкарыстоўваеце проксі-сервер…</translation>
-<translation id="3894751534882749287">Калі вы ўсё ж хочаце праглядзець гэтую старонку, змяніце налады блакавання адсочвання і націсніце кнопку "Дазволіць"</translation>
 <translation id="3950820424414687140">Увайсці</translation>
 <translation id="3973234410852337861"><ph name="HOST_NAME" /> заблакаваны</translation>
 <translation id="3987940399970879459">Менш за 1 МБ</translation>
@@ -104,7 +101,6 @@
 <translation id="4701488924964507374"><ph name="SENTENCE1" /> <ph name="SENTENCE2" /></translation>
 <translation id="4708268264240856090">Злучэнне перапынена</translation>
 <translation id="4722547256916164131"><ph name="BEGIN_LINK" />Запуск дыягностыкі сеткі Windows<ph name="END_LINK" /></translation>
-<translation id="4736016046474602958">Блакаванне адсочвання</translation>
 <translation id="4744603770635761495">Шлях да запускальнага файла</translation>
 <translation id="4750917950439032686">Прыватныя звесткі (напрыклад, пароль, або нумар карткі), якія вы адпраўляеце на сайт, абароненыя.</translation>
 <translation id="4764776831041365478">Старонка па адрасе <ph name="URL" /> , часова недасягальная або перамешчаная па новым адрасе.</translation>
@@ -162,12 +158,10 @@
 <translation id="7096937462164235847">Сапраўднасць гэтага вэб-сайта не спраўджаная.</translation>
 <translation id="7108819624672055576">Дазволена пашырэннем</translation>
 <translation id="7111012039238467737">(Дзейны)</translation>
-<translation id="7113310725918019676">Дазволіць <ph name="BLOCKED_TYPE" /> з <ph name="DOMAIN" /></translation>
 <translation id="7210863904660874423"><ph name="HOST_NAME" /> не адпавядае стандартам бяспекі.</translation>
 <translation id="7219179957768738017">У гэтым злучэнні выкарыстоўваецца <ph name="SSL_VERSION" />.</translation>
 <translation id="7221855153210829124">Паказваць апавяшчэнні</translation>
 <translation id="7353601530677266744">Камандны радок</translation>
-<translation id="7364115444476960850">Старонка, на якую вы хочаце перайсці, была заблакаваная Vivaldi<ph name="BLOCKER_NAME" /></translation>
 <translation id="7419106976560586862">Шлях да профілю</translation>
 <translation id="7455133967321480974">Выкарыстоўваць глабальна (блакаваць)</translation>
 <translation id="7518003948725431193">Па адрасе не знойдзена старонкі: <ph name="URL" /></translation>
@@ -187,7 +181,6 @@
 <translation id="8037357227543935929">Пытацца (прадвызначана)</translation>
 <translation id="8041940743680923270">Выкарыстоўваць глабальна (пытацца)</translation>
 <translation id="808894953321890993">Змяніць пароль</translation>
-<translation id="8119307142152921512">адсочванне і рэклама</translation>
 <translation id="8149426793427495338">Ваш камп'ютар перайшоў у рэжым сну.</translation>
 <translation id="8150722005171944719">Немагчыма прачытаць файл па адрасе <ph name="URL" />. Магчыма, ен быў выдалены, альбо ў вас няма права доступу да гэтага файла.</translation>
 <translation id="8184538546369750125">Выкарыстоўваць глабальна (дазваляць)</translation>
@@ -203,7 +196,6 @@
 <translation id="8703575177326907206">Злучэнне з <ph name="DOMAIN" /> не зашыфравана.</translation>
 <translation id="8740359287975076522">Не ўдаецца знайсці &lt;abbr id="dnsDefinition"&gt;DNS-адрас&lt;/abbr&gt; сайта <ph name="HOST_NAME" /> . Выконваецца дыягностыка.</translation>
 <translation id="8820817407110198400">Закладкі</translation>
-<translation id="8940028675168378100">Заблакавана <ph name="BLOCKER_NAME" /></translation>
 <translation id="8963117664422609631">Перайсці да налад сайта</translation>
 <translation id="8975012916872825179">Уключае ў сябе такую інфармацыю, як нумары тэлефонаў, адрасы электроннай пошты і адрасы дастаўкі</translation>
 <translation id="9001074447101275817">Проксі-сервер <ph name="DOMAIN" /> патрабуе імя карыстальніка і пароль.</translation>
@@ -214,7 +206,6 @@
 <translation id="9069693763241529744">Заблакавана пашырэннем</translation>
 <translation id="9073799351042754113">Вы адключылі папярэджанні сістэмы бяспекі для гэтага сайта.</translation>
 <translation id="9169664750068251925">Заўседы блакаваць на гэтым сайце</translation>
-<translation id="9180553614777056266">Блакаванне рэкламы</translation>
 <translation id="9183425211371246419"><ph name="HOST_NAME" /> выкарыстоўвае пратакол, які не падтрымліваецца.</translation>
 <translation id="936602727769022409">Вы можаце страціць доступ да акаўнта Google. Рэкамендуем змяніць пароль. Пасля гэтага спатрэбіцца зноў увайсці ў акаўнт.</translation>
 <translation id="969892804517981540">Афіцыйная зборка</translation>

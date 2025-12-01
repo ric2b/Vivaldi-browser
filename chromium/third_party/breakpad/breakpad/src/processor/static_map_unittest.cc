@@ -52,7 +52,7 @@ template<typename Key, typename Value>
 class SimpleMapSerializer {
  public:
   static char* Serialize(const std::map<Key, Value>& stdmap,
-                   unsigned int* size = NULL) {
+                   unsigned int* size = nullptr) {
     unsigned int size_per_node =
         sizeof(uint64_t) + sizeof(Key) + sizeof(Value);
     unsigned int memsize = sizeof(int64_t) + size_per_node * stdmap.size();

@@ -15,10 +15,8 @@
   margin-top: 2px;
 }
 
-.film-strip-view .label {
+.film-strip-view .gray-info-message {
   margin: auto;
-  font-size: 18px;
-  color: var(--sys-color-token-subtle);
 }
 
 .film-strip-view .frame {

@@ -272,10 +272,10 @@ bool ssl_public_key_verify(SSL *ssl, Span<const uint8_t> signature,
   }
   bool ok = EVP_DigestVerify(ctx.get(), signature.data(), signature.size(),
                              in.data(), in.size());
-#if defined(BORINGSSL_UNSAFE_FUZZER_MODE)
-  ok = true;
-  ERR_clear_error();
-#endif
+  if (CRYPTO_fuzzer_mode_enabled()) {
+    ok = true;
+    ERR_clear_error();
+  }
   return ok;
 }
 

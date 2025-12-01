@@ -19,25 +19,32 @@ namespace content::protocol {
 // [device/bluetooth/test/README.md](https://chromium.googlesource.com/chromium/src/+/main/device/bluetooth/test/README.md)
 class CONTENT_EXPORT BluetoothEmulationHandler
     : public DevToolsDomainHandler,
-      public BluetoothEmulation::Backend {
+      public BluetoothEmulation::Backend,
+      public bluetooth::mojom::FakeCentralClient {
  public:
   BluetoothEmulationHandler();
   ~BluetoothEmulationHandler() override;
+
+  static std::vector<BluetoothEmulationHandler*> ForAgentHost(
+      DevToolsAgentHostImpl* host);
 
   // DevToolsDomainHandler:
   void Wire(UberDispatcher* dispatcher) override;
 
  private:
   // BluetoothEmulation::Backend
-  Response Enable(const String& in_state) override;
+  Response Enable(const std::string& in_state, bool in_le_supported) override;
   Response Disable() override;
+  void SetSimulatedCentralState(
+      const std::string& in_state,
+      std::unique_ptr<SetSimulatedCentralStateCallback> callback) override;
   void SimulatePreconnectedPeripheral(
-      const String& in_address,
-      const String& in_name,
+      const std::string& in_address,
+      const std::string& in_name,
       std::unique_ptr<
           protocol::Array<protocol::BluetoothEmulation::ManufacturerData>>
           in_manufacturer_data,
-      std::unique_ptr<protocol::Array<String>> in_known_service_uuids,
+      std::unique_ptr<protocol::Array<std::string>> in_known_service_uuids,
       std::unique_ptr<SimulatePreconnectedPeripheralCallback> callback)
       override;
 
@@ -48,10 +55,48 @@ class CONTENT_EXPORT BluetoothEmulationHandler
       std::unique_ptr<protocol::BluetoothEmulation::ScanEntry> in_entry,
       std::unique_ptr<SimulateAdvertisementCallback> callback) override;
 
+  void SimulateGATTOperationResponse(
+      const std::string& in_address,
+      const std::string& in_type,
+      int in_code,
+      std::unique_ptr<SimulateGATTOperationResponseCallback> callback) override;
+
+  void AddService(const std::string& in_address,
+                  const std::string& in_serviceUuid,
+                  std::unique_ptr<AddServiceCallback> callback) override;
+  void RemoveService(const std::string& in_address,
+                     const std::string& in_serviceId,
+                     std::unique_ptr<RemoveServiceCallback> callback) override;
+
+  void AddCharacteristic(
+      const std::string& in_address,
+      const std::string& in_serviceId,
+      const std::string& in_characteristicUuid,
+      std::unique_ptr<protocol::BluetoothEmulation::CharacteristicProperties>
+          in_properties,
+      std::unique_ptr<AddCharacteristicCallback> callback) override;
+  void RemoveCharacteristic(
+      const std::string& in_address,
+      const std::string& in_serviceId,
+      const std::string& in_characteristicId,
+      std::unique_ptr<RemoveCharacteristicCallback> callback) override;
+
+  // bluetooth::mojom::FakeCentralClient
+  void DispatchGATTOperationEvent(
+      bluetooth::mojom::GATTOperationType type,
+      const std::string& peripheral_address) override;
+
+  bool is_enabled() { return fake_central_.is_bound(); }
+
+  std::optional<BluetoothEmulation::Frontend> frontend_;
   // Tracks emulation usage across all instances, since the backend can only
   // support one fake adapter at a time.
   inline static bool emulation_enabled_ = false;
   mojo::Remote<bluetooth::mojom::FakeCentral> fake_central_;
+  mojo::AssociatedReceiver<bluetooth::mojom::FakeCentralClient>
+      client_receiver_{this};
+  std::unique_ptr<device::BluetoothAdapterFactory::GlobalOverrideValues>
+      global_factory_values_;
 };
 
 }  // namespace content::protocol

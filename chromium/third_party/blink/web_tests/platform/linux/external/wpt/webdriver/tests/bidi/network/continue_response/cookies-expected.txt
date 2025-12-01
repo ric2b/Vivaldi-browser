@@ -24,3 +24,4 @@ This is a wdspec test.
 [FAIL] test_cookie_attributes_response_started[same site strict]
   assert 0 == 1
 Harness: the test ran to completion.
+

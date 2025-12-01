@@ -52,6 +52,7 @@
 
 #if !BUILDFLAG(IS_ANDROID)
 #include "browser/sessions/vivaldi_session_utils.h"
+#include "chrome/browser/ui/browser_list.h"
 #endif
 
 using namespace vivaldi_image_store;
@@ -114,7 +115,7 @@ const char kDatasourceFilemappingTmpFilename[] = "file_mapping.tmp";
 
 // The name is thumbnails as originally the directory stored only bookmark
 // thumbnails.
-const base::FilePath::StringPieceType kImageDirectory =
+const base::FilePath::StringViewType kImageDirectory =
     FILE_PATH_LITERAL("VivaldiThumbnails");
 
 // Size of bookmark thumbnails. This must stay in sync with ThumbnailService.js.
@@ -647,14 +648,19 @@ void VivaldiImageStore::FindUsedUrlsOnUIThreadWithLoadedBookmarks(
   if (!profile_ || !bookmark_model)
     return;
 
+#if !BUILDFLAG(IS_ANDROID)
+  if (BrowserList::GetInstance()->size() == 0) {
+    // VB-114966: No browser, most likely we are in the profile picker.
+    return;
+  }
+#endif
+
   if (g_browser_process->IsShuttingDown()) {
     LOG(INFO) << "VivaldiImageStore GC skip due to exiting.";
     return;
   }
 
   DCHECK(guard);
-
-  LOG(INFO) << "VivaldiImageStore GC started";
 
   UrlKind url_kind;
   std::string id;

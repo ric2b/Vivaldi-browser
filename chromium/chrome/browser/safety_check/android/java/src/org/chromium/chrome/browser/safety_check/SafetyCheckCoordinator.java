@@ -13,11 +13,12 @@ import androidx.lifecycle.LifecycleOwner;
 import androidx.lifecycle.Observer;
 
 import org.chromium.base.supplier.ObservableSupplier;
-import org.chromium.chrome.browser.password_manager.CustomTabIntentHelper;
+import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.password_manager.PasswordManagerHelper;
 import org.chromium.chrome.browser.password_manager.PasswordStoreBridge;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.ui.signin.SigninAndHistorySyncActivityLauncher;
+import org.chromium.components.browser_ui.settings.SettingsCustomTabLauncher;
 import org.chromium.components.prefs.PrefService;
 import org.chromium.components.signin.base.CoreAccountInfo;
 import org.chromium.components.sync.SyncService;
@@ -51,7 +52,7 @@ public class SafetyCheckCoordinator implements DefaultLifecycleObserver, SafetyC
      * @param passwordStoreBridge Provides access to stored passwords.
      * @param passwordManagerHelper An instance of {@link PasswordManagerHelper} that provides
      *     access to password management capabilities.
-     * @param customTabIntentHelper Provides an intent to open a p-link help center article in a
+     * @param settingsCustomTabLauncher Used by password manager to open a help center article in a
      *     custom tab.
      */
     public static void create(
@@ -65,7 +66,7 @@ public class SafetyCheckCoordinator implements DefaultLifecycleObserver, SafetyC
             PrefService prefService,
             PasswordStoreBridge passwordStoreBridge,
             PasswordManagerHelper passwordManagerHelper,
-            CustomTabIntentHelper customTabIntentHelper) {
+            SettingsCustomTabLauncher settingsCustomTabLauncher) {
         new SafetyCheckCoordinator(
                 settingsFragment,
                 profile,
@@ -77,7 +78,7 @@ public class SafetyCheckCoordinator implements DefaultLifecycleObserver, SafetyC
                 prefService,
                 passwordStoreBridge,
                 passwordManagerHelper,
-                customTabIntentHelper);
+                settingsCustomTabLauncher);
     }
 
     private SafetyCheckCoordinator(
@@ -91,7 +92,7 @@ public class SafetyCheckCoordinator implements DefaultLifecycleObserver, SafetyC
             PrefService prefService,
             PasswordStoreBridge passwordStoreBridge,
             PasswordManagerHelper passwordManagerHelper,
-            CustomTabIntentHelper customTabIntentHelper) {
+            SettingsCustomTabLauncher settingsCustomTabLauncher) {
         mSettingsFragment = settingsFragment;
         mUpdatesClient = updatesClient;
         mSyncService = syncService;
@@ -139,7 +140,7 @@ public class SafetyCheckCoordinator implements DefaultLifecycleObserver, SafetyC
                                                     passwordStoreBridge,
                                                     passwordManagerHelper,
                                                     modalDialogManagerSupplier,
-                                                    customTabIntentHelper);
+                                                    settingsCustomTabLauncher);
                                 }
                             }
                         });
@@ -185,7 +186,7 @@ public class SafetyCheckCoordinator implements DefaultLifecycleObserver, SafetyC
             SafetyCheckSettingsFragment settingsFragment, PropertyModel safetyCheckModel) {
         if (isAccountPasswordStorageUsed()) {
             String title =
-                    usesSplitStoresAndUPMForLocal(mPrefService)
+                    usesFullUpm()
                             ? mSettingsFragment.getString(
                                     R.string.safety_check_passwords_account_title,
                                     CoreAccountInfo.getEmailFrom(mSyncService.getAccountInfo()))
@@ -199,7 +200,7 @@ public class SafetyCheckCoordinator implements DefaultLifecycleObserver, SafetyC
         }
         if (isLocalPasswordStorageUsed()) {
             String title =
-                    usesSplitStoresAndUPMForLocal(mPrefService)
+                    usesFullUpm()
                             ? mSettingsFragment.getString(
                                     R.string.safety_check_passwords_local_title)
                             : mSettingsFragment.getString(R.string.safety_check_passwords_title);
@@ -247,7 +248,7 @@ public class SafetyCheckCoordinator implements DefaultLifecycleObserver, SafetyC
     @Override
     public boolean isLocalPasswordStorageUsed() {
         if (!PasswordManagerHelper.hasChosenToSyncPasswords(mSyncService)) return true;
-        if (usesSplitStoresAndUPMForLocal(mPrefService)) return true;
+        if (usesFullUpm()) return true;
         return false;
     }
 
@@ -255,5 +256,15 @@ public class SafetyCheckCoordinator implements DefaultLifecycleObserver, SafetyC
     public boolean isAccountPasswordStorageUsed() {
         if (PasswordManagerHelper.hasChosenToSyncPasswords(mSyncService)) return true;
         return false;
+    }
+
+    private boolean usesFullUpm() {
+        if (ChromeFeatureList.isEnabled(ChromeFeatureList.LOGIN_DB_DEPRECATION_ANDROID)) {
+            // In this case, Safety Check is only used from the PhishGuard dialog if
+            // a phished credential is in both local and account stores, so UPM is definitely
+            // available.
+            return true;
+        }
+        return usesSplitStoresAndUPMForLocal(mPrefService);
     }
 }

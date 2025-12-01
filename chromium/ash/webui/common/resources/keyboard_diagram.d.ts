@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {KeyboardKeyState} from './keyboard_key.js';
+import type {KeyboardKeyState} from './keyboard_key.js';
 
 export enum MechanicalLayout {
   ANSI = 'ansi',
@@ -15,6 +15,7 @@ export enum PhysicalLayout {
   CHROME_OS_DELL_ENTERPRISE_WILCO = 'dell-enterprise-wilco',
   CHROME_OS_DELL_ENTERPRISE_DRALLION = 'dell-enterprise-drallion',
   SPLIT_MODIFIER = 'split-modifier',
+  ACER_SPLIT_MODIFIER_WITH_NUMPAD = 'acer-split-modifier-with-numpad',
 }
 
 export enum TopRightKey {

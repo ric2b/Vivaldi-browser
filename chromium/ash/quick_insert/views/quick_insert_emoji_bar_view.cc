@@ -165,7 +165,7 @@ class GifsButton : public views::LabelButton {
         .SetCallback(base::BindRepeating(&GifsButton::OnButtonPressed,
                                          base::Unretained(this))
                          .Then(std::move(pressed_callback)))
-        .SetEnabledTextColorIds(cros_tokens::kCrosSysOnSurface)
+        .SetEnabledTextColors(cros_tokens::kCrosSysOnSurface)
         .SetImageLabelSpacing(kGifsButtonIconLabelSpacing)
         .BuildChildren();
     label()->SetFontList(TypographyProvider::Get()->ResolveTypographyToken(
@@ -221,7 +221,7 @@ class GifsButton : public views::LabelButton {
   }
 
   void UpdateBackground() {
-    SetBackground(views::CreateThemedRoundedRectBackground(
+    SetBackground(views::CreateRoundedRectBackground(
         (is_checked_ ? cros_tokens::kCrosSysSystemPrimaryContainer
                      : (GetState() == views::Button::ButtonState::STATE_HOVERED
                             ? cros_tokens::kCrosSysHoverOnSubtle
@@ -270,7 +270,7 @@ QuickInsertEmojiBarView::QuickInsertEmojiBarView(
       is_gifs_enabled ? IDS_PICKER_EMOJI_BAR_WITH_GIFS_GRID_ACCESSIBLE_NAME
                       : IDS_PICKER_EMOJI_BAR_GRID_ACCESSIBLE_NAME));
   SetProperty(views::kElementIdentifierKey, kQuickInsertEmojiBarElementId);
-  SetBackground(views::CreateThemedRoundedRectBackground(
+  SetBackground(views::CreateRoundedRectBackground(
       kQuickInsertContainerBackgroundColor, kQuickInsertContainerBorderRadius));
   SetBorder(std::make_unique<views::HighlightBorder>(
       kQuickInsertContainerBorderRadius,

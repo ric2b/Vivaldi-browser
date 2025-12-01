@@ -12,6 +12,7 @@
 #include "base/timer/timer.h"
 #include "base/values.h"
 #include "components/ad_blocker/adblock_types.h"
+#include "components/request_filter/adblock_filter/adblock_tab_state_and_logs.h"
 #include "url/gurl.h"
 #include "url/origin.h"
 
@@ -46,13 +47,8 @@ class StateAndLogs {
       RuleGroup group,
       const std::string& domain) const = 0;
 
-  virtual const CounterGroup& GetBlockedDomainCounters() const = 0;
-  virtual const CounterGroup& GetBlockedForOriginCounters() const = 0;
-  virtual base::Time GetBlockedCountersStart() const = 0;
-  virtual void ClearBlockedCounters() = 0;
-
-  virtual bool WasFrameBlocked(RuleGroup group,
-                               content::RenderFrameHost* frame) const = 0;
+  virtual std::array<std::optional<TabStateAndLogs::RuleData>, kRuleGroupCount>
+  WasFrameBlocked(content::RenderFrameHost* frame) const = 0;
 
   virtual TabStateAndLogs* GetTabHelper(
       content::WebContents* contents) const = 0;

@@ -12,6 +12,7 @@
 #include "chrome/browser/ui/tabs/tab_group.h"
 #include "chrome/browser/ui/tabs/tab_group_deletion_dialog_controller.h"
 #include "chrome/browser/ui/views/tabs/recent_activity_bubble_dialog_view.h"
+#include "components/data_sharing/public/group_data.h"
 #include "components/saved_tab_groups/public/saved_tab_group.h"
 #include "components/saved_tab_groups/public/types.h"
 #include "ui/base/interaction/element_tracker.h"
@@ -86,7 +87,8 @@ class SavedTabGroupUtils {
       const Browser* browser,
       GroupDeletionReason reason,
       const std::vector<TabGroupId>& group_ids,
-      base::OnceCallback<void()> callback);
+      base::OnceCallback<void(DeletionDialogController::DeletionDialogTiming)>
+          callback);
 
   // Converts a webcontents into a SavedTabGroupTab.
   static SavedTabGroupTab CreateSavedTabGroupTabFromWebContents(
@@ -160,17 +162,24 @@ class SavedTabGroupUtils {
   static bool IsOwnerOfSharedTabGroup(Profile* profile,
                                       const base::Uuid& sync_id);
 
+  // Returns a list of the members of the group if the group data exists in the
+  // collaboration service in that profile. returns empty in any case where data
+  // is missing or not accessible.
+  static std::vector<data_sharing::GroupMember> GetMembersOfSharedTabGroup(
+      Profile* profile,
+      const tab_groups::CollaborationId& collaboration_id);
+
   // Returns the GroupId for this tab group's collaboration.
   static std::optional<data_sharing::GroupId> GetDataSharingGroupId(
       Profile* profile,
       LocalTabGroupID group_id);
 
-  // Returns whether this tab group has Recent Activity.
-  static bool HasRecentActivity(Profile* profile, LocalTabGroupID group_id);
-
-  // Returns the Recent Activity Log for this tab group.
+  // Returns the Recent Activity Log for this tab group. Optionally, filter for
+  // the given tab.
   static std::vector<collaboration::messaging::ActivityLogItem>
-  GetRecentActivity(Profile* profile, LocalTabGroupID group_id);
+  GetRecentActivity(Profile* profile,
+                    LocalTabGroupID group_id,
+                    std::optional<LocalTabID> tab_id = std::nullopt);
 
   // Returns the tab with this id if contained in this group. The group
   // must exist.

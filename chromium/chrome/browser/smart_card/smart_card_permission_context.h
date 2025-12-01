@@ -11,11 +11,16 @@
 #include <string>
 #include <vector>
 
+#include "base/containers/flat_map.h"
 #include "base/memory/raw_ref.h"
 #include "base/memory/weak_ptr.h"
+#include "base/observer_list.h"
+#include "base/scoped_observation.h"
+#include "base/time/time.h"
 #include "chrome/browser/smart_card/smart_card_permission_request.h"
 #include "chrome/browser/smart_card/smart_card_reader_tracker.h"
 #include "components/permissions/object_permission_context_base.h"
+#include "content/public/browser/smart_card_delegate.h"
 #include "url/origin.h"
 
 class Profile;
@@ -28,7 +33,8 @@ class SmartCardReaderPermissionsSiteSettingsHandlerTest;
 }  // namespace settings
 
 class SmartCardPermissionContext
-    : public permissions::ObjectPermissionContextBase {
+    : public permissions::ObjectPermissionContextBase,
+      public permissions::ObjectPermissionContextBase::PermissionObserver {
  public:
   // Callback type to report whether the user allowed the connection request.
   using RequestReaderPermissionCallback = base::OnceCallback<void(bool)>;
@@ -50,6 +56,12 @@ class SmartCardPermissionContext
   std::string GetKeyForObject(const base::Value::Dict& object) override;
   bool IsValidObject(const base::Value::Dict& object) override;
   std::u16string GetObjectDisplayName(const base::Value::Dict& object) override;
+
+  // permissions::ObjectPermissionContextBase::PermissionObserver:
+  void OnPermissionRevoked(const url::Origin& origin) override;
+
+  void AddObserver(content::SmartCardDelegate::PermissionObserver* observer);
+  void RemoveObserver(content::SmartCardDelegate::PermissionObserver* observer);
 
   void RevokeEphemeralPermissions();
   void RevokeAllPermissions();
@@ -85,6 +97,7 @@ class SmartCardPermissionContext
   friend class SmartCardPermissionContextTest;
   friend class settings::SmartCardReaderPermissionsSiteSettingsHandlerTest;
   friend class PageInfoBubbleViewInteractiveUiTest;
+  friend class ChromeOsSmartCardDelegateBrowserTest;
 
   class OneTimeObserver;
   class PowerSuspendObserver;
@@ -120,8 +133,14 @@ class SmartCardPermissionContext
 
   SmartCardReaderTracker& GetReaderTracker() const;
 
-  // Set of readers to which an origin has ephemeral access to.
-  std::map<url::Origin, std::set<std::string>> ephemeral_grants_;
+  void RevokeEphemeralPermissionIfLongTimeoutOccured(
+      const url::Origin& origin,
+      const std::string& reader_name);
+
+  // Set of readers to which an origin has ephemeral access to and times the
+  // ephemeral permissions should expire.
+  base::flat_map<url::Origin, base::flat_map<std::string, base::Time>>
+      ephemeral_grants_with_expiry_;
 
   // this is for tracking consecutive denials (after 3, guard setting is to be
   // set to blocked)
@@ -133,6 +152,14 @@ class SmartCardPermissionContext
 
   // Instance is owned by this profile.
   base::raw_ref<Profile> profile_;
+
+  base::ObserverList<content::SmartCardDelegate::PermissionObserver>
+      permission_observers_;
+
+  base::ScopedObservation<
+      permissions::ObjectPermissionContextBase,
+      permissions::ObjectPermissionContextBase::PermissionObserver>
+      permission_observation_{this};
 
   base::WeakPtrFactory<SmartCardPermissionContext> weak_ptr_factory_;
 };

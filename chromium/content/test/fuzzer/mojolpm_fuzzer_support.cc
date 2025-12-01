@@ -4,7 +4,9 @@
 
 #include "content/test/fuzzer/mojolpm_fuzzer_support.h"
 
+#include "base/allocator/partition_alloc_features.h"
 #include "base/command_line.h"
+#include "base/compiler_specific.h"
 #include "base/debug/asan_service.h"
 #include "base/i18n/icu_util.h"
 #include "base/test/test_suite_helper.h"
@@ -24,7 +26,7 @@ namespace content::mojolpm {
 #if defined(ADDRESS_SANITIZER)
 static void FalsePositiveErrorReportCallback(const char* reason,
                                              bool* should_exit_cleanly) {
-  if (!strcmp(base::PlatformThread::GetName(), "fuzzer_thread")) {
+  if (!UNSAFE_TODO(strcmp(base::PlatformThread::GetName(), "fuzzer_thread"))) {
     base::debug::AsanService::GetInstance()->Log(
         "MojoLPM: FALSE POSITIVE\n"
         "This crash occurred on the fuzzer thread, so it is a false positive "
@@ -49,6 +51,9 @@ FuzzerEnvironment::FuzzerEnvironment(int argc, const char* const* argv)
     : command_line_initialized_(base::CommandLine::Init(argc, argv)),
       fuzzer_thread_("fuzzer_thread") {
   base::test::InitScopedFeatureListForTesting(feature_list_);
+
+  disable_asan_brp_instantiation_check_.InitAndDisableFeature(
+      base::features::kAsanBrpInstantiationCheck);
 
   TestTimeouts::Initialize();
 

@@ -23,7 +23,7 @@ namespace test {
 
 std::string NetEqStatsGetter::ConcealmentEvent::ToString() const {
   char ss_buf[256];
-  rtc::SimpleStringBuilder ss(ss_buf);
+  SimpleStringBuilder ss(ss_buf);
   ss << "ConcealmentEvent duration_ms:" << duration_ms
      << " event_number:" << concealment_event_number
      << " time_from_previous_event_end_ms:" << time_from_previous_event_end_ms;
@@ -48,7 +48,7 @@ void NetEqStatsGetter::AfterGetAudio(int64_t time_now_ms,
   // get audio. It is called independently from get audio in practice.
   const auto lifetime_stat = neteq->GetLifetimeStatistics();
   if (last_stats_query_time_ms_ == 0 ||
-      rtc::TimeDiff(time_now_ms, last_stats_query_time_ms_) >=
+      TimeDiff(time_now_ms, last_stats_query_time_ms_) >=
           stats_query_interval_ms_) {
     NetEqNetworkStatistics stats;
     RTC_CHECK_EQ(neteq->NetworkStatistics(&stats), 0);

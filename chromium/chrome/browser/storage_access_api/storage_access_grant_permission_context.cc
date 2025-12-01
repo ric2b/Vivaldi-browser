@@ -35,10 +35,11 @@
 #include "components/permissions/permission_request_id.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
-#include "content/public/browser/dips_service.h"
+#include "content/public/browser/btm_service.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/runtime_feature_state/runtime_feature_state_document_data.h"
 #include "content/public/browser/storage_partition.h"
+#include "content/public/browser/web_contents.h"
 #include "content/public/common/content_features.h"
 #include "net/base/schemeful_site.h"
 #include "net/cookies/cookie_setting_override.h"
@@ -195,6 +196,13 @@ bool AreFedCmAutograntsEnabled(content::RenderFrameHost* rfh) {
           blink::features::kFedCmWithStorageAccessAPI);
       state.has_value()) {
     return state.value();
+  }
+
+  // RuntimeFeatureStateDocumentData doesn't know what the default state of a
+  // feature is, so we check the underlying feature explicitly.
+  if (base::FeatureList::IsEnabled(
+          blink::features::kFedCmWithStorageAccessAPI)) {
+    return true;
   }
   content::RuntimeFeatureStateDocumentData* document_data =
       content::RuntimeFeatureStateDocumentData::GetForCurrentDocument(rfh);
@@ -540,8 +548,12 @@ ContentSetting StorageAccessGrantPermissionContext::GetPermissionStatusInternal(
     content::RenderFrameHost* render_frame_host,
     const GURL& requesting_origin,
     const GURL& embedding_origin) const {
-  // Permission query from top-level frame should be "granted" by default.
-  if (render_frame_host && render_frame_host->IsInPrimaryMainFrame()) {
+  // Permission query from top-level frame should be "granted" by default unless
+  // We are in a partitioned popin. Partitioned popins can be partitioned even
+  // as a top-frame, so need to continue. See
+  // https://explainers-by-googlers.github.io/partitioned-popins/
+  if (render_frame_host && render_frame_host->IsInPrimaryMainFrame() &&
+      !render_frame_host->ShouldPartitionAsPopin()) {
     return CONTENT_SETTING_ALLOW;
   }
 
@@ -679,4 +691,14 @@ void StorageAccessGrantPermissionContext::UpdateContentSetting(
   // run our callback. As a result we do our updates when we're notified of a
   // permission being set and should not be called here.
   NOTREACHED();
+}
+
+GURL StorageAccessGrantPermissionContext::GetEffectiveEmbedderOrigin(
+    content::RenderFrameHost* rfh) const {
+  if (!rfh->ShouldPartitionAsPopin()) {
+    return PermissionContextBase::GetEffectiveEmbedderOrigin(rfh);
+  }
+  content::WebContents* web_contents =
+      content::WebContents::FromRenderFrameHost(rfh);
+  return web_contents->GetPartitionedPopinEmbedderOrigin(PassKey());
 }

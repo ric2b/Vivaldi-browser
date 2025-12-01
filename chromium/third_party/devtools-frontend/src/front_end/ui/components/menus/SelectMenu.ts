@@ -19,11 +19,11 @@ import selectMenuButtonStylesRaw from './selectMenuButton.css.js';
 
 // TODO(crbug.com/391381439): Fully migrate off of constructed style sheets.
 const selectMenuStyles = new CSSStyleSheet();
-selectMenuStyles.replaceSync(selectMenuStylesRaw.cssContent);
+selectMenuStyles.replaceSync(selectMenuStylesRaw.cssText);
 
 // TODO(crbug.com/391381439): Fully migrate off of constructed style sheets.
 const selectMenuButtonStyles = new CSSStyleSheet();
-selectMenuButtonStyles.replaceSync(selectMenuButtonStylesRaw.cssContent);
+selectMenuButtonStyles.replaceSync(selectMenuButtonStylesRaw.cssText);
 
 const {html} = Lit;
 
@@ -89,7 +89,7 @@ export class SelectMenu extends HTMLElement {
   readonly #shadow = this.attachShadow({mode: 'open'});
   readonly #renderBound = this.#render.bind(this);
   #button: SelectMenuButton|null = null;
-  #open: boolean = false;
+  #open = false;
   #props: SelectMenuData = {
     buttonTitle: '',
     position: Dialogs.Dialog.DialogVerticalPosition.BOTTOM,

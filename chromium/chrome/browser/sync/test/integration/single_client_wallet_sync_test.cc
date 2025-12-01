@@ -7,8 +7,8 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/metrics/histogram_tester.h"
+#include "base/test/test_future.h"
 #include "build/build_config.h"
-#include "build/chromeos_buildflags.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
 #include "chrome/browser/sync/test/integration/autofill_helper.h"
 #include "chrome/browser/sync/test/integration/bookmarks_helper.h"
@@ -22,9 +22,9 @@
 #include "chrome/browser/webdata_services/web_data_service_factory.h"
 #include "components/autofill/core/browser/data_manager/payments/payments_data_manager.h"
 #include "components/autofill/core/browser/data_manager/payments/payments_data_manager_test_utils.h"
-#include "components/autofill/core/browser/data_model/credit_card.h"
-#include "components/autofill/core/browser/data_model/credit_card_cloud_token_data.h"
-#include "components/autofill/core/browser/data_model/payments_metadata.h"
+#include "components/autofill/core/browser/data_model/payments/credit_card.h"
+#include "components/autofill/core/browser/data_model/payments/credit_card_cloud_token_data.h"
+#include "components/autofill/core/browser/data_model/payments/payments_metadata.h"
 #include "components/autofill/core/browser/data_quality/autofill_data_util.h"
 #include "components/autofill/core/browser/field_types.h"
 #include "components/autofill/core/browser/metrics/autofill_metrics.h"
@@ -86,65 +86,44 @@ MATCHER(AddressHasConverted, "") {
 const char kLocalGuidA[] = "EDC609ED-7EEE-4F27-B00C-423242A9C44A";
 const char kDifferentBillingAddressId[] = "another address entity ID";
 
-template <class T>
-class AutofillWebDataServiceConsumer : public WebDataServiceConsumer {
- public:
-  AutofillWebDataServiceConsumer() = default;
-
-  AutofillWebDataServiceConsumer(const AutofillWebDataServiceConsumer&) =
-      delete;
-  AutofillWebDataServiceConsumer& operator=(
-      const AutofillWebDataServiceConsumer&) = delete;
-
-  ~AutofillWebDataServiceConsumer() override = default;
-
-  void OnWebDataServiceRequestDone(
-      WebDataServiceBase::Handle handle,
-      std::unique_ptr<WDTypedResult> result) override {
-    result_ = std::move(static_cast<WDResult<T>*>(result.get())->GetValue());
-    run_loop_.Quit();
-  }
-
-  void Wait() { run_loop_.Run(); }
-
-  T& result() { return result_; }
-
- private:
-  base::RunLoop run_loop_;
-  T result_;
-};
-
-#if !BUILDFLAG(IS_CHROMEOS_ASH)
+#if !BUILDFLAG(IS_CHROMEOS)
 std::vector<std::unique_ptr<CreditCard>> GetServerCards(
     scoped_refptr<autofill::AutofillWebDataService> service) {
-  AutofillWebDataServiceConsumer<std::vector<std::unique_ptr<CreditCard>>>
-      consumer;
-  service->GetServerCreditCards(&consumer);
-  consumer.Wait();
-  return std::move(consumer.result());
+  base::test::TestFuture<WebDataServiceBase::Handle,
+                         std::unique_ptr<WDTypedResult>>
+      future;
+  service->GetServerCreditCards(future.GetCallback());
+  return static_cast<
+             WDResult<std::vector<std::unique_ptr<autofill::CreditCard>>>&>(
+             *future.Get<1>())
+      .GetValue();
 }
 
 std::unique_ptr<autofill::PaymentsCustomerData> GetPaymentsCustomerData(
     scoped_refptr<autofill::AutofillWebDataService> service) {
-  AutofillWebDataServiceConsumer<
-      std::unique_ptr<autofill::PaymentsCustomerData>>
-      consumer;
-  service->GetPaymentsCustomerData(&consumer);
-  consumer.Wait();
-  return std::move(consumer.result());
+  base::test::TestFuture<WebDataServiceBase::Handle,
+                         std::unique_ptr<WDTypedResult>>
+      future;
+  service->GetPaymentsCustomerData(future.GetCallback());
+  return static_cast<
+             WDResult<std::unique_ptr<autofill::PaymentsCustomerData>>&>(
+             *future.Get<1>())
+      .GetValue();
 }
 
 std::vector<std::unique_ptr<autofill::CreditCardCloudTokenData>>
 GetCreditCardCloudTokenData(
     scoped_refptr<autofill::AutofillWebDataService> service) {
-  AutofillWebDataServiceConsumer<
-      std::vector<std::unique_ptr<CreditCardCloudTokenData>>>
-      consumer;
-  service->GetCreditCardCloudTokenData(&consumer);
-  consumer.Wait();
-  return std::move(consumer.result());
+  base::test::TestFuture<WebDataServiceBase::Handle,
+                         std::unique_ptr<WDTypedResult>>
+      future;
+  service->GetCreditCardCloudTokenData(future.GetCallback());
+  return static_cast<
+             WDResult<std::vector<std::unique_ptr<CreditCardCloudTokenData>>>&>(
+             *future.Get<1>())
+      .GetValue();
 }
-#endif  // !BUILDFLAG(IS_CHROMEOS_ASH)
+#endif  // !BUILDFLAG(IS_CHROMEOS)
 
 // Waits until local changes are committed or an auth error is encountered.
 class TestForAuthError : public UpdatedProgressMarkerChecker {
@@ -224,12 +203,11 @@ class SingleClientWalletWithImprovedSigninUISyncTest
   SingleClientWalletWithImprovedSigninUISyncTest() {
     if (GetParam()) {
       feature_list_.InitWithFeatures(
-          /*enabled_features=*/{switches::kExplicitBrowserSigninUIOnDesktop,
-                                switches::kImprovedSigninUIOnDesktop},
+          /*enabled_features=*/{switches::kImprovedSigninUIOnDesktop},
           /*disabled_features=*/{});
     } else {
       feature_list_.InitWithFeatures(
-          /*enabled_features=*/{switches::kExplicitBrowserSigninUIOnDesktop},
+          /*enabled_features=*/{},
           /*disabled_features=*/{switches::kImprovedSigninUIOnDesktop});
     }
 
@@ -244,7 +222,7 @@ class SingleClientWalletWithImprovedSigninUISyncTest
 
 // ChromeOS does not support late signin after profile creation, so the test
 // below does not apply, at least in the current form.
-#if !BUILDFLAG(IS_CHROMEOS_ASH)
+#if !BUILDFLAG(IS_CHROMEOS)
 IN_PROC_BROWSER_TEST_P(SingleClientWalletWithImprovedSigninUISyncTest,
                        DownloadAccountStorage_Card) {
   ASSERT_TRUE(SetupClients());
@@ -463,7 +441,7 @@ IN_PROC_BROWSER_TEST_F(SingleClientWalletSyncTest,
   EXPECT_EQ("data-2",
             paydm->GetCreditCardCloudTokenData()[0]->instrument_token);
 }
-#endif  // !BUILDFLAG(IS_CHROMEOS_ASH)
+#endif  // !BUILDFLAG(IS_CHROMEOS)
 
 IN_PROC_BROWSER_TEST_F(SingleClientWalletSyncTest, EnabledByDefault) {
   ASSERT_TRUE(SetupSync());
@@ -477,7 +455,7 @@ IN_PROC_BROWSER_TEST_F(SingleClientWalletSyncTest, EnabledByDefault) {
 }
 
 // ChromeOS does not sign out, so the test below does not apply.
-#if !BUILDFLAG(IS_CHROMEOS_ASH)
+#if !BUILDFLAG(IS_CHROMEOS)
 IN_PROC_BROWSER_TEST_F(SingleClientWalletSyncTest, ClearOnSignOut) {
   GetFakeServer()->SetWalletData({CreateDefaultSyncWalletCard(),
                                   CreateDefaultSyncPaymentsCustomerData(),
@@ -502,7 +480,7 @@ IN_PROC_BROWSER_TEST_F(SingleClientWalletSyncTest, ClearOnSignOut) {
   EXPECT_EQ(0uL, paydm->GetCreditCardCloudTokenData().size());
   EXPECT_EQ(0U, GetServerCardsMetadata(0).size());
 }
-#endif  // !BUILDFLAG(IS_CHROMEOS_ASH)
+#endif  // !BUILDFLAG(IS_CHROMEOS)
 
 // Wallet data should get cleared from the database when the user enters the
 // sync paused state (e.g. persistent auth error).
@@ -1035,9 +1013,9 @@ class SingleClientWalletSecondaryAccountSyncTest
   }
 
   void SetUpOnMainThread() override {
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
     secondary_account_helper::InitNetwork();
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+#endif  // BUILDFLAG(IS_CHROMEOS)
     SyncTest::SetUpOnMainThread();
   }
 
@@ -1049,7 +1027,7 @@ class SingleClientWalletSecondaryAccountSyncTest
 
 // ChromeOS doesn't support changes to the primary account after startup, so
 // these tests don't apply.
-#if !BUILDFLAG(IS_CHROMEOS_ASH)
+#if !BUILDFLAG(IS_CHROMEOS)
 IN_PROC_BROWSER_TEST_F(SingleClientWalletSecondaryAccountSyncTest,
                        SwitchesFromAccountToProfileStorageOnSyncOptIn) {
   ASSERT_TRUE(SetupClients());
@@ -1095,10 +1073,10 @@ IN_PROC_BROWSER_TEST_F(SingleClientWalletSecondaryAccountSyncTest,
   // complete.
   secondary_account_helper::GrantSyncConsent(profile(), "user@email.com");
   GetSyncService(0)->SetSyncFeatureRequested();
-#if !BUILDFLAG(IS_CHROMEOS_ASH)
+#if !BUILDFLAG(IS_CHROMEOS)
   GetSyncService(0)->GetUserSettings()->SetInitialSyncFeatureSetupComplete(
       syncer::SyncFirstSetupCompleteSource::BASIC_FLOW);
-#endif  // !BUILDFLAG(IS_CHROMEOS_ASH)
+#endif  // !BUILDFLAG(IS_CHROMEOS)
 
   // Wait for Sync to get reconfigured into feature mode.
   ASSERT_TRUE(GetClient(0)->AwaitSyncSetupCompletion());
@@ -1180,10 +1158,10 @@ IN_PROC_BROWSER_TEST_F(
   ASSERT_EQ(syncer::SyncService::TransportState::CONFIGURING,
             GetSyncService(0)->GetTransportState());
 
-#if !BUILDFLAG(IS_CHROMEOS_ASH)
+#if !BUILDFLAG(IS_CHROMEOS)
   GetSyncService(0)->GetUserSettings()->SetInitialSyncFeatureSetupComplete(
       syncer::SyncFirstSetupCompleteSource::BASIC_FLOW);
-#endif  // !BUILDFLAG(IS_CHROMEOS_ASH)
+#endif  // !BUILDFLAG(IS_CHROMEOS)
 
   // Wait for Sync to get reconfigured into feature mode.
   ASSERT_TRUE(GetClient(0)->AwaitSyncSetupCompletion());
@@ -1206,4 +1184,4 @@ IN_PROC_BROWSER_TEST_F(
   EXPECT_EQ(0U, GetCreditCardCloudTokenData(account_data).size());
   EXPECT_EQ(1U, GetCreditCardCloudTokenData(profile_data).size());
 }
-#endif  // !BUILDFLAG(IS_CHROMEOS_ASH)
+#endif  // !BUILDFLAG(IS_CHROMEOS)

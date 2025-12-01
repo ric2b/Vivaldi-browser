@@ -34,11 +34,12 @@
 #include "components/sessions/core/session_service_commands.h"
 #include "components/sessions/vivaldi_session_service_commands.h"
 #include "components/datasource/vivaldi_image_store.h"
+#include "components/tabs/tab_helpers.h"
 #include "content/public/browser/navigation_entry.h"
 #include "extensions/browser/extension_function_dispatcher.h"
-#include "extensions/api/tabs/tabs_private_api.h"
 #include "extensions/schema/vivaldi_sessions.h"
 #include "extensions/tools/vivaldi_tools.h"
+#include "extensions/vivaldi_browser_component_wrapper.h"
 #include "sessions/index_model.h"
 #include "sessions/index_node.h"
 #include "sessions/index_service_factory.h"
@@ -308,8 +309,8 @@ void MakeAPIContentModel(content::BrowserContext* browser_context,
         sessions::GetFixedTabTitles(tit->second.get(), tab.fixed_name,
             tab.fixed_group_name);
 
-        std::optional<double> id = GetTabWorkspaceId(
-            tit->second->viv_ext_data);
+        std::optional<double> id =
+            ::vivaldi::GetTabWorkspaceId(tit->second->viv_ext_data);
         if (id.has_value()) {
           // Add tab to workspace.
           bool match = false;
@@ -943,7 +944,8 @@ ExtensionFunction::ResponseAction SessionsPrivateOpenFunction::Run() {
   EXTENSION_FUNCTION_VALIDATE(params);
 
   VivaldiBrowserWindow* window =
-      VivaldiBrowserWindow::FromId(params->window_id);
+      VivaldiBrowserComponentWrapper::GetInstance()->
+          VivaldiBrowserWindowFromId(params->window_id);
   if (!window) {
     return RespondNow(Error("No such window"));
   }

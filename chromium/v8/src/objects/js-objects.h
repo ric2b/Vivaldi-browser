@@ -10,6 +10,7 @@
 #include "src/common/globals.h"
 #include "src/handles/handles.h"
 #include "src/objects/embedder-data-slot.h"
+#include "src/objects/fixed-array.h"
 // TODO(jkummerow): Consider forward-declaring instead.
 #include "src/objects/internal-index.h"
 #include "src/objects/objects.h"
@@ -147,6 +148,8 @@ class JSReceiver : public TorqueGeneratedJSReceiver<JSReceiver, HeapObject> {
       DirectHandle<Name> name);
   V8_WARN_UNUSED_RESULT static inline Maybe<bool> HasElement(
       Isolate* isolate, DirectHandle<JSReceiver> object, uint32_t index);
+  V8_WARN_UNUSED_RESULT static inline Maybe<bool> HasPropertyOrElement(
+      Isolate* isolate, DirectHandle<JSReceiver> object, PropertyKey key);
 
   V8_EXPORT_PRIVATE V8_WARN_UNUSED_RESULT static Maybe<bool> HasOwnProperty(
       Isolate* isolate, DirectHandle<JSReceiver> object,
@@ -166,6 +169,10 @@ class JSReceiver : public TorqueGeneratedJSReceiver<JSReceiver, HeapObject> {
   V8_EXPORT_PRIVATE V8_WARN_UNUSED_RESULT static Maybe<bool>
   DeletePropertyOrElement(Isolate* isolate, DirectHandle<JSReceiver> object,
                           DirectHandle<Name> name,
+                          LanguageMode language_mode = LanguageMode::kSloppy);
+  V8_EXPORT_PRIVATE V8_WARN_UNUSED_RESULT static Maybe<bool>
+  DeletePropertyOrElement(Isolate* isolate, DirectHandle<JSReceiver> object,
+                          PropertyKey key,
                           LanguageMode language_mode = LanguageMode::kSloppy);
   V8_EXPORT_PRIVATE V8_WARN_UNUSED_RESULT static Maybe<bool> DeleteProperty(
       Isolate* isolate, DirectHandle<JSReceiver> object,
@@ -486,12 +493,13 @@ class JSObject : public TorqueGeneratedJSObject<JSObject, JSReceiver> {
 
   V8_WARN_UNUSED_RESULT static MaybeDirectHandle<Object> V8_EXPORT_PRIVATE
   SetOwnPropertyIgnoreAttributes(DirectHandle<JSObject> object,
-                                 DirectHandle<Name> name, Handle<Object> value,
+                                 DirectHandle<Name> name,
+                                 DirectHandle<Object> value,
                                  PropertyAttributes attributes);
 
   V8_WARN_UNUSED_RESULT static MaybeDirectHandle<Object>
   SetOwnElementIgnoreAttributes(DirectHandle<JSObject> object, size_t index,
-                                Handle<Object> value,
+                                DirectHandle<Object> value,
                                 PropertyAttributes attributes);
 
   // Equivalent to one of the above depending on whether |name| can be converted
@@ -499,7 +507,7 @@ class JSObject : public TorqueGeneratedJSObject<JSObject, JSReceiver> {
   V8_EXPORT_PRIVATE V8_WARN_UNUSED_RESULT static MaybeDirectHandle<Object>
   DefinePropertyOrElementIgnoreAttributes(DirectHandle<JSObject> object,
                                           DirectHandle<Name> name,
-                                          Handle<Object> value,
+                                          DirectHandle<Object> value,
                                           PropertyAttributes attributes = NONE);
 
   // Adds or reconfigures a property to attributes NONE. It will fail when it
@@ -527,7 +535,7 @@ class JSObject : public TorqueGeneratedJSObject<JSObject, JSReceiver> {
   // Extend the receiver with a single fast property appeared first in the
   // passed map. This also extends the property backing store if necessary.
   static void AllocateStorageForMap(DirectHandle<JSObject> object,
-                                    Handle<Map> map);
+                                    DirectHandle<Map> map);
 
   // Migrates the given object to a map whose field representations are the
   // lowest upper bound of all known representations for that field.
@@ -641,9 +649,19 @@ class JSObject : public TorqueGeneratedJSObject<JSObject, JSReceiver> {
   static const uint32_t kMinAddedElementsCapacity = 16;
 
   // Computes the new capacity when expanding the elements of a JSObject.
-  static uint32_t NewElementsCapacity(uint32_t old_capacity) {
+  static constexpr uint32_t NewElementsCapacity(uint32_t old_capacity) {
     // (old_capacity + 50%) + kMinAddedElementsCapacity
-    return old_capacity + (old_capacity >> 1) + kMinAddedElementsCapacity;
+    uint32_t new_capacity =
+        old_capacity + (old_capacity >> 1) + kMinAddedElementsCapacity;
+
+    // If we go past kMaxFixedArrayCapacity, but kMaxFixedArrayCapacity is still
+    // more than the old_capacity plus the minimum growth amount, limit the
+    // capacity to kMinAddedElementsCapacity.
+    if (new_capacity > kMaxFixedArrayCapacity &&
+        old_capacity + kMinAddedElementsCapacity <= kMaxFixedArrayCapacity) {
+      return kMaxFixedArrayCapacity;
+    }
+    return new_capacity;
   }
 
   // These methods do not perform access checks!
@@ -1232,7 +1250,7 @@ class DateCache;
 // Representation for JS date objects.
 class JSDate : public TorqueGeneratedJSDate<JSDate, JSObject> {
  public:
-  static V8_WARN_UNUSED_RESULT MaybeHandle<JSDate> New(
+  static V8_WARN_UNUSED_RESULT MaybeDirectHandle<JSDate> New(
       DirectHandle<JSFunction> constructor, DirectHandle<JSReceiver> new_target,
       double tv);
 

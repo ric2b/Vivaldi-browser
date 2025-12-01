@@ -67,7 +67,7 @@ void CheckForOverRealization() {
 }
 
 // Serializes the `session_storage` to proto::WebStateStorage.
-web::proto::WebStateStorage SessionStorageToProto(
+std::optional<web::proto::WebStateStorage> SessionStorageToProto(
     CRWSessionStorage* session_storage) {
   web::proto::WebStateStorage storage;
   [session_storage serializeToProto:storage];
@@ -267,11 +267,6 @@ void WebStateImpl::OnFaviconUrlUpdated(
 void WebStateImpl::OnStateChangedForPermission(Permission permission) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   RealizedState()->OnStateChangedForPermission(permission);
-}
-
-void WebStateImpl::OnUnderPageBackgroundColorChanged() {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  RealizedState()->OnUnderPageBackgroundColorChanged();
 }
 
 NavigationManagerImpl& WebStateImpl::GetNavigationManagerImpl() {
@@ -553,15 +548,12 @@ WebState* WebStateImpl::ForceRealized() {
     // pass it to initialize the RealizedWebState).
     std::unique_ptr<SerializedData> saved = std::move(saved_);
 
-    // Load the storage from disk.
-    proto::WebStateStorage storage = saved->TakeStorageLoader().Run();
-
     // Perform the initialisation of the RealizedWebState. No outside
     // code should be able to observe the WebStateImpl with both `saved_`
     // and `pimpl_` set.
     pimpl_->InitWithProto(saved->GetBrowserState(), saved->GetLastActiveTime(),
                           saved->GetTitle(), saved->GetVisibleURL(),
-                          saved->GetFaviconStatus(), std::move(storage),
+                          saved->GetFaviconStatus(), saved->LoadStorage(),
                           saved->TakeNativeSessionFetcher());
 
     // Delete the SerializedData without calling TearDown() as the WebState

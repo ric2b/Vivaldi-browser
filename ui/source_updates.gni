@@ -33,6 +33,8 @@ update_target("//chrome/browser/ui:ui") {
   ]
   if (!is_android) {
     sources += [
+      "//vivaldi/extensions/api/events/vivaldi_ui_events.cc",
+      "//vivaldi/extensions/api/events/vivaldi_ui_events.h",
       "//vivaldi/ui/views/video_pip_controller.cc",
       "//vivaldi/ui/views/video_pip_controller.h",
       "//vivaldi/ui/views/vivaldi_bookmark_menu_controller_views.cc",
@@ -61,7 +63,6 @@ update_target("//chrome/browser/ui:ui") {
       "//vivaldi/ui/vivaldi_message_box_dialog.cc",
       "//vivaldi/ui/vivaldi_message_box_dialog.h",
       "//vivaldi/ui/vivaldi_tab_model.cc",
-      "//vivaldi/ui/vivaldi_tab_strip_model.cc",
       "//vivaldi/ui/views/vivaldi_window_widget_delegate.cc",
       "//vivaldi/ui/views/vivaldi_window_widget_delegate.h",
       "//vivaldi/ui/vivaldi_quit_confirmation_dialog.cc",
@@ -70,6 +71,12 @@ update_target("//chrome/browser/ui:ui") {
       "//vivaldi/ui/vivaldi_ui_utils.h",
       "//vivaldi/ui/vivaldi_infobar_delegate.cc",
       "//vivaldi/ui/vivaldi_infobar_delegate.h",
+      "//vivaldi/ui/webui/vivaldi_profile_picker.cc",
+      "//vivaldi/ui/webui/vivaldi_profile_picker.h",
+      "//vivaldi/ui/webui/vivaldi_profile_picker_handler.cc",
+      "//vivaldi/ui/webui/vivaldi_profile_picker_handler.h",
+      "//vivaldi/ui/webui/vivaldi_web_ui_helpers.cc",
+      "//vivaldi/ui/webui/vivaldi_web_ui_helpers.h",
     ]
     deps += [
       "//vivaldi/ui/vector_icons:vector_icons",
@@ -113,6 +120,12 @@ update_target("//ui/menus:menus") {
 }
 
 if (!is_android) {
+  update_target("//chrome/browser/ui/tabs:tab_strip_impl") {
+    sources += [
+      "//vivaldi/ui/vivaldi_tab_strip_model.cc",
+    ]
+  }
+
   update_template_instance("//content/public/common:interfaces") {
     visibility += ["//ui/views:views"]
   }

@@ -42,6 +42,7 @@
 #include "src/heap/main-allocator.h"
 #include "src/heap/memory-allocator.h"
 #include "src/heap/mutable-page-metadata.h"
+#include "src/heap/page-pool.h"
 #include "src/heap/spaces-inl.h"
 #include "src/heap/spaces.h"
 #include "src/objects/free-space.h"
@@ -78,6 +79,7 @@ class V8_NODISCARD TestMemoryAllocatorScope {
   MemoryAllocator* allocator() { return isolate_->heap()->memory_allocator(); }
 
   ~TestMemoryAllocatorScope() {
+    isolate_->heap()->memory_allocator()->ReleasePooledChunksImmediately();
     isolate_->heap()->memory_allocator()->TearDown();
     isolate_->heap()->memory_allocator_.swap(old_allocator_);
     isolate_->GetCodePages()->swap(code_pages_);
@@ -311,7 +313,8 @@ TEST(SemiSpaceNewSpace) {
   LinearAllocationArea allocation_info;
 
   auto new_space = std::make_unique<SemiSpaceNewSpace>(
-      heap, heap->InitialSemiSpaceSize(), heap->InitialSemiSpaceSize());
+      heap, heap->InitialSemiSpaceSize(), heap->InitialSemiSpaceSize(),
+      heap->InitialSemiSpaceSize());
   MainAllocator allocator(heap->main_thread_local_heap(), new_space.get(),
                           MainAllocator::IsNewGeneration::kYes,
                           &allocation_info);
@@ -330,7 +333,7 @@ TEST(SemiSpaceNewSpace) {
   CHECK_LT(0, successful_allocations);
 
   new_space.reset();
-  memory_allocator->pool()->ReleasePooledChunks();
+  memory_allocator->ReleasePooledChunksImmediately();
 }
 
 TEST(PagedNewSpace) {
@@ -343,7 +346,8 @@ TEST(PagedNewSpace) {
   LinearAllocationArea allocation_info;
 
   auto new_space = std::make_unique<PagedNewSpace>(
-      heap, heap->InitialSemiSpaceSize(), heap->InitialSemiSpaceSize());
+      heap, heap->InitialSemiSpaceSize(), heap->InitialSemiSpaceSize(),
+      heap->InitialSemiSpaceSize());
   MainAllocator allocator(heap->main_thread_local_heap(), new_space.get(),
                           MainAllocator::IsNewGeneration::kYes,
                           &allocation_info);
@@ -364,7 +368,7 @@ TEST(PagedNewSpace) {
   CHECK_LT(0, successful_allocations);
 
   new_space.reset();
-  memory_allocator->pool()->ReleasePooledChunks();
+  memory_allocator->ReleasePooledChunksImmediately();
 }
 
 TEST(OldSpace) {

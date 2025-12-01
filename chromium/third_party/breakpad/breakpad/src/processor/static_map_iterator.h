@@ -52,7 +52,7 @@ template<typename Key, typename Value, typename Compare>
 class StaticMapIterator {
  public:
   // Constructors.
-  StaticMapIterator(): index_(-1), base_(NULL) { }
+  StaticMapIterator(): index_(-1), base_(nullptr) { }
 
   // Increment & Decrement operators:
   StaticMapIterator& operator++();

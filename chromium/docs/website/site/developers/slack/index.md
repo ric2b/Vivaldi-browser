@@ -45,6 +45,9 @@ channel.
     [chromium-slack-invites@chromium.org](mailto:chromium-slack-invites@chromium.org)
     for an invite link.
 
+  * Contributors of accepted Chromium Google Summer of Code proposals are
+    invited to join before they land commits and add themselves to AUTHORS.
+
   * Furthermore, if you are a part of a project that is significantly related
     to Chromium and that is significantly owned or maintained by Chromium
     AUTHORS, you can also have access without being in the Chromium AUTHORS file

@@ -31,6 +31,9 @@ enum class LoginDbDeprecationExportResult {
 };
 // LINT.ThenChange(/tools/metrics/histograms/metadata/password/enums.xml:LoginDbDeprecationExportResult)
 
+inline constexpr std::string_view kExportedPasswordsFileName =
+    "ChromePasswords.csv";
+
 // Directs exporting the passwords from the `LoginDatabase` to a CSV stored
 // in the same place to allow for database deprecation.
 class LoginDbDeprecationPasswordExporter
@@ -73,6 +76,9 @@ class LoginDbDeprecationPasswordExporter
   // Called when the export finishes (from `OnExportComplete`),
   // or before it starts if the passwords to export could not be fetched.
   void OnExportCompleteWithResult(LoginDbDeprecationExportResult result);
+
+  // Used to delete the passwords after successful export.
+  scoped_refptr<PasswordStoreInterface> password_store_;
 
   // Callback to invoke when ALL the export operations finished. It will clean
   // up `this`.

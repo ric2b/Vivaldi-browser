@@ -83,6 +83,7 @@
 #include "net/dns/public/util.h"
 #include "net/test/ssl_test_util.h"
 #include "net/test/test_doh_server.h"
+#include "services/network/public/cpp/features.h"
 #include "services/tracing/public/cpp/perfetto/perfetto_config.h"
 #include "services/tracing/public/cpp/perfetto/perfetto_traced_process.h"
 #include "services/tracing/public/cpp/tracing_features.h"
@@ -909,7 +910,8 @@ class NoGPUCaptureScreenshotTest : public CaptureScreenshotTest {
 // Tests that large screenshots are composited fine with software compositor.
 // Regression test for https://crbug.com/1137291.
 // Flaky on Linux.  http://crbug.com/1301176
-#if BUILDFLAG(IS_LINUX)
+// TODO(crbug.com/396301195): Failing on Win 10 Tests x64 dbg bot.
+#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_WIN)
 #define MAYBE_LargeScreenshot DISABLED_LargeScreenshot
 #else
 #define MAYBE_LargeScreenshot LargeScreenshot
@@ -4312,7 +4314,7 @@ class SharedStorageDevToolsProtocolTest : public DevToolsProtocolTest {
   SharedStorageDevToolsProtocolTest() {
     feature_list_
         .InitWithFeaturesAndParameters(/*enabled_features=*/
-                                       {{blink::features::kSharedStorageAPI,
+                                       {{network::features::kSharedStorageAPI,
                                          {{"SharedStorageBitBudget",
                                            base::NumberToString(
                                                kBudgetAllowed)}}},

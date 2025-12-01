@@ -65,18 +65,27 @@ static_library("notes") {
   }
 }
 
+static_library("factory") {
+  if (!is_ios) {
+    sources = [
+      "notes_factory.cc",
+      "notes_factory.h",
+    ]
+
+    deps = [
+      "//components/keyed_service/core",
+      "//components/keyed_service/content",
+      "//vivaldi/sync:factory",
+    ]
+  }
+}
+
 static_library("browser") {
   sources = [
     "notes_model_loaded_observer.cc",
     "notes_model_loaded_observer.h",
     "notes_model_observer.h",
   ]
-  if (!is_ios) {
-    sources += [
-      "notes_factory.cc",
-      "notes_factory.h",
-    ]
-  }
   if (is_linux || is_win) {
     sources += [
       "notes_submenu_observer_helper_views.cc",
@@ -102,6 +111,7 @@ static_library("browser") {
   }
 
   deps = [
+    ":factory",
     "//base:base",
     "//base:i18n",
     "//components/keyed_service/core",

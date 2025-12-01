@@ -4,7 +4,7 @@
 <html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en">
 <head>
 <meta http-equiv="Content-Type" content="application/xhtml+xml; charset=UTF-8" />
-<meta name="generator" content="AsciiDoc 10.2.0" />
+<meta name="generator" content="AsciiDoc 10.2.1" />
 <title>depot_tools_tutorial(7)</title>
 <style type="text/css">
 /* Shared CSS for AsciiDoc xhtml11 and html5 backends */
@@ -886,21 +886,17 @@ in your <code>~/.bashrc</code> or <code>~/.zshrc</code>). Assuming you cloned <e
 </div>
 <div class="sect3">
 <h4 id="_windows">WINDOWS</h4>
-<div class="paragraph"><p>Download the <em>depot_tools</em>
-<a href="https://storage.googleapis.com/chrome-infra/depot_tools.zip">bundle</a> and
-extract it somewhere.</p></div>
-<div class="admonitionblock">
-<table><tr>
-<td class="icon">
-<div class="title">Warning</div>
-</td>
-<td class="content"><strong>DO NOT</strong> use drag-n-drop or copy-n-paste extract from Explorer, this will not
-extract the hidden &#8220;.git&#8221; folder which is necessary for <em>depot_tools</em> to
-autoupdate itself. You can use &#8220;Extract all&#8230;&#8221; from the context menu though.</td>
-</tr></table>
-</div>
+<div class="paragraph"><p>Download and install Git for Windows from <a href="https://git-scm.com/downloads/win">https://git-scm.com/downloads/win</a>.</p></div>
+<div class="paragraph"><p>From a command shell, navigate to the directory where you want to put
+<em>depot_tools</em> and clone the <em>depot_tools</em> repository. For example, if you
+want <em>depot_tools</em> to be cloned to <code>C:\workspace\depot_tools</code>:</p></div>
+<div class="listingblock">
+<div class="content">
+<pre><code><strong><span class="white">$ cd C:\workspace</span></strong>
+<strong><span class="white">$ git clone https://chromium.googlesource.com/chromium/tools/depot_tools.git</span></strong></code></pre>
+</div></div>
 <div class="paragraph"><p>Add <em>depot_tools</em> to the <em>front</em> of your PATH (must be ahead of any installs of
-Python). Assuming you unzipped the bundle to <code>C:\workspace\depot_tools</code>:</p></div>
+Python). Assuming you cloned <em>depot_tools</em> to <code>C:\workspace\depot_tools</code>:</p></div>
 <div class="dlist"><dl>
 <dt class="hdlist1">
 With Administrator access: 
@@ -1101,6 +1097,16 @@ then <code>git rebase-update</code> will clean it up for you.</p></div>
 rebase-update</code>, and it will pick up where it left off. Once the command has
 finished updating all of your branches, it will return you back to the branch
 you started on.</p></div>
+<div class="paragraph"><p>As an alternative, or if you experience issues with multiple merge conflicts on
+the same changes you can run <code>git squash-branch</code> on the conflicted branch
+(either after running <code>git rebase --abort</code> or before running <code>git
+rebase-update</code>). This will convert the branch to a single commit, which should
+apply more cleanly, or at least result in only needing to resolve the merge
+conflicts once. Running <code>git cl squash-closed</code> prior to <code>git rebase-update</code> will
+perform this <code>git squash-branch</code> on all branches that gerrit thinks are closed.
+These now-closed branches should have a single commit that will cleanly apply
+(and then subsequently be deleted by the rebase process), and can reduce the
+risk of running into merge conflicts during the rebase.</p></div>
 <div class="admonitionblock">
 <table><tr>
 <td class="icon">
@@ -1455,7 +1461,7 @@ EOF
 <span style="color: #FF5555">|</span> * <span style="color: #FF5555"></span><span style="font-weight: bold; color: #FF5555">2c0ad9c59b</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span>	<span style="color: #50FA7B"></span><span style="font-weight: bold; color: #50FA7B">(</span><span style="font-weight: bold; color: #50FA7B"></span><span style="font-weight: bold; color: #50FA7B">fix_typo</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span><span style="color: #50FA7B"></span><span style="font-weight: bold; color: #50FA7B">) </span><span style="font-weight: bold"></span><span style="font-weight: bold"></span><span style="color: #F1FA8C">2014-04-10</span> ~ Fix typo for good!
 <span style="color: #FF5555">|</span> * <span style="color: #FF5555"></span><span style="font-weight: bold; color: #FF5555">615ffa720f</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span>	<span style="color: #F1FA8C">2014-04-10</span> ~ Fix terrible typo.
 <span style="color: #FF5555">|</span><span style="color: #FF5555">/</span>
-* <span style="color: #FF5555"></span><span style="font-weight: bold; color: #FF5555">beec6f4746</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span>	<span style="color: #50FA7B"></span><span style="font-weight: bold; color: #50FA7B">(</span><span style="font-weight: bold; color: #FF5555">origin/main</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span><span style="color: #50FA7B"></span><span style="font-weight: bold; color: #50FA7B">, </span><span style="font-weight: bold; color: #FF5555">origin/HEAD</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span><span style="color: #50FA7B"></span><span style="font-weight: bold; color: #50FA7B">) </span><span style="font-weight: bold"></span><span style="font-weight: bold"></span><span style="color: #F1FA8C">2014-04-10</span> ~ Make ReflectorImpl use mailboxes    &lt;(<span style="color: #BFBFBF"></span><span style="font-weight: bold; color: #BFBFBF">chap2, fix_typo</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span>)
+* <span style="color: #FF5555"></span><span style="font-weight: bold; color: #FF5555">beec6f4746</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span>	<span style="color: #50FA7B"></span><span style="font-weight: bold; color: #50FA7B">(</span><span style="font-weight: bold; color: #FF5555">origin/main</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span><span style="color: #50FA7B"></span><span style="font-weight: bold; color: #50FA7B">, </span><span style="font-weight: bold; color: #FF5555">origin/HEAD</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span><span style="color: #50FA7B"></span><span style="font-weight: bold; color: #50FA7B">) </span><span style="font-weight: bold"></span><span style="font-weight: bold"></span><span style="color: #F1FA8C">2014-04-10</span> ~ Make ReflectorImpl use mailboxes    &lt;(<span style="color: #BFBFBF"></span><span style="font-weight: bold; color: #BFBFBF">fix_typo, chap2</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span>)
 * <span style="color: #FF5555"></span><span style="font-weight: bold; color: #FF5555">41290e02b7</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span>	<span style="color: #F1FA8C">2014-04-10</span> ~ don't use glibc-specific execinfo.h on uclibc builds
 * <span style="color: #FF5555"></span><span style="font-weight: bold; color: #FF5555">a76fde7b7b</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span>	<span style="color: #F1FA8C">2014-04-10</span> ~ [fsp] Add requestUnmount() method together with the request manager.
 * <span style="color: #FF5555"></span><span style="font-weight: bold; color: #FF5555">9de7a713b3</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span>	<span style="color: #F1FA8C">2014-04-10</span> ~ linux_aura: Use system configuration for middle clicking the titlebar.
@@ -1632,7 +1638,7 @@ by checking out the <a href="https://chromium.googlesource.com/chromium/tools/de
 <div id="footer">
 <div id="footer-text">
 Last updated
- 2022-08-26 21:13:38 PDT
+ 2025-02-20 16:05:41 PST
 </div>
 </div>
 </body>

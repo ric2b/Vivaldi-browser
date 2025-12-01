@@ -1618,7 +1618,7 @@ void GetContent(base::FilePath name, SessionContent& content) {
     commands.push_back(std::move(item));
   }
 
-  sessions::TokenToSessionTabGroup tab_groups;
+  sessions::GroupIdToSessionTabGroup tab_groups;
   sessions::VivaldiCreateTabsAndWindows(commands, &content.tabs,
                                         &tab_groups, &content.windows,
                                         &content.active_window_id);

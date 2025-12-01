@@ -16,7 +16,7 @@ import requestHeaderSectionStylesRaw from './RequestHeaderSection.css.js';
 
 // TODO(crbug.com/391381439): Fully migrate off of constructed style sheets.
 const requestHeaderSectionStyles = new CSSStyleSheet();
-requestHeaderSectionStyles.replaceSync(requestHeaderSectionStylesRaw.cssContent);
+requestHeaderSectionStyles.replaceSync(requestHeaderSectionStylesRaw.cssText);
 
 const {render, html} = Lit;
 
@@ -38,7 +38,7 @@ const UIStrings = {
    *@description Message to explain lack of raw headers for a particular network request
    */
   provisionalHeadersAreShown: 'Provisional headers are shown.',
-};
+} as const;
 
 const str_ = i18n.i18n.registerUIStrings('panels/network/components/RequestHeaderSection.ts', UIStrings);
 const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);

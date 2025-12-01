@@ -27,7 +27,6 @@
 #include "content/public/common/content_client.h"
 #include "content/public/common/origin_util.h"
 #include "mojo/public/cpp/bindings/callback_helpers.h"
-#include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/common/storage_key/storage_key.h"
 #include "third_party/blink/public/mojom/service_worker/service_worker_registration_options.mojom.h"
 
@@ -553,9 +552,6 @@ void ServiceWorkerContainerHostForClient::SendSetController(
       SCOPED_CRASH_KEY_NUMBER(
           "SWController", "client_type",
           static_cast<int>(service_worker_client().GetClientType()));
-      SCOPED_CRASH_KEY_BOOL(
-          "SWController", "PlzDedicatedWorker",
-          base::FeatureList::IsEnabled(blink::features::kPlzDedicatedWorker));
       base::debug::DumpWithoutCrashing();
     }
   }
@@ -727,6 +723,7 @@ bool ServiceWorkerContainerHostForClient::AllowServiceWorker(
   if (!browser_context) {
     return false;
   }
+  auto start_time = base::TimeTicks::Now();
   AllowServiceWorkerResult allowed =
       GetContentClient()->browser()->AllowServiceWorker(
           scope,
@@ -734,6 +731,9 @@ bool ServiceWorkerContainerHostForClient::AllowServiceWorker(
               service_worker_client().key()),
           service_worker_client().top_frame_origin(), script_url,
           browser_context);
+  base::UmaHistogramMicrosecondsTimes(
+      "ServiceWorker.ContainerHostForClient.AllowServiceWorkerCallTime",
+      base::TimeTicks::Now() - start_time);
   if (service_worker_client().IsContainerForWindowClient()) {
     auto* rfh = RenderFrameHostImpl::FromID(
         service_worker_client().GetRenderFrameHostId());

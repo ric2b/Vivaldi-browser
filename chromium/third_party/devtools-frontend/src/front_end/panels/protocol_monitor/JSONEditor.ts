@@ -10,8 +10,6 @@ import * as Host from '../../core/host/host.js';
 import * as i18n from '../../core/i18n/i18n.js';
 import * as SDK from '../../core/sdk/sdk.js';
 import * as Buttons from '../../ui/components/buttons/buttons.js';
-import * as Dialogs from '../../ui/components/dialogs/dialogs.js';
-import type * as Menus from '../../ui/components/menus/menus.js';
 import * as SuggestionInput from '../../ui/components/suggestion_input/suggestion_input.js';
 import * as UI from '../../ui/legacy/legacy.js';
 import * as Lit from '../../ui/lit/lit.js';
@@ -41,18 +39,22 @@ const UIStrings = {
    */
   addCustomProperty: 'Add custom property',
   /**
-   * @description The title of a the button that sends a CDP command.
+   * @description The title of a button that sends a CDP command.
    */
   sendCommandCtrlEnter: 'Send command - Ctrl+Enter',
   /**
-   * @description The title of a the button that sends a CDP command.
+   * @description The title of a button that sends a CDP command.
    */
   sendCommandCmdEnter: 'Send command - ⌘+Enter',
   /**
-   * @description he title of a the button that copies a CDP command.
+   * @description The title of a button that copies a CDP command.
    */
   copyCommand: 'Copy command',
-};
+  /**
+   * @description A label for a select input that allows selecting a CDP target to send the commands to.
+   */
+  selectTarget: 'Select a target',
+} as const;
 const str_ = i18n.i18n.registerUIStrings('panels/protocol_monitor/JSONEditor.ts', UIStrings);
 const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
 
@@ -141,25 +143,19 @@ export interface EventTypes {
 }
 
 export class JSONEditor extends Common.ObjectWrapper.eventMixin<EventTypes, typeof UI.Widget.VBox>(UI.Widget.VBox) {
-  #metadataByCommand: Map<string, {parameters: Parameter[], description: string, replyArgs: string[]}>;
-  #typesByName: Map<string, Parameter[]>;
-  #enumsByName: Map<string, Record<string, string>>;
+  #metadataByCommand = new Map<string, {parameters: Parameter[], description: string, replyArgs: string[]}>();
+  #typesByName = new Map<string, Parameter[]>();
+  #enumsByName = new Map<string, Record<string, string>>();
   #parameters: Parameter[] = [];
   #targets: SDK.Target.Target[] = [];
-  #command: string = '';
+  #command = '';
   #targetId?: string;
   #hintPopoverHelper?: UI.PopoverHelper.PopoverHelper;
 
-  constructor(
-      metadataByCommand: Map<string, {parameters: Parameter[], description: string, replyArgs: string[]}>,
-      typesByName: Map<string, Parameter[]>,
-      enumsByName: Map<string, Record<string, string>>,
-  ) {
-    super(/* useShadowDom=*/ true);
+  constructor(element: HTMLElement) {
+    super(/* useShadowDom=*/ true, undefined, element);
     this.registerRequiredCSS(editorWidgetStyles);
-    this.#metadataByCommand = metadataByCommand;
-    this.#typesByName = typesByName;
-    this.#enumsByName = enumsByName;
+    this.element.setAttribute('jslog', `${VisualLogging.pane('command-editor').track({resize: true})}`);
     this.contentElement.addEventListener('keydown', event => {
       if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
         this.#handleParameterInputKeydown(event);
@@ -172,8 +168,8 @@ export class JSONEditor extends Common.ObjectWrapper.eventMixin<EventTypes, type
     return this.#metadataByCommand;
   }
 
-  set metadataByCommand(metadataByCommand:
-                            Map<string, {parameters: Parameter[], description: string, replyArgs: string[]}>) {
+  set metadataByCommand(
+      metadataByCommand: Map<string, {parameters: Parameter[], description: string, replyArgs: string[]}>) {
     this.#metadataByCommand = metadataByCommand;
     this.requestUpdate();
   }
@@ -242,7 +238,6 @@ export class JSONEditor extends Common.ObjectWrapper.eventMixin<EventTypes, type
         this.contentElement, event => this.#handlePopoverDescriptions(event), 'protocol-monitor.hint');
     this.#hintPopoverHelper.setDisableOnClick(true);
     this.#hintPopoverHelper.setTimeout(300);
-    this.#hintPopoverHelper.setHasPadding(true);
     const targetManager = SDK.TargetManager.TargetManager.instance();
     targetManager.addEventListener(
         SDK.TargetManager.Events.AVAILABLE_TARGETS_CHANGED, this.#handleAvailableTargetsChanged, this);
@@ -394,17 +389,17 @@ export class JSONEditor extends Common.ObjectWrapper.eventMixin<EventTypes, type
   #convertObjectParameter(key: string, value: unknown, schema?: Parameter, initialSchema?: Parameter[]): Parameter {
     const description = schema?.description ?? '';
     if (typeof value !== 'object' || value === null) {
-      throw Error('The value is not an object');
+      throw new Error('The value is not an object');
     }
     const typeRef = schema?.typeRef;
     if (!typeRef) {
-      throw Error('Every object parameters should have a type ref');
+      throw new Error('Every object parameters should have a type ref');
     }
 
     const nestedType = typeRef === DUMMY_DATA ? initialSchema : this.typesByName.get(typeRef);
 
     if (!nestedType) {
-      throw Error('No nested type for keys were found');
+      throw new Error('No nested type for keys were found');
     }
     const objectValues = [];
     for (const objectKey of Object.keys(value)) {
@@ -428,11 +423,11 @@ export class JSONEditor extends Common.ObjectWrapper.eventMixin<EventTypes, type
     const optional = schema?.optional ?? true;
     const typeRef = schema?.typeRef;
     if (!typeRef) {
-      throw Error('Every array parameters should have a type ref');
+      throw new Error('Every array parameters should have a type ref');
     }
 
     if (!Array.isArray(value)) {
-      throw Error('The value is not an array');
+      throw new Error('The value is not an array');
     }
     const nestedType = this.#isTypePrimitive(typeRef) ? undefined : {
       optional: true,
@@ -460,7 +455,7 @@ export class JSONEditor extends Common.ObjectWrapper.eventMixin<EventTypes, type
     };
   }
 
-  #handlePopoverDescriptions(event: MouseEvent):
+  #handlePopoverDescriptions(event: MouseEvent|KeyboardEvent):
       {box: AnchorBox, show: (popover: UI.GlassPane.GlassPane) => Promise<boolean>}|null {
     const hintElement = event.composedPath()[0] as HTMLElement;
     const elementData = this.#getDescriptionAndTypeForElement(hintElement);
@@ -472,7 +467,7 @@ export class JSONEditor extends Common.ObjectWrapper.eventMixin<EventTypes, type
     const replyArgs = elementData.replyArgs;
     let popupContent = '';
     // replyArgs and type cannot get into conflict because replyArgs is attached to a command and type to a parameter
-    if (replyArgs) {
+    if (replyArgs && replyArgs.length > 0) {
       popupContent = tail + `Returns: ${replyArgs}<br>`;
     } else if (type) {
       popupContent = tail + `<br>Type: ${type}<br>`;
@@ -484,7 +479,7 @@ export class JSONEditor extends Common.ObjectWrapper.eventMixin<EventTypes, type
       box: hintElement.boxInWindow(),
       show: async (popover: UI.GlassPane.GlassPane) => {
         const popupElement = new ElementsComponents.CSSHintDetailsView.CSSHintDetailsView({
-          getMessage: () => `<code><span>${head}</span></code>`,
+          getMessage: () => `<span>${head}</span>`,
           getPossibleFixMessage: () => popupContent,
           getLearnMoreLink: () =>
               `https://chromedevtools.github.io/devtools-protocol/tot/${this.command.split('.')[0]}/`,
@@ -694,13 +689,6 @@ export class JSONEditor extends Common.ObjectWrapper.eventMixin<EventTypes, type
     this.populateParametersForCommandWithDefaultValues();
   };
 
-  #computeTargetLabel(target: SDK.Target.Target): string|undefined {
-    if (!target) {
-      return undefined;
-    }
-    return `${target.name()} (${target.inspectedURL()})`;
-  }
-
   #isTypePrimitive(type: string): boolean {
     if (type === ParameterType.STRING || type === ParameterType.BOOLEAN || type === ParameterType.NUMBER) {
       return true;
@@ -751,7 +739,7 @@ export class JSONEditor extends Common.ObjectWrapper.eventMixin<EventTypes, type
       case ParameterType.ARRAY: {
         const typeRef = parameter.typeRef;
         if (!typeRef) {
-          throw Error('Every array parameter must have a typeRef');
+          throw new Error('Every array parameter must have a typeRef');
         }
 
         const nestedType = this.typesByName.get(typeRef) ?? [];
@@ -832,7 +820,7 @@ export class JSONEditor extends Common.ObjectWrapper.eventMixin<EventTypes, type
   }
 
   #handleClearParameter(parameter: Parameter, isParentArray?: boolean): void {
-    if (!parameter || parameter.value === undefined) {
+    if (parameter?.value === undefined) {
       return;
     }
 
@@ -880,41 +868,29 @@ export class JSONEditor extends Common.ObjectWrapper.eventMixin<EventTypes, type
   }
 
   #renderTargetSelectorRow(): Lit.TemplateResult|undefined {
-    const target = this.targets.find(el => el.id() === this.targetId);
-    const targetLabel = target ? this.#computeTargetLabel(target) : this.#computeTargetLabel(this.targets[0]);
-
     // clang-format off
     return html`
     <div class="row attribute padded">
       <div>target<span class="separator">:</span></div>
-      <devtools-select-menu
-            class="target-select-menu"
-            @selectmenuselected=${this.#onTargetSelected}
-            .showDivider=${true}
-            .showArrow=${true}
-            .sideButton=${false}
-            .showSelectedItem=${true}
-            .position=${Dialogs.Dialog.DialogVerticalPosition.BOTTOM}
-            .buttonTitle=${targetLabel || ''}
-            jslog=${VisualLogging.dropDown('targets').track({click: true})}
-          >
-          ${repeat(this.targets, target => {
-          return html`
-                <devtools-menu-item
-                  .value=${target.id()}>
-                    ${this.#computeTargetLabel(target)}
-                </devtools-menu-item>
-              `;
-        },
-    )}
-          </devtools-select-menu>
+      <select class="target-selector"
+              title=${i18nString(UIStrings.selectTarget)}
+              jslog=${VisualLogging.dropDown('target-selector').track({change: true})}
+              @change=${this.#onTargetSelected}>
+        ${this.targets.map(target => html`
+          <option jslog=${VisualLogging.item('target').track({click: true})}
+                  value=${target.id()} ?selected=${target.id() === this.targetId}>
+            ${target.name()} (${target.inspectedURL()})
+          </option>`)}
+      </select>
     </div>
   `;
     // clang-format on
   }
 
-  #onTargetSelected(event: Menus.SelectMenu.SelectMenuItemSelectedEvent): void {
-    this.targetId = event.itemValue as string;
+  #onTargetSelected(event: Event): void {
+    if (event.target instanceof HTMLSelectElement) {
+      this.targetId = event.target.value;
+    }
     this.requestUpdate();
   }
 
@@ -953,8 +929,7 @@ export class JSONEditor extends Common.ObjectWrapper.eventMixin<EventTypes, type
   #renderWarningIcon(): Lit.TemplateResult|undefined {
     return html`<devtools-icon
     .data=${{
-    iconName:
-      'warning-filled', color: 'var(--icon-warning)', width: '14px', height: '14px',
+      iconName: 'warning-filled', color: 'var(--icon-warning)', width: '14px', height: '14px',
     }
     }
     class=${classMap({

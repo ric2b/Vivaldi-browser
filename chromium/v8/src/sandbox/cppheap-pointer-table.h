@@ -10,7 +10,6 @@
 #include "src/base/atomicops.h"
 #include "src/base/bounds.h"
 #include "src/base/memory.h"
-#include "src/base/platform/mutex.h"
 #include "src/common/globals.h"
 #include "src/sandbox/compactible-external-entity-table.h"
 #include "src/sandbox/tagged-payload.h"
@@ -219,9 +218,6 @@ class V8_EXPORT_PRIVATE CppHeapPointerTable
   static_assert(kMaxCppHeapPointers == kMaxCapacity);
 
  public:
-  // Size of an CppHeapPointerTable, for layout computation in IsolateData.
-  static int constexpr kSize = 2 * kSystemPointerSize;
-
   CppHeapPointerTable() = default;
   CppHeapPointerTable(const CppHeapPointerTable&) = delete;
   CppHeapPointerTable& operator=(const CppHeapPointerTable&) = delete;
@@ -284,8 +280,6 @@ class V8_EXPORT_PRIVATE CppHeapPointerTable
       uint32_t index, CppHeapPointerHandle* handle_location,
       uint32_t start_of_evacuation_area);
 };
-
-static_assert(sizeof(CppHeapPointerTable) == CppHeapPointerTable::kSize);
 
 }  // namespace internal
 }  // namespace v8

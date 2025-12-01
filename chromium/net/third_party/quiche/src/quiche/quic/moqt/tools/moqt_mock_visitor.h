@@ -26,6 +26,7 @@ namespace moqt::test {
 
 struct MockSessionCallbacks {
   testing::MockFunction<void()> session_established_callback;
+  testing::MockFunction<void(absl::string_view)> goaway_received_callback;
   testing::MockFunction<void(absl::string_view)> session_terminated_callback;
   testing::MockFunction<void()> session_deleted_callback;
   testing::MockFunction<std::optional<MoqtAnnounceErrorReason>(
@@ -45,6 +46,7 @@ struct MockSessionCallbacks {
   MoqtSessionCallbacks AsSessionCallbacks() {
     return MoqtSessionCallbacks{
         session_established_callback.AsStdFunction(),
+        goaway_received_callback.AsStdFunction(),
         session_terminated_callback.AsStdFunction(),
         session_deleted_callback.AsStdFunction(),
         incoming_announce_callback.AsStdFunction(),
@@ -98,6 +100,8 @@ class MockSubscribeRemoteTrackVisitor : public SubscribeRemoteTrack::Visitor {
               (const FullTrackName& full_track_name, FullSequence sequence,
                MoqtPriority publisher_priority, MoqtObjectStatus status,
                absl::string_view object, bool end_of_message),
+              (override));
+  MOCK_METHOD(void, OnSubscribeDone, (FullTrackName full_track_name),
               (override));
 };
 

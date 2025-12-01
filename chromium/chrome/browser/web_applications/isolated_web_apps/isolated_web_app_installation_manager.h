@@ -8,6 +8,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <variant>
 
 #include "base/files/scoped_temp_file.h"
 #include "base/functional/callback_forward.h"
@@ -42,11 +43,7 @@ class WebAppProvider;
 // On ChromeOS only, the command line will be parsed whenever a new manager is
 // started, which occurs on `Profile` initialization. This is done this way
 // because the browser does not go through the "normal" startup flow on
-// ChromeOS, and has different startup behaviors depending on whether or not Ash
-// or Lacros is used.
-//
-// TODO(cmfcmf): Revisit this behavior once using Ash instead of Lacros is no
-// longer possible.
+// ChromeOS.
 class IsolatedWebAppInstallationManager {
  public:
   using MaybeInstallIsolatedWebAppCommandSuccess =
@@ -118,7 +115,7 @@ class IsolatedWebAppInstallationManager {
                            NoInstallationWhenDevModePolicyDisabled);
 
   static IsolatedWebAppInstallSource CreateInstallSource(
-      absl::variant<base::FilePath, const base::ScopedTempFile*, url::Origin>
+      std::variant<base::FilePath, const base::ScopedTempFile*, url::Origin>
           source,
       InstallSurface surface);
 

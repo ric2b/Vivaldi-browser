@@ -314,8 +314,18 @@ class AutocompleteController : public AutocompleteProviderListener,
 
   // Sets the position of the omnibox when it's in steady state (unfocused).
   // Only used on iOS for logging purposes.
-  void SetSteadyStateOmniboxPosition(
+  virtual void SetSteadyStateOmniboxPosition(
       metrics::OmniboxEventProto::OmniboxPosition position);
+
+  // Vivaldi
+  // Look at vivaldi wiki to have more information about why
+  // some providers are disabled.
+
+#if !BUILDFLAG(IS_IOS) && !BUILDFLAG(IS_ANDROID)
+  bool VivaldiShouldRunProviderForDesktop(AutocompleteProvider* provider) const;
+#else
+  bool VivaldiShouldRunProviderForMobile(AutocompleteProvider* provider) const;
+#endif
 
  private:
   friend class FakeAutocompleteController;
@@ -326,6 +336,10 @@ class AutocompleteController : public AutocompleteProviderListener,
                            FilterMatchesForInstantKeywordWithBareAt);
   FRIEND_TEST_ALL_PREFIXES(AutocompleteControllerTest,
                            NoActionsAttachedToLensSearchboxMatches);
+  FRIEND_TEST_ALL_PREFIXES(AutocompleteControllerTest,
+                           ContextualSearchActionAttachedPageKeywordMode);
+  FRIEND_TEST_ALL_PREFIXES(AutocompleteControllerTest,
+                           ContextualSearchActionAttachedInZeroSuggest);
   FRIEND_TEST_ALL_PREFIXES(AutocompleteProviderTest,
                            RedundantKeywordsIgnoredInResult);
   FRIEND_TEST_ALL_PREFIXES(AutocompleteProviderTest, UpdateSearchboxStats);
@@ -372,9 +386,21 @@ class AutocompleteController : public AutocompleteProviderListener,
   FRIEND_TEST_ALL_PREFIXES(OmniboxPopupViewViewsTest,
                            AccessibleSelectionOnResultSelection);
   FRIEND_TEST_ALL_PREFIXES(OmniboxPopupViewViewsTest, AccessibleResultName);
+  FRIEND_TEST_ALL_PREFIXES(OmniboxEditModelPopupTest,
+                           GetMatchIconForFeaturedEnterpriseSearchAggregator);
   FRIEND_TEST_ALL_PREFIXES(
       OmniboxEditModelPopupTest,
-      GetMatchIconForFeaturedEnterpriseSearchAggregatorUsesDoesNotUseFavicon);
+      GetMatchIconForFeaturedEnterpriseSearchAggregatorContentSuggestion);
+  FRIEND_TEST_ALL_PREFIXES(
+      OmniboxEditModelPopupTest,
+      GetPopupRichSuggestionBitmapForMatchWithoutAssociatedKeyword);
+  FRIEND_TEST_ALL_PREFIXES(
+      OmniboxEditModelPopupTest,
+      GetPopupRichSuggestionBitmapForMatchWithAssociatedKeyword);
+  FRIEND_TEST_ALL_PREFIXES(OmniboxEditModelPopupTest,
+                           GetIconForExtensionWithImageURL);
+  FRIEND_TEST_ALL_PREFIXES(RealboxHandlerTest, RealboxUpdatesEditModelInput);
+  FRIEND_TEST_ALL_PREFIXES(OmniboxViewPopupTest, GetIcon_IconUrl);
 
   // A minimal representation of the previous `AutocompleteResult`. Used by
   // `UpdateResult()`'s helper methods.
@@ -439,6 +465,10 @@ class AutocompleteController : public AutocompleteProviderListener,
   // For each AutocompleteMatch in `result`, updates the searchbox stats iff the
   // provider's TemplateURL supports it.
   void UpdateSearchboxStats(AutocompleteResult* result);
+
+  // For each AutocompleteMatch in `result`, updates the "shown in session" data
+  // that's needed in order to ensure proper client-side metrics logging.
+  void UpdateShownInSession(AutocompleteResult* result);
 
   // Update the tail suggestions' `tail_suggest_common_prefix`.
   void UpdateTailSuggestPrefix(AutocompleteResult* result);

@@ -35,8 +35,8 @@ class ConvolutionThunk final : public Thunk {
  public:
   struct Options {
     bool multi_threaded = false;
-    bool use_acl = false;
   };
+
   static absl::StatusOr<std::unique_ptr<ConvolutionThunk>> Create(
       Info info, Options options, BufferAllocation::Slice input_buffer,
       const Shape& input_shape, BufferAllocation::Slice kernel_buffer,
@@ -67,11 +67,6 @@ class ConvolutionThunk final : public Thunk {
                    ConvolutionCanonicalDims convolution_canonical_dims,
                    ConvolutionDimensionNumbers dnums, Window window);
 
-  void HandleACLConvolution(const ExecuteParams& params,
-                            se::DeviceMemoryBase input,
-                            se::DeviceMemoryBase kernel,
-                            se::DeviceMemoryBase output);
-
   tsl::AsyncValueRef<Thunk::ExecuteEvent> HandleEigen2DConvolution(
       const ExecuteParams& params, se::DeviceMemoryBase input,
       se::DeviceMemoryBase kernel, se::DeviceMemoryBase output);
@@ -79,8 +74,6 @@ class ConvolutionThunk final : public Thunk {
   tsl::AsyncValueRef<Thunk::ExecuteEvent> HandleEigen3DConvolution(
       const ExecuteParams& params, se::DeviceMemoryBase input,
       se::DeviceMemoryBase kernel, se::DeviceMemoryBase output);
-
-  using Dims = ConvolutionCanonicalDims::Dims;
 
   Options options_;
   ConvolutionSlices convolution_slices_;

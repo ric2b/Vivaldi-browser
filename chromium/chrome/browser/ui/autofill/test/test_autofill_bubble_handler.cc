@@ -4,7 +4,7 @@
 
 #include "chrome/browser/ui/autofill/test/test_autofill_bubble_handler.h"
 
-#include "chrome/browser/ui/autofill/autofill_ai/save_autofill_ai_data_controller.h"
+#include "chrome/browser/ui/autofill/autofill_ai/save_or_update_autofill_ai_data_controller.h"
 #include "chrome/browser/ui/autofill/payments/save_iban_ui.h"
 #include "chrome/browser/ui/autofill/save_address_bubble_controller.h"
 #include "chrome/browser/ui/autofill/update_address_bubble_controller.h"
@@ -34,16 +34,6 @@ AutofillBubbleBase* TestAutofillBubbleHandler::ShowIbanBubble(
     iban_bubble_view_ = std::make_unique<TestAutofillBubble>();
   }
   return iban_bubble_view_.get();
-}
-
-AutofillBubbleBase* TestAutofillBubbleHandler::ShowLocalCardMigrationBubble(
-    content::WebContents* web_contents,
-    LocalCardMigrationBubbleController* controller,
-    bool is_user_gesture) {
-  if (!local_card_migration_bubble_view_) {
-    local_card_migration_bubble_view_ = std::make_unique<TestAutofillBubble>();
-  }
-  return local_card_migration_bubble_view_.get();
 }
 
 AutofillBubbleBase* TestAutofillBubbleHandler::ShowOfferNotificationBubble(
@@ -79,7 +69,7 @@ AutofillBubbleBase* TestAutofillBubbleHandler::ShowAddressSignInPromo(
 
 AutofillBubbleBase* TestAutofillBubbleHandler::ShowSaveAutofillAiDataBubble(
     content::WebContents* contents,
-    autofill_ai::SaveAutofillAiDataController* controller) {
+    autofill_ai::SaveOrUpdateAutofillAiDataController* controller) {
   if (!save_autofill_ai_data_bubble_view_) {
     save_autofill_ai_data_bubble_view_ = std::make_unique<TestAutofillBubble>();
   }

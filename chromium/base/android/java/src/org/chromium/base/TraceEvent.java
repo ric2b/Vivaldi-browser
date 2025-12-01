@@ -442,29 +442,46 @@ public class TraceEvent implements AutoCloseable {
     }
 
     /**
-     * Records 'WebView.Startup.CreationTime.Stage2.ProviderInit.Warm' and
-     * 'WebView.Startup.CreationTime.Stage2.ProviderInit.Cold' events depending on the value of
-     * `isColdStartup` with the 'android_webview.timeline' category starting at `startTimeMs` with
-     * the duration of `durationMs`.
+     * Records 'WebView.Startup.CreationTime.FirstInstanceWithGlobalStartup' or
+     * 'WebView.Startup.CreationTime.FirstInstanceWithoutGlobalStartup' events depending on the
+     * value of `includedGlobalStartup` with the 'android_webview.timeline' category starting at
+     * `startTimeMs` with the duration of `durationMs`.
      */
-    public static void webViewStartupStage2(
-            long startTimeMs, long durationMs, boolean isColdStartup) {
+    public static void webViewStartupFirstInstance(
+            long startTimeMs, long durationMs, boolean includedGlobalStartup) {
         if (sEnabled) {
-            TraceEventJni.get().webViewStartupStage2(startTimeMs, durationMs, isColdStartup);
+            TraceEventJni.get()
+                    .webViewStartupFirstInstance(startTimeMs, durationMs, includedGlobalStartup);
+        }
+    }
+
+    /**
+     * Records a 'WebView.Startup.CreationTime.NotFirstInstance' event with the
+     * 'android_webview.timeline' category starting at `startTimeMs` with the duration of
+     * `durationMs`.
+     */
+    public static void webViewStartupNotFirstInstance(long startTimeMs, long durationMs) {
+        if (sEnabled) {
+            TraceEventJni.get().webViewStartupNotFirstInstance(startTimeMs, durationMs);
         }
     }
 
     /**
      * Records a 'WebView.Startup.CreationTime.StartChromiumLocked' event with the
      * 'android_webview.timeline' category starting at `startTimeMs` with the duration of
-     * `durationMs`. `callSite` and `fromUIThread` are set as the arguments for the event.
+     * `durationMs`. `startCallSite`, `finishCallSite` and `startupMode are set as the arguments for
+     * the event.
      */
     public static void webViewStartupStartChromiumLocked(
-            long startTimeMs, long durationMs, int callSite, boolean fromUIThread) {
+            long startTimeMs,
+            long durationMs,
+            int startCallSite,
+            int finishCallSite,
+            int startupMode) {
         if (sEnabled) {
             TraceEventJni.get()
                     .webViewStartupStartChromiumLocked(
-                            startTimeMs, durationMs, callSite, fromUIThread);
+                            startTimeMs, durationMs, startCallSite, finishCallSite, startupMode);
         }
     }
 
@@ -672,10 +689,17 @@ public class TraceEvent implements AutoCloseable {
 
         void webViewStartupStage1(long startTimeMs, long durationMs);
 
-        void webViewStartupStage2(long startTimeMs, long durationMs, boolean isColdStartup);
+        void webViewStartupFirstInstance(
+                long startTimeMs, long durationMs, boolean includedGlobalStartup);
+
+        void webViewStartupNotFirstInstance(long startTimeMs, long durationMs);
 
         void webViewStartupStartChromiumLocked(
-                long startTimeMs, long durationMs, int callSite, boolean fromUIThread);
+                long startTimeMs,
+                long durationMs,
+                int startCallSite,
+                int finishCallSite,
+                int startupMode);
 
         void startupActivityStart(long activityId, long startTimeMs);
 

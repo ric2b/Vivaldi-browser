@@ -11,7 +11,6 @@ import android.database.Cursor;
 import android.net.Uri;
 
 import androidx.annotation.IntDef;
-import androidx.annotation.NonNull;
 import androidx.annotation.VisibleForTesting;
 
 import org.chromium.base.ContextUtils;
@@ -20,6 +19,8 @@ import org.chromium.base.ResettersForTesting;
 import org.chromium.base.StrictModeContext;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.build.BuildConfig;
+import org.chromium.build.annotations.NullMarked;
+import org.chromium.build.annotations.Nullable;
 
 import java.util.Arrays;
 import java.util.HashMap;
@@ -28,6 +29,7 @@ import java.util.Map;
 import java.util.Set;
 
 /** A browser-process class for querying SafeMode state and executing SafeModeActions. */
+@NullMarked
 public class SafeModeController {
     public static final String SAFE_MODE_STATE_COMPONENT =
             "org.chromium.android_webview.SafeModeState";
@@ -37,11 +39,11 @@ public class SafeModeController {
 
     private static final String TAG = "WebViewSafeMode";
 
-    private SafeModeAction[] mRegisteredActions;
+    private SafeModeAction @Nullable [] mRegisteredActions;
 
     private SafeModeController() {}
 
-    private static SafeModeController sInstanceForTests;
+    private static @Nullable SafeModeController sInstanceForTests;
 
     private static class LazyHolder {
         static final SafeModeController INSTANCE = new SafeModeController();
@@ -75,7 +77,8 @@ public class SafeModeController {
         SafeModeActionName.DISABLE_ORIGIN_TRIALS,
         SafeModeActionName.DISABLE_SAFE_BROWSING,
         SafeModeActionName.RESET_COMPONENT_UPDATER,
-        SafeModeActionName.DISABLE_SUPERVISION_CHECKS
+        SafeModeActionName.DISABLE_SUPERVISION_CHECKS,
+        SafeModeActionName.DISABLE_STARTUP_TASKS_LOGIC
     })
     private static @interface SafeModeActionName {
         int DELETE_VARIATIONS_SEED = 0;
@@ -87,7 +90,8 @@ public class SafeModeController {
         int DISABLE_SAFE_BROWSING = 6;
         int RESET_COMPONENT_UPDATER = 7;
         int DISABLE_SUPERVISION_CHECKS = 8;
-        int COUNT = 9;
+        int DISABLE_STARTUP_TASKS_LOGIC = 9;
+        int COUNT = 10;
     }
 
     // Maps the SafeModeAction ID to its histogram enum
@@ -114,6 +118,9 @@ public class SafeModeController {
         map.put(
                 SafeModeActionIds.DISABLE_SUPERVISION_CHECKS,
                 SafeModeActionName.DISABLE_SUPERVISION_CHECKS);
+        map.put(
+                SafeModeActionIds.DISABLE_STARTUP_TASKS_LOGIC,
+                SafeModeActionName.DISABLE_STARTUP_TASKS_LOGIC);
         return map;
     }
 
@@ -142,7 +149,7 @@ public class SafeModeController {
      * @throws IllegalStateException if actions have already been registered.
      * @throws IllegalArgumentException if there are any duplicates.
      */
-    public void registerActions(@NonNull SafeModeAction[] actions) {
+    public void registerActions(SafeModeAction[] actions) {
         if (mRegisteredActions != null) {
             throw new IllegalStateException("Already registered a list of actions in this process");
         }
@@ -271,7 +278,7 @@ public class SafeModeController {
      *
      * @return A copy of the list of registered {@link SafeModeAction} actions.
      */
-    public SafeModeAction[] getRegisteredActions() {
+    public SafeModeAction @Nullable [] getRegisteredActions() {
         if (mRegisteredActions == null) {
             return null;
         }

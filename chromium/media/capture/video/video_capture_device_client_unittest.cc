@@ -12,12 +12,12 @@
 #include "base/functional/bind.h"
 #include "base/location.h"
 #include "base/memory/raw_ptr.h"
+#include "base/memory/scoped_refptr.h"
 #include "base/run_loop.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/test/task_environment.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
-#include "build/chromeos_buildflags.h"
 #include "components/viz/common/resources/shared_image_format.h"
 #include "components/viz/test/test_context_provider.h"
 #include "media/base/limits.h"
@@ -38,9 +38,9 @@
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
 #include "media/capture/video/chromeos/video_capture_jpeg_decoder.h"
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+#endif  // BUILDFLAG(IS_CHROMEOS)
 
 using ::testing::_;
 using ::testing::AtLeast;
@@ -62,11 +62,11 @@ namespace {
 constexpr auto si_usage = gpu::SHARED_IMAGE_USAGE_CPU_WRITE_ONLY |
                           gpu::SHARED_IMAGE_USAGE_DISPLAY_READ;
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
 std::unique_ptr<VideoCaptureJpegDecoder> ReturnNullPtrAsJpecDecoder() {
   return nullptr;
 }
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+#endif  // BUILDFLAG(IS_CHROMEOS)
 
 class FakeVideoEffectsManagerImpl
     : public media::mojom::ReadonlyVideoEffectsManager {
@@ -144,17 +144,15 @@ testing::Matcher<std::optional<T>> CreateOptionalMatcher(
 class VideoCaptureDeviceClientTest : public ::testing::Test {
  public:
   void InitWithSharedMemoryBufferPool() {
-    scoped_refptr<VideoCaptureBufferPoolImpl> buffer_pool(
-        new VideoCaptureBufferPoolImpl(VideoCaptureBufferType::kSharedMemory,
-                                       2));
+    auto buffer_pool = base::MakeRefCounted<VideoCaptureBufferPoolImpl>(
+        VideoCaptureBufferType::kSharedMemory, 2);
     Init(std::move(buffer_pool));
   }
 
   void InitWithGmbBufferPool() {
-    scoped_refptr<VideoCaptureBufferPoolImpl> buffer_pool(
-        new VideoCaptureBufferPoolImpl(
-            VideoCaptureBufferType::kSharedMemory, 2,
-            std::make_unique<FakeVideoCaptureBufferTrackerFactory>()));
+    auto buffer_pool = base::MakeRefCounted<VideoCaptureBufferPoolImpl>(
+        VideoCaptureBufferType::kSharedMemory, 2,
+        std::make_unique<FakeVideoCaptureBufferTrackerFactory>());
     Init(std::move(buffer_pool));
   }
 
@@ -194,7 +192,7 @@ class VideoCaptureDeviceClientTest : public ::testing::Test {
     receiver_ = controller.get();
     test_sii_ = base::MakeRefCounted<gpu::TestSharedImageInterface>();
     test_sii_->UseTestGMBInSharedImageCreationWithBufferUsage();
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
     device_client_ = std::make_unique<VideoCaptureDeviceClient>(
         std::move(controller), buffer_pool,
         base::BindRepeating(&ReturnNullPtrAsJpecDecoder));
@@ -219,7 +217,7 @@ class VideoCaptureDeviceClientTest : public ::testing::Test {
         std::move(controller), buffer_pool,
         media::VideoEffectsContext(std::move(processor_remote),
                                    std::move(readonly_effects_manager_remote)));
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+#endif  // BUILDFLAG(IS_CHROMEOS)
   }
 };
 

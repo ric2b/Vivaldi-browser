@@ -33,16 +33,16 @@
 #include "base/dcheck_is_on.h"
 #include "cc/paint/paint_flags.h"
 #include "third_party/blink/renderer/platform/fonts/font.h"
+#include "third_party/blink/renderer/platform/geometry/dash_array.h"
 #include "third_party/blink/renderer/platform/graphics/dark_mode_filter.h"
 #include "third_party/blink/renderer/platform/graphics/dark_mode_settings.h"
-#include "third_party/blink/renderer/platform/graphics/dash_array.h"
 #include "third_party/blink/renderer/platform/graphics/dom_node_id.h"
 #include "third_party/blink/renderer/platform/graphics/graphics_context_state.h"
+#include "third_party/blink/renderer/platform/graphics/image.h"
 #include "third_party/blink/renderer/platform/graphics/image_orientation.h"
 #include "third_party/blink/renderer/platform/graphics/paint/paint_filter.h"
 #include "third_party/blink/renderer/platform/graphics/paint/paint_record.h"
 #include "third_party/blink/renderer/platform/graphics/paint/paint_recorder.h"
-#include "third_party/blink/renderer/platform/graphics/skia/skia_utils.h"
 #include "third_party/blink/renderer/platform/platform_export.h"
 #include "third_party/blink/renderer/platform/wtf/allocator/allocator.h"
 #include "third_party/blink/renderer/platform/wtf/forward.h"
@@ -65,6 +65,7 @@ class PaintPreviewTracker;
 
 namespace blink {
 
+class ContouredRect;
 class FloatRoundedRect;
 class KURL;
 class PaintController;
@@ -309,6 +310,9 @@ class PLATFORM_EXPORT GraphicsContext {
   void FillRoundedRect(const FloatRoundedRect&,
                        const Color&,
                        const AutoDarkMode& auto_dark_mode);
+  void FillContouredRect(const ContouredRect&,
+                         const Color&,
+                         const AutoDarkMode& auto_dark_mode);
   void FillDRRect(const FloatRoundedRect&,
                   const FloatRoundedRect&,
                   const Color&,
@@ -372,16 +376,16 @@ class PLATFORM_EXPORT GraphicsContext {
 
   void Clip(const gfx::Rect& rect) { ClipRect(gfx::RectToSkRect(rect)); }
   void Clip(const gfx::RectF& rect) { ClipRect(gfx::RectFToSkRect(rect)); }
-  void ClipRoundedRect(const FloatRoundedRect&,
-                       SkClipOp = SkClipOp::kIntersect,
-                       AntiAliasingMode = kAntiAliased);
+  void ClipContouredRect(const ContouredRect&,
+                         SkClipOp = SkClipOp::kIntersect,
+                         AntiAliasingMode = kAntiAliased);
   void ClipOut(const gfx::Rect& rect) {
     ClipRect(gfx::RectToSkRect(rect), kNotAntiAliased, SkClipOp::kDifference);
   }
   void ClipOut(const gfx::RectF& rect) {
     ClipRect(gfx::RectFToSkRect(rect), kNotAntiAliased, SkClipOp::kDifference);
   }
-  void ClipOutRoundedRect(const FloatRoundedRect&);
+  void ClipOutContouredRect(const ContouredRect&);
   void ClipPath(const SkPath&,
                 AntiAliasingMode = kNotAntiAliased,
                 SkClipOp = SkClipOp::kIntersect);
@@ -401,11 +405,11 @@ class PLATFORM_EXPORT GraphicsContext {
                 DOMNodeId,
                 const AutoDarkMode& auto_dark_mode);
 
-  void DrawEmphasisMarks(const Font&,
-                         const TextRun&,
-                         const AtomicString& mark,
-                         const gfx::PointF&,
-                         const AutoDarkMode& auto_dark_mode);
+  void DeprecatedDrawEmphasisMarks(const Font&,
+                                   const TextRun&,
+                                   const AtomicString& mark,
+                                   const gfx::PointF&,
+                                   const AutoDarkMode& auto_dark_mode);
   void DrawEmphasisMarks(const Font&,
                          const TextFragmentPaintInfo&,
                          const AtomicString& mark,
@@ -511,13 +515,6 @@ class PLATFORM_EXPORT GraphicsContext {
     RealizePaintSave();
     return paint_state_;
   }
-
-  template <typename TextPaintInfo>
-  void DrawEmphasisMarksInternal(const Font&,
-                                 const TextPaintInfo&,
-                                 const AtomicString& mark,
-                                 const gfx::PointF&,
-                                 const AutoDarkMode& auto_dark_mode);
 
   template <typename DrawTextFunc>
   void DrawTextPasses(const DrawTextFunc&);

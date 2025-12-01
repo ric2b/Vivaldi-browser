@@ -17,6 +17,7 @@
    "disallowed_launch_protocols": [  ],
    "display_mode": "",
    "display_override": [  ],
+   "diy_app_icons_masked_on_mac": false,
    "downloaded_icon_sizes": {
       "ANY": [  ],
       "MASKABLE": [  ],
@@ -63,6 +64,7 @@
    },
    "tab_strip": null,
    "theme_color": "none",
+   "update_token": null,
    "user_link_capturing_preference": "0",
    "was_shortcut_app": false,
    "window_controls_overlay_enabled": false

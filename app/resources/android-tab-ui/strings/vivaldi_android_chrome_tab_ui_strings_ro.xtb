@@ -1,9 +1,17 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="ro">
+<translation id="2277224997687551299">Editare nume grup</translation>
+<translation id="2330212241471632770">{TABS_COUNT, plural,
+          =1 {Filă de semne de carte}
+          other {File de semne de carte}
+        }</translation>
 <translation id="2947471979790858922">Activitatea dumneavoastră în aceste file private va fi eliminată de pe acest dispozitiv</translation>
 <translation id="3870643923290313246">{INCOGNITO_TABS_COUNT, plural,
         =1 {Puteți găsi filele dumneavoastră închise în Filele Recente din meniul principal Vivaldi. Fila dumneavoastră privată nu va fi disponibilă.}
         other {Puteți găsi filele dumneavoastră închise în Filele Recente din meniul principal Vivaldi. Cele # file private nu vor fi disponibile.}}</translation>
+<translation id="4460014764210899310">Degrupează</translation>
 <translation id="4871187110787939393">Închideți toate filele private?</translation>
+<translation id="5494920125229734069">Selectare totală</translation>
+<translation id="6744956528665271406">Editare culoare grup</translation>
 </translationbundle>

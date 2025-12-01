@@ -44,10 +44,10 @@ export {AboutPageBrowserProxy, AboutPageBrowserProxyImpl, UpdateStatus} from './
 export {PromoteUpdaterStatus} from './about_page/about_page_browser_proxy.js';
 // </if>
 // clang-format on
-
+export {SettingsA11yPageElement, ToastAlertLevel} from './a11y_page/a11y_page.js';
 export {SettingsAiInfoCardElement} from './ai_page/ai_info_card.js';
 export {SettingsAiLoggingInfoBullet} from './ai_page/ai_logging_info_bullet.js';
-export {SettingsAiPageElement} from './ai_page/ai_page.js';
+//export {SettingsAiPageElement} from './ai_page/ai_page.js';
 export {ModelExecutionEnterprisePolicyValue} from './ai_page/constants.js';
 export {AppearanceBrowserProxy, AppearanceBrowserProxyImpl} from './appearance_page/appearance_browser_proxy.js';
 export {SettingsAppearancePageElement, SystemTheme} from './appearance_page/appearance_page.js';
@@ -64,7 +64,6 @@ export {SettingsDefaultBrowserPageElement} from './default_browser_page/default_
 // </if>
 // <if expr="enable_glic">
 export {GlicBrowserProxy, GlicBrowserProxyImpl} from './glic_page/glic_browser_proxy.js';
-export {SettingsGlicDataPageElement, SettingsGlicDataPageFeaturePrefName} from './glic_page/glic_data_page.js';
 export {SettingsGlicPageElement, SettingsGlicPageFeaturePrefName} from './glic_page/glic_page.js';
 // </if>
 export {HatsBrowserProxy, HatsBrowserProxyImpl, SafeBrowsingSetting, SecurityPageInteraction, TrustSafetyInteraction} from './hats_browser_proxy.js';

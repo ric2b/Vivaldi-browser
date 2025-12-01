@@ -14,6 +14,7 @@
 #include "components/prefs/pref_change_registrar.h"
 #include "components/search_engines/reconciling_template_url_data_holder.h"
 #include "components/search_engines/search_engine_choice/search_engine_choice_service.h"
+#include "components/search_engines/template_url_prepopulate_data_resolver.h"
 
 namespace search_engines {
 class SearchEngineChoiceService;
@@ -92,6 +93,7 @@ class DefaultSearchManager
   static const char kDisabledByPolicy[];
   static const char kCreatedFromPlayAPI[];
   static const char kFeaturedByPolicy[];
+  static const char kRequireShortcut[];
   static const char kPreconnectToSearchUrl[];
   static const char kPrefetchLikelyNavigations[];
   static const char kIsActive[];
@@ -125,11 +127,13 @@ class DefaultSearchManager
   DefaultSearchManager(
       PrefService* pref_service,
       search_engines::SearchEngineChoiceService* search_engine_choice_service,
+      TemplateURLPrepopulateData::Resolver& prepopulate_data_resolver,
       const ObserverCallback& change_observer);
 
   DefaultSearchManager(
       PrefService* pref_service,
       search_engines::SearchEngineChoiceService* search_engine_choice_service,
+      TemplateURLPrepopulateData::Resolver& prepopulate_data_resolver,
       const char* vivaldi_default_pref,
       const ObserverCallback& change_observer);
 
@@ -215,6 +219,8 @@ class DefaultSearchManager
   base::ScopedObservation<search_engines::SearchEngineChoiceService,
                           search_engines::SearchEngineChoiceService::Observer>
       search_engine_choice_service_observation_{this};
+
+  raw_ref<TemplateURLPrepopulateData::Resolver> prepopulate_data_resolver_;
 
   // Default search engine provided by pre-populated data or by the
   // |kSearchProviderOverrides| pref. This will be used when no other default

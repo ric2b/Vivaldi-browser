@@ -285,7 +285,9 @@ INSTANTIATE_TEST_SUITE_P(
                         EwalletFlowExitedReason::kActionTokenNotAvailable,
                         EwalletFlowExitedReason::kUserLoggedOut,
                         EwalletFlowExitedReason::kFopSelectorClosedNotByUser,
-                        EwalletFlowExitedReason::kFopSelectorClosedByUser),
+                        EwalletFlowExitedReason::kFopSelectorClosedByUser,
+                        EwalletFlowExitedReason::kFoldableDevice,
+                        EwalletFlowExitedReason::kMaxStrikes),
         testing::Values(PaymentLinkValidator::Scheme::kDuitNow,
                         PaymentLinkValidator::Scheme::kShopeePay,
                         PaymentLinkValidator::Scheme::kTngd)));

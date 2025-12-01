@@ -5,6 +5,9 @@
 #ifndef V8_OBJECTS_TRANSITIONS_INL_H_
 #define V8_OBJECTS_TRANSITIONS_INL_H_
 
+#include "src/objects/transitions.h"
+// Include the non-inl header before the rest of the headers.
+
 #include <ranges>
 #include <type_traits>
 
@@ -12,7 +15,6 @@
 #include "src/objects/maybe-object-inl.h"
 #include "src/objects/slots.h"
 #include "src/objects/smi.h"
-#include "src/objects/transitions.h"
 
 // Has to be the last include (doesn't have include guards):
 #include "src/objects/object-macros.h"
@@ -542,8 +544,8 @@ void TransitionsAccessor::ForEachTransitionWithKey(
       return;
     }
     case kFullTransitionArray: {
-      base::SpinningMutexGuardIf scope(isolate_->full_transition_array_access(),
-                                       concurrent_access_);
+      base::MutexGuardIf scope(isolate_->full_transition_array_access(),
+                               concurrent_access_);
       Tagged<TransitionArray> transition_array = transitions();
       int num_transitions = transition_array->number_of_transitions();
       ReadOnlyRoots roots(isolate_);

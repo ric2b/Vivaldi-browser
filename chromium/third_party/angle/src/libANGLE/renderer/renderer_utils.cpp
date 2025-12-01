@@ -24,8 +24,8 @@
 #include "libANGLE/renderer/Format.h"
 #include "platform/Feature.h"
 
-#include <string.h>
 #include <cctype>
+#include <cstring>
 
 namespace angle
 {
@@ -74,7 +74,7 @@ void FeatureInfo::applyOverride(bool state)
 // FeatureSetBase implementation
 void FeatureSetBase::reset()
 {
-    for (auto iter : members)
+    for (const auto &iter : members)
     {
         FeatureInfo *feature = iter.second;
         feature->enabled     = false;
@@ -82,12 +82,15 @@ void FeatureSetBase::reset()
     }
 }
 
-void FeatureSetBase::overrideFeatures(const std::vector<std::string> &featureNames, bool enabled)
+std::string FeatureSetBase::overrideFeatures(const std::vector<std::string> &featureNames,
+                                             bool enabled)
 {
+    std::stringstream featureStream;
+
     for (const std::string &name : featureNames)
     {
         const bool hasWildcard = name.back() == '*';
-        for (auto iter : members)
+        for (const auto &iter : members)
         {
             const std::string &featureName = iter.first;
             FeatureInfo *feature           = iter.second;
@@ -99,6 +102,12 @@ void FeatureSetBase::overrideFeatures(const std::vector<std::string> &featureNam
 
             feature->applyOverride(enabled);
 
+            if (featureStream.str().empty())
+            {
+                featureStream << "Feature overrides: ";
+            }
+            featureStream << featureName << (enabled ? " enabled, " : " disabled, ");
+
             // If name has a wildcard, try to match it with all features.  Otherwise, bail on first
             // match, as names are unique.
             if (!hasWildcard)
@@ -107,13 +116,20 @@ void FeatureSetBase::overrideFeatures(const std::vector<std::string> &featureNam
             }
         }
     }
+
+    if (!featureStream.str().empty())
+    {
+        featureStream << std::endl;
+    }
+
+    return featureStream.str();
 }
 
 void FeatureSetBase::populateFeatureList(FeatureList *features) const
 {
-    for (FeatureMap::const_iterator it = members.begin(); it != members.end(); it++)
+    for (const auto &member : members)
     {
-        features->push_back(it->second);
+        features->push_back(member.second);
     }
 }
 }  // namespace angle
@@ -385,6 +401,7 @@ PackPixelsParams::PackPixelsParams()
     : destFormat(nullptr),
       outputPitch(0),
       packBuffer(nullptr),
+      reverseRowOrder(false),
       offset(0),
       rotation(SurfaceRotation::Identity)
 {}
@@ -692,10 +709,6 @@ void CopyImageCHROMIUM(const uint8_t *sourceData,
 }
 
 // IncompleteTextureSet implementation.
-IncompleteTextureSet::IncompleteTextureSet() {}
-
-IncompleteTextureSet::~IncompleteTextureSet() {}
-
 void IncompleteTextureSet::onDestroy(const gl::Context *context)
 {
     // Clear incomplete textures.
@@ -1326,7 +1339,8 @@ angle::Result GetVertexRangeInfo(const gl::Context *context,
     {
         gl::IndexRange indexRange;
         ANGLE_TRY(context->getState().getVertexArray()->getIndexRange(
-            context, indexTypeOrInvalid, vertexOrIndexCount, indices, &indexRange));
+            context, indexTypeOrInvalid, vertexOrIndexCount, indices,
+            context->getState().isPrimitiveRestartEnabled(), &indexRange));
         ANGLE_TRY(ComputeStartVertex(context->getImplementation(), indexRange, baseVertex,
                                      startVertexOut));
         *vertexCountOut = indexRange.vertexCount();
@@ -1367,37 +1381,13 @@ gl::Rectangle ClipRectToScissor(const gl::State &glState, const gl::Rectangle &r
     return clippedRect;
 }
 
-void LogFeatureStatus(const angle::FeatureSetBase &features,
-                      const std::vector<std::string> &featureNames,
-                      bool enabled)
-{
-    for (const std::string &name : featureNames)
-    {
-        const bool hasWildcard = name.back() == '*';
-        for (auto iter : features.getFeatures())
-        {
-            const std::string &featureName = iter.first;
-
-            if (!angle::FeatureNameMatch(featureName, name))
-            {
-                continue;
-            }
-
-            INFO() << "Feature: " << featureName << (enabled ? " enabled" : " disabled");
-
-            if (!hasWildcard)
-            {
-                break;
-            }
-        }
-    }
-}
-
 void ApplyFeatureOverrides(angle::FeatureSetBase *features,
                            const angle::FeatureOverrides &overrides)
 {
-    features->overrideFeatures(overrides.enabled, true);
-    features->overrideFeatures(overrides.disabled, false);
+    std::stringstream featureStream;
+
+    featureStream << features->overrideFeatures(overrides.enabled, true);
+    featureStream << features->overrideFeatures(overrides.disabled, false);
 
     // Override with environment as well.
     constexpr char kAngleFeatureOverridesEnabledEnvName[]  = "ANGLE_FEATURE_OVERRIDES_ENABLED";
@@ -1413,11 +1403,42 @@ void ApplyFeatureOverrides(angle::FeatureSetBase *features,
         angle::GetCachedStringsFromEnvironmentVarOrAndroidProperty(
             kAngleFeatureOverridesDisabledEnvName, kAngleFeatureOverridesDisabledPropertyName, ":");
 
-    features->overrideFeatures(overridesEnabled, true);
-    LogFeatureStatus(*features, overridesEnabled, true);
+    featureStream << features->overrideFeatures(overridesEnabled, true);
+    featureStream << features->overrideFeatures(overridesDisabled, false);
 
-    features->overrideFeatures(overridesDisabled, false);
-    LogFeatureStatus(*features, overridesDisabled, false);
+    if (!featureStream.str().empty())
+    {
+        INFO() << featureStream.str();
+    }
+}
+
+void StreamEmulatedLineLoopIndices(gl::DrawElementsType glIndexType,
+                                   GLsizei indexCount,
+                                   const uint8_t *srcPtr,
+                                   uint8_t *outPtr,
+                                   bool shouldConvertUint8)
+{
+    switch (glIndexType)
+    {
+        case gl::DrawElementsType::UnsignedByte:
+            if (shouldConvertUint8)
+            {
+                CopyLineLoopIndicesWithRestart<uint8_t, uint16_t>(indexCount, srcPtr, outPtr);
+            }
+            else
+            {
+                CopyLineLoopIndicesWithRestart<uint8_t, uint8_t>(indexCount, srcPtr, outPtr);
+            }
+            break;
+        case gl::DrawElementsType::UnsignedShort:
+            CopyLineLoopIndicesWithRestart<uint16_t, uint16_t>(indexCount, srcPtr, outPtr);
+            break;
+        case gl::DrawElementsType::UnsignedInt:
+            CopyLineLoopIndicesWithRestart<uint32_t, uint32_t>(indexCount, srcPtr, outPtr);
+            break;
+        default:
+            UNREACHABLE();
+    }
 }
 
 void GetSamplePosition(GLsizei sampleCount, size_t index, GLfloat *xy)

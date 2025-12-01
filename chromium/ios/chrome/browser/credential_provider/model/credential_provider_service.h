@@ -93,6 +93,9 @@ class CredentialProviderService
   // Syncs the credential store to disk.
   void SyncStore();
 
+  // Helper function for asynchronous portion of `SyncStore`.
+  void CompleteSync(NSArray<id<Credential>>* credentials);
+
   // Returns the primary account's gaia id.
   NSString* PrimaryAccountId() const;
 
@@ -176,6 +179,9 @@ class CredentialProviderService
   MemoryCredentialStore* GetCredentialStore(
       password_manager::PasswordStoreInterface* store) const;
 
+  // Returns whether multiple profiles are currently fully initialized.
+  bool IsUsingMultiProfile() const;
+
   // The pref service.
   const raw_ptr<PrefService> prefs_;
 
@@ -224,6 +230,10 @@ class CredentialProviderService
   // `AppGroupUserDefaultsCredentialProviderSavingPasskeysEnabled` documentation
   // for important caveats.
   BooleanPrefMember saving_passkeys_enabled_;
+
+  // The preference associated with
+  // password_manager::prefs::kAutomaticPasskeyUpgrades.
+  BooleanPrefMember automatic_passkey_upgrades_enabled_;
 
   // Weak pointer factory.
   base::WeakPtrFactory<CredentialProviderService> weak_ptr_factory_{this};

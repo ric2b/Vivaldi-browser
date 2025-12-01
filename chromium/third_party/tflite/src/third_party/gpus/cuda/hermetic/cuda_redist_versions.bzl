@@ -129,18 +129,26 @@ CUDNN_REDIST_JSON_DICT = {
         "https://developer.download.nvidia.com/compute/cudnn/redist/redistrib_9.7.0.json",
         "e715c1d028585d228c4678c2cdc5ad9a34fde54515a1c52aa60e36021a90dd90",
     ],
+    "9.7.1": [
+        "https://developer.download.nvidia.com/compute/cudnn/redist/redistrib_9.7.1.json",
+        "f9bc411a4908f0931e7323f89049e3a38453632c4ac5f4aa3220af69ddded9dc",
+    ],
+    "9.8.0": [
+        "https://developer.download.nvidia.com/compute/cudnn/redist/redistrib_9.8.0.json",
+        "a1599fa1f8dcb81235157be5de5ab7d3936e75dfc4e1e442d07970afad3c4843",
+    ],
 }
 
 CUDA_12_NCCL_WHEEL_DICT = {
     "x86_64-unknown-linux-gnu": {
-        "version": "2.23.4",
-        "url": "https://files.pythonhosted.org/packages/ed/1f/6482380ec8dcec4894e7503490fc536d846b0d59694acad9cf99f27d0e7d/nvidia_nccl_cu12-2.23.4-py3-none-manylinux2014_x86_64.whl",
-        "sha256": "b097258d9aab2fa9f686e33c6fe40ae57b27df60cedbd15d139701bb5509e0c1",
+        "version": "2.25.1",
+        "url": "https://files.pythonhosted.org/packages/11/0c/8c78b7603f4e685624a3ea944940f1e75f36d71bd6504330511f4a0e1557/nvidia_nccl_cu12-2.25.1-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl",
+        "sha256": "362aed5963fb9ea2ed2f264409baae30143498fd0e5c503aeaa1badd88cdc54a",
     },
     "aarch64-unknown-linux-gnu": {
-        "version": "2.23.4",
-        "url": "https://files.pythonhosted.org/packages/c8/3a/0112397396dec37ffc8edd7836d48261b4d14ca60ec8ed7bc857cce1d916/nvidia_nccl_cu12-2.23.4-py3-none-manylinux2014_aarch64.whl",
-        "sha256": "aa946c8327e22ced28e7cef508a334673abc42064ec85f02d005ba1785ea4cec",
+        "version": "2.25.1",
+        "url": "https://files.pythonhosted.org/packages/4b/28/f62adab24f2d4b2165b22145af56a7598ab535feb6ccd172f76b9106ebaa/nvidia_nccl_cu12-2.25.1-py3-none-manylinux2014_aarch64.manylinux_2_17_aarch64.whl",
+        "sha256": "4ab428bc915785cc66e8c57cb34c7a64cf739c46702b8db748b6ad6cc7180cf8",
     },
 }
 
@@ -170,10 +178,36 @@ CUDA_NCCL_WHEELS = {
     "12.8.0": CUDA_12_NCCL_WHEEL_DICT,
 }
 
+# Ensures PTX version compatibility w/ Clang & ptxas in cuda_configure.bzl
+PTX_VERSION_DICT = {
+    # To find, invoke `llc -march=nvptx64 -mcpu=help 2>&1 | grep ptx | sort -V | tail -n 1`
+    "clang": {
+        "14": "7.5",
+        "15": "7.5",
+        "16": "7.8",
+        "17": "8.1",
+        "18": "8.3",
+        "19": "8.5",
+        "20": "8.7",
+    },
+    # To find, look at https://docs.nvidia.com/cuda/parallel-thread-execution/index.html#release-notes
+    "cuda": {
+        "11.8": "7.8",
+        "12.1": "8.1",
+        "12.2": "8.2",
+        "12.3": "8.3",
+        "12.4": "8.4",
+        "12.5": "8.5",
+        "12.6": "8.5",
+        "12.8": "8.7",
+    },
+}
+
 REDIST_VERSIONS_TO_BUILD_TEMPLATES = {
     "nvidia_driver": {
         "repo_name": "cuda_driver",
         "version_to_template": {
+            "570": "//third_party/gpus/cuda/hermetic:cuda_driver.BUILD.tpl",
             "560": "//third_party/gpus/cuda/hermetic:cuda_driver.BUILD.tpl",
             "555": "//third_party/gpus/cuda/hermetic:cuda_driver.BUILD.tpl",
             "550": "//third_party/gpus/cuda/hermetic:cuda_driver.BUILD.tpl",

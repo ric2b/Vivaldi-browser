@@ -29,7 +29,6 @@
 <translation id="2359808026110333948">Continuar</translation>
 <translation id="2467694685043708798"><ph name="BEGIN_LINK" />Executar a diagnose da rede<ph name="END_LINK" /></translation>
 <translation id="2491414235131909199">Unha extensión bloqueou esta páxina</translation>
-<translation id="2501278716633472235">Volver</translation>
 <translation id="2539524384386349900">Detectar</translation>
 <translation id="255002559098805027"><ph name="HOST_NAME" /> enviou unha resposta inválida.</translation>
 <translation id="2634124572758952069">Non se puido atopar a dirección IP do servidor de <ph name="HOST_NAME" />.</translation>
@@ -54,7 +53,6 @@
       <ph name="PLATFORM_TEXT" /></translation>
 <translation id="3226128629678568754">Preme o botón de recargar a páxina para reenviar os datos necesarios para cargar a páxina.</translation>
 <translation id="3234666976984236645">Detectar sempre contido importante para este sitio</translation>
-<translation id="3308738399950580893">anuncios</translation>
 <translation id="3422472998109090673">O sitio <ph name="HOST_NAME" /> é inaccesible neste momento.</translation>
 <translation id="3427092606871434483">Permitir (predeterminado)</translation>
 <translation id="3447661539832366887">O propietario deste dispositivo desactivou o xogo do dinosario.</translation>
@@ -70,7 +68,6 @@
 <translation id="3681007416295224113">Certificar información</translation>
 <translation id="3717027428350673159"><ph name="BEGIN_LINK" />Comprobar a configuración do proxy, firewall, e DNS <ph name="END_LINK" /></translation>
 <translation id="382518646247711829">Se usas un servidor de proxy…</translation>
-<translation id="3894751534882749287">Se desexa ver a páxina de todos os xeitos, pode cambiar o seu nivel de protección de seguimento na xanela emerxente bloqueador de seguimento ou premendo no botón Permitir</translation>
 <translation id="3950820424414687140">Iniciar sesión</translation>
 <translation id="3973234410852337861"><ph name="HOST_NAME" /> está bloqueado</translation>
 <translation id="3987940399970879459">Menos de 1 MB</translation>
@@ -95,7 +92,6 @@
 <translation id="4701488924964507374"><ph name="SENTENCE1" /> <ph name="SENTENCE2" /></translation>
 <translation id="4708268264240856090">A túa conexión foi interrompida</translation>
 <translation id="4722547256916164131"><ph name="BEGIN_LINK" />Executar a diagnose da rede de Windows<ph name="END_LINK" /></translation>
-<translation id="4736016046474602958">Bloqueador de rastreadores</translation>
 <translation id="4744603770635761495">Camiño ao executábel</translation>
 <translation id="4750917950439032686">A súa información (por exemplo, contrasinais ou números de tarxetas de crédito) é privada cando se envía a este sitio.</translation>
 <translation id="4764776831041365478">É posible que a página web <ph name="URL" /> estea temporalmente inactiva ou que fose trasladada definitivamente a outra dirección.</translation>
@@ -151,12 +147,10 @@
 <translation id="7096937462164235847">Non se verificou a identidade deste sitio web.</translation>
 <translation id="7108819624672055576">Permitido por unha extensión</translation>
 <translation id="7111012039238467737">(Válido)</translation>
-<translation id="7113310725918019676">Permitir <ph name="BLOCKED_TYPE" /> desde <ph name="DOMAIN" /></translation>
 <translation id="7210863904660874423"><ph name="HOST_NAME" /> non se adheriu a ningún estándar de seguranza.</translation>
 <translation id="7219179957768738017">A conexión usa <ph name="SSL_VERSION" />.</translation>
 <translation id="7221855153210829124">Amosar notificacións</translation>
 <translation id="7353601530677266744">Liña de ordes</translation>
-<translation id="7364115444476960850"><ph name="BLOCKER_NAME" /> de Vivaldi bloqueou a páxina á que estabas intentando acceder</translation>
 <translation id="7419106976560586862">Camiño ao perfil</translation>
 <translation id="7455133967321480974">Usar valor por defecto global (Bloquear)</translation>
 <translation id="7518003948725431193">Non se atopou unha página web para o enderezo: <ph name="URL" /></translation>
@@ -175,7 +169,6 @@
 <translation id="8037357227543935929">Preguntar (por defecto)</translation>
 <translation id="8041940743680923270">Usar valor por defecto global (Preguntar)</translation>
 <translation id="808894953321890993">Cambiar contrasinal</translation>
-<translation id="8119307142152921512">rastreadores e anuncios</translation>
 <translation id="8149426793427495338">O computador entrou en suspensión.</translation>
 <translation id="8150722005171944719">O ficheiro que se atopa en <ph name="URL" /> non se pode ler. É posible que fose eliminado, trasladado ou que os permisos do ficheiro impidan acceder a el.</translation>
 <translation id="8184538546369750125">Usar valor por defecto global (permitir)</translation>
@@ -191,7 +184,6 @@
 <translation id="8703575177326907206">A túa conexión a <ph name="DOMAIN" /> non está encriptada.</translation>
 <translation id="8740359287975076522">Non se atopou <ph name="HOST_NAME" /> &lt;abbr id="dnsDefinition"&gt;o enderezo DNS&lt;/abbr&gt;. Estase diagnosticando o problema.</translation>
 <translation id="8820817407110198400">Marcadores</translation>
-<translation id="8940028675168378100">Bloqueado por <ph name="BLOCKER_NAME" /></translation>
 <translation id="8963117664422609631">Ir á configuración do sitio</translation>
 <translation id="9001074447101275817">O proxy <ph name="DOMAIN" /> require un nome de usuario e contrasinal.</translation>
 <translation id="9025348182339809926">(Inválido)</translation>
@@ -200,7 +192,6 @@
 <translation id="9069693763241529744">Bloqueado por unha extensión</translation>
 <translation id="9073799351042754113">Escolliches desactivar os avisos de seguranza para este sitio web.</translation>
 <translation id="9169664750068251925">Bloquear sempre para este sitio</translation>
-<translation id="9180553614777056266">Bloqueador de anuncios</translation>
 <translation id="9183425211371246419"><ph name="HOST_NAME" /> usa un protocolo non soportado.</translation>
 <translation id="936602727769022409">Podería perder o acceso á súa conta de Google. Chromium recomenda cambiar o seu contrasinal agora. Pediráselle que inicie sesión.</translation>
 <translation id="969892804517981540">Compilación oficial</translation>

@@ -1,7 +1,10 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="es">
-<translation id="1397811292916898096">Buscar en <ph name="PRODUCT_NAME" /></translation>
+<translation id="1204037785786432551">Enlace de descarga</translation>
+<translation id="1206892813135768548">Copiar texto del enlace</translation>
+<translation id="1397811292916898096">Buscar con <ph name="PRODUCT_NAME" /></translation>
+<translation id="1435593198351412143">Abrir PDFs automáticamente</translation>
 <translation id="1456207338570705181">La función Tocar para buscar solo está disponible cuando Google es el buscador por defecto en Vivaldi. Esta envía la palabra seleccionada y la página actual como contexto al buscador de Google. Puedes desactivarla en los <ph name="BEGIN_LINK" />ajustes<ph name="END_LINK" />.</translation>
 <translation id="1598449788754183301">Alternar entre pestañas normales o privadas</translation>
 <translation id="1644574205037202324">Historial</translation>
@@ -14,13 +17,21 @@
 <translation id="2433507940547922241">Apariencia</translation>
 <translation id="2501278716633472235">Atrás</translation>
 <translation id="2633278372998075009">Pestañas privadas</translation>
+<translation id="2650751991977523696">¿Quieres descargar el archivo de nuevo?</translation>
+<translation id="265156376773362237">Precarga estándar</translation>
 <translation id="272026394418727548">Página principal de Vivaldi</translation>
-<translation id="2951071800649516099">Añade páginas a tu lista de lectura para leer más tarde</translation>
+<translation id="2842985007712546952">Carpeta principal</translation>
+<translation id="2871733351037274014">Precargar páginas</translation>
+<translation id="2904300462646366554">Los PDFs descargados se abren automáticamente con uno de los visores de PDFs instalados en el dispositivo</translation>
+<translation id="2951071800649516099">Añade páginas a la lista de lectura para leerlas más tarde</translation>
+<translation id="3029276696788198026">No precargar</translation>
 <translation id="3060635849835183725">{BOOKMARKS_COUNT, plural,
           =1 {<ph name="BOOKMARKS_COUNT_ONE" /> marcador}
           other {<ph name="BOOKMARKS_COUNT_MANY" /> marcadores}}</translation>
 <translation id="3076631378407175873">© <ph name="YEAR" /> Vivaldi Technologies AS. Todos los derechos reservados.</translation>
+<translation id="3232293466644486101">Eliminar datos de navegación…</translation>
 <translation id="3234355010754616171">Nueva pestaña privada</translation>
+<translation id="3237087289225714896">Precarga estándar:</translation>
 <translation id="3377025655491224618">Pestañas privada</translation>
 <translation id="3504699618187058974">Apilar pestañas</translation>
 <translation id="3518985090088779359">Aceptar y continuar</translation>
@@ -28,7 +39,9 @@
 <translation id="3602290021589620013">Vista previa</translation>
 <translation id="3700829948786686853">Bienvenido a Vivaldi</translation>
 <translation id="3719826155360621982">Página principal</translation>
+<translation id="3738139272394829648">Tocar para buscar</translation>
 <translation id="385051799172605136">Atrás</translation>
+<translation id="3987993985790029246">Copiar enlace</translation>
 <translation id="399014816462153200">Páginas leídas:</translation>
 <translation id="4121750346708795461">Al usar esta aplicación aceptas las <ph name="BEGIN_LINK1" />condiciones de servicio<ph name="END_LINK1" /> y la <ph name="BEGIN_LINK2" />política de privacidad<ph name="END_LINK2" /> de Vivaldi.</translation>
 <translation id="4137746084635924146">Idioma actual del dispositivo</translation>
@@ -36,9 +49,13 @@
 <translation id="4195643157523330669">Abrir en pestaña nueva</translation>
 <translation id="4225895483398857530">Acceso directo en la barra de herramientas</translation>
 <translation id="4243710787042215766">Abrir en pestaña privada</translation>
+<translation id="4269820728363426813">Copiar dirección del enlace</translation>
+<translation id="4291407919474070700"><ph name="BEGIN_LINK" />Activa el bloqueo de pantalla en los ajustes de Android<ph name="END_LINK" /></translation>
 <translation id="4304713468139749426">Gestor de contraseñas</translation>
-<translation id="451872707440238414">Buscar en tus marcadores</translation>
+<translation id="451872707440238414">Buscar en los marcadores</translation>
 <translation id="4526803704855831732">Pestañas privadas</translation>
+<translation id="4532845899244822526">Seleccionar carpeta</translation>
+<translation id="4699172675775169585">Archivos e imágenes en caché</translation>
 <translation id="4719086422742491124">Obtén información sobre los temas tratados en los sitios web sin salir de la página. Selecciona una o más palabras para buscarlas.
 
 La función tocar para buscar solo está disponible cuando Google es el buscador por defecto en Vivaldi.</translation>
@@ -49,33 +66,59 @@ La función tocar para buscar solo está disponible cuando Google es el buscador
 <translation id="49576331685473090">Bloqueador de contenidos</translation>
 <translation id="5079259810715830221">Cuando un sitio de Google solicita precargar privadamente enlaces en su página, Vivaldi encripta y precarga las páginas a través de los servidores de Google sin usar cookies. Esto permite ocultar tu identidad del sitio precargado.</translation>
 <translation id="5118676864324397542">Almacenamiento de <ph name="APP_NAME" /></translation>
+<translation id="5144385790872094440">Algunas de las páginas que visitas están precargadas. Es posible que las páginas se precarguen a través de los servidores de Google si están enlazadas desde un sitio o aplicación de Google.</translation>
 <translation id="5186185447130319458">Privado</translation>
+<translation id="5206168361184759344">{FILE_COUNT, plural,
+            =1 {Descargando archivo…}
+            other {Descargando # archivos…}}</translation>
 <translation id="5233638681132016545">Nueva pestaña</translation>
 <translation id="5375131951310889874">La función «Tocar para buscar» solo está disponible cuando Google ha sido establecido como buscador por defecto en Vivaldi. Ésta envía una palabra y su contexto al buscador de Google para mostrarte definiciones, imágenes, resultados de búsqueda y otros detalles.
 
 Para modificar el término de la búsqueda, mantén pulsado cualquier texto para seleccionarlo. Para afinar la búsqueda, desliza el panel hacia arriba y después toca el cuadro de búsqueda.</translation>
+<translation id="543338862236136125">Cambiar contraseña</translation>
 <translation id="572328651809341494">Pestañas recientes</translation>
+<translation id="5833984609253377421">Compartir enlace</translation>
 <translation id="6150320133806434356">Marcador guardado</translation>
+<translation id="6193448654517602979">Selecciona pestañas</translation>
 <translation id="6336451774241870485">Nueva pestaña privada</translation>
 <translation id="6337323516034698937">Para enviar esta pestaña a otro dispositivo, inicia sesión en Vivaldi Sync en ambos dispositivos. Si fuese necesario, introduce la contraseña de cifrado.</translation>
+<translation id="6341580099087024258">Preguntar dónde guardar los archivos</translation>
 <translation id="6404511346730675251">Editar marcador</translation>
+<translation id="650224091954855786">{FILE_COUNT, plural,
+          =1 {Archivo descargado}
+          other {# descargas completadas}}</translation>
 <translation id="6585139692466700358">Ofrecer traducir páginas con el servicio de traducción de Vivaldi</translation>
+<translation id="6588043302623806746">Usar DNS seguro</translation>
 <translation id="6593061639179217415">Modo escritorio</translation>
 <translation id="6610147964972079463">Cerrar todas</translation>
+<translation id="6627583120233659107">Editar carpeta</translation>
+<translation id="6865313869410766144">Datos de autocompletado de formularios</translation>
+<translation id="6909589135458168665">Precargar páginas</translation>
 <translation id="7029995644714925509">Cuando un sitio solicita precargar privadamente enlaces en su página, Vivaldi encripta y precarga las páginas a través de los servidores de Google sin usar cookies. Esto permite ocultar tu identidad del sitio precargado.</translation>
 <translation id="706339621163631076">Política de privacidad del navegador</translation>
 <translation id="732145680195464316">Marcador guardado en <ph name="PRODUCT_NAME" /></translation>
+<translation id="7324354302972299151">Enviar una solicitud "Do Not Track"</translation>
+<translation id="7359002509206457351">Acceder a métodos de pago</translation>
+<translation id="7419565702166471774">Usar siempre conexiones seguras</translation>
 <translation id="7427132068601343474">Acerca de Vivaldi</translation>
+<translation id="7456774706094330779">Precarga ampliada</translation>
 <translation id="7465104139234185284">Cerrar todas las pestañas privadas</translation>
 <translation id="7481312909269577407">Avanzar</translation>
+<translation id="7764225426217299476">Añadir dirección</translation>
 <translation id="7968014550143838305">Añadido a la lista de lectura</translation>
 <translation id="804786196054284061">Condiciones de servicio</translation>
+<translation id="8062594758852531064">Precarga ampliada:</translation>
+<translation id="8073388330009372546">Abrir imagen en pestaña nueva</translation>
 <translation id="8127542551745560481">Editar página principal</translation>
+<translation id="8266862848225348053">Ubicación de las descargas</translation>
+<translation id="8348430946834215779">Usa HTTPS siempre que sea posible y recibe advertencias antes de cargar sitios que no sean compatibles con este protocolo</translation>
 <translation id="8560602726703398413">Encuentra tu lista de lectura en marcadores</translation>
 <translation id="85991616550051997">Ir a la página principal</translation>
 <translation id="8820817407110198400">Marcadores</translation>
 <translation id="9042893549633094279">Privacidad y seguridad</translation>
 <translation id="9063523880881406963">Desactivar la petición para el modo escritorio</translation>
 <translation id="9080642952018487277">Entrar al modo privado</translation>
+<translation id="930124987204876019">Eliminar el historial, cookies, datos del sitio, caché…</translation>
+<translation id="961856697154696964">Eliminar datos de navegación</translation>
 <translation id="96681097142096641">¿Ver página simplificada?</translation>
 </translationbundle>

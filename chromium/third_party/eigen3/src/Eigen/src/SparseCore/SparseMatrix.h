@@ -875,7 +875,6 @@ class SparseMatrix : public SparseCompressedBase<SparseMatrix<Scalar_, Options_,
     return *this;
   }
 
-#ifndef EIGEN_PARSED_BY_DOXYGEN
   template <typename OtherDerived>
   inline SparseMatrix& operator=(const EigenBase<OtherDerived>& other) {
     return Base::operator=(other.derived());
@@ -883,7 +882,6 @@ class SparseMatrix : public SparseCompressedBase<SparseMatrix<Scalar_, Options_,
 
   template <typename Lhs, typename Rhs>
   inline SparseMatrix& operator=(const Product<Lhs, Rhs, AliasFreeProduct>& other);
-#endif  // EIGEN_PARSED_BY_DOXYGEN
 
   template <typename OtherDerived>
   EIGEN_DONT_INLINE SparseMatrix& operator=(const SparseMatrixBase<OtherDerived>& other);

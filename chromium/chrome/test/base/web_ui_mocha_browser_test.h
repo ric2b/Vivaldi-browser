@@ -7,15 +7,36 @@
 
 #include <string>
 
+#include "build/build_config.h"
+#include "chrome/test/base/platform_browser_test.h"
+
+#if BUILDFLAG(IS_ANDROID)
+#include "base/test/scoped_feature_list.h"
+#include "content/public/common/content_features.h"
+#else
 #include "chrome/test/base/devtools_agent_coverage_observer.h"
-#include "chrome/test/base/in_process_browser_test.h"
+#endif
+
+class Profile;
 
 namespace content {
 class WebContents;
 }  // namespace content
 
+namespace webui {
+
+// Convert all non-alphanumeric characters to underscore in-place. Assumes
+// ASCII. Intended to fit the regular expression used for GTest names.
+void CanonicalizeTestName(std::string* test_name);
+
+// Receive messages from JS.
+bool WaitForTestToFinish(content::WebContents* web_contents,
+                         bool is_sub_test_result_reporting_enabled);
+
+}  // namespace webui
+
 // Inherit from this class to run WebUI tests that are using Mocha.
-class WebUIMochaBrowserTest : public InProcessBrowserTest {
+class WebUIMochaBrowserTest : public PlatformBrowserTest {
  public:
   WebUIMochaBrowserTest(const WebUIMochaBrowserTest&) = delete;
   WebUIMochaBrowserTest& operator=(const WebUIMochaBrowserTest&) = delete;
@@ -57,15 +78,20 @@ class WebUIMochaBrowserTest : public InProcessBrowserTest {
       const std::string& trigger,
       const bool& skip_test_loader);
 
+  // Tests may optionally call this before calling RunTest to opt out of
+  // SubTestResult reporting. This is useful for GTests that run intentionally
+  // failing JS tests.
+  void DisableSubTestResultReporting();
+
   // Hook for subclasses that need to perform additional setup steps that
   // involve the WebContents, before the Mocha test runs.
   virtual void OnWebContentsAvailable(content::WebContents* web_contents);
 
-  // Gets the WebContents instance to set up the chrome://webui-test data
-  // source for. Defaults to chrome_test_utils::GetActiveWebContents(this);
-  virtual content::WebContents* GetWebContentsForSetup();
+  // Gets the Profile instance to set the chrome://webui-test data on.
+  // Defaults to chrome_test_utils::GetProfile(this);
+  virtual Profile* GetProfileForSetup();
 
-  // InProcessBrowserTest overrides.
+  // PlatformBrowserTest overrides.
   void SetUpOnMainThread() override;
 
   void set_test_loader_host(const std::string& host);
@@ -92,8 +118,21 @@ class WebUIMochaBrowserTest : public InProcessBrowserTest {
   // Note: It is also used by RunTest even when |skip_test_loader| is true.
   std::string test_loader_scheme_;
 
+  // Determines if SubTestResults should be reported for individual JS tests.
+  bool is_sub_test_result_reporting_enabled_ = true;
+
+#if BUILDFLAG(IS_ANDROID)
+  // On Android, JavaScript console messages are only added to test logs if
+  // kLogJsConsoleMessages is enabled (on other platforms, such messages are
+  // included in test logs by default). Console messages are necessary for
+  // WebUI tests since they include logs indicating which tests in a suite
+  // passed/failed and the console errors related to any failures.
+  base::test::ScopedFeatureList scoped_feature_list_{
+      features::kLogJsConsoleMessages};
+#else
   // Handles collection of code coverage.
   std::unique_ptr<DevToolsAgentCoverageObserver> coverage_handler_;
+#endif
 };
 
 // Inherit from this class to explicitly focus the web contents before running

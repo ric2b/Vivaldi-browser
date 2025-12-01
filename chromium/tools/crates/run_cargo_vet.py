@@ -7,6 +7,11 @@
 Arguments are passed through to `cargo vet`.
 '''
 
+# TODO(https://crbug.com/405980483): Evaluate whether to keep supporting
+# `tools/crates/run_cargo_vet.py` (see similar note in
+# `tools/rust/build_vet.py`).  Note that we have removed `cargo vet` presubmits
+# (as tracked in https://crbug.com/405980483).
+
 import argparse
 import os
 import platform
@@ -51,7 +56,13 @@ def main():
         old_config_toml = f.read()
 
     _CARGO_ARGS = ['-Zunstable-options', '-C', _MANIFEST_DIR]
-    _EXTRA_VET_ARGS = ['--cargo-arg=-Zbindeps', '--no-registry-suggestions']
+    _EXTRA_VET_ARGS = [
+        # See the `[dependencies.cxxbridge-cmd]` section in
+        # `third_party/rust/chromium_crates_io/Cargo.toml` for explanation why
+        # `-Zbindeps` flag is needed.
+        '--cargo-arg=-Zbindeps',
+        '--no-registry-suggestions'
+    ]
     success = RunCargo(
         args.rust_sysroot, None,
         _CARGO_ARGS + ['vet'] + unrecognized_args + _EXTRA_VET_ARGS)
@@ -73,9 +84,7 @@ def main():
     if not success:
         is_presubmit = '--locked' in unrecognized_args and \
                        '--frozen' in unrecognized_args
-        if is_presubmit:
-            print("INFO: Chromium's `cargo vet` policy and presubmit " \
-                  "are described in `//docs/rust-unsafe.md`.")
+        assert not is_presubmit
 
     return 0 if success else 1
 

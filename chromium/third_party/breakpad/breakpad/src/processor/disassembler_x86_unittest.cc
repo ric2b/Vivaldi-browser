@@ -94,7 +94,7 @@ TEST(DisassemblerX86Test, SimpleReturnInstruction) {
   EXPECT_EQ(libdis::insn_return, instruction->type);
   EXPECT_EQ(0U, dis.NextInstruction());
   EXPECT_FALSE(dis.currentInstructionValid());
-  EXPECT_EQ(NULL, dis.currentInstruction());
+  EXPECT_EQ(nullptr, dis.currentInstruction());
 }
 
 TEST(DisassemblerX86Test, SimpleInvalidInstruction) {

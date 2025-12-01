@@ -7,10 +7,19 @@ import * as TextUtils from '../../models/text_utils/text_utils.js';
 import * as Common from '../common/common.js';
 import * as HostModule from '../host/host.js';
 import * as Platform from '../platform/platform.js';
+import * as Root from '../root/root.js';
 
+import type {CSSMatchedStyles} from './CSSMatchedStyles.js';
 import {cssMetadata, GridAreaRowRegex} from './CSSMetadata.js';
 import type {Edit} from './CSSModel.js';
-import {stripComments} from './CSSPropertyParser.js';
+import {
+  type BottomUpTreeMatching,
+  type Match,
+  matchDeclaration,
+  type Matcher,
+  stripComments
+} from './CSSPropertyParser.js';
+import {CSSWideKeywordMatcher, FontMatcher} from './CSSPropertyParserMatchers.js';
 import type {CSSStyleDeclaration} from './CSSStyleDeclaration.js';
 
 export const enum Events {
@@ -88,6 +97,33 @@ export class CSSProperty extends Common.ObjectWrapper.ObjectWrapper<EventTypes> 
     return result;
   }
 
+  parseExpression(expression: string, matchedStyles: CSSMatchedStyles, computedStyles: Map<string, string>|null):
+      BottomUpTreeMatching|null {
+    if (!this.parsedOk) {
+      return null;
+    }
+
+    return matchDeclaration(this.name, expression, this.#matchers(matchedStyles, computedStyles));
+  }
+
+  parseValue(matchedStyles: CSSMatchedStyles, computedStyles: Map<string, string>|null): BottomUpTreeMatching|null {
+    if (!this.parsedOk) {
+      return null;
+    }
+
+    return matchDeclaration(this.name, this.value, this.#matchers(matchedStyles, computedStyles));
+  }
+
+  #matchers(matchedStyles: CSSMatchedStyles, computedStyles: Map<string, string>|null): Array<Matcher<Match>> {
+    const matchers = matchedStyles.propertyMatchers(this.ownerStyle, computedStyles);
+
+    matchers.push(new CSSWideKeywordMatcher(this, matchedStyles));
+    if (Root.Runtime.experiments.isEnabled('font-editor')) {
+      matchers.push(new FontMatcher());
+    }
+    return matchers;
+  }
+
   private ensureRanges(): void {
     if (this.#nameRangeInternal && this.#valueRangeInternal) {
       return;
@@ -160,11 +196,6 @@ export class CSSProperty extends Common.ObjectWrapper.ObjectWrapper<EventTypes> 
     return this.#active;
   }
 
-  trimmedValueWithoutImportant(): string {
-    const important = '!important';
-    return this.value.endsWith(important) ? this.value.slice(0, -important.length).trim() : this.value.trim();
-  }
-
   async setText(propertyText: string, majorChange: boolean, overwrite?: boolean): Promise<boolean> {
     if (!this.ownerStyle) {
       throw new Error('No ownerStyle for property');
@@ -202,7 +233,7 @@ export class CSSProperty extends Common.ObjectWrapper.ObjectWrapper<EventTypes> 
     const text = new TextUtils.Text.Text(this.ownerStyle.cssText || '');
     const newStyleText = text.replaceRange(range, Platform.StringUtilities.sprintf(';%s;', propertyText));
     const styleText = await CSSProperty.formatStyle(newStyleText, indentation, endIndentation);
-    return this.ownerStyle.setText(styleText, majorChange);
+    return await this.ownerStyle.setText(styleText, majorChange);
   }
 
   static async formatStyle(styleText: string, indentation: string, endIndentation: string): Promise<string> {
@@ -330,7 +361,7 @@ export class CSSProperty extends Common.ObjectWrapper.ObjectWrapper<EventTypes> 
     } else {
       text = appendSemicolonIfMissing(this.text.substring(2, propertyText.length - 2).trim());
     }
-    return this.setText(text, true, true);
+    return await this.setText(text, true, true);
   }
 
   /**

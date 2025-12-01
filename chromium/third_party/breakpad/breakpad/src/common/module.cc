@@ -273,7 +273,7 @@ Module::File* Module::FindFile(const char* name) {
 
 Module::File* Module::FindExistingFile(const string& name) {
   FileByNameMap::iterator it = files_.find(&name);
-  return (it == files_.end()) ? NULL : it->second;
+  return (it == files_.end()) ? nullptr : it->second;
 }
 
 void Module::GetFiles(vector<File*>* vec) {

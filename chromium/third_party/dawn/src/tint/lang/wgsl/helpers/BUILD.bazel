@@ -42,13 +42,11 @@ cc_library(
     "append_vector.cc",
     "apply_substitute_overrides.cc",
     "check_supported_extensions.cc",
-    "flatten_bindings.cc",
   ],
   hdrs = [
     "append_vector.h",
     "apply_substitute_overrides.h",
     "check_supported_extensions.h",
-    "flatten_bindings.h",
   ],
   deps = [
     "//src/tint/api/common",
@@ -69,7 +67,6 @@ cc_library(
     "//src/tint/utils/macros",
     "//src/tint/utils/math",
     "//src/tint/utils/memory",
-    "//src/tint/utils/result",
     "//src/tint/utils/rtti",
     "//src/tint/utils/symbol",
     "//src/tint/utils/text",
@@ -84,7 +81,6 @@ cc_library(
   srcs = [
     "append_vector_test.cc",
     "check_supported_extensions_test.cc",
-    "flatten_bindings_test.cc",
   ],
   deps = [
     "//src/tint/api/common",
@@ -109,7 +105,6 @@ cc_library(
     "//src/tint/utils/macros",
     "//src/tint/utils/math",
     "//src/tint/utils/memory",
-    "//src/tint/utils/result",
     "//src/tint/utils/rtti",
     "//src/tint/utils/symbol",
     "//src/tint/utils/text",

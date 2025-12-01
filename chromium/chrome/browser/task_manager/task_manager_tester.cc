@@ -5,6 +5,7 @@
 #include "chrome/browser/task_manager/task_manager_tester.h"
 
 #include <memory>
+#include <string_view>
 
 #include "base/memory/ptr_util.h"
 #include "base/memory/raw_ptr.h"
@@ -94,10 +95,6 @@ size_t TaskManagerTester::GetRowCount() {
 
 std::u16string TaskManagerTester::GetRowTitle(size_t row) {
   return model_->GetText(row, IDS_TASK_MANAGER_TASK_COLUMN);
-}
-
-std::optional<size_t> TaskManagerTester::GetRowForActiveTask() {
-  return model_->GetRowForActiveTask();
 }
 
 void TaskManagerTester::ToggleColumnVisibility(ColumnSpecifier column) {
@@ -205,7 +202,7 @@ std::vector<std::u16string> TaskManagerTester::GetWebContentsTaskTitles() {
 }
 
 bool TaskManagerTester::UpdateModel(const DisplayCategory display_category,
-                                    const std::u16string& search_term) {
+                                    std::u16string_view search_term) {
   return model_->UpdateModel(display_category, search_term);
 }
 

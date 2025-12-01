@@ -102,11 +102,6 @@ export class SettingsAppearancePageElement extends
        */
       pageVisibility: Object,
 
-      prefs: {
-        type: Object,
-        notify: true,
-      },
-
       defaultZoom_: Number,
 
       isWallpaperPolicyControlled_: {type: Boolean, value: true},
@@ -203,13 +198,6 @@ export class SettingsAppearancePageElement extends
         },
       },
 
-      toolbarPinningEnabled_: {
-        type: Boolean,
-        value() {
-          return loadTimeData.getBoolean('toolbarPinningEnabled');
-        },
-      },
-
       showManagedThemeDialog_: Boolean,
 
       sidePanelOptions_: {
@@ -296,7 +284,6 @@ export class SettingsAppearancePageElement extends
   private isForcedTheme_: boolean;
   private showHoverCardImagesOption_: boolean;
   private showResetPinnedActionsButton_: boolean;
-  private toolbarPinningEnabled_: boolean;
 
   // <if expr="is_linux">
   private showCustomChromeFrame_: boolean;
@@ -389,11 +376,7 @@ export class SettingsAppearancePageElement extends
   }
 
   private onThemeClick_() {
-    if (this.toolbarPinningEnabled_) {
-      this.appearanceBrowserProxy_.openCustomizeChrome();
-    } else {
-      window.open(this.themeUrl_ || loadTimeData.getString('themesGalleryUrl'));
-    }
+    this.appearanceBrowserProxy_.openCustomizeChrome();
   }
 
   private onCustomizeToolbarClick_() {
@@ -490,8 +473,8 @@ export class SettingsAppearancePageElement extends
       return;
     }
 
-    let i18nId;
     // <if expr="is_linux">
+    let i18nId: string;
     switch (this.systemTheme_) {
       case SystemTheme.GTK:
         i18nId = 'gtkTheme';
@@ -503,15 +486,11 @@ export class SettingsAppearancePageElement extends
         i18nId = 'classicTheme';
         break;
     }
+    this.themeSublabel_ = this.i18n(i18nId);
     // </if>
     // <if expr="not is_linux">
-    if (this.toolbarPinningEnabled_) {
       this.themeSublabel_ = '';
-      return;
-    }
-    i18nId = 'chooseFromWebStore';
     // </if>
-    this.themeSublabel_ = this.i18n(i18nId);
   }
 
   /** @return Whether applied theme is set by policy. */

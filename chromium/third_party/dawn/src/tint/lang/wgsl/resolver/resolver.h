@@ -204,6 +204,9 @@ class Resolver {
     /// the identifier is not templated.
     core::type::Type* Array(const ast::Identifier* ident);
 
+    /// @returns a binding_array resolved from the templated identifier @p ident.
+    core::type::BindingArray* BindingArray(const ast::Identifier* ident);
+
     /// @returns an atomic resolved from the templated identifier @p ident.
     core::type::Atomic* Atomic(const ast::Identifier* ident);
 
@@ -231,9 +234,6 @@ class Resolver {
     /// @returns a subgroup matrix resolved from the templated identifier @p ident
     core::type::SubgroupMatrix* SubgroupMatrix(const ast::Identifier* ident,
                                                core::SubgroupMatrixKind kind);
-
-    /// @returns a packed vec3 resolved from the templated identifier @p ident.
-    core::type::Vector* PackedVec3T(const ast::Identifier* ident);
 
     /// @returns @p ident cast to an ast::TemplatedIdentifier, if the identifier is templated and
     /// the number of templated arguments are between @p min_args and @p max_args.
@@ -401,13 +401,6 @@ class Resolver {
     sem::SwitchStatement* SwitchStatement(const ast::SwitchStatement* s);
     sem::Statement* VariableDeclStatement(const ast::VariableDeclStatement*);
     bool Statements(VectorRef<const ast::Statement*>);
-
-    // CollectTextureSamplerPairs() collects all the texture/sampler pairs from the target function
-    // / builtin, and records these on the current function by calling AddTextureSamplerPair().
-    void CollectTextureSamplerPairs(sem::Function* func,
-                                    VectorRef<const sem::ValueExpression*> args) const;
-    void CollectTextureSamplerPairs(const sem::BuiltinFn* builtin,
-                                    VectorRef<const sem::ValueExpression*> args) const;
 
     /// Resolves the WorkgroupSize for the given function, assigning it to
     /// current_function_
@@ -662,6 +655,11 @@ class Resolver {
     using StructConstructorSig = tint::UnorderedKeyWrapper<
         std::tuple<const core::type::Struct*, size_t, core::EvaluationStage>>;
 
+    // SubgroupMatrixConstructorSig represents a unique subgroup matrix constructor signature.
+    // It is a tuple of the subgroup matrix type and the number of arguments provided.
+    using SubgroupMatrixConstructorSig =
+        tint::UnorderedKeyWrapper<std::tuple<const core::type::SubgroupMatrix*, size_t>>;
+
     /// ExprEvalStageConstraint describes a constraint on when expressions can be evaluated.
     struct ExprEvalStageConstraint {
         /// The latest stage that the expression can be evaluated
@@ -695,12 +693,14 @@ class Resolver {
     wgsl::Extensions enabled_extensions_;
     Vector<sem::Function*, 8> entry_points_;
     Hashmap<const core::type::Type*, const Source*, 8> atomic_composite_info_;
+    Hashset<const core::type::Type*, 8> subgroup_matrix_uses_;
     tint::Bitset<0> marked_;
     ExprEvalStageConstraint expr_eval_stage_constraint_;
     std::unordered_map<const sem::Function*, AliasAnalysisInfo> alias_analysis_infos_;
     Hashmap<OverrideId, const sem::Variable*, 8> override_ids_;
     Hashmap<ArrayConstructorSig, sem::CallTarget*, 8> array_ctors_;
     Hashmap<StructConstructorSig, sem::CallTarget*, 8> struct_ctors_;
+    Hashmap<SubgroupMatrixConstructorSig, sem::CallTarget*, 8> subgroup_matrix_ctors_;
     sem::Function* current_function_ = nullptr;
     sem::Statement* current_statement_ = nullptr;
     sem::CompoundStatement* current_compound_statement_ = nullptr;

@@ -24,11 +24,7 @@ import * as Lit from '../../../ui/lit/lit.js';
 import * as VisualLogging from '../../../ui/visual_logging/visual_logging.js';
 
 import {NotRestoredReasonDescription} from './BackForwardCacheStrings.js';
-import backForwardCacheViewStylesRaw from './backForwardCacheView.css.js';
-
-// TODO(crbug.com/391381439): Fully migrate off of constructed style sheets.
-const backForwardCacheViewStyles = new CSSStyleSheet();
-backForwardCacheViewStyles.replaceSync(backForwardCacheViewStylesRaw.cssContent);
+import backForwardCacheViewStyles from './backForwardCacheView.css.js';
 
 const {html} = Lit;
 
@@ -48,7 +44,7 @@ const UIStrings = {
   /**
    * @description Entry name text in the back/forward cache view of the Application panel
    */
-  url: 'URL:',
+  url: 'URL',
   /**
    * @description Status text for the status of the back/forward cache status
    */
@@ -148,7 +144,7 @@ const UIStrings = {
    * @description Shows the number of files with a particular issue.
    */
   filesPerIssue: '{n, plural, =1 {# file} other {# files}}',
-};
+} as const;
 
 const str_ = i18n.i18n.registerUIStrings('panels/application/components/BackForwardCacheView.ts', UIStrings);
 const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
@@ -182,7 +178,6 @@ export class BackForwardCacheView extends LegacyWrapper.LegacyWrapper.WrappableC
   }
   connectedCallback(): void {
     this.parentElement?.classList.add('overflow-auto');
-    this.#shadow.adoptedStyleSheets = [backForwardCacheViewStyles];
   }
 
   override async render(): Promise<void> {
@@ -190,6 +185,7 @@ export class BackForwardCacheView extends LegacyWrapper.LegacyWrapper.WrappableC
       // Disabled until https://crbug.com/1079231 is fixed.
       // clang-format off
       Lit.render(html`
+        <style>${backForwardCacheViewStyles.cssText}</style>
         <devtools-report .data=${
             {reportTitle: i18nString(UIStrings.backForwardCacheTitle)} as ReportView.ReportView.ReportData
         } jslog=${VisualLogging.pane('back-forward-cache')}>
@@ -282,14 +278,8 @@ export class BackForwardCacheView extends LegacyWrapper.LegacyWrapper.WrappableC
     // clang-format off
     return html`
       ${this.#renderBackForwardCacheStatus(frame.backForwardCacheDetails.restoredFromCache)}
-      <div class="report-line">
-        <div class="report-key">
-          ${i18nString(UIStrings.url)}
-        </div>
-        <div class="report-value" title=${frame.url}>
-          ${frame.url}
-        </div>
-      </div>
+      <devtools-report-key>${i18nString(UIStrings.url)}</devtools-report-key>
+      <devtools-report-value>${frame.url}</devtools-report-value>
       ${this.#maybeRenderFrameTree(frame.backForwardCacheDetails.explanationsTree)}
       <devtools-report-section>
         <devtools-button
@@ -365,20 +355,15 @@ export class BackForwardCacheView extends LegacyWrapper.LegacyWrapper.WrappableC
 
     // clang-format off
     return html`
-      <div class="report-line"
-      jslog=${VisualLogging.section('frames')}>
-        <div class="report-key">
-          ${i18nString(UIStrings.framesTitle)}
-        </div>
-        <div class="report-value">
-          <devtools-tree-outline .data=${{
-            tree: [root],
-            defaultRenderer: treeNodeRenderer,
-            compact: true,
-          } as TreeOutline.TreeOutline.TreeOutlineData<FrameTreeNodeData>}>
-          </devtools-tree-outline>
-        </div>
-      </div>
+      <devtools-report-key jslog=${VisualLogging.section('frames')}>${i18nString(UIStrings.framesTitle)}</devtools-report-key>
+      <devtools-report-value>
+        <devtools-tree-outline .data=${{
+          tree: [root],
+          defaultRenderer: treeNodeRenderer,
+          compact: true,
+        } as TreeOutline.TreeOutline.TreeOutlineData<FrameTreeNodeData>}>
+        </devtools-tree-outline>
+      </devtools-report-value>
     `;
     // clang-format on
   }
@@ -391,7 +376,7 @@ export class BackForwardCacheView extends LegacyWrapper.LegacyWrapper.WrappableC
       {node: TreeOutline.TreeOutlineUtils.TreeNode<FrameTreeNodeData>, frameCount: number, issueCount: number} {
     let frameCount = 1;
     let issueCount = 0;
-    const children: TreeOutline.TreeOutlineUtils.TreeNode<FrameTreeNodeData>[] = [];
+    const children: Array<TreeOutline.TreeOutlineUtils.TreeNode<FrameTreeNodeData>> = [];
 
     let nodeUrlText = '';
     if (explanationTree.url.length) {
@@ -518,7 +503,7 @@ export class BackForwardCacheView extends LegacyWrapper.LegacyWrapper.WrappableC
     const circumstantial = explanations.filter(
         explanation => explanation.type === Protocol.Page.BackForwardCacheNotRestoredReasonType.Circumstantial);
 
-    const reasonToFramesMap: Map<Protocol.Page.BackForwardCacheNotRestoredReason, string[]> = new Map();
+    const reasonToFramesMap = new Map<Protocol.Page.BackForwardCacheNotRestoredReason, string[]>();
     if (explanationTree) {
       this.#buildReasonToFramesMap(explanationTree, {blankCount: 1}, reasonToFramesMap);
     }

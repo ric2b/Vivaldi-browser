@@ -22,6 +22,7 @@ ci.defaults.set(
     properties = {
         "perf_dashboard_machine_group": "ChromiumANGLE",
     },
+    reclient_enabled = False,
     service_account = ci.gpu.SERVICE_ACCOUNT,
     shadow_service_account = ci.gpu.SHADOW_SERVICE_ACCOUNT,
     siso_enabled = True,
@@ -73,13 +74,15 @@ ci.gpu.linux_builder(
             ],
         ),
         chromium_config = builder_config.chromium_config(
-            config = "main_builder_mb",
+            config = "main_builder",
+            apply_configs = ["mb"],
             build_config = builder_config.build_config.RELEASE,
+            target_arch = builder_config.target_arch.ARM,
             target_bits = 64,
             target_platform = builder_config.target_platform.ANDROID,
         ),
         android_config = builder_config.android_config(
-            config = "main_builder_mb",
+            config = "base_config",
         ),
         build_gs_bucket = "chromium-angle-archive",
     ),
@@ -117,13 +120,15 @@ ci.thin_tester(
             ],
         ),
         chromium_config = builder_config.chromium_config(
-            config = "main_builder_mb",
+            config = "main_builder",
+            apply_configs = ["mb"],
             build_config = builder_config.build_config.RELEASE,
+            target_arch = builder_config.target_arch.ARM,
             target_bits = 64,
             target_platform = builder_config.target_platform.ANDROID,
         ),
         android_config = builder_config.android_config(
-            config = "main_builder_mb",
+            config = "base_config",
         ),
         build_gs_bucket = "chromium-angle-archive",
         run_tests_serially = True,

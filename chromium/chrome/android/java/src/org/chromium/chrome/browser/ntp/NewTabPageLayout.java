@@ -36,7 +36,7 @@ import org.chromium.chrome.browser.lifecycle.ActivityLifecycleDispatcher;
 import org.chromium.chrome.browser.logo.LogoBridge.Logo;
 import org.chromium.chrome.browser.logo.LogoCoordinator;
 import org.chromium.chrome.browser.logo.LogoUtils;
-import org.chromium.chrome.browser.logo.LogoUtils.LogoSizeForLogoPolish;
+import org.chromium.chrome.browser.logo.LogoUtils.DoodleSize;
 import org.chromium.chrome.browser.logo.LogoView;
 import org.chromium.chrome.browser.multiwindow.MultiWindowUtils;
 import org.chromium.chrome.browser.ntp.NewTabPage.OnSearchBoxScrollListener;
@@ -45,6 +45,7 @@ import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.suggestions.tile.MostVisitedTilesCoordinator;
 import org.chromium.chrome.browser.suggestions.tile.TileGroup;
 import org.chromium.chrome.browser.suggestions.tile.TileGroup.Delegate;
+import org.chromium.chrome.browser.suggestions.tile.TilesLinearLayout;
 import org.chromium.chrome.browser.tab_ui.InvalidationAwareThumbnailProvider;
 import org.chromium.chrome.browser.ui.native_page.TouchEnabledDelegate;
 import org.chromium.chrome.browser.util.BrowserUiUtils;
@@ -133,9 +134,6 @@ public class NewTabPageLayout extends LinearLayout {
     private boolean mIsInNarrowWindowOnTablet;
     // This variable is only valid when the NTP surface is in tablet mode.
     private boolean mIsInMultiWindowModeOnTablet;
-    private boolean mIsLogoPolishFlagEnabled;
-    private boolean mIsLogoPolishEnabled;
-    private @LogoSizeForLogoPolish int mLogoSizeForLogoPolish;
     private View mFakeSearchBoxLayout;
     private Callback<Logo> mOnLogoAvailableCallback;
 
@@ -158,6 +156,10 @@ public class NewTabPageLayout extends LinearLayout {
     @Override
     protected void onFinishInflate() {
         super.onFinishInflate();
+
+        setBackgroundColor(
+                getResources()
+                        .getColor(R.color.home_surface_background_color, getContext().getTheme()));
 
         // TODO(crbug.com/347509698): Remove the log statements after fixing the bug.
         Log.i(TAG, "NewTabPageLayout.onFinishInflate before insertSiteSectionView");
@@ -210,11 +212,6 @@ public class NewTabPageLayout extends LinearLayout {
         mProfile = profile;
         mUiConfig = uiConfig;
         mWindowAndroid = windowAndroid;
-        mIsLogoPolishFlagEnabled = LogoUtils.isLogoPolishEnabled();
-        mIsLogoPolishEnabled =
-                LogoUtils.isLogoPolishEnabledWithGoogleDoodle(
-                        mSearchProviderIsGoogle && mShowingNonStandardGoogleLogo);
-        mLogoSizeForLogoPolish = LogoUtils.getLogoSizeForLogoPolish();
         mIsTablet = isTablet;
         mTabStripHeightSupplier = tabStripHeightSupplier;
 
@@ -283,11 +280,9 @@ public class NewTabPageLayout extends LinearLayout {
                 new OnDragListener() {
                     @Override
                     public boolean onDrag(View view, DragEvent dragEvent) {
-                        // Disable search box EditText when tab is dropped.
-                        if (dragEvent.getClipDescription() == null
-                                || !dragEvent
-                                        .getClipDescription()
-                                        .hasMimeType(MimeTypeUtils.CHROME_MIMETYPE_TAB)) {
+                        // Disable search box EditText when browser content is dropped.
+                        if (!MimeTypeUtils.clipDescriptionHasBrowserContent(
+                                dragEvent.getClipDescription())) {
                             return false;
                         } else {
                             if (dragEvent.getAction() == DragEvent.ACTION_DRAG_STARTED) {
@@ -368,9 +363,6 @@ public class NewTabPageLayout extends LinearLayout {
                         (logo) -> {
                             mSnapshotTileGridChanged = true;
                             mShowingNonStandardGoogleLogo = logo != null && mSearchProviderIsGoogle;
-                            mIsLogoPolishEnabled =
-                                    LogoUtils.isLogoPolishEnabledWithGoogleDoodle(
-                                            mShowingNonStandardGoogleLogo);
                         });
 
         mLogoView = findViewById(R.id.search_provider_logo);
@@ -381,12 +373,9 @@ public class NewTabPageLayout extends LinearLayout {
                         logoClickedCallback,
                         mLogoView,
                         mOnLogoAvailableCallback,
-                        /* visibilityObserver= */ null,
-                        mIsLogoPolishFlagEnabled);
-        mLogoCoordinator.setLogoSizeForLogoPolish(
-                mIsInMultiWindowModeOnTablet
-                        ? LogoSizeForLogoPolish.SMALL
-                        : mLogoSizeForLogoPolish);
+                        /* visibilityObserver= */ null);
+        mLogoCoordinator.setDoodleSize(
+                mIsInMultiWindowModeOnTablet ? DoodleSize.TABLET_SPLIT_SCREEN : DoodleSize.REGULAR);
         mLogoCoordinator.initWithNative(mProfile);
         setSearchProviderInfo(searchProviderHasLogo, searchProviderIsGoogle);
         setSearchProviderTopMargin();
@@ -516,7 +505,8 @@ public class NewTabPageLayout extends LinearLayout {
         if (mMvTilesContainerLayout.getVisibility() == GONE) return;
 
         if (mInitialTileNum == null) {
-            mInitialTileNum = ((ViewGroup) findViewById(R.id.mv_tiles_layout)).getChildCount();
+            mInitialTileNum =
+                    ((TilesLinearLayout) findViewById(R.id.mv_tiles_layout)).getTileCount();
         }
 
         int currentOrientation = getResources().getConfiguration().orientation;
@@ -589,8 +579,6 @@ public class NewTabPageLayout extends LinearLayout {
 
         if (!mSearchProviderIsGoogle) {
             mShowingNonStandardGoogleLogo = false;
-            mIsLogoPolishEnabled =
-                    LogoUtils.isLogoPolishEnabledWithGoogleDoodle(mShowingNonStandardGoogleLogo);
         }
 
         setSearchProviderTopMargin();
@@ -804,8 +792,8 @@ public class NewTabPageLayout extends LinearLayout {
     private int getLogoTopMargin() {
         Resources resources = getResources();
 
-        if (mIsLogoPolishEnabled && mSearchProviderHasLogo) {
-            return LogoUtils.getTopMarginForLogoPolish(resources);
+        if (mShowingNonStandardGoogleLogo && mSearchProviderHasLogo) {
+            return LogoUtils.getTopMarginForDoodle(resources);
         }
 
         return resources.getDimensionPixelSize(R.dimen.ntp_logo_margin_top);
@@ -842,7 +830,7 @@ public class NewTabPageLayout extends LinearLayout {
         if (!mHasShownView) {
             mHasShownView = true;
             onInitializationProgressChanged();
-            TraceEvent.instant("NewTabPageSearchAvailable)");
+            TraceEvent.instant("NewTabPageSearchAvailable");
         }
     }
 
@@ -949,37 +937,33 @@ public class NewTabPageLayout extends LinearLayout {
 
         mIsInNarrowWindowOnTablet = isInNarrowWindowOnTablet(mIsTablet, mUiConfig);
 
-        updateLogoOnTabletForLogoPolish();
+        updateDoodleOnTablet();
         updateMvtOnTablet();
         updateSearchBoxWidth();
     }
 
     /**
-     * When Logo Polish is enabled with medium or large size, adjusts the logo size while the tablet
-     * transitions to or from a multi-screen layout, ensuring the change occurs post-logo
-     * initialization.
+     * Adjusts the doodle size while the tablet transitions to or from a multi-screen layout,
+     * ensuring the change occurs post-logo initialization.
      */
-    private void updateLogoOnTabletForLogoPolish() {
+    private void updateDoodleOnTablet() {
         if (!mIsTablet) return;
 
         boolean isInMultiWindowModeOnTabletPreviousValue = mIsInMultiWindowModeOnTablet;
         mIsInMultiWindowModeOnTablet =
                 MultiWindowUtils.getInstance().isInMultiWindowMode(mActivity);
 
-        // According to the design of Logo Polish, the small logo size is used in split screens on
-        // tablets. Thus, if the default logo size is small, we don't need to adjust the logo size
-        // while the tablet transitions to or from a multi-screen layout.
-        if (mIsLogoPolishEnabled
-                && mLogoSizeForLogoPolish != LogoSizeForLogoPolish.SMALL
-                && mLogoView != null
+        if (mLogoView != null
                 && isInMultiWindowModeOnTabletPreviousValue != mIsInMultiWindowModeOnTablet) {
-            int realLogoSizeForLogoPolish =
+            int doodleSize =
                     mIsInMultiWindowModeOnTablet
-                            ? LogoSizeForLogoPolish.SMALL
-                            : mLogoSizeForLogoPolish;
-            mLogoCoordinator.setLogoSizeForLogoPolish(realLogoSizeForLogoPolish);
-            LogoUtils.setLogoViewLayoutParams(
-                    mLogoView, getResources(), mIsLogoPolishEnabled, realLogoSizeForLogoPolish);
+                            ? DoodleSize.TABLET_SPLIT_SCREEN
+                            : DoodleSize.REGULAR;
+            mLogoCoordinator.setDoodleSize(doodleSize);
+
+            if (mShowingNonStandardGoogleLogo) {
+                LogoUtils.setLogoViewLayoutParamsForDoodle(mLogoView, getResources(), doodleSize);
+            }
         }
     }
 

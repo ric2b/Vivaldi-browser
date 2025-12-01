@@ -16,9 +16,9 @@
 #include "chrome/browser/ui/performance_controls/tab_resource_usage_tab_helper.h"
 #include "chrome/browser/ui/tab_ui_helper.h"
 #include "chrome/browser/ui/tabs/public/tab_features.h"
-#include "chrome/browser/ui/tabs/public/tab_interface.h"
 #include "chrome/browser/ui/tabs/saved_tab_groups/collaboration_messaging_tab_data.h"
 #include "chrome/browser/ui/tabs/saved_tab_groups/saved_tab_group_utils.h"
+#include "chrome/browser/ui/tabs/saved_tab_groups/saved_tab_group_web_contents_listener.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/tabs/tab_strip_model_delegate.h"
 #include "chrome/browser/ui/tabs/tab_utils.h"
@@ -31,6 +31,7 @@
 #include "components/saved_tab_groups/public/features.h"
 #include "components/saved_tab_groups/public/tab_group_sync_service.h"
 #include "components/security_interstitials/content/security_interstitial_tab_helper.h"
+#include "components/tab_collections/public/tab_interface.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/url_constants.h"
@@ -69,7 +70,11 @@ GetCollaborationMessage(tabs::TabInterface* tab) {
 // static
 TabRendererData TabRendererData::FromTabInModel(const TabStripModel* model,
                                                 int index) {
-  content::WebContents* const contents = model->GetWebContentsAt(index);
+  tabs::TabInterface* const tab = model->GetTabAtIndex(index);
+  CHECK(tab);
+  content::WebContents* const contents = tab->GetContents();
+  CHECK(contents);
+
   // If the tab is showing a lookalike interstitial ("Did you mean example.com"
   // on éxample.com), don't show the URL in the hover card because it's
   // misleading.
@@ -82,7 +87,23 @@ TabRendererData TabRendererData::FromTabInModel(const TabStripModel* model,
       security_interstitial_tab_helper->ShouldDisplayURL();
   TabRendererData data;
   TabUIHelper* const tab_ui_helper = TabUIHelper::FromWebContents(contents);
+
   data.favicon = tab_ui_helper->GetFavicon();
+  data.title = tab_ui_helper->GetTitle();
+
+  // If the tab is in a deferred state, override favicon and title data.
+  const tabs::TabFeatures* features = tab->GetTabFeatures();
+  if (features) {
+    const tab_groups::SavedTabGroupWebContentsListener* wc_listener =
+        features->saved_tab_group_web_contents_listener();
+    if (wc_listener) {
+      if (const std::optional<tab_groups::DeferredTabState>&
+              deferred_tab_state = wc_listener->deferred_tab_state()) {
+        data.favicon = deferred_tab_state.value().favicon();
+        data.title = deferred_tab_state.value().title();
+      }
+    }
+  }
 
   // Tabbed web apps should use the app icon on the home tab.
   Browser* app_browser = chrome::FindBrowserWithTab(contents);
@@ -115,7 +136,6 @@ TabRendererData TabRendererData::FromTabInModel(const TabStripModel* model,
   data.collaboration_messaging =
       GetCollaborationMessage(model->GetTabAtIndex(index));
   data.network_state = TabNetworkStateForWebContents(contents);
-  data.title = tab_ui_helper->GetTitle();
   data.visible_url = contents->GetVisibleURL();
   // Allow empty title for chrome-untrusted:// URLs.
   if (data.title.empty() &&

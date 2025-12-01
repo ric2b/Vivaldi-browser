@@ -58,7 +58,7 @@
   // Exit fullscreen when the status bar is tapped, but don't allow the scroll-
   // to-top animation to occur if the toolbars are fully collapsed.
   BOOL scrollToTop = !AreCGFloatsEqual(self.model->progress(), 0.0);
-  self.mediator->ExitFullscreen();
+  self.mediator->ExitFullscreen(FullscreenExitReason::kUserTapped);
   return scrollToTop;
 }
 
@@ -83,7 +83,6 @@
                             withVelocity:(CGPoint)velocity
                      targetContentOffset:(inout CGPoint*)targetContentOffset {
   if (!base::FeatureList::IsEnabled(web::features::kSmoothScrollingDefault)) {
-    self.model->SetScrollViewIsScrolling(false);
     self.model->SetScrollViewIsDragging(false);
   }
 }
@@ -92,8 +91,17 @@
             (CRWWebViewScrollViewProxy*)webViewScrollViewProxy
                          willDecelerate:(BOOL)decelerate {
   if (!base::FeatureList::IsEnabled(web::features::kSmoothScrollingDefault)) {
-    self.model->SetScrollViewIsScrolling(false);
     self.model->SetScrollViewIsDragging(false);
+    if (!decelerate) {
+      self.model->SetScrollViewIsScrolling(false);
+    }
+  }
+}
+
+- (void)webViewScrollViewDidEndDecelerating:
+    (CRWWebViewScrollViewProxy*)webViewScrollViewProxy {
+  if (!base::FeatureList::IsEnabled(web::features::kSmoothScrollingDefault)) {
+    self.model->SetScrollViewIsScrolling(false);
   }
 }
 

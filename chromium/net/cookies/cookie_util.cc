@@ -36,7 +36,9 @@
 #include "net/base/registry_controlled_domains/registry_controlled_domain.h"
 #include "net/base/schemeful_site.h"
 #include "net/base/url_util.h"
+#include "net/cookies/canonical_cookie.h"
 #include "net/cookies/cookie_access_delegate.h"
+#include "net/cookies/cookie_access_result.h"
 #include "net/cookies/cookie_constants.h"
 #include "net/cookies/cookie_inclusion_status.h"
 #include "net/cookies/cookie_monster.h"
@@ -309,17 +311,25 @@ enum class StorageAccessNetRequestKind {
   // The request had the `kStorageAccessGrantEligible` override, and was
   // same-origin.
   kSameOrigin = 0,
-  // The request had the `kStorageAccessGrantEligible` override, and was
+  // Deprecated: The request had the `kStorageAccessGrantEligible` override, and
+  // was
   // cross-origin, same-site.
-  kCrossOriginSameSite = 1,
+  // kCrossOriginSameSite = 1,
+
   // The request had the `kStorageAccessGrantEligible` override, and was
   // cross-site.
   kCrossSite = 2,
-  kMaxValue = kCrossSite
+  // The request had the `kStorageAccessGrantEligible` override, and was
+  // cross-origin, same-site, and included credentials.
+  kCrossOriginSameSiteCredentialsIncluded = 3,
+  // The request had the `kStorageAccessGrantEligible` override, and was
+  // cross-origin, same-site, but did not include credentials.
+  kCrossOriginSameSiteCredentialsNotIncluded = 4,
+  kMaxValue = kCrossOriginSameSiteCredentialsNotIncluded
 };
 
 void RecordStorageAccessNetRequestMetric(StorageAccessNetRequestKind kind) {
-  base::UmaHistogramEnumeration("Net.HttpJob.StorageAccessNetRequest", kind);
+  base::UmaHistogramEnumeration("Net.HttpJob.StorageAccessNetRequest2", kind);
 }
 
 }  // namespace
@@ -375,14 +385,17 @@ std::optional<std::string> GetCookieDomainWithString(
   if (url_host.ends_with("..")) {
     return std::nullopt;
   }
+
+  const bool is_host_ip = url.HostIsIPAddress();
+  const bool domain_matches_host =
+      base::EqualsCaseInsensitiveASCII(url_host, domain_string) ||
+      base::EqualsCaseInsensitiveASCII("." + url_host, domain_string);
+
   // If no domain was specified in the domain string, default to a host cookie.
   // We match IE/Firefox in allowing a domain=IPADDR if it matches (case
   // in-sensitive) the url ip address hostname and ignoring a leading dot if one
   // exists. It should be treated as a host cookie.
-  if (domain_string.empty() ||
-      (url.HostIsIPAddress() &&
-       (base::EqualsCaseInsensitiveASCII(url_host, domain_string) ||
-        base::EqualsCaseInsensitiveASCII("." + url_host, domain_string)))) {
+  if (domain_string.empty() || (is_host_ip && domain_matches_host)) {
     std::string result;
     if (url.SchemeIsHTTPOrHTTPS() || url.SchemeIsWSOrWSS()) {
       result = url_host;
@@ -397,6 +410,10 @@ std::optional<std::string> GetCookieDomainWithString(
     // generating too many crash reports and already know why this is failing.
     DCHECK(DomainIsHostOnly(result));
     return result;
+  } else if (is_host_ip) {
+    // IP address that don't have an empty or matching domain attribute are
+    // invalid.
+    return std::nullopt;
   }
 
   // Disallow domain names with %-escaped characters.
@@ -1132,23 +1149,23 @@ bool ShouldAddInitialStorageAccessApiOverride(
     const GURL& url,
     StorageAccessApiStatus api_status,
     base::optional_ref<const url::Origin> request_initiator,
-    bool emit_metrics) {
+    bool emit_metrics,
+    bool credentials_mode_include) {
   if (api_status != StorageAccessApiStatus::kAccessViaAPI ||
       !request_initiator) {
     return false;
   }
 
+  const url::Origin origin = url::Origin::Create(url);
+
   using enum StorageAccessNetRequestKind;
   StorageAccessNetRequestKind kind = kCrossSite;
-  if (request_initiator->IsSameOriginWith(url)) {
+  if (request_initiator->IsSameOriginWith(origin)) {
     kind = kSameOrigin;
-  } else {
-    SchemefulSite request_site(url.SchemeIsHTTPOrHTTPS()
-                                   ? url
-                                   : ChangeWebSocketSchemeToHttpScheme(url));
-    if (SchemefulSite(request_initiator.value()) == request_site) {
-      kind = kCrossOriginSameSite;
-    }
+  } else if (SchemefulSite::IsSameSite(request_initiator.value(), origin)) {
+    kind = credentials_mode_include
+               ? kCrossOriginSameSiteCredentialsIncluded
+               : kCrossOriginSameSiteCredentialsNotIncluded;
   }
   if (emit_metrics) {
     RecordStorageAccessNetRequestMetric(kind);

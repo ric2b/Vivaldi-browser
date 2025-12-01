@@ -482,16 +482,16 @@ bool VisitAnnotationsDatabase::GetContentAnnotationsForVisit(
   out_content_annotations->model_annotations.visibility_score =
       static_cast<float>(statement.ColumnDouble(1));
   out_content_annotations->model_annotations.categories =
-      GetCategoriesFromStringColumn(statement.ColumnString(2));
+      GetCategoriesFromStringColumn(statement.ColumnStringView(2));
   out_content_annotations->model_annotations.page_topics_model_version =
       statement.ColumnInt64(3);
   out_content_annotations->annotation_flags = statement.ColumnInt64(4);
   out_content_annotations->model_annotations.entities =
-      GetCategoriesFromStringColumn(statement.ColumnString(5));
+      GetCategoriesFromStringColumn(statement.ColumnStringView(5));
   out_content_annotations->related_searches =
-      DeserializeFromStringColumn(statement.ColumnString(6));
+      DeserializeFromStringColumn(statement.ColumnStringView(6));
   out_content_annotations->search_normalized_url =
-      GURL(statement.ColumnString(7));
+      GURL(statement.ColumnStringView(7));
   out_content_annotations->search_terms = statement.ColumnString16(8);
   out_content_annotations->alternative_title = statement.ColumnString(9);
   out_content_annotations->page_language = statement.ColumnString(10);
@@ -941,8 +941,8 @@ ClusterVisit VisitAnnotationsDatabase::GetClusterVisit(VisitID visit_id) {
   cluster_visit.score = static_cast<float>(statement.ColumnDouble(2));
   cluster_visit.engagement_score =
       static_cast<float>(statement.ColumnDouble(3));
-  cluster_visit.url_for_deduping = GURL(statement.ColumnString(4));
-  cluster_visit.normalized_url = GURL(statement.ColumnString(5));
+  cluster_visit.url_for_deduping = GURL(statement.ColumnStringView(4));
+  cluster_visit.normalized_url = GURL(statement.ColumnStringView(5));
   cluster_visit.url_for_display = statement.ColumnString16(6);
   cluster_visit.interaction_state =
       InteractionStateFromInt(statement.ColumnInt(7));
@@ -1242,9 +1242,11 @@ bool VisitAnnotationsDatabase::MigrateContentAnnotationsAddSearchMetadata() {
   // Add the `search_normalized_url` and `search_terms` columns to the older
   // versions of the table.
   return GetDB().Execute(
-      "ALTER TABLE content_annotations "
-      "ADD COLUMN search_normalized_url; \n"
-      "ALTER TABLE content_annotations ADD COLUMN search_terms LONGVARCHAR");
+             "ALTER TABLE content_annotations "
+             "ADD COLUMN search_normalized_url") &&
+         GetDB().Execute(
+             "ALTER TABLE content_annotations ADD COLUMN search_terms "
+             "LONGVARCHAR");
 }
 
 bool VisitAnnotationsDatabase::MigrateContentAnnotationsAddAlternativeTitle() {
@@ -1418,7 +1420,7 @@ bool VisitAnnotationsDatabase::ClustersTableContainsAutoincrement() {
     return false;
   }
 
-  std::string clusters_schema = statement.ColumnString(0);
+  std::string_view clusters_schema = statement.ColumnStringView(0);
   // We check if the whole schema contains "AUTOINCREMENT", since
   // "AUTOINCREMENT" only can be used for "INTEGER PRIMARY KEY", so we assume no
   // other columns could contain "AUTOINCREMENT".
@@ -1504,7 +1506,7 @@ std::string VisitAnnotationsDatabase::ConvertCategoriesToStringColumn(
 // functions should not be changed.
 std::vector<VisitContentModelAnnotations::Category>
 VisitAnnotationsDatabase::GetCategoriesFromStringColumn(
-    const std::string& column_value) {
+    std::string_view column_value) {
   std::vector<VisitContentModelAnnotations::Category> categories;
 
   std::vector<std::string> category_strings = base::SplitString(
@@ -1536,7 +1538,7 @@ std::string VisitAnnotationsDatabase::SerializeToStringColumn(
 // format is already being synced, the implementation of these functions
 // should not be changed.
 std::vector<std::string> VisitAnnotationsDatabase::DeserializeFromStringColumn(
-    const std::string& column_value) {
+    std::string_view column_value) {
   using std::string_literals::operator""s;
   return base::SplitString(column_value, "\0"s, base::TRIM_WHITESPACE,
                            base::SPLIT_WANT_NONEMPTY);

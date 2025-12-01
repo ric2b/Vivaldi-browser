@@ -9,7 +9,6 @@
 #include "ash/test/pixel/ash_pixel_test_init_params.h"
 #include "base/test/scoped_feature_list.h"
 #include "chromeos/constants/chromeos_features.h"
-#include "ui/gfx/paint_vector_icon.h"
 #include "ui/gfx/vector_icon_types.h"
 #include "ui/message_center/message_center.h"
 #include "ui/message_center/public/cpp/notification.h"
@@ -85,6 +84,6 @@ TEST_P(ScalableIphPixelTest, NotificationNoBodyText) {
   EXPECT_TRUE(GetPixelDiffer()->CompareUiComponentsOnPrimaryScreen(
       GetScreenshotName("scalable_iph_notification_no_body_text",
                         IsNotificationWidthIncreaseEnabled()),
-      /*revision_number=*/1, message_view));
+      /*revision_number=*/2, message_view));
 }
 }  // namespace ash

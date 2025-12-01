@@ -44,6 +44,16 @@ const SKIPPED_FILES = [
 
     // Just recursively loads itself.
     'regress-8510.js',
+
+    // Contains an expected SyntaxError. From:
+    // spidermonkey/non262/Unicode/regress-352044-02-n.js
+    'regress-352044-02-n.js',
+
+    // Very slow pattern that just makes fuzz tests time out.
+    'regress-crbug-400504688.js',
+
+    // Empty test that just sets flags.
+    'regress-392928803.js',
 ];
 
 const SKIPPED_DIRECTORIES = [
@@ -98,6 +108,11 @@ const SOFT_SKIPPED_PATHS = [
     /webgl/,
 ];
 
+// Files that can't be combined with `use strict`.
+const SLOPPY_FILES = new Set([
+  "chakra/UnitTestFramework/UnitTestFramework.js",
+]);
+
 // Flags that lead to false positives. Furthermore choose files using these
 // flags with a lower probability, as the absence of the flags typically
 // renders the tests useless.
@@ -112,6 +127,13 @@ const DISALLOWED_FLAGS_WITH_DISCOURAGED_FILES = [
     // Disallowed due to false positives.
     '--correctness-fuzzer-suppressions',
     '--expose-trigger-failure',
+
+    // Doesn't make much sense without the memory-corruption API. In the future
+    // we might want to enable the latter only on builds with the API
+    // available. Using tests that need one of these flags is also not
+    // resulting in useful cases.
+    '--sandbox-testing',
+    '--sandbox-fuzzing',
 ];
 
 // Flags that lead to false positives or that are already passed by default.
@@ -140,8 +162,8 @@ const DISALLOWED_FLAGS = [
     '--expose-debug-as',
     '--expose-natives-as',
     '--mock-arraybuffer-allocator',
-    'natives',  // Used in conjunction with --expose-natives-as.
     /^--trace-path.*/,
+    /.*\.mjs$/,
 ];
 
 // Flags only used with 25% probability.
@@ -266,12 +288,14 @@ function isTestSoftSkippedRel(relPath) {
 }
 
 function isTestSloppyRel(relPath) {
-  return this.getGeneratedSloppy().has(normalize(relPath));
+  const path = normalize(relPath);
+  return this.getGeneratedSloppy().has(path) || SLOPPY_FILES.has(path);
 }
 
 function filterFlags(flags) {
   return flags.filter(flag => {
     return (
+        flag.startsWith('--') &&
         _doesntMatch(DISALLOWED_FLAGS_WITH_DISCOURAGED_FILES, flag) &&
         _doesntMatch(DISALLOWED_FLAGS, flag) &&
         (_doesntMatch(LOW_PROB_FLAGS, flag) ||

@@ -45,10 +45,11 @@ void NotifyMacEvent(AXPlatformNodeCocoa* target, ax::mojom::Event event_type) {
 namespace ui {
 
 // static
-AXPlatformNode* AXPlatformNode::Create(AXPlatformNodeDelegate* delegate) {
+AXPlatformNode::Pointer AXPlatformNode::Create(
+    AXPlatformNodeDelegate* delegate) {
   AXPlatformNode* node = new AXPlatformNodeMac();
   node->Init(delegate);
-  return node;
+  return Pointer(node);
 }
 
 // static
@@ -69,7 +70,7 @@ AXPlatformNodeMac::~AXPlatformNodeMac() = default;
 
 void AXPlatformNodeMac::Destroy() {
   if (objc_storage_->native_node) {
-    [objc_storage_->native_node detach];
+    [objc_storage_->native_node detachAndNotifyDestroyed:YES];
     // Also, clear the pointer to make accidental use-after-free impossible.
     objc_storage_->native_node = nil;
   }

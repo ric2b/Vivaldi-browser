@@ -8,6 +8,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <variant>
 
 #include "base/memory/raw_ptr.h"
 #include "base/memory/ref_counted.h"
@@ -24,7 +25,6 @@
 #include "content/public/browser/child_process_termination_info.h"
 #include "content/public/common/result_codes.h"
 #include "mojo/public/cpp/system/invitation.h"
-#include "third_party/abseil-cpp/absl/types/variant.h"
 #include "third_party/perfetto/include/perfetto/tracing/traced_proto.h"
 
 #if BUILDFLAG(IS_ANDROID)
@@ -84,11 +84,13 @@ static_assert(static_cast<int>(LAUNCH_RESULT_START) >
 struct RenderProcessPriority {
   RenderProcessPriority(bool visible,
                         bool has_media_stream,
+                        bool has_immersive_xr_session,
                         bool has_foreground_service_worker,
                         unsigned int frame_depth,
                         bool intersects_viewport,
                         bool boost_for_pending_views,
-                        bool boost_for_loading
+                        bool boost_for_loading,
+                        bool is_spare_renderer
 #if BUILDFLAG(IS_ANDROID)
                         ,
                         ChildProcessImportance importance
@@ -97,24 +99,11 @@ struct RenderProcessPriority {
                         ,
                         std::optional<base::Process::Priority> priority_override
 #endif
-                        )
-      : visible(visible),
-        has_media_stream(has_media_stream),
-        has_foreground_service_worker(has_foreground_service_worker),
-        frame_depth(frame_depth),
-        intersects_viewport(intersects_viewport),
-        boost_for_pending_views(boost_for_pending_views),
-        boost_for_loading(boost_for_loading)
-#if BUILDFLAG(IS_ANDROID)
-        ,
-        importance(importance)
-#endif
-#if !BUILDFLAG(IS_ANDROID)
-        ,
-        priority_override(priority_override)
-#endif
-  {
-  }
+  );
+
+  RenderProcessPriority(const RenderProcessPriority&);
+
+  RenderProcessPriority& operator=(const RenderProcessPriority&);
 
   // Returns true if the child process is backgrounded.
   // DEPRECATED NOTICE: Use GetProcessPriority() instead.
@@ -142,6 +131,11 @@ struct RenderProcessPriority {
   // content.
   bool has_media_stream;
 
+  // |has_immersive_xr_session| is true when the process is responsible for
+  // rendering an XrSession. Such sessions typically take over the full screen
+  // for rendering, and may otherwise "background" the current process.
+  bool has_immersive_xr_session;
+
   // |has_foreground_service_worker| is true when the process has a service
   // worker that may need to service timely events from other, possibly visible,
   // processes.
@@ -168,6 +162,11 @@ struct RenderProcessPriority {
   // |boost_for_loading| is true if this process is responsible for committing
   // navigation and initial loading.
   bool boost_for_loading;
+
+  // |is_spare_renderer| is true if this process should be treated as a spare
+  // renderer. The process will be given a moderate priority even it is not
+  // visible and used.
+  bool is_spare_renderer;
 
 #if BUILDFLAG(IS_ANDROID)
   ChildProcessImportance importance;
@@ -201,7 +200,7 @@ struct ChildProcessLauncherFileData {
   //
   // Currently only supported on Linux, ChromeOS and Android platforms.
   // TODO(crbug.com/40253015): this currently silently fails on Android.
-  std::map<std::string, absl::variant<base::FilePath, base::ScopedFD>>
+  std::map<std::string, std::variant<base::FilePath, base::ScopedFD>>
       files_to_preload;
 #endif
 };

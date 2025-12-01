@@ -6,6 +6,7 @@
 
 #include "base/task/thread_pool.h"
 #include "chromeos/ash/components/boca/boca_app_client.h"
+#include "chromeos/ash/components/boca/session_api/add_students_request.h"
 #include "chromeos/ash/components/boca/session_api/constants.h"
 #include "chromeos/ash/components/boca/session_api/create_session_request.h"
 #include "chromeos/ash/components/boca/session_api/get_session_request.h"
@@ -17,6 +18,7 @@
 #include "components/signin/public/identity_manager/identity_manager.h"
 #include "google_apis/common/auth_service.h"
 #include "google_apis/common/request_sender.h"
+#include "student_heartbeat_request.h"
 
 namespace ash::boca {
 
@@ -78,8 +80,17 @@ void SessionClientImpl::RemoveStudent(
   sender_->StartRequestWithAuthRetry(std::move(request));
 }
 
+void SessionClientImpl::AddStudents(
+    std::unique_ptr<AddStudentsRequest> request) {
+  sender_->StartRequestWithAuthRetry(std::move(request));
+}
+
 void SessionClientImpl::JoinSession(
     std::unique_ptr<JoinSessionRequest> request) {
+  sender_->StartRequestWithAuthRetry(std::move(request));
+}
+void SessionClientImpl::StudentHeartbeat(
+    std::unique_ptr<StudentHeartbeatRequest> request) {
   sender_->StartRequestWithAuthRetry(std::move(request));
 }
 }  // namespace ash::boca

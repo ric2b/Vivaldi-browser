@@ -37,7 +37,7 @@ LayoutUnit ComputeMargin(const Length& length,
         static_cast<int>(reference_length * length.Percent() / 100.0));
   }
   DCHECK(length.IsFixed());
-  return LayoutUnit(length.Value() * zoom);
+  return LayoutUnit(length.Pixels() * zoom);
 }
 
 PhysicalBoxStrut ResolveMargin(const Vector<Length>& margin,
@@ -333,8 +333,15 @@ const LayoutObject* IntersectionGeometry::GetTargetLayoutObject(
       [[unlikely]] {
     return nullptr;
   }
-
-  DCHECK(!target_element.GetDocument().View()->NeedsLayout());
+  if (RuntimeEnabledFeatures::ForceDelayedIntersectionUpdateEnabled()) {
+    // We may have dirty layout in a throttled frame when the frame is not
+    // required to update intersection. Assuming "not intersecting".
+    if (target->GetFrameView()->NeedsLayout()) [[unlikely]] {
+      return nullptr;
+    }
+  } else {
+    DCHECK(!target_element.GetDocument().View()->NeedsLayout());
+  }
   return target;
 }
 
@@ -763,7 +770,7 @@ bool IntersectionGeometry::ApplyClip(const LayoutObject* target,
                                      bool root_scrolls_target,
                                      CachedRects* cached_rects) {
   unsigned flags = kDefaultVisualRectFlags | kEdgeInclusive |
-                   kDontApplyMainFrameOverflowClip;
+                   kDontApplyMainFrameOverflowClip | kUsePreciseClipPath;
   if (!ShouldRespectFilters()) {
     flags |= kIgnoreFilters;
   }

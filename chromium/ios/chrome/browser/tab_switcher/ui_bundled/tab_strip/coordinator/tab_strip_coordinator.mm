@@ -94,7 +94,7 @@
       startDispatchingToTarget:self
                    forProtocol:@protocol(TabStripCommands)];
 
-  ProfileIOS* profile = self.browser->GetProfile();
+  ProfileIOS* profile = self.profile;
   CHECK(profile);
   self.tabStripViewController = [[TabStripViewController alloc] init];
   self.tabStripViewController.layoutGuideCenter =
@@ -107,13 +107,21 @@
   BrowserList* browserList = BrowserListFactory::GetForProfile(profile);
   tab_groups::TabGroupSyncService* tabGroupSyncService =
       tab_groups::TabGroupSyncServiceFactory::GetForProfile(profile);
-  self.mediator = [[TabStripMediator alloc]
-         initWithConsumer:self.tabStripViewController
-      tabGroupSyncService:tabGroupSyncService
-              browserList:browserList
-         messagingService:collaboration::messaging::
-                              MessagingBackendServiceFactory::GetForProfile(
-                                  profile)];
+  collaboration::messaging::MessagingBackendService* messagingService =
+      collaboration::messaging::MessagingBackendServiceFactory::GetForProfile(
+          profile);
+  collaboration::CollaborationService* collaborationService =
+      collaboration::CollaborationServiceFactory::GetForProfile(profile);
+  ShareKitService* shareKitService =
+      ShareKitServiceFactory::GetForProfile(profile);
+
+  self.mediator =
+      [[TabStripMediator alloc] initWithConsumer:self.tabStripViewController
+                             tabGroupSyncService:tabGroupSyncService
+                                     browserList:browserList
+                                messagingService:messagingService
+                            collaborationService:collaborationService
+                                 shareKitService:shareKitService];
   self.mediator.webStateList = self.browser->GetWebStateList();
   self.mediator.profile = profile;
   self.mediator.browser = self.browser;
@@ -199,13 +207,12 @@
 
 - (void)showAlertForLastTabDragged:
     (TabStripLastTabDraggedAlertCommand*)command {
-  ProfileIOS* profile = self.browser->GetProfile();
-  if (profile->IsOffTheRecord()) {
+  if (self.profile->IsOffTheRecord()) {
     return;
   }
 
   AuthenticationService* authenticationService =
-      AuthenticationServiceFactory::GetForProfile(profile);
+      AuthenticationServiceFactory::GetForProfile(self.profile);
   id<SystemIdentity> identity =
       authenticationService->GetPrimaryIdentity(signin::ConsentLevel::kSignin);
 
@@ -260,6 +267,11 @@
 - (void)showTabGroupConfirmationForAction:(TabGroupActionType)actionType
                                 groupItem:(TabGroupItem*)tabGroupItem
                                sourceView:(UIView*)sourceView {
+  if (actionType == TabGroupActionType::kLeaveOrKeepSharedTabGroup ||
+      actionType == TabGroupActionType::kDeleteOrKeepSharedTabGroup) {
+    sourceView = self.tabStripViewController.closedTabGroupView;
+  }
+
   _tabGroupConfirmationCoordinator = [[TabGroupConfirmationCoordinator alloc]
       initWithBaseViewController:self.baseViewController
                          browser:self.browser
@@ -267,20 +279,20 @@
                       sourceView:sourceView];
   __weak TabStripCoordinator* weakSelf = self;
   _tabGroupConfirmationCoordinator.primaryAction = ^{
+    [weakSelf takeActionForActionType:actionType tabGroupItem:tabGroupItem];
+  };
+  _tabGroupConfirmationCoordinator.secondaryAction = ^{
     switch (actionType) {
       case TabGroupActionType::kUngroupTabGroup:
-        [weakSelf ungroupTabGroup:tabGroupItem];
-        break;
       case TabGroupActionType::kDeleteTabGroup:
-        [weakSelf deleteTabGroup:tabGroupItem];
-        break;
       case TabGroupActionType::kLeaveSharedTabGroup:
       case TabGroupActionType::kDeleteSharedTabGroup:
-        // TODO(crbug.com/375587197): Implement this.
-        break;
+        NOTREACHED();
+
       case TabGroupActionType::kLeaveOrKeepSharedTabGroup:
       case TabGroupActionType::kDeleteOrKeepSharedTabGroup:
-        NOTREACHED();
+        [weakSelf replaceLastTabByNewTabInGroup:tabGroupItem];
+        break;
     }
   };
   _tabGroupConfirmationCoordinator.tabGroupName = tabGroupItem.title;
@@ -292,8 +304,7 @@
 
 - (void)showTabStripTabGroupSnackbarAfterClosingGroups:
     (int)numberOfClosedGroups {
-  if (!IsTabGroupSyncEnabled() ||
-      self.browser->GetProfile()->IsOffTheRecord()) {
+  if (!IsTabGroupSyncEnabled() || self.profile->IsOffTheRecord()) {
     return;
   }
 
@@ -391,20 +402,41 @@
   _alertCoordinator = nil;
 }
 
-// Helper method to close a tab group and dismiss the confirmation coordinator.
-- (void)deleteTabGroup:(TabGroupItem*)tabGroupItem {
-  if (tabGroupItem) {
-    [_mediator deleteGroup:tabGroupItem];
+// Executes a corresponded action to `actionType` and dismiss
+// the confirmation coordinator.
+- (void)takeActionForActionType:(TabGroupActionType)actionType
+                   tabGroupItem:(TabGroupItem*)tabGroupItem {
+  if (!tabGroupItem) {
+    return;
   }
+
+  switch (actionType) {
+    case TabGroupActionType::kUngroupTabGroup:
+      [_mediator ungroupGroup:tabGroupItem];
+      break;
+    case TabGroupActionType::kDeleteTabGroup:
+      [_mediator deleteGroup:tabGroupItem];
+      break;
+    case TabGroupActionType::kLeaveSharedTabGroup:
+    case TabGroupActionType::kLeaveOrKeepSharedTabGroup:
+      [_mediator leaveSharedGroup:tabGroupItem];
+      break;
+    case TabGroupActionType::kDeleteSharedTabGroup:
+    case TabGroupActionType::kDeleteOrKeepSharedTabGroup:
+      [_mediator deleteSharedGroup:tabGroupItem];
+      break;
+  }
+
   [_tabGroupConfirmationCoordinator stop];
   _tabGroupConfirmationCoordinator = nil;
 }
 
-// Helper method to ungroup a tab group and dismiss the confirmation
-// coordinator.
-- (void)ungroupTabGroup:(TabGroupItem*)tabGroupItem {
+// Helper method to open a new tab when the last tab of a shared group is
+// closed. By doing that, the user is keeping the group instead of deleting it.
+- (void)replaceLastTabByNewTabInGroup:(TabGroupItem*)tabGroupItem {
   if (tabGroupItem) {
-    [_mediator ungroupGroup:tabGroupItem];
+    [_mediator addNewTabInGroup:tabGroupItem];
+    [_mediator closeSavedTabFromGroup:tabGroupItem];
   }
   [_tabGroupConfirmationCoordinator stop];
   _tabGroupConfirmationCoordinator = nil;
@@ -426,8 +458,9 @@
   std::unique_ptr<collaboration::CollaborationControllerDelegate> delegate =
       std::make_unique<collaboration::IOSCollaborationControllerDelegate>(
           browser, self.baseViewController);
-  collaborationService->StartShareOrManageFlow(std::move(delegate),
-                                               tabGroup->tab_group_id());
+  collaborationService->StartShareOrManageFlow(
+      std::move(delegate), tabGroup->tab_group_id(),
+      collaboration::CollaborationServiceShareOrManageEntryPoint::kUnknown);
 }
 
 @end

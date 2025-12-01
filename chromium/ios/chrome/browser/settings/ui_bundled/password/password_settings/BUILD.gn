@@ -21,6 +21,7 @@ source_set("password_settings") {
     "//components/password_manager/core/browser/features:password_features",
     "//components/password_manager/core/common",
     "//components/prefs",
+    "//components/prefs/ios",
     "//components/signin/public/identity_manager/objc",
     "//components/strings",
     "//ios/chrome/app/strings",
@@ -39,10 +40,8 @@ source_set("password_settings") {
     "//ios/chrome/browser/shared/coordinator/chrome_coordinator",
     "//ios/chrome/browser/shared/model/application_context",
     "//ios/chrome/browser/shared/model/browser",
-    "//ios/chrome/browser/shared/model/prefs",
     "//ios/chrome/browser/shared/model/profile",
     "//ios/chrome/browser/shared/model/url:constants",
-    "//ios/chrome/browser/shared/model/utils",
     "//ios/chrome/browser/shared/public/commands",
     "//ios/chrome/browser/shared/ui/util:util",
     "//ios/chrome/browser/signin/model",
@@ -70,8 +69,11 @@ source_set("password_settings_ui") {
   deps = [
     ":password_settings_constants",
     "//components/strings",
+    "//ios/chrome/app:tests_hook",
     "//ios/chrome/app/strings",
+    "//ios/chrome/browser/credential_provider/model:features",
     "//ios/chrome/browser/settings/ui_bundled/password:features",
+    "//ios/chrome/browser/shared/coordinator/utils",
     "//ios/chrome/browser/shared/public/commands",
     "//ios/chrome/browser/shared/public/features",
     "//ios/chrome/browser/shared/ui/symbols",
@@ -83,7 +85,10 @@ source_set("password_settings_ui") {
     "//ui/base",
   ]
   public_deps = [ "//ios/chrome/browser/settings/ui_bundled:settings_root" ]
-  frameworks = [ "UIKit.framework" ]
+  frameworks = [
+    "UIKit.framework",
+    "AuthenticationServices.framework",
+  ]
 }
 
 source_set("password_settings_constants") {
@@ -125,6 +130,7 @@ source_set("unit_tests") {
     "//components/webauthn/core/browser",
     "//components/webauthn/core/browser:test_support",
     "//ios/chrome/app/strings",
+    "//ios/chrome/browser/credential_provider/model:features",
     "//ios/chrome/browser/passwords/model:store_factory",
     "//ios/chrome/browser/passwords/model/metrics",
     "//ios/chrome/browser/settings/ui_bundled/password:features",

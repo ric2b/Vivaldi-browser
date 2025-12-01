@@ -8,6 +8,8 @@
 /external/libavif
 /match_stats.csv
 /out_comparison.txt
+/sys/aom-sys/aom
+/sys/aom-sys/aom.rs
 /sys/dav1d-sys/dav1d
 /sys/dav1d-sys/dav1d.rs
 /sys/libgav1-sys/libgav1

@@ -35,7 +35,6 @@
 #include "chrome/browser/apps/app_service/app_launch_params.h"
 #include "chrome/browser/apps/app_service/launch_utils.h"
 #include "chrome/browser/apps/link_capturing/enable_link_capturing_infobar_delegate.h"
-#include "chrome/browser/apps/link_capturing/link_capturing_features.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profiles_state.h"
 #include "chrome/browser/sessions/app_session_service.h"
@@ -60,6 +59,7 @@
 #include "chrome/browser/ui/web_applications/web_app_launch_process.h"
 #include "chrome/browser/ui/web_applications/web_app_launch_utils.h"
 #include "chrome/browser/ui/web_applications/web_app_tabbed_utils.h"
+#include "chrome/browser/web_applications/link_capturing_features.h"
 #include "chrome/browser/web_applications/locks/app_lock.h"
 #include "chrome/browser/web_applications/mojom/user_display_mode.mojom-shared.h"
 #include "chrome/browser/web_applications/navigation_capturing_log.h"
@@ -67,8 +67,6 @@
 #include "chrome/browser/web_applications/web_app_constants.h"
 #include "chrome/browser/web_applications/web_app_helpers.h"
 #include "chrome/browser/web_applications/web_app_install_utils.h"
-#include "chrome/browser/web_applications/web_app_launch_params.h"
-#include "chrome/browser/web_applications/web_app_launch_queue.h"
 #include "chrome/browser/web_applications/web_app_provider.h"
 #include "chrome/browser/web_applications/web_app_registrar.h"
 #include "chrome/browser/web_applications/web_app_sync_bridge.h"
@@ -78,6 +76,8 @@
 #include "chromeos/constants/chromeos_features.h"
 #include "components/services/app_service/public/cpp/app_launch_util.h"
 #include "components/site_engagement/content/site_engagement_service.h"
+#include "components/webapps/browser/launch_queue/launch_params.h"
+#include "components/webapps/browser/launch_queue/launch_queue.h"
 #include "components/webapps/common/web_app_id.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/navigation_entry.h"
@@ -152,10 +152,8 @@ Browser* ReparentWebContentsIntoAppBrowser(content::WebContents* contents,
 #endif
 
     return target_browser;
-  }
+  } // End Vivaldi
 
-  TabStripModel* target_tabstrip = target_browser->tab_strip_model();
-  bool target_has_pinned_home_tab = HasPinnedHomeTab(target_tabstrip);
   if (!insert_as_pinned_home_tab) {
     MaybeAddPinnedHomeTab(target_browser, app_id);
   }
@@ -169,12 +167,6 @@ Browser* ReparentWebContentsIntoAppBrowser(content::WebContents* contents,
   ReparentWebContentsIntoBrowserImpl(
       source_browser, contents, target_browser,
       /*insert_as_pinned_first_tab=*/insert_as_pinned_home_tab);
-  if (insert_as_pinned_home_tab) {
-    if (target_has_pinned_home_tab) {
-      target_tabstrip->DetachAndDeleteWebContentsAt(1);
-    }
-    SetWebContentsIsPinnedHomeTab(target_tabstrip->GetWebContentsAt(0));
-  }
   return target_browser;
 }
 
@@ -328,7 +320,7 @@ void RecordDiyOrCraftedAppLaunch(const WebApp& web_app) {
 void ReparentWebContentsIntoBrowserImpl(Browser* source_browser,
                                         content::WebContents* web_contents,
                                         Browser* target_browser,
-                                        bool insert_as_first_tab) {
+                                        bool insert_as_pinned_home_tab) {
   CHECK(source_browser);
   CHECK(web_contents);
   CHECK(target_browser);
@@ -374,10 +366,12 @@ void ReparentWebContentsIntoBrowserImpl(Browser* source_browser,
       source_tabstrip->DetachWebContentsAtForInsertion(found_tab_index.value());
   int location = target_browser->tab_strip_model()->count();
   int add_types = (AddTabTypes::ADD_INHERIT_OPENER | AddTabTypes::ADD_ACTIVE);
-  if (insert_as_first_tab) {
+  if (insert_as_pinned_home_tab) {
     location = 0;
     add_types |= AddTabTypes::ADD_PINNED;
   }
+  const bool target_has_pinned_home_tab =
+      HasPinnedHomeTab(target_browser->tab_strip_model());
   // This method moves a WebContents from a non-normal browser window to a
   // normal browser window. We cannot move the Tab over directly since TabModel
   // enforces the requirement that it cannot move between window types.
@@ -387,6 +381,14 @@ void ReparentWebContentsIntoBrowserImpl(Browser* source_browser,
       location, std::move(contents_move), add_types);
   CHECK_EQ(web_contents,
            target_browser->tab_strip_model()->GetActiveWebContents());
+
+  if (insert_as_pinned_home_tab) {
+    if (target_has_pinned_home_tab) {
+      target_browser->tab_strip_model()->DetachAndDeleteWebContentsAt(1);
+    }
+    SetWebContentsIsPinnedHomeTab(
+        target_browser->tab_strip_model()->GetWebContentsAt(0));
+  }
 
   if (!target_app_id) {
     IntentPickerTabHelper* helper =
@@ -460,7 +462,9 @@ bool MaybeHandleIntentPickerFocusExistingOrNavigateExisting(
   }
   std::optional<AppBrowserController::BrowserAndTabIndex> existing_app_host =
       AppBrowserController::FindTopLevelBrowsingContextForWebApp(
-          *profile, app_id, Browser::TYPE_APP);
+          *profile, app_id, Browser::TYPE_APP,
+          /*for_focus_existing=*/client_mode ==
+              LaunchHandler::ClientMode::kFocusExisting);
   if (!existing_app_host.has_value()) {
     return false;
   }
@@ -772,7 +776,7 @@ content::WebContents* NavigateWebAppUsingParams(const std::string& app_id,
     // This block safe guards against misuse of APIs (that can cause
     // GetCapturingSystemAppForURL returning the wrong value).
     //
-    // TODO(http://crbug.com/1408946): Remove this block when we find a better
+    // TODO(crbug.com/40253765): Remove this block when we find a better
     // way to prevent API misuse (e.g. by ensuring test coverage for new
     // features that could trigger this code) or this code path is no longer
     // possible.
@@ -803,7 +807,7 @@ void RecordAppWindowLaunchMetric(Profile* profile,
   }
 
   DisplayMode display =
-      provider->registrar_unsafe().GetEffectiveDisplayModeFromManifest(app_id);
+      provider->registrar_unsafe().GetAppEffectiveDisplayMode(app_id);
   if (display != DisplayMode::kUndefined) {
     DCHECK_LT(DisplayMode::kUndefined, display);
     DCHECK_LE(display, DisplayMode::kMaxValue);
@@ -838,6 +842,8 @@ void RecordAppTabLaunchMetric(Profile* profile,
     return;
   }
 
+  // Measure the display mode that was specified in the manifest if this app was
+  // set to open in a standalone window.
   DisplayMode display =
       provider->registrar_unsafe().GetEffectiveDisplayModeFromManifest(app_id);
   if (display != DisplayMode::kUndefined) {
@@ -999,7 +1005,7 @@ void EnqueueLaunchParams(content::WebContents* contents,
                          const GURL& url,
                          bool wait_for_navigation_to_complete) {
   CHECK(contents);
-  WebAppLaunchParams launch_params;
+  webapps::LaunchParams launch_params;
   launch_params.started_new_navigation = wait_for_navigation_to_complete;
   launch_params.app_id = app_id;
   launch_params.target_url = url;

@@ -5,7 +5,7 @@
 import type * as Protocol from '../../../generated/protocol.js';
 import * as CPUProfile from '../../../models/cpu_profile/cpu_profile.js';
 import {describeWithEnvironment} from '../../../testing/EnvironmentHelpers.js';
-import {makeCompleteEvent} from '../../../testing/TraceHelpers.js';
+import {makeCompleteEvent, makeInstantEvent} from '../../../testing/TraceHelpers.js';
 import {TraceLoader} from '../../../testing/TraceLoader.js';
 import * as Trace from '../trace.js';
 
@@ -106,7 +106,7 @@ describeWithEnvironment('SamplesIntegrator', function() {
         throw new Error('Trace events were unexpectedly not found.');
       }
       const constructedCalls = samplesIntegrator.buildProfileCalls(traceEvents);
-      assert.lengthOf(constructedCalls, 5131);
+      assert.lengthOf(constructedCalls, 5130);
     });
 
     it('creates JS profile calls with a top-level V8 invocation', () => {
@@ -243,7 +243,7 @@ describeWithEnvironment('SamplesIntegrator', function() {
           {id: 5, callFrame: {functionName: 'sheep', scriptId, url, lineNumber, columnNumber}},
         ],
         samples: [3, 3, 3, 5],
-        traceIds: {3: traceId},
+        traceIds: {[traceId]: 5},
         timeDeltas: new Array(4).fill(100),
       };
 
@@ -272,8 +272,8 @@ describeWithEnvironment('SamplesIntegrator', function() {
       const evaluateScript = makeCompleteEvent(Trace.Types.Events.Name.EVALUATE_SCRIPT, 0, 500);
       const v8Run = makeCompleteEvent('v8.run', 10, 490);
       const consoleTimeStamp =
-          makeCompleteEvent(Trace.Types.Events.Name.CONSOLE_TIME_STAMP, 350, 10) as Trace.Types.Events.ConsoleTimeStamp;
-      consoleTimeStamp.args = {data: {name: 'A timestamp', sampleTraceId: traceId}};
+          makeInstantEvent(Trace.Types.Events.Name.TIME_STAMP, 350) as Trace.Types.Events.ConsoleTimeStamp;
+      consoleTimeStamp.args = {data: {message: 'A timestamp', sampleTraceId: traceId}};
       const traceEvents = [evaluateScript, v8Run, consoleTimeStamp];
       const constructedCalls = integrator.buildProfileCalls(traceEvents);
       assert.lengthOf(constructedCalls, 4);

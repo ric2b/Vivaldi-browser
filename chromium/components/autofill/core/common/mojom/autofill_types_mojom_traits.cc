@@ -4,12 +4,13 @@
 
 #include "components/autofill/core/common/mojom/autofill_types_mojom_traits.h"
 
+#include <variant>
+
 #include "base/i18n/rtl.h"
 #include "components/autofill/core/common/form_field_data.h"
 #include "components/autofill/core/common/html_field_types.h"
 #include "mojo/public/cpp/base/string16_mojom_traits.h"
 #include "mojo/public/cpp/base/time_mojom_traits.h"
-#include "third_party/abseil-cpp/absl/types/variant.h"
 #include "ui/gfx/geometry/mojom/geometry_mojom_traits.h"
 #include "url/mojom/origin_mojom_traits.h"
 #include "url/mojom/url_gurl_mojom_traits.h"
@@ -76,13 +77,15 @@ autofill::mojom::SectionValueDataView::Tag
 UnionTraits<autofill::mojom::SectionValueDataView,
             autofill::Section::SectionValue>::
     GetTag(const autofill::Section::SectionValue& r) {
-  if (absl::holds_alternative<autofill::Section::Default>(r))
+  if (std::holds_alternative<autofill::Section::Default>(r)) {
     return autofill::mojom::SectionValueDataView::Tag::kDefaultSection;
-  if (absl::holds_alternative<autofill::Section::Autocomplete>(r)) {
+  }
+  if (std::holds_alternative<autofill::Section::Autocomplete>(r)) {
     return autofill::mojom::SectionValueDataView::Tag::kAutocomplete;
   }
-  if (absl::holds_alternative<autofill::Section::FieldIdentifier>(r))
+  if (std::holds_alternative<autofill::Section::FieldIdentifier>(r)) {
     return autofill::mojom::SectionValueDataView::Tag::kFieldIdentifier;
+  }
 
   NOTREACHED();
 }
@@ -231,6 +234,14 @@ bool StructTraits<
       return false;
     }
     out->set_parsed_autocomplete(std::move(parsed_autocomplete));
+  }
+
+  {
+    std::u16string pattern;
+    if (!data.ReadPattern(&pattern)) {
+      return false;
+    }
+    out->set_pattern(std::move(pattern));
   }
 
   {
@@ -510,6 +521,12 @@ bool StructTraits<autofill::mojom::FormFieldDataPredictionsDataView,
   if (!data.ReadOverallType(&out->overall_type)) {
     return false;
   }
+  if (!data.ReadAutofillAiType(&out->autofill_ai_type)) {
+    return false;
+  }
+  if (!data.ReadFormatString(&out->format_string)) {
+    return false;
+  }
   if (!data.ReadParseableName(&out->parseable_name)) {
     return false;
   }
@@ -620,20 +637,28 @@ bool StructTraits<autofill::mojom::PasswordGenerationUIDataDataView,
 }
 
 // static
+bool StructTraits<autofill::mojom::TriggeringFieldDataView,
+                  autofill::TriggeringField>::
+    Read(autofill::mojom::TriggeringFieldDataView data,
+         autofill::TriggeringField* out) {
+  out->show_webauthn_credentials = data.show_webauthn_credentials();
+
+  return data.ReadElementId(&out->element_id) &&
+         data.ReadTriggerSource(&out->trigger_source) &&
+         data.ReadTextDirection(&out->text_direction) &&
+         data.ReadTypedUsername(&out->typed_username) &&
+         data.ReadBounds(&out->bounds);
+}
+
+// static
 bool StructTraits<autofill::mojom::PasswordSuggestionRequestDataView,
                   autofill::PasswordSuggestionRequest>::
     Read(autofill::mojom::PasswordSuggestionRequestDataView data,
          autofill::PasswordSuggestionRequest* out) {
   out->username_field_index = data.username_field_index();
   out->password_field_index = data.password_field_index();
-  out->show_webauthn_credentials = data.show_webauthn_credentials();
 
-  return data.ReadElementId(&out->element_id) &&
-         data.ReadFormData(&out->form_data) &&
-         data.ReadTriggerSource(&out->trigger_source) &&
-         data.ReadTextDirection(&out->text_direction) &&
-         data.ReadTypedUsername(&out->typed_username) &&
-         data.ReadBounds(&out->bounds);
+  return data.ReadField(&out->field) && data.ReadFormData(&out->form_data);
 }
 
 bool StructTraits<

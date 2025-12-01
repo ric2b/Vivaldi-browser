@@ -651,6 +651,10 @@ const WebViewImpl* WebViewImpl::GetTab() {
 }
 
 Status WebViewImpl::GetActivePage(WebView** web_view) {
+  auto* page_tracker = GetTab()->GetPageTracker();
+  if (!page_tracker) {
+    return Status(kUnknownError, "page tracker not found");
+  }
   return GetTab()->GetPageTracker()->GetActivePage(web_view);
 }
 
@@ -777,8 +781,10 @@ Status WebViewImpl::Resume(const Timeout* timeout) {
                                          timeout);
 }
 
-Status WebViewImpl::StartBidiServer(std::string bidi_mapper_script) {
-  return client_->StartBidiServer(std::move(bidi_mapper_script));
+Status WebViewImpl::StartBidiServer(std::string bidi_mapper_script,
+                                    bool enable_unsafe_extension_debugging) {
+  return client_->StartBidiServer(std::move(bidi_mapper_script),
+                                  enable_unsafe_extension_debugging);
 }
 
 Status WebViewImpl::PostBidiCommand(base::Value::Dict command) {

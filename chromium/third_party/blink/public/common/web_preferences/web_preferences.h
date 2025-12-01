@@ -16,6 +16,7 @@
 #include "third_party/blink/public/mojom/css/preferred_contrast.mojom-shared.h"
 #include "third_party/blink/public/mojom/v8_cache_options.mojom-forward.h"
 #include "third_party/blink/public/mojom/webpreferences/web_preferences.mojom-shared.h"
+#include "third_party/skia/include/core/SkColor.h"
 #include "url/gurl.h"
 #include "url/origin.h"
 
@@ -359,6 +360,10 @@ struct BLINK_COMMON_EXPORT WebPreferences {
   // Forced colors are disabled for sites in the `kPageColorsBlockList` pref.
   bool is_forced_colors_disabled = false;
 
+  // Holds the browser's theme color to be used to render root non-overlay
+  // Fluent scrollbars. Stored from an SkColor as ARGB.
+  std::optional<SkColor> root_scrollbar_theme_color;
+
   // The preferred color scheme set by the user's browser settings. The variable
   // follows the browser's color mode setting unless a browser theme (custom or
   // not) is defined, in which case the color scheme is set to the default
@@ -441,6 +446,10 @@ struct BLINK_COMMON_EXPORT WebPreferences {
   // browser controls shown ratio. This value is used in web settings only
   // when feature DynamicSafeAreaInsets is enabled.
   bool dynamic_safe_area_insets_enabled = false;
+
+  // Whether PaymentRequest is enabled. Controlled by WebView settings on
+  // WebView and by `kWebPayments` feature flag everywhere.
+  bool payment_request_enabled = false;
 
   // Vivaldi specific preferences:
   // Maps to the Cycle focus setting in Vivaldi.

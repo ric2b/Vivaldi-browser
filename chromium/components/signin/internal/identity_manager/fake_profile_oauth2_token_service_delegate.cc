@@ -38,6 +38,17 @@ FakeProfileOAuth2TokenServiceDelegate::CreateAccessTokenFetcher(
           consumer, url_loader_factory, it->second);
 }
 
+#if BUILDFLAG(IS_IOS)
+void FakeProfileOAuth2TokenServiceDelegate::GetRefreshTokenFromDevice(
+    const CoreAccountId& account_id,
+    const OAuth2AccessTokenManager::ScopeSet& scopes,
+    signin::AccessTokenFetcher::TokenCallback callback) {
+  std::move(callback).Run(GoogleServiceAuthError::AuthErrorNone(),
+                          signin::AccessTokenInfo(GetRefreshToken(account_id),
+                                                  base::Time(), std::string()));
+}
+#endif
+
 bool FakeProfileOAuth2TokenServiceDelegate::RefreshTokenIsAvailable(
     const CoreAccountId& account_id) const {
   return !GetRefreshToken(account_id).empty();
@@ -124,8 +135,7 @@ void FakeProfileOAuth2TokenServiceDelegate::RevokeAllCredentialsInternal(
 }
 
 void FakeProfileOAuth2TokenServiceDelegate::LoadCredentialsInternal(
-    const CoreAccountId& primary_account_id,
-    bool is_syncing) {
+    const CoreAccountId& primary_account_id) {
   set_load_credentials_state(
       signin::LoadCredentialsState::LOAD_CREDENTIALS_FINISHED_WITH_SUCCESS);
   FireRefreshTokensLoaded();

@@ -57,6 +57,8 @@ import os
 import subprocess
 import sys
 
+THIS_DIR = os.path.dirname(__file__)
+
 # The number of long build times to report:
 long_count = 10
 # The number of long times by extension to report
@@ -362,8 +364,7 @@ def main():
         long_ext_count += len(args.step_types.split(";"))
 
     if os.path.exists(metrics_file):
-        # Automatically handle summarizing siso builds.
-        cmd = ["siso.bat" if "win32" in sys.platform else "siso"]
+        cmd = [sys.executable, os.path.join(THIS_DIR, "siso.py")]
         cmd.extend(["metrics", "summary"])
         if args.build_directory:
             cmd.extend(["-C", args.build_directory])

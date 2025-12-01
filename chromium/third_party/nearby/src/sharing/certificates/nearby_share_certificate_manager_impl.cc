@@ -280,9 +280,7 @@ NearbyShareCertificateManagerImpl::NearbyShareCertificateManagerImpl(
               })),
       executor_(context->CreateSequencedTaskRunner()) {
   local_device_data_manager_->AddObserver(this);
-  if (!NearbyFlags::GetInstance().GetBoolFlag(
-          sharing::config_package_nearby::nearby_sharing_feature::
-              kCallNearbyIdentityApi)) {
+  if (!UsingIdentityRpc()) {
     contact_manager_->AddObserver(this);
   }
 }
@@ -323,6 +321,10 @@ void NearbyShareCertificateManagerImpl::CertificateDownloadContext::
         next_page_token_ = response->next_page_token();
         FetchNextPage();
       });
+}
+
+bool NearbyShareCertificateManagerImpl::UsingIdentityRpc() {
+  return local_device_data_manager_->UsingIdentityRpc();
 }
 
 void NearbyShareCertificateManagerImpl::CertificateDownloadContext::
@@ -439,9 +441,7 @@ void NearbyShareCertificateManagerImpl::DownloadPublicCertificates() {
         absl::bind_front(&NearbyShareCertificateManagerImpl::
                              OnPublicCertificatesDownloadSuccess,
                          this));
-    if (NearbyFlags::GetInstance().GetBoolFlag(
-            config_package_nearby::nearby_sharing_feature::
-                kCallNearbyIdentityApi)) {
+    if (UsingIdentityRpc()) {
       context->QuerySharedCredentialsFetchNextPage();
     } else {
       context->FetchNextPage();
@@ -479,9 +479,7 @@ void NearbyShareCertificateManagerImpl::UploadLocalDeviceCertificates() {
               << " local device certificates.";
     bool upload_certificates_result = false;
     absl::Notification notification;
-    if (NearbyFlags::GetInstance().GetBoolFlag(
-            config_package_nearby::nearby_sharing_feature::
-                kCallNearbyIdentityApi)) {
+    if (local_device_data_manager_->UsingIdentityRpc()) {
       LOG(INFO) << __func__ << ": [Call Identity API] PublishDevice: upload "
                 << public_certs.size() << " local device certificates.";
       local_device_data_manager_->PublishDevice(
@@ -511,10 +509,7 @@ void NearbyShareCertificateManagerImpl::UploadLocalDeviceCertificates() {
     // TODO(b/373780923): add Unit test for the two RPC calls and add a cap to
     // the number of time you can keep calling PublishDevice due to contacts
     // changes (it could indicate a server bug).
-    if (call_publish_device_after_certs_regen_ &&
-        NearbyFlags::GetInstance().GetBoolFlag(
-            config_package_nearby::nearby_sharing_feature::
-                kCallNearbyIdentityApi)) {
+    if (call_publish_device_after_certs_regen_ && UsingIdentityRpc()) {
       LOG(INFO) << __func__
                 << ": [Call Identity API] Another call to PublishDevice after "
                    "regenerating all Private certificates: ";
@@ -691,12 +686,19 @@ std::string NearbyShareCertificateManagerImpl::Dump() const {
 
 std::optional<absl::Time>
 NearbyShareCertificateManagerImpl::NextPrivateCertificateExpirationTime() {
+  std::optional<AccountManager::Account> account =
+      account_manager_.GetCurrentAccount();
+  // If the user is not logged in, there are no certs and we don't need to check
+  // for expiration.
+  if (!account.has_value()) {
+    return std::nullopt;
+  }
   // We enforce that a fixed number--kNearbyShareNumPrivateCertificates for each
-  // visibility--of private certificates be present at all times. This might not
-  // be true the first time the user enables Nearby Share or after certificates
-  // are revoked. For simplicity, consider the case of missing certificates an
-  // "expired" state. Return the minimum time to immediately trigger the private
-  // certificate creation flow.
+  // visibility--of private certificates be present when user is logged in.
+  // This might not be true the first time the user enables Nearby Share or
+  // after certificates are revoked. For simplicity, consider the case of
+  // missing certificates an "expired" state. Return the minimum time to
+  // immediately trigger the private certificate creation flow.
   if (certificate_storage_->GetPrivateCertificates()->size() <
       NumExpectedPrivateCertificates()) {
     return absl::InfinitePast();

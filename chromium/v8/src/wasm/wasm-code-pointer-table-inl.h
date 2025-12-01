@@ -5,9 +5,11 @@
 #ifndef V8_WASM_WASM_CODE_POINTER_TABLE_INL_H_
 #define V8_WASM_WASM_CODE_POINTER_TABLE_INL_H_
 
+#include "src/wasm/wasm-code-pointer-table.h"
+// Include the non-inl header before the rest of the headers.
+
 #include "src/common/code-memory-access-inl.h"
 #include "src/common/segmented-table-inl.h"
-#include "src/wasm/wasm-code-pointer-table.h"
 
 #if !V8_ENABLE_WEBASSEMBLY
 #error This header should only be included if WebAssembly is enabled.
@@ -125,7 +127,7 @@ WasmCodePointer WasmCodePointerTable::AllocateUninitializedEntry() {
     // allocating a new segment in the meantime. However, the freelist can
     // still grow if another thread frees an entry, so we'll merge the
     // freelists atomically in the end.
-    base::SpinningMutexGuard guard(&segment_allocation_mutex_);
+    base::MutexGuard guard(&segment_allocation_mutex_);
 
     // Reload freelist head in case another thread already grew the table.
     if (!freelist_head_.load(std::memory_order_relaxed).is_empty()) {

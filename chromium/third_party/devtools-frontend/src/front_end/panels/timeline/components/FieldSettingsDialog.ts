@@ -19,7 +19,7 @@ import type {OriginMap} from './OriginMap.js';
 
 // TODO(crbug.com/391381439): Fully migrate off of constructed style sheets.
 const fieldSettingsDialogStyles = new CSSStyleSheet();
-fieldSettingsDialogStyles.replaceSync(fieldSettingsDialogStylesRaw.cssContent);
+fieldSettingsDialogStyles.replaceSync(fieldSettingsDialogStylesRaw.cssText);
 
 const UIStrings = {
   /**
@@ -90,7 +90,7 @@ const UIStrings = {
    * @example {http//malformed.com} PH1
    */
   invalidOrigin: '"{PH1}" is not a valid origin or URL.',
-};
+} as const;
 
 const str_ = i18n.i18n.registerUIStrings('panels/timeline/components/FieldSettingsDialog.ts', UIStrings);
 const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
@@ -112,8 +112,8 @@ export class FieldSettingsDialog extends HTMLElement {
 
   #configSetting = CrUXManager.CrUXManager.instance().getConfigSetting();
 
-  #urlOverride: string = '';
-  #urlOverrideEnabled: boolean = false;
+  #urlOverride = '';
+  #urlOverrideEnabled = false;
   #urlOverrideWarning = '';
   #originMap?: OriginMap;
 
@@ -257,6 +257,7 @@ export class FieldSettingsDialog extends HTMLElement {
           variant: Buttons.Button.Variant.PRIMARY,
           title: i18nString(UIStrings.ok),
         } as Buttons.Button.ButtonData}
+        class="enable"
         jslog=${VisualLogging.action('timeline.field-data.enable').track({click: true})}
         data-field-data-enable
       >${i18nString(UIStrings.ok)}</devtools-button>

@@ -25,7 +25,6 @@
 #include "components/collaboration/public/features.h"
 #include "components/collaboration/public/messaging/activity_log.h"
 #include "components/data_sharing/public/features.h"
-#include "components/saved_tab_groups/internal/tab_group_sync_service_impl.h"
 #include "components/saved_tab_groups/public/features.h"
 #include "components/saved_tab_groups/public/tab_group_sync_service.h"
 #include "components/signin/public/base/avatar_icon_util.h"
@@ -193,15 +192,17 @@ std::vector<ActivityLogItem> CreateMockActivityLog(int n) {
 class RecentActivityBubbleDialogViewBrowserTest : public DialogBrowserTest {
  public:
   void ShowUi(const std::string& name) override {
-    std::vector<ActivityLogItem> activity_log;
-    if (name == "WithOneItem") {
-      activity_log = CreateMockActivityLog(1);
+    if (name == "Empty") {
+      ShowLog({});
+    } else if (name == "WithOneItem") {
+      ShowLog(CreateMockActivityLog(1));
     } else if (name == "WithFullList") {
-      activity_log = CreateMockActivityLog(5);
+      ShowLog(CreateMockActivityLog(5));
     } else if (name == "WithTooManyItems") {
-      activity_log = CreateMockActivityLog(10);
+      ShowLog(CreateMockActivityLog(10));
+    } else if (name == "ForCurrentTab") {
+      ShowLogForCurrentTab(CreateMockActivityLog(5));
     }
-    ShowLog(activity_log);
   }
 
   void ShowLog(std::vector<ActivityLogItem> activity_log) {
@@ -216,19 +217,56 @@ class RecentActivityBubbleDialogViewBrowserTest : public DialogBrowserTest {
                               activity_log, browser()->profile());
   }
 
+  void ShowLogForCurrentTab(std::vector<ActivityLogItem> activity_log) {
+    // Anchor to top container for tests.
+    views::View* anchor_view =
+        BrowserView::GetBrowserViewForBrowser(browser())->top_container();
+
+    bubble_coordinator_ = std::make_unique<RecentActivityBubbleCoordinator>();
+    EXPECT_EQ(nullptr, bubble_coordinator_->GetBubble());
+    bubble_coordinator_->ShowForCurrentTab(
+        anchor_view, browser()->tab_strip_model()->GetWebContentsAt(0), {},
+        activity_log, browser()->profile());
+  }
+
   bool VerifyUi() override {
     EXPECT_TRUE(bubble_coordinator_->IsShowing());
     EXPECT_NE(nullptr, bubble_coordinator_->GetBubble());
-    auto children = bubble_coordinator_->GetBubble()->children();
+    auto* bubble = bubble_coordinator_->GetBubble();
+    auto children = bubble->children();
 
     std::string test_name =
         testing::UnitTest::GetInstance()->current_test_info()->name();
 
-    if (test_name == "InvokeUi_WithOneItem") {
-      EXPECT_EQ(1u, children.size());
-    } else {
-      // All other tests expect a complete list of 5 items.
+    // Containers are always created
+    EXPECT_TRUE(bubble->tab_activity_container());
+    EXPECT_TRUE(bubble->group_activity_container());
+
+    // All dialogs have 4 children, except for empty state dialog, which
+    // also contains the label for the empty state.
+    if (test_name == "InvokeUi_Empty") {
       EXPECT_EQ(5u, children.size());
+    } else {
+      EXPECT_EQ(4u, children.size());
+    }
+
+    // Tab container empty and hidden.
+    EXPECT_FALSE(bubble->tab_activity_container()->GetVisible());
+    EXPECT_EQ(0u, bubble->tab_activity_container()->children().size());
+
+    if (test_name == "InvokeUi_Empty") {
+      // Group container empty and hidden.
+      EXPECT_FALSE(bubble->group_activity_container()->GetVisible());
+      EXPECT_EQ(0u, bubble->group_activity_container()->children().size());
+    } else if (test_name == "InvokeUi_WithOneItem") {
+      // Group container is visible with one child.
+      EXPECT_TRUE(bubble->group_activity_container()->GetVisible());
+      EXPECT_EQ(1u, bubble->group_activity_container()->children().size());
+    } else {
+      // All other tests expect a complete list of 5 items in the group
+      // container.
+      EXPECT_TRUE(bubble->group_activity_container()->GetVisible());
+      EXPECT_EQ(5u, bubble->group_activity_container()->children().size());
     }
 
     return true;
@@ -246,6 +284,11 @@ class RecentActivityBubbleDialogViewBrowserTest : public DialogBrowserTest {
 };
 
 IN_PROC_BROWSER_TEST_F(RecentActivityBubbleDialogViewBrowserTest,
+                       InvokeUi_Empty) {
+  ShowAndVerifyUi();
+}
+
+IN_PROC_BROWSER_TEST_F(RecentActivityBubbleDialogViewBrowserTest,
                        InvokeUi_WithOneItem) {
   ShowAndVerifyUi();
 }
@@ -257,6 +300,11 @@ IN_PROC_BROWSER_TEST_F(RecentActivityBubbleDialogViewBrowserTest,
 
 IN_PROC_BROWSER_TEST_F(RecentActivityBubbleDialogViewBrowserTest,
                        InvokeUi_WithTooManyItems) {
+  ShowAndVerifyUi();
+}
+
+IN_PROC_BROWSER_TEST_F(RecentActivityBubbleDialogViewBrowserTest,
+                       InvokeUi_ForCurrentTab) {
   ShowAndVerifyUi();
 }
 
@@ -304,8 +352,7 @@ class RecentActivityBubbleDialogViewActionBrowserTest
  public:
   void SetUp() override {
     scoped_feature_list_.InitWithFeatures(
-        {tab_groups::kTabGroupsSaveV2,
-         tab_groups::kTabGroupSyncServiceDesktopMigration,
+        {tab_groups::kTabGroupSyncServiceDesktopMigration,
          data_sharing::features::kDataSharingFeature,
          collaboration::features::kCollaborationMessaging},
         {});
@@ -403,9 +450,8 @@ class RecentActivityBubbleDialogViewActionBrowserTest
 
   SavedTabGroup ShareTabGroup(TabGroupId group_id) {
     std::string collaboration_id = "fake_collaboration_id";
-    TabGroupSyncServiceImpl* tab_group_sync_service =
-        static_cast<TabGroupSyncServiceImpl*>(
-            TabGroupSyncServiceFactory::GetForProfile(browser()->profile()));
+    TabGroupSyncService* tab_group_sync_service =
+        TabGroupSyncServiceFactory::GetForProfile(browser()->profile());
     tab_group_sync_service->MakeTabGroupSharedForTesting(group_id,
                                                          collaboration_id);
     auto saved_tab_group = tab_group_sync_service->GetGroup(group_id);

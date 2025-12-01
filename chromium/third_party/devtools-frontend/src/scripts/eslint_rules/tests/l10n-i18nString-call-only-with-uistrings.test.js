@@ -3,17 +3,9 @@
 // found in the LICENSE file.
 
 'use strict';
-
-const tsParser = require('@typescript-eslint/parser');
-
 const rule = require('../lib/l10n-i18nString-call-only-with-uistrings.js');
-const ruleTester = new (require('eslint').RuleTester)({
-  languageOptions: {
-    ecmaVersion: 'latest',
-    sourceType: 'module',
-    parser: tsParser,
-  },
-});
+
+const {RuleTester} = require('./utils/utils.js');
 
 const expectedErrors = [
   {
@@ -21,13 +13,13 @@ const expectedErrors = [
   },
 ];
 
-ruleTester.run('l10n-i18nString-call-only-with-uistrings', rule, {
+new RuleTester().run('l10n-i18nString-call-only-with-uistrings', rule, {
   valid: [
     {
-      code: 'const UIStrings = { foo: "foo" }; i18nString(UIStrings.foo);',
+      code: 'const UIStrings = { foo: "foo" } as const; i18nString(UIStrings.foo);',
     },
     {
-      code: 'const UIStrings = { foo: "foo" }; i18nLazyString(UIStrings.foo);',
+      code: 'const UIStrings = { foo: "foo" } as const; i18nLazyString(UIStrings.foo);',
     },
   ],
   invalid: [

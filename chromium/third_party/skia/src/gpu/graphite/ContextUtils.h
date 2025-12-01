@@ -16,11 +16,13 @@
 class SkColorInfo;
 class SkM44;
 
-namespace skgpu::graphite {
+namespace skgpu {
+enum class BackendApi : unsigned int;
 
+namespace graphite {
 class ComputeStep;
 enum class Coverage;
-enum class DstReadStrategy;
+enum class DstReadStrategy : uint8_t;
 class Geometry;
 class PaintParams;
 class PipelineDataGatherer;
@@ -69,10 +71,14 @@ std::string GetPipelineLabel(const ShaderCodeDictionary*,
                              const RenderStep* renderStep,
                              UniquePaintParamsID paintID);
 
-std::string BuildComputeSkSL(const Caps*, const ComputeStep*);
+// TODO(b/396420770): Right now, BuildComputeSkSL must consider the backend in order to make certain
+// decisions. It would be ideal if we could make this more backend-agnostic, perhaps by having a
+// compute-specific equivalent to ResourceBindingRequirements.
+std::string BuildComputeSkSL(const Caps*, const ComputeStep*, BackendApi);
 
 std::string EmitSamplerLayout(const ResourceBindingRequirements&, int* binding);
 
-} // namespace skgpu::graphite
+} // namespace graphite
+} // namespace skgpu
 
 #endif // skgpu_graphite_ContextUtils_DEFINED

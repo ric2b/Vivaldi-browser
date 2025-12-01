@@ -14,6 +14,7 @@
 
 #include "tensorflow/lite/experimental/litert/core/model/model_graph.h"
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
 
@@ -23,7 +24,9 @@
 #include "absl/types/span.h"
 #include "tensorflow/lite/experimental/litert/c/litert_model.h"
 #include "tensorflow/lite/experimental/litert/c/litert_op_code.h"
+#include "tensorflow/lite/experimental/litert/cc/litert_buffer_ref.h"
 #include "tensorflow/lite/experimental/litert/core/model/graph_validation.h"
+#include "tensorflow/lite/experimental/litert/core/model/ir_allocator.h"
 #include "tensorflow/lite/experimental/litert/core/model/model.h"
 
 namespace litert::internal {
@@ -98,6 +101,14 @@ LiteRtTensorT TestTensor() {
   return tensor;
 }
 
+LiteRtTensorT& TestTensor(LiteRtTensorT& tensor) {
+  tensor.Type().first = kLiteRtRankedTensorType;
+  tensor.Type().second.ranked_tensor_type.element_type = kType;
+  tensor.Type().second.ranked_tensor_type.layout.dimensions[0] = kDims[0];
+  tensor.Type().second.ranked_tensor_type.layout.rank = kRank;
+  return tensor;
+}
+
 LiteRtOpT TestOp() {
   LiteRtOpT op;
   op.SetOpCode(kOpCode);
@@ -111,10 +122,74 @@ TEST(ModelGraphTest, CloneTensor) {
   EXPECT_THAT(dest, HasRankedType(kType, kDimsSpan));
 }
 
+TEST(ModelQuantizationTypeTest, ClonePerChannelQuantization) {
+  static constexpr std::array kScale = {1.0f, 2.0f};
+  static constexpr std::array kZero = {1L, 2L};
+  static constexpr int32_t kQdim = 0;
+
+  IrAllocator<LiteRtTensorT> tensor_allocator;
+  auto& tensor = tensor_allocator.EmplaceBack();
+  LiteRtTensorT dest;
+  const auto quant = MakePerChannelQuantization(
+      kScale, kZero, kQdim,
+      [&tensor](auto s) { return tensor.RequestScratchBuffer(s); });
+
+  ASSERT_EQ(quant.first, kLiteRtQuantizationPerChannel);
+  const auto& per_channel = quant.second.per_channel;
+
+  const auto size = per_channel.num_channels;
+  ASSERT_EQ(size, 2);
+  EXPECT_EQ(per_channel.quantized_dimension, 0);
+  tensor.SetQarams(quant);
+
+  CloneTo(tensor, dest);
+  // Mimic DCE.
+  tensor_allocator.RemoveIf([](auto& t) { return true; });
+  auto dest_quant = dest.Qparams();
+
+  auto scales = absl::MakeConstSpan(dest_quant.second.per_channel.scales,
+                                    dest_quant.second.per_channel.num_channels);
+  auto zeros = absl::MakeConstSpan(dest_quant.second.per_channel.zero_points,
+                                   dest_quant.second.per_channel.num_channels);
+
+  ASSERT_EQ(scales.size(), 2);
+  ASSERT_EQ(zeros.size(), 2);
+  EXPECT_THAT(scales, ElementsAreArray(kScale));
+  EXPECT_THAT(zeros, ElementsAreArray(kZero));
+}
+
 TEST(ModelGraphTest, MakeCloneTensor) {
   LiteRtSubgraphT subgraph;
   auto& dest = MakeClone(subgraph, TestTensor());
   EXPECT_THAT(dest, HasRankedType(kType, kDimsSpan));
+}
+
+TEST(ModelGraphTest, CloneCstSameManager) {
+  OwningBufferRef<uint8_t> buffer("DATA");
+  LiteRtModelT model;
+  const auto num_buffers = model.Buffers()->NumBuffers();
+  auto& sg = model.EmplaceSubgraph();
+  auto& src = TestTensor(sg.EmplaceTensor());
+  SetWeightsFromUnownedBuffer(src.Weights(), buffer);
+  auto& dest = MakeClone(sg, src);
+  EXPECT_EQ(dest.Weights().Buffer().StrView(), buffer.StrView());
+  EXPECT_EQ(model.Buffers()->NumBuffers(), num_buffers + 1);
+  EXPECT_EQ(dest.Weights().GetBufferId(), src.Weights().GetBufferId());
+  EXPECT_EQ(dest.Weights().GetBufferManager(),
+            src.Weights().GetBufferManager());
+  EXPECT_EQ(dest.Weights().Buffer().Data(), src.Weights().Buffer().Data());
+}
+
+TEST(ModelGraphTest, CloneCstDifferentManager) {
+  OwningBufferRef<uint8_t> buffer("DATA");
+  LiteRtSubgraphT sg;
+  auto& src = TestTensor(sg.EmplaceTensor());
+  SetWeightsFromUnownedBuffer(src.Weights(), buffer);
+  auto& dest = MakeClone(sg, src);
+  EXPECT_EQ(dest.Weights().Buffer().StrView(), buffer.StrView());
+  EXPECT_NE(dest.Weights().GetBufferManager(),
+            src.Weights().GetBufferManager());
+  EXPECT_NE(dest.Weights().Buffer().Data(), src.Weights().Buffer().Data());
 }
 
 TEST(ModelGraphTest, CloneOp) {

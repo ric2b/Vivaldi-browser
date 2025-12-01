@@ -18,6 +18,7 @@
 #import "components/autofill/core/common/autofill_features.h"
 #import "components/autofill/core/common/autofill_prefs.h"
 #import "components/autofill/ios/browser/personal_data_manager_observer_bridge.h"
+#import "components/autofill/ios/common/features.h"
 #import "components/password_manager/core/common/password_manager_features.h"
 #import "components/plus_addresses/features.h"
 #import "components/plus_addresses/grit/plus_addresses_strings.h"
@@ -25,12 +26,15 @@
 #import "components/strings/grit/components_strings.h"
 #import "components/sync/service/sync_user_settings.h"
 #import "ios/chrome/browser/autofill/model/personal_data_manager_factory.h"
+#import "ios/chrome/browser/autofill/ui_bundled/bottom_sheet/autofill_edit_profile_bottom_sheet_coordinator.h"
+#import "ios/chrome/browser/autofill/ui_bundled/bottom_sheet/settings_autofill_edit_profile_bottom_sheet_handler.h"
 #import "ios/chrome/browser/net/model/crurl.h"
 #import "ios/chrome/browser/settings/ui_bundled/autofill/autofill_profile_edit_coordinator.h"
 #import "ios/chrome/browser/settings/ui_bundled/autofill/autofill_settings_constants.h"
 #import "ios/chrome/browser/settings/ui_bundled/autofill/cells/autofill_address_profile_record_type.h"
 #import "ios/chrome/browser/settings/ui_bundled/autofill/cells/autofill_profile_item.h"
 #import "ios/chrome/browser/settings/ui_bundled/elements/enterprise_info_popover_view_controller.h"
+#import "ios/chrome/browser/settings/ui_bundled/settings_root_table_view_controller+toolbar_add.h"
 #import "ios/chrome/browser/shared/coordinator/alert/action_sheet_coordinator.h"
 #import "ios/chrome/browser/shared/model/application_context/application_context.h"
 #import "ios/chrome/browser/shared/model/browser/browser.h"
@@ -101,24 +105,33 @@ typedef NS_ENUM(NSInteger, ItemType) {
 
   // Whether Settings have been dismissed.
   BOOL _settingsAreDismissed;
+
+  // The account email of the signed-in user, or nil if there is no
+  // signed-in user.
+  NSString* _userEmail;
+
+  // Coordinator that managers a UIAlertController to delete addresses.
+  ActionSheetCoordinator* _deletionSheetCoordinator;
+
+  // Coordinator to view/edit profile details.
+  AutofillProfileEditCoordinator* _autofillProfileEditCoordinator;
+
+  // Add button for the toolbar, which allows the user to manually add a new
+  // address.
+  UIBarButtonItem* _addButtonInToolbar;
+
+  // Handler used to manage the settings workflow for manually adding an
+  // address.
+  SettingsAutofillEditProfileBottomSheetHandler* _addProfileBottomSheetHandler;
+
+  // Coordinator to present and manage the bottom sheet for manually adding an
+  // address.
+  AutofillEditProfileBottomSheetCoordinator*
+      _autofillAddProfileBottomSheetCoordinator;
 }
 
 @property(nonatomic, getter=isAutofillProfileEnabled)
     BOOL autofillProfileEnabled;
-
-// The account email of the signed-in user, or nil if there is no
-// signed-in user.
-@property(nonatomic, strong) NSString* userEmail;
-
-// Default NO. YES, when the autofill syncing is enabled.
-@property(nonatomic, assign, getter=isSyncEnabled) BOOL syncEnabled;
-
-// Coordinator that managers a UIAlertController to delete addresses.
-@property(nonatomic, strong) ActionSheetCoordinator* deletionSheetCoordinator;
-
-// Coordinator to view/edit profile details.
-@property(nonatomic, strong)
-    AutofillProfileEditCoordinator* autofillProfileEditCoordinator;
 
 @end
 
@@ -173,7 +186,7 @@ typedef NS_ENUM(NSInteger, ItemType) {
 
   if (base::FeatureList::IsEnabled(
           plus_addresses::features::kPlusAddressesEnabled) &&
-      self.userEmail) {
+      _userEmail) {
     [model addSectionWithIdentifier:SectionIdentifierPlusAddress];
     [model addItem:[self plusAddressItem]
         toSectionWithIdentifier:SectionIdentifierPlusAddress];
@@ -291,9 +304,6 @@ typedef NS_ENUM(NSInteger, ItemType) {
   if (autofillProfile.IsAccountProfile()) {
     item.autofillProfileRecordType =
         AutofillAddressProfileRecordType::AutofillAccountProfile;
-  } else if (self.syncEnabled) {
-    item.autofillProfileRecordType =
-        AutofillAddressProfileRecordType::AutofillSyncableProfile;
   } else {
     item.autofillProfileRecordType = AutofillLocalProfile;
     if ([self shouldShowCloudOffIconForProfile:autofillProfile]) {
@@ -325,6 +335,8 @@ typedef NS_ENUM(NSInteger, ItemType) {
 - (void)settingsWillBeDismissed {
   DCHECK(!_settingsAreDismissed);
 
+  [self stopAutofillEditProfileBottomSheetCoordinator];
+
   [self stopAutofillProfileEditCoordinator];
   _personalDataManager->RemoveObserver(_observer.get());
   [self dismissDeletionSheet];
@@ -350,8 +362,14 @@ typedef NS_ENUM(NSInteger, ItemType) {
   // controller or the `deletionSheetCoordinator` is shown.
   if (self.navigationController.visibleViewController == self) {
     return NO;
-  } else if (self.deletionSheetCoordinator != nil) {
-    return ![self.deletionSheetCoordinator isVisible];
+  } else if (_deletionSheetCoordinator != nil) {
+    return ![_deletionSheetCoordinator isVisible];
+  }
+  // TODO(crbug.com/407298266): Temporarily keep the toolbar visible when this
+  // view controller is at the top of the navigation stack.
+  else if (IsAddAddressManuallyEnabled() &&
+           self.navigationController.topViewController == self) {
+    return NO;
   }
   return YES;
 }
@@ -370,6 +388,16 @@ typedef NS_ENUM(NSInteger, ItemType) {
 // Override.
 - (void)deleteItems:(NSArray<NSIndexPath*>*)indexPaths {
   [self showDeletionConfirmationForIndexPaths:indexPaths];
+}
+
+- (UIBarButtonItem*)customLeftToolbarButton {
+  // When in edit mode, a "Delete" button is shown as the left toolbar button.
+  // This button shouldn't be overridden with a custom one.
+  if (self.tableView.isEditing || !IsAddAddressManuallyEnabled()) {
+    return nil;
+  }
+
+  return self.addButtonInToolbar;
 }
 
 #pragma mark - UITableViewDelegate
@@ -556,9 +584,10 @@ typedef NS_ENUM(NSInteger, ItemType) {
 #pragma mark - Switch Callbacks
 
 - (void)autofillAddressSwitchChanged:(UISwitch*)switchView {
-  [self setSwitchItemOn:[switchView isOn]
-               itemType:ItemTypeAutofillAddressSwitch];
-  [self setAutofillProfileEnabled:[switchView isOn]];
+  BOOL switchOn = [switchView isOn];
+  [self setSwitchItemOn:switchOn itemType:ItemTypeAutofillAddressSwitch];
+  [self setAutofillProfileEnabled:switchOn];
+  _addButtonInToolbar.enabled = switchOn;
 }
 
 #pragma mark - Switch Helpers
@@ -625,18 +654,24 @@ typedef NS_ENUM(NSInteger, ItemType) {
 }
 
 - (void)determineUserEmail {
-  self.syncEnabled = NO;
-  self.userEmail = nil;
+  _userEmail = nil;
   AuthenticationService* authenticationService =
       AuthenticationServiceFactory::GetForProfile(_browser->GetProfile());
   CHECK(authenticationService);
   id<SystemIdentity> identity =
       authenticationService->GetPrimaryIdentity(signin::ConsentLevel::kSignin);
   if (identity) {
-    self.userEmail = identity.userEmail;
-    self.syncEnabled = _personalDataManager->address_data_manager()
-                           .IsSyncFeatureEnabledForAutofill();
+    _userEmail = identity.userEmail;
   }
+}
+
+- (UIBarButtonItem*)addButtonInToolbar {
+  if (!_addButtonInToolbar) {
+    _addButtonInToolbar =
+        [self addButtonWithAction:@selector(handleAddAddress)];
+    _addButtonInToolbar.enabled = [self isAutofillProfileEnabled];
+  }
+  return _addButtonInToolbar;
 }
 
 #pragma mark - PopoverLabelViewControllerDelegate
@@ -649,20 +684,26 @@ typedef NS_ENUM(NSInteger, ItemType) {
 
 - (void)autofillProfileEditCoordinatorTableViewControllerDidFinish:
     (AutofillProfileEditCoordinator*)coordinator {
-  DCHECK_EQ(self.autofillProfileEditCoordinator, coordinator);
+  DCHECK_EQ(_autofillProfileEditCoordinator, coordinator);
   [self stopAutofillProfileEditCoordinator];
 }
 
 #pragma mark - Private
 - (void)dismissDeletionSheet {
-  [self.deletionSheetCoordinator stop];
-  self.deletionSheetCoordinator = nil;
+  [_deletionSheetCoordinator stop];
+  _deletionSheetCoordinator = nil;
 }
 
 - (void)stopAutofillProfileEditCoordinator {
-  self.autofillProfileEditCoordinator.delegate = nil;
-  [self.autofillProfileEditCoordinator stop];
-  self.autofillProfileEditCoordinator = nil;
+  _autofillProfileEditCoordinator.delegate = nil;
+  [_autofillProfileEditCoordinator stop];
+  _autofillProfileEditCoordinator = nil;
+}
+
+- (void)stopAutofillEditProfileBottomSheetCoordinator {
+  [_autofillAddProfileBottomSheetCoordinator stop];
+  _autofillAddProfileBottomSheetCoordinator = nil;
+  _addProfileBottomSheetHandler = nil;
 }
 
 // Removes the item from the personal data manager model.
@@ -742,7 +783,6 @@ typedef NS_ENUM(NSInteger, ItemType) {
 - (void)showDeletionConfirmationForIndexPaths:
     (NSArray<NSIndexPath*>*)indexPaths {
   BOOL accountProfiles = NO;
-  BOOL syncProfiles = NO;
 
   int profileCount = 0;
 
@@ -758,9 +798,6 @@ typedef NS_ENUM(NSInteger, ItemType) {
       case AutofillAccountProfile:
         accountProfiles = YES;
         break;
-      case AutofillSyncableProfile:
-        syncProfiles = YES;
-        break;
       case AutofillLocalProfile:
         break;
     }
@@ -773,9 +810,8 @@ typedef NS_ENUM(NSInteger, ItemType) {
 
   NSString* deletionConfirmationString =
       [self getDeletionConfirmationStringUsingProfileCount:profileCount
-                                           accountProfiles:accountProfiles
-                                              syncProfiles:syncProfiles];
-  self.deletionSheetCoordinator = [[ActionSheetCoordinator alloc]
+                                           accountProfiles:accountProfiles];
+  _deletionSheetCoordinator = [[ActionSheetCoordinator alloc]
       initWithBaseViewController:self
                          browser:_browser
                            title:deletionConfirmationString
@@ -784,13 +820,12 @@ typedef NS_ENUM(NSInteger, ItemType) {
 
   if (UIContentSizeCategoryIsAccessibilityCategory(
           UIApplication.sharedApplication.preferredContentSizeCategory)) {
-    self.deletionSheetCoordinator.alertStyle = UIAlertControllerStyleAlert;
+    _deletionSheetCoordinator.alertStyle = UIAlertControllerStyleAlert;
   }
 
-  self.deletionSheetCoordinator.popoverArrowDirection =
-      UIPopoverArrowDirectionAny;
+  _deletionSheetCoordinator.popoverArrowDirection = UIPopoverArrowDirectionAny;
   __weak AutofillProfileTableViewController* weakSelf = self;
-  [self.deletionSheetCoordinator
+  [_deletionSheetCoordinator
       addItemWithTitle:
           l10n_util::GetPluralNSStringF(
               IDS_IOS_SETTINGS_AUTOFILL_DELETE_ADDRESS_CONFIRMATION_BUTTON,
@@ -803,35 +838,28 @@ typedef NS_ENUM(NSInteger, ItemType) {
                   [weakSelf dismissDeletionSheet];
                 }
                  style:UIAlertActionStyleDestructive];
-  [self.deletionSheetCoordinator
+  [_deletionSheetCoordinator
       addItemWithTitle:l10n_util::GetNSString(IDS_APP_CANCEL)
                 action:^{
                   [weakSelf dismissDeletionSheet];
                 }
                  style:UIAlertActionStyleCancel];
-  [self.deletionSheetCoordinator start];
+  [_deletionSheetCoordinator start];
 }
 
 // Returns the deletion confirmation message string based on
-// `profileCount` and if it the source has any `accountProfiles` or
-// `syncProfiles`.
+// `profileCount` and if it the source has any `accountProfiles`.
 - (NSString*)getDeletionConfirmationStringUsingProfileCount:(int)profileCount
                                             accountProfiles:
-                                                (BOOL)accountProfiles
-                                               syncProfiles:(BOOL)syncProfiles {
+                                                (BOOL)accountProfiles {
   if (accountProfiles) {
     std::u16string pattern = l10n_util::GetStringUTF16(
         IDS_IOS_SETTINGS_AUTOFILL_DELETE_ACCOUNT_ADDRESS_CONFIRMATION_TITLE);
     std::u16string confirmationString =
         base::i18n::MessageFormatter::FormatWithNamedArgs(
-            pattern, "email", base::SysNSStringToUTF16(self.userEmail), "count",
+            pattern, "email", base::SysNSStringToUTF16(_userEmail), "count",
             profileCount);
     return base::SysUTF16ToNSString(confirmationString);
-  }
-  if (syncProfiles) {
-    return l10n_util::GetPluralNSStringF(
-        IDS_IOS_SETTINGS_AUTOFILL_DELETE_SYNC_ADDRESS_CONFIRMATION_TITLE,
-        profileCount);
   }
   return l10n_util::GetPluralNSStringF(
       IDS_IOS_SETTINGS_AUTOFILL_DELETE_LOCAL_ADDRESS_CONFIRMATION_TITLE,
@@ -847,13 +875,13 @@ typedef NS_ENUM(NSInteger, ItemType) {
 - (void)showAddressProfileDetailsPageForProfile:
             (const autofill::AutofillProfile*)profile
                      withMigrateToAccountButton:(BOOL)migrateToAccountButton {
-  self.autofillProfileEditCoordinator = [[AutofillProfileEditCoordinator alloc]
+  _autofillProfileEditCoordinator = [[AutofillProfileEditCoordinator alloc]
       initWithBaseNavigationController:self.navigationController
                                browser:_browser
                                profile:*profile
                 migrateToAccountButton:migrateToAccountButton];
-  self.autofillProfileEditCoordinator.delegate = self;
-  [self.autofillProfileEditCoordinator start];
+  _autofillProfileEditCoordinator.delegate = self;
+  [_autofillProfileEditCoordinator start];
 }
 
 // Returns YES if the cloud off icon should be shown next to the profile. Only
@@ -863,7 +891,32 @@ typedef NS_ENUM(NSInteger, ItemType) {
     (const autofill::AutofillProfile&)profile {
   return IsEligibleForMigrationToAccount(
              _personalDataManager->address_data_manager(), profile) &&
-         self.userEmail != nil;
+         _userEmail != nil;
+}
+
+// Opens a new view controller `AutofillAddAddressViewController` for filling
+// and saving an address.
+- (void)handleAddAddress {
+  if (_settingsAreDismissed) {
+    return;
+  }
+
+  base::RecordAction(base::UserMetricsAction("AddAddressManually_Opened"));
+
+  autofill::AddressDataManager& addressDataManager =
+      _personalDataManager->address_data_manager();
+
+  _addProfileBottomSheetHandler =
+      [[SettingsAutofillEditProfileBottomSheetHandler alloc]
+          initWithAddressDataManager:&addressDataManager
+                           userEmail:_userEmail];
+
+  _autofillAddProfileBottomSheetCoordinator =
+      [[AutofillEditProfileBottomSheetCoordinator alloc]
+          initWithBaseViewController:self
+                             browser:_browser
+                             handler:_addProfileBottomSheetHandler];
+  [_autofillAddProfileBottomSheetCoordinator start];
 }
 
 @end

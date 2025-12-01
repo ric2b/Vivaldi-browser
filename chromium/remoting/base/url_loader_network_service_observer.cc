@@ -70,7 +70,12 @@ void PrintCertificateDetails(const net::X509Certificate& cert) {
 
 }  // namespace
 
-UrlLoaderNetworkServiceObserver::UrlLoaderNetworkServiceObserver() = default;
+UrlLoaderNetworkServiceObserver::UrlLoaderNetworkServiceObserver(
+    std::unique_ptr<net::ClientCertStore> client_cert_store)
+    : client_cert_store_(std::move(client_cert_store)) {
+  CHECK(client_cert_store_);
+}
+
 UrlLoaderNetworkServiceObserver::~UrlLoaderNetworkServiceObserver() = default;
 
 mojo::PendingRemote<network::mojom::URLLoaderNetworkServiceObserver>
@@ -95,19 +100,14 @@ void UrlLoaderNetworkServiceObserver::OnCertificateRequested(
     const scoped_refptr<net::SSLCertRequestInfo>& cert_info,
     mojo::PendingRemote<network::mojom::ClientCertificateResponder>
         client_cert_responder) {
-  std::unique_ptr<net::ClientCertStore> client_cert_store =
-      CreateClientCertStoreInstance();
-  net::ClientCertStore* const temp_client_cert_store = client_cert_store.get();
-
-  // Note: |client_cert_store| and |cert_info| are bound to the callback as it
-  // is the caller's responsibility to keep them alive until the callback has
-  // been run by ClientCertStore.
-  temp_client_cert_store->GetClientCerts(
+  // Note: |cert_info| is bound to the callback as it is the caller's
+  // responsibility to keep them alive until the callback has been run by
+  // ClientCertStore.
+  client_cert_store_->GetClientCerts(
       cert_info,
       base::BindOnce(&UrlLoaderNetworkServiceObserver::OnCertificatesSelected,
                      weak_factory_.GetWeakPtr(),
-                     std::move(client_cert_responder),
-                     std::move(client_cert_store), cert_info));
+                     std::move(client_cert_responder), cert_info));
 }
 
 void UrlLoaderNetworkServiceObserver::OnAuthRequired(
@@ -126,6 +126,9 @@ void UrlLoaderNetworkServiceObserver::OnPrivateNetworkAccessPermissionRequired(
     const std::optional<std::string>& private_network_device_id,
     const std::optional<std::string>& private_network_device_name,
     OnPrivateNetworkAccessPermissionRequiredCallback callback) {}
+
+void UrlLoaderNetworkServiceObserver::OnLocalNetworkAccessPermissionRequired(
+    OnLocalNetworkAccessPermissionRequiredCallback callback) {}
 
 void UrlLoaderNetworkServiceObserver::OnClearSiteData(
     const GURL& url,
@@ -157,6 +160,9 @@ void UrlLoaderNetworkServiceObserver::OnSharedStorageHeaderReceived(
   std::move(callback).Run();
 }
 
+void UrlLoaderNetworkServiceObserver::OnAdAuctionEventRecordHeaderReceived(
+    network::AdAuctionEventRecord event_record) {}
+
 void UrlLoaderNetworkServiceObserver::Clone(
     mojo::PendingReceiver<network::mojom::URLLoaderNetworkServiceObserver>
         observer) {
@@ -175,7 +181,6 @@ void UrlLoaderNetworkServiceObserver::OnUrlLoaderConnectedToPrivateNetwork(
 void UrlLoaderNetworkServiceObserver::OnCertificatesSelected(
     mojo::PendingRemote<network::mojom::ClientCertificateResponder>
         client_cert_responder,
-    std::unique_ptr<net::ClientCertStore> cert_store,
     const scoped_refptr<net::SSLCertRequestInfo>& cert_info,
     net::ClientCertIdentityList selected_certs) {
   base::Time now = base::Time::Now();

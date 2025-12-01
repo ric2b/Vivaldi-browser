@@ -20,7 +20,6 @@
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/render_process_host.h"
-#include "extensions/browser/api/declarative/rules_registry_service.h"
 #include "extensions/browser/api/declarative_net_request/action_tracker.h"
 #include "extensions/browser/api/declarative_net_request/constants.h"
 #include "extensions/browser/api/declarative_net_request/request_action.h"
@@ -40,9 +39,11 @@
 #include "extensions/browser/api/web_request/web_request_time_tracker.h"
 #include "extensions/browser/api_activity_monitor.h"
 #include "extensions/browser/event_router.h"
+#include "extensions/browser/extension_navigation_registry.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/browser/extensions_browser_client.h"
 #include "extensions/browser/process_map.h"
+#include "extensions/browser/rules_registry_ids.h"
 #include "extensions/common/api/web_request/web_request_activity_log_constants.h"
 #include "extensions/common/error_utils.h"
 #include "extensions/common/extension_id.h"
@@ -282,7 +283,7 @@ void SendOnMessageEventOnUI(
   auto event = std::make_unique<Event>(
       histogram_value, event_name, std::move(event_args), browser_context,
       /*restrict_to_context_type=*/std::nullopt, GURL(),
-      EventRouter::USER_GESTURE_UNKNOWN, std::move(event_filtering_info));
+      EventRouter::UserGestureState::kUnknown, std::move(event_filtering_info));
   event_router->DispatchEventToExtension(extension_id, std::move(event));
 }
 
@@ -406,6 +407,25 @@ GURL GetNewUrl(const GURL& redirect_url,
   auto dynamic_url =
       TransformToDynamicURLIfNecessary(redirect_url, browser_context);
   return dynamic_url.value_or(redirect_url);
+}
+
+// Write that extension caused redirect OnBeforeRequest, ExecuteDeltas.
+void RecordThatNavigationWasInitiatedByExtension(
+    const WebRequestInfo* request,
+    content::BrowserContext* browser_context,
+    GURL* new_url,
+    const ExtensionId& extension_id) {
+  GURL new_location = new_url ? *new_url : GURL();
+
+  // Now that the event type has been signaled, record that webRequest has
+  // intercepted this redirect.
+  if (request->navigation_id.has_value()) {
+    // Store the target url.
+    // TODO(crbug.com/40060076): Record the extension id that caused the action.
+    ExtensionNavigationRegistry::Get(browser_context)
+        ->RecordExtensionRedirect(request->navigation_id.value(), new_location,
+                                  extension_id);
+  }
 }
 
 using CallbacksForPageLoad = std::list<base::OnceClosure>;
@@ -1006,7 +1026,8 @@ int WebRequestEventRouter::OnBeforeRequest(
                     browser_context, action.extension_id, request->url,
                     action.redirect_url.value());
           }
-
+          RecordThatNavigationWasInitiatedByExtension(
+              request, browser_context, new_url, action.extension_id);
           return net::OK;
         case DNRRequestAction::Type::MODIFY_HEADERS:
           // Unlike other actions, allow web request extensions to intercept
@@ -2237,14 +2258,9 @@ bool WebRequestEventRouter::ListenerMatchesRequest(
   }
 
   if (request.is_web_view) {
-    // If this is a navigation request, then we can skip this check. IDs will
-    // be -1 and the request is trusted.
-    if (!request.is_navigation_request &&
-        listener.id.render_process_id != request.web_view_embedder_process_id) {
-      return false;
-    }
-
-    if (listener.id.web_view_instance_id != request.web_view_instance_id) {
+    if (listener.id.render_process_id !=
+            request.web_view_embedder_process_id.value() ||
+        listener.id.web_view_instance_id != request.web_view_instance_id) {
       return false;
     }
   }
@@ -2422,11 +2438,12 @@ int WebRequestEventRouter::ExecuteDeltas(
 
   extension_web_request_api_helpers::IgnoredActions ignored_actions;
   std::vector<const DNRRequestAction*> matched_dnr_actions;
+  std::optional<ExtensionId> extension_id;
   if (blocked_request.event == EventTypes::kOnBeforeRequest) {
     CHECK(!blocked_request.callback.is_null());
     helpers::MergeOnBeforeRequestResponses(
         request->url, blocked_request.response_deltas, blocked_request.new_url,
-        &ignored_actions);
+        &extension_id, &ignored_actions);
   } else if (blocked_request.event == EventTypes::kOnBeforeSendHeaders) {
     CHECK(!blocked_request.before_send_headers_callback.is_null());
     helpers::MergeOnBeforeSendHeadersResponses(
@@ -2440,7 +2457,8 @@ int WebRequestEventRouter::ExecuteDeltas(
         *request, blocked_request.response_deltas,
         blocked_request.original_response_headers.get(),
         blocked_request.override_response_headers, blocked_request.new_url,
-        &ignored_actions, &response_headers_modified, &matched_dnr_actions);
+        &extension_id, &ignored_actions, &response_headers_modified,
+        &matched_dnr_actions);
   } else if (blocked_request.event == EventTypes::kOnAuthRequired) {
     CHECK(blocked_request.callback.is_null());
     CHECK(!blocked_request.auth_callback.is_null());
@@ -2469,6 +2487,10 @@ int WebRequestEventRouter::ExecuteDeltas(
     GetExtensionWebRequestTimeTracker().SetRequestCanceled(request->id);
   } else if (redirected) {
     GetExtensionWebRequestTimeTracker().SetRequestRedirected(request->id);
+
+    RecordThatNavigationWasInitiatedByExtension(request, browser_context,
+                                                blocked_request.new_url,
+                                                extension_id.value_or(""));
   }
 
   // Log UMA metrics. Note: We are not necessarily concerned with the final
@@ -2548,7 +2570,7 @@ bool WebRequestEventRouter::ProcessDeclarativeRules(
 
   int rules_registry_id = request->is_web_view
                               ? request->web_view_rules_registry_id
-                              : RulesRegistryService::kDefaultRulesRegistryID;
+                              : rules_registry_ids::kDefaultRulesRegistryID;
 
   // First parameter identifies the registry, the second indicates whether the
   // registry belongs to the cross browser_context.

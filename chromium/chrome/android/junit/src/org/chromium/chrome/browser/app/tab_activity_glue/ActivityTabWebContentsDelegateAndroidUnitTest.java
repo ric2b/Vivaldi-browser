@@ -6,6 +6,7 @@ package org.chromium.chrome.browser.app.tab_activity_glue;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -231,6 +232,9 @@ public class ActivityTabWebContentsDelegateAndroidUnitTest {
         Tab parentTab = mock(Tab.class);
         Tab newTab = mock(Tab.class);
         doReturn(Token.createRandom()).when(parentTab).getTabGroupId();
+        doReturn(true).when(mTabCreator).createTabWithWebContents(any(), any(), anyInt(), any());
+        doReturn(true).when(mTabGroupModelFilter).isTabInTabGroup(any());
+        doReturn(true).when(mTabGroupModelFilter).isTabModelRestored();
         Map<WebContents, Tab> tabMap = Map.of(mWebContents, parentTab, newWebContents, newTab);
         mTabWebContentsDelegateAndroid.setTabMap(tabMap);
 
@@ -244,6 +248,13 @@ public class ActivityTabWebContentsDelegateAndroidUnitTest {
                 false);
         verify(mTabGroupModelFilter)
                 .mergeListOfTabsToGroup(Arrays.asList(newTab), parentTab, false);
+    }
+
+    @Test
+    public void testDestroy() {
+        verify(mTab).addObserver(any());
+        mTabWebContentsDelegateAndroid.destroy();
+        verify(mTab).removeObserver(any());
     }
 
     private void assertForceDarkEnabledForWebContents(boolean isEnabled) {

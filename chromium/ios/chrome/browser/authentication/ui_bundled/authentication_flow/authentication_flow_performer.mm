@@ -7,9 +7,11 @@
 #import <MaterialComponents/MaterialSnackbar.h>
 
 #import <memory>
+#import <optional>
 
 #import "base/check_op.h"
 #import "base/functional/bind.h"
+#import "base/functional/callback_helpers.h"
 #import "base/ios/block_types.h"
 #import "base/metrics/user_metrics.h"
 #import "base/notreached.h"
@@ -36,7 +38,9 @@
 #import "ios/chrome/browser/policy/model/browser_policy_connector_ios.h"
 #import "ios/chrome/browser/policy/model/cloud/user_policy_signin_service.h"
 #import "ios/chrome/browser/policy/model/cloud/user_policy_signin_service_factory.h"
-#import "ios/chrome/browser/policy/model/cloud/user_policy_switch.h"
+#import "ios/chrome/browser/policy/model/management_state.h"
+#import "ios/chrome/browser/policy/ui_bundled/management_util.h"
+#import "ios/chrome/browser/shared/coordinator/alert/action_sheet_coordinator.h"
 #import "ios/chrome/browser/shared/coordinator/alert/alert_coordinator.h"
 #import "ios/chrome/browser/shared/coordinator/scene/scene_state.h"
 #import "ios/chrome/browser/shared/model/application_context/application_context.h"
@@ -49,10 +53,12 @@
 #import "ios/chrome/browser/shared/public/commands/snackbar_commands.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/shared/public/features/system_flags.h"
+#import "ios/chrome/browser/shared/ui/util/identity_snackbar/identity_snackbar_message.h"
 #import "ios/chrome/browser/shared/ui/util/snackbar_util.h"
 #import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
 #import "ios/chrome/browser/signin/model/authentication_service.h"
 #import "ios/chrome/browser/signin/model/authentication_service_factory.h"
+#import "ios/chrome/browser/signin/model/chrome_account_manager_service_factory.h"
 #import "ios/chrome/browser/signin/model/constants.h"
 #import "ios/chrome/browser/signin/model/identity_manager_factory.h"
 #import "ios/chrome/browser/signin/model/system_identity.h"
@@ -80,6 +86,38 @@ void AuthenticationFlowContinuation(OnProfileSwitchCompletion completion,
   std::move(closure).Run();
 }
 
+// Handler for the signout action from a snackbar. Will `clear_selected_type`
+// if it is not std::nullopt.
+void HandleSignoutForSnackbar(
+    base::WeakPtr<Browser> weak_browser,
+    std::optional<syncer::UserSelectableType> clear_selected_type) {
+  Browser* browser = weak_browser.get();
+  if (!browser) {
+    return;
+  }
+
+  base::RecordAction(
+      base::UserMetricsAction("Mobile.Signin.SnackbarUndoTapped"));
+
+  ProfileIOS* profile = browser->GetProfile();
+  AuthenticationService* auth_service =
+      AuthenticationServiceFactory::GetForProfile(profile);
+  if (!auth_service->HasPrimaryIdentity(signin::ConsentLevel::kSignin)) {
+    return;
+  }
+
+  if (clear_selected_type.has_value()) {
+    SyncServiceFactory::GetForProfile(profile)
+        ->GetUserSettings()
+        ->SetSelectedType(clear_selected_type.value(), false);
+  }
+
+  signin::MultiProfileSignOut(
+      browser, signin_metrics::ProfileSignout::kUserTappedUndoRightAfterSignIn,
+      /*force_snackbar_over_toolbar=*/false,
+      /*snackbar_message=*/nil, /*signout_completion=*/nil);
+}
+
 }  // namespace
 
 @interface AuthenticationFlowPerformer () <
@@ -103,6 +141,7 @@ void AuthenticationFlowContinuation(OnProfileSwitchCompletion completion,
       _accountLevelSigninRestrictionPolicyFetcher;
   std::unique_ptr<base::OneShotTimer> _watchdogTimer;
   id<ChangeProfileCommands> _changeProfileHandler;
+  ActionSheetCoordinator* _leavingPrimaryAccountConfirmationDialogCoordinator;
 }
 
 - (id<AuthenticationFlowPerformerDelegate>)delegate {
@@ -120,19 +159,47 @@ void AuthenticationFlowContinuation(OnProfileSwitchCompletion completion,
   return self;
 }
 
-- (void)interruptWithAction:(SigninCoordinatorInterrupt)action
-                 completion:(ProceduralBlock)completion {
+- (void)interrupt {
   [_managedConfirmationScreenCoordinator stop];
   _managedConfirmationScreenCoordinator = nil;
   [_managedConfirmationAlertCoordinator stop];
   _managedConfirmationAlertCoordinator = nil;
   [_errorAlertCoordinator stop];
   _errorAlertCoordinator = nil;
-  if (completion) {
-    completion();
-  }
   _delegate = nil;
   [self stopWatchdogTimer];
+}
+
+- (void)fetchUnsyncedDataWithSyncService:(syncer::SyncService*)syncService {
+  auto callback = base::BindOnce(
+      [](__typeof(_delegate) delegate, syncer::DataTypeSet set) {
+        [delegate didFetchUnsyncedDataWithUnsyncedDataTypes:set];
+      },
+      _delegate);
+  signin::FetchUnsyncedDataForSignOutOrProfileSwitching(syncService,
+                                                        std::move(callback));
+}
+
+- (void)
+    showLeavingPrimaryAccountConfirmationWithBaseViewController:
+        (UIViewController*)baseViewController
+                                                        browser:
+                                                            (Browser*)browser
+                                              signedInUserState:
+                                                  (SignedInUserState)
+                                                      signedInUserState
+                                                     anchorView:
+                                                         (UIView*)anchorView
+                                                     anchorRect:
+                                                         (CGRect)anchorRect {
+  __weak __typeof(self) weakSelf = self;
+  _leavingPrimaryAccountConfirmationDialogCoordinator =
+      GetLeavingPrimaryAccountConfirmationDialog(
+          baseViewController, browser, anchorView, anchorRect,
+          signedInUserState, YES, ^(BOOL continueFlow) {
+            [weakSelf leavingPrimaryAccountConfirmationDone:continueFlow];
+          });
+  [_leavingPrimaryAccountConfirmationDialogCoordinator start];
 }
 
 - (void)fetchManagedStatus:(ProfileIOS*)profile
@@ -187,44 +254,58 @@ void AuthenticationFlowContinuation(OnProfileSwitchCompletion completion,
 }
 
 - (void)switchToProfileWithIdentity:(id<SystemIdentity>)identity
-                         sceneState:(SceneState*)sceneState
-                         completion:(OnProfileSwitchCompletion)completion {
+                         sceneState:(SceneState*)sceneState {
   CHECK(AreSeparateProfilesForManagedAccountsEnabled());
+
   std::optional<std::string> profileName =
       GetApplicationContext()
           ->GetAccountProfileMapper()
           ->FindProfileNameForGaiaID(GaiaId(identity.gaiaID));
   if (!profileName.has_value()) {
+    __weak __typeof(_delegate) weakDelegate = _delegate;
     base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
-        FROM_HERE, base::BindOnce(std::move(completion), /*success=*/false,
-                                  /*new_profile_browser=*/nullptr));
+        FROM_HERE, base::BindOnce(
+                       [](__typeof(_delegate) delegate) {
+                         [delegate didFailToSwitchToProfile];
+                       },
+                       weakDelegate));
     return;
   }
 
+  [self switchToProfileWithName:*profileName sceneState:sceneState];
+}
+
+- (void)switchToProfileWithName:(const std::string&)profileName
+                     sceneState:(SceneState*)sceneState {
+  CHECK(AreSeparateProfilesForManagedAccountsEnabled());
+
+  __weak __typeof(_delegate) weakDelegate = _delegate;
+  OnProfileSwitchCompletion completion = base::BindOnce(
+      [](__typeof(_delegate) delegate, bool success,
+         Browser* new_profile_browser) {
+        [delegate didSwitchToProfileWithNewProfileBrowser:new_profile_browser];
+      },
+      weakDelegate);
+
   [_changeProfileHandler
-      changeProfile:*profileName
+      changeProfile:profileName
            forScene:sceneState
        continuation:base::BindOnce(&AuthenticationFlowContinuation,
                                    std::move(completion))];
 }
 
 - (void)makePersonalProfileManagedWithIdentity:(id<SystemIdentity>)identity {
-  __weak __typeof(_delegate) weakDelegate = _delegate;
   GetApplicationContext()
       ->GetAccountProfileMapper()
-      ->MakePersonalProfileManagedWithGaiaID(
-          GaiaId(identity.gaiaID), base::BindOnce(^{
-            [weakDelegate didMakePersonalProfileManaged];
-          }));
+      ->MakePersonalProfileManagedWithGaiaID(GaiaId(identity.gaiaID));
+  [_delegate didMakePersonalProfileManaged];
 }
 
-- (void)signOutProfile:(ProfileIOS*)profile {
-  // TODO(crbug.com/375604649): Skip sign out if the identity to sign-in is in a
-  // different profile.
+- (void)signOutForAccountSwitchWithProfile:(ProfileIOS*)profile {
   __weak __typeof(_delegate) weakDelegate = _delegate;
   AuthenticationServiceFactory::GetForProfile(profile)->SignOut(
-      signin_metrics::ProfileSignout::kUserClickedSignoutSettings, ^{
-        [weakDelegate didSignOut];
+      signin_metrics::ProfileSignout::kSignoutForAccountSwitching, ^{
+        [weakDelegate didSignOutForAccountSwitch];
       });
 }
 
@@ -234,12 +315,13 @@ void AuthenticationFlowContinuation(OnProfileSwitchCompletion completion,
 }
 
 - (void)showManagedConfirmationForHostedDomain:(NSString*)hostedDomain
-                                     userEmail:(NSString*)userEmail
+                                      identity:(id<SystemIdentity>)identity
                                 viewController:(UIViewController*)viewController
                                        browser:(Browser*)browser
                      skipBrowsingDataMigration:(BOOL)skipBrowsingDataMigration
-                    mergeBrowsingDataByDefault:
-                        (BOOL)mergeBrowsingDataByDefault {
+                    mergeBrowsingDataByDefault:(BOOL)mergeBrowsingDataByDefault
+         browsingDataMigrationDisabledByPolicy:
+             (BOOL)browsingDataMigrationDisabledByPolicy {
   DCHECK(!_managedConfirmationScreenCoordinator);
   DCHECK(!_managedConfirmationAlertCoordinator);
   DCHECK(!_errorAlertCoordinator);
@@ -251,12 +333,14 @@ void AuthenticationFlowContinuation(OnProfileSwitchCompletion completion,
   if (AreSeparateProfilesForManagedAccountsEnabled()) {
     _managedConfirmationScreenCoordinator =
         [[ManagedProfileCreationCoordinator alloc]
-            initWithBaseViewController:viewController
-                             userEmail:userEmail
-                          hostedDomain:hostedDomain
-                               browser:browser
-             skipBrowsingDataMigration:skipBrowsingDataMigration
-            mergeBrowsingDataByDefault:mergeBrowsingDataByDefault];
+                       initWithBaseViewController:viewController
+                                         identity:identity
+                                     hostedDomain:hostedDomain
+                                          browser:browser
+                        skipBrowsingDataMigration:skipBrowsingDataMigration
+                       mergeBrowsingDataByDefault:mergeBrowsingDataByDefault
+            browsingDataMigrationDisabledByPolicy:
+                browsingDataMigrationDisabledByPolicy];
     _managedConfirmationScreenCoordinator.delegate = self;
     [_managedConfirmationScreenCoordinator start];
     return;
@@ -277,28 +361,32 @@ void AuthenticationFlowContinuation(OnProfileSwitchCompletion completion,
                      withIdentity:(id<SystemIdentity>)identity
                           browser:(Browser*)browser {
   DCHECK(browser);
-  base::WeakPtr<Browser> weakBrowser = browser->AsWeakPtr();
   ProfileIOS* profile = browser->GetProfile()->GetOriginalProfile();
   syncer::SyncService* syncService = SyncServiceFactory::GetForProfile(profile);
 
   // Signing in from bookmarks and reading list enables the corresponding
   // type.
-  BOOL bookmarksToggleEnabledWithSigninFlow = NO;
-  BOOL readingListToggleEnabledWithSigninFlow = NO;
+  std::optional<syncer::UserSelectableType> clearSelectableType;
   if (postSignInActions.Has(
           PostSignInAction::kEnableUserSelectableTypeBookmarks) &&
       !syncService->GetUserSettings()->GetSelectedTypes().Has(
           syncer::UserSelectableType::kBookmarks)) {
     syncService->GetUserSettings()->SetSelectedType(
         syncer::UserSelectableType::kBookmarks, true);
-    bookmarksToggleEnabledWithSigninFlow = YES;
+    clearSelectableType = syncer::UserSelectableType::kBookmarks;
   } else if (postSignInActions.Has(
                  PostSignInAction::kEnableUserSelectableTypeReadingList) &&
              !syncService->GetUserSettings()->GetSelectedTypes().Has(
                  syncer::UserSelectableType::kReadingList)) {
     syncService->GetUserSettings()->SetSelectedType(
         syncer::UserSelectableType::kReadingList, true);
-    readingListToggleEnabledWithSigninFlow = YES;
+    clearSelectableType = syncer::UserSelectableType::kReadingList;
+  }
+
+  if (postSignInActions.Has(
+          PostSignInAction::kShowIdentityConfirmationSnackbar)) {
+    [self triggerAccountSwitchSnackbarWithIdentity:identity browser:browser];
+    return;
   }
 
   if (!postSignInActions.Has(PostSignInAction::kShowSnackbar)) {
@@ -306,31 +394,9 @@ void AuthenticationFlowContinuation(OnProfileSwitchCompletion completion,
   }
 
   MDCSnackbarMessageAction* action = [[MDCSnackbarMessageAction alloc] init];
-  action.handler = ^{
-    if (!weakBrowser.get()) {
-      return;
-    }
-    base::RecordAction(
-        base::UserMetricsAction("Mobile.Signin.SnackbarUndoTapped"));
-    AuthenticationService* authService =
-        AuthenticationServiceFactory::GetForProfile(profile);
-    if (authService->HasPrimaryIdentity(signin::ConsentLevel::kSignin)) {
-      // Signing in from bookmarks and reading list enables the corresponding
-      // type. The undo button should handle that before signing out.
-      if (bookmarksToggleEnabledWithSigninFlow) {
-        syncService->GetUserSettings()->SetSelectedType(
-            syncer::UserSelectableType::kBookmarks, false);
-      } else if (readingListToggleEnabledWithSigninFlow) {
-        syncService->GetUserSettings()->SetSelectedType(
-            syncer::UserSelectableType::kReadingList, false);
-      }
-      signin::MultiProfileSignOut(
-          browser,
-          signin_metrics::ProfileSignout::kUserTappedUndoRightAfterSignIn,
-          /*force_snackbar_over_toolbar=*/false,
-          /*snackbar_message=*/nil, /*signout_completion=*/nil);
-    }
-  };
+  action.handler = base::CallbackToBlock(base::BindOnce(
+      &HandleSignoutForSnackbar, browser->AsWeakPtr(), clearSelectableType));
+
   action.title = l10n_util::GetNSString(IDS_IOS_SIGNIN_SNACKBAR_UNDO);
   action.accessibilityIdentifier = kSigninSnackbarUndo;
   NSString* messageText =
@@ -381,9 +447,6 @@ void AuthenticationFlowContinuation(OnProfileSwitchCompletion completion,
 
 - (void)registerUserPolicy:(ProfileIOS*)profile
                forIdentity:(id<SystemIdentity>)identity {
-  // Should only fetch user policies when the feature is enabled.
-  DCHECK(policy::IsAnyUserPolicyFeatureEnabled());
-
   std::string userEmail = base::SysNSStringToUTF8(identity.userEmail);
   CoreAccountId accountID =
       IdentityManagerFactory::GetForProfile(profile)->PickAccountIdForAccount(
@@ -392,29 +455,41 @@ void AuthenticationFlowContinuation(OnProfileSwitchCompletion completion,
   policy::UserPolicySigninService* userPolicyService =
       policy::UserPolicySigninServiceFactory::GetForProfile(profile);
 
-  __weak __typeof(self) weakSelf = self;
 
   [self startWatchdogTimerForUserPolicyRegistration];
+
+  __weak __typeof(self) weakSelf = self;
   userPolicyService->RegisterForPolicyWithAccountId(
       userEmail, accountID,
       base::BindOnce(^(const std::string& dmToken, const std::string& clientID,
                        const std::vector<std::string>& userAffiliationIDs) {
-        if (![self stopWatchdogTimer]) {
-          // Watchdog timer has already fired, don't notify the delegate.
-          return;
-        }
-        NSMutableArray<NSString*>* userAffiliationIDsNSArray =
-            [[NSMutableArray alloc] init];
-        for (const auto& userAffiliationID : userAffiliationIDs) {
-          [userAffiliationIDsNSArray
-              addObject:base::SysUTF8ToNSString(userAffiliationID)];
-        }
-        [weakSelf.delegate
-            didRegisterForUserPolicyWithDMToken:base::SysUTF8ToNSString(dmToken)
-                                       clientID:base::SysUTF8ToNSString(
-                                                    clientID)
-                             userAffiliationIDs:userAffiliationIDsNSArray];
+        [weakSelf didRegisterForUserPolicyWithDMToken:dmToken
+                                             clientID:clientID
+                                   userAffiliationIDs:userAffiliationIDs];
       }));
+}
+
+// Wraps -didRegisterForUserPolicyWithDMToken:clientID:userAffiliationIDs:
+// method from the delegate with a check that the watchdog has not expired
+// and conversion of the parameter to Objective-C types.
+- (void)didRegisterForUserPolicyWithDMToken:(const std::string&)dmToken
+                                   clientID:(const std::string&)clientID
+                         userAffiliationIDs:(const std::vector<std::string>&)
+                                                userAffiliationIDs {
+  // If the watchdog timer has already fired, don't notify the delegate.
+  if (![self stopWatchdogTimer]) {
+    return;
+  }
+
+  NSMutableArray<NSString*>* affiliationIDs = [[NSMutableArray alloc] init];
+  for (const auto& userAffiliationID : userAffiliationIDs) {
+    [affiliationIDs addObject:base::SysUTF8ToNSString(userAffiliationID)];
+  }
+
+  [_delegate
+      didRegisterForUserPolicyWithDMToken:base::SysUTF8ToNSString(dmToken)
+                                 clientID:base::SysUTF8ToNSString(clientID)
+                       userAffiliationIDs:affiliationIDs];
 }
 
 - (void)fetchUserPolicy:(ProfileIOS*)profile
@@ -422,9 +497,6 @@ void AuthenticationFlowContinuation(OnProfileSwitchCompletion completion,
                clientID:(NSString*)clientID
      userAffiliationIDs:(NSArray<NSString*>*)userAffiliationIDs
                identity:(id<SystemIdentity>)identity {
-  // Should only fetch user policies when the feature is enabled.
-  DCHECK(policy::IsAnyUserPolicyFeatureEnabled());
-
   // Need a `dmToken` and a `clientID` to fetch user policies.
   DCHECK([dmToken length] > 0);
   DCHECK([clientID length] > 0);
@@ -436,8 +508,6 @@ void AuthenticationFlowContinuation(OnProfileSwitchCompletion completion,
   AccountId accountID = AccountId::FromUserEmailGaiaId(
       gaia::CanonicalizeEmail(userEmail), GaiaId(identity.gaiaID));
 
-  __weak __typeof(self) weakSelf = self;
-
   std::vector<std::string> userAffiliationIDsVector;
   for (NSString* userAffiliationID in userAffiliationIDs) {
     userAffiliationIDsVector.push_back(
@@ -445,24 +515,40 @@ void AuthenticationFlowContinuation(OnProfileSwitchCompletion completion,
   }
 
   [self startWatchdogTimerForUserPolicyFetch];
+
+  __weak __typeof(self) weakSelf = self;
   policyService->FetchPolicyForSignedInUser(
       accountID, base::SysNSStringToUTF8(dmToken),
       base::SysNSStringToUTF8(clientID), userAffiliationIDsVector,
       profile->GetSharedURLLoaderFactory(), base::BindOnce(^(bool success) {
-        if (![self stopWatchdogTimer]) {
-          // Watchdog timer has already fired, don't notify the delegate.
-          return;
-        }
-        [weakSelf.delegate didFetchUserPolicyWithSuccess:success];
+        [weakSelf didFetchUserPolicyWithSuccess:success];
       }));
+}
+
+// Wraps -didFetchUserPolicyWithSuccess: method from the delegate with a
+// check that the watchdog has not expired.
+- (void)didFetchUserPolicyWithSuccess:(BOOL)success {
+  // If the watchdog timer has already fired, don't notify the delegate.
+  if (![self stopWatchdogTimer]) {
+    return;
+  }
+
+  [_delegate didFetchUserPolicyWithSuccess:success];
 }
 
 #pragma mark - Private
 
+// Called when `_leavingPrimaryAccountConfirmationDialogCoordinator` is done.
+- (void)leavingPrimaryAccountConfirmationDone:(BOOL)continueFlow {
+  [_leavingPrimaryAccountConfirmationDialogCoordinator stop];
+  _leavingPrimaryAccountConfirmationDialogCoordinator = nil;
+  [_delegate didAcceptToLeavePrimaryAccount:continueFlow];
+}
+
 // Called when separation policies have been fetched, and calls the delegate.
 - (void)didFetchProfileSeparationPolicies:
     (const policy::ProfileSeparationPolicies&)policies {
-  CHECK(_accountLevelSigninRestrictionPolicyFetcher, );
+  CHECK(_accountLevelSigninRestrictionPolicyFetcher);
   _accountLevelSigninRestrictionPolicyFetcher.reset();
   auto profile_separation_data_migration_settings =
       policy::ProfileSeparationDataMigrationSettings::USER_OPT_IN;
@@ -476,12 +562,6 @@ void AuthenticationFlowContinuation(OnProfileSwitchCompletion completion,
 }
 
 - (void)updateUserPolicyNotificationStatusIfNeeded:(PrefService*)prefService {
-  if (!policy::IsAnyUserPolicyFeatureEnabled()) {
-    // Don't set the notification pref if the User Policy feature isn't
-    // enabled.
-    return;
-  }
-
   prefService->SetBoolean(policy::policy_prefs::kUserPolicyNotificationWasShown,
                           true);
 }
@@ -513,48 +593,52 @@ void AuthenticationFlowContinuation(OnProfileSwitchCompletion completion,
 // `stopWatchdogTimer` is called before it times out.
 - (void)startWatchdogTimerForManagedStatus {
   __weak AuthenticationFlowPerformer* weakSelf = self;
-  ProceduralBlock timeoutBlock = ^{
-    AuthenticationFlowPerformer* strongSelf = weakSelf;
-    if (!strongSelf) {
-      return;
-    }
-    [strongSelf stopWatchdogTimer];
-    NSError* error = [NSError errorWithDomain:kAuthenticationErrorDomain
-                                         code:TIMED_OUT_FETCH_POLICY
-                                     userInfo:nil];
-    [strongSelf->_delegate didFailFetchManagedStatus:error];
-  };
-  [self startWatchdogTimerWithTimeoutBlock:timeoutBlock];
+  [self startWatchdogTimerWithTimeoutBlock:^{
+    [weakSelf onManagedStatusWatchdogTimerExpired];
+  }];
+}
+
+// Handle the expiration of the watchdog timer for the method
+// -startWatchdogTimerForManagedStatus.
+- (void)onManagedStatusWatchdogTimerExpired {
+  NSError* error = [NSError errorWithDomain:kAuthenticationErrorDomain
+                                       code:TIMED_OUT_FETCH_POLICY
+                                   userInfo:nil];
+
+  [self stopWatchdogTimer];
+  [_delegate didFailFetchManagedStatus:error];
 }
 
 // Starts a Watchdog Timer that ends the user policy registration on time out.
 - (void)startWatchdogTimerForUserPolicyRegistration {
   __weak AuthenticationFlowPerformer* weakSelf = self;
-  ProceduralBlock timeoutBlock = ^{
-    AuthenticationFlowPerformer* strongSelf = weakSelf;
-    if (!strongSelf) {
-      return;
-    }
-    [strongSelf stopWatchdogTimer];
-    [strongSelf.delegate didRegisterForUserPolicyWithDMToken:@""
-                                                    clientID:@""
-                                          userAffiliationIDs:@[]];
-  };
-  [self startWatchdogTimerWithTimeoutBlock:timeoutBlock];
+  [self startWatchdogTimerWithTimeoutBlock:^{
+    [weakSelf onUserPolicyRegistrationWatchdogTimerExpired];
+  }];
+}
+
+// Handle the expiration of the watchdog time for the method
+// -startWatchdogTimerForUserPolicyRegistration.
+- (void)onUserPolicyRegistrationWatchdogTimerExpired {
+  [self stopWatchdogTimer];
+  [_delegate didRegisterForUserPolicyWithDMToken:@""
+                                        clientID:@""
+                              userAffiliationIDs:@[]];
 }
 
 // Starts a Watchdog Timer that ends the user policy fetch on time out.
 - (void)startWatchdogTimerForUserPolicyFetch {
   __weak AuthenticationFlowPerformer* weakSelf = self;
-  ProceduralBlock timeoutBlock = ^{
-    AuthenticationFlowPerformer* strongSelf = weakSelf;
-    if (!strongSelf) {
-      return;
-    }
-    [strongSelf stopWatchdogTimer];
-    [strongSelf->_delegate didFetchUserPolicyWithSuccess:NO];
-  };
-  [self startWatchdogTimerWithTimeoutBlock:timeoutBlock];
+  [self startWatchdogTimerWithTimeoutBlock:^{
+    [weakSelf onUserPolicyFetchWatchdogTimerExpired];
+  }];
+}
+
+// Handle the expiration of the watchdog time for the method
+// -startWatchdogTimerForUserPolicyFetch.
+- (void)onUserPolicyFetchWatchdogTimerExpired {
+  [self stopWatchdogTimer];
+  [_delegate didFetchUserPolicyWithSuccess:NO];
 }
 
 // Stops the watchdog timer, and doesn't call the `timeoutDelegateSelector`.
@@ -627,6 +711,28 @@ void AuthenticationFlowContinuation(OnProfileSwitchCompletion completion,
     [self updateUserPolicyNotificationStatusIfNeeded:prefService];
   }
   [self.delegate didAcceptManagedConfirmation:keepBrowsingDataSeparate];
+}
+
+// Displays the identity confirmation snackbar with `identity`.
+- (void)triggerAccountSwitchSnackbarWithIdentity:(id<SystemIdentity>)identity
+                                         browser:(Browser*)browser {
+  ProfileIOS* profile = browser->GetProfile()->GetOriginalProfile();
+  UIImage* avatar = ChromeAccountManagerServiceFactory::GetForProfile(profile)
+                        ->GetIdentityAvatarWithIdentity(
+                            identity, IdentityAvatarSize::Regular);
+  ManagementState managementState =
+      GetManagementState(IdentityManagerFactory::GetForProfile(profile),
+                         AuthenticationServiceFactory::GetForProfile(profile),
+                         profile->GetPrefs());
+  MDCSnackbarMessage* snackbarTitle = [[IdentitySnackbarMessage alloc]
+      initWithName:identity.userGivenName
+             email:identity.userEmail
+            avatar:avatar
+           managed:managementState.is_profile_managed()];
+  CommandDispatcher* dispatcher = browser->GetCommandDispatcher();
+  id<SnackbarCommands> snackbarCommandsHandler =
+      HandlerForProtocol(dispatcher, SnackbarCommands);
+  [snackbarCommandsHandler showSnackbarMessageOverBrowserToolbar:snackbarTitle];
 }
 
 #pragma mark - ManagedProfileCreationCoordinatorDelegate

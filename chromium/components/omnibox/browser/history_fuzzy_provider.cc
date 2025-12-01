@@ -41,7 +41,6 @@
 #include "third_party/metrics_proto/omnibox_event.pb.h"
 #include "third_party/metrics_proto/omnibox_focus_type.pb.h"
 #include "url/gurl.h"
-#include "vivaldi/prefs/vivaldi_gen_prefs.h"
 
 namespace {
 
@@ -498,17 +497,6 @@ void HistoryFuzzyProvider::Start(const AutocompleteInput& input,
                                  bool minimal_changes) {
   TRACE_EVENT0("omnibox", "HistoryFuzzyProvider::Start");
   matches_.clear();
-
-#if defined(VIVALDI_BUILD)
-  PrefService* prefs = client()->GetPrefs();
-  auto show_search =
-      prefs->GetBoolean(vivaldiprefs::kAddressBarOmniboxShowBrowserHistory);
-
-  if (!show_search) {
-    return;
-  }
-#endif
-
   if (input.IsZeroSuggest() ||
       input.type() == metrics::OmniboxInputType::EMPTY) {
     return;

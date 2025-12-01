@@ -45,6 +45,8 @@
 #import "ios/chrome/browser/location_bar/ui_bundled/location_bar_view_controller.h"
 #import "ios/chrome/browser/ntp/model/new_tab_page_tab_helper.h"
 #import "ios/chrome/browser/ntp/model/new_tab_page_util.h"
+#import "ios/chrome/browser/omnibox/model/omnibox_position/omnibox_position_browser_agent.h"
+#import "ios/chrome/browser/omnibox/model/omnibox_position/omnibox_state_provider.h"
 #import "ios/chrome/browser/omnibox/ui_bundled/chrome_omnibox_client_ios.h"
 #import "ios/chrome/browser/omnibox/ui_bundled/omnibox_controller_delegate.h"
 #import "ios/chrome/browser/omnibox/ui_bundled/omnibox_coordinator.h"
@@ -100,6 +102,7 @@ const size_t kMaxURLDisplayChars = 32 * 1024;
     LocationBarViewControllerDelegate,
     LocationBarSteadyViewConsumer,
     OmniboxControllerDelegate,
+    OmniboxStateProvider,
     URLDragDataSource> {
   // API endpoint for omnibox.
   std::unique_ptr<WebLocationBarImpl> _locationBar;
@@ -127,7 +130,6 @@ const size_t kMaxURLDisplayChars = 32 * 1024;
 @property(nonatomic, strong) LocationBarMediator* mediator;
 @property(nonatomic, strong) LocationBarSteadyViewMediator* steadyViewMediator;
 @property(nonatomic, strong) LocationBarViewController* viewController;
-@property(nonatomic, readonly) ProfileIOS* profile;
 @property(nonatomic, readonly) WebStateList* webStateList;
 
 // Tracks calls in progress to -cancelOmniboxEdit to avoid calling it from
@@ -143,10 +145,6 @@ const size_t kMaxURLDisplayChars = 32 * 1024;
 @implementation LocationBarCoordinator
 
 #pragma mark - Accessors
-
-- (ProfileIOS*)profile {
-  return self.browser ? self.browser->GetProfile() : nullptr;
-}
 
 - (WebStateList*)webStateList {
   return self.browser ? self.browser->GetWebStateList() : nullptr;
@@ -181,6 +179,7 @@ const size_t kMaxURLDisplayChars = 32 * 1024;
 
   self.viewController = [[LocationBarViewController alloc] init];
   self.viewController.incognito = isIncognito;
+  self.viewController.profilePrefs = self.profile->GetPrefs();
   self.viewController.delegate = self;
   // TODO(crbug.com/40670043): Use HandlerForProtocol after commands protocol
   // clean up.
@@ -191,8 +190,7 @@ const size_t kMaxURLDisplayChars = 32 * 1024;
                      LensCommands, LensOverlayCommands, OmniboxCommands>>(
           self.browser->GetCommandDispatcher());
   self.viewController.tracker =
-      feature_engagement::TrackerFactory::GetForProfile(
-          self.browser->GetProfile());
+      feature_engagement::TrackerFactory::GetForProfile(self.profile);
   self.viewController.voiceSearchEnabled =
       ios::provider::IsVoiceSearchEnabled();
   self.viewController.layoutGuideCenter =
@@ -293,11 +291,18 @@ const size_t kMaxURLDisplayChars = 32 * 1024;
                                     OverlayModality::kWebContentArea);
   self.steadyViewMediator.consumer = self;
   self.steadyViewMediator.tracker =
-      feature_engagement::TrackerFactory::GetForProfile(
-          self.browser->GetProfile());
+      feature_engagement::TrackerFactory::GetForProfile(self.profile);
 
   _omniboxFullscreenUIUpdater = std::make_unique<FullscreenUIUpdater>(
       fullscreenController, self.viewController);
+
+  OmniboxPositionBrowserAgent* omniboxPositionBrowserAgent =
+      OmniboxPositionBrowserAgent::FromBrowser(self.browser);
+  /// The location bar is the OmniboxStateProvider because omnibox is used both
+  /// in browser and lens overlay.
+  if (omniboxPositionBrowserAgent) {
+    omniboxPositionBrowserAgent->SetOmniboxStateProvider(self);
+  }
 
   self.started = YES;
 
@@ -468,6 +473,12 @@ const size_t kMaxURLDisplayChars = 32 * 1024;
 
 - (LocationBarModel*)locationBarModel {
   return _locationBarModel.get();
+}
+
+#pragma mark - OmniboxStateProvider
+
+- (BOOL)isOmniboxFocused {
+  return [self isOmniboxFirstResponder] || [self showingOmniboxPopup];
 }
 
 #pragma mark - LocationBarViewControllerDelegate

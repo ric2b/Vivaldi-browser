@@ -2277,12 +2277,12 @@ IN_PROC_BROWSER_TEST_F(AccessibilityWinBrowserTest,
   Microsoft::WRL::ComPtr<IAccessibleText> paragraph_text;
   SetUpSampleParagraph(&paragraph_text, ui::AXMode::kNativeAPIs |
                                             ui::AXMode::kWebContents |
-                                            ui::AXMode::kScreenReader);
+                                            ui::AXMode::kExtendedProperties);
 
   AccessibilityNotificationWaiter waiter(
       shell()->web_contents(),
       ui::AXMode::kNativeAPIs | ui::AXMode::kWebContents |
-          ui::AXMode::kScreenReader | ui::AXMode::kInlineTextBoxes,
+          ui::AXMode::kExtendedProperties | ui::AXMode::kInlineTextBoxes,
       ax::mojom::Event::kLoadComplete);
 
   // Calling `get_characterExtents` will enable `ui::AXMode::kInlineTextBoxes`
@@ -2342,7 +2342,8 @@ IN_PROC_BROWSER_TEST_F(AccessibilityWinBrowserTest,
   EXPECT_TRUE(found);
 
   // Remove all accessibility modes.
-  content::BrowserAccessibilityState::GetInstance()->ResetAccessibilityMode();
+  content::BrowserAccessibilityState::GetInstance()
+      ->DisableProcessAccessibility();
 
   // Ensure accessibility is not enabled before we begin the test.
   EXPECT_TRUE(content::BrowserAccessibilityStateImpl::GetInstance()
@@ -6246,7 +6247,7 @@ IN_PROC_BROWSER_TEST_F(AccessibilityWinUIASelectivelyEnabledBrowserTest,
 
   // Web content accessibility support should now be enabled.
   expected_mode |= ui::AXMode::kNativeAPIs | ui::AXMode::kWebContents |
-                   ui::AXMode::kScreenReader;
+                   ui::AXMode::kExtendedProperties;
   EXPECT_EQ(expected_mode, content::BrowserAccessibilityStateImpl::GetInstance()
                                ->GetAccessibilityMode());
   ASSERT_TRUE(waiter.WaitForNotification());
@@ -6272,7 +6273,7 @@ IN_PROC_BROWSER_TEST_F(AccessibilityWinUIASelectivelyEnabledBrowserTest,
         UIA_LabeledByPropertyId, variant.Receive()));
   }
   // Now check that we have complete accessibility support enabled.
-  expected_mode |= ui::AXMode::kScreenReader;
+  expected_mode |= ui::AXMode::kExtendedProperties;
   EXPECT_EQ(expected_mode, content::BrowserAccessibilityStateImpl::GetInstance()
                                ->GetAccessibilityMode());
 
@@ -6583,7 +6584,7 @@ IN_PROC_BROWSER_TEST_F(AccessibilityWinBrowserTest,
 
   WebContentsImpl* web_contents =
       static_cast<WebContentsImpl*>(shell()->web_contents());
-  BrowserAccessibilityState::GetInstance()->ResetAccessibilityMode();
+  BrowserAccessibilityState::GetInstance()->DisableProcessAccessibility();
   auto accessibility_mode = web_contents->GetAccessibilityMode();
   ASSERT_TRUE(accessibility_mode.is_mode_off());
   EXPECT_EQ(nullptr, GetManager());
@@ -6611,7 +6612,7 @@ IN_PROC_BROWSER_TEST_F(AccessibilityWinBrowserTest,
   int32_t unique_id_2 = button_2->GetAXPlatformNode()->GetUniqueId();
 
   // Turn accessibility off again.
-  BrowserAccessibilityState::GetInstance()->ResetAccessibilityMode();
+  BrowserAccessibilityState::GetInstance()->DisableProcessAccessibility();
   accessibility_mode = web_contents->GetAccessibilityMode();
   ASSERT_TRUE(accessibility_mode.is_mode_off());
   EXPECT_EQ(nullptr, GetManager());

@@ -35,7 +35,6 @@
 #include "services/network/public/mojom/permissions_policy/permissions_policy_feature.mojom-blink-forward.h"
 #include "services/network/public/mojom/web_sandbox_flags.mojom-blink-forward.h"
 #include "third_party/blink/public/mojom/permissions_policy/document_policy_feature.mojom-blink-forward.h"
-#include "third_party/blink/public/mojom/permissions_policy/permissions_policy.mojom-blink-forward.h"
 #include "third_party/blink/public/mojom/security_context/insecure_request_policy.mojom-blink-forward.h"
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
@@ -45,11 +44,14 @@
 #include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
 #include "third_party/blink/renderer/platform/wtf/vector.h"
 
+namespace network {
+class PermissionsPolicy;
+}  // namespace network
+
 namespace blink {
 
 class DocumentPolicy;
 class ExecutionContext;
-class PermissionsPolicy;
 class PolicyValue;
 class SecurityOrigin;
 
@@ -132,14 +134,15 @@ class CORE_EXPORT SecurityContext {
     return insecure_request_policy_;
   }
 
-  const PermissionsPolicy* GetPermissionsPolicy() const {
+  const network::PermissionsPolicy* GetPermissionsPolicy() const {
     return permissions_policy_.get();
   }
-  const PermissionsPolicy* GetReportOnlyPermissionsPolicy() const {
+  const network::PermissionsPolicy* GetReportOnlyPermissionsPolicy() const {
     return report_only_permissions_policy_.get();
   }
-  void SetPermissionsPolicy(std::unique_ptr<PermissionsPolicy>);
-  void SetReportOnlyPermissionsPolicy(std::unique_ptr<PermissionsPolicy>);
+  void SetPermissionsPolicy(std::unique_ptr<network::PermissionsPolicy>);
+  void SetReportOnlyPermissionsPolicy(
+      std::unique_ptr<network::PermissionsPolicy>);
 
   const DocumentPolicy* GetDocumentPolicy() const {
     return document_policy_.get();
@@ -158,9 +161,9 @@ class CORE_EXPORT SecurityContext {
     // Whether a report should be sent (to Reporting API, ReportingObservers,
     // and the console).
     bool should_report;
-    // Where a report should be sent, if one should be. nullopt if no reporting
-    // is configured for this feature.
-    std::optional<String> reporting_endpoint;
+    // Where a report should be sent, if one should be. empty if no
+    // reporting is configured for this feature.
+    String reporting_endpoint;
   };
 
   // Permissions Policy
@@ -191,8 +194,8 @@ class CORE_EXPORT SecurityContext {
  protected:
   network::mojom::blink::WebSandboxFlags sandbox_flags_;
   scoped_refptr<SecurityOrigin> security_origin_;
-  std::unique_ptr<PermissionsPolicy> permissions_policy_;
-  std::unique_ptr<PermissionsPolicy> report_only_permissions_policy_;
+  std::unique_ptr<network::PermissionsPolicy> permissions_policy_;
+  std::unique_ptr<network::PermissionsPolicy> report_only_permissions_policy_;
   std::unique_ptr<DocumentPolicy> document_policy_;
   std::unique_ptr<DocumentPolicy> report_only_document_policy_;
 

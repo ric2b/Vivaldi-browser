@@ -5,9 +5,11 @@
 #include "components/supervised_user/core/browser/supervised_user_utils.h"
 
 #include <optional>
+#include <variant>
 #include <vector>
 
 #include "base/base64.h"
+#include "base/base64url.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/notreached.h"
 #include "base/strings/utf_string_conversions.h"
@@ -148,10 +150,10 @@ std::optional<ToggleState> GetExtensionsToggleStateForHistogram(
 }
 
 // Returns the text that will be shown as the PACP widget subtitle, containing
-// information about the blocked url and the blocking reason.
+// information about the blocked hostname and the blocking reason.
 std::string GetBlockingReasonSubtitle(
-    const std::string blocked_url,
-    const supervised_user::FilteringBehaviorReason& filtering_reason) {
+    const std::u16string blocked_hostname,
+    supervised_user::FilteringBehaviorReason filtering_reason) {
   int message_id = 0;
   switch (filtering_reason) {
     case FilteringBehaviorReason::DEFAULT:
@@ -164,24 +166,29 @@ std::string GetBlockingReasonSubtitle(
       message_id = IDS_PARENT_WEBSITE_APPROVAL_MANUAL_URL;
       break;
   }
-  return l10n_util::GetStringFUTF8(message_id, base::UTF8ToUTF16(blocked_url));
+  return l10n_util::GetStringFUTF8(message_id, blocked_hostname);
 }
 
 // Returns a base64-encoded `TransactionData` proto message that encapsulates
 // the blocked url so that PACP can consume it.
 std::string GetBase64EncodedInTransactionalDataForPayload(
-    const std::string blocked_url,
-    const supervised_user::FilteringBehaviorReason& filtering_reason) {
-  CHECK(!blocked_url.empty());
+    const std::u16string blocked_hostname,
+    supervised_user::FilteringBehaviorReason filtering_reason) {
+  CHECK(!blocked_hostname.empty());
   kids::platform::parentaccess::proto::LocalApprovalPayload approval_url;
   approval_url.set_url_approval_context(
-      GetBlockingReasonSubtitle(blocked_url, filtering_reason));
+      GetBlockingReasonSubtitle(blocked_hostname, filtering_reason));
 
   kids::platform::parentaccess::proto::TransactionData transaction_data;
   transaction_data.mutable_payload()->set_value(
       approval_url.SerializeAsString());
   transaction_data.mutable_payload()->set_type_url(kPacpUrlPayloadMessageType);
-  return base::Base64Encode(transaction_data.SerializeAsString());
+  std::string base_64_url_encoded_data;
+  base::Base64UrlEncode(transaction_data.SerializeAsString(),
+                        base::Base64UrlEncodePolicy::INCLUDE_PADDING,
+                        &base_64_url_encoded_data);
+  CHECK(base_64_url_encoded_data.length() > 0);
+  return base_64_url_encoded_data;
 }
 
 // Returns the PACP widget url with the appropriate query parameters.
@@ -189,7 +196,7 @@ GURL GetParentAccessURL(
     const std::string& caller_id,
     const std::string& locale,
     std::optional<GURL> blocked_url,
-    const supervised_user::FilteringBehaviorReason& filtering_reason) {
+    supervised_user::FilteringBehaviorReason filtering_reason) {
   GURL url(kParentAccessBaseURL);
   GURL::Replacements replacements;
   std::string query = base::StrCat({"callerid=", caller_id, "&hl=", locale,
@@ -197,9 +204,16 @@ GURL GetParentAccessURL(
   if (base::FeatureList::IsEnabled(
           kLocalWebApprovalsWidgetSupportsUrlPayload) &&
       blocked_url.has_value() && !blocked_url.value().host().empty()) {
-    query += base::StrCat({"&transaction-data=",
-                           GetBase64EncodedInTransactionalDataForPayload(
-                               blocked_url.value().host(), filtering_reason)});
+    // Prepare blocked URL hostname for user-friendly display, including internationalized
+    // domain name (IDN) conversion if necessary.
+    std::u16string blocked_hostname = url_formatter::FormatUrl(
+        blocked_url.value(),
+        url_formatter::kFormatUrlOmitHTTP | url_formatter::kFormatUrlOmitHTTPS |
+            url_formatter::kFormatUrlOmitDefaults,
+        base::UnescapeRule::SPACES, nullptr, nullptr, nullptr);
+    query += base::StrCat(
+        {"&transaction-data=", GetBase64EncodedInTransactionalDataForPayload(
+                                   blocked_hostname, filtering_reason)});
   }
   replacements.SetQueryStr(query);
   return url.ReplaceComponents(replacements);
@@ -217,18 +231,18 @@ ParentAccessCallbackParsedResult::~ParentAccessCallbackParsedResult() = default;
 
 std::optional<ParentAccessWidgetError>
 ParentAccessCallbackParsedResult::GetError() const {
-  if (absl::holds_alternative<ParentAccessWidgetError>(result_)) {
-    return absl::get<ParentAccessWidgetError>(result_);
+  if (std::holds_alternative<ParentAccessWidgetError>(result_)) {
+    return std::get<ParentAccessWidgetError>(result_);
   }
   return std::nullopt;
 }
 
 std::optional<kids::platform::parentaccess::client::proto::ParentAccessCallback>
 ParentAccessCallbackParsedResult::GetCallback() const {
-  if (absl::holds_alternative<
+  if (std::holds_alternative<
           kids::platform::parentaccess::client::proto::ParentAccessCallback>(
           result_)) {
-    return absl::get<
+    return std::get<
         kids::platform::parentaccess::client::proto::ParentAccessCallback>(
         result_);
   }
@@ -238,11 +252,11 @@ ParentAccessCallbackParsedResult::GetCallback() const {
 // static
 ParentAccessCallbackParsedResult
 ParentAccessCallbackParsedResult::ParseParentAccessCallbackResult(
-    const std::string& encoded_parent_access_callback_proto,
-    base::Base64DecodePolicy decoding_policy) {
+    const std::string& encoded_parent_access_callback_proto) {
   std::string decoded_parent_access_callback;
-  if (!base::Base64Decode(encoded_parent_access_callback_proto,
-                          &decoded_parent_access_callback, decoding_policy)) {
+  if (!base::Base64UrlDecode(encoded_parent_access_callback_proto,
+                             base::Base64UrlDecodePolicy::IGNORE_PADDING,
+                             &decoded_parent_access_callback)) {
     LOG(ERROR) << "ParentAccessHandler::ParentAccessResult: Error decoding "
                   "parent_access_result from base64";
     return ParentAccessCallbackParsedResult(
@@ -380,16 +394,18 @@ GURL UrlFormatter::FormatUrl(const GURL& url) const {
 #endif  // !BUILDFLAG(IS_CHROMEOS)
 }
 
-GURL GetParentAccessURLForIOS(const std::string& locale) {
-  return GetParentAccessURL(
-      kParentAccessIOSCallerID, locale, /*blocked_url*/ std::nullopt,
-      /*filtering_reason*/ supervised_user::FilteringBehaviorReason::DEFAULT);
+GURL GetParentAccessURLForIOS(
+    const std::string& locale,
+    const GURL& blocked_url,
+    supervised_user::FilteringBehaviorReason filtering_reason) {
+  return GetParentAccessURL(kParentAccessIOSCallerID, locale, blocked_url,
+                            filtering_reason);
 }
 
 GURL GetParentAccessURLForDesktop(
     const std::string& locale,
     const GURL& blocked_url,
-    const supervised_user::FilteringBehaviorReason& filtering_reason) {
+    supervised_user::FilteringBehaviorReason filtering_reason) {
   return GetParentAccessURL(kParentAccessDesktopCallerID, locale, blocked_url,
                             filtering_reason);
 }

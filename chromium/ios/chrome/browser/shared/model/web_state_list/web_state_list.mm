@@ -11,6 +11,7 @@
 #import "base/check_op.h"
 #import "base/containers/adapters.h"
 #import "base/containers/contains.h"
+#import "base/functional/bind.h"
 #import "base/memory/raw_ptr.h"
 #import "components/tab_groups/tab_group_id.h"
 #import "ios/chrome/browser/shared/model/web_state_list/order_controller.h"
@@ -19,9 +20,14 @@
 #import "ios/chrome/browser/shared/model/web_state_list/tab_group.h"
 #import "ios/chrome/browser/shared/model/web_state_list/tab_group_range.h"
 #import "ios/chrome/browser/shared/model/web_state_list/web_state_list_delegate.h"
+#import "ios/chrome/browser/shared/model/web_state_list/web_state_list_groups_delegate.h"
 #import "ios/chrome/browser/shared/model/web_state_list/web_state_list_observer.h"
 #import "ios/chrome/browser/shared/model/web_state_list/web_state_opener.h"
 #import "ios/web/public/web_state.h"
+
+// Vivaldi
+#import "app/vivaldi_apptools.h"
+// End Vivaldi
 
 namespace {
 
@@ -182,8 +188,9 @@ WebStateList::InsertionParams::InsertionParams(InsertionParams&& other) =
 WebStateList::InsertionParams& WebStateList::InsertionParams::operator=(
     InsertionParams&& other) = default;
 
-WebStateList::WebStateList(WebStateListDelegate* delegate)
-    : delegate_(delegate) {
+WebStateList::WebStateList(WebStateListDelegate* delegate,
+                           WebStateListGroupsDelegate* groups_delegate)
+    : delegate_(delegate), groups_delegate_(groups_delegate) {
   DCHECK(delegate_);
 }
 
@@ -662,6 +669,21 @@ std::unique_ptr<web::WebState> WebStateList::DetachWebStateAtImpl(
   web::WebState* new_active_web_state = ContainsIndex(new_active_index)
                                             ? GetWebStateAt(new_active_index)
                                             : nullptr;
+
+  int insertion_index = kInvalidIndex;
+  std::unique_ptr<web::WebState> web_state_to_insert;
+  if (ShouldInsertWebState(params, group)) {
+    // In case the group is empty but should be kept, add a new tab in it
+    // instead of delete it.
+    web_state_to_insert = groups_delegate_->WebStateToAddToEmptyGroup();
+    if (is_active_web_state_detached) {
+      new_active_web_state = web_state_to_insert.get();
+    }
+    insertion_index = InsertWebStateImpl(
+        std::move(web_state_to_insert),
+        WebStateList::InsertionParams::Automatic().InGroup(group));
+  }
+
   const WebStateListStatus status = {
       .old_active_web_state = old_active_web_state,
       .new_active_web_state = new_active_web_state};
@@ -700,6 +722,13 @@ std::unique_ptr<web::WebState> WebStateList::DetachWebStateAtImpl(
     CHECK_GT(active_index_, 0);
     --active_index_;
   }
+  // If a web state is inserted and the previously detached web state was
+  // active, the newly inserted web state should become the active one.
+  if (insertion_index != kInvalidIndex && is_active_web_state_detached) {
+    // Removes one to `insertion_index`, because the insertion happened before
+    // the removal of the web state.
+    active_index_ = --insertion_index;
+  }
 
   // Check that the active element (if there is one) is valid and expected.
   DCHECK(active_index_ == kInvalidIndex || ContainsIndex(active_index_));
@@ -719,6 +748,22 @@ std::unique_ptr<web::WebState> WebStateList::DetachWebStateAtImpl(
   DeleteGroupIfEmpty(group);
 
   return detached_web_state;
+}
+
+bool WebStateList::ShouldInsertWebState(DetachParams params,
+                                        const TabGroup* group) {
+  // Do not insert web state when shuting down the app. All tabs are closed.
+  if (params.is_closing && !params.is_user_action) {
+    return false;
+  }
+  if (!group) {
+    return false;
+  }
+  const auto iter = groups_.find(group);
+  if (iter == groups_.end() || group->range().count() > 1) {
+    return false;
+  }
+  return (groups_delegate_ && !groups_delegate_->ShouldDeleteGroup(group));
 }
 
 std::vector<std::unique_ptr<web::WebState>>
@@ -803,6 +848,13 @@ int WebStateList::SetWebStatePinnedAtImpl(int index, bool pinned) {
   // When pinning, move to the end of the pinned tabs. When unpinning, move to
   // the end of the WebStateList. May end up identical to `index`.
   int new_index = pinned ? pinned_tabs_count_ : count() - 1;
+
+  if (vivaldi::IsVivaldiRunning()) {
+    // Note: (prio@vivaldi.com) When unpinning keep the unpinned tab
+    // in the current index to match behaviour from Desktop.
+    new_index = pinned ? pinned_tabs_count_ : index;
+  } // End Vivaldi
+
   MoveWebStateWrapperAt(index, new_index, pinned, /*new_group=*/nullptr);
 
   return new_index;
@@ -1201,21 +1253,22 @@ void WebStateList::DeleteGroupIfEmpty(const TabGroup* group) {
   DCHECK(locked_);
 
   const auto iter = groups_.find(group);
-  if (iter != groups_.end() && group->range().count() == 0) {
-    // Notify observers of the imminent deletion of the group.
-    // The deletion doesn't change the active WebState.
-    web::WebState* const active_web_state = GetActiveWebState();
-    const WebStateListStatus status = {
-        .old_active_web_state = active_web_state,
-        .new_active_web_state = active_web_state};
-    const WebStateListChangeGroupDelete group_delete_change(group);
-    for (auto& observer : observers_) {
-      observer.WebStateListDidChange(this, group_delete_change, status);
-    }
-
-    // Actually delete the group.
-    groups_.erase(iter);
+  if (iter == groups_.end() || group->range().count() > 0) {
+    return;
   }
+
+  // Notify observers of the imminent deletion of the group.
+  // The deletion doesn't change the active WebState.
+  web::WebState* const active_web_state = GetActiveWebState();
+  const WebStateListStatus status = {.old_active_web_state = active_web_state,
+                                     .new_active_web_state = active_web_state};
+  const WebStateListChangeGroupDelete group_delete_change(group);
+  for (auto& observer : observers_) {
+    observer.WebStateListDidChange(this, group_delete_change, status);
+  }
+
+  // Actually delete the group.
+  groups_.erase(iter);
 }
 
 void WebStateList::SetActiveIndex(int active_index) {

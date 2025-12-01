@@ -5,6 +5,8 @@
 #ifndef COMPONENTS_AUTOFILL_CORE_BROWSER_METRICS_LOG_EVENT_H_
 #define COMPONENTS_AUTOFILL_CORE_BROWSER_METRICS_LOG_EVENT_H_
 
+#include <variant>
+
 #include "base/time/time.h"
 #include "base/types/id_type.h"
 #include "components/autofill/core/browser/filling/field_filling_skip_reason.h"
@@ -12,7 +14,6 @@
 #include "components/autofill/core/browser/proto/api_v1.pb.h"
 #include "components/autofill/core/browser/studies/autofill_ablation_study.h"
 #include "components/autofill/core/common/is_required.h"
-#include "third_party/abseil-cpp/absl/types/variant.h"
 
 namespace autofill {
 
@@ -34,7 +35,6 @@ bool OptionalBooleanToBool(OptionalBoolean value);
 
 // Enum for different data types filled during autofill filling events,
 // including those of the SingleFieldFiller.
-// Values are recorded as metrics and must not change or be reused.
 enum class FillDataType : uint8_t {
   kUndefined = 0,
   kAutofillProfile = 1,
@@ -43,14 +43,14 @@ enum class FillDataType : uint8_t {
   kSingleFieldFillerIban = 4,
   kSingleFieldFillerPromoCode = 5,
   kAutofillAi = 6,
+  kSingleFieldFillerLoyaltyCard = 7,
 };
 
 // AreCollapsible(..., ...) are a set of functions that checks whether two
 // consecutive events in the event log of a form can be merged into one.
 // This is a best effort mechanism to reduce the memory footprint caused by
 // redundant events.
-bool AreCollapsible(const absl::monostate& event1,
-                    const absl::monostate& event2);
+bool AreCollapsible(const std::monostate& event1, const std::monostate& event2);
 
 // Log the field that shows a dropdown list of suggestions for autofill.
 struct AskForValuesToFillFieldLogEvent {

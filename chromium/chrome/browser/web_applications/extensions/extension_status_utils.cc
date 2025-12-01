@@ -10,6 +10,7 @@
 #include "base/strings/string_split.h"
 #include "build/build_config.h"
 #include "chrome/browser/extensions/extension_management.h"
+#include "chrome/browser/extensions/managed_installation_mode.h"
 #include "chrome/browser/extensions/preinstalled_apps.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/chrome_features.h"
@@ -33,9 +34,6 @@ const char kDefaultAllowedExtensionIds[] =
     "alhngdkjgnedakdlnamimgfihgkmenbh,"
     "gnddkmpjjjcimefninepfmmddpgaaado";
 
-BASE_FEATURE(kChromeAppsDeprecationExcludeForceInstalls,
-             "ChromeAppsDeprecationExcludeForceInstalls",
-             base::FEATURE_DISABLED_BY_DEFAULT);
 base::FeatureParam<std::string> kChromeAppAllowlist{
     &features::kChromeAppsDeprecation, "allow_list",
     kDefaultAllowedExtensionIds};
@@ -58,12 +56,12 @@ bool IsExtensionBlockedByPolicy(content::BrowserContext* context,
   const Extension* extension = registry->GetInstalledExtension(extension_id);
   ExtensionManagement* management =
       ExtensionManagementFactory::GetForBrowserContext(context);
-  ExtensionManagement::InstallationMode mode =
+  ManagedInstallationMode mode =
       extension ? management->GetInstallationMode(extension)
                 : management->GetInstallationMode(extension_id,
                                                   /*update_url=*/std::string());
-  return mode == ExtensionManagement::INSTALLATION_BLOCKED ||
-         mode == ExtensionManagement::INSTALLATION_REMOVED;
+  return mode == ManagedInstallationMode::kBlocked ||
+         mode == ManagedInstallationMode::kRemoved;
 }
 
 bool IsExtensionInstalled(content::BrowserContext* context,
@@ -131,15 +129,6 @@ bool IsExtensionUnsupportedDeprecatedApp(content::BrowserContext* context,
       extension_id, extensions::ExtensionRegistry::EVERYTHING);
   if (!app || !app->is_app())
     return false;
-
-  bool force_installed =
-      IsExtensionForceInstalled(context, extension_id, nullptr);
-
-  if (base::FeatureList::IsEnabled(
-          kChromeAppsDeprecationExcludeForceInstalls) &&
-      force_installed) {
-    return false;
-  }
 
   // This feature parameter can specify specific extension ids to continue
   // allowing.

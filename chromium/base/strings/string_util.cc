@@ -2,11 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/40284755): Remove this and spanify to fix the errors.
-#pragma allow_unsafe_buffers
-#endif
-
 #include "base/strings/string_util.h"
 
 #include <errno.h>
@@ -27,6 +22,7 @@
 #include <vector>
 
 #include "base/check_op.h"
+#include "base/compiler_specific.h"
 #include "base/no_destructor.h"
 #include "base/strings/string_util_impl_helpers.h"
 #include "base/strings/string_util_internal.h"
@@ -38,13 +34,14 @@
 namespace base {
 
 bool IsWprintfFormatPortable(const wchar_t* format) {
-  for (const wchar_t* position = format; *position != '\0'; ++position) {
+  for (const wchar_t* position = format; *position != '\0';
+       UNSAFE_TODO(++position)) {
     if (*position == '%') {
       bool in_specification = true;
       bool modifier_l = false;
       while (in_specification) {
         // Eat up characters until reaching a known specifier.
-        if (*++position == '\0') {
+        if (UNSAFE_TODO(*++position) == '\0') {
           // The format string ended in the middle of a specification.  Call
           // it portable because no unportable specifications were found.  The
           // string is equally broken on all platforms.
@@ -61,7 +58,7 @@ bool IsWprintfFormatPortable(const wchar_t* format) {
           return false;
         }
 
-        if (wcschr(L"diouxXeEfgGaAcspn%", *position)) {
+        if (UNSAFE_TODO(wcschr(L"diouxXeEfgGaAcspn%", *position))) {
           // Portable, keep scanning the rest of the format string.
           in_specification = false;
         }
@@ -152,13 +149,17 @@ std::string_view TrimString(std::string_view input,
   return internal::TrimStringPieceT(input, trim_chars, positions);
 }
 
-void TruncateUTF8ToByteSize(const std::string& input,
+void TruncateUTF8ToByteSize(std::string_view input,
                             const size_t byte_size,
                             std::string* output) {
   DCHECK(output);
+  *output = TruncateUTF8ToByteSize(input, byte_size);
+}
+
+std::string_view TruncateUTF8ToByteSize(std::string_view input,
+                                        size_t byte_size) {
   if (byte_size > input.length()) {
-    *output = input;
-    return;
+    return input;
   }
   DCHECK_LE(byte_size,
             static_cast<uint32_t>(std::numeric_limits<int32_t>::max()));
@@ -174,8 +175,8 @@ void TruncateUTF8ToByteSize(const std::string& input,
   while (char_index >= 0) {
     int32_t prev = char_index;
     base_icu::UChar32 code_point = 0;
-    CBU8_NEXT(reinterpret_cast<const uint8_t*>(data), char_index,
-              truncation_length, code_point);
+    UNSAFE_TODO(CBU8_NEXT(reinterpret_cast<const uint8_t*>(data), char_index,
+                          truncation_length, code_point));
     if (!IsValidCharacter(code_point)) {
       char_index = prev - 1;
     } else {
@@ -184,9 +185,9 @@ void TruncateUTF8ToByteSize(const std::string& input,
   }
 
   if (char_index >= 0) {
-    *output = input.substr(0, static_cast<size_t>(char_index));
+    return input.substr(0, static_cast<size_t>(char_index));
   } else {
-    output->clear();
+    return std::string_view();
   }
 }
 
@@ -309,11 +310,11 @@ std::u16string FormatBytesUnlocalized(int64_t bytes) {
 
   char buf[64];
   if (bytes != 0 && dimension > 0 && unit_amount < 100) {
-    base::snprintf(buf, std::size(buf), "%.1lf%s", unit_amount,
-                   kByteStringsUnlocalized[dimension]);
+    UNSAFE_TODO(base::snprintf(buf, std::size(buf), "%.1lf%s", unit_amount,
+                               kByteStringsUnlocalized[dimension]));
   } else {
-    base::snprintf(buf, std::size(buf), "%.0lf%s", unit_amount,
-                   kByteStringsUnlocalized[dimension]);
+    UNSAFE_TODO(base::snprintf(buf, std::size(buf), "%.0lf%s", unit_amount,
+                               kByteStringsUnlocalized[dimension]));
   }
 
   return ASCIIToUTF16(buf);

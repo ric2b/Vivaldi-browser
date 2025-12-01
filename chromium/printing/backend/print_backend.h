@@ -34,8 +34,6 @@ struct COMPONENT_EXPORT(PRINT_BACKEND) PrinterBasicInfo {
   PrinterBasicInfo(const std::string& printer_name,
                    const std::string& display_name,
                    const std::string& printer_description,
-                   int printer_status,
-                   bool is_default,
                    const PrinterBasicInfoOptions& options);
   PrinterBasicInfo(const PrinterBasicInfo& other);
   ~PrinterBasicInfo();
@@ -50,8 +48,6 @@ struct COMPONENT_EXPORT(PRINT_BACKEND) PrinterBasicInfo {
   // this field.
   std::string display_name;
   std::string printer_description;
-  int printer_status = 0;
-  bool is_default = false;
   PrinterBasicInfoOptions options;
 };
 
@@ -286,6 +282,11 @@ struct COMPONENT_EXPORT(PRINT_BACKEND) PrinterSemanticCapsAndDefaults {
 #if BUILDFLAG(IS_CHROMEOS)
   bool pin_supported = false;
   AdvancedCapabilities advanced_capabilities;
+
+  // Print scaling capability
+  std::vector<mojom::PrintScalingType> print_scaling_types;
+  mojom::PrintScalingType print_scaling_type_default =
+      mojom::PrintScalingType::kUnknownPrintScalingType;
 #endif  // BUILDFLAG(IS_CHROMEOS)
 
 #if BUILDFLAG(IS_WIN)

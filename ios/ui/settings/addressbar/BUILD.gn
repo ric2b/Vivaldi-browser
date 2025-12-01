@@ -33,6 +33,7 @@ swift_source_set("vivaldi_addressbar_settings_swift") {
   bridge_header = "vivaldi_addressbar_settings_swift_bridge.h"
   sources = [
     "vivaldi_addressbar_settings_constants.swift",
+    "vivaldi_addressbar_settings_state.swift",
     "vivaldi_addressbar_settings_view_provider.swift",
     "vivaldi_addressbar_settings_view.swift",
   ]

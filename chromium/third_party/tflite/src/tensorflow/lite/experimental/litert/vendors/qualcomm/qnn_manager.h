@@ -31,11 +31,13 @@
 #include "third_party/qairt/latest/include/QNN/QnnCommon.h"
 #include "third_party/qairt/latest/include/QNN/QnnContext.h"
 #include "third_party/qairt/latest/include/QNN/QnnInterface.h"
+#include "third_party/qairt/latest/include/QNN/QnnTypes.h"
 #include "third_party/qairt/latest/include/QNN/System/QnnSystemContext.h"
 #include "third_party/qairt/latest/include/QNN/System/QnnSystemInterface.h"
 #include "tensorflow/lite/experimental/litert/c/litert_common.h"
 #include "tensorflow/lite/experimental/litert/cc/litert_expected.h"
 #include "tensorflow/lite/experimental/litert/cc/litert_macros.h"  // IWYU pragma: keep
+#include "tensorflow/lite/experimental/litert/cc/litert_shared_library.h"
 #include "tensorflow/lite/experimental/litert/vendors/qualcomm/common.h"
 
 //===----------------------------------------------------------------------===//
@@ -86,6 +88,7 @@ class QnnManager {
 
   static absl::Span<const QnnBackend_Config_t*> DefaultBackendConfigs();
   static absl::Span<const QnnContext_Config_t*> DefaultContextConfigs();
+  static absl::Span<const QnnContext_Config_t*> WeightSharingContextConfigs();
 
   // Get resolved function pointers for qnn sdk calls. Nullptr if functions
   // have not been resolved yet.
@@ -119,6 +122,10 @@ class QnnManager {
   // buffer.
   LiteRtStatus GenerateContextBinary(Qnn_ContextHandle_t context_handle,
                                      std::vector<char>& buffer);
+
+  LiteRtStatus ValidateOp(const Qnn_OpConfig_t& op_config);
+
+  bool IsLegacySocModel() { return soc_model_ == QNN_HTP_DEVICE_ARCH_V68; }
 
  private:
   QnnManager() = default;
@@ -174,8 +181,13 @@ class QnnManager {
   // if backendCreate has not been called.
   LiteRtStatus FreeBackend();
 
-  void* lib_so_ = nullptr;
-  void* lib_system_so_ = nullptr;
+  // Handle to the shared library that implements the API. The library is
+  // released when the manager is destroyed.
+  SharedLibrary lib_;
+
+  // Handle to the system shared library that implements the API. The library is
+  // released when the manager is destroyed.
+  SharedLibrary lib_system_;
 
   const QnnInterface_t* interface_ = nullptr;
   const QnnSystemInterface_t* system_interface_ = nullptr;
@@ -183,6 +195,7 @@ class QnnManager {
   Qnn_LogHandle_t log_handle_ = nullptr;
   Qnn_BackendHandle_t backend_handle_ = nullptr;
   Qnn_DeviceHandle_t device_handle_ = nullptr;
+  QnnHtpDevice_Arch_t soc_model_ = QNN_HTP_DEVICE_ARCH_UNKNOWN;
 };
 
 // Unfortunately we can't use std::unique_ptr with a deleter because

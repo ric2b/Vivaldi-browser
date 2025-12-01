@@ -450,7 +450,8 @@ void PdfAccessibilityTree::DoSetAccessibilityViewportInfo(
 }
 
 void PdfAccessibilityTree::SetAccessibilityDocInfo(
-    chrome_pdf::AccessibilityDocInfo doc_info) {
+    std::unique_ptr<chrome_pdf::AccessibilityDocInfo> doc_info) {
+  CHECK(doc_info);
   // This call may trigger layout, and ultimately self-deletion; see
   // crbug.com/1274376 for details.
   base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
@@ -460,15 +461,16 @@ void PdfAccessibilityTree::SetAccessibilityDocInfo(
 }
 
 void PdfAccessibilityTree::DoSetAccessibilityDocInfo(
-    const chrome_pdf::AccessibilityDocInfo& doc_info) {
+    std::unique_ptr<chrome_pdf::AccessibilityDocInfo> doc_info) {
+  CHECK(doc_info);
   auto obj = GetPluginContainerAXObject();
   if (!obj) {
     return;
   }
 
   ClearAccessibilityNodes();
-  page_count_ = doc_info.page_count;
-  is_tagged_ = doc_info.is_tagged;
+  page_count_ = doc_info->page_count;
+  is_tagged_ = doc_info->is_tagged;
 
   doc_node_ =
       CreateNode(ax::mojom::Role::kPdfRoot, ax::mojom::Restriction::kReadOnly,
@@ -543,8 +545,8 @@ void PdfAccessibilityTree::OnHasSearchifyText() {
   content::RenderAccessibility* render_accessibility =
       render_frame() ? render_frame()->GetRenderAccessibility() : nullptr;
   bool screen_reader_mode =
-      (render_accessibility &&
-       render_accessibility->GetAXMode().has_mode(ui::AXMode::kScreenReader));
+      (render_accessibility && render_accessibility->GetAXMode().has_mode(
+                                   ui::AXMode::kExtendedProperties));
   base::UmaHistogramBoolean(
       "Accessibility.ScreenAI.Searchify.ScreenReaderModeEnabled",
       screen_reader_mode);

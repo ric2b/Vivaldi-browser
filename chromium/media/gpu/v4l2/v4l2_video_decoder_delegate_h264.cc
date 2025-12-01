@@ -17,19 +17,19 @@
 
 #include "base/containers/heap_array.h"
 #include "base/logging.h"
+#include "base/memory/scoped_refptr.h"
 #include "base/numerics/safe_conversions.h"
-#include "build/chromeos_buildflags.h"
 #include "media/gpu/macros.h"
 #include "media/gpu/v4l2/v4l2_decode_surface.h"
 #include "media/gpu/v4l2/v4l2_decode_surface_handler.h"
 #include "media/gpu/v4l2/v4l2_device.h"
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
 // gn check does not account for BUILDFLAG(), so including this header will
-// make gn check fail for builds other than ash-chrome. See gn help nogncheck
+// make gn check fail for builds other than ChromeOS. See gn help nogncheck
 // for more information.
 #include "chromeos/components/cdm_factory_daemon/chromeos_cdm_context.h"  // nogncheck
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+#endif  // BUILDFLAG(IS_CHROMEOS)
 
 namespace media {
 
@@ -124,7 +124,7 @@ scoped_refptr<H264Picture> V4L2VideoDecoderDelegateH264::CreateH264Picture() {
     return nullptr;
   }
 
-  return new V4L2H264Picture(dec_surface);
+  return base::MakeRefCounted<V4L2H264Picture>(dec_surface);
 }
 
 scoped_refptr<H264Picture>
@@ -134,7 +134,7 @@ V4L2VideoDecoderDelegateH264::CreateH264PictureSecure(uint64_t secure_handle) {
   if (!dec_surface)
     return nullptr;
 
-  return new V4L2H264Picture(dec_surface);
+  return base::MakeRefCounted<V4L2H264Picture>(dec_surface);
 }
 
 void V4L2VideoDecoderDelegateH264::ProcessSPS(
@@ -408,7 +408,7 @@ V4L2VideoDecoderDelegateH264::ParseEncryptedSliceHeader(
     const std::vector<SubsampleEntry>& /*subsamples*/,
     uint64_t secure_handle,
     H264SliceHeader* slice_header_out) {
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
   if (!cdm_context_ || !cdm_context_->GetChromeOsCdmContext()) {
     LOG(ERROR) << "Missing ChromeOSCdmContext";
     return Status::kFail;
@@ -502,7 +502,7 @@ V4L2VideoDecoderDelegateH264::ParseEncryptedSliceHeader(
   return Status::kOk;
 #else
   return Status::kFail;
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+#endif  // BUILDFLAG(IS_CHROMEOS)
 }
 
 H264Decoder::H264Accelerator::Status V4L2VideoDecoderDelegateH264::SubmitSlice(

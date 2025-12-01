@@ -183,73 +183,47 @@ void TemplateURLService::VivaldiResetDefaultOverride() {
 std::array<DefaultSearchManager, TemplateURLService::kDefaultSearchTypeCount>
 TemplateURLService::VivaldiGetDefaultSearchManagers(
     PrefService* prefs,
-    search_engines::SearchEngineChoiceService* search_engine_choice_service) {
+    search_engines::SearchEngineChoiceService* search_engine_choice_service,
+    TemplateURLPrepopulateData::Resolver& prepopulate_data_resolver
+  ) {
   return {
-      {{prefs, search_engine_choice_service,
+      {{prefs, search_engine_choice_service, prepopulate_data_resolver,
         DefaultSearchManager::kDefaultSearchProviderDataPrefName,
         base::BindRepeating(&TemplateURLService::ApplyDefaultSearchChange,
                             base::Unretained(this),
                             TemplateURLService::kDefaultSearchMain)
-#if BUILDFLAG(IS_CHROMEOS_LACROS)
-            ,
-        for_lacros_main_profile
-#endif  //  BUILDFLAG(IS_CHROMEOS_LACROS)
        },
-       {prefs, search_engine_choice_service,
+       {prefs, search_engine_choice_service, prepopulate_data_resolver,
         DefaultSearchManager::kDefaultPrivateSearchProviderDataPrefName,
         base::BindRepeating(&TemplateURLService::ApplyDefaultSearchChange,
                             base::Unretained(this), kDefaultSearchPrivate)
-#if BUILDFLAG(IS_CHROMEOS_LACROS)
-            ,
-        for_lacros_main_profile
-#endif  //  BUILDFLAG(IS_CHROMEOS_LACROS)
        },
-       {prefs, search_engine_choice_service,
+       {prefs, search_engine_choice_service, prepopulate_data_resolver,
         DefaultSearchManager::kDefaultSearchFieldProviderDataPrefName,
         base::BindRepeating(&TemplateURLService::ApplyDefaultSearchChange,
                             base::Unretained(this), kDefaultSearchField)
-#if BUILDFLAG(IS_CHROMEOS_LACROS)
-            ,
-        for_lacros_main_profile
-#endif  //  BUILDFLAG(IS_CHROMEOS_LACROS)
        },
-       {prefs, search_engine_choice_service,
+       {prefs, search_engine_choice_service, prepopulate_data_resolver,
         DefaultSearchManager::kDefaultPrivateSearchFieldProviderDataPrefName,
         base::BindRepeating(&TemplateURLService::ApplyDefaultSearchChange,
                             base::Unretained(this), kDefaultSearchFieldPrivate)
-#if BUILDFLAG(IS_CHROMEOS_LACROS)
-            ,
-        for_lacros_main_profile
-#endif  //  BUILDFLAG(IS_CHROMEOS_LACROS)
        },
-       {prefs, search_engine_choice_service,
+       {prefs, search_engine_choice_service, prepopulate_data_resolver,
         DefaultSearchManager::kDefaultSpeeddialsSearchProviderDataPrefName,
         base::BindRepeating(&TemplateURLService::ApplyDefaultSearchChange,
                             base::Unretained(this), kDefaultSearchSpeeddials)
-#if BUILDFLAG(IS_CHROMEOS_LACROS)
-            ,
-        for_lacros_main_profile
-#endif  //  BUILDFLAG(IS_CHROMEOS_LACROS)
        },
-       {prefs, search_engine_choice_service,
+       {prefs, search_engine_choice_service, prepopulate_data_resolver,
         DefaultSearchManager::
             kDefaultSpeeddialsPrivateSearchProviderDataPrefName,
         base::BindRepeating(&TemplateURLService::ApplyDefaultSearchChange,
                             base::Unretained(this),
                             kDefaultSearchSpeeddialsPrivate)
-#if BUILDFLAG(IS_CHROMEOS_LACROS)
-            ,
-        for_lacros_main_profile
-#endif  //  BUILDFLAG(IS_CHROMEOS_LACROS)
        },
-       {prefs, search_engine_choice_service,
+       {prefs, search_engine_choice_service, prepopulate_data_resolver,
         DefaultSearchManager::kDefaultImageSearchProviderDataPrefName,
         base::BindRepeating(&TemplateURLService::ApplyDefaultSearchChange,
                             base::Unretained(this), kDefaultSearchImage)}
-#if BUILDFLAG(IS_CHROMEOS_LACROS)
-       ,
-       for_lacros_main_profile
-#endif  //  BUILDFLAG(IS_CHROMEOS_LACROS)
       },
   };
 }

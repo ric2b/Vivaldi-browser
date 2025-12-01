@@ -170,6 +170,7 @@
 <translation id="3838085852053358637">Caricamento estensione non riuscito</translation>
 <translation id="383891835335927981">Non è stato aumentato o diminuito lo zoom di alcun sito</translation>
 <translation id="385051799172605136">Indietro</translation>
+<translation id="3858860766373142691">Nome</translation>
 <translation id="3861977424605124250">Mostra all'avvio</translation>
 <translation id="3867944738977021751">Campi certificato</translation>
 <translation id="3905761538810670789">Ripara app</translation>
@@ -415,6 +416,9 @@ Conserva il file di chiave in un luogo sicuro. Ti servirà per creare nuove vers
 <translation id="8004582292198964060">Browser</translation>
 <translation id="8018313076035239964">Controlla quali contenuti possono mostrarti i siti web e quali informazioni possono utilizzare</translation>
 <translation id="8071432093239591881">Stampa come immagine</translation>
+<translation id="8118448640060360549">{EXTENSIONS_COUNT, plural,
+        =1 {# segnalibro}
+        other {# segnalibri}}</translation>
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" />K</translation>
 <translation id="8212008074015601248">{NUM_DOWNLOAD, plural,
         =1 {Trasferimento è in corso} other {Trasferimenti sono in corso}}</translation>

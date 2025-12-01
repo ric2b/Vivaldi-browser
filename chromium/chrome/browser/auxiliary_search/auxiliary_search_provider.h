@@ -15,40 +15,55 @@
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "components/keyed_service/core/keyed_service.h"
+#include "components/ntp_tiles/most_visited_sites.h"
+#include "components/ntp_tiles/ntp_tile.h"
 
-namespace auxiliary_search {
-class AuxiliarySearchBookmarkGroup;
-}
-namespace bookmarks {
-class BookmarkModel;
-}
+namespace visited_url_ranking {
+class VisitedURLRankingService;
+}  // namespace visited_url_ranking
+
 class TabAndroid;
 
-// AuxiliarySearchProvider is responsible for providing the necessary
-// information for the auxiliary search..
-class AuxiliarySearchProvider : public KeyedService {
- public:
-  // DO NOT pass a Profile here, keyed services must have explicit dependencies
-  // on other keyed services (crbug.com/368297674).
-  explicit AuxiliarySearchProvider(bookmarks::BookmarkModel* bookmark_model);
-  ~AuxiliarySearchProvider() override;
+// GENERATED_JAVA_ENUM_PACKAGE: org.chromium.chrome.browser.auxiliary_search
+enum class AuxiliarySearchEntryType {
+  kTab = 0,
+  kCustomTab = 1,
+  kTopSite = 2,
+  // New values above this line.
+  kMaxValue = kTopSite
+};
 
-  base::android::ScopedJavaLocalRef<jbyteArray> GetBookmarksSearchableData(
-      JNIEnv* env) const;
+// AuxiliarySearchProvider is responsible for providing the necessary
+// information for the auxiliary search.
+class AuxiliarySearchProvider : public KeyedService,
+                                public ntp_tiles::MostVisitedSites::Observer {
+ public:
+  AuxiliarySearchProvider(
+      visited_url_ranking::VisitedURLRankingService* ranking_service,
+      std::unique_ptr<ntp_tiles::MostVisitedSites> most_visited_sites);
+
+  ~AuxiliarySearchProvider() override;
 
   void GetNonSensitiveTabs(
       JNIEnv* env,
       const base::android::JavaParamRef<jobjectArray>& j_tabs_android,
       const base::android::JavaParamRef<jobject>& j_callback_obj) const;
 
+  void GetNonSensitiveHistoryData(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& j_callback_obj) const;
+
+  // Sets an observer and immediately fetches the current most visited sites
+  // suggestions.
+  void SetObserverAndTrigger(JNIEnv* env,
+                             const base::android::JavaRef<jobject>& j_ref_obj);
+
+  // Starts a fetch of the current most visited sites suggestions.
+  void GetMostVisitedSites(JNIEnv* env) const;
+
   static void EnsureFactoryBuilt();
 
  private:
-  FRIEND_TEST_ALL_PREFIXES(AuxiliarySearchProviderTest, QueryBookmarks);
-  FRIEND_TEST_ALL_PREFIXES(AuxiliarySearchProviderTest,
-                           QueryBookmarks_flagTest);
-  FRIEND_TEST_ALL_PREFIXES(AuxiliarySearchProviderTest,
-                           QueryBookmarks_nativePageShouldBeFiltered);
   FRIEND_TEST_ALL_PREFIXES(AuxiliarySearchProviderBrowserTest,
                            QuerySensitiveTab);
   FRIEND_TEST_ALL_PREFIXES(AuxiliarySearchProviderBrowserTest,
@@ -63,7 +78,14 @@ class AuxiliarySearchProvider : public KeyedService {
   using NonSensitiveTabsCallback =
       base::OnceCallback<void(std::vector<base::WeakPtr<TabAndroid>>)>;
 
-  auxiliary_search::AuxiliarySearchBookmarkGroup GetBookmarks() const;
+  // KeyedService:
+  void Shutdown() override;
+
+  // ntp_tiles::MostVisitedSites::Observer implementation.
+  void OnURLsAvailable(
+      const std::map<ntp_tiles::SectionType, ntp_tiles::NTPTilesVector>&
+          sections) override;
+  void OnIconMadeAvailable(const GURL& site_url) override;
 
   static void FilterTabsByScheme(
       std::vector<raw_ptr<TabAndroid, VectorExperimental>>& tabs);
@@ -72,7 +94,10 @@ class AuxiliarySearchProvider : public KeyedService {
       std::vector<raw_ptr<TabAndroid, VectorExperimental>> all_tabs,
       NonSensitiveTabsCallback callback) const;
 
-  const raw_ptr<bookmarks::BookmarkModel> bookmark_model_;
+  base::android::ScopedJavaGlobalRef<jobject> j_ref_;
+
+  const raw_ptr<visited_url_ranking::VisitedURLRankingService> ranking_service_;
+  std::unique_ptr<ntp_tiles::MostVisitedSites> most_visited_sites_;
 };
 
 #endif  // CHROME_BROWSER_AUXILIARY_SEARCH_AUXILIARY_SEARCH_PROVIDER_H_

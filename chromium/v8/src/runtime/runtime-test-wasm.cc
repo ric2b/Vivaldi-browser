@@ -458,7 +458,7 @@ RUNTIME_FUNCTION(Runtime_GetWasmExceptionValues) {
   }
   DirectHandle<WasmExceptionPackage> exception =
       args.at<WasmExceptionPackage>(0);
-  Handle<Object> values_obj =
+  DirectHandle<Object> values_obj =
       WasmExceptionPackage::GetExceptionValues(isolate, exception);
   if (!IsFixedArray(*values_obj)) {
     // Only called with correct input (unless fuzzing).
@@ -468,7 +468,7 @@ RUNTIME_FUNCTION(Runtime_GetWasmExceptionValues) {
   DirectHandle<FixedArray> externalized_values =
       isolate->factory()->NewFixedArray(values->length());
   for (int i = 0; i < values->length(); i++) {
-    Handle<Object> value(values->get(i), isolate);
+    DirectHandle<Object> value(values->get(i), isolate);
     if (!IsSmi(*value)) {
       // Note: This will leak string views to JS. This should be fine for a
       // debugging function.
@@ -762,11 +762,11 @@ static Tagged<Object> CreateWasmObject(Isolate* isolate,
   wasm::ErrorThrower thrower(isolate, "CreateWasmObject");
   base::OwnedVector<const uint8_t> bytes = base::OwnedCopyOf(module_bytes);
   wasm::WasmEngine* engine = wasm::GetWasmEngine();
-  MaybeHandle<WasmModuleObject> maybe_module_object = engine->SyncCompile(
+  MaybeDirectHandle<WasmModuleObject> maybe_module_object = engine->SyncCompile(
       isolate, wasm::WasmEnabledFeatures(), wasm::CompileTimeImports(),
       &thrower, std::move(bytes));
   CHECK(!thrower.error());
-  Handle<WasmModuleObject> module_object;
+  DirectHandle<WasmModuleObject> module_object;
   if (!maybe_module_object.ToHandle(&module_object)) {
     DCHECK(isolate->has_exception());
     return ReadOnlyRoots(isolate).exception();
@@ -775,7 +775,7 @@ static Tagged<Object> CreateWasmObject(Isolate* isolate,
   MaybeDirectHandle<WasmInstanceObject> maybe_instance =
       engine->SyncInstantiate(isolate, &thrower, module_object,
                               Handle<JSReceiver>::null(),
-                              MaybeHandle<JSArrayBuffer>());
+                              MaybeDirectHandle<JSArrayBuffer>());
   CHECK(!thrower.error());
   DirectHandle<WasmInstanceObject> instance;
   if (!maybe_instance.ToHandle(&instance)) {
@@ -986,6 +986,11 @@ RUNTIME_FUNCTION(Runtime_FlushLiftoffCode) {
   return Smi::FromInt(static_cast<int>(code_size + metadata_size));
 }
 
+RUNTIME_FUNCTION(Runtime_WasmTriggerCodeGC) {
+  wasm::GetWasmEngine()->TriggerCodeGCForTesting();
+  return ReadOnlyRoots(isolate).undefined_value();
+}
+
 RUNTIME_FUNCTION(Runtime_EstimateCurrentMemoryConsumption) {
   size_t result = wasm::GetWasmEngine()->EstimateCurrentMemoryConsumption();
   return Smi::FromInt(static_cast<int>(result));
@@ -1019,7 +1024,7 @@ RUNTIME_FUNCTION(Runtime_WasmDeoptsExecutedForFunction) {
     return CrashUnlessFuzzing(isolate);
   }
   const wasm::TypeFeedbackStorage& feedback = module->type_feedback;
-  base::SpinningMutexGuard mutex_guard(&feedback.mutex);
+  base::MutexGuard mutex_guard(&feedback.mutex);
   auto entry = feedback.deopt_count_for_function.find(func_index);
   if (entry == feedback.deopt_count_for_function.end()) {
     return Smi::FromInt(0);
@@ -1038,6 +1043,29 @@ RUNTIME_FUNCTION(Runtime_CheckIsOnCentralStack) {
   // switches to the central stack to run JS imports.
   CHECK(isolate->IsOnCentralStack());
   return ReadOnlyRoots(isolate).undefined_value();
+}
+
+// Takes a type index, creates a ValueType for (ref $index) and returns its
+// raw bit field. Useful for sandbox tests.
+RUNTIME_FUNCTION(Runtime_BuildRefTypeBitfield) {
+  SealHandleScope scope(isolate);
+  if (args.length() != 2 || !IsSmi(args[0]) || !IsWasmInstanceObject(args[1])) {
+    return CrashUnlessFuzzing(isolate);
+  }
+  DisallowGarbageCollection no_gc;
+  // Allow fuzzers to generate invalid types, but avoid running into the
+  // DCHECK in base::BitField::encode().
+  static constexpr uint32_t kMask = (1u << wasm::ValueType::kNumIndexBits) - 1;
+  wasm::ModuleTypeIndex type_index{
+      static_cast<uint32_t>(Cast<Smi>(args[0]).value()) & kMask};
+  const wasm::WasmModule* module = Cast<WasmInstanceObject>(args[1])->module();
+  // If we get an invalid type index, make up the additional data; the result
+  // may still be useful for fuzzers for causing interesting confusion.
+  wasm::ValueType t =
+      module->has_type(type_index)
+          ? wasm::ValueType::Ref(module->heap_type(type_index))
+          : wasm::ValueType::Ref(type_index, false, wasm::RefTypeKind::kStruct);
+  return Smi::FromInt(t.raw_bit_field());
 }
 
 // The GenerateRandomWasmModule function is only implemented in non-official

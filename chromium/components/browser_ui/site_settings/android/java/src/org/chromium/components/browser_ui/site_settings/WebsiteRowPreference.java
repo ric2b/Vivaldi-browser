@@ -21,11 +21,14 @@ import androidx.appcompat.app.AlertDialog;
 import androidx.preference.PreferenceViewHolder;
 
 import org.chromium.base.CallbackUtils;
+import org.chromium.build.annotations.NullMarked;
+import org.chromium.build.annotations.Nullable;
 import org.chromium.components.browser_ui.settings.ChromeImageViewPreference;
 import org.chromium.components.browser_ui.settings.FaviconViewUtils;
 import org.chromium.components.embedder_support.util.UrlConstants;
 
 /** Used by {@link AllSiteSettings} to display a row for a group of sites or a single site. */
+@NullMarked
 public class WebsiteRowPreference extends ChromeImageViewPreference {
     private final SiteSettingsDelegate mSiteSettingsDelegate;
     private final WebsiteEntry mSiteEntry;
@@ -35,23 +38,31 @@ public class WebsiteRowPreference extends ChromeImageViewPreference {
     // Whether the favicon has been fetched already.
     private boolean mFaviconFetched;
 
-    private Dialog mConfirmationDialog;
+    private @Nullable Dialog mConfirmationDialog;
 
     private LayoutInflater mLayoutInflater;
 
     private Runnable mOnDeleteCallback;
 
+    private boolean mShowRwsMembershipLabels;
+
+    private boolean mIsClickable;
+
     WebsiteRowPreference(
             Context context,
             SiteSettingsDelegate siteSettingsDelegate,
             WebsiteEntry siteEntry,
-            LayoutInflater layoutInflater) {
+            LayoutInflater layoutInflater,
+            boolean showRwsMembershipLabels,
+            boolean isClickable) {
         super(context);
         mSiteSettingsDelegate = siteSettingsDelegate;
         mSiteEntry = siteEntry;
         mLayoutInflater = layoutInflater;
         // Initialize with an empty callback.
         mOnDeleteCallback = CallbackUtils.emptyRunnable();
+        mShowRwsMembershipLabels = showRwsMembershipLabels;
+        mIsClickable = isClickable;
 
         // To make sure the layout stays stable throughout, we assign a
         // transparent drawable as the icon initially. This is so that
@@ -107,6 +118,8 @@ public class WebsiteRowPreference extends ChromeImageViewPreference {
                     mSiteEntry.getFaviconUrl(), this::onFaviconAvailable);
             mFaviconFetched = true;
         }
+
+        setViewClickable(mIsClickable);
     }
 
     public void setOnDeleteCallback(Runnable callback) {
@@ -196,24 +209,16 @@ public class WebsiteRowPreference extends ChromeImageViewPreference {
             }
         }
 
-        if (mSiteSettingsDelegate.shouldShowPrivacySandboxRwsUi()) {
-            if (mSiteEntry.isPartOfRws()) {
-                String rwsSummary =
+        if (mSiteSettingsDelegate.shouldShowPrivacySandboxRwsUi()
+                && mSiteEntry.isPartOfRws()
+                && mShowRwsMembershipLabels) {
+            String rwsSummary = getContext().getString(R.string.all_sites_rws_label);
+            if (summary.isEmpty()) {
+                summary = rwsSummary;
+            } else {
+                summary =
                         getContext()
-                                .getResources()
-                                .getQuantityString(
-                                        R.plurals.rws_summary,
-                                        mSiteEntry.getRwsSize(),
-                                        Integer.toString(mSiteEntry.getRwsSize()),
-                                        mSiteEntry.getRwsOwner());
-                if (summary.isEmpty()) {
-                    summary = rwsSummary;
-                } else {
-                    summary =
-                            getContext()
-                                    .getString(
-                                            R.string.summary_with_one_bullet, summary, rwsSummary);
-                }
+                                .getString(R.string.summary_with_one_bullet, summary, rwsSummary);
             }
         }
 

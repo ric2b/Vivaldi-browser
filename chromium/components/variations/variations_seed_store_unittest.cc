@@ -627,11 +627,7 @@ TEST_P(LoadSeedDataAllGroupsTest, LoadSeed_CorruptGzip) {
       compressed_seed, base::Base64Encode(compressed_seed));
 
   base::HistogramTester histogram_tester;
-  VariationsSeed loaded_seed;
-  std::string loaded_seed_data;
-  std::string loaded_base64_seed_signature;
-  ASSERT_FALSE(seed_store.LoadSeed(&loaded_seed, &loaded_seed_data,
-                                   &loaded_base64_seed_signature));
+  ASSERT_FALSE(MakeSeedStoreLoadStoredSeed(seed_store));
 
   // Verify metrics and prefs.
   histogram_tester.ExpectUniqueSample("Variations.SeedLoadResult",
@@ -683,11 +679,7 @@ TEST_P(LoadSeedDataControlAndDefaultGroupsTest,
       "invalid seed data", "invalid seed data");
 
   base::HistogramTester histogram_tester;
-  VariationsSeed loaded_seed;
-  std::string loaded_seed_data;
-  std::string loaded_base64_seed_signature;
-  ASSERT_FALSE(seed_store.LoadSeed(&loaded_seed, &loaded_seed_data,
-                                   &loaded_base64_seed_signature));
+  ASSERT_FALSE(MakeSeedStoreLoadStoredSeed(seed_store));
 
   // Verify metrics and prefs.
   histogram_tester.ExpectUniqueSample("Variations.SeedLoadResult",

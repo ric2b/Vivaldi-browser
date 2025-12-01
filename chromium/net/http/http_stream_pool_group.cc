@@ -148,27 +148,6 @@ void HttpStreamPool::Group::OnJobComplete(Job* job) {
   }
 }
 
-int HttpStreamPool::Group::Preconnect(
-    size_t num_streams,
-    quic::ParsedQuicVersion quic_version,
-    const NetLogWithSource& job_controller_net_log,
-    CompletionOnceCallback callback) {
-  if (ActiveStreamSocketCount() >= num_streams) {
-    return OK;
-  }
-
-  // When failing, just returns the current error.
-  // TODO(crbug.com/381742472): Consider resuming this preconnect after the
-  // current failing attempt manager completes.
-  if (IsFailing()) {
-    return attempt_manager_->final_error_to_notify_jobs();
-  }
-
-  EnsureAttemptManager();
-  return attempt_manager_->Preconnect(
-      num_streams, quic_version, job_controller_net_log, std::move(callback));
-}
-
 std::unique_ptr<HttpStreamPoolHandle> HttpStreamPool::Group::CreateHandle(
     std::unique_ptr<StreamSocket> socket,
     StreamSocketHandle::SocketReuseType reuse_type,
@@ -217,7 +196,7 @@ void HttpStreamPool::Group::ReleaseStreamSocket(
                               : kClosedConnectionReturnedToPool;
   } else if (generation != generation_) {
     not_reusable_reason = kSocketGenerationOutOfDate;
-  } else if (ReachedMaxStreamLimit()) {
+  } else if (ReachedMaxStreamLimit() || pool_->ReachedMaxStreamLimit()) {
     not_reusable_reason = kExceededSocketLimits;
   } else {
     reusable = true;
@@ -243,7 +222,6 @@ void HttpStreamPool::Group::AddIdleStreamSocket(
   idle_stream_sockets_.emplace_back(std::move(socket), base::TimeTicks::Now());
   pool_->IncrementTotalIdleStreamCount();
   CleanupIdleStreamSockets(CleanupMode::kTimeoutOnly, kIdleTimeLimitExpired);
-  MaybeComplete();
 }
 
 std::unique_ptr<StreamSocket> HttpStreamPool::Group::GetIdleStreamSocket() {
@@ -388,6 +366,10 @@ void HttpStreamPool::Group::OnAttemptManagerComplete() {
 
   attempt_manager_.reset();
 
+  if (on_attempt_manager_complete_callback_for_testing_) {
+    std::move(on_attempt_manager_complete_callback_for_testing_).Run();
+  }
+
   if (should_start_new_attempt_manager) {
     EnsureAttemptManager();
     ResumePausedJob();
@@ -427,6 +409,12 @@ base::Value::Dict HttpStreamPool::Group::GetInfoAsValue() const {
 
 void HttpStreamPool::Group::CleanupTimedoutIdleStreamSocketsForTesting() {
   CleanupIdleStreamSockets(CleanupMode::kTimeoutOnly, "For testing");
+}
+
+void HttpStreamPool::Group::SetOnAttemptManagerCompleteCallbackForTesting(
+    base::OnceClosure callback) {
+  CHECK(on_attempt_manager_complete_callback_for_testing_.is_null());
+  on_attempt_manager_complete_callback_for_testing_ = std::move(callback);
 }
 
 bool HttpStreamPool::Group::IsFailing() const {

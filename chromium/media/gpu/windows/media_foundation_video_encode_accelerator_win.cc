@@ -2,11 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
-#pragma allow_unsafe_buffers
-#endif
-
 #include "media/gpu/windows/media_foundation_video_encode_accelerator_win.h"
 
 #include <objbase.h>
@@ -24,6 +19,7 @@
 #include <vector>
 
 #include "base/containers/fixed_flat_set.h"
+#include "base/containers/heap_array.h"
 #include "base/features.h"
 #include "base/memory/shared_memory_mapping.h"
 #include "base/memory/unsafe_shared_memory_region.h"
@@ -40,6 +36,7 @@
 #include "gpu/ipc/common/dxgi_helpers.h"
 #include "gpu/ipc/service/shared_image_stub.h"
 #include "media/base/bitstream_buffer.h"
+#include "media/base/encoder_status.h"
 #include "media/base/media_log.h"
 #include "media/base/media_switches.h"
 #include "media/base/video_codecs.h"
@@ -195,6 +192,10 @@ bool IsMatchingDevice(CHROME_LUID desired_luid, ID3D11Device* device) {
   return false;
 }
 
+bool IsOdd(int value) {
+  return (value & 1) != 0;
+}
+
 }  // namespace
 
 struct MediaFoundationVideoEncodeAccelerator::PendingInput {
@@ -209,23 +210,23 @@ struct MediaFoundationVideoEncodeAccelerator::PendingInput {
   gfx::ColorSpace color_space;
   ComMFSample input_sample;
   bool resolving_shared_image = false;
+  gpu::Mailbox shared_image_token;
 };
 
 class MediaFoundationVideoEncodeAccelerator::EncodeOutput {
  public:
   EncodeOutput(uint32_t size, const BitstreamBufferMetadata& md)
-      : metadata(md), data_(size) {}
+      : metadata(md), data_(base::HeapArray<uint8_t>::Uninit(size)) {}
 
   EncodeOutput(const EncodeOutput&) = delete;
   EncodeOutput& operator=(const EncodeOutput&) = delete;
 
-  uint8_t* memory() { return data_.data(); }
-  int size() const { return static_cast<int>(data_.size()); }
+  base::span<uint8_t> as_span() { return data_.as_span(); }
 
   BitstreamBufferMetadata metadata;
 
  private:
-  std::vector<uint8_t> data_;
+  base::HeapArray<uint8_t> data_;
 };
 
 struct MediaFoundationVideoEncodeAccelerator::BitstreamBufferRef {
@@ -276,7 +277,7 @@ MediaFoundationVideoEncodeAccelerator::GetSupportedProfiles() {
   return mf_shared_state->GetSupportedProfiles();
 }
 
-bool MediaFoundationVideoEncodeAccelerator::Initialize(
+EncoderStatus MediaFoundationVideoEncodeAccelerator::Initialize(
     const Config& config,
     Client* client,
     std::unique_ptr<MediaLog> media_log) {
@@ -300,7 +301,7 @@ bool MediaFoundationVideoEncodeAccelerator::Initialize(
     MEDIA_LOG(ERROR, media_log_)
         << "Input format not supported= "
         << VideoPixelFormatToString(config.input_format);
-    return false;
+    return {EncoderStatus::Codes::kEncoderInitializationError};
   }
 
   if (config.output_profile >= H264PROFILE_MIN &&
@@ -309,7 +310,7 @@ bool MediaFoundationVideoEncodeAccelerator::Initialize(
         eAVEncH264VProfile_unknown) {
       MEDIA_LOG(ERROR, media_log_)
           << "Output profile not supported = " << config.output_profile;
-      return false;
+      return {EncoderStatus::Codes::kEncoderInitializationError};
     }
     codec_ = VideoCodec::kH264;
   } else if (config.output_profile >= VP9PROFILE_MIN &&
@@ -317,7 +318,7 @@ bool MediaFoundationVideoEncodeAccelerator::Initialize(
     if (GetVP9VProfile(config.output_profile) == eAVEncVP9VProfile_unknown) {
       MEDIA_LOG(ERROR, media_log_)
           << "Output profile not supported = " << config.output_profile;
-      return false;
+      return {EncoderStatus::Codes::kEncoderInitializationError};
     }
     codec_ = VideoCodec::kVP9;
   } else if (config.output_profile == AV1PROFILE_PROFILE_MAIN) {
@@ -335,13 +336,13 @@ bool MediaFoundationVideoEncodeAccelerator::Initialize(
   if (codec_ == VideoCodec::kUnknown) {
     MEDIA_LOG(ERROR, media_log_)
         << "Output profile not supported = " << config.output_profile;
-    return false;
+    return {EncoderStatus::Codes::kEncoderInitializationError};
   }
 
   if (config.HasSpatialLayer()) {
     MEDIA_LOG(ERROR, media_log_) << "MediaFoundation does not support "
                                     "spatial layer encoding.";
-    return false;
+    return {EncoderStatus::Codes::kEncoderInitializationError};
   }
   client_ = client;
 
@@ -381,7 +382,7 @@ bool MediaFoundationVideoEncodeAccelerator::Initialize(
   if (activates.empty()) {
     NotifyErrorStatus({EncoderStatus::Codes::kEncoderInitializationError,
                        "Failed finding a hardware encoder MFT"});
-    return false;
+    return {EncoderStatus::Codes::kEncoderInitializationError};
   }
 
   bool activated = ActivateAsyncEncoder(activates, config.is_constrained_h264);
@@ -390,7 +391,7 @@ bool MediaFoundationVideoEncodeAccelerator::Initialize(
   if (!activated) {
     NotifyErrorStatus({EncoderStatus::Codes::kEncoderInitializationError,
                        "Failed activating an async hardware encoder MFT"});
-    return false;
+    return {EncoderStatus::Codes::kEncoderInitializationError};
   }
 
   // Set the SW implementation of the rate controller. Do nothing if SW RC is
@@ -400,14 +401,14 @@ bool MediaFoundationVideoEncodeAccelerator::Initialize(
   if (!SetEncoderModes()) {
     NotifyErrorStatus({EncoderStatus::Codes::kEncoderInitializationError,
                        "Failed to set encoder modes"});
-    return false;
+    return {EncoderStatus::Codes::kEncoderInitializationError};
   }
 
   if (!InitializeInputOutputParameters(config.output_profile,
                                        config.is_constrained_h264)) {
     NotifyErrorStatus({EncoderStatus::Codes::kEncoderInitializationError,
                        "Failed to set input/output param."});
-    return false;
+    return {EncoderStatus::Codes::kEncoderInitializationError};
   }
 
   // Get the max framerate and max/min resolutions of the given codec.
@@ -451,7 +452,7 @@ bool MediaFoundationVideoEncodeAccelerator::Initialize(
   if (!IsFrameSizeAllowed(config.input_visible_size)) {
     NotifyErrorStatus({EncoderStatus::Codes::kEncoderUnsupportedConfig,
                        "Unsupported frame size"});
-    return false;
+    return {EncoderStatus::Codes::kEncoderInitializationError};
   }
 
   for (auto& [framerate, resolution] : max_framerate_and_resolutions_) {
@@ -479,6 +480,14 @@ bool MediaFoundationVideoEncodeAccelerator::Initialize(
   encoder_info_.requested_resolution_alignment = 2;
   encoder_info_.apply_alignment_to_all_simulcast_layers = true;
   encoder_info_.has_trusted_rate_controller = false;
+  if (codec_ == VideoCodec::kHEVC && vendor_ == DriverVendor::kIntel) {
+    // On Intel HEVC we trust the rate controller based on manual testing and
+    // because trusting it produces better results than not trusting it when
+    // track frame rate suddenly drops, this avoids encoder FPS dropping even
+    // more than the track FPS dropped, see https://crbug.com/402910373. This
+    // risks overshooting but that seems like less of a concern on Intel.
+    encoder_info_.has_trusted_rate_controller = true;
+  }
   DCHECK(encoder_info_.is_hardware_accelerated);
   DCHECK(encoder_info_.supports_native_handle);
   DCHECK(encoder_info_.reports_average_qp);
@@ -499,14 +508,14 @@ bool MediaFoundationVideoEncodeAccelerator::Initialize(
 
   if (state_ == kInitializing) {
     if (!InitializeMFT(nullptr)) {
-      return false;
+      return {EncoderStatus::Codes::kEncoderInitializationError};
     }
   }
 
   // Notify encoder info change to client after initialization succeeded.
   client_->NotifyEncoderInfoChange(encoder_info_);
 
-  return true;
+  return {EncoderStatus::Codes::kOk};
 }
 
 bool MediaFoundationVideoEncodeAccelerator::InitializeMFT(
@@ -684,6 +693,7 @@ void MediaFoundationVideoEncodeAccelerator::QueueInput(
   if (!frame->VideoFrame::HasMappableGpuBuffer() && frame->HasSharedImage() &&
       command_buffer_helper_) {
     result.resolving_shared_image = true;
+    result.shared_image_token = frame->shared_image()->mailbox();
     pending_input_queue_.push_back(result);
     auto d3d_device = dxgi_device_manager_->GetDevice();
     if (!d3d_device) {
@@ -779,8 +789,16 @@ void MediaFoundationVideoEncodeAccelerator::UseOutputBitstreamBuffer(
   }
   auto encode_output = std::move(encoder_output_queue_.front());
   encoder_output_queue_.pop_front();
-  memcpy(buffer_ref->mapping.memory(), encode_output->memory(),
-         encode_output->size());
+
+  if (buffer.size() < encode_output->as_span().size()) {
+    NotifyErrorStatus(
+        {EncoderStatus::Codes::kInvalidOutputBuffer,
+         "Encoder output is too large: " + base::NumberToString(buffer.size()) +
+             " vs. " + base::NumberToString(encode_output->as_span().size())});
+    return;
+  }
+  buffer_ref->mapping.GetMemoryAsSpan<uint8_t>().copy_prefix_from(
+      encode_output->as_span());
 
   client_->BitstreamBufferReady(buffer_ref->id, encode_output->metadata);
   if (encoder_output_queue_.empty() && state_ == kPostFlushing) {
@@ -911,6 +929,12 @@ bool MediaFoundationVideoEncodeAccelerator::IsFrameSizeAllowed(gfx::Size size) {
   // It's possible `max_framerate_and_resolutions_` is empty when we
   // failed to retrieve `MF_VIDEO_MAX_MB_PER_SEC`.
   DCHECK(!min_resolution_.IsEmpty());
+
+  if (IsOdd(size.width()) || IsOdd(size.height())) {
+    MEDIA_LOG(ERROR, media_log_) << "MediaFoundation does not support "
+                                    "encoding frame of odd width/height well.";
+    return false;
+  }
 
   for (auto& [frame_rate, resolution] : max_framerate_and_resolutions_) {
     // TODO(crbug.com/365813271): Add framerate check once we can make sure
@@ -1058,6 +1082,15 @@ void MediaFoundationVideoEncodeAccelerator::UpdateFrameSize(
   input_since_keyframe_count_ = 0;
   client_->RequireBitstreamBuffers(kNumInputBuffers, input_visible_size_,
                                    bitstream_buffer_size_);
+
+  if (mf_video_processor_) {
+    hr = mf_video_processor_->UpdateOutputSize(input_visible_size_);
+    if (FAILED(hr)) {
+      NotifyErrorStatus(
+          {EncoderStatus::Codes::kSystemAPICallError,
+           "Couldn't update Video processor output size: " + PrintHr(hr)});
+    }
+  }
 }
 
 void MediaFoundationVideoEncodeAccelerator::Destroy() {
@@ -1425,8 +1458,14 @@ void MediaFoundationVideoEncodeAccelerator::SetSWRateControl() {
 
 #if BUILDFLAG(ENABLE_PLATFORM_HEVC)
   if (codec_ == VideoCodec::kHEVC) {
-    // H264 SW BRC supports up to two temporal layers.
+    // H265 SW BRC supports up to two temporal layers.
     if (num_temporal_layers_ > 2) {
+      return;
+    }
+
+    if (vendor_ == DriverVendor::kQualcomm) {
+      // Qualcomm H265 HMFT does not work with SW BRC.
+      // More info: https://crbug.com/390581539
       return;
     }
 
@@ -1788,7 +1827,8 @@ HRESULT MediaFoundationVideoEncodeAccelerator::PopulateInputSampleBuffer(
   if (base::FeatureList::IsEnabled(kMediaFoundationD3DVideoProcessing)) {
     is_supported_format =
         std::ranges::find(kSupportedPixelFormatsD3DVideoProcessing,
-                          frame->format()) != kSupportedPixelFormats.end();
+                          frame->format()) !=
+        kSupportedPixelFormatsD3DVideoProcessing.end();
   } else {
     is_supported_format =
         std::ranges::find(kSupportedPixelFormats, frame->format()) !=
@@ -1875,22 +1915,20 @@ HRESULT MediaFoundationVideoEncodeAccelerator::PopulateInputSampleBuffer(
   // Establish plain pointers into the input buffer, where we will copy pixel
   // data to.
   MediaBufferScopedPointer scoped_buffer(input_buffer.Get());
-  DCHECK(scoped_buffer.get());
-  uint8_t* dst_y = scoped_buffer.get();
   size_t dst_y_stride = VideoFrame::RowBytes(
       VideoFrame::Plane::kY, kTargetPixelFormat, input_visible_size_.width());
-  uint8_t* dst_uv =
-      scoped_buffer.get() +
+  size_t dst_y_size =
       dst_y_stride * VideoFrame::Rows(VideoFrame::Plane::kY, kTargetPixelFormat,
                                       input_visible_size_.height());
+  auto dst_y = scoped_buffer.as_span().first(dst_y_size);
+
   size_t dst_uv_stride = VideoFrame::RowBytes(
       VideoFrame::Plane::kUV, kTargetPixelFormat, input_visible_size_.width());
-  uint8_t* end =
-      dst_uv + dst_uv_stride * VideoFrame::Rows(VideoFrame::Plane::kUV,
-                                                kTargetPixelFormat,
-                                                input_visible_size_.height());
-  DCHECK_GE(static_cast<ptrdiff_t>(scoped_buffer.max_length()),
-            end - scoped_buffer.get());
+  size_t dst_uv_size =
+      dst_uv_stride * VideoFrame::Rows(VideoFrame::Plane::kUV,
+                                       kTargetPixelFormat,
+                                       input_visible_size_.height());
+  auto dst_uv = scoped_buffer.as_span().subspan(dst_y_size, dst_uv_size);
 
   // Set up a VideoFrame with the data pointing into the input buffer.
   // We need it to ease copying and scaling by reusing ConvertAndScale()
@@ -1929,7 +1967,7 @@ HRESULT MediaFoundationVideoEncodeAccelerator::PopulateInputSampleBuffer(
         .CPUAccessFlags = 0,
         .MiscFlags = 0};
     D3D11_SUBRESOURCE_DATA init_data = {
-        .pSysMem = scoped_buffer.get(),
+        .pSysMem = scoped_buffer.as_span().data(),
         .SysMemPitch = static_cast<UINT>(dst_y_stride),
         .SysMemSlicePitch = 0};
     ComD3D11Texture2D input_texture;
@@ -2038,9 +2076,9 @@ HRESULT MediaFoundationVideoEncodeAccelerator::CopyInputSampleBufferFromGpu(
                        hr);
 
   MediaBufferScopedPointer scoped_buffer(input_buffer.Get());
-  bool copy_succeeded = gpu::CopyD3D11TexToMem(
-      sample_texture.Get(), scoped_buffer.get(), scoped_buffer.max_length(),
-      d3d_device.Get(), &staging_texture_);
+  bool copy_succeeded =
+      gpu::CopyD3D11TexToMem(sample_texture.Get(), scoped_buffer.as_span(),
+                             d3d_device.Get(), &staging_texture_);
   if (!copy_succeeded) {
     LOG(ERROR) << "Failed to copy sample to memory.";
     return E_FAIL;
@@ -2056,10 +2094,20 @@ HRESULT MediaFoundationVideoEncodeAccelerator::CopyInputSampleBufferFromGpu(
 
   if (mf_video_processor_) {
     // This sample needs color space conversion
-    ComMFSample vp_input_sample = std::move(input_sample);
-    hr = mf_video_processor_->Convert(vp_input_sample.Get(), frame->format(),
-                                      &input_sample);
+    ComMFSample vp_output_sample;
+    hr = mf_video_processor_->Convert(input_sample.Get(), frame->format(),
+                                      &vp_output_sample);
+    // input_sample is the sample that will be fed to the encoder, but
+    // its buffers are from the original color format.  Remove those
+    // buffers and replace them with the buffer that has been
+    // converted to the target color format.
     RETURN_ON_HR_FAILURE(hr, "Failed to convert input frame", hr);
+    hr = input_sample->RemoveAllBuffers();
+    RETURN_ON_HR_FAILURE(hr, "Failed to remove buffers from sample", hr);
+    ComMFMediaBuffer vp_output_buffer;
+    hr = vp_output_sample->GetBufferByIndex(0, &vp_output_buffer);
+    RETURN_ON_HR_FAILURE(hr, "Failed to get output buffer from sample", hr);
+    hr = input_sample->AddBuffer(vp_output_buffer.Get());
   }
 
   return S_OK;
@@ -2081,15 +2129,20 @@ HRESULT MediaFoundationVideoEncodeAccelerator::PopulateInputSampleBufferGpu(
     // - MFVP will output a different texture that can be used
     //    as encoder input with no synchronization issues.
     HRESULT hr;
+    ComMFSample vp_output_sample;
     if (frame->HasSharedImage()) {
-      ComMFSample vp_input_sample = std::move(input_sample);
-      hr = mf_video_processor_->Convert(vp_input_sample.Get(), frame->format(),
-                                        &input_sample);
+      hr = mf_video_processor_->Convert(input_sample.Get(), frame->format(),
+                                        &vp_output_sample);
     } else {
-      input_sample = nullptr;
-      hr = mf_video_processor_->Convert(frame, &input_sample);
+      hr = mf_video_processor_->Convert(frame, &vp_output_sample);
     }
     RETURN_ON_HR_FAILURE(hr, "Failed to convert input frame", hr);
+    hr = input_sample->RemoveAllBuffers();
+    RETURN_ON_HR_FAILURE(hr, "Failed to remove buffers from sample", hr);
+    ComMFMediaBuffer vp_output_buffer;
+    hr = vp_output_sample->GetBufferByIndex(0, &vp_output_buffer);
+    RETURN_ON_HR_FAILURE(hr, "Failed to get output buffer from sample", hr);
+    hr = input_sample->AddBuffer(vp_output_buffer.Get());
     return S_OK;
   }
 
@@ -2250,12 +2303,14 @@ void MediaFoundationVideoEncodeAccelerator::ProcessOutput() {
 
   const bool keyframe = MFGetAttributeUINT32(
       output_data_buffer.pSample, MFSampleExtension_CleanPoint, false);
-  DWORD size = 0;
-  hr = output_buffer->GetCurrentLength(&size);
+  DWORD output_buffer_size = 0;
+  hr = output_buffer->GetCurrentLength(&output_buffer_size);
   RETURN_ON_HR_FAILURE(hr, "Couldn't get buffer length", );
-  DCHECK_NE(size, 0u);
+  DCHECK_NE(output_buffer_size, 0u);
+  MediaBufferScopedPointer scoped_buffer(output_buffer.Get());
+  auto output_buffer_span = scoped_buffer.as_span().first(output_buffer_size);
 
-  BitstreamBufferMetadata md(size, keyframe, timestamp);
+  BitstreamBufferMetadata md(output_buffer_span.size(), keyframe, timestamp);
   if (frame_qp.has_value() && IsValidQp(codec_, *frame_qp)) {
     md.qp = *frame_qp;
   }
@@ -2267,9 +2322,8 @@ void MediaFoundationVideoEncodeAccelerator::ProcessOutput() {
   if (IsTemporalScalabilityCoding()) {
     DCHECK(svc_parser_);
     TemporalScalabilityIdExtractor::BitstreamMetadata bits_md;
-    MediaBufferScopedPointer scoped_buffer(output_buffer.Get());
-    if (!svc_parser_->ParseChunk(base::span(scoped_buffer.get().get(), size),
-                                 metadata.frame_id, bits_md)) {
+    if (!svc_parser_->ParseChunk(output_buffer_span, metadata.frame_id,
+                                 bits_md)) {
       NotifyErrorStatus({EncoderStatus::Codes::kEncoderHardwareDriverError,
                          "Parse bitstream failed"});
       return;
@@ -2357,19 +2411,18 @@ void MediaFoundationVideoEncodeAccelerator::ProcessOutput() {
     frame_params.temporal_layer_id = temporal_id;
     frame_params.timestamp = timestamp.InMilliseconds();
     // Notify SW BRC about recent encoded frame size.
-    rate_ctrl_->PostEncodeUpdate(size, frame_params);
+    rate_ctrl_->PostEncodeUpdate(output_buffer_span.size(), frame_params);
   }
-  DVLOG(3) << "Encoded data with size:" << size << " keyframe " << keyframe;
+  DVLOG(3) << "Encoded data with size:" << output_buffer_span.size()
+           << " keyframe " << keyframe;
   // If no bit stream buffer presents, queue the output first.
   if (bitstream_buffer_queue_.empty()) {
     DVLOG(3) << "No bitstream buffers.";
 
     // We need to copy the output so that encoding can continue.
-    auto encode_output = std::make_unique<EncodeOutput>(size, md);
-    {
-      MediaBufferScopedPointer scoped_buffer(output_buffer.Get());
-      memcpy(encode_output->memory(), scoped_buffer.get(), size);
-    }
+    auto encode_output =
+        std::make_unique<EncodeOutput>(output_buffer_span.size(), md);
+    encode_output->as_span().copy_from(output_buffer_span);
     encoder_output_queue_.push_back(std::move(encode_output));
     return;
   }
@@ -2384,16 +2437,15 @@ void MediaFoundationVideoEncodeAccelerator::ProcessOutput() {
   auto buffer_ref = std::move(bitstream_buffer_queue_.back());
   bitstream_buffer_queue_.pop_back();
 
-  {
-    MediaBufferScopedPointer scoped_buffer(output_buffer.Get());
-    if (!buffer_ref->mapping.IsValid() || !scoped_buffer.get()) {
-      DLOG(ERROR) << "Failed to copy bitstream media buffer.";
-      return;
-    }
-
-    memcpy(buffer_ref->mapping.memory(), scoped_buffer.get(), size);
+  if (!buffer_ref->mapping.IsValid() ||
+      buffer_ref->mapping.size() < output_buffer_span.size()) {
+    NotifyErrorStatus({EncoderStatus::Codes::kInvalidOutputBuffer,
+                       "Failed to copy bitstream media buffer."});
+    return;
   }
 
+  buffer_ref->mapping.GetMemoryAsSpan<uint8_t>().copy_prefix_from(
+      output_buffer_span);
   client_->BitstreamBufferReady(buffer_ref->id, md);
 }
 
@@ -2774,12 +2826,24 @@ void MediaFoundationVideoEncodeAccelerator::OnSharedImageSampleAvailable(
     return;
   }
 
-  DCHECK(!pending_input_queue_.empty());
-  auto& next_input = pending_input_queue_.front();
-  next_input.input_sample = sample;
-  next_input.resolving_shared_image = false;
+  // If the encoding client quickly supplies multiple shared texture
+  // frames, there could be multiple shared images being resolved at
+  // the same time.  This sample needs to be linked with the correct
+  // frame in the queue.  In some circumstances, the client may supply
+  // multiple VideoFrames backed by the same mailbox, so ensure a
+  // queued frame being resolved gets completed.
+  auto it = pending_input_queue_.begin();
+  for (; it != pending_input_queue_.end(); it++) {
+    if (it->shared_image_token == frame->shared_image()->mailbox() &&
+        it->resolving_shared_image) {
+      it->input_sample = sample;
+      it->resolving_shared_image = false;
+      break;
+    }
+  }
+  DCHECK(it != pending_input_queue_.end());
 
-  HRESULT hr = PopulateInputSampleBuffer(next_input, std::move(frame));
+  HRESULT hr = PopulateInputSampleBuffer(*it, std::move(frame));
   if (FAILED(hr)) {
     NotifyErrorStatus({EncoderStatus::Codes::kEncoderFailedEncode,
                        "Failed to populate input sample buffer"});

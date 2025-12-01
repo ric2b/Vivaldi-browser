@@ -29,6 +29,11 @@ class TabGroupChangeNotifier
     // observer before calling Initialize().
     virtual void OnTabGroupChangeNotifierInitialized() = 0;
 
+    // Invoked when sync is disabled which includes sign out or disabling sync
+    // for tabs. On receiving this event, the messaging service is expected to
+    // clear the database, in-memory model, and hide any outstanding messages.
+    virtual void OnSyncDisabled() = 0;
+
     // A new tab group was added.
     virtual void OnTabGroupAdded(const tab_groups::SavedTabGroup& added_group,
                                  tab_groups::TriggerSource source) = 0;
@@ -60,14 +65,15 @@ class TabGroupChangeNotifier
     // A tab was removed from the given tab group. The last known information
     // about the tab is provided.
     virtual void OnTabRemoved(tab_groups::SavedTabGroupTab removed_tab,
-                              tab_groups::TriggerSource source) = 0;
+                              tab_groups::TriggerSource source,
+                              bool is_selected) = 0;
     // A tab has been updated.
     virtual void OnTabUpdated(const tab_groups::SavedTabGroupTab& updated_tab,
-                              tab_groups::TriggerSource source) = 0;
-    // A tab has been selected. The parameter is empty if the selected tab could
-    // not be found, i.e. it is not part of a shared tab group.
-    virtual void OnTabSelected(
-        std::optional<tab_groups::SavedTabGroupTab> selected_tab) = 0;
+                              tab_groups::TriggerSource source,
+                              bool is_selected) = 0;
+    // A tab was selected or deselected.
+    virtual void OnTabSelectionChanged(const tab_groups::LocalTabID& tab_id,
+                                       bool is_selected) = 0;
   };
 
   ~TabGroupChangeNotifier() override;

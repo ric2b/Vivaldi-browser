@@ -12,6 +12,42 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::*;
+
 pub mod clap;
-pub mod raw;
-pub mod y4m;
+
+// Some HEIF fractional fields can be negative, hence Fraction and UFraction.
+// The denominator is always unsigned.
+
+/// cbindgen:field-names=[n,d]
+#[derive(Clone, Copy, Debug, Default)]
+#[repr(C)]
+pub struct Fraction(pub i32, pub u32);
+
+/// cbindgen:field-names=[n,d]
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+#[repr(C)]
+pub struct UFraction(pub u32, pub u32);
+
+impl Fraction {
+    pub(crate) fn is_valid(&self) -> AvifResult<()> {
+        match self.1 {
+            0 => Err(AvifError::InvalidArgument),
+            _ => Ok(()),
+        }
+    }
+
+    pub(crate) fn as_f64(&self) -> AvifResult<f64> {
+        self.is_valid()?;
+        Ok(self.0 as f64 / self.1 as f64)
+    }
+}
+
+impl UFraction {
+    pub(crate) fn is_valid(&self) -> AvifResult<()> {
+        match self.1 {
+            0 => Err(AvifError::InvalidArgument),
+            _ => Ok(()),
+        }
+    }
+}

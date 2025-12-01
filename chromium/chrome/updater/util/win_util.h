@@ -224,6 +224,11 @@ std::wstring GetAppClientStateKey(const std::string& app_id);
 std::wstring GetAppClientStateKey(const std::wstring& app_id);
 
 // Returns the registry path
+// `Software\{CompanyName}\Update\ClientStateMedium\{app_id}`.
+std::wstring GetAppClientStateMediumKey(const std::string& app_id);
+std::wstring GetAppClientStateMediumKey(const std::wstring& app_id);
+
+// Returns the registry path
 // `Software\{CompanyName}\Update\ClientState\{app_id}\cohort`.
 std::wstring GetAppCohortKey(const std::string& app_id);
 std::wstring GetAppCohortKey(const std::wstring& app_id);
@@ -456,11 +461,6 @@ bool IsOemInstalling();
 
 // Stores the runtime enrollment token to the persistent storage.
 bool StoreRunTimeEnrollmentToken(const std::string& enrollment_token);
-
-// Returns a unique temp file path of the form
-// `%TMP%\{name}{guid}.{fileextension}`, where `name` and `extension` are the
-// name and extension of `file`.
-std::optional<base::FilePath> GetUniqueTempFilePath(base::FilePath file);
 
 }  // namespace updater
 

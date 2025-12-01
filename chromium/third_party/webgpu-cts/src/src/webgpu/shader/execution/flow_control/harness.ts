@@ -1,10 +1,10 @@
 import { Colors } from '../../../../common/util/colors.js';
-import { GPUTest } from '../../../gpu_test.js';
+import { AllFeaturesMaxLimitsGPUTest } from '../../../gpu_test.js';
 
 /**
  * Options for runFlowControlTest()
  */
-interface FlowControlTest extends GPUTest {
+interface FlowControlTest extends AllFeaturesMaxLimitsGPUTest {
   params: {
     /**
      * If true, then constant values will be placed into a storage buffer,
@@ -192,7 +192,7 @@ ${main_wgsl.extra}
   });
 
   // Run the shader.
-  const encoder = t.device.createCommandEncoder();
+  const encoder = t.device.createCommandEncoder({ label: 'runFlowControlTest' });
   const pass = encoder.beginComputePass();
   pass.setPipeline(pipeline);
   pass.setBindGroup(0, bindGroup);

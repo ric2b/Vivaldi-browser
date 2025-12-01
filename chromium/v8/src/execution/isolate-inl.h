@@ -6,8 +6,11 @@
 #define V8_EXECUTION_ISOLATE_INL_H_
 
 #include "src/execution/isolate.h"
+// Include the non-inl header before the rest of the headers.
+
 #include "src/objects/contexts-inl.h"
 #include "src/objects/js-function.h"
+#include "src/objects/lookup-inl.h"
 #include "src/objects/objects-inl.h"
 #include "src/objects/oddball.h"
 #include "src/objects/property-cell.h"
@@ -20,8 +23,7 @@
 #include "src/runtime/runtime-utils.h"
 #endif
 
-namespace v8 {
-namespace internal {
+namespace v8::internal {
 
 // static
 V8_INLINE Isolate::PerIsolateThreadData*
@@ -238,7 +240,16 @@ bool Isolate::IsInitialArrayPrototype(Tagged<JSArray> array) {
 NATIVE_CONTEXT_FIELDS(NATIVE_CONTEXT_FIELD_ACCESSOR)
 #undef NATIVE_CONTEXT_FIELD_ACCESSOR
 
-}  // namespace internal
-}  // namespace v8
+SetCurrentIsolateScope::SetCurrentIsolateScope(Isolate* isolate)
+    : ptr_compr_cage_access_scope_(isolate),
+      previous_isolate_(Isolate::TryGetCurrent()) {
+  Isolate::SetCurrent(isolate);
+}
+
+SetCurrentIsolateScope::~SetCurrentIsolateScope() {
+  Isolate::SetCurrent(previous_isolate_);
+}
+
+}  // namespace v8::internal
 
 #endif  // V8_EXECUTION_ISOLATE_INL_H_

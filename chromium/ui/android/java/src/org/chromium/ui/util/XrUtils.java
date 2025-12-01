@@ -5,17 +5,18 @@
 package org.chromium.ui.util;
 
 import org.chromium.base.PackageManagerUtils;
+import org.chromium.base.ResettersForTesting;
 import org.chromium.build.annotations.NullMarked;
 import org.chromium.build.annotations.Nullable;
 
 /** A singleton utility class to manages XR session and UI environment. */
 @NullMarked
 public class XrUtils {
-
     private static XrUtils sInstance = new XrUtils();
     private static @Nullable Boolean sXrDeviceOverrideForTesting;
 
-    protected XrUtils() {}
+    // For spatialization of Chrome app using Jetpack XR.
+    private boolean mInFullSpaceMode;
 
     /** Returns the singleton instance of XRUtils. */
     public static XrUtils getInstance() {
@@ -23,7 +24,7 @@ public class XrUtils {
     }
 
     /** Set the XR device envornment for testing. */
-    public static void setXrDeviceForTesting(boolean isXrDevice) {
+    public static void setXrDeviceForTesting(Boolean isXrDevice) {
         sXrDeviceOverrideForTesting = isXrDevice;
     }
 
@@ -37,8 +38,35 @@ public class XrUtils {
         boolean xrDevice =
                 (sXrDeviceOverrideForTesting != null)
                         ? sXrDeviceOverrideForTesting
-                        : PackageManagerUtils.hasSystemFeature(
-                                PackageManagerUtils.XR_IMMERSIVE_FEATURE_NAME);
+                        : (PackageManagerUtils.hasSystemFeature(
+                                        PackageManagerUtils.XR_IMMERSIVE_FEATURE_NAME)
+                                || PackageManagerUtils.hasSystemFeature(
+                                        PackageManagerUtils.XR_OPENXR_FEATURE_NAME));
         return xrDevice;
+    }
+
+    /**
+     * Check if the device is in full space mode or in home space mode. Only one of these mode is
+     * active at any given time.
+     */
+    public boolean isFsmOnXrDevice() {
+        return isXrDevice() && mInFullSpaceMode;
+    }
+
+    /** Set the current full space mode based of the Android XR. */
+    public void setFullSpaceMode(boolean fullSpaceMode) {
+        if (!isXrDevice()) return;
+        mInFullSpaceMode = fullSpaceMode;
+    }
+
+    /** Determine if the Android XR is in full space mode. */
+    public boolean getFullSpaceMode() {
+        return mInFullSpaceMode;
+    }
+
+    public static void setXrUtilsForTesting(XrUtils instance) {
+        XrUtils oldInstance = sInstance;
+        sInstance = instance;
+        ResettersForTesting.register(() -> sInstance = oldInstance);
     }
 }

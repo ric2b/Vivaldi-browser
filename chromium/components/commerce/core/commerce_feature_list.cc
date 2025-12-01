@@ -43,7 +43,6 @@ const CountryLocaleMap& GetAllowedCountryToLocaleMap() {
     map[&kCommerceMerchantViewerRegionLaunched] = {{"us", {"en-us"}}};
     map[&kEnableDiscountInfoApiRegionLaunched] = {{"us", {"en-us"}}};
     map[&ntp_features::kNtpChromeCartModule] = {{"us", {"en-us"}}};
-    map[&kParcelTrackingRegionLaunched] = {{"us", {"en-us"}}};
     map[&kPriceAnnotationsRegionLaunched] = {{"us", {"en-us"}}};
     map[&kPriceInsightsRegionLaunched] = {{"us", {"en-us"}}};
     map[&kProductSpecifications] = {{"us", {"en-us"}}};
@@ -157,7 +156,7 @@ BASE_FEATURE(kPriceInsights,
              "PriceInsights",
              base::FEATURE_DISABLED_BY_DEFAULT);
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) || \
-    BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_IOS)
+    BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_IOS) || BUILDFLAG(IS_ANDROID)
 BASE_FEATURE(kPriceInsightsRegionLaunched,
              "PriceInsightsRegionLaunched",
              base::FEATURE_ENABLED_BY_DEFAULT);
@@ -186,6 +185,15 @@ BASE_FEATURE(kPriceTrackingPromo,
              "PriceTrackingPromo",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
+// ShopCard in Magic Stack, including shopping features like price drop,
+// reviews, etc.
+BASE_FEATURE(kShopCard, "ShopCard", base::FEATURE_DISABLED_BY_DEFAULT);
+
+// Impression limits on ShopCards
+BASE_FEATURE(kShopCardImpressionLimits,
+             "ShopCardImpressionLimits",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
 BASE_FEATURE(kProductSpecifications,
              "ProductSpecifications",
              base::FEATURE_DISABLED_BY_DEFAULT);
@@ -198,7 +206,7 @@ BASE_FEATURE(kProductSpecificationsClearMetadataOnNewlySupportedFields,
 
 BASE_FEATURE(kCompareConfirmationToast,
              "CompareConfirmationToast",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 BASE_FEATURE(kProductSpecificationsCache,
              "ProductSpecificationsCache",
@@ -208,17 +216,18 @@ BASE_FEATURE(kProductSpecificationsCache,
 // enables a new context menu for comparison tables under Bookmarks and Lists.
 BASE_FEATURE(kCompareManagementInterface,
              "CompareManagementInterface",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 // Discount on navigation
 BASE_FEATURE(kEnableDiscountInfoApi,
              "EnableDiscountInfoApi",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
+// TODO(crbug.com/406555154): Clean up this flag when discount on clank launched.
 const char kDiscountOnShoppyPageParam[] = "discount-on-shoppy-page";
 
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) || \
-    BUILDFLAG(IS_CHROMEOS)
+    BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_ANDROID)
 const base::FeatureParam<bool> kDiscountOnShoppyPage{
     &kEnableDiscountInfoApi, kDiscountOnShoppyPageParam, true};
 #else
@@ -357,12 +366,16 @@ BASE_FEATURE(kDiscountConsentV2,
 
 BASE_FEATURE(kCodeBasedRBD, "CodeBasedRBD", base::FEATURE_ENABLED_BY_DEFAULT);
 
-BASE_FEATURE(kParcelTracking,
-             "ParcelTracking",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-BASE_FEATURE(kParcelTrackingRegionLaunched,
-             "ParcelTrackingRegionLaunched",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+extern const char kShopCardArm1[] = "arm_1";
+extern const char kShopCardArm2[] = "arm_2";
+extern const char kShopCardArm3[] = "arm_3";
+extern const char kShopCardArm4[] = "arm_4";
+// Regular Tab Resumption with same impression limits as ShopCard
+// (max 3 impressions). So ShopCard variations of Tab Resumption can
+// be conclusively benchmarked against regular Tab Resumption.
+extern const char kShopCardArm5[] = "arm_5";
+extern const char kShopCardFrontPosition[] = "shop_card_front";
+extern const char kShopCardMaxImpressions[] = "max_impressions";
 
 const char kProductSpecificationsSetValidForClusteringTimeParam[] =
     "set-valid-for-clustering-time";

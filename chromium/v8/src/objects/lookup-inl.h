@@ -6,6 +6,7 @@
 #define V8_OBJECTS_LOOKUP_INL_H_
 
 #include "src/objects/lookup.h"
+// Include the non-inl header before the rest of the headers.
 
 // Include other inline headers *after* including lookup.h, such that e.g. the
 // definition of LookupIterator is available (and this comment prevents
@@ -298,8 +299,7 @@ bool LookupIterator::ExtendingNonExtensible(DirectHandle<JSReceiver> receiver) {
   // These JSObject types are wrappers around a set of primitive values
   // and exist only for the purpose of passing the data across V8 Api.
   // They are not supposed to be ever leaked to user JS code.
-  CHECK(!IsJSMessageObjectMap(receiver_map) &&
-        !IsJSExternalObjectMap(receiver_map));
+  CHECK(!IsMaybeReadOnlyJSObjectMap(receiver_map));
 
   // Shared objects have fixed layout. No properties may be added to them, not
   // even private symbols.

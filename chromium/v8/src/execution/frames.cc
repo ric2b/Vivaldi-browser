@@ -555,7 +555,7 @@ StackFrameIteratorForProfiler::StackFrameIteratorForProfiler(
   const Address fast_c_fp = isolate->isolate_data()->fast_c_call_caller_fp();
   if (fast_c_fp != kNullAddress) {
     // 'Fast C calls' are a special type of C call where we call directly from
-    // JS to C without an exit frame inbetween. The CEntryStub is responsible
+    // JS to C without an exit frame in between. The CEntryStub is responsible
     // for setting Isolate::c_entry_fp, meaning that it won't be set for fast C
     // calls. To keep the stack iterable, we store the FP and PC of the caller
     // of the fast C call on the isolate. This is guaranteed to be the topmost
@@ -667,9 +667,7 @@ bool StackFrameIteratorForProfiler::IsValidTop(ThreadLocalTop* top) const {
   if (!IsValidExitFrame(c_entry_fp)) return false;
   // There should be at least one JS_ENTRY stack handler.
   Address handler = Isolate::handler(top);
-  if (handler == kNullAddress) return false;
-  // Check that there are no js frames on top of the native frames.
-  return c_entry_fp < handler;
+  return handler != kNullAddress;
 }
 
 void StackFrameIteratorForProfiler::AdvanceOneFrame() {
@@ -726,6 +724,7 @@ bool StackFrameIteratorForProfiler::HasValidExitIfEntryFrame(
 }
 
 bool StackFrameIteratorForProfiler::IsValidExitFrame(Address fp) const {
+  if (!IsAligned(fp, kSystemPointerSize)) return false;
   if (!IsValidStackAddress(fp)) return false;
   Address sp = ExitFrame::ComputeStackPointer(fp);
   if (!IsValidStackAddress(sp)) return false;
@@ -2959,15 +2958,15 @@ Handle<Script> FrameSummary::WasmInterpretedFrameSummary::script() const {
                 wasm_instance()->GetIsolate());
 }
 
-Handle<Context> FrameSummary::WasmInterpretedFrameSummary::native_context()
-    const {
+DirectHandle<Context>
+FrameSummary::WasmInterpretedFrameSummary::native_context() const {
   return handle(wasm_instance_->trusted_data(isolate())->native_context(),
                 isolate());
 }
 
-Handle<StackFrameInfo>
+DirectHandle<StackFrameInfo>
 FrameSummary::WasmInterpretedFrameSummary::CreateStackFrameInfo() const {
-  Handle<String> function_name =
+  DirectHandle<String> function_name =
       GetWasmFunctionDebugName(isolate(), instance_data(), function_index());
   return isolate()->factory()->NewStackFrameInfo(script(), SourcePosition(),
                                                  function_name, false);

@@ -4,13 +4,14 @@
 
 package org.chromium.components.embedder_support.contextmenu;
 
-import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 
 import org.jni_zero.CalledByNative;
 import org.jni_zero.JNINamespace;
 
 import org.chromium.blink_public.common.ContextMenuDataMediaType;
+import org.chromium.build.annotations.NullMarked;
+import org.chromium.build.annotations.Nullable;
 import org.chromium.content_public.browser.AdditionalNavigationParams;
 import org.chromium.content_public.common.ContentUrlConstants;
 import org.chromium.content_public.common.Referrer;
@@ -18,9 +19,10 @@ import org.chromium.url.GURL;
 
 /**
  * A list of parameters that explain what kind of context menu to show the user. This data is
- * generated from content/public/common/context_menu_params.h.
+ * generated from components/embedder_support/android/contextmenu/context_menu_builder.h.
  */
 @JNINamespace("context_menu")
+@NullMarked
 public class ContextMenuParams {
     private final long mNativePtr;
     private final GURL mPageUrl;
@@ -29,8 +31,9 @@ public class ContextMenuParams {
     private final String mTitleText;
     private final GURL mUnfilteredLinkUrl;
     private final GURL mSrcUrl;
-    private final Referrer mReferrer;
+    private final @Nullable Referrer mReferrer;
 
+    private final boolean mIsPage;
     private final boolean mIsAnchor;
     private final boolean mIsImage;
     private final boolean mIsVideo;
@@ -42,6 +45,8 @@ public class ContextMenuParams {
     private final int mSourceType;
 
     private final boolean mOpenedFromHighlight;
+
+    private final boolean mOpenedFromInterestTarget;
 
     private final @Nullable AdditionalNavigationParams mAdditionalNavigationParams;
 
@@ -81,11 +86,20 @@ public class ContextMenuParams {
     }
 
     /** @return the referrer associated with the frame on which the menu is invoked */
-    public Referrer getReferrer() {
+    public @Nullable Referrer getReferrer() {
         return mReferrer;
     }
 
-    /** @return Whether or not the context menu is being shown for an anchor. */
+    /**
+     * @return Whether or not the context menu is being shown for a page.
+     */
+    public boolean isPage() {
+        return mIsPage;
+    }
+
+    /**
+     * @return Whether or not the context menu is being shown for an anchor.
+     */
     public boolean isAnchor() {
         return mIsAnchor;
     }
@@ -150,8 +164,18 @@ public class ContextMenuParams {
         return mOpenedFromHighlight;
     }
 
-    /** @return The additional navigation params associated with this Context Menu. */
-    public AdditionalNavigationParams getAdditionalNavigationParams() {
+    /**
+     * @return Whether or not the context menu was opened from an element with the `interesttarget`
+     *     attribute.
+     */
+    public boolean getOpenedFromInterestTarget() {
+        return mOpenedFromInterestTarget;
+    }
+
+    /**
+     * @return The additional navigation params associated with this Context Menu.
+     */
+    public @Nullable AdditionalNavigationParams getAdditionalNavigationParams() {
         return mAdditionalNavigationParams;
     }
 
@@ -165,12 +189,13 @@ public class ContextMenuParams {
             GURL unfilteredLinkUrl,
             GURL srcUrl,
             String titleText,
-            Referrer referrer,
+            @Nullable Referrer referrer,
             boolean canSaveMedia,
             int triggeringTouchXDp,
             int triggeringTouchYDp,
             int sourceType,
             boolean openedFromHighlight,
+            boolean openedFromInterestTarget,
             @Nullable AdditionalNavigationParams additionalNavigationParams) {
         mNativePtr = nativePtr;
         mPageUrl = pageUrl;
@@ -181,6 +206,13 @@ public class ContextMenuParams {
         mSrcUrl = srcUrl;
         mReferrer = referrer;
 
+        // Note: On desktop it is necessary to also check for the case where the target is an
+        // (editable) text/ password selection. Here that is not necessary because on Clank
+        //  it will open a selection popup instead of a context menu.
+        mIsPage =
+                (mediaType == ContextMenuDataMediaType.NONE
+                        && linkUrl.isEmpty()
+                        && !openedFromHighlight);
         mIsAnchor = !linkUrl.isEmpty();
         mIsImage = mediaType == ContextMenuDataMediaType.IMAGE;
         mIsVideo = mediaType == ContextMenuDataMediaType.VIDEO;
@@ -189,6 +221,7 @@ public class ContextMenuParams {
         mTriggeringTouchYDp = triggeringTouchYDp;
         mSourceType = sourceType;
         mOpenedFromHighlight = openedFromHighlight;
+        mOpenedFromInterestTarget = openedFromInterestTarget;
         mAdditionalNavigationParams = additionalNavigationParams;
     }
 
@@ -209,6 +242,7 @@ public class ContextMenuParams {
             int triggeringTouchYDp,
             int sourceType,
             boolean openedFromHighlight,
+            boolean openedFromInterestTarget,
             @Nullable AdditionalNavigationParams additionalNavigationParams) {
         // TODO(crbug.com/40549331): Convert Referrer to use GURL.
         Referrer referrer =
@@ -230,6 +264,7 @@ public class ContextMenuParams {
                 triggeringTouchYDp,
                 sourceType,
                 openedFromHighlight,
+                openedFromInterestTarget,
                 additionalNavigationParams);
     }
 }

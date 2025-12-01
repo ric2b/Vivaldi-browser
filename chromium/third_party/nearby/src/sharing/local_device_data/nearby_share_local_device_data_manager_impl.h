@@ -90,6 +90,8 @@ class NearbyShareLocalDeviceDataManagerImpl
       std::vector<nearby::sharing::proto::PublicCertificate> certificates,
       bool force_update_contacts, PublishDeviceCallback callback) override;
 
+  bool UsingIdentityRpc() override;
+
   // Creates a default device name of the form "<given name>'s <device type>."
   // For example, "Josh's Chromebook." If a given name cannot be found, returns
   // just the device type. If the resulting name is too long the user's name
@@ -102,7 +104,6 @@ class NearbyShareLocalDeviceDataManagerImpl
   std::unique_ptr<nearby::sharing::api::SharingRpcClient> nearby_share_client_;
   std::unique_ptr<nearby::sharing::api::IdentityRpcClient>
       nearby_identity_client_;
-  const std::string device_id_;
   std::unique_ptr<TaskRunner> executor_;
 };
 

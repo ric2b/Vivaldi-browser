@@ -39,7 +39,7 @@ suite('<settings-device-page>', () => {
     return page;
   }
 
-  setup(async () => {
+  setup(() => {
     fakeSystemDisplay = new FakeSystemDisplay();
     setDisplayApiForTesting(fakeSystemDisplay);
 
@@ -680,7 +680,7 @@ suite('<settings-device-page>', () => {
           minOutputVolumePercent,
           audioPage.get('audioSystemProperties_').outputVolumePercent,
       );
-      assertEquals('settings20:volume-zero', outputMuteButton.ironIcon);
+      assertEquals('os-settings:volume-zero', outputMuteButton.ironIcon);
 
       // Test clicking to max volume case.
       const maxOutputVolumePercent = 100;
@@ -689,7 +689,7 @@ suite('<settings-device-page>', () => {
           maxOutputVolumePercent,
           audioPage.get('audioSystemProperties_').outputVolumePercent,
       );
-      assertEquals('settings20:volume-up', outputMuteButton.ironIcon);
+      assertEquals('os-settings:volume-up', outputMuteButton.ironIcon);
 
       // Test clicking to non-boundary volume case.
       const nonBoundaryOutputVolumePercent = 50;
@@ -698,7 +698,7 @@ suite('<settings-device-page>', () => {
           nonBoundaryOutputVolumePercent,
           audioPage.get('audioSystemProperties_').outputVolumePercent,
       );
-      assertEquals('settings20:volume-up', outputMuteButton.ironIcon);
+      assertEquals('os-settings:volume-up', outputMuteButton.ironIcon);
 
       // Ensure value clamps to min.
       outputSlider.value = -1;
@@ -708,7 +708,7 @@ suite('<settings-device-page>', () => {
       assertEquals(
           minOutputVolumePercent,
           audioPage.get('audioSystemProperties_').outputVolumePercent);
-      assertEquals('settings20:volume-zero', outputMuteButton.ironIcon);
+      assertEquals('os-settings:volume-zero', outputMuteButton.ironIcon);
 
       // Ensure value clamps to max.
       outputSlider.value = 101;
@@ -718,7 +718,7 @@ suite('<settings-device-page>', () => {
       assertEquals(
           maxOutputVolumePercent,
           audioPage.get('audioSystemProperties_').outputVolumePercent);
-      assertEquals('settings20:volume-up', outputMuteButton.ironIcon);
+      assertEquals('os-settings:volume-up', outputMuteButton.ironIcon);
 
       // Test clicking to a small icon volume case.
       const smallIconOutputVolumePercent = 10;
@@ -727,7 +727,7 @@ suite('<settings-device-page>', () => {
           smallIconOutputVolumePercent,
           audioPage.get('audioSystemProperties_').outputVolumePercent,
       );
-      assertEquals('settings20:volume-down', outputMuteButton.ironIcon);
+      assertEquals('os-settings:volume-down', outputMuteButton.ironIcon);
     });
 
     test('output mute state changes slider disabled state', async () => {
@@ -908,7 +908,7 @@ suite('<settings-device-page>', () => {
           crosAudioConfigMojom.MuteState.kMutedByUser,
           audioPage.get('audioSystemProperties_').outputMuteState);
       assertTrue(audioPage.get('isOutputMuted_'));
-      assertEquals('settings20:volume-up-off', outputMuteButton.ironIcon);
+      assertEquals('os-settings:volume-up-off', outputMuteButton.ironIcon);
 
       outputMuteButton.click();
       await flushTasks();
@@ -988,7 +988,7 @@ suite('<settings-device-page>', () => {
     suite('voice isolation', () => {
       let voiceIsolationToggleSection: SettingsToggleButtonElement;
 
-      setup(async () => {
+      setup(() => {
         const toggleSection =
             audioPage.shadowRoot!.querySelector<SettingsToggleButtonElement>(
                 '#audioInputVoiceIsolationToggleSection');
@@ -1018,19 +1018,19 @@ suite('<settings-device-page>', () => {
         return radioButton;
       }
 
-      test('section visibility - style transfer', async () => {
+      test('section visibility - style transfer', () => {
         assertVoiceIsolationVisibilityForSystemProperties(
             effectStyleTransferAudioSystemProperties, /*visible*/ true);
       });
-      test('section visibility - beamforming', async () => {
+      test('section visibility - beamforming', () => {
         assertVoiceIsolationVisibilityForSystemProperties(
             effectBeamformingAudioSystemProperties, /*visible*/ true);
       });
-      test('section visibility - noise cancellation', async () => {
+      test('section visibility - noise cancellation', () => {
         assertVoiceIsolationVisibilityForSystemProperties(
             effectNoiseCancellationAudioSystemProperties, /*visible*/ true);
       });
-      test('section visibility - no effects', async () => {
+      test('section visibility - no effects', () => {
         assertVoiceIsolationVisibilityForSystemProperties(
             effectNoneAudioSystemProperties, /*visible*/ false);
       });
@@ -1192,7 +1192,7 @@ suite('<settings-device-page>', () => {
       });
     });
 
-    test('simulate hfp mic sr with unsupported state', async () => {
+    test('simulate hfp mic sr with unsupported state', () => {
       const audioHfpMicSrSubsection =
           audioPage.shadowRoot!.querySelector<HTMLElement>(
               '#audioInputHfpMicSrSubsection');
@@ -1557,7 +1557,7 @@ suite('<settings-device-page>', () => {
           activeDevice.spatialAudioState);
     });
 
-    test('simulate click row switch spatial audio', async () => {
+    test('simulate click row switch spatial audio', () => {
       crosAudioConfig.setAudioSystemProperties(
           spatialAudioSupportedAudioSystemProperties);
 

@@ -22,7 +22,7 @@
 #include "ui/color/color_provider_key.h"
 #include "ui/color/color_provider_utils.h"
 #include "ui/native_theme/common_theme.h"
-#include "ui/native_theme/native_theme_features.h"
+#include "ui/native_theme/features/native_theme_features.h"
 #include "ui/native_theme/native_theme_utils.h"
 
 namespace ui {
@@ -249,12 +249,11 @@ NativeTheme::PreferredColorScheme NativeTheme::CalculatePreferredColorScheme()
 
 // static
 bool NativeTheme::CalculateUseOverlayScrollbar() {
-  bool use_overlay_scrollbar = IsOverlayScrollbarEnabledByFeatureFlag();
 #if BUILDFLAG(IS_CHROMEOS)
-  use_overlay_scrollbar =
-      use_overlay_scrollbar || features::IsOverlayScrollbarOSSettingEnabled();
+  return true;
+#else
+  return IsOverlayScrollbarEnabledByFeatureFlag();
 #endif
-  return use_overlay_scrollbar;
 }
 
 std::optional<base::TimeDelta> NativeTheme::GetPlatformCaretBlinkInterval()

@@ -40,7 +40,7 @@
 #include "codec_par.h"
 #include "decode.h"
 #include "hwconfig.h"
-#include "refstruct.h"
+#include "libavutil/refstruct.h"
 #include "thread.h"
 #include "threadframe.h"
 #include "internal.h"
@@ -558,6 +558,7 @@ int av_get_bits_per_sample(enum AVCodecID codec_id)
         return 3;
     case AV_CODEC_ID_ADPCM_SBPRO_4:
     case AV_CODEC_ID_ADPCM_IMA_WAV:
+    case AV_CODEC_ID_ADPCM_IMA_XBOX:
     case AV_CODEC_ID_ADPCM_IMA_QT:
     case AV_CODEC_ID_ADPCM_SWF:
     case AV_CODEC_ID_ADPCM_MS:
@@ -720,10 +721,15 @@ static int get_audio_frame_duration(enum AVCodecID id, int sr, int ch, int ba,
                 int blocks = frame_bytes / ba;
                 int64_t tmp = 0;
                 switch (id) {
+                case AV_CODEC_ID_ADPCM_IMA_XBOX:
+                    if (bps != 4)
+                        return 0;
+                    tmp = blocks * ((ba - 4 * ch) / (bps * ch) * 8);
+                    break;
                 case AV_CODEC_ID_ADPCM_IMA_WAV:
                     if (bps < 2 || bps > 5)
                         return 0;
-                    tmp = blocks * (1LL + (ba - 4 * ch) / (bps * ch) * 8);
+                    tmp = blocks * (1LL + (ba - 4 * ch) / (bps * ch) * 8LL);
                     break;
                 case AV_CODEC_ID_ADPCM_IMA_DK3:
                     tmp = blocks * (((ba - 16LL) * 2 / 3 * 4) / ch);
@@ -856,7 +862,7 @@ int ff_thread_ref_frame(ThreadFrame *dst, const ThreadFrame *src)
     av_assert0(!dst->progress);
 
     if (src->progress)
-        dst->progress = ff_refstruct_ref(src->progress);
+        dst->progress = av_refstruct_ref(src->progress);
 
     return 0;
 }
@@ -872,7 +878,7 @@ int ff_thread_replace_frame(ThreadFrame *dst, const ThreadFrame *src)
     if (ret < 0)
         return ret;
 
-    ff_refstruct_replace(&dst->progress, src->progress);
+    av_refstruct_replace(&dst->progress, src->progress);
 
     return 0;
 }

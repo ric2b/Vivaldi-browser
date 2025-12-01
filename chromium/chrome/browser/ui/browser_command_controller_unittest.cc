@@ -50,6 +50,10 @@
 #endif  // ((BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_WIN)) &&
         // BUILDFLAG(ENABLE_EXTENSIONS))
 
+#if BUILDFLAG(ENABLE_GLIC)
+#include "chrome/common/chrome_features.h"
+#endif
+
 class BrowserCommandControllerTest : public BrowserWithTestWindowTest {
  public:
   BrowserCommandControllerTest() = default;
@@ -289,7 +293,7 @@ class FullscreenTestBrowserWindow : public TestBrowserWindow,
   // TestBrowserWindow overrides:
   bool ShouldHideUIForFullscreen() const override { return fullscreen_; }
   bool IsFullscreen() const override { return fullscreen_; }
-  void EnterFullscreen(const GURL& url,
+  void EnterFullscreen(const url::Origin& origin,
                        ExclusiveAccessBubbleType type,
                        int64_t display_id) override {
     fullscreen_ = true;

@@ -1263,8 +1263,7 @@
       },
       'optimization_guide-mac-arm64': {
         'additional_compile_targets': [
-          'ondevice_model_benchmark',
-          'ondevice_model_example',
+          'ondevice_model_benchmark'
         ],
         'mixins': [
           'chrome-swarming-pool',
@@ -1278,8 +1277,7 @@
       },
       'optimization_guide-mac-x64': {
         'additional_compile_targets': [
-          'ondevice_model_benchmark',
-          'ondevice_model_example',
+          'ondevice_model_benchmark'
         ],
         'mixins': [
           'chrome-swarming-pool',
@@ -1293,8 +1291,7 @@
       },
       'optimization_guide-win-arm64': {
         'additional_compile_targets': [
-          'ondevice_model_benchmark',
-          'ondevice_model_example',
+          'ondevice_model_benchmark'
         ],
         'mixins': [
           'chrome-swarming-pool',
@@ -1308,8 +1305,7 @@
       },
       'optimization_guide-win32': {
         'additional_compile_targets': [
-          'ondevice_model_benchmark',
-          'ondevice_model_example',
+          'ondevice_model_benchmark'
         ],
         'mixins': [
           'chrome-intelligence-swarming-pool',
@@ -1323,8 +1319,7 @@
       },
       'optimization_guide-win64': {
         'additional_compile_targets': [
-          'ondevice_model_benchmark',
-          'ondevice_model_example',
+          'ondevice_model_benchmark'
         ],
         'mixins': [
           'chrome-intelligence-swarming-pool',
@@ -1359,6 +1354,67 @@
         ],
         'test_suites': {
            'gtest_tests': 'optimization_guide_gpu_gtests',
+        },
+        'os_type': 'win',
+      },
+    },
+  },
+   {
+    'project': 'chrome',
+    'bucket': 'ci',
+    'name': 'internal.translatekit',
+    'mixins': [
+      'chrome-tester-service-account',
+    ],
+    'machines': {
+      'linux-translatekit-builder': {
+        'mixins': [
+          'chrome-swarming-pool',
+          'linux-jammy',
+          'x86-64',
+        ],
+        'test_suites': {
+           'isolated_scripts': 'translatekit_script_tests',
+        },
+        'os_type': 'linux',
+      },
+      'mac-arm64-translatekit-builder': {
+        'mixins': [
+          'chrome-swarming-pool',
+          'mac_default_arm64',
+        ],
+        'test_suites': {
+           'isolated_scripts': 'translatekit_script_tests',
+        },
+        'os_type': 'mac',
+      },
+      'mac-x64-translatekit-builder': {
+        'mixins': [
+          'chrome-swarming-pool',
+          'mac_default_x64',
+        ],
+        'test_suites': {
+           'isolated_scripts': 'translatekit_script_tests',
+        },
+        'os_type': 'mac',
+      },
+      'win32-translatekit-builder': {
+        'mixins': [
+          'chrome-swarming-pool',
+          'win10',
+        ],
+        'test_suites': {
+           'isolated_scripts': 'translatekit_script_tests',
+        },
+        'os_type': 'win',
+      },
+      'win64-translatekit-builder': {
+        'mixins': [
+          'chrome-swarming-pool',
+          'win10',
+        ],
+        'test_suites': {
+           'isolated_scripts': 'translatekit_script_tests',
         },
         'os_type': 'win',
       },

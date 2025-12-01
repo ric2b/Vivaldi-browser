@@ -13,6 +13,8 @@
 #include "base/strings/strcat.h"
 #include "base/test/bind.h"
 #include "base/test/scoped_feature_list.h"
+#include "base/threading/platform_thread.h"
+#include "base/time/time.h"
 #include "content/browser/bad_message.h"
 #include "content/browser/renderer_host/frame_tree.h"
 #include "content/browser/web_contents/web_contents_impl.h"
@@ -29,6 +31,7 @@
 #include "content/public/test/content_browser_test.h"
 #include "content/public/test/content_browser_test_content_browser_client.h"
 #include "content/public/test/content_browser_test_utils.h"
+#include "content/public/test/test_devtools_protocol_client.h"
 #include "content/public/test/test_utils.h"
 #include "content/shell/browser/shell.h"
 #include "content/test/content_browser_test_utils_internal.h"
@@ -42,17 +45,30 @@
 #include "net/http/alternative_service.h"
 #include "net/storage_access_api/status.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
+#include "services/network/public/cpp/features.h"
 #include "services/network/public/cpp/network_switches.h"
 #include "services/network/public/mojom/restricted_cookie_manager.mojom-test-utils.h"
 #include "services/network/public/mojom/restricted_cookie_manager.mojom.h"
 #include "services/service_manager/public/cpp/interface_provider.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/blink/public/common/features_generated.h"
 #include "url/gurl.h"
 
 namespace content {
 
 namespace {
+
+void EnableDevtoolsThirdPartyCookieRestriction(
+    TestDevToolsProtocolClient& frame_devtools_client) {
+  base::Value::Dict command_params;
+  frame_devtools_client.SendCommandSync("Network.enable");
+  command_params.Set("enableThirdPartyCookieRestriction", true);
+  command_params.Set("disableThirdPartyCookieMetadata", false);
+  command_params.Set("disableThirdPartyCookieHeuristics", false);
+  frame_devtools_client.SendCommandAsync("Network.setCookieControls",
+                                         std::move(command_params));
+}
 
 void SetCookieFromJS(RenderFrameHost* frame, std::string cookie) {
   EvalJsResult result = EvalJs(frame, "document.cookie = '" + cookie + "'");
@@ -109,7 +125,17 @@ std::string GetCookiesDirect(WebContentsImpl* tab, const GURL& url) {
 
 }  // namespace
 
-class CookieBrowserTest : public ContentBrowserTest {
+class CookieBrowserTest
+    : public ContentBrowserTest,
+      public ::testing::WithParamInterface<std::tuple<bool, bool>> {
+ public:
+  CookieBrowserTest() {
+    scoped_feature_list_.InitWithFeatureStates(
+        {{network::features::kGetCookiesOnSet, GetCookiesOnSetEnabled()},
+         {blink::features::kAsyncSetCookie, AsyncSetCookieEnabled()}});
+  }
+  ~CookieBrowserTest() override = default;
+
  protected:
   void SetUpCommandLine(base::CommandLine* command_line) override {
     command_line->AppendSwitch(
@@ -120,11 +146,29 @@ class CookieBrowserTest : public ContentBrowserTest {
     // Support multiple sites on the test server.
     host_resolver()->AddRule("*", "127.0.0.1");
   }
+
+  bool GetCookiesOnSetEnabled() { return std::get<0>(GetParam()); }
+
+  bool AsyncSetCookieEnabled() { return std::get<1>(GetParam()); }
+
+  base::test::ScopedFeatureList scoped_feature_list_;
 };
+
+INSTANTIATE_TEST_SUITE_P(
+    ,
+    CookieBrowserTest,
+    testing::Combine(testing::Bool(), testing::Bool()),
+    [](const testing::TestParamInfo<std::tuple<bool, bool>>& info) {
+      std::string name =
+          std::get<0>(info.param) ? "GetOnSetEnabled" : "GetOnSetDisabled";
+      name += "_";
+      name += std::get<1>(info.param) ? "Async" : "Sync";
+      return name;
+    });
 
 // Exercises basic cookie operations via javascript, including an http page
 // interacting with secure cookies.
-IN_PROC_BROWSER_TEST_F(CookieBrowserTest, Cookies) {
+IN_PROC_BROWSER_TEST_P(CookieBrowserTest, Cookies) {
   SetupCrossSiteRedirector(embedded_test_server());
   ASSERT_TRUE(embedded_test_server()->Start());
 
@@ -185,8 +229,8 @@ IN_PROC_BROWSER_TEST_F(CookieBrowserTest, Cookies) {
   // Non-TLS page writes not-secure cookie.
   EXPECT_TRUE(ExecJs(web_contents_http->GetPrimaryMainFrame(),
                      "document.cookie = 'B=2';"));
-  EXPECT_EQ("B=2", GetCookieFromJS(web_contents_https->GetPrimaryMainFrame()));
   EXPECT_EQ("B=2", GetCookieFromJS(web_contents_http->GetPrimaryMainFrame()));
+  EXPECT_EQ("B=2", GetCookieFromJS(web_contents_https->GetPrimaryMainFrame()));
 
   // TLS page writes secure cookie.
   EXPECT_TRUE(ExecJs(web_contents_https->GetPrimaryMainFrame(),
@@ -205,7 +249,7 @@ IN_PROC_BROWSER_TEST_F(CookieBrowserTest, Cookies) {
 }
 
 // Ensure "priority" cookie option is settable via document.cookie.
-IN_PROC_BROWSER_TEST_F(CookieBrowserTest, CookiePriority) {
+IN_PROC_BROWSER_TEST_P(CookieBrowserTest, CookiePriority) {
   ASSERT_TRUE(embedded_test_server()->Start());
 
   struct {
@@ -232,7 +276,7 @@ IN_PROC_BROWSER_TEST_F(CookieBrowserTest, CookiePriority) {
 
 // SameSite cookies (that aren't marked as http-only) should be available to
 // JavaScript.
-IN_PROC_BROWSER_TEST_F(CookieBrowserTest, SameSiteCookies) {
+IN_PROC_BROWSER_TEST_P(CookieBrowserTest, SameSiteCookies) {
   // Must use HTTPS because SameSite=None cookies must be Secure.
   net::EmbeddedTestServer server(net::EmbeddedTestServer::TYPE_HTTPS);
   server.SetSSLConfig(net::EmbeddedTestServer::CERT_TEST_NAMES);
@@ -289,7 +333,68 @@ IN_PROC_BROWSER_TEST_F(CookieBrowserTest, SameSiteCookies) {
   EXPECT_EQ("none=1", GetCookieFromJS(b_iframe));
 }
 
-IN_PROC_BROWSER_TEST_F(CookieBrowserTest, CookieTruncatingCharFromJavascript) {
+IN_PROC_BROWSER_TEST_P(CookieBrowserTest,
+                       CookieJarInvalidatesCacheWithNewDevtoolsControls) {
+  // Must use HTTPS because SameSite=None cookies must be Secure.
+  net::EmbeddedTestServer server(net::EmbeddedTestServer::TYPE_HTTPS);
+  server.SetSSLConfig(net::EmbeddedTestServer::CERT_TEST_NAMES);
+  server.AddDefaultHandlers(GetTestDataFilePath());
+  SetupCrossSiteRedirector(&server);
+  ASSERT_TRUE(server.Start());
+
+  // Set a single cookie that we'll access from a third-party context
+  std::string cookies_to_set =
+      "/set-cookie?none=1;SameSite=None;Secure";  // SameSite=None must be
+                                                  // Secure
+
+  GURL url = server.GetURL("b.test", cookies_to_set);
+  EXPECT_TRUE(NavigateToURL(shell(), url));
+
+  WebContentsImpl* web_contents =
+      static_cast<WebContentsImpl*>(shell()->web_contents());
+  // Turn on third-party cookie restriction from devtools. This needs to happen
+  // from a top level client
+  TestDevToolsProtocolClient devtools_client;
+  devtools_client.AttachToWebContents(web_contents);
+  EnableDevtoolsThirdPartyCookieRestriction(devtools_client);
+
+  url = server.GetURL("a.test",
+                      "/cross_site_iframe_factory.html?a.test(b.test())");
+  EXPECT_TRUE(NavigateToURL(shell(), url));
+
+  RenderFrameHost* oop_iframe = web_contents->GetPrimaryFrameTree()
+                                    .root()
+                                    ->child_at(0)
+                                    ->current_frame_host();
+
+  // Attach devtools client to the sub frame, but disable the controls at first
+  devtools_client.DetachProtocolClient();
+  devtools_client.AttachToFrameTreeHost(oop_iframe);
+  devtools_client.SendCommandSync("Network.disable");
+
+  // Check Get->Get
+  // Overrides should not apply after disabling the controls
+  EXPECT_EQ("none=1", GetCookieFromJS(oop_iframe));
+
+  // Confirm cache is invalidated by observing new value from document.cookie
+  // when re-enabling devtools
+  devtools_client.SendCommandSync("Network.enable");
+  EXPECT_EQ("", GetCookieFromJS(oop_iframe));
+
+  // Check Set->Get
+  // Set a cookie with devtools disabled
+  devtools_client.SendCommandSync("Network.disable");
+  SetCookieFromJS(oop_iframe, "none=2; SameSite=None; Secure");
+
+  // Confirm cache is invalidated by observing no cookie from document.cookie
+  // when re-enabling devtools
+  devtools_client.SendCommandSync("Network.enable");
+  EXPECT_EQ("", GetCookieFromJS(oop_iframe));
+
+  devtools_client.DetachProtocolClient();
+}
+
+IN_PROC_BROWSER_TEST_P(CookieBrowserTest, CookieTruncatingCharFromJavascript) {
   ASSERT_TRUE(embedded_test_server()->Start());
 
   ASSERT_TRUE(
@@ -325,7 +430,7 @@ IN_PROC_BROWSER_TEST_F(CookieBrowserTest, CookieTruncatingCharFromJavascript) {
   EXPECT_EQ("", GetCookieFromJS(frame));
 }
 
-IN_PROC_BROWSER_TEST_F(CookieBrowserTest, CookieTruncatingCharFromHeaders) {
+IN_PROC_BROWSER_TEST_P(CookieBrowserTest, CookieTruncatingCharFromHeaders) {
   std::string cookie_string;
   embedded_test_server()->RegisterRequestHandler(base::BindLambdaForTesting(
       [&](const net::test_server::HttpRequest& request)
@@ -383,13 +488,15 @@ class RestrictedCookieManagerInterceptor
       const net::SiteForCookies& site_for_cookies,
       const url::Origin& top_frame_origin,
       net::StorageAccessApiStatus storage_access_api_status,
+      bool get_version_shared_memory,
+      bool is_ad_tagged,
       bool apply_devtools_overrides,
       const std::string& cookie,
       SetCookieFromStringCallback callback) override {
     GetForwardingInterface()->SetCookieFromString(
         URLToUse(url), site_for_cookies, top_frame_origin,
-        storage_access_api_status, apply_devtools_overrides, std::move(cookie),
-        std::move(callback));
+        storage_access_api_status, get_version_shared_memory, is_ad_tagged,
+        apply_devtools_overrides, std::move(cookie), std::move(callback));
   }
 
   void GetCookiesString(const GURL& url,
@@ -466,7 +573,7 @@ class CookieStoreContentBrowserClient
 // for wrong URLs are rejected.
 // TODO(crbug.com/41453892): This should actually result in renderer
 // kills.
-IN_PROC_BROWSER_TEST_F(CookieBrowserTest, CrossSiteCookieSecurityEnforcement) {
+IN_PROC_BROWSER_TEST_P(CookieBrowserTest, CrossSiteCookieSecurityEnforcement) {
   // The code under test is only active under site isolation.
   if (!AreAllSitesIsolatedForTesting()) {
     return;
@@ -533,9 +640,33 @@ IN_PROC_BROWSER_TEST_F(CookieBrowserTest, CrossSiteCookieSecurityEnforcement) {
       v.DepictFrameTree(tab->GetPrimaryFrameTree().root()));
 }
 
+IN_PROC_BROWSER_TEST_P(CookieBrowserTest, CookieNotReadableAfterExpiry) {
+  ASSERT_TRUE(embedded_test_server()->Start());
+
+  GURL http_url = embedded_test_server()->GetURL("example.test", "/empty.html");
+  EXPECT_TRUE(NavigateToURL(shell(), http_url));
+
+  WebContentsImpl* web_contents_http =
+      static_cast<WebContentsImpl*>(shell()->web_contents());
+  RenderFrameHost* frame = web_contents_http->GetPrimaryMainFrame();
+
+  SetCookieFromJS(frame, "c=1;Max-Age=1");
+  SetCookieFromJS(frame, "d=1;Max-Age=7200");
+  EXPECT_EQ("c=1; d=1", GetCookieFromJS(frame));
+
+  // If cookies properly expire and become unavailable this test will terminate.
+  // If they do not the test will time out. The earliest expiry from the cookies
+  // is used so the short expiry from c is expected to be used.
+  std::string cookie;
+  do {
+    cookie = GetCookieFromJS(frame);
+    base::PlatformThread::Sleep(base::Milliseconds(100));
+  } while (cookie != "d=1");
+}
+
 // Cookies for an eTLD should be stored (via JS) if they match the URL host,
 // even if they begin with `.` or have non-canonical capitalization.
-IN_PROC_BROWSER_TEST_F(CookieBrowserTest, ETldDomainCookies) {
+IN_PROC_BROWSER_TEST_P(CookieBrowserTest, ETldDomainCookies) {
   ASSERT_TRUE(embedded_test_server()->Start());
 
   // This test uses `gov.br` as an example of an eTLD.
@@ -568,7 +699,7 @@ IN_PROC_BROWSER_TEST_F(CookieBrowserTest, ETldDomainCookies) {
 
 // Cookies for an eTLD should be stored (via header) if they match the URL host,
 // even if they begin with `.` or have non-canonical capitalization.
-IN_PROC_BROWSER_TEST_F(CookieBrowserTest, ETldDomainCookiesHeader) {
+IN_PROC_BROWSER_TEST_P(CookieBrowserTest, ETldDomainCookiesHeader) {
   std::string got_cookie_on_request;
   std::string set_cookie_on_response;
   embedded_test_server()->RegisterRequestHandler(base::BindLambdaForTesting(

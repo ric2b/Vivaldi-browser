@@ -23,13 +23,13 @@
 #include "components/autofill/core/browser/form_parsing/address_field_parser.h"
 #include "components/autofill/core/browser/form_parsing/address_field_parser_ng.h"
 #include "components/autofill/core/browser/form_parsing/alternative_name_field_parser.h"
-#include "components/autofill/core/browser/form_parsing/autofill_ai_field_parser.h"
 #include "components/autofill/core/browser/form_parsing/autofill_parsing_utils.h"
 #include "components/autofill/core/browser/form_parsing/autofill_scanner.h"
 #include "components/autofill/core/browser/form_parsing/credit_card_field_parser.h"
 #include "components/autofill/core/browser/form_parsing/email_field_parser.h"
 #include "components/autofill/core/browser/form_parsing/form_field_parser.h"
 #include "components/autofill/core/browser/form_parsing/iban_field_parser.h"
+#include "components/autofill/core/browser/form_parsing/loyalty_field_parser.h"
 #include "components/autofill/core/browser/form_parsing/merchant_promo_code_field_parser.h"
 #include "components/autofill/core/browser/form_parsing/name_field_parser.h"
 #include "components/autofill/core/browser/form_parsing/phone_field_parser.h"
@@ -193,15 +193,6 @@ void FormFieldParser::ParseFormFields(
   std::vector<raw_ptr<AutofillField, VectorExperimental>> processed_fields =
       RemoveCheckableFields(fields);
 
-#if BUILDFLAG(USE_INTERNAL_AUTOFILL_PATTERNS)
-  // AutofillAi is parsed using their own exclusive pattern file.
-  if (context.pattern_file == PatternFile::kAutofillAi) {
-    ParseFormFieldsPass(AutofillAiFieldParser::Parse, context, processed_fields,
-                        field_candidates);
-    return;
-  }
-#endif
-
   // Email pass.
   ParseFormFieldsPass(EmailFieldParser::Parse, context, processed_fields,
                       field_candidates);
@@ -237,6 +228,13 @@ void FormFieldParser::ParseFormFields(
   // Price pass.
   ParseFormFieldsPass(PriceFieldParser::Parse, context, processed_fields,
                       field_candidates);
+
+  if (base::FeatureList::IsEnabled(
+          features::kAutofillEnableLoyaltyCardsFilling)) {
+    // Loyalty card pass.
+    ParseFormFieldsPass(LoyaltyFieldParser::Parse, context, processed_fields,
+                        field_candidates);
+  }
 
   // Name pass.
   ParseFormFieldsPass(NameFieldParser::Parse, context, processed_fields,
@@ -304,9 +302,22 @@ void FormFieldParser::ClearCandidatesIfHeuristicsDidNotFindEnoughFields(
     permitted_single_field_types.insert(ADDRESS_HOME_ZIP);
   }
 
+  if (base::FeatureList::IsEnabled(
+          features::kAutofillEnableLoyaltyCardsFilling)) {
+    permitted_single_field_types.insert(LOYALTY_MEMBERSHIP_ID);
+  }
+
   // For historic reasons email addresses are only retained if they appear in
   // a <form> tag. It's unclear whether that's necessary.
   FieldTypeSet permitted_single_field_types_in_form{EMAIL_ADDRESS};
+
+  // `AutofillEnableEmailHeuristicOutsideForms` permits email fields to be
+  // filled even when they are not in a <form> tag.
+  if (base::FeatureList::IsEnabled(
+          features::kAutofillEnableEmailHeuristicOutsideForms)) {
+    permitted_single_field_types.insert(EMAIL_ADDRESS);
+    permitted_single_field_types_in_form.erase(EMAIL_ADDRESS);
+  }
 
   // Returns whether a field type may exist as a stand-alone field.
   auto retainable_field_type =
@@ -380,6 +391,13 @@ void FormFieldParser::ParseSingleFields(
   // IBAN pass.
   ParseFormFieldsPass(IbanFieldParser::Parse, context, processed_fields,
                       field_candidates);
+
+  if (base::FeatureList::IsEnabled(
+          features::kAutofillEnableLoyaltyCardsFilling)) {
+    // Loyalty Cards pass.
+    ParseFormFieldsPass(LoyaltyFieldParser::Parse, context, processed_fields,
+                        field_candidates);
+  }
 
   if (AddressFieldParser::IsStandaloneZipSupported(context.client_country)) {
     // In some countries we observe address forms that are particularly small

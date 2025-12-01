@@ -31,7 +31,7 @@ namespace internal {
 #define CHECK_EXCEPTION_ON_DISPOSAL(isolate, disposable_stack, return_value) \
   do {                                                                       \
     DCHECK(isolate->has_exception());                                        \
-    Handle<Object> current_error(isolate->exception(), isolate);             \
+    DirectHandle<Object> current_error(isolate->exception(), isolate);       \
     DirectHandle<Object> current_error_message(isolate->pending_message(),   \
                                                isolate);                     \
     if (!isolate->is_catchable_by_javascript(*current_error)) {              \
@@ -46,9 +46,9 @@ namespace internal {
 // https://arai-a.github.io/ecma262-compare/?pr=3000&id=sec-disposeresources
 MaybeDirectHandle<Object> JSDisposableStackBase::DisposeResources(
     Isolate* isolate, DirectHandle<JSDisposableStackBase> disposable_stack,
-    MaybeHandle<Object> maybe_continuation_error,
     DisposableStackResourcesType resources_type) {
   DCHECK(!IsUndefined(disposable_stack->stack()));
+  DCHECK_EQ(disposable_stack->state(), DisposableStackState::kDisposed);
 
   DirectHandle<FixedArray> stack(disposable_stack->stack(), isolate);
 
@@ -59,12 +59,6 @@ MaybeDirectHandle<Object> JSDisposableStackBase::DisposeResources(
   int length = disposable_stack->length();
 
   MaybeDirectHandle<Object> result;
-  Handle<Object> continuation_error;
-
-  if (maybe_continuation_error.ToHandle(&continuation_error)) {
-    disposable_stack->set_error(*continuation_error);
-    disposable_stack->set_error_message(isolate->pending_message());
-  }
 
   // 3. For each element resource of
   // disposeCapability.[[DisposableResourceStack]], in reverse list order, do
@@ -179,7 +173,6 @@ MaybeDirectHandle<Object> JSDisposableStackBase::DisposeResources(
   // 6. Set disposeCapability.[[DisposableResourceStack]] to a new empty List.
   disposable_stack->set_stack(ReadOnlyRoots(isolate).empty_fixed_array());
   disposable_stack->set_length(0);
-  disposable_stack->set_state(DisposableStackState::kDisposed);
 
   Handle<Object> existing_error_handle(disposable_stack->error(), isolate);
   DirectHandle<Object> existing_error_message_handle(
@@ -189,8 +182,7 @@ MaybeDirectHandle<Object> JSDisposableStackBase::DisposeResources(
       *(isolate->factory()->uninitialized_value()));
 
   // 7. Return ? completion.
-  if (!IsUninitialized(*existing_error_handle) &&
-      !(existing_error_handle.equals(continuation_error))) {
+  if (!IsUninitialized(*existing_error_handle)) {
     if (disposable_stack->suppressed_error_created() == true) {
       // Created SuppressedError is intentionally suppressed here for debug.
       SuppressDebug while_processing(isolate->debug());
@@ -230,9 +222,8 @@ Maybe<bool> JSAsyncDisposableStack::NextDisposeAsyncIteration(
     // 6. Let result be
     //   DisposeResources(asyncDisposableStack.[[DisposeCapability]],
     //   NormalCompletion(undefined)).
-    result =
-        DisposeResources(isolate, async_disposable_stack, MaybeHandle<Object>(),
-                         DisposableStackResourcesType::kAtLeastOneAsync);
+    result = DisposeResources(isolate, async_disposable_stack,
+                              DisposableStackResourcesType::kAtLeastOneAsync);
 
     DirectHandle<Object> result_handle;
 

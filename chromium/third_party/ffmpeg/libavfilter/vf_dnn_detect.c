@@ -695,8 +695,12 @@ static av_cold int dnn_detect_init(AVFilterContext *context)
     ff_dnn_set_detect_post_proc(&ctx->dnnctx, dnn_detect_post_proc);
 
     if (ctx->labels_filename) {
-        return read_detect_label_file(context);
+        ret = read_detect_label_file(context);
+        if (ret) {
+          return ret;
+        }
     }
+
     if (ctx->anchors_str) {
         ret = dnn_detect_parse_anchors(ctx->anchors_str, &ctx->anchors);
         if (!ctx->anchors) {
@@ -705,6 +709,7 @@ static av_cold int dnn_detect_init(AVFilterContext *context)
         }
         ctx->nb_anchor = ret;
     }
+
     return 0;
 }
 
@@ -847,9 +852,10 @@ static const AVFilterPad dnn_detect_inputs[] = {
     },
 };
 
-const AVFilter ff_vf_dnn_detect = {
-    .name          = "dnn_detect",
-    .description   = NULL_IF_CONFIG_SMALL("Apply DNN detect filter to the input."),
+const FFFilter ff_vf_dnn_detect = {
+    .p.name        = "dnn_detect",
+    .p.description = NULL_IF_CONFIG_SMALL("Apply DNN detect filter to the input."),
+    .p.priv_class  = &dnn_detect_class,
     .priv_size     = sizeof(DnnDetectContext),
     .preinit       = ff_dnn_filter_init_child_class,
     .init          = dnn_detect_init,
@@ -857,6 +863,5 @@ const AVFilter ff_vf_dnn_detect = {
     FILTER_INPUTS(dnn_detect_inputs),
     FILTER_OUTPUTS(ff_video_default_filterpad),
     FILTER_PIXFMTS_ARRAY(pix_fmts),
-    .priv_class    = &dnn_detect_class,
     .activate      = dnn_detect_activate,
 };

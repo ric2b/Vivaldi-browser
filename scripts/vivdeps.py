@@ -141,6 +141,7 @@ def get_chromium_variables():
 
   global_vars["checkout_src_internal"]=False
   global_vars["checkout_nacl"]=False
+  global_vars["checkout_press_benchmarks"]=False
   global_vars["git_dependencies"]="DEPS"
 
   return global_vars

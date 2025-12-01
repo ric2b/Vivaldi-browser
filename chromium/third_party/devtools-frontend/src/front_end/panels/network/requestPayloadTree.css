@@ -20,7 +20,7 @@
   margin-top: -1px;
   display: flex;
   align-items: center;
-  height: 26px;
+  height: var(--sys-size-13);
 }
 
 .tree-outline li {
@@ -31,6 +31,13 @@
 .tree-outline li:not(.parent) {
   margin-left: 10px;
   display: block;
+
+  &:has(.payload-name) {
+    margin: var(--sys-size-3) 0;
+    display: grid;
+    grid-template-columns: min-content 1fr;
+    gap: var(--sys-size-6);
+  }
 }
 
 .tree-outline li:not(.parent)::before {
@@ -49,9 +56,6 @@
   display: inline;
   margin-left: 30px;
   font-weight: normal;
-  color: var(--sys-color-on-surface);
-  background: none;
-  border: none;
 }
 
 .tree-outline li.expanded .payload-toggle:focus-visible {
@@ -64,24 +68,20 @@
 }
 
 .tree-outline .payload-name {
-  color: var(--sys-color-token-subtle);
-  display: inline-flex;
-  margin-right: 0.25em;
-  font-weight: bold;
-  vertical-align: top;
+  color: var(--sys-color-on-surface-subtle);
+  font: var(--sys-typescale-body5-medium);
   white-space: pre-wrap;
-}
-
-.tree-outline .payload-separator {
-  user-select: none;
+  align-self: start;
+  min-width: 150px;
+  line-height: 18px;
 }
 
 .tree-outline .payload-value {
   display: inline;
-  margin-right: 1em;
   white-space: pre-wrap;
   word-break: break-all;
-  margin-top: 1px;
+  font: var(--sys-typescale-body4-regular);
+  line-height: 18px;
 }
 
 .tree-outline .empty-request-payload {

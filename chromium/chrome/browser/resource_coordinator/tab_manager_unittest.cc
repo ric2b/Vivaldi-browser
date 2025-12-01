@@ -21,7 +21,6 @@
 #include "base/test/scoped_feature_list.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
-#include "build/chromeos_buildflags.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/metrics/desktop_session_duration/desktop_session_duration_tracker.h"
 #include "chrome/browser/profiles/profile.h"
@@ -102,7 +101,7 @@ TEST_F(TabManagerTest, IsInternalPage) {
   EXPECT_TRUE(TabManager::IsInternalPage(GURL(chrome::kChromeUISettingsURL)));
 
 // Debugging URLs are not included.
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
   EXPECT_FALSE(TabManager::IsInternalPage(GURL(chrome::kChromeUIDiscardsURL)));
 #endif
   EXPECT_FALSE(
@@ -158,7 +157,7 @@ TEST_F(TabManagerTest, MAYBE_DiscardTabWithNonVisibleTabs) {
   task_environment()->AdvanceClock(kBackgroundUrgentProtectionTime);
 
   for (int i = 0; i < 4; ++i)
-    tab_manager_->DiscardTab(LifecycleUnitDiscardReason::URGENT);
+    tab_manager_->DiscardTabByExtension(nullptr);
 
   // Active tab in a visible window should not be discarded.
   EXPECT_FALSE(IsTabDiscarded(tab_strip1->GetWebContentsAt(0)));
@@ -167,7 +166,7 @@ TEST_F(TabManagerTest, MAYBE_DiscardTabWithNonVisibleTabs) {
   EXPECT_TRUE(IsTabDiscarded(tab_strip1->GetWebContentsAt(1)));
   EXPECT_TRUE(IsTabDiscarded(tab_strip2->GetWebContentsAt(1)));
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
   // On ChromeOS, a non-visible tab should be discarded even if it's active in
   // its tab strip.
   EXPECT_TRUE(IsTabDiscarded(tab_strip2->GetWebContentsAt(0)));
@@ -175,7 +174,7 @@ TEST_F(TabManagerTest, MAYBE_DiscardTabWithNonVisibleTabs) {
   // On other platforms, an active tab is never discarded, even if it's not
   // visible.
   EXPECT_FALSE(IsTabDiscarded(tab_strip2->GetWebContentsAt(0)));
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+#endif  // BUILDFLAG(IS_CHROMEOS)
 
   // Tabs with a committed URL must be closed explicitly to avoid DCHECK errors.
   tab_strip1->CloseAllTabs();

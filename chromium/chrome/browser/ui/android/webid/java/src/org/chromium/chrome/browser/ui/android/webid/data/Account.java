@@ -10,7 +10,6 @@ import org.jni_zero.CalledByNative;
 import org.jni_zero.JniType;
 
 import org.chromium.build.annotations.Nullable;
-import org.chromium.url.GURL;
 
 /**
  * This class holds the data used to represent a selectable account in the Account Selection sheet.
@@ -19,26 +18,30 @@ import org.chromium.url.GURL;
  */
 public class Account {
     private final String mId;
-    private final String mEmail;
-    private final String mName;
+    private final String mDisplayIdentifier;
+    private final String mDisplayName;
     private final String mGivenName;
     // The secondary description. This value is not null if and only if the UI being displayed is
     // multi IDP. The text contains the IDP origin and possibly the last used timestamp if this is
     // an account that has been used in the device before.
     private final @Nullable String mSecondaryDescription;
-    private final GURL mPictureUrl;
     private final Bitmap mPictureBitmap;
+    private final Bitmap mCircledBadgedPictureBitmap;
     private final boolean mIsSignIn;
     private final boolean mIsBrowserTrustedSignIn;
     private final boolean mIsFilteredOut;
+    private final IdentityProviderData mIdentityProviderData;
 
     /**
      * @param id The account ID.
-     * @param email Email shown to the user.
-     * @param name Full name.
+     * @param displayIdentifier Identifier to show for the user (e.g. email).
+     * @param displayName Name to show for the user.
      * @param givenName Given name.
-     * @param pictureUrl Picture URL of the avatar shown to the user.
-     * @param pictureBitmap The Bitmap for the picture in pictureUrl.
+     * @param secondaryDescription The secondary description for the account button. This is only
+     *     used when multiple IDPs are being used in the dialog.
+     * @param pictureBitmap The Bitmap for the picture.
+     * @param circledBadgedPictureBitmap The Bitmap for the circled and badged picture. This is only
+     *     used when multiple IDPs are being used in the dialog.
      * @param isSignIn Whether this account's login state is sign in or sign up. Unlike the other
      *     fields this can be populated either by the IDP or by the browser based on its stored
      *     permission grants.
@@ -47,37 +50,45 @@ public class Account {
      *     has third-party cookie access.
      * @param isFilteredOut Whether this account is filtered out or not. If true, the account must
      *     be shown disabled since it cannot be used by the user.
+     * @param identityProviderData The IdentityProviderData corresponding to the IDP to which this
+     *     account belongs to.
      */
     @CalledByNative
     public Account(
             @JniType("std::string") String id,
-            @JniType("std::string") String email,
-            @JniType("std::string") String name,
+            @JniType("std::string") String displayIdentifier,
+            @JniType("std::string") String displayName,
             @JniType("std::string") String givenName,
             @JniType("std::optional<std::string>") @Nullable String secondaryDescription,
-            @JniType("GURL") GURL pictureUrl,
             Bitmap pictureBitmap,
+            Bitmap circledBadgedPictureBitmap,
             boolean isSignIn,
             boolean isBrowserTrustedSignIn,
-            boolean isFilteredOut) {
+            boolean isFilteredOut,
+            IdentityProviderData identityProviderData) {
         mId = id;
-        mEmail = email;
-        mName = name;
+        mDisplayIdentifier = displayIdentifier;
+        mDisplayName = displayName;
         mGivenName = givenName;
         mSecondaryDescription = secondaryDescription;
-        mPictureUrl = pictureUrl;
         mPictureBitmap = pictureBitmap;
+        mCircledBadgedPictureBitmap = circledBadgedPictureBitmap;
         mIsSignIn = isSignIn;
         mIsBrowserTrustedSignIn = isBrowserTrustedSignIn;
         mIsFilteredOut = isFilteredOut;
+        mIdentityProviderData = identityProviderData;
     }
 
-    public String getEmail() {
-        return mEmail;
+    public String getId() {
+        return mId;
     }
 
-    public String getName() {
-        return mName;
+    public String getDisplayIdentifier() {
+        return mDisplayIdentifier;
+    }
+
+    public String getDisplayName() {
+        return mDisplayName;
     }
 
     public String getGivenName() {
@@ -88,12 +99,12 @@ public class Account {
         return mSecondaryDescription;
     }
 
-    public GURL getPictureUrl() {
-        return mPictureUrl;
-    }
-
     public Bitmap getPictureBitmap() {
         return mPictureBitmap;
+    }
+
+    public Bitmap getCircledBadgedPictureBitmap() {
+        return mCircledBadgedPictureBitmap;
     }
 
     public boolean isSignIn() {
@@ -108,9 +119,7 @@ public class Account {
         return mIsFilteredOut;
     }
 
-    // Return all the String fields. Note that this excludes non-string fields, in particular
-    // mPictureUrl.
-    public String[] getStringFields() {
-        return new String[] {mId, mEmail, mName, mGivenName};
+    public IdentityProviderData getIdentityProviderData() {
+        return mIdentityProviderData;
     }
 }

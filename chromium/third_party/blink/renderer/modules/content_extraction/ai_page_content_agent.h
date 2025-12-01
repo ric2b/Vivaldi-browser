@@ -6,12 +6,16 @@
 #define THIRD_PARTY_BLINK_RENDERER_MODULES_CONTENT_EXTRACTION_AI_PAGE_CONTENT_AGENT_H_
 
 #include "base/functional/callback_forward.h"
+#include "base/memory/stack_allocated.h"
 #include "base/types/pass_key.h"
+#include "mojo/public/cpp/bindings/lib/validation_context.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "third_party/blink/public/mojom/content_extraction/ai_page_content.mojom-blink.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/frame/local_frame_view.h"
+#include "third_party/blink/renderer/modules/content_extraction/paid_content.h"
 #include "third_party/blink/renderer/modules/modules_export.h"
+#include "third_party/blink/renderer/platform/heap/collection_support/heap_hash_map.h"
 #include "third_party/blink/renderer/platform/mojo/heap_mojo_receiver_set.h"
 #include "third_party/blink/renderer/platform/mojo/heap_mojo_wrapper_mode.h"
 #include "third_party/blink/renderer/platform/supplementable.h"
@@ -59,14 +63,13 @@ class MODULES_EXPORT AIPageContentAgent final
   void GetAIPageContentSync(mojom::blink::AIPageContentOptionsPtr options,
                             GetAIPageContentCallback callback,
                             base::TimeTicks start_time) const;
-  // Runs tasks if the document lifecycle is at least as advanced as the
-  // associated vector.
-  void RunTasksIfReady();
 
   // Synchronously services a single request.
   class ContentBuilder {
+    STACK_ALLOCATED();
+
    public:
-    ContentBuilder(const mojom::blink::AIPageContentOptions& options);
+    explicit ContentBuilder(const mojom::blink::AIPageContentOptions& options);
     ~ContentBuilder();
 
     mojom::blink::AIPageContentPtr Build(LocalFrame& frame);
@@ -76,20 +79,49 @@ class MODULES_EXPORT AIPageContentAgent final
     // visible for `visibility`.
     bool WalkChildren(const LayoutObject& object,
                       mojom::blink::AIPageContentNode& content_node,
-                      const ComputedStyle& document_style) const;
+                      const ComputedStyle& document_style);
     void ProcessIframe(const LayoutIFrame& object,
-                       mojom::blink::AIPageContentNode& content_node) const;
+                       mojom::blink::AIPageContentNode& content_node);
     mojom::blink::AIPageContentNodePtr MaybeGenerateContentNode(
         const LayoutObject& object,
-        const ComputedStyle& document_style) const;
-    std::optional<DOMNodeId> AddNodeId(
+        const ComputedStyle& document_style);
+    void AddPageInteractionInfo(const Document& document,
+                                mojom::blink::AIPageContent& page_content);
+    void AddFrameData(const LocalFrame& frame,
+                      mojom::blink::AIPageContentFrameData& frame_data);
+    void AddFrameInteractionInfo(
+        const LocalFrame& frame,
+        mojom::blink::AIPageContentFrameInteractionInfo&
+            frame_interaction_info);
+    void AddNodeInteractionInfo(
         const LayoutObject& object,
         mojom::blink::AIPageContentAttributes& attributes) const;
+    void AddMetaData(
+        const LocalFrame& frame,
+        WTF::Vector<mojom::blink::AIPageContentMetaPtr>& meta_data) const;
     void AddNodeGeometry(
         const LayoutObject& object,
         mojom::blink::AIPageContentAttributes& attributes) const;
+    void AddAnnotatedRoles(const LayoutObject& object,
+                           Vector<mojom::blink::AIPageContentAnnotatedRole>&
+                               annotated_roles) const;
+
+    void AddInteractiveNode(DOMNodeId dom_node_id);
+
+    // The set of nodes which are involved in a user interaction and must
+    // produce a ContentNode.
+    base::flat_set<DOMNodeId> interactive_dom_node_ids_;
 
     const raw_ref<const mojom::blink::AIPageContentOptions> options_;
+
+    // The current depth of the tree being walked.
+    int stack_depth_ = 0;
+
+    // Whether the stack depth has exceeded the max tree depth.
+    bool stack_depth_exceeded_ = false;
+
+    // List of nodes marked as isAccessibleForFree=false.
+    PaidContent paid_content_;
   };
 
   void Bind(mojo::PendingReceiver<mojom::blink::AIPageContentAgent> receiver);
@@ -98,10 +130,8 @@ class MODULES_EXPORT AIPageContentAgent final
       receiver_set_;
   // Already registered for lifetime notifications.
   bool is_registered_ = false;
-  // Tasks to run when geometry is needed.
-  WTF::Vector<base::OnceClosure> geometry_tasks_;
-  // Tasks to run when geometry is not needed.
-  WTF::Vector<base::OnceClosure> layout_clean_tasks_;
+  // Tasks to run when post lifecycle.
+  WTF::Vector<base::OnceClosure> async_extraction_tasks_;
 };
 
 }  // namespace blink

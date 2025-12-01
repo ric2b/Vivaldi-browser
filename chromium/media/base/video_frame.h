@@ -397,6 +397,17 @@ class MEDIA_EXPORT VideoFrame : public base::RefCountedThreadSafe<VideoFrame> {
       const uint8_t* uv_data,
       base::TimeDelta timestamp);
 
+  static scoped_refptr<VideoFrame> WrapExternalYuvData(
+      VideoPixelFormat format,
+      const gfx::Size& coded_size,
+      const gfx::Rect& visible_rect,
+      const gfx::Size& natural_size,
+      size_t y_stride,
+      size_t uv_stride,
+      base::span<const uint8_t> y_data,
+      base::span<const uint8_t> uv_data,
+      base::TimeDelta timestamp);
+
   // Wraps |gpu_memory_buffer|. This will transfer ownership of
   // |gpu_memory_buffer| to the returned VideoFrame.
   // For use in contexts where the GPUMemoryBuffer has no SharedImage
@@ -452,6 +463,7 @@ class MEDIA_EXPORT VideoFrame : public base::RefCountedThreadSafe<VideoFrame> {
   static scoped_refptr<VideoFrame> WrapUnacceleratedIOSurface(
       gfx::GpuMemoryBufferHandle handle,
       const gfx::Rect& visible_rect,
+      const gfx::Size& natural_size,
       base::TimeDelta timestamp);
 #endif
 
@@ -708,6 +720,8 @@ class MEDIA_EXPORT VideoFrame : public base::RefCountedThreadSafe<VideoFrame> {
     return const_cast<uint8_t*>(data(plane));
   }
 
+  bool is_mappable_si_enabled() const { return is_mappable_si_enabled_; }
+
   const std::optional<gpu::VulkanYCbCrInfo>& ycbcr_info() const {
     return wrapped_frame_ ? wrapped_frame_->ycbcr_info() : ycbcr_info_;
   }
@@ -796,9 +810,8 @@ class MEDIA_EXPORT VideoFrame : public base::RefCountedThreadSafe<VideoFrame> {
   gpu::SyncToken UpdateReleaseSyncToken(SyncTokenClient* client);
 
   // Similar to UpdateReleaseSyncToken() but operates on the gpu::SyncToken
-  // for mailbox. This should only be called when a VideoFrame has a single
-  // owner. I.e., before it has been vended after creation.
-  gpu::SyncToken UpdateAcquireSyncToken(SyncTokenClient* client);
+  // for mailbox.
+  void UpdateAcquireSyncToken(gpu::SyncToken new_acquire_sync_token);
 
   // Returns a human-readable string describing |*this|.
   std::string AsHumanReadableString() const;
@@ -820,6 +833,18 @@ class MEDIA_EXPORT VideoFrame : public base::RefCountedThreadSafe<VideoFrame> {
   void set_ycbcr_info(const std::optional<gpu::VulkanYCbCrInfo>& ycbcr_info) {
     ycbcr_info_ = ycbcr_info;
   }
+
+  // Tests can use this method to mark a VF as non-texturable. This is required
+  // when tests creates a VF with a mappable shared image but does not want to
+  // render it. In those cases only looking for ::HasSharedImage() does not
+  // provide enough info to make a decision if VF is texturable or not since VF
+  // will always have a shared image for MappableSI case.
+  void DisableTexturingForTesting() {
+    CHECK(is_mappable_si_enabled_);
+    is_texturable_for_testing_ = false;
+  }
+
+  bool IsTexturableForTesting() const { return is_texturable_for_testing_; }
 
  protected:
   friend class base::RefCountedThreadSafe<VideoFrame>;
@@ -992,6 +1017,17 @@ class MEDIA_EXPORT VideoFrame : public base::RefCountedThreadSafe<VideoFrame> {
 
   // Allocation which makes up |data_| planes for self-allocated frames.
   std::unique_ptr<uint8_t, base::UncheckedFreeDeleter> private_data_;
+
+  // Only used by tests.
+  // Some tests creates VideoFrame with a Mappable shared image which it does
+  // not intend to render. Tests generally uses ::IsSharedImage() to identify
+  // if a frame is texture backed and can be rendered. This is not enough when
+  // MappableSI is used since a Mappable shared image can be created by tests
+  // only for mapping the underlying buffer to CPU visible memory for
+  // read/write and not necessarily for rendering. Tests which intends to do so
+  // must explicitly mark the VideoFrame as non texturable via
+  // ::DisableTexturingForTesting().
+  bool is_texturable_for_testing_ = true;
 };
 
 }  // namespace media

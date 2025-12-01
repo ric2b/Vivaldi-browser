@@ -14,7 +14,6 @@
 #include "chrome/browser/ui/lens/lens_overlay_side_panel_web_view.h"
 #include "chrome/browser/ui/lens/lens_overlay_url_builder.h"
 #include "chrome/browser/ui/tabs/public/tab_features.h"
-#include "chrome/browser/ui/tabs/public/tab_interface.h"
 #include "chrome/browser/ui/views/side_panel/side_panel_content_proxy.h"
 #include "chrome/browser/ui/views/side_panel/side_panel_entry.h"
 #include "chrome/browser/ui/views/side_panel/side_panel_enums.h"
@@ -32,6 +31,7 @@
 #include "components/lens/lens_overlay_side_panel_result.h"
 #include "components/shared_highlighting/core/common/fragment_directives_utils.h"
 #include "components/strings/grit/components_strings.h"
+#include "components/tab_collections/public/tab_interface.h"
 #include "components/vector_icons/vector_icons.h"
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/render_frame_host.h"
@@ -412,7 +412,16 @@ bool LensOverlaySidePanelCoordinator::ShouldHandlePDFViewportChange(
 void LensOverlaySidePanelCoordinator::OnTextFinderLookupComplete(
     const GURL& nav_url,
     const std::vector<std::pair<std::string, bool>>& lookup_results) {
+  const GURL& page_url = lens_overlay_controller_->GetTabInterface()
+                             ->GetContents()
+                             ->GetLastCommittedURL();
   if (lookup_results.empty()) {
+    if (URLsMatchWithoutTextFragment(page_url, nav_url)) {
+      lens_overlay_controller_->ShowToastInSidePanel(l10n_util::GetStringUTF8(
+          IDS_LENS_OVERLAY_TOAST_PAGE_CONTENT_NOT_FOUND_MESSAGE));
+      return;
+    }
+
     lens_overlay_controller_->GetTabInterface()
         ->GetBrowserWindowInterface()
         ->OpenGURL(nav_url, WindowOpenDisposition::NEW_FOREGROUND_TAB);
@@ -423,6 +432,12 @@ void LensOverlaySidePanelCoordinator::OnTextFinderLookupComplete(
   for (auto pair : lookup_results) {
     // If any of the text fragments are not found, then open in a new tab.
     if (!pair.second) {
+      if (URLsMatchWithoutTextFragment(page_url, nav_url)) {
+        lens_overlay_controller_->ShowToastInSidePanel(l10n_util::GetStringUTF8(
+            IDS_LENS_OVERLAY_TOAST_PAGE_CONTENT_NOT_FOUND_MESSAGE));
+        return;
+      }
+
       lens_overlay_controller_->GetTabInterface()
           ->GetBrowserWindowInterface()
           ->OpenGURL(nav_url, WindowOpenDisposition::NEW_FOREGROUND_TAB);

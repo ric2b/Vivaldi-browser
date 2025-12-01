@@ -46,6 +46,7 @@ tf_cc_binary(
             "//tensorflow/core:tensorflow",
         ],
     }) + [
+        "@com_google_absl//absl/log",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/strings",
         "//tensorflow/cc:ops",
@@ -63,8 +64,6 @@ py_strict_binary(
     name = "label_image_py",
     srcs = ["label_image.py"],
     main = "label_image.py",
-    python_version = "PY3",
-    srcs_version = "PY3",
     deps = [
         "//tensorflow:tensorflow_py",
         "//third_party/py/numpy",

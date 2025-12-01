@@ -2,14 +2,10 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
-#pragma allow_unsafe_buffers
-#endif
-
 #include "ash/app_list/views/search_box_view.h"
 
 #include <algorithm>
+#include <array>
 #include <map>
 #include <memory>
 #include <string>
@@ -28,6 +24,7 @@
 #include "ash/assistant/ui/main_stage/launcher_search_iph_view.h"
 #include "ash/capture_mode/capture_mode_constants.h"
 #include "ash/capture_mode/capture_mode_controller.h"
+#include "ash/capture_mode/sunfish_scanner_feature_watcher.h"
 #include "ash/constants/ash_features.h"
 #include "ash/keyboard/ui/keyboard_ui_controller.h"
 #include "ash/public/cpp/app_list/app_list_config.h"
@@ -38,7 +35,9 @@
 #include "ash/public/cpp/capture_mode/capture_mode_api.h"
 #include "ash/public/cpp/wallpaper/wallpaper_types.h"
 #include "ash/resources/vector_icons/vector_icons.h"
+#include "ash/scanner/scanner_metrics.h"
 #include "ash/search_box/search_box_constants.h"
+#include "ash/shell.h"
 #include "ash/strings/grit/ash_strings.h"
 #include "ash/style/ash_color_id.h"
 #include "ash/style/ash_color_provider.h"
@@ -46,6 +45,8 @@
 #include "ash/user_education/user_education_class_properties.h"
 #include "ash/user_education/user_education_util.h"
 #include "ash/user_education/welcome_tour/welcome_tour_metrics.h"
+#include "ash/wm/mru_window_tracker.h"
+#include "ash/wm/window_state.h"
 #include "base/containers/contains.h"
 #include "base/functional/bind.h"
 #include "base/i18n/case_conversion.h"
@@ -68,6 +69,7 @@
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
+#include "ui/base/models/image_model.h"
 #include "ui/base/mojom/menu_source_type.mojom.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/chromeos/styles/cros_tokens_color_mappings.h"
@@ -121,23 +123,29 @@ constexpr int kMinimumLengthToAutocomplete = 2;
 // Border insets for SearchBoxView in bubble launcher.
 constexpr auto kBorderInsetsForAppListBubble = gfx::Insets::TLBR(4, 4, 4, 0);
 
+// The size the of the `kLensColorIcon` used for the sunfish button. Larger than
+// the regular search box icon size to accommodate for the Lens icon's padding.
+constexpr int kLensColorIconSize = 24;
+
 // The default PlaceholderTextTypes used for productivity launcher. Randomly
 // selected when placeholder text would be shown.
-constexpr SearchBoxView::PlaceholderTextType kDefaultPlaceholders[] = {
-    SearchBoxView::PlaceholderTextType::kShortcuts,
-    SearchBoxView::PlaceholderTextType::kTabs,
-    SearchBoxView::PlaceholderTextType::kSettings,
-    SearchBoxView::PlaceholderTextType::kImages,
-};
+constexpr auto kDefaultPlaceholders =
+    std::to_array<SearchBoxView::PlaceholderTextType>({
+        SearchBoxView::PlaceholderTextType::kShortcuts,
+        SearchBoxView::PlaceholderTextType::kTabs,
+        SearchBoxView::PlaceholderTextType::kSettings,
+        SearchBoxView::PlaceholderTextType::kImages,
+    });
 
 // PlaceholderTextTypes used for productivity launcher for cloud gaming devices.
 // Randomly selected when placeholder text would be shown.
-constexpr SearchBoxView::PlaceholderTextType kGamingPlaceholders[4] = {
-    SearchBoxView::PlaceholderTextType::kShortcuts,
-    SearchBoxView::PlaceholderTextType::kTabs,
-    SearchBoxView::PlaceholderTextType::kSettings,
-    SearchBoxView::PlaceholderTextType::kGames,
-};
+constexpr auto kGamingPlaceholders =
+    std::to_array<SearchBoxView::PlaceholderTextType>({
+        SearchBoxView::PlaceholderTextType::kShortcuts,
+        SearchBoxView::PlaceholderTextType::kTabs,
+        SearchBoxView::PlaceholderTextType::kSettings,
+        SearchBoxView::PlaceholderTextType::kGames,
+    });
 
 constexpr gfx::RoundedCornersF kAssistantButtonBackgroundRadiiLTR = {
     18,
@@ -559,11 +567,12 @@ SearchBoxView::SearchBoxView(SearchBoxViewDelegate* delegate,
   views::ImageButton* sunfish_button = CreateSunfishButton(base::BindRepeating(
       &SearchBoxView::SunfishButtonPressed, base::Unretained(this)));
   sunfish_button->SetFlipCanvasOnPaintForRTLUI(false);
-  // TODO(http://b/361850292): Upload label for translation.
-  std::u16string sunfish_button_label(u"Select to search");
+  std::u16string sunfish_button_label(
+      l10n_util::GetStringUTF16(IDS_ASH_SUNFISH_SEARCH_BOX_BUTTON));
   sunfish_button->GetViewAccessibility().SetName(sunfish_button_label);
   sunfish_button->SetTooltipText(sunfish_button_label);
-  SetShowSunfishButton(search_box_model->show_sunfish_button());
+  // Update the visibility based on the search box model.
+  SunfishButtonVisibilityChanged();
 
   views::ImageButton* assistant_button =
       CreateAssistantButton(base::BindRepeating(
@@ -664,7 +673,7 @@ void SearchBoxView::UpdateKeyboardVisibility() {
   keyboard_controller->HideKeyboardByUser();
 }
 
-void SearchBoxView::HandleQueryChange(const std::u16string& query,
+void SearchBoxView::HandleQueryChange(std::u16string_view query,
                                       bool initiated_by_user) {
   // Randomly select a new placeholder text when we get an empty new query.
   if (query.empty()) {
@@ -711,7 +720,7 @@ void SearchBoxView::HandleQueryChange(const std::u16string& query,
   const bool query_empty_changed =
       trimmed_query.empty() != IsTrimmedQueryEmpty(current_query_);
 
-  current_query_ = query;
+  current_query_ = std::u16string(query);
 
   if (query_changed_callback_) {
     query_changed_callback_.Run();
@@ -730,8 +739,9 @@ void SearchBoxView::HandleQueryChange(const std::u16string& query,
   // Don't reinitiate zero state search if the previous query was already empty
   // (to avoid issuing zero state search twice in a row while clearing up search
   // - see http://crbug.com/979594).
-  if (initiated_by_user || !trimmed_query.empty() || query_empty_changed)
-    view_delegate_->StartSearch(query);
+  if (initiated_by_user || !trimmed_query.empty() || query_empty_changed) {
+    view_delegate_->StartSearch(current_query_);
+  }
 }
 
 void SearchBoxView::SetQueryChangedCallback(QueryChangedCallback callback) {
@@ -810,13 +820,8 @@ void SearchBoxView::OnThemeChanged() {
       views::ImageButton::STATE_NORMAL,
       ui::ImageModel::FromVectorIcon(views::kIcCloseIcon, button_icon_color,
                                      GetSearchBoxIconSize()));
-  if (IsSunfishAllowedAndEnabled()) {
-    sunfish_button()->SetImageModel(
-        views::ImageButton::STATE_NORMAL,
-        ui::ImageModel::FromVectorIcon(
-            features::IsSunfishFeatureEnabled() ? kLensColorIcon : kScannerIcon,
-            button_icon_color, GetSearchBoxIconSize()));
-  }
+  // Update the icon of the Sunfish-session button.
+  SunfishButtonVisibilityChanged();
   assistant_button()->SetImageModel(
       views::ImageButton::STATE_NORMAL,
       ui::ImageModel::FromVectorIcon(
@@ -866,7 +871,7 @@ void SearchBoxView::AddedToWidget() {
   }
 }
 
-void SearchBoxView::RunLauncherSearchQuery(const std::u16string& query) {
+void SearchBoxView::RunLauncherSearchQuery(std::u16string_view query) {
   UpdateQuery(query);
 }
 
@@ -876,7 +881,7 @@ void SearchBoxView::OpenAssistantPage() {
       assistant::AssistantEntryPoint::kLauncherSearchIphChip);
 }
 
-void SearchBoxView::OnLauncherSearchChipPressed(const std::u16string& query) {
+void SearchBoxView::OnLauncherSearchChipPressed(std::u16string_view query) {
   view_delegate_->EndAssistant(
       assistant::AssistantExitPoint::kLauncherSearchIphChip);
   UpdateQuery(query);
@@ -1105,8 +1110,8 @@ void SearchBoxView::ProcessAutocomplete(
   }
 
   // Current non-autocompleted text.
-  const std::u16string& user_typed_text =
-      search_box()->GetText().substr(0, highlight_range_.start());
+  std::u16string user_typed_text(
+      search_box()->GetText().substr(0, highlight_range_.start()));
   if (last_key_pressed_ == ui::VKEY_BACK ||
       last_key_pressed_ == ui::VKEY_DELETE || IsArrowKey(last_key_pressed_) ||
       !first_visible_result ||
@@ -1264,12 +1269,34 @@ void SearchBoxView::SunfishButtonPressed() {
   if (is_app_list_bubble_) {
     // Only hide the launcher bubble in clamshell mode.
     view_delegate_->DismissAppList();
+  } else {
+    // Otherwise, show the last active window if one exists.
+    MruWindowTracker::WindowList windows =
+        Shell::Get()->mru_window_tracker()->BuildMruWindowList(kActiveDesk);
+    if (!windows.empty()) {
+      WindowState::Get(windows.front())->Activate();
+    }
+  }
+
+  SunfishScannerFeatureWatcher* feature_watcher =
+      Shell::Get()->sunfish_scanner_feature_watcher();
+  feature_watcher->UpdateFeatureStates();
+
+  if (!feature_watcher->CanShowSunfishOrScannerUi()) {
+    // The Sunfish-session allowed state changed between when the launcher was
+    // shown and when the the button was clicked.
+    // No need to manually hide the Sunfish button here -
+    // `AppListControllerImpl` should have hidden the icon already from the
+    // `UpdateFeatureStates()` call.
+    return;
   }
 
   // If the user presses the button, there is no need to show the nudge anymore,
   // so set the pref to its limit.
   SetSunfishLauncherNudgeShownCount(capture_mode::kSunfishNudgeMaxShownCount);
 
+  RecordScannerFeatureUserState(
+      ScannerFeatureUserState::kSunfishSessionStartedFromLauncherButton);
   CaptureModeController::Get()->StartSunfishSession();
 }
 
@@ -1398,7 +1425,7 @@ void SearchBoxView::SetAutocompleteText(
   // Clear existing autocomplete text and reset the highlight range.
   ClearAutocompleteText();
 
-  const std::u16string& current_text = search_box()->GetText();
+  std::u16string_view current_text = search_box()->GetText();
   // Currrent text is a prefix of autocomplete text.
   DCHECK(base::StartsWith(autocomplete_text, current_text,
                           base::CompareCase::INSENSITIVE_ASCII));
@@ -1454,12 +1481,12 @@ SearchBoxView::PlaceholderTextType SearchBoxView::SelectPlaceholderText()
   return kDefaultPlaceholders[rand() % std::size(kDefaultPlaceholders)];
 }
 
-void SearchBoxView::UpdateQuery(const std::u16string& new_query) {
+void SearchBoxView::UpdateQuery(std::u16string_view new_query) {
   SetText(new_query);
-  ContentsChanged(search_box(), new_query);
+  ContentsChanged(search_box(), std::u16string(new_query));
 }
 
-void SearchBoxView::SetText(const std::u16string& text) {
+void SearchBoxView::SetText(std::u16string_view text) {
   search_box()->SetText(text);
   UpdateAccessibleValue();
 }
@@ -1772,11 +1799,26 @@ void SearchBoxView::ShowAssistantNewEntryPointChanged() {
   SetShowAssistantNewEntryPointButton(show);
 }
 
-void SearchBoxView::ShowSunfishChanged() {
-  SetShowSunfishButton(AppListModelProvider::Get()
-                           ->search_model()
-                           ->search_box()
-                           ->show_sunfish_button());
+void SearchBoxView::SunfishButtonVisibilityChanged() {
+  SearchBoxModel::SunfishButtonVisibility visibility =
+      AppListModelProvider::Get()
+          ->search_model()
+          ->search_box()
+          ->sunfish_button_visibility();
+  bool shown = visibility != SearchBoxModel::SunfishButtonVisibility::kHidden;
+  SetShowSunfishButton(shown);
+
+  if (shown) {
+    bool is_sunfish_icon =
+        visibility ==
+        SearchBoxModel::SunfishButtonVisibility::kShownWithSunfishIcon;
+    sunfish_button()->SetImageModel(
+        views::ImageButton::STATE_NORMAL,
+        ui::ImageModel::FromVectorIcon(
+            is_sunfish_icon ? kLensColorIcon : kScannerIcon,
+            kColorAshButtonIconColor,
+            is_sunfish_icon ? kLensColorIconSize : GetSearchBoxIconSize()));
+  }
 }
 
 void SearchBoxView::UpdateIphViewVisibility(bool can_show_iph) {
@@ -1804,7 +1846,7 @@ void SearchBoxView::UpdateIphViewVisibility(bool can_show_iph) {
 
     auto radii = base::i18n::IsRTL() ? kAssistantButtonBackgroundRadiiRTL
                                      : kAssistantButtonBackgroundRadiiLTR;
-    assistant_button()->SetBackground(views::CreateThemedRoundedRectBackground(
+    assistant_button()->SetBackground(views::CreateRoundedRectBackground(
         kColorAshControlBackgroundColorInactive, radii));
 
     auto highlight_path_generator =
@@ -1908,8 +1950,9 @@ void SearchBoxView::UpdateAccessibleValue() {
     GetViewAccessibility().RemoveValue();
     return;
   }
-  GetViewAccessibility().SetValue(l10n_util::GetStringFUTF16(
-      IDS_APP_LIST_SEARCH_BOX_AUTOCOMPLETE, search_box()->GetText()));
+  GetViewAccessibility().SetValue(
+      l10n_util::GetStringFUTF16(IDS_APP_LIST_SEARCH_BOX_AUTOCOMPLETE,
+                                 std::u16string(search_box()->GetText())));
 }
 
 BEGIN_METADATA(SearchBoxView)

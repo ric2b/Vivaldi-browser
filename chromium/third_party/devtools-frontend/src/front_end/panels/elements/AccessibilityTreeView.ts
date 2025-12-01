@@ -81,11 +81,11 @@ export class AccessibilityTreeView extends UI.Widget.VBox implements
     if (!this.root) {
       const frameId = SDK.FrameManager.FrameManager.instance().getOutermostFrame()?.id;
       if (!frameId) {
-        throw Error('No top frame');
+        throw new Error('No top frame');
       }
       this.root = await AccessibilityTreeUtils.getRootNode(frameId);
       if (!this.root) {
-        throw Error('No root');
+        throw new Error('No root');
       }
     }
     await this.renderTree();
@@ -147,6 +147,9 @@ export class AccessibilityTreeView extends UI.Widget.VBox implements
   treeUpdated({data}: Common.EventTarget
                   .EventTargetEvent<SDK.AccessibilityModel.EventTypes[SDK.AccessibilityModel.Events.TREE_UPDATED]>):
       void {
+    if (!this.isShowing()) {
+      return;
+    }
     if (!data.root) {
       void this.renderTree();
       return;

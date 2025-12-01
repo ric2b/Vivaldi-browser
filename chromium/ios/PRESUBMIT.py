@@ -20,6 +20,17 @@ IOS_PACKAGE_PATTERN = r'^ios'
 BOXED_BOOL_PATTERN = r'@\((YES|NO)\)'
 USER_DEFAULTS_PATTERN = r'\[NSUserDefaults standardUserDefaults]'
 
+# Color management constants
+COLOR_SHARED_DIR = 'ios/chrome/common/ui/colors/'
+COLOR_FILE_PATTERN = '.colorset/Contents.json'
+
+
+def FormatMessageWithFiles(message, errors):
+    """Helper to format warning/error messages with affected files."""
+    if not errors:
+        return message
+    return '\n'.join([message + '\n\nAffected file(s):'] + errors) + '\n'
+
 def IsSubListOf(needle, hay):
     """Returns whether there is a slice of |hay| equal to |needle|."""
     for i, line in enumerate(hay):
@@ -274,7 +285,7 @@ def _IsAlphabeticallySortedXML(file):
     """Check that the `file` is alphabetically sorted"""
     parser = ElementTree.XMLParser(target=ElementTree.TreeBuilder(
         insert_comments=True))
-    with open(file, 'r') as xml_file:
+    with open(file, 'r', encoding='utf8') as xml_file:
         tree = ElementTree.parse(xml_file, parser)
     root = tree.getroot()
 
@@ -294,7 +305,7 @@ def _IsAlphabeticallySortedXML(file):
 def _CheckOrderedStringFile(input_api, output_api):
     """ Checks that the string files are alphabetically ordered"""
     errors = []
-    for f in input_api.AffectedFiles():
+    for f in input_api.AffectedFiles(include_deletes=False):
         if not f.LocalPath().endswith("_strings.grd"):
             continue
         if not _IsAlphabeticallySortedXML(f.AbsoluteLocalPath()):
@@ -331,7 +342,94 @@ def _CheckNotUsingNSUserDefaults(input_api, output_api):
     return [output_api.PresubmitPromptWarning(warning_message)]
 
 
-def CheckChangeOnUpload(input_api, output_api):
+def _CheckNewColorIntroduction(input_api, output_api):
+    """Checks for new or modified colorset files.
+
+    Ensures colors are properly added to the shared directory.
+    """
+    results = []
+
+    affected_files = [
+        f for f in input_api.AffectedFiles()
+        if f.LocalPath().endswith(COLOR_FILE_PATTERN)
+    ]
+
+    warnings = {
+        'shared_added': [],
+        'shared_modified': [],
+        'other_modified': []
+    }
+    errors = []
+
+    for affected_file in affected_files:
+        action = affected_file.Action()
+        local_path = affected_file.LocalPath()
+        file_path_error = '%s' % (affected_file.LocalPath())
+
+        if COLOR_SHARED_DIR in local_path:
+            if action == 'A':
+                warnings['shared_added'].append(file_path_error)
+            elif action == 'M':
+                warnings['shared_modified'].append(file_path_error)
+        else:
+            if action == 'A':
+                errors.append(file_path_error)
+            elif action == 'M':
+                warnings['other_modified'].append(file_path_error)
+
+    output = []
+
+    if errors:
+        error_message = ('New color(s) must be added to the %s directory.' %
+                         COLOR_SHARED_DIR)
+        output.append(
+            output_api.PresubmitError(
+                FormatMessageWithFiles(error_message, errors)))
+
+    warning_message = ('Please ensure the color does not already exist in the '
+                       'shared %s directory.' % COLOR_SHARED_DIR)
+
+    if warnings['shared_added']:
+        shared_added_message = ('New color(s) added in %s. %s' %
+                                (COLOR_SHARED_DIR, warning_message))
+        output.append(
+            output_api.PresubmitPromptWarning(
+                FormatMessageWithFiles(shared_added_message,
+                                       warnings['shared_added'])))
+
+    if warnings['shared_modified']:
+        shared_modified_message = ('Color(s) modified in %s. %s' %
+                                   (COLOR_SHARED_DIR, warning_message))
+        output.append(
+            output_api.PresubmitPromptWarning(
+                FormatMessageWithFiles(shared_modified_message,
+                                       warnings['shared_modified'])))
+
+    if warnings['other_modified']:
+        modified_message = ('Color(s) modified. %s' % warning_message)
+        output.append(
+            output_api.PresubmitPromptWarning(
+                FormatMessageWithFiles(modified_message,
+                                       warnings['other_modified'])))
+
+    return output
+
+def _CheckStyleESLint(input_api, output_api):
+  results = []
+
+  try:
+    import sys
+    old_sys_path = sys.path[:]
+    cwd = input_api.PresubmitLocalPath()
+    sys.path += [input_api.os_path.join(cwd, '..', 'tools')]
+    from web_dev_style import presubmit_support
+    results += presubmit_support.CheckStyleESLint(input_api, output_api)
+  finally:
+    sys.path = old_sys_path
+
+  return results
+
+def CheckChange(input_api, output_api):
     results = []
     results.extend(_CheckBugInToDo(input_api, output_api))
     results.extend(_CheckNullabilityAnnotations(input_api, output_api))
@@ -342,4 +440,12 @@ def CheckChangeOnUpload(input_api, output_api):
     results.extend(_CheckCanImproveTestUsingExpectNSEQ(input_api, output_api))
     results.extend(_CheckOrderedStringFile(input_api, output_api))
     results.extend(_CheckNotUsingNSUserDefaults(input_api, output_api))
+    results.extend(_CheckNewColorIntroduction(input_api, output_api))
+    results.extend(_CheckStyleESLint(input_api, output_api))
     return results
+
+def CheckChangeOnUpload(input_api, output_api):
+  return CheckChange(input_api, output_api)
+
+def CheckChangeOnCommit(input_api, output_api):
+  return CheckChange(input_api, output_api)

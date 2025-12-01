@@ -31,11 +31,30 @@
 enum GPUFeatureName {
     "multi-draw-indirect",
     "chromium-experimental-immediate-data",
+    "chromium-experimental-subgroup-matrix",
+    "core-features-and-limits",
 };
 
-interface GPUAdapter {
-    readonly attribute boolean isCompatibilityMode;
-    readonly attribute DOMString featureLevel;
+enum GPUSubgroupMatrixComponentType {
+  "f32",
+  "f16",
+  "u32",
+  "i32",
+  "u8",
+  "i8",
+};
+
+interface GPUSubgroupMatrixConfig {
+  readonly attribute GPUSubgroupMatrixComponentType componentType;
+  readonly attribute GPUSubgroupMatrixComponentType resultComponentType;
+  readonly attribute unsigned long M;
+  readonly attribute unsigned long N;
+  readonly attribute unsigned long K;
+};
+
+interface GPUAdapterInfo {
+    readonly attribute boolean isFallbackAdapter;
+    [SameObject] readonly attribute FrozenArray<GPUSubgroupMatrixConfig> subgroupMatrixConfigs;
 };
 
 interface GPUCommandEncoder {
@@ -60,6 +79,7 @@ enum WGSLLanguageFeatureName {
     "packed_4x8_integer_dot_product",
     "unrestricted_pointer_parameters",
     "pointer_composite_access",
+    "sized_binding_array",
 };
 
 // TODO(crbug.com/354751907) Move to GPUAdapterInfo

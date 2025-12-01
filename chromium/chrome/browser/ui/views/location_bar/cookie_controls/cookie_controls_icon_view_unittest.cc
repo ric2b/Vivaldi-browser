@@ -4,6 +4,8 @@
 
 #include "chrome/browser/ui/views/location_bar/cookie_controls/cookie_controls_icon_view.h"
 
+#include <string_view>
+
 #include "base/run_loop.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/test/metrics/user_action_tester.h"
@@ -17,7 +19,7 @@
 #include "components/privacy_sandbox/privacy_sandbox_features.h"
 #include "cookie_controls_bubble_coordinator.h"
 #include "testing/gmock/include/gmock/gmock.h"
-#include "ui/views/accessibility/ax_event_manager.h"
+#include "ui/views/accessibility/ax_update_notifier.h"
 #include "ui/views/test/ax_event_counter.h"
 
 namespace {
@@ -72,7 +74,7 @@ class CookieControlsIconViewUnitTest
       public testing::WithParamInterface<CookieBlocking3pcdStatus> {
  protected:
   CookieControlsIconViewUnitTest()
-      : a11y_counter_(views::AXEventManager::Get()) {}
+      : a11y_counter_(views::AXUpdateNotifier::Get()) {}
 
   void SetUp() override {
     TestWithBrowserView::SetUp();
@@ -109,9 +111,9 @@ class CookieControlsIconViewUnitTest
 
   bool Visible() { return view_->ShouldBeVisible(); }
 
-  const std::u16string& LabelText() { return view_->label()->GetText(); }
+  std::u16string_view LabelText() const { return view_->label()->GetText(); }
 
-  std::u16string TooltipText() {
+  std::u16string_view TooltipText() const {
     return view_->IconLabelBubbleView::GetTooltipText();
   }
 

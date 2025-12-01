@@ -85,7 +85,6 @@ inline void LoadFromStack(LiftoffAssembler* assm, LiftoffRegister dst,
     case kI64:
     case kRefNull:
     case kRef:
-    case kRtt:
       // Stack slots are uncompressed even when heap pointers are compressed.
       assm->movq(dst.gp(), src);
       break;
@@ -115,7 +114,6 @@ inline void StoreToMemory(LiftoffAssembler* assm, Operand dst,
     case kI64:
     case kRefNull:
     case kRef:
-    case kRtt:
       // Stack slots are uncompressed even when heap pointers are compressed.
       assm->movq(dst, src.gp());
       break;
@@ -162,7 +160,6 @@ inline void push(LiftoffAssembler* assm, LiftoffRegister reg, ValueKind kind,
     case kI64:
     case kRef:
     case kRefNull:
-    case kRtt:
       assm->AllocateStackSpace(padding);
       assm->pushq(reg.gp());
       break;
@@ -310,6 +307,7 @@ void LiftoffAssembler::PatchPrepareStackFrame(
              stack_param_slots * kStackSlotSize +
              CommonFrameConstants::kFixedFrameSizeAboveFp)));
     CallBuiltin(Builtin::kWasmHandleStackOverflow);
+    safepoint_table_builder->DefineSafepoint(this);
     PopRegisters(regs_to_save);
   } else {
     near_call(static_cast<intptr_t>(Builtin::kWasmStackOverflow),
@@ -1082,7 +1080,6 @@ void LiftoffAssembler::Spill(int offset, LiftoffRegister reg, ValueKind kind) {
     case kI64:
     case kRefNull:
     case kRef:
-    case kRtt:
       movq(dst, reg.gp());
       break;
     case kF32:
@@ -2018,11 +2015,11 @@ inline void ConvertFloatToIntAndBack(LiftoffAssembler* assm, Register dst,
 }
 
 template <typename dst_type, typename src_type>
-inline bool EmitTruncateFloatToInt(LiftoffAssembler* assm, Register dst,
+inline void EmitTruncateFloatToInt(LiftoffAssembler* assm, Register dst,
                                    DoubleRegister src, Label* trap) {
   if (!CpuFeatures::IsSupported(SSE4_1)) {
     __ bailout(kMissingCPUFeature, "no SSE4.1");
-    return true;
+    return;
   }
   CpuFeatureScope feature(assm, SSE4_1);
 
@@ -2046,15 +2043,14 @@ inline bool EmitTruncateFloatToInt(LiftoffAssembler* assm, Register dst,
   // equal.
   __ j(parity_even, trap);
   __ j(not_equal, trap);
-  return true;
 }
 
 template <typename dst_type, typename src_type>
-inline bool EmitSatTruncateFloatToInt(LiftoffAssembler* assm, Register dst,
+inline void EmitSatTruncateFloatToInt(LiftoffAssembler* assm, Register dst,
                                       DoubleRegister src) {
   if (!CpuFeatures::IsSupported(SSE4_1)) {
     __ bailout(kMissingCPUFeature, "no SSE4.1");
-    return true;
+    return;
   }
   CpuFeatureScope feature(assm, SSE4_1);
 
@@ -2123,15 +2119,14 @@ inline bool EmitSatTruncateFloatToInt(LiftoffAssembler* assm, Register dst,
   }
 
   __ bind(&done);
-  return true;
 }
 
 template <typename src_type>
-inline bool EmitSatTruncateFloatToUInt64(LiftoffAssembler* assm, Register dst,
+inline void EmitSatTruncateFloatToUInt64(LiftoffAssembler* assm, Register dst,
                                          DoubleRegister src) {
   if (!CpuFeatures::IsSupported(SSE4_1)) {
     __ bailout(kMissingCPUFeature, "no SSE4.1");
-    return true;
+    return;
   }
   CpuFeatureScope feature(assm, SSE4_1);
 
@@ -2164,7 +2159,6 @@ inline bool EmitSatTruncateFloatToUInt64(LiftoffAssembler* assm, Register dst,
   __ bind(&overflow);
   __ movq(dst, Immediate64(std::numeric_limits<uint64_t>::max()));
   __ bind(&done);
-  return true;
 }
 #undef __
 }  // namespace liftoff
@@ -2175,114 +2169,127 @@ bool LiftoffAssembler::emit_type_conversion(WasmOpcode opcode,
   switch (opcode) {
     case kExprI32ConvertI64:
       movl(dst.gp(), src.gp());
-      return true;
+      break;
     case kExprI32SConvertF32:
-      return liftoff::EmitTruncateFloatToInt<int32_t, float>(this, dst.gp(),
-                                                             src.fp(), trap);
+      liftoff::EmitTruncateFloatToInt<int32_t, float>(this, dst.gp(), src.fp(),
+                                                      trap);
+      break;
     case kExprI32UConvertF32:
-      return liftoff::EmitTruncateFloatToInt<uint32_t, float>(this, dst.gp(),
-                                                              src.fp(), trap);
+      liftoff::EmitTruncateFloatToInt<uint32_t, float>(this, dst.gp(), src.fp(),
+                                                       trap);
+      break;
     case kExprI32SConvertF64:
-      return liftoff::EmitTruncateFloatToInt<int32_t, double>(this, dst.gp(),
-                                                              src.fp(), trap);
+      liftoff::EmitTruncateFloatToInt<int32_t, double>(this, dst.gp(), src.fp(),
+                                                       trap);
+      break;
     case kExprI32UConvertF64:
-      return liftoff::EmitTruncateFloatToInt<uint32_t, double>(this, dst.gp(),
-                                                               src.fp(), trap);
+      liftoff::EmitTruncateFloatToInt<uint32_t, double>(this, dst.gp(),
+                                                        src.fp(), trap);
+      break;
     case kExprI32SConvertSatF32:
-      return liftoff::EmitSatTruncateFloatToInt<int32_t, float>(this, dst.gp(),
-                                                                src.fp());
+      liftoff::EmitSatTruncateFloatToInt<int32_t, float>(this, dst.gp(),
+                                                         src.fp());
+      break;
     case kExprI32UConvertSatF32:
-      return liftoff::EmitSatTruncateFloatToInt<uint32_t, float>(this, dst.gp(),
-                                                                 src.fp());
+      liftoff::EmitSatTruncateFloatToInt<uint32_t, float>(this, dst.gp(),
+                                                          src.fp());
+      break;
     case kExprI32SConvertSatF64:
-      return liftoff::EmitSatTruncateFloatToInt<int32_t, double>(this, dst.gp(),
-                                                                 src.fp());
+      liftoff::EmitSatTruncateFloatToInt<int32_t, double>(this, dst.gp(),
+                                                          src.fp());
+      break;
     case kExprI32UConvertSatF64:
-      return liftoff::EmitSatTruncateFloatToInt<uint32_t, double>(
-          this, dst.gp(), src.fp());
+      liftoff::EmitSatTruncateFloatToInt<uint32_t, double>(this, dst.gp(),
+                                                           src.fp());
+      break;
     case kExprI32ReinterpretF32:
       Movd(dst.gp(), src.fp());
-      return true;
+      break;
     case kExprI64SConvertI32:
       movsxlq(dst.gp(), src.gp());
-      return true;
+      break;
     case kExprI64SConvertF32:
-      return liftoff::EmitTruncateFloatToInt<int64_t, float>(this, dst.gp(),
-                                                             src.fp(), trap);
+      liftoff::EmitTruncateFloatToInt<int64_t, float>(this, dst.gp(), src.fp(),
+                                                      trap);
+      break;
     case kExprI64UConvertF32: {
       RETURN_FALSE_IF_MISSING_CPU_FEATURE(SSE4_1);
       Cvttss2uiq(dst.gp(), src.fp(), trap);
-      return true;
+      break;
     }
     case kExprI64SConvertF64:
-      return liftoff::EmitTruncateFloatToInt<int64_t, double>(this, dst.gp(),
-                                                              src.fp(), trap);
+      liftoff::EmitTruncateFloatToInt<int64_t, double>(this, dst.gp(), src.fp(),
+                                                       trap);
+      break;
     case kExprI64UConvertF64: {
       RETURN_FALSE_IF_MISSING_CPU_FEATURE(SSE4_1);
       Cvttsd2uiq(dst.gp(), src.fp(), trap);
-      return true;
+      break;
     }
     case kExprI64SConvertSatF32:
-      return liftoff::EmitSatTruncateFloatToInt<int64_t, float>(this, dst.gp(),
-                                                                src.fp());
+      liftoff::EmitSatTruncateFloatToInt<int64_t, float>(this, dst.gp(),
+                                                         src.fp());
+      break;
     case kExprI64UConvertSatF32: {
-      return liftoff::EmitSatTruncateFloatToUInt64<float>(this, dst.gp(),
-                                                          src.fp());
+      liftoff::EmitSatTruncateFloatToUInt64<float>(this, dst.gp(), src.fp());
+      break;
     }
     case kExprI64SConvertSatF64:
-      return liftoff::EmitSatTruncateFloatToInt<int64_t, double>(this, dst.gp(),
-                                                                 src.fp());
+      liftoff::EmitSatTruncateFloatToInt<int64_t, double>(this, dst.gp(),
+                                                          src.fp());
+      break;
     case kExprI64UConvertSatF64: {
-      return liftoff::EmitSatTruncateFloatToUInt64<double>(this, dst.gp(),
-                                                           src.fp());
+      liftoff::EmitSatTruncateFloatToUInt64<double>(this, dst.gp(), src.fp());
+      break;
     }
     case kExprI64UConvertI32:
       emit_u32_to_uintptr(dst.gp(), src.gp());
-      return true;
+      break;
     case kExprI64ReinterpretF64:
       Movq(dst.gp(), src.fp());
-      return true;
+      break;
     case kExprF32SConvertI32:
       Cvtlsi2ss(dst.fp(), src.gp());
-      return true;
+      break;
     case kExprF32UConvertI32:
       movl(kScratchRegister, src.gp());
       Cvtqsi2ss(dst.fp(), kScratchRegister);
-      return true;
+      break;
     case kExprF32SConvertI64:
       Cvtqsi2ss(dst.fp(), src.gp());
-      return true;
+      break;
     case kExprF32UConvertI64:
       Cvtqui2ss(dst.fp(), src.gp());
-      return true;
+      break;
     case kExprF32ConvertF64:
       Cvtsd2ss(dst.fp(), src.fp());
-      return true;
+      break;
     case kExprF32ReinterpretI32:
       Movd(dst.fp(), src.gp());
-      return true;
+      break;
     case kExprF64SConvertI32:
       Cvtlsi2sd(dst.fp(), src.gp());
-      return true;
+      break;
     case kExprF64UConvertI32:
       movl(kScratchRegister, src.gp());
       Cvtqsi2sd(dst.fp(), kScratchRegister);
-      return true;
+      break;
     case kExprF64SConvertI64:
       Cvtqsi2sd(dst.fp(), src.gp());
-      return true;
+      break;
     case kExprF64UConvertI64:
       Cvtqui2sd(dst.fp(), src.gp());
-      return true;
+      break;
     case kExprF64ConvertF32:
       Cvtss2sd(dst.fp(), src.fp());
-      return true;
+      break;
     case kExprF64ReinterpretI64:
       Movq(dst.fp(), src.gp());
-      return true;
+      break;
     default:
       UNREACHABLE();
   }
+  return true;
 }
 
 void LiftoffAssembler::emit_i32_signextend_i8(Register dst, Register src) {
@@ -2323,7 +2330,6 @@ void LiftoffAssembler::emit_cond_jump(Condition cond, Label* label,
         break;
       case kRef:
       case kRefNull:
-      case kRtt:
         DCHECK(cond == kEqual || cond == kNotEqual);
 #if defined(V8_COMPRESS_POINTERS)
         // It's enough to do a 32-bit comparison. This is also necessary for
@@ -2572,7 +2578,8 @@ void LiftoffAssembler::LoadTransform(LiftoffRegister dst, Register src_addr,
                                      Register offset_reg, uintptr_t offset_imm,
                                      LoadType type,
                                      LoadTransformationKind transform,
-                                     uint32_t* protected_load_pc) {
+                                     uint32_t* protected_load_pc,
+                                     bool i64_offset) {
   Operand src_op = liftoff::GetMemOp(this, src_addr, offset_reg, offset_imm);
   *protected_load_pc = pc_offset();
   MachineType memtype = type.mem_type();

@@ -8,19 +8,15 @@
 #include <set>
 
 #include "base/functional/bind.h"
+#include "components/performance_manager/public/features.h"
 #include "components/performance_manager/public/graph/frame_node.h"
 #include "components/performance_manager/public/graph/graph_operations.h"
 #include "components/performance_manager/public/graph/process_node.h"
 #include "content/public/browser/browser_thread.h"
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
 #include "chromeos/ash/components/dbus/resourced/resourced_client.h"
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
-
-#if BUILDFLAG(IS_CHROMEOS_LACROS)
-#include "chromeos/crosapi/mojom/resource_manager.mojom.h"
-#include "chromeos/lacros/lacros_service.h"
-#endif  // BUILDFLAG(IS_CHROMEOS_LACROS)
+#endif  // BUILDFLAG(IS_CHROMEOS)
 
 namespace performance_manager::policies {
 
@@ -42,7 +38,7 @@ constexpr base::TimeDelta kReportProcessesMinimalInterval = base::Seconds(3);
 void ReportPageProcessesOnUIThread(
     const base::flat_map<base::ProcessId, ReportPageProcessesPolicy::PageState>&
         page_processes) {
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
   ash::ResourcedClient* client = ash::ResourcedClient::Get();
   if (!client) {
     return;
@@ -58,46 +54,8 @@ void ReportPageProcessesOnUIThread(
                            page_process.second.last_visible);
   }
 
-  client->ReportBrowserProcesses(ash::ResourcedClient::Component::kAsh,
-                                 processes);
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
-
-#if BUILDFLAG(IS_CHROMEOS_LACROS)
-  chromeos::LacrosService* service = chromeos::LacrosService::Get();
-  // Check LacrosService availability to avoid crashing
-  // lacros_chrome_browsertests.
-  if (!service || !service->IsAvailable<crosapi::mojom::ResourceManager>()) {
-    LOG(ERROR) << "ResourceManager is not available";
-    return;
-  }
-
-  int resource_manager_version =
-      service->GetInterfaceVersion<crosapi::mojom::ResourceManager>();
-  if (resource_manager_version <
-      int{crosapi::mojom::ResourceManager::MethodMinVersions::
-              kReportPageProcessesMinVersion}) {
-    LOG(WARNING) << "Resource Manager version " << resource_manager_version
-                 << " does not support reporting page processes.";
-    return;
-  }
-
-  std::vector<crosapi::mojom::PageProcessPtr> processes;
-  processes.reserve(page_processes.size());
-
-  for (const auto& page_process : page_processes) {
-    crosapi::mojom::PageProcessPtr process = crosapi::mojom::PageProcess::New();
-    process->pid = page_process.first;
-    process->host_protected_page = page_process.second.host_protected_page;
-    process->host_visible_page = page_process.second.host_visible_page;
-    process->host_focused_page = page_process.second.host_focused_page;
-    process->last_visible_ms =
-        page_process.second.last_visible.since_origin().InMilliseconds();
-    processes.push_back(std::move(process));
-  }
-
-  service->GetRemote<crosapi::mojom::ResourceManager>()->ReportPageProcesses(
-      std::move(processes));
-#endif  // BUILDFLAG(IS_CHROMEOS_LACROS)
+  client->ReportBrowserProcesses(processes);
+#endif  // BUILDFLAG(IS_CHROMEOS)
 }
 
 }  // namespace
@@ -171,16 +129,16 @@ void ReportPageProcessesPolicy::HandlePageNodeEventsDelayed() {
 void ReportPageProcessesPolicy::HandlePageNodeEvents() {
   has_delayed_events_ = false;
 
-  PageDiscardingHelper* discarding_helper =
-      PageDiscardingHelper::GetFromGraph(GetOwningGraph());
+  DiscardEligibilityPolicy* eligibility_policy =
+      DiscardEligibilityPolicy::GetFromGraph(GetOwningGraph());
 
   Graph::NodeSetView<const PageNode*> all_page_nodes =
       GetOwningGraph()->GetAllPageNodes();
   std::vector<PageNodeSortProxy> candidates;
   candidates.reserve(all_page_nodes.size());
   for (const PageNode* page_node : all_page_nodes) {
-    CanDiscardResult can_discard_result = discarding_helper->CanDiscard(
-        page_node, PageDiscardingHelper::DiscardReason::URGENT);
+    CanDiscardResult can_discard_result = eligibility_policy->CanDiscard(
+        page_node, DiscardEligibilityPolicy::DiscardReason::URGENT);
     bool is_visible = page_node->IsVisible();
     bool is_focused = page_node->IsFocused();
     candidates.emplace_back(page_node, can_discard_result, is_visible,

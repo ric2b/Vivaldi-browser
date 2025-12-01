@@ -27,6 +27,7 @@
 #include "third_party/blink/public/platform/web_text_input_info.h"
 #include "third_party/blink/renderer/platform/graphics/lcd_text_preference.h"
 #include "third_party/blink/renderer/platform/platform_export.h"
+#include "third_party/blink/renderer/platform/scheduler/public/widget_scheduler.h"
 #include "third_party/blink/renderer/platform/text/text_direction.h"
 #include "third_party/blink/renderer/platform/timer.h"
 #include "third_party/blink/renderer/platform/weborigin/kurl.h"
@@ -65,20 +66,16 @@ class WidgetBaseClient;
 class WidgetInputHandlerManager;
 class WidgetCompositor;
 
-namespace scheduler {
-class WidgetScheduler;
-}
-
 // This class is the foundational class for all widgets that blink creates.
 // (WebPagePopupImpl, WebFrameWidgetImpl) will contain an instance of this
 // class. For simplicity purposes this class will be a member of those classes.
 //
 // Co-orindates handled in this class can be in the "blink coordinate space"
 // which is scaled DSF baked in.
-class PLATFORM_EXPORT WidgetBase
-    : public mojom::blink::Widget,
-      public LayerTreeViewDelegate,
-      public mojom::blink::RenderInputRouterClient {
+class PLATFORM_EXPORT WidgetBase : public mojom::blink::Widget,
+                                   public LayerTreeViewDelegate,
+                                   public mojom::blink::RenderInputRouterClient,
+                                   public scheduler::WidgetScheduler::Delegate {
  public:
   WidgetBase(
       WidgetBaseClient* client,
@@ -166,11 +163,9 @@ class PLATFORM_EXPORT WidgetBase
       mojom::blink::RecordContentToVisibleTimeRequestPtr visible_time_request)
       override;
   void CancelSuccessfulPresentationTimeRequest() override;
-  void SetupRenderInputRouterConnections(
+  void SetupBrowserRenderInputRouterConnections(
       mojo::PendingReceiver<mojom::blink::RenderInputRouterClient>
-          browser_request,
-      mojo::PendingReceiver<mojom::blink::RenderInputRouterClient> viz_request)
-      override;
+          browser_request) override;
 
   // LayerTreeViewDelegate overrides:
   // Applies viewport related properties during a commit from the compositor
@@ -212,6 +207,9 @@ class PLATFORM_EXPORT WidgetBase
   std::unique_ptr<cc::RenderFrameMetadataObserver> CreateRenderFrameObserver()
       override;
 
+  // scheduler::WidgetScheduler::Delegate overrides:
+  void RequestBeginMainFrameNotExpected(bool) override;
+
   cc::AnimationHost* AnimationHost() const;
   cc::AnimationTimeline* ScrollAnimationTimeline() const;
   cc::LayerTreeHost* LayerTreeHost() const;
@@ -251,7 +249,8 @@ class PLATFORM_EXPORT WidgetBase
 
   // Posts a task with the given delay, then calls ScheduleAnimation() on the
   // WidgetBaseClient.
-  void RequestAnimationAfterDelay(const base::TimeDelta& delay);
+  void RequestAnimationAfterDelay(const base::TimeDelta& delay,
+                                  bool urgent = false);
 
   void ShowVirtualKeyboard();
   void UpdateSelectionBounds();
@@ -534,9 +533,6 @@ class PLATFORM_EXPORT WidgetBase
 
   // Stores the current type of composition text rendering of |webwidget_|.
   bool can_compose_inline_ = true;
-
-  // Stores whether the IME should always be hidden for |webwidget_|.
-  bool always_hide_ime_ = false;
 
   // Used to inform didChangeSelection() when it is called in the context
   // of handling a FrameInputHandler::SelectRange IPC.

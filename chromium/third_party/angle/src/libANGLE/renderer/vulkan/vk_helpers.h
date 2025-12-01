@@ -176,7 +176,7 @@ ImageLayout GetImageLayoutFromGLImageLayout(ErrorContext *context, GLenum layout
 
 GLenum ConvertImageLayoutToGLImageLayout(ImageLayout imageLayout);
 
-VkImageLayout ConvertImageLayoutToVkImageLayout(Renderer *renderer, ImageLayout imageLayout);
+VkImageLayout ConvertImageLayoutToVkImageLayout(ImageLayout imageLayout);
 
 class ImageHelper;
 
@@ -199,6 +199,11 @@ class Context : public ErrorContext
     void finalizeAllForeignImages();
 
   protected:
+    bool hasForeignImagesToTransition() const
+    {
+        return !mForeignImagesInUse.empty() || !mImagesToTransitionToForeign.empty();
+    }
+
     // Stash the ShareGroupVk's RefCountedEventRecycler here ImageHelper to conveniently access
     RefCountedEventsGarbageRecycler *mShareGroupRefCountedEventsGarbageRecycler;
     // List of foreign images that are currently used in recorded commands but haven't been
@@ -480,6 +485,8 @@ class DynamicDescriptorPool final : angle::NonCopyable
     void destroyUnusedPool(Renderer *renderer, const DescriptorPoolWeakPointer &pool);
     void checkAndDestroyUnusedPool(Renderer *renderer);
 
+    // For ASSERT use only. Return true if mDescriptorSetCache contains DescriptorSet for desc.
+    bool hasCachedDescriptorSet(const DescriptorSetDesc &desc) const;
     // For testing only!
     static uint32_t GetMaxSetsPerPoolForTesting();
     static void SetMaxSetsPerPoolForTesting(uint32_t maxSetsPerPool);
@@ -1059,7 +1066,7 @@ class BufferHelper : public ReadWriteResource
     void destroy(Renderer *renderer);
     void release(Renderer *renderer);
     void release(Context *context);
-    void releaseBufferAndDescriptorSetCache(Context *context);
+    void releaseBufferAndDescriptorSetCache(ContextVk *contextVk);
 
     BufferSerial getBufferSerial() const { return mSerial; }
     BufferSerial getBlockSerial() const
@@ -1117,7 +1124,7 @@ class BufferHelper : public ReadWriteResource
 
     void recordReadBarrier(Context *context,
                            VkAccessFlags readAccessType,
-                           VkPipelineStageFlags readStage,
+                           VkPipelineStageFlags readPipelineStageFlags,
                            PipelineStage stageIndex,
                            PipelineBarrierArray *pipelineBarriers,
                            EventBarrierArray *eventBarriers,
@@ -1131,6 +1138,21 @@ class BufferHelper : public ReadWriteResource
                             PipelineBarrierArray *pipelineBarriers,
                             EventBarrierArray *eventBarriers,
                             RefCountedEventCollector *eventCollector);
+
+    void recordReadEvent(Context *context,
+                         VkAccessFlags readAccessType,
+                         VkPipelineStageFlags readPipelineStageFlags,
+                         PipelineStage stageIndex,
+                         const QueueSerial &queueSerial,
+                         EventStage eventStage,
+                         RefCountedEventArray *refCountedEventArray);
+
+    void recordWriteEvent(Context *context,
+                          VkAccessFlags writeAccessType,
+                          VkPipelineStageFlags writePipelineStageFlags,
+                          const QueueSerial &writeQueueSerial,
+                          PipelineStage writeStage,
+                          RefCountedEventArray *refCountedEventArray);
 
     void fillWithColor(const angle::Color<uint8_t> &color,
                        const gl::InternalFormat &internalFormat);
@@ -1165,19 +1187,6 @@ class BufferHelper : public ReadWriteResource
     // Returns the current VkAccessFlags bits
     VkAccessFlags getCurrentWriteAccess() const { return mCurrentWriteAccess; }
 
-    void setCurrentWriteEvent(Context *context,
-                              VkAccessFlags writeAccessType,
-                              VkPipelineStageFlags writePipelineStageFlags,
-                              PipelineStage writeStage,
-                              EventStage eventStage,
-                              RefCountedEventArray *eventArray);
-
-    void setCurrentReadEvent(Context *context,
-                             VkAccessFlags readAccessType,
-                             VkPipelineStageFlags readPipelineStageFlags,
-                             EventStage eventStage,
-                             RefCountedEventArray *eventArray);
-
   private:
     // Only called by DynamicBuffer.
     friend class DynamicBuffer;
@@ -1207,13 +1216,15 @@ class BufferHelper : public ReadWriteResource
 
     // For memory barriers.
     DeviceQueueIndex mCurrentDeviceQueueIndex;
+
+    // Access that not tracked by VkEvents
     VkFlags mCurrentWriteAccess;
     VkFlags mCurrentReadAccess;
     VkPipelineStageFlags mCurrentWriteStages;
     VkPipelineStageFlags mCurrentReadStages;
 
     // The current refCounted event. When barrier is needed, we should wait for this event.
-    RefCountedEvent mCurrentWriteEvent;
+    RefCountedEventWithAccessFlags mCurrentWriteEvent;
     RefCountedEventArrayWithAccessFlags mCurrentReadEvents;
 
     // Track history of pipeline stages being used. This information provides
@@ -1275,7 +1286,7 @@ class BufferPool : angle::NonCopyable
     uint32_t mMemoryTypeIndex;
     VkDeviceSize mTotalMemorySize;
     BufferBlockPointerVector mBufferBlocks;
-    BufferBlockPointerVector mEmptyBufferBlocks;
+    std::deque<BufferBlockPointer> mEmptyBufferBlocks;
     // Tracks the number of new buffers needed for suballocation since last pruneEmptyBuffers call.
     // We will use this heuristic information to decide how many empty buffers to keep around.
     size_t mNumberOfNewBuffersNeededSinceLastPrune;
@@ -2066,6 +2077,10 @@ class RenderPassCommandBufferHelper final : public CommandBufferHelperCommon
     }
 
     void setImageOptimizeForPresent(ImageHelper *image) { mImageOptimizeForPresent = image; }
+    bool isImageOptimizedForPresent(const ImageHelper *image) const
+    {
+        return mImageOptimizeForPresent == image;
+    }
 
     void setGLMemoryBarrierIssued()
     {
@@ -2187,7 +2202,7 @@ template <typename CommandBufferHelperT>
 class CommandBufferRecycler
 {
   public:
-    CommandBufferRecycler()  = default;
+    CommandBufferRecycler() { mCommandBufferHelperFreeList.reserve(8); }
     ~CommandBufferRecycler() = default;
 
     void onDestroy();
@@ -2243,8 +2258,7 @@ bool FormatHasNecessaryFeature(Renderer *renderer,
                                VkFormatFeatureFlags featureBits);
 
 bool CanCopyWithTransfer(Renderer *renderer,
-                         angle::FormatID srcFormatID,
-                         VkImageTiling srcTilingMode,
+                         VkImageUsageFlags srcUsage,
                          angle::FormatID dstFormatID,
                          VkImageTiling dstTilingMode);
 
@@ -2276,7 +2290,8 @@ class ImageHelper final : public Resource, public angle::Subject
                                     gl::TextureType textureType,
                                     const VkExtent3D &extents,
                                     bool rotatedAspectRatio,
-                                    const Format &format,
+                                    angle::FormatID intendedFormatID,
+                                    angle::FormatID actualFormatID,
                                     GLint samples,
                                     VkImageUsageFlags usage,
                                     gl::LevelIndex firstLevel,
@@ -2487,9 +2502,6 @@ class ImageHelper final : public Resource, public angle::Subject
     VkImageTiling getTilingMode() const { return mTilingMode; }
     VkImageCreateFlags getCreateFlags() const { return mCreateFlags; }
     VkImageUsageFlags getUsage() const { return mUsage; }
-    bool getCompressionFixedRate(VkImageCompressionControlEXT *compressionInfo,
-                                 VkImageCompressionFixedRateFlagsEXT *compressionRates,
-                                 GLenum glCompressionRate) const;
     VkImageType getType() const { return mImageType; }
     const VkExtent3D &getExtents() const { return mExtents; }
     const VkExtent3D getRotatedExtents() const;
@@ -2543,7 +2555,7 @@ class ImageHelper final : public Resource, public angle::Subject
 
     void setCurrentImageLayout(Renderer *renderer, ImageLayout newLayout);
     ImageLayout getCurrentImageLayout() const { return mCurrentLayout; }
-    VkImageLayout getCurrentLayout(Renderer *renderer) const;
+    VkImageLayout getCurrentLayout() const;
     const QueueSerial &getBarrierQueueSerial() const { return mBarrierQueueSerial; }
 
     gl::Extents getLevelExtents(LevelIndex levelVk) const;
@@ -2558,6 +2570,7 @@ class ImageHelper final : public Resource, public angle::Subject
     void clearRenderPassUsageFlag(RenderPassUsage flag);
     void resetRenderPassUsageFlags();
     bool hasRenderPassUsageFlag(RenderPassUsage flag) const;
+    bool hasAnyRenderPassUsageFlags() const;
     bool usedByCurrentRenderPassAsAttachmentAndSampler(RenderPassUsage textureSamplerUsage) const;
 
     static void Copy(Renderer *renderer,
@@ -2957,11 +2970,13 @@ class ImageHelper final : public Resource, public angle::Subject
     bool hasSubresourceDefinedStencilContent(gl::LevelIndex level,
                                              uint32_t layerIndex,
                                              uint32_t layerCount) const;
+    void invalidateEntireLevelContent(vk::ErrorContext *context, gl::LevelIndex level);
     void invalidateSubresourceContent(ContextVk *contextVk,
                                       gl::LevelIndex level,
                                       uint32_t layerIndex,
                                       uint32_t layerCount,
                                       bool *preferToKeepContentsDefinedOut);
+    void invalidateEntireLevelStencilContent(vk::ErrorContext *context, gl::LevelIndex level);
     void invalidateSubresourceStencilContent(ContextVk *contextVk,
                                              gl::LevelIndex level,
                                              uint32_t layerIndex,
@@ -3084,6 +3099,8 @@ class ImageHelper final : public Resource, public angle::Subject
         SubresourceUpdate(VkColorComponentFlags colorMaskFlags,
                           const VkClearColorValue &clearValue,
                           const gl::ImageIndex &imageIndex);
+
+        SubresourceUpdate(const SubresourceUpdate &other);
         SubresourceUpdate(SubresourceUpdate &&other);
 
         SubresourceUpdate &operator=(SubresourceUpdate &&other);
@@ -3115,6 +3132,7 @@ class ImageHelper final : public Resource, public angle::Subject
             RefCounted<BufferHelper> *buffer;
         } refCounted;
     };
+    using SubresourceUpdates = std::deque<SubresourceUpdate>;
 
     // Up to 8 layers are tracked per level for whether contents are defined, above which the
     // contents are considered unconditionally defined.  This handles the more likely scenarios of:
@@ -3188,7 +3206,7 @@ class ImageHelper final : public Resource, public angle::Subject
     // channels.
     VkColorComponentFlags getEmulatedChannelsMask() const;
     void stageClearIfEmulatedFormat(bool isRobustResourceInitEnabled, bool isExternalImage);
-    bool verifyEmulatedClearsAreBeforeOtherUpdates(const std::vector<SubresourceUpdate> &updates);
+    bool verifyEmulatedClearsAreBeforeOtherUpdates(const SubresourceUpdates &updates);
 
     // Clear either color or depth/stencil based on image format.
     void clear(Renderer *renderer,
@@ -3253,8 +3271,8 @@ class ImageHelper final : public Resource, public angle::Subject
     // Limit the input level to the number of levels in subresource update list.
     void clipLevelToUpdateListUpperLimit(gl::LevelIndex *level) const;
 
-    std::vector<SubresourceUpdate> *getLevelUpdates(gl::LevelIndex level);
-    const std::vector<SubresourceUpdate> *getLevelUpdates(gl::LevelIndex level) const;
+    SubresourceUpdates *getLevelUpdates(gl::LevelIndex level);
+    const SubresourceUpdates *getLevelUpdates(gl::LevelIndex level) const;
 
     void appendSubresourceUpdate(gl::LevelIndex level, SubresourceUpdate &&update);
     void prependSubresourceUpdate(gl::LevelIndex level, SubresourceUpdate &&update);
@@ -3286,13 +3304,14 @@ class ImageHelper final : public Resource, public angle::Subject
                            uint32_t layerStart,
                            uint32_t layerCount,
                            VkImageAspectFlags aspectFlags);
-    void invalidateSubresourceContentImpl(ContextVk *contextVk,
+    void invalidateSubresourceContentImpl(vk::ErrorContext *context,
                                           gl::LevelIndex level,
                                           uint32_t layerIndex,
                                           uint32_t layerCount,
                                           VkImageAspectFlagBits aspect,
                                           LevelContentDefinedMask *contentDefinedMask,
-                                          bool *preferToKeepContentsDefinedOut);
+                                          bool *preferToKeepContentsDefinedOut,
+                                          bool *layerLimitReachedOut);
     void restoreSubresourceContentImpl(gl::LevelIndex level,
                                        uint32_t layerIndex,
                                        uint32_t layerCount,
@@ -3368,7 +3387,7 @@ class ImageHelper final : public Resource, public angle::Subject
         return ext.width * ext.height > kThreadholdForComputeTransCoding;
     }
 
-    void adjustLayerRange(const std::vector<SubresourceUpdate> &levelUpdates,
+    void adjustLayerRange(const SubresourceUpdates &levelUpdates,
                           uint32_t *layerStart,
                           uint32_t *layerEnd);
 
@@ -3440,7 +3459,7 @@ class ImageHelper final : public Resource, public angle::Subject
     // Image formats used for imageless framebuffers.
     ImageFormats mViewFormats;
 
-    std::vector<std::vector<SubresourceUpdate>> mSubresourceUpdates;
+    std::vector<SubresourceUpdates> mSubresourceUpdates;
     VkDeviceSize mTotalStagedBufferUpdateSize;
 
     // Optimization for repeated clear with the same value. If this pointer is not null, the entire
@@ -3952,9 +3971,10 @@ class ShaderProgramHelper : angle::NonCopyable
         const GraphicsPipelineDesc **descPtrOut,
         PipelineHelper **pipelineOut) const
     {
-        return graphicsPipelines->createPipeline(context, pipelineCache, compatibleRenderPass,
-                                                 pipelineLayout, mShaders, specConsts, source,
-                                                 pipelineDesc, descPtrOut, pipelineOut);
+        return graphicsPipelines->createPipeline(
+            context, pipelineCache, compatibleRenderPass, pipelineLayout,
+            GraphicsPipelineShadersInfo(&mShaders, &specConsts), source, pipelineDesc, descPtrOut,
+            pipelineOut);
     }
 
     void createMonolithicPipelineCreationTask(vk::ErrorContext *context,

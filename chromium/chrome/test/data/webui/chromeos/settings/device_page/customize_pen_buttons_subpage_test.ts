@@ -66,7 +66,7 @@ suite('<settings-customize-pen-buttons-subpage>', () => {
         assertEquals(Router.getInstance().currentRoute, routes.DEVICE);
       });
 
-  test('button action list fetched from provider', async () => {
+  test('button action list fetched from provider', () => {
     const observed_devices: number[] = provider.getObservedDevices();
     assertEquals(1, observed_devices.length);
 
@@ -89,7 +89,7 @@ suite('<settings-customize-pen-buttons-subpage>', () => {
     assertTrue(!!provider);
     assertEquals(provider.getSetGraphicsTabletSettingsCallCount(), 0);
     const buttonName =
-        page!.selectedTablet!.settings!.penButtonRemappings[0]!.name;
+        page!.selectedTablet.settings.penButtonRemappings[0]!.name;
     assertEquals(buttonName, 'Undo');
     page.set(
         `selectedTablet.settings.penButtonRemappings.0.name`,

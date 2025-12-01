@@ -15,6 +15,7 @@
 #include "build/build_config.h"
 #include "net/base/features.h"
 #include "net/cookies/canonical_cookie_test_helpers.h"
+#include "net/cookies/cookie_access_params.h"
 #include "net/cookies/cookie_constants.h"
 #include "net/cookies/cookie_inclusion_status.h"
 #include "net/cookies/cookie_options.h"
@@ -2313,76 +2314,6 @@ TEST(CanonicalCookieTest, IncludeForRequestURLSameSite) {
   }
 }
 
-TEST(CanonicalCookieTest, TestFirstPartyPartitionedAndCrossSiteContext) {
-  std::string histogram_name =
-      "Cookie.FirstPartyPartitioned.HasCrossSiteAncestor";
-  base::Time current_time = base::Time::Now();
-  base::HistogramTester histogram_tester;
-  GURL url("https://www.example.com");
-  GURL url2("https://wwwnottheSame.com");
-  CookieOptions options;
-
-  auto make_cookie = [current_time](const auto& partition_key) {
-    return CanonicalCookie::CreateUnsafeCookieForTesting(
-        "A", "2", "www.example.com", "/test", current_time, base::Time(),
-        base::Time(), base::Time(), true /*secure*/, true /*httponly*/,
-        CookieSameSite::NO_RESTRICTION, COOKIE_PRIORITY_DEFAULT, partition_key);
-  };
-
-  auto no_partition_key_cookie = make_cookie(std::nullopt);
-  auto partitioned_cookie =
-      make_cookie(CookiePartitionKey::FromURLForTesting(GURL(url)));
-  auto nonced_partition_key_cookie =
-      make_cookie(CookiePartitionKey::FromURLForTesting(
-          GURL(url), CookiePartitionKey::AncestorChainBit::kCrossSite,
-          base::UnguessableToken::Create()));
-  auto different_site_partition_key_cookie =
-      make_cookie(CookiePartitionKey::FromURLForTesting(GURL(url2)));
-
-  histogram_tester.ExpectBucketCount(histogram_name, true, 0);
-  histogram_tester.ExpectBucketCount(histogram_name, false, 0);
-  no_partition_key_cookie->IncludeForRequestURL(
-      url, options,
-      CookieAccessParams{CookieAccessSemantics::NONLEGACY,
-                         CookieScopeSemantics::UNKNOWN, false});
-
-  histogram_tester.ExpectBucketCount(histogram_name, true, 0);
-  histogram_tester.ExpectBucketCount(histogram_name, false, 0);
-
-  partitioned_cookie->IncludeForRequestURL(
-      url, options,
-      CookieAccessParams{CookieAccessSemantics::NONLEGACY,
-                         CookieScopeSemantics::UNKNOWN, false});
-  histogram_tester.ExpectBucketCount(histogram_name, true, 1);
-  histogram_tester.ExpectBucketCount(histogram_name, false, 0);
-
-  nonced_partition_key_cookie->IncludeForRequestURL(
-      url, options,
-      CookieAccessParams{CookieAccessSemantics::NONLEGACY,
-                         CookieScopeSemantics::UNKNOWN, false});
-  histogram_tester.ExpectBucketCount(histogram_name, true, 1);
-  histogram_tester.ExpectBucketCount(histogram_name, false, 0);
-
-  different_site_partition_key_cookie->IncludeForRequestURL(
-      url, options,
-      CookieAccessParams{CookieAccessSemantics::NONLEGACY,
-                         CookieScopeSemantics::UNKNOWN, false});
-  histogram_tester.ExpectBucketCount(histogram_name, true, 1);
-  histogram_tester.ExpectBucketCount(histogram_name, false, 0);
-
-  // Show that a cookie in a non-CROSS_SITE context registers as false.
-  options.set_same_site_cookie_context(
-      net::CookieOptions::SameSiteCookieContext(
-          net::CookieOptions::SameSiteCookieContext::ContextType::
-              SAME_SITE_LAX));
-
-  partitioned_cookie->IncludeForRequestURL(
-      url, options,
-      CookieAccessParams{CookieAccessSemantics::NONLEGACY,
-                         CookieScopeSemantics::UNKNOWN, false});
-  histogram_tester.ExpectBucketCount(histogram_name, true, 1);
-  histogram_tester.ExpectBucketCount(histogram_name, false, 1);
-}
 // Test that SameSite=None requires Secure.
 TEST(CanonicalCookieTest, IncludeCookiesWithoutSameSiteMustBeSecure) {
   GURL url("https://www.example.com");
@@ -3732,8 +3663,9 @@ TEST(CanonicalCookieTest, TestSetCreationDate) {
 }
 
 TEST(CanonicalCookieTest, TestPrefixHistograms) {
+  base::MetricsSubSampler::ScopedAlwaysSampleForTesting always_sample;
   base::HistogramTester histograms;
-  const char kCookiePrefixHistogram[] = "Cookie.CookiePrefix";
+  const char kCookiePrefixHistogram[] = "Cookie.CookiePrefix.Subsampled";
   GURL https_url("https://www.example.test");
   base::Time creation_time = base::Time::Now();
   std::optional<base::Time> server_time = std::nullopt;
@@ -3772,9 +3704,12 @@ TEST(CanonicalCookieTest, TestPrefixHistograms) {
 }
 
 TEST(CanonicalCookieTest, TestHasNonASCIIHistograms) {
+  base::MetricsSubSampler::ScopedAlwaysSampleForTesting always_sample;
   base::HistogramTester histograms;
-  const char kCookieNonASCIINameHistogram[] = "Cookie.HasNonASCII.Name";
-  const char kCookieNonASCIIValueHistogram[] = "Cookie.HasNonASCII.Value";
+  const char kCookieNonASCIINameHistogram[] =
+      "Cookie.HasNonASCII.Name.Subsampled";
+  const char kCookieNonASCIIValueHistogram[] =
+      "Cookie.HasNonASCII.Value.Subsampled";
   const GURL test_url("https://www.example.test");
   int expected_name_true = 0;
   int expected_name_false = 0;
@@ -4723,6 +4658,24 @@ TEST(CanonicalCookieTest, CreateSanitizedCookie_Logic) {
   EXPECT_TRUE(cc);
   EXPECT_EQ(too_long_domain, cc->DomainWithoutDot());
   EXPECT_TRUE(status.IsInclude());
+
+  cc = CanonicalCookie::CreateSanitizedCookie(
+      GURL("file://52.251.94.56/:"), "A", "B", "888888888", "/foo",
+      base::Time(), base::Time(), base::Time(), false /*secure*/,
+      false /*httponly*/, CookieSameSite::NO_RESTRICTION,
+      COOKIE_PRIORITY_DEFAULT, std::nullopt /*partition_key*/, &status);
+  EXPECT_FALSE(cc);
+  EXPECT_TRUE(status.HasExactlyExclusionReasonsForTesting(
+      {CookieInclusionStatus::ExclusionReason::EXCLUDE_INVALID_DOMAIN}));
+
+  cc = CanonicalCookie::CreateSanitizedCookie(
+      GURL("http://52.251.94.56/"), "A", "B", "251", "/foo", base::Time(),
+      base::Time(), base::Time(), false /*secure*/, false /*httponly*/,
+      CookieSameSite::NO_RESTRICTION, COOKIE_PRIORITY_DEFAULT,
+      std::nullopt /*partition_key*/, &status);
+  EXPECT_FALSE(cc);
+  EXPECT_TRUE(status.HasExactlyExclusionReasonsForTesting(
+      {CookieInclusionStatus::ExclusionReason::EXCLUDE_INVALID_DOMAIN}));
 }
 
 // Regression test for https://crbug.com/362535230.
@@ -6207,9 +6160,10 @@ TEST(CanonicalCookieTest, TestHasHiddenPrefixName) {
 }
 
 TEST(CanonicalCookieTest, TestDoubleUnderscorePrefixHistogram) {
+  base::MetricsSubSampler::ScopedAlwaysSampleForTesting always_sample;
   base::HistogramTester histograms;
   const char kDoubleUnderscorePrefixHistogram[] =
-      "Cookie.DoubleUnderscorePrefixedName";
+      "Cookie.DoubleUnderscorePrefixedName.Subsampled";
 
   CanonicalCookie::CreateForTesting(GURL("https://www.example.com/"),
                                     "__Secure-abc=123; Secure",

@@ -209,8 +209,11 @@
       default_value: "false",
       custom_compare: true,
     },
+    // Set when some part of a value depends on a Container Query container,
+    // e.g. cq* units, or an invoked custom function with an inner @container
+    // rule.
     {
-      name: "HasContainerRelativeUnits",
+      name: "HasContainerRelativeValue",
       field_template: "monotonic_flag",
       default_value: "false",
       custom_compare: true,
@@ -353,7 +356,7 @@
       default_value: "FillLayer(EFillLayerType::kBackground, true)",
       field_group: "background",
       computed_style_custom_functions: ["initial", "getter", "setter"],
-      invalidate: ["background", "background-current-color"],
+      invalidate: ["background", "currentcolor"],
     },
     {
       name: "HasClipPath",
@@ -390,12 +393,13 @@
     },
     {
       name: "font",
-      field_template: "external",
+      field_template: "pointer",
+      field_group: "inherited",
       include_paths: ["third_party/blink/renderer/platform/fonts/font.h"],
       type_name: "Font",
-      field_group: "font",
       inherited: true,
-      default_value: "Font()",
+      default_value: "MakeGarbageCollected<Font>()",
+      wrapper_pointer_name: "Member",
       invalidate: ["reshape"],
     },
     {
@@ -477,7 +481,7 @@
       field_template: "primitive",
       include_paths: ["third_party/blink/renderer/platform/graphics/touch_action.h"],
       type_name: "TouchAction",
-      field_size: 9,
+      field_size: 10,
       default_value: "TouchAction::kAuto",
       field_group: "*",
     },
@@ -529,7 +533,7 @@
       type_name: "StyleHighlightData",
       include_paths: ["third_party/blink/renderer/core/style/style_highlight_data.h"],
       default_value: "StyleHighlightData()",
-      field_group: "*->highlight-data",
+      field_group: "inherited->highlight-data",
       computed_style_custom_functions: [],
     },
     {
@@ -620,7 +624,7 @@
     {
       name: "DocumentRulesSelectors",
       field_template: "external",
-      type_name: "HeapHashSet<WeakMember<StyleRule>>",
+      type_name: "GCedHeapHashSet<WeakMember<StyleRule>>",
       wrapper_pointer_name: "Member",
       field_group: "*",
       default_value: "nullptr",
@@ -815,7 +819,6 @@
       name: "ForcesStackingContext",
       field_template: "primitive",
       type_name: "bool",
-      field_group: "*",
       default_value: "false",
     },
     // Plugins require accelerated compositing for reasons external to blink.
@@ -876,7 +879,7 @@
       name: "WillChangeProperties",
       field_template: "external",
       type_name: "Vector<CSSPropertyID>",
-      field_group: "*->will-change",
+      field_group: "misc->will-change",
       default_value: "Vector<CSSPropertyID>()",
       include_paths: ["third_party/blink/renderer/platform/wtf/vector.h",
                       "third_party/blink/renderer/core/css/css_property_names.h"],
@@ -886,19 +889,28 @@
       name: "WillChangeContents",
       field_template: "primitive",
       type_name: "bool",
-      field_group: "*->will-change",
+      field_group: "misc->will-change",
       default_value: "false",
     },
     {
       name: "WillChangeScrollPosition",
       field_template: "primitive",
       type_name: "bool",
-      field_group: "*->will-change",
+      field_group: "misc->will-change",
       default_value: "false",
       invalidate: ["compositing"],
     },
     {
       name: "HasAutoColumnWidth",
+      field_template: "primitive",
+      type_name: "bool",
+      field_group: "*",
+      default_value: "true",
+      computed_style_custom_functions: ["setter"],
+      invalidate: ["layout", "paint"],
+    },
+    {
+      name: "HasAutoColumnHeight",
       field_template: "primitive",
       type_name: "bool",
       field_group: "*",
@@ -945,7 +957,7 @@
       default_value: "false",
       custom_compare: true,
       inherited: true,
-      invalidate: ["accent-color", "background-current-color", "border-visual", "paint"],
+      invalidate: ["accent-color", "border-visual", "currentcolor", "paint"],
     },
     {
       // This flag is set if both the computed value of color-scheme is 'normal'
@@ -981,6 +993,7 @@
     {
       name: "IsSpecifiedDisplayWebkitBox",
       name_for_methods: "IsSpecifiedDisplayWebkitBox",
+      field_group: "*",
       field_template: "monotonic_flag",
       default_value: "false",
       invalidate: ["layout", "paint"],
@@ -1024,7 +1037,6 @@
     },
     {
       name: "InlineBlockBaselineEdge",
-      field_group: "*",
       field_template: "keyword",
       keywords: ["margin-box", "border-box", "content-box"],
       default_value: "margin-box",
@@ -1035,7 +1047,7 @@
       default_value: "Length()",
       include_paths: ["third_party/blink/renderer/platform/geometry/length.h"],
       type_name: "Length",
-      field_group: "*->math",
+      field_group: "misc->math",
       getter: "GetMathBaseline",
     },
     {
@@ -1044,7 +1056,7 @@
       default_value: "Length()",
       include_paths: ["third_party/blink/renderer/platform/geometry/length.h"],
       type_name: "Length",
-      field_group: "*->math",
+      field_group: "misc->math",
       getter: "GetMathFractionBarThickness",
       invalidate: ["layout", "paint"],
     },
@@ -1054,7 +1066,7 @@
       default_value: "Length()",
       include_paths: ["third_party/blink/renderer/platform/geometry/length.h"],
       type_name: "Length",
-      field_group: "*->math",
+      field_group: "misc->math",
       getter: "GetMathLSpace",
       invalidate: ["layout", "paint"],
     },
@@ -1064,7 +1076,7 @@
       default_value: "Length()",
       include_paths: ["third_party/blink/renderer/platform/geometry/length.h"],
       type_name: "Length",
-      field_group: "*->math",
+      field_group: "misc->math",
       getter: "GetMathRSpace",
       invalidate: ["layout", "paint"],
     },
@@ -1074,7 +1086,7 @@
       default_value: "Length()",
       include_paths: ["third_party/blink/renderer/platform/geometry/length.h"],
       type_name: "Length",
-      field_group: "*->math",
+      field_group: "misc->math",
       getter: "GetMathPaddedVOffset",
       invalidate: ["layout", "paint"],
     },
@@ -1084,7 +1096,7 @@
       default_value: "Length()",
       include_paths: ["third_party/blink/renderer/platform/geometry/length.h"],
       type_name: "Length",
-      field_group: "*->math",
+      field_group: "misc->math",
       getter: "GetMathPaddedDepth",
     },
     {
@@ -1093,7 +1105,7 @@
       default_value: "Length()",
       include_paths: ["third_party/blink/renderer/platform/geometry/length.h"],
       type_name: "Length",
-      field_group: "*->math",
+      field_group: "misc->math",
       getter: "GetMathMinSize",
       invalidate: ["layout", "paint"],
     },
@@ -1103,7 +1115,7 @@
       default_value: "Length()",
       include_paths: ["third_party/blink/renderer/platform/geometry/length.h"],
       type_name: "Length",
-      field_group: "*->math",
+      field_group: "misc->math",
       getter: "GetMathMaxSize",
       invalidate: ["layout", "paint"],
     },
@@ -1116,7 +1128,7 @@
     },
     {
       name: "BaselineShiftType",
-      field_group: "svg->misc",
+      field_group: "svg->svgmisc",
       // Use a keyword?
       field_template: "primitive",
       field_size: 2,
@@ -1131,7 +1143,7 @@
       // For now ComputedStyle for non-SVG elemnts always have the initial value
       // in order to disable the feature.
       name: "CssDominantBaseline",
-      field_group: "svg",
+      field_group: "svginherited",
       field_template: "primitive",
       field_size: 4,
       type_name: "EDominantBaseline",
@@ -1271,6 +1283,13 @@
     // CSS function.
     {
       name: "AffectedByCSSFunction",
+      field_template: "monotonic_flag",
+      field_group: "*",
+      default_value: "false",
+    },
+    {
+      // True when @media is used within @function, false otherwise.
+      name: "AffectedByFunctionalMedia",
       field_template: "monotonic_flag",
       field_group: "*",
       default_value: "false",

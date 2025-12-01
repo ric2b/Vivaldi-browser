@@ -308,11 +308,13 @@ class PrivateState : angle::NonCopyable
     bool isClipDepthModeZeroToOne() const { return mClipDepthMode == ClipDepthMode::ZeroToOne; }
 
     // Blend state manipulation
-    bool isBlendEnabled() const { return mBlendStateExt.getEnabledMask().test(0); }
+    bool isBlendEnabled() const { return isBlendEnabledIndexed(0); }
     bool isBlendEnabledIndexed(GLuint index) const
     {
         ASSERT(static_cast<size_t>(index) < mBlendStateExt.getDrawBufferCount());
-        return mBlendStateExt.getEnabledMask().test(index);
+        return isActivelyOverriddenPLSDrawBuffer(index)
+                   ? mPLSDeferredBlendEnables.test(index)
+                   : mBlendStateExt.getEnabledMask().test(index);
     }
     DrawBufferMask getBlendEnabledDrawBufferMask() const { return mBlendStateExt.getEnabledMask(); }
     void setBlend(bool enabled);
@@ -591,7 +593,6 @@ class PrivateState : angle::NonCopyable
     const GLES1State &gles1() const { return mGLES1State; }
 
     const state::DirtyBits &getDirtyBits() const { return mDirtyBits; }
-    void clearDirtyBits() { mDirtyBits.reset(); }
     void clearDirtyBits(const state::DirtyBits &bitset) { mDirtyBits &= ~bitset; }
     void setAllDirtyBits()
     {
@@ -601,7 +602,6 @@ class PrivateState : angle::NonCopyable
     }
 
     const state::ExtendedDirtyBits &getExtendedDirtyBits() const { return mExtendedDirtyBits; }
-    void clearExtendedDirtyBits() { mExtendedDirtyBits.reset(); }
     void clearExtendedDirtyBits(const state::ExtendedDirtyBits &bitset)
     {
         mExtendedDirtyBits &= ~bitset;
@@ -709,6 +709,10 @@ class PrivateState : angle::NonCopyable
 
     // GL_ANGLE_shader_pixel_local_storage
     GLsizei mPixelLocalStorageActivePlanes;
+    // Overridden PLS draw buffers require no blend and a full color mask. While PLS is active,
+    // defer any updates to these states until it ends.
+    DrawBufferMask mPLSDeferredBlendEnables;
+    BlendStateExt::ColorMaskStorage::Type mPLSDeferredColorMasks;
 
     // GLES1 emulation: state specific to GLES1
     GLES1State mGLES1State;
@@ -841,6 +845,8 @@ class State : angle::NonCopyable
 
     void invalidateTextureBindings(TextureType type);
 
+    bool isTextureBoundToActivePLS(TextureID) const;
+
     // Sampler object binding manipulation
     void setSamplerBinding(const Context *context, GLuint textureUnit, Sampler *sampler);
     SamplerID getSamplerId(GLuint textureUnit) const
@@ -912,9 +918,9 @@ class State : angle::NonCopyable
         return mProgram;
     }
 
-    Program *getLinkedProgram(const Context *context) const
+    ANGLE_INLINE Program *getLinkedProgram(const Context *context) const
     {
-        if (mProgram)
+        if (ANGLE_LIKELY(mProgram))
         {
             mProgram->resolveLink(context);
         }
@@ -1094,11 +1100,6 @@ class State : angle::NonCopyable
     {
         return mDirtyBits | mPrivateState.getDirtyBits();
     }
-    void clearDirtyBits()
-    {
-        mDirtyBits.reset();
-        mPrivateState.clearDirtyBits();
-    }
     void clearDirtyBits(const state::DirtyBits &bitset)
     {
         mDirtyBits &= ~bitset;
@@ -1114,11 +1115,6 @@ class State : angle::NonCopyable
     const state::ExtendedDirtyBits getExtendedDirtyBits() const
     {
         return mExtendedDirtyBits | mPrivateState.getExtendedDirtyBits();
-    }
-    void clearExtendedDirtyBits()
-    {
-        mExtendedDirtyBits.reset();
-        mPrivateState.clearExtendedDirtyBits();
     }
     void clearExtendedDirtyBits(const state::ExtendedDirtyBits &bitset)
     {
@@ -1373,10 +1369,6 @@ class State : angle::NonCopyable
     GLenum getCoverageModulation() const { return mPrivateState.getCoverageModulation(); }
     bool getFramebufferSRGB() const { return mPrivateState.getFramebufferSRGB(); }
     GLuint getPatchVertices() const { return mPrivateState.getPatchVertices(); }
-    void setPixelLocalStorageActivePlanes(GLsizei n)
-    {
-        mPrivateState.setPixelLocalStorageActivePlanes(n);
-    }
     GLsizei getPixelLocalStorageActivePlanes() const
     {
         return mPrivateState.getPixelLocalStorageActivePlanes();

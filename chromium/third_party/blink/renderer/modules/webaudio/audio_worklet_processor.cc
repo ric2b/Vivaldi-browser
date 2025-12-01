@@ -2,15 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
-#pragma allow_unsafe_buffers
-#endif
-
 #include "third_party/blink/renderer/modules/webaudio/audio_worklet_processor.h"
 
 #include <memory>
 
+#include "base/compiler_specific.h"
 #include "third_party/blink/renderer/bindings/core/v8/worker_or_worklet_script_controller.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_blink_audio_worklet_process_callback.h"
 #include "third_party/blink/renderer/core/messaging/message_port.h"
@@ -152,7 +148,14 @@ bool AudioWorkletProcessor::Process(
     TRACE_EVENT0(
         TRACE_DISABLED_BY_DEFAULT("audio-worklet"),
         "AudioWorkletProcessor::Process (author script execution)");
-    if (!definition->ProcessFunction()
+    auto* process_function = definition->ProcessFunction();
+    if (!process_function) {
+      SetErrorState(
+          AudioWorkletProcessorErrorState::kProcessMethodUndefinedError);
+      return false;
+    }
+
+    if (!process_function
              ->Invoke(this, ScriptValue(isolate, inputs_.Get(isolate)),
                       ScriptValue(isolate, outputs_.Get(isolate)),
                       ScriptValue(isolate, params_.Get(isolate)))
@@ -367,8 +370,9 @@ void AudioWorkletProcessor::CopyPortToArrayBuffers(
       auto backing_store = array_buffers[bus_index][channel_index]
                                .Get(isolate)
                                ->GetBackingStore();
-      memcpy(backing_store->Data(), audio_bus->Channel(channel_index)->Data(),
-             bus_length * sizeof(float));
+      UNSAFE_TODO(memcpy(backing_store->Data(),
+                         audio_bus->Channel(channel_index)->Data(),
+                         bus_length * sizeof(float)));
     }
   }
 }
@@ -391,10 +395,11 @@ void AudioWorkletProcessor::CopyArrayBuffersToPort(
       // An ArrayBuffer might be transferred. So we need to check the byte
       // length and silence the output buffer if needed.
       if (backing_store->ByteLength() == bus_length) {
-        memcpy(audio_bus->Channel(channel_index)->MutableData(),
-               backing_store->Data(), bus_length);
+        UNSAFE_TODO(memcpy(audio_bus->Channel(channel_index)->MutableData(),
+                           backing_store->Data(), bus_length));
       } else {
-        memset(audio_bus->Channel(channel_index)->MutableData(), 0, bus_length);
+        UNSAFE_TODO(memset(audio_bus->Channel(channel_index)->MutableData(), 0,
+                           bus_length));
       }
     }
   }
@@ -409,7 +414,8 @@ void AudioWorkletProcessor::ZeroArrayBuffers(
       auto backing_store = array_buffers[bus_index][channel_index]
                                .Get(isolate)
                                ->GetBackingStore();
-      memset(backing_store->Data(), 0, backing_store->ByteLength());
+      UNSAFE_TODO(
+          memset(backing_store->Data(), 0, backing_store->ByteLength()));
     }
   }
 }
@@ -436,7 +442,8 @@ bool AudioWorkletProcessor::ParamValueMapMatchesToParamsObject(
     // AudioWorkletHandler.
     unsigned array_size = 1;
     for (unsigned k = 1; k < param_float_array->size(); ++k) {
-      if (param_float_array->Data()[k] != param_float_array->Data()[0]) {
+      if (UNSAFE_TODO(param_float_array->Data()[k]) !=
+          param_float_array->Data()[0]) {
         array_size = param_float_array->size();
         break;
       }
@@ -485,7 +492,8 @@ bool AudioWorkletProcessor::CloneParamValueMapToObject(
     // AudioWorkletHandler.
     unsigned array_size = 1;
     for (unsigned k = 1; k < param_float_array->size(); ++k) {
-      if (param_float_array->Data()[k] != param_float_array->Data()[0]) {
+      if (UNSAFE_TODO(param_float_array->Data()[k]) !=
+          param_float_array->Data()[0]) {
         array_size = param_float_array->size();
         break;
       }
@@ -546,8 +554,8 @@ bool AudioWorkletProcessor::CopyParamValueMapToObject(
       return false;
     }
 
-    memcpy(float32_array->Buffer()->GetBackingStore()->Data(),
-           param_array->Data(), array_length * sizeof(float));
+    UNSAFE_TODO(memcpy(float32_array->Buffer()->GetBackingStore()->Data(),
+                       param_array->Data(), array_length * sizeof(float)));
   }
 
   return true;

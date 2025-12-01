@@ -107,7 +107,8 @@ public class ChromePageInfo {
                 ChromePageInfo::dismissPopup); // Vivaldi
 
         // Vivaldi - Combined Site prefs and Tracker blocker popup
-        PageInfoContainer pageInfoContainer = PageInfoController.getPageInfoContainer();
+        PageInfoContainer pageInfoContainer =
+                PageInfoController.getLastPageInfoController().getPageInfoContainer();
         if (mTrackerBlockerPopup == null) mTrackerBlockerPopup = new VivaldiTrackerBlockerPopup();
         mTrackerBlockerPopup.setCurrentTab(tab);
         mTrackerBlockerPopup.setSitePrefsContainer(pageInfoContainer);

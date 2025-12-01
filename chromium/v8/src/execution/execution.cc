@@ -273,6 +273,9 @@ V8_WARN_UNUSED_RESULT MaybeHandle<Object> Invoke(Isolate* isolate,
   DCHECK(!IsJSGlobalObject(*params.receiver));
   DCHECK_LE(params.args.size(), FixedArray::kMaxLength);
   DCHECK(!isolate->has_exception());
+  // Runtime code must be able to get the "current" isolate from TLS, and this
+  // must equal the isolate we execute in.
+  DCHECK_EQ(isolate, Isolate::TryGetCurrent());
 
 #if V8_ENABLE_WEBASSEMBLY
   // If we have PKU support for Wasm, ensure that code is currently write
@@ -550,14 +553,14 @@ MaybeHandle<Object> Execution::CallBuiltin(
 }
 
 // static
-MaybeHandle<JSReceiver> Execution::New(
+MaybeDirectHandle<JSReceiver> Execution::New(
     Isolate* isolate, DirectHandle<Object> constructor,
     base::Vector<const DirectHandle<Object>> args) {
   return New(isolate, constructor, constructor, args);
 }
 
 // static
-MaybeHandle<JSReceiver> Execution::New(
+MaybeDirectHandle<JSReceiver> Execution::New(
     Isolate* isolate, DirectHandle<Object> constructor,
     DirectHandle<Object> new_target,
     base::Vector<const DirectHandle<Object>> args) {

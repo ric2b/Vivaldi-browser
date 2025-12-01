@@ -12,8 +12,10 @@
 #include "components/prefs/testing_pref_service.h"
 #include "components/saved_tab_groups/public/pref_names.h"
 #include "components/signin/public/base/signin_pref_names.h"
+#include "components/signin/public/base/signin_prefs.h"
 #include "components/signin/public/base/signin_switches.h"
 #include "components/signin/public/identity_manager/account_info.h"
+#include "components/signin/public/identity_manager/identity_manager.h"
 #include "components/sync/base/data_type.h"
 #include "components/sync/base/features.h"
 #include "components/sync/base/user_selectable_type.h"
@@ -70,15 +72,14 @@ class SyncUserSettingsImplTest : public testing::Test,
  protected:
   SyncUserSettingsImplTest() {
     SyncPrefs::RegisterProfilePrefs(pref_service_.registry());
+    SigninPrefs::RegisterProfilePrefs(pref_service_.registry());
     SyncTransportDataPrefs::RegisterProfilePrefs(pref_service_.registry());
+    signin::IdentityManager::RegisterProfilePrefs(pref_service_.registry());
     // TODO(crbug.com/368409110): Necessary for a workaround in
     // SyncPrefs::KeepAccountSettingsPrefsOnlyForUsers(); see TODO there.
     pref_service_.registry()->RegisterDictionaryPref(
         tab_groups::prefs::kLocallyClosedRemoteTabGroupIds,
         base::Value::Dict());
-    // Pref is registered in signin internal `PrimaryAccountManager`.
-    pref_service_.registry()->RegisterBooleanPref(
-        ::prefs::kExplicitBrowserSignin, false);
     sync_prefs_ = std::make_unique<SyncPrefs>(&pref_service_);
 
     sync_service_crypto_ = std::make_unique<SyncServiceCrypto>(
@@ -164,14 +165,20 @@ TEST_F(SyncUserSettingsImplTest, GetSelectedTypesWhileSignedOut) {
 TEST_F(SyncUserSettingsImplTest, DefaultSelectedTypesWhileSignedIn) {
   base::test::ScopedFeatureList feature_list;
   feature_list.InitWithFeatures(
-      /*enabled_features=*/{kSyncEnableBookmarksInTransportMode,
+      /*enabled_features=*/{switches::kSyncEnableBookmarksInTransportMode,
                             kReplaceSyncPromosWithSignInPromos,
 #if !BUILDFLAG(IS_IOS) && !BUILDFLAG(IS_ANDROID)
                             kReadingListEnableSyncTransportModeUponSignIn,
-                            switches::kExplicitBrowserSigninUIOnDesktop,
+                            kSeparateLocalAndAccountSearchEngines,
+                            syncer::kSeparateLocalAndAccountThemes,
+                            syncer::kMoveThemePrefsToSpecifics,
 #endif
-                            kEnablePreferencesAccountStorage},
+                            switches::kEnablePreferencesAccountStorage},
       /*disabled_features=*/{});
+
+  // Required for kThemes and kPreferences on desktop.
+  pref_service_.SetBoolean(
+      ::prefs::kPrefsThemesSearchEnginesAccountStorageEnabled, true);
 
   std::unique_ptr<SyncUserSettingsImpl> sync_user_settings =
       MakeSyncUserSettings(GetUserTypes());
@@ -183,18 +190,39 @@ TEST_F(SyncUserSettingsImplTest, DefaultSelectedTypesWhileSignedIn) {
   // History and Tabs require a separate opt-in.
   // SavedTabGroups also requires a separate opt-in, either the same one as
   // history and tabs (on mobile), or a dedicated opt-in.
-  // Apps, Extensions, Themes and Cookies are not supported in transport mode.
+  // Apps, Extensions and Cookies are not supported in transport mode.
   UserSelectableTypeSet expected_disabled_types = {
-      UserSelectableType::kHistory, UserSelectableType::kTabs,
-      UserSelectableType::kApps,    UserSelectableType::kExtensions,
-      UserSelectableType::kThemes,  UserSelectableType::kSavedTabGroups,
-      UserSelectableType::kCookies};
+      UserSelectableType::kHistory,        UserSelectableType::kTabs,
+      UserSelectableType::kApps,           UserSelectableType::kExtensions,
+      UserSelectableType::kSavedTabGroups, UserSelectableType::kCookies};
   if (!base::FeatureList::IsEnabled(kSyncSharedTabGroupDataInTransportMode)) {
     expected_disabled_types.Put(UserSelectableType::kSharedTabGroupData);
   }
 
+#if BUILDFLAG(IS_IOS) || BUILDFLAG(IS_ANDROID)
+  expected_disabled_types.Put(UserSelectableType::kThemes);
+#else
+  // On platforms other than mobile, bookmarks requires a separate pref
+  // `kBookmarksExplicitBrowserSigninEnabled`.
+  expected_disabled_types.Put(UserSelectableType::kBookmarks);
+#endif
+
   EXPECT_EQ(selected_types,
             Difference(registered_types, expected_disabled_types));
+
+#if !BUILDFLAG(IS_IOS) && !BUILDFLAG(IS_ANDROID)
+  pref_service_.SetBoolean(
+      ::prefs::kPrefsThemesSearchEnginesAccountStorageEnabled, false);
+  sync_user_settings = MakeSyncUserSettings(GetUserTypes());
+  registered_types = sync_user_settings->GetRegisteredSelectableTypes();
+  selected_types = sync_user_settings->GetSelectedTypes();
+  // These datatypes require the preference
+  // `prefs::kPrefsThemesSearchEnginesAccountStorageEnabled` to be set.
+  expected_disabled_types.Put(UserSelectableType::kThemes);
+  expected_disabled_types.Put(UserSelectableType::kPreferences);
+  EXPECT_EQ(selected_types,
+            Difference(registered_types, expected_disabled_types));
+#endif
 }
 
 TEST_F(SyncUserSettingsImplTest, SetSelectedTypeInTransportMode) {
@@ -457,11 +485,11 @@ TEST_F(SyncUserSettingsImplTest, ShouldSyncSessionsOnlyIfOpenTabsIsSelected) {
       /*types=*/{UserSelectableType::kHistory, UserSelectableType::kTabs});
 #if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_IOS)
   // For android and iOS, we enable SAVED_TAB_GROUP under OpenTabs as well.
-  EXPECT_EQ(
-      GetPreferredUserTypes(*sync_user_settings),
-      Union(AlwaysPreferredUserTypes(),
-            {COLLABORATION_GROUP, HISTORY, HISTORY_DELETE_DIRECTIVES,
-             SAVED_TAB_GROUP, SHARED_TAB_GROUP_DATA, SESSIONS, USER_EVENTS}));
+  EXPECT_EQ(GetPreferredUserTypes(*sync_user_settings),
+            Union(AlwaysPreferredUserTypes(),
+                  {COLLABORATION_GROUP, HISTORY, HISTORY_DELETE_DIRECTIVES,
+                   SAVED_TAB_GROUP, SHARED_TAB_GROUP_DATA, SESSIONS,
+                   USER_EVENTS, SHARED_TAB_GROUP_ACCOUNT_DATA}));
 #else
   EXPECT_EQ(GetPreferredUserTypes(*sync_user_settings),
             Union(AlwaysPreferredUserTypes(),
@@ -481,10 +509,10 @@ TEST_F(SyncUserSettingsImplTest, ShouldSyncSessionsOnlyIfOpenTabsIsSelected) {
   sync_user_settings->SetSelectedTypes(
       /*sync_everything=*/false,
       /*types=*/{UserSelectableType::kTabs});
-  EXPECT_EQ(
-      GetPreferredUserTypes(*sync_user_settings),
-      Union(AlwaysPreferredUserTypes(), {COLLABORATION_GROUP, SAVED_TAB_GROUP,
-                                         SESSIONS, SHARED_TAB_GROUP_DATA}));
+  EXPECT_EQ(GetPreferredUserTypes(*sync_user_settings),
+            Union(AlwaysPreferredUserTypes(),
+                  {COLLABORATION_GROUP, SAVED_TAB_GROUP, SESSIONS,
+                   SHARED_TAB_GROUP_DATA, SHARED_TAB_GROUP_ACCOUNT_DATA}));
 #else
   sync_user_settings->SetSelectedTypes(
       /*sync_everything=*/false,
@@ -499,10 +527,10 @@ TEST_F(SyncUserSettingsImplTest, ShouldSyncSessionsOnlyIfOpenTabsIsSelected) {
   sync_user_settings->SetSelectedTypes(
       /*sync_everything=*/false,
       /*types=*/{UserSelectableType::kSavedTabGroups});
-  EXPECT_EQ(
-      GetPreferredUserTypes(*sync_user_settings),
-      Union(AlwaysPreferredUserTypes(),
-            {COLLABORATION_GROUP, SAVED_TAB_GROUP, SHARED_TAB_GROUP_DATA}));
+  EXPECT_EQ(GetPreferredUserTypes(*sync_user_settings),
+            Union(AlwaysPreferredUserTypes(),
+                  {COLLABORATION_GROUP, SAVED_TAB_GROUP, SHARED_TAB_GROUP_DATA,
+                   SHARED_TAB_GROUP_ACCOUNT_DATA}));
 #endif  // !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
 }
 

@@ -32,7 +32,7 @@ import {
 
 // TODO(crbug.com/391381439): Fully migrate off of constructed style sheets.
 const requestHeadersViewStyles = new CSSStyleSheet();
-requestHeadersViewStyles.replaceSync(requestHeadersViewStylesRaw.cssContent);
+requestHeadersViewStyles.replaceSync(requestHeadersViewStylesRaw.cssText);
 
 const RAW_HEADER_CUTOFF = 3000;
 const {render, html} = Lit;
@@ -114,7 +114,7 @@ const UIStrings = {
    *@description HTTP response code
    */
   statusCode: 'Status Code',
-};
+} as const;
 const str_ = i18n.i18n.registerUIStrings('panels/network/components/RequestHeadersView.ts', UIStrings);
 const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
 
@@ -199,7 +199,7 @@ export class RequestHeadersView extends LegacyWrapper.LegacyWrapper.WrappableCom
       return;
     }
 
-    return RenderCoordinator.write(() => {
+    return await RenderCoordinator.write(() => {
       // Disabled until https://crbug.com/1079231 is fixed.
       // clang-format off
       render(html`
@@ -505,7 +505,7 @@ export class RequestHeadersView extends LegacyWrapper.LegacyWrapper.WrappableCom
         name.toLowerCase() === this.#toReveal?.header?.toLowerCase();
     return html`
       <div class="row ${isHighlighted ? 'header-highlight' : ''}">
-        <div class="header-name">${name}:</div>
+        <div class="header-name">${name}</div>
         <div
           class="header-value ${classNames?.join(' ')}"
           @copy=${() => Host.userMetrics.actionTaken(Host.UserMetrics.Action.NetworkPanelCopyValue)}

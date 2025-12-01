@@ -72,7 +72,7 @@ const UIStrings = {
    * can react to them.
    */
   linkHandling: 'Link handling:',
-};
+} as const;
 const str_ = i18n.i18n.registerUIStrings('ui/legacy/components/utils/Linkifier.ts', UIStrings);
 const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
 const instances = new Set<Linkifier>();
@@ -91,18 +91,38 @@ let linkHandlerSettingInstance: Common.Settings.Setting<string>;
 
 export class Linkifier extends Common.ObjectWrapper.ObjectWrapper<EventTypes> implements SDK.TargetManager.Observer {
   private readonly maxLength: number;
-  private readonly anchorsByTarget: Map<SDK.Target.Target, Element[]>;
-  private readonly locationPoolByTarget: Map<SDK.Target.Target, Bindings.LiveLocation.LiveLocationPool>;
+  private readonly anchorsByTarget = new Map<SDK.Target.Target, Element[]>();
+  private readonly locationPoolByTarget = new Map<SDK.Target.Target, Bindings.LiveLocation.LiveLocationPool>();
   private useLinkDecorator: boolean;
+  readonly #anchorUpdaters: WeakMap<Element, (this: Linkifier, anchor: HTMLElement) => void>;
 
   constructor(maxLengthForDisplayedURLs?: number, useLinkDecorator?: boolean) {
     super();
     this.maxLength = maxLengthForDisplayedURLs || UI.UIUtils.MaxLengthForDisplayedURLs;
-    this.anchorsByTarget = new Map();
-    this.locationPoolByTarget = new Map();
     this.useLinkDecorator = Boolean(useLinkDecorator);
+    this.#anchorUpdaters = new WeakMap();
     instances.add(this);
     SDK.TargetManager.TargetManager.instance().observeTargets(this);
+    Workspace.Workspace.WorkspaceImpl.instance().addEventListener(
+        Workspace.Workspace.Events.WorkingCopyChanged, this.#onWorkingCopyChangedOrCommitted, this);
+    Workspace.Workspace.WorkspaceImpl.instance().addEventListener(
+        Workspace.Workspace.Events.WorkingCopyCommitted, this.#onWorkingCopyChangedOrCommitted, this);
+  }
+
+  #onWorkingCopyChangedOrCommitted({
+    data: {uiSourceCode}
+  }: Common.EventTarget.EventTargetEvent<{uiSourceCode: Workspace.UISourceCode.UISourceCode}>): void {
+    const anchors = anchorsByUISourceCode.get(uiSourceCode);
+    if (!anchors) {
+      return;
+    }
+    for (const anchor of anchors) {
+      const updater = this.#anchorUpdaters.get(anchor);
+      if (!updater) {
+        continue;
+      }
+      updater.call(this, anchor as HTMLElement);
+    }
   }
 
   static setLinkDecorator(linkDecorator: LinkDecorator): void {
@@ -154,7 +174,7 @@ export class Linkifier extends Common.ObjectWrapper.ObjectWrapper<EventTypes> im
 
   private static unbindUILocation(anchor: Element): void {
     const info = Linkifier.linkInfo(anchor);
-    if (!info || !info.uiLocation) {
+    if (!info?.uiLocation) {
       return;
     }
 
@@ -188,7 +208,7 @@ export class Linkifier extends Common.ObjectWrapper.ObjectWrapper<EventTypes> im
    */
   private static unbindBreakpoint(anchor: Element): void {
     const info = Linkifier.linkInfo(anchor);
-    if (info && info.revealable) {
+    if (info?.revealable) {
       info.revealable = null;
     }
   }
@@ -239,6 +259,7 @@ export class Linkifier extends Common.ObjectWrapper.ObjectWrapper<EventTypes> im
       inlineFrameIndex: options?.inlineFrameIndex ?? 0,
       userMetric: options?.userMetric,
       jslogContext: options?.jslogContext || 'script-location',
+      omitOrigin: options?.omitOrigin,
     };
     const {columnNumber, className = ''} = linkifyURLOptions;
     if (sourceURL) {
@@ -268,7 +289,7 @@ export class Linkifier extends Common.ObjectWrapper.ObjectWrapper<EventTypes> im
       jslogContext: 'script-location',
     };
     const {link, linkInfo} = Linkifier.createLink(
-        fallbackAnchor && fallbackAnchor.textContent ? fallbackAnchor.textContent : '', className, createLinkOptions);
+        fallbackAnchor?.textContent ? fallbackAnchor.textContent : '', className, createLinkOptions);
     linkInfo.enableDecorator = this.useLinkDecorator;
     linkInfo.fallback = fallbackAnchor;
     linkInfo.userMetric = options?.userMetric;
@@ -437,6 +458,10 @@ export class Linkifier extends Common.ObjectWrapper.ObjectWrapper<EventTypes> im
   }
 
   dispose(): void {
+    Workspace.Workspace.WorkspaceImpl.instance().removeEventListener(
+        Workspace.Workspace.Events.WorkingCopyChanged, this.#onWorkingCopyChangedOrCommitted, this);
+    Workspace.Workspace.WorkspaceImpl.instance().removeEventListener(
+        Workspace.Workspace.Events.WorkingCopyCommitted, this.#onWorkingCopyChangedOrCommitted, this);
     // Create a copy of {keys} so {targetRemoved} can safely modify the map.
     for (const target of [...this.anchorsByTarget.keys()]) {
       this.targetRemoved(target);
@@ -455,8 +480,8 @@ export class Linkifier extends Common.ObjectWrapper.ObjectWrapper<EventTypes> im
     const uiLocation = await liveLocation.uiLocation();
     if (!uiLocation) {
       if (liveLocation instanceof Bindings.CSSWorkspaceBinding.LiveLocation) {
-        const header = (liveLocation as Bindings.CSSWorkspaceBinding.LiveLocation).header();
-        if (header && header.ownerNode) {
+        const header = (liveLocation).header();
+        if (header?.ownerNode) {
           anchor.addEventListener('click', event => {
             event.consume(true);
             void Common.Revealer.reveal(header.ownerNode || null);
@@ -474,8 +499,12 @@ export class Linkifier extends Common.ObjectWrapper.ObjectWrapper<EventTypes> im
     if (options.revealBreakpoint) {
       Linkifier.bindBreakpoint(anchor, uiLocation);
     }
+
     const text = uiLocation.linkText(true /* skipTrim */, options.showColumnNumber);
     Linkifier.setTrimmedText(anchor, text, this.maxLength);
+    this.#anchorUpdaters.set(anchor, function(this: Linkifier, anchor: HTMLElement) {
+      void this.updateAnchor(anchor, options, liveLocation);
+    });
 
     let titleText: string = uiLocation.uiSourceCode.url();
     if (uiLocation.uiSourceCode.mimeType() === 'application/wasm') {
@@ -497,13 +526,13 @@ export class Linkifier extends Common.ObjectWrapper.ObjectWrapper<EventTypes> im
 
   private static updateLinkDecorations(anchor: Element): void {
     const info = Linkifier.linkInfo(anchor);
-    if (!info || !info.enableDecorator) {
+    if (!info?.enableDecorator) {
       return;
     }
     if (!decorator || !info.uiLocation) {
       return;
     }
-    if (info.icon && info.icon.parentElement) {
+    if (info.icon?.parentElement) {
       anchor.removeChild(info.icon);
     }
     const icon = decorator.linkIcon(info.uiLocation.uiSourceCode);
@@ -528,6 +557,7 @@ export class Linkifier extends Common.ObjectWrapper.ObjectWrapper<EventTypes> im
     const preventClick = options.preventClick;
     const maxLength = options.maxLength || UI.UIUtils.MaxLengthForDisplayedURLs;
     const bypassURLTrimming = options.bypassURLTrimming;
+    const omitOrigin = options.omitOrigin;
     if (!url || Common.ParsedURL.schemeIs(url, 'javascript:')) {
       const element = document.createElement('span');
       if (className) {
@@ -539,6 +569,14 @@ export class Linkifier extends Common.ObjectWrapper.ObjectWrapper<EventTypes> im
     }
 
     let linkText = text || Bindings.ResourceUtils.displayNameForURL(url);
+
+    if (omitOrigin) {
+      const parsedUrl = URL.parse(url);
+      if (parsedUrl) {
+        linkText = url.replace(parsedUrl.origin, '');
+      }
+    }
+
     if (typeof lineNumber === 'number' && !text) {
       linkText += ':' + (lineNumber + 1);
       if (showColumnNumber && typeof columnNumber === 'number') {
@@ -595,20 +633,18 @@ export class Linkifier extends Common.ObjectWrapper.ObjectWrapper<EventTypes> im
       UI.Tooltip.Tooltip.install(link, title);
     }
     if (href) {
-      // @ts-ignore
+      // @ts-expect-error
       link.href = href;
     }
     link.setAttribute('jslog', `${VisualLogging.link(jslogContext).track({click: true})}`);
 
     if (text instanceof HTMLElement) {
       link.appendChild(text);
+    } else if (bypassURLTrimming) {
+      link.classList.add('devtools-link-styled-trim');
+      Linkifier.appendTextWithoutHashes(link, text);
     } else {
-      if (bypassURLTrimming) {
-        link.classList.add('devtools-link-styled-trim');
-        Linkifier.appendTextWithoutHashes(link, text);
-      } else {
-        Linkifier.setTrimmedText(link, text, maxLength);
-      }
+      Linkifier.setTrimmedText(link, text, maxLength);
     }
 
     const linkInfo = {
@@ -743,18 +779,18 @@ export class Linkifier extends Common.ObjectWrapper.ObjectWrapper<EventTypes> im
     return info ? info.uiLocation : null;
   }
 
-  static linkActions(info: LinkInfo): {
+  static linkActions(info: LinkInfo): Array<{
     section: string,
     title: string,
     jslogContext: string,
     handler: () => Promise<void>| void,
-  }[] {
-    const result: {
+  }> {
+    const result: Array<{
       section: string,
       title: string,
       jslogContext: string,
       handler: () => Promise<void>| void,
-    }[] = [];
+    }> = [];
 
     if (!info) {
       return result;
@@ -810,7 +846,7 @@ export class Linkifier extends Common.ObjectWrapper.ObjectWrapper<EventTypes> im
         section: 'reveal',
         title: UI.UIUtils.openLinkExternallyLabel(),
         jslogContext: 'open-in-new-tab',
-        handler: () => Host.InspectorFrontendHost.InspectorFrontendHostInstance.openInNewTab(url),
+        handler: () => UI.UIUtils.openInNewTab(url),
       });
       result.push({
         section: 'clipboard',
@@ -820,7 +856,7 @@ export class Linkifier extends Common.ObjectWrapper.ObjectWrapper<EventTypes> im
       });
     }
 
-    if (uiLocation && uiLocation.uiSourceCode) {
+    if (uiLocation?.uiSourceCode) {
       const contentProvider = uiLocation.uiSourceCode;
       result.push({
         section: 'clipboard',
@@ -1018,6 +1054,7 @@ export interface LinkifyURLOptions {
   bypassURLTrimming?: boolean;
   userMetric?: Host.UserMetrics.Action;
   jslogContext?: string;
+  omitOrigin?: boolean;
 }
 
 export interface LinkifyOptions {
@@ -1028,6 +1065,7 @@ export interface LinkifyOptions {
   tabStop?: boolean;
   userMetric?: Host.UserMetrics.Action;
   jslogContext?: string;
+  omitOrigin?: boolean;
 
   /**
    * {@link LinkDisplayOptions.revealBreakpoint}

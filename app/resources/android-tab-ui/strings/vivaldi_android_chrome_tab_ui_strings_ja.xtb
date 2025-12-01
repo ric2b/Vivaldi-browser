@@ -1,9 +1,17 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="ja">
+<translation id="2277224997687551299">グループ名を編集</translation>
+<translation id="2330212241471632770">{TABS_COUNT, plural,
+          =1 {タブをブックマークに追加}
+          other {タブをブックマークに追加}
+        }</translation>
 <translation id="2947471979790858922">これらのプライベートタブでのアクティビティは、このデバイスから削除されます</translation>
 <translation id="3870643923290313246">{INCOGNITO_TABS_COUNT, plural,
         =1 {閉じたタブは、Vivaldi のメインメニューにある「最近のタブ」にあります。プライベートタブは表示されません。}
         other {閉じたタブは、Vivaldiのメインメニューにある「最近のタブ」にあります。 # つのプライベートタブは表示されません。}}</translation>
+<translation id="4460014764210899310">グループを解除</translation>
 <translation id="4871187110787939393">プライベートタブをすべて閉じますか？</translation>
+<translation id="5494920125229734069">すべて選択する</translation>
+<translation id="6744956528665271406">グループの色を変更する</translation>
 </translationbundle>

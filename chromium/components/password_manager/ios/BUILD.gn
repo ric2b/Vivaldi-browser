@@ -10,6 +10,7 @@ component("ios") {
 
   deps = [
     ":account_select_fill_data",
+    ":features",
     ":password_controller_js",
     "//base",
     "//components/autofill/core/browser",
@@ -66,6 +67,7 @@ component("ios") {
 
 source_set("password_manager_feature_header") {
   deps = [
+    ":features",
     "//base",
     "//components/autofill/core/common",
     "//ios/web/public/js_messaging",
@@ -78,6 +80,7 @@ source_set("password_manager_feature_header") {
 
 source_set("account_select_fill_data") {
   deps = [
+    ":features",
     "//base",
     "//components/autofill/core/common",
     "//components/autofill/ios/browser:util",
@@ -93,6 +96,17 @@ source_set("account_select_fill_data") {
   ]
 }
 
+source_set("features") {
+  deps = [ "//base" ]
+
+  configs += [ "//build/config/compiler:wexit_time_destructors" ]
+
+  sources = [
+    "features.h",
+    "features.mm",
+  ]
+}
+
 optimize_ts("password_controller_js") {
   sources = [ "resources/password_controller.ts" ]
 
@@ -100,6 +114,7 @@ optimize_ts("password_controller_js") {
     "//components/autofill/ios/form_util:fill_js_dependencies",
     "//components/autofill/ios/form_util:fill_js_namespace",
     "//ios/web/public/js_messaging:gcrweb",
+    "//ios/web/public/js_messaging:util_scripts",
   ]
 }
 
@@ -133,6 +148,7 @@ source_set("unit_tests") {
   ]
   deps = [
     ":account_select_fill_data",
+    ":features",
     ":ios",
     ":test_support",
     "//base",

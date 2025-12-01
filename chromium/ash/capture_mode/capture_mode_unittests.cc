@@ -8,6 +8,7 @@
 #include <tuple>
 #include <vector>
 
+#include "ash/accessibility/accessibility_controller.h"
 #include "ash/accessibility/magnifier/docked_magnifier_controller.h"
 #include "ash/accessibility/magnifier/magnifier_glass.h"
 #include "ash/annotator/annotation_tray.h"
@@ -325,10 +326,8 @@ class CaptureModeTestBase : public AshTestBase {
   }
 
   void SwitchToUser2() {
-    auto* session_controller = GetSessionControllerClient();
     constexpr char kUserEmail[] = "user2@capture_mode";
-    session_controller->AddUserSession(kUserEmail);
-    session_controller->SwitchActiveUser(AccountId::FromUserEmail(kUserEmail));
+    SimulateUserLogin({kUserEmail});
   }
 
   void OpenSettingsView() {
@@ -1033,35 +1032,41 @@ TEST_P(CaptureModeTest, CaptureRegionCaptureButtonLocation) {
   auto* controller = StartImageRegionCapture();
 
   // Select a large region. Verify that the capture button widget is centered.
-  SelectRegion(gfx::Rect(100, 100, 600, 600));
+  constexpr gfx::Rect kLargeRegion(200, 200, 500, 500);
+  SelectRegion(kLargeRegion);
 
   views::Widget* capture_button_widget = GetCaptureModeLabelWidget();
   ASSERT_TRUE(capture_button_widget);
   aura::Window* capture_button_window =
       capture_button_widget->GetNativeWindow();
-  EXPECT_EQ(gfx::Point(400, 400),
+  EXPECT_EQ(kLargeRegion.CenterPoint(),
             capture_button_window->bounds().CenterPoint());
 
   // Drag the bottom corner so that the region is too small to fit the capture
-  // button. Verify that the button is aligned horizontally and placed below the
+  // button. Verify that the button is aligned horizontally and placed above the
   // region.
   auto* event_generator = GetEventGenerator();
-  event_generator->DragMouseTo(gfx::Point(120, 120));
-  EXPECT_EQ(gfx::Rect(100, 100, 20, 20), controller->user_capture_region());
-  EXPECT_EQ(110, capture_button_window->bounds().CenterPoint().x());
+  constexpr gfx::Rect kSmallRegion(200, 200, 20, 20);
+  event_generator->DragMouseTo(kSmallRegion.bottom_right());
+  EXPECT_EQ(kSmallRegion, controller->user_capture_region());
+  EXPECT_EQ(kSmallRegion.CenterPoint().x(),
+            capture_button_window->bounds().CenterPoint().x());
   const int distance_from_region =
       CaptureModeSession::kCaptureButtonDistanceFromRegionDp;
-  EXPECT_EQ(120 + distance_from_region, capture_button_window->bounds().y());
-
-  // Click inside the region to drag the entire region to the bottom of the
-  // screen. Verify that the button is aligned horizontally and placed above the
-  // region.
-  event_generator->set_current_screen_location(gfx::Point(110, 110));
-  event_generator->DragMouseTo(gfx::Point(110, 790));
-  EXPECT_EQ(gfx::Rect(100, 780, 20, 20), controller->user_capture_region());
-  EXPECT_EQ(110, capture_button_window->bounds().CenterPoint().x());
-  EXPECT_EQ(780 - distance_from_region,
+  EXPECT_EQ(kSmallRegion.y() - distance_from_region,
             capture_button_window->bounds().bottom());
+
+  // Click inside the region to drag the entire region to the top of the
+  // screen. Verify that the button is aligned horizontally and placed below the
+  // region.
+  event_generator->set_current_screen_location(kSmallRegion.CenterPoint());
+  constexpr gfx::Rect kRegionAtTop(200, 0, 20, 20);
+  event_generator->DragMouseTo(kRegionAtTop.CenterPoint());
+  EXPECT_EQ(kRegionAtTop, controller->user_capture_region());
+  EXPECT_EQ(kRegionAtTop.CenterPoint().x(),
+            capture_button_window->bounds().CenterPoint().x());
+  EXPECT_EQ(kRegionAtTop.bottom() + distance_from_region,
+            capture_button_window->bounds().y());
 }
 
 // Tests some edge cases to ensure the capture button does not intersect the
@@ -4061,6 +4066,59 @@ TEST_P(CaptureModeTest, KeyboardNavigationTabThroughWindowsOnMultipleDisplays) {
   EXPECT_FALSE(controller->IsActive());
 }
 
+// Tests tabbing through partial capture affordance circles, which are drawn
+// directly on a layer and therefore have a custom implementation using
+// `views::AxVirtualView`.
+TEST_P(CaptureModeTest, KeyboardNavigationAffordanceCircles) {
+  // We need two displays to test display removal.
+  UpdateDisplay("800x700,801+0-800x700");
+
+  // The `views::AxVirtualView`'s are not created unless they are needed
+  // (ChromeVox is enabled).
+  Shell::Get()->accessibility_controller()->spoken_feedback().SetEnabled(true);
+
+  auto* controller =
+      StartCaptureSession(CaptureModeSource::kRegion, CaptureModeType::kImage);
+  CaptureModeSessionTestApi test_api(controller->capture_mode_session());
+
+  // Select a region and ensure it is on the secondary display, we will test
+  // removing the display while focused on an affordance circle on the secondary
+  // display later.
+  const gfx::Rect target_region(gfx::Rect(850, 50, 200, 200));
+  SelectRegion(target_region);
+  ASSERT_EQ(Shell::GetAllRootWindows().size(), 2u);
+  ASSERT_EQ(test_api.GetCaptureModeBarView()
+                ->GetWidget()
+                ->GetNativeWindow()
+                ->GetRootWindow(),
+            Shell::GetAllRootWindows()[1]);
+
+  // Both the `views::AxVirtualView`s and their widget are created lazily; they
+  // won't be created until tabbed into.
+  EXPECT_FALSE(test_api.HasAxVirtualWidget());
+  EXPECT_EQ(test_api.GetAxVirtualViewsCount(), 0u);
+
+  // Tab through the bar until we reach the first element that needs a
+  // `views::AxVirtualView`.
+  while (test_api.GetCurrentFocusGroup() !=
+         CaptureModeSessionFocusCycler::FocusGroup::kSelection) {
+    SendKey(ui::VKEY_TAB, GetEventGenerator());
+  }
+  EXPECT_TRUE(test_api.HasAxVirtualWidget());
+  EXPECT_EQ(test_api.GetAxVirtualViewsCount(), 1u);
+
+  // Tab through several circles and test that more `views::AxVirtualView`s have
+  // been lazily created.
+  SendKey(ui::VKEY_TAB, GetEventGenerator(), ui::EF_NONE, /*count=*/2);
+  EXPECT_EQ(test_api.GetAxVirtualViewsCount(), 3u);
+
+  // Test that when we remove the secondary display, the `views::AxVirtualView`s
+  // and their widget are destroyed.
+  RemoveSecondaryDisplay();
+  EXPECT_FALSE(test_api.HasAxVirtualWidget());
+  EXPECT_EQ(test_api.GetAxVirtualViewsCount(), 0u);
+}
+
 // Tests that a click will remove focus.
 TEST_P(CaptureModeTest, KeyboardNavigationClicksRemoveFocus) {
   auto* controller = StartImageRegionCapture();
@@ -6932,7 +6990,7 @@ TEST_P(CaptureModeSettingsTest, NudgeDoesNotShowForAllUserTypes) {
   for (const auto& test_case : kUserTypeTestCases) {
     SCOPED_TRACE(test_case.trace);
     ClearLogin();
-    SimulateUserLogin("example@gmail.com", test_case.user_type);
+    SimulateUserLogin({"example@gmail.com", test_case.user_type});
 
     auto* controller = StartImageRegionCapture();
     EXPECT_EQ(test_case.can_see_nudge, controller->CanShowSunfishRegionNudge());

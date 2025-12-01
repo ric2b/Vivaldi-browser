@@ -17,6 +17,7 @@ syntax = "proto3";
 package cast.core;
 
 import "proto/common/runtime_metadata.proto";
+import "proto/common/service_info.proto";
 
 option optimize_for = LITE_RUNTIME;
 
@@ -32,6 +33,11 @@ service CastCoreService {
   // Updates the PrelaunchType of runtime.
   rpc UpdatePrelaunchType(UpdatePrelaunchTypeRequest)
       returns (UpdatePrelaunchTypeResponse);
+
+  // Authenticates anactively running runtime usage of Cast Core, and reports
+  // its endpoint information.
+  rpc AuthenticateRuntime(AuthenticateRuntimeRequest)
+      returns (AuthenticateRuntimeResponse);
 }
 
 message RegisterRuntimeRequest {
@@ -61,3 +67,23 @@ message UpdatePrelaunchTypeRequest {
 }
 
 message UpdatePrelaunchTypeResponse {}
+
+message AuthenticateRuntimeRequest {
+  // Runtime id.
+  string runtime_id = 1;
+  // Opaque token to authenticate the runtime.
+  string authentication_token = 2;
+  // The endpoint the runtime is running on.
+  cast.common.ServiceInfo runtime_service_info = 3;
+  // Optional challenge for Cast Core to sign.
+  string challenge = 4;
+}
+
+message AuthenticateRuntimeResponse {
+  // Device certificate chain excluding the Cast Root CA.
+  repeated string certificate_chain = 1;
+  // Optional signature of the challenge token. Present if runtime sent it in
+  // the request. The signature can be verified with the 0th certificate in the
+  // `certificate_chain`.
+  string challenge_signature = 2;
+}

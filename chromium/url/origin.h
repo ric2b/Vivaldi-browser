@@ -62,6 +62,10 @@ namespace net {
 class SchemefulSite;
 }  // namespace net
 
+namespace optimization_guide {
+class SecurityOriginSerializer;
+}
+
 namespace url {
 
 namespace mojom {
@@ -229,6 +233,9 @@ class COMPONENT_EXPORT(URL) Origin {
   // are exact matches. Two opaque origins are same-origin only if their
   // internal nonce values match. A non-opaque origin is never same-origin with
   // an opaque origin.
+  //
+  // If you are looking for a same _site_ check between origins, see
+  // net::SchemefulSite::IsSameSite.
   bool IsSameOriginWith(const Origin& other) const;
 
   // Non-opaque origin is "same-origin" with `url` if their schemes, hosts, and
@@ -282,7 +289,8 @@ class COMPONENT_EXPORT(URL) Origin {
 
   // Allows Origin to be used as a key in STL (for example, a std::set or
   // std::map).
-  std::strong_ordering operator<=>(const Origin& other) const = default;
+  friend bool operator==(const Origin& left, const Origin& right) = default;
+  friend auto operator<=>(const Origin& left, const Origin& right) = default;
 
   // Creates a new opaque origin that is guaranteed to be cross-origin to all
   // currently existing origins. An origin created by this method retains its
@@ -355,6 +363,7 @@ class COMPONENT_EXPORT(URL) Origin {
   friend COMPONENT_EXPORT(URL) std::ostream& operator<<(std::ostream& out,
                                                         const Origin& origin);
   friend class blink::StorageKeyTest;
+  friend class optimization_guide::SecurityOriginSerializer;
 
   // Origin::Nonce is a wrapper around base::UnguessableToken that generates
   // the random value only when the value is first accessed. The lazy generation

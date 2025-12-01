@@ -45,8 +45,6 @@ tint_add_target(tint_lang_wgsl_helpers lib
   lang/wgsl/helpers/apply_substitute_overrides.h
   lang/wgsl/helpers/check_supported_extensions.cc
   lang/wgsl/helpers/check_supported_extensions.h
-  lang/wgsl/helpers/flatten_bindings.cc
-  lang/wgsl/helpers/flatten_bindings.h
 )
 
 tint_target_add_dependencies(tint_lang_wgsl_helpers lib
@@ -68,7 +66,6 @@ tint_target_add_dependencies(tint_lang_wgsl_helpers lib
   tint_utils_macros
   tint_utils_math
   tint_utils_memory
-  tint_utils_result
   tint_utils_rtti
   tint_utils_symbol
   tint_utils_text
@@ -85,7 +82,6 @@ tint_target_add_external_dependencies(tint_lang_wgsl_helpers lib
 tint_add_target(tint_lang_wgsl_helpers_test test
   lang/wgsl/helpers/append_vector_test.cc
   lang/wgsl/helpers/check_supported_extensions_test.cc
-  lang/wgsl/helpers/flatten_bindings_test.cc
 )
 
 tint_target_add_dependencies(tint_lang_wgsl_helpers_test test
@@ -111,7 +107,6 @@ tint_target_add_dependencies(tint_lang_wgsl_helpers_test test
   tint_utils_macros
   tint_utils_math
   tint_utils_memory
-  tint_utils_result
   tint_utils_rtti
   tint_utils_symbol
   tint_utils_text

@@ -18,6 +18,7 @@
 #include "components/omnibox/browser/omnibox_popup_view.h"
 #include "components/omnibox/browser/omnibox_prefs.h"
 #include "components/omnibox/browser/page_classification_functions.h"
+#include "components/omnibox/common/omnibox_feature_configs.h"
 #include "components/search_engines/template_url_starter_pack_data.h"
 #include "ui/gfx/geometry/rect.h"
 
@@ -79,8 +80,13 @@ void OmniboxController::StartZeroSuggestPrefetch() {
   TRACE_EVENT0("omnibox", "OmniboxController::StartZeroSuggestPrefetch");
   auto page_classification =
       client_->GetPageClassification(/*is_prefetch=*/true);
+
+  // TODO(crbug.com/406826913): Remove this check from OmniboxController and
+  // fix associated tests.
   if (!OmniboxFieldTrial::IsZeroSuggestPrefetchingEnabledInContext(
-          page_classification)) {
+          page_classification) &&
+      !omnibox_feature_configs::OmniboxUrlSuggestionsOnFocus::Get()
+           .MostVisitedPrefetchingEnabled()) {
     return;
   }
 
@@ -111,11 +117,10 @@ void OmniboxController::OnResultChanged(AutocompleteController* controller,
       edit_model_->OnCurrentMatchChanged();
     } else {
       edit_model_->OnPopupResultChanged();
-      edit_model_->OnPopupDataChanged(std::u16string(),
-                                      /*is_temporary_text=*/false,
-                                      std::u16string(), std::u16string(),
-                                      std::u16string(), std::u16string(), false,
-                                      std::u16string(), AutocompleteMatch());
+      edit_model_->OnPopupDataChanged(
+          std::u16string(),
+          /*is_temporary_text=*/false, std::u16string(), std::u16string(),
+          std::u16string(), false, std::u16string(), AutocompleteMatch());
     }
   } else {
     edit_model_->OnPopupResultChanged();

@@ -23,7 +23,7 @@ sys.path.append(os.path.join(os.path.dirname(__file__), os.pardir, os.pardir))
 import gn_helpers
 
 SCRIPT_DIR = os.path.dirname(__file__)
-SDK_VERSION = '10.0.22621.0'
+SDK_VERSION = '10.0.26100.0'
 
 
 def _ExtractImportantEnvironment(output_of_set):
@@ -325,7 +325,7 @@ def main():
   print(f'include_flags_I = {ListToArgString(include_I)}')
   print(f'include_flags_I_list = {ListToArgList(include_I)}')
   assert include_imsvc
-  if bool(int(os.environ.get('DEPOT_TOOLS_WIN_TOOLCHAIN', 1))) and win_sdk_path:
+  if (options.toolchain_json or bool(int(os.environ.get('DEPOT_TOOLS_WIN_TOOLCHAIN', 1)))) and win_sdk_path:
     flags = ['/winsysroot' + relflag(toolchain_root).replace("\\","/")]
     print(f'include_flags_imsvc = {ListToArgString(flags)}')
     print(f'include_flags_imsvc_list = {ListToArgList(flags)}')
@@ -336,7 +336,7 @@ def main():
   assert libpath_flags
   print(f'libpath_flags = {ListToArgString(libpath_flags)}')
   print(f'libpath_flags_list = {ListToArgList(libpath_flags)}')
-  if bool(int(os.environ.get('DEPOT_TOOLS_WIN_TOOLCHAIN', 1))) and win_sdk_path:
+  if (options.toolchain_json or bool(int(os.environ.get('DEPOT_TOOLS_WIN_TOOLCHAIN', 1)))) and win_sdk_path:
     flags = ['/winsysroot:' + relflag(toolchain_root)]
     print(f'libpath_lldlink_flags = {ListToArgString(flags)}')
     print(f'libpath_lldlink_flags_list = {ListToArgList(flags)}')

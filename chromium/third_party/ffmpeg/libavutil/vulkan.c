@@ -217,26 +217,17 @@ int ff_vk_load_props(FFVulkanContext *s)
     return 0;
 }
 
-static int vk_qf_get_index(FFVulkanContext *s, VkQueueFlagBits dev_family, int *nb)
+AVVulkanDeviceQueueFamily *ff_vk_qf_find(FFVulkanContext *s,
+                                         VkQueueFlagBits dev_family,
+                                         VkVideoCodecOperationFlagBitsKHR vid_ops)
 {
     for (int i = 0; i < s->hwctx->nb_qf; i++) {
-        if (s->hwctx->qf[i].flags & dev_family) {
-            *nb = s->hwctx->qf[i].num;
-            return s->hwctx->qf[i].idx;
+        if ((s->hwctx->qf[i].flags & dev_family) &&
+            (s->hwctx->qf[i].video_caps & vid_ops) == vid_ops) {
+            return &s->hwctx->qf[i];
         }
     }
-
-    av_assert0(0); /* Should never happen */
-}
-
-int ff_vk_qf_init(FFVulkanContext *s, FFVkQueueFamilyCtx *qf,
-                  VkQueueFlagBits dev_family)
-{
-    /* Fill in queue families from context if not done yet */
-    if (!s->nb_qfs)
-        load_enabled_qfs(s);
-
-    return (qf->queue_family = vk_qf_get_index(s, dev_family, &qf->nb_queues));
+    return NULL;
 }
 
 void ff_vk_exec_pool_free(FFVulkanContext *s, FFVkExecPool *pool)
@@ -251,7 +242,6 @@ void ff_vk_exec_pool_free(FFVulkanContext *s, FFVkExecPool *pool)
                 vk->WaitForFences(s->hwctx->act_dev, 1, &e->fence, VK_TRUE, UINT64_MAX);
             vk->DestroyFence(s->hwctx->act_dev, e->fence, s->hwctx->alloc);
         }
-        pthread_mutex_destroy(&e->lock);
 
         ff_vk_exec_discard_deps(s, e);
 
@@ -303,7 +293,7 @@ void ff_vk_exec_pool_free(FFVulkanContext *s, FFVkExecPool *pool)
     av_free(pool->contexts);
 }
 
-int ff_vk_exec_pool_init(FFVulkanContext *s, FFVkQueueFamilyCtx *qf,
+int ff_vk_exec_pool_init(FFVulkanContext *s, AVVulkanDeviceQueueFamily *qf,
                          FFVkExecPool *pool, int nb_contexts,
                          int nb_queries, VkQueryType query_type, int query_64bit,
                          const void *query_create_pnext)
@@ -331,7 +321,7 @@ int ff_vk_exec_pool_init(FFVulkanContext *s, FFVkQueueFamilyCtx *qf,
         .sType              = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
         .flags              = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT |
                               VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
-        .queueFamilyIndex   = qf->queue_family,
+        .queueFamilyIndex   = qf->idx,
     };
     ret = vk->CreateCommandPool(s->hwctx->act_dev, &cqueue_create,
                                 s->hwctx->alloc, &pool->cmd_buf_pool);
@@ -424,11 +414,6 @@ int ff_vk_exec_pool_init(FFVulkanContext *s, FFVkQueueFamilyCtx *qf,
             .flags = VK_FENCE_CREATE_SIGNALED_BIT,
         };
 
-        /* Mutex */
-        err = pthread_mutex_init(&e->lock, NULL);
-        if (err != 0)
-            return AVERROR(err);
-
         /* Fence */
         ret = vk->CreateFence(s->hwctx->act_dev, &fence_create, s->hwctx->alloc,
                               &e->fence);
@@ -449,10 +434,9 @@ int ff_vk_exec_pool_init(FFVulkanContext *s, FFVkQueueFamilyCtx *qf,
         e->buf = pool->cmd_bufs[i];
 
         /* Queue index distribution */
-        e->qi = i % qf->nb_queues;
-        e->qf = qf->queue_family;
-        vk->GetDeviceQueue(s->hwctx->act_dev, qf->queue_family,
-                           e->qi, &e->queue);
+        e->qi = i % qf->num;
+        e->qf = qf->idx;
+        vk->GetDeviceQueue(s->hwctx->act_dev, qf->idx, e->qi, &e->queue);
     }
 
     return 0;
@@ -498,10 +482,8 @@ FFVkExecContext *ff_vk_exec_get(FFVulkanContext *s, FFVkExecPool *pool)
 void ff_vk_exec_wait(FFVulkanContext *s, FFVkExecContext *e)
 {
     FFVulkanFunctions *vk = &s->vkfn;
-    pthread_mutex_lock(&e->lock);
     vk->WaitForFences(s->hwctx->act_dev, 1, &e->fence, VK_TRUE, UINT64_MAX);
     ff_vk_exec_discard_deps(s, e);
-    pthread_mutex_unlock(&e->lock);
 }
 
 int ff_vk_exec_start(FFVulkanContext *s, FFVkExecContext *e)
@@ -517,11 +499,7 @@ int ff_vk_exec_start(FFVulkanContext *s, FFVkExecContext *e)
 
     /* Wait for the fence to be signalled */
     vk->WaitForFences(s->hwctx->act_dev, 1, &e->fence, VK_TRUE, UINT64_MAX);
-
-    /* vkResetFences is defined as being host-synchronized */
-    pthread_mutex_lock(&e->lock);
     vk->ResetFences(s->hwctx->act_dev, 1, &e->fence);
-    pthread_mutex_unlock(&e->lock);
 
     /* Discard queue dependencies */
     ff_vk_exec_discard_deps(s, e);

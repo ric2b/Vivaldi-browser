@@ -23,10 +23,6 @@
 #include "components/viz/test/test_shared_image_interface_provider.h"
 #include "services/viz/public/mojom/compositing/compositor_frame_sink.mojom.h"
 
-namespace viz {
-class CompositorFrameSinkSupport;
-}  // namespace viz
-
 namespace cc {
 
 class TaskRunnerProvider;
@@ -65,7 +61,6 @@ class TestLayerTreeFrameSink : public LayerTreeFrameSink,
       scoped_refptr<viz::RasterContextProvider> compositor_context_provider,
       scoped_refptr<viz::RasterContextProvider> worker_context_provider,
       scoped_refptr<gpu::SharedImageInterface> shared_image_interface,
-      gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager,
       const viz::RendererSettings& renderer_settings,
       const viz::DebugRendererSettings* debug_settings,
       TaskRunnerProvider* task_runner_provider,
@@ -155,7 +150,8 @@ class TestLayerTreeFrameSink : public LayerTreeFrameSink,
   gfx::DisplayColorSpaces display_color_spaces_;
 
   // Uses surface_manager_.
-  std::unique_ptr<viz::CompositorFrameSinkSupport> support_;
+  class TestCompositorFrameSinkSupport;
+  std::unique_ptr<TestCompositorFrameSinkSupport> support_;
 
   std::unique_ptr<viz::SyntheticBeginFrameSource> begin_frame_source_;
   raw_ptr<viz::BeginFrameSource>

@@ -9,6 +9,7 @@
 #include "base/i18n/case_conversion.h"
 #include "base/json/json_reader.h"
 #include "base/path_service.h"
+#include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
@@ -100,7 +101,8 @@ void RemoveUnusedIconsThread(const std::vector<base::FilePath>& icons,
 
 DirectMatchService::DirectMatchService()
     : qwerty_weighted_distance_(QwertyWeightedDistance(kNeighborWeight)),
-      report_backoff_(&kBackoffPolicy) {}
+      report_backoff_(&kBackoffPolicy),
+      weak_ptr_factory_(this) {}
 
 DirectMatchService::~DirectMatchService() {}
 
@@ -191,7 +193,6 @@ void DirectMatchService::RunDirectMatchDownload() {
   size_t loader_idx = simple_url_loader_.size();
   simple_url_loader_.push_back(network::SimpleURLLoader::Create(
       std::move(resource_request), traffic_annotation));
-
   simple_url_loader_.at(loader_idx)
       ->DownloadToString(
           url_loader_factory_.get(),
@@ -268,6 +269,8 @@ void DirectMatchService::OnDirectMatchDownloadDone(
   if (!block_list || block_list->empty()) {
     return;
   }
+  direct_match_units_.clear();
+
   for (base::Value& block : *block_list) {
     if (!block.is_dict()) {
       continue;
@@ -283,6 +286,15 @@ void DirectMatchService::OnDirectMatchDownloadDone(
     direct_match_units_.push_back(std::move(data));
   }
   LOG(INFO) << "Downloaded Direct Match list from server.";
+
+  int update_interval =
+      prefs_->GetInteger(vivaldiprefs::kDirectMatchUpdateInterval);
+
+  base::SequencedTaskRunner::GetCurrentDefault()->PostDelayedTask(
+      FROM_HERE,
+      base::BindOnce(&DirectMatchService::RunDirectMatchDownload,
+                     weak_ptr_factory_.GetWeakPtr()),
+      base::Hours(update_interval));
 
   for (Observer& observer : observers_) {
     observer.OnFinishedDownloadingDirectMatchUnits();

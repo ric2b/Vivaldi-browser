@@ -8,7 +8,7 @@
 
 #include "base/test/bind.h"
 #include "base/test/scoped_feature_list.h"
-#include "content/browser/preloading/preload_pipeline_info.h"
+#include "content/browser/preloading/preload_pipeline_info_impl.h"
 #include "content/browser/preloading/preloading.h"
 #include "content/browser/preloading/preloading_confidence.h"
 #include "content/browser/preloading/preloading_config.h"
@@ -19,6 +19,7 @@
 #include "content/browser/preloading/speculation_rules/speculation_host_impl.h"
 #include "content/browser/renderer_host/render_frame_host_impl.h"
 #include "content/browser/site_instance_impl.h"
+#include "content/public/browser/preload_pipeline_info.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/storage_partition.h"
 #include "content/public/test/preloading_test_util.h"
@@ -195,19 +196,23 @@ class PrerenderHostRegistryTest : public RenderViewHostImplTestHarness {
       case PreloadingTriggerType::kSpeculationRuleFromAutoSpeculationRules:
         return PrerenderAttributes(
             url, trigger_type, embedder_histogram_suffix,
-            blink::mojom::SpeculationTargetHint::kNoHint, Referrer(), eagerness,
+            std::make_optional(SpeculationRulesParams(
+                blink::mojom::SpeculationTargetHint::kNoHint,
+                eagerness.value_or(blink::mojom::SpeculationEagerness::kEager),
+                SpeculationRulesTags())),
+            Referrer(),
             /*no_vary_search_hint=*/std::nullopt, rfh, contents()->GetWeakPtr(),
             ui::PAGE_TRANSITION_LINK,
             /*should_warm_up_compositor=*/false,
             /*should_prepare_paint_tree=*/false,
             /*url_match_predicate=*/{},
             /*prerender_navigation_handle_callback=*/{},
-            base::MakeRefCounted<PreloadPipelineInfo>());
+            PreloadPipelineInfoImpl::Create(
+                /*planned_max_preloading_type=*/PreloadingType::kPrerender));
       case PreloadingTriggerType::kEmbedder:
         return PrerenderAttributes(
             url, trigger_type, embedder_histogram_suffix,
-            /*target_hint=*/std::nullopt, Referrer(),
-            /*eagerness=*/std::nullopt,
+            /*speculation_rules_params=*/std::nullopt, Referrer(),
             /*no_vary_search_hint=*/std::nullopt,
             /*initiator_render_frame_host=*/nullptr, contents()->GetWeakPtr(),
             ui::PageTransitionFromInt(ui::PAGE_TRANSITION_TYPED |
@@ -216,7 +221,8 @@ class PrerenderHostRegistryTest : public RenderViewHostImplTestHarness {
             /*should_prepare_paint_tree=*/false,
             /*url_match_predicate=*/{},
             /*prerender_navigation_handle_callback=*/{},
-            base::MakeRefCounted<PreloadPipelineInfo>());
+            PreloadPipelineInfoImpl::Create(
+                /*planned_max_preloading_type=*/PreloadingType::kPrerender));
     }
   }
 
@@ -338,7 +344,6 @@ TEST_F(PrerenderHostRegistryTest, CreateAndStartHost_PreloadingConfigHoldback) {
   PreloadingAttempt* preloading_attempt = preloading_data->AddPreloadingAttempt(
       content_preloading_predictor::kSpeculationRules,
       PreloadingType::kPrerender, std::move(same_url_matcher),
-      /*planned_max_preloading_type=*/std::nullopt,
       contents()->GetPrimaryMainFrame()->GetPageUkmSourceId());
   const FrameTreeNodeId prerender_frame_tree_node_id =
       registry().CreateAndStartHost(
@@ -359,7 +364,6 @@ TEST_F(PrerenderHostRegistryTest,
   PreloadingAttempt* preloading_attempt = preloading_data->AddPreloadingAttempt(
       content_preloading_predictor::kSpeculationRules,
       PreloadingType::kPrerender, std::move(same_url_matcher),
-      /*planned_max_preloading_type=*/std::nullopt,
       contents()->GetPrimaryMainFrame()->GetPageUkmSourceId());
 
   auto attributes = GeneratePrerenderAttributes(
@@ -386,7 +390,6 @@ TEST_F(PrerenderHostRegistryTest, CreateAndStartHost_HoldbackOverride_Allowed) {
   PreloadingAttempt* preloading_attempt = preloading_data->AddPreloadingAttempt(
       content_preloading_predictor::kSpeculationRules,
       PreloadingType::kPrerender, std::move(same_url_matcher),
-      /*planned_max_preloading_type=*/std::nullopt,
       contents()->GetPrimaryMainFrame()->GetPageUkmSourceId());
 
   auto attributes = GeneratePrerenderAttributes(

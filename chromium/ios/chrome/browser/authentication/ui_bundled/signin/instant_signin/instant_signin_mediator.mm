@@ -17,9 +17,6 @@ using signin_metrics::PromoAction;
 @implementation InstantSigninMediator {
   AuthenticationFlow* _authenticationFlow;
   AccessPoint _accessPoint;
-  // Completion block to call once AuthenticationFlow is done while being
-  // interrupted.
-  ProceduralBlock _interruptionCompletion;
 }
 
 - (instancetype)initWithAccessPoint:(signin_metrics::AccessPoint)accessPoint {
@@ -45,15 +42,12 @@ using signin_metrics::PromoAction;
 }
 
 - (void)disconnect {
-  CHECK(!_authenticationFlow);
-  CHECK(!_interruptionCompletion);
+  CHECK(!_authenticationFlow, base::NotFatalUntil::M138);
 }
 
-- (void)interruptWithAction:(SigninCoordinatorInterrupt)action
-                 completion:(ProceduralBlock)completion {
+- (void)interrupt {
   CHECK(_authenticationFlow);
-  _interruptionCompletion = [completion copy];
-  [_authenticationFlow interruptWithAction:action];
+  [_authenticationFlow interrupt];
 }
 
 #pragma mark - Private
@@ -62,14 +56,8 @@ using signin_metrics::PromoAction;
 - (void)signInFlowCompletedForSignInOnlyWithResult:
     (SigninCoordinatorResult)result {
   CHECK(_authenticationFlow);
-  _authenticationFlow.delegate = nil;
   _authenticationFlow = nil;
-  ProceduralBlock interruptionCompletion = _interruptionCompletion;
-  _interruptionCompletion = nil;
   [self.delegate instantSigninMediator:self didSigninWithResult:result];
-  if (interruptionCompletion) {
-    interruptionCompletion();
-  }
 }
 
 @end

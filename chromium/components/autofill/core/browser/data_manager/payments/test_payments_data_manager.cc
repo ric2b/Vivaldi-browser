@@ -6,7 +6,7 @@
 
 #include "base/strings/utf_string_conversions.h"
 #include "base/uuid.h"
-#include "components/autofill/core/browser/data_model/bnpl_issuer.h"
+#include "components/autofill/core/browser/data_model/payments/bnpl_issuer.h"
 
 namespace autofill {
 
@@ -278,11 +278,11 @@ void TestPaymentsDataManager::AddServerCreditCard(
 
 void TestPaymentsDataManager::AddBnplIssuer(const BnplIssuer& bnpl_issuer) {
   // No duplicated issuer should be inserted into the BNPL issuer list.
-  CHECK(!std::ranges::any_of(
+  CHECK(std::ranges::none_of(
       linked_bnpl_issuers_, [&](const BnplIssuer& saved_bnpl_issuer) {
         return saved_bnpl_issuer.issuer_id() == bnpl_issuer.issuer_id();
       }));
-  CHECK(!std::ranges::any_of(
+  CHECK(std::ranges::none_of(
       unlinked_bnpl_issuers_, [&](const BnplIssuer& saved_bnpl_issuer) {
         return saved_bnpl_issuer.issuer_id() == bnpl_issuer.issuer_id();
       }));
@@ -293,6 +293,11 @@ void TestPaymentsDataManager::AddBnplIssuer(const BnplIssuer& bnpl_issuer) {
     unlinked_bnpl_issuers_.push_back(bnpl_issuer);
   }
   NotifyObservers();
+}
+
+void TestPaymentsDataManager::ClearBnplIssuers() {
+  linked_bnpl_issuers_.clear();
+  unlinked_bnpl_issuers_.clear();
 }
 
 void TestPaymentsDataManager::AddAutofillOfferData(

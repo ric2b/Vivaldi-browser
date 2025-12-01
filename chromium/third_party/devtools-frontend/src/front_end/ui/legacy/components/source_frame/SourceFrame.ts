@@ -36,14 +36,12 @@ import * as Root from '../../../../core/root/root.js';
 import * as SDK from '../../../../core/sdk/sdk.js';
 import * as Formatter from '../../../../models/formatter/formatter.js';
 import * as TextUtils from '../../../../models/text_utils/text_utils.js';
+import * as PanelCommon from '../../../../panels/common/common.js';
 import * as CodeMirror from '../../../../third_party/codemirror.next/codemirror.next.js';
-import * as Buttons from '../../../components/buttons/buttons.js';
 import * as CodeHighlighter from '../../../components/code_highlighter/code_highlighter.js';
 import * as TextEditor from '../../../components/text_editor/text_editor.js';
 import * as VisualLogging from '../../../visual_logging/visual_logging.js';
 import * as UI from '../../legacy.js';
-
-import selfXssDialogStyles from './selfXssDialog.css.js';
 
 const UIStrings = {
   /**
@@ -102,14 +100,6 @@ const UIStrings = {
    */
   allowPasting: 'allow pasting',
   /**
-   *@description Button text for canceling an action
-   */
-  cancel: 'Cancel',
-  /**
-   *@description Button text for allowing an action
-   */
-  allow: 'Allow',
-  /**
    *@description Input box placeholder which instructs the user to type 'allow pasing' into the input box.
    *@example {allow pasting} PH1
    */
@@ -120,7 +110,7 @@ const UIStrings = {
    */
   binaryContentError:
       'Editor can\'t show binary data. Use the "Response" tab in the "Network" panel to inspect this resource.',
-};
+} as const;
 const str_ = i18n.i18n.registerUIStrings('ui/legacy/components/source_frame/SourceFrame.ts', UIStrings);
 const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
 
@@ -322,6 +312,7 @@ export class SourceFrameImpl extends Common.ObjectWrapper.eventMixin<EventTypes,
           activeDark: 'var(--sys-color-divider-prominent)',
         },
       }),
+      infobarState,
     ];
   }
 
@@ -345,7 +336,16 @@ export class SourceFrameImpl extends Common.ObjectWrapper.eventMixin<EventTypes,
     // dialog if pasting via keyboard.
     await new Promise(resolve => setTimeout(resolve, 0));
 
-    const allowPasting = await SelfXssWarningDialog.show();
+    const allowPasting = await PanelCommon.TypeToAllowDialog.show({
+      jslogContext: {
+        dialog: 'self-xss-warning',
+        input: 'allow-pasting',
+      },
+      header: i18nString(UIStrings.doYouTrustThisCode),
+      message: i18nString(UIStrings.doNotPaste, {PH1: i18nString(UIStrings.allowPasting)}),
+      typePhrase: i18nString(UIStrings.allowPasting),
+      inputPlaceholder: i18nString(UIStrings.typeAllowPasting, {PH1: i18nString(UIStrings.allowPasting)})
+    });
     if (allowPasting) {
       this.selfXssWarningDisabledSetting.set(true);
       Host.userMetrics.actionTaken(Host.UserMetrics.Action.SelfXssAllowPastingInDialog);
@@ -836,7 +836,7 @@ export class SourceFrameImpl extends Common.ObjectWrapper.eventMixin<EventTypes,
     }
     const editor = this.textEditor;
     const currentActiveSearch = editor.state.field(activeSearchState);
-    if (currentActiveSearch && currentActiveSearch.currentRange) {
+    if (currentActiveSearch?.currentRange) {
       editor.dispatch({effects: setActiveSearch.of(new ActiveSearch(currentActiveSearch.regexp, null))});
     }
   }
@@ -1049,64 +1049,10 @@ class SearchMatch {
         return this.match[0];
       }
       if (selector[0] === '<') {
-        return (this.match.groups && this.match.groups[selector.slice(1, selector.length - 1)]) || '';
+        return (this.match.groups?.[selector.slice(1, selector.length - 1)]) || '';
       }
       return this.match[Number.parseInt(selector, 10)] || '';
     });
-  }
-}
-
-export class SelfXssWarningDialog {
-  static async show(): Promise<boolean> {
-    const dialog = new UI.Dialog.Dialog('self-xss-warning');
-    dialog.setMaxContentSize(new UI.Geometry.Size(504, 340));
-    dialog.setSizeBehavior(UI.GlassPane.SizeBehavior.SET_EXACT_WIDTH_MAX_HEIGHT);
-    dialog.setDimmed(true);
-    const shadowRoot = UI.UIUtils.createShadowRootWithCoreStyles(dialog.contentElement, {cssFile: selfXssDialogStyles});
-    const content = shadowRoot.createChild('div', 'widget');
-
-    const result = await new Promise<boolean>(resolve => {
-      const closeButton = content.createChild('dt-close-button', 'dialog-close-button');
-      closeButton.setTabbable(true);
-      self.onInvokeElement(closeButton, event => {
-        dialog.hide();
-        event.consume(true);
-        resolve(false);
-      });
-
-      content.createChild('div', 'title').textContent = i18nString(UIStrings.doYouTrustThisCode);
-      content.createChild('div', 'message').textContent =
-          i18nString(UIStrings.doNotPaste, {PH1: i18nString(UIStrings.allowPasting)});
-
-      const input = UI.UIUtils.createInput('text-input', 'text', 'allow-pasting');
-      input.placeholder = i18nString(UIStrings.typeAllowPasting, {PH1: i18nString(UIStrings.allowPasting)});
-      content.appendChild(input);
-
-      const buttonsBar = content.createChild('div', 'button');
-      const cancelButton =
-          UI.UIUtils.createTextButton(i18nString(UIStrings.cancel), () => resolve(false), {jslogContext: 'cancel'});
-      buttonsBar.appendChild(cancelButton);
-      const allowButton = UI.UIUtils.createTextButton(i18nString(UIStrings.allow), () => {
-        resolve(input.value === i18nString(UIStrings.allowPasting));
-      }, {jslogContext: 'confirm', variant: Buttons.Button.Variant.PRIMARY});
-      allowButton.disabled = true;
-      buttonsBar.appendChild(allowButton);
-
-      input.addEventListener('input', () => {
-        allowButton.disabled = !Boolean(input.value);
-      }, false);
-      input.addEventListener('paste', e => e.preventDefault());
-      input.addEventListener('drop', e => e.preventDefault());
-
-      dialog.setOutsideClickCallback(event => {
-        event.consume();
-        resolve(false);
-      });
-      dialog.show();
-      Host.userMetrics.actionTaken(Host.UserMetrics.Action.SelfXssWarningDialogShown);
-    });
-    dialog.hide();
-    return result;
   }
 }
 
@@ -1159,7 +1105,7 @@ class ActiveSearch {
 }
 
 const setActiveSearch =
-    CodeMirror.StateEffect.define<ActiveSearch|null>({map: (value, mapping) => value && value.map(mapping)});
+    CodeMirror.StateEffect.define<ActiveSearch|null>({map: (value, mapping) => value?.map(mapping)});
 
 const activeSearchState = CodeMirror.StateField.define<ActiveSearch|null>({
   create(): null {
@@ -1168,7 +1114,7 @@ const activeSearchState = CodeMirror.StateField.define<ActiveSearch|null>({
   update(state, tr): ActiveSearch |
       null {
         return tr.effects.reduce(
-            (state, effect) => effect.is(setActiveSearch) ? effect.value : state, state && state.map(tr.changes));
+            (state, effect) => effect.is(setActiveSearch) ? effect.value : state, state?.map(tr.changes) ?? null);
       },
 });
 
@@ -1176,8 +1122,7 @@ const searchMatchDeco = CodeMirror.Decoration.mark({class: 'cm-searchMatch'});
 const currentSearchMatchDeco = CodeMirror.Decoration.mark({class: 'cm-searchMatch cm-searchMatch-selected'});
 
 const searchHighlighter = CodeMirror.ViewPlugin.fromClass(class {
-decorations:
-  CodeMirror.DecorationSet;
+  decorations: CodeMirror.DecorationSet;
 
   constructor(view: CodeMirror.EditorView) {
     this.decorations = this.computeDecorations(view);
@@ -1303,3 +1248,28 @@ const sourceFrameTheme = CodeMirror.EditorView.theme({
  */
 export type RevealPosition = number|{lineNumber: number, columnNumber?: number}|
     {from: {lineNumber: number, columnNumber: number}, to: {lineNumber: number, columnNumber: number}};
+
+// Infobar panel state, used to show additional panels below the editor.
+
+export const addInfobar = CodeMirror.StateEffect.define<UI.Infobar.Infobar>();
+export const removeInfobar = CodeMirror.StateEffect.define<UI.Infobar.Infobar>();
+
+const infobarState = CodeMirror.StateField.define<UI.Infobar.Infobar[]>({
+  create(): UI.Infobar.Infobar[] {
+    return [];
+  },
+  update(current, tr): UI.Infobar.Infobar[] {
+    for (const effect of tr.effects) {
+      if (effect.is(addInfobar)) {
+        current = current.concat(effect.value);
+      } else if (effect.is(removeInfobar)) {
+        current = current.filter(b => b !== effect.value);
+      }
+    }
+    return current;
+  },
+  provide: (field): CodeMirror.Extension => CodeMirror.showPanel.computeN(
+      [field],
+      (state): Array<() => CodeMirror.Panel> =>
+          state.field(field).map((bar): (() => CodeMirror.Panel) => (): CodeMirror.Panel => ({dom: bar.element}))),
+});

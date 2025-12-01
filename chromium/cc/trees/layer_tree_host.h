@@ -297,7 +297,7 @@ class CC_EXPORT LayerTreeHost : public MutatorHostClient {
   // for instance in the case of RequestAnimationFrame from blink to ensure the
   // main frame update is run on the next tick without preemptively forcing a
   // full commit synchronization or layer updates.
-  void SetNeedsAnimate();
+  void SetNeedsAnimate(bool urgent = false);
 
   // Calls SetNeedsAnimate() if there is no main frame already in progress.
   void SetNeedsAnimateIfNotInsideMainFrame();
@@ -371,6 +371,8 @@ class CC_EXPORT LayerTreeHost : public MutatorHostClient {
   void OnDeferCommitsChanged(bool defer_status,
                              PaintHoldingReason reason,
                              std::optional<PaintHoldingCommitTrigger> trigger);
+
+  void SetShouldThrottleFrameRate(bool flag);
 
   // Returns whether there are any outstanding ScopedDeferMainFrameUpdate,
   // though commits may be deferred also when the local_surface_id_from_parent()
@@ -914,6 +916,7 @@ class CC_EXPORT LayerTreeHost : public MutatorHostClient {
 
   void SetSourceURL(ukm::SourceId source_id, const GURL& url);
   base::ReadOnlySharedMemoryRegion CreateSharedMemoryForSmoothnessUkm();
+  base::ReadOnlySharedMemoryRegion CreateSharedMemoryForDroppedFramesUkm();
 
   void SetRenderFrameObserver(
       std::unique_ptr<RenderFrameMetadataObserver> observer);

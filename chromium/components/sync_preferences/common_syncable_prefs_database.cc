@@ -26,6 +26,7 @@
 #include "components/saved_tab_groups/public/pref_names.h"
 #include "components/search_engines/search_engines_pref_names.h"
 #include "components/sharing_message/pref_names.h"
+#include "components/sync/base/data_type.h"
 #include "components/translate/core/browser/translate_pref_names.h"
 #include "components/translate/core/browser/translate_prefs.h"
 #include "components/variations/service/google_groups_manager_prefs.h"
@@ -125,6 +126,8 @@ enum {
   kSafeBrowsingEnhanced = 79,
   kFacilitatedPaymentsEwallet = 80,
   kAutofillBnplEnabled = 81,
+  kAutofillHasSeenBnpl = 82,
+  kAutomaticPasskeyUpgrades = 83,
   // See components/sync_preferences/README.md about adding new entries here.
   // vvvvv IMPORTANT! vvvvv
   // Note to the reviewer: IT IS YOUR RESPONSIBILITY to ensure that new syncable
@@ -205,6 +208,10 @@ constexpr auto kCommonSyncablePrefsAllowlist =
           MergeBehavior::kNone}},
         {password_manager::prefs::kCredentialsEnableService,
          {syncable_prefs_ids::kCredentialsEnableService,
+          syncer::PRIORITY_PREFERENCES, PrefSensitivity::kNone,
+          MergeBehavior::kNone}},
+        {password_manager::prefs::kAutomaticPasskeyUpgrades,
+         {syncable_prefs_ids::kAutomaticPasskeyUpgrades,
           syncer::PRIORITY_PREFERENCES, PrefSensitivity::kNone,
           MergeBehavior::kNone}},
         {password_manager::prefs::kPasswordDismissCompromisedAlertEnabled,
@@ -330,6 +337,9 @@ constexpr auto kCommonSyncablePrefsAllowlist =
     BUILDFLAG(IS_CHROMEOS)
         {autofill::prefs::kAutofillBnplEnabled,
          {syncable_prefs_ids::kAutofillBnplEnabled, syncer::PREFERENCES,
+          PrefSensitivity::kNone, MergeBehavior::kNone}},
+        {autofill::prefs::kAutofillHasSeenBnpl,
+         {syncable_prefs_ids::kAutofillHasSeenBnpl, syncer::PREFERENCES,
           PrefSensitivity::kNone, MergeBehavior::kNone}},
 #endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) ||
         // BUILDFLAG(IS_CHROMEOS)

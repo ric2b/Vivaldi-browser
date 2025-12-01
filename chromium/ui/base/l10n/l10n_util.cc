@@ -43,8 +43,6 @@
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/base/ui_base_paths.h"
 
-#include "app/vivaldi_apptools.h"
-
 #if BUILDFLAG(IS_ANDROID)
 #include "base/android/locale_utils.h"
 #include "ui/base/l10n/l10n_util_android.h"
@@ -62,6 +60,8 @@
 #include "base/logging.h"
 #include "ui/base/l10n/l10n_util_win.h"
 #endif  // BUILDFLAG(IS_WIN)
+
+#include "app/vivaldi_apptools.h"
 
 namespace {
 
@@ -168,6 +168,7 @@ constexpr auto kAcceptLanguageList = base::MakeFixedFlatSet<std::string_view>({
     "kab",       // Kabyle, Vivaldi addition
     "kk",        // Kazakh
     "km",        // Cambodian
+    "kmr",       // Kurdish (Kurmanji), Vivaldi addition
     "kn",        // Kannada
     "ko",        // Korean
     "kok",       // Konkani
@@ -521,7 +522,7 @@ std::string GetApplicationLocaleInternalMac(const std::string& pref_locale) {
         return app_locale;
       }
     }
-  }
+  } // End Vivaldi
 
   // Use any override (Cocoa for the browser), otherwise use the preference
   // passed to the function.

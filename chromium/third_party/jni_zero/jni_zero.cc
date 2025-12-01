@@ -24,7 +24,6 @@ JavaVM* g_jvm = nullptr;
 jclass (*g_class_resolver)(JNIEnv*, const char*, const char*) = nullptr;
 
 void (*g_exception_handler_callback)(JNIEnv*) = nullptr;
-void (*g_native_to_java_callback)(const char*, const char*) = nullptr;
 
 jclass GetClassInternal(JNIEnv* env,
                         const char* class_name,
@@ -123,6 +122,10 @@ void DetachFromVM() {
 }
 
 void InitVM(JavaVM* vm) {
+  if (g_jvm) {
+    JNI_ZERO_CHECK(vm == g_jvm);
+    return;
+  }
   g_jvm = vm;
   JNIEnv* env = AttachCurrentThread();
   g_object_class = GetSystemClassGlobalRef(env, "java/lang/Object");
@@ -172,16 +175,6 @@ bool ClearException(JNIEnv* env) {
 
 void SetExceptionHandler(void (*callback)(JNIEnv*)) {
   g_exception_handler_callback = callback;
-}
-
-void SetNativeToJavaCallback(void (*callback)(char const*, char const*)) {
-  g_native_to_java_callback = callback;
-}
-
-void CallNativeToJavaCallback(char const* class_name, char const* method_name) {
-  if (g_native_to_java_callback) {
-    g_native_to_java_callback(class_name, method_name);
-  }
 }
 
 void CheckException(JNIEnv* env) {

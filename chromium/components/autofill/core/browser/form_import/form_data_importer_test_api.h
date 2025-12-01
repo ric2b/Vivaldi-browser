@@ -12,14 +12,12 @@
 #include "components/autofill/core/browser/form_import/form_data_importer.h"
 #include "components/autofill/core/browser/payments/credit_card_save_manager.h"
 #include "components/autofill/core/browser/payments/iban_save_manager.h"
-#include "components/autofill/core/browser/payments/local_card_migration_manager.h"
 
 namespace autofill {
 
 class FormDataImporterTestApi {
  public:
-  using AddressProfileImportCandidate =
-      FormDataImporter::AddressProfileImportCandidate;
+  using ExtractedAddressProfile = FormDataImporter::ExtractedAddressProfile;
   using ExtractedFormData = FormDataImporter::ExtractedFormData;
 
   explicit FormDataImporterTestApi(FormDataImporter* fdi) : fdi_(*fdi) {}
@@ -40,14 +38,6 @@ class FormDataImporterTestApi {
     fdi_->iban_save_manager_ = std::move(iban_save_manager);
   }
 
-#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
-  void set_local_card_migration_manager(
-      std::unique_ptr<LocalCardMigrationManager> local_card_migration_manager) {
-    fdi_->local_card_migration_manager_ =
-        std::move(local_card_migration_manager);
-  }
-#endif  // !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
-
   FormDataImporter::CreditCardImportType credit_card_import_type() const {
     return fdi_->credit_card_import_type_;
   }
@@ -65,11 +55,10 @@ class FormDataImporterTestApi {
     return fdi_->ExtractCreditCard(form);
   }
 
-  size_t ExtractAddressProfiles(const FormStructure& form,
-                                std::vector<AddressProfileImportCandidate>*
-                                    address_profile_import_candidates) {
-    return fdi_->ExtractAddressProfiles(form,
-                                        address_profile_import_candidates);
+  size_t ExtractAddressProfiles(
+      const FormStructure& form,
+      std::vector<ExtractedAddressProfile>* extracted_address_profiles) {
+    return fdi_->ExtractAddressProfiles(form, extracted_address_profiles);
   }
 
   base::flat_map<FieldType, std::u16string> GetObservedFieldValues(
@@ -83,13 +72,24 @@ class FormDataImporterTestApi {
         has_multiple_distinct_email_addresses, has_address_related_fields);
   }
 
-  bool ProcessAddressProfileImportCandidates(
-      const std::vector<AddressProfileImportCandidate>&
-          address_profile_import_candidates,
+  bool HasInvalidFieldTypes(
+      base::span<const AutofillField* const> section_fields) {
+    ProfileImportMetadata import_metadata;
+    bool has_invalid_field_types = false;
+    bool has_multiple_distinct_email_addresses = false;
+    bool has_address_related_fields = false;
+    std::ignore = fdi_->GetAddressObservedFieldValues(
+        section_fields, import_metadata, nullptr, has_invalid_field_types,
+        has_multiple_distinct_email_addresses, has_address_related_fields);
+    return has_invalid_field_types;
+  }
+
+  bool ProcessExtractedAddressProfiles(
+      const std::vector<ExtractedAddressProfile>& extracted_address_profiles,
       bool allow_prompt,
       ukm::SourceId ukm_source_id) {
-    return fdi_->ProcessAddressProfileImportCandidates(
-        address_profile_import_candidates, allow_prompt, ukm_source_id);
+    return fdi_->ProcessExtractedAddressProfiles(extracted_address_profiles,
+                                                 allow_prompt, ukm_source_id);
   }
 
   ExtractedFormData ExtractFormData(const FormStructure& form,

@@ -106,6 +106,21 @@ class CachedMetadataHandler : public GarbageCollected<CachedMetadataHandler> {
                                          // by a single CachedMetadata entry.
   };
 
+  // Defines mutually exclusive serving sources for the handler's cached
+  // metadata.
+  enum class ServingSource {
+    // Served by ServiceWorker CacheStorage.
+    kCacheStorage,
+
+    // Served by the static cached metadata from the application's resource
+    // bundle for WebUI code.
+    kWebUIBundledCache,
+
+    // Served by other means, typically the platform's CodeCacheHost. Note: This
+    // enum should be expanded as necessary.
+    kOther,
+  };
+
   virtual ~CachedMetadataHandler() = default;
   virtual void Trace(Visitor* visitor) const {}
 
@@ -117,7 +132,10 @@ class CachedMetadataHandler : public GarbageCollected<CachedMetadataHandler> {
   // Returns the encoding to which the cache is specific.
   virtual String Encoding() const = 0;
 
-  virtual bool IsServedFromCacheStorage() const = 0;
+  // The source serving the handler's cached metadata.
+  virtual ServingSource GetServingSource() const {
+    return ServingSource::kOther;
+  }
 
   // Dump cache size kept in memory.
   virtual void OnMemoryDump(WebProcessMemoryDump* pmd,
@@ -176,8 +194,9 @@ class CachedMetadataHandler : public GarbageCollected<CachedMetadataHandler> {
     // Do nothing.
   }
 
-  // Called if the code cache data was used. Intended for logging.
-  virtual void DidUseCodeCache() {}
+  // Called if the code cache data was used. `was_rejected` is true if V8
+  // consumed but rejected the code cache. Intended for logging.
+  virtual void DidUseCodeCache(bool was_rejected) {}
 
   // Called when a code cache will eventually be generated. It won't necessarily
   // be generated immediately. Intended for logging.

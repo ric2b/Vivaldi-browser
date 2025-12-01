@@ -1191,6 +1191,7 @@ static int vp8_lossless_decode_frame(AVCodecContext *avctx, AVFrame *p,
     *got_frame   = 1;
     p->pict_type = AV_PICTURE_TYPE_I;
     p->flags |= AV_FRAME_FLAG_KEY;
+    p->flags |= AV_FRAME_FLAG_LOSSLESS;
     ret          = data_size;
 
 free_and_return:
@@ -1406,7 +1407,11 @@ static int webp_decode_frame(AVCodecContext *avctx, AVFrame *p,
                                                 chunk_size, 0);
                 if (ret < 0)
                     return ret;
+#if FF_API_CODEC_PROPS
+FF_DISABLE_DEPRECATION_WARNINGS
                 avctx->properties |= FF_CODEC_PROPERTY_LOSSLESS;
+FF_ENABLE_DEPRECATION_WARNINGS
+#endif
             }
             bytestream2_skip(&gb, chunk_size);
             break;

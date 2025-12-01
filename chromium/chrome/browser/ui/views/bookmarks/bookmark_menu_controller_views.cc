@@ -9,6 +9,7 @@
 #include "base/memory/ptr_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/bookmarks/bookmark_merged_surface_service.h"
+#include "chrome/browser/bookmarks/bookmark_merged_surface_service_observer.h"
 #include "chrome/browser/ui/bookmarks/bookmark_stats.h"
 #include "chrome/browser/ui/views/bookmarks/bookmark_bar_view.h"
 #include "chrome/browser/ui/views/bookmarks/bookmark_menu_controller_observer.h"
@@ -73,7 +74,7 @@ void BookmarkMenuController::RunMenuAt(BookmarkBarView* bookmark_bar) {
   views::View::ConvertPointToScreen(menu_button, &screen_loc);
   gfx::Rect bounds(screen_loc.x(), screen_loc.y(), menu_button->width(),
                    menu_button->height());
-  menu_delegate_->GetBookmarkModel()->AddObserver(this);
+  menu_delegate_->GetBookmarkMergedSurfaceService()->AddObserver(this);
   // We only delete ourself after the menu completes, so we can safely ignore
   // the return value.
   menu_runner_->RunMenuAt(menu_delegate_->parent(),
@@ -210,9 +211,12 @@ views::MenuItemView* BookmarkMenuController::GetVivaldiSiblingMenu(
     views::MenuAnchorPosition* anchor) {
   int start_index;
   const BookmarkNode* node = vivaldi::GetNodeByPosition(
-      menu_delegate_->GetBookmarkModel(), screen_point, &start_index, rect);
+      menu_delegate_->GetBookmarkMergedSurfaceService()->bookmark_model(),
+      screen_point, &start_index, rect);
   if (!node || !node->is_folder() ||
-      menu_delegate_->GetBookmarkModel()->is_root_node(node))
+      menu_delegate_->GetBookmarkMergedSurfaceService()
+          ->bookmark_model()
+          ->is_root_node(node))
     return nullptr;
   menu_delegate_->SetActiveMenu(BookmarkParentFolder::FromFolderNode(node),
                                 start_index);
@@ -228,7 +232,7 @@ void BookmarkMenuController::WillShowMenu(MenuItemView* menu) {
   menu_delegate_->WillShowMenu(menu);
 }
 
-void BookmarkMenuController::BookmarkModelChanged() {
+void BookmarkMenuController::BookmarkMergedSurfaceServiceChanged() {
   if (!menu_delegate_->is_mutating_model()) {
     menu()->Cancel();
   }
@@ -240,19 +244,49 @@ void BookmarkMenuController::BookmarkStartIndexChanged(
   menu_delegate_->SetMenuStartIndex(folder, new_start_index);
 }
 
+void BookmarkMenuController::BookmarkMergedSurfaceServiceLoaded() {
+  BookmarkMergedSurfaceServiceChanged();
+}
+
+void BookmarkMenuController::BookmarkMergedSurfaceServiceBeingDeleted() {
+  BookmarkMergedSurfaceServiceChanged();
+}
+
+void BookmarkMenuController::BookmarkNodeAdded(
+    const BookmarkParentFolder& parent,
+    size_t index) {
+  BookmarkMergedSurfaceServiceChanged();
+}
+
+void BookmarkMenuController::BookmarkNodesRemoved(
+    const BookmarkParentFolder& parent,
+    const base::flat_set<const bookmarks::BookmarkNode*>& nodes) {
+  BookmarkMergedSurfaceServiceChanged();
+}
+
 void BookmarkMenuController::BookmarkNodeMoved(
-    const bookmarks::BookmarkNode* old_parent,
+    const BookmarkParentFolder& old_parent,
     size_t old_index,
-    const bookmarks::BookmarkNode* new_parent,
+    const BookmarkParentFolder& new_parent,
     size_t new_index) {
   // The delegate is also an observer and will handle updating the menu.
   // Overriding the BookmarkNodeMoved method prevents the base class from
   // invoking `BookmarkModelChanged`, which would close the menu.
   CHECK(menu_delegate_.get());
+}
 
-  // TODO(crbug.com/393126961): This is a temporary solution to prevent
-  // some crashes, by ensuring the bookmark menu closes when the bookmark moves.
-  menu()->Cancel();
+void BookmarkMenuController::BookmarkNodeChanged(
+    const bookmarks::BookmarkNode* node) {
+  BookmarkMergedSurfaceServiceChanged();
+}
+
+void BookmarkMenuController::BookmarkParentFolderChildrenReordered(
+    const BookmarkParentFolder& folder) {
+  BookmarkMergedSurfaceServiceChanged();
+}
+
+void BookmarkMenuController::BookmarkAllUserNodesRemoved() {
+  BookmarkMergedSurfaceServiceChanged();
 }
 
 bool BookmarkMenuController::ShouldTryPositioningBesideAnchor() const {
@@ -274,7 +308,7 @@ void BookmarkMenuController::VivaldiSelectionChanged(MenuItemView* menu) {
 }
 
 BookmarkMenuController::~BookmarkMenuController() {
-  menu_delegate_->GetBookmarkModel()->RemoveObserver(this);
+  menu_delegate_->GetBookmarkMergedSurfaceService()->RemoveObserver(this);
   if (observer_) {
     observer_->BookmarkMenuControllerDeleted(this);
   }

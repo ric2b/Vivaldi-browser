@@ -852,6 +852,12 @@ bool ScopeIterator::VisitContextLocals(const Visitor& visitor,
     if (ScopeInfo::VariableIsSynthetic(*name)) continue;
     int context_index = scope_info->ContextHeaderLength() + it->index();
     Handle<Object> value(context->get(context_index), isolate_);
+    if (v8_flags.script_context_mutable_heap_number &&
+        context->IsScriptContext()) {
+      value = indirect_handle(Context::LoadScriptContextElement(
+                                  context, context_index, value, isolate_),
+                              isolate_);
+    }
     if (visitor(name, value, scope_type)) return true;
   }
   return false;
@@ -958,14 +964,14 @@ bool ScopeIterator::VisitLocals(const Visitor& visitor, Mode mode,
         if (mode == Mode::STACK) continue;
         DCHECK(var->IsContextSlot());
 
-        // We know of at least one open bug where the context and scope chain
-        // don't match (https://crbug.com/753338).
-        // Return `undefined` if the context's ScopeInfo doesn't know anything
-        // about this variable.
-        if (context_->scope_info()->ContextSlotIndex(var->name()) != index) {
-          value = isolate_->factory()->undefined_value();
-        } else {
-          value = handle(context_->get(index), isolate_);
+        DCHECK_EQ(context_->scope_info()->ContextSlotIndex(var->name()), index);
+        value = handle(context_->get(index), isolate_);
+
+        if (v8_flags.script_context_mutable_heap_number &&
+            context_->IsScriptContext()) {
+          value = indirect_handle(Context::LoadScriptContextElement(
+                                      context_, index, value, isolate_),
+                                  isolate_);
         }
         break;
 
@@ -1126,7 +1132,15 @@ bool ScopeIterator::SetLocalVariableValue(DirectHandle<String> variable_name,
               index) {
             return false;
           }
-          context_->set(index, *new_value);
+          if ((v8_flags.script_context_mutable_heap_number ||
+               v8_flags.const_tracking_let) &&
+              context_->IsScriptContext()) {
+            Context::StoreScriptContextAndUpdateSlotProperty(
+                context_, index, new_value, isolate_);
+          } else {
+            context_->set(index, *new_value);
+          }
+
           return true;
 
         case VariableLocation::MODULE:
@@ -1194,7 +1208,13 @@ bool ScopeIterator::SetScriptVariableValue(DirectHandle<String> variable_name,
   if (script_contexts->Lookup(variable_name, &lookup_result)) {
     DirectHandle<Context> script_context(
         script_contexts->get(lookup_result.context_index), isolate_);
-    script_context->set(lookup_result.slot_index, *new_value);
+    if (v8_flags.script_context_mutable_heap_number ||
+        v8_flags.const_tracking_let) {
+      Context::StoreScriptContextAndUpdateSlotProperty(
+          script_context, lookup_result.slot_index, new_value, isolate_);
+    } else {
+      script_context->set(lookup_result.slot_index, *new_value);
+    }
     return true;
   }
 

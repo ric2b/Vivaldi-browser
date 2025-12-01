@@ -51,6 +51,9 @@
 #include "extensions/common/permissions/permissions_data.h"
 #include "url/origin.h"
 
+#include "components/infobars/content/content_infobar_manager.h"
+#include "chrome/browser/ui/page_info/page_info_infobar_delegate.h"
+
 namespace {
 
 std::vector<extensions::ExtensionId> GetExtensionIds(
@@ -343,10 +346,6 @@ void ExtensionActionRunner::OnRequestScriptInjectionPermission(
     mojom::InjectionType script_type,
     mojom::RunLocation run_location,
     mojom::LocalFrameHost::RequestScriptInjectionPermissionCallback callback) {
-  if (!crx_file::id_util::IdIsValid(extension_id)) {
-    NOTREACHED() << "'" << extension_id << "' is not a valid id.";
-  }
-
   const Extension* extension = ExtensionRegistry::Get(browser_context_)
                                    ->enabled_extensions()
                                    .GetByID(extension_id);
@@ -427,6 +426,13 @@ void ExtensionActionRunner::ShowReloadPageBubble(
   // doesn't exist. Currently we get the extension's icon via the action
   // controller from the container, so the container must exist.
   Browser* browser = chrome::FindBrowserWithTab(web_contents());
+  //Vivaldi: We do not have an ExtensionContainer like chromium and use
+  // infobars to prompt for page reload.
+  if(browser->is_vivaldi()){
+      infobars::ContentInfoBarManager* infobar_manager =
+          infobars::ContentInfoBarManager::FromWebContents(web_contents());
+      PageInfoInfoBarDelegate::CreateForVivaldi(infobar_manager);
+  } else {
   ExtensionsContainer* const extensions_container =
       browser ? browser->window()->GetExtensionsContainer() : nullptr;
   if (!extensions_container) {
@@ -437,6 +443,7 @@ void ExtensionActionRunner::ShowReloadPageBubble(
       browser, extension_ids,
       base::BindOnce(&ExtensionActionRunner::OnReloadPageBubbleAccepted,
                      weak_factory_.GetWeakPtr()));
+  }
 }
 
 void ExtensionActionRunner::OnReloadPageBubbleAccepted() {

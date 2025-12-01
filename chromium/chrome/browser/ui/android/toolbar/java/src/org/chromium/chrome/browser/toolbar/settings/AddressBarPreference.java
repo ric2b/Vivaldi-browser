@@ -7,14 +7,14 @@ package org.chromium.chrome.browser.toolbar.settings;
 import android.content.Context;
 import android.util.AttributeSet;
 import android.widget.RadioGroup;
-import android.widget.TextView;
 
-import androidx.annotation.NonNull;
 import androidx.annotation.VisibleForTesting;
 import androidx.preference.Preference;
 import androidx.preference.PreferenceViewHolder;
 
-import org.chromium.base.BuildInfo;
+import org.chromium.build.annotations.Initializer;
+import org.chromium.build.annotations.NullMarked;
+import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.preferences.ChromePreferenceKeys;
 import org.chromium.chrome.browser.preferences.ChromeSharedPreferences;
 import org.chromium.chrome.browser.toolbar.R;
@@ -22,11 +22,11 @@ import org.chromium.components.browser_ui.widget.RadioButtonWithDescription;
 import org.chromium.components.browser_ui.widget.RadioButtonWithDescriptionLayout;
 
 /** Preferences that allows the user to configure address bar. */
+@NullMarked
 public class AddressBarPreference extends Preference implements RadioGroup.OnCheckedChangeListener {
-    private @NonNull TextView mDescription;
-    private @NonNull RadioButtonWithDescriptionLayout mGroup;
-    private @NonNull RadioButtonWithDescription mTopButton;
-    private @NonNull RadioButtonWithDescription mBottomButton;
+    private RadioButtonWithDescriptionLayout mGroup;
+    private RadioButtonWithDescription mTopButton;
+    private RadioButtonWithDescription mBottomButton;
 
     public AddressBarPreference(Context context, AttributeSet attrs) {
         super(context, attrs);
@@ -34,10 +34,22 @@ public class AddressBarPreference extends Preference implements RadioGroup.OnChe
         setLayoutResource(R.layout.address_bar_preference);
     }
 
+    /**
+     * Returns whether the toolbar is user-configured to show on top. If no value has been set
+     * explicitly by the user a default param is used. The value of the default param is
+     * configurable for experimental purposes but defaults to top.
+     */
+    public static boolean isToolbarConfiguredToShowOnTop() {
+        return ChromeSharedPreferences.getInstance()
+                .readBoolean(
+                        ChromePreferenceKeys.TOOLBAR_TOP_ANCHORED,
+                        ChromeFeatureList.sAndroidBottomToolbarDefaultToTop.getValue());
+    }
+
     @Override
+    @Initializer
     public void onBindViewHolder(PreferenceViewHolder holder) {
         super.onBindViewHolder(holder);
-        mDescription = (TextView) holder.findViewById(R.id.address_bar_settings_description);
         mGroup =
                 (RadioButtonWithDescriptionLayout)
                         holder.findViewById(R.id.address_bar_radio_group);
@@ -47,7 +59,6 @@ public class AddressBarPreference extends Preference implements RadioGroup.OnChe
         mBottomButton = (RadioButtonWithDescription) holder.findViewById(R.id.address_bar_bottom);
 
         initializeRadioButtonSelection();
-        overrideDescriptionIfFoldable();
     }
 
     @Override
@@ -58,17 +69,9 @@ public class AddressBarPreference extends Preference implements RadioGroup.OnChe
     }
 
     private void initializeRadioButtonSelection() {
-        boolean showOnTop =
-                ChromeSharedPreferences.getInstance()
-                        .readBoolean(ChromePreferenceKeys.TOOLBAR_TOP_ANCHORED, true);
+        boolean showOnTop = isToolbarConfiguredToShowOnTop();
         mTopButton.setChecked(showOnTop);
         mBottomButton.setChecked(!showOnTop);
-    }
-
-    private void overrideDescriptionIfFoldable() {
-        if (BuildInfo.getInstance().isFoldable) {
-            mDescription.setText(R.string.address_bar_settings_description_foldable);
-        }
     }
 
     @VisibleForTesting
@@ -79,10 +82,5 @@ public class AddressBarPreference extends Preference implements RadioGroup.OnChe
     @VisibleForTesting
     RadioButtonWithDescription getBottomRadioButton() {
         return mBottomButton;
-    }
-
-    @VisibleForTesting
-    TextView getDescription() {
-        return mDescription;
     }
 }

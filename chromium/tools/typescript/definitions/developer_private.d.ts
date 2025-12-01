@@ -11,26 +11,6 @@ declare global {
   export namespace chrome {
     export namespace developerPrivate {
 
-      export enum ItemType {
-        HOSTED_APP = 'hosted_app',
-        PACKAGED_APP = 'packaged_app',
-        LEGACY_PACKAGED_APP = 'legacy_packaged_app',
-        EXTENSION = 'extension',
-        THEME = 'theme',
-      }
-
-      export interface ItemInspectView {
-        path: string;
-        render_process_id: number;
-        render_view_id: number;
-        incognito: boolean;
-        generatedBackgroundPage: boolean;
-      }
-
-      export interface InstallWarning {
-        message: string;
-      }
-
       export enum ExtensionType {
         HOSTED_APP = 'HOSTED_APP',
         PLATFORM_APP = 'PLATFORM_APP',
@@ -237,10 +217,13 @@ declare global {
         disableReasons: DisableReasons;
         errorCollection: AccessModifier;
         fileAccess: AccessModifier;
+        fileAccessPendingChange: boolean;
         homePage: HomePage;
         iconUrl: string;
         id: string;
         incognitoAccess: AccessModifier;
+        userScriptsAccess: AccessModifier;
+        incognitoAccessPendingChange: boolean;
         installWarnings: string[];
         isCommandRegistrationHandledExternally: boolean;
         launchUrl?: string;
@@ -287,6 +270,7 @@ declare global {
         extensionId: string;
         fileAccess?: boolean;
         incognitoAccess?: boolean;
+        userScriptsAccess?: boolean;
         errorCollection?: boolean;
         hostAccess?: HostAccess;
         showAccessRequestsInToolbar?: boolean;
@@ -512,7 +496,7 @@ declare global {
       export function dismissMv2DeprecationNoticeForExtension(
           extensionId: string): Promise<void>;
       export function uploadExtensionToAccount(extensionId: string):
-          Promise<void>;
+          Promise<boolean>;
 
       export const onItemStateChanged: ChromeEvent<(data: EventData) => void>;
       export const onProfileStateChanged:

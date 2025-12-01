@@ -33,7 +33,7 @@ struct SearchWidget: Widget {
     let kind: String = "SearchWidget"
     var body: some WidgetConfiguration {
       AppIntentConfiguration(
-        kind: kind, intent: SelectProfileIntent.self, provider: ConfigurableProvider()
+        kind: kind, intent: SelectAccountIntent.self, provider: ConfigurableProvider()
       ) { entry in
         SearchWidgetEntryView(entry: entry)
       }
@@ -54,7 +54,8 @@ struct SearchWidgetEntryView: View {
 
   var body: some View {
     SearchWidgetEntryViewTemplate(
-      destinationURL: WidgetConstants.SearchWidget.url, imageName: "widget_chrome_logo",
+      destinationURL: destinationURL(url: WidgetConstants.SearchWidget.url, gaia: entry.gaiaID),
+      imageName: "widget_chrome_logo",
       title: "IDS_IOS_WIDGET_KIT_EXTENSION_SEARCH_TITLE",
       accessibilityLabel: "IDS_IOS_WIDGET_KIT_EXTENSION_SEARCH_A11Y_LABEL", entry: entry)
   }

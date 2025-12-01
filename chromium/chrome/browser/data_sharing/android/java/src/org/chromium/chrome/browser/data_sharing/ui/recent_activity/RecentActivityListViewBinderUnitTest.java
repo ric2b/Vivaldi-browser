@@ -15,6 +15,7 @@ import static org.mockito.Mockito.when;
 import android.content.Context;
 import android.graphics.drawable.Drawable;
 import android.text.TextPaint;
+import android.view.View;
 import android.view.View.OnClickListener;
 import android.view.ViewGroup;
 import android.widget.ImageView;
@@ -74,11 +75,12 @@ public class RecentActivityListViewBinderUnitTest {
 
     @Test
     public void testDescriptionWithTimestamp() {
-        DescriptionAndTimestamp descriptionAndTimestamp = new DescriptionAndTimestamp();
-        descriptionAndTimestamp.description = "description 1";
-        descriptionAndTimestamp.timestamp = "8h ago";
-        descriptionAndTimestamp.separator = ".";
-        descriptionAndTimestamp.descriptionFullTextResId = 5;
+        DescriptionAndTimestamp descriptionAndTimestamp =
+                new DescriptionAndTimestamp(
+                        /* description= */ "description 1",
+                        /* separator= */ ".",
+                        /* timestamp= */ "8h ago",
+                        /* descriptionFullTextResId= */ 5);
         mPropertyModel.set(
                 RecentActivityListProperties.DESCRIPTION_AND_TIMESTAMP_TEXT,
                 descriptionAndTimestamp);
@@ -93,11 +95,12 @@ public class RecentActivityListViewBinderUnitTest {
 
     @Test
     public void testTimestampWithEmptyDescription() {
-        DescriptionAndTimestamp descriptionAndTimestamp = new DescriptionAndTimestamp();
-        descriptionAndTimestamp.description = "";
-        descriptionAndTimestamp.timestamp = "8h ago";
-        descriptionAndTimestamp.separator = ".";
-        descriptionAndTimestamp.descriptionFullTextResId = 5;
+        DescriptionAndTimestamp descriptionAndTimestamp =
+                new DescriptionAndTimestamp(
+                        /* description= */ "",
+                        /* separator= */ ".",
+                        /* timestamp= */ "8h ago",
+                        /* descriptionFullTextResId= */ 5);
         mPropertyModel.set(
                 RecentActivityListProperties.DESCRIPTION_AND_TIMESTAMP_TEXT,
                 descriptionAndTimestamp);
@@ -116,6 +119,13 @@ public class RecentActivityListViewBinderUnitTest {
         InOrder inOrder = Mockito.inOrder(mFaviconView);
         inOrder.verify(mFaviconView).setImageDrawable(eq(null));
         inOrder.verify(mFaviconView).setImageDrawable(eq(mDrawable));
+    }
+
+    @Test
+    public void testFavicon_nullProvider() {
+        mPropertyModel.set(RecentActivityListProperties.FAVICON_PROVIDER, null);
+        InOrder inOrder = Mockito.inOrder(mFaviconView);
+        inOrder.verify(mFaviconView).setVisibility(eq(View.GONE));
     }
 
     @Test

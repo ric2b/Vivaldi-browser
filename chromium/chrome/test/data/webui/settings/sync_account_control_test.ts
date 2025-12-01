@@ -206,6 +206,28 @@ suite('SyncAccountControl', function() {
         assertTrue(isChildVisible(testElement, '#signout-button'));
       });
 
+  test('Signout buttons not available to managed accounts', function() {
+    loadTimeData.overrideValues({isImprovedSettingsUIOnDesktopEnabled: true});
+    testElement.syncStatus = {
+      signedInState: SignedInState.SIGNED_IN,
+      statusAction: StatusAction.NO_ACTION,
+      domain: 'domain',
+    };
+
+    flush();
+
+    assertTrue(isChildVisible(testElement, '#sync-button'));
+    assertFalse(isChildVisible(testElement, '#signout-button'));
+    assertFalse(isChildVisible(testElement, '#remove-account-button'));
+
+    testElement.syncStatus = {
+      signedInState: SignedInState.SIGNED_IN_PAUSED,
+      statusAction: StatusAction.NO_ACTION,
+      domain: 'domain',
+    };
+    assertFalse(isChildVisible(testElement, '#signout-button'));
+    assertFalse(isChildVisible(testElement, '#remove-account-button'));
+  });
 
   test(
       'Updated UI hidden when sync off, kImprovedSettingsUIOnDesktop disabled',
@@ -537,6 +559,36 @@ suite('SyncAccountControl', function() {
     assertTrue(isVisible(setupButtons));
   });
 
+  test('signed in, setup in progress with error', function() {
+    testElement.embeddedInSubpage = true;
+
+    testElement.syncStatus = {
+      signedInState: SignedInState.SYNCING,
+      signedInUsername: 'bar@bar.com',
+      statusAction: StatusAction.REAUTHENTICATE,
+      statusText: 'Sign in again',
+      firstSetupInProgress: true,
+      hasError: true,
+      hasUnrecoverableError: false,
+      disabled: false,
+    };
+    flush();
+    const userInfo = testElement.shadowRoot!.querySelector('#user-info')!;
+    const setupButtons =
+        testElement.shadowRoot!.querySelector('#setup-buttons');
+
+    assertTrue(userInfo.textContent!.includes('Sign in again'));
+    assertTrue(isVisible(setupButtons));
+
+    // Other buttons are not shown, https://crbug.com/405980868
+    assertFalse(isChildVisible(testElement, '#turn-off'));
+    assertFalse(isChildVisible(testElement, '#sync-error-button'));
+    assertFalse(isChildVisible(testElement, '#signin-paused-buttons'));
+    assertFalse(isChildVisible(testElement, '#sync-button'));
+    assertFalse(isChildVisible(testElement, '#signout-button'));
+    assertFalse(isChildVisible(testElement, '#account-aware'));
+  });
+
   test('embedded in another page', function() {
     testElement.embeddedInSubpage = true;
 
@@ -707,6 +759,7 @@ suite('SyncAccountControl', function() {
     assertNotEquals(secondaryContentSignedIn, secondaryContentSigninPaused);
     assertEquals(secondaryContentSigninPaused.trim(), signedInAccount.email);
     assertTrue(isChildVisible(testElement, '#signin-paused-buttons'));
+    assertTrue(isChildVisible(testElement, '#remove-account-button'));
     assertFalse(isChildVisible(testElement, '#dropdown-arrow'));
     assertFalse(isChildVisible(testElement, '#sync-button'));
   });

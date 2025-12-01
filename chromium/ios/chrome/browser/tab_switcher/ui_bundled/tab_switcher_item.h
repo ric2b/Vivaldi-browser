@@ -44,6 +44,12 @@ typedef void (^TabSwitcherImageFetchingCompletionBlock)(TabSwitcherItem* item,
 @property(nonatomic, readonly) BOOL hidesTitle;
 @property(nonatomic, readonly) BOOL showsActivity;
 
+// Vivaldi
+@property(nonatomic, assign) BOOL isPinned;
+@property(nonatomic, readonly) BOOL isNTP;
+@property(nonatomic, readonly) UIColor* themeColor;
+// End Vivaldi
+
 #pragma mark - Image Fetching
 
 // Fetches the favicon, calling `completion` on the calling sequence when the

@@ -93,8 +93,12 @@ class ExtensionThrottleManager {
     virtual ~Vivaldi_ExtensionManagerObserver() = default;
   };
 
-  void AddObserver(Vivaldi_ExtensionManagerObserver* observer);
-  void RemoveObserver(Vivaldi_ExtensionManagerObserver* observer);
+  void AddObserver(Vivaldi_ExtensionManagerObserver* observer) {
+    observers_.AddObserver(observer);
+  }
+  void RemoveObserver(Vivaldi_ExtensionManagerObserver* observer) {
+    observers_.RemoveObserver(observer);
+  }
 
  protected:
   // Method that allows us to transform a URL into an ID that can be used in our

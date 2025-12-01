@@ -7,6 +7,7 @@
 #include <stdint.h>
 
 #include <algorithm>
+#include <memory>
 #include <utility>
 #include <vector>
 
@@ -26,7 +27,6 @@
 #include "components/affiliations/core/browser/affiliation_fetcher_interface.h"
 #include "components/affiliations/core/browser/affiliation_utils.h"
 #include "components/affiliations/core/browser/facet_manager.h"
-#include "components/affiliations/core/browser/features.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 
 namespace affiliations {
@@ -46,7 +46,6 @@ AffiliationBackend::AffiliationBackend(
     : task_runner_(task_runner),
       clock_(time_source),
       tick_clock_(time_tick_source),
-      fetcher_factory_(std::make_unique<AffiliationFetcherFactoryImpl>()),
       construction_time_(clock_->Now()) {
   DCHECK_LT(base::Time(), clock_->Now());
   DETACH_FROM_SEQUENCE(sequence_checker_);
@@ -75,6 +74,8 @@ void AffiliationBackend::Initialize(
   DCHECK(!url_loader_factory_);
   url_loader_factory_ = network::SharedURLLoaderFactory::Create(
       std::move(pending_url_loader_factory));
+  fetcher_manager_ = std::make_unique<AffiliationFetcherManager>(
+      std::move(url_loader_factory_), this);
 }
 
 void AffiliationBackend::GetAffiliationsAndBranding(
@@ -237,16 +238,6 @@ void AffiliationBackend::DeleteCache(const base::FilePath& db_path) {
   AffiliationDatabase::Delete(db_path);
 }
 
-void AffiliationBackend::SetFetcherFactoryForTesting(
-    std::unique_ptr<AffiliationFetcherFactory> fetcher_factory) {
-  fetcher_factory_ = std::move(fetcher_factory);
-}
-
-AffiliationDatabase& AffiliationBackend::GetAffiliationDatabaseForTesting() {
-  CHECK(cache_.get());
-  return *cache_.get();
-}
-
 FacetManager* AffiliationBackend::GetOrCreateFacetManager(
     const FacetURI& facet_uri) {
   std::unique_ptr<FacetManager>& facet_manager = facet_managers_[facet_uri];
@@ -312,7 +303,6 @@ void AffiliationBackend::OnFetchSucceeded(
     std::unique_ptr<AffiliationFetcherDelegate::Result> result) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
-  fetcher_.reset();
   throttler_->InformOfNetworkRequestComplete(true);
 
   if (!result->psl_extensions.empty()) {
@@ -378,7 +368,6 @@ void AffiliationBackend::OnFetchSucceeded(
 void AffiliationBackend::OnFetchFailed(AffiliationFetcherInterface* fetcher) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
-  fetcher_.reset();
   throttler_->InformOfNetworkRequestComplete(false);
 
   // Trigger a retry if a fetch is still needed.
@@ -401,7 +390,6 @@ void AffiliationBackend::OnMalformedResponse(
 }
 
 bool AffiliationBackend::OnCanSendNetworkRequest() {
-  DCHECK(!fetcher_);
   std::vector<FacetURI> requested_facet_uris;
   for (const auto& facet_manager_pair : facet_managers_) {
     if (facet_manager_pair.second->DoesRequireFetch())
@@ -412,25 +400,12 @@ bool AffiliationBackend::OnCanSendNetworkRequest() {
   if (requested_facet_uris.empty())
     return false;
 
-  fetcher_ = fetcher_factory_->CreateInstance(url_loader_factory_, this);
-  // Not possible to create facet, return false to indicate this.
-  if (!fetcher_) {
-    return false;
-  }
   // TODO(crbug.com/40858918): There is no need to request psl extension every
   // time, find a better way of caching it.
-#if BUILDFLAG(IS_ANDROID)
-  const bool is_android_enabled =
-      base::FeatureList::IsEnabled(features::kAffiliationsGroupInfoEnabled);
-  fetcher_->StartRequest(
-      requested_facet_uris,
-      {.branding_info = true, .psl_extension_list = is_android_enabled});
-#else
-  fetcher_->StartRequest(requested_facet_uris,
-                         {.branding_info = true, .psl_extension_list = true});
-#endif
   ReportStatistics(requested_facet_uris.size());
-  return true;
+  return fetcher_manager_->Fetch(
+      requested_facet_uris, {.branding_info = true, .psl_extension_list = true},
+      base::DoNothing());
 }
 
 void AffiliationBackend::ReportStatistics(size_t requested_facet_uri_count) {
@@ -449,11 +424,6 @@ void AffiliationBackend::ReportStatistics(size_t requested_facet_uri_count) {
         base::Seconds(1), base::Days(3), 50);
   }
   last_request_time_ = clock_->Now();
-}
-
-void AffiliationBackend::SetThrottlerForTesting(
-    std::unique_ptr<AffiliationFetchThrottler> throttler) {
-  throttler_ = std::move(throttler);
 }
 
 }  // namespace affiliations

@@ -2,12 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifndef V8_WASM_INTERPRETER_WASM_INTERPRETER_H_
+#define V8_WASM_INTERPRETER_WASM_INTERPRETER_H_
+
 #if !V8_ENABLE_WEBASSEMBLY
 #error This header should only be included if WebAssembly is enabled.
 #endif  // !V8_ENABLE_WEBASSEMBLY
-
-#ifndef V8_WASM_INTERPRETER_WASM_INTERPRETER_H_
-#define V8_WASM_INTERPRETER_WASM_INTERPRETER_H_
 
 #include <atomic>
 #include <memory>
@@ -71,7 +71,7 @@ class WasmInterpreterThread;
 
 using pc_t = size_t;
 using CodeOffset = size_t;
-using WasmRef = Handle<Object>;
+using WasmRef = DirectHandle<Object>;
 
 // We are using sizeof(WasmRef) and kSystemPointerSize interchangeably in the
 // interpreter code.
@@ -121,9 +121,9 @@ struct FrameState {
 
   // Maintains a reference to the exceptions caught by each catch handler.
   void SetCaughtException(Isolate* isolate, uint32_t catch_block_index,
-                          Handle<Object> exception);
-  Handle<Object> GetCaughtException(Isolate* isolate,
-                                    uint32_t catch_block_index) const;
+                          DirectHandle<Object> exception);
+  DirectHandle<Object> GetCaughtException(Isolate* isolate,
+                                          uint32_t catch_block_index) const;
   void DisposeCaughtExceptionsArray(Isolate* isolate);
   Handle<FixedArray> caught_exceptions_;
 
@@ -193,7 +193,7 @@ class V8_EXPORT_PRIVATE WasmInterpreterThreadMap {
   typedef std::unordered_map<int, std::unique_ptr<WasmInterpreterThread>>
       ThreadInterpreterMap;
   ThreadInterpreterMap map_;
-  base::SpinningMutex mutex_;
+  base::Mutex mutex_;
 };
 
 // Representation of a thread in the interpreter.
@@ -617,7 +617,7 @@ class V8_EXPORT_PRIVATE WasmInterpreter {
 
   WasmInterpreter(Isolate* isolate, const WasmModule* module,
                   const ModuleWireBytes& wire_bytes,
-                  Handle<WasmInstanceObject> instance);
+                  DirectHandle<WasmInstanceObject> instance);
 
   static void InitializeOncePerProcess();
   static void GlobalTearDown();
@@ -654,7 +654,7 @@ class V8_EXPORT_PRIVATE WasmInterpreter {
   // {InterpreterCode} vector in the {CodeMap}. It is also passed to
   // {WasmDecoder} used to parse the 'locals' in a Wasm function.
   Zone zone_;
-  Handle<WasmInstanceObject> instance_object_;
+  DirectHandle<WasmInstanceObject> instance_object_;
 
   // Create a copy of the module bytes for the interpreter, since the passed
   // pointer might be invalidated after constructing the interpreter.
@@ -1115,7 +1115,11 @@ struct WasmInstruction {
     struct GC_HeapTypeImmediate {
       uint32_t length;
       HeapType::Representation type_representation;
-      constexpr HeapType type() const { return HeapType(type_representation); }
+      // This is incorrect; it's just the smallest possible fix to make
+      // the header-includes bot green which needs this file to compile.
+      // It'd probably be a good idea to store a HeapType instead of a
+      // HeapType::Representation above.
+      constexpr HeapType type() const { return kWasmAnyRef; }
     } gc_heap_type_immediate;
     struct GC_ArrayNewFixed {
       uint32_t array_index;
@@ -1299,9 +1303,9 @@ class WasmEHData {
       BlockIndex catch_block_index) const;
 
   void SetCaughtException(Isolate* isolate, BlockIndex catch_block_index,
-                          Handle<Object> exception);
-  Handle<Object> GetCaughtException(Isolate* isolate,
-                                    BlockIndex catch_block_index) const;
+                          DirectHandle<Object> exception);
+  DirectHandle<Object> GetCaughtException(Isolate* isolate,
+                                          BlockIndex catch_block_index) const;
 
  protected:
   BlockIndex GetTryBranchOf(BlockIndex catch_block_index) const;
@@ -1403,8 +1407,8 @@ class WasmBytecode {
       WasmEHData::BlockIndex catch_block_index) const {
     return eh_data_.GetExceptionPayloadStartSlotOffsets(catch_block_index);
   }
-  Handle<Object> GetCaughtException(Isolate* isolate,
-                                    uint32_t catch_block_index) const {
+  DirectHandle<Object> GetCaughtException(Isolate* isolate,
+                                          uint32_t catch_block_index) const {
     return eh_data_.GetCaughtException(isolate, catch_block_index);
   }
 
@@ -2082,9 +2086,9 @@ class WasmBytecodeGenerator {
   InstrHandlerSize handler_size_;
   bool current_instr_encoding_failed_;
   bool no_nested_emit_instr_handler_guard_;
-  static size_t total_bytecode_size_;
-  static size_t emitted_short_slot_offset_count_;
-  static size_t emitted_short_memory_offset_count_;
+  static std::atomic<size_t> total_bytecode_size_;
+  static std::atomic<size_t> emitted_short_slot_offset_count_;
+  static std::atomic<size_t> emitted_short_memory_offset_count_;
 
   WasmBytecodeGenerator(const WasmBytecodeGenerator&) = delete;
   WasmBytecodeGenerator& operator=(const WasmBytecodeGenerator&) = delete;

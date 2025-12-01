@@ -20,8 +20,9 @@
 #import "ios/chrome/browser/favicon/model/ios_chrome_favicon_loader_factory.h"
 #import "ios/chrome/browser/feature_engagement/model/tracker_factory.h"
 #import "ios/chrome/browser/location_bar/ui_bundled/location_bar_constants.h"
+#import "ios/chrome/browser/omnibox/model/autocomplete_result_wrapper.h"
 #import "ios/chrome/browser/omnibox/model/omnibox_autocomplete_controller.h"
-#import "ios/chrome/browser/omnibox/model/omnibox_popup_controller.h"
+#import "ios/chrome/browser/omnibox/model/omnibox_text_controller.h"
 #import "ios/chrome/browser/omnibox/ui_bundled/keyboard_assist/omnibox_assistive_keyboard_delegate.h"
 #import "ios/chrome/browser/omnibox/ui_bundled/keyboard_assist/omnibox_assistive_keyboard_mediator.h"
 #import "ios/chrome/browser/omnibox/ui_bundled/keyboard_assist/omnibox_assistive_keyboard_views.h"
@@ -33,6 +34,7 @@
 #import "ios/chrome/browser/omnibox/ui_bundled/omnibox_util.h"
 #import "ios/chrome/browser/omnibox/ui_bundled/omnibox_view_controller.h"
 #import "ios/chrome/browser/omnibox/ui_bundled/omnibox_view_ios.h"
+#import "ios/chrome/browser/omnibox/ui_bundled/popup/omnibox_pedal_annotator.h"
 #import "ios/chrome/browser/omnibox/ui_bundled/popup/omnibox_popup_coordinator.h"
 #import "ios/chrome/browser/omnibox/ui_bundled/popup/omnibox_popup_view_ios.h"
 #import "ios/chrome/browser/omnibox/ui_bundled/popup/pedal_section_extractor.h"
@@ -49,6 +51,8 @@
 #import "ios/chrome/browser/shared/public/commands/load_query_commands.h"
 #import "ios/chrome/browser/shared/public/commands/omnibox_commands.h"
 #import "ios/chrome/browser/shared/public/commands/qr_scanner_commands.h"
+#import "ios/chrome/browser/shared/public/commands/quick_delete_commands.h"
+#import "ios/chrome/browser/shared/public/commands/settings_commands.h"
 #import "ios/chrome/browser/shared/public/commands/toolbar_commands.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/shared/public/features/system_flags.h"
@@ -101,8 +105,8 @@
 
   /// Controller for the omnibox autocomplete.
   OmniboxAutocompleteController* _omniboxAutocompleteController;
-  /// Controller for the omnibox popup.
-  OmniboxPopupController* _omniboxPopupController;
+  /// Controller for the omnibox text.
+  OmniboxTextController* _omniboxTextController;
 
   /// Object handling interactions in the keyboard accessory view.
   OmniboxAssistiveKeyboardMediator* _keyboardMediator;
@@ -153,18 +157,18 @@
       LayoutGuideCenterForBrowser(self.browser);
   self.viewController.isSearchOnlyUI = self.isSearchOnlyUI;
 
-  BOOL isIncognito = self.browser->GetProfile()->IsOffTheRecord();
+  BOOL isIncognito = self.profile->IsOffTheRecord();
   self.mediator = [[OmniboxMediator alloc]
       initWithIncognito:isIncognito
                 tracker:feature_engagement::TrackerFactory::GetForProfile(
-                            self.browser->GetProfile())
+                            self.profile)
           isLensOverlay:_isLensOverlay];
 
   TemplateURLService* templateURLService =
-      ios::TemplateURLServiceFactory::GetForProfile(self.browser->GetProfile());
+      ios::TemplateURLServiceFactory::GetForProfile(self.profile);
   self.mediator.templateURLService = templateURLService;
   self.mediator.faviconLoader =
-      IOSChromeFaviconLoaderFactory::GetForProfile(self.browser->GetProfile());
+      IOSChromeFaviconLoaderFactory::GetForProfile(self.profile);
   self.mediator.consumer = self.viewController;
   self.mediator.omniboxCommandsHandler =
       HandlerForProtocol(self.browser->GetCommandDispatcher(), OmniboxCommands);
@@ -176,19 +180,17 @@
   self.mediator.URLLoadingBrowserAgent =
       UrlLoadingBrowserAgent::FromBrowser(self.browser);
   self.viewController.pasteDelegate = self.mediator;
+  self.viewController.mutator = self.mediator;
 
   DCHECK(_client.get());
 
   id<OmniboxCommands> omniboxHandler =
       HandlerForProtocol(self.browser->GetCommandDispatcher(), OmniboxCommands);
   _editView = std::make_unique<OmniboxViewIOS>(
-      self.textField, std::move(_client), self.browser->GetProfile(),
-      omniboxHandler, self.focusDelegate, _toolbarHandler, self.viewController,
-      _isLensOverlay);
+      self.textField, std::move(_client), self.profile, omniboxHandler,
+      self.focusDelegate, _toolbarHandler, _isLensOverlay);
   self.pasteDelegate = [[OmniboxTextFieldPasteDelegate alloc] init];
   [self.textField setPasteDelegate:self.pasteDelegate];
-
-  self.viewController.textChangeDelegate = _editView.get();
 
   _keyboardMediator = [[OmniboxAssistiveKeyboardMediator alloc] init];
   _keyboardMediator.applicationCommandsHandler = HandlerForProtocol(
@@ -214,10 +216,43 @@
   }
 
   _omniboxAutocompleteController = [[OmniboxAutocompleteController alloc]
-      initWithOmniboxController:_editView->controller()];
-  _omniboxPopupController = [[OmniboxPopupController alloc] init];
-  _omniboxAutocompleteController.omniboxPopupController =
-      _omniboxPopupController;
+      initWithOmniboxController:_editView->controller()
+                 omniboxViewIOS:_editView.get()];
+
+  _omniboxTextController = [[OmniboxTextController alloc]
+      initWithOmniboxController:_editView->controller()
+                 omniboxViewIOS:_editView.get()];
+  _omniboxTextController.delegate = self.mediator;
+  _omniboxTextController.omniboxAutocompleteController =
+      _omniboxAutocompleteController;
+  _omniboxTextController.textField = self.textField;
+  _omniboxAutocompleteController.omniboxTextController = _omniboxTextController;
+
+  self.mediator.omniboxTextController = _omniboxTextController;
+  _editView->SetOmniboxTextController(_omniboxTextController);
+
+  CommandDispatcher* dispatcher = self.browser->GetCommandDispatcher();
+  OmniboxPedalAnnotator* annotator = [[OmniboxPedalAnnotator alloc] init];
+  annotator.applicationHandler =
+      HandlerForProtocol(dispatcher, ApplicationCommands);
+  annotator.settingsHandler = HandlerForProtocol(dispatcher, SettingsCommands);
+  annotator.omniboxHandler = HandlerForProtocol(dispatcher, OmniboxCommands);
+  annotator.quickDeleteHandler =
+      HandlerForProtocol(dispatcher, QuickDeleteCommands);
+
+  AutocompleteResultWrapper* autocompleteResultWrapper =
+      [[AutocompleteResultWrapper alloc]
+          initWithOmniboxClient:_editView->controller()
+                                    ? _editView->controller()->client()
+                                    : nullptr];
+  autocompleteResultWrapper.pedalAnnotator = annotator;
+  autocompleteResultWrapper.templateURLService = templateURLService;
+  autocompleteResultWrapper.isIncognito = isIncognito;
+  autocompleteResultWrapper.delegate = _omniboxAutocompleteController;
+
+  _omniboxAutocompleteController.autocompleteResultWrapper =
+      autocompleteResultWrapper;
+  autocompleteResultWrapper.delegate = _omniboxAutocompleteController;
 
   self.popupCoordinator = [self createPopupCoordinator:self.presenterDelegate];
   [self.popupCoordinator start];
@@ -226,12 +261,12 @@
 - (void)stop {
   [_omniboxAutocompleteController disconnect];
   _omniboxAutocompleteController = nil;
-  _omniboxPopupController = nil;
+  [_omniboxTextController disconnect];
+  _omniboxTextController = nil;
 
   [self.popupCoordinator stop];
   self.popupCoordinator = nil;
 
-  self.viewController.textChangeDelegate = nil;
   self.returnDelegate.acceptDelegate = nil;
   _editView.reset();
   self.viewController = nil;
@@ -247,8 +282,6 @@
   self.returnDelegate = nil;
   [self.zeroSuggestPrefetchHelper disconnect];
   self.zeroSuggestPrefetchHelper = nil;
-
-  [NSNotificationCenter.defaultCenter removeObserver:self];
 }
 
 - (void)updateOmniboxState {
@@ -278,8 +311,7 @@
       (!self.isSearchOnlyUI ||
        experimental_flags::IsOmniboxDebuggingEnabled())) {
     TemplateURLService* templateURLService =
-        ios::TemplateURLServiceFactory::GetForProfile(
-            self.browser->GetProfile());
+        ios::TemplateURLServiceFactory::GetForProfile(self.profile);
     self.keyboardAccessoryView = ConfigureAssistiveKeyboardViews(
         self.textField, kDotComTLD, _keyboardMediator, templateURLService,
         HandlerForProtocol(self.browser->GetCommandDispatcher(), HelpCommands));
@@ -337,18 +369,17 @@
   DCHECK(!_popupCoordinator);
   std::unique_ptr<OmniboxPopupViewIOS> popupView =
       std::make_unique<OmniboxPopupViewIOS>(_editView->controller(),
-                                            _editView.get(),
                                             _omniboxAutocompleteController);
 
   _editView->SetPopupProvider(popupView.get());
 
   OmniboxPopupCoordinator* coordinator = [[OmniboxPopupCoordinator alloc]
-      initWithBaseViewController:nil
-                         browser:self.browser
-          autocompleteController:_editView->controller()
-                                     ->autocomplete_controller()
-                       popupView:std::move(popupView)
-                 popupController:_omniboxPopupController];
+         initWithBaseViewController:nil
+                            browser:self.browser
+             autocompleteController:_editView->controller()
+                                        ->autocomplete_controller()
+                          popupView:std::move(popupView)
+      omniboxAutocompleteController:_omniboxAutocompleteController];
   coordinator.presenterDelegate = presenterDelegate;
 
   self.returnDelegate = [[ForwardingReturnDelegate alloc] init];
@@ -384,9 +415,7 @@
 }
 
 - (void)setThumbnailImage:(UIImage*)image {
-  if (_editView) {
-    _editView->SetThumbnailImage(image);
-  }
+  [self.mediator setThumbnailImage:image];
 }
 
 #pragma mark Scribble

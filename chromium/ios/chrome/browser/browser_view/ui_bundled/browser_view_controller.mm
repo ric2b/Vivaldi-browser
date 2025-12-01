@@ -25,19 +25,21 @@
 #import "ios/chrome/browser/browser_view/ui_bundled/browser_view_visibility_consumer.h"
 #import "ios/chrome/browser/browser_view/ui_bundled/key_commands_provider.h"
 #import "ios/chrome/browser/browser_view/ui_bundled/safe_area_provider.h"
+#import "ios/chrome/browser/content_suggestions/ui_bundled/ntp_home_constant.h"
 #import "ios/chrome/browser/crash_report/model/crash_keys_helper.h"
 #import "ios/chrome/browser/default_promo/ui_bundled/default_promo_non_modal_presentation_delegate.h"
 #import "ios/chrome/browser/discover_feed/model/feed_constants.h"
 #import "ios/chrome/browser/find_in_page/model/util.h"
 #import "ios/chrome/browser/first_run/ui_bundled/first_run_util.h"
 #import "ios/chrome/browser/fullscreen/ui_bundled/fullscreen_animator.h"
+#import "ios/chrome/browser/fullscreen/ui_bundled/fullscreen_reason.h"
 #import "ios/chrome/browser/fullscreen/ui_bundled/fullscreen_ui_element.h"
 #import "ios/chrome/browser/fullscreen/ui_bundled/fullscreen_ui_updater.h"
 #import "ios/chrome/browser/incognito_reauth/ui_bundled/features.h"
 #import "ios/chrome/browser/incognito_reauth/ui_bundled/incognito_reauth_constants.h"
 #import "ios/chrome/browser/incognito_reauth/ui_bundled/incognito_reauth_scene_agent.h"
 #import "ios/chrome/browser/incognito_reauth/ui_bundled/incognito_reauth_view.h"
-#import "ios/chrome/browser/intents/intents_donation_helper.h"
+#import "ios/chrome/browser/intents/model/intents_donation_helper.h"
 #import "ios/chrome/browser/main_content/ui_bundled/main_content_ui.h"
 #import "ios/chrome/browser/main_content/ui_bundled/main_content_ui_broadcasting_util.h"
 #import "ios/chrome/browser/main_content/ui_bundled/main_content_ui_state.h"
@@ -47,6 +49,8 @@
 #import "ios/chrome/browser/ntp/model/new_tab_page_util.h"
 #import "ios/chrome/browser/ntp/ui_bundled/new_tab_page_coordinator.h"
 #import "ios/chrome/browser/omnibox/public/omnibox_ui_features.h"
+#import "ios/chrome/browser/popup_menu/ui_bundled/overflow_menu/feature_flags.h"
+#import "ios/chrome/browser/popup_menu/ui_bundled/popup_menu_coordinator.h"
 #import "ios/chrome/browser/reading_list/model/reading_list_browser_agent.h"
 #import "ios/chrome/browser/shared/model/application_context/application_context.h"
 #import "ios/chrome/browser/shared/model/url/chrome_url_constants.h"
@@ -60,30 +64,27 @@
 #import "ios/chrome/browser/shared/public/commands/settings_commands.h"
 #import "ios/chrome/browser/shared/public/commands/text_zoom_commands.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
-#import "ios/chrome/browser/shared/public/features/features_utils.h"
 #import "ios/chrome/browser/shared/ui/util/named_guide.h"
 #import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
 #import "ios/chrome/browser/shared/ui/util/url_with_title.h"
+#import "ios/chrome/browser/side_swipe/ui_bundled/card_swipe_view_delegate.h"
+#import "ios/chrome/browser/side_swipe/ui_bundled/side_swipe_coordinator.h"
 #import "ios/chrome/browser/side_swipe/ui_bundled/side_swipe_mediator.h"
+#import "ios/chrome/browser/side_swipe/ui_bundled/side_swipe_ui_controller_delegate.h"
 #import "ios/chrome/browser/side_swipe/ui_bundled/swipe_view.h"
 #import "ios/chrome/browser/signin/model/identity_manager_factory.h"
 #import "ios/chrome/browser/snapshots/model/snapshot_tab_helper.h"
 #import "ios/chrome/browser/tab_switcher/ui_bundled/tab_strip/coordinator/tab_strip_coordinator.h"
+#import "ios/chrome/browser/tab_switcher/ui_bundled/tab_strip/ui/swift_constants_for_objective_c.h"
 #import "ios/chrome/browser/tab_switcher/ui_bundled/tab_strip/ui/tab_strip_utils.h"
 #import "ios/chrome/browser/tabs/ui_bundled/background_tab_animation_view.h"
 #import "ios/chrome/browser/tabs/ui_bundled/foreground_tab_animation_view.h"
-#import "ios/chrome/browser/tabs/ui_bundled/requirements/tab_strip_presentation.h"
 #import "ios/chrome/browser/tabs/ui_bundled/switch_to_tab_animation_view.h"
-#import "ios/chrome/browser/tabs/ui_bundled/tab_strip_constants.h"
-#import "ios/chrome/browser/tabs/ui_bundled/tab_strip_legacy_coordinator.h"
 #import "ios/chrome/browser/toolbar/ui_bundled/accessory/toolbar_accessory_presenter.h"
 #import "ios/chrome/browser/toolbar/ui_bundled/buttons/toolbar_configuration.h"
-#import "ios/chrome/browser/toolbar/ui_bundled/fullscreen/toolbar_ui.h"
-#import "ios/chrome/browser/toolbar/ui_bundled/fullscreen/toolbar_ui_broadcasting_util.h"
+#import "ios/chrome/browser/toolbar/ui_bundled/fullscreen/toolbars_size.h"
+#import "ios/chrome/browser/toolbar/ui_bundled/fullscreen/toolbars_size_broadcasting_util.h"
 #import "ios/chrome/browser/toolbar/ui_bundled/toolbar_coordinator.h"
-#import "ios/chrome/browser/ui/content_suggestions/ntp_home_constant.h"
-#import "ios/chrome/browser/ui/popup_menu/overflow_menu/feature_flags.h"
-#import "ios/chrome/browser/ui/popup_menu/popup_menu_coordinator.h"
 #import "ios/chrome/browser/url_loading/model/url_loading_browser_agent.h"
 #import "ios/chrome/browser/url_loading/model/url_loading_params.h"
 #import "ios/chrome/browser/web/model/page_placeholder_browser_agent.h"
@@ -121,7 +122,6 @@
 #import "ios/chrome/browser/shared/model/prefs/pref_names.h"
 #import "ios/chrome/browser/shared/model/utils/first_run_util.h"
 #import "ios/chrome/browser/shared/public/commands/browser_coordinator_commands.h"
-#import "ios/chrome/browser/tabs/ui_bundled/requirements/tab_strip_constants.h"
 #import "ios/chrome/browser/ui/browser_view/browser_view_controller+vivaldi.h"
 #import "ios/chrome/browser/ui/location_bar/location_bar_constants+vivaldi.h"
 #import "ios/chrome/browser/omnibox/ui_bundled/omnibox_view_ios.h"
@@ -149,10 +149,6 @@ using vivaldi::IsVivaldiRunning;
 // End Vivaldi
 
 namespace {
-
-// When the tab strip moves beyond this origin offset, switch the status bar
-// appearance from light to dark.
-const CGFloat kTabStripAppearanceOffset = -29;
 
 enum HeaderBehaviour {
   // The header moves completely out of the screen.
@@ -219,10 +215,10 @@ const double kDelayForRatingPrompt = 10.0;
 #pragma mark - BVC
 
 // Note other delegates defined in the Delegates category header.
-@interface BrowserViewController () <FullscreenUIElement,
+@interface BrowserViewController () <CardSwipeViewDelegate,
+                                     FullscreenUIElement,
                                      MainContentUI,
-                                     SideSwipeMediatorDelegate,
-                                     TabStripPresentation,
+                                     SideSwipeUIControllerDelegate,
                                      UIGestureRecognizerDelegate,
 
                                      // Vivaldi
@@ -236,7 +232,7 @@ const double kDelayForRatingPrompt = 10.0;
   NSInteger _NTPAnimationIdentifier;
 
   // Mediator for edge swipe gestures for page and tab navigation.
-  SideSwipeMediator* _sideSwipeMediator;
+  SideSwipeCoordinator* _sideSwipeCoordinator;
 
   // Keyboard commands provider.  It offloads most of the keyboard commands
   // management off of the BVC.
@@ -272,8 +268,8 @@ const double kDelayForRatingPrompt = 10.0;
   // button.
   BookmarksCoordinator* _bookmarksCoordinator;
 
-  // Toolbar state that broadcasts changes to min and max heights.
-  ToolbarUIState* _toolbarUIState;
+  // Toolbars size that broadcasts changes to min and max heights.
+  ToolbarsSize* _toolbarsSize;
 
   // The main content UI updater for the content displayed by this BVC.
   MainContentUIStateUpdater* _mainContentUIUpdater;
@@ -332,10 +328,7 @@ const double kDelayForRatingPrompt = 10.0;
 // for the presentation of a new tab. Can be used to record performance metrics.
 @property(nonatomic, strong, nullable)
     ProceduralBlock foregroundTabWasAddedCompletionBlock;
-// Coordinator for tablet tab strip.
-@property(nonatomic, strong)
-    TabStripLegacyCoordinator* legacyTabStripCoordinator;
-// Coordinator for the new tablet tab strip.
+// Coordinator for the tablet tab strip.
 @property(nonatomic, strong) TabStripCoordinator* tabStripCoordinator;
 // A weak reference to the view of the tab strip on tablet.
 @property(nonatomic, weak) UIView* tabStripView;
@@ -346,8 +339,6 @@ const double kDelayForRatingPrompt = 10.0;
 
 // Coordinator for the popup menus.
 @property(nonatomic, strong) PopupMenuCoordinator* popupMenuCoordinator;
-
-@property(nonatomic, strong) BubblePresenter* bubblePresenter;
 
 // Presenter used to display accessories over the toolbar (e.g. Find In Page).
 @property(nonatomic, strong)
@@ -466,8 +457,9 @@ const double kDelayForRatingPrompt = 10.0;
   if (self) {
     _browserContainerViewController = browserContainerViewController;
     _keyCommandsProvider = keyCommandsProvider;
-    _sideSwipeMediator = dependencies.sideSwipeMediator;
-    [_sideSwipeMediator setSwipeDelegate:self];
+    _sideSwipeCoordinator = dependencies.sideSwipeCoordinator;
+    [_sideSwipeCoordinator setSideSwipeUIControllerDelegate:self];
+    [_sideSwipeCoordinator setCardSwipeViewDelegate:self];
     _bookmarksCoordinator = dependencies.bookmarksCoordinator;
     self.toolbarAccessoryPresenter = dependencies.toolbarAccessoryPresenter;
     self.ntpCoordinator = dependencies.ntpCoordinator;
@@ -482,7 +474,6 @@ const double kDelayForRatingPrompt = 10.0;
     // End Vivaldi
 
     self.tabStripCoordinator = dependencies.tabStripCoordinator;
-    self.legacyTabStripCoordinator = dependencies.legacyTabStripCoordinator;
 
     self.textZoomHandler = dependencies.textZoomHandler;
     self.helpHandler = dependencies.helpHandler;
@@ -591,12 +582,15 @@ const double kDelayForRatingPrompt = 10.0;
 
   ChromeBroadcaster* broadcaster = self.fullscreenController->broadcaster();
   if (_broadcasting) {
-    _toolbarUIState = [[ToolbarUIState alloc] init];
-    // Must update _toolbarUIState with current toolbar height state before
+    _toolbarsSize = [[ToolbarsSize alloc] init];
+    // Must update _toolbarsSize with current toolbar height state before
     // starting broadcasting.
     [self updateToolbarState];
-    StartBroadcastingToolbarUI(_toolbarUIState, broadcaster);
+    self.fullscreenController->SetToolbarsSize(_toolbarsSize);
 
+    if (!IsRefactorToolbarsSize()) {
+      StartBroadcastingToolbarsSize(_toolbarsSize, broadcaster);
+    }
     _mainContentUIUpdater = [[MainContentUIStateUpdater alloc]
         initWithState:[[MainContentUIState alloc] init]];
     _webMainContentUIForwarder = [[WebScrollViewMainContentUIForwarder alloc]
@@ -608,10 +602,12 @@ const double kDelayForRatingPrompt = 10.0;
         std::make_unique<FullscreenUIUpdater>(self.fullscreenController, self);
     [self updateForFullscreenProgress:self.fullscreenController->GetProgress()];
   } else {
-    StopBroadcastingToolbarUI(broadcaster);
+    if (!IsRefactorToolbarsSize()) {
+      StopBroadcastingToolbarsSize(broadcaster);
+    }
     StopBroadcastingMainContentUI(broadcaster);
     _mainContentUIUpdater = nil;
-    _toolbarUIState = nil;
+    _toolbarsSize = nil;
     [_webMainContentUIForwarder disconnect];
     _webMainContentUIForwarder = nil;
 
@@ -964,7 +960,8 @@ const double kDelayForRatingPrompt = 10.0;
   } else {
     self.inNewTabAnimation = YES;
     // Exit fullscreen if needed.
-    self.fullscreenController->ExitFullscreen();
+    self.fullscreenController->ExitFullscreen(
+        FullscreenExitReason::kForcedByCode);
     const CGFloat kAnimatedViewSize = 50;
     BackgroundTabAnimationView* animatedView =
         [[BackgroundTabAnimationView alloc]
@@ -991,22 +988,15 @@ const double kDelayForRatingPrompt = 10.0;
   _isShutdown = YES;
 
   // Disconnect child coordinators.
-  if (IsModernTabStripOrRaccoonEnabled()) {
     [self.tabStripCoordinator stop];
     self.tabStripCoordinator = nil;
-  } else {
-    [self.legacyTabStripCoordinator stop];
-    self.legacyTabStripCoordinator = nil;
-  }
   self.tabStripView = nil;
-
-  _bubblePresenter = nil;
 
   [self.contentArea removeGestureRecognizer:self.contentAreaGestureRecognizer];
 
   [self.toolbarCoordinator stop];
   self.toolbarCoordinator = nil;
-  _sideSwipeMediator = nil;
+  _sideSwipeCoordinator = nil;
   [_voiceSearchController disconnect];
   [[NSNotificationCenter defaultCenter] removeObserver:self];
   _bookmarksCoordinator = nil;
@@ -1121,7 +1111,7 @@ const double kDelayForRatingPrompt = 10.0;
   [self setUpViewLayout:YES];
   [self addConstraintsToToolbar];
 
-  [_sideSwipeMediator addHorizontalGesturesToView:self.view];
+  [_sideSwipeCoordinator addHorizontalGesturesToView:self.view];
 
   // Add a tap gesture recognizer to save the last tap location for the source
   // location of the new tab animation.
@@ -1255,12 +1245,6 @@ const double kDelayForRatingPrompt = 10.0;
   [self startObservingTabSettingChange];
   [self startObservingOmniboxPositionChange];
   [self startObservingWebsiteAppearanceAndAccentColorChange];
-  _sideSwipeMediator.isDesktopTabBarEnabled = [self canShowTabStrip];
-  if (self.currentWebState && self.legacyTabStripCoordinator) {
-    [self.legacyTabStripCoordinator
-        scrollToSelectedTab:self.currentWebState animated:NO];
-    [self updateUIElementsWithThemeColor];
-  }
   if (ShouldShowVivaldiWhatsNewPage()) {
     [self openWhatsNewTab];
   }
@@ -1343,16 +1327,12 @@ const double kDelayForRatingPrompt = 10.0;
     _voiceSearchController.dispatcher = nil;
     [self.toolbarCoordinator stop];
     self.toolbarCoordinator = nil;
-    _toolbarUIState = nil;
-    if (IsModernTabStripOrRaccoonEnabled()) {
-      [self.tabStripCoordinator stop];
-      self.tabStripCoordinator = nil;
-    } else {
-      [self.legacyTabStripCoordinator stop];
-      self.legacyTabStripCoordinator = nil;
-    }
+    _toolbarsSize = nil;
+    [self.tabStripCoordinator stop];
+    self.tabStripCoordinator = nil;
     self.tabStripView = nil;
-    _sideSwipeMediator = nil;
+    [_sideSwipeCoordinator stop];
+    _sideSwipeCoordinator = nil;
   }
 }
 
@@ -1403,24 +1383,21 @@ const double kDelayForRatingPrompt = 10.0;
       animateAlongsideTransition:^(
           id<UIViewControllerTransitionCoordinatorContext>) {
         [weakSelf animateTransition];
-      }
-      completion:^(id<UIViewControllerTransitionCoordinatorContext>) {
-        [weakSelf completedTransition];
 
         // Vivaldi
         [weakSelf didUpdateTabSettings];
         [weakSelf updateForFullscreenProgress:
             weakSelf.fullscreenController->GetProgress()];
         // End Vivaldi
-
-      }];
+      }
+                      completion:nil];
 
   crash_keys::SetCurrentOrientation(GetInterfaceOrientation(),
                                     [[UIDevice currentDevice] orientation]);
 }
 
 - (void)animateTransition {
-  // Force updates of the toolbar state as the toolbar height might
+  // Force updates of the toolbars' size as the toolbar height might
   // change on rotation.
   [self updateToolbarState];
   // Resize horizontal viewport if Smooth Scrolling is on.
@@ -1429,14 +1406,6 @@ const double kDelayForRatingPrompt = 10.0;
   }
 
   [self.popupMenuCommandsHandler adjustPopupSize];
-}
-
-- (void)completedTransition {
-  if (!IsModernTabStripOrRaccoonEnabled()) {
-    if (self.tabStripView) {
-      [self.legacyTabStripCoordinator tabStripSizeDidChange];
-    }
-  }
 }
 
 - (void)dismissViewControllerAnimated:(BOOL)flag
@@ -1537,7 +1506,8 @@ const double kDelayForRatingPrompt = 10.0;
       };
     }
   }
-  [_sideSwipeMediator resetContentView];
+
+  [_sideSwipeCoordinator stopActiveSideSwipeAnimation];
 
   void (^superCall)() = ^{
     [super presentViewController:viewControllerToPresent
@@ -1563,8 +1533,8 @@ const double kDelayForRatingPrompt = 10.0;
       self.presentedViewController.beingDismissed) {
     // Don't rotate while a presentation or dismissal animation is occurring.
     return NO;
-  } else if (_sideSwipeMediator && ![_sideSwipeMediator shouldAutorotate]) {
-    // Don't auto rotate if side swipe controller view says not to.
+  } else if (_sideSwipeCoordinator.swipeInProgress) {
+    // Don't auto rotate if a side swipe is in progress.
     return NO;
   } else {
     return [super shouldAutorotate];
@@ -1584,12 +1554,6 @@ const double kDelayForRatingPrompt = 10.0;
     }
   } // End Vivaldi
 
-  if (IsRegularXRegularSizeClass(self) && !_isOffTheRecord &&
-      !IsModernTabStripOrRaccoonEnabled()) {
-    return self.tabStripView.frame.origin.y < kTabStripAppearanceOffset
-               ? UIStatusBarStyleDefault
-               : UIStatusBarStyleLightContent;
-  }
   return _isOffTheRecord ? UIStatusBarStyleLightContent
                          : UIStatusBarStyleDefault;
 }
@@ -1609,17 +1573,13 @@ const double kDelayForRatingPrompt = 10.0;
   _fakeStatusBarView = [[UIView alloc] initWithFrame:statusBarFrame];
   [_fakeStatusBarView setAutoresizingMask:UIViewAutoresizingFlexibleWidth];
   if (ui::GetDeviceFormFactor() == ui::DEVICE_FORM_FACTOR_TABLET) {
-    if (IsModernTabStripOrRaccoonEnabled()) {
-      _fakeStatusBarView.backgroundColor = TabStripHelper.backgroundColor;
-      // Force the UserInterfaceStyle update in incognito.
-      _fakeStatusBarView.overrideUserInterfaceStyle =
-          _isOffTheRecord ? UIUserInterfaceStyleDark
-                          : UIUserInterfaceStyleUnspecified;
-      const bool canShowTabStrip = IsRegularXRegularSizeClass(self);
-      _fakeStatusBarView.hidden = !canShowTabStrip;
-    } else {
-      _fakeStatusBarView.backgroundColor = UIColor.blackColor;
-    }
+    _fakeStatusBarView.backgroundColor = TabStripHelper.backgroundColor;
+    // Force the UserInterfaceStyle update in incognito.
+    _fakeStatusBarView.overrideUserInterfaceStyle =
+        _isOffTheRecord ? UIUserInterfaceStyleDark
+                        : UIUserInterfaceStyleUnspecified;
+    const bool canShowTabStrip = IsRegularXRegularSizeClass(self);
+    _fakeStatusBarView.hidden = !canShowTabStrip;
     _fakeStatusBarView.autoresizingMask = UIViewAutoresizingFlexibleWidth;
     DCHECK(self.contentArea);
     [self.view insertSubview:_fakeStatusBarView aboveSubview:self.contentArea];
@@ -1642,19 +1602,13 @@ const double kDelayForRatingPrompt = 10.0;
   }
 
   if (IsVivaldiRunning()) {
-    self.legacyTabStripCoordinator.presentationProvider = self;
-    [self.legacyTabStripCoordinator start];
+    [self.tabStripCoordinator start];
+    [self.tabStripCoordinator hideTabStrip:![self canShowTabStrip]];
   } else {
   if (ui::GetDeviceFormFactor() == ui::DEVICE_FORM_FACTOR_TABLET) {
     const bool canShowTabStrip = IsRegularXRegularSizeClass(self);
-    if (IsModernTabStripOrRaccoonEnabled()) {
       [self.tabStripCoordinator start];
       [self.tabStripCoordinator hideTabStrip:!canShowTabStrip];
-    } else {
-      self.legacyTabStripCoordinator.presentationProvider = self;
-      [self.legacyTabStripCoordinator start];
-      [self.legacyTabStripCoordinator hideTabStrip:!canShowTabStrip];
-    }
   }
   } // End Vivaldi
 
@@ -1823,6 +1777,19 @@ const double kDelayForRatingPrompt = 10.0;
         self.toolbarCoordinator.primaryToolbarViewController.view;
 
     if (IsVivaldiRunning()) {
+      UIViewController* tabStripViewController =
+          self.tabStripCoordinator.viewController;
+      [self addChildViewController:tabStripViewController];
+      self.tabStripView = tabStripViewController.view;
+      [self.view addSubview:self.tabStripView];
+      [tabStripViewController didMoveToParentViewController:self];
+      CGRect tabStripFrame =
+          CGRectMake(0, self.headerOffset, self.view.bounds.size.width,
+                     TabStripCollectionViewConstants.height);
+      self.tabStripView.frame = tabStripFrame;
+      self.tabStripView.autoresizingMask =
+          (UIViewAutoresizingFlexibleWidth |
+           UIViewAutoresizingFlexibleBottomMargin);
       if ([self canShowTabStrip]) {
         [self.view insertSubview:primaryToolbarView
                     aboveSubview:self.tabStripView];
@@ -1831,7 +1798,7 @@ const double kDelayForRatingPrompt = 10.0;
       }
     } else {
     if (ui::GetDeviceFormFactor() == ui::DEVICE_FORM_FACTOR_TABLET) {
-      if (IsModernTabStripOrRaccoonEnabled() && self.tabStripCoordinator) {
+      if (self.tabStripCoordinator) {
         UIViewController* tabStripViewController =
             self.tabStripCoordinator.viewController;
         [self addChildViewController:tabStripViewController];
@@ -1840,20 +1807,14 @@ const double kDelayForRatingPrompt = 10.0;
         [tabStripViewController didMoveToParentViewController:self];
         CGRect tabStripFrame =
             CGRectMake(0, self.headerOffset, self.view.bounds.size.width,
-                       kModernTabStripHeight);
+                       TabStripCollectionViewConstants.height);
         self.tabStripView.frame = tabStripFrame;
         self.tabStripView.autoresizingMask =
             (UIViewAutoresizingFlexibleWidth |
              UIViewAutoresizingFlexibleBottomMargin);
       }
-      if (IsModernTabStripOrRaccoonEnabled()) {
-        [self.view insertSubview:primaryToolbarView
-                    aboveSubview:self.tabStripView];
-      } else {
-        [self.view insertSubview:primaryToolbarView
-                    belowSubview:self.tabStripView];
-      }
-
+      [self.view insertSubview:primaryToolbarView
+                  aboveSubview:self.tabStripView];
     } else {
       [self.view addSubview:primaryToolbarView];
     }
@@ -2165,12 +2126,14 @@ const double kDelayForRatingPrompt = 10.0;
 
   self.fullscreenController->BrowserTraitCollectionChangedBegin();
 
+#if !defined(__IPHONE_17_0) || __IPHONE_OS_VERSION_MIN_REQUIRED < __IPHONE_17_0
   // TODO(crbug.com/41198852): - traitCollectionDidChange: is not always
   // forwarded because in some cases the presented view controller isn't a child
   // of the BVC in the view controller hierarchy (some intervening object isn't
   // a view controller).
   [self.presentedViewController
       traitCollectionDidChange:previousTraitCollection];
+#endif
 
   if (self.currentWebState) {
     UIEdgeInsets contentPadding =
@@ -2180,8 +2143,9 @@ const double kDelayForRatingPrompt = 10.0;
     self.currentWebState->GetWebViewProxy().contentInset = contentPadding;
   }
 
-  // Toolbar state must be updated before `updateFootersForFullscreenProgress`
-  // as the later uses the insets from fullscreen model.
+  // Toolbars size must be updated before
+  // `updateFootersForFullscreenProgress` as the later uses the insets from
+  // fullscreen model.
   [self updateToolbarState];
 
   // Change the height of the secondary toolbar to show/hide it.
@@ -2213,12 +2177,12 @@ const double kDelayForRatingPrompt = 10.0;
       // collection change method could lead the tab strip to show over
       // onboarding flow. Skip updating the tab strip when first run is in
       // progress.
-      if (!IsFirstRun()) {
+      if (!ShouldPresentFirstRunExperience()) {
         [self showTabStripView:self.tabStripView];
         [self.tabStripView layoutSubviews];
       }
 
-      [self.legacyTabStripCoordinator hideTabStrip:![self canShowTabStrip]];
+      [self.tabStripCoordinator hideTabStrip:![self canShowTabStrip]];
       [self addConstraintsToPrimaryToolbar];
       if (![VivaldiGlobalHelpers isDeviceTablet]) {
         [self updateForFullscreenProgress:
@@ -2228,12 +2192,7 @@ const double kDelayForRatingPrompt = 10.0;
     [self showTabStripView:self.tabStripView];
     [self.tabStripView layoutSubviews];
     const bool canShowTabStrip = IsRegularXRegularSizeClass(self);
-
-    if (IsModernTabStripOrRaccoonEnabled()) {
       [self.tabStripCoordinator hideTabStrip:!canShowTabStrip];
-    } else {
-      [self.legacyTabStripCoordinator hideTabStrip:!canShowTabStrip];
-    }
     _fakeStatusBarView.hidden = !canShowTabStrip;
     } // End Vivaldi
 
@@ -2251,6 +2210,29 @@ const double kDelayForRatingPrompt = 10.0;
   [self setNeedsStatusBarAppearanceUpdate];
 
   self.fullscreenController->BrowserTraitCollectionChangedEnd();
+}
+
+// Shows the `tabStripView`.
+- (void)showTabStripView:(UIView*)tabStripView {
+  DCHECK([self isViewLoaded]);
+  DCHECK(tabStripView);
+  self.tabStripView = tabStripView;
+  CGRect tabStripFrame = [self.tabStripView frame];
+  tabStripFrame.origin = CGPointZero;
+  // TODO(crbug.com/41023322): Move the origin.y below to -setUpViewLayout.
+  // because the CGPointZero above will break reset the offset, but it's not
+  // clear what removing that will do.
+  tabStripFrame.origin.y = self.headerOffset;
+  tabStripFrame.size.width = CGRectGetWidth([self view].bounds);
+  [self.tabStripView setFrame:tabStripFrame];
+
+  UIView* primaryToolbar =
+      self.toolbarCoordinator.primaryToolbarViewController.view;
+  [self.view insertSubview:tabStripView belowSubview:primaryToolbar];
+
+  if (IsVivaldiRunning() && !ShouldPresentFirstRunExperience()) {
+    [self.view bringSubviewToFront:self.tabStripView];
+  } // End Vivaldi
 }
 
 #pragma mark - Private Methods: Tap handling
@@ -2475,15 +2457,23 @@ const double kDelayForRatingPrompt = 10.0;
          self.headerOffset;
 }
 
-// Updates the ToolbarUIState, which broadcasts any changes to registered
+// Updates the ToolbarsSize, which broadcasts any changes to registered
 // listeners.
 - (void)updateToolbarState {
-  _toolbarUIState.collapsedTopToolbarHeight = [self collapsedTopToolbarHeight];
-  _toolbarUIState.expandedTopToolbarHeight = [self expandedTopToolbarHeight];
-  _toolbarUIState.collapsedBottomToolbarHeight =
-      [self collapsedBottomToolbarHeight];
-  _toolbarUIState.expandedBottomToolbarHeight =
-      [self secondaryToolbarHeightWithInset];
+  if (IsRefactorToolbarsSize()) {
+    [_toolbarsSize
+        setCollapsedTopToolbarHeight:[self collapsedTopToolbarHeight]
+            expandedTopToolbarHeight:[self expandedTopToolbarHeight]
+         expandedBottomToolbarHeight:[self secondaryToolbarHeightWithInset]
+        collapsedBottomToolbarHeight:[self collapsedBottomToolbarHeight]];
+  } else {
+    _toolbarsSize.collapsedTopToolbarHeight = [self collapsedTopToolbarHeight];
+    _toolbarsSize.expandedTopToolbarHeight = [self expandedTopToolbarHeight];
+    _toolbarsSize.collapsedBottomToolbarHeight =
+        [self collapsedBottomToolbarHeight];
+    _toolbarsSize.expandedBottomToolbarHeight =
+        [self secondaryToolbarHeightWithInset];
+  }
 }
 
 // Returns the height difference between the fully expanded and fully collapsed
@@ -2628,7 +2618,7 @@ const double kDelayForRatingPrompt = 10.0;
   if (self.ntpCoordinator.isNTPActiveForCurrentWebState) {
     [self.ntpCoordinator locationBarDidBecomeFirstResponder];
   }
-  [_sideSwipeMediator setEnabled:NO];
+  [_sideSwipeCoordinator setEnabled:NO];
 
   if (!IsVisibleURLNewTabPage(self.currentWebState) ||
       ui::GetDeviceFormFactor() == ui::DEVICE_FORM_FACTOR_TABLET) {
@@ -2648,7 +2638,7 @@ const double kDelayForRatingPrompt = 10.0;
 }
 
 - (void)omniboxDidResignFirstResponder {
-  [_sideSwipeMediator setEnabled:YES];
+  [_sideSwipeCoordinator setEnabled:YES];
 
   [self.ntpCoordinator locationBarWillResignFirstResponder];
 
@@ -3077,13 +3067,7 @@ const double kDelayForRatingPrompt = 10.0;
   return [hitView isDescendantOfView:self.contentArea];
 }
 
-// TODO(crbug.com/40842427): Factor this delegate into a mediator or other
-// helper
-#pragma mark - SideSwipeMediatorDelegate
-
-- (UIView*)sideSwipeFullscreenView {
-  return self.view;
-}
+#pragma mark - CardSwipeViewDelegate
 
 - (void)sideSwipeViewDismissAnimationDidEnd:(UIView*)sideSwipeView {
 
@@ -3100,7 +3084,15 @@ const double kDelayForRatingPrompt = 10.0;
 
   // Reset horizontal stack view.
   [sideSwipeView removeFromSuperview];
-  [_sideSwipeMediator setInSwipe:NO];
+  [_sideSwipeCoordinator setSwipeInProgress:NO];
+}
+
+// TODO(crbug.com/40842427): Factor this delegate into a mediator or other
+// helper
+#pragma mark - SideSwipeUIControllerDelegate
+
+- (UIView*)sideSwipeFullscreenView {
+  return self.view;
 }
 
 - (UIView*)sideSwipeContentView {
@@ -3183,8 +3175,8 @@ const double kDelayForRatingPrompt = 10.0;
     return;
   }
 
-  // Toolbar state must be updated before `updateForFullscreenProgress` as the
-  // later uses the insets from fullscreen model.
+  // Toolbars size must be updated before `updateForFullscreenProgress` as
+  // the later uses the insets from fullscreen model.
   [self updateToolbarState];
 
   self.primaryToolbarHeightConstraint.constant =
@@ -3235,40 +3227,6 @@ const double kDelayForRatingPrompt = 10.0;
 
 - (id<LogoAnimationControllerOwner>)logoAnimationControllerOwner {
   return nil;
-}
-
-#pragma mark - TabStripPresentation
-
-- (BOOL)isTabStripFullyVisible {
-  return ([self currentHeaderOffset] == 0.0f);
-}
-
-- (void)showTabStripView:(UIView*)tabStripView {
-  DCHECK([self isViewLoaded]);
-  DCHECK(tabStripView);
-  self.tabStripView = tabStripView;
-  CGRect tabStripFrame = [self.tabStripView frame];
-  tabStripFrame.origin = CGPointZero;
-  // TODO(crbug.com/41023322): Move the origin.y below to -setUpViewLayout.
-  // because the CGPointZero above will break reset the offset, but it's not
-  // clear what removing that will do.
-  tabStripFrame.origin.y = self.headerOffset;
-
-  // Vivaldi
-  tabStripFrame.origin.x = self.rootSafeAreaInsets.left;
-  tabStripFrame.size.width = CGRectGetWidth([self view].bounds) -
-      self.rootSafeAreaInsets.left - self.rootSafeAreaInsets.right;
-  // End Vivaldi
-
-  [self.tabStripView setFrame:tabStripFrame];
-
-  if (IsModernTabStripOrRaccoonEnabled()) {
-    UIView* primaryToolbar =
-        self.toolbarCoordinator.primaryToolbarViewController.view;
-    [self.view insertSubview:tabStripView belowSubview:primaryToolbar];
-  } else {
-    [self.view addSubview:tabStripView];
-  }
 }
 
 #pragma mark - FindBarPresentationDelegate
@@ -3385,7 +3343,6 @@ const double kDelayForRatingPrompt = 10.0;
 
 #pragma mark - Actions that triggers webstate and parent UI updates.
 - (void)didUpdateTabSettings {
-  _sideSwipeMediator.isDesktopTabBarEnabled = [self canShowTabStrip];
   [self updateNTPFrame];
   [self updateToolbarType];
   [self updateTabStripView];
@@ -3424,13 +3381,9 @@ const double kDelayForRatingPrompt = 10.0;
     [self.tabStripView setFrame:tabStripFrame];
     [self.tabStripView layoutSubviews];
 
-    if (!IsFirstRun()) {
+    if (!ShouldPresentFirstRunExperience()) {
       [self.view bringSubviewToFront:self.tabStripView];
     }
-
-    if (self.currentWebState)
-      [self.legacyTabStripCoordinator
-       scrollToSelectedTab:self.currentWebState animated:NO];
   }
 }
 
@@ -3509,7 +3462,7 @@ const double kDelayForRatingPrompt = 10.0;
           constraintEqualToAnchor:self.view.bottomAnchor];
 
   CGFloat tabStripContainerHeight =
-      [self canShowTabStrip] ? kTabStripHeight : 0;
+      [self canShowTabStrip] ? TabStripCollectionViewConstants.height : 0;
   if (self.isBottomOmniboxEnabled) {
     tabStripContainerHeight += [self canShowTabStrip] ?
         self.rootSafeAreaInsets.bottom : self.rootSafeAreaInsets.top;
@@ -3751,10 +3704,8 @@ const double kDelayForRatingPrompt = 10.0;
 }
 
 - (BOOL)isBottomOmniboxEnabled {
-  if (!_bottomOmniboxEnabled)
-    return NO;
-
-  return _bottomOmniboxEnabled.value;
+  return GetApplicationContext()
+      ->GetLocalState()->GetBoolean(prefs::kBottomOmnibox);
 }
 
 - (BOOL)showDynamicAccentColor {
@@ -3985,7 +3936,11 @@ const double kDelayForRatingPrompt = 10.0;
   }
 }
 
-#pragma mark - SideSwipeMediatorDelegate(Vivaldi)
+#pragma mark - SideSwipeUIControllerDelegate(Vivaldi)
+- (BOOL)isTabBarEnabled {
+  return [self isDesktopTabBarEnabled];
+}
+
 - (void)didFinishSideSwipeNavigation {
   [self updateUIElementsWithThemeColor];
 }

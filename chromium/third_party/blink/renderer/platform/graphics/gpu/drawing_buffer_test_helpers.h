@@ -22,7 +22,6 @@
 #include "third_party/blink/public/platform/web_graphics_context_3d_provider.h"
 #include "third_party/blink/renderer/platform/graphics/gpu/drawing_buffer.h"
 #include "third_party/blink/renderer/platform/graphics/gpu/extensions_3d_util.h"
-#include "third_party/blink/renderer/platform/graphics/graphics_types.h"
 #include "third_party/blink/renderer/platform/graphics/test/test_webgraphics_shared_image_interface_provider.h"
 #include "ui/gl/gpu_preference.h"
 
@@ -437,13 +436,14 @@ class DrawingBufferForTests : public DrawingBuffer {
       DrawingBuffer::Client* client,
       const gfx::Size& size,
       PreserveDrawingBuffer preserve,
-      UseMultisampling use_multisampling) {
+      UseMultisampling use_multisampling,
+      bool desynchronized = false) {
     std::unique_ptr<Extensions3DUtil> extensions_util =
         Extensions3DUtil::Create(context_provider->ContextGL());
     scoped_refptr<DrawingBufferForTests> drawing_buffer =
         base::AdoptRef(new DrawingBufferForTests(
             std::move(context_provider), graphics_info,
-            std::move(extensions_util), client, preserve));
+            std::move(extensions_util), client, preserve, desynchronized));
     if (!drawing_buffer->Initialize(
             size, use_multisampling != kDisableMultisampling)) {
       drawing_buffer->BeginDestruction();
@@ -460,12 +460,13 @@ class DrawingBufferForTests : public DrawingBuffer {
       const Platform::GraphicsInfo& graphics_info,
       std::unique_ptr<Extensions3DUtil> extensions_util,
       DrawingBuffer::Client* client,
-      PreserveDrawingBuffer preserve)
+      PreserveDrawingBuffer preserve,
+      bool desynchronized)
       : DrawingBuffer(
             std::move(context_provider),
             graphics_info,
             false /* usingSwapChain */,
-            false /* desynchronized */,
+            desynchronized,
             std::move(extensions_util),
             client,
             false /* discardFramebufferSupported */,

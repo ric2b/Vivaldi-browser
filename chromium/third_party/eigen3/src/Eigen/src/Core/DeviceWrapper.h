@@ -66,7 +66,7 @@ struct AssignmentWithDevice<DstXprType, Product<Lhs, Rhs, Options>, Functor, Dev
   static EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE void run(DstXprType& dst, const SrcXprType& src, const Functor& func,
                                                         Device&) {
     Base::run(dst, src, func);
-  };
+  }
 };
 
 // specialization for coeffcient-wise assignment

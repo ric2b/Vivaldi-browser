@@ -74,8 +74,6 @@ class MockDeviceInfoSyncClient : public DeviceInfoSyncClient {
               (),
               (const override));
   MOCK_METHOD(bool, IsUmaEnabledOnCrOSDevice, (), (const override));
-
-  MOCK_METHOD(size_t, VivaldiGetSyncedFileStorageSize, (), (const override));
 };
 
 class LocalDeviceInfoProviderImplTest : public testing::Test {

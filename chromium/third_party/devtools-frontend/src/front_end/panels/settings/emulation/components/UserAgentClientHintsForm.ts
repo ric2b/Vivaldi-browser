@@ -18,7 +18,7 @@ import userAgentClientHintsFormStylesRaw from './userAgentClientHintsForm.css.js
 
 // TODO(crbug.com/391381439): Fully migrate off of constructed style sheets.
 const userAgentClientHintsFormStyles = new CSSStyleSheet();
-userAgentClientHintsFormStyles.replaceSync(userAgentClientHintsFormStylesRaw.cssContent);
+userAgentClientHintsFormStyles.replaceSync(userAgentClientHintsFormStylesRaw.cssText);
 
 const {html} = Lit;
 
@@ -155,7 +155,7 @@ const UIStrings = {
    *@description Text that is usually a hyperlink to more documentation
    */
   learnMore: 'Learn more',
-};
+} as const;
 const str_ = i18n.i18n.registerUIStrings('panels/settings/emulation/components/UserAgentClientHintsForm.ts', UIStrings);
 const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
 
@@ -210,12 +210,12 @@ const DEFAULT_METADATA = {
 export class UserAgentClientHintsForm extends HTMLElement {
   readonly #shadow = this.attachShadow({mode: 'open'});
 
-  #isFormOpened: boolean = false;
-  #isFormDisabled: boolean = false;
+  #isFormOpened = false;
+  #isFormDisabled = false;
   #metaData: Protocol.Emulation.UserAgentMetadata = DEFAULT_METADATA;
-  #showMobileCheckbox: boolean = false;
-  #showSubmitButton: boolean = false;
-  #useragentModifiedAriaMessage: string = '';
+  #showMobileCheckbox = false;
+  #showSubmitButton = false;
+  #useragentModifiedAriaMessage = '';
 
   connectedCallback(): void {
     this.#shadow.adoptedStyleSheets = [Input.checkboxStyles, userAgentClientHintsFormStyles];

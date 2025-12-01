@@ -49,6 +49,7 @@
 #include "net/dns/mock_host_resolver.h"
 #include "net/test/embedded_test_server/request_handler_util.h"
 #include "services/metrics/public/cpp/ukm_builders.h"
+#include "services/network/public/cpp/features.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "third_party/blink/public/common/associated_interfaces/associated_interface_provider.h"
 #include "third_party/blink/public/common/features.h"
@@ -90,12 +91,9 @@ constexpr char kExpectedHeaderValueForSiteB[] =
 static constexpr char kBrowsingTopicsApiActionTypeHistogramId[] =
     "BrowsingTopics.ApiActionType";
 
-static constexpr char kRedirectCountHistogramId[] =
-    "BrowsingTopics.PageLoad.OnTopicsFirstInvoked.RedirectCount";
-
-static constexpr char kRedirectWithTopicsInvokedCountHistogramId[] =
-    "BrowsingTopics.PageLoad.OnTopicsFirstInvoked."
-    "RedirectWithTopicsInvokedCount";
+static constexpr char kRedirectTopicsCallingSitesCountHistogramId[] =
+    "BrowsingTopics.RedirectChain.OnTopicsFirstInvokedForSite."
+    "TopicsCallingSitesCount";
 
 EpochTopics CreateTestEpochTopics(
     const std::vector<std::pair<Topic, std::set<HashedDomain>>>& topics,
@@ -183,6 +181,19 @@ class BrowsingTopicsBrowserTestBase : public MixinBasedInProcessBrowserTest {
         base::SequencedTaskRunner::GetCurrentDefault()));
 
     content::SetupCrossSiteRedirector(&https_server_);
+
+    for (int i = 0; i < 10; ++i) {
+      distinct_cert_hostnames_.push_back(
+          base::StrCat({"example", base::NumberToString(i), ".com"}));
+    }
+
+    distinct_cert_hostnames_.push_back("a.test");
+    distinct_cert_hostnames_.push_back("b.test");
+    distinct_cert_hostnames_.push_back("c.test");
+    distinct_cert_hostnames_.push_back("d.test");
+
+    https_server_.SetCertHostnames(distinct_cert_hostnames_);
+
     ASSERT_TRUE(https_server_.Start());
 
     content::SetupCrossSiteRedirector(embedded_test_server());
@@ -250,6 +261,8 @@ class BrowsingTopicsBrowserTestBase : public MixinBasedInProcessBrowserTest {
   }
 
  protected:
+  std::vector<std::string> distinct_cert_hostnames_;
+
   net::EmbeddedTestServer https_server_{
       net::test_server::EmbeddedTestServer::TYPE_HTTPS};
 
@@ -264,7 +277,7 @@ class BrowsingTopicsDisabledBrowserTest : public BrowsingTopicsBrowserTestBase {
   BrowsingTopicsDisabledBrowserTest() {
     scoped_feature_list_.InitWithFeatures(
         /*enabled_features=*/{},
-        /*disabled_features=*/{blink::features::kBrowsingTopics});
+        /*disabled_features=*/{network::features::kBrowsingTopics});
   }
 
  protected:
@@ -294,7 +307,7 @@ class BrowsingTopicsAnnotationGoldenDataBrowserTest
   BrowsingTopicsAnnotationGoldenDataBrowserTest() {
     scoped_feature_list_.InitWithFeatures(
         /*enabled_features=*/
-        {blink::features::kBrowsingTopics,
+        {network::features::kBrowsingTopics,
          blink::features::kBrowsingTopicsBypassIPIsPubliclyRoutableCheck,
          features::kPrivacySandboxAdsAPIsOverride},
         /*disabled_features=*/{
@@ -386,7 +399,7 @@ class BrowsingTopicsBrowserTest : public BrowsingTopicsBrowserTestBase {
     // during tests where expiration is irrelevant.
     scoped_feature_list_.InitWithFeaturesAndParameters(
         /*enabled_features=*/
-        {{blink::features::kBrowsingTopics, {}},
+        {{network::features::kBrowsingTopics, {}},
          {blink::features::kBrowsingTopicsParameters,
           {{"epoch_retention_duration", "3650000d"}}},
          {blink::features::kBrowsingTopicsBypassIPIsPubliclyRoutableCheck, {}},
@@ -407,12 +420,13 @@ class BrowsingTopicsBrowserTest : public BrowsingTopicsBrowserTestBase {
     }
   }
 
-  // BrowserTestBase::SetUpInProcessBrowserTestFixture
-  void SetUpInProcessBrowserTestFixture() override {
-    subscription_ =
-        BrowserContextDependencyManager::GetInstance()
-            ->RegisterCreateServicesCallbackForTesting(base::BindRepeating(
-                &BrowsingTopicsBrowserTest::OnWillCreateBrowserContextServices,
+  void SetUpBrowserContextKeyedServices(
+      content::BrowserContext* context) override {
+    browsing_topics::BrowsingTopicsServiceFactory::GetInstance()
+        ->SetTestingFactory(
+            context,
+            base::BindRepeating(
+                &BrowsingTopicsBrowserTest::CreateBrowsingTopicsService,
                 base::Unretained(this)));
   }
 
@@ -499,15 +513,6 @@ class BrowsingTopicsBrowserTest : public BrowsingTopicsBrowserTestBase {
 
   content::test::PrerenderTestHelper& prerender_helper() {
     return prerender_helper_;
-  }
-
-  void OnWillCreateBrowserContextServices(content::BrowserContext* context) {
-    browsing_topics::BrowsingTopicsServiceFactory::GetInstance()
-        ->SetTestingFactory(
-            context,
-            base::BindRepeating(
-                &BrowsingTopicsBrowserTest::CreateBrowsingTopicsService,
-                base::Unretained(this)));
   }
 
   void InitializePreexistingState(
@@ -618,8 +623,6 @@ class BrowsingTopicsBrowserTest : public BrowsingTopicsBrowserTestBase {
   optimization_guide::TestOptimizationGuideModelProvider model_provider_;
 
   std::unique_ptr<ukm::TestAutoSetUkmRecorder> ukm_recorder_;
-
-  base::CallbackListSubscription subscription_;
 };
 
 class BrowsingTopicsSubresourceRequestTest
@@ -2194,7 +2197,7 @@ IN_PROC_BROWSER_TEST_F(BrowsingTopicsBrowserTest,
   EXPECT_EQ(api_usage_contexts[2].hashed_context_domain, HashedDomain(1));
 }
 
-IN_PROC_BROWSER_TEST_F(BrowsingTopicsBrowserTest, RedirectMetrics_NoRedirect) {
+IN_PROC_BROWSER_TEST_F(BrowsingTopicsBrowserTest, RedirectMetrics_OnePage) {
   base::HistogramTester histogram_tester;
 
   GURL main_frame_url =
@@ -2203,35 +2206,29 @@ IN_PROC_BROWSER_TEST_F(BrowsingTopicsBrowserTest, RedirectMetrics_NoRedirect) {
   ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), main_frame_url));
 
   // Expect no UMA, as Topics API has not been invoked in the page.
-  histogram_tester.ExpectTotalCount(kRedirectCountHistogramId,
-                                    /*expected_count=*/0);
-  histogram_tester.ExpectTotalCount(kRedirectWithTopicsInvokedCountHistogramId,
+  histogram_tester.ExpectTotalCount(kRedirectTopicsCallingSitesCountHistogramId,
                                     /*expected_count=*/0);
 
   InvokeTopicsAPI(web_contents());
 
-  histogram_tester.ExpectUniqueSample(kRedirectCountHistogramId,
-                                      /*sample=*/0,
-                                      /*expected_bucket_count=*/1);
   histogram_tester.ExpectUniqueSample(
-      kRedirectWithTopicsInvokedCountHistogramId,
-      /*sample=*/0,
+      kRedirectTopicsCallingSitesCountHistogramId,
+      /*sample=*/1,
       /*expected_bucket_count=*/1);
 
   // Calling Topics API the second time won't record UMA again.
   InvokeTopicsAPI(web_contents());
 
-  histogram_tester.ExpectUniqueSample(kRedirectCountHistogramId,
-                                      /*sample=*/0,
-                                      /*expected_bucket_count=*/1);
+  // Expect a sample emitted from the current page.
   histogram_tester.ExpectUniqueSample(
-      kRedirectWithTopicsInvokedCountHistogramId,
-      /*sample=*/0,
+      kRedirectTopicsCallingSitesCountHistogramId,
+      /*sample=*/1,
       /*expected_bucket_count=*/1);
 }
 
-IN_PROC_BROWSER_TEST_F(BrowsingTopicsBrowserTest,
-                       RedirectMetrics_OneRedirectWithoutTopicsInvoked) {
+IN_PROC_BROWSER_TEST_F(
+    BrowsingTopicsBrowserTest,
+    RedirectMetrics_TwoPages_DifferentSites_FirstPageDoesNotInvokeTopics) {
   base::HistogramTester histogram_tester;
 
   GURL main_frame_url1 =
@@ -2245,26 +2242,23 @@ IN_PROC_BROWSER_TEST_F(BrowsingTopicsBrowserTest,
   ASSERT_TRUE(content::NavigateToURLFromRendererWithoutUserGesture(
       web_contents(), main_frame_url2));
 
+  // Expect no UMA, as Topics API has not been invoked in the redirect chain.
+  histogram_tester.ExpectTotalCount(kRedirectTopicsCallingSitesCountHistogramId,
+                                    /*expected_count=*/0);
+
   InvokeTopicsAPI(web_contents(), /*skip_observation=*/false,
                   content::EXECUTE_SCRIPT_NO_USER_GESTURE);
 
-  histogram_tester.ExpectUniqueSample(kRedirectCountHistogramId,
-                                      /*sample=*/1,
-                                      /*expected_bucket_count=*/1);
+  // Expect a sample emitted from the second page.
   histogram_tester.ExpectUniqueSample(
-      kRedirectWithTopicsInvokedCountHistogramId,
-      /*sample=*/0,
+      kRedirectTopicsCallingSitesCountHistogramId,
+      /*sample=*/1,
       /*expected_bucket_count=*/1);
-
-  // The redirect chain has only one page calling topics. We need at least two
-  // for this `TopicsRedirectChainDetected` event, so it's not being logged.
-  auto entries = ukm_recorder_->GetEntriesByName(
-      ukm::builders::BrowsingTopics_TopicsRedirectChainDetected::kEntryName);
-  EXPECT_EQ(0u, entries.size());
 }
 
-IN_PROC_BROWSER_TEST_F(BrowsingTopicsBrowserTest,
-                       RedirectMetrics_OneRedirectWithTopicsInvoked) {
+IN_PROC_BROWSER_TEST_F(
+    BrowsingTopicsBrowserTest,
+    RedirectMetrics_TwoPages_DifferentSites_FirstPageInvokesTopics) {
   base::HistogramTester histogram_tester;
 
   GURL main_frame_url1 =
@@ -2281,22 +2275,80 @@ IN_PROC_BROWSER_TEST_F(BrowsingTopicsBrowserTest,
   ASSERT_TRUE(content::NavigateToURLFromRendererWithoutUserGesture(
       web_contents(), main_frame_url2));
 
+  // Expect no sample except for the one emitted from the first page.
+  histogram_tester.ExpectUniqueSample(
+      kRedirectTopicsCallingSitesCountHistogramId,
+      /*sample=*/1,
+      /*expected_bucket_count=*/1);
+
   InvokeTopicsAPI(web_contents(), /*skip_observation=*/false,
                   content::EXECUTE_SCRIPT_NO_USER_GESTURE);
 
-  histogram_tester.ExpectBucketCount(kRedirectCountHistogramId,
-                                     /*sample=*/1,
-                                     /*expected_count=*/1);
-  histogram_tester.ExpectBucketCount(kRedirectWithTopicsInvokedCountHistogramId,
-                                     /*sample=*/1,
-                                     /*expected_count=*/1);
+  // Expect a sample emitted from the second page.
+  histogram_tester.ExpectBucketCount(
+      kRedirectTopicsCallingSitesCountHistogramId,
+      /*sample=*/2,
+      /*expected_count=*/1);
+}
 
-  auto entries = ukm_recorder_->GetEntriesByName(
-      ukm::builders::BrowsingTopics_TopicsRedirectChainDetected::kEntryName);
-  EXPECT_EQ(1u, entries.size());
-  ukm_recorder_->ExpectEntrySourceHasUrl(entries.back(), main_frame_url1);
-  ukm_recorder_->ExpectEntryMetric(entries.back(), "NumberOfPagesCallingTopics",
-                                   2);
+IN_PROC_BROWSER_TEST_F(
+    BrowsingTopicsBrowserTest,
+    RedirectMetrics_TwoPages_SameSites_FirstPageDoesNotInvokeTopics) {
+  base::HistogramTester histogram_tester;
+
+  GURL main_frame_url1 =
+      https_server_.GetURL("a.test", "/browsing_topics/empty_page.html");
+
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), main_frame_url1));
+
+  GURL main_frame_url2 =
+      https_server_.GetURL("a.test", "/browsing_topics/empty_page.html");
+
+  ASSERT_TRUE(content::NavigateToURLFromRendererWithoutUserGesture(
+      web_contents(), main_frame_url2));
+
+  // Expect no UMA, as Topics API has not been invoked in the redirect chain.
+  histogram_tester.ExpectTotalCount(kRedirectTopicsCallingSitesCountHistogramId,
+                                    /*expected_count=*/0);
+
+  InvokeTopicsAPI(web_contents(), /*skip_observation=*/false,
+                  content::EXECUTE_SCRIPT_NO_USER_GESTURE);
+
+  // Expect a sample emitted from the second page.
+  histogram_tester.ExpectUniqueSample(
+      kRedirectTopicsCallingSitesCountHistogramId,
+      /*sample=*/1,
+      /*expected_bucket_count=*/1);
+}
+
+IN_PROC_BROWSER_TEST_F(
+    BrowsingTopicsBrowserTest,
+    RedirectMetrics_TwoPages_SameSites_FirstPageInvokesTopics) {
+  base::HistogramTester histogram_tester;
+
+  GURL main_frame_url1 =
+      https_server_.GetURL("a.test", "/browsing_topics/empty_page.html");
+
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), main_frame_url1));
+
+  InvokeTopicsAPI(web_contents(), /*skip_observation=*/false,
+                  content::EXECUTE_SCRIPT_NO_USER_GESTURE);
+
+  GURL main_frame_url2 =
+      https_server_.GetURL("a.test", "/browsing_topics/empty_page.html");
+
+  ASSERT_TRUE(content::NavigateToURLFromRendererWithoutUserGesture(
+      web_contents(), main_frame_url2));
+
+  InvokeTopicsAPI(web_contents(), /*skip_observation=*/false,
+                  content::EXECUTE_SCRIPT_NO_USER_GESTURE);
+
+  // Expect no sample except for the one emitted from the first page, because
+  // the second page's site is not a new site in the redirect chain.
+  histogram_tester.ExpectUniqueSample(
+      kRedirectTopicsCallingSitesCountHistogramId,
+      /*sample=*/1,
+      /*expected_bucket_count=*/1);
 }
 
 IN_PROC_BROWSER_TEST_F(BrowsingTopicsBrowserTest,
@@ -2322,12 +2374,9 @@ IN_PROC_BROWSER_TEST_F(BrowsingTopicsBrowserTest,
   InvokeTopicsAPI(web_contents(), /*skip_observation=*/false,
                   content::EXECUTE_SCRIPT_NO_USER_GESTURE);
 
-  histogram_tester.ExpectUniqueSample(kRedirectCountHistogramId,
-                                      /*sample=*/0,
-                                      /*expected_bucket_count=*/2);
   histogram_tester.ExpectUniqueSample(
-      kRedirectWithTopicsInvokedCountHistogramId,
-      /*sample=*/0,
+      kRedirectTopicsCallingSitesCountHistogramId,
+      /*sample=*/1,
       /*expected_bucket_count=*/2);
 }
 
@@ -2354,12 +2403,9 @@ IN_PROC_BROWSER_TEST_F(
   InvokeTopicsAPI(web_contents(), /*skip_observation=*/false,
                   content::EXECUTE_SCRIPT_NO_USER_GESTURE);
 
-  histogram_tester.ExpectUniqueSample(kRedirectCountHistogramId,
-                                      /*sample=*/0,
-                                      /*expected_bucket_count=*/2);
   histogram_tester.ExpectUniqueSample(
-      kRedirectWithTopicsInvokedCountHistogramId,
-      /*sample=*/0,
+      kRedirectTopicsCallingSitesCountHistogramId,
+      /*sample=*/1,
       /*expected_bucket_count=*/2);
 }
 
@@ -2397,12 +2443,9 @@ IN_PROC_BROWSER_TEST_F(BrowsingTopicsBrowserTest,
   InvokeTopicsAPI(new_web_contents, /*skip_observation=*/false,
                   content::EXECUTE_SCRIPT_NO_USER_GESTURE);
 
-  histogram_tester.ExpectUniqueSample(kRedirectCountHistogramId,
-                                      /*sample=*/0,
-                                      /*expected_bucket_count=*/2);
   histogram_tester.ExpectUniqueSample(
-      kRedirectWithTopicsInvokedCountHistogramId,
-      /*sample=*/0,
+      kRedirectTopicsCallingSitesCountHistogramId,
+      /*sample=*/1,
       /*expected_bucket_count=*/2);
 }
 
@@ -2447,14 +2490,13 @@ IN_PROC_BROWSER_TEST_F(BrowsingTopicsBrowserTest,
   InvokeTopicsAPI(initial_web_contents, /*skip_observation=*/false,
                   content::EXECUTE_SCRIPT_NO_USER_GESTURE);
 
-  // Expect that the page resulted from the opener navigation will be
-  // initialized with the redirect status derived from the initial page.
-  histogram_tester.ExpectBucketCount(kRedirectCountHistogramId,
-                                     /*sample=*/1,
-                                     /*expected_count=*/1);
-  histogram_tester.ExpectBucketCount(kRedirectWithTopicsInvokedCountHistogramId,
-                                     /*sample=*/1,
-                                     /*expected_count=*/1);
+  // Expect a new sample. This implies that the page resulted from the opener
+  // navigation was initialized with the redirect status derived from the
+  // initial page.
+  histogram_tester.ExpectBucketCount(
+      kRedirectTopicsCallingSitesCountHistogramId,
+      /*sample=*/2,
+      /*expected_count=*/1);
 }
 
 IN_PROC_BROWSER_TEST_F(
@@ -2473,25 +2515,21 @@ IN_PROC_BROWSER_TEST_F(
   GURL main_frame_url2 =
       https_server_.GetURL("a.test", "/browsing_topics/empty_page.html#123");
 
-  // Trigger a same-doc navigation. The page and its redirect state won't be
-  // affected.
-  ASSERT_TRUE(content::NavigateToURLFromRendererWithoutUserGesture(
-      web_contents(), main_frame_url2));
+  // Trigger a same-doc navigation with user activation. The page and its
+  // redirect state won't be affected.
+  ASSERT_TRUE(
+      content::NavigateToURLFromRenderer(web_contents(), main_frame_url2));
 
   InvokeTopicsAPI(web_contents(), /*skip_observation=*/false,
                   content::EXECUTE_SCRIPT_NO_USER_GESTURE);
 
-  histogram_tester.ExpectUniqueSample(kRedirectCountHistogramId,
-                                      /*sample=*/0,
-                                      /*expected_bucket_count=*/1);
   histogram_tester.ExpectUniqueSample(
-      kRedirectWithTopicsInvokedCountHistogramId,
-      /*sample=*/0,
+      kRedirectTopicsCallingSitesCountHistogramId,
+      /*sample=*/1,
       /*expected_bucket_count=*/1);
 }
 
-IN_PROC_BROWSER_TEST_F(BrowsingTopicsBrowserTest,
-                       RedirectMetrics_TenRedirectsWithTopicsInvoked) {
+IN_PROC_BROWSER_TEST_F(BrowsingTopicsBrowserTest, RedirectMetrics_CapReached) {
   base::HistogramTester histogram_tester;
 
   GURL main_frame_url =
@@ -2502,9 +2540,11 @@ IN_PROC_BROWSER_TEST_F(BrowsingTopicsBrowserTest,
   InvokeTopicsAPI(web_contents(), /*skip_observation=*/false,
                   content::EXECUTE_SCRIPT_NO_USER_GESTURE);
 
-  for (int i = 0; i < 10; ++i) {
+  ASSERT_EQ(distinct_cert_hostnames_.size(), 14u);
+
+  for (const std::string& host : distinct_cert_hostnames_) {
     GURL new_main_frame_url =
-        https_server_.GetURL("b.test", "/browsing_topics/empty_page.html");
+        https_server_.GetURL(host, "/browsing_topics/empty_page.html");
 
     ASSERT_TRUE(content::NavigateToURLFromRendererWithoutUserGesture(
         web_contents(), new_main_frame_url));
@@ -2513,25 +2553,17 @@ IN_PROC_BROWSER_TEST_F(BrowsingTopicsBrowserTest,
                     content::EXECUTE_SCRIPT_NO_USER_GESTURE);
   }
 
-  // For each bucket from 0 to 4, expect a single sample.
-  for (int i = 0; i < 4; ++i) {
-    histogram_tester.ExpectBucketCount(kRedirectCountHistogramId,
-                                       /*sample=*/i,
-                                       /*expected_count=*/1);
+  // For each bucket from 1 to 5, expect a single sample.
+  for (int i = 1; i < 5; ++i) {
     histogram_tester.ExpectBucketCount(
-        kRedirectWithTopicsInvokedCountHistogramId,
+        kRedirectTopicsCallingSitesCountHistogramId,
         /*sample=*/i,
         /*expected_count=*/1);
   }
 
-  // For bucket 5, it should have 6 samples (corresponding to the last 6 page
-  // loads), as we cap the number at 5.
-  histogram_tester.ExpectBucketCount(kRedirectCountHistogramId,
-                                     /*sample=*/5,
-                                     /*expected_count=*/6);
-  histogram_tester.ExpectBucketCount(kRedirectWithTopicsInvokedCountHistogramId,
-                                     /*sample=*/5,
-                                     /*expected_count=*/6);
+  // Expect no more samples in other buckets, as we cap the number at 5.
+  histogram_tester.ExpectTotalCount(kRedirectTopicsCallingSitesCountHistogramId,
+                                    /*expected_count=*/5);
 }
 
 IN_PROC_BROWSER_TEST_F(BrowsingTopicsBrowserTest,
@@ -2547,7 +2579,7 @@ IN_PROC_BROWSER_TEST_F(BrowsingTopicsBrowserTest,
                   content::EXECUTE_SCRIPT_NO_USER_GESTURE);
 
   GURL download_url =
-      https_server_.GetURL("a.test", "/downloads/a_zip_file.zip");
+      https_server_.GetURL("b.test", "/downloads/a_zip_file.zip");
 
   // Trigger a renderer-initiated navigation that turns into a download. The
   // page and its redirect state won't be affected.
@@ -2565,12 +2597,9 @@ IN_PROC_BROWSER_TEST_F(BrowsingTopicsBrowserTest,
   InvokeTopicsAPI(web_contents(), /*skip_observation=*/false,
                   content::EXECUTE_SCRIPT_NO_USER_GESTURE);
 
-  histogram_tester.ExpectUniqueSample(kRedirectCountHistogramId,
-                                      /*sample=*/0,
-                                      /*expected_bucket_count=*/1);
   histogram_tester.ExpectUniqueSample(
-      kRedirectWithTopicsInvokedCountHistogramId,
-      /*sample=*/0,
+      kRedirectTopicsCallingSitesCountHistogramId,
+      /*sample=*/1,
       /*expected_bucket_count=*/1);
 }
 

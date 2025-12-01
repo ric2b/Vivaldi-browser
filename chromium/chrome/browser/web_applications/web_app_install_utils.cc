@@ -15,6 +15,7 @@
 #include <string_view>
 #include <type_traits>
 #include <utility>
+#include <variant>
 #include <vector>
 
 #include "base/check.h"
@@ -69,9 +70,9 @@
 #include "content/public/common/content_features.h"
 #include "mojo/public/cpp/bindings/struct_ptr.h"
 #include "net/http/http_util.h"
+#include "services/network/public/cpp/permissions_policy/permissions_policy_declaration.h"
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/common/manifest/manifest.h"
-#include "third_party/blink/public/common/permissions_policy/permissions_policy.h"
 #include "third_party/blink/public/mojom/manifest/display_mode.mojom-shared.h"
 #include "third_party/blink/public/mojom/manifest/manifest.mojom-shared.h"
 #include "third_party/blink/public/mojom/manifest/manifest.mojom.h"
@@ -81,7 +82,7 @@
 #include "url/gurl.h"
 #include "url/origin.h"
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
 #include "chromeos/ash/experiences/system_web_apps/types/system_web_app_data.h"
 #endif
 
@@ -461,7 +462,7 @@ void PopulateHomeTabIcons(WebAppInstallInfo* web_app_info,
     return;
   }
 
-  const auto& home_tab = absl::get<blink::Manifest::HomeTabParams>(
+  const auto& home_tab = std::get<blink::Manifest::HomeTabParams>(
       web_app_info->tab_strip.value().home_tab);
 
   for (const auto& icon : home_tab.icons) {
@@ -667,7 +668,7 @@ void UpdateWebAppInstallInfoIconsFromManifestIfNeeded(
 // which limits the number of icons.
 void PopulateHomeTabIconsFromHomeTabManifestParams(
     WebAppInstallInfo* web_app_info) {
-  auto& home_tab = absl::get<blink::Manifest::HomeTabParams>(
+  auto& home_tab = std::get<blink::Manifest::HomeTabParams>(
       web_app_info->tab_strip->home_tab);
   std::vector<blink::Manifest::ImageResource> home_tab_icons;
   for (const auto& icon : home_tab.icons) {
@@ -801,7 +802,7 @@ void UpdateWebAppInfoFromManifest(const blink::mojom::Manifest& manifest,
 
   web_app_info->permissions_policy.clear();
   for (const auto& decl : manifest.permissions_policy) {
-    blink::ParsedPermissionsPolicyDeclaration copy;
+    network::ParsedPermissionsPolicyDeclaration copy;
     copy.feature = decl.feature;
     copy.self_if_matches = decl.self_if_matches;
     for (const auto& origin : decl.allowed_origins)
@@ -1033,12 +1034,7 @@ WebAppManagement::Type ConvertInstallSurfaceToWebAppSource(
     case webapps::WebappInstallSource::OOBE_APP_RECOMMENDATIONS:
     case webapps::WebappInstallSource::WEB_INSTALL:
     case webapps::WebappInstallSource::CHROMEOS_HELP_APP:
-      if (base::FeatureList::IsEnabled(
-              features::kWebAppDontAddExistingAppsToSync)) {
-        return WebAppManagement::kUserInstalled;
-      } else {
-        return WebAppManagement::kSync;
-      }
+      return WebAppManagement::kUserInstalled;
 
     case webapps::WebappInstallSource::IWA_GRAPHICAL_INSTALLER:
     case webapps::WebappInstallSource::IWA_DEV_UI:
@@ -1261,7 +1257,7 @@ void ApplyParamsToFinalizeOptions(
   options.add_to_quick_launch_bar = install_params.add_to_quick_launch_bar;
   options.skip_origin_association_validation =
       install_params.skip_origin_association_validation;
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
   if (install_params.system_app_type.has_value()) {
     options.system_web_app_data.emplace();
     options.system_web_app_data->system_app_type =
@@ -1275,12 +1271,12 @@ bool HomeTabIconsExistInTabStrip(const WebAppInstallInfo& web_app_info) {
     return false;
   }
 
-  if (!absl::holds_alternative<blink::Manifest::HomeTabParams>(
+  if (!std::holds_alternative<blink::Manifest::HomeTabParams>(
           web_app_info.tab_strip.value().home_tab)) {
     return false;
   }
 
-  const auto& home_tab = absl::get<blink::Manifest::HomeTabParams>(
+  const auto& home_tab = std::get<blink::Manifest::HomeTabParams>(
       web_app_info.tab_strip.value().home_tab);
 
   if (home_tab.icons.empty()) {
@@ -1296,7 +1292,7 @@ bool IsSyncEnabledForApps(Profile* profile) {
   }
   syncer::SyncService* sync_service =
       SyncServiceFactory::GetForProfile(profile);
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
   return sync_service->GetUserSettings()->GetSelectedOsTypes().Has(
       syncer::UserSelectableOsType::kOsApps);
 #else

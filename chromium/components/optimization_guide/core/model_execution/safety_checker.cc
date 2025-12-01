@@ -132,14 +132,11 @@ SafetyChecker::Result SafetyChecker::Result::Merge(
 }
 
 SafetyChecker::SafetyChecker(base::WeakPtr<TextSafetyClient> client,
-                             on_device_model::TextSafetyLoaderParams params,
                              SafetyConfig safety_cfg)
     : client_(std::move(client)),
-      params_(std::move(params)),
       safety_cfg_(std::move(safety_cfg)) {}
 SafetyChecker::SafetyChecker(const SafetyChecker& orig)
     : client_(orig.client_),
-      params_(orig.params_),
       safety_cfg_(orig.safety_cfg_) {}
 SafetyChecker::~SafetyChecker() = default;
 
@@ -150,7 +147,8 @@ void SafetyChecker::RunRequestChecks(const MultimodalMessage& request,
     std::move(callback).Run(SafetyChecker::Result{});
     return;
   }
-  if (!client_) {
+  auto& session = GetSession();
+  if (!session.is_bound()) {
     std::move(callback).Run(FailToRunResult());
     return;
   }
@@ -169,11 +167,10 @@ void SafetyChecker::RunRequestChecks(const MultimodalMessage& request,
                        text)
             .Then(merge_fn);
     if (safety_cfg_.IsRequestCheckLanguageOnly(idx)) {
-      client_->GetTextSafetyModelRemote(params_)->DetectLanguage(
+      session->DetectLanguage(
           text, base::BindOnce(&AsSafetyInfo).Then(std::move(merge_result_fn)));
     } else {
-      client_->GetTextSafetyModelRemote(params_)->ClassifyTextSafety(
-          text, std::move(merge_result_fn));
+      session->ClassifyTextSafety(text, std::move(merge_result_fn));
     }
   }
 }
@@ -185,7 +182,8 @@ void SafetyChecker::RunRawOutputCheck(const std::string& raw_output,
     std::move(callback).Run(SafetyChecker::Result{});
     return;
   }
-  if (!client_) {
+  auto& session = GetSession();
+  if (!session.is_bound()) {
     std::move(callback).Run(FailToRunResult());
     return;
   }
@@ -195,7 +193,7 @@ void SafetyChecker::RunRawOutputCheck(const std::string& raw_output,
     return;
   }
   auto text = check_input->ToString();
-  client_->GetTextSafetyModelRemote(params_)->ClassifyTextSafety(
+  session->ClassifyTextSafety(
       text, base::BindOnce(&RawOutputCheckResult,
                            weak_ptr_factory_.GetWeakPtr(), text, completeness)
                 .Then(std::move(callback)));
@@ -210,7 +208,8 @@ void SafetyChecker::RunResponseChecks(const MultimodalMessage& request,
     std::move(callback).Run(SafetyChecker::Result{});
     return;
   }
-  if (!client_) {
+  auto& session = GetSession();
+  if (!session.is_bound()) {
     std::move(callback).Run(FailToRunResult());
     return;
   }
@@ -234,9 +233,17 @@ void SafetyChecker::RunResponseChecks(const MultimodalMessage& request,
         base::BindOnce(&ResponseCheckResult, weak_ptr_factory_.GetWeakPtr(),
                        idx, text, completeness)
             .Then(merge_fn);
-    client_->GetTextSafetyModelRemote(params_)->ClassifyTextSafety(
-        text, std::move(merge_result_fn));
+    session->ClassifyTextSafety(text, std::move(merge_result_fn));
   }
+}
+
+mojo::Remote<on_device_model::mojom::TextSafetySession>&
+SafetyChecker::GetSession() {
+  if (session_ || !client_) {
+    return session_;
+  }
+  client_->StartSession(session_.BindNewPipeAndPassReceiver());
+  return session_;
 }
 
 }  // namespace optimization_guide

@@ -18,6 +18,7 @@
 #include "third_party/blink/renderer/core/css/zoom_adjusted_pixel_value.h"
 #include "third_party/blink/renderer/core/style/computed_style.h"
 #include "third_party/blink/renderer/core/style/computed_style_constants.h"
+#include "third_party/blink/renderer/core/style/superellipse.h"
 #include "third_party/blink/renderer/platform/wtf/allocator/allocator.h"
 
 namespace blink {
@@ -47,7 +48,8 @@ class CORE_EXPORT ComputedStyleUtils {
     if (length.IsAuto()) {
       return CSSIdentifierValue::Create(CSSValueID::kAuto);
     }
-    return ZoomAdjustedPixelValue(length.Value(), style);
+    DCHECK(length.IsFixed());
+    return ZoomAdjustedPixelValue(length.Pixels(), style);
   }
 
   static const CSSValue* ValueForColor(const StyleColor&,
@@ -148,7 +150,7 @@ class CORE_EXPORT ComputedStyleUtils {
   static CSSIdentifierValue* ValueForFontOpticalSizing(const ComputedStyle&);
   static CSSValue* ValueForFontFeatureSettings(const ComputedStyle&);
   static CSSValue* ValueForFontVariationSettings(const ComputedStyle&);
-  static CSSValue* ValueForFontPalette(const ComputedStyle&);
+  static const CSSValue* ValueForFontPalette(const ComputedStyle&);
   static CSSValue* SpecifiedValueForGridTrackSize(const GridTrackSize&,
                                                   const ComputedStyle&);
   static CSSValue* ValueForGridAutoTrackList(const NGGridTrackList&,
@@ -233,6 +235,7 @@ class CORE_EXPORT ComputedStyleUtils {
                                                    const ComputedStyle&);
   static CSSValue* ValueForBorderRadiusCorner(const LengthSize&,
                                               const ComputedStyle&);
+  static CSSValue* ValueForCornerShape(const Superellipse&);
 
   // Serializes a gfx::Transform into a matrix() or matrix3d() transform
   // function value. If force_matrix3d is true, it will always give a matrix3d
@@ -279,6 +282,7 @@ class CORE_EXPORT ComputedStyleUtils {
                                  ShapeValue*,
                                  CSSValuePhase value_phase);
   static CSSValueList* ValueForBorderRadiusShorthand(const ComputedStyle&);
+  static CSSValueList* ValueForCornerShapeShorthand(const ComputedStyle&);
   static CSSValue* StrokeDashArrayToCSSValueList(const SVGDashArray&,
                                                  const ComputedStyle&);
   static const CSSValue* ValueForSVGPaint(const SVGPaint&,

@@ -6,6 +6,7 @@
 
 
 .ai-assistance-feedback-row {
+  font-family: var(--default-font-family);
   width: 100%;
   display: flex;
   gap: var(--sys-size-8);
@@ -17,6 +18,7 @@
     display: flex;
     align-items: center;
     gap: var(--sys-size-2);
+    padding: var(--sys-size-4) 0;
   }
 
   .vertical-separator {
@@ -93,6 +95,7 @@
     height: var(--sys-size-11);
     padding: 0 var(--sys-size-5);
     background-color: var(--sys-color-surface3);
+    width: auto;
   }
 
   .feedback-input::placeholder {

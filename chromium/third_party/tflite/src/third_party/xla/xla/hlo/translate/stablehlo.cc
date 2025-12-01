@@ -26,6 +26,7 @@ limitations under the License.
 #include "mlir/Dialect/Func/Extensions/AllExtensions.h"
 #include "mlir/Dialect/Shape/IR/Shape.h"
 #include "mlir/Dialect/Tensor/IR/Tensor.h"
+#include "mlir/Dialect/UB/IR/UBOps.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/Location.h"
 #include "mlir/IR/MLIRContext.h"
@@ -51,7 +52,9 @@ absl::Status MhloToStablehlo(mlir::ModuleOp module) {
   auto context = module.getContext();
   mlir::PassManager pm(context);
   mlir::BaseScopedDiagnosticHandler diag_handler(context);
-  pm.addPass(mlir::mhlo::createHloLegalizeToStablehloPass());
+  mlir::mhlo::HloLegalizeToStablehloPassOptions options;
+  options.allow_xla_features_ = true;
+  pm.addPass(mlir::mhlo::createHloLegalizeToStablehloPass(options));
   if (failed(pm.run(module))) {
     return diag_handler.ConsumeStatus();
   }
@@ -92,7 +95,7 @@ void RegisterMlirToHloDependentDialects(mlir::DialectRegistry& registry) {
   mlir::func::registerAllExtensions(registry);
   mlir::mhlo::registerAllMhloDialects(registry);
   registry.insert<mlir::tensor::TensorDialect, mlir::arith::ArithDialect,
-                  mlir::shape::ShapeDialect>();
+                  mlir::shape::ShapeDialect, mlir::ub::UBDialect>();
 }
 
 absl::StatusOr<mlir::OwningOpRef<mlir::ModuleOp>> ConvertHloToStablehlo(

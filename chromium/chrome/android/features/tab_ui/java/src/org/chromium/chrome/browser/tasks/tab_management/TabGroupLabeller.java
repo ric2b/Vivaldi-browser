@@ -34,7 +34,7 @@ public class TabGroupLabeller extends TabObjectLabeller {
     @Override
     protected boolean shouldApply(PersistentMessage message) {
         return mTabGroupModelFilterSupplier.get() != null
-                && !mTabGroupModelFilterSupplier.get().isOffTheRecord()
+                && !mTabGroupModelFilterSupplier.get().getTabModel().isOffTheRecord()
                 && message.type == PersistentNotificationType.DIRTY_TAB_GROUP
                 && getTabId(message) != Tab.INVALID_TAB_ID;
     }
@@ -61,8 +61,7 @@ public class TabGroupLabeller extends TabObjectLabeller {
             // be refactored to accept either rootId or even better tabGroupId as the identifier for
             // tab groups. See https://crbug.com/387509285.
             TabGroupModelFilter filter = mTabGroupModelFilterSupplier.get();
-            int rootId = filter.getRootIdFromStableId(tabGroupId);
-            return filter.getGroupLastShownTabId(rootId);
+            return filter.getGroupLastShownTabId(tabGroupId);
         }
     }
 }

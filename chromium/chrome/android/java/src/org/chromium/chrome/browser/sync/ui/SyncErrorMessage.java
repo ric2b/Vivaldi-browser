@@ -281,7 +281,18 @@ public class SyncErrorMessage implements SyncService.SyncStateChangedListener, U
     private @StringRes int getButtonTextForTrustedVaultErrorInfobarStudy() {
         if (ChromeFeatureList.isEnabled(
                 ChromeFeatureList.SYNC_ENABLE_PASSWORDS_SYNC_ERROR_MESSAGE_ALTERNATIVE)) {
-            return R.string.identity_error_card_button_verify;
+            switch (getTrustedVaultErrorMessageVersion()) {
+                case 1:
+                    return R.string.identity_error_message_button_verify;
+                case 2:
+                    return R.string.identity_error_card_button_okay;
+                default:
+                    // This should never happen, as there are only two versions.
+                    assert false
+                            : "Invalid version for SyncEnablePasswordsSyncErrorMessageAlternative: "
+                                    + getTrustedVaultErrorMessageVersion();
+                    break;
+            }
         }
         return R.string.identity_error_message_button_verify;
     }
@@ -319,18 +330,7 @@ public class SyncErrorMessage implements SyncService.SyncStateChangedListener, U
     private @StringRes int getTitleForTrustedVaultErrorMessageStudy() {
         if (ChromeFeatureList.isEnabled(
                 ChromeFeatureList.SYNC_ENABLE_PASSWORDS_SYNC_ERROR_MESSAGE_ALTERNATIVE)) {
-            switch (getTrustedVaultErrorMessageVersion()) {
-                case 1:
-                    return R.string.password_sync_trusted_vault_error_title_1;
-                case 2:
-                    return R.string.password_sync_trusted_vault_error_title_2;
-                default:
-                    // This should never happen, as there are only two versions.
-                    assert false
-                            : "Invalid version for SyncEnablePasswordsSyncErrorMessageAlternative: "
-                                    + getTrustedVaultErrorMessageVersion();
-                    break;
-            }
+            return R.string.password_sync_trusted_vault_error_title;
         }
         return R.string.identity_error_card_button_verify;
     }
@@ -372,18 +372,7 @@ public class SyncErrorMessage implements SyncService.SyncStateChangedListener, U
     private @StringRes int getContentForTrustedVaultErrorMessageStudy() {
         if (ChromeFeatureList.isEnabled(
                 ChromeFeatureList.SYNC_ENABLE_PASSWORDS_SYNC_ERROR_MESSAGE_ALTERNATIVE)) {
-            switch (getTrustedVaultErrorMessageVersion()) {
-                case 1:
-                    return R.string.password_sync_trusted_vault_error_hint_1;
-                case 2:
-                    return R.string.password_sync_trusted_vault_error_hint_2;
-                default:
-                    // This should never happen, as there are only two versions.
-                    assert false
-                            : "Invalid version for SyncEnablePasswordsSyncErrorMessageAlternative: "
-                                    + getTrustedVaultErrorMessageVersion();
-                    break;
-            }
+            return R.string.password_sync_trusted_vault_error_hint;
         }
         return R.string.identity_error_message_body_sync_retrieve_keys_for_passwords;
     }

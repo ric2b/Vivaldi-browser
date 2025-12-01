@@ -116,7 +116,9 @@ void SendDiagnostic(MXDiagnostic* diagnostic, const std::string& type) {
           {"breadcrumbs",
            base::SysNSStringToUTF8(previous_session.breadcrumbs)});
     }
-    crash_reporter::ProcessExternalDump("MetricKit", spanpayload,
+    const std::string source =
+        type == "crash" ? "MetricKit" : "MetricKit_Diagnostics";
+    crash_reporter::ProcessExternalDump(source, spanpayload,
                                         override_annotations);
   }
 }
@@ -137,6 +139,10 @@ void ProcessDiagnosticPayloads(NSArray<MXDiagnosticPayload*>* payloads) {
       for (MXDiskWriteExceptionDiagnostic* diagnostic in payload
                .diskWriteExceptionDiagnostics) {
         SendDiagnostic(diagnostic, "diskwrite-exception");
+      }
+      for (MXCPUExceptionDiagnostic* diagnostic in payload
+               .appLaunchDiagnostics) {
+        SendDiagnostic(diagnostic, "app-launch");
       }
     }
   }

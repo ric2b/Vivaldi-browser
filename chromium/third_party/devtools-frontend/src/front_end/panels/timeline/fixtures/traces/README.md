@@ -145,7 +145,7 @@ Generated from https://github.com/ChromeDevTools/performance-stories/tree/main/f
 
 ### two-workers
 
-Generated from https://github.com/ChromeDevTools/performance-stories/tree/main/two-workers. Runs two workers that both calculcate fibonnaci numbers.
+Generated from https://github.com/ChromeDevTools/performance-stories/tree/main/two-workers. Runs two workers that both calculate fibonnaci numbers.
 
 ### timer-initiators
 
@@ -254,3 +254,37 @@ A trace generated from crrev.com/c/6197645 (January 2025), which changed the for
 ### dom-size-overlap
 
 Trace containing a cross-origin navigation where DOM size events from the pre-navigation page are emitted *after* the navigation event.
+
+### lcp-fetchpriority-high
+
+A page that loads an image as the LCP resource with fetchpriority=high set.
+
+### enhanced-traces
+
+(faked) script contents and source map urls, from the new "enhanced traces" feature. See http://crbug.com/337909145
+
+### lcp-discovery-delay
+
+A page that has an LCP image but is delayed by main thread blocking JS. Generated from https://github.com/ChromeDevTools/performance-stories/tree/main/lcp-discovery-delay.
+
+### byte-efficiency
+
+A recording of a page load of the Lighthouse byte-efficiency tester. https://github.com/GoogleChrome/lighthouse/blob/main/cli/test/fixtures/byte-efficiency/tester.html
+
+### render-blocking-requests
+
+A page that has a few render blocking requests:
+
+- jQuery from a CDN
+- a stylesheet
+- a script including some blocking `sleepFor` call that blocks the main thread
+
+All of which delays the LCP image from rendering.
+
+### http1.1
+
+Contains several image requests from the same 3P origin that use HTTP/1.1
+
+### dupe-js
+
+A bunch of bundles with the exact same content: https://dupe-modules-lh-2.surge.sh/

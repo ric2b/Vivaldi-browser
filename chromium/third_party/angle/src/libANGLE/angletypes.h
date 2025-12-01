@@ -701,6 +701,8 @@ class BlendStateExt final
 
     ///////// Color Write Mask /////////
 
+    constexpr static uint8_t kColorMaskRGBA = 0xf;
+
     static constexpr size_t PackColorMask(const bool red,
                                           const bool green,
                                           const bool blue,
@@ -1274,6 +1276,7 @@ enum class NativeWindowSystem
     X11,
     Wayland,
     Gbm,
+    NullCompute,
     Other,
 };
 
@@ -1551,6 +1554,14 @@ class FoveationState
     static constexpr size_t kMaxFocalPoints =
         IMPLEMENTATION_MAX_NUM_LAYERS * IMPLEMENTATION_MAX_FOCAL_POINTS;
     std::array<FocalPoint, kMaxFocalPoints> mFocalPoints;
+};
+
+enum class BufferStorage : bool
+{
+    // The buffer storage is mutable
+    Mutable,
+    // The buffer storage is immutable
+    Immutable,
 };
 
 }  // namespace gl

@@ -54,7 +54,6 @@ OmniboxSuggestionIconType GetOmniboxSuggestionIconTypeForAutocompleteMatchType(
     // Vivaldi
     case AutocompleteMatchType::BOOKMARK_NICKNAME:
     case AutocompleteMatchType::DIRECT_MATCH:
-    case AutocompleteMatchType::RECENT_TYPED_HISTORY:
 
       return OmniboxSuggestionIconType::kDefaultFavicon;
     case AutocompleteMatchType::CLIPBOARD_IMAGE:
@@ -69,6 +68,11 @@ OmniboxSuggestionIconType GetOmniboxSuggestionIconTypeForAutocompleteMatchType(
     case AutocompleteMatchType::VOICE_SUGGEST:
       return OmniboxSuggestionIconType::kSearch;
     case AutocompleteMatchType::SEARCH_HISTORY:
+
+    // Vivaldi
+    case AutocompleteMatchType::RECENT_TYPED_HISTORY:
+    // End Vivaldi
+
     case AutocompleteMatchType::SEARCH_SUGGEST_PERSONALIZED:
       return OmniboxSuggestionIconType::kSearchHistory;
     case AutocompleteMatchType::CALCULATOR:
@@ -81,7 +85,9 @@ OmniboxSuggestionIconType GetOmniboxSuggestionIconTypeForAutocompleteMatchType(
     case AutocompleteMatchType::HISTORY_EMBEDDINGS:
     case AutocompleteMatchType::FEATURED_ENTERPRISE_SEARCH:
     case AutocompleteMatchType::HISTORY_EMBEDDINGS_ANSWER:
-      DUMP_WILL_BE_NOTREACHED();
+    default:
+      DUMP_WILL_BE_NOTREACHED()
+          << "Unsupported AutocompleteMatchType: " << type;
       return OmniboxSuggestionIconType::kDefaultFavicon;
   }
 }
@@ -138,9 +144,6 @@ LocationBarSecurityIconType GetLocationBarSecurityIconTypeForSecurityState(
       return LocationBarSecurityIconType::NOT_SECURE_WARNING;
     case security_state::SECURE:
       return LocationBarSecurityIconType::NONE;
-    case security_state::SECURE_WITH_POLICY_INSTALLED_CERT:
-      NOTREACHED()
-          << "SECURE_WITH_POLICY_INSTALLED_CERT is used only on ChromeOS";
     case security_state::SECURITY_LEVEL_COUNT:
       NOTREACHED();
   }

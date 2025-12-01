@@ -15,6 +15,7 @@
 
 #include "base/functional/bind.h"
 #include "base/lazy_instance.h"
+#include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
 #include "build/build_config.h"
@@ -170,7 +171,7 @@ void ExtensionOmniboxEventRouter::OnInputEntered(
   auto event = std::make_unique<Event>(events::OMNIBOX_ON_INPUT_ENTERED,
                                        omnibox::OnInputEntered::kEventName,
                                        std::move(args), profile);
-  event->user_gesture = EventRouter::USER_GESTURE_ENABLED;
+  event->user_gesture = EventRouter::UserGestureState::kEnabled;
   EventRouter::Get(profile)
       ->DispatchEventToExtension(extension_id, std::move(event));
 
@@ -222,7 +223,7 @@ void ExtensionOmniboxEventRouter::OnActionExecuted(
   auto event = std::make_unique<Event>(
       events::OMNIBOX_ON_ACTION_EXECUTED, omnibox::OnActionExecuted::kEventName,
       omnibox::OnActionExecuted::Create(std::move(action_execution)), profile);
-  event->user_gesture = EventRouter::USER_GESTURE_ENABLED;
+  event->user_gesture = EventRouter::UserGestureState::kEnabled;
   event_router->DispatchEventToExtension(extension_id, std::move(event));
 }
 

@@ -82,6 +82,8 @@ COMPONENT_EXPORT(OPTIMIZATION_GUIDE_FEATURES)
 BASE_DECLARE_FEATURE(kAiSettingsPageRefresh);
 COMPONENT_EXPORT(OPTIMIZATION_GUIDE_FEATURES)
 BASE_DECLARE_FEATURE(kPrivacyGuideAiSettings);
+COMPONENT_EXPORT(OPTIMIZATION_GUIDE_FEATURES)
+BASE_DECLARE_FEATURE(kAnnotatedPageContentWithActionableElements);
 
 COMPONENT_EXPORT(OPTIMIZATION_GUIDE_FEATURES)
 extern const base::FeatureParam<bool> kShowAiSettingsForTesting;
@@ -507,6 +509,10 @@ double GetOnDeviceModelDefaultTemperature();
 
 COMPONENT_EXPORT(OPTIMIZATION_GUIDE_FEATURES)
 std::vector<uint32_t> GetOnDeviceModelAllowedAdaptationRanks();
+
+// Whether the on-device model should be limited to running only on the CPU.
+COMPONENT_EXPORT(OPTIMIZATION_GUIDE_FEATURES)
+bool ForceCpuBackendForOnDeviceModel();
 
 // Whether the on-device model will be validated when updated using a set of
 // prompts with expected output.

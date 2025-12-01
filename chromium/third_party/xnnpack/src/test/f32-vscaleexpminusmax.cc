@@ -16,13 +16,13 @@
 #include <vector>
 
 #include <gtest/gtest.h>
-#include "replicable_random_device.h"
-#include "xnnpack.h"
-#include "xnnpack/buffer.h"
-#include "xnnpack/common.h"
-#include "xnnpack/isa-checks.h"
-#include "xnnpack/microfnptr.h"
-#include "xnnpack/vscaleexpminusmax.h"
+#include "test/replicable_random_device.h"
+#include "include/xnnpack.h"
+#include "src/xnnpack/buffer.h"
+#include "src/xnnpack/common.h"
+#include "src/xnnpack/isa-checks.h"
+#include "src/xnnpack/microfnptr.h"
+#include "src/xnnpack/vscaleexpminusmax.h"
 
 class VScaleExpMinusMaxMicrokernelTester {
 public:
@@ -63,8 +63,6 @@ public:
     xnnpack::Buffer<float> x(elements() + XNN_EXTRA_BYTES / sizeof(float));
     xnnpack::Buffer<float> y(elements());
     xnnpack::Buffer<double> y_ref(elements());
-    // TODO(b/372792254): This is hiding a possible msan bug in the microkernels tested here.
-    std::fill(y.begin(), y.end(), 0.0f);
     for (size_t iteration = 0; iteration < iterations(); iteration++) {
       std::generate(x.begin(), x.end(), std::ref(f32rng));
 
@@ -79,7 +77,7 @@ public:
 
       // Verify results.
       for (size_t i = 0; i < elements(); i++) {
-        EXPECT_NEAR(y_ref[i], y[i], std::abs(y_ref[i]) * 1.0e-6)
+        ASSERT_NEAR(y_ref[i], y[i], std::abs(y_ref[i]) * 1.0e-6)
           << "elements = " << elements() << ", scale = " << scale() << ", x_max = " << x_max;
       }
     }
@@ -138,5 +136,5 @@ XNN_TEST_VSCALEEXPMINUSMAX_ELEMENT_DIV(ukernel,arch_flags, element_tile, init_pa
 XNN_TEST_VSCALEEXPMINUSMAX_ELEMENT_LT(ukernel,arch_flags, element_tile, init_params);                                                                                                        \
 XNN_TEST_VSCALEEXPMINUSMAX_ELEMENT_GT(ukernel,arch_flags, element_tile, init_params);                                                                                                        \
 XNN_TEST_VSCALEEXPMINUSMAX_SCALE(ukernel,arch_flags, element_tile, init_params);
-#include "f32-vscaleexpminusmax/f32-vscaleexpminusmax.h"
+#include "src/f32-vscaleexpminusmax/f32-vscaleexpminusmax.h"
 #undef XNN_UKERNEL_WITH_PARAMS

@@ -152,7 +152,7 @@ constexpr char kMinMicLevelFieldTrial[] =
 
 std::string GetAgcMinMicLevelExperimentFieldTrial(const std::string& value) {
   char field_trial_buffer[64];
-  rtc::SimpleStringBuilder builder(field_trial_buffer);
+  SimpleStringBuilder builder(field_trial_buffer);
   builder << kMinMicLevelFieldTrial << "/" << value << "/";
   return builder.str();
 }
@@ -163,7 +163,7 @@ std::string GetAgcMinMicLevelExperimentFieldTrialEnabled(
   RTC_DCHECK_GE(enabled_value, 0);
   RTC_DCHECK_LE(enabled_value, 255);
   char field_trial_buffer[64];
-  rtc::SimpleStringBuilder builder(field_trial_buffer);
+  SimpleStringBuilder builder(field_trial_buffer);
   builder << kMinMicLevelFieldTrial << "/Enabled-" << enabled_value << suffix
           << "/";
   return builder.str();
@@ -258,8 +258,8 @@ class SpeechSamplesReader {
       // Apply gain and copy samples into `audio_buffer_`.
       std::transform(buffer_.begin(), buffer_.end(),
                      audio_buffer_.channels()[0], [gain](int16_t v) -> float {
-                       return rtc::SafeClamp(static_cast<float>(v) * gain,
-                                             kMinSample, kMaxSample);
+                       return SafeClamp(static_cast<float>(v) * gain,
+                                        kMinSample, kMaxSample);
                      });
 
       agc.AnalyzePreProcess(audio_buffer_);
@@ -292,8 +292,8 @@ class SpeechSamplesReader {
       // Apply gain and copy samples into `audio_buffer_`.
       std::transform(buffer_.begin(), buffer_.end(),
                      audio_buffer_.channels()[0], [gain](int16_t v) -> float {
-                       return rtc::SafeClamp(static_cast<float>(v) * gain,
-                                             kMinSample, kMaxSample);
+                       return SafeClamp(static_cast<float>(v) * gain,
+                                        kMinSample, kMaxSample);
                      });
 
       agc.AnalyzePreProcess(audio_buffer_);

@@ -55,8 +55,8 @@ class Menu_Model : public KeyedService {
   bool loaded() const { return loaded_; }
   bool IsValidIndex(const Menu_Node* parent, size_t index);
 
-  void AddObserver(MenuModelObserver* observer);
-  void RemoveObserver(MenuModelObserver* observer);
+  virtual void AddObserver(MenuModelObserver* observer);
+  virtual void RemoveObserver(MenuModelObserver* observer);
 
   Menu_Node* GetMenuByResourceName(const std::string& menu);
   // Returns the parent of all fixed nodes.

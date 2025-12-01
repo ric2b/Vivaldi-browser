@@ -25,6 +25,7 @@ enum class GlicNudgeActivity {
   kNudgeDismissed,
   kNudgeNotShownWebContents,
   kNudgeIgnoredActiveTabChanged,
+  kNudgeIgnoredNavigation,
 };
 
 // Controller that mediates Glic Nudges and ensures that only the active tab is
@@ -53,11 +54,17 @@ class GlicNudgeController {
   }
 
   // Updates the `nudge_label` for `web_contents`, if the WebContents is active.
+  // The nudge will be removed from `web_contents` if `nudge_label` is empty.
+  // `activity` must be supplied iff. `nudge_label` is empty, to identify the
+  // reason of nudge removal.
   void UpdateNudgeLabel(content::WebContents* web_contents,
                         const std::string& nudge_label,
+                        std::optional<GlicNudgeActivity> activity,
                         GlicNudgeActivityCallback callback);
 
   void OnNudgeActivity(GlicNudgeActivity activity);
+
+  void SetNudgeActivityCallbackForTesting();
 
  private:
   // Called when the active tab changes, to update the nudge UI appropriate for

@@ -37,7 +37,6 @@ import org.chromium.base.supplier.OneshotSupplierImpl;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeBaseAppCompatActivity;
 import org.chromium.chrome.browser.back_press.BackPressHelper;
-import org.chromium.chrome.browser.back_press.SecondaryActivityBackPressUma.SecondaryActivity;
 import org.chromium.chrome.browser.feedback.HelpAndFeedbackLauncherImpl;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.init.ChromeBrowserInitializer;
@@ -71,6 +70,8 @@ import androidx.appcompat.widget.SearchView;
 import androidx.preference.PreferenceScreen;
 import android.provider.Settings;
 import android.view.inputmethod.EditorInfo;
+import org.chromium.base.ContextUtils;
+import android.content.pm.PackageManager;
 
 import java.util.ArrayList;
 
@@ -80,14 +81,11 @@ import org.chromium.chrome.browser.night_mode.NightModeMetrics;
 import org.chromium.chrome.browser.night_mode.settings.ThemeSettingsFragment;
 import org.chromium.chrome.browser.password_manager.ManagePasswordsReferrer;
 import org.chromium.chrome.browser.password_manager.PasswordManagerLauncher;
+import org.chromium.components.browser_ui.accessibility.AccessibilitySettings;
 import org.chromium.components.browser_ui.accessibility.PageZoomUtils;
 
 import org.vivaldi.browser.preferences.PreferenceSearchManager;
 import org.vivaldi.browser.preferences.VivaldiPreferences;
-
-import static org.chromium.components.browser_ui.accessibility.AccessibilitySettings.PREF_CAPTIONS;
-import static org.chromium.components.browser_ui.accessibility.AccessibilitySettings.RESET_UI_SCALE;
-import static org.chromium.components.browser_ui.accessibility.AccessibilitySettings.RESET_ZOOM;
 
 /**
  * The Chrome settings activity.
@@ -222,8 +220,7 @@ public class SettingsActivity extends ChromeBaseAppCompatActivity
         setStatusBarColor();
         initBottomSheet();
 
-        mSnackbarManagerSupplier.set(
-                new SnackbarManager(this, findViewById(android.R.id.content), null));
+        mSnackbarManagerSupplier.set(new SnackbarManager(this, getContentView(), null));
 
         mIntentRequestTracker = IntentRequestTracker.createFromActivity(this);
 
@@ -534,8 +531,7 @@ public class SettingsActivity extends ChromeBaseAppCompatActivity
             BackPressHelper.create(
                     activeFragment.getViewLifecycleOwner(),
                     getOnBackPressedDispatcher(),
-                    (BackPressHandler) activeFragment,
-                    SecondaryActivity.SETTINGS);
+                    (BackPressHandler) activeFragment);
         }
     }
 
@@ -543,8 +539,7 @@ public class SettingsActivity extends ChromeBaseAppCompatActivity
         BackPressHelper.create(
                 this,
                 getOnBackPressedDispatcher(),
-                mBottomSheetControllerSupplier.get().getBottomSheetBackPressHandler(),
-                SecondaryActivity.SETTINGS);
+                mBottomSheetControllerSupplier.get().getBottomSheetBackPressHandler());
     }
 
     @Override
@@ -761,7 +756,7 @@ public class SettingsActivity extends ChromeBaseAppCompatActivity
                                         ThemeSettingsFragment.KEY_THEME_SETTINGS_ENTRY,
                                         NightModeMetrics.ThemeSettingsEntry.SETTINGS);
                         break;
-                    case PREF_CAPTIONS:
+                    case AccessibilitySettings.PREF_CAPTIONS:
                         preference.setOnPreferenceClickListener(
                                 pref -> {
                                     Intent intent = new Intent(Settings.ACTION_CAPTIONING_SETTINGS);
@@ -774,7 +769,7 @@ public class SettingsActivity extends ChromeBaseAppCompatActivity
                                     return true;
                                 });
                         break;
-                    case RESET_UI_SCALE:
+                    case VivaldiPreferences.RESET_UI_SCALE:
                         preference.setOnPreferenceClickListener(pref -> {
 
                             int ui_dpi = VivaldiPreferences.getSharedPreferencesManager().readInt(
@@ -787,7 +782,7 @@ public class SettingsActivity extends ChromeBaseAppCompatActivity
                             return true;
                         });
                         break;
-                    case RESET_ZOOM:
+                    case VivaldiPreferences.RESET_ZOOM:
                         preference.setOnPreferenceClickListener(pref -> {
                             PageZoomUtils.setDefaultZoomBySeekBarValue(
                                     new ChromeAccessibilitySettingsDelegate(mProfile)
@@ -796,6 +791,30 @@ public class SettingsActivity extends ChromeBaseAppCompatActivity
                             return true;
                         });
                         break;
+                    case "notifications":
+                        Intent intent = new Intent();
+                        intent.setAction(Settings.ACTION_APP_NOTIFICATION_SETTINGS);
+                        intent.putExtra(
+                                Settings.EXTRA_APP_PACKAGE,
+                                ContextUtils.getApplicationContext().getPackageName());
+
+                        PackageManager pm = getPackageManager();
+                        if (pm != null && intent.resolveActivity(pm) != null) {
+                            preference.setOnPreferenceClickListener(pref -> {
+                                startActivity(intent);
+                                // We handle the click so the default action isn't triggered.
+                                return true;
+                            });
+                        } else {
+                            preference.setEnabled(false);
+                        }
+                        break;
+                    case AccessibilitySettings.PREF_PAGE_ZOOM_ALWAYS_SHOW:
+                        preference.setOnPreferenceChangeListener((pref, newValue) -> {
+                            boolean enabled = (boolean) newValue;
+                            PageZoomUtils.setShouldAlwaysShowZoomMenuItem(enabled);
+                            return true;
+                        });
                 }
             }
             searchResultScreen.addPreference(preference);

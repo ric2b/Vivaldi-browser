@@ -557,17 +557,14 @@ void MergePointInterpreterFrameState::MergePhis(
 }
 
 void MergePointInterpreterFrameState::MergeVirtualObject(
-    MaglevGraphBuilder* builder, const VirtualObject::List unmerged_vos,
+    MaglevGraphBuilder* builder, const VirtualObjectList unmerged_vos,
     const KnownNodeAspects& unmerged_aspects, VirtualObject* merged,
     VirtualObject* unmerged) {
   if (merged == unmerged) {
     // No need to merge.
     return;
   }
-  // Currently, the graph builder will never change the VO map.
-  DCHECK(unmerged->map().equals(merged->map()));
-  DCHECK_EQ(merged->slot_count(), unmerged->slot_count());
-  DCHECK_EQ(merged->allocation(), unmerged->allocation());
+  DCHECK(unmerged->compatible_for_merge(merged));
 
   if (v8_flags.trace_maglev_graph_building) {
     std::cout << " - Merging VOS: "
@@ -579,19 +576,15 @@ void MergePointInterpreterFrameState::MergeVirtualObject(
               << "(unmerged)" << std::endl;
   }
 
-  VirtualObject* result = builder->CreateVirtualObjectForMerge(
-      unmerged->map(), unmerged->slot_count());
-  for (uint32_t i = 0; i < merged->slot_count(); i++) {
-    std::optional<ValueNode*> merged_value_opt = MergeVirtualObjectValue(
-        builder, unmerged_aspects, merged->get_by_index(i),
-        unmerged->get_by_index(i));
-    if (!merged_value_opt.has_value()) {
-      // Merge failed, we should escape the allocation instead.
-      unmerged->allocation()->ForceEscaping();
-      return;
-    }
-    result->set_by_index(i, merged_value_opt.value());
+  auto maybe_result = merged->Merge(
+      unmerged, builder->NewObjectId(), builder->zone(),
+      [&](ValueNode* a, ValueNode* b) {
+        return MergeVirtualObjectValue(builder, unmerged_aspects, a, b);
+      });
+  if (!maybe_result) {
+    return unmerged->allocation()->ForceEscaping();
   }
+  VirtualObject* result = *maybe_result;
   result->set_allocation(unmerged->allocation());
   result->Snapshot();
   unmerged->allocation()->UpdateObject(result);
@@ -600,7 +593,7 @@ void MergePointInterpreterFrameState::MergeVirtualObject(
 
 void MergePointInterpreterFrameState::MergeVirtualObjects(
     MaglevGraphBuilder* builder, MaglevCompilationUnit& compilation_unit,
-    const VirtualObject::List unmerged_vos,
+    const VirtualObjectList unmerged_vos,
     const KnownNodeAspects& unmerged_aspects) {
   if (frame_state_.virtual_objects().is_empty()) return;
   if (unmerged_vos.is_empty()) return;
@@ -616,9 +609,9 @@ void MergePointInterpreterFrameState::MergeVirtualObjects(
 
   // We iterate both list in reversed order of ids collecting the umerged
   // objects into the map, until we find a common virtual object.
-  VirtualObject::List::WalkUntilCommon(
+  VirtualObjectList::WalkUntilCommon(
       frame_state_.virtual_objects(), unmerged_vos,
-      [&](VirtualObject* vo, VirtualObject::List vos) {
+      [&](VirtualObject* vo, VirtualObjectList vos) {
         // If we have a version in the map, it should be the most up-to-date,
         // since the list is in reverse order.
         auto& map = unmerged_vos == vos ? unmerged_map : merged_map;
@@ -862,7 +855,7 @@ const LoopEffects* MergePointInterpreterFrameState::loop_effects() {
 void MergePointInterpreterFrameState::MergeThrow(
     MaglevGraphBuilder* builder, const MaglevCompilationUnit* handler_unit,
     const KnownNodeAspects& known_node_aspects,
-    const VirtualObject::List virtual_objects) {
+    const VirtualObjectList virtual_objects) {
   // We don't count total predecessors on exception handlers, but we do want to
   // special case the first predecessor so we do count predecessors_so_far
   DCHECK_EQ(predecessor_count_, 0);
@@ -951,7 +944,7 @@ ValueNode* FromInt32ToTagged(const MaglevGraphBuilder* builder,
     tagged = Node::New<Int32ToNumber>(builder->zone(), {value});
   }
 
-  predecessor->nodes().Add(tagged);
+  predecessor->nodes().push_back(tagged);
   builder->compilation_unit()->RegisterNodeInGraphLabeller(tagged);
   return tagged;
 }
@@ -970,7 +963,7 @@ ValueNode* FromUint32ToTagged(const MaglevGraphBuilder* builder,
     tagged = Node::New<Uint32ToNumber>(builder->zone(), {value});
   }
 
-  predecessor->nodes().Add(tagged);
+  predecessor->nodes().push_back(tagged);
   builder->compilation_unit()->RegisterNodeInGraphLabeller(tagged);
   return tagged;
 }
@@ -984,7 +977,7 @@ ValueNode* FromIntPtrToTagged(const MaglevGraphBuilder* builder,
 
   ValueNode* tagged = Node::New<IntPtrToNumber>(builder->zone(), {value});
 
-  predecessor->nodes().Add(tagged);
+  predecessor->nodes().push_back(tagged);
   builder->compilation_unit()->RegisterNodeInGraphLabeller(tagged);
   return tagged;
 }
@@ -1001,7 +994,7 @@ ValueNode* FromFloat64ToTagged(const MaglevGraphBuilder* builder,
       builder->zone(), {value},
       Float64ToTagged::ConversionMode::kCanonicalizeSmi);
 
-  predecessor->nodes().Add(tagged);
+  predecessor->nodes().push_back(tagged);
   builder->compilation_unit()->RegisterNodeInGraphLabeller(tagged);
   return tagged;
 }
@@ -1018,7 +1011,7 @@ ValueNode* FromHoleyFloat64ToTagged(const MaglevGraphBuilder* builder,
       builder->zone(), {value},
       HoleyFloat64ToTagged::ConversionMode::kCanonicalizeSmi);
 
-  predecessor->nodes().Add(tagged);
+  predecessor->nodes().push_back(tagged);
   builder->compilation_unit()->RegisterNodeInGraphLabeller(tagged);
   return tagged;
 }
@@ -1404,13 +1397,38 @@ bool MergePointInterpreterFrameState::IsUnreachableByForwardEdge() const {
       DCHECK(!is_loop());
       return true;
     case 1:
-      // Only resumable loops can be reachable by back-edge only. Others we
-      // prune in the front-end.
-      DCHECK_EQ(is_loop(), is_resumable_loop());
       return is_loop();
     default:
       return false;
   }
+}
+
+void MergePointInterpreterFrameState::RemovePredecessorAt(int predecessor_id) {
+  // Only call this function if we have already process all merge points.
+  DCHECK_EQ(predecessors_so_far_, predecessor_count_);
+  DCHECK_GT(predecessor_count_, 0);
+  // Shift predecessors_ by 1.
+  for (uint32_t i = predecessor_id; i < predecessor_count_ - 1; i++) {
+    predecessors_[i] = predecessors_[i + 1];
+    // Update cache in unconditional control node.
+    ControlNode* control = predecessors_[i]->control_node();
+    if (auto unconditional_control =
+            control->TryCast<UnconditionalControlNode>()) {
+      DCHECK_EQ(unconditional_control->predecessor_id(), i + 1);
+      unconditional_control->set_predecessor_id(i);
+    }
+  }
+  // Remove Phi input of index predecessor_id.
+  for (Phi* phi : *phis()) {
+    DCHECK_EQ(phi->input_count(), predecessor_count_);
+    // Shift phi inputs by 1.
+    for (int i = predecessor_id; i < phi->input_count() - 1; i++) {
+      phi->change_input(i, phi->input(i + 1).node());
+    }
+    phi->reduce_input_count(1);
+  }
+  predecessor_count_--;
+  predecessors_so_far_--;
 }
 
 }  // namespace maglev

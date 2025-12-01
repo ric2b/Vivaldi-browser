@@ -41,6 +41,7 @@
 #include "base/trace_event/memory_dump_manager.h"
 #include "build/build_config.h"
 #include "components/history_embeddings/history_embeddings_features.h"
+#include "components/lens/lens_features.h"
 #include "components/omnibox/browser/actions/omnibox_action_in_suggest.h"
 #include "components/omnibox/browser/actions/omnibox_answer_action.h"
 #include "components/omnibox/browser/actions/omnibox_pedal_provider.h"
@@ -54,6 +55,7 @@
 #include "components/omnibox/browser/builtin_provider.h"
 #include "components/omnibox/browser/calculator_provider.h"
 #include "components/omnibox/browser/clipboard_provider.h"
+#include "components/omnibox/browser/contextual_search_provider.h"
 #include "components/omnibox/browser/document_provider.h"
 #include "components/omnibox/browser/enterprise_search_aggregator_provider.h"
 #include "components/omnibox/browser/featured_search_provider.h"
@@ -69,6 +71,7 @@
 #include "components/omnibox/browser/on_device_head_provider.h"
 #include "components/omnibox/browser/open_tab_provider.h"
 #include "components/omnibox/browser/page_classification_functions.h"
+#include "components/omnibox/browser/recently_closed_tabs_provider.h"
 #include "components/omnibox/browser/search_provider.h"
 #include "components/omnibox/browser/search_scoring_signals_annotator.h"
 #include "components/omnibox/browser/shortcuts_provider.h"
@@ -862,14 +865,15 @@ void AutocompleteController::OnProviderUpdate(
   if (last_update_type_ == UpdateType::kNone)
     return;
 
-  // Allow history embedding answers and unscoped extension suggestions to
-  // trigger updates after `stop_timer_` has fired.
+  // Allow some providers to trigger updates after `stop_timer_` has fired.
   // TODO(crbug.com/364303536) This is a temporary fix for allowing history
   //   embedding answers to `UpdateResults()` after `stop_timer_` has fired.
   bool allow_post_done_updates =
       provider &&
       (provider->type() == AutocompleteProvider::TYPE_HISTORY_EMBEDDINGS ||
-       provider->type() == AutocompleteProvider::TYPE_UNSCOPED_EXTENSION);
+       provider->type() == AutocompleteProvider::TYPE_UNSCOPED_EXTENSION ||
+       provider->type() ==
+           AutocompleteProvider::TYPE_ENTERPRISE_SEARCH_AGGREGATOR);
 
   // Providers shouldn't be running and calling `OnProviderUpdate()` after
   // autocompletion has stopped.
@@ -1050,62 +1054,28 @@ bool AutocompleteController::ShouldRunProvider(
     return false;
   }
 
-  // Vivaldi: (VIB-914/VAB-7032) - Disable all other providers except
-  // Search Provider when Search Engine Keyword is activated so that the
-  // AutocompleteSuggestion does not end up matching with something else
-  // such as Bookmarks, History etc.
   if (vivaldi::IsVivaldiRunning()) {
-    if (provider_client_.get()
-            ->GetTemplateURLService()
-            ->VivaldiIsDefaultOverridden()) {
-      switch (provider->type()) {
-        case AutocompleteProvider::TYPE_SEARCH:
-        case AutocompleteProvider::TYPE_KEYWORD: {
-          return true;
-        }
-        default:
-          return false;
-      }
+    if (!provider_client_.get()->GetPrefs()->FindPreference(
+        vivaldiprefs::kAddressBarOmniboxDropdownSize)->IsDefaultValue()) {
+      provider->set_provider_max_matches(
+        provider_client_.get()->GetPrefs()->GetInteger(
+          vivaldiprefs::kAddressBarOmniboxDropdownSize));
     }
-
-    if (input_.from_search_field) {
-      switch (provider->type()) {
-        case AutocompleteProvider::TYPE_SEARCH:
-        case AutocompleteProvider::TYPE_DIRECT_MATCH:
-        case AutocompleteProvider::TYPE_KEYWORD:
-        case AutocompleteProvider::TYPE_HISTORY_URL:
-          return true;
 #if !BUILDFLAG(IS_IOS) && !BUILDFLAG(IS_ANDROID)
-        case AutocompleteProvider::TYPE_RECENT_TYPED_HISTORY:
-          return provider_client_.get()->GetPrefs()->GetBoolean(
-              vivaldiprefs::kAddressBarOmniboxShowTypedHistory);
-#endif
-        default:
-          return false;
-      }
-    }
-
-    // When typing a search engine keyword, only show search and
-    // search suggestions from this search engine.
-    if (!input_.search_engine_guid.empty()) {
-      switch (provider->type()) {
-        case AutocompleteProvider::TYPE_SEARCH:
-        case AutocompleteProvider::TYPE_KEYWORD:
-          return true;
-        default:
-          return false;
-      }
-    }
-#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
-    if (provider->type() == AutocompleteProvider::TYPE_ON_DEVICE_HEAD ||
-        provider->type() == AutocompleteProvider::TYPE_FEATURED_SEARCH ||
-        (provider->type() == AutocompleteProvider::TYPE_SEARCH &&
-          !provider_client_.get()->GetPrefs()->GetBoolean(
-          vivaldiprefs::kAddressBarInlineSearchEnabled))) {
-      return false;
-    }
+    return VivaldiShouldRunProviderForDesktop(provider);
+#else
+    return VivaldiShouldRunProviderForMobile(provider);
 #endif
   }  // End Vivaldi
+
+  // If zero prefix suggest is disabled for the Lens contextual searchbox, only
+  // run the typed search provider. Else, will use the IsLensSearchbox check
+  // below.
+  if (omnibox::IsLensContextualSearchbox(
+          input_.current_page_classification()) &&
+      !lens::features::ShowContextualSearchboxZeroPrefixSuggest()) {
+    return provider->type() == AutocompleteProvider::TYPE_SEARCH;
+  }
 
   // Only a subset of providers are run for the Lens searchboxes.
   if (omnibox::IsLensSearchbox(input_.current_page_classification())) {
@@ -1137,6 +1107,10 @@ bool AutocompleteController::ShouldRunProvider(
         (keyword_turl->starter_pack_id() > 0 ||
          keyword_turl->policy_origin() ==
              TemplateURLData::PolicyOrigin::kSearchAggregator)) {
+      if (keyword_turl->starter_pack_id() ==
+          TemplateURLStarterPackData::kPage) {
+        return provider->type() == AutocompleteProvider::TYPE_CONTEXTUAL_SEARCH;
+      }
       switch (provider->type()) {
         // Keyword provider creates the suggestion attached to the keyword chip
         // and search provider creates the SEARCH_OTHER_ENGINE suggestion
@@ -1209,25 +1183,29 @@ bool AutocompleteController::ShouldRunProvider(
 
   // Some providers should only run in starter pack mode or in the CrOS
   // launcher. If we reach here, we're not in starter pack mode.
+  bool should_run_search_aggregator_provider =
+      omnibox_feature_configs::SearchAggregatorProvider::Get().enabled &&
+      template_url_service_ &&
+      template_url_service_->GetEnterpriseSearchAggregatorEngine() &&
+      !template_url_service_->IsShortcutRequiredForSearchAggregatorEngine();
+
   switch (provider->type()) {
     case AutocompleteProvider::TYPE_ENTERPRISE_SEARCH_AGGREGATOR:
-      return false;
+      return should_run_search_aggregator_provider;
+
+    // Document provider suggestions are redundant with the enterprise search
+    // aggregator provider suggestions, which can be configured to provide
+    // Google Drive suggestions.
+    case AutocompleteProvider::TYPE_DOCUMENT:
+      return !omnibox_feature_configs::SearchAggregatorProvider::Get()
+                  .disable_drive ||
+             !should_run_search_aggregator_provider;
+
     case AutocompleteProvider::TYPE_OPEN_TAB:
       return is_cros_launcher_;
 #if !BUILDFLAG(IS_IOS)
     case AutocompleteProvider::TYPE_HISTORY_EMBEDDINGS:
       return history_embeddings::GetFeatureParameters().omnibox_unscoped;
-#endif
-// TODO: Disable TYPE_ZERO_SUGGEST_LOCAL_HISTORY on all platforms
-// once TYPE_RECENT_TYPED_HISTORY is implemented.
-#if !BUILDFLAG(IS_IOS) && !BUILDFLAG(IS_ANDROID)
-    // Don't use TYPE_ZERO_SUGGEST_LOCAL_HISTORY in Vivaldi,
-    // we use TYPE_RECENT_TYPED_HISTORY instead.
-    case AutocompleteProvider::TYPE_ZERO_SUGGEST_LOCAL_HISTORY:
-      return false;
-#else
-    case AutocompleteProvider::TYPE_RECENT_TYPED_HISTORY:
-      return false;
 #endif
     default:
       break;
@@ -1306,6 +1284,10 @@ void AutocompleteController::InitializeAsyncProviders(int provider_types) {
         new UnscopedExtensionProvider(provider_client_.get(), this);
     providers_.push_back(unscoped_extension_provider_.get());
   }
+  if (provider_types & AutocompleteProvider::TYPE_CONTEXTUAL_SEARCH) {
+    providers_.push_back(
+        new ContextualSearchProvider(provider_client_.get(), this));
+  }
 }
 
 void AutocompleteController::InitializeSyncProviders(int provider_types) {
@@ -1355,9 +1337,8 @@ void AutocompleteController::InitializeSyncProviders(int provider_types) {
   if (provider_types & AutocompleteProvider::TYPE_MOST_VISITED_SITES) {
     providers_.push_back(
         new MostVisitedSitesProvider(provider_client_.get(), this));
-    // Note: the need for the always-present verbatim match originates from the
-    // search-ready omnibox (SRO) in Incognito mode, where the
-    // ZeroSuggestProvider intentionally never gets invoked.
+  }
+  if (provider_types & AutocompleteProvider::TYPE_VERBATIM_MATCH) {
     providers_.push_back(
         new ZeroSuggestVerbatimMatchProvider(provider_client_.get()));
   }
@@ -1398,6 +1379,10 @@ void AutocompleteController::InitializeSyncProviders(int provider_types) {
     featured_search_provider_ =
         new FeaturedSearchProvider(provider_client_.get());
     providers_.push_back(featured_search_provider_.get());
+  }
+  if (provider_types & AutocompleteProvider::TYPE_RECENTLY_CLOSED_TABS) {
+    providers_.push_back(
+        new RecentlyClosedTabsProvider(provider_client_.get(), this));
   }
 }
 
@@ -1480,14 +1465,16 @@ void AutocompleteController::UpdateResult(UpdateType update_type,
       update_type == UpdateType::kLastAsyncPassExceptDoc) {
     internal_result_.SortAndCull(input_, template_url_service_,
                                  triggered_feature_service_,
-                                 old_result.default_match_to_preserve);
+                                 old_result.default_match_to_preserve,
+                                 provider_client_.get());
     internal_result_.TransferOldMatches(input_,
                                         &old_result.matches_to_transfer);
   }
 
   internal_result_.SortAndCull(input_, template_url_service_,
                                triggered_feature_service_,
-                               old_result.default_match_to_preserve);
+                               old_result.default_match_to_preserve,
+                               provider_client_.get());
 
   if (update_type == UpdateType::kSyncPass) {
     StartExpireTimer();
@@ -1590,14 +1577,17 @@ void AutocompleteController::MlRerank(OldResult& old_result) {
 }
 
 void AutocompleteController::PostProcessMatches() {
+// Vivaldi
+#if !BUILDFLAG(IS_ANDROID)
 #if DCHECK_IS_ON()
   internal_result_.Validate();
 #endif  // DCHECK_IS_ON()
-
+#endif  // !IS_ANDROID
   AttachActions();
   UpdateKeywordDescriptions(&internal_result_);
   UpdateAssociatedKeywords(&internal_result_);
   UpdateSearchboxStats(&internal_result_);
+  UpdateShownInSession(&internal_result_);
   UpdateTailSuggestPrefix(&internal_result_);
   MaybeRemoveCompanyEntityImages(&internal_result_);
   MaybeCleanSuggestionsForKeywordMode(input_, &internal_result_);
@@ -1663,6 +1653,25 @@ void AutocompleteController::AttachActions() {
   if (omnibox::IsLensSearchbox(input_.current_page_classification())) {
     return;
   }
+
+  #if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
+  // Attach the contextual search fulfillment actions in the @page keyword mode.
+  if (base::FeatureList::IsEnabled(
+          omnibox::kContextualZeroSuggestLensFulfillment) &&
+      input_.IsZeroSuggest()) {
+    internal_result_.AttachContextualSearchFulfillmentActionToMatches();
+  } else if (input_.InKeywordMode()) {
+    AutocompleteInput keyword_input = input_;
+    const TemplateURL* keyword_turl =
+        AutocompleteInput::GetSubstitutingTemplateURLForInput(
+            template_url_service_, &keyword_input);
+    if (keyword_turl->starter_pack_id() == TemplateURLStarterPackData::kPage) {
+      internal_result_.AttachContextualSearchFulfillmentActionToMatches();
+      return;
+    }
+  }
+#endif  // !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
+
   // TabMatcher should run for ZPS for the Hub since open tab suggestions are
   // shown there.
   if (!input_.IsZeroSuggest() ||
@@ -1684,7 +1693,7 @@ void AutocompleteController::AttachActions() {
 #endif
   }
   internal_result_.TrimOmniboxActions(input_.IsZeroSuggest());
-#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
+#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS) && !defined(VIVALDI_BUILD)
   internal_result_.SplitActionsToSuggestions();
 #endif
 }
@@ -1775,6 +1784,12 @@ void AutocompleteController::UpdateKeywordDescriptions(
   for (auto i(result->begin()); i != result->end(); ++i) {
     if (AutocompleteMatch::IsSearchType(i->type)) {
       if (AutocompleteMatchHasCustomDescription(*i) ||
+#if defined(VIVALDI_BUILD)
+          // Is it no necessary that RECENT_TYPED_HISTORY contains only
+          // keyword search. It can contain typed URL too and keyword can be
+          // empty. So skip.
+          i->type == AutocompleteMatchType::RECENT_TYPED_HISTORY ||
+#endif // End Vivaldi
           IsUnscopedExtensionMatch(*i)) {
         continue;
       }
@@ -1988,6 +2003,31 @@ void AutocompleteController::UpdateSearchboxStats(AutocompleteResult* result) {
                 .spec());
       }
     }
+  }
+}
+
+// TODO(crbug.com/402519775): Merge the logic in this function into
+// `UpdateSearchboxStats()` once we've rolled all session-related data into a
+// single `SessionData` property on matches.
+void AutocompleteController::UpdateShownInSession(AutocompleteResult* result) {
+  for (auto& match : *result) {
+    result->set_suggestions_shown_in_session(input_.IsZeroSuggest(), match);
+  }
+
+  for (auto& match : *result) {
+    const auto [zero_prefix_search_shown, zero_prefix_url_shown] =
+        result->suggestions_shown_in_session(/*is_zero_suggest=*/true);
+    match.zero_prefix_search_suggestions_shown_in_session =
+        zero_prefix_search_shown;
+    match.zero_prefix_url_suggestions_shown_in_session = zero_prefix_url_shown;
+
+    match.zero_prefix_suggestions_shown_in_session =
+        zero_prefix_search_shown || zero_prefix_url_shown;
+
+    const auto [typed_search_shown, typed_url_shown] =
+        result->suggestions_shown_in_session(/*is_zero_suggest=*/false);
+    match.typed_search_suggestions_shown_in_session = typed_search_shown;
+    match.typed_url_suggestions_shown_in_session = typed_url_shown;
   }
 }
 

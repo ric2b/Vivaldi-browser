@@ -36,8 +36,7 @@
 #include "components/history/core/browser/history_service.h"
 #include "components/policy/core/common/policy_pref_names.h"
 #include "components/prefs/pref_service.h"
-#include "components/safe_browsing/content/browser/download/download_stats.h"
-#include "components/safe_browsing/content/common/file_type_policies.h"
+#include "components/safe_browsing/buildflags.h"
 #include "components/safe_browsing/core/browser/safe_browsing_metrics_collector.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_task_traits.h"
@@ -68,7 +67,7 @@
 #include "ui/shell_dialogs/select_file_utils_win.h"
 #endif
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
 #include "chrome/browser/ash/policy/dlp/dlp_files_controller_ash.h"
 #include "chrome/browser/chromeos/policy/dlp/dlp_file_destination.h"
 #include "chrome/browser/chromeos/policy/dlp/dlp_rules_manager.h"
@@ -77,6 +76,11 @@
 
 #if BUILDFLAG(IS_ANDROID)
 #include "components/safe_browsing/android/safe_browsing_api_handler_bridge.h"
+#endif
+
+#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+#include "components/safe_browsing/content/browser/download/download_stats.h"
+#include "components/safe_browsing/content/common/file_type_policies.h"
 #endif
 
 #if BUILDFLAG(IS_ANDROID)
@@ -294,6 +298,7 @@ DownloadTargetDeterminer::Result
     should_notify_extensions_ = true;
     virtual_path_ = target_directory.Append(generated_filename);
     DCHECK(virtual_path_.IsAbsolute());
+
     // Added by Vivaldi. VB-110404
     bool automatic_avoid_collisions_for_saveas =
         GetProfile()->GetPrefs()->GetBoolean(
@@ -302,6 +307,7 @@ DownloadTargetDeterminer::Result
         confirmation_reason_ == DownloadConfirmationReason::SAVE_AS) {
       conflict_action_ = DownloadPathReservationTracker::OVERWRITE;
     }
+    // End Vivaldi
 
   } else {
     conflict_action_ = DownloadPathReservationTracker::OVERWRITE;
@@ -338,12 +344,14 @@ base::FilePath DownloadTargetDeterminer::GenerateFileName() const {
       download_->GetURL(), download_->GetContentDisposition(), referrer_charset,
       suggested_filename, sniffed_mime_type, default_filename);
 
+#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
   // We don't replace the file extension if sfafe browsing consider the file
   // extension to be unsafe. Just let safe browsing scan the generated file.
   if (safe_browsing::FileTypePolicies::GetInstance()->IsCheckedBinaryFile(
           generated_filename)) {
     return generated_filename;
   }
+#endif
 
   // If no mime type or explicitly specified a name, don't replace file
   // extension.
@@ -600,6 +608,7 @@ DownloadTargetDeterminer::DoRequestConfirmation() {
               weak_ptr_factory_.GetWeakPtr()));
       return QUIT_DOLOOP;
     }
+    // End Vivaldi
 #endif
 
     // If there is a non-neutral confirmation reason, prompt the user.
@@ -1054,12 +1063,14 @@ void DownloadTargetDeterminer::CheckVisitedReferrerBeforeDone(
     bool visited_referrer_before) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   DCHECK_EQ(STATE_DETERMINE_INTERMEDIATE_PATH, next_state_);
+#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
   safe_browsing::RecordDownloadFileTypeAttributes(
       safe_browsing::FileTypePolicies::GetInstance()->GetFileDangerLevel(
           virtual_path_.BaseName(), download_->GetURL(),
           GetProfile()->GetPrefs()),
       download_->HasUserGesture(), visited_referrer_before,
       GetLastDownloadBypassTimestamp());
+#endif
   danger_level_ = GetDangerLevel(
       visited_referrer_before ? VISITED_REFERRER : NO_VISITS_TO_REFERRER);
   if (danger_level_ != DownloadFileType::NOT_DANGEROUS &&
@@ -1277,7 +1288,7 @@ DownloadConfirmationReason DownloadTargetDeterminer::NeedsConfirmation(
 
 bool DownloadTargetDeterminer::IsDownloadDlpBlocked(
     const base::FilePath& download_path) const {
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
   auto* web_contents =
       download_ ? content::DownloadItemUtils::GetWebContents(download_)
                 : nullptr;
@@ -1320,6 +1331,7 @@ DownloadFileType::DangerLevel DownloadTargetDeterminer::GetDangerLevel(
     return DownloadFileType::NOT_DANGEROUS;
   }
 
+#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
   DownloadFileType::DangerLevel danger_level =
       safe_browsing::FileTypePolicies::GetInstance()->GetFileDangerLevel(
           virtual_path_.BaseName(), download_->GetURL(),
@@ -1342,6 +1354,11 @@ DownloadFileType::DangerLevel DownloadTargetDeterminer::GetDangerLevel(
       user_approved_path) {
     // If the "DownloadRestrictions" enterprise policy explicitly disallows the
     // download, don't let the user gesture bypass the dangerous verdict.
+    //
+    // TODO(chlily) Need to verify how DownloadRestrictions policy functions
+    // when there is no Safe Browsing in the build. The policy (or at least
+    // the dangerous file types part of it) should still be active even if
+    // Safe Browsing is unavailable. (!BUILDFLAG(SAFE_BROWSING_AVAILABLE))
     if ((download_restriction == policy::DownloadRestriction::DANGEROUS_FILES ||
          download_restriction ==
              policy::DownloadRestriction::POTENTIALLY_DANGEROUS_FILES) &&
@@ -1375,6 +1392,9 @@ DownloadFileType::DangerLevel DownloadTargetDeterminer::GetDangerLevel(
        (download_->HasUserGesture() && visits == VISITED_REFERRER)))
     return DownloadFileType::NOT_DANGEROUS;
   return danger_level;
+#else
+  return DownloadFileType::NOT_DANGEROUS;
+#endif
 }
 
 std::optional<base::Time>

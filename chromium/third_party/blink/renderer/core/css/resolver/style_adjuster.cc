@@ -118,7 +118,8 @@ TouchAction AdjustTouchActionForElement(TouchAction touch_action,
                                         Element* element) {
   Element* document_element = element->GetDocument().documentElement();
   bool scrolls_overflow = builder.ScrollsOverflow();
-  if (element == element->GetDocument().FirstBodyElement()) {
+  if (IsA<HTMLBodyElement>(element) &&
+      element == element->GetDocument().FirstBodyElement()) {
     // Body scrolls overflow if html root overflow is not visible or the
     // propagation of overflow is stopped by containment.
     if (parent_style.IsOverflowVisibleAlongBothAxes()) {
@@ -131,9 +132,14 @@ TouchAction AdjustTouchActionForElement(TouchAction touch_action,
   bool is_child_document =
       element == document_element && element->GetDocument().LocalOwner();
   if (scrolls_overflow || is_child_document) {
-    return touch_action | TouchAction::kPan |
-           TouchAction::kInternalPanXScrolls |
-           TouchAction::kInternalNotWritable;
+    touch_action |= TouchAction::kPan | TouchAction::kInternalPanXScrolls |
+                    TouchAction::kInternalNotWritable;
+    // TODO(crbug.com/378027646): Remove after making a decision regarding
+    // handwriting enablement.
+    touch_action |= TouchAction::kInternalHandwritingPanningRules;
+  }
+  if (is_child_document) {
+    touch_action |= TouchAction::kInternalHandwriting;
   }
   return touch_action;
 }
@@ -156,7 +162,19 @@ bool ShouldBeInlinified(const Element* element) {
   if (!element) {
     return true;
   }
-  const Element* parent = element->ParentOrShadowHostElement();
+  const Element* parent;
+  if (RuntimeEnabledFeatures::RubyFieldsetCrashFixEnabled()) {
+    parent = FlatTreeTraversal::ParentElement(*element);
+    while (parent) {
+      const ComputedStyle* parent_style = parent->GetComputedStyle();
+      if (!parent_style || parent_style->Display() != EDisplay::kContents) {
+        break;
+      }
+      parent = FlatTreeTraversal::ParentElement(*parent);
+    }
+  } else {
+    parent = element->ParentOrShadowHostElement();
+  }
   return !IsA<HTMLFieldSetElement>(parent) && !IsA<HTMLMediaElement>(parent);
 }
 
@@ -401,9 +419,9 @@ void StyleAdjuster::AdjustStyleForEditing(ComputedStyleBuilder& builder,
 void StyleAdjuster::AdjustStyleForTextCombine(ComputedStyleBuilder& builder) {
   DCHECK_EQ(builder.Display(), EDisplay::kInlineBlock);
   // Set box sizes
-  const Font& font = builder.GetFont();
-  DCHECK(font.GetFontDescription().IsVerticalBaseline());
-  const auto one_em = ComputedStyle::ComputedFontSizeAsFixed(builder.GetFont());
+  const Font* font = builder.GetFont();
+  DCHECK(font->GetFontDescription().IsVerticalBaseline());
+  const auto one_em = ComputedStyle::ComputedFontSizeAsFixed(*font);
   const auto line_height = builder.FontHeight();
   const auto size =
       LengthSize(Length::Fixed(line_height), Length::Fixed(one_em));
@@ -435,7 +453,7 @@ void StyleAdjuster::AdjustStyleForCombinedText(ComputedStyleBuilder& builder) {
   builder.UpdateFontOrientation();
 
 #if DCHECK_IS_ON()
-  DCHECK_EQ(builder.GetFont().GetFontDescription().Orientation(),
+  DCHECK_EQ(builder.GetFont()->GetFontDescription().Orientation(),
             FontOrientation::kHorizontal);
   const ComputedStyle* cloned_style = builder.CloneStyle();
   LayoutTextCombine::AssertStyleIsValid(*cloned_style);
@@ -921,18 +939,29 @@ void StyleAdjuster::AdjustEffectiveTouchAction(
   // Apply the adjusted parent effective touch actions.
   builder.SetEffectiveTouchAction(effective_touch_action);
 
-  // crbug.com/378027646 : This use counter counts how many pages would lose
-  // handwriting capabilities on platforms that support it if the handwriting
-  // keyword were implemented on this CSS attribute. Please see the linked bug
-  // for more information.
-  const bool would_lose_handwriting =
-      is_writable && effective_touch_action != TouchAction::kNone &&
-      (effective_touch_action & TouchAction::kInternalHandwriting) !=
-          TouchAction::kInternalHandwriting;
-  if (would_lose_handwriting) {
-    UseCounter::Count(
-        element->GetDocument(),
-        WebFeature::kNonNoneTouchActionWouldLoseEditableHandwriting);
+  if (is_writable && effective_touch_action != TouchAction::kNone) {
+    const auto would_lose_handwriting =
+        [effective_touch_action](TouchAction handwriting_touch_action) {
+          return (effective_touch_action & handwriting_touch_action) !=
+                 handwriting_touch_action;
+        };
+    // TODO(crbug.com/378027646) : This use counter counts how many pages would
+    // lose handwriting capabilities on platforms that support it if the
+    // handwriting keyword were implemented on this CSS attribute.
+    if (would_lose_handwriting(TouchAction::kInternalHandwriting)) {
+      UseCounter::Count(
+          element->GetDocument(),
+          WebFeature::kNonNoneTouchActionWouldLoseEditableHandwriting);
+    }
+    // Similar to the use counter above, but this will measure how many pages
+    // would lose handwriting capabilities if the handwriting keyword follows
+    // the rules for panning (being re-enabled when on a scrollable element).
+    if (would_lose_handwriting(TouchAction::kInternalHandwritingPanningRules)) {
+      UseCounter::Count(
+          element->GetDocument(),
+          WebFeature::
+              kNonNoneTouchActionWouldLoseEditableHandwritingRestoredByScroller);
+    }
   }
 
   // Propagate touch action to child frames.
@@ -1036,9 +1065,15 @@ void StyleAdjuster::AdjustForForcedColorsMode(ComputedStyleBuilder& builder,
 }
 
 void StyleAdjuster::AdjustForSVGTextElement(ComputedStyleBuilder& builder) {
+  // TODO(mstensho): We only need to reset the properties that may actually
+  // enable multicol here. As of multicol level 1, that's just `column-count`
+  // and `column-width`. Once speccing of level 2 `column-wrap` and
+  // `column-height` is done, these may also become such properties, though.
   builder.SetColumnGap(ComputedStyleInitialValues::InitialColumnGap());
   builder.SetColumnWidthInternal(
       ComputedStyleInitialValues::InitialColumnWidth());
+  builder.SetColumnHeightInternal(
+      ComputedStyleInitialValues::InitialColumnHeight());
   builder.SetColumnRuleStyle(
       ComputedStyleInitialValues::InitialColumnRuleStyle());
   builder.SetColumnRuleWidthInternal(
@@ -1053,7 +1088,10 @@ void StyleAdjuster::AdjustForSVGTextElement(ComputedStyleBuilder& builder) {
       ComputedStyleInitialValues::InitialHasAutoColumnCount());
   builder.SetHasAutoColumnWidthInternal(
       ComputedStyleInitialValues::InitialHasAutoColumnWidth());
+  builder.SetHasAutoColumnHeightInternal(
+      ComputedStyleInitialValues::InitialHasAutoColumnHeight());
   builder.ResetColumnFill();
+  builder.ResetColumnWrap();
   builder.ResetColumnSpan();
 }
 
@@ -1211,7 +1249,8 @@ void StyleAdjuster::AdjustComputedStyle(StyleResolverState& state,
   AdjustForForcedColorsMode(builder, state.GetDocument());
 
   // Let the theme also have a crack at adjusting the style.
-  LayoutTheme::GetTheme().AdjustStyle(element, builder);
+  LayoutTheme::GetTheme().AdjustStyle(
+      element ? element : state.GetPseudoElement(), builder);
 
   AdjustStyleForInert(builder, element);
 

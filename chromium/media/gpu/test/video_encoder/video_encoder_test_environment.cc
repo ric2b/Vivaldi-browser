@@ -19,7 +19,6 @@
 #include "base/strings/string_number_conversions.h"
 #include "build/build_config.h"
 #include "build/buildflag.h"
-#include "build/chromeos_buildflags.h"
 #include "gpu/ipc/service/gpu_memory_buffer_factory.h"
 #include "media/base/bitrate.h"
 #include "media/base/media_switches.h"
@@ -295,11 +294,6 @@ VideoEncoderTestEnvironment* VideoEncoderTestEnvironment::Create(
       media::kVaapiEnforceVideoMinMaxResolution);
 #endif
 
-#if defined(ARCH_CPU_X86_FAMILY) && BUILDFLAG(IS_CHROMEOS)
-  // TODO(b/378401081): remove once enabled by default.
-  combined_enabled_features.push_back(media::kVaapiAV1TemporalLayerHWEncoding);
-#endif
-
 #if BUILDFLAG(IS_LINUX) && BUILDFLAG(USE_VAAPI)
   combined_enabled_features.push_back(media::kAcceleratedVideoEncodeLinux);
 #endif
@@ -407,9 +401,9 @@ base::FilePath VideoEncoderTestEnvironment::OutputFilePath(
     bool svc_enable,
     int spatial_idx,
     int temporal_idx) const {
-  base::FilePath::StringPieceType extension = codec == VideoCodec::kH264
-                                                  ? FILE_PATH_LITERAL("h264")
-                                                  : FILE_PATH_LITERAL("ivf");
+  base::FilePath::StringViewType extension = codec == VideoCodec::kH264
+                                                 ? FILE_PATH_LITERAL("h264")
+                                                 : FILE_PATH_LITERAL("ivf");
   auto output_bitstream_filepath =
       OutputFolder()
           .Append(GetTestOutputFilePath())

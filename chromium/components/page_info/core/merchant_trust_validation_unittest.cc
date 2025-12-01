@@ -10,7 +10,6 @@
 
 namespace page_info::merchant_trust_validation {
 
-
 commerce::MerchantTrustSignalsV2 GetSampleProto() {
   commerce::MerchantTrustSignalsV2 proto;
   proto.set_merchant_star_rating(4.5);
@@ -18,6 +17,10 @@ commerce::MerchantTrustSignalsV2 GetSampleProto() {
   proto.set_merchant_details_page_url("https://example.com");
   proto.set_shopper_voice_summary("Great product");
   return proto;
+}
+
+TEST(MerchantTrustValidation, NoResult) {
+  EXPECT_EQ(ValidateProto(std::nullopt), MerchantTrustStatus::kNoResult);
 }
 
 // Tests that correct proto messages are accepted.
@@ -41,7 +44,8 @@ TEST(MerchantTrustValidation, MissingCountRating) {
 TEST(MerchantTrustValidation, MissingReviewsSummary) {
   auto proto = GetSampleProto();
   proto.clear_shopper_voice_summary();
-  EXPECT_EQ(ValidateProto(proto), MerchantTrustStatus::kMissingReviewsSummary);
+  EXPECT_EQ(ValidateProto(proto),
+            MerchantTrustStatus::kValidWithMissingReviewsSummary);
 }
 
 TEST(MerchantTrustValidation, MissingReviewsPageUrl) {

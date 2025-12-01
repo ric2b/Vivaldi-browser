@@ -12,9 +12,10 @@
 #include "components/autofill/core/browser/country_type.h"
 #include "components/autofill/core/browser/data_manager/payments/payments_data_manager.h"
 #include "components/autofill/core/browser/data_manager/payments/test_payments_data_manager.h"
-#include "components/autofill/core/browser/data_model/credit_card.h"
-#include "components/autofill/core/browser/data_model/credit_card_benefit.h"
-#include "components/autofill/core/browser/data_model/credit_card_test_api.h"
+#include "components/autofill/core/browser/data_model/payments/bnpl_issuer.h"
+#include "components/autofill/core/browser/data_model/payments/credit_card.h"
+#include "components/autofill/core/browser/data_model/payments/credit_card_benefit.h"
+#include "components/autofill/core/browser/data_model/payments/credit_card_test_api.h"
 #include "components/autofill/core/browser/form_structure.h"
 #include "components/autofill/core/browser/form_structure_test_api.h"
 #include "components/autofill/core/browser/payments/constants.h"
@@ -699,22 +700,27 @@ TEST_F(AutofillOptimizationGuideTest,
 }
 
 // Test the `BUY_NOW_PAY_LATER_ALLOWLIST_AFFIRM` optimization type is registered
-// when the amount extraction experiment is enabled and there is at least one
-// server credit card.
+// when the amount extraction allowlist is enabled and there is at least one
+// Affirm BNPL issuer.
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) || \
     BUILDFLAG(IS_CHROMEOS)
 TEST_F(
     AutofillOptimizationGuideTest,
     CreditCardFormFound_AmountExtractionAllowed_BuyNowPayLaterProviderAffirm) {
-  base::test::ScopedFeatureList feature_list{
-      features::kAutofillEnableAmountExtractionDesktop};
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitWithFeatures(
+      {features::kAutofillEnableAmountExtractionAllowlistDesktop,
+       features::kAutofillEnableBuyNowPayLaterSyncing},
+      {});
   FormStructure form_structure{
       CreateTestCreditCardFormData(/*is_https=*/true,
                                    /*use_month_type=*/true)};
   test_api(form_structure)
       .SetFieldTypes({CREDIT_CARD_NAME_FULL, CREDIT_CARD_NUMBER,
                       CREDIT_CARD_EXP_MONTH, CREDIT_CARD_VERIFICATION_CODE});
-  payments_data_manager().AddServerCreditCard(test::GetMaskedServerCard());
+  BnplIssuer bnpl_issuer = test::GetTestLinkedBnplIssuer();
+  bnpl_issuer.set_issuer_id(std::string(kBnplAffirmIssuerId));
+  payments_data_manager().AddBnplIssuer(bnpl_issuer);
 
   // Ensure that on registration the right optimization type is registered.
   EXPECT_CALL(
@@ -725,19 +731,24 @@ TEST_F(
 }
 
 // Test the `BUY_NOW_PAY_LATER_ALLOWLIST_ZIP` optimization type is registered
-// when the amount extraction experiment is enabled and there is at least one
-// server credit card.
+// when the amount extraction allowlist is enabled and there is at least one
+// Zip BNPL issuer.
 TEST_F(AutofillOptimizationGuideTest,
        CreditCardFormFound_AmountExtractionAllowed_BuyNowPayLaterProviderZip) {
-  base::test::ScopedFeatureList feature_list{
-      features::kAutofillEnableAmountExtractionDesktop};
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitWithFeatures(
+      {features::kAutofillEnableAmountExtractionAllowlistDesktop,
+       features::kAutofillEnableBuyNowPayLaterSyncing},
+      {});
   FormStructure form_structure{
       CreateTestCreditCardFormData(/*is_https=*/true,
                                    /*use_month_type=*/true)};
   test_api(form_structure)
       .SetFieldTypes({CREDIT_CARD_NAME_FULL, CREDIT_CARD_NUMBER,
                       CREDIT_CARD_EXP_MONTH, CREDIT_CARD_VERIFICATION_CODE});
-  payments_data_manager().AddServerCreditCard(test::GetMaskedServerCard());
+  BnplIssuer bnpl_issuer = test::GetTestLinkedBnplIssuer();
+  bnpl_issuer.set_issuer_id(std::string(kBnplZipIssuerId));
+  payments_data_manager().AddBnplIssuer(bnpl_issuer);
 
   // Ensure that on registration the right optimization type is registered.
   EXPECT_CALL(
@@ -749,19 +760,23 @@ TEST_F(AutofillOptimizationGuideTest,
 
 // Test neither `BUY_NOW_PAY_LATER_ALLOWLIST_AFFIRM` nor
 // `BUY_NOW_PAY_LATER_ALLOWLIST_ZIP` optimization types are registered when the
-// amount extraction experiment is off.
+// amount extraction allowlist flag is off.
 TEST_F(AutofillOptimizationGuideTest,
        CreditCardFormFound_AmountExtractionAllowed_FlagOff) {
   base::test::ScopedFeatureList feature_list;
-  feature_list.InitAndDisableFeature(
-      features::kAutofillEnableAmountExtractionDesktop);
+  feature_list.InitWithFeatures(
+      /*enabled_features=*/{features::kAutofillEnableBuyNowPayLaterSyncing},
+      /*disabled_features=*/{
+          features::kAutofillEnableAmountExtractionAllowlistDesktop});
   FormStructure form_structure{
       CreateTestCreditCardFormData(/*is_https=*/true,
                                    /*use_month_type=*/true)};
   test_api(form_structure)
       .SetFieldTypes({CREDIT_CARD_NAME_FULL, CREDIT_CARD_NUMBER,
                       CREDIT_CARD_EXP_MONTH, CREDIT_CARD_VERIFICATION_CODE});
-  payments_data_manager().AddServerCreditCard(test::GetMaskedServerCard());
+  BnplIssuer bnpl_issuer = test::GetTestLinkedBnplIssuer();
+  bnpl_issuer.set_issuer_id(std::string(kBnplAffirmIssuerId));
+  payments_data_manager().AddBnplIssuer(bnpl_issuer);
 
   // RegisterOptimizationTypes shouldn't be called.
   EXPECT_CALL(decider(), RegisterOptimizationTypes).Times(0);
@@ -771,18 +786,20 @@ TEST_F(AutofillOptimizationGuideTest,
 
 // Test neither `BUY_NOW_PAY_LATER_ALLOWLIST_AFFIRM` nor
 // `BUY_NOW_PAY_LATER_ALLOWLIST_ZIP` optimization types are registered when
-// there is no server credit card.
+// there is no BNPL issuer synced to the account.
 TEST_F(AutofillOptimizationGuideTest,
-       CreditCardFormFound_AmountExtractionAllowed_NoServerCreditCardFound) {
-  base::test::ScopedFeatureList feature_list{
-      features::kAutofillEnableAmountExtractionDesktop};
+       CreditCardFormFound_AmountExtractionAllowed_NoBnplIssuerFound) {
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitWithFeatures(
+      {features::kAutofillEnableAmountExtractionAllowlistDesktop,
+       features::kAutofillEnableBuyNowPayLaterSyncing},
+      {});
   FormStructure form_structure{
       CreateTestCreditCardFormData(/*is_https=*/true,
                                    /*use_month_type=*/true)};
   test_api(form_structure)
       .SetFieldTypes({CREDIT_CARD_NAME_FULL, CREDIT_CARD_NUMBER,
                       CREDIT_CARD_EXP_MONTH, CREDIT_CARD_VERIFICATION_CODE});
-  payments_data_manager().AddCreditCard(test::GetCreditCard());
 
   // RegisterOptimizationTypes shouldn't be called.
   EXPECT_CALL(decider(), RegisterOptimizationTypes).Times(0);
@@ -790,94 +807,134 @@ TEST_F(AutofillOptimizationGuideTest,
   guide().OnDidParseForm(form_structure, payments_data_manager());
 }
 
-// Test that we allow BNPL for Affirm on an allowlisted URL.
+// Test that we allow checkout amount searching for Affirm on an allowlisted
+// URL.
 TEST_F(AutofillOptimizationGuideTest,
-       IsEligibleForBuyNowPayLater_AffirmUrlAllowed) {
-  // Ensure that `IsEligibleForBuyNowPayLater()` returns the right
-  // response.
+       IsUrlEligibleForCheckoutAmountSearchForIssuerId_AffirmUrlAllowed) {
+  base::test::ScopedFeatureList feature_list{
+      features::kAutofillEnableAmountExtractionAllowlistDesktop};
+
+  // Ensure that `IsUrlEligibleForCheckoutAmountSearchForIssuerId()` returns the
+  // right response.
   ON_CALL(decider(),
           CanApplyOptimization(
-              Eq(GURL("https://www.abercrombie.com")),
+              Eq(GURL("https://www.testurl.test")),
               Eq(optimization_guide::proto::BUY_NOW_PAY_LATER_ALLOWLIST_AFFIRM),
               Matcher<optimization_guide::OptimizationMetadata*>(Eq(nullptr))))
       .WillByDefault(
           Return(optimization_guide::OptimizationGuideDecision::kTrue));
 
-  // abercrombie.com is in the allowlist.
-  EXPECT_TRUE(guide().IsEligibleForBuyNowPayLater(
-      /*issuer_id=*/"affirm", GURL("https://www.abercrombie.com")));
+  // testurl.test is in the allowlist.
+  EXPECT_TRUE(guide().IsUrlEligibleForCheckoutAmountSearchForIssuerId(
+      kBnplAffirmIssuerId, GURL("https://www.testurl.test")));
 }
 
-// Test that we do not allow BNPL for Affirm on a non-allowlisted URL.
+// Test that we do not allow checkout amount searching for Affirm on a
+// non-allowlisted URL.
 TEST_F(AutofillOptimizationGuideTest,
-       IsEligibleForBuyNowPayLater_AffirmUrlBlocked) {
-  // Ensure that `IsEligibleForBuyNowPayLater()` returns the right
-  // response.
+       IsUrlEligibleForCheckoutAmountSearchForIssuerId_AffirmUrlBlocked) {
+  base::test::ScopedFeatureList feature_list{
+      features::kAutofillEnableAmountExtractionAllowlistDesktop};
+
+  // Ensure that `IsUrlEligibleForCheckoutAmountSearchForIssuerId()` returns the
+  // right response.
   ON_CALL(decider(),
           CanApplyOptimization(
-              Eq(GURL("https://www.abc.com")),
+              Eq(GURL("https://www.testurl.test")),
               Eq(optimization_guide::proto::BUY_NOW_PAY_LATER_ALLOWLIST_AFFIRM),
               Matcher<optimization_guide::OptimizationMetadata*>(Eq(nullptr))))
       .WillByDefault(
           Return(optimization_guide::OptimizationGuideDecision::kFalse));
 
-  // abc.com is not in the allowlist.
-  EXPECT_FALSE(guide().IsEligibleForBuyNowPayLater(
-      /*issuer_id=*/"affirm", GURL("https://www.abc.com")));
+  // testurl.test is not in the allowlist.
+  EXPECT_FALSE(guide().IsUrlEligibleForCheckoutAmountSearchForIssuerId(
+      kBnplAffirmIssuerId, GURL("https://www.testurl.test")));
 }
 
-// Test that we allow BNPL for Zip on an allowlisted URL.
+// Test that we allow checkout amount searching for Zip on an allowlisted URL.
 TEST_F(AutofillOptimizationGuideTest,
-       IsEligibleForBuyNowPayLater_ZipUrlAllowed) {
-  // Ensure that `IsEligibleForBuyNowPayLater()` returns the right
-  // response.
+       IsUrlEligibleForCheckoutAmountSearchForIssuerId_ZipUrlAllowed) {
+  base::test::ScopedFeatureList feature_list{
+      features::kAutofillEnableAmountExtractionAllowlistDesktop};
+
+  // Ensure that `IsUrlEligibleForCheckoutAmountSearchForIssuerId()` returns the
+  // right response.
   ON_CALL(decider(),
           CanApplyOptimization(
-              Eq(GURL("https://www.abercrombie.com")),
+              Eq(GURL("https://www.testurl.test")),
               Eq(optimization_guide::proto::BUY_NOW_PAY_LATER_ALLOWLIST_ZIP),
               Matcher<optimization_guide::OptimizationMetadata*>(Eq(nullptr))))
       .WillByDefault(
           Return(optimization_guide::OptimizationGuideDecision::kTrue));
 
-  // abercrombie.com is in the allowlist.
-  EXPECT_TRUE(guide().IsEligibleForBuyNowPayLater(
-      /*issuer_id=*/"zip", GURL("https://www.abercrombie.com")));
+  // testurl.test is in the allowlist.
+  EXPECT_TRUE(guide().IsUrlEligibleForCheckoutAmountSearchForIssuerId(
+      kBnplZipIssuerId, GURL("https://www.testurl.test")));
 }
 
-// Test that we do not allow BNPL for Zip on a non-allowlisted URL.
+// Test that we do not allow checkout amount searching for Zip on a
+// non-allowlisted URL.
 TEST_F(AutofillOptimizationGuideTest,
-       IsEligibleForBuyNowPayLater_ZipUrlBlocked) {
-  // Ensure that `IsEligibleForBuyNowPayLater()` returns the right
-  // response.
+       IsUrlEligibleForCheckoutAmountSearchForIssuerId_ZipUrlBlocked) {
+  base::test::ScopedFeatureList feature_list{
+      features::kAutofillEnableAmountExtractionAllowlistDesktop};
+
+  // Ensure that `IsUrlEligibleForCheckoutAmountSearchForIssuerId()` returns the
+  // right response.
   ON_CALL(decider(),
           CanApplyOptimization(
-              Eq(GURL("https://www.abc.com")),
+              Eq(GURL("https://www.testurl.test")),
               Eq(optimization_guide::proto::BUY_NOW_PAY_LATER_ALLOWLIST_ZIP),
               Matcher<optimization_guide::OptimizationMetadata*>(Eq(nullptr))))
       .WillByDefault(
           Return(optimization_guide::OptimizationGuideDecision::kFalse));
 
-  // abc.com is not in the allowlist.
-  EXPECT_FALSE(guide().IsEligibleForBuyNowPayLater(
-      /*issuer_id=*/"zip", GURL("https://www.abc.com")));
+  // testurl.test is not in the allowlist.
+  EXPECT_FALSE(guide().IsUrlEligibleForCheckoutAmountSearchForIssuerId(
+      kBnplZipIssuerId, GURL("https://www.testurl.test")));
 }
 
-// Test that we do not allow BNPL for unknown issuer id.
+// Test that we do not allow checkout amount searching for unknown issuer id.
 TEST_F(AutofillOptimizationGuideTest,
-       IsEligibleForBuyNowPayLater_UnknownIssuerIdBlocked) {
-  // Ensure that `IsEligibleForBuyNowPayLater()` returns the right
-  // response.
+       IsUrlEligibleForCheckoutAmountSearchForIssuerId_UnknownIssuerIdBlocked) {
+  base::test::ScopedFeatureList feature_list{
+      features::kAutofillEnableAmountExtractionAllowlistDesktop};
+
+  // Ensure that `IsUrlEligibleForCheckoutAmountSearchForIssuerId()` returns the
+  // right response.
   ON_CALL(decider(),
           CanApplyOptimization(
-              Eq(GURL("https://www.abercrombie.com")),
+              Eq(GURL("https://www.testurl.test")),
               Eq(optimization_guide::proto::BUY_NOW_PAY_LATER_ALLOWLIST_ZIP),
               Matcher<optimization_guide::OptimizationMetadata*>(Eq(nullptr))))
       .WillByDefault(
           Return(optimization_guide::OptimizationGuideDecision::kTrue));
 
-  // abercrombie.com is in the allowlist but issuer_id is not matched.
-  EXPECT_FALSE(guide().IsEligibleForBuyNowPayLater(
-      /*issuer_id=*/"zipp", GURL("https://www.abercrombie.com")));
+  // testurl.test is in the allowlist but issuer_id is not matched.
+  EXPECT_FALSE(guide().IsUrlEligibleForCheckoutAmountSearchForIssuerId(
+      /*issuer_id=*/"zipp", GURL("https://www.testurl.test")));
+}
+
+// Test that we do not allow checkout amount searching when the amount
+// extraction allowlist is off.
+TEST_F(AutofillOptimizationGuideTest,
+       IsUrlEligibleForCheckoutAmountSearchForIssuerId_AllowlistFlagOff) {
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitAndDisableFeature(
+      features::kAutofillEnableAmountExtractionAllowlistDesktop);
+
+  // Ensure that `IsUrlEligibleForCheckoutAmountSearchForIssuerId()` returns the
+  // right response.
+  ON_CALL(decider(),
+          CanApplyOptimization(
+              Eq(GURL("https://www.testurl.test")),
+              Eq(optimization_guide::proto::BUY_NOW_PAY_LATER_ALLOWLIST_ZIP),
+              Matcher<optimization_guide::OptimizationMetadata*>(Eq(nullptr))))
+      .WillByDefault(
+          Return(optimization_guide::OptimizationGuideDecision::kTrue));
+
+  EXPECT_FALSE(guide().IsUrlEligibleForCheckoutAmountSearchForIssuerId(
+      kBnplZipIssuerId, GURL("https://www.testurl.test")));
 }
 #endif
 
@@ -1004,6 +1061,47 @@ INSTANTIATE_TEST_SUITE_P(
             optimization_guide::proto::
                 AMERICAN_EXPRESS_CREDIT_CARD_SUBSCRIPTION_BENEFITS,
             CreditCardCategoryBenefit::BenefitCategory::kSubscription},
+        BenefitOptimizationToBenefitCategoryTestCase{
+            "bmo",
+            optimization_guide::proto::
+                BMO_CREDIT_CARD_AIR_MILES_PARTNER_BENEFITS,
+            CreditCardCategoryBenefit::BenefitCategory::kAirMilesPartner},
+        BenefitOptimizationToBenefitCategoryTestCase{
+            "bmo",
+            optimization_guide::proto::BMO_CREDIT_CARD_ALCOHOL_STORE_BENEFITS,
+            CreditCardCategoryBenefit::BenefitCategory::kAlcoholStores},
+        BenefitOptimizationToBenefitCategoryTestCase{
+            "bmo", optimization_guide::proto::BMO_CREDIT_CARD_DINING_BENEFITS,
+            CreditCardCategoryBenefit::BenefitCategory::kDining},
+        BenefitOptimizationToBenefitCategoryTestCase{
+            "bmo",
+            optimization_guide::proto::BMO_CREDIT_CARD_DRUGSTORE_BENEFITS,
+            CreditCardCategoryBenefit::BenefitCategory::kDrugstores},
+        BenefitOptimizationToBenefitCategoryTestCase{
+            "bmo",
+            optimization_guide::proto::BMO_CREDIT_CARD_ENTERTAINMENT_BENEFITS,
+            CreditCardCategoryBenefit::BenefitCategory::kEntertainment},
+        BenefitOptimizationToBenefitCategoryTestCase{
+            "bmo", optimization_guide::proto::BMO_CREDIT_CARD_GROCERY_BENEFITS,
+            CreditCardCategoryBenefit::BenefitCategory::kGroceryStores},
+        BenefitOptimizationToBenefitCategoryTestCase{
+            "bmo",
+            optimization_guide::proto::BMO_CREDIT_CARD_OFFICE_SUPPLY_BENEFITS,
+            CreditCardCategoryBenefit::BenefitCategory::kOfficeSupplies},
+        BenefitOptimizationToBenefitCategoryTestCase{
+            "bmo",
+            optimization_guide::proto::BMO_CREDIT_CARD_RECURRING_BILL_BENEFITS,
+            CreditCardCategoryBenefit::BenefitCategory::kRecurringBills},
+        BenefitOptimizationToBenefitCategoryTestCase{
+            "bmo", optimization_guide::proto::BMO_CREDIT_CARD_TRANSIT_BENEFITS,
+            CreditCardCategoryBenefit::BenefitCategory::kTransit},
+        BenefitOptimizationToBenefitCategoryTestCase{
+            "bmo", optimization_guide::proto::BMO_CREDIT_CARD_TRAVEL_BENEFITS,
+            CreditCardCategoryBenefit::BenefitCategory::kTravel},
+        BenefitOptimizationToBenefitCategoryTestCase{
+            "bmo",
+            optimization_guide::proto::BMO_CREDIT_CARD_WHOLESALE_CLUB_BENEFITS,
+            CreditCardCategoryBenefit::BenefitCategory::kWholesaleClubs},
         BenefitOptimizationToBenefitCategoryTestCase{
             "capitalone",
             optimization_guide::proto::CAPITAL_ONE_CREDIT_CARD_DINING_BENEFITS,

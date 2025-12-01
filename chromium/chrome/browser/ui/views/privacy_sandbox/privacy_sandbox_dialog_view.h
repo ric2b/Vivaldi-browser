@@ -32,7 +32,10 @@ class PrivacySandboxDialogView : public views::View {
   void Close();
 
  private:
-  friend class PrivacySandboxQueueTestHelper;
+  friend class PrivacySandboxQueueTestNotice;
+
+  void AdsDialogNoArgsCallback(
+      PrivacySandboxService::AdsDialogCallbackNoArgsEvents event);
   void ResizeNativeView(int height);
   void ShowNativeView();
   void OpenPrivacySandboxSettings();
@@ -40,11 +43,11 @@ class PrivacySandboxDialogView : public views::View {
   friend class PrivacySandboxDialogViewPrivacyPolicyBrowserTest;
   friend class
       PrivacySandboxDialogViewAdsApiUxEnhancementPrivacyPolicyBrowserTest;
+  friend class PrivacySandboxDialogViewAdsApiUxEnhancementsLearnMoreBrowserTest;
   content::WebContents* GetWebContentsForTesting();
 
   raw_ptr<views::WebView> web_view_;
   raw_ptr<Browser> browser_;
-  base::TimeTicks dialog_created_time_;
 };
 
 #endif  // CHROME_BROWSER_UI_VIEWS_PRIVACY_SANDBOX_PRIVACY_SANDBOX_DIALOG_VIEW_H_

@@ -50,7 +50,8 @@ class AutofillSettingsProfileEditTableViewControllerTest
            initWithDelegate:nil
         personalDataManager:personal_data_manager_.get()
             autofillProfile:profile_.get()
-          isMigrationPrompt:NO];
+          isMigrationPrompt:NO
+           addManualAddress:NO];
     CreateController();
     CheckController();
 
@@ -69,7 +70,8 @@ class AutofillSettingsProfileEditTableViewControllerTest
             initWithDelegate:autofill_profile_edit_mediator_
                    userEmail:nil
                   controller:viewController
-                settingsView:YES];
+                settingsView:YES
+            addManualAddress:NO];
     viewController.handler = autofill_profile_edit_table_view_controller_;
     autofill_profile_edit_mediator_.consumer =
         autofill_profile_edit_table_view_controller_;
@@ -110,7 +112,8 @@ class AutofillSettingsProfileEditTableViewControllerTestWithUnionViewEnabled
             initWithDelegate:autofill_profile_edit_mediator_
                    userEmail:base::SysUTF16ToNSString(kTestSyncingEmail)
                   controller:viewController
-                settingsView:YES];
+                settingsView:YES
+            addManualAddress:NO];
     viewController.handler = autofill_profile_edit_table_view_controller_;
     autofill_profile_edit_mediator_.consumer =
         autofill_profile_edit_table_view_controller_;
@@ -205,7 +208,8 @@ class AutofillSettingsProfileEditTableViewControllerWithMigrationButtonTest
             initWithDelegate:autofill_profile_edit_mediator_
                    userEmail:base::SysUTF16ToNSString(kTestSyncingEmail)
                   controller:viewController
-                settingsView:YES];
+                settingsView:YES
+            addManualAddress:NO];
     viewController.handler = autofill_profile_edit_table_view_controller_;
     autofill_profile_edit_mediator_.consumer =
         autofill_profile_edit_table_view_controller_;
@@ -231,7 +235,7 @@ TEST_F(AutofillSettingsProfileEditTableViewControllerWithMigrationButtonTest,
   EXPECT_NSEQ(
       static_cast<TableViewTextItem*>(GetTableViewItem(0, rowCnt - 1)).text,
       l10n_util::GetNSString(
-          IDS_IOS_SETTINGS_AUTOFILL_MIGRATE_ADDRESS_TO_ACCOUNT_BUTTON_TITLE));
+          IDS_IOS_GOOGLE_ACCOUNT_SETTINGS_BATCH_UPLOAD_BUTTON_ITEM));
 }
 
 }  // namespace

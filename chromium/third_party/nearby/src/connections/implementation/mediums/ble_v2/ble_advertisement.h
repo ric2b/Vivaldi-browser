@@ -15,9 +15,12 @@
 #ifndef CORE_INTERNAL_MEDIUMS_BLE_V2_BLE_ADVERTISEMENT_H_
 #define CORE_INTERNAL_MEDIUMS_BLE_V2_BLE_ADVERTISEMENT_H_
 
+#include <string>
 #include <utility>
 
 #include "absl/status/statusor.h"
+#include "absl/strings/escaping.h"
+#include "absl/strings/str_format.h"
 #include "connections/implementation/mediums/ble_v2/ble_advertisement_header.h"
 #include "internal/platform/byte_array.h"
 
@@ -59,7 +62,25 @@ class BleAdvertisement {
 
   static constexpr int kServiceIdHashLength = 3;
   static constexpr int kDeviceTokenLength = 2;
-
+  static constexpr int kVersionLength = 1;
+  static constexpr int kVersionBitmask = 0x0E0;
+  static constexpr int kSocketVersionBitmask = 0x01C;
+  static constexpr int kFastAdvertisementFlagBitmask = 0x002;
+  static constexpr int kDataSizeLength = 4;      // Length of one int.
+  static constexpr int kFastDataSizeLength = 1;  // Length of one byte.
+  static constexpr int kMinAdvertisementLength =
+      kVersionLength + kServiceIdHashLength + kDataSizeLength;
+  // The maximum length for a Gatt characteristic value is 512 bytes, so make
+  // sure the entire advertisement is less than that. The data can take up
+  // whatever space is remaining after the bytes preceding it.
+  static constexpr int kMaxAdvertisementLength = 512;
+  static constexpr int kMinFastAdvertisementLegth =
+      kVersionLength + kFastDataSizeLength;
+  // The maximum length for the scan response is 31 bytes. However, with the
+  // required header that comes before the service data, this leaves the
+  // advertiser with 27 leftover bytes.
+  static constexpr int kMaxFastAdvertisementLength = 27;
+  static constexpr int kExtraFieldsMaskLength = 1;
   // Hashable
   bool operator==(const BleAdvertisement &rhs) const;
   template <typename H>
@@ -101,6 +122,17 @@ class BleAdvertisement {
   ByteArray GetDeviceToken() const { return device_token_; }
   int GetPsm() const { return psm_; }
   void SetPsm(int psm) { psm_ = psm; }
+  std::string ToReadableString() const {
+    return absl::StrFormat(
+        "BleAdvertisement { version=%d, socket_version=%d, "
+        "fast_advertisement=%v, service_id_hash=%s, data=%s, device_token=%s, "
+        "psm=%d }",
+        static_cast<int>(version_), static_cast<int>(socket_version_),
+        fast_advertisement_,
+        absl::BytesToHexString(service_id_hash_.AsStringView()),
+        absl::BytesToHexString(data_.AsStringView()),
+        absl::BytesToHexString(device_token_.AsStringView()), psm_);
+  }
 
  private:
   // Represents the extra fields of the `BleAdvertisement` used in Advertising +
@@ -145,26 +177,6 @@ class BleAdvertisement {
                               : (kMinAdvertisementLength + data_length +
                                  total_optional_length);
   }
-
-  static constexpr int kVersionLength = 1;
-  static constexpr int kVersionBitmask = 0x0E0;
-  static constexpr int kSocketVersionBitmask = 0x01C;
-  static constexpr int kFastAdvertisementFlagBitmask = 0x002;
-  static constexpr int kDataSizeLength = 4;      // Length of one int.
-  static constexpr int kFastDataSizeLength = 1;  // Length of one byte.
-  static constexpr int kMinAdvertisementLength =
-      kVersionLength + kServiceIdHashLength + kDataSizeLength;
-  // The maximum length for a Gatt characteristic value is 512 bytes, so make
-  // sure the entire advertisement is less than that. The data can take up
-  // whatever space is remaining after the bytes preceding it.
-  static constexpr int kMaxAdvertisementLength = 512;
-  static constexpr int kMinFastAdvertisementLegth =
-      kVersionLength + kFastDataSizeLength;
-  // The maximum length for the scan response is 31 bytes. However, with the
-  // required header that comes before the service data, this leaves the
-  // advertiser with 27 leftover bytes.
-  static constexpr int kMaxFastAdvertisementLength = 27;
-  static constexpr int kExtraFieldsMaskLength = 1;
 
   Version version_{Version::kUndefined};
   SocketVersion socket_version_{SocketVersion::kUndefined};

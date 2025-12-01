@@ -13,6 +13,7 @@
 #include "src/base/atomic-utils.h"
 #include "src/base/logging.h"
 #include "src/common/globals.h"
+#include "src/execution/isolate-inl.h"
 #include "src/execution/vm-state-inl.h"
 #include "src/flags/flags.h"
 #include "src/heap/base/active-system-pages.h"
@@ -142,10 +143,9 @@ class Sweeper::MajorSweeperJob final : public JobTask {
 
  private:
   void RunImpl(JobDelegate* delegate, bool is_joining_thread) {
-    // In case multi-cage pointer compression mode is enabled ensure that
-    // current thread's cage base values are properly initialized.
-    PtrComprCageAccessScope ptr_compr_cage_access_scope(
-        sweeper_->heap_->isolate());
+    // Set the current isolate such that trusted pointer tables etc are
+    // available and the cage base is set correctly for multi-cage mode.
+    SetCurrentIsolateScope isolate_scope(sweeper_->heap_->isolate());
 
     DCHECK(sweeper_->major_sweeping_in_progress());
     const int offset = delegate->GetTaskId();
@@ -213,10 +213,9 @@ class Sweeper::MinorSweeperJob final : public JobTask {
         tracer_, sweeper_->GetTracingScope(NEW_SPACE, is_joining_thread),
         is_joining_thread ? ThreadKind::kMain : ThreadKind::kBackground,
         trace_id_, TRACE_EVENT_FLAG_FLOW_IN);
-    // In case multi-cage pointer compression mode is enabled ensure that
-    // current thread's cage base values are properly initialized.
-    PtrComprCageAccessScope ptr_compr_cage_access_scope(
-        sweeper_->heap_->isolate());
+    // Set the current isolate such that trusted pointer tables etc are
+    // available and the cage base is set correctly for multi-cage mode.
+    SetCurrentIsolateScope isolate_scope(sweeper_->heap_->isolate());
 
     if (!concurrent_sweeper.ConcurrentSweepSpace(delegate)) return;
     concurrent_sweeper.ConcurrentSweepPromotedPages(delegate);
@@ -383,7 +382,7 @@ void Sweeper::LocalSweeper::ParallelSweepPage(PageMetadata* page,
   if (page->SweepingDone()) return;
 
   {
-    base::SpinningMutexGuard guard(page->mutex());
+    base::MutexGuard guard(page->mutex());
     DCHECK(!page->SweepingDone());
     DCHECK_EQ(PageMetadata::ConcurrentSweepingState::kPendingSweeping,
               page->concurrent_sweeping_state());
@@ -617,7 +616,7 @@ void Sweeper::LocalSweeper::ParallelIteratePromotedPage(
   DCHECK(!page->Chunk()->IsFlagSet(MemoryChunk::BLACK_ALLOCATED));
   DCHECK_NOT_NULL(page);
   {
-    base::SpinningMutexGuard guard(page->mutex());
+    base::MutexGuard guard(page->mutex());
     DCHECK(!page->SweepingDone());
     DCHECK_EQ(PageMetadata::ConcurrentSweepingState::kPendingIteration,
               page->concurrent_sweeping_state());
@@ -849,14 +848,13 @@ void Sweeper::EnsureMajorCompleted() {
         TRACE_EVENT_FLAG_FLOW_IN | TRACE_EVENT_FLAG_FLOW_OUT);
     // Discard all pooled pages on memory-reducing GCs.
     if (major_sweeping_state_.should_reduce_memory()) {
-      heap_->memory_allocator()->pool()->ReleasePooledChunks();
+      heap_->memory_allocator()->ReleasePooledChunksImmediately();
     }
     FinishMajorJobs();
     major_sweeping_state_.FinishSweeping();
     // Sweeping should not add pages to the pool.
-    DCHECK_IMPLIES(
-        major_sweeping_state_.should_reduce_memory(),
-        heap_->memory_allocator()->pool()->NumberOfCommittedChunks() == 0);
+    DCHECK_IMPLIES(major_sweeping_state_.should_reduce_memory(),
+                   heap_->memory_allocator()->GetPooledChunksCount() == 0);
   }
 }
 

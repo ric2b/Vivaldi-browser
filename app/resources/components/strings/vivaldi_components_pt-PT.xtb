@@ -21,6 +21,9 @@
           &gt;
           <ph name="PROXIES_TITLE" />
           e certifique-se de que a sua configuração está definida como "sem proxy" ou "direta".</translation>
+<translation id="4949828774841497663">Aceda a Aplicações &gt; Definições do sistema &gt; Rede, selecione a
+          rede ativa, clique no botão Detalhes… e desmarque todos os proxies
+          que possam ter sido selecionados.</translation>
 <translation id="5248344925342018662">Está a ver uma página segura do Vivaldi</translation>
 <translation id="6690242244468452299">Esta página mostra informação sobre os seus crashes mais recentes, caso tenha ativado os relatórios de crash.</translation>
 <translation id="7023871570427738255">Aceda ao
@@ -32,7 +35,4 @@
         Se isto não resolver o problema, recomendamos que marque esta opção
         novamente para obter um melhor desempenho.</translation>
 <translation id="7496505986576158197">O Vivaldi existe graças ao projeto open source <ph name="BEGIN_LINK_CHROMIUM" />Chromium<ph name="END_LINK_CHROMIUM" /> e a outro <ph name="BEGIN_LINK_OSS" />software open source<ph name="END_LINK_OSS" />.</translation>
-<translation id="8187289872471304532">Aceda a
-          Aplicações &gt; Preferências do Sistema &gt; Rede &gt; Avançadas &gt; Proxies
-          e desmarque todos os proxies selecionados.</translation>
 </translationbundle>

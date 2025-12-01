@@ -2,11 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
-#pragma allow_unsafe_buffers
-#endif
-
 #include "third_party/blink/renderer/modules/webcodecs/video_decoder.h"
 
 #include <utility>
@@ -159,6 +154,15 @@ VideoDecoderConfig* CopyConfig(const VideoDecoderConfig& config) {
   if (config.hasOptimizeForLatency())
     copy->setOptimizeForLatency(config.optimizeForLatency());
 
+  if (RuntimeEnabledFeatures::WebCodecsOrientationEnabled()) {
+    if (config.hasFlip()) {
+      copy->setFlip(config.flip());
+    }
+    if (config.hasRotation()) {
+      copy->setRotation(config.rotation());
+    }
+  }
+
   return copy;
 }
 
@@ -166,7 +170,8 @@ void ParseAv1KeyFrame(const media::DecoderBuffer& buffer,
                       libgav1::BufferPool* buffer_pool,
                       bool* is_key_frame) {
   libgav1::DecoderState decoder_state;
-  libgav1::ObuParser parser(buffer.data(), buffer.size(),
+  auto buffer_span = base::span(buffer);
+  libgav1::ObuParser parser(buffer_span.data(), buffer_span.size(),
                             /*operating_point=*/0, buffer_pool, &decoder_state);
   libgav1::RefCountedBufferPtr frame;
   libgav1::StatusCode status_code = parser.ParseOneFrame(&frame);
@@ -178,20 +183,24 @@ void ParseVpxKeyFrame(const media::DecoderBuffer& buffer,
                       media::VideoCodec codec,
                       bool* is_key_frame) {
 #if BUILDFLAG(ENABLE_LIBVPX)
+  auto buffer_span = base::span(buffer);
   vpx_codec_stream_info_t stream_info = {0};
   stream_info.sz = sizeof(vpx_codec_stream_info_t);
   auto status = vpx_codec_peek_stream_info(
       codec == media::VideoCodec::kVP8 ? vpx_codec_vp8_dx()
                                        : vpx_codec_vp9_dx(),
-      buffer.data(), static_cast<uint32_t>(buffer.size()), &stream_info);
+      buffer_span.data(), static_cast<uint32_t>(buffer_span.size()),
+      &stream_info);
   *is_key_frame = (status == VPX_CODEC_OK) && stream_info.is_kf;
 #endif
 }
 
 void ParseH264KeyFrame(const media::DecoderBuffer& buffer, bool* is_key_frame) {
 #if BUILDFLAG(USE_PROPRIETARY_CODECS)
-  auto result = media::mp4::AVC::AnalyzeAnnexB(
-      buffer.data(), buffer.size(), std::vector<media::SubsampleEntry>());
+  auto buffer_span = base::span(buffer);
+  auto result =
+      media::mp4::AVC::AnalyzeAnnexB(buffer_span.data(), buffer_span.size(),
+                                     std::vector<media::SubsampleEntry>());
   *is_key_frame = result.is_keyframe.value_or(false);
 #endif
 }
@@ -199,8 +208,10 @@ void ParseH264KeyFrame(const media::DecoderBuffer& buffer, bool* is_key_frame) {
 void ParseH265KeyFrame(const media::DecoderBuffer& buffer, bool* is_key_frame) {
 #if BUILDFLAG(USE_PROPRIETARY_CODECS)
 #if BUILDFLAG(ENABLE_PLATFORM_HEVC)
-  auto result = media::mp4::HEVC::AnalyzeAnnexB(
-      buffer.data(), buffer.size(), std::vector<media::SubsampleEntry>());
+  auto buffer_span = base::span(buffer);
+  auto result =
+      media::mp4::HEVC::AnalyzeAnnexB(buffer_span.data(), buffer_span.size(),
+                                      std::vector<media::SubsampleEntry>());
   *is_key_frame = result.is_keyframe.value_or(false);
 #endif  // BUILDFLAG(ENABLE_PLATFORM_HEVC)
 #endif  // BUILDFLAG(USE_PROPRIETARY_CODECS)
@@ -443,9 +454,8 @@ VideoDecoder::MakeMediaVideoDecoderConfigInternal(
       NOTREACHED();
     }
     if (!desc_wrapper.empty()) {
-      const uint8_t* start = desc_wrapper.data();
-      const size_t size = desc_wrapper.size();
-      extra_data.assign(start, start + size);
+      extra_data.assign(base::to_address(desc_wrapper.begin()),
+                        base::to_address(desc_wrapper.end()));
     }
   }
   if (needs_converter_out) {
@@ -531,11 +541,17 @@ VideoDecoder::MakeMediaVideoDecoderConfigInternal(
     encryption_scheme = scheme.value();
   }
 
+  auto transformation = media::kNoTransformation;
+  if (RuntimeEnabledFeatures::WebCodecsOrientationEnabled()) {
+    transformation =
+        media::VideoTransformation(config.rotation(), config.flip());
+  }
+
   media::VideoDecoderConfig media_config;
   media_config.Initialize(video_type.codec, video_type.profile,
                           media::VideoDecoderConfig::AlphaMode::kIsOpaque,
-                          media_color_space, media::kNoTransformation,
-                          coded_size, visible_rect, natural_size, extra_data,
+                          media_color_space, transformation, coded_size,
+                          visible_rect, natural_size, extra_data,
                           encryption_scheme);
   media_config.set_aspect_ratio(aspect_ratio);
   if (!media_config.IsValidConfig()) {
@@ -566,10 +582,9 @@ std::optional<media::VideoDecoderConfig> VideoDecoder::MakeMediaConfig(
     const ConfigType& config,
     String* js_error_message) {
   DCHECK(js_error_message);
-  std::optional<media::VideoDecoderConfig> media_config =
-      MakeMediaVideoDecoderConfigInternal(
-          config, decoder_specific_data_ /* out */, js_error_message /* out */);
-  current_codec_ =
+  auto media_config = MakeMediaVideoDecoderConfigInternal(
+      config, decoder_specific_data_ /* out */, js_error_message /* out */);
+  pending_codec_ =
       media_config ? media_config->codec() : media::VideoCodec::kUnknown;
   return media_config;
 }
@@ -578,8 +593,9 @@ media::DecoderStatus::Or<scoped_refptr<media::DecoderBuffer>>
 VideoDecoder::MakeInput(const InputType& chunk, bool verify_key_frame) {
   scoped_refptr<media::DecoderBuffer> decoder_buffer = chunk.buffer();
   if (decoder_specific_data_.decoder_helper) {
-    const uint8_t* src = chunk.buffer()->data();
-    size_t src_size = chunk.buffer()->size();
+    auto decoder_buffer_span = base::span(*chunk.buffer());
+    const uint8_t* src = decoder_buffer_span.data();
+    size_t src_size = decoder_buffer_span.size();
 
     // Note: this may not be safe if support for SharedArrayBuffers is added.
     uint32_t output_size =
@@ -608,15 +624,15 @@ VideoDecoder::MakeInput(const InputType& chunk, bool verify_key_frame) {
 
   bool is_key_frame = chunk.type() == V8EncodedVideoChunkType::Enum::kKey;
   if (verify_key_frame) {
-    if (current_codec_ == media::VideoCodec::kVP9 ||
-        current_codec_ == media::VideoCodec::kVP8) {
-      ParseVpxKeyFrame(*decoder_buffer, current_codec_, &is_key_frame);
-    } else if (current_codec_ == media::VideoCodec::kAV1 &&
+    if (pending_codec_ == media::VideoCodec::kVP9 ||
+        pending_codec_ == media::VideoCodec::kVP8) {
+      ParseVpxKeyFrame(*decoder_buffer, pending_codec_, &is_key_frame);
+    } else if (pending_codec_ == media::VideoCodec::kAV1 &&
                decoder_specific_data_.av1_buffer_pool) {
       ParseAv1KeyFrame(*decoder_buffer,
                        decoder_specific_data_.av1_buffer_pool.get(),
                        &is_key_frame);
-    } else if (current_codec_ == media::VideoCodec::kH264) {
+    } else if (pending_codec_ == media::VideoCodec::kH264) {
       ParseH264KeyFrame(*decoder_buffer, &is_key_frame);
 
 #if BUILDFLAG(USE_PROPRIETARY_CODECS)
@@ -631,7 +647,7 @@ VideoDecoder::MakeInput(const InputType& chunk, bool verify_key_frame) {
             "in the VideoDecoderConfig.");
       }
 #endif
-    } else if (current_codec_ == media::VideoCodec::kHEVC) {
+    } else if (pending_codec_ == media::VideoCodec::kHEVC) {
       ParseH265KeyFrame(*decoder_buffer, &is_key_frame);
 
 #if BUILDFLAG(USE_PROPRIETARY_CODECS)
@@ -663,6 +679,10 @@ VideoDecoder::MakeInput(const InputType& chunk, bool verify_key_frame) {
 media::DecoderStatus::Or<VideoDecoder::OutputType*> VideoDecoder::MakeOutput(
     scoped_refptr<MediaOutputType> output,
     ExecutionContext* context) {
+  if (output) {
+    output->metadata().transformation = active_transform_;
+  }
+
   const auto it = chunk_metadata_.find(output->timestamp());
   if (it != chunk_metadata_.end()) {
     const auto duration = it->second.duration;
@@ -680,6 +700,12 @@ media::DecoderStatus::Or<VideoDecoder::OutputType*> VideoDecoder::MakeOutput(
     chunk_metadata_.erase(chunk_metadata_.begin(), it + 1);
   }
   return MakeGarbageCollected<OutputType>(std::move(output), context);
+}
+
+void VideoDecoder::OnActiveConfigChanged(const MediaConfigType& config) {
+  DCHECK(RuntimeEnabledFeatures::WebCodecsOrientationEnabled() ||
+         config.video_transformation() == media::kNoTransformation);
+  active_transform_ = config.video_transformation();
 }
 
 const AtomicString& VideoDecoder::InterfaceName() const {

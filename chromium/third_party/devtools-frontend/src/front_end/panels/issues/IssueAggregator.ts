@@ -30,7 +30,7 @@ export class AggregatedIssue extends IssuesManager.Issue.Issue {
     hasRequest: boolean,
   }>();
   #affectedRawCookieLines = new Map<string, {rawCookieLine: string, hasRequest: boolean}>();
-  #affectedRequests = new Array<Protocol.Audits.AffectedRequest>();
+  #affectedRequests: Protocol.Audits.AffectedRequest[] = [];
   #affectedRequestIds = new Set<Protocol.Network.RequestId>();
   #affectedLocations = new Map<string, Protocol.Audits.SourceCodeLocation>();
   #heavyAdIssues = new Set<IssuesManager.HeavyAdIssue.HeavyAdIssue>();
@@ -44,10 +44,13 @@ export class AggregatedIssue extends IssuesManager.Issue.Issue {
   #cookieDeprecationMetadataIssues =
       new Set<IssuesManager.CookieDeprecationMetadataIssue.CookieDeprecationMetadataIssue>();
   #mixedContentIssues = new Set<IssuesManager.MixedContentIssue.MixedContentIssue>();
+  #partitioningBlobURLIssues = new Set<IssuesManager.PartitioningBlobURLIssue.PartitioningBlobURLIssue>();
   #sharedArrayBufferIssues = new Set<IssuesManager.SharedArrayBufferIssue.SharedArrayBufferIssue>();
   #quirksModeIssues = new Set<IssuesManager.QuirksModeIssue.QuirksModeIssue>();
   #attributionReportingIssues = new Set<IssuesManager.AttributionReportingIssue.AttributionReportingIssue>();
   #genericIssues = new Set<IssuesManager.GenericIssue.GenericIssue>();
+  #selectElementAccessibilityIssues =
+      new Set<IssuesManager.SelectElementAccessibilityIssue.SelectElementAccessibilityIssue>();
   #representative?: IssuesManager.Issue.Issue;
   #aggregatedIssuesCount = 0;
   #key: AggregationKey;
@@ -141,6 +144,11 @@ export class AggregatedIssue extends IssuesManager.Issue.Issue {
     return this.#genericIssues;
   }
 
+  getSelectElementAccessibilityIssues():
+      Iterable<IssuesManager.SelectElementAccessibilityIssue.SelectElementAccessibilityIssue> {
+    return this.#selectElementAccessibilityIssues;
+  }
+
   getDescription(): IssuesManager.MarkdownIssueDescription.MarkdownIssueDescription|null {
     if (this.#representative) {
       return this.#representative.getDescription();
@@ -157,6 +165,10 @@ export class AggregatedIssue extends IssuesManager.Issue.Issue {
 
   getAggregatedIssuesCount(): number {
     return this.#aggregatedIssuesCount;
+  }
+
+  getPartitioningBlobURLIssues(): Iterable<IssuesManager.PartitioningBlobURLIssue.PartitioningBlobURLIssue> {
+    return this.#partitioningBlobURLIssues;
   }
 
   /**
@@ -243,6 +255,12 @@ export class AggregatedIssue extends IssuesManager.Issue.Issue {
     }
     if (issue instanceof IssuesManager.GenericIssue.GenericIssue) {
       this.#genericIssues.add(issue);
+    }
+    if (issue instanceof IssuesManager.SelectElementAccessibilityIssue.SelectElementAccessibilityIssue) {
+      this.#selectElementAccessibilityIssues.add(issue);
+    }
+    if (issue instanceof IssuesManager.PartitioningBlobURLIssue.PartitioningBlobURLIssue) {
+      this.#partitioningBlobURLIssues.add(issue);
     }
   }
 

@@ -39,6 +39,7 @@ package(
 
 exports_files(
     [
+        "criticality.h",
         "subprocess.h",
         "env_time.h",
         "crash_analysis.h",
@@ -68,13 +69,17 @@ exports_files(
 bzl_library(
     name = "rules_cc_bzl",
     srcs = ["rules_cc.bzl"],
-    deps = tf_platform_alias("rules_cc_bzl"),
+    deps = tf_platform_alias("rules_cc_bzl") + [
+        "//xla/tsl:package_groups_bzl",
+    ],
 )
 
 bzl_library(
     name = "build_config_root_bzl",
     srcs = ["build_config_root.bzl"],
-    deps = tf_platform_alias("build_config_root_bzl"),
+    deps = tf_platform_alias("build_config_root_bzl") + [
+        "//xla/tsl:package_groups_bzl",
+    ],
 )
 
 filegroup(
@@ -117,6 +122,7 @@ filegroup(
     name = "lib_hdrs",
     srcs = [
         "crash_analysis.h",
+        "criticality.h",
         "dynamic_annotations.h",
         "env.h",
         "errors.h",
@@ -163,6 +169,7 @@ filegroup(
     name = "mobile_srcs_no_runtime",
     srcs = [
         "byte_order.h",
+        "criticality.h",
         "dynamic_annotations.h",
         "env.cc",
         "env.h",
@@ -402,6 +409,46 @@ tsl_cc_test(
         ":errors",
         "//xla/tsl/platform:test",
         "@com_google_absl//absl/status",
+        "@com_google_googletest//:gtest_main",
+    ],
+)
+
+cc_library(
+    name = "file_system_helper",
+    srcs = [
+        "file_system.h",
+        "file_system_helper.cc",
+    ],
+    hdrs = ["file_system_helper.h"],
+    deps = [
+        ":errors",
+        ":file_statistics",
+        ":macros",
+        ":status",
+        ":statusor",
+        ":types",
+        "//xla/tsl/platform:env",
+        "@com_google_absl//absl/base:core_headers",
+        "@com_google_absl//absl/types:span",
+        "@local_tsl//tsl/platform",
+        "@local_tsl//tsl/platform:cord",
+        "@local_tsl//tsl/platform:mutex",
+        "@local_tsl//tsl/platform:path",
+        "@local_tsl//tsl/platform:platform_port",
+        "@local_tsl//tsl/platform:str_util",
+        "@local_tsl//tsl/platform:stringpiece",
+    ],
+)
+
+tsl_cc_test(
+    name = "file_system_helper_test",
+    size = "small",
+    srcs = ["file_system_helper_test.cc"],
+    deps = [
+        ":file_system_helper",
+        "//xla/tsl/lib/core:status_test_util",
+        "//xla/tsl/platform:env",
+        "//xla/tsl/platform:env_impl",
         "@com_google_googletest//:gtest_main",
     ],
 )
@@ -769,4 +816,24 @@ cc_library(
     name = "stack_frame",
     hdrs = ["stack_frame.h"],
     compatible_with = get_compatible_with_portable(),
+)
+
+cc_library(
+    name = "criticality",
+    compatible_with = get_compatible_with_portable(),
+    textual_hdrs = ["criticality.h"],
+    deps = tf_platform_deps("criticality"),
+)
+
+tsl_cc_test(
+    name = "criticality_test",
+    size = "small",
+    srcs = [
+        "criticality_test.cc",
+    ],
+    deps = [
+        ":criticality",
+        "//xla/tsl/platform:test",
+        "@com_google_googletest//:gtest_main",
+    ],
 )

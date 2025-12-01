@@ -16,7 +16,7 @@ const UIStrings = {
    *@description Text in Threads Sidebar Pane of the Sources panel
    */
   paused: 'paused',
-};
+} as const;
 const str_ = i18n.i18n.registerUIStrings('panels/sources/ThreadsSidebarPane.ts', UIStrings);
 const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
 
@@ -71,8 +71,7 @@ export class ThreadsSidebarPane extends UI.Widget.VBox implements
 
     function updateTitle(): void {
       const executionContext = debuggerModel.runtimeModel().defaultExecutionContext();
-      title.textContent =
-          executionContext && executionContext.label() ? executionContext.label() : debuggerModel.target().name();
+      title.textContent = executionContext?.label() ? executionContext.label() : debuggerModel.target().name();
     }
 
     function updatePausedState(): void {

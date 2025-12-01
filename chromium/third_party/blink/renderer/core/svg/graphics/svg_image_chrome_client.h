@@ -71,7 +71,8 @@ class CORE_EXPORT SVGImageChromeClient final : public IsolatedSVGChromeClient {
   void ChromeDestroyed() override;
   void InvalidateContainer() override;
   void ScheduleAnimation(const LocalFrameView*,
-                         base::TimeDelta = base::TimeDelta()) override;
+                         base::TimeDelta,
+                         bool urgent) override;
 
   void SetTimerForTesting(
       DisallowNewWrapper<HeapTaskRunnerTimer<SVGImageChromeClient>>*);

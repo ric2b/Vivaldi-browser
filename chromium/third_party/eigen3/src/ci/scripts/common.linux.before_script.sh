@@ -21,7 +21,7 @@ apt-get install -y --no-install-recommends ninja-build cmake git > /dev/null
 # Install required dependencies and set up compilers.
 # These are required even for testing to ensure that dynamic runtime libraries
 # are available.
-if [[ "$ARCH" == "${EIGEN_CI_TARGET_ARCH}" ]]; then
+if [[ "$ARCH" == "${EIGEN_CI_TARGET_ARCH}" || "${EIGEN_CI_TARGET_ARCH}" == "any" ]]; then
   apt-get install -y --no-install-recommends ${EIGEN_CI_INSTALL} > /dev/null;
   export EIGEN_CI_CXX_IMPLICIT_INCLUDE_DIRECTORIES="";
   export EIGEN_CI_CXX_COMPILER_TARGET="";

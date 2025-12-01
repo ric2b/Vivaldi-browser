@@ -6,6 +6,7 @@
 
 #import <UIKit/UIKit.h>
 
+#import "components/signin/core/browser/account_reconcilor.h"
 #import "ios/chrome/browser/authentication/ui_bundled/signin/consistency_promo_signin/consistency_default_account/consistency_default_account_coordinator.h"
 #import "ios/chrome/browser/authentication/ui_bundled/signin/consistency_promo_signin/consistency_promo_signin_mediator.h"
 #import "ios/chrome/browser/authentication/ui_bundled/signin/consistency_promo_signin/consistency_sheet/consistency_sheet_navigation_controller.h"
@@ -82,7 +83,7 @@ class ConsistencyPromoSigninCoordinatorTest : public PlatformTest {
     OCMStub([consistency_default_account_coordinator_mock_ viewController])
         .andReturn(default_account_view_controller);
     // Setup the mediator.
-    OCMStub([(id)mediator_mock_ alloc]).andReturn(mediator_mock_);
+    OCMExpect([(id)mediator_mock_ alloc]).andReturn(mediator_mock_);
     OCMExpect(
         [mediator_mock_
             initWithAccountManagerService:reinterpret_cast<
@@ -93,6 +94,8 @@ class ConsistencyPromoSigninCoordinatorTest : public PlatformTest {
                                               [OCMArg anyPointer])
                           identityManager:reinterpret_cast<
                                               signin::IdentityManager*>(
+                                              [OCMArg anyPointer])
+                        accountReconcilor:reinterpret_cast<AccountReconcilor*>(
                                               [OCMArg anyPointer])
                           userPrefService:reinterpret_cast<PrefService*>(
                                               [OCMArg anyPointer])

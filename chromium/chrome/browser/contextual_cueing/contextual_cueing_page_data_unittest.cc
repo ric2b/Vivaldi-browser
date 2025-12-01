@@ -5,6 +5,7 @@
 #include "chrome/browser/contextual_cueing/contextual_cueing_page_data.h"
 
 #include "base/test/test_future.h"
+#include "chrome/browser/contextual_cueing/contextual_cueing_enums.h"
 #include "chrome/test/base/testing_profile.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/test/test_renderer_host.h"
@@ -41,7 +42,9 @@ class ContextualCueingPageDataTest : public content::RenderViewHostTestHarness {
 };
 
 TEST_F(ContextualCueingPageDataTest, Basic) {
-  base::test::TestFuture<std::string> future;
+  base::test::TestFuture<
+      base::expected<std::string, contextual_cueing::NudgeDecision>>
+      future;
   optimization_guide::proto::GlicContextualCueingMetadata metadata;
   auto* config = metadata.add_cueing_configurations();
   config->set_cue_label("basic label");
@@ -50,11 +53,39 @@ TEST_F(ContextualCueingPageDataTest, Basic) {
                                           std::move(metadata),
                                           future.GetCallback());
   ASSERT_TRUE(future.Wait());
-  EXPECT_EQ("basic label", future.Get());
+  EXPECT_EQ("basic label", future.Get().value());
+}
+
+TEST_F(ContextualCueingPageDataTest, EarlyDestruction) {
+  base::test::TestFuture<
+      base::expected<std::string, contextual_cueing::NudgeDecision>>
+      future;
+  optimization_guide::proto::GlicContextualCueingMetadata metadata;
+  auto* config = metadata.add_cueing_configurations();
+  config->set_cue_label("basic label");
+  // Use a page content condition to prevent the callback from being invoked
+  // immediately.
+  auto* condition = config->add_conditions();
+  condition->set_signal(
+      optimization_guide::proto::ContextualCueingClientSignal::
+          CONTEXTUAL_CUEING_CLIENT_SIGNAL_CONTENT_LENGTH_WORD_COUNT);
+  condition->set_cueing_operator(
+      optimization_guide::proto::ContextualCueingOperator::
+          CONTEXTUAL_CUEING_OPERATOR_GREATER_THAN_OR_EQUAL_TO);
+  condition->set_int64_threshold(1000);
+
+  ContextualCueingPageData::CreateForPage(web_contents_->GetPrimaryPage(),
+                                          std::move(metadata),
+                                          future.GetCallback());
+  ContextualCueingPageData::DeleteForPage(web_contents_->GetPrimaryPage());
+  ASSERT_TRUE(future.Wait());
+  EXPECT_EQ(NudgeDecision::kNudgeDecisionInterrupted, future.Get().error());
 }
 
 TEST_F(ContextualCueingPageDataTest, NonPdfPageFails) {
-  base::test::TestFuture<std::string> future;
+  base::test::TestFuture<
+      base::expected<std::string, contextual_cueing::NudgeDecision>>
+      future;
   optimization_guide::proto::GlicContextualCueingMetadata metadata;
   auto* config = metadata.add_cueing_configurations();
   config->set_cue_label("basic label");
@@ -68,14 +99,17 @@ TEST_F(ContextualCueingPageDataTest, NonPdfPageFails) {
                                           std::move(metadata),
                                           future.GetCallback());
   ASSERT_TRUE(future.Wait());
-  EXPECT_TRUE(future.Get().empty());
+  EXPECT_EQ(future.Get().error(),
+            contextual_cueing::NudgeDecision::kClientConditionsUnmet);
 }
 
 TEST_F(ContextualCueingPageDataTest, PdfPageCountFails) {
   content::WebContentsTester::For(web_contents_.get())
       ->SetMainFrameMimeType(pdf::kPDFMimeType);
 
-  base::test::TestFuture<std::string> future;
+  base::test::TestFuture<
+      base::expected<std::string, contextual_cueing::NudgeDecision>>
+      future;
   optimization_guide::proto::GlicContextualCueingMetadata metadata;
   auto* config = metadata.add_cueing_configurations();
   config->set_cue_label("pdf label");
@@ -93,14 +127,17 @@ TEST_F(ContextualCueingPageDataTest, PdfPageCountFails) {
   InvokePdfPageCountReceived(1);
 
   ASSERT_TRUE(future.Wait());
-  EXPECT_TRUE(future.Get().empty());
+  EXPECT_EQ(future.Get().error(),
+            contextual_cueing::NudgeDecision::kClientConditionsUnmet);
 }
 
 TEST_F(ContextualCueingPageDataTest, PdfPageCountPasses) {
   content::WebContentsTester::For(web_contents_.get())
       ->SetMainFrameMimeType(pdf::kPDFMimeType);
 
-  base::test::TestFuture<std::string> future;
+  base::test::TestFuture<
+      base::expected<std::string, contextual_cueing::NudgeDecision>>
+      future;
   optimization_guide::proto::GlicContextualCueingMetadata metadata;
   auto* config = metadata.add_cueing_configurations();
   config->set_cue_label("pdf label");
@@ -118,14 +155,16 @@ TEST_F(ContextualCueingPageDataTest, PdfPageCountPasses) {
   InvokePdfPageCountReceived(4);
 
   ASSERT_TRUE(future.Wait());
-  EXPECT_EQ("pdf label", future.Get());
+  EXPECT_EQ("pdf label", future.Get().value());
 }
 
 TEST_F(ContextualCueingPageDataTest, BasicAndPdfPageCountCondition) {
   content::WebContentsTester::For(web_contents_.get())
       ->SetMainFrameMimeType(pdf::kPDFMimeType);
 
-  base::test::TestFuture<std::string> future;
+  base::test::TestFuture<
+      base::expected<std::string, contextual_cueing::NudgeDecision>>
+      future;
   optimization_guide::proto::GlicContextualCueingMetadata metadata;
   auto* config = metadata.add_cueing_configurations();
   config->set_cue_label("pdf label");
@@ -145,7 +184,7 @@ TEST_F(ContextualCueingPageDataTest, BasicAndPdfPageCountCondition) {
                                           std::move(metadata),
                                           future.GetCallback());
   ASSERT_TRUE(future.Wait());
-  EXPECT_EQ("basic label", future.Get());
+  EXPECT_EQ("basic label", future.Get().value());
 }
 
 }  // namespace contextual_cueing

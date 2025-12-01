@@ -9,6 +9,7 @@
 #if BUILDFLAG(ENABLE_EXTENSIONS)
 
  public:
+  Browser* GetBrowser(content::WebContents* web_contents);
   void ShowPageInfo(gfx::Point pos);
 
   void NavigationStateChanged(content::WebContents* source,
@@ -47,6 +48,10 @@
                        const std::string& frame_name,
                        WindowOpenDisposition disposition,
                        const blink::mojom::WindowFeatures& features);
+
+  bool ShouldForwardShortcutToBrowser(
+      const input::NativeWebKeyboardEvent& event);
+  bool ShortcutFoundInPrefs(std::string shortcut_text);
 
   content::KeyboardEventProcessingResult PreHandleKeyboardEvent(
       content::WebContents* source,
@@ -90,16 +95,25 @@
     return is_navigating_away_from_vivaldi_ui_;
   }
 
+  // Called from WebViewGuest::CanDownload and blocks a download following the
+  // same criteria as InsecureDownloadData. True on block, false on download.
+  void VivaldiCanDownload(const GURL& url,
+                          const std::string& request_method,
+                          base::OnceCallback<void(bool)> callback) override;
+
+  // Returns true if the delegate is a GuestView.
+  bool IsVivaldiGuestView() override;
+
+  // This is called every time before navigation. It replaces
+  // dangerous chrome:// URLs with about:blank in incognito windows to
+  // prevent crashes. This can't be done by throttling, since WebUI is
+  // initialized even before throttles run.
+  void VivaldiSanitizeUrl(GURL& url);
  protected:
 
   WebContentsDelegate* GetDevToolsConnector() override;
 
  private:
-  // Called from WebViewGuest::CanDownload and blocks a download following the
-  // same criteria as InsecureDownloadData. True on block, false on download.
-  void VivaldiCanDownload(const GURL& url,
-                          const std::string& request_method,
-                          base::OnceCallback<void(bool)> callback);
 
   void VisibleSecurityStateChanged(content::WebContents* source) override;
 
@@ -179,6 +193,10 @@
   // Used for SetContentsBounds while being unattached.
   std::unique_ptr<gfx::Rect> last_set_bounds_;
 
+  // 0 - on panels
+  // tab_id where the widget is placed on - on widgets
+  // std::nullopt - regular tab
+  std::optional<int> parent_tab_id_;
 #endif  // Extensions
 
 // };

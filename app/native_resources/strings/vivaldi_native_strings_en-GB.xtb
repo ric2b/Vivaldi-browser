@@ -34,6 +34,7 @@
 <translation id="2441056087170876076">Monster 2</translation>
 <translation id="2444387452209867610">Insert Note</translation>
 <translation id="2486841023299517366">Animal 4</translation>
+<translation id="2501278716633472235">Go back</translation>
 <translation id="2612127540243995147">Ready to install. Vivaldi will be closed and relaunched.</translation>
 <translation id="2613387515621326337">Show update website</translation>
 <translation id="2645477450146475243">Sadly, your Opera settings are not available while that browser is running. To import those settings to Vivaldi, save your work and close all Opera windows. Then click Continue.</translation>
@@ -58,6 +59,7 @@
 <translation id="3259769196742189631">Validate</translation>
 <translation id="3291915639428159043">Autoplay blocked</translation>
 <translation id="3302905971452834934">Monster 1</translation>
+<translation id="3308738399950580893">ads</translation>
 <translation id="3334610655141903168">(no title)</translation>
 <translation id="3372505110412186107">Vivaldi <ph name="VERSION" /> is currently the newest version available.</translation>
 <translation id="3383198080133834965">You’re up to date!</translation>
@@ -80,6 +82,7 @@
 <translation id="3795800845758778870">Sadly, your Brave settings are not available while that browser is running. To import those settings to Vivaldi, save your work and close all Brave windows. Then click Continue.</translation>
 <translation id="3822431842304177896">New Separator</translation>
 <translation id="3832132597516774400">Landscape 5</translation>
+<translation id="3894751534882749287">If you wish to view the page anyway, you can change its tracking protection level in the Tracker-blocker popup or by clicking the Allow button</translation>
 <translation id="3914946330804881301">Imported From Opera</translation>
 <translation id="3921292902397893431">Monster 8</translation>
 <translation id="3943857333388298514">Paste</translation>
@@ -103,6 +106,7 @@
 <translation id="4582480609585453144">Open Link in Background Tab</translation>
 <translation id="4636708767492582204">Send by Mail</translation>
 <translation id="4677434526832593569">Animal 8</translation>
+<translation id="4736016046474602958">Tracker Blocker</translation>
 <translation id="474217410105706308">Mute Tab</translation>
 <translation id="4861715717329665002">Autosaved Sessions</translation>
 <translation id="4881695831933465202">Open</translation>
@@ -147,6 +151,7 @@
 <translation id="7086554968911045110">Landscape 7</translation>
 <translation id="7099506190679014195">Secure keystore upgrade</translation>
 <translation id="7111492742514999492">Landscape 9</translation>
+<translation id="7113310725918019676">Allow <ph name="BLOCKED_TYPE" /> from <ph name="DOMAIN" /></translation>
 <translation id="7208252576848052204">Sadly, your Arc settings are not available while that browser is running. To import those settings to Vivaldi, save your work and close all Arc windows. Then click Continue.</translation>
 <translation id="7337881442233988129">Chromium</translation>
 <translation id="7581266044164103589">Failed to launch the update installer. Please check that the computer has enough memory or disc space and try again later.</translation>
@@ -161,9 +166,9 @@
 <translation id="8027581147000338959">Open in New Window</translation>
 <translation id="8044382196220116469">Don't allow sites to automatically play video</translation>
 <translation id="8099620695029051217">Copy Page Address</translation>
+<translation id="8119307142152921512">trackers and ads</translation>
 <translation id="8197810018650377191">Bookmark Page</translation>
 <translation id="8261506727792406068">Delete</translation>
-<translation id="8263047843452521549">Inspect background service-worker</translation>
 <translation id="8331671104904436324">Open in Background Tab</translation>
 <translation id="8373293945112511707">Landscape 1</translation>
 <translation id="8388552048012645975">Downloading update...</translation>
@@ -177,7 +182,6 @@
 <translation id="8651348004684669199">Add Active Tab</translation>
 <translation id="8669345741879513971">Monster 10</translation>
 <translation id="867544375504146191">Yandex</translation>
-<translation id="8689295374912158752">Inspect portal-document</translation>
 <translation id="875142999698251063">Quit now</translation>
 <translation id="8768970203213061953">Landscape 14</translation>
 <translation id="8773635261052182196">You will no longer see these notifications. You can enable them again from the Vivaldi settings.</translation>
@@ -185,6 +189,7 @@
 <translation id="8813277370772331957">Remind me later</translation>
 <translation id="8894900864683381599">Add Link to Web Panel</translation>
 <translation id="8912720443398351457">Do You Really Want To Exit Vivaldi?</translation>
+<translation id="8940028675168378100">Blocked by <ph name="BLOCKER_NAME" /></translation>
 <translation id="8947109330183116400">Select HTML bookmark file</translation>
 <translation id="9017566390391482291">Select Vivaldi profile folder for import</translation>
 <translation id="9048058608784130603">Pending update <ph name="VERSION" /></translation>
@@ -195,6 +200,7 @@
 <translation id="912022491595344261">Open Image as <ph name="USER" /></translation>
 <translation id="9157539936604258187">Open Link</translation>
 <translation id="9169060351863393881">Opera 12.x</translation>
+<translation id="9180553614777056266">Ad Blocker</translation>
 <translation id="939305735877869636">Brave</translation>
 <translation id="970294721402795299">Landscape 16</translation>
 </translationbundle>

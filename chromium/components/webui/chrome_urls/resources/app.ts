@@ -46,11 +46,11 @@ export class ChromeUrlsAppElement extends CrLitElement {
     };
   }
 
-  protected debugPagesButtonDisabled_: boolean = false;
-  protected webuiUrlInfos_: WebuiUrlInfo[] = [];
-  protected internalUrlInfos_: WebuiUrlInfo[] = [];
-  protected commandUrls_: Url[] = [];
-  protected internalUisEnabled_: boolean = false;
+  protected accessor debugPagesButtonDisabled_: boolean = false;
+  protected accessor webuiUrlInfos_: WebuiUrlInfo[] = [];
+  protected accessor internalUrlInfos_: WebuiUrlInfo[] = [];
+  protected accessor commandUrls_: Url[] = [];
+  protected accessor internalUisEnabled_: boolean = false;
   protected tracker_: EventTracker = new EventTracker();
 
 
@@ -100,8 +100,8 @@ export class ChromeUrlsAppElement extends CrLitElement {
       return;
     }
 
-    const header = this.shadowRoot!.querySelector<HTMLElement>(
-        '#internal-debugging-pages');
+    const header =
+        this.shadowRoot.querySelector<HTMLElement>('#internal-debugging-pages');
     assert(header);
     header.scrollIntoView(true);
   }

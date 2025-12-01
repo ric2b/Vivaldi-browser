@@ -18,6 +18,7 @@ import org.chromium.base.FeatureList;
 import org.chromium.base.supplier.Supplier;
 import org.chromium.chrome.browser.toolbar.ButtonData;
 import org.chromium.chrome.browser.toolbar.ButtonDataImpl;
+import org.chromium.chrome.browser.toolbar.R;
 import org.chromium.chrome.browser.toolbar.adaptive.AdaptiveToolbarFeatures;
 import org.chromium.chrome.browser.user_education.IphCommandBuilder;
 import org.chromium.chrome.browser.user_education.UserEducationHelper;
@@ -41,7 +42,7 @@ import java.util.function.BooleanSupplier;
 public class OptionalButtonCoordinator {
     private final OptionalButtonMediator mMediator;
     private final OptionalButtonView mView;
-    private final UserEducationHelper mUserEducationHelper;
+    private final Supplier<UserEducationHelper> mUserEducationHelper;
     private final Supplier<Tracker> mFeatureEngagementTrackerSupplier;
     private Callback<Integer> mTransitionFinishedCallback;
     private IphCommandBuilder mIphCommandBuilder;
@@ -75,7 +76,7 @@ public class OptionalButtonCoordinator {
      */
     public OptionalButtonCoordinator(
             View view,
-            UserEducationHelper userEducationHelper,
+            Supplier<UserEducationHelper> userEducationHelper,
             ViewGroup transitionRoot,
             BooleanSupplier isAnimationAllowedPredicate,
             Supplier<Tracker> featureEngagementTrackerSupplier) {
@@ -132,7 +133,7 @@ public class OptionalButtonCoordinator {
      * (according to the BooleanSupplier set with setIsAnimationAllowedPredicate) then this update
      * will be animated. Otherwise it'll instantly switch to the new icon.
      */
-    public void updateButton(ButtonData buttonData) {
+    public void updateButton(ButtonData buttonData, boolean isIncognito) {
         if (buttonData != null
                 && buttonData.getButtonSpec() != null
                 && buttonData.getButtonSpec().getIphCommandBuilder() != null) {
@@ -170,6 +171,12 @@ public class OptionalButtonCoordinator {
 
         // Reset background alpha, in case the IPH onDismiss callback doesn't fire.
         mMediator.setBackgroundAlpha(255);
+        if (buttonData != null) {
+            buttonData.setBackgroundResource(
+                    isIncognito
+                            ? R.drawable.default_icon_background_baseline
+                            : R.drawable.default_icon_background);
+        }
         mMediator.updateButton(buttonData);
     }
 
@@ -202,7 +209,7 @@ public class OptionalButtonCoordinator {
     /**
      * Updates the color filter of the background to match the current address bar background color.
      * This color is only used when showing a contextual action button (when {@link
-     * #updateButton(ButtonData)} is called with a {@link
+     * #updateButton(ButtonData, boolean)} is called with a {@link
      * org.chromium.chrome.browser.toolbar.ButtonData.ButtonSpec} where {@code isDynamicAction()} is
      * true).
      */
@@ -254,7 +261,7 @@ public class OptionalButtonCoordinator {
         }
 
         if (mIphCommandBuilder != null) {
-            mUserEducationHelper.requestShowIph(mIphCommandBuilder.build());
+            mUserEducationHelper.get().requestShowIph(mIphCommandBuilder.build());
             mIphCommandBuilder = null;
         }
     }

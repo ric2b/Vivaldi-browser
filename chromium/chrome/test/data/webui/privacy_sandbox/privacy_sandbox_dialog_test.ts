@@ -17,25 +17,26 @@ import type {PrivacySandboxNoticeRestrictedDialogAppElement} from 'chrome://priv
 import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
 import {flush, html, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 import {assertEquals, assertFalse, assertTrue} from 'chrome://webui-test/chai_assert.js';
-import {flushTasks} from 'chrome://webui-test/polymer_test_util.js';
+import {flushTasks, waitAfterNextRender} from 'chrome://webui-test/polymer_test_util.js';
 import {TestBrowserProxy} from 'chrome://webui-test/test_browser_proxy.js';
 import {isChildVisible, isVisible, microtasksFinished} from 'chrome://webui-test/test_util.js';
 
 class TestPrivacySandboxDialogBrowserProxy extends TestBrowserProxy implements
     PrivacySandboxDialogBrowserProxy {
-  private privacySandboxShouldShowPrivacyPolicy_ = false;
+  private shouldShowAdTopicsContentParity_ = false;
+
   constructor() {
     super([
       'promptActionOccurred',
       'resizeDialog',
       'showDialog',
       'recordPrivacyPolicyLoadTime',
-      'shouldShowPrivacySandboxPrivacyPolicy',
+      'shouldShowAdTopicsContentParity',
     ]);
   }
 
-  setPrivacySandboxShouldShowPrivacyPolicy(shouldShow: boolean) {
-    this.privacySandboxShouldShowPrivacyPolicy_ = shouldShow;
+  setShouldShowAdTopicsContentParity(shouldShow: boolean) {
+    this.shouldShowAdTopicsContentParity_ = shouldShow;
   }
 
   promptActionOccurred() {
@@ -55,9 +56,9 @@ class TestPrivacySandboxDialogBrowserProxy extends TestBrowserProxy implements
     this.methodCalled('recordPrivacyPolicyLoadTime', arguments);
   }
 
-  shouldShowPrivacySandboxPrivacyPolicy() {
-    this.methodCalled('shouldShowPrivacySandboxPrivacyPolicy');
-    return Promise.resolve(this.privacySandboxShouldShowPrivacyPolicy_);
+  shouldShowAdTopicsContentParity() {
+    this.methodCalled('shouldShowAdTopicsContentParity');
+    return Promise.resolve(this.shouldShowAdTopicsContentParity_);
   }
 }
 
@@ -66,7 +67,7 @@ function isChildInParentBounds(
   const target = viewport.shadowRoot!.querySelector(targetSelector);
   assertTrue(
       !!target, `target element ${targetSelector} not found in the viewport`);
-  const targetBounds = target!.getBoundingClientRect();
+  const targetBounds = target.getBoundingClientRect();
   const viewportBounds = viewport.getBoundingClientRect();
   return targetBounds.top >= 0 && targetBounds.left >= 0 &&
       targetBounds.top < viewportBounds.height &&
@@ -138,9 +139,9 @@ suite('Combined', function() {
   test('moreButton', async function() {
     await verifyActionOccured(
         browserProxy, PrivacySandboxPromptAction.CONSENT_SHOWN);
-    const consentStep = getActiveStep(page)!;
+    const consentStep = getActiveStep(page);
     assertEquals(
-        getActiveStep(page)!.id, PrivacySandboxCombinedDialogStep.CONSENT);
+        getActiveStep(page).id, PrivacySandboxCombinedDialogStep.CONSENT);
     await consentStep.moreButtonInitializedForTest();
     await flushTasks();
 
@@ -202,9 +203,9 @@ suite('Combined', function() {
     // Verify that dialog starts with consent step.
     await verifyActionOccured(
         browserProxy, PrivacySandboxPromptAction.CONSENT_SHOWN);
-    const consentStep = getActiveStep(page)!;
+    const consentStep = getActiveStep(page);
     assertEquals(
-        getActiveStep(page)!.id, PrivacySandboxCombinedDialogStep.CONSENT);
+        getActiveStep(page).id, PrivacySandboxCombinedDialogStep.CONSENT);
 
     // Accept the consent step.
     testClickButton('#confirmButton', consentStep);
@@ -213,13 +214,13 @@ suite('Combined', function() {
 
     // Resolving consent step triggers saving step.
     assertEquals(
-        getActiveStep(page)!.id, PrivacySandboxCombinedDialogStep.SAVING);
+        getActiveStep(page).id, PrivacySandboxCombinedDialogStep.SAVING);
 
     // After saving step has ended (with a delay), the notice is shown.
     await verifyActionOccured(
         browserProxy, PrivacySandboxPromptAction.NOTICE_SHOWN);
-    const noticeStep = getActiveStep(page)!;
-    assertEquals(noticeStep!.id, PrivacySandboxCombinedDialogStep.NOTICE);
+    const noticeStep = getActiveStep(page);
+    assertEquals(noticeStep.id, PrivacySandboxCombinedDialogStep.NOTICE);
 
     // Acknowledge the notice.
     testClickButton('#ackButton', noticeStep);
@@ -231,8 +232,8 @@ suite('Combined', function() {
     // Verify that dialog starts with consent step.
     await verifyActionOccured(
         browserProxy, PrivacySandboxPromptAction.CONSENT_SHOWN);
-    const consentStep = getActiveStep(page)!;
-    assertEquals(consentStep!.id, PrivacySandboxCombinedDialogStep.CONSENT);
+    const consentStep = getActiveStep(page);
+    assertEquals(consentStep.id, PrivacySandboxCombinedDialogStep.CONSENT);
 
     // Accept the consent step.
     testClickButton('#confirmButton', consentStep);
@@ -241,14 +242,14 @@ suite('Combined', function() {
 
     // Resolving consent step triggers saving step.
     assertEquals(
-        getActiveStep(page)!.id, PrivacySandboxCombinedDialogStep.SAVING);
+        getActiveStep(page).id, PrivacySandboxCombinedDialogStep.SAVING);
 
     // After saving step has ended (with a delay), the notice is shown.
     await verifyActionOccured(
         browserProxy, PrivacySandboxPromptAction.NOTICE_SHOWN);
-    const noticeStep = getActiveStep(page)!;
+    const noticeStep = getActiveStep(page);
     assertEquals(
-        getActiveStep(page)!.id, PrivacySandboxCombinedDialogStep.NOTICE);
+        getActiveStep(page).id, PrivacySandboxCombinedDialogStep.NOTICE);
 
     // Click 'Open settings' button.
     testClickButton('#settingsButton', noticeStep);
@@ -260,8 +261,8 @@ suite('Combined', function() {
     // Verify that dialog starts with consent step.
     await verifyActionOccured(
         browserProxy, PrivacySandboxPromptAction.CONSENT_SHOWN);
-    const consentStep = getActiveStep(page)!;
-    assertEquals(consentStep!.id, PrivacySandboxCombinedDialogStep.CONSENT);
+    const consentStep = getActiveStep(page);
+    assertEquals(consentStep.id, PrivacySandboxCombinedDialogStep.CONSENT);
 
     // Decline the consent step.
     testClickButton('#declineButton', consentStep);
@@ -270,13 +271,13 @@ suite('Combined', function() {
 
     // Resolving consent step triggers saving step.
     assertEquals(
-        getActiveStep(page)!.id, PrivacySandboxCombinedDialogStep.SAVING);
+        getActiveStep(page).id, PrivacySandboxCombinedDialogStep.SAVING);
 
     // After saving step has ended (with a delay), the notice is shown.
     await verifyActionOccured(
         browserProxy, PrivacySandboxPromptAction.NOTICE_SHOWN);
-    const noticeStep = getActiveStep(page)!;
-    assertEquals(noticeStep!.id, PrivacySandboxCombinedDialogStep.NOTICE);
+    const noticeStep = getActiveStep(page);
+    assertEquals(noticeStep.id, PrivacySandboxCombinedDialogStep.NOTICE);
 
     // Acknowledge the notice.
     testClickButton('#ackButton', noticeStep);
@@ -288,8 +289,8 @@ suite('Combined', function() {
     // Verify that dialog starts with consent step.
     await verifyActionOccured(
         browserProxy, PrivacySandboxPromptAction.CONSENT_SHOWN);
-    const consentStep = getActiveStep(page)!;
-    assertEquals(consentStep!.id, PrivacySandboxCombinedDialogStep.CONSENT);
+    const consentStep = getActiveStep(page);
+    assertEquals(consentStep.id, PrivacySandboxCombinedDialogStep.CONSENT);
 
     // Decline the consent step.
     testClickButton('#declineButton', consentStep);
@@ -298,13 +299,13 @@ suite('Combined', function() {
 
     // Resolving consent step triggers saving step.
     assertEquals(
-        getActiveStep(page)!.id, PrivacySandboxCombinedDialogStep.SAVING);
+        getActiveStep(page).id, PrivacySandboxCombinedDialogStep.SAVING);
 
     // After saving step has ended (with a delay), the notice is shown.
     await verifyActionOccured(
         browserProxy, PrivacySandboxPromptAction.NOTICE_SHOWN);
-    const noticeStep = getActiveStep(page)!;
-    assertEquals(noticeStep!.id, PrivacySandboxCombinedDialogStep.NOTICE);
+    const noticeStep = getActiveStep(page);
+    assertEquals(noticeStep.id, PrivacySandboxCombinedDialogStep.NOTICE);
 
     // Click 'Open settings' button.
     testClickButton('#settingsButton', noticeStep);
@@ -315,11 +316,11 @@ suite('Combined', function() {
   test('learnMoreClicked', async function() {
     await verifyActionOccured(
         browserProxy, PrivacySandboxPromptAction.CONSENT_SHOWN);
-    const consentStep = getActiveStep(page)!;
-    assertEquals(consentStep!.id, PrivacySandboxCombinedDialogStep.CONSENT);
+    const consentStep = getActiveStep(page);
+    assertEquals(consentStep.id, PrivacySandboxCombinedDialogStep.CONSENT);
     // TODO(crbug.com/40244046): Test scrolling behaviour.
     // The collapse section is closed.
-    const learnMoreElement = consentStep!.shadowRoot!.querySelector(
+    const learnMoreElement = consentStep.shadowRoot!.querySelector(
         'privacy-sandbox-dialog-learn-more');
     const collapseElement =
         learnMoreElement!.shadowRoot!.querySelector('cr-collapse');
@@ -367,75 +368,30 @@ suite('CombinedAdsApiUxEnhancementDisabled', function() {
   test('consentEEAContent', async function() {
     await verifyActionOccured(
         browserProxy, PrivacySandboxPromptAction.CONSENT_SHOWN);
-    const consentStep = getActiveStep(page)!;
-    assertEquals(consentStep!.id, PrivacySandboxCombinedDialogStep.CONSENT);
+    const consentStep = getActiveStep(page);
+    assertEquals(consentStep.id, PrivacySandboxCombinedDialogStep.CONSENT);
     assertTrue(
         isVisible(consentStep.shadowRoot!.querySelector('#consentContent')));
     assertFalse(
         isVisible(consentStep.shadowRoot!.querySelector('#consentContentV2')));
   });
 
-  test('consentEEAPrivacyPolicyNotShown', async function() {
-    browserProxy.setPrivacySandboxShouldShowPrivacyPolicy(false);
-    await verifyActionOccured(
-        browserProxy, PrivacySandboxPromptAction.CONSENT_SHOWN);
-    const consentStep = getActiveStep(page)!;
-    assertEquals(
-        getActiveStep(page)!.id, PrivacySandboxCombinedDialogStep.CONSENT);
-
-    // The collapse section is opened.
-    const learnMore: HTMLElement = consentStep!.shadowRoot!.querySelector(
-        'privacy-sandbox-dialog-learn-more')!;
-    const collapseElement = learnMore!.shadowRoot!.querySelector('cr-collapse');
-    testClickButton('cr-expand-button', learnMore);
-    await verifyActionOccured(
-        browserProxy, PrivacySandboxPromptAction.CONSENT_MORE_INFO_OPENED);
-    assertTrue(collapseElement!.opened);
-
-    const learnMoreDiv = learnMore!.querySelector<HTMLElement>('#learnMoreDiv');
-    assertTrue(!!learnMoreDiv);
-
-    // Privacy policy div does not exist.
-    assertEquals(
-        isChildVisible(learnMore, '#privacyPolicyDiv'), false,
-        'privacy policy link should not be visible');
-
-    // Neither privacy policy link should be shown
-    assertFalse(
-        isVisible(consentStep.shadowRoot!.querySelector('#privacyPolicyLink')));
-    assertFalse(isVisible(
-        consentStep.shadowRoot!.querySelector('#privacyPolicyLinkV2')));
-
-    // Privacy policy dialog element does not exist.
-    const privacyPolicyDialog = consentStep!.shadowRoot!.querySelector(
-        'privacy-sandbox-privacy-policy-dialog');
-    assertFalse(!!privacyPolicyDialog);
-  });
-
   test('consentEEAPrivacyPolicy', async function() {
-    browserProxy.setPrivacySandboxShouldShowPrivacyPolicy(true);
     await verifyActionOccured(
         browserProxy, PrivacySandboxPromptAction.CONSENT_SHOWN);
-    const consentStep = getActiveStep(page)!;
+    const consentStep = getActiveStep(page);
     assertEquals(
-        getActiveStep(page)!.id, PrivacySandboxCombinedDialogStep.CONSENT);
-
+        getActiveStep(page).id, PrivacySandboxCombinedDialogStep.CONSENT);
     // The collapse section is opened.
-    const learnMore: HTMLElement = consentStep!.shadowRoot!.querySelector(
+    const learnMore: HTMLElement = consentStep.shadowRoot!.querySelector(
         'privacy-sandbox-dialog-learn-more')!;
-    const collapseElement = learnMore!.shadowRoot!.querySelector('cr-collapse');
+    const collapseElement = learnMore.shadowRoot!.querySelector('cr-collapse');
     testClickButton('cr-expand-button', learnMore);
     await verifyActionOccured(
         browserProxy, PrivacySandboxPromptAction.CONSENT_MORE_INFO_OPENED);
     assertTrue(collapseElement!.opened);
-
-    // Privacy policy div is not shown.
-    const learnMoreDiv =
-        learnMore!.querySelector<HTMLElement>('#learnMoreDiv')!;
-    assertEquals(window.getComputedStyle(learnMoreDiv).display, 'none');
-
     const privacyPolicyDiv =
-        learnMore!.querySelector<HTMLElement>('#privacyPolicyDiv');
+        learnMore.querySelector<HTMLElement>('#privacyPolicyDiv');
     const privacyPolicyLink =
         privacyPolicyDiv!.querySelector<HTMLElement>('#privacyPolicyLink');
     assertTrue(
@@ -446,20 +402,17 @@ suite('CombinedAdsApiUxEnhancementDisabled', function() {
         'privacy policy link should be visible before being clicked');
     assertFalse(isVisible(
         consentStep.shadowRoot!.querySelector('#privacyPolicyLinkV2')));
-
-    privacyPolicyLink!.click();
+    privacyPolicyLink.click();
     await microtasksFinished();
-
-    const privacyPolicyDialog = consentStep!.shadowRoot!.querySelector(
+    const privacyPolicyDialog = consentStep.shadowRoot!.querySelector(
         'privacy-sandbox-privacy-policy-dialog');
     assertTrue(!!privacyPolicyDialog);
     const privacyPolicy =
-        privacyPolicyDialog.shadowRoot!.querySelector('#privacyPolicy');
+        privacyPolicyDialog.shadowRoot.querySelector('#privacyPolicy');
     assertTrue(!!privacyPolicy);
     const privacyPolicyBackButtonContainer =
-        privacyPolicyDialog.shadowRoot!.querySelector('.button-container');
+        privacyPolicyDialog.shadowRoot.querySelector('.button-container');
     assertTrue(!!privacyPolicyBackButtonContainer);
-
     assertEquals(
         getComputedStyle(privacyPolicy).opacity, '1',
         `privacy policy page should be visible when the link is clicked`);
@@ -470,7 +423,6 @@ suite('CombinedAdsApiUxEnhancementDisabled', function() {
         isChildVisible(consentStep, '#consentNotice'), false,
         `if the privacy policy page is visible,
         the consent notice should not be visible.`);
-
     // After clicking the back button, the content area should display the
     // consent screen again.
     testClickButton('#backButton', privacyPolicyDialog);
@@ -491,8 +443,8 @@ suite('CombinedAdsApiUxEnhancementDisabled', function() {
     // Verify that dialog starts with consent step.
     await verifyActionOccured(
         browserProxy, PrivacySandboxPromptAction.CONSENT_SHOWN);
-    const consentStep = getActiveStep(page)!;
-    assertEquals(consentStep!.id, PrivacySandboxCombinedDialogStep.CONSENT);
+    const consentStep = getActiveStep(page);
+    assertEquals(consentStep.id, PrivacySandboxCombinedDialogStep.CONSENT);
 
     // Decline the consent step, to get to the notice step.
     testClickButton('#declineButton', consentStep);
@@ -501,13 +453,13 @@ suite('CombinedAdsApiUxEnhancementDisabled', function() {
 
     // Resolving consent step triggers saving step.
     assertEquals(
-        getActiveStep(page)!.id, PrivacySandboxCombinedDialogStep.SAVING);
+        getActiveStep(page).id, PrivacySandboxCombinedDialogStep.SAVING);
 
     // After saving step has ended (with a delay), the notice is shown.
     await verifyActionOccured(
         browserProxy, PrivacySandboxPromptAction.NOTICE_SHOWN);
-    const noticeStep = getActiveStep(page)!;
-    assertEquals(noticeStep!.id, PrivacySandboxCombinedDialogStep.NOTICE);
+    const noticeStep = getActiveStep(page);
+    assertEquals(noticeStep.id, PrivacySandboxCombinedDialogStep.NOTICE);
     assertTrue(
         isVisible(noticeStep.shadowRoot!.querySelector('#noticeContent')));
     assertFalse(
@@ -541,59 +493,38 @@ suite('CombinedAdsApiUxEnhancement', function() {
   test('consentEEAContent', async function() {
     await verifyActionOccured(
         browserProxy, PrivacySandboxPromptAction.CONSENT_SHOWN);
-    const consentStep = getActiveStep(page)!;
-    assertEquals(consentStep!.id, PrivacySandboxCombinedDialogStep.CONSENT);
+    const consentStep = getActiveStep(page);
+    assertEquals(consentStep.id, PrivacySandboxCombinedDialogStep.CONSENT);
     assertFalse(
         isVisible(consentStep.shadowRoot!.querySelector('#consentContent')));
     assertTrue(
         isVisible(consentStep.shadowRoot!.querySelector('#consentContentV2')));
   });
 
-  test('consentEEAPrivacyPolicyNotShown', async function() {
-    browserProxy.setPrivacySandboxShouldShowPrivacyPolicy(false);
-    await verifyActionOccured(
-        browserProxy, PrivacySandboxPromptAction.CONSENT_SHOWN);
-    const consentStep = getActiveStep(page)!;
-    assertEquals(consentStep!.id, PrivacySandboxCombinedDialogStep.CONSENT);
-    const learnMore = consentStep.shadowRoot!.querySelector(
-        'privacy-sandbox-dialog-learn-more');
-    assertTrue(!!learnMore);
-    const collapseElement = learnMore!.shadowRoot!.querySelector('cr-collapse');
-    testClickButton('cr-expand-button', learnMore);
-    await verifyActionOccured(
-        browserProxy, PrivacySandboxPromptAction.CONSENT_MORE_INFO_OPENED);
-    assertTrue(collapseElement!.opened);
-    assertFalse(isVisible(
-        consentStep.shadowRoot!.querySelector('#privacyPolicyLinkV2')));
-    assertFalse(
-        isVisible(consentStep.shadowRoot!.querySelector('#privacyPolicyLink')));
-    assertFalse(
-        isVisible(consentStep.shadowRoot!.querySelector('#learnMoreDiv')));
-    assertFalse(
-        isVisible(consentStep.shadowRoot!.querySelector('#privacyPolicyDiv')));
-  });
-
   test('consentEEAPrivacyPolicy', async function() {
-    browserProxy.setPrivacySandboxShouldShowPrivacyPolicy(true);
     await verifyActionOccured(
         browserProxy, PrivacySandboxPromptAction.CONSENT_SHOWN);
-    const consentStep = getActiveStep(page)!;
-    assertEquals(consentStep!.id, PrivacySandboxCombinedDialogStep.CONSENT);
+    const consentStep = getActiveStep(page);
+    assertEquals(consentStep.id, PrivacySandboxCombinedDialogStep.CONSENT);
     const learnMore = consentStep.shadowRoot!.querySelector(
         'privacy-sandbox-dialog-learn-more');
     assertTrue(!!learnMore);
-    const collapseElement = learnMore!.shadowRoot!.querySelector('cr-collapse');
+    const collapseElement = learnMore.shadowRoot!.querySelector('cr-collapse');
     testClickButton('cr-expand-button', learnMore);
+    await waitAfterNextRender(learnMore);
     await verifyActionOccured(
         browserProxy, PrivacySandboxPromptAction.CONSENT_MORE_INFO_OPENED);
     assertTrue(collapseElement!.opened);
     assertFalse(
         isVisible(consentStep.shadowRoot!.querySelector('#privacyPolicyLink')));
     assertFalse(
-        isVisible(consentStep.shadowRoot!.querySelector('#learnMoreDiv')));
-    assertFalse(
         isVisible(consentStep.shadowRoot!.querySelector('#privacyPolicyDiv')));
-
+    assertFalse(isVisible(consentStep.shadowRoot!.querySelector(
+        '#learnMoreBulletDescriptionContentParity')));
+    assertFalse(isVisible(consentStep.shadowRoot!.querySelector(
+        '#learnMoreBulletDescriptionNoLink')));
+    assertTrue(isVisible(
+        consentStep.shadowRoot!.querySelector('#learnMoreBulletDescription')));
     const privacyPolicyLinkV2 =
         consentStep.shadowRoot!.querySelector<HTMLElement>(
             '#privacyPolicyLinkV2');
@@ -602,14 +533,139 @@ suite('CombinedAdsApiUxEnhancement', function() {
     privacyPolicyLinkV2.click();
     await microtasksFinished();
 
-    const privacyPolicyDialog = consentStep!.shadowRoot!.querySelector(
+    const privacyPolicyDialog = consentStep.shadowRoot!.querySelector(
         'privacy-sandbox-privacy-policy-dialog');
     assertTrue(!!privacyPolicyDialog);
     const privacyPolicy =
-        privacyPolicyDialog.shadowRoot!.querySelector('#privacyPolicy');
+        privacyPolicyDialog.shadowRoot.querySelector('#privacyPolicy');
     assertTrue(!!privacyPolicy);
     const privacyPolicyBackButtonContainer =
-        privacyPolicyDialog.shadowRoot!.querySelector('.button-container');
+        privacyPolicyDialog.shadowRoot.querySelector('.button-container');
+    assertTrue(!!privacyPolicyBackButtonContainer);
+
+    assertEquals(
+        getComputedStyle(privacyPolicy).opacity, '1',
+        `privacy policy page should be visible when the link is clicked`);
+    assertEquals(
+        getComputedStyle(privacyPolicyBackButtonContainer).display, 'flex',
+        `privacy policy back button should be visible when the link is clicked`);
+    assertEquals(
+        isChildVisible(consentStep, '#consentNotice'), false,
+        `if the privacy policy page is visible,
+        the consent notice should not be visible.`);
+
+    // After clicking the back button, the content area should display the
+    // consent screen again.
+    testClickButton('#backButton', privacyPolicyDialog);
+    await microtasksFinished();
+
+    assertEquals(
+        isChildVisible(consentStep, '#confirmButton'), true,
+        `buttons should be shown on the consent notice again`);
+    assertEquals(
+        getComputedStyle(privacyPolicy).opacity, '0',
+        `privacy policy page should be hidden when the back button is clicked`);
+    assertEquals(
+        getComputedStyle(privacyPolicyBackButtonContainer).display, 'none',
+        `privacy policy back button should be hidden when the back button is clicked`);
+  });
+});
+
+suite('CombinedAdsApiUxEnhancementAdTopicsContentParity', function() {
+  let page: PrivacySandboxCombinedDialogAppElement;
+  let browserProxy: TestPrivacySandboxDialogBrowserProxy;
+
+  suiteSetup(function() {
+    loadTimeData.overrideValues({
+      isPrivacySandboxAdsApiUxEnhancementsEnabled: true,
+    });
+  });
+
+  setup(async function() {
+    browserProxy = new TestPrivacySandboxDialogBrowserProxy();
+    browserProxy.setShouldShowAdTopicsContentParity(true);
+    PrivacySandboxDialogBrowserProxy.setInstance(browserProxy);
+
+    document.body.innerHTML = window.trustedTypes!.emptyHTML;
+    page = document.createElement('privacy-sandbox-combined-dialog-app');
+    page.disableAnimationsForTesting();
+    document.body.appendChild(page);
+
+    await browserProxy.whenCalled('resizeDialog');
+    await browserProxy.whenCalled('showDialog');
+  });
+
+  test('consentEEAContent', async function() {
+    await verifyActionOccured(
+        browserProxy, PrivacySandboxPromptAction.CONSENT_SHOWN);
+    const consentStep = getActiveStep(page);
+    assertEquals(consentStep.id, PrivacySandboxCombinedDialogStep.CONSENT);
+    assertFalse(
+        isVisible(consentStep.shadowRoot!.querySelector('#consentContent')));
+    assertTrue(
+        isVisible(consentStep.shadowRoot!.querySelector('#consentContentV2')));
+    const consentContentV2FirstDescription =
+        consentStep.shadowRoot!.querySelector<HTMLElement>(
+            '#consentContentV2FirstDescription');
+    assertTrue(isVisible(consentContentV2FirstDescription));
+    assertEquals(
+        loadTimeData.getString('m1ConsentDescription1ContentParity'),
+        consentContentV2FirstDescription!.innerText);
+  });
+
+  test('consentEEAPrivacyPolicy', async function() {
+    await verifyActionOccured(
+        browserProxy, PrivacySandboxPromptAction.CONSENT_SHOWN);
+    const consentStep = getActiveStep(page);
+    assertEquals(consentStep.id, PrivacySandboxCombinedDialogStep.CONSENT);
+    const learnMore = consentStep.shadowRoot!.querySelector(
+        'privacy-sandbox-dialog-learn-more');
+    assertTrue(!!learnMore);
+    const collapseElement = learnMore.shadowRoot!.querySelector('cr-collapse');
+    testClickButton('cr-expand-button', learnMore);
+    await verifyActionOccured(
+        browserProxy, PrivacySandboxPromptAction.CONSENT_MORE_INFO_OPENED);
+    assertTrue(collapseElement!.opened);
+    await waitAfterNextRender(learnMore);
+    assertFalse(
+        isVisible(consentStep.shadowRoot!.querySelector('#privacyPolicyLink')));
+    assertFalse(isVisible(
+        consentStep.shadowRoot!.querySelector('#privacyPolicyLinkV2')));
+    assertFalse(
+        isVisible(consentStep.shadowRoot!.querySelector('#privacyPolicyDiv')));
+    // Testing Ad Topics Content Parity Changes
+    assertFalse(isVisible(
+        consentStep.shadowRoot!.querySelector('#learnMoreBulletDescription')));
+    const learnMoreBulletDescriptionContentParity =
+        consentStep.shadowRoot!.querySelector<HTMLElement>(
+            '#learnMoreBulletDescriptionContentParity');
+    assertTrue(isVisible(learnMoreBulletDescriptionContentParity));
+    const learnMoreBulletDescriptionContentParityText =
+        loadTimeData
+            .getString('m1ConsentLearnMoreBullet2DescriptionContentParity')
+            .replace(/<[^>]*>/g, '')  // Remove HTML tags
+            .trim();
+    assertEquals(
+        learnMoreBulletDescriptionContentParityText,
+        learnMoreBulletDescriptionContentParity!.innerText.trim());
+    assertFalse(isVisible(consentStep.shadowRoot!.querySelector(
+        '#learnMoreBulletDescriptionNoLink')));
+    const privacyPolicyLinkV3 =
+        consentStep.shadowRoot!.querySelector<HTMLElement>(
+            '#privacyPolicyLinkV3');
+    assertTrue(!!privacyPolicyLinkV3);
+    assertTrue(isVisible(privacyPolicyLinkV3));
+    privacyPolicyLinkV3.click();
+    await microtasksFinished();
+
+    const privacyPolicyDialog = consentStep.shadowRoot!.querySelector(
+        'privacy-sandbox-privacy-policy-dialog');
+    assertTrue(!!privacyPolicyDialog);
+    const privacyPolicy =
+        privacyPolicyDialog.shadowRoot.querySelector('#privacyPolicy');
+    assertTrue(!!privacyPolicy);
+    const privacyPolicyBackButtonContainer =
+        privacyPolicyDialog.shadowRoot.querySelector('.button-container');
     assertTrue(!!privacyPolicyBackButtonContainer);
 
     assertEquals(
@@ -668,7 +724,7 @@ suite('NoticeEEA', function() {
     await verifyActionOccured(
         browserProxy, PrivacySandboxPromptAction.NOTICE_SHOWN);
     const noticeStep = getActiveStep(page);
-    assertEquals(noticeStep!.id, PrivacySandboxCombinedDialogStep.NOTICE);
+    assertEquals(noticeStep.id, PrivacySandboxCombinedDialogStep.NOTICE);
     await noticeStep.moreButtonInitializedForTest();
     await flushTasks();
 
@@ -731,7 +787,7 @@ suite('NoticeEEA', function() {
     await verifyActionOccured(
         browserProxy, PrivacySandboxPromptAction.NOTICE_SHOWN);
     const noticeStep = getActiveStep(page);
-    assertEquals(noticeStep!.id, PrivacySandboxCombinedDialogStep.NOTICE);
+    assertEquals(noticeStep.id, PrivacySandboxCombinedDialogStep.NOTICE);
 
     // Acknowledge the notice.
     testClickButton('#ackButton', noticeStep);
@@ -744,7 +800,7 @@ suite('NoticeEEA', function() {
     await verifyActionOccured(
         browserProxy, PrivacySandboxPromptAction.NOTICE_SHOWN);
     const noticeStep = getActiveStep(page);
-    assertEquals(noticeStep!.id, PrivacySandboxCombinedDialogStep.NOTICE);
+    assertEquals(noticeStep.id, PrivacySandboxCombinedDialogStep.NOTICE);
     await noticeStep.moreButtonInitializedForTest();
 
     // Acknowledge the notice.
@@ -757,10 +813,10 @@ suite('NoticeEEA', function() {
     await verifyActionOccured(
         browserProxy, PrivacySandboxPromptAction.NOTICE_SHOWN);
     const noticeStep = getActiveStep(page);
-    assertEquals(noticeStep!.id, PrivacySandboxCombinedDialogStep.NOTICE);
+    assertEquals(noticeStep.id, PrivacySandboxCombinedDialogStep.NOTICE);
     // TODO(crbug.com/40244046): Test scrolling behaviour.
     // The collapse section is closed.
-    const learnMoreElement = noticeStep!.shadowRoot!.querySelector(
+    const learnMoreElement = noticeStep.shadowRoot!.querySelector(
         'privacy-sandbox-dialog-learn-more');
     const collapseElement =
         learnMoreElement!.shadowRoot!.querySelector('cr-collapse');
@@ -810,7 +866,7 @@ suite('NoticeEEAAdsApiUxEnhancement', function() {
     await verifyActionOccured(
         browserProxy, PrivacySandboxPromptAction.NOTICE_SHOWN);
     const noticeStep = getActiveStep(page);
-    assertEquals(noticeStep!.id, PrivacySandboxCombinedDialogStep.NOTICE);
+    assertEquals(noticeStep.id, PrivacySandboxCombinedDialogStep.NOTICE);
     await noticeStep.moreButtonInitializedForTest();
     await flushTasks();
 
@@ -873,7 +929,7 @@ suite('NoticeEEAAdsApiUxEnhancement', function() {
     await verifyActionOccured(
         browserProxy, PrivacySandboxPromptAction.NOTICE_SHOWN);
     const noticeStep = getActiveStep(page);
-    assertEquals(noticeStep!.id, PrivacySandboxCombinedDialogStep.NOTICE);
+    assertEquals(noticeStep.id, PrivacySandboxCombinedDialogStep.NOTICE);
 
     // Acknowledge the notice.
     testClickButton('#ackButton', noticeStep);
@@ -886,7 +942,7 @@ suite('NoticeEEAAdsApiUxEnhancement', function() {
     await verifyActionOccured(
         browserProxy, PrivacySandboxPromptAction.NOTICE_SHOWN);
     const noticeStep = getActiveStep(page);
-    assertEquals(noticeStep!.id, PrivacySandboxCombinedDialogStep.NOTICE);
+    assertEquals(noticeStep.id, PrivacySandboxCombinedDialogStep.NOTICE);
     await noticeStep.moreButtonInitializedForTest();
 
     // Acknowledge the notice.
@@ -902,11 +958,11 @@ suite('NoticeEEAAdsApiUxEnhancement', function() {
     await verifyActionOccured(
         browserProxy, PrivacySandboxPromptAction.NOTICE_SHOWN);
     const noticeStep = getActiveStep(page);
-    assertEquals(noticeStep!.id, PrivacySandboxCombinedDialogStep.NOTICE);
+    assertEquals(noticeStep.id, PrivacySandboxCombinedDialogStep.NOTICE);
     // TODO(crbug.com/40244046): Test scrolling behaviour.
     // The collapse section is closed.
     const learnMore =
-        noticeStep!.shadowRoot!.querySelector<HTMLElement>(learnMoreELementId);
+        noticeStep.shadowRoot!.querySelector<HTMLElement>(learnMoreELementId);
     const collapseElement = learnMore!.shadowRoot!.querySelector('cr-collapse');
     assertFalse(collapseElement!.opened);
 
@@ -923,7 +979,7 @@ suite('NoticeEEAAdsApiUxEnhancement', function() {
     assertFalse(collapseElement!.opened);
   }
 
-  test('siteSuggestedAdsLearnMoreClicked', async function() {
+  test('siteSuggestedAdsLearnMoreClicked', function() {
     verifyCollapseSectionOpensAndCloses(
         '#siteSuggestedAdsLearnMore',
         PrivacySandboxPromptAction.NOTICE_SITE_SUGGESTED_ADS_MORE_INFO_OPENED,
@@ -931,7 +987,7 @@ suite('NoticeEEAAdsApiUxEnhancement', function() {
         browserProxy);
   });
 
-  test('adsMeasurementLearnMoreClicked', async function() {
+  test('adsMeasurementLearnMoreClicked', function() {
     verifyCollapseSectionOpensAndCloses(
         '#adsMeasurementLearnMore',
         PrivacySandboxPromptAction.NOTICE_ADS_MEASUREMENT_MORE_INFO_OPENED,
@@ -943,43 +999,22 @@ suite('NoticeEEAAdsApiUxEnhancement', function() {
     await verifyActionOccured(
         browserProxy, PrivacySandboxPromptAction.NOTICE_SHOWN);
     const noticeStep = getActiveStep(page);
-    assertEquals(noticeStep!.id, PrivacySandboxCombinedDialogStep.NOTICE);
+    assertEquals(noticeStep.id, PrivacySandboxCombinedDialogStep.NOTICE);
     assertFalse(
         isVisible(noticeStep.shadowRoot!.querySelector('#noticeContent')));
     assertTrue(
         isVisible(noticeStep.shadowRoot!.querySelector('#noticeContentV2')));
   });
 
-  test('privacyPolicyNotShown', async function() {
-    browserProxy.setPrivacySandboxShouldShowPrivacyPolicy(false);
-    await verifyActionOccured(
-        browserProxy, PrivacySandboxPromptAction.NOTICE_SHOWN);
-    const noticeStep = getActiveStep(page);
-    assertEquals(noticeStep!.id, PrivacySandboxCombinedDialogStep.NOTICE);
-    const learnMore = noticeStep.shadowRoot!.querySelector(
-        'privacy-sandbox-dialog-learn-more');
-    assertTrue(!!learnMore);
-    const collapseElement = learnMore!.shadowRoot!.querySelector('cr-collapse');
-    testClickButton('cr-expand-button', learnMore);
-    await flushTasks();
-    await verifyActionOccured(
-        browserProxy,
-        PrivacySandboxPromptAction.NOTICE_SITE_SUGGESTED_ADS_MORE_INFO_OPENED);
-    assertTrue(collapseElement!.opened);
-    assertFalse(isVisible(
-        noticeStep.shadowRoot!.querySelector('#privacyPolicyLinkV2')));
-  });
-
   test('privacyPolicyShown', async function() {
-    browserProxy.setPrivacySandboxShouldShowPrivacyPolicy(true);
     await verifyActionOccured(
         browserProxy, PrivacySandboxPromptAction.NOTICE_SHOWN);
     const noticeStep = getActiveStep(page);
-    assertEquals(noticeStep!.id, PrivacySandboxCombinedDialogStep.NOTICE);
+    assertEquals(noticeStep.id, PrivacySandboxCombinedDialogStep.NOTICE);
     const learnMore = noticeStep.shadowRoot!.querySelector(
         'privacy-sandbox-dialog-learn-more');
     assertTrue(!!learnMore);
-    const collapseElement = learnMore!.shadowRoot!.querySelector('cr-collapse');
+    const collapseElement = learnMore.shadowRoot!.querySelector('cr-collapse');
     testClickButton('cr-expand-button', learnMore);
     await flushTasks();
     await verifyActionOccured(
@@ -995,14 +1030,14 @@ suite('NoticeEEAAdsApiUxEnhancement', function() {
     privacyPolicyLinkV2.click();
     await microtasksFinished();
 
-    const privacyPolicyDialog = noticeStep!.shadowRoot!.querySelector(
+    const privacyPolicyDialog = noticeStep.shadowRoot!.querySelector(
         'privacy-sandbox-privacy-policy-dialog');
     assertTrue(!!privacyPolicyDialog);
     const privacyPolicy =
-        privacyPolicyDialog.shadowRoot!.querySelector('#privacyPolicy');
+        privacyPolicyDialog.shadowRoot.querySelector('#privacyPolicy');
     assertTrue(!!privacyPolicy);
     const privacyPolicyBackButtonContainer =
-        privacyPolicyDialog.shadowRoot!.querySelector('.button-container');
+        privacyPolicyDialog.shadowRoot.querySelector('.button-container');
     assertTrue(!!privacyPolicyBackButtonContainer);
 
     assertEquals(
@@ -1187,30 +1222,13 @@ suite('NoticeROWAdsApiUxEnhancement', function() {
         isVisible(page.shadowRoot!.querySelector('#learnMoreAndLastTextV2')));
   });
 
-  test('privacyPolicyNotShown', async function() {
-    browserProxy.setPrivacySandboxShouldShowPrivacyPolicy(false);
-    await verifyActionOccured(
-        browserProxy, PrivacySandboxPromptAction.NOTICE_SHOWN);
-    const learnMore =
-        page.shadowRoot!.querySelector('privacy-sandbox-dialog-learn-more');
-    assertTrue(!!learnMore);
-    const collapseElement = learnMore!.shadowRoot!.querySelector('cr-collapse');
-    testClickButton('cr-expand-button', learnMore);
-    await verifyActionOccured(
-        browserProxy, PrivacySandboxPromptAction.NOTICE_MORE_INFO_OPENED);
-    assertTrue(collapseElement!.opened);
-    assertFalse(
-        isVisible(page.shadowRoot!.querySelector('#privacyPolicyLinkV2')));
-  });
-
   test('privacyPolicyShown', async function() {
-    browserProxy.setPrivacySandboxShouldShowPrivacyPolicy(true);
     await verifyActionOccured(
         browserProxy, PrivacySandboxPromptAction.NOTICE_SHOWN);
     const learnMore =
         page.shadowRoot!.querySelector('privacy-sandbox-dialog-learn-more');
     assertTrue(!!learnMore);
-    const collapseElement = learnMore!.shadowRoot!.querySelector('cr-collapse');
+    const collapseElement = learnMore.shadowRoot!.querySelector('cr-collapse');
     testClickButton('cr-expand-button', learnMore);
     await verifyActionOccured(
         browserProxy, PrivacySandboxPromptAction.NOTICE_MORE_INFO_OPENED);
@@ -1227,10 +1245,10 @@ suite('NoticeROWAdsApiUxEnhancement', function() {
         'privacy-sandbox-privacy-policy-dialog');
     assertTrue(!!privacyPolicyDialog);
     const privacyPolicy =
-        privacyPolicyDialog.shadowRoot!.querySelector('#privacyPolicy');
+        privacyPolicyDialog.shadowRoot.querySelector('#privacyPolicy');
     assertTrue(!!privacyPolicy);
     const privacyPolicyBackButtonContainer =
-        privacyPolicyDialog.shadowRoot!.querySelector('.button-container');
+        privacyPolicyDialog.shadowRoot.querySelector('.button-container');
     assertTrue(!!privacyPolicyBackButtonContainer);
 
     assertEquals(

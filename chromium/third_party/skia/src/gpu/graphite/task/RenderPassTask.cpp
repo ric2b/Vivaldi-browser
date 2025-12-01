@@ -7,6 +7,7 @@
 
 #include "src/gpu/graphite/task/RenderPassTask.h"
 
+#include "src/gpu/SkBackingFit.h"
 #include "src/gpu/graphite/Caps.h"
 #include "src/gpu/graphite/CommandBuffer.h"
 #include "src/gpu/graphite/ContextPriv.h"
@@ -18,6 +19,19 @@
 #include "src/gpu/graphite/TextureProxy.h"
 
 namespace skgpu::graphite {
+
+namespace {
+
+SkISize get_msaa_size(const SkISize& targetSize, const Caps& caps) {
+    if (caps.differentResolveAttachmentSizeSupport()) {
+        // Use approx size for better reuse.
+        return GetApproxSize(targetSize);
+    }
+
+    return targetSize;
+}
+
+}  // anonymous namespace
 
 sk_sp<RenderPassTask> RenderPassTask::Make(DrawPassList passes,
                                            const RenderPassDesc& desc,
@@ -116,28 +130,23 @@ Task::Status RenderPassTask::addCommands(Context* context,
     SkASSERT(fTarget && fTarget->isInstantiated());
     SkASSERT(!fDstCopy || fDstCopy->isInstantiated());
 
-    // Set any replay translation and clip, as needed.
-    // The clip set here will intersect with any scissor set during this render pass.
+    // Only apply the replay translation and clip if we're drawing to the final replay target.
     const SkIRect renderTargetBounds = SkIRect::MakeSize(fTarget->dimensions());
     if (fTarget->texture() == replayData.fTarget) {
-        // We're drawing to the final replay target, so apply replay translation and clip.
-        if (replayData.fClip.isEmpty()) {
-            // If no replay clip is defined, default to the render target bounds.
-            commandBuffer->setReplayTranslationAndClip(replayData.fTranslation,
-                                                       renderTargetBounds);
-        } else {
-            // If a replay clip is defined, intersect it with the render target bounds.
-            // If the intersection is empty, we can skip this entire render pass.
-            SkIRect replayClip = replayData.fClip;
-            if (!replayClip.intersect(renderTargetBounds)) {
-                return Status::kSuccess;
-            }
-            commandBuffer->setReplayTranslationAndClip(replayData.fTranslation, replayClip);
+        // The clip set here will intersect with the render target bounds, and then any scissor set
+        // during this render pass. If there is no intersection between the clip and the render
+        // target bounds, we can skip this entire render pass.
+        if (!commandBuffer->setReplayTranslationAndClip(
+                    replayData.fTranslation, replayData.fClip, renderTargetBounds)) {
+            return Status::kSuccess;
         }
+
     } else {
-        // We're not drawing to the final replay target, so don't apply replay translation or clip.
-        // In this case as well, the clip we set defaults to the render target bounds.
-        commandBuffer->setReplayTranslationAndClip({0, 0}, renderTargetBounds);
+        // An empty clip is ignored, and will default to the render target bounds.
+        constexpr SkIVector kNoReplayTranslation = {0, 0};
+        constexpr SkIRect kNoReplayClip = SkIRect::MakeEmpty();
+        commandBuffer->setReplayTranslationAndClip(
+                kNoReplayTranslation, kNoReplayClip, renderTargetBounds);
     }
 
     // We don't instantiate the MSAA or DS attachments in prepareResources because we want to use
@@ -149,7 +158,8 @@ Task::Status RenderPassTask::addCommands(Context* context,
         SkASSERT(fTarget->numSamples() == 1 &&
                  fRenderPassDesc.fColorAttachment.fTextureInfo.numSamples() > 1);
         colorAttachment = resourceProvider->findOrCreateDiscardableMSAAAttachment(
-                fTarget->dimensions(), fRenderPassDesc.fColorAttachment.fTextureInfo);
+                get_msaa_size(fTarget->dimensions(), *context->priv().caps()),
+                fRenderPassDesc.fColorAttachment.fTextureInfo);
         if (!colorAttachment) {
             SKGPU_LOG_W("Could not get Color attachment for RenderPassTask");
             return Status::kFail;
@@ -164,7 +174,8 @@ Task::Status RenderPassTask::addCommands(Context* context,
         // TODO: ensure this is a scratch/recycled texture
         SkASSERT(fTarget->isInstantiated());
         SkISize dimensions = context->priv().caps()->getDepthAttachmentDimensions(
-                fTarget->texture()->textureInfo(), fTarget->dimensions());
+                colorAttachment->textureInfo(), colorAttachment->dimensions());
+
         depthStencilAttachment = resourceProvider->findOrCreateDepthStencilAttachment(
                 dimensions, fRenderPassDesc.fDepthStencilAttachment.fTextureInfo);
         if (!depthStencilAttachment) {

@@ -112,9 +112,6 @@ const char kDisableBackForwardCache[] = "disable-back-forward-cache";
 // features.
 const char kDisableBlinkFeatures[]          = "disable-blink-features";
 
-// Disables HTML5 DB support.
-const char kDisableDatabases[]              = "disable-databases";
-
 // Disable the per-domain blocking for 3D APIs after GPU reset.
 // This switch is intended only for tests.
 const char kDisableDomainBlockingFor3DAPIs[] =
@@ -602,9 +599,13 @@ const char kProtectedAudiencesConsentedDebugToken[] =
 // Defaults to disabled.
 const char kPullToRefresh[] = "pull-to-refresh";
 
-// Reduce the accept-language http header, and only send one language in the
-// request header: https://github.com/Tanych/accept-language.
+// Reduce the accept-language for HTTP header and JS navigator.languages, and
+// only most preferred language: https://github.com/Tanych/accept-language.
 const char kReduceAcceptLanguage[] = "reduce-accept-language";
+
+// Reduce the accept-language for HTTP header, and only send most preferred
+// language in the request header: https://github.com/Tanych/accept-language.
+const char kReduceAcceptLanguageHTTP[] = "reduce-accept-language-http";
 
 // Reduce the minor version number in the User-Agent string. This flag
 // implements phase 4 of User-Agent reduction:
@@ -774,12 +775,6 @@ const char kUseFakeUIForFedCM[] = "use-fake-ui-for-fedcm";
 // with screen/tab capture.
 const char kUseFakeUIForMediaStream[]     = "use-fake-ui-for-media-stream";
 
-#if BUILDFLAG(IS_WIN)
-// This will replace the existing font manager with FontDataManager in the
-// renderer.
-const char kUseFontDataManager[] = "use-font-data-manager";
-#endif
-
 // Texture target for CHROMIUM_image backed video frame textures.
 const char kVideoImageTextureTarget[] = "video-image-texture-target";
 
@@ -789,9 +784,6 @@ const char kVideoImageTextureTarget[] = "video-image-texture-target";
 // features have not yet been loaded.
 const char kUseContextSnapshotSwitch[] = "use-context-snapshot";
 #endif
-
-// Set when Chromium should use a mobile user agent.
-const char kUseMobileUserAgent[] = "use-mobile-user-agent";
 
 // Use the MockCertVerifier. This only works in test code.
 const char kUseMockCertVerifierForTesting[] =

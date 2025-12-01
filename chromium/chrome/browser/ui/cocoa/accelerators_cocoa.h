@@ -51,6 +51,11 @@ class AcceleratorsCocoa {
   // Informs AcceleratorsCocoa that it's constructing accelerators for a PWA.
   static void CreateForPWA(bool flag);
 
+  // Vivaldi
+  void OverrideAcceleratorForCommand(int command_id,
+                                     ui::Accelerator accelerator);
+  // End Vivaldi
+
  private:
   friend struct base::DefaultSingletonTraits<AcceleratorsCocoa>;
   FRIEND_TEST_ALL_PREFIXES(AcceleratorsCocoaBrowserTest,

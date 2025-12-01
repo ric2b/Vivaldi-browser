@@ -49,7 +49,7 @@ class DeviceInfoSyncClient {
   // Returns false if method is called on non-CrOS device.
   virtual bool IsUmaEnabledOnCrOSDevice() const = 0;
 
-  virtual size_t VivaldiGetSyncedFileStorageSize() const = 0;
+  virtual size_t VivaldiGetSyncedFileStorageSize() const { return 0; }
 };
 
 }  // namespace syncer

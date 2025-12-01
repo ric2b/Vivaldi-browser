@@ -8,7 +8,6 @@
 #include "include/v8config.h"
 #include "src/base/atomicops.h"
 #include "src/base/memory.h"
-#include "src/base/platform/mutex.h"
 #include "src/common/globals.h"
 #include "src/runtime/runtime.h"
 #include "src/sandbox/external-entity-table.h"
@@ -174,9 +173,6 @@ class V8_EXPORT_PRIVATE JSDispatchTable
       ExternalEntityTable<JSDispatchEntry, kJSDispatchTableReservationSize>;
 
  public:
-  // Size of a JSDispatchTable, for layout computation in IsolateData.
-  static constexpr int kSize = 2 * kSystemPointerSize;
-
 #ifdef V8_ENABLE_SANDBOX
   static_assert(kMaxJSDispatchEntries == kMaxCapacity);
 #endif  // V8_ENABLE_SANDBOX
@@ -219,7 +215,7 @@ class V8_EXPORT_PRIVATE JSDispatchTable
   inline void SetCodeKeepTieringRequestNoWriteBarrier(JSDispatchHandle handle,
                                                       Tagged<Code> new_code);
   // Resets the entrypoint to the code's entrypoint.
-  inline void ResetTieringRequest(JSDispatchHandle handle, Isolate* isolate);
+  inline void ResetTieringRequest(JSDispatchHandle handle);
   // Check if and/or which tiering builtin is installed.
   inline bool IsTieringRequested(JSDispatchHandle handle);
   inline bool IsTieringRequested(JSDispatchHandle handle,
@@ -227,12 +223,14 @@ class V8_EXPORT_PRIVATE JSDispatchTable
 
   // Allocates a new entry in the table and initialize it.
   //
+  // Note: If possible allocate dispatch handles through the factory.
+  //
   // This method is atomic and can be called from background threads.
-  inline JSDispatchHandle AllocateAndInitializeEntry(Space* space,
-                                                     uint16_t parameter_count);
   inline JSDispatchHandle AllocateAndInitializeEntry(Space* space,
                                                      uint16_t parameter_count,
                                                      Tagged<Code> code);
+  inline std::optional<JSDispatchHandle> TryAllocateAndInitializeEntry(
+      Space* space, uint16_t parameter_count, Tagged<Code> code);
 
   // The following methods are used to pre allocate entries and then initialize
   // them later.
@@ -322,7 +320,6 @@ class V8_EXPORT_PRIVATE JSDispatchTable
   friend class MarkCompactCollector;
 };
 
-static_assert(sizeof(JSDispatchTable) == JSDispatchTable::kSize);
 }  // namespace internal
 }  // namespace v8
 

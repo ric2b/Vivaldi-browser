@@ -5,7 +5,6 @@
 <translation id="1097355661841455597">Adorávamos saber a sua opinião.</translation>
 <translation id="1137850887415122856">Para bloquear os seus separadores privados, ative o Touch ID, Face ID ou um código de acesso.</translation>
 <translation id="1310184829257917508">Pedir para abrir em privado hiperligações de outras aplicações</translation>
-<translation id="1561609750546413721">Tradutor Vivaldi</translation>
 <translation id="207677936531967364">Nova página de separador privado</translation>
 <translation id="2353953000228441783">Vista predefinida do website</translation>
 <translation id="2394192052244849643">Colar e pesquisar</translation>
@@ -17,7 +16,9 @@
 <translation id="3463990832590571933">Abrir num novo separador privado</translation>
 <translation id="3473652525653758699">Nova janela privada</translation>
 <translation id="3501504415290398157">Use <ph name="BIOMETRIC_AUTHENITCATION_TYPE" /> para desbloquear os seus separadores privados.</translation>
+<translation id="3607792383367580513">Traduzir</translation>
 <translation id="3692650606013198282">Abrir em privado</translation>
+<translation id="3922395466317605522">Personalizar o menu</translation>
 <translation id="3981599532037327317">Abrir ${url} em privado</translation>
 <translation id="398477389655464998">Copiar hiperligação para a seleção</translation>
 <translation id="4026745073321351206">🙄 Detetou um problema?</translation>
@@ -39,10 +40,9 @@
 <translation id="7307970171564921489">Desbloquear separadores privados com <ph name="BIOMETRIC_AUTHENITCATION_TYPE" /></translation>
 <translation id="7347289093190902150">Abrir em privado?</translation>
 <translation id="7549299604720382000">Novo separador privado</translation>
-<translation id="755255281989213264">Personalizar o menu</translation>
-<translation id="7920949005883349320">Privacidade e segurança</translation>
 <translation id="7961015016161918242">Nunca</translation>
 <translation id="8326104954595890674">Novo separador privado</translation>
 <translation id="8756969031206844760">Quer atualizar a palavra-passe?</translation>
+<translation id="9042893549633094279">Privacidade e segurança</translation>
 <translation id="9094033019050270033">Atualizar a palavra-passe</translation>
 </translationbundle>

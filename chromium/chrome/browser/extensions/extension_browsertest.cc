@@ -103,9 +103,6 @@ ExtensionBrowserTest::ExtensionBrowserTest(ContextType context_type)
 #if BUILDFLAG(IS_CHROMEOS)
       set_chromeos_user_(true),
 #endif
-      // TODO(crbug.com/40261741): Move this ScopedCurrentChannel down into
-      // tests that specifically require it.
-      current_channel_(version_info::Channel::UNKNOWN),
       override_prompt_for_external_extensions_(
           FeatureSwitch::prompt_for_external_extensions(),
           false),
@@ -116,7 +113,6 @@ ExtensionBrowserTest::ExtensionBrowserTest(ContextType context_type)
       start_menu_override_(base::DIR_START_MENU),
       common_start_menu_override_(base::DIR_COMMON_START_MENU),
 #endif
-      profile_(nullptr),
       verifier_format_override_(crx_file::VerifierFormat::CRX3) {
   EXPECT_TRUE(temp_dir_.CreateUniqueTempDir());
 }
@@ -125,21 +121,6 @@ ExtensionBrowserTest::~ExtensionBrowserTest() = default;
 
 ExtensionService* ExtensionBrowserTest::extension_service() {
   return ExtensionSystem::Get(profile())->extension_service();
-}
-
-ExtensionRegistry* ExtensionBrowserTest::extension_registry() {
-  return ExtensionRegistry::Get(profile());
-}
-
-void ExtensionBrowserTest::OnExtensionLoaded(
-    content::BrowserContext* browser_context,
-    const Extension* extension) {
-  last_loaded_extension_id_ = extension->id();
-  VLOG(1) << "Got EXTENSION_LOADED notification.";
-}
-
-void ExtensionBrowserTest::OnShutdown(ExtensionRegistry* registry) {
-  registry_observation_.Reset();
 }
 
 Profile* ExtensionBrowserTest::profile() {
@@ -188,9 +169,6 @@ void ExtensionBrowserTest::SetUp() {
 void ExtensionBrowserTest::SetUpCommandLine(base::CommandLine* command_line) {
   ExtensionPlatformBrowserTest::SetUpCommandLine(command_line);
 
-  base::PathService::Get(chrome::DIR_TEST_DATA, &test_data_dir_);
-  test_data_dir_ = test_data_dir_.AppendASCII("extensions");
-
   if (!ShouldEnableContentVerification()) {
     ignore_content_verification_ =
         std::make_unique<ScopedIgnoreContentVerifierForTest>();
@@ -218,22 +196,20 @@ void ExtensionBrowserTest::SetUpCommandLine(base::CommandLine* command_line) {
 }
 
 void ExtensionBrowserTest::SetUpOnMainThread() {
+  ExtensionPlatformBrowserTest::SetUpOnMainThread();
+
   observer_ =
-      std::make_unique<ChromeExtensionTestNotificationObserver>(browser());
-  if (extension_service()->updater()) {
-    extension_service()->updater()->SetExtensionCacheForTesting(
-        test_extension_cache_.get());
+      browser()
+          ? std::make_unique<ChromeExtensionTestNotificationObserver>(browser())
+          : std::make_unique<ChromeExtensionTestNotificationObserver>(
+                profile());
+  ExtensionUpdater* updater = ExtensionUpdater::Get(profile());
+  if (updater->enabled()) {
+    updater->SetExtensionCacheForTesting(test_extension_cache_.get());
   }
 
-  SetUpTestProtocolHandler();
   content::URLDataSource::Add(profile(),
                               std::make_unique<ThemeSource>(profile()));
-  registry_observation_.Observe(ExtensionRegistry::Get(profile()));
-}
-
-void ExtensionBrowserTest::TearDownOnMainThread() {
-  TearDownTestProtocolHandler();
-  registry_observation_.Reset();
 }
 
 const Extension* ExtensionBrowserTest::LoadExtension(
@@ -276,13 +252,13 @@ const Extension* ExtensionBrowserTest::LoadExtension(
 
   if (options.wait_for_registration_stored) {
     registration_observer =
-        std::make_unique<TestServiceWorkerContextObserver>(profile_);
+        std::make_unique<TestServiceWorkerContextObserver>(profile());
   }
 
   scoped_refptr<const Extension> extension =
       loader.LoadExtension(extension_path);
   if (extension) {
-    last_loaded_extension_id_ = extension->id();
+    set_last_loaded_extension_id(extension->id());
   }
 
   if (options.wait_for_registration_stored &&
@@ -291,11 +267,6 @@ const Extension* ExtensionBrowserTest::LoadExtension(
   }
 
   return extension.get();
-}
-
-void ExtensionBrowserTest::DisableExtension(const std::string& extension_id,
-                                            int disable_reasons) {
-  extension_service()->DisableExtension(extension_id, disable_reasons);
 }
 
 const Extension* ExtensionBrowserTest::LoadExtensionAsComponentWithManifest(
@@ -316,7 +287,7 @@ const Extension* ExtensionBrowserTest::LoadExtensionAsComponentWithManifest(
   if (!extension) {
     return nullptr;
   }
-  last_loaded_extension_id_ = extension->id();
+  set_last_loaded_extension_id(extension->id());
   return extension;
 }
 
@@ -346,66 +317,6 @@ const Extension* ExtensionBrowserTest::LoadAndLaunchApp(
 
 Browser* ExtensionBrowserTest::LaunchAppBrowser(const Extension* extension) {
   return browsertest_util::LaunchAppBrowser(profile(), extension);
-}
-
-base::FilePath ExtensionBrowserTest::PackExtension(
-    const base::FilePath& dir_path,
-    int extra_run_flags) {
-  base::ScopedAllowBlockingForTesting allow_blocking;
-  base::FilePath crx_path = temp_dir_.GetPath().AppendASCII("temp.crx");
-  if (!base::DeleteFile(crx_path)) {
-    ADD_FAILURE() << "Failed to delete crx: " << crx_path.value();
-    return base::FilePath();
-  }
-
-  // Look for PEM files with the same name as the directory.
-  base::FilePath pem_path =
-      dir_path.ReplaceExtension(FILE_PATH_LITERAL(".pem"));
-  base::FilePath pem_path_out;
-
-  if (!base::PathExists(pem_path)) {
-    pem_path = base::FilePath();
-    pem_path_out = crx_path.DirName().AppendASCII("temp.pem");
-    if (!base::DeleteFile(pem_path_out)) {
-      ADD_FAILURE() << "Failed to delete pem: " << pem_path_out.value();
-      return base::FilePath();
-    }
-  }
-
-  return PackExtensionWithOptions(dir_path, crx_path, pem_path, pem_path_out,
-                                  extra_run_flags);
-}
-
-base::FilePath ExtensionBrowserTest::PackExtensionWithOptions(
-    const base::FilePath& dir_path,
-    const base::FilePath& crx_path,
-    const base::FilePath& pem_path,
-    const base::FilePath& pem_out_path,
-    int extra_run_flags) {
-  base::ScopedAllowBlockingForTesting allow_blocking;
-  if (!base::PathExists(dir_path)) {
-    ADD_FAILURE() << "Extension dir not found: " << dir_path.value();
-    return base::FilePath();
-  }
-
-  if (!base::PathExists(pem_path) && pem_out_path.empty()) {
-    ADD_FAILURE() << "Must specify a PEM file or PEM output path";
-    return base::FilePath();
-  }
-
-  std::unique_ptr<ExtensionCreator> creator(new ExtensionCreator());
-  if (!creator->Run(dir_path, crx_path, pem_path, pem_out_path,
-                    extra_run_flags | ExtensionCreator::kOverwriteCRX)) {
-    ADD_FAILURE() << "ExtensionCreator::Run() failed: "
-                  << creator->error_message();
-    return base::FilePath();
-  }
-
-  if (!base::PathExists(crx_path)) {
-    ADD_FAILURE() << crx_path.value() << " was not created.";
-    return base::FilePath();
-  }
-  return crx_path;
 }
 
 const Extension* ExtensionBrowserTest::UpdateExtensionWaitForIdle(
@@ -515,8 +426,7 @@ const Extension* ExtensionBrowserTest::InstallOrUpdateExtension(
       install_ui = std::make_unique<ExtensionInstallPrompt>(
           window_controller->GetActiveTab());
     }
-    installer =
-        CrxInstaller::Create(extension_service(), std::move(install_ui));
+    installer = CrxInstaller::Create(profile(), std::move(install_ui));
     installer->set_expected_id(id);
     installer->set_creation_flags(creation_flags);
     installer->set_install_source(install_source);
@@ -614,29 +524,6 @@ void ExtensionBrowserTest::ReloadExtension(
   observer_->WaitForExtensionViewsToLoad();
 }
 
-void ExtensionBrowserTest::UnloadExtension(
-    const extensions::ExtensionId& extension_id) {
-  extension_service()->UnloadExtension(extension_id,
-                                       UnloadedExtensionReason::DISABLE);
-}
-
-void ExtensionBrowserTest::UninstallExtension(
-    const extensions::ExtensionId& extension_id) {
-  extension_service()->UninstallExtension(
-      extension_id, UNINSTALL_REASON_FOR_TESTING, nullptr);
-}
-
-void ExtensionBrowserTest::DisableExtension(
-    const extensions::ExtensionId& extension_id) {
-  extension_service()->DisableExtension(extension_id,
-                                        disable_reason::DISABLE_USER_ACTION);
-}
-
-void ExtensionBrowserTest::EnableExtension(
-    const extensions::ExtensionId& extension_id) {
-  extension_service()->EnableExtension(extension_id);
-}
-
 bool ExtensionBrowserTest::WaitForPageActionVisibilityChangeTo(int count) {
   return observer_->WaitForPageActionVisibilityChangeTo(count);
 }
@@ -655,84 +542,12 @@ bool ExtensionBrowserTest::WaitForExtensionNotIdle(
   return observer_->WaitForExtensionNotIdle(extension_id);
 }
 
-void ExtensionBrowserTest::OpenWindow(content::WebContents* contents,
-                                      const GURL& url,
-                                      bool newtab_process_should_equal_opener,
-                                      bool should_succeed,
-                                      content::WebContents** newtab_result) {
-  content::WebContentsAddedObserver tab_added_observer;
-  ASSERT_TRUE(content::ExecJs(contents, "window.open('" + url.spec() + "');"));
-  content::WebContents* newtab = tab_added_observer.GetWebContents();
-  ASSERT_TRUE(newtab);
-  WaitForLoadStop(newtab);
-
-  if (should_succeed) {
-    EXPECT_EQ(url, newtab->GetLastCommittedURL());
-    EXPECT_EQ(content::PAGE_TYPE_NORMAL,
-              newtab->GetController().GetLastCommittedEntry()->GetPageType());
-  } else {
-    // "Failure" comes in two forms: redirecting to about:blank or showing an
-    // error page. At least one should be true.
-    EXPECT_TRUE(
-        newtab->GetLastCommittedURL() == GURL(url::kAboutBlankURL) ||
-        newtab->GetController().GetLastCommittedEntry()->GetPageType() ==
-            content::PAGE_TYPE_ERROR);
-  }
-
-  if (newtab_process_should_equal_opener) {
-    EXPECT_EQ(contents->GetPrimaryMainFrame()->GetSiteInstance(),
-              newtab->GetPrimaryMainFrame()->GetSiteInstance());
-  } else {
-    EXPECT_NE(contents->GetPrimaryMainFrame()->GetSiteInstance(),
-              newtab->GetPrimaryMainFrame()->GetSiteInstance());
-  }
-
-  if (newtab_result) {
-    *newtab_result = newtab;
-  }
-}
-
-bool ExtensionBrowserTest::NavigateInRenderer(content::WebContents* contents,
-                                              const GURL& url) {
-  EXPECT_TRUE(
-      content::ExecJs(contents, "window.location = '" + url.spec() + "';"));
-  bool result = content::WaitForLoadStop(contents);
-  EXPECT_EQ(url, contents->GetController().GetLastCommittedEntry()->GetURL());
-  return result;
-}
-
-ExtensionHost* ExtensionBrowserTest::FindHostWithPath(ProcessManager* manager,
-                                                      const std::string& path,
-                                                      int expected_hosts) {
-  ExtensionHost* result_host = nullptr;
-  int num_hosts = 0;
-  for (ExtensionHost* host : manager->background_hosts()) {
-    if (host->GetLastCommittedURL().path() == path) {
-      EXPECT_FALSE(result_host);
-      result_host = host;
-    }
-    num_hosts++;
-  }
-  EXPECT_EQ(expected_hosts, num_hosts);
-  return result_host;
-}
-
-content::ServiceWorkerContext* ExtensionBrowserTest::GetServiceWorkerContext() {
-  return GetServiceWorkerContext(profile());
-}
-
-// static
-content::ServiceWorkerContext* ExtensionBrowserTest::GetServiceWorkerContext(
-    content::BrowserContext* browser_context) {
-  return service_worker_test_utils::GetServiceWorkerContext(browser_context);
-}
-
 WindowController* ExtensionBrowserTest::GetWindowController() {
 #if BUILDFLAG(ENABLE_DESKTOP_ANDROID_EXTENSIONS)
   // TODO(b/361838438): Provide an implementation for the desktop android build.
   return nullptr;
 #else
-  return browser()->extension_window_controller();
+  return browser() ? browser()->extension_window_controller() : nullptr;
 #endif
 }
 

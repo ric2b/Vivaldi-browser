@@ -88,9 +88,8 @@ std::vector<TabAlertState> GetTabAlertStatesForContents(
 #if BUILDFLAG(ENABLE_GLIC)
   if (Profile* const profile =
           Profile::FromBrowserContext(contents->GetBrowserContext());
-      GlicEnabling::IsProfileEligible(profile)) {
-    glic::GlicKeyedService* glic_service =
-        glic::GlicKeyedServiceFactory::GetGlicKeyedService(profile, false);
+      glic::GlicEnabling::IsProfileEligible(profile)) {
+    glic::GlicKeyedService* glic_service = glic::GlicKeyedService::Get(profile);
     if (glic_service && glic_service->IsContextAccessIndicatorShown(contents)) {
       states.push_back(TabAlertState::GLIC_ACCESSING);
     }

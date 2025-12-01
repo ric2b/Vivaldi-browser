@@ -16,7 +16,7 @@ import recordingListViewStylesRaw from './recordingListView.css.js';
 
 // TODO(crbug.com/391381439): Fully migrate off of constructed style sheets.
 const recordingListViewStyles = new CSSStyleSheet();
-recordingListViewStyles.replaceSync(recordingListViewStylesRaw.cssContent);
+recordingListViewStyles.replaceSync(recordingListViewStylesRaw.cssText);
 
 const {html} = Lit;
 
@@ -41,7 +41,7 @@ const UIStrings = {
    * @description The title of the row corresponding to a recording. By clicking on the row, the user open the recording for editing.
    */
   openRecording: 'Open recording',
-};
+} as const;
 const str_ = i18n.i18n.registerUIStrings(
     'panels/recorder/components/RecordingListView.ts',
     UIStrings,

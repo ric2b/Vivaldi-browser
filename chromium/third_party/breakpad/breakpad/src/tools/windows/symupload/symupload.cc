@@ -87,7 +87,7 @@ static bool GetFileVersionString(const wchar_t* filename, wstring* version) {
     return false;
   }
 
-  void* file_info_buffer = NULL;
+  void* file_info_buffer = nullptr;
   unsigned int file_info_length;
   if (!VerQueryValue(&version_info[0], L"\\",
                      &file_info_buffer, &file_info_length)) {
@@ -138,7 +138,7 @@ static bool DumpSymbolsToTempFile(const wchar_t* file,
     return false;
   }
 
-  FILE* temp_file = NULL;
+  FILE* temp_file = nullptr;
 #if _MSC_VER >= 1400  // MSVC 2005/8
   if (_wfopen_s(&temp_file, temp_filename, L"w") != 0)
 #else  // _MSC_VER >= 1400
@@ -292,7 +292,7 @@ int wmain(int argc, wchar_t* argv[]) {
     while (currentarg < argc) {
       int response_code;
       if (!HTTPUpload::SendMultipartPostRequest(argv[currentarg], parameters, files,
-          timeout == -1 ? NULL : &timeout,
+          timeout == -1 ? nullptr : &timeout,
           nullptr, &response_code)) {
         success = false;
         fwprintf(stderr,

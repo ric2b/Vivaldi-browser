@@ -53,6 +53,12 @@ SVGLayoutResult LayoutSVGContainer::UpdateSVGLayout(
     const SVGLayoutInfo& layout_info) {
   NOT_DESTROYED();
   DCHECK(NeedsLayout());
+  if (layout_info.viewport_changed && HasViewportDependence() &&
+      IsSVGTransformableContainer()) {
+    // TODO: This will be called if any descendant has a viewport dependency,
+    // not just if this container has one.
+    SetNeedsTransformUpdate();
+  }
 
   SVGTransformChange transform_change = SVGTransformChange::kNone;
   // Update the local transform in subclasses.
@@ -108,12 +114,6 @@ bool LayoutSVGContainer::UpdateAfterSVGLayout(
     needs_transform_update_ = false;
   }
 
-  if (!RuntimeEnabledFeatures::SvgViewportOptimizationEnabled()) {
-    // Reset the viewport dependency flag based on the state for this container.
-    TransformHelper::UpdateReferenceBoxDependency(
-        *this, transform_uses_reference_box_);
-  }
-
   if (!IsSVGHiddenContainer()) {
     SetTransformAffectsVectorEffect(false);
     ClearSVGDescendantMayHaveTransformRelatedAnimation();
@@ -124,21 +124,9 @@ bool LayoutSVGContainer::UpdateAfterSVGLayout(
           child->SVGDescendantMayHaveTransformRelatedAnimation()) {
         SetSVGDescendantMayHaveTransformRelatedAnimation();
       }
-      if (!RuntimeEnabledFeatures::SvgViewportOptimizationEnabled()) {
-        if (child->SVGSelfOrDescendantHasViewportDependency()) {
-          SetSVGSelfOrDescendantHasViewportDependency();
-        }
-      }
-    }
-  } else if (!RuntimeEnabledFeatures::SvgViewportOptimizationEnabled()) {
-    // Hidden containers can depend on the viewport as well.
-    for (auto* child = FirstChild(); child; child = child->NextSibling()) {
-      if (child->SVGSelfOrDescendantHasViewportDependency()) {
-        SetSVGSelfOrDescendantHasViewportDependency();
-        break;
-      }
     }
   }
+
   return transform_change != SVGTransformChange::kNone;
 }
 

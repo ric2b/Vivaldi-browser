@@ -13,22 +13,29 @@
 
 #include <algorithm>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "base/command_line.h"
+#include "base/i18n/message_formatter.h"
 #include "base/i18n/number_formatting.h"
 #include "base/i18n/rtl.h"
 #include "base/i18n/string_search.h"
 #include "base/i18n/time_formatting.h"
+#include "base/i18n/unicodestring.h"
+#include "base/numerics/safe_conversions.h"
 #include "base/process/process_handle.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
+#include "chrome/browser/task_manager/common/task_manager_features.h"
 #include "chrome/browser/task_manager/sampling/task_group.h"
 #include "chrome/browser/task_manager/task_manager_interface.h"
+#include "chrome/browser/task_manager/task_manager_metrics_recorder.h"
 #include "chrome/browser/task_manager/task_manager_observer.h"
 #include "chrome/browser/ui/task_manager/task_manager_columns.h"
 #include "chrome/common/pref_names.h"
@@ -38,6 +45,8 @@
 #include "components/nacl/common/nacl_switches.h"
 #include "components/prefs/scoped_user_pref_update.h"
 #include "content/public/common/result_codes.h"
+#include "third_party/icu/source/common/unicode/utypes.h"
+#include "third_party/icu/source/i18n/unicode/listformatter.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/models/image_model.h"
 #include "ui/base/models/table_model_observer.h"
@@ -130,8 +139,10 @@ bool ShouldKeepTaskForTabsAndExtensions(Task::Type type,
                                         Task::SubType subtype) {
   switch (type) {
     case Task::RENDERER:
-      return subtype != Task::SubType::kSpareRenderer &&
-             subtype != Task::SubType::kUnknownRenderer;
+      // Only keep renderers with no sub type. Any other explicitly labeled
+      // renderers, such as Spare Renderers, or Unknown renderers should show up
+      // in Browser/System.
+      return subtype == Task::SubType::kNoSubType;
     case Task::EXTENSION:
     case Task::GUEST:
     case Task::PLUGIN:
@@ -152,19 +163,15 @@ bool ShouldKeepTaskForSystem(Task::Type type, Task::SubType subtype) {
     case Task::PLUGIN_VM:
     case Task::ZYGOTE:
     case Task::UTILITY:
-    case Task::PLUGIN:
+    case Task::NACL:
     case Task::SANDBOX_HELPER:
       return true;
-    default:
-      break;
-  }
 
-  // The subtypes are normal renderers, however killing these is not beneficial
-  // to the user, so they are categorized under System.
-  switch (subtype) {
-    case Task::SubType::kSpareRenderer:
-    case Task::SubType::kUnknownRenderer:
-      return true;
+    case Task::RENDERER:
+      // The subtypes are normal renderers, however killing these is not
+      // beneficial to the user, so they are categorized under Browser/System.
+      return subtype != Task::SubType::kNoSubType;
+
     default:
       return false;
   }
@@ -395,6 +402,32 @@ TaskManagerTableModel::TaskManagerTableModel(
 
 TaskManagerTableModel::~TaskManagerTableModel() {
   StopUpdating();
+
+  if (!base::FeatureList::IsEnabled(features::kTaskManagerDesktopRefresh)) {
+    return;
+  }
+
+  // A tab switch isn't performed when the table model closes, so we need to
+  // collect the remaining elapsed time in the current tab.
+  UpdateOldTabTime(/*old_category=*/display_category_);
+
+  // Record these manually instead of using a loop so that if the enums change
+  // this will fail to compile.
+  task_manager::RecordTabSwitchEvent(CategoryRecord::kTabsAndExtensions,
+                                     tabs_and_ex_total_time_);
+
+  // Note: system_total_time_ is used for both since there is no functional
+  // difference between browser & system (they are essentially the same tab).
+  // Instead, the data is routed to the platform appropriate bucket.
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
+  task_manager::RecordTabSwitchEvent(CategoryRecord::kBrowser,
+                                     system_total_time_);
+#elif BUILDFLAG(IS_CHROMEOS)
+  task_manager::RecordTabSwitchEvent(CategoryRecord::kSystem,
+                                     system_total_time_);
+#endif
+
+  task_manager::RecordTabSwitchEvent(CategoryRecord::kAll, all_total_time_);
 }
 
 size_t TaskManagerTableModel::RowCount() {
@@ -709,6 +742,103 @@ int TaskManagerTableModel::CompareValues(size_t row1,
   }
 }
 
+std::u16string TaskManagerTableModel::GetAXNameForHeader(
+    const std::vector<std::u16string>& visible_column_titles) {
+  // Gate the header change for task manager behind feature flag. Clean it up
+  // once refreshed task manager is launched.
+  // TODO(crbug.com/364926055): Chromium Task Manager Refresh Cleanup.
+  if (!base::FeatureList::IsEnabled(features::kTaskManagerDesktopRefresh)) {
+    return TableModel::GetAXNameForHeader(visible_column_titles);
+  }
+
+  CHECK(!visible_column_titles.empty());
+  return FormatListToString(visible_column_titles);
+}
+
+std::u16string TaskManagerTableModel::GetAXNameForRow(
+    size_t row,
+    const std::vector<int>& visible_column_ids) {
+  // Gate the row change for task manager behind feature flag. Clean it up
+  // once refreshed task manager is launched.
+  // TODO(crbug.com/364926055): Chromium Task Manager Refresh Cleanup.
+  if (!base::FeatureList::IsEnabled(features::kTaskManagerDesktopRefresh)) {
+    return TableModel::GetAXNameForRow(row, visible_column_ids);
+  }
+
+  DCHECK_LT(row, RowCount());
+  DCHECK(!visible_column_ids.empty());
+
+  // Holds all visible column values for the `row`.
+  std::vector<std::u16string> column_names;
+  column_names.reserve(visible_column_ids.size());
+  std::ranges::transform(
+      visible_column_ids, std::back_inserter(column_names),
+      [this, row](const auto& col_id) { return GetText(row, col_id); });
+  std::erase_if(column_names,
+                [](const auto& column_name) { return column_name.empty(); });
+
+  // Holds all other task titles in the same task group with the 'row'.
+  std::vector<std::u16string> other_task_titles;
+  if (IsTaskFirstInGroup(row)) {
+    const auto current_task = tasks_.begin() + row;
+    const base::ProcessId current_process_id =
+        observed_task_manager()->GetProcessId(tasks_[row]);
+    // Record the end of the column names for the task.
+    const auto mismatch_task = std::ranges::find_if_not(
+        current_task, tasks_.end(),
+        [this, current_process_id](const auto& task_id) {
+          return observed_task_manager()->GetProcessId(task_id) ==
+                 current_process_id;
+        });
+
+    if (mismatch_task - current_task > 1) {
+      const TaskIdList group_tasks =
+          observed_task_manager()->GetIdsOfTasksSharingSameProcess(tasks_[row]);
+      DCHECK(!group_tasks.empty());
+      other_task_titles.reserve(group_tasks.size() - 1);
+      // If there is at least one task other than the `row` in the same task
+      // group existing in `tasks_`, insert the connect text and the title of
+      // the other tasks.
+      // Add other tasks in the same task group in `other_task_titles` .
+      std::ranges::transform(
+          current_task + 1, mismatch_task,
+          std::back_inserter(other_task_titles), [this](const auto& task_id) {
+            return observed_task_manager()->GetTitle(task_id);
+          });
+    }
+  }
+
+  return base::i18n::MessageFormatter::FormatWithNamedArgs(
+      l10n_util::GetStringUTF16(IDS_TASK_MANAGER_TASK_GROUP_CONNECT_TEXT),
+      "NUM_TASKS", base::checked_cast<int>(other_task_titles.size()),
+      "TASK_ROW", FormatListToString(column_names), "OTHER_TASKS",
+      FormatListToString(other_task_titles));
+}
+
+std::u16string TaskManagerTableModel::FormatListToString(
+    base::span<const std::u16string> items) {
+  if (items.empty()) {
+    return std::u16string();
+  }
+
+  std::vector<icu::UnicodeString> strings;
+  strings.reserve(items.size());
+  for (const auto& item : items) {
+    strings.emplace_back(item.data(), item.size());
+  }
+
+  UErrorCode status = U_ZERO_ERROR;
+  const auto formatter =
+      base::WrapUnique(icu::ListFormatter::createInstance(status));
+  CHECK(U_SUCCESS(status));
+
+  icu::UnicodeString formatted;
+  formatter->format(strings.data(), strings.size(), formatted, status);
+  CHECK(U_SUCCESS(status));
+
+  return base::i18n::UnicodeStringToString16(formatted);
+}
+
 void TaskManagerTableModel::GetRowsGroupRange(size_t row_index,
                                               size_t* out_start,
                                               size_t* out_length) {
@@ -741,7 +871,7 @@ void TaskManagerTableModel::FilterTaskList(std::vector<TaskId>& tasks) {
 
 void TaskManagerTableModel::OnTaskAdded(TaskId id) {
   if (!search_terms_.empty()) {
-    // Update matched process id if task manager is in search mode.
+    // Update matched process id.
     UpdateMatchedProcessSetById(id);
   }
 
@@ -749,8 +879,8 @@ void TaskManagerTableModel::OnTaskAdded(TaskId id) {
   // a new task has been added.
 
   // We will get a newly sorted list from the task manager as opposed to just
-  // adding |id| to |tasks_| because we want to keep |tasks_| sorted by proc IDs
-  // and then by Task IDs.
+  // adding |id| to |tasks_| because we want to keep |tasks_| sorted by proc
+  // IDs and then by Task IDs.
   tasks_ = observed_task_manager()->GetTaskIdsList();
   FilterTaskList(tasks_);
 
@@ -787,9 +917,14 @@ void TaskManagerTableModel::OnTaskToBeRemoved(TaskId id) {
 }
 
 void TaskManagerTableModel::OnTasksRefreshed(const TaskIdList& task_ids) {
-  tasks_ = task_ids;
-  FilterTaskList(tasks_);
-  OnRefresh();
+  OnRefresh(task_ids);
+}
+
+void TaskManagerTableModel::OnTasksRefreshedWithBackgroundCalculations(
+    const TaskIdList& task_ids) {
+  if (base::FeatureList::IsEnabled(features::kTaskManagerDesktopRefresh)) {
+    OnRefresh(task_ids);
+  }
 }
 
 void TaskManagerTableModel::ActivateTask(size_t row_index) {
@@ -1009,20 +1144,9 @@ std::optional<size_t> TaskManagerTableModel::GetRowForWebContents(
   return static_cast<size_t>(index - tasks_.begin());
 }
 
-std::optional<size_t> TaskManagerTableModel::GetRowForActiveTask() {
-  if (!active_task_id_.has_value()) {
-    return std::nullopt;
-  }
-  auto index = std::ranges::find(tasks_, active_task_id_.value());
-  if (index == tasks_.end()) {
-    return std::nullopt;
-  }
-  return static_cast<size_t>(index - tasks_.begin());
-}
-
 void TaskManagerTableModel::StartUpdating() {
   TaskManagerInterface::GetTaskManager()->AddObserver(this);
-  OnTasksRefreshed(observed_task_manager()->GetTaskIdsList());
+  OnRefresh(observed_task_manager()->GetTaskIdsList());
 
   // In order for the scrollbar of the TableView to work properly on startup of
   // the task manager, we must invoke TableModelObserver::OnModelChanged() which
@@ -1037,7 +1161,9 @@ void TaskManagerTableModel::StopUpdating() {
   observed_task_manager()->RemoveObserver(this);
 }
 
-void TaskManagerTableModel::OnRefresh() {
+void TaskManagerTableModel::OnRefresh(const TaskIdList& task_ids) {
+  tasks_ = task_ids;
+  FilterTaskList(tasks_);
   if (table_model_observer_) {
     table_model_observer_->OnItemsChanged(0, RowCount());
   }
@@ -1061,49 +1187,68 @@ bool TaskManagerTableModel::IsTaskFirstInGroup(size_t row_index) const {
   return false;
 }
 
-bool TaskManagerTableModel::ShouldKeepTaskForSupportedType(
-    TaskId task_id) const {
-  // TODO(crbug.com/364926055): Remove when the refreshed Task Manager launches.
-  // Used for backward compatibility with the prod. task manager.
-  if (display_category_ == DisplayCategory::kAll) {
-    return true;
+bool TaskManagerTableModel::FetchTaskTypes(TaskId child_task_id,
+                                           Task::Type& out_type,
+                                           Task::SubType& out_subtype) const {
+  const TaskId root = observed_task_manager()->GetRootTaskId(child_task_id);
+  if (!observed_task_manager()->IsTaskValid(root)) {
+    return false;
   }
 
-  const TaskId root = observed_task_manager()->GetRootTaskId(task_id);
-  const Task::Type type = observed_task_manager()->GetType(root);
-  const Task::SubType subtype = observed_task_manager()->GetSubType(root);
+  out_type = observed_task_manager()->GetType(root);
+  out_subtype = observed_task_manager()->GetSubType(root);
+  return true;
+}
+
+bool TaskManagerTableModel::ShouldKeepTaskForSupportedType(
+    TaskId task_id) const {
+  Task::Type type;
+  Task::SubType subtype;
+
+  if (!FetchTaskTypes(task_id, type, subtype)) {
+    // crbug.com/396002122: It is possible that the root task id is not
+    // valid/tracked anymore, so discard this task.
+    return false;
+  }
 
   return ShouldKeepTaskForTabsAndExtensions(type, subtype) ||
          ShouldKeepTaskForSystem(type, subtype);
 }
 
 bool TaskManagerTableModel::ShouldKeepTask(TaskId task_id) const {
-  if (!search_terms_.empty()) {
-    // In search mode, keep the task if it falls in a supported category as well
-    // as if it is in the same task group with tasks matching the current search
-    // term.
-    return ShouldKeepTaskForSupportedType(task_id) &&
-           matched_process_set_.contains(
-               observed_task_manager()->GetProcessId(task_id));
-  }
-
   // TODO(crbug.com/364926055): Remove when the refreshed Task Manager launches.
   // Used for backward compatibility with the prod. task manager.
-  if (display_category_ == DisplayCategory::kAll) {
+  if (!base::FeatureList::IsEnabled(features::kTaskManagerDesktopRefresh)) {
     return true;
   }
 
+  if (!search_terms_.empty() &&
+      !matched_process_set_.contains(
+          observed_task_manager()->GetProcessId(task_id))) {
+    // In refreshed task manager, task should not be kept if the task title does
+    // not match the search term or not in the same task group with the matched
+    // tasks.
+    return false;
+  }
+
+  Task::Type type;
+  Task::SubType subtype;
+
   // Keep any TaskId iff the task that spawned it (root node) has a type that
   // matches the current category.
-  const TaskId root = observed_task_manager()->GetRootTaskId(task_id);
-  const Task::Type type = observed_task_manager()->GetType(root);
-  const Task::SubType subtype = observed_task_manager()->GetSubType(root);
+  if (!FetchTaskTypes(task_id, type, subtype)) {
+    // crbug.com/396002122: It is possible that the root task id is not
+    // valid/tracked anymore, so discard this task.
+    return false;
+  }
 
   switch (display_category_) {
     case DisplayCategory::kTabsAndExtensions:
       return ShouldKeepTaskForTabsAndExtensions(type, subtype);
     case DisplayCategory::kSystem:
       return ShouldKeepTaskForSystem(type, subtype);
+    case DisplayCategory::kAll:
+      return true;
     default:
       NOTREACHED();
   }
@@ -1143,8 +1288,9 @@ void TaskManagerTableModel::UpdateMatchedProcessSet() {
 
 void TaskManagerTableModel::UpdateMatchedProcessSetById(TaskId task_id) {
   // Excludes the task from search term match if it does not fall in any
-  // category.
-  if (ShouldKeepTaskForSupportedType(task_id) &&
+  // supported category.
+  if ((display_category_ == DisplayCategory::kAll ||
+       ShouldKeepTaskForSupportedType(task_id)) &&
       base::i18n::StringSearchIgnoringCaseAndAccents(
           search_terms_, observed_task_manager()->GetTitle(task_id),
           /*match_index=*/nullptr, /*match_length=*/nullptr)) {
@@ -1152,14 +1298,57 @@ void TaskManagerTableModel::UpdateMatchedProcessSetById(TaskId task_id) {
   }
 }
 
+void TaskManagerTableModel::UpdateOldTabTime(DisplayCategory old_category) {
+  // Add the elapsed time in the old category to the total time spent in this
+  // session.
+  const auto end_time = base::TimeTicks::Now();
+  switch (old_category) {
+    case DisplayCategory::kTabsAndExtensions:
+      tabs_and_ex_total_time_ += (end_time - tabs_and_ex_start_time_);
+      break;
+    case DisplayCategory::kSystem:
+      system_total_time_ += (end_time - system_start_time_);
+      break;
+    case DisplayCategory::kAll:
+      all_total_time_ += (end_time - all_start_time_);
+      break;
+    default:
+      NOTREACHED();
+  }
+}
+
+void TaskManagerTableModel::StartNewTabTime(DisplayCategory new_category) {
+  // Reset the start time for the new category.
+  const auto end_time = base::TimeTicks::Now();
+  switch (new_category) {
+    case DisplayCategory::kTabsAndExtensions:
+      tabs_and_ex_start_time_ = end_time;
+      break;
+    case DisplayCategory::kSystem:
+      system_start_time_ = end_time;
+      break;
+    case DisplayCategory::kAll:
+      all_start_time_ = end_time;
+      break;
+    default:
+      NOTREACHED();
+  }
+}
+
 bool TaskManagerTableModel::UpdateModel(const DisplayCategory display_category,
-                                        const std::u16string& search_term) {
+                                        std::u16string_view search_term) {
   if (search_terms_ == search_term && display_category_ == display_category) {
     // Early return if no real change happens.
     return false;
   }
 
-  search_terms_ = search_term;
+  // If there is a category switch, log the time spent. Used for UMA metrics.
+  if (display_category_ != display_category) {
+    UpdateOldTabTime(display_category_);
+    StartNewTabTime(display_category);
+  }
+
+  search_terms_ = std::u16string(search_term);
   display_category_ = display_category;
 
   // Precalculate matched processes for search terms.

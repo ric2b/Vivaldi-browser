@@ -20,9 +20,7 @@
 #include "chrome/browser/sync/sync_service_factory.h"
 #include "chrome/browser/ui/browser_element_identifiers.h"
 #include "chrome/browser/ui/commerce/mock_commerce_ui_tab_helper.h"
-#include "chrome/browser/ui/signin/bubble_signin_promo_delegate.h"
 #include "chrome/browser/ui/tabs/public/tab_features.h"
-#include "chrome/browser/ui/tabs/public/tab_interface.h"
 #include "chrome/browser/ui/views/commerce/price_tracking_view.h"
 #include "chrome/browser/ui/views/commerce/shopping_collection_iph_view.h"
 #include "chrome/test/base/browser_with_test_window_test.h"
@@ -35,9 +33,10 @@
 #include "components/commerce/core/test_utils.h"
 #include "components/feature_engagement/public/feature_constants.h"
 #include "components/feature_engagement/test/mock_tracker.h"
+#include "components/signin/public/base/signin_switches.h"
 #include "components/signin/public/identity_manager/identity_test_utils.h"
-#include "components/sync/base/features.h"
 #include "components/sync/test/test_sync_service.h"
+#include "components/tab_collections/public/tab_interface.h"
 #include "components/ukm/test_ukm_recorder.h"
 #include "services/metrics/public/cpp/ukm_builders.h"
 #include "ui/base/interaction/element_identifier.h"
@@ -136,7 +135,7 @@ class BookmarkBubbleViewTestBase : public BrowserWithTestWindowTest {
     // Create a fake anchor view for the bubble.
     BookmarkBubbleView::ShowBubble(
         anchor_widget_->GetContentsView(),
-        browser()->tab_strip_model()->GetActiveWebContents(), nullptr, nullptr,
+        browser()->tab_strip_model()->GetActiveWebContents(), nullptr,
         browser(), GURL(kTestBookmarkURL), already_bookmarked);
   }
 
@@ -436,7 +435,7 @@ class BookmarkBubbleViewWithAccountBookmarksTest
  public:
   BookmarkBubbleViewWithAccountBookmarksTest() {
     test_features_.InitAndEnableFeature(
-        syncer::kSyncEnableBookmarksInTransportMode);
+        switches::kSyncEnableBookmarksInTransportMode);
   }
 };
 

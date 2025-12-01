@@ -18,10 +18,8 @@
 #include "ui/views/view.h"
 
 namespace views {
-class Checkbox;
 class ImageButton;
 class Label;
-class MdTextButton;
 }  // namespace views
 
 namespace webid {
@@ -47,8 +45,8 @@ class AccountSelectionBubbleView : public views::BubbleDialogDelegateView,
   void ShowMultiAccountPicker(
       const std::vector<IdentityRequestAccountPtr>& accounts,
       const std::vector<IdentityProviderDataPtr>& idp_list,
-      bool show_back_button,
-      bool is_choose_an_account) override;
+      const gfx::Image& rp_icon,
+      bool show_back_button) override;
   void ShowVerifyingSheet(const IdentityRequestAccountPtr& account,
                           const std::u16string& title) override;
 
@@ -66,10 +64,6 @@ class AccountSelectionBubbleView : public views::BubbleDialogDelegateView,
   void ShowRequestPermissionDialog(
       const IdentityRequestAccountPtr& account) override;
 
-  void ShowSingleReturningAccountDialog(
-      const std::vector<IdentityRequestAccountPtr>& accounts,
-      const std::vector<IdentityProviderDataPtr>& idp_list) override;
-
   std::string GetDialogTitle() const override;
 
   // views::BubbleDialogDelegateView:
@@ -79,9 +73,8 @@ class AccountSelectionBubbleView : public views::BubbleDialogDelegateView,
   FRIEND_TEST_ALL_PREFIXES(AccountSelectionBubbleViewTest,
                            WebContentsLargeEnoughToFitDialog);
 
-  // Returns a View containing the logo of the identity provider. Creates the
-  // `header_icon_view_` if `has_idp_icon` is true.
-  std::unique_ptr<views::View> CreateHeaderView(bool has_idp_icon);
+  // Returns a View containing the logo of the identity provider.
+  std::unique_ptr<views::View> CreateHeaderView();
 
   // Returns a View for single account chooser. It contains the account
   // information, disclosure text and a button for the user to confirm the
@@ -102,32 +95,32 @@ class AccountSelectionBubbleView : public views::BubbleDialogDelegateView,
                    views::View* accounts_content,
                    bool is_multi_idp);
 
-  // Returns a View containing a single returning account as well as a button to
-  // 'choose an account' which will show all accounts and IDPs that are
-  // available.
-  std::unique_ptr<views::View> CreateSingleReturningAccountChooser(
-      const std::vector<IdentityRequestAccountPtr>& accounts,
-      const std::vector<IdentityProviderDataPtr>& idp_list);
+  // Invoked whenever the expandable account chooser is scrolled.
+  void OnExpandableAccountsScrolled();
 
   // Returns a view containing a button for the user to login to an IDP for
   // which there was a login status mismatch, to be used in the multiple account
   // chooser case.
-  std::unique_ptr<views::View> CreateIdpLoginRow(
+  std::unique_ptr<views::View> CreateMultiIdpLoginRow(
       const std::u16string& idp_for_display,
-      const content::IdentityProviderMetadata& idp_metadata);
+      const IdentityProviderDataPtr& idp_data);
 
-  // Creates the "Use other account" button.
-  std::unique_ptr<views::View> CreateUseOtherAccountButton(
+  // Creates the "Use other account" button when showing a dialog with one IDP.
+  std::unique_ptr<views::View> CreateSingleIdpUseOtherAccountButton(
       const content::IdentityProviderMetadata& idp_metadata,
       const std::u16string& title,
       int icon_margin);
 
   // Updates the header title, the header icon visibility and the header back
-  // button visibiltiy. `idp_metadata` is not null when we need to set a header
-  // image based on the IDP.
-  void UpdateHeader(const content::IdentityProviderMetadata& idp_metadata,
+  // button visibiltiy. `idp_image` is not empty when we need to set a header
+  // image based on the IDP. `should_circle_crop_header_icon` determines whether
+  // the icon passed should be cropped or not. Some icons like the RP icon are
+  // not meant to be cropped, and some icons like the badged account icon are
+  // cropped on the backend, so they should not be cropped here.
+  void UpdateHeader(const gfx::Image& idp_image,
                     const std::u16string& title,
-                    bool show_back_button);
+                    bool show_back_button,
+                    bool should_circle_crop_header_icon);
 
   // Removes all children except for `header_view_`.
   void RemoveNonHeaderChildViews();
@@ -155,15 +148,6 @@ class AccountSelectionBubbleView : public views::BubbleDialogDelegateView,
 
   // View containing the bubble title.
   raw_ptr<views::Label> title_label_ = nullptr;
-
-  // View containing the continue button.
-  raw_ptr<views::MdTextButton> continue_button_ = nullptr;
-
-  // Auto re-authn opt-out checkbox.
-  raw_ptr<views::Checkbox> auto_reauthn_checkbox_ = nullptr;
-
-  // Whether to show the auto re-authn opt-out checkbox;
-  bool show_auto_reauthn_checkbox_{false};
 
   // Used to ensure that callbacks are not run if the AccountSelectionBubbleView
   // is destroyed.

@@ -4,18 +4,21 @@
 
 #include "chrome/browser/glic/glic_keyed_service_factory.h"
 
+#include "chrome/browser/browser_process.h"
 #include "chrome/browser/glic/glic_profile_manager.h"
+#include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
+#include "chrome/browser/themes/theme_service_factory.h"
 #include "extensions/browser/api/declarative/rules_registry_service.h"
 
 namespace glic {
 
 // static
 GlicKeyedService* GlicKeyedServiceFactory::GetGlicKeyedService(
-    content::BrowserContext* browser_context,
-    bool create) {
+    content::BrowserContext* browser_context) {
   return static_cast<GlicKeyedService*>(
-      GetInstance()->GetServiceForBrowserContext(browser_context, create));
+      GetInstance()->GetServiceForBrowserContext(browser_context,
+                                                 /*create=*/false));
 }
 
 // static
@@ -27,17 +30,14 @@ GlicKeyedServiceFactory* GlicKeyedServiceFactory::GetInstance() {
 GlicKeyedServiceFactory::GlicKeyedServiceFactory()
     : ProfileKeyedServiceFactory("GlicKeyedService",
                                  ProfileSelections::BuildForRegularProfile()) {
-  // GlicKeyedService has an indirect dependency on the
-  // RulesRegistryService through extensions::TabHelper::WebContentsDestroyed
-  // when the glic web contents is destroyed.
-  DependsOn(extensions::RulesRegistryService::GetFactoryInstance());
   DependsOn(IdentityManagerFactory::GetInstance());
+  DependsOn(ThemeServiceFactory::GetInstance());
 }
 
 GlicKeyedServiceFactory::~GlicKeyedServiceFactory() = default;
 
 bool GlicKeyedServiceFactory::ServiceIsCreatedWithBrowserContext() const {
-  return false;
+  return true;
 }
 
 std::unique_ptr<KeyedService>
@@ -46,7 +46,7 @@ GlicKeyedServiceFactory::BuildServiceInstanceForBrowserContext(
   Profile* profile = Profile::FromBrowserContext(context);
   return std::make_unique<GlicKeyedService>(
       profile, IdentityManagerFactory::GetForProfile(profile),
-      GlicProfileManager::GetInstance());
+      g_browser_process->profile_manager(), GlicProfileManager::GetInstance());
 }
 
 }  // namespace glic

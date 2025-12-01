@@ -10,6 +10,8 @@
 
 #include "system_wrappers/include/cpu_info.h"
 
+#include <cstdint>
+
 #if defined(WEBRTC_WIN)
 #include <windows.h>
 #elif defined(WEBRTC_LINUX)
@@ -20,6 +22,7 @@
 #include <zircon/syscalls.h>
 #endif
 
+#include "rtc_base/checks.h"
 #include "rtc_base/logging.h"
 
 namespace internal {
@@ -65,7 +68,7 @@ uint32_t CpuInfo::DetectNumberOfCores() {
   // the sandbox is initialized) and not thereafter.
   // For more information see crbug.com/176522.
   static const uint32_t logical_cpus =
-      static_cast<uint32_t>(internal::DetectNumberOfCores());
+      static_cast<uint32_t>(::internal::DetectNumberOfCores());
   return logical_cpus;
 }
 

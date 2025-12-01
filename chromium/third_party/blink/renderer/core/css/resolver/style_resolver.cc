@@ -110,6 +110,7 @@
 #include "third_party/blink/renderer/core/html/track/vtt/vtt_element.h"
 #include "third_party/blink/renderer/core/html_names.h"
 #include "third_party/blink/renderer/core/inspector/identifiers_factory.h"
+#include "third_party/blink/renderer/core/inspector/inspector_trace_events.h"
 #include "third_party/blink/renderer/core/layout/layout_view.h"
 #include "third_party/blink/renderer/core/mathml/mathml_fraction_element.h"
 #include "third_party/blink/renderer/core/mathml/mathml_operator_element.h"
@@ -137,6 +138,11 @@ namespace blink {
 
 namespace {
 
+bool IsForPseudoElement(const Element& element,
+                        const StyleRequest& style_request) {
+  return element.IsPseudoElement() || style_request.IsPseudoStyleRequest();
+}
+
 bool IsPseudoElementWithUAStyle(PseudoId pseudo_id) {
   switch (pseudo_id) {
     case kPseudoIdMarker:
@@ -144,6 +150,7 @@ bool IsPseudoElementWithUAStyle(PseudoId pseudo_id) {
     case kPseudoIdScrollButtonInlineStart:
     case kPseudoIdScrollButtonInlineEnd:
     case kPseudoIdScrollButtonBlockEnd:
+    case kPseudoIdScrollMarker:
       return true;
     default:
       return false;
@@ -231,7 +238,7 @@ const Element& UltimateOriginatingElementOrSelf(const Element& element) {
   if (!element.IsPseudoElement()) {
     return element;
   }
-  return *To<PseudoElement>(element).UltimateOriginatingElement();
+  return To<PseudoElement>(element).UltimateOriginatingElement();
 }
 
 bool HasAnimationsOrTransitions(const StyleResolverState& state) {
@@ -286,7 +293,7 @@ String ComputeBaseComputedStyleDiff(const ComputedStyle* base_computed_style,
   // differences that are permitted during an animation.
   // The FontFaceCache version number may be increased without forcing a style
   // recalc (see crbug.com/471079).
-  if (!base_computed_style->GetFont().IsFallbackValid()) {
+  if (!base_computed_style->GetFont()->IsFallbackValid()) {
     exclusions.insert(DebugField::font_);
   }
 
@@ -436,7 +443,7 @@ void ApplyLengthConversionFlags(StyleResolverState& state) {
   }
   if (flags & static_cast<Flags>(Flag::kContainerRelative)) {
     builder.SetDependsOnSizeContainerQueries(true);
-    builder.SetHasContainerRelativeUnits();
+    builder.SetHasContainerRelativeValue();
   }
   if (flags & static_cast<Flags>(Flag::kTreeScopedReference)) {
     state.SetHasTreeScopedReference();
@@ -1042,10 +1049,12 @@ void StyleResolver::ForEachUARulesForElement(const Element& element,
       default_style_sheets.DefaultPseudoElementStyleOrNull()) {
     func(default_style_sheets.DefaultPseudoElementStyleOrNull(),
          kPseudoElementUASheet);
-  } else if (IsTransitionPseudoElement(pseudo_id) &&
-             GetDocument().GetStyleEngine().DefaultViewTransitionStyle()) {
-    func(GetDocument().GetStyleEngine().DefaultViewTransitionStyle(),
-         kViewTransitionUASheet);
+  } else if (IsTransitionPseudoElement(pseudo_id)) {
+    if (auto* rule_set =
+            GetDocument().GetStyleEngine().DefaultViewTransitionStyle(
+                element)) {
+      func(rule_set, kViewTransitionUASheet);
+    }
   }
 }
 
@@ -1268,10 +1277,11 @@ const ComputedStyle* StyleResolver::ResolveStyle(
   }
 
   if (InvalidationTracingFlag::IsEnabled()) [[unlikely]] {
-    TRACE_EVENT_INSTANT1(
+    DEVTOOLS_TIMELINE_TRACE_EVENT_INSTANT_WITH_CATEGORIES(
         TRACE_DISABLED_BY_DEFAULT("devtools.timeline.invalidationTracking"),
-        "StyleResolver::ResolveStyle", TRACE_EVENT_SCOPE_THREAD, "elementId",
-        IdentifiersFactory::IntIdForNode(element));
+        "StyleResolver::ResolveStyle",
+        inspector_style_resolver_resolve_style_event::Data, element,
+        style_request.pseudo_id);
   }
 
   DCHECK(GetDocument().GetFrame());
@@ -1295,7 +1305,7 @@ const ComputedStyle* StyleResolver::ResolveStyle(
     state.StyleBuilder().SetIsEnsuredInDisplayNone();
   }
 
-  if ((element->IsPseudoElement() || style_request.IsPseudoStyleRequest()) &&
+  if (IsForPseudoElement(*element, style_request) &&
       state.HadNoMatchedProperties()) {
     DCHECK(!cascade.InlineStyleLost());
     return state.TakeStyle();
@@ -1305,17 +1315,14 @@ const ComputedStyle* StyleResolver::ResolveStyle(
     INCREMENT_STYLE_STATS_COUNTER(GetDocument().GetStyleEngine(),
                                   styles_animated, 1);
     StyleAdjuster::AdjustComputedStyle(
-        state,
-        (element->IsPseudoElement() || style_request.IsPseudoStyleRequest())
-            ? nullptr
-            : element);
+        state, IsForPseudoElement(*element, style_request) ? nullptr : element);
   }
 
   ApplyAnchorData(state);
 
   IncrementResolvedStyleCounters(style_request, GetDocument());
 
-  if (!style_request.IsPseudoStyleRequest()) {
+  if (!IsForPseudoElement(*element, style_request)) {
     if (IsA<HTMLBodyElement>(*element)) {
       GetDocument().GetTextLinkColors().SetTextColor(
           state.StyleBuilder().GetCurrentColor());
@@ -1359,6 +1366,17 @@ const ComputedStyle* StyleResolver::ResolveStyle(
 
   if (state.StyleBuilder().HasLineHeightRelativeUnits()) {
     GetDocument().GetStyleEngine().SetUsesLineHeightUnits(true);
+  }
+
+  if (state.StyleBuilder().HasSiblingFunctions()) {
+    Element& tree_counting_element =
+        state.GetUltimateOriginatingElementOrSelf();
+    if (ContainerNode* parent =
+            tree_counting_element.ParentElementOrDocumentFragment()) {
+      parent->SetChildrenAffectedByForwardPositionalRules();
+      parent->SetChildrenAffectedByBackwardPositionalRules();
+      GetDocument().GetStyleEngine().SetUsesTreeCountingFunctions();
+    }
   }
 
   state.LoadPendingResources();
@@ -1407,11 +1425,11 @@ void StyleResolver::InitStyle(Element& element,
     state.StyleBuilder().SetNonInheritedVariablesFrom(
         state.OriginatingElementStyle());
   } else {
-    state.CreateNewStyle(
-        source_for_noninherited, *parent_style,
-        (!style_request.IsPseudoStyleRequest() && IsAtShadowBoundary(&element))
-            ? ComputedStyleBuilder::kAtShadowBoundary
-            : ComputedStyleBuilder::kNotAtShadowBoundary);
+    state.CreateNewStyle(source_for_noninherited, *parent_style,
+                         (!IsForPseudoElement(element, style_request) &&
+                          IsAtShadowBoundary(&element))
+                             ? ComputedStyleBuilder::kAtShadowBoundary
+                             : ComputedStyleBuilder::kNotAtShadowBoundary);
   }
   if (element.IsPseudoElement()) {
     state.StyleBuilder().SetStyleType(element.GetPseudoIdForStyling());
@@ -1429,6 +1447,8 @@ void StyleResolver::InitStyle(Element& element,
         style_request.originating_element_style->InForcedColorsMode());
     state.StyleBuilder().SetForcedColorAdjust(
         style_request.originating_element_style->ForcedColorAdjust());
+    state.StyleBuilder().SetDarkColorScheme(
+        style_request.originating_element_style->DarkColorScheme());
     state.StyleBuilder().SetFont(
         style_request.originating_element_style->GetFont());
     state.StyleBuilder().SetLineHeight(
@@ -1441,7 +1461,7 @@ void StyleResolver::InitStyle(Element& element,
     state.StyleBuilder().SetIsLink();
   }
 
-  if (!style_request.IsPseudoStyleRequest()) {
+  if (!IsForPseudoElement(element, style_request)) {
     // Preserve the text autosizing multiplier on style recalc. Autosizer will
     // update it during layout if needed.
     // NOTE: This must occur before CascadeAndApplyMatchedProperties for correct
@@ -1509,7 +1529,7 @@ bool CanApplyInlineStyleIncrementally(Element* element,
   // Pseudo-elements can't have inline styles. We also don't have the old
   // style in this situation (|element| is the originating element in in
   // this case, so using that style would be wrong).
-  if (style_request.IsPseudoStyleRequest()) {
+  if (IsForPseudoElement(*element, style_request)) {
     return false;
   }
 
@@ -1661,15 +1681,13 @@ void StyleResolver::ApplyBaseStyleNoCache(
                                  selector_filter_, cascade.MutableMatchResult(),
                                  state.InsideLink());
 
-  if (element->IsPseudoElement() || style_request.IsPseudoStyleRequest()) {
+  if (element->IsPseudoElement()) {
+    GetDocument().GetStyleEngine().EnsureUAStyleForPseudoElement(
+        element->GetPseudoIdForStyling());
+  } else if (style_request.IsPseudoStyleRequest()) {
     collector.SetPseudoElementStyleRequest(style_request);
-    if (element->IsPseudoElement()) {
-      GetDocument().GetStyleEngine().EnsureUAStyleForPseudoElement(
-          element->GetPseudoIdForStyling());
-    } else {
-      GetDocument().GetStyleEngine().EnsureUAStyleForPseudoElement(
-          style_request.pseudo_id);
-    }
+    GetDocument().GetStyleEngine().EnsureUAStyleForPseudoElement(
+        style_request.pseudo_id);
   }
 
   if (!state.ParentStyle()) {
@@ -1680,7 +1698,7 @@ void StyleResolver::ApplyBaseStyleNoCache(
     state.SetParentStyle(InitialStyleForElement());
     state.SetLayoutParentStyle(state.ParentStyle());
 
-    if (!style_request.IsPseudoStyleRequest() &&
+    if (!IsForPseudoElement(*element, style_request) &&
         *element != GetDocument().documentElement()) {
       // Strictly, we should only allow the root element to inherit from
       // initial styles, but we allow getComputedStyle() for connected
@@ -1702,7 +1720,7 @@ void StyleResolver::ApplyBaseStyleNoCache(
 
   const MatchResult& match_result = collector.MatchedResult();
 
-  if (element->IsPseudoElement() || style_request.IsPseudoStyleRequest()) {
+  if (IsForPseudoElement(*element, style_request)) {
     if (!match_result.HasMatchedProperties()) {
       InitStyle(*element, style_request, *initial_style_, state.ParentStyle(),
                 state);
@@ -1798,7 +1816,7 @@ void StyleResolver::ApplyBaseStyleNoCache(
       ComputedStyle::IsDisplayInlineType(builder.Display()));
 
   StyleAdjuster::AdjustComputedStyle(
-      state, style_request.IsPseudoStyleRequest() ? nullptr : element);
+      state, IsForPseudoElement(*element, style_request) ? nullptr : element);
 
   ApplyAnchorData(state);
 }
@@ -1886,7 +1904,7 @@ void StyleResolver::ApplyBaseStyle(
     ApplyLengthConversionFlags(state);
 
     StyleAdjuster::AdjustComputedStyle(
-        state, style_request.IsPseudoStyleRequest() ? nullptr : element);
+        state, IsForPseudoElement(*element, style_request) ? nullptr : element);
 
     // Normally done by StyleResolver::MaybeAddToMatchedPropertiesCache(),
     // when applying the cascade. Note that this is probably redundant
@@ -2318,7 +2336,9 @@ RuleIndexList* StyleResolver::PseudoCSSRulesForElement(
     PseudoId pseudo_id,
     const AtomicString& view_transition_name,
     unsigned rules_to_include) {
-  DCHECK(element);
+  if (!element || !element->isConnected()) {
+    return nullptr;
+  }
   StyleResolverState state(GetDocument(), *element);
   MatchResult match_result;
   StyleRecalcContext style_recalc_context =
@@ -2631,14 +2651,15 @@ StyleResolver::CacheSuccess StyleResolver::ApplyMatchedCache(
     InitStyle(element, style_request, initial_style, state.ParentStyle(),
               state);
 
+    ExpandInheritedVisitedProperties(state);
+
     // contenteditable attribute (implemented by -webkit-user-modify) should
     // be propagated from shadow host to distributed node.
     //
-    // This can be overridden by matched properties, so we don't want to do it
-    // when we have a cache hit; both this fixup and any overriding of it have
-    // already been applied in the cached data.
-    if (!element.IsPseudoElement() && !style_request.IsPseudoStyleRequest() &&
-        element.AssignedSlot()) {
+    // This can be overridden by matched properties, so we don't want to do
+    // it when we have a cache hit; both this fixup and any overriding of it
+    // have already been applied in the cached data.
+    if (!IsForPseudoElement(element, style_request) && element.AssignedSlot()) {
       if (Element* parent = element.parentElement()) {
         if (!RuntimeEnabledFeatures::
                 InheritUserModifyWithoutContenteditableEnabled() ||
@@ -2756,8 +2777,15 @@ const CSSValue* StyleResolver::ComputeValue(
     const CSSValue& value) {
   const ComputedStyle* base_style = element->GetComputedStyle();
   StyleResolverState state(element->GetDocument(), *element);
+  state.EnsureParentStyle();
   STACK_UNINITIALIZED StyleCascade cascade(state);
   state.SetStyle(*base_style);
+  // This method does not load any resources, which means that the ComputedStyle
+  // contains StylePendingImages. As those are not expected to exist on style
+  // for rendered elements, there is a DCHECK that is triggered when trying to
+  // read out computed <image> values. Work around that DCHECK by saying this
+  // style is not for a rendered element.
+  state.StyleBuilder().SetIsEnsuredInDisplayNone();
   auto* set =
       MakeGarbageCollected<MutableCSSPropertyValueSet>(state.GetParserMode());
   set->SetProperty(property_name, value);
@@ -2783,7 +2811,8 @@ const CSSValue* StyleResolver::ResolveValue(
     const CSSValue& value) {
   StyleResolverState state(element.GetDocument(), element);
   state.SetStyle(style);
-  return StyleCascade::Resolve(state, property_name, value);
+  return StyleCascade::Resolve(state, property_name, value,
+                               /*tree_scope=*/&element.GetDocument());
 }
 
 FilterOperations StyleResolver::ComputeFilterOperations(
@@ -2791,7 +2820,7 @@ FilterOperations StyleResolver::ComputeFilterOperations(
     const Font& font,
     const CSSValue& filter_value) {
   ComputedStyleBuilder parent_builder = CreateComputedStyleBuilder();
-  parent_builder.SetFont(font);
+  parent_builder.SetFont(const_cast<Font*>(&font));
   const ComputedStyle* parent = parent_builder.TakeStyle();
 
   StyleResolverState state(GetDocument(), *element,
@@ -2966,9 +2995,9 @@ StyleRuleList* StyleResolver::CollectMatchingRulesFromUnconnectedRuleSet(
 // Font properties are also handled by FontStyleResolver outside the main
 // thread. If you add/remove properties here, make sure they are also properly
 // handled by FontStyleResolver.
-Font StyleResolver::ComputeFont(Element& element,
-                                const ComputedStyle& style,
-                                const CSSPropertyValueSet& property_set) {
+Font* StyleResolver::ComputeFont(Element& element,
+                                 const ComputedStyle& style,
+                                 const CSSPropertyValueSet& property_set) {
   static const CSSProperty* properties[6] = {
       &GetCSSPropertyFontSize(),        &GetCSSPropertyFontFamily(),
       &GetCSSPropertyFontStretch(),     &GetCSSPropertyFontStyle(),
@@ -3023,6 +3052,35 @@ void StyleResolver::Trace(Visitor* visitor) const {
 
 bool StyleResolver::IsForcedColorsModeEnabled() const {
   return GetDocument().InForcedColorsMode();
+}
+
+// Expand inherited visited properties at visited-link boundaries.
+//
+// This expansion normally happens cascade-time (see ExpandCascade),
+// but for performance reasons we only do this when we're inside
+// a visited link. This causes problems when inheriting colors (or
+// other affected properties) into a visited link, since (once inside
+// that visited link), we'll start using the visited color field
+// for rendering, which wasn't expanded higher up in the ancestor chain.
+void StyleResolver::ExpandInheritedVisitedProperties(
+    StyleResolverState& state) {
+  if (state.ParentStyle() &&
+      state.ParentStyle()->InsideLink() == EInsideLink::kNotInsideLink &&
+      state.InsideLink() == EInsideLink::kInsideVisitedLink) {
+    state.StyleBuilder().SetInternalVisitedColor(state.StyleBuilder().Color());
+    state.StyleBuilder().SetInternalVisitedCaretColor(
+        state.StyleBuilder().CaretColor());
+    state.StyleBuilder().SetInternalVisitedFillPaint(
+        state.StyleBuilder().FillPaint());
+    state.StyleBuilder().SetInternalVisitedStrokePaint(
+        state.StyleBuilder().StrokePaint());
+    state.StyleBuilder().SetInternalVisitedTextEmphasisColor(
+        state.StyleBuilder().TextEmphasisColor());
+    state.StyleBuilder().SetInternalVisitedTextFillColor(
+        state.StyleBuilder().TextFillColor());
+    state.StyleBuilder().SetInternalVisitedTextStrokeColor(
+        state.StyleBuilder().TextStrokeColor());
+  }
 }
 
 ComputedStyleBuilder StyleResolver::CreateAnonymousStyleBuilderWithDisplay(
@@ -3359,17 +3417,17 @@ void StyleResolver::PropagateStyleToViewport() {
 #undef PROPAGATE_VALUE
 #undef PROPAGATE_FROM
 
-static Font ComputeInitialLetterFont(const ComputedStyle& style,
-                                     const ComputedStyle& paragraph_style) {
+static Font* ComputeInitialLetterFont(const ComputedStyle& style,
+                                      const ComputedStyle& paragraph_style) {
   const StyleInitialLetter& initial_letter = style.InitialLetter();
   DCHECK(!initial_letter.IsNormal());
-  const Font& font = style.GetFont();
+  Font* font = style.GetFont();
 
-  const FontMetrics& metrics = font.PrimaryFont()->GetFontMetrics();
+  const FontMetrics& metrics = font->PrimaryFont()->GetFontMetrics();
   const float cap_height = metrics.CapHeight();
   const float line_height = paragraph_style.ComputedLineHeight();
   const float cap_height_of_para =
-      paragraph_style.GetFont().PrimaryFont()->GetFontMetrics().CapHeight();
+      paragraph_style.GetFont()->PrimaryFont()->GetFontMetrics().CapHeight();
 
   // See https://drafts.csswg.org/css-inline/#sizing-initial-letter
   const float desired_cap_height =
@@ -3381,9 +3439,10 @@ static Font ComputeInitialLetterFont(const ComputedStyle& style,
   adjusted_font_description.SetComputedSize(adjusted_font_size);
   adjusted_font_description.SetSpecifiedSize(adjusted_font_size);
   while (adjusted_font_size > 1) {
-    Font actual_font(adjusted_font_description, font.GetFontSelector());
+    Font* actual_font = MakeGarbageCollected<Font>(adjusted_font_description,
+                                                   font->GetFontSelector());
     const float actual_cap_height =
-        actual_font.PrimaryFont()->GetFontMetrics().CapHeight();
+        actual_font->PrimaryFont()->GetFontMetrics().CapHeight();
     if (actual_cap_height <= desired_cap_height) {
       return actual_font;
     }

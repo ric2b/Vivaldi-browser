@@ -21,21 +21,19 @@ enum class AccessPoint;
 // This class is meant to only be used by `AuthenticationFlow` class.
 // If the identity is assigned to another profile, the profile switching must be
 // done before creating this instance.
-// This class auto-retain itself until the sign-in is done.
-// TODO(crbug.com/375605482): Need unittests.
+// This class auto-retains itself until the sign-in is done.
 @interface AuthenticationFlowInProfile : NSObject
-
-// Whether the History Sync Opt-In screen follows after authentication flow
-// completes with success.
-@property(nonatomic, assign) BOOL precedingHistorySync;
 
 // Designated initializer.
 // `browser` is the browser of the current profile.
 // `identity` to sign in. This identity must be assigned the current profile.
+// `precedingHistorySync` specifies whether the History Sync Opt-In screen
+//   follows after authentication flow completes with success.
 - (instancetype)initWithBrowser:(Browser*)browser
                        identity:(id<SystemIdentity>)identity
               isManagedIdentity:(BOOL)isManagedIdentity
                     accessPoint:(signin_metrics::AccessPoint)accessPoint
+           precedingHistorySync:(BOOL)precedingHistorySync
               postSignInActions:(PostSignInActionSet)postSignInActions
     NS_DESIGNATED_INITIALIZER;
 - (instancetype)init NS_UNAVAILABLE;

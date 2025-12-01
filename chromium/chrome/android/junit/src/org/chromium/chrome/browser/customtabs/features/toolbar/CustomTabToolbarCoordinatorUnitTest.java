@@ -24,7 +24,8 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.Mock;
-import org.mockito.MockitoAnnotations;
+import org.mockito.junit.MockitoJUnit;
+import org.mockito.junit.MockitoRule;
 import org.robolectric.Robolectric;
 
 import org.chromium.base.test.BaseRobolectricTestRunner;
@@ -41,6 +42,7 @@ import org.chromium.chrome.browser.customtabs.content.CustomTabActivityTabProvid
 import org.chromium.chrome.browser.share.ShareDelegate;
 import org.chromium.chrome.browser.share.ShareDelegateSupplier;
 import org.chromium.chrome.browser.tab.Tab;
+import org.chromium.chrome.browser.toolbar.ToolbarManager;
 import org.chromium.ui.base.ActivityWindowAndroid;
 import org.chromium.url.GURL;
 
@@ -48,6 +50,8 @@ import org.chromium.url.GURL;
 @RunWith(BaseRobolectricTestRunner.class)
 @EnableFeatures({SHARE_CUSTOM_ACTIONS_IN_CCT})
 public class CustomTabToolbarCoordinatorUnitTest {
+    @Rule public final MockitoRule mMockitoRule = MockitoJUnit.rule();
+
     @Rule
     public final CustomTabActivityContentTestEnvironment env =
             new CustomTabActivityContentTestEnvironment();
@@ -65,6 +69,7 @@ public class CustomTabToolbarCoordinatorUnitTest {
     @Mock private CustomButtonParams mCustomButtonParams;
     @Mock private PendingIntent mPendingIntent;
     @Mock private Activity mActivity;
+    @Mock private ToolbarManager mToolbarManager;
 
     private Activity mActivityForResources;
     private CustomTabActivityTabController mTabController;
@@ -72,7 +77,6 @@ public class CustomTabToolbarCoordinatorUnitTest {
 
     @Before
     public void setup() {
-        MockitoAnnotations.initMocks(this);
 
         mActivityForResources = Robolectric.setupActivity(Activity.class);
         mTabController = env.createTabController();
@@ -146,5 +150,21 @@ public class CustomTabToolbarCoordinatorUnitTest {
                 .thenReturn(CustomButtonParams.ButtonType.CCT_SHARE_BUTTON);
 
         clickButtonAndVerifyPendingIntent();
+    }
+
+    @Test
+    public void testToolbarInitialized_closeButtonEnabled() {
+        when(env.intentDataProvider.isCloseButtonEnabled()).thenReturn(true);
+
+        mCoordinator.onToolbarInitialized(mToolbarManager);
+        verify(mCloseButtonVisibilityManager).setVisibility(true);
+    }
+
+    @Test
+    public void testToolbarInitialized_closeButtonDisabled() {
+        when(env.intentDataProvider.isCloseButtonEnabled()).thenReturn(false);
+
+        mCoordinator.onToolbarInitialized(mToolbarManager);
+        verify(mCloseButtonVisibilityManager).setVisibility(false);
     }
 }

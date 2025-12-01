@@ -60,7 +60,7 @@ suite('SeaPenInputQueryElementTest', function() {
         seaPenSuggestions.shadowRoot!.querySelector<CrButtonElement>(
             '.suggestion');
     assertTrue(!!seaPenSuggestionButton, 'suggestion buttons should exist');
-    const suggestionButtonText = seaPenSuggestionButton.textContent!.trim()!;
+    const suggestionButtonText = seaPenSuggestionButton.textContent!.trim();
 
     seaPenSuggestionButton.click();
     await waitAfterNextRender(seaPenInputQueryElement as HTMLElement);
@@ -314,8 +314,7 @@ suite('SeaPenInputQueryElementTest', function() {
             '#queryInput');
     assertEquals(textValue, inputElement!.value, 'input should show text');
 
-    const suggestionButtonText = await clickSuggestionButton()!;
-
+    const suggestionButtonText = await clickSuggestionButton();
 
     assertEquals(inputElement?.value, suggestionButtonText);
   });
@@ -329,12 +328,27 @@ suite('SeaPenInputQueryElementTest', function() {
     const textValue = 'Brevity is the soul of wit';
     await setTextInputValue(textValue);
 
-    const suggestionButtonText = await clickSuggestionButton()!;
-
+    const suggestionButtonText = await clickSuggestionButton();
 
     assertEquals(
         `${textValue}, ${suggestionButtonText}`, inputElement!.value,
         'suggestion text should be added at the end of the text input');
+  });
+
+  test('clicking suggestion focuses input', async () => {
+    seaPenInputQueryElement = initElement(SeaPenInputQueryElement);
+    await waitAfterNextRender(seaPenInputQueryElement);
+    const inputElement =
+        seaPenInputQueryElement.shadowRoot?.querySelector<CrTextareaElement>(
+            '#queryInput');
+    const textValue = 'Expectation is the root of all heartache';
+    await setTextInputValue(textValue);
+
+    await clickSuggestionButton();
+
+    assertEquals(
+        inputElement, getActiveElement(seaPenInputQueryElement),
+        'input element should be focused');
   });
 
   test(
@@ -399,7 +413,7 @@ suite('SeaPenInputQueryElementTest', function() {
     }
 
     const shuffleButton =
-        seaPenSuggestions!.shadowRoot!.getElementById('shuffle')!;
+        seaPenSuggestions.shadowRoot!.getElementById('shuffle')!;
     shuffleButton.click();
     await waitAfterNextRender(seaPenInputQueryElement);
 
@@ -417,7 +431,7 @@ suite('SeaPenInputQueryElementTest', function() {
     // Clearing text input clears the suggestions.
     await setTextInputValue('');
     assertFalse(
-        !!seaPenInputQueryElement!.shadowRoot!.querySelector<HTMLElement>(
+        !!seaPenInputQueryElement.shadowRoot!.querySelector<HTMLElement>(
             SeaPenSuggestionsElement.is),
         'there should be no suggestions with empty text input');
 
@@ -466,7 +480,7 @@ suite('SeaPenInputQueryElementTest', function() {
         seaPenInputQueryElement.shadowRoot!.getElementById('inspire');
     assertTrue(!!inspireButton);
 
-    inspireButton!.click();
+    inspireButton.click();
     await waitAfterNextRender(seaPenInputQueryElement);
 
     const inputElement =
@@ -502,7 +516,7 @@ suite('SeaPenInputQueryElementTest', function() {
         searchButton!.innerText);
     assertEquals('personalization-shared:refresh', icon!.getAttribute('icon'));
 
-    inspireButton!.click();
+    inspireButton.click();
     await waitAfterNextRender(seaPenInputQueryElement);
 
     // After inspire button is clicked, switch back to the create button.

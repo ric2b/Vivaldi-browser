@@ -2,11 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/40284755): Remove this and spanify to fix the errors.
-#pragma allow_unsafe_buffers
-#endif
-
 #include "base/metrics/persistent_histogram_allocator.h"
 
 #include <atomic>
@@ -14,6 +9,8 @@
 #include <string_view>
 #include <utility>
 
+#include "base/compiler_specific.h"
+#include "base/containers/span.h"
 #include "base/debug/crash_logging.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
@@ -66,31 +63,6 @@ enum : uint32_t {
 // used instead of std::atomic because the latter can create global ctors
 // and dtors.
 subtle::AtomicWord g_histogram_allocator = 0;
-
-// Take an array of range boundaries and create a proper BucketRanges object
-// which is returned to the caller. A return of nullptr indicates that the
-// passed boundaries are invalid.
-std::unique_ptr<BucketRanges> CreateRangesFromData(
-    HistogramBase::Sample32* ranges_data,
-    uint32_t ranges_checksum,
-    size_t count) {
-  // To avoid racy destruction at shutdown, the following may be leaked.
-  std::unique_ptr<BucketRanges> ranges(new BucketRanges(count));
-  DCHECK_EQ(count, ranges->size());
-  for (size_t i = 0; i < count; ++i) {
-    if (i > 0 && ranges_data[i] <= ranges_data[i - 1]) {
-      return nullptr;
-    }
-    ranges->set_range(i, ranges_data[i]);
-  }
-
-  ranges->ResetChecksum();
-  if (ranges->checksum() != ranges_checksum) {
-    return nullptr;
-  }
-
-  return ranges;
-}
 
 // Calculate the number of bytes required to store all of a histogram's
 // "counts". This will return zero (0) if `bucket_count` is not valid.
@@ -330,15 +302,19 @@ std::unique_ptr<HistogramBase> PersistentHistogramAllocator::GetHistogram(
   PersistentHistogramData* data =
       memory_allocator_->GetAsObject<PersistentHistogramData>(ref, &alloc_size);
 
+  // Get a bounded view of the metric name. Note that this is a durable but
+  // volatile view. I.e., the data lives in the persistent shared memory region
+  // and will not be freed, but the contents of the view may change at any time.
   // Checks data for nullptr; `metric_name` not empty means data is not nullptr.
-  std::string_view metric_name = PersistentMemoryAllocator::StringViewAt(
-      data, offsetof(PersistentHistogramData, name), alloc_size);
+  DurableStringView durable_metric_name(PersistentMemoryAllocator::StringViewAt(
+      data, offsetof(PersistentHistogramData, name), alloc_size));
 
   // Check that metadata is reasonable: metric_name is non-empty,
   // ID fields have been loaded with a hash of the name (0 is considered
   // unset/invalid).
-  if (metric_name.empty() ||
-      reinterpret_cast<const char*>(data)[alloc_size - 1] != '\0' ||
+  if (durable_metric_name->empty() ||
+      UNSAFE_TODO(reinterpret_cast<const char*>(data)[alloc_size - 1]) !=
+          '\0' ||
       data->samples_metadata.id == 0 || data->logged_metadata.id == 0 ||
       // Note: Sparse histograms use `id + 1` in `logged_metadata`.
       (data->logged_metadata.id != data->samples_metadata.id &&
@@ -347,10 +323,10 @@ std::unique_ptr<HistogramBase> PersistentHistogramAllocator::GetHistogram(
       // could just verify the name length based on the overall alloc length,
       // but that doesn't work because the allocated block may have been
       // aligned to the next boundary value.
-      HashMetricName(metric_name) != data->samples_metadata.id) {
+      HashMetricName(*durable_metric_name) != data->samples_metadata.id) {
     return nullptr;
   }
-  return CreateHistogram(data);
+  return CreateHistogram(data, durable_metric_name);
 }
 
 std::unique_ptr<HistogramBase> PersistentHistogramAllocator::AllocateHistogram(
@@ -379,8 +355,8 @@ std::unique_ptr<HistogramBase> PersistentHistogramAllocator::AllocateHistogram(
       memory_allocator_->New<PersistentHistogramData>(
           offsetof(PersistentHistogramData, name) + name.size() + 1);
   if (histogram_data) {
-    memcpy(histogram_data->name, name.data(), name.size());
-    histogram_data->name[name.size()] = '\0';
+    UNSAFE_TODO(memcpy(histogram_data->name, name.data(), name.size()));
+    UNSAFE_TODO(histogram_data->name[name.size()]) = '\0';
     histogram_data->histogram_type = histogram_type;
     histogram_data->flags = flags | HistogramBase::kIsPersistent;
 
@@ -425,7 +401,7 @@ std::unique_ptr<HistogramBase> PersistentHistogramAllocator::AllocateHistogram(
                 ranges_ref, kTypeIdRangesArray, ranges_count);
         if (ranges_data) {
           for (size_t i = 0; i < bucket_ranges->size(); ++i) {
-            ranges_data[i] = bucket_ranges->range(i);
+            UNSAFE_TODO(ranges_data[i]) = bucket_ranges->range(i);
           }
           bucket_ranges->set_persistent_reference(ranges_ref);
         } else {
@@ -461,7 +437,10 @@ std::unique_ptr<HistogramBase> PersistentHistogramAllocator::AllocateHistogram(
     // using what is already known above but avoids duplicating the switch
     // statement here and serves as a double-check that everything is
     // correct before commiting the new histogram to persistent space.
-    std::unique_ptr<HistogramBase> histogram = CreateHistogram(histogram_data);
+    DurableStringView durable_name(
+        std::string_view(histogram_data->name, name.size()));
+    std::unique_ptr<HistogramBase> histogram =
+        CreateHistogram(histogram_data, durable_name);
     DCHECK(histogram);
     DCHECK_NE(0U, histogram_data->samples_metadata.id);
     DCHECK_NE(0U, histogram_data->logged_metadata.id);
@@ -571,15 +550,20 @@ void PersistentHistogramAllocator::ClearLastCreatedReferenceForTesting() {
 }
 
 std::unique_ptr<HistogramBase> PersistentHistogramAllocator::CreateHistogram(
-    PersistentHistogramData* histogram_data_ptr) {
+    PersistentHistogramData* histogram_data_ptr,
+    DurableStringView durable_name) {
   if (!histogram_data_ptr) {
     return nullptr;
   }
 
+  // The durable name is expected to be hanging off the end of the histogram
+  // data (which we expect was allocated by the persistent memory allocator).
+  DCHECK_EQ(durable_name->data(), histogram_data_ptr->name);
+
   // Sparse histograms are quite different so handle them as a special case.
   if (histogram_data_ptr->histogram_type == SPARSE_HISTOGRAM) {
     std::unique_ptr<HistogramBase> histogram =
-        SparseHistogram::PersistentCreate(this, histogram_data_ptr->name,
+        SparseHistogram::PersistentCreate(this, durable_name,
                                           &histogram_data_ptr->samples_metadata,
                                           &histogram_data_ptr->logged_metadata);
     DCHECK(histogram);
@@ -592,33 +576,37 @@ std::unique_ptr<HistogramBase> PersistentHistogramAllocator::CreateHistogram(
   // changed at any moment by a malicious actor that shares access. The local
   // values are validated below and then used to create the histogram, knowing
   // they haven't changed between validation and use.
-  int32_t histogram_type = histogram_data_ptr->histogram_type;
-  int32_t histogram_flags = histogram_data_ptr->flags;
-  int32_t histogram_minimum = histogram_data_ptr->minimum;
-  int32_t histogram_maximum = histogram_data_ptr->maximum;
-  uint32_t histogram_bucket_count = histogram_data_ptr->bucket_count;
-  uint32_t histogram_ranges_ref = histogram_data_ptr->ranges_ref;
-  uint32_t histogram_ranges_checksum = histogram_data_ptr->ranges_checksum;
+  const int32_t histogram_type = histogram_data_ptr->histogram_type;
+  const int32_t histogram_flags = histogram_data_ptr->flags;
+  const int32_t histogram_minimum = histogram_data_ptr->minimum;
+  const int32_t histogram_maximum = histogram_data_ptr->maximum;
+  const uint32_t histogram_bucket_count = histogram_data_ptr->bucket_count;
+  const uint32_t histogram_ranges_ref = histogram_data_ptr->ranges_ref;
+  const uint32_t histogram_ranges_checksum =
+      histogram_data_ptr->ranges_checksum;
 
   size_t allocated_bytes = 0;
-  HistogramBase::Sample32* ranges_data =
+  const HistogramBase::Sample32* const ranges_data =
       memory_allocator_->GetAsArray<HistogramBase::Sample32>(
           histogram_ranges_ref, kTypeIdRangesArray,
           PersistentMemoryAllocator::kSizeAny, &allocated_bytes);
-
+  const size_t ranges_size = histogram_bucket_count + 1;
   const uint32_t max_buckets =
       std::numeric_limits<uint32_t>::max() / sizeof(HistogramBase::Sample32);
-  size_t required_bytes =
-      (histogram_bucket_count + 1) * sizeof(HistogramBase::Sample32);
+
+  const size_t required_bytes = ranges_size * sizeof(HistogramBase::Sample32);
   if (!ranges_data || histogram_bucket_count < 2 ||
       histogram_bucket_count >= max_buckets ||
       allocated_bytes < required_bytes) {
     return nullptr;
   }
 
-  std::unique_ptr<const BucketRanges> created_ranges = CreateRangesFromData(
-      ranges_data, histogram_ranges_checksum, histogram_bucket_count + 1);
-  if (!created_ranges || created_ranges->size() != histogram_bucket_count + 1 ||
+  auto created_ranges = std::make_unique<const BucketRanges>(
+      // SAFETY: We have validated above that `ranges_size` elements can be read
+      // from the allocation holding `ranges_data`.
+      UNSAFE_BUFFERS(base::span(ranges_data, ranges_size)));
+  if (!created_ranges || created_ranges->size() != ranges_size ||
+      created_ranges->checksum() != histogram_ranges_checksum ||
       created_ranges->range(1) != histogram_minimum ||
       created_ranges->range(histogram_bucket_count - 1) != histogram_maximum) {
     return nullptr;
@@ -667,33 +655,32 @@ std::unique_ptr<HistogramBase> PersistentHistogramAllocator::CreateHistogram(
       kTypeIdCountsArray, counts_bytes, counts_bytes / 2);
 
   // Create the right type of histogram.
-  const char* name = histogram_data_ptr->name;
   std::unique_ptr<HistogramBase> histogram;
   switch (histogram_type) {
     case HISTOGRAM:
-      histogram =
-          Histogram::PersistentCreate(name, ranges, counts_data, logged_data,
-                                      &histogram_data_ptr->samples_metadata,
-                                      &histogram_data_ptr->logged_metadata);
+      histogram = Histogram::PersistentCreate(
+          durable_name, ranges, counts_data, logged_data,
+          &histogram_data_ptr->samples_metadata,
+          &histogram_data_ptr->logged_metadata);
       DCHECK(histogram);
       break;
     case LINEAR_HISTOGRAM:
       histogram = LinearHistogram::PersistentCreate(
-          name, ranges, counts_data, logged_data,
+          durable_name, ranges, counts_data, logged_data,
           &histogram_data_ptr->samples_metadata,
           &histogram_data_ptr->logged_metadata);
       DCHECK(histogram);
       break;
     case BOOLEAN_HISTOGRAM:
       histogram = BooleanHistogram::PersistentCreate(
-          name, ranges, counts_data, logged_data,
+          durable_name, ranges, counts_data, logged_data,
           &histogram_data_ptr->samples_metadata,
           &histogram_data_ptr->logged_metadata);
       DCHECK(histogram);
       break;
     case CUSTOM_HISTOGRAM:
       histogram = CustomHistogram::PersistentCreate(
-          name, ranges, counts_data, logged_data,
+          durable_name, ranges, counts_data, logged_data,
           &histogram_data_ptr->samples_metadata,
           &histogram_data_ptr->logged_metadata);
       DCHECK(histogram);

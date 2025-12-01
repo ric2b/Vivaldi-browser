@@ -45,11 +45,11 @@ limitations under the License.
 #include "xla/primitive_util.h"
 #include "xla/shape.h"
 #include "xla/shape_util.h"
+#include "xla/tsl/platform/errors.h"
+#include "xla/tsl/platform/logging.h"  // IWYU pragma: keep
 #include "xla/types.h"
 #include "xla/util.h"
 #include "xla/xla_data.pb.h"
-#include "tsl/platform/errors.h"
-#include "tsl/platform/logging.h"  // IWYU pragma: keep
 
 using absl::StrAppend;
 using absl::StrAppendFormat;
@@ -518,7 +518,7 @@ class NearComparator {
       }
       return;
     }
-    std::vector<int64_t> multi_index(actual_.shape().rank(), 0);
+    std::vector<int64_t> multi_index(actual_.shape().dimensions_size(), 0);
     CompareLiteralsSlow(0, &multi_index);
   }
 
@@ -838,7 +838,7 @@ absl::Status EqualShapes(const Shape& expected, const Shape& actual) {
       }
     }
   } else if (expected.IsArray()) {
-    if (expected.rank() != actual.rank()) {
+    if (expected.dimensions_size() != actual.dimensions_size()) {
       return InvalidArgument("want rank of %s got rank of %s",
                              ShapeUtil::HumanString(expected),
                              ShapeUtil::HumanString(actual));

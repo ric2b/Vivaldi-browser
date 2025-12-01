@@ -6,8 +6,8 @@
 #define THIRD_PARTY_BLINK_RENDERER_CORE_LAYOUT_ANCHOR_EVALUATOR_IMPL_H_
 
 #include <optional>
+#include <variant>
 
-#include "third_party/abseil-cpp/absl/types/variant.h"
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/css/anchor_evaluator.h"
 #include "third_party/blink/renderer/core/css/css_anchor_query_enums.h"
@@ -27,7 +27,7 @@ class LayoutObject;
 class StitchedAnchorQueries;
 class PaintLayer;
 
-using AnchorKey = absl::variant<const ScopedCSSName*, const Element*>;
+using AnchorKey = std::variant<const ScopedCSSName*, const Element*>;
 
 // This class is conceptually a concatenation of two hash maps with different
 // key types but the same value type. To save memory, we don't implement it as
@@ -47,11 +47,10 @@ class AnchorQueryBase : public GarbageCollectedMixin {
 
   const AnchorReference* GetAnchorReference(const AnchorKey& key) const {
     if (const ScopedCSSName* const* name =
-            absl::get_if<const ScopedCSSName*>(&key)) {
+            std::get_if<const ScopedCSSName*>(&key)) {
       return GetAnchorReference(named_anchors_, *name);
     }
-    return GetAnchorReference(implicit_anchors_,
-                              absl::get<const Element*>(key));
+    return GetAnchorReference(implicit_anchors_, std::get<const Element*>(key));
   }
 
   struct AddResult {
@@ -61,10 +60,10 @@ class AnchorQueryBase : public GarbageCollectedMixin {
   };
   AddResult insert(const AnchorKey& key, AnchorReference* reference) {
     if (const ScopedCSSName* const* name =
-            absl::get_if<const ScopedCSSName*>(&key)) {
+            std::get_if<const ScopedCSSName*>(&key)) {
       return insert(named_anchors_, *name, reference);
     }
-    return insert(implicit_anchors_, absl::get<const Element*>(key), reference);
+    return insert(implicit_anchors_, std::get<const Element*>(key), reference);
   }
 
   class Iterator {
@@ -150,7 +149,7 @@ struct CORE_EXPORT PhysicalAnchorReference
   PhysicalAnchorReference(const Element& element,
                           const PhysicalRect& rect,
                           bool is_out_of_flow,
-                          HeapHashSet<Member<Element>>* display_locks)
+                          GCedHeapHashSet<Member<Element>>* display_locks)
       : rect(rect),
         element(&element),
         display_locks(display_locks),
@@ -168,7 +167,7 @@ struct CORE_EXPORT PhysicalAnchorReference
   // A singly linked list in the reverse tree order. There can be at most one
   // in-flow reference, which if exists must be at the end of the list.
   Member<PhysicalAnchorReference> next;
-  Member<HeapHashSet<Member<Element>>> display_locks;
+  Member<GCedHeapHashSet<Member<Element>>> display_locks;
   bool is_out_of_flow = false;
 };
 
@@ -247,7 +246,7 @@ class CORE_EXPORT AnchorEvaluatorImpl : public AnchorEvaluator {
         container_writing_direction_(container_writing_direction),
         containing_block_rect_(offset_to_padding_box, available_size),
         display_locks_affected_by_anchors_(
-            MakeGarbageCollected<HeapHashSet<Member<Element>>>()) {
+            MakeGarbageCollected<GCedHeapHashSet<Member<Element>>>()) {
     DCHECK(anchor_query_);
   }
 
@@ -267,7 +266,7 @@ class CORE_EXPORT AnchorEvaluatorImpl : public AnchorEvaluator {
         container_writing_direction_(container_writing_direction),
         containing_block_rect_(offset_to_padding_box, available_size),
         display_locks_affected_by_anchors_(
-            MakeGarbageCollected<HeapHashSet<Member<Element>>>()) {
+            MakeGarbageCollected<GCedHeapHashSet<Member<Element>>>()) {
     DCHECK(anchor_queries_);
     DCHECK(containing_block_);
   }
@@ -304,7 +303,7 @@ class CORE_EXPORT AnchorEvaluatorImpl : public AnchorEvaluator {
   Element* AccessibilityAnchor() const;
   void ClearAccessibilityAnchor();
 
-  HeapHashSet<Member<Element>>* GetDisplayLocksAffectedByAnchors() const {
+  GCedHeapHashSet<Member<Element>>* GetDisplayLocksAffectedByAnchors() const {
     return display_locks_affected_by_anchors_;
   }
 
@@ -420,7 +419,7 @@ class CORE_EXPORT AnchorEvaluatorImpl : public AnchorEvaluator {
 
   // A set of elements whose display locks' skipping status are potentially
   // impacted by anchors found by this evaluator.
-  mutable HeapHashSet<Member<Element>>* display_locks_affected_by_anchors_ =
+  mutable GCedHeapHashSet<Member<Element>>* display_locks_affected_by_anchors_ =
       nullptr;
 };
 

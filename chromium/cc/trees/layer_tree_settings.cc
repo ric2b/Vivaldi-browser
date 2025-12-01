@@ -17,6 +17,8 @@ LayerTreeSettings::LayerTreeSettings()
     : default_tile_size(gfx::Size(256, 256)),
       max_untiled_layer_size(gfx::Size(512, 512)),
       minimum_occlusion_tracking_size(gfx::Size(160, 160)),
+      use_layer_lists(
+          base::FeatureList::IsEnabled(features::kUseLayerListsByDefault)),
       memory_policy(64 * 1024 * 1024,
                     gpu::MemoryAllocation::CUTOFF_ALLOW_EVERYTHING,
                     ManagedMemoryPolicy::kDefaultNumResourcesLimit) {}
@@ -25,7 +27,7 @@ LayerTreeSettings::LayerTreeSettings(const LayerTreeSettings& other) = default;
 LayerTreeSettings::~LayerTreeSettings() = default;
 
 bool LayerTreeSettings::UseLayerContextForDisplay() const {
-  return use_layer_lists && !is_display_tree &&
+  return !is_layer_tree_for_ui && !is_display_tree &&
          base::FeatureList::IsEnabled(features::kTreesInViz);
 }
 

@@ -41,17 +41,12 @@ class SyncUserSettingsMock : public SyncUserSettings {
               GetTypePrefStateForAccount,
               (UserSelectableType),
               (const override));
-#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
-  MOCK_METHOD(int,
-              GetNumberOfAccountsWithPasswordsSelected,
-              (),
-              (const override));
-#endif
   MOCK_METHOD(void,
               SetSelectedTypes,
               (bool, UserSelectableTypeSet),
               (override));
   MOCK_METHOD(void, SetSelectedType, (UserSelectableType, bool), (override));
+  MOCK_METHOD(void, ResetSelectedType, (UserSelectableType), (override));
   MOCK_METHOD(void,
               KeepAccountSettingsPrefsOnlyForUsers,
               (const std::vector<signin::GaiaIdHash>&),

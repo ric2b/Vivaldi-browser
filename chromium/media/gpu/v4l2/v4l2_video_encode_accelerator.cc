@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/390223051): Remove C-library calls to fix the errors.
+#pragma allow_unsafe_libc_calls
+#endif
+
 #include "media/gpu/v4l2/v4l2_video_encode_accelerator.h"
 
 #include <fcntl.h>
@@ -33,6 +38,7 @@
 #include "base/trace_event/trace_event.h"
 #include "media/base/bitstream_buffer.h"
 #include "media/base/color_plane_layout.h"
+#include "media/base/encoder_status.h"
 #include "media/base/media_log.h"
 #include "media/base/media_switches.h"
 #include "media/base/media_util.h"
@@ -192,7 +198,7 @@ V4L2VideoEncodeAccelerator::~V4L2VideoEncodeAccelerator() {
   num_instances_.Decrement();
 }
 
-bool V4L2VideoEncodeAccelerator::Initialize(
+EncoderStatus V4L2VideoEncodeAccelerator::Initialize(
     const Config& config,
     Client* client,
     std::unique_ptr<MediaLog> media_log) {
@@ -204,13 +210,13 @@ bool V4L2VideoEncodeAccelerator::Initialize(
 
   if (!can_use_encoder_) {
     MEDIA_LOG(ERROR, media_log.get()) << "Too many encoders are allocated";
-    return false;
+    return {EncoderStatus::Codes::kEncoderInitializationError};
   }
 
   if (config.HasSpatialLayer()) {
     MEDIA_LOG(ERROR, media_log.get())
         << "Spatial layer encoding is not yet supported";
-    return false;
+    return {EncoderStatus::Codes::kEncoderInitializationError};
   }
 
   // Currently only Qualcomm (SC7180) supports temporal layers, MTK drivers
@@ -230,7 +236,7 @@ bool V4L2VideoEncodeAccelerator::Initialize(
         MEDIA_LOG(ERROR, media_log.get())
             << "Unsupported number of temporal layers: "
             << base::strict_cast<size_t>(num_temporal_layers);
-        return false;
+        return {EncoderStatus::Codes::kEncoderInitializationError};
       }
     } else {
       MEDIA_LOG(WARNING, media_log.get())
@@ -249,7 +255,7 @@ bool V4L2VideoEncodeAccelerator::Initialize(
   if (output_format_fourcc_ == V4L2_PIX_FMT_INVALID) {
     MEDIA_LOG(ERROR, media_log.get())
         << "invalid output_profile=" << GetProfileName(config.output_profile);
-    return false;
+    return {EncoderStatus::Codes::kEncoderInitializationError};
   }
 
   if (!device_->Open(V4L2Device::Type::kEncoder, output_format_fourcc_)) {
@@ -257,7 +263,7 @@ bool V4L2VideoEncodeAccelerator::Initialize(
         << "Failed to open device for profile="
         << GetProfileName(config.output_profile)
         << ", fourcc=" << FourccToString(output_format_fourcc_);
-    return false;
+    return {EncoderStatus::Codes::kEncoderInitializationError};
   }
 
   gfx::Size min_resolution;
@@ -273,7 +279,7 @@ bool V4L2VideoEncodeAccelerator::Initialize(
         << "Unsupported resolution: " << config.input_visible_size.ToString()
         << ", min=" << min_resolution.ToString()
         << ", max=" << max_resolution.ToString();
-    return false;
+    return {EncoderStatus::Codes::kEncoderInitializationError};
   }
 
   // Ask if V4L2_ENC_CMD_STOP (Flush) is supported.
@@ -290,13 +296,13 @@ bool V4L2VideoEncodeAccelerator::Initialize(
   if (device_->Ioctl(VIDIOC_QUERYCAP, &caps) != 0) {
     MEDIA_LOG(ERROR, media_log.get())
         << "ioctl() failed: VIDIOC_QUERYCAP, errno=" << errno;
-    return false;
+    return {EncoderStatus::Codes::kEncoderInitializationError};
   }
 
   if ((caps.capabilities & kCapsRequired) != kCapsRequired) {
     MEDIA_LOG(ERROR, media_log.get())
         << "caps check failed: 0x" << std::hex << caps.capabilities;
-    return false;
+    return {EncoderStatus::Codes::kEncoderInitializationError};
   }
 
   driver_name_ = device_->GetDriverName();
@@ -304,7 +310,7 @@ bool V4L2VideoEncodeAccelerator::Initialize(
   encoder_task_runner_->PostTask(
       FROM_HERE, base::BindOnce(&V4L2VideoEncodeAccelerator::InitializeTask,
                                 weak_this_, config));
-  return true;
+  return {EncoderStatus::Codes::kOk};
 }
 
 void V4L2VideoEncodeAccelerator::InitializeTask(const Config& config) {

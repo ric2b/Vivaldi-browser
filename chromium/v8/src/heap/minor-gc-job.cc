@@ -6,7 +6,7 @@
 
 #include <memory>
 
-#include "src/execution/isolate.h"
+#include "src/execution/isolate-inl.h"
 #include "src/execution/vm-state-inl.h"
 #include "src/flags/flags.h"
 #include "src/heap/heap-inl.h"
@@ -166,6 +166,10 @@ void MinorGCJob::Task::RunInternal() {
 
   DCHECK_EQ(job_->current_task_id_, id());
   job_->current_task_id_ = CancelableTaskManager::kInvalidTaskId;
+
+  // Set the current isolate such that trusted pointer tables etc are
+  // available and the cage base is set correctly for multi-cage mode.
+  SetCurrentIsolateScope isolate_scope(isolate());
 
   Heap* heap = isolate()->heap();
 

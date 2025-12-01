@@ -43,10 +43,10 @@ with `AutofillAgent` extracting a form from the DOM.
 │   │ │1 per WebContents│    │            │                  │
 │   │ └─┬───────────────┘    └────────┐   │                  │
 │   │   │posts                        │   │                  │
-│   │ ┌─▼─────────────────────────┐   │   │                  │
-│   ├─►AutofillCrowsourcingManager│   │   │                  │    ┌──────────────┐
-│   │ │1 per WebContents          │   │   │                  │    │FormStructure │
-│   │ └─────────────────────▲─────┘   │   │                  │    │1 per FormData│
+│   │ ┌─▼──────────────────────────┐  │   │                  │
+│   ├─►AutofillCrowdsourcingManager│  │   │                  │    ┌──────────────┐
+│   │ │1 per WebContents           │  │   │                  │    │FormStructure │
+│   │ └─────────────────────▲──────┘  │   │                  │    │1 per FormData│
 │   │                       │         │   │                  └──┐ └─▲────────────┘
 │   │owns 1                 │         │   │events               │   │sets types
 │ ┌─┴──────────────────┐    │queries  │ ┌─┴───────────────────┐ │   │owns N
@@ -323,7 +323,7 @@ Several important subsets of FieldTypes exist:
   * The supported type of [EmailInfo](https://source.chromium.org/chromium/chromium/src/+/refs/heads/main:components/autofill/core/browser/data_model/contact_info.h;l=87;drc=10009f6ff9f3b626979c9422321686f360df7cee) is [EMAIL_ADDRESS](https://source.chromium.org/chromium/chromium/src/+/refs/heads/main:components/autofill/core/browser/data_model/contact_info.cc;l=184;drc=59b1cf76cc21ae34bc99073e963f7d268b0a5c17).
   * The supported types of AutofillProfile are all name, address, phone number, etc. types.
 * Stored types of AutofillProfile: The set of types stored in AutofillTable,
-  defined by `GetDatabaseStoredTypesOfAutofillProfile()` in field_type_util.h.
+  defined by `AutofillProfile::kDatabaseStoredTypes`.
   * Not all supported types of AutofillProfile are stored, since types following
     a standard format can unambiguously be derived from another type. See
     derived types below.

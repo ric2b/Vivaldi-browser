@@ -7,6 +7,14 @@
       <permission id="camera" type="camera">
     </div>
   </div>
+  <permission
+    id="microphone"
+    type="microphone"
+    ondismiss="console.log(this.id + '-dismiss');"
+    onresolve="console.log(this.id + '-resolve');"
+    onpromptdismiss="console.log(this.id + '-promptdismiss');"
+    onpromptaction="console.log(this.id + '-promptaction');">
+  </permission>
   <script>
     function logEventToConsole(prefix, event) {
       console.log(prefix + event.target.id + '-' + event.type);
@@ -23,6 +31,19 @@
       logEventToConsole("grandparent-", event);
     });
     document.getElementById('grandparent').addEventListener('dismiss', (event) => {
+      logEventToConsole("grandparent-", event);
+    });
+
+    document.getElementById('parent').addEventListener('promptaction', (event) => {
+      logEventToConsole("parent-", event);
+    });
+    document.getElementById('parent').addEventListener('promptdismiss', (event) => {
+      logEventToConsole("parent-", event);
+    });
+    document.getElementById('grandparent').addEventListener('promptaction', (event) => {
+      logEventToConsole("grandparent-", event);
+    });
+    document.getElementById('grandparent').addEventListener('promptdismiss', (event) => {
       logEventToConsole("grandparent-", event);
     });
 

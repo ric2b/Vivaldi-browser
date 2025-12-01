@@ -562,8 +562,9 @@ class RenderFrameHostManagerTest
         BrowsingContextGroupSwap::CreateDefault();
     TestRenderFrameHost* frame_host = static_cast<TestRenderFrameHost*>(
         manager
-            ->GetFrameHostForNavigation(frame_tree_node->navigation_request(),
-                                        &ignored_bcg_swap_info)
+            ->GetFrameHostForNavigation(
+                frame_tree_node->navigation_request(), &ignored_bcg_swap_info,
+                ProcessAllocationContext{ProcessAllocationSource::kTest})
             .value());
     CHECK(frame_host);
 
@@ -2342,8 +2343,17 @@ TEST_P(RenderFrameHostManagerTestWithSiteIsolation,
 // This test confirms that for this return navigation that we identified that
 // there is no FallbackSurface for the RenderWidgetHostView to display during
 // the navigation. (https://crbug.com/1258363)
+// TODO(crbug.com/375057184): Determine why this test crashes on Android and
+// re-enable it.
+#if BUILDFLAG(IS_ANDROID)
+#define MAYBE_TwoTabsOneNavigatesAndCrashesThenNavigatesBack \
+  DISABLED_TwoTabsOneNavigatesAndCrashesThenNavigatesBack
+#else
+#define MAYBE_TwoTabsOneNavigatesAndCrashesThenNavigatesBack \
+  TwoTabsOneNavigatesAndCrashesThenNavigatesBack
+#endif
 TEST_P(RenderFrameHostManagerTestWithSiteIsolation,
-       DISABLED_TwoTabsOneNavigatesAndCrashesThenNavigatesBack) {
+       MAYBE_TwoTabsOneNavigatesAndCrashesThenNavigatesBack) {
   const GURL kUrl1("http://www.google.com/");
   const GURL kUrl2("http://webkit.org/");
 
@@ -3458,11 +3468,13 @@ TEST_P(RenderFrameHostManagerTest, NavigateFromDeadRendererToWebUI) {
   // Prepare to commit, update the navigating RenderFrameHost.
   BrowsingContextGroupSwap ignored_bcg_swap_info =
       BrowsingContextGroupSwap::CreateDefault();
-  EXPECT_EQ(host, manager
-                      ->GetFrameHostForNavigation(
-                          frame_tree_node->navigation_request(),
-                          &ignored_bcg_swap_info)
-                      .value());
+  EXPECT_EQ(
+      host,
+      manager
+          ->GetFrameHostForNavigation(
+              frame_tree_node->navigation_request(), &ignored_bcg_swap_info,
+              ProcessAllocationContext{ProcessAllocationSource::kTest})
+          .value());
 
   // No pending RenderFrameHost as the current one should be reused.
   EXPECT_FALSE(GetPendingFrameHost(manager));

@@ -8,6 +8,10 @@ import org.jni_zero.CalledByNative;
 import org.jni_zero.JNINamespace;
 import org.jni_zero.NativeMethods;
 
+import org.chromium.base.Callback;
+import org.chromium.base.ObserverList;
+import org.chromium.build.annotations.NullMarked;
+import org.chromium.build.annotations.Nullable;
 import org.chromium.components.data_sharing.GroupData;
 import org.chromium.components.data_sharing.member_role.MemberRole;
 import org.chromium.url.GURL;
@@ -17,7 +21,9 @@ import org.chromium.url.GURL;
  * are delegated to the native C++ class.
  */
 @JNINamespace("collaboration")
+@NullMarked
 public class CollaborationServiceImpl implements CollaborationService {
+    private final ObserverList<CollaborationService.Observer> mObservers = new ObserverList<>();
     private long mNativePtr;
 
     @CalledByNative
@@ -35,14 +41,21 @@ public class CollaborationServiceImpl implements CollaborationService {
     }
 
     @Override
-    public void startJoinFlow(CollaborationControllerDelegate delegate, GURL url) {
-        CollaborationServiceImplJni.get().startJoinFlow(mNativePtr, delegate.getNativePtr(), url);
+    public void startJoinFlow(
+            CollaborationControllerDelegate delegate,
+            GURL url,
+            @CollaborationServiceJoinEntryPoint int entry) {
+        CollaborationServiceImplJni.get()
+                .startJoinFlow(mNativePtr, delegate.getNativePtr(), url, entry);
     }
 
     @Override
-    public void startShareOrManageFlow(CollaborationControllerDelegate delegate, String syncId) {
+    public void startShareOrManageFlow(
+            CollaborationControllerDelegate delegate,
+            String syncId,
+            @CollaborationServiceShareOrManageEntryPoint int entry) {
         CollaborationServiceImplJni.get()
-                .startShareOrManageFlow(mNativePtr, delegate.getNativePtr(), syncId);
+                .startShareOrManageFlow(mNativePtr, delegate.getNativePtr(), syncId, entry);
     }
 
     @Override
@@ -51,14 +64,41 @@ public class CollaborationServiceImpl implements CollaborationService {
     }
 
     @Override
-    public @MemberRole int getCurrentUserRoleForGroup(String collaborationId) {
+    public @MemberRole int getCurrentUserRoleForGroup(@Nullable String collaborationId) {
         return CollaborationServiceImplJni.get()
                 .getCurrentUserRoleForGroup(mNativePtr, collaborationId);
     }
 
     @Override
-    public GroupData getGroupData(String collaborationId) {
+    public GroupData getGroupData(@Nullable String collaborationId) {
         return CollaborationServiceImplJni.get().getGroupData(mNativePtr, collaborationId);
+    }
+
+    @Override
+    public void leaveGroup(String groupId, Callback<Boolean> callback) {
+        CollaborationServiceImplJni.get().leaveGroup(mNativePtr, groupId, callback);
+    }
+
+    @Override
+    public void deleteGroup(String groupId, Callback<Boolean> callback) {
+        CollaborationServiceImplJni.get().deleteGroup(mNativePtr, groupId, callback);
+    }
+
+    @Override
+    public void addObserver(Observer observer) {
+        mObservers.addObserver(observer);
+    }
+
+    @Override
+    public void removeObserver(Observer observer) {
+        mObservers.removeObserver(observer);
+    }
+
+    @CalledByNative
+    private void onServiceStatusChanged(ServiceStatus oldStatus, ServiceStatus newStatus) {
+        for (CollaborationService.Observer observer : mObservers) {
+            observer.onServiceStatusChanged(oldStatus, newStatus);
+        }
     }
 
     @CalledByNative
@@ -72,16 +112,29 @@ public class CollaborationServiceImpl implements CollaborationService {
                 long nativeCollaborationServiceAndroid, CollaborationServiceImpl caller);
 
         void startJoinFlow(
-                long nativeCollaborationServiceAndroid, long delegateNativePtr, GURL url);
+                long nativeCollaborationServiceAndroid,
+                long delegateNativePtr,
+                GURL url,
+                int entry);
 
         void startShareOrManageFlow(
-                long nativeCollaborationServiceAndroid, long delegateNativePtr, String syncId);
+                long nativeCollaborationServiceAndroid,
+                long delegateNativePtr,
+                String syncId,
+                int entry);
 
         ServiceStatus getServiceStatus(long nativeCollaborationServiceAndroid);
 
         int getCurrentUserRoleForGroup(
-                long nativeCollaborationServiceAndroid, String collaborationId);
+                long nativeCollaborationServiceAndroid, @Nullable String collaborationId);
 
-        GroupData getGroupData(long nativeCollaborationServiceAndroid, String collaborationId);
+        GroupData getGroupData(
+                long nativeCollaborationServiceAndroid, @Nullable String collaborationId);
+
+        void leaveGroup(
+                long nativeCollaborationServiceAndroid, String groupId, Callback<Boolean> callback);
+
+        void deleteGroup(
+                long nativeCollaborationServiceAndroid, String groupId, Callback<Boolean> callback);
     }
 }

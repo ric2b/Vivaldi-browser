@@ -6,14 +6,20 @@
 
 #include <string>
 
+#include "base/check_deref.h"
+#include "base/feature_list.h"
 #include "base/metrics/histogram_functions.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/ui/actions/chrome_action_id.h"
 #include "chrome/browser/ui/autofill/autofill_bubble_base.h"
 #include "chrome/browser/ui/autofill/autofill_bubble_handler.h"
 #include "chrome/browser/ui/browser.h"
+#include "chrome/browser/ui/browser_actions.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/page_action/page_action_icon_type.h"
+#include "chrome/browser/ui/tabs/public/tab_features.h"
+#include "chrome/browser/ui/ui_features.h"
 #include "components/autofill/core/browser/metrics/autofill_metrics.h"
 #include "components/autofill/core/browser/metrics/payments/offers_metrics.h"
 #include "components/autofill/core/browser/payments/offer_notification_options.h"
@@ -22,8 +28,14 @@
 #include "components/autofill/core/common/autofill_payments_features.h"
 #include "components/commerce/core/commerce_feature_list.h"
 #include "components/strings/grit/components_strings.h"
+#include "components/tab_collections/public/tab_interface.h"
 #include "content/public/browser/navigation_handle.h"
+#include "ui/actions/actions.h"
 #include "ui/base/l10n/l10n_util.h"
+
+#if !BUILDFLAG(IS_ANDROID)
+#include "chrome/browser/ui/views/page_action/page_action_controller.h"
+#endif  // BUILDFLAG(IS_ANDROID)
 
 namespace autofill {
 
@@ -56,7 +68,9 @@ OfferNotificationBubbleControllerImpl::OfferNotificationBubbleControllerImpl(
     content::WebContents* web_contents)
     : AutofillBubbleControllerBase(web_contents),
       content::WebContentsUserData<OfferNotificationBubbleControllerImpl>(
-          *web_contents) {}
+          *web_contents),
+      tab_interface_(
+          CHECK_DEREF(tabs::TabInterface::GetFromContents(web_contents))) {}
 
 std::u16string OfferNotificationBubbleControllerImpl::GetWindowTitle() const {
   switch (offer_.GetOfferType()) {
@@ -108,14 +122,6 @@ bool OfferNotificationBubbleControllerImpl::IsIconVisible() const {
   return bubble_state_ != BubbleState::kHidden;
 }
 
-bool OfferNotificationBubbleControllerImpl::ShouldIconExpand() const {
-  return icon_should_expand_;
-}
-
-void OfferNotificationBubbleControllerImpl::OnIconExpanded() {
-  icon_should_expand_ = false;
-}
-
 void OfferNotificationBubbleControllerImpl::OnBubbleClosed(
     PaymentsUiClosedReason closed_reason) {
   set_bubble_view(nullptr);
@@ -152,8 +158,6 @@ void OfferNotificationBubbleControllerImpl::ShowOfferNotificationIfApplicable(
     const AutofillOfferData& offer,
     const CreditCard* card,
     const OfferNotificationOptions& options) {
-  icon_should_expand_ = options.expand_notification_icon;
-
   // If this is not the bubble's first show, and offer to be shown has not
   // changed, and it has not been shown for more than
   // kAutofillBubbleSurviveNavigationTime, do not dismiss the bubble.
@@ -208,6 +212,7 @@ void OfferNotificationBubbleControllerImpl::OnVisibilityChanged(
   } else if (visibility == content::Visibility::HIDDEN) {
     HideBubbleAndClearTimestamp(bubble_state_ == BubbleState::kShowingIcon);
   }
+  UpdatePageAction();
 }
 
 PageActionIconType
@@ -217,6 +222,8 @@ OfferNotificationBubbleControllerImpl::GetPageActionIconType() {
 
 void OfferNotificationBubbleControllerImpl::DoShowBubble() {
   bubble_state_ = BubbleState::kShowingIconAndBubble;
+  UpdatePageAction();
+
   // Don't show bubble yet if web content is not active (bubble will instead be
   // shown when web content become visible and active).
   if (!IsWebContentsActive()) {
@@ -260,9 +267,40 @@ void OfferNotificationBubbleControllerImpl::HideBubbleAndClearTimestamp(
     bool should_show_icon) {
   bubble_state_ =
       should_show_icon ? BubbleState::kShowingIcon : BubbleState::kHidden;
+  UpdatePageAction();
   UpdatePageActionIcon();
   HideBubble();
   bubble_shown_timestamp_ = std::nullopt;
+}
+
+void OfferNotificationBubbleControllerImpl::UpdatePageAction() {
+  // Page action icons do not exist for Android.
+#if !BUILDFLAG(IS_ANDROID)
+  if (!IsPageActionMigrated(PageActionIconType::kPaymentsOfferNotification)) {
+    return;
+  }
+  // TODO(crbug.com/403255843): AutofillBubbleControllerBase relies on
+  // WebContents visibility changes, meaning this can get triggered during
+  // destruction. Ideally, the controller would track a TabInterface to prevent
+  // updates mid-destruction.
+  if (!tab_interface_->GetTabFeatures()) {
+    return;
+  }
+  bool should_show_icon = bubble_state_ != BubbleState::kHidden;
+  constexpr actions::ActionId action_id = kActionOffersAndRewardsForPage;
+  auto* const page_action_controller =
+      tab_interface_->GetTabFeatures()->page_action_controller();
+  if (should_show_icon) {
+    page_action_controller->Show(action_id);
+  } else {
+    page_action_controller->Hide(action_id);
+  }
+  auto* action = actions::ActionManager::Get().FindAction(
+      action_id, tab_interface_->GetBrowserWindowInterface()
+                     ->GetActions()
+                     ->root_action_item());
+  action->SetEnabled(should_show_icon);
+#endif  // BUILDFLAG(IS_ANDROID)
 }
 
 WEB_CONTENTS_USER_DATA_KEY_IMPL(OfferNotificationBubbleControllerImpl);

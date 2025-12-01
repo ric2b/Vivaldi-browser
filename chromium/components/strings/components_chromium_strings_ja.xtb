@@ -21,6 +21,7 @@
 <translation id="4622039161600275920">このページは Chromium によってブロックされています</translation>
 <translation id="48558539577516920">ファイアウォールやウイルス対策の設定で、Chromium からネットワークへのアクセスを
         許可します。</translation>
+<translation id="4949828774841497663">[アプリケーション] &gt; [システム設定] &gt; [ネットワーク] に移動し、アクティブなネットワークを選択したあと、[詳細] ボタンをクリックして、選択されているプロキシがあれば選択を解除します。</translation>
 <translation id="580822234363523061">このオプションを無効にするには:
           Chromium メニュー &gt;
           <ph name="SETTINGS_TITLE" />
@@ -41,9 +42,6 @@
           の順に移動して、[<ph name="NO_PREFETCH_DESCRIPTION" />] をオフにします。
           上記を行っても問題が解決しない場合は、パフォーマンス向上のため
           このオプションを再びオンにすることをおすすめします。</translation>
-<translation id="8187289872471304532">このオプションを無効にするには:
-          [アプリケーション] &gt; [システム環境設定] &gt; [ネットワーク] &gt; [詳細] &gt; [プロキシ] の順に移動して、
-          選択されているプロキシの選択を解除します。</translation>
 <translation id="8597726643333341451">保護された Chrome for Testing ページを表示しています</translation>
 <translation id="8684913864886094367">Chromium は正しく終了しませんでした。</translation>
 </translationbundle>

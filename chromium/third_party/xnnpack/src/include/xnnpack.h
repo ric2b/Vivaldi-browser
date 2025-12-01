@@ -6,13 +6,15 @@
 // This source code is licensed under the BSD-style license found in the
 // LICENSE file in the root directory of this source tree.
 
+// clang-format off
+
 #pragma once
 
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 
-#include "pthreadpool.h"
+#include <pthreadpool.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -296,6 +298,9 @@ enum xnn_datatype {
   xnn_datatype_qduint8 = 15,
   /// IEEE754 half-precision packed floating-point.
   xnn_datatype_pfp16 = 16,
+  /// Packed quantized 8-bit unsigned integer with shared per-Value quantization
+  /// parameters.
+  xnn_datatype_pqint8 = 17,
 };
 
 /// Define a tensor-type Value and add it to a Subgraph.
@@ -487,11 +492,21 @@ enum xnn_status xnn_define_dynamically_quantized_tensor_value(
 /// Type of unary operation
 enum xnn_unary_operator {
   xnn_unary_invalid = -1,
-  xnn_unary_convert,
-  xnn_unary_clamp,
   xnn_unary_abs,
+  // This is a GELU approximation that mimics the approximation:
+  //
+  //   0.5 * x * (1 + tanh(sqrt(2/π) * (x + 0.044715 * x^3)))
+  //
+  // which differs sufficiently from the exact GELU (`xnn_unary_gelu` below) to
+  // cause problems in some models. Note that both the approximation and the
+  // exact GELU use the same order rational approximation polynomials and are
+  // therefore both equally fast.
+  xnn_unary_approxgelu,
   xnn_unary_bankers_rounding,
   xnn_unary_ceiling,
+  xnn_unary_clamp,
+  xnn_unary_convert,
+  xnn_unary_cosine,
   xnn_unary_elu,
   xnn_unary_exp,
   xnn_unary_floor,
@@ -500,17 +515,16 @@ enum xnn_unary_operator {
   xnn_unary_leaky_relu,
   xnn_unary_log,
   xnn_unary_negate,
-  xnn_unary_sigmoid,
-  xnn_unary_square,
-  xnn_unary_square_root,
   xnn_unary_reciprocal_square_root,
+  xnn_unary_sigmoid,
+  xnn_unary_sine,
+  xnn_unary_square_root,
+  xnn_unary_square,
   xnn_unary_tanh,
   // The following operators are experimental and may be removed.
-  xnn_unary_cube_root,
-  xnn_unary_cosine,
-  xnn_unary_sine,
-  xnn_unary_count_leading_zeros,
   xnn_unary_bitwise_not,
+  xnn_unary_count_leading_zeros,
+  xnn_unary_cube_root,
   xnn_unary_popcount,
   xnn_unary_sign,
 };
@@ -1481,6 +1495,28 @@ enum xnn_status xnn_define_static_reduce_v2(        //
     uint32_t output_id,                             //
     uint32_t flags);
 
+/// Define a n-Input Concatenate Node and add it to a Subgraph.
+///
+/// The n-Input Concatenate Node concatenates 'n' tensors along a specified axis.
+///
+/// @param subgraph - a Subgraph object that will own the created Node.
+/// @param axis - the axis to concatenate the two input tensors along. If this is less than zero, the number of
+///               dimensions is added to it.
+/// @param num_inputs - The number of input tensors to concatenate. Must be greater than or equal to 2.
+/// @param inputs - An array of Value IDs representing the input tensors. Each tensor must be an N-dimensional tensor defined in the @a subgraph.
+///                 All input tensors must have identical dimensions, except for the concatenation axis.
+/// @param output_id - Value ID for the output tensor. The output tensor must be a N-dimensional tensor defined
+///                    in the @a subgraph with each dimension equal to the dimension of both inputs, except the axis
+///                    dimension, where it is the sum of the corresponding dimensions of both inputs.
+/// @param flags - binary features of the Concatenate Node. No supported flags are currently defined.
+enum xnn_status xnn_define_concatenate(
+  xnn_subgraph_t subgraph,
+  int32_t axis,
+  size_t num_inputs,
+  const uint32_t* inputs,
+  uint32_t output_id,
+  uint32_t flags);
+
 /// Define a 2-Input Concatenate Node and add it to a Subgraph.
 ///
 /// The 2-Input Concatenate Node concatenates two tensors along a specified axis.
@@ -1498,7 +1534,7 @@ enum xnn_status xnn_define_static_reduce_v2(        //
 ///                    in the @a subgraph with each dimension equal to the dimension of both inputs, except the axis
 ///                    dimension, where it is the sum of the corresponding dimensions of both inputs.
 /// @param flags - binary features of the Concatenate Node. No supported flags are currently defined.
-enum xnn_status xnn_define_concatenate2(
+XNN_DEPRECATED enum xnn_status xnn_define_concatenate2(
   xnn_subgraph_t subgraph,
   int32_t axis,
   uint32_t input1_id,
@@ -1526,7 +1562,7 @@ enum xnn_status xnn_define_concatenate2(
 ///                    in the @a subgraph with each dimension equal to the dimension of all inputs, except the axis
 ///                    dimension, where it is the sum of the corresponding dimensions of all inputs.
 /// @param flags - binary features of the Concatenate Node. No supported flags are currently defined.
-enum xnn_status xnn_define_concatenate3(
+XNN_DEPRECATED enum xnn_status xnn_define_concatenate3(
   xnn_subgraph_t subgraph,
   int32_t axis,
   uint32_t input1_id,
@@ -1558,7 +1594,7 @@ enum xnn_status xnn_define_concatenate3(
 ///                    in the @a subgraph with each dimension equal to the dimension of all inputs, except the axis
 ///                    dimension, where it is the sum of the corresponding dimensions of all inputs.
 /// @param flags - binary features of the Concatenate Node. No supported flags are currently defined.
-enum xnn_status xnn_define_concatenate4(
+XNN_DEPRECATED enum xnn_status xnn_define_concatenate4(
   xnn_subgraph_t subgraph,
   int32_t axis,
   uint32_t input1_id,
@@ -1593,7 +1629,7 @@ enum xnn_status xnn_define_concatenate4(
 /// @param output_id - Value ID for the output tensor. The output tensor must be a N-dimensional tensor defined
 ///                    in the @a subgraph with each dimension equal to the dimension of all inputs, except the axis
 ///                    dimension, where it is the sum of the corresponding dimensions of all inputs.
-enum xnn_status xnn_define_concatenate5(
+XNN_DEPRECATED enum xnn_status xnn_define_concatenate5(
   xnn_subgraph_t subgraph,
   int32_t axis,
   uint32_t input1_id,
@@ -1635,6 +1671,31 @@ enum xnn_status xnn_define_copy(
   uint32_t output_id,
   uint32_t flags);
 
+/// Define a n-Output Split Node and add it to a Subgraph.
+///
+/// The n-Output Split Node splits an input tensor into n output tensors along a specified axis evenly.
+///
+/// @param subgraph - a Subgraph object that will own the created Node.
+/// @param split_dim - the dimension to split the input tensor along. If this is less than zero, the number of
+///                    dimensions is added to it.
+/// @param input_id - Value ID for the input tensor. The input tensor must be an N-dimensional tensor defined in the @a
+///                   subgraph.
+/// @param num_outputs - The number of output tensors to generate. The input tensor will be evenly split into 
+///                      this number of output tensors along the `split_dim`. Each output tensor will have 
+///                      the same dimensions as the input tensor, except for the `split_dim`, which will be 
+///                      divided evenly between the outputs.
+/// @param outputs - An array of Value IDs for the output tensors. Each output tensor must be an N-dimensional 
+///                  tensor defined in the @a subgraph with the same shape as the input tensor, except along the
+///                  `split_dim` dimension, which will be split evenly among the output tensors. The number of
+///                  output tensors corresponds to the value of `num_outputs`.
+enum xnn_status xnn_define_even_split(
+  xnn_subgraph_t subgraph,
+  int32_t split_dim,
+  uint32_t input_id,
+  size_t num_outputs,
+  const uint32_t* outputs,
+  uint32_t flags);
+
 /// Define a 2-Output Split Node and add it to a Subgraph.
 ///
 /// The 2-Output Split Node splits an input tensor into two output tensors along a specified axis evenly.
@@ -1651,7 +1712,7 @@ enum xnn_status xnn_define_copy(
 ///                     defined in the @a subgraph with each dimension, except the axis, equal to the corresponding
 ///                     dimension of the first output. The split_dim dimension is half of the input's split_dim.
 /// @param flags - binary features of the Split Node. No supported flags are currently defined.
-enum xnn_status xnn_define_even_split2(
+XNN_DEPRECATED enum xnn_status xnn_define_even_split2(
   xnn_subgraph_t subgraph,
   int32_t split_dim,
   uint32_t input_id,
@@ -1680,7 +1741,7 @@ enum xnn_status xnn_define_even_split2(
 ///                     dimension of the second and third output. The split_dim dimension is one third of the input's
 ///                     split_dim.
 /// @param flags - binary features of the Split Node. No supported flags are currently defined.
-enum xnn_status xnn_define_even_split3(
+XNN_DEPRECATED enum xnn_status xnn_define_even_split3(
   xnn_subgraph_t subgraph,
   int32_t split_dim,
   uint32_t input_id,
@@ -1714,7 +1775,7 @@ enum xnn_status xnn_define_even_split3(
 ///                     dimension of the other output tensors. The split_dim dimension is one fourth of the input's
 ///                     split_dim.
 /// @param flags - binary features of the Split Node. No supported flags are currently defined.
-enum xnn_status xnn_define_even_split4(
+XNN_DEPRECATED enum xnn_status xnn_define_even_split4(
   xnn_subgraph_t subgraph,
   int32_t split_dim,
   uint32_t input_id,
@@ -2101,6 +2162,33 @@ enum xnn_status xnn_define_static_slice_v2(  //
     size_t num_dims,                         //
     const int64_t* offsets,                  //
     const size_t* sizes,                     //
+    uint32_t input_id,                       //
+    uint32_t output_id,                      //
+    uint32_t flags);
+
+/// Define a Static Slice Node add it to a Subgraph.
+///
+/// @param subgraph - a Subgraph object that will own the created Node.
+/// @param num_dims - number of shape dimensions in the input and output tensor.
+/// @param begins - offsets to the start in each dimension of the input tensor. This array must have @a num_dims elements.
+///                 Can be negative meaning that the offset is relative to the end of the dimension.
+/// @param ends - offsets to the end in each dimension of the input tensor. This array must have @a num_dims elements.
+///               Can be negative meaning that the offset is relative to the end of the dimension.
+///               An end value of 0 means "infer the largest open interval".
+/// @param strides - The stride to use for each dimension of the slice. Can be NULL, in which case
+///                  a value of 1 is assumed for all dimensions.
+///                  TODO: at present, only stride values of 1 are supported (other values will return errors);
+///                  this will be supported more fully in the future.
+/// @param input_id - Value ID for the input tensor. The input tensor must be defined in the @a subgraph.
+/// @param output_id - Value ID for the output tensor. The output tensor must be defined in the @a subgraph, and its
+///                    dimensions must match @a sizes.
+/// @param flags - binary features of the Static Slice Node. No supported flags are currently defined.
+enum xnn_status xnn_define_static_slice_v3(  //
+    xnn_subgraph_t subgraph,                 //
+    size_t num_dims,                         //
+    const int64_t* begins,                   //
+    const int64_t* ends,                     //
+    const int64_t* strides,                  //
     uint32_t input_id,                       //
     uint32_t output_id,                      //
     uint32_t flags);
@@ -2517,15 +2605,12 @@ enum xnn_status xnn_reshape_argmax_pooling2d_nhwc_f32(
   size_t channels,
   size_t input_pixel_stride,
   size_t output_pixel_stride,
-  size_t* workspace_size,
-  size_t* workspace_alignment,
   size_t* output_height_out,
   size_t* output_width_out,
   pthreadpool_t threadpool);
 
 enum xnn_status xnn_setup_argmax_pooling2d_nhwc_f32(
   xnn_operator_t argmax_pooling_op,
-  void* workspace,
   const float* input,
   float* output,
   uint32_t* index);
@@ -2552,15 +2637,12 @@ enum xnn_status xnn_reshape_average_pooling2d_nhwc_f16(
   size_t channels,
   size_t input_pixel_stride,
   size_t output_pixel_stride,
-  size_t* workspace_size,
-  size_t* workspace_alignment,
   size_t* output_height_out,
   size_t* output_width_out,
   pthreadpool_t threadpool);
 
 enum xnn_status xnn_setup_average_pooling2d_nhwc_f16(
   xnn_operator_t average_pooling_op,
-  void* workspace,
   const void* input,
   void* output);
 
@@ -2586,59 +2668,25 @@ enum xnn_status xnn_reshape_average_pooling2d_nhwc_f32(
   size_t channels,
   size_t input_pixel_stride,
   size_t output_pixel_stride,
-  size_t* workspace_size,
-  size_t* workspace_alignment,
   size_t* output_height_out,
   size_t* output_width_out,
   pthreadpool_t threadpool);
 
 enum xnn_status xnn_setup_average_pooling2d_nhwc_f32(
   xnn_operator_t average_pooling_op,
-  void* workspace,
   const float* input,
   float* output);
-
-enum xnn_status xnn_create_average_pooling2d_nhwc_qu8(
-  uint32_t input_padding_top,
-  uint32_t input_padding_right,
-  uint32_t input_padding_bottom,
-  uint32_t input_padding_left,
-  uint32_t pooling_height,
-  uint32_t pooling_width,
-  uint32_t stride_height,
-  uint32_t stride_width,
-  uint8_t input_zero_point,
-  float input_scale,
-  uint8_t output_zero_point,
-  float output_scale,
-  uint8_t output_min,
-  uint8_t output_max,
-  uint32_t flags,
-  xnn_operator_t* average_pooling_op_out);
-
-enum xnn_status xnn_reshape_average_pooling2d_nhwc_qu8(
-  xnn_operator_t average_pooling_op,
-  size_t batch_size,
-  size_t input_height,
-  size_t input_width,
-  size_t channels,
-  size_t input_pixel_stride,
-  size_t output_pixel_stride,
-  size_t* workspace_size,
-  size_t* workspace_alignment,
-  size_t* output_height_out,
-  size_t* output_width_out,
-  pthreadpool_t threadpool);
-
-enum xnn_status xnn_setup_average_pooling2d_nhwc_qu8(
-  xnn_operator_t average_pooling_op,
-  void* workspace,
-  const uint8_t* input,
-  uint8_t* output);
 
 enum xnn_status xnn_create_batch_matrix_multiply_nc_f16(
   uint32_t flags,
   xnn_operator_t* batch_matrix_multiply_op);
+
+enum xnn_status xnn_create_batch_matrix_multiply_nc_bf16_f32(
+    uint32_t flags, xnn_operator_t* batch_matrix_multiply_op);
+
+enum xnn_status xnn_create_batch_matrix_multiply_nc_f16_const_weights(
+    size_t batch_size_b, size_t k, size_t n, const void* data_b, uint32_t flags,
+    xnn_operator_t* batch_matrix_multiply_op);
 
 enum xnn_status xnn_reshape_batch_matrix_multiply_nc_f16(
     xnn_operator_t batch_matrix_multiply_op, size_t num_batch_dims,
@@ -2647,6 +2695,16 @@ enum xnn_status xnn_reshape_batch_matrix_multiply_nc_f16(
     pthreadpool_t threadpool);
 
 enum xnn_status xnn_setup_batch_matrix_multiply_nc_f16(
+    xnn_operator_t batch_matrix_multiply_op, void* workspace,
+    const void* input_a, const void* input_b, void* output);
+
+enum xnn_status xnn_reshape_batch_matrix_multiply_nc_bf16_f32(
+    xnn_operator_t batch_matrix_multiply_op, size_t num_batch_dims,
+    const size_t* batch_dims_a, const size_t* batch_dims_b, size_t m, size_t k,
+    size_t n, size_t* workspace_size, size_t* workspace_alignment,
+    pthreadpool_t threadpool);
+
+enum xnn_status xnn_setup_batch_matrix_multiply_nc_bf16_f32(
     xnn_operator_t batch_matrix_multiply_op, void* workspace,
     const void* input_a, const void* input_b, void* output);
 
@@ -3764,6 +3822,20 @@ enum xnn_status xnn_create_fully_connected_nc_f32_f16(
   xnn_weights_cache_t weights_cache,
   xnn_operator_t* fully_connected_op_out);
 
+enum xnn_status xnn_create_fully_connected_nc_bf16_f32(
+  size_t input_channels,
+  size_t output_channels,
+  size_t input_stride,
+  size_t output_stride,
+  const void* kernel,
+  const float* bias,
+  float output_min,
+  float output_max,
+  uint32_t flags,
+  xnn_code_cache_t code_cache,
+  xnn_weights_cache_t weights_cache,
+  xnn_operator_t* fully_connected_op_out);
+
 enum xnn_status xnn_create_fully_connected_nc_f32(
   size_t input_channels,
   size_t output_channels,
@@ -3783,6 +3855,11 @@ enum xnn_status xnn_reshape_fully_connected_nc_f32_f16(
   size_t batch_size,
   pthreadpool_t threadpool);
 
+enum xnn_status xnn_reshape_fully_connected_nc_bf16_f32(
+  xnn_operator_t fully_connected_op,
+  size_t batch_size,
+  pthreadpool_t threadpool);
+
 enum xnn_status xnn_reshape_fully_connected_nc_f32(
   xnn_operator_t fully_connected_op,
   size_t batch_size,
@@ -3791,6 +3868,11 @@ enum xnn_status xnn_reshape_fully_connected_nc_f32(
 enum xnn_status xnn_setup_fully_connected_nc_f32_f16(
   xnn_operator_t fully_connected_op,
   const float* input,
+  float* output);
+
+enum xnn_status xnn_setup_fully_connected_nc_bf16_f32(
+  xnn_operator_t fully_connected_op,
+  const void* input,
   float* output);
 
 enum xnn_status xnn_setup_fully_connected_nc_f32(
@@ -4256,13 +4338,14 @@ enum xnn_status xnn_setup_reduce_nd(
     const void* input,
     void* output);
 
-enum xnn_status xnn_create_resize_bilinear2d_nchw_f32(
+enum xnn_status xnn_create_resize_bilinear2d_nchw(
+  enum xnn_datatype datatype,
   size_t output_height,
   size_t output_width,
   uint32_t flags,
   xnn_operator_t* resize_op_out);
 
-enum xnn_status xnn_reshape_resize_bilinear2d_nchw_f32(
+enum xnn_status xnn_reshape_resize_bilinear2d_nchw(
   xnn_operator_t resize_op,
   size_t batch_size,
   size_t input_height,
@@ -4272,39 +4355,19 @@ enum xnn_status xnn_reshape_resize_bilinear2d_nchw_f32(
   size_t output_pixel_stride,
   pthreadpool_t threadpool);
 
-enum xnn_status xnn_setup_resize_bilinear2d_nchw_f32(
-  xnn_operator_t resize_op,
-  const float* input,
-  float* output);
-
-enum xnn_status xnn_create_resize_bilinear2d_nchw_f16(
-  size_t output_height,
-  size_t output_width,
-  uint32_t flags,
-  xnn_operator_t* resize_op_out);
-
-enum xnn_status xnn_reshape_resize_bilinear2d_nchw_f16(
-  xnn_operator_t resize_op,
-  size_t batch_size,
-  size_t input_height,
-  size_t input_width,
-  size_t channels,
-  size_t input_pixel_stride,
-  size_t output_pixel_stride,
-  pthreadpool_t threadpool);
-
-enum xnn_status xnn_setup_resize_bilinear2d_nchw_f16(
+enum xnn_status xnn_setup_resize_bilinear2d_nchw(
   xnn_operator_t resize_op,
   const void* input,
   void* output);
 
-enum xnn_status xnn_create_resize_bilinear2d_nhwc_f16(
+enum xnn_status xnn_create_resize_bilinear2d_nhwc(
+  enum xnn_datatype datatype,
   size_t output_height,
   size_t output_width,
   uint32_t flags,
   xnn_operator_t* resize_op_out);
 
-enum xnn_status xnn_reshape_resize_bilinear2d_nhwc_f16(
+enum xnn_status xnn_reshape_resize_bilinear2d_nhwc(
   xnn_operator_t resize_op,
   size_t batch_size,
   size_t input_height,
@@ -4316,83 +4379,11 @@ enum xnn_status xnn_reshape_resize_bilinear2d_nhwc_f16(
   size_t* workspace_alignment,
   pthreadpool_t threadpool);
 
-enum xnn_status xnn_setup_resize_bilinear2d_nhwc_f16(
+enum xnn_status xnn_setup_resize_bilinear2d_nhwc(
   xnn_operator_t resize_op,
   void* workspace,
   const void* input,
   void* output);
-
-enum xnn_status xnn_create_resize_bilinear2d_nhwc_f32(
-  size_t output_height,
-  size_t output_width,
-  uint32_t flags,
-  xnn_operator_t* resize_op_out);
-
-enum xnn_status xnn_reshape_resize_bilinear2d_nhwc_f32(
-  xnn_operator_t resize_op,
-  size_t batch_size,
-  size_t input_height,
-  size_t input_width,
-  size_t channels,
-  size_t input_pixel_stride,
-  size_t output_pixel_stride,
-  size_t* workspace_size,
-  size_t* workspace_alignment,
-  pthreadpool_t threadpool);
-
-enum xnn_status xnn_setup_resize_bilinear2d_nhwc_f32(
-  xnn_operator_t resize_op,
-  void* workspace,
-  const float* input,
-  float* output);
-
-enum xnn_status xnn_create_resize_bilinear2d_nhwc_s8(
-  size_t output_height,
-  size_t output_width,
-  uint32_t flags,
-  xnn_operator_t* resize_op_out);
-
-enum xnn_status xnn_reshape_resize_bilinear2d_nhwc_s8(
-  xnn_operator_t resize_op,
-  size_t batch_size,
-  size_t input_height,
-  size_t input_width,
-  size_t channels,
-  size_t input_pixel_stride,
-  size_t output_pixel_stride,
-  size_t* workspace_size,
-  size_t* workspace,
-  pthreadpool_t threadpool);
-
-enum xnn_status xnn_setup_resize_bilinear2d_nhwc_s8(
-  xnn_operator_t resize_op,
-  void* workspace,
-  const int8_t* input,
-  int8_t* output);
-
-enum xnn_status xnn_create_resize_bilinear2d_nhwc_u8(
-  size_t output_height,
-  size_t output_width,
-  uint32_t flags,
-  xnn_operator_t* resize_op_out);
-
-enum xnn_status xnn_reshape_resize_bilinear2d_nhwc_u8(
-  xnn_operator_t resize_op,
-  size_t batch_size,
-  size_t input_height,
-  size_t input_width,
-  size_t channels,
-  size_t input_pixel_stride,
-  size_t output_pixel_stride,
-  size_t* workspace_size,
-  size_t* workspace_alignment,
-  pthreadpool_t threadpool);
-
-enum xnn_status xnn_setup_resize_bilinear2d_nhwc_u8(
-  xnn_operator_t resize_op,
-  void* workspace,
-  const uint8_t* input,
-  uint8_t* output);
 
 enum xnn_status xnn_create_rope_nthc_f16(
   uint32_t flags,

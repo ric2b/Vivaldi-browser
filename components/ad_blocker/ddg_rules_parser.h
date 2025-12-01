@@ -3,6 +3,7 @@
 #ifndef COMPONENTS_AD_BLOCKER_DDG_RULES_PARSER_H_
 #define COMPONENTS_AD_BLOCKER_DDG_RULES_PARSER_H_
 
+#include "base/memory/raw_ptr.h"
 #include "base/values.h"
 #include "components/ad_blocker/adblock_request_filter_rule.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"

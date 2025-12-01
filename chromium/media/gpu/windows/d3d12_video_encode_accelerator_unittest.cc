@@ -5,6 +5,8 @@
 #include "media/gpu/windows/d3d12_video_encode_accelerator.h"
 
 #include "base/test/task_environment.h"
+#include "components/viz/common/resources/shared_image_format.h"
+#include "gpu/command_buffer/client/test_shared_image_interface.h"
 #include "media/base/media_util.h"
 #include "media/base/win/d3d12_mocks.h"
 #include "media/base/win/d3d12_video_mocks.h"
@@ -101,41 +103,6 @@ class MockVideoEncoderDelegateFactory
   }
 };
 
-class MockGpuMemoryBuffer : public gfx::GpuMemoryBuffer {
- public:
-  MockGpuMemoryBuffer() {
-    fake_handle_.type = gfx::DXGI_SHARED_HANDLE;
-    fake_handle_.set_dxgi_handle(gfx::DXGIHandle::CreateFakeForTest());
-  }
-  ~MockGpuMemoryBuffer() override = default;
-
-  MOCK_METHOD(bool, Map, ());
-  MOCK_METHOD(void*, memory, (size_t));
-  MOCK_METHOD(void, Unmap, ());
-  MOCK_METHOD(gfx::Size, GetSize, (), (const));
-  MOCK_METHOD(gfx::BufferFormat, GetFormat, (), (const));
-  MOCK_METHOD(int, stride, (size_t plane), (const));
-  MOCK_METHOD(gfx::GpuMemoryBufferId, GetId, (), (const));
-  MOCK_METHOD(gfx::GpuMemoryBufferType, GetType, (), (const));
-  // Not mocked because:
-  // - no one actually needs the mock and
-  // - the returned handle needs to actually be of the correct type, which
-  //   is much easier with an actual function rather than a function mock.
-  gfx::GpuMemoryBufferHandle CloneHandle() const override {
-    return fake_handle_.Clone();
-  }
-  MOCK_METHOD(void,
-              OnMemoryDump,
-              (base::trace_event::ProcessMemoryDump*,
-               const base::trace_event::MemoryAllocatorDumpGuid&,
-               uint64_t,
-               int),
-              (const));
-
- private:
-  gfx::GpuMemoryBufferHandle fake_handle_;
-};
-
 }  // namespace
 
 class D3D12VideoEncodeAcceleratorTest : public testing::Test {
@@ -161,6 +128,7 @@ class D3D12VideoEncodeAcceleratorTest : public testing::Test {
     static_cast<D3D12VideoEncodeAccelerator*>(video_encode_accelerator_.get())
         ->SetEncoderFactoryForTesting(
             std::make_unique<MockVideoEncoderDelegateFactory>());
+    test_sii_ = base::MakeRefCounted<gpu::TestSharedImageInterface>();
   }
 
   VideoEncodeAccelerator::Config SupportedProfileToConfig(
@@ -174,17 +142,21 @@ class D3D12VideoEncodeAcceleratorTest : public testing::Test {
   }
 
   scoped_refptr<VideoFrame> CreateTestVideoFrame() {
-    auto mock_gpu_memory_buffer =
-        std::make_unique<NiceMock<MockGpuMemoryBuffer>>();
-    ON_CALL(*mock_gpu_memory_buffer, GetSize())
-        .WillByDefault(Return(kSupportedSize));
-    ON_CALL(*mock_gpu_memory_buffer, GetFormat())
-        .WillByDefault(Return(gfx::BufferFormat::YUV_420_BIPLANAR));
-    ON_CALL(*mock_gpu_memory_buffer, GetType())
-        .WillByDefault(Return(gfx::GpuMemoryBufferType::DXGI_SHARED_HANDLE));
-    return VideoFrame::WrapExternalGpuMemoryBuffer(
-        gfx::Rect(kSupportedSize), kSupportedSize,
-        std::move(mock_gpu_memory_buffer), base::TimeDelta{});
+    gfx::GpuMemoryBufferHandle fake_handle;
+    fake_handle.type = gfx::DXGI_SHARED_HANDLE;
+    fake_handle.set_dxgi_handle(gfx::DXGIHandle::CreateFakeForTest());
+
+    const auto si_usage = gpu::SHARED_IMAGE_USAGE_CPU_WRITE_ONLY |
+                          gpu::SHARED_IMAGE_USAGE_DISPLAY_READ;
+    auto shared_image = test_sii_->CreateSharedImage(
+        {viz::MultiPlaneFormat::kNV12, kSupportedSize, gfx::ColorSpace(),
+         gpu::SharedImageUsageSet(si_usage), "D3D12VideoEncodeAcceleratorTest"},
+        gpu::kNullSurfaceHandle, gfx::BufferUsage::GPU_READ,
+        std::move(fake_handle));
+    return media::VideoFrame::WrapMappableSharedImage(
+        std::move(shared_image), test_sii_->GenVerifiedSyncToken(),
+        base::NullCallback(), gfx::Rect(kSupportedSize), kSupportedSize,
+        base::TimeDelta{});
   }
 
   void WaitForEncoderTasksToComplete() const {
@@ -223,6 +195,7 @@ class D3D12VideoEncodeAcceleratorTest : public testing::Test {
   Microsoft::WRL::ComPtr<D3D12ResourceMock> mock_resource_;
   std::unique_ptr<VideoEncodeAccelerator> video_encode_accelerator_;
   std::unique_ptr<MockVideoEncodeAcceleratorClient> client_;
+  scoped_refptr<gpu::TestSharedImageInterface> test_sii_;
 };
 
 TEST_F(D3D12VideoEncodeAcceleratorTest, SupportedProfilesCanBeInitialized) {
@@ -232,8 +205,9 @@ TEST_F(D3D12VideoEncodeAcceleratorTest, SupportedProfilesCanBeInitialized) {
   for (const auto& profile :
        d3d12_video_encode_accelerator->GetSupportedProfiles()) {
     auto config = SupportedProfileToConfig(profile);
-    EXPECT_TRUE(d3d12_video_encode_accelerator->Initialize(
-        config, client_.get(), media_log_->Clone()));
+    EXPECT_TRUE(d3d12_video_encode_accelerator
+                    ->Initialize(config, client_.get(), media_log_->Clone())
+                    .is_ok());
     EXPECT_CALL(*client_, NotifyEncoderInfoChange(_)).Times(1);
     EXPECT_CALL(*client_, NotifyErrorStatus(_)).Times(0);
     WaitForEncoderTasksToComplete();
@@ -262,8 +236,9 @@ TEST_F(D3D12VideoEncodeAcceleratorTest, RejectsUnsupportedConfig) {
     auto bad_config = supported_config;
     bad_config.output_profile = video_codec_profile;
     bad_config.input_visible_size = size;
-    EXPECT_TRUE(d3d12_video_encode_accelerator->Initialize(
-        bad_config, client_.get(), media_log_->Clone()));
+    EXPECT_TRUE(d3d12_video_encode_accelerator
+                    ->Initialize(bad_config, client_.get(), media_log_->Clone())
+                    .is_ok());
     EXPECT_CALL(*client_, NotifyEncoderInfoChange(_)).Times(0);
     EXPECT_CALL(*client_, NotifyErrorStatus(_)).Times(1);
     WaitForEncoderTasksToComplete();
@@ -290,8 +265,10 @@ TEST_F(D3D12VideoEncodeAcceleratorTest,
             bitstream_buffer_count = count;
             bitstream_buffer_size = size_in_bytes;
           }));
-  EXPECT_TRUE(d3d12_video_encode_accelerator->Initialize(
-      supported_config, client_.get(), media_log_->Clone()));
+  EXPECT_TRUE(
+      d3d12_video_encode_accelerator
+          ->Initialize(supported_config, client_.get(), media_log_->Clone())
+          .is_ok());
   WaitForEncoderTasksToComplete();
   Mock::VerifyAndClearExpectations(&client_);
 

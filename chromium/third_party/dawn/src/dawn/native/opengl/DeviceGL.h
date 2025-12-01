@@ -93,7 +93,7 @@ class Device final : public DeviceBase {
                                            uint64_t size) override;
 
     MaybeError CopyFromStagingToTextureImpl(const BufferBase* source,
-                                            const TextureDataLayout& src,
+                                            const TexelCopyBufferLayout& src,
                                             const TextureCopy& dst,
                                             const Extent3D& copySizePixels) override;
 
@@ -148,6 +148,12 @@ class Device final : public DeviceBase {
         const SharedTextureMemoryDescriptor* descriptor) override;
     ResultOrError<Ref<SharedFenceBase>> ImportSharedFenceImpl(
         const SharedFenceDescriptor* descriptor) override;
+    ResultOrError<Ref<TextureBase>> CreateTextureWrappingEGLImageImpl(
+        const ExternalImageDescriptor* descriptor,
+        ::EGLImage image);
+    ResultOrError<Ref<TextureBase>> CreateTextureWrappingGLTextureImpl(
+        const ExternalImageDescriptor* descriptor,
+        GLuint texture);
 
     void DestroyImpl() override;
 

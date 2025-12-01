@@ -44,18 +44,17 @@
 #include "net/cert/internal/revocation_checker.h"
 #include "net/cert/internal/system_trust_store.h"
 #include "net/cert/known_roots.h"
-#include "net/cert/symantec_certs.h"
 #include "net/cert/x509_certificate.h"
 #include "net/cert/x509_certificate_net_log_param.h"
 #include "net/cert/x509_util.h"
 #include "net/log/net_log_event_type.h"
 #include "net/log/net_log_values.h"
 #include "net/log/net_log_with_source.h"
+#include "third_party/boringssl/src/include/openssl/pki/ocsp.h"
 #include "third_party/boringssl/src/include/openssl/pool.h"
 #include "third_party/boringssl/src/pki/encode_values.h"
 #include "third_party/boringssl/src/pki/extended_key_usage.h"
 #include "third_party/boringssl/src/pki/ocsp.h"
-#include "third_party/boringssl/src/pki/ocsp_revocation_status.h"
 #include "third_party/boringssl/src/pki/parse_certificate.h"
 #include "third_party/boringssl/src/pki/pem.h"
 #include "third_party/boringssl/src/pki/signature_algorithm.h"
@@ -569,15 +568,6 @@ int CertVerifyProc::Verify(X509Certificate* cert,
       rv = MapCertStatusToNetError(verify_result->cert_status);
   }
 
-  // Distrust Symantec-issued certificates, as described at
-  // https://security.googleblog.com/2017/09/chromes-plan-to-distrust-symantec.html
-  if (!(flags & VERIFY_DISABLE_SYMANTEC_ENFORCEMENT) &&
-      IsLegacySymantecCert(verify_result->public_key_hashes)) {
-    verify_result->cert_status |= CERT_STATUS_SYMANTEC_LEGACY;
-    if (rv == OK || IsCertificateError(rv))
-      rv = MapCertStatusToNetError(verify_result->cert_status);
-  }
-
   // Flag certificates using too long validity periods.
   if (verify_result->is_issued_by_known_root && HasTooLongValidity(*cert)) {
     verify_result->cert_status |= CERT_STATUS_VALIDITY_TOO_LONG;
@@ -782,8 +772,9 @@ bool CertVerifyProc::HasNameConstraintsViolation(
     for (const auto& hash : public_key_hashes) {
       if (hash.tag() != HASH_VALUE_SHA256)
         continue;
-      if (memcmp(hash.data(), limit.public_key_hash.data, hash.size()) != 0)
+      if (hash.span() != limit.public_key_hash) {
         continue;
+      }
       if (dns_names.empty() && ip_addrs.empty()) {
         std::vector<std::string> names;
         names.push_back(common_name);

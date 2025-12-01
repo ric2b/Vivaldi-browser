@@ -6,6 +6,8 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <utility>
+#include <variant>
 #include <vector>
 
 #include "ash/app_list/views/app_list_bubble_apps_page.h"
@@ -302,8 +304,8 @@ class GeminiAppInteractiveUiTestBase
     // `InteractiveBrowserTestT<>::SetUpOnMainThread()` so that the interactive
     // browser test base class will successfully set the context widget for the
     // test sequence. The context widget will be associated with the browser.
-    if (absl::holds_alternative<ash::LoggedInUserMixin>(user_session_mixin_)) {
-      absl::get<ash::LoggedInUserMixin>(user_session_mixin_).LogInUser();
+    if (std::holds_alternative<ash::LoggedInUserMixin>(user_session_mixin_)) {
+      std::get<ash::LoggedInUserMixin>(user_session_mixin_).LogInUser();
     }
 
     InteractiveBrowserTestT<
@@ -334,16 +336,16 @@ class GeminiAppInteractiveUiTestBase
  private:
   // Creates the appropriate guest or logged-in user session mixin based on
   // the presence of `login_type`.
-  absl::variant<ash::GuestSessionMixin, ash::LoggedInUserMixin>
+  std::variant<ash::GuestSessionMixin, ash::LoggedInUserMixin>
   CreateUserSessionMixin(
       std::optional<ash::LoggedInUserMixin::LogInType> login_type) {
     if (!login_type) {
-      return absl::variant<ash::GuestSessionMixin, ash::LoggedInUserMixin>(
-          absl::in_place_type_t<ash::GuestSessionMixin>(), &mixin_host_);
+      return std::variant<ash::GuestSessionMixin, ash::LoggedInUserMixin>(
+          std::in_place_type_t<ash::GuestSessionMixin>(), &mixin_host_);
     }
 
-    return absl::variant<ash::GuestSessionMixin, ash::LoggedInUserMixin>(
-        absl::in_place_type_t<ash::LoggedInUserMixin>(), &mixin_host_,
+    return std::variant<ash::GuestSessionMixin, ash::LoggedInUserMixin>(
+        std::in_place_type_t<ash::LoggedInUserMixin>(), &mixin_host_,
         /*test_base=*/this, embedded_test_server(), login_type.value());
   }
 
@@ -352,7 +354,7 @@ class GeminiAppInteractiveUiTestBase
 
   // Used to manage either a guest or logged-in user session based on test
   // parameterization.
-  absl::variant<ash::GuestSessionMixin, ash::LoggedInUserMixin>
+  std::variant<ash::GuestSessionMixin, ash::LoggedInUserMixin>
       user_session_mixin_;
 
   // Used to enable the Gemini app preinstallation.
@@ -536,7 +538,6 @@ IN_PROC_BROWSER_TEST_P(GeminiAppInteractiveUiTest, LaunchFromShelf) {
   // Views.
   raw_ptr<ash::ShelfAppButton> chrome_app = nullptr;
   raw_ptr<ash::ShelfAppButton> gemini_app = nullptr;
-  raw_ptr<ash::ShelfAppButton> gmail_app = nullptr;
   raw_ptr<ash::ShelfView> shelf = nullptr;
 
   // Test.
@@ -562,28 +563,22 @@ IN_PROC_BROWSER_TEST_P(GeminiAppInteractiveUiTest, LaunchFromShelf) {
       // Cache Chrome app.
       AssignView(kChromeAppElementName, std::ref(chrome_app)),
 
-      // Find Gmail app.
-      NameDescendantView(
-          ash::kShelfViewElementId, kGmailAppElementName,
-          base::BindRepeating(&IsShelfAppButtonForWebApp, std::cref(shelf),
-                              ash::kGmailAppId)),
-
-      // Cache Gmail app.
-      AssignView(kGmailAppElementName, std::ref(gmail_app)),
-
       // Check Gemini app position.
-      Check([&]() {
-        std::vector<raw_ptr<ash::ShelfAppButton>> apps;
-        FindDescendantsOfClass(shelf, apps);
-        const auto gemini_app_index = FindIndex(apps, gemini_app.get());
-        if (IsExistingUser()) {
-          return gemini_app_index == 0u;
-        }
-        const auto chrome_app_index = FindIndex(apps, chrome_app.get());
-        const auto gmail_app_index = FindIndex(apps, gmail_app.get());
-        return (chrome_app_index == gemini_app_index.value() - 1u) &&
-               (gmail_app_index == gemini_app_index.value() + 1u);
-      }),
+      Check(
+          [&]() {
+            std::vector<raw_ptr<ash::ShelfAppButton>> apps;
+
+            FindDescendantsOfClass(shelf, apps);
+
+            const auto gemini_app_index = FindIndex(apps, gemini_app.get());
+            const auto chrome_app_index = FindIndex(apps, chrome_app.get());
+            if (IsExistingUser()) {
+              return gemini_app_index == 0u;
+            }
+
+            return chrome_app_index == 0u && gemini_app_index == 1u;
+          },
+          "Gemini app is positioned correctly"),
 
       // Launch Gemini app.
       InstrumentNextTab(kGeminiAppWebContentsElementId, AnyBrowser()),

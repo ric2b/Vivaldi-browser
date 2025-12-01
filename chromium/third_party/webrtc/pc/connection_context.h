@@ -30,11 +30,7 @@
 #include "rtc_base/socket_factory.h"
 #include "rtc_base/thread.h"
 #include "rtc_base/thread_annotations.h"
-
-namespace rtc {
-class BasicPacketSocketFactory;
-class UniqueRandomIdGenerator;
-}  // namespace rtc
+#include "rtc_base/unique_id_generator.h"
 
 namespace webrtc {
 
@@ -66,12 +62,12 @@ class ConnectionContext final : public RefCountedNonVirtual<ConnectionContext> {
     return media_engine_.get();
   }
 
-  rtc::Thread* signaling_thread() { return signaling_thread_; }
-  const rtc::Thread* signaling_thread() const { return signaling_thread_; }
-  rtc::Thread* worker_thread() { return worker_thread_.get(); }
-  const rtc::Thread* worker_thread() const { return worker_thread_.get(); }
-  rtc::Thread* network_thread() { return network_thread_; }
-  const rtc::Thread* network_thread() const { return network_thread_; }
+  Thread* signaling_thread() { return signaling_thread_; }
+  const Thread* signaling_thread() const { return signaling_thread_; }
+  Thread* worker_thread() { return worker_thread_.get(); }
+  const Thread* worker_thread() const { return worker_thread_.get(); }
+  Thread* network_thread() { return network_thread_; }
+  const Thread* network_thread() const { return network_thread_; }
 
   // Environment associated with the PeerConnectionFactory.
   // Note: environments are different for different PeerConnections,
@@ -83,7 +79,7 @@ class ConnectionContext final : public RefCountedNonVirtual<ConnectionContext> {
     RTC_DCHECK_RUN_ON(signaling_thread_);
     return default_network_manager_.get();
   }
-  rtc::PacketSocketFactory* default_socket_factory() {
+  PacketSocketFactory* default_socket_factory() {
     RTC_DCHECK_RUN_ON(signaling_thread_);
     return default_socket_factory_.get();
   }
@@ -91,7 +87,7 @@ class ConnectionContext final : public RefCountedNonVirtual<ConnectionContext> {
     RTC_DCHECK_RUN_ON(worker_thread());
     return call_factory_.get();
   }
-  rtc::UniqueRandomIdGenerator* ssrc_generator() { return &ssrc_generator_; }
+  UniqueRandomIdGenerator* ssrc_generator() { return &ssrc_generator_; }
   // Note: There is lots of code that wants to know whether or not we
   // use RTX, but so far, no code has been found that sets it to false.
   // Kept in the API in order to ease introduction if we want to resurrect
@@ -112,12 +108,12 @@ class ConnectionContext final : public RefCountedNonVirtual<ConnectionContext> {
   // The following three variables are used to communicate between the
   // constructor and the destructor, and are never exposed externally.
   bool wraps_current_thread_;
-  std::unique_ptr<rtc::SocketFactory> owned_socket_factory_;
-  std::unique_ptr<rtc::Thread> owned_network_thread_
+  std::unique_ptr<SocketFactory> owned_socket_factory_;
+  std::unique_ptr<Thread> owned_network_thread_
       RTC_GUARDED_BY(signaling_thread_);
-  rtc::Thread* const network_thread_;
-  AlwaysValidPointer<rtc::Thread> const worker_thread_;
-  rtc::Thread* const signaling_thread_;
+  Thread* const network_thread_;
+  AlwaysValidPointer<Thread> const worker_thread_;
+  Thread* const signaling_thread_;
 
   const Environment env_;
 
@@ -129,7 +125,7 @@ class ConnectionContext final : public RefCountedNonVirtual<ConnectionContext> {
   // specified by the user (or by the remote party).
   // TODO(bugs.webrtc.org/12666): This variable is used from both the signaling
   // and worker threads. See if we can't restrict usage to a single thread.
-  rtc::UniqueRandomIdGenerator ssrc_generator_;
+  UniqueRandomIdGenerator ssrc_generator_;
   std::unique_ptr<rtc::NetworkMonitorFactory> const network_monitor_factory_
       RTC_GUARDED_BY(signaling_thread_);
   std::unique_ptr<rtc::NetworkManager> default_network_manager_
@@ -137,7 +133,7 @@ class ConnectionContext final : public RefCountedNonVirtual<ConnectionContext> {
   std::unique_ptr<MediaFactory> const call_factory_
       RTC_GUARDED_BY(worker_thread());
 
-  std::unique_ptr<rtc::PacketSocketFactory> default_socket_factory_
+  std::unique_ptr<PacketSocketFactory> default_socket_factory_
       RTC_GUARDED_BY(signaling_thread_);
   std::unique_ptr<SctpTransportFactoryInterface> const sctp_factory_;
 

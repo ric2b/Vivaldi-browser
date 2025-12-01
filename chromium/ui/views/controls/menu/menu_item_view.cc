@@ -42,6 +42,7 @@
 #include "ui/gfx/paint_vector_icon.h"
 #include "ui/gfx/text_utils.h"
 #include "ui/native_theme/native_theme.h"
+#include "ui/views/accessibility/ax_virtual_view.h"
 #include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/badge_painter.h"
 #include "ui/views/controls/button/menu_button.h"
@@ -339,7 +340,7 @@ MenuItemView* MenuItemView::AddMenuItemAt(
     submenu_->SetBorderColorId(submenu_background_color);
     if (submenu_background_color.has_value()) {
       submenu_->SetBackground(
-          views::CreateThemedSolidBackground(submenu_background_color.value()));
+          views::CreateSolidBackground(submenu_background_color.value()));
     }
   }
   DCHECK_LE(index, submenu_->children().size());
@@ -465,7 +466,7 @@ SubmenuView* MenuItemView::CreateSubmenu() {
   // submenu items, we create a virtual child of type Menu.
   std::unique_ptr<AXVirtualView> virtual_child =
       std::make_unique<AXVirtualView>();
-  virtual_child->GetCustomData().role = ax::mojom::Role::kMenu;
+  virtual_child->SetRole(ax::mojom::Role::kMenu);
   GetViewAccessibility().AddVirtualChildView(std::move(virtual_child));
 #endif  //  BUILDFLAG(IS_MAC)
 

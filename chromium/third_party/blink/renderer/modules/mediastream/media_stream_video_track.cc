@@ -852,9 +852,9 @@ MediaStreamVideoTrack::MediaStreamVideoTrack(
           &MediaStreamVideoTrack::FrameDeliverer::
               NewSubCaptureTargetVersionOnVideoTaskRunner,
           frame_deliverer_)),
-      base::BindPostTaskToCurrentDefault(WTF::BindRepeating(
-          &MediaStreamVideoTrack::SetSizeAndComputedFrameRate,
-          weak_factory_.GetWeakPtr())),
+      base::BindPostTaskToCurrentDefault(
+          WTF::BindRepeating(&MediaStreamVideoTrack::SetVideoFrameSettings,
+                             weak_factory_.GetWeakPtr())),
       base::BindPostTaskToCurrentDefault(
           WTF::BindRepeating(&MediaStreamVideoTrack::set_computed_source_format,
                              weak_factory_.GetWeakPtr())),
@@ -904,9 +904,9 @@ MediaStreamVideoTrack::MediaStreamVideoTrack(
           &MediaStreamVideoTrack::FrameDeliverer::
               NewSubCaptureTargetVersionOnVideoTaskRunner,
           frame_deliverer_)),
-      base::BindPostTaskToCurrentDefault(WTF::BindRepeating(
-          &MediaStreamVideoTrack::SetSizeAndComputedFrameRate,
-          weak_factory_.GetWeakPtr())),
+      base::BindPostTaskToCurrentDefault(
+          WTF::BindRepeating(&MediaStreamVideoTrack::SetVideoFrameSettings,
+                             weak_factory_.GetWeakPtr())),
       base::BindPostTaskToCurrentDefault(
           WTF::BindRepeating(&MediaStreamVideoTrack::set_computed_source_format,
                              weak_factory_.GetWeakPtr())),
@@ -1136,7 +1136,7 @@ void MediaStreamVideoTrack::GetSettings(
             : *adapter_frame_rate;
   } else {
     // For other tracks, use the computed frame rate reported via
-    // SetSizeAndComputedFrameRate().
+    // SetVideoFrameSettings().
     if (computed_frame_rate_)
       settings.frame_rate = *computed_frame_rate_;
   }
@@ -1152,6 +1152,9 @@ void MediaStreamVideoTrack::GetSettings(
     settings.logical_surface = info->logical_surface;
     settings.cursor = info->cursor;
   }
+
+  settings.physical_frame_size = captured_frame_physical_size_;
+  settings.device_scale_factor = device_scale_factor_;
 }
 
 MediaStreamTrackPlatform::VideoFrameStats
@@ -1228,6 +1231,27 @@ void MediaStreamVideoTrack::OnReadyStateChanged(
   Vector<WebMediaStreamSink*> encoded_sinks_copy(encoded_sinks_);
   for (auto* encoded_sink : encoded_sinks_copy)
     encoded_sink->OnReadyStateChanged(state);
+}
+
+void MediaStreamVideoTrack::SetVideoFrameSettings(
+    gfx::Size frame_size,
+    double frame_rate,
+    std::optional<gfx::Size> metadata_source_size,
+    std::optional<float> device_scale_factor) {
+  width_ = frame_size.width();
+  height_ = frame_size.height();
+  computed_frame_rate_ = frame_rate;
+
+  bool resolution_changed =
+      (captured_frame_physical_size_ != metadata_source_size) ||
+      (device_scale_factor_ != device_scale_factor);
+
+  captured_frame_physical_size_ = metadata_source_size;
+  device_scale_factor_ = device_scale_factor;
+
+  if (resolution_changed && captured_surface_resolution_callback_) {
+    captured_surface_resolution_callback_.Run(/*has_changed=*/true);
+  }
 }
 
 void MediaStreamVideoTrack::SetMinimumFrameRate(double min_frame_rate) {

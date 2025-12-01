@@ -182,10 +182,6 @@ void TabGroupSyncServiceProxy::OnTabSelected(
   NOTIMPLEMENTED();
 }
 
-SelectedTabInfo TabGroupSyncServiceProxy::GetCurrentlySelectedTabInfo() {
-  return SelectedTabInfo();
-}
-
 void TabGroupSyncServiceProxy::SaveGroup(SavedTabGroup group) {
   service_->SaveRestoredGroup(std::move(group));
 }
@@ -201,6 +197,12 @@ void TabGroupSyncServiceProxy::MakeTabGroupShared(
   NOTIMPLEMENTED();
 }
 
+void TabGroupSyncServiceProxy::MakeTabGroupSharedForTesting(
+    const LocalTabGroupID& local_group_id,
+    std::string_view collaboration_id) {
+  NOTIMPLEMENTED();
+}
+
 void TabGroupSyncServiceProxy::AboutToUnShareTabGroup(
     const LocalTabGroupID& local_group_id,
     base::OnceClosure on_complete_callback) {
@@ -211,6 +213,23 @@ void TabGroupSyncServiceProxy::OnTabGroupUnShareComplete(
     const LocalTabGroupID& local_group_id,
     bool success) {
   NOTIMPLEMENTED();
+}
+
+void TabGroupSyncServiceProxy::OnCollaborationRemoved(
+    const syncer::CollaborationId& collaboration_id) {
+  NOTIMPLEMENTED();
+}
+
+std::vector<const SavedTabGroup*> TabGroupSyncServiceProxy::ReadAllGroups()
+    const {
+  const std::vector<SavedTabGroup>& groups =
+      service_->model()->saved_tab_groups();
+  std::vector<const SavedTabGroup*> group_ptrs;
+  group_ptrs.reserve(groups.size());
+  for (const SavedTabGroup& group : groups) {
+    group_ptrs.push_back(&group);
+  }
+  return group_ptrs;
 }
 
 std::vector<SavedTabGroup> TabGroupSyncServiceProxy::GetAllGroups() const {
@@ -255,13 +274,13 @@ TabGroupSyncServiceProxy::GetTitleForPreviouslyExistingSharedTabGroup(
   return std::nullopt;
 }
 
-void TabGroupSyncServiceProxy::OpenTabGroup(
+std::optional<LocalTabGroupID> TabGroupSyncServiceProxy::OpenTabGroup(
     const base::Uuid& sync_group_id,
     std::unique_ptr<TabGroupActionContext> context) {
   TabGroupActionContextDesktop* desktop_context =
       static_cast<TabGroupActionContextDesktop*>(context.get());
-  service_->OpenSavedTabGroupInBrowser(desktop_context->browser, sync_group_id,
-                                       desktop_context->opening_source);
+  return service_->OpenSavedTabGroupInBrowser(
+      desktop_context->browser, sync_group_id, desktop_context->opening_source);
 }
 
 void TabGroupSyncServiceProxy::UpdateLocalTabGroupMapping(
@@ -325,6 +344,11 @@ TabGroupSyncServiceProxy::GetSharedTabGroupControllerDelegate() {
   return service_->GetSharedTabGroupControllerDelegate();
 }
 
+base::WeakPtr<syncer::DataTypeControllerDelegate>
+TabGroupSyncServiceProxy::GetSharedTabGroupAccountControllerDelegate() {
+  return service_->GetSharedTabGroupAccountControllerDelegate();
+}
+
 std::unique_ptr<ScopedLocalObservationPauser>
 TabGroupSyncServiceProxy::CreateScopedLocalObserverPauser() {
   return service_->CreateScopedLocalObserverPauser();
@@ -348,6 +372,12 @@ void TabGroupSyncServiceProxy::AddObserver(Observer* observer) {
   }
 
   observers_.AddObserver(observer);
+
+  // TabGroupSyncServiceImpl calls OnInitialized when an observer is added,
+  // mirroring this functionality here.
+  if (service_->model()->is_loaded()) {
+    observer->OnInitialized();
+  }
 }
 
 void TabGroupSyncServiceProxy::RemoveObserver(Observer* observer) {
@@ -362,7 +392,12 @@ void TabGroupSyncServiceProxy::SetIsInitializedForTesting(bool initialized) {
   service_->model()->LoadStoredEntries({}, {});
 }
 
-SavedTabGroupModel* TabGroupSyncServiceProxy::GetModelForTesting() {
+std::u16string TabGroupSyncServiceProxy::GetTabTitle(
+    const LocalTabID& local_tab_id) {
+  return std::u16string();
+}
+
+SavedTabGroupModel* TabGroupSyncServiceProxy::GetModel() {
   return service_->model();
 }
 

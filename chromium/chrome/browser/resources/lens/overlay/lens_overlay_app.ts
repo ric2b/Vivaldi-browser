@@ -141,9 +141,14 @@ export class LensOverlayAppElement extends LensOverlayAppElementBase {
         type: Boolean,
         value: false,
       },
+      enableGhostLoader: {
+        type: Boolean,
+        value: () => loadTimeData.getBoolean('enableGhostLoader'),
+      },
       showGhostLoader: {
         type: Boolean,
         computed: `computeShowGhostLoader(
+                enableGhostLoader,
                 isSearchboxFocused,
                 autocompleteRequestStarted,
                 showErrorState,
@@ -199,15 +204,22 @@ export class LensOverlayAppElement extends LensOverlayAppElementBase {
   private isPointerDown: boolean = false;
   // Whether the button containers should be faded out.
   private shouldFadeOutButtons: boolean = false;
+  private darkMode: boolean;
   // The overlay theme.
   private theme: OverlayTheme;
   // Whether the contextual searchbox feature is enabled.
   private isLensOverlayContextualSearchboxEnabled: boolean;
   // Whether the contextual searchbox is visible to the user.
   private isLensOverlayContextualSearchboxVisible: boolean = false;
+  // Whether the contextual searchbox should be auto-focused when the overlay is
+  // first opened.
+  private autoFocusSearchbox: boolean =
+      loadTimeData.getValue('autoFocusSearchbox');
   private toastMessage: string = '';
   // What the current page content type is.
   private pageContentType: PageContentType = PageContentType.kUnknown;
+  // Whether the ghost loader is enabled via feature flag.
+  private enableGhostLoader: boolean;
   // Whether to show the ghost loader.
   private showGhostLoader: boolean;
   // What the placeholder text should be.
@@ -217,6 +229,12 @@ export class LensOverlayAppElement extends LensOverlayAppElementBase {
 
   // The performance tracker used to log performance metrics for the overlay.
   private performanceTracker: PerformanceTracker = new PerformanceTracker();
+
+  // Whether the overlay has received notice that the handshake with the Lens
+  // backend has completed. The handshake is required to send suggest requests.
+  private isBackendHandshakeComplete = false;
+  // Whether to trigger the autocomplete request when suggest inputs are ready.
+  private triggerSuggestOnInputReady = false;
 
   private eventTracker_: EventTracker = new EventTracker();
 
@@ -248,6 +266,8 @@ export class LensOverlayAppElement extends LensOverlayAppElementBase {
       callbackRouter.themeReceived.addListener(this.themeReceived.bind(this)),
       callbackRouter.shouldShowContextualSearchBox.addListener(
           this.shouldShowContextualSearchBox.bind(this)),
+      callbackRouter.notifyHandshakeComplete.addListener(
+          this.onBackendHandshakeComplete.bind(this)),
       callbackRouter.notifyResultsPanelOpened.addListener(
           this.onNotifyResultsPanelOpened.bind(this)),
       callbackRouter.notifyOverlayClosing.addListener(() => {
@@ -466,7 +486,9 @@ export class LensOverlayAppElement extends LensOverlayAppElementBase {
   }
 
   private computeShowGhostLoader(): boolean {
-    if (this.suppressGhostLoader) {
+    // Ghost loader is disabled by the feature flag or suppressed by the
+    // LensOverlayController.
+    if (!this.enableGhostLoader || this.suppressGhostLoader) {
       return false;
     }
     // Show the ghost loader if there is focus on the searchbox, and there is
@@ -516,6 +538,22 @@ export class LensOverlayAppElement extends LensOverlayAppElementBase {
     recordLensOverlayInteraction(INVOCATION_SOURCE, UserAction.kMyActivity);
   }
 
+  private onBackendHandshakeComplete() {
+    if (this.isBackendHandshakeComplete) {
+      // The handshake should only be completed once on invocation. Ignore
+      // subsequent calls just in case.
+      return;
+    }
+    this.isBackendHandshakeComplete = true;
+
+    // Trigger autocomplete if the handshake completed while the user is waiting
+    // for suggest results.
+    if (this.triggerSuggestOnInputReady && this.isSearchboxFocused) {
+      this.triggerSearchboxSuggestions();
+    }
+    this.triggerSuggestOnInputReady = false;
+  }
+
   private onNotifyResultsPanelOpened() {
     this.sidePanelOpened = true;
   }
@@ -550,6 +588,35 @@ export class LensOverlayAppElement extends LensOverlayAppElementBase {
   private onInitialFlashAnimationEnd() {
     this.initialFlashAnimationHasEnded = true;
     this.$.initialGradient.setScrimVisible();
+    // The searchbox is not focusable until the animation has ended.
+    if (this.autoFocusSearchbox &&
+        this.isLensOverlayContextualSearchboxVisible) {
+      this.focusSearchbox();
+    }
+  }
+
+  private triggerSearchboxSuggestions() {
+    // If the backend handshake has completed, then it is safe to issue the
+    // autocomplete query immediately.
+    if (this.isBackendHandshakeComplete) {
+      this.$.searchbox.queryAutocomplete();
+      return;
+    }
+
+    // Since the backend handshake has not completed, set the
+    // triggerSuggestOnInputReady flag so that the autocomplete query is
+    // triggered when the handshake completes. Also set the autocomplete request
+    // started flag to true so that the ghost loader is shown to hide the
+    // handshake latency from the user.
+    this.triggerSuggestOnInputReady = true;
+    this.autocompleteRequestStarted = true;
+  }
+
+  private focusSearchbox() {
+    this.shadowRoot!.querySelector<HTMLElement>('cr-searchbox')
+        ?.shadowRoot!.querySelector<HTMLElement>('input')
+        ?.focus();
+    this.triggerSearchboxSuggestions();
   }
 
   private computeShouldFadeOutButtons(): boolean {
@@ -615,7 +682,7 @@ export class LensOverlayAppElement extends LensOverlayAppElementBase {
   private getSearchboxAriaDescription(): string {
     // Get the the text from the ghost loader to add to the searchbox aria
     // description.
-    return this.$.searchboxGhostLoader.getText();
+    return this.showGhostLoader ? this.$.searchboxGhostLoader.getText() : '';
   }
 
   setSearchboxFocusForTesting(isFocused: boolean) {

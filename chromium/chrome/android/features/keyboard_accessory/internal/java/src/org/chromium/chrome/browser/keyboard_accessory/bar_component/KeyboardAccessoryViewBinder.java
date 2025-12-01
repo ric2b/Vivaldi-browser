@@ -148,13 +148,9 @@ class KeyboardAccessoryViewBinder {
                                         item.getSuggestion().getItemTag());
                     }
                 } else if (item.getFeatureForIph()
-                                .equals(
-                                        FeatureConstants
-                                                .KEYBOARD_ACCESSORY_PLUS_ADDRESS_CREATE_SUGGESTION)
-                        || item.getFeatureForIph()
-                                .equals(
-                                        FeatureConstants
-                                                .KEYBOARD_ACCESSORY_PAYMENT_CARD_INFO_RETRIEVAL_FEATURE)) {
+                        .equals(
+                                FeatureConstants
+                                        .KEYBOARD_ACCESSORY_PAYMENT_CARD_INFO_RETRIEVAL_FEATURE)) {
                     isIphShown =
                             showHelpBubble(
                                     mKeyboardAccessory.getFeatureEngagementTracker(),
@@ -182,11 +178,7 @@ class KeyboardAccessoryViewBinder {
             // the following chip. This might give a more consistent user experience and allow wider
             // windows to show more information in a chip before truncating.
             if (containsIbanInfo(item.getSuggestion())
-                    || (ChromeFeatureList.isEnabled(
-                                    ChromeFeatureList.AUTOFILL_ENABLE_VIRTUAL_CARD_METADATA)
-                            && ChromeFeatureList.isEnabled(
-                                    ChromeFeatureList.AUTOFILL_ENABLE_CARD_PRODUCT_NAME)
-                            && containsCreditCardInfo(item.getSuggestion()))) {
+                    || containsCreditCardInfo(item.getSuggestion())) {
                 int windowWidth =
                         chipView.getContext().getResources().getDisplayMetrics().widthPixels;
                 chipView.setMaxWidth((int) (windowWidth * 0.85));

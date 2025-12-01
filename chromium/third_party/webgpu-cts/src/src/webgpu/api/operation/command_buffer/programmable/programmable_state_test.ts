@@ -1,5 +1,5 @@
 import { unreachable } from '../../../../../common/util/util.js';
-import { GPUTest, GPUTestBase } from '../../../../gpu_test.js';
+import { AllFeaturesMaxLimitsGPUTest, GPUTestBase } from '../../../../gpu_test.js';
 import { EncoderType } from '../../../../util/command_buffer_maker.js';
 
 interface BindGroupIndices {
@@ -12,7 +12,7 @@ type CreateEncoderType = ReturnType<
   typeof GPUTestBase.prototype.createEncoder<'compute pass' | 'render pass' | 'render bundle'>
 >['encoder'];
 
-export class ProgrammableStateTest extends GPUTest {
+export class ProgrammableStateTest extends AllFeaturesMaxLimitsGPUTest {
   private commonBindGroupLayouts: Map<string, GPUBindGroupLayout> = new Map();
 
   skipIfNeedsStorageBuffersInFragmentStageAndHaveNone(

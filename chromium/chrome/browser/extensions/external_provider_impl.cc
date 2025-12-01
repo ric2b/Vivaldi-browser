@@ -57,6 +57,7 @@
 
 #if BUILDFLAG(IS_CHROMEOS)
 #include "ash/constants/ash_paths.h"
+#include "ash/constants/ash_switches.h"
 #include "base/path_service.h"
 #include "chrome/browser/ash/customization/customization_document.h"
 #include "chrome/browser/ash/extensions/signin_screen_extensions_external_loader.h"
@@ -391,8 +392,8 @@ void ExternalProviderImpl::RetrieveExtensionsFromPrefs(
         extension_dict.FindString(kWebAppMigrationFlag);
     bool is_migrating_to_web_app =
         web_app_migration_flag &&
-        web_app::IsPreinstalledAppInstallFeatureEnabled(*web_app_migration_flag,
-                                                        *profile_);
+        web_app::IsPreinstalledAppInstallFeatureEnabled(
+            *web_app_migration_flag);
     bool keep_if_present =
         extension_dict.FindBool(kKeepIfPresent).value_or(false);
     if (keep_if_present || is_migrating_to_web_app) {
@@ -537,6 +538,29 @@ bool ExternalProviderImpl::HasExtension(
   CHECK(prefs_);
   CHECK(ready_);
   return prefs_->contains(id);
+}
+
+bool ExternalProviderImpl::HasExtensionWithLocation(
+    const std::string& id,
+    mojom::ManifestLocation location) const {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+  CHECK(prefs_);
+  CHECK(ready_);
+  const base::Value::Dict* dict = prefs_->FindDict(id);
+  if (!dict) {
+    return false;
+  }
+
+  if (dict->contains(kExternalUpdateUrl) && location == download_location_) {
+    return true;
+  }
+
+  if (dict->contains(kExternalCrx) && dict->FindString(kExternalVersion) &&
+      location == crx_location_) {
+    return true;
+  }
+
+  return false;
 }
 
 bool ExternalProviderImpl::GetExtensionDetails(
@@ -696,7 +720,11 @@ void ExternalProviderImpl::CreateExternalProviders(
   // mode.
   if (IsRunningInForcedAppMode()) {
 #if BUILDFLAG(IS_CHROMEOS)
-    if (profiles::IsChromeAppKioskSession()) {
+    if (profiles::IsChromeAppKioskSession() &&
+        // If kPreventKioskAutolaunchForTesting is specified,
+        // the app won't be provided, so skip these providers.
+        !base::CommandLine::ForCurrentProcess()->HasSwitch(
+            ash::switches::kPreventKioskAutolaunchForTesting)) {
       ManifestLocation location = ManifestLocation::kExternalPolicy;
 
       if (!connector->IsDeviceEnterpriseManaged())

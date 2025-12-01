@@ -39,7 +39,6 @@
 #include "gpu/command_buffer/common/shared_image_capabilities.h"
 #include "gpu/command_buffer/common/shared_image_usage.h"
 #include "gpu/command_buffer/common/sync_token.h"
-#include "gpu/config/gpu_finch_features.h"
 #include "gpu/ipc/common/gpu_memory_buffer_support.h"
 #include "media/base/media_switches.h"
 #include "ui/aura/env.h"
@@ -312,18 +311,8 @@ Buffer::Texture::Texture(
                                    gpu::SHARED_IMAGE_USAGE_RASTER_WRITE |
                                    gpu::SHARED_IMAGE_USAGE_DISPLAY_READ;
 
-  bool add_scanout_usage = is_overlay_candidate;
-
-  // Scanout usage should be added only if scanout of SharedImages is supported.
-  // However, historically this was not checked.
-  // TODO(crbug.com/330865436): Remove killswitch post-safe rollout.
-  if (base::FeatureList::IsEnabled(
-          features::kExoBufferAddScanoutUsageOnlyIfSupportedBySharedImage)) {
-    add_scanout_usage = add_scanout_usage &&
-                        sii->GetCapabilities().supports_scanout_shared_images;
-  }
-
-  if (add_scanout_usage) {
+  if (is_overlay_candidate &&
+      sii->GetCapabilities().supports_scanout_shared_images) {
     usage |= gpu::SHARED_IMAGE_USAGE_SCANOUT;
   }
 
@@ -435,7 +424,9 @@ gpu::SyncToken Buffer::Texture::CopyTexImage(
     sync_token = sii->GenUnverifiedSyncToken();
 
     gpu::raster::RasterInterface* ri = context_provider_->RasterInterface();
-    ri->WaitSyncTokenCHROMIUM(sync_token.GetConstData());
+    std::unique_ptr<gpu::RasterScopedAccess> ri_access =
+        shared_image_->BeginRasterAccess(ri, sync_token, /*readonly=*/true);
+
     DCHECK_NE(query_id_, 0u);
     ri->BeginQueryEXT(query_type_, query_id_);
 
@@ -448,7 +439,7 @@ gpu::SyncToken Buffer::Texture::CopyTexImage(
     // Create and return a sync token that can be used to ensure that the
     // CopySharedImage call is processed before issuing any commands
     // that will read from the target texture on a different context.
-    ri->GenUnverifiedSyncTokenCHROMIUM(sync_token.GetData());
+    sync_token = gpu::RasterScopedAccess::EndAccess(std::move(ri_access));
   }
   return sync_token;
 }

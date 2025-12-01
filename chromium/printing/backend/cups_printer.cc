@@ -107,13 +107,15 @@ class CupsPrinterImpl : public CupsPrinter {
 
 #if BUILDFLAG(IS_CHROMEOS)
     // OAuth token passed to CUPS as IPP attribute, see b/200086039.
-    if (name && strcmp(name, kSettingChromeOSAccessOAuthToken) == 0)
+    if (name &&
+        UNSAFE_TODO(strcmp(name, kSettingChromeOSAccessOAuthToken)) == 0) {
       return true;
+    }
 
     // Special case for the IPP 'client-info' collection because
     // cupsCheckDestSupported will not report it as supported even when it is.
     // See http://b/238761330.
-    if (name && strcmp(name, kIppClientInfo) == 0) {
+    if (name && UNSAFE_TODO(strcmp(name, kIppClientInfo)) == 0) {
       return true;
     }
 #endif
@@ -148,7 +150,6 @@ class CupsPrinterImpl : public CupsPrinter {
     const cups_dest_t* printer = destination_.get();
 
     printer_info->printer_name = printer->name;
-    printer_info->is_default = printer->is_default;
 
     const std::string info = GetInfo();
     const std::string make_and_model = GetMakeAndModel();
@@ -156,11 +157,6 @@ class CupsPrinterImpl : public CupsPrinter {
     printer_info->display_name = GetDisplayName(printer->name, info);
     printer_info->printer_description =
         GetPrinterDescription(make_and_model, info);
-
-    const char* state = cupsGetOption(kCUPSOptPrinterState,
-                                      printer->num_options, printer->options);
-    if (state)
-      base::StringToInt(state, &printer_info->printer_status);
 
     printer_info->options[kDriverInfoTagName] = make_and_model;
 

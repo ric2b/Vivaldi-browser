@@ -15,10 +15,13 @@
 #include "chrome/browser/ai/ai_language_model.h"
 #include "chrome/browser/ai/ai_on_device_model_component_observer.h"
 #include "chrome/browser/ai/ai_summarizer.h"
+#include "chrome/browser/ai/ai_utils.h"
 #include "content/public/browser/browser_context.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/receiver_set.h"
 #include "mojo/public/cpp/bindings/remote_set.h"
+#include "third_party/blink/public/mojom/ai/ai_common.mojom-forward.h"
+#include "third_party/blink/public/mojom/ai/ai_common.mojom.h"
 #include "third_party/blink/public/mojom/ai/ai_language_model.mojom-forward.h"
 #include "third_party/blink/public/mojom/ai/ai_manager.mojom.h"
 #include "third_party/blink/public/mojom/ai/model_download_progress_observer.mojom-forward.h"
@@ -27,6 +30,8 @@ namespace base {
 class SupportsUserData;
 }  // namespace base
 
+using blink::mojom::AILanguageCodePtr;
+
 // Owned by the host of the document / service worker via `SupportUserData`.
 // The browser-side implementation of `blink::mojom::AIManager`.
 class AIManager : public base::SupportsUserData::Data,
@@ -34,7 +39,7 @@ class AIManager : public base::SupportsUserData::Data,
  public:
   using AILanguageModelOrCreationError =
       base::expected<std::unique_ptr<AILanguageModel>,
-                     blink::mojom::AIManagerCreateLanguageModelError>;
+                     blink::mojom::AIManagerCreateClientError>;
   explicit AIManager(content::BrowserContext* browser_context);
   AIManager(const AIManager&) = delete;
   AIManager& operator=(const AIManager&) = delete;
@@ -45,10 +50,14 @@ class AIManager : public base::SupportsUserData::Data,
   void CreateLanguageModelForCloning(
       base::PassKey<AILanguageModel> pass_key,
       blink::mojom::AILanguageModelSamplingParamsPtr sampling_params,
+      on_device_model::Capabilities capabilities,
       AIContextBoundObjectSet& context_bound_object_set,
       const AILanguageModel::Context& context,
       mojo::Remote<blink::mojom::AIManagerCreateLanguageModelClient>
-          client_remote);
+          client_remote,
+      std::unique_ptr<
+          optimization_guide::OptimizationGuideModelExecutor::Session>
+          override_session);
 
   size_t GetContextBoundObjectSetSizeForTesting() {
     return context_bound_object_set_.GetSizeForTesting();
@@ -71,17 +80,32 @@ class AIManager : public base::SupportsUserData::Data,
   // Return the max temperature for the LanguageModel API.
   float GetLanguageModelMaxTemperature();
 
-  // Return the default and max sampling params for the LanguageModel API.
-  blink::mojom::AILanguageModelParamsPtr GetLanguageModelParams();
-
  private:
   FRIEND_TEST_ALL_PREFIXES(AIManagerTest, CanCreate);
   FRIEND_TEST_ALL_PREFIXES(AIManagerTest, NoUAFWithInvalidOnDeviceModelPath);
-  FRIEND_TEST_ALL_PREFIXES(AISummarizerUnitTest,
-                           CreateSummarizerWithoutService);
+  FRIEND_TEST_ALL_PREFIXES(AISummarizerTest, CreateSummarizerWithoutService);
+  FRIEND_TEST_ALL_PREFIXES(AIManagerIsLanguagesSupportedTest, OneVector);
+  FRIEND_TEST_ALL_PREFIXES(AIManagerIsLanguagesSupportedTest,
+                           TwoVectorsAndOneCode);
+
+  // Returns if all of the language codes in `languages` are supported.
+  static bool IsLanguagesSupported(
+      const std::vector<AILanguageCodePtr>& languages);
+
+  // Returns if `output` and all of the language codes in `input` and `context`
+  // are supported.
+  static bool IsLanguagesSupported(
+      const std::vector<AILanguageCodePtr>& input,
+      const std::vector<AILanguageCodePtr>& context,
+      const AILanguageCodePtr& output);
+
+  // Return the default and max sampling params for the LanguageModel API.
+  blink::mojom::AILanguageModelParamsPtr GetLanguageModelParams();
 
   // `blink::mojom::AIManager` implementation.
-  void CanCreateLanguageModel(CanCreateLanguageModelCallback callback) override;
+  void CanCreateLanguageModel(
+      blink::mojom::AILanguageModelCreateOptionsPtr options,
+      CanCreateLanguageModelCallback callback) override;
   void CreateLanguageModel(
       mojo::PendingRemote<blink::mojom::AIManagerCreateLanguageModelClient>
           client,
@@ -92,7 +116,8 @@ class AIManager : public base::SupportsUserData::Data,
   void CreateWriter(
       mojo::PendingRemote<blink::mojom::AIManagerCreateWriterClient> client,
       blink::mojom::AIWriterCreateOptionsPtr options) override;
-  void CanCreateSummarizer(CanCreateSummarizerCallback callback) override;
+  void CanCreateSummarizer(blink::mojom::AISummarizerCreateOptionsPtr options,
+                           CanCreateSummarizerCallback callback) override;
   void CreateSummarizer(
       mojo::PendingRemote<blink::mojom::AIManagerCreateSummarizerClient> client,
       blink::mojom::AISummarizerCreateOptionsPtr options) override;
@@ -120,11 +145,15 @@ class AIManager : public base::SupportsUserData::Data,
   // model to be available.
   std::unique_ptr<CreateLanguageModelOnDeviceSessionTask>
   CreateLanguageModelInternal(
-      const blink::mojom::AILanguageModelSamplingParamsPtr& sampling_params,
+      blink::mojom::AILanguageModelSamplingParamsPtr sampling_params,
+      on_device_model::Capabilities capabilities,
       AIContextBoundObjectSet& context_bound_object_set,
       base::OnceCallback<void(AILanguageModelOrCreationError)> callback,
       const std::optional<const AILanguageModel::Context>& context =
-          std::nullopt);
+          std::nullopt,
+      std::unique_ptr<
+          optimization_guide::OptimizationGuideModelExecutor::Session>
+          override_session = nullptr);
 
   void SendDownloadProgressUpdate(uint64_t downloaded_bytes,
                                   uint64_t total_bytes);

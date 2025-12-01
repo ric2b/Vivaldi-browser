@@ -70,12 +70,14 @@ class QUICHE_EXPORT MoqtFramer {
   quiche::QuicheBuffer SerializeFetchCancel(const MoqtFetchCancel& message);
   quiche::QuicheBuffer SerializeFetchOk(const MoqtFetchOk& message);
   quiche::QuicheBuffer SerializeFetchError(const MoqtFetchError& message);
+  quiche::QuicheBuffer SerializeSubscribesBlocked(
+      const MoqtSubscribesBlocked& message);
   quiche::QuicheBuffer SerializeObjectAck(const MoqtObjectAck& message);
 
  private:
   // Returns true if the metadata is internally consistent.
   static bool ValidateObjectMetadata(const MoqtObject& object,
-                                     MoqtDataStreamType message_type);
+                                     bool is_datagram);
 
   quiche::QuicheBufferAllocator* allocator_;
   bool using_webtrans_;

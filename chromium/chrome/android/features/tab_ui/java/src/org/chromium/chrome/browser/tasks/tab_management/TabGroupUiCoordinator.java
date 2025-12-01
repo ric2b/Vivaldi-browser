@@ -6,7 +6,6 @@ package org.chromium.chrome.browser.tasks.tab_management;
 
 import android.app.Activity;
 import android.content.res.Resources;
-import android.graphics.Color;
 import android.os.Build;
 import android.view.LayoutInflater;
 import android.view.ViewGroup;
@@ -28,9 +27,8 @@ import org.chromium.chrome.browser.browser_controls.BrowserControlsStateProvider
 import org.chromium.chrome.browser.collaboration.CollaborationServiceFactory;
 import org.chromium.chrome.browser.data_sharing.DataSharingServiceFactory;
 import org.chromium.chrome.browser.data_sharing.DataSharingTabManager;
-import org.chromium.chrome.browser.data_sharing.ui.shared_image_tiles.SharedImageTilesColor;
+import org.chromium.chrome.browser.data_sharing.ui.shared_image_tiles.SharedImageTilesConfig;
 import org.chromium.chrome.browser.data_sharing.ui.shared_image_tiles.SharedImageTilesCoordinator;
-import org.chromium.chrome.browser.data_sharing.ui.shared_image_tiles.SharedImageTilesType;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.layouts.LayoutStateProvider;
 import org.chromium.chrome.browser.profiles.Profile;
@@ -84,15 +82,13 @@ public class TabGroupUiCoordinator implements TabGroupUiMediator.ResetHandler, T
     private final ModalDialogManager mModalDialogManager;
     private final ObservableSupplierImpl<Token> mCurrentTabGroupId = new ObservableSupplierImpl<>();
     private final ThemeColorProvider mThemeColorProvider;
-    private final ObservableSupplierImpl<Integer> mBackgroundColorSupplier =
-            new ObservableSupplierImpl<>(Color.TRANSPARENT);
 
-    private PropertyModelChangeProcessor mModelChangeProcessor;
-    private TabGridDialogCoordinator mTabGridDialogCoordinator;
-    private LazyOneshotSupplier<TabGridDialogMediator.DialogController>
+    private @Nullable PropertyModelChangeProcessor mModelChangeProcessor;
+    private @Nullable TabGridDialogCoordinator mTabGridDialogCoordinator;
+    private @Nullable LazyOneshotSupplier<TabGridDialogMediator.DialogController>
             mTabGridDialogControllerSupplier;
-    private TabListCoordinator mTabStripCoordinator;
-    private TabGroupUiMediator mMediator;
+    private @Nullable TabListCoordinator mTabStripCoordinator;
+    private @Nullable TabGroupUiMediator mMediator;
     private @Nullable TabBubbler mTabBubbler;
 
     /** Creates a new {@link TabGroupUiCoordinator} */
@@ -119,7 +115,7 @@ public class TabGroupUiCoordinator implements TabGroupUiMediator.ResetHandler, T
 
             @LayoutRes
             int layoutId =
-                    ChromeFeatureList.isEnabled(ChromeFeatureList.DATA_SHARING)
+                    TabUiUtils.isDataSharingFunctionalityEnabled()
                             ? R.layout.dynamic_bottom_tab_strip_toolbar
                             : R.layout.bottom_tab_strip_toolbar;
             mToolbarView =
@@ -175,9 +171,10 @@ public class TabGroupUiCoordinator implements TabGroupUiMediator.ResetHandler, T
     /** Handle any initialization that occurs once native has been loaded. */
     @Override
     public void initializeWithNative(
-            Activity activity,
             BottomControlsCoordinator.BottomControlsVisibilityController visibilityController,
-            Callback<Object> onModelTokenChange) {
+            Callback<Object> onSnapshotTokenChange) {
+        ObservableSupplierImpl<Object> tabStripTokenSupplier = new ObservableSupplierImpl<>();
+
         var currentTabGroupModelFilterSupplier =
                 mTabModelSelector
                         .getTabGroupModelFilterProvider()
@@ -202,13 +199,12 @@ public class TabGroupUiCoordinator implements TabGroupUiMediator.ResetHandler, T
                             mTabListContainerView,
                             /* attachToParent= */ true,
                             COMPONENT_NAME,
-                            onModelTokenChange,
+                            tabStripTokenSupplier::set,
                             /* hasEmptyView= */ false,
                             /* emptyImageResId= */ Resources.ID_NULL,
                             /* emptyHeadingStringResId= */ Resources.ID_NULL,
                             /* emptySubheadingStringResId= */ Resources.ID_NULL,
                             /* onTabGroupCreation= */ null,
-                            mBackgroundColorSupplier,
                             /* allowDragAndDrop= */ false);
             mTabStripCoordinator.initWithNative(mTabModelSelector.getModel(false).getProfile());
 
@@ -229,16 +225,23 @@ public class TabGroupUiCoordinator implements TabGroupUiMediator.ResetHandler, T
             }
 
             @Nullable SharedImageTilesCoordinator sharedImageTilesCoordinator = null;
-            if (ChromeFeatureList.isEnabled(ChromeFeatureList.DATA_SHARING)) {
+            @Nullable SharedImageTilesConfig.Builder sharedImageTilesConfigBuilder = null;
+            Profile profile = mTabModelSelector.getModel(/* incognito= */ false).getProfile();
+            CollaborationService collaborationService =
+                    CollaborationServiceFactory.getForProfile(profile);
+            @NonNull ServiceStatus serviceStatus = collaborationService.getServiceStatus();
+            if (serviceStatus.isAllowedToJoin()) {
                 DataSharingService dataSharingService =
-                        DataSharingServiceFactory.getForProfile(
-                                mTabModelSelector.getModel(/* incognito= */ false).getProfile());
+                        DataSharingServiceFactory.getForProfile(profile);
+                sharedImageTilesConfigBuilder =
+                        new SharedImageTilesConfig.Builder(mActivity)
+                                .setIconSizeDp(R.dimen.tab_strip_shared_image_tiles_size);
                 sharedImageTilesCoordinator =
                         new SharedImageTilesCoordinator(
-                                activity,
-                                SharedImageTilesType.DEFAULT,
-                                new SharedImageTilesColor(SharedImageTilesColor.Style.DYNAMIC),
-                                dataSharingService);
+                                mActivity,
+                                sharedImageTilesConfigBuilder.build(),
+                                dataSharingService,
+                                collaborationService);
                 FrameLayout container =
                         mToolbarView.findViewById(R.id.toolbar_image_tiles_container);
                 TabUiUtils.attachSharedImageTilesCoordinatorToFrameLayout(
@@ -247,10 +250,9 @@ public class TabGroupUiCoordinator implements TabGroupUiMediator.ResetHandler, T
 
             mMediator =
                     new TabGroupUiMediator(
-                            mActivity,
                             visibilityController,
                             mHandleBackPressChangedSupplier,
-                            this,
+                            /* resetHandler= */ this,
                             mModel,
                             mTabModelSelector,
                             mTabContentManager,
@@ -259,13 +261,12 @@ public class TabGroupUiCoordinator implements TabGroupUiMediator.ResetHandler, T
                             mTabGridDialogControllerSupplier,
                             mOmniboxFocusStateSupplier,
                             sharedImageTilesCoordinator,
+                            sharedImageTilesConfigBuilder,
                             mThemeColorProvider,
-                            mBackgroundColorSupplier);
+                            onSnapshotTokenChange,
+                            tabStripTokenSupplier);
+            mMediator.setContext(mActivity); // Vivaldi
 
-            Profile profile = mTabModelSelector.getModel(false).getProfile();
-            CollaborationService collaborationService =
-                    CollaborationServiceFactory.getForProfile(profile);
-            @NonNull ServiceStatus serviceStatus = collaborationService.getServiceStatus();
             if (serviceStatus.isAllowedToJoin()) {
                 mTabBubbler =
                         new TabBubbler(
@@ -339,24 +340,22 @@ public class TabGroupUiCoordinator implements TabGroupUiMediator.ResetHandler, T
         return mHandleBackPressChangedSupplier;
     }
 
-    /** Destroy any members that needs clean up. */
     @Override
     public void destroy() {
-        // TODO(crbug.com/40766050): Add tests for destroy conditions.
-        // Early return if the component hasn't initialized yet.
-        if (mActivity == null) return;
-
-        mTabStripCoordinator.onDestroy();
+        if (mTabStripCoordinator != null) {
+            mTabStripCoordinator.onDestroy();
+        }
         if (mTabGridDialogCoordinator != null) {
             mTabGridDialogCoordinator.destroy();
         }
-        mModelChangeProcessor.destroy();
+        if (mModelChangeProcessor != null) {
+            mModelChangeProcessor.destroy();
+        }
         if (mMediator != null) {
             mMediator.destroy();
         }
         if (mTabBubbler != null) {
             mTabBubbler.destroy();
-            mTabBubbler = null;
         }
     }
 

@@ -2,13 +2,13 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifndef V8_EXECUTION_MESSAGES_H_
+#define V8_EXECUTION_MESSAGES_H_
+
 // The infrastructure used for (localized) message reporting in V8.
 //
 // Note: there's a big unresolved issue about ownership of the data
 // structures used by this framework.
-
-#ifndef V8_EXECUTION_MESSAGES_H_
-#define V8_EXECUTION_MESSAGES_H_
 
 #include <memory>
 
@@ -161,8 +161,9 @@ class MessageFormatter {
       Isolate* isolate, MessageTemplate index,
       base::Vector<const DirectHandle<String>> args);
 
-  static Handle<String> Format(Isolate* isolate, MessageTemplate index,
-                               base::Vector<const DirectHandle<Object>> args);
+  static DirectHandle<String> Format(
+      Isolate* isolate, MessageTemplate index,
+      base::Vector<const DirectHandle<Object>> args);
 };
 
 // A message handler is a convenience interface for accessing the list
@@ -183,7 +184,8 @@ class MessageHandler {
 
   static void DefaultMessageReport(Isolate* isolate, const MessageLocation* loc,
                                    DirectHandle<Object> message_obj);
-  static Handle<String> GetMessage(Isolate* isolate, DirectHandle<Object> data);
+  static DirectHandle<String> GetMessage(Isolate* isolate,
+                                         DirectHandle<Object> data);
   static std::unique_ptr<char[]> GetLocalizedMessage(Isolate* isolate,
                                                      DirectHandle<Object> data);
 

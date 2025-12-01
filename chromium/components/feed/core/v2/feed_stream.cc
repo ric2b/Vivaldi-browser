@@ -286,6 +286,7 @@ feedwire::DiscoverLaunchResult FeedStream::TriggerStreamLoad(
 
 void FeedStream::InitializeComplete(WaitForStoreInitializeTask::Result result) {
   metadata_ = *std::move(result.startup_data.metadata);
+  delegate_->SetFeedLaunchCuiMetadata(metadata_.feed_launch_cui_metadata());
   for (const feedstore::StreamData& stream_data :
        result.startup_data.stream_data) {
     StreamType stream_type =
@@ -446,6 +447,7 @@ const feedstore::Metadata& FeedStream::GetMetadata() const {
 void FeedStream::SetMetadata(feedstore::Metadata metadata) {
   metadata_ = std::move(metadata);
   store_->WriteMetadata(metadata_, base::DoNothing());
+  delegate_->SetFeedLaunchCuiMetadata(metadata_.feed_launch_cui_metadata());
 }
 
 void FeedStream::SetStreamStale(const StreamType& stream_type, bool is_stale) {
@@ -1625,6 +1627,10 @@ void FeedStream::ReportOtherUserAction(SurfaceId surface_id,
 void FeedStream::ReportOtherUserAction(const StreamType& stream_type,
                                        FeedUserActionType action_type) {
   metrics_reporter_->OtherUserAction(stream_type, action_type);
+}
+
+void FeedStream::ReportOtherUserAction(FeedUserActionType action_type) {
+  metrics_reporter_->OtherUserAction(action_type);
 }
 
 void FeedStream::ReportInfoCardTrackViewStarted(SurfaceId surface_id,

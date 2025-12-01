@@ -1041,6 +1041,9 @@ typedef struct AV1EncoderConfig {
   // Indicates the speed preset to be used.
   int speed;
 
+  // Enable the low complexity decode mode.
+  unsigned int enable_low_complexity_decode;
+
   // Indicates the target sequence level index for each operating point(OP).
   AV1_LEVEL target_seq_level_idx[MAX_NUM_OPERATING_POINTS];
 
@@ -4404,6 +4407,8 @@ static inline void set_postproc_filter_default_params(AV1_COMMON *cm) {
 
   lf->filter_level[0] = 0;
   lf->filter_level[1] = 0;
+  lf->backup_filter_level[0] = 0;
+  lf->backup_filter_level[1] = 0;
   cdef_info->cdef_bits = 0;
   cdef_info->cdef_strengths[0] = 0;
   cdef_info->nb_cdef_strengths = 1;

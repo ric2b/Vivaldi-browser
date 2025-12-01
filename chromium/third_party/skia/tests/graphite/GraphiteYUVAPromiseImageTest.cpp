@@ -253,8 +253,7 @@ void setup_test_context(Context* context,
                         SkYUVAInfo::PlaneConfig::kY_U_V_A,
                         SkYUVAInfo::Subsampling::k444,
                         kJPEG_Full_SkYUVColorSpace);
-    YUVABackendTextureInfo yuvaBackendInfo(testCtx->fRecorder.get(),
-                                           yuvaInfo,
+    YUVABackendTextureInfo yuvaBackendInfo(yuvaInfo,
                                            textureInfo,
                                            skgpu::Mipmapped::kNo);
 
@@ -282,7 +281,7 @@ DEF_CONDITIONAL_GRAPHITE_TEST_FOR_RENDERING_CONTEXTS(NonVolatileGraphiteYUVAProm
                                                      context,
                                                      testGpuContext,
                                                      true,
-                                                     CtsEnforcement::kApiLevel_V) {
+                                                     CtsEnforcement::kApiLevel_202404) {
     constexpr SkISize kDimensions { 16, 16 };
 
     TestCtx testContext;
@@ -381,7 +380,7 @@ DEF_CONDITIONAL_GRAPHITE_TEST_FOR_RENDERING_CONTEXTS(
         context,
         testGpuContext,
         true,
-        CtsEnforcement::kApiLevel_V) {
+        CtsEnforcement::kApiLevel_202404) {
     constexpr SkISize kDimensions { 16, 16 };
 
     TestCtx testContext;
@@ -461,7 +460,7 @@ DEF_CONDITIONAL_GRAPHITE_TEST_FOR_RENDERING_CONTEXTS(
 DEF_GRAPHITE_TEST_FOR_RENDERING_CONTEXTS(NonVolatileGraphiteYUVAPromiseImageCreationFailureTest,
                                          reporter,
                                          context,
-                                         CtsEnforcement::kApiLevel_V) {
+                                         CtsEnforcement::kApiLevel_202404) {
     // Note: these dimensions are invalid and will cause MakeGraphitePromiseTexture to fail
     constexpr SkISize kDimensions { 0, 0 };
 
@@ -484,7 +483,7 @@ DEF_CONDITIONAL_GRAPHITE_TEST_FOR_RENDERING_CONTEXTS(VolatileGraphiteYUVAPromise
                                                      context,
                                                      testGpuContext,
                                                      true,
-                                                     CtsEnforcement::kApiLevel_V) {
+                                                     CtsEnforcement::kApiLevel_202404) {
     constexpr SkISize kDimensions { 16, 16 };
 
     TestCtx testContext;
@@ -606,7 +605,7 @@ DEF_CONDITIONAL_GRAPHITE_TEST_FOR_RENDERING_CONTEXTS(
         context,
         testGpuContext,
         true,
-        CtsEnforcement::kApiLevel_V) {
+        CtsEnforcement::kApiLevel_202404) {
     constexpr SkISize kDimensions { 16, 16 };
 
     TestCtx testContext;
@@ -691,7 +690,7 @@ DEF_CONDITIONAL_GRAPHITE_TEST_FOR_RENDERING_CONTEXTS(GraphiteYUVAPromiseImageRec
                                                      context,
                                                      testGpuContext,
                                                      true,
-                                                     CtsEnforcement::kApiLevel_V) {
+                                                     CtsEnforcement::kApiLevel_202404) {
     constexpr SkISize kDimensions{ 16, 16 };
 
     for (Volatile isVolatile : { Volatile::kNo, Volatile::kYes }) {
@@ -733,7 +732,7 @@ DEF_CONDITIONAL_GRAPHITE_TEST_FOR_RENDERING_CONTEXTS(GraphiteYUVAPromiseImageMul
                                                      context,
                                                      testGpuContext,
                                                      true,
-                                                     CtsEnforcement::kApiLevel_V) {
+                                                     CtsEnforcement::kApiLevel_202404) {
     constexpr SkISize kDimensions{ 16, 16 };
 
     static constexpr int kNumRecordings = 3;

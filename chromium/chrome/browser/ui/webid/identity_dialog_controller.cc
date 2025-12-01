@@ -6,13 +6,25 @@
 
 #include <memory>
 
+#include "base/functional/bind.h"
+#include "base/metrics/histogram_functions.h"
 #include "build/build_config.h"
+#include "chrome/browser/optimization_guide/optimization_guide_keyed_service_factory.h"
+#include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/segmentation_platform/segmentation_platform_service_factory.h"
+#include "chrome/browser/ui/browser_finder.h"
+#include "components/favicon/content/content_favicon_driver.h"
+#include "components/favicon/core/favicon_driver.h"
+#include "components/segmentation_platform/public/constants.h"
+#include "components/segmentation_platform/public/features.h"
+#include "components/segmentation_platform/public/result.h"
+#include "components/segmentation_platform/public/segmentation_platform_service.h"
 
 // We add nognchecks on these includes so that Android bots do not fail
 // dependency checks.
 #if !BUILDFLAG(IS_ANDROID)
-#include "chrome/browser/ui/tabs/public/tab_interface.h"  // nogncheck
 #include "chrome/browser/ui/views/webid/fedcm_account_selection_view_desktop.h"  // nogncheck
+#include "components/tab_collections/public/tab_interface.h"  // nogncheck
 #endif
 
 #include "chrome/browser/ui/webid/account_selection_view.h"
@@ -21,8 +33,35 @@
 #include "third_party/blink/public/mojom/webid/federated_auth_request.mojom-shared.h"
 
 IdentityDialogController::IdentityDialogController(
-    content::WebContents* rp_web_contents)
-    : rp_web_contents_(rp_web_contents) {}
+    content::WebContents* rp_web_contents,
+    segmentation_platform::SegmentationPlatformService* service,
+    optimization_guide::OptimizationGuideDecider* decider)
+    : rp_web_contents_(rp_web_contents),
+      segmentation_platform_service_(service),
+      optimization_guide_decider_(decider) {
+  if (!base::FeatureList::IsEnabled(
+          segmentation_platform::features::kSegmentationPlatformFedCmUser)) {
+    return;
+  }
+
+  Profile* profile = Profile::FromBrowserContext(
+      rp_web_contents_->GetPrimaryMainFrame()->GetBrowserContext());
+  if (profile->IsOffTheRecord()) {
+    return;
+  }
+
+  if (!segmentation_platform_service_) {
+    segmentation_platform_service_ = segmentation_platform::
+        SegmentationPlatformServiceFactory::GetForProfile(profile);
+  }
+
+  if (!optimization_guide_decider_) {
+    optimization_guide_decider_ =
+        OptimizationGuideKeyedServiceFactory::GetForProfile(profile);
+  }
+  optimization_guide_decider_->RegisterOptimizationTypes(
+      {optimization_guide::proto::OptimizationType::FEDCM_CLICKTHROUGH_RATE});
+}
 
 IdentityDialogController::~IdentityDialogController() = default;
 
@@ -37,7 +76,7 @@ int IdentityDialogController::GetBrandIconIdealSize(
 }
 
 bool IdentityDialogController::ShowAccountsDialog(
-    const std::string& rp_for_display,
+    content::RelyingPartyData rp_data,
     const std::vector<IdentityProviderDataPtr>& identity_provider_data,
     const std::vector<IdentityRequestAccountPtr>& accounts,
     content::IdentityRequestAccount::SignInMode sign_in_mode,
@@ -55,7 +94,29 @@ bool IdentityDialogController::ShowAccountsDialog(
   if (!TrySetAccountView()) {
     return false;
   }
-  return account_view_->Show(rp_for_display, identity_provider_data, accounts,
+  favicon::FaviconDriver* favicon_driver =
+      favicon::ContentFaviconDriver::FromWebContents(rp_web_contents_);
+  // Currently, FaviconIsValid() is never true on Android, and GetFavicon()
+  // returns the default favicon, so we will not use this result and instead
+  // obtain the favicon from the Java code.
+  if (favicon_driver && favicon_driver->FaviconIsValid()) {
+    rp_data.rp_icon = favicon_driver->GetFavicon();
+  }
+
+  // If widget mode and segmentation platform feature flag is enabled, make the
+  // call to segmentation platform service for a UI volume recommendation.
+  if (rp_mode == blink::mojom::RpMode::kPassive &&
+      base::FeatureList::IsEnabled(
+          segmentation_platform::features::kSegmentationPlatformFedCmUser)) {
+    RequestUiVolumeRecommendation(
+        base::BindOnce(&IdentityDialogController::
+                           OnRequestUiVolumeRecommendationResultReceived,
+                       base::Unretained(this), rp_data, identity_provider_data,
+                       accounts, sign_in_mode, rp_mode, new_accounts));
+    return true;
+  }
+
+  return account_view_->Show(rp_data, identity_provider_data, accounts,
                              sign_in_mode, rp_mode, new_accounts);
 }
 
@@ -130,9 +191,13 @@ void IdentityDialogController::OnAccountsDisplayed() {
   std::move(on_accounts_displayed_).Run();
 }
 
-void IdentityDialogController::OnAccountSelected(const GURL& idp_config_url,
-                                                 const Account& account) {
+void IdentityDialogController::OnAccountSelected(
+    const GURL& idp_config_url,
+    const std::string& account_id,
+    const content::IdentityRequestAccount::LoginState& login_state) {
   CHECK(on_account_selection_);
+
+  CollectTrainingData(UserAction::kSuccess);
 
   // We only allow dismiss after account selection on active modes and not on
   // passive mode.
@@ -143,9 +208,8 @@ void IdentityDialogController::OnAccountSelected(const GURL& idp_config_url,
   }
 
   std::move(on_account_selection_)
-      .Run(idp_config_url, account.id,
-           account.login_state ==
-               content::IdentityRequestAccount::LoginState::kSignIn);
+      .Run(idp_config_url, account_id,
+           login_state == content::IdentityRequestAccount::LoginState::kSignIn);
 }
 
 void IdentityDialogController::OnDismiss(DismissReason dismiss_reason) {
@@ -155,8 +219,18 @@ void IdentityDialogController::OnDismiss(DismissReason dismiss_reason) {
     return;
   }
 
+  if (dismiss_reason == DismissReason::kCloseButton ||
+      dismiss_reason == DismissReason::kSwipe) {
+    CollectTrainingData(UserAction::kClosed);
+  } else {
+    CollectTrainingData(UserAction::kIgnored);
+  }
+
   on_account_selection_.Reset();
   std::move(on_dismiss_).Run(dismiss_reason);
+
+  // Do not access member variables from this point onwards because
+  // |on_dismiss_| may have destroyed this object.
 }
 
 std::string IdentityDialogController::GetTitle() const {
@@ -255,4 +329,117 @@ bool IdentityDialogController::TrySetAccountView() {
   account_view_ = std::make_unique<webid::FedCmAccountSelectionView>(this, tab);
 #endif
   return true;
+}
+
+void IdentityDialogController::RequestUiVolumeRecommendation(
+    segmentation_platform::ClassificationResultCallback callback) {
+  if (!segmentation_platform_service_) {
+    segmentation_platform::ClassificationResult result(
+        segmentation_platform::PredictionStatus::kFailed);
+    std::move(callback).Run(result);
+    return;
+  }
+
+  segmentation_platform::PredictionOptions prediction_options;
+  prediction_options.on_demand_execution = true;
+  scoped_refptr<segmentation_platform::InputContext> input_context =
+      base::MakeRefCounted<segmentation_platform::InputContext>();
+  webid::FedCmClickthroughRateMetadata metadata =
+      GetFedCmClickthroughRateMetadata();
+  input_context->metadata_args.emplace(
+      segmentation_platform::kPerPageLoadClickthroughRate,
+      segmentation_platform::processing::ProcessedValue(
+          metadata.per_page_load_clickthrough_rate()));
+  input_context->metadata_args.emplace(
+      segmentation_platform::kPerClientClickthroughRate,
+      segmentation_platform::processing::ProcessedValue(
+          metadata.per_client_clickthrough_rate()));
+  input_context->metadata_args.emplace(
+      segmentation_platform::kPerImpressionClickthroughRate,
+      segmentation_platform::processing::ProcessedValue(
+          metadata.per_impression_clickthrough_rate()));
+  input_context->metadata_args.emplace(
+      segmentation_platform::kLikelyToSignin,
+      segmentation_platform::processing::ProcessedValue(
+          metadata.likely_to_signin()));
+  segmentation_platform_service_->GetClassificationResult(
+      segmentation_platform::kFedCmUserKey, prediction_options, input_context,
+      std::move(callback));
+}
+
+void IdentityDialogController::OnRequestUiVolumeRecommendationResultReceived(
+    const content::RelyingPartyData& rp_data,
+    const std::vector<IdentityProviderDataPtr>& identity_provider_data,
+    const std::vector<IdentityRequestAccountPtr>& accounts,
+    Account::SignInMode sign_in_mode,
+    blink::mojom::RpMode rp_mode,
+    const std::vector<IdentityRequestAccountPtr>& new_accounts,
+    const segmentation_platform::ClassificationResult&
+        ui_volume_recommendation) {
+  training_request_id_ = ui_volume_recommendation.request_id;
+
+  // Default to showing loud UI if the prediction fails for any reason.
+  if (ui_volume_recommendation.status !=
+          segmentation_platform::PredictionStatus::kSucceeded ||
+      ui_volume_recommendation.ordered_labels[0] == "FedCmUserLoud") {
+    account_view_->Show(rp_data, identity_provider_data, accounts, sign_in_mode,
+                        rp_mode, new_accounts);
+    return;
+  }
+
+  // TODO(crbug.com/380416872): Integrate with quiet UI. Until then, dismiss the
+  // UI.
+  OnDismiss(DismissReason::kSuppressed);
+}
+
+void IdentityDialogController::CollectTrainingData(UserAction user_action) {
+  if (!training_request_id_ || !segmentation_platform_service_) {
+    return;
+  }
+
+  ukm::SourceId source_id =
+      (rp_web_contents_ && rp_web_contents_->GetPrimaryMainFrame())
+          ? rp_web_contents_->GetPrimaryMainFrame()->GetPageUkmSourceId()
+          : ukm::kInvalidSourceId;
+
+  segmentation_platform::TrainingLabels training_labels;
+  base::UmaHistogramEnumeration("Blink.FedCm.SegmentationPlatform.UserAction",
+                                user_action);
+  training_labels.output_metric =
+      std::make_pair("Blink.FedCm.SegmentationPlatform.UserAction",
+                     static_cast<base::HistogramBase::Sample32>(user_action));
+
+  segmentation_platform_service_->CollectTrainingData(
+      segmentation_platform::proto::SegmentId::
+          OPTIMIZATION_TARGET_SEGMENTATION_FEDCM_USER,
+      *training_request_id_, source_id, training_labels, base::DoNothing());
+  training_request_id_ = std::nullopt;
+  segmentation_platform_service_ = nullptr;
+}
+
+webid::FedCmClickthroughRateMetadata
+IdentityDialogController::GetFedCmClickthroughRateMetadata() {
+  if (!optimization_guide_decider_) {
+    return webid::FedCmClickthroughRateMetadata();
+  }
+
+  optimization_guide::OptimizationMetadata opt_guide_metadata;
+  auto opt_guide_has_hint = optimization_guide_decider_->CanApplyOptimization(
+      rp_web_contents_->GetPrimaryMainFrame()->GetLastCommittedURL(),
+      optimization_guide::proto::OptimizationType::FEDCM_CLICKTHROUGH_RATE,
+      &opt_guide_metadata);
+  if (opt_guide_has_hint !=
+          optimization_guide::OptimizationGuideDecision::kTrue ||
+      !opt_guide_metadata.any_metadata().has_value()) {
+    return webid::FedCmClickthroughRateMetadata();
+  }
+
+  std::optional<webid::FedCmClickthroughRateMetadata> parsed_metadata =
+      optimization_guide::ParsedAnyMetadata<
+          webid::FedCmClickthroughRateMetadata>(
+          opt_guide_metadata.any_metadata().value());
+  if (!parsed_metadata.has_value()) {
+    return webid::FedCmClickthroughRateMetadata();
+  }
+  return parsed_metadata.value();
 }

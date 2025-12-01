@@ -12,10 +12,10 @@
 #include "include/gpu/GpuTypes.h"
 #include "src/base/SkEnumBitMask.h"
 #include "src/core/SkDevice.h"
-#include "src/gpu/graphite/ClipStack_graphite.h"
+#include "src/gpu/graphite/ClipStack.h"
 #include "src/gpu/graphite/DrawOrder.h"
 #include "src/gpu/graphite/geom/Rect.h"
-#include "src/gpu/graphite/geom/Transform_graphite.h"
+#include "src/gpu/graphite/geom/Transform.h"
 #include "src/text/gpu/SubRunContainer.h"
 #include "src/text/gpu/SubRunControl.h"
 
@@ -29,7 +29,7 @@ class BoundsManager;
 class Clip;
 class Context;
 class DrawContext;
-enum class DstReadStrategy;
+enum class DstReadStrategy : uint8_t;
 class Geometry;
 class Image;
 enum class LoadOp : uint8_t;
@@ -202,9 +202,6 @@ private:
     class IntersectionTreeSet;
 
     Device(Recorder*, sk_sp<DrawContext>);
-
-    sk_sp<SkSpecialImage> makeSpecial(const SkBitmap&) override;
-    sk_sp<SkSpecialImage> makeSpecial(const SkImage*) override;
 
     bool onReadPixels(const SkPixmap&, int x, int y) override;
 

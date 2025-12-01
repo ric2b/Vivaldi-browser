@@ -39,16 +39,6 @@ ExtensionThrottleManager::~ExtensionThrottleManager() {
   }
 }
 
-void ExtensionThrottleManager::AddObserver(
-    Vivaldi_ExtensionManagerObserver* observer) {
-  observers_.AddObserver(observer);
-}
-
-void ExtensionThrottleManager::RemoveObserver(
-    Vivaldi_ExtensionManagerObserver* observer) {
-  observers_.RemoveObserver(observer);
-}
-
 std::unique_ptr<blink::URLLoaderThrottle>
 ExtensionThrottleManager::MaybeCreateURLLoaderThrottle(
     const network::ResourceRequest& request) {

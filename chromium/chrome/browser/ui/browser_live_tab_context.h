@@ -74,6 +74,7 @@ class BrowserLiveTabContext : public sessions::LiveTabContext {
       const sessions::tab_restore::Tab& tab,
       int tab_index,
       bool select,
+      bool is_restoring_group_or_window,
       sessions::tab_restore::Type original_session_type,
       const std::map<std::string, bool> page_action_overrides,
       const std::string& viv_ext_data) override;

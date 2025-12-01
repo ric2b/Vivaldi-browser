@@ -2,11 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
-#pragma allow_unsafe_buffers
-#endif
-
 #include "cc/paint/paint_op_writer.h"
 
 #include <memory>
@@ -14,6 +9,7 @@
 #include <vector>
 
 #include "base/bits.h"
+#include "base/compiler_specific.h"
 #include "base/containers/heap_array.h"
 #include "base/notreached.h"
 #include "cc/paint/color_filter.h"
@@ -30,6 +26,7 @@
 #include "cc/paint/skottie_wrapper.h"
 #include "cc/paint/transfer_cache_serialize_helper.h"
 #include "gpu/command_buffer/common/mailbox.h"
+#include "skia/ext/skia_utils_base.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "third_party/skia/include/core/SkColorSpace.h"
@@ -250,9 +247,10 @@ size_t PaintOpWriter::FinishOp(uint8_t type) {
   }
 
   // Write type and skip into the header bytes.
-  WriteHeader(memory_ - written, type, aligned_written);
-
-  memory_ += padding;
+  UNSAFE_TODO({
+    WriteHeader(memory_ - written, type, aligned_written);
+    memory_ += padding;
+  });
   return aligned_written;
 }
 
@@ -284,7 +282,8 @@ void PaintOpWriter::WriteSizeAt(void* memory, size_t size) {
   // and https://crbug.com/1440013).
   uint32_t* memory_32 = static_cast<uint32_t*>(memory);
   memory_32[0] = static_cast<uint32_t>(size);
-  memory_32[1] = static_cast<uint32_t>(static_cast<uint64_t>(size) >> 32);
+  UNSAFE_TODO(memory_32[1]) =
+      static_cast<uint32_t>(static_cast<uint64_t>(size) >> 32);
 }
 
 void PaintOpWriter::Write(const SkPath& path, UsePaintCache use_paint_cache) {
@@ -406,8 +405,8 @@ void PaintOpWriter::Write(const DrawImage& draw_image,
     Write(pixmap.height());
     size_t pixmap_size = pixmap.computeByteSize();
     WriteSize(pixmap_size);
-    WriteData(base::span<const uint8_t>(
-        static_cast<const uint8_t*>(pixmap.addr()), pixmap_size));
+    WriteData(UNSAFE_TODO(base::span<const uint8_t>(
+        static_cast<const uint8_t*>(pixmap.addr()), pixmap_size)));
     return;
   }
 
@@ -486,7 +485,7 @@ void PaintOpWriter::WriteImage(const gpu::Mailbox& mailbox,
     return;
   }
 
-  memcpy(memory_, mailbox.name, sizeof(mailbox.name));
+  UNSAFE_TODO(memcpy(memory_, mailbox.name, sizeof(mailbox.name)));
   DidWrite(sizeof(mailbox.name));
   Write(reinterpret_as_srgb);
 }
@@ -500,7 +499,7 @@ void PaintOpWriter::Write(const SkHighContrastConfig& config) {
 void PaintOpWriter::Write(const sk_sp<SkData>& data) {
   if (data.get() && data->size()) {
     WriteSize(data->size());
-    WriteData(base::span<const uint8_t>(data->bytes(), data->size()));
+    WriteData(skia::as_byte_span(*data));
   } else {
     // Differentiate between nullptr and valid but zero size.  It's not clear
     // that this happens in practice, but seems better to be consistent.
@@ -555,8 +554,8 @@ void PaintOpWriter::Write(const gfx::HDRMetadata& hdr_metadata) {
 void PaintOpWriter::Write(const SkString& sk_string) {
   size_t num_bytes = sk_string.size();
   WriteSize(num_bytes);
-  WriteData(base::span<const uint8_t>(
-      reinterpret_cast<const uint8_t*>(sk_string.data()), num_bytes));
+  WriteData(UNSAFE_TODO(base::span<const uint8_t>(
+      reinterpret_cast<const uint8_t*>(sk_string.data()), num_bytes)));
 }
 
 void PaintOpWriter::Write(
@@ -790,7 +789,31 @@ void PaintOpWriter::Write(const PaintShader* shader,
   // Explicitly don't write the cached_shader_ because that can be regenerated
   // using other fields.
 
-  Write(shader->sksl_command_);
+  uint32_t effect_id = shader->sk_runtime_effect_id_;
+  WriteSimple(effect_id);
+  auto* cache = options_.paint_cache;
+  CHECK(cache);
+  auto entry_state = PaintCacheEntryState::kEmpty;
+  if (effect_id != 0u) {
+    auto cache_id = static_cast<PaintCacheId>(effect_id);
+    if (cache->Get(PaintCacheDataType::kSkRuntimeEffect, cache_id)) {
+      // Cached.
+      entry_state = PaintCacheEntryState::kCached;
+    } else {
+      // Tell the service to cache.
+      // Use the size of the string as an estimation to the SkRuntimeEffect.
+      // This is intentional as only browser UI is submitting the shader
+      // commands, and there is no cache budget contention on the browser
+      // UI side.
+      size_t effect_size = SerializedSize(shader->sksl_command_);
+      cache->Put(PaintCacheDataType::kSkRuntimeEffect, cache_id, effect_size);
+      entry_state = PaintCacheEntryState::kInlined;
+    }
+  }
+  Write(static_cast<uint32_t>(entry_state));
+  if (entry_state == PaintCacheEntryState::kInlined) {
+    Write(shader->sksl_command_);
+  }
   Write(shader->scalar_uniforms_);
   Write(shader->float2_uniforms_);
   Write(shader->float4_uniforms_);
@@ -822,7 +845,7 @@ void PaintOpWriter::WriteData(base::span<const uint8_t> data) {
     return;
   }
 
-  memcpy(memory_, data.data(), data.size());
+  UNSAFE_TODO(memcpy(memory_, data.data(), data.size()));
   DidWrite(data.size());
 }
 
@@ -838,7 +861,7 @@ void PaintOpWriter::AlignMemory(size_t alignment) {
     return;
   }
 
-  memory_ += padding;
+  UNSAFE_TODO(memory_ += padding);
 }
 
 void PaintOpWriter::Write(const ColorFilter* filter) {

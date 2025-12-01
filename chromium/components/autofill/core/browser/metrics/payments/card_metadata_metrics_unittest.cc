@@ -4,9 +4,10 @@
 
 #include "components/autofill/core/browser/metrics/payments/card_metadata_metrics.h"
 
+#include "base/test/gmock_callback_support.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "components/autofill/core/browser/data_manager/payments/payments_data_manager.h"
-#include "components/autofill/core/browser/data_model/credit_card_benefit_test_api.h"
+#include "components/autofill/core/browser/data_model/payments/credit_card_benefit_test_api.h"
 #include "components/autofill/core/browser/metrics/autofill_metrics_test_base.h"
 #include "components/autofill/core/browser/payments/constants.h"
 #include "components/autofill/core/browser/test_utils/autofill_test_utils.h"
@@ -327,14 +328,13 @@ TEST_P(CardMetadataFormEventMetricsTest, LogFilledMetrics) {
       form(), form().fields().back().global_id());
   DidShowAutofillSuggestions(form(), /*field_index=*/form().fields().size() - 1,
                              SuggestionType::kCreditCardEntry);
+  EXPECT_CALL(credit_card_access_manager(), FetchCreditCard)
+      .WillOnce(base::test::RunOnceCallback<1>(card()));
   autofill_manager().FillOrPreviewCreditCardForm(
       mojom::ActionPersistence::kFill, form(),
       form().fields().back().global_id(),
       *personal_data().payments_data_manager().GetCreditCardByGUID(kCardGuid),
       AutofillTriggerSource::kPopup);
-  test_api(autofill_manager())
-      .OnCreditCardFetched(form(), form().fields().back().global_id(),
-                           AutofillTriggerSource::kPopup, card());
 
   // Verify that:
   // 1. if the card suggestion filled had metadata,
@@ -379,9 +379,13 @@ TEST_P(CardMetadataFormEventMetricsTest, LogFilledMetrics) {
                                       card_metadata_available(), 0);
 
   // Fill the suggestion again.
-  test_api(autofill_manager())
-      .OnCreditCardFetched(form(), form().fields().back().global_id(),
-                           AutofillTriggerSource::kPopup, card());
+  EXPECT_CALL(credit_card_access_manager(), FetchCreditCard)
+      .WillOnce(base::test::RunOnceCallback<1>(card()));
+  autofill_manager().FillOrPreviewCreditCardForm(
+      mojom::ActionPersistence::kFill, form(),
+      form().fields().back().global_id(),
+      *personal_data().payments_data_manager().GetCreditCardByGUID(kCardGuid),
+      AutofillTriggerSource::kPopup);
 
   EXPECT_THAT(
       histogram_tester.GetAllSamples("Autofill.FormEvents.CreditCard"),
@@ -416,14 +420,13 @@ TEST_P(CardMetadataFormEventMetricsTest, LogSubmitMetrics) {
   // Simulate filling and then submitting the card.
   autofill_manager().OnAskForValuesToFillTest(
       form(), form().fields().back().global_id());
+  EXPECT_CALL(credit_card_access_manager(), FetchCreditCard)
+      .WillOnce(base::test::RunOnceCallback<1>(card()));
   autofill_manager().FillOrPreviewCreditCardForm(
       mojom::ActionPersistence::kFill, form(),
       form().fields().back().global_id(),
       *personal_data().payments_data_manager().GetCreditCardByGUID(kCardGuid),
       AutofillTriggerSource::kPopup);
-  test_api(autofill_manager())
-      .OnCreditCardFetched(form(), form().fields().back().global_id(),
-                           AutofillTriggerSource::kPopup, card());
   SubmitForm(form());
 
   // Verify that:
@@ -466,27 +469,23 @@ TEST_P(CardMetadataFormEventMetricsTest, LogSubmitMetrics) {
 }
 
 // Params:
-// 1) Whether card product name feature flag is enabled.
-// 2) Whether card metadata (both product name and card art image) are provided.
-// 3) Whether the card has linked virtual card (only card art is provided).
+// 1) Whether card metadata (both product name and card art image) are provided.
+// 2) Whether the card has linked virtual card (only card art is provided).
 class CardMetadataLatencyMetricsTest
     : public AutofillMetricsBaseTest,
       public testing::Test,
-      public testing::WithParamInterface<std::tuple<bool, bool, bool>> {
+      public testing::WithParamInterface<std::tuple<bool, bool>> {
  public:
   CardMetadataLatencyMetricsTest() = default;
   ~CardMetadataLatencyMetricsTest() override = default;
 
-  bool card_product_name_enabled() { return std::get<0>(GetParam()); }
-  bool card_metadata_available() { return std::get<1>(GetParam()); }
-  bool card_has_static_art_image() { return std::get<2>(GetParam()); }
+  bool card_metadata_available() { return std::get<0>(GetParam()); }
+  bool card_has_static_art_image() { return std::get<1>(GetParam()); }
 
   FormData form() { return form_; }
 
   void SetUp() override {
     SetUpHelper();
-    feature_list_card_product_name_.InitWithFeatureState(
-        features::kAutofillEnableCardProductName, card_product_name_enabled());
     // Set up the form data. Reset form action to skip the IsFormMixedContent
     // check.
     form_ =
@@ -527,7 +526,6 @@ class CardMetadataLatencyMetricsTest
 INSTANTIATE_TEST_SUITE_P(All,
                          CardMetadataLatencyMetricsTest,
                          testing::Combine(testing::Bool(),
-                                          testing::Bool(),
                                           testing::Bool()));
 
 // Test to ensure that we log card metadata related metrics only when card
@@ -552,18 +550,13 @@ TEST_P(CardMetadataLatencyMetricsTest, LogMetrics) {
       "Autofill.CreditCard.SelectionLatencySinceShown.";
 
   std::string latency_histogram_suffix;
-  // Card product name is shown when card_metadata_available() and
-  // card_product_name_enabled() both return true.
+  // Card product name is shown when card_metadata_available() return true.
   // Card art image is shown when 1. card_has_linked_virtual_card() or
   // 2. card_metadata_available() returns true.
   // TODO(crbug.com/387391138): Determine appropriate cases and modify test
   // coverage accordingly.
   if (card_metadata_available()) {
-    if (card_product_name_enabled()) {
-      latency_histogram_suffix = kProductNameAndArtImageBothShownSuffix;
-    } else {
-      latency_histogram_suffix = kArtImageShownOnlySuffix;
-    }
+    latency_histogram_suffix = kProductNameAndArtImageBothShownSuffix;
   } else {
     latency_histogram_suffix = kProductNameAndArtImageNotShownSuffix;
   }
@@ -643,12 +636,13 @@ class CardBenefitFormEventMetricsTest
   // Simulating selecting and filling the given `card` from a list of
   // suggestions.
   void ShowSuggestionsThenSelectAndFillCard(const CreditCard* card) {
-    ShowSuggestionsAndSelectCard(card);
-    test_api(autofill_manager())
-        .OnCreditCardFetched(
-            form(),
-            form().fields()[credit_card_number_field_index()].global_id(),
-            AutofillTriggerSource::kPopup, CHECK_DEREF(card));
+    EXPECT_CALL(credit_card_access_manager(), FetchCreditCard)
+        .WillOnce(base::test::RunOnceCallback<1>(*card));
+    ShowCardSuggestions();
+    autofill_manager().FillOrPreviewCreditCardForm(
+        mojom::ActionPersistence::kFill, form(),
+        form().fields()[credit_card_number_field_index()].global_id(), *card,
+        AutofillTriggerSource::kPopup);
   }
 
   const CreditCard* GetCreditCard() {
@@ -1218,10 +1212,9 @@ TEST_P(CardBenefitFormEventMetricsTest,
                      Bucket(FORM_EVENT_LOCAL_SUGGESTION_FILLED, 1)));
   EXPECT_THAT(
       histogram_tester.GetAllSamples("Autofill.FormEvents.CreditCard"),
-      BucketsInclude(
-          Bucket(
-              FORM_EVENT_SUGGESTION_FOR_SERVER_CARD_WITH_BENEFIT_AVAILABLE_FILLED,
-              1)));
+      BucketsInclude(Bucket(
+          FORM_EVENT_SUGGESTION_FOR_SERVER_CARD_WITH_BENEFIT_AVAILABLE_FILLED,
+          1)));
 }
 
 // Tests that when a form is submitted after a masked server card with a

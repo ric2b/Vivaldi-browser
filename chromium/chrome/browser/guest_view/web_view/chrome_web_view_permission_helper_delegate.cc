@@ -17,6 +17,7 @@
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/content_settings/core/common/content_settings_types.h"
 #include "components/guest_view/browser/guest_view_base.h"
+#include "components/permissions/permission_util.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/permission_controller.h"
 #include "content/public/browser/render_frame_host.h"
@@ -26,10 +27,9 @@
 #include "extensions/browser/guest_view/web_view/web_view_constants.h"
 #include "extensions/browser/guest_view/web_view/web_view_guest.h"
 #include "ppapi/buildflags/buildflags.h"
+#include "services/network/public/cpp/permissions_policy/permissions_policy.h"
 #include "services/network/public/mojom/permissions_policy/permissions_policy_feature.mojom-shared.h"
 #include "third_party/blink/public/common/permissions/permission_utils.h"
-#include "third_party/blink/public/common/permissions_policy/permissions_policy.h"
-#include "third_party/blink/public/common/permissions_policy/permissions_policy_features.h"
 #include "url/origin.h"
 
 #if BUILDFLAG(ENABLE_PLUGINS)
@@ -56,7 +56,7 @@ bool IsFeatureEnabledByEmbedderPermissionsPolicy(
   content::RenderFrameHost* embedder_rfh = web_view_guest->embedder_rfh();
   CHECK(embedder_rfh);
 
-  const blink::PermissionsPolicy* permissions_policy =
+  const network::PermissionsPolicy* permissions_policy =
       embedder_rfh->GetPermissionsPolicy();
   CHECK(permissions_policy);
   if (!permissions_policy->IsFeatureEnabledForOrigin(feature,
@@ -469,6 +469,28 @@ bool ChromeWebViewPermissionHelperDelegate::
   // old behavior.
   return embedder_origin.scheme() == content::kChromeUIScheme &&
          embedder_origin.host() == chrome::kChromeUIGlicHost;
+}
+
+std::optional<content::PermissionResult>
+ChromeWebViewPermissionHelperDelegate::OverridePermissionResult(
+    ContentSettingsType type) {
+  const url::Origin& origin =
+      web_view_guest()->owner_rfh()->GetLastCommittedOrigin();
+  // chrome://glic requires additional permissions, and webview's
+  // permissionrequest API does not handle clipboard access.
+  if (origin.scheme() == content::kChromeUIScheme &&
+      origin.host() == chrome::kChromeUIGlicHost) {
+    switch (type) {
+      case ContentSettingsType::CLIPBOARD_READ_WRITE:
+      case ContentSettingsType::CLIPBOARD_SANITIZED_WRITE:
+        return content::PermissionResult(
+            content::PermissionStatus::GRANTED,
+            content::PermissionStatusSource::UNSPECIFIED);
+      default:
+        break;
+    }
+  }
+  return std::nullopt;
 }
 
 }  // namespace extensions

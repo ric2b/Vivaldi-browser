@@ -10,9 +10,11 @@
 #include "ui/base/window_open_disposition.h"
 
 class PrefService;
+struct BookmarkParentFolder;
 
 namespace bookmarks {
 class BookmarkNode;
+class BookmarkModel;
 }  // namespace bookmarks
 
 namespace vivaldi {
@@ -30,12 +32,11 @@ void SetContainerState(const std::string& edge, int menu_index);
 
 void ClearBookmarkMenu();
 
-void GetBookmarkNodes(const bookmarks::BookmarkNode* node,
+void GetBookmarkNodes(bookmarks::BookmarkModel* model,
+                      const BookmarkParentFolder& folder,
                       std::vector<bookmarks::BookmarkNode*>& nodes);
-void AddExtraBookmarkMenuItems(NSMenu* menu,
-                               unsigned int* menu_index,
-                               const bookmarks::BookmarkNode* node,
-                               bool on_top);
+void AddExtraBookmarkMenuItems(NSMenu* menu, bookmarks::BookmarkModel* model,
+                               const BookmarkParentFolder& folder, bool on_top);
 void OnClearBookmarkMenu(NSMenu* menu, NSMenuItem* item);
 
 WindowOpenDisposition WindowOpenDispositionFromNSEvent(NSEvent* event,

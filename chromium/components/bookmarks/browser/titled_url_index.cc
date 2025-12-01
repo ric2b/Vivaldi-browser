@@ -23,6 +23,7 @@
 #include "components/bookmarks/browser/titled_url_match.h"
 #include "components/bookmarks/browser/titled_url_node.h"
 #include "components/bookmarks/common/bookmark_features.h"
+#include "components/omnibox/common/string_cleaning.h"
 #include "components/query_parser/snippet.h"
 #include "third_party/icu/source/common/unicode/normalizer2.h"
 #include "third_party/icu/source/common/unicode/utypes.h"
@@ -100,7 +101,7 @@ void TitledUrlIndex::Add(const TitledUrlNode* node) {
 
   // Vivaldi
   for (const std::u16string& term :
-       ExtractQueryWords(Normalize(node->GetTitledUrlNodeNickName()))) {
+       ExtractQueryWords(Normalize(node->GetTitledUrlNodeNickName()), true)) {
     nickname_index_.try_emplace(term, indexed_node_set_type_)
         .first->second.InsertSingleNode(node);
   }
@@ -119,7 +120,7 @@ void TitledUrlIndex::Remove(const TitledUrlNode* node) {
 
 void TitledUrlIndex::AddPath(const TitledUrlNode* node) {
   for (const std::u16string& term :
-       ExtractQueryWords(Normalize(node->GetTitledUrlNodeTitle()))) {
+       ExtractQueryWords(Normalize(node->GetTitledUrlNodeTitle()), true)) {
     path_index_[term]++;
   }
 }
@@ -138,9 +139,11 @@ void TitledUrlIndex::RemovePath(const TitledUrlNode* node) {
 std::vector<TitledUrlMatch> TitledUrlIndex::GetResultsMatching(
     const std::u16string& input_query,
     size_t max_count,
-    query_parser::MatchingAlgorithm matching_algorithm) {
+    query_parser::MatchingAlgorithm matching_algorithm,
+    bool special_characters) {
   const std::u16string query = Normalize(input_query);
-  std::vector<std::u16string> terms = ExtractQueryWords(query);
+  std::vector<std::u16string> terms =
+      ExtractQueryWords(query, special_characters);
   if (terms.empty())
     return {};
 
@@ -247,8 +250,8 @@ std::optional<TitledUrlMatch> TitledUrlIndex::MatchTitledUrlNodeWithQuery(
   const std::u16string lower_title =
       base::i18n::ToLower(Normalize(node->GetTitledUrlNodeTitle()));
   base::OffsetAdjuster::Adjustments adjustments;
-  const std::u16string clean_url =
-      CleanUpUrlForMatching(node->GetTitledUrlNodeUrl(), &adjustments);
+  const std::u16string clean_url = string_cleaning::CleanUpUrlForMatching(
+      node->GetTitledUrlNodeUrl(), &adjustments);
   std::vector<std::u16string> lower_ancestor_titles;
   std::ranges::transform(
       node->GetTitledUrlNodeAncestorTitles(),
@@ -256,7 +259,9 @@ std::optional<TitledUrlMatch> TitledUrlIndex::MatchTitledUrlNodeWithQuery(
       [](const auto& ancestor_title) {
         return base::i18n::ToLower(Normalize(std::u16string(ancestor_title)));
       });
-
+  // Vivaldi
+  const std::u16string lower_description =
+      base::i18n::ToLower(Normalize(node->GetTitledUrlNodeDescription()));
   // Check if the input approximately matches the node. This is less strict than
   // the following check; it will return false positives. But it's also much
   // faster, so if it returns false, early exit and avoid the expensive
@@ -264,6 +269,8 @@ std::optional<TitledUrlMatch> TitledUrlIndex::MatchTitledUrlNodeWithQuery(
   bool approximate_match =
       std::ranges::all_of(query_terms, [&](const auto& word) {
         if (lower_title.find(word) != std::u16string::npos)
+          return true;
+        if (lower_description.find(word) != std::u16string::npos)
           return true;
         if (clean_url.find(word) != std::u16string::npos)
           return true;
@@ -288,8 +295,6 @@ std::optional<TitledUrlMatch> TitledUrlIndex::MatchTitledUrlNodeWithQuery(
 
 #if defined(VIVALDI_BUILD)
   query_parser::QueryWordVector description_words, nickname_words;
-  const std::u16string lower_description =
-      base::i18n::ToLower(Normalize(node->GetTitledUrlNodeDescription()));
   query_parser::QueryParser::ExtractQueryWords(lower_description,
                                                &description_words);
   const std::u16string lower_nickname =
@@ -484,13 +489,14 @@ bool TitledUrlIndex::DoesTermMatchPath(
 
 // static
 std::vector<std::u16string> TitledUrlIndex::ExtractQueryWords(
-    const std::u16string& query) {
+    const std::u16string& query,
+    bool special_characters) {
   std::vector<std::u16string> terms;
   if (query.empty())
     return std::vector<std::u16string>();
   query_parser::QueryParser::ParseQueryWords(
       base::i18n::ToLower(query), query_parser::MatchingAlgorithm::DEFAULT,
-      &terms);
+      &terms, special_characters);
   return terms;
 }
 
@@ -500,12 +506,14 @@ std::vector<std::u16string> TitledUrlIndex::ExtractIndexTerms(
   std::vector<std::u16string> terms;
 
   for (const std::u16string& term :
-       ExtractQueryWords(Normalize(node->GetTitledUrlNodeTitle()))) {
+       ExtractQueryWords(Normalize(node->GetTitledUrlNodeTitle()), true)) {
     terms.push_back(term);
   }
 
-  for (const std::u16string& term : ExtractQueryWords(CleanUpUrlForMatching(
-           node->GetTitledUrlNodeUrl(), /*adjustments=*/nullptr))) {
+  for (const std::u16string& term :
+       ExtractQueryWords(string_cleaning::CleanUpUrlForMatching(
+           node->GetTitledUrlNodeUrl(), /*adjustments=*/nullptr),
+                         true)) {
     terms.push_back(term);
   }
 

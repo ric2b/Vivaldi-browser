@@ -12,7 +12,6 @@ import static org.hamcrest.Matchers.is;
 import static org.junit.Assert.assertNotNull;
 
 import static org.chromium.base.ThreadUtils.runOnUiThreadBlocking;
-import static org.chromium.chrome.browser.facilitated_payments.FacilitatedPaymentsPaymentMethodsProperties.DISMISS_HANDLER;
 import static org.chromium.chrome.browser.facilitated_payments.FacilitatedPaymentsPaymentMethodsProperties.FopSelectorProperties.SCREEN_ITEMS;
 import static org.chromium.chrome.browser.facilitated_payments.FacilitatedPaymentsPaymentMethodsProperties.ItemType.BANK_ACCOUNT;
 import static org.chromium.chrome.browser.facilitated_payments.FacilitatedPaymentsPaymentMethodsProperties.ItemType.CONTINUE_BUTTON;
@@ -41,10 +40,12 @@ import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
+import org.mockito.Mock;
 import org.mockito.junit.MockitoJUnit;
 import org.mockito.junit.MockitoRule;
 import org.mockito.quality.Strictness;
 
+import org.chromium.base.ContextUtils;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
@@ -146,10 +147,12 @@ public final class FacilitatedPaymentsPaymentMethodsViewTest {
     @Rule
     public ChromeTabbedActivityTestRule mActivityTestRule = new ChromeTabbedActivityTestRule();
 
+    @Mock private FacilitatedPaymentsPaymentMethodsComponent.Delegate mDelegateMock;
+
     private BottomSheetController mBottomSheetController;
     private BottomSheetTestSupport mSheetTestSupport;
-    private FacilitatedPaymentsPaymentMethodsView mView;
     private FacilitatedPaymentsPaymentMethodsMediator mMediator;
+    private FacilitatedPaymentsPaymentMethodsView mView;
     private PropertyModel mModel;
 
     @Before
@@ -168,12 +171,16 @@ public final class FacilitatedPaymentsPaymentMethodsViewTest {
                             new PropertyModel.Builder(
                                             FacilitatedPaymentsPaymentMethodsProperties.ALL_KEYS)
                                     .with(VISIBLE_STATE, HIDDEN)
-                                    .with(DISMISS_HANDLER, (Integer unused) -> {})
                                     .with(UI_EVENT_LISTENER, (Integer unused) -> {})
                                     .build();
                     mView =
                             new FacilitatedPaymentsPaymentMethodsView(
                                     mActivityTestRule.getActivity(), mBottomSheetController);
+                    mMediator.initialize(
+                            ContextUtils.getApplicationContext(),
+                            mModel,
+                            mDelegateMock,
+                            mActivityTestRule.getProfile(false));
                     PropertyModelChangeProcessor.create(
                             mModel,
                             mView,
@@ -260,14 +267,16 @@ public final class FacilitatedPaymentsPaymentMethodsViewTest {
 
         assertThat(getSheetItems().getChildCount(), is(2));
 
-        String expectedBankAccountSummary1 = String.format("Pix  •  %s ••••%s", "Checking", "1111");
         assertThat(getBankAccountNameAt(0).getText(), is("bankName1"));
-        assertThat(getBankAccountSummaryAt(0).getText(), is(expectedBankAccountSummary1));
+        assertThat(getBankAccountPaymentRailAt(0).getText(), is("Pix  •"));
+        assertThat(getBankAccountTypeAt(0).getText(), is("Checking"));
+        assertThat(getBankAccountNumberAt(0).getText(), is("••••1111"));
         assertThat(getBankAccountAdditionalInfoAt(0).getText(), is("Limit per Pix R$ 500"));
 
-        String expectedBankAccountSummary2 = String.format("Pix  •  %s ••••%s", "Savings", "2222");
         assertThat(getBankAccountNameAt(1).getText(), is("bankName2"));
-        assertThat(getBankAccountSummaryAt(1).getText(), is(expectedBankAccountSummary2));
+        assertThat(getBankAccountPaymentRailAt(1).getText(), is("Pix  •"));
+        assertThat(getBankAccountTypeAt(1).getText(), is("Savings"));
+        assertThat(getBankAccountNumberAt(1).getText(), is("••••2222"));
         assertThat(getBankAccountAdditionalInfoAt(1).getText(), is("Limit per Pix R$ 500"));
     }
 
@@ -606,8 +615,16 @@ public final class FacilitatedPaymentsPaymentMethodsViewTest {
         return getSheetItems().getChildAt(index).findViewById(R.id.bank_name);
     }
 
-    private TextView getBankAccountSummaryAt(int index) {
-        return getSheetItems().getChildAt(index).findViewById(R.id.bank_account_summary);
+    private TextView getBankAccountPaymentRailAt(int index) {
+        return getSheetItems().getChildAt(index).findViewById(R.id.bank_account_payment_rail);
+    }
+
+    private TextView getBankAccountTypeAt(int index) {
+        return getSheetItems().getChildAt(index).findViewById(R.id.bank_account_type);
+    }
+
+    private TextView getBankAccountNumberAt(int index) {
+        return getSheetItems().getChildAt(index).findViewById(R.id.bank_account_number);
     }
 
     private TextView getBankAccountAdditionalInfoAt(int index) {

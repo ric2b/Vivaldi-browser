@@ -48,7 +48,7 @@
 #import "ios/chrome/browser/shared/ui/util/layout_guide_names.h"
 #import "ios/chrome/browser/shared/ui/util/util_swift.h"
 #import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
-#import "ios/chrome/browser/tabs/ui_bundled/tab_strip_constants.h"
+#import "ios/chrome/browser/tab_switcher/ui_bundled/tab_strip/ui/swift_constants_for_objective_c.h"
 #import "ios/chrome/browser/toolbar/ui_bundled/buttons/toolbar_button.h"
 #import "ios/chrome/browser/toolbar/ui_bundled/primary_toolbar_view.h"
 #import "ios/chrome/browser/toolbar/ui_bundled/primary_toolbar_view_controller.h"
@@ -196,7 +196,6 @@ using vivaldi::IsVivaldiRunning;
   self.locationBarCoordinator =
       [[LocationBarCoordinator alloc] initWithBrowser:browser];
   self.locationBarCoordinator.delegate = self.omniboxFocusDelegate;
-  self.locationBarCoordinator.bubblePresenter = self.bubblePresenter;
   self.locationBarCoordinator.popupPresenterDelegate =
       self.popupPresenterDelegate;
 
@@ -252,8 +251,7 @@ using vivaldi::IsVivaldiRunning;
   }
 
   [self updateToolbarsLayout];
-  _prerenderService =
-      PrerenderServiceFactory::GetForProfile(self.browser->GetProfile());
+  _prerenderService = PrerenderServiceFactory::GetForProfile(self.profile);
 
   [super start];
   self.started = YES;
@@ -371,12 +369,11 @@ using vivaldi::IsVivaldiRunning;
   // IsActive() value rather than checking -IsVisibleURLNewTabPage.
   NewTabPageTabHelper* NTPHelper = NewTabPageTabHelper::FromWebState(webState);
   BOOL isNTP = NTPHelper && NTPHelper->IsActive();
-  BOOL isOffTheRecord = self.browser->GetProfile()->IsOffTheRecord();
+  BOOL isOffTheRecord = self.profile->IsOffTheRecord();
   BOOL canShowTabStrip = IsRegularXRegularSizeClass(self.traitEnvironment);
 
   // Hide the toolbar when displaying content suggestions without the tab
-  // strip, without the focused omnibox, and for UI Refresh, only when in
-  // split toolbar mode.
+  // strip, without the focused omnibox, only when in split toolbar mode.
   BOOL hideToolbar = isNTP && !isOffTheRecord &&
                      ![self isOmniboxFirstResponder] &&
                      ![self showingOmniboxPopup] && !canShowTabStrip &&
@@ -613,9 +610,6 @@ using vivaldi::IsVivaldiRunning;
     return;
   }
   [self updateToolbarsLayout];
-
-  [self.primaryToolbarCoordinator
-      viewControllerTraitCollectionDidChange:previousTraitCollection];
 }
 
 - (void)close {
@@ -624,6 +618,15 @@ using vivaldi::IsVivaldiRunning;
         self.browser->GetCommandDispatcher(), ApplicationCommands);
     [applicationCommandsHandler dismissModalDialogsWithCompletion:nil];
   }
+}
+
+- (void)locationBarExpandedInViewController:
+    (PrimaryToolbarViewController*)viewController {
+  // Do nothing.
+}
+- (void)locationBarContractedInViewController:
+    (PrimaryToolbarViewController*)viewController {
+  // Do nothing.
 }
 
 #pragma mark - SideSwipeToolbarInteracting
@@ -642,7 +645,7 @@ using vivaldi::IsVivaldiRunning;
     if (_omniboxPosition == ToolbarType::kSecondary &&
         _tabBarEnabled && coordinator == self.secondaryToolbarCoordinator) {
       toolbarFrame.size.height =
-          toolbarFrame.size.height - kTabStripHeight -
+          toolbarFrame.size.height - TabStripCollectionViewConstants.height -
             VivaldiGlobalHelpers.safeAreaInsets.bottom;
     }
     // End Vivaldi
@@ -786,7 +789,7 @@ using vivaldi::IsVivaldiRunning;
 /// an incognito browser, the NTP is displayed, and whether the fakebox was
 /// pinned if it was selected.
 - (OmniboxFocusTrigger)omniboxFocusTrigger {
-  if (self.browser->GetProfile()->IsOffTheRecord() ||
+  if (self.profile->IsOffTheRecord() ||
       !IsSplitToolbarMode(self.traitEnvironment)) {
     return _focusedFromFakebox ? OmniboxFocusTrigger::kUnpinnedFakebox
                                : OmniboxFocusTrigger::kOther;

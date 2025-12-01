@@ -14,14 +14,14 @@
             "builder_id": {
               "bucket": "ci",
               "builder": "Android Release (Pixel 2)",
-              "project": "chromium-m134"
+              "project": "chromium-m136"
             },
             "builder_spec": {
               "build_gs_bucket": "chromium-gpu-archive",
               "builder_group": "chromium.gpu",
               "execution_mode": "COMPILE_AND_TEST",
               "legacy_android_config": {
-                "config": "main_builder"
+                "config": "base_config"
               },
               "legacy_chromium_config": {
                 "apply_configs": [
@@ -30,6 +30,7 @@
                 ],
                 "build_config": "Release",
                 "config": "main_builder",
+                "target_arch": "arm",
                 "target_bits": 64,
                 "target_platform": "android"
               },
@@ -45,14 +46,14 @@
             "builder_id": {
               "bucket": "ci",
               "builder": "android-14-arm64-rel",
-              "project": "chromium-m134"
+              "project": "chromium-m136"
             },
             "builder_spec": {
               "build_gs_bucket": "chromium-android-archive",
               "builder_group": "chromium.android",
               "execution_mode": "COMPILE_AND_TEST",
               "legacy_android_config": {
-                "config": "main_builder"
+                "config": "base_config"
               },
               "legacy_chromium_config": {
                 "apply_configs": [
@@ -61,6 +62,7 @@
                 ],
                 "build_config": "Release",
                 "config": "main_builder",
+                "target_arch": "arm",
                 "target_bits": 64,
                 "target_platform": "android"
               },
@@ -76,14 +78,14 @@
             "builder_id": {
               "bucket": "ci",
               "builder": "android-pie-arm64-rel",
-              "project": "chromium-m134"
+              "project": "chromium-m136"
             },
             "builder_spec": {
               "build_gs_bucket": "chromium-android-archive",
               "builder_group": "chromium.android",
               "execution_mode": "COMPILE_AND_TEST",
               "legacy_android_config": {
-                "config": "main_builder"
+                "config": "base_config"
               },
               "legacy_chromium_config": {
                 "apply_configs": [
@@ -92,6 +94,7 @@
                 ],
                 "build_config": "Release",
                 "config": "main_builder",
+                "target_arch": "arm",
                 "target_bits": 64,
                 "target_platform": "android"
               },
@@ -109,17 +112,17 @@
         {
           "bucket": "ci",
           "builder": "Android Release (Pixel 2)",
-          "project": "chromium-m134"
+          "project": "chromium-m136"
         },
         {
           "bucket": "ci",
           "builder": "android-14-arm64-rel",
-          "project": "chromium-m134"
+          "project": "chromium-m136"
         },
         {
           "bucket": "ci",
           "builder": "android-pie-arm64-rel",
-          "project": "chromium-m134"
+          "project": "chromium-m136"
         }
       ],
       "targets_spec_directory": "src/infra/config/generated/builders/try/android-arm64-rel/targets"

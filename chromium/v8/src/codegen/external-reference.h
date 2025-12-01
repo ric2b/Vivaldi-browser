@@ -91,7 +91,9 @@ enum class IsolateFieldId : uint8_t;
   V(trusted_pointer_table_base_address,                         \
     "Isolate::trusted_pointer_table_base_address()")            \
   V(shared_trusted_pointer_table_base_address,                  \
-    "Isolate::shared_trusted_pointer_table_base_address()")
+    "Isolate::shared_trusted_pointer_table_base_address()")     \
+  V(code_pointer_table_base_address,                            \
+    "Isolate::code_pointer_table_base_address()")
 #else
 #define EXTERNAL_REFERENCE_LIST_WITH_ISOLATE_SANDBOX(V)
 #endif  // V8_ENABLE_SANDBOX
@@ -234,6 +236,7 @@ enum class IsolateFieldId : uint8_t;
     "v8_flags.script_context_mutable_heap_number")                             \
   V(script_context_mutable_heap_int32_flag,                                    \
     "v8_flags.script_context_mutable_heap_int32")                              \
+  V(additive_safe_int_feedback_flag, "v8_flags.additive_safe_int_feedback")    \
   V(external_one_byte_string_get_chars, "external_one_byte_string_get_chars")  \
   V(external_two_byte_string_get_chars, "external_two_byte_string_get_chars")  \
   V(smi_lexicographic_compare_function, "smi_lexicographic_compare_function")  \
@@ -259,7 +262,7 @@ enum class IsolateFieldId : uint8_t;
     "name_to_index_hashtable_lookup_forwarded_string")                         \
   V(name_to_index_hashtable_find_insertion_entry_forwarded_string,             \
     "name_to_index_hashtable_find_insertion_entry_forwarded_string")           \
-  IF_WASM(V, wasm_sync_stack_limit, "wasm_sync_stack_limit")                   \
+  IF_WASM(V, wasm_switch_stacks, "wasm_switch_stacks")                         \
   IF_WASM(V, wasm_return_switch, "wasm_return_switch")                         \
   IF_WASM(V, wasm_switch_to_the_central_stack,                                 \
           "wasm::switch_to_the_central_stack")                                 \
@@ -377,7 +380,14 @@ enum class IsolateFieldId : uint8_t;
   IF_WASM(V, wasm_WebAssemblyMemoryGetBuffer,                                  \
           "wasm::WebAssemblyMemoryGetBuffer")                                  \
   IF_WASM(V, wasm_WebAssemblyMemoryGrow, "wasm::WebAssemblyMemoryGrow")        \
-  IF_WASM(V, wasm_WebAssemblyMemoryMap, "wasm::WebAssemblyMemoryMap")          \
+  IF_WASM(V, wasm_WebAssemblyMemoryMapDescriptorMap,                           \
+          "wasm::WebAssemblyMemoryMapDescriptorMap")                           \
+  IF_WASM(V, wasm_WebAssemblyMemoryMapDescriptorUnmap,                         \
+          "wasm::WebAssemblyMemoryMapDescriptorUnmap")                         \
+  IF_WASM(V, wasm_WebAssemblyMemoryToFixedLengthBuffer,                        \
+          "wasm::WebAssemblyMemoryToFixedLengthBuffer")                        \
+  IF_WASM(V, wasm_WebAssemblyMemoryToResizableBuffer,                          \
+          "wasm::WebAssemblyMemoryToResizableBuffer")                          \
   IF_WASM(V, wasm_WebAssemblyModule, "wasm::WebAssemblyModule")                \
   IF_WASM(V, wasm_WebAssemblyModuleCustomSections,                             \
           "wasm::WebAssemblyModuleCustomSections")                             \
@@ -469,7 +479,6 @@ enum class IsolateFieldId : uint8_t;
   V(typed_array_and_rab_gsab_typed_array_elements_kind_sizes,                  \
     "TypedArrayAndRabGsabTypedArrayElementsKindSizes")                         \
   V(allocate_buffer, "AllocateBuffer")                                         \
-  V(deallocate_buffer, "DeallocateBuffer")                                     \
   EXTERNAL_REFERENCE_LIST_INTL(V)                                              \
   EXTERNAL_REFERENCE_LIST_SANDBOX(V)                                           \
   EXTERNAL_REFERENCE_LIST_LEAPTIERING(V)                                       \
@@ -486,13 +495,21 @@ enum class IsolateFieldId : uint8_t;
 #endif  // V8_INTL_SUPPORT
 
 #ifdef V8_ENABLE_SANDBOX
-#define EXTERNAL_REFERENCE_LIST_SANDBOX(V)                        \
-  V(sandbox_base_address, "Sandbox::base()")                      \
-  V(sandbox_end_address, "Sandbox::end()")                        \
-  V(empty_backing_store_buffer, "EmptyBackingStoreBuffer()")      \
-  V(code_pointer_table_address,                                   \
-    "IsolateGroup::current()->code_pointer_table()")              \
+#ifdef V8_COMPRESS_POINTERS_IN_MULTIPLE_CAGES
+#define EXTERNAL_REFERENCE_LIST_SANDBOX(V)                   \
+  V(sandbox_base_address, "Sandbox::base()")                 \
+  V(sandbox_end_address, "Sandbox::end()")                   \
+  V(empty_backing_store_buffer, "EmptyBackingStoreBuffer()") \
   V(memory_chunk_metadata_table_address, "MemoryChunkMetadata::Table()")
+#else
+#define EXTERNAL_REFERENCE_LIST_SANDBOX(V)                               \
+  V(sandbox_base_address, "Sandbox::base()")                             \
+  V(sandbox_end_address, "Sandbox::end()")                               \
+  V(empty_backing_store_buffer, "EmptyBackingStoreBuffer()")             \
+  V(memory_chunk_metadata_table_address, "MemoryChunkMetadata::Table()") \
+  V(global_code_pointer_table_base_address,                              \
+    "IsolateGroup::current()->code_pointer_table()")
+#endif  // V8_COMPRESS_POINTERS_IN_MULTIPLE_CAGES
 #else
 #define EXTERNAL_REFERENCE_LIST_SANDBOX(V)
 #endif  // V8_ENABLE_SANDBOX
@@ -617,6 +634,8 @@ class ExternalReference {
 #undef DECL_EXTERNAL_REFERENCE
 
   V8_EXPORT_PRIVATE static ExternalReference isolate_address();
+  V8_EXPORT_PRIVATE static ExternalReference
+  address_of_code_pointer_table_base_address();
   V8_EXPORT_PRIVATE static ExternalReference jslimit_address();
 
   V8_EXPORT_PRIVATE V8_NOINLINE static ExternalReference

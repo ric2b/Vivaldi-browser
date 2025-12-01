@@ -5,6 +5,7 @@
 
 // Brand-specific constants and install modes for Google Chrome.
 
+#include <array>
 #include <objbase.h>
 #include <stdlib.h>
 
@@ -90,6 +91,11 @@ CLSID GetOrGenerateToastActivatorCLSID(const base::FilePath* target_path /*null*
 
 namespace install_static {
 
+enum InstallConstantIndex {
+  VIVALDI_INDEX,
+  NUM_INSTALL_MODES,
+};
+
 const wchar_t kCompanyPathName[] = L"";
 
 const wchar_t kProductPathName[] = L"Vivaldi";
@@ -98,10 +104,10 @@ const size_t kProductPathNameLength = _countof(kProductPathName) - 1;
 
 const char kSafeBrowsingName[] = "vivaldi";
 
-const InstallConstants kInstallModes[] = {
+const auto kInstallModes = std::to_array<InstallConstants>({
     // The primary install mode for stable Google Chrome.
     {
-        .size = sizeof(kInstallModes[0]),
+        .size = sizeof(InstallConstants),
         .index = VIVALDI_INDEX,
         .install_switch =
             "",  // Empty install_suffix for the primary install mode.
@@ -149,9 +155,6 @@ const InstallConstants kInstallModes[] = {
             L"S-1-15-2-3251537155-1984446955-2931258699-841473695-1938553385-"
             L"934012048-",
     },
-};
-
-static_assert(_countof(kInstallModes) == NUM_INSTALL_MODES,
-              "Imbalance between kInstallModes and InstallConstantIndex");
+});
 
 }  // namespace install_static

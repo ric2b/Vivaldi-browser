@@ -7,8 +7,10 @@
 #include <algorithm>
 #include <memory>
 
+#include "base/containers/fixed_flat_map.h"
 #include "base/feature_list.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/trace_event/trace_event.h"
 #include "services/network/public/mojom/web_sandbox_flags.mojom-blink.h"
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/mojom/frame/frame.mojom-blink.h"
@@ -53,6 +55,158 @@
 namespace blink {
 
 namespace {
+
+struct WindowProxyAccessCounters {
+  // `property_access` is optional as most methods are measured through
+  // the idl itself, and only anonymous getters cannot use that attribute.
+  std::optional<WebFeature> property_access;
+  WebFeature cross_origin_property_access;
+  WebFeature cross_origin_property_access_from_other_page;
+};
+
+inline constexpr auto kWindowProxyAccessTypeToCounters = base::MakeFixedFlatMap<
+    mojom::blink::WindowProxyAccessType,
+    WindowProxyAccessCounters>({
+    {
+        mojom::blink::WindowProxyAccessType::kLocation,
+        {
+            std::nullopt,
+            WebFeature::kWindowProxyCrossOriginAccessLocation,
+            WebFeature::kWindowProxyCrossOriginAccessFromOtherPageLocation,
+        },
+    },
+    {
+
+        mojom::blink::WindowProxyAccessType::kClosed,
+        {
+            std::nullopt,
+            WebFeature::kWindowProxyCrossOriginAccessClosed,
+            WebFeature::kWindowProxyCrossOriginAccessFromOtherPageClosed,
+        },
+    },
+    {
+
+        mojom::blink::WindowProxyAccessType::kLength,
+        {
+            std::nullopt,
+            WebFeature::kWindowProxyCrossOriginAccessLength,
+            WebFeature::kWindowProxyCrossOriginAccessFromOtherPageLength,
+        },
+    },
+    {
+
+        mojom::blink::WindowProxyAccessType::kSelf,
+        {
+            std::nullopt,
+            WebFeature::kWindowProxyCrossOriginAccessSelf,
+            WebFeature::kWindowProxyCrossOriginAccessFromOtherPageSelf,
+        },
+    },
+    {
+
+        mojom::blink::WindowProxyAccessType::kWindow,
+        {
+            std::nullopt,
+            WebFeature::kWindowProxyCrossOriginAccessWindow,
+            WebFeature::kWindowProxyCrossOriginAccessFromOtherPageWindow,
+        },
+    },
+    {
+
+        mojom::blink::WindowProxyAccessType::kFrames,
+        {
+            std::nullopt,
+            WebFeature::kWindowProxyCrossOriginAccessFrames,
+            WebFeature::kWindowProxyCrossOriginAccessFromOtherPageFrames,
+        },
+    },
+    {
+
+        mojom::blink::WindowProxyAccessType::kOpener,
+        {
+            std::nullopt,
+            WebFeature::kWindowProxyCrossOriginAccessOpener,
+            WebFeature::kWindowProxyCrossOriginAccessFromOtherPageOpener,
+        },
+    },
+    {
+
+        mojom::blink::WindowProxyAccessType::kParent,
+        {
+            std::nullopt,
+            WebFeature::kWindowProxyCrossOriginAccessParent,
+            WebFeature::kWindowProxyCrossOriginAccessFromOtherPageParent,
+        },
+    },
+    {
+
+        mojom::blink::WindowProxyAccessType::kTop,
+        {
+            std::nullopt,
+            WebFeature::kWindowProxyCrossOriginAccessTop,
+            WebFeature::kWindowProxyCrossOriginAccessFromOtherPageTop,
+        },
+    },
+    {
+
+        mojom::blink::WindowProxyAccessType::kPostMessage,
+        {
+            std::nullopt,
+            WebFeature::kWindowProxyCrossOriginAccessPostMessage,
+            WebFeature::kWindowProxyCrossOriginAccessFromOtherPagePostMessage,
+        },
+    },
+    {
+
+        mojom::blink::WindowProxyAccessType::kAnonymousIndexedGetter,
+        {
+            WebFeature::kWindowProxyIndexedGetter,
+            WebFeature::kWindowProxyCrossOriginAccessIndexedGetter,
+            WebFeature::kWindowProxyCrossOriginAccessFromOtherPageIndexedGetter,
+        },
+    },
+    {
+
+        mojom::blink::WindowProxyAccessType::kClose,
+        {
+            std::nullopt,
+            WebFeature::kWindowProxyCrossOriginAccessClose,
+            WebFeature::kWindowProxyCrossOriginAccessFromOtherPageClose,
+        },
+    },
+    {
+
+        mojom::blink::WindowProxyAccessType::kFocus,
+        {
+            std::nullopt,
+            WebFeature::kWindowProxyCrossOriginAccessFocus,
+            WebFeature::kWindowProxyCrossOriginAccessFromOtherPageFocus,
+        },
+    },
+    {
+
+        mojom::blink::WindowProxyAccessType::kBlur,
+        {
+            std::nullopt,
+            WebFeature::kWindowProxyCrossOriginAccessBlur,
+            WebFeature::kWindowProxyCrossOriginAccessFromOtherPageBlur,
+        },
+    },
+    {
+
+        mojom::blink::WindowProxyAccessType::kAnonymousNamedGetter,
+        {
+            WebFeature::kWindowProxyNamedGetter,
+            WebFeature::kWindowProxyCrossOriginAccessNamedGetter,
+            WebFeature::kWindowProxyCrossOriginAccessFromOtherPageNamedGetter,
+        },
+    },
+});
+
+// Any new WindowProxy method UMA should garner UKM and vice-versa.
+static_assert(
+    kWindowProxyAccessTypeToCounters.size() ==
+    static_cast<int64_t>(mojom::blink::WindowProxyAccessType::kMaxValue) + 1u);
 
 String CoopReportOnlyErrorMessage(const String& property_name) {
   String call;
@@ -129,8 +283,6 @@ bool DOMWindow::IsWindowOrWorkerGlobalScope() const {
 
 Location* DOMWindow::location() const {
   RecordWindowProxyAccessMetrics(
-      WebFeature::kWindowProxyCrossOriginAccessLocation,
-      WebFeature::kWindowProxyCrossOriginAccessFromOtherPageLocation,
       mojom::blink::WindowProxyAccessType::kLocation);
   if (!location_)
     location_ = MakeGarbageCollected<Location>(const_cast<DOMWindow*>(this));
@@ -139,16 +291,12 @@ Location* DOMWindow::location() const {
 
 bool DOMWindow::closed() const {
   RecordWindowProxyAccessMetrics(
-      WebFeature::kWindowProxyCrossOriginAccessClosed,
-      WebFeature::kWindowProxyCrossOriginAccessFromOtherPageClosed,
       mojom::blink::WindowProxyAccessType::kClosed);
   return window_is_closing_ || !GetFrame() || !GetFrame()->GetPage();
 }
 
 unsigned DOMWindow::length() const {
   RecordWindowProxyAccessMetrics(
-      WebFeature::kWindowProxyCrossOriginAccessLength,
-      WebFeature::kWindowProxyCrossOriginAccessFromOtherPageLength,
       mojom::blink::WindowProxyAccessType::kLength);
   return GetFrame() ? GetFrame()->Tree().ScopedChildCount() : 0;
 }
@@ -158,8 +306,6 @@ DOMWindow* DOMWindow::self() const {
     return nullptr;
 
   RecordWindowProxyAccessMetrics(
-      WebFeature::kWindowProxyCrossOriginAccessSelf,
-      WebFeature::kWindowProxyCrossOriginAccessFromOtherPageSelf,
       mojom::blink::WindowProxyAccessType::kSelf);
 
   return GetFrame()->DomWindow();
@@ -170,8 +316,6 @@ DOMWindow* DOMWindow::window() const {
     return nullptr;
 
   RecordWindowProxyAccessMetrics(
-      WebFeature::kWindowProxyCrossOriginAccessWindow,
-      WebFeature::kWindowProxyCrossOriginAccessFromOtherPageWindow,
       mojom::blink::WindowProxyAccessType::kWindow);
 
   return GetFrame()->DomWindow();
@@ -182,8 +326,6 @@ DOMWindow* DOMWindow::frames() const {
     return nullptr;
 
   RecordWindowProxyAccessMetrics(
-      WebFeature::kWindowProxyCrossOriginAccessFrames,
-      WebFeature::kWindowProxyCrossOriginAccessFromOtherPageFrames,
       mojom::blink::WindowProxyAccessType::kFrames);
 
   return GetFrame()->DomWindow();
@@ -191,8 +333,6 @@ DOMWindow* DOMWindow::frames() const {
 
 ScriptValue DOMWindow::openerForBindings(v8::Isolate* isolate) const {
   RecordWindowProxyAccessMetrics(
-      WebFeature::kWindowProxyCrossOriginAccessOpener,
-      WebFeature::kWindowProxyCrossOriginAccessFromOtherPageOpener,
       mojom::blink::WindowProxyAccessType::kOpener);
   ScriptState* script_state = ScriptState::ForCurrentRealm(isolate);
   return ScriptValue(isolate, ToV8Traits<IDLNullable<DOMWindow>>::ToV8(
@@ -257,8 +397,6 @@ DOMWindow* DOMWindow::parent() const {
     return nullptr;
 
   RecordWindowProxyAccessMetrics(
-      WebFeature::kWindowProxyCrossOriginAccessParent,
-      WebFeature::kWindowProxyCrossOriginAccessFromOtherPageParent,
       mojom::blink::WindowProxyAccessType::kParent);
 
   Frame* parent = GetFrame()->Tree().Parent();
@@ -270,8 +408,6 @@ DOMWindow* DOMWindow::top() const {
     return nullptr;
 
   RecordWindowProxyAccessMetrics(
-      WebFeature::kWindowProxyCrossOriginAccessTop,
-      WebFeature::kWindowProxyCrossOriginAccessFromOtherPageTop,
       mojom::blink::WindowProxyAccessType::kTop);
 
   return GetFrame()->Tree().Top().DomWindow();
@@ -294,8 +430,6 @@ void DOMWindow::postMessage(v8::Isolate* isolate,
                             const WindowPostMessageOptions* options,
                             ExceptionState& exception_state) {
   RecordWindowProxyAccessMetrics(
-      WebFeature::kWindowProxyCrossOriginAccessPostMessage,
-      WebFeature::kWindowProxyCrossOriginAccessFromOtherPagePostMessage,
       mojom::blink::WindowProxyAccessType::kPostMessage);
   LocalDOMWindow* incumbent_window = IncumbentDOMWindow(isolate);
   UseCounter::Count(incumbent_window->document(),
@@ -314,10 +448,7 @@ void DOMWindow::postMessage(v8::Isolate* isolate,
 
 DOMWindow* DOMWindow::AnonymousIndexedGetter(uint32_t index) {
   RecordWindowProxyAccessMetrics(
-      WebFeature::kWindowProxyCrossOriginAccessIndexedGetter,
-      WebFeature::kWindowProxyCrossOriginAccessFromOtherPageIndexedGetter,
-      mojom::blink::WindowProxyAccessType::kAnonymousIndexedGetter,
-      WebFeature::kWindowProxyIndexedGetter);
+      mojom::blink::WindowProxyAccessType::kAnonymousIndexedGetter);
   ReportCoopAccess("indexed");
 
   if (!GetFrame())
@@ -485,8 +616,6 @@ void DOMWindow::Close(LocalDOMWindow* incumbent_window) {
   }
 
   RecordWindowProxyAccessMetrics(
-      WebFeature::kWindowProxyCrossOriginAccessClose,
-      WebFeature::kWindowProxyCrossOriginAccessFromOtherPageClose,
       mojom::blink::WindowProxyAccessType::kClose);
 
   Settings* settings = GetFrame()->GetSettings();
@@ -534,6 +663,7 @@ void DOMWindow::focus(v8::Isolate* isolate) {
     return;
 
   Page* page = frame->GetPage();
+  // TODO(dcheng): This null check is probably not needed.
   if (!page)
     return;
 
@@ -549,8 +679,6 @@ void DOMWindow::focus(v8::Isolate* isolate) {
   }
 
   RecordWindowProxyAccessMetrics(
-      WebFeature::kWindowProxyCrossOriginAccessFocus,
-      WebFeature::kWindowProxyCrossOriginAccessFromOtherPageFocus,
       mojom::blink::WindowProxyAccessType::kFocus);
 
   // HTML standard doesn't require to check the incumbent realm, but Blink
@@ -605,8 +733,7 @@ void DOMWindow::focus(v8::Isolate* isolate) {
     // We are depending on user activation twice since IsFocusAllowed() will
     // check for activation. This should be addressed in
     // https://crbug.com/959815.
-    if (local_frame->GetDocument() &&
-        !local_frame->GetDocument()->IsFocusAllowed()) {
+    if (!local_frame->GetDocument()->IsFocusAllowed(FocusTrigger::kScript)) {
       return;
     }
   }
@@ -631,8 +758,6 @@ void DOMWindow::focus(v8::Isolate* isolate) {
 
 void DOMWindow::blur() {
   RecordWindowProxyAccessMetrics(
-      WebFeature::kWindowProxyCrossOriginAccessBlur,
-      WebFeature::kWindowProxyCrossOriginAccessFromOtherPageBlur,
       mojom::blink::WindowProxyAccessType::kBlur);
 }
 
@@ -970,10 +1095,10 @@ void DOMWindow::DoPostMessage(scoped_refptr<SerializedScriptValue> message,
 }
 
 void DOMWindow::RecordWindowProxyAccessMetrics(
-    WebFeature cross_origin_property_access,
-    WebFeature cross_origin_property_access_from_other_page,
-    mojom::blink::WindowProxyAccessType access_type,
-    std::optional<WebFeature> property_access) const {
+    mojom::blink::WindowProxyAccessType access_type) const {
+  const auto& counter_it = kWindowProxyAccessTypeToCounters.find(access_type);
+  CHECK(counter_it != kWindowProxyAccessTypeToCounters.end());
+
   if (!GetFrame())
     return;
 
@@ -1005,8 +1130,8 @@ void DOMWindow::RecordWindowProxyAccessMetrics(
     }
   }
 
-  if (property_access) {
-    UseCounter::Count(accessing_window, *property_access);
+  if (counter_it->second.property_access) {
+    UseCounter::Count(accessing_window, *counter_it->second.property_access);
   }
 
   // Note that SecurityOrigin can be null in unit tests.
@@ -1018,11 +1143,13 @@ void DOMWindow::RecordWindowProxyAccessMetrics(
               GetFrame()->GetSecurityContext()->GetSecurityOrigin())) {
     return;
   }
-  UseCounter::Count(accessing_window->document(), cross_origin_property_access);
+  UseCounter::Count(accessing_window->document(),
+                    counter_it->second.cross_origin_property_access);
 
   if (accessing_frame->GetPage() != GetFrame()->GetPage()) {
-    UseCounter::Count(accessing_window,
-                      cross_origin_property_access_from_other_page);
+    UseCounter::Count(
+        accessing_window,
+        counter_it->second.cross_origin_property_access_from_other_page);
   }
 }
 

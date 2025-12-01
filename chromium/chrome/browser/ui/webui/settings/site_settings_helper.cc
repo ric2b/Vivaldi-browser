@@ -165,6 +165,7 @@ constexpr auto kContentSettingsTypeGroupNames = std::to_array<
     {ContentSettingsType::WEB_APP_INSTALLATION, "web-app-installation"},
     {ContentSettingsType::SMART_CARD_GUARD, "smart-card-readers"},
     {ContentSettingsType::SMART_CARD_DATA, "smart-card-readers-data"},
+    {ContentSettingsType::LOCAL_NETWORK_ACCESS, "local-network-access"},
 
     // Add new content settings here if a corresponding Javascript string
     // representation for it is not required, for example if the content setting
@@ -247,6 +248,10 @@ constexpr auto kContentSettingsTypeGroupNames = std::to_array<
     {ContentSettingsType::CONTROLLED_FRAME, nullptr},
     // POINTER_LOCK has been deprecated.
     {ContentSettingsType::POINTER_LOCK, nullptr},
+    {ContentSettingsType::REVOKED_DISRUPTIVE_NOTIFICATION_PERMISSIONS, nullptr},
+
+    // Vivaldi
+    {ContentSettingsType::KEY_SHORTCUTS, "key-shortcuts"},
 });
 
 static_assert(
@@ -500,6 +505,8 @@ bool HasRegisteredGroupName(ContentSettingsType type) {
 #if defined(VIVALDI_BUILD)
   if (type == ContentSettingsType::AUTOPLAY) {
     return true;
+  } else if (type == ContentSettingsType::KEY_SHORTCUTS) {
+    return true;
   }
 #endif  // VIVALDI_BUILD
 
@@ -516,6 +523,8 @@ ContentSettingsType ContentSettingsTypeFromGroupName(std::string_view name) {
 #if defined(VIVALDI_BUILD)
   if (name == "autoplay") {
     return ContentSettingsType::AUTOPLAY;
+  } else if (name == "key-shortcut") {
+    return ContentSettingsType::KEY_SHORTCUTS;
   }
 #endif  // VIVALDI_BUILD
 
@@ -601,6 +610,7 @@ std::vector<ContentSettingsType> GetVisiblePermissionCategories(
 
 #if defined(VIVALDI_BUILD)
       ContentSettingsType::AUTOPLAY,
+      ContentSettingsType::KEY_SHORTCUTS,
 #endif  // VIVALDI_BUILD
   }};
   static bool initialized = false;
@@ -645,9 +655,7 @@ std::vector<ContentSettingsType> GetVisiblePermissionCategories(
     }
 
     if (base::FeatureList::IsEnabled(
-            features::kCapturedSurfaceControlKillswitch) &&
-        base::FeatureList::IsEnabled(
-            features::kCapturedSurfaceControlStickyPermissions)) {
+            features::kCapturedSurfaceControlKillswitch)) {
       base_types->push_back(ContentSettingsType::CAPTURED_SURFACE_CONTROL);
     }
 
@@ -664,6 +672,11 @@ std::vector<ContentSettingsType> GetVisiblePermissionCategories(
 
     if (base::FeatureList::IsEnabled(blink::features::kWebAppInstallation)) {
       base_types->push_back(ContentSettingsType::WEB_APP_INSTALLATION);
+    }
+
+    if (base::FeatureList::IsEnabled(
+            network::features::kLocalNetworkAccessChecks)) {
+      base_types->push_back(ContentSettingsType::LOCAL_NETWORK_ACCESS);
     }
 
     initialized = true;
@@ -734,6 +747,7 @@ SiteSettingSource ProviderTypeToSiteSettingsSource(
     case ProviderType::kDefaultProvider:
       return SiteSettingSource::kDefault;
 
+    case ProviderType::kJavascriptOptimizerAndroidProvider:
     case ProviderType::kNone:
     case ProviderType::kNotificationAndroidProvider:
     case ProviderType::kProviderForTests:
@@ -757,7 +771,7 @@ std::string ProviderToDefaultSettingSourceString(const ProviderType provider) {
     case ProviderType::kWebuiAllowlistProvider:
     case ProviderType::kDefaultProvider:
       return "default";
-
+    case ProviderType::kJavascriptOptimizerAndroidProvider:
     case ProviderType::kNone:
     case ProviderType::kNotificationAndroidProvider:
     case ProviderType::kProviderForTests:

@@ -34,6 +34,7 @@ import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.page_image_service.ImageServiceBridge;
 import org.chromium.chrome.browser.page_image_service.ImageServiceBridgeJni;
+import org.chromium.chrome.browser.price_tracking.PriceDropNotificationManager;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.signin.services.IdentityServicesProvider;
 import org.chromium.chrome.browser.signin.services.SigninManager;
@@ -56,8 +57,7 @@ import org.chromium.ui.base.TestActivity;
     ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE,
     ChromeSwitches.DISABLE_NATIVE_INITIALIZATION
 })
-// TODO(crbug.com/327387704): Add tests with this flag enabled.
-@Features.DisableFeatures(ChromeFeatureList.UNO_PHASE_2_FOLLOW_UP)
+@Features.EnableFeatures(ChromeFeatureList.UNO_PHASE_2_FOLLOW_UP)
 public class BookmarkManagerCoordinatorTest {
     @Rule public MockitoRule mMockitoRule = MockitoJUnit.rule();
 
@@ -80,6 +80,9 @@ public class BookmarkManagerCoordinatorTest {
     @Mock private CommerceFeatureUtils.Natives mCommerceFeatureUtilsJniMock;
     @Mock private ShoppingService mShoppingService;
     @Mock private ReauthenticatorBridge mReauthenticatorMock;
+    @Mock private BookmarkOpener mBookmarkOpener;
+    @Mock private BookmarkManagerOpener mBookmarkManagerOpener;
+    @Mock private PriceDropNotificationManager mPriceDropNotificationManager;
 
     private Activity mActivity;
     private BookmarkManagerCoordinator mCoordinator;
@@ -113,13 +116,14 @@ public class BookmarkManagerCoordinatorTest {
                             mCoordinator =
                                     new BookmarkManagerCoordinator(
                                             mActivity,
-                                            /* openBookmarkComponentName= */ null,
                                             /* isDialogUi= */ !DeviceFormFactor
                                                     .isNonMultiDisplayContextOnTablet(mActivity),
                                             mSnackbarManager,
                                             mProfile,
                                             mBookmarkUiPrefs,
-                                            /* bookmarkOpenedCallback= */ null);
+                                            mBookmarkOpener,
+                                            mBookmarkManagerOpener,
+                                            mPriceDropNotificationManager);
                             mActivity.setContentView(mCoordinator.getView());
                         });
     }
@@ -136,8 +140,6 @@ public class BookmarkManagerCoordinatorTest {
     @Test
     public void testCreateView() {
         FrameLayout parent = new FrameLayout(mActivity);
-        assertNotNull(mCoordinator.buildPersonalizedPromoView(parent));
-        assertNotNull(mCoordinator.buildLegacyPromoView(parent));
         assertNotNull(mCoordinator.buildSectionHeaderView(parent));
         assertNotNull(BookmarkManagerCoordinator.buildDividerView(parent));
         assertNotNull(BookmarkManagerCoordinator.buildCompactImprovedBookmarkRow(parent));

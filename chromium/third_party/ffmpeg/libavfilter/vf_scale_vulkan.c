@@ -39,13 +39,17 @@ typedef struct ScaleVulkanContext {
 
     int initialized;
     FFVkExecPool e;
-    FFVkQueueFamilyCtx qf;
+    AVVulkanDeviceQueueFamily *qf;
     FFVulkanShader shd;
     VkSampler sampler;
 
     /* Push constants / options */
     struct {
         float yuv_matrix[4][4];
+        int crop_x;
+        int crop_y;
+        int crop_w;
+        int crop_h;
     } opts;
 
     char *out_format_string;
@@ -121,10 +125,6 @@ static av_cold int init_filter(AVFilterContext *ctx, AVFrame *in)
     FFVkSPIRVCompiler *spv;
     FFVulkanDescriptorSetBinding *desc;
 
-    int crop_x = in->crop_left;
-    int crop_y = in->crop_top;
-    int crop_w = in->width - (in->crop_left + in->crop_right);
-    int crop_h = in->height - (in->crop_top + in->crop_bottom);
     int in_planes = av_pix_fmt_count_planes(s->vkctx.input_format);
 
     switch (s->scaler) {
@@ -142,8 +142,14 @@ static av_cold int init_filter(AVFilterContext *ctx, AVFrame *in)
         return AVERROR_EXTERNAL;
     }
 
-    ff_vk_qf_init(vkctx, &s->qf, VK_QUEUE_COMPUTE_BIT);
-    RET(ff_vk_exec_pool_init(vkctx, &s->qf, &s->e, s->qf.nb_queues*4, 0, 0, 0, NULL));
+    s->qf = ff_vk_qf_find(vkctx, VK_QUEUE_COMPUTE_BIT, 0);
+    if (!s->qf) {
+        av_log(ctx, AV_LOG_ERROR, "Device has no compute queues\n");
+        err = AVERROR(ENOTSUP);
+        goto fail;
+    }
+
+    RET(ff_vk_exec_pool_init(vkctx, s->qf, &s->e, s->qf->num*4, 0, 0, 0, NULL));
     RET(ff_vk_init_sampler(vkctx, &s->sampler, 0, sampler_mode));
     RET(ff_vk_shader_init(vkctx, &s->shd, "scale",
                           VK_SHADER_STAGE_COMPUTE_BIT,
@@ -153,6 +159,10 @@ static av_cold int init_filter(AVFilterContext *ctx, AVFrame *in)
 
     GLSLC(0, layout(push_constant, std430) uniform pushConstants {        );
     GLSLC(1,    mat4 yuv_matrix;                                          );
+    GLSLC(1,    int crop_x;                                               );
+    GLSLC(1,    int crop_y;                                               );
+    GLSLC(1,    int crop_w;                                               );
+    GLSLC(1,    int crop_h;                                               );
     GLSLC(0, };                                                           );
     GLSLC(0,                                                              );
 
@@ -199,8 +209,8 @@ static av_cold int init_filter(AVFilterContext *ctx, AVFrame *in)
     GLSLC(1,     ivec2 size;                                                 );
     GLSLC(1,     ivec2 pos = ivec2(gl_GlobalInvocationID.xy);                );
     GLSLF(1,     vec2 in_d = vec2(%i, %i);             ,in->width, in->height);
-    GLSLF(1,     vec2 c_r = vec2(%i, %i) / in_d;              ,crop_w, crop_h);
-    GLSLF(1,     vec2 c_o = vec2(%i, %i) / in_d;               ,crop_x,crop_y);
+    GLSLC(1,     vec2 c_r = vec2(crop_w, crop_h) / in_d;                     );
+    GLSLC(1,     vec2 c_o = vec2(crop_x, crop_y) / in_d;                     );
     GLSLC(0,                                                                 );
 
     if (s->vkctx.output_format == s->vkctx.input_format) {
@@ -280,12 +290,22 @@ static int scale_vulkan_filter_frame(AVFilterLink *link, AVFrame *in)
     if (!s->initialized)
         RET(init_filter(ctx, in));
 
+    s->opts.crop_x = in->crop_left;
+    s->opts.crop_y = in->crop_top;
+    s->opts.crop_w = in->width - (in->crop_left + in->crop_right);
+    s->opts.crop_h = in->height - (in->crop_top + in->crop_bottom);
+
     RET(ff_vk_filter_process_simple(&s->vkctx, &s->e, &s->shd, out, in,
                                     s->sampler, &s->opts, sizeof(s->opts)));
 
     err = av_frame_copy_props(out, in);
     if (err < 0)
         goto fail;
+
+    if (out->width != in->width || out->height != in->height) {
+        av_frame_side_data_remove_by_props(&out->side_data, &out->nb_side_data,
+                                           AV_SIDE_DATA_PROP_SIZE_DEPENDENT);
+    }
 
     if (s->out_range != AVCOL_RANGE_UNSPECIFIED)
         out->color_range = s->out_range;
@@ -315,6 +335,11 @@ static int scale_vulkan_config_output(AVFilterLink *outlink)
                                    &vkctx->output_height);
     if (err < 0)
         return err;
+
+    ff_scale_adjust_dimensions(inlink, &vkctx->output_width, &vkctx->output_height, 0, 1);
+
+    outlink->w = vkctx->output_width;
+    outlink->h = vkctx->output_height;
 
     if (s->out_format_string) {
         s->vkctx.output_format = av_get_pix_fmt(s->out_format_string);
@@ -401,16 +426,16 @@ static const AVFilterPad scale_vulkan_outputs[] = {
     },
 };
 
-const AVFilter ff_vf_scale_vulkan = {
-    .name           = "scale_vulkan",
-    .description    = NULL_IF_CONFIG_SMALL("Scale Vulkan frames"),
+const FFFilter ff_vf_scale_vulkan = {
+    .p.name         = "scale_vulkan",
+    .p.description  = NULL_IF_CONFIG_SMALL("Scale Vulkan frames"),
+    .p.priv_class   = &scale_vulkan_class,
+    .p.flags        = AVFILTER_FLAG_HWDEVICE,
     .priv_size      = sizeof(ScaleVulkanContext),
     .init           = &ff_vk_filter_init,
     .uninit         = &scale_vulkan_uninit,
     FILTER_INPUTS(scale_vulkan_inputs),
     FILTER_OUTPUTS(scale_vulkan_outputs),
     FILTER_SINGLE_PIXFMT(AV_PIX_FMT_VULKAN),
-    .priv_class     = &scale_vulkan_class,
     .flags_internal = FF_FILTER_FLAG_HWFRAME_AWARE,
-    .flags          = AVFILTER_FLAG_HWDEVICE,
 };

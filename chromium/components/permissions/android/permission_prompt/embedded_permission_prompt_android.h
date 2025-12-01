@@ -37,6 +37,8 @@ class EmbeddedPermissionPromptAndroid : public PermissionPromptAndroid {
   // PermissionPrompt:
   PermissionPromptDisposition GetPromptDisposition() const override;
   bool ShouldFinalizeRequestAfterDecided() const override;
+  std::optional<gfx::Rect> GetViewBoundsInScreen() const override;
+  bool IsAskPrompt() const override;
 
   // PermissionPromptAndroid:
   EmbeddedPermissionPromptFlowModel::Variant GetEmbeddedPromptVariant()

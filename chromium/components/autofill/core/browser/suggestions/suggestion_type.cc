@@ -20,12 +20,16 @@ std::string_view SuggestionTypeToStringView(SuggestionType type) {
       return "kAddressFieldByFieldFilling";
     case SuggestionType::kManageAddress:
       return "kManageAddress";
+    case SuggestionType::kManageAutofillAi:
+      return "kManageAutofillAi";
     case SuggestionType::kManageCreditCard:
       return "kManageCreditCard";
     case SuggestionType::kManageIban:
       return "kManageIban";
     case SuggestionType::kManagePlusAddress:
       return "kManagePlusAddress";
+    case SuggestionType::kManageLoyaltyCard:
+      return "kManageLoyaltyCard";
     case SuggestionType::kComposeResumeNudge:
       return "kComposeResumeNudge";
     case SuggestionType::kComposeDisable:
@@ -46,8 +50,6 @@ std::string_view SuggestionTypeToStringView(SuggestionType type) {
       return "kAllSavedPasswordsEntry";
     case SuggestionType::kGeneratePasswordEntry:
       return "kGeneratePasswordEntry";
-    case SuggestionType::kShowAccountCards:
-      return "kShowAccountCards";
     case SuggestionType::kAccountStoragePasswordEntry:
       return "kAccountStoragePasswordEntry";
     case SuggestionType::kPasswordFieldByFieldFilling:
@@ -86,6 +88,8 @@ std::string_view SuggestionTypeToStringView(SuggestionType type) {
       return "kWebauthnCredential";
     case SuggestionType::kWebauthnSignInWithAnotherDevice:
       return "kWebauthnSignInWithAnotherDevice";
+    case SuggestionType::kIdentityCredential:
+      return "kIdentityCredential";
     case SuggestionType::kTitle:
       return "kTitle";
     case SuggestionType::kSeparator:
@@ -100,18 +104,12 @@ std::string_view SuggestionTypeToStringView(SuggestionType type) {
       return "kDevtoolsTestAddressByCountry";
     case SuggestionType::kDevtoolsTestAddressEntry:
       return "kDevtoolsTestAddressEntry";
-    case SuggestionType::kRetrieveAutofillAi:
-      return "kRetrieveAutofillAi";
-    case SuggestionType::kAutofillAiLoadingState:
-      return "kAutofillAiLoadingState";
     case SuggestionType::kFillAutofillAi:
       return "kFillAutofillAi";
-    case SuggestionType::kAutofillAiFeedback:
-      return "kAutofillAiFeedback";
-    case SuggestionType::kAutofillAiError:
-      return "kAutofillAiError";
-    case SuggestionType::kEditAutofillAiData:
-      return "kEditAutofillAiData";
+    case SuggestionType::kPendingStateSignin:
+      return "kPendingStateSignin";
+    case SuggestionType::kLoyaltyCardEntry:
+      return "kLoyaltyCardEntry";
   }
   NOTREACHED();
 }

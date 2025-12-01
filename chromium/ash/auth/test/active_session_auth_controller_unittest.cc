@@ -65,13 +65,10 @@ class ActiveSessionAuthControllerTest
     UserDataAuthClient::InitializeFake();
     auth_parts_ = AuthParts::Create(local_state());
 
-    AshTestBase::SetUp();
+    NoSessionAshTestBase::SetUp();
 
-    GetSessionControllerClient()->Reset();
-    GetSessionControllerClient()->AddUserSession(
-        kUserEmail, user_manager::UserType::kRegular);
-    GetSessionControllerClient()->SetSessionState(
-        session_manager::SessionState::ACTIVE);
+    ClearLogin();
+    SimulateUserLogin({kUserEmail, user_manager::UserType::kRegular});
   }
 
   void TearDown() override {
@@ -84,7 +81,7 @@ class ActiveSessionAuthControllerTest
     CryptohomeMiscClient::Shutdown();
     UserDataAuthClient::Shutdown();
 
-    AshTestBase::TearDown();
+    NoSessionAshTestBase::TearDown();
   }
 
   void InitializeUserManager() {
@@ -98,9 +95,7 @@ class ActiveSessionAuthControllerTest
     user_manager_->AddGaiaUser(account_id_, user_manager::UserType::kRegular);
     user_manager_->UserLoggedIn(
         account_id_,
-        user_manager::FakeUserManager::GetFakeUsernameHash(account_id_),
-        /*browser_restart=*/false,
-        /*is_child=*/false);
+        user_manager::FakeUserManager::GetFakeUsernameHash(account_id_));
     ASSERT_FALSE(user_manager_->IsUserCryptohomeDataEphemeral(account_id_));
   }
 

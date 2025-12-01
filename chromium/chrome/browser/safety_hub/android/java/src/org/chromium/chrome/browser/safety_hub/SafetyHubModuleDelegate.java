@@ -18,7 +18,15 @@ public interface SafetyHubModuleDelegate {
      *
      * @param context used to show the dialog.
      */
+    // TODO(crbug.com/388788969): Rename to `showAccountPasswordCheckUi`.
     void showPasswordCheckUi(Context context);
+
+    /**
+     * Launches the Local Password Checkup UI from GMSCore.
+     *
+     * @param context used to show the dialog.
+     */
+    void showLocalPasswordCheckUi(Context context);
 
     /**
      * Opens the Play Store page for the installed Chrome channel.
@@ -32,6 +40,12 @@ public interface SafetyHubModuleDelegate {
      * @return the total passwords count for Account-level passwords.
      */
     int getAccountPasswordsCount(@Nullable PasswordStoreBridge passwordStoreBridge);
+
+    /**
+     * @param passwordStoreBridge Provides access to stored passwords.
+     * @return the total passwords count for local-level passwords.
+     */
+    int getLocalPasswordsCount(@Nullable PasswordStoreBridge passwordStoreBridge);
 
     /**
      * Opens the sign-in bottomsheet.

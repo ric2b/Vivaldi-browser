@@ -70,7 +70,7 @@ AudioDeviceThread::AudioDeviceThread(Callback* callback,
 }
 
 AudioDeviceThread::~AudioDeviceThread() {
-  in_shutdown_.Set();
+  in_shutdown_ = true;
   socket_.Shutdown();
   if (thread_handle_.is_null())
     return;
@@ -93,6 +93,14 @@ void AudioDeviceThread::ThreadMain() {
     size_t bytes_read = socket_.Receive(base::byte_span_from_ref(pending_data));
     if (bytes_read != sizeof(pending_data))
       break;
+
+    // std::numeric_limits<uint32_t>::max() - 1 is a special signal that
+    // tells us that the writer is done and will be closing the connection.
+    // Nothing that happens after that is considered an error.
+    if (pending_data == std::numeric_limits<uint32_t>::max() - 1) {
+      in_shutdown_ = true;
+      break;
+    }
 
     // std::numeric_limits<uint32_t>::max() is a special signal which is
     // returned after the browser stops the output device in response to a
@@ -127,7 +135,7 @@ void AudioDeviceThread::ThreadMain() {
     }
   }
 
-  if (!in_shutdown_.IsSet()) {
+  if (!in_shutdown_.load()) {
     callback_->OnSocketError();
   }
 }

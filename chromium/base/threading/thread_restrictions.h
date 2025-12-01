@@ -171,7 +171,6 @@ class ScopedAllowInitGLBindings;
 class VizCompositorThreadRunnerWebView;
 }  // namespace android_webview
 namespace ash {
-class BrowserDataBackMigrator;
 class LoginEventRecorder;
 class StartupCustomizationDocument;
 class StartupUtils;
@@ -258,9 +257,6 @@ namespace cronet {
 class CronetPrefsManager;
 class CronetContext;
 }  // namespace cronet
-namespace crosapi {
-class LacrosThreadTypeDelegate;
-}  // namespace crosapi
 namespace crypto {
 class ScopedAllowBlockingForNSS;
 }
@@ -336,6 +332,7 @@ template <class WorkerInterface,
 class CodecWorkerImpl;
 class FileVideoCaptureDeviceFactory;
 class GpuMojoMediaClientWin;
+class MailboxVideoFrameConverter;
 class MojoVideoEncodeAccelerator;
 class PaintCanvasVideoRenderer;
 class V4L2DevicePoller;  // TODO(crbug.com/41486289): remove this.
@@ -589,7 +586,6 @@ class BASE_EXPORT ScopedAllowBlocking {
   friend class ::WebEngineBrowserMainParts;
   friend class android_webview::AwBrowserContext;
   friend class android_webview::ScopedAllowInitGLBindings;
-  friend class ash::BrowserDataBackMigrator;
   friend class ash::LoginEventRecorder;
   friend class ash::StartupCustomizationDocument;  // http://crosbug.com/11103
   friend class ash::StartupUtils;
@@ -620,7 +616,6 @@ class BASE_EXPORT ScopedAllowBlocking {
   friend class content::WebContentsViewMac;
   friend class cronet::CronetContext;
   friend class cronet::CronetPrefsManager;
-  friend class crosapi::LacrosThreadTypeDelegate;
   friend class crypto::ScopedAllowBlockingForNSS;  // http://crbug.com/59847
   friend class drive::FakeDriveService;
   friend class extensions::DesktopAndroidExtensionSystem;
@@ -884,6 +879,7 @@ class BASE_EXPORT
   friend class gpu::GpuMemoryBufferImplDXGI;
   friend class media::AudioInputDevice;
   friend class media::AudioOutputDevice;
+  friend class media::MailboxVideoFrameConverter;
   friend class media::PaintCanvasVideoRenderer;
   friend class media::V4L2DevicePoller;  // TODO(crbug.com/41486289): remove
                                          // this.

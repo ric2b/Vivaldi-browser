@@ -9,18 +9,20 @@
 #include <memory>
 #include <optional>
 #include <set>
+#include <variant>
 #include <vector>
 
 #include "base/containers/flat_set.h"
 #include "base/gtest_prod_util.h"
 #include "base/memory/raw_ref.h"
+#include "base/memory/weak_ptr.h"
 #include "base/time/time.h"
 #include "base/values.h"
 #include "pdf/buildflags.h"
 #include "pdf/pdf_ink_brush.h"
 #include "pdf/pdf_ink_ids.h"
 #include "pdf/pdf_ink_undo_redo_model.h"
-#include "third_party/abseil-cpp/absl/types/variant.h"
+#include "pdf/ui/thumbnail.h"
 #include "third_party/ink/src/ink/geometry/partitioned_mesh.h"
 #include "third_party/ink/src/ink/strokes/in_progress_stroke.h"
 #include "third_party/ink/src/ink/strokes/input/stroke_input.h"
@@ -140,10 +142,12 @@ class PdfInkModule {
   // stroke state with non-empty `drawing_stroke_state().inputs`.
   void Draw(SkCanvas& canvas);
 
-  // Draws `strokes_` for `page_index` into `canvas`. Here, `canvas` only covers
-  // the region for the page at `page_index`, so this only draws strokes for
-  // that page, regardless of page visibility.
-  bool DrawThumbnail(SkCanvas& canvas, int page_index);
+  // Generates a thumbnail of `thumbnail_size` for the page at `page_index`
+  // using DrawThumbnail(). Sends the result to the WebUI if successful.
+  // Otherwise, do not send anything to the WebUI.
+  // `thumbnail_size` must be non-empty.
+  void GenerateAndSendInkThumbnail(int page_index,
+                                   const gfx::Size& thumbnail_size);
 
   // Gets an iterator for the visible strokes across all pages.
   // Modifying the set of visible strokes while using the iterator is not
@@ -160,12 +164,8 @@ class PdfInkModule {
   void OnGeometryChanged();
 
   // For testing only. Returns the current `PdfInkBrush` used to draw strokes,
-  // or nullptr if there is no brush.
+  // or nullptr if there is no brush because `PdfInkModule` is erasing.
   const PdfInkBrush* GetPdfInkBrushForTesting() const;
-
-  // For testing only. Returns the current eraser size, or nullopt if the
-  // eraser is not in use.
-  std::optional<float> GetEraserSizeForTesting() const;
 
   // For testing only. Returns the (visible) input positions used for all
   // strokes in the document.
@@ -272,7 +272,8 @@ class PdfInkModule {
     ~EraserState();
 
     bool erasing = false;
-    base::flat_set<int> page_indices_with_erasures;
+    base::flat_set<int> page_indices_with_stroke_erasures;
+    base::flat_set<int> page_indices_with_partitioned_mesh_erasures;
 
     // The event position for the last input, similar to what is stored in
     // `DrawingStrokeState` for compensating for missed input events.
@@ -317,9 +318,8 @@ class PdfInkModule {
   bool FinishEraseStroke(const gfx::PointF& position,
                          ink::StrokeInput::ToolType tool_type);
 
-  // Shared code for the Erase methods above. Returns if something got erased or
-  // not.
-  bool EraseHelper(const gfx::PointF& position, int page_index);
+  // Shared code for the Erase methods above.
+  void EraseHelper(const gfx::PointF& position, int page_index);
 
   // Sets `using_stylus_instead_of_touch_` to true if `tool_type` is
   // `ink::StrokeInput::ToolType::kStylus`. Otherwise do nothing.
@@ -336,22 +336,22 @@ class PdfInkModule {
   void HandleSetAnnotationModeMessage(const base::Value::Dict& message);
 
   bool is_drawing_stroke() const {
-    return absl::holds_alternative<DrawingStrokeState>(current_tool_state_);
+    return std::holds_alternative<DrawingStrokeState>(current_tool_state_);
   }
   bool is_erasing_stroke() const {
-    return absl::holds_alternative<EraserState>(current_tool_state_);
+    return std::holds_alternative<EraserState>(current_tool_state_);
   }
   const DrawingStrokeState& drawing_stroke_state() const {
-    return absl::get<DrawingStrokeState>(current_tool_state_);
+    return std::get<DrawingStrokeState>(current_tool_state_);
   }
   DrawingStrokeState& drawing_stroke_state() {
-    return absl::get<DrawingStrokeState>(current_tool_state_);
+    return std::get<DrawingStrokeState>(current_tool_state_);
   }
   const EraserState& erasing_stroke_state() const {
-    return absl::get<EraserState>(current_tool_state_);
+    return std::get<EraserState>(current_tool_state_);
   }
   EraserState& erasing_stroke_state() {
-    return absl::get<EraserState>(current_tool_state_);
+    return std::get<EraserState>(current_tool_state_);
   }
 
   // Returns the current brush. Must be in a drawing stroke state.
@@ -392,6 +392,26 @@ class PdfInkModule {
 
   void MaybeSetDrawingBrushAndCursor();
 
+  // Helper that calls GenerateAndSendInkThumbnail() without needing to specify
+  // the thumbnail size. This helper determines the size by asking
+  // PdfInkModuleClient.
+  void GenerateAndSendInkThumbnailInternal(int page_index);
+
+  // Draws `strokes_` for `page_index` into `canvas`. Here, `canvas` only covers
+  // the region for the page at `page_index`, so this only draws strokes for
+  // that page, regardless of page visibility.
+  bool DrawThumbnail(SkCanvas& canvas, int page_index);
+
+  // Updates the page indices in `ink_updates` using
+  // GenerateAndSendInkThumbnailInternal(), and updates the page indices in
+  // `pdf_updates` using PdfInkModuleClient::RequestThumbnail().
+  void RequestThumbnailUpdates(const base::flat_set<int>& ink_updates,
+                               const base::flat_set<int>& pdf_updates);
+
+  // Handles the callback for PDF thumbnail generation requests. Sends
+  // `thumbnail` to the WebUI.
+  void OnGotThumbnail(int page_index, Thumbnail thumbnail);
+
   const raw_ref<PdfInkModuleClient> client_;
 
   bool enabled_ = false;
@@ -411,7 +431,6 @@ class PdfInkModule {
   // modified in the middle of an in-progress stroke.
   PdfInkBrush highlighter_brush_;
   PdfInkBrush pen_brush_;
-  float eraser_size_ = 3.0f;
 
   // The parameters that are to be applied to the drawing brushes when a new
   // stroke is started.  These can be modified at any time, including in the
@@ -419,12 +438,14 @@ class PdfInkModule {
   std::optional<PendingDrawingBrushState> pending_drawing_brush_state_;
 
   // The state of the current tool that is in use.
-  absl::variant<DrawingStrokeState, EraserState> current_tool_state_;
+  std::variant<DrawingStrokeState, EraserState> current_tool_state_;
 
   // The state of the strokes that have been completed.
   DocumentStrokesMap strokes_;
 
   PdfInkUndoRedoModel undo_redo_model_;
+
+  base::WeakPtrFactory<PdfInkModule> weak_factory_{this};
 };
 
 }  // namespace chrome_pdf

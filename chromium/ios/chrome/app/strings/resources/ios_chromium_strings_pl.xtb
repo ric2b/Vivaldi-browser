@@ -4,6 +4,7 @@
 <translation id="1000436330784933699">Tutaj możesz otworzyć Obiektyw.</translation>
 <translation id="1042296835509784301">Otwiera Menedżera haseł w Chromium.</translation>
 <translation id="1047130070405668746">Wybierz Chromium.</translation>
+<translation id="1086486568852410168">Szukaj za pomocą Obiektywu Google</translation>
 <translation id="1091252999271033193">Oznacza to, że Chromium będzie za każdym razem wyświetlać witrynę mobilną.</translation>
 <translation id="1115463765356382667">Wykonaj te sugerowane działania, aby w pełni wykorzystać możliwości Chromium.</translation>
 <translation id="1140315115515116765">Używaj domyślnie Chromium, aby łatwo otrzymywać statystyki dotyczące cen</translation>
@@ -30,7 +31,6 @@
 <translation id="159029779861043703">Chromium dba o bezpieczeństwo Twoich danych wrażliwych za pomocą Face ID.</translation>
 <translation id="1591119736686995611">Otwiera siatkę kart w Chromium.</translation>
 <translation id="16001233025397167">Kontrola zabezpieczeń chroni Cię przed przypadkami naruszenia bezpieczeństwa danych, niebezpiecznymi stronami i innymi zagrożeniami. Otrzymuj alerty o problemach związanych z prywatnością i bezpieczeństwem, które wykrywa Chromium.</translation>
-<translation id="1611584326765829247">Pozwól Chromium na ułatwianie Ci śledzenia przesyłek</translation>
 <translation id="1617663976202781617">Dane z synchronizacji Chromium</translation>
 <translation id="164952285225495380">Ta przesyłka jest już śledzona w Chromium.</translation>
 <translation id="1707458603865303524">Używaj Chromium zawsze wtedy, gdy klikasz linki w wiadomościach lub w innych aplikacjach.</translation>
@@ -70,11 +70,11 @@ Odczekaj kilka minut, zanim się wylogujesz. Jeśli wylogujesz się teraz, te da
 <translation id="2459183986985456602">Otwórz moją ostatnio używaną kartę w Chromium.</translation>
 <translation id="2476409803017965813">Wybrane opcje możesz zmienić w dowolnym momencie w ustawieniach Chromium.</translation>
 <translation id="2478931088402984578">Wybierz <ph name="BEGIN_BOLD" />Chromium<ph name="END_BOLD" /></translation>
+<translation id="2485774047568879945">Ustaw Chromium jako przeglądarkę domyślną, aby łatwo udostępniać i otwierać linki</translation>
 <translation id="2512597191798760956">Naciśnij i przytrzymaj ikonę Chromium i kliknij „Edytuj ekran główny”</translation>
 <translation id="2517624234762908348">Synchronizuj dane Chromium</translation>
 <translation id="2592940277904433508">Nadal korzystaj z Chromium</translation>
 <translation id="2607609479243848905">Jeśli zapomnisz hasło lub zechcesz zmienić to ustawienie, <ph name="BEGIN_LINK" />usuń dane Chromium na swoim koncie<ph name="END_LINK" />.</translation>
-<translation id="2618757400690011108">{COUNT,plural, =1{Chromium pomoże Ci śledzić tę przesyłkę na stronie nowej karty.}few{Chromium pomoże Ci śledzić te przesyłki na stronie nowej karty.}many{Chromium pomoże Ci śledzić te przesyłki na stronie nowej karty.}other{Chromium pomoże Ci śledzić te przesyłki na stronie nowej karty.}}</translation>
 <translation id="2650312721222849884">Aby widzieć swoje karty zawsze, kiedy korzystasz z Chromium, włącz synchronizację</translation>
 <translation id="2684230048001240293">Ustaw Chromium jako przeglądarkę domyślną, aby synchronizować karty, hasła i dane kart płatniczych na wszystkich urządzeniach</translation>
 <translation id="2730884209570016437">Chromium nie może użyć aparatu, bo używa go już inna aplikacja</translation>
@@ -89,9 +89,9 @@ W <ph name="BEGIN_LINK" />usługach Google<ph name="END_LINK" /> znajdziesz wi�
 <translation id="2977470724722393594">Masz aktualną wersję Chromium</translation>
 <translation id="3044857325852340337">Dane Chromium zostały usunięte</translation>
 <translation id="3054480780637153380">Otwórz ustawienia Chromium na urządzeniu z iOS, kliknij „Domyślna przeglądarka” i wybierz Chromium.</translation>
-<translation id="3078941082359356771">{COUNT,plural, =1{Chromium może pomóc Ci śledzić tę przesyłkę na stronie nowej karty.}few{Chromium może pomóc Ci śledzić te przesyłki na stronie nowej karty.}many{Chromium może pomóc Ci śledzić te przesyłki na stronie nowej karty.}other{Chromium może pomóc Ci śledzić te przesyłki na stronie nowej karty.}}</translation>
 <translation id="3102849287235003384">Aby wylogować się z konta Google na wszystkich stronach, <ph name="BEGIN_LINK" />wyloguj się z Chromium<ph name="END_LINK" />.</translation>
 <translation id="3115956258722352278">Ustawić Chromium jako przeglądarkę domyślną?</translation>
+<translation id="3180939591219927904">Włącz opcję „Po zamknięciu Chromium blokuj karty incognito”</translation>
 <translation id="3242612358525156339">W ustawieniach urządzenia otwórz „<ph name="TEXT_OF_THE_SETTINGS_MENU_ITEM" />” i wybierz „Chromium”</translation>
 <translation id="328933489847748230">{count,plural, =1{Pokazuję 1 okno Chromium}few{Pokazuję {count} okna Chromium}many{Pokazuję {count} okien Chromium}other{Pokazuję {count} okna Chromium}}</translation>
 <translation id="3344973607274501920">Przeglądarce Chromium nie udało się sprawdzić Twoich haseł. Sprawdź połączenie z internetem.</translation>
@@ -99,12 +99,15 @@ W <ph name="BEGIN_LINK" />usługach Google<ph name="END_LINK" /> znajdziesz wi�
 <translation id="3387107508582892610">{THRESHOLD,plural, =1{Dzieje się tak, gdy nie korzystasz z Chromium przez {THRESHOLD} minutę. Może to obejmować historię i autouzupełnianie.}few{Dzieje się tak, gdy nie korzystasz z Chromium przez {THRESHOLD} minuty. Może to obejmować historię i autouzupełnianie.}many{Dzieje się tak, gdy nie korzystasz z Chromium przez {THRESHOLD} minut. Może to obejmować historię i autouzupełnianie.}other{Dzieje się tak, gdy nie korzystasz z Chromium przez {THRESHOLD} minuty. Może to obejmować historię i autouzupełnianie.}}</translation>
 <translation id="3410395242749598859">Niektóre dane z Chromium nie zostały jeszcze zapisane na koncie <ph name="EMAIL" />.
 Zanim przełączysz się na inne konto, odczekaj kilka minut. Jeśli przełączysz się teraz, te dane zostaną usunięte.</translation>
+<translation id="3440830787838130530">W Menedżerze haseł Google możesz łatwo i bezpiecznie udostępniać kopie swoich haseł grupie rodzinnej</translation>
 <translation id="3472200483164753384">Nieobsługiwane w Chromium Canary</translation>
 <translation id="347967311580159871">W <ph name="BEGIN_LINK" />usługach Google<ph name="END_LINK" /> znajdziesz więcej ustawień, które wykorzystują dane do ulepszania działania Chromium.</translation>
 <translation id="3512168799938877162">Hasło nie zostało udostępnione. Sprawdź połączenie z internetem i upewnij się, że jesteś zalogowany(-a) w Chromium. Następnie spróbuj ponownie.</translation>
 <translation id="3529798650269984835">Włącz „Blokuj karty incognito po zamknięciu Chromium”.</translation>
+<translation id="3541247799006476453">Korzystaj z autouzupełniania w Chromium, aby mieć łatwy dostęp do haseł i kluczy dostępu</translation>
 <translation id="3567399274263440288">Aby w pełni wykorzystać możliwości Chromium, zaloguj się na konto Google.</translation>
 <translation id="3581385059720151202">Wyszukaj elementy wizualne w Chromium</translation>
+<translation id="3582640969619785896">Chromium zaproponuje zapisanie hasła</translation>
 <translation id="3594315078412605236">Zarządzaj formami płatności w Chromium</translation>
 <translation id="3634039384458740619">Otwórz ustawienia Chromium</translation>
 <translation id="3639997914391704523">Chromium może sprawdzić Twoje hasła, gdy zalogujesz się na swoje konto Google.</translation>
@@ -161,12 +164,15 @@ Aby zmienić to ustawienie, <ph name="BEGIN_LINK" />usuń dane Chromium na swoim
 <translation id="4999538639245140991">Wylogowujesz się z konta, którym zarządza <ph name="SIGNOUT_MANAGED_DOMAIN" />. Spowoduje to usunięcie danych Chromium z tego urządzenia, ale pozostaną one na koncie Google.</translation>
 <translation id="5042011327527167688">Kliknij „Zobacz w Mapach Google w Chromium”.</translation>
 <translation id="5044871537677053278">Chromium wykrywa adresy i wykorzystuje Mapy Google, aby wyświetlać Ci wskazówki dojazdu i informacje lokalne.</translation>
+<translation id="5048140766121299007">W ustawieniach „<ph name="TEXT_OF_THE_SETTINGS_MENU_ITEM" />” włącz „Chromium”</translation>
 <translation id="5048795749726991615">Aby łatwo przywoływać zapisane hasła w innych aplikacjach, użyj autouzupełniania w Chromium</translation>
 <translation id="5053429694249468757">Usuwam dane Chromium…</translation>
 <translation id="5071749685031362629">Chromium na iOS</translation>
 <translation id="5088872414922783602">Otwieraj Chromium szybciej z Docka na ekranie głównym.</translation>
 <translation id="5124429847818367226">Teraz możesz używać Chromium za każdym razem, gdy przeglądasz lub klikasz linki w wiadomościach, dokumentach i innych aplikacjach.</translation>
 <translation id="5131565040785979529">Twoja organizacja (<ph name="DOMAIN" />) zarządza kontem, na które się logujesz, i korzystaniem z Chromium.</translation>
+<translation id="5134464247000681876">Otwieraj linki z Gmaila, Map, YouTube i innych aplikacji w Chromium</translation>
+<translation id="5203244847421322551">Zapisuj i automatycznie uzupełniaj hasła w Chromium</translation>
 <translation id="5224391634244552924">Brak zapisanych haseł. Chromium może sprawdzać Twoje hasła, gdy je zapiszesz.</translation>
 <translation id="5259423875997548710">Wyszukaj elementy wizualne w Chromium.</translation>
 <translation id="5308226104666789935">Chromium nie może sprawdzić dostępności aktualizacji</translation>
@@ -181,6 +187,7 @@ Aby zmienić to ustawienie, <ph name="BEGIN_LINK" />usuń dane Chromium na swoim
 1. Otwórz Ustawienia.
 2. Kliknij Domyślna przeglądarka.
 3. Wybierz Chromium.</translation>
+<translation id="5482686278086727777">Aby otrzymywać przypomnienia o kartach z Chromium, włącz powiadomienia w ustawieniach iOS.</translation>
 <translation id="5521125884468363740">Aby widzieć swoje karty zawsze, kiedy korzystasz z Chromium, zaloguj się i włącz synchronizację</translation>
 <translation id="5534584691915394889">Będziemy z tego korzystać, aby tworzyć wydarzenia z Chromium i Obiektywu Google w kalendarzu Apple.</translation>
 <translation id="5571094606370987472">Otwiera ostatnie karty w Chromium.</translation>
@@ -202,7 +209,6 @@ Pamiętaj, że:
     Jeśli zsynchronizujesz historię przeglądania z kontem Google, dane mogą też zawierać informacje o adresach URL, które odwiedzasz.<ph name="END_INDENT" /></translation>
 <translation id="5932787118589620366">Usuń dane przeglądania w Chromium.</translation>
 <translation id="593808800391107017">Otrzymuj alerty o problemach związanych z prywatnością i bezpieczeństwem, które automatycznie wykrywa Chromium.</translation>
-<translation id="5945387852661427312">Logujesz się na konto, którym zarządza <ph name="DOMAIN" />, i przekazujesz jego administratorowi kontrolę nad Twoimi danymi Chromium. Zostaną one trwale przypisane do tego konta. Gdy się wylogujesz, znikną one z tego urządzenia, ale pozostaną zapisane na Twoim koncie Google.</translation>
 <translation id="5951593919357934226">Wykorzystaj maksymalnie potencjał Chromium.</translation>
 <translation id="5985254578475526217">Aby otrzymywać powiadomienia z Chromium, włącz je w ustawieniach iOS.</translation>
 <translation id="6104024151682120539">Otwórz w Chromium</translation>
@@ -210,10 +216,11 @@ Pamiętaj, że:
 <translation id="6132149203299792222">Zaloguj się na konto Google, aby synchronizować swoje hasła, zakładki i inne dane.</translation>
 <translation id="6148377327556085395">Dodaj zakładki do Chromium</translation>
 <translation id="6154098560469640583">Używaj Chromium za każdym razem, gdy klikasz linki w wiadomościach, dokumentach i w innych aplikacjach.</translation>
+<translation id="6157162508956739031">Szybko loguj się w aplikacjach i na stronach dzięki autouzupełnianiu haseł i kluczy dostępu z Chromium</translation>
 <translation id="6170619162539716595">Zezwalaj Chromium na używanie Map Google do podawania wskazówek i informacji lokalnych o wykrytych adresach.</translation>
-<translation id="6197255575340902638">Jeśli ukryjesz „<ph name="MODULE_NAME" />”, Chromium nie będzie już automatycznie śledzić przesyłek w przyszłości i usunie wszystkie wcześniejsze dane śledzenia.</translation>
 <translation id="6247557882553405851">Menedżer haseł Google</translation>
 <translation id="6268381023930128611">Wylogować z Chromium?</translation>
+<translation id="6301717043141881464">Aby mieć łatwy dostęp do zapisanych haseł w innych aplikacjach, użyj autouzupełniania w Chromium</translation>
 <translation id="6324041800010509197">Wyświetl siatkę kart w Chromium</translation>
 <translation id="6325378625795868881">Używaj Chromium, zawsze gdy klikasz linki w wiadomościach i w innych aplikacjach.</translation>
 <translation id="6424492062988593837">Chromium jest teraz jeszcze lepsze! Dostępna jest nowa wersja.</translation>
@@ -225,6 +232,7 @@ Pamiętaj, że:
 <translation id="6574750762636192517">Zarządzaj hasłami w Chromium</translation>
 <translation id="6590232959690355435">Otwiera stronę historii Chromium.</translation>
 <translation id="6674470628873622334">Otwiera nową kartę incognito w Chromium.</translation>
+<translation id="6680609900732453726">Chroń swoją prywatność podczas przeglądania dzięki uwierzytelnianiu urządzenia przy zamykaniu Chromium</translation>
 <translation id="6752854822223394465">Twoja organizacja konfiguruje Chromium…</translation>
 <translation id="6794054469102824109">Otwiera grę z dinozaurem w Chromium.</translation>
 <translation id="6820823224820483452">Przeglądarce Chromium nie udało się sprawdzić wszystkich haseł. Spróbuj ponownie jutro.</translation>
@@ -254,22 +262,24 @@ Twoje zaszyfrowane dane może odczytać tylko osoba znająca hasło. Nie jest on
 <translation id="7337881442233988129">Chromium</translation>
 <translation id="7357211569052832586">Wybrane dane zostały usunięte z Chromium i synchronizowanych urządzeń. Inne rodzaje historii przeglądania, takie jak wyszukiwania i aktywność w innych usługach Google, mogą być nadal dostępne na Twoim koncie Google na history.google.com</translation>
 <translation id="7395825497086981028">Hasło zostanie zapisane w menedżerze haseł na koncie <ph name="EMAIL" />.</translation>
+<translation id="7504829997542308412">Otwórz Chromium</translation>
 <translation id="7531461704633548377">Z Chromium</translation>
 <translation id="7554983317097061001">Wskazówka dotycząca Chromium: przenieś Chromium do Docka</translation>
 <translation id="7576863740961052505">Zarządzaj ustawieniami Chromium</translation>
 <translation id="7674213385180944843">Wybierz Ustawienia &gt; Prywatność &gt; Aparat &gt; Chromium i włącz aparat.</translation>
 <translation id="7733418656985455268">Wskazówka dotycząca Chromium: wyszukuj za pomocą Obiektywu</translation>
 <translation id="7747820849741499258">Wyszukaj w Chromium</translation>
+<translation id="7753923083404296545">Otwarto w Chromium w trybie incognito</translation>
 <translation id="7762622637388462191">Po zamknięciu Chromium lub przełączeniu się na inną aplikację zablokuj karty incognito.</translation>
 <translation id="7763454117143368771">Używaj Chromium jako przeglądarki domyślnej, aby korzystać z ochrony przed niebezpiecznymi stronami i bezpiecznie przechowywać swoje hasła</translation>
 <translation id="7784950022329154821">Blokuj karty incognito po zamknięciu Chromium</translation>
 <translation id="78025249032851484">Twoja przeglądarka Chromium jest nieaktualna.</translation>
 <translation id="7859018312476869945">Gdy piszesz na pasku adresu lub w polu wyszukiwania, Chromium wysyła to, co piszesz, do domyślnej wyszukiwarki, aby podawać Ci lepsze sugestie. Ta funkcja jest wyłączona w trybie incognito.</translation>
-<translation id="7859432380288435856">Chromium wykryje numery śledzenia przesyłek w odwiedzanych przez Ciebie witrynach i wyświetli aktualne informacje o przesyłkach na stronie Nowa karta. Aby ta funkcja mogła działać, Twoje dane będą udostępniane Google. Pozwoli to też na ulepszanie Zakupów Google.</translation>
 <translation id="7890287942691234100">Zacznij używać skanera Chromium</translation>
 <translation id="7905064834449738336">Gdy użyjesz hasła, które zostało opublikowane online, Chromium wyświetli ostrzeżenie. Aby nikt (nawet Google) nie mógł odczytać haseł ani nazw użytkowników, podczas sprawdzania są one zaszyfrowane.</translation>
 <translation id="7928628054454574139">Otwieraj Chromium po kliknięciu linków w innych aplikacjach</translation>
 <translation id="7934404985878918282">Zobacz listę Do przeczytania w Chromium</translation>
+<translation id="7935734571048689933">Przeglądarka Chromium jest zarządzana</translation>
 <translation id="7951793218148208717">Otwiera nową kartę w Chromium.</translation>
 <translation id="7980860476903281594">Chromium udostępnia Twoją lokalizację witrynom, którym zgadzasz się ją ujawnić.</translation>
 <translation id="7994322153108931467">Aby otrzymywać przydatne wskazówki dotyczące Chromium, włącz powiadomienia w ustawieniach iOS.</translation>
@@ -287,6 +297,7 @@ Twoje zaszyfrowane dane może odczytać tylko osoba znająca hasło. Nie jest on
 <translation id="8254729934443216898">Poznaj nowe funkcje, które pomogą Ci w pełni wykorzystać możliwości Chromium.</translation>
 <translation id="8293572045658095405">Jesteś w trybie incognito w Chromium</translation>
 <translation id="830951810931292870">Otwiera wpisane adresy URL w Chromium w trybie incognito.</translation>
+<translation id="8390323835464055390">Logowanie się za pomocą zapisanych haseł i kluczy dostępu z dowolnej aplikacji dzięki autouzupełnianiu w Chromium</translation>
 <translation id="8409374867500149834">Korzystasz z najlepszych zabezpieczeń Chromium przed szkodliwymi stronami</translation>
 <translation id="8543509361021925846">{THRESHOLD,plural, =1{Dzieje się tak, gdy nie używasz Chromium przez {THRESHOLD} minutę. Dane zapisane tylko na tym urządzeniu, gdy korzystałeś(-aś) z niego po zalogowaniu, zostaną usunięte. Może to obejmować historię i hasła.}few{Dzieje się tak, gdy nie używasz Chromium przez {THRESHOLD} minuty. Dane zapisane tylko na tym urządzeniu, gdy korzystałeś(-aś) z niego po zalogowaniu, zostaną usunięte. Może to obejmować historię i hasła.}many{Dzieje się tak, gdy nie używasz Chromium przez {THRESHOLD} minut. Dane zapisane tylko na tym urządzeniu, gdy korzystałeś(-aś) z niego po zalogowaniu, zostaną usunięte. Może to obejmować historię i hasła.}other{Dzieje się tak, gdy nie używasz Chromium przez {THRESHOLD} minuty. Dane zapisane tylko na tym urządzeniu, gdy korzystałeś(-aś) z niego po zalogowaniu, zostaną usunięte. Może to obejmować historię i hasła.}}</translation>
 <translation id="858114650497379505">Haseł zapisanych w menedżerze haseł możesz używać w innych aplikacjach na iPhonie.</translation>
@@ -299,11 +310,11 @@ Twoje zaszyfrowane dane może odczytać tylko osoba znająca hasło. Nie jest on
 <translation id="8754966941001340678">Chromium zaleca silniejszą ochronę</translation>
 <translation id="8759037115129007407">W tej chwili członek Twojej grupy rodzinnej nie może otrzymać haseł. Poproś go, aby zaktualizował Chromium i zsynchronizował hasła. <ph name="BEGIN_LINK" />Więcej informacji<ph name="END_LINK" /></translation>
 <translation id="8776843108004031667">To konto razem z wszelkimi niezapisanymi danymi zostanie usunięte z Chromium.</translation>
+<translation id="8793333988063379360">Tutaj znajdziesz ustawienia Chromium i inne opcje</translation>
 <translation id="8805148242934787134">Ustaw Chromium jako przeglądarkę domyślną</translation>
 <translation id="8826789549860004832">Aby w pełni wykorzystywać możliwości Chromium, kontynuuj konfigurowanie przeglądarki.</translation>
 <translation id="88376265765385899">Otwiera zakładki w Chromium.</translation>
 <translation id="8860548555286245440">Otwieraj adresy URL w Chromium w trybie incognito</translation>
-<translation id="8866191443434488382">Chromium będzie wykrywać numery śledzenia w odwiedzanych przez Ciebie witrynach i wyświetlać aktualne informacje o przesyłkach na stronie Nowa karta. Numery śledzenia przesyłek i nazwy witryn będą wysyłane do zespołu Chromium i używane do obsługi tej funkcji oraz do ogólnego ulepszania funkcji zakupów. Możesz to zmienić w dowolnym momencie w <ph name="BEGIN_LINK" />ustawieniach śledzenia przesyłek<ph name="END_LINK" />.</translation>
 <translation id="8880024619507699923">Twoja organizacja wymaga od Ciebie zalogowania się w Chromium. <ph name="BEGIN_LINK" />Więcej informacji<ph name="END_LINK" /></translation>
 <translation id="8900052431807804054">Korzystaj z najlepszych zabezpieczeń Chromium</translation>
 <translation id="8950326149985259075">{THRESHOLD,plural, =1{Dzieje się tak, gdy nie korzystasz z Chromium przez {THRESHOLD} minutę}few{Dzieje się tak, gdy nie korzystasz z Chromium przez {THRESHOLD} minuty}many{Dzieje się tak, gdy nie korzystasz z Chromium przez {THRESHOLD} minut}other{Dzieje się tak, gdy nie korzystasz z Chromium przez {THRESHOLD} minuty}}</translation>

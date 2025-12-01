@@ -2,11 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/40284755): Remove this and spanify to fix the errors.
-#pragma allow_unsafe_buffers
-#endif
-
 #include "base/process/launch.h"
 
 #include <dirent.h>
@@ -271,7 +266,7 @@ void CloseSuperfluousFds(const base::InjectiveMultimap& saved_mapping) {
 
     char* endptr;
     errno = 0;
-    const long int fd = strtol(fd_dir.name(), &endptr, 10);
+    const long int fd = UNSAFE_TODO(strtol(fd_dir.name(), &endptr, 10));
     if (fd_dir.name()[0] == 0 || *endptr || fd < 0 || errno ||
         !IsValueInRangeForNumericType<int>(fd)) {
       continue;
@@ -764,7 +759,7 @@ NOINLINE pid_t CloneAndLongjmpInChild(int flags,
     defined(ARCH_CPU_PPC64_FAMILY) || defined(ARCH_CPU_LOONGARCH_FAMILY) || \
     defined(ARCH_CPU_RISCV_FAMILY)
   // The stack grows downward.
-  void* stack = stack_buf + sizeof(stack_buf);
+  void* stack = UNSAFE_TODO(stack_buf + sizeof(stack_buf));
 #else
 #error "Unsupported architecture"
 #endif

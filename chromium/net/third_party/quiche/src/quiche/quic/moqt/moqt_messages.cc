@@ -30,39 +30,19 @@ MoqtObjectStatus IntegerToObjectStatus(uint64_t integer) {
 }
 
 MoqtFilterType GetFilterType(const MoqtSubscribe& message) {
-  if (!message.end_group.has_value() && message.end_object.has_value()) {
-    return MoqtFilterType::kNone;
-  }
-  bool has_start =
-      message.start_group.has_value() && message.start_object.has_value();
-  if (message.end_group.has_value()) {
-    if (has_start) {
-      if (*message.end_group < *message.start_group) {
+  if (message.start.has_value()) {
+    if (message.end_group.has_value()) {
+      if (*message.end_group < message.start->group) {
         return MoqtFilterType::kNone;
-      } else if (*message.end_group == *message.start_group &&
-                 *message.end_object <= *message.start_object) {
-        if (*message.end_object < *message.start_object) {
-          return MoqtFilterType::kNone;
-        } else if (*message.end_object == *message.start_object) {
-          return MoqtFilterType::kAbsoluteStart;
-        }
       }
       return MoqtFilterType::kAbsoluteRange;
     }
-  } else {
-    if (has_start) {
-      return MoqtFilterType::kAbsoluteStart;
-    } else if (!message.start_group.has_value()) {
-      if (message.start_object.has_value()) {
-        if (message.start_object.value() == 0) {
-          return MoqtFilterType::kLatestGroup;
-        }
-      } else {
-        return MoqtFilterType::kLatestObject;
-      }
-    }
+    return MoqtFilterType::kAbsoluteStart;
   }
-  return MoqtFilterType::kNone;
+  if (message.end_group.has_value()) {
+    return MoqtFilterType::kNone;  // End group without start is invalid.
+  }
+  return MoqtFilterType::kLatestObject;
 }
 
 std::string MoqtMessageTypeToString(const MoqtMessageType message_type) {
@@ -117,6 +97,8 @@ std::string MoqtMessageTypeToString(const MoqtMessageType message_type) {
       return "FETCH_OK";
     case MoqtMessageType::kFetchError:
       return "FETCH_ERROR";
+    case MoqtMessageType::kSubscribesBlocked:
+      return "SUBSCRIBES_BLOCKED";
     case MoqtMessageType::kObjectAck:
       return "OBJECT_ACK";
   }
@@ -125,8 +107,6 @@ std::string MoqtMessageTypeToString(const MoqtMessageType message_type) {
 
 std::string MoqtDataStreamTypeToString(MoqtDataStreamType type) {
   switch (type) {
-    case MoqtDataStreamType::kObjectDatagram:
-      return "OBJECT_PREFER_DATAGRAM";
     case MoqtDataStreamType::kStreamHeaderSubgroup:
       return "STREAM_HEADER_SUBGROUP";
     case MoqtDataStreamType::kStreamHeaderFetch:
@@ -135,6 +115,16 @@ std::string MoqtDataStreamTypeToString(MoqtDataStreamType type) {
       return "PADDING";
   }
   return "Unknown stream type " + absl::StrCat(static_cast<int>(type));
+}
+
+std::string MoqtDatagramTypeToString(MoqtDatagramType type) {
+  switch (type) {
+    case MoqtDatagramType::kObject:
+      return "OBJECT_DATAGRAM";
+    case MoqtDatagramType::kObjectStatus:
+      return "OBJECT_STATUS_DATAGRAM";
+  }
+  return "Unknown datagram type " + absl::StrCat(static_cast<int>(type));
 }
 
 std::string MoqtForwardingPreferenceToString(
@@ -148,37 +138,6 @@ std::string MoqtForwardingPreferenceToString(
   QUIC_BUG(quic_bug_bad_moqt_message_type_01)
       << "Unknown preference " << std::to_string(static_cast<int>(preference));
   return "Unknown preference " + std::to_string(static_cast<int>(preference));
-}
-
-MoqtForwardingPreference GetForwardingPreference(MoqtDataStreamType type) {
-  switch (type) {
-    case MoqtDataStreamType::kObjectDatagram:
-      return MoqtForwardingPreference::kDatagram;
-    case MoqtDataStreamType::kStreamHeaderSubgroup:
-      return MoqtForwardingPreference::kSubgroup;
-    case MoqtDataStreamType::kStreamHeaderFetch:
-      QUIC_BUG(quic_bug_forwarding_preference_for_fetch)
-          << "Forwarding preference for fetch is not supported";
-      break;
-    default:
-      break;
-  }
-  QUIC_BUG(quic_bug_bad_moqt_message_type_02)
-      << "Message type does not indicate forwarding preference";
-  return MoqtForwardingPreference::kSubgroup;
-};
-
-MoqtDataStreamType GetMessageTypeForForwardingPreference(
-    MoqtForwardingPreference preference) {
-  switch (preference) {
-    case MoqtForwardingPreference::kDatagram:
-      return MoqtDataStreamType::kObjectDatagram;
-    case MoqtForwardingPreference::kSubgroup:
-      return MoqtDataStreamType::kStreamHeaderSubgroup;
-  }
-  QUIC_BUG(quic_bug_bad_moqt_message_type_03)
-      << "Forwarding preference does not indicate message type";
-  return MoqtDataStreamType::kStreamHeaderSubgroup;
 }
 
 std::string FullTrackName::ToString() const {

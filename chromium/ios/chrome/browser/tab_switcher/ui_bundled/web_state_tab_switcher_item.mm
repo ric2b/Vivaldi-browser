@@ -171,4 +171,20 @@ const CGFloat kSymbolSize = 16;
   return static_cast<NSUInteger>(self.identifier.identifier());
 }
 
+// Vivaldi
+- (BOOL)isNTP {
+  if (!_webState) {
+    return YES;
+  }
+  return IsUrlNtp(_webState->GetVisibleURL());
+}
+
+- (UIColor*)themeColor {
+  if (!_webState) {
+    return nil;
+  }
+  return _webState->GetThemeColor();
+}
+// End Vivaldi
+
 @end

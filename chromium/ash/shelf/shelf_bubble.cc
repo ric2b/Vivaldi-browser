@@ -66,7 +66,7 @@ ShelfBubble::ShelfBubble(
           anchor,
           arrow_position.value_or(GetArrow(alignment))),
       for_tooltip_(for_tooltip) {
-  set_color(SK_ColorTRANSPARENT);
+  set_background_color(SK_ColorTRANSPARENT);
 
   // Bubbles that use transparent colors should not paint their ClientViews to a
   // layer as doing so could result in visual artifacts.
@@ -92,7 +92,7 @@ void ShelfBubble::CreateBubble() {
 
   // Settings that should only be changed just after bubble creation.
   GetBubbleFrameView()->SetCornerRadius(border_radius_);
-  GetBubbleFrameView()->SetBackgroundColor(color());
+  GetBubbleFrameView()->SetBackgroundColor(background_color());
 }
 
 std::unique_ptr<views::NonClientFrameView>
@@ -104,7 +104,7 @@ ShelfBubble::CreateNonClientFrameView(views::Widget* widget) {
   frame_ptr->set_use_anchor_window_bounds(false);
 
   auto border = std::make_unique<views::BubbleBorder>(arrow(), GetShadow());
-  border->SetColor(color());
+  border->SetColor(background_color());
   frame_ptr->SetBubbleBorder(std::move(border));
 
   return frame;

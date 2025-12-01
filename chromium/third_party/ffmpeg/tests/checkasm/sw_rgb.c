@@ -453,6 +453,354 @@ static void check_rgb_to_uv(SwsContext *sws)
     }
 }
 
+static void check_rgba_to_a(SwsContext *sws)
+{
+    SwsInternal *ctx = sws_internal(sws);
+
+    LOCAL_ALIGNED_16(uint8_t, src,  [MAX_LINE_SIZE * 4]);
+    LOCAL_ALIGNED_32(uint8_t, dst0_y, [MAX_LINE_SIZE * 2]);
+    LOCAL_ALIGNED_32(uint8_t, dst1_y, [MAX_LINE_SIZE * 2]);
+
+    declare_func(void, uint8_t *dst, const uint8_t *src1,
+                 const uint8_t *src2, const uint8_t *src3, int width,
+                 uint32_t *rgb2yuv, void *opq);
+
+    randomize_buffers(src, MAX_LINE_SIZE * 4);
+
+    for (int i = 0; i < FF_ARRAY_ELEMS(rgb_formats); i++) {
+        const AVPixFmtDescriptor *desc = av_pix_fmt_desc_get(rgb_formats[i]);
+        if (desc->nb_components < 4)
+            continue;
+
+        sws->src_format = rgb_formats[i];
+        ff_sws_init_scale(ctx);
+
+        for (int j = 0; j < FF_ARRAY_ELEMS(input_sizes); j++) {
+            int w = input_sizes[j];
+
+            if (check_func(ctx->alpToYV12, "%s_to_y_%d", desc->name, w)) {
+                memset(dst0_y, 0xFA, MAX_LINE_SIZE * 2);
+                memset(dst1_y, 0xFA, MAX_LINE_SIZE * 2);
+
+                call_ref(dst0_y, NULL, NULL, src, w, ctx->input_rgb2yuv_table, NULL);
+                call_new(dst1_y, NULL, NULL, src, w, ctx->input_rgb2yuv_table, NULL);
+
+                if (memcmp(dst0_y, dst1_y, w * 2))
+                    fail();
+
+                // only bench native endian formats
+                if (sws->src_format == AV_PIX_FMT_RGB32 || sws->src_format == AV_PIX_FMT_RGB32_1)
+                    bench_new(dst1_y, NULL, NULL, src, w, ctx->input_rgb2yuv_table, NULL);
+            }
+        }
+    }
+}
+
+
+static const int packed_rgb_fmts[] = {
+    AV_PIX_FMT_RGB24,
+    AV_PIX_FMT_BGR24,
+    AV_PIX_FMT_ARGB,
+    AV_PIX_FMT_RGBA,
+    AV_PIX_FMT_ABGR,
+    AV_PIX_FMT_BGRA,
+    AV_PIX_FMT_RGB48BE,
+    AV_PIX_FMT_RGB48LE,
+    AV_PIX_FMT_RGB565BE,
+    AV_PIX_FMT_RGB565LE,
+    AV_PIX_FMT_RGB555BE,
+    AV_PIX_FMT_RGB555LE,
+    AV_PIX_FMT_BGR565BE,
+    AV_PIX_FMT_BGR565LE,
+    AV_PIX_FMT_BGR555BE,
+    AV_PIX_FMT_BGR555LE,
+    AV_PIX_FMT_RGB444LE,
+    AV_PIX_FMT_RGB444BE,
+    AV_PIX_FMT_BGR444LE,
+    AV_PIX_FMT_BGR444BE,
+    AV_PIX_FMT_BGR48BE,
+    AV_PIX_FMT_BGR48LE,
+    AV_PIX_FMT_RGBA64BE,
+    AV_PIX_FMT_RGBA64LE,
+    AV_PIX_FMT_BGRA64BE,
+    AV_PIX_FMT_BGRA64LE,
+    AV_PIX_FMT_RGB8,
+    AV_PIX_FMT_BGR8,
+    AV_PIX_FMT_RGB4,
+    AV_PIX_FMT_BGR4,
+    AV_PIX_FMT_RGB4_BYTE,
+    AV_PIX_FMT_BGR4_BYTE,
+};
+
+#define INPUT_SIZE 512
+
+static void check_yuv2packed1(void)
+{
+    static const int alpha_values[] = {0, 2048, 4096};
+
+    declare_func_emms(AV_CPU_FLAG_MMX | AV_CPU_FLAG_MMXEXT,
+                      void, SwsInternal *c, const int16_t *lumSrc,
+                      const int16_t *chrUSrc[2], const int16_t *chrVSrc[2],
+                      const int16_t *alpSrc, uint8_t *dest,
+                      int dstW, int uvalpha, int y);
+
+    const int16_t *luma;
+    const int16_t *chru[2];
+    const int16_t *chrv[2];
+    const int16_t *alpha;
+
+    LOCAL_ALIGNED_8(int32_t, src_y, [INPUT_SIZE]);
+    LOCAL_ALIGNED_8(int32_t, src_u, [INPUT_SIZE]);
+    LOCAL_ALIGNED_8(int32_t, src_v, [INPUT_SIZE]);
+    LOCAL_ALIGNED_8(int32_t, src_a, [INPUT_SIZE]);
+
+    LOCAL_ALIGNED_8(uint8_t, dst0, [INPUT_SIZE * sizeof(int32_t[4])]);
+    LOCAL_ALIGNED_8(uint8_t, dst1, [INPUT_SIZE * sizeof(int32_t[4])]);
+
+    randomize_buffers((uint8_t*)src_y, INPUT_SIZE * sizeof(int32_t));
+    randomize_buffers((uint8_t*)src_u, INPUT_SIZE * sizeof(int32_t));
+    randomize_buffers((uint8_t*)src_v, INPUT_SIZE * sizeof(int32_t));
+    randomize_buffers((uint8_t*)src_a, INPUT_SIZE * sizeof(int32_t));
+
+    /* Limit to 14 bit input range */
+    for (int i = 0; i < INPUT_SIZE; i++) {
+        src_y[i] &= 0x3FFF3FFF;
+        src_a[i] &= 0x3FFF3FFF;
+        src_u[i] &= 0x3FFF3FFF;
+        src_v[i] &= 0x3FFF3FFF;
+    }
+
+    luma  = (int16_t *)src_y;
+    alpha = (int16_t *)src_a;
+    for (int i = 0; i < 2; i++) {
+        chru[i] =  (int16_t *)(src_u + i*INPUT_SIZE);
+        chrv[i] =  (int16_t *)(src_v + i*INPUT_SIZE);
+    }
+
+    for (int fmi = 0; fmi < FF_ARRAY_ELEMS(packed_rgb_fmts); fmi++) {
+        const AVPixFmtDescriptor *desc = av_pix_fmt_desc_get(packed_rgb_fmts[fmi]);
+        int line_size = INPUT_SIZE * desc->comp[0].step;
+        SwsContext *sws;
+        SwsInternal *c;
+
+        if (desc->flags & AV_PIX_FMT_FLAG_BITSTREAM)
+            line_size = AV_CEIL_RSHIFT(line_size, 3);
+
+        sws = sws_getContext(MAX_LINE_SIZE, MAX_LINE_SIZE, AV_PIX_FMT_YUV420P,
+                             MAX_LINE_SIZE, MAX_LINE_SIZE, packed_rgb_fmts[fmi],
+                             SWS_ACCURATE_RND | SWS_BITEXACT, NULL, NULL, NULL);
+        if (!sws)
+            fail();
+
+        c = sws_internal(sws);
+
+        for (int ai = 0; ai < FF_ARRAY_ELEMS(alpha_values); ai++) {
+            const int chr_alpha = alpha_values[ai];
+            if (check_func(c->yuv2packed1, "yuv2%s_1_%d_%d", desc->name, chr_alpha, INPUT_SIZE)) {
+                memset(dst0, 0xFF, INPUT_SIZE * sizeof(int32_t[4]));
+                memset(dst1, 0xFF, INPUT_SIZE * sizeof(int32_t[4]));
+
+                call_ref(c, luma, chru, chrv, alpha, dst0, INPUT_SIZE, chr_alpha, 0);
+                call_new(c, luma, chru, chrv, alpha, dst1, INPUT_SIZE, chr_alpha, 0);
+
+                if (memcmp(dst0, dst1, line_size))
+                    fail();
+
+                bench_new(c, luma, chru, chrv, alpha, dst1, INPUT_SIZE, chr_alpha, 0);
+            }
+        }
+
+        sws_freeContext(sws);
+    }
+}
+
+static void check_yuv2packed2(void)
+{
+    static const int alpha_values[] = {0, 2048, 4096};
+
+    declare_func_emms(AV_CPU_FLAG_MMX | AV_CPU_FLAG_MMXEXT,
+                      void, SwsInternal *c, const int16_t *lumSrc[2],
+                      const int16_t *chrUSrc[2], const int16_t *chrVSrc[2],
+                      const int16_t *alpSrc[2], uint8_t *dest,
+                      int dstW, int yalpha, int uvalpha, int y);
+
+    const int16_t *luma[2];
+    const int16_t *chru[2];
+    const int16_t *chrv[2];
+    const int16_t *alpha[2];
+
+    LOCAL_ALIGNED_8(int32_t, src_y, [2 * INPUT_SIZE]);
+    LOCAL_ALIGNED_8(int32_t, src_u, [2 * INPUT_SIZE]);
+    LOCAL_ALIGNED_8(int32_t, src_v, [2 * INPUT_SIZE]);
+    LOCAL_ALIGNED_8(int32_t, src_a, [2 * INPUT_SIZE]);
+
+    LOCAL_ALIGNED_8(uint8_t, dst0, [INPUT_SIZE * sizeof(int32_t[4])]);
+    LOCAL_ALIGNED_8(uint8_t, dst1, [INPUT_SIZE * sizeof(int32_t[4])]);
+
+    randomize_buffers((uint8_t*)src_y, 2 * INPUT_SIZE * sizeof(int32_t));
+    randomize_buffers((uint8_t*)src_u, 2 * INPUT_SIZE * sizeof(int32_t));
+    randomize_buffers((uint8_t*)src_v, 2 * INPUT_SIZE * sizeof(int32_t));
+    randomize_buffers((uint8_t*)src_a, 2 * INPUT_SIZE * sizeof(int32_t));
+
+    /* Limit to 14 bit input range */
+    for (int i = 0; i < 2 * INPUT_SIZE; i++) {
+        src_y[i] &= 0x3FFF3FFF;
+        src_u[i] &= 0x3FFF3FFF;
+        src_v[i] &= 0x3FFF3FFF;
+        src_a[i] &= 0x3FFF3FFF;
+    }
+
+    for (int i = 0; i < 2; i++) {
+        luma[i] =  (int16_t *)(src_y + i*INPUT_SIZE);
+        chru[i] =  (int16_t *)(src_u + i*INPUT_SIZE);
+        chrv[i] =  (int16_t *)(src_v + i*INPUT_SIZE);
+        alpha[i] = (int16_t *)(src_a + i*INPUT_SIZE);
+    }
+
+    for (int fmi = 0; fmi < FF_ARRAY_ELEMS(packed_rgb_fmts); fmi++) {
+        const AVPixFmtDescriptor *desc = av_pix_fmt_desc_get(packed_rgb_fmts[fmi]);
+        int line_size = INPUT_SIZE * desc->comp[0].step;
+        SwsContext *sws;
+        SwsInternal *c;
+
+        if (desc->flags & AV_PIX_FMT_FLAG_BITSTREAM)
+            line_size = AV_CEIL_RSHIFT(line_size, 3);
+
+        sws = sws_getContext(MAX_LINE_SIZE, MAX_LINE_SIZE, AV_PIX_FMT_YUV420P,
+                             MAX_LINE_SIZE, MAX_LINE_SIZE, packed_rgb_fmts[fmi],
+                             SWS_ACCURATE_RND | SWS_BITEXACT, NULL, NULL, NULL);
+        if (!sws)
+            fail();
+
+        c = sws_internal(sws);
+
+        for (int ai = 0; ai < FF_ARRAY_ELEMS(alpha_values); ai++) {
+            const int lum_alpha = alpha_values[ai];
+            const int chr_alpha  = alpha_values[ai];
+            if (check_func(c->yuv2packed2, "yuv2%s_2_%d_%d", desc->name, lum_alpha, INPUT_SIZE)) {
+                memset(dst0, 0xFF, INPUT_SIZE * sizeof(int32_t[4]));
+                memset(dst1, 0xFF, INPUT_SIZE * sizeof(int32_t[4]));
+
+                call_ref(c, luma, chru, chrv, alpha, dst0, INPUT_SIZE, lum_alpha, chr_alpha, 0);
+                call_new(c, luma, chru, chrv, alpha, dst1, INPUT_SIZE, lum_alpha, chr_alpha, 0);
+
+                if (memcmp(dst0, dst1, line_size))
+                    fail();
+
+                bench_new(c, luma, chru, chrv, alpha, dst1, INPUT_SIZE, lum_alpha, chr_alpha, 0);
+            }
+        }
+
+        sws_freeContext(sws);
+    }
+}
+
+static void check_yuv2packedX(void)
+{
+#define LARGEST_FILTER 16
+    static const int filter_sizes[] = {2, 16};
+
+    declare_func_emms(AV_CPU_FLAG_MMX | AV_CPU_FLAG_MMXEXT,
+                      void, SwsInternal *c, const int16_t *lumFilter,
+                      const int16_t **lumSrcx, int lumFilterSize,
+                      const int16_t *chrFilter, const int16_t **chrUSrcx,
+                      const int16_t **chrVSrcx, int chrFilterSize,
+                      const int16_t **alpSrcx, uint8_t *dest,
+                      int dstW, int y);
+
+    const int16_t *luma[LARGEST_FILTER];
+    const int16_t *chru[LARGEST_FILTER];
+    const int16_t *chrv[LARGEST_FILTER];
+    const int16_t *alpha[LARGEST_FILTER];
+
+    LOCAL_ALIGNED_8(int16_t, luma_filter, [LARGEST_FILTER]);
+    LOCAL_ALIGNED_8(int16_t, chr_filter, [LARGEST_FILTER]);
+
+    LOCAL_ALIGNED_8(int32_t, src_y, [LARGEST_FILTER * INPUT_SIZE]);
+    LOCAL_ALIGNED_8(int32_t, src_u, [LARGEST_FILTER * INPUT_SIZE]);
+    LOCAL_ALIGNED_8(int32_t, src_v, [LARGEST_FILTER * INPUT_SIZE]);
+    LOCAL_ALIGNED_8(int32_t, src_a, [LARGEST_FILTER * INPUT_SIZE]);
+
+    LOCAL_ALIGNED_8(uint8_t, dst0, [INPUT_SIZE * sizeof(int32_t[4])]);
+    LOCAL_ALIGNED_8(uint8_t, dst1, [INPUT_SIZE * sizeof(int32_t[4])]);
+
+    randomize_buffers((uint8_t*)src_y, LARGEST_FILTER * INPUT_SIZE * sizeof(int32_t));
+    randomize_buffers((uint8_t*)src_u, LARGEST_FILTER * INPUT_SIZE * sizeof(int32_t));
+    randomize_buffers((uint8_t*)src_v, LARGEST_FILTER * INPUT_SIZE * sizeof(int32_t));
+    randomize_buffers((uint8_t*)src_a, LARGEST_FILTER * INPUT_SIZE * sizeof(int32_t));
+
+    /* Limit to 14 bit input range */
+    for (int i = 0; i < LARGEST_FILTER * INPUT_SIZE; i++) {
+        src_y[i] &= 0x3FFF3FFF;
+        src_u[i] &= 0x3FFF3FFF;
+        src_v[i] &= 0x3FFF3FFF;
+        src_a[i] &= 0x3FFF3FFF;
+    }
+
+    for (int i = 0; i < LARGEST_FILTER; i++) {
+        luma[i] =  (int16_t *)(src_y + i*INPUT_SIZE);
+        chru[i] =  (int16_t *)(src_u + i*INPUT_SIZE);
+        chrv[i] =  (int16_t *)(src_v + i*INPUT_SIZE);
+        alpha[i] = (int16_t *)(src_a + i*INPUT_SIZE);
+    }
+
+    for (int fmi = 0; fmi < FF_ARRAY_ELEMS(packed_rgb_fmts); fmi++) {
+        const AVPixFmtDescriptor *desc = av_pix_fmt_desc_get(packed_rgb_fmts[fmi]);
+        int line_size = INPUT_SIZE * desc->comp[0].step;
+        SwsContext *sws;
+        SwsInternal *c;
+
+        if (desc->flags & AV_PIX_FMT_FLAG_BITSTREAM)
+            line_size = AV_CEIL_RSHIFT(line_size, 3);
+
+        sws = sws_getContext(MAX_LINE_SIZE, MAX_LINE_SIZE, AV_PIX_FMT_YUV420P,
+                                MAX_LINE_SIZE, MAX_LINE_SIZE, packed_rgb_fmts[fmi],
+                                SWS_ACCURATE_RND | SWS_BITEXACT, NULL, NULL, NULL);
+        if (!sws)
+            fail();
+
+        c = sws_internal(sws);
+
+        for (int fsi = 0; fsi < FF_ARRAY_ELEMS(filter_sizes); fsi++) {
+            const int luma_filter_size = filter_sizes[fsi];
+            const int chr_filter_size = filter_sizes[fsi];
+
+            for (int i = 0; i < luma_filter_size; i++)
+                luma_filter[i] = -((1 << 12) / (luma_filter_size - 1));
+            luma_filter[rnd() % luma_filter_size] = (1 << 13) - 1;
+
+            for (int i = 0; i < chr_filter_size; i++)
+                chr_filter[i] = -((1 << 12) / (chr_filter_size - 1));
+            chr_filter[rnd() % chr_filter_size] = (1 << 13) - 1;
+
+            if (check_func(c->yuv2packedX, "yuv2%s_X_%d_%d", desc->name, luma_filter_size, INPUT_SIZE)) {
+                memset(dst0, 0xFF, INPUT_SIZE * sizeof(int32_t[4]));
+                memset(dst1, 0xFF, INPUT_SIZE * sizeof(int32_t[4]));
+
+                call_ref(c, luma_filter, luma, luma_filter_size,
+                            chr_filter, chru, chrv, chr_filter_size,
+                            alpha, dst0, INPUT_SIZE, 0);
+
+                call_new(c, luma_filter, luma, luma_filter_size,
+                            chr_filter, chru, chrv, chr_filter_size,
+                            alpha, dst1, INPUT_SIZE, 0);
+
+                if (memcmp(dst0, dst1, line_size))
+                    fail();
+
+                bench_new(c, luma_filter, luma, luma_filter_size,
+                            chr_filter, chru, chrv, chr_filter_size,
+                            alpha, dst1, INPUT_SIZE, 0);
+            }
+        }
+
+        sws_freeContext(sws);
+    }
+}
+
+#undef INPUT_SIZE
+#undef LARGEST_FILTER
+
 void checkasm_check_sw_rgb(void)
 {
     SwsContext *sws;
@@ -495,8 +843,20 @@ void checkasm_check_sw_rgb(void)
     check_rgb_to_uv(sws);
     report("rgb_to_uv");
 
+    check_rgba_to_a(sws);
+    report("rgba_to_a");
+
     check_rgb24toyv12(sws);
     report("rgb24toyv12");
 
     sws_freeContext(sws);
+
+    check_yuv2packed1();
+    report("yuv2packed1");
+
+    check_yuv2packed2();
+    report("yuv2packed2");
+
+    check_yuv2packedX();
+    report("yuv2packedX");
 }

@@ -194,6 +194,10 @@ enum class BuiltinFn : uint8_t {
     kQuadSwapX,
     kQuadSwapY,
     kQuadSwapDiagonal,
+    kSubgroupMatrixLoad,
+    kSubgroupMatrixStore,
+    kSubgroupMatrixMultiply,
+    kSubgroupMatrixMultiplyAccumulate,
     kTintMaterialize,
     kNone,
 };
@@ -364,6 +368,10 @@ constexpr BuiltinFn kBuiltinFns[] = {
     BuiltinFn::kQuadSwapX,
     BuiltinFn::kQuadSwapY,
     BuiltinFn::kQuadSwapDiagonal,
+    BuiltinFn::kSubgroupMatrixLoad,
+    BuiltinFn::kSubgroupMatrixStore,
+    BuiltinFn::kSubgroupMatrixMultiply,
+    BuiltinFn::kSubgroupMatrixMultiplyAccumulate,
     BuiltinFn::kTintMaterialize,
 };
 
@@ -516,6 +524,10 @@ constexpr const char* kBuiltinFnStrings[] = {
     "quadSwapX",
     "quadSwapY",
     "quadSwapDiagonal",
+    "subgroupMatrixLoad",
+    "subgroupMatrixStore",
+    "subgroupMatrixMultiply",
+    "subgroupMatrixMultiplyAccumulate",
     "__tint_materialize",
 };
 
@@ -575,6 +587,11 @@ bool IsPacked4x8IntegerDotProductBuiltin(BuiltinFn f);
 /// @param f the builtin type
 /// @returns true if the given `f` is a subgroup builtin
 bool IsSubgroup(BuiltinFn f);
+
+/// Determines if the given `f` is a subgroup matrix builtin.
+/// @param f the builtin type
+/// @returns true if the given `f` is a subgroup matrix builtin
+bool IsSubgroupMatrix(BuiltinFn f);
 
 /// Determines if the given `f` is a quadSwap* builtin.
 /// @param f the builtin type

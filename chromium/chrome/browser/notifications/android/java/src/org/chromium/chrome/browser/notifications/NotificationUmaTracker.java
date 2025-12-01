@@ -8,7 +8,6 @@ import android.app.Notification;
 import android.text.format.DateUtils;
 
 import androidx.annotation.IntDef;
-import androidx.annotation.Nullable;
 import androidx.annotation.RequiresApi;
 import androidx.core.app.NotificationManagerCompat;
 
@@ -17,6 +16,8 @@ import org.chromium.base.MathUtils;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.base.shared_preferences.SharedPreferencesManager;
+import org.chromium.build.annotations.NullMarked;
+import org.chromium.build.annotations.Nullable;
 import org.chromium.chrome.browser.notifications.channels.ChromeChannelDefinitions;
 import org.chromium.chrome.browser.preferences.ChromePreferenceKeys;
 import org.chromium.chrome.browser.preferences.ChromeSharedPreferences;
@@ -31,6 +32,7 @@ import java.lang.annotation.RetentionPolicy;
  * Helper class to make tracking notification UMA stats easier for various features. Having a single
  * entry point here to make more complex tracking easier to add in the future.
  */
+@NullMarked
 public class NotificationUmaTracker {
     /*
      * A list of notification types.  To add a type to this list please update
@@ -81,7 +83,8 @@ public class NotificationUmaTracker {
         SystemNotificationType.UPM_ERROR,
         SystemNotificationType.WEBAPK_INSTALL_FAILED,
         SystemNotificationType.DATA_SHARING,
-        SystemNotificationType.UPM_ACCESS_LOSS_WARNING
+        SystemNotificationType.UPM_ACCESS_LOSS_WARNING,
+        SystemNotificationType.TRACING
     })
     @Retention(RetentionPolicy.SOURCE)
     public @interface SystemNotificationType {
@@ -127,8 +130,9 @@ public class NotificationUmaTracker {
         int WEBAPK_INSTALL_FAILED = 38;
         int DATA_SHARING = 39;
         int UPM_ACCESS_LOSS_WARNING = 40;
+        int TRACING = 41;
 
-        int NUM_ENTRIES = 41;
+        int NUM_ENTRIES = 42;
     }
 
     /*

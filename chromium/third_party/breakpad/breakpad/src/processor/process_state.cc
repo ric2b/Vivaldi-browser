@@ -68,9 +68,9 @@ void ProcessState::Clear() {
   modules_without_symbols_.clear();
   modules_with_corrupt_symbols_.clear();
   delete modules_;
-  modules_ = NULL;
+  modules_ = nullptr;
   delete unloaded_modules_;
-  unloaded_modules_ = NULL;
+  unloaded_modules_ = nullptr;
 }
 
 }  // namespace google_breakpad

@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "content/browser/renderer_host/media/media_stream_manager.h"
+
 #include <stddef.h>
 
 #include <memory>
@@ -25,7 +27,6 @@
 #include "base/unguessable_token.h"
 #include "build/build_config.h"
 #include "content/browser/media/media_devices_util.h"
-#include "content/browser/renderer_host/media/media_stream_manager.h"
 #include "content/browser/renderer_host/media/media_stream_ui_proxy.h"
 #include "content/browser/renderer_host/media/mock_video_capture_provider.h"
 #include "content/browser/renderer_host/media/video_capture_manager.h"
@@ -39,6 +40,7 @@
 #include "content/public/test/mock_captured_surface_controller.h"
 #include "content/public/test/test_browser_context.h"
 #include "content/test/test_web_contents.h"
+#include "media/audio/application_loopback_device_helper.h"
 #include "media/audio/audio_device_description.h"
 #include "media/audio/audio_system_impl.h"
 #include "media/audio/fake_audio_log_factory.h"
@@ -75,8 +77,9 @@ using testing::ElementsAre;
 using ::testing::Invoke;
 
 #if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
-using CapturedWheelAction = ::blink::mojom::CapturedWheelAction;
-using CapturedWheelActionPtr = ::blink::mojom::CapturedWheelActionPtr;
+using ::blink::mojom::CapturedWheelAction;
+using ::blink::mojom::CapturedWheelActionPtr;
+using ::blink::mojom::ZoomLevelAction;
 using CapturedSurfaceControllerFactoryCallback =
     ::content::MediaStreamManager::CapturedSurfaceControllerFactoryCallback;
 #endif
@@ -102,6 +105,31 @@ namespace {
 
 const char kFakeDeviceIdPrefix[] = "fake_device_id_";
 const GlobalRenderFrameHostId kRenderFrameHostId{1, 2};
+
+#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
+enum class CapturedSurfaceControlAPI {
+  kSendWheel,
+  kIncreaseZoomLevel,
+  kDecreaseZoomLevel,
+  kResetZoomLevel,
+  kRequestPermission,
+};
+
+ZoomLevelAction ToZoomLevelAction(CapturedSurfaceControlAPI input) {
+  switch (input) {
+    case CapturedSurfaceControlAPI::kIncreaseZoomLevel:
+      return ZoomLevelAction::kIncrease;
+    case CapturedSurfaceControlAPI::kDecreaseZoomLevel:
+      return ZoomLevelAction::kDecrease;
+    case CapturedSurfaceControlAPI::kResetZoomLevel:
+      return ZoomLevelAction::kReset;
+    case CapturedSurfaceControlAPI::kSendWheel:
+    case CapturedSurfaceControlAPI::kRequestPermission:
+      break;
+  }
+  NOTREACHED() << "Not a ZoomLevelAction.";
+}
+#endif
 
 std::string GetAudioInputDeviceId(size_t index) {
   return std::string(kFakeDeviceIdPrefix) + base::NumberToString(index);
@@ -311,9 +339,9 @@ class TestMediaStreamDispatcherHost
   void SendWheel(const base::UnguessableToken& device_id,
                  blink::mojom::CapturedWheelActionPtr action,
                  SendWheelCallback callback) override {}
-  void SetZoomLevel(const base::UnguessableToken& device_id,
-                    int32_t zoom_level,
-                    SetZoomLevelCallback callback) override {}
+  void UpdateZoomLevel(const base::UnguessableToken& device_id,
+                       ZoomLevelAction action,
+                       UpdateZoomLevelCallback callback) override {}
   void RequestCapturedSurfaceControlPermission(
       const base::UnguessableToken& device_id,
       RequestCapturedSurfaceControlPermissionCallback callback) override {}
@@ -376,12 +404,6 @@ blink::StreamControls GetAudioStreamControls(std::string hmac_device_id) {
 }
 
 #if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
-enum class CapturedSurfaceControlAPI {
-  kSendWheel,
-  kSetZoomLevel,
-  kRequestPermission,
-};
-
 // Make an arbitrary valid CapturedWheelAction.
 CapturedWheelActionPtr MakeCapturedWheelActionPtr() {
   return CapturedWheelAction::New(
@@ -520,17 +542,29 @@ class MediaStreamManagerTest : public ::testing::Test {
     }
   }
 
-  void RequestAndStopGetDisplayMedia(bool app_requested_audio,
-                                     bool user_shared_audio) {
+  using VerifyDevicesCallback =
+      base::OnceCallback<void(const blink::MediaStreamDevice& video_device,
+                              const blink::MediaStreamDevice& audio_device)>;
+
+  void RequestAndStopGetDisplayMedia(
+      bool app_requested_audio,
+      bool user_shared_audio,
+      const blink::MediaStreamDevices& additional_devices,
+      VerifyDevicesCallback verify_devices_callback) {
     DCHECK(app_requested_audio || !user_shared_audio);
     media_stream_manager_->UseFakeUIFactoryForTests(base::BindRepeating(
-        [](bool user_shared_audio) {
+        [](bool user_shared_audio,
+           const blink::MediaStreamDevices& additional_devices) {
           auto fake_ui = std::make_unique<FakeMediaStreamUIProxy>(
               /*tests_use_fake_render_frame_hosts=*/true);
           fake_ui->SetAudioShare(user_shared_audio);
+          // MediaStreamManager automatically adds a default audio and video
+          // device to fake_ui. The additional devices added here take
+          // precedence over those default devices.
+          fake_ui->AddAvailableDevices(additional_devices);
           return std::unique_ptr<FakeMediaStreamUIProxy>(std::move(fake_ui));
         },
-        user_shared_audio));
+        user_shared_audio, additional_devices));
 
     blink::StreamControls controls(
         app_requested_audio /* app_requested_audio */,
@@ -574,14 +608,7 @@ class MediaStreamManagerTest : public ::testing::Test {
         std::move(zoom_level_change_callback));
     run_loop_.Run();
 
-    EXPECT_EQ(blink::mojom::MediaStreamType::DISPLAY_VIDEO_CAPTURE,
-              video_device.type);
-    if (app_requested_audio && user_shared_audio) {
-      EXPECT_EQ(blink::mojom::MediaStreamType::DISPLAY_AUDIO_CAPTURE,
-                audio_device.type);
-    } else {
-      EXPECT_EQ(blink::mojom::MediaStreamType::NO_SERVICE, audio_device.type);
-    }
+    std::move(verify_devices_callback).Run(video_device, audio_device);
 
     EXPECT_CALL(
         *media_observer_,
@@ -980,20 +1007,78 @@ TEST_F(MediaStreamManagerTest, GenerateAndReuseStreamForAudioDevice) {
 }
 
 TEST_F(MediaStreamManagerTest, GetDisplayMediaRequestVideoOnly) {
-  RequestAndStopGetDisplayMedia(/*app_requested_audio=*/false,
-                                /*user_shared_audio=*/false);
+  RequestAndStopGetDisplayMedia(
+      /*app_requested_audio=*/false,
+      /*user_shared_audio=*/false,
+      /*additional_devices=*/{},
+      /*verify_devices_callback=*/
+      base::BindOnce([](const blink::MediaStreamDevice& video_device,
+                        const blink::MediaStreamDevice& audio_device) {
+        EXPECT_EQ(blink::mojom::MediaStreamType::DISPLAY_VIDEO_CAPTURE,
+                  video_device.type);
+        EXPECT_EQ(blink::mojom::MediaStreamType::NO_SERVICE, audio_device.type);
+      }));
 }
 
 TEST_F(MediaStreamManagerTest, GetDisplayMediaRequestAudioAndVideo) {
-  RequestAndStopGetDisplayMedia(/*app_requested_audio=*/true,
-                                /*user_shared_audio=*/true);
+  RequestAndStopGetDisplayMedia(
+      /*app_requested_audio=*/true,
+      /*user_shared_audio=*/true,
+      /*additional_devices=*/{},
+      /*verify_devices_callback=*/
+      base::BindOnce([](const blink::MediaStreamDevice& video_device,
+                        const blink::MediaStreamDevice& audio_device) {
+        EXPECT_EQ(blink::mojom::MediaStreamType::DISPLAY_VIDEO_CAPTURE,
+                  video_device.type);
+        EXPECT_EQ(blink::mojom::MediaStreamType::DISPLAY_AUDIO_CAPTURE,
+                  audio_device.type);
+      }));
 }
 
 // The application requested audio, but the user deselected sharing of audio.
 TEST_F(MediaStreamManagerTest,
        GetDisplayMediaRequestAudioAndVideoNoAudioShare) {
-  RequestAndStopGetDisplayMedia(/*app_requested_audio=*/true,
-                                /*user_shared_audio=*/false);
+  RequestAndStopGetDisplayMedia(
+      /*app_requested_audio=*/true,
+      /*user_shared_audio=*/false,
+      /*additional_devices=*/{},
+      /*verify_devices_callback=*/
+      base::BindOnce([](const blink::MediaStreamDevice& video_device,
+                        const blink::MediaStreamDevice& audio_device) {
+        EXPECT_EQ(blink::mojom::MediaStreamType::DISPLAY_VIDEO_CAPTURE,
+                  video_device.type);
+        EXPECT_EQ(blink::mojom::MediaStreamType::NO_SERVICE, audio_device.type);
+      }));
+}
+
+TEST_F(MediaStreamManagerTest,
+       GetDisplayMediaRequestApplicationAudioShareIsHashed) {
+  blink::MediaStreamDevice application_loopback_device(
+      blink::mojom::MediaStreamType::DISPLAY_AUDIO_CAPTURE,
+      media::CreateApplicationLoopbackDeviceId(12345), "Application Capture");
+
+  auto salt_and_origin = MediaDeviceSaltAndOrigin::Empty();
+  const std::string hashed_application_loopback_device_id =
+      GetHMACForRawMediaDeviceID(salt_and_origin,
+                                 application_loopback_device.id);
+
+  RequestAndStopGetDisplayMedia(
+      /*app_requested_audio=*/true,
+      /*user_shared_audio=*/true,
+      /*additional_devices=*/
+      {application_loopback_device},
+      /*verify_devices_callback=*/
+      base::BindOnce(
+          [](const std::string hashed_application_loopback_device_id,
+             const blink::MediaStreamDevice& video_device,
+             const blink::MediaStreamDevice& audio_device) {
+            EXPECT_EQ(blink::mojom::MediaStreamType::DISPLAY_VIDEO_CAPTURE,
+                      video_device.type);
+            EXPECT_EQ(blink::mojom::MediaStreamType::DISPLAY_AUDIO_CAPTURE,
+                      audio_device.type);
+            EXPECT_EQ(hashed_application_loopback_device_id, audio_device.id);
+          },
+          hashed_application_loopback_device_id));
 }
 
 TEST_F(MediaStreamManagerTest, GetDisplayMediaRequestCallsUIProxy) {
@@ -1844,9 +1929,7 @@ class MediaStreamManagerCapturedSurfaceControlTest
                       gdm_rfhid, captured_wc_id);
               captured_surface_controller->SetSendWheelResponse(
                   CapturedSurfaceControlResult::kSuccess);
-              captured_surface_controller->SetGetZoomLevelResponse(
-                  100, CapturedSurfaceControlResult::kSuccess);
-              captured_surface_controller->SetSetZoomLevelResponse(
+              captured_surface_controller->SetUpdateZoomLevelResponse(
                   CapturedSurfaceControlResult::kSuccess);
               captured_surface_controller->SetRequestPermissionResponse(
                   CapturedSurfaceControlResult::kSuccess);
@@ -1875,23 +1958,11 @@ class MediaStreamManagerCapturedSurfaceControlTest
         MakeCapturedWheelActionPtr(), MakeCallback());
   }
 
-  base::OnceCallback<void(std::optional<int>, CapturedSurfaceControlResult)>
-  MakeGetZoomLevelCallback() {
-    return base::BindOnce(
-        [](std::optional<CapturedSurfaceControlResult>* result_opt,
-           std::optional<int>, CapturedSurfaceControlResult result) {
-          CHECK(result_opt);
-          EXPECT_FALSE(result_opt->has_value());
-          *result_opt = result;
-        },
-        &result_);
-  }
-
-  void SetZoomLevel(
-      GlobalRenderFrameHostId gdm_rfhid,
-      std::optional<base::UnguessableToken> session_id = std::nullopt) {
-    media_stream_manager_->SetZoomLevel(
-        gdm_rfhid, session_id.value_or(video_device_.session_id()), 100,
+  void UpdateZoomLevel(GlobalRenderFrameHostId gdm_rfhid,
+                       std::optional<base::UnguessableToken> session_id,
+                       ZoomLevelAction action) {
+    media_stream_manager_->UpdateZoomLevel(
+        gdm_rfhid, session_id.value_or(video_device_.session_id()), action,
         MakeCallback());
   }
 
@@ -1940,8 +2011,10 @@ class MediaStreamManagerCapturedSurfaceControlActionTest
         SendWheel(gdm_rfhid, session_id);
         return;
       }
-      case CapturedSurfaceControlAPI::kSetZoomLevel: {
-        SetZoomLevel(gdm_rfhid, session_id);
+      case CapturedSurfaceControlAPI::kIncreaseZoomLevel:
+      case CapturedSurfaceControlAPI::kDecreaseZoomLevel:
+      case CapturedSurfaceControlAPI::kResetZoomLevel: {
+        UpdateZoomLevel(gdm_rfhid, session_id, ToZoomLevelAction(tested_api_));
         return;
       }
       case CapturedSurfaceControlAPI::kRequestPermission: {
@@ -1959,7 +2032,9 @@ INSTANTIATE_TEST_SUITE_P(
     ,
     MediaStreamManagerCapturedSurfaceControlActionTest,
     testing::Values(CapturedSurfaceControlAPI::kSendWheel,
-                    CapturedSurfaceControlAPI::kSetZoomLevel,
+                    CapturedSurfaceControlAPI::kIncreaseZoomLevel,
+                    CapturedSurfaceControlAPI::kDecreaseZoomLevel,
+                    CapturedSurfaceControlAPI::kResetZoomLevel,
                     CapturedSurfaceControlAPI::kRequestPermission));
 
 TEST_P(MediaStreamManagerCapturedSurfaceControlActionTest, SuccessfulIfValid) {

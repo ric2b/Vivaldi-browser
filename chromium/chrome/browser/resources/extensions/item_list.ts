@@ -98,25 +98,28 @@ export class ExtensionsItemListElement extends ExtensionsItemListElementBase {
     };
   }
 
-  apps: chrome.developerPrivate.ExtensionInfo[] = [];
-  extensions: chrome.developerPrivate.ExtensionInfo[] = [];
-  delegate: ItemDelegate = new DummyItemDelegate();
-  inDevMode: boolean = false;
-  isMv2DeprecationNoticeDismissed: boolean = false;
-  filter: string = '';
-  protected filteredExtensions_: chrome.developerPrivate.ExtensionInfo[] = [];
-  protected filteredApps_: chrome.developerPrivate.ExtensionInfo[] = [];
-  protected computedFilter_: Filter|null = null;
-  protected maxColumns_: number = 3;
-  protected unsafeExtensions_: chrome.developerPrivate.ExtensionInfo[] = [];
-  protected mv2ExperimentStage_: Mv2ExperimentStage =
-      getMv2ExperimentStage(loadTimeData.getInteger('MV2ExperimentStage'));
-  protected mv2DeprecatedExtensions_: chrome.developerPrivate.ExtensionInfo[] =
+  accessor apps: chrome.developerPrivate.ExtensionInfo[] = [];
+  accessor extensions: chrome.developerPrivate.ExtensionInfo[] = [];
+  accessor delegate: ItemDelegate = new DummyItemDelegate();
+  accessor inDevMode: boolean = false;
+  accessor isMv2DeprecationNoticeDismissed: boolean = false;
+  accessor filter: string = '';
+  protected accessor filteredExtensions_:
+      chrome.developerPrivate.ExtensionInfo[] = [];
+  protected accessor filteredApps_: chrome.developerPrivate.ExtensionInfo[] =
       [];
-  protected shownAppsCount_: number = 0;
-  protected shownExtensionsCount_: number = 0;
-  protected showSafetyCheckReviewPanel_: boolean = false;
-  private reviewPanelShown_: boolean = false;
+  protected accessor computedFilter_: Filter|null = null;
+  protected accessor maxColumns_: number = 3;
+  protected accessor unsafeExtensions_:
+      chrome.developerPrivate.ExtensionInfo[] = [];
+  protected accessor mv2ExperimentStage_: Mv2ExperimentStage =
+      getMv2ExperimentStage(loadTimeData.getInteger('MV2ExperimentStage'));
+  protected accessor mv2DeprecatedExtensions_:
+      chrome.developerPrivate.ExtensionInfo[] = [];
+  protected accessor shownAppsCount_: number = 0;
+  protected accessor shownExtensionsCount_: number = 0;
+  protected accessor showSafetyCheckReviewPanel_: boolean = false;
+  private accessor reviewPanelShown_: boolean = false;
 
   override willUpdate(changedProperties: PropertyValues<this>) {
     super.willUpdate(changedProperties);
@@ -160,20 +163,17 @@ export class ExtensionsItemListElement extends ExtensionsItemListElementBase {
   }
 
   getDetailsButton(id: string): HTMLElement|null {
-    const item =
-        this.shadowRoot!.querySelector<ExtensionsItemElement>(`#${id}`);
+    const item = this.shadowRoot.querySelector<ExtensionsItemElement>(`#${id}`);
     return item && item.getDetailsButton();
   }
 
   getRemoveButton(id: string): HTMLElement|null {
-    const item =
-        this.shadowRoot!.querySelector<ExtensionsItemElement>(`#${id}`);
+    const item = this.shadowRoot.querySelector<ExtensionsItemElement>(`#${id}`);
     return item && item.getRemoveButton();
   }
 
   getErrorsButton(id: string): HTMLElement|null {
-    const item =
-        this.shadowRoot!.querySelector<ExtensionsItemElement>(`#${id}`);
+    const item = this.shadowRoot.querySelector<ExtensionsItemElement>(`#${id}`);
     return item && item.getErrorsButton();
   }
 
@@ -183,8 +183,7 @@ export class ExtensionsItemListElement extends ExtensionsItemListElementBase {
    * return: If an item's button has been focused, see comment below.
    */
   focusItemButton(id: string): boolean {
-    const item =
-        this.shadowRoot!.querySelector<ExtensionsItemElement>(`#${id}`);
+    const item = this.shadowRoot.querySelector<ExtensionsItemElement>(`#${id}`);
     // This function is called from a setTimeout() inside manager.ts. Rarely,
     // the list of extensions rendered in this element may not match the list of
     // extensions stored in manager.ts for a brief moment (not visible to the
@@ -196,7 +195,7 @@ export class ExtensionsItemListElement extends ExtensionsItemListElementBase {
     }
 
     const buttonToFocus = item.getRemoveButton() || item.getDetailsButton();
-    buttonToFocus!.focus();
+    buttonToFocus.focus();
     return true;
   }
 

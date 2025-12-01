@@ -5,6 +5,7 @@
 #include "content/public/browser/web_contents_observer.h"
 
 #include "base/test/scoped_feature_list.h"
+#include "base/test/test_future.h"
 #include "build/build_config.h"
 #include "content/browser/renderer_host/render_frame_host_impl.h"
 #include "content/browser/service_worker/embedded_worker_instance.h"
@@ -470,7 +471,7 @@ IN_PROC_BROWSER_TEST_F(WebContentsObserverBrowserTest,
                       net::CookieEffectiveSameSite::LAX_MODE_ALLOW_UNSAFE,
                       net::CookieInclusionStatus(),
                       net::CookieAccessSemantics::NONLEGACY,
-                      net::CookieScopeSemantics::UNKNOWN, false)}));
+                      net::CookieScopeSemantics::NONLEGACY, false)}));
   cookie_tracker.cookie_accesses().clear();
 }
 
@@ -528,7 +529,7 @@ IN_PROC_BROWSER_TEST_F(WebContentsObserverBrowserTest,
                            net::CookieEffectiveSameSite::LAX_MODE_ALLOW_UNSAFE,
                            net::CookieInclusionStatus(),
                            net::CookieAccessSemantics::NONLEGACY,
-                           net::CookieScopeSemantics::UNKNOWN, false)}));
+                           net::CookieScopeSemantics::NONLEGACY, false)}));
   cookie_tracker.cookie_accesses().clear();
 
   // 2) Navigate to another url on the same site and expect a notification about
@@ -550,7 +551,7 @@ IN_PROC_BROWSER_TEST_F(WebContentsObserverBrowserTest,
                       net::CookieEffectiveSameSite::LAX_MODE_ALLOW_UNSAFE,
                       net::CookieInclusionStatus(),
                       net::CookieAccessSemantics::NONLEGACY,
-                      net::CookieScopeSemantics::UNKNOWN, false)}));
+                      net::CookieScopeSemantics::NONLEGACY, false)}));
   cookie_tracker.cookie_accesses().clear();
 }
 
@@ -618,7 +619,7 @@ IN_PROC_BROWSER_TEST_F(WebContentsObserverBrowserTest,
                            net::CookieEffectiveSameSite::LAX_MODE_ALLOW_UNSAFE,
                            net::CookieInclusionStatus(),
                            net::CookieAccessSemantics::NONLEGACY,
-                           net::CookieScopeSemantics::UNKNOWN, false)},
+                           net::CookieScopeSemantics::NONLEGACY, false)},
           CookieAccess{CookieAccessDetails::Type::kRead,
                        ContextType::kNavigation,
                        {},
@@ -631,7 +632,7 @@ IN_PROC_BROWSER_TEST_F(WebContentsObserverBrowserTest,
                            net::CookieEffectiveSameSite::LAX_MODE_ALLOW_UNSAFE,
                            net::CookieInclusionStatus(),
                            net::CookieAccessSemantics::NONLEGACY,
-                           net::CookieScopeSemantics::UNKNOWN, false)}));
+                           net::CookieScopeSemantics::NONLEGACY, false)}));
   cookie_tracker.cookie_accesses().clear();
 }
 
@@ -696,7 +697,7 @@ IN_PROC_BROWSER_TEST_F(WebContentsObserverBrowserTest,
                            net::CookieEffectiveSameSite::LAX_MODE_ALLOW_UNSAFE,
                            net::CookieInclusionStatus(),
                            net::CookieAccessSemantics::NONLEGACY,
-                           net::CookieScopeSemantics::UNKNOWN, false)},
+                           net::CookieScopeSemantics::NONLEGACY, false)},
           CookieAccess{CookieAccessDetails::Type::kRead, ContextType::kFrame,
                        cookie_tracker.frame_id(frame_id_index), -1, url2_image,
                        first_party_url, "foo", "bar",
@@ -704,7 +705,7 @@ IN_PROC_BROWSER_TEST_F(WebContentsObserverBrowserTest,
                            net::CookieEffectiveSameSite::LAX_MODE_ALLOW_UNSAFE,
                            net::CookieInclusionStatus(),
                            net::CookieAccessSemantics::NONLEGACY,
-                           net::CookieScopeSemantics::UNKNOWN, false)}));
+                           net::CookieScopeSemantics::NONLEGACY, false)}));
   cookie_tracker.cookie_accesses().clear();
 }
 
@@ -743,7 +744,7 @@ IN_PROC_BROWSER_TEST_F(WebContentsObserverBrowserTest,
               net::CookieEffectiveSameSite::LAX_MODE_ALLOW_UNSAFE,
               net::CookieInclusionStatus(),
               net::CookieAccessSemantics::NONLEGACY,
-              net::CookieScopeSemantics::UNKNOWN, false)}));
+              net::CookieScopeSemantics::NONLEGACY, false)}));
   cookie_tracker.cookie_accesses().clear();
 }
 
@@ -781,21 +782,21 @@ IN_PROC_BROWSER_TEST_F(WebContentsObserverBrowserTestWithTPCD,
                                  "foo=bar;SameSite=None;Secure"));
   EXPECT_TRUE(NavigateToURL(web_contents(), url_a_check_cookie));
   cookie_tracker.WaitForCookies(1);
-  EXPECT_THAT(
-      cookie_tracker.cookie_accesses(),
-      testing::ElementsAre(CookieAccess{
-          CookieAccessDetails::Type::kRead,
-          ContextType::kNavigation,
-          {},
-          cookie_tracker.navigation_id(0),
-          url_a_check_cookie,
-          url_a,
-          "foo",
-          "bar",
-          net::CookieAccessResult(net::CookieEffectiveSameSite::NO_RESTRICTION,
-                                  net::CookieInclusionStatus(),
-                                  net::CookieAccessSemantics::NONLEGACY,
-                                  net::CookieScopeSemantics::UNKNOWN, true)}));
+  EXPECT_THAT(cookie_tracker.cookie_accesses(),
+              testing::ElementsAre(CookieAccess{
+                  CookieAccessDetails::Type::kRead,
+                  ContextType::kNavigation,
+                  {},
+                  cookie_tracker.navigation_id(0),
+                  url_a_check_cookie,
+                  url_a,
+                  "foo",
+                  "bar",
+                  net::CookieAccessResult(
+                      net::CookieEffectiveSameSite::NO_RESTRICTION,
+                      net::CookieInclusionStatus(),
+                      net::CookieAccessSemantics::NONLEGACY,
+                      net::CookieScopeSemantics::NONLEGACY, true)}));
   cookie_tracker.cookie_accesses().clear();
 
   // 2) Navigate to |url_b_cross_site|. This page should load b.test(a.test)
@@ -818,7 +819,7 @@ IN_PROC_BROWSER_TEST_F(WebContentsObserverBrowserTestWithTPCD,
                                   net::CookieInclusionStatus::ExclusionReason::
                                       EXCLUDE_THIRD_PARTY_PHASEOUT}),
                           net::CookieAccessSemantics::NONLEGACY,
-                          net::CookieScopeSemantics::UNKNOWN, true)),
+                          net::CookieScopeSemantics::NONLEGACY, true)),
                   MatchesCookieAccess(
                       CookieAccessDetails::Type::kRead, testing::_, testing::_,
                       testing::_, testing::_, testing::_, "foo", "bar",
@@ -829,7 +830,7 @@ IN_PROC_BROWSER_TEST_F(WebContentsObserverBrowserTestWithTPCD,
                                   net::CookieInclusionStatus::ExclusionReason::
                                       EXCLUDE_THIRD_PARTY_PHASEOUT}),
                           net::CookieAccessSemantics::NONLEGACY,
-                          net::CookieScopeSemantics::UNKNOWN, true))));
+                          net::CookieScopeSemantics::NONLEGACY, true))));
   cookie_tracker.cookie_accesses().clear();
 }
 namespace {
@@ -940,5 +941,263 @@ IN_PROC_BROWSER_TEST_P(WebContentsObserverColorSchemeBrowserTest,
 }
 
 }  // namespace
+
+namespace {
+
+// Waits for a specific type of cookie access on a particular URL, and saves its
+// CookieAccessDetails for later introspection.
+class CookieObserver : public WebContentsObserver {
+ public:
+  explicit CookieObserver(WebContents* web_contents,
+                          GURL url,
+                          CookieAccessDetails::Type type)
+      : WebContentsObserver(web_contents),
+        monitored_url_(std::move(url)),
+        monitored_type_(type) {}
+
+  [[nodiscard]] bool Wait() { return future_.Wait(); }
+
+  const CookieAccessDetails& details() { return future_.Get(); }
+
+  // WebContentsObserver overrides:
+  void OnCookiesAccessed(RenderFrameHost* render_frame_host,
+                         const CookieAccessDetails& details) override {
+    if (details.url != monitored_url_ || details.type != monitored_type_) {
+      return;
+    }
+
+    future_.SetValue(details);
+  }
+
+  void OnCookiesAccessed(NavigationHandle* navigation_handle,
+                         const CookieAccessDetails& details) override {
+    if (details.url != monitored_url_ || details.type != monitored_type_) {
+      return;
+    }
+
+    future_.SetValue(details);
+  }
+
+ private:
+  GURL monitored_url_;
+  CookieAccessDetails::Type monitored_type_;
+  base::test::TestFuture<CookieAccessDetails> future_;
+};
+
+MATCHER_P(HasUrl, matcher, "") {
+  return ExplainMatchResult(matcher, arg.url, result_listener);
+}
+
+MATCHER_P(HasSource, matcher, "") {
+  return ExplainMatchResult(matcher, arg.source, result_listener);
+}
+
+}  // namespace
+
+// Tests for the CookieAccessDetails::source reported by
+// WebContentsObserver::OnCookiesAccessed().
+class CookieSourceBrowserTest : public ContentBrowserTest {
+ public:
+  void SetUpOnMainThread() override {
+    host_resolver()->AddRule("*", "127.0.0.1");
+    embedded_https_test_server().SetSSLConfig(
+        net::EmbeddedTestServer::CERT_TEST_NAMES);
+    ASSERT_TRUE(embedded_https_test_server().Start());
+  }
+
+  WebContents* web_contents() { return shell()->web_contents(); }
+};
+
+IN_PROC_BROWSER_TEST_F(CookieSourceBrowserTest, NavigationCookie) {
+  GURL url =
+      embedded_https_test_server().GetURL("a.test", "/set-cookie?foo=bar");
+
+  CookieObserver observer(web_contents(), url,
+                          CookieAccessDetails::Type::kChange);
+  ASSERT_TRUE(NavigateToURL(web_contents(), url));
+  ASSERT_TRUE(observer.Wait());
+  ASSERT_THAT(
+      observer.details(),
+      testing::AllOf(HasUrl(url),
+                     HasSource(CookieAccessDetails::Source::kNavigation)));
+}
+
+IN_PROC_BROWSER_TEST_F(CookieSourceBrowserTest, IframeNavigationCookie) {
+  GURL main_url = embedded_https_test_server().GetURL(
+      "a.test", "/page_with_blank_iframe.html");
+  GURL iframe_url = embedded_https_test_server().GetURL(
+      "b.test", "/set-cookie?foo=bar;Secure;SameSite=None");
+
+  ASSERT_TRUE(NavigateToURL(web_contents(), main_url));
+  CookieObserver observer(web_contents(), iframe_url,
+                          CookieAccessDetails::Type::kChange);
+  ASSERT_TRUE(NavigateIframeToURL(web_contents(), "test_iframe", iframe_url));
+  ASSERT_TRUE(observer.Wait());
+
+  ASSERT_THAT(
+      observer.details(),
+      testing::AllOf(HasUrl(iframe_url),
+                     HasSource(CookieAccessDetails::Source::kNavigation)));
+}
+
+IN_PROC_BROWSER_TEST_F(CookieSourceBrowserTest, NestedIframeNavigationCookie) {
+  GURL main_url = embedded_https_test_server().GetURL(
+      "a.test", "/page_with_blank_iframe.html");
+  GURL outer_iframe_url = embedded_https_test_server().GetURL(
+      "b.test", "/page_with_blank_iframe.html");
+  GURL inner_iframe_url = embedded_https_test_server().GetURL(
+      "c.test", "/set-cookie?foo=bar;Secure;SameSite=None");
+
+  ASSERT_TRUE(NavigateToURL(web_contents(), main_url));
+  ASSERT_TRUE(NavigateToURLFromRenderer(ChildFrameAt(web_contents(), 0),
+                                        outer_iframe_url));
+  CookieObserver observer(web_contents(), inner_iframe_url,
+                          CookieAccessDetails::Type::kChange);
+  ASSERT_TRUE(NavigateToURLFromRenderer(
+      ChildFrameAt(ChildFrameAt(web_contents(), 0), 0), inner_iframe_url));
+  ASSERT_TRUE(observer.Wait());
+
+  ASSERT_THAT(
+      observer.details(),
+      testing::AllOf(HasUrl(inner_iframe_url),
+                     HasSource(CookieAccessDetails::Source::kNavigation)));
+}
+
+IN_PROC_BROWSER_TEST_F(CookieSourceBrowserTest, JavaScriptCookie) {
+  GURL url = embedded_https_test_server().GetURL("a.test", "/empty.html");
+
+  ASSERT_TRUE(NavigateToURL(web_contents(), url));
+  CookieObserver observer(web_contents(), url,
+                          CookieAccessDetails::Type::kChange);
+  ASSERT_TRUE(ExecJs(web_contents(), "document.cookie = 'foo=bar';"));
+  ASSERT_TRUE(observer.Wait());
+
+  ASSERT_THAT(
+      observer.details(),
+      testing::AllOf(HasUrl(url),
+                     HasSource(CookieAccessDetails::Source::kNonNavigation)));
+}
+
+IN_PROC_BROWSER_TEST_F(CookieSourceBrowserTest, IframeJavaScriptCookie) {
+  GURL main_url = embedded_https_test_server().GetURL(
+      "a.test", "/page_with_blank_iframe.html");
+  GURL iframe_url =
+      embedded_https_test_server().GetURL("b.test", "/empty.html");
+
+  ASSERT_TRUE(NavigateToURL(web_contents(), main_url));
+  ASSERT_TRUE(NavigateIframeToURL(web_contents(), "test_iframe", iframe_url));
+  CookieObserver observer(web_contents(), iframe_url,
+                          CookieAccessDetails::Type::kChange);
+  ASSERT_TRUE(ExecJs(ChildFrameAt(web_contents(), 0),
+                     "document.cookie = 'foo=bar;Secure;SameSite=None';"));
+  ASSERT_TRUE(observer.Wait());
+
+  ASSERT_THAT(
+      observer.details(),
+      testing::AllOf(HasUrl(iframe_url),
+                     HasSource(CookieAccessDetails::Source::kNonNavigation)));
+}
+
+IN_PROC_BROWSER_TEST_F(CookieSourceBrowserTest, SubresourceRequestCookie) {
+  GURL doc_url = embedded_https_test_server().GetURL("a.test", "/empty.html");
+  GURL img_url = embedded_https_test_server().GetURL(
+      "b.test", "/set-cookie?foo=bar;Secure;SameSite=None");
+
+  ASSERT_TRUE(NavigateToURL(web_contents(), doc_url));
+  CookieObserver observer(web_contents(), img_url,
+                          CookieAccessDetails::Type::kChange);
+  ASSERT_TRUE(ExecJs(web_contents(), JsReplace(R"(
+      const img = document.createElement('img');
+      img.src = $1;
+      document.body.append(img);
+    )",
+                                               img_url)));
+  ASSERT_TRUE(observer.Wait());
+
+  ASSERT_THAT(
+      observer.details(),
+      testing::AllOf(HasUrl(img_url),
+                     HasSource(CookieAccessDetails::Source::kNonNavigation)));
+}
+
+IN_PROC_BROWSER_TEST_F(CookieSourceBrowserTest, PrefetchCookie) {
+  const GURL main_url =
+      embedded_https_test_server().GetURL("a.test", "/empty.html");
+  const GURL prefetch_url = embedded_https_test_server().GetURL(
+      "b.test", "/set-cookie?foo=bar;Secure;SameSite=None");
+
+  ASSERT_TRUE(NavigateToURL(web_contents(), main_url));
+
+  CookieObserver observer(web_contents(), prefetch_url,
+                          CookieAccessDetails::Type::kChange);
+  ASSERT_TRUE(ExecJs(web_contents(), JsReplace(R"(
+      const link = document.createElement('link');
+      link.rel = 'prefetch';
+      link.as = 'document';
+      link.href = $1;
+      document.body.append(link);
+    )",
+                                               prefetch_url)));
+  ASSERT_TRUE(observer.Wait());
+
+  ASSERT_THAT(
+      observer.details(),
+      testing::AllOf(HasUrl(prefetch_url),
+                     HasSource(CookieAccessDetails::Source::kNonNavigation)));
+}
+
+IN_PROC_BROWSER_TEST_F(CookieSourceBrowserTest, CookieStoreApi) {
+  GURL url = embedded_https_test_server().GetURL("a.test", "/empty.html");
+
+  ASSERT_TRUE(NavigateToURL(web_contents(), url));
+  CookieObserver observer(web_contents(), url,
+                          CookieAccessDetails::Type::kChange);
+  ASSERT_TRUE(ExecJs(web_contents(), "cookieStore.set('foo', 'bar')"));
+  ASSERT_TRUE(observer.Wait());
+
+  ASSERT_THAT(
+      observer.details(),
+      testing::AllOf(HasUrl(url),
+                     HasSource(CookieAccessDetails::Source::kNonNavigation)));
+}
+
+IN_PROC_BROWSER_TEST_F(CookieSourceBrowserTest, Fetch) {
+  GURL main_url = embedded_https_test_server().GetURL("a.test", "/empty.html");
+  GURL fetch_url =
+      embedded_https_test_server().GetURL("a.test", "/set-cookie?foo=bar");
+
+  ASSERT_TRUE(NavigateToURL(web_contents(), main_url));
+  CookieObserver observer(web_contents(), fetch_url,
+                          CookieAccessDetails::Type::kChange);
+  ASSERT_TRUE(ExecJs(web_contents(), JsReplace("fetch($1);", fetch_url)));
+  ASSERT_TRUE(observer.Wait());
+
+  ASSERT_THAT(
+      observer.details(),
+      testing::AllOf(HasUrl(fetch_url),
+                     HasSource(CookieAccessDetails::Source::kNonNavigation)));
+}
+
+IN_PROC_BROWSER_TEST_F(CookieSourceBrowserTest, XMLHttpRequest) {
+  GURL main_url = embedded_https_test_server().GetURL("a.test", "/empty.html");
+  GURL xhr_url =
+      embedded_https_test_server().GetURL("a.test", "/set-cookie?foo=bar");
+
+  ASSERT_TRUE(NavigateToURL(web_contents(), main_url));
+  CookieObserver observer(web_contents(), xhr_url,
+                          CookieAccessDetails::Type::kChange);
+  ASSERT_TRUE(ExecJs(web_contents(), JsReplace(R"(
+        const xhr = new XMLHttpRequest();
+        xhr.open("GET", $1, true);
+        xhr.send(null);
+      )",
+                                               xhr_url)));
+  ASSERT_TRUE(observer.Wait());
+
+  ASSERT_THAT(
+      observer.details(),
+      testing::AllOf(HasUrl(xhr_url),
+                     HasSource(CookieAccessDetails::Source::kNonNavigation)));
+}
 
 }  // namespace content

@@ -556,6 +556,9 @@ targets.binaries.generated_script(
     label = "//chrome/test:chrome_sizes",
     merge = targets.merge(
         script = "//tools/perf/process_perf_results.py",
+        args = [
+            "--upload-skia-json",
+        ],
     ),
 )
 
@@ -770,6 +773,9 @@ targets.binaries.generated_script(
     skip_usage_check = True,
     merge = targets.merge(
         script = "//tools/perf/process_perf_results.py",
+        args = [
+            "--upload-skia-json",
+        ],
     ),
     resultdb = targets.resultdb(
         enable = True,
@@ -832,6 +838,22 @@ targets.binaries.console_test_launcher(
     label = "//components/cronet/android:cronet_unittests_android",
     # All references have been moved to starlark
     skip_usage_check = True,
+)
+
+targets.binaries.generated_script(
+    name = "crossbench_smoketests",
+    label = "//chrome/test:crossbench_smoketests",
+    skip_usage_check = True,
+    args = [
+        "../../third_party/crossbench/cb.py",
+        "--benchmarks=speedometer_3.0",
+        "--isolated-script-test-output=${ISOLATED_OUTDIR}",
+        "--repeat=1",
+        "--iterations=2",
+        "--fast",
+        "--fileserver",
+        "--luci-chromium",
+    ],
 )
 
 targets.binaries.console_test_launcher(
@@ -902,6 +924,9 @@ targets.binaries.generated_script(
     ],
     merge = targets.merge(
         script = "//tools/perf/process_perf_results.py",
+        args = [
+            "--upload-skia-json",
+        ],
     ),
 )
 
@@ -1029,6 +1054,9 @@ targets.binaries.generated_script(
     skip_usage_check = True,
     merge = targets.merge(
         script = "//tools/perf/process_perf_results.py",
+        args = [
+            "--upload-skia-json",
+        ],
     ),
 )
 
@@ -1710,20 +1738,6 @@ targets.binaries.generated_script(
     label = "//chrome/test:performance_test_suite_android_trichrome_chrome_google_bundle",
 )
 
-# TODO(https://crbug.com/378731077): Remove when migration is done.
-targets.binaries.generated_script(
-    name = "performance_test_suite_android_clank_trichrome_chrome_google_64_32_bundle",
-    label = "//chrome/test:performance_test_suite_android_clank_trichrome_chrome_google_64_32_bundle",
-    skip_usage_check = True,  # Necessary until Pinpoint targets are migrated.
-)
-
-# TODO(https://crbug.com/378731077): Remove when migration is done.
-targets.binaries.generated_script(
-    name = "performance_test_suite_android_clank_trichrome_bundle",
-    label = "//chrome/test:performance_test_suite_android_clank_trichrome_bundle",
-    skip_usage_check = True,  # Necessary until Pinpoint targets are migrated.
-)
-
 targets.binaries.script(
     name = "performance_web_engine_test_suite",
     label = "//content/test:performance_web_engine_test_suite",
@@ -1757,6 +1771,13 @@ targets.binaries.script(
     args = [
         "../../tools/polymer/run_polymer_tools_tests.py",
     ],
+)
+
+targets.binaries.generated_script(
+    name = "webui_resources_tools_python_unittests",
+    label = "//ui/webui/resources/tools:webui_resources_tools_python_unittests",
+    # All references are in starlark.
+    skip_usage_check = True,
 )
 
 targets.binaries.console_test_launcher(
@@ -1805,6 +1826,9 @@ targets.binaries.generated_script(
     skip_usage_check = True,
     merge = targets.merge(
         script = "//tools/perf/process_perf_results.py",
+        args = [
+            "--upload-skia-json",
+        ],
     ),
     resultdb = targets.resultdb(
         enable = True,
@@ -2305,6 +2329,9 @@ targets.binaries.script(
     ],
     merge = targets.merge(
         script = "//tools/perf/process_perf_results.py",
+        args = [
+            "--upload-skia-json",
+        ],
     ),
 )
 

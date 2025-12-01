@@ -31,11 +31,6 @@ chromium-metrics-reviews@google.com.
   <int value="1" label="HTTP cache hit"/>
 </enum>
 
-<enum name="BooleanHasDiscount">
-  <int value="0" label="No discount"/>
-  <int value="1" label="has discount"/>
-</enum>
-
 <enum name="FailToShowHomeSurfaceReason">
   <int value="0" label="Fail to create a NTP Tab"/>
   <int value="1" label="Fail to find a NTP Tab"/>
@@ -51,6 +46,12 @@ chromium-metrics-reviews@google.com.
   <int value="3" label="Content error"/>
 </enum>
 
+<enum name="MicrosoftFilesRecommendationType">
+  <int value="0" label="Used"/>
+  <int value="1" label="Shared"/>
+  <int value="2" label="Trending"/>
+</enum>
+
 <enum name="MicrosoftFilesRequestResult">
   <int value="0" label="Success"/>
   <int value="1" label="Network error"/>
@@ -58,6 +59,12 @@ chromium-metrics-reviews@google.com.
   <int value="3" label="Content error"/>
   <int value="4" label="Throttling error"/>
   <int value="5" label="Unauthorized error"/>
+</enum>
+
+<enum name="MicrosoftFilesSubstitutionType">
+  <int value="0" label="None"/>
+  <int value="1" label="Non-insights replaced trending"/>
+  <int value="2" label="Trending replaced non-insights"/>
 </enum>
 
 <enum name="MvtReselectUrlMatchResult">
@@ -318,6 +325,7 @@ chromium-metrics-reviews@google.com.
   <int value="20" label="Default color clicked"/>
   <int value="21" label="Chrome color clicked"/>
   <int value="22" label="Custom color clicked"/>
+  <int value="23" label="Show footer toggle clicked"/>
 </enum>
 
 <enum name="NTPCustomizeChromeSidePanelImpression">
@@ -373,6 +381,12 @@ chromium-metrics-reviews@google.com.
   <int value="1"
       label="Preview images for NTP collections shown on the 'Themes' page"/>
   <int value="2" label="Images in a specific NTP collection"/>
+</enum>
+
+<enum name="NTPMicrosoftAuthError">
+  <int value="2652902242" label="user_cancelled: The user cancelled the flow"/>
+  <int value="3367032940"
+      label="no_account_error: Silent auth was attempted with no user account"/>
 </enum>
 
 <enum name="NTPMicrosoftAuthType">
@@ -491,7 +505,10 @@ chromium-metrics-reviews@google.com.
   <int value="2" label="JSON parse error"/>
   <int value="3" label="Content error"/>
   <int value="4" label="Throttling error"/>
+  <int value="5" label="Unauthorized error"/>
 </enum>
+
+<!-- LINT.IfChange(PromoBrowserCommandEnum) -->
 
 <enum name="PromoBrowserCommandEnum">
   <int value="0" label="Unknown Command"/>
@@ -507,7 +524,13 @@ chromium-metrics-reviews@google.com.
   <int value="10" label="Start Password Manager Tutorial"/>
   <int value="11" label="Start Saved Tab Group Tutorial"/>
   <int value="12" label="Open AI Settings"/>
+  <int value="13" label="Open Safety Check from What's New"/>
+  <int value="14" label="Open Payments Settings"/>
+  <int value="15" label="[Deprecated] Open History Search Settings"/>
+  <int value="16" label="Open Glic"/>
 </enum>
+
+<!-- LINT.ThenChange(//ui/webui/resources/js/browser_command/browser_command.mojom:Command) -->
 
 <enum name="SearchResumptionModule.ModuleNotShownReason">
   <int value="0" label="Not enough suggestions available"/>

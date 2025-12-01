@@ -34,6 +34,7 @@ import android.view.View;
 
 import androidx.annotation.ColorInt;
 import androidx.appcompat.content.res.AppCompatResources;
+import androidx.core.content.ContextCompat;
 import androidx.core.graphics.ColorUtils;
 import androidx.test.espresso.matcher.ViewMatchers.Visibility;
 import androidx.test.filters.LargeTest;
@@ -48,7 +49,8 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.Mock;
 import org.mockito.Mockito;
-import org.mockito.MockitoAnnotations;
+import org.mockito.junit.MockitoJUnit;
+import org.mockito.junit.MockitoRule;
 
 import org.chromium.base.CallbackUtils;
 import org.chromium.base.ThreadUtils;
@@ -60,12 +62,10 @@ import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.Criteria;
 import org.chromium.base.test.util.CriteriaHelper;
 import org.chromium.base.test.util.DisableIf;
-import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Features.EnableFeatures;
 import org.chromium.base.test.util.Restriction;
 import org.chromium.chrome.browser.browser_controls.BrowserControlsStateProvider.ControlsPosition;
 import org.chromium.chrome.browser.browser_controls.BrowserStateBrowserControlsVisibilityDelegate;
-import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.fullscreen.BrowserControlsManager;
 import org.chromium.chrome.browser.night_mode.ChromeNightModeTestUtils;
@@ -91,7 +91,6 @@ import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
 import org.chromium.chrome.test.R;
 import org.chromium.chrome.test.util.NewTabPageTestUtils;
 import org.chromium.chrome.test.util.OmniboxTestUtils;
-import org.chromium.components.browser_ui.styles.ChromeColors;
 import org.chromium.components.embedder_support.util.UrlConstants;
 import org.chromium.components.omnibox.OmniboxFeatureList;
 import org.chromium.components.search_engines.TemplateUrlService;
@@ -105,6 +104,8 @@ import org.chromium.ui.test.util.ViewUtils;
 @CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE})
 @Restriction(DeviceFormFactor.PHONE)
 public class ToolbarPhoneTest {
+    @Rule public final MockitoRule mMockitoRule = MockitoJUnit.rule();
+
     @Rule
     public ChromeTabbedActivityTestRule mActivityTestRule = new ChromeTabbedActivityTestRule();
 
@@ -139,7 +140,6 @@ public class ToolbarPhoneTest {
 
     @Before
     public void setUp() {
-        MockitoAnnotations.initMocks(this);
 
         mActivityTestRule.startMainActivityOnBlankPage();
         TemplateUrlService originalService =
@@ -353,10 +353,7 @@ public class ToolbarPhoneTest {
                         false);
 
         // Show a button, this will inflate the optional button view and create its coordinator.
-        ThreadUtils.runOnUiThreadBlocking(
-                () -> {
-                    mToolbar.updateOptionalButton(buttonData);
-                });
+        ThreadUtils.runOnUiThreadBlocking(() -> mToolbar.updateOptionalButton(buttonData));
 
         CriteriaHelper.pollUiThread(
                 () ->
@@ -401,10 +398,7 @@ public class ToolbarPhoneTest {
                         false);
 
         // Show a button, this will inflate the optional button view and create its coordinator.
-        ThreadUtils.runOnUiThreadBlocking(
-                () -> {
-                    mToolbar.updateOptionalButton(buttonData);
-                });
+        ThreadUtils.runOnUiThreadBlocking(() -> mToolbar.updateOptionalButton(buttonData));
 
         CriteriaHelper.pollUiThread(
                 () ->
@@ -431,7 +425,6 @@ public class ToolbarPhoneTest {
 
     @Test
     @MediumTest
-    @DisabledTest(message = "crbug.com/1473282")
     public void testOptionalButton_DrawnWhenVisible() {
         Drawable drawable =
                 AppCompatResources.getDrawable(
@@ -450,10 +443,7 @@ public class ToolbarPhoneTest {
                         false);
 
         // Show a button, this will inflate the optional button view and create its coordinator.
-        ThreadUtils.runOnUiThreadBlocking(
-                () -> {
-                    mToolbar.updateOptionalButton(buttonData);
-                });
+        ThreadUtils.runOnUiThreadBlocking(() -> mToolbar.updateOptionalButton(buttonData));
 
         CriteriaHelper.pollUiThread(() -> mToolbar.getOptionalButtonViewForTesting() != null);
         ViewUtils.onViewWaiting(
@@ -483,9 +473,8 @@ public class ToolbarPhoneTest {
         @ColorInt
         int homeSurfaceToolbarBackgroundColor =
                 ColorUtils.setAlphaComponent(
-                        ChromeColors.getSurfaceColor(
-                                mToolbar.getContext(),
-                                R.dimen.home_surface_background_color_elevation),
+                        ContextCompat.getColor(
+                                mToolbar.getContext(), R.color.home_surface_background_color),
                         0);
 
         assertEquals(false, mToolbar.isLocationBarShownInNtp());
@@ -560,10 +549,8 @@ public class ToolbarPhoneTest {
         ColorDrawable toolbarBackgroundDrawable = mToolbar.getBackgroundDrawable();
         @ColorInt
         int homeSurfaceToolbarBackgroundColor =
-                ChromeColors.getSurfaceColor(
-                        mToolbar.getContext(),
-                        org.chromium.chrome.browser.toolbar.R.dimen
-                                .home_surface_background_color_elevation);
+                ContextCompat.getColor(
+                        mToolbar.getContext(), R.color.home_surface_background_color);
 
         assertEquals(false, mToolbar.isLocationBarShownInGeneralNtp());
         assertNotEquals(homeSurfaceToolbarBackgroundColor, toolbarBackgroundDrawable.getColor());
@@ -604,13 +591,13 @@ public class ToolbarPhoneTest {
                         AdaptiveToolbarButtonVariant.UNKNOWN,
                         0,
                         false);
-        mToolbar.updateOptionalButton(buttonData);
-        verify(mOptionalButtonCoordinator).updateButton(buttonData);
+        ThreadUtils.runOnUiThreadBlocking(() -> mToolbar.updateOptionalButton(buttonData));
+        verify(mOptionalButtonCoordinator).updateButton(buttonData, false);
 
         mOmnibox.requestFocus();
-        verify(mOptionalButtonCoordinator).updateButton(null);
+        verify(mOptionalButtonCoordinator).updateButton(null, false);
         mOmnibox.clearFocus();
-        verify(mOptionalButtonCoordinator, times(2)).updateButton(buttonData);
+        verify(mOptionalButtonCoordinator, times(2)).updateButton(buttonData, false);
     }
 
     @Test
@@ -700,9 +687,6 @@ public class ToolbarPhoneTest {
     }
 
     @Test
-    @EnableFeatures(
-            ChromeFeatureList.TOOLBAR_PHONE_CLEANUP
-                    + ":remove_redundant_ntpupdate_in_lbvisualupdate/true")
     @LargeTest
     public void testNtpAnimation_onGTSExit() {
         // Load NTP

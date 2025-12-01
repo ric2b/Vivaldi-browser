@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/390223051): Remove C-library calls to fix the errors.
+#pragma allow_unsafe_libc_calls
+#endif
+
 // The entry point for all Mac Chromium processes, including the outer app
 // bundle (browser) and helper app (renderer, plugin, and friends).
 
@@ -129,7 +134,7 @@ typedef int (*ChromeMainPtr)(int, char**);
 // revised. Hopefully a more elegant solution will become apparent before that's
 // required.
 #if !defined(DCHECK_ALWAYS_ON)
-__attribute__((used)) const char kGrossPaddingForCrbug1300598[84 * 1024] = {};
+__attribute__((used)) const char kGrossPaddingForCrbug1300598[76 * 1024] = {};
 #else
 // DCHECK builds are larger and therefore require less padding. See
 // https://crbug.com/1394196 for the calculations, and

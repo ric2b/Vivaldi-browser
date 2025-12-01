@@ -70,7 +70,8 @@ public class SafetyHubMetricUtils {
      */
     @StringDef({
         DashboardModuleType.UPDATE_CHECK,
-        DashboardModuleType.PASSWORDS,
+        DashboardModuleType.ACCOUNT_PASSWORDS,
+        DashboardModuleType.LOCAL_PASSWORDS,
         DashboardModuleType.SAFE_BROWSING,
         DashboardModuleType.REVOKED_PERMISSIONS,
         DashboardModuleType.NOTIFICATION_REVIEW,
@@ -79,7 +80,8 @@ public class SafetyHubMetricUtils {
     @Retention(RetentionPolicy.SOURCE)
     @interface DashboardModuleType {
         String UPDATE_CHECK = "UpdateCheck";
-        String PASSWORDS = "Passwords";
+        String ACCOUNT_PASSWORDS = "AccountPasswords";
+        String LOCAL_PASSWORDS = "LocalPasswords";
         String SAFE_BROWSING = "SafeBrowsing";
         String REVOKED_PERMISSIONS = "RevokedPermissions";
         String NOTIFICATION_REVIEW = "NotificationReview";
@@ -189,12 +191,35 @@ public class SafetyHubMetricUtils {
         int MAX_VALUE = SHOW_SIGN_IN_PROMO;
     }
 
+    /**
+     * State for a Safety Hub module. Must be kept in sync with SafetyHubModuleState in
+     * settings/enums.xml.
+     */
+    @IntDef({
+        ModuleStateEnum.WARNING,
+        ModuleStateEnum.UNAVAILABLE,
+        ModuleStateEnum.INFO,
+        ModuleStateEnum.SAFE,
+        ModuleStateEnum.LOADING
+    })
+    @Retention(RetentionPolicy.SOURCE)
+    public @interface ModuleStateEnum {
+        int WARNING = 0;
+        int UNAVAILABLE = 1;
+        int INFO = 2;
+        int SAFE = 3;
+        int LOADING = 4;
+        int MAX_VALUE = LOADING;
+    }
+
     public static String getDashboardModuleTypeForModuleOption(@ModuleOption int option) {
         switch (option) {
             case ModuleOption.UPDATE_CHECK:
                 return DashboardModuleType.UPDATE_CHECK;
             case ModuleOption.ACCOUNT_PASSWORDS:
-                return DashboardModuleType.PASSWORDS;
+                return DashboardModuleType.ACCOUNT_PASSWORDS;
+            case ModuleOption.LOCAL_PASSWORDS:
+                return DashboardModuleType.LOCAL_PASSWORDS;
             case ModuleOption.SAFE_BROWSING:
                 return DashboardModuleType.SAFE_BROWSING;
             case ModuleOption.UNUSED_PERMISSIONS:
@@ -211,6 +236,23 @@ public class SafetyHubMetricUtils {
                 EXTERNAL_INTERACTIONS_HISTOGRAM_NAME, value, ExternalInteractions.MAX_VALUE);
     }
 
+    static @ModuleStateEnum int getModuleStateEnum(@ModuleState int state) {
+        switch (state) {
+            case ModuleState.WARNING:
+                return ModuleStateEnum.WARNING;
+            case ModuleState.UNAVAILABLE:
+                return ModuleStateEnum.UNAVAILABLE;
+            case ModuleState.INFO:
+                return ModuleStateEnum.INFO;
+            case ModuleState.SAFE:
+                return ModuleStateEnum.SAFE;
+            case ModuleState.LOADING:
+                return ModuleStateEnum.LOADING;
+            default:
+                throw new IllegalArgumentException();
+        }
+    }
+
     static void recordModuleState(
             @ModuleState int state,
             @DashboardModuleType String moduleType,
@@ -221,7 +263,8 @@ public class SafetyHubMetricUtils {
         joiner.add(lifecycleEvent);
         String histogramName = joiner.toString();
 
-        RecordHistogram.recordEnumeratedHistogram(histogramName, state, ModuleState.MAX_VALUE);
+        RecordHistogram.recordEnumeratedHistogram(
+                histogramName, getModuleStateEnum(state), ModuleStateEnum.MAX_VALUE);
     }
 
     static void recordRevokedPermissionsInteraction(@PermissionsModuleInteractions int value) {

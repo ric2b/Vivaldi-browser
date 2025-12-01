@@ -8,10 +8,12 @@
 #include "base/command_line.h"
 #include "base/containers/flat_map.h"
 #include "base/containers/flat_set.h"
+#include "base/feature_list.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/shared_memory_switch.h"
 #include "base/memory/weak_ptr.h"
+#include "base/sequence_checker.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/tracing/tracing_tls.h"
 #include "base/unguessable_token.h"
@@ -21,6 +23,7 @@
 #include "mojo/public/cpp/system/data_pipe_drainer.h"
 #include "services/tracing/public/cpp/perfetto/shared_memory.h"
 #include "services/tracing/public/cpp/perfetto/trace_packet_tokenizer.h"
+#include "services/tracing/public/cpp/tracing_features.h"
 #include "services/tracing/public/mojom/perfetto_service.mojom.h"
 #include "services/tracing/public/mojom/tracing_service.mojom.h"
 #include "third_party/perfetto/include/perfetto/base/task_runner.h"
@@ -38,15 +41,6 @@ using ShmemMode = perfetto::SharedMemoryArbiter::ShmemMode;
 
 namespace tracing {
 namespace {
-
-// TODO(crbug.com/40574593): Find a good compromise between performance and
-// data granularity (mainly relevant to running with small buffer sizes
-// when we use background tracing) on Android.
-#if BUILDFLAG(IS_ANDROID)
-constexpr size_t kDefaultSMBPageSizeBytes = 4 * 1024;
-#else
-constexpr size_t kDefaultSMBPageSizeBytes = 32 * 1024;
-#endif
 
 constexpr char kErrorTracingFailed[] = "Tracing failed";
 
@@ -79,6 +73,8 @@ class ProducerEndpoint : public perfetto::ProducerEndpoint,
   base::WeakPtr<ProducerEndpoint> GetWeakPtr() {
     return weak_factory_.GetWeakPtr();
   }
+
+  void DetachFromSequence() { DETACH_FROM_SEQUENCE(sequence_checker_); }
 
   // perfetto::ProducerEndpoint implementation:
   void Disconnect() override {
@@ -683,9 +679,9 @@ PerfettoTracingBackend::ConnectProducer(const ConnectProducerArgs& args) {
   uint32_t shmem_size_hint = args.shmem_size_hint_bytes;
   uint32_t shmem_page_size_hint = args.shmem_page_size_hint_bytes;
   if (shmem_size_hint == 0)
-    shmem_size_hint = kDefaultSharedMemorySize;
+    shmem_size_hint = features::kPerfettoSharedMemorySizeBytes.Get();
   if (shmem_page_size_hint == 0)
-    shmem_page_size_hint = kDefaultSMBPageSizeBytes;
+    shmem_page_size_hint = features::kPerfettoSMBPageSizeBytes.Get();
 
   if (args.use_producer_provided_smb) {
     auto* command_line = base::CommandLine::ForCurrentProcess();
@@ -757,10 +753,41 @@ void PerfettoTracingBackend::OnProducerConnected(
   }
 }
 
+void PerfettoTracingBackend::DetachFromMuxerSequence() {
+  DETACH_FROM_SEQUENCE(muxer_sequence_checker_);
+#if DCHECK_IS_ON()
+  perfetto::base::TaskRunner* task_runner;
+  {
+    base::AutoLock lock(task_runner_lock_);
+    task_runner = muxer_task_runner_;
+  }
+
+  // Must reset sequence_checker on `task_runner`, because `weak_this` and
+  // `producer_endpoint_` needs to bind there.
+  task_runner->PostTask([weak_this = weak_factory_.GetWeakPtr()] {
+    // Can be destroyed in testing.
+    if (weak_this && weak_this->producer_endpoint_) {
+      weak_this->producer_endpoint_->DetachFromSequence();
+    }
+  });
+#endif  // DCHECK_IS_ON()
+}
+
 void PerfettoTracingBackend::BindProducerConnectionIfNecessary() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(muxer_sequence_checker_);
-  if (!producer_endpoint_)
+  {
+    base::AutoLock lock(task_runner_lock_);
+    // Check service existence first because mojo is initialized after
+    // `muxer_task_runner_` resets. So we can avoid binding `sequence_checker`
+    // in `base::WeakPtr` of `producer_endpoint_` before task resets.
+    if (!perfetto_service_) {
+      return;
+    }
+  }
+
+  if (!producer_endpoint_) {
     return;
+  }
 
   mojo::PendingRemote<mojom::PerfettoService> perfetto_service;
   {
@@ -768,10 +795,8 @@ void PerfettoTracingBackend::BindProducerConnectionIfNecessary() {
     perfetto_service = std::move(perfetto_service_);
   }
 
-  if (perfetto_service) {
-    producer_endpoint_->BindConnection(muxer_task_runner_,
-                                       std::move(perfetto_service));
-  }
+  producer_endpoint_->BindConnection(muxer_task_runner_,
+                                     std::move(perfetto_service));
 }
 
 void PerfettoTracingBackend::CreateConsumerConnection(

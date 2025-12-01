@@ -457,7 +457,7 @@ Currently, no (*).
 The containers are implemented using Linux [user namespaces] and those are quite
 restricted (by design).
 
-See the [FUSE support entry](#FUSE) for alternatives.
+See the [FUSE support entry](#is-fuse-supported) for alternatives.
 
 (*): Technically you can mount a few limited pseudo filesystems (like
 memory-backed tmpfs), but most people aren't interested in those.
@@ -476,7 +476,7 @@ See the [previous question about mounting filesystems](#can-i-mount-filesystems)
 Specifically, we're referring to `losetup` and `mount -o loop` which use
 `/dev/loop-control` and nodes like `/dev/loop0` via the `loop` kernel module.
 
-If you have a use case that wouldn't be solved by supporting [FUSE](#FUSE),
+If you have a use case that wouldn't be solved by supporting [FUSE](#is-fuse-supported),
 please [file a bug][new-bug] for us.
 
 ### Can I run a VM inside the VM?

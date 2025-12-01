@@ -4,6 +4,7 @@
 
 #include "components/optimization_guide/content/browser/page_content_proto_provider.h"
 
+#include "base/check.h"
 #include "base/functional/concurrent_closures.h"
 #include "base/i18n/char_iterator.h"
 #include "base/metrics/histogram_macros.h"
@@ -11,6 +12,7 @@
 #include "base/task/thread_pool.h"
 #include "base/timer/elapsed_timer.h"
 #include "components/optimization_guide/content/browser/page_content_proto_util.h"
+#include "components/optimization_guide/core/optimization_guide_features.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents.h"
 #include "mojo/public/cpp/bindings/callback_helpers.h"
@@ -42,6 +44,11 @@ void ApplyOptionsOverridesForWebContents(
   // WebContents.
   if (web_contents->GetVisibility() != content::Visibility::VISIBLE) {
     options.on_critical_path = true;
+  }
+
+  if (base::FeatureList::IsEnabled(
+          features::kAnnotatedPageContentWithActionableElements)) {
+    options.enable_experimental_actionable_data = true;
   }
 }
 
@@ -79,7 +86,13 @@ std::optional<optimization_guide::RenderFrameInfo> GetRenderFrameInfo(
     return std::nullopt;
   }
 
+  auto serialized_server_token =
+      DocumentIdentifierUserData::GetDocumentIdentifier(
+          render_frame_host->GetGlobalFrameToken());
+  CHECK(serialized_server_token.has_value());
+
   optimization_guide::RenderFrameInfo render_frame_info;
+  render_frame_info.serialized_server_token = serialized_server_token.value();
   render_frame_info.global_frame_token =
       render_frame_host->GetGlobalFrameToken();
   // We use the origin instead of last committed URL here to ensure the security
@@ -89,6 +102,7 @@ std::optional<optimization_guide::RenderFrameInfo> GetRenderFrameInfo(
   // 2. about:blank inherits its origin from the initiator while the URL doesn't
   //    convey that.
   render_frame_info.source_origin = render_frame_host->GetLastCommittedOrigin();
+  render_frame_info.url = render_frame_host->GetLastCommittedURL();
   return render_frame_info;
 }
 
@@ -153,24 +167,54 @@ void RecordPageContentExtractionMetrics(
       elapsed.Elapsed(), base::Microseconds(1), base::Milliseconds(5), 50);
 }
 
+// Converts gfx::Size to optimization_guide::proto::ViewportGeometry.
+void ConvertViewportGeometry(
+    const gfx::Size& viewport,
+    optimization_guide::proto::BoundingRect* viewport_geometry) {
+  viewport_geometry->set_x(0);
+  viewport_geometry->set_y(0);
+  viewport_geometry->set_width(viewport.width());
+  viewport_geometry->set_height(viewport.height());
+}
+
 void OnGotAIPageContentForAllFrames(
+    blink::mojom::AIPageContentOptionsPtr main_frame_options,
     base::ElapsedTimer elapsed_timer,
     content::GlobalRenderFrameHostToken main_frame_token,
     ukm::SourceId source_id,
+    const gfx::Size& main_frame_viewport,
     std::unique_ptr<optimization_guide::AIPageContentMap> page_content_map,
     OnAIPageContentDone done_callback) {
-  optimization_guide::proto::AnnotatedPageContent proto;
+  optimization_guide::AIPageContentResult page_content;
+  optimization_guide::FrameTokenSet frame_token_set;
+
   if (!optimization_guide::ConvertAIPageContentToProto(
-          main_frame_token, *page_content_map,
-          base::BindRepeating(&GetRenderFrameInfo), &proto)) {
+          std::move(main_frame_options), main_frame_token, *page_content_map,
+          base::BindRepeating(&GetRenderFrameInfo), frame_token_set,
+          page_content)) {
     std::move(done_callback).Run(std::nullopt);
     return;
   }
+
+  ConvertViewportGeometry(main_frame_viewport,
+                          page_content.proto.mutable_viewport_geometry());
+
+  // Get all the document identifiers for the frames that were seen.
+  for (const auto& frame_token : frame_token_set) {
+    content::RenderFrameHost* render_frame_host =
+        content::RenderFrameHost::FromFrameToken(frame_token);
+    CHECK(render_frame_host);
+    auto token = DocumentIdentifierUserData::GetDocumentIdentifier(frame_token);
+    CHECK(token.has_value());
+    page_content.document_identifiers[token.value()] =
+        render_frame_host->GetWeakDocumentPtr();
+  }
+
   base::ThreadPool::PostTask(
       FROM_HERE, {base::TaskPriority::BEST_EFFORT},
       base::BindOnce(RecordPageContentExtractionMetrics,
-                     elapsed_timer.Elapsed(), source_id, proto));
-  std::move(done_callback).Run(std::move(proto));
+                     elapsed_timer.Elapsed(), source_id, page_content.proto));
+  std::move(done_callback).Run(std::move(page_content));
 }
 
 void OnGotAIPageContentForFrame(
@@ -188,6 +232,12 @@ void OnGotAIPageContentForFrame(
 }
 
 }  // namespace
+
+AIPageContentResult::AIPageContentResult() = default;
+AIPageContentResult::~AIPageContentResult() = default;
+AIPageContentResult::AIPageContentResult(AIPageContentResult&& other) = default;
+AIPageContentResult& AIPageContentResult::operator=(
+    AIPageContentResult&& other) = default;
 
 blink::mojom::AIPageContentOptionsPtr DefaultAIPageContentOptions() {
   auto request = blink::mojom::AIPageContentOptions::New();
@@ -255,10 +305,27 @@ void GetAIPageContent(content::WebContents* web_contents,
 
   std::move(concurrent)
       .Done(base::BindOnce(
-          &OnGotAIPageContentForAllFrames, base::ElapsedTimer(),
+          &OnGotAIPageContentForAllFrames, std::move(options),
+          base::ElapsedTimer(),
           web_contents->GetPrimaryMainFrame()->GetGlobalFrameToken(),
           web_contents->GetPrimaryMainFrame()->GetPageUkmSourceId(),
-          std::move(page_content_map), std::move(done_callback)));
+          web_contents->GetSize(), std::move(page_content_map),
+          std::move(done_callback)));
 }
+
+// Allows for a DocumentIdentifier to be reused across calls to convert
+std::optional<std::string> DocumentIdentifierUserData::GetDocumentIdentifier(
+    content::GlobalRenderFrameHostToken token) {
+  content::RenderFrameHost* render_frame_host =
+      content::RenderFrameHost::FromFrameToken(token);
+  if (!render_frame_host) {
+    return std::nullopt;
+  }
+  return DocumentIdentifierUserData::GetOrCreateForCurrentDocument(
+             render_frame_host)
+      ->serialized_token();
+}
+
+DOCUMENT_USER_DATA_KEY_IMPL(DocumentIdentifierUserData);
 
 }  // namespace optimization_guide

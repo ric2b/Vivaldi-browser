@@ -2,19 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 'use strict';
-
-const tsParser = require('@typescript-eslint/parser');
-
 const rule = require('../lib/inject-checkbox-styles.js');
-const ruleTester = new (require('eslint').RuleTester)({
-  languageOptions: {
-    ecmaVersion: 'latest',
-    sourceType: 'module',
-    parser: tsParser,
-  },
-});
 
-ruleTester.run('inject-checkbox-styles', rule, {
+const {RuleTester} = require('./utils/utils.js');
+
+new RuleTester().run('inject-checkbox-styles', rule, {
   valid: [
     {
       code: `import * as Input from '../input/input.js';
@@ -39,7 +31,7 @@ import settingCheckboxStylesRaw from './settingCheckbox.css.js';
 
 // TODO(crbug.com/391381439): Fully migrate off of constructed style sheets.
 const settingCheckboxStyles = new CSSStyleSheet();
-settingCheckboxStyles.replaceSync(settingCheckboxStylesRaw.cssContent);
+settingCheckboxStyles.replaceSync(settingCheckboxStylesRaw.cssText);
 
 export class SettingCheckbox extends HTMLElement {
   static readonly litTagName = Lit.literal\`setting-checkbox\`;

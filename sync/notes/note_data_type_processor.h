@@ -144,6 +144,11 @@ class NoteDataTypeProcessor : public syncer::DataTypeProcessor,
 
   const raw_ptr<file_sync::SyncedFileStore> synced_file_store_;
 
+  // Controls whether notes should be wiped when sync is stopped. Not actually
+  // used in Vivaldi
+  const syncer::WipeModelUponSyncDisabledBehavior
+      wipe_model_upon_sync_disabled_behavior_;
+
   // Stores the start callback in between OnSyncStarting() and
   // ModelReadyToSync().
   StartCallback start_callback_;
@@ -155,12 +160,6 @@ class NoteDataTypeProcessor : public syncer::DataTypeProcessor,
   // remote changes to. It is set during ModelReadyToSync(), which is called
   // during startup, as part of the note-loading process.
   raw_ptr<NoteModelView> notes_model_ = nullptr;
-
-  // Controls whether notes should be wiped when sync is stopped. Not actually
-  // used in Vivaldi
-  syncer::WipeModelUponSyncDisabledBehavior
-      wipe_model_upon_sync_disabled_behavior_ =
-          syncer::WipeModelUponSyncDisabledBehavior::kNever;
 
   // The callback used to schedule the persistence of note model as well as
   // the metadata to a file during which latest metadata should also be pulled

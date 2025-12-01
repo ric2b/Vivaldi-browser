@@ -97,8 +97,6 @@ bool StructTraits<printing::mojom::PrinterBasicInfoDataView,
     base::debug::DumpWithoutCrashing();
     return false;
   }
-  out->printer_status = data.printer_status();
-  out->is_default = data.is_default();
   if (!data.ReadOptions(&out->options)) {
     base::debug::Alias(&data);
     base::debug::DumpWithoutCrashing();
@@ -135,7 +133,7 @@ bool StructTraits<printing::mojom::PaperDataView,
   std::string display_name;
   std::string vendor_id;
   gfx::Size size_um;
-  std::optional<gfx::Rect> maybe_printable_area_um;
+  gfx::Rect printable_area_um;
   if (!data.ReadDisplayName(&display_name)) {
     base::debug::Alias(&data);
     base::debug::DumpWithoutCrashing();
@@ -151,18 +149,13 @@ bool StructTraits<printing::mojom::PaperDataView,
     base::debug::DumpWithoutCrashing();
     return false;
   }
-  if (!data.ReadPrintableAreaUm(&maybe_printable_area_um)) {
+  if (!data.ReadPrintableAreaUm(&printable_area_um)) {
     base::debug::Alias(&data);
     base::debug::DumpWithoutCrashing();
     return false;
   }
   int max_height_um = data.max_height_um();
   bool has_borderless_variant = data.has_borderless_variant();
-
-  // For backwards compatibility, allow printable area to be missing. Set the
-  // default printable area to be the page size.
-  gfx::Rect printable_area_um =
-      maybe_printable_area_um.value_or(gfx::Rect(size_um));
 
   // Allow empty Papers, since PrinterSemanticCapsAndDefaults can have empty
   // default Papers.
@@ -415,6 +408,16 @@ bool StructTraits<printing::mojom::PrinterSemanticCapsAndDefaultsDataView,
     base::debug::DumpWithoutCrashing();
     return false;
   }
+  if (!data.ReadPrintScalingTypes(&out->print_scaling_types)) {
+    base::debug::Alias(&data);
+    base::debug::DumpWithoutCrashing();
+    return false;
+  }
+  if (!data.ReadPrintScalingTypeDefault(&out->print_scaling_type_default)) {
+    base::debug::Alias(&data);
+    base::debug::DumpWithoutCrashing();
+    return false;
+  }
 #endif  // BUILDFLAG(IS_CHROMEOS)
 
   // Extra validity checks.
@@ -451,6 +454,14 @@ bool StructTraits<printing::mojom::PrinterSemanticCapsAndDefaultsDataView,
   if (advanced_capabilities_dup_checker.HasDuplicates(
           out->advanced_capabilities)) {
     DLOG(ERROR) << "Duplicate advanced_capabilities detected.";
+    base::debug::Alias(&data);
+    base::debug::DumpWithoutCrashing();
+    return false;
+  }
+  DuplicateChecker<printing::mojom::PrintScalingType>
+      print_scaling_types_dup_checker;
+  if (print_scaling_types_dup_checker.HasDuplicates(out->print_scaling_types)) {
+    DLOG(ERROR) << "Duplicate print_scaling_types detected.";
     base::debug::Alias(&data);
     base::debug::DumpWithoutCrashing();
     return false;

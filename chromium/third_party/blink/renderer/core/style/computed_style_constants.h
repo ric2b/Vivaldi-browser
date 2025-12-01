@@ -401,9 +401,8 @@ enum class TextEmphasisPosition : unsigned {
   kOverLeft,
   kUnderRight,
   kUnderLeft,
+  kAuto,
 };
-
-enum class StyleViewTransitionCaptureMode : unsigned { kFlat, kLayered };
 
 inline bool IsOver(TextEmphasisPosition position) {
   return position == TextEmphasisPosition::kOverRight ||

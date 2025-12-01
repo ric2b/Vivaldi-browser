@@ -4,6 +4,7 @@
 
 #include "chrome/browser/ui/views/tabs/tab_strip.h"
 
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -14,6 +15,7 @@
 #include "chrome/browser/ui/browser_command_controller.h"
 #include "chrome/browser/ui/browser_tabstrip.h"
 #include "chrome/browser/ui/performance_controls/tab_resource_usage_tab_helper.h"
+#include "chrome/browser/ui/tabs/saved_tab_groups/saved_tab_group_utils.h"
 #include "chrome/browser/ui/tabs/tab_group.h"
 #include "chrome/browser/ui/tabs/tab_group_model.h"
 #include "chrome/browser/ui/tabs/tab_renderer_data.h"
@@ -116,6 +118,37 @@ IN_PROC_BROWSER_TEST_F(TabStripBrowsertest, MoveTabAndDeleteGroup) {
       tab_strip_model()->group_model()->ListTabGroups();
   EXPECT_EQ(groups.size(), 1U);
   EXPECT_EQ(groups[0], group);
+}
+
+IN_PROC_BROWSER_TEST_F(TabStripBrowsertest, DetachAndReInsertGroup) {
+  ASSERT_TRUE(tab_strip_model()->SupportsTabGroups());
+
+  AppendTab();
+  AppendTab();
+
+  tab_groups::TabGroupId group = tab_strip_model()->AddToNewGroup({0, 1});
+
+  tab_groups::TabGroupSyncService* tab_group_service =
+      tab_groups::SavedTabGroupUtils::GetServiceForProfile(
+          browser()->profile());
+
+  // TODO(392952244): Remove this after migrating callers to using new APIs.
+  std::unique_ptr<tab_groups::ScopedLocalObservationPauser>
+      observation_pauser_ =
+          tab_group_service->CreateScopedLocalObserverPauser();
+
+  std::unique_ptr<DetachedTabGroup> detached_group =
+      tab_strip_model()->DetachTabGroupForInsertion(group);
+
+  EXPECT_EQ(tab_strip()->GetTabCount(), 1);
+  EXPECT_EQ(tab_strip()->tab_at(0)->group(), std::nullopt);
+
+  tab_strip_model()->InsertDetachedTabGroupAt(std::move(detached_group), 1);
+
+  EXPECT_EQ(tab_strip()->GetTabCount(), 3);
+  EXPECT_EQ(tab_strip()->tab_at(0)->group(), std::nullopt);
+  EXPECT_EQ(tab_strip()->tab_at(1)->group(), group);
+  EXPECT_EQ(tab_strip()->tab_at(2)->group(), group);
 }
 
 IN_PROC_BROWSER_TEST_F(TabStripBrowsertest, ShiftTabPrevious_Success) {
@@ -1223,11 +1256,12 @@ IN_PROC_BROWSER_TEST_F(TabStripBrowsertest, TabGroupHeaderTooltipText) {
                                    ->title();
 
   EXPECT_EQ(group_title, group_header->GetTitleTextForTesting());
-  EXPECT_EQ(group_header->GetRenderedTooltipText(gfx::Point()),
-            l10n_util::GetStringFUTF16(IDS_TAB_GROUPS_NAMED_GROUP_TOOLTIP,
-                                       group_header->GetTitleTextForTesting(),
-                                       tab_strip()->GetGroupContentString(
-                                           group_header->group().value())));
+  EXPECT_EQ(
+      group_header->GetRenderedTooltipText(gfx::Point()),
+      l10n_util::GetStringFUTF16(
+          IDS_TAB_GROUPS_NAMED_GROUP_TOOLTIP,
+          std::u16string(group_header->GetTitleTextForTesting()),
+          tab_strip()->GetGroupContentString(group_header->group().value())));
 
   tab_strip_model()->group_model()->GetTabGroup(group)->SetVisualData(
       tab_groups::TabGroupVisualData(std::u16string(),
@@ -1261,11 +1295,12 @@ IN_PROC_BROWSER_TEST_F(TabStripBrowsertest,
 
   EXPECT_EQ(group_title, group_header->GetTitleTextForTesting());
 
-  EXPECT_EQ(group_header->GetRenderedTooltipText(gfx::Point()),
-            l10n_util::GetStringFUTF16(IDS_TAB_GROUPS_NAMED_GROUP_TOOLTIP,
-                                       group_header->GetTitleTextForTesting(),
-                                       tab_strip()->GetGroupContentString(
-                                           group_header->group().value())));
+  EXPECT_EQ(
+      group_header->GetRenderedTooltipText(gfx::Point()),
+      l10n_util::GetStringFUTF16(
+          IDS_TAB_GROUPS_NAMED_GROUP_TOOLTIP,
+          std::u16string(group_header->GetTitleTextForTesting()),
+          tab_strip()->GetGroupContentString(group_header->group().value())));
 
   ui::AXNodeData data;
 
@@ -1360,7 +1395,7 @@ IN_PROC_BROWSER_TEST_F(TabStripBrowsertest,
   Tab* tab1 = tab_strip()->tab_at(1);
   ui::AXNodeData ax_node_data_0;
   ui::AXNodeData ax_node_data_1;
-  views::test::AXEventCounter counter(views::AXEventManager::Get());
+  views::test::AXEventCounter counter(views::AXUpdateNotifier::Get());
 
   tab_strip()->SelectTab(tab_strip()->tab_at(0), GetDummyEvent());
   tab0->GetViewAccessibility().GetAccessibleNodeData(&ax_node_data_0);
@@ -1403,9 +1438,7 @@ class TabStripSaveBrowsertest : public TabStripBrowsertest {
  public:
   TabStripSaveBrowsertest() {
     scoped_feature_list_.InitWithFeatures(
-        {tab_groups::kTabGroupsSaveV2,
-         data_sharing::features::kDataSharingFeature},
-        {});
+        {data_sharing::features::kDataSharingFeature}, {});
   }
 
  private:

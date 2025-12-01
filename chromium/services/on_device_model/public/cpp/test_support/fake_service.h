@@ -13,6 +13,7 @@
 #include "base/run_loop.h"
 #include "build/build_config.h"
 #include "mojo/public/cpp/bindings/associated_receiver.h"
+#include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/unique_receiver_set.h"
 #include "services/on_device_model/public/cpp/model_assets.h"
 #include "services/on_device_model/public/cpp/service_client.h"
@@ -71,15 +72,16 @@ struct FakeOnDeviceServiceSettings final {
 class FakeOnDeviceSession final : public mojom::Session {
  public:
   explicit FakeOnDeviceSession(FakeOnDeviceServiceSettings* settings,
-                               FakeOnDeviceModel* model);
+                               FakeOnDeviceModel* model,
+                               const Capabilities& capabilities);
   ~FakeOnDeviceSession() override;
 
   // mojom::Session:
-  void AddContext(mojom::InputOptionsPtr input,
-                  mojo::PendingRemote<mojom::ContextClient> client) override;
+  void Append(mojom::AppendOptionsPtr options,
+              mojo::PendingRemote<mojom::ContextClient> client) override;
 
-  void Execute(
-      mojom::InputOptionsPtr input,
+  void Generate(
+      mojom::GenerateOptionsPtr input,
       mojo::PendingRemote<mojom::StreamingResponder> response) override;
 
   void GetSizeInTokens(mojom::InputPtr input,
@@ -91,16 +93,16 @@ class FakeOnDeviceSession final : public mojom::Session {
       mojo::PendingReceiver<on_device_model::mojom::Session> session) override;
 
  private:
-  void ExecuteImpl(mojom::InputOptionsPtr input,
-                   mojo::PendingRemote<mojom::StreamingResponder> response);
-
-  void AddContextInternal(mojom::InputOptionsPtr input,
-                          mojo::PendingRemote<mojom::ContextClient> client);
+  void GenerateImpl(mojom::GenerateOptionsPtr options,
+                    mojo::PendingRemote<mojom::StreamingResponder> response);
+  void AppendImpl(mojom::AppendOptionsPtr options,
+                  mojo::Remote<mojom::ContextClient> client);
 
   raw_ptr<FakeOnDeviceServiceSettings> settings_;
   std::string adaptation_model_weight_;
-  std::vector<mojom::InputOptionsPtr> context_;
+  std::vector<mojom::AppendOptionsPtr> context_;
   raw_ptr<FakeOnDeviceModel> model_;
+  Capabilities capabilities_;
 
   base::WeakPtrFactory<FakeOnDeviceSession> weak_factory_{this};
 };
@@ -117,7 +119,8 @@ class FakeOnDeviceModel : public mojom::OnDeviceModel {
   ~FakeOnDeviceModel() override;
 
   // mojom::OnDeviceModel:
-  void StartSession(mojo::PendingReceiver<mojom::Session> session) override;
+  void StartSession(mojo::PendingReceiver<mojom::Session> session,
+                    mojom::SessionParamsPtr params) override;
 
   void DetectLanguage(const std::string& text,
                       DetectLanguageCallback callback) override;
@@ -148,12 +151,17 @@ class FakeOnDeviceModel : public mojom::OnDeviceModel {
   mojo::UniqueReceiverSet<mojom::OnDeviceModel> model_adaptation_receivers_;
 };
 
-class FakeTsModel final : public on_device_model::mojom::TextSafetyModel {
+class FakeTsModel final : public mojom::TextSafetyModel,
+                          public mojom::TextSafetySession {
  public:
-  explicit FakeTsModel(on_device_model::mojom::TextSafetyModelParamsPtr params);
+  explicit FakeTsModel(mojom::TextSafetyModelParamsPtr params);
   ~FakeTsModel() override;
 
   // on_device_model::mojom::TextSafetyModel
+  void StartSession(
+      mojo::PendingReceiver<mojom::TextSafetySession> session) override;
+
+  // on_device_model::mojom::TextSafetySession
   void ClassifyTextSafety(const std::string& text,
                           ClassifyTextSafetyCallback callback) override;
   void DetectLanguage(const std::string& text,
@@ -162,6 +170,7 @@ class FakeTsModel final : public on_device_model::mojom::TextSafetyModel {
  private:
   bool has_safety_model_ = false;
   bool has_language_model_ = false;
+  mojo::ReceiverSet<mojom::TextSafetySession> sessions_;
 };
 
 // TsHolder holds a single TsModel. Its operations may block.
@@ -192,6 +201,8 @@ class FakeOnDeviceModelService : public mojom::OnDeviceModelService {
   void LoadModel(mojom::LoadModelParamsPtr params,
                  mojo::PendingReceiver<mojom::OnDeviceModel> model,
                  LoadModelCallback callback) override;
+  void GetCapabilities(ModelAssets assets,
+                       GetCapabilitiesCallback callback) override;
   void LoadTextSafetyModel(
       mojom::TextSafetyModelParamsPtr params,
       mojo::PendingReceiver<mojom::TextSafetyModel> model) override;

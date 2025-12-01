@@ -28,11 +28,6 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
-#pragma allow_unsafe_buffers
-#endif
-
 #include "third_party/blink/renderer/core/dom/element_data.h"
 
 #include "third_party/blink/renderer/core/css/css_property_value_set.h"
@@ -134,13 +129,15 @@ void ElementData::TraceAfterDispatch(blink::Visitor* visitor) const {
 ShareableElementData::ShareableElementData(
     const Vector<Attribute, kAttributePrealloc>& attributes)
     : ElementData(attributes.size()) {
-  for (unsigned i = 0; i < bit_field_.get<ArraySize>(); ++i)
-    new (&attribute_array_[i]) Attribute(attributes[i]);
+  for (size_t i = 0; i < attributes.size(); ++i) {
+    new (&AttributesSpan()[i]) Attribute(attributes[i]);
+  }
 }
 
 ShareableElementData::~ShareableElementData() {
-  for (unsigned i = 0; i < bit_field_.get<ArraySize>(); ++i)
-    attribute_array_[i].~Attribute();
+  for (auto& attribute : AttributesSpan()) {
+    attribute.~Attribute();
+  }
 }
 
 ShareableElementData::ShareableElementData(const UniqueElementData& other)
@@ -153,8 +150,9 @@ ShareableElementData::ShareableElementData(const UniqueElementData& other)
         other.presentation_attribute_style_->ImmutableCopyIfNeeded();
   }
 
-  for (unsigned i = 0; i < bit_field_.get<ArraySize>(); ++i)
-    new (&attribute_array_[i]) Attribute(other.attribute_vector_.at(i));
+  for (unsigned i = 0; i < other.attribute_vector_.size(); ++i) {
+    new (&AttributesSpan()[i]) Attribute(other.attribute_vector_.at(i));
+  }
 }
 
 ShareableElementData* ShareableElementData::CreateWithAttributes(
@@ -187,10 +185,10 @@ UniqueElementData::UniqueElementData(const ShareableElementData& other)
          !other.presentation_attribute_style_->IsMutable());
   presentation_attribute_style_ = other.presentation_attribute_style_;
 
-  unsigned length = other.Attributes().size();
-  attribute_vector_.reserve(length);
-  for (unsigned i = 0; i < length; ++i)
-    attribute_vector_.UncheckedAppend(other.attribute_array_[i]);
+  attribute_vector_.reserve(other.Attributes().size());
+  for (auto& attribute : other.AttributesSpan()) {
+    attribute_vector_.UncheckedAppend(attribute);
+  }
 }
 
 ShareableElementData* UniqueElementData::MakeShareableCopy() const {

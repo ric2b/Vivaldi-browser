@@ -65,7 +65,7 @@ function injectVariableSubstitutions(variables: Record<string, string>) {
                        if (!resolvedValue) {
                          return getMatch.call(this, node);
                        }
-                       return new SDK.CSSPropertyParser.VariableMatch(
+                       return new SDK.CSSPropertyParserMatchers.BaseVariableMatch(
                            this.ast.text(node), node, resolvedValue.varName, [], this, () => resolvedValue.value);
                      });
 }
@@ -94,8 +94,18 @@ describe('Matchers for SDK.CSSPropertyParser.BottomUpTreeMatching', () => {
 
   it('parses colors in logical border properties', () => {
     for (const success
-             of ['border-block-end', 'border-block-end-color', 'border-block-start', 'border-block-start-color',
-                 'border-inline-end', 'border-inline-end-color', 'border-inline-start', 'border-inline-start-color']) {
+             of ['border-inline', 'border-block', 'border-inline-color', 'border-block-color', 'border-block-end',
+                 'border-block-end-color', 'border-block-start', 'border-block-start-color', 'border-inline-end',
+                 'border-inline-end-color', 'border-inline-start', 'border-inline-start-color']) {
+      const {ast, match, text} = matchSingleValue(success, 'red', new SDK.CSSPropertyParserMatchers.ColorMatcher());
+      assert.exists(match, text);
+      assert.strictEqual(match.text, 'red');
+      assert.strictEqual(ast?.propertyName, success);
+    }
+  });
+
+  it('parses colors in SVG color properties', () => {
+    for (const success of ['flood-color', 'lighting-color', 'stop-color']) {
       const {ast, match, text} = matchSingleValue(success, 'red', new SDK.CSSPropertyParserMatchers.ColorMatcher());
       assert.exists(match, text);
       assert.strictEqual(match.text, 'red');
@@ -429,15 +439,20 @@ describe('Matchers for SDK.CSSPropertyParser.BottomUpTreeMatching', () => {
 
   it('parses light-dark correctly', () => {
     for (const fail of ['light-dark()', 'light-dark(red)', 'light-dark(var(--foo))']) {
-      const {match, text} = matchSingleValue('color', fail, new SDK.CSSPropertyParserMatchers.LightDarkColorMatcher());
+      const {match, text} = matchSingleValue(
+          'color', fail,
+          new SDK.CSSPropertyParserMatchers.LightDarkColorMatcher(
+              sinon.createStubInstance(SDK.CSSStyleDeclaration.CSSStyleDeclaration)));
       assert.isNull(match, text);
     }
 
     for (const succeed
              of ['light-dark(red, blue)', 'light-dark(var(--foo), red)', 'light-dark(red, var(--foo))',
                  'light-dark(var(--foo), var(--bar))']) {
-      const {ast, match, text} =
-          matchSingleValue('color', succeed, new SDK.CSSPropertyParserMatchers.LightDarkColorMatcher());
+      const {ast, match, text} = matchSingleValue(
+          'color', succeed,
+          new SDK.CSSPropertyParserMatchers.LightDarkColorMatcher(
+              sinon.createStubInstance(SDK.CSSStyleDeclaration.CSSStyleDeclaration)));
       assert.exists(ast, text);
       assert.exists(match, text);
 
@@ -449,8 +464,10 @@ describe('Matchers for SDK.CSSPropertyParser.BottomUpTreeMatching', () => {
     }
 
     // light-dark only applies to color properties
-    const {match, text} =
-        matchSingleValue('width', 'light-dark(red, blue)', new SDK.CSSPropertyParserMatchers.LightDarkColorMatcher());
+    const {match, text} = matchSingleValue(
+        'width', 'light-dark(red, blue)',
+        new SDK.CSSPropertyParserMatchers.LightDarkColorMatcher(
+            sinon.createStubInstance(SDK.CSSStyleDeclaration.CSSStyleDeclaration)));
     assert.isNull(match, text);
   });
 
@@ -589,12 +606,11 @@ describe('Matchers for SDK.CSSPropertyParser.BottomUpTreeMatching', () => {
     });
   });
 
-  describe('SelectFunctionMatcher', () => {
+  describe('MathFunctionMatcher', () => {
     it('matches selecting functions', () => {
       const success = ['clamp(1px, 2px, 3px)', 'min(1, 2)', 'max(3, 4)'];
       for (const value of success) {
-        const {match, text} =
-            matchSingleValue('width', value, new SDK.CSSPropertyParserMatchers.SelectFunctionMatcher());
+        const {match, text} = matchSingleValue('width', value, new SDK.CSSPropertyParserMatchers.MathFunctionMatcher());
         assert.exists(match, text);
         assert.strictEqual(match.text, value);
         assert.strictEqual(match.func, value.substr(0, value.indexOf('(')));
@@ -603,8 +619,7 @@ describe('Matchers for SDK.CSSPropertyParser.BottomUpTreeMatching', () => {
 
       const failure = ['clomp(1px, 2px, 3px)', 'min()'];
       for (const value of failure) {
-        const {match, text} =
-            matchSingleValue('width', value, new SDK.CSSPropertyParserMatchers.SelectFunctionMatcher());
+        const {match, text} = matchSingleValue('width', value, new SDK.CSSPropertyParserMatchers.MathFunctionMatcher());
         assert.notExists(match, text);
       }
     });

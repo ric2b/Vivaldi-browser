@@ -92,7 +92,7 @@ AutocompleteMatch NicknameMatchToAutocompleteMatch(
 
 
   // If rich autocompletion applies, we skip trying the alternatives below.
-  if (!match.TryRichAutocompletion(match.contents, match.description, input) &&
+  if (!match.TryRichAutocompletion(input, match.contents, match.description) &&
       inline_autocomplete_offset != std::u16string::npos) {
     match.inline_autocompletion = nickname.substr(inline_autocomplete_offset);
   }

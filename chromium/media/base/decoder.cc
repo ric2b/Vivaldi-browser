@@ -52,8 +52,6 @@ std::string GetDecoderName(VideoDecoderType type) {
       return "V4L2VideoDecoder";
     case VideoDecoderType::kVivWMFDecoder:
       return "WMFVideoDecoder";
-    case VideoDecoderType::kVivPassThrough:
-      return "PassThroughVideoDecoder";
     case VideoDecoderType::kTesting:
       return "Testing or Mock Video decoder";
     case VideoDecoderType::kOutOfProcess:
@@ -85,8 +83,6 @@ std::string GetDecoderName(AudioDecoderType type) {
       return "AudioToolboxAudioDecoder";
     case AudioDecoderType::kMediaFoundation:
       return "MediaFoundationAudioDecoder";
-    case AudioDecoderType::kVivPassThrough:
-      return "PassThroughAudioDecoder";
   }
 }
 

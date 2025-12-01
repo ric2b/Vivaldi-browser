@@ -14,6 +14,7 @@
 #include "third_party/blink/renderer/core/layout/length_utils.h"
 #include "third_party/blink/renderer/core/layout/logical_box_fragment.h"
 #include "third_party/blink/renderer/core/layout/physical_box_fragment.h"
+#include "third_party/blink/renderer/core/layout/space_utils.h"
 #include "third_party/blink/renderer/core/style/computed_style.h"
 #include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 
@@ -306,7 +307,7 @@ LogicalOffset GetFragmentainerProgression(const BoxFragmentBuilder& builder,
                                           FragmentationType type) {
   if (type == kFragmentColumn) {
     LayoutUnit column_inline_progression = ColumnInlineProgression(
-        builder.ChildAvailableSize().inline_size, builder.Style());
+        builder.Style(), builder.ChildAvailableSize().inline_size);
     return LogicalOffset(column_inline_progression, LayoutUnit());
   }
   DCHECK_EQ(type, kFragmentPage);
@@ -1388,7 +1389,8 @@ ConstraintSpace CreateConstraintSpaceForFragmentainer(
     LogicalSize fragmentainer_size,
     LogicalSize percentage_resolution_size,
     bool balance_columns,
-    BreakAppeal min_break_appeal) {
+    BreakAppeal min_break_appeal,
+    const BoxFragmentBuilder* container_builder) {
   ConstraintSpaceBuilder space_builder(
       parent_space, parent_space.GetWritingDirection(), /* is_new_fc */ true);
   space_builder.SetAvailableSize(fragmentainer_size);
@@ -1408,6 +1410,10 @@ ConstraintSpace CreateConstraintSpaceForFragmentainer(
   space_builder.SetMinBreakAppeal(min_break_appeal);
   space_builder.SetBaselineAlgorithmType(
       parent_space.GetBaselineAlgorithmType());
+
+  if (container_builder && container_builder->ShouldTextBoxTrim()) {
+    SetTextBoxTrimOnChildSpaceBuilder(*container_builder, &space_builder);
+  }
 
   return space_builder.ToConstraintSpace();
 }

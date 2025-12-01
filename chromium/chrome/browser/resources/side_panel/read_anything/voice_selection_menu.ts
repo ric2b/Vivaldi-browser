@@ -7,7 +7,6 @@ import '//resources/cr_elements/cr_lazy_render/cr_lazy_render_lit.js';
 import '//resources/cr_elements/cr_icon/cr_icon.js';
 import '//resources/cr_elements/icons.html.js';
 import '//resources/cr_elements/cr_action_menu/cr_action_menu.js';
-import '//resources/cr_elements/cr_lazy_render/cr_lazy_render.js';
 import './language_menu.js';
 
 import type {CrActionMenuElement} from '//resources/cr_elements/cr_action_menu/cr_action_menu.js';
@@ -22,7 +21,12 @@ import {openMenu, spinnerDebounceTimeout, ToolbarEvent} from './common.js';
 import type {LanguageMenuElement} from './language_menu.js';
 import {ReadAloudSettingsChange} from './metrics_browser_proxy.js';
 import {ReadAnythingLogger} from './read_anything_logger.js';
-import {areVoicesEqual, convertLangOrLocaleForVoicePackManager, isGoogle, isNatural, NotificationType} from './voice_language_util.js';
+// clang-format off
+// <if expr="not is_chromeos">
+import {isGoogle} from './voice_language_util.js';
+// </if>
+// clang-format on
+import {areVoicesEqual, convertLangOrLocaleForVoicePackManager, isNatural, NotificationType} from './voice_language_util.js';
 import {VoiceNotificationManager} from './voice_notification_manager.js';
 import type {VoiceNotificationListener} from './voice_notification_manager.js';
 import {getCss} from './voice_selection_menu.css.js';
@@ -139,7 +143,10 @@ export class VoiceSelectionMenuElement extends VoiceSelectionMenuElementBase
     }
   }
 
-  notify(language: string, type: NotificationType) {
+  notify(type: NotificationType, language?: string) {
+    if (!language) {
+      return;
+    }
     this.currentNotifications_ = {
       ...this.currentNotifications_,
       [language]: type,
@@ -212,7 +219,7 @@ export class VoiceSelectionMenuElement extends VoiceSelectionMenuElementBase
         }, {} as {[language: string]: VoiceDropdownItem[]});
 
     for (const lang of Object.keys(languageToVoices)) {
-      languageToVoices[lang].sort(voiceQualityRankComparator);
+      languageToVoices[lang]!.sort(voiceQualityRankComparator);
     }
 
     return Object.entries(languageToVoices).map(([
@@ -356,7 +363,7 @@ export class VoiceSelectionMenuElement extends VoiceSelectionMenuElementBase
       const visiblePreviewButton =
           currentElement.querySelector<HTMLElement>('#preview-icon');
       assert(visiblePreviewButton, 'can\'t find preview button');
-      visiblePreviewButton!.focus();
+      visiblePreviewButton.focus();
     }
     // This action is also handled by the menu itself
     // For left arrow, this takes us to the voice being previewed,
@@ -405,7 +412,7 @@ export class VoiceSelectionMenuElement extends VoiceSelectionMenuElementBase
     const voiceIndex = Number.parseInt(
         (e.currentTarget as HTMLElement).dataset['voiceIndex']!);
 
-    return this.voiceGroups_[groupIndex].voices[voiceIndex];
+    return this.voiceGroups_[groupIndex]!.voices[voiceIndex]!;
   }
 
   private computeErrorMessages_(): string[] {

@@ -153,7 +153,7 @@ class CookieSettingsTestBase : public testing::Test {
     return ContentSettingPatternSource(
         ContentSettingsPattern::FromString(primary_pattern),
         ContentSettingsPattern::FromString(secondary_pattern),
-        base::Value(setting), source, off_the_record, metadata);
+        base::Value(setting), source, off_the_record, std::move(metadata));
   }
 
   void FastForwardTime(base::TimeDelta delta) {
@@ -1375,25 +1375,17 @@ TEST_P(CookieSettingsTestP, IsPrivacyModeEnabled) {
 
 TEST_P(CookieSettingsTestP, IsCookieAccessible_SameSiteNoneCookie) {
   CookieSettings settings;
-  net::CookieInclusionStatus status;
-  settings.set_block_third_party_cookies(false);
-
-  std::unique_ptr<net::CanonicalCookie> cookie =
-      MakeCanonicalSameSiteNoneCookie("name", kURL);
-
-  EXPECT_TRUE(settings.IsCookieAccessible(
-      *cookie, GURL(kURL), net::SiteForCookies(),
-      url::Origin::Create(GURL(kOtherURL)), net::FirstPartySetMetadata(),
-      GetCookieSettingOverrides(), &status));
-
   settings.set_block_third_party_cookies(true);
   if (IsTrackingProtectionEnabledFor3pcd()) {
     settings.set_tracking_protection_enabled_for_3pcd(true);
   }
 
+  std::unique_ptr<net::CanonicalCookie> cookie =
+      MakeCanonicalSameSiteNoneCookie("name", kURL);
+
   // Third-party cookies are blocked, so the cookie should not be accessible by
   // default in a third-party context.
-  status.ResetForTesting();
+  net::CookieInclusionStatus status;
   EXPECT_FALSE(settings.IsCookieAccessible(
       *cookie, GURL(kURL), net::SiteForCookies(),
       url::Origin::Create(GURL(kOtherURL)), net::FirstPartySetMetadata(),
@@ -1457,25 +1449,15 @@ TEST_P(CookieSettingsTestP, IsCookieAccessible_SameSiteNoneCookie) {
 
 TEST_P(CookieSettingsTestP, IsCookieAccessible_SameSiteLaxCookie) {
   CookieSettings settings;
-  net::CookieInclusionStatus status;
-  settings.set_block_third_party_cookies(false);
-
-  std::unique_ptr<net::CanonicalCookie> cookie =
-      MakeCanonicalCookie("name", kURL);
-
-  EXPECT_TRUE(settings.IsCookieAccessible(
-      *cookie, GURL(kURL), net::SiteForCookies(),
-      url::Origin::Create(GURL(kOtherURL)), net::FirstPartySetMetadata(),
-      GetCookieSettingOverrides(), &status));
-  EXPECT_FALSE(status.HasWarningReason(
-      net::CookieInclusionStatus::WarningReason::WARN_THIRD_PARTY_PHASEOUT));
-
   settings.set_block_third_party_cookies(true);
   if (IsTrackingProtectionEnabledFor3pcd()) {
     settings.set_tracking_protection_enabled_for_3pcd(true);
   }
 
-  status.ResetForTesting();
+  std::unique_ptr<net::CanonicalCookie> cookie =
+      MakeCanonicalCookie("name", kURL);
+
+  net::CookieInclusionStatus status;
   EXPECT_FALSE(settings.IsCookieAccessible(
       *cookie, GURL(kURL), net::SiteForCookies(),
       url::Origin::Create(GURL(kOtherURL)), net::FirstPartySetMetadata(),
@@ -2251,8 +2233,10 @@ TEST_P(
     CookieSettingsTestP,
     AnnotateAndMoveUserBlockedCookies_SitesInFirstPartySet_FirstPartyURLBlocked) {
   CookieSettings settings;
-  net::CookieInclusionStatus status;
-  settings.set_block_third_party_cookies(false);
+  settings.set_block_third_party_cookies(true);
+  if (IsTrackingProtectionEnabledFor3pcd()) {
+    settings.set_tracking_protection_enabled_for_3pcd(true);
+  }
   settings.set_content_settings(
       ContentSettingsType::COOKIES,
       {CreateSetting(kRwsOwnerURL, kRwsOwnerURL, CONTENT_SETTING_BLOCK)});
@@ -2266,19 +2250,6 @@ TEST_P(
   net::FirstPartySetEntry frame_entry(primary, net::SiteType::kAssociated, 1u);
   net::FirstPartySetEntry top_frame_entry(primary, net::SiteType::kPrimary,
                                           std::nullopt);
-  // Without third-party-cookie-blocking enabled, the cookie is accessible, even
-  // though cookies are blocked for the top-level URL.
-  ASSERT_TRUE(settings.IsCookieAccessible(
-      *cookie, GURL(kRwsMemberURL), net::SiteForCookies(), top_frame_origin,
-      net::FirstPartySetMetadata(frame_entry, top_frame_entry),
-      GetCookieSettingOverrides(), &status));
-
-  // Now we enable third-party-cookie-blocking, and verify that the right
-  // exclusion reasons are still applied.
-  settings.set_block_third_party_cookies(true);
-  if (IsTrackingProtectionEnabledFor3pcd()) {
-    settings.set_tracking_protection_enabled_for_3pcd(true);
-  }
 
   net::CookieAccessResultList maybe_included_cookies = {{*cookie, {}}};
   net::CookieAccessResultList excluded_cookies = {};
@@ -2465,44 +2436,6 @@ TEST_F(CookieSettingsTest, GetStorageAccessStatus) {
                     {net::CookieSettingOverride::
                          kStorageAccessGrantEligibleViaHeader})),
             net::cookie_util::StorageAccessStatus::kActive);
-}
-
-TEST_F(CookieSettingsTest,
-       StorageAccessHeaderOriginTrialSettingAllowedWhenSet) {
-  CookieSettings settings;
-  settings.set_content_settings(
-      ContentSettingsType::STORAGE_ACCESS_HEADER_ORIGIN_TRIAL,
-      {CreateSetting(kURL, kOtherURL, CONTENT_SETTING_ALLOW)});
-
-  EXPECT_TRUE(settings.IsStorageAccessHeadersEnabled(
-      GURL(kURL), url::Origin::Create(GURL(kOtherURL))));
-}
-
-TEST_F(CookieSettingsTest,
-       StorageAccessHeaderOriginTrialSettingUnaffectedByIrrelevantSetting) {
-  base::test::ScopedFeatureList features;
-  features.InitAndDisableFeature(network::features::kStorageAccessHeaders);
-  CookieSettings settings;
-  settings.set_content_settings(
-      ContentSettingsType::STORAGE_ACCESS,
-      {CreateSetting(kURL, kOtherURL, CONTENT_SETTING_ALLOW)});
-
-  EXPECT_FALSE(settings.IsStorageAccessHeadersEnabled(
-      GURL(kURL), url::Origin::Create(GURL(kOtherURL))));
-}
-
-TEST_F(
-    CookieSettingsTest,
-    StorageAccessHeaderOriginTrialSettingUnaffectedBySettingForDifferentPair) {
-  base::test::ScopedFeatureList features;
-  features.InitAndDisableFeature(network::features::kStorageAccessHeaders);
-  CookieSettings settings;
-  settings.set_content_settings(
-      ContentSettingsType::STORAGE_ACCESS_HEADER_ORIGIN_TRIAL,
-      {CreateSetting(kUnrelatedURL, kOtherURL, CONTENT_SETTING_ALLOW)});
-
-  EXPECT_FALSE(settings.IsStorageAccessHeadersEnabled(
-      GURL(kURL), url::Origin::Create(GURL(kOtherURL))));
 }
 
 TEST_F(CookieSettingsTest,

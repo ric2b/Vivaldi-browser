@@ -7,13 +7,27 @@
 #include <type_traits>
 #include <utility>
 
+#include "base/containers/to_vector.h"
+#include "base/strings/strcat.h"
 #include "base/strings/utf_string_conversions.h"
-#include "components/autofill/core/browser/data_model/credit_card.h"
+#include "components/autofill/core/browser/data_model/payments/credit_card.h"
 #include "components/autofill/core/browser/suggestions/suggestion_type.h"
 
 namespace autofill {
 
 namespace {
+
+std::string ConvertMinorTextToPrintableString(Suggestion suggestion) {
+  std::vector<std::string> fragments;
+  for (size_t index = 0; index < suggestion.minor_texts.size(); index++) {
+    fragments.push_back(base::StrCat(
+        {"minor_text_", base::NumberToString(index), ": \"",
+         base::UTF16ToUTF8(suggestion.minor_texts[index].value), "\" ",
+         (suggestion.minor_texts[index].is_primary ? "(Primary)\n"
+                                                   : "(Not Primary)\n")}));
+  }
+  return base::StrCat(fragments);
+}
 
 std::string_view ConvertAcceptabilityToPrintableString(
     Suggestion::Acceptability acceptability) {
@@ -58,16 +72,20 @@ std::string_view ConvertIconToPrintableString(Suggestion::Icon icon) {
       return "kGooglePasswordManager";
     case Suggestion::Icon::kGooglePay:
       return "kGooglePay";
-    case Suggestion::Icon::kGooglePayDark:
-      return "kGooglePayDark";
+    case Suggestion::Icon::kHome:
+      return "kHome";
     case Suggestion::Icon::kHttpWarning:
       return "kHttpWarning";
     case Suggestion::Icon::kHttpsInvalid:
       return "kHttpsInvalid";
+    case Suggestion::Icon::kIdCard:
+      return "kIdCard";
     case Suggestion::Icon::kKey:
       return "kKey";
     case Suggestion::Icon::kLocation:
       return "kLocation";
+    case Suggestion::Icon::kLoyalty:
+      return "kLoyalty";
     case Suggestion::Icon::kMagic:
       return "kMagic";
     case Suggestion::Icon::kOfferTag:
@@ -78,12 +96,14 @@ std::string_view ConvertIconToPrintableString(Suggestion::Icon icon) {
       return "kScanCreditCard";
     case Suggestion::Icon::kSettings:
       return "kSettings";
-    case Suggestion::Icon::kAutofillAi:
-      return "kAutofillAi";
     case Suggestion::Icon::kSettingsAndroid:
       return "kSettingsAndroid";
     case Suggestion::Icon::kUndo:
       return "kUndo";
+    case Suggestion::Icon::kVehicle:
+      return "kVehicle";
+    case Suggestion::Icon::kWork:
+      return "kWork";
     case Suggestion::Icon::kCardGeneric:
       return "kCardGeneric";
     case Suggestion::Icon::kCardAmericanExpress:
@@ -171,11 +191,8 @@ Suggestion::PlusAddressPayload::~PlusAddressPayload() = default;
 
 Suggestion::AutofillAiPayload::AutofillAiPayload() = default;
 
-Suggestion::AutofillAiPayload::AutofillAiPayload(
-    const base::flat_map<FieldGlobalId, std::u16string>& values_to_fill,
-    const DenseSet<FieldFillingSkipReason>& ignorable_skip_reasons)
-    : values_to_fill(std::move(values_to_fill)),
-      ignorable_skip_reasons(std::move(ignorable_skip_reasons)) {}
+Suggestion::AutofillAiPayload::AutofillAiPayload(base::Uuid guid)
+    : guid(std::move(guid)) {}
 
 Suggestion::AutofillAiPayload::AutofillAiPayload(const AutofillAiPayload&) =
     default;
@@ -213,6 +230,28 @@ Suggestion::AutofillProfilePayload::operator=(AutofillProfilePayload&&) =
     default;
 
 Suggestion::AutofillProfilePayload::~AutofillProfilePayload() = default;
+
+Suggestion::IdentityCredentialPayload::IdentityCredentialPayload() = default;
+Suggestion::IdentityCredentialPayload::IdentityCredentialPayload(
+    GURL configURL,
+    std::string account_id)
+    : config_url(std::move(configURL)), account_id(std::move(account_id)) {}
+
+Suggestion::IdentityCredentialPayload::IdentityCredentialPayload(
+    const IdentityCredentialPayload&) = default;
+
+Suggestion::IdentityCredentialPayload::IdentityCredentialPayload(
+    IdentityCredentialPayload&&) = default;
+
+Suggestion::IdentityCredentialPayload&
+Suggestion::IdentityCredentialPayload::operator=(
+    const IdentityCredentialPayload&) = default;
+
+Suggestion::IdentityCredentialPayload&
+Suggestion::IdentityCredentialPayload::operator=(IdentityCredentialPayload&&) =
+    default;
+
+Suggestion::IdentityCredentialPayload::~IdentityCredentialPayload() = default;
 
 Suggestion::PaymentsPayload::PaymentsPayload() = default;
 
@@ -283,7 +322,7 @@ Suggestion::Suggestion(std::string_view main_text,
       main_text(base::UTF8ToUTF16(main_text), Text::IsPrimary(true)),
       icon(icon) {
   if (!label.empty()) {
-    this->labels = {{Text(base::UTF8ToUTF16(label))}};
+    labels = {{Text(base::UTF8ToUTF16(label))}};
   }
 }
 
@@ -297,16 +336,21 @@ Suggestion::Suggestion(std::string_view main_text,
       icon(icon) {}
 
 Suggestion::Suggestion(std::string_view main_text,
-                       std::string_view minor_text,
+                       base::span<const std::string> minor_text_labels,
                        std::string_view label,
                        Icon icon,
                        SuggestionType type)
     : type(type),
       main_text(base::UTF8ToUTF16(main_text), Text::IsPrimary(true)),
-      minor_text(base::UTF8ToUTF16(minor_text)),
+      minor_texts(base::ToVector(minor_text_labels,
+                                 [](std::string_view minor_text) {
+                                   return Text(
+                                       base::UTF8ToUTF16(minor_text),
+                                       Suggestion::Text::IsPrimary(true));
+                                 })),
       icon(icon) {
   if (!label.empty()) {
-    this->labels = {{Text(base::UTF8ToUTF16(label))}};
+    labels = {{Text(base::UTF8ToUTF16(label))}};
   }
 }
 
@@ -345,8 +389,7 @@ void PrintTo(const Suggestion& suggestion, std::ostream* os) {
       << "Suggestion (type:" << suggestion.type << ", main_text:\""
       << suggestion.main_text.value << "\""
       << (suggestion.main_text.is_primary ? "(Primary)" : "(Not Primary)")
-      << ", minor_text:\"" << suggestion.minor_text.value << "\""
-      << (suggestion.minor_text.is_primary ? "(Primary)" : "(Not Primary)")
+      << ConvertMinorTextToPrintableString(suggestion)
       << ", additional_label: \"" << suggestion.additional_label << "\""
       << ", acceptability: \""
       << ConvertAcceptabilityToPrintableString(suggestion.acceptability) << "\""

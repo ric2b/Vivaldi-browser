@@ -2,13 +2,13 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifndef V8_COMPILER_TURBOSHAFT_WASM_LOWERING_REDUCER_H_
+#define V8_COMPILER_TURBOSHAFT_WASM_LOWERING_REDUCER_H_
+
 #include "src/compiler/turboshaft/builtin-call-descriptors.h"
 #if !V8_ENABLE_WEBASSEMBLY
 #error This header should only be included if WebAssembly is enabled.
 #endif  // !V8_ENABLE_WEBASSEMBLY
-
-#ifndef V8_COMPILER_TURBOSHAFT_WASM_LOWERING_REDUCER_H_
-#define V8_COMPILER_TURBOSHAFT_WASM_LOWERING_REDUCER_H_
 
 #include "src/compiler/globals.h"
 #include "src/compiler/turboshaft/assembler.h"
@@ -41,12 +41,10 @@ class WasmLoweringReducer : public Next {
     return LowerGlobalSetOrGet(instance, value, global, GlobalMode::kStore);
   }
 
-  OpIndex REDUCE(Null)(wasm::ValueType type) {
+  OpIndex REDUCE(RootConstant)(RootIndex index) {
     OpIndex roots = __ LoadRootRegister();
-    RootIndex index =
-        type.use_wasm_null() ? RootIndex::kWasmNull : RootIndex::kNullValue;
-    // We load WasmNull as a pointer here and not as a TaggedPointer because
-    // WasmNull is stored uncompressed in the IsolateData, and a load of a
+    // We load the value as a pointer here and not as a TaggedPointer because
+    // it is stored uncompressed in the IsolateData, and a load of a
     // TaggedPointer loads compressed pointers.
 #if V8_TARGET_BIG_ENDIAN
     // On big endian a full pointer load is needed as otherwise the wrong half
@@ -62,15 +60,27 @@ class WasmLoweringReducer : public Next {
 #endif
   }
 
-  V<Word32> REDUCE(IsNull)(OpIndex object, wasm::ValueType type) {
+  V<Word32> REDUCE(IsRootConstant)(OpIndex object, RootIndex index) {
 #if V8_STATIC_ROOTS_BOOL
-    V<Object> null_value = V<Object>::Cast(__ UintPtrConstant(
-        type.use_wasm_null() ? StaticReadOnlyRoot::kWasmNull
-                             : StaticReadOnlyRoot::kNullValue));
-#else
-    V<Object> null_value = __ Null(type);
+    if (RootsTable::IsReadOnly(index)) {
+      V<Object> root = V<Object>::Cast(__ UintPtrConstant(
+          StaticReadOnlyRootsPointerTable[static_cast<size_t>(index)]));
+      return __ TaggedEqual(object, root);
+    }
 #endif
-    return __ TaggedEqual(object, null_value);
+    return __ TaggedEqual(object, __ RootConstant(index));
+  }
+
+  OpIndex REDUCE(Null)(wasm::ValueType type) {
+    RootIndex index =
+        type.use_wasm_null() ? RootIndex::kWasmNull : RootIndex::kNullValue;
+    return ReduceRootConstant(index);
+  }
+
+  V<Word32> REDUCE(IsNull)(OpIndex object, wasm::ValueType type) {
+    RootIndex index =
+        type.use_wasm_null() ? RootIndex::kWasmNull : RootIndex::kNullValue;
+    return ReduceIsRootConstant(object, index);
   }
 
   V<Object> REDUCE(AssertNotNull)(V<Object> object, wasm::ValueType type,
@@ -543,7 +553,6 @@ class WasmLoweringReducer : public Next {
         return MemoryRepresentation::Float64();
       case wasm::kS128:
         return MemoryRepresentation::Simd128();
-      case wasm::kRtt:
       case wasm::kRef:
       case wasm::kRefNull:
         return MemoryRepresentation::AnyTagged();
@@ -732,7 +741,10 @@ class WasmLoweringReducer : public Next {
 
     V<Map> map = __ LoadMapField(object);
 
-    if (module_->type(config.to.ref_index()).is_final) {
+    DCHECK_IMPLIES(module_->type(config.to.ref_index()).is_final,
+                   config.exactness == kExactMatchOnly);
+
+    if (config.exactness == kExactMatchOnly) {
       __ TrapIfNot(__ TaggedEqual(map, rtt.value()), TrapId::kTrapIllegalCast);
       GOTO(end_label);
     } else {
@@ -801,7 +813,10 @@ class WasmLoweringReducer : public Next {
 
     V<Map> map = __ LoadMapField(object);
 
-    if (module_->type(config.to.ref_index()).is_final) {
+    DCHECK_IMPLIES(module_->type(config.to.ref_index()).is_final,
+                   config.exactness == kExactMatchOnly);
+
+    if (config.exactness == kExactMatchOnly) {
       GOTO(end_label, __ TaggedEqual(map, rtt.value()));
     } else {
       // First, check if types happen to be equal. This has been shown to give

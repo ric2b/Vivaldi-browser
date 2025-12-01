@@ -312,6 +312,10 @@ var gniExportDescs = []exporter.GNIExportDesc{
 				"//src/ports:typeface_fontations_hdrs",
 				"//src/ports:typeface_fontations_srcs",
 			}},
+		{Var: "skia_ports_fontations_bridge_rust_side_sources",
+			Rules: []string{
+				"//src/ports/fontations:bridge_rust_side_srcs",
+			}},
 		{Var: "skia_ports_typeface_proxy_sources",
 			Rules: []string{
 				"//src/ports:typeface_proxy_hdrs",
@@ -350,6 +354,8 @@ var gniExportDescs = []exporter.GNIExportDesc{
 				"//src/pdf:_pdf_hdrs",
 				"//src/pdf:_pdf_srcs",
 			}},
+		{Var: "skia_pdf_jpeg_public",
+			Rules: []string{"//include/docs:pdf_jpeg_hdrs"}},
 	}},
 	{GNI: "gn/sksl.gni", Vars: []exporter.GNIFileListExportDesc{
 		{Var: "skia_sksl_core_sources",
@@ -711,6 +717,8 @@ var gniExportDescs = []exporter.GNIExportDesc{
 			Rules: []string{"//modules/skunicode/src:icu4x_srcs"}},
 		{Var: "skia_unicode_client_icu_sources",
 			Rules: []string{"//modules/skunicode/src:client_srcs"}},
+		{Var: "skia_unicode_bidi_sources",
+			Rules: []string{"//modules/skunicode/src:bidi_srcs"}},
 		{Var: "skia_unicode_builtin_icu_sources",
 			Rules: []string{"//modules/skunicode/src:builtin_srcs"}},
 		{Var: "skia_unicode_runtime_icu_sources",

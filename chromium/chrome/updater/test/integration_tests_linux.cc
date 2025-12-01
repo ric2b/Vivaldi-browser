@@ -141,17 +141,16 @@ void ExpectMostlyClean(std::optional<base::FilePath> path) {
   int count = CountDirectoryFiles(*path);
   EXPECT_LE(count, 2);
   if (count >= 1) {
-    EXPECT_TRUE(base::PathExists(path->AppendASCII("updater.log")));
+    EXPECT_TRUE(base::PathExists(path->Append("updater.log")));
   }
   if (count == 2) {
-    EXPECT_TRUE(base::PathExists(path->AppendASCII("prefs.json")));
+    EXPECT_TRUE(base::PathExists(path->Append("prefs.json")));
   }
 }
 
 void ExpectClean(UpdaterScope scope) {
   ExpectCleanProcesses();
   ExpectMostlyClean(GetInstallDirectory(scope));
-  ExpectMostlyClean(GetCacheBaseDirectory(scope));
   EXPECT_FALSE(SystemdUnitsInstalled(scope));
   ASSERT_NO_FATAL_FAILURE(ExpectEnterpriseCompanionAppNotInstalled());
 }
@@ -192,16 +191,16 @@ std::vector<TestUpdaterVersion> GetRealUpdaterLowerVersions(
   EXPECT_TRUE(base::PathService::Get(base::DIR_EXE, &exe_path));
   base::FilePath old_updater_path =
       exe_path.Append(FILE_PATH_LITERAL("old_updater"))
-          .AppendASCII(base::StrCat({base::ToLowerASCII(BROWSER_NAME_STRING),
-                                     "_linux64", arch_suffix}));
+          .Append(base::StrCat({base::ToLowerASCII(BROWSER_NAME_STRING),
+                                "_linux64", arch_suffix}));
 
 #if BUILDFLAG(CHROMIUM_BRANDING) || BUILDFLAG(GOOGLE_CHROME_BRANDING)
-  old_updater_path = old_updater_path.AppendASCII("cipd");
+  old_updater_path = old_updater_path.Append("cipd");
 #endif
 
   // Linux currently does not have a way to get version information for the
   // executable via `FileVersionInfo`.
-  return {{old_updater_path.AppendASCII(
+  return {{old_updater_path.Append(
                base::StrCat({kExecutableName, kExecutableSuffix})),
            {}}};
 }

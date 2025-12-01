@@ -11,6 +11,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <array>
 #include <memory>
 #include <string>
 
@@ -28,6 +29,7 @@
 #include "net/base/net_error_details.h"
 #include "net/base/net_errors.h"
 #include "net/base/request_priority.h"
+#include "net/base/tracing.h"
 #include "net/http/http_cache.h"
 #include "net/http/http_request_headers.h"
 #include "net/http/http_response_headers.h"
@@ -150,6 +152,8 @@ class NET_EXPORT_PRIVATE HttpCache::Transaction : public HttpTransaction {
   LoadState GetLoadState() const override;
   void SetQuicServerInfo(QuicServerInfo* quic_server_info) override;
   bool GetLoadTimingInfo(LoadTimingInfo* load_timing_info) const override;
+  void PopulateLoadTimingInternalInfo(
+      LoadTimingInternalInfo* load_timing_internal_info) const override;
   bool GetRemoteEndpoint(IPEndPoint* endpoint) const override;
   void PopulateNetErrorDetails(NetErrorDetails* details) const override;
   void SetPriority(RequestPriority priority) override;
@@ -199,9 +203,14 @@ class NET_EXPORT_PRIVATE HttpCache::Transaction : public HttpTransaction {
   // Helper struct to pair a header name with its value, for
   // headers used to validate cache entries.
   struct ValidationHeaders {
-    ValidationHeaders() = default;
+    ValidationHeaders();
 
-    std::string values[kNumValidationHeaders];
+    ValidationHeaders(const ValidationHeaders&) = delete;
+    ValidationHeaders& operator=(const ValidationHeaders&) = delete;
+
+    ~ValidationHeaders();
+
+    std::array<std::string, kNumValidationHeaders> values;
     void Reset() {
       initialized = false;
       for (auto& value : values) {
@@ -320,7 +329,8 @@ class NET_EXPORT_PRIVATE HttpCache::Transaction : public HttpTransaction {
     kCouldntConditionalize = 8,    // Couldn't send conditional request.
     kValidated = 9,                // Original URL response was revalidated.
     kUpdated = 10,                 // Original URL response was updated.
-    kMaxValue = kUpdated,
+    kCacheLockTimeout = 11,        // Failed to get cache lock; cache not used.
+    kMaxValue = kCacheLockTimeout,
   };
   // LINT.ThenChange(//tools/metrics/histograms/metadata/net/enums.xml:NoVarySearchUseResult)
 
@@ -630,8 +640,12 @@ class NET_EXPORT_PRIVATE HttpCache::Transaction : public HttpTransaction {
   // Removes the used NoVarySearchCache entry from the NoVarySearchCache, sets
   // `use_no_vary_search_cache_` to false, and restarts the transaction from the
   // beginning.
-  int RestartWithoutNoVarySearchCache(RestartCacheEntryAction entry_action,
-                                      NoVarySearchUseResult restart_reason);
+  [[nodiscard]] int RestartWithoutNoVarySearchCache(
+      RestartCacheEntryAction entry_action,
+      NoVarySearchUseResult restart_reason);
+
+  static std::string_view NoVarySearchUseResultToString(
+      NoVarySearchUseResult result);
 
   // If `mutable_request_` has not been initialized, initialize it by making a
   // shallow copy of `request_`, and then modify `request_` to point to it.
@@ -647,8 +661,8 @@ class NET_EXPORT_PRIVATE HttpCache::Transaction : public HttpTransaction {
   // the cache transaction completes (or times out).
   std::optional<int> pending_io_result_ = std::nullopt;
 
-  // Used for tracing.
-  const uint64_t trace_id_;
+  // Used for state change trace events.
+  const perfetto::Track track_for_state_change_;
 
   // Initial request with which Start() was invoked.
   raw_ptr<const HttpRequestInfo> initial_request_ = nullptr;
@@ -750,6 +764,7 @@ class NET_EXPORT_PRIVATE HttpCache::Transaction : public HttpTransaction {
   bool recorded_histograms_ = false;
   bool has_opened_or_created_entry_ = false;
   bool record_entry_open_or_creation_time_ = false;
+  bool recorded_response_freshness_is_zero_ = false;
 
   NetworkTransactionInfo network_transaction_info_;
 

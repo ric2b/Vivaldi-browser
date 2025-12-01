@@ -16,7 +16,6 @@
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/enterprise/identifiers/profile_id_service_factory.h"
 #include "chrome/browser/enterprise/signals/device_info_fetcher.h"
-#include "chrome/browser/enterprise/signals/signals_common.h"
 #include "chrome/browser/extensions/api/enterprise_reporting_private/chrome_desktop_report_request_helper.h"
 #include "chrome/browser/extensions/api/enterprise_reporting_private/enterprise_reporting_private_api.h"
 #include "chrome/browser/extensions/extension_api_unittest.h"
@@ -29,6 +28,7 @@
 #include "chrome/test/base/testing_profile.h"
 #include "chrome/test/base/testing_profile_manager.h"
 #include "components/component_updater/pref_names.h"
+#include "components/device_signals/core/common/common_types.h"
 #include "components/enterprise/browser/controller/fake_browser_dm_token_storage.h"
 #include "components/enterprise/browser/identifiers/profile_id_service.h"
 #include "components/enterprise/connectors/core/connectors_prefs.h"
@@ -38,7 +38,6 @@
 #include "components/safe_browsing/core/common/safe_browsing_prefs.h"
 #include "components/version_info/version_info.h"
 #include "extensions/browser/api_test_utils.h"
-#include "extensions/browser/extension_function_dispatcher.h"
 #include "google_apis/gaia/gaia_id.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -78,7 +77,7 @@
 namespace enterprise_reporting_private =
     ::extensions::api::enterprise_reporting_private;
 
-using SettingValue = enterprise_signals::SettingValue;
+using SettingValue = device_signals::SettingValue;
 using ::testing::_;
 using ::testing::Eq;
 using ::testing::Invoke;
@@ -176,10 +175,8 @@ TEST_F(EnterpriseReportingPrivateDeviceDataFunctionsTest, StoreDeviceData) {
   base::Value::List values;
   values.Append("a");
   values.Append(base::Value::BlobStorage({1, 2, 3}));
-  api_test_utils::RunFunction(
-      function.get(), std::move(values),
-      std::make_unique<ExtensionFunctionDispatcher>(profile()),
-      extensions::api_test_utils::FunctionMode::kNone);
+  api_test_utils::RunFunction(function.get(), std::move(values), profile(),
+                              extensions::api_test_utils::FunctionMode::kNone);
   ASSERT_TRUE(function->GetResultListForTest());
   EXPECT_EQ(0u, function->GetResultListForTest()->size());
   EXPECT_TRUE(function->GetError().empty());
@@ -190,10 +187,8 @@ TEST_F(EnterpriseReportingPrivateDeviceDataFunctionsTest, DeviceDataMissing) {
       base::MakeRefCounted<EnterpriseReportingPrivateGetDeviceDataFunction>();
   base::Value::List values;
   values.Append("b");
-  api_test_utils::RunFunction(
-      function.get(), std::move(values),
-      std::make_unique<ExtensionFunctionDispatcher>(profile()),
-      extensions::api_test_utils::FunctionMode::kNone);
+  api_test_utils::RunFunction(function.get(), std::move(values), profile(),
+                              extensions::api_test_utils::FunctionMode::kNone);
   ASSERT_TRUE(function->GetResultListForTest());
   EXPECT_EQ(1u, function->GetResultListForTest()->size());
   EXPECT_TRUE(function->GetError().empty());
@@ -209,10 +204,9 @@ TEST_F(EnterpriseReportingPrivateDeviceDataFunctionsTest, DeviceBadId) {
   base::Value::List set_values;
   set_values.Append("a/b");
   set_values.Append(base::Value::BlobStorage({1, 2, 3}));
-  api_test_utils::RunFunction(
-      set_function.get(), std::move(set_values),
-      std::make_unique<ExtensionFunctionDispatcher>(profile()),
-      extensions::api_test_utils::FunctionMode::kNone);
+  api_test_utils::RunFunction(set_function.get(), std::move(set_values),
+                              profile(),
+                              extensions::api_test_utils::FunctionMode::kNone);
   ASSERT_TRUE(set_function->GetError().empty());
 
   // Try to read the directory as a file and should fail.
@@ -220,10 +214,8 @@ TEST_F(EnterpriseReportingPrivateDeviceDataFunctionsTest, DeviceBadId) {
       base::MakeRefCounted<EnterpriseReportingPrivateGetDeviceDataFunction>();
   base::Value::List values;
   values.Append("a");
-  api_test_utils::RunFunction(
-      function.get(), std::move(values),
-      std::make_unique<ExtensionFunctionDispatcher>(profile()),
-      extensions::api_test_utils::FunctionMode::kNone);
+  api_test_utils::RunFunction(function.get(), std::move(values), profile(),
+                              extensions::api_test_utils::FunctionMode::kNone);
   ASSERT_TRUE(function->GetResultListForTest());
   EXPECT_EQ(0u, function->GetResultListForTest()->size());
   EXPECT_FALSE(function->GetError().empty());
@@ -235,20 +227,17 @@ TEST_F(EnterpriseReportingPrivateDeviceDataFunctionsTest, RetrieveDeviceData) {
   base::Value::List set_values;
   set_values.Append("c");
   set_values.Append(base::Value::BlobStorage({1, 2, 3}));
-  api_test_utils::RunFunction(
-      set_function.get(), std::move(set_values),
-      std::make_unique<ExtensionFunctionDispatcher>(profile()),
-      extensions::api_test_utils::FunctionMode::kNone);
+  api_test_utils::RunFunction(set_function.get(), std::move(set_values),
+                              profile(),
+                              extensions::api_test_utils::FunctionMode::kNone);
   ASSERT_TRUE(set_function->GetError().empty());
 
   auto get_function =
       base::MakeRefCounted<EnterpriseReportingPrivateGetDeviceDataFunction>();
   base::Value::List values;
   values.Append("c");
-  api_test_utils::RunFunction(
-      get_function.get(), std::move(values),
-      std::make_unique<ExtensionFunctionDispatcher>(profile()),
-      extensions::api_test_utils::FunctionMode::kNone);
+  api_test_utils::RunFunction(get_function.get(), std::move(values), profile(),
+                              extensions::api_test_utils::FunctionMode::kNone);
   ASSERT_TRUE(get_function->GetResultListForTest());
   const base::Value& single_result = (*get_function->GetResultListForTest())[0];
   EXPECT_TRUE(get_function->GetError().empty());
@@ -260,20 +249,18 @@ TEST_F(EnterpriseReportingPrivateDeviceDataFunctionsTest, RetrieveDeviceData) {
       base::MakeRefCounted<EnterpriseReportingPrivateSetDeviceDataFunction>();
   base::Value::List reset_values;
   reset_values.Append("c");
-  api_test_utils::RunFunction(
-      set_function2.get(), std::move(reset_values),
-      std::make_unique<ExtensionFunctionDispatcher>(profile()),
-      extensions::api_test_utils::FunctionMode::kNone);
+  api_test_utils::RunFunction(set_function2.get(), std::move(reset_values),
+                              profile(),
+                              extensions::api_test_utils::FunctionMode::kNone);
   ASSERT_TRUE(set_function2->GetError().empty());
 
   auto get_function2 =
       base::MakeRefCounted<EnterpriseReportingPrivateGetDeviceDataFunction>();
   base::Value::List values2;
   values2.Append("c");
-  api_test_utils::RunFunction(
-      get_function2.get(), std::move(values2),
-      std::make_unique<ExtensionFunctionDispatcher>(profile()),
-      extensions::api_test_utils::FunctionMode::kNone);
+  api_test_utils::RunFunction(get_function2.get(), std::move(values2),
+                              profile(),
+                              extensions::api_test_utils::FunctionMode::kNone);
   ASSERT_TRUE(get_function2->GetResultListForTest());
   EXPECT_EQ(1u, get_function2->GetResultListForTest()->size());
   EXPECT_TRUE(get_function2->GetError().empty());
@@ -476,14 +463,6 @@ class EnterpriseReportingPrivateGetContextInfoTest
 #endif
   }
 
-  void ExpectDefaultThirdPartyBlockingEnabled(
-      const enterprise_reporting_private::ContextInfo& info) {
-#if BUILDFLAG(IS_WIN) && BUILDFLAG(GOOGLE_CHROME_BRANDING)
-    EXPECT_TRUE(*info.third_party_blocking_enabled);
-#else
-    EXPECT_FALSE(info.third_party_blocking_enabled.has_value());
-#endif
-  }
 };
 
 TEST_F(EnterpriseReportingPrivateGetContextInfoTest, NoSpecialContext) {
@@ -508,45 +487,8 @@ TEST_F(EnterpriseReportingPrivateGetContextInfoTest, NoSpecialContext) {
       enterprise_reporting_private::PasswordProtectionTrigger::kPolicyUnset,
       info.password_protection_warning_trigger);
   EXPECT_FALSE(info.chrome_remote_desktop_app_blocked);
-  ExpectDefaultThirdPartyBlockingEnabled(info);
   EXPECT_TRUE(info.enterprise_profile_id);
 }
-
-#if BUILDFLAG(IS_WIN) && BUILDFLAG(GOOGLE_CHROME_BRANDING)
-class EnterpriseReportingPrivateGetContextInfoThirdPartyBlockingTest
-    : public EnterpriseReportingPrivateGetContextInfoTest,
-      public testing::WithParamInterface<bool> {};
-
-TEST_P(EnterpriseReportingPrivateGetContextInfoThirdPartyBlockingTest, Test) {
-  bool policyValue = GetParam();
-
-  g_browser_process->local_state()->SetBoolean(
-      prefs::kThirdPartyBlockingEnabled, policyValue);
-
-  enterprise_reporting_private::ContextInfo info = GetContextInfo();
-
-  EXPECT_TRUE(info.browser_affiliation_ids.empty());
-  EXPECT_TRUE(info.profile_affiliation_ids.empty());
-  EXPECT_TRUE(info.on_file_attached_providers.empty());
-  EXPECT_TRUE(info.on_file_downloaded_providers.empty());
-  EXPECT_TRUE(info.on_bulk_data_entry_providers.empty());
-  EXPECT_EQ(enterprise_reporting_private::RealtimeUrlCheckMode::kDisabled,
-            info.realtime_url_check_mode);
-  EXPECT_TRUE(info.on_security_event_providers.empty());
-  EXPECT_EQ(version_info::GetVersionNumber(), info.browser_version);
-  EXPECT_EQ(enterprise_reporting_private::SafeBrowsingLevel::kStandard,
-            info.safe_browsing_protection_level);
-  EXPECT_EQ(BuiltInDnsClientPlatformDefault(),
-            info.built_in_dns_client_enabled);
-  EXPECT_FALSE(info.chrome_remote_desktop_app_blocked);
-  EXPECT_EQ(policyValue, *info.third_party_blocking_enabled);
-}
-
-INSTANTIATE_TEST_SUITE_P(
-    ,
-    EnterpriseReportingPrivateGetContextInfoThirdPartyBlockingTest,
-    testing::Bool());
-#endif  // BUILDFLAG(IS_WIN) && BUILDFLAG(GOOGLE_CHROME_BRANDING)
 
 class EnterpriseReportingPrivateGetContextInfoSafeBrowsingTest
     : public EnterpriseReportingPrivateGetContextInfoTest,
@@ -589,7 +531,6 @@ TEST_P(EnterpriseReportingPrivateGetContextInfoSafeBrowsingTest, Test) {
   EXPECT_EQ(
       enterprise_reporting_private::PasswordProtectionTrigger::kPolicyUnset,
       info.password_protection_warning_trigger);
-  ExpectDefaultThirdPartyBlockingEnabled(info);
   EXPECT_TRUE(info.enterprise_profile_id);
 }
 
@@ -627,7 +568,6 @@ TEST_P(EnterpriseReportingPrivateGetContextInfoBuiltInDnsClientTest, Test) {
   EXPECT_EQ(
       enterprise_reporting_private::PasswordProtectionTrigger::kPolicyUnset,
       info.password_protection_warning_trigger);
-  ExpectDefaultThirdPartyBlockingEnabled(info);
   EXPECT_TRUE(info.enterprise_profile_id);
 }
 
@@ -682,7 +622,6 @@ TEST_P(EnterpriseReportingPrivateGetContextPasswordProtectionWarningTrigger,
             info.safe_browsing_protection_level);
   EXPECT_EQ(BuiltInDnsClientPlatformDefault(),
             info.built_in_dns_client_enabled);
-  ExpectDefaultThirdPartyBlockingEnabled(info);
   EXPECT_EQ(passwordTriggerValue, info.password_protection_warning_trigger);
   EXPECT_TRUE(info.enterprise_profile_id);
 }
@@ -728,7 +667,6 @@ class EnterpriseReportingPrivateGetContextOSFirewallLinuxTest
         enterprise_reporting_private::PasswordProtectionTrigger::kPolicyUnset,
         info.password_protection_warning_trigger);
     EXPECT_FALSE(info.chrome_remote_desktop_app_blocked);
-    ExpectDefaultThirdPartyBlockingEnabled(info);
     EXPECT_TRUE(info.enterprise_profile_id);
   }
 
@@ -836,7 +774,6 @@ class EnterpriseReportingPrivateGetContextInfoChromeRemoteDesktopAppBlockedTest
     EXPECT_EQ(
         enterprise_reporting_private::PasswordProtectionTrigger::kPolicyUnset,
         info.password_protection_warning_trigger);
-    ExpectDefaultThirdPartyBlockingEnabled(info);
     EXPECT_TRUE(info.enterprise_profile_id);
   }
 };
@@ -939,7 +876,7 @@ class EnterpriseReportingPrivateGetContextInfoOSFirewallTest
   }
 
   extensions::api::enterprise_reporting_private::SettingValue
-  ToInfoSettingValue(enterprise_signals::SettingValue value) {
+  ToInfoSettingValue(device_signals::SettingValue value) {
     switch (value) {
       case SettingValue::DISABLED:
         return extensions::api::enterprise_reporting_private::SettingValue::
@@ -977,7 +914,6 @@ TEST_P(EnterpriseReportingPrivateGetContextInfoOSFirewallTest, Test) {
       enterprise_reporting_private::PasswordProtectionTrigger::kPolicyUnset,
       info.password_protection_warning_trigger);
   EXPECT_FALSE(info.chrome_remote_desktop_app_blocked);
-  ExpectDefaultThirdPartyBlockingEnabled(info);
   EXPECT_EQ(ToInfoSettingValue(firewall_value_), info.os_firewall);
   EXPECT_TRUE(info.enterprise_profile_id);
 }
@@ -1040,7 +976,6 @@ TEST_P(EnterpriseReportingPrivateGetContextInfoRealTimeURLCheckTest, Test) {
   EXPECT_EQ(
       enterprise_reporting_private::PasswordProtectionTrigger::kPolicyUnset,
       info.password_protection_warning_trigger);
-  ExpectDefaultThirdPartyBlockingEnabled(info);
   EXPECT_TRUE(info.enterprise_profile_id);
 }
 
@@ -1121,10 +1056,8 @@ TEST_F(EnterpriseReportingPrivateEnqueueRecordFunctionTest,
   const auto dm_token = policy::DMToken::CreateValidToken(kTestDMTokenValue);
   policy::SetDMTokenForTesting(dm_token);
 
-  api_test_utils::RunFunction(
-      function_.get(), std::move(params),
-      std::make_unique<ExtensionFunctionDispatcher>(profile()),
-      extensions::api_test_utils::FunctionMode::kNone);
+  api_test_utils::RunFunction(function_.get(), std::move(params), profile(),
+                              extensions::api_test_utils::FunctionMode::kNone);
   EXPECT_EQ(function_->GetError(), kNoError);
 
   ::chromeos::MissiveClient::TestInterface* const missive_test_interface =
@@ -1163,10 +1096,8 @@ TEST_F(EnterpriseReportingPrivateEnqueueRecordFunctionTest,
   policy::SetDMTokenForTesting(
       policy::DMToken::CreateValidToken(kTestDMTokenValue));
 
-  api_test_utils::RunFunction(
-      function_.get(), std::move(params),
-      std::make_unique<ExtensionFunctionDispatcher>(profile()),
-      extensions::api_test_utils::FunctionMode::kNone);
+  api_test_utils::RunFunction(function_.get(), std::move(params), profile(),
+                              extensions::api_test_utils::FunctionMode::kNone);
 
   EXPECT_EQ(function_->GetError(),
             EnterpriseReportingPrivateEnqueueRecordFunction::
@@ -1194,10 +1125,8 @@ TEST_F(EnterpriseReportingPrivateEnqueueRecordFunctionTest,
   policy::SetDMTokenForTesting(
       policy::DMToken::CreateValidToken(kTestDMTokenValue));
 
-  api_test_utils::RunFunction(
-      function_.get(), std::move(params),
-      std::make_unique<ExtensionFunctionDispatcher>(profile()),
-      extensions::api_test_utils::FunctionMode::kNone);
+  api_test_utils::RunFunction(function_.get(), std::move(params), profile(),
+                              extensions::api_test_utils::FunctionMode::kNone);
 
   EXPECT_EQ(function_->GetError(),
             EnterpriseReportingPrivateEnqueueRecordFunction::
@@ -1222,10 +1151,8 @@ TEST_F(EnterpriseReportingPrivateEnqueueRecordFunctionTest,
   // Set up invalid DM token
   policy::SetDMTokenForTesting(policy::DMToken::CreateInvalidToken());
 
-  api_test_utils::RunFunction(
-      function_.get(), std::move(params),
-      std::make_unique<ExtensionFunctionDispatcher>(profile()),
-      extensions::api_test_utils::FunctionMode::kNone);
+  api_test_utils::RunFunction(function_.get(), std::move(params), profile(),
+                              extensions::api_test_utils::FunctionMode::kNone);
 
   EXPECT_EQ(function_->GetError(),
             EnterpriseReportingPrivateEnqueueRecordFunction::
@@ -1258,10 +1185,8 @@ TEST_F(EnterpriseReportingPrivateEnqueueRecordFunctionTest,
   policy::SetDMTokenForTesting(
       policy::DMToken::CreateValidToken(kTestDMTokenValue));
 
-  api_test_utils::RunFunction(
-      function_.get(), std::move(params),
-      std::make_unique<ExtensionFunctionDispatcher>(profile()),
-      extensions::api_test_utils::FunctionMode::kNone);
+  api_test_utils::RunFunction(function_.get(), std::move(params), profile(),
+                              extensions::api_test_utils::FunctionMode::kNone);
 
   EXPECT_EQ(function_->GetError(),
             EnterpriseReportingPrivateEnqueueRecordFunction::
@@ -1275,11 +1200,11 @@ TEST_F(EnterpriseReportingPrivateEnqueueRecordFunctionTest,
 
 namespace {
 
-constexpr char kFakeUserId[] = "fake user id";
+constexpr GaiaId::Literal kFakeUserId("fake user id");
 
 enterprise_reporting_private::UserContext GetFakeUserContext() {
   enterprise_reporting_private::UserContext user_context;
-  user_context.user_id = kFakeUserId;
+  user_context.user_id = kFakeUserId.ToString();
   return user_context;
 }
 
@@ -1312,7 +1237,7 @@ class UserContextGatedTest : public ExtensionApiUnittest {
                        const device_signals::SignalsAggregationRequest& request,
                        device_signals::SignalsAggregator::GetSignalsCallback
                            callback) {
-              EXPECT_EQ(user_context.user_id, GaiaId(kFakeUserId));
+              EXPECT_EQ(user_context.user_id, kFakeUserId);
               EXPECT_EQ(request.signal_names.size(), 1U);
               std::move(callback).Run(response);
             }));

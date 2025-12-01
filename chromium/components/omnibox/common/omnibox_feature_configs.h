@@ -6,8 +6,14 @@
 #define COMPONENTS_OMNIBOX_COMMON_OMNIBOX_FEATURE_CONFIGS_H_
 
 #include "base/feature_list.h"
+#include "base/gtest_prod_util.h"
 #include "base/time/time.h"
 #include "base/values.h"
+
+class EnterpriseSearchManager;
+class EnterpriseSearchManagerProviderInjectionTest;
+class EnterpriseSearchManagerRequireShortcutTest;
+FORWARD_DECLARE_TEST(EnterpriseSearchManagerProviderInjectionTest, Verify);
 
 namespace omnibox_feature_configs {
 
@@ -174,12 +180,48 @@ struct SearchAggregatorProvider : Config<SearchAggregatorProvider> {
   SearchAggregatorProvider& operator=(const SearchAggregatorProvider&);
   ~SearchAggregatorProvider();
 
-  // Utility methods
+  bool enabled;
+  // Minimum length input must be to run the
+  // `EnterpriseSearchAggregatorProvider`.
+  int min_query_length;
+  // If true, the response will be parsed in a utility process.
+  bool parse_response_in_utility_process;
+  // If true, the newer Discovery Engine OAuth scope will be used in suggestions
+  // requests.
+  bool use_discovery_engine_oauth_scope;
+  // If true, doc provider won't run outside the drive scope. If false, doc
+  // provider will run unscoped. Either way, doc provider won't run when in the
+  // enterprise scope.
+  bool disable_drive;
+
+  // See comments in enterprise_search_aggregator_provider.cc
+  size_t scoring_max_matches_created_per_type;
+  size_t scoring_max_scoped_matches_shown_per_type;
+  size_t scoring_max_unscoped_matches_shown_per_type;
+  size_t scoring_min_char_for_strong_text_match;
+  size_t scoring_min_words_for_full_text_match_boost;
+  int scoring_full_text_match_score;
+  int scoring_score_per_strong_text_match;
+  int scoring_score_per_weak_text_match;
+  int scoring_max_text_score;
+  int scoring_people_score_boost;
+  bool scoring_prefer_contents_over_queries;
+  size_t scoring_scoped_max_low_quality_matches;
+  size_t scoring_unscoped_max_low_quality_matches;
+  int scoring_low_quality_threshold;
+
+ private:
+  // Utility methods and members for setting up a mock search engine via Finch.
+  // Restricted to `EnterpriseSearchManager` and its tests.
+  friend class ::EnterpriseSearchManager;
+  friend class ::EnterpriseSearchManagerProviderInjectionTest;
+  friend class ::EnterpriseSearchManagerRequireShortcutTest;
+  FRIEND_TEST_ALL_PREFIXES(::EnterpriseSearchManagerProviderInjectionTest,
+                           Verify);
+
   bool AreMockEnginesValid() const;
   std::vector<base::Value> CreateMockSearchEngines() const;
   base::Value::Dict CreateMockSearchAggregator(bool featured_by_policy) const;
-
-  bool enabled;
 
   // The search engine name, shown in the Omnibox.
   std::string name;
@@ -193,18 +235,7 @@ struct SearchAggregatorProvider : Config<SearchAggregatorProvider> {
   std::string icon_url;
   // If enabled, Chrome will blend search suggestions with other Omnibox
   // suggestions without requiring keyword mode.
-  bool trigger_omnibox_blending;
-  // The amount of time to wait before calling the callback function after
-  // making a request to get enterprise suggestions.
-  base::TimeDelta callback_delay;
-  // The number of suggestions to show users.
-  int num_suggestions;
-  // Type of request response. Can be one of the following strings.
-  // - "success" - Successful response.
-  // - "success_no_suggestions" - Successful response but empty suggestions
-  //   field.
-  // - "backoff" - No response was sent or response took too long.
-  std::string response_type;
+  bool require_shortcut;
 };
 
 // If enabled, uses RichAnswerTemplate instead of SuggestionAnswer to display
@@ -213,6 +244,52 @@ struct SuggestionAnswerMigration : Config<SuggestionAnswerMigration> {
   DECLARE_FEATURE(kOmniboxSuggestionAnswerMigration);
   SuggestionAnswerMigration();
   bool enabled;
+};
+
+// Enables url suggestions when omnibox is focused on Web/SRP.
+struct OmniboxUrlSuggestionsOnFocus : Config<OmniboxUrlSuggestionsOnFocus> {
+  DECLARE_FEATURE(kOmniboxUrlSuggestionsOnFocus);
+  OmniboxUrlSuggestionsOnFocus();
+  OmniboxUrlSuggestionsOnFocus(const OmniboxUrlSuggestionsOnFocus&);
+  OmniboxUrlSuggestionsOnFocus& operator=(const OmniboxUrlSuggestionsOnFocus&);
+  ~OmniboxUrlSuggestionsOnFocus();
+  bool enabled;
+  bool show_recently_closed_tabs;
+  // Max number of zps suggestions to show.
+  size_t max_suggestions;
+  // Max number of search zps suggestions to show.
+  size_t max_search_suggestions;
+  // Max number of url zps suggestions to show.
+  size_t max_url_suggestions;
+  // Number of days to consider for most visited sites (0-indexed).
+  size_t most_visited_recency_window;
+  // Recency factor heuristic used to calculate most visited sites.  Must be
+  // one of `kMvtScoringParamRecencyFactor` feature param values listed in
+  // //components/history/core/browser/features.h.
+  std::string most_visited_recency_factor;
+  // Whether MostVisitedProvider should directly query HistoryService for its
+  // most visited sites list. False if the provider should query TopSites.
+  bool directly_query_history_service;
+  // Whether to prefetch the most visited sites.
+  bool prefetch_most_visited_sites;
+  // The debouncing delay (in milliseconds) to use when throttling
+  // HistoryService requests.
+  int prefetch_most_visited_sites_delay_ms;
+
+  bool MostVisitedPrefetchingEnabled() const;
+};
+
+// Enables the HaTS for On-Focus ZPS so that it may show up for a user.
+struct HappinessTrackingSurveyForOmniboxOnFocusZps
+    : Config<HappinessTrackingSurveyForOmniboxOnFocusZps> {
+  DECLARE_FEATURE(kHappinessTrackingSurveyForOmniboxOnFocusZps);
+  HappinessTrackingSurveyForOmniboxOnFocusZps();
+  bool enabled;
+  // Number of times the omnibox must be focused on SRP/Web before the survey
+  // may be shown
+  size_t focus_threshold;
+  // Number of ms before the survey may be shown.
+  size_t survey_delay;
 };
 
 // Do not add new configs here at the bottom by default. They should be ordered

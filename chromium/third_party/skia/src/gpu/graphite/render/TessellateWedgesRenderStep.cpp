@@ -23,7 +23,7 @@
 #include "src/gpu/graphite/PipelineData.h"
 #include "src/gpu/graphite/geom/Geometry.h"
 #include "src/gpu/graphite/geom/Shape.h"
-#include "src/gpu/graphite/geom/Transform_graphite.h"
+#include "src/gpu/graphite/geom/Transform.h"
 #include "src/gpu/graphite/render/DynamicInstancesPatchAllocator.h"
 #include "src/gpu/tessellate/FixedCountBufferUtils.h"
 #include "src/gpu/tessellate/MidpointContourParser.h"
@@ -116,23 +116,21 @@ TessellateWedgesRenderStep::~TessellateWedgesRenderStep() {}
 
 std::string TessellateWedgesRenderStep::vertexSkSL() const {
     return SkSL::String::printf(
-            R"(
-                float2 localCoord;
-                if (resolveLevel_and_idx.x < 0) {
-                    // A negative resolve level means this is the fan point.
-                    localCoord = fanPointAttrib;
-                } else {
-                    // TODO: Approximate perspective scaling to match how PatchWriter is configured
-                    // (or provide explicit tessellation level in instance data instead of
-                    // replicating work)
-                    float2x2 vectorXform = float2x2(localToDevice[0].xy, localToDevice[1].xy);
-                    localCoord = tessellate_filled_curve(
-                        vectorXform, resolveLevel_and_idx.x, resolveLevel_and_idx.y, p01, p23, %s);
-                }
-                float4 devPosition = localToDevice * float4(localCoord, 0.0, 1.0);
-                devPosition.z = depth;
-                stepLocalCoords = localCoord;
-            )",
+            "float2 localCoord;\n"
+            "if (resolveLevel_and_idx.x < 0) {\n"
+                // A negative resolve level means this is the fan point.
+                "localCoord = fanPointAttrib;\n"
+            "} else {\n"
+                // TODO: Approximate perspective scaling to match how PatchWriter is configured
+                // (or provide explicit tessellation level in instance data instead of
+                // replicating work)
+                "float2x2 vectorXform = float2x2(localToDevice[0].xy, localToDevice[1].xy);\n"
+                "localCoord = tessellate_filled_curve("
+                    "vectorXform, resolveLevel_and_idx.x, resolveLevel_and_idx.y, p01, p23, %s);\n"
+            "}\n"
+            "float4 devPosition = localToDevice * float4(localCoord, 0.0, 1.0);\n"
+            "devPosition.z = depth;\n"
+            "stepLocalCoords = localCoord;\n",
             fInfinitySupport ? "curve_type_using_inf_support(p23)" : "curveType");
 }
 

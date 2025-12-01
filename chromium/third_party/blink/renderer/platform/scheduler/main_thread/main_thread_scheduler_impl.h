@@ -24,6 +24,7 @@
 #include "base/task/sequence_manager/task_time_observer.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/task/single_thread_task_runner.h"
+#include "base/threading/scoped_thread_priority.h"
 #include "base/time/time.h"
 #include "base/trace_event/trace_log.h"
 #include "build/build_config.h"
@@ -53,6 +54,7 @@
 #include "third_party/blink/renderer/platform/scheduler/public/frame_scheduler.h"
 #include "third_party/blink/renderer/platform/scheduler/public/main_thread_scheduler.h"
 #include "third_party/blink/renderer/platform/scheduler/public/rail_mode_observer.h"
+#include "third_party/blink/renderer/platform/scheduler/public/widget_scheduler.h"
 #include "third_party/blink/renderer/platform/wtf/allocator/allocator.h"
 #include "third_party/blink/renderer/platform/wtf/hash_set.h"
 #include "third_party/blink/renderer/platform/wtf/vector.h"
@@ -79,10 +81,11 @@ FORWARD_DECLARE_TEST(MainThreadSchedulerImplTest,
                      CanExceedIdleDeadlineIfRequired);
 }  // namespace main_thread_scheduler_impl_unittest
 class AgentGroupSchedulerImpl;
+class CPUTimeBudgetPool;
 class FrameSchedulerImpl;
 class PageSchedulerImpl;
 class WebRenderWidgetSchedulingState;
-class CPUTimeBudgetPool;
+class WidgetSchedulerImpl;
 
 class PLATFORM_EXPORT MainThreadSchedulerImpl
     : public ThreadSchedulerBase,
@@ -92,9 +95,17 @@ class PLATFORM_EXPORT MainThreadSchedulerImpl
       public RenderWidgetSignals::Observer,
       public base::trace_event::TraceLog::AsyncEnabledStateObserver {
  public:
-  // Duration before rendering is considered starved by render-blocking tasks,
-  // which is a safeguard against pathological cases for render-blocking image
-  // prioritization.
+  // Duration after which rendering is considered starved, in which case the
+  // compositor task queues will have an increased priority until the next
+  // BeginMainFrame. Note that the elevated priority is lower than that of
+  // render-blocking tasks, and a separate higher threshold is used to prevent
+  // starvation by those tasks (see `kRenderBlockingStarvationThreshold`).
+  static constexpr base::TimeDelta kDefaultRenderingStarvationThreshold =
+      base::Milliseconds(100);
+
+  // Duration after which rendering is considered starved by render-blocking
+  // tasks, which is a safeguard against pathological cases for render-blocking
+  // loading task prioritization.
   static constexpr base::TimeDelta kRenderBlockingStarvationThreshold =
       base::Milliseconds(500);
 
@@ -136,10 +147,6 @@ class PLATFORM_EXPORT MainThreadSchedulerImpl
     // per-ASG task runner instead of the per-thread task runner.
     bool mbi_override_task_runner_handle;
 
-    // If ThreadedScrollPreventRenderingStarvation is enabled, this controls the
-    // rendering anti-starvation threshold during UseCase::kCompositorGesture.
-    base::TimeDelta compositor_gesture_rendering_starvation_threshold;
-
     // The policy to use for discrete input-based task deferral. If
     // `features::kDeferRendererTasksAfterInput` is enabled, this is set to the
     // policy set in the associated feature param, otherwise this is
@@ -147,10 +154,8 @@ class PLATFORM_EXPORT MainThreadSchedulerImpl
     std::optional<features::TaskDeferralPolicy>
         discrete_input_task_deferral_policy;
 
-    // If we haven't run BeginMainFrame in this many milliseconds, give the next
-    // BeginMainFrame task elevated priority.
-    base::TimeDelta prioritize_compositing_after_delay_pre_fcp;
-    base::TimeDelta prioritize_compositing_after_delay_post_fcp;
+    bool input_scenario_priority_boost_enabled;
+    bool input_scenario_priority_boost_includes_loading;
   };
 
   static const char* RAILModeToString(RAILMode rail_mode);
@@ -177,7 +182,6 @@ class PLATFORM_EXPORT MainThreadSchedulerImpl
   void PauseTimersForAndroidWebView() override;
   void ResumeTimersForAndroidWebView() override;
 #endif
-  void SetRendererProcessType(WebRendererProcessType type) override;
   void OnUrgentMessageReceived() override;
   void OnUrgentMessageProcessed() override;
 
@@ -206,8 +210,6 @@ class PLATFORM_EXPORT MainThreadSchedulerImpl
   // ThreadScheduler implementation:
   bool ShouldYieldForHighPriorityWork() override;
   void PostIdleTask(const base::Location&, Thread::IdleTask) override;
-  void PostNonNestableIdleTask(const base::Location&,
-                               Thread::IdleTask) override;
   void PostDelayedIdleTask(const base::Location&,
                            base::TimeDelta delay,
                            Thread::IdleTask) override;
@@ -231,7 +233,8 @@ class PLATFORM_EXPORT MainThreadSchedulerImpl
   // RenderWidgetSignals::Observer implementation:
   void SetAllRenderWidgetsHidden(bool hidden) override;
 
-  scoped_refptr<WidgetScheduler> CreateWidgetScheduler();
+  scoped_refptr<WidgetScheduler> CreateWidgetScheduler(
+      WidgetScheduler::Delegate* delegate);
   void WillBeginFrame(const viz::BeginFrameArgs& args);
   void BeginFrameNotExpectedSoon();
   void BeginMainFrameNotExpectedUntil(base::TimeTicks time);
@@ -310,6 +313,7 @@ class PLATFORM_EXPORT MainThreadSchedulerImpl
   base::TimeTicks CurrentIdleTaskDeadlineForTesting() const;
   void EndIdlePeriodForTesting(base::TimeTicks time_remaining);
   bool PolicyNeedsUpdateForTesting();
+  const IdleHelper& GetIdleHelperForTesting() const;
 
   std::unique_ptr<CPUTimeBudgetPool> CreateCPUTimeBudgetPoolForTesting(
       const char* name);
@@ -353,6 +357,7 @@ class PLATFORM_EXPORT MainThreadSchedulerImpl
   const SchedulingSettings& scheduling_settings() const;
 
   void OnWebSchedulingTaskQueuePriorityChanged(MainThreadTaskQueue*);
+  void OnWidgetSchedulerWillShutdown(WidgetSchedulerImpl*);
 
   base::WeakPtr<MainThreadSchedulerImpl> GetWeakPtr();
 
@@ -378,7 +383,6 @@ class PLATFORM_EXPORT MainThreadSchedulerImpl
 
   scoped_refptr<MainThreadTaskQueue> ControlTaskQueue();
   scoped_refptr<MainThreadTaskQueue> DefaultTaskQueue();
-  scoped_refptr<MainThreadTaskQueue> CompositorTaskQueue();
   scoped_refptr<MainThreadTaskQueue> V8TaskQueue();
 
   // `current_use_case` will be overwritten by the next call to UpdatePolicy.
@@ -489,11 +493,15 @@ class PLATFORM_EXPORT MainThreadSchedulerImpl
       base::TimeTicks now,
       base::TimeDelta* next_long_idle_period_delay_out) override;
   void IsNotQuiescent() override {}
-  void OnIdlePeriodStarted() override;
-  void OnIdlePeriodEnded() override;
   void OnPendingTasksChanged(bool has_tasks) override;
 
+  // Enables or disables the BeginMainFrameNotExpected signals from all widgets.
   void DispatchRequestBeginMainFrameNotExpected(bool has_tasks);
+
+  // Requests the BeginMainFrameNotExpected signals for a single widget, which
+  // is done asynchronously during initialization if needed.
+  void InitializeRequestBeginMainFrameNotExpected(
+      scoped_refptr<WidgetSchedulerImpl>);
 
   void EndIdlePeriod();
 
@@ -693,40 +701,40 @@ class PLATFORM_EXPORT MainThreadSchedulerImpl
     ~MainThreadOnly();
 
     IdleTimeEstimator idle_time_estimator;
-    TraceableState<UseCase, TracingCategory::kDefault> current_use_case;
+    TraceableState<UseCase, "renderer.scheduler"> current_use_case;
     Policy current_policy;
     base::TimeTicks current_policy_expiration_time;
     base::TimeTicks estimated_next_frame_begin;
     base::TimeTicks current_task_start_time;
     base::TimeTicks discrete_input_response_start_time;
     base::TimeDelta compositor_frame_interval;
-    TraceableCounter<int, TracingCategory::kInfo>
+    TraceableCounter<int, TRACE_DISABLED_BY_DEFAULT("renderer.scheduler")>
         renderer_pause_count;  // Renderer is paused if non-zero.
 
     bool renderer_hidden = false;
     std::optional<base::ScopedSampleMetadata> renderer_hidden_metadata;
     std::optional<base::ScopedSampleMetadata> renderer_frozen_metadata;
     bool renderer_backgrounded = kLaunchingProcessIsBackgrounded;
-    TraceableState<bool, TracingCategory::kDefault>
-        blocking_input_expected_soon;
-    TraceableState<bool, TracingCategory::kDebug> in_idle_period_for_testing;
-    TraceableState<bool, TracingCategory::kTopLevel> is_audio_playing;
-    TraceableState<bool, TracingCategory::kDebug>
+    TraceableState<bool, "renderer.scheduler"> blocking_input_expected_soon;
+    TraceableState<bool, TRACE_DISABLED_BY_DEFAULT("renderer.scheduler.debug")>
+        in_idle_period_for_testing;
+    TraceableState<bool, "renderer"> is_audio_playing;
+    TraceableState<bool, TRACE_DISABLED_BY_DEFAULT("renderer.scheduler.debug")>
         compositor_will_send_main_frame_not_expected;
-    TraceableState<bool, TracingCategory::kDebug> has_navigated;
-    TraceableState<bool, TracingCategory::kDebug> pause_timers_for_webview;
+    TraceableState<bool, TRACE_DISABLED_BY_DEFAULT("renderer.scheduler.debug")>
+        has_navigated;
+    TraceableState<bool, TRACE_DISABLED_BY_DEFAULT("renderer.scheduler.debug")>
+        pause_timers_for_webview;
     base::TimeTicks background_status_changed_at;
     HashSet<PageSchedulerImpl*> page_schedulers;  // Not owned.
     base::ObserverList<RAILModeObserver>::Unchecked
         rail_mode_observers;  // Not owned.
     MainThreadMetricsHelper metrics_helper;
-    TraceableState<WebRendererProcessType, TracingCategory::kTopLevel>
-        process_type;
     TraceableState<std::optional<TaskDescriptionForTracing>,
-                   TracingCategory::kInfo>
+                   TRACE_DISABLED_BY_DEFAULT("renderer.scheduler")>
         task_description_for_tracing;  // Don't use except for tracing.
     TraceableState<std::optional<TaskPriority>,
-                   TracingCategory::kInfo>
+                   TRACE_DISABLED_BY_DEFAULT("renderer.scheduler")>
         task_priority_for_tracing;  // Only used for tracing.
 
     // Holds task queues that are currently running.
@@ -745,9 +753,9 @@ class PLATFORM_EXPORT MainThreadSchedulerImpl
     // kNormalPriority and is updated via UpdateCompositorTaskQueuePriority().
     // After 100ms with nothing running from this queue, the compositor will
     // be set to kVeryHighPriority until a frame is run.
-    TraceableState<TaskPriority, TracingCategory::kDefault> compositor_priority;
+    TraceableState<TaskPriority, "renderer.scheduler"> compositor_priority;
 
-    TraceableState<RenderingPrioritizationState, TracingCategory::kDefault>
+    TraceableState<RenderingPrioritizationState, "renderer.scheduler">
         main_frame_prioritization_state;
     // Signals needed to compute the `main_frame_prioritization_state`.
     base::TimeTicks last_frame_time;
@@ -765,11 +773,18 @@ class PLATFORM_EXPORT MainThreadSchedulerImpl
 
     WTF::Vector<AgentGroupSchedulerScope> agent_group_scheduler_scope_stack;
 
-    Persistent<HeapHashSet<WeakMember<AgentGroupSchedulerImpl>>>
+    Persistent<GCedHeapHashSet<WeakMember<AgentGroupSchedulerImpl>>>
         agent_group_schedulers;
     // Task queues that have been detached from their scheduler and may have
     // pending tasks that need to run.
     WTF::HashSet<scoped_refptr<MainThreadTaskQueue>> detached_task_queues;
+
+    // Temporarily boosts the main thread priority. Only used if
+    // kInputScenarioPriorityBoost is enabled.
+    std::optional<base::ScopedBoostPriority> main_thread_priority_boost;
+
+    // `WidgetScheduler`s that have not been shut down.
+    WTF::HashSet<scoped_refptr<WidgetSchedulerImpl>> widget_schedulers;
   };
 
   struct AnyThread {
@@ -777,24 +792,26 @@ class PLATFORM_EXPORT MainThreadSchedulerImpl
     ~AnyThread();
 
     PendingUserInput::Monitor pending_input_monitor;
-    base::TimeTicks last_idle_period_end_time;
     UserModel user_model;
-    TraceableState<bool, TracingCategory::kInfo> awaiting_touch_start_response;
-    TraceableState<bool, TracingCategory::kInfo>
+    TraceableState<bool, TRACE_DISABLED_BY_DEFAULT("renderer.scheduler")>
+        awaiting_touch_start_response;
+    TraceableState<bool, TRACE_DISABLED_BY_DEFAULT("renderer.scheduler")>
         awaiting_discrete_input_response;
-    TraceableState<bool, TracingCategory::kInfo> in_idle_period;
-    TraceableState<bool, TracingCategory::kInfo>
+    TraceableState<bool, TRACE_DISABLED_BY_DEFAULT("renderer.scheduler")>
         begin_main_frame_on_critical_path;
-    TraceableState<bool, TracingCategory::kInfo>
+    TraceableState<bool, TRACE_DISABLED_BY_DEFAULT("renderer.scheduler")>
         last_gesture_was_compositor_driven;
-    TraceableState<bool, TracingCategory::kInfo> default_gesture_prevented;
-    TraceableState<bool, TracingCategory::kInfo> have_seen_a_blocking_gesture;
-    TraceableState<bool, TracingCategory::kInfo>
+    TraceableState<bool, TRACE_DISABLED_BY_DEFAULT("renderer.scheduler")>
+        default_gesture_prevented;
+    TraceableState<bool, TRACE_DISABLED_BY_DEFAULT("renderer.scheduler")>
+        have_seen_a_blocking_gesture;
+    TraceableState<bool, TRACE_DISABLED_BY_DEFAULT("renderer.scheduler")>
         waiting_for_any_main_frame_contentful_paint;
-    TraceableState<bool, TracingCategory::kInfo>
+    TraceableState<bool, TRACE_DISABLED_BY_DEFAULT("renderer.scheduler")>
         waiting_for_any_main_frame_meaningful_paint;
-    TraceableState<bool, TracingCategory::kInfo> is_any_main_frame_loading;
-    TraceableState<bool, TracingCategory::kInfo>
+    TraceableState<bool, TRACE_DISABLED_BY_DEFAULT("renderer.scheduler")>
+        is_any_main_frame_loading;
+    TraceableState<bool, TRACE_DISABLED_BY_DEFAULT("renderer.scheduler")>
         have_seen_input_since_navigation;
   };
 

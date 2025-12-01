@@ -26,7 +26,7 @@
 #include "services/webnn/queueable_resource_state.h"
 #include "services/webnn/queueable_resource_state_base.h"
 #include "services/webnn/resource_task.h"
-#include "services/webnn/tflite/buffer_content.h"
+#include "services/webnn/tflite/buffer_content_tflite.h"
 #include "services/webnn/tflite/context_impl_tflite.h"
 #include "services/webnn/tflite/graph_builder_tflite.h"
 #include "services/webnn/tflite/op_resolver.h"
@@ -108,7 +108,8 @@ class GraphImplTflite::ComputeResources {
          flatbuffers::DetachedBuffer buffer,
          std::vector<uint8_t> buffer_data,
          const base::flat_map<uint64_t, std::unique_ptr<WebNNConstantOperand>>&
-             constant_operands) {
+             constant_operands,
+         bool graph_requires_fp32_precision) {
     auto self = std::make_unique<ComputeResources>();
 
     self->model_content_ = std::move(buffer);
@@ -126,7 +127,7 @@ class GraphImplTflite::ComputeResources {
       DumpModelToFile(self->model_content_);
     }
 
-    OpResolver op_resolver(context->options());
+    OpResolver op_resolver(context->options(), graph_requires_fp32_precision);
 
     self->model_weights_ = std::move(buffer_data);
     self->allocation_ = std::make_unique<::tflite::MemoryAllocation>(
@@ -289,17 +290,19 @@ GraphImplTflite::CreateAndBuild(
     ContextImplTflite* context) {
   ASSIGN_OR_RETURN(GraphBuilderTflite::Result result,
                    GraphBuilderTflite::CreateAndBuild(
-                       context->properties(), *graph_info, constant_operands),
+                       context->properties(), *graph_info, constant_operands,
+                       compute_resource_info.operand_to_dependent_operations),
                    [](std::string error) {
                      return mojom::Error::New(
                          mojom::Error::Code::kNotSupportedError,
                          std::move(error));
                    });
 
-  ASSIGN_OR_RETURN(std::unique_ptr<ComputeResources> compute_resources,
-                   ComputeResources::Create(context, std::move(result.buffer),
-                                            std::move(result.buffer_data),
-                                            constant_operands));
+  ASSIGN_OR_RETURN(
+      std::unique_ptr<ComputeResources> compute_resources,
+      ComputeResources::Create(context, std::move(result.buffer),
+                               std::move(result.buffer_data), constant_operands,
+                               result.graph_requires_fp32_precision));
 
   auto compute_resources_state =
       base::MakeRefCounted<QueueableResourceState<ComputeResources>>(

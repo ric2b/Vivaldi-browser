@@ -14,13 +14,16 @@ import android.os.Handler;
 import android.os.Looper;
 import android.util.LruCache;
 import android.view.WindowManager;
-
 import androidx.annotation.IntDef;
 import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
-
 import com.google.common.hash.Hashing;
-
+import com.google.common.collect.ImmutableMap;
+import java.time.Duration;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 import org.chromium.base.ActivityState;
 import org.chromium.base.ApplicationState;
 import org.chromium.base.ApplicationStatus;
@@ -60,6 +63,7 @@ import org.chromium.chrome.browser.translate.TranslationObserver;
 import org.chromium.chrome.browser.user_education.UserEducationHelper;
 import org.chromium.chrome.modules.readaloud.Playback;
 import org.chromium.chrome.modules.readaloud.PlaybackArgs;
+import org.chromium.chrome.modules.readaloud.PlaybackArgs.PlaybackMode;
 import org.chromium.chrome.modules.readaloud.PlaybackArgs.PlaybackVoice;
 import org.chromium.chrome.modules.readaloud.PlaybackListener;
 import org.chromium.chrome.modules.readaloud.Player;
@@ -80,12 +84,6 @@ import org.chromium.ui.InsetObserver;
 import org.chromium.ui.base.ActivityWindowAndroid;
 import org.chromium.ui.base.WindowAndroid;
 import org.chromium.url.GURL;
-
-import java.time.Duration;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Locale;
-import java.util.Map;
 
 /**
  * The main entrypoint component for Read Aloud feature. It's responsible for checking its
@@ -192,39 +190,75 @@ public class ReadAloudController
         var oldValue = sClock;
         sClock = clock;
         ResettersForTesting.register(() -> sClock = oldValue);
+  }
+
+  private static class ReadabilityInfo {
+    private final Map<PlaybackArgs.PlaybackMode, ReadAloudReadabilityHooks.ReadabilityResult>
+        mReadabilityInfoPerMode;
+    private final long mResponseTimestamp;
+
+    /**
+     * Constructor.
+     *
+     * @param readabilityInfoPerMode Readability info per mode.
+     * @param responseTimestamp Timestamp when readability request responded.
+     */
+    ReadabilityInfo(
+        Map<PlaybackArgs.PlaybackMode, ReadAloudReadabilityHooks.ReadabilityResult>
+            readabilityInfoPerMode,
+        long responseTimestamp) {
+      mReadabilityInfoPerMode = readabilityInfoPerMode;
+      mResponseTimestamp = responseTimestamp;
     }
 
-    private static class ReadabilityInfo {
-        private final boolean mIsReadable;
-        private final long mResponseTimestamp;
-        private final boolean mTimepointsSupported;
-
-        /**
-         * Constructor.
-         *
-         * @param isReadable Is page readable.
-         * @param responseTimestamp Timestamp when readability request responded.
-         * @param timepointsSupported Whether or not timepoints are supported (needed for
-         *     highlighting).
-         */
-        ReadabilityInfo(boolean isReadable, long responseTimestamp, boolean timepointsSupported) {
-            mIsReadable = isReadable;
-            mResponseTimestamp = responseTimestamp;
-            mTimepointsSupported = timepointsSupported;
-        }
-
-        boolean isReadable() {
-            return mIsReadable;
-        }
-
-        long getResponseTime() {
-            return mResponseTimestamp;
-        }
-
-        boolean getTimepointsSupported() {
-            return mTimepointsSupported;
-        }
+    static ReadabilityInfo entirelyUnsupported(long responseTimestamp) {
+      return new ReadabilityInfo(
+          ImmutableMap.of(
+              PlaybackArgs.PlaybackMode.CLASSIC,
+              new ReadAloudReadabilityHooks.ReadabilityResult(false, false),
+              PlaybackArgs.PlaybackMode.OVERVIEW,
+              new ReadAloudReadabilityHooks.ReadabilityResult(false, false)),
+          responseTimestamp);
     }
+
+    static ReadabilityInfo forTimepoints(boolean timepointsSupported, long responseTimestamp) {
+        return new ReadabilityInfo(
+          ImmutableMap.of(
+              PlaybackArgs.PlaybackMode.CLASSIC,
+              new ReadAloudReadabilityHooks.ReadabilityResult(true, timepointsSupported),
+              PlaybackArgs.PlaybackMode.OVERVIEW,
+              new ReadAloudReadabilityHooks.ReadabilityResult(true, timepointsSupported)),
+          responseTimestamp);
+    }
+
+    boolean isReadable() {
+      return isReadable(PlaybackArgs.PlaybackMode.CLASSIC);
+    }
+
+    boolean isReadable(PlaybackArgs.PlaybackMode mode) {
+      return getReadabilityResultForMode(mode).readable;
+    }
+
+    long getResponseTime() {
+      return mResponseTimestamp;
+    }
+
+    boolean getTimepointsSupported() {
+      return getTimepointsSupported(PlaybackArgs.PlaybackMode.CLASSIC);
+    }
+
+    boolean getTimepointsSupported(PlaybackArgs.PlaybackMode mode) {
+      return getReadabilityResultForMode(mode).supportsHighlighting;
+    }
+
+    private ReadAloudReadabilityHooks.ReadabilityResult getReadabilityResultForMode(
+        PlaybackArgs.PlaybackMode mode) {
+      return mReadabilityInfoPerMode.getOrDefault(
+          mode,
+          new ReadAloudReadabilityHooks.ReadabilityResult(
+              /* readable= */ false, /* supportsHighlighting= */ false));
+    }
+  }
 
     // Information about a tab playback necessary for resuming later. Does not
     // include language or voice which should come from current tab state or
@@ -344,6 +378,10 @@ public class ReadAloudController
     // Whether or not to highlight the page. Change will only have effect if
     // isHighlightingSupported() returns true.
     private final ObservableSupplierImpl<Boolean> mHighlightingEnabled;
+
+    // Whether or not to show the playback mode selector.
+    private final ObservableSupplierImpl<Boolean> mPlaybackModeSelectionEnabled;
+
     // Voices to show in voice selection menu.
     private final ObservableSupplierImpl<List<PlaybackVoice>> mCurrentLanguageVoices;
     // Selected voice ID.
@@ -430,14 +468,19 @@ public class ReadAloudController
      * Kicks of readability check on a page load iff: the url is valid, no previous result is
      * available/pending and if a request has to be sent, the necessary conditions are satisfied.
      */
-    private final ReadAloudReadabilityHooks.ReadabilityCallback mReadabilityCallback =
-            new ReadAloudReadabilityHooks.ReadabilityCallback() {
+    private final ReadAloudReadabilityHooks.ReadabilityPerModeCallback mReadabilityPerModeCallback =
+            new ReadAloudReadabilityHooks.ReadabilityPerModeCallback() {
                 @Override
-                public void onSuccess(String url, boolean isReadable, boolean timepointsSupported) {
+                public void onSuccess(String url, Map<PlaybackArgs.PlaybackMode, ReadAloudReadabilityHooks.ReadabilityResult> readabilityPerMode) {
                     if (url.isEmpty() || url == null) {
                         assert false;
                         return;
                     }
+                    ReadabilityInfo readabilityInfo =
+                            new ReadabilityInfo(
+                                    readabilityPerMode,
+                                    sClock.currentTimeMillis());
+                    boolean isReadable = readabilityInfo.isReadable();
 
                     Log.d(TAG, "onSuccess called for %s", url);
                     ReadAloudMetrics.recordIsPageReadable(isReadable);
@@ -452,13 +495,10 @@ public class ReadAloudController
                         ReadAloudFeatures.activateKnownReadableTrial();
                     }
 
-                    // isPlaybackEnabled() should only be checked if isReadable == true.
-                    isReadable = isReadable && ReadAloudFeatures.isPlaybackEnabled();
                     int urlHash = urlToHash(url);
                     sReadabilityInfoMap.put(
                             urlHash,
-                            new ReadabilityInfo(
-                                    isReadable, sClock.currentTimeMillis(), timepointsSupported));
+                            readabilityInfo);
                     mPendingRequests.remove(urlHash);
                     notifyReadabilityMayHaveChanged();
                 }
@@ -510,6 +550,7 @@ public class ReadAloudController
         mBottomControlsStacker = bottomControlsStacker;
         mLayoutManagerSupplier = layoutManagerSupplier;
         mHighlightingEnabled = new ObservableSupplierImpl<>(false);
+        mPlaybackModeSelectionEnabled = new ObservableSupplierImpl<>(false);
         ApplicationStatus.registerApplicationStateListener(this);
         ApplicationStatus.registerStateListenerForActivity(this, mActivity);
         mActivityWindowAndroid = activityWindowAndroid;
@@ -781,7 +822,7 @@ public class ReadAloudController
             return;
         }
         mPendingRequests.add(urlSpecHash);
-        mReadabilityHooks.isPageReadable(urlSpec, mReadabilityCallback);
+        mReadabilityHooks.isPageReadable(urlSpec, mReadabilityPerModeCallback);
     }
 
     private ReadabilityInfo getReadabilityInfoIfUnexpired(int sanitizedUrlHash) {
@@ -1035,6 +1076,7 @@ public class ReadAloudController
                     ReadAloudMetrics.recordIsTabPlaybackCreationSuccessful(true);
                     ReadAloudMetrics.recordTabCreationSuccess(entrypoint, Entrypoint.NUM_ENTRIES);
                     maybeSetUpHighlighter(playback.getMetadata());
+                    updatePlaybackModeSelectionEnabled();
                     updateVoiceMenu(
                             isTranslated
                                     ? playbackLanguage
@@ -1048,7 +1090,7 @@ public class ReadAloudController
                         Log.e(TAG, "Attempting to play a non readable website");
                         sReadabilityInfoMap.put(
                                 sanitizedUrlHash,
-                                new ReadabilityInfo(false, sClock.currentTimeMillis(), false));
+                                ReadabilityInfo.entirelyUnsupported(sClock.currentTimeMillis()));
                         notifyReadabilityMayHaveChanged();
                     }
 
@@ -1273,6 +1315,11 @@ public class ReadAloudController
         return language;
     }
 
+    private void updatePlaybackModeSelectionEnabled() {
+        // TODO(crbug.com/401256755): Implement with actual logic.
+        mPlaybackModeSelectionEnabled.set(false);
+    }
+
     private void updateVoiceMenu(@Nullable String language) {
         if (language == null) {
             return;
@@ -1341,6 +1388,16 @@ public class ReadAloudController
     @Override
     public ObservableSupplier<String> getVoiceIdSupplier() {
         return mSelectedVoiceId;
+    }
+
+    @Override
+    public ObservableSupplier<Boolean> getPlaybackModeSelectionEnabled() {
+        return mPlaybackModeSelectionEnabled;
+    }
+
+    @Override
+    public void setPlaybackModeAndApplyToPlayback(PlaybackMode mode) {
+        // TODO(crbug.com/401256755): Implement.
     }
 
     @Override
@@ -1746,7 +1803,7 @@ public class ReadAloudController
     }
 
     public void setTimepointsSupportedForTest(String url, boolean supported) {
-        sReadabilityInfoMap.put(urlToHash(url), new ReadabilityInfo(true, 0L, supported));
+        sReadabilityInfoMap.put(urlToHash(url), ReadabilityInfo.forTimepoints(supported, 0L));
     }
 
     public void setStateToRestoreOnBringingToForegroundForTests(RestoreState restoreState) {

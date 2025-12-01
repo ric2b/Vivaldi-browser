@@ -12,14 +12,14 @@ import stylesRaw from './timeRangeOverlay.css.js';
 
 // TODO(crbug.com/391381439): Fully migrate off of constructed style sheets.
 const styles = new CSSStyleSheet();
-styles.replaceSync(stylesRaw.cssContent);
+styles.replaceSync(stylesRaw.cssText);
 
 const UIStrings = {
   /**
    *@description Accessible label used to explain to a user that they are viewing an entry label.
    */
   timeRange: 'Time range',
-};
+} as const;
 const str_ = i18n.i18n.registerUIStrings('panels/timeline/overlays/components/TimeRangeOverlay.ts', UIStrings);
 const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
 
@@ -46,8 +46,8 @@ export class TimeRangeOverlay extends HTMLElement {
   #label: string;
 
   // The label is set to editable and in focus anytime the label is empty and when the label it is double clicked.
-  // If the user clicks away from the selected range element and the label is not empty, the lable is set to not editable until it is double clicked.
-  #isLabelEditable: boolean = true;
+  // If the user clicks away from the selected range element and the label is not empty, the label is set to not editable until it is double clicked.
+  #isLabelEditable = true;
 
   #rangeContainer: HTMLElement|null = null;
   #labelBox: HTMLElement|null = null;

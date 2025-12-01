@@ -94,6 +94,8 @@ component("network_service") {
     "orb/orb_mimetypes.h",
     "orb/orb_sniffers.cc",
     "orb/orb_sniffers.h",
+    "partial_decoder.cc",
+    "partial_decoder.h",
     "pending_callback_chain.cc",
     "pending_callback_chain.h",
     "prefetch_cache.cc",
@@ -312,6 +314,7 @@ component("network_service") {
     "//components/ip_protection/common:ip_protection_proxy_delegate",
     "//components/ip_protection/common:ip_protection_telemetry_uma",
     "//components/ip_protection/common:masked_domain_list_manager",
+    "//components/ip_protection/common:probabilistic_reveal_token_registry",
     "//components/miracle_parameter/common",
     "//components/network_session_configurator/browser",
     "//components/network_session_configurator/common",
@@ -329,6 +332,7 @@ component("network_service") {
     "//mojo/public/cpp/system",
     "//net",
     "//net:extras",
+    "//services/network/ad_auction",
     "//services/network/attribution",
     "//services/network/first_party_sets:first_party_sets_manager",
     "//services/network/public/cpp",
@@ -443,6 +447,7 @@ source_set("tests") {
     "orb/orb_impl_unittest.cc",
     "orb/orb_mimetypes_unittest.cc",
     "orb/orb_sniffers_unittest.cc",
+    "partial_decoder_unittest.cc",
     "pending_callback_chain_unittest.cc",
     "prefetch_cache_unittest.cc",
     "prefetch_matches_unittest.cc",
@@ -540,6 +545,7 @@ source_set("tests") {
     "//base",
     "//components/ip_protection/common:ip_protection_telemetry_uma",
     "//components/ip_protection/common:masked_domain_list_manager",
+    "//components/ip_protection/common:probabilistic_reveal_token_registry",
     "//components/network_session_configurator/browser",
     "//components/os_crypt/async/browser:test_support",
     "//components/os_crypt/sync:test_support",
@@ -592,7 +598,10 @@ source_set("tests") {
   }
 
   if (use_blink) {
-    deps += [ "//services/proxy_resolver:lib" ]
+    deps += [
+      "//services/proxy_resolver:lib",
+      "//third_party/blink/public/common:preloading_headers",
+    ]
   }
 }
 

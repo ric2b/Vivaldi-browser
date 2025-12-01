@@ -16,6 +16,7 @@
 #include "base/uuid.h"
 #include "net/storage_access_api/status.h"
 #include "services/metrics/public/cpp/ukm_source_id.h"
+#include "services/network/public/cpp/permissions_policy/permissions_policy_declaration.h"
 #include "services/network/public/mojom/link_header.mojom-shared.h"
 #include "services/network/public/mojom/referrer_policy.mojom-shared.h"
 #include "services/network/public/mojom/url_loader_factory.mojom-shared.h"
@@ -478,7 +479,7 @@ struct BLINK_EXPORT WebNavigationParams {
   // take precedence over any permissions policy constructed in blink. This is
   // useful for isolated applications, which use a different base permissions
   // policy than blink, which uses a fully permissive policy as its base.
-  std::optional<blink::ParsedPermissionsPolicy> permissions_policy_override;
+  std::optional<network::ParsedPermissionsPolicy> permissions_policy_override;
 
   // These are used to construct a subset of the back/forward list for the
   // window.navigation API. They only have the attributes that are needed for
@@ -583,6 +584,12 @@ struct BLINK_EXPORT WebNavigationParams {
   //  Could be std::nullopt for synchronous commit, same document navigations.
   std::optional<base::flat_map<mojom::PermissionName, mojom::PermissionStatus>>
       initial_permission_statuses;
+
+  // When this is set to true, the navigation must create a new document
+  // sequence number to avoid appearing as a same-document navigation, even if
+  // the URL seems like a match. This matters for cross-origin navigations
+  // (apart from error pages with the same precursor origin).
+  bool force_new_document_sequence_number = false;
 };
 
 }  // namespace blink

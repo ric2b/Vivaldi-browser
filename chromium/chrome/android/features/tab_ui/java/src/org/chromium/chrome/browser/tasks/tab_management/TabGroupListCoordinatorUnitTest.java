@@ -16,7 +16,6 @@ import android.graphics.Bitmap;
 import android.graphics.drawable.Drawable;
 
 import androidx.test.ext.junit.rules.ActivityScenarioRule;
-import androidx.test.filters.SmallTest;
 
 import org.junit.After;
 import org.junit.Before;
@@ -85,10 +84,9 @@ public class TabGroupListCoordinatorUnitTest {
     }
 
     @Test
-    @SmallTest
     public void testForeignFavicon() {
         FaviconResolver resolver =
-                TabGroupListCoordinator.buildFaviconResolver(
+                TabGroupListFaviconResolverFactory.build(
                         mActivity, mProfile, mTabListFaviconProvider);
         resolver.resolve(JUnitTestGURLs.URL_1, mCallback);
         verify(mFaviconHelperJniMock)
@@ -100,10 +98,9 @@ public class TabGroupListCoordinatorUnitTest {
     }
 
     @Test
-    @SmallTest
     public void testFallbackFavicon() {
         FaviconResolver resolver =
-                TabGroupListCoordinator.buildFaviconResolver(
+                TabGroupListFaviconResolverFactory.build(
                         mActivity, mProfile, mTabListFaviconProvider);
         resolver.resolve(JUnitTestGURLs.URL_1, mCallback);
         verify(mFaviconHelperJniMock)
@@ -115,10 +112,9 @@ public class TabGroupListCoordinatorUnitTest {
     }
 
     @Test
-    @SmallTest
     public void testInternalFavicon() {
         FaviconResolver resolver =
-                TabGroupListCoordinator.buildFaviconResolver(
+                TabGroupListFaviconResolverFactory.build(
                         mActivity, mProfile, mTabListFaviconProvider);
         resolver.resolve(JUnitTestGURLs.NTP_NATIVE_URL, mCallback);
         verify(mCallback).onResult(notNull());

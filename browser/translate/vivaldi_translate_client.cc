@@ -79,6 +79,7 @@ VivaldiTranslateClient::VivaldiTranslateClient(
           web_contents->GetBrowserContext())
           ->GetPrimaryModel());
   if (translate_driver_) {
+    translate_driver_->AddTranslationObserver(this);
     translate_driver_->AddLanguageDetectionObserver(this);
     translate_driver_->set_translate_manager(translate_manager_.get());
   }
@@ -92,6 +93,7 @@ VivaldiTranslateClient::VivaldiTranslateClient(
 VivaldiTranslateClient::~VivaldiTranslateClient() {
   if (translate_driver_) {
     translate_driver_->RemoveLanguageDetectionObserver(this);
+    translate_driver_->RemoveTranslationObserver(this);
     translate_driver_->set_translate_manager(nullptr);
   }
 }
@@ -103,7 +105,7 @@ std::string& VivaldiTranslateClient::GetTranslateScript() {
 }
 
 #if !BUILDFLAG(IS_ANDROID)
-constexpr base::FilePath::StringPieceType kTranslateBundleName(
+constexpr base::FilePath::StringViewType kTranslateBundleName(
     FILE_PATH_LITERAL("translate-bundle.js"));
 #endif  // !BUILDFLAG(IS_ANDROID)
 
@@ -429,7 +431,64 @@ void VivaldiTranslateClient::OnLanguageDetermined(
     manual_translate_on_ready_ = false;
   }
 #endif
+
+
+#if BUILDFLAG(ENABLE_EXTENSIONS)
+  extensions::vivaldi::tabs_private::LanguageDetectionDetails lang_details;
+
+  lang_details.url = details.url.spec();
+  lang_details.content_language = details.content_language;
+  lang_details.cld_language = details.model_detected_language;
+  lang_details.is_cld_reliable = details.is_model_reliable;
+  lang_details.has_no_translate = details.has_notranslate;
+  lang_details.html_root_language = details.html_root_language;
+  lang_details.adopted_language = details.adopted_language;
+
+  int tab_id = sessions::SessionTabHelper::IdForTab(web_contents()).id();
+  if (tab_id) {
+    ::vivaldi::BroadcastEvent(
+        extensions::vivaldi::tabs_private::OnLanguageDetermined::kEventName,
+        extensions::vivaldi::tabs_private::OnLanguageDetermined::Create(
+            tab_id, std::move(lang_details)),
+        web_contents()->GetBrowserContext());
+  }
+#endif // ENABLE_EXTENSIONS
 }
+
+void VivaldiTranslateClient::OnPageTranslated(
+    const std::string& original_lang,
+    const std::string& translated_lang,
+    translate::TranslateErrors error_type) {
+#if BUILDFLAG(ENABLE_EXTENSIONS)
+  int tab_id = sessions::SessionTabHelper::IdForTab(web_contents()).id();
+  if (tab_id) {
+    ::vivaldi::BroadcastEvent(
+        extensions::vivaldi::tabs_private::OnPageTranslated::kEventName,
+        extensions::vivaldi::tabs_private::OnPageTranslated::Create(
+            tab_id, original_lang, translated_lang,
+            ToVivaldiTranslateError(error_type)
+            ),
+        web_contents()->GetBrowserContext());
+  }
+#endif // ENABLE_EXTENSIONS
+}
+
+void VivaldiTranslateClient::OnIsPageTranslatedChanged(
+    content::WebContents* source) {
+#if BUILDFLAG(ENABLE_EXTENSIONS)
+  int tab_id = sessions::SessionTabHelper::IdForTab(web_contents()).id();
+  bool is_translated = GetLanguageState().IsPageTranslated();
+
+  // OnPageTranslated is typically the main event, but it's not fired when
+  // revert has been used, so the client will need this event to know.
+  ::vivaldi::BroadcastEvent(
+      extensions::vivaldi::tabs_private::OnIsPageTranslatedChanged::kEventName,
+      extensions::vivaldi::tabs_private::OnIsPageTranslatedChanged::Create(
+          tab_id, is_translated),
+      web_contents()->GetBrowserContext());
+#endif // ENABLE_EXTENSIONS
+}
+
 #if BUILDFLAG(IS_ANDROID)
 void VivaldiTranslateClient::PrimaryPageChanged(content::Page& page) {
   if (auto_translate_snackbar_controller_ &&

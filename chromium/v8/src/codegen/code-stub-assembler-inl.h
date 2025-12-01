@@ -5,11 +5,13 @@
 #ifndef V8_CODEGEN_CODE_STUB_ASSEMBLER_INL_H_
 #define V8_CODEGEN_CODE_STUB_ASSEMBLER_INL_H_
 
+#include "src/codegen/code-stub-assembler.h"
+// Include the non-inl header before the rest of the headers.
+
 #include <functional>
 
 #include "src/builtins/builtins-constructor-gen.h"
 #include "src/builtins/builtins-inl.h"
-#include "src/codegen/code-stub-assembler.h"
 #include "src/common/globals.h"
 
 namespace v8 {
@@ -18,13 +20,12 @@ namespace internal {
 #include "src/codegen/define-code-stub-assembler-macros.inc"
 
 template <typename TCallable, class... TArgs>
-TNode<Object> CodeStubAssembler::Call(TNode<Context> context,
-                                      TNode<TCallable> callable,
-                                      ConvertReceiverMode mode,
-                                      TNode<Object> receiver, TArgs... args) {
-  static_assert(std::is_same<Object, TCallable>::value ||
-                std::is_base_of<HeapObject, TCallable>::value);
-  static_assert(!std::is_base_of<JSFunction, TCallable>::value,
+TNode<JSAny> CodeStubAssembler::Call(TNode<Context> context,
+                                     TNode<TCallable> callable,
+                                     ConvertReceiverMode mode,
+                                     TNode<JSAny> receiver, TArgs... args) {
+  static_assert(is_subtype_v<TCallable, Object>);
+  static_assert(!is_subtype_v<TCallable, JSFunction>,
                 "Use CallFunction() when the callable is a JSFunction.");
 
   if (IsUndefinedConstant(receiver) || IsNullConstant(receiver)) {
@@ -37,27 +38,27 @@ TNode<Object> CodeStubAssembler::Call(TNode<Context> context,
 }
 
 template <typename TCallable, class... TArgs>
-TNode<Object> CodeStubAssembler::Call(TNode<Context> context,
-                                      TNode<TCallable> callable,
-                                      TNode<JSReceiver> receiver,
-                                      TArgs... args) {
+TNode<JSAny> CodeStubAssembler::Call(TNode<Context> context,
+                                     TNode<TCallable> callable,
+                                     TNode<JSReceiver> receiver,
+                                     TArgs... args) {
   return Call(context, callable, ConvertReceiverMode::kNotNullOrUndefined,
               receiver, args...);
 }
 
 template <typename TCallable, class... TArgs>
-TNode<Object> CodeStubAssembler::Call(TNode<Context> context,
-                                      TNode<TCallable> callable,
-                                      TNode<Object> receiver, TArgs... args) {
+TNode<JSAny> CodeStubAssembler::Call(TNode<Context> context,
+                                     TNode<TCallable> callable,
+                                     TNode<JSAny> receiver, TArgs... args) {
   return Call(context, callable, ConvertReceiverMode::kAny, receiver, args...);
 }
 
 template <class... TArgs>
-TNode<Object> CodeStubAssembler::CallFunction(TNode<Context> context,
-                                              TNode<JSFunction> callable,
-                                              ConvertReceiverMode mode,
-                                              TNode<Object> receiver,
-                                              TArgs... args) {
+TNode<JSAny> CodeStubAssembler::CallFunction(TNode<Context> context,
+                                             TNode<JSFunction> callable,
+                                             ConvertReceiverMode mode,
+                                             TNode<JSAny> receiver,
+                                             TArgs... args) {
   if (IsUndefinedConstant(receiver) || IsNullConstant(receiver)) {
     DCHECK_NE(mode, ConvertReceiverMode::kNotNullOrUndefined);
     return CallJS(Builtins::CallFunction(ConvertReceiverMode::kNullOrUndefined),
@@ -69,20 +70,20 @@ TNode<Object> CodeStubAssembler::CallFunction(TNode<Context> context,
 }
 
 template <class... TArgs>
-TNode<Object> CodeStubAssembler::CallFunction(TNode<Context> context,
-                                              TNode<JSFunction> callable,
-                                              TNode<JSReceiver> receiver,
-                                              TArgs... args) {
+TNode<JSAny> CodeStubAssembler::CallFunction(TNode<Context> context,
+                                             TNode<JSFunction> callable,
+                                             TNode<JSReceiver> receiver,
+                                             TArgs... args) {
   return CallFunction(context, callable,
                       ConvertReceiverMode::kNotNullOrUndefined, receiver,
                       args...);
 }
 
 template <class... TArgs>
-TNode<Object> CodeStubAssembler::CallFunction(TNode<Context> context,
-                                              TNode<JSFunction> callable,
-                                              TNode<Object> receiver,
-                                              TArgs... args) {
+TNode<JSAny> CodeStubAssembler::CallFunction(TNode<Context> context,
+                                             TNode<JSFunction> callable,
+                                             TNode<JSAny> receiver,
+                                             TArgs... args) {
   return CallFunction(context, callable, ConvertReceiverMode::kAny, receiver,
                       args...);
 }
@@ -104,7 +105,8 @@ TNode<Object> CodeStubAssembler::FastCloneJSObject(
   CSA_DCHECK(this, IsNotSetWord32<Map::Bits3::ConstructionCounterBits>(
                        LoadMapBitField3(target_map)));
 
-  TVARIABLE(HeapObject, var_properties, EmptyFixedArrayConstant());
+  TVARIABLE((Union<FixedArray, PropertyArray>), var_properties,
+            EmptyFixedArrayConstant());
   TVARIABLE(FixedArray, var_elements, EmptyFixedArrayConstant());
 
   // Copy the PropertyArray backing store. The source PropertyArray

@@ -15,6 +15,7 @@
 
 #include <memory>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -126,13 +127,6 @@ class DataObjectImpl : public DownloadFileObserver,
 class COMPONENT_EXPORT(UI_BASE) OSExchangeDataProviderWin
     : public OSExchangeDataProvider {
  public:
-  // Returns true if source has plain text that is a valid url.
-  static bool HasPlainTextURL(IDataObject* source);
-
-  // Returns true if source has plain text that is a valid URL and sets url to
-  // that url.
-  static bool GetPlainTextURL(IDataObject* source, GURL* url);
-
   static DataObjectImpl* GetDataObjectImpl(const OSExchangeData& data);
   static IDataObject* GetIDataObject(const OSExchangeData& data);
 
@@ -155,8 +149,8 @@ class COMPONENT_EXPORT(UI_BASE) OSExchangeDataProviderWin
   std::optional<url::Origin> GetRendererTaintedOrigin() const override;
   void MarkAsFromPrivileged() override;
   bool IsFromPrivileged() const override;
-  void SetString(const std::u16string& data) override;
-  void SetURL(const GURL& url, const std::u16string& title) override;
+  void SetString(std::u16string_view data) override;
+  void SetURL(const GURL& url, std::u16string_view title) override;
   void SetFilename(const base::FilePath& path) override;
   void SetFilenames(const std::vector<FileInfo>& filenames) override;
   // Test only method for adding virtual file content to the data store. The
@@ -204,6 +198,15 @@ class COMPONENT_EXPORT(UI_BASE) OSExchangeDataProviderWin
   DataTransferEndpoint* GetSource() const override;
 
  private:
+  // Returns true if `GetPlainTextURL()` would return a GURL and false
+  // otherwise.
+  bool HasPlainTextURL() const;
+
+  // Returns a GURL if text is present and that text is a valid URL, and if
+  // `IsRendererTainted()` is true, that the URL has an HTTP or HTTPS scheme;
+  // otherwise, returns `std::nullopt`.
+  std::optional<GURL> GetPlainTextURL() const;
+
   void SetVirtualFileContentAtIndexForTesting(base::span<const uint8_t> data,
                                               DWORD tymed,
                                               LONG index);

@@ -19,7 +19,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
 #include "base/uuid.h"
-#include "components/autofill/core/browser/data_model/autofill_profile.h"
+#include "components/autofill/core/browser/data_model/addresses/autofill_profile.h"
 #include "components/autofill/core/browser/data_model/transliterator.h"
 #include "components/autofill/core/browser/field_type_utils.h"
 #include "components/autofill/core/browser/field_types.h"
@@ -183,7 +183,7 @@ bool AddLegacyAutofillProfileNamesToProfile(sql::Database* db,
            kConjunctionLastNameStatus, kSecondLastName, kSecondLastNameStatus,
            kLastName, kLastNameStatus, kFullName, kFullNameStatus},
           profile->guid())) {
-    DCHECK_EQ(profile->guid(), s.ColumnString(0));
+    DCHECK_EQ(profile->guid(), s.ColumnStringView(0));
 
     int index = 1;
     for (FieldType type :
@@ -230,7 +230,7 @@ bool AddLegacyAutofillProfileAddressesToProfile(sql::Database* db,
                     kFloor,
                     kFloorStatus},
                    profile->guid())) {
-    DCHECK_EQ(profile->guid(), s.ColumnString(0));
+    DCHECK_EQ(profile->guid(), s.ColumnStringView(0));
     std::u16string street_address = s.ColumnString16(1);
     std::u16string dependent_locality = s.ColumnString16(13);
     std::u16string city = s.ColumnString16(15);
@@ -292,7 +292,7 @@ bool AddLegacyAutofillProfileEmailsToProfile(sql::Database* db,
   sql::Statement s;
   if (SelectByGuid(db, s, kAutofillProfileEmailsTable, {kGuid, kEmail},
                    profile->guid())) {
-    DCHECK_EQ(profile->guid(), s.ColumnString(0));
+    DCHECK_EQ(profile->guid(), s.ColumnStringView(0));
     profile->SetRawInfo(EMAIL_ADDRESS, s.ColumnString16(1));
   }
   return s.Succeeded();
@@ -309,7 +309,7 @@ bool AddLegacyAutofillProfilePhonesToProfile(sql::Database* db,
   sql::Statement s;
   if (SelectByGuid(db, s, kAutofillProfilePhonesTable, {kGuid, kNumber},
                    profile->guid())) {
-    DCHECK_EQ(profile->guid(), s.ColumnString(0));
+    DCHECK_EQ(profile->guid(), s.ColumnStringView(0));
     profile->SetRawInfo(PHONE_HOME_WHOLE_NUMBER, s.ColumnString16(1));
   }
   return s.Succeeded();
@@ -386,7 +386,7 @@ bool AddProfileMetadataToTable(sql::Database* db,
 // if the write succeeded.
 bool AddProfileTypeTokensToTable(sql::Database* db,
                                  const AutofillProfile& profile) {
-  for (FieldType type : GetDatabaseStoredTypesOfAutofillProfile()) {
+  for (FieldType type : AutofillProfile::kDatabaseStoredTypes) {
     std::u16string value = profile.GetRawInfo(type);
     if (!base::FeatureList::IsEnabled(features::kAutofillUseINAddressModel) &&
         type == ADDRESS_HOME_STREET_LOCATION_AND_LOCALITY) {
@@ -445,10 +445,10 @@ bool AddAutofillProfileToTableVersion113(sql::Database* db,
   if (!s.Run()) {
     return false;
   }
-  // Note that `GetDatabaseStoredTypesOfAutofillProfile()` might change in
+  // Note that `AutofillProfile::kDatabaseStoredTypes` might change in
   // future versions. Due to the flexible layout of the type tokens table, this
   // is not a problem.
-  for (FieldType type : GetDatabaseStoredTypesOfAutofillProfile()) {
+  for (FieldType type : AutofillProfile::kDatabaseStoredTypes) {
     InsertBuilder(db, s, GetLegacyProfileTypeTokensTable(profile.record_type()),
                   {kGuid, kType, kValue, kVerificationStatus});
     s.BindString(0, profile.guid());
@@ -489,7 +489,7 @@ std::optional<std::vector<FieldTypeData>> ReadProfileTypeTokens(
   // As `SelectByGuid()` already calls `s.Step()`, do-while is used here.
   do {
     FieldType type = ToSafeFieldType(s.ColumnInt(0), UNKNOWN_TYPE);
-    if (!GetDatabaseStoredTypesOfAutofillProfile().contains(type)) {
+    if (!AutofillProfile::kDatabaseStoredTypes.contains(type)) {
       // This is possible in two cases:
       // - The database was tampered with by external means.
       // - The type corresponding to `s.ColumnInt(0)` was deprecated. In this

@@ -131,10 +131,8 @@ bool CanMoveTabsToNewWindow(Browser* browser,
 // specified, adds all the moved tabs to a new group. This group will have the
 // appearance as |group| but a different ID, since IDs can't be shared across
 // windows.
-void MoveTabsToNewWindow(
-    Browser* browser,
-    const std::vector<int>& tab_indices,
-    std::optional<tab_groups::TabGroupId> group = std::nullopt);
+void MoveTabsToNewWindow(Browser* browser, const std::vector<int>& tab_indices);
+void MoveGroupToNewWindow(Browser* browser, tab_groups::TabGroupId group);
 bool CanCloseTabsToRight(const Browser* browser);
 bool CanCloseOtherTabs(const Browser* browser);
 content::WebContents* DuplicateTabAt(Browser* browser, int index);
@@ -165,15 +163,15 @@ bool CanBookmarkCurrentTab(const Browser* browser);
 void BookmarkAllTabs(Browser* browser);
 bool CanBookmarkAllTabs(const Browser* browser);
 bool CanMoveActiveTabToReadLater(Browser* browser);
-bool MoveCurrentTabToReadLater(Browser* browser);
-bool MoveTabToReadLater(Browser* browser, content::WebContents* web_contents);
+void MoveCurrentTabToReadLater(Browser* browser);
+void MoveTabsToReadLater(Browser* browser,
+                         std::vector<content::WebContents*> web_contentses);
 bool MarkCurrentTabAsReadInReadLater(Browser* browser);
 bool IsCurrentTabUnreadInReadLater(Browser* browser);
 void ShowOffersAndRewardsForPage(Browser* browser);
 void SaveCreditCard(Browser* browser);
 void SaveIban(Browser* browser);
 void ShowMandatoryReauthOptInPrompt(Browser* browser);
-void MigrateLocalCards(Browser* browser);
 void SaveAutofillAddress(Browser* browser);
 void ShowFilledCardInformationBubble(Browser* browser);
 void ShowVirtualCardEnrollBubble(Browser* browser);

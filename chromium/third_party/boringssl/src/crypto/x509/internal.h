@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef OPENSSL_HEADER_X509_INTERNAL_H
-#define OPENSSL_HEADER_X509_INTERNAL_H
+#ifndef OPENSSL_HEADER_CRYPTO_X509_INTERNAL_H
+#define OPENSSL_HEADER_CRYPTO_X509_INTERNAL_H
 
 #include <openssl/base.h>
 #include <openssl/evp.h>
@@ -552,4 +552,4 @@ int DIST_POINT_set_dpname(DIST_POINT_NAME *dpn, X509_NAME *iname);
 }  // extern C
 #endif
 
-#endif  // OPENSSL_HEADER_X509_INTERNAL_H
+#endif  // OPENSSL_HEADER_CRYPTO_X509_INTERNAL_H

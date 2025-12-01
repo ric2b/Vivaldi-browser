@@ -507,8 +507,8 @@ TEST_P(UnifiedSystemTrayTest, CalendarAcceleratorFocusesDateCell) {
   auto* focus_manager =
       GetUnifiedSystemTrayBubble()->GetBubbleWidget()->GetFocusManager();
   EXPECT_TRUE(focus_manager->GetFocusedView());
-  EXPECT_STREQ(focus_manager->GetFocusedView()->GetClassName(),
-               "CalendarDateCellView");
+  EXPECT_EQ(focus_manager->GetFocusedView()->GetClassName(),
+            "CalendarDateCellView");
 }
 
 // Tests that using functional keys to change brightness/volume when the
@@ -1014,7 +1014,8 @@ class UnifiedSystemTrayAccessibilityTest : public AshTestBase {
     std::unique_ptr<TestShellDelegate> shell_delegate =
         std::make_unique<TestShellDelegate>();
     shell_delegate->set_channel(version_info::Channel::BETA);
-    AshTestBase::SetUp(std::move(shell_delegate));
+    set_shell_delegate(std::move(shell_delegate));
+    AshTestBase::SetUp();
 
     scoped_fake_power_status_ = std::make_unique<ScopedFakePowerStatus>();
 
@@ -1128,11 +1129,8 @@ class UnifiedSystemTrayAccessibilityTest : public AshTestBase {
   void RegisterUserWithUserPrefs(const AccountId& account_id,
                                  user_manager::UserType user_type) {
     // Create a fake user prefs map.
-    GetSessionControllerClient()->Reset();
-    GetSessionControllerClient()->AddUserSession(user_email, user_type);
-    GetSessionControllerClient()->SwitchActiveUser(account_id);
-    GetSessionControllerClient()->SetSessionState(
-        session_manager::SessionState::ACTIVE);
+    ClearLogin();
+    SimulateUserLogin({user_email, user_type}, account_id);
   }
 
  protected:

@@ -23,6 +23,7 @@ import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.lifecycle.ActivityLifecycleDispatcher;
 import org.chromium.chrome.browser.lifecycle.NativeInitObserver;
 import org.chromium.chrome.browser.ntp.NewTabPage;
+import org.chromium.chrome.browser.preferences.Pref;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.settings.MainSettings;
 import org.chromium.chrome.browser.settings.SettingsNavigationFactory;
@@ -30,7 +31,6 @@ import org.chromium.chrome.browser.signin.SigninAndHistorySyncActivityLauncherIm
 import org.chromium.chrome.browser.signin.services.DisplayableProfileData;
 import org.chromium.chrome.browser.signin.services.IdentityServicesProvider;
 import org.chromium.chrome.browser.signin.services.ProfileDataCache;
-import org.chromium.chrome.browser.signin.services.SigninManager;
 import org.chromium.chrome.browser.sync.SyncServiceFactory;
 import org.chromium.chrome.browser.sync.settings.SyncSettingsUtils;
 import org.chromium.chrome.browser.sync.settings.SyncSettingsUtils.SyncError;
@@ -57,6 +57,7 @@ import org.chromium.components.signin.identitymanager.IdentityManager;
 import org.chromium.components.signin.identitymanager.PrimaryAccountChangeEvent;
 import org.chromium.components.signin.metrics.SigninAccessPoint;
 import org.chromium.components.sync.SyncService;
+import org.chromium.components.user_prefs.UserPrefs;
 
 /**
  * Handles displaying IdentityDisc on toolbar depending on several conditions (user sign-in state,
@@ -121,7 +122,7 @@ public class IdentityDiscController
                         /* isEnabled= */ true,
                         AdaptiveToolbarButtonVariant.UNKNOWN,
                         /* tooltipTextResId= */ Resources.ID_NULL,
-                        /* showHoverhighlight= */ true);
+                        /* showBackgroundHighlight= */ true);
     }
 
     /** Registers itself to observe sign-in and sync status events. */
@@ -191,7 +192,8 @@ public class IdentityDiscController
                 AdaptiveToolbarButtonVariant.UNKNOWN,
                 buttonSpec.getActionChipLabelResId(),
                 buttonSpec.getHoverTooltipTextId(),
-                buttonSpec.getShouldShowHoverHighlight());
+                buttonSpec.shouldShowBackgroundHighlight(),
+                /* hasErrorBadge= */ mIdentityError != SyncError.NO_ERROR);
     }
 
     /**
@@ -299,6 +301,15 @@ public class IdentityDiscController
     /** {@link SyncService.SyncStateChangedListener} implementation. */
     @Override
     public void syncStateChanged() {
+        maybeUpdateIdentityErrorAndBadge();
+    }
+
+    @VisibleForTesting
+    public @SyncError int getIdentityError() {
+        return mIdentityError;
+    }
+
+    private void maybeUpdateIdentityErrorAndBadge() {
         if (mProfile == null) {
             return;
         }
@@ -319,7 +330,7 @@ public class IdentityDiscController
                     mIdentityError == SyncError.NO_ERROR
                             ? null
                             : ProfileDataCache.createToolbarIdentityDiscBadgeConfig(
-                                    mContext, R.drawable.ic_error_badge_14dp));
+                                    mContext, R.drawable.ic_error_badge_16dp));
         }
     }
 
@@ -373,6 +384,7 @@ public class IdentityDiscController
             mSyncService = SyncServiceFactory.getForProfile(profile);
             if (mSyncService != null) {
                 mSyncService.addSyncStateChangedListener(this);
+                maybeUpdateIdentityErrorAndBadge();
             }
 
             notifyObservers(true);
@@ -409,9 +421,8 @@ public class IdentityDiscController
         recordIdentityDiscUsed();
 
         Profile originalProfile = mProfileSupplier.get().getOriginalProfile();
-        SigninManager signinManager =
-                IdentityServicesProvider.get().getSigninManager(originalProfile);
-        if (getSignedInAccountInfo() == null && !signinManager.isSigninDisabledByPolicy()) {
+        if (getSignedInAccountInfo() == null
+                && UserPrefs.get(originalProfile).getBoolean(Pref.SIGNIN_ALLOWED)) {
             AccountPickerBottomSheetStrings bottomSheetStrings =
                     new AccountPickerBottomSheetStrings.Builder(
                                     R.string.signin_account_picker_bottom_sheet_title)

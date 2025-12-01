@@ -207,7 +207,7 @@ const UIStrings = {
    */
   xhrReadyStateChange: '`XHR` `readyState` change',
   /**
-   * @description Text for an event. Shown in the timeline in the Perforamnce panel.
+   * @description Text for an event. Shown in the timeline in the Performance panel.
    * XHR refers to XmlHttpRequest, a Web API. (see https://developer.mozilla.org/en-US/docs/Web/API/XMLHttpRequest)
    * The text is shown when a XmlHttpRequest load event happens on the inspected page.
    */
@@ -241,7 +241,7 @@ const UIStrings = {
    */
   cacheModule: 'Cache module code',
   /**
-   * @description Text for an event. Shown in the timeline in the Perforamnce panel.
+   * @description Text for an event. Shown in the timeline in the Performance panel.
    * "Module" refers to JavaScript modules: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide/Modules
    * JavaScript modules are a way to organize JavaScript code.
    * "Evaluate" is the phase when the JavaScript code of a module is executed.
@@ -520,7 +520,7 @@ const UIStrings = {
    * postTask API was cancelled, so will no longer run.
    */
   abortPostTaskCallback: 'Cancel postTask',
-};
+} as const;
 
 export enum EventCategory {
   DRAWING = 'drawing',
@@ -610,7 +610,7 @@ let categoryStyles: CategoryPalette|null;
 /**
  * This map defines the styles for events shown in the panel. This
  * includes its color (which on the event's category, the label it's
- * displayed with and flag to know wether it's visible in the flamechart
+ * displayed with and flag to know weather it's visible in the flamechart
  * or not).
  * The thread appenders use this map to determine if an event should be
  * shown in the flame chart. If an event is not in the map, then it
@@ -908,7 +908,7 @@ export function maybeInitSylesMap(): EventStylesMap {
         true,
         ),
 
-    [Trace.Types.Events.Name.CONSOLE_TIME_STAMP]:
+    [Trace.Types.Events.Name.TIME_STAMP]:
         new TimelineRecordStyle(i18nString(UIStrings.timestamp), defaultCategoryStyles.scripting),
 
     [Trace.Types.Events.Name.CONSOLE_TIME]:
@@ -1076,6 +1076,20 @@ export function maybeInitSylesMap(): EventStylesMap {
     [Trace.Types.Events.Name.V8_CONSOLE_RUN_TASK]:
         new TimelineRecordStyle(i18nString(UIStrings.consoleTaskRun), defaultCategoryStyles.scripting),
   };
+
+  // TODO: remove assertion after deduped eventStylesMap for VISIBLE_TRACE_EVENT_TYPES.
+  const visibleTraceEventsComplete = (Object.keys(eventStylesMap)).every(eventType => {
+    return Trace.Helpers.Trace.VISIBLE_TRACE_EVENT_TYPES.has(eventType as Trace.Types.Events.Name);
+  });
+
+  const eventStylesMapKeys = Object.keys(eventStylesMap) as Trace.Types.Events.Name[];
+  const eventStylesComplete = Array.from(Trace.Helpers.Trace.VISIBLE_TRACE_EVENT_TYPES).every(eventType => {
+    return eventStylesMapKeys.includes(eventType);
+  });
+
+  if (!visibleTraceEventsComplete || !eventStylesComplete) {
+    throw new Error('eventStylesMap and VISIBLE_TRACE_EVENT_TYPES are out of sync!');
+  }
   return eventStylesMap;
 }
 

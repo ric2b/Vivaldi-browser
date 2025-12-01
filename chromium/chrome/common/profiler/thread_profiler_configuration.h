@@ -8,11 +8,11 @@
 #include <initializer_list>
 #include <optional>
 #include <string>
+#include <variant>
 
 #include "base/no_destructor.h"
 #include "base/profiler/stack_sampling_profiler.h"
 #include "components/sampling_profiler/process_type.h"
-#include "third_party/abseil-cpp/absl/types/variant.h"
 
 namespace base {
 class CommandLine;
@@ -60,11 +60,8 @@ class ThreadProfilerConfiguration {
   void AppendCommandLineSwitchForChildProcess(
       base::CommandLine* command_line) const;
 
- private:
-  friend base::NoDestructor<ThreadProfilerConfiguration>;
-
   // The variation groups that represent the Chrome-wide profiling
-  // configurations.
+  // configurations. Exposed for testing.
   enum VariationGroup {
     // Disabled within the experiment.
     kProfileDisabled,
@@ -83,6 +80,24 @@ class ThreadProfilerConfiguration {
     // Disabled outside of the experiment.
     kProfileDisabledOutsideOfExperiment,
   };
+
+  // Configuration variations, along with weights to use when randomly choosing
+  // one of a set of variations. Exposed for testing.
+  struct Variation {
+    VariationGroup group;
+    double weight;
+  };
+
+  // Randomly chooses a variation from the weighted variations. Weights are
+  // expected to sum to 100 as a sanity check. Exposed for testing.
+  // randValue is a random value in the interval [0, 1) and is used to
+  // determine the variation group.
+  static VariationGroup ChooseVariationGroup(
+      std::initializer_list<Variation> variations,
+      double randValue);
+
+ private:
+  friend base::NoDestructor<ThreadProfilerConfiguration>;
 
   struct BrowserProcessConfiguration {
     // The configuration state for the browser process. If !has_value()
@@ -106,14 +121,7 @@ class ThreadProfilerConfiguration {
 
   // The configuration state for the current process, browser or child.
   using Configuration =
-      absl::variant<BrowserProcessConfiguration, ChildProcessConfiguration>;
-
-  // Configuration variations, along with weights to use when randomly choosing
-  // one of a set of variations.
-  struct Variation {
-    VariationGroup group;
-    double weight;
-  };
+      std::variant<BrowserProcessConfiguration, ChildProcessConfiguration>;
 
   ThreadProfilerConfiguration();
 
@@ -127,11 +135,6 @@ class ThreadProfilerConfiguration {
   static bool IsProcessGloballyEnabled(
       const ThreadProfilerConfiguration::BrowserProcessConfiguration& config,
       sampling_profiler::ProfilerProcessType process);
-
-  // Randomly chooses a variation from the weighted variations. Weights are
-  // expected to sum to 100 as a sanity check.
-  static VariationGroup ChooseVariationGroup(
-      std::initializer_list<Variation> variations);
 
   // Generates a configuration for the browser process.
   static BrowserProcessConfiguration GenerateBrowserProcessConfiguration(

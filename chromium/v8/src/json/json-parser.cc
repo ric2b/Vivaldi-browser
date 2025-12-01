@@ -6,6 +6,7 @@
 
 #include <optional>
 
+#include "src/base/small-vector.h"
 #include "src/base/strings.h"
 #include "src/builtins/builtins.h"
 #include "src/common/assert-scope.h"
@@ -742,7 +743,7 @@ class JSDataObjectBuilder {
   };
   JSDataObjectBuilder(Isolate* isolate, ElementsKind elements_kind,
                       int expected_named_properties,
-                      Handle<Map> expected_final_map,
+                      DirectHandle<Map> expected_final_map,
                       HeapNumberMode heap_number_mode)
       : isolate_(isolate),
         elements_kind_(elements_kind),
@@ -861,7 +862,7 @@ class JSDataObjectBuilder {
 
     Representation representation =
         Object::OptimalRepresentation(*value, isolate_);
-    Handle<FieldType> type =
+    DirectHandle<FieldType> type =
         Object::OptimalType(*value, isolate_, representation);
     MaybeHandle<Map> maybe_map = Map::CopyWithField(
         isolate_, map_, key, type, NONE, PropertyConstness::kConst,
@@ -993,7 +994,7 @@ class JSDataObjectBuilder {
       base::Vector<const Char> key_chars, GetKeyFunction&& get_key,
       Handle<String>* key_out) {
     Handle<String> expected_key;
-    Handle<Map> target_map;
+    DirectHandle<Map> target_map;
 
     InternalIndex descriptor_index(current_property_index_);
     if (IsOnExpectedFinalMapFastPath()) {
@@ -1094,7 +1095,7 @@ class JSDataObjectBuilder {
       } else {
         // Do the in-place reconfiguration.
         DCHECK(!representation.IsDouble());
-        Handle<FieldType> value_type =
+        DirectHandle<FieldType> value_type =
             Object::OptimalType(*value, isolate_, representation);
         MapUpdater::GeneralizeField(isolate_, map_, descriptor_index,
                                     current_details.constness(), representation,
@@ -1105,7 +1106,7 @@ class JSDataObjectBuilder {
                    map_->instance_descriptors(isolate_)->GetFieldType(
                        descriptor_index),
                    value)) {
-      Handle<FieldType> value_type =
+      DirectHandle<FieldType> value_type =
           Object::OptimalType(*value, isolate_, expected_representation);
       MapUpdater::GeneralizeField(isolate_, map_, descriptor_index,
                                   current_details.constness(),
@@ -1196,13 +1197,13 @@ class JSDataObjectBuilder {
   int expected_property_count_;
   HeapNumberMode heap_number_mode_;
 
-  Handle<Map> map_;
+  DirectHandle<Map> map_;
   int current_property_index_ = 0;
   int extra_heap_numbers_needed_ = 0;
 
   Handle<JSObject> object_;
 
-  Handle<Map> expected_final_map_ = {};
+  DirectHandle<Map> expected_final_map_ = {};
   int property_count_in_expected_final_map_ = 0;
 };
 
@@ -1286,7 +1287,7 @@ class JsonParser<Char>::NamedPropertyIterator {
 template <typename Char>
 template <bool should_track_json_source>
 Handle<JSObject> JsonParser<Char>::BuildJsonObject(const JsonContinuation& cont,
-                                                   Handle<Map> feedback) {
+                                                   DirectHandle<Map> feedback) {
   if (!feedback.is_null() && feedback->is_deprecated()) {
     feedback = Map::Update(isolate_, feedback);
   }
@@ -1508,7 +1509,7 @@ MaybeHandle<Object> JsonParser<Char>::ParseJsonObject(Handle<Map> feedback) {
 
   Expect(JsonToken::RBRACE, MessageTemplate::kJsonParseExpectedCommaOrRBrace);
   Handle<Object> result = BuildJsonObject<false>(cont, feedback);
-  property_stack_.resize_no_init(cont.index);
+  property_stack_.resize(cont.index);
   return cont.scope.CloseAndEscape(result);
 }
 
@@ -1586,8 +1587,8 @@ MaybeHandle<Object> JsonParser<Char>::ParseJsonArray() {
         elements->set(i++, element);
       }
     }
-    smi_elements_.resize_no_init(0);
-    double_elements_.resize_no_init(0);
+    smi_elements_.resize(0);
+    double_elements_.resize(0);
     return handle_scope.CloseAndEscape(array);
   }
   // Otherwise, we fell out of the while loop above because the next element
@@ -1596,11 +1597,11 @@ MaybeHandle<Object> JsonParser<Char>::ParseJsonArray() {
   for (int element : smi_elements_) {
     element_stack_.emplace_back(handle(Smi::FromInt(element), isolate_));
   }
-  smi_elements_.resize_no_init(0);
+  smi_elements_.resize(0);
   for (double element : double_elements_) {
     element_stack_.emplace_back(factory()->NewNumber(element));
   }
-  double_elements_.resize_no_init(0);
+  double_elements_.resize(0);
 
   Handle<Object> value;
   if (V8_UNLIKELY(!ParseJsonValueRecursive().ToHandle(&value))) return {};
@@ -1623,7 +1624,7 @@ MaybeHandle<Object> JsonParser<Char>::ParseJsonArray() {
 
   Expect(JsonToken::RBRACK, MessageTemplate::kJsonParseExpectedCommaOrRBrack);
   Handle<Object> result = BuildJsonArray(start);
-  element_stack_.resize_no_init(start);
+  element_stack_.resize(start);
   return handle_scope.CloseAndEscape(result);
 }
 
@@ -1665,8 +1666,8 @@ MaybeHandle<Object> JsonParser<Char>::ParseJsonValue() {
   // For information about snapshotting, see below.
   Handle<Object> val_node;
   // Record the start position and end position for the primitive values.
-  int start_position;
-  int end_position;
+  uint32_t start_position;
+  uint32_t end_position;
 
   // Workaround for -Wunused-but-set-variable on old gcc versions (version < 8).
   USE(start_position);
@@ -1889,7 +1890,7 @@ MaybeHandle<Object> JsonParser<Char>::ParseJsonValue() {
                   isolate(), table, key,
                   {property_val_node, property_snapshot});
             }
-            property_val_node_stack.resize_no_init(cont.index);
+            property_val_node_stack.resize(cont.index);
             DisallowGarbageCollection no_gc;
             Tagged<ObjectTwoHashTable> raw_table = *table;
             value = cont.scope.CloseAndEscape(value);
@@ -1897,7 +1898,7 @@ MaybeHandle<Object> JsonParser<Char>::ParseJsonValue() {
           } else {
             value = cont.scope.CloseAndEscape(value);
           }
-          property_stack_.resize_no_init(cont.index);
+          property_stack_.resize(cont.index);
 
           // Pop the continuation.
           cont = std::move(cont_stack.back());
@@ -1933,14 +1934,14 @@ MaybeHandle<Object> JsonParser<Char>::ParseJsonValue() {
               raw_val_node_and_snapshot_array->set(i * 2 + 1,
                                                    *element_stack_[start + i]);
             }
-            element_val_node_stack.resize_no_init(cont.index);
+            element_val_node_stack.resize(cont.index);
             value = cont.scope.CloseAndEscape(value);
             val_node = cont.scope.CloseAndEscape(
                 handle(raw_val_node_and_snapshot_array, isolate_));
           } else {
             value = cont.scope.CloseAndEscape(value);
           }
-          element_stack_.resize_no_init(cont.index);
+          element_stack_.resize(cont.index);
           // Pop the continuation.
           cont = std::move(cont_stack.back());
           cont_stack.pop_back();
@@ -2106,13 +2107,23 @@ Handle<String> JsonParser<Char>::DecodeString(
     if (!hint.is_null() && Matches(data, hint)) return hint;
   }
 
-  return factory()->InternalizeString(intermediate, 0, string.length());
+  DCHECK_EQ(intermediate->length(), string.length());
+  return factory()->InternalizeString(intermediate);
 }
 
 template <typename Char>
 Handle<String> JsonParser<Char>::MakeString(const JsonString& string,
                                             Handle<String> hint) {
   if (string.length() == 0) return factory()->empty_string();
+  if (string.length() == 1) {
+    uint16_t first_char;
+    if (!string.has_escape()) {
+      first_char = chars_[string.start()];
+    } else {
+      DecodeString(&first_char, string.start(), 1);
+    }
+    return factory()->LookupSingleCharacterStringFromCode(first_char);
+  }
 
   if (string.internalize() && !string.has_escape()) {
     if (!hint.is_null()) {
@@ -2120,9 +2131,9 @@ Handle<String> JsonParser<Char>::MakeString(const JsonString& string,
       if (Matches(data, hint)) return hint;
     }
     if (chars_may_relocate_) {
-      return factory()->InternalizeString(Cast<SeqString>(source_),
-                                          string.start(), string.length(),
-                                          string.needs_conversion());
+      return factory()->InternalizeSubString(Cast<SeqString>(source_),
+                                             string.start(), string.length(),
+                                             string.needs_conversion());
     }
     base::Vector<const Char> chars(chars_ + string.start(), string.length());
     return factory()->InternalizeString(chars, string.needs_conversion());
@@ -2142,7 +2153,8 @@ Handle<String> JsonParser<Char>::MakeString(const JsonString& string,
 
 template <typename Char>
 template <typename SinkChar>
-void JsonParser<Char>::DecodeString(SinkChar* sink, int start, int length) {
+void JsonParser<Char>::DecodeString(SinkChar* sink, uint32_t start,
+                                    uint32_t length) {
   SinkChar* sink_start = sink;
   const Char* cursor = chars_ + start;
   while (true) {
@@ -2207,8 +2219,8 @@ void JsonParser<Char>::DecodeString(SinkChar* sink, int start, int length) {
 template <typename Char>
 JsonString JsonParser<Char>::ScanJsonString(bool needs_internalization) {
   DisallowGarbageCollection no_gc;
-  int start = position();
-  int offset = start;
+  uint32_t start = position();
+  uint32_t offset = start;
   bool has_escape = false;
   base::uc32 bits = 0;
 
@@ -2229,9 +2241,9 @@ JsonString JsonParser<Char>::ScanJsonString(bool needs_internalization) {
     }
 
     if (*cursor_ == '"') {
-      int end = position();
+      uint32_t end = position();
       advance();
-      int length = end - offset;
+      uint32_t length = end - offset;
       bool convert = sizeof(Char) == 1 ? bits > unibrow::Latin1::kMaxChar
                                        : bits <= unibrow::Latin1::kMaxChar;
       constexpr int kMaxInternalizedStringValueLength = 10;

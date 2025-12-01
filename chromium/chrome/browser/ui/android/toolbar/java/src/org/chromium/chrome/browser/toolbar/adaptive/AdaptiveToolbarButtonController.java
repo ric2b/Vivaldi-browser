@@ -6,10 +6,15 @@ package org.chromium.chrome.browser.toolbar.adaptive;
 
 import static org.chromium.chrome.browser.preferences.ChromePreferenceKeys.ADAPTIVE_TOOLBAR_CUSTOMIZATION_ENABLED;
 import static org.chromium.chrome.browser.preferences.ChromePreferenceKeys.ADAPTIVE_TOOLBAR_CUSTOMIZATION_SETTINGS;
+import static org.chromium.chrome.browser.toolbar.adaptive.settings.AdaptiveToolbarSettingsFragment.ARG_UI_STATE_AUTO_BUTTON_CAPTION;
+import static org.chromium.chrome.browser.toolbar.adaptive.settings.AdaptiveToolbarSettingsFragment.ARG_UI_STATE_CAN_SHOW_UI;
+import static org.chromium.chrome.browser.toolbar.adaptive.settings.AdaptiveToolbarSettingsFragment.ARG_UI_STATE_PREFERENCE_SELECTION;
+import static org.chromium.chrome.browser.toolbar.adaptive.settings.AdaptiveToolbarSettingsFragment.ARG_UI_STATE_TOOLBAR_BUTTON_STATE;
 
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.content.res.Configuration;
+import android.os.Bundle;
 import android.view.View;
 
 import androidx.annotation.Nullable;
@@ -37,6 +42,7 @@ import org.chromium.chrome.browser.toolbar.ButtonDataImpl;
 import org.chromium.chrome.browser.toolbar.ButtonDataProvider;
 import org.chromium.chrome.browser.toolbar.ButtonDataProvider.ButtonDataObserver;
 import org.chromium.chrome.browser.toolbar.R;
+import org.chromium.chrome.browser.toolbar.adaptive.AdaptiveToolbarStatePredictor.UiState;
 import org.chromium.chrome.browser.toolbar.adaptive.settings.AdaptiveToolbarSettingsFragment;
 import org.chromium.components.browser_ui.settings.SettingsNavigation;
 import org.chromium.content_public.browser.NavigationHandle;
@@ -77,6 +83,7 @@ public class AdaptiveToolbarButtonController
     private final AndroidPermissionDelegate mAndroidPermissionDelegate;
     private final CallbackController mCallbackController;
     private final Callback<AdaptiveToolbarStatePredictor.UiState> mUiStateCallback;
+    private final AdaptiveToolbarBehavior mToolbarBehavior;
 
     @Nullable private AdaptiveToolbarStatePredictor mAdaptiveToolbarStatePredictor;
     @Nullable private View.OnLongClickListener mMenuHandler;
@@ -103,14 +110,14 @@ public class AdaptiveToolbarButtonController
             ActivityLifecycleDispatcher lifecycleDispatcher,
             ObservableSupplier<Profile> profileSupplier,
             AdaptiveButtonActionMenuCoordinator menuCoordinator,
+            AdaptiveToolbarBehavior toolbarBehavior,
             AndroidPermissionDelegate androidPermissionDelegate) {
         mContext = context;
         mMenuClickListener =
                 id -> {
                     if (id == R.id.customize_adaptive_button_menu_id) {
                         RecordUserAction.record("MobileAdaptiveMenuCustomize");
-                        SettingsNavigationFactory.createSettingsNavigation()
-                                .startSettings(context, AdaptiveToolbarSettingsFragment.class);
+                        mAdaptiveToolbarStatePredictor.recomputeUiState(this::startSettings);
                         return;
                     }
                     assert false : "unknown adaptive button menu id: " + id;
@@ -118,6 +125,7 @@ public class AdaptiveToolbarButtonController
         mLifecycleDispatcher = lifecycleDispatcher;
         mLifecycleDispatcher.register(this);
         mMenuCoordinator = menuCoordinator;
+        mToolbarBehavior = toolbarBehavior;
         mScreenWidthDp = context.getResources().getConfiguration().screenWidthDp;
         mAndroidPermissionDelegate = androidPermissionDelegate;
         mCallbackController = new CallbackController();
@@ -133,6 +141,16 @@ public class AdaptiveToolbarButtonController
 
         new OneShotCallback<>(
                 profileSupplier, mCallbackController.makeCancelable(this::setProfile));
+    }
+
+    private void startSettings(UiState uiState) {
+        Bundle args = new Bundle();
+        args.putBoolean(ARG_UI_STATE_CAN_SHOW_UI, uiState.canShowUi);
+        args.putInt(ARG_UI_STATE_TOOLBAR_BUTTON_STATE, uiState.toolbarButtonState);
+        args.putInt(ARG_UI_STATE_PREFERENCE_SELECTION, uiState.preferenceSelection);
+        args.putInt(ARG_UI_STATE_AUTO_BUTTON_CAPTION, uiState.autoButtonCaption);
+        SettingsNavigationFactory.createSettingsNavigation()
+                .startSettings(mContext, AdaptiveToolbarSettingsFragment.class, args);
     }
 
     /**
@@ -240,7 +258,8 @@ public class AdaptiveToolbarButtonController
                             receivedButtonSpec.getButtonVariant(),
                             receivedButtonSpec.getActionChipLabelResId(),
                             receivedButtonSpec.getHoverTooltipTextId(),
-                            receivedButtonSpec.getShouldShowHoverHighlight()));
+                            receivedButtonSpec.shouldShowBackgroundHighlight(),
+                            receivedButtonSpec.hasErrorBadge()));
         }
         return mButtonData;
     }
@@ -273,7 +292,8 @@ public class AdaptiveToolbarButtonController
         assert mAdaptiveToolbarStatePredictor == null;
         profile = profile.getOriginalProfile();
         mAdaptiveToolbarStatePredictor =
-                new AdaptiveToolbarStatePredictor(mContext, profile, mAndroidPermissionDelegate);
+                new AdaptiveToolbarStatePredictor(
+                        mContext, profile, mAndroidPermissionDelegate, mToolbarBehavior);
         ContextUtils.getAppSharedPreferences().registerOnSharedPreferenceChangeListener(this);
 
         if (!AdaptiveToolbarFeatures.isCustomizationEnabled()) return;

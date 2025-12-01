@@ -35,6 +35,7 @@
 #include "gpu/command_buffer/service/service_utils.h"
 #include "gpu/command_buffer/service/shared_image/shared_image_representation.h"
 #include "gpu/config/gpu_finch_features.h"
+#include "ui/gl/gl_implementation.h"
 #include "ui/gl/gl_utils.h"
 #include "ui/gl/gl_version_info.h"
 #include "ui/gl/gpu_switching_manager.h"
@@ -137,13 +138,7 @@ class ScopedColorMaskZeroReset {
   explicit ScopedColorMaskZeroReset(gl::GLApi* api,
                                     bool oes_draw_buffers_indexed)
       : api_(api), oes_draw_buffers_indexed_(oes_draw_buffers_indexed) {
-    if (oes_draw_buffers_indexed_) {
-      GLsizei length = 0;
-      api_->glGetBooleani_vRobustANGLEFn(
-          GL_COLOR_WRITEMASK, 0, sizeof(color_mask_), &length, color_mask_);
-    } else {
-      api_->glGetBooleanvFn(GL_COLOR_WRITEMASK, color_mask_);
-    }
+    api_->glGetBooleanvFn(GL_COLOR_WRITEMASK, color_mask_);
   }
   ~ScopedColorMaskZeroReset() {
     if (oes_draw_buffers_indexed_) {
@@ -799,6 +794,9 @@ gpu::ContextResult GLES2DecoderPassthroughImpl::Initialize(
     const DisallowedFeatures& disallowed_features,
     const ContextCreationAttribs& attrib_helper) {
   TRACE_EVENT0("gpu", "GLES2DecoderPassthroughImpl::Initialize");
+  CHECK(gl::GetGLImplementation() == gl::kGLImplementationEGLANGLE)
+      << "Running WebGL through passthrough command decoder without ANGLE's "
+      << "validation is a security risk";
   DCHECK(context->IsCurrent(surface.get()));
   api_ = gl::g_current_gl_context;
   // Take ownership of the context and surface. The surface can be replaced
@@ -954,10 +952,10 @@ gpu::ContextResult GLES2DecoderPassthroughImpl::Initialize(
   FAIL_INIT_IF_NOT(feature_info_->feature_flags().khr_debug,
                    "missing GL_KHR_debug");
   FAIL_INIT_IF_NOT(!attrib_helper.fail_if_major_perf_caveat ||
-                       !feature_info_->feature_flags().is_swiftshader_for_webgl,
-                   "fail_if_major_perf_caveat + swiftshader");
-  FAIL_INIT_IF_NOT(!attrib_helper.enable_oop_rasterization,
-                   "oop rasterization not supported");
+                       !feature_info_->feature_flags().is_software_webgl,
+                   "fail_if_major_perf_caveat + software gl");
+  FAIL_INIT_IF_NOT(!attrib_helper.enable_gpu_rasterization,
+                   "GPU rasterization not supported");
   FAIL_INIT_IF_NOT(!IsES31ForTestingContextType(attrib_helper.context_type) ||
                        feature_info_->gl_version_info().IsAtLeastGLES(3, 1),
                    "ES 3.1 context type requires an ES 3.1 ANGLE context");
@@ -1419,7 +1417,7 @@ gpu::Capabilities GLES2DecoderPassthroughImpl::GetCapabilities() {
   caps.angle_rgbx_internal_format =
       feature_info_->feature_flags().angle_rgbx_internal_format;
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
   PopulateDRMCapabilities(&caps, feature_info_.get());
 #endif
 

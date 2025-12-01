@@ -7,12 +7,15 @@
 #include <algorithm>
 #include <memory>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
 #include "ash/capture_mode/action_button_view.h"
+#include "ash/capture_mode/capture_mode_session_focus_cycler.h"
 #include "ash/capture_mode/capture_mode_types.h"
 #include "ash/capture_mode/capture_mode_util.h"
+#include "ash/resources/vector_icons/vector_icons.h"
 #include "ash/strings/grit/ash_strings.h"
 #include "ash/style/system_shadow.h"
 #include "ash/style/typography.h"
@@ -41,7 +44,6 @@
 #include "ui/views/controls/link.h"
 #include "ui/views/layout/box_layout.h"
 #include "ui/views/layout/box_layout_view.h"
-#include "ui/views/vector_icons.h"
 #include "ui/views/view.h"
 #include "ui/views/view_class_properties.h"
 #include "ui/views/view_utils.h"
@@ -68,7 +70,7 @@ constexpr auto kErrorViewLeadingIconRightPadding = 4;
 constexpr auto kErrorViewTryAgainLinkPadding = gfx::Insets::TLBR(0, 8, 0, 4);
 
 // The horizontal distance between action buttons in a row.
-constexpr int kActionButtonSpacing = 10;
+constexpr int kActionButtonSpacing = 6;
 
 // The animation duration for fading out old action buttons after the smart
 // actions button is pressed.
@@ -93,7 +95,7 @@ ActionButtonContainerView::ErrorView::ErrorView()
   SetOrientation(views::BoxLayout::Orientation::kHorizontal);
   SetInsideBorderInsets(kErrorViewBorderInsets);
 
-  SetBackground(views::CreateThemedRoundedRectBackground(
+  SetBackground(views::CreateRoundedRectBackground(
       cros_tokens::kCrosSysSystemBaseElevated,
       gfx::RoundedCornersF(kErrorViewCornerRadius)));
   SetPaintToLayer();
@@ -103,26 +105,25 @@ ActionButtonContainerView::ErrorView::ErrorView()
       this, kErrorViewCornerRadius,
       views::HighlightBorder::Type::kHighlightBorderNoShadow);
 
-  AddChildView(views::Builder<views::ImageView>()
-                   .SetPreferredSize(gfx::Size(kErrorViewLeadingIconSize,
-                                               kErrorViewLeadingIconSize))
-                   .SetImage(ui::ImageModel::FromVectorIcon(
-                       views::kInfoIcon, cros_tokens::kCrosSysSecondary))
-                   .SetProperty(views::kMarginsKey,
-                                gfx::Insets::TLBR(
-                                    0, 0, 0, kErrorViewLeadingIconRightPadding))
-                   .Build());
+  AddChildView(
+      views::Builder<views::ImageView>()
+          .SetPreferredSize(
+              gfx::Size(kErrorViewLeadingIconSize, kErrorViewLeadingIconSize))
+          .SetImage(ui::ImageModel::FromVectorIcon(
+              kCaptureModeActionErrorIcon, cros_tokens::kCrosSysSecondary))
+          .SetProperty(
+              views::kMarginsKey,
+              gfx::Insets::TLBR(0, 0, 0, kErrorViewLeadingIconRightPadding))
+          .Build());
 
   AddChildView(
       views::Builder<views::Label>()
           .CopyAddressTo(&error_label_)
-          .SetEnabledColorId(cros_tokens::kCrosSysSecondary)
+          .SetEnabledColor(cros_tokens::kCrosSysSecondary)
           .SetFontList(TypographyProvider::Get()->ResolveTypographyToken(
               TypographyToken::kCrosAnnotation1))
           .Build());
 
-  // TODO(crbug.com/388451361): Implement keyboard navigation for the try again
-  // link.
   AddChildView(
       views::Builder<views::Link>()
           .CopyAddressTo(&try_again_link_)
@@ -130,11 +131,12 @@ ActionButtonContainerView::ErrorView::ErrorView()
               IDS_ASH_SCANNER_ERROR_TRY_AGAIN_LINK_TEXT))
           .SetFontList(TypographyProvider::Get()->ResolveTypographyToken(
               TypographyToken::kCrosButton2))
-          .SetEnabledColorId(cros_tokens::kCrosSysPrimary)
+          .SetEnabledColor(cros_tokens::kCrosSysPrimary)
           .SetForceUnderline(false)
           .SetProperty(views::kMarginsKey, kErrorViewTryAgainLinkPadding)
           .SetVisible(false)
           .Build());
+  CaptureModeSessionFocusCycler::HighlightHelper::Install(try_again_link_);
 }
 
 ActionButtonContainerView::ErrorView::~ErrorView() = default;
@@ -177,7 +179,7 @@ void ActionButtonContainerView::ErrorView::SetTryAgainCallback(
   try_again_link_->SetCallback(std::move(try_again_callback));
 }
 
-const std::u16string&
+std::u16string_view
 ActionButtonContainerView::ErrorView::GetErrorMessageForTesting() const {
   return error_label_->GetText();
 }
@@ -202,6 +204,7 @@ ActionButtonContainerView::ActionButtonContainerView() {
           // updated when `action_button_row_` bounds are updated.
           .SetPaintToLayer()
           .Build());
+  action_button_row_->layer()->SetFillsBoundsOpaquely(false);
 }
 
 ActionButtonContainerView::~ActionButtonContainerView() = default;
@@ -261,6 +264,20 @@ const views::View::Views& ActionButtonContainerView::GetActionButtons() const {
   return action_button_row_->children();
 }
 
+std::vector<views::View*> ActionButtonContainerView::GetFocusableViews() {
+  std::vector<views::View*> focusable_views;
+  views::View* try_again_link = error_view_->try_again_link();
+  if (error_view_->GetVisible() && try_again_link->GetVisible()) {
+    focusable_views.push_back(try_again_link);
+  }
+  for (auto action_button : GetActionButtons()) {
+    if (action_button->GetEnabled()) {
+      focusable_views.push_back(action_button);
+    }
+  }
+  return focusable_views;
+}
+
 void ActionButtonContainerView::ShowErrorView(
     const std::u16string& error_message,
     base::RepeatingClosure try_again_callback) {
@@ -297,26 +314,14 @@ void ActionButtonContainerView::OnSmartActionsButtonFadedOut() {
     return;
   }
 
-  // Remove Scanner action buttons and keep other buttons. We need to copy the
-  // old action buttons vector since we will be removing buttons from the
-  // original vector.
-  std::vector<std::unique_ptr<ActionButtonView>> action_buttons_to_keep;
-  views::View::Views old_action_buttons = GetActionButtons();
-  for (views::View* view : old_action_buttons) {
-    auto action_button = action_button_row_->RemoveChildViewT(
-        views::AsViewClass<ActionButtonView>(view));
-    if (action_button->rank().type != ActionButtonType::kScanner) {
-      action_buttons_to_keep.push_back(std::move(action_button));
-    }
-  }
-  CHECK(GetActionButtons().empty());
+  RemoveSmartActionsButton();
 
-  // Add the buttons to keep back into the action button container and
-  // collapse them into icon buttons.
-  for (std::unique_ptr<ActionButtonView>& action_button :
-       action_buttons_to_keep) {
-    action_button->CollapseToIconButton();
-    action_button_row_->AddChildView(std::move(action_button));
+  // Collapse the remaining buttons into icon buttons.
+  for (views::View* view : GetActionButtons()) {
+    auto* action_button = views::AsViewClass<ActionButtonView>(view);
+    if (action_button->rank().type != ActionButtonType::kScanner) {
+      action_button->CollapseToIconButton();
+    }
   }
 
   // Compute bounds required to slide in the new icon buttons from the left edge
@@ -350,6 +355,17 @@ void ActionButtonContainerView::OnSmartActionsButtonFadedOut() {
       .At(base::TimeDelta())
       .SetDuration(kSmartActionsButtonTransitionSlideInDuration)
       .SetTransform(layer, gfx::Transform(), gfx::Tween::ACCEL_LIN_DECEL_100);
+}
+
+void ActionButtonContainerView::RemoveSmartActionsButton() {
+  // Note that `views::View::GetViewByID` recursively a view's children, so if
+  // `ActionButtonView` contains any children with ID `kSmartActionsButton = 1`,
+  // this will fail.
+  // As of writing, `ActionButtonView`'s children all have an ID of 0.
+  if (views::View* smart_actions_button = action_button_row_->GetViewByID(
+          ActionButtonViewID::kSmartActionsButton)) {
+    action_button_row_->RemoveChildViewT(smart_actions_button);
+  }
 }
 
 void ActionButtonContainerView::SetWidgetEventsEnabled(bool enabled) {

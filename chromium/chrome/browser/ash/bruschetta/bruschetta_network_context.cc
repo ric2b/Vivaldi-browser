@@ -238,6 +238,11 @@ void BruschettaNetworkContext::OnPrivateNetworkAccessPermissionRequired(
   std::move(callback).Run(false);
 }
 
+void BruschettaNetworkContext::OnLocalNetworkAccessPermissionRequired(
+    OnLocalNetworkAccessPermissionRequiredCallback callback) {
+  std::move(callback).Run(false);
+}
+
 void BruschettaNetworkContext::OnClearSiteData(
     const GURL& url,
     const std::string& header_value,
@@ -267,6 +272,9 @@ void BruschettaNetworkContext::OnSharedStorageHeaderReceived(
     OnSharedStorageHeaderReceivedCallback callback) {
   std::move(callback).Run();
 }
+
+void BruschettaNetworkContext::OnAdAuctionEventRecordHeaderReceived(
+    network::AdAuctionEventRecord event_record) {}
 
 void BruschettaNetworkContext::Clone(
     mojo::PendingReceiver<network::mojom::URLLoaderNetworkServiceObserver>

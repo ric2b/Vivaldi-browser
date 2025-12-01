@@ -1413,6 +1413,12 @@ static void freeP4(sqlite3 *db, int p4type, void *p4){
       if( db->pnBytesFreed==0 ) sqlite3DeleteTable(db, (Table*)p4);
       break;
     }
+    case P4_SUBRTNSIG: {
+      SubrtnSig *pSig = (SubrtnSig*)p4;
+      sqlite3DbFree(db, pSig->zAff);
+      sqlite3DbFree(db, pSig);
+      break;
+    }
   }
 }
 
@@ -1992,6 +1998,11 @@ char *sqlite3VdbeDisplayP4(sqlite3 *db, Op *pOp){
       zP4 = pOp->p4.pTab->zName;
       break;
     }
+    case P4_SUBRTNSIG: {
+      SubrtnSig *pSig = pOp->p4.pSubrtnSig;
+      sqlite3_str_appendf(&x, "subrtnsig:%d,%s", pSig->selId, pSig->zAff);
+      break;
+    }
     default: {
       zP4 = pOp->p4.z;
     }
@@ -2133,6 +2144,7 @@ void sqlite3VdbePrintOp(FILE *pOut, int pc, VdbeOp *pOp){
 ** will be initialized before use.
 */
 static void initMemArray(Mem *p, int N, sqlite3 *db, u16 flags){
+  assert( db!=0 );
   if( N>0 ){
     do{
       p->flags = flags;
@@ -2140,6 +2152,7 @@ static void initMemArray(Mem *p, int N, sqlite3 *db, u16 flags){
       p->szMalloc = 0;
 #ifdef SQLITE_DEBUG
       p->pScopyFrom = 0;
+      p->bScopy = 0;
 #endif
       p++;
     }while( (--N)>0 );
@@ -2158,6 +2171,7 @@ static void releaseMemArray(Mem *p, int N){
   if( p && N ){
     Mem *pEnd = &p[N];
     sqlite3 *db = p->db;
+    assert( db!=0 );
     if( db->pnBytesFreed ){
       do{
         if( p->szMalloc ) sqlite3DbFree(db, p->zMalloc);
@@ -2638,6 +2652,7 @@ void sqlite3VdbeMakeReady(
   assert( pParse!=0 );
   assert( p->eVdbeState==VDBE_INIT_STATE );
   assert( pParse==p->pParse );
+  assert( pParse->db==p->db );
   p->pVList = pParse->pVList;
   pParse->pVList =  0;
   db = p->db;
@@ -4501,7 +4516,7 @@ SQLITE_NOINLINE int sqlite3BlobCompare(const Mem *pB1, const Mem *pB2){
 ** We must use separate SQLITE_NOINLINE functions here, since otherwise
 ** optimizer code movement causes gcov to become very confused.
 */
-#if  defined(SQLITE_COVERAGE_TEST) || defined(SQLITE_DEBUG)
+#if defined(SQLITE_COVERAGE_TEST) || defined(SQLITE_DEBUG)
 static int SQLITE_NOINLINE doubleLt(double a, double b){ return a<b; }
 static int SQLITE_NOINLINE doubleEq(double a, double b){ return a==b; }
 #endif
@@ -4516,13 +4531,6 @@ int sqlite3IntFloatCompare(i64 i, double r){
     /* SQLite considers NaN to be a NULL. And all integer values are greater
     ** than NULL */
     return 1;
-  }
-  if( sqlite3Config.bUseLongDouble ){
-    LONGDOUBLE_TYPE x = (LONGDOUBLE_TYPE)i;
-    testcase( x<r );
-    testcase( x>r );
-    testcase( x==r );
-    return (x<r) ? -1 : (x>r);
   }else{
     i64 y;
     if( r<-9223372036854775808.0 ) return +1;
@@ -5336,7 +5344,8 @@ sqlite3_value *sqlite3VdbeGetBoundValue(Vdbe *v, int iVar, u8 aff){
   assert( iVar>0 );
   if( v ){
     Mem *pMem = &v->aVar[iVar-1];
-    assert( (v->db->flags & SQLITE_EnableQPSG)==0 );
+    assert( (v->db->flags & SQLITE_EnableQPSG)==0 
+         || (v->db->mDbFlags & DBFLAG_InternalFunc)!=0 );
     if( 0==(pMem->flags & MEM_Null) ){
       sqlite3_value *pRet = sqlite3ValueNew(v->db);
       if( pRet ){
@@ -5356,7 +5365,8 @@ sqlite3_value *sqlite3VdbeGetBoundValue(Vdbe *v, int iVar, u8 aff){
 */
 void sqlite3VdbeSetVarmask(Vdbe *v, int iVar){
   assert( iVar>0 );
-  assert( (v->db->flags & SQLITE_EnableQPSG)==0 );
+  assert( (v->db->flags & SQLITE_EnableQPSG)==0 
+       || (v->db->mDbFlags & DBFLAG_InternalFunc)!=0 );
   if( iVar>=32 ){
     v->expmask |= 0x80000000;
   }else{
@@ -5523,12 +5533,20 @@ void sqlite3VdbePreUpdateHook(
   sqlite3DbFree(db, preupdate.aRecord);
   vdbeFreeUnpacked(db, preupdate.keyinfo.nKeyField+1, preupdate.pUnpacked);
   vdbeFreeUnpacked(db, preupdate.keyinfo.nKeyField+1, preupdate.pNewUnpacked);
+  sqlite3VdbeMemRelease(&preupdate.oldipk);
   if( preupdate.aNew ){
     int i;
     for(i=0; i<pCsr->nField; i++){
       sqlite3VdbeMemRelease(&preupdate.aNew[i]);
     }
     sqlite3DbNNFreeNN(db, preupdate.aNew);
+  }
+  if( preupdate.apDflt ){
+    int i;
+    for(i=0; i<pTab->nCol; i++){
+      sqlite3ValueFree(preupdate.apDflt[i]);
+    }
+    sqlite3DbFree(db, preupdate.apDflt);
   }
 }
 #endif /* SQLITE_ENABLE_PREUPDATE_HOOK */

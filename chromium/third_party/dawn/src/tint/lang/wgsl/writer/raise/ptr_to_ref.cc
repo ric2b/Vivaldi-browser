@@ -30,6 +30,8 @@
 #include "src/tint/lang/core/ir/function.h"
 #include "src/tint/lang/core/ir/let.h"
 #include "src/tint/lang/core/ir/module.h"
+#include "src/tint/lang/core/ir/phony.h"
+#include "src/tint/lang/core/ir/validator.h"
 #include "src/tint/lang/core/ir/var.h"
 #include "src/tint/lang/core/type/pointer.h"
 #include "src/tint/lang/core/type/reference.h"
@@ -43,7 +45,7 @@ struct Impl {
     core::ir::Module& mod;
     core::ir::Builder b{mod};
 
-    Result<SuccessType> Run() {
+    void Run() {
         Vector<core::ir::Block*, 32> blocks;
         for (auto fn : mod.functions) {
             blocks.Push(fn->Block());
@@ -58,6 +60,9 @@ struct Impl {
                     [&](core::ir::Var* var) { ResultPtrToRef(var); },
                     [&](core::ir::Let* let) {
                         OperandRefToPtr({let, core::ir::Let::kValueOperandOffset});
+                    },
+                    [&](core::ir::Phony* p) {
+                        OperandRefToPtr({p, core::ir::Phony::kValueOperandOffset});
                     },
                     [&](core::ir::Call* call) { OperandsRefToPtr(call); },
                     [&](core::ir::Access* access) {
@@ -85,8 +90,6 @@ struct Impl {
                     });
             }
         }
-
-        return Success;
     }
 
     void OperandsRefToPtr(core::ir::Instruction* inst) {
@@ -137,7 +140,21 @@ struct Impl {
 }  // namespace
 
 Result<SuccessType> PtrToRef(core::ir::Module& mod) {
-    return Impl{mod}.Run();
+    auto result =
+        core::ir::ValidateAndDumpIfNeeded(mod, "wgsl.PtrToRef",
+                                          core::ir::Capabilities{
+                                              core::ir::Capability::kAllowOverrides,
+                                              core::ir::Capability::kAllowPhonyInstructions,
+                                          }
+
+        );
+    if (result != Success) {
+        return result;
+    }
+
+    Impl{mod}.Run();
+
+    return Success;
 }
 
 }  // namespace tint::wgsl::writer::raise

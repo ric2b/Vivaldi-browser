@@ -69,6 +69,12 @@ class VIEWS_EXPORT NativeWidgetMac : public internal::NativeWidgetPrivate,
   // Called when the backing NSWindow gains or loses key status.
   void OnWindowKeyStatusChanged(bool is_key, bool is_content_first_responder);
 
+  // Called when the user will start resizing the window.
+  void OnWindowWillStartLiveResize();
+
+  // Called when the user ends resizing the window.
+  void OnWindowDidEndLiveResize();
+
   // The vertical position from which sheets should be anchored, from the top
   // of the content view.
   virtual int32_t SheetOffsetY();
@@ -274,6 +280,7 @@ class VIEWS_EXPORT NativeWidgetMac : public internal::NativeWidgetPrivate,
   // FocusChangeListener:
   void OnWillChangeFocus(View* focused_before, View* focused_now) override;
   void OnDidChangeFocus(View* focused_before, View* focused_now) override;
+  void OnFocusManagerDestroying(FocusManager* focus_manager) override;
 
   // ui::ImeKeyEventDispatcher:
   ui::EventDispatchDetails DispatchKeyEventPostIME(ui::KeyEvent* key) override;

@@ -68,6 +68,8 @@ usage() {
 
 COMMAND=" --edit"
 INCLUDE_ARGS=""
+GMOCK_INCLUDES="--extra-arg=-I../../third_party/googletest/src/googlemock/include/"
+GTEST_INCLUDES="--extra-arg=-I../../third_party/googletest/src/googletest/include/"
 CHECK_MODE=false
 
 while getopts 'd:rncw:h' opts; do
@@ -107,11 +109,7 @@ done
 HAS_OUTPUT=false
 for FILE in "$@"
 do
-  # Run the command in $WORKDIR because of this reported issue:
-  # https://github.com/llvm/llvm-project/issues/110843
-  cd $WORKDIR
-  OUTPUT=$(../../$CLEANER $INCLUDE_ARGS $COMMAND ../../$FILE)
-  cd -
+  OUTPUT=$($CLEANER -p $WORKDIR $INCLUDE_ARGS $GMOCK_INCLUDES $GTEST_INCLUDES $COMMAND $FILE)
 
   # include-cleaner does not support custom mappings for certain deps
   # this ensures that the gtest/gmock deps it inserts are replaced
@@ -136,8 +134,8 @@ do
   HAS_OUTPUT=$HAS_OUTPUT || [[ ! -z $OUTPUT ]]
 done
 
-echo "Finished. Check diff, compile, gn gen --check and git cl format"
-echo "before uploading."
+echo "Finished. Check diff, compile, gn gen --check (tools_webrtc/gn_check_autofix.py can fix most of the issues)"
+echo "and git cl format before uploading."
 
 # Return a non-zero exit code if running with "CHECK_MODE"
 # and there are changes to apply.

@@ -23,7 +23,9 @@ class MockValueWriter {
 
 TEST(XmlElementWriter, EmptyElement) {
   std::ostringstream out;
-  { XmlElementWriter writer(out, "foo", XmlAttributes()); }
+  {
+    XmlElementWriter writer(out, "foo", XmlAttributes());
+  }
   EXPECT_EQ("<foo />\n", out.str());
 
   std::ostringstream out_attr;

@@ -365,7 +365,6 @@ void GCTracer::StopObservablePause(GarbageCollector collector,
       for (int i = 0; i < Scope::NUMBER_OF_INCREMENTAL_SCOPES; i++) {
         current_.incremental_scopes[i] = incremental_scopes_[i];
         current_.scopes[i] = incremental_scopes_[i].duration;
-        new (&incremental_scopes_[i]) IncrementalInfos;
       }
     } else {
       recorded_mark_compacts_.Push(
@@ -389,6 +388,13 @@ void GCTracer::StopObservablePause(GarbageCollector collector,
     PrintNVP();
   } else {
     Print();
+  }
+
+  // Reset here because Print() still uses these scopes.
+  if (current_.type == Event::Type::INCREMENTAL_MARK_COMPACTOR) {
+    for (int i = 0; i < Scope::NUMBER_OF_INCREMENTAL_SCOPES; i++) {
+      new (&incremental_scopes_[i]) IncrementalInfos;
+    }
   }
 
   if (v8_flags.trace_gc) {
@@ -416,7 +422,7 @@ void GCTracer::UpdateMemoryBalancerGCSpeed() {
       atomic_pause_duration + current_.incremental_marking_duration;
   base::TimeDelta concurrent_gc_time;
   {
-    base::SpinningMutexGuard guard(&background_scopes_mutex_);
+    base::MutexGuard guard(&background_scopes_mutex_);
     concurrent_gc_time =
         background_scopes_[Scope::MC_BACKGROUND_EVACUATE_COPY] +
         background_scopes_[Scope::MC_BACKGROUND_EVACUATE_UPDATE_POINTERS] +
@@ -800,8 +806,8 @@ void GCTracer::Print() const {
       static_cast<double>(current_.start_memory_size) / MB,
       static_cast<double>(current_.end_object_size) / MB,
       static_cast<double>(current_.end_memory_size) / MB,
-      static_cast<double>(
-          heap_->memory_allocator()->pool()->CommittedBufferedMemory()) /
+      static_cast<double>(heap_->memory_allocator()->GetPooledChunksCount() *
+                          PageMetadata::kPageSize) /
           MB,
       duration.InMillisecondsF(), total_external_time, incremental_buffer,
       AverageMarkCompactMutatorUtilization(),
@@ -823,7 +829,7 @@ void GCTracer::PrintNVP() const {
   }
 
   // Avoid data races when printing the background scopes.
-  base::SpinningMutexGuard guard(&background_scopes_mutex_);
+  base::MutexGuard guard(&background_scopes_mutex_);
 
   switch (current_.type) {
     case Event::Type::SCAVENGER:
@@ -849,14 +855,17 @@ void GCTracer::PrintNVP() const {
           "scavenge.parallel=%.2f "
           "scavenge.update_refs=%.2f "
           "scavenge.sweep_array_buffers=%.2f "
+          "scavenge.resize_new_space=%.2f "
           "background.scavenge.parallel=%.2f "
           "incremental.steps_count=%d "
           "incremental.steps_took=%.1f "
           "scavenge_throughput=%.f "
-          "total_size_before=%zu "
-          "total_size_after=%zu "
-          "holes_size_before=%zu "
-          "holes_size_after=%zu "
+          "start_object_size=%zu "
+          "end_object_size=%zu "
+          "start_memory_size=%zu "
+          "end_memory_size=%zu "
+          "start_holes_size=%zu "
+          "end_holes_size=%zu "
           "allocated=%zu "
           "promoted=%zu "
           "quarantined_size=%zu "
@@ -870,7 +879,13 @@ void GCTracer::PrintNVP() const {
           "promotion_rate=%.1f%% "
           "new_space_survive_rate_=%.1f%% "
           "new_space_allocation_throughput=%.1f "
-          "pool_chunks=%zu\n",
+          "new_space_capacity=%zu "
+          "old_gen_allocation_limit=%zu "
+          "global_allocation_limit=%zu "
+          "allocation_throughput=%.1f "
+          "pool_local_chunks=%zu "
+          "pool_shared_chunks=%zu "
+          "pool_total_chunks=%zu\n",
           duration.InMillisecondsF(), spent_in_mutator.InMillisecondsF(),
           ToString(current_.type, true), current_.reduce_memory,
           young_gc_while_full_gc_,
@@ -890,6 +905,7 @@ void GCTracer::PrintNVP() const {
           current_scope(Scope::SCAVENGER_SCAVENGE_PARALLEL),
           current_scope(Scope::SCAVENGER_SCAVENGE_UPDATE_REFS),
           current_scope(Scope::SCAVENGER_SWEEP_ARRAY_BUFFERS),
+          current_scope(Scope::SCAVENGER_RESIZE_NEW_SPACE),
           current_scope(Scope::SCAVENGER_BACKGROUND_SCAVENGE_PARALLEL),
           incremental_scope(GCTracer::Scope::MC_INCREMENTAL).steps,
           current_scope(Scope::MC_INCREMENTAL),
@@ -897,6 +913,7 @@ void GCTracer::PrintNVP() const {
               YoungGenerationSpeedMode::kOnlyAtomicPause)
               .value_or(0.0),
           current_.start_object_size, current_.end_object_size,
+          current_.start_memory_size, current_.end_memory_size,
           current_.start_holes_size, current_.end_holes_size,
           allocated_since_last_gc, heap_->promoted_objects_size(),
           heap_->semi_space_new_space()->QuarantinedSize(),
@@ -907,7 +924,13 @@ void GCTracer::PrintNVP() const {
           AverageSurvivalRatio(), heap_->promotion_rate_,
           heap_->new_space_surviving_rate_,
           NewSpaceAllocationThroughputInBytesPerMillisecond(),
-          heap_->memory_allocator()->pool()->NumberOfCommittedChunks());
+          heap_->new_space() ? heap_->new_space()->TotalCapacity() : 0,
+          heap_->old_generation_allocation_limit(),
+          heap_->global_allocation_limit(),
+          AllocationThroughputInBytesPerMillisecond(),
+          heap_->memory_allocator()->GetPooledChunksCount(),
+          heap_->memory_allocator()->GetSharedPooledChunksCount(),
+          heap_->memory_allocator()->GetTotalPooledChunksCount());
       break;
     case Event::Type::MINOR_MARK_SWEEPER:
     case Event::Type::INCREMENTAL_MINOR_MARK_SWEEPER:
@@ -945,10 +968,12 @@ void GCTracer::PrintNVP() const {
           "background.sweep=%.2f "
           "background.sweep.array_buffers=%.2f "
           "conservative_stack_scanning=%.2f "
-          "total_size_before=%zu "
-          "total_size_after=%zu "
-          "holes_size_before=%zu "
-          "holes_size_after=%zu "
+          "start_object_size=%zu "
+          "end_object_size=%zu "
+          "start_memory_size=%zu "
+          "end_memory_size=%zu "
+          "start_holes_size=%zu "
+          "end_holes_size=%zu "
           "allocated=%zu "
           "promoted=%zu "
           "new_space_survived=%zu "
@@ -959,7 +984,11 @@ void GCTracer::PrintNVP() const {
           "average_survival_ratio=%.1f%% "
           "promotion_rate=%.1f%% "
           "new_space_survive_rate_=%.1f%% "
-          "new_space_allocation_throughput=%.1f\n",
+          "new_space_capacity=%zu "
+          "old_gen_allocation_limit=%zu "
+          "global_allocation_limit=%zu "
+          "new_space_allocation_throughput=%.1f "
+          "allocation_throughput=%.1f\n",
           duration.InMillisecondsF(), spent_in_mutator.InMillisecondsF(), "mms",
           current_.reduce_memory, current_scope(Scope::MINOR_MS),
           current_scope(Scope::TIME_TO_SAFEPOINT),
@@ -991,6 +1020,7 @@ void GCTracer::PrintNVP() const {
           current_scope(Scope::BACKGROUND_YOUNG_ARRAY_BUFFER_SWEEP),
           current_scope(Scope::CONSERVATIVE_STACK_SCANNING),
           current_.start_object_size, current_.end_object_size,
+          current_.start_memory_size, current_.end_memory_size,
           current_.start_holes_size, current_.end_holes_size,
           allocated_since_last_gc, heap_->promoted_objects_size(),
           heap_->new_space_surviving_object_size(),
@@ -998,7 +1028,11 @@ void GCTracer::PrintNVP() const {
           heap_->nodes_promoted_, heap_->promotion_ratio_,
           AverageSurvivalRatio(), heap_->promotion_rate_,
           heap_->new_space_surviving_rate_,
-          NewSpaceAllocationThroughputInBytesPerMillisecond());
+          heap_->new_space() ? heap_->new_space()->TotalCapacity() : 0,
+          heap_->old_generation_allocation_limit(),
+          heap_->global_allocation_limit(),
+          NewSpaceAllocationThroughputInBytesPerMillisecond(),
+          AllocationThroughputInBytesPerMillisecond());
       break;
     case Event::Type::MARK_COMPACTOR:
     case Event::Type::INCREMENTAL_MARK_COMPACTOR:
@@ -1034,6 +1068,7 @@ void GCTracer::PrintNVP() const {
           "complete.sweeping=%.1f "
           "epilogue=%.1f "
           "evacuate=%.1f "
+          "evacuate.pin_pages=%.1f "
           "evacuate.candidates=%.1f "
           "evacuate.clean_up=%.1f "
           "evacuate.copy=%.1f "
@@ -1064,7 +1099,6 @@ void GCTracer::PrintNVP() const {
           "sweep.old=%.1f "
           "sweep.start_jobs=%.1f "
           "incremental=%.1f "
-          "incremental.finalize=%.1f "
           "incremental.finalize.external.prologue=%.1f "
           "incremental.finalize.external.epilogue=%.1f "
           "incremental.layout_change=%.1f "
@@ -1081,10 +1115,12 @@ void GCTracer::PrintNVP() const {
           "background.evacuate.copy=%.1f "
           "background.evacuate.update_pointers=%.1f "
           "conservative_stack_scanning=%.2f "
-          "total_size_before=%zu "
-          "total_size_after=%zu "
-          "holes_size_before=%zu "
-          "holes_size_after=%zu "
+          "start_object_size=%zu "
+          "end_object_size=%zu "
+          "start_memory_size=%zu "
+          "end_memory_size=%zu "
+          "start_holes_size=%zu "
+          "end_holes_size=%zu "
           "allocated=%zu "
           "promoted=%zu "
           "new_space_survived=%zu "
@@ -1096,8 +1132,14 @@ void GCTracer::PrintNVP() const {
           "promotion_rate=%.1f%% "
           "new_space_survive_rate=%.1f%% "
           "new_space_allocation_throughput=%.1f "
-          "pool_chunks=%zu "
-          "compaction_speed=%.f\n",
+          "new_space_capacity=%zu "
+          "old_gen_allocation_limit=%zu "
+          "global_allocation_limit=%zu "
+          "allocation_throughput=%.1f "
+          "pool_local_chunks=%zu "
+          "pool_shared_chunks=%zu "
+          "pool_total_chunks=%zu "
+          "compaction_speed=%.1f\n",
           duration.InMillisecondsF(), spent_in_mutator.InMillisecondsF(),
           ToString(current_.type, true), current_.reduce_memory,
           current_scope(Scope::TIME_TO_SAFEPOINT),
@@ -1126,6 +1168,7 @@ void GCTracer::PrintNVP() const {
           current_scope(Scope::MC_COMPLETE_SWEEP_ARRAY_BUFFERS),
           current_scope(Scope::MC_COMPLETE_SWEEPING),
           current_scope(Scope::MC_EPILOGUE), current_scope(Scope::MC_EVACUATE),
+          current_scope(Scope::MC_EVACUATE_PIN_PAGES),
           current_scope(Scope::MC_EVACUATE_CANDIDATES),
           current_scope(Scope::MC_EVACUATE_CLEAN_UP),
           current_scope(Scope::MC_EVACUATE_COPY),
@@ -1155,7 +1198,6 @@ void GCTracer::PrintNVP() const {
           current_scope(Scope::MC_SWEEP_OLD),
           current_scope(Scope::MC_SWEEP_START_JOBS),
           current_scope(Scope::MC_INCREMENTAL),
-          current_scope(Scope::MC_INCREMENTAL_FINALIZE),
           current_scope(Scope::MC_INCREMENTAL_EXTERNAL_PROLOGUE),
           current_scope(Scope::MC_INCREMENTAL_EXTERNAL_EPILOGUE),
           current_scope(Scope::MC_INCREMENTAL_LAYOUT_CHANGE),
@@ -1175,6 +1217,7 @@ void GCTracer::PrintNVP() const {
           current_scope(Scope::MC_BACKGROUND_EVACUATE_UPDATE_POINTERS),
           current_scope(Scope::CONSERVATIVE_STACK_SCANNING),
           current_.start_object_size, current_.end_object_size,
+          current_.start_memory_size, current_.end_memory_size,
           current_.start_holes_size, current_.end_holes_size,
           allocated_since_last_gc, heap_->promoted_objects_size(),
           heap_->new_space_surviving_object_size(),
@@ -1183,7 +1226,13 @@ void GCTracer::PrintNVP() const {
           AverageSurvivalRatio(), heap_->promotion_rate_,
           heap_->new_space_surviving_rate_,
           NewSpaceAllocationThroughputInBytesPerMillisecond(),
-          heap_->memory_allocator()->pool()->NumberOfCommittedChunks(),
+          heap_->new_space() ? heap_->new_space()->TotalCapacity() : 0,
+          heap_->old_generation_allocation_limit(),
+          heap_->global_allocation_limit(),
+          AllocationThroughputInBytesPerMillisecond(),
+          heap_->memory_allocator()->GetPooledChunksCount(),
+          heap_->memory_allocator()->GetSharedPooledChunksCount(),
+          heap_->memory_allocator()->GetTotalPooledChunksCount(),
           CompactionSpeedInBytesPerMillisecond().value_or(0.0));
       break;
     case Event::Type::START:
@@ -1368,7 +1417,7 @@ void GCTracer::NotifyIncrementalMarkingStart() {
 }
 
 void GCTracer::FetchBackgroundCounters() {
-  base::SpinningMutexGuard guard(&background_scopes_mutex_);
+  base::MutexGuard guard(&background_scopes_mutex_);
   for (int i = Scope::FIRST_BACKGROUND_SCOPE; i <= Scope::LAST_BACKGROUND_SCOPE;
        i++) {
     current_.scopes[i] += background_scopes_[i];
@@ -1421,8 +1470,7 @@ void GCTracer::RecordGCSumCounters() {
   const base::TimeDelta incremental_marking =
       incremental_scopes_[Scope::MC_INCREMENTAL_LAYOUT_CHANGE].duration +
       incremental_scopes_[Scope::MC_INCREMENTAL_START].duration +
-      current_.incremental_marking_duration +
-      incremental_scopes_[Scope::MC_INCREMENTAL_FINALIZE].duration;
+      current_.incremental_marking_duration;
   const base::TimeDelta incremental_sweeping =
       incremental_scopes_[Scope::MC_INCREMENTAL_SWEEPING].duration;
   const base::TimeDelta overall_duration =
@@ -1434,7 +1482,7 @@ void GCTracer::RecordGCSumCounters() {
   base::TimeDelta background_duration;
   base::TimeDelta marking_background_duration;
   {
-    base::SpinningMutexGuard guard(&background_scopes_mutex_);
+    base::MutexGuard guard(&background_scopes_mutex_);
     background_duration =
         background_scopes_[Scope::MC_BACKGROUND_EVACUATE_COPY] +
         background_scopes_[Scope::MC_BACKGROUND_EVACUATE_UPDATE_POINTERS] +
@@ -1627,8 +1675,7 @@ void GCTracer::ReportFullCycleToRecorder() {
       current_.incremental_scopes[Scope::MC_INCREMENTAL_LAYOUT_CHANGE]
           .duration +
       current_.incremental_scopes[Scope::MC_INCREMENTAL_START].duration +
-      current_.incremental_marking_duration +
-      current_.incremental_scopes[Scope::MC_INCREMENTAL_FINALIZE].duration;
+      current_.incremental_marking_duration;
   const base::TimeDelta incremental_sweeping =
       current_.incremental_scopes[Scope::MC_INCREMENTAL_SWEEPING].duration;
   const base::TimeDelta overall_duration =

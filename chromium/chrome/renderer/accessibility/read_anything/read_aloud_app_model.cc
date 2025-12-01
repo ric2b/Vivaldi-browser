@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "base/containers/span.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
@@ -349,11 +350,11 @@ a11y::ReadAloudCurrentGranularity ReadAloudAppModel::GetNextNodes(
 bool ReadAloudAppModel::NoValidTextRemainingInCurrentNode(bool is_pdf,
                                                           bool is_docs) const {
   ui::AXNode* anchor_node = GetNextNodeFromPosition(ax_position_);
-  std::u16string text = a11y::GetTextContent(anchor_node, is_docs);
+  std::u16string text = a11y::GetTextContent(anchor_node, is_docs, is_pdf);
   std::u16string text_substr = text.substr(current_text_index_);
   int prev_index = current_text_index_;
   // Gets the starting index for the next sentence in the current node.
-  int next_sentence_index = GetNextSentence(text_substr, is_pdf) + prev_index;
+  int next_sentence_index = GetNextSentence(text_substr) + prev_index;
   // If our current index within the current node is greater than that node's
   // text, look at the next node. If the starting index of the next sentence
   // in the node is the same the current index within the node, this means
@@ -430,7 +431,7 @@ a11y::TraversalState ReadAloudAppModel::AddTextFromStartOfNode(
     a11y::ReadAloudCurrentGranularity& current_granularity) {
   ui::AXNode* anchor_node = GetNextNodeFromPosition(ax_position_);
 
-  std::u16string base_text = a11y::GetTextContent(anchor_node, is_docs);
+  std::u16string base_text = a11y::GetTextContent(anchor_node, is_docs, is_pdf);
 
   bool is_superscript = a11y::IsSuperscript(anchor_node);
 
@@ -442,9 +443,8 @@ a11y::TraversalState ReadAloudAppModel::AddTextFromStartOfNode(
   // previous and current node text. If we're currently in a superscript,
   // no need to check for a combined sentence, as we want to add the
   // entire superscript to the current text segment.
-  int combined_sentence_index = is_superscript
-                                    ? combined_text.length()
-                                    : GetNextSentence(combined_text, is_pdf);
+  int combined_sentence_index =
+      is_superscript ? combined_text.length() : GetNextSentence(combined_text);
 
   bool is_opening_punctuation = PositionEndsWithOpeningPunctuation(
       is_superscript, combined_sentence_index, combined_text,
@@ -478,7 +478,7 @@ a11y::TraversalState ReadAloudAppModel::AddTextFromStartOfNode(
     // (index_in_new_node);
     AddTextToCurrentGranularity(anchor_node, /* startIndex= */ 0,
                                 /* end_index= */ index_in_new_node,
-                                current_granularity, is_docs);
+                                current_granularity, is_docs, is_pdf);
     current_text_index_ = index_in_new_node;
     if (current_text_index_ != (int)base_text.length()) {
       // If we're in the middle of the node, there's no need to attempt
@@ -506,12 +506,11 @@ a11y::TraversalState ReadAloudAppModel::AddTextFromMiddleOfNode(
     a11y::ReadAloudCurrentGranularity& current_granularity) {
   // Add the next granularity piece within the current node.
   ui::AXNode* anchor_node = GetNextNodeFromPosition(ax_position_);
-  std::u16string text = a11y::GetTextContent(anchor_node, is_docs);
+  std::u16string text = a11y::GetTextContent(anchor_node, is_docs, is_pdf);
   int prev_index = current_text_index_;
   std::u16string text_substr = text.substr(current_text_index_);
   // Find the next sentence within the current node.
-  int new_current_text_index =
-      GetNextSentence(text_substr, is_pdf) + prev_index;
+  int new_current_text_index = GetNextSentence(text_substr) + prev_index;
   int start_index = current_text_index_;
   current_text_index_ = new_current_text_index;
 
@@ -520,7 +519,7 @@ a11y::TraversalState ReadAloudAppModel::AddTextFromMiddleOfNode(
   // the sentence) to the start of the next sentence.
   AddTextToCurrentGranularity(anchor_node, start_index,
                               /* end_index= */ current_text_index_,
-                              current_granularity, is_docs);
+                              current_granularity, is_docs, is_pdf);
 
   // After adding the most recent granularity segment, if we're not at the
   //  end of the node, the current nodes can be returned, as we know there's
@@ -537,10 +536,11 @@ void ReadAloudAppModel::AddTextToCurrentGranularity(
     int start_index,
     int end_index,
     a11y::ReadAloudCurrentGranularity& current_granularity,
-    bool is_docs) {
+    bool is_docs,
+    bool is_pdf) {
   current_granularity.AddText(
       anchor_node->id(), start_index, end_index,
-      a11y::GetTextContent(anchor_node, is_docs)
+      a11y::GetTextContent(anchor_node, is_docs, is_pdf)
           .substr(start_index, end_index - start_index));
 }
 
@@ -570,15 +570,24 @@ ReadAloudAppModel::GetNextValidPositionFromCurrentPosition(
     ui::AXNodePosition::AXPositionInstance possible_new_position =
         new_position->CreateNextSentenceStartPosition(
             sentence_movement_options_);
-    bool use_paragraph = false;
+
+    // If the new position and the previous position are the same, try moving
+    // to the next line position instead. This seems to happen on pdfs sometimes
+    // where next sentence returns the same position and next paragraph skips
+    // some text.
+    // TODO(crbug.com/40927698): Investigate whether this is helpful beyond pdfs
+    if (is_pdf && ArePositionsEqual(possible_new_position, new_position)) {
+      possible_new_position =
+          new_position->CreateNextLineStartPosition(sentence_movement_options_);
+    }
 
     // If the new position and the previous position are the same, try moving
     // to the next paragraph position instead. This happens rarely, but when
     // it does, we can get stuck in an infinite loop of calling
     // CreateNextSentenceStartPosition, as it will always return the same
     // position.
-    if (ArePositionsEqual(possible_new_position, new_position)) {
-      use_paragraph = true;
+    if (possible_new_position->IsNullPosition() ||
+        ArePositionsEqual(possible_new_position, new_position)) {
       possible_new_position = new_position->CreateNextParagraphStartPosition(
           sentence_movement_options_);
 
@@ -595,9 +604,9 @@ ReadAloudAppModel::GetNextValidPositionFromCurrentPosition(
     }
 
     // If the new position is still the same as the old position after trying
-    // a paragraph position, go ahead and return a null position instead, as
-    // ending speech early is preferable to getting stuck in an infinite
-    // loop.
+    // both line and paragraph positions, go ahead and return a null position
+    // instead, as ending speech early is preferable to getting stuck in an
+    // infinite loop.
     if (ArePositionsEqual(possible_new_position, new_position)) {
       return ui::AXNodePosition::AXPosition::CreateNullPosition();
     }
@@ -613,11 +622,7 @@ ReadAloudAppModel::GetNextValidPositionFromCurrentPosition(
       return new_position;
     }
 
-    new_position = use_paragraph
-                       ? new_position->CreateNextParagraphStartPosition(
-                             sentence_movement_options_)
-                       : new_position->CreateNextSentenceStartPosition(
-                             sentence_movement_options_);
+    new_position = std::move(possible_new_position);
   }
 
   return new_position;
@@ -754,5 +759,11 @@ void ReadAloudAppModel::IncrementMetric(const std::string& metric_name) {
   if (metric_to_single_sample_[metric_name]) {
     metric_to_single_sample_[metric_name]->SetSample(
         metric_to_count_map_[metric_name]);
+  }
+}
+
+void ReadAloudAppModel::LogSpeechStop(ReadAloudStopSource source) {
+  if (features::IsReadAnythingReadAloudEnabled()) {
+    base::UmaHistogramEnumeration(kSpeechStopSourceHistogramName, source);
   }
 }

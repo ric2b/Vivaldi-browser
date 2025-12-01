@@ -241,7 +241,7 @@ int GetEncoderPriorityBitrate(std::string codec_name,
 
 uint32_t GetInitialEncoderMaxBitrate(int initial_encoder_max_bitrate) {
   if (initial_encoder_max_bitrate > 0)
-    return rtc::dchecked_cast<uint32_t>(initial_encoder_max_bitrate);
+    return dchecked_cast<uint32_t>(initial_encoder_max_bitrate);
 
   // TODO(srte): Make sure max bitrate is not set to negative values. We don't
   // have any way to handle unset values in downstream code, such as the
@@ -555,8 +555,8 @@ void VideoSendStreamImpl::ReconfigureVideoEncoder(
     SetParametersCallback callback) {
   RTC_DCHECK_RUN_ON(&thread_checker_);
   RTC_DCHECK_EQ(content_type_, config.content_type);
-  RTC_LOG(LS_VERBOSE) << "Encoder config: " << config.ToString()
-                      << " VideoSendStream config: " << config_.ToString();
+  RTC_LOG(LS_INFO) << "Encoder config: " << config.ToString()
+                   << " VideoSendStream config: " << config_.ToString();
 
   has_active_encodings_ = HasActiveEncodings(config);
   if (has_active_encodings_ && rtp_video_sender_->IsActive() && !IsRunning()) {
@@ -573,6 +573,11 @@ void VideoSendStreamImpl::ReconfigureVideoEncoder(
 VideoSendStream::Stats VideoSendStreamImpl::GetStats() {
   RTC_DCHECK_RUN_ON(&thread_checker_);
   return stats_proxy_.GetStats();
+}
+
+void VideoSendStreamImpl::SetStats(const Stats& stats) {
+  RTC_DCHECK_RUN_ON(&thread_checker_);
+  stats_proxy_.SetStats(stats);
 }
 
 std::optional<float> VideoSendStreamImpl::GetPacingFactorOverride() const {
@@ -941,7 +946,7 @@ uint32_t VideoSendStreamImpl::OnBitrateUpdated(BitrateAllocationUpdate update) {
   link_allocation = std::max(encoder_target_rate, link_allocation);
   video_stream_encoder_->OnBitrateUpdated(
       encoder_target_rate, encoder_stable_target_rate, link_allocation,
-      rtc::dchecked_cast<uint8_t>(update.packet_loss_ratio * 256),
+      dchecked_cast<uint8_t>(update.packet_loss_ratio * 256),
       update.round_trip_time.ms(), update.cwnd_reduce_ratio);
   stats_proxy_.OnSetEncoderTargetRate(encoder_target_rate_bps_);
   return protection_bitrate_bps;

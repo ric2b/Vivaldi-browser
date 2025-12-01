@@ -38,17 +38,23 @@ export class HeaderElement extends CrLitElement {
 
   static override get properties() {
     return {
+      // Whether the menu button and subtitle input are disabled.
+      disabled: {
+        type: Boolean,
+        reflect: true,
+      },
+
       isPageTitleClickable: {
         type: Boolean,
         reflect: true,
       },
 
-      menuButtonDisabled: {type: Boolean},
-
       subtitle: {
         type: String,
         reflect: true,
       },
+
+      maxNameLength_: {type: Number},
 
       showingMenu_: {
         type: Boolean,
@@ -59,14 +65,14 @@ export class HeaderElement extends CrLitElement {
     };
   }
 
-  isPageTitleClickable: boolean = false;
-  menuButtonDisabled: boolean = false;
-  subtitle: string|null = null;
+  accessor disabled: boolean = false;
+  accessor isPageTitleClickable: boolean = false;
+  accessor subtitle: string|null = null;
 
-  protected showingMenu_: boolean = false;
-  protected showingInput_: boolean = false;
-  protected pageName_: string;
-  protected maxNameLength_: number = loadTimeData.getInteger('maxNameLength');
+  protected accessor showingMenu_: boolean = false;
+  protected accessor showingInput_: boolean = false;
+  protected accessor maxNameLength_: number =
+      loadTimeData.getInteger('maxNameLength');
 
   override render() {
     return getHtml.bind(this)();
@@ -82,11 +88,15 @@ export class HeaderElement extends CrLitElement {
   }
 
   private get input_(): CrInputElement|null {
-    const input = this.shadowRoot!.querySelector('cr-input');
+    const input = this.shadowRoot.querySelector('cr-input');
     return input;
   }
 
   protected async onRenaming_() {
+    if (this.disabled) {
+      return;
+    }
+
     this.showingInput_ = true;
     await this.updateComplete;
     this.input_?.focus();

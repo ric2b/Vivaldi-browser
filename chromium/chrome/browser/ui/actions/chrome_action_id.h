@@ -88,6 +88,7 @@
   E(kActionAutofillMandatoryReauth, IDC_AUTOFILL_MANDATORY_REAUTH) \
   E(kActionProfileMenuInAppMenu, IDC_PROFILE_MENU_IN_APP_MENU) \
   E(kActionPasswordsAndAutofillMenu, IDC_PASSWORDS_AND_AUTOFILL_MENU) \
+  E(kActionShowMemorySaverChip) \
   /* Page-manipulation commands that target a specified tab, which may not */ \
   /* be the active one. */ \
   E(kActionMuteTargetSite, IDC_MUTE_TARGET_SITE) \
@@ -463,7 +464,6 @@
   E(kActionContentContextAccessibilityLabelsToggleOnce, \
     IDC_CONTENT_CONTEXT_ACCESSIBILITY_LABELS_TOGGLE_ONCE) \
   /* Tab Search */ \
-  E(kActionTabSearch, IDC_TAB_SEARCH) \
   E(kActionTabSearchClose, IDC_TAB_SEARCH_CLOSE) \
   /* Views debug commands. */ \
   E(kActionDebugToggleTabletMode, IDC_DEBUG_TOGGLE_TABLET_MODE) \
@@ -487,7 +487,12 @@
   E(kActionLiveCaption, IDC_LIVE_CAPTION) \
   /* Device API system tray icon */ \
   E(kActionDeviceSystemTrayIconFirst, IDC_DEVICE_SYSTEM_TRAY_ICON_FIRST) \
-  E(kActionDeviceSystemTrayIconLast, IDC_DEVICE_SYSTEM_TRAY_ICON_LAST)
+  E(kActionDeviceSystemTrayIconLast, IDC_DEVICE_SYSTEM_TRAY_ICON_LAST) \
+  /*Shows the Intent Picker bubble */ \
+  E(kActionShowIntentPicker) \
+  /*Toolbar pinning*/ \
+  E(kActionPinActionToToolbar) \
+  E(kActionUnpinActionFromToolbar)
 
 #if BUILDFLAG(IS_CHROMEOS)
 #define CHROME_PLATFORM_SPECIFIC_ACTION_IDS \
@@ -518,8 +523,10 @@
   E(kActionSidePanelShowAssistant) \
   E(kActionSidePanelShowBookmarks, IDC_SHOW_BOOKMARK_SIDE_PANEL) \
   E(kActionSidePanelShowCustomizeChrome) \
+  E(kActionSidePanelShowCustomizeChromeToolbar) \
   E(kActionSidePanelShowFeed) \
   E(kActionSidePanelShowHistoryCluster) \
+  E(kActionSidePanelShowHistory) \
   E(kActionSidePanelShowLens) \
   E(kActionSidePanelShowLensOverlayResults, IDC_CONTENT_CONTEXT_LENS_OVERLAY) \
   E(kActionSidePanelShowReadAnything) \
@@ -534,6 +541,7 @@
   E(kActionHome, IDC_HOME) \
   E(kActionForward, IDC_FORWARD) \
   E(kActionNewIncognitoWindow, IDC_NEW_INCOGNITO_WINDOW) \
+  E(kActionSendSharedTabGroupFeedback, IDC_SEND_SHARED_TAB_GROUP_FEEDBACK) \
   E(kActionShowPasswordManager, IDC_SHOW_PASSWORD_MANAGER) \
   E(kActionShowPaymentMethods, IDC_SHOW_PAYMENT_METHODS) \
   E(kActionShowAddresses, IDC_SHOW_ADDRESSES) \
@@ -554,6 +562,7 @@
   E(kActionShowPasswordsBubbleOrPage) \
   E(kActionManagePasswordsForPage, IDC_MANAGE_PASSWORDS_FOR_PAGE) \
   E(kActionCopyUrl, IDC_COPY_URL) \
+  E(kActionTabSearch, IDC_TAB_SEARCH) \
 
 #define CHROME_ACTION_IDS \
     CHROME_COMMON_ACTION_IDS \

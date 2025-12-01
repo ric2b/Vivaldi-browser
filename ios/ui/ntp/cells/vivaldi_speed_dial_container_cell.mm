@@ -76,7 +76,19 @@
   _currentPage = page;
 }
 
-#pragma mark - VIVALDI_SPEED_DIAL_CONTAINER_VIEW_DELEGATE
+- (void)visibleCellDidChange {
+  [self.speedDialView visibleCellDidChange];
+}
+
+#pragma mark - VivaldiSpeedDialContainerDelegate
+
+- (void)collectionViewHasScrollableContent:(BOOL)hasScrollableContents
+                                    parent:(VivaldiSpeedDialItem*)parent {
+  if (self.delegate)
+    [self.delegate collectionViewHasScrollableContent:hasScrollableContents
+                                               parent:parent];
+}
+
 - (void)didSelectItem:(VivaldiSpeedDialItem*)item
                parent:(VivaldiSpeedDialItem*)parent {
   if (self.delegate)

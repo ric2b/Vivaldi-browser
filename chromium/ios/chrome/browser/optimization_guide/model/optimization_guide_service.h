@@ -55,6 +55,7 @@ class BrowserList;
 class OptimizationGuideLogger;
 class OptimizationGuideNavigationData;
 class PrefService;
+class TabResumptionMediatorProxy;
 
 // A BrowserState keyed service that is used to own the underlying Optimization
 // Guide components. This is a rough copy of the OptimizationGuideKeyedService
@@ -179,10 +180,14 @@ class OptimizationGuideService
       optimization_guide::proto::OptimizationType optimization_type,
       const std::optional<optimization_guide::OptimizationMetadata>& metadata);
 
+  // Returns an error message describing a given error code.
+  std::string ResponseForErrorCode(int error_code);
+
  private:
   friend class OptimizationGuideServiceTest;
   friend class OptimizationGuideTabHelper;
   friend class OptimizationGuideTestAppInterfaceWrapper;
+  friend class TabResumptionMediatorProxy;
 
   // Notifies `hints_manager_` that the navigation associated with
   // `navigation_data` has started or redirected.
@@ -232,6 +237,10 @@ class OptimizationGuideService
   // Manages the state of the on-device model.
   scoped_refptr<optimization_guide::OnDeviceModelComponentStateManager>
       on_device_model_state_manager_;
+
+  // Downloads other model assets for on-device execution.
+  std::unique_ptr<optimization_guide::OnDeviceAssetManager>
+      on_device_asset_manager_;
 
 #endif
 

@@ -295,6 +295,7 @@
 <translation id="2867808975387772810">Bibliografia</translation>
 <translation id="2873259058405069099">Vai all'inizio della tabella</translation>
 <translation id="287383510823843610">Arancione scuro</translation>
+<translation id="2876760662374103627">Controlli con il volto attivi</translation>
 <translation id="2879867157561757640">Scorri verso il basso con tre dita</translation>
 <translation id="288178314850623291">Utilizza i comandi di spostamento per passare a specifici tipi di elementi. Per avanzare tra le intestazioni, premi il tasto per la ricerca + H o per retrocedere il tasto per la ricerca + MAIUSC + H.</translation>
 <translation id="2885764457467528513">{COUNT,plural, =1{minuto}other{minuti}}</translation>
@@ -1115,6 +1116,7 @@
 <translation id="8316881042119029234">Merletto antico</translation>
 <translation id="8326783648485765113">Verde prato</translation>
 <translation id="8345569862449483843">{COUNT,plural, =1{cancelletto}other{# simboli cancelletto}}</translation>
+<translation id="8351821207686449674">Attiva/disattiva sottotitoli codificati</translation>
 <translation id="8378855320830505539">Regione</translation>
 <translation id="8382679411218029383">Completamento automatico incorporato ed elenco</translation>
 <translation id="8394908167088220973">Play/Pausa contenuti multimediali</translation>

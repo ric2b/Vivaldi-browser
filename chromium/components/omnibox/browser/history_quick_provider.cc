@@ -46,7 +46,6 @@
 #include "ui/base/page_transition_types.h"
 #include "url/third_party/mozilla/url_parse.h"
 #include "url/url_util.h"
-#include "vivaldi/prefs/vivaldi_gen_prefs.h"
 
 namespace {
 constexpr int kAndroidHubMaxMatches = 5;
@@ -62,17 +61,6 @@ void HistoryQuickProvider::Start(const AutocompleteInput& input,
                                  bool minimal_changes) {
   TRACE_EVENT0("omnibox", "HistoryQuickProvider::Start");
   matches_.clear();
-
-#if defined(VIVALDI_BUILD)
-  PrefService* prefs = client()->GetPrefs();
-  auto show_search =
-      prefs->GetBoolean(vivaldiprefs::kAddressBarOmniboxShowBrowserHistory);
-
-  if (!show_search) {
-    return;
-  }
-#endif
-
   if (disabled_ || input.IsZeroSuggest() ||
       input.type() == metrics::OmniboxInputType::EMPTY) {
     return;
@@ -380,8 +368,8 @@ AutocompleteMatch HistoryQuickProvider::QuickMatchToACMatch(
       ACMatchClassification::NONE);
 
   // Set |inline_autocompletion| and |allowed_to_be_default_match| if possible.
-  if (match.TryRichAutocompletion(match.contents, match.description,
-                                  autocomplete_input_)) {
+  if (match.TryRichAutocompletion(autocomplete_input_, match.contents,
+                                  match.description)) {
     // If rich autocompletion applies, we skip trying the alternatives below.
   } else if (inline_autocomplete_offset != std::u16string::npos) {
     match.inline_autocompletion =

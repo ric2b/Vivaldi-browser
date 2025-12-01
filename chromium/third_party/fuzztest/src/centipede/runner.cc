@@ -23,6 +23,7 @@
 #include "./centipede/runner.h"
 
 #include <pthread.h>  // NOLINT: use pthread to avoid extra dependencies.
+#include <signal.h>
 #include <sys/resource.h>
 #include <sys/stat.h>
 #include <sys/time.h>
@@ -39,6 +40,7 @@
 #include <ctime>
 #include <functional>
 #include <memory>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -209,6 +211,28 @@ static uint64_t TimeInUsec() {
   return tv.tv_sec * kUsecInSec + tv.tv_usec;
 }
 
+static void CheckForceAbortTimeout() {
+  // No timeout is set, ignore.
+  if (state.run_time_flags.force_abort_timeout == 0) return;
+  // Watchdog did not invoke abort yet, ignore.
+  if (state.force_abort_deadline == 0) return;
+  // The runner is still running unexpectedly long after we started aborting.
+  if (time(nullptr) > state.force_abort_deadline) {
+    fprintf(stderr,
+            "========= Force Abort timer exceeded; "
+            "the program is still running after %" PRIu64
+            " seconds after raising SIGABRT. Forcefully aborting the runner in "
+            "the watchdog thread.\n",
+            state.run_time_flags.force_abort_timeout);
+    // std::_Exit() is preferred over std::abort() and std::exit().
+    // std::abort() would raise a SIGABRT and trigger the same crash handler
+    // that is currently stuck; std::exit() would trigger the onexit handlers,
+    // which may or may not be problematic. To be safe, we use _exit() to bypass
+    // these failure handlers and terminate the process immediately.
+    std::_Exit(EXIT_FAILURE);
+  }
+}
+
 static void CheckWatchdogLimits() {
   const uint64_t curr_time = time(nullptr);
   struct Resource {
@@ -216,33 +240,37 @@ static void CheckWatchdogLimits() {
     const char *units;
     uint64_t value;
     uint64_t limit;
+    bool ignore_report;
     const char *failure;
   };
   const uint64_t input_start_time = state.input_start_time;
   const uint64_t batch_start_time = state.batch_start_time;
   if (input_start_time == 0 || batch_start_time == 0) return;
   const Resource resources[] = {
-      {
-          .what = "Per-input timeout",
-          .units = "sec",
-          .value = curr_time - input_start_time,
-          .limit = state.run_time_flags.timeout_per_input,
-          .failure = kExecutionFailurePerInputTimeout.data(),
-      },
-      {
-          .what = "Per-batch timeout",
-          .units = "sec",
-          .value = curr_time - batch_start_time,
-          .limit = state.run_time_flags.timeout_per_batch,
-          .failure = kExecutionFailurePerBatchTimeout.data(),
-      },
-      {
-          .what = "RSS limit",
-          .units = "MB",
-          .value = GetPeakRSSMb(),
-          .limit = state.run_time_flags.rss_limit_mb,
-          .failure = kExecutionFailureRssLimitExceeded.data(),
-      },
+      {Resource{
+          /*what=*/"Per-input timeout",
+          /*units=*/"sec",
+          /*value=*/curr_time - input_start_time,
+          /*limit=*/state.run_time_flags.timeout_per_input,
+          /*ignore_report=*/state.run_time_flags.ignore_timeout_reports != 0,
+          /*failure=*/kExecutionFailurePerInputTimeout.data(),
+      }},
+      {Resource{
+          /*what=*/"Per-batch timeout",
+          /*units=*/"sec",
+          /*value=*/curr_time - batch_start_time,
+          /*limit=*/state.run_time_flags.timeout_per_batch,
+          /*ignore_report=*/state.run_time_flags.ignore_timeout_reports != 0,
+          /*failure=*/kExecutionFailurePerBatchTimeout.data(),
+      }},
+      {Resource{
+          /*what=*/"RSS limit",
+          /*units=*/"MB",
+          /*value=*/GetPeakRSSMb(),
+          /*limit=*/state.run_time_flags.rss_limit_mb,
+          /*ignore_report=*/false,
+          /*failure=*/kExecutionFailureRssLimitExceeded.data(),
+      }},
   };
   for (const auto &resource : resources) {
     if (resource.limit != 0 && resource.value > resource.limit) {
@@ -251,12 +279,33 @@ static void CheckWatchdogLimits() {
       // `RunOneInput()` after all the work is done.
       static std::atomic<bool> already_handling_failure = false;
       if (!already_handling_failure.exchange(true)) {
+        if (resource.ignore_report) {
+          fprintf(stderr,
+                  "========= %s exceeded: %" PRIu64 " > %" PRIu64
+                  " (%s); exiting without reporting as an error\n",
+                  resource.what, resource.value, resource.limit,
+                  resource.units);
+          std::_Exit(0);
+          // should not return here.
+        }
         fprintf(stderr,
                 "========= %s exceeded: %" PRIu64 " > %" PRIu64
                 " (%s); exiting\n",
                 resource.what, resource.value, resource.limit, resource.units);
         WriteFailureDescription(resource.failure);
-        abort();
+        pthread_mutex_lock(&state.runner_main_thread_mu);
+        if (state.runner_main_thread.has_value()) {
+          fprintf(stderr, "Sending SIGABRT to the runner main thread.\n");
+          state.force_abort_deadline =
+              time(nullptr) + state.run_time_flags.force_abort_timeout;
+          pthread_kill(*state.runner_main_thread, SIGABRT);
+          pthread_mutex_unlock(&state.runner_main_thread_mu);
+          return;
+        } else {
+          pthread_mutex_unlock(&state.runner_main_thread_mu);
+          fprintf(stderr, "Aborting the runner in the watchdog thread.\n");
+          std::abort();
+        }
       }
     }
   }
@@ -269,6 +318,7 @@ static void CheckWatchdogLimits() {
   state.watchdog_thread_started = true;
   while (true) {
     sleep(1);
+    CheckForceAbortTimeout();
 
     // No calls to ResetInputTimer() yet: input execution hasn't started.
     if (state.input_start_time == 0) continue;
@@ -293,7 +343,7 @@ __attribute__((noinline)) void CheckStackLimit(uintptr_t sp) {
             tls.top_frame_sp - sp, stack_limit);
     centipede::WriteFailureDescription(
         centipede::kExecutionFailureStackLimitExceeded.data());
-    abort();
+    std::abort();
   }
 }
 
@@ -310,10 +360,12 @@ void GlobalRunnerState::CleanUpDetachedTls() {
 void GlobalRunnerState::StartWatchdogThread() {
   fprintf(stderr,
           "Starting watchdog thread: timeout_per_input: %" PRIu64
-          " sec; timeout_per_batch: %" PRIu64 " sec; rss_limit_mb: %" PRIu64
+          " sec; timeout_per_batch: %" PRIu64
+          " sec; force_abort_timeout: %" PRIu64 " sec; rss_limit_mb: %" PRIu64
           " MB; stack_limit_kb: %" PRIu64 " KB\n",
           state.run_time_flags.timeout_per_input.load(),
           state.run_time_flags.timeout_per_batch,
+          state.run_time_flags.force_abort_timeout,
           state.run_time_flags.rss_limit_mb.load(),
           state.run_time_flags.stack_limit_kb.load());
   pthread_t watchdog_thread;
@@ -561,6 +613,15 @@ void RunnerCallbacks::GetSeeds(std::function<void(ByteSpan)> seed_callback) {
 
 std::string RunnerCallbacks::GetSerializedTargetConfig() { return ""; }
 
+bool RunnerCallbacks::Mutate(
+    const std::vector<MutationInputRef> & /*inputs*/, size_t /*num_mutants*/,
+    std::function<void(ByteSpan)> /*new_mutant_callback*/) {
+  RunnerCheck(!HasCustomMutator(),
+              "Class deriving from RunnerCallbacks must implement Mutate() if "
+              "HasCustomMutator() returns true.");
+  return true;
+}
+
 void RunnerCallbacks::OnFailure(
     std::function<void(std::string_view)> /*failure_description_callback*/) {}
 
@@ -582,6 +643,11 @@ class LegacyRunnerCallbacks : public RunnerCallbacks {
         "test_on_input_cb returns invalid value other than -1 and 0");
     return retval == 0;
   }
+
+  bool HasCustomMutator() const override {
+    return custom_mutator_cb_ != nullptr;
+  }
+
   bool Mutate(const std::vector<MutationInputRef> &inputs, size_t num_mutants,
               std::function<void(ByteSpan)> new_mutant_callback) override;
 
@@ -911,16 +977,25 @@ static int MutateInputsFromShmem(BlobSequence &inputs_blobseq,
     }
     auto blob = inputs_blobseq.Read();
     if (!runner_request::IsDataInput(blob)) break;
-    inputs.push_back({.data = {blob.data, blob.data + blob.size},
-                      .metadata = std::move(metadata)});
+    inputs.push_back(
+        MutationInput{/*data=*/ByteArray{blob.data, blob.data + blob.size},
+                      /*metadata=*/std::move(metadata)});
     input_refs.push_back(
-        {.data = inputs.back().data, .metadata = &inputs.back().metadata});
+        MutationInputRef{/*data=*/inputs.back().data,
+                         /*metadata=*/&inputs.back().metadata});
   }
 
-  if (!callbacks.Mutate(input_refs, num_mutants, [&](ByteSpan mutant) {
-        outputs_blobseq.Write({1 /*unused tag*/, mutant.size(), mutant.data()});
-      }))
+  if (!MutationResult::WriteHasCustomMutator(callbacks.HasCustomMutator(),
+                                             outputs_blobseq)) {
     return EXIT_FAILURE;
+  }
+  if (!callbacks.HasCustomMutator()) return EXIT_SUCCESS;
+
+  if (!callbacks.Mutate(input_refs, num_mutants, [&](ByteSpan mutant) {
+        MutationResult::WriteMutant(mutant, outputs_blobseq);
+      })) {
+    return EXIT_FAILURE;
+  }
   return EXIT_SUCCESS;
 }
 
@@ -1107,6 +1182,17 @@ GlobalRunnerState::~GlobalRunnerState() {
 //
 //  Note: argc/argv are used for only ReadOneInputExecuteItAndDumpCoverage().
 int RunnerMain(int argc, char **argv, RunnerCallbacks &callbacks) {
+  {
+    LockGuard lock(state.runner_main_thread_mu);
+    state.runner_main_thread = pthread_self();
+  }
+  struct OnReturn {
+    ~OnReturn() {
+      LockGuard lock(state.runner_main_thread_mu);
+      state.runner_main_thread = std::nullopt;
+    }
+  } on_return;
+
   state.centipede_runner_main_executed = true;
 
   fprintf(stderr, "Centipede fuzz target runner; argv[0]: %s flags: %s\n",

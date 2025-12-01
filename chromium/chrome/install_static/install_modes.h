@@ -31,7 +31,6 @@
 #include <string>
 
 #include "build/branding_buildflags.h"
-#include "chrome/install_static/install_constants.h"
 
 // Include the brand-specific values. Each of these must define:
 // - enum InstallConstantIndex: named indices of the brand's kInstallModes
@@ -42,6 +41,8 @@
 #include "chrome/install_static/google_chrome_install_modes.h"
 #elif BUILDFLAG(GOOGLE_CHROME_FOR_TESTING_BRANDING)
 #include "chrome/install_static/google_chrome_for_testing_install_modes.h"
+#elif defined(VIVALDI_BUILD)
+#include "installer/vivaldi_install_modes.h"
 #else
 #include "chrome/install_static/chromium_install_modes.h"
 #endif
@@ -62,9 +63,6 @@ extern const size_t kProductPathNameLength;
 // The brand-specific safe browsing client name.
 extern const char kSafeBrowsingName[];
 
-// A brand's collection of install modes.
-extern const InstallConstants kInstallModes[];
-
 // The following convenience functions behave conditionally on whether or not
 // the brand uses Chrome's integration with Google Update. For brands that do
 // not (e.g., Chromium), they return something like "Software\Chromium" or
@@ -75,6 +73,11 @@ extern const InstallConstants kInstallModes[];
 std::wstring GetClientsKeyPath(const wchar_t* app_guid);
 std::wstring GetClientStateKeyPath(const wchar_t* app_guid);
 std::wstring GetClientStateMediumKeyPath(const wchar_t* app_guid);
+
+#if !defined(VIVALDI_BUILD)
+static_assert(kInstallModes.size() == NUM_INSTALL_MODES,
+              "Imbalance between kInstallModes and InstallConstantIndex");
+#endif // Vivaldi
 
 }  // namespace install_static
 

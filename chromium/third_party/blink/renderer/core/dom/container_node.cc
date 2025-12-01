@@ -24,7 +24,6 @@
 #include "third_party/blink/renderer/core/dom/container_node.h"
 
 #include "third_party/blink/renderer/bindings/core/v8/v8_get_html_options.h"
-#include "third_party/blink/renderer/bindings/core/v8/v8_get_inner_html_options.h"
 #include "third_party/blink/renderer/core/accessibility/ax_object_cache.h"
 #include "third_party/blink/renderer/core/css/resolver/style_resolver.h"
 #include "third_party/blink/renderer/core/css/selector_filter.h"
@@ -62,7 +61,6 @@
 #include "third_party/blink/renderer/core/frame/web_feature.h"
 #include "third_party/blink/renderer/core/html/forms/html_field_set_element.h"
 #include "third_party/blink/renderer/core/html/forms/html_form_element.h"
-#include "third_party/blink/renderer/core/html/forms/html_input_element.h"
 #include "third_party/blink/renderer/core/html/forms/radio_node_list.h"
 #include "third_party/blink/renderer/core/html/html_collection.h"
 #include "third_party/blink/renderer/core/html/html_dialog_element.h"
@@ -87,7 +85,6 @@
 #include "third_party/blink/renderer/platform/instrumentation/use_counter.h"
 #include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 #include "third_party/blink/renderer/platform/wtf/casting.h"
-#include "third_party/blink/renderer/platform/wtf/wtf_size_t.h"
 
 namespace blink {
 
@@ -883,11 +880,15 @@ void ContainerNode::WillRemoveChildren() {
 }
 
 LayoutBox* ContainerNode::GetLayoutBoxForScrolling() const {
-  return GetLayoutBox();
+  LayoutBox* box = GetLayoutBox();
+  if (box) {
+    box = box->ContentLayoutBox();
+  }
+  return box && box->IsScrollContainer() ? box : nullptr;
 }
 
 bool ContainerNode::IsReadingFlowContainer() const {
-  return GetLayoutBox() ? GetLayoutBox()->IsReadingFlowContainer() : false;
+  return GetLayoutBox() && GetLayoutBox()->IsReadingFlowContainer();
 }
 
 void ContainerNode::Trace(Visitor* visitor) const {
@@ -1522,24 +1523,6 @@ unsigned ContainerNode::CountChildren() const {
   return count;
 }
 
-bool ContainerNode::HasOnlyText() const {
-  bool has_text = false;
-  for (Node* child = firstChild(); child; child = child->nextSibling()) {
-    switch (child->getNodeType()) {
-      case kTextNode:
-      case kCdataSectionNode:
-        has_text = has_text || !To<Text>(child)->data().empty();
-        break;
-      case kCommentNode:
-        // Ignore comments.
-        break;
-      default:
-        return false;
-    }
-  }
-  return has_text;
-}
-
 Element* ContainerNode::QuerySelector(const AtomicString& selectors,
                                       ExceptionState& exception_state) {
   SelectorQuery* selector_query = GetDocument().GetSelectorQueryCache().Add(
@@ -1866,34 +1849,6 @@ RadioNodeList* ContainerNode::GetRadioNodeList(const AtomicString& name,
   CollectionType type =
       only_match_img_elements ? kRadioImgNodeListType : kRadioNodeListType;
   return EnsureCachedCollection<RadioNodeList>(type, name);
-}
-
-String ContainerNode::FindTextInElementWith(
-    const AtomicString& substring,
-    base::FunctionRef<bool(const String&)> validity_checker) const {
-  for (Element& element : ElementTraversal::DescendantsOf(*this)) {
-    String text;
-    if (element.HasTagName(html_names::kInputTag) &&
-        element.FastHasAttribute(html_names::kReadonlyAttr) &&
-        EqualIgnoringASCIICase(element.FastGetAttribute(html_names::kTypeAttr),
-                               "text") &&
-        RuntimeEnabledFeatures::FindTextInReadonlyTextInputEnabled()) {
-      text = To<HTMLInputElement>(element).Value();
-    } else if (element.HasOnlyText()) {
-      text = element.TextFromChildren();
-    }
-
-    if (text.empty()) {
-      continue;
-    }
-
-    if (text.FindIgnoringASCIICase(substring) != WTF::kNotFound &&
-        validity_checker(text)) {
-      return text;
-    }
-  }
-
-  return String();
 }
 
 StaticNodeList* ContainerNode::FindAllTextNodesMatchingRegex(

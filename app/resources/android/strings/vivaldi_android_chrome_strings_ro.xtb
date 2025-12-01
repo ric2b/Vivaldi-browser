@@ -1,23 +1,30 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="ro">
+<translation id="1204037785786432551">Descarcă linkul</translation>
+<translation id="1206892813135768548">Copiază textul linkului</translation>
 <translation id="1397811292916898096">Căutați cu <ph name="PRODUCT_NAME" /></translation>
-<translation id="1456207338570705181">Atingeți pentru a Căuta este o funcție disponibilă numai atunci când Google este setat ca motor de căutare implicit în Vivaldi. Aceasta trimite cuvântul selectat și pagina curentă drept context la Căutarea Google. O puteți dezactiva în <ph name="BEGIN_LINK" />Setări<ph name="END_LINK" />.</translation>
+<translation id="1435593198351412143">Deschide automat fișierele PDF</translation>
+<translation id="1456207338570705181">Atingeți pentru a căuta este o funcție disponibilă numai atunci când Google este desemnat ca motor de căutare implicit în Vivaldi. Aceasta trimite cuvântul selectat și pagina curentă drept context la Căutare Google. O puteți dezactiva în <ph name="BEGIN_LINK" />Setări<ph name="END_LINK" />.</translation>
 <translation id="1598449788754183301">Comutați filele normale/private</translation>
 <translation id="1644574205037202324">Istoric</translation>
 <translation id="1829244130665387512">Caută în pagină</translation>
 <translation id="1910514478706885609">Deschideți într-o filă nouă suprapusă</translation>
 <translation id="1925021887439448749">Introduceți adresa web personalizată</translation>
-<translation id="2038563949887743358">Activați Cererea pentru versiunea desktop</translation>
+<translation id="2038563949887743358">Activați solicitarea pentru versiunea desktop</translation>
 <translation id="2149973817440762519">Editare semn de carte</translation>
 <translation id="2306442503286132111">Semnul de carte a fost salvat în dosarul <ph name="FOLDER_NAME" /></translation>
 <translation id="2433507940547922241">Aspect</translation>
 <translation id="2501278716633472235">Mergi înapoi</translation>
 <translation id="2633278372998075009">File private</translation>
+<translation id="2650751991977523696">Descărcați din nou fișierul?</translation>
 <translation id="265156376773362237">Preîncărcare standard</translation>
 <translation id="272026394418727548">Pagina principală Vivaldi</translation>
-<translation id="2871733351037274014">Preîncarcă paginile</translation>
+<translation id="2842985007712546952">Dosar superior</translation>
+<translation id="2871733351037274014">Preîncărcare pagini</translation>
+<translation id="2904300462646366554">Fișierele PDF descărcate se deschid automat cu unul dintre vizualizatoarele PDF de pe dispozitiv</translation>
 <translation id="2951071800649516099">Adaugă pagini la lista de lectură pentru mai târziu</translation>
+<translation id="3029276696788198026">Fără preîncărcare</translation>
 <translation id="3060635849835183725">{BOOKMARKS_COUNT, plural,
           =1 {<ph name="BOOKMARKS_COUNT_ONE" /> semn de carte}
           other {<ph name="BOOKMARKS_COUNT_MANY" /> semne de carte}}</translation>
@@ -26,14 +33,15 @@
 <translation id="3234355010754616171">Filă privată nouă</translation>
 <translation id="3237087289225714896">Preîncărcare standard:</translation>
 <translation id="3377025655491224618">Filă privată</translation>
-<translation id="3504699618187058974">Grupați filele</translation>
+<translation id="3504699618187058974">Grupează filele</translation>
 <translation id="3518985090088779359">Acceptați și continuați</translation>
 <translation id="3571177741182643350">Articole Necitite - Disponibile offline:</translation>
 <translation id="3602290021589620013">Previzualizare</translation>
 <translation id="3700829948786686853">Bun venit la Vivaldi</translation>
-<translation id="3719826155360621982">Pagina de start</translation>
+<translation id="3719826155360621982">Pagina principală</translation>
 <translation id="3738139272394829648">Atingeți pentru a căuta</translation>
 <translation id="385051799172605136">Înapoi</translation>
+<translation id="3987993985790029246">Copiază linkul</translation>
 <translation id="399014816462153200">Articole citite:</translation>
 <translation id="4121750346708795461">Prin folosirea acestei aplicații, sunteți de acord cu <ph name="BEGIN_LINK1" />Acordul de Licență pentru Utilizatorul Final<ph name="END_LINK1" /> și <ph name="BEGIN_LINK2" />Politica de Confidențialitate<ph name="END_LINK2" /> ale Vivaldi.</translation>
 <translation id="4137746084635924146">Limba actuală a dispozitivului</translation>
@@ -41,10 +49,13 @@
 <translation id="4195643157523330669">Deschideți în filă nouă</translation>
 <translation id="4225895483398857530">Comandă rapidă spre bara de instrumente</translation>
 <translation id="4243710787042215766">Deschideți într-o filă privată</translation>
+<translation id="4269820728363426813">Copiază adresa linkului</translation>
 <translation id="4291407919474070700"><ph name="BEGIN_LINK" />Activează blocarea ecranului în setările Android<ph name="END_LINK" /></translation>
-<translation id="4304713468139749426">Manager de Parole</translation>
+<translation id="4304713468139749426">Gestionar de parole</translation>
 <translation id="451872707440238414">Căutați în semnele de carte</translation>
 <translation id="4526803704855831732">File private</translation>
+<translation id="4532845899244822526">Alegere dosar</translation>
+<translation id="4699172675775169585">Imagini și fișiere memorate în cache</translation>
 <translation id="4719086422742491124">Aflați despre subiectele de pe site-urile web fără a părăsi pagina. Selectați unul sau mai multe cuvinte de pe pagină pentru a le căuta.
 
 Atingeți pentru a căuta este o funcție care este disponibilă numai atunci când Google este stabilit ca motor de căutare implicit în Vivaldi.</translation>
@@ -55,20 +66,35 @@ Atingeți pentru a căuta este o funcție care este disponibilă numai atunci c�
 <translation id="49576331685473090">Blocare de conținut</translation>
 <translation id="5079259810715830221">Când un site web Google cere să preîncărcarce în mod privat linkuri pe pagina sa, Vivaldi criptează și preîncărcă pagini prin serverele Google fără cookie-uri. Acest lucru vă ascunde identitatea de pe site-ul web preîncărcat.</translation>
 <translation id="5118676864324397542">Spațiu de stocare <ph name="APP_NAME" /></translation>
+<translation id="5144385790872094440">Unele dintre paginile pe care le vizitați sunt preîncărcate. Este posibil ca paginile să fie preîncărcate prin serverele Google atunci când un site web sau o aplicație Google trimite către ele.</translation>
 <translation id="5186185447130319458">Privat</translation>
+<translation id="5206168361184759344">{FILE_COUNT, plural,
+            =1 {Se descarcă fișierul…}
+            other {Se descarcă # fișiere…}}</translation>
 <translation id="5233638681132016545">Filă nouă</translation>
 <translation id="5375131951310889874">Aflați despre subiectele de pe site-urile web fără a părăsi pagina. Atingeți pentru a căuta este o funcție care este disponibilă numai atunci când Google este stabilit ca motor de căutare implicit în Vivaldi. Aceasta trimite un cuvânt și contextul din jurul lui către Google Search, returnând definiții, imagini, rezultate ale căutării și alte detalii.
 
 Pentru a ajusta termenul de căutare, apăsați lung pentru a-l selecta. Pentru a restrânge căutarea, glisați panoul până la capăt și atingeți caseta de căutare.</translation>
+<translation id="543338862236136125">Editare parolă</translation>
 <translation id="572328651809341494">File recente</translation>
+<translation id="5833984609253377421">Partajează linkul</translation>
 <translation id="6150320133806434356">Semnul de carte a fost salvat</translation>
+<translation id="6193448654517602979">Selectare file</translation>
 <translation id="6336451774241870485">Filă privată nouă</translation>
+<translation id="6337323516034698937">Pentru a trimite această filă către un alt dispozitiv, conectați-vă la Sincronizare Vivaldi pe ambele dispozitive. Asigurați-vă că introduceți parola de criptare, dacă este necesar.</translation>
+<translation id="6341580099087024258">Întreabă unde să fie salvate fișierele</translation>
 <translation id="6404511346730675251">Editare semn de carte</translation>
+<translation id="650224091954855786">{FILE_COUNT, plural,
+          =1 {Fișier descărcat}
+          other {# descărcări finalizate}}</translation>
 <translation id="6585139692466700358">Oferă traducerea paginilor în alte limbi folosind serviciul de traducere Vivaldi</translation>
 <translation id="6588043302623806746">Folosește un DNS securizat</translation>
 <translation id="6593061639179217415">Versiune pentru desktop</translation>
 <translation id="6610147964972079463">Închide filele private</translation>
-<translation id="7029995644714925509">Când un site web solicită să preîncarce în mod privat link-uri pe pagina sa, Vivaldi criptează și preîncarcă pagini prin serverele Google fără cookie-uri. Acest lucru vă ascunde identitatea de pe site-ul web preîncărcat.</translation>
+<translation id="6627583120233659107">Editare dosar</translation>
+<translation id="6865313869410766144">Completare automată a datelor din formular</translation>
+<translation id="6909589135458168665">Preîncărcare pagini</translation>
+<translation id="7029995644714925509">Când un site web solicită să preîncarce în mod privat linkuri pe pagina sa, Vivaldi criptează și preîncarcă pagini prin serverele Google fără cookie-uri. Acest lucru vă ascunde identitatea de pe site-ul web preîncărcat.</translation>
 <translation id="706339621163631076">Politica privind confidențialitatea browser-ului</translation>
 <translation id="732145680195464316">Semnul de carte a fost salvat în <ph name="PRODUCT_NAME" /></translation>
 <translation id="7324354302972299151">Trimite o solicitare „Do Not Track”</translation>
@@ -78,16 +104,19 @@ Pentru a ajusta termenul de căutare, apăsați lung pentru a-l selecta. Pentru 
 <translation id="7456774706094330779">Preîncărcare extinsă</translation>
 <translation id="7465104139234185284">Închide toate filele private</translation>
 <translation id="7481312909269577407">Înainte</translation>
+<translation id="7764225426217299476">Adaugă o adresă</translation>
 <translation id="7968014550143838305">Adăugat la lista de lectură</translation>
 <translation id="804786196054284061">Acord de licență pentru utilizatorul final</translation>
 <translation id="8062594758852531064">Preîncărcare extinsă:</translation>
+<translation id="8073388330009372546">Deschide imaginea în filă nouă</translation>
 <translation id="8127542551745560481">Editare pagină principală</translation>
+<translation id="8266862848225348053">Locația de descărcare</translation>
 <translation id="8348430946834215779">Folosește HTTPS ori de câte ori este posibil și primește un avertisment înainte de a încărca site-uri web care nu acceptă acest protocol</translation>
 <translation id="8560602726703398413">Căutați lista de lectură în semnele de carte</translation>
-<translation id="85991616550051997">Mergi la pagina de start</translation>
+<translation id="85991616550051997">Mergi la pagina principală</translation>
 <translation id="8820817407110198400">Semne de carte</translation>
 <translation id="9042893549633094279">Confidențialitate și securitate</translation>
-<translation id="9063523880881406963">Dezactivați Cererea pentru versiunea desktop</translation>
+<translation id="9063523880881406963">Dezactivați solicitarea pentru versiunea desktop</translation>
 <translation id="9080642952018487277">Intrați în modul privat</translation>
 <translation id="930124987204876019">Șterge istoricul, cookie-urile, datele privind site-urile, memoria cache…</translation>
 <translation id="961856697154696964">Ștergere date de navigare</translation>

@@ -13,6 +13,8 @@
 #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
 #include "third_party/blink/renderer/platform/heap/member.h"
 #include "third_party/blink/renderer/platform/weborigin/kurl.h"
+#include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
+#include "third_party/blink/renderer/platform/wtf/vector.h"
 
 namespace blink {
 
@@ -37,7 +39,9 @@ class CORE_EXPORT SpeculationRule final
       std::optional<network::mojom::ReferrerPolicy>,
       mojom::blink::SpeculationEagerness,
       network::mojom::blink::NoVarySearchPtr,
-      mojom::blink::SpeculationInjectionType);
+      mojom::blink::SpeculationInjectionType,
+      WTF::String ruleset_tag,
+      WTF::String rule_tag);
   ~SpeculationRule();
 
   const Vector<KURL>& urls() const { return urls_; }
@@ -59,6 +63,8 @@ class CORE_EXPORT SpeculationRule final
   mojom::blink::SpeculationInjectionType injection_type() const {
     return injection_type_;
   }
+  WTF::String ruleset_tag() const { return ruleset_tag_; }
+  WTF::String rule_tag() const { return rule_tag_; }
 
   void Trace(Visitor*) const;
 
@@ -73,6 +79,10 @@ class CORE_EXPORT SpeculationRule final
   network::mojom::blink::NoVarySearchPtr no_vary_search_hint_;
   mojom::blink::SpeculationInjectionType injection_type_ =
       mojom::blink::SpeculationInjectionType::kNone;
+  // TODO(crbug.com/381687257): make `ruleset_tag_` owned by
+  // `SpeculationRuleSet`.
+  const WTF::String ruleset_tag_;
+  const WTF::String rule_tag_;
 };
 
 }  // namespace blink

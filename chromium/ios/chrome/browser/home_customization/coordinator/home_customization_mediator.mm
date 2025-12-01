@@ -5,7 +5,9 @@
 #import "ios/chrome/browser/home_customization/coordinator/home_customization_mediator.h"
 
 #import "base/memory/raw_ptr.h"
+#import "components/commerce/core/commerce_feature_list.h"
 #import "components/prefs/pref_service.h"
+#import "ios/chrome/browser/content_suggestions/ui_bundled/set_up_list/utils.h"
 #import "ios/chrome/browser/home_customization/coordinator/home_customization_navigation_delegate.h"
 #import "ios/chrome/browser/home_customization/ui/home_customization_discover_consumer.h"
 #import "ios/chrome/browser/home_customization/ui/home_customization_magic_stack_consumer.h"
@@ -17,7 +19,6 @@
 #import "ios/chrome/browser/parcel_tracking/features.h"
 #import "ios/chrome/browser/shared/model/prefs/pref_names.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
-#import "ios/chrome/browser/ui/content_suggestions/set_up_list/utils.h"
 #import "url/gurl.h"
 
 @implementation HomeCustomizationMediator {
@@ -90,6 +91,12 @@
                       [self isMagicStackCardEnabledForType:
                                 CustomizationToggleType::kMostVisited]});
   }
+  if (commerce::kShopCardVariation.Get() == commerce::kShopCardArm1 ||
+      commerce::kShopCardVariation.Get() == commerce::kShopCardArm2) {
+    toggleMap.insert({CustomizationToggleType::kShopCard,
+                      [self isMagicStackCardEnabledForType:
+                                CustomizationToggleType::kShopCard]});
+  }
   [self.magicStackPageConsumer populateToggles:toggleMap];
 }
 
@@ -139,6 +146,17 @@
           FeedActivityBucketForPrefs(_prefService)));
       return _prefService->GetBoolean(
           prefs::kHomeCustomizationMostVisitedEnabled);
+    case CustomizationToggleType::kShopCard:
+      if (commerce::kShopCardVariation.Get() == commerce::kShopCardArm1) {
+        return _prefService->GetBoolean(
+            prefs::kHomeCustomizationMagicStackShopCardPriceTrackingEnabled);
+      } else if (commerce::kShopCardVariation.Get() ==
+                 commerce::kShopCardArm2) {
+        return _prefService->GetBoolean(
+            prefs::kHomeCustomizationMagicStackShopCardReviewsEnabled);
+      } else {
+        return false;
+      }
     default:
       NOTREACHED();
   }
@@ -186,6 +204,17 @@
                                enabled);
       break;
     }
+    case CustomizationToggleType::kShopCard:
+      if (commerce::kShopCardVariation.Get() == commerce::kShopCardArm1) {
+        _prefService->SetBoolean(
+            prefs::kHomeCustomizationMagicStackShopCardPriceTrackingEnabled,
+            enabled);
+      } else if (commerce::kShopCardVariation.Get() ==
+                 commerce::kShopCardArm2) {
+        _prefService->SetBoolean(
+            prefs::kHomeCustomizationMagicStackShopCardReviewsEnabled, enabled);
+      }
+      break;
   }
 }
 

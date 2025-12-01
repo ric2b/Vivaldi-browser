@@ -853,13 +853,13 @@ typedef struct FPDF_COLORSCHEME_ {
 //          Returns true if the page is rendered successfully, false otherwise.
 
 FPDF_EXPORT FPDF_BOOL FPDF_CALLCONV FPDF_RenderPage(HDC dc,
-                                               FPDF_PAGE page,
-                                               int start_x,
-                                               int start_y,
-                                               int size_x,
-                                               int size_y,
-                                               int rotate,
-                                               int flags);
+                                                    FPDF_PAGE page,
+                                                    int start_x,
+                                                    int start_y,
+                                                    int size_x,
+                                                    int size_y,
+                                                    int rotate,
+                                                    int flags);
 #endif
 
 // Function: FPDF_RenderPageBitmap
@@ -1088,7 +1088,13 @@ FPDF_EXPORT FPDF_BITMAP FPDF_CALLCONV FPDFBitmap_Create(int width,
 // 4 bytes per pixel, byte order: blue, green, red, unused.
 #define FPDFBitmap_BGRx 3
 // 4 bytes per pixel, byte order: blue, green, red, alpha.
+// Pixel components are independent of alpha.
 #define FPDFBitmap_BGRA 4
+// 4 bytes per pixel, byte order: blue, green, red, alpha.
+// Pixel components are premultiplied by alpha.
+// Note that this is experimental and only supported when rendering with
+// |FPDF_RENDERER_TYPE| is set to |FPDF_RENDERERTYPE_SKIA|.
+#define FPDFBitmap_BGRA_Premul 5
 
 // Function: FPDFBitmap_CreateEx
 //          Create a device independent bitmap (FXDIB)

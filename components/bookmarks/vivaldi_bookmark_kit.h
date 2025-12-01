@@ -133,6 +133,13 @@ bool IsURLAddedToNode(BookmarkModel* model,
                       const BookmarkNode* node,
                       const GURL& url);
 
+// Returns True when the provided BookmarkNode is a direct child of one of the
+// root nodes such as Bookmarks Bar, Mobile nodes.
+bool IsDirectChildOfRoot(BookmarkModel* model, const BookmarkNode* node);
+
+// Helper method to return non empty root nodes from the provided model.
+std::vector<const BookmarkNode*> GetRootNodes(BookmarkModel* model);
+
 // Helper method to find if given Node is Start Page node by checking certain
 // conditions.
 const BookmarkNode* FindStartPageNode(const BookmarkNode* node);

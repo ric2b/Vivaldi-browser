@@ -17,6 +17,7 @@
 
 @protocol LensOverlayCommands;
 class LensOverlaySnapshotController;
+class PrefService;
 
 // A tab helper that handles navigation to the tab with Lens Overlay
 // by showing/hiding/killing the Lens Overlay UI.
@@ -124,6 +125,8 @@ class LensOverlayTabHelper : public LensOverlaySnapshotControllerDelegate,
  private:
   explicit LensOverlayTabHelper(web::WebState* web_state);
 
+  PrefService* GetProfilePrefs();
+
   // Handler used to request showing the password bottom sheet.
   __weak id<LensOverlayCommands> commands_handler_;
 
@@ -141,7 +144,7 @@ class LensOverlayTabHelper : public LensOverlaySnapshotControllerDelegate,
 
   // Tracks the state of the bottom sheet associated with this web state.
   // Should remain in sync with the actual dimension of the bottom sheet.
-  SheetDimensionState sheet_dimension_state_ = SheetDimensionStateHidden;
+  SheetDimensionState sheet_dimension_state_ = SheetDimensionState::kHidden;
 
   UIImage* viewport_snapshot_;
 

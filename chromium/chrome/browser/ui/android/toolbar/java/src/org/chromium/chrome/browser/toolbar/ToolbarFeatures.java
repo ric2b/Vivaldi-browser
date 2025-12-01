@@ -7,6 +7,7 @@ package org.chromium.chrome.browser.toolbar;
 import android.os.Build.VERSION;
 import android.os.Build.VERSION_CODES;
 
+import org.chromium.base.DeviceInfo;
 import org.chromium.base.ResettersForTesting;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 
@@ -17,10 +18,6 @@ public final class ToolbarFeatures {
 
     /** Private constructor to avoid instantiation. */
     private ToolbarFeatures() {}
-
-    public static boolean shouldSuppressCaptures() {
-        return ChromeFeatureList.sSuppressionToolbarCaptures.isEnabled();
-    }
 
     /**
      * Returns whether to record metrics from suppression experiment. This allows an arm of
@@ -35,6 +32,9 @@ public final class ToolbarFeatures {
     public static boolean isTabStripWindowLayoutOptimizationEnabled(boolean isTablet) {
         if (sTabStripLayoutOptimizationEnabledForTesting != null) {
             return sTabStripLayoutOptimizationEnabledForTesting;
+        }
+        if (DeviceInfo.isAutomotive()) {
+            return false;
         }
         return ChromeFeatureList.sTabStripLayoutOptimization.isEnabled()
                 && isTablet

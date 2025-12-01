@@ -8,7 +8,7 @@ declared in that file.
 It then uses both the vivaldi and chromium sections to build a list of
 preferences that the javascript side is allowed to read from the C++ side.
 
-/!\: This script should never generate data that is used in the process of
+!!: This script should never generate data that is used in the process of
 determining runtime behavior related to prefs. In feneral, changing anything
 in the prefs definitions should work without needing to recompile a new binary.
 The only allowable exception is that removing a pref that is actively used by

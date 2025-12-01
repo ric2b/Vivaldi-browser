@@ -13,7 +13,6 @@
 #include "chrome/browser/profiles/profile.h"
 #include "components/optimization_guide/core/optimization_guide_features.h"
 #include "components/optimization_guide/core/optimization_guide_model_executor.h"
-#include "third_party/blink/public/mojom/ai/ai_language_model.mojom.h"
 
 namespace {
 
@@ -59,6 +58,11 @@ void CreateOnDeviceSessionTask::Start() {
   OptimizationGuideKeyedService* service = GetOptimizationGuideService();
   if (!service) {
     Finish(nullptr);
+    return;
+  }
+
+  if (override_session_) {
+    Finish(std::move(override_session_));
     return;
   }
 
@@ -159,7 +163,8 @@ CreateLanguageModelOnDeviceSessionTask::CreateLanguageModelOnDeviceSessionTask(
     AIManager& ai_manager,
     AIContextBoundObjectSet& context_bound_object_set,
     content::BrowserContext* browser_context,
-    const blink::mojom::AILanguageModelSamplingParamsPtr& sampling_params,
+    optimization_guide::SamplingParams sampling_params,
+    on_device_model::Capabilities capabilities,
     base::OnceCallback<
         void(std::unique_ptr<
              optimization_guide::OptimizationGuideModelExecutor::Session>)>
@@ -168,22 +173,9 @@ CreateLanguageModelOnDeviceSessionTask::CreateLanguageModelOnDeviceSessionTask(
           context_bound_object_set,
           browser_context,
           optimization_guide::ModelBasedCapabilityKey::kPromptApi),
-      completion_callback_(std::move(completion_callback)) {
-  auto language_model_params = ai_manager.GetLanguageModelParams();
-  if (sampling_params) {
-    sampling_params_ = optimization_guide::SamplingParams{
-        .top_k = std::min(sampling_params->top_k,
-                          language_model_params->max_sampling_params->top_k),
-        .temperature =
-            std::min(sampling_params->temperature,
-                     language_model_params->max_sampling_params->temperature)};
-  } else {
-    sampling_params_ = optimization_guide::SamplingParams{
-        .top_k = language_model_params->default_sampling_params->top_k,
-        .temperature =
-            language_model_params->default_sampling_params->temperature};
-  }
-}
+      sampling_params_(std::move(sampling_params)),
+      capabilities_(capabilities),
+      completion_callback_(std::move(completion_callback)) {}
 
 CreateLanguageModelOnDeviceSessionTask::
     ~CreateLanguageModelOnDeviceSessionTask() = default;
@@ -197,4 +189,5 @@ void CreateLanguageModelOnDeviceSessionTask::OnFinish(
 void CreateLanguageModelOnDeviceSessionTask::UpdateSessionConfigParams(
     optimization_guide::SessionConfigParams* config_params) {
   config_params->sampling_params = sampling_params_;
+  config_params->capabilities = capabilities_;
 }

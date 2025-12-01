@@ -67,6 +67,8 @@ struct Environment {
   size_t stack_limit_kb = 0;
   size_t timeout_per_input = 60;
   size_t timeout_per_batch = 0;
+  absl::Duration force_abort_timeout = absl::Minutes(15);
+  bool ignore_timeout_reports = false;
   absl::Time stop_at = absl::InfiniteFuture();
   bool fork_server = true;
   bool full_sync = false;
@@ -130,6 +132,17 @@ struct Environment {
   // If set, operate on the corpus database for a single test specified by
   // FuzzTest instead of all the tests.
   bool fuzztest_single_test_mode = false;
+  // If set, deserializes the configuration from the value instead of querying
+  // the configuration via runner callbacks.
+  std::string fuzztest_configuration;
+  // The crash ID used for `replay_crash` or `export_crash`.
+  std::string crash_id;
+  // If set, replay `crash_id` in the corpus database.
+  bool replay_crash = false;
+  // If set, export the input contents of `crash_id` from the corpus database.
+  bool export_crash = false;
+  // The path to export the input contents of `crash_id` for `export_crash`.
+  std::string export_crash_file;
 
   // Command line-related fields -----------------------------------------------
 
@@ -222,6 +235,8 @@ struct Environment {
   // `timeout_per_input` and `batch_size` and updates it. Otherwise, leaves it
   // unchanged.
   void UpdateTimeoutPerBatchIfEqualTo(size_t val);
+  // If `binary_hash` is empty, updates it using the file in `coverage_binary`.
+  void UpdateBinaryHashIfEmpty();
 };
 
 }  // namespace centipede

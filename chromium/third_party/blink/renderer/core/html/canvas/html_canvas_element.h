@@ -44,7 +44,6 @@
 #include "third_party/blink/renderer/core/page/page_visibility_observer.h"
 #include "third_party/blink/renderer/platform/bindings/v8_external_memory_accounter.h"
 #include "third_party/blink/renderer/platform/graphics/canvas_resource_host.h"
-#include "third_party/blink/renderer/platform/graphics/graphics_types.h"
 #include "third_party/blink/renderer/platform/graphics/graphics_types_3d.h"
 #include "third_party/blink/renderer/platform/graphics/offscreen_canvas_placeholder.h"
 #include "third_party/blink/renderer/platform/graphics/static_bitmap_image.h"
@@ -171,8 +170,9 @@ class CORE_EXPORT HTMLCanvasElement final
   void DiscardResourceProvider() override;
 
   TextDirection GetTextDirection(const ComputedStyle*) override;
+  const LayoutLocale* GetLocale() const override;
 
-  FontSelector* GetFontSelector() override;
+  UniqueFontSelector* GetFontSelector() override;
 
   bool ShouldBeDirectComposited() const;
 
@@ -200,11 +200,9 @@ class CORE_EXPORT HTMLCanvasElement final
   void PageVisibilityChanged() override;
 
   // CanvasImageSource implementation
-  scoped_refptr<Image> GetSourceImageForCanvas(
-      FlushReason,
-      SourceImageStatus*,
-      const gfx::SizeF&,
-      const AlphaDisposition alpha_disposition) override;
+  scoped_refptr<Image> GetSourceImageForCanvas(FlushReason,
+                                               SourceImageStatus*,
+                                               const gfx::SizeF&) override;
   bool WouldTaintOrigin() const override;
   gfx::SizeF ElementSize(const gfx::SizeF&,
                          const RespectImageOrientationEnum) const override;
@@ -235,8 +233,7 @@ class CORE_EXPORT HTMLCanvasElement final
   // CanvasRenderingContextHost implementation.
   UkmParameters GetUkmParameters() override;
 
-  void DisableAcceleration(std::unique_ptr<CanvasResourceProvider>
-                               new_provider_for_testing = nullptr);
+  void DisableAcceleration();
   bool EnableAcceleration() final;
 
   // ImageBitmapSource implementation
@@ -263,6 +260,7 @@ class CORE_EXPORT HTMLCanvasElement final
   void StyleDidChange(const ComputedStyle* old_style,
                       const ComputedStyle& new_style);
   void LayoutObjectDestroyed();
+  void LangAttributeChanged() override;
 
   void NotifyListenersCanvasChanged();
 
@@ -336,11 +334,21 @@ class CORE_EXPORT HTMLCanvasElement final
   void RemovedFrom(ContainerNode& insertion_point) override;
 
  private:
+  enum class ReadbackType {
+    kWebExposed,
+    kNotWebExposed,
+  };
+
   void Dispose();
 
+  // Updates the preferred 2D raster mode based on the state of the context and
+  // GPU acceleration.
+  void UpdatePreferred2DRasterMode();
+
+  // Recreates the resource provider.
   // TODO(crbug.com/40280152): Remove parameter once the hibernation handler is
   // an instance variable of this class.
-  CanvasResourceProvider* GetOrCreateCanvasResourceProviderFor2DContext(
+  CanvasResourceProvider* RecreateCanvasResourceProviderFor2DContext(
       CanvasHibernationHandler& hibernation_handler);
 
   void ColorSchemeMayHaveChanged();
@@ -375,9 +383,11 @@ class CORE_EXPORT HTMLCanvasElement final
 
   bool PaintsIntoCanvasBuffer() const;
 
-  String ToDataURLInternal(const String& mime_type,
-                           const double& quality,
-                           SourceDrawingBuffer) const;
+  String ToDataURLInternal(
+      const String& mime_type,
+      const double& quality,
+      SourceDrawingBuffer,
+      ReadbackType readback_type = ReadbackType::kWebExposed) const;
 
   // Returns the transparent image resource for this canvas.
   scoped_refptr<StaticBitmapImage> GetTransparentImage();
@@ -388,8 +398,7 @@ class CORE_EXPORT HTMLCanvasElement final
 
   scoped_refptr<StaticBitmapImage> GetSourceImageForCanvasInternal(
       FlushReason,
-      SourceImageStatus*,
-      const AlphaDisposition alpha_disposition = kPremultiplyAlpha);
+      SourceImageStatus*);
 
   static std::pair<blink::Image*, float> BrokenCanvas(
       float device_scale_factor);
@@ -418,11 +427,8 @@ class CORE_EXPORT HTMLCanvasElement final
   std::unique_ptr<Canvas2DLayerBridge> canvas2d_bridge_;
 
   // If the ResourceProvider currently exists, replaces it with a
-  // CanvasResourceProvider that was newly created for usage with a 2D context
-  // (or with `new_provider_for_testing` if non-null).
-  void ReplaceExistingResourceProviderFor2DContext(
-      std::unique_ptr<CanvasResourceProvider> new_provider_for_testing =
-          nullptr);
+  // CanvasResourceProvider that was newly created for usage with a 2D context.
+  void ReplaceExistingResourceProviderFor2DContext();
 
   // Used for OffscreenCanvas that controls this HTML canvas element
   // and for low latency mode.

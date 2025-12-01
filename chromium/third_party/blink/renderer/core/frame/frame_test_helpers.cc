@@ -958,6 +958,7 @@ WebView* TestWebFrameClient::CreateNewWindow(
     const WebURLRequest&,
     const WebWindowFeatures&,
     const WebString& name,
+    const gfx::Rect& requested_screen_rect,
     WebNavigationPolicy,
     network::mojom::blink::WebSandboxFlags,
     const SessionStorageNamespaceId&,
@@ -1049,9 +1050,8 @@ void TestWebFrameWidget::BindWidgetChannels(
 
   mojo::PendingRemote<mojom::blink::RenderInputRouterClient> rir_client_remote;
   // Setup RenderInputRouter mojo connections.
-  widget_remote->SetupRenderInputRouterConnections(
-      rir_client_remote.InitWithNewPipeAndPassReceiver(),
-      /* viz_client= */ mojo::NullReceiver());
+  widget_remote->SetupBrowserRenderInputRouterConnections(
+      rir_client_remote.InitWithNewPipeAndPassReceiver());
   widget_host_->BindRenderInputRouterInterfaces(std::move(rir_client_remote));
 
   widget_host_->GetWidgetInputHandler(
@@ -1110,7 +1110,9 @@ void TestWebFrameWidgetHost::CreateFrameSink(
     mojo::PendingReceiver<viz::mojom::blink::CompositorFrameSink>
         compositor_frame_sink_receiver,
     mojo::PendingRemote<viz::mojom::blink::CompositorFrameSinkClient>
-        compositor_frame_sink_client) {}
+        compositor_frame_sink_client,
+    mojo::PendingRemote<blink::mojom::blink::RenderInputRouterClient>
+        viz_rir_client_remote) {}
 
 void TestWebFrameWidgetHost::RegisterRenderFrameMetadataObserver(
     mojo::PendingReceiver<cc::mojom::blink::RenderFrameMetadataObserverClient>
@@ -1178,8 +1180,7 @@ void TestWidgetInputHandlerHost::ImeCancelComposition() {}
 
 void TestWidgetInputHandlerHost::ImeCompositionRangeChanged(
     const gfx::Range& range,
-    const std::optional<WTF::Vector<gfx::Rect>>& character_bounds,
-    const std::optional<WTF::Vector<gfx::Rect>>& line_bounds) {}
+    const std::optional<WTF::Vector<gfx::Rect>>& character_bounds) {}
 
 void TestWidgetInputHandlerHost::SetMouseCapture(bool capture) {}
 

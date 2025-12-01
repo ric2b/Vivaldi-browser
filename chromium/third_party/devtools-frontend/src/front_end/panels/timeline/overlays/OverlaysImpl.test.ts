@@ -2,9 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+import * as Common from '../../../core/common/common.js';
+import * as AiAssistanceModels from '../../../models/ai_assistance/ai_assistance.js';
 import * as Trace from '../../../models/trace/trace.js';
-import {dispatchClickEvent} from '../../../testing/DOMHelpers.js';
-import {describeWithEnvironment} from '../../../testing/EnvironmentHelpers.js';
+import {mockAidaClient} from '../../../testing/AiAssistanceHelpers.js';
+import {cleanTextContent, dispatchClickEvent, doubleRaf} from '../../../testing/DOMHelpers.js';
+import {describeWithEnvironment, updateHostConfig} from '../../../testing/EnvironmentHelpers.js';
 import {
   makeInstantEvent,
   microsecondsTraceWindow,
@@ -14,12 +17,16 @@ import {
 import {TraceLoader} from '../../../testing/TraceLoader.js';
 import * as RenderCoordinator from '../../../ui/components/render_coordinator/render_coordinator.js';
 import * as PerfUI from '../../../ui/legacy/components/perf_ui/perf_ui.js';
+import * as PanelCommon from '../../common/common.js';
 import * as Timeline from '../timeline.js';
 
 import * as Components from './components/components.js';
 import * as Overlays from './overlays.js';
 
 const FAKE_OVERLAY_ENTRY_QUERIES: Overlays.Overlays.OverlayEntryQueries = {
+  parsedTrace() {
+    return null;
+  },
   isEntryCollapsedByUser() {
     return false;
   },
@@ -37,8 +44,9 @@ function createCharts(parsedTrace?: Trace.Handlers.Types.ParsedTrace): Overlays.
   const mainProvider = new Timeline.TimelineFlameChartDataProvider.TimelineFlameChartDataProvider();
   const networkProvider = new Timeline.TimelineFlameChartNetworkDataProvider.TimelineFlameChartNetworkDataProvider();
   if (parsedTrace) {
-    mainProvider.setModel(parsedTrace);
-    networkProvider.setModel(parsedTrace);
+    const entityMapper = new Timeline.Utils.EntityMapper.EntityMapper(parsedTrace);
+    mainProvider.setModel(parsedTrace, entityMapper);
+    networkProvider.setModel(parsedTrace, entityMapper);
   }
 
   const delegate = new MockFlameChartDelegate();
@@ -63,7 +71,9 @@ function createCharts(parsedTrace?: Trace.Handlers.Types.ParsedTrace): Overlays.
 }
 
 describeWithEnvironment('Overlays', () => {
+  let showFreDialogStub: sinon.SinonStub<Parameters<typeof PanelCommon.FreDialog.show>, Promise<boolean>>;
   beforeEach(() => {
+    showFreDialogStub = sinon.stub(PanelCommon.FreDialog, 'show');
     setupIgnoreListManagerEnvironment();
   });
 
@@ -272,7 +282,12 @@ describeWithEnvironment('Overlays', () => {
           network: networkFlameChartsContainer,
         },
         charts,
-        entryQueries: FAKE_OVERLAY_ENTRY_QUERIES,
+        entryQueries: {
+          ...FAKE_OVERLAY_ENTRY_QUERIES,
+          parsedTrace() {
+            return parsedTrace;
+          },
+        },
       });
       const currManager = Timeline.ModificationsManager.ModificationsManager.activeManager();
       // The Annotations Overlays are added through the ModificationsManager listener
@@ -309,6 +324,54 @@ describeWithEnvironment('Overlays', () => {
       // Set the visible window to be the entire trace.
       overlays.updateVisibleWindow(parsedTrace.Meta.traceBounds);
       return {overlays, container, charts};
+    }
+
+    async function createAnnotationsLabelElement(
+        context: Mocha.Suite|Mocha.Context|null, file: string, entryIndex: number, label?: string,
+        isEventOnMainChart = true): Promise<{
+      elementsWrapper: HTMLElement,
+      inputField: HTMLElement,
+      overlays: Overlays.Overlays.Overlays,
+      event: Trace.Types.Events.Event,
+      component: Components.EntryLabelOverlay.EntryLabelOverlay,
+    }> {
+      updateHostConfig({
+        devToolsAiGeneratedTimelineLabels: {
+          enabled: true,
+        }
+      });
+
+      const {parsedTrace} = await TraceLoader.traceEngine(context, file);
+      const {overlays, container, charts} = setupChartWithDimensionsAndAnnotationOverlayListeners(parsedTrace);
+      let event;
+      if (isEventOnMainChart) {
+        event = charts.mainProvider.eventByIndex?.(entryIndex);
+      } else {
+        event = charts.networkProvider.eventByIndex?.(entryIndex);
+      }
+      assert.isOk(event);
+
+      // Create an entry label overlay
+      Timeline.ModificationsManager.ModificationsManager.activeManager()?.createAnnotation({
+        type: 'ENTRY_LABEL',
+        entry: event,
+        label: label ?? '',
+      });
+      await overlays.update();
+      await RenderCoordinator.done();
+
+      // Ensure that the overlay was created.
+      const overlayDOM = container.querySelector<HTMLElement>('.overlay-type-ENTRY_LABEL');
+      assert.isOk(overlayDOM);
+      const component = overlayDOM?.querySelector('devtools-entry-label-overlay');
+      assert.isOk(component?.shadowRoot);
+      component.connectedCallback();
+      const elementsWrapper = component.shadowRoot.querySelector<HTMLElement>('.label-parts-wrapper');
+      assert.isOk(elementsWrapper);
+      const inputField = elementsWrapper.querySelector<HTMLElement>('.input-field');
+      assert.isOk(inputField);
+
+      return {elementsWrapper, inputField, overlays, event, component};
     }
 
     it('can render an entry selected overlay', async function() {
@@ -431,6 +494,55 @@ describeWithEnvironment('Overlays', () => {
       });
     });
 
+    it('should show FRE dialog on the ai suggestion button click if the `ai-annotations-enabled` setting is off',
+       async function() {
+         Common.Settings.moduleSetting('ai-annotations-enabled').set(false);
+         const {elementsWrapper, inputField} = await createAnnotationsLabelElement(this, 'web-dev.json.gz', 50);
+
+         // Double click on the label box to make it editable and focus on it
+         inputField.dispatchEvent(new FocusEvent('dblclick', {bubbles: true}));
+         await RenderCoordinator.done();
+
+         const aiLabelButtonWrapper =
+             elementsWrapper.querySelector<HTMLElement>('.ai-label-button-wrapper') as HTMLSpanElement;
+         assert.isOk(aiLabelButtonWrapper);
+         const aiButton = aiLabelButtonWrapper.querySelector<HTMLElement>('.ai-label-button') as HTMLSpanElement;
+         assert.isOk(aiButton);
+
+         // This dialog should not be visible unless the `generate annotation` button is clicked
+         assert.isFalse(showFreDialogStub.called, 'Expected FreDialog to be not shown but it\'s shown');
+         aiButton.dispatchEvent(new FocusEvent('click', {bubbles: true}));
+         await RenderCoordinator.done();
+
+         // This dialog should be visible
+         assert.isTrue(showFreDialogStub.called, 'Expected FreDialog to be shown but it\'s not shown');
+
+         const customLearnMoreButtonTitle = showFreDialogStub.lastCall.args[0].learnMoreButtonTitle;
+         assert.exists(
+             customLearnMoreButtonTitle, 'Expected FreDialog to have a custom button title but it\'s not provided');
+         assert.deepEqual(customLearnMoreButtonTitle.toString(), 'Learn more about auto annotations');
+       });
+
+    it('should not show FRE dialog on the ai suggestion button click if the `ai-annotations-enabled` setting is on',
+       async function() {
+         Common.Settings.moduleSetting('ai-annotations-enabled').set(true);
+         const {elementsWrapper, inputField} = await createAnnotationsLabelElement(this, 'web-dev.json.gz', 50);
+
+         // Double click on the label box to make it editable and focus on it
+         inputField.dispatchEvent(new FocusEvent('dblclick', {bubbles: true}));
+
+         const aiLabelButtonWrapper =
+             elementsWrapper.querySelector<HTMLElement>('.ai-label-button-wrapper') as HTMLSpanElement;
+
+         assert.isOk(aiLabelButtonWrapper);
+         const aiButton = aiLabelButtonWrapper.querySelector<HTMLElement>('.ai-label-button') as HTMLSpanElement;
+         assert.isOk(aiButton);
+
+         aiButton.dispatchEvent(new FocusEvent('click', {bubbles: true}));
+         // This dialog should not be visible on the `generate label` button click since the setting is already on
+         assert.isFalse(showFreDialogStub.called, 'Expected FreDialog to be shown but it\'s not shown');
+       });
+
     it('toggles overlays container display', async function() {
       const {parsedTrace} = await TraceLoader.traceEngine(this, 'web-dev.json.gz');
       const {overlays, container} = setupChartWithDimensionsAndAnnotationOverlayListeners(parsedTrace);
@@ -466,71 +578,231 @@ describeWithEnvironment('Overlays', () => {
       assert.lengthOf(container.children, 1);
     });
 
-    it('can render the label for entry label overlay', async function() {
-      const {parsedTrace} = await TraceLoader.traceEngine(this, 'web-dev.json.gz');
-      const {overlays, container, charts} = setupChartWithDimensionsAndAnnotationOverlayListeners(parsedTrace);
-      const event = charts.mainProvider.eventByIndex?.(50);
-      assert.isOk(event);
-
-      overlays.add({
-        type: 'ENTRY_LABEL',
-        entry: event,
-        label: 'entry label',
-      });
-      await overlays.update();
-
-      const overlayDOM = container.querySelector<HTMLElement>('.overlay-type-ENTRY_LABEL');
-      assert.isOk(overlayDOM);
-      const component = overlayDOM?.querySelector('devtools-entry-label-overlay');
-      assert.isOk(component?.shadowRoot);
-
-      const elementsWrapper = component.shadowRoot.querySelector<HTMLElement>('.label-parts-wrapper');
-      assert.isOk(elementsWrapper);
-
-      const inputField = elementsWrapper.querySelector<HTMLElement>('.input-field');
-      assert.isOk(inputField);
-
+    it('can render provided label for entry label overlay', async function() {
+      const {inputField} = await createAnnotationsLabelElement(this, 'web-dev.json.gz', 50, 'entry label');
       assert.strictEqual(inputField?.innerText, 'entry label');
     });
 
-    it('Inputting `Enter`into label overlay makes it non-editable', async function() {
-      const {parsedTrace} = await TraceLoader.traceEngine(this, 'web-dev.json.gz');
-      const {overlays, container, charts} = setupChartWithDimensionsAndAnnotationOverlayListeners(parsedTrace);
-      const event = charts.mainProvider.eventByIndex?.(50);
-      assert.isOk(event);
+    it('generates a label when the user clicks "Generate" if the setting is enabled', async function() {
+      const {elementsWrapper, inputField, component} = await createAnnotationsLabelElement(this, 'web-dev.json.gz', 50);
+      Common.Settings.moduleSetting('ai-annotations-enabled').set(true);
 
-      // Create an entry label overlay
-      overlays.add({
-        type: 'ENTRY_LABEL',
-        entry: event,
-        label: 'label',
+      const generateButton = elementsWrapper.querySelector<HTMLElement>('.ai-label-button');
+      assert.isOk(generateButton, 'could not find "Generate label" button');
+      assert.isTrue(generateButton.classList.contains('enabled'));
+      const agent = new AiAssistanceModels.PerformanceAnnotationsAgent({
+        aidaClient: mockAidaClient([[{
+          explanation: 'This is an interesting entry',
+          metadata: {
+            rpcGlobalId: 123,
+          }
+        }]])
       });
-      await overlays.update();
+      component.overrideAIAgentForTest(agent);
 
-      // Ensure that the overlay was created.
-      const overlayDOM = container.querySelector<HTMLElement>('.overlay-type-ENTRY_LABEL');
-      assert.isOk(overlayDOM);
+      // The Agent call is async, so wait for the change event on the label to ensure the UI is updated.
+      const changeEvent = new Promise<void>(resolve => {
+        component.addEventListener(
+            Components.EntryLabelOverlay.EntryLabelChangeEvent.eventName, () => resolve(), {once: true});
+      });
+      dispatchClickEvent(generateButton);
+      await RenderCoordinator.done();
+      await changeEvent;
 
-      const component = overlayDOM?.querySelector('devtools-entry-label-overlay');
-      assert.isOk(component?.shadowRoot);
-      component.connectedCallback();
-      const elementsWrapper = component.shadowRoot.querySelector<HTMLElement>('.label-parts-wrapper');
-      assert.isOk(elementsWrapper);
+      assert.strictEqual(inputField.innerHTML, 'This is an interesting entry');
+    });
 
-      const inputField = elementsWrapper.querySelector<HTMLElement>('.input-field');
-      assert.isOk(inputField);
+    it('"Generate label" button does not appear on tracks other than main', async function() {
+      const {elementsWrapper} =
+          await createAnnotationsLabelElement(this, 'web-dev.json.gz', 0, '', /* isEventOnMainChart */ false);
+      const generateButton = elementsWrapper.querySelector<HTMLElement>('.ai-label-button');
+      // The button should not appear next to a network event
+      assert.isNotOk(generateButton, 'could not find "Generate label" button');
+    });
+
+    it('shows correct tooltip on the `generate ai label` hover for the users with logging enabled', async function() {
+      const {elementsWrapper} = await createAnnotationsLabelElement(this, 'web-dev.json.gz', 50);
+
+      const aiLabelButtonWrapper =
+          elementsWrapper.querySelector<HTMLElement>('.ai-label-button-wrapper') as HTMLSpanElement;
+      assert.isOk(aiLabelButtonWrapper);
+
+      const tooltip = aiLabelButtonWrapper.querySelector<HTMLElement>('devtools-tooltip');
+      assert.isOk(tooltip);
+      assert.strictEqual(
+          cleanTextContent(tooltip.innerText),
+          'The selected call stack is sent to Google. The content you submit and that is generated by this feature will be used to improve Google’s AI models. This is an experimental AI feature and won’t always get it right. Learn more in settings',
+      );
+    });
+
+    it('does not show the AI button if there is already a label', async function() {
+      const {elementsWrapper} = await createAnnotationsLabelElement(this, 'web-dev.json.gz', 50, 'initial entry label');
+
+      const aiLabelButtonWrapper =
+          elementsWrapper.querySelector<HTMLElement>('.ai-label-button-wrapper') as HTMLSpanElement;
+      assert.isNull(aiLabelButtonWrapper);
+    });
+
+    it('shows correct tooltip text on `generate ai label` hover for the users with logging disabled', async function() {
+      updateHostConfig({
+        aidaAvailability: {
+          enabled: true,
+          blockedByAge: false,
+          blockedByEnterprisePolicy: false,
+          blockedByGeo: false,
+          disallowLogging: true,
+          enterprisePolicyValue: 1,
+        },
+      });
+
+      const {elementsWrapper} = await createAnnotationsLabelElement(this, 'web-dev.json.gz', 50);
+
+      const aiLabelButtonWrapper =
+          elementsWrapper.querySelector<HTMLElement>('.ai-label-button-wrapper') as HTMLSpanElement;
+      assert.isOk(aiLabelButtonWrapper);
+      const tooltip = aiLabelButtonWrapper.querySelector<HTMLElement>('devtools-tooltip');
+      assert.isOk(tooltip);
+      assert.strictEqual(
+          cleanTextContent(tooltip.innerText),
+          'The selected call stack is sent to Google. The content you submit and that is generated by this feature will not be used to improve Google’s AI models. This is an experimental AI feature and won’t always get it right. Learn more in settings',
+      );
+    });
+
+    it('Does not show `generate ai label` button if the label is not empty', async function() {
+      updateHostConfig({
+        aidaAvailability: {
+          enabled: false,
+          blockedByAge: true,
+          blockedByEnterprisePolicy: false,
+          blockedByGeo: false,
+          disallowLogging: true,
+          enterprisePolicyValue: 1,
+        },
+      });
+
+      const {elementsWrapper, inputField} =
+          await createAnnotationsLabelElement(this, 'web-dev.json.gz', 50, 'entry label');
+      assert.strictEqual(inputField?.innerText, 'entry label');
+
+      const aiLabelButtonWrapper =
+          elementsWrapper.querySelector<HTMLElement>('.ai-label-disabled-button-wrapper') as HTMLSpanElement;
+      // Button should not exist
+      assert.isNotOk(aiLabelButtonWrapper);
+    });
+
+    it('Shows the `generate ai label` button if the label is empty', async function() {
+      updateHostConfig({
+        aidaAvailability: {
+          enabled: false,
+          blockedByAge: true,
+          blockedByEnterprisePolicy: false,
+          blockedByGeo: false,
+          disallowLogging: true,
+          enterprisePolicyValue: 1,
+        },
+      });
+
+      const {elementsWrapper, inputField} = await createAnnotationsLabelElement(this, 'web-dev.json.gz', 50, '');
+      assert.strictEqual(inputField?.innerText, '');
+
+      const aiLabelButtonWrapper =
+          elementsWrapper.querySelector<HTMLElement>('.ai-label-disabled-button-wrapper') as HTMLSpanElement;
+      assert.isOk(aiLabelButtonWrapper);
+    });
+
+    it('Shows disabled `generate ai label` button if the user is not logged into their google account or is under 18',
+       async function() {
+         updateHostConfig({
+           aidaAvailability: {
+             enabled: false,
+             blockedByAge: true,
+             blockedByEnterprisePolicy: false,
+             blockedByGeo: false,
+             disallowLogging: true,
+             enterprisePolicyValue: 1,
+           },
+         });
+
+         const {elementsWrapper, inputField} = await createAnnotationsLabelElement(this, 'web-dev.json.gz', 50, '');
+         assert.strictEqual(inputField?.innerText, '');
+
+         const aiLabelButtonWrapper =
+             elementsWrapper.querySelector<HTMLElement>('.ai-label-disabled-button-wrapper') as HTMLSpanElement;
+         assert.isOk(aiLabelButtonWrapper);
+
+         const tooltip = aiLabelButtonWrapper.querySelector<HTMLElement>('devtools-tooltip');
+         assert.isOk(tooltip);
+         assert.strictEqual(
+             cleanTextContent(tooltip.innerText),
+             'Auto annotations are not available. Learn more in settings',
+         );
+       });
+
+    it('Shows disabled `generate ai label` button if the user is in an unsupported location', async function() {
+      updateHostConfig({
+        aidaAvailability: {
+          enabled: false,
+          blockedByAge: false,
+          blockedByEnterprisePolicy: false,
+          blockedByGeo: true,
+          disallowLogging: true,
+          enterprisePolicyValue: 1,
+        },
+      });
+
+      const {elementsWrapper, inputField} = await createAnnotationsLabelElement(this, 'web-dev.json.gz', 50, '');
+      assert.strictEqual(inputField?.innerText, '');
+
+      const aiLabelButtonWrapper =
+          elementsWrapper.querySelector<HTMLElement>('.ai-label-disabled-button-wrapper') as HTMLSpanElement;
+      assert.isOk(aiLabelButtonWrapper);
+
+      const tooltip = aiLabelButtonWrapper.querySelector<HTMLElement>('devtools-tooltip');
+      assert.isOk(tooltip);
+      assert.strictEqual(
+          cleanTextContent(tooltip.innerText),
+          'Auto annotations are not available. Learn more in settings',
+      );
+    });
+
+    it('Does not show the `generate ai label` button for enterprise users with disabled AI features', async function() {
+      updateHostConfig({
+        aidaAvailability: {
+          enabled: false,
+          blockedByAge: false,
+          blockedByEnterprisePolicy: true,
+          blockedByGeo: false,
+          disallowLogging: true,
+          enterprisePolicyValue: 2,
+        },
+      });
+
+      const {elementsWrapper, inputField} =
+          await createAnnotationsLabelElement(this, 'web-dev.json.gz', 50, 'entry label');
+      assert.strictEqual(inputField?.innerText, 'entry label');
+
+      const aiLabelButtonWrapper =
+          elementsWrapper.querySelector<HTMLElement>('.ai-label-button-wrapper') as HTMLSpanElement;
+      // Button should not exist
+      assert.isNotOk(aiLabelButtonWrapper);
+    });
+
+    it('Inputting `Enter` into label overlay makes it non-editable', async function() {
+      const {inputField, component} = await createAnnotationsLabelElement(this, 'web-dev.json.gz', 50, 'label');
 
       // Double click on the label box to make it editable and focus on it
       inputField.dispatchEvent(new FocusEvent('dblclick', {bubbles: true}));
 
       // Ensure the label content is editable
       assert.isTrue(inputField.isContentEditable);
+      assert.isTrue(component.hasAttribute('data-user-editing-label'));
 
-      // Press `Enter` to make the lable not editable
+      // Press `Enter` to make the label not editable
       inputField.dispatchEvent(new KeyboardEvent('keydown', {key: 'Enter', cancelable: true, bubbles: true}));
 
       // Ensure the label content is not editable
       assert.isFalse(inputField.isContentEditable);
+      assert.isFalse(component.hasAttribute('data-user-editing-label'));
     });
 
     it('Inputting `Enter` into time range label field when the label is empty removes the overlay', async function() {
@@ -634,32 +906,8 @@ describeWithEnvironment('Overlays', () => {
       assert.lengthOf(overlays.overlaysOfType('TIME_RANGE'), 2);
     });
 
-    it('Removes empty label if it is empty when navigated away from (removed focused from)', async function() {
-      const {parsedTrace} = await TraceLoader.traceEngine(this, 'web-dev.json.gz');
-      const {overlays, container, charts} = setupChartWithDimensionsAndAnnotationOverlayListeners(parsedTrace);
-      const event = charts.mainProvider.eventByIndex?.(50);
-      assert.isOk(event);
-
-      // Create an entry label overlay
-      Timeline.ModificationsManager.ModificationsManager.activeManager()?.createAnnotation({
-        type: 'ENTRY_LABEL',
-        entry: event as Trace.Types.Events.Event,
-        label: '',
-      });
-      await overlays.update();
-
-      // Ensure that the overlay was created.
-      const overlayDOM = container.querySelector<HTMLElement>('.overlay-type-ENTRY_LABEL');
-      assert.isOk(overlayDOM);
-      const component = overlayDOM?.querySelector('devtools-entry-label-overlay');
-      assert.isOk(component?.shadowRoot);
-
-      component.connectedCallback();
-      const elementsWrapper = component.shadowRoot.querySelector<HTMLElement>('.label-parts-wrapper');
-      assert.isOk(elementsWrapper);
-
-      const inputField = elementsWrapper.querySelector<HTMLElement>('.input-field');
-      assert.isOk(inputField);
+    it('removes empty label if it is empty when it loses focus', async function() {
+      const {inputField, overlays, event} = await createAnnotationsLabelElement(this, 'web-dev.json.gz', 50);
 
       // Double click on the label box to make it editable and focus on it
       inputField.dispatchEvent(new FocusEvent('dblclick', {bubbles: true}));
@@ -669,7 +917,8 @@ describeWithEnvironment('Overlays', () => {
 
       // Change the content to not editable by changing the element blur like when clicking outside of it.
       // The label is empty since no initial value was passed into it and no characters were entered.
-      inputField.dispatchEvent(new FocusEvent('blur', {bubbles: true}));
+      inputField.dispatchEvent(new FocusEvent('focusout', {bubbles: true}));
+      await doubleRaf();
 
       // Ensure that the entry overlay has been removed because it was saved empty
       assert.lengthOf(overlays.overlaysForEntry(event), 0);
@@ -684,7 +933,7 @@ describeWithEnvironment('Overlays', () => {
       // Create an entry label overlay
       Timeline.ModificationsManager.ModificationsManager.activeManager()?.createAnnotation({
         type: 'ENTRY_LABEL',
-        entry: event as Trace.Types.Events.Event,
+        entry: event,
         label: '',
       });
       await overlays.update();
@@ -875,70 +1124,26 @@ describeWithEnvironment('Overlays', () => {
       assert.lengthOf(container.children, 0);
     });
 
-    it('the label entry field is editable when created', async function() {
-      const {parsedTrace} = await TraceLoader.traceEngine(this, 'web-dev.json.gz');
-      const {overlays, container} = setupChartWithDimensionsAndAnnotationOverlayListeners(parsedTrace);
-      const charts = createCharts(parsedTrace);
-      const event = charts.mainProvider.eventByIndex?.(50);
-      assert.isOk(event);
-
-      // Since ENTRY_LABEL is AnnotationOverlay, create it through ModificationsManager
-      Timeline.ModificationsManager.ModificationsManager.activeManager()?.createAnnotation({
-        type: 'ENTRY_LABEL',
-        label: '',
-        entry: event as Trace.Types.Events.Event,
-      });
-
-      await overlays.update();
-      const overlayDOM = container.querySelector<HTMLElement>('.overlay-type-ENTRY_LABEL');
-      assert.isOk(overlayDOM);
-      const component = overlayDOM?.querySelector('devtools-entry-label-overlay');
-      assert.isOk(component?.shadowRoot);
-
-      const elementsWrapper = component.shadowRoot.querySelector<HTMLElement>('.label-parts-wrapper');
-      const inputField = elementsWrapper?.querySelector<HTMLElement>('.input-field') as HTMLSpanElement;
-      assert.isOk(inputField);
+    it('the label entry field is editable when created without initial label', async function() {
+      const {inputField} = await createAnnotationsLabelElement(this, 'web-dev.json.gz', 50);
       // The label input box should be editable after it is created and before anything else happened
       assert.isTrue(inputField.isContentEditable);
     });
 
     it('the label entry field is in focus after being double clicked on', async function() {
-      const {parsedTrace} = await TraceLoader.traceEngine(this, 'web-dev.json.gz');
-      const {overlays, container} = setupChartWithDimensionsAndAnnotationOverlayListeners(parsedTrace);
-      const charts = createCharts(parsedTrace);
-      const event = charts.mainProvider.eventByIndex?.(50);
-      assert.isOk(event);
-
-      // Since ENTRY_LABEL is AnnotationOverlay, create it through ModificationsManager
-      Timeline.ModificationsManager.ModificationsManager.activeManager()?.createAnnotation({
-        type: 'ENTRY_LABEL',
-        label: '',
-        entry: event as Trace.Types.Events.Event,
-      });
-
-      await overlays.update();
-      const overlayDOM = container.querySelector<HTMLElement>('.overlay-type-ENTRY_LABEL');
-      assert.isOk(overlayDOM);
-      const component = overlayDOM?.querySelector('devtools-entry-label-overlay');
-      assert.isOk(component?.shadowRoot);
-
-      const elementsWrapper = component.shadowRoot.querySelector<HTMLElement>('.label-parts-wrapper');
-      assert.isOk(elementsWrapper);
-      const labelBox = elementsWrapper.querySelector<HTMLElement>('.input-field') as HTMLSpanElement;
-
-      assert.isOk(labelBox);
-
+      const {inputField} = await createAnnotationsLabelElement(this, 'web-dev.json.gz', 50);
       // The label input box should be editable after it is created and before anything else happened
-      assert.isTrue(labelBox.isContentEditable);
+      assert.isTrue(inputField.isContentEditable);
 
       // Make the content to editable by changing the element blur like when clicking outside of it.
       // When that happens, the content should be set to not editable.
-      labelBox.dispatchEvent(new FocusEvent('blur', {bubbles: true}));
-      assert.isFalse(labelBox.isContentEditable);
+      inputField.dispatchEvent(new FocusEvent('focusout', {bubbles: true}));
+      await doubleRaf();
+      assert.isFalse(inputField.isContentEditable);
 
       // Double click on the label to make it editable again
-      labelBox.dispatchEvent(new FocusEvent('dblclick', {bubbles: true}));
-      assert.isTrue(labelBox.isContentEditable);
+      inputField.dispatchEvent(new FocusEvent('dblclick', {bubbles: true}));
+      assert.isTrue(inputField.isContentEditable);
     });
   });
 

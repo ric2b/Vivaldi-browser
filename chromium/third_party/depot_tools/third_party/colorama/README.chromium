@@ -2,7 +2,7 @@ Name: colorama
 URL: https://github.com/tartley/colorama
 Version: b71bec90d4770d4124ad95d70cc6a4c9289bbadf (0.4.1)
 Revision: b71bec90d4770d4124ad95d70cc6a4c9289bbadf
-License: BSD
+License: BSD-3-Clause
 License File: LICENSE.txt
 Shipped: no
 Security Critical: no

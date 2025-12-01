@@ -32,15 +32,19 @@ import android.view.WindowManager;
 
 import androidx.appcompat.app.AppCompatActivity;
 
+import com.google.common.collect.ImmutableMap;
+
 import org.junit.After;
 import org.junit.Before;
+import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Captor;
 import org.mockito.Mock;
 import org.mockito.Mockito;
-import org.mockito.MockitoAnnotations;
+import org.mockito.junit.MockitoJUnit;
+import org.mockito.junit.MockitoRule;
 import org.robolectric.Robolectric;
 import org.robolectric.annotation.Config;
 import org.robolectric.shadows.ShadowLooper;
@@ -50,9 +54,6 @@ import org.chromium.base.ApplicationState;
 import org.chromium.base.Promise;
 import org.chromium.base.supplier.ObservableSupplierImpl;
 import org.chromium.base.supplier.OneshotSupplierImpl;
-import org.chromium.base.task.TaskTraits;
-import org.chromium.base.task.test.ShadowPostTask;
-import org.chromium.base.task.test.ShadowPostTask.TestImpl;
 import org.chromium.base.test.BaseRobolectricTestRunner;
 import org.chromium.base.test.util.Features.DisableFeatures;
 import org.chromium.base.test.util.Features.EnableFeatures;
@@ -89,6 +90,7 @@ import org.chromium.chrome.modules.readaloud.Playback;
 import org.chromium.chrome.modules.readaloud.Playback.PlaybackTextPart;
 import org.chromium.chrome.modules.readaloud.Playback.PlaybackTextType;
 import org.chromium.chrome.modules.readaloud.PlaybackArgs;
+import org.chromium.chrome.modules.readaloud.PlaybackArgs.PlaybackMode;
 import org.chromium.chrome.modules.readaloud.PlaybackArgs.PlaybackVoice;
 import org.chromium.chrome.modules.readaloud.PlaybackListener;
 import org.chromium.chrome.modules.readaloud.PlaybackListener.PlaybackData;
@@ -121,7 +123,7 @@ import java.util.Locale;
 @RunWith(BaseRobolectricTestRunner.class)
 @Config(
         manifest = Config.NONE,
-        shadows = {ShadowDeviceConditions.class, ShadowPostTask.class})
+        shadows = {ShadowDeviceConditions.class})
 @EnableFeatures({ChromeFeatureList.READALOUD, ChromeFeatureList.READALOUD_PLAYBACK})
 @DisableFeatures({
     ChromeFeatureList.READALOUD_IN_MULTI_WINDOW,
@@ -135,6 +137,7 @@ public class ReadAloudControllerUnitTest {
     private static final Locale EN_US = new Locale("en", "US");
     private static final Locale FR_FR = new Locale("fr", "FR");
 
+    @Rule public final MockitoRule mMockitoRule = MockitoJUnit.rule();
     private MockTab mTab;
     private ReadAloudController mController;
     private ReadAloudController mController2;
@@ -164,7 +167,7 @@ public class ReadAloudControllerUnitTest {
     @Mock private ActivityLifecycleDispatcher mActivityLifecycleDispatcher;
     MockTabModelSelector mTabModelSelector;
 
-    @Captor ArgumentCaptor<ReadAloudReadabilityHooks.ReadabilityCallback> mCallbackCaptor;
+    @Captor ArgumentCaptor<ReadAloudReadabilityHooks.ReadabilityPerModeCallback> mCallbackCaptor;
     @Captor ArgumentCaptor<ReadAloudPlaybackHooks.CreatePlaybackCallback> mPlaybackCallbackCaptor;
     @Captor ArgumentCaptor<PlaybackArgs> mPlaybackArgsCaptor;
     @Captor ArgumentCaptor<PlaybackListener> mPlaybackListenerCaptor;
@@ -212,15 +215,6 @@ public class ReadAloudControllerUnitTest {
     public void setUp() {
         mDefaultLocale = Locale.getDefault();
 
-        MockitoAnnotations.initMocks(this);
-        ShadowPostTask.setTestImpl(
-                new TestImpl() {
-                    @Override
-                    public void postDelayedTask(
-                            @TaskTraits int taskTraits, Runnable task, long delay) {
-                        task.run();
-                    }
-                });
         mLayoutStateProviderSupplier.set(mLayoutStateProvider);
         mProfileSupplier = new ObservableSupplierImpl<>();
         mProfileSupplier.set(mMockProfile);
@@ -299,6 +293,7 @@ public class ReadAloudControllerUnitTest {
         mExtractorPromise = new Promise<Long>();
         when(mExtractor.getDateModified(any())).thenReturn(mExtractorPromise);
         mExtractorPromise.fulfill(1234567123456L);
+        ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
     }
 
     void initPlaybackHooks() {
@@ -647,7 +642,7 @@ public class ReadAloudControllerUnitTest {
         verify(mHooksImpl, never())
                 .isPageReadable(
                         Mockito.anyString(),
-                        Mockito.any(ReadAloudReadabilityHooks.ReadabilityCallback.class));
+                        Mockito.any(ReadAloudReadabilityHooks.ReadabilityPerModeCallback.class));
     }
 
     @Test
@@ -658,7 +653,7 @@ public class ReadAloudControllerUnitTest {
                 .isPageReadable(eq(sTestGURL.getSpec()), mCallbackCaptor.capture());
         assertFalse(mController.isReadable(mTab));
 
-        mCallbackCaptor.getValue().onSuccess(sTestGURL.getSpec(), true, false);
+        mCallbackCaptor.getValue().onSuccess(sTestGURL.getSpec(), ImmutableMap.of(PlaybackMode.CLASSIC, new ReadAloudReadabilityHooks.ReadabilityResult(true, false)));
         assertTrue(mController.isReadable(mTab));
         assertFalse(mController.timepointsSupported(mTab));
 
@@ -668,7 +663,7 @@ public class ReadAloudControllerUnitTest {
         verify(mHooksImpl, times(1))
                 .isPageReadable(
                         Mockito.anyString(),
-                        Mockito.any(ReadAloudReadabilityHooks.ReadabilityCallback.class));
+                        Mockito.any(ReadAloudReadabilityHooks.ReadabilityPerModeCallback.class));
     }
 
     @Test
@@ -679,7 +674,7 @@ public class ReadAloudControllerUnitTest {
                 .isPageReadable(eq(sTestGURL.getSpec()), mCallbackCaptor.capture());
         assertFalse(mController.isReadable(mTab));
 
-        mCallbackCaptor.getValue().onSuccess(sTestGURL.getSpec(), true, false);
+        mCallbackCaptor.getValue().onSuccess(sTestGURL.getSpec(), ImmutableMap.of(PlaybackMode.CLASSIC, new ReadAloudReadabilityHooks.ReadabilityResult(true, false)));
         UnifiedConsentServiceBridge.setUrlKeyedAnonymizedDataCollectionEnabled(false);
         assertFalse(mController.isReadable(mTab));
     }
@@ -700,7 +695,7 @@ public class ReadAloudControllerUnitTest {
                 .isPageReadable(eq(sTestGURL.getSpec()), mCallbackCaptor.capture());
         assertFalse(mController.isReadable(mTab));
 
-        mCallbackCaptor.getValue().onSuccess(sTestGURL.getSpec(), false, false);
+        mCallbackCaptor.getValue().onSuccess(sTestGURL.getSpec(), ImmutableMap.of(PlaybackMode.CLASSIC, new ReadAloudReadabilityHooks.ReadabilityResult(false, false)));
         assertFalse(mController.isReadable(mTab));
 
         // check 1hr1s later for the same url, we should return false and request readability again
@@ -711,7 +706,7 @@ public class ReadAloudControllerUnitTest {
         verify(mHooksImpl, times(2))
                 .isPageReadable(
                         Mockito.anyString(),
-                        Mockito.any(ReadAloudReadabilityHooks.ReadabilityCallback.class));
+                        Mockito.any(ReadAloudReadabilityHooks.ReadabilityPerModeCallback.class));
     }
 
     @Test
@@ -721,7 +716,7 @@ public class ReadAloudControllerUnitTest {
                 .isPageReadable(eq(sTestGURL.getSpec()), mCallbackCaptor.capture());
         assertFalse(mController.isReadable(mTab));
 
-        mCallbackCaptor.getValue().onSuccess(sTestGURL.getSpec(), true, false);
+        mCallbackCaptor.getValue().onSuccess(sTestGURL.getSpec(), ImmutableMap.of(PlaybackMode.CLASSIC, new ReadAloudReadabilityHooks.ReadabilityResult(true, false)));
         assertTrue(mController.isReadable(mTab));
 
         // check 1hr1s later for the same url, we should remove the record, return false and request
@@ -734,7 +729,7 @@ public class ReadAloudControllerUnitTest {
         verify(mHooksImpl, times(2))
                 .isPageReadable(
                         Mockito.anyString(),
-                        Mockito.any(ReadAloudReadabilityHooks.ReadabilityCallback.class));
+                        Mockito.any(ReadAloudReadabilityHooks.ReadabilityPerModeCallback.class));
     }
 
     @Test
@@ -757,7 +752,7 @@ public class ReadAloudControllerUnitTest {
         verify(mHooksImpl, times(2))
                 .isPageReadable(
                         Mockito.anyString(),
-                        Mockito.any(ReadAloudReadabilityHooks.ReadabilityCallback.class));
+                        Mockito.any(ReadAloudReadabilityHooks.ReadabilityPerModeCallback.class));
     }
 
     @Test
@@ -768,7 +763,13 @@ public class ReadAloudControllerUnitTest {
                 .isPageReadable(eq(sTestGURL.getSpec()), mCallbackCaptor.capture());
         boolean failed = false;
         try {
-            mCallbackCaptor.getValue().onSuccess("", true, true);
+            mCallbackCaptor
+                    .getValue()
+                    .onSuccess(
+                            "",
+                            ImmutableMap.of(
+                                    PlaybackMode.CLASSIC,
+                                    new ReadAloudReadabilityHooks.ReadabilityResult(true, true)));
         } catch (AssertionError e) {
             failed = true;
         }
@@ -800,7 +801,7 @@ public class ReadAloudControllerUnitTest {
         assertFalse(mController.isReadable(mTab));
 
         // The page is readable, result should be cached.
-        mCallbackCaptor.getValue().onSuccess(sTestGURL.getSpec(), true, false);
+        mCallbackCaptor.getValue().onSuccess(sTestGURL.getSpec(), ImmutableMap.of(PlaybackMode.CLASSIC, new ReadAloudReadabilityHooks.ReadabilityResult(true, false)));
         assertTrue(mController.isReadable(mTab));
         assertFalse(mController.timepointsSupported(mTab));
 
@@ -815,7 +816,7 @@ public class ReadAloudControllerUnitTest {
         verify(mHooksImpl, times(1))
                 .isPageReadable(
                         Mockito.anyString(),
-                        Mockito.any(ReadAloudReadabilityHooks.ReadabilityCallback.class));
+                        Mockito.any(ReadAloudReadabilityHooks.ReadabilityPerModeCallback.class));
     }
 
     @Test
@@ -825,7 +826,7 @@ public class ReadAloudControllerUnitTest {
         verify(mHooksImpl, times(1))
                 .isPageReadable(eq(sTestGURL.getSpec()), mCallbackCaptor.capture());
 
-        mCallbackCaptor.getValue().onSuccess(sTestGURL.getSpec(), true, false);
+        mCallbackCaptor.getValue().onSuccess(sTestGURL.getSpec(), ImmutableMap.of(PlaybackMode.CLASSIC, new ReadAloudReadabilityHooks.ReadabilityResult(true, false)));
         assertTrue(mController.isReadable(mTab));
 
         // check that URL is supported when the language is set to a supported language
@@ -839,7 +840,7 @@ public class ReadAloudControllerUnitTest {
 
         verify(mHooksImpl).isPageReadable(eq(sTestGURL.getSpec()), mCallbackCaptor.capture());
 
-        mCallbackCaptor.getValue().onSuccess(sTestGURL.getSpec(), true, false);
+        mCallbackCaptor.getValue().onSuccess(sTestGURL.getSpec(), ImmutableMap.of(PlaybackMode.CLASSIC, new ReadAloudReadabilityHooks.ReadabilityResult(true, false)));
         assertTrue(mController.isReadable(mTab));
 
         // advance by 1hr
@@ -861,7 +862,7 @@ public class ReadAloudControllerUnitTest {
         verify(mHooksImpl, times(1))
                 .isPageReadable(eq(sTestGURL.getSpec()), mCallbackCaptor.capture());
 
-        mCallbackCaptor.getValue().onSuccess(sTestGURL.getSpec(), true, false);
+        mCallbackCaptor.getValue().onSuccess(sTestGURL.getSpec(), ImmutableMap.of(PlaybackMode.CLASSIC, new ReadAloudReadabilityHooks.ReadabilityResult(true, false)));
         assertTrue(mController.isReadable(mTab));
 
         // check that URL isn't supported when the language is set to an unsupported language
@@ -906,7 +907,7 @@ public class ReadAloudControllerUnitTest {
         verify(mHooksImpl, times(1))
                 .isPageReadable(
                         Mockito.anyString(),
-                        Mockito.any(ReadAloudReadabilityHooks.ReadabilityCallback.class));
+                        Mockito.any(ReadAloudReadabilityHooks.ReadabilityPerModeCallback.class));
     }
 
     @Test
@@ -1206,7 +1207,7 @@ public class ReadAloudControllerUnitTest {
         mCallbackCaptor
                 .getValue()
                 .onSuccess(
-                        gurl.getSpec(), /* isReadable= */ true, /* timepointsSupported= */ false);
+                        gurl.getSpec(), ImmutableMap.of(PlaybackMode.CLASSIC, new ReadAloudReadabilityHooks.ReadabilityResult(true, false)));
         mController.playTab(mTab, ReadAloudController.Entrypoint.MAGIC_TOOLBAR);
         resolvePromises();
 
@@ -1231,7 +1232,7 @@ public class ReadAloudControllerUnitTest {
         mCallbackCaptor
                 .getValue()
                 .onSuccess(
-                        gurl.getSpec(), /* isReadable= */ true, /* timepointsSupported= */ false);
+                        gurl.getSpec(), ImmutableMap.of(PlaybackMode.CLASSIC, new ReadAloudReadabilityHooks.ReadabilityResult(true, false)));
 
         assertTrue(mController.isReadable(mTab));
         mController.playTab(mTab, ReadAloudController.Entrypoint.MAGIC_TOOLBAR);
@@ -1380,7 +1381,7 @@ public class ReadAloudControllerUnitTest {
         verify(mHooksImpl, times(1)).isPageReadable(eq(sanitized), mCallbackCaptor.capture());
         assertFalse(mController.isReadable(mTab));
 
-        mCallbackCaptor.getValue().onSuccess(sanitized, true, true);
+        mCallbackCaptor.getValue().onSuccess(sanitized, ImmutableMap.of(PlaybackMode.CLASSIC, new ReadAloudReadabilityHooks.ReadabilityResult(true, true)));
         assertTrue(mController.isReadable(mTab));
         assertTrue(mController.timepointsSupported(mTab));
     }
@@ -1974,7 +1975,7 @@ public class ReadAloudControllerUnitTest {
 
         verify(mHooksImpl, times(1)).isPageReadable(eq(testUrl), mCallbackCaptor.capture());
 
-        mCallbackCaptor.getValue().onSuccess(testUrl, true, false);
+        mCallbackCaptor.getValue().onSuccess(testUrl, ImmutableMap.of(PlaybackMode.CLASSIC, new ReadAloudReadabilityHooks.ReadabilityResult(true, false)));
         verify(runnable).run();
     }
 
@@ -1986,11 +1987,11 @@ public class ReadAloudControllerUnitTest {
         mController.maybeCheckReadability(mTab);
         verify(mHooksImpl, times(1))
                 .isPageReadable(eq(sTestGURL.getSpec()), mCallbackCaptor.capture());
-        mCallbackCaptor.getValue().onSuccess(sTestGURL.getSpec(), true, false);
+        mCallbackCaptor.getValue().onSuccess(sTestGURL.getSpec(), ImmutableMap.of(PlaybackMode.CLASSIC, new ReadAloudReadabilityHooks.ReadabilityResult(true, false)));
         histogram.assertExpected();
 
         histogram = HistogramWatcher.newSingleRecordWatcher(histogramName, false);
-        mCallbackCaptor.getValue().onSuccess(sTestGURL.getSpec(), false, false);
+        mCallbackCaptor.getValue().onSuccess(sTestGURL.getSpec(), ImmutableMap.of(PlaybackMode.CLASSIC, new ReadAloudReadabilityHooks.ReadabilityResult(false, false)));
         histogram.assertExpected();
     }
 
@@ -2002,7 +2003,7 @@ public class ReadAloudControllerUnitTest {
         mController.maybeCheckReadability(mTab);
         verify(mHooksImpl, times(1))
                 .isPageReadable(eq(sTestGURL.getSpec()), mCallbackCaptor.capture());
-        mCallbackCaptor.getValue().onSuccess(sTestGURL.getSpec(), true, false);
+        mCallbackCaptor.getValue().onSuccess(sTestGURL.getSpec(), ImmutableMap.of(PlaybackMode.CLASSIC, new ReadAloudReadabilityHooks.ReadabilityResult(true, false)));
         histogram.assertExpected();
 
         histogram = HistogramWatcher.newSingleRecordWatcher(histogramName, false);
@@ -2026,8 +2027,7 @@ public class ReadAloudControllerUnitTest {
                 .getValue()
                 .onSuccess(
                         sTestGURL.getSpec(),
-                        /* isReadable= */ true,
-                        /* timepointsSupported= */ false);
+                        ImmutableMap.of(PlaybackMode.CLASSIC, new ReadAloudReadabilityHooks.ReadabilityResult(true, false)));
         histogram.assertExpected();
 
         histogram = HistogramWatcher.newSingleRecordWatcher(histogramName, false);
@@ -2035,8 +2035,7 @@ public class ReadAloudControllerUnitTest {
                 .getValue()
                 .onSuccess(
                         sTestGURL.getSpec(),
-                        /* isReadable= */ false,
-                        /* timepointsSupported= */ false);
+                        ImmutableMap.of(PlaybackMode.CLASSIC, new ReadAloudReadabilityHooks.ReadabilityResult(false, false)));
         histogram.assertExpected();
 
         // nothing should be emitted on error
@@ -2048,17 +2047,6 @@ public class ReadAloudControllerUnitTest {
                 .getValue()
                 .onFailure(sTestGURL.getSpec(), new Throwable("Something went wrong"));
         histogram.assertExpected();
-    }
-
-    @Test
-    @DisableFeatures(ChromeFeatureList.READALOUD_PLAYBACK)
-    public void testReadAloudPlaybackFlagCheckedAfterReadability() {
-        mController.maybeCheckReadability(mTab);
-        verify(mHooksImpl, times(1))
-                .isPageReadable(eq(sTestGURL.getSpec()), mCallbackCaptor.capture());
-        mCallbackCaptor.getValue().onSuccess(sTestGURL.getSpec(), true, false);
-
-        assertFalse(mController.isReadable(mTab));
     }
 
     @Test
@@ -2448,13 +2436,13 @@ public class ReadAloudControllerUnitTest {
         verify(mHooksImpl, times(1))
                 .isPageReadable(eq(sTestGURL.getSpec()), mCallbackCaptor.capture());
         // Page is readable so activate the trial.
-        mCallbackCaptor.getValue().onSuccess(sTestGURL.getSpec(), true, false);
+        mCallbackCaptor.getValue().onSuccess(sTestGURL.getSpec(), ImmutableMap.of(PlaybackMode.CLASSIC, new ReadAloudReadabilityHooks.ReadabilityResult(true, false)));
         verify(mReadAloudFeaturesNatives, times(1))
                 .activateSyntheticTrial(eq(KNOWN_READABLE_TRIAL_PTR));
 
         // Subsequent readability checks may cause activateSyntheticTrial() to be called again
         // (though it has no effect after the first call).
-        mCallbackCaptor.getValue().onSuccess(sTestGURL.getSpec(), true, false);
+        mCallbackCaptor.getValue().onSuccess(sTestGURL.getSpec(), ImmutableMap.of(PlaybackMode.CLASSIC, new ReadAloudReadabilityHooks.ReadabilityResult(true, false)));
         verify(mReadAloudFeaturesNatives, times(2))
                 .activateSyntheticTrial(eq(KNOWN_READABLE_TRIAL_PTR));
     }
@@ -2465,7 +2453,7 @@ public class ReadAloudControllerUnitTest {
         verify(mHooksImpl, times(1))
                 .isPageReadable(eq(sTestGURL.getSpec()), mCallbackCaptor.capture());
         // Page is not readable so do not activate the trial.
-        mCallbackCaptor.getValue().onSuccess(sTestGURL.getSpec(), false, false);
+        mCallbackCaptor.getValue().onSuccess(sTestGURL.getSpec(), ImmutableMap.of(PlaybackMode.CLASSIC, new ReadAloudReadabilityHooks.ReadabilityResult(false, false)));
         verify(mReadAloudFeaturesNatives, never()).activateSyntheticTrial(anyLong());
     }
 
@@ -2476,7 +2464,7 @@ public class ReadAloudControllerUnitTest {
         verify(mHooksImpl, times(1))
                 .isPageReadable(eq(sTestGURL.getSpec()), mCallbackCaptor.capture());
         // Page is readable so activate the trial.
-        mCallbackCaptor.getValue().onSuccess(sTestGURL.getSpec(), true, false);
+        mCallbackCaptor.getValue().onSuccess(sTestGURL.getSpec(), ImmutableMap.of(PlaybackMode.CLASSIC, new ReadAloudReadabilityHooks.ReadabilityResult(true, false)));
         verify(mReadAloudFeaturesNatives, times(1))
                 .activateSyntheticTrial(eq(KNOWN_READABLE_TRIAL_PTR));
     }
@@ -2761,7 +2749,8 @@ public class ReadAloudControllerUnitTest {
         // Check readability.
         mController.maybeCheckReadability(mTab);
         // No readability request should be made.
-        verify(mHooksImpl, never()).isPageReadable(any(), any());
+        verify(mHooksImpl, never())
+                .isPageReadable(any(), any(ReadAloudReadabilityHooks.ReadabilityPerModeCallback.class));
 
         // Try playing the tab.
         mFakeTranslateBridge.setCurrentLanguage("en");
@@ -2959,7 +2948,11 @@ public class ReadAloudControllerUnitTest {
         GURL gurl = new GURL("https://en.wikipedia.org/wiki/Alphabet_Inc.");
         when(mTab.getUrl()).thenReturn(gurl);
         mController.getTabModelTabObserverforTests().didFirstVisuallyNonEmptyPaint(mTab);
-        verify(mHooksImpl).isPageReadable(eq(gurl.getPossiblyInvalidSpec()), any());
+        ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
+        verify(mHooksImpl)
+                .isPageReadable(
+                        eq(gurl.getPossiblyInvalidSpec()),
+                        any(ReadAloudReadabilityHooks.ReadabilityPerModeCallback.class));
     }
 
     @Test
@@ -2995,7 +2988,13 @@ public class ReadAloudControllerUnitTest {
         // if somehow an empty url sneaks into the readability maps
         boolean failed = false;
         try {
-            mCallbackCaptor.getValue().onSuccess("", true, true);
+            mCallbackCaptor
+                    .getValue()
+                    .onSuccess(
+                            "",
+                            ImmutableMap.of(
+                                    PlaybackMode.CLASSIC,
+                                    new ReadAloudReadabilityHooks.ReadabilityResult(true, true)));
         } catch (AssertionError e) {
             failed = true;
         }
@@ -3062,7 +3061,7 @@ public class ReadAloudControllerUnitTest {
 
         // Simulate response coming back after ReadAloudController being destroyed.
         mController.destroy();
-        mCallbackCaptor.getValue().onSuccess(sTestGURL.getSpec(), true, false);
+        mCallbackCaptor.getValue().onSuccess(sTestGURL.getSpec(), ImmutableMap.of(PlaybackMode.CLASSIC, new ReadAloudReadabilityHooks.ReadabilityResult(true, false)));
 
         verify(readabilityObserver, never()).run();
     }

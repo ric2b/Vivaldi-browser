@@ -55,6 +55,7 @@ import org.chromium.chrome.browser.layouts.LayoutType;
 import org.chromium.chrome.browser.logo.LogoBridge.Logo;
 import org.chromium.chrome.browser.logo.LogoUtils;
 import org.chromium.chrome.browser.logo.LogoView;
+import org.chromium.chrome.browser.suggestions.tile.TilesLinearLayout;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tabmodel.TabClosureParams;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
@@ -304,8 +305,8 @@ public class ShowNtpAtStartupTest {
                 });
 
         Resources res = mActivityTestRule.getActivity().getResources();
-        int expectedLogoHeight = LogoUtils.getLogoHeightForLogoPolishWithMediumSize(res);
-        int expectedTopMargin = LogoUtils.getTopMarginForLogoPolish(res);
+        int expectedLogoHeight = LogoUtils.getDoodleHeight(res);
+        int expectedTopMargin = LogoUtils.getTopMarginForDoodle(res);
         int expectedBottomMargin = res.getDimensionPixelSize(R.dimen.ntp_logo_margin_bottom);
 
         // Verifies the logo size is decreased, and top bottom margins are updated.
@@ -621,13 +622,11 @@ public class ShowNtpAtStartupTest {
             NewTabPage ntp) {
         NewTabPageLayout ntpLayout = ntp.getNewTabPageLayout();
         View mvtContainer = ntpLayout.findViewById(R.id.mv_tiles_container);
-        View mvTilesLayout = ntpLayout.findViewById(R.id.mv_tiles_layout);
+        TilesLinearLayout mvTilesLayout = ntpLayout.findViewById(R.id.mv_tiles_layout);
         int mvt1LeftMargin =
-                ((MarginLayoutParams) ((ViewGroup) mvTilesLayout).getChildAt(0).getLayoutParams())
-                        .leftMargin;
+                ((MarginLayoutParams) mvTilesLayout.getTileAt(0).getLayoutParams()).leftMargin;
         int mvt2LeftMargin =
-                ((MarginLayoutParams) ((ViewGroup) mvTilesLayout).getChildAt(1).getLayoutParams())
-                        .leftMargin;
+                ((MarginLayoutParams) mvTilesLayout.getTileAt(1).getLayoutParams()).leftMargin;
 
         // Orientation changes are not supported on automotive.
         if (BuildInfo.getInstance().isAutomotive) {

@@ -26,9 +26,9 @@
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
 #include "chrome/browser/bookmarks/url_and_id.h"
 #include "chrome/browser/browser_process.h"
-#include "chrome/browser/extensions/api/bookmarks/bookmark_api_helpers.h"
 #include "chrome/browser/extensions/api/tabs/windows_util.h"
 #include "chrome/browser/extensions/bookmarks/bookmarks_error_constants.h"
+#include "chrome/browser/extensions/bookmarks/bookmarks_helpers.h"
 #include "chrome/browser/extensions/chrome_extension_function_details.h"
 #include "chrome/browser/extensions/extension_tab_util.h"
 #include "chrome/browser/importer/external_process_importer_host.h"
@@ -247,6 +247,11 @@ void BookmarkManagerPrivateEventRouter::DispatchEvent(
 void BookmarkManagerPrivateEventRouter::BookmarkModelChanged() {}
 
 void BookmarkManagerPrivateEventRouter::BookmarkModelBeingDeleted() {
+  // This codepath is unexpected because `this` is owned by a KeyedService that
+  // depends on BookmarkModelFactory, which means BookmarkModel must outlive
+  // `this`.
+  NOTREACHED(base::NotFatalUntil::M138);
+  bookmark_model_->RemoveObserver(this);
   bookmark_model_ = nullptr;
 }
 
@@ -579,10 +584,9 @@ BookmarkManagerPrivateGetSubtreeFunction::RunOnReady() {
       BookmarkModelFactory::GetForBrowserContext(GetProfile());
   bookmarks::ManagedBookmarkService* managed = GetManagedBookmarkService();
   if (params->folders_only) {
-    bookmark_api_helpers::AddNodeFoldersOnly(model, managed, node, &nodes,
-                                             true);
+    bookmarks_helpers::AddNodeFoldersOnly(model, managed, node, &nodes, true);
   } else {
-    bookmark_api_helpers::AddNode(model, managed, node, &nodes, true);
+    bookmarks_helpers::AddNode(model, managed, node, &nodes, true);
   }
   return ArgumentList(GetSubtree::Results::Create(nodes));
 }
@@ -605,8 +609,9 @@ BookmarkManagerPrivateRemoveTreesFunction::RunOnReady() {
   for (const std::string& id_string : params->id_list) {
     if (!base::StringToInt64(id_string, &id))
       return Error(bookmarks_errors::kInvalidIdError);
-    if (!bookmark_api_helpers::RemoveNode(model, managed, id, true, &error))
+    if (!bookmarks_helpers::RemoveNode(model, managed, id, true, &error)) {
       return Error(error);
+    }
   }
 
   return NoArguments();

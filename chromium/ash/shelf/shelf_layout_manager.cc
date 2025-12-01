@@ -1321,6 +1321,17 @@ void ShelfLayoutManager::OnPinnedStateChanged(aura::Window* pinned_window) {
   UpdateVisibilityState(/*force_layout=*/false);
 }
 
+void ShelfLayoutManager::OnRootWindowWillShutdown(aura::Window* root_window) {
+  // It is possible that there are shelf update calls between Root Window
+  // shutting down and ShelfWidget::Shutdown (which subsequently called
+  // |PrepareForShutdown()|). Therefore, we need to flip the |in_shutdown_| bit
+  // early to avoid making changes to a partially destroyed host.
+  aura::Window* root = shelf_widget_->GetNativeWindow()->GetRootWindow();
+  if (root == root_window) {
+    PrepareForShutdown();
+  }
+}
+
 void ShelfLayoutManager::OnShellDestroying() {
   // Prepare for shutdown early, to prevent window stacking changes that may
   // happen during shutdown (e.g. during overview controller, or tablet mode
@@ -1500,9 +1511,7 @@ void ShelfLayoutManager::OnLocaleChanged() {
   shelf_->login_shelf_widget()->HandleLocaleChange();
   shelf_->status_area_widget()->HandleLocaleChange();
   shelf_->navigation_widget()->HandleLocaleChange();
-  if (features::IsDeskButtonEnabled()) {
-    shelf_widget_->desk_button_widget()->HandleLocaleChange();
-  }
+  shelf_widget_->desk_button_widget()->HandleLocaleChange();
 
   // Layout update is needed when language changes between LTR and RTL.
   LayoutShelf();
@@ -1971,9 +1980,7 @@ void ShelfLayoutManager::UpdateBoundsAndOpacity(bool animate) {
   hotseat_widget->UpdateLayout(animate);
   status_widget->UpdateLayout(animate);
   nav_widget->UpdateLayout(animate);
-  if (features::IsDeskButtonEnabled()) {
-    shelf_widget_->desk_button_widget()->UpdateLayout(animate);
-  }
+  shelf_widget_->desk_button_widget()->UpdateLayout(animate);
   shelf_->login_shelf_widget()->UpdateLayout(animate);
 
   phase_ = ShelfLayoutPhase::kAtRest;
@@ -2007,8 +2014,7 @@ void ShelfLayoutManager::UpdateTargetBounds(const State& state,
   shelf_->status_area_widget()->CalculateTargetBounds();
   shelf_->navigation_widget()->CalculateTargetBounds();
 
-  if (features::IsDeskButtonEnabled() &&
-      shelf_->desk_button_widget()->ShouldReserveSpaceFromShelf()) {
+  if (shelf_->desk_button_widget()->ShouldReserveSpaceFromShelf()) {
     // If the desk button should be on the shelf, reserve space for it in the
     // hotseat before drawing the hotseat.
     CalculateDeskButtonAndHotseatTargetBounds();
@@ -2106,10 +2112,8 @@ void ShelfLayoutManager::UpdateTargetBoundsForGesture(
         adjusted_shelf_position);
     shelf_->hotseat_widget()->UpdateTargetBoundsForGesture(
         adjusted_shelf_position);
-    if (features::IsDeskButtonEnabled()) {
-      shelf_->desk_button_widget()->UpdateTargetBoundsForGesture(
-          adjusted_shelf_position);
-    }
+    shelf_->desk_button_widget()->UpdateTargetBoundsForGesture(
+        adjusted_shelf_position);
     shelf_->navigation_widget()->UpdateTargetBoundsForGesture(
         adjusted_shelf_position);
     shelf_->status_area_widget()->UpdateTargetBoundsForGesture(
@@ -2457,12 +2461,10 @@ bool ShelfLayoutManager::IsShelfWindow(aura::Window* window) {
 
   // Calculate whether `window` is contained by the desk button widget.
   bool window_in_desk_button_widget = false;
-  if (features::IsDeskButtonEnabled()) {
-    const aura::Window* desk_button_window =
-        shelf_->desk_button_widget()->GetNativeWindow();
-    window_in_desk_button_widget =
-        (desk_button_window && desk_button_window->Contains(window));
-  }
+  const aura::Window* desk_button_window =
+      shelf_->desk_button_widget()->GetNativeWindow();
+  window_in_desk_button_widget =
+      (desk_button_window && desk_button_window->Contains(window));
 
   return (shelf_window && shelf_window->Contains(window)) ||
          (navigation_window && navigation_window->Contains(window)) ||
@@ -3207,9 +3209,7 @@ void ShelfLayoutManager::HandleShelfAlignmentChange() {
 
   // The desk button widget needs to know that the alignment is changing early
   // so that it can calculate the correct preferred length.
-  if (features::IsDeskButtonEnabled()) {
-    shelf_->desk_button_widget()->PrepareForAlignmentChange();
-  }
+  shelf_->desk_button_widget()->PrepareForAlignmentChange();
 
   UpdateVisibilityState(/*force_layout=*/true);
 }
@@ -3247,7 +3247,7 @@ bool ShelfLayoutManager::IsShelfContainerAnimating() const {
 }
 
 void ShelfLayoutManager::CalculateDeskButtonAndHotseatTargetBounds() {
-  CHECK(features::IsDeskButtonEnabled() && shelf_->desk_button_widget() &&
+  CHECK(shelf_->desk_button_widget() &&
         shelf_->desk_button_widget()->ShouldReserveSpaceFromShelf());
 
   auto reserve_space_for_desk_button_widget = [](Shelf* shelf) {

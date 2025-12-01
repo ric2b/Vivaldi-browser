@@ -13,7 +13,8 @@
 #include "third_party/blink/renderer/core/svg/svg_path_utilities.h"
 #include "third_party/blink/renderer/platform/geometry/length_functions.h"
 #include "third_party/blink/renderer/platform/geometry/length_point.h"
-#include "third_party/blink/renderer/platform/graphics/path.h"
+#include "third_party/blink/renderer/platform/geometry/path.h"
+#include "third_party/blink/renderer/platform/geometry/path_types.h"
 #include "ui/gfx/geometry/point_f.h"
 #include "ui/gfx/geometry/size.h"
 
@@ -133,11 +134,9 @@ class SegmentVisitor {
 };
 }  // namespace
 
-void StyleShape::GetPath(Path& path,
-                         const gfx::RectF& box_rect,
-                         float zoom) const {
-  path.SetWindRule(GetWindRule());
-  SVGPathBuilder builder(path);
+Path StyleShape::GetPath(const gfx::RectF& box_rect, float zoom) const {
+  SVGPathBuilder builder(GetWindRule());
+
   builder.EmitSegment(
       {.command = SVGPathSegType::kPathSegMoveToAbs,
        .target_point = PointForLengthPoint(origin_, box_rect.size())});
@@ -146,8 +145,10 @@ void StyleShape::GetPath(Path& path,
   for (const Segment& segment : segments_) {
     std::visit(visitor, segment);
   }
+
   // TODO(crbug.com/384870258): retain an LRU size->path cache.
-  path.Translate(box_rect.OffsetFromOrigin());
+  builder.Translate(box_rect.OffsetFromOrigin());
+  return builder.Finalize();
 }
 
 }  // namespace blink

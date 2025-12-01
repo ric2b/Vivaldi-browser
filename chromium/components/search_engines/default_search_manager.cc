@@ -21,6 +21,8 @@
 #include "components/search_engines/template_url_data_util.h"
 #include "components/search_engines/template_url_prepopulate_data.h"
 
+#include "vivaldi/prefs/vivaldi_gen_prefs.h"
+
 namespace {
 bool g_fallback_search_engines_disabled = false;
 
@@ -89,6 +91,7 @@ const char DefaultSearchManager::kDisabledByPolicy[] = "disabled_by_policy";
 const char DefaultSearchManager::kCreatedFromPlayAPI[] =
     "created_from_play_api";
 const char DefaultSearchManager::kFeaturedByPolicy[] = "featured_by_policy";
+const char DefaultSearchManager::kRequireShortcut[] = "require_shortcut";
 const char DefaultSearchManager::kPreconnectToSearchUrl[] =
     "preconnect_to_search_url";
 const char DefaultSearchManager::kPrefetchLikelyNavigations[] =
@@ -106,28 +109,40 @@ const char DefaultSearchManager::kPosition[] = "position";
 DefaultSearchManager::DefaultSearchManager(
     PrefService* pref_service,
     search_engines::SearchEngineChoiceService* search_engine_choice_service,
+    TemplateURLPrepopulateData::Resolver& prepopulate_data_resolver,
     const ObserverCallback& change_observer)
     : DefaultSearchManager(pref_service,
                            search_engine_choice_service,
+                           prepopulate_data_resolver,
                            kDefaultSearchProviderDataPrefName,
                            change_observer) {}
 
 DefaultSearchManager::DefaultSearchManager(
     PrefService* pref_service,
     search_engines::SearchEngineChoiceService* search_engine_choice_service,
+    TemplateURLPrepopulateData::Resolver& prepopulate_data_resolver,
     const char* vivaldi_default_pref,
     const ObserverCallback& change_observer)
     : pref_service_(pref_service),
       search_engine_choice_service_(search_engine_choice_service),
       change_observer_(change_observer),
       search_engine_choice_service_observation_(this),
-      prefs_default_search_(pref_service, search_engine_choice_service),
+      prepopulate_data_resolver_(prepopulate_data_resolver),
+      prefs_default_search_(prepopulate_data_resolver),
       vivaldi_default_pref_(vivaldi_default_pref) {
   if (pref_service_) {
     pref_change_registrar_.Init(pref_service_);
     pref_change_registrar_.Add(
         vivaldi_default_pref_,
         base::BindRepeating(&DefaultSearchManager::OnDefaultSearchPrefChanged,
+                            base::Unretained(this)));
+    // NOTE(konrad@vivaldi.com): The choice of default search engine in Vivaldi
+    // depends on the kStartupFirstSeenVersion, and to avoid races when the pref
+    // is saved later, we need to reload default search engines after changing
+    // the pref.
+    pref_change_registrar_.Add(
+        vivaldiprefs::kStartupFirstSeenVersion,
+        base::BindRepeating(&DefaultSearchManager::OnOverridesPrefChanged,
                             base::Unretained(this)));
     pref_change_registrar_.Add(
         prefs::kSearchProviderOverrides,
@@ -373,8 +388,7 @@ void DefaultSearchManager::LoadSavedGuestSearch() {
       search_engine_choice_service_->GetSavedSearchEngineBetweenGuestSessions();
   if (prepopulate_id.has_value()) {
     saved_guest_search_ =
-        TemplateURLPrepopulateData::GetPrepopulatedEngineFromFullList(
-            &*pref_service_, &*search_engine_choice_service_, *prepopulate_id);
+        prepopulate_data_resolver_->GetEngineFromFullList(*prepopulate_id);
   } else {
     saved_guest_search_.reset();
   }
@@ -382,8 +396,7 @@ void DefaultSearchManager::LoadSavedGuestSearch() {
 
 void DefaultSearchManager::LoadPrepopulatedFallbackSearch() {
   std::unique_ptr<TemplateURLData> data =
-      TemplateURLPrepopulateData::GetPrepopulatedFallbackSearch(
-          pref_service_, search_engine_choice_service_, GetPrepopulatedType(vivaldi_default_pref_));
+      prepopulate_data_resolver_->GetFallbackSearch(GetPrepopulatedType(vivaldi_default_pref_));
   fallback_default_search_ = std::move(data);
 }
 

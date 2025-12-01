@@ -10,6 +10,7 @@
 #include <string>
 #include <string_view>
 #include <utility>
+#include <variant>
 
 #include "base/command_line.h"
 #include "base/files/file_util.h"
@@ -25,13 +26,13 @@
 #include "base/uuid.h"
 #include "build/build_config.h"
 #include "components/autofill/core/browser/autofill_type.h"
-#include "components/autofill/core/browser/data_model/autofill_offer_data.h"
-#include "components/autofill/core/browser/data_model/autofill_wallet_usage_data.h"
-#include "components/autofill/core/browser/data_model/bank_account.h"
-#include "components/autofill/core/browser/data_model/credit_card.h"
-#include "components/autofill/core/browser/data_model/credit_card_benefit_test_api.h"
-#include "components/autofill/core/browser/data_model/credit_card_cloud_token_data.h"
-#include "components/autofill/core/browser/data_model/payments_metadata.h"
+#include "components/autofill/core/browser/data_model/payments/autofill_offer_data.h"
+#include "components/autofill/core/browser/data_model/payments/autofill_wallet_usage_data.h"
+#include "components/autofill/core/browser/data_model/payments/bank_account.h"
+#include "components/autofill/core/browser/data_model/payments/credit_card.h"
+#include "components/autofill/core/browser/data_model/payments/credit_card_benefit_test_api.h"
+#include "components/autofill/core/browser/data_model/payments/credit_card_cloud_token_data.h"
+#include "components/autofill/core/browser/data_model/payments/payments_metadata.h"
 #include "components/autofill/core/browser/field_types.h"
 #include "components/autofill/core/browser/payments/payments_customer_data.h"
 #include "components/autofill/core/browser/test_utils/autofill_test_utils.h"
@@ -50,48 +51,58 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/origin.h"
 
-using base::Time;
-using base::test::EqualsProto;
-using testing::ElementsAre;
-using testing::UnorderedElementsAre;
+using ::base::Time;
+using ::base::test::EqualsProto;
+using ::testing::ElementsAre;
+using ::testing::Pointee;
+using ::testing::UnorderedElementsAre;
 
 namespace autofill {
 namespace {
 
 CreditCardBenefitBase::BenefitId get_benefit_id(
     const CreditCardBenefit& benefit) {
-  return absl::visit([](const auto& a) { return a.benefit_id(); }, benefit);
+  return std::visit([](const auto& a) { return a.benefit_id(); }, benefit);
 }
 
 class PaymentsAutofillTableTest : public testing::Test {
  public:
-  PaymentsAutofillTableTest()
-      : encryptor_(os_crypt_async::GetTestEncryptorForTesting()) {}
+  PaymentsAutofillTableTest() = default;
 
  protected:
   void SetUp() override {
     ASSERT_TRUE(temp_dir_.CreateUniqueTempDir());
     file_ = temp_dir_.GetPath().AppendASCII("TestWebDatabase");
+    InitDatabase(/*use_new_encryption_key=*/false);
+  }
 
-    table_ = std::make_unique<PaymentsAutofillTable>();
-    db_ = std::make_unique<WebDatabase>();
-    db_->AddTable(table_.get());
-    ASSERT_EQ(sql::INIT_OK, db_->Init(file_, &encryptor_));
+  // Opens the database file and initializes `db_` and `table_`.
+  // If `use_new_encryption_key` is true, encrypted values in the database
+  // cannot be decrypted. This simulates, for example, the user switching
+  // between Chrome and Chromium.
+  void InitDatabase(bool use_new_encryption_key) {
+    if (!encryptor_ || use_new_encryption_key) {
+      encryptor_ = os_crypt_async::GetTestEncryptorForTesting();
+    }
+    table_.emplace();
+    db_.emplace();
+    db_->AddTable(&*table_);
+    ASSERT_EQ(sql::INIT_OK, db_->Init(file_, &*encryptor_));
   }
 
   // Get date_modifed `column` of `table_name` with specific `instrument_id` or
   // `guid`.
   time_t GetDateModified(std::string_view table_name,
                          std::string_view column,
-                         absl::variant<std::string, int64_t> id) {
+                         std::variant<std::string, int64_t> id) {
     sql::Statement s(db_->GetSQLConnection()->GetUniqueStatement(base::StrCat(
         {"SELECT ", column, " FROM ", table_name, " WHERE ",
-         absl::holds_alternative<std::string>(id) ? "guid" : "instrument_id",
+         std::holds_alternative<std::string>(id) ? "guid" : "instrument_id",
          " = ?"})));
-    if (const std::string* guid = absl::get_if<std::string>(&id)) {
+    if (const std::string* guid = std::get_if<std::string>(&id)) {
       s.BindString(0, *guid);
     } else {
-      s.BindInt64(0, absl::get<int64_t>(id));
+      s.BindInt64(0, std::get<int64_t>(id));
     }
     EXPECT_TRUE(s.Step());
     return s.ColumnInt64(0);
@@ -101,9 +112,9 @@ class PaymentsAutofillTableTest : public testing::Test {
   base::ScopedTempDir temp_dir_;
   base::test::TaskEnvironment task_environment_{
       base::test::TaskEnvironment::TimeSource::MOCK_TIME};
-  const os_crypt_async::Encryptor encryptor_;
-  std::unique_ptr<PaymentsAutofillTable> table_;
-  std::unique_ptr<WebDatabase> db_;
+  std::optional<os_crypt_async::Encryptor> encryptor_;
+  std::optional<PaymentsAutofillTable> table_;
+  std::optional<WebDatabase> db_;
 };
 
 TEST_F(PaymentsAutofillTableTest, Iban) {
@@ -512,16 +523,16 @@ TEST_F(PaymentsAutofillTableTest, ServerCvc) {
   // instrument_id.
   EXPECT_TRUE(table_->AddServerCvc(kServerCvc));
   EXPECT_THAT(table_->GetAllServerCvcs(),
-              UnorderedElementsAre(testing::Pointee(kServerCvc)));
+              UnorderedElementsAre(Pointee(kServerCvc)));
 
   const base::Time kSomeLaterTime = base::Time::FromSecondsSinceUnixEpoch(1000);
   const std::u16string kNewCvc = u"234";
   const ServerCvc kNewServerCvcUnderSameInstrumentId{kInstrumentId, kNewCvc,
                                                      kSomeLaterTime};
   EXPECT_TRUE(table_->UpdateServerCvc(kNewServerCvcUnderSameInstrumentId));
-  EXPECT_THAT(table_->GetAllServerCvcs(),
-              UnorderedElementsAre(
-                  testing::Pointee(kNewServerCvcUnderSameInstrumentId)));
+  EXPECT_THAT(
+      table_->GetAllServerCvcs(),
+      UnorderedElementsAre(Pointee(kNewServerCvcUnderSameInstrumentId)));
 
   // Remove the server cvc. It should also remove cvc from server_stored_cvc
   // table.
@@ -546,7 +557,7 @@ TEST_F(PaymentsAutofillTableTest, ReconcileServerCvcs) {
   // Add 2 server credit cards.
   CreditCard card1 = test::WithCvc(test::GetMaskedServerCard());
   CreditCard card2 = test::WithCvc(test::GetMaskedServerCard2());
-  test::SetServerCreditCards(table_.get(), {card1, card2});
+  test::SetServerCreditCards(&*table_, {card1, card2});
 
   // Add 1 server cvc that doesn't have a credit card associate with. We
   // should have 3 cvcs in server_stored_cvc table.
@@ -705,6 +716,48 @@ TEST_F(PaymentsAutofillTableTest, UpdateCreditCardOriginOnly) {
   EXPECT_FALSE(s_updated.Step());
 }
 
+// Tests that when the encryption key changes, the database is still functional
+// and does not crash (regression test for crbug.com/392169470).
+TEST_F(PaymentsAutofillTableTest, UpdateCreditCardWithChangedEncryptionKey) {
+  base::test::ScopedFeatureList features(
+      features::kAutofillEnableCvcStorageAndFilling);
+  CreditCard creditcard = test::WithCvc(test::GetCreditCard(), u"123");
+
+  // Reading the card after writing it obtains the original card.
+  ASSERT_TRUE(table_->AddCreditCard(creditcard));
+  EXPECT_THAT(table_->GetCreditCard(creditcard.guid()), Pointee(creditcard));
+
+  // Reading the card after re-opening the database obtains the original card.
+  InitDatabase(/*use_new_encryption_key=*/false);
+  EXPECT_THAT(table_->GetCreditCard(creditcard.guid()), Pointee(creditcard));
+
+  // Reading the card after updating the CVC obtains the original card with the
+  // modified CVC.
+  ASSERT_TRUE(table_->UpdateLocalCvc(creditcard.guid(), u"456"));
+  creditcard.set_cvc(u"456");
+  EXPECT_THAT(table_->GetCreditCard(creditcard.guid()), Pointee(creditcard));
+
+  // Reading the card after re-opening the database with a **different**
+  // encryption key obtains the original card without the card number and
+  // without the CVC. Both columns are lost because they're encrypted and the
+  // decryption failed due to the changed key.
+  InitDatabase(/*use_new_encryption_key=*/true);
+  creditcard.SetNumber(u"");
+  creditcard.set_cvc(u"");
+  EXPECT_THAT(table_->GetCreditCard(creditcard.guid()), Pointee(creditcard));
+
+  // Changing the credit card number works.
+  creditcard.SetNumber(u"4444333322221111");
+  ASSERT_TRUE(table_->UpdateCreditCard(creditcard));
+  EXPECT_THAT(table_->GetCreditCard(creditcard.guid()), Pointee(creditcard));
+
+  // Changing the credit card number also works. In particular, it does not
+  // crash the browser (regression test for crbug.com/392169470).
+  ASSERT_TRUE(table_->UpdateLocalCvc(creditcard.guid(), u"789"));
+  creditcard.set_cvc(u"789");
+  EXPECT_THAT(table_->GetCreditCard(creditcard.guid()), Pointee(creditcard));
+}
+
 TEST_F(PaymentsAutofillTableTest, SetGetServerCards) {
   for (bool is_cvc_storage_flag_enabled : {true, false}) {
     base::test::ScopedFeatureList feature;
@@ -755,7 +808,7 @@ TEST_F(PaymentsAutofillTableTest, SetGetServerCards) {
 
     // The CVC modification dates are set to `now` during insertion.
     const time_t now = base::Time::Now().ToTimeT();
-    test::SetServerCreditCards(table_.get(), inputs);
+    test::SetServerCreditCards(&*table_, inputs);
 
     std::vector<std::unique_ptr<CreditCard>> outputs;
     ASSERT_TRUE(table_->GetServerCreditCards(outputs));
@@ -844,7 +897,7 @@ TEST_F(PaymentsAutofillTableTest, SetGetCardInfoEnrollmentState) {
   inputs[1].set_card_info_retrieval_enrollment_state(
       CreditCard::CardInfoRetrievalEnrollmentState::kRetrievalEnrolled);
 
-  test::SetServerCreditCards(table_.get(), inputs);
+  test::SetServerCreditCards(&*table_, inputs);
 
   std::vector<std::unique_ptr<CreditCard>> outputs;
   ASSERT_TRUE(table_->GetServerCreditCards(outputs));
@@ -873,7 +926,7 @@ TEST_F(PaymentsAutofillTableTest, SetGetCardInfoEnrollmentStateWithFlagOff) {
   inputs[1].set_card_info_retrieval_enrollment_state(
       CreditCard::CardInfoRetrievalEnrollmentState::kRetrievalEnrolled);
 
-  test::SetServerCreditCards(table_.get(), inputs);
+  test::SetServerCreditCards(&*table_, inputs);
 
   std::vector<std::unique_ptr<CreditCard>> outputs;
   ASSERT_TRUE(table_->GetServerCreditCards(outputs));
@@ -970,7 +1023,7 @@ TEST_F(PaymentsAutofillTableTest, UpdateServerCardMetadataDoesNotChangeData) {
   inputs[0].SetRawInfo(CREDIT_CARD_EXP_4_DIGIT_YEAR, u"2020");
   inputs[0].SetRawInfo(CREDIT_CARD_NUMBER, u"1111");
   inputs[0].SetNetworkForMaskedCard(kVisaCard);
-  test::SetServerCreditCards(table_.get(), inputs);
+  test::SetServerCreditCards(&*table_, inputs);
 
   std::vector<std::unique_ptr<CreditCard>> outputs;
   ASSERT_TRUE(table_->GetServerCreditCards(outputs));
@@ -1160,7 +1213,7 @@ TEST_F(PaymentsAutofillTableTest, SetServerCardModify) {
 
   std::vector<CreditCard> inputs;
   inputs.push_back(masked_card);
-  test::SetServerCreditCards(table_.get(), inputs);
+  test::SetServerCreditCards(&*table_, inputs);
 
   // Set inputs that do not include our old card.
   CreditCard random_card(CreditCard::RecordType::kMaskedServerCard, "b456");
@@ -1170,7 +1223,7 @@ TEST_F(PaymentsAutofillTableTest, SetServerCardModify) {
   random_card.SetRawInfo(CREDIT_CARD_NUMBER, u"2222");
   random_card.SetNetworkForMaskedCard(kVisaCard);
   inputs[0] = random_card;
-  test::SetServerCreditCards(table_.get(), inputs);
+  test::SetServerCreditCards(&*table_, inputs);
 
   // We should have only the new card, the other one should have been deleted.
   std::vector<std::unique_ptr<CreditCard>> outputs;
@@ -1196,7 +1249,7 @@ TEST_F(PaymentsAutofillTableTest, SetServerCardUpdateUsageStatsAndBillingAddress
 
   std::vector<CreditCard> inputs;
   inputs.push_back(masked_card);
-  test::SetServerCreditCards(table_.get(), inputs);
+  test::SetServerCreditCards(&*table_, inputs);
 
   std::vector<std::unique_ptr<CreditCard>> outputs;
   table_->GetServerCreditCards(outputs);
@@ -1531,7 +1584,7 @@ TEST_F(PaymentsAutofillTableTest, RemoveAllVirtualCardUsageData) {
 
 TEST_F(PaymentsAutofillTableTest, GetMaskedBankAccounts) {
   // Populate masked_bank_accounts table.
-  ASSERT_TRUE(db_->GetSQLConnection()->Execute(
+  ASSERT_TRUE(db_->GetSQLConnection()->ExecuteScriptForTesting(
       "INSERT INTO masked_bank_accounts (instrument_id, bank_name, "
       "account_number_suffix, account_type, nickname, display_icon_url) "
       "VALUES(100, 'bank_name', 'account_number_suffix', 1, 'nickname', "
@@ -1575,7 +1628,7 @@ TEST_F(PaymentsAutofillTableTest,
        GetMaskedBankAccounts_BankAccountTypeOutOfBounds) {
   // Populate masked_bank_accounts table with the first row to have an invalid
   // bank account type with value 100.
-  ASSERT_TRUE(db_->GetSQLConnection()->Execute(
+  ASSERT_TRUE(db_->GetSQLConnection()->ExecuteScriptForTesting(
       "INSERT INTO masked_bank_accounts (instrument_id, bank_name, "
       "account_number_suffix, account_type, nickname, display_icon_url) "
       "VALUES(100, 'bank_name', 'account_number_suffix', 100, 'nickname', "
@@ -1597,7 +1650,7 @@ TEST_F(PaymentsAutofillTableTest,
 }
 
 TEST_F(PaymentsAutofillTableTest, SetMaskedBankAccounts) {
-  ASSERT_TRUE(db_->GetSQLConnection()->Execute(
+  ASSERT_TRUE(db_->GetSQLConnection()->ExecuteScriptForTesting(
       "INSERT INTO masked_bank_accounts (instrument_id, bank_name, "
       "account_number_suffix, account_type, nickname, display_icon_url) "
       "VALUES(100, 'bank_name', 'account_number_suffix', 1, 'nickname', "
@@ -1735,7 +1788,7 @@ TEST_F(PaymentsAutofillTableTest, GetCreditCardBenefitsForInstrumentId) {
   // id.
   std::vector<CreditCardBenefit> output_benefits;
   EXPECT_TRUE(table_->GetCreditCardBenefitsForInstrumentId(
-      *absl::visit(
+      *std::visit(
           [](const auto& benefit) {
             return benefit.linked_card_instrument_id();
           },

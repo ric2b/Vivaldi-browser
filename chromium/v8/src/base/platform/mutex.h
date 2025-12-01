@@ -10,27 +10,9 @@
 #include "absl/synchronization/mutex.h"
 #include "include/v8config.h"
 
-#if V8_OS_DARWIN
-#include <os/lock.h>
-#endif
-
-#if V8_OS_POSIX
-#include <pthread.h>
-#endif
-
 #include "src/base/base-export.h"
 #include "src/base/lazy-instance.h"
 #include "src/base/logging.h"
-
-#if V8_OS_WIN
-#include "src/base/win32-headers.h"
-#endif
-
-#if V8_OS_STARBOARD
-#include "starboard/common/mutex.h"
-#include "starboard/common/recursive_mutex.h"
-#include "starboard/common/rwlock.h"
-#endif
 
 namespace v8 {
 namespace base {
@@ -109,42 +91,6 @@ class V8_BASE_EXPORT Mutex final {
   absl::Mutex native_handle_;
 };
 
-class V8_BASE_EXPORT SpinningMutex final {
- public:
-  SpinningMutex();
-  void Lock();
-  inline void Unlock();
-  inline bool TryLock();
-  void AssertHeld() const {}  // Not supported.
-
- private:
-#if V8_OS_DARWIN
-  os_unfair_lock lock_;
-#else
-  absl::Mutex lock_;
-#endif
-};
-
-#if V8_OS_DARWIN
-
-V8_INLINE bool SpinningMutex::TryLock() {
-  return os_unfair_lock_trylock(&lock_);
-}
-
-V8_INLINE void SpinningMutex::Unlock() { return os_unfair_lock_unlock(&lock_); }
-
-#else
-
-V8_INLINE bool SpinningMutex::TryLock() ABSL_NO_THREAD_SAFETY_ANALYSIS {
-  return lock_.TryLock();
-}
-
-V8_INLINE void SpinningMutex::Unlock() ABSL_NO_THREAD_SAFETY_ANALYSIS {
-  lock_.Unlock();
-}
-
-#endif
-
 // POD Mutex initialized lazily (i.e. the first time Pointer() is called).
 // Usage:
 //   static LazyMutex my_mutex = LAZY_MUTEX_INITIALIZER;
@@ -157,11 +103,6 @@ V8_INLINE void SpinningMutex::Unlock() ABSL_NO_THREAD_SAFETY_ANALYSIS {
 using LazyMutex = LazyStaticInstance<Mutex, DefaultConstructTrait<Mutex>,
                                      ThreadSafeInitOnceTrait>::type;
 #define LAZY_MUTEX_INITIALIZER LAZY_STATIC_INSTANCE_INITIALIZER
-using LazySpinningMutex =
-    LazyStaticInstance<SpinningMutex, DefaultConstructTrait<SpinningMutex>,
-                       ThreadSafeInitOnceTrait>::type;
-
-#define LAZY_SELFISH_MUTEX_INITIALIZER LAZY_STATIC_INSTANCE_INITIALIZER
 
 // RecursiveMutex - a replacement for std::recursive_mutex
 //
@@ -184,7 +125,7 @@ using LazySpinningMutex =
 
 class V8_BASE_EXPORT RecursiveMutex final {
  public:
-  RecursiveMutex();
+  RecursiveMutex() = default;
   RecursiveMutex(const RecursiveMutex&) = delete;
   RecursiveMutex& operator=(const RecursiveMutex&) = delete;
   ~RecursiveMutex();
@@ -216,21 +157,9 @@ class V8_BASE_EXPORT RecursiveMutex final {
   }
 
  private:
-  // The implementation-defined native handle type.
-#if V8_OS_POSIX
-  using NativeHandle = pthread_mutex_t;
-#elif V8_OS_WIN
-  using NativeHandle = V8_CRITICAL_SECTION;
-#elif V8_OS_STARBOARD
-  using NativeHandle = starboard::RecursiveMutex;
-#endif
-
-  NativeHandle native_handle_;
-#ifdef DEBUG
-  // This is being used for Assert* methods. Accesses are only allowed if you
-  // actually hold the mutex, otherwise you would get race conditions.
-  int level_;
-#endif
+  std::atomic<int> thread_id_ = 0;
+  int level_ = 0;
+  Mutex mutex_;
 };
 
 
@@ -288,21 +217,20 @@ class V8_NODISCARD LockGuard final {
 };
 
 using MutexGuard = LockGuard<Mutex>;
-using SpinningMutexGuard = LockGuard<SpinningMutex>;
 using RecursiveMutexGuard = LockGuard<RecursiveMutex>;
 
-class V8_NODISCARD SpinningMutexGuardIf final {
+class V8_NODISCARD MutexGuardIf final {
  public:
-  SpinningMutexGuardIf(SpinningMutex* mutex, bool enable_mutex) {
+  MutexGuardIf(Mutex* mutex, bool enable_mutex) {
     if (enable_mutex) {
       mutex_.emplace(mutex);
     }
   }
-  SpinningMutexGuardIf(const SpinningMutexGuardIf&) = delete;
-  SpinningMutexGuardIf& operator=(const SpinningMutexGuardIf&) = delete;
+  MutexGuardIf(const MutexGuardIf&) = delete;
+  MutexGuardIf& operator=(const MutexGuardIf&) = delete;
 
  private:
-  std::optional<SpinningMutexGuard> mutex_;
+  std::optional<MutexGuard> mutex_;
 };
 
 }  // namespace base

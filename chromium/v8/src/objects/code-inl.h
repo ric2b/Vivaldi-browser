@@ -5,12 +5,14 @@
 #ifndef V8_OBJECTS_CODE_INL_H_
 #define V8_OBJECTS_CODE_INL_H_
 
+#include "src/objects/code.h"
+// Include the non-inl header before the rest of the headers.
+
 #include "src/baseline/bytecode-offset-iterator.h"
 #include "src/codegen/code-desc.h"
 #include "src/deoptimizer/deoptimize-reason.h"
 #include "src/heap/heap-layout-inl.h"
 #include "src/heap/heap-write-barrier-inl.h"
-#include "src/objects/code.h"
 #include "src/objects/deoptimization-data-inl.h"
 #include "src/objects/instance-type-inl.h"
 #include "src/objects/instruction-stream-inl.h"
@@ -537,18 +539,12 @@ inline void Code::SetMarkedForDeoptimization(Isolate* isolate,
           case LazyDeoptimizeReason::kAllocationSiteTenuringChange:
           case LazyDeoptimizeReason::kAllocationSiteTransitionChange:
           case LazyDeoptimizeReason::kEmptyContextExtensionChange:
-          case LazyDeoptimizeReason::kExceptionCaught:
-          case LazyDeoptimizeReason::kFieldTypeConstChange:
           case LazyDeoptimizeReason::kFrameValueMaterialized:
           case LazyDeoptimizeReason::kPropertyCellChange:
-          case LazyDeoptimizeReason::kPrototypeChange:
           case LazyDeoptimizeReason::kScriptContextSlotPropertyChange:
-            jdt->SetTieringRequest(
-                handle,
-                v8_flags.maglev ? TieringBuiltin::kStartMaglevOptimizeJob
-                                : TieringBuiltin::kStartTurbofanOptimizeJob,
-                isolate);
-            break;
+          case LazyDeoptimizeReason::kPrototypeChange:
+          case LazyDeoptimizeReason::kExceptionCaught:
+          case LazyDeoptimizeReason::kFieldTypeConstChange:
           case LazyDeoptimizeReason::kFieldRepresentationChange:
           case LazyDeoptimizeReason::kFieldTypeChange:
           case LazyDeoptimizeReason::kInitialMapChange:

@@ -14,6 +14,7 @@
 <translation id="1454726940098520109">Ne prikazuj ponovo potvrdu</translation>
 <translation id="1462666970065907900">Da li zaista želite da zatvorite ovaj prozor?</translation>
 <translation id="1480046233931937785">Zasluge</translation>
+<translation id="1490502035430975848">Ispitaj dokument portala</translation>
 <translation id="1521774566618522728">Aktivno danas</translation>
 <translation id="1526344461589023948">Došlo je do greške prilikom pokušaja čuvanja preuzetog ažuriranja. Proverite da li računar ima dovoljno prostora na disku i pokušajte ponovo kasnije.</translation>
 <translation id="1635542496948266458">Promeni profil</translation>
@@ -34,9 +35,11 @@
 <translation id="2141974047387702305">Došlo je do greške prilikom preuzimanja datoteka za ažuriranje. Proverite internet vezu i pokušajte ponovo kasnije.</translation>
 <translation id="2226825946708954262">⚠ Nastavi sa gubitkom podataka</translation>
 <translation id="2339641773402824483">Proveravanje ažuriranja...</translation>
+<translation id="2429571091666452569">Sa liste:</translation>
 <translation id="2441056087170876076">Čudovište 2</translation>
 <translation id="2444387452209867610">Umetni belešku</translation>
 <translation id="2486841023299517366">Životinja 4</translation>
+<translation id="2501278716633472235">Idi nazad</translation>
 <translation id="2612127540243995147">Spremno za instalaciju. Vivaldi će se zatvoriti i ponovo pokrenuti.</translation>
 <translation id="2613387515621326337">Prikaži veb sajt za ažuriranje</translation>
 <translation id="2645477450146475243">Nažalost, vaša podešavanja Opera pregledača nisu dostupna dok taj pregledač radi. Da biste uvezli ta podešavanja u Vivaldi, sačuvajte svoj rad i zatvorite sve prozore Opera pregledača a zatim kliknite na Nastavi.</translation>
@@ -61,6 +64,7 @@
 <translation id="3259769196742189631">Proveri valjanost na W3C</translation>
 <translation id="3291915639428159043">Automatska reprodukcija blokirana</translation>
 <translation id="3302905971452834934">Čudovište 1</translation>
+<translation id="3308738399950580893">reklame</translation>
 <translation id="3334610655141903168">(bez naslova)</translation>
 <translation id="3372505110412186107">Vivaldi <ph name="VERSION" /> je trenutno najnovija dostupna verzija.</translation>
 <translation id="3383198080133834965">Imate najnoviju verziju!</translation>
@@ -71,9 +75,11 @@
 <translation id="3521635864657970829">Da li zaista želite da zatvorite ovaj prozor?</translation>
 <translation id="3540597690227428180">Životinja 9</translation>
 <translation id="3542768452570884558">Otvori vezu u novom prozoru</translation>
+<translation id="3586931643579894722">Sakrij detalje</translation>
 <translation id="3588820906588687999">Otvori sliku u novoj kartici</translation>
 <translation id="3601066750251199488">Čudovište 3</translation>
 <translation id="3620979700683094848">Sajtovi mogu automatski da reprodukuju video</translation>
+<translation id="3650023731264842343">Prilikom učitavanja sledeće stranice:</translation>
 <translation id="3658651522139217005">Opera GX</translation>
 <translation id="3680031241659195730">Nova verzija Vivaldi pregledača je dostupna!</translation>
 <translation id="3708982624815781692">Preuzimanje je otkazano.</translation>
@@ -83,12 +89,13 @@
 <translation id="3795800845758778870">Nažalost, vaša podešavanja Brave pregledača nisu dostupna dok je taj pregledač otvoren. Da biste uvezli ta podešavanja u Vivaldi, sačuvajte svoj rad i zatvorite sve prozore Brave pregledača. Zatim kliknite na Nastavi.</translation>
 <translation id="3822431842304177896">Novi razdelnik</translation>
 <translation id="3832132597516774400">Pejzaž 5</translation>
+<translation id="3894751534882749287">Ako ipak želite da pogledate stranicu, možete da promenite nivo zaštite od praćenja u iskačućem prozoru blokatora praćenja ili klikom na dugme Dozvoli</translation>
 <translation id="3914946330804881301">Uvezeno iz Opera</translation>
 <translation id="3921292902397893431">Čudovište 8</translation>
 <translation id="3943857333388298514">Nalepi</translation>
 <translation id="4005270918754737597">Preskoči ovu verziju</translation>
 <translation id="4044951018940382324">Vivaldi</translation>
-<translation id="4064545092083709582">Vivaldi nije mogao da otključa vaše bezbedne skladište ključeva. Bez skladišta ključeva, izgubićete sačuvane podatke za prijavljivanje, bezbedne kolačiće, a neke funkcije kao što su sinhronizacija, pošta i kalendar će prestati da rade.
+<translation id="4064545092083709582">Vivaldi nije mogao da otključa vaše bezbedne skladište ključeva. Bez skladišta ključeva, izgubićete sačuvane podatke za prijavljivanje, bezbedne kolačiće, a neke funkcije kao što su sinhronizacija, pošta i kalendar će prestati da rade.
 
     Izađite sada, otključajte ili popravite skladište ključeva, a zatim pokušajte ponovo. Da li zaista želite da nastavite i izgubite podatke?</translation>
 <translation id="4074744496918018786">Otvori sliku u privatnom prozoru</translation>
@@ -107,6 +114,7 @@
 <translation id="4582480609585453144">Otvori vezu u kartici u pozadini</translation>
 <translation id="4636708767492582204">Pošalji poštom</translation>
 <translation id="4677434526832593569">Životinja 8</translation>
+<translation id="4736016046474602958">Blokator praćenja</translation>
 <translation id="474217410105706308">Isključi zvuk kartice</translation>
 <translation id="4861715717329665002">Automatski sačuvane sesije</translation>
 <translation id="4881695831933465202">Otvori</translation>
@@ -133,9 +141,11 @@
 <translation id="588258955323874662">Ceo ekran</translation>
 <translation id="5916080360077521750">Na žalost, podešavanja Chrome pregledača nisu dostupna dok je pregledač pokrenut. Za uvoz tih podešavanja u Vivaldi, sačuvajte vaš rad i zatvorite sve prozore Chrome pregledača. Nakon toga kliknite na Nastavi.</translation>
 <translation id="6040143037577758943">Zatvori</translation>
+<translation id="6140948187512243695">Prikaži detalje</translation>
 <translation id="6229528619562190452">Kliknite ovde da biste ažurirali Vivaldi.</translation>
-<translation id="6234173136417926046">Koristi sliku kao pozadinu brzog biranja</translation>
+<translation id="6234173136417926046">Koristi sliku kao pozadinu početne stranice</translation>
 <translation id="6339818817272922368">Lokalni nalog</translation>
+<translation id="6376435169746695498">Učitavanje ove stranice je blokirano podudaranjem sa <ph name="BLOCKER_NAME" /></translation>
 <translation id="6398710281890660037">Obezbedi moj profil</translation>
 <translation id="6438786710866753178">Pejzaž 4</translation>
 <translation id="6477028720702061455">Izaberite fasciklu profila Opera pregledača za uvoz</translation>
@@ -152,6 +162,7 @@
 <translation id="7086554968911045110">Pejzaž 7</translation>
 <translation id="7099506190679014195">Nadogradnja bezbednog skladišta ključeva</translation>
 <translation id="7111492742514999492">Pejzaž 9</translation>
+<translation id="7113310725918019676">Dozvoli <ph name="BLOCKED_TYPE" /> od <ph name="DOMAIN" /></translation>
 <translation id="7208252576848052204">Nažalost, vaša podešavanja Arc pregledača nisu dostupna dok taj pregledač radi. Da biste uvezli ta podešavanja u Vivaldi, sačuvajte svoj rad i zatvorite sve prozore Arc pregledača a zatim kliknite na Nastavi.</translation>
 <translation id="7321500017121629018">Aktivno juče</translation>
 <translation id="7337881442233988129">Chromium</translation>
@@ -167,12 +178,13 @@
 <translation id="8027581147000338959">Otvori u novom prozoru</translation>
 <translation id="8044382196220116469">Ne dozvoli sajtovima da automatski reprodukuju video</translation>
 <translation id="8099620695029051217">Kopiraj adresu stranice</translation>
+<translation id="8119307142152921512">praćenja i reklame</translation>
 <translation id="8197810018650377191">Dodaj stranicu u obeleživače</translation>
 <translation id="8261506727792406068">Izbriši</translation>
-<translation id="8263047843452521549">Ispitaj radnu skriptu usluge u pozadini</translation>
 <translation id="8331671104904436324">Otvori u kartici u pozadini</translation>
 <translation id="8373293945112511707">Pejzaž 1</translation>
 <translation id="8388552048012645975">Preuzimanje ažuriranja...</translation>
+<translation id="8392904568172593155">Bez parametara</translation>
 <translation id="8427094907586191051">Pejzaž 17</translation>
 <translation id="8439034818057146672">Nova verzija Vivaldi pregledača je spremna za instalaciju.</translation>
 <translation id="8446668873108041390">Izvršavanje JavaScript-a preko AppleScript-a je isključeno. U okviru Podešavanja &gt; Privatnost &gt; Apple Events postoji podešavanje za omogućavanje JavaScript-a iz Apple Events-a.</translation>
@@ -183,14 +195,15 @@
 <translation id="8651348004684669199">Dodaj aktivnu karticu</translation>
 <translation id="8669345741879513971">Čudovište 10</translation>
 <translation id="867544375504146191">Yandex</translation>
-<translation id="8689295374912158752">Ispitaj dokument portala</translation>
 <translation id="875142999698251063">Izađi sada</translation>
 <translation id="8768970203213061953">Pejzaž 14</translation>
 <translation id="8773635261052182196">Više nećete videti ova obaveštenja. Možete ih omogućiti ponovo u podešavanjima Vivaldi pregledača.</translation>
 <translation id="8774017153185436870">Sajtovi bi mogli automatski da reprodukuju video</translation>
 <translation id="8813277370772331957">Podseti me kasnije</translation>
+<translation id="8837256239226739065">Ispitaj radne skripte usluge u pozadini</translation>
 <translation id="8894900864683381599">Dodaj vezu kao veb panel</translation>
 <translation id="8912720443398351457">Da li zaista želite da izađete iz Vivaldi pregledača?</translation>
+<translation id="8940028675168378100">Blokirao <ph name="BLOCKER_NAME" /></translation>
 <translation id="8947109330183116400">Izaberite HTML datoteku sa obeleživačima</translation>
 <translation id="9017566390391482291">Izaberite fasciklu profila Vivaldi pregledača za uvoz</translation>
 <translation id="9048058608784130603">Ažuriranje <ph name="VERSION" /> je na čekanju</translation>
@@ -201,6 +214,7 @@
 <translation id="912022491595344261">Otvori sliku kao <ph name="USER" /></translation>
 <translation id="9157539936604258187">Otvori vezu</translation>
 <translation id="9169060351863393881">Opera 12.x</translation>
+<translation id="9180553614777056266">Blokator reklama</translation>
 <translation id="939305735877869636">Brave</translation>
 <translation id="970294721402795299">Pejzaž 16</translation>
 </translationbundle>

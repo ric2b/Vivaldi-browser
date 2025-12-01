@@ -9,8 +9,8 @@ source_set("features") {
   ]
   deps = [
     "//base",
-    "//components/search_engines",
-    "//ios/chrome/browser/search_engines/model",
+    "//components/regional_capabilities",
+    "//ios/chrome/browser/regional_capabilities/model",
     "//ios/chrome/browser/shared/model/profile",
   ]
 }
@@ -41,12 +41,14 @@ source_set("ui_bundled") {
   ]
   deps = [
     ":constants",
+    ":features",
     ":field_trial",
     ":first_run_provider",
     ":screen_delegate",
     ":utils",
     "//base",
     "//base:i18n",
+    "//components/metrics",
     "//components/signin/public/identity_manager",
     "//ios/chrome/app:tests_hook",
     "//ios/chrome/app/strings",
@@ -55,6 +57,7 @@ source_set("ui_bundled") {
     "//ios/chrome/browser/authentication/ui_bundled/signin:interruptible_chrome_coordinator",
     "//ios/chrome/browser/docking_promo/coordinator",
     "//ios/chrome/browser/first_run/model",
+    "//ios/chrome/browser/first_run/ui_bundled/best_features/coordinator",
     "//ios/chrome/browser/first_run/ui_bundled/default_browser",
     "//ios/chrome/browser/first_run/ui_bundled/resources",
     "//ios/chrome/browser/first_run/ui_bundled/signin",
@@ -97,6 +100,7 @@ source_set("first_run_provider") {
     "//components/search_engines",
     "//components/sync/base:features",
     "//ios/chrome/app:tests_hook",
+    "//ios/chrome/browser/first_run/ui_bundled/best_features/coordinator",
     "//ios/chrome/browser/first_run/ui_bundled/omnibox_position:omnibox_position_ui",
     "//ios/chrome/browser/policy/model",
     "//ios/chrome/browser/screen/ui_bundled:screen_provider",
@@ -168,6 +172,7 @@ source_set("eg2_tests") {
     "//components/policy:policy_code_generate",
     "//components/policy/core/common:common_constants",
     "//components/policy/test_support:test_support",
+    "//components/regional_capabilities",
     "//components/search_engines",
     "//components/signin/internal/identity_manager",
     "//components/signin/ios/browser:features",

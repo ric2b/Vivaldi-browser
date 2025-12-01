@@ -27,7 +27,7 @@ export class Automapping {
   private readonly filesIndex: FilePathIndex;
   private readonly projectFoldersIndex: FolderIndex;
   private readonly activeFoldersIndex: FolderIndex;
-  private readonly interceptors: ((arg0: Workspace.UISourceCode.UISourceCode) => boolean)[];
+  private readonly interceptors: Array<(arg0: Workspace.UISourceCode.UISourceCode) => boolean>;
   constructor(
       workspace: Workspace.Workspace.WorkspaceImpl, onStatusAdded: (arg0: AutomappingStatus) => Promise<void>,
       onStatusRemoved: (arg0: AutomappingStatus) => Promise<void>) {
@@ -246,11 +246,9 @@ export class Automapping {
               PersistenceImpl.rewrapNodeJSContent(status.fileSystem, fileContent, networkContent.content);
           isValid = fileContent === rewrappedNetworkContent;
         }
-      } else {
-        if (networkContent.content) {
-          // Trim trailing whitespaces because V8 adds trailing newline.
-          isValid = fileContent.trimEnd() === networkContent.content.trimEnd();
-        }
+      } else if (networkContent.content) {
+        // Trim trailing whitespaces because V8 adds trailing newline.
+        isValid = fileContent.trimEnd() === networkContent.content.trimEnd();
       }
       if (!isValid) {
         this.prevalidationFailedForTest(status);
@@ -346,7 +344,7 @@ export class Automapping {
       this.sourceCodeToMetadataMap.set(sourceCode, await sourceCode.requestMetadata());
     }));
 
-    const activeFiles = similarFiles.filter(file => Boolean(this.activeFoldersIndex.closestParentFolder(file.url())));
+    const activeFiles = similarFiles.filter(file => !!this.activeFoldersIndex.closestParentFolder(file.url()));
     const networkMetadata = this.sourceCodeToMetadataMap.get(networkSourceCode);
     if (!networkMetadata || (!networkMetadata.modificationTime && typeof networkMetadata.contentSize !== 'number')) {
       // If networkSourceCode does not have metadata, try to match against active folders.

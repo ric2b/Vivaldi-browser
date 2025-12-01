@@ -37,6 +37,7 @@
 <translation id="2441056087170876076">Zajačí zúbok (Príšerka 2)</translation>
 <translation id="2444387452209867610">Vložiť poznámku</translation>
 <translation id="2486841023299517366">Pes (Zviera 4)</translation>
+<translation id="2501278716633472235">Prejsť späť</translation>
 <translation id="2612127540243995147">Pripravené na inštaláciu. Prehliadač Vivaldi bude zatvorený a znova spustený.</translation>
 <translation id="2613387515621326337">Zobraziť stránku aktualizácie</translation>
 <translation id="2645477450146475243">Bohužiaľ, nastavenia Opera nie sú dostupné, keď je tento prehliadač spustený. Ak chcete tieto nastavenia importovať do prehliadača Vivaldi, uložte svoju prácu a zatvorte všetky okná Opera. Potom kliknite na tlačidlo Pokračovať.</translation>
@@ -61,6 +62,7 @@
 <translation id="3259769196742189631">Skontrolovať správnosť HTML stránky</translation>
 <translation id="3291915639428159043">Automatické prehrávanie zablokované</translation>
 <translation id="3302905971452834934">Darebák (Príšerka 1)</translation>
+<translation id="3308738399950580893">reklamy</translation>
 <translation id="3334610655141903168">(žiadny názov)</translation>
 <translation id="3372505110412186107">Verzia <ph name="VERSION" /> prehliadača Vivaldi je aktuálne najnovšia dostupná verzia.</translation>
 <translation id="3383198080133834965">Váš prehliadač je aktuálny!</translation>
@@ -83,6 +85,7 @@
 <translation id="3795800845758778870">Ľutujeme, ale nemôžeme získať nastavenia prehliadača Brave, ak je práve spustený. Pre importovanie týchto nastavení do prehliadača Vivaldi si najprv uložte všetku prácu a zatvorte všetky okná prehliadača Brave. Potom kliknite na Pokračovať.</translation>
 <translation id="3822431842304177896">Nový oddeľovač</translation>
 <translation id="3832132597516774400">Prímorský súmrak (Krajina 5)</translation>
+<translation id="3894751534882749287">Ak si želáte aj naďalej zobraziť stránku, môžete zmeniť úroveň blokovania vo vyskakujúcom okne alebo kliknutím na tlačidlo „Povoliť“</translation>
 <translation id="3914946330804881301">Importované z prehliadača Opera</translation>
 <translation id="3921292902397893431">Nafúkanec (Príšerka 8)</translation>
 <translation id="3943857333388298514">Prilepiť</translation>
@@ -107,6 +110,7 @@
 <translation id="4582480609585453144">Otvoriť odkaz v liste na pozadí</translation>
 <translation id="4636708767492582204">Odoslať poštou</translation>
 <translation id="4677434526832593569">Vlk (Zviera 8)</translation>
+<translation id="4736016046474602958">Blokovač sledovania</translation>
 <translation id="474217410105706308">Stlmiť zvuk listu</translation>
 <translation id="4861715717329665002">Automaticky uložené relácie</translation>
 <translation id="4881695831933465202">Otvoriť v súčasnom liste</translation>
@@ -152,6 +156,7 @@
 <translation id="7086554968911045110">Noc v horách (Krajina 7)</translation>
 <translation id="7099506190679014195">Zabezpečená aktualizácia úložiska kľúčov</translation>
 <translation id="7111492742514999492">Veterný mlyn (Krajina 9)</translation>
+<translation id="7113310725918019676">Povoliť <ph name="BLOCKED_TYPE" /> z <ph name="DOMAIN" /></translation>
 <translation id="7208252576848052204">Bohužiaľ, nastavenia Arc nie sú dostupné, keď je tento prehliadač spustený. Ak chcete tieto nastavenia importovať do prehliadača Vivaldi, uložte svoju prácu a zatvorte všetky okná Arc. Potom kliknite na tlačidlo Pokračovať.</translation>
 <translation id="7321500017121629018">Aktívne včera</translation>
 <translation id="7337881442233988129">Chromium</translation>
@@ -167,9 +172,9 @@
 <translation id="8027581147000338959">Otvoriť v novom okne</translation>
 <translation id="8044382196220116469">Nedovoliť, aby stránky automaticky prehrávali videá</translation>
 <translation id="8099620695029051217">Kopírovať adresu stránky</translation>
+<translation id="8119307142152921512">sledovanie a reklamy</translation>
 <translation id="8197810018650377191">Pridať stránku do záložiek</translation>
 <translation id="8261506727792406068">Odstrániť</translation>
-<translation id="8263047843452521549">Preskúmať pracovný proces služby</translation>
 <translation id="8331671104904436324">Otvoriť v novom liste na pozadí</translation>
 <translation id="8373293945112511707">Vodopád (Krajina 1)</translation>
 <translation id="8388552048012645975">Sťahovanie aktualizácie...</translation>
@@ -183,7 +188,6 @@
 <translation id="8651348004684669199">Pridať aktívny list</translation>
 <translation id="8669345741879513971">Prasiatko Babe (Príšerka 10)</translation>
 <translation id="867544375504146191">Yandex</translation>
-<translation id="8689295374912158752">Preskúmať portal-document</translation>
 <translation id="875142999698251063">Ukončiť teraz</translation>
 <translation id="8768970203213061953">Americká púšť (Krajina 14)</translation>
 <translation id="8773635261052182196">Nebudete už naďalej vidieť tieto upozornenia. Môžete si ich znova zapnúť v nastaveniach Vivaldi.</translation>
@@ -191,6 +195,7 @@
 <translation id="8813277370772331957">Pripomenúť neskôr</translation>
 <translation id="8894900864683381599">Pridať odkaz na webový panel</translation>
 <translation id="8912720443398351457">Naozaj chcete ukončiť prehliadač Vivaldi?</translation>
+<translation id="8940028675168378100">Zablokované cez <ph name="BLOCKER_NAME" /></translation>
 <translation id="8947109330183116400">Vybrať HTML súbor záložiek</translation>
 <translation id="9017566390391482291">Vybrať profilový priečinok Vivaldi pre import</translation>
 <translation id="9048058608784130603">Čakajúca aktualizácia <ph name="VERSION" /></translation>
@@ -201,6 +206,7 @@
 <translation id="912022491595344261">Otvoriť obrázok ako <ph name="USER" /></translation>
 <translation id="9157539936604258187">Otvoriť odkaz v súčasnom liste</translation>
 <translation id="9169060351863393881">Opera 12.x</translation>
+<translation id="9180553614777056266">Blokovač reklám</translation>
 <translation id="939305735877869636">Brave</translation>
 <translation id="970294721402795299">Zámok (Krajina 16)</translation>
 </translationbundle>

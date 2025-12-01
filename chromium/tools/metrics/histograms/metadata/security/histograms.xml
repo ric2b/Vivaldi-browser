@@ -22,8 +22,19 @@ chromium-metrics-reviews@google.com.
 
 <histograms>
 
+<variants name="SafetyTip">
+  <variant name=".SafetyTip_BadReputation" summary="Bad reputation Safety Tip"/>
+  <variant name=".SafetyTip_BadReputationIgnored"
+      summary="Bad reputation ignored by user"/>
+  <variant name=".SafetyTip_Lookalike" summary="Lookalike Safety Tip"/>
+  <variant name=".SafetyTip_LookalikeIgnored"
+      summary="Lookalike Safety Tip ignored by user"/>
+  <variant name=".SafetyTip_None" summary="No Safety Tip"/>
+  <variant name=".SafetyTip_Unknown" summary="Unknown Safety Tip status"/>
+</variants>
+
 <histogram name="Security.DataDecoder.Image.DecodingTime" units="ms"
-    expires_after="2025-07-13">
+    expires_after="2025-09-14">
   <owner>lukasza@chromium.org</owner>
   <owner>rsesek@chromium.org</owner>
   <summary>
@@ -130,7 +141,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Security.DataDecoder.Json.DecodingTime" units="ms"
-    expires_after="2025-07-06">
+    expires_after="2025-09-07">
   <owner>djmitche@chromium.org</owner>
   <owner>dadrian@chromium.org</owner>
   <summary>
@@ -140,7 +151,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Security.GwpAsan.Activated.{Allocator}.{Process}"
-    enum="Boolean" expires_after="2025-06-08">
+    enum="Boolean" expires_after="2025-08-10">
   <owner>mpdenton@chromium.org</owner>
   <owner>kdlee@chromium.org</owner>
   <owner>memory-safety-dev@chromium.org</owner>
@@ -163,7 +174,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Security.GwpAsan.AllocatorOom.{Allocator}.{Process}"
-    units="allocations" expires_after="2025-06-08">
+    units="allocations" expires_after="2025-08-10">
   <owner>mpdenton@chromium.org</owner>
   <owner>kdlee@chromium.org</owner>
   <owner>memory-safety-dev@chromium.org</owner>
@@ -203,7 +214,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Security.HttpsFirstMode.InterstitialReason"
-    enum="HttpsFirstModeInterstitialReason" expires_after="2025-06-15">
+    enum="HttpsFirstModeInterstitialReason" expires_after="2025-08-17">
   <owner>meacer@chromium.org</owner>
   <owner>trusty-transport@chromium.org</owner>
   <summary>
@@ -213,7 +224,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Security.HttpsFirstMode.NavigationEvent"
-    enum="HttpsFirstModeNavigationEvent" expires_after="2025-06-15">
+    enum="HttpsFirstModeNavigationEvent" expires_after="2025-08-17">
   <owner>cthomp@chromium.org</owner>
   <owner>trusty-transport@chromium.org</owner>
   <summary>
@@ -235,7 +246,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Security.HttpsFirstMode.SettingChanged2"
-    enum="HttpsFirstModeSetting" expires_after="2025-06-22">
+    enum="HttpsFirstModeSetting" expires_after="2025-08-24">
   <owner>cthomp@chromium.org</owner>
   <owner>trusty-transport@chromium.org</owner>
   <summary>
@@ -262,7 +273,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Security.HttpsFirstMode.SettingEnabledAtStartup2"
-    enum="HttpsFirstModeSetting" expires_after="2025-06-22">
+    enum="HttpsFirstModeSetting" expires_after="2025-08-24">
   <owner>cthomp@chromium.org</owner>
   <owner>trusty-transport@chromium.org</owner>
   <summary>
@@ -274,7 +285,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="Security.HttpsFirstModeWithEngagementHeuristic.AccumulatedHostCount"
-    units="hostnames" expires_after="2025-06-22">
+    units="hostnames" expires_after="2025-08-24">
   <owner>meacer@chromium.org</owner>
   <owner>trusty-transport@chromium.org</owner>
   <summary>
@@ -285,7 +296,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Security.HttpsFirstModeWithEngagementHeuristic.Duration"
-    units="seconds" expires_after="2025-06-22">
+    units="seconds" expires_after="2025-08-24">
   <owner>meacer@chromium.org</owner>
   <owner>trusty-transport@chromium.org</owner>
   <summary>
@@ -296,7 +307,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Security.HttpsFirstModeWithEngagementHeuristic.HostCount"
-    units="hostnames" expires_after="2025-06-22">
+    units="hostnames" expires_after="2025-08-24">
   <owner>meacer@chromium.org</owner>
   <owner>trusty-transport@chromium.org</owner>
   <summary>
@@ -308,7 +319,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="Security.HttpsFirstModeWithEngagementHeuristic.NavigationEvent"
-    enum="HttpsFirstModeNavigationEvent" expires_after="2025-06-22">
+    enum="HttpsFirstModeNavigationEvent" expires_after="2025-08-24">
   <owner>meacer@chromium.org</owner>
   <owner>cthomp@chromium.org</owner>
   <owner>trusty-transport@chromium.org</owner>
@@ -320,7 +331,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Security.HttpsFirstModeWithEngagementHeuristic.State"
-    enum="SiteEngagementHeuristicState" expires_after="2025-06-22">
+    enum="SiteEngagementHeuristicState" expires_after="2025-08-24">
   <owner>meacer@chromium.org</owner>
   <owner>trusty-transport@chromium.org</owner>
   <summary>
@@ -330,19 +341,8 @@ chromium-metrics-reviews@google.com.
   </summary>
 </histogram>
 
-<histogram name="Security.JSONParser.ChromiumExtensionUsage"
-    enum="JsonParserExtension" expires_after="2025-03-23">
-  <owner>ellyjones@chromium.org</owner>
-  <owner>chrome-platform-security@google.com</owner>
-  <summary>
-    Records the usage of the base::JSONParser's non-RFC-8259-conforming
-    extensions when parsing JSON documents. This histogram is emitted each time
-    an instance of non-conforming syntax is detected in a document.
-  </summary>
-</histogram>
-
 <histogram name="Security.JSONParser.ParsingTime" units="microseconds"
-    expires_after="2025-07-20">
+    expires_after="2025-09-21">
   <owner>djmitche@chromium.org</owner>
   <owner>chrome-platform-security@google.com</owner>
   <summary>
@@ -362,7 +362,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Security.NavigationRequestSecurityLevel"
-    enum="NavigationRequestSecurityLevel" expires_after="2025-06-22">
+    enum="NavigationRequestSecurityLevel" expires_after="2025-08-24">
   <owner>jdeblasio@chromium.org</owner>
   <owner>trusty-transport@chromium.org</owner>
   <summary>
@@ -377,18 +377,18 @@ chromium-metrics-reviews@google.com.
   </summary>
 </histogram>
 
-<histogram base="true" name="Security.PageEndReason" enum="PageEndReason"
-    expires_after="2025-06-22">
+<histogram name="Security.PageEndReason{SafetyTip}" enum="PageEndReason"
+    expires_after="2025-08-24">
   <owner>cthomp@chromium.org</owner>
   <owner>trusty-transport@chromium.org</owner>
   <summary>
     Records the reason the page visit ended (e.g., reload, tab closed, new
-    navigation, etc.) for page loads that committed.
+    navigation, etc.) for page loads that committed. {SafetyTip}
   </summary>
 </histogram>
 
 <histogram name="Security.PageInfo.AboutThisSiteInteraction"
-    enum="AboutThisSiteInteraction" expires_after="2025-06-22">
+    enum="AboutThisSiteInteraction" expires_after="2025-08-24">
   <owner>dullweber@chromium.org</owner>
   <owner>olesiamarukhno@chromium.org</owner>
   <summary>
@@ -398,7 +398,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Security.PageInfo.AboutThisSiteLanguageSupported"
-    enum="Boolean" expires_after="2025-07-13">
+    enum="Boolean" expires_after="2025-09-14">
   <owner>dullweber@chromium.org</owner>
   <owner>olesiamarukhno@chromium.org</owner>
   <summary>
@@ -408,7 +408,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Security.PageInfo.AboutThisSiteStatus"
-    enum="AboutThisSiteStatus" expires_after="2025-07-13">
+    enum="AboutThisSiteStatus" expires_after="2025-09-14">
   <owner>dullweber@chromium.org</owner>
   <owner>olesiamarukhno@chromium.org</owner>
   <summary>
@@ -418,7 +418,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Security.PageInfo.AdPersonalizationRowShown" enum="Boolean"
-    expires_after="2025-06-08">
+    expires_after="2025-08-10">
   <owner>dullweber@chromium.org</owner>
   <owner>sauski@google.com</owner>
   <summary>
@@ -428,13 +428,15 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Security.PageInfo.Cookies.HasFPSInfo" enum="Boolean"
-    expires_after="M119">
+    expires_after="2025-09-10">
   <owner>tommasin@chromium.org</owner>
   <owner>sauski@google.com</owner>
   <owner>olesiamarukhno@google.com</owner>
   <summary>
     Tracks whether the FPS section was shown in the Cookies subpage. Recorded
     every time Cookie subpage from PageInfo is opened.
+
+    Note: This histogram was expired from M119 until M136.
   </summary>
 </histogram>
 
@@ -477,38 +479,49 @@ chromium-metrics-reviews@google.com.
   </summary>
 </histogram>
 
-<histogram name="Security.PageInfo.TimeOpen" units="ms"
-    expires_after="2023-11-12">
-  <owner>cthomp@chromium.org</owner>
-  <owner>security-enamel@chromium.org</owner>
-  <summary>
-    Records the amount of time the Page Info bubble is open before the user
-    closes it or takes an action which closes it.
-  </summary>
-</histogram>
-
-<histogram name="Security.PageInfo.TimeOpen.Action" units="ms"
+<histogram name="Security.PageInfo.TimeOpen.Action{SafetyTip}" units="ms"
     expires_after="2025-02-10">
   <owner>cthomp@chromium.org</owner>
   <owner>security-enamel@chromium.org</owner>
   <summary>
     Records the amount of time the Page Info bubble is open before the user
     closes it, for cases where the user has performed an action inside it.
+    {SafetyTip}
   </summary>
+  <token key="SafetyTip" variants="SafetyTip">
+    <variant name=""/>
+  </token>
 </histogram>
 
-<histogram name="Security.PageInfo.TimeOpen.NoAction" units="ms"
+<histogram name="Security.PageInfo.TimeOpen.NoAction{SafetyTip}" units="ms"
     expires_after="2024-10-20">
   <owner>cthomp@chromium.org</owner>
   <owner>security-enamel@chromium.org</owner>
   <summary>
     Records the amount of time the Page Info bubble is open before the user
     closes it, for cases where the user performed no action inside it.
+    {SafetyTip}
   </summary>
+  <token key="SafetyTip" variants="SafetyTip">
+    <variant name=""/>
+  </token>
+</histogram>
+
+<histogram name="Security.PageInfo.TimeOpen{SafetyTip}" units="ms"
+    expires_after="2023-11-12">
+  <owner>cthomp@chromium.org</owner>
+  <owner>security-enamel@chromium.org</owner>
+  <summary>
+    Records the amount of time the Page Info bubble is open before the user
+    closes it or takes an action which closes it. {SafetyTip}
+  </summary>
+  <token key="SafetyTip" variants="SafetyTip">
+    <variant name=""/>
+  </token>
 </histogram>
 
 <histogram name="Security.PrivateNetworkAccess.CheckResult"
-    enum="PrivateNetworkAccessCheckResult" expires_after="2025-06-22">
+    enum="PrivateNetworkAccessCheckResult" expires_after="2025-08-24">
   <owner>titouan@chromium.org</owner>
   <owner>clamy@chromium.org</owner>
   <owner>mkwst@chromium.org</owner>
@@ -554,7 +567,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Security.PrivateNetworkAccess.PrivateIpInferrable"
-    enum="Boolean" expires_after="2025-06-22">
+    enum="Boolean" expires_after="2025-08-24">
   <owner>titouan@chromium.org</owner>
   <owner>lyf@chromium.org</owner>
   <owner>clamy@chromium.org</owner>
@@ -569,7 +582,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Security.PrivateNetworkAccess.PrivateIpResolveMatch"
-    enum="Boolean" expires_after="2025-06-22">
+    enum="Boolean" expires_after="2025-08-24">
   <owner>titouan@chromium.org</owner>
   <owner>lyf@chromium.org</owner>
   <owner>clamy@chromium.org</owner>
@@ -595,16 +608,19 @@ chromium-metrics-reviews@google.com.
   </summary>
 </histogram>
 
-<histogram name="Security.SafetyTips.Interaction" enum="SafetyTipInteraction"
-    expires_after="2023-06-18">
+<histogram name="Security.SafetyTips.Interaction{SafetyTip}"
+    enum="SafetyTipInteraction" expires_after="2023-06-18">
   <owner>jdeblasio@chromium.org</owner>
   <owner>estark@chromium.org</owner>
   <summary>
     Records a user's interaction with a Safety Tip. Recorded every time a user
     uses one of the Safety Tip's buttons or dismisses it explicitly. Can be
     normalized against Security.SafetyTips.SafetyTipShown, filtered to users
-    with the feature enabled to show the UI.
+    with the feature enabled to show the UI. {SafetyTip}
   </summary>
+  <token key="SafetyTip" variants="SafetyTip">
+    <variant name=""/>
+  </token>
 </histogram>
 
 <histogram name="Security.SafetyTips.SafetyTipIgnoredPageLoad"
@@ -728,29 +744,33 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Security.SCTAuditing.OptOut.DroppedDueToLogNotFound"
-    enum="Boolean" expires_after="2024-05-26">
+    enum="Boolean" expires_after="2026-04-01">
   <owner>cthomp@chromium.org</owner>
   <owner>trusty-transport@chromium.org</owner>
   <summary>
     Records whether a hashdance report was dropped due to not finding the log
     metadata for the selected SCT. Recorded once when creating a new auditing
     report, but before the report is sampled or deduplicated.
+
+    Note: This histogram was expired from 2024-05-26 through 2025-03-31.
   </summary>
 </histogram>
 
 <histogram name="Security.SCTAuditing.OptOut.LookupQueryResult"
-    enum="SCTLookupQueryResult" expires_after="2024-07-28">
+    enum="SCTLookupQueryResult" expires_after="2026-04-01">
   <owner>cthomp@chromium.org</owner>
   <owner>nsatragno@chromium.org</owner>
   <owner>trusty-transport@chromium.org</owner>
   <summary>
     Records the result of a hashdance lookup query. Recorded once per query
     regardless of whether the query succeeded, failed, or is a retry.
+
+    Note: This histogram was expired from 2024-05-26 through 2025-03-31.
   </summary>
 </histogram>
 
 <histogram name="Security.SCTAuditing.OptOut.PopularSCTSkipped" enum="Boolean"
-    expires_after="2024-05-26">
+    expires_after="2026-04-01">
   <owner>cthomp@chromium.org</owner>
   <owner>nsatragno@chromium.org</owner>
   <owner>trusty-transport@chromium.org</owner>
@@ -758,11 +778,13 @@ chromium-metrics-reviews@google.com.
     Records whether an SCT selected for a hashdance lookup query was skipped
     because it was found on the Popular SCTs list. Recorded once when creating a
     new auditing report, but before the report is sampled or deduplicated.
+
+    Note: This histogram was expired from 2024-05-26 through 2025-03-31.
   </summary>
 </histogram>
 
 <histogram name="Security.SCTAuditing.OptOut.ReportCount" units="reports"
-    expires_after="2024-05-26">
+    expires_after="2026-04-01">
   <owner>cthomp@chromium.org</owner>
   <owner>jdeblasio@chromium.org</owner>
   <summary>
@@ -773,6 +795,8 @@ chromium-metrics-reviews@google.com.
     the SCT auditing code, after sampling is performed, and only once per report
     (including across browser restarts). This metric is only emitted for SCT
     auditing hashdance users.
+
+    Note: This histogram was expired from 2024-05-26 through 2025-03-31.
   </summary>
 </histogram>
 
@@ -816,7 +840,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Security.SecurityLevel.OnCommit" enum="SecurityLevel"
-    expires_after="2025-03-17">
+    expires_after="2026-03-17">
   <owner>cthomp@chromium.org</owner>
   <owner>security-enamel@chromium.org</owner>
   <summary>
@@ -840,17 +864,18 @@ chromium-metrics-reviews@google.com.
   </summary>
 </histogram>
 
-<histogram base="true" name="Security.SiteEngagement" units="units"
+<histogram name="Security.SiteEngagement{SafetyTip}" units="units"
     expires_after="2023-11-12">
   <owner>cthomp@chromium.org</owner>
   <owner>security-enamel@chromium.org</owner>
   <summary>
     The final Site Engagement score (0 to 100) of a URL during a visit to a
     page. Recorded when the user closes the page or initiates a new navigation.
+    {SafetyTip}
   </summary>
 </histogram>
 
-<histogram base="true" name="Security.TimeOnPage2" units="ms"
+<histogram name="Security.TimeOnPage2{SafetyTip}" units="ms"
     expires_after="2025-01-26">
   <owner>cthomp@chromium.org</owner>
   <owner>security-enamel@chromium.org</owner>
@@ -859,12 +884,12 @@ chromium-metrics-reviews@google.com.
     foreground from the start of the navigation to the page visit completing due
     to a new navigation or the tab being closed). This aggregates all foreground
     time over the entire visit (multiple times in the foreground are added
-    together).
+    together). {SafetyTip}
   </summary>
 </histogram>
 
 <histogram name="SiteIsolation.BrowsingInstance.MaxCountPerProcess"
-    units="units" expires_after="2025-05-18">
+    units="units" expires_after="2025-09-07">
   <owner>wjmaclean@chromium.org</owner>
   <owner>creis@chromium.org</owner>
   <summary>
@@ -875,7 +900,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="SiteIsolation.BrowsingInstanceCount" units="units"
-    expires_after="2025-04-13">
+    expires_after="2026-04-13">
   <owner>alexmos@chromium.org</owner>
   <owner>creis@chromium.org</owner>
   <summary>
@@ -987,7 +1012,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="SiteIsolation.NewProcessUsedForNavigationWhenSameSiteProcessExists"
-    enum="Boolean" expires_after="2025-06-22">
+    enum="Boolean" expires_after="2025-08-24">
   <owner>bashi@chromium.org</owner>
   <owner>blink-network-stack@google.com</owner>
   <summary>
@@ -1046,7 +1071,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="SiteIsolation.ProxyCount" units="proxies"
-    expires_after="2025-06-01">
+    expires_after="2025-08-03">
   <owner>alexmos@chromium.org</owner>
   <owner>creis@chromium.org</owner>
   <owner>lukasza@chromium.org</owner>
@@ -1119,7 +1144,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="SiteIsolation.SavedWebTriggeredIsolatedOrigins.Size"
-    units="origins" expires_after="2025-04-20">
+    units="origins" expires_after="2025-08-03">
   <owner>alexmos@chromium.org</owner>
   <owner>creis@chromium.org</owner>
   <owner>lukasza@chromium.org</owner>
@@ -1132,7 +1157,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="SiteIsolation.SiteInstancesPerBrowsingInstance" units="units"
-    expires_after="2025-04-13">
+    expires_after="2026-04-13">
   <owner>alexmos@chromium.org</owner>
   <owner>creis@chromium.org</owner>
   <owner>lukasza@chromium.org</owner>

@@ -27,8 +27,8 @@ cc_library(
     hdrs = glob(["include/GL/*.h"]),
     includes = ["include"],
     linkopts = select({
-        "//buildenv:linux": ["-lGL"],
-        "//buildenv:osx": ["-framework OpenGL"],
+        "@platforms//os:linux": ["-lGL"],
+        "@platforms//os:osx": ["-framework OpenGL"],
     }),
     visibility = ["//visibility:public"],
 )

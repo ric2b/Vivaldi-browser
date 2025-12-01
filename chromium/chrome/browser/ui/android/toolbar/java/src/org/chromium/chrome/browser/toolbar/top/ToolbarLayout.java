@@ -12,7 +12,6 @@ import android.graphics.drawable.Drawable;
 import android.os.Build;
 import android.os.Build.VERSION;
 import android.util.AttributeSet;
-import android.view.InputDevice;
 import android.view.MotionEvent;
 import android.view.View;
 import android.widget.FrameLayout;
@@ -51,6 +50,7 @@ import org.chromium.chrome.browser.toolbar.ToolbarDataProvider;
 import org.chromium.chrome.browser.toolbar.ToolbarProgressBar;
 import org.chromium.chrome.browser.toolbar.ToolbarTabController;
 import org.chromium.chrome.browser.toolbar.menu_button.MenuButtonCoordinator;
+import org.chromium.chrome.browser.toolbar.reload_button.ReloadButtonCoordinator;
 import org.chromium.chrome.browser.toolbar.top.NavigationPopup.HistoryDelegate;
 import org.chromium.chrome.browser.toolbar.top.ToolbarTablet.OfflineDownloader;
 import org.chromium.chrome.browser.toolbar.top.TopToolbarCoordinator.ToolbarColorObserver;
@@ -63,6 +63,7 @@ import org.chromium.chrome.browser.util.BrowserUiUtils;
 import org.chromium.chrome.browser.util.BrowserUiUtils.ModuleTypeOnStartAndNtp;
 import org.chromium.components.feature_engagement.Tracker;
 import org.chromium.ui.base.ViewUtils;
+import org.chromium.ui.util.MotionEventUtils;
 import org.chromium.ui.util.TokenHolder;
 import org.chromium.url.GURL;
 
@@ -152,7 +153,8 @@ public abstract class ToolbarLayout extends FrameLayout
             OfflineDownloader offlineDownloader,
             UserEducationHelper userEducationHelper,
             ObservableSupplier<Tracker> trackerSupplier,
-            ToolbarProgressBar progressBar) {
+            ToolbarProgressBar progressBar,
+            @Nullable ReloadButtonCoordinator reloadButtonCoordinator) {
         mToolbarDataProvider = toolbarDataProvider;
         mToolbarTabController = tabController;
         mMenuButtonCoordinator = menuButtonCoordinator;
@@ -290,13 +292,6 @@ public abstract class ToolbarLayout extends FrameLayout
     /** TODO comment */
     @CallSuper
     protected void onMenuButtonDisabled() {}
-
-    // Set hover tooltip text for buttons shared between phones and tablets.
-    public void setTooltipTextForToolbarButtons() {
-        // Set hover tooltip text for home.
-        setTooltipText(
-                getHomeButton(), getContext().getString(R.string.accessibility_toolbar_btn_home));
-    }
 
     /**
      * Set hover tooltip text for buttons shared between phones and tablets. @TODO: Remove and use
@@ -514,18 +509,11 @@ public abstract class ToolbarLayout extends FrameLayout
     void updateBackButtonVisibility(boolean canGoBack) {}
 
     /**
-     * Gives inheriting classes the chance to update the visibility of the
-     * forward button.
+     * Gives inheriting classes the chance to update the visibility of the forward button.
+     *
      * @param canGoForward Whether or not the current tab has any history to go forward to.
      */
     void updateForwardButtonVisibility(boolean canGoForward) {}
-
-    /**
-     * Gives inheriting classes the chance to update the visibility of the
-     * reload button.
-     * @param isReloading Whether or not the current tab is loading.
-     */
-    void updateReloadButtonVisibility(boolean isReloading) {}
 
     /**
      * Gives inheriting classes the chance to update the visual status of the bookmark button.
@@ -643,10 +631,9 @@ public abstract class ToolbarLayout extends FrameLayout
 
     @Override
     public boolean onGenericMotionEvent(MotionEvent event) {
-        // Consumes mouse button events on toolbar so they don't get leaked to content layer.
-        // See https://crbug.com/740855.
-        if ((event.getSource() & InputDevice.SOURCE_CLASS_POINTER) != 0
-                && event.getToolType(0) == MotionEvent.TOOL_TYPE_MOUSE) {
+        // Consumes mouse/trackpad button events on toolbar so they don't get leaked to content
+        // layer. See https://crbug.com/740855 (mouse) and https://crbug.com/384916573 (trackpad).
+        if (MotionEventUtils.isMouseEvent(event) || MotionEventUtils.isTrackpadEvent(event)) {
             int action = event.getActionMasked();
             if (action == MotionEvent.ACTION_BUTTON_PRESS
                     || action == MotionEvent.ACTION_BUTTON_RELEASE
@@ -741,36 +728,13 @@ public abstract class ToolbarLayout extends FrameLayout
     public abstract LocationBar getLocationBar();
 
     /**
-     * Navigates the current Tab back.
-     * @return Whether or not the current Tab did go back.
-     */
-    boolean back() {
-        maybeUnfocusUrlBar();
-        return mToolbarTabController != null && mToolbarTabController.back();
-    }
-
-    /**
      * Navigates the current Tab forward.
+     *
      * @return Whether or not the current Tab did go forward.
      */
     boolean forward() {
         maybeUnfocusUrlBar();
         return mToolbarTabController != null ? mToolbarTabController.forward() : false;
-    }
-
-    /**
-     * If the page is currently loading, this will trigger the tab to stop. If the page is fully
-     * loaded, this will trigger a refresh.
-     *
-     * <p>The buttons of the toolbar will be updated as a result of making this call.
-     *
-     * @param ignoreCache Whether a reload should ignore the cache (hard-reload).
-     */
-    void stopOrReloadCurrentTab(boolean ignoreCache) {
-        maybeUnfocusUrlBar();
-        if (mToolbarTabController != null) {
-            mToolbarTabController.stopOrReloadCurrentTab(ignoreCache);
-        }
     }
 
     /** Opens hompage in the current tab. */
@@ -789,9 +753,10 @@ public abstract class ToolbarLayout extends FrameLayout
 
     /**
      * Update the optional toolbar button, showing it if currently hidden.
+     *
      * @param buttonData Display data for the button, e.g. the Drawable and content description.
      */
-    void updateOptionalButton(ButtonData buttonData) {}
+    protected void updateOptionalButton(ButtonData buttonData) {}
 
     /** Hide the optional toolbar button. */
     void hideOptionalButton() {}
@@ -940,6 +905,9 @@ public abstract class ToolbarLayout extends FrameLayout
         }
     }
 
+    /** Requests keyboard focus on the toolbar row. */
+    public abstract void requestKeyboardFocus();
+
     /** Vivaldi */
     public void onBottomToolbarVisibilityChanged(boolean isVisible, int orientation) {}
 
@@ -966,4 +934,14 @@ public abstract class ToolbarLayout extends FrameLayout
     public void updateShieldButtonState(GURL gurl) {};
 
     public ChromeImageButton getPanelButton() { return null; }
+    // End Vivaldi
+
+    /**
+     * Vivaldi: Navigates the current Tab back.
+     * @return Whether or not the current Tab did go back.
+     */
+    public boolean back() {
+        maybeUnfocusUrlBar();
+        return mToolbarTabController != null && mToolbarTabController.back();
+    }
 }

@@ -13,6 +13,7 @@
 #include "net/socket/tcp_client_socket.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
 #include "remoting/protocol/stun_tcp_packet_processor.h"
+#include "third_party/webrtc/rtc_base/time_utils.h"
 
 namespace remoting::protocol {
 
@@ -271,8 +272,6 @@ int StreamPacketSocket::SetOption(rtc::Socket::Option option, int value) {
       NOTIMPLEMENTED() << "Unexpected socket option: " << option;
       return -1;
   }
-
-  NOTREACHED();
 }
 
 int StreamPacketSocket::GetError() const {

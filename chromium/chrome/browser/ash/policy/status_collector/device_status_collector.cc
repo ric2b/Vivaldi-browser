@@ -9,6 +9,7 @@
 
 #include "chrome/browser/ash/policy/status_collector/device_status_collector.h"
 
+#include <inttypes.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <sys/types.h>
@@ -60,7 +61,6 @@
 #include "chrome/browser/ash/policy/status_collector/status_collector_state.h"
 #include "chrome/browser/ash/policy/status_collector/tpm_status_combiner.h"
 #include "chrome/browser/ash/profiles/profile_helper.h"
-#include "chrome/browser/browser_process.h"
 #include "chrome/browser/crash_upload_list/crash_upload_list.h"
 #include "chrome/browser/policy/profile_policy_connector.h"
 #include "chrome/browser/ui/webui/ash/settings/pages/storage/device_storage_util.h"
@@ -2050,7 +2050,7 @@ void DeviceStatusCollector::ReceiveCPUStatistics(const std::string& stats) {
     // sys_time, and idle_time.
     uint64_t user = 0, nice = 0, system = 0, idle = 0;
     int vals = sscanf(stats.c_str(),
-                      "cpu %" PRIu64 " %" PRIu64 " %" PRIu64 " %" PRIu64, &user,
+                      "cpu %" SCNu64 " %" SCNu64 " %" SCNu64 " %" SCNu64, &user,
                       &nice, &system, &idle);
     DCHECK_EQ(4, vals);
 
@@ -2533,7 +2533,7 @@ bool DeviceStatusCollector::GetNetworkStatus(
 
 bool DeviceStatusCollector::GetUsers(em::DeviceStatusReportRequest* status) {
   const user_manager::UserList& users =
-      user_manager::UserManager::Get()->GetUsers();
+      user_manager::UserManager::Get()->GetPersistedUsers();
 
   bool anything_reported = false;
   for (user_manager::User* user : users) {

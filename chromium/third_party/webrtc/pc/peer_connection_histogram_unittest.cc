@@ -17,18 +17,13 @@
 
 #include "api/jsep.h"
 #include "api/jsep_session_description.h"
-#include "api/make_ref_counted.h"
 #include "api/peer_connection_interface.h"
 #include "api/rtc_error.h"
 #include "api/scoped_refptr.h"
-#include "api/task_queue/default_task_queue_factory.h"
 #include "api/test/mock_async_dns_resolver.h"
 #include "api/test/rtc_error_matchers.h"
-#include "p2p/base/port_allocator.h"
-#include "p2p/client/basic_port_allocator.h"
+#include "api/units/time_delta.h"
 #include "pc/peer_connection.h"
-#include "pc/peer_connection_factory.h"
-#include "pc/peer_connection_proxy.h"
 #include "pc/peer_connection_wrapper.h"
 #include "pc/sdp_utils.h"
 #include "pc/test/enable_fake_media.h"
@@ -40,6 +35,7 @@
 #include "rtc_base/fake_mdns_responder.h"
 #include "rtc_base/fake_network.h"
 #include "rtc_base/gunit.h"
+#include "rtc_base/network.h"
 #include "rtc_base/socket_address.h"
 #include "rtc_base/thread.h"
 #include "rtc_base/virtual_socket_server.h"
@@ -57,11 +53,10 @@ using ::testing::NiceMock;
 static const char kUsagePatternMetric[] = "WebRTC.PeerConnection.UsagePattern";
 static constexpr webrtc::TimeDelta kDefaultTimeout =
     webrtc::TimeDelta::Millis(10000);
-static const rtc::SocketAddress kLocalAddrs[2] = {
-    rtc::SocketAddress("1.1.1.1", 0), rtc::SocketAddress("2.2.2.2", 0)};
-static const rtc::SocketAddress kPrivateLocalAddress("10.1.1.1", 0);
-static const rtc::SocketAddress kPrivateIpv6LocalAddress("fd12:3456:789a:1::1",
-                                                         0);
+static const SocketAddress kLocalAddrs[2] = {SocketAddress("1.1.1.1", 0),
+                                             SocketAddress("2.2.2.2", 0)};
+static const SocketAddress kPrivateLocalAddress("10.1.1.1", 0);
+static const SocketAddress kPrivateIpv6LocalAddress("fd12:3456:789a:1::1", 0);
 
 int MakeUsageFingerprint(std::set<UsageEvent> events) {
   int signature = 0;
@@ -70,21 +65,6 @@ int MakeUsageFingerprint(std::set<UsageEvent> events) {
   }
   return signature;
 }
-
-class PeerConnectionFactoryForUsageHistogramTest
-    : public PeerConnectionFactory {
- public:
-  PeerConnectionFactoryForUsageHistogramTest()
-      : PeerConnectionFactory([] {
-          PeerConnectionFactoryDependencies dependencies;
-          dependencies.network_thread = rtc::Thread::Current();
-          dependencies.worker_thread = rtc::Thread::Current();
-          dependencies.signaling_thread = rtc::Thread::Current();
-          dependencies.task_queue_factory = CreateDefaultTaskQueueFactory();
-          EnableFakeMedia(dependencies);
-          return dependencies;
-        }()) {}
-};
 
 class PeerConnectionWrapperForUsageHistogramTest;
 
@@ -124,13 +104,6 @@ class PeerConnectionWrapperForUsageHistogramTest
     : public PeerConnectionWrapper {
  public:
   using PeerConnectionWrapper::PeerConnectionWrapper;
-
-  PeerConnection* GetInternalPeerConnection() {
-    auto* pci =
-        static_cast<PeerConnectionProxyWithInternal<PeerConnectionInterface>*>(
-            pc());
-    return static_cast<PeerConnection*>(pci->internal());
-  }
 
   // Override with different return type
   ObserverForUsageHistogramTest* observer() {
@@ -236,109 +209,89 @@ class PeerConnectionUsageHistogramTest : public ::testing::Test {
   typedef std::unique_ptr<PeerConnectionWrapperForUsageHistogramTest>
       WrapperPtr;
 
-  PeerConnectionUsageHistogramTest()
-      : vss_(new rtc::VirtualSocketServer()),
-        socket_factory_(new rtc::BasicPacketSocketFactory(vss_.get())),
-        main_(vss_.get()) {
-    metrics::Reset();
-  }
+  PeerConnectionUsageHistogramTest() : main_(&vss_) { metrics::Reset(); }
 
   WrapperPtr CreatePeerConnection() {
     RTCConfiguration config;
     config.sdp_semantics = SdpSemantics::kUnifiedPlan;
-    return CreatePeerConnection(
-        config, PeerConnectionFactoryInterface::Options(), nullptr);
+    return CreatePeerConnection(config);
   }
 
   WrapperPtr CreatePeerConnection(const RTCConfiguration& config) {
-    return CreatePeerConnection(
-        config, PeerConnectionFactoryInterface::Options(), nullptr);
+    return CreatePeerConnection(config,
+                                PeerConnectionFactoryInterface::Options(),
+                                PeerConnectionDependencies(nullptr), nullptr);
   }
 
   WrapperPtr CreatePeerConnectionWithMdns(const RTCConfiguration& config) {
-    auto resolver_factory =
+    PeerConnectionDependencies deps(nullptr /* observer_in */);
+    deps.async_dns_resolver_factory =
         std::make_unique<NiceMock<MockAsyncDnsResolverFactory>>();
 
-    PeerConnectionDependencies deps(nullptr /* observer_in */);
-
-    auto fake_network = NewFakeNetwork();
+    auto fake_network = std::make_unique<FakeNetworkManager>();
     fake_network->set_mdns_responder(
-        std::make_unique<FakeMdnsResponder>(rtc::Thread::Current()));
+        std::make_unique<FakeMdnsResponder>(Thread::Current()));
     fake_network->AddInterface(NextLocalAddress());
 
-    std::unique_ptr<cricket::BasicPortAllocator> port_allocator(
-        new cricket::BasicPortAllocator(fake_network, socket_factory_.get()));
-
-    deps.async_dns_resolver_factory = std::move(resolver_factory);
-    deps.allocator = std::move(port_allocator);
-
-    return CreatePeerConnection(
-        config, PeerConnectionFactoryInterface::Options(), std::move(deps));
+    return CreatePeerConnection(config,
+                                PeerConnectionFactoryInterface::Options(),
+                                std::move(deps), std::move(fake_network));
   }
 
   WrapperPtr CreatePeerConnectionWithImmediateReport() {
     RTCConfiguration configuration;
     configuration.sdp_semantics = SdpSemantics::kUnifiedPlan;
     configuration.report_usage_pattern_delay_ms = 0;
-    return CreatePeerConnection(
-        configuration, PeerConnectionFactoryInterface::Options(), nullptr);
+    return CreatePeerConnection(configuration);
   }
 
   WrapperPtr CreatePeerConnectionWithPrivateLocalAddresses() {
-    auto* fake_network = NewFakeNetwork();
+    auto fake_network = std::make_unique<FakeNetworkManager>();
     fake_network->AddInterface(NextLocalAddress());
     fake_network->AddInterface(kPrivateLocalAddress);
 
-    auto port_allocator = std::make_unique<cricket::BasicPortAllocator>(
-        fake_network, socket_factory_.get());
     RTCConfiguration config;
     config.sdp_semantics = SdpSemantics::kUnifiedPlan;
-    return CreatePeerConnection(config,
-                                PeerConnectionFactoryInterface::Options(),
-                                std::move(port_allocator));
+    return CreatePeerConnection(
+        config, PeerConnectionFactoryInterface::Options(),
+        PeerConnectionDependencies(nullptr), std::move(fake_network));
   }
 
   WrapperPtr CreatePeerConnectionWithPrivateIpv6LocalAddresses() {
-    auto* fake_network = NewFakeNetwork();
+    auto fake_network = std::make_unique<FakeNetworkManager>();
     fake_network->AddInterface(NextLocalAddress());
     fake_network->AddInterface(kPrivateIpv6LocalAddress);
 
-    auto port_allocator = std::make_unique<cricket::BasicPortAllocator>(
-        fake_network, socket_factory_.get());
-
     RTCConfiguration config;
     config.sdp_semantics = SdpSemantics::kUnifiedPlan;
-    return CreatePeerConnection(config,
-                                PeerConnectionFactoryInterface::Options(),
-                                std::move(port_allocator));
+    return CreatePeerConnection(
+        config, PeerConnectionFactoryInterface::Options(),
+        PeerConnectionDependencies(nullptr), std::move(fake_network));
   }
 
   WrapperPtr CreatePeerConnection(
       const RTCConfiguration& config,
       const PeerConnectionFactoryInterface::Options factory_options,
-      std::unique_ptr<cricket::PortAllocator> allocator) {
-    PeerConnectionDependencies deps(nullptr);
-    deps.allocator = std::move(allocator);
-
-    return CreatePeerConnection(config, factory_options, std::move(deps));
-  }
-
-  WrapperPtr CreatePeerConnection(
-      const RTCConfiguration& config,
-      const PeerConnectionFactoryInterface::Options factory_options,
-      PeerConnectionDependencies deps) {
-    auto pc_factory =
-        rtc::make_ref_counted<PeerConnectionFactoryForUsageHistogramTest>();
-    pc_factory->SetOptions(factory_options);
-
-    // If no allocator is provided, one will be created using a network manager
-    // that uses the host network. This doesn't work on all trybots.
-    if (!deps.allocator) {
-      auto fake_network = NewFakeNetwork();
+      PeerConnectionDependencies deps,
+      std::unique_ptr<rtc::NetworkManager> network_manager) {
+    PeerConnectionFactoryDependencies pcf_deps;
+    pcf_deps.network_thread = Thread::Current();
+    pcf_deps.worker_thread = Thread::Current();
+    pcf_deps.signaling_thread = Thread::Current();
+    pcf_deps.socket_factory = &vss_;
+    if (network_manager != nullptr) {
+      pcf_deps.network_manager = std::move(network_manager);
+    } else {
+      // If no network manager is provided, one will be created that uses the
+      // host network. This doesn't work on all trybots.
+      auto fake_network = std::make_unique<FakeNetworkManager>();
       fake_network->AddInterface(NextLocalAddress());
-      deps.allocator = std::make_unique<cricket::BasicPortAllocator>(
-          fake_network, socket_factory_.get());
+      pcf_deps.network_manager = std::move(fake_network);
     }
+    EnableFakeMedia(pcf_deps);
+
+    auto pc_factory = CreateModularPeerConnectionFactory(std::move(pcf_deps));
+    pc_factory->SetOptions(factory_options);
 
     auto observer = std::make_unique<ObserverForUsageHistogramTest>();
     deps.observer = observer.get();
@@ -362,26 +315,14 @@ class PeerConnectionUsageHistogramTest : public ::testing::Test {
     return metrics::MinSample(kUsagePatternMetric);
   }
 
-  // The PeerConnection's port allocator is tied to the PeerConnection's
-  // lifetime and expects the underlying NetworkManager to outlive it.  That
-  // prevents us from having the PeerConnectionWrapper own the fake network.
-  // Therefore, the test fixture will own all the fake networks even though
-  // tests should access the fake network through the PeerConnectionWrapper.
-  rtc::FakeNetworkManager* NewFakeNetwork() {
-    fake_networks_.emplace_back(std::make_unique<rtc::FakeNetworkManager>());
-    return fake_networks_.back().get();
-  }
-
-  rtc::SocketAddress NextLocalAddress() {
+  SocketAddress NextLocalAddress() {
     RTC_DCHECK(next_local_address_ < (int)arraysize(kLocalAddrs));
     return kLocalAddrs[next_local_address_++];
   }
 
-  std::vector<std::unique_ptr<rtc::FakeNetworkManager>> fake_networks_;
   int next_local_address_ = 0;
-  std::unique_ptr<rtc::VirtualSocketServer> vss_;
-  std::unique_ptr<rtc::BasicPacketSocketFactory> socket_factory_;
-  rtc::AutoSocketServerThread main_;
+  VirtualSocketServer vss_;
+  AutoSocketServerThread main_;
 };
 
 TEST_F(PeerConnectionUsageHistogramTest, UsageFingerprintHistogramFromTimeout) {

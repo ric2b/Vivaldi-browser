@@ -596,6 +596,7 @@ void CompilePlainRequestFilter(const RequestFilterRule& rule,
 }
 
 void CompileRequestFilterRule(
+    bool allow_strict_blocking,
     const RequestFilterRule& rule,
     const RuleSourceSettings& source_settings,
     base::Value::Dict& compiled_request_filter_rules,
@@ -616,7 +617,10 @@ void CompileRequestFilterRule(
     trigger.set_load_type(rule.party);
 
     if (explicit_types.test(RequestFilterRule::kDocument) &&
-        rule.decision != RequestFilterRule::kPass) {
+        rule.decision != RequestFilterRule::kPass && allow_strict_blocking) {
+      // The SubDocument resource type is translated as a document block rule
+      // In order to actually block subdocument, the load context must be set
+      // instead (See below)
       resource_types.set(RequestFilterRule::kSubDocument);
     } else if (resource_types.test(RequestFilterRule::kSubDocument)) {
       resource_types.reset(RequestFilterRule::kSubDocument);
@@ -718,7 +722,8 @@ void CompileScriptletInjectionRule(
 }
 }  // namespace
 
-std::string CompileIosRulesToString(const ParseResult& parse_result,
+std::string CompileIosRulesToString(bool allow_strict_blocking,
+                                    const ParseResult& parse_result,
                                     const RuleSourceSettings& source_settings,
                                     bool pretty_print) {
   base::Value::Dict compiled_request_filter_rules;
@@ -726,9 +731,10 @@ std::string CompileIosRulesToString(const ParseResult& parse_result,
   base::Value::Dict compiled_scriptlet_injection_rules;
   base::Value::List partner_list_allowed_documents;
   for (const auto& request_filter_rule : parse_result.request_filter_rules) {
-    CompileRequestFilterRule(
-        request_filter_rule, source_settings, compiled_request_filter_rules,
-        compiled_cosmetic_filter_rules, partner_list_allowed_documents);
+    CompileRequestFilterRule(allow_strict_blocking, request_filter_rule,
+                             source_settings, compiled_request_filter_rules,
+                             compiled_cosmetic_filter_rules,
+                             partner_list_allowed_documents);
   }
   for (const auto& cosmetic_rule : parse_result.cosmetic_rules) {
     CompileCosmeticRule(cosmetic_rule, compiled_cosmetic_filter_rules);
@@ -758,14 +764,15 @@ std::string CompileIosRulesToString(const ParseResult& parse_result,
   return output;
 }
 
-bool CompileIosRules(const ParseResult& parse_result,
+bool CompileIosRules(bool allow_strict_blocking,
+                     const ParseResult& parse_result,
                      const RuleSourceSettings& source_settings,
                      const base::FilePath& output_path,
                      std::string& checksum) {
   if (!base::CreateDirectory(output_path.DirName()))
     return false;
-  std::string ios_rules =
-      CompileIosRulesToString(parse_result, source_settings, false);
+  std::string ios_rules = CompileIosRulesToString(
+      allow_strict_blocking, parse_result, source_settings, false);
   checksum = CalculateBufferChecksum(ios_rules);
   return base::WriteFile(output_path, ios_rules);
 }

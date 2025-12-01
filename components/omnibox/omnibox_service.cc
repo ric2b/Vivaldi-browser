@@ -11,6 +11,7 @@
 #include "chrome/browser/autocomplete/chrome_autocomplete_provider_client.h"
 #include "components/omnibox/browser/autocomplete_classifier.h"
 #include "components/omnibox/omnibox_service_observer.h"
+#include "components/omnibox/browser/keyword_provider.h"
 #include "third_party/metrics_proto/omnibox_event.pb.h"
 
 namespace vivaldi_omnibox {
@@ -40,6 +41,19 @@ void OmniboxService::StartSearch(
   autocomplete_input.set_focus_type(input.focus_type);
   autocomplete_input.from_search_field = input.from_search_field;
   autocomplete_input.search_engine_guid = input.search_engine_guid;
+  //Check if the input starts with a valid search engine Keyword and
+  // if it is enable the keyword mode.
+  TemplateURLService* template_URL_service =
+      std::make_unique<ChromeAutocompleteProviderClient>
+      (profile_)->GetTemplateURLService();
+  if(0 < static_cast<int>(input_text.find_first_of(base::kWhitespaceUTF16)) &&
+      !controller_->keyword_provider()->
+        GetKeywordForText(input_text,template_URL_service).empty())
+    autocomplete_input.set_keyword_mode_entry_method(
+      metrics::OmniboxEventProto::SPACE_IN_MIDDLE);
+  else
+    autocomplete_input.set_keyword_mode_entry_method(
+      metrics::OmniboxEventProto::INVALID);
 
   if (input.clear_state_before_searching) {
     controller_->RemoveObserver(this);

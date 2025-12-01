@@ -31,13 +31,15 @@ import android.widget.SeekBar.OnSeekBarChangeListener;
 
 import org.junit.After;
 import org.junit.Before;
+import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Captor;
 import org.mockito.Mock;
 import org.mockito.Mockito;
-import org.mockito.MockitoAnnotations;
+import org.mockito.junit.MockitoJUnit;
+import org.mockito.junit.MockitoRule;
 import org.robolectric.annotation.Config;
 import org.robolectric.shadows.ShadowLooper;
 
@@ -51,6 +53,7 @@ import org.chromium.chrome.browser.readaloud.ReadAloudPrefs;
 import org.chromium.chrome.browser.readaloud.ReadAloudPrefsJni;
 import org.chromium.chrome.browser.readaloud.testing.MockPrefServiceHelper;
 import org.chromium.chrome.modules.readaloud.Playback;
+import org.chromium.chrome.modules.readaloud.PlaybackArgs.PlaybackMode;
 import org.chromium.chrome.modules.readaloud.PlaybackArgs.PlaybackVoice;
 import org.chromium.chrome.modules.readaloud.PlaybackListener;
 import org.chromium.chrome.modules.readaloud.Player;
@@ -67,6 +70,7 @@ public class PlayerMediatorUnitTest {
     private static final String PUBLISHER = "Publisher";
     private static final long POSITION_NS = 1_000_000_000L; // one second
     private static final long DURATION_NS = 10_000_000_000L; // ten seconds
+    @Rule public final MockitoRule mMockitoRule = MockitoJUnit.rule();
     @Mock ReadAloudPrefs.Natives mPrefsNative;
     @Mock private PlayerCoordinator mPlayerCoordinator;
     @Mock private Playback mPlayback;
@@ -79,6 +83,7 @@ public class PlayerMediatorUnitTest {
     private ObservableSupplierImpl<List<PlaybackVoice>> mVoicesSupplier;
     private ObservableSupplierImpl<String> mSelectedVoiceIdSupplier;
     private ObservableSupplierImpl<Boolean> mHighlightingEnabledSupplier;
+    private ObservableSupplierImpl<Boolean> mPlaybackModeSelectorEnabledSupplier;
     @Captor private ArgumentCaptor<PlaybackListener> mPlaybackListenerCaptor;
     public UserActionTester mUserActionTester;
 
@@ -152,16 +157,18 @@ public class PlayerMediatorUnitTest {
 
     @Before
     public void setUp() {
-        MockitoAnnotations.initMocks(this);
         resetPlayback();
         doReturn(TITLE).when(mPlaybackMetadata).title();
         doReturn(PUBLISHER).when(mPlaybackMetadata).publisher();
+        doReturn(PlaybackMode.OVERVIEW).when(mPlaybackMetadata).playbackMode();
         mVoicesSupplier = new ObservableSupplierImpl<>();
         mVoicesSupplier.set(List.of(new PlaybackVoice("en", "a")));
         mSelectedVoiceIdSupplier = new ObservableSupplierImpl<>();
         mSelectedVoiceIdSupplier.set("a");
         mHighlightingEnabledSupplier = new ObservableSupplierImpl<>();
         mHighlightingEnabledSupplier.set(true);
+        mPlaybackModeSelectorEnabledSupplier = new ObservableSupplierImpl<>();
+        mPlaybackModeSelectorEnabledSupplier.set(false);
         ReadAloudPrefsJni.setInstanceForTesting(mPrefsNative);
         mMockPrefServiceHelper = new MockPrefServiceHelper();
         mPlaybackData = new TestPlaybackData();
@@ -170,6 +177,7 @@ public class PlayerMediatorUnitTest {
         doReturn(true).when(mDelegate).isHighlightingSupported();
         doReturn(mHighlightingEnabledSupplier).when(mDelegate).getHighlightingEnabledSupplier();
         doReturn(mVoicesSupplier).when(mDelegate).getCurrentLanguageVoicesSupplier();
+        doReturn(mPlaybackModeSelectorEnabledSupplier).when(mDelegate).getPlaybackModeSelectionEnabled();
         doReturn(mSelectedVoiceIdSupplier).when(mDelegate).getVoiceIdSupplier();
         doReturn(mMockPrefServiceHelper.getPrefService()).when(mDelegate).getPrefService();
         mPreviewPromise = new Promise<>();
@@ -203,6 +211,7 @@ public class PlayerMediatorUnitTest {
         assertEquals(PUBLISHER, mModel.get(PlayerProperties.PUBLISHER));
         assertEquals(true, mModel.get(PlayerProperties.HIGHLIGHTING_SUPPORTED));
         assertEquals(true, mModel.get(PlayerProperties.HIGHLIGHTING_ENABLED));
+        assertEquals(mPlaybackMetadata.playbackMode().getValue(), mModel.get(PlayerProperties.PLAYBACK_MODE));
     }
 
     @Test
@@ -579,6 +588,13 @@ public class PlayerMediatorUnitTest {
         mOnSeekBarChangeListener.onStopTrackingTouch(mSeekbar);
 
         histogram.assertExpected();
+    }
+
+    @Test
+    public void testObservePlaybackModeSelectionEnabled() {
+        mPlaybackModeSelectorEnabledSupplier.set(true);
+
+        assertEquals(true, mModel.get(PlayerProperties.PLAYBACK_MODE_SELECTION_ENABLED));
     }
 
     @Test

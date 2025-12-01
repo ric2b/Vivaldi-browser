@@ -19,6 +19,7 @@
 
 namespace ash {
 
+using kiosk::test::LaunchAppManually;
 using kiosk::test::TheKioskApp;
 
 // Verifies Kiosk does not launch with `PERMANENTLY_UNTRUSTED` cros settings.
@@ -42,7 +43,7 @@ IN_PROC_BROWSER_TEST_P(KioskUntrustedCrosSettingsTest, DoesNotLaunch) {
   ScopedCrosSettingsTestHelper settings{/*create_settings_service=*/false};
   settings.ReplaceDeviceSettingsProviderWithStub();
   settings.SetTrustedStatus(CrosSettingsProvider::PERMANENTLY_UNTRUSTED);
-  ASSERT_TRUE(kiosk_.LaunchManually(TheKioskApp()));
+  ASSERT_TRUE(LaunchAppManually(TheKioskApp()));
 
   // Kiosk does not launch when settings are `PERMANENTLY_UNTRUSTED`.
   EXPECT_FALSE(KioskController::Get().IsSessionStarting());
@@ -54,10 +55,9 @@ INSTANTIATE_TEST_SUITE_P(
     testing::Values(KioskMixin::Config{/*name=*/"WebApp",
                                        /*auto_launch_account_id=*/{},
                                        {KioskMixin::SimpleWebAppOption()}},
-                    KioskMixin::Config{
-                        /*name=*/"ChromeApp",
-                        /*auto_launch_account_id=*/{},
-                        {KioskMixin::SimpleChromeAppOption()}}, ),
+                    KioskMixin::Config{/*name=*/"ChromeApp",
+                                       /*auto_launch_account_id=*/{},
+                                       {KioskMixin::SimpleChromeAppOption()}}),
     KioskMixin::ConfigName);
 
 }  // namespace ash

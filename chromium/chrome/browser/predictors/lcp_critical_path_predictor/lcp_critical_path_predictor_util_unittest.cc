@@ -23,7 +23,9 @@
 using testing::StrictMock;
 
 namespace predictors {
+
 namespace {
+
 class Updater {
  public:
   Updater(size_t sliding_window_size, size_t max_histogram_buckets)
@@ -150,6 +152,19 @@ void InitializeSubresourceUrlDestinationsBucket(
         ->mutable_fetched_subresource_url_destination()
         ->insert({url.first, url.second});
   }
+}
+
+LcpElementLocatorStat CreateLcpElementLocatorStat(
+    std::vector<std::pair<std::string, double>> lcp_element_locator_buckets,
+    double other_bucket_frequency) {
+  LcpElementLocatorStat lcp_element_locator_stat;
+  for (auto [lcp_element_locator, frequency] : lcp_element_locator_buckets) {
+    auto* bucket = lcp_element_locator_stat.add_lcp_element_locator_buckets();
+    bucket->set_lcp_element_locator(lcp_element_locator);
+    bucket->set_frequency(frequency);
+  }
+  lcp_element_locator_stat.set_other_bucket_frequency(other_bucket_frequency);
+  return lcp_element_locator_stat;
 }
 
 }  // namespace
@@ -1264,6 +1279,26 @@ TEST(LcppMultipleKeyTest, GetFirstLevelPath) {
   }
 }
 
+TEST(RecordLcpElementLocatorHistogramTest, ReduceSlidingWindowSize) {
+  LcppStat lcpp_stat;
+  *lcpp_stat.mutable_lcp_element_locator_stat() =
+      CreateLcpElementLocatorStat({{"#a", 3.0}, {"#b", 2.0}, {"#c", 1.0}}, 4.0);
+
+  // Reduce sliding_window_size from 10 to 5.
+  RecordLcpElementLocatorHistogramForTesting(
+      /*sliding_window_size=*/5, /*max_histogram_buckets=*/3, "#d", lcpp_stat);
+  EXPECT_EQ(lcpp_stat.lcp_element_locator_stat(),
+            CreateLcpElementLocatorStat({{"#a", 1.2}, {"#b", 0.8}, {"#d", 1.0}},
+                                        /*other_bucket_frequency=*/2.0));
+
+  // Reduce sliding_window_size from 5 to 1.
+  RecordLcpElementLocatorHistogramForTesting(
+      /*sliding_window_size=*/1, /*max_histogram_buckets=*/3, "#e", lcpp_stat);
+  EXPECT_EQ(lcpp_stat.lcp_element_locator_stat(),
+            CreateLcpElementLocatorStat({{"#e", 1.0}},
+                                        /*other_bucket_frequency=*/0.0));
+}
+
 class LcppDataMapTest : public testing::Test {
  public:
   void InitializeDB(const LoadingPredictorConfig& config) {
@@ -1431,10 +1466,56 @@ class LcppDataMapFeatures
   LcppDataMapFeatures() {
     scoped_feature_list_.InitWithFeatures(GetParam(),
                                           /*disabled_features=*/{});
+    constexpr char kSlidingWindowSize[] = "5";
+    constexpr char kMaxHistogramBuckets[] = "2";
+    scoped_feature_list_for_sliding_window_and_buckets_
+        .InitWithFeaturesAndParameters(
+            {
+                {blink::features::kLCPCriticalPathPredictor,
+                 {{blink::features::kLCPCriticalPathPredictorSlidingWindowSize
+                       .name,
+                   kSlidingWindowSize},
+                  {blink::features::kLCPCriticalPathPredictorMaxHistogramBuckets
+                       .name,
+                   kMaxHistogramBuckets}}},
+                {blink::features::kLCPScriptObserver,
+                 {{blink::features::kLCPScriptObserverSlidingWindowSize.name,
+                   kSlidingWindowSize},
+                  {blink::features::kLCPScriptObserverMaxHistogramBuckets.name,
+                   kMaxHistogramBuckets}}},
+                {blink::features::kLCPPFontURLPredictor,
+                 {{blink::features::kLCPPFontURLPredictorSlidingWindowSize.name,
+                   kSlidingWindowSize},
+                  {blink::features::kLCPPFontURLPredictorMaxHistogramBuckets
+                       .name,
+                   kMaxHistogramBuckets}}},
+                {blink::features::kHttpDiskCachePrewarming,
+                 {{blink::features::kHttpDiskCachePrewarmingSlidingWindowSize
+                       .name,
+                   kSlidingWindowSize},
+                  {blink::features::kHttpDiskCachePrewarmingMaxHistogramBuckets
+                       .name,
+                   kMaxHistogramBuckets}}},
+                {blink::features::kLCPPAutoPreconnectLcpOrigin,
+                 {{blink::features::kLCPPAutoPreconnectSlidingWindowSize.name,
+                   kSlidingWindowSize},
+                  {blink::features::kLCPPAutoPreconnectMaxHistogramBuckets.name,
+                   kMaxHistogramBuckets}}},
+                {blink::features::kLCPPDeferUnusedPreload,
+                 {{blink::features::kLCPPDeferUnusedPreloadSlidingWindowSize
+                       .name,
+                   kSlidingWindowSize},
+                  {blink::features::kLCPPDeferUnusedPreloadMaxHistogramBuckets
+                       .name,
+                   kMaxHistogramBuckets}}},
+            },
+            {});
   }
 
  private:
   base::test::ScopedFeatureList scoped_feature_list_;
+  base::test::ScopedFeatureList
+      scoped_feature_list_for_sliding_window_and_buckets_;
 };
 
 auto& kLCPPInitiatorOrigin = blink::features::kLCPPInitiatorOrigin;
@@ -1490,8 +1571,6 @@ TEST_P(LcppDataMapFeatures, Base) {
 TEST_P(LcppDataMapFeatures, LearnLcpp) {
   LoadingPredictorConfig config;
   PopulateTestConfig(&config);
-  EXPECT_EQ(5U, config.lcpp_histogram_sliding_window_size);
-  EXPECT_EQ(2U, config.max_lcpp_histogram_buckets);
   InitializeDB(config);
   EXPECT_TRUE(GetDataMap().empty());
 
@@ -1613,8 +1692,6 @@ TEST_P(LcppDataMapFeatures, LearnLcpp) {
 TEST_P(LcppDataMapFeatures, LearnFontUrls) {
   LoadingPredictorConfig config;
   PopulateTestConfig(&config);
-  EXPECT_EQ(5U, config.lcpp_histogram_sliding_window_size);
-  EXPECT_EQ(2U, config.max_lcpp_histogram_buckets);
   InitializeDB(config);
   EXPECT_TRUE(GetDataMap().empty());
 
@@ -1659,8 +1736,6 @@ TEST_P(LcppDataMapFeatures, LearnFontUrls) {
 TEST_P(LcppDataMapFeatures, LearnSubresourceUrls) {
   LoadingPredictorConfig config;
   PopulateTestConfig(&config);
-  EXPECT_EQ(5U, config.lcpp_histogram_sliding_window_size);
-  EXPECT_EQ(2U, config.max_lcpp_histogram_buckets);
   InitializeDB(config);
   EXPECT_TRUE(GetDataMap().empty());
   const network::mojom::RequestDestination kEmpty =
@@ -1865,7 +1940,6 @@ class LcppMultipleKeyTest
     LoadingPredictorConfig config;
     PopulateTestConfig(&config);
     config.max_hosts_to_track_for_lcpp = 100u;
-    config.lcpp_histogram_sliding_window_size = 10u;
     config.lcpp_multiple_key_histogram_sliding_window_size = 100u;
     config.lcpp_multiple_key_max_histogram_buckets = 100u;
     InitializeDB(config);

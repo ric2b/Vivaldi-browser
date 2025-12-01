@@ -42,7 +42,6 @@ bzl_library(
 py_strict_library(
     name = "tpu_test_wrapper",
     srcs = ["tpu_test_wrapper.py"],
-    srcs_version = "PY3",
     deps = [
         "//tensorflow/python/platform:flags",
         "//tensorflow/python/util:tf_inspect",
@@ -53,8 +52,6 @@ py_strict_test(
     name = "tpu_test_wrapper_test",
     srcs = ["tpu_test_wrapper_test.py"],
     main = "tpu_test_wrapper_test.py",
-    python_version = "PY3",
-    srcs_version = "PY3",
     tags = [
         "no_oss_py35",
         "no_pip",
@@ -98,7 +95,6 @@ alias(
 pytype_strict_library(
     name = "async_checkpoint",
     srcs = ["async_checkpoint.py"],
-    srcs_version = "PY3",
     deps = [
         "//tensorflow/core:protos_all_py",
         "//tensorflow/python/client:session",
@@ -164,7 +160,6 @@ pytype_strict_library(
 pytype_strict_library(
     name = "preempted_hook_py",
     srcs = ["preempted_hook.py"],
-    srcs_version = "PY3",
     deps = [
         "//tensorflow/python/distribute/cluster_resolver:tpu_cluster_resolver_py",
         "//tensorflow/python/platform:tf_logging",
@@ -198,7 +193,6 @@ py_strict_library(
 py_strict_library(
     name = "functional",
     srcs = ["functional.py"],
-    srcs_version = "PY3",
     visibility = [
         "//visibility:public",
     ],
@@ -210,7 +204,6 @@ py_strict_library(
 pytype_strict_library(
     name = "topology",
     srcs = ["topology.py"],
-    srcs_version = "PY3",
     deps = [
         "//tensorflow/core/protobuf/tpu:topology_proto_py",
         "//tensorflow/python/util:numpy_compat",
@@ -224,7 +217,6 @@ py_strict_library(
     srcs = [
         "__init__.py",
     ],
-    srcs_version = "PY3",
     deps = ["//tensorflow/python/framework:versions"],
 )
 
@@ -234,7 +226,6 @@ py_strict_library(
         "__init__.py",
         "api.py",
     ],
-    srcs_version = "PY3",
     deps = [
         ":feature_column_v2",
         ":tpu_embedding_for_serving",
@@ -324,7 +315,6 @@ pytype_strict_library(
         "tpu_strategy_util.py",
         "training_loop.py",
     ],
-    srcs_version = "PY3",
     deps = [
         ":tensor_tracer",
         ":topology",
@@ -459,7 +449,6 @@ pytype_strict_library(
     srcs = [
         "datasets.py",
     ],
-    srcs_version = "PY3",
     visibility = visibility,
     deps = [
         "//tensorflow/python/data/experimental/ops:interleave_ops",
@@ -613,7 +602,6 @@ pytype_strict_library(
 py_strict_library(
     name = "tpu_name_util",
     srcs = ["tpu_name_util.py"],
-    srcs_version = "PY3",
     deps = [
         "//tensorflow/python/util:tf_export",
     ],
@@ -709,7 +697,6 @@ tf_py_strict_test(
 pytype_strict_library(
     name = "tpu_embedding_v2_utils",
     srcs = ["tpu_embedding_v2_utils.py"],
-    srcs_version = "PY3",
     deps = [
         "//tensorflow/core/protobuf/tpu:optimization_parameters_proto_py",
         "//tensorflow/core/protobuf/tpu:tpu_embedding_configuration_proto_py",
@@ -734,7 +721,6 @@ pytype_strict_library(
 pytype_strict_library(
     name = "tpu_embedding_v2",
     srcs = ["tpu_embedding_v2.py"],
-    srcs_version = "PY3",
     deps = [
         ":tpu_embedding_v2_utils",
         ":tpu_py",
@@ -778,7 +764,6 @@ pytype_strict_library(
 pytype_strict_library(
     name = "tpu_embedding_base",
     srcs = ["tpu_embedding_base.py"],
-    srcs_version = "PY3",
     deps = [
         ":tpu_embedding_v2_utils",
         "//tensorflow/python/framework:dtypes",
@@ -847,17 +832,16 @@ tf_py_strict_test(
         "//tensorflow/core/tpu/kernels:sparse_core_layout_proto_py",
         "//tensorflow/python/compat:v2_compat",
         "//tensorflow/python/framework:constant_op",
+        "//tensorflow/python/framework:dtypes",
         "//tensorflow/python/ops:array_ops",
         "//tensorflow/python/ops:math_ops",
         "//tensorflow/python/platform:client_testlib",
-        "@absl_py//absl/logging",
     ],
 )
 
 pytype_strict_library(
     name = "tpu_embedding_for_serving",
     srcs = ["tpu_embedding_for_serving.py"],
-    srcs_version = "PY3",
     deps = [
         ":tpu_embedding_base",
         ":tpu_embedding_v2_utils",
@@ -877,6 +861,8 @@ pytype_strict_library(
         "//tensorflow/python/ops:sparse_ops",
         "//tensorflow/python/ops:variables",
         "//tensorflow/python/ops/ragged:ragged_tensor",
+        "//tensorflow/python/trackable:base",
+        "//tensorflow/python/trackable:constants",
         "//tensorflow/python/types:core",
         "//tensorflow/python/util:nest",
         "//tensorflow/python/util:tf_export",
@@ -889,8 +875,6 @@ tf_py_strict_test(
     srcs = [
         "tpu_embedding_for_serving_test.py",
     ],
-    python_version = "PY3",
-    srcs_version = "PY3",
     deps = [
         ":tpu_embedding_for_serving",
         ":tpu_embedding_v2_utils",
@@ -909,7 +893,6 @@ tf_py_strict_test(
 pytype_strict_library(
     name = "tpu_embedding_v1",
     srcs = ["tpu_embedding_v1.py"],
-    srcs_version = "PY3",
     deps = [
         ":tpu_embedding_base",
         ":tpu_embedding_v2_utils",
@@ -936,8 +919,6 @@ tf_py_strict_test(
     srcs = [
         "tpu_embedding_v2_utils_test.py",
     ],
-    python_version = "PY3",
-    srcs_version = "PY3",
     deps = [
         ":tpu_embedding_v2_utils",
         "//tensorflow/core/protobuf/tpu:tpu_embedding_configuration_proto_py",
@@ -954,7 +935,6 @@ tpu_py_strict_test(
     ],
     disable_experimental = True,
     disable_mlir_bridge = False,
-    python_version = "PY3",
     deps = [
         ":functional",
         ":tpu_py",
@@ -993,7 +973,6 @@ tpu_py_strict_test(
 # NOTE this target should only be depended on by the tpu_test_wrapper macro.
 py_strict_library(
     name = "tpu_test_deps",
-    srcs_version = "PY3",
     visibility = ["//visibility:public"],
     deps = [
         "//tensorflow/python/platform:client_testlib",
@@ -1119,9 +1098,7 @@ tpu_py_strict_test(
     # copybara:uncomment disable_v5 = False,
     # copybara:uncomment disable_v5_grm = True,
     # copybara:uncomment disable_v6e = True,
-    python_version = "PY3",
     shard_count = 4,
-    srcs_version = "PY3",
     # copybara:uncomment use_tpu_plugin_and_capi = True,
     deps = [
         ":tpu_embedding_for_serving",
@@ -1174,10 +1151,8 @@ tpu_py_strict_test(
             "--tf_xla_disable_full_embedding_pipelining=true"
         ),
     },
-    python_version = "PY3",
     # Make it so there are enough shards so each test runs in separate shards.
     shard_count = 12,
-    srcs_version = "PY3",
     visibility = ["//visibility:private"],
     deps = [
         ":device_assignment",
@@ -1190,19 +1165,18 @@ tpu_py_strict_test(
         "//tensorflow/python/distribute:tpu_strategy",
         "//tensorflow/python/distribute:values",
         "//tensorflow/python/distribute/cluster_resolver:tpu_cluster_resolver_py",
-        "//tensorflow/python/eager:context",
         "//tensorflow/python/eager:def_function",
         "//tensorflow/python/eager:remote",
-        "//tensorflow/python/framework:combinations",
         "//tensorflow/python/framework:config",
         "//tensorflow/python/framework:constant_op",
         "//tensorflow/python/framework:dtypes",
         "//tensorflow/python/framework:sparse_tensor",
         "//tensorflow/python/ops:array_ops",
         "//tensorflow/python/platform:client_testlib",
+        "//tensorflow/python/saved_model:load",
+        "//tensorflow/python/saved_model:save",
         "//third_party/py/numpy",
         "@absl_py//absl/flags",
-        "@absl_py//absl/logging",
         "@absl_py//absl/testing:parameterized",
     ],
 )

@@ -4,6 +4,7 @@
 
 export namespace Chrome {
   export namespace DevTools {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     export interface EventSink<ListenerT extends(...args: any) => void> {
       addListener(listener: ListenerT): void;
       removeListener(listener: ListenerT): void;
@@ -11,9 +12,21 @@ export namespace Chrome {
 
     export interface Resource {
       readonly url: string;
+      readonly type: string;
 
       getContent(callback: (content: string, encoding: string) => unknown): void;
       setContent(content: string, commit: boolean, callback?: (error?: Object) => unknown): void;
+      /**
+       * Augments this resource's scopes information based on the list of {@link NamedFunctionRange}s
+       * for improved debuggability and function naming.
+       *
+       * @throws
+       * If this resource was not produced by a sourcemap or if {@link ranges} are not nested properly.
+       * Concretely: For each range, start position must be less than end position, and
+       * there must be no "straddling" (i.e. partially overlapping ranges).
+       */
+      setFunctionRangesForScript(ranges: NamedFunctionRange[]): Promise<void>;
+      attachSourceMapURL(sourceMapURL: string): Promise<void>;
     }
 
     export interface InspectedWindow {
@@ -31,7 +44,7 @@ export namespace Chrome {
             details: unknown[],
             isError: boolean,
             isException: boolean,
-            value: string
+            value: string,
           }) => unknown): void;
       getResources(callback: (resources: Resource[]) => unknown): void;
       reload(reloadOptions?: {ignoreCache?: boolean, injectedScript?: string, userAgent?: string}): void;
@@ -157,10 +170,13 @@ export namespace Chrome {
     export type RecorderExtensionPlugin = RecorderExtensionExportPlugin|RecorderExtensionReplayPlugin;
 
     export interface RecorderExtensionExportPlugin {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       stringify(recording: Record<string, any>): Promise<string>;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       stringifyStep(step: Record<string, any>): Promise<string>;
     }
     export interface RecorderExtensionReplayPlugin {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       replay(recording: Record<string, any>): void;
     }
 
@@ -170,6 +186,7 @@ export namespace Chrome {
     export interface RemoteObject {
       type: RemoteObjectType;
       className?: string;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       value?: any;
       description?: string;
       objectId?: RemoteObjectId;
@@ -232,9 +249,8 @@ export namespace Chrome {
        * Retrieve function name(s) for the function(s) containing the rawLocation. This returns more than one entry if
        * the location is inside of an inlined function with the innermost function at index 0.
        */
-      getFunctionInfo(rawLocation: RawLocation):
-          Promise<{frames: Array<FunctionInfo>, missingSymbolFiles: Array<string>}|{missingSymbolFiles: Array<string>}|
-                  {frames: Array<FunctionInfo>}>;
+      getFunctionInfo(rawLocation: RawLocation): Promise<{frames: FunctionInfo[], missingSymbolFiles: string[]}|
+                                                         {missingSymbolFiles: string[]}|{frames: FunctionInfo[]}>;
 
       /**
        * Find locations in raw modules corresponding to the inline function
@@ -272,9 +288,9 @@ export namespace Chrome {
       releaseObject(objectId: RemoteObjectId): Promise<void>;
     }
 
-
     export interface SupportedScriptTypes {
       language: string;
+      // eslint-disable-next-line @typescript-eslint/naming-convention
       symbol_types: string[];
     }
 
@@ -296,6 +312,16 @@ export namespace Chrome {
           Promise<void>;
     }
 
+    export interface Position {
+      line: number;
+      column: number;
+    }
+
+    export interface NamedFunctionRange {
+      readonly name: string;
+      readonly start: Position;
+      readonly end: Position;
+    }
 
     export interface RecorderExtensions {
       registerRecorderExtensionPlugin(plugin: RecorderExtensionPlugin, pluginName: string, mediaType?: string):

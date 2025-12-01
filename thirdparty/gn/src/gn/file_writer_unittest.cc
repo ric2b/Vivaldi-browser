@@ -55,7 +55,8 @@ TEST(FileWriter, LongPathWrite) {
 
   const std::string data = "Hello World!";
 
-  base::FilePath file_path = temp_dir.GetPath().AppendASCII(std::string(255, 'A'));
+  base::FilePath file_path =
+      temp_dir.GetPath().AppendASCII(std::string(255, 'A'));
 
   EXPECT_GE(file_path.value().size(), MAX_PATH);
 

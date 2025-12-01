@@ -77,6 +77,10 @@
   E_CPONLY(kColorBatchUploadBackground) \
   E_CPONLY(kColorBatchUploadDataBackground) \
   E_CPONLY(kColorBatchUploadDataSeparator) \
+  /* BNPL Issuer GPay colors */ \
+  E_CPONLY(kColorBnplIssuerLabelForeground) \
+  E_CPONLY(kColorBnplIssuerLabelForegroundDisabled) \
+  E_CPONLY(kColorBnplIssuerLinkedIneligibleBackground) \
   /* Compose colors */ \
   E_CPONLY(kColorComposeDialogBackground) \
   E_CPONLY(kColorComposeDialogDivider) \
@@ -147,7 +151,6 @@
   E_CPONLY(kColorExtensionMenuPinButtonIcon) \
   E_CPONLY(kColorExtensionMenuPinButtonIconDisabled) \
   E_CPONLY(kColorExtensionsMenuContainerBackground) \
-  E_CPONLY(kColorExtensionsToolbarControlsBackground) \
   E_CPONLY(kColorExtensionsMenuText) \
   E_CPONLY(kColorExtensionsMenuSecondaryText) \
   /* Feature Promo bubble colors. */ \
@@ -191,6 +194,8 @@
   /* Intent Picker colors. */ \
   E_CPONLY(kColorIntentPickerItemBackgroundHovered) \
   E_CPONLY(kColorIntentPickerItemBackgroundSelected) \
+  /* Glic colors */ \
+  E_CPONLY(kColorGlicBackground) \
   /* Hover Button colors */ \
   E_CPONLY(kColorHoverButtonBackgroundHovered) \
   /* Lens overlay colors. */ \
@@ -208,6 +213,9 @@
   /* Media router colors. */ \
   E_CPONLY(kColorMediaRouterIconActive) \
   E_CPONLY(kColorMediaRouterIconWarning) \
+  /* Multi contents view colors. */ \
+  E_CPONLY(kColorMulitContentsViewActiveContentOutline) \
+  E_CPONLY(kColorMulitContentsViewInactiveContentOutline) \
   /* New tab button colors. */ \
   E_CPONLY(kColorNewTabButtonForegroundFrameActive) \
   E_CPONLY(kColorNewTabButtonForegroundFrameInactive) \
@@ -385,6 +393,8 @@
   E_CPONLY(kColorPageInfoSubtitleForeground) \
   E_CPONLY(kColorPageInfoPermissionBlockedOnSystemLevelDisabled) \
   E_CPONLY(kColorPageInfoPermissionUsedIcon) \
+  /* Parent access local web approval dialog colors */ \
+  E_CPONLY(kColorParentAccessViewLocalWebApprovalBackground) \
   /* Payments colors. */ \
   E_CPONLY(kColorPaymentsFeedbackTipBackground) \
   E_CPONLY(kColorPaymentsFeedbackTipBorder) \
@@ -466,7 +476,6 @@
   E_CPONLY(kColorPwaMenuButtonIcon) \
   E_CPONLY(kColorPwaSecurityChipForeground) \
   E_CPONLY(kColorPwaSecurityChipForegroundDangerous) \
-  E_CPONLY(kColorPwaSecurityChipForegroundPolicyCert) \
   E_CPONLY(kColorPwaSecurityChipForegroundSecure) \
   E_CPONLY(kColorPwaTabBarBottomSeparator) \
   E_CPONLY(kColorPwaTabBarTopSeparator) \
@@ -591,6 +600,7 @@
   E_CPONLY(kColorShareThisTabSourceViewBorder) \
   /* The color used in the Tab Group Sharing Recent Activity dialog */ \
   E_CPONLY(kColorSharingRecentActivityDialogFaviconContainer) \
+  E_CPONLY(kColorSharingRecentActivityDialogActivityContainer) \
   /* Side panel colors. */ \
   E_CPONLY(kColorSidePanelBackground) \
   E_CPONLY(kColorSidePanelBadgeBackground) \
@@ -794,7 +804,6 @@
   E_CPONLY(kColorTaskManagerTableBackgroundSelectedUnfocused) \
   E_CPONLY(kColorTaskManagerTableHeaderBackground) \
   E_CPONLY(kColorTaskManagerSearchBarBackground) \
-  E_CPONLY(kColorTaskManagerSearchBarHoverOn) \
   E_CPONLY(kColorTaskManagerSearchBarTransparent) \
   E_CPONLY(kColorTaskManagerSearchBarPlaceholderText) \
   /* Thumbnail tab colors. */ \

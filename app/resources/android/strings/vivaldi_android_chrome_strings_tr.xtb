@@ -1,7 +1,10 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="tr">
+<translation id="1204037785786432551">Bağlantıyı indir</translation>
+<translation id="1206892813135768548">Bağlantı metnini kopyala</translation>
 <translation id="1397811292916898096"><ph name="PRODUCT_NAME" /> ile ara</translation>
+<translation id="1435593198351412143">PDF'leri otomatik olarak aç</translation>
 <translation id="1456207338570705181">Touch to Search, yalnızca Google, Vivaldi'de varsayılan arama motoru olarak ayarlandığında kullanılabilen bir özelliktir. Seçilen kelimeyi ve geçerli sayfayı bağlam olarak Google Arama'ya gönderir. <ph name="BEGIN_LINK" />Ayarlar<ph name="END_LINK" /> bölümünden kapatabilirsiniz.</translation>
 <translation id="1598449788754183301">Normal/özel sekmeler arasında geçiş yap</translation>
 <translation id="1644574205037202324">Geçmiş</translation>
@@ -14,10 +17,14 @@
 <translation id="2433507940547922241">Görünüm</translation>
 <translation id="2501278716633472235">Geri dön</translation>
 <translation id="2633278372998075009">Özel sekmeler</translation>
+<translation id="2650751991977523696">Dosya tekrar indirilsin mi?</translation>
 <translation id="265156376773362237">Standart önceden yükleme</translation>
 <translation id="272026394418727548">Vivaldi’nin ana sayfası</translation>
+<translation id="2842985007712546952">Ana klasör</translation>
 <translation id="2871733351037274014">Sayfaları önceden yükle</translation>
+<translation id="2904300462646366554">İndirilen PDF'ler, cihazınızdaki PDF görüntüleyicilerden biriyle otomatik olarak açılır</translation>
 <translation id="2951071800649516099">Daha sonrası için okuma listenize sayfalar ekleyin</translation>
+<translation id="3029276696788198026">Önceden yükleme kapalı</translation>
 <translation id="3060635849835183725">{BOOKMARKS_COUNT, plural,
           =1 {<ph name="BOOKMARKS_COUNT_ONE" /> yer imi}
           other {<ph name="BOOKMARKS_COUNT_MANY" /> yer imleri}}</translation>
@@ -34,6 +41,7 @@
 <translation id="3719826155360621982">Ana sayfa</translation>
 <translation id="3738139272394829648">Dokun ve Ara</translation>
 <translation id="385051799172605136">Geri</translation>
+<translation id="3987993985790029246">Bağlantıyı kopyala</translation>
 <translation id="399014816462153200">Makaleleri Okuyun:</translation>
 <translation id="4121750346708795461">Bu uygulamayı kullanarak, Vivaldi'nin <ph name="BEGIN_LINK1" />Son Kullanıcı Lisans Sözleşmesi<ph name="END_LINK1" />'ni ve <ph name="BEGIN_LINK2" />Gizlilik Politikası<ph name="END_LINK2" />'nı kabul etmiş olursunuz.</translation>
 <translation id="4137746084635924146">Geçerli cihaz dili</translation>
@@ -41,10 +49,13 @@
 <translation id="4195643157523330669">Yeni sekmede aç</translation>
 <translation id="4225895483398857530">Araç çubuğu kısayolu</translation>
 <translation id="4243710787042215766">Özel sekmede aç</translation>
+<translation id="4269820728363426813">Bağlantı adresini kopyala</translation>
 <translation id="4291407919474070700"><ph name="BEGIN_LINK" />Android ayarlarında ekran kilidini açın<ph name="END_LINK" /></translation>
 <translation id="4304713468139749426">Şifre Yöneticisi</translation>
 <translation id="451872707440238414">Yer imlerinizde arayın</translation>
 <translation id="4526803704855831732">Özel Sekmeler</translation>
+<translation id="4532845899244822526">Klasör seçin</translation>
+<translation id="4699172675775169585">Önbelleğe alınan resimler ve dosyalar</translation>
 <translation id="4719086422742491124">Sayfadan ayrılmadan web sitelerindeki konular hakkında bilgi edinin. Aramak için sayfada bir veya daha fazla kelime seçin.
 
 Touch to Search, yalnızca Google, Vivaldi'de varsayılan arama motoru olarak ayarlandığında kullanılabilen bir özelliktir.</translation>
@@ -55,20 +66,30 @@ Touch to Search, yalnızca Google, Vivaldi'de varsayılan arama motoru olarak ay
 <translation id="49576331685473090">İçerik engelleyici</translation>
 <translation id="5079259810715830221">Bir Google sitesi, bağlantıların sayfalarına özel olarak önceden yüklenmesini istediğinde, Vivaldi, sayfaları Google sunucuları aracılığıyla çerezler olmadan şifreler ve önceden yükler.Bu, kimliğinizi önceden yüklenmiş siteden gizler.</translation>
 <translation id="5118676864324397542"><ph name="APP_NAME" /> depolama alanı</translation>
+<translation id="5144385790872094440">Ziyaret ettiğiniz sayfaların bazıları önceden yüklenir. Bir Google sitesinden veya uygulamasından bağlantı verildiğinde sayfalar Google sunucuları aracılığıyla önceden yüklenebilir.</translation>
 <translation id="5186185447130319458">Özel</translation>
+<translation id="5206168361184759344">{FILE_COUNT,plural, =1{Dosya indiriliyor…}other{# dosya indiriliyor…}}</translation>
 <translation id="5233638681132016545">Yeni sekme</translation>
 <translation id="5375131951310889874">Sayfadan ayrılmadan web sitelerindeki konular hakkında bilgi edinin. Touch to Search, yalnızca Google, Vivaldi'de varsayılan arama motoru olarak ayarlandığında kullanılabilen bir özelliktir. Bir kelimeyi ve çevresindeki bağlamı Google Arama'ya göndererek tanımları, resimleri, arama sonuçlarını ve diğer ayrıntıları döndürür.
 
 Arama teriminizi ayarlamak için, seçmek için uzun basın. Aramanızı hassaslaştırmak için paneli tamamen yukarı kaydırın ve arama kutusuna dokunun.</translation>
+<translation id="543338862236136125">Şifreyi düzenle</translation>
 <translation id="572328651809341494">Son sekmeler</translation>
+<translation id="5833984609253377421">Bağlantıyı paylaş</translation>
 <translation id="6150320133806434356">Yer imi kaydedildi</translation>
+<translation id="6193448654517602979">Sekmeleri seç</translation>
 <translation id="6336451774241870485">Yeni özel sekme</translation>
 <translation id="6337323516034698937">Bu sekmeyi başka bir cihaza göndermek için her iki cihazda da Vivaldi Senkronizasyonun'da oturum açın. Gerekirse şifreleme parolasını girdiğinizden emin olun.</translation>
+<translation id="6341580099087024258">Dosyaların kaydedileceği yeri sor</translation>
 <translation id="6404511346730675251">Yer imini düzenle</translation>
+<translation id="650224091954855786">{FILE_COUNT,plural, =1{Dosya indirildi}other{# indirme işlemi tamamlandı}}</translation>
 <translation id="6585139692466700358">Vivaldi'nin çeviri sistemini kullanarak sayfaları diğer dillere çevirmeyi teklif et</translation>
 <translation id="6588043302623806746">Güvenli DNS kullan</translation>
 <translation id="6593061639179217415">Masaüstü sitesi</translation>
 <translation id="6610147964972079463">Özel sekmeleri kapat</translation>
+<translation id="6627583120233659107">Klasörü düzenle</translation>
+<translation id="6865313869410766144">Form otomatik doldurma verileri</translation>
+<translation id="6909589135458168665">Sayfaları Önceden Yükleme</translation>
 <translation id="7029995644714925509">Bir site, kendi sayfasındaki bağlantıları özel olarak önceden yüklemeyi istediğinde, Vivaldi, sayfaları çerezler olmadan Google sunucuları aracılığıyla şifreler ve önceden yükler.Bu, kimliğinizi önceden yüklenmiş siteden gizler.</translation>
 <translation id="706339621163631076">Tarayıcı Gizlilik Politikası</translation>
 <translation id="732145680195464316"><ph name="PRODUCT_NAME" /> uygulamasına eklendi</translation>
@@ -79,10 +100,13 @@ Arama teriminizi ayarlamak için, seçmek için uzun basın. Aramanızı hassasl
 <translation id="7456774706094330779">Genişletilmiş önceden yükleme</translation>
 <translation id="7465104139234185284">Tüm özel sekmeleri kapat</translation>
 <translation id="7481312909269577407">İleri</translation>
+<translation id="7764225426217299476">Adres ekle</translation>
 <translation id="7968014550143838305">Okuma listesine eklendi</translation>
 <translation id="804786196054284061">Son Kullanıcı Lisans Sözleşmesi</translation>
 <translation id="8062594758852531064">Genişletilmiş önceden yükleme:</translation>
+<translation id="8073388330009372546">Resmi yeni sekmede aç</translation>
 <translation id="8127542551745560481">Ana sayfayı düzenle</translation>
+<translation id="8266862848225348053">İndirme konumu</translation>
 <translation id="8348430946834215779">Mümkün olduğunda HTTPS kullanın ve HTTPS'yi desteklemeyen siteleri yüklemeden önce uyarı alın</translation>
 <translation id="8560602726703398413">Okuma listenizi Yer imlerinde bulun</translation>
 <translation id="85991616550051997">Ana sayfaya git</translation>

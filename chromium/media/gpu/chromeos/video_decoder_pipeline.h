@@ -14,7 +14,6 @@
 #include "base/memory/weak_ptr.h"
 #include "base/sequence_checker.h"
 #include "build/build_config.h"
-#include "build/chromeos_buildflags.h"
 #include "gpu/config/gpu_driver_bug_workarounds.h"
 #include "media/base/cdm_context.h"
 #include "media/base/limits.h"
@@ -27,7 +26,7 @@
 #include "media/gpu/chromeos/frame_resource_converter.h"
 #include "media/gpu/chromeos/image_processor_with_pool.h"
 #include "media/gpu/media_gpu_export.h"
-#include "media/mojo/mojom/stable/stable_video_decoder.mojom.h"
+#include "media/mojo/mojom/video_decoder.mojom.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/gfx/native_pixmap.h"
 #include "ui/gfx/native_pixmap_handle.h"
@@ -197,7 +196,7 @@ class MEDIA_GPU_EXPORT VideoDecoderPipeline : public VideoDecoder,
       std::unique_ptr<FrameResourceConverter> frame_converter,
       std::vector<Fourcc> renderable_fourccs,
       std::unique_ptr<MediaLog> media_log,
-      mojo::PendingRemote<stable::mojom::StableVideoDecoder> oop_video_decoder,
+      mojo::PendingRemote<mojom::VideoDecoder> oop_video_decoder,
       bool in_video_decoder_process);
   // Same idea but creates a VideoDecoderPipeline instance intended to be
   // adapted or bridged to a VideoDecodeAccelerator interface, for ARC clients.
@@ -230,9 +229,8 @@ class MEDIA_GPU_EXPORT VideoDecoderPipeline : public VideoDecoder,
   // This method is thread- and sequence-safe. |cb| is always called on the same
   // sequence as NotifySupportKnown().
   static void NotifySupportKnown(
-      mojo::PendingRemote<stable::mojom::StableVideoDecoder> oop_video_decoder,
-      base::OnceCallback<
-          void(mojo::PendingRemote<stable::mojom::StableVideoDecoder>)> cb);
+      mojo::PendingRemote<mojom::VideoDecoder> oop_video_decoder,
+      base::OnceCallback<void(mojo::PendingRemote<mojom::VideoDecoder>)> cb);
 
   static std::optional<SupportedVideoDecoderConfigs> GetSupportedConfigs(
       VideoDecoderType decoder_type,

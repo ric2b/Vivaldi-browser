@@ -42,15 +42,13 @@ namespace {
 
 class StorageTextureTests : public DawnTest {
   protected:
-    wgpu::RequiredLimits GetRequiredLimits(const wgpu::SupportedLimits& supported) override {
+    wgpu::Limits GetRequiredLimits(const wgpu::Limits& supported) override {
         // Just copy all the limits, though all we really care about is
         // maxStorageBuffersInFragmentStage
         // maxStorageTexturesInFragmentStage
         // maxStorageBuffersInVertexStage
         // maxStorageTexturesInVertexStage
-        wgpu::RequiredLimits required = {};
-        required.limits = supported.limits;
-        return required;
+        return supported;
     }
 
   public:
@@ -479,11 +477,11 @@ fn IsEqualTo(pixel : vec4f, expected : vec4f) -> bool {
         wgpu::CommandEncoder encoder = device.CreateCommandEncoder();
 
         const wgpu::Extent3D copyExtent = {kWidth, kHeight, sliceCount};
-        wgpu::ImageCopyBuffer imageCopyBuffer =
-            utils::CreateImageCopyBuffer(uploadBuffer, 0, kTextureBytesPerRowAlignment, kHeight);
-        wgpu::ImageCopyTexture imageCopyTexture;
-        imageCopyTexture.texture = outputTexture;
-        encoder.CopyBufferToTexture(&imageCopyBuffer, &imageCopyTexture, &copyExtent);
+        wgpu::TexelCopyBufferInfo texelCopyBufferInfo = utils::CreateTexelCopyBufferInfo(
+            uploadBuffer, 0, kTextureBytesPerRowAlignment, kHeight);
+        wgpu::TexelCopyTextureInfo texelCopyTextureInfo;
+        texelCopyTextureInfo.texture = outputTexture;
+        encoder.CopyBufferToTexture(&texelCopyBufferInfo, &texelCopyTextureInfo, &copyExtent);
 
         wgpu::CommandBuffer commandBuffer = encoder.Finish();
         queue.Submit(1, &commandBuffer);
@@ -677,11 +675,11 @@ fn IsEqualTo(pixel : vec4f, expected : vec4f) -> bool {
 
         wgpu::CommandEncoder encoder = device.CreateCommandEncoder();
         {
-            wgpu::ImageCopyTexture imageCopyTexture =
-                utils::CreateImageCopyTexture(storageTexture, mipLevel, {0, 0, 0});
-            wgpu::ImageCopyBuffer imageCopyBuffer = utils::CreateImageCopyBuffer(
+            wgpu::TexelCopyTextureInfo texelCopyTextureInfo =
+                utils::CreateTexelCopyTextureInfo(storageTexture, mipLevel, {0, 0, 0});
+            wgpu::TexelCopyBufferInfo texelCopyBufferInfo = utils::CreateTexelCopyBufferInfo(
                 resultBuffer, 0, kTextureBytesPerRowAlignment, size.height);
-            encoder.CopyTextureToBuffer(&imageCopyTexture, &imageCopyBuffer, &size);
+            encoder.CopyTextureToBuffer(&texelCopyTextureInfo, &texelCopyBufferInfo, &size);
         }
         wgpu::CommandBuffer commandBuffer = encoder.Finish();
         queue.Submit(1, &commandBuffer);
@@ -717,9 +715,6 @@ fn IsEqualTo(pixel : vec4f, expected : vec4f) -> bool {
 
 // Test that write-only storage textures are supported in compute shader.
 TEST_P(StorageTextureTests, WriteonlyStorageTextureInComputeShader) {
-    // TODO(crbug.com/388318201): investigate
-    DAWN_SUPPRESS_TEST_IF(IsCompatibilityMode() &&
-                          HasToggleEnabled("gl_force_es_31_and_no_extensions"));
     for (wgpu::TextureFormat format : utils::kAllTextureFormats) {
         if (!utils::TextureFormatSupportsStorageTexture(format, device, IsCompatibilityMode())) {
             continue;
@@ -746,14 +741,10 @@ TEST_P(StorageTextureTests, WriteonlyStorageTextureInComputeShader) {
 
 // Test that write-only storage textures are supported in fragment shader.
 TEST_P(StorageTextureTests, WriteonlyStorageTextureInFragmentShader) {
-    // TODO(crbug.com/388318201): investigate
-    DAWN_SUPPRESS_TEST_IF(IsCompatibilityMode() &&
-                          HasToggleEnabled("gl_force_es_31_and_no_extensions"));
-
     // TODO(crbug.com/dawn/2295): diagnose this failure on Pixel 4 OpenGLES
     DAWN_SUPPRESS_TEST_IF(IsOpenGLES() && IsAndroid() && IsQualcomm());
 
-    DAWN_SUPPRESS_TEST_IF(GetSupportedLimits().limits.maxStorageTexturesInFragmentStage < 1);
+    DAWN_SUPPRESS_TEST_IF(GetSupportedLimits().maxStorageTexturesInFragmentStage < 1);
 
     for (wgpu::TextureFormat format : utils::kAllTextureFormats) {
         if (!utils::TextureFormatSupportsStorageTexture(format, device, IsCompatibilityMode())) {
@@ -895,12 +886,13 @@ TEST_P(StorageTextureTests, SampledAndWriteonlyStorageTexturePingPong) {
     bufferDescriptor.usage = wgpu::BufferUsage::CopySrc | wgpu::BufferUsage::CopyDst;
     wgpu::Buffer resultBuffer = device.CreateBuffer(&bufferDescriptor);
 
-    wgpu::ImageCopyTexture imageCopyTexture;
-    imageCopyTexture.texture = storageTexture1;
+    wgpu::TexelCopyTextureInfo texelCopyTextureInfo;
+    texelCopyTextureInfo.texture = storageTexture1;
 
-    wgpu::ImageCopyBuffer imageCopyBuffer = utils::CreateImageCopyBuffer(resultBuffer, 0, 256, 1);
+    wgpu::TexelCopyBufferInfo texelCopyBufferInfo =
+        utils::CreateTexelCopyBufferInfo(resultBuffer, 0, 256, 1);
     wgpu::Extent3D extent3D = {1, 1, 1};
-    encoder.CopyTextureToBuffer(&imageCopyTexture, &imageCopyBuffer, &extent3D);
+    encoder.CopyTextureToBuffer(&texelCopyTextureInfo, &texelCopyBufferInfo, &extent3D);
 
     wgpu::CommandBuffer commands = encoder.Finish();
     queue.Submit(1, &commands);
@@ -1093,7 +1085,7 @@ fn doTest() -> bool {
 // Verify that the texture is correctly cleared to 0 before its first usage as a write-only storage
 // storage texture in a render pass.
 TEST_P(StorageTextureZeroInitTests, WriteonlyStorageTextureClearsToZeroInRenderPass) {
-    DAWN_SUPPRESS_TEST_IF(GetSupportedLimits().limits.maxStorageTexturesInFragmentStage < 1);
+    DAWN_SUPPRESS_TEST_IF(GetSupportedLimits().maxStorageTexturesInFragmentStage < 1);
 
     // Prepare the write-only storage texture.
     wgpu::Texture writeonlyStorageTexture = CreateTexture(
@@ -1178,7 +1170,7 @@ fn main(@builtin(local_invocation_id) local_id: vec3<u32>,) {
 
 // Verify read-write storage texture can work correctly in fragment shaders.
 TEST_P(ReadWriteStorageTextureTests, ReadWriteStorageTextureInFragmentShader) {
-    DAWN_SUPPRESS_TEST_IF(GetSupportedLimits().limits.maxStorageTexturesInFragmentStage < 1);
+    DAWN_SUPPRESS_TEST_IF(GetSupportedLimits().maxStorageTexturesInFragmentStage < 1);
 
     std::array<uint32_t, kWidth * kHeight> inputData;
     std::array<uint32_t, kWidth * kHeight> expectedData;
@@ -1301,7 +1293,7 @@ TEST_P(ReadWriteStorageTextureTests, ReadOnlyStorageTextureInVertexShader) {
     // TODO(crbug.com/dawn/2295): diagnose this failure on Pixel 6 OpenGLES
     DAWN_SUPPRESS_TEST_IF(IsOpenGLES() && IsAndroid() && IsARM());
 
-    DAWN_SUPPRESS_TEST_IF(GetSupportedLimits().limits.maxStorageTexturesInVertexStage < 1);
+    DAWN_SUPPRESS_TEST_IF(GetSupportedLimits().maxStorageTexturesInVertexStage < 1);
 
     constexpr wgpu::TextureFormat kStorageTextureFormat = wgpu::TextureFormat::R32Uint;
     const std::vector<uint8_t> kInitialTextureData = GetExpectedData(kStorageTextureFormat);
@@ -1349,7 +1341,7 @@ struct FragmentInput {
 
 // Verify read-only storage texture can work correctly in fragment shaders.
 TEST_P(ReadWriteStorageTextureTests, ReadOnlyStorageTextureInFragmentShader) {
-    DAWN_SUPPRESS_TEST_IF(GetSupportedLimits().limits.maxStorageTexturesInFragmentStage < 1);
+    DAWN_SUPPRESS_TEST_IF(GetSupportedLimits().maxStorageTexturesInFragmentStage < 1);
 
     constexpr wgpu::TextureFormat kStorageTextureFormat = wgpu::TextureFormat::R32Uint;
     const std::vector<uint8_t> kInitialTextureData = GetExpectedData(kStorageTextureFormat);
@@ -1506,21 +1498,21 @@ TEST_P(ReadWriteStorageTextureTests, ReadMipLevel0WriteMipLevel1) {
     computeEncoder.End();
 
     {
-        wgpu::ImageCopyTexture imageCopyTexture =
-            utils::CreateImageCopyTexture(texture, 0, {0, 0, 0});
-        wgpu::ImageCopyBuffer imageCopyBuffer =
-            utils::CreateImageCopyBuffer(resultBuffer0, 0, 256, 1);
+        wgpu::TexelCopyTextureInfo texelCopyTextureInfo =
+            utils::CreateTexelCopyTextureInfo(texture, 0, {0, 0, 0});
+        wgpu::TexelCopyBufferInfo texelCopyBufferInfo =
+            utils::CreateTexelCopyBufferInfo(resultBuffer0, 0, 256, 1);
         wgpu::Extent3D size({1, 1, 1});
-        encoder.CopyTextureToBuffer(&imageCopyTexture, &imageCopyBuffer, &size);
+        encoder.CopyTextureToBuffer(&texelCopyTextureInfo, &texelCopyBufferInfo, &size);
     }
 
     {
-        wgpu::ImageCopyTexture imageCopyTexture =
-            utils::CreateImageCopyTexture(texture, 1, {0, 0, 0});
-        wgpu::ImageCopyBuffer imageCopyBuffer =
-            utils::CreateImageCopyBuffer(resultBuffer1, 0, 256, 1);
+        wgpu::TexelCopyTextureInfo texelCopyTextureInfo =
+            utils::CreateTexelCopyTextureInfo(texture, 1, {0, 0, 0});
+        wgpu::TexelCopyBufferInfo texelCopyBufferInfo =
+            utils::CreateTexelCopyBufferInfo(resultBuffer1, 0, 256, 1);
         wgpu::Extent3D size({1, 1, 1});
-        encoder.CopyTextureToBuffer(&imageCopyTexture, &imageCopyBuffer, &size);
+        encoder.CopyTextureToBuffer(&texelCopyTextureInfo, &texelCopyBufferInfo, &size);
     }
 
     wgpu::CommandBuffer commandBuffer = encoder.Finish();
@@ -1583,11 +1575,12 @@ TEST_P(ReadWriteStorageTextureTests, ReadMipLevel2AsBothTextureBindingAndStorage
         uint32_t width = 4 >> mipLevel;
         uint32_t bytesPerRow = width * 4;
         wgpu::Extent3D copySize({width, 1, 1});
-        wgpu::ImageCopyTexture imageCopyTexture =
-            utils::CreateImageCopyTexture(texture, mipLevel, {0, 0, 0});
-        wgpu::TextureDataLayout textureDataLayout = utils::CreateTextureDataLayout(0, bytesPerRow);
+        wgpu::TexelCopyTextureInfo texelCopyTextureInfo =
+            utils::CreateTexelCopyTextureInfo(texture, mipLevel, {0, 0, 0});
+        wgpu::TexelCopyBufferLayout texelCopyBufferLayout =
+            utils::CreateTexelCopyBufferLayout(0, bytesPerRow);
         std::vector<uint8_t> data(bytesPerRow, mipLevel + 1);
-        queue.WriteTexture(&imageCopyTexture, data.data(), bytesPerRow, &textureDataLayout,
+        queue.WriteTexture(&texelCopyTextureInfo, data.data(), bytesPerRow, &texelCopyBufferLayout,
                            &copySize);
     }
 
@@ -1662,11 +1655,12 @@ TEST_P(ReadWriteStorageTextureTests, ReadMipLevel1AndWriteLevel2AtTheSameTime) {
         uint32_t width = 4 >> mipLevel;
         uint32_t bytesPerRow = width * 4;
         wgpu::Extent3D copySize({width, 1, 1});
-        wgpu::ImageCopyTexture imageCopyTexture =
-            utils::CreateImageCopyTexture(texture, mipLevel, {0, 0, 0});
-        wgpu::TextureDataLayout textureDataLayout = utils::CreateTextureDataLayout(0, bytesPerRow);
+        wgpu::TexelCopyTextureInfo texelCopyTextureInfo =
+            utils::CreateTexelCopyTextureInfo(texture, mipLevel, {0, 0, 0});
+        wgpu::TexelCopyBufferLayout texelCopyBufferLayout =
+            utils::CreateTexelCopyBufferLayout(0, bytesPerRow);
         std::vector<uint8_t> data(bytesPerRow, mipLevel + 1);
-        queue.WriteTexture(&imageCopyTexture, data.data(), bytesPerRow, &textureDataLayout,
+        queue.WriteTexture(&texelCopyTextureInfo, data.data(), bytesPerRow, &texelCopyBufferLayout,
                            &copySize);
     }
 
@@ -1695,12 +1689,12 @@ TEST_P(ReadWriteStorageTextureTests, ReadMipLevel1AndWriteLevel2AtTheSameTime) {
 
     // copy a texel from mip level 2
     {
-        wgpu::ImageCopyTexture imageCopyTexture =
-            utils::CreateImageCopyTexture(texture, 2, {0, 0, 0});
-        wgpu::ImageCopyBuffer imageCopyBuffer =
-            utils::CreateImageCopyBuffer(resultBuffer, 0, 256, 1);
+        wgpu::TexelCopyTextureInfo texelCopyTextureInfo =
+            utils::CreateTexelCopyTextureInfo(texture, 2, {0, 0, 0});
+        wgpu::TexelCopyBufferInfo texelCopyBufferInfo =
+            utils::CreateTexelCopyBufferInfo(resultBuffer, 0, 256, 1);
         wgpu::Extent3D size({1, 1, 1});
-        encoder.CopyTextureToBuffer(&imageCopyTexture, &imageCopyBuffer, &size);
+        encoder.CopyTextureToBuffer(&texelCopyTextureInfo, &texelCopyBufferInfo, &size);
     }
 
     wgpu::CommandBuffer commandBuffer = encoder.Finish();

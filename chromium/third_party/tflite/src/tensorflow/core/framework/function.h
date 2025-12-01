@@ -24,6 +24,7 @@ limitations under the License.
 
 // clang-format off
 // Required for IS_MOBILE_PLATFORM
+#include "absl/status/status.h"
 #include "tensorflow/core/framework/graph_debug_info.pb.h"
 #include "tensorflow/core/framework/op_def_builder.h"
 #include "tensorflow/core/platform/platform.h"
@@ -412,6 +413,9 @@ class FunctionLibraryDefinition : public OpRegistryInterface {
 
   static constexpr const char* const kGradientOp = "SymbolicGradient";
   static constexpr const char* const kFuncAttr = "f";
+
+  static constexpr const char* const kFunctionRunsAtMostOnce =
+      "function_runs_at_most_once";
 
   // Note: This constructor grabs `lib_def`'s lock in shared mode.
   FunctionLibraryDefinition(const FunctionLibraryDefinition& lib_def);
@@ -870,6 +874,11 @@ class FunctionLibraryRuntime : public core::WeakRefCounted {
     // and GPU (non-XLA) graphs.
     bool int_args_and_retvals_on_device = false;
 
+    // Indicates that the specified function will run at most once. This allows
+    // use to add extra optimizations such as clearing the executor state to
+    // reduce memory consumption.
+    bool function_runs_at_most_once = false;
+
     // This interface is EXPERIMENTAL and subject to change.
     //
     // Instantiates the function for XLA compilation on device_type. If empty,
@@ -891,6 +900,10 @@ class FunctionLibraryRuntime : public core::WeakRefCounted {
     auto opts = absl::make_unique<InstantiateOptions>();
     return Instantiate(function_name, attrs, *opts, handle);
   }
+
+  // Finalizes the function library runtime. The Instantiate method should be
+  // called before Finalize is called.
+  virtual absl::Status Finalize() { return absl::OkStatus(); };
 
   // Releases state associated with the handle.
   virtual absl::Status ReleaseHandle(Handle handle) = 0;

@@ -164,9 +164,9 @@ Running an origin trial requires the following:
 *   Make sure your feature is ready to run an origin trial experiment
             ([see
             above](/blink/origin-trials/running-an-origin-trial#is-feature-ready)).
-*   Review
+*   For Googlers, review
             [go/ChromeLaunchProcess](http://go/ChromeLaunchProcess)
-            and determine what launch approvals you require.
+            to determine if there are any additional launch approvals required.
 *   Integrate with the origin trials framework ([see
             below](/blink/origin-trials/running-an-origin-trial#integrate-feature)).
 *   Send an [Intent to Experiment](/blink/launching-features), via the
@@ -182,7 +182,7 @@ Running an origin trial requires the following:
     *   If feasible, this could include doing your own testing within
                 the developer's environment (any of test/staging/production).
     *   For an example, see [crbug.com/709211](https://crbug.com/709211).
-*   Publish a blog post on
+*   Optional: Publish a blog post on
             [developers.google.com/web/updates](http://developers.google.com/web/updates)
             about the feature when it lands beta.
     *   The OT team will add your feature to the [public developer
@@ -193,7 +193,7 @@ Running an origin trial requires the following:
 *   Update the feature's entry on
             [chromestatus.com](https://www.chromestatus.com/) to set the status
             to "Origin trial".
-*   You can review the developer registrations for your feature (and
+*   Optional: Googlers can review the developer registrations for your feature (and
             renewals) by following the instructions in the [feature author
             guide](http://go/running-an-origin-trial).
     *   In particular, be aware of any registrations that expect

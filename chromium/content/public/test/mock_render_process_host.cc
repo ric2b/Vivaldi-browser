@@ -230,6 +230,10 @@ void MockRenderProcessHost::OnBoostForLoadingAdded() {}
 
 void MockRenderProcessHost::OnBoostForLoadingRemoved() {}
 
+void MockRenderProcessHost::OnImmersiveXrSessionStarted() {}
+
+void MockRenderProcessHost::OnImmersiveXrSessionStopped() {}
+
 StoragePartition* MockRenderProcessHost::GetStoragePartition() {
   return browser_context_->GetStoragePartition(storage_partition_config_);
 }
@@ -372,6 +376,8 @@ bool MockRenderProcessHost::HasPriorityOverride() {
 
 void MockRenderProcessHost::ClearPriorityOverride() {}
 #endif  // !BUILDFLAG(IS_ANDROID)
+
+void MockRenderProcessHost::SetHasSpareRendererPriority(bool) {}
 
 #if BUILDFLAG(IS_ANDROID)
 ChildProcessImportance MockRenderProcessHost::GetEffectiveImportance() {

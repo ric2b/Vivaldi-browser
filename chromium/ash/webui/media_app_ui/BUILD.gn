@@ -6,12 +6,11 @@ import("//ash/webui/media_app_ui/media_app_files.gni")
 import("//ash/webui/media_app_ui/media_app_ui.gni")
 import("//ash/webui/web_applications/system_apps.gni")
 import("//build/buildflag_header.gni")
-import("//build/config/chromeos/ui_mode.gni")
 import("//mojo/public/tools/bindings/mojom.gni")
 import("//tools/typescript/ts_library.gni")
 import("//tools/typescript/webui_ts_library.gni")
 
-assert(is_chromeos_ash, "Media App is ash-chrome only")
+assert(is_chromeos, "Media App is ChromeOS only")
 
 static_library("media_app_ui") {
   sources = [
@@ -114,6 +113,7 @@ copy("copy_mojo") {
   public_deps = [
     ":mojo_bindings_untrusted_ts__generator",
     "//chromeos/ash/components/mantis/mojom:mojom_ts__generator",
+    "//chromeos/services/machine_learning/public/mojom:mojom_ts__generator",
   ]
   sources = []
   foreach(file, media_app_mojom_sources) {
@@ -170,7 +170,9 @@ ts_library("test_build_ts") {
   root_dir = ts_root_dir
   testonly = true
   in_files = media_app_test_ts
-  definitions = media_app_definitions_staged + media_app_test_definitions_staged
+  definitions =
+      media_app_definitions_staged + media_app_test_definitions_staged +
+      [ "//tools/typescript/definitions/strings.d.ts" ]
   deps = [
     ":build_ts",
     "//chrome/test/data/webui:build_ts",

@@ -90,6 +90,18 @@ inline constexpr char kDiscardRingTreatmentEnabled[] =
 inline constexpr char kPerformanceInterventionNotificationEnabled[] =
     "performance_tuning.intervention_notification.enabled";
 
+// The pref storing when was the last time the performance intervention
+// notification was shown.
+inline constexpr char kPerformanceInterventionNotificationLastShown[] =
+    "performance_tuning.intervention_notification.last_shown";
+
+// The pref storing a boolean list which keeps track whether the user has
+// accepted performance intervention with a true value and false if the
+// intervention was rejected. This is the second version of this pref
+// because the first was deprecated for saving inaccurate entries.
+inline constexpr char kPerformanceInterventionNotificationAcceptHistory[] =
+    "performance_tuning.intervention_notification.accept_history2";
+
 void RegisterLocalStatePrefs(PrefRegistrySimple* registry);
 
 void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry);

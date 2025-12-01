@@ -7,8 +7,61 @@ module viz.mojom;
 import "cc/mojom/element_id.mojom";
 import "cc/mojom/layer_type.mojom";
 import "skia/public/mojom/skcolor4f.mojom";
+import "services/viz/public/mojom/compositing/surface_range.mojom";
 import "ui/gfx/geometry/mojom/geometry.mojom";
+import "ui/gfx/mojom/rrect_f.mojom";
+import "services/viz/public/mojom/compositing/filter_operations.mojom";
+import "services/viz/public/mojom/compositing/copy_output_request.mojom";
+import "services/viz/public/mojom/compositing/resource_id.mojom";
+import "services/viz/public/mojom/compositing/subtree_capture_id.mojom";
 import "ui/gfx/mojom/transform.mojom";
+
+// Extra fields in a cc::MirrorLayerImpl that has been added to a tree or
+// modified in some interesting way since a prior tree update.
+struct MirrorLayerExtra {
+  int32 mirrored_layer_id;
+};
+
+// Extra fields in a cc::SurfaceLayerImpl that has been added to a tree or
+// modified in some interesting way since a prior tree update.
+struct SurfaceLayerExtra {
+  // This represents a range of surfaces the surface layer contains.
+  SurfaceRange surface_range;
+
+  // Number of frames to activation deadline.
+  // If nullopt, use the default lower bound deadline instead.
+  uint32? deadline_in_frames;
+
+  // This flag indicates whether the surface layer stretches content to fill
+  // bounds or not.
+  bool stretch_content_to_fill_bounds;
+
+  // This flag indicates whether the surface layer is hit testable or not.
+  bool surface_hit_testable;
+
+  // This flag indicates whether the surface layer has "pointer-events: none"
+  // or not.
+  bool has_pointer_events_none;
+
+  // This flag indicates whether the surface layer is refelction or not.
+  bool is_reflection;
+
+  // This flag tracks if a visibility reset took place in the associated
+  // SurfaceLayer and is used to update |will_draw_| on that layer accordingly.
+  bool will_draw_needs_reset;
+
+  // This flag indicates whether child paint flags (filter quality and
+  // dynamic range limit) should be overridden or not.
+  bool override_child_paint_flags;
+};
+
+// Extra properties that are specific to a LayerImpl type.
+union LayerExtra {
+  // Extra properties that are specific to MirrorLayerImpl.
+  MirrorLayerExtra mirror_layer_extra;
+  // Extra properties that are specific to SurfaceLayerImpl.
+  SurfaceLayerExtra surface_layer_extra;
+};
 
 // Details about a cc::LayerImpl that has been added to a tree or modified in
 // some interesting way since a prior tree update.
@@ -41,6 +94,13 @@ struct Layer {
   skia.mojom.SkColor4f background_color;
   skia.mojom.SkColor4f safe_opaque_background_color;
 
+  // Optional field that will be set if this Layer is a PictureLayer that is
+  // actually a solid color.
+  skia.mojom.SkColor4f? solid_color;
+
+  // Will be set to true for PictureLayers that are backdrop filter masks.
+  bool is_backdrop_filter_mask;
+
   // Optional stable identifier that may be referenced in property trees and
   // animations. Identifies a client-side object which can be represented by
   // multiple layers over time but only by a single layer at once.
@@ -59,6 +119,9 @@ struct Layer {
   int32 clip_tree_index;
   int32 effect_tree_index;
   int32 scroll_tree_index;
+
+  // Extra properties that are specific to a layerImpl type.
+  LayerExtra? layer_extra;
 };
 
 // See blink::AnchorPositionScrollData, from which the fields here are derived.
@@ -126,6 +189,8 @@ struct TransformNode {
   // Actual transformation parameters for this node. See cc::TransformNode.
   gfx.mojom.Transform local;
   gfx.mojom.Point3F origin;
+  gfx.mojom.Vector2dF post_translation;
+  gfx.mojom.Transform to_parent;
   gfx.mojom.PointF scroll_offset;
   gfx.mojom.Vector2dF snap_amount;
 
@@ -158,6 +223,10 @@ struct TransformNode {
   // corresponding to this node, if this node corresponds to the root of a
   // visible frame.
   cc.mojom.ElementId? visible_frame_element_id;
+
+  // cc::DamageReasonsSet bit mask tracking the damage reasons for changes to
+  // this node.
+  uint64 damage_reasons_bit_mask;
 };
 
 // Details about a new or updated node within a clip property tree.
@@ -218,6 +287,9 @@ struct EffectNode {
   // doesn't induce a render surface.
   gfx.mojom.Vector2dF surface_contents_scale;
 
+  SubtreeCaptureId subtree_capture_id;
+  gfx.mojom.Size subtree_size;
+
   // This is an SkBlendMode, which has no mojom definition yet. Must be manually
   // validated to be no greater than SkBlendMode::kLastMode.
   uint32 blend_mode;
@@ -225,6 +297,53 @@ struct EffectNode {
   // The index of the ancestor EffectNode which induces a render surface. Must
   // be a valid index in the same effect tree.
   int32 target_id;
+
+  FilterOperations filters;
+  FilterOperations backdrop_filters;
+  gfx.mojom.RRectF? backdrop_filter_bounds;
+  float backdrop_filter_quality;
+
+  // The element id corresponding to the mask to apply to the filtered backdrop
+  // image.
+  cc.mojom.ElementId? backdrop_mask_element_id;
+
+  bool cache_render_surface;
+  // Whether the contents should continue to be visible when rotated such that
+  // its back face is facing toward the camera. It's true by default.
+  bool double_sided;
+  bool trilinear_filtering;
+
+  // TODO(crbug.com/40461368): Delete this after implementation of
+  // SetHideLayerAndSubtree is cleaned up.
+  bool subtree_hidden;
+  // Whether this node has a potentially running (i.e., irrespective
+  // of exact timeline) filter animation.
+  bool has_potential_filter_animation;
+  // Whether this node has a potentially running (i.e., irrespective
+  // of exact timeline) backdrop-filter animation.
+  bool has_potential_backdrop_filter_animation;
+  // Whether this node has a potentially running (i.e., irrespective
+  // of exact timeline) opacity animation.
+  bool has_potential_opacity_animation;
+
+  // If set, the node's subtree has a copy request and the layer should
+  // not be skipped for draw property computation.
+  // TODO(crbug.com/406652614): Compute subtree_has_copy_request in
+  // EffectTree::UpdateEffects() instead of serializing it.
+  bool subtree_has_copy_request;
+
+  // If set, the effect node tries to not trigger a render surface due to it
+  // having a rounded corner.
+  bool is_fast_rounded_corner;
+  // True if a backdrop effect may be present on this effect (and therefore
+  // any side-effects on ancestors should be taken into account).
+  bool may_have_backdrop_effect;
+  // Whether this effect is related to a non-identity 2D scale transform (and no
+  // other transform).
+  bool has_2d_scale_transform;
+
+  // The CopyOutputRequests that have been made for this node.
+  array<CopyOutputRequest> copy_output_requests;
 };
 
 // Details about a new or updated node within a scroll property tree.

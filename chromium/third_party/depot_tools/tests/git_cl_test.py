@@ -981,7 +981,7 @@ class TestGitCl(unittest.TestCase):
                     ref_suffix
                 ] + (push_opts if push_opts else []), ),
                 (('remote:\n'
-                  'remote: Processing changes: (\)\n'
+                  'remote: Processing changes: (\\)\n'
                   'remote: Processing changes: (|)\n'
                   'remote: Processing changes: (/)\n'
                   'remote: Processing changes: (-)\n'
@@ -2985,6 +2985,110 @@ class TestGitCl(unittest.TestCase):
         self.assertEqual(
             0, git_cl.main(['archive', '-f', '-p',
                             'archived/{issue}-{branch}']))
+
+    @unittest.skipIf(gclient_utils.IsEnvCog(),
+                     'not supported in non-git environment')
+    def test_squash_closed(self):
+        self.calls = [
+            ((['git', 'for-each-ref', '--format=%(refname)', 'refs/heads'], ),
+             'refs/heads/main\nrefs/heads/foo\nrefs/heads/bar'),
+            ((['git', 'checkout', 'foo'], ), ''),
+            ((['git', 'checkout', 'main'], ), ''),
+        ]
+
+        mock.patch(
+            'git_cl.get_cl_statuses',
+            lambda branches, fine_grained, max_processes: [
+                (MockChangelistWithBranchAndIssue('main', 1), 'open'),
+                (MockChangelistWithBranchAndIssue('foo', 456), 'closed'),
+                (MockChangelistWithBranchAndIssue('bar', 789), 'open')
+            ]).start()
+        mock.patch('git_common.current_branch', return_value='main').start()
+        mock.patch('git_squash_branch.main', return_value=0).start()
+
+        self.assertEqual(0, git_cl.main(['squash-closed', '-f']))
+
+    @unittest.skipIf(gclient_utils.IsEnvCog(),
+                     'not supported in non-git environment')
+    def test_squash_closed_dry_run(self):
+        self.calls = [
+            ((['git', 'for-each-ref', '--format=%(refname)', 'refs/heads'], ),
+             'refs/heads/main\nrefs/heads/foo\nrefs/heads/bar'),
+        ]
+
+        mock.patch(
+            'git_cl.get_cl_statuses',
+            lambda branches, fine_grained, max_processes: [
+                (MockChangelistWithBranchAndIssue('main', 1), 'open'),
+                (MockChangelistWithBranchAndIssue('foo', 456), 'closed'),
+                (MockChangelistWithBranchAndIssue('bar', 789), 'open')
+            ]).start()
+
+        self.assertEqual(0, git_cl.main(['squash-closed', '-d']))
+
+    @unittest.skipIf(gclient_utils.IsEnvCog(),
+                     'not supported in non-git environment')
+    def test_squash_closed_current_branch_fails(self):
+        self.calls = [
+            ((['git', 'for-each-ref', '--format=%(refname)', 'refs/heads'], ),
+             'refs/heads/main\nrefs/heads/foo\nrefs/heads/bar'),
+        ]
+
+        mock.patch(
+            'git_cl.get_cl_statuses',
+            lambda branches, fine_grained, max_processes: [
+                (MockChangelistWithBranchAndIssue('main', 1), 'closed'),
+            ]).start()
+
+        self.assertEqual(1, git_cl.main(['squash-closed', '-f']))
+
+    @unittest.skipIf(gclient_utils.IsEnvCog(),
+                     'not supported in non-git environment')
+    def test_squash_closed_reset_on_failure(self):
+        self.calls = [
+            ((['git', 'for-each-ref', '--format=%(refname)', 'refs/heads'], ),
+             'refs/heads/main\nrefs/heads/foo\nrefs/heads/bar'),
+            ((['git', 'checkout', 'foo'], ), ''),
+            ((['git', 'checkout', 'main'], ), ''),
+        ]
+
+        mock.patch(
+            'git_cl.get_cl_statuses',
+            lambda branches, fine_grained, max_processes: [
+                (MockChangelistWithBranchAndIssue('main', 1), 'open'),
+                (MockChangelistWithBranchAndIssue('foo', 456), 'closed'),
+                (MockChangelistWithBranchAndIssue('bar', 789), 'open')
+            ]).start()
+        mock.patch('git_common.current_branch', return_value='main').start()
+        mock.patch('git_squash_branch.main', return_value=1).start()
+
+        self.assertEqual(1, git_cl.main(['squash-closed', '-f']))
+
+    @unittest.skipIf(gclient_utils.IsEnvCog(),
+                     'not supported in non-git environment')
+    def test_squash_closed_clean_exit_no_closed_branches(self):
+        self.calls = [
+            ((['git', 'for-each-ref', '--format=%(refname)', 'refs/heads'], ),
+             'refs/heads/main\nrefs/heads/foo\nrefs/heads/bar'),
+        ]
+
+        mock.patch(
+            'git_cl.get_cl_statuses',
+            lambda branches, fine_grained, max_processes: [
+                (MockChangelistWithBranchAndIssue('main', 1), 'open'),
+                (MockChangelistWithBranchAndIssue('foo', 456), 'open'),
+                (MockChangelistWithBranchAndIssue('bar', 789), 'open')
+            ]).start()
+        mock.patch('git_common.current_branch', return_value='main').start()
+        mock.patch('git_squash_branch.main', return_value=0).start()
+
+        self.assertEqual(0, git_cl.main(['squash-closed', '-f']))
+
+    @unittest.skipIf(gclient_utils.IsEnvCog(),
+                     'not supported in non-git environment')
+    def test_squash_closed_abort_on_dirty_tree(self):
+        mock.patch('git_common.is_dirty_git_tree', return_value=True).start()
+        self.assertEqual(1, git_cl.main(['squash-closed', '-f']))
 
     @unittest.skipIf(gclient_utils.IsEnvCog(),
                     'not supported in non-git environment')
@@ -5615,11 +5719,36 @@ class CMDSplitTestCase(CMDTestCaseBase):
                          0)
         self.assertEqual(mock_split_cl.call_count, 1)
 
-        # Unless we're doing a dry run
+        # ...unless we're doing a dry run
         mock_split_cl.reset_mock()
         self.assertEqual(git_cl.main(['split', '-n']), 0)
         self.assertEqual(mock_split_cl.call_count, 1)
 
+    @mock.patch("split_cl.SplitCl", return_value=0)
+    @mock.patch("git_cl.OptionParser.error", side_effect=ParserErrorMock)
+    def testReviewerParsing(self, _, mock_split_cl):
+        """Make sure we correctly parse various combinations of --reviewers"""
+
+        # Helper function to pull out the reviewers arg and compare it
+        def testOneSetOfFlags(flags, expected):
+            self.assertEqual(git_cl.main(['split', '-n'] + flags), 0)
+            mock_split_cl.assert_called_once()
+            # It's unfortunate that there's no better way to get the argument
+            # than to hardcode its number, unless we switch to using keyword
+            # arguments everywhere or pass the options in directly.
+            reviewers_arg = mock_split_cl.call_args.args[6]
+            self.assertEqual(reviewers_arg, expected)
+            mock_split_cl.reset_mock()
+
+        # If no --reviewers flag is passed, we should get None
+        testOneSetOfFlags([], None)
+        # If --reviewers flag is passed, we should get a list of args
+        testOneSetOfFlags(['--reviewers', 'a@b.com'], ['a@b.com'])
+        testOneSetOfFlags(['--reviewers', 'a@b.com', '--reviewers', 'c@d.com'],
+                          ['a@b.com', 'c@d.com'])
+        # If --no-reviewers flag is passed, we should always get an empty list
+        testOneSetOfFlags(['--no-reviewers'], [])
+        testOneSetOfFlags(['--reviewers', 'a@b.com', '--no-reviewers'], [])
 
 if __name__ == '__main__':
     logging.basicConfig(

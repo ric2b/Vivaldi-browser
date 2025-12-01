@@ -12,6 +12,7 @@
 #include "components/omnibox/browser/autocomplete_match.h"
 #include "components/omnibox/browser/omnibox_edit_model.h"
 #include "components/prefs/pref_change_registrar.h"
+#include "components/search_engines/template_url_starter_pack_data.h"
 
 class OmniboxClient;
 class OmniboxView;

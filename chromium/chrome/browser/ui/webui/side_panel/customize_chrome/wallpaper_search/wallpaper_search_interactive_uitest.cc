@@ -5,6 +5,7 @@
 #include "base/containers/span.h"
 #include "base/feature_list.h"
 #include "base/functional/bind.h"
+#include "base/strings/strcat.h"
 #include "base/test/scoped_feature_list.h"
 #include "chrome/browser/optimization_guide/mock_optimization_guide_keyed_service.h"
 #include "chrome/browser/optimization_guide/optimization_guide_keyed_service_factory.h"
@@ -303,8 +304,8 @@ class WallpaperSearchOptimizationGuideInteractiveTest
                 response.SerializeToString(&serialized_metadata);
                 optimization_guide::proto::Any result;
                 result.set_value(serialized_metadata);
-                result.set_type_url("type.googleapis.com/" +
-                                    response.GetTypeName());
+                result.set_type_url(base::StrCat(
+                    {"type.googleapis.com/", response.GetTypeName()}));
 
                 std::move(done_callback_arg)
                     .Run(optimization_guide::
@@ -417,8 +418,16 @@ IN_PROC_BROWSER_TEST_F(WallpaperSearchOptimizationGuideInteractiveTest,
                           "(el) => el.getAnimations().length === 0")));
 }
 
+// TODO(crbug.com/404256907): Flayky in Linux TSAN.
+#if defined(THREAD_SANITIZER) && BUILDFLAG(IS_LINUX)
+#define MAYBE_SearchesAndSetsNewAndHistoricalResults \
+  DISABLED_SearchesAndSetsNewAndHistoricalResults
+#else
+#define MAYBE_SearchesAndSetsNewAndHistoricalResults \
+  SearchesAndSetsNewAndHistoricalResults
+#endif  // defined(THREAD_SANITIZER) && BUILDFLAG(IS_LINUX)
 IN_PROC_BROWSER_TEST_F(WallpaperSearchOptimizationGuideInteractiveTest,
-                       SearchesAndSetsNewAndHistoricalResults) {
+                       MAYBE_SearchesAndSetsNewAndHistoricalResults) {
   // Intercept Wallpaper Search descriptor fetches, and respond with data.
   std::unique_ptr<content::URLLoaderInterceptor> descriptors_fetch_interceptor =
       SetUpDescriptorsResponseWithData();
@@ -498,9 +507,8 @@ IN_PROC_BROWSER_TEST_F(WallpaperSearchOptimizationGuideInteractiveTest,
       WaitForStateChange(kNewTabPageElementId, ntp_has_background));
 }
 
-// The feedback dialog on CrOS & LaCrOS happens at the system level,
-// which cannot be easily tested here. LaCrOS has a separate feedback
-// browser test which gives us some coverage.
+// The feedback dialog on Cros happens at the system level, which cannot be
+// easily tested here.
 #if !BUILDFLAG(IS_CHROMEOS)
 IN_PROC_BROWSER_TEST_F(WallpaperSearchOptimizationGuideInteractiveTest,
                        FeedbackDialogShowsOnThumbsDown) {

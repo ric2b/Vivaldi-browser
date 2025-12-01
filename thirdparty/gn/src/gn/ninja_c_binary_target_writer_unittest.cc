@@ -2266,12 +2266,6 @@ TEST_F(NinjaCBinaryTargetWriterTest, ModuleMapInStaticLibrary) {
   TestWithScope setup;
   Err err;
 
-  std::unique_ptr<Tool> cxx_module_tool =
-      Tool::CreateTool(CTool::kCToolCxxModule);
-  cxx_module_tool->set_outputs(SubstitutionList::MakeForTest(
-      "{{source_out_dir}}/{{target_output_name}}.{{source_name_part}}.pcm"));
-  setup.toolchain()->SetTool(std::move(cxx_module_tool));
-
   TestTarget target(setup, "//foo:bar", Target::STATIC_LIBRARY);
   target.sources().push_back(SourceFile("//foo/bar.cc"));
   target.sources().push_back(SourceFile("//foo/bar.modulemap"));

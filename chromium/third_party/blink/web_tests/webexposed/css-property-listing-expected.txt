@@ -26,7 +26,6 @@ All changes to this list should go through Blink's feature review process: http:
     -webkit-mask-position-y
     -webkit-perspective-origin-x
     -webkit-perspective-origin-y
-    -webkit-print-color-adjust
     -webkit-rtl-ordering
     -webkit-ruby-position
     -webkit-tap-highlight-color
@@ -148,11 +147,13 @@ All changes to this list should go through Blink's feature review process: http:
     column-count
     column-fill
     column-gap
+    column-height
     column-rule-color
     column-rule-style
     column-rule-width
     column-span
     column-width
+    column-wrap
     contain
     contain-intrinsic-block-size
     contain-intrinsic-height
@@ -162,6 +163,14 @@ All changes to this list should go through Blink's feature review process: http:
     container-type
     content
     content-visibility
+    corner-bottom-left-shape
+    corner-bottom-right-shape
+    corner-end-end-shape
+    corner-end-start-shape
+    corner-start-end-shape
+    corner-start-start-shape
+    corner-top-left-shape
+    corner-top-right-shape
     counter-increment
     counter-reset
     counter-set
@@ -333,9 +342,11 @@ All changes to this list should go through Blink's feature review process: http:
     position-try-fallbacks
     position-try-order
     position-visibility
+    print-color-adjust
     quotes
     r
     reading-flow
+    reading-order
     resize
     right
     rotate
@@ -355,6 +366,7 @@ All changes to this list should go through Blink's feature review process: http:
     scroll-margin-left
     scroll-margin-right
     scroll-margin-top
+    scroll-marker-contain
     scroll-marker-group
     scroll-padding-block-end
     scroll-padding-block-start
@@ -638,6 +650,11 @@ All changes to this list should go through Blink's feature review process: http:
     container
         container-name
         container-type
+    corner-shape
+        corner-bottom-left-shape
+        corner-bottom-right-shape
+        corner-top-left-shape
+        corner-top-right-shape
     flex
         flex-basis
         flex-grow
@@ -1049,6 +1066,8 @@ All changes to this list should go through Blink's feature review process: http:
         perspective
     -webkit-perspective-origin
         perspective-origin
+    -webkit-print-color-adjust
+        print-color-adjust
     -webkit-shape-image-threshold
         shape-image-threshold
     -webkit-shape-margin

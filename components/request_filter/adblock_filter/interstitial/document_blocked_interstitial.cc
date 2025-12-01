@@ -9,9 +9,9 @@
 #include "components/request_filter/adblock_filter/adblock_rule_service_content.h"
 #include "components/request_filter/adblock_filter/adblock_rule_service_factory.h"
 #include "components/security_interstitials/content/security_interstitial_controller_client.h"
-#include "components/strings/grit/components_strings.h"
 #include "content/public/browser/web_contents.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "vivaldi/app/grit/vivaldi_native_strings.h"
 
 namespace adblock_filter {
 namespace {
@@ -36,6 +36,9 @@ DocumentBlockedInterstitial::DocumentBlockedInterstitial(
     content::WebContents* web_contents,
     const GURL& request_url,
     RuleGroup blocking_group,
+    std::string_view rule_text,
+    std::string rule_source_name,
+    GURL rule_source_link,
     std::unique_ptr<
         security_interstitials::SecurityInterstitialControllerClient>
         controller_client)
@@ -43,7 +46,10 @@ DocumentBlockedInterstitial::DocumentBlockedInterstitial(
           web_contents,
           request_url,
           std::move(controller_client)),
-      blocking_group_(blocking_group) {}
+      blocking_group_(std::move(blocking_group)),
+      rule_text_(std::move(rule_text)),
+      rule_source_name_(std::move(rule_source_name)),
+      rule_source_link_(std::move(rule_source_link)) {}
 
 DocumentBlockedInterstitial::~DocumentBlockedInterstitial() = default;
 
@@ -75,15 +81,33 @@ void DocumentBlockedInterstitial::PopulateInterstitialStrings(
   load_time_data.Set(
       "heading",
       l10n_util::GetStringFUTF16(IDS_DOCUMENT_BLOCKED_HEADING, blocker_name));
+  load_time_data.Set("rule", rule_text_);
   load_time_data.Set(
-      "primaryParagraph", l10n_util::GetStringUTF16(IDS_DOCUMENT_BLOCKED_INFO));
+      "ruleListCaption",
+      l10n_util::GetStringUTF16(IDS_DOCUMENT_BLOCKED_RULE_LIST_CAPTION));
+  load_time_data.Set("ruleListName", rule_source_name_);
+  load_time_data.Set("ruleListAddress", rule_source_link_.spec());
+  load_time_data.Set(
+      "urlDetailsCaption",
+      l10n_util::GetStringUTF16(IDS_DOCUMENT_BLOCKED_URL_DETAILS_CAPTION));
+  load_time_data.Set("requestUrl", request_url().possibly_invalid_spec());
+  load_time_data.Set(
+      "urlShowDetails",
+      l10n_util::GetStringUTF16(IDS_DOCUMENT_BLOCKED_URL_SHOW_DETAILS));
+  load_time_data.Set(
+      "urlHideDetails",
+      l10n_util::GetStringUTF16(IDS_DOCUMENT_BLOCKED_URL_HIDE_DETAILS));
+  load_time_data.Set(
+      "requestUrlWithoutParameters",
+      l10n_util::GetStringUTF16(IDS_DOCUMENT_BLOCKED_URL_WITHOUT_PARAMETERS));
+  load_time_data.Set("primaryParagraph",
+                     l10n_util::GetStringUTF16(IDS_DOCUMENT_BLOCKED_INFO));
   load_time_data.Set(
       "proceedButtonText",
       l10n_util::GetStringFUTF16(IDS_DOCUMENT_BLOCKED_ALLOW_DOMAIN, block_type,
                                  GetFormattedHostName()));
-  load_time_data.Set(
-      "primaryButtonText",
-      l10n_util::GetStringUTF16(IDS_DOCUMENT_BLOCKED_GO_BACK));
+  load_time_data.Set("primaryButtonText",
+                     l10n_util::GetStringUTF16(IDS_DOCUMENT_BLOCKED_GO_BACK));
 }
 
 // This handles the commands sent from the interstitial JavaScript.

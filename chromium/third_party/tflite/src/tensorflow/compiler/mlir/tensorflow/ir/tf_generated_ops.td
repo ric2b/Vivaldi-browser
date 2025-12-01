@@ -11335,52 +11335,6 @@ truncated normal values using the parameters for each row.}]>:$output
   TF_DerivedOperandTypeAttr dtype = TF_DerivedOperandTypeAttr<1>;
 }
 
-def TF_PartitionedCallOp : TF_Op<"PartitionedCall", [CallOpInterface, DeclareOpInterfaceMethods<SymbolUserOpInterface>, Pure]> {
-  let summary = [{
-returns `f(inputs)`, where `f`'s body is placed and partitioned.
-  }];
-
-  let description = [{
-Asynchronously executes a function, potentially across multiple devices but
-within a single process. The kernel places and partitions a given function's
-underlying graph, and executes each of the partitioned subgraphs as a function.
-  }];
-
-  let arguments = (ins
-    Arg<Variadic<TF_Tensor>, [{A list of input tensors.}]>:$args,
-
-    SymbolRefAttr:$f,
-    DefaultValuedOptionalAttr<StrAttr, "\"\"">:$config,
-    DefaultValuedOptionalAttr<StrAttr, "\"\"">:$config_proto,
-    DefaultValuedOptionalAttr<StrAttr, "\"\"">:$executor_type
-  );
-
-  let results = (outs
-    Res<Variadic<TF_Tensor>, [{A list of return values.}]>:$output
-  );
-
-  TF_DerivedOperandTypeListAttr Tin = TF_DerivedOperandTypeListAttr<0>;
-  TF_DerivedResultTypeListAttr Tout = TF_DerivedResultTypeListAttr<0>;
-
-  let extraClassDeclaration = [{
-    // Gets the argument operands to the called function.
-    operand_range getArgOperands() { return getArgs(); }
-    MutableOperandRange getArgOperandsMutable() {
-      return getArgsMutable();
-    }
-
-    // Returns the callee of this operation.
-    CallInterfaceCallable getCallableForCallee() { return getFAttr(); }
-    // Sets the callee from the callable.
-    void setCalleeFromCallable(CallInterfaceCallable callee);
-
-    // returns the callee of this operation.
-    func::FuncOp func() {
-      return SymbolTable::lookupNearestSymbolFrom<func::FuncOp>(*this, getF());
-    }
-  }];
-}
-
 def TF_PolygammaOp : TF_Op<"Polygamma", [Pure, ResultsBroadcastableShape]>,
                      WithBroadcastableBinOpBuilder {
   let summary = [{
@@ -12899,6 +12853,12 @@ def TF_RemoteCallOp : TF_Op<"RemoteCall", [CallOpInterface]> {
     void setCalleeFromCallable(CallInterfaceCallable callee) {
       (*this)->setAttr("f", callee.get<SymbolRefAttr>());
     }
+    Attribute removeArgAttrsAttr() { return nullptr; }
+    Attribute removeResAttrsAttr() { return nullptr; }
+    ArrayAttr getArgAttrsAttr() { return nullptr; }
+    ArrayAttr getResAttrsAttr() { return nullptr; }
+    void setArgAttrsAttr(ArrayAttr) { return; }
+    void setResAttrsAttr(ArrayAttr) { return; }
   }];
 }
 
@@ -18720,6 +18680,26 @@ For internal use only.
   TF_DerivedOperandTypeAttr T = TF_DerivedOperandTypeAttr<0>;
 }
 
+def TF_TPUDummyInputOp : TF_Op<"TPUDummyInput", [Pure, TF_NoConstantFold]> {
+  let summary = [{
+Generates a zero-valued tensor for use as a dummy input to a TPU.
+  }];
+
+  let description = [{
+For the internal use of the TF2XLA bridge in the XLA Broadcast pass. This op
+  }];
+
+  let arguments = (ins
+    TF_ShapeAttr:$shape
+  );
+
+  let results = (outs
+    TensorOf<[TF_Bfloat16, TF_Float32]>:$output
+  );
+
+  TF_DerivedResultTypeAttr dtype = TF_DerivedResultTypeAttr<0>;
+}
+
 def TF_TPUEmbeddingActivationsOp : TF_Op<"TPUEmbeddingActivations", [Pure]> {
   let summary = "An op enabling differentiation of TPU Embeddings.";
 
@@ -20367,66 +20347,6 @@ def TF_UncompressElementOp : TF_Op<"UncompressElement", [Pure]> {
   TF_DerivedResultTypeListAttr output_types = TF_DerivedResultTypeListAttr<0>;
 }
 
-def TF_UniformDequantizeOp : TF_Op<"UniformDequantize", [Pure]> {
-  let summary = "Perform dequantization on the quantized Tensor `input`.";
-
-  let description = [{
-Given quantized `input` which was quantized using `scales` and `zero_points`, performs dequantization using the formula:
-dequantized_data = (quantized_data - zero_point) * scale.
-  }];
-
-  let arguments = (ins
-    Arg<TensorOf<[TF_Qint32, TF_Qint8]>, [{Must be a Tensor of Tin.}]>:$input,
-    Arg<TF_Float32Tensor, [{The float value(s) used as scale(s) when quantizing original data that input represents.
-Must be a scalar Tensor if quantization_axis is -1 (per-tensor quantization), otherwise 1D Tensor of size (input.dim_size(quantization_axis),) (per-axis quantization).}]>:$scales,
-    Arg<TF_Int32Tensor, [{The int32 value(s) used as zero_point(s) when quantizing original data that input represents.
-Same shape condition as scales.}]>:$zero_points,
-
-    DefaultValuedOptionalAttr<I64Attr, "-1">:$quantization_axis,
-    I64Attr:$quantization_min_val,
-    I64Attr:$quantization_max_val
-  );
-
-  let results = (outs
-    Res<TF_Float32Tensor, [{The output dequantized Tensor of Tout, whose shape is same as input.}]>:$output
-  );
-
-  TF_DerivedOperandTypeAttr Tin = TF_DerivedOperandTypeAttr<0>;
-  TF_DerivedResultTypeAttr Tout = TF_DerivedResultTypeAttr<0>;
-
-  let hasVerifier = 1;
-}
-
-def TF_UniformQuantizeOp : TF_Op<"UniformQuantize", [Pure]> {
-  let summary = "Perform quantization on Tensor `input`.";
-
-  let description = [{
-Given `input`, `scales` and `zero_points`, performs quantization using the formula:
-quantized_data = floor(input_data * (1.0f / scale) + 0.5f) + zero_point
-  }];
-
-  let arguments = (ins
-    Arg<TF_Float32Tensor, [{Must be a Tensor of Tin.}]>:$input,
-    Arg<TF_Float32Tensor, [{The float value(s) to use as scale(s) to quantize `input`.
-Must be a scalar Tensor if quantization_axis is -1 (per-tensor quantization), otherwise 1D Tensor of size (input.dim_size(quantization_axis),) (per-axis quantization).}]>:$scales,
-    Arg<TF_Int32Tensor, [{The int32 value(s) to use as zero_point(s) to quantize `input`.
-Same shape condition as scales.}]>:$zero_points,
-
-    DefaultValuedOptionalAttr<I64Attr, "-1">:$quantization_axis,
-    I64Attr:$quantization_min_val,
-    I64Attr:$quantization_max_val
-  );
-
-  let results = (outs
-    Res<TensorOf<[TF_Qint32, TF_Qint8]>, [{The output quantized Tensor of Tout, whose shape is same as input.}]>:$output
-  );
-
-  TF_DerivedOperandTypeAttr Tin = TF_DerivedOperandTypeAttr<0>;
-  TF_DerivedResultTypeAttr Tout = TF_DerivedResultTypeAttr<0>;
-
-  let hasVerifier = 1;
-}
-
 def TF_UniformQuantizedAddOp : TF_Op<"UniformQuantizedAdd", [Pure]> {
   let summary = [{
 Perform quantized add of quantized Tensor `lhs` and quantized Tensor `rhs` to make quantized `output`.
@@ -21403,7 +21323,8 @@ values. These keys should be in byte format.}]>:$keys,
 
     StrArrayAttr:$prediction_names,
     BoolAttr:$training,
-    StrAttr:$file_path
+    StrAttr:$file_path,
+    DefaultValuedOptionalAttr<BoolAttr, "false">:$write_vector_predictions
   );
 
   let results = (outs);

@@ -5,28 +5,28 @@
 
 #include <assert.h>
 #include <inttypes.h>
-#include <math.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 
-#include "xnnpack.h"
-#include "xnnpack/allocator.h"
-#include "xnnpack/common.h"
-#include "xnnpack/compute.h"
-#include "xnnpack/config-types.h"
-#include "xnnpack/config.h"
-#include "xnnpack/reference-config.h"
-#include "xnnpack/datatype.h"
-#include "xnnpack/log.h"
-#include "xnnpack/microkernel-type.h"
-#include "xnnpack/microparams.h"
-#include "xnnpack/normalization.h"
-#include "xnnpack/operator-type.h"
-#include "xnnpack/operator.h"
-#include "xnnpack/params.h"
-#include "pthreadpool.h"
+#include "include/xnnpack.h"
+#include "src/xnnpack/allocator.h"
+#include "src/xnnpack/common.h"
+#include "src/xnnpack/compute.h"
+#include "src/xnnpack/config-types.h"
+#include "src/xnnpack/config.h"
+#include "src/xnnpack/operator-utils.h"
+#include "src/xnnpack/reference-config.h"
+#include "src/xnnpack/datatype.h"
+#include "src/xnnpack/log.h"
+#include "src/xnnpack/microkernel-type.h"
+#include "src/xnnpack/microparams.h"
+#include "src/xnnpack/normalization.h"
+#include "src/xnnpack/operator-type.h"
+#include "src/xnnpack/operator.h"
+#include "src/xnnpack/params.h"
+#include <pthreadpool.h>
 
 static enum xnn_status create_reduce_nd(
     uint32_t flags,
@@ -99,39 +99,45 @@ static enum xnn_status reshape_reduce_nd(
     enum xnn_operator_type expected_operator_type,
     pthreadpool_t threadpool) {
   if (reduce_op->type != expected_operator_type) {
-    xnn_log_error("failed to reshape operator: operator type mismatch (expected %s, got %s)",
-      xnn_operator_type_to_string(expected_operator_type),
-      xnn_operator_type_to_string(reduce_op->type));
+    xnn_log_error(
+        "failed to reshape operator: operator type mismatch (expected %s, got "
+        "%s)",
+        xnn_operator_type_to_string(expected_operator_type),
+        xnn_operator_type_to_string_v2(reduce_op));
     return xnn_status_invalid_parameter;
   }
   reduce_op->state = xnn_run_state_invalid;
 
   if ((xnn_params.init_flags & XNN_INIT_FLAG_XNNPACK) == 0) {
     xnn_log_error("failed to reshape %s operator: XNNPACK is not initialized",
-      xnn_operator_type_to_string(reduce_op->type));
+                  xnn_operator_type_to_string_v2(reduce_op));
     return xnn_status_uninitialized;
   }
 
   if (num_input_dims > XNN_MAX_TENSOR_DIMS) {
     xnn_log_error(
-      "failed to reshape %s operator with %zu input dimensions dimensions: "
-      "the number of input dimensions must not exceed %d",
-      xnn_operator_type_to_string(reduce_op->type), num_input_dims, XNN_MAX_TENSOR_DIMS);
+        "failed to reshape %s operator with %zu input dimensions dimensions: "
+        "the number of input dimensions must not exceed %d",
+        xnn_operator_type_to_string_v2(reduce_op), num_input_dims,
+        XNN_MAX_TENSOR_DIMS);
     return xnn_status_unsupported_parameter;
   }
 
   if (num_reduction_axes > num_input_dims) {
     xnn_log_error(
-      "failed to reshape %s operator with %zu reduction axes: "
-      "the number of reduction axes must not exceed the number of input dimensions %zu",
-      xnn_operator_type_to_string(reduce_op->type), num_reduction_axes, num_input_dims);
+        "failed to reshape %s operator with %zu reduction axes: "
+        "the number of reduction axes must not exceed the number of input "
+        "dimensions %zu",
+        xnn_operator_type_to_string_v2(reduce_op), num_reduction_axes,
+        num_input_dims);
     return xnn_status_invalid_parameter;
   }
 
   if (num_reduction_axes == 0) {
     xnn_log_error(
-      "failed to reshape %s operator with %zu reduction axes: the number of reduction axes must be non-zero",
-      xnn_operator_type_to_string(reduce_op->type), num_reduction_axes);
+        "failed to reshape %s operator with %zu reduction axes: the number of "
+        "reduction axes must be non-zero",
+        xnn_operator_type_to_string_v2(reduce_op), num_reduction_axes);
     return xnn_status_invalid_parameter;
   }
 
@@ -146,7 +152,7 @@ static enum xnn_status reshape_reduce_nd(
       xnn_log_error(
           "failed to reshape %s operator with #%zu reduction axis of %" PRIi64
           ": the index is out of bounds for a %zuD input shape",
-          xnn_operator_type_to_string(reduce_op->type), i, reduction_axes[i],
+          xnn_operator_type_to_string_v2(reduce_op), i, reduction_axes[i],
           num_input_dims);
       return xnn_status_invalid_parameter;
     }
@@ -167,7 +173,7 @@ static enum xnn_status reshape_reduce_nd(
       xnn_log_error(
           "failed to reshape %s operator with #%zu reduction axis of %" PRIi64
           ": the reduction axes must be unique",
-          xnn_operator_type_to_string(reduce_op->type), i, reduction_axes[i]);
+          xnn_operator_type_to_string_v2(reduce_op), i, reduction_axes[i]);
       return xnn_status_invalid_parameter;
     }
   }
@@ -218,7 +224,7 @@ static enum xnn_status reshape_reduce_nd(
 
     reduce_op->context.reduce = (struct reduce_context) {
       .channels = axis_dim << log2_data_element_size,
-      .ukernel.rsum = reduce_op->rsum_config->ukernel,
+      .ukernel.contiguous_reduce = reduce_op->rsum_config->ukernel,
       .accumulation_element_size = UINT32_C(1) << log2_accumulator_element_size,
       .output_element_size = UINT32_C(1) << log2_data_element_size,
     };
@@ -257,8 +263,8 @@ static enum xnn_status reshape_reduce_nd(
       reduce_op->zero_buffer = xnn_allocate_zero_simd_memory(zero_size);
       if (reduce_op->zero_buffer == NULL) {
         xnn_log_error(
-          "failed to allocate %zu bytes for %s operator zero padding",
-          zero_size, xnn_operator_type_to_string(reduce_op->type));
+            "failed to allocate %zu bytes for %s operator zero padding",
+            zero_size, xnn_operator_type_to_string_v2(reduce_op));
         return xnn_status_out_of_memory;
       }
       reduce_op->channels = channel_like_dim;
@@ -267,7 +273,7 @@ static enum xnn_status reshape_reduce_nd(
     reduce_op->context.reduce = (struct reduce_context) {
       .zero = reduce_op->zero_buffer,
       .channels = axis_dim,
-      .ukernel.rdsum = reduce_op->rdsum_config->rd_ukernel,
+      .ukernel.discontiguous_reduce = reduce_op->rdsum_config->rd_ukernel,
       .accumulation_element_size = UINT32_C(1) << log2_accumulator_element_size,
       .output_element_size = UINT32_C(1) << log2_data_element_size,
     };
@@ -326,9 +332,11 @@ static enum xnn_status setup_reduce_nd(
     enum xnn_operator_type expected_operator_type)
 {
   if (reduce_op->type != expected_operator_type) {
-    xnn_log_error("failed to setup operator: operator type mismatch (expected %s, got %s)",
-      xnn_operator_type_to_string(expected_operator_type),
-      xnn_operator_type_to_string(reduce_op->type));
+    xnn_log_error(
+        "failed to setup operator: operator type mismatch (expected %s, got "
+        "%s)",
+        xnn_operator_type_to_string(expected_operator_type),
+        xnn_operator_type_to_string_v2(reduce_op));
     return xnn_status_invalid_parameter;
   }
 
@@ -337,8 +345,8 @@ static enum xnn_status setup_reduce_nd(
       return xnn_status_success;
     case xnn_run_state_invalid:
       xnn_log_error(
-        "failed to setup %s operator: operator has not been reshaped yet",
-        xnn_operator_type_to_string(reduce_op->type));
+          "failed to setup %s operator: operator has not been reshaped yet",
+          xnn_operator_type_to_string_v2(reduce_op));
       return xnn_status_invalid_state;
     case xnn_run_state_needs_setup:
       // Operator has been reshaped, but not setup, continue with setup.

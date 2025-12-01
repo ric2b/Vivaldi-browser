@@ -24,6 +24,7 @@ import "protos/perfetto/config/android/android_log_config.proto";
 import "protos/perfetto/config/android/android_polled_state_config.proto";
 import "protos/perfetto/config/android/android_system_property_config.proto";
 import "protos/perfetto/config/android/android_sdk_sysprop_guard_config.proto";
+import "protos/perfetto/config/android/app_wakelock_config.proto";
 import "protos/perfetto/config/android/kernel_wakelocks_config.proto";
 import "protos/perfetto/config/android/network_trace_config.proto";
 import "protos/perfetto/config/android/packages_list_config.proto";
@@ -52,9 +53,10 @@ import "protos/perfetto/config/sys_stats/sys_stats_config.proto";
 import "protos/perfetto/config/test_config.proto";
 import "protos/perfetto/config/track_event/track_event_config.proto";
 import "protos/perfetto/config/system_info/system_info.proto";
+import "protos/perfetto/config/chrome/histogram_samples.proto";
 
 // The configuration that is passed to each data source when starting tracing.
-// Next id: 134
+// Next id: 136
 message DataSourceConfig {
   enum SessionInitiator {
     SESSION_INITIATOR_UNSPECIFIED = 0;
@@ -217,6 +219,13 @@ message DataSourceConfig {
 
   // Data source name: gpu.renderstages
   optional GpuRenderStagesConfig gpu_renderstages_config = 133 [lazy = true];
+
+  // Data source name: org.chromium.histogram_samples
+  optional ChromiumHistogramSamplesConfig chromium_histogram_samples = 134
+      [lazy = true];
+
+  // Data source name: android.app_wakelocks
+  optional AppWakelocksConfig app_wakelocks_config = 135 [lazy = true];
 
   // This is a fallback mechanism to send a free-form text config to the
   // producer. In theory this should never be needed. All the code that

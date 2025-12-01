@@ -94,8 +94,6 @@
 #if BUILDFLAG(IS_CHROMEOS)
 #include "chromeos/ash/components/audio/cras_audio_handler.h"
 #include "content/browser/gpu/chromeos/video_capture_dependencies.h"
-#include "content/browser/gpu/gpu_memory_buffer_manager_singleton.h"
-#include "content/public/browser/chromeos/multi_capture_service.h"
 #include "media/capture/video/chromeos/camera_hal_dispatcher_impl.h"
 #include "media/capture/video/chromeos/jpeg_accelerator_provider.h"
 #include "media/capture/video/chromeos/public/cros_features.h"
@@ -535,6 +533,11 @@ const blink::MediaStreamDevice* GetStreamDevice(
     }
   }
   return nullptr;
+}
+
+bool IsApplicationLoopbackAudioDevice(MediaStreamDevice* device) {
+  return blink::IsAudioInputMediaType(device->type) &&
+         media::AudioDeviceDescription::IsApplicationLoopbackDevice(device->id);
 }
 
 }  // namespace
@@ -1592,8 +1595,6 @@ MediaStreamManager::MediaStreamManager(
               base::BindRepeating(
                   &VideoCaptureDependencies::CreateJpegEncodeAccelerator));
       system_event_monitor_ = std::make_unique<media::SystemEventMonitorImpl>();
-      media::VideoCaptureDeviceFactoryChromeOS::SetGpuBufferManager(
-          GpuMemoryBufferManagerSingleton::GetInstance());
       media::CameraHalDispatcherImpl::GetInstance()->Start();
     }
 #endif
@@ -2221,8 +2222,17 @@ bool MediaStreamManager::GetEligibleCaptureDeviceids(
 void MediaStreamManager::TranslateDeviceIdToSourceId(
     const DeviceRequest* request,
     MediaStreamDevice* device) const {
+  // If the device id contains sensitive information, we replace it with a hash
+  // so that it is not exposed to the Renderer. This happens in the following
+  // cases:
+  // * If the MediaStreamDevice represents a video or audio OS input device
+  // (such as a webcam or microphone), the device id may contain an identifier
+  // supplied by the OS.
+  // * If it is an application loopback device, it may contain an identifier
+  // (such as a process id) supplied by the OS.
   if (blink::IsDeviceMediaType(request->audio_type()) ||
-      blink::IsDeviceMediaType(request->video_type())) {
+      blink::IsDeviceMediaType(request->video_type()) ||
+      IsApplicationLoopbackAudioDevice(device)) {
     device->id =
         GetHMACForRawMediaDeviceID(request->salt_and_origin, device->id);
     if (device->group_id) {
@@ -2239,18 +2249,29 @@ void MediaStreamManager::StartEnumeration(DeviceRequest* request,
       base::StringPrintf("StartEnumeration({requester_id=%d}, {label=%s})",
                          request->requester_id, label.c_str()));
 
-  // Start monitoring the devices when doing the first enumeration.
-  media_devices_manager_->StartMonitoring();
-
-  // Start enumeration for devices of all requested device types.
   bool request_audio_input =
       request->audio_type() != MediaStreamType::NO_SERVICE;
+  bool request_video_input =
+      request->video_type() != MediaStreamType::NO_SERVICE;
+
+  MediaDevicesManager::DeviceStartMonitoringMode start_mode =
+      MediaDevicesManager::DeviceStartMonitoringMode::kNone;
+  if (request_audio_input && request_video_input) {
+    start_mode =
+        MediaDevicesManager::DeviceStartMonitoringMode::kStartAudioAndVideo;
+  } else if (request_audio_input) {
+    start_mode = MediaDevicesManager::DeviceStartMonitoringMode::kStartAudio;
+  } else if (request_video_input) {
+    start_mode = MediaDevicesManager::DeviceStartMonitoringMode::kStartVideo;
+  }
+  // Start monitoring the requested devices when doing the first enumeration.
+  media_devices_manager_->StartMonitoring(start_mode);
+
+  // Start enumeration for devices of all requested device types.
   if (request_audio_input) {
     request->SetState(request->audio_type(), MEDIA_REQUEST_STATE_REQUESTED);
   }
 
-  bool request_video_input =
-      request->video_type() != MediaStreamType::NO_SERVICE;
   if (request_video_input) {
     request->SetState(request->video_type(), MEDIA_REQUEST_STATE_REQUESTED);
   }
@@ -4250,10 +4271,10 @@ void MediaStreamManager::SendWheel(
   controller->SendWheel(std::move(action), std::move(callback));
 }
 
-void MediaStreamManager::SetZoomLevel(
+void MediaStreamManager::UpdateZoomLevel(
     GlobalRenderFrameHostId capturer_rfh_id,
     const base::UnguessableToken& session_id,
-    int zoom_level,
+    blink::mojom::ZoomLevelAction action,
     base::OnceCallback<void(blink::mojom::CapturedSurfaceControlResult)>
         callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
@@ -4278,7 +4299,7 @@ void MediaStreamManager::SetZoomLevel(
     return;
   }
 
-  controller->SetZoomLevel(zoom_level, std::move(callback));
+  controller->UpdateZoomLevel(action, std::move(callback));
 }
 
 void MediaStreamManager::RequestCapturedSurfaceControlPermission(
@@ -4618,7 +4639,7 @@ std::unique_ptr<MediaStreamUIProxy> MediaStreamManager::MakeFakeUIProxy(
   }
 
   std::unique_ptr<FakeMediaStreamUIProxy> fake_ui = fake_ui_factory_.Run();
-  fake_ui->SetAvailableDevices(devices);
+  fake_ui->AddAvailableDevices(devices);
 
   return fake_ui;
 }

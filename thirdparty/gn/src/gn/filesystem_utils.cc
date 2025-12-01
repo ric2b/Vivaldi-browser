@@ -662,8 +662,8 @@ std::string RegulatePathIfAbsolute(std::string_view path) {
   bool is_start_slash = IsSlash(path[0]);
 
   // 1. /C:/ -> C:/
-  if (path.size() > 3 && is_start_slash &&
-        base::IsAsciiAlpha(path[1]) && path[2] == ':') {
+  if (path.size() > 3 && is_start_slash && base::IsAsciiAlpha(path[1]) &&
+      path[2] == ':') {
     return RegulatePathIfAbsolute(path.substr(1));
   }
 
@@ -684,8 +684,7 @@ std::string RegulatePathIfAbsolute(std::string_view path) {
 }
 #endif
 
-std::string MakeRelativePath(std::string_view input,
-                             std::string_view dest) {
+std::string MakeRelativePath(std::string_view input, std::string_view dest) {
 #if defined(OS_WIN)
   // Regulate the paths.
   std::string input_regulated = RegulatePathIfAbsolute(input);

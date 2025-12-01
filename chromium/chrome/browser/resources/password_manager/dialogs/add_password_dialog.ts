@@ -213,6 +213,7 @@ export class AddPasswordDialogElement extends AddPasswordDialogElementBase {
   private usernamesBySignonRealm_: Map<string, Set<string>>;
   private websiteErrorMessage_: string|null;
   private usernameErrorMessage_: string|null;
+  private canAddPassword_: boolean;
   private isPasswordInvalid_: boolean;
   private urlCollection_: chrome.passwordsPrivate.UrlCollection|null;
   private readonly storeOptionAccountValue_: string;
@@ -258,7 +259,7 @@ export class AddPasswordDialogElement extends AddPasswordDialogElementBase {
   /**
    * Helper function that checks whether the entered url is valid.
    */
-  private async validateWebsite_() {
+  private validateWebsite_() {
     if (this.website_.length === 0) {
       this.websiteErrorMessage_ = null;
       return;
@@ -287,7 +288,7 @@ export class AddPasswordDialogElement extends AddPasswordDialogElementBase {
   }
 
   private showWebsiteError_(): boolean {
-    return !!this.websiteErrorMessage_ && this.websiteErrorMessage_!.length > 0;
+    return !!this.websiteErrorMessage_ && this.websiteErrorMessage_.length > 0;
   }
 
   private computeUsernameErrorMessage_(): string|null {

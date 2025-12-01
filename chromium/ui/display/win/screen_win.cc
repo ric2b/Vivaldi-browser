@@ -12,6 +12,7 @@
 #include <optional>
 #include <sstream>
 
+#include "base/compiler_specific.h"
 #include "base/containers/contains.h"
 #include "base/containers/flat_set.h"
 #include "base/debug/alias.h"
@@ -575,7 +576,7 @@ gfx::Point DIPToScreenPoint(const gfx::Point& dip_point,
 // Create a fake FHD display used in case no displays are ever conneceted.
 ScreenWinDisplay CreateFallbackPrimaryScreenDisplay() {
   MONITORINFOEX monitor_info;
-  ::ZeroMemory(&monitor_info, sizeof(monitor_info));
+  UNSAFE_TODO(::ZeroMemory(&monitor_info, sizeof(monitor_info)));
   monitor_info.cbSize = sizeof(monitor_info);
   monitor_info.rcMonitor = gfx::Rect{1920, 1080}.ToRECT();
   monitor_info.rcWork = monitor_info.rcMonitor;
@@ -772,8 +773,10 @@ ScreenWinDisplay ScreenWin::GetScreenWinDisplayWithDisplayId(int64_t id) {
 }
 
 // static
-int64_t ScreenWin::DisplayIdFromMonitorInfo(const MONITORINFOEX& monitor) {
-  return internal::DisplayInfo::DisplayIdFromMonitorInfo(monitor);
+int64_t ScreenWin::DisplayIdFromMonitorInfo(const MONITORINFOEX& monitor_info) {
+  return g_instance
+             ? g_instance->GetDisplayIdFromMonitorInfo(monitor_info)
+             : internal::DisplayInfo::DisplayIdFromMonitorInfo(monitor_info);
 }
 
 // static
@@ -899,6 +902,10 @@ gfx::Rect ScreenWin::DIPToScreenRectInWindow(gfx::NativeWindow window,
 
 void ScreenWin::UpdateFromDisplayInfos(
     const std::vector<internal::DisplayInfo>& display_infos) {
+  // Retrieve the primary monitor info here, instead of later below. This is a
+  // speculative workaround for the issue observed on older version of Windows
+  // 10.  See crbug.com/394622418 for more detail.
+  auto primary_monitor = MonitorFromWindow(nullptr, MONITOR_DEFAULTTOPRIMARY);
   auto new_screen_win_displays = DisplayInfosToScreenWinDisplays(
       display_infos, color_profile_reader_.get(), dxgi_info_.get());
 
@@ -932,7 +939,7 @@ void ScreenWin::UpdateFromDisplayInfos(
 
   // This primary information is used only to detect if another monitor has
   // became the primary monitor.
-  primary_monitor_ = MonitorFromWindow(nullptr, MONITOR_DEFAULTTOPRIMARY);
+  primary_monitor_ = primary_monitor;
 
   const std::optional<MONITORINFOEX> primary_monitor_info =
       MonitorInfoFromHMONITOR(primary_monitor_);
@@ -992,6 +999,11 @@ std::optional<MONITORINFOEX> ScreenWin::MonitorInfoFromWindow(
     HWND hwnd,
     DWORD default_options) const {
   return MonitorInfoFromHMONITOR(::MonitorFromWindow(hwnd, default_options));
+}
+
+int64_t ScreenWin::GetDisplayIdFromMonitorInfo(
+    const MONITORINFOEX& monitor_info) const {
+  return internal::DisplayInfo::DisplayIdFromMonitorInfo(monitor_info);
 }
 
 HWND ScreenWin::GetRootWindow(HWND hwnd) const {

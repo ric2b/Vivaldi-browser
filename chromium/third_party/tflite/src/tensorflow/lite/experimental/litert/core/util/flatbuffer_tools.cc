@@ -16,7 +16,6 @@
 
 #include <algorithm>
 #include <memory>
-#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -273,7 +272,9 @@ Expected<TflPerChannelQParams> AsPerChannelQparams(
 
 Expected<FlatbufferWrapper::Ptr> FlatbufferWrapper::CreateFromBuffer(
     OwningBufferRef<uint8_t>&& buffer) {
-  if (!VerifyFlatbuffer(buffer.Data(), buffer.Size())) {
+  static constexpr size_t k2GiB = 2e+9;
+  if (buffer.Size() < k2GiB &&
+      !VerifyFlatbuffer(buffer.Data(), buffer.Size())) {
     return Error(kLiteRtStatusErrorInvalidFlatbuffer);
   }
 

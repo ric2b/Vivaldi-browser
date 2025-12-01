@@ -13,13 +13,11 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
 #include "build/build_config.h"
-#include "build/chromeos_buildflags.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/enterprise/browser_management/management_service_factory.h"
 #include "chrome/browser/image_fetcher/image_fetcher_service_factory.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/profiles/profile_attributes_entry.h"
 #include "chrome/browser/profiles/profile_attributes_storage.h"
 #include "chrome/browser/profiles/profile_key.h"
 #include "chrome/browser/profiles/profile_manager.h"
@@ -53,9 +51,12 @@
 
 #include "base/android/jni_string.h"
 #include "base/android/scoped_java_ref.h"
+#include "chrome/browser/enterprise/connectors/connectors_service.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/managed_ui.h"
 #include "components/enterprise/browser/reporting/common_pref_names.h"
+#include "components/enterprise/connectors/core/features.h"
+#include "components/safe_browsing/core/common/features.h"
 
 // Must come after other includes, because FromJniType() uses Profile.
 #include "chrome/browser/enterprise/util/jni_headers/ManagedBrowserUtils_jni.h"
@@ -221,10 +222,10 @@ void SetUserAcceptedAccountManagement(Profile* profile, bool accepted) {
       profile_manager->GetProfileAttributesStorage()
           .GetProfileAttributesWithPath(profile->GetPath());
   if (entry) {
-    entry->SetUserAcceptedAccountManagement(accepted);
 #if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)
-    entry->SetEnterpriseProfileLabel(GetEnterpriseLabel(profile));
+    SetEnterpriseProfileLabel(profile);
 #endif
+    entry->SetUserAcceptedAccountManagement(accepted);
   }
 }
 
@@ -237,6 +238,25 @@ bool UserAcceptedAccountManagement(Profile* profile) {
           ->GetProfileAttributesStorage()
           .GetProfileAttributesWithPath(profile->GetPath());
   return entry && entry->UserAcceptedAccountManagement();
+}
+
+void SetEnterpriseProfileLabel(Profile* profile) {
+  ProfileManager* profile_manager = g_browser_process->profile_manager();
+  if (!profile_manager) {
+    // Can be null in tests.
+    return;
+  }
+  ProfileAttributesEntry* entry =
+      profile_manager->GetProfileAttributesStorage()
+          .GetProfileAttributesWithPath(profile->GetPath());
+  if (!entry) {
+    return;
+  }
+  std::string label = IsEnterpriseBadgingEnabledForToolbar(profile)
+                          ? profile->GetPrefs()->GetString(
+                                prefs::kEnterpriseCustomLabelForProfile)
+                          : std::string();
+  entry->SetEnterpriseProfileLabel(base::UTF8ToUTF16(label));
 }
 
 bool ProfileCanBeManaged(Profile* profile) {
@@ -267,7 +287,7 @@ bool IsEnterpriseBadgingEnabledForToolbar(Profile* profile) {
 }
 
 bool CanShowEnterpriseBadgingForMenu(Profile* profile) {
-  if (!UserAcceptedAccountManagement(profile) && !profile->IsChild()) {
+  if (!CanShowEnterpriseProfileUI(profile) && !profile->IsChild()) {
     return false;
   }
   if (base::FeatureList::IsEnabled(
@@ -288,7 +308,7 @@ bool CanShowEnterpriseBadgingForMenu(Profile* profile) {
 }
 
 bool CanShowEnterpriseBadgingForAvatar(Profile* profile) {
-  if (!UserAcceptedAccountManagement(profile)) {
+  if (!CanShowEnterpriseProfileUI(profile)) {
     return false;
   }
   if (!IsEnterpriseBadgingEnabledForToolbar(profile)) {
@@ -306,6 +326,18 @@ bool CanShowEnterpriseBadgingForAvatar(Profile* profile) {
   return !profile->GetPrefs()
               ->GetString(prefs::kEnterpriseCustomLabelForProfile)
               .empty();
+}
+
+bool CanShowEnterpriseProfileUI(Profile* profile) {
+  if (profile->IsOffTheRecord()) {
+    return false;
+  }
+  if (!UserAcceptedAccountManagement(profile) ||
+      !policy::ManagementServiceFactory::GetForProfile(profile)
+           ->IsAccountManaged()) {
+    return false;
+  }
+  return true;
 }
 
 bool IsKnownConsumerDomain(const std::string& email_domain) {
@@ -345,6 +377,52 @@ jboolean JNI_ManagedBrowserUtils_IsProfileReportingEnabled(JNIEnv* env,
                                                            Profile* profile) {
   return profile->GetPrefs()->GetBoolean(
       enterprise_reporting::kCloudProfileReportingEnabled);
+}
+
+// static
+jboolean JNI_ManagedBrowserUtils_IsOnSecurityEventEnterpriseConnectorEnabled(
+    JNIEnv* env,
+    Profile* profile) {
+  DCHECK(profile);
+
+  if (!base::FeatureList::IsEnabled(
+          enterprise_connectors::kEnterpriseSecurityEventReportingOnAndroid) &&
+      !base::FeatureList::IsEnabled(
+          enterprise_connectors::
+              kEnterpriseUrlFilteringEventReportingOnAndroid)) {
+    return false;
+  }
+
+  auto* service =
+      enterprise_connectors::ConnectorsServiceFactory::GetForBrowserContext(
+          profile);
+  if (!service) {
+    return false;
+  }
+
+  return !service->GetReportingServiceProviderNames().empty();
+}
+
+// static
+jboolean JNI_ManagedBrowserUtils_IsEnterpriseRealTimeUrlCheckModeEnabled(
+    JNIEnv* env,
+    Profile* profile) {
+  DCHECK(profile);
+
+  if (!base::FeatureList::IsEnabled(
+           safe_browsing::kEnterpriseRealTimeUrlCheckOnAndroid)) {
+    return false;
+  }
+
+  auto* service =
+      enterprise_connectors::ConnectorsServiceFactory::GetForBrowserContext(
+          profile);
+  if (!service) {
+    return false;
+  }
+
+  return service->GetAppliedRealTimeUrlCheck() !=
+         enterprise_connectors::REAL_TIME_CHECK_DISABLED;
 }
 
 #endif  // BUILDFLAG(IS_ANDROID)

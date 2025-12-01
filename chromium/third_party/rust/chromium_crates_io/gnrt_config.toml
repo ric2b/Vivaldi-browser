@@ -80,39 +80,19 @@ config_template = "vet_config.toml.hbs"
 
 [resolve]
 root = "chromium"
-# These crates are dependencies in some configurations, but we don't use them.
-remove_crates = [
-    # C/C++ dependencies must be explicitly writting in GN rules somehow.
-    'cc',
-    'link-cplusplus',
-    'shlex',
-    # minimal-lexical is unsound see https://crrev.com/c/4977110 for more info.
-    # It is a dependency of nom, but not actually used.
-    'minimal-lexical',
-    # Windows targets that we do not ever target.
-    'windows_aarch64_gnullvm',
-    'windows_i686_gnu',
-    'windows_i686_gnullvm',
-    'windows_x86_64_gnu',
-    'windows_x86_64_gnullvm',
-    # Behind a feature that we do not enable.
-    'wasi'
-]
+remove_crates = []
 
 [crate.anyhow]
 group = 'test'
 
-[crate.base64]
-group = 'test'
-
-[crate.bstr]
-ban_features = [
-    # The unicode feature is not audited for UB-Risk-2.
-    'unicode'
-]
-
 [crate.bytes]
 group = 'test'
+
+[crate.bytemuck]
+extra_kv = { configs_to_remove = [
+  # This allows using `std::simd` helpers, which are needed by first-party code.
+  '//build/config/compiler:disallow_unstable_features',
+] }
 
 [crate.clap]
 # These files are included from source files and are thus required as part of
@@ -137,6 +117,13 @@ remove_build_rs = true
 shipped = false
 bin_targets = ["cxxbridge"]
 
+[crate.fdeflate.extra_kv]
+# Web tests (aka WPT tests, also formerly known as Layout Tests) require fast
+# PNG encoding and decoding even in Debug builds.  See
+# https://crbug.com/396419181.
+configs_to_remove = ['//build/config/compiler:default_optimization']
+configs_to_add = ['//build/config/compiler:optimize']
+
 [crate.flate2]
 ban_features = [
     # `any_zlib` feature is banned because Chromium does not use the `zlib`
@@ -144,16 +131,70 @@ ban_features = [
     # audited).
     'any_zlib',
 ]
+[crate.flate2.extra_kv]
+# Web tests (aka WPT tests, also formerly known as Layout Tests) require fast
+# PNG encoding and decoding even in Debug builds.  See
+# https://crbug.com/396419181.
+configs_to_remove = ['//build/config/compiler:default_optimization']
+configs_to_add = ['//build/config/compiler:optimize']
 
 [crate.hex]
 group = 'test'
 
-[crate.hex-literal]
-group = 'test'
-extra_input_roots = ['../README.md']
-
 [crate.itertools]
 group = 'test'
+
+[crate.icu_calendar_data]
+extra_input_roots = ['../data']
+extra_src_roots = ['../data']
+
+[crate.icu_casemap_data]
+extra_input_roots = ['../data']
+extra_src_roots = ['../data']
+
+[crate.icu_collator_data]
+extra_input_roots = ['../data']
+extra_src_roots = ['../data']
+
+[crate.icu_datetime_data]
+extra_input_roots = ['../data']
+extra_src_roots = ['../data']
+
+[crate.icu_decimal_data]
+extra_input_roots = ['../data']
+extra_src_roots = ['../data']
+
+[crate.icu_experimental_data]
+extra_input_roots = ['../data']
+extra_src_roots = ['../data']
+
+[crate.icu_list_data]
+extra_input_roots = ['../data']
+extra_src_roots = ['../data']
+
+[crate.icu_locale_data]
+extra_input_roots = ['../data']
+extra_src_roots = ['../data']
+
+[crate.icu_normalizer_data]
+extra_input_roots = ['../data']
+extra_src_roots = ['../data']
+
+[crate.icu_plurals_data]
+extra_input_roots = ['../data']
+extra_src_roots = ['../data']
+
+[crate.icu_properties_data]
+extra_input_roots = ['../data']
+extra_src_roots = ['../data']
+
+[crate.icu_segmenter_data]
+extra_input_roots = ['../data']
+extra_src_roots = ['../data']
+
+[crate.icu_time_data]
+extra_input_roots = ['../data']
+extra_src_roots = ['../data']
 
 [crate.libc]
 ban_features = [
@@ -167,8 +208,23 @@ license_files= ["LICENSE.txt"]
 
 [crate.log]
 
-[crate.nom]
-remove_deps = ['minimal-lexical']
+[crate.miniz_oxide.extra_kv]
+# Web tests (aka WPT tests, also formerly known as Layout Tests) require fast
+# PNG encoding and decoding even in Debug builds.  See
+# https://crbug.com/396419181.
+configs_to_remove = ['//build/config/compiler:default_optimization']
+configs_to_add = ['//build/config/compiler:optimize']
+
+[crate.num-traits]
+# Configures the has_total_cmp feature, not necessary
+remove_build_rs = true
+
+[crate.png.extra_kv]
+# Web tests (aka WPT tests, also formerly known as Layout Tests) require fast
+# PNG encoding and decoding even in Debug builds.  See
+# https://crbug.com/396419181.
+configs_to_remove = ['//build/config/compiler:default_optimization']
+configs_to_add = ['//build/config/compiler:optimize']
 
 [crate.prost]
 extra_input_roots = ['../README.md']
@@ -186,18 +242,8 @@ group = 'test'
 [crate.read-fonts]
 extra_src_roots = ['../generated']
 
-[crate.regex]
-group = 'test'
-
-[crate.relative-path]
-# TODO(https://crbug.com/369075726): Remove this exception.
-no_license_file_tracked_in_crbug_369075726 = true
-
-[crate.rstest]
-group = 'test'
-
-[crate.rstest_reuse]
-group = 'test'
+[crate.rust_decimal]
+build_script_outputs = ['README-lib.md']
 
 [crate.rustversion]
 allow_first_party_usage = false
@@ -209,18 +255,20 @@ shipped = false
 # TODO(https://crbug.com/369075726): Remove this exception.
 no_license_file_tracked_in_crbug_369075726 = true
 
-[crate.serde_json]
-group = 'test'
-
 [crate.skrifa]
 extra_src_roots = ['../generated']
 
 [crate.small_ctor]
 group = 'test'
 
-[crate.unicode-linebreak]
-allow_first_party_usage = false
-build_script_outputs = [ "tables.rs" ]
+[crate.smallvec]
+ban_features = ['malloc_size_of']
+
+[crate.temporal_capi]
+license_files = ["LICENSE-MIT", "LICENSE-APACHE"]
+
+[crate.temporal_rs]
+license_files = ["LICENSE-MIT", "LICENSE-APACHE"]
 
 [crate.windows-sys]
 extra_kv = { visibility = [ '//build/rust/tests/windows_sys_test' ] }
@@ -233,7 +281,3 @@ native_libs_roots = [ '../lib' ]
 
 [crate.windows_x86_64_msvc]
 native_libs_roots = [ '../lib' ]
-
-[crate.wycheproof]
-group = 'test'
-extra_input_roots = ['data']

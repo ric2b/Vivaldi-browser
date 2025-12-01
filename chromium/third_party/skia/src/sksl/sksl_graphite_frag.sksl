@@ -244,8 +244,8 @@ $pure half4 sk_analytic_and_atlas_clip(float2 coords,
                                        float4 rect,
                                        float2 radiusPlusHalf,
                                        half4 edgeSelect,
-                                       half2 texCoordOffset,
-                                       half4 maskBounds,
+                                       float2 texCoordOffset,
+                                       float4 maskBounds,
                                        float2 invAtlasSize,
                                        sampler2D atlasSampler) {
     half4 analyticClip = sk_analytic_clip(coords, rect, radiusPlusHalf, edgeSelect);
@@ -414,6 +414,13 @@ $pure half4 sk_image_shader(float2 coords,
                             sampler2D s) {
     return $sample_image_subset(coords, invImgSize, subset, tileModeX, tileModeY,
                                 filterMode, float2($kLinearInset), s);
+}
+
+$pure half4 sk_image_shader_clamp(float2 coords,
+                                  float2 invImgSize,
+                                  float4 subsetInsetClamp,
+                                  sampler2D s) {
+    return $sample_image(clamp(coords, subsetInsetClamp.xy, subsetInsetClamp.zw), invImgSize, s);
 }
 
 $pure half4 sk_cubic_image_shader(float2 coords,

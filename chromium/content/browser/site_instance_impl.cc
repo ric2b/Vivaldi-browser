@@ -7,6 +7,7 @@
 #include <string>
 #include <tuple>
 
+#include "base/check_is_test.h"
 #include "base/containers/contains.h"
 #include "base/debug/crash_logging.h"
 #include "base/debug/dump_without_crashing.h"
@@ -329,7 +330,8 @@ SiteInstanceImpl::CreateReusableInstanceForTesting(
       ProcessReusePolicy::REUSE_PENDING_OR_COMMITTED_SITE_SUBFRAME);
   // Proactively create a process since many callers of this function in tests
   // rely on site_instance->GetProcess().
-  site_instance->GetOrCreateProcess();
+  site_instance->GetOrCreateProcess(
+      ProcessAllocationContext{ProcessAllocationSource::kTest});
   return site_instance;
 }
 
@@ -398,11 +400,6 @@ const IsolationContext& SiteInstanceImpl::GetIsolationContext() {
   return browsing_instance_->isolation_context();
 }
 
-RenderProcessHost* SiteInstanceImpl::GetSiteInstanceGroupProcessIfAvailable() {
-  return browsing_instance_->site_instance_group_manager()
-      .GetExistingGroupProcess(this);
-}
-
 bool SiteInstanceImpl::IsDefaultSiteInstance() const {
   return default_site_instance_state_ != nullptr;
 }
@@ -446,14 +443,19 @@ RenderProcessHost* SiteInstanceImpl::GetProcess() {
       base::FeatureList::IsEnabled(kTraceSiteInstanceGetProcessCreation)) {
     if (kCrashOnGetProcessCreation.Get()) {
       CHECK(false);
-    } else {
-      base::debug::DumpWithoutCrashing();
     }
   }
-  return GetOrCreateProcess();
+  return GetOrCreateProcess(ProcessAllocationContext{
+      ProcessAllocationSource::kNoProcessCreationExpected});
 }
 
-RenderProcessHost* SiteInstanceImpl::GetOrCreateProcess() {
+RenderProcessHost* SiteInstanceImpl::GetOrCreateProcess(
+    const ProcessAllocationContext& context) {
+  if (!HasProcess() &&
+      base::FeatureList::IsEnabled(kTraceSiteInstanceGetProcessCreation) &&
+      context.source == ProcessAllocationSource::kNoProcessCreationExpected) {
+    base::debug::DumpWithoutCrashing();
+  }
   // Create a new SiteInstanceGroup and RenderProcessHost if there isn't one.
   // All SiteInstances within a SiteInstanceGroup share a process and
   // AgentSchedulingGroupHost. A group must have a process. If the process gets
@@ -466,12 +468,23 @@ RenderProcessHost* SiteInstanceImpl::GetOrCreateProcess() {
     } else if (process_reuse_policy_ == ProcessReusePolicy::PROCESS_PER_SITE) {
       process_reuse_policy_ = ProcessReusePolicy::DEFAULT;
     }
-    SetProcessInternal(
-        RenderProcessHostImpl::GetProcessHostForSiteInstance(this));
+    ProcessAllocationContext allocation_context = context;
+    if (allocation_context.navigation_context.has_value()) {
+      allocation_context.navigation_context->requires_new_process_for_coop =
+          coop_reuse_process_failed_;
+    }
+    SetProcessInternal(RenderProcessHostImpl::GetProcessHostForSiteInstance(
+        this, allocation_context));
   }
   DCHECK(site_instance_group_);
 
   return site_instance_group_->process();
+}
+
+RenderProcessHost* SiteInstanceImpl::GetOrCreateProcess() {
+  CHECK_IS_TEST();
+  return GetOrCreateProcess(
+      ProcessAllocationContext{ProcessAllocationSource::kTest});
 }
 
 SiteInstanceGroupId SiteInstanceImpl::GetSiteInstanceGroupId() {
@@ -539,11 +552,6 @@ void SiteInstanceImpl::SetProcessInternal(RenderProcessHost* process) {
   if (has_site_) {
     GetContentClient()->browser()->SiteInstanceGotProcessAndSite(this);
   }
-
-  // Notify SiteInstanceGroupManager that the process was set on this
-  // SiteInstance. This must be called after LockProcessIfNeeded() because
-  // the SiteInstanceGroupManager does suitability checks that use the lock.
-  browsing_instance_->site_instance_group_manager().OnProcessSet(this);
 }
 
 bool SiteInstanceImpl::CanAssociateWithSpareProcess() {
@@ -675,12 +683,6 @@ void SiteInstanceImpl::SetSiteInfoInternal(const SiteInfo& site_info) {
           site_instance_group_->process(), this);
     }
   }
-
-  // Notify SiteInstanceGroupManager that the SiteInfo was set on this
-  // SiteInstance. This must be called after LockProcessIfNeeded() because
-  // the SiteInstanceGroupManager does suitability checks that use the lock.
-  browsing_instance_->site_instance_group_manager().OnSiteInfoSet(this,
-                                                                  has_group());
 }
 
 void SiteInstanceImpl::ConvertToDefaultOrSetSite(const UrlInfo& url_info) {
@@ -1416,15 +1418,6 @@ bool SiteInstanceImpl::CanBePlacedInDefaultSiteInstance(
   if (url.SchemeIs(url::kFileScheme))
     return false;
 
-  // Don't use the default SiteInstance when
-  // kProcessSharingWithStrictSiteInstances is enabled because we want each
-  // site to have its own SiteInstance object and logic elsewhere ensures
-  // that those SiteInstances share a process.
-  if (base::FeatureList::IsEnabled(
-          features::kProcessSharingWithStrictSiteInstances)) {
-    return false;
-  }
-
   // Don't use the default SiteInstance when SiteInstance doesn't assign a
   // site URL for |url|, since in that case the SiteInstance should remain
   // unused, and a subsequent navigation should always be able to reuse it,
@@ -1666,11 +1659,6 @@ RenderProcessHost* SiteInstanceImpl::GetDefaultProcessForBrowsingInstance() {
           browsing_instance_->default_site_instance()) {
     return default_instance->HasProcess() ? default_instance->GetProcess()
                                           : nullptr;
-  }
-  if (browsing_instance_->site_instance_group_manager().default_process()) {
-    DCHECK(base::FeatureList::IsEnabled(
-        features::kProcessSharingWithStrictSiteInstances));
-    return browsing_instance_->site_instance_group_manager().default_process();
   }
   return nullptr;
 }

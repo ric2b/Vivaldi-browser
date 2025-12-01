@@ -27,8 +27,6 @@
 
 #include "src/tint/lang/spirv/reader/lower/vector_element_pointer.h"
 
-#include <utility>
-
 #include "src/tint/lang/core/ir/builder.h"
 #include "src/tint/lang/core/ir/module.h"
 #include "src/tint/lang/core/ir/validator.h"
@@ -155,6 +153,7 @@ struct State {
 Result<SuccessType> VectorElementPointer(core::ir::Module& ir) {
     auto result = ValidateAndDumpIfNeeded(ir, "spirv.VectorElementPointer",
                                           core::ir::Capabilities{
+                                              core::ir::Capability::kAllowOverrides,
                                               core::ir::Capability::kAllowVectorElementPointer,
                                           });
     if (result != Success) {

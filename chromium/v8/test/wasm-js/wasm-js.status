@@ -15,9 +15,6 @@
   # tests have been updated.
   'wpt/exception/getArg.tentative': [FAIL],
 
-  # Failing spec tests after test update
-  'proposals/js-types/function/constructor.tentative': [FAIL],
-
   # This is a spec test of the https://github.com/WebAssembly/esm-integration
   # proposal which V8 does not implement yet.
   'wpt/module/moduleSource.tentative': [FAIL],
@@ -36,8 +33,17 @@
   # TODO(https://crbug.com/42202693): RAB / GSAB integration.
   'wpt/memory/to-fixed-length-buffer': [FAIL],
   'wpt/memory/to-resizable-buffer': [FAIL],
-  'wpt/memory/to-resizable-buffer-shared': [FAIL],
-  'wpt/memory/to-fixed-length-buffer-shared': [FAIL],
+
+  # TODO(402340845): This requires the type reflection proposal to be staged or enabled by default.
+  'wpt/function/call.tentative': [FAIL],
+  'wpt/function/table.tentative': [FAIL],
+  'wpt/function/type.tentative': [FAIL],
+  'wpt/global/type.tentative': [FAIL],
+  'wpt/memory/constructor-types.tentative': [FAIL],
+  'wpt/memory/type.tentative': [FAIL],
+  'wpt/table/constructor-types.tentative': [FAIL],
+  'wpt/table/type.tentative': [FAIL],
+  'wpt/tag/type.tentative': [FAIL],
 }], # ALWAYS
 
 ['system == android', {
@@ -75,11 +81,11 @@
 }],
 
 ##############################################################################
-['arch != x64 and arch != arm64 and arch != ia32 and arch != arm and arch != riscv64 and arch != loong64 and arch != ppc64', {
+['arch != x64 and arch != arm64 and arch != ia32 and arch != arm and arch != riscv64 and arch != loong64 and arch != ppc64 and arch != s390x', {
   # Stack switching is not supported on all platforms.
   'proposals/js-promise-integration/js-promise-integration/js-promise-integration': [SKIP],
   'wpt/jspi/*': [SKIP]
-}],  # (arch != x64 and arch != arm64 and arch != ia32 and arch != arm and arch != riscv64 and arch != loong64 and arch != ppc64)
+}],  # (arch != x64 and arch != arm64 and arch != ia32 and arch != arm and arch != riscv64 and arch != loong64 and arch != ppc64 and arch != s390x)
 
 ##############################################################################
 ['cet_shadow_stack', {

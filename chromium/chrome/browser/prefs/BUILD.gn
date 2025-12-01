@@ -24,7 +24,6 @@ source_set("prefs") {
 
   public_deps = [
     "//base",
-    "//build:chromeos_buildflags",
     "//chrome/browser/profiles:profile",
     "//chrome/browser/sync",
     "//components/keyed_service/core",
@@ -84,7 +83,6 @@ source_set("impl") {
     "//components/enterprise/connectors/core",
     "//components/fingerprinting_protection_filter/common",
     "//components/fingerprinting_protection_filter/common:prefs",
-    "//components/flags_ui",
     "//components/history_clusters/core",
     "//components/image_fetcher/core/cache",
     "//components/invalidation/impl",
@@ -104,6 +102,7 @@ source_set("impl") {
     "//components/permissions",
     "//components/plus_addresses:prefs",
     "//components/pref_registry",
+    "//components/privacy_sandbox:privacy_sandbox_notice_storage",
     "//components/privacy_sandbox:privacy_sandbox_prefs",
     "//components/privacy_sandbox:tpcd",
     "//components/proxy_config",
@@ -125,10 +124,15 @@ source_set("impl") {
     "//components/update_client",
     "//components/variations/service",
     "//components/webui/chrome_urls",
+    "//components/webui/flags",
     "//services/preferences/public/cpp/tracked",
     "//services/preferences/public/mojom",
     "//services/preferences/tracked",
   ]
+
+  if (enable_background_mode) {
+    deps += [ "//chrome/browser/background/extensions:extensions" ]
+  }
 
   if (is_chromeos) {
     deps += [
@@ -152,7 +156,6 @@ source_set("impl") {
       "//chrome/browser/ash/child_accounts",
       "//chrome/browser/ash/child_accounts/parent_access_code",
       "//chrome/browser/ash/child_accounts/time_limits",
-      "//chrome/browser/ash/crosapi:browser_util",
       "//chrome/browser/ash/crostini",
       "//chrome/browser/ash/cryptauth",
       "//chrome/browser/ash/customization",
@@ -207,7 +210,6 @@ source_set("impl") {
       "//chrome/browser/chromeos/upload_office_to_cloud",
       "//chrome/browser/extensions/api/document_scan:profile_prefs_registry_util",
       "//chrome/browser/extensions/api/enterprise_platform_keys:enterprise_platform_keys_registry_util",
-      "//chrome/browser/extensions/api/shared_storage",
       "//chrome/browser/nearby_sharing/common",
       "//chrome/browser/policy:onc",
       "//chrome/browser/policy:system_features_disable_list",
@@ -316,8 +318,8 @@ source_set("impl") {
 
   if (enable_glic) {
     deps += [
+      "//chrome/browser/background/glic",
       "//chrome/browser/glic",
-      "//chrome/browser/glic/launcher",
     ]
   }
 }
@@ -349,7 +351,6 @@ source_set("util_impl") {
   deps = [
     ":util",
     "//base",
-    "//build:chromeos_buildflags",
     "//chrome/browser/profiles:profile",
     "//chrome/browser/ui/startup:startup_tab",
     "//chrome/common:constants",
@@ -385,7 +386,6 @@ source_set("unit_tests") {
     ":util",
     "//base",
     "//base/test:test_support",
-    "//build:chromeos_buildflags",
     "//chrome/browser",
     "//chrome/browser:browser_process",
     "//chrome/browser/profiles:profile_util",
@@ -438,9 +438,9 @@ if (!is_android) {
     deps = [
       "//base",
       "//base/test:test_support",
-      "//build:chromeos_buildflags",
       "//chrome/browser",
       "//chrome/browser/preloading:prefs",
+      "//chrome/browser/search_engines",
       "//chrome/browser/ui",
       "//chrome/browser/ui/tabs:tab_strip",
       "//chrome/common:constants",

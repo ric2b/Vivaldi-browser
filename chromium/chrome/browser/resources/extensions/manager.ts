@@ -162,32 +162,35 @@ export class ExtensionsManagerElement extends ExtensionsManagerElementBase {
     };
   }
 
-  canLoadUnpacked: boolean = false;
-  delegate: ServiceInterface = Service.getInstance();
-  inDevMode: boolean = loadTimeData.getBoolean('inDevMode');
-  isMv2DeprecationNoticeDismissed: boolean =
+  accessor canLoadUnpacked: boolean = false;
+  accessor delegate: ServiceInterface = Service.getInstance();
+  accessor inDevMode: boolean = loadTimeData.getBoolean('inDevMode');
+  accessor isMv2DeprecationNoticeDismissed: boolean =
       loadTimeData.getBoolean('MV2DeprecationNoticeDismissed');
-  showActivityLog: boolean = loadTimeData.getBoolean('showActivityLog');
-  enableEnhancedSiteControls: boolean =
+  accessor showActivityLog: boolean =
+      loadTimeData.getBoolean('showActivityLog');
+  accessor enableEnhancedSiteControls: boolean =
       loadTimeData.getBoolean('enableEnhancedSiteControls');
-  devModeControlledByPolicy: boolean = false;
-  protected isChildAccount_: boolean = false;
-  protected incognitoAvailable_: boolean = false;
-  filter: string = '';
-  protected errorPageItem_?: chrome.developerPrivate.ExtensionInfo;
-  protected detailViewItem_?: chrome.developerPrivate.ExtensionInfo;
-  protected activityLogItem_?: chrome.developerPrivate.ExtensionInfo|
-      ActivityLogExtensionPlaceholder;
-  protected extensions_: chrome.developerPrivate.ExtensionInfo[] = [];
-  protected apps_: chrome.developerPrivate.ExtensionInfo[] = [];
-  protected didInitPage_: boolean = false;
-  protected narrow_: boolean = false;
-  protected showDrawer_: boolean = false;
-  protected showLoadErrorDialog_: boolean = false;
-  protected showInstallWarningsDialog_: boolean = false;
-  protected installWarnings_: string[]|null = null;
-  protected showOptionsDialog_: boolean = false;
-  protected fromActivityLog_: boolean = false;
+  accessor devModeControlledByPolicy: boolean = false;
+  protected accessor isChildAccount_: boolean = false;
+  protected accessor incognitoAvailable_: boolean = false;
+  accessor filter: string = '';
+  protected accessor errorPageItem_: chrome.developerPrivate.ExtensionInfo|
+      undefined;
+  protected accessor detailViewItem_: chrome.developerPrivate.ExtensionInfo|
+      undefined;
+  protected accessor activityLogItem_: chrome.developerPrivate.ExtensionInfo|
+      ActivityLogExtensionPlaceholder|undefined;
+  protected accessor extensions_: chrome.developerPrivate.ExtensionInfo[] = [];
+  protected accessor apps_: chrome.developerPrivate.ExtensionInfo[] = [];
+  protected accessor didInitPage_: boolean = false;
+  protected accessor narrow_: boolean = false;
+  protected accessor showDrawer_: boolean = false;
+  protected accessor showLoadErrorDialog_: boolean = false;
+  protected accessor showInstallWarningsDialog_: boolean = false;
+  protected accessor installWarnings_: string[]|null = null;
+  protected accessor showOptionsDialog_: boolean = false;
+  protected accessor fromActivityLog_: boolean = false;
 
   /**
    * A promise resolver for any external files waiting for initPage_ to be
@@ -247,7 +250,7 @@ export class ExtensionsManagerElement extends ExtensionsManagerElementBase {
     const changedPrivateProperties =
         changedProperties as Map<PropertyKey, unknown>;
     if (changedPrivateProperties.has('narrow_')) {
-      const drawer = this.shadowRoot!.querySelector('cr-drawer');
+      const drawer = this.shadowRoot.querySelector('cr-drawer');
       if (!this.narrow_ && drawer?.open) {
         drawer.close();
       }
@@ -379,7 +382,7 @@ export class ExtensionsManagerElement extends ExtensionsManagerElementBase {
   protected onMenuButtonClick_() {
     this.showDrawer_ = true;
     setTimeout(() => {
-      this.shadowRoot!.querySelector('cr-drawer')!.openDrawer();
+      this.shadowRoot.querySelector('cr-drawer')!.openDrawer();
     }, 0);
   }
 
@@ -569,7 +572,7 @@ export class ExtensionsManagerElement extends ExtensionsManagerElementBase {
       e: CustomEvent<Error|chrome.developerPrivate.LoadError>) {
     this.showLoadErrorDialog_ = true;
     setTimeout(() => {
-      const dialog = this.shadowRoot!.querySelector('extensions-load-error')!;
+      const dialog = this.shadowRoot.querySelector('extensions-load-error')!;
       dialog.loadError = e.detail;
       dialog.show();
     }, 0);
@@ -582,7 +585,7 @@ export class ExtensionsManagerElement extends ExtensionsManagerElementBase {
     this.onCloseDrawer_();
 
     const optionsDialog =
-        this.shadowRoot!.querySelector('extensions-options-dialog');
+        this.shadowRoot.querySelector('extensions-options-dialog');
     if (optionsDialog && optionsDialog.open) {
       this.showOptionsDialog_ = false;
     }
@@ -648,7 +651,7 @@ export class ExtensionsManagerElement extends ExtensionsManagerElementBase {
       assert(newPage.extensionId);
       this.showOptionsDialog_ = true;
       setTimeout(() => {
-        this.shadowRoot!.querySelector('extensions-options-dialog')!.show(
+        this.shadowRoot.querySelector('extensions-options-dialog')!.show(
             data!,
         );
       }, 0);
@@ -672,7 +675,7 @@ export class ExtensionsManagerElement extends ExtensionsManagerElementBase {
    * This method animates the closing of the drawer.
    */
   protected onCloseDrawer_() {
-    const drawer = this.shadowRoot!.querySelector('cr-drawer');
+    const drawer = this.shadowRoot.querySelector('cr-drawer');
     if (drawer && drawer.open) {
       drawer.close();
     }
@@ -684,8 +687,8 @@ export class ExtensionsManagerElement extends ExtensionsManagerElementBase {
 
   protected onOptionsDialogClose_() {
     this.showOptionsDialog_ = false;
-    this.shadowRoot!.querySelector(
-                        'extensions-detail-view')!.focusOptionsButton();
+    this.shadowRoot.querySelector(
+                       'extensions-detail-view')!.focusOptionsButton();
   }
 
   private onViewEnterStart_() {
@@ -709,7 +712,7 @@ export class ExtensionsManagerElement extends ExtensionsManagerElementBase {
 
     const extensionId =
         (e.composedPath()[0] as ExtensionsDetailViewElement).data.id;
-    const list = this.shadowRoot!.querySelector('extensions-item-list')!;
+    const list = this.shadowRoot.querySelector('extensions-item-list')!;
     const button = viewType === 'EXTENSIONS-DETAIL-VIEW' ?
         list.getDetailsButton(extensionId) :
         list.getErrorsButton(extensionId);

@@ -24,15 +24,11 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
-#pragma allow_unsafe_buffers
-#endif
-
 #include "third_party/blink/renderer/core/html/parser/html_construction_site.h"
 
 #include <limits>
 
+#include "base/compiler_specific.h"
 #include "base/notreached.h"
 #include "third_party/blink/renderer/core/dom/attribute_part.h"
 #include "third_party/blink/renderer/core/dom/child_node_part.h"
@@ -153,9 +149,9 @@ static inline WhitespaceMode RecomputeWhiteSpaceMode(
   auto check_whitespace = [](auto* buffer, size_t length) {
     WhitespaceMode result = WhitespaceMode::kNewlineThenWhitespace;
     for (size_t i = 1; i < length; ++i) {
-      if (buffer[i] == ' ') [[likely]] {
+      if (UNSAFE_TODO(buffer[i]) == ' ') [[likely]] {
         continue;
-      } else if (IsHTMLSpecialWhitespace(buffer[i])) {
+      } else if (IsHTMLSpecialWhitespace(UNSAFE_TODO(buffer[i]))) {
         result = WhitespaceMode::kAllWhitespace;
       } else {
         return WhitespaceMode::kNotAllWhitespace;
@@ -225,7 +221,7 @@ static inline void Insert(HTMLConstructionSiteTask& task) {
 
   // https://html.spec.whatwg.org/C/#insert-a-foreign-element
   // 3.1, (3) Push (pop) an element queue
-  CEReactionsScope reactions;
+  CEReactionsScope reactions(task.child->GetDocument().GetAgent().isolate());
   if (task.next_child)
     task.parent->ParserInsertBefore(task.child.Get(), *task.next_child);
   else
@@ -1190,7 +1186,7 @@ Element* HTMLConstructionSite::CreateElement(
 
     // "6.3 Push a new element queue onto the custom element
     // reactions stack."
-    CEReactionsScope reactions;
+    CEReactionsScope reactions(document.GetAgent().isolate());
 
     // "7. Let element be the result of creating an element given document,
     // localName, given namespace, null, and is. If will execute script is true,

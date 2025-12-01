@@ -830,7 +830,9 @@ int sqlite3_declare_vtab(sqlite3 *db, const char *zCreateTable){
   z = (const unsigned char*)zCreateTable;
   for(i=0; aKeyword[i]; i++){
     int tokenType = 0;
-    do{ z += sqlite3GetToken(z, &tokenType); }while( tokenType==TK_SPACE );
+    do{
+      z += sqlite3GetToken(z, &tokenType);
+    }while( tokenType==TK_SPACE || tokenType==TK_COMMENT );
     if( tokenType!=aKeyword[i] ){
       sqlite3ErrorWithMsg(db, SQLITE_ERROR, "syntax error");
       return SQLITE_ERROR;
@@ -867,6 +869,7 @@ int sqlite3_declare_vtab(sqlite3 *db, const char *zCreateTable){
       Table *pNew = sParse.pNewTable;
       Index *pIdx;
       pTab->aCol = pNew->aCol;
+      assert( IsOrdinaryTable(pNew) );
       sqlite3ExprListDelete(db, pNew->u.tab.pDfltList);
       pTab->nNVCol = pTab->nCol = pNew->nCol;
       pTab->tabFlags |= pNew->tabFlags & (TF_WithoutRowid|TF_NoVisibleRowid);

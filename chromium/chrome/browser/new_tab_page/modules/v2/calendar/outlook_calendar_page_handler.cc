@@ -7,13 +7,14 @@
 #include <string>
 #include <vector>
 
-#include "base/containers/fixed_flat_map.h"
 #include "base/files/file_path.h"
 #include "base/i18n/time_formatting.h"
 #include "base/metrics/histogram_functions.h"
+#include "base/strings/escape.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/new_tab_page/microsoft_auth/microsoft_auth_service_factory.h"
+#include "chrome/browser/new_tab_page/modules/microsoft_modules_helper.h"
 #include "chrome/browser/new_tab_page/modules/v2/calendar/calendar_data.mojom.h"
 #include "chrome/browser/new_tab_page/modules/v2/calendar/calendar_fake_data_helper.h"
 #include "chrome/common/pref_names.h"
@@ -27,10 +28,6 @@
 #include "services/network/public/mojom/url_response_head.mojom.h"
 
 namespace {
-
-const char kBaseIconUrl[] =
-    "https://res.cdn.office.net/files/fabric-cdn-prod_20240925.001/assets/"
-    "item-types/16/";
 
 const char kBaseAttachmentResourceUrl[] =
     "https://outlook.office.com/mail/deeplink/attachment/";
@@ -150,156 +147,6 @@ constexpr net::NetworkTrafficAnnotationTag attachment_traffic_annotation =
 
 constexpr int kMaxResponseSize = 1024 * 1024;
 
-// The following are used to create file icon urls.
-constexpr char kAudioIconPartialPath[] = "audio";
-constexpr char kImagesIconPartialPath[] = "photo";
-constexpr char kVideoIconPartialPath[] = "video";
-constexpr char kCodeIconPartialPath[] = "code";
-constexpr char kVectorIconPartialPath[] = "vector";
-constexpr char kXmlDocumentIconPartialPath[] = "docx";
-constexpr char kXmlPresentationIconPartialPath[] = "pptx";
-constexpr char kXmlSpreadsheetIconPartialPath[] = "xlsx";
-constexpr char kPlainTextIconPartialPath[] = "txt";
-constexpr char kCsvIconPartialPath[] = "csv";
-constexpr char kPdfIconPartialPath[] = "pdf";
-constexpr char kRichTextPartialPath[] = "rtf";
-constexpr char kZipPartialPath[] = "zip";
-constexpr char kXmlPartialPath[] = "xml";
-
-std::string GetFileExtension(std::string mime_type) {
-  base::FilePath::StringType extension;
-  net::GetPreferredExtensionForMimeType(mime_type, &extension);
-  std::string result;
-
-#if BUILDFLAG(IS_WIN)
-  // `extension` will be of std::wstring type on Windows which needs to be
-  // handled differently than std::string. See base/files/file_path.h for more
-  // info.
-  result = base::WideToUTF8(extension);
-#else
-  result = extension;
-#endif
-
-  return result;
-}
-
-// Maps files to their icon url. These are simplified mappings derived from
-// https://github.com/microsoft/fluentui/blob/master/packages/react-file-type-icons/src/FileTypeIconMap.ts.
-// TODO(crbug.com/397728601): Investigate a better solution for getting file
-// icon urls and move solution to a helper file to eliminate duplication of url
-// retrieval.
-GURL GetIconUrl(std::string mime_type) {
-  const auto kIconMap =
-      base::MakeFixedFlatMap<std::string_view, std::string_view>({
-          // Audio files. Copied from `kStandardAudioTypes` in
-          // net/base/mime_util.cc.
-          {"audio/aac", kAudioIconPartialPath},
-          {"audio/aiff", kAudioIconPartialPath},
-          {"audio/amr", kAudioIconPartialPath},
-          {"audio/basic", kAudioIconPartialPath},
-          {"audio/flac", kAudioIconPartialPath},
-          {"audio/midi", kAudioIconPartialPath},
-          {"audio/mp3", kAudioIconPartialPath},
-          {"audio/mp4", kAudioIconPartialPath},
-          {"audio/mpeg", kAudioIconPartialPath},
-          {"audio/mpeg3", kAudioIconPartialPath},
-          {"audio/ogg", kAudioIconPartialPath},
-          {"audio/vorbis", kAudioIconPartialPath},
-          {"audio/wav", kAudioIconPartialPath},
-          {"audio/webm", kAudioIconPartialPath},
-          {"audio/x-m4a", kAudioIconPartialPath},
-          {"audio/x-ms-wma", kAudioIconPartialPath},
-          {"audio/vnd.rn-realaudio", kAudioIconPartialPath},
-          {"audio/vnd.wave", kAudioIconPartialPath},
-          // Image files. Copied from `kStandardImageTypes` in
-          // net/base/mime_util.cc.
-          {"image/avif", kImagesIconPartialPath},
-          {"image/bmp", kImagesIconPartialPath},
-          {"image/cis-cod", kImagesIconPartialPath},
-          {"image/gif", kImagesIconPartialPath},
-          {"image/heic", kImagesIconPartialPath},
-          {"image/heif", kImagesIconPartialPath},
-          {"image/ief", kImagesIconPartialPath},
-          {"image/jpeg", kImagesIconPartialPath},
-          {"image/pict", kImagesIconPartialPath},
-          {"image/pipeg", kImagesIconPartialPath},
-          {"image/png", kImagesIconPartialPath},
-          {"image/webp", kImagesIconPartialPath},
-          {"image/tiff", kImagesIconPartialPath},
-          {"image/vnd.microsoft.icon", kImagesIconPartialPath},
-          {"image/x-cmu-raster", kImagesIconPartialPath},
-          {"image/x-cmx", kImagesIconPartialPath},
-          {"image/x-icon", kImagesIconPartialPath},
-          {"image/x-portable-anymap", kImagesIconPartialPath},
-          {"image/x-portable-bitmap", kImagesIconPartialPath},
-          {"image/x-portable-graymap", kImagesIconPartialPath},
-          {"image/x-portable-pixmap", kImagesIconPartialPath},
-          {"image/x-rgb", kImagesIconPartialPath},
-          {"image/x-xbitmap", kImagesIconPartialPath},
-          {"image/x-xpixmap", kImagesIconPartialPath},
-          {"image/x-xwindowdump", kImagesIconPartialPath},
-          // Video files. Copied from `kStandardVideoTypes` in
-          // net/base/mime_util.cc.
-          {"video/avi", kVideoIconPartialPath},
-          {"video/divx", kVideoIconPartialPath},
-          {"video/flc", kVideoIconPartialPath},
-          {"video/mp4", kVideoIconPartialPath},
-          {"video/mpeg", kVideoIconPartialPath},
-          {"video/ogg", kVideoIconPartialPath},
-          {"video/quicktime", kVideoIconPartialPath},
-          {"video/sd-video", kVideoIconPartialPath},
-          {"video/webm", kVideoIconPartialPath},
-          {"video/x-dv", kVideoIconPartialPath},
-          {"video/x-m4v", kVideoIconPartialPath},
-          {"video/x-mpeg", kVideoIconPartialPath},
-          {"video/x-ms-asf", kVideoIconPartialPath},
-          {"video/x-ms-wmv", kVideoIconPartialPath},
-          // Older versions of Microsoft Office files.
-          {"application/msword", kXmlDocumentIconPartialPath},
-          {"application/vnd.ms-excel", kXmlSpreadsheetIconPartialPath},
-          {"pplication/vnd.ms-powerpoint", kXmlPresentationIconPartialPath},
-          // OpenXML files.
-          {"application/"
-           "vnd.openxmlformats-officedocument.presentationml.presentation",
-           kXmlPresentationIconPartialPath},
-          {"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-           kXmlSpreadsheetIconPartialPath},
-          {"application/"
-           "vnd.openxmlformats-officedocument.wordprocessingml.document",
-           kXmlDocumentIconPartialPath},
-          // Other file types.
-          {"text/plain", kPlainTextIconPartialPath},
-          {"application/csv", kCsvIconPartialPath},
-          {"text/csv", kCsvIconPartialPath},
-          {"application/pdf", kPdfIconPartialPath},
-          {"application/rtf", kRichTextPartialPath},
-          {"application/epub+zip", kRichTextPartialPath},
-          {"application/zip", kZipPartialPath},
-          {"text/xml", kXmlPartialPath},
-          {"text/css", kCodeIconPartialPath},
-          {"text/javascript", kCodeIconPartialPath},
-          {"application/json", kCodeIconPartialPath},
-          {"application/rdf+xml", kCodeIconPartialPath},
-          {"application/rss+xml", kCodeIconPartialPath},
-          {"text/x-sh", kCodeIconPartialPath},
-          {"application/xhtml+xml", kCodeIconPartialPath},
-          {"application/postscript", kVectorIconPartialPath},
-          {"image/svg+xml", kVectorIconPartialPath},
-      });
-
-  const auto it = kIconMap.find(mime_type);
-  if (it != kIconMap.end()) {
-    return GURL(kBaseIconUrl).Resolve(std::string(it->second) + ".png");
-  }
-  return GURL();
-}
-
-// The file names in the response are formatted as "name.extension" we
-// only want the file name so we remove the extension.
-std::string GetFileName(std::string full_name, std::string extension) {
-  return full_name.substr(0, full_name.size() - extension.size() - 1);
-}
-
 // Returns the URL for retrieving calendar events.
 GURL GetRequestUrl() {
   std::string start_date_time = TimeFormatAsIso8601(base::Time::Now());
@@ -373,8 +220,10 @@ void OutlookCalendarPageHandler::GetEvents(GetEventsCallback callback) {
       ntp_features::kNtpOutlookCalendarModule,
       ntp_features::kNtpOutlookCalendarModuleDataParam);
   if (!fake_data_param.empty()) {
+    bool has_attachments_enabled = fake_data_param == "fake-attachments";
     std::move(callback).Run(calendar::calendar_fake_data_helper::GetFakeEvents(
-        calendar::calendar_fake_data_helper::CalendarType::OUTLOOK_CALENDAR));
+        calendar::calendar_fake_data_helper::CalendarType::OUTLOOK_CALENDAR,
+        has_attachments_enabled));
   } else {
     MakeRequest(std::move(callback));
   }
@@ -441,6 +290,7 @@ void OutlookCalendarPageHandler::OnJsonReceived(
                              base::Time::Now() + base::Seconds(wait_time));
     } else if (response_info->headers->response_code() ==
                net::HTTP_UNAUTHORIZED) {
+      request_result = OutlookCalendarRequestResult::kAuthError;
       microsoft_auth_service_->SetAuthStateError();
     }
   }
@@ -577,7 +427,8 @@ void OutlookCalendarPageHandler::OnJsonParsed(
         return;
       }
 
-      std::string file_extension = GetFileExtension(*content_type);
+      std::string file_extension =
+          microsoft_modules_helper::GetFileExtension(*content_type);
       // Skip creating an attachment if an extension cannot be found. This is
       // being done because the `title` and `icon_url` are dependent on a
       // correct extension.
@@ -585,14 +436,20 @@ void OutlookCalendarPageHandler::OnJsonParsed(
         continue;
       }
 
-      created_attachment->title = GetFileName(*name, file_extension);
-      GURL icon_url = GetIconUrl(*content_type);
+      created_attachment->title =
+          microsoft_modules_helper::GetFileName(*name, file_extension);
+      GURL icon_url = microsoft_modules_helper::GetFileIconUrl(*content_type);
       if (!icon_url.is_valid()) {
         continue;
       }
       created_attachment->icon_url = icon_url;
-      std::string attachment_url =
-          kBaseAttachmentResourceUrl + *event_id + "/" + *id;
+
+      std::string event_id_escaped =
+          base::EscapeUrlEncodedData(*event_id, true);
+      std::string attachment_id_escaped = base::EscapeUrlEncodedData(*id, true);
+      std::string url_path = event_id_escaped + "/" + attachment_id_escaped;
+      GURL attachment_url = GURL(kBaseAttachmentResourceUrl).Resolve(url_path);
+
       // Set `resource_url` prematurely because the request to check whether the
       // attachment page exists is handled asynchronously. This way the request
       // can finish before possibly incorrectly resetting the URLs. The urls
@@ -600,9 +457,9 @@ void OutlookCalendarPageHandler::OnJsonParsed(
       // unsuccessful and it is not yet time to make another request.
       if (!ntp_features::kNtpOutlookCalendarModuleDisableAttachmentsParam
                .Get()) {
-        created_attachment->resource_url = GURL(attachment_url);
+        created_attachment->resource_url = attachment_url;
       }
-      last_attachment_resource_url = attachment_url;
+      last_attachment_resource_url = attachment_url.spec();
       created_event->attachments.push_back(std::move(created_attachment));
     }
 

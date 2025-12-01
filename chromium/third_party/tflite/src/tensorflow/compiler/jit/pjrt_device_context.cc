@@ -66,7 +66,7 @@ absl::StatusOr<std::unique_ptr<xla::PjRtBuffer>> HostTensorToPjRtBuffer(
       /*byte_strides=*/std::nullopt,
       xla::PjRtClient::HostBufferSemantics::kImmutableZeroCopy,
       /*on_done_with_host_buffer=*/
-      [cpu_tensor = *cpu_tensor]() { /* frees tensor */ }, pjrt_device,
+      [cpu_tensor = *cpu_tensor]() { /* frees tensor */ }, pjrt_memory,
       device_layout);
   if (first_try_buffer.ok()) {
     return std::move(*first_try_buffer);
@@ -271,7 +271,8 @@ void PjRtDeviceToDeviceCopy(DeviceContext* send_dev_context,
           .value();
 
   absl::StatusOr<std::unique_ptr<xla::PjRtBuffer>> buffer_or =
-      src_device_buffer->CopyToDevice(pjrt_dst_device);
+      src_device_buffer->CopyToMemorySpace(
+          *pjrt_dst_device->default_memory_space());
   if (!buffer_or.ok()) {
     done(buffer_or.status());
     return;

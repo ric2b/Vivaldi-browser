@@ -370,10 +370,14 @@ base::Value::Dict SerializeAuctionConfigForDevtools(const AuctionConfig& conf) {
                     result);
   SerializeIntoDict("sellerSignals", conf.non_shared_params.seller_signals,
                     result);
+  SerializeIntoDict("sellerTKVSignals",
+                    conf.non_shared_params.seller_tkv_signals, result);
   SerializeIntoDict("sellerTimeout", conf.non_shared_params.seller_timeout,
                     result);
   SerializeIntoDict("perBuyerSignals", conf.non_shared_params.per_buyer_signals,
                     result);
+  SerializeIntoDict("perBuyerTKVSignals",
+                    conf.non_shared_params.per_buyer_tkv_signals, result);
   SerializeIntoDict("perBuyerTimeouts", conf.non_shared_params.buyer_timeouts,
                     result);
   SerializeIntoDict("perBuyerCumulativeTimeouts",
@@ -504,6 +508,8 @@ base::Value::Dict SerializeInterestGroupForDevtools(const InterestGroup& ig) {
                     ig.max_trusted_bidding_signals_url_length, result);
   SerializeIntoDict("trustedBiddingSignalsCoordinator",
                     ig.trusted_bidding_signals_coordinator, result);
+  SerializeIntoDict("viewAndClickCountsProviders",
+                    ig.view_and_click_counts_providers, result);
   SerializeIntoDict("userBiddingSignals", ig.user_bidding_signals, result);
   SerializeIntoDict("ads", ig.ads, result);
   SerializeIntoDict("adComponents", ig.ad_components, result);

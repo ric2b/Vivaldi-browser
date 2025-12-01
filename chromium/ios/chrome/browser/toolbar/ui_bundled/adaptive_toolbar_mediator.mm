@@ -460,6 +460,8 @@ std::optional<tab_groups::LocalTabGroupID> LocalTabGroupID(
     self.webState = nil;
     self.navigationBrowserAgent = nil;
   }
+
+  [self fetchMessages];
 }
 
 - (void)setWebContentAreaOverlayPresenter:
@@ -796,7 +798,8 @@ std::optional<tab_groups::LocalTabGroupID> LocalTabGroupID(
 
 // Gets messages to indicate that a shared tab group has been changed.
 - (void)fetchMessages {
-  if (!_messagingService || !_messagingService->IsInitialized()) {
+  if (!_messagingService || !_messagingService->IsInitialized() ||
+      !_webStateList) {
     return;
   }
 

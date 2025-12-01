@@ -12,6 +12,7 @@
 
 #include "absl/status/status.h"
 #include "absl/strings/string_view.h"
+#include "quiche/quic/core/quic_alarm.h"
 #include "quiche/quic/core/quic_time.h"
 #include "quiche/quic/moqt/moqt_messages.h"
 #include "quiche/quic/moqt/moqt_priority.h"
@@ -23,6 +24,11 @@
 #include "quiche/web_transport/web_transport.h"
 
 namespace moqt {
+
+namespace test {
+class MoqtSessionPeer;
+class SubscribeRemoteTrackPeer;
+}  // namespace test
 
 using MoqtObjectAckFunction =
     quiche::MultiUseCallback<void(uint64_t group_id, uint64_t object_id,
@@ -63,11 +69,12 @@ class RemoteTrack {
     return window_.InWindow(sequence);
   }
 
-  void ChangeWindow(SubscribeWindow& window) { window_ = window; }
-
   quiche::QuicheWeakPtr<RemoteTrack> weak_ptr() {
     return weak_ptr_factory_.Create();
   }
+
+ protected:
+  SubscribeWindow& window() { return window_; };
 
  private:
   const FullTrackName full_track_name_;
@@ -106,17 +113,23 @@ class SubscribeRemoteTrack : public RemoteTrack {
         const FullTrackName& full_track_name, FullSequence sequence,
         MoqtPriority publisher_priority, MoqtObjectStatus object_status,
         absl::string_view object, bool end_of_message) = 0;
-    // TODO(martinduke): Add final sequence numbers
+    virtual void OnSubscribeDone(FullTrackName full_track_name) = 0;
   };
-  SubscribeRemoteTrack(const MoqtSubscribe& subscribe, Visitor* visitor)
+  SubscribeRemoteTrack(
+      const MoqtSubscribe& subscribe, Visitor* visitor,
+      quic::QuicTimeDelta delivery_timeout = quic::QuicTimeDelta::Infinite())
       : RemoteTrack(subscribe.full_track_name, subscribe.subscribe_id,
-                    SubscribeWindow(subscribe.start_group.value_or(0),
-                                    subscribe.start_object.value_or(0),
-                                    subscribe.end_group.value_or(UINT64_MAX),
-                                    subscribe.end_object.value_or(UINT64_MAX))),
+                    SubscribeWindow(subscribe.start.value_or(FullSequence()),
+                                    subscribe.end_group)),
         track_alias_(subscribe.track_alias),
         visitor_(visitor),
+        delivery_timeout_(delivery_timeout),
         subscribe_(std::make_unique<MoqtSubscribe>(subscribe)) {}
+  ~SubscribeRemoteTrack() override {
+    if (subscribe_done_alarm_ != nullptr) {
+      subscribe_done_alarm_->PermanentCancel();
+    }
+  }
 
   void OnObjectOrOk() override {
     subscribe_.reset();  // No SUBSCRIBE_ERROR, no need to store this anymore.
@@ -129,10 +142,61 @@ class SubscribeRemoteTrack : public RemoteTrack {
     // This class will soon be destroyed, so there's no need to null the
     // unique_ptr;
   }
+  // Returns false if the forwarding preference is changing on the track.
+  bool OnObject(bool is_datagram) {
+    OnObjectOrOk();
+    if (!is_datagram_.has_value()) {
+      is_datagram_ = is_datagram;
+      return true;
+    } else {
+      return (is_datagram_ == is_datagram);
+    }
+  }
+  // Called on SUBSCRIBE_OK or SUBSCRIBE_UPDATE.
+  bool TruncateStart(FullSequence start) {
+    return window().TruncateStart(start);
+  }
+  // Called on SUBSCRIBE_UPDATE.
+  bool TruncateEnd(uint64_t end_group) {
+    return window().TruncateEnd(end_group);
+  }
+  void OnStreamOpened();
+  void OnStreamClosed();
+  void OnSubscribeDone(uint64_t stream_count, const quic::QuicClock* clock,
+                       std::unique_ptr<quic::QuicAlarm> subscribe_done_alarm);
+  bool all_streams_closed() const {
+    return total_streams_.has_value() && *total_streams_ == streams_closed_;
+  }
+
+  // The application can request a Joining FETCH but also for FETCH objects to
+  // be delivered via SubscribeRemoteTrack::Visitor::OnObjectFragment(). When
+  // this occurs, the session passes the FetchTask here to handle incoming
+  // FETCH objects to pipe directly into the visitor.
+  void OnJoiningFetchReady(std::unique_ptr<MoqtFetchTask> fetch_task);
 
  private:
+  friend class test::MoqtSessionPeer;
+  friend class test::SubscribeRemoteTrackPeer;
+
+  void MaybeSetSubscribeDoneAlarm();
+
+  void FetchObjects();
+  std::unique_ptr<MoqtFetchTask> fetch_task_;
+
   const uint64_t track_alias_;
   Visitor* visitor_;
+  std::optional<bool> is_datagram_;
+  int currently_open_streams_ = 0;
+  // Every stream that has received FIN or RESET_STREAM.
+  uint64_t streams_closed_ = 0;
+  // Value assigned on SUBSCRIBE_DONE. Can destroy subscription state if
+  // streams_closed_ == total_streams_.
+  std::optional<uint64_t> total_streams_;
+  // Timer to clean up the track if there are no open streams.
+  quic::QuicTimeDelta delivery_timeout_ = quic::QuicTimeDelta::Infinite();
+  std::unique_ptr<quic::QuicAlarm> subscribe_done_alarm_ = nullptr;
+  const quic::QuicClock* clock_ = nullptr;
+
   // For convenience, store the subscribe message if it has to be re-sent with
   // a new track alias.
   std::unique_ptr<MoqtSubscribe> subscribe_;
@@ -158,11 +222,11 @@ using TaskDestroyedCallback = quiche::SingleUseCallback<void()>;
 class UpstreamFetch : public RemoteTrack {
  public:
   UpstreamFetch(const MoqtFetch& fetch, FetchResponseCallback callback)
-      : RemoteTrack(fetch.full_track_name, fetch.subscribe_id,
-                    SubscribeWindow(
-                        fetch.start_object,
-                        FullSequence(fetch.end_group,
-                                     fetch.end_object.value_or(UINT64_MAX)))),
+      : RemoteTrack(fetch.full_track_name, fetch.fetch_id,
+                    fetch.joining_fetch.has_value()
+                        ? SubscribeWindow(FullSequence(0, 0))
+                        : SubscribeWindow(fetch.start_object, fetch.end_group,
+                                          fetch.end_object)),
         ok_callback_(std::move(callback)) {
     // Immediately set the data stream type.
     CheckDataStreamType(MoqtDataStreamType::kStreamHeaderFetch);

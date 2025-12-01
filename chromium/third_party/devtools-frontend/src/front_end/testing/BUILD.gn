@@ -8,6 +8,7 @@ ts_library("testing") {
   testonly = true
 
   sources = [
+    "AiAssistanceHelpers.ts",
     "ConsoleHelpers.ts",
     "ContextMenuHelpers.ts",
     "Cookies.ts",
@@ -45,6 +46,7 @@ ts_library("testing") {
     "TrackAsyncOperations.ts",
     "UISourceCodeHelpers.ts",
     "UserMetricsHelpers.ts",
+    "ViewFunctionHelpers.ts",
     "VisualLoggingHelpers.ts",
     "test_post_setup.ts",
     "test_setup.ts",
@@ -67,7 +69,6 @@ ts_library("testing") {
     "../models/extensions:bundle",
     "../models/issues_manager:bundle",
     "../models/text_utils:bundle",
-    "../models/timeline_model:bundle",
     "../models/trace:bundle",
     "../models/workspace:bundle",
     "../panels/elements:meta",

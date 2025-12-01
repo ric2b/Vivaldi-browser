@@ -185,28 +185,19 @@ suite('<settings-display-and-magnification-subpage>', () => {
   test('Turns on overlay scrollbars', async () => {
     await initPage();
 
-    if (loadTimeData.getBoolean('isAccessibilityOverlayScrollbarEnabled')) {
-      // If the flag is enabled, check that the UI works.
-      assertFalse(page.prefs.settings.a11y.overlay_scrollbar.enabled.value);
+    assertFalse(page.prefs.settings.a11y.overlay_scrollbar.enabled.value);
 
-      const enableROverlayScrollbarToggle =
-        page.shadowRoot!.querySelector<SettingsToggleButtonElement>(
-          '#enableOverlayScrollbar');
-      assert(enableROverlayScrollbarToggle);
-      assertTrue(isVisible(enableROverlayScrollbarToggle));
+    const enableAlwaysShowScrollbarsToggle =
+      page.shadowRoot!.querySelector<SettingsToggleButtonElement>(
+        '#enableAlwaysShowScrollbars');
+    assert(enableAlwaysShowScrollbarsToggle);
+    assertTrue(isVisible(enableAlwaysShowScrollbarsToggle));
 
-      enableROverlayScrollbarToggle.click();
-      await waitBeforeNextRender(page);
-      flush();
+    enableAlwaysShowScrollbarsToggle.click();
+    await waitBeforeNextRender(page);
+    flush();
 
-      assertTrue(page.prefs.settings.a11y.overlay_scrollbar.enabled.value);
-    } else {
-      // Toggle shouldn't be available if flag is disabled.
-      const enableROverlayScrollbarToggle =
-        page.shadowRoot!.querySelector<SettingsToggleButtonElement>(
-          '#enableOverlayScrollbar');
-      assert(!enableROverlayScrollbarToggle);
-    }
+    assertTrue(page.prefs.settings.a11y.overlay_scrollbar.enabled.value);
   });
 
   if (loadTimeData.getBoolean(

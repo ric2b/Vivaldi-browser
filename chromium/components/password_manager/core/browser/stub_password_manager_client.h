@@ -94,10 +94,12 @@ class StubPasswordManagerClient : public PasswordManagerClient {
       base::OnceClosure confirmation_callback) override;
 #endif  // !BUILDFLAG(IS_IOS)
 
+#if BUILDFLAG(SAFE_BROWSING_AVAILABLE) || BUILDFLAG(IS_IOS)
   safe_browsing::PasswordProtectionService* GetPasswordProtectionService()
       const override;
+#endif
 
-#if defined(ON_FOCUS_PING_ENABLED)
+#if defined(ON_FOCUS_PING_ENABLED) && BUILDFLAG(SAFE_BROWSING_AVAILABLE)
   void CheckSafeBrowsingReputation(const GURL& form_action,
                                    const GURL& frame_url) override;
 #endif
@@ -110,6 +112,7 @@ class StubPasswordManagerClient : public PasswordManagerClient {
   void PotentialSaveFormSubmitted() override;
 #endif
   signin::IdentityManager* GetIdentityManager() override;
+  const signin::IdentityManager* GetIdentityManager() const override;
   scoped_refptr<network::SharedURLLoaderFactory> GetURLLoaderFactory() override;
   network::mojom::NetworkContext* GetNetworkContext() const override;
   bool IsIsolationForPasswordSitesEnabled() const override;

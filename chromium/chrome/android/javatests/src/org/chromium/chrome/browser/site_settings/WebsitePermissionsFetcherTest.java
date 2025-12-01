@@ -85,7 +85,8 @@ import java.util.concurrent.TimeoutException;
 @CommandLineFlags.Add({
     ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE,
     WebsitePermissionsFetcherTest.ENABLE_EXPERIMENTAL_WEB_PLATFORM_FEATURES,
-    WebsitePermissionsFetcherTest.ENABLE_WEB_BLUETOOTH_NEW_PERMISSIONS_BACKEND
+    WebsitePermissionsFetcherTest.ENABLE_WEB_BLUETOOTH_NEW_PERMISSIONS_BACKEND,
+    WebsitePermissionsFetcherTest.ENABLE_BLUETOOTH_RFCOMM_ANDROID
 })
 @Batch(Batch.PER_CLASS)
 public class WebsitePermissionsFetcherTest {
@@ -102,6 +103,12 @@ public class WebsitePermissionsFetcherTest {
     /** Command line flag to enable the new Web Bluetooth permissions backend in tests. */
     public static final String ENABLE_WEB_BLUETOOTH_NEW_PERMISSIONS_BACKEND =
             "enable-features=WebBluetoothNewPermissionsBackend";
+
+    /**
+     * Command line flag to enable Bluetooth RFCOMM support for serial ports on Android in tests.
+     */
+    public static final String ENABLE_BLUETOOTH_RFCOMM_ANDROID =
+            "enable-features=BluetoothRfcommAndroid";
 
     private static final BrowserContextHandle UNUSED_BROWSER_CONTEXT_HANDLE = null;
 
@@ -700,6 +707,13 @@ public class WebsitePermissionsFetcherTest {
                         SITE_WILDCARD,
                         /* isEmbargoed= */ false,
                         SessionModel.DURABLE));
+        websitePreferenceBridge.addPermissionInfo(
+                new PermissionInfo(
+                        ContentSettingsType.LOCAL_NETWORK_ACCESS,
+                        ORIGIN,
+                        SITE_WILDCARD,
+                        /* isEmbargoed= */ false,
+                        SessionModel.DURABLE));
 
         // Add content setting exception types.
         // If the ContentSettingsType.MAX_VALUE value changes *and* a new value has been exposed on
@@ -707,7 +721,7 @@ public class WebsitePermissionsFetcherTest {
         // Otherwise, just update count in the assert.
         // TODO(https://b/332704817): Add test for Tracking Protection content setting after Android
         // integration.
-        assertEquals(117, ContentSettingsType.MAX_VALUE);
+        assertEquals(119, ContentSettingsType.MAX_VALUE);
         websitePreferenceBridge.addContentSettingException(
                 new ContentSettingException(
                         ContentSettingsType.COOKIES,
@@ -813,6 +827,13 @@ public class WebsitePermissionsFetcherTest {
                         ContentSettingValues.DEFAULT,
                         ProviderType.PREF_PROVIDER,
                         /* isEmbargoed= */ false));
+        websitePreferenceBridge.addContentSettingException(
+                new ContentSettingException(
+                        ContentSettingsType.LOCAL_NETWORK_ACCESS,
+                        ORIGIN,
+                        ContentSettingValues.DEFAULT,
+                        ProviderType.PREF_PROVIDER,
+                        /* isEmbargoed= */ false));
 
         int storageSize = 256;
         int sharedDictionarySize = 12345;
@@ -833,7 +854,7 @@ public class WebsitePermissionsFetcherTest {
                     .getBrowsingDataModel(any(Callback.class));
         } else {
             // Add storage info.
-            websitePreferenceBridge.addStorageInfo(new StorageInfo(ORIGIN, 0, storageSize));
+            websitePreferenceBridge.addStorageInfo(new StorageInfo(ORIGIN, storageSize));
 
             // Add local storage info.
             websitePreferenceBridge.addLocalStorageInfoMapEntry(
@@ -853,6 +874,13 @@ public class WebsitePermissionsFetcherTest {
                         ContentSettingsType.BLUETOOTH_CHOOSER_DATA,
                         ORIGIN,
                         "Wireless",
+                        "Object",
+                        false));
+        websitePreferenceBridge.addChosenObjectInfo(
+                new ChosenObjectInfo(
+                        ContentSettingsType.SERIAL_CHOOSER_DATA,
+                        ORIGIN,
+                        "Serial",
                         "Object",
                         false));
 
@@ -881,6 +909,8 @@ public class WebsitePermissionsFetcherTest {
                     Assert.assertNotNull(site.getPermissionInfo(ContentSettingsType.VR));
                     Assert.assertNotNull(site.getPermissionInfo(ContentSettingsType.HAND_TRACKING));
                     Assert.assertNotNull(site.getPermissionInfo(ContentSettingsType.AR));
+                    Assert.assertNotNull(
+                            site.getPermissionInfo(ContentSettingsType.LOCAL_NETWORK_ACCESS));
 
                     // Check content setting exception types.
                     assertEquals(
@@ -972,13 +1002,16 @@ public class WebsitePermissionsFetcherTest {
                     // Check chooser info types.
                     ArrayList<ChosenObjectInfo> chosenObjectInfos =
                             new ArrayList<>(site.getChosenObjectInfo());
-                    assertEquals(2, chosenObjectInfos.size());
+                    assertEquals(3, chosenObjectInfos.size());
                     assertEquals(
                             ContentSettingsType.BLUETOOTH_CHOOSER_DATA,
                             chosenObjectInfos.get(0).getContentSettingsType());
                     assertEquals(
                             ContentSettingsType.USB_CHOOSER_DATA,
                             chosenObjectInfos.get(1).getContentSettingsType());
+                    assertEquals(
+                            ContentSettingsType.SERIAL_CHOOSER_DATA,
+                            chosenObjectInfos.get(2).getContentSettingsType());
                 });
     }
 
@@ -1297,7 +1330,7 @@ public class WebsitePermissionsFetcherTest {
         String chromiumOrigin = "https://chromium.org";
         int storageSize = 256;
         int sharedDictionarySize = 512;
-        StorageInfo fakeStorageInfo = new StorageInfo(ORIGIN, 0, storageSize);
+        StorageInfo fakeStorageInfo = new StorageInfo(ORIGIN, storageSize);
         LocalStorageInfo fakeLocalStorageInfo = new LocalStorageInfo(ORIGIN, storageSize, false);
         LocalStorageInfo fakeImportantLocalStorageInfo =
                 new LocalStorageInfo(chromiumOrigin, storageSize, true);
@@ -1403,7 +1436,8 @@ public class WebsitePermissionsFetcherTest {
                 new ArrayList<>(
                         Arrays.asList(
                                 SiteSettingsCategory.Type.USB,
-                                SiteSettingsCategory.Type.BLUETOOTH));
+                                SiteSettingsCategory.Type.BLUETOOTH,
+                                SiteSettingsCategory.Type.SERIAL_PORT));
 
         for (@SiteSettingsCategory.Type int type : chooserDataTypes) {
             WebsitePermissionsFetcher fetcher =
@@ -1448,9 +1482,6 @@ public class WebsitePermissionsFetcherTest {
         }
 
         Mockito.doReturn(true).when(mSiteSettingsDelegate).isRelatedWebsiteSetsDataAccessEnabled();
-        Mockito.doReturn(true)
-                .when(mSiteSettingsDelegate)
-                .isPrivacySandboxFirstPartySetsUiFeatureEnabled();
 
         var fetcher =
                 new WebsitePermissionsFetcher(

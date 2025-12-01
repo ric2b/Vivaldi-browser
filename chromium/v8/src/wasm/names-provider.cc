@@ -23,7 +23,7 @@ NamesProvider::NamesProvider(const WasmModule* module,
 NamesProvider::~NamesProvider() = default;
 
 void NamesProvider::DecodeNamesIfNotYetDone() {
-  base::SpinningMutexGuard lock(&mutex_);
+  base::MutexGuard lock(&mutex_);
   if (has_decoded_) return;
   has_decoded_ = true;
   name_section_names_.reset(
@@ -203,7 +203,7 @@ void NamesProvider::PrintFunctionName(StringBuilder& out,
 
   if (behavior == kWasmInternal) return;
   {
-    base::SpinningMutexGuard lock(&mutex_);
+    base::MutexGuard lock(&mutex_);
     if (!has_computed_function_import_names_) {
       ComputeFunctionNamesFromImportsExports();
     }
@@ -390,6 +390,7 @@ void NamesProvider::PrintTagName(StringBuilder& out, uint32_t tag_index,
 
 void NamesProvider::PrintHeapType(StringBuilder& out, HeapType type) {
   if (type.is_index()) {
+    if (type.is_exact()) out << "exact ";
     PrintTypeName(out, type.ref_index());
   } else {
     out << type.name();
@@ -397,24 +398,13 @@ void NamesProvider::PrintHeapType(StringBuilder& out, HeapType type) {
 }
 
 void NamesProvider::PrintValueType(StringBuilder& out, ValueType type) {
-  switch (type.kind()) {
-    case kRef:
-    case kRefNull:
-      if (type.encoding_needs_heap_type()) {
-        out << (type.kind() == kRef ? "(ref " : "(ref null ");
-        PrintHeapType(out, type.heap_type());
-        out << ')';
-      } else {
-        out << type.heap_type().name() << "ref";
-      }
-      break;
-    case kRtt:
-      out << "(rtt ";
-      PrintTypeName(out, type.ref_index());
-      out << ')';
-      break;
-    default:
-      out << wasm::name(type.kind());
+  if (type.has_index()) {
+    out << (type.is_nullable() ? "(ref null " : "(ref ");
+    if (type.is_exact()) out << "exact ";
+    PrintTypeName(out, type.ref_index());
+    out << ')';
+  } else {
+    out << type.name();
   }
 }
 
@@ -429,7 +419,7 @@ size_t StringMapSize(const std::map<uint32_t, std::string>& map) {
 }  // namespace
 
 size_t NamesProvider::EstimateCurrentMemoryConsumption() const {
-  UPDATE_WHEN_CLASS_CHANGES(NamesProvider, 168);
+  UPDATE_WHEN_CLASS_CHANGES(NamesProvider, 176);
   size_t result = sizeof(NamesProvider);
   if (name_section_names_) {
     DecodedNameSection* names = name_section_names_.get();
@@ -445,7 +435,7 @@ size_t NamesProvider::EstimateCurrentMemoryConsumption() const {
     result += names->tag_names_.EstimateCurrentMemoryConsumption();
   }
   {
-    base::SpinningMutexGuard lock(&mutex_);
+    base::MutexGuard lock(&mutex_);
     result += StringMapSize(import_export_function_names_);
     result += StringMapSize(import_export_table_names_);
     result += StringMapSize(import_export_memory_names_);
@@ -474,7 +464,7 @@ size_t CanonicalTypeNamesProvider::EstimateCurrentMemoryConsumption() const {
 
 void CanonicalTypeNamesProvider::DecodeNameSections() {
   // TODO(jkummerow): We'll probably need to lock read accesses too.
-  base::SpinningMutexGuard lock(&mutex_);
+  base::MutexGuard lock(&mutex_);
   type_names_.resize(GetTypeCanonicalizer()->GetCurrentNumberOfTypes());
   GetWasmEngine()->DecodeAllNameSections(this);
 }
@@ -518,6 +508,7 @@ void CanonicalTypeNamesProvider::PrintValueType(StringBuilder& out,
     case kRefNull:
       if (type.encoding_needs_heap_type()) {
         out << (type.kind() == kRef ? "(ref " : "(ref null ");
+        if (type.is_exact()) out << "exact ";
         if (type.has_index()) {
           PrintTypeName(out, type.ref_index());
         } else {
@@ -527,11 +518,6 @@ void CanonicalTypeNamesProvider::PrintValueType(StringBuilder& out,
       } else {
         out << type.name();
       }
-      break;
-    case kRtt:
-      out << "(rtt ";
-      PrintTypeName(out, type.ref_index());
-      out << ')';
       break;
     default:
       out << wasm::name(type.kind());

@@ -149,7 +149,9 @@ PlusAddressServiceImpl::PlusAddressServiceImpl(
   if (webdata_service_) {
     webdata_service_observation_.Observe(webdata_service_.get());
     if (IsEnabled()) {
-      webdata_service_->GetPlusProfiles(this);
+      webdata_service_->GetPlusProfiles(
+          base::BindOnce(&PlusAddressServiceImpl::OnWebDataServiceRequestDone,
+                         weak_ptr_factory_.GetWeakPtr()));
     }
   }
   identity_manager_observation_.Observe(identity_manager);
@@ -190,8 +192,7 @@ bool PlusAddressServiceImpl::IsPlusAddressCreationEnabled(
 
   // We've met the prerequisites. If this isn't an OTR session and the global
   // settings toggle isn't off, plus address creation is supported.
-  return !base::FeatureList::IsEnabled(features::kPlusAddressGlobalToggle) ||
-         setting_service_->GetIsPlusAddressesEnabled();
+  return setting_service_->GetIsPlusAddressesEnabled();
 }
 
 bool PlusAddressServiceImpl::ShouldShowManualFallback(
@@ -215,8 +216,7 @@ bool PlusAddressServiceImpl::ShouldShowManualFallback(
 
   // If the user doesn't have an existing plus address for `origin` and this
   // session is not off-the-record, the global toggle must be enabled.
-  return !base::FeatureList::IsEnabled(features::kPlusAddressGlobalToggle) ||
-         setting_service_->GetIsPlusAddressesEnabled();
+  return setting_service_->GetIsPlusAddressesEnabled();
 }
 
 std::optional<PlusAddress> PlusAddressServiceImpl::GetPlusAddress(

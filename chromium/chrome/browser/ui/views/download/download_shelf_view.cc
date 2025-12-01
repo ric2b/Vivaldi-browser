@@ -85,14 +85,6 @@ DownloadShelfView::DownloadShelfView(Browser* browser, BrowserView* parent)
 
   accessible_alert_ = AddChildView(std::make_unique<views::View>());
 
-  if (gfx::Animation::ShouldRenderRichAnimation()) {
-    new_item_animation_.SetSlideDuration(base::Milliseconds(800));
-    shelf_animation_.SetSlideDuration(base::Milliseconds(120));
-  } else {
-    new_item_animation_.SetSlideDuration(base::TimeDelta());
-    shelf_animation_.SetSlideDuration(base::TimeDelta());
-  }
-
   views::ViewAccessibility& accessibility = GetViewAccessibility();
   accessibility.SetName(l10n_util::GetStringUTF16(IDS_ACCNAME_DOWNLOADS_BAR),
                         ax::mojom::NameFrom::kAttribute);
@@ -276,7 +268,7 @@ void DownloadShelfView::RemoveDownloadView(View* view) {
 
 void DownloadShelfView::ConfigureButtonForTheme(views::MdTextButton* button) {
   button->SetBgColorIdOverride(kColorDownloadShelfButtonBackground);
-  button->SetEnabledTextColorIds(kColorDownloadShelfButtonText);
+  button->SetEnabledTextColors(kColorDownloadShelfButtonText);
 }
 
 void DownloadShelfView::DoShowDownload(
@@ -302,6 +294,8 @@ void DownloadShelfView::DoShowDownload(
   }
 
   new_item_animation_.Reset();
+  new_item_animation_.SetSlideDuration(
+      gfx::Animation::RichAnimationDuration(base::Milliseconds(800)));
   new_item_animation_.Show();
 
   if (was_empty && !shelf_animation_.is_animating() && GetVisible()) {
@@ -312,6 +306,8 @@ void DownloadShelfView::DoShowDownload(
 
 void DownloadShelfView::DoOpen() {
   SetVisible(true);
+  shelf_animation_.SetSlideDuration(
+      gfx::Animation::RichAnimationDuration(base::Milliseconds(120)));
   shelf_animation_.Show();
 }
 
@@ -319,6 +315,8 @@ void DownloadShelfView::DoClose() {
   if (parent_) {
   parent_->SetDownloadShelfVisible(false);
   }
+  shelf_animation_.SetSlideDuration(
+      gfx::Animation::RichAnimationDuration(base::Milliseconds(120)));
   shelf_animation_.Hide();
 }
 

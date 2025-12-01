@@ -1,12 +1,23 @@
 # Notes On Compiling SQLite On Windows 11
 
-Here are step-by-step instructions on how to build SQLite from
-canonical source on a new Windows 11 PC, as of 2023-11-01:
+Below are step-by-step instructions on how to build SQLite from
+canonical source on a new Windows 11 PC, as of 2024-10-09.
+See [](./compile-for-unix.md) for a similar guide for unix-like
+systems, including MacOS.
 
   1.  Install Microsoft Visual Studio. The free "community edition" 
       will work fine.  Do a standard install for C++ development.
       SQLite only needs the
       "cl" compiler and the "nmake" build tool.
+      <ul><li><b>Note:</b>
+      VS2015 or later is required for the procedures below to
+      all work.  You *might* be able to get the build to work with
+      earlier versions of MSVC, but in that case the TCL installation
+      of step 3 will be required, since the "jimsh0.c" program of
+      Autosetup that is used as a substitute for "tclsh.exe" won't
+      compile with versions of Visual Studio prior to VS2015.  In any
+      event, building SQLite from canonical source code on Windows
+      is not supported for earlier versions of Visual Studio.</ul>
 
   2.  Under the "Start" menu, find "All Apps" then go to "Visual Studio 20XX"
       and find "x64 Native Tools Command Prompt for VS 20XX".  Pin that
@@ -16,50 +27,83 @@ canonical source on a new Windows 11 PC, as of 2023-11-01:
       a 32-bit build.)  The subsequent steps will not work in a vanilla
       DOS prompt.  Nor will they work in PowerShell.
 
-  3.  Install TCL development libraries.  This note assumes that you will
+  3.  *(Optional):* Install TCL development libraries.
+      This note assumes that you will
       install the TCL development libraries in the "`c:\Tcl`" directory.
       Make adjustments
       if you want TCL installed somewhere else.  SQLite needs both the
-      "tclsh.exe" command-line tool as part of the build process, and
-      the "tcl86.lib" library in order to run tests.  You will need
-      TCL version 8.6 or later.
+      "tclsh90.exe" command-line tool as part of the build process, and
+      the "tcl90.lib" and "tclstub.lib" libraries in order to run tests.
+      This document assumes you are working with TCL version 9.0.
+      See [](./tcl-extension-testing.md#windows) for guidance on how
+      to compile TCL version 8.6 for use with SQLite.
       <ol type="a">
       <li>Get the TCL source archive, perhaps from
-      [https://www.tcl.tk/software/tcltk/download.html](https://www.tcl.tk/software/tcltk/download.html).
+      <https://www.tcl.tk/software/tcltk/download.html>
+      or <https://sqlite.org/tmp/tcl9.0.0.tar.gz>.
       <li>Untar or unzip the source archive.  CD into the "win/" subfolder
           of the source tree.
-      <li>Run: `nmake /f makefile.vc release`
-      <li>Run: `nmake /f makefile.vc INSTALLDIR=c:\Tcl install`
-      <li>CD to `c:\Tcl\lib`.  In that subfolder make a copy of the
-          "`tcl86t.lib`" file to the alternative name "`tcl86.lib`"
-          (omitting the second 't').  Leave the copy in the same directory
-          as the original.
-      <li>CD to `c:\Tcl\bin`.  Make a copy of the "`tclsh86t.exe`"
-          file into "`tclsh.exe`" (without the "86t") in the same directory.
-      <li>Add `c:\Tcl\bin` to your %PATH%.  To do this, go to Settings
+      <li>Run: `nmake /f makefile.vc INSTALLDIR=c:\Tcl release`
+      <li>Run: `nmake /f makefile.vc INSTALLDIR=c:\Tcl install` <br>
+          Notes:
+          <ol type="i">
+          <li> The previous two `nmake` commands must be run separately.
+          <li> Also, the INSTALLDIR=... argument is required on both.
+          </ol>
+      <li><i>Optional:</i> CD to `c:\Tcl\bin` and make a copy of
+          `tclsh90.exe` over into just `tclsh.exe`.
+      <li><i>Optional:</i>
+          Add `c:\Tcl\bin` to your %PATH%.  To do this, go to Settings
           and search for "path".  Select "edit environment variables for
           your account" and modify your default PATH accordingly.
           You will need to close and reopen your command prompts after
           making this change.
       </ol>
 
+      As of 2024-10-25, TCL is not longer required for many
+      common build targets, such as "sqlite3.c" or the "sqlite3.exe"
+      command-line tool.  So you can skip this step if that is all
+      you want to build.  TCL is still required to run "make test"
+      and similar, or to build the TCL extension, of course.
+
   4.  Download the SQLite source tree and unpack it. CD into the
       toplevel directory of the source tree.
 
-  5.  Set the TCLDIR environment variable to point to your TCL installation.
-      Like this:
-      <ul>
-      <li> `set TCLDIR=c:\Tcl`
-      </ul>
-
-  6.  Run the "`Makefile.msc`" makefile with an appropriate target.
+  5.  Run the "`Makefile.msc`" makefile with an appropriate target.
       Examples:
       <ul>
       <li>  `nmake /f makefile.msc`
       <li>  `nmake /f makefile.msc sqlite3.c`
+      <li>  `nmake /f makefile.msc sqlite3.exe`
+      <li>  `nmake /f makefile.msc sqldiff.exe`
+      <li>  `nmake /f makefile.msc sqlite3_rsync.exe`
+      </ul>
+      <p>No TCL is required for the nmake targets above.  But for the ones
+      that follow, you will need a TCL installation, as described in step 3
+      above.  If you install TCL in some directory other than C:\\Tcl, then
+      you will also need to add the "TCLDIR=<i>&lt;dir&gt;</i>" option on the
+      nmake command line to tell nmake where your TCL is installed.
+      <ul>
+      <li>  `nmake /f makefile.msc tclextension-install`
       <li>  `nmake /f makefile.msc devtest`
       <li>  `nmake /f makefile.msc releasetest`
+      <li>  `nmake /f makefile.msc sqlite3_analyzer.exe`
       </ul>
+
+      It is not required that you run the "tclextension-install" target prior to
+      running tests.  However, the tests will run more smoothly if you do.
+      The version of SQLite used for the TCL extension does *not* need to
+      correspond to the version of SQLite under test.  So you can install the
+      SQLite TCL extension once, and then use it to test many different versions
+      of SQLite.
+
+
+  7.  For a debugging build of the CLI, where the ".treetrace" and ".wheretrace"
+      commands work, add the DEBUG=3 argument to nmake.  Like this:
+      <ul>
+      <li> `nmake /f makefile.msc DEBUG=3 clean sqlite3.exe`
+      </ul>
+   
 
 ## 32-bit Builds
 
@@ -108,7 +152,7 @@ nmake /f Makefile.msc sqlite3_analyzer.exe
 ~~~~
 
 And you will end up with a working executable.  However, that executable
-will depend on having the "tcl86.dll" library somewhere on your %PATH%.
+will depend on having the "tcl98.dll" library somewhere on your %PATH%.
 Use the following steps to build an executable that has the TCL library
 statically linked so that it does not depend on separate DLL:
 
@@ -118,27 +162,26 @@ statically linked so that it does not depend on separate DLL:
   2.  Untar the TCL source tarball into a fresh directory.  CD into
       the "win/" subfolder.
 
-  3.  Run: `nmake /f makefile.vc OPTS=nothreads,static shell`
-
+  3.  Run: `nmake /f makefile.vc OPTS=static shell`
 
   4.  CD into the "Release*" subfolder that is created (note the
       wildcard - the full name of the directory might vary).  There
-      you will find the "tcl86s.lib" file.  Copy this file into the
-      same directory that you put the "tcl86.lib" on your initial
+      you will find the "tcl90s.lib" file.  Copy this file into the
+      same directory that you put the "tcl90.lib" on your initial
       installation.  (In this document, that directory is
       "`C:\Tcl32\lib`" for 32-bit builds and
       "`C:\Tcl\lib`" for 64-bit builds.)
 
   5.  CD into your SQLite source code directory and build the desired
-      utility program, but add the following extra arguments to the
+      utility program, but add the following extra argument to the
       nmake command line:
       <blockquote><pre>
-      CCOPTS="-DSTATIC_BUILD" LIBTCL="tcl86s.lib netapi32.lib user32.lib"
+      STATICALLY_LINK_TCL=1
       </pre></blockquote>
       <p>So, for example, to build a statically linked version of
       sqlite3_analyzer.exe, you might type:
       <blockquote><pre>
-      nmake /f Makefile.msc CCOPTS="-DSTATIC_BUILD" LIBTCL="tcl86s.lib netapi32.lib user32.lib" sqlite3_analyzer.exe
+      nmake /f Makefile.msc STATICALLY_LINK_TCL=1 sqlite3_analyzer.exe
       </pre></blockquote>
 
   6.  After your executable is built, you can verify that it does not

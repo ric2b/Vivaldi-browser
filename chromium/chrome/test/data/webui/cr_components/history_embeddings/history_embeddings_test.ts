@@ -5,6 +5,7 @@
 import 'chrome://history/strings.m.js';
 import 'chrome://resources/cr_components/history_embeddings/history_embeddings.js';
 
+import {HistoryResultType} from '//resources/cr_components/history/constants.js';
 import {CrFeedbackOption} from '//resources/cr_elements/cr_feedback_buttons/cr_feedback_buttons.js';
 import {getFaviconForPageURL} from '//resources/js/icon.js';
 import {HistoryEmbeddingsBrowserProxyImpl} from 'chrome://resources/cr_components/history_embeddings/browser_proxy.js';
@@ -93,13 +94,13 @@ import {eventToPromise, isVisible, microtasksFinished} from 'chrome://webui-test
 
     function getResultElements(): HTMLElement[] {
       if (enableAnswers) {
-        return Array.from(element.shadowRoot!.querySelectorAll('.result-item'));
+        return Array.from(element.shadowRoot.querySelectorAll('.result-item'));
       }
       return Array.from(
-          element.shadowRoot!.querySelectorAll('cr-url-list-item'));
+          element.shadowRoot.querySelectorAll('cr-url-list-item'));
     }
 
-    test('Searches', async () => {
+    test('Searches', () => {
       assertEquals('some query', handler.getArgs('search')[0].query);
     });
 
@@ -112,7 +113,7 @@ import {eventToPromise, isVisible, microtasksFinished} from 'chrome://webui-test
       });
       element.searchQuery = 'my query';
       await microtasksFinished();
-      const headingEl = element.shadowRoot!.querySelector('.results-heading');
+      const headingEl = element.shadowRoot.querySelector('.results-heading');
       assertTrue(!!headingEl);
       assertEquals(
           'loading results for "my query"', headingEl.textContent!.trim());
@@ -131,7 +132,7 @@ import {eventToPromise, isVisible, microtasksFinished} from 'chrome://webui-test
       element.searchQuery = 'my new query';
       await handler.whenCalled('search');
       const loadingResultsEl =
-          element.shadowRoot!.querySelector('.loading-results');
+          element.shadowRoot.querySelector('.loading-results');
       assertTrue(!!loadingResultsEl);
       assertTrue(
           isVisible(loadingResultsEl),
@@ -151,7 +152,7 @@ import {eventToPromise, isVisible, microtasksFinished} from 'chrome://webui-test
         });
         await microtasksFinished();
         const loadingAnswersEl =
-            element.shadowRoot!.querySelector('.loading-answer');
+            element.shadowRoot.querySelector('.loading-answer');
         assertTrue(!!loadingAnswersEl);
         assertTrue(
             isVisible(loadingAnswersEl), 'Answers should still be loading');
@@ -169,7 +170,7 @@ import {eventToPromise, isVisible, microtasksFinished} from 'chrome://webui-test
       }
     });
 
-    test('DisplaysResults', async () => {
+    test('DisplaysResults', () => {
       const resultsElements = getResultElements();
       assertEquals(2, resultsElements.length);
       if (enableAnswers) {
@@ -262,7 +263,7 @@ import {eventToPromise, isVisible, microtasksFinished} from 'chrome://webui-test
       await microtasksFinished();
 
       const loadingAnswersEl =
-          element.shadowRoot!.querySelector('.loading-answer');
+          element.shadowRoot.querySelector('.loading-answer');
       assertFalse(isVisible(loadingAnswersEl));
     });
 
@@ -302,6 +303,19 @@ import {eventToPromise, isVisible, microtasksFinished} from 'chrome://webui-test
       assertEquals(true, resultClickEvent.detail.shiftKey);
     });
 
+    test('FiresRecordHistoryLinkClick', async () => {
+      const resultsElements = getResultElements();
+      const recordClickEventPromise =
+          eventToPromise('record-history-link-click', element);
+      // Prevent clicking from actually open in new tabs for native anchor tags.
+      resultsElements[1]!.addEventListener('click', e => e.preventDefault());
+      resultsElements[1]!.click();
+      const recordClickEvent = await recordClickEventPromise;
+      assertEquals(
+          HistoryResultType.EMBEDDINGS, recordClickEvent.detail.resultType);
+      assertEquals(1, recordClickEvent.detail.index);
+    });
+
     test('FiresContextMenu', async () => {
       const resultsElements = getResultElements();
       const resultContextMenuEventPromise =
@@ -338,7 +352,7 @@ import {eventToPromise, isVisible, microtasksFinished} from 'chrome://webui-test
       });
       await microtasksFinished();
 
-      const answerLink = element.shadowRoot!.querySelector('.answer-link');
+      const answerLink = element.shadowRoot.querySelector('.answer-link');
       assertTrue(!!answerLink);
       answerLink.addEventListener('click', e => e.preventDefault());
       const answerClickEventPromise = eventToPromise('answer-click', element);
@@ -378,7 +392,7 @@ import {eventToPromise, isVisible, microtasksFinished} from 'chrome://webui-test
       // Clicking on the more actions button for the first item should load
       // the cr-action-menu and open it.
       const moreActionsMenu =
-          element.shadowRoot!.querySelector('cr-action-menu');
+          element.shadowRoot.querySelector('cr-action-menu');
       assertTrue(!!moreActionsMenu);
       assertTrue(moreActionsMenu.open);
 
@@ -417,8 +431,8 @@ import {eventToPromise, isVisible, microtasksFinished} from 'chrome://webui-test
 
       // Open the 'more actions' menu for the first result and remove it.
       moreActionsIconButtons[0]!.click();
-      element.shadowRoot!
-          .querySelector<HTMLElement>('#removeFromHistoryOption')!.click();
+      element.shadowRoot.querySelector<HTMLElement>(
+                            '#removeFromHistoryOption')!.click();
       await microtasksFinished();
 
       // There is still 1 result left so it should still be visible.
@@ -428,8 +442,8 @@ import {eventToPromise, isVisible, microtasksFinished} from 'chrome://webui-test
 
       // Open the 'more actions' menu for the last result and remove it.
       moreActionsIconButtons[0]!.click();
-      element.shadowRoot!
-          .querySelector<HTMLElement>('#removeFromHistoryOption')!.click();
+      element.shadowRoot.querySelector<HTMLElement>(
+                            '#removeFromHistoryOption')!.click();
       await microtasksFinished();
 
       // No results left.
@@ -439,7 +453,7 @@ import {eventToPromise, isVisible, microtasksFinished} from 'chrome://webui-test
 
     test('SetsUserFeedback', async () => {
       const feedbackButtonsEl =
-          element.shadowRoot!.querySelector('cr-feedback-buttons');
+          element.shadowRoot.querySelector('cr-feedback-buttons');
       assertTrue(!!feedbackButtonsEl);
       assertEquals(
           CrFeedbackOption.UNSPECIFIED, feedbackButtonsEl.selectedOption,
@@ -574,7 +588,7 @@ import {eventToPromise, isVisible, microtasksFinished} from 'chrome://webui-test
       assertEquals(21, numChars);
     });
 
-    test('ForceFlushesQualityLogOnBeforeUnload', async () => {
+    test('ForceFlushesQualityLogOnBeforeUnload', () => {
       if (!enableAnswers) {
         return;
       }
@@ -609,7 +623,7 @@ import {eventToPromise, isVisible, microtasksFinished} from 'chrome://webui-test
       assertEquals(1, handler.getCallCount('sendQualityLog'));
     });
 
-    test('ForceSupressesLogging', async () => {
+    test('ForceSupressesLogging', () => {
       element.forceSuppressLogging = true;
       const resultsElements = getResultElements();
       simulateClick(resultsElements[0]!);
@@ -717,7 +731,7 @@ import {eventToPromise, isVisible, microtasksFinished} from 'chrome://webui-test
       });
       element.otherHistoryResultClicked = false;
       const answerLink =
-          element.shadowRoot!.querySelector<HTMLAnchorElement>('.answer-link');
+          element.shadowRoot.querySelector<HTMLAnchorElement>('.answer-link');
       assertTrue(!!answerLink);
       simulateClick(answerLink);
       window.dispatchEvent(new Event('beforeunload'));  // Flush metrics.
@@ -744,8 +758,7 @@ import {eventToPromise, isVisible, microtasksFinished} from 'chrome://webui-test
       });
 
       function getAnswerSection() {
-        return element.shadowRoot!.querySelector<HTMLElement>(
-            '.answer-section');
+        return element.shadowRoot.querySelector<HTMLElement>('.answer-section');
       }
 
       assertFalse(
@@ -809,7 +822,7 @@ import {eventToPromise, isVisible, microtasksFinished} from 'chrome://webui-test
       }
 
       function getAnswer() {
-        return element.shadowRoot!.querySelector<HTMLElement>('.answer');
+        return element.shadowRoot.querySelector<HTMLElement>('.answer');
       }
 
       assertFalse(
@@ -856,7 +869,7 @@ import {eventToPromise, isVisible, microtasksFinished} from 'chrome://webui-test
       await microtasksFinished();
 
       const answerSource =
-          element.shadowRoot!.querySelector<HTMLElement>('.answer-source');
+          element.shadowRoot.querySelector<HTMLElement>('.answer-source');
       assertTrue(!!answerSource);
       assertTrue(isVisible(answerSource));
       assertEquals(
@@ -903,7 +916,7 @@ import {eventToPromise, isVisible, microtasksFinished} from 'chrome://webui-test
       }
 
       function getAnswerLink() {
-        return element.shadowRoot!.querySelector<HTMLAnchorElement>(
+        return element.shadowRoot.querySelector<HTMLAnchorElement>(
             '.answer-link');
       }
 
@@ -925,13 +938,13 @@ import {eventToPromise, isVisible, microtasksFinished} from 'chrome://webui-test
           'should ignore other directives');
     });
 
-    test('DisplaysFavicons', async () => {
+    test('DisplaysFavicons', () => {
       if (!enableAnswers) {
         // Favicons for without answers is embedded in a separate component.
         return;
       }
 
-      const favicons = element.shadowRoot!.querySelectorAll<HTMLElement>(
+      const favicons = element.shadowRoot.querySelectorAll<HTMLElement>(
           '.result-url-and-favicon  .favicon');
       assertEquals(2, favicons.length);
       assertEquals(
@@ -963,7 +976,7 @@ import {eventToPromise, isVisible, microtasksFinished} from 'chrome://webui-test
       }
 
       await updateAnswerStatus(AnswerStatus.kExecutionFailure);
-      const errorEl = element.shadowRoot!.querySelector<HTMLElement>('.answer');
+      const errorEl = element.shadowRoot.querySelector<HTMLElement>('.answer');
       assertTrue(!!errorEl);
       assertTrue(isVisible(errorEl));
       assertTrue(errorEl.hasAttribute('is-error'));

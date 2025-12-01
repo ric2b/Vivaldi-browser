@@ -6,7 +6,7 @@ import { spawn } from 'child_process';
 import { ESLint } from 'eslint';
 import { readFileSync } from 'fs';
 import { sync } from 'globby';
-import { extname, join } from 'path';
+import { extname, join, resolve, relative } from 'path';
 import stylelint from 'stylelint';
 import yargs from 'yargs';
 import { hideBin } from 'yargs/helpers';
@@ -15,6 +15,7 @@ import {
   devtoolsRootPath,
   litAnalyzerExecutablePath,
   nodePath,
+  nodeModulesPath,
   tsconfigJsonPath,
 } from '../devtools_paths.js';
 
@@ -30,6 +31,11 @@ const flags = yargs(hideBin(process.argv))
     describe:
       'Disable cache validations during debugging, useful for custom rule creation/debugging.',
   })
+  .option('tsc', {
+    type: 'boolean',
+    default: false,
+    describe: 'Temperary here while fixing EsLint rule',
+  })
   .usage('$0 [<files...>]', 'Run the linter on the provided files', yargs => {
     yargs.positional('files', {
       describe: 'File(s), glob(s), or directories',
@@ -40,6 +46,7 @@ const flags = yargs(hideBin(process.argv))
         'scripts',
         'test',
         'extensions',
+        'extension-api',
       ],
     });
   })
@@ -53,7 +60,16 @@ if (flags.debug) {
 }
 const cacheLinters = !flags.debug;
 
+function debugLogging(...args) {
+  if (!flags.debug) {
+    return;
+  }
+
+  console.log(...args);
+}
+
 async function runESLint(scriptFiles) {
+  debugLogging('[lint]: Running EsLint...');
   const cli = new ESLint({
     cwd: join(import.meta.dirname, '..', '..'),
     fix: flags.fix,
@@ -111,6 +127,7 @@ async function runESLint(scriptFiles) {
 }
 
 async function runStylelint(files) {
+  debugLogging('[lint]: Running StyleLint...');
   const { report, errored } = await stylelint.lint({
     configFile: join(import.meta.dirname, '..', '..', '.stylelintrc.json'),
     ignorePath: join(import.meta.dirname, '..', '..', '.stylelintignore'),
@@ -137,6 +154,8 @@ async function runStylelint(files) {
  * @param {string[]} files the input files to analyze.
  */
 async function runLitAnalyzer(files) {
+  debugLogging('[lint]: Running LitAnalyzer...');
+
   const readLitAnalyzerConfigFromCompilerOptions = () => {
     const { compilerOptions } = JSON.parse(
       readFileSync(tsconfigJsonPath(), 'utf-8'),
@@ -154,6 +173,11 @@ async function runLitAnalyzer(files) {
   };
 
   const { rules } = readLitAnalyzerConfigFromCompilerOptions();
+  /**
+   *
+   * @param {string[]} subsetFiles
+   * @returns {{output: string, error: string, status:boolean}}
+   */
   const getLitAnalyzerResult = async subsetFiles => {
     const args = [
       litAnalyzerExecutablePath(),
@@ -217,7 +241,9 @@ async function runLitAnalyzer(files) {
     }),
   );
   for (const result of results) {
-    if (result.output) {
+    // Don't print if no problems are found
+    // Mimics the other tools
+    if (result.output && !result.output.includes('Found 0 problems')) {
       console.log(result.output);
     }
     if (result.error) {
@@ -228,12 +254,92 @@ async function runLitAnalyzer(files) {
   return results.every(r => r.status);
 }
 
+const DEVTOOLS_ROOT_DIR = resolve(import.meta.dirname, '..', '..');
+/**
+ *
+ * @param {string} path
+ * @returns {boolean}
+ */
+function shouldIgnoreFile(path) {
+  const resolvedPath = resolve(path);
+  const relativePath = relative(DEVTOOLS_ROOT_DIR, resolvedPath);
+
+  if (
+    relativePath.includes('third_party') ||
+    relativePath.includes('node_modules')
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
+async function runEslintRulesTypeCheck(_files) {
+  const tscPath = join(nodeModulesPath(), '.bin', 'tsc');
+  const tsConfigEslintRules = join(
+    devtoolsRootPath(),
+    'scripts',
+    'eslint_rules',
+    'tsconfig.json',
+  );
+  const args = [tscPath, '-b', tsConfigEslintRules];
+  /**
+   * @returns {Promise<{output: string, error: string, status:boolean}>}
+   */
+  async function runTypeCheck() {
+    const result = {
+      output: '',
+      error: '',
+      status: false,
+    };
+
+    return await new Promise(resolve => {
+      const litAnalyzerProcess = spawn(nodePath(), args, {
+        encoding: 'utf-8',
+        cwd: devtoolsRootPath(),
+      });
+
+      litAnalyzerProcess.stdout.on('data', data => {
+        result.output += `\n${data.toString()}`;
+      });
+      litAnalyzerProcess.stderr.on('data', data => {
+        result.error += `\n${data.toString()}`;
+      });
+
+      litAnalyzerProcess.on('error', message => {
+        result.error += `\n${message}`;
+        resolve(result);
+      });
+
+      litAnalyzerProcess.on('exit', code => {
+        result.status = code === 0;
+        resolve(result);
+      });
+    });
+  }
+
+  const result = await runTypeCheck();
+
+  if (result.output && !result.output.includes('Found 0 problems')) {
+    console.log(result.output);
+  }
+  if (result.error) {
+    console.log(result.error);
+  }
+  return result.status;
+}
+
 async function run() {
   const scripts = [];
   const styles = [];
   for (const path of sync(flags.files, {
     expandDirectories: { extensions: ['css', 'mjs', 'js', 'ts'] },
+    gitignore: true,
   })) {
+    if (shouldIgnoreFile(path)) {
+      continue;
+    }
+
     if (extname(path) === '.css') {
       styles.push(path);
     } else {
@@ -242,6 +348,9 @@ async function run() {
   }
 
   const frontEndFiles = scripts.filter(script => script.includes('front_end'));
+  const esLintRules = scripts.filter(script =>
+    script.includes('scripts/eslint_rules'),
+  );
 
   let succeed = true;
   if (scripts.length !== 0) {
@@ -253,6 +362,10 @@ async function run() {
   if (styles.length !== 0) {
     succeed &&= await runStylelint(styles);
   }
+  if (esLintRules.length !== 0 && flags.tsc) {
+    succeed &&= await runEslintRulesTypeCheck();
+  }
+
   return succeed;
 }
 

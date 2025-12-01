@@ -15,6 +15,7 @@
 #include "ui/base/mojom/dialog_button.mojom.h"
 #include "ui/base/mojom/window_show_state.mojom.h"
 #include "ui/events/event_processor.h"
+#include "ui/gfx/native_widget_types.h"
 #include "ui/views/bubble/bubble_border.h"
 #include "ui/views/bubble/bubble_frame_view.h"
 #include "ui/views/controls/button/checkbox.h"
@@ -31,8 +32,6 @@
 #endif
 
 namespace views {
-
-namespace {
 
 class TestDialog : public DialogDelegateView {
  public:
@@ -90,6 +89,8 @@ class TestDialog : public DialogDelegateView {
   bool show_close_button_ = true;
   bool should_handle_escape_ = false;
 };
+
+namespace {
 
 class DialogTest : public ViewsTestBase {
  public:
@@ -164,6 +165,8 @@ class DialogTest : public ViewsTestBase {
   std::unique_ptr<TestDialog> dialog_;
   raw_ptr<TestDialog> dialog_raw_ = nullptr;
 };
+
+}  // namespace
 
 TEST_F(DialogTest, InputIsInitiallyFocused) {
   EXPECT_EQ(dialog()->input(), dialog()->GetFocusManager()->GetFocusedView());
@@ -450,7 +453,8 @@ TEST_F(DialogTest, UnfocusableInitialFocus) {
       ->set_full_keyboard_access_state(false);
 #endif
 
-  auto dialog_owned = std::make_unique<DialogDelegateView>();
+  auto dialog_owned =
+      std::make_unique<DialogDelegateView>(DialogDelegateView::CreatePassKey());
   DialogDelegateView* dialog = dialog_owned.get();
   Textfield* textfield = dialog->AddChildView(std::make_unique<Textfield>());
   Widget* dialog_widget = CreateDialogWidget(std::move(dialog_owned));
@@ -475,7 +479,8 @@ TEST_F(DialogTest, UnfocusableInitialFocus) {
 
 TEST_F(DialogTest, ButtonEnableUpdatesState) {
   test::WidgetTest::WidgetAutoclosePtr widget(
-      CreateDialogWidget(std::make_unique<DialogDelegateView>()));
+      CreateDialogWidget(std::make_unique<DialogDelegateView>(
+          DialogDelegateView::CreatePassKey())));
   auto* dialog = static_cast<DialogDelegateView*>(widget->widget_delegate());
 
   EXPECT_TRUE(dialog->GetOkButton()->GetEnabled());
@@ -550,8 +555,8 @@ TEST_F(DialogDelegateCloseTest, OldClosePathDoesNotDoubleClose) {
   auto dialog_owned =
       std::make_unique<TestDialogDelegateView>(&accepted, &cancelled);
   TestDialogDelegateView* dialog = dialog_owned.get();
-  Widget* widget = DialogDelegate::CreateDialogWidget(std::move(dialog_owned),
-                                                      GetContext(), nullptr);
+  Widget* widget = DialogDelegate::CreateDialogWidget(
+      std::move(dialog_owned), GetContext(), gfx::NativeView());
   widget->Show();
 
   views::test::WidgetDestroyedWaiter destroyed_waiter(widget);
@@ -563,7 +568,8 @@ TEST_F(DialogDelegateCloseTest, OldClosePathDoesNotDoubleClose) {
 }
 
 TEST_F(DialogDelegateCloseTest, CloseParentWidgetDoesNotInvokeCloseCallback) {
-  auto dialog_owned = std::make_unique<DialogDelegateView>();
+  auto dialog_owned =
+      std::make_unique<DialogDelegateView>(DialogDelegateView::CreatePassKey());
   DialogDelegateView* dialog = dialog_owned.get();
   std::unique_ptr<Widget> parent =
       CreateTestWidget(Widget::InitParams::CLIENT_OWNS_WIDGET);
@@ -585,7 +591,8 @@ TEST_F(DialogDelegateCloseTest, CloseParentWidgetDoesNotInvokeCloseCallback) {
 
 TEST_F(DialogTest, AcceptCallbackWithCloseDoesNotClose) {
   test::WidgetTest::WidgetAutoclosePtr widget(
-      CreateDialogWidget(std::make_unique<DialogDelegateView>()));
+      CreateDialogWidget(std::make_unique<DialogDelegateView>(
+          DialogDelegateView::CreatePassKey())));
   auto* dialog = static_cast<DialogDelegateView*>(widget->widget_delegate());
 
   bool accepted = false;
@@ -602,7 +609,8 @@ TEST_F(DialogTest, AcceptCallbackWithCloseDoesNotClose) {
 
 TEST_F(DialogTest, AcceptCallbackWithCloseDoesClose) {
   test::WidgetTest::WidgetAutoclosePtr widget(
-      CreateDialogWidget(std::make_unique<DialogDelegateView>()));
+      CreateDialogWidget(std::make_unique<DialogDelegateView>(
+          DialogDelegateView::CreatePassKey())));
   auto* dialog = static_cast<DialogDelegateView*>(widget->widget_delegate());
 
   bool accepted = false;
@@ -619,7 +627,8 @@ TEST_F(DialogTest, AcceptCallbackWithCloseDoesClose) {
 
 TEST_F(DialogTest, CancelCallbackWithCloseDoesNotClose) {
   test::WidgetTest::WidgetAutoclosePtr widget(
-      CreateDialogWidget(std::make_unique<DialogDelegateView>()));
+      CreateDialogWidget(std::make_unique<DialogDelegateView>(
+          DialogDelegateView::CreatePassKey())));
   auto* dialog = static_cast<DialogDelegateView*>(widget->widget_delegate());
 
   bool canceled = false;
@@ -636,7 +645,8 @@ TEST_F(DialogTest, CancelCallbackWithCloseDoesNotClose) {
 
 TEST_F(DialogTest, CancelCallbackWithCloseDoesClose) {
   test::WidgetTest::WidgetAutoclosePtr widget(
-      CreateDialogWidget(std::make_unique<DialogDelegateView>()));
+      CreateDialogWidget(std::make_unique<DialogDelegateView>(
+          DialogDelegateView::CreatePassKey())));
   auto* dialog = static_cast<DialogDelegateView*>(widget->widget_delegate());
 
   bool canceled = false;
@@ -655,7 +665,8 @@ class MakeCloseSynchronousTest : public DialogTest {
  public:
   void CreateSynchronousCloseWidget() {
     std::unique_ptr<DialogDelegateView> delegate =
-        std::make_unique<DialogDelegateView>();
+        std::make_unique<DialogDelegateView>(
+            DialogDelegateView::CreatePassKey());
     synchronous_close_view_ = delegate.get();
     delegate->SetOwnershipOfNewWidget(Widget::InitParams::CLIENT_OWNS_WIDGET);
     synchronous_close_widget_ = base::WrapUnique(
@@ -701,7 +712,5 @@ TEST_F(MakeCloseSynchronousTest, Accept) {
   }
   EXPECT_FALSE(synchronous_close_widget_);
 }
-
-}  // namespace
 
 }  // namespace views

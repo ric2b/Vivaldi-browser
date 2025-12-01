@@ -463,9 +463,9 @@ TEST(PlatformThreadTest, SetHugeThreadName) {
 
 TEST(PlatformThreadTest, GetDefaultThreadStackSize) {
   size_t stack_size = PlatformThread::GetDefaultThreadStackSize();
-#if BUILDFLAG(IS_IOS) && BUILDFLAG(USE_BLINK)
+#if BUILDFLAG(IS_IOS)
   EXPECT_EQ(1024u * 1024u, stack_size);
-#elif BUILDFLAG(IS_WIN) || BUILDFLAG(IS_IOS) || BUILDFLAG(IS_FUCHSIA) ||      \
+#elif BUILDFLAG(IS_WIN) || BUILDFLAG(IS_FUCHSIA) ||                           \
     ((BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)) && defined(__GLIBC__) && \
      !defined(THREAD_SANITIZER)) ||                                           \
     (BUILDFLAG(IS_ANDROID) && !defined(ADDRESS_SANITIZER))
@@ -629,7 +629,7 @@ INSTANTIATE_TEST_SUITE_P(
 namespace {
 
 bool IsTidCacheCorrect() {
-  return PlatformThread::CurrentId() == syscall(__NR_gettid);
+  return PlatformThread::CurrentId().raw() == syscall(__NR_gettid);
 }
 
 void* CheckTidCacheCorrectWrapper(void*) {

@@ -43,6 +43,20 @@ enum class ParentAccessWidgetError {
 };
 // LINT.ThenChange(//tools/metrics/histograms/metadata/families/enums.xml:FamilyLinkUserParentAccessWidgetError)
 
+// Type of error that was encountered during a local web approval flow.
+// Used for metrics. Those values are logged to UMA. Entries should not be
+// renumbered and numeric values should never be reused.
+// LINT.IfChange(LocalWebApprovalErrorType)
+enum class LocalWebApprovalErrorType : int {
+  kFailureToDecodePacpResponse = 0,
+  kFailureToParsePacpResponse = 1,
+  kUnexpectedPacpResponse = 2,
+  kPacpTimeoutExceeded = 3,
+  kPacpEmptyResponse = 4,
+  kMaxValue = kPacpEmptyResponse
+};
+// LINT.ThenChange(//tools/metrics/histograms/metadata/families/enums.xml:LocalWebApprovalErrorType)
+
 // This enum describes the filter types of Chrome, which is
 // set by Family Link App or at families.google.com/families. These values
 // are logged to UMA. Entries should not be renumbered and numeric values
@@ -190,6 +204,9 @@ extern const char kSupervisedUserTopLevelURLFilteringResultHistogramName[];
 // for use in the navigation throttle context.
 extern const char kSupervisedUserTopLevelURLFilteringResult2HistogramName[];
 
+// Histogram name to log the result of a local url approval request.
+extern const char kLocalWebApprovalResultHistogramName[];
+
 // The URL which the "Managed by your parent" UI links to.
 extern const char kManagedByParentUiMoreInfoUrl[];
 
@@ -214,6 +231,14 @@ extern const char kClassifyUrlThrottleStatusHistogramName[];
 
 // Histogram name to track the final throttle verdict.
 extern const char kClassifyUrlThrottleFinalStatusHistogramName[];
+
+// Histogram name to track the duration of successful local web approval flows,
+// in milliseconds.
+extern const char kLocalWebApprovalDurationMillisecondsHistogramName[];
+
+// Histogram name to track the different error types that may occur during the
+// local web approval flow.
+extern const char kLocalWebApprovalErrorTypeHistogramName[];
 }  // namespace supervised_user
 
 #endif  // COMPONENTS_SUPERVISED_USER_CORE_COMMON_SUPERVISED_USER_CONSTANTS_H_

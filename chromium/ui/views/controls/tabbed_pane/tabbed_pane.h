@@ -7,6 +7,7 @@
 
 #include <memory>
 #include <string>
+#include <string_view>
 #include <utility>
 
 #include "base/callback_list.h"
@@ -184,8 +185,8 @@ class VIEWS_EXPORT TabbedPaneTab : public View {
   bool selected() const { return selected_; }
   void SetSelected(bool selected);
 
-  const std::u16string& GetTitleText() const;
-  void SetTitleText(const std::u16string& text);
+  std::u16string_view GetTitleText() const;
+  void SetTitleText(std::u16string_view text);
 
   void SetTitleMargin(const gfx::Insets& margin);
   void SetIconMargin(const gfx::Insets& margin);
@@ -280,9 +281,6 @@ class VIEWS_EXPORT TabbedPaneTabStrip : public View,
   // AnimationDelegate:
   void AnimationProgressed(const gfx::Animation* animation) override;
   void AnimationEnded(const gfx::Animation* animation) override;
-
-  // Called by TabbedPaneTabStrip when its enable status changes.
-  void OnEnableChanged();
 
   // Called by TabbedPaneTabStrip when the selected tab changes. This function
   // is only called if |from_tab| is not null, i.e., there was a previously
@@ -387,9 +385,6 @@ class VIEWS_EXPORT TabbedPaneTabStrip : public View,
   // Whether to draw the unselected divider below the tabs. Useful for when
   // the caller wants to use a custom divider instead.
   bool draw_tab_divider_ = true;
-
-  // Listener to monitor `SetEnabled` and propagate the state changes.
-  base::CallbackListSubscription enabled_changed_subscription_;
 };
 
 BEGIN_VIEW_BUILDER(VIEWS_EXPORT, TabbedPane, FlexLayoutView)

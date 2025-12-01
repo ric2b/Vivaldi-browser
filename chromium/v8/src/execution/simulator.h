@@ -34,6 +34,10 @@
 #error Unsupported target architecture.
 #endif
 
+namespace heap::base {
+class StackVisitor;
+}
+
 namespace v8 {
 namespace internal {
 
@@ -52,11 +56,22 @@ class SimulatorStack : public v8::internal::AllStatic {
   }
 
 #if V8_ENABLE_WEBASSEMBLY
+  // Includes the safety stack limit gap.
   static inline base::Vector<uint8_t> GetCentralStackView(
       v8::internal::Isolate* isolate) {
     return Simulator::current(isolate)->GetCentralStackView();
   }
+
+  // Size of the safety stack limit gap.
+  static int JSStackLimitMargin() { return Simulator::JSStackLimitMargin(); }
 #endif
+
+  // Iterates the simulator registers and stack for conservative stack scanning.
+  static void IterateRegistersAndStack(Isolate* isolate,
+                                       ::heap::base::StackVisitor* visitor) {
+    DCHECK_NOT_NULL(isolate);
+    Simulator::current(isolate)->IterateRegistersAndStack(visitor);
+  }
 
   // When running on the simulator, we should leave the C stack limits alone
   // when switching stacks for Wasm.
@@ -96,12 +111,18 @@ class SimulatorStack : public v8::internal::AllStatic {
   static inline base::Vector<uint8_t> GetCentralStackView(
       v8::internal::Isolate* isolate) {
     uintptr_t upper_bound = base::Stack::GetStackStart();
-    size_t size =
-        v8_flags.stack_size * KB + wasm::StackMemory::kJSLimitOffsetKB * KB;
+    size_t size = isolate->stack_size() + JSStackLimitMargin();
     uintptr_t lower_bound = upper_bound - size;
     return base::VectorOf(reinterpret_cast<uint8_t*>(lower_bound), size);
   }
+
+  static constexpr int JSStackLimitMargin() {
+    return wasm::StackMemory::kJSLimitOffsetKB * KB;
+  }
 #endif
+
+  static void IterateRegistersAndStack(Isolate* isolate,
+                                       ::heap::base::StackVisitor* visitor) {}
 
   // When running on real hardware, we should also switch the C stack limit
   // when switching stacks for Wasm.

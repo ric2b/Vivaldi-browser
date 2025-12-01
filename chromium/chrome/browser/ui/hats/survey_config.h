@@ -34,6 +34,7 @@ extern const char kHatsSurveyTriggerLensOverlayResults[];
 extern const char kHatsSurveyTriggerNtpModules[];
 extern const char kHatsSurveyTriggerNtpPhotosModuleOptOut[];
 extern const char kHatsSurveyTriggerPerformanceControlsPerformance[];
+extern const char kHatsSurveyTriggerPerformanceControlsPPM[];
 extern const char kHatsSurveyTriggerPerformanceControlsBatteryPerformance[];
 extern const char kHatsSurveyTriggerPerformanceControlsMemorySaverOptOut[];
 extern const char kHatsSurveyTriggerPerformanceControlsBatterySaverOptOut[];
@@ -90,6 +91,8 @@ extern const char kHatsSurveyTriggerPrivacySandboxSentimentSurvey[];
 extern const char kHatsSurveyTriggerMerchantTrustEvaluationControlSurvey[];
 extern const char kHatsSurveyTriggerMerchantTrustEvaluationExperimentSurvey[];
 extern const char kHatsSurveyTriggerMerchantTrustLearnSurvey[];
+extern const char kHatsSurveyTriggerOnFocusZpsSuggestionsHappiness[];
+extern const char kHatsSurveyTriggerOnFocusZpsSuggestionsUtility[];
 
 extern const char kHatsSurveyTriggerTesting[];
 // The Trigger ID for a test HaTS Next survey which is available for testing

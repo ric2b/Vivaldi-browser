@@ -12,6 +12,7 @@
 #include <stddef.h>
 
 #include <string>
+#include <variant>
 
 #include "base/base_paths.h"
 #include "base/check.h"
@@ -48,7 +49,6 @@
 #include "chrome/browser/defaults.h"
 #include "chrome/browser/headless/headless_mode_util.h"
 #include "chrome/browser/lifetime/browser_shutdown.h"
-#include "chrome/browser/mac/code_sign_clone_manager.h"
 #include "chrome/browser/metrics/chrome_feature_list_creator.h"
 #include "chrome/browser/startup_data.h"
 #include "chrome/common/buildflags.h"
@@ -101,7 +101,6 @@
 #include "ppapi/buildflags/buildflags.h"
 #include "printing/buildflags/buildflags.h"
 #include "services/tracing/public/cpp/stack_sampling/tracing_sampler_profiler.h"
-#include "third_party/abseil-cpp/absl/types/variant.h"
 #include "third_party/blink/public/common/features.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
@@ -115,6 +114,7 @@
 
 #include "base/base_switches.h"
 #include "base/files/important_file_writer_cleaner.h"
+#include "base/process/process_handle.h"
 #include "base/win/atl.h"
 #include "base/win/dark_mode_support.h"
 #include "base/win/resource_exhaustion.h"
@@ -132,6 +132,7 @@
 #include "base/apple/foundation_util.h"
 #include "chrome/app/chrome_main_mac.h"
 #include "chrome/browser/chrome_browser_application_mac.h"
+#include "chrome/browser/mac/code_sign_clone_manager.h"
 #include "chrome/browser/mac/relauncher.h"
 #include "chrome/browser/shell_integration.h"
 #include "components/crash/core/common/objc_zombie.h"
@@ -203,7 +204,7 @@
 #endif
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
-#include "chrome/browser/extensions/startup_helper.h"
+#include "chrome/browser/extensions/startup_helper.h"  // nogncheck
 #include "extensions/common/constants.h"
 #endif
 
@@ -491,10 +492,10 @@ std::optional<int> HandlePackExtensionSwitches(
     if (!error_message.empty()) {
       LOG(ERROR) << error_message.c_str();
     }
-    return chrome::RESULT_CODE_PACK_EXTENSION_ERROR;
+    return CHROME_RESULT_CODE_PACK_EXTENSION_ERROR;
   }
 
-  return chrome::RESULT_CODE_NORMAL_EXIT_PACK_EXTENSION_SUCCESS;
+  return CHROME_RESULT_CODE_NORMAL_EXIT_PACK_EXTENSION_SUCCESS;
 }
 #endif  // !BUILDFLAG(ENABLE_EXTENSIONS)
 
@@ -535,11 +536,11 @@ std::optional<int> AcquireProcessSingleton(
                          base::UTF16ToWide(l10n_util::GetStringUTF16(
                              IDS_USED_EXISTING_BROWSER)))
                          .c_str());
-      return chrome::RESULT_CODE_NORMAL_EXIT_PROCESS_NOTIFIED;
+      return CHROME_RESULT_CODE_NORMAL_EXIT_PROCESS_NOTIFIED;
     }
 
     case ProcessSingleton::PROFILE_IN_USE:
-      return chrome::RESULT_CODE_PROFILE_IN_USE;
+      return CHROME_RESULT_CODE_PROFILE_IN_USE;
 
     case ProcessSingleton::LOCK_ERROR:
       LOG(ERROR) << "Failed to create a ProcessSingleton for your profile "
@@ -547,7 +548,7 @@ std::optional<int> AcquireProcessSingleton(
                     "would start multiple browser processes rather than "
                     "opening a new window in the existing process. Aborting "
                     "now to avoid profile corruption.";
-      return chrome::RESULT_CODE_PROFILE_IN_USE;
+      return CHROME_RESULT_CODE_PROFILE_IN_USE;
   }
 
   return std::nullopt;
@@ -724,7 +725,7 @@ void OnResourceExhausted() {
     ::MessageBox(nullptr, kOnResourceExhaustedMessage, kMessageBoxTitle, MB_OK);
   }
   base::Process::TerminateCurrentProcessImmediately(
-      chrome::RESULT_CODE_SYSTEM_RESOURCE_EXHAUSTED);
+      CHROME_RESULT_CODE_SYSTEM_RESOURCE_EXHAUSTED);
 }
 
 // Alternate version of the above handler that is used when running in headless
@@ -773,7 +774,7 @@ std::optional<int> ChromeMainDelegate::PostEarlyInitialization(
     InvokedIn invoked_in) {
   DUMP_WILL_BE_CHECK(base::ThreadPoolInstance::Get());
   const auto* invoked_in_browser =
-      absl::get_if<InvokedInBrowserProcess>(&invoked_in);
+      std::get_if<InvokedInBrowserProcess>(&invoked_in);
   if (!invoked_in_browser) {
     CommonEarlyInitialization(invoked_in);
     return std::nullopt;
@@ -923,7 +924,7 @@ std::optional<int> ChromeMainDelegate::PostEarlyInitialization(
 bool ChromeMainDelegate::ShouldCreateFeatureList(InvokedIn invoked_in) {
   // The //content layer is always responsible for creating the FeatureList in
   // child processes.
-  if (absl::holds_alternative<InvokedInChildProcess>(invoked_in)) {
+  if (std::holds_alternative<InvokedInChildProcess>(invoked_in)) {
     return true;
   }
 
@@ -964,6 +965,15 @@ void ChromeMainDelegate::CommonEarlyInitialization(InvokedIn invoked_in) {
   std::string process_type =
       command_line->GetSwitchValueASCII(switches::kProcessType);
   bool is_browser_process = process_type.empty();
+
+#if BUILDFLAG(IS_WIN)
+  if (base::FeatureList::IsEnabled(features::kDisableBoostPriority)) {
+    // The second argument to this function *disables* boosting if true. See
+    // https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-setprocesspriorityboost
+    SetProcessPriorityBoost(/*hProcess=*/base::GetCurrentProcessHandle(),
+                            /*bDisablePriorityBoost=*/true);
+  }
+#endif
 
   // Enable Split cache by default here and not in content/ so as to not
   // impact non-Chrome embedders like WebView, Cronet etc. This only enables
@@ -1117,13 +1127,14 @@ std::optional<int> ChromeMainDelegate::BasicStartupComplete() {
       !pipes_are_specified_explicitly &&
       !devtools_pipe::AreFileDescriptorsOpen()) {
     LOG(ERROR) << "Remote debugging pipe file descriptors are not open.";
-    return chrome::RESULT_CODE_UNSUPPORTED_PARAM;
+    return CHROME_RESULT_CODE_UNSUPPORTED_PARAM;
   }
 
 #if BUILDFLAG(IS_WIN)
   // Browser should not be sandboxed.
-  if (is_browser && IsSandboxedProcess())
-    return chrome::RESULT_CODE_INVALID_SANDBOX_STATE;
+  if (is_browser && IsSandboxedProcess()) {
+    return CHROME_RESULT_CODE_INVALID_SANDBOX_STATE;
+  }
 #endif
 
 #if BUILDFLAG(IS_MAC)
@@ -1542,7 +1553,7 @@ void ChromeMainDelegate::SandboxInitialized(const std::string& process_type) {
 #endif
 }
 
-absl::variant<int, content::MainFunctionParams> ChromeMainDelegate::RunProcess(
+std::variant<int, content::MainFunctionParams> ChromeMainDelegate::RunProcess(
     const std::string& process_type,
     content::MainFunctionParams main_function_params) {
 #if BUILDFLAG(IS_ANDROID)

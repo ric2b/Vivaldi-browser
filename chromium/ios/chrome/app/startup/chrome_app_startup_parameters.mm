@@ -47,7 +47,7 @@ NSString* const kSmartAppBannerKey = @"safarisab";
 
 // TODO(crbug.com/40725595): When swift is supported move WidgetKit constants to
 // a file where they can be shared with the extension. Currently these are also
-// declared as URLs in ios/c/widget_kit_extension/widget_constants.swift.
+// declared as URLs in ios/c/widget_kit_extension/widget_urls.swift.
 //
 // Scheme used by the widget extension actions. It's important that this scheme
 // is never defined as Custom URL Scheme for Chrome so only the widgets can use
@@ -235,8 +235,7 @@ TabOpeningPostOpeningAction XCallbackPoaToPostOpeningAction(
                                   AppLaunchSource::X_CALLBACK);
     // TODO(crbug.com/41004788): Temporary fix.
     NSString* action = [completeURL path];
-    // Currently only "open" and "extension-command" are supported.
-    // Other actions are being considered (see b/6914153).
+    // Currently only "open" and "app-group-command" are supported.
     if ([action
             isEqualToString:
                 [NSString
@@ -586,7 +585,7 @@ TabOpeningPostOpeningAction XCallbackPoaToPostOpeningAction(
 
   if ([command isEqualToString:base::SysUTF8ToNSString(
                                    app_group::kChromeAppGroupOpenURLCommand)]) {
-    if (!externalText || ![externalText isKindOfClass:[NSString class]]) {
+    if (!externalText) {
       return nil;
     }
     GURL externalGURL(base::SysNSStringToUTF8(externalText));
@@ -599,6 +598,25 @@ TabOpeningPostOpeningAction XCallbackPoaToPostOpeningAction(
              secureSourceApp:secureAppID
                  completeURL:URL
              applicationMode:ApplicationModeForTabOpening::UNDETERMINED
+        forceApplicationMode:forceApplicationMode];
+    action = ACTION_OPEN_URL;
+  }
+
+  if ([command
+          isEqualToString:app_group::kChromeAppGroupOpenURLInIcognitoCommand]) {
+    if (!externalText) {
+      return nil;
+    }
+    GURL externalGURL(base::SysNSStringToUTF8(externalText));
+    if (!externalGURL.is_valid() || !externalGURL.SchemeIsHTTPOrHTTPS()) {
+      return nil;
+    }
+    params = [[ChromeAppStartupParameters alloc]
+         initWithExternalURL:externalGURL
+           declaredSourceApp:appID
+             secureSourceApp:secureAppID
+                 completeURL:URL
+             applicationMode:ApplicationModeForTabOpening::INCOGNITO
         forceApplicationMode:forceApplicationMode];
     action = ACTION_OPEN_URL;
   }
@@ -623,6 +641,25 @@ TabOpeningPostOpeningAction XCallbackPoaToPostOpeningAction(
     action = ACTION_SEARCH_TEXT;
   }
 
+  if ([command isEqualToString:app_group::
+                                   kChromeAppGroupIncognitoSearchTextCommand]) {
+    if (!externalText) {
+      return nil;
+    }
+
+    params = [[ChromeAppStartupParameters alloc]
+         initWithExternalURL:GURL(kChromeUINewTabURL)
+           declaredSourceApp:appID
+             secureSourceApp:secureAppID
+                 completeURL:URL
+             applicationMode:ApplicationModeForTabOpening::INCOGNITO
+        forceApplicationMode:forceApplicationMode];
+
+    params.textQuery = externalText;
+
+    action = ACTION_SEARCH_TEXT;
+  }
+
   if ([command
           isEqualToString:base::SysUTF8ToNSString(
                               app_group::kChromeAppGroupSearchImageCommand)]) {
@@ -636,6 +673,25 @@ TabOpeningPostOpeningAction XCallbackPoaToPostOpeningAction(
              secureSourceApp:secureAppID
                  completeURL:URL
              applicationMode:ApplicationModeForTabOpening::UNDETERMINED
+        forceApplicationMode:forceApplicationMode];
+
+    params.imageSearchData = externalData;
+
+    action = ACTION_SEARCH_IMAGE;
+  }
+
+  if ([command isEqualToString:
+                   app_group::kChromeAppGroupIncognitoSearchImageCommand]) {
+    if (!externalData) {
+      return nil;
+    }
+
+    params = [[ChromeAppStartupParameters alloc]
+         initWithExternalURL:GURL(kChromeUINewTabURL)
+           declaredSourceApp:appID
+             secureSourceApp:secureAppID
+                 completeURL:URL
+             applicationMode:ApplicationModeForTabOpening::INCOGNITO
         forceApplicationMode:forceApplicationMode];
 
     params.imageSearchData = externalData;

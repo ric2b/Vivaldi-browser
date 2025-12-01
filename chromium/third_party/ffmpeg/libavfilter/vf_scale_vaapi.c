@@ -137,6 +137,12 @@ static int scale_vaapi_filter_frame(AVFilterLink *inlink, AVFrame *input_frame)
     if (err < 0)
         goto fail;
 
+    if (output_frame->width != input_frame->width || output_frame->height != input_frame->height) {
+        av_frame_side_data_remove_by_props(&output_frame->side_data,
+                                           &output_frame->nb_side_data,
+                                           AV_SIDE_DATA_PROP_SIZE_DEPENDENT);
+    }
+
     if (ctx->colour_primaries != AVCOL_PRI_UNSPECIFIED)
         output_frame->color_primaries = ctx->colour_primaries;
     if (ctx->colour_transfer != AVCOL_TRC_UNSPECIFIED)
@@ -291,15 +297,15 @@ static const AVFilterPad scale_vaapi_outputs[] = {
     },
 };
 
-const AVFilter ff_vf_scale_vaapi = {
-    .name          = "scale_vaapi",
-    .description   = NULL_IF_CONFIG_SMALL("Scale to/from VAAPI surfaces."),
+const FFFilter ff_vf_scale_vaapi = {
+    .p.name        = "scale_vaapi",
+    .p.description = NULL_IF_CONFIG_SMALL("Scale to/from VAAPI surfaces."),
+    .p.priv_class  = &scale_vaapi_class,
     .priv_size     = sizeof(ScaleVAAPIContext),
     .init          = &scale_vaapi_init,
     .uninit        = &ff_vaapi_vpp_ctx_uninit,
     FILTER_INPUTS(scale_vaapi_inputs),
     FILTER_OUTPUTS(scale_vaapi_outputs),
     FILTER_QUERY_FUNC2(&ff_vaapi_vpp_query_formats),
-    .priv_class    = &scale_vaapi_class,
     .flags_internal = FF_FILTER_FLAG_HWFRAME_AWARE,
 };

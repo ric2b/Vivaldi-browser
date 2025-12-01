@@ -21,6 +21,7 @@
 <translation id="4622039161600275920">Questa pagina è stata bloccata da Chromium</translation>
 <translation id="48558539577516920">Consenti a Chromium di accedere alla rete nelle impostazioni del firewall o del software
          antivirus.</translation>
+<translation id="4949828774841497663">Vai a Applicazioni &gt; Impostazioni di sistema &gt; Rete, seleziona la rete attiva, fai clic sul pulsante Dettagli… e deseleziona eventuali proxy che potrebbero essere stati selezionati.</translation>
 <translation id="580822234363523061">Seleziona
           il menu Chromium &gt;
           <ph name="SETTINGS_TITLE" />
@@ -36,9 +37,6 @@
 <translation id="7681937895330411637">La realizzazione di Chromium è stata possibile grazie al progetto open source <ph name="BEGIN_LINK_CHROMIUM" />Chromium<ph name="END_LINK_CHROMIUM" />.</translation>
 <translation id="7861509383340276692">Seleziona il menu Chromium &gt; <ph name="SETTINGS_TITLE" /> &gt; <ph name="ADVANCED_TITLE" /> e deseleziona "<ph name="NO_PREFETCH_DESCRIPTION" />".
 Se il problema non si risolve, dovresti riselezionare questa opzione per ottenere prestazioni migliori.</translation>
-<translation id="8187289872471304532">Seleziona
-          Applicazioni &gt; Preferenze di Sistema &gt; Network &gt; Avanzate &gt; Proxy
-          e deseleziona i proxy selezionati.</translation>
 <translation id="8597726643333341451">Stai visualizzando una pagina sicura di Chrome for Testing</translation>
 <translation id="8684913864886094367">Chromium non si è chiuso correttamente.</translation>
 </translationbundle>

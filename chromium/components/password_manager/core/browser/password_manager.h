@@ -54,11 +54,11 @@ class FormData;
 
 namespace password_manager {
 
+class BrowserSavePasswordProgressLogger;
 class PasswordManagerClient;
 class PasswordManagerDriver;
 class PasswordFormManagerForUI;
 class PasswordFormManager;
-class PasswordManagerMetricsRecorder;
 struct PasswordForm;
 struct PossibleUsernameData;
 
@@ -353,12 +353,6 @@ class PasswordManager : public PasswordManagerInterface {
   // gone.
   std::unique_ptr<PasswordFormManagerForUI> MoveOwnedSubmittedManager();
 
-  // Records provisional save failure using current |client_| and
-  // |main_frame_url_|.
-  void RecordProvisionalSaveFailure(
-      PasswordManagerMetricsRecorder::ProvisionalSaveFailure failure,
-      const GURL& form_origin);
-
   // Returns the manager which manages |form_id|. |driver| is needed to
   // determine the match. Returns nullptr when no matched manager is found.
   PasswordFormManager* GetMatchedManagerForForm(
@@ -459,12 +453,6 @@ class PasswordManager : public PasswordManagerInterface {
   const raw_ptr<PasswordManagerClient> client_;
 
   const base::CallbackListSubscription account_store_cb_list_subscription_;
-
-  // Records all visible forms seen during a page load, in all frames of the
-  // page. When the page stops loading, the password manager checks if one of
-  // the recorded forms matches the login form from the previous page
-  // (to see if the login was a failure), and clears the vector.
-  std::vector<autofill::FormData> visible_forms_data_;
 
   // Server predictions for the forms on the page.
   std::map<autofill::FormSignature, FormPredictions> server_predictions_;

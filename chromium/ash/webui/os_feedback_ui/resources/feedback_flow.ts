@@ -19,7 +19,8 @@ import {ConfirmationPageElement} from './confirmation_page.js';
 import {getTemplate} from './feedback_flow.html.js';
 import {showScrollingEffectOnStart, showScrollingEffects} from './feedback_utils.js';
 import {getFeedbackServiceProvider} from './mojo_interface_provider.js';
-import {FeedbackAppExitPath, FeedbackAppHelpContentOutcome, FeedbackAppPreSubmitAction, FeedbackContext, FeedbackServiceProviderInterface, Report, SendReportStatus} from './os_feedback_ui.mojom-webui.js';
+import type {FeedbackContext, FeedbackServiceProviderInterface, Report, SendReportStatus} from './os_feedback_ui.mojom-webui.js';
+import {FeedbackAppExitPath, FeedbackAppHelpContentOutcome, FeedbackAppPreSubmitAction} from './os_feedback_ui.mojom-webui.js';
 import {SearchPageElement} from './search_page.js';
 import {ShareDataPageElement} from './share_data_page.js';
 
@@ -62,6 +63,7 @@ export const AdditionalContextQueryParam = {
   FROM_SETTINGS_SEARCH: 'from_settings_search',
   FROM_AUTOFILL: 'from_autofill',
   AUTOFILL_METADATA: 'autofill_metadata',
+  IS_QUERY_FINGERPRINT: 'is_query_fingerprint',
 };
 
 /**
@@ -338,6 +340,7 @@ export class FeedbackFlowElement extends PolymerElement {
     this.feedbackContext = {
       assistantDebugInfoAllowed: false,
       fromSettingsSearch: feedbackInfo.fromSettingsSearch ?? false,
+      isQueryFingerprint: feedbackInfo.isQueryFingerprint ?? false,
       isInternalAccount: feedbackInfo.isInternalAccount ?? false,
       wifiDebugLogsAllowed: false,
       traceId: feedbackInfo.traceId ?? 0,
@@ -368,10 +371,10 @@ export class FeedbackFlowElement extends PolymerElement {
       //   }
       // ].
       assert('EXTRA_DIAGNOSTICS' === feedbackInfo.systemInformation[0].key);
-      this.feedbackContext!.extraDiagnostics =
+      this.feedbackContext.extraDiagnostics =
           feedbackInfo.systemInformation[0].value;
     }
-    this.isUserLoggedIn = this.feedbackContext!.categoryTag !== 'Login';
+    this.isUserLoggedIn = this.feedbackContext.categoryTag !== 'Login';
     this.onFeedbackContextReceived();
   }
 
@@ -450,6 +453,9 @@ export class FeedbackFlowElement extends PolymerElement {
     const fromSettingsSearch =
         params.get(AdditionalContextQueryParam.FROM_SETTINGS_SEARCH);
     this.set('feedbackContext.fromSettingsSearch', !!fromSettingsSearch);
+    const isQueryFingerprint =
+        params.get(AdditionalContextQueryParam.IS_QUERY_FINGERPRINT);
+    this.set('feedbackContext.isQueryFingerprint', !!isQueryFingerprint)
 
     const fromAutofill = params.get(AdditionalContextQueryParam.FROM_AUTOFILL);
     this.feedbackContext.fromAutofill = !!fromAutofill;

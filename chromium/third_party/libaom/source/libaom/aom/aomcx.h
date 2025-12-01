@@ -208,11 +208,11 @@ enum aome_enc_control_id {
    * encoding process, values greater than 0 will increase encoder speed at
    * the expense of quality.
    *
-   * Valid range: 0..11. 0 runs the slowest, and 11 runs the fastest;
+   * Valid range: 0..12. 0 runs the slowest, and 12 runs the fastest;
    * quality improves as speed decreases (since more compression
    * possibilities are explored).
    *
-   * NOTE: 10 and 11 are only allowed in AOM_USAGE_REALTIME. In
+   * NOTE: 10 - 12 are only allowed in AOM_USAGE_REALTIME. In
    * AOM_USAGE_GOOD_QUALITY and AOM_USAGE_ALL_INTRA, 9 is the highest allowed
    * value. However, AOM_USAGE_GOOD_QUALITY treats 7..9 the same as 6. Also,
    * AOM_USAGE_REALTIME treats 0..4 the same as 5.
@@ -672,6 +672,7 @@ enum aome_enc_control_id {
    * - 0 = disable
    * - 1 = enable for all frames (default)
    * - 2 = disable for non-reference frames
+   * - 3 = enable adaptively based on frame qindex
    */
   AV1E_SET_ENABLE_CDEF = 58,
 
@@ -1577,6 +1578,11 @@ enum aome_enc_control_id {
    */
   AV1E_SET_MAX_CONSEC_FRAME_DROP_MS_CBR = 169,
 
+  /*!\brief Codec control to enable the low complexity decode mode, unsigned
+   * int parameter. Value of zero means this mode is disabled.
+   */
+  AV1E_SET_ENABLE_LOW_COMPLEXITY_DECODE = 170,
+
   // Any new encoder control IDs should be added above.
   // Maximum allowed encoder control ID is 229.
   // No encoder control ID should be added below.
@@ -1668,9 +1674,10 @@ typedef enum {
  * Changes the encoder to tune for certain types of input material.
  *
  * \note
- * AOM_TUNE_SSIMULACRA2 is restricted to all intra mode (AOM_USAGE_ALL_INTRA).
- * Setting the tuning option to AOM_TUNE_SSIMULACRA2 causes the following
- * options to be set (expressed as command-line options):
+ * AOM_TUNE_IQ and AOM_TUNE_SSIMULACRA2 are restricted to all intra mode
+ * (AOM_USAGE_ALL_INTRA). Setting the tuning option to either AOM_TUNE_IQ or
+ * AOM_TUNE_SSIMULACRA2 causes the following options to be set (expressed as
+ * command-line options):
  *   * --enable-qm=1
  *   * --qm-min=2
  *   * --qm-max=10
@@ -1690,14 +1697,19 @@ typedef enum {
   AOM_TUNE_VMAF_NEG_MAX_GAIN = 7,
   AOM_TUNE_BUTTERAUGLI = 8,
   AOM_TUNE_VMAF_SALIENCY_MAP = 9,
-/*!\brief Allows detection of the presence of AOM_TUNE_SSIMULACRA2 at compile
- * time.
- */
-#define AOM_HAVE_TUNE_SSIMULACRA2 1
-  /* Increases image quality and consistency, guided by the SSIMULACRA2 metric
-   * and subjective quality checks. Shares the rdmult code with AOM_TUNE_SSIM.
+/*!\brief Allows detection of the presence of AOM_TUNE_IQ at compile time. */
+#define AOM_HAVE_TUNE_IQ 1
+  /* Image quality (or intra quality). Increases image quality and consistency,
+   * guided by the SSIMULACRA 2 metric and subjective quality checks. Shares
+   * the rdmult code with AOM_TUNE_SSIM.
    */
-  AOM_TUNE_SSIMULACRA2 = 10,
+  AOM_TUNE_IQ = 10,
+/*!\brief Allows detection of the presence of AOM_TUNE_SSIMULACRA2 at compile
+ * time. */
+#define AOM_HAVE_TUNE_SSIMULACRA2 1
+  /* Tune that optimizes for maximum SSIMULACRA 2 scores. Shares the rdmult code
+     with AOM_TUNE_SSIM. */
+  AOM_TUNE_SSIMULACRA2 = 11,
 } aom_tune_metric;
 
 /*!\brief Distortion metric to use for RD optimization.
@@ -2278,6 +2290,9 @@ AOM_CTRL_USE_TYPE(AV1E_SET_POSTENCODE_DROP_RTC, int)
 
 AOM_CTRL_USE_TYPE(AV1E_SET_MAX_CONSEC_FRAME_DROP_MS_CBR, int)
 #define AOM_CTRL_AV1E_SET_MAX_CONSEC_FRAME_DROP_MS_CBR
+
+AOM_CTRL_USE_TYPE(AV1E_SET_ENABLE_LOW_COMPLEXITY_DECODE, unsigned int)
+#define AOM_CTRL_AV1E_SET_ENABLE_LOW_COMPLEXITY_DECODE
 
 /*!\endcond */
 /*! @} - end defgroup aom_encoder */

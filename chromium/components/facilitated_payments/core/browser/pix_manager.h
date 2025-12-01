@@ -16,7 +16,7 @@
 #include "base/time/time.h"
 #include "base/timer/timer.h"
 #include "base/types/expected.h"
-#include "components/autofill/core/browser/data_model/bank_account.h"
+#include "components/autofill/core/browser/data_model/payments/bank_account.h"
 #include "components/autofill/core/browser/payments/payments_autofill_client.h"
 #include "components/facilitated_payments/core/browser/facilitated_payments_api_client.h"
 #include "components/facilitated_payments/core/browser/network_api/facilitated_payments_initiate_payment_request_details.h"
@@ -60,7 +60,25 @@ class PixManager {
  private:
   friend class PixManagerTest;
   friend class PixManagerTestForUiScreens;
+  friend class PixManagerPaymentsNetworkInterfaceTest;
   // Keep all entries in alphabetical order!
+  FRIEND_TEST_ALL_PREFIXES(PixManagerPaymentsNetworkInterfaceTest,
+                           OnInitiatePaymentResponseReceived_FailureResponse);
+  FRIEND_TEST_ALL_PREFIXES(PixManagerPaymentsNetworkInterfaceTest,
+                           SendInitiatePaymentRequest);
+  FRIEND_TEST_ALL_PREFIXES(
+      PixManagerPaymentsNetworkInterfaceTest,
+      OnInitiatePaymentResponseReceived_InvokePurchaseActionTriggered);
+  FRIEND_TEST_ALL_PREFIXES(
+      PixManagerPaymentsNetworkInterfaceTest,
+      OnInitiatePaymentResponseReceived_LoggedOutProfile_ErrorScreenShown);
+  FRIEND_TEST_ALL_PREFIXES(
+      PixManagerPaymentsNetworkInterfaceTest,
+      OnInitiatePaymentResponseReceived_NoActionToken_ErrorScreenShown);
+  FRIEND_TEST_ALL_PREFIXES(
+      PixManagerPaymentsNetworkInterfaceTest,
+      OnInitiatePaymentResponseReceived_NoCoreAccountInfo_ErrorScreenShown);
+  FRIEND_TEST_ALL_PREFIXES(PixManagerPaymentsNetworkInterfaceTest, Reset);
   FRIEND_TEST_ALL_PREFIXES(PixManagerTest, ApiClientInitializedLazily);
   FRIEND_TEST_ALL_PREFIXES(PixManagerTest,
                            ApiClientTriggeredAfterPixCodeValidation);
@@ -89,24 +107,7 @@ class PixManager {
                            NoPixPaymentPromptWhenApiClientNotAvailable);
   FRIEND_TEST_ALL_PREFIXES(PixManagerTest,
                            OnGetClientToken_ClientTokenEmpty_ErrorScreenShown);
-  FRIEND_TEST_ALL_PREFIXES(PixManagerTest,
-                           OnInitiatePaymentResponseReceived_FailureResponse);
-  FRIEND_TEST_ALL_PREFIXES(
-      PixManagerTest,
-      OnInitiatePaymentResponseReceived_InvokePurchaseActionTriggered);
-  FRIEND_TEST_ALL_PREFIXES(
-      PixManagerTest,
-      OnInitiatePaymentResponseReceived_LoggedOutProfile_ErrorScreenShown);
-  FRIEND_TEST_ALL_PREFIXES(
-      PixManagerTest,
-      OnInitiatePaymentResponseReceived_NoActionToken_ErrorScreenShown);
-  FRIEND_TEST_ALL_PREFIXES(
-      PixManagerTest,
-      OnInitiatePaymentResponseReceived_NoCoreAccountInfo_ErrorScreenShown);
-  FRIEND_TEST_ALL_PREFIXES(PixManagerTest,
-                           OnPixPaymentPromptResult_FopSelected);
-  FRIEND_TEST_ALL_PREFIXES(PixManagerTest,
-                           OnPixPaymentPromptResult_FopSelectorDeclined);
+  FRIEND_TEST_ALL_PREFIXES(PixManagerTest, OnPixAccountSelected);
   FRIEND_TEST_ALL_PREFIXES(
       PixManagerTest,
       OnPurchaseActionResult_CouldNotInvoke_ErrorScreenShown);
@@ -146,7 +147,6 @@ class PixManager {
   FRIEND_TEST_ALL_PREFIXES(PixManagerTest,
                            RiskDataNotEmpty_GetClientTokenCalled);
   FRIEND_TEST_ALL_PREFIXES(PixManagerTest, RiskDataNotEmpty_HistogramsLogged);
-  FRIEND_TEST_ALL_PREFIXES(PixManagerTest, SendInitiatePaymentRequest);
   FRIEND_TEST_ALL_PREFIXES(PixManagerTest, ShowErrorScreen);
   FRIEND_TEST_ALL_PREFIXES(PixManagerTest, ShowPixPaymentPrompt);
   FRIEND_TEST_ALL_PREFIXES(PixManagerTest, ShowProgressScreen);
@@ -161,10 +161,6 @@ class PixManager {
                            PayflowExitedReason_LandscapeScreenOrientation);
   FRIEND_TEST_ALL_PREFIXES(PixManagerTestInLandscapeMode,
                            PixPayflowBlockedWhenFlagDisabled);
-
-  // Register optimization guide deciders for PIX. It is an allowlist of URLs
-  // where we attempt PIX code detection.
-  void RegisterPixAllowlist() const;
 
   // Queries the allowlist for the `url`. The result could be:
   // 1. In the allowlist
@@ -191,14 +187,14 @@ class PixManager {
 
   // Called after checking whether the facilitated payment API is available. If
   // the API is not available, the user should not be prompted to make a
-  // payment.
-  void OnApiAvailabilityReceived(bool is_api_available);
+  // payment. The call to check API availability was made at `start_time`.
+  void OnApiAvailabilityReceived(base::TimeTicks start_time,
+                                 bool is_api_available);
 
-  // Called after showing the PIX the payment prompt. The FOP selector was shown
-  // at `fop_selector_shown_timestamp`.
-  void OnPixPaymentPromptResult(base::TimeTicks fop_selector_shown_timestamp,
-                                bool is_prompt_accepted,
-                                int64_t selected_instrument_id);
+  // Called when user selects the Pix bank account to pay with. The FOP selector
+  // was shown at `fop_selector_shown_timestamp`.
+  void OnPixAccountSelected(base::TimeTicks fop_selector_shown_timestamp,
+                            int64_t selected_instrument_id);
 
   // Invoked when risk data is fetched. The call to fetch the risk data was made
   // at `start_time`.
@@ -206,23 +202,28 @@ class PixManager {
                         const std::string& risk_data);
 
   // Called after retrieving the client token from the facilitated payment API.
-  // If not empty, the client token can be used for initiating payment.
-  void OnGetClientToken(std::vector<uint8_t> client_token);
+  // If not empty, the client token can be used for initiating payment. The call
+  // to fetch client token was made at `start_time`.
+  void OnGetClientToken(base::TimeTicks start_time,
+                        std::vector<uint8_t> client_token);
 
   // Makes a payment request to the Payments server after the user has selected
   // the account for making the payment.
   void SendInitiatePaymentRequest();
 
   // Called after receiving the `result` of the initiate payment call. The
-  // `response_details` contains the action token used for payment.
+  // `response_details` contains the action token used for payment. The initiate
+  // payment request was sent at `start_time`.
   void OnInitiatePaymentResponseReceived(
+      base::TimeTicks start_time,
       autofill::payments::PaymentsAutofillClient::PaymentsRpcResult result,
       std::unique_ptr<FacilitatedPaymentsInitiatePaymentResponseDetails>
           response_details);
 
   // Called after receiving the `result` of invoking the purchase manager for
-  // payment.
-  void OnPurchaseActionResult(PurchaseActionResult result);
+  // payment. The purchase action was triggered at `start_time`.
+  void OnPurchaseActionResult(base::TimeTicks start_time,
+                              PurchaseActionResult result);
 
   // Called by the view to communicate UI events.
   void OnUiEvent(UiEvent ui_event_type);
@@ -233,7 +234,7 @@ class PixManager {
   // Sets the internal state and triggers showing the Pix payment prompt.
   void ShowPixPaymentPrompt(
       base::span<const autofill::BankAccount> bank_account_suggestions,
-      base::OnceCallback<void(bool, int64_t)> on_user_decision_callback);
+      base::OnceCallback<void(int64_t)> on_pix_account_selected);
 
   // Sets the internal state and triggers showing the progress screen.
   void ShowProgressScreen();
@@ -263,21 +264,6 @@ class PixManager {
 
   // Stores the time when a user copies a Pix code.
   base::TimeTicks pix_code_copied_timestamp_;
-
-  // Measures the time taken to check the availability of the facilitated
-  // payments API client.
-  base::TimeTicks api_availability_check_start_time_;
-
-  // Measures the time take to load the client token from the facilitated
-  // payments API client.
-  base::TimeTicks get_client_token_loading_start_time_;
-
-  // Measures the time take to complete the call to the InitiatePayment backend
-  // api.
-  base::TimeTicks initiate_payment_network_start_time_;
-
-  // Measures the time take to complete the purchase action.
-  base::TimeTicks purchase_action_start_time_;
 
   // A timer to make UI changes.
   base::OneShotTimer ui_timer_;

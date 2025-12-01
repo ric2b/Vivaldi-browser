@@ -321,7 +321,7 @@ class PLATFORM_EXPORT ResourceFetcher
   // counting.
   void PrepareForLeakDetection();
 
-  using ResourceFetcherSet = HeapHashSet<WeakMember<ResourceFetcher>>;
+  using ResourceFetcherSet = GCedHeapHashSet<WeakMember<ResourceFetcher>>;
   static const ResourceFetcherSet& MainThreadFetchers();
 
   mojom::blink::BlobRegistry* GetBlobRegistry();
@@ -379,6 +379,10 @@ class PLATFORM_EXPORT ResourceFetcher
   // changed such that the load should no longer be deferred.
   void ReloadImagesIfNotDeferred();
 
+  // Populates the provided request's permissions policy.
+  void PopulateResourceRequestPermissionsPolicy(
+      network::ResourceRequest* request);
+
   // Check if a resource is preloaded by earlyhints when response received.
   void MarkEarlyHintConsumedIfNeeded(uint64_t inspector_id,
                                      Resource* resource,
@@ -387,6 +391,7 @@ class PLATFORM_EXPORT ResourceFetcher
   void EnableDeferUnusedPreloadForTesting() {
     defer_unused_preload_enabled_for_testing_ = true;
   }
+
   using LcppDeferUnusedPreloadPreloadedReason =
       features::LcppDeferUnusedPreloadPreloadedReason;
   void SetDeferUnusedPreloadPreloadedReasonForTesting(
@@ -471,7 +476,10 @@ class PLATFORM_EXPORT ResourceFetcher
                                       ResourceRequestBlockedReason,
                                       ResourceClient*);
 
-  Resource* MatchPreload(const FetchParameters& params, ResourceType);
+  Resource* MatchPreload(
+      const FetchParameters& params,
+      ResourceType,
+      HeapHashMap<PreloadKey, Member<Resource>>::iterator it);
   void PrintPreloadMismatch(Resource*, Resource::MatchStatus);
   void InsertAsPreloadIfNecessary(Resource*,
                                   const FetchParameters& params,

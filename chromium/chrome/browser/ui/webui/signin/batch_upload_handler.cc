@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <iterator>
+#include <variant>
 
 #include "base/strings/to_string.h"
 #include "chrome/browser/ui/browser.h"
@@ -13,6 +14,7 @@
 #include "chrome/browser/ui/webui/signin/signin_utils.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/signin/public/identity_manager/account_info.h"
+#include "components/sync/base/data_type.h"
 #include "components/sync/service/local_data_description.h"
 #include "net/base/url_util.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -74,12 +76,12 @@ std::string ComputeBatchUploadSubtitle(syncer::DataType first_type,
 }
 
 GURL ComputeIconUrl(const syncer::LocalDataItemModel::Icon& icon) {
-  if (absl::holds_alternative<syncer::LocalDataItemModel::NoIcon>(icon)) {
+  if (std::holds_alternative<syncer::LocalDataItemModel::NoIcon>(icon)) {
     return GURL();
   }
 
   if (const GURL* page_url =
-          absl::get_if<syncer::LocalDataItemModel::PageUrlIcon>(&icon)) {
+          std::get_if<syncer::LocalDataItemModel::PageUrlIcon>(&icon)) {
     // Add the http:// scheme if a scheme is not already present.
     GURL::Replacements replace_scheme;
     replace_scheme.SetSchemeStr(url::kHttpScheme);
@@ -96,7 +98,7 @@ GURL ComputeIconUrl(const syncer::LocalDataItemModel::Icon& icon) {
     return favicon_url;
   }
 
-  if (absl::holds_alternative<syncer::LocalDataItemModel::FolderIcon>(icon)) {
+  if (std::holds_alternative<syncer::LocalDataItemModel::FolderIcon>(icon)) {
     return GURL(kFolderIconUrl);
   }
 
@@ -247,6 +249,11 @@ BatchUploadHandler::ConstructMojoBatchUploadData(
     // TODO(crbug.com/372450941): Adadpt the mojo variable name.
     data_container_mojo->section_title =
         base::ToString(GetTypeSectionTitleId(local_data_description.type));
+    if (local_data_description.type == syncer::DataType::THEMES) {
+      CHECK_EQ(local_data_description.local_data_models.size(), 1u)
+          << "Themes only expects to show the currently used theme";
+      data_container_mojo->is_theme = true;
+    }
 
     InternalId current_id = InternalId(0);
     for (const auto& data_item : local_data_description.local_data_models) {
@@ -291,6 +298,8 @@ int BatchUploadHandler::GetTypeSectionTitleId(syncer::DataType type) {
       return IDS_BATCH_UPLOAD_SECTION_TITLE_BOOKMARKS;
     case syncer::DataType::CONTACT_INFO:
       return IDS_BATCH_UPLOAD_SECTION_TITLE_ADDRESSES;
+    case syncer::DataType::THEMES:
+      return IDS_BATCH_UPLOAD_SECTION_TITLE_THEMES_WITH_DESCRIPTION;
     default:
       NOTREACHED();
   }

@@ -1,9 +1,14 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="tr">
+<translation id="2277224997687551299">Grup adını düzenle</translation>
+<translation id="2330212241471632770">{TABS_COUNT,plural, =1{Sekmeye yer imi koy}other{Sekmelere yer imi koy}}</translation>
 <translation id="2947471979790858922">Bu özel sekmelerdeki etkinliğiniz bu cihazdan kaldırılacak</translation>
 <translation id="3870643923290313246">{INCOGNITO_TABS_COUNT, plural,
         =1 {Kapalı sekmelerinizi Vivaldi ana menüsünün altındaki Son sekmeler bölümünde bulabilirsiniz. Özel sekmeniz kullanılamayacak.}
         other {Kapalı sekmelerinizi Vivaldi ana menüsünün altındaki Son sekmeler bölümünde bulabilirsiniz. # özel sekmeniz kullanılamayacak.}}</translation>
+<translation id="4460014764210899310">Grubu Çöz</translation>
 <translation id="4871187110787939393">Tüm özel sekmeler kapatılsın mı?</translation>
+<translation id="5494920125229734069">Tümünü seç</translation>
+<translation id="6744956528665271406">Grup rengini düzenle</translation>
 </translationbundle>

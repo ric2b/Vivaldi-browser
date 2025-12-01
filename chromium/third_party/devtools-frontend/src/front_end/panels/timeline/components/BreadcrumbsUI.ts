@@ -14,7 +14,7 @@ import breadcrumbsUIStylesRaw from './breadcrumbsUI.css.js';
 
 // TODO(crbug.com/391381439): Fully migrate off of constructed style sheets.
 const breadcrumbsUIStyles = new CSSStyleSheet();
-breadcrumbsUIStyles.replaceSync(breadcrumbsUIStylesRaw.cssContent);
+breadcrumbsUIStyles.replaceSync(breadcrumbsUIStylesRaw.cssText);
 
 const {render, html} = Lit;
 
@@ -31,7 +31,7 @@ const UIStrings = {
    */
   removeChildBreadcrumbs: 'Remove child breadcrumbs',
 
-};
+} as const;
 
 const str_ = i18n.i18n.registerUIStrings('panels/timeline/components/BreadcrumbsUI.ts', UIStrings);
 const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);

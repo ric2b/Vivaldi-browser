@@ -5,8 +5,7 @@ This file contains definition of resources that will be translated for each
 locale.  The strings in this file are specific to iOS.
 -->
 
-<grit base_dir="." latest_public_release="0" current_release="1"
-      output_all_resource_defines="false" source_lang_id="en" enc_check="möl">
+<grit base_dir="." latest_public_release="0" current_release="1" source_lang_id="en" enc_check="möl">
   <outputs>
     <output filename="ios_google_chrome_strings_ca-valencia.pak" type="data_package" lang="ca@valencia" />
     <output filename="ios_google_chrome_strings_de-CH.pak" type="data_package" lang="de-CH" />

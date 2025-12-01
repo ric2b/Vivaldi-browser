@@ -40,10 +40,8 @@ constexpr net::registry_controlled_domains::PrivateRegistryFilter
 bool IsSameSiteWithAncestors(const url::Origin& origin,
                              RenderFrameHost* render_frame_host) {
   while (render_frame_host) {
-    // Many cases are same-origin, so check that first to speed up the cases
-    // where the check passes, as IsSameSite() is slower.
-    if (!origin.IsSameOriginWith(render_frame_host->GetLastCommittedOrigin()) &&
-        !IsSameSite(origin, render_frame_host->GetLastCommittedOrigin())) {
+    if (!net::SchemefulSite::IsSameSite(
+            origin, render_frame_host->GetLastCommittedOrigin())) {
       return false;
     }
     render_frame_host = render_frame_host->GetParent();
@@ -89,7 +87,7 @@ void SetIdpSigninStatus(content::BrowserContext* context,
     return;
   }
   delegate->SetIdpSigninStatus(
-      origin, status == blink::mojom::IdpSigninStatus::kSignedIn);
+      origin, status == blink::mojom::IdpSigninStatus::kSignedIn, std::nullopt);
 }
 
 std::optional<std::string> ComputeConsoleMessageForHttpResponseCode(
@@ -117,10 +115,6 @@ bool IsEndpointSameOrigin(const GURL& identity_provider_config_url,
                           const GURL& endpoint_url) {
   return url::Origin::Create(identity_provider_config_url)
       .IsSameOriginWith(endpoint_url);
-}
-
-bool IsSameSite(const url::Origin& origin1, const url::Origin& origin2) {
-  return net::SchemefulSite(origin1) == net::SchemefulSite(origin2);
 }
 
 bool ShouldFailAccountsEndpointRequestBecauseNotSignedInWithIdp(
@@ -157,12 +151,12 @@ void UpdateIdpSigninStatusForAccountsEndpointResponse(
     // FedCmIdpSigninStatusMode::METRICS_ONLY mode in order to better emulate
     // FedCmIdpSigninStatusMode::ENABLED behavior.
     if (!does_idp_have_failing_signin_status) {
-      permission_delegate->SetIdpSigninStatus(idp_origin, true);
+      permission_delegate->SetIdpSigninStatus(idp_origin, true, std::nullopt);
     }
   } else {
     RecordIdpSignOutNetError(fetch_status.response_code);
     // Ensures that we only fetch accounts unconditionally once.
-    permission_delegate->SetIdpSigninStatus(idp_origin, false);
+    permission_delegate->SetIdpSigninStatus(idp_origin, false, std::nullopt);
   }
 }
 
@@ -177,7 +171,10 @@ std::string GetConsoleErrorMessageFromResult(
       return "The IdP is not potentially trustworthy (are you using HTTP?)";
     }
     case FederatedAuthRequestResult::kDisabledInSettings: {
-      return "FedCM was disabled in browser Site Settings.";
+      return "FedCM was disabled either temporarily based on previous user "
+             "action or permanently via site settings. Try manage third-party "
+             "sign-in via the icon to the left of the URL bar or via site "
+             "settings.";
     }
     case FederatedAuthRequestResult::kDisabledInFlags: {
       return "FedCM was disabled in flags.";
@@ -321,6 +318,14 @@ std::string GetConsoleErrorMessageFromResult(
     case FederatedAuthRequestResult::kError: {
       return "Error retrieving a token.";
     }
+    case FederatedAuthRequestResult::kCorsError: {
+      return "Server did not send the correct CORS headers.";
+    }
+    case FederatedAuthRequestResult::kSuppressedBySegmentationPlatform: {
+      return "Dialog is suppressed because historical data shows that the user "
+             "is not interested in FedCM on this RP. For testing purposes, "
+             "disable the #fedcm-segmentation-platform flag.";
+    }
     case FederatedAuthRequestResult::kSuccess: {
       // Should not be called with success, as we should not add a console
       // message for success.
@@ -435,28 +440,14 @@ bool HasSharingPermissionOrIdpHasThirdPartyCookiesAccess(
       requester_origin, embedder_origin, url::Origin::Create(provider_url));
 }
 
-bool IsFedCmAuthzEnabled(RenderFrameHost& host, const url::Origin& idp_origin) {
-  RuntimeFeatureStateDocumentData* rfs_document_data =
-      RuntimeFeatureStateDocumentData::GetForCurrentDocument(&host);
+bool IsFedCmAuthzEnabled() {
   // If field trials or an explicit user selection disables authz, we should
   // respect that.
   std::optional<bool> is_overridden = IsFedCmAuthzOverridden();
   if (is_overridden) {
     return *is_overridden;
   }
-
-  // Should not be null as this gets initialized when the host gets created.
-  DCHECK(rfs_document_data);
-  std::vector<url::Origin> third_party_origins = {idp_origin};
-  // This includes origin trials.
-  bool runtime_enabled =
-      rfs_document_data->runtime_feature_state_read_context()
-          .IsFedCmAuthzEnabled() ||
-      rfs_document_data->runtime_feature_state_read_context()
-          .IsFedCmAuthzEnabledForThirdParty(third_party_origins);
-
-  bool flag_enabled = IsFedCmAuthzFlagEnabled();
-  return runtime_enabled || flag_enabled;
+  return true;
 }
 
 FederatedAuthRequestPageData* GetPageData(Page& page) {
@@ -475,7 +466,7 @@ FedCmRequesterFrameType ComputeRequesterFrameType(const RenderFrameHost& rfh,
   if (!rfh.GetParent()) {
     return FedCmRequesterFrameType::kMainFrame;
   }
-  return IsSameSite(requester, embedder)
+  return net::SchemefulSite::IsSameSite(requester, embedder)
              ? FedCmRequesterFrameType::kSameSiteIframe
              : FedCmRequesterFrameType::kCrossSiteIframe;
 }

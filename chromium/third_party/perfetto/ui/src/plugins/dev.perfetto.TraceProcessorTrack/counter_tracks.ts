@@ -286,11 +286,6 @@ export const COUNTER_TRACK_SCHEMAS: ReadonlyArray<CounterTrackTypeSchema> = [
     group: undefined,
   },
   {
-    type: 'perf_counter',
-    topLevelGroup: 'HARDWARE',
-    group: 'perf counters',
-  },
-  {
     type: 'pixel_cpm_counters',
     topLevelGroup: 'HARDWARE',
     group: 'CPM Counters',
@@ -335,8 +330,8 @@ export const COUNTER_TRACK_SCHEMAS: ReadonlyArray<CounterTrackTypeSchema> = [
   },
   {
     type: 'smaps',
-    topLevelGroup: 'MEMORY',
-    group: 'smaps',
+    topLevelGroup: 'PROCESS',
+    group: undefined,
   },
   {
     type: 'sysprop_counter',

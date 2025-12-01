@@ -24,6 +24,7 @@ ci/Linux Release (NVIDIA)
 ci/Mac Release (Intel)
 ci/Mac Retina Release (AMD)
 ci/Win10 x64 Release (NVIDIA)
+try/android_optional_gpu_tests_rel
 try/dawn-chromium-presubmit
 try/dawn-linux-x64-deps-rel
 try/dawn-mac-arm64-deps-rel
@@ -31,3 +32,7 @@ try/dawn-mac-x64-deps-rel
 try/dawn-win10-x64-deps-rel
 try/dawn-win10-x86-deps-rel
 try/dawn-win11-arm64-deps-rel
+try/gpu-fyi-cq-android-arm64
+try/linux_optional_gpu_tests_rel
+try/mac_optional_gpu_tests_rel
+try/win_optional_gpu_tests_rel

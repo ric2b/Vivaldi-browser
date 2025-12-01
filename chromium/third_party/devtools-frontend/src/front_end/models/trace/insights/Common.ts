@@ -2,13 +2,22 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+import * as Protocol from '../../../generated/protocol.js';
 import type * as CrUXManager from '../../crux-manager/crux-manager.js';
+import type * as Handlers from '../handlers/handlers.js';
 import * as Helpers from '../helpers/helpers.js';
 import type * as Lantern from '../lantern/lantern.js';
 import * as Types from '../types/types.js';
 
 import {getLogNormalScore} from './Statistics.js';
-import type {InsightModels, InsightSet, InsightSetContext, MetricSavings, TraceInsightSets} from './types.js';
+import {
+  InsightKeys,
+  type InsightModels,
+  type InsightSet,
+  type InsightSetContext,
+  type MetricSavings,
+  type TraceInsightSets
+} from './types.js';
 
 const GRAPH_SAVINGS_PRECISION = 50;
 
@@ -29,12 +38,12 @@ export function getInsight<InsightName extends keyof InsightModels>(
   }
 
   // For some reason typescript won't narrow the type by removing Error, so do it manually.
-  return insight as InsightModels[InsightName];
+  return insight;
 }
 
 export function getLCP(insights: TraceInsightSets|null, key: string|null):
     {value: Types.Timing.Micro, event: Types.Events.LargestContentfulPaintCandidate}|null {
-  const insight = getInsight('LCPPhases', insights, key);
+  const insight = getInsight(InsightKeys.LCP_PHASES, insights, key);
   if (!insight || !insight.lcpMs || !insight.lcpEvent) {
     return null;
   }
@@ -45,7 +54,7 @@ export function getLCP(insights: TraceInsightSets|null, key: string|null):
 
 export function getINP(insights: TraceInsightSets|null, key: string|null):
     {value: Types.Timing.Micro, event: Types.Events.SyntheticInteractionPair}|null {
-  const insight = getInsight('InteractionToNextPaint', insights, key);
+  const insight = getInsight(InsightKeys.INTERACTION_TO_NEXT_PAINT, insights, key);
   if (!insight?.longestInteractionEvent?.dur) {
     return null;
   }
@@ -56,7 +65,7 @@ export function getINP(insights: TraceInsightSets|null, key: string|null):
 
 export function getCLS(
     insights: TraceInsightSets|null, key: string|null): {value: number, worstClusterEvent: Types.Events.Event|null} {
-  const insight = getInsight('CLSCulprits', insights, key);
+  const insight = getInsight(InsightKeys.CLS_CULPRITS, insights, key);
   if (!insight) {
     // Unlike the other metrics, there is always a value for CLS even with no data.
     return {value: 0, worstClusterEvent: null};
@@ -75,11 +84,11 @@ export function getCLS(
   return {value: maxScore, worstClusterEvent: worstCluster ?? null};
 }
 
-export function evaluateLCPMetricScore(value: number): number {
+export function evaluateLCPMetricScore(value: Types.Timing.Milli): number {
   return getLogNormalScore({p10: 2500, median: 4000}, value);
 }
 
-export function evaluateINPMetricScore(value: number): number {
+export function evaluateINPMetricScore(value: Types.Timing.Milli): number {
   return getLogNormalScore({p10: 200, median: 500}, value);
 }
 
@@ -100,6 +109,12 @@ export interface CrUXFieldMetricResults {
   lcp: CrUXFieldMetricTimingResult|null;
   inp: CrUXFieldMetricTimingResult|null;
   cls: CrUXFieldMetricNumberResult|null;
+  lcpPhases: {
+    ttfb: CrUXFieldMetricTimingResult|null,
+    loadDelay: CrUXFieldMetricTimingResult|null,
+    loadDuration: CrUXFieldMetricTimingResult|null,
+    renderDelay: CrUXFieldMetricTimingResult|null,
+  };
 }
 
 function getPageResult(
@@ -167,6 +182,12 @@ export function getFieldMetricsForInsightSet(
     lcp: getMetricTimingResult(pageResult, 'largest_contentful_paint', scope),
     inp: getMetricTimingResult(pageResult, 'interaction_to_next_paint', scope),
     cls: getMetricResult(pageResult, 'cumulative_layout_shift', scope),
+    lcpPhases: {
+      ttfb: getMetricTimingResult(pageResult, 'largest_contentful_paint_image_time_to_first_byte', scope),
+      loadDelay: getMetricTimingResult(pageResult, 'largest_contentful_paint_image_resource_load_delay', scope),
+      loadDuration: getMetricTimingResult(pageResult, 'largest_contentful_paint_image_resource_load_duration', scope),
+      renderDelay: getMetricTimingResult(pageResult, 'largest_contentful_paint_image_element_render_delay', scope),
+    }
   };
 }
 
@@ -191,8 +212,8 @@ export function calculateMetricWeightsForSorting(
   const fieldLcp = fieldMetrics.lcp?.value ?? null;
   const fieldInp = fieldMetrics.inp?.value ?? null;
   const fieldCls = fieldMetrics.cls?.value ?? null;
-  const fieldLcpScore = fieldLcp !== null ? evaluateLCPMetricScore(fieldLcp) : 0;
-  const fieldInpScore = fieldInp !== null ? evaluateINPMetricScore(fieldInp) : 0;
+  const fieldLcpScore = fieldLcp !== null ? evaluateLCPMetricScore(Helpers.Timing.microToMilli(fieldLcp)) : 0;
+  const fieldInpScore = fieldInp !== null ? evaluateINPMetricScore(Helpers.Timing.microToMilli(fieldInp)) : 0;
   const fieldClsScore = fieldCls !== null ? evaluateCLSMetricScore(fieldCls) : 0;
   const fieldLcpScoreInverted = 1 - fieldLcpScore;
   const fieldInpScoreInverted = 1 - fieldInpScore;
@@ -273,4 +294,99 @@ export function metricSavingsForWastedBytes(
     FCP: estimateSavingsWithGraphs(wastedBytesByRequestId, simulator, fcpGraph),
     LCP: estimateSavingsWithGraphs(wastedBytesByRequestId, simulator, lcpGraph),
   };
+}
+
+/**
+ * Returns whether the network request was sent encoded.
+ */
+export function isRequestCompressed(request: Types.Events.SyntheticNetworkRequest): boolean {
+  // FYI: In Lighthouse, older devtools logs (like our test fixtures) seems to be
+  // lower case, while modern logs are Cased-Like-This.
+  const patterns = [
+    /^content-encoding$/i, /^x-content-encoding-over-network$/i,
+    /^x-original-content-encoding$/i,  // Lightrider.
+  ];
+  const compressionTypes = ['gzip', 'br', 'deflate', 'zstd'];
+  return request.args.data.responseHeaders.some(
+      header => patterns.some(p => header.name.match(p)) && compressionTypes.includes(header.value));
+}
+
+function getRequestSizes(request: Types.Events.SyntheticNetworkRequest): {resourceSize: number, transferSize: number} {
+  const resourceSize = request.args.data.decodedBodyLength;
+  const transferSize = request.args.data.encodedDataLength;
+  return {resourceSize, transferSize};
+}
+
+/**
+ * Estimates the number of bytes the content of this network record would have consumed on the network based on the
+ * uncompressed size (totalBytes). Uses the actual transfer size from the network record if applicable,
+ * minus the size of the response headers.
+ *
+ * @param totalBytes Uncompressed size of the resource
+ */
+export function estimateCompressedContentSize(
+    request: Types.Events.SyntheticNetworkRequest|undefined, totalBytes: number,
+    resourceType: Protocol.Network.ResourceType): number {
+  if (!request) {
+    // We don't know how many bytes this asset used on the network, but we can guess it was
+    // roughly the size of the content gzipped.
+    // See https://developers.google.com/web/fundamentals/performance/optimizing-content-efficiency/optimize-encoding-and-transfer for specific CSS/Script examples
+    // See https://discuss.httparchive.org/t/file-size-and-compression-savings/145 for fallback multipliers
+    switch (resourceType) {
+      case 'Stylesheet':
+        // Stylesheets tend to compress extremely well.
+        return Math.round(totalBytes * 0.2);
+      case 'Script':
+      case 'Document':
+        // Scripts and HTML compress fairly well too.
+        return Math.round(totalBytes * 0.33);
+      default:
+        // Otherwise we'll just fallback to the average savings in HTTPArchive
+        return Math.round(totalBytes * 0.5);
+    }
+  }
+
+  // Get the size of the response body on the network.
+  const {transferSize, resourceSize} = getRequestSizes(request);
+  let contentTransferSize = transferSize;
+  if (!isRequestCompressed(request)) {
+    // This is not compressed, so we can use resourceSize directly.
+    // This would be equivalent to transfer size minus headers transfer size, but transfer size
+    // may also include bytes for SSL connection etc.
+    contentTransferSize = resourceSize;
+  }
+  // TODO(cjamcl): Get "responseHeadersTransferSize" in Network handler.
+  // else if (request.responseHeadersTransferSize) {
+  //   // Subtract the size of the encoded headers.
+  //   contentTransferSize =
+  //     Math.max(0, contentTransferSize - request.responseHeadersTransferSize);
+  // }
+
+  if (request.args.data.resourceType === resourceType) {
+    // This was a regular standalone asset, just use the transfer size.
+    return contentTransferSize;
+  }
+
+  // This was an asset that was inlined in a different resource type (e.g. HTML document).
+  // Use the compression ratio of the resource to estimate the total transferred bytes.
+  // Get the compression ratio, if it's an invalid number, assume no compression.
+  const compressionRatio = Number.isFinite(resourceSize) && resourceSize > 0 ? (contentTransferSize / resourceSize) : 1;
+  return Math.round(totalBytes * compressionRatio);
+}
+
+/**
+ * Utility function to estimate the ratio of the compression of a script.
+ * This excludes the size of the response headers.
+ */
+export function estimateCompressionRatioForScript(script: Handlers.ModelHandlers.Scripts.Script): number {
+  if (!script.request) {
+    // Can't find request, so just use 1.
+    return 1;
+  }
+
+  const request = script.request;
+  const contentLength = request.args.data.decodedBodyLength ?? script.content?.length ?? 0;
+  const compressedSize = estimateCompressedContentSize(request, contentLength, Protocol.Network.ResourceType.Script);
+  const compressionRatio = compressedSize / contentLength;
+  return compressionRatio;
 }

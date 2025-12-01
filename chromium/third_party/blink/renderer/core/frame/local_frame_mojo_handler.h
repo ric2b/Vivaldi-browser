@@ -109,6 +109,7 @@ class LocalFrameMojoHandler
   void NotifyUserActivation(
       mojom::blink::UserActivationNotificationType notification_type) final;
   void NotifyVirtualKeyboardOverlayRect(const gfx::Rect& keyboard_rect) final;
+  void NotifyContextMenuInsetsObservers(const gfx::Rect&) final;
   void AddMessageToConsole(mojom::blink::ConsoleMessageLevel level,
                            const WTF::String& message,
                            bool discard_duplicates) final;
@@ -239,6 +240,7 @@ class LocalFrameMojoHandler
       bool is_validated,
       const WTF::String& normalized_server_timing,
       const ::network::URLLoaderCompletionStatus& completion_status) final;
+  void GetScrollPosition(GetScrollPositionCallback callback) final;
 
   // blink::mojom::LocalMainFrame overrides:
   void AnimateDoubleTapZoom(const gfx::Point& point,

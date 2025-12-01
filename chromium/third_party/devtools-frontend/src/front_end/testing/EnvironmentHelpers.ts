@@ -13,6 +13,7 @@ import * as Bindings from '../models/bindings/bindings.js';
 import * as IssuesManager from '../models/issues_manager/issues_manager.js';
 import * as Logs from '../models/logs/logs.js';
 import * as Persistence from '../models/persistence/persistence.js';
+import * as ProjectSettings from '../models/project_settings/project_settings.js';
 import * as Workspace from '../models/workspace/workspace.js';
 import type * as UIModule from '../ui/legacy/legacy.js';
 
@@ -115,22 +116,18 @@ const REGISTERED_EXPERIMENTS = [
   'timeline-v8-runtime-call-stats',
   'timeline-invalidation-tracking',
   Root.Runtime.ExperimentName.INSTRUMENTATION_BREAKPOINTS,
-  Root.Runtime.ExperimentName.STYLES_PANE_CSS_CHANGES,
   Root.Runtime.ExperimentName.HEADER_OVERRIDES,
   Root.Runtime.ExperimentName.HIGHLIGHT_ERRORS_ELEMENTS_PANEL,
   Root.Runtime.ExperimentName.USE_SOURCE_MAP_SCOPES,
   'font-editor',
   Root.Runtime.ExperimentName.NETWORK_PANEL_FILTER_BAR_REDESIGN,
-  Root.Runtime.ExperimentName.AUTOFILL_VIEW,
   Root.Runtime.ExperimentName.TIMELINE_DEBUG_MODE,
-  Root.Runtime.ExperimentName.TIMELINE_SERVER_TIMINGS,
   Root.Runtime.ExperimentName.FULL_ACCESSIBILITY_TREE,
   Root.Runtime.ExperimentName.TIMELINE_SHOW_POST_MESSAGE_EVENTS,
   Root.Runtime.ExperimentName.TIMELINE_ENHANCED_TRACES,
   Root.Runtime.ExperimentName.TIMELINE_EXPERIMENTAL_INSIGHTS,
   Root.Runtime.ExperimentName.TIMELINE_DIM_UNRELATED_EVENTS,
   Root.Runtime.ExperimentName.TIMELINE_ALTERNATIVE_NAVIGATION,
-  Root.Runtime.ExperimentName.TIMELINE_THIRD_PARTY_DEPENDENCIES,
 ];
 
 export async function initializeGlobalVars({reset = true} = {}) {
@@ -291,9 +288,11 @@ export async function initializeGlobalVars({reset = true} = {}) {
         Common.Settings.SettingCategory.ELEMENTS, 'show-css-property-documentation-on-hover', false,
         Common.Settings.SettingType.BOOLEAN),
     createSettingValue(
-        Common.Settings.SettingCategory.NONE, 'ai-assistance-enabled', false, Common.Settings.SettingType.BOOLEAN),
+        Common.Settings.SettingCategory.AI, 'ai-assistance-enabled', false, Common.Settings.SettingType.BOOLEAN),
     createSettingValue(
-        Common.Settings.SettingCategory.NONE, 'ai-assistance-history-entries', [], Common.Settings.SettingType.ARRAY),
+        Common.Settings.SettingCategory.AI, 'ai-annotations-enabled', false, Common.Settings.SettingType.BOOLEAN),
+    createSettingValue(
+        Common.Settings.SettingCategory.AI, 'ai-assistance-history-entries', [], Common.Settings.SettingType.ARRAY),
     createSettingValue(
         Common.Settings.SettingCategory.MOBILE, 'emulation.show-device-outline', false,
         Common.Settings.SettingType.BOOLEAN),
@@ -326,7 +325,7 @@ export async function initializeGlobalVars({reset = true} = {}) {
 export async function deinitializeGlobalVars() {
   // Remove the global SDK.
   // eslint-disable-next-line @typescript-eslint/naming-convention
-  const globalObject = (globalThis as unknown as {SDK?: {}, ls?: {}});
+  const globalObject = (globalThis as unknown as {SDK?: unknown, ls?: unknown});
   delete globalObject.SDK;
   delete globalObject.ls;
 
@@ -349,6 +348,7 @@ export async function deinitializeGlobalVars() {
   Bindings.CSSWorkspaceBinding.CSSWorkspaceBinding.removeInstance();
   IssuesManager.IssuesManager.IssuesManager.removeInstance();
   Persistence.IsolatedFileSystemManager.IsolatedFileSystemManager.removeInstance();
+  ProjectSettings.ProjectSettingsModel.ProjectSettingsModel.removeInstance();
 
   Common.Settings.resetSettings();
 
@@ -500,71 +500,29 @@ export function expectConsoleLogs(expectedLogs: {warn?: string[], log?: string[]
   });
 }
 
-export function getGetHostConfigStub(config: Root.Runtime.HostConfig): sinon.SinonStub {
-  const settings = Common.Settings.Settings.instance();
-  return sinon.stub(settings, 'getHostConfig').returns({
-    aidaAvailability: {
-      disallowLogging: false,
-      enterprisePolicyValue: 0,
-      ...config.aidaAvailability,
-    },
-    devToolsConsoleInsights: {
-      enabled: false,
-      modelId: '',
-      temperature: -1,
-      ...config.devToolsConsoleInsights,
-    } as Root.Runtime.HostConfigConsoleInsights,
-    devToolsFreestyler: {
-      modelId: '',
-      temperature: -1,
-      enabled: false,
-      ...config.devToolsFreestyler,
-    } as Root.Runtime.HostConfigFreestyler,
-    devToolsAiAssistanceNetworkAgent: {
-      modelId: '',
-      temperature: -1,
-      enabled: false,
-      ...config.devToolsAiAssistanceNetworkAgent,
-    } as Root.Runtime.HostConfigAiAssistanceNetworkAgent,
-    devToolsAiAssistanceFileAgent: {
-      modelId: '',
-      temperature: -1,
-      enabled: false,
-      ...config.devToolsAiAssistanceFileAgent,
-    } as Root.Runtime.HostConfigAiAssistanceFileAgent,
-    devToolsAiAssistancePerformanceAgent: {
-      modelId: '',
-      temperature: -1,
-      enabled: false,
-      ...config.devToolsAiAssistancePerformanceAgent,
-    } as Root.Runtime.HostConfigAiAssistancePerformanceAgent,
-    devToolsImprovedWorkspaces: {
-      enabled: false,
-    },
-    devToolsVeLogging: {
-      enabled: true,
-      testing: false,
-    },
-    devToolsPrivacyUI: {
-      enabled: false,
-      ...config.devToolsPrivacyUI,
-    } as Root.Runtime.HostConfigPrivacyUI,
-    devToolsEnableOriginBoundCookies: {
-      portBindingEnabled: false,
-      schemeBindingEnabled: false,
-      ...config.devToolsEnableOriginBoundCookies,
-    } as Root.Runtime.HostConfigEnableOriginBoundCookies,
-    devToolsAnimationStylesInStylesTab: {
-      enabled: false,
-      ...config.devToolsAnimationStylesInStylesTab,
-    } as Root.Runtime.HostConfigAnimationStylesInStylesTab,
-    isOffTheRecord: false,
-    thirdPartyCookieControls: {
-      thirdPartyCookieRestrictionEnabled: false,
-      thirdPartyCookieMetadataEnabled: true,
-      thirdPartyCookieHeuristicsEnabled: true,
-      managedBlockThirdPartyCookies: 'Unset',
-      ...config.thirdPartyCookieControls,
-    } as Root.Runtime.HostConfigThirdPartyCookieControls,
-  });
+let originalUserAgent: string;
+
+export function setUserAgentForTesting(): void {
+  originalUserAgent = window.navigator.userAgent;
+  Object.defineProperty(window.navigator, 'userAgent', {value: 'Chrome/unit_test', configurable: true});
+}
+
+export function restoreUserAgentForTesting(): void {
+  Object.defineProperty(window.navigator, 'userAgent', {value: originalUserAgent});
+}
+
+export function resetHostConfig() {
+  for (const key of Object.keys(Root.Runtime.hostConfig)) {
+    // @ts-expect-error TypeScript does not deduce the correct type
+    delete Root.Runtime.hostConfig[key];
+  }
+}
+
+/**
+ * Update `Root.Runtime.hostConfig` for testing.
+ * `Root.Runtime.hostConfig` is automatically cleaned-up between unit
+ * tests.
+ */
+export function updateHostConfig(config: Root.Runtime.HostConfig) {
+  Object.assign(Root.Runtime.hostConfig, config);
 }

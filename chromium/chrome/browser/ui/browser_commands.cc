@@ -57,7 +57,6 @@
 #include "chrome/browser/ui/autofill/address_bubbles_controller.h"
 #include "chrome/browser/ui/autofill/payments/filled_card_information_bubble_controller_impl.h"
 #include "chrome/browser/ui/autofill/payments/iban_bubble_controller_impl.h"
-#include "chrome/browser/ui/autofill/payments/manage_migration_ui_controller.h"
 #include "chrome/browser/ui/autofill/payments/mandatory_reauth_bubble_controller_impl.h"
 #include "chrome/browser/ui/autofill/payments/offer_notification_bubble_controller_impl.h"
 #include "chrome/browser/ui/autofill/payments/save_card_bubble_controller_impl.h"
@@ -115,6 +114,7 @@
 #include "chrome/common/content_restriction.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/common/url_constants.h"
+#include "chrome/grit/generated_resources.h"
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "components/bookmarks/browser/bookmark_node.h"
 #include "components/bookmarks/browser/bookmark_utils.h"
@@ -171,7 +171,6 @@
 #include "content/public/common/content_switches.h"
 #include "content/public/common/url_constants.h"
 #include "content/public/common/url_utils.h"
-#include "content/public/common/user_agent.h"
 #include "extensions/buildflags/buildflags.h"
 #include "pdf/buildflags.h"
 #include "printing/buildflags/buildflags.h"
@@ -645,6 +644,13 @@ Browser* OpenEmptyWindow(Profile* profile,
   params.should_trigger_session_restore = should_trigger_session_restore;
   Browser* browser = Browser::Create(params);
 
+  if (vivaldi::IsVivaldiRunning()) {
+    // VB-114710 Address Bar not focusing when no windows are open
+    // Don't add a tab, on macOS it has the wrong url
+    // Vivaldi app will handle the rest.
+    return browser;
+  }
+
   // Startup tabs could be created during browser creation. Add an empty tab
   // only if no tabs are created.
   if (browser->tab_strip_model()->empty()) {
@@ -1111,9 +1117,28 @@ bool CanMoveTabsToNewWindow(Browser* browser,
          static_cast<int>(tab_indices.size());
 }
 
+void MoveGroupToNewWindow(Browser* browser, tab_groups::TabGroupId group) {
+  Browser* new_browser;
+  if (browser->is_type_app() && browser->app_controller()->has_tab_strip()) {
+    new_browser = Browser::Create(Browser::CreateParams::CreateForApp(
+        browser->app_name(), browser->is_trusted_source(), gfx::Rect(),
+        browser->profile(), true));
+    web_app::MaybeAddPinnedHomeTab(new_browser,
+                                   new_browser->app_controller()->app_id());
+  } else {
+    new_browser =
+        Browser::Create(Browser::CreateParams(browser->profile(), true));
+  }
+
+  std::unique_ptr<DetachedTabGroup> detached_group =
+      browser->tab_strip_model()->DetachTabGroupForInsertion(group);
+  new_browser->tab_strip_model()->InsertDetachedTabGroupAt(
+      std::move(detached_group), 0);
+  new_browser->window()->Show();
+}
+
 void MoveTabsToNewWindow(Browser* browser,
-                         const std::vector<int>& tab_indices,
-                         std::optional<tab_groups::TabGroupId> group) {
+                         const std::vector<int>& tab_indices) {
   if (tab_indices.empty()) {
     return;
   }
@@ -1128,27 +1153,6 @@ void MoveTabsToNewWindow(Browser* browser,
   } else {
     new_browser =
         Browser::Create(Browser::CreateParams(browser->profile(), true));
-  }
-
-  tab_groups::TabGroupSyncService* tab_group_service =
-      tab_groups::SavedTabGroupUtils::GetServiceForProfile(browser->profile());
-  std::unique_ptr<tab_groups::ScopedLocalObservationPauser> observation_pauser;
-
-  tab_groups::TabGroupVisualData visual_data;
-
-  if (group.has_value()) {
-    const tab_groups::TabGroupVisualData* old_visual_data =
-        browser->tab_strip_model()
-            ->group_model()
-            ->GetTabGroup(group.value())
-            ->visual_data();
-
-    visual_data = tab_groups::TabGroupVisualData(old_visual_data->title(),
-                                                 old_visual_data->color(),
-                                                 false /* is_collapsed */);
-    if (tab_group_service && tab_group_service->GetGroup(group.value())) {
-      observation_pauser = tab_group_service->CreateScopedLocalObserverPauser();
-    }
   }
 
   int indices_size = tab_indices.size();
@@ -1168,21 +1172,8 @@ void MoveTabsToNewWindow(Browser* browser,
       add_types = add_types | AddTabTypes::ADD_ACTIVE;
     }
 
-    new_browser->tab_strip_model()->AddTab(std::move(tab_model), -1,
-                                           ui::PAGE_TRANSITION_TYPED, add_types,
-                                           std::nullopt);
-  }
-
-  // Add all the tabs in the new browser to the group if it belonged in a group.
-  if (group.has_value()) {
-    std::vector<int> indices(new_browser->tab_strip_model()->GetTabCount());
-    std::iota(indices.begin(), indices.end(), 0);
-    new_browser->tab_strip_model()->AddToNewGroup(indices, group.value(),
-                                                  visual_data);
-
-    if (observation_pauser) {
-      observation_pauser.reset();
-    }
+    new_browser->tab_strip_model()->AddTab(
+        std::move(tab_model), -1, ui::PAGE_TRANSITION_TYPED, add_types);
   }
 
   new_browser->window()->Show();
@@ -1470,45 +1461,55 @@ bool CanMoveActiveTabToReadLater(Browser* browser) {
                                        &title);
 }
 
-bool MoveCurrentTabToReadLater(Browser* browser) {
-  return MoveTabToReadLater(browser,
-                            browser->tab_strip_model()->GetActiveWebContents());
+void MoveCurrentTabToReadLater(Browser* browser) {
+  MoveTabsToReadLater(browser,
+                      {browser->tab_strip_model()->GetActiveWebContents()});
 }
 
-bool MoveTabToReadLater(Browser* browser, content::WebContents* web_contents) {
-  GURL url;
-  std::u16string title;
-  ReadingListModel* model = GetReadingListModel(browser);
-  if (!CanMoveWebContentsToReadLater(browser, web_contents, model, &url,
-                                     &title)) {
-    return false;
+void MoveTabsToReadLater(Browser* browser,
+                         std::vector<content::WebContents*> web_contentses) {
+  int added_to_read_later = 0;
+  for (WebContents* const web_contents : web_contentses) {
+    GURL url;
+    std::u16string title;
+    ReadingListModel* model = GetReadingListModel(browser);
+    if (!CanMoveWebContentsToReadLater(browser, web_contents, model, &url,
+                                       &title)) {
+      continue;
+    }
+    model->AddOrReplaceEntry(url, base::UTF16ToUTF8(title),
+                             reading_list::EntrySource::ADDED_VIA_CURRENT_APP,
+                             /*estimated_read_time=*/base::TimeDelta());
+    browser->window()->MaybeShowFeaturePromo(
+        feature_engagement::kIPHReadingListDiscoveryFeature);
+    base::UmaHistogramEnumeration(
+        "ReadingList.BookmarkBarState.OnEveryAddToReadingList",
+        browser->bookmark_bar_state());
+    added_to_read_later += 1;
   }
-  model->AddOrReplaceEntry(url, base::UTF16ToUTF8(title),
-                           reading_list::EntrySource::ADDED_VIA_CURRENT_APP,
-                           /*estimated_read_time=*/base::TimeDelta());
-  browser->window()->MaybeShowFeaturePromo(
-      feature_engagement::kIPHReadingListDiscoveryFeature);
-  base::UmaHistogramEnumeration(
-      "ReadingList.BookmarkBarState.OnEveryAddToReadingList",
-      browser->bookmark_bar_state());
+
+  if (added_to_read_later == 0) {
+    return;
+  }
+
 #if !BUILDFLAG(IS_ANDROID)
   if (toast_features::IsEnabled(toast_features::kReadingListToast)) {
     // Don't show the reading list toast if the side panel is visible.
     std::optional<SidePanelEntry::Id> id =
         browser->GetFeatures().side_panel_ui()->GetCurrentEntryId();
     if (id.has_value() && id.value() == SidePanelEntryId::kReadingList) {
-      return true;
+      return;
     }
 
     ToastController* const toast_controller =
         browser->GetFeatures().toast_controller();
     if (toast_controller) {
-      toast_controller->MaybeShowToast(
-          ToastParams(ToastId::kAddedToReadingList));
+      ToastParams params = ToastParams(ToastId::kAddedToReadingList);
+      params.body_string_cardinality_param = added_to_read_later;
+      toast_controller->MaybeShowToast(std::move(params));
     }
   }
 #endif
-  return true;
 }
 
 bool MarkCurrentTabAsReadInReadLater(Browser* browser) {
@@ -1574,15 +1575,6 @@ void ShowMandatoryReauthOptInPrompt(Browser* browser) {
       autofill::MandatoryReauthBubbleControllerImpl::FromWebContents(
           web_contents);
   controller->ReshowBubble();
-}
-
-void MigrateLocalCards(Browser* browser) {
-  WebContents* web_contents =
-      browser->tab_strip_model()->GetActiveWebContents();
-  autofill::ManageMigrationUiController* controller =
-      autofill::ManageMigrationUiController::FromWebContents(web_contents);
-  // Show migration-related Ui when the user clicks the credit card icon.
-  controller->OnUserClickedCreditCardIcon();
 }
 
 void SaveAutofillAddress(Browser* browser) {
@@ -2089,8 +2081,9 @@ void SetAndroidOsForTabletSite(content::WebContents* current_tab) {
     entry->SetIsOverridingUserAgent(true);
     std::string product = embedder_support::GetProductAndVersion() + " Mobile";
     blink::UserAgentOverride ua_override;
-    ua_override.ua_string_override = content::BuildUserAgentFromOSAndProduct(
-        kOsOverrideForTabletSite, product);
+    ua_override.ua_string_override =
+        embedder_support::BuildUserAgentFromOSAndProduct(
+            kOsOverrideForTabletSite, product);
     ua_override.ua_metadata_override = embedder_support::GetUserAgentMetadata(
         g_browser_process->local_state());
     ua_override.ua_metadata_override->mobile = true;

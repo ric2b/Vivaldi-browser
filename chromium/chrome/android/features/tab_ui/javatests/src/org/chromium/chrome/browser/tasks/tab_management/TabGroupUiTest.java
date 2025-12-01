@@ -63,6 +63,8 @@ import org.chromium.chrome.browser.browser_controls.BrowserControlsStateProvider
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.layouts.LayoutType;
+import org.chromium.chrome.browser.preferences.Pref;
+import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabLaunchType;
 import org.chromium.chrome.browser.tabmodel.TabGroupModelFilter;
@@ -74,6 +76,7 @@ import org.chromium.chrome.test.R;
 import org.chromium.chrome.test.batch.BlankCTATabInitialStateRule;
 import org.chromium.chrome.test.util.ChromeRenderTestRule;
 import org.chromium.components.embedder_support.util.UrlConstants;
+import org.chromium.components.user_prefs.UserPrefs;
 import org.chromium.content_public.browser.LoadUrlParams;
 import org.chromium.ui.base.DeviceFormFactor;
 import org.chromium.ui.test.util.ViewUtils;
@@ -87,6 +90,7 @@ import java.util.concurrent.atomic.AtomicReference;
 @CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE})
 @Restriction(DeviceFormFactor.PHONE)
 @Batch(Batch.PER_CLASS)
+@EnableFeatures(ChromeFeatureList.DATA_SHARING)
 public class TabGroupUiTest {
 
     @ClassRule
@@ -103,7 +107,7 @@ public class TabGroupUiTest {
     public ChromeRenderTestRule mRenderTestRule =
             ChromeRenderTestRule.Builder.withPublicCorpus()
                     .setBugComponent(ChromeRenderTestRule.Component.UI_BROWSER_MOBILE_TAB_GROUPS)
-                    .setRevision(2)
+                    .setRevision(4)
                     .build();
 
     @Mock private BrowserControlsStateProvider mBrowserControlsStateProvider;
@@ -207,7 +211,6 @@ public class TabGroupUiTest {
     @Test
     @LargeTest
     @Feature({"RenderTest"})
-    @EnableFeatures(ChromeFeatureList.DATA_SHARING)
     public void testRenderStrip_toggleNotificationBubble() throws IOException {
         final ChromeTabbedActivity cta = sActivityTestRule.getActivity();
         AtomicReference<ViewGroup> controlsReference = new AtomicReference<>();
@@ -297,6 +300,7 @@ public class TabGroupUiTest {
     @Test
     @LargeTest
     @Feature({"RenderTest"})
+    @DisableFeatures(ChromeFeatureList.DATA_SHARING)
     public void testRenderStrip_BackgroundAddTab() throws IOException {
         final ChromeTabbedActivity cta = sActivityTestRule.getActivity();
         AtomicReference<RecyclerView> recyclerViewReference = new AtomicReference<>();
@@ -324,7 +328,7 @@ public class TabGroupUiTest {
                                     .getTabGroupModelFilterProvider()
                                     .getTabGroupModelFilter(false);
                     filter.mergeListOfTabsToGroup(
-                            List.of(tab), filter.getTabAt(0), /* notify= */ false);
+                            List.of(tab), filter.getRepresentativeTabAt(0), /* notify= */ false);
                 });
         ViewUtils.waitForVisibleView(
                 allOf(
@@ -340,7 +344,56 @@ public class TabGroupUiTest {
                     // Disable animation to reduce flakiness.
                     stripRecyclerView.setItemAnimator(null);
                 });
-        mRenderTestRule.render(recyclerViewReference.get(), "3rd_tab_selected");
+        mRenderTestRule.render(recyclerViewReference.get(), "background_add_tab");
+    }
+
+    @Test
+    @LargeTest
+    @Feature({"RenderTest"})
+    public void testRenderStrip_BackgroundAddTab_ResizeableView() throws IOException {
+        final ChromeTabbedActivity cta = sActivityTestRule.getActivity();
+        AtomicReference<RecyclerView> recyclerViewReference = new AtomicReference<>();
+        TabUiTestHelper.addBlankTabs(cta, false, 2);
+        enterTabSwitcher(cta);
+        verifyTabSwitcherCardCount(cta, 3);
+        mergeAllNormalTabsToAGroup(cta);
+        verifyTabSwitcherCardCount(cta, 1);
+
+        // Select the first tab in group and add one new tab to group.
+        clickFirstCardFromTabSwitcher(cta);
+        clickNthTabInDialog(cta, 0);
+        ThreadUtils.runOnUiThreadBlocking(
+                () -> {
+                    Tab tab =
+                            cta.getCurrentTabCreator()
+                                    .createNewTab(
+                                            new LoadUrlParams("about:blank"),
+                                            "About Test",
+                                            TabLaunchType.FROM_SYNC_BACKGROUND,
+                                            null,
+                                            TabModel.INVALID_TAB_INDEX);
+                    TabGroupModelFilter filter =
+                            cta.getTabModelSelector()
+                                    .getTabGroupModelFilterProvider()
+                                    .getTabGroupModelFilter(false);
+                    filter.mergeListOfTabsToGroup(
+                            List.of(tab), filter.getRepresentativeTabAt(0), /* notify= */ false);
+                });
+        ViewUtils.waitForVisibleView(
+                allOf(
+                        withId(R.id.tab_list_recycler_view),
+                        isDescendantOfA(withId(R.id.bottom_controls)),
+                        isCompletelyDisplayed()));
+        ThreadUtils.runOnUiThreadBlocking(
+                () -> {
+                    ViewGroup bottomToolbar = cta.findViewById(R.id.bottom_controls);
+                    RecyclerView stripRecyclerView =
+                            bottomToolbar.findViewById(R.id.tab_list_recycler_view);
+                    recyclerViewReference.set(stripRecyclerView);
+                    // Disable animation to reduce flakiness.
+                    stripRecyclerView.setItemAnimator(null);
+                });
+        mRenderTestRule.render(recyclerViewReference.get(), "resizeable_background_add_tab");
     }
 
     @Test
@@ -377,6 +430,18 @@ public class TabGroupUiTest {
     @MediumTest
     @DisableFeatures(ChromeFeatureList.EDGE_TO_EDGE_BOTTOM_CHIN)
     public void testStripShownOnGroupTabPage_EdgeToEdgeWithoutBottomChin() throws Exception {
+        ThreadUtils.runOnUiThreadBlocking(
+                () -> {
+                    Profile profile =
+                            sActivityTestRule
+                                    .getActivity()
+                                    .getProfileProviderSupplier()
+                                    .get()
+                                    .getOriginalProfile();
+                    UserPrefs.get(profile)
+                            .setBoolean(Pref.DID_SYNC_TAB_GROUPS_IN_LAST_SESSION, false);
+                });
+
         // Create a tab group with 2 tabs.
         finishActivity(sActivityTestRule.getActivity());
         createThumbnailBitmapAndWriteToFile(0, mBrowserControlsStateProvider);

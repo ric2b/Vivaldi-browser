@@ -49,6 +49,7 @@
 #include <sys/types.h>
 #include <unistd.h>
 
+#include <memory>
 #include <ostream>
 #include <string>
 #include <vector>
@@ -88,7 +89,6 @@ using google_breakpad::mach_o::Segment;
 using google_breakpad::Module;
 using google_breakpad::StabsReader;
 using google_breakpad::StabsToModule;
-using google_breakpad::scoped_ptr;
 using std::make_pair;
 using std::pair;
 using std::string;
@@ -109,7 +109,7 @@ vector<string> list_directory(const string& directory) {
     path += '/';
   }
 
-  struct dirent* entry = NULL;
+  struct dirent* entry = nullptr;
   while ((entry = readdir(dir))) {
     if (strcmp(entry->d_name, ".") != 0 && strcmp(entry->d_name, "..") != 0) {
       entries.push_back(path + entry->d_name);
@@ -270,7 +270,7 @@ void DumpSymbols::SetReportWarnings(bool report_warnings) {
 }
 
 string DumpSymbols::Identifier() {
-  scoped_ptr<FileID> file_id;
+  std::unique_ptr<FileID> file_id;
 
   if (from_disk_) {
     file_id.reset(new FileID(object_filename_.c_str()));
@@ -278,7 +278,7 @@ string DumpSymbols::Identifier() {
     file_id.reset(new FileID(contents_.get(), size_));
   }
   unsigned char identifier_bytes[16];
-  scoped_ptr<Module> module;
+  std::unique_ptr<Module> module;
   if (!selected_object_file_) {
     if (!CreateEmptyModule(module))
       return string();
@@ -364,7 +364,7 @@ class DumpSymbols::DumperLineToModule:
   ByteReader* byte_reader_;  // WEAK
 };
 
-bool DumpSymbols::CreateEmptyModule(scoped_ptr<Module>& module) {
+bool DumpSymbols::CreateEmptyModule(std::unique_ptr<Module>& module) {
   // Select an object file, if SetArchitecture hasn't been called to set one
   // explicitly.
   if (!selected_object_file_) {
@@ -699,7 +699,7 @@ bool DumpSymbols::LoadCommandDumper::SymtabCommand(const ByteBuffer& entries,
 }
 
 bool DumpSymbols::ReadSymbolData(Module** out_module) {
-  scoped_ptr<Module> module;
+  std::unique_ptr<Module> module;
   if (!CreateEmptyModule(module))
     return false;
 
@@ -728,7 +728,7 @@ bool DumpSymbols::ReadSymbolData(Module** out_module) {
 // header only to |stream|. Return true on success; if an error occurs, report
 // it and return false.
 bool DumpSymbols::WriteSymbolFileHeader(std::ostream& stream) {
-  scoped_ptr<Module> module;
+  std::unique_ptr<Module> module;
   if (!CreateEmptyModule(module))
     return false;
 

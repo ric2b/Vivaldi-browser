@@ -12,6 +12,7 @@ import android.view.ActionMode;
 import android.view.View;
 import android.view.View.OnLongClickListener;
 
+import androidx.annotation.DrawableRes;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.core.view.ViewCompat;
@@ -447,15 +448,6 @@ public class LocationBarCoordinator
     }
 
     @Override
-    public boolean unfocusUrlBarOnBackPressed() {
-        if (mLocationBarMediator.isUrlBarFocused()) {
-            mLocationBarMediator.backKeyPressed();
-            return true;
-        }
-        return false;
-    }
-
-    @Override
     public void selectAll() {
         mUrlCoordinator.selectAll();
     }
@@ -859,5 +851,14 @@ public class LocationBarCoordinator
     @Override
     public @NonNull Optional<OmniboxSuggestionsVisualState> getOmniboxSuggestionsVisualState() {
         return Optional.of(mAutocompleteCoordinator);
+    }
+
+    /**
+     * Updates the location bar button background.
+     *
+     * @param backgroundResId The button background resource.
+     */
+    public void updateButtonBackground(@DrawableRes int backgroundResId) {
+        mLocationBarMediator.updateButtonBackground(backgroundResId);
     }
 }

@@ -261,6 +261,9 @@ class V8_EXPORT_PRIVATE MaglevAssembler : public MacroAssembler {
 
   inline void StoreInt32Field(Register object, int offset, int32_t value);
 
+  inline void AssertElidedWriteBarrier(Register object, Register value,
+                                       RegisterSnapshot snapshot);
+
 #ifdef V8_ENABLE_SANDBOX
 
   void StoreTrustedPointerFieldWithWriteBarrier(
@@ -422,6 +425,8 @@ class V8_EXPORT_PRIVATE MaglevAssembler : public MacroAssembler {
   inline void AddInt32(Register reg, int amount);
   inline void AndInt32(Register reg, int mask);
   inline void OrInt32(Register reg, int mask);
+  inline void AndInt32(Register reg, Register other);
+  inline void OrInt32(Register reg, Register other);
   inline void ShiftLeft(Register reg, int amount);
   inline void IncrementAddress(Register reg, int32_t delta);
   inline void LoadAddress(Register dst, MemOperand location);
@@ -730,6 +735,7 @@ class V8_EXPORT_PRIVATE MaglevAssembler : public MacroAssembler {
   inline void IntPtrToDouble(DoubleRegister result, Register src);
 
   inline void StringLength(Register result, Register string);
+  inline void LoadThinStringValue(Register result, Register string);
 
   // The registers WriteBarrierDescriptor::ObjectRegister and
   // WriteBarrierDescriptor::SlotAddressRegister can be clobbered.

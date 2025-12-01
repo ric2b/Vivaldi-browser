@@ -7,7 +7,6 @@
  * 'settings-customize-mouse-buttons-subpage' displays the customized buttons
  * and allow users to configure their buttons for each mouse.
  */
-import '../icons.html.js';
 import '../settings_shared.css.js';
 import './input_device_settings_shared.css.js';
 import '../controls/settings_toggle_button.js';
@@ -197,9 +196,9 @@ export class SettingsCustomizeMouseButtonsSubpageElement extends
       return;
     }
 
-    this.selectedMouse!.settings!.swapRight = this.primaryRightPref_.value;
+    this.selectedMouse.settings.swapRight = this.primaryRightPref_.value;
     this.inputDeviceSettingsProvider_.setMouseSettings(
-        this.selectedMouse!.id, this.selectedMouse!.settings);
+        this.selectedMouse.id, this.selectedMouse.settings);
   }
 
   private getDescription_(): string {
@@ -207,7 +206,7 @@ export class SettingsCustomizeMouseButtonsSubpageElement extends
       return '';
     }
     return this.i18n(
-        'customizeButtonSubpageDescription', this.selectedMouse!.name);
+        'customizeButtonSubpageDescription', this.selectedMouse.name);
   }
 
   private getcustomizeMouseButtonsNudgeHeader_(): string {

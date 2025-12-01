@@ -7,6 +7,7 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
 #include "chrome/browser/signin/reauth_result.h"
+#include "chrome/browser/signin/signin_promo.h"
 #include "components/prefs/pref_service.h"
 #include "components/signin/public/base/consent_level.h"
 #include "components/signin/public/base/signin_metrics.h"
@@ -15,12 +16,18 @@
 #include "components/signin/public/base/signin_switches.h"
 #include "components/signin/public/identity_manager/identity_manager.h"
 #include "components/signin/public/identity_manager/primary_account_mutator.h"
+#include "components/sync/base/features.h"
+#include "components/sync_bookmarks/switches.h"
 #include "net/base/network_change_notifier.h"
 
 #if !BUILDFLAG(IS_ANDROID)
 #include "chrome/browser/sync/sync_service_factory.h"
 #include "components/sync/service/sync_prefs.h"
 #endif  // !BUILDFLAG(IS_ANDROID)
+
+#if BUILDFLAG(ENABLE_EXTENSIONS)
+#include "chrome/browser/extensions/extension_sync_util.h"
+#endif  // BUILDFLAG(ENABLE_EXTENSIONS)
 
 #if BUILDFLAG(ENABLE_DICE_SUPPORT)
 #include "chrome/browser/autofill/personal_data_manager_factory.h"
@@ -34,32 +41,88 @@
 #include "components/sync/service/sync_service.h"
 #include "components/sync/service/sync_user_settings.h"
 
+#include "app/vivaldi_apptools.h"
+
 namespace {
 
+using signin::SignInPromoType;
 using signin_util::SignedInState;
 
 constexpr int kSigninPromoShownThreshold = 5;
 constexpr int kSigninPromoDismissedThreshold = 2;
 
-// Maps to a subset of `signin_metrics::AccessPoint`.
-enum class AutofillSignInPromoType { kPassword, kAddress };
-
-syncer::DataType GetDataTypeFromAutofillSignInPromoType(
-    AutofillSignInPromoType type) {
+syncer::DataType GetDataTypeFromSignInPromoType(SignInPromoType type) {
   switch (type) {
-    case AutofillSignInPromoType::kPassword:
+    case SignInPromoType::kPassword:
       return syncer::PASSWORDS;
-    case AutofillSignInPromoType::kAddress:
+    case SignInPromoType::kAddress:
       return syncer::CONTACT_INFO;
+    case SignInPromoType::kBookmark:
+      return syncer::BOOKMARKS;
+    case SignInPromoType::kExtension:
+      return syncer::EXTENSIONS;
   }
+}
+
+bool ShouldShowPromoBasedOnImpressionOrDismissalCount(Profile& profile,
+                                                      SignInPromoType type) {
+  // Footer sign in promos are always shown.
+  if (type == signin::SignInPromoType::kExtension ||
+      type == signin::SignInPromoType::kBookmark) {
+    return true;
+  }
+
+  AccountInfo account = signin_ui_util::GetSingleAccountForPromos(
+      IdentityManagerFactory::GetForProfile(&profile));
+
+  int show_count = 0;
+  switch (type) {
+    case SignInPromoType::kAddress:
+      show_count =
+          account.gaia.empty()
+              ? profile.GetPrefs()->GetInteger(
+                    prefs::kAddressSignInPromoShownCountPerProfile)
+              : SigninPrefs(*profile.GetPrefs())
+                    .GetAddressSigninPromoImpressionCount(account.gaia);
+      break;
+    case SignInPromoType::kPassword:
+      show_count =
+          account.gaia.empty()
+              ? profile.GetPrefs()->GetInteger(
+                    prefs::kPasswordSignInPromoShownCountPerProfile)
+              : SigninPrefs(*profile.GetPrefs())
+                    .GetPasswordSigninPromoImpressionCount(account.gaia);
+      break;
+    case SignInPromoType::kBookmark:
+    case SignInPromoType::kExtension:
+      NOTREACHED();
+  }
+
+  int dismiss_count =
+      account.gaia.empty()
+          ? profile.GetPrefs()->GetInteger(
+                prefs::kAutofillSignInPromoDismissCountPerProfile)
+          : SigninPrefs(*profile.GetPrefs())
+                .GetAutofillSigninPromoDismissCount(account.gaia);
+
+  // Don't show the promo again if it
+  // - has already been shown `kSigninPromoShownThreshold` times for its
+  // autofill bubble promo type.
+  // - has already been dismissed `kSigninPromoDismissedThreshold` times,
+  // regardless of autofill bubble promo type.
+  return show_count < kSigninPromoShownThreshold &&
+         dismiss_count < kSigninPromoDismissedThreshold;
 }
 
 // Performs base checks for whether the sign in promos should be shown.
 // Needs additional checks depending on the type of the promo (see
 // `ShouldShowAddressSignInPromo` and `ShouldShowPasswordSignInPromo`).
 // `profile` is the profile of the tab the promo would be shown on.
-bool ShouldShowSignInPromoCommon(Profile& profile,
-                                 AutofillSignInPromoType type) {
+bool ShouldShowSignInPromoCommon(Profile& profile, SignInPromoType type) {
+  if (vivaldi::IsVivaldiRunning()) {
+    return false;
+  }
+
   // Don't show the promo if it does not pass the sync base checks.
   if (!signin::ShouldShowSyncPromo(profile)) {
     return false;
@@ -72,7 +135,7 @@ bool ShouldShowSignInPromoCommon(Profile& profile,
 
   syncer::SyncService* sync_service =
       SyncServiceFactory::GetForProfile(&profile);
-  syncer::DataType data_type = GetDataTypeFromAutofillSignInPromoType(type);
+  syncer::DataType data_type = GetDataTypeFromSignInPromoType(type);
 
   // Don't show the promo if policies disallow account storage.
   if (sync_service->GetUserSettings()->IsTypeManagedByPolicy(
@@ -81,11 +144,8 @@ bool ShouldShowSignInPromoCommon(Profile& profile,
     return false;
   }
 
-  signin::IdentityManager* identity_manager =
-      IdentityManagerFactory::GetForProfile(&profile);
-
-  SignedInState signed_in_state =
-      signin_util::GetSignedInState(identity_manager);
+  SignedInState signed_in_state = signin_util::GetSignedInState(
+      IdentityManagerFactory::GetForProfile(&profile));
 
   switch (signed_in_state) {
     case signin_util::SignedInState::kSignedIn:
@@ -101,75 +161,7 @@ bool ShouldShowSignInPromoCommon(Profile& profile,
       break;
   }
 
-  // Don't show the promo again after it was dismissed twice, regardless of
-  // autofill bubble promo type.
-  AccountInfo account =
-      signin_ui_util::GetSingleAccountForPromos(identity_manager);
-  int dismiss_count =
-      account.gaia.empty()
-          ? profile.GetPrefs()->GetInteger(
-                prefs::kAutofillSignInPromoDismissCountPerProfile)
-          : SigninPrefs(*profile.GetPrefs())
-                .GetAutofillSigninPromoDismissCount(account.gaia);
-
-  if (dismiss_count >= kSigninPromoDismissedThreshold) {
-    return false;
-  }
-
-  // Only show the promo if explicit browser signin is enabled.
-  return switches::IsExplicitBrowserSigninUIOnDesktopEnabled();
-}
-
-bool ShouldShowPromoBasedOnImpressionCount(Profile& profile,
-                                           AutofillSignInPromoType type) {
-  signin::IdentityManager* identity_manager =
-      IdentityManagerFactory::GetForProfile(&profile);
-
-  // Show the promo if the user is sign in pending, regardless of impression
-  // count.
-  if (signin_util::IsSigninPending(identity_manager)) {
-    return true;
-  }
-
-  // Don't show the promo again if it has already been shown
-  // `kSigninPromoShownThreshold` times.
-  AccountInfo account =
-      signin_ui_util::GetSingleAccountForPromos(identity_manager);
-
-  int show_count = 0;
-  switch (type) {
-    case AutofillSignInPromoType::kAddress:
-      show_count =
-          account.gaia.empty()
-              ? profile.GetPrefs()->GetInteger(
-                    prefs::kAddressSignInPromoShownCountPerProfile)
-              : SigninPrefs(*profile.GetPrefs())
-                    .GetAddressSigninPromoImpressionCount(account.gaia);
-      break;
-    case AutofillSignInPromoType::kPassword:
-      show_count =
-          account.gaia.empty()
-              ? profile.GetPrefs()->GetInteger(
-                    prefs::kPasswordSignInPromoShownCountPerProfile)
-              : SigninPrefs(*profile.GetPrefs())
-                    .GetPasswordSigninPromoImpressionCount(account.gaia);
-  }
-
-  return show_count < kSigninPromoShownThreshold;
-}
-
-AutofillSignInPromoType GetAutofillSignInPromoType(
-    signin_metrics::AccessPoint access_point) {
-  CHECK(signin::IsAutofillSigninPromo(access_point));
-
-  switch (access_point) {
-    case signin_metrics::AccessPoint::kPasswordBubble:
-      return AutofillSignInPromoType::kPassword;
-    case signin_metrics::AccessPoint::kAddressBubble:
-      return AutofillSignInPromoType::kAddress;
-    default:
-      NOTREACHED();
-  }
+  return ShouldShowPromoBasedOnImpressionOrDismissalCount(profile, type);
 }
 
 }  // namespace
@@ -227,16 +219,33 @@ bool ShouldShowSyncPromo(Profile& profile) {
 }
 #endif  // !BUILDFLAG(IS_ANDROID)
 
-bool ShouldShowPasswordSignInPromo(Profile& profile) {
+#if BUILDFLAG(ENABLE_EXTENSIONS)
+bool ShouldShowExtensionSyncPromo(Profile& profile,
+                                  const extensions::Extension& extension) {
 #if BUILDFLAG(ENABLE_DICE_SUPPORT)
-
-  if (!ShouldShowSignInPromoCommon(profile,
-                                   AutofillSignInPromoType::kPassword)) {
+  if (vivaldi::IsVivaldiRunning()) {
     return false;
   }
 
-  if (!ShouldShowPromoBasedOnImpressionCount(
-          profile, AutofillSignInPromoType::kPassword)) {
+  // Don't show the promo if it does not pass the sync base checks.
+  if (!signin::ShouldShowSyncPromo(profile)) {
+    return false;
+  }
+
+  if (!extensions::sync_util::ShouldSync(&profile, &extension)) {
+    return false;
+  }
+
+  // `ShouldShowSyncPromo()` does not check if extensions are syncing in
+  // transport mode. That's why `IsSyncingExtensionsEnabled()` is added so the
+  // sign in promo is not shown in that case.
+  if (extensions::sync_util::IsSyncingExtensionsEnabled(&profile)) {
+    return false;
+  }
+
+  // The promo is not shown to users that have explicitly signed in through the
+  // browser (even if extensions are not syncing).
+  if (profile.GetPrefs()->GetBoolean(prefs::kExplicitBrowserSignin)) {
     return false;
   }
 
@@ -246,16 +255,37 @@ bool ShouldShowPasswordSignInPromo(Profile& profile) {
 #endif  // BUILDFLAG(ENABLE_DICE_SUPPORT)
 }
 
-bool ShouldShowAddressSignInPromo(Profile& profile,
-                                  const autofill::AutofillProfile& address) {
+bool ShouldShowExtensionSignInPromo(Profile& profile,
+                                    const extensions::Extension& extension) {
 #if BUILDFLAG(ENABLE_DICE_SUPPORT)
-  // Remove this once enabled by default.
-  if (!switches::IsImprovedSigninUIOnDesktopEnabled()) {
+  if (!base::FeatureList::IsEnabled(
+          switches::kEnableExtensionsExplicitBrowserSignin)) {
     return false;
   }
 
-  if (!ShouldShowSignInPromoCommon(profile,
-                                   AutofillSignInPromoType::kAddress)) {
+  if (!ShouldShowExtensionSyncPromo(profile, extension)) {
+    return false;
+  }
+
+  return ShouldShowSignInPromoCommon(profile, SignInPromoType::kExtension);
+#else
+  return false;
+#endif  // BUILDFLAG(ENABLE_DICE_SUPPORT)
+}
+#endif  // BUILDFLAG(ENABLE_EXTENSIONS)
+
+bool ShouldShowPasswordSignInPromo(Profile& profile) {
+#if BUILDFLAG(ENABLE_DICE_SUPPORT)
+  return ShouldShowSignInPromoCommon(profile, SignInPromoType::kPassword);
+#else
+  return false;
+#endif  // BUILDFLAG(ENABLE_DICE_SUPPORT)
+}
+
+bool ShouldShowAddressSignInPromo(Profile& profile,
+                                  const autofill::AutofillProfile& address) {
+#if BUILDFLAG(ENABLE_DICE_SUPPORT)
+  if (vivaldi::IsVivaldiRunning()) {
     return false;
   }
 
@@ -268,12 +298,46 @@ bool ShouldShowAddressSignInPromo(Profile& profile,
     return false;
   }
 
-  if (!ShouldShowPromoBasedOnImpressionCount(
-          profile, AutofillSignInPromoType::kAddress)) {
+  return ShouldShowSignInPromoCommon(profile, SignInPromoType::kAddress);
+#else
+  return false;
+#endif  // BUILDFLAG(ENABLE_DICE_SUPPORT)
+}
+
+bool ShouldShowBookmarkSignInPromo(Profile& profile) {
+#if BUILDFLAG(ENABLE_DICE_SUPPORT)
+  if (!base::FeatureList::IsEnabled(
+          switches::kSyncEnableBookmarksInTransportMode) ||
+      !base::FeatureList::IsEnabled(
+          switches::kSyncMinimizeDeletionsDuringBookmarkBatchUpload)) {
     return false;
   }
 
-  return true;
+  // Do not show the promo if a user was previously syncing, as this may result
+  // in duplicate data.
+  // TODO(crbug.com/402748138): Remove this once bookmarks de-duplication is
+  // implemented.
+  if (!profile.GetPrefs()
+           ->GetString(::prefs::kGoogleServicesLastSyncingGaiaId)
+           .empty()) {
+    return false;
+  }
+
+  // If the user is in sign in pending state, the promo should only be shown if
+  // they already have account storage for bookmarks enabled.
+  IdentityManager* identity_manager =
+      IdentityManagerFactory::GetForProfile(&profile);
+  syncer::SyncService* sync_service =
+      SyncServiceFactory::GetForProfile(&profile);
+  if (identity_manager && signin_util::IsSigninPending(identity_manager)) {
+    if (!sync_service ||
+        !sync_service->GetUserSettings()->GetSelectedTypes().Has(
+            syncer::UserSelectableType::kBookmarks)) {
+      return false;
+    }
+  }
+
+  return ShouldShowSignInPromoCommon(profile, SignInPromoType::kBookmark);
 #else
   return false;
 #endif  // BUILDFLAG(ENABLE_DICE_SUPPORT)
@@ -284,25 +348,63 @@ bool IsAutofillSigninPromo(signin_metrics::AccessPoint access_point) {
          access_point == signin_metrics::AccessPoint::kAddressBubble;
 }
 
+bool IsSignInPromo(signin_metrics::AccessPoint access_point) {
+  if (IsAutofillSigninPromo(access_point)) {
+    return true;
+  }
+
+  if (access_point == signin_metrics::AccessPoint::kExtensionInstallBubble) {
+    return base::FeatureList::IsEnabled(
+        switches::kEnableExtensionsExplicitBrowserSignin);
+  }
+
+  if (access_point == signin_metrics::AccessPoint::kBookmarkBubble) {
+    return base::FeatureList::IsEnabled(
+        switches::kSyncEnableBookmarksInTransportMode);
+  }
+
+  return false;
+}
+
+SignInPromoType GetSignInPromoTypeFromAccessPoint(
+    signin_metrics::AccessPoint access_point) {
+  switch (access_point) {
+    case signin_metrics::AccessPoint::kPasswordBubble:
+      return SignInPromoType::kPassword;
+    case signin_metrics::AccessPoint::kAddressBubble:
+      return SignInPromoType::kAddress;
+    case signin_metrics::AccessPoint::kBookmarkBubble:
+      return SignInPromoType::kBookmark;
+    case signin_metrics::AccessPoint::kExtensionInstallBubble:
+      return SignInPromoType::kExtension;
+    default:
+      NOTREACHED();
+  }
+}
+
 #if BUILDFLAG(ENABLE_DICE_SUPPORT)
 void RecordSignInPromoShown(signin_metrics::AccessPoint access_point,
                             Profile* profile) {
   CHECK(profile);
+  CHECK(!profile->IsOffTheRecord());
 
   AccountInfo account = signin_ui_util::GetSingleAccountForPromos(
       IdentityManagerFactory::GetForProfile(profile));
-  AutofillSignInPromoType promo_type = GetAutofillSignInPromoType(access_point);
+  SignInPromoType promo_type = GetSignInPromoTypeFromAccessPoint(access_point);
 
   // Record the pref per profile if there is no account present.
   if (account.gaia.empty()) {
     const char* pref_name;
     switch (promo_type) {
-      case AutofillSignInPromoType::kPassword:
+      case SignInPromoType::kPassword:
         pref_name = prefs::kPasswordSignInPromoShownCountPerProfile;
         break;
-      case AutofillSignInPromoType::kAddress:
+      case SignInPromoType::kAddress:
         pref_name = prefs::kAddressSignInPromoShownCountPerProfile;
         break;
+      case SignInPromoType::kBookmark:
+      case SignInPromoType::kExtension:
+        return;
     }
 
     int show_count = profile->GetPrefs()->GetInteger(pref_name);
@@ -313,13 +415,17 @@ void RecordSignInPromoShown(signin_metrics::AccessPoint access_point,
   // Record the pref for the account that was used for the promo, either because
   // it is signed into the web or in sign in pending state.
   switch (promo_type) {
-    case AutofillSignInPromoType::kPassword:
+    case SignInPromoType::kPassword:
       SigninPrefs(*profile->GetPrefs())
           .IncrementPasswordSigninPromoImpressionCount(account.gaia);
       return;
-    case AutofillSignInPromoType::kAddress:
+    case SignInPromoType::kAddress:
       SigninPrefs(*profile->GetPrefs())
           .IncrementAddressSigninPromoImpressionCount(account.gaia);
+      return;
+    case SignInPromoType::kBookmark:
+    case SignInPromoType::kExtension:
+      return;
   }
 }
 #endif  // BUILDFLAG(ENABLE_DICE_SUPPORT)

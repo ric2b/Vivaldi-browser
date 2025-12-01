@@ -13,7 +13,6 @@
 #import "ios/ui/ad_tracker_blocker/vivaldi_atb_setting_type.h"
 // End Vivaldi
 
-@class BubblePresenter;
 @protocol BrowserCoordinatorCommands;
 @protocol EditViewAnimatee;
 @protocol FakeboxButtonsSnapshotProvider;
@@ -40,9 +39,6 @@
 
 @property(nonatomic, weak) id<OmniboxPopupPresenterDelegate>
     popupPresenterDelegate;
-
-// Bubble presenter for displaying IPH bubbles relating to the toolbars.
-@property(nonatomic, strong) BubblePresenter* bubblePresenter;
 
 // Initializes this Coordinator with its `browser` and a nil base view
 // controller.

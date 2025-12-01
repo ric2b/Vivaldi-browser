@@ -28,6 +28,7 @@
 #include "base/no_destructor.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/task/single_thread_task_runner.h"
+#include "base/time/time.h"
 #import "components/remote_cocoa/app_shim/NSToolbar+Private.h"
 #import "components/remote_cocoa/app_shim/bridged_content_view.h"
 #import "components/remote_cocoa/app_shim/browser_native_widget_window_mac.h"
@@ -56,10 +57,12 @@
 #include "ui/display/display.h"
 #include "ui/display/screen.h"
 #include "ui/events/cocoa/cocoa_event_utils.h"
+#include "ui/events/types/event_type.h"
 #include "ui/gfx/geometry/dip_util.h"
 #include "ui/gfx/geometry/size_conversions.h"
 #import "ui/gfx/mac/coordinate_conversion.h"
 #import "ui/gfx/mac/nswindow_frame_controls.h"
+#include "ui/gfx/native_widget_types.h"
 
 // Vivaldi
 #include "app/vivaldi_apptools.h"
@@ -80,11 +83,12 @@ CG_EXTERN CGError CGSSetWindowCaptureExcludeShape(CGSConnectionID cid,
 CG_EXTERN CGRegionRef CGRegionCreateWithRect(CGRect rect);
 
 namespace {
-constexpr auto kUIPaintTimeout = base::Seconds(5);
+constexpr auto kUIPaintTimeout = base::Milliseconds(500);
 
 // Returns the display that the specified window is on.
 display::Display GetDisplayForWindow(NSWindow* window) {
-  return display::Screen::GetScreen()->GetDisplayNearestWindow(window);
+  return display::Screen::GetScreen()->GetDisplayNearestWindow(
+      gfx::NativeWindow(window));
 }
 
 }  // namespace
@@ -304,9 +308,8 @@ NativeWidgetNSWindowBridge* NativeWidgetNSWindowBridge::GetFromId(
 }
 
 // static
-NativeWidgetNSWindowBridge* NativeWidgetNSWindowBridge::GetFromNativeWindow(
-    gfx::NativeWindow native_window) {
-  NSWindow* window = native_window.GetNativeNSWindow();
+NativeWidgetNSWindowBridge* NativeWidgetNSWindowBridge::GetFromNSWindow(
+    NSWindow* window) {
   if (NativeWidgetMacNSWindow* widget_window =
           base::apple::ObjCCast<NativeWidgetMacNSWindow>(window)) {
     return GetFromId([widget_window bridgedNativeWidgetId]);
@@ -378,7 +381,7 @@ NativeWidgetNSWindowBridge::NativeWidgetNSWindowBridge(
 
 NativeWidgetNSWindowBridge::~NativeWidgetNSWindowBridge() {
   SetLocalEventMonitorEnabled(false);
-  DCHECK(!key_down_event_monitor_);
+  DCHECK(!local_event_monitor_);
   GetPendingWindowTitleMap().erase(window_);
   // The delegate should be cleared already. Note this enforces the precondition
   // that -[NSWindow close] is invoked on the hosted window before the
@@ -423,33 +426,44 @@ void NativeWidgetNSWindowBridge::SetParent(uint64_t new_parent_id) {
     parent_->RemoveChildWindow(this);
     parent_ = nullptr;
   }
-  if (!new_parent_id)
-    return;
 
-  // It is only valid to have a NativeWidgetMac be the parent of another
-  // NativeWidgetMac.
+  // Strip the managed/transient collection behavior bits; they will be reset
+  // later.
+  NSWindowCollectionBehavior collectionBehavior =
+      window_.collectionBehavior & ~(NSWindowCollectionBehaviorManaged |
+                                     NSWindowCollectionBehaviorTransient);
+
+  // If `new_parent_id` is 0 or is invalid, leave the window as a top-level
+  // window.
+  //
+  // Details: When the OS tells us a window is closing it is removed from the id
+  // map. Since nothing is stopping the browser process from still trying to use
+  // that id until the browser process has been informed that the window is
+  // gone, it is totally possible to be passed no longer valid ids.
   NativeWidgetNSWindowBridge* new_parent =
-      NativeWidgetNSWindowBridge::GetFromId(new_parent_id);
-  if (!new_parent) {
-    // When the OS tells us a window is closing it is removed from the id map.
-    // Since nothing is stopping the browser process from still trying to use
-    // that id until the browser process has been informed that the window is
-    // gone, it is totally possible to be passed no longer valid ids here.
+      new_parent_id ? NativeWidgetNSWindowBridge::GetFromId(new_parent_id)
+                    : nil;
+  if (!new_parent_id || !new_parent) {
+    // When a window doesn't have a parent, it should have normal managed
+    // collection behavior.
+    window_.collectionBehavior =
+        collectionBehavior | NSWindowCollectionBehaviorManaged;
     return;
   }
 
   parent_ = new_parent;
   parent_->child_windows_.push_back(this);
 
+  // When a window has a parent, it must not have a fixed Space, otherwise
   // Widget::ShowInactive() could result in a Space switch when the widget has a
-  // parent, and we're calling -orderWindow:relativeTo:. Use Transient
-  // collection behaviour to prevent that.
-  // https://crbug.com/697829
-  [window_ setCollectionBehavior:[window_ collectionBehavior] |
-                                 NSWindowCollectionBehaviorTransient];
+  // parent, and we're calling -orderWindow:relativeTo:. Therefore, give it
+  // transient collection behavior. See https://crbug.com/41305285.
+  window_.collectionBehavior =
+      collectionBehavior | NSWindowCollectionBehaviorTransient;
 
-  if (wants_to_be_visible_)
+  if (wants_to_be_visible_) {
     parent_->OrderChildren();
+  }
 }
 
 void NativeWidgetNSWindowBridge::CreateSelectFileDialog(
@@ -656,8 +670,10 @@ void NativeWidgetNSWindowBridge::DestroyContentView() {
   [window_ setContentView:nil];
 }
 
-void NativeWidgetNSWindowBridge::CreateContentView(uint64_t ns_view_id,
-                                                   const gfx::Rect& bounds) {
+void NativeWidgetNSWindowBridge::CreateContentView(
+    uint64_t ns_view_id,
+    const gfx::Rect& bounds,
+    std::optional<int> corner_radius) {
   DCHECK(!bridged_view_);
 
   bridged_view_ = [[BridgedContentView alloc] initWithBridge:this
@@ -690,6 +706,11 @@ void NativeWidgetNSWindowBridge::CreateContentView(uint64_t ns_view_id,
   [bridged_view_ addSubview:compositor_view];
 
   [bridged_view_ setWantsLayer:YES];
+  if (corner_radius) {
+    bridged_view_.layer.cornerRadius = *corner_radius;
+    bridged_view_.layer.masksToBounds = YES;
+  }
+
   [window_ setContentView:bridged_view_];
 }
 
@@ -949,7 +970,7 @@ bool NativeWidgetNSWindowBridge::HasCapture() {
 void NativeWidgetNSWindowBridge::SetLocalEventMonitorEnabled(bool enabled) {
   if (enabled) {
     // Create the event monitor if it does not exist yet.
-    if (key_down_event_monitor_) {
+    if (local_event_monitor_) {
       return;
     }
 
@@ -963,20 +984,24 @@ void NativeWidgetNSWindowBridge::SetLocalEventMonitorEnabled(bool enabled) {
       std::unique_ptr<ui::Event> ui_event =
           ui::EventFromNative(base::apple::OwnedNSEvent(event));
       bool event_handled = false;
-      weak_ptr->host_->DispatchMonitorEvent(std::move(ui_event),
-                                            &event_handled);
+      if (ui_event && ui_event->type() != ui::EventType::kUnknown) {
+        weak_ptr->host_->DispatchMonitorEvent(std::move(ui_event),
+                                              &event_handled);
+      }
+
       return event_handled ? nil : event;
     };
-    key_down_event_monitor_ =
-        [NSEvent addLocalMonitorForEventsMatchingMask:NSEventMaskKeyDown
+    local_event_monitor_ =
+        [NSEvent addLocalMonitorForEventsMatchingMask:NSEventMaskAny
                                               handler:block];
   } else {
     // Destroy the event monitor if it exists.
-    if (!key_down_event_monitor_)
+    if (!local_event_monitor_) {
       return;
+    }
 
-    [NSEvent removeMonitor:key_down_event_monitor_];
-    key_down_event_monitor_ = nil;
+    [NSEvent removeMonitor:local_event_monitor_];
+    local_event_monitor_ = nil;
   }
 }
 
@@ -1203,6 +1228,14 @@ void NativeWidgetNSWindowBridge::OnSizeChanged() {
 
 void NativeWidgetNSWindowBridge::OnPositionChanged() {
   UpdateWindowGeometry();
+}
+
+void NativeWidgetNSWindowBridge::OnWindowWillStartLiveResize() {
+  host_->OnWindowWillStartLiveResize();
+}
+
+void NativeWidgetNSWindowBridge::OnWindowDidEndLiveResize() {
+  host_->OnWindowDidEndLiveResize();
 }
 
 void NativeWidgetNSWindowBridge::OnVisibilityChanged() {
@@ -1506,20 +1539,25 @@ gfx::Rect NativeWidgetNSWindowBridge::FullscreenControllerGetFrame() const {
 // NativeWidgetNSWindowBridge, ui::CATransactionObserver
 
 bool NativeWidgetNSWindowBridge::ShouldWaitInPreCommit() {
-  if (!window_visible_)
+  if (!window_visible_ || !wants_to_be_visible_) {
     return false;
-  if (ca_transaction_sync_suppressed_)
+  }
+  if (ca_transaction_sync_suppressed_) {
     return false;
-  if (!bridged_view_)
+  }
+  if (!bridged_view_) {
     return false;
-  if (content_dip_size_.IsEmpty())
+  }
+  if (content_dip_size_.IsEmpty()) {
     return false;
+  }
   // Suppress synchronous CA transactions during AppKit fullscreen transition
   // since there is no need for updates during such transition.
   // Re-layout and re-paint will be done after the transition. See
   // https://crbug.com/875707 for potential problems if we don't suppress.
-  if (fullscreen_controller_.IsInFullscreenTransition())
+  if (fullscreen_controller_.IsInFullscreenTransition()) {
     return false;
+  }
   return content_dip_size_ != compositor_frame_dip_size_;
 }
 

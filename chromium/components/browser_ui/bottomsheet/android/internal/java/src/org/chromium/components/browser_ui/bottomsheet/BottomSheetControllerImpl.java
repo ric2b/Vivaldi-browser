@@ -4,19 +4,22 @@
 
 package org.chromium.components.browser_ui.bottomsheet;
 
+import static org.chromium.build.NullUtil.assumeNonNull;
+
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.Window;
 
-import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 
 import org.chromium.base.Callback;
 import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.base.supplier.ObservableSupplierImpl;
 import org.chromium.base.supplier.Supplier;
+import org.chromium.build.annotations.MonotonicNonNull;
+import org.chromium.build.annotations.NullMarked;
+import org.chromium.build.annotations.Nullable;
 import org.chromium.components.browser_ui.desktop_windowing.AppHeaderState;
 import org.chromium.components.browser_ui.desktop_windowing.DesktopWindowStateManager;
 import org.chromium.components.browser_ui.widget.gesture.BackPressHandler;
@@ -39,6 +42,7 @@ import java.util.PriorityQueue;
  * and call {@link #requestShowContent(BottomSheetContent, boolean)} which will return true if the
  * content was actually shown (see full doc on method).
  */
+@NullMarked
 class BottomSheetControllerImpl implements ManagedBottomSheetController, ScrimCoordinator.Observer {
     /** The initial capacity for the priority queue handling pending content show requests. */
     private static final int INITIAL_QUEUE_CAPACITY = 1;
@@ -73,19 +77,27 @@ class BottomSheetControllerImpl implements ManagedBottomSheetController, ScrimCo
 
     private final Supplier<Integer> mEdgeToEdgeBottomInsetSupplier;
     private final KeyboardVisibilityDelegate mKeyboardVisibilityDelegate;
-    private final DesktopWindowStateManager mDesktopWindowStateManager;
+    private final @Nullable DesktopWindowStateManager mDesktopWindowStateManager;
+
+    /**
+     * An observer that observes changes to the bottom sheet content {@code
+     * BottomSheetContent#mBackPressStateChangedSupplier} and updates the {@code
+     * BottomSheetControllerImpl#mBackPressStateChangedSupplier}.
+     */
+    private final Callback<Boolean> mContentBackPressStateChangedObserver =
+            contentWillHandleBackPress -> updateBackPressStateChangedSupplier();
 
     /** A handle to the {@link BottomSheet} that this class controls. */
-    private BottomSheet mBottomSheet;
+    private @MonotonicNonNull BottomSheet mBottomSheet;
 
     /**
      * The container that the sheet exists in. This is one layer inside of the root coordinator view
      * to support the view's shadow.
      */
-    private ViewGroup mBottomSheetContainer;
+    private @MonotonicNonNull ViewGroup mBottomSheetContainer;
 
     /** A queue for content that is waiting to be shown in the {@link BottomSheet}. */
-    private PriorityQueue<BottomSheetContent> mContentQueue;
+    private @MonotonicNonNull PriorityQueue<BottomSheetContent> mContentQueue;
 
     /** Whether the controller is already processing a hide request for the tab. */
     private boolean mIsProcessingHideRequest;
@@ -94,23 +106,17 @@ class BottomSheetControllerImpl implements ManagedBottomSheetController, ScrimCo
     private boolean mIsSuppressingCurrentContent;
 
     /** A runnable that initializes the bottom sheet when necessary. */
-    private Runnable mSheetInitializer;
+    private @Nullable Runnable mSheetInitializer;
 
     /** The state of the sheet so it can be returned to what it was prior to suppression. */
     private @SheetState int mSheetStateBeforeSuppress;
 
     /** The content being shown prior to the sheet being suppressed. */
-    private BottomSheetContent mContentWhenSuppressed;
-
-    /**
-     * An observer that observes changes to the bottom sheet content {@code
-     * BottomSheetContent#mBackPressStateChangedSupplier} and updates the {@code
-     * BottomSheetControllerImpl#mBackPressStateChangedSupplier}.
-     */
-    private Callback<Boolean> mContentBackPressStateChangedObserver;
+    private @Nullable BottomSheetContent mContentWhenSuppressed;
 
     private int mAppHeaderHeight;
     private int mBottomControlsHeight;
+    private boolean mIsAnchoredToBottomControls;
 
     /**
      * Build a new controller of the bottom sheet.
@@ -133,7 +139,7 @@ class BottomSheetControllerImpl implements ManagedBottomSheetController, ScrimCo
             KeyboardVisibilityDelegate keyboardDelegate,
             Supplier<ViewGroup> root,
             boolean alwaysFullWidth,
-            @NonNull Supplier<Integer> edgeToEdgeBottomInsetSupplier,
+            Supplier<Integer> edgeToEdgeBottomInsetSupplier,
             @Nullable DesktopWindowStateManager desktopWindowStateManager) {
         mScrimManagerSupplier = scrimManagerSupplier;
         mPendingSheetObservers = new ArrayList<>();
@@ -311,7 +317,7 @@ class BottomSheetControllerImpl implements ManagedBottomSheetController, ScrimCo
                     }
 
                     @Override
-                    public void onSheetContentChanged(BottomSheetContent newContent) {
+                    public void onSheetContentChanged(@Nullable BottomSheetContent newContent) {
                         updateBackPressStateChangedSupplier();
 
                         if (newContent != null) return;
@@ -388,7 +394,7 @@ class BottomSheetControllerImpl implements ManagedBottomSheetController, ScrimCo
     }
 
     @Override
-    public BottomSheetContent getCurrentSheetContent() {
+    public @Nullable BottomSheetContent getCurrentSheetContent() {
         return mBottomSheet == null ? null : mBottomSheet.getCurrentSheetContent();
     }
 
@@ -422,6 +428,11 @@ class BottomSheetControllerImpl implements ManagedBottomSheetController, ScrimCo
     @Override
     public int getContainerHeight() {
         return mBottomSheet != null ? (int) mBottomSheet.getSheetContainerHeight() : 0;
+    }
+
+    @Override
+    public int getContainerWidth() {
+        return mBottomSheet != null ? (int) mBottomSheet.getSheetContainerWidth() : 0;
     }
 
     @Override
@@ -495,19 +506,19 @@ class BottomSheetControllerImpl implements ManagedBottomSheetController, ScrimCo
     }
 
     void setSheetStateForTesting(@SheetState int state, boolean animate) {
-        mBottomSheet.setSheetState(state, animate);
+        assumeNonNull(mBottomSheet).setSheetState(state, animate);
     }
 
     View getBottomSheetViewForTesting() {
-        return mBottomSheet;
+        return assumeNonNull(mBottomSheet);
     }
 
     ViewGroup getBottomSheetContainerForTesting() {
-        return mBottomSheetContainer;
+        return assumeNonNull(mBottomSheetContainer);
     }
 
     public void endAnimationsForTesting() {
-        mBottomSheet.endAnimations();
+        assumeNonNull(mBottomSheet).endAnimations();
     }
 
     @VisibleForTesting
@@ -515,7 +526,7 @@ class BottomSheetControllerImpl implements ManagedBottomSheetController, ScrimCo
         clearRequestsAndHide();
 
         // Handle content that has a custom lifecycle.
-        hideContent(mBottomSheet.getCurrentSheetContent(), /* animate= */ true);
+        hideContent(assumeNonNull(mBottomSheet).getCurrentSheetContent(), /* animate= */ true);
     }
 
     @Override
@@ -524,7 +535,9 @@ class BottomSheetControllerImpl implements ManagedBottomSheetController, ScrimCo
             throw new RuntimeException("Attempting to show null content in the sheet!");
         }
 
-        if (mBottomSheet == null) mSheetInitializer.run();
+        if (mBottomSheet == null) assumeNonNull(mSheetInitializer).run();
+        assumeNonNull(mBottomSheet);
+        assumeNonNull(mContentQueue);
 
         // If already showing (or queued to show) the requested content, do nothing.
         if (content == mBottomSheet.getCurrentSheetContent() || mContentQueue.contains(content)) {
@@ -562,11 +575,13 @@ class BottomSheetControllerImpl implements ManagedBottomSheetController, ScrimCo
 
     @Override
     public void hideContent(
-            BottomSheetContent content, boolean animate, @StateChangeReason int hideReason) {
+            @Nullable BottomSheetContent content,
+            boolean animate,
+            @StateChangeReason int hideReason) {
         if (mBottomSheet == null) return;
 
         if (content != mBottomSheet.getCurrentSheetContent()) {
-            mContentQueue.remove(content);
+            assumeNonNull(mContentQueue).remove(content);
             return;
         }
 
@@ -587,7 +602,7 @@ class BottomSheetControllerImpl implements ManagedBottomSheetController, ScrimCo
     }
 
     @Override
-    public void hideContent(BottomSheetContent content, boolean animate) {
+    public void hideContent(@Nullable BottomSheetContent content, boolean animate) {
         hideContent(content, animate, StateChangeReason.NONE);
     }
 
@@ -619,14 +634,14 @@ class BottomSheetControllerImpl implements ManagedBottomSheetController, ScrimCo
      * @param animate Whether the sheet should animate opened.
      */
     private void showNextContent(boolean animate) {
-        if (mBottomSheet.getSheetState() != SheetState.HIDDEN) {
+        if (assumeNonNull(mBottomSheet).getSheetState() != SheetState.HIDDEN) {
             throw new RuntimeException("Showing next content before sheet is hidden!");
         }
 
         // Make sure the container is visible as it is set to "gone" when there is no content.
-        mBottomSheetContainer.setVisibility(View.VISIBLE);
+        assumeNonNull(mBottomSheetContainer).setVisibility(View.VISIBLE);
 
-        if (mContentQueue.isEmpty()) {
+        if (assumeNonNull(mContentQueue).isEmpty()) {
             mBottomSheet.showContent(null);
             return;
         }
@@ -640,8 +655,6 @@ class BottomSheetControllerImpl implements ManagedBottomSheetController, ScrimCo
         }
         if (nextContent != null) {
             mKeyboardVisibilityDelegate.hideKeyboard(mBottomSheetContainer);
-            mContentBackPressStateChangedObserver =
-                    (contentWillHandleBackPress) -> updateBackPressStateChangedSupplier();
             nextContent
                     .getBackPressStateChangedSupplier()
                     .addObserver(mContentBackPressStateChangedObserver);
@@ -654,7 +667,7 @@ class BottomSheetControllerImpl implements ManagedBottomSheetController, ScrimCo
     public void clearRequestsAndHide() {
         if (mBottomSheet == null) return;
 
-        clearRequests(mContentQueue.iterator());
+        clearRequests(assumeNonNull(mContentQueue).iterator());
 
         BottomSheetContent currentContent = mBottomSheet.getCurrentSheetContent();
         if (currentContent == null || !currentContent.hasCustomLifecycle()) {
@@ -666,29 +679,36 @@ class BottomSheetControllerImpl implements ManagedBottomSheetController, ScrimCo
 
     @Override
     public boolean isFullWidth() {
-        return mBottomSheet.isFullWidth();
+        return assumeNonNull(mBottomSheet).isFullWidth();
     }
 
     @Override
     @VisibleForTesting
     public boolean isSmallScreen() {
-        return mBottomSheet.isSmallScreen();
+        return assumeNonNull(mBottomSheet).isSmallScreen();
+    }
+
+    @Override
+    public boolean isAnchoredToBottomControls() {
+        return mIsAnchoredToBottomControls;
     }
 
     // ScrimCoordinator.Observer
     @Override
     public void scrimVisibilityChanged(boolean scrimVisible) {
         if (mBottomSheet == null) return;
+        assumeNonNull(mBottomSheetContainer);
         if (scrimVisible && mBottomSheet.isSheetOpen()) {
             // Scrimmed bottom sheet. Draw the bottom sheet container on top of all sibling views,
             // originating from the bottom of the screen.
+            mIsAnchoredToBottomControls = false;
             mBottomSheetContainer.setZ(1.0f);
             mBottomSheet.setBottomMargin(0);
-
         } else {
             // Unscrimmed bottom sheet. Draw the bottom sheet container in its "natural" order; i.e.
             // in the order specified in res_app/layout/main.xml. Draw originating from the top of
             // the bottom controls.
+            mIsAnchoredToBottomControls = true;
             mBottomSheetContainer.setZ(0.0f);
             mBottomSheet.setBottomMargin(mBottomControlsHeight);
         }
@@ -715,7 +735,7 @@ class BottomSheetControllerImpl implements ManagedBottomSheetController, ScrimCo
      * @return Whether the sheet currently supports switching its content.
      */
     private boolean canBottomSheetSwitchContent() {
-        BottomSheetContent currentContent = mBottomSheet.getCurrentSheetContent();
+        BottomSheetContent currentContent = assumeNonNull(mBottomSheet).getCurrentSheetContent();
         if (!mBottomSheet.isSheetOpen()) {
             return true;
         }
@@ -750,17 +770,20 @@ class BottomSheetControllerImpl implements ManagedBottomSheetController, ScrimCo
     }
 
     private void onScrimClicked() {
-        if (!mBottomSheet.isSheetOpen()) return;
+        if (!assumeNonNull(mBottomSheet).isSheetOpen()) return;
         mBottomSheet.setSheetState(
                 mBottomSheet.getMinSwipableSheetState(), true, StateChangeReason.TAP_SCRIM);
     }
 
     void runSheetInitializerForTesting() {
-        mSheetInitializer.run();
+        assumeNonNull(mSheetInitializer).run();
     }
 
     /** Vivaldi **/
     @Override
-    public void swipeWithToolbar() { mBottomSheet.swipeWithToolbar(); }
+    public void swipeWithToolbar() {
+        if(mBottomSheet != null)
+            mBottomSheet.swipeWithToolbar();
+    }
     // End Vivaldi
 }

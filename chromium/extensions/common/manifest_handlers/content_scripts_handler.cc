@@ -9,6 +9,7 @@
 #include <memory>
 
 #include "base/lazy_instance.h"
+#include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/types/optional_util.h"
 #include "extensions/common/api/content_scripts.h"
@@ -164,8 +165,9 @@ bool ContentScriptsInfo::ExtensionHasScriptAtURL(const Extension* extension,
                                                  const GURL& url) {
   for (const std::unique_ptr<UserScript>& script :
        GetContentScripts(extension)) {
-    if (script->MatchesURL(url))
+    if (script->MatchesURL(url)) {
       return true;
+    }
   }
   return false;
 }
@@ -176,8 +178,9 @@ URLPatternSet ContentScriptsInfo::GetScriptableHosts(
   URLPatternSet scriptable_hosts;
   for (const std::unique_ptr<UserScript>& script :
        GetContentScripts(extension)) {
-    for (const URLPattern& pattern : script->url_patterns())
+    for (const URLPattern& pattern : script->url_patterns()) {
       scriptable_hosts.AddPattern(pattern);
+    }
   }
   return scriptable_hosts;
 }
@@ -210,8 +213,22 @@ bool ContentScriptsHandler::Parse(Extension* extension, std::u16string* error) {
         CreateUserScript(std::move(manifest_keys.content_scripts[i]), i,
                          can_execute_script_everywhere,
                          all_urls_includes_chrome_urls, extension, error);
-    if (!user_script)
+    if (!user_script) {
       return false;  // Failed to parse script context definition.
+    }
+
+    std::string mime_type_error;
+    if (!script_parsing::ValidateUserScriptMimeTypesFromFileExtensions(
+            *user_script, &mime_type_error)) {
+      // Issue a warning and ignore this file. This is a warning and not a
+      // hard-error to preserve both backwards compatibility and potential
+      // future-compatibility if mime types change.
+      extension->AddInstallWarning(InstallWarning(
+          base::StringPrintf(manifest_errors::kInvalidUserScriptMimeType,
+                             mime_type_error.c_str()),
+          ContentScriptsKeys::kContentScripts));
+      continue;
+    }
 
     user_script->set_host_id(
         mojom::HostID(mojom::HostID::HostType::kExtensions, extension->id()));

@@ -8,7 +8,7 @@ import("//ui/webui/resources/tools/generate_grd.gni")
 import("//ui/webui/webui_features.gni")
 import("./os_settings.gni")
 
-assert(is_chromeos_ash, "ChromeOS Settings is ChromeOS only")
+assert(is_chromeos, "ChromeOS Settings is ChromeOS only")
 
 nearby_share_tsc_dir =
     "$root_gen_dir/chrome/browser/resources/chromeos/nearby_share/shared/tsc"
@@ -485,7 +485,6 @@ build_webui("build") {
 
   icons_html_files = [
     "app_management_icons.html",
-    "icons.html",
     "os_a11y_page/facegaze_icons.html",
     "os_settings_icons.html",
   ]
@@ -651,6 +650,9 @@ build_webui("build") {
       "/shared/|" + rebase_path(nearby_share_tsc_dir, root_build_dir),
     ]
   }
+
+  # TODO(crbug.com/406583052): Remove when all violations have been fixed.
+  enable_type_aware_eslint_checks = false
 }
 
 # Need to rename gen/ash/webui/personalization_app/search/search.mojom-webui.ts

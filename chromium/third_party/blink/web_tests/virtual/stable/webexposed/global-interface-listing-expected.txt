@@ -118,6 +118,16 @@ interface AnimationTimeline
     getter currentTime
     getter duration
     method constructor
+interface AsyncDisposableStack
+    attribute @@toStringTag
+    getter disposed
+    method Symbol(Symbol.asyncDispose)
+    method adopt
+    method constructor
+    method defer
+    method disposeAsync
+    method move
+    method use
 interface Attr : Node
     attribute @@toStringTag
     getter localName
@@ -1054,6 +1064,7 @@ interface CanvasRenderingContext2D
     getter globalCompositeOperation
     getter imageSmoothingEnabled
     getter imageSmoothingQuality
+    getter lang
     getter letterSpacing
     getter lineCap
     getter lineDashOffset
@@ -1126,6 +1137,7 @@ interface CanvasRenderingContext2D
     setter globalCompositeOperation
     setter imageSmoothingEnabled
     setter imageSmoothingQuality
+    setter lang
     setter letterSpacing
     setter lineCap
     setter lineDashOffset
@@ -1143,8 +1155,16 @@ interface CanvasRenderingContext2D
     setter wordSpacing
 interface CaptureController : EventTarget
     attribute @@toStringTag
+    getter onzoomlevelchange
+    getter zoomLevel
     method constructor
+    method decreaseZoomLevel
+    method forwardWheel
+    method getSupportedZoomLevels
+    method increaseZoomLevel
+    method resetZoomLevel
     method setFocusBehavior
+    setter onzoomlevelchange
 interface CaretPosition
     attribute @@toStringTag
     getter offset
@@ -1219,6 +1239,11 @@ interface CloseWatcher : EventTarget
     method requestClose
     setter oncancel
     setter onclose
+interface CommandEvent : Event
+    attribute @@toStringTag
+    getter command
+    getter source
+    method constructor
 interface Comment : CharacterData
     attribute @@toStringTag
     method constructor
@@ -1649,6 +1674,16 @@ interface DevicePosture : EventTarget
     getter type
     method constructor
     setter onchange
+interface DisposableStack
+    attribute @@toStringTag
+    getter disposed
+    method Symbol(Symbol.dispose)
+    method adopt
+    method constructor
+    method defer
+    method dispose
+    method move
+    method use
 interface Document : Node
     static method parseHTMLUnsafe
     attribute @@toStringTag
@@ -1715,6 +1750,7 @@ interface Document : Node
     getter onchange
     getter onclick
     getter onclose
+    getter oncommand
     getter oncontentvisibilityautostatechange
     getter oncontextlost
     getter oncontextmenu
@@ -1935,6 +1971,7 @@ interface Document : Node
     setter onchange
     setter onclick
     setter onclose
+    setter oncommand
     setter oncontentvisibilityautostatechange
     setter oncontextlost
     setter oncontextmenu
@@ -2119,6 +2156,7 @@ interface EditContext : EventTarget
 interface Element : Node
     attribute @@toStringTag
     attribute @@unscopables
+    getter ariaActiveDescendantElement
     getter ariaAtomic
     getter ariaAutoComplete
     getter ariaBrailleLabel
@@ -2129,15 +2167,21 @@ interface Element : Node
     getter ariaColIndex
     getter ariaColIndexText
     getter ariaColSpan
+    getter ariaControlsElements
     getter ariaCurrent
+    getter ariaDescribedByElements
     getter ariaDescription
+    getter ariaDetailsElements
     getter ariaDisabled
+    getter ariaErrorMessageElements
     getter ariaExpanded
+    getter ariaFlowToElements
     getter ariaHasPopup
     getter ariaHidden
     getter ariaInvalid
     getter ariaKeyShortcuts
     getter ariaLabel
+    getter ariaLabelledByElements
     getter ariaLevel
     getter ariaLive
     getter ariaModal
@@ -2258,6 +2302,7 @@ interface Element : Node
     method webkitMatchesSelector
     method webkitRequestFullScreen
     method webkitRequestFullscreen
+    setter ariaActiveDescendantElement
     setter ariaAtomic
     setter ariaAutoComplete
     setter ariaBrailleLabel
@@ -2268,15 +2313,21 @@ interface Element : Node
     setter ariaColIndex
     setter ariaColIndexText
     setter ariaColSpan
+    setter ariaControlsElements
     setter ariaCurrent
+    setter ariaDescribedByElements
     setter ariaDescription
+    setter ariaDetailsElements
     setter ariaDisabled
+    setter ariaErrorMessageElements
     setter ariaExpanded
+    setter ariaFlowToElements
     setter ariaHasPopup
     setter ariaHidden
     setter ariaInvalid
     setter ariaKeyShortcuts
     setter ariaLabel
+    setter ariaLabelledByElements
     setter ariaLevel
     setter ariaLive
     setter ariaModal
@@ -2322,6 +2373,7 @@ interface Element : Node
     setter slot
 interface ElementInternals
     attribute @@toStringTag
+    getter ariaActiveDescendantElement
     getter ariaAtomic
     getter ariaAutoComplete
     getter ariaBrailleLabel
@@ -2332,15 +2384,21 @@ interface ElementInternals
     getter ariaColIndex
     getter ariaColIndexText
     getter ariaColSpan
+    getter ariaControlsElements
     getter ariaCurrent
+    getter ariaDescribedByElements
     getter ariaDescription
+    getter ariaDetailsElements
     getter ariaDisabled
+    getter ariaErrorMessageElements
     getter ariaExpanded
+    getter ariaFlowToElements
     getter ariaHasPopup
     getter ariaHidden
     getter ariaInvalid
     getter ariaKeyShortcuts
     getter ariaLabel
+    getter ariaLabelledByElements
     getter ariaLevel
     getter ariaLive
     getter ariaModal
@@ -2378,6 +2436,7 @@ interface ElementInternals
     method reportValidity
     method setFormValue
     method setValidity
+    setter ariaActiveDescendantElement
     setter ariaAtomic
     setter ariaAutoComplete
     setter ariaBrailleLabel
@@ -2388,15 +2447,21 @@ interface ElementInternals
     setter ariaColIndex
     setter ariaColIndexText
     setter ariaColSpan
+    setter ariaControlsElements
     setter ariaCurrent
+    setter ariaDescribedByElements
     setter ariaDescription
+    setter ariaDetailsElements
     setter ariaDisabled
+    setter ariaErrorMessageElements
     setter ariaExpanded
+    setter ariaFlowToElements
     setter ariaHasPopup
     setter ariaHidden
     setter ariaInvalid
     setter ariaKeyShortcuts
     setter ariaLabel
+    setter ariaLabelledByElements
     setter ariaLevel
     setter ariaLive
     setter ariaModal
@@ -2505,6 +2570,7 @@ interface EventTarget
     method constructor
     method dispatchEvent
     method removeEventListener
+    method when
 interface External
     attribute @@toStringTag
     method AddSearchProvider
@@ -2538,6 +2604,10 @@ interface FencedFrameConfig
     attribute @@toStringTag
     method constructor
     method setSharedStorageContext
+interface FetchLaterResult
+    attribute @@toStringTag
+    getter activated
+    method constructor
 interface File : Blob
     attribute @@toStringTag
     getter lastModified
@@ -2615,6 +2685,9 @@ interface FileSystemWritableFileStream : WritableStream
     method seek
     method truncate
     method write
+interface Float16Array : TypedArray
+    attribute BYTES_PER_ELEMENT
+    method constructor
 interface FocusEvent : UIEvent
     attribute @@toStringTag
     getter relatedTarget
@@ -2701,6 +2774,7 @@ interface GPUAdapterInfo
     getter architecture
     getter description
     getter device
+    getter isFallbackAdapter
     getter subgroupMaxSize
     getter subgroupMinSize
     getter vendor
@@ -2957,7 +3031,6 @@ interface GPUSupportedLimits
     getter maxComputeWorkgroupsPerDimension
     getter maxDynamicStorageBuffersPerPipelineLayout
     getter maxDynamicUniformBuffersPerPipelineLayout
-    getter maxInterStageShaderComponents
     getter maxInterStageShaderVariables
     getter maxSampledTexturesPerShaderStage
     getter maxSamplersPerShaderStage
@@ -3297,6 +3370,8 @@ interface HTMLBodyElement : HTMLElement
     setter vLink
 interface HTMLButtonElement : HTMLElement
     attribute @@toStringTag
+    getter command
+    getter commandForElement
     getter disabled
     getter form
     getter formAction
@@ -3317,6 +3392,8 @@ interface HTMLButtonElement : HTMLElement
     method constructor
     method reportValidity
     method setCustomValidity
+    setter command
+    setter commandForElement
     setter disabled
     setter formAction
     setter formEnctype
@@ -3434,6 +3511,7 @@ interface HTMLElement : Element
     getter onchange
     getter onclick
     getter onclose
+    getter oncommand
     getter oncontentvisibilityautostatechange
     getter oncontextlost
     getter oncontextmenu
@@ -3569,6 +3647,7 @@ interface HTMLElement : Element
     setter onchange
     setter onclick
     setter onclose
+    setter oncommand
     setter oncontentvisibilityautostatechange
     setter oncontextlost
     setter oncontextmenu
@@ -4500,6 +4579,9 @@ interface HTMLSelectElement : HTMLElement
     setter selectedIndex
     setter size
     setter value
+interface HTMLSelectedContentElement : HTMLElement
+    attribute @@toStringTag
+    method constructor
 interface HTMLSlotElement : HTMLElement
     attribute @@toStringTag
     getter name
@@ -4993,6 +5075,7 @@ interface IIRFilterNode : AudioNode
 interface IdentityCredential : Credential
     static method disconnect
     attribute @@toStringTag
+    getter configURL
     getter isAutoSelected
     getter token
     method constructor
@@ -5355,6 +5438,7 @@ interface MathMLElement : Element
     getter onchange
     getter onclick
     getter onclose
+    getter oncommand
     getter oncontentvisibilityautostatechange
     getter oncontextlost
     getter oncontextmenu
@@ -5466,6 +5550,7 @@ interface MathMLElement : Element
     setter onchange
     setter onclick
     setter onclose
+    setter oncommand
     setter oncontentvisibilityautostatechange
     setter oncontextlost
     setter oncontextmenu
@@ -5932,7 +6017,6 @@ interface NamedNodeMap
 interface NavigateEvent : Event
     attribute @@toStringTag
     getter canIntercept
-    getter canTransition
     getter destination
     getter downloadRequest
     getter formData
@@ -5941,6 +6025,7 @@ interface NavigateEvent : Event
     getter info
     getter navigationType
     getter signal
+    getter sourceElement
     getter userInitiated
     method constructor
     method intercept
@@ -6242,6 +6327,29 @@ interface OTPCredential : Credential
     attribute @@toStringTag
     getter code
     method constructor
+interface Observable
+    static method from
+    attribute @@toStringTag
+    method catch
+    method constructor
+    method drop
+    method every
+    method filter
+    method finally
+    method find
+    method first
+    method flatMap
+    method forEach
+    method inspect
+    method last
+    method map
+    method reduce
+    method some
+    method subscribe
+    method switchMap
+    method take
+    method takeUntil
+    method toArray
 interface OfflineAudioCompletionEvent : Event
     attribute @@toStringTag
     getter renderedBuffer
@@ -6283,6 +6391,7 @@ interface OffscreenCanvasRenderingContext2D
     getter globalCompositeOperation
     getter imageSmoothingEnabled
     getter imageSmoothingQuality
+    getter lang
     getter letterSpacing
     getter lineCap
     getter lineDashOffset
@@ -6354,6 +6463,7 @@ interface OffscreenCanvasRenderingContext2D
     setter globalCompositeOperation
     setter imageSmoothingEnabled
     setter imageSmoothingQuality
+    setter lang
     setter letterSpacing
     setter lineCap
     setter lineDashOffset
@@ -7390,8 +7500,12 @@ interface RestrictionTarget
 interface SVGAElement : SVGGraphicsElement
     attribute @@toStringTag
     getter href
+    getter rel
+    getter relList
     getter target
     method constructor
+    setter rel
+    setter relList
 interface SVGAngle
     attribute @@toStringTag
     attribute SVG_ANGLETYPE_DEG
@@ -7558,6 +7672,7 @@ interface SVGElement : Element
     getter onchange
     getter onclick
     getter onclose
+    getter oncommand
     getter oncontentvisibilityautostatechange
     getter oncontextlost
     getter oncontextmenu
@@ -7671,6 +7786,7 @@ interface SVGElement : Element
     setter onchange
     setter onclick
     setter onclose
+    setter oncommand
     setter oncontentvisibilityautostatechange
     setter oncontextlost
     setter oncontextmenu
@@ -9000,6 +9116,15 @@ interface SubmitEvent : Event
     attribute @@toStringTag
     getter submitter
     method constructor
+interface Subscriber
+    attribute @@toStringTag
+    getter active
+    getter signal
+    method addTeardown
+    method complete
+    method constructor
+    method error
+    method next
 interface SubtleCrypto
     attribute @@toStringTag
     method constructor
@@ -9015,6 +9140,10 @@ interface SubtleCrypto
     method unwrapKey
     method verify
     method wrapKey
+interface SuppressedError : Error
+    attribute message
+    attribute name
+    method constructor
 interface SyncManager
     attribute @@toStringTag
     method constructor
@@ -11440,7 +11569,6 @@ interface XRSystem : EventTarget
     method constructor
     method isSessionSupported
     method requestSession
-    method supportsSession
     setter ondevicechange
 interface XRTransientInputHitTestResult
     attribute @@toStringTag
@@ -11870,6 +11998,7 @@ namespace console
     getter onchange
     getter onclick
     getter onclose
+    getter oncommand
     getter oncontentvisibilityautostatechange
     getter oncontextlost
     getter oncontextmenu
@@ -12019,6 +12148,7 @@ namespace console
     method confirm
     method createImageBitmap
     method fetch
+    method fetchLater
     method find
     method focus
     method gc
@@ -12029,7 +12159,6 @@ namespace console
     method moveBy
     method moveTo
     method open
-    method openDatabase
     method postMessage
     method print
     method prompt
@@ -12090,6 +12219,7 @@ namespace console
     setter onchange
     setter onclick
     setter onclose
+    setter oncommand
     setter oncontentvisibilityautostatechange
     setter oncontextlost
     setter oncontextmenu

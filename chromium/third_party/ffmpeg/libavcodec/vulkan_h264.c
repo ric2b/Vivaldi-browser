@@ -24,6 +24,7 @@
 const FFVulkanDecodeDescriptor ff_vk_dec_h264_desc = {
     .codec_id         = AV_CODEC_ID_H264,
     .decode_extension = FF_VK_EXT_VIDEO_DECODE_H264,
+    .queue_flags      = VK_QUEUE_VIDEO_DECODE_BIT_KHR,
     .decode_op        = VK_VIDEO_CODEC_OPERATION_DECODE_H264_BIT_KHR,
     .ext_props = {
         .extensionName = VK_STD_VULKAN_VIDEO_CODEC_H264_DECODE_EXTENSION_NAME,
@@ -541,7 +542,7 @@ static int vk_h264_end_frame(AVCodecContext *avctx)
     return ff_vk_decode_frame(avctx, pic->f, vp, rav, rvp);
 }
 
-static void vk_h264_free_frame_priv(FFRefStructOpaque _hwctx, void *data)
+static void vk_h264_free_frame_priv(AVRefStructOpaque _hwctx, void *data)
 {
     AVHWDeviceContext *hwctx = _hwctx.nc;
     H264VulkanDecodePicture *hp = data;

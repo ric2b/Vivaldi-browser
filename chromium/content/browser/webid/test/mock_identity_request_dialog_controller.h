@@ -29,7 +29,7 @@ class MockIdentityRequestDialogController
 
   MOCK_METHOD(bool,
               ShowAccountsDialog,
-              (const std::string&,
+              (content::RelyingPartyData,
                const std::vector<IdentityProviderDataPtr>&,
                const std::vector<IdentityRequestAccountPtr>&,
                IdentityRequestAccount::SignInMode,
@@ -75,6 +75,7 @@ class MockIdentityRequestDialogController
               (const GURL&, blink::mojom::RpMode rp_mode, DismissCallback),
               (override));
   MOCK_METHOD(void, CloseModalDialog, (), (override));
+  MOCK_METHOD(void, NotifyAutofillSourceReadyForTesting, (), (override));
 
   // Request the IdP Registration permission.
   MOCK_METHOD(void,

@@ -181,17 +181,9 @@ COMPONENT_EXPORT(ASH_CONSTANTS) extern const char kEnterpriseDisableArc[];
 COMPONENT_EXPORT(ASH_CONSTANTS)
 extern const char kEnterpriseForceManualEnrollmentInTestBuilds[];
 COMPONENT_EXPORT(ASH_CONSTANTS)
-extern const char kEnterpriseEnableForcedReEnrollment[];
-COMPONENT_EXPORT(ASH_CONSTANTS)
 extern const char kEnterpriseEnableForcedReEnrollmentOnFlex[];
 COMPONENT_EXPORT(ASH_CONSTANTS)
 extern const char kEnterpriseEnableUnifiedStateDetermination[];
-COMPONENT_EXPORT(ASH_CONSTANTS)
-extern const char kEnterpriseEnableInitialEnrollment[];
-COMPONENT_EXPORT(ASH_CONSTANTS)
-extern const char kEnterpriseEnrollmentInitialModulus[];
-COMPONENT_EXPORT(ASH_CONSTANTS)
-extern const char kEnterpriseEnrollmentModulusLimit[];
 COMPONENT_EXPORT(ASH_CONSTANTS)
 extern const char kDisallowPolicyBlockDevMode[];
 COMPONENT_EXPORT(ASH_CONSTANTS)
@@ -266,7 +258,6 @@ COMPONENT_EXPORT(ASH_CONSTANTS)
 extern const char kBrowserDataBackwardMigrationForUser[];
 COMPONENT_EXPORT(ASH_CONSTANTS)
 extern const char kBrowserDataBackwardMigrationMode[];
-COMPONENT_EXPORT(ASH_CONSTANTS) extern const char kCoralFeatureKey[];
 COMPONENT_EXPORT(ASH_CONSTANTS) extern const char kMantisFeatureKey[];
 COMPONENT_EXPORT(ASH_CONSTANTS)
 extern const char kForceBrowserDataBackwardMigration[];
@@ -322,6 +313,12 @@ COMPONENT_EXPORT(ASH_CONSTANTS) extern const char kRlzPingDelay[];
 COMPONENT_EXPORT(ASH_CONSTANTS) extern const char kRmaNotAllowed[];
 COMPONENT_EXPORT(ASH_CONSTANTS) extern const char kSafeMode[];
 COMPONENT_EXPORT(ASH_CONSTANTS) extern const char kSamlPasswordChangeUrl[];
+COMPONENT_EXPORT(ASH_CONSTANTS)
+extern const char kScannerDisclaimerDebugOverride[];
+COMPONENT_EXPORT(ASH_CONSTANTS)
+extern const char kScannerDisclaimerDebugOverrideReminder[];
+COMPONENT_EXPORT(ASH_CONSTANTS)
+extern const char kScannerDisclaimerDebugOverrideFull[];
 COMPONENT_EXPORT(ASH_CONSTANTS) extern const char kScannerUpdateKey[];
 COMPONENT_EXPORT(ASH_CONSTANTS) extern const char kSealKey[];
 COMPONENT_EXPORT(ASH_CONSTANTS)

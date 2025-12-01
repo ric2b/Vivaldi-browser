@@ -14,6 +14,7 @@
 #include "base/memory/raw_ptr.h"
 #include "base/memory/raw_ref.h"
 #include "base/memory/ref_counted.h"
+#include "base/memory/safe_ref.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/sequence_checker.h"
@@ -50,7 +51,6 @@ class OnDeviceModelAccessController;
 class OnDeviceModelAdaptationMetadata;
 class OnDeviceModelComponentStateManager;
 class OnDeviceModelMetadata;
-class ModelQualityLogsUploaderService;
 class OnDeviceModelAdaptationController;
 
 // Controls the lifetime of the on-device model service, loading and unloading
@@ -83,8 +83,6 @@ class OnDeviceModelServiceController
       ModelBasedCapabilityKey feature,
       ExecuteRemoteFn execute_remote_fn,
       base::WeakPtr<OptimizationGuideLogger> logger,
-      base::WeakPtr<ModelQualityLogsUploaderService>
-          model_quality_uploader_service,
       const std::optional<SessionConfigParams>& config_params);
 
   // Starts the service and executes a benchmark to determine the performance
@@ -113,9 +111,6 @@ class OnDeviceModelServiceController
       ModelBasedCapabilityKey feature,
       std::unique_ptr<OnDeviceModelAdaptationMetadata> adaptation_metadata);
 
-  // Called when the model adaptation remote is disconnected.
-  void OnModelAdaptationRemoteDisconnected();
-
   // Add/remove observers for notifying on-device model availability changes.
   void AddOnDeviceModelAvailabilityChangeObserver(
       ModelBasedCapabilityKey feature,
@@ -123,6 +118,9 @@ class OnDeviceModelServiceController
   void RemoveOnDeviceModelAvailabilityChangeObserver(
       ModelBasedCapabilityKey feature,
       OnDeviceModelAvailabilityObserver* observer);
+
+  // Calls `callback` with the capabilities of the current model.
+  on_device_model::Capabilities GetCapabilities();
 
   base::WeakPtr<OnDeviceModelServiceController> GetWeakPtr() {
     return weak_ptr_factory_.GetWeakPtr();
@@ -139,10 +137,61 @@ class OnDeviceModelServiceController
   }
 
   mojo::Remote<on_device_model::mojom::OnDeviceModel>& base_model_remote() {
-    return base_model_remote_;
+    return base_model_controller_->remote();
   }
 
  private:
+  class BaseModelController final {
+   public:
+    explicit BaseModelController(
+        base::SafeRef<OnDeviceModelServiceController> controller,
+        std::unique_ptr<OnDeviceModelMetadata> model_metadata);
+    ~BaseModelController();
+
+    // Ensures the service is running and base model remote is created.
+    // TODO(holte): Don't take paths as an argument.
+    mojo::Remote<on_device_model::mojom::OnDeviceModel>& GetOrCreateRemote(
+        const on_device_model::ModelAssetPaths& model_paths);
+
+    // Return the remote for direct use by the feature, adjusting idle timeout.
+    mojo::Remote<on_device_model::mojom::OnDeviceModel>& DirectUse();
+
+    on_device_model::ModelAssetPaths PopulateModelPaths();
+
+    // TODO(holte): Eliminate this accessor
+    mojo::Remote<on_device_model::mojom::OnDeviceModel>& remote() {
+      return remote_;
+    }
+
+    OnDeviceModelMetadata* model_metadata() { return model_metadata_.get(); }
+
+   private:
+    OnDeviceModelAccessController& access_controller() {
+      return *controller_->access_controller_;
+    }
+
+    // Called when the model assets have been loaded from disk and are ready to
+    // be sent to the service.
+    void OnModelAssetsLoaded(
+        mojo::PendingReceiver<on_device_model::mojom::OnDeviceModel> model,
+        on_device_model::ModelAssets assets);
+
+    // Called when the base model is disconnected unexpectedly.
+    void OnDisconnect();
+
+    // Begins the on-device model validation flow.
+    void StartValidation();
+
+    // Called when validation has finished or failed.
+    void FinishValidation(OnDeviceModelValidationResult result);
+
+    base::SafeRef<OnDeviceModelServiceController> controller_;
+    std::unique_ptr<OnDeviceModelMetadata> model_metadata_;
+    std::unique_ptr<OnDeviceModelValidator> model_validator_;
+    mojo::Remote<on_device_model::mojom::OnDeviceModel> remote_;
+    base::WeakPtrFactory<BaseModelController> weak_ptr_factory_{this};
+  };
+
   class OnDeviceModelClient final : public OnDeviceOptions::Client {
    public:
     OnDeviceModelClient(
@@ -154,8 +203,9 @@ class OnDeviceModelServiceController
     ~OnDeviceModelClient() override;
     std::unique_ptr<OnDeviceOptions::Client> Clone() const override;
     bool ShouldUse() override;
-    mojo::Remote<on_device_model::mojom::OnDeviceModel>& GetModelRemote()
-        override;
+    void StartSession(
+        mojo::PendingReceiver<on_device_model::mojom::Session> pending,
+        on_device_model::mojom::SessionParamsPtr params) override;
     void OnResponseCompleted() override;
 
    private:
@@ -166,14 +216,8 @@ class OnDeviceModelServiceController
     // Model adaptation assets are populated when it was required.
     std::optional<on_device_model::AdaptationAssetPaths> adaptation_assets_;
   };
-  friend class ChromeOnDeviceModelServiceController;
-  friend class FakeOnDeviceModelServiceController;
   friend class OnDeviceModelAdaptationController;
   friend class OnDeviceModelClient;
-  friend class OnDeviceModelExecutionEnabledBrowserTest;
-  friend class OnDeviceModelServiceAdaptationControllerTest;
-  friend class OnDeviceModelServiceControllerIOS;
-  friend class OnDeviceModelServiceControllerTest;
   friend class base::RefCounted<OnDeviceModelServiceController>;
 
   // Ensures the service is running and provides a remote for the model.
@@ -183,32 +227,8 @@ class OnDeviceModelServiceController
       base::optional_ref<const on_device_model::AdaptationAssetPaths>
           adaptation_assets);
 
-  // Ensures the service is running and base model remote is created.
-  void MaybeCreateBaseModelRemote(
-      const on_device_model::ModelAssetPaths& model_paths);
-
-  // Called when the model assets have been loaded from disk and are ready to be
-  // sent to the service.
-  void OnModelAssetsLoaded(
-      mojo::PendingReceiver<on_device_model::mojom::OnDeviceModel> model,
-      on_device_model::ModelAssets assets);
-
   // Called when the service disconnects unexpectedly.
   void OnServiceDisconnected(on_device_model::ServiceDisconnectReason reason);
-
-  // Called when disconnected from the model.
-  void OnBaseModelDisconnected();
-
-  // Called when `base_model_remote_` is idle.
-  void OnBaseModelRemoteIdle();
-
-  // Begins the on-device model validation flow.
-  void StartValidation();
-
-  // Called when validation has finished or failed.
-  void FinishValidation(OnDeviceModelValidationResult result);
-
-  on_device_model::ModelAssetPaths PopulateModelPaths();
 
   // Called to update model availability for all features.
   void NotifyModelAvailabilityChanges();
@@ -222,11 +242,8 @@ class OnDeviceModelServiceController
   base::WeakPtr<OnDeviceModelComponentStateManager>
       on_device_component_state_manager_;
 
-  std::unique_ptr<OnDeviceModelMetadata> model_metadata_;
   on_device_model::ServiceClient service_client_;
   SafetyClient safety_client_;
-
-  mojo::Remote<on_device_model::mojom::OnDeviceModel> base_model_remote_;
 
   // Maintains the live model adaptation controllers per feature. Created when
   // model adaptation is needed for a feature, and removed when adaptation
@@ -240,17 +257,13 @@ class OnDeviceModelServiceController
   base::flat_map<ModelBasedCapabilityKey, OnDeviceModelAdaptationMetadata>
       model_adaptation_metadata_;
 
-  std::unique_ptr<OnDeviceModelValidator> model_validator_;
-
   std::map<ModelBasedCapabilityKey,
            base::ObserverList<OnDeviceModelAvailabilityObserver>>
       model_availability_change_observers_;
 
   SEQUENCE_CHECKER(sequence_checker_);
 
-  // Used to get weak pointers that are reset if the base model is updated.
-  base::WeakPtrFactory<OnDeviceModelServiceController>
-      base_model_scoped_weak_ptr_factory_{this};
+  std::optional<BaseModelController> base_model_controller_;
 
   // Used to get `weak_ptr_` to self.
   base::WeakPtrFactory<OnDeviceModelServiceController> weak_ptr_factory_{this};

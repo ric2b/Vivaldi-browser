@@ -9,7 +9,7 @@ import {
   PAUSE_INDICATOR_SELECTOR,
 } from 'test/e2e/helpers/sources-helpers';
 import {
-  clickElement,
+  click,
   getBrowserAndPages,
   getPendingEvents,
   installEventListener,
@@ -39,13 +39,14 @@ describe('LinearMemoryInspector', () => {
     await waitForFunction(async () => ((await getPendingEvents(frontend, 'DevTools.DebuggerPaused')) || []).length > 0);
 
     const stopped = await waitFor(PAUSE_INDICATOR_SELECTOR);
-    const stoppedText = await waitForFunction(async () => stopped.evaluate(node => node.textContent));
+    const stoppedText = await waitForFunction(async () => await stopped.evaluate(node => node.textContent));
 
-    assert.equal(stoppedText, 'Paused on breakpoint');
+    assert.strictEqual(stoppedText, 'Paused on breakpoint');
 
     const localVariable = await waitFor('[data-object-property-name-for-test="d"]');
-    const memIcon = await waitFor('[title="Open in Memory inspector panel"]', localVariable);
-    await clickElement(memIcon);
+    await click('[title="Open in Memory inspector panel"]', {
+      root: localVariable,
+    });
 
     const byteHighlights = await waitForMany('.byte-cell.highlight-area', 8);
     const byteHighlightText = await Promise.all(byteHighlights.map(cell => cell.evaluate(cell => cell.textContent)));

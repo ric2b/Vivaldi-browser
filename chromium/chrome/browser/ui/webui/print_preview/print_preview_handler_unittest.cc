@@ -81,7 +81,6 @@
 
 #if BUILDFLAG(IS_CHROMEOS)
 #include "chrome/browser/ash/crosapi/crosapi_manager.h"
-#include "chrome/browser/ash/crosapi/idle_service_ash.h"
 #include "chrome/browser/ash/crosapi/test_local_printer_ash.h"
 #include "chromeos/ash/components/login/login_state/login_state.h"
 #include "chromeos/crosapi/mojom/local_printer.mojom.h"
@@ -176,17 +175,14 @@ base::Value::List ConstructPreviewArgs(std::string_view callback_id,
 
 UserActionBuckets GetUserActionForPrinterType(mojom::PrinterType type) {
   switch (type) {
-    case mojom::PrinterType::kPrivetDeprecated:
-      NOTREACHED();
     case mojom::PrinterType::kExtension:
       return UserActionBuckets::kPrintWithExtension;
     case mojom::PrinterType::kPdf:
       return UserActionBuckets::kPrintToPdf;
     case mojom::PrinterType::kLocal:
       return UserActionBuckets::kPrintToPrinter;
-    case mojom::PrinterType::kCloudDeprecated:
-      NOTREACHED();
   }
+  NOTREACHED();
 }
 
 // Checks whether |histograms| was updated correctly by a job with a printer
@@ -426,7 +422,6 @@ class PrintPreviewHandlerTest : public testing::Test {
 #endif
 #if BUILDFLAG(IS_CHROMEOS)
     local_printer_ = std::make_unique<TestLocalPrinterAsh>(&profile_, nullptr);
-    crosapi::IdleServiceAsh::DisableForTesting();
     ash::LoginState::Initialize();
     manager_ = std::make_unique<crosapi::CrosapiManager>();
 #endif
@@ -1489,8 +1484,7 @@ class ContentAnalysisPrintPreviewHandlerTest
 
 TEST_P(ContentAnalysisPrintPreviewHandlerTest, LocalScanBeforePrinting) {
   TestingProfile* main_profile =
-      testing_profile_manager()->CreateTestingProfile("Main Profile",
-                                                      /*is_main_profile=*/true);
+      testing_profile_manager()->CreateTestingProfile("Main Profile");
   SetProfileForInitialSettings(main_profile);
   Initialize();
 

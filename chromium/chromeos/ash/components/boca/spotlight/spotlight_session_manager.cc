@@ -15,18 +15,22 @@
 #include "chromeos/ash/components/boca/proto/session.pb.h"
 #include "chromeos/ash/components/boca/session_api/constants.h"
 #include "chromeos/ash/components/boca/spotlight/spotlight_crd_manager.h"
+#include "chromeos/ash/components/boca/spotlight/spotlight_notification_handler.h"
 #include "chromeos/ash/components/boca/spotlight/spotlight_service.h"
 
 namespace ash::boca {
 
 SpotlightSessionManager::SpotlightSessionManager(
     std::unique_ptr<SpotlightCrdManager> spotlight_crd_manager)
-    : spotlight_service_(std::make_unique<SpotlightService>()),
+    : notification_handler_(std::make_unique<SpotlightNotificationHandler>()),
+      spotlight_service_(std::make_unique<SpotlightService>()),
       spotlight_crd_manager_(std::move(spotlight_crd_manager)) {}
 SpotlightSessionManager::SpotlightSessionManager(
+    std::unique_ptr<SpotlightNotificationHandler> notification_handler,
     std::unique_ptr<SpotlightCrdManager> spotlight_crd_manager,
     std::unique_ptr<SpotlightService> spotlight_service)
-    : spotlight_service_(std::move(spotlight_service)),
+    : notification_handler_(std::move(notification_handler)),
+      spotlight_service_(std::move(spotlight_service)),
       spotlight_crd_manager_(std::move(spotlight_crd_manager)) {
   CHECK_IS_TEST();
 }
@@ -52,8 +56,7 @@ void SpotlightSessionManager::OnConsumerActivityUpdated(
     const std::map<std::string, ::boca::StudentStatus>& activities) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
-  if (!ash::features::IsBocaSpotlightEnabled() || !in_session_ ||
-      request_in_progress_) {
+  if (!ash::features::IsBocaSpotlightEnabled() || !in_session_) {
     return;
   }
   auto student_status = activities.find(BocaAppClient::Get()
@@ -72,25 +75,37 @@ void SpotlightSessionManager::OnConsumerActivityUpdated(
 
   if (device->second.has_view_screen_config()) {
     if (device->second.view_screen_config().view_screen_state() ==
-        ::boca::ViewScreenConfig::REQUESTED) {
+            ::boca::ViewScreenConfig::REQUESTED &&
+        !request_in_progress_) {
       request_in_progress_ = true;
       spotlight_crd_manager_->InitiateSpotlightSession(
           base::BindOnce(&SpotlightSessionManager::OnConnectionCodeReceived,
                          weak_ptr_factory_.GetWeakPtr()));
+    } else if (device->second.view_screen_config().view_screen_state() ==
+                   ::boca::ViewScreenConfig::INACTIVE &&
+               request_in_progress_) {
+      notification_handler_->StopSpotlightCountdown();
+      request_in_progress_ = false;
     }
   }
 }
 
 void SpotlightSessionManager::OnConnectionCodeReceived(
-    std::optional<std::string> connection_code) {
-  if (!connection_code.has_value()) {
-    LOG(WARNING) << "[Boca]Failed to generate Spotlight connection code.";
-    return;
-  }
+    const std::string& connection_code) {
+  CHECK(spotlight_service_);
+  notification_handler_->StartSpotlightCountdownNotification();
 
+  spotlight_service_->RegisterScreen(
+      connection_code, BocaAppClient::Get()->GetSchoolToolsServerBaseUrl(),
+      base::BindOnce(&SpotlightSessionManager::OnRegisterScreenRequestSent,
+                     weak_ptr_factory_.GetWeakPtr()));
+}
+
+void SpotlightSessionManager::RegisterStudentScreen(
+    const std::string& connection_code) {
   CHECK(spotlight_service_);
   spotlight_service_->RegisterScreen(
-      connection_code.value(), kSchoolToolsApiBaseUrl,
+      connection_code, BocaAppClient::Get()->GetSchoolToolsServerBaseUrl(),
       base::BindOnce(&SpotlightSessionManager::OnRegisterScreenRequestSent,
                      weak_ptr_factory_.GetWeakPtr()));
 }

@@ -25,6 +25,7 @@ import org.chromium.base.ContextUtils;
 import org.chromium.base.IntentUtils;
 import org.chromium.base.Log;
 import org.chromium.base.PackageManagerUtils;
+import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.base.supplier.ObservableSupplierImpl;
@@ -33,7 +34,6 @@ import org.chromium.chrome.browser.IntentHandler;
 import org.chromium.chrome.browser.back_press.MinimizeAppAndCloseTabBackPressHandler;
 import org.chromium.chrome.browser.back_press.MinimizeAppAndCloseTabBackPressHandler.MinimizeAppAndCloseTabType;
 import org.chromium.chrome.browser.browserservices.intents.BrowserServicesIntentDataProvider;
-import org.chromium.chrome.browser.crash.ChromePureJavaExceptionReporter;
 import org.chromium.chrome.browser.customtabs.CloseButtonNavigator;
 import org.chromium.chrome.browser.customtabs.CustomTabObserver;
 import org.chromium.chrome.browser.document.ChromeLauncherActivity;
@@ -236,26 +236,16 @@ public class CustomTabActivityNavigationController
         RecordUserAction.record("CustomTabs.SystemBack");
         if (mTabProvider.getTab() == null) return false;
 
-        if (ChromeFeatureList.isEnabled(ChromeFeatureList.CCT_BEFORE_UNLOAD)
-                && mTabController.onlyOneTabRemaining()) {
+        if (mTabController.onlyOneTabRemaining()) {
             finishActivity(separateTask);
             return true;
         }
 
-        if (mTabController.dispatchBeforeUnloadIfNeeded()) {
-            MinimizeAppAndCloseTabBackPressHandler.record(MinimizeAppAndCloseTabType.CLOSE_TAB);
-            MinimizeAppAndCloseTabBackPressHandler.recordForCustomTab(
-                    MinimizeAppAndCloseTabType.CLOSE_TAB, separateTask);
-            return true;
-        }
-        if (mTabController.onlyOneTabRemaining()) {
-            finishActivity(separateTask);
-        } else {
-            MinimizeAppAndCloseTabBackPressHandler.record(MinimizeAppAndCloseTabType.CLOSE_TAB);
-            MinimizeAppAndCloseTabBackPressHandler.recordForCustomTab(
-                    MinimizeAppAndCloseTabType.CLOSE_TAB, separateTask);
-            mTabController.closeTab();
-        }
+        MinimizeAppAndCloseTabBackPressHandler.record(MinimizeAppAndCloseTabType.CLOSE_TAB);
+        MinimizeAppAndCloseTabBackPressHandler.recordForCustomTab(
+                MinimizeAppAndCloseTabType.CLOSE_TAB, separateTask);
+
+        if (!mTabController.dispatchBeforeUnloadIfNeeded()) mTabController.closeTab();
 
         return true;
     }
@@ -308,7 +298,11 @@ public class CustomTabActivityNavigationController
         Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
         intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
         intent.putExtra(IntentHandler.EXTRA_FROM_OPEN_IN_BROWSER, true);
-
+        // Vivaldi
+        // NOTE(jarle@vivaldi.com): Always open custom tab URL in Vivaldi.
+        if (BuildConfig.IS_VIVALDI) {
+            intent.setPackage(ContextUtils.getApplicationContext().getPackageName());
+        } else {
         ResolveInfo resolveInfo = PackageManagerUtils.resolveDefaultWebBrowserActivity();
         if (resolveInfo != null) {
             intent.setPackage(resolveInfo.activityInfo.packageName);
@@ -317,6 +311,7 @@ public class CustomTabActivityNavigationController
                 intent.setPackage(null);
             }
         }
+        } // Vivaldi
 
         boolean isOffTheRecord = mIntentDataProvider.isOffTheRecord();
         boolean willChromeHandleIntent = mIntentDataProvider.isOpenedByChrome();
@@ -368,16 +363,10 @@ public class CustomTabActivityNavigationController
                                 R.string.custom_tab_cant_perform_action_toast,
                                 Toast.LENGTH_LONG)
                         .show();
-                // Silently crash to investigate https://crbug.com/384992232
+                // TODO(crbug.com/384992232): Clean up the histogram.
                 boolean isPdf = tab.isNativePage() && tab.getNativePage().isPdf();
-                String logMessage =
-                        "This is not a crash. The intent to open the URL currently being"
-                                + " displayed in the Custom Tab in the regular browser can not be"
-                                + " resolved by any Activity on the system. intent.getPackage() = "
-                                + intent.getPackage()
-                                + " isPdf = "
-                                + isPdf;
-                ChromePureJavaExceptionReporter.reportJavaException(new Throwable(logMessage));
+                RecordHistogram.recordBooleanHistogram(
+                        "Android.CustomTab.CannotOpenUrlInBrowser.IsPdf", isPdf);
             }
         }
         return true;

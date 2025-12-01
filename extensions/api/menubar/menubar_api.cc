@@ -20,6 +20,7 @@
 #include "ui/vivaldi_browser_window.h"
 #include "extensions/schema/menubar.h"
 #include "extensions/tools/vivaldi_tools.h"
+#include "extensions/vivaldi_browser_component_wrapper.h"
 #include "ui/vivaldi_main_menu.h"
 
 #include <map>
@@ -211,12 +212,7 @@ bool MenubarAPI::GetIsSupportedInSettings(int id) {
 // items in the Help menu enabled.
 // static
 bool MenubarAPI::HasActiveWindow() {
-  for (Browser* browser : *BrowserList::GetInstance()) {
-    if (browser->window() && browser->window()->IsActive()) {
-      return true;
-    }
-  }
-  return false;
+  return VivaldiBrowserComponentWrapper::GetInstance()->BrowserListHasActive();
 }
 
 // static
@@ -229,7 +225,9 @@ bool MenubarAPI::HandleActionById(content::BrowserContext* browser_context,
     return false;
   }
 
-  VivaldiBrowserWindow* window = VivaldiBrowserWindow::FromId(window_id);
+  VivaldiBrowserWindow* window =
+      VivaldiBrowserComponentWrapper::GetInstance()->
+          VivaldiBrowserWindowFromId(window_id);
   if (window) {
     // VB-107552. Ping renderer code with a message telling
     // user input happens. A blocking blocking menu event loop will prevent
@@ -252,9 +250,10 @@ bool MenubarAPI::HandleActionById(content::BrowserContext* browser_context,
 }
 
 ExtensionFunction::ResponseAction MenubarGetHasWindowsFunction::Run() {
+  int count = VivaldiBrowserComponentWrapper::GetInstance()->
+      BrowserListGetCount();
   return RespondNow(
-    ArgumentList(vivaldi::menubar::GetHasWindows::Results::Create(
-        BrowserList::GetInstance()->size() > 0)));
+    ArgumentList(vivaldi::menubar::GetHasWindows::Results::Create(count > 0)));
 }
 
 ExtensionFunction::ResponseAction MenubarSetupFunction::Run() {
@@ -263,11 +262,8 @@ ExtensionFunction::ResponseAction MenubarSetupFunction::Run() {
 
   // Set up map based on the incoming actions and update id to match this map.
   if (SetIds(params->items, true)) {
-    for (Browser* browser : *BrowserList::GetInstance()) {
-      chrome::BrowserCommandController* command_controller =
-          browser->command_controller();
-      command_controller->InitVivaldiCommandState();
-    }
+    VivaldiBrowserComponentWrapper::GetInstance()->
+        BrowserListInitVivaldiCommandState();
   }
 
 #if BUILDFLAG(IS_MAC)

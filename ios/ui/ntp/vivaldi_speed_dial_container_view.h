@@ -41,6 +41,8 @@
 - (void)reloadLayoutWithStyle:(VivaldiStartPageLayoutStyle)style
                  layoutColumn:(VivaldiStartPageLayoutColumn)column;
 
+- (void)visibleCellDidChange;
+
 @end
 
 #endif  // IOS_UI_NTP_VIVALDI_SPEED_DIAL_CONTAINER_VIEW_H_

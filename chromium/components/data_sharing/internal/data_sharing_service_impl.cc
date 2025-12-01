@@ -11,6 +11,7 @@
 #include "base/files/file_util.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback.h"
+#include "base/metrics/histogram_functions_internal_overloads.h"
 #include "base/notimplemented.h"
 #include "base/notreached.h"
 #include "base/observer_list.h"
@@ -20,6 +21,7 @@
 #include "components/data_sharing/internal/collaboration_group_sync_bridge.h"
 #include "components/data_sharing/internal/data_sharing_network_loader_impl.h"
 #include "components/data_sharing/internal/group_data_proto_utils.h"
+#include "components/data_sharing/internal/logger_impl.h"
 #include "components/data_sharing/public/data_sharing_sdk_delegate.h"
 #include "components/data_sharing/public/data_sharing_service.h"
 #include "components/data_sharing/public/features.h"
@@ -108,7 +110,8 @@ DataSharingServiceImpl::DataSharingServiceImpl(
           std::make_unique<PreviewServerProxy>(identity_manager,
                                                url_loader_factory,
                                                channel)),
-      avatar_fetcher_(std::make_unique<AvatarFetcher>()) {
+      avatar_fetcher_(std::make_unique<AvatarFetcher>()),
+      logger_(std::make_unique<LoggerImpl>()) {
   auto change_processor =
       std::make_unique<syncer::ClientTagBasedDataTypeProcessor>(
           syncer::COLLABORATION_GROUP,
@@ -220,7 +223,6 @@ void DataSharingServiceImpl::ReadGroupDeprecated(
   }
 
   data_sharing_pb::ReadGroupsParams params;
-  params.add_group_ids(group_id.value());
   data_sharing_pb::ReadGroupsParams::GroupParams* group_params =
       params.add_group_params();
   group_params->set_group_id(group_id.value());
@@ -235,8 +237,24 @@ void DataSharingServiceImpl::ReadGroupDeprecated(
 void DataSharingServiceImpl::ReadNewGroup(
     const GroupToken& token,
     base::OnceCallback<void(const GroupDataOrFailureOutcome&)> callback) {
-  // TODO(crbug.com/377780190): Implement this.
-  return std::move(callback).Run(GroupData());
+  if (!sdk_delegate_) {
+    // Reply in a posted task to avoid reentrance on the calling side.
+    base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
+        FROM_HERE,
+        base::BindOnce(
+            std::move(callback),
+            base::unexpected(PeopleGroupActionFailure::kPersistentFailure)));
+    return;
+  }
+
+  data_sharing_pb::ReadGroupWithTokenParams params;
+  const std::string& group_id = token.group_id.value();
+  params.set_group_id(group_id);
+  params.set_access_token(token.access_token);
+  sdk_delegate_->ReadGroupWithToken(
+      params,
+      base::BindOnce(&DataSharingServiceImpl::OnReadSingleGroupCompleted,
+                     weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
 }
 
 void DataSharingServiceImpl::CreateGroup(
@@ -271,6 +289,9 @@ void DataSharingServiceImpl::DeleteGroup(
                        PeopleGroupActionOutcome::kPersistentFailure));
     return;
   }
+
+  groups_attempted_to_leave_or_delete_by_current_user_in_current_session_
+      .insert(group_id);
 
   data_sharing_pb::DeleteGroupParams params;
   params.set_group_id(group_id.value());
@@ -358,8 +379,8 @@ void DataSharingServiceImpl::LeaveGroup(
     return;
   }
 
-  groups_attempted_to_leave_by_current_user_in_current_session_.insert(
-      group_id);
+  groups_attempted_to_leave_or_delete_by_current_user_in_current_session_
+      .insert(group_id);
 
   data_sharing_pb::LeaveGroupParams params;
   params.set_group_id(group_id.value());
@@ -369,9 +390,9 @@ void DataSharingServiceImpl::LeaveGroup(
                      weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
 }
 
-bool DataSharingServiceImpl::IsLeavingGroup(const GroupId& group_id) {
-  return groups_attempted_to_leave_by_current_user_in_current_session_.contains(
-      group_id);
+bool DataSharingServiceImpl::IsLeavingOrDeletingGroup(const GroupId& group_id) {
+  return groups_attempted_to_leave_or_delete_by_current_user_in_current_session_
+      .contains(group_id);
 }
 
 std::vector<GroupEvent> DataSharingServiceImpl::GetGroupEventsSinceStartup() {
@@ -382,6 +403,12 @@ std::vector<GroupEvent> DataSharingServiceImpl::GetGroupEventsSinceStartup() {
 }
 
 void DataSharingServiceImpl::OnModelLoaded() {
+  std::set<GroupData> groups = ReadAllGroups();
+  for (const GroupData& group : groups) {
+    base::UmaHistogramCounts100("DataSharing.TotalMembersInGroup.AtStartup",
+                                group.members.size());
+  }
+
   for (auto& observer : observers_) {
     observer.OnGroupDataModelLoaded();
   }
@@ -390,7 +417,6 @@ void DataSharingServiceImpl::OnModelLoaded() {
 void DataSharingServiceImpl::OnGroupAdded(const GroupId& group_id,
                                           const base::Time& event_time) {
   CHECK(group_data_model_);
-
   std::optional<GroupData> group_data = group_data_model_->GetGroup(group_id);
   CHECK(group_data);
   for (auto& observer : observers_) {
@@ -663,6 +689,10 @@ DataSharingUIDelegate* DataSharingServiceImpl::GetUiDelegate() {
   return ui_delegate_.get();
 }
 
+Logger* DataSharingServiceImpl::GetLogger() {
+  return logger_.get();
+}
+
 void DataSharingServiceImpl::AddGroupDataForTesting(GroupData group_data) {
   group_data_for_testing_.emplace(group_data.group_token.group_id, group_data);
 }
@@ -674,6 +704,13 @@ void DataSharingServiceImpl::SetPreviewServerProxyForTesting(
 
 PreviewServerProxy* DataSharingServiceImpl::GetPreviewServerProxyForTesting() {
   return preview_server_proxy_.get();
+}
+
+void DataSharingServiceImpl::OnCollaborationGroupRemoved(
+    const data_sharing::GroupId& group_id) {
+  if (collaboration_group_sync_bridge_) {
+    collaboration_group_sync_bridge_->RemoveGroupLocally(group_id);
+  }
 }
 
 void DataSharingServiceImpl::OnAccessTokenAdded(

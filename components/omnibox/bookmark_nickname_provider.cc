@@ -47,11 +47,6 @@ void BookmarkNicknameProvider::Start(const AutocompleteInput& input,
 
   matches_.clear();
 
-  PrefService* prefs = client_->GetPrefs();
-  if (!prefs->GetBoolean(vivaldiprefs::kAddressBarOmniboxShowNicknames)) {
-    return;
-  }
-
   if (input.IsZeroSuggest() || input.text().empty()) {
     return;
   }
@@ -99,7 +94,7 @@ void BookmarkNicknameProvider::DoAutocomplete(const AutocompleteInput& input) {
     // Score the TitledUrlMatch. If its score is greater than 0 then the
     // AutocompleteMatch is created and added to matches_.
     auto [relevance, bookmark_count] =
-        CalculateBookmarkMatchRelevance(bookmark_match);
+        CalculateBookmarkMatchRelevance(bookmark_match, input);
     if (relevance == 0) {
       continue;
     }
@@ -131,9 +126,10 @@ void BookmarkNicknameProvider::DoAutocomplete(const AutocompleteInput& input) {
 }
 
 std::pair<int, int> BookmarkNicknameProvider::CalculateBookmarkMatchRelevance(
-    const TitledUrlMatch& bookmark_match) const {
-  size_t nickname_length =
-      bookmark_match.node->GetTitledUrlNodeNickName().length();
+    const TitledUrlMatch& bookmark_match,
+    const AutocompleteInput& input) const {
+  std::u16string nickname = bookmark_match.node->GetTitledUrlNodeNickName();
+  size_t nickname_length = nickname.length();
 
   ScoringFunctor nickname_position_functor =
       for_each(bookmark_match.nickname_match_positions.begin(),
@@ -147,7 +143,13 @@ std::pair<int, int> BookmarkNicknameProvider::CalculateBookmarkMatchRelevance(
   PrefService* prefs = client_->GetPrefs();
   bool bookmark_boost =
     prefs->GetBoolean(vivaldiprefs::kAddressBarOmniboxBookmarksBoosted);
-  int vivaldi_bookmark_boost_score = bookmark_boost ? 500 : 0;
+  const int no_autocomplete_boost =
+      nickname == input.text() &&
+              !prefs->GetBoolean(vivaldiprefs::kAddressBarAutocompleteEnabled)
+          ? 1000
+          : 0;
+  int vivaldi_bookmark_boost_score =
+      (bookmark_boost ? 500 : 0) + no_autocomplete_boost;
 
   const int kBaseBookmarkNicknameScore = 1460 + vivaldi_bookmark_boost_score;
   const int kMaxBookmarkScore = 1599 + vivaldi_bookmark_boost_score;

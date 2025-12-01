@@ -22,6 +22,7 @@ import org.chromium.chrome.R;
 import org.chromium.chrome.browser.history.AppFilterCoordinator.AppInfo;
 import org.chromium.chrome.browser.history.HistoryProvider.BrowsingHistoryObserver;
 import org.chromium.chrome.browser.ui.favicon.FaviconHelper.DefaultFaviconHelper;
+import org.chromium.chrome.browser.ui.signin.signin_promo.SigninPromoCoordinator;
 import org.chromium.components.browser_ui.widget.DateDividedAdapter;
 import org.chromium.components.browser_ui.widget.MoreProgressButton;
 import org.chromium.components.browser_ui.widget.MoreProgressButton.State;
@@ -42,6 +43,8 @@ public class HistoryAdapter extends DateDividedAdapter implements BrowsingHistor
     private final ArrayList<HistoryItemView> mItemViews;
     private final DefaultFaviconHelper mFaviconHelper;
     private final boolean mShowAppFilter;
+    // TODO(crbug.com/388201374): Remove the nullability once the feature is launched.
+    private @Nullable final SigninPromoCoordinator mHistorySyncPromoCoordinator;
 
     private RecyclerView mRecyclerView;
     private @Nullable HistoryProvider mHistoryProvider;
@@ -53,6 +56,7 @@ public class HistoryAdapter extends DateDividedAdapter implements BrowsingHistor
     private HeaderItem mPrivacyDisclaimerHeaderItem;
     private HeaderItem mClearBrowsingDataButtonHeaderItem;
     private HeaderItem mHistoryOpenInChromeHeaderItem;
+    private HeaderItem mHistorySyncPromoHeaderItem;
     private HeaderItem mAppFilterHeaderItem;
     private ChipView mAppFilterChip;
 
@@ -69,6 +73,7 @@ public class HistoryAdapter extends DateDividedAdapter implements BrowsingHistor
     private boolean mClearOnNextQueryComplete;
     private boolean mPrivacyDisclaimersVisible;
     private boolean mClearBrowsingDataButtonVisible;
+    private boolean mHistorySyncPromoVisible;
     private String mQueryText = EMPTY_QUERY;
     private String mHostName;
 
@@ -80,7 +85,10 @@ public class HistoryAdapter extends DateDividedAdapter implements BrowsingHistor
     // not in search mode when app filter is in effect.
     private boolean mShowSourceApp;
 
-    public HistoryAdapter(HistoryContentManager manager, HistoryProvider provider) {
+    public HistoryAdapter(
+            HistoryContentManager manager,
+            HistoryProvider provider,
+            @Nullable SigninPromoCoordinator historySyncPromoCoordinator) {
         setHasStableIds(true);
         mHistoryProvider = provider;
         mHistoryProvider.setObserver(this);
@@ -89,6 +97,7 @@ public class HistoryAdapter extends DateDividedAdapter implements BrowsingHistor
         mItemViews = new ArrayList<>();
         mShowAppFilter = mManager.showAppFilter();
         mShowSourceApp = mShowAppFilter; // defaults to BrApp full history
+        mHistorySyncPromoCoordinator = historySyncPromoCoordinator;
     }
 
     /** Called when the activity/native page is destroyed. */
@@ -267,7 +276,8 @@ public class HistoryAdapter extends DateDividedAdapter implements BrowsingHistor
             clear(true);
             mClearOnNextQueryComplete = false;
         }
-        if ((!mAreHeadersInitialized && items.size() > 0 && !mIsSearching)
+        boolean isEmpty = items.size() > 0 || mHistorySyncPromoVisible;
+        if ((!mAreHeadersInitialized && isEmpty && !mIsSearching)
                 || (mIsSearching && mShowAppFilter)) {
             setHeaders();
             mAreHeadersInitialized = true;
@@ -366,26 +376,34 @@ public class HistoryAdapter extends DateDividedAdapter implements BrowsingHistor
             clearBrowsingDataButtonContainer.setVisibility(View.GONE);
         }
 
-        mAppFilterHeaderItem = new HeaderItem(0, historyAppFilterContainer);
-        mPrivacyDisclaimerHeaderItem = new HeaderItem(0, privacyDisclaimerContainer);
+        mAppFilterHeaderItem = new StandardHeaderItem(0, historyAppFilterContainer);
+        mPrivacyDisclaimerHeaderItem = new StandardHeaderItem(0, privacyDisclaimerContainer);
         mPrivacyDisclaimerBottomSpace =
                 privacyDisclaimerContainer.findViewById(R.id.privacy_disclaimer_bottom_space);
-        mClearBrowsingDataButtonHeaderItem = new HeaderItem(1, clearBrowsingDataButtonContainer);
+        mClearBrowsingDataButtonHeaderItem =
+                new StandardHeaderItem(1, clearBrowsingDataButtonContainer);
         mClearBrowsingDataButton =
                 clearBrowsingDataButtonContainer.findViewById(R.id.clear_browsing_data_button);
 
         if (mManager.launchedForApp()) {
             ViewGroup historyOpenInChromeButtonContainer = getCctOpenInChromeButtonContainer(null);
 
-            mHistoryOpenInChromeHeaderItem = new HeaderItem(1, historyOpenInChromeButtonContainer);
+            mHistoryOpenInChromeHeaderItem =
+                    new StandardHeaderItem(1, historyOpenInChromeButtonContainer);
+        }
+        if (mHistorySyncPromoCoordinator != null) {
+            View historySyncPromoView = getHistorySyncPromoView();
+
+            mHistorySyncPromoHeaderItem = new PersistentHeaderItem(2, historySyncPromoView);
         }
 
         updateClearBrowsingDataButtonVisibility();
         setPrivacyDisclaimer();
         updatePrivacyDisclaimerBottomSpace();
+        updateHistorySyncPromoVisibility();
     }
 
-    ViewGroup getClearBrowsingDataButtonContainer(ViewGroup parent) {
+    private ViewGroup getClearBrowsingDataButtonContainer(ViewGroup parent) {
         ViewGroup viewGroup =
                 (ViewGroup)
                         LayoutInflater.from(mManager.getContext())
@@ -396,7 +414,7 @@ public class HistoryAdapter extends DateDividedAdapter implements BrowsingHistor
         return viewGroup;
     }
 
-    ViewGroup getCctOpenInChromeButtonContainer(ViewGroup parent) {
+    private ViewGroup getCctOpenInChromeButtonContainer(ViewGroup parent) {
         ViewGroup viewGroup =
                 (ViewGroup)
                         LayoutInflater.from(mManager.getContext())
@@ -407,7 +425,7 @@ public class HistoryAdapter extends DateDividedAdapter implements BrowsingHistor
         return viewGroup;
     }
 
-    ViewGroup getAppFilterContainer(ViewGroup parent) {
+    private ViewGroup getAppFilterContainer(ViewGroup parent) {
         ViewGroup historyAppFilterContainer =
                 (ViewGroup)
                         LayoutInflater.from(mManager.getContext())
@@ -417,6 +435,12 @@ public class HistoryAdapter extends DateDividedAdapter implements BrowsingHistor
         mAppFilterChip.getPrimaryTextView().setText(R.string.history_filter_by_app);
         mAppFilterChip.addDropdownIcon();
         return historyAppFilterContainer;
+    }
+
+    private View getHistorySyncPromoView() {
+        View promoView = mHistorySyncPromoCoordinator.buildPromoView(null);
+        mHistorySyncPromoCoordinator.setView(promoView);
+        return promoView;
     }
 
     void updateHistory(AppInfo appInfo) {
@@ -512,6 +536,9 @@ public class HistoryAdapter extends DateDividedAdapter implements BrowsingHistor
             if (mManager.launchedForApp()) {
                 args.add(mHistoryOpenInChromeHeaderItem);
             }
+            if (mHistorySyncPromoVisible) {
+                args.add(mHistorySyncPromoHeaderItem);
+            }
         }
         setHeaders(args.toArray(new HeaderItem[args.size()]));
     }
@@ -574,6 +601,29 @@ public class HistoryAdapter extends DateDividedAdapter implements BrowsingHistor
         mAppId = appId;
     }
 
+    void updateHistorySyncPromoVisibility() {
+        if (mHistorySyncPromoCoordinator == null) {
+            return;
+        }
+
+        boolean shouldHistorySyncPromoBeVisible = mHistorySyncPromoCoordinator.canShowPromo();
+        if (shouldHistorySyncPromoBeVisible == mHistorySyncPromoVisible) {
+            return;
+        }
+
+        mHistorySyncPromoVisible = shouldHistorySyncPromoBeVisible;
+        if (!mAreHeadersInitialized) {
+            return;
+        }
+
+        setHeaders();
+        if (!shouldHistorySyncPromoBeVisible) {
+            // When removing the history sync promo, other headers should be removed when there's
+            // no history record.
+            removeHeaderIfEmpty();
+        }
+    }
+
     ItemGroup getFirstGroupForTests() {
         return getGroupAt(0).first;
     }
@@ -595,10 +645,11 @@ public class HistoryAdapter extends DateDividedAdapter implements BrowsingHistor
     }
 
     void generateHeaderItemsForTest() {
-        mPrivacyDisclaimerHeaderItem = new HeaderItem(0, null);
-        mClearBrowsingDataButtonHeaderItem = new HeaderItem(1, null);
+        mPrivacyDisclaimerHeaderItem = new StandardHeaderItem(0, null);
+        mClearBrowsingDataButtonHeaderItem = new StandardHeaderItem(1, null);
         mClearBrowsingDataButtonVisible = true;
-        mAppFilterHeaderItem = new HeaderItem(0, null);
+        mAppFilterHeaderItem = new StandardHeaderItem(0, null);
+        mHistorySyncPromoHeaderItem = new PersistentHeaderItem(2, null);
     }
 
     void generateFooterItemsForTest(MoreProgressButton mockButton) {

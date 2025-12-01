@@ -117,8 +117,6 @@ class V8_EXPORT_PRIVATE IncrementalMarking final {
   // marking completes.
   void AdvanceOnAllocation();
 
-  bool IsAheadOfSchedule() const;
-
   bool IsCompacting() { return IsMajorMarking() && is_compacting_; }
 
   Heap* heap() const { return heap_; }
@@ -141,6 +139,10 @@ class V8_EXPORT_PRIVATE IncrementalMarking final {
                          size_t max_bytes_to_mark = SIZE_MAX);
 
   uint64_t current_trace_id() const { return current_trace_id_.value(); }
+
+  std::shared_ptr<::heap::base::IncrementalMarkingSchedule> schedule() {
+    return schedule_;
+  }
 
  private:
   class Observer final : public AllocationObserver {
@@ -179,8 +181,10 @@ class V8_EXPORT_PRIVATE IncrementalMarking final {
   bool ShouldWaitForTask();
   bool TryInitializeTaskTimeout();
 
-  // Returns the actual used time.
-  v8::base::TimeDelta EmbedderStep(v8::base::TimeDelta expected_duration);
+  // Returns the actual used time and actually marked bytes.
+  std::pair<v8::base::TimeDelta, size_t> CppHeapStep(
+      v8::base::TimeDelta max_duration, size_t marked_bytes_limit);
+
   void Step(v8::base::TimeDelta max_duration, size_t max_bytes_to_process,
             StepOrigin step_origin);
 
@@ -212,11 +216,11 @@ class V8_EXPORT_PRIVATE IncrementalMarking final {
   std::unique_ptr<IncrementalMarkingJob> incremental_marking_job_;
   Observer new_generation_observer_;
   Observer old_generation_observer_;
-  base::SpinningMutex background_live_bytes_mutex_;
+  base::Mutex background_live_bytes_mutex_;
   std::unordered_map<MutablePageMetadata*, intptr_t,
                      base::hash<MutablePageMetadata*>>
       background_live_bytes_;
-  std::unique_ptr<::heap::base::IncrementalMarkingSchedule> schedule_;
+  std::shared_ptr<::heap::base::IncrementalMarkingSchedule> schedule_;
   std::optional<uint64_t> current_trace_id_;
 
   friend class IncrementalMarkingJob;

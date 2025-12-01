@@ -10,7 +10,7 @@
 // Allows bookmark menus from a generic view
 void BookmarkMenuController::RunMenuAt(const views::View* parent,
                                        const gfx::Rect& rect) {
-  menu_delegate_->GetBookmarkModel()->AddObserver(this);
+  menu_delegate_->GetBookmarkMergedSurfaceService()->AddObserver(this);
   menu_runner_->RunMenuAt(menu_delegate_->parent(), nullptr, rect,
                           views::MenuAnchorPosition::kTopLeft,
                           ui::mojom::MenuSourceType::kNone);
@@ -23,9 +23,10 @@ views::MenuItemView* BookmarkMenuController::GetNextSiblingMenu(
     views::MenuAnchorPosition* anchor) {
   int start_index;
   const bookmarks::BookmarkNode* node = vivaldi::GetNextNode(
-      menu_delegate_->GetBookmarkModel(), next, &start_index, rect);
+      menu_delegate_->GetBookmarkMergedSurfaceService()->bookmark_model(), next,
+      &start_index, rect);
   if (!node || !node->is_folder() ||
-      menu_delegate_->GetBookmarkModel()->is_root_node(node))
+      menu_delegate_->GetBookmarkMergedSurfaceService()->bookmark_model()->is_root_node(node))
     return nullptr;
   menu_delegate_->SetActiveMenu(BookmarkParentFolder::FromFolderNode(node),
                                 start_index);

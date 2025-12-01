@@ -48,6 +48,8 @@ class PrefService;
 + (BOOL)showSpeedDials;
 /// Returns whether start page customize button is visible on the start page.
 + (BOOL)showStartPageCustomizeButton;
+/// Returns whether Add (SD/Folder) button is visible on the start page.
++ (BOOL)showAddButton;
 
 /// Returns the option to open start page with.
 + (const VivaldiStartPageStartItemType)getReopenStartPageWithItem;
@@ -78,6 +80,8 @@ class PrefService;
 + (void)setShowSpeedDials:(BOOL)show;
 /// Sets whether start page customize button is visible on the start page.
 + (void)setShowStartPageCustomizeButton:(BOOL)show;
+/// Sets whether Add (SD/Folder) button is visible on the start page.
++ (void)setShowAddButton:(BOOL)show;
 
 /// Sets the option to open start page with.
 + (void)setReopenStartPageWithItem:(const VivaldiStartPageStartItemType)item;

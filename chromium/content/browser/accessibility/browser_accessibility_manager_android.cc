@@ -272,6 +272,13 @@ void BrowserAccessibilityManagerAndroid::FireGeneratedEvent(
         wcax->HandleStateDescriptionChanged(android_node->GetUniqueId());
       }
       break;
+    case ui::AXEventGenerator::Event::DESCRIPTION_CHANGED: {
+      wcax->HandleDescriptionChangedSubtree(android_node->GetUniqueId());
+      if (android_node->GetRole() == ax::mojom::Role::kDialog) {
+        wcax->HandleDescriptionChangedPaneTitle(android_node->GetUniqueId());
+      }
+      break;
+    }
     case ui::AXEventGenerator::Event::DOCUMENT_SELECTION_CHANGED: {
       ui::AXNodeID focus_id =
           ax_tree()->GetUnignoredSelection().focus_object_id;
@@ -290,6 +297,10 @@ void BrowserAccessibilityManagerAndroid::FireGeneratedEvent(
       }
       break;
     }
+    case ui::AXEventGenerator::Event::IMAGE_ANNOTATION_CHANGED: {
+      wcax->HandleImageAnnotationChanged(android_node->GetUniqueId());
+      break;
+    }
     case ui::AXEventGenerator::Event::LIVE_REGION_NODE_CHANGED: {
       // This event is fired when an object appears in a live region.
       // Speak its text unless the experimental deprecation of the announce
@@ -301,6 +312,10 @@ void BrowserAccessibilityManagerAndroid::FireGeneratedEvent(
         std::u16string text = android_node->GetTextContentUTF16();
         wcax->AnnounceLiveRegionText(text);
       }
+      break;
+    }
+    case ui::AXEventGenerator::Event::MENU_POPUP_START: {
+      wcax->HandleMenuOpened(android_node->GetUniqueId());
       break;
     }
     case ui::AXEventGenerator::Event::NAME_CHANGED: {
@@ -362,7 +377,6 @@ void BrowserAccessibilityManagerAndroid::FireGeneratedEvent(
     case ui::AXEventGenerator::Event::CONTROLS_CHANGED:
     case ui::AXEventGenerator::Event::DETAILS_CHANGED:
     case ui::AXEventGenerator::Event::DESCRIBED_BY_CHANGED:
-    case ui::AXEventGenerator::Event::DESCRIPTION_CHANGED:
     case ui::AXEventGenerator::Event::DOCUMENT_TITLE_CHANGED:
     case ui::AXEventGenerator::Event::EDITABLE_TEXT_CHANGED:
     case ui::AXEventGenerator::Event::ENABLED_CHANGED:
@@ -372,7 +386,6 @@ void BrowserAccessibilityManagerAndroid::FireGeneratedEvent(
     case ui::AXEventGenerator::Event::HASPOPUP_CHANGED:
     case ui::AXEventGenerator::Event::HIERARCHICAL_LEVEL_CHANGED:
     case ui::AXEventGenerator::Event::IGNORED_CHANGED:
-    case ui::AXEventGenerator::Event::IMAGE_ANNOTATION_CHANGED:
     case ui::AXEventGenerator::Event::INVALID_STATUS_CHANGED:
     case ui::AXEventGenerator::Event::KEY_SHORTCUTS_CHANGED:
     case ui::AXEventGenerator::Event::LABELED_BY_CHANGED:
@@ -383,7 +396,6 @@ void BrowserAccessibilityManagerAndroid::FireGeneratedEvent(
     case ui::AXEventGenerator::Event::LIVE_RELEVANT_CHANGED:
     case ui::AXEventGenerator::Event::LIVE_STATUS_CHANGED:
     case ui::AXEventGenerator::Event::MENU_POPUP_END:
-    case ui::AXEventGenerator::Event::MENU_POPUP_START:
     case ui::AXEventGenerator::Event::MENU_ITEM_SELECTED:
     case ui::AXEventGenerator::Event::MULTILINE_STATE_CHANGED:
     case ui::AXEventGenerator::Event::MULTISELECTABLE_STATE_CHANGED:
@@ -416,9 +428,9 @@ void BrowserAccessibilityManagerAndroid::FireGeneratedEvent(
 void BrowserAccessibilityManagerAndroid::FireAriaNotificationEvent(
     ui::BrowserAccessibility* node,
     const std::string& announcement,
-    const std::string& notification_id,
+    ax::mojom::AriaNotificationPriority priority_property,
     ax::mojom::AriaNotificationInterrupt interrupt_property,
-    ax::mojom::AriaNotificationPriority priority_property) {
+    const std::string& type) {
   DCHECK(node);
 
   auto* wcax = GetWebContentsAXFromRootManager();

@@ -696,7 +696,7 @@ check_compressedSequences(const void* compressed, size_t cSize, const void* orig
     if (decompressed == NULL) return 2;
 
     decSize = ZSTD_decompress(decompressed, origSize, compressed, cSize);
-    if (decSize != origSize) { free(decompressed); DISPLAY("ZSTD_decompress failed (%zu) ", decSize); return 1; }
+    if (decSize != origSize) { free(decompressed); DISPLAY("ZSTD_decompress failed (%u) ", (unsigned)decSize); return 1; }
 
     diff = memcmp(decompressed, orig, origSize);
     if (diff) { free(decompressed); return 1; }
@@ -904,7 +904,7 @@ static int benchMem(unsigned scenarioID,
                 if (verif_f) {
                     size_t const vRes = verif_f(dst, newResult.sumOfReturn, origSrc, origSrcSize);
                     if (vRes) {
-                        DISPLAY(" validation failed ! (%zu)\n", vRes);
+                        DISPLAY(" validation failed ! (%u)\n", (unsigned)vRes);
                         break;
                     }
                 }

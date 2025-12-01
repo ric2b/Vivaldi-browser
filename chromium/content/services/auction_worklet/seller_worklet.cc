@@ -58,6 +58,7 @@
 #include "gin/dictionary.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/remote.h"
+#include "services/network/public/cpp/features.h"
 #include "services/network/public/mojom/url_loader_factory.mojom.h"
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/common/interest_group/ad_auction_currencies.h"
@@ -238,8 +239,7 @@ bool AppendAuctionConfig(
           ? *auction_ad_config_non_shared_params.reporting_timeout
           : AuctionV8Helper::kScriptTimeout;
 
-  if (base::FeatureList::IsEnabled(blink::features::kFledgeReportingTimeout) &&
-      !auction_config_dict.Set("reportingTimeout",
+  if (!auction_config_dict.Set("reportingTimeout",
                                reporting_timeout.InMilliseconds())) {
     return false;
   }
@@ -563,6 +563,7 @@ void SellerWorklet::ScoreAd(
         browser_signal_buyer_and_seller_reporting_id,
     uint32_t browser_signal_bidding_duration_msecs,
     bool browser_signal_for_debugging_only_in_cooldown_or_lockout,
+    bool browser_signal_for_debugging_only_sampling,
     const std::optional<base::TimeDelta> seller_timeout,
     uint64_t trace_id,
     const url::Origin& bidder_joining_origin,
@@ -576,9 +577,9 @@ void SellerWorklet::ScoreAd(
   base::UmaHistogramCounts1000(
       "Ads.InterestGroup.Auction.NumberOfPendingScoreAdTasks",
       score_ad_tasks_.size());
-  score_ad_tasks_.emplace_front();
 
-  auto score_ad_task = score_ad_tasks_.begin();
+  // Add to end of list to make best effort attempt to maintain task order.
+  auto score_ad_task = score_ad_tasks_.emplace(score_ad_tasks_.end());
   score_ad_task->ad_metadata_json = ad_metadata_json;
   score_ad_task->bid = bid;
   score_ad_task->bid_currency = bid_currency;
@@ -600,6 +601,8 @@ void SellerWorklet::ScoreAd(
       browser_signal_bidding_duration_msecs;
   score_ad_task->browser_signal_for_debugging_only_in_cooldown_or_lockout =
       browser_signal_for_debugging_only_in_cooldown_or_lockout;
+  score_ad_task->browser_signal_for_debugging_only_sampling =
+      browser_signal_for_debugging_only_sampling;
   score_ad_task->seller_timeout = seller_timeout;
   score_ad_task->trace_id = trace_id;
   score_ad_task->score_ad_client.Bind(std::move(score_ad_client));
@@ -652,11 +655,16 @@ void SellerWorklet::ScoreAd(
       !base::FeatureList::IsEnabled(
           features::kFledgeAlwaysReuseSellerContext) &&
       IsCodeReady()) {
-    score_ad_task->context_prep_task_id = cancelable_task_tracker_.PostTask(
-        v8_runners_[score_ad_task->thread].get(), FROM_HERE,
-        base::BindOnce(&SellerWorklet::V8State::PrepareContextRecycler,
-                       base::Unretained(v8_state_[score_ad_task->thread].get()),
-                       trace_id));
+    if (IsCodeReady()) {
+      score_ad_task->context_prep_task_id = cancelable_task_tracker_.PostTask(
+          v8_runners_[score_ad_task->thread].get(), FROM_HERE,
+          base::BindOnce(
+              &SellerWorklet::V8State::PrepareContextRecycler,
+              base::Unretained(v8_state_[score_ad_task->thread].get()),
+              trace_id));
+    } else if (score_ad_tasks_.size() == 1) {
+      SetEagerJsCompilation(true);
+    }
   }
 
   score_ad_task->trace_wait_deps_start = base::TimeTicks::Now();
@@ -757,10 +765,9 @@ void SellerWorklet::ReportResult(
                 browser_signals_other_seller->is_top_level_seller(),
             !browser_signals_component_auction_report_result_params.is_null());
 
-  report_result_tasks_.emplace_front();
-
-  auto report_result_task = report_result_tasks_.begin();
-
+  // Add to end of list to make best effort attempt to maintain task order.
+  auto report_result_task =
+      report_result_tasks_.emplace(report_result_tasks_.end());
   report_result_task->auction_ad_config_non_shared_params =
       auction_ad_config_non_shared_params;
   report_result_task->browser_signals_other_seller =
@@ -901,6 +908,10 @@ SellerWorklet::V8State::CreateContextRecyclerAndRunTopLevel(
   v8::Local<v8::Context> context = context_recycler_scope.GetContext();
   TRACE_EVENT_NESTABLE_ASYNC_END0("fledge", "get_seller_context", trace_id);
 
+  // We want this before RunScript, both because it's meant to be visible
+  // to globals, and because we don't want to overwrite existing globals.
+  context_recycler->AddTextConversionHelpers();
+
   v8::Local<v8::UnboundScript> unbound_worklet_script =
       worklet_script_.Get(v8_helper_->isolate());
 
@@ -918,7 +929,7 @@ SellerWorklet::V8State::CreateContextRecyclerAndRunTopLevel(
       permissions_policy_state_->private_aggregation_allowed,
       /*reserved_once_allowed=*/true);
   context_recycler->AddRealTimeReportingBindings();
-  if (base::FeatureList::IsEnabled(blink::features::kSharedStorageAPI)) {
+  if (base::FeatureList::IsEnabled(network::features::kSharedStorageAPI)) {
     context_recycler->AddSharedStorageBindings(
         shared_storage_host_remote_.is_bound()
             ? shared_storage_host_remote_.get()
@@ -977,6 +988,7 @@ void SellerWorklet::V8State::ScoreAd(
         browser_signal_buyer_and_seller_reporting_id,
     uint32_t browser_signal_bidding_duration_msecs,
     bool browser_signal_for_debugging_only_in_cooldown_or_lockout,
+    bool browser_signal_for_debugging_only_sampling,
     const std::optional<base::TimeDelta> seller_timeout,
     uint64_t trace_id,
     base::ScopedClosureRunner cleanup_score_ad_task,
@@ -1168,12 +1180,14 @@ void SellerWorklet::V8State::ScoreAd(
       !SetDataVersion(trusted_signals_relation_, scoring_signals_data_version,
                       browser_signals_dict) ||
       (base::FeatureList::IsEnabled(
-           blink::features::kBiddingAndScoringDebugReportingAPI) &&
-       base::FeatureList::IsEnabled(
            blink::features::kFledgeSampleDebugReports) &&
        !browser_signals_dict.Set(
            "forDebuggingOnlyInCooldownOrLockout",
            browser_signal_for_debugging_only_in_cooldown_or_lockout)) ||
+      (base::FeatureList::IsEnabled(
+           blink::features::kFledgeEnableSampleDebugReportOnCookieSetting) &&
+       !browser_signals_dict.Set("forDebuggingOnlySampling",
+                                 browser_signal_for_debugging_only_sampling)) ||
       (ad->creative_scanning_metadata.has_value() &&
        creative_scanning_enabled_ &&
        !browser_signals_dict.Set("creativeScanningMetadata",
@@ -1668,6 +1682,10 @@ void SellerWorklet::V8State::ReportResult(
   v8::Local<v8::Context> context = context_recycler_scope.GetContext();
   AuctionV8Logger v8_logger(v8_helper_.get(), context);
 
+  // We want this before RunScript, both because it's meant to be visible
+  // to globals, and because we don't want to overwrite existing globals.
+  context_recycler.AddTextConversionHelpers();
+
   v8::LocalVector<v8::Value> args(isolate);
 
   context_recycler.EnsureAuctionConfigLazyFillers(
@@ -1691,7 +1709,6 @@ void SellerWorklet::V8State::ReportResult(
 
   v8::Local<v8::Object> browser_signals = v8::Object::New(isolate);
   gin::Dictionary browser_signals_dict(isolate, browser_signals);
-
   context_recycler.AddSellerBrowserSignalsLazyFiller();
   // Passing null for ad_components here since we do not want creative scanning
   // info here.
@@ -1822,7 +1839,7 @@ void SellerWorklet::V8State::ReportResult(
       permissions_policy_state_->private_aggregation_allowed,
       /*reserved_once_allowed=*/false);
 
-  if (base::FeatureList::IsEnabled(blink::features::kSharedStorageAPI)) {
+  if (base::FeatureList::IsEnabled(network::features::kSharedStorageAPI)) {
     context_recycler.AddSharedStorageBindings(
         shared_storage_host_remote_.is_bound()
             ? shared_storage_host_remote_.get()
@@ -2285,19 +2302,40 @@ void SellerWorklet::OnDirectFromSellerAuctionSignalsDownloadedScoreAd(
   ScoreAdIfReady(task);
 }
 
+bool SellerWorklet::ScoreAdTaskHasInputs(
+    const SellerWorklet::ScoreAdTask& task) const {
+  return !task.waiting_for_signals_fetch &&
+         !task.direct_from_seller_request_seller_signals &&
+         !task.direct_from_seller_request_auction_signals;
+}
+
 bool SellerWorklet::IsReadyToScoreAd(const ScoreAdTask& task) const {
   // The first check should be implied by IsCodeReady(), but best to be safe.
   return trusted_signals_relation_ !=
              SignalsOriginRelation::kUnknownPermissionCrossOriginSignals &&
-         !task.waiting_for_signals_fetch &&
-         !task.direct_from_seller_request_seller_signals &&
-         !task.direct_from_seller_request_auction_signals && IsCodeReady();
+         ScoreAdTaskHasInputs(task) && IsCodeReady();
+}
+
+void SellerWorklet::SetEagerJsCompilation(bool eagerly_compile_js) {
+  for (size_t thread_index = 0; thread_index < v8_runners_.size();
+       ++thread_index) {
+    v8_runners_[thread_index]->PostTask(
+        FROM_HERE,
+        base::BindOnce(&AuctionV8Helper::SetEagerJsCompilation,
+                       base::Unretained(v8_helpers_[thread_index].get()),
+                       eagerly_compile_js));
+  }
 }
 
 void SellerWorklet::ScoreAdIfReady(ScoreAdTaskList::iterator task) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(user_sequence_checker_);
 
   if (!IsReadyToScoreAd(*task)) {
+    if (ScoreAdTaskHasInputs(*task) && worklet_loader_) {
+      // Disable eager JS compilation if we're only waiting on Javascript, so
+      // that we can begin scoring this bid as soon as we have the script.
+      SetEagerJsCompilation(false);
+    }
     return;
   }
 
@@ -2367,6 +2405,7 @@ void SellerWorklet::ScoreAdIfReady(ScoreAdTaskList::iterator task) {
           std::move(task->browser_signal_buyer_and_seller_reporting_id),
           task->browser_signal_bidding_duration_msecs,
           task->browser_signal_for_debugging_only_in_cooldown_or_lockout,
+          task->browser_signal_for_debugging_only_sampling,
           std::move(task->seller_timeout), task->trace_id,
           base::ScopedClosureRunner(std::move(cleanup_score_ad_task)),
           /*task_enqueued_time=*/base::TimeTicks::Now(),

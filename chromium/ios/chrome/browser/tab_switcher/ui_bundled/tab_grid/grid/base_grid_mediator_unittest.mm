@@ -562,7 +562,11 @@ TEST_P(BaseGridMediatorTest, NoToolbarUpdateNotSelected) {
 // should be presented, the others would be disabled.
 TEST_P(BaseGridMediatorTest, NTPSelectedWithoutGroup) {
   base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitWithFeatures({kTabGroupsIPad, kModernTabStrip}, {});
+  scoped_feature_list.InitWithFeatures({kTabGroupsIPad}, {});
+  if (!IsTabGroupInGridEnabled()) {
+    // Disabled on iPadOS 16.
+    return;
+  }
 
   ASSERT_EQ(3UL, consumer_.items.size());
   browser_->GetWebStateList()->InsertWebState(
@@ -620,7 +624,11 @@ TEST_P(BaseGridMediatorTest, NTPSelectedWithoutGroup) {
 // Tests selecting a tab with one existing group.
 TEST_P(BaseGridMediatorTest, SelectedTabWithGroup) {
   base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitWithFeatures({kTabGroupsIPad, kModernTabStrip}, {});
+  scoped_feature_list.InitWithFeatures({kTabGroupsIPad}, {});
+  if (!IsTabGroupInGridEnabled()) {
+    // Disabled on iPadOS 16.
+    return;
+  }
 
   EXPECT_EQ(3UL, consumer_.items.size());
 
@@ -735,7 +743,11 @@ TEST_P(BaseGridMediatorTest, CloseAllThenAddWebState) {
 // Tests selecting a tab and a group with one existing group.
 TEST_P(BaseGridMediatorTest, SelectedTabAndGroupWithGroup) {
   base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitWithFeatures({kTabGroupsIPad, kModernTabStrip}, {});
+  scoped_feature_list.InitWithFeatures({kTabGroupsIPad}, {});
+  if (!IsTabGroupInGridEnabled()) {
+    // Disabled on iPadOS 16.
+    return;
+  }
 
   EXPECT_EQ(3UL, consumer_.items.size());
 
@@ -803,8 +815,11 @@ TEST_P(BaseGridMediatorTest, SelectedTabAndGroupWithGroup) {
 
 // Tests that ungrouping a group correctly deletes the group.
 TEST_P(BaseGridMediatorTest, UnGroup) {
-  scoped_feature_list_.InitWithFeatures(
-      {kTabGroupsIPad, kModernTabStrip, kTabGroupSync}, {});
+  scoped_feature_list_.InitWithFeatures({kTabGroupsIPad, kTabGroupSync}, {});
+  if (!IsTabGroupInGridEnabled()) {
+    // Disabled on iPadOS 16.
+    return;
+  }
 
   tab_groups::MockTabGroupSyncService* mock_service =
       static_cast<tab_groups::MockTabGroupSyncService*>(
@@ -829,8 +844,11 @@ TEST_P(BaseGridMediatorTest, UnGroup) {
 // Tests that ungrouping a group from another browser (e.g from Search)
 // correctly deletes the group.
 TEST_P(BaseGridMediatorTest, UnGroupFromAnotherBrowser) {
-  scoped_feature_list_.InitWithFeatures(
-      {kTabGroupsIPad, kModernTabStrip, kTabGroupSync}, {});
+  scoped_feature_list_.InitWithFeatures({kTabGroupsIPad, kTabGroupSync}, {});
+  if (!IsTabGroupInGridEnabled()) {
+    // Disabled on iPadOS 16.
+    return;
+  }
   mode_holder_.mode = TabGridMode::kSearch;
 
   WebStateList* other_web_state_list = other_browser_->GetWebStateList();
@@ -858,8 +876,11 @@ TEST_P(BaseGridMediatorTest, UnGroupFromAnotherBrowser) {
 
 // Tests that closing the last tab of a selected group clears the selection.
 TEST_P(BaseGridMediatorTest, CloseSelectedGroup) {
-  scoped_feature_list_.InitWithFeatures(
-      {kTabGroupsIPad, kModernTabStrip, kTabGroupSync}, {});
+  scoped_feature_list_.InitWithFeatures({kTabGroupsIPad, kTabGroupSync}, {});
+  if (!IsTabGroupInGridEnabled()) {
+    // Disabled on iPadOS 16.
+    return;
+  }
 
   tab_groups::MockTabGroupSyncService* mock_service =
       static_cast<tab_groups::MockTabGroupSyncService*>(
@@ -887,8 +908,11 @@ TEST_P(BaseGridMediatorTest, CloseSelectedGroup) {
 
 // Tests that closing a group locally removes the mapping from the sync service.
 TEST_P(BaseGridMediatorTest, CloseGroupLocally) {
-  scoped_feature_list_.InitWithFeatures(
-      {kTabGroupsIPad, kModernTabStrip, kTabGroupSync}, {});
+  scoped_feature_list_.InitWithFeatures({kTabGroupsIPad, kTabGroupSync}, {});
+  if (!IsTabGroupInGridEnabled()) {
+    // Disabled on iPadOS 16.
+    return;
+  }
 
   tab_groups::MockTabGroupSyncService* mock_service =
       static_cast<tab_groups::MockTabGroupSyncService*>(
@@ -915,8 +939,11 @@ TEST_P(BaseGridMediatorTest, CloseGroupLocally) {
 // Tests that closing a group locally from another browser (e.g from Search)
 // correctly closes the group and removes the mapping from the sync service.
 TEST_P(BaseGridMediatorTest, CloseGroupFromAnotherBrowser) {
-  scoped_feature_list_.InitWithFeatures(
-      {kTabGroupsIPad, kModernTabStrip, kTabGroupSync}, {});
+  scoped_feature_list_.InitWithFeatures({kTabGroupsIPad, kTabGroupSync}, {});
+  if (!IsTabGroupInGridEnabled()) {
+    // Disabled on iPadOS 16.
+    return;
+  }
   mode_holder_.mode = TabGridMode::kSearch;
 
   WebStateList* other_web_state_list = other_browser_->GetWebStateList();
@@ -947,8 +974,11 @@ TEST_P(BaseGridMediatorTest, CloseGroupFromAnotherBrowser) {
 
 // Tests that closing multiple selected items doesn't delete saved groups.
 TEST_P(BaseGridMediatorTest, CloseSelectedTabsAndGroups) {
-  scoped_feature_list_.InitWithFeatures(
-      {kTabGroupsIPad, kModernTabStrip, kTabGroupSync}, {});
+  scoped_feature_list_.InitWithFeatures({kTabGroupsIPad, kTabGroupSync}, {});
+  if (!IsTabGroupInGridEnabled()) {
+    // Disabled on iPadOS 16.
+    return;
+  }
 
   WebStateList* web_state_list = browser_->GetWebStateList();
   CloseAllWebStates(*web_state_list, WebStateList::CLOSE_NO_FLAGS);
@@ -1028,7 +1058,11 @@ TEST_P(BaseGridMediatorTest, CloseSelectedGroupInBatch) {
 // the web state list or not.
 TEST_P(BaseGridMediatorTest, SelectionAfterChangingGroup) {
   base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitWithFeatures({kTabGroupsIPad, kModernTabStrip}, {});
+  scoped_feature_list.InitWithFeatures({kTabGroupsIPad}, {});
+  if (!IsTabGroupInGridEnabled()) {
+    // Disabled on iPadOS 16.
+    return;
+  }
 
   WebStateList* web_state_list = browser_->GetWebStateList();
   CloseAllWebStates(*web_state_list, WebStateList::CLOSE_NO_FLAGS);
@@ -1081,7 +1115,11 @@ TEST_P(BaseGridMediatorTest, DropLocalTab) {
 // Tests dropping a tabs from the tab group view in the grid.
 TEST_P(BaseGridMediatorTest, DropLocalTabFromTabGroup) {
   base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitWithFeatures({kTabGroupsIPad, kModernTabStrip}, {});
+  scoped_feature_list.InitWithFeatures({kTabGroupsIPad}, {});
+  if (!IsTabGroupInGridEnabled()) {
+    // Disabled on iPadOS 16.
+    return;
+  }
 
   WebStateList* web_state_list = browser_->GetWebStateList();
   CloseAllWebStates(*web_state_list, WebStateList::CLOSE_NO_FLAGS);
@@ -1157,7 +1195,11 @@ TEST_P(BaseGridMediatorTest, DropCrossWindowTab) {
 // Tests dropping a local Tab Group (i.e. from the same window).
 TEST_P(BaseGridMediatorTest, DropLocalTabGroup) {
   base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitWithFeatures({kTabGroupsIPad, kModernTabStrip}, {});
+  scoped_feature_list.InitWithFeatures({kTabGroupsIPad}, {});
+  if (!IsTabGroupInGridEnabled()) {
+    // Disabled on iPadOS 16.
+    return;
+  }
 
   WebStateList* web_state_list = browser_->GetWebStateList();
   CloseAllWebStates(*web_state_list, WebStateList::CLOSE_NO_FLAGS);
@@ -1185,7 +1227,11 @@ TEST_P(BaseGridMediatorTest, DropLocalTabGroup) {
 // Tests dropping a Tab Group from another browser (i.e. from the same window).
 TEST_P(BaseGridMediatorTest, DropCrossBrowserTabGroup) {
   base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitWithFeatures({kTabGroupsIPad, kModernTabStrip}, {});
+  scoped_feature_list.InitWithFeatures({kTabGroupsIPad}, {});
+  if (!IsTabGroupInGridEnabled()) {
+    // Disabled on iPadOS 16.
+    return;
+  }
 
   // Prepare the web state list in which the group will be dropped.
   WebStateList* web_state_list = browser_->GetWebStateList();

@@ -80,7 +80,8 @@ Configurator::Configurator(scoped_refptr<UpdaterPrefs> prefs,
   GetNetworkFetcherFactory();
 #endif
   static crash_reporter::CrashKeyString<6> crash_key_managed("managed");
-  crash_key_managed.Set(base::ToString(is_managed_device_));
+  crash_key_managed.Set(is_managed_device_ ? base::ToString(*is_managed_device_)
+                                           : "n/a");
 }
 Configurator::~Configurator() = default;
 
@@ -266,7 +267,7 @@ update_client::UpdaterStateProvider Configurator::GetUpdaterStateProvider()
 
 std::optional<base::FilePath> Configurator::GetCrxCachePath() const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  return updater::GetCrxDiffCacheDirectory(GetUpdaterScope());
+  return updater::GetCrxCacheDirectory(GetUpdaterScope());
 }
 
 bool Configurator::IsConnectionMetered() const {

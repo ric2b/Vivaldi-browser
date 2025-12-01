@@ -4,6 +4,12 @@
 
 #import "ios/chrome/browser/supervised_user/ui/constants.h"
 
-// A11y identifier for the parent access bottom sheet view.
 NSString* const kParentAccessViewAccessibilityIdentifier =
     @"ParentAccessViewAccessibilityIdentifier";
+
+NSString* const kParentAccessCloseButtonAccessibilityIdentifier =
+    @"ParentAccessCloseButtonAccessibilityIdentifier";
+
+NSString* const kParentAccessSnackbarClose = @"ParentAccessSnackbarClose";
+
+NSString* const kParentAccessSnackbarCategory = @"ParentAccessSnackbarCategory";

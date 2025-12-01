@@ -115,9 +115,7 @@ Local<String> GetBigIntDescription(Isolate* isolate, Local<BigInt> bigint) {
 
   i::DirectHandle<i::String> description =
       i_isolate->factory()
-          ->NewConsString(
-              string_value,
-              i_isolate->factory()->LookupSingleCharacterStringFromCode('n'))
+          ->NewConsString(string_value, i_isolate->factory()->n_string())
           .ToHandleChecked();
   return Utils::ToLocal(description);
 }
@@ -186,7 +184,7 @@ MaybeLocal<Array> GetInternalProperties(Isolate* v8_isolate,
                                         Local<Value> value) {
   i::Isolate* isolate = reinterpret_cast<i::Isolate*>(v8_isolate);
   ENTER_V8_NO_SCRIPT_NO_EXCEPTION(isolate);
-  i::Handle<i::Object> val = Utils::OpenHandle(*value);
+  i::DirectHandle<i::Object> val = Utils::OpenDirectHandle(*value);
   i::DirectHandle<i::JSArray> result;
   if (!i::Runtime::GetInternalProperties(isolate, val).ToHandle(&result))
     return MaybeLocal<Array>();
@@ -1433,6 +1431,16 @@ void RecordAsyncStackTaggingCreateTaskCall(v8::Isolate* v8_isolate) {
 void NotifyDebuggerPausedEventSent(v8::Isolate* v8_isolate) {
   i::Isolate* isolate = reinterpret_cast<i::Isolate*>(v8_isolate);
   isolate->debug()->NotifyDebuggerPausedEventSent();
+}
+
+uint64_t GetIsolateId(v8::Isolate* v8_isolate) {
+  i::Isolate* isolate = reinterpret_cast<i::Isolate*>(v8_isolate);
+  return isolate->debug()->IsolateId();
+}
+
+void SetIsolateId(v8::Isolate* v8_isolate, uint64_t id) {
+  i::Isolate* isolate = reinterpret_cast<i::Isolate*>(v8_isolate);
+  isolate->debug()->SetIsolateId(id);
 }
 
 std::unique_ptr<PropertyIterator> PropertyIterator::Create(

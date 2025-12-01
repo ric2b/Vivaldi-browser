@@ -3,18 +3,17 @@
 // META: timeout=long
 
 promise_test(async t => {
-  // Make sure the prompt api is enabled.
-  assert_true(!!ai);
-  // Make sure the session could be created.
-  const capabilities = await ai.languageModel.capabilities();
-  const status = capabilities.available;
-  assert_true(status !== "no");
+  await ensureLanguageModel();
+
   // Start a new session.
-  const session = await ai.languageModel.create();
+  const session = await LanguageModel.create();
   // Test the streaming prompt API.
   const streamingResponse =
     session.promptStreaming(kTestPrompt);
-  assert_true(Object.prototype.toString.call(streamingResponse) === "[object ReadableStream]");
+  assert_equals(
+    Object.prototype.toString.call(streamingResponse),
+    "[object ReadableStream]"
+  );
   const reader = streamingResponse.getReader();
   let result = "";
   while (true) {
@@ -26,5 +25,5 @@ promise_test(async t => {
       result += value;
     }
   }
-  assert_true(result.length > 0, "The result should not be empty.");
+  assert_greater_than(result.length, 0, "The result should not be empty.");
 });

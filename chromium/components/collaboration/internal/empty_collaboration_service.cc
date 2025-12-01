@@ -20,15 +20,20 @@ void EmptyCollaborationService::RemoveObserver(Observer* observer) {}
 
 void EmptyCollaborationService::StartJoinFlow(
     std::unique_ptr<CollaborationControllerDelegate> delegate,
-    const GURL& url) {}
+    const GURL& url,
+    CollaborationServiceJoinEntryPoint entry) {}
 
 void EmptyCollaborationService::StartShareOrManageFlow(
     std::unique_ptr<CollaborationControllerDelegate> delegate,
-    const tab_groups::EitherGroupID& group_id) {}
+    const tab_groups::EitherGroupID& either_id,
+    CollaborationServiceShareOrManageEntryPoint entry) {}
 
 ServiceStatus EmptyCollaborationService::GetServiceStatus() {
   return ServiceStatus();
 }
+
+void EmptyCollaborationService::CancelAllFlows(
+    base::OnceCallback<void()> finish_callback) {}
 
 data_sharing::MemberRole EmptyCollaborationService::GetCurrentUserRoleForGroup(
     const data_sharing::GroupId& group_id) {
@@ -38,6 +43,18 @@ data_sharing::MemberRole EmptyCollaborationService::GetCurrentUserRoleForGroup(
 std::optional<data_sharing::GroupData> EmptyCollaborationService::GetGroupData(
     const data_sharing::GroupId& group_id) {
   return std::nullopt;
+}
+
+void EmptyCollaborationService::DeleteGroup(
+    const data_sharing::GroupId& group_id,
+    base::OnceCallback<void(bool)> callback) {
+  std::move(callback).Run(true);
+}
+
+void EmptyCollaborationService::LeaveGroup(
+    const data_sharing::GroupId& group_id,
+    base::OnceCallback<void(bool)> callback) {
+  std::move(callback).Run(true);
 }
 
 }  // namespace collaboration

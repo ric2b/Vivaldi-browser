@@ -9,6 +9,12 @@ states and transitions between them.
 
 See the [Getting Started with Public Transit](getting_started.md) guide.
 
+See some example tests:
+
+* [ExampleAutoResetCtaTest](/chrome/android/javatests/src/org/chromium/chrome/browser/ExampleAutoResetCtaTest.java)
+* [ExampleFreshCtaTest](/chrome/android/javatests/src/org/chromium/chrome/browser/ExampleFreshCtaTest.java)
+* [ExampleReusedCtaTest](/chrome/android/javatests/src/org/chromium/chrome/browser/ExampleReusedCtaTest.java)
+
 ## Why Use Public Transit?
 
 **Scalability**
@@ -139,23 +145,62 @@ current state, increasing discoverability of shared code.
 It is recommended to batch Public Transit tests to reduce runtime and save CQ/CI
 resources.
 
-#### How to Batch a Public Transit Test
+#### How to Batch restarting the Activity between tests
+
+This restarts the Android Activities while keeping the browser process alive.
+Static fields, singletons and globals are not reset unless ResettersForTesting
+was used.
 
 1. Add `@Batch(Batch.PER_CLASS)` to the test class.
-2. Add the [`BatchedPublicTransitRule<>`] specifying the home station. The *home
-   station* is where each test starts and ends.
-3. Get the first station in each test case from a batched entry point, e.g.
-   `ChromeTabbedActivityPublicTransitEntryPoints#startOnBlankPage()`.
-4. Each test should return to the home station. If a test does not end in the
-   home station, it will fail (if it already hasn't) with a descriptive message.
-   The following tests will also fail right at the start.
+2. Use the `@Rule` returned by
+   `ChromeTransitTestRules.freshChromeTabbedActivityRule()`.
+3. Get the first station in each test case from the test rule. e.g.
+   `mCtaTestRule.startOnBlankPage()`.
 
-In Chrome, in many situations, [`BlankCTATabInitialStatePublicTransitRule`] is
-more practical to use to automatically reset Tab state. It also acts as entry
-point.
+The `BatchedPublicTransitRule` is not necessary. Returning to the home station
+is not necessary. However, this does not run as fast as "reusing the Activity"
+below, especially in Release.
 
-[`BatchedPublicTransitRule<>`]: https://source.chromium.org/search?q=symbol:BatchedPublicTransitRule&ss=chromium
-[`BlankCTATabInitialStatePublicTransitRule`]: https://source.chromium.org/search?q=symbol:BlankCTATabInitialStatePublicTransitRule&ss=chromium
+
+Example: [ExampleFreshCtaTest](/chrome/android/javatests/src/org/chromium/chrome/browser/ExampleFreshCtaTest.java)
+
+#### How to Batch reusing the Activity between tests but resetting tab state
+
+This keeps the Activity, but closes all tabs between tests and returns to a
+blank page.
+
+Using `AutoResetCtaTransitTestRule`:
+
+1. Add `@Batch(Batch.PER_CLASS)` to the test class.
+2. Use `ChromeTransitTestRules.autoResetCtaActivityRule()`.
+3. Get the first station in each test case from the test rule:
+   `mCtaTestRule.startOnBlankPage()`.
+
+Tests don't need to return to the home station. Only some reset paths are
+supported - this is best effort since this reset transition is not part of a
+regular user flow.
+
+Example: [ExampleAutoResetCtaTest](/chrome/android/javatests/src/org/chromium/chrome/browser/ExampleAutoResetCtaTest.java)
+
+#### How to Batch reusing the Activity between tests staying on the same state
+
+This both keeps the Activiy and doesn't reset any app state between tests (apart
+from ResettersForTesting) - a test is started immediately after the previous
+finished.
+
+Using `ReusedCtaTransitTestRule`:
+
+1. Add `@Batch(Batch.PER_CLASS)` to the test class.
+2. Use a "Reused" factory method such as
+   `ChromeTransitTestRules.blankPageStartReusedActivityRule()`.
+3. Get the first station in each test case from the test rule:
+   `mCtaTestRule.start()`.
+
+Each test should return to the home station. If a test does not end in the
+home station, it will fail (if it already hasn't) with a descriptive message.
+The following tests will also fail right at the start.
+
+Example: [ExampleReusedCtaTest](/chrome/android/javatests/src/org/chromium/chrome/browser/ExampleReusedCtaTest.java)
 
 ### ViewPrinter
 

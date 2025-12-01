@@ -10,6 +10,7 @@ source_set("ui_bundled") {
     "fullscreen_controller.mm",
     "fullscreen_controller_observer.h",
     "fullscreen_controller_observer.mm",
+    "fullscreen_reason.h",
     "fullscreen_ui_updater.h",
     "scoped_fullscreen_disabler.h",
     "scoped_fullscreen_disabler.mm",
@@ -45,6 +46,8 @@ source_set("internal") {
   sources = [
     "fullscreen_browser_observer.h",
     "fullscreen_browser_observer.mm",
+    "fullscreen_constants.h",
+    "fullscreen_constants.mm",
     "fullscreen_content_adjustment_util.h",
     "fullscreen_content_adjustment_util.mm",
     "fullscreen_controller_impl.h",
@@ -69,6 +72,7 @@ source_set("internal") {
   ]
 
   deps = [
+    ":metrics",
     ":ui",
     "//base",
     "//ios/chrome/browser/broadcaster/ui_bundled",
@@ -78,6 +82,7 @@ source_set("internal") {
     "//ios/chrome/browser/shared/model/web_state_list",
     "//ios/chrome/browser/shared/public/features",
     "//ios/chrome/browser/shared/ui/util",
+    "//ios/chrome/browser/toolbar/ui_bundled/fullscreen",
     "//ios/chrome/common/ui/util",
     "//ios/public/provider/chrome/browser/fullscreen:fullscreen_api",
     "//ios/web/common",
@@ -129,6 +134,7 @@ source_set("unit_tests") {
     "//ios/chrome/browser/shared/model/web_state_list",
     "//ios/chrome/browser/shared/model/web_state_list/test:test_support",
     "//ios/chrome/browser/shared/public/features",
+    "//ios/chrome/browser/toolbar/ui_bundled/fullscreen",
     "//ios/chrome/common/ui/util",
     "//ios/web/common",
     "//ios/web/public",
@@ -161,4 +167,12 @@ source_set("eg2_tests") {
     "//url",
   ]
   frameworks = [ "UIKit.framework" ]
+}
+
+source_set("metrics") {
+  sources = [
+    "fullscreen_metrics.h",
+    "fullscreen_metrics.mm",
+  ]
+  deps = [ "//base" ]
 }

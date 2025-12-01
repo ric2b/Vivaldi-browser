@@ -36,10 +36,12 @@ constexpr base::TimeDelta kOcrDelay = base::Milliseconds(100);
 
 class SearchifierTestClient : public TestClient {
  public:
-  explicit SearchifierTestClient() = default;
+  SearchifierTestClient() = default;
   SearchifierTestClient(const SearchifierTestClient&) = delete;
   SearchifierTestClient& operator=(const SearchifierTestClient&) = delete;
   ~SearchifierTestClient() override = default;
+
+  bool IsPrintPreview() const override { return is_print_preview_; }
 
   void OnSearchifyStateChange(bool busy) override {
     if (busy) {
@@ -49,6 +51,13 @@ class SearchifierTestClient : public TestClient {
     }
   }
 
+  void set_for_print_preview() { is_print_preview_ = true; }
+
+  int busy_state_changed_count() const { return busy_state_changed_count_; }
+  int idle_state_changed_count() const { return idle_state_changed_count_; }
+
+ private:
+  bool is_print_preview_ = false;
   int busy_state_changed_count_ = 0;
   int idle_state_changed_count_ = 0;
 };
@@ -91,8 +100,6 @@ VisualAnnotationPtr CreateEmptyAnnotation() {
 VisualAnnotationPtr CreateSampleAnnotation(int call_number) {
   auto annotation = CreateEmptyAnnotation();
   auto line_box = screen_ai::mojom::LineBox::New();
-  line_box->baseline_box = gfx::Rect(0, 0, 100, 100);
-  line_box->baseline_box_angle = 0;
   line_box->bounding_box = gfx::Rect(0, 0, 100, 100);
   line_box->bounding_box_angle = 0;
   auto word_box = screen_ai::mojom::WordBox::New();
@@ -116,6 +123,11 @@ class PDFiumOnDemandSearchifierTest : public PDFiumTestBase {
   void CreateEngine(const base::FilePath::CharType* test_filename) {
     engine_ = InitializeEngine(&client_, test_filename);
     ASSERT_TRUE(engine_) << test_filename;
+  }
+
+  void CreatePreviewEngine(const base::FilePath::CharType* test_filename) {
+    client_.set_for_print_preview();
+    CreateEngine(test_filename);
   }
 
   void TearDown() override {
@@ -154,10 +166,10 @@ class PDFiumOnDemandSearchifierTest : public PDFiumTestBase {
   int performed_ocrs() const { return performed_ocrs_; }
   PDFiumEngine* engine() { return engine_.get(); }
   int busy_state_changed_count() const {
-    return client_.busy_state_changed_count_;
+    return client_.busy_state_changed_count();
   }
   int idle_state_changed_count() const {
-    return client_.idle_state_changed_count_;
+    return client_.idle_state_changed_count();
   }
 
  private:
@@ -228,14 +240,33 @@ TEST_P(PDFiumOnDemandSearchifierTest, PageWithImagesNoRecognizableText) {
 
   StartSearchify(/*empty_results=*/true);
 
-  base::test::TestFuture<void> future;
-  WaitUntilIdle(searchifier, future.GetCallback());
-  ASSERT_TRUE(future.Wait());
-  ASSERT_EQ(performed_ocrs(), 2);
-  EXPECT_TRUE(page.IsPageSearchified());
+  {
+    base::test::TestFuture<void> future;
+    WaitUntilIdle(searchifier, future.GetCallback());
+    ASSERT_TRUE(future.Wait());
+    ASSERT_EQ(performed_ocrs(), 2);
+    EXPECT_TRUE(page.IsPageSearchified());
+  }
 
   // The page has two images, but no recognizable text.
   EXPECT_TRUE(GetPageText(page).empty());
+
+  // Unload the page where Searchify did not add any text.
+  page.Unload();
+
+  // Get the text from the page, which reloads the page.
+  EXPECT_EQ(GetPageText(page), "");
+
+  {
+    // Wait for idle. This should not crash.
+    base::test::TestFuture<void> future;
+    WaitUntilIdle(searchifier, future.GetCallback());
+    ASSERT_TRUE(future.Wait());
+
+    // The number of performed OCRs has not changed.
+    ASSERT_EQ(performed_ocrs(), 2);
+    EXPECT_TRUE(page.IsPageSearchified());
+  }
 }
 
 TEST_P(PDFiumOnDemandSearchifierTest, MultiplePagesWithImages) {
@@ -380,9 +411,19 @@ TEST_P(PDFiumOnDemandSearchifierTest, MultiplePagesWithUnload) {
   // Fetch `page3_info` again.
   page3_info = page3.GetTextRunInfo(0);
   ASSERT_TRUE(page3_info.has_value());
-  // TODO(crbug.com/376304020): Figure out how to properly track Searchified
-  // text, so this returns true.
-  EXPECT_FALSE(page3_info.value().is_searchified);
+  EXPECT_TRUE(page3_info.value().is_searchified);
+}
+
+TEST_P(PDFiumOnDemandSearchifierTest, OnePageWithImagesInPrintPreview) {
+  CreatePreviewEngine(FILE_PATH_LITERAL("image_alt_text.pdf"));
+
+  PDFiumPage& page = GetPDFiumPageForTest(*engine(), 0);
+
+  // Load the page to trigger Searchify, but it should not do anything for Print
+  // Preview.
+  page.GetPage();
+  ASSERT_FALSE(engine()->PageNeedsSearchify(0));
+  ASSERT_FALSE(engine()->GetSearchifierForTesting());
 }
 
 TEST_P(PDFiumOnDemandSearchifierTest, OcrCancellation) {

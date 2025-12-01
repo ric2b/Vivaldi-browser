@@ -5,9 +5,24 @@
 #include "services/on_device_model/ml/session_accessor.h"
 
 #include "base/compiler_specific.h"
+#include "components/optimization_guide/core/optimization_guide_features.h"
 #include "services/on_device_model/ml/chrome_ml.h"
 
 namespace ml {
+
+namespace {
+
+float GetTemperature(std::optional<float> temperature) {
+  return std::max(0.0f, temperature.value_or(0.0f));
+}
+
+uint32_t GetTopK(std::optional<uint32_t> top_k) {
+  return std::min(static_cast<uint32_t>(
+                      optimization_guide::features::GetOnDeviceModelMaxTopK()),
+                  std::max(1u, top_k.value_or(1)));
+}
+
+}  // namespace
 
 // Wrapper for the ChromeMLCancel object.
 class SessionAccessor::Canceler : public base::RefCountedThreadSafe<Canceler> {
@@ -37,14 +52,17 @@ SessionAccessor::Ptr SessionAccessor::Create(
     const ChromeML& chrome_ml,
     scoped_refptr<base::SequencedTaskRunner> task_runner,
     ChromeMLModel model,
-    on_device_model::mojom::LoadAdaptationParamsPtr params) {
+    on_device_model::mojom::SessionParamsPtr params,
+    on_device_model::mojom::LoadAdaptationParamsPtr adaptation_params,
+    std::optional<uint32_t> adaptation_id) {
   Ptr handle(new SessionAccessor(chrome_ml, task_runner, model),
              base::OnTaskRunnerDeleter(task_runner));
   // SessionAccessor is deleted on `task_runner_` so base::Unretained is safe.
   task_runner->PostTask(
       FROM_HERE,
       base::BindOnce(&SessionAccessor::CreateInternal,
-                     base::Unretained(handle.get()), std::move(params)));
+                     base::Unretained(handle.get()), std::move(params),
+                     std::move(adaptation_params), adaptation_id));
   return handle;
 }
 
@@ -73,16 +91,25 @@ SessionAccessor::Ptr SessionAccessor::Clone() {
   return handle;
 }
 
-ChromeMLCancelFn SessionAccessor::Execute(
-    on_device_model::mojom::InputOptionsPtr input,
-    ChromeMLExecutionOutputFn output_fn,
+ChromeMLCancelFn SessionAccessor::Append(
+    on_device_model::mojom::AppendOptionsPtr options,
     ChromeMLContextSavedFn context_saved_fn) {
   auto canceler = base::MakeRefCounted<Canceler>(chrome_ml_.get());
   task_runner_->PostTask(
+      FROM_HERE, base::BindOnce(&SessionAccessor::AppendInternal,
+                                base::Unretained(this), std::move(options),
+                                std::move(context_saved_fn), canceler));
+  return [canceler] { canceler->Cancel(); };
+}
+
+ChromeMLCancelFn SessionAccessor::Generate(
+    on_device_model::mojom::GenerateOptionsPtr options,
+    ChromeMLExecutionOutputFn output_fn) {
+  auto canceler = base::MakeRefCounted<Canceler>(chrome_ml_.get());
+  task_runner_->PostTask(
       FROM_HERE,
-      base::BindOnce(&SessionAccessor::ExecuteInternal, base::Unretained(this),
-                     std::move(input), std::move(output_fn),
-                     std::move(context_saved_fn), canceler));
+      base::BindOnce(&SessionAccessor::GenerateInternal, base::Unretained(this),
+                     std::move(options), std::move(output_fn), canceler));
   return [canceler] { canceler->Cancel(); };
 }
 
@@ -109,49 +136,88 @@ void SessionAccessor::CloneFrom(SessionAccessor* other) {
 
 DISABLE_CFI_DLSYM
 void SessionAccessor::CreateInternal(
-    on_device_model::mojom::LoadAdaptationParamsPtr params) {
+    on_device_model::mojom::SessionParamsPtr params,
+    on_device_model::mojom::LoadAdaptationParamsPtr adaptation_params,
+    std::optional<uint32_t> adaptation_id) {
   DCHECK(task_runner_->RunsTasksInCurrentSequence());
-  if (params) {
-    ChromeMLAdaptationDescriptor descriptor = {
-        .max_tokens = params->max_tokens,
-        .enable_image_input = params->enable_image_input,
-    };
-
-    ChromeMLModelData data;
-    std::string weights_path_str = params->assets.weights_path.AsUTF8Unsafe();
-    if (params->assets.weights.IsValid() || !weights_path_str.empty()) {
-      if (params->assets.weights.IsValid()) {
-        data.weights_file = params->assets.weights.TakePlatformFile();
+  // TODO(crbug.com/403383823): Require `params` to be non-null and remove
+  // this fallback path.
+  if (!params) {
+    params = on_device_model::mojom::SessionParams::New();
+    // If session params are not provided but adaptation params are, inherit
+    // values from adaptation.
+    if (adaptation_params) {
+      if (adaptation_params->enable_image_input) {
+        params->capabilities.Put(on_device_model::CapabilityFlags::kImageInput);
+      }
+      if (adaptation_params->enable_audio_input) {
+        params->capabilities.Put(on_device_model::CapabilityFlags::kAudioInput);
+      }
+      params->max_tokens = adaptation_params->max_tokens;
+    }
+    params->top_k = GetTopK(std::nullopt);
+    params->temperature = GetTemperature(std::nullopt);
+  } else {
+    // Clamp sampling params.
+    params->top_k = GetTopK(params->top_k);
+    params->temperature = GetTemperature(params->temperature);
+  }
+  ChromeMLAdaptationDescriptor descriptor = {
+      .max_tokens = params->max_tokens,
+      .top_k = params->top_k,
+      .temperature = params->temperature,
+      .enable_image_input = params->capabilities.Has(
+          on_device_model::CapabilityFlags::kImageInput),
+      .enable_audio_input = params->capabilities.Has(
+          on_device_model::CapabilityFlags::kAudioInput),
+  };
+  ChromeMLModelData data;
+  std::string weights_path_str;
+  if (adaptation_params) {
+    weights_path_str = adaptation_params->assets.weights_path.AsUTF8Unsafe();
+    if (adaptation_params->assets.weights.IsValid() ||
+        !weights_path_str.empty()) {
+      if (adaptation_params->assets.weights.IsValid()) {
+        data.weights_file =
+            adaptation_params->assets.weights.TakePlatformFile();
       } else {
         data.model_path = weights_path_str.data();
       }
+      data.file_id = adaptation_id;
       descriptor.model_data = &data;
     }
-    session_ = chrome_ml_->api().CreateSession(model_, &descriptor);
-  } else {
-    session_ = chrome_ml_->api().CreateSession(model_, nullptr);
   }
+  session_ = chrome_ml_->api().CreateSession(model_, &descriptor);
 }
 
 DISABLE_CFI_DLSYM
-void SessionAccessor::ExecuteInternal(
-    on_device_model::mojom::InputOptionsPtr input,
-    ChromeMLExecutionOutputFn output_fn,
+void SessionAccessor::AppendInternal(
+    on_device_model::mojom::AppendOptionsPtr append_options,
     ChromeMLContextSavedFn context_saved_fn,
     scoped_refptr<Canceler> canceler) {
   DCHECK(task_runner_->RunsTasksInCurrentSequence());
   ChromeMLExecuteOptions options{
-      .max_tokens = input->max_tokens,
-      .token_offset = input->token_offset,
-      .max_output_tokens = input->max_output_tokens,
-      .top_k = input->top_k.value_or(1),
-      .temperature = input->temperature.value_or(0),
+      .max_tokens = append_options->max_tokens,
+      .token_offset = append_options->token_offset,
   };
-  options.input = input->input->pieces.data();
-  options.input_size = input->input->pieces.size();
+  options.input = append_options->input->pieces.data();
+  options.input_size = append_options->input->pieces.size();
   if (context_saved_fn) {
     options.context_saved_fn = &context_saved_fn;
   }
+  chrome_ml_->api().SessionExecuteModel(session_, model_, &options,
+                                        canceler->get());
+}
+
+DISABLE_CFI_DLSYM
+void SessionAccessor::GenerateInternal(
+    on_device_model::mojom::GenerateOptionsPtr generate_options,
+    ChromeMLExecutionOutputFn output_fn,
+    scoped_refptr<Canceler> canceler) {
+  DCHECK(task_runner_->RunsTasksInCurrentSequence());
+  ChromeMLExecuteOptions options{
+      .max_output_tokens = generate_options->max_output_tokens,
+  };
   if (output_fn) {
     options.execution_output_fn = &output_fn;
   }

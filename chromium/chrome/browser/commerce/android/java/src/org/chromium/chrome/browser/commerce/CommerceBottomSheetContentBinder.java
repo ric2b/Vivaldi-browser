@@ -11,9 +11,11 @@ import android.widget.FrameLayout.LayoutParams;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
+import org.chromium.build.annotations.NullMarked;
 import org.chromium.ui.modelutil.PropertyKey;
 import org.chromium.ui.modelutil.PropertyModel;
 
+@NullMarked
 public class CommerceBottomSheetContentBinder {
     public static void bind(PropertyModel model, LinearLayout view, PropertyKey propertyKey) {
         if (propertyKey == CommerceBottomSheetContentProperties.CUSTOM_VIEW) {
@@ -40,6 +42,18 @@ public class CommerceBottomSheetContentBinder {
                     model.get(CommerceBottomSheetContentProperties.HAS_TITLE)
                             ? View.VISIBLE
                             : View.GONE);
+        } else if (propertyKey == CommerceBottomSheetContentProperties.HAS_CUSTOM_PADDING) {
+            LinearLayout itemContainer = (LinearLayout) view.findViewById(R.id.item_container);
+            if (model.get(CommerceBottomSheetContentProperties.HAS_CUSTOM_PADDING)) {
+                itemContainer.setPadding(0, 0, 0, 0);
+            } else {
+                int padding =
+                        itemContainer
+                                .getContext()
+                                .getResources()
+                                .getDimensionPixelSize(R.dimen.content_item_container_padding);
+                itemContainer.setPadding(padding, padding, padding, padding);
+            }
         }
     }
 }

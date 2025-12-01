@@ -20,6 +20,7 @@
 #include "base/containers/flat_set.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
+#include "base/timer/timer.h"
 #include "ui/aura/window_observer.h"
 #include "ui/color/color_provider_source_observer.h"
 #include "ui/compositor/layer_delegate.h"
@@ -50,9 +51,9 @@ class CaptureModeSettingsView;
 class CaptureRegionOverlayController;
 class CaptureWindowObserver;
 class CursorSetter;
-class PillButton;
 class RecordingTypeMenuView;
 class ScannerActionViewModel;
+enum class ScannerEntryPoint;
 class UserNudgeController;
 class WindowDimmer;
 
@@ -192,9 +193,16 @@ class ASH_EXPORT CaptureModeSession
                                     ActionButtonRank rank,
                                     ActionButtonViewID id) override;
   void AddSmartActionsButton() override;
+  void MaybeShowScannerDisclaimer(
+      ScannerEntryPoint entry_point,
+      base::RepeatingClosure accept_callback,
+      base::RepeatingClosure decline_callback) override;
   void OnScannerActionsFetched(
-      std::vector<ScannerActionViewModel> scanner_actions) override;
-  gfx::Rect GetFeedbackWidgetScreenBounds() const override;
+      ScannerSession::FetchActionsResponse actions_response) override;
+  void ShowActionContainerError(const std::u16string& error_message) override;
+  void OnSearchResultsPanelCreated(views::Widget* panel_widget) override;
+  bool TakeFocusForSearchResultsPanel(bool reverse) override;
+  void ClearPseudoFocus() override;
 
   // ui::LayerDelegate:
   void OnPaintLayer(const ui::PaintContext& context) override;
@@ -289,6 +297,9 @@ class ASH_EXPORT CaptureModeSession
   // Paints the current capture region depending on the current capture source.
   void PaintCaptureRegion(gfx::Canvas* canvas);
 
+  // Paints the capture region with sunfish mode styling.
+  void PaintSunfishCaptureRegion(gfx::Canvas* canvas);
+
   // Paints the capture region overlay onto `canvas` if supported by the
   // behavior, otherwise does nothing.
   void MaybePaintCaptureRegionOverlay(gfx::Canvas& canvas) const;
@@ -311,11 +322,13 @@ class ASH_EXPORT CaptureModeSession
   void OnLocatedEventReleased(const gfx::Point& location_in_root);
 
   // Updates the capture region and the capture region widgets depending on the
-  // value of |is_resizing|. |by_user| is true if the capture region is changed
-  // by user.
+  // value of `is_resizing`. `by_user` is true if the capture region is changed
+  // by user. `root_window_will_shutdown` is true if this update was a result of
+  // a root window being shutdown.
   void UpdateCaptureRegion(const gfx::Rect& new_capture_region,
                            bool is_resizing,
-                           bool by_user);
+                           bool by_user,
+                           bool root_window_will_shutdown);
 
   // Updates the dimensions label widget shown during a region capture session.
   // If not |is_resizing|, not a region capture session or the capture region is
@@ -438,19 +451,15 @@ class ASH_EXPORT CaptureModeSession
   // case returns true if `this` was deleted.
   [[nodiscard]] bool ShowDefaultActionButtonsOrPerformSearch();
 
-  // Checks if the controller needs to show the disclaimer and shows if
-  // necessary. `accept_callback` is run if disclaimer is accepted.
-  // Takes a repeating closure because the button that triggers this (Smart
-  // actions button) will continue to appear after the disclaimer is dismissed,
-  // allowing the user to click on it again and trigger the callback again.
-  void MaybeShowDisclaimer(base::RepeatingClosure accept_callback);
-
-  // Called by the consent disclaimer on accept, which will run the `callback`
-  // to `OnSmartActionsButtonDisclaimerCheckSuccess()`.
-  void OnDisclaimerAccepted(base::RepeatingClosure callback);
+  // Called by the consent disclaimer on accept.
+  void OnDisclaimerAccepted(ScannerEntryPoint entry_point,
+                            base::RepeatingClosure callback);
 
   // Called by the consent disclaimer on decline.
-  void OnDisclaimerDeclined();
+  void OnDisclaimerDeclined(base::RepeatingClosure callback);
+
+  // Called by the consent disclaimer when a user clicks a link.
+  void OnDisclaimerLinkPressed(const char* url);
 
   // Called back when the smart actions button is pressed.
   void OnSmartActionsButtonPressed();
@@ -460,24 +469,31 @@ class ASH_EXPORT CaptureModeSession
   // actions.
   void OnSmartActionsButtonDisclaimerCheckSuccess();
 
+  // Called back when the smart actions button is pressed and disclaimer was
+  // declined. This will remove the smart actions button.
+  void OnSmartActionsButtonDisclaimerDeclined();
+
   // Called back when a Scanner action button is pressed.
   void OnScannerActionButtonPressed(
       const ScannerActionViewModel& scanner_action);
 
-  // Creates the feedback button widget if it wasn't previously created and
-  // should be shown, and updates the widget's bounds and visibility.
-  void UpdateFeedbackButtonWidget();
+  // Called back when the user clicks a link to try fetching Scanner actions
+  // again after a previous attempt failed.
+  void OnScannerTryAgainPressed();
 
-  // Returns true if `widget` is the `feedback_button_widget_` and we should
-  // hide it, as the button should only be shown when we are in region selection
-  // mode for an image (including Sunfish/Scanner sessions).
-  bool ShouldHideFeedbackWidget(views::Widget* widget) const;
+  // Returns true if the action container should be shown, excluding a check for
+  // whether Sunfish-related UI or Scanner-related UI can be shown. This checks:
+  // - a drag is not in progress,
+  // - the selection is a non-empty image region, and
+  // - the active behavior can show action buttons (i.e. it is either the
+  //   default behavior or the Sunfish behavior).
+  bool ShouldShowActionContainerWidgetWithoutFeatureChecks() const;
 
-  // Returns true if the action container should be shown.
+  // Returns true if the action container should be shown. This checks all of
+  // the checks in `ShouldShowActionContainerWidgetWithoutFeatureChecks`, and
+  // also includes a check for whether Sunfish-related UI or Scanner-related UI
+  // can be shown.
   bool ShouldShowActionContainerWidget() const;
-
-  // Shows the feedback page with preset information for sunfish.
-  void ShowFeedbackPage();
 
   // Removes the glow animation if there is one.
   void MaybeRemoveGlowAnimation();
@@ -532,10 +548,7 @@ class ASH_EXPORT CaptureModeSession
   raw_ptr<RecordingTypeMenuView, DanglingUntriaged> recording_type_menu_view_ =
       nullptr;
 
-  // Widget that shows a feedback button for Sunfish.
-  views::UniqueWidgetPtr feedback_button_widget_;
-  raw_ptr<PillButton> feedback_button_;
-
+  // Widget that shows a consent disclaimer for Sunfish and Scanner features.
   views::UniqueWidgetPtr disclaimer_;
 
   // Magnifier glass used during a region capture session.
@@ -611,6 +624,14 @@ class ASH_EXPORT CaptureModeSession
   // translations, etc.
   std::unique_ptr<CaptureRegionOverlayController>
       capture_region_overlay_controller_;
+
+  // Indicates if a screenshot is taking for search.
+  bool is_capturing_for_search_ = false;
+
+  // Timer for performing image search or requesting actions after a delay. This
+  // is to prevent too many requests if the user needs to repeatedly adjust the
+  // capture region.
+  base::OneShotTimer image_search_request_timer_;
 
   // The object which handles tab focus while in a capture session.
   std::unique_ptr<CaptureModeSessionFocusCycler> focus_cycler_;

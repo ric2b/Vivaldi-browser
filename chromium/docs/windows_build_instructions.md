@@ -52,24 +52,24 @@ $ PATH_TO_INSTALLER.EXE ^
 Required
 
 * [Windows 11 SDK](https://developer.microsoft.com/en-us/windows/downloads/windows-sdk/)
-version 10.0.22621.2428. This can be installed separately or by checking the
+version 10.0.26100.3323. This can be installed separately or by checking the
 appropriate box in the Visual Studio Installer.
-* (Windows 11) SDK Debugging Tools 10.0.22621.755 or higher. This version of the
+* (Windows 11) SDK Debugging Tools 10.0.26100.3323 or higher. This version of the
 Debugging tools is needed in order to support reading the large-page PDBs that
-Chrome uses to allow greater-than 4 GiB PDBs. This can be installed after the
-matching Windows SDK version is installed, from: Control Panel -> Programs and
-Features -> Windows Software Development Kit [version] -> Change -> Debugging Tools for
-Windows. If building on ARM64 Windows then you will need to manually copy the
-Debuggers\x64 directory from another machine because it does not get installed
-on ARM64 and is needed, whether you are building Chromium for x64 or ARM64 on
-ARM64.
+Chrome uses to allow greater-than 4 GiB PDBs. If the current SDK installation
+does not include debugging tools, they can be installed at:
+Control Panel -> Programs and Features -> Windows Software Development Kit [version]
+-> Change -> Debugging Tools for Windows. If building on ARM64 Windows then you
+will need to manually copy the Debuggers\x64 directory from another machine because
+it does not get installed on ARM64 and is needed, whether you are building Chromium
+for x64 or ARM64 on ARM64.
 
-WARNING: On sufficiently old versions of Windows (1909 or earlier), dawn (or
-related components) may fail with a D3d-related error when using the 26100 SDK.
+WARNING: On sufficiently old versions of Windows (1909 or earlier), dawn or
+related components may fail with a D3d-related error when using the 26100 SDK.
 This is because the d3dcompiler_47.dll file in the new SDK attempts to
 dynamically link versions of the Universal C Runtime which are not present by
 default on older systems. If you experience these errors, you can either update
-the UCRT on your system, or install the 22612 SDK and use the d3dcompiler_47.dll
+the UCRT on your system, or install the 22621 SDK and use the d3dcompiler_47.dll
 file included there, which statically links the UCRT.
 
 This problem may also manifest as a DLL failure to load `__CxxFrameHandler4`.
@@ -108,26 +108,18 @@ $ git version
 
 ## Install `depot_tools`
 
-***
-**Warning:** `depot_tools` will stop bundling Git for Windows from Sep 23, 2024
-onwards. To prepare for this change, Windows users should
-[install Git](#git-installation) directly before then.
-***
+From a command shell, navigate to the directory where you want to put
+`depot_tools` and clone the `depot_tools` repository. For example, if you
+want it to be cloned to `C:\src\depot_tools`:
 
-Download the
-[depot_tools bundle](https://storage.googleapis.com/chrome-infra/depot_tools.zip)
-and extract it somewhere (eg: C:\src\depot_tools).
-
-***
-**Warning:** **DO NOT** use drag-n-drop or copy-n-paste extract from Explorer,
-this will not extract the hidden “.git” folder which is necessary for
-depot_tools to autoupdate itself. You can use “Extract all…” from the
-context menu though.
-***
+```shell
+$ cd C:\src
+$ git clone https://chromium.googlesource.com/chromium/tools/depot_tools.git
+```
 
 Add depot_tools to the start of your PATH (must be ahead of any installs of
 Python. Note that environment variable names are case insensitive).
-* Assuming you unzipped the bundle to `C:\src\depot_tools`, open:
+* Assuming you cloned the repo to `C:\src\depot_tools`, open:
   Control Panel → System and Security → System
 * Select which PATH variable to edit.
   * If you have Administrator access, you can edit the **system** PATH. Click

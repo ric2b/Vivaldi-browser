@@ -7,9 +7,10 @@
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
 #include "build/build_config.h"
-#include "components/autofill/core/browser/data_model/credit_card.h"
+#include "components/autofill/core/browser/data_model/payments/credit_card.h"
 #include "components/autofill/core/browser/form_import/form_data_importer_test_api.h"
 #include "components/autofill/core/browser/metrics/form_events/credit_card_form_event_logger.h"
+#include "components/autofill/core/browser/metrics/payments/card_info_retrieval_enrolled_metrics.h"
 #include "components/autofill/core/browser/metrics/payments/card_unmask_flow_metrics.h"
 #include "components/autofill/core/browser/payments/credit_card_access_manager.h"
 #include "components/autofill/core/browser/payments/credit_card_access_manager_test_base.h"
@@ -36,12 +37,17 @@ using autofill_metrics::CreditCardFormEventLogger;
 class CreditCardAccessManagerRiskBasedMaskedServerCardUnmaskingTest
     : public CreditCardAccessManagerTestBase {
  public:
-  CreditCardAccessManagerRiskBasedMaskedServerCardUnmaskingTest() = default;
+  CreditCardAccessManagerRiskBasedMaskedServerCardUnmaskingTest() {
+    feature_list_.InitWithFeatures(
+        /*enabled_features=*/{features::kAutofillEnableCardInfoRuntimeRetrieval,
+                              features::
+                                  kAutofillEnableFpanRiskBasedAuthentication},
+        /*disabled_features=*/{});
+  }
   ~CreditCardAccessManagerRiskBasedMaskedServerCardUnmaskingTest() override =
       default;
 
-  base::test::ScopedFeatureList feature_list_{
-      features::kAutofillEnableFpanRiskBasedAuthentication};
+  base::test::ScopedFeatureList feature_list_;
 
   void MockRiskBasedAuthSucceedsWithoutPanReturned(
       const CreditCard* card,
@@ -125,7 +131,9 @@ TEST_F(CreditCardAccessManagerRiskBasedMaskedServerCardUnmaskingTest,
        RiskBasedMaskedServerCardUnmasking_RetrievalError) {
   base::HistogramTester histogram_tester;
   const CreditCard* masked_server_card =
-      CreateServerCard(kTestGUID, kTestNumber, kTestServerId);
+      CreateServerCard(kTestGUID, kTestNumber, kTestServerId, kTestCvc16,
+                       CreditCard::RecordType::kMaskedServerCard,
+                       /*is_card_info_retrieval_enrolled=*/true);
 
   FetchCreditCard(masked_server_card);
 
@@ -151,6 +159,11 @@ TEST_F(CreditCardAccessManagerRiskBasedMaskedServerCardUnmaskingTest,
   histogram_tester.ExpectUniqueSample(
       "Autofill.ServerCardUnmask.ServerCard.Result.RiskBased",
       autofill_metrics::ServerCardUnmaskResult::kAuthenticationError, 1);
+  histogram_tester.ExpectUniqueSample(
+      "Autofill.CardInfoRetrievalEnrolled.Result",
+      autofill_metrics::CardInfoRetrievalEnrolledUnmaskResult::
+          kAuthenticationError,
+      1);
 }
 
 // Ensures that the masked server card risk-based unmasking response is
@@ -159,7 +172,9 @@ TEST_F(CreditCardAccessManagerRiskBasedMaskedServerCardUnmaskingTest,
        RiskBasedMaskedServerCardUnmasking_FlowCancelled) {
   base::HistogramTester histogram_tester;
   const CreditCard* masked_server_card =
-      CreateServerCard(kTestGUID, kTestNumber, kTestServerId);
+      CreateServerCard(kTestGUID, kTestNumber, kTestServerId, kTestCvc16,
+                       CreditCard::RecordType::kMaskedServerCard,
+                       /*is_card_info_retrieval_enrolled=*/true);
 
   FetchCreditCard(masked_server_card);
 
@@ -181,6 +196,10 @@ TEST_F(CreditCardAccessManagerRiskBasedMaskedServerCardUnmaskingTest,
   histogram_tester.ExpectUniqueSample(
       "Autofill.ServerCardUnmask.ServerCard.Result.RiskBased",
       autofill_metrics::ServerCardUnmaskResult::kFlowCancelled, 1);
+  histogram_tester.ExpectUniqueSample(
+      "Autofill.CardInfoRetrievalEnrolled.Result",
+      autofill_metrics::CardInfoRetrievalEnrolledUnmaskResult::kFlowCancelled,
+      1);
 }
 
 // Ensures that the masked server card risk-based authentication is not invoked
@@ -472,7 +491,6 @@ TEST_F(
                    ->risk_based_authentication_invoked());
 }
 
-#if !BUILDFLAG(IS_IOS)
 // Test the green path flow when the masked server card enrolled in card info
 // retrieval is successfully returned from the server during a risk-based
 // retrieval.
@@ -558,8 +576,14 @@ TEST_F(CreditCardAccessManagerRiskBasedMaskedServerCardUnmaskingTest,
   histogram_tester.ExpectUniqueSample(
       "Autofill.ServerCardUnmask.ServerCard.Result.RiskBased",
       autofill_metrics::ServerCardUnmaskResult::kRiskBasedUnmasked, 1);
+  histogram_tester.ExpectUniqueSample(
+      "Autofill.CardInfoRetrievalEnrolled.Result",
+      autofill_metrics::CardInfoRetrievalEnrolledUnmaskResult::
+          kRiskBasedUnmasked,
+      1);
 }
 
+#if !BUILDFLAG(IS_IOS)
 // Test the yellow path flow when the masked server card enrolled in card info
 // retrieval is retrieved from the server with Sms Otp authentication.
 TEST_F(CreditCardAccessManagerRiskBasedMaskedServerCardUnmaskingTest,
@@ -643,10 +667,34 @@ TEST_F(
   EXPECT_EQ(kTestCvc16, accessor_->cvc());
 }
 
+// Params of the CardInfoRetrievalUnmaskingYellowPathMetricsTest:
+// -- CreditCardOtpAuthenticator::OtpAuthenticationResponse::Result result
+class CardInfoRetrievalUnmaskingYellowPathMetricsTest
+    : public CreditCardAccessManagerRiskBasedMaskedServerCardUnmaskingTest,
+      public testing::WithParamInterface<
+          CreditCardOtpAuthenticator::OtpAuthenticationResponse::Result> {
+ public:
+  CreditCardOtpAuthenticator::OtpAuthenticationResponse::Result result() {
+    return GetParam();
+  }
+};
+
+INSTANTIATE_TEST_SUITE_P(
+    ,
+    CardInfoRetrievalUnmaskingYellowPathMetricsTest,
+    testing::Values(
+        CreditCardOtpAuthenticator::OtpAuthenticationResponse::Result::kSuccess,
+        CreditCardOtpAuthenticator::OtpAuthenticationResponse::Result::
+            kFlowCancelled,
+        CreditCardOtpAuthenticator::OtpAuthenticationResponse::Result::
+            kGenericError,
+        CreditCardOtpAuthenticator::OtpAuthenticationResponse::Result::
+            kAuthenticationError));
+
 // Testing autofill metrics for runtime retrieval cards in otp authentication
 // flow.
-TEST_F(CreditCardAccessManagerRiskBasedMaskedServerCardUnmaskingTest,
-       CardInfoRetrievalUnmasking_AuthenticationRequired_OtpOnly_Metrics) {
+TEST_P(CardInfoRetrievalUnmaskingYellowPathMetricsTest,
+       CardInfoRetrievalUnmasking_AuthenticationRequired_Metrics) {
 #if BUILDFLAG(IS_ANDROID)
   if (base::android::BuildInfo::GetInstance()->is_automotive()) {
     GTEST_SKIP() << "This test should not run on automotive.";
@@ -670,22 +718,43 @@ TEST_F(CreditCardAccessManagerRiskBasedMaskedServerCardUnmaskingTest,
                        /*is_card_info_retrieval_enrolled=*/true);
   credit_card_access_manager().OnOtpAuthenticationComplete(
       CreditCardOtpAuthenticator::OtpAuthenticationResponse()
-          .with_result(CreditCardOtpAuthenticator::OtpAuthenticationResponse::
-                           Result::kSuccess)
+          .with_result(result())
           .with_card(enrolled_card)
           .with_cvc(kTestCvc16));
 
+  autofill_metrics::CardInfoRetrievalEnrolledUnmaskResult
+      expected_retrieval_enrolled_result;
   // Expect the metrics are logged correctly.
+  if (result() ==
+      CreditCardOtpAuthenticator::OtpAuthenticationResponse::Result::kSuccess) {
+    histogram_tester.ExpectUniqueSample(
+        "Autofill.ServerCardUnmask.VirtualCard.Attempt", false, 0);
+    histogram_tester.ExpectUniqueSample(
+        "Autofill.ServerCardUnmask.VirtualCard.Result.Otp",
+        autofill_metrics::ServerCardUnmaskResult::kAuthenticationUnmasked, 0);
+    histogram_tester.ExpectUniqueSample(
+        "Autofill.ServerCardUnmask.ServerCard.Attempt", true, 1);
+    histogram_tester.ExpectUniqueSample(
+        "Autofill.ServerCardUnmask.ServerCard.Result.Otp",
+        autofill_metrics::ServerCardUnmaskResult::kAuthenticationUnmasked, 1);
+    expected_retrieval_enrolled_result = autofill_metrics::
+        CardInfoRetrievalEnrolledUnmaskResult::kAuthenticationUnmasked;
+
+  } else if (result() == CreditCardOtpAuthenticator::OtpAuthenticationResponse::
+                             Result::kFlowCancelled) {
+    expected_retrieval_enrolled_result =
+        autofill_metrics::CardInfoRetrievalEnrolledUnmaskResult::kFlowCancelled;
+  } else if (result() == CreditCardOtpAuthenticator::OtpAuthenticationResponse::
+                             Result::kGenericError) {
+    expected_retrieval_enrolled_result = autofill_metrics::
+        CardInfoRetrievalEnrolledUnmaskResult::kUnexpectedError;
+  } else {
+    expected_retrieval_enrolled_result = autofill_metrics::
+        CardInfoRetrievalEnrolledUnmaskResult::kAuthenticationError;
+  }
   histogram_tester.ExpectUniqueSample(
-      "Autofill.ServerCardUnmask.VirtualCard.Attempt", false, 0);
-  histogram_tester.ExpectUniqueSample(
-      "Autofill.ServerCardUnmask.VirtualCard.Result.Otp",
-      autofill_metrics::ServerCardUnmaskResult::kAuthenticationUnmasked, 0);
-  histogram_tester.ExpectUniqueSample(
-      "Autofill.ServerCardUnmask.ServerCard.Attempt", true, 1);
-  histogram_tester.ExpectUniqueSample(
-      "Autofill.ServerCardUnmask.ServerCard.Result.Otp",
-      autofill_metrics::ServerCardUnmaskResult::kAuthenticationUnmasked, 1);
+      "Autofill.CardInfoRetrievalEnrolled.Result",
+      expected_retrieval_enrolled_result, 1);
 }
 
 // Test the yellow path flow when the masked server card enrolled in card info

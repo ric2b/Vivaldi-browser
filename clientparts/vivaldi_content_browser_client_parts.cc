@@ -40,6 +40,12 @@ bool HandleVivaldiURLRewrite(GURL* url,
     // we change it to chrome:
     GURL::Replacements replacements;
     replacements.SetSchemeStr(content::kChromeUIScheme);
+#if BUILDFLAG(IS_ANDROID)
+    // NOTE(jarle@vivaldi.com): Rewrite vivaldi://about
+    if (url->host() == chrome::kChromeUIAboutHost) {
+      replacements.SetHostStr(chrome::kChromeUIVersionHost);
+    }
+#endif //  IS_ANDROID
     *url = url->ReplaceComponents(replacements);
     return true;
   }

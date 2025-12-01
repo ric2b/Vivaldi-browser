@@ -16,13 +16,16 @@
 #include "chrome/browser/ui/chrome_pages.h"
 #include "chrome/browser/ui/profiles/profile_view_utils.h"
 #include "chrome/browser/ui/tabs/saved_tab_groups/tab_group_action_context_desktop.h"
+#include "chrome/browser/ui/views/data_sharing/account_card_view.h"
 #include "chrome/browser/ui/views/data_sharing/data_sharing_bubble_controller.h"
 #include "chrome/grit/generated_resources.h"
+#include "chrome/grit/theme_resources.h"
 #include "components/collaboration/public/collaboration_service.h"
 #include "components/collaboration/public/service_status.h"
 #include "components/saved_tab_groups/public/tab_group_sync_service.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/models/dialog_model.h"
+#include "ui/views/bubble/bubble_dialog_model_host.h"
 #include "ui/views/widget/widget.h"
 
 namespace {
@@ -88,14 +91,16 @@ DialogText GetPromptDialogTextFromStatus(
 void ShowSignInAndSyncUi(Profile* profile) {
   signin_ui_util::EnableSyncFromSingleAccountPromo(
       profile, GetAccountInfoFromProfile(profile),
-      signin_metrics::AccessPoint::kCollaborationTabGroup);
+      signin_metrics::AccessPoint::kCollaborationShareTabGroup);
 }
 
 }  // namespace
 
 CollaborationControllerDelegateDesktop::CollaborationControllerDelegateDesktop(
-    Browser* browser)
+    Browser* browser,
+    std::optional<data_sharing::FlowType> flow)
     : browser_(browser),
+      flow_(flow),
       collaboration_service_(
           collaboration::CollaborationServiceFactory::GetForProfile(
               browser_->GetProfile())) {
@@ -128,6 +133,7 @@ void CollaborationControllerDelegateDesktop::Cancel(ResultCallback result) {
 }
 
 void CollaborationControllerDelegateDesktop::ShowAuthenticationUi(
+    collaboration::FlowType flow_type,
     ResultCallback result) {
   MaybeShowSignInOrSyncPromptDialog();
   authentication_ui_callback_ = std::move(result);
@@ -152,7 +158,9 @@ void CollaborationControllerDelegateDesktop::ShowJoinDialog(
   controller->SetShowErrorDialogCallback(
       base::BindOnce(&CollaborationControllerDelegateDesktop::ShowErrorDialog,
                      weak_ptr_factory_.GetWeakPtr()));
-  controller->Show(token);
+
+  data_sharing::RequestInfo request_info(token, data_sharing::FlowType::kJoin);
+  controller->Show(request_info);
 }
 
 void CollaborationControllerDelegateDesktop::ShowShareDialog(
@@ -162,16 +170,24 @@ void CollaborationControllerDelegateDesktop::ShowShareDialog(
     return;
   }
   CHECK(std::holds_alternative<tab_groups::LocalTabGroupID>(either_id));
-  DataSharingBubbleController::GetOrCreateForBrowser(browser_)->Show(
-      std::get<tab_groups::LocalTabGroupID>(either_id));
-  std::move(result).Run(CollaborationControllerDelegate::Outcome::kSuccess,
-                        std::nullopt);
+  data_sharing::RequestInfo request_info(
+      std::get<tab_groups::LocalTabGroupID>(either_id),
+      data_sharing::FlowType::kShare);
+  auto* controller =
+      DataSharingBubbleController::GetOrCreateForBrowser(browser_);
+  controller->SetOnShareLinkRequestedCallback(std::move(result));
+  controller->Show(request_info);
 }
 
 void CollaborationControllerDelegateDesktop::OnUrlReadyToShare(
     const data_sharing::GroupId& group_id,
     const GURL& url,
-    ResultCallback result) {}
+    ResultCallback result) {
+  auto* controller =
+      DataSharingBubbleController::GetOrCreateForBrowser(browser_);
+  controller->OnUrlReadyToShare(url);
+  std::move(result).Run(CollaborationControllerDelegate::Outcome::kSuccess);
+}
 
 void CollaborationControllerDelegateDesktop::ShowManageDialog(
     const tab_groups::EitherGroupID& either_id,
@@ -179,10 +195,46 @@ void CollaborationControllerDelegateDesktop::ShowManageDialog(
   if (!browser_) {
     return;
   }
-  CHECK(std::holds_alternative<tab_groups::LocalTabGroupID>(either_id));
-  DataSharingBubbleController::GetOrCreateForBrowser(browser_)->Show(
-      std::get<tab_groups::LocalTabGroupID>(either_id));
-  std::move(result).Run(CollaborationControllerDelegate::Outcome::kSuccess);
+
+  data_sharing::FlowType flow =
+      flow_.has_value() ? flow_.value() : data_sharing::FlowType::kManage;
+
+  std::unique_ptr<data_sharing::RequestInfo> request_info;
+  if (flow == data_sharing::FlowType::kManage) {
+    // For manage flow, local tab group id is used because
+    // unsharing a group requires a local tab group id.
+    CHECK(std::holds_alternative<tab_groups::LocalTabGroupID>(either_id));
+    request_info = std::make_unique<data_sharing::RequestInfo>(
+        std::get<tab_groups::LocalTabGroupID>(either_id), flow);
+  } else {
+    // For leave/delete/close flows, saved tab group id is used because the
+    // group is not required to be open, hence local tab group id may not exist.
+    // TODO(crbug.com/380287432): Move leave/delete into the collaboration
+    // service code.
+    CHECK(std::holds_alternative<base::Uuid>(either_id));
+    tab_groups::TabGroupSyncService* tab_group_sync_service =
+        tab_groups::TabGroupSyncServiceFactory::GetForProfile(
+            browser_->GetProfile());
+    auto saved_tab_group =
+        tab_group_sync_service->GetGroup(std::get<base::Uuid>(either_id));
+    if (saved_tab_group && saved_tab_group->is_shared_tab_group()) {
+      data_sharing::GroupId id(saved_tab_group->collaboration_id()->value());
+      request_info = std::make_unique<data_sharing::RequestInfo>(
+          data_sharing::GroupToken(id, /*access_token=*/""), flow);
+    }
+  }
+
+  if (!request_info) {
+    std::move(result).Run(CollaborationControllerDelegate::Outcome::kFailure);
+    return;
+  }
+
+  auto* controller =
+      DataSharingBubbleController::GetOrCreateForBrowser(browser_);
+  controller->SetOnCloseCallback(base::BindOnce(
+      &CollaborationControllerDelegateDesktop::OnManageDialogClosing,
+      weak_ptr_factory_.GetWeakPtr(), std::move(result)));
+  controller->Show(*request_info);
 }
 
 void CollaborationControllerDelegateDesktop::PromoteTabGroup(
@@ -251,12 +303,28 @@ void CollaborationControllerDelegateDesktop::OnBrowserClosing(
 }
 
 void CollaborationControllerDelegateDesktop::OnJoinDialogClosing(
-    ResultCallback result) {
+    ResultCallback result,
+    std::optional<data_sharing::mojom::GroupAction> action,
+    std::optional<data_sharing::mojom::GroupActionProgress> progress) {
   // Joins flow should end when the shared tab group is open after join
   // or cancel without joining.
   // TODO(crbug.org/380287432): Only cancel the flow if user doesn't join the
   // group.
   std::move(result).Run(CollaborationControllerDelegate::Outcome::kCancel);
+}
+
+void CollaborationControllerDelegateDesktop::OnManageDialogClosing(
+    ResultCallback result,
+    std::optional<data_sharing::mojom::GroupAction> action,
+    std::optional<data_sharing::mojom::GroupActionProgress> progress) {
+  if ((action == data_sharing::mojom::GroupAction::kLeaveGroup ||
+       action == data_sharing::mojom::GroupAction::kDeleteGroup) &&
+      progress == data_sharing::mojom::GroupActionProgress::kSuccess) {
+    std::move(result).Run(
+        CollaborationControllerDelegate::Outcome::kDeleteOrLeaveGroup);
+  } else {
+    std::move(result).Run(CollaborationControllerDelegate::Outcome::kSuccess);
+  }
 }
 
 void CollaborationControllerDelegateDesktop::ShowErrorDialog() {
@@ -293,15 +361,20 @@ void CollaborationControllerDelegateDesktop::MaybeShowSignInAndSyncUi() {
     return;
   }
 
+  Profile* profile = browser_->profile();
   switch (status.signin_status) {
     case collaboration::SigninStatus::kNotSignedIn:
+      ShowSignInAndSyncUi(profile);
+      break;
     case collaboration::SigninStatus::kSignedInPaused:
-      ShowSignInAndSyncUi(browser_->profile());
+      signin_ui_util::ShowReauthForAccount(
+          profile, GetAccountInfoFromProfile(profile).email,
+          signin_metrics::AccessPoint::kCollaborationShareTabGroup);
       break;
     case collaboration::SigninStatus::kSignedIn:
       switch (status.sync_status) {
         case collaboration::SyncStatus::kNotSyncing:
-          ShowSignInAndSyncUi(browser_->profile());
+          ShowSignInAndSyncUi(profile);
           break;
         case collaboration::SyncStatus::kSyncWithoutTabGroup:
           chrome::ShowSettingsSubPage(browser_, chrome::kSyncSetupSubPage);
@@ -331,11 +404,15 @@ void CollaborationControllerDelegateDesktop::
 
   DialogText dialog_text = GetPromptDialogTextFromStatus(status);
   if (dialog_text.valid) {
-    // TODO(crbug.org/380287432): Refine UI to match UX.
     std::unique_ptr<ui::DialogModel> dialog_model =
         ui::DialogModel::Builder()
             .SetTitle(dialog_text.title)
             .AddParagraph(ui::DialogModelLabel(dialog_text.body))
+#if BUILDFLAG(GOOGLE_CHROME_BRANDING)
+            .SetBannerImage(
+                ui::ImageModel::FromResourceId(IDR_SHARED_TAB_GROUPS_LIGHT),
+                ui::ImageModel::FromResourceId(IDR_SHARED_TAB_GROUPS_DARK))
+#endif
             .AddCancelButton(
                 base::BindOnce(&CollaborationControllerDelegateDesktop::
                                    OnPromptDialogCancel,
@@ -349,6 +426,11 @@ void CollaborationControllerDelegateDesktop::
                 ui::DialogModel::Button::Params()
                     .SetLabel(dialog_text.ok_button_text)
                     .SetEnabled(true))
+            .AddCustomField(
+                std::make_unique<views::BubbleDialogModelHost::CustomView>(
+                    std::make_unique<AccountCardView>(
+                        GetAccountInfoFromProfile(browser_->profile())),
+                    views::BubbleDialogModelHost::FieldType::kText))
             .Build();
     prompt_dialog_widget_ =
         chrome::ShowBrowserModal(browser_, std::move(dialog_model));

@@ -17,6 +17,7 @@
 #include "components/autofill/core/browser/payments/payments_autofill_client.h"
 #include "components/facilitated_payments/core/browser/facilitated_payments_api_client.h"
 #include "components/facilitated_payments/core/browser/network_api/facilitated_payments_initiate_payment_request_details.h"
+#include "components/facilitated_payments/core/browser/strike_databases/payment_link_suggestion_strike_database.h"
 #include "components/facilitated_payments/core/utils/facilitated_payments_ui_utils.h"
 #include "components/facilitated_payments/core/utils/facilitated_payments_utils.h"
 #include "components/facilitated_payments/core/validation/payment_link_validator.h"
@@ -79,11 +80,8 @@ class EwalletManager {
   void OnApiAvailabilityReceived(base::TimeTicks start_time,
                                  bool is_api_available);
 
-  // Called after the user interacts with the eWallet payment prompt.
-  // `is_prompt_accepted` indicates whether the user selects an eWallet FOP or
-  // dismisses the prompt.
-  void OnEwalletPaymentPromptResult(bool is_prompt_accepted,
-                                    int64_t selected_instrument_id);
+  // Called when user selects the eWallet account to pay with.
+  void OnEwalletAccountSelected(int64_t selected_instrument_id);
 
   // Invoked when risk data is fetched. The call to fetch the risk data was
   // made at `start_time`. `risk_data` is the fetched risk data.
@@ -124,7 +122,7 @@ class EwalletManager {
   // prompt.
   void ShowEwalletPaymentPrompt(
       base::span<const autofill::Ewallet> ewallet_suggestions,
-      base::OnceCallback<void(bool, int64_t)> on_user_decision_callback);
+      base::OnceCallback<void(int64_t)> on_ewallet_account_selected);
 
   // Updates the `ui_state_` value and triggers showing the progress screen.
   void ShowProgressScreen();
@@ -138,6 +136,10 @@ class EwalletManager {
   // Dismisses the FacilitatedPayments bottom sheet if the progress screen is
   // being shown.
   void DismissProgressScreen();
+
+  // Retrieves the strike database for payment link suggestion. This can return
+  // nullptr so check before using.
+  PaymentLinkSuggestionStrikeDatabase* GetOrCreateStrikeDatabase();
 
   // A list of eWallets that support the payment link provided in
   // TriggerEwalletPushPayment().
@@ -194,6 +196,9 @@ class EwalletManager {
 
   // A timer to make UI changes.
   base::OneShotTimer ui_timer_;
+
+  // Strike database used to check whether to prompt the FOP selector or not.
+  std::unique_ptr<PaymentLinkSuggestionStrikeDatabase> strike_database_;
 
   base::WeakPtrFactory<EwalletManager> weak_ptr_factory_{this};
 };

@@ -14,6 +14,7 @@
 <translation id="1454726940098520109">Niet meer vragen</translation>
 <translation id="1462666970065907900">Weet je zeker dat je dit venster wilt sluiten?</translation>
 <translation id="1480046233931937785">Met dank aan</translation>
+<translation id="1490502035430975848">Portal Document inspecteren</translation>
 <translation id="1521774566618522728">Vandaag actief</translation>
 <translation id="1526344461589023948">Er is iets misgegaan bij het opslaan van een binnengehaalde update. Controleer dat de computer genoeg schijfruimte heeft en probeer het opnieuw.</translation>
 <translation id="1635542496948266458">Wissel van profiel</translation>
@@ -34,9 +35,11 @@
 <translation id="2141974047387702305">Er is iets misgegaan bij het binnenhalen van de updatebestanden. Controleer je internetverbinding en probeer het opnieuw.</translation>
 <translation id="2226825946708954262">⚠ Doorgaan met verlies van gegevens</translation>
 <translation id="2339641773402824483">Controleren op nieuwe versies...</translation>
+<translation id="2429571091666452569">Uit de lijst:</translation>
 <translation id="2441056087170876076">Monster 2</translation>
 <translation id="2444387452209867610">Notitie in&amp;voegen</translation>
 <translation id="2486841023299517366">Dier 4</translation>
+<translation id="2501278716633472235">Terug</translation>
 <translation id="2612127540243995147">Klaar om te installeren. Vivaldi wordt afgesloten en opnieuw gestart.</translation>
 <translation id="2613387515621326337">Updatewebsite weergeven</translation>
 <translation id="2645477450146475243">Helaas zijn de instellingen van de Opera-browser niet beschikbaar als deze nog actief is. Om die instellingen in Vivaldi te importeren, moet je je werk opslaan en alle vensters van Opera sluiten. Klik vervolgens op Doorgaan.</translation>
@@ -61,6 +64,7 @@
 <translation id="3259769196742189631">Pagina vali&amp;deren</translation>
 <translation id="3291915639428159043">Automatisch afspelen geblokkeerd</translation>
 <translation id="3302905971452834934">Monster 1</translation>
+<translation id="3308738399950580893">advertenties</translation>
 <translation id="3334610655141903168">(geen titel)</translation>
 <translation id="3372505110412186107">Vivaldi <ph name="VERSION" /> is de nieuwst beschikbare versie.</translation>
 <translation id="3383198080133834965">Je gebruikt de laatste versie!</translation>
@@ -71,9 +75,11 @@
 <translation id="3521635864657970829">Weet je zeker dat je dit venster wilt sluiten?</translation>
 <translation id="3540597690227428180">Dier 9</translation>
 <translation id="3542768452570884558">Koppeling openen in &amp;nieuw venster</translation>
+<translation id="3586931643579894722">Details verbergen</translation>
 <translation id="3588820906588687999">Afbeelding openen in nieuwe &amp;tab</translation>
 <translation id="3601066750251199488">Monster 3</translation>
 <translation id="3620979700683094848">Websites mogen video automatisch afspelen</translation>
+<translation id="3650023731264842343">Tijdens het laden van de volgende pagina:</translation>
 <translation id="3658651522139217005">Opera GX</translation>
 <translation id="3680031241659195730">Er is een nieuwe versie van Vivaldi beschikbaar!</translation>
 <translation id="3708982624815781692">De download is geannuleerd.</translation>
@@ -83,6 +89,7 @@
 <translation id="3795800845758778870">Helaas zijn instellingen van Brave niet te benaderen als die browser open staat. Om Brave-instellingen in Vivaldi te importeren, sla je je werk op en sluit je alle vensters van Brave. Klik daarna op Opnieuw proberen.</translation>
 <translation id="3822431842304177896">Nieuwe scheidingslijn</translation>
 <translation id="3832132597516774400">Landschap 5</translation>
+<translation id="3894751534882749287">Als je de pagina toch wilt bekijken, kun je het beschermingsniveau wijzigen in de pop-up van het traceringsfilter of op de knop Toestaan klikken</translation>
 <translation id="3914946330804881301">Geïmporteerd uit Opera</translation>
 <translation id="3921292902397893431">Monster 8</translation>
 <translation id="3943857333388298514">Plakken</translation>
@@ -107,6 +114,7 @@
 <translation id="4582480609585453144">Koppeling openen in achtergrondtab</translation>
 <translation id="4636708767492582204">Selectie &amp;e-mailen</translation>
 <translation id="4677434526832593569">Dier 8</translation>
+<translation id="4736016046474602958">Traceringsfilter</translation>
 <translation id="474217410105706308">Geluid in tab uitzetten</translation>
 <translation id="4861715717329665002">Automatisch opgeslagen sessies</translation>
 <translation id="4881695831933465202">Openen</translation>
@@ -133,9 +141,11 @@
 <translation id="588258955323874662">Volledig &amp;scherm</translation>
 <translation id="5916080360077521750">Helaas zijn instellingen van Chrome niet te benaderen als die browser open staat. Om Chrome-instellingen in Vivaldi te importeren, sla je je werk op en sluit je alle vensters van Chrome. Klik daarna op Opnieuw proberen.</translation>
 <translation id="6040143037577758943">Sluiten</translation>
+<translation id="6140948187512243695">Details weergeven</translation>
 <translation id="6229528619562190452">Klik hier om Vivaldi te vernieuwen.</translation>
 <translation id="6234173136417926046">Afbeelding &amp;gebruiken als snelkiezerachtergrond</translation>
 <translation id="6339818817272922368">Lokaal account</translation>
+<translation id="6376435169746695498">Het laden van deze pagina werd geblokkeerd door een overeenkomst in <ph name="BLOCKER_NAME" /></translation>
 <translation id="6398710281890660037">Beveilig mijn profiel</translation>
 <translation id="6438786710866753178">Landschap 4</translation>
 <translation id="6477028720702061455">Te importeren Opera-profielmap selecteren</translation>
@@ -152,6 +162,7 @@
 <translation id="7086554968911045110">Landschap 7</translation>
 <translation id="7099506190679014195">Veilige upgrade van de keystore</translation>
 <translation id="7111492742514999492">Landschap 9</translation>
+<translation id="7113310725918019676"><ph name="BLOCKED_TYPE" /> toestaan op <ph name="DOMAIN" /></translation>
 <translation id="7208252576848052204">Helaas zijn de instellingen van de Arc-browser niet beschikbaar als deze nog actief is. Om die instellingen in Vivaldi te importeren, moet je je werk opslaan en alle vensters van Arc sluiten. Klik vervolgens op Doorgaan.</translation>
 <translation id="7321500017121629018">Gisteren actief</translation>
 <translation id="7337881442233988129">Chromium</translation>
@@ -167,12 +178,13 @@
 <translation id="8027581147000338959">Openen in nieuw venster</translation>
 <translation id="8044382196220116469">Niet toestaan dat websites automatisch video afspelen</translation>
 <translation id="8099620695029051217">Pagina-adres &amp;kopiëren</translation>
+<translation id="8119307142152921512">traceerders en advertenties</translation>
 <translation id="8197810018650377191">Pagina toevoegen aan &amp;bladwijzers</translation>
 <translation id="8261506727792406068">Verwijderen</translation>
-<translation id="8263047843452521549">Achtergronddiensten inspecteren</translation>
 <translation id="8331671104904436324">Openen in achtergrondtab</translation>
 <translation id="8373293945112511707">Landschap 1</translation>
 <translation id="8388552048012645975">Update downloaden...</translation>
+<translation id="8392904568172593155">Zonder parameters</translation>
 <translation id="8427094907586191051">Landschap 17</translation>
 <translation id="8439034818057146672">Er staat een nieuwe Vivaldi-versie klaar om te installeren.</translation>
 <translation id="8446668873108041390">Het uitvoeren van JavaScript door AppleScript is uitgeschakeld. Onder Instellingen &gt; Privacy &gt; Apple Events staat een instelling om JavaScript vanuit Apple Events toe te staan.</translation>
@@ -183,14 +195,15 @@
 <translation id="8651348004684669199">Huidige tab toevoegen</translation>
 <translation id="8669345741879513971">Monster 10</translation>
 <translation id="867544375504146191">Yandex</translation>
-<translation id="8689295374912158752">Portal-document inspecteren</translation>
 <translation id="875142999698251063">Nu afsluiten</translation>
 <translation id="8768970203213061953">Landschap 14</translation>
 <translation id="8773635261052182196">Je krijgt deze meldingen niet meer te zien. Je kunt ze weer aanzetten in Vivaldi's instellingen.</translation>
 <translation id="8774017153185436870">Websites zouden video automatisch kunnen afspelen</translation>
 <translation id="8813277370772331957">Later herinneren</translation>
+<translation id="8837256239226739065">Background Service Worker inspecteren</translation>
 <translation id="8894900864683381599">Koppeling toevoegen aan &amp;webpaneel</translation>
 <translation id="8912720443398351457">Weet je zeker dat je Vivaldi wilt afsluiten?</translation>
+<translation id="8940028675168378100">Geblokkeerd door <ph name="BLOCKER_NAME" /></translation>
 <translation id="8947109330183116400">Html-bladwijzerbestand selecteren</translation>
 <translation id="9017566390391482291">Te importeren Vivaldi-profielmap selecteren</translation>
 <translation id="9048058608784130603">In afwachting van update <ph name="VERSION" /></translation>
@@ -201,6 +214,7 @@
 <translation id="912022491595344261">Afbeelding openen als <ph name="USER" /></translation>
 <translation id="9157539936604258187">Koppe&amp;ling openen</translation>
 <translation id="9169060351863393881">Opera 12.x</translation>
+<translation id="9180553614777056266">Reclamefilter</translation>
 <translation id="939305735877869636">Brave</translation>
 <translation id="970294721402795299">Landschap 16</translation>
 </translationbundle>

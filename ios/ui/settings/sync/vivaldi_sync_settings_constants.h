@@ -34,6 +34,9 @@ extern const int vUserMaximumValidAge;
 extern const unsigned long vUserMinimumPasswordLength;
 extern const unsigned long vActivationCodeLength;
 
+// Encryption Password
+extern const unsigned long vMinimumPasswordLength;
+
 extern NSString* const vHttpMethod;
 extern NSString* const vRequestHeader;
 extern NSString* const vRequestValue;

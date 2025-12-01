@@ -10,7 +10,6 @@
 
 #include "ash/public/cpp/app_types_util.h"
 #include "ash/public/cpp/window_properties.h"
-#include "ash/session/session_controller_impl.h"
 #include "ash/shelf/shelf_window_watcher.h"
 #include "ash/shell.h"
 #include "base/memory/raw_ptr.h"
@@ -37,10 +36,24 @@ using DemoModeApp = DemoSessionMetricsRecorder::DemoModeApp;
 
 using ExitSessionFrom = DemoSessionMetricsRecorder::ExitSessionFrom;
 
+using SessionType = DemoSessionMetricsRecorder::SessionType;
+
 DemoSessionMetricsRecorder* g_demo_session_metrics_recorder = nullptr;
+
+// It is reset to this default value every session, and DemoLoginController will
+// set it to the other session type if needed.
+//
+// We keep it as a global variable instead of owning by
+// DemoSessionMetricsRecorder, because DemoSessionMetricsRecorder is not
+// initiated yet when DemoLoginController is setting its value before entering
+// the session.
+SessionType current_session_type = SessionType::kClassicMGS;
 
 // How often to sample.
 constexpr auto kSamplePeriod = base::Seconds(1);
+
+// Minimum app usage time.
+constexpr base::TimeDelta kMinimumAppUsageTime = base::Seconds(1);
 
 // Redefining chromeos::preinstalled_web_apps::kHelpAppId as ash can't depend on
 // chrome.
@@ -48,11 +61,32 @@ constexpr char kHelpAppId[] = "nbljnnecbjbmifnoehiemkgefbnpoeak";
 
 constexpr char kDemoModeSignedInShopperDwellTime[] =
     "DemoMode.SignedIn.Shopper.DwellTime";
+constexpr char kDemoModeSignedInMGSFallbackShopperDwellTime[] =
+    "DemoMode.SignedIn.MGSFallback.Shopper.DwellTime";
 
 constexpr char kSetupDemoAccountRequestResult[] =
     "DemoMode.SignedIn.Request.SetupResult";
 constexpr char kCleanupDemoAccountRequestResult[] =
     "DemoMode.SignedIn.Request.CleanupResult";
+constexpr char kAppUsageTimeHistogramPrefix[] = "DemoMode.AppUsageTime.";
+
+struct AppHistogramSuffix {
+  const DemoModeApp app_type;
+  const std::string name;
+};
+
+// Apps in Demo mode have the highest launched count. Note that
+// `DemoModeApp::kOtherChromeApp` includes the demo mode SWA. Not recording this
+// one until we exclude it from `DemoModeApp::kOtherChromeApp`.
+const AppHistogramSuffix kAppsHistogramSuffix[] = {
+    {DemoModeApp::kGooglePhotos, "GooglePhoto"},
+    {DemoModeApp::kStardewValley, "StardewValley"},
+    {DemoModeApp::kMinecraft, "Minecraft"},
+    {DemoModeApp::kPlayStore, "PlayStore"},
+    {DemoModeApp::kOtherArcApp, "OtherArcApp"},
+    {DemoModeApp::kBrowser, "Browser"},
+    {DemoModeApp::kYoutubePwa, "YouTubePwa"},
+};
 
 // How many periods to wait for user activity before discarding samples.
 // This timeout is low because demo sessions tend to be very short. If we
@@ -142,6 +176,15 @@ DemoModeApp GetAppFromAppId(const std::string& app_id) {
   }
 
   return DemoModeApp::kOtherChromeApp;
+}
+
+const std::string GetAppHistogramSuffix(DemoModeApp app_type) {
+  const AppHistogramSuffix* suffix = std::ranges::find(
+      kAppsHistogramSuffix, app_type, &AppHistogramSuffix::app_type);
+  if (suffix == std::end(kAppsHistogramSuffix)) {
+    return std::string();
+  }
+  return suffix->name;
 }
 
 // Maps an ARC++ package name to a DemoModeApp value for metrics.
@@ -359,6 +402,9 @@ class DemoSessionMetricsRecorder::ActiveAppArcPackageNameObserver
 
 // Observes changes in a window's ArcPackageName property for the purpose of
 // logging of unique launches of ARC apps.
+// TODO(crbug.com/393457908): Remove this.
+// `UniqueAppsLaunchedArcPackageNameObserver` is a singleton and cannot observe
+// multiple arc package launch at the same time.
 class DemoSessionMetricsRecorder::UniqueAppsLaunchedArcPackageNameObserver
     : public aura::WindowObserver {
  public:
@@ -417,12 +463,7 @@ void DemoSessionMetricsRecorder::RecordExitSessionAction(
       GetExitSessionActionName(recorded_from, false);
   base::RecordAction(base::UserMetricsAction(action_name.c_str()));
 
-  // Check if the current session is signed-in (a regular user). Signed-in
-  // sessions have a regular user account and a better demo experience, whereas
-  // tranditional demo mode is a managed guest session.
-  std::optional<user_manager::UserType> user_type =
-      Shell::Get()->session_controller()->GetUserType();
-  if (user_type && *user_type == user_manager::UserType::kRegular) {
+  if (current_session_type == SessionType::kSignedInDemoSession) {
     // Record signed-in session related action.
     const std::string signed_in_action_name =
         GetExitSessionActionName(recorded_from, true);
@@ -433,6 +474,29 @@ void DemoSessionMetricsRecorder::RecordExitSessionAction(
 // static
 DemoSessionMetricsRecorder* DemoSessionMetricsRecorder::Get() {
   return g_demo_session_metrics_recorder;
+}
+
+// static
+void DemoSessionMetricsRecorder::ReportDemoAccountSetupResult(
+    DemoAccountRequestResultCode result_code) {
+  base::UmaHistogramEnumeration(kSetupDemoAccountRequestResult, result_code);
+}
+
+// static
+void DemoSessionMetricsRecorder::ReportDemoAccountCleanupResult(
+    DemoAccountRequestResultCode result_code) {
+  base::UmaHistogramEnumeration(kCleanupDemoAccountRequestResult, result_code);
+}
+
+// static
+void DemoSessionMetricsRecorder::SetCurrentSessionType(
+    SessionType session_type) {
+  current_session_type = session_type;
+}
+
+// static
+SessionType DemoSessionMetricsRecorder::GetCurrentSessionTypeForTesting() {
+  return current_session_type;
 }
 
 DemoSessionMetricsRecorder::DemoSessionMetricsRecorder(
@@ -464,8 +528,8 @@ DemoSessionMetricsRecorder::DemoSessionMetricsRecorder(
 }
 
 DemoSessionMetricsRecorder::~DemoSessionMetricsRecorder() {
-  // TODO(mlcui): Investigate whether the metrics emitted here are gracefully
-  // handled during session / device shutdown.
+  // TODO(crbug.com/393457908): Fix under reported metric record during
+  // shutdown.
 
   // Report any remaining stored samples on exit. (If the user went idle, there
   // won't be any.)
@@ -485,6 +549,7 @@ DemoSessionMetricsRecorder::~DemoSessionMetricsRecorder() {
   g_demo_session_metrics_recorder = nullptr;
 }
 
+// TODO(crbug.com/393457908): This metric is under reported.
 void DemoSessionMetricsRecorder::RecordAppLaunch(const std::string& id,
                                                  chromeos::AppType app_type) {
   if (!ShouldRecordAppLaunch(id)) {
@@ -596,33 +661,58 @@ void DemoSessionMetricsRecorder::OnTouchEvent(ui::TouchEvent* event) {
 }
 
 void DemoSessionMetricsRecorder::ReportShopperSessionDwellTime() {
-  std::optional<user_manager::UserType> user_type =
-      Shell::Get()->session_controller()->GetUserType();
-  // Check if the current session is signed-in (a regular user).
-  // TODO: Instead of checking the user type, we should have a flag here set
-  // from DemoLoginController to tell if it's a signed-in session.
-  if (user_type && *user_type == user_manager::UserType::kRegular) {
-    if (!shopper_session_first_user_activity_.is_null()) {
-      DCHECK(!last_user_activity_.is_null());
-      DCHECK_LE(shopper_session_first_user_activity_, last_user_activity_);
-
-      base::TimeDelta dwell_time =
-          last_user_activity_ - shopper_session_first_user_activity_;
-      ReportHistogramLongSecondsTimes100(kDemoModeSignedInShopperDwellTime,
-                                         dwell_time);
-    }
-    shopper_session_first_user_activity_ = base::TimeTicks();
+  if (shopper_session_first_user_activity_.is_null()) {
+    return;
   }
+  if (current_session_type == SessionType::kSignedInDemoSession ||
+      current_session_type == SessionType::kFallbackMGS) {
+    DCHECK(!last_user_activity_.is_null());
+    DCHECK_LE(shopper_session_first_user_activity_, last_user_activity_);
+
+    base::TimeDelta dwell_time =
+        last_user_activity_ - shopper_session_first_user_activity_;
+    ReportHistogramLongSecondsTimes100(
+        current_session_type == SessionType::kSignedInDemoSession
+            ? kDemoModeSignedInShopperDwellTime
+            : kDemoModeSignedInMGSFallbackShopperDwellTime,
+        dwell_time);
+  }
+  shopper_session_first_user_activity_ = base::TimeTicks();
 }
 
-void DemoSessionMetricsRecorder::ReportDemoAccountSetupResult(
-    DemoAccountRequestResultCode result_code) {
-  base::UmaHistogramEnumeration(kSetupDemoAccountRequestResult, result_code);
+void DemoSessionMetricsRecorder::OnAppCreation(
+    const std::string& app_id_or_package,
+    const bool is_arc_app) {
+  const DemoModeApp app = is_arc_app ? GetAppFromPackageName(app_id_or_package)
+                                     : GetAppFromAppId(app_id_or_package);
+  if (GetAppHistogramSuffix(app).empty()) {
+    return;
+  }
+  apps_start_time_[app] = base::TimeTicks::Now();
 }
 
-void DemoSessionMetricsRecorder::ReportDemoAccountCleanupResult(
-    DemoAccountRequestResultCode result_code) {
-  base::UmaHistogramEnumeration(kCleanupDemoAccountRequestResult, result_code);
+void DemoSessionMetricsRecorder::OnAppDestruction(
+    const std::string& app_id_or_package,
+    const bool is_arc_app) {
+  const DemoModeApp app = is_arc_app ? GetAppFromPackageName(app_id_or_package)
+                                     : GetAppFromAppId(app_id_or_package);
+  if (!apps_start_time_.contains(app)) {
+    return;
+  }
+
+  const auto duration = base::TimeTicks::Now() - apps_start_time_[app];
+  apps_start_time_.erase(app);
+
+  // Some Arc app gets quickly created and destructed after `OnAppDestruction`
+  // get called. Ignore reporting if the duration is too short.
+  if (duration < kMinimumAppUsageTime) {
+    return;
+  }
+
+  const std::string histogram_suffix = GetAppHistogramSuffix(app);
+  ReportHistogramLongSecondsTimes100(
+      base::StrCat({kAppUsageTimeHistogramPrefix, histogram_suffix}).c_str(),
+      duration);
 }
 
 void DemoSessionMetricsRecorder::StartRecording() {

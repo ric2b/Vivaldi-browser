@@ -6,11 +6,11 @@ package org.chromium.components.collaboration.messaging.bridge;
 
 import android.text.TextUtils;
 
-import androidx.annotation.Nullable;
-
 import org.jni_zero.CalledByNative;
 import org.jni_zero.JNINamespace;
 
+import org.chromium.build.annotations.NullMarked;
+import org.chromium.build.annotations.Nullable;
 import org.chromium.components.collaboration.messaging.ActivityLogItem;
 import org.chromium.components.collaboration.messaging.CollaborationEvent;
 import org.chromium.components.collaboration.messaging.InstantMessage;
@@ -27,6 +27,7 @@ import org.chromium.components.tab_group_sync.LocalTabGroupId;
 import org.chromium.components.tab_groups.TabGroupColorId;
 
 import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -34,6 +35,7 @@ import java.util.Optional;
  * call these methods directly.
  */
 @JNINamespace("collaboration::messaging::android")
+@NullMarked
 class ConversionUtils {
     @CalledByNative
     private static MessageAttribution createAttributionFrom(
@@ -110,17 +112,29 @@ class ConversionUtils {
 
     @CalledByNative
     private static InstantMessage createInstantMessage(
-            MessageAttribution attribution,
             @CollaborationEvent int collaborationEvent,
             @InstantNotificationLevel int level,
-            @InstantNotificationType int type) {
+            @InstantNotificationType int type,
+            String localizedMessage,
+            List<MessageAttribution> attributions) {
         InstantMessage message = new InstantMessage();
-        message.attribution = attribution;
         message.collaborationEvent = collaborationEvent;
         message.level = level;
         message.type = type;
+        message.localizedMessage = localizedMessage;
+        message.attributions = attributions;
 
         return message;
+    }
+
+    @CalledByNative
+    private static List<MessageAttribution> addAttributionToList(
+            @Nullable List<MessageAttribution> attributions, MessageAttribution attribution) {
+        if (attributions == null) {
+            attributions = new ArrayList<>();
+        }
+        attributions.add(attribution);
+        return attributions;
     }
 
     @CalledByNative

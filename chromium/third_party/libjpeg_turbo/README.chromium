@@ -1,6 +1,6 @@
 Name: libjpeg-turbo
 URL: https://github.com/libjpeg-turbo/libjpeg-turbo/
-Version: 2.1.5.1
+Version: 3.1.0
 License: IJG, BSD-3, Zlib
 License File: LICENSE.md
 Security Critical: yes
@@ -9,7 +9,7 @@ License Android Compatible: yes
 
 Description:
 This consists of the components:
-* libjpeg-turbo 2.1.5.1
+* libjpeg-turbo 3.1.0
 * This file (README.chromium)
 * A build file (BUILD.gn)
 * An OWNERS file
@@ -39,21 +39,6 @@ following changes which are not merged to upstream:
 * Configuration files jconfig.h, jconfigint.h and neon-compat.h were generated
   and then altered manually to be compatible on all of Chromium's platforms.
   http://crbug.com/608347
-* Fix static const data duplication of jpeg_nbits_table. A unique copy
-  was in the jchuff.obj and jcphuff.obj resulting in an added 65k in
-  .rdata in chrome.dll and chrome_child.dll.  Declaring extern const
-  in the header instead of static const and moving the definition to
-  a new .c file fixes this so only one copy is referenced. Also added
-  extern wrappers around usage in asm files. The jpeg_nbits_table.inc
-  file was also deleted. It was also necessary to give this table hidden
-  visibility to avoid invalid relocations (ignored by ld but rejected by
-  lld) arising from attempts to reference the table from assembler on
-  32-bit x86. This only affects shared libraries, but that's important
-  for downstream Android builds.
-* Merged upstream patch https://github.com/libjpeg-turbo/libjpeg-turbo/commit/0fc7313e545a3ff499c19ee6591bb87f0ad8b2a4
-  This patch resolves an O(n^2) slowdown issue when JPEG files contain an
-  enormous number of markers; this would only occur in a maliciouly-crafted
-  image, or through fuzzing.
 * Patches to enable running the upstream unit tests through GTest.
   The upstream unit tests are defined here under the section 'TESTS':
   https://github.com/libjpeg-turbo/libjpeg-turbo/blob/master/CMakeLists.txt

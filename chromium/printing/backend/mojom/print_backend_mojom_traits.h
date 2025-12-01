@@ -30,12 +30,6 @@ struct StructTraits<printing::mojom::PrinterBasicInfoDataView,
       const printing::PrinterBasicInfo& i) {
     return i.printer_description;
   }
-  static int printer_status(const printing::PrinterBasicInfo& i) {
-    return i.printer_status;
-  }
-  static bool is_default(const printing::PrinterBasicInfo& i) {
-    return i.is_default;
-  }
   static const printing::PrinterBasicInfoOptions& options(
       const printing::PrinterBasicInfo& i) {
     return i.options;
@@ -255,6 +249,14 @@ struct StructTraits<printing::mojom::PrinterSemanticCapsAndDefaultsDataView,
   static const printing::AdvancedCapabilities& advanced_capabilities(
       const printing::PrinterSemanticCapsAndDefaults& p) {
     return p.advanced_capabilities;
+  }
+  static const std::vector<printing::mojom::PrintScalingType>&
+  print_scaling_types(const printing::PrinterSemanticCapsAndDefaults& p) {
+    return p.print_scaling_types;
+  }
+  static printing::mojom::PrintScalingType print_scaling_type_default(
+      const printing::PrinterSemanticCapsAndDefaults& p) {
+    return p.print_scaling_type_default;
   }
 #endif  // BUILDFLAG(IS_CHROMEOS)
 

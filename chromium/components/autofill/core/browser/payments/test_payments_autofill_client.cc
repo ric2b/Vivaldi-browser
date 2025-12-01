@@ -18,6 +18,7 @@
 #include "components/autofill/core/browser/payments/credit_card_cvc_authenticator.h"
 #include "components/autofill/core/browser/payments/credit_card_otp_authenticator.h"
 #include "components/autofill/core/browser/payments/mandatory_reauth_manager.h"
+#include "components/autofill/core/browser/payments/test/mock_bnpl_manager.h"
 #include "components/autofill/core/browser/payments/test/mock_payments_window_manager.h"
 #include "components/autofill/core/browser/payments/virtual_card_enrollment_manager.h"
 #include "components/autofill/core/browser/single_field_fillers/payments/merchant_promo_code_manager.h"
@@ -33,10 +34,6 @@
 #include "components/autofill/core/browser/payments/test_internal_authenticator.h"
 #include "components/webauthn/core/browser/internal_authenticator.h"
 #endif  // !BUILDFLAG(IS_IOS)
-
-#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
-#include "components/autofill/core/browser/payments/local_card_migration_manager.h"
-#endif  // !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
 
 namespace autofill::payments {
 
@@ -54,27 +51,6 @@ void TestPaymentsAutofillClient::LoadRiskData(
 }
 
 #if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
-void TestPaymentsAutofillClient::ShowLocalCardMigrationDialog(
-    base::OnceClosure show_migration_dialog_closure) {
-  std::move(show_migration_dialog_closure).Run();
-}
-
-void TestPaymentsAutofillClient::ConfirmMigrateLocalCardToCloud(
-    const LegalMessageLines& legal_message_lines,
-    const std::string& user_email,
-    const std::vector<MigratableCreditCard>& migratable_credit_cards,
-    PaymentsAutofillClient::LocalCardMigrationCallback
-        start_migrating_cards_callback) {
-  // If `migration_card_selection_` hasn't been preset by tests, default to
-  // selecting all migratable cards.
-  if (migration_card_selection_.empty()) {
-    for (MigratableCreditCard card : migratable_credit_cards) {
-      migration_card_selection_.push_back(card.credit_card().guid());
-    }
-  }
-  std::move(start_migrating_cards_callback).Run(migration_card_selection_);
-}
-
 void TestPaymentsAutofillClient::ConfirmSaveIbanLocally(
     const Iban& iban,
     bool should_show_prompt,
@@ -200,7 +176,8 @@ void TestPaymentsAutofillClient::ShowMandatoryReauthOptInPrompt(
 
 BnplManager* TestPaymentsAutofillClient::GetPaymentsBnplManager() {
   if (!bnpl_manager_) {
-    bnpl_manager_ = std::make_unique<BnplManager>(this);
+    bnpl_manager_ = std::make_unique<BnplManager>(
+        &static_cast<TestAutofillClient&>(client_.get()));
   }
 
   return bnpl_manager_.get();
@@ -260,8 +237,7 @@ TestPaymentsAutofillClient::GetOrCreatePaymentsMandatoryReauthManager() {
   return mock_payments_mandatory_reauth_manager_.get();
 }
 
-const PaymentsDataManager& TestPaymentsAutofillClient::GetPaymentsDataManager()
-    const {
+PaymentsDataManager& TestPaymentsAutofillClient::GetPaymentsDataManager() {
   return client_->GetPersonalDataManager().payments_data_manager();
 }
 
@@ -289,6 +265,15 @@ void TestPaymentsAutofillClient::ShowUnmaskAuthenticatorSelectionDialog(
         confirm_unmask_challenge_option_callback,
     base::OnceClosure cancel_unmasking_closure) {
   unmask_authenticator_selection_dialog_shown_ = true;
+}
+
+MockBnplManager& TestPaymentsAutofillClient::CreateOrGetMockBnplManager() {
+  if (!bnpl_manager_) {
+    bnpl_manager_ = std::make_unique<testing::NiceMock<MockBnplManager>>(
+        &static_cast<TestAutofillClient&>(client_.get()));
+  }
+
+  return static_cast<MockBnplManager&>(*bnpl_manager_.get());
 }
 
 #if BUILDFLAG(IS_ANDROID)

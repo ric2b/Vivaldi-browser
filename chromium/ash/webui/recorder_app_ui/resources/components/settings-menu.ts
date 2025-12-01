@@ -46,12 +46,14 @@ import {HELP_URL} from '../core/url_constants.js';
 import {
   assert,
   assertExhaustive,
+  assertExists,
   assertInstanceof,
   assertNotReached,
 } from '../core/utils/assert.js';
 import {stopPropagation} from '../core/utils/event_handler.js';
 
 import {CraDialog} from './cra/cra-dialog.js';
+import {CraIconButton} from './cra/cra-icon-button.js';
 import {withTooltip} from './directives/with-tooltip.js';
 import {SpeakerLabelConsentDialog} from './speaker-label-consent-dialog.js';
 import {TranscriptionConsentDialog} from './transcription-consent-dialog.js';
@@ -170,6 +172,8 @@ export class SettingsMenu extends ReactiveLitElement {
 
   private readonly dialog = createRef<CraDialog>();
 
+  private readonly subpageButton = createRef<CraIconButton>();
+
   private readonly summaryDownloadRequested = signal(false);
 
   private readonly shouldShowLanguagePicker =
@@ -197,9 +201,7 @@ export class SettingsMenu extends ReactiveLitElement {
       s.summaryEnabled = SummaryEnableState.ENABLED;
     });
     this.platformHandler.perfLogger.start({kind: 'summaryModelDownload'});
-    this.platformHandler.summaryModelLoader.download();
-    // The settings download both the model for summary and title suggestion.
-    this.platformHandler.titleSuggestionModelLoader.download();
+    this.platformHandler.downloadGenAiModel();
     this.summaryDownloadRequested.value = true;
   }
 
@@ -211,31 +213,88 @@ export class SettingsMenu extends ReactiveLitElement {
     });
   }
 
+  private renderSummaryModelDownloadStatus() {
+    const state = this.platformHandler.getGenAiModelState().kind;
+    switch (state) {
+      case 'unavailable':
+        return assertNotReached(
+          'Summary model unavailable but the setting is rendered.',
+        );
+      case 'notInstalled':
+        return nothing;
+      case 'error':
+        return html`
+          <spoken-message
+            slot="status"
+            role="status"
+            aria-live="polite"
+          >
+            ${i18n.genAiDownloadErrorStatusMessage}
+          </spoken-message>
+        `;
+      case 'installed':
+        if (!this.summaryDownloadRequested.value) {
+          return nothing;
+        }
+        return html`
+          <spoken-message
+            slot="status"
+            role="status"
+            aria-live="polite"
+          >
+            ${i18n.genAiDownloadFinishedStatusMessage}
+          </spoken-message>
+        `;
+      case 'installing':
+        return html`
+          <spoken-message slot="status" role="status" aria-live="polite">
+            ${i18n.genAiDownloadStartedStatusMessage}
+          </spoken-message>
+        `;
+      default:
+        return assertExhaustive(state);
+    }
+  }
+
   private renderSummaryModelDescriptionAndAction() {
-    const state = this.platformHandler.summaryModelLoader.state.value;
+    const state = this.platformHandler.getGenAiModelState();
+    const downloadButton = html`
+      <cra-button
+        slot="action"
+        button-style="secondary"
+        .label=${i18n.settingsOptionsGenAiDownloadButton}
+        @click=${this.onDownloadSummaryClick}
+        aria-label=${i18n.settingsOptionsGenAiDownloadButtonAriaLabel}
+      ></cra-button>
+    `;
     if (state.kind === 'notInstalled') {
       // Shows the "download" button when the summary model is not installed,
       // even if it's already enabled by user. This shouldn't happen in normal
       // case, but might happen if DLC is cleared manually by any mean.
       return html`
         <span slot="description">
-          ${i18n.settingsOptionsSummaryDescription}
+          ${i18n.settingsOptionsGenAiDescription}
           <a
             href=${HELP_URL}
             target="_blank"
             @click=${stopPropagation}
-            aria-label=${i18n.settingsOptionsSummaryLearnMoreLinkAriaLabel}
+            aria-label=${i18n.settingsOptionsGenAiLearnMoreLinkAriaLabel}
           >
-            ${i18n.settingsOptionsSummaryLearnMoreLink}
+            ${i18n.settingsOptionsGenAiLearnMoreLink}
           </a>
         </span>
-        <cra-button
-          slot="action"
-          button-style="secondary"
-          .label=${i18n.settingsOptionsSummaryDownloadButton}
-          @click=${this.onDownloadSummaryClick}
-          aria-label=${i18n.settingsOptionsSummaryDownloadButtonAriaLabel}
-        ></cra-button>
+        ${downloadButton}
+      `;
+    }
+
+    if (state.kind === 'error') {
+      // Shows the "download" button when summary model fails to download so
+      // that users can try download again later.
+      return html`
+        <span slot="description" class="error">
+          ${i18n.settingsOptionsGenAiErrorDescription}
+        </span>
+        ${downloadButton}
       `;
     }
 
@@ -244,32 +303,22 @@ export class SettingsMenu extends ReactiveLitElement {
         slot="action"
         .selected=${this.summaryEnabled}
         @change=${this.onSummaryToggle}
-        aria-label=${i18n.settingsOptionsSummaryLabel}
+        aria-label=${i18n.settingsOptionsGenAiLabel}
       >
       </cros-switch>
     `;
     if (!this.summaryEnabled) {
       return summaryToggle;
     }
-    const downloadedStatus = html`<spoken-message
-      slot="status"
-      role="status"
-      aria-live="polite"
-    >
-      ${i18n.summaryDownloadFinishedStatusMessage}
-    </spoken-message>`;
 
     switch (state.kind) {
       case 'unavailable':
         return assertNotReached(
           'Summary model unavailable but the setting is rendered.',
         );
-      case 'error':
-        // TODO: b/344784638 - Render error state.
-        return nothing;
       case 'installing': {
         const progressDescription =
-          i18n.settingsOptionsSummaryDownloadingProgressDescription(
+          i18n.settingsOptionsGenAiDownloadingProgressDescription(
             state.progress,
           );
         return html`
@@ -277,36 +326,30 @@ export class SettingsMenu extends ReactiveLitElement {
           <cra-button
             slot="action"
             button-style="secondary"
-            .label=${i18n.settingsOptionsSummaryDownloadingButton}
+            .label=${i18n.settingsOptionsGenAiDownloadingButton}
             disabled
           >
             <md-circular-progress indeterminate slot="leading-icon">
             </md-circular-progress>
           </cra-button>
-          <spoken-message slot="status" role="status" aria-live="polite">
-            ${i18n.summaryDownloadStartedStatusMessage}
-          </spoken-message>
         `;
       }
       case 'installed':
-        return [
-          summaryToggle,
-          this.summaryDownloadRequested.value ? downloadedStatus : nothing,
-        ];
+        return summaryToggle;
       default:
         assertExhaustive(state.kind);
     }
   }
 
   private renderSummaryModelSettings() {
-    if (this.platformHandler.summaryModelLoader.state.value.kind ===
-        'unavailable') {
+    if (this.platformHandler.getGenAiModelState().kind === 'unavailable') {
       return nothing;
     }
     return html`
       <settings-row>
-        <span slot="label">${i18n.settingsOptionsSummaryLabel}</span>
+        <span slot="label">${i18n.settingsOptionsGenAiLabel}</span>
         ${this.renderSummaryModelDescriptionAndAction()}
+        ${this.renderSummaryModelDownloadStatus()}}
       </settings-row>
     `;
   }
@@ -342,6 +385,7 @@ export class SettingsMenu extends ReactiveLitElement {
           shape="circle"
           aria-label=${i18n.settingsOptionsLanguageSubpageButtonAriaLabel}
           @click=${this.onLanguagePickerExpand}
+          ${ref(this.subpageButton)}
         >
           <cra-icon slot="icon" name="chevron_right"></cra-icon>
         </cra-icon-button>
@@ -586,6 +630,12 @@ export class SettingsMenu extends ReactiveLitElement {
   private onSubpageCloseClick() {
     assert(this.transcriptionLanguageExpanded.value);
     this.transcriptionLanguageExpanded.value = false;
+    this.updateComplete.then(() => {
+      const subpageButton = assertExists(this.subpageButton.value);
+      subpageButton.updateComplete.then(() => {
+        subpageButton.focus();
+      });
+    });
   }
 
   private renderSettingsBody(): RenderResult {

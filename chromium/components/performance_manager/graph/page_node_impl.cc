@@ -17,6 +17,7 @@
 #include "components/performance_manager/graph/graph_impl_operations.h"
 #include "components/performance_manager/graph/process_node_impl.h"
 #include "components/performance_manager/public/graph/graph_operations.h"
+#include "components/performance_manager/public/resource_attribution/page_context.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/web_contents.h"
 
@@ -42,14 +43,7 @@ PageNodeImpl::PageNodeImpl(base::WeakPtr<content::WebContents> web_contents,
   // TODO(crbug.com/40121561): Remove `visible_url` from the constructor in M132
   // if no issues are found with this CHECK.
   CHECK(main_frame_url_.value().is_empty(), base::NotFatalUntil::M132);
-
-  // Nodes are created on the UI thread, then accessed on the PM sequence.
-  // `weak_this_` can be returned from GetWeakPtrOnUIThread() and dereferenced
-  // on the PM sequence.
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-  DETACH_FROM_SEQUENCE(sequence_checker_);
-  weak_this_ = weak_factory_.GetWeakPtr();
-
   if (is_audible_.value()) {
     audible_change_time_ = base::TimeTicks::Now();
   }
@@ -59,7 +53,6 @@ PageNodeImpl::~PageNodeImpl() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK_EQ(nullptr, opener_frame_node_);
   DCHECK_EQ(nullptr, embedder_frame_node_);
-  DCHECK_EQ(EmbeddingType::kInvalid, embedding_type_);
 }
 
 const std::string& PageNodeImpl::GetBrowserContextID() const {
@@ -70,12 +63,6 @@ const std::string& PageNodeImpl::GetBrowserContextID() const {
 resource_attribution::PageContext PageNodeImpl::GetResourceContext() const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   return resource_attribution::PageContext::FromPageNode(this);
-}
-
-PageNodeImpl::EmbeddingType PageNodeImpl::GetEmbeddingType() const {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  DCHECK(embedder_frame_node_ || embedding_type_ == EmbeddingType::kInvalid);
-  return embedding_type_;
 }
 
 PageType PageNodeImpl::GetType() const {
@@ -233,11 +220,6 @@ uint64_t PageNodeImpl::EstimatePrivateFootprintSize() const {
         return true;
       });
   return total;
-}
-
-base::WeakPtr<PageNodeImpl> PageNodeImpl::GetWeakPtrOnUIThread() {
-  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-  return weak_this_;
 }
 
 base::WeakPtr<PageNodeImpl> PageNodeImpl::GetWeakPtr() {
@@ -404,7 +386,6 @@ FrameNodeImpl* PageNodeImpl::opener_frame_node() const {
 
 FrameNodeImpl* PageNodeImpl::embedder_frame_node() const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  DCHECK(embedder_frame_node_ || embedding_type_ == EmbeddingType::kInvalid);
   return embedder_frame_node_;
 }
 
@@ -463,44 +444,36 @@ void PageNodeImpl::ClearOpenerFrameNode() {
   }
 }
 
-void PageNodeImpl::SetEmbedderFrameNodeAndEmbeddingType(
-    FrameNodeImpl* embedder,
-    EmbeddingType embedding_type) {
+void PageNodeImpl::SetEmbedderFrameNode(FrameNodeImpl* embedder) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(embedder);
   DCHECK(graph()->NodeInGraph(embedder));
   DCHECK_NE(this, embedder->page_node());
-  DCHECK_NE(EmbeddingType::kInvalid, embedding_type);
 
   auto* previous_embedder = embedder_frame_node_.get();
-  auto previous_type = embedding_type_;
 
   if (previous_embedder) {
     previous_embedder->RemoveEmbeddedPage(PassKey(), this);
   }
   embedder_frame_node_ = embedder;
-  embedding_type_ = embedding_type;
   embedder->AddEmbeddedPage(PassKey(), this);
 
   for (auto& observer : GetObservers()) {
-    observer.OnEmbedderFrameNodeChanged(this, previous_embedder, previous_type);
+    observer.OnEmbedderFrameNodeChanged(this, previous_embedder);
   }
 }
 
-void PageNodeImpl::ClearEmbedderFrameNodeAndEmbeddingType() {
+void PageNodeImpl::ClearEmbedderFrameNode() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK_NE(nullptr, embedder_frame_node_);
-  DCHECK_NE(EmbeddingType::kInvalid, embedding_type_);
 
   auto* previous_embedder = embedder_frame_node_.get();
-  auto previous_type = embedding_type_;
 
   embedder_frame_node_->RemoveEmbeddedPage(PassKey(), this);
   embedder_frame_node_ = nullptr;
-  embedding_type_ = EmbeddingType::kInvalid;
 
   for (auto& observer : GetObservers()) {
-    observer.OnEmbedderFrameNodeChanged(this, previous_embedder, previous_type);
+    observer.OnEmbedderFrameNodeChanged(this, previous_embedder);
   }
 }
 
@@ -512,12 +485,6 @@ void PageNodeImpl::set_has_nonempty_beforeunload(
 
 void PageNodeImpl::OnInitializingProperties() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-
-  // Make sure all weak pointers, even `weak_this_` that was created on the UI
-  // thread in the constructor, can only be dereferenced on the graph sequence.
-  weak_factory_.BindToCurrentSequence(
-      base::subtle::BindWeakPtrFactoryPassKey());
-
   NodeAttachedDataStorage::Create(this);
 }
 
@@ -531,7 +498,7 @@ void PageNodeImpl::OnBeforeLeavingGraph() {
 
   // Sever embedder relationships.
   if (embedder_frame_node_) {
-    ClearEmbedderFrameNodeAndEmbeddingType();
+    ClearEmbedderFrameNode();
   }
 
   DCHECK_EQ(0u, frame_node_count_);

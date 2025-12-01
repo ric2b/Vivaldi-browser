@@ -41,6 +41,7 @@
 #include "chrome/test/user_education/interactive_feature_promo_test.h"
 #include "components/feature_engagement/public/feature_constants.h"
 #include "components/privacy_sandbox/privacy_sandbox_features.h"
+#include "components/regional_capabilities/regional_capabilities_switches.h"
 #include "components/search_engines/search_engine_choice/search_engine_choice_utils.h"
 #include "components/search_engines/search_engines_switches.h"
 #include "components/signin/public/base/consent_level.h"
@@ -50,6 +51,7 @@
 #include "components/signin/public/identity_manager/account_info.h"
 #include "components/signin/public/identity_manager/identity_manager.h"
 #include "components/signin/public/identity_manager/identity_test_utils.h"
+#include "components/user_education/views/help_bubble_view.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
 #include "net/dns/mock_host_resolver.h"
@@ -453,14 +455,6 @@ class FirstRunParameterizedInteractiveUiTest
   }
 
  protected:
-  bool SupervisedProfilePromoHasBeenShown(Browser* browser) {
-    return feature_engagement::TrackerFactory::GetForBrowserContext(
-               browser->profile())
-        ->HasEverTriggered(
-            feature_engagement::kIPHSupervisedUserProfileSigninFeature,
-            /*from_window=*/false);
-  }
-
   void SimulateSignIn(const std::string& account_email,
                       const std::string& account_given_name) {
     auto* identity_manager = IdentityManagerFactory::GetForProfile(profile());
@@ -739,8 +733,12 @@ IN_PROC_BROWSER_TEST_P(FirstRunParameterizedInteractiveUiTest, SignInAndSync) {
       "ProfilePicker.FirstRun.ExitStatus",
       ProfilePicker::FirstRunExitStatus::kCompleted, 1);
 
-  EXPECT_EQ(WithSupervisedUser(),
-            SupervisedProfilePromoHasBeenShown(browser()));
+  RunTestSequence(
+      If([]() { return WithSupervisedUser(); },
+         Then(WaitForPromo(
+             feature_engagement::kIPHSupervisedUserProfileSigninFeature)),
+         Else(EnsureNotPresent(
+             user_education::HelpBubbleView::kHelpBubbleElementIdForTesting))));
 }
 
 IN_PROC_BROWSER_TEST_P(FirstRunParameterizedInteractiveUiTest, DeclineSync) {
@@ -823,8 +821,12 @@ IN_PROC_BROWSER_TEST_P(FirstRunParameterizedInteractiveUiTest, DeclineSync) {
       "ProfilePicker.FirstRun.ExitStatus",
       ProfilePicker::FirstRunExitStatus::kCompleted, 1);
 
-  EXPECT_EQ(WithSupervisedUser(),
-            SupervisedProfilePromoHasBeenShown(browser()));
+  RunTestSequence(
+      If([]() { return WithSupervisedUser(); },
+         Then(WaitForPromo(
+             feature_engagement::kIPHSupervisedUserProfileSigninFeature)),
+         Else(EnsureNotPresent(
+             user_education::HelpBubbleView::kHelpBubbleElementIdForTesting))));
 }
 
 IN_PROC_BROWSER_TEST_P(FirstRunParameterizedInteractiveUiTest, GoToSettings) {
@@ -863,8 +865,7 @@ IN_PROC_BROWSER_TEST_P(FirstRunParameterizedInteractiveUiTest, GoToSettings) {
             return SyncButtonsFeatureConfig() !=
                    SyncButtonsFeatureConfig::kButtonsStillLoading;
           },
-          /* then_steps= */ Steps(
-              WaitForButtonVisible(kWebContentsId, kOptInSyncButton))),
+          Then(WaitForButtonVisible(kWebContentsId, kOptInSyncButton))),
 
       // Click "Settings" to proceed to the browser.
       EnsurePresent(kWebContentsId, kSettingsButton),

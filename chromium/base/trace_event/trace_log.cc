@@ -198,12 +198,12 @@ void OnAddLegacyTraceEvent(TraceEvent* trace_event) {
         break;
     }
   }
-  if (trace_event->thread_id() &&
+  if (trace_event->thread_id() != kInvalidThreadId &&
       trace_event->thread_id() != base::PlatformThread::CurrentId()) {
     PERFETTO_INTERNAL_LEGACY_EVENT_ON_TRACK(
         phase, category, trace_event->name(),
-        perfetto::ThreadTrack::ForThread(trace_event->thread_id()), timestamp,
-        write_args);
+        perfetto::ThreadTrack::ForThread(trace_event->thread_id().raw()),
+        timestamp, write_args);
     return;
   }
   PERFETTO_INTERNAL_LEGACY_EVENT_ON_TRACK(
@@ -224,10 +224,11 @@ void OnUpdateLegacyTraceEventDuration(
   auto phase = TRACE_EVENT_PHASE_END;
   base::TimeTicks timestamp =
       explicit_timestamps ? now : TRACE_TIME_TICKS_NOW();
-  if (thread_id && thread_id != base::PlatformThread::CurrentId()) {
+  if (thread_id != kInvalidThreadId &&
+      thread_id != base::PlatformThread::CurrentId()) {
     PERFETTO_INTERNAL_LEGACY_EVENT_ON_TRACK(
-        phase, category, name, perfetto::ThreadTrack::ForThread(thread_id),
-        timestamp);
+        phase, category, name,
+        perfetto::ThreadTrack::ForThread(thread_id.raw()), timestamp);
     return;
   }
   PERFETTO_INTERNAL_LEGACY_EVENT_ON_TRACK(
@@ -347,7 +348,7 @@ struct TraceLog::RegisteredAsyncObserver {
 
 // static
 TraceLog* TraceLog::GetInstance() {
-  static base::NoDestructor<TraceLog> instance(0);
+  static base::NoDestructor<TraceLog> instance{};
   return instance.get();
 }
 
@@ -361,7 +362,7 @@ void TraceLog::ResetForTesting() {
   self->InitializePerfettoIfNeeded();
 }
 
-TraceLog::TraceLog(int generation) : process_id_(base::kNullProcessId) {
+TraceLog::TraceLog() : process_id_(base::kNullProcessId) {
 #if BUILDFLAG(IS_NACL)  // NaCl shouldn't expose the process id.
   SetProcessID(0);
 #else
@@ -568,14 +569,6 @@ MetadataFilterPredicate TraceLog::GetMetadataFilterPredicate() const {
   return metadata_filter_predicate_;
 }
 
-void TraceLog::SetRecordHostAppPackageName(bool record_host_app_package_name) {
-  record_host_app_package_name_ = record_host_app_package_name;
-}
-
-bool TraceLog::ShouldRecordHostAppPackageName() const {
-  return record_host_app_package_name_;
-}
-
 TraceConfig TraceLog::GetCurrentTraceConfig() const {
   const auto chrome_config =
       GetCurrentTrackEventDataSourceConfig().chrome_config();
@@ -762,26 +755,6 @@ void TraceLog::SetProcessID(ProcessId process_id) {
   process_id_ = process_id;
 }
 
-int TraceLog::GetNewProcessLabelId() {
-  AutoLock lock(lock_);
-  return next_process_label_id_++;
-}
-
-void TraceLog::UpdateProcessLabel(int label_id,
-                                  const std::string& current_label) {
-  if (!current_label.length()) {
-    return RemoveProcessLabel(label_id);
-  }
-
-  AutoLock lock(lock_);
-  process_labels_[label_id] = current_label;
-}
-
-void TraceLog::RemoveProcessLabel(int label_id) {
-  AutoLock lock(lock_);
-  process_labels_.erase(label_id);
-}
-
 size_t TraceLog::GetObserverCountForTest() const {
   AutoLock lock(observers_lock_);
   return enabled_state_observers_.size();
@@ -879,12 +852,15 @@ base::trace_event::TraceEventHandle AddTraceEventWithProcessId(
     base::ProcessId process_id,
     base::trace_event::TraceArguments* args,
     unsigned int flags) {
+  static_assert(sizeof(base::PlatformThreadId::UnderlyingType) >=
+                sizeof(base::ProcessId));
   base::TimeTicks now = TRACE_TIME_TICKS_NOW();
   return AddTraceEventWithThreadIdAndTimestamp(
       phase, category_group_enabled, name, scope, id,
       trace_event_internal::kNoId,  // bind_id
-      static_cast<base::PlatformThreadId>(process_id), now, args,
-      flags | TRACE_EVENT_FLAG_HAS_PROCESS_ID);
+      base::PlatformThreadId(
+          static_cast<base::PlatformThreadId::UnderlyingType>(process_id)),
+      now, args, flags | TRACE_EVENT_FLAG_HAS_PROCESS_ID);
 }
 
 base::trace_event::TraceEventHandle AddTraceEventWithThreadIdAndTimestamp(

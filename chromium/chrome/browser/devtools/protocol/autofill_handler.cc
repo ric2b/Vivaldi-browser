@@ -5,6 +5,7 @@
 #include "chrome/browser/devtools/protocol/autofill_handler.h"
 
 #include <optional>
+#include <variant>
 
 #include "base/check_deref.h"
 #include "base/memory/scoped_refptr.h"
@@ -16,8 +17,8 @@
 #include "components/autofill/content/browser/content_autofill_driver.h"
 #include "components/autofill/content/browser/content_autofill_driver_factory.h"
 #include "components/autofill/content/browser/scoped_autofill_managers_observation.h"
-#include "components/autofill/core/browser/data_model/autofill_profile.h"
-#include "components/autofill/core/browser/data_model/credit_card.h"
+#include "components/autofill/core/browser/data_model/addresses/autofill_profile.h"
+#include "components/autofill/core/browser/data_model/payments/credit_card.h"
 #include "components/autofill/core/browser/field_types.h"
 #include "components/autofill/core/browser/form_structure.h"
 #include "components/autofill/core/browser/foundations/autofill_manager.h"
@@ -192,9 +193,7 @@ void AutofillHandler::SetAddresses(
       // available addresses.
       // TODO(b/40270486): Offer a test address version for when the new model
       // is enabled.
-      if (test_address_country == u"Germany" &&
-          base::FeatureList::IsEnabled(
-              autofill::features::kAutofillUseDEAddressModel)) {
+      if (test_address_country == u"Germany") {
         continue;
       }
 
@@ -224,7 +223,7 @@ void AutofillHandler::OnFillOrPreviewDataModelForm(
     const autofill::FillingPayload& filling_payload) {
   // We only care about address forms that were filled.
   if (action_persistence != autofill::mojom::ActionPersistence::kFill ||
-      !absl::holds_alternative<const autofill::AutofillProfile*>(
+      !std::holds_alternative<const autofill::AutofillProfile*>(
           filling_payload)) {
     return;
   }
@@ -232,7 +231,7 @@ void AutofillHandler::OnFillOrPreviewDataModelForm(
   autofill::FormStructure& form_structure =
       CHECK_DEREF(manager.FindCachedFormById(form));
   const autofill::AutofillProfile* profile_used_to_fill_form =
-      absl::get<const autofill::AutofillProfile*>(filling_payload);
+      std::get<const autofill::AutofillProfile*>(filling_payload);
 
   auto field_id_to_form_field_data =
       base::MakeFlatMap<autofill::FieldGlobalId,

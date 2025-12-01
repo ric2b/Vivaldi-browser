@@ -8,13 +8,16 @@
 -All/CompositedScrollingMetricTest.PassiveEventHandlers/1
 -All/CompositedScrollingMetricTest.RecordCorrectScrollingThread/0
 -All/CompositedScrollingMetricTest.RecordCorrectScrollingThread/1
+-All/CustomizableSelectEnabledDumpAccessibilityTreeTest.AccessibilitySelect/blink
 -All/DumpAccessibilityTreeTest.AccessibilityIframeTransformNested/blink
 -All/DumpAccessibilityTreeTest.AccessibilityIframeTransformNestedCrossProcess/blink
 -All/DumpAccessibilityTreeTest.AccessibilityLabelWithSelectedOption/blink
 -All/DumpAccessibilityTreeTest.AccessibilityOptgroup/blink
 -All/DumpAccessibilityTreeTest.AccessibilityPopoverApi/blink
 -All/DumpAccessibilityTreeTest.AccessibilitySelect/blink
+-All/DumpAccessibilityTreeTest.AccessibilitySelectionContainer/blink
 -All/DumpAccessibilityTreeTest.AccessibilityWindowCropsItems/blink
+-All/DumpAccessibilityTreeTest.ShadowDomFirstChild/blink
 -All/ScrollingIntegrationTest.ScrollAfterCrossOriginNavigation/0
 -All/ScrollingIntegrationTest.ScrollAfterCrossOriginNavigation/1
 -All/SitePerProcessBrowserTest.FrameOwnerPropertiesPropagationScrolling/0
@@ -31,9 +34,15 @@
 -All/TouchpadPinchBrowserTest.WheelListenerPreventingDoubleTap/1
 -All/TouchpadPinchBrowserTest.WheelListenerPreventingPinch/0
 -All/TouchpadPinchBrowserTest.WheelListenerPreventingPinch/1
+-BackForwardCacheBrowserTest.BlockAndUnblockFromHTMLFile
+-BackForwardCacheBrowserTest.BlockAndUnblockFromJavaScriptFile
 -BackForwardCacheBrowserTest.DoesNotCacheIfRunFileChooserIsInvoked
+-BackForwardCacheBrowserTest.MultipleBlocksFromHTMLFile
+-BackForwardCacheBrowserTest.MultipleBlocksFromJavaScriptFile
+-BackForwardCacheBrowserTest.StickyFeaturesWithDetails
 -BackForwardCacheBrowserTest.WebSocketCachedIfClosed
 -BackForwardCacheBrowserTest.WebSocketNotCached
+-BackForwardCacheBrowserTestDisableCCNS.CCNSAndWebSocketBothRecorded
 -BackgroundTracingManagerBrowserTest.PerfettoSystemBackgroundScenarioDefaultName
 -BackgroundTracingManagerBrowserTest.PerfettoSystemBackgroundScenarioRuleId
 -BrowserGpuChannelHostFactoryTest.GrContextKeepsGpuChannelAlive
@@ -332,10 +341,8 @@
 
 # TODO(crbug.com/40274214): Assertion happens because |spawner_url_base_| is
 # empty.
--All/WorkerTest.WebSocketSharedWorker/0
--All/WorkerTest.WebSocketSharedWorker/1
--All/WorkerTest.WebSocketSharedWorker/2
--All/WorkerTest.WebSocketSharedWorker/3
+-All/WorkerTest.WebSocketSharedWorker/PrivateNetworkAccessForWorkersDisabled
+-All/WorkerTest.WebSocketSharedWorker/PrivateNetworkAccessForWorkersEnabled
 
 # TODO(crbug.com/335331442): A timeout happens after bump the version of SDK up to 17.4.
 -All/AccessibilityHitTestingBrowserTest.HitTestInPopup/ZoomFactor1
@@ -829,8 +836,8 @@
 
 # TODO(crbug.com/384770166): These tests have been failing since
 # https://crrev.com/c/6101118.
--PrerenderBrowserTest.ActivateOnWindowOpen_NewTab
--PrerenderBrowserTest.ActivateOnWindowOpen_PopUp
+-PrerenderTargetHintEnabledBrowserTest.ActivateOnWindowOpen_NewTab
+-PrerenderTargetHintEnabledBrowserTest.ActivateOnWindowOpen_PopUp
 
 # TODO(crbug.com/393431139): These tests have been failing since
 # https://crrev.com/c/5201204.
@@ -838,3 +845,12 @@
 -All/InterestGroupComponentWorkletValidationBrowserTest.ComponentAuctionValidateWorkletParameters/top_level_header_direct_from_seller_signals_component_subresource_bundle_direct_from_seller_signals
 -All/InterestGroupComponentWorkletValidationBrowserTest.ComponentAuctionValidateWorkletParameters/top_level_subresource_bundle_direct_from_seller_signals_component_header_direct_from_seller_signals
 -All/InterestGroupComponentWorkletValidationBrowserTest.ComponentAuctionValidateWorkletParameters/top_level_subresource_bundle_direct_from_seller_signals_component_subresource_bundle_direct_from_seller_signals
+
+# TODO(crbug.com/402810071): These tests have been failing since
+# https://crrev.com/c/6261869. The blink::features::kPrerender2InNewTab feature
+# doesn't work on iOS correctly.
+-PrerenderTargetHintEnabledBrowserTest.ActivateOnLinkClick_TargetBlankWithNoopener_WithTargetHintBlank
+-PrerenderTargetHintEnabledBrowserTest.ActivateOnLinkClick_TargetBlank_WithTargetHintBlank
+-PrerenderTargetHintEnabledBrowserTest.BackgroundedPage_ActivateOnLinkClick_TargetBlank_WithTargetHintBlank
+-PrerenderTargetHintEnabledBrowserTest.SessionStorage_TargetBlank_WithTargetHintBlank
+-PrerenderTargetHintOriginTrialBrowserTest.Prerender2InNewTabOriginTrial

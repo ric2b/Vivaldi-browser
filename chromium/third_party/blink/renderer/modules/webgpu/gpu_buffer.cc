@@ -382,7 +382,7 @@ void GPUBuffer::OnMapAsyncCallback(
     case wgpu::MapAsyncStatus::Success:
       resolver->Resolve();
       break;
-    case wgpu::MapAsyncStatus::InstanceDropped:
+    case wgpu::MapAsyncStatus::CallbackCancelled:
       resolver->RejectWithDOMException(DOMExceptionCode::kAbortError,
                                        String::FromUTF8(message));
       break;

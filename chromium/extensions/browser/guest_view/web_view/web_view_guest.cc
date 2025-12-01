@@ -68,6 +68,7 @@
 #include "extensions/browser/guest_view/web_view/web_view_permission_types.h"
 #include "extensions/browser/guest_view/web_view/web_view_renderer_state.h"
 #include "extensions/browser/process_manager.h"
+#include "extensions/browser/rules_registry_ids.h"
 #include "extensions/browser/url_loader_factory_manager.h"
 #include "extensions/common/constants.h"
 #include "extensions/common/extension_features.h"
@@ -124,6 +125,8 @@
 #include "chrome/browser/ui/browser_navigator.h"
 #include "chrome/browser/ui/browser_navigator_params.h"
 #include "chrome/browser/ui/browser_tabstrip.h"
+
+#include "extensions/vivaldi_browser_component_wrapper.h"
 
 using vivaldi::IsVivaldiApp;
 using vivaldi::IsVivaldiRunning;
@@ -438,7 +441,7 @@ int WebViewGuest::GetOrGenerateRulesRegistryID(int embedder_process_id,
   bool is_web_view = embedder_process_id && webview_instance_id
                      && !IsVivaldiRunning();
   if (!is_web_view)
-    return RulesRegistryService::kDefaultRulesRegistryID;
+    return rules_registry_ids::kDefaultRulesRegistryID;
 
   WebViewKey key = std::make_pair(content::ChildProcessId(embedder_process_id),
                                   webview_instance_id);
@@ -463,8 +466,10 @@ void WebViewGuest::CreateInnerPage(
   // changes here. Go look in
   // ./extensions/api/guest_view/vivaldi_web_view_guest.cpp
   if (IsVivaldiRunning()) {
-    return VivaldiCreateWebContents(std::move(owned_this), create_params,
-                                    std::move(callback));
+    VivaldiCreateWebContents(std::move(owned_this), create_params,
+        std::move(callback));
+    RunVivaldiPostponedCalls();
+    return;
   }
 
   RenderFrameHost* owner_render_frame_host = owner_rfh();
@@ -793,7 +798,9 @@ void WebViewGuest::EmbedderFullscreenToggled(bool entered_fullscreen) {
 bool WebViewGuest::ZoomPropagatesFromEmbedderToGuest() const {
   // If Vivaldi and the webcontents is in a tabstrip we should not sync
   // zoom-level between the embedder and the WebViewGuest.
-  if (IsVivaldiRunning() && chrome::FindBrowserWithTab(web_contents())) {
+  if (IsVivaldiRunning() &&
+      VivaldiBrowserComponentWrapper::GetInstance()->FindBrowserWithTab(
+          web_contents())) {
     return false;
   }
   // We use the embedder's zoom iff we haven't set a zoom ourselves using
@@ -817,9 +824,11 @@ void WebViewGuest::WebContentsDestroyed() {
   // RenderFrameDeleted(), such as when destroying unattached guests that never
   // had a RenderFrame created.
   // TODO(crbug.com/40202416): Implement an MPArch equivalent of this.
-  WebViewRendererState::GetInstance()->RemoveGuest(
-      GetGuestMainFrame()->GetProcess()->GetDeprecatedID(),
-      GetGuestMainFrame()->GetRoutingID());
+  if (GetGuestMainFrame()) {
+    WebViewRendererState::GetInstance()->RemoveGuest(
+        GetGuestMainFrame()->GetProcess()->GetDeprecatedID(),
+        GetGuestMainFrame()->GetRoutingID());
+  }
   } // End Vivaldi
   // The following call may destroy `this`.
   GuestViewBase::WebContentsDestroyed();
@@ -865,10 +874,8 @@ void WebViewGuest::CloseContents(WebContents* source) {
   // Vivaldi
   // Call the Browser class as it already has an instance of the
   // active unload controller needed for beforeunload handling.
-  Browser* browser = chrome::FindBrowserWithTab(source);
-  if (browser) {
-    browser->DoCloseContents(source);
-  }
+  VivaldiBrowserComponentWrapper::GetInstance()->BrowserDoCloseContents(
+      source);
   // End Vivaldi
 }
 
@@ -1309,7 +1316,7 @@ bool WebViewGuest::ClearData(base::Time remove_since,
 
 WebViewGuest::WebViewGuest(content::RenderFrameHost* owner_rfh)
     : GuestView<WebViewGuest>(owner_rfh),
-      rules_registry_id_(RulesRegistryService::kInvalidRulesRegistryID),
+      rules_registry_id_(rules_registry_ids::kInvalidRulesRegistryID),
       find_helper_(this),
       javascript_dialog_helper_(this),
       web_view_guest_delegate_(base::WrapUnique(
@@ -1633,8 +1640,7 @@ void WebViewGuest::PushWebViewStateToIOThread(
       guest_host->GetSiteInstance()->GetStoragePartitionConfig();
 
   WebViewRendererState::WebViewInfo web_view_info;
-  web_view_info.embedder_process_id =
-      owner_rfh()->GetProcess()->GetDeprecatedID();
+  web_view_info.embedder_process_id = owner_rfh()->GetProcess()->GetID();
   web_view_info.instance_id = view_instance_id();
   web_view_info.partition_id = storage_partition_config.partition_name();
   web_view_info.owner_host = owner_host();
@@ -1645,7 +1651,7 @@ void WebViewGuest::PushWebViewStateToIOThread(
       WebViewContentScriptManager::Get(browser_context());
   DCHECK(manager);
   web_view_info.content_script_ids = manager->GetContentScriptIDSet(
-      web_view_info.embedder_process_id, web_view_info.instance_id);
+      web_view_info.embedder_process_id.value(), web_view_info.instance_id);
 
   WebViewRendererState::GetInstance()->AddGuest(
       guest_host->GetProcess()->GetDeprecatedID(), guest_host->GetRoutingID(),
@@ -1761,6 +1767,11 @@ bool WebViewGuest::IsPermissionRequestable(ContentSettingsType type) const {
 
 std::optional<content::PermissionResult> WebViewGuest::OverridePermissionResult(
     ContentSettingsType type) const {
+  auto result = web_view_permission_helper_->OverridePermissionResult(type);
+  if (result) {
+    return result;
+  }
+
   if (IsOwnedByControlledFrameEmbedder()) {
     // Permission of content within a Controlled Frame is isolated.
     // Therefore, Controlled Frame decides what the immediate permission result
@@ -1969,8 +1980,8 @@ void WebViewGuest::ApplyAttributes(const base::Value::Dict& params) {
     // this function. Web panels need a set of functionality to work propely so
     // we use this place as a hook to set up what is needed.
     if (IsVivaldiWebPanel()) {
-      if (!TabDialogs::FromWebContents(web_contents()))
-        TabDialogs::CreateForWebContents(web_contents());
+      VivaldiBrowserComponentWrapper::GetInstance()->EnsureTabDialogsCreated(
+          web_contents());
     }
   }
   // End Vivaldi
@@ -2104,22 +2115,23 @@ content::WebContents* WebViewGuest::AddNewContents(
     bool* was_blocked) {
   CHECK(!base::FeatureList::IsEnabled(features::kGuestViewMPArch));
 
-
-    if (disposition == WindowOpenDisposition::NEW_PICTURE_IN_PICTURE) {
-    Browser* browser = chrome::FindBrowserWithTab(source);
+  if (disposition == WindowOpenDisposition::NEW_PICTURE_IN_PICTURE) {
+    Browser* browser =
+        VivaldiBrowserComponentWrapper::GetInstance()->FindBrowserWithTab(
+            source);
     if (browser) {
-
       content::WebContentsImpl* webcontensimpl =
           static_cast<content::WebContentsImpl*>(new_contents.get());
 
       webcontensimpl->SetResumePending(true);
-      if (browser->ShouldResumeRequestsForCreatedWindow())
+      if (browser->ShouldResumeRequestsForCreatedWindow()) {
         webcontensimpl->ResumeLoadingCreatedWebContents();
+      }
 
-      browser->AddNewContentsVivaldi(source, std::move(new_contents), target_url,
-                              disposition, window_features, user_gesture,
-                              was_blocked);
-      return webcontensimpl;
+      return VivaldiBrowserComponentWrapper::GetInstance()
+          ->BrowserAddNewContents(browser, source, std::move(new_contents),
+                                  target_url, disposition, window_features,
+                                  user_gesture, was_blocked);
     }
   }
 
@@ -2201,169 +2213,8 @@ WebContents* WebViewGuest::OpenURLFromTab(
   }
 
   if (IsVivaldiRunning()) {
-    // NOTE(pettern@vivaldi.com): Fix for VB-43122. Let devtools handle opening
-    // links from devtools.
-    DevToolsWindow* window = DevToolsWindow::AsDevToolsWindow(web_contents());
-    if (window) {
-      return window->OpenURLFromTab(source, params,
-                                    /*navigation_handle_callback=*/{});
-    }
-
-    Profile* profile = Profile::FromBrowserContext(source->GetBrowserContext());
-
-    if (params.disposition == WindowOpenDisposition::OFF_THE_RECORD) {
-      profile = profile->GetPrimaryOTRProfile(/*create_if_needed=*/true);
-    }
-
-    Browser* browser = chrome::FindTabbedBrowser(profile, false);
-    if (!browser &&
-        params.disposition != WindowOpenDisposition::OFF_THE_RECORD) {
-      // This is triggered from embedded content not in a tab. I.e. a mailview
-      // or extension browser action popup. Was added via VB-112248.
-      browser = ::vivaldi::FindBrowserWithNonTabContent(source);
-    }
-
-    if (!browser && Browser::GetCreationStatusForProfile(profile) ==
-                        Browser::CreationStatus::kOk) {
-      browser =
-          Browser::Create(Browser::CreateParams(profile, params.user_gesture));
-    }
-
-    NavigateParams nav_params(browser, params.url, params.transition);
-
-    nav_params.FillNavigateParamsFromOpenURLParams(params);
-    nav_params.source_contents = source;
-    nav_params.tabstrip_add_types = AddTabTypes::ADD_NONE;
-    nav_params.should_create_guestframe = true;
-    if (params.user_gesture) {
-      nav_params.window_action = NavigateParams::SHOW_WINDOW;
-    }
-
-    if (params.disposition != WindowOpenDisposition::CURRENT_TAB) {
-
-      // Navigate assumes target_contents has already been navigated.
-      content::NavigationController::LoadURLParams load_url_params(
-          nav_params.url);
-
-      load_url_params.initiator_frame_token = nav_params.initiator_frame_token;
-      load_url_params.initiator_process_id = nav_params.initiator_process_id;
-      load_url_params.initiator_origin = nav_params.initiator_origin;
-      load_url_params.initiator_base_url = nav_params.initiator_base_url;
-      load_url_params.source_site_instance = nav_params.source_site_instance;
-      load_url_params.referrer = nav_params.referrer;
-      load_url_params.frame_name = nav_params.frame_name;
-      load_url_params.frame_tree_node_id = nav_params.frame_tree_node_id;
-      load_url_params.redirect_chain = nav_params.redirect_chain;
-      load_url_params.transition_type = nav_params.transition;
-      load_url_params.extra_headers = nav_params.extra_headers;
-      load_url_params.should_replace_current_entry =
-          nav_params.should_replace_current_entry;
-      load_url_params.is_renderer_initiated = nav_params.is_renderer_initiated;
-      load_url_params.started_from_context_menu =
-          nav_params.started_from_context_menu;
-      load_url_params.has_user_gesture = nav_params.user_gesture;
-      load_url_params.blob_url_loader_factory =
-          nav_params.blob_url_loader_factory;
-      load_url_params.input_start = nav_params.input_start;
-      load_url_params.was_activated = nav_params.was_activated;
-      load_url_params.href_translate = nav_params.href_translate;
-      load_url_params.reload_type = nav_params.reload_type;
-      load_url_params.impression = nav_params.impression;
-      load_url_params.suggested_system_entropy =
-          nav_params.suggested_system_entropy;
-
-      if (nav_params.post_data) {
-        load_url_params.load_type =
-            content::NavigationController::LOAD_TYPE_HTTP_POST;
-        load_url_params.post_data = nav_params.post_data;
-      }
-
-      // Create new webcontents and navigate this.
-      scoped_refptr<content::SiteInstance>
-          initial_site_instance_for_new_contents =
-              tab_util::GetSiteInstanceForNewTab(browser->profile(),
-                                                 params.url);
-
-      WebContents::CreateParams webcontents_create_params(
-          browser->profile(), initial_site_instance_for_new_contents);
-
-      // Filter out data that must not be shared between profiles while loading.
-      Profile* navigation_profile = browser->profile();
-      if (nav_params.source_site_instance) {
-        navigation_profile = Profile::FromBrowserContext(
-            nav_params.source_site_instance->GetBrowserContext());
-      }
-      if (nav_params.source_contents) {
-        navigation_profile = Profile::FromBrowserContext(
-            nav_params.source_contents->GetBrowserContext());
-      }
-
-      webcontents_create_params.opener_render_frame_id =
-          params.source_render_frame_id;
-      webcontents_create_params.opener_render_process_id =
-          params.source_render_process_id;
-
-      // A tab is being opened from a link from a different profile, we must
-      // reset source information that may cause state to be shared.
-      if (navigation_profile != browser->profile()) {
-        nav_params.opener = nullptr;
-        nav_params.source_contents = nullptr;
-        nav_params.source_site_instance = nullptr;
-        nav_params.referrer = content::Referrer();
-
-        load_url_params.source_site_instance = nullptr;
-        load_url_params.referrer = content::Referrer();
-
-        webcontents_create_params.opener_render_frame_id = MSG_ROUTING_NONE;
-        webcontents_create_params.opener_render_process_id =
-            content::ChildProcessHost::kInvalidUniqueID;
-
-        load_url_params.load_type =
-            content::NavigationController::LOAD_TYPE_DEFAULT;
-        load_url_params.post_data.reset();
-      }
-
-      if (params.disposition == WindowOpenDisposition::NEW_BACKGROUND_TAB) {
-        webcontents_create_params.initially_hidden = true;
-      }
-
-#if defined(USE_AURA)
-      if (browser->window() && browser->window()->GetNativeWindow()) {
-        webcontents_create_params.context =
-            browser->window()->GetNativeWindow();
-      }
-#endif
-
-      webcontents_create_params.always_create_guest = true;
-
-      std::unique_ptr<WebContents> target_contents =
-          WebContents::Create(webcontents_create_params);
-
-      // |frame_tree_node_id| is invalid for main frame navigations.
-      if (params.frame_tree_node_id.is_null()) {
-        bool force_no_https_upgrade =
-            nav_params.url_typed_with_http_scheme ||
-            nav_params.captive_portal_window_type !=
-                captive_portal::CaptivePortalWindowType::kNone;
-        std::unique_ptr<ChromeNavigationUIData> navigation_ui_data =
-            ChromeNavigationUIData::CreateForMainFrameNavigation(
-                target_contents.get(), params.disposition,
-                nav_params.is_using_https_as_default_scheme,
-                force_no_https_upgrade);
-        navigation_ui_data->set_navigation_initiated_from_sync(
-            nav_params.navigation_initiated_from_sync);
-        load_url_params.navigation_ui_data = std::move(navigation_ui_data);
-      }
-      target_contents->GetController().LoadURLWithParams(load_url_params);
-
-      nav_params.contents_to_insert = std::move(target_contents);
-      // Inserts the navigated contents into the tabstrip of the right browser.
-      Navigate(&nav_params);
-      return nav_params.navigated_or_inserted_contents;
-    } else {
-      Navigate(&nav_params);
-      return nullptr;
-    }
+    return VivaldiBrowserComponentWrapper::GetInstance()
+        ->WebViewGuestOpenUrlFromTab(web_contents(), source, params);
   }
 
   // This code path is taken if Ctrl+Click, middle click or any of the
@@ -2471,7 +2322,8 @@ void WebViewGuest::LoadURLWithParams(
   bool is_vivaldi_host = IsVivaldiApp(owner_host());
 
   // Handle chrome://restart and chrome://quit urls.
-  if (is_vivaldi_host && HandleNonNavigationAboutURL(url)) {
+  if (is_vivaldi_host && VivaldiBrowserComponentWrapper::GetInstance()
+                             ->HandleNonNavigationAboutURL(url)) {
     return;
   }
 
@@ -2537,6 +2389,8 @@ void WebViewGuest::LoadURLWithParams(
   }
 
   GURL validated_url(url);
+  VivaldiSanitizeUrl(validated_url);
+
   // If the embedder is Vivaldi do not filter the url, we want to open all urls.
   if (!IsVivaldiApp(owner_host()))
   GetGuestMainFrame()->GetProcess()->FilterURL(false, &validated_url);
@@ -2588,10 +2442,9 @@ void WebViewGuest::RequestNewWindowPermission(
       // We need to find the browser window id, and since it is only opening via
       // user gestures we can trust the last active browser.
 
-      Profile *profile =
-          Profile::FromBrowserContext(new_guest->web_contents()->GetBrowserContext());
-      Browser *browser =
-          chrome::FindTabbedBrowser(profile, false);
+      Browser* browser =
+          VivaldiBrowserComponentWrapper::GetInstance()->FindBrowserWithTab(
+              web_contents());
       if (browser) {
         int foreground =
             (disposition == WindowOpenDisposition::NEW_BACKGROUND_TAB) ? 0 : 1;

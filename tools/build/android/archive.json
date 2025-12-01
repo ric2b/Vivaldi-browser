@@ -18,6 +18,11 @@
     "archive_type": "ARCHIVE_TYPE_ZIP",
     "versioned": true
   },
+  "about_credits": {
+    "files": [ "gen/components/resources/about_credits.html" ],
+    "archive_type": "ARCHIVE_TYPE_ZIP",
+    "versioned": true
+  },
   "dump_syms": {},
   "minidump_stackwalk": {}
 }

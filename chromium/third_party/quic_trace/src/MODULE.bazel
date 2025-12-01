@@ -1,0 +1,40 @@
+module(
+    name = "quic_trace",
+    repo_name = "com_google_quic_trace",
+    version = "0.0.0",
+)
+
+bazel_dep(name = "abseil-cpp", repo_name = "com_google_absl", version = "20250127.0")
+bazel_dep(name = "apple_support", repo_name = "build_bazel_apple_support", version = "1.18.1")
+bazel_dep(name = "bazel_skylib", version = "1.7.1")
+bazel_dep(name = "platforms", version = "0.0.11")
+bazel_dep(name = "protobuf", repo_name = "com_google_protobuf", version = "29.3")
+
+http_archive = use_repo_rule("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
+
+http_archive(
+    name = "sdl2",
+    build_file = "external/sdl2.BUILD",
+    sha256 = "91e0b198b08ee61f652e5c914494c5e8b961536b196a803f858c0468454010ea",
+    strip_prefix = "SDL2-2.32.0",
+    urls = ["https://www.libsdl.org/release/SDL2-2.32.0.zip"],
+)
+
+http_archive(
+    name = "sdl2_ttf",
+    build_file = "external/sdl2_ttf.BUILD",
+    sha256 = "ad7a7d2562c19ad2b71fa4ab2e76f9f52b3ee98096c0a7d7efbafc2617073c27",
+    strip_prefix = "SDL2_ttf-2.0.14",
+    urls = ["https://www.libsdl.org/projects/SDL_ttf/release/SDL2_ttf-2.0.14.zip"],
+)
+
+http_archive(
+    name = "freetype",
+    build_file = "external/freetype.BUILD",
+    # We patch out some modules we don't use from freetype config file.
+    patch_args = ["-p1"],
+    patches = ["external/freetype_config.patch"],
+    sha256 = "0550350666d427c74daeb85d5ac7bb353acba5f76956395995311a9c6f063289",
+    strip_prefix = "freetype-2.13.3",
+    urls = ["https://download.savannah.gnu.org/releases/freetype/freetype-2.13.3.tar.xz"],
+)

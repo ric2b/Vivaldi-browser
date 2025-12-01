@@ -58,8 +58,9 @@ void VivaldiAttachTabHelpers(WebContents* web_contents) {
   }
 
   adblock_filter::RuleService* rules_service =
+      (vivaldi::IsVivaldiRunning() || vivaldi::ForcedVivaldiRunning()) ?
       adblock_filter::RuleServiceFactory::GetForBrowserContext(
-          web_contents->GetBrowserContext());
+          web_contents->GetBrowserContext()) : nullptr;
 
   // The adblock rules might not be loaded yet, so we fallback to the lazy-creation.
   if (rules_service && rules_service->IsLoaded()) {

@@ -29,7 +29,6 @@
 #include "base/task/thread_pool.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
-#include "build/chromeos_buildflags.h"
 #include "chrome/browser/browser_process.h"
 #include "components/version_info/version_info.h"
 #include "components/webrtc_logging/browser/log_cleanup.h"
@@ -106,9 +105,7 @@ std::string GetLogUploadProduct() {
   const char product[] = "Chrome";
 #elif BUILDFLAG(IS_MAC)
   const char product[] = "Chrome_Mac";
-// TODO(crbug.com/40118868): Revisit the macro expression once build flag switch
-// of lacros-chrome is complete.
-#elif BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS)
+#elif BUILDFLAG(IS_LINUX)
 #if !defined(ADDRESS_SANITIZER)
   const char product[] = "Chrome_Linux";
 #else
@@ -116,7 +113,7 @@ std::string GetLogUploadProduct() {
 #endif
 #elif BUILDFLAG(IS_ANDROID)
   const char product[] = "Chrome_Android";
-#elif BUILDFLAG(IS_CHROMEOS_ASH)
+#elif BUILDFLAG(IS_CHROMEOS)
   const char product[] = "Chrome_ChromeOS";
 #else
 #error Platform not supported.

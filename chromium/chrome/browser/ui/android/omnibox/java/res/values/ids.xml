@@ -18,5 +18,7 @@ found in the LICENSE file.
     <item type="id" name="control_container" />
     <item type="id" name="coordinator" />
 
-    <item type="id" name="search_engine_suggestion_stub" /> <!-- Vivaldi -->
+     <!-- Vivaldi -->
+    <item type="id" name="search_engine_suggestion_stub" />
+     <!-- End Vivaldi -->
 </resources>

@@ -2,7 +2,6 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-import("//build/config/chromeos/ui_mode.gni")
 import("//chrome/browser/buildflags.gni")
 import("//chrome/common/features.gni")
 import("//components/compose/features.gni")
@@ -11,13 +10,13 @@ import("//printing/buildflags/buildflags.gni")
 import("//third_party/closure_compiler/compile_js.gni")
 import("//tools/grit/grit_rule.gni")
 import("//tools/grit/repack.gni")
+import("//ui/webui/webui_features.gni")
 
 assert(!is_ios, "Chromium/iOS shouldn't use anything in //chrome")
 assert(!is_fuchsia, "Fuchsia shouldn't use anything in //chrome")
 
 group("resources") {
   public_deps = [
-    "data_sharing_internals:resources",
     "saved_tab_groups_unsupported:resources",
     "segmentation_internals:resources",
   ]
@@ -57,6 +56,7 @@ group("resources") {
       "side_panel/bookmarks:resources",
       "side_panel/commerce:resources",
       "side_panel/customize_chrome:resources",
+      "side_panel/history:resources",
       "side_panel/history_clusters:resources",
       "side_panel/read_anything:resources",
       "side_panel/reading_list:resources",
@@ -74,12 +74,13 @@ group("resources") {
     }
   }
 
-  if (is_chromeos_ash) {
+  if (is_chromeos) {
     public_deps += [
       "ash/extended_updates:resources",
       "ash/inline_login:resources",
       "ash/settings:resources",
       "chromeos:resources",
+      "chromeos/dlp_internals:resources",
     ]
   }
 
@@ -94,16 +95,11 @@ group("resources") {
     ]
   }
 
-  if (is_win || is_mac || is_linux || is_chromeos_ash) {
-    public_deps += [ "connectors_internals:resources" ]
-  }
-
-  if (is_chromeos) {
-    public_deps += [ "chromeos/dlp_internals:resources" ]
-  }
-
   if (is_win || is_mac || is_linux || is_chromeos) {
-    public_deps += [ "discards:resources" ]
+    public_deps += [
+      "connectors_internals:resources",
+      "discards:resources",
+    ]
   }
 
   if (is_win || is_mac || is_linux) {
@@ -112,11 +108,12 @@ group("resources") {
       "app_settings:resources",
       "browser_switch:resources",
       "on_device_translation_internals:resources",
+      "signin/history_sync_optin:resources",
       "tts_engine:resources",
     ]
   }
 
-  if (!is_android && !is_chromeos_ash) {
+  if (!is_android && !is_chromeos) {
     public_deps += [
       "inline_login:resources",
       "signin/profile_picker:resources",
@@ -135,7 +132,7 @@ group("resources") {
     public_deps += [ "tab_strip:resources" ]
   }
 
-  if (enable_extensions) {
+  if (enable_extensions_core) {
     public_deps += [ "extensions:resources" ]
   }
 
@@ -160,11 +157,25 @@ group("resources") {
   }
 
   if (enable_glic) {
-    public_deps += [ "glic:resources" ]
+    public_deps += [
+      "glic:resources",
+      "glic/fre:resources",
+    ]
   }
 }
 
-if (is_chromeos_ash && enable_js_type_check) {
+if (enable_webui_generate_code_cache) {
+  group("code_cache_resources") {
+    public_deps = [
+      "side_panel/bookmarks:code_cache_resources",
+      "side_panel/customize_chrome:code_cache_resources",
+      "side_panel/reading_list:code_cache_resources",
+      "side_panel/shared:code_cache_resources",
+    ]
+  }
+}
+
+if (is_chromeos && enable_js_type_check) {
   group("closure_compile") {
     deps = [
       "chromeos:closure_compile",
@@ -262,6 +273,7 @@ group("dev_ui_resources") {
     "privacy_sandbox/internals:resources",
     "usb_internals:resources",
     "//components/commerce/core/internals/resources",
+    "//components/data_sharing/data_sharing_internals/resources",
     "//components/download/resources/download_internals:resources",
     "//components/history_clusters/history_clusters_internals/resources",
     "//components/metrics/debug:resources",
@@ -280,7 +292,7 @@ group("dev_ui_resources") {
     "//content/browser/webrtc/resources",
   ]
 
-  if (is_chromeos_ash) {
+  if (is_chromeos) {
     public_deps += [ "//chromeos/ash/components/kiosk/vision/webui:resources" ]
   }
 
@@ -327,6 +339,7 @@ repack("dev_ui_paks") {
     "$root_gen_dir/chrome/privacy_sandbox_internals_resources.pak",
     "$root_gen_dir/chrome/usb_internals_resources.pak",
     "$root_gen_dir/components/commerce_internals_resources.pak",
+    "$root_gen_dir/components/data_sharing_internals_resources.pak",
     "$root_gen_dir/components/dev_ui_components_resources.pak",
     "$root_gen_dir/components/download_internals_resources.pak",
     "$root_gen_dir/components/history_clusters_internals_resources.pak",

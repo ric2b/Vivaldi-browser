@@ -5,6 +5,8 @@
 #ifndef CHROME_BROWSER_GLIC_GLIC_PREF_NAMES_H_
 #define CHROME_BROWSER_GLIC_GLIC_PREF_NAMES_H_
 
+class PrefRegistrySimple;
+
 namespace glic::prefs {
 
 // ************* LOCAL STATE PREFS ***************
@@ -20,9 +22,11 @@ inline constexpr char kGlicLauncherHotkey[] = "glic.launcher_hotkey";
 // ************* PROFILE PREFS ***************
 // Prefs below are tied to a user profile
 
-// Integer pref that determines Glic enabling state for this user profile. This
-// is controlled from enterprise policy.
-inline constexpr char kGlicSettingsPolicy[] = "glic.settings_policy";
+// Value enums for the browser.gemini_settings pref. Integer pref that
+// determines Glic enabling state for this user profile. This is controlled from
+// enterprise policy.
+// TODO(crbug.com/393537628): This should be moved to a less Glic-specific
+// place.
 enum class SettingsPolicyState {
   kMinValue = 0,
 
@@ -32,6 +36,21 @@ enum class SettingsPolicyState {
   kMaxValue = kDisabled
 };
 
+// Value enums for the glic.completed_fre pref. Integer pref that determines the
+// Fre status for user profile.
+enum class FreStatus {
+  kMinValue = 0,
+
+  kNotStarted = kMinValue,
+  kCompleted = 1,
+  kIncomplete = 2,
+
+  kMaxValue = kIncomplete
+};
+
+// Boolean pref that determines if the glic button in tabstrip is pinned.
+inline constexpr char kGlicPinnedToTabstrip[] = "glic.pinned_to_tabstrip";
+
 // Boolean pref that enables or disables geolocation access for Glic.
 inline constexpr char kGlicGeolocationEnabled[] = "glic.geolocation_enabled";
 // Boolean pref that enables or disables microphone access for Glic.
@@ -39,9 +58,16 @@ inline constexpr char kGlicMicrophoneEnabled[] = "glic.microphone_enabled";
 // Boolean pref that enables or disables tab context for Glic.
 inline constexpr char kGlicTabContextEnabled[] = "glic.tab_context_enabled";
 
-// Boolean pref that tracks whether the Glic FRE was completed for this user
-// profile.
+// Integer pref that determines the Fre status for user profile. Values are from
+// the FreStatus enum.
 inline constexpr char kGlicCompletedFre[] = "glic.completed_fre";
+
+// Time pref that records the last time a user dismissed the Glic window.
+inline constexpr char kGlicWindowLastDismissedTime[] =
+    "glic.window.last_dimissed_time";
+
+void RegisterProfilePrefs(PrefRegistrySimple* registry);
+void RegisterLocalStatePrefs(PrefRegistrySimple* registry);
 
 }  // namespace glic::prefs
 

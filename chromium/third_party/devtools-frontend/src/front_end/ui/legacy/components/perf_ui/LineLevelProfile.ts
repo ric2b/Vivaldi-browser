@@ -134,14 +134,13 @@ export class Memory {
 
 export class Helper {
   private readonly type: string;
-  private readonly locationPool: Bindings.LiveLocation.LiveLocationPool;
-  private updateTimer: number|null;
-  private lineData!: Map<SDK.Target.Target|null, Map<Platform.DevToolsPath.UrlString|number, Map<number, number>>>;
+  private readonly locationPool = new Bindings.LiveLocation.LiveLocationPool();
+  private updateTimer: number|null = null;
+  private lineData =
+      new Map<SDK.Target.Target|null, Map<Platform.DevToolsPath.UrlString|number, Map<number, number>>>();
 
   constructor(type: string) {
     this.type = type;
-    this.locationPool = new Bindings.LiveLocation.LiveLocationPool();
-    this.updateTimer = null;
     this.reset();
   }
 
@@ -181,7 +180,7 @@ export class Helper {
     this.locationPool.disposeAll();
     // Map from sources to line->value profile maps.
     const decorationsBySource = new Map<Workspace.UISourceCode.UISourceCode, Map<number, number>>();
-    const pending: Promise<void>[] = [];
+    const pending: Array<Promise<void>> = [];
 
     for (const [target, scriptToLineMap] of this.lineData) {
       const debuggerModel = target ? target.model(SDK.DebuggerModel.DebuggerModel) : null;

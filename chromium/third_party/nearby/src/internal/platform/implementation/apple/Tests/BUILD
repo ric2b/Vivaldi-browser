@@ -12,8 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+load("@rules_apple//apple:ios.bzl", "ios_unit_test")
 load("//third_party/nearby:minimum_os.bzl", "IOS_LATEST_TEST_RUNNER", "IOS_MINIMUM_OS")
-load("//tools/build_defs/apple:ios.bzl", "ios_unit_test")
 
 licenses(["notice"])
 
@@ -28,6 +28,11 @@ objc_library(
         "GNCBLEGATTClientTest.m",
         "GNCBLEGATTServer+Testing.h",
         "GNCBLEGATTServerTest.m",
+        "GNCBLEL2CAPFakeInputOutputStream.h",
+        "GNCBLEL2CAPFakeInputOutputStream.m",
+        "GNCBLEL2CAPServer+Testing.h",
+        "GNCBLEL2CAPServerTest.m",
+        "GNCBLEL2CAPStreamTest.m",
         "GNCBLEMedium+Testing.h",
         "GNCBLEMediumTest.m",
         "GNCBLEUtilsTest.mm",
@@ -44,6 +49,7 @@ objc_library(
         "GNCScheduledExecutorTest.mm",
         "GNCSingleThreadExecutorTest.mm",
         "GNCUtilsTest.mm",
+        "NSData+GNCBase85Test.m",
         "NSData+GNCWebSafeBase64Test.m",
     ],
     deps = [

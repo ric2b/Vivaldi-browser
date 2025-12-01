@@ -9,6 +9,7 @@ import android.view.View;
 
 import androidx.annotation.ColorInt;
 import androidx.annotation.IntDef;
+import androidx.annotation.StringRes;
 
 import org.chromium.base.supplier.ObservableSupplierImpl;
 import org.chromium.build.annotations.NullMarked;
@@ -54,12 +55,6 @@ public interface BottomSheetContent {
     @interface ContentPriority {
         int HIGH = 0;
         int LOW = 1;
-    }
-
-    /** Interface to listen when the size of a BottomSheetContent changes. */
-    interface ContentSizeListener {
-        /** Called when the size of the view has changed. */
-        void onSizeChanged(int width, int height, int oldWidth, int oldHeight);
     }
 
     /**
@@ -219,18 +214,21 @@ public interface BottomSheetContent {
      * @return The resource id of the string announced when the sheet is opened at half height. This
      *     is typically the name of your feature followed by 'opened at half height'.
      */
+    @StringRes
     int getSheetHalfHeightAccessibilityStringId();
 
     /**
-     * @return The resource id of the string announced when the sheet is opened at full height.
-     *         This is typically the name of your feature followed by 'opened at full height'.
+     * @return The resource id of the string announced when the sheet is opened at full height. This
+     *     is typically the name of your feature followed by 'opened at full height'.
      */
+    @StringRes
     int getSheetFullHeightAccessibilityStringId();
 
     /**
-     * @return The resource id of the string announced when the sheet is closed. This is
-     *         typically the name of your feature followed by 'closed'.
+     * @return The resource id of the string announced when the sheet is closed. This is typically
+     *     the name of your feature followed by 'closed'.
      */
+    @StringRes
     int getSheetClosedAccessibilityStringId();
 
     /**

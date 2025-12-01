@@ -1,21 +1,30 @@
-#include <string>
+// Copyright (c) 2024 Vivaldi Technologies AS. All rights reserved
 
-#include "app/vivaldi_apptools.h"
-#include "base/containers/fixed_flat_map.h"
-#include "base/logging.h"
-#include "base/strings/utf_string_conversions.h"
+#include "components/search_engines/search_engines_helper.h"
+
+#include "components/country_codes/country_codes.h"
+#include "components/prefs/pref_service.h"
 #include "components/search_engines/search_engine_type.h"
 #include "components/search_engines/search_engines_manager.h"
 #include "components/search_engines/search_engines_managers_factory.h"
 #include "components/search_engines/template_url_prepopulate_data.h"
-#include "search_engines_helper.h"
 
 namespace TemplateURLPrepopulateData {
 
 namespace {
+
+std::string LanguageCodeFromApplicationLocale(
+    const std::string_view application_locale) {
+  std::string lang(
+      application_locale.begin(),
+      std::find(application_locale.begin(), application_locale.end(), '-'));
+  return lang;
+}
+
 const std::vector<EngineAndTier> GetSearchEngineDetails(
-    int country_id,
-    std::string application_locale,
+    country_codes::CountryId country_id,
+    const std::string_view application_locale,
+    PrefService& prefs,
     size_t* default_search_provider_index,
     SearchType search_type) {
   if (default_search_provider_index)
@@ -23,15 +32,8 @@ const std::vector<EngineAndTier> GetSearchEngineDetails(
 
   std::vector<EngineAndTier> result;
 
-  ParsedSearchEngines::EnginesListWithDefaults prepopulated_engines_list;
-
-  std::string lang(
-      application_locale.begin(),
-      std::find(application_locale.begin(), application_locale.end(), '-'));
-
-  prepopulated_engines_list = SearchEnginesManagersFactory::GetInstance()
-                                  ->GetSearchEnginesManager()
-                                  ->GetEnginesByCountryId(country_id, lang);
+  ParsedSearchEngines::EnginesListWithDefaults prepopulated_engines_list =
+      GetPrepopulatedSearchEngines(country_id, application_locale, prefs);
 
   CHECK(!prepopulated_engines_list.list.empty());
   CHECK(prepopulated_engines_list.default_index >= 0 &&
@@ -74,17 +76,31 @@ const std::vector<EngineAndTier> GetSearchEngineDetails(
 }  // namespace
 
 const std::vector<EngineAndTier> GetPrepopulationSetFromCountryID(
-    int country_id,
-    std::string application_locale) {
-  return GetSearchEngineDetails(country_id, application_locale, nullptr,
+    country_codes::CountryId country_id,
+    const std::string_view application_locale,
+    PrefService& prefs) {
+  return GetSearchEngineDetails(country_id, application_locale, prefs, nullptr,
                                 SearchType::kMain);
 }
 
-const PrepopulatedEngine* GetFallbackEngine(int country_id,
-                                            std::string application_locale,
-                                            SearchType search_type) {
+ParsedSearchEngines::EnginesListWithDefaults GetPrepopulatedSearchEngines(
+    country_codes::CountryId country_id,
+    const std::string_view application_locale,
+    PrefService& prefs) {
+  return SearchEnginesManagersFactory::GetInstance()
+      ->GetSearchEnginesManager()
+      ->GetEnginesByCountryId(
+          country_id, LanguageCodeFromApplicationLocale(application_locale),
+          prefs);
+}
+
+const PrepopulatedEngine* GetFallbackEngine(
+    country_codes::CountryId country_id,
+    const std::string_view application_locale,
+    PrefService& prefs,
+    SearchType search_type) {
   size_t default_engine_index;
-  return GetSearchEngineDetails(country_id, application_locale,
+  return GetSearchEngineDetails(country_id, application_locale, prefs,
                                 &default_engine_index, search_type)
       .at(default_engine_index)
       .search_engine;

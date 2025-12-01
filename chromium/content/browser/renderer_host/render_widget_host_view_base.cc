@@ -255,6 +255,17 @@ void RenderWidgetHostViewBase::CopyFromExactSurface(
   std::move(callback).Run(SkBitmap());
 }
 
+#if BUILDFLAG(IS_ANDROID)
+void RenderWidgetHostViewBase::CopyFromExactSurfaceWithIpcPriority(
+    const gfx::Rect& src_rect,
+    const gfx::Size& output_size,
+    base::OnceCallback<void(const SkBitmap&)> callback,
+    CopyOutputIpcPriority ipc_priority) {
+  NOTIMPLEMENTED_LOG_ONCE();
+  std::move(callback).Run(SkBitmap());
+}
+#endif
+
 std::unique_ptr<viz::ClientFrameSinkVideoCapturer>
 RenderWidgetHostViewBase::CreateVideoCapturer() {
   std::unique_ptr<viz::ClientFrameSinkVideoCapturer> video_capturer =
@@ -747,11 +758,10 @@ void RenderWidgetHostViewBase::ImeCancelComposition() {
 
 void RenderWidgetHostViewBase::ImeCompositionRangeChanged(
     const gfx::Range& range,
-    const std::optional<std::vector<gfx::Rect>>& character_bounds,
-    const std::optional<std::vector<gfx::Rect>>& line_bounds) {
+    const std::optional<std::vector<gfx::Rect>>& character_bounds) {
   if (GetTextInputManager()) {
-    GetTextInputManager()->ImeCompositionRangeChanged(
-        this, range, character_bounds, line_bounds);
+    GetTextInputManager()->ImeCompositionRangeChanged(this, range,
+                                                      character_bounds);
   }
 }
 
@@ -778,6 +788,11 @@ RenderWidgetHostViewBase::GetTouchSelectionControllerClientManager() {
 
 TouchSelectionControllerInputObserver*
 RenderWidgetHostViewBase::GetTouchSelectionControllerInputObserver() {
+  return nullptr;
+}
+
+RenderWidgetHost::InputEventObserver*
+RenderWidgetHostViewBase::GetInputTransferHandlerObserver() {
   return nullptr;
 }
 

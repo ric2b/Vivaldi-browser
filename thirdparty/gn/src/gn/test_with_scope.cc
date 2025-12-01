@@ -111,6 +111,17 @@ void TestWithScope::SetupToolchain(Toolchain* toolchain, bool use_toc) {
   cxx_tool->set_command_launcher("launcher");
   toolchain->SetTool(std::move(cxx_tool));
 
+  // CXX_MODULE
+  std::unique_ptr<Tool> cxx_module_tool =
+      Tool::CreateTool(CTool::kCToolCxxModule);
+  SetCommandForTool(
+      "c++ {{source}} {{cflags}} {{cflags_cc}} {{defines}} {{include_dirs}} "
+      "-o {{output}}",
+      cxx_module_tool.get());
+  cxx_module_tool->set_outputs(SubstitutionList::MakeForTest(
+      "{{source_out_dir}}/{{target_output_name}}.{{source_name_part}}.pcm"));
+  toolchain->SetTool(std::move(cxx_module_tool));
+
   // OBJC
   std::unique_ptr<Tool> objc_tool = Tool::CreateTool(CTool::kCToolObjC);
   SetCommandForTool(

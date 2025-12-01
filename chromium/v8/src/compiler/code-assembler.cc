@@ -65,7 +65,7 @@ CodeAssemblerState::CodeAssemblerState(Isolate* isolate, Zone* zone,
                                        CodeKind kind, const char* name,
                                        Builtin builtin)
     : raw_assembler_(new RawMachineAssembler(
-          isolate, zone->New<Graph>(zone), call_descriptor,
+          isolate, zone->New<TFGraph>(zone), call_descriptor,
           MachineType::PointerRepresentation(),
           InstructionSelector::SupportedMachineOperatorFlags(),
           InstructionSelector::AlignmentRequirements())),
@@ -120,7 +120,7 @@ class BreakOnNodeDecorator final : public GraphDecorator {
 };
 
 void CodeAssembler::BreakOnNode(int node_id) {
-  Graph* graph = raw_assembler()->graph();
+  TFGraph* graph = raw_assembler()->graph();
   Zone* zone = graph->zone();
   GraphDecorator* decorator =
       zone->New<BreakOnNodeDecorator>(static_cast<NodeId>(node_id));
@@ -222,7 +222,7 @@ void CodeAssembler::BuiltinCompilationScheduler::AwaitAndFinalizeCurrentBatch(
     Isolate* isolate) {
   if (v8_flags.concurrent_builtin_generation) {
     auto* dispatcher = isolate->optimizing_compile_dispatcher();
-    dispatcher->AwaitCompileTasks();
+    dispatcher->WaitUntilCompilationJobsDone();
     builtins_installed_count_ =
         dispatcher->InstallGeneratedBuiltins(builtins_installed_count_);
   } else {
@@ -1190,7 +1190,7 @@ void CodeAssembler::HandleException(Node* node) {
   Bind(&exception);
   const Operator* op = raw_assembler()->common()->IfException();
   Node* exception_value = raw_assembler()->AddNode(op, node, node);
-  label->AddInputs({UncheckedCast<Object>(exception_value)});
+  label->AddInputs({CAST(exception_value)});
   Goto(label->plain_label());
 
   Bind(&success);
@@ -2049,7 +2049,7 @@ ScopedExceptionHandler::~ScopedExceptionHandler() {
     if (inside_block) {
       assembler_->Goto(&skip);
     }
-    TNode<Object> e;
+    TNode<JSAny> e;
     assembler_->Bind(label_.get(), &e);
     if (exception_ != nullptr) *exception_ = e;
     assembler_->Goto(compatibility_label_);

@@ -15,29 +15,31 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/gfx/geometry/size.h"
 
+#if BUILDFLAG(IS_CHROMEOS)
+#include "testing/gmock/include/gmock/gmock.h"
+#endif  // BUILDFLAG(IS_CHROMEOS)
+
 namespace printing {
+
+#if BUILDFLAG(IS_CHROMEOS)
+using ::testing::UnorderedElementsAreArray;
+#endif  // BUILDFLAG(IS_CHROMEOS)
 
 TEST(PrintBackendMojomTraitsTest, TestSerializeAndDeserializePrinterBasicInfo) {
   static const PrinterBasicInfo kPrinterBasicInfo1(
       /*printer_name=*/"test printer name 1",
       /*display_name=*/"test display name 1",
       /*printer_description=*/"This is printer #1 for unit testing.",
-      /*printer_status=*/0,
-      /*is_default=*/true,
       /*options=*/{{"opt1", "123"}, {"opt2", "456"}});
   static const PrinterBasicInfo kPrinterBasicInfo2(
       /*printer_name=*/"test printer name 2",
       /*display_name=*/"test display name 2",
       /*printer_description=*/"This is printer #2 for unit testing.",
-      /*printer_status=*/1,
-      /*is_default=*/false,
       /*options=*/{});
   static const PrinterBasicInfo kPrinterBasicInfo3(
       /*printer_name=*/"test printer name 2",
       /*display_name=*/"test display name 2",
       /*printer_description=*/"",
-      /*printer_status=*/9,
-      /*is_default=*/false,
       /*options=*/{});
   static const PrinterList kPrinterList{kPrinterBasicInfo1, kPrinterBasicInfo2,
                                         kPrinterBasicInfo3};
@@ -57,15 +59,11 @@ TEST(PrintBackendMojomTraitsTest,
       /*printer_name=*/"",
       /*display_name=*/"test display name",
       /*printer_description=*/"",
-      /*printer_status=*/0,
-      /*is_default=*/true,
       /*options=*/{});
   static const PrinterBasicInfo kPrinterBasicInfoEmptyDisplayName(
       /*printer_name=*/"test printer name",
       /*display_name=*/"",
       /*printer_description=*/"",
-      /*printer_status=*/0,
-      /*is_default=*/true,
       /*options=*/{});
   static const PrinterList kPrinterList{kPrinterBasicInfoEmptyPrinterName,
                                         kPrinterBasicInfoEmptyDisplayName};
@@ -218,13 +216,76 @@ TEST(PrintBackendMojomTraitsTest,
     EXPECT_EQ(advanced_capability, output);
   }
 }
+TEST(
+    PrintBackendMojomTraitsTest,
+    TestSerializeAndDeserializePrinterSemanticCapsAndDefaultsPrintScalingTypes) {
+  // Normal scenario: valid types and default value
+  {
+    PrinterSemanticCapsAndDefaults input =
+        GenerateSamplePrinterSemanticCapsAndDefaults(
+            SampleWithScaleAndPinAndAdvancedCapabilities());
+    PrinterSemanticCapsAndDefaults output;
+    EXPECT_TRUE(mojo::test::SerializeAndDeserialize<
+                mojom::PrinterSemanticCapsAndDefaults>(input, output));
+    EXPECT_THAT(output.print_scaling_types,
+                UnorderedElementsAreArray(kPrintScalingTypes));
+    EXPECT_EQ(kPrintScalingTypeDefault, output.print_scaling_type_default);
+  }
+
+  // Empty print_scaling_types (should be valid)
+  {
+    PrinterSemanticCapsAndDefaults input =
+        GenerateSamplePrinterSemanticCapsAndDefaults(
+            SampleWithScaleAndPinAndAdvancedCapabilities());
+    input.print_scaling_types.clear();
+    PrinterSemanticCapsAndDefaults output;
+    EXPECT_TRUE(mojo::test::SerializeAndDeserialize<
+                mojom::PrinterSemanticCapsAndDefaults>(input, output));
+    EXPECT_TRUE(output.print_scaling_types.empty());
+    EXPECT_EQ(kPrintScalingTypeDefault, output.print_scaling_type_default);
+  }
+
+  // Unknown default type (should be valid)
+  {
+    PrinterSemanticCapsAndDefaults input =
+        GenerateSamplePrinterSemanticCapsAndDefaults(
+            SampleWithScaleAndPinAndAdvancedCapabilities());
+    input.print_scaling_type_default =
+        mojom::PrintScalingType::kUnknownPrintScalingType;
+    PrinterSemanticCapsAndDefaults output;
+    EXPECT_TRUE(mojo::test::SerializeAndDeserialize<
+                mojom::PrinterSemanticCapsAndDefaults>(input, output));
+    EXPECT_THAT(output.print_scaling_types,
+                UnorderedElementsAreArray(kPrintScalingTypes));
+    EXPECT_EQ(mojom::PrintScalingType::kUnknownPrintScalingType,
+              output.print_scaling_type_default);
+  }
+}
+
+TEST(
+    PrintBackendMojomTraitsTest,
+    TestSerializeAndDeserializePrinterSemanticCapsAndDefaultsPrintScalingTypesDuplicate) {
+  // Duplicates in print_scaling_types (should be invalid)
+  PrinterSemanticCapsAndDefaults input =
+      GenerateSamplePrinterSemanticCapsAndDefaults(
+          SampleWithScaleAndPinAndAdvancedCapabilities());
+  input.print_scaling_types = {
+      mojom::PrintScalingType::kAuto,
+      mojom::PrintScalingType::kFit,
+      mojom::PrintScalingType::kAuto,  // Duplicate
+      mojom::PrintScalingType::kNone,
+  };
+  PrinterSemanticCapsAndDefaults output;
+  EXPECT_FALSE(mojo::test::SerializeAndDeserialize<
+               mojom::PrinterSemanticCapsAndDefaults>(input, output));
+}
 #endif  // BUILDFLAG(IS_CHROMEOS)
 
 TEST(PrintBackendMojomTraitsTest,
      TestSerializeAndDeserializePrinterSemanticCapsAndDefaults) {
   OptionalSampleCapabilities caps;
 #if BUILDFLAG(IS_CHROMEOS)
-  caps = SampleWithPinAndAdvancedCapabilities();
+  caps = SampleWithScaleAndPinAndAdvancedCapabilities();
 #endif  // BUILDFLAG(IS_CHROMEOS)
   PrinterSemanticCapsAndDefaults input =
       GenerateSamplePrinterSemanticCapsAndDefaults(std::move(caps));
@@ -252,6 +313,9 @@ TEST(PrintBackendMojomTraitsTest,
 #if BUILDFLAG(IS_CHROMEOS)
   EXPECT_EQ(kPinSupported, output.pin_supported);
   EXPECT_EQ(kAdvancedCapabilities, output.advanced_capabilities);
+  EXPECT_THAT(output.print_scaling_types,
+              UnorderedElementsAreArray(kPrintScalingTypes));
+  EXPECT_EQ(kPrintScalingTypeDefault, output.print_scaling_type_default);
 #endif  // BUILDFLAG(IS_CHROMEOS)
 }
 

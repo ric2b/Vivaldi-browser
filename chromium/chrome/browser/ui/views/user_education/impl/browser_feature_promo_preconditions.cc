@@ -63,9 +63,16 @@ user_education::FeaturePromoResult WindowActivePrecondition::CheckPrecondition(
     widget = views::Widget::GetWidgetForNativeWindow(
         contents->GetTopLevelNativeWindow());
   }
-  return widget && widget->GetPrimaryWindowWidget()->ShouldPaintAsActive()
+  if (widget) {
+    // For some reason sometimes primary can be null;
+    // see https://crbug.com/400921315
+    if (auto* const primary = widget->GetPrimaryWindowWidget()) {
+      widget = primary;
+    }
+  }
+  return widget && widget->ShouldPaintAsActive()
              ? user_education::FeaturePromoResult::Success()
-             : user_education::FeaturePromoResult::kBlockedByUi;
+             : user_education::FeaturePromoResult::kAnchorSurfaceNotActive;
 }
 
 OmniboxNotOpenPrecondition::OmniboxNotOpenPrecondition(
@@ -98,7 +105,7 @@ ToolbarNotCollapsedPrecondition::CheckPrecondition(ComputedData&) const {
   if (const auto* const controller =
           browser_view_->toolbar()->toolbar_controller()) {
     if (controller->InOverflowMode()) {
-      return user_education::FeaturePromoResult::kBlockedByUi;
+      return user_education::FeaturePromoResult::kWindowTooSmall;
     }
   }
   return user_education::FeaturePromoResult::Success();
@@ -115,7 +122,7 @@ user_education::FeaturePromoResult
 BrowserNotClosingPrecondition::CheckPrecondition(ComputedData&) const {
   if (browser_view_->browser()->IsBrowserClosing() ||
       browser_view_->GetWidget()->IsClosed()) {
-    return user_education::FeaturePromoResult::kBlockedByUi;
+    return user_education::FeaturePromoResult::kBlockedByContext;
   }
   return user_education::FeaturePromoResult::Success();
 }
@@ -157,9 +164,8 @@ NoCriticalNoticeShowingPrecondition::CheckPrecondition(ComputedData&) const {
 UserNotActivePrecondition::UserNotActivePrecondition(
     BrowserView& browser_view,
     const user_education::UserEducationTimeProvider& time_provider)
-    : FeaturePromoPreconditionBase(
-          kUserNotActivePrecondition,
-          "The user is not actively trying sending input"),
+    : FeaturePromoPreconditionBase(kUserNotActivePrecondition,
+                                   "The user is not actively sending input"),
       browser_view_(browser_view),
       time_provider_(time_provider) {
   if (browser_view.GetWidget()) {
@@ -178,39 +184,28 @@ void UserNotActivePrecondition::CreateEventMonitor() {
   // watching events at all.
   event_monitor_ = views::EventMonitor::CreateWindowMonitor(
       this, browser_view_->GetWidget()->GetTopLevelWidget()->GetNativeWindow(),
-      {ui::EventType::kKeyPressed, ui::EventType::kKeyReleased,
-       ui::EventType::kMousePressed, ui::EventType::kMouseReleased,
-       ui::EventType::kTouchPressed, ui::EventType::kTouchReleased,
-       ui::EventType::kGestureBegin, ui::EventType::kGestureEnd,
-       ui::EventType::kMouseMoved});
+      {ui::EventType::kKeyPressed, ui::EventType::kKeyReleased});
 }
 
 void UserNotActivePrecondition::OnEvent(const ui::Event& event) {
-  if (event.type() == ui::EventType::kMouseMoved) {
-    // For mouse moves, do not set the delay timer unless the mouse is being
-    // moved in the top container (toolbar, tabstrip, etc.). Other mouse moves
-    // are not significant enough to warrant delaying an IPH.
-    bool in_top_container = false;
-    if (auto* const top_container =
-            views::ElementTrackerViews::GetInstance()->GetFirstMatchingView(
-                kTopContainerElementId, browser_view_->GetElementContext())) {
-      in_top_container = top_container->GetBoundsInScreen().Contains(
-          event.AsMouseEvent()->root_location());
-    }
-    if (!in_top_container) {
-      return;
-    }
-  }
   // Delay heavyweight IPH for the prescribed amount of time.
   last_active_time_ = time_provider_->GetCurrentTime();
 }
 
 user_education::FeaturePromoResult UserNotActivePrecondition::CheckPrecondition(
     ComputedData&) const {
-  const auto elapsed = time_provider_->GetCurrentTime() - last_active_time_;
-  return elapsed < user_education::features::GetIdleTimeBeforeHeavyweightPromo()
-             ? user_education::FeaturePromoResult::kBlockedByUi
-             : user_education::FeaturePromoResult::Success();
+  // Only do check if min idle time is nonzero and positive; otherwise this is a
+  // no-op. Explicitly verify this in case of non-monotonic clock weirdness.
+  const auto min_idle_time =
+      user_education::features::GetIdleTimeBeforeHeavyweightPromo();
+  if (min_idle_time.is_positive()) {
+    const auto elapsed = time_provider_->GetCurrentTime() - last_active_time_;
+    return elapsed < min_idle_time
+               ? user_education::FeaturePromoResult::kBlockedByUserActivity
+               : user_education::FeaturePromoResult::Success();
+  } else {
+    return user_education::FeaturePromoResult::Success();
+  }
 }
 
 void UserNotActivePrecondition::OnViewAddedToWidget(

@@ -16,6 +16,7 @@
 
 #include <algorithm>
 #include <cstddef>
+#include <cstdint>
 #include <cstdlib>
 #include <filesystem>  // NOLINT
 #include <string>
@@ -110,15 +111,29 @@ void CentipedeCallbacks::PopulateBinaryInfo(BinaryInfo &binary_info) {
 
 std::string CentipedeCallbacks::ConstructRunnerFlags(
     std::string_view extra_flags, bool disable_coverage) {
+  int64_t force_abort_timeout = 0;
+  if (env_.force_abort_timeout == absl::InfiniteDuration() ||
+      env_.force_abort_timeout <= absl::ZeroDuration()) {
+    LOG(INFO) << "Centipede's force abort feature is disabled because force "
+                 "abort timeout is set to "
+              << env_.force_abort_timeout << ".";
+    force_abort_timeout = 0;
+  } else {
+    force_abort_timeout = absl::ToInt64Seconds(env_.force_abort_timeout);
+  }
   std::vector<std::string> flags = {
       "CENTIPEDE_RUNNER_FLAGS=",
       absl::StrCat("timeout_per_input=", env_.timeout_per_input),
       absl::StrCat("timeout_per_batch=", env_.timeout_per_batch),
+      absl::StrCat("force_abort_timeout=", force_abort_timeout),
       absl::StrCat("address_space_limit_mb=", env_.address_space_limit_mb),
       absl::StrCat("rss_limit_mb=", env_.rss_limit_mb),
       absl::StrCat("stack_limit_kb=", env_.stack_limit_kb),
       absl::StrCat("crossover_level=", env_.crossover_level),
   };
+  if (env_.ignore_timeout_reports) {
+    flags.emplace_back("ignore_timeout_reports");
+  }
   if (!disable_coverage) {
     flags.emplace_back(absl::StrCat("path_level=", env_.path_level));
     if (env_.use_pc_features) flags.emplace_back("use_pc_features");
@@ -215,7 +230,8 @@ int CentipedeCallbacks::ExecuteCentipedeSancovBinaryWithShmem(
 
   // Get results.
   batch_result.exit_code() = retval;
-  CHECK(batch_result.Read(outputs_blobseq_));
+  const bool read_success = batch_result.Read(outputs_blobseq_);
+  LOG_IF(ERROR, !read_success) << "Failed to read batch result!";
   outputs_blobseq_.ReleaseSharedMemory();  // Outputs are already consumed.
 
   // We may have fewer feature blobs than inputs if
@@ -225,7 +241,8 @@ int CentipedeCallbacks::ExecuteCentipedeSancovBinaryWithShmem(
   //   * Will be logged by the caller.
   // * some outputs were not written because the outputs_blobseq_ overflown.
   //   * Logged by the following code.
-  if (retval == 0 && batch_result.num_outputs_read() != num_inputs_written) {
+  if (retval == 0 && read_success &&
+      batch_result.num_outputs_read() != num_inputs_written) {
     LOG(INFO) << "Read " << batch_result.num_outputs_read() << "/"
               << num_inputs_written
               << " outputs; shmem_size_mb might be too small: "
@@ -336,9 +353,9 @@ bool CentipedeCallbacks::GetSerializedTargetConfigViaExternalBinary(
 }
 
 // See also: MutateInputsFromShmem().
-bool CentipedeCallbacks::MutateViaExternalBinary(
+MutationResult CentipedeCallbacks::MutateViaExternalBinary(
     std::string_view binary, const std::vector<MutationInputRef> &inputs,
-    std::vector<ByteArray> &mutants) {
+    size_t num_mutants) {
   CHECK(!env_.has_input_wildcards)
       << "Standalone binary does not support custom mutator";
 
@@ -347,7 +364,7 @@ bool CentipedeCallbacks::MutateViaExternalBinary(
   outputs_blobseq_.Reset();
 
   size_t num_inputs_written =
-      runner_request::RequestMutation(mutants.size(), inputs, inputs_blobseq_);
+      runner_request::RequestMutation(num_mutants, inputs, inputs_blobseq_);
   LOG_IF(INFO, num_inputs_written != inputs.size())
       << VV(num_inputs_written) << VV(inputs.size());
 
@@ -363,19 +380,13 @@ bool CentipedeCallbacks::MutateViaExternalBinary(
     PrintExecutionLog();
   }
 
-  // Read all mutants.
-  for (size_t i = 0; i < mutants.size(); ++i) {
-    auto blob = outputs_blobseq_.Read();
-    if (blob.size == 0) {
-      mutants.resize(i);
-      break;
-    }
-    mutants[i].assign(blob.data, blob.data + blob.size);
-  }
+  MutationResult result;
+  result.exit_code() = retval;
+  result.Read(num_mutants, outputs_blobseq_);
   outputs_blobseq_.ReleaseSharedMemory();  // Outputs are already consumed.
 
   VLOG(1) << __FUNCTION__ << " took " << (absl::Now() - start_time);
-  return retval == 0;
+  return result;
 }
 
 size_t CentipedeCallbacks::LoadDictionary(std::string_view dictionary_path) {

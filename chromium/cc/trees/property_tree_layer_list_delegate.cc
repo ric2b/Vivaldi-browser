@@ -70,10 +70,10 @@ void PropertyTreeLayerListDelegate::UpdateScrollOffsetFromImpl(
     TransformTree& transform_tree =
         host()->property_trees()->transform_tree_mutable();
     auto* transform_node = transform_tree.Node(scroll_node->transform_id);
-    if (transform_node && transform_node->scroll_offset != new_offset) {
-      transform_node->scroll_offset = new_offset;
+    if (transform_node && transform_node->scroll_offset() != new_offset) {
+      transform_node->SetScrollOffset(new_offset, DamageReason::kUntracked);
       transform_node->needs_local_transform_update = true;
-      transform_node->transform_changed = true;
+      transform_node->SetTransformChanged(DamageReason::kUntracked);
       transform_tree.set_needs_update(true);
 
       // If the scroll was realized on the compositor, then its transform node
@@ -145,6 +145,15 @@ void PropertyTreeLayerListDelegate::OnElementOpacityMutated(
     float opacity) {
   host()->property_trees()->effect_tree_mutable().OnOpacityAnimated(element_id,
                                                                     opacity);
+  return;
+}
+
+void PropertyTreeLayerListDelegate::OnElementTransformMutated(
+    ElementId element_id,
+    ElementListType list_type,
+    const gfx::Transform& transform) {
+  host()->property_trees()->transform_tree_mutable().OnTransformAnimated(
+      element_id, transform);
   return;
 }
 

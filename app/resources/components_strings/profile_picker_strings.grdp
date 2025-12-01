@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<grit-part>
+  <message name="IDS_PROFILE_PICKER_GUEST_MODE" desc="Guest Mode profile-picker button">Guest mode</message>
+  <message name="IDS_PROFILE_PICKER_SHOW_ON_STARTUP" desc="Profile-picker checkbox label">Show on startup</message>
+  <message name="IDS_PROFILE_PICKER_INTRO_TEXT" desc="Profile-picker intro text">With Vivaldi profiles you can separate all your Vivaldi stuff. Create profiles for friends and family, or split between work and fun.</message>
+  <message name="IDS_PROFILE_PICKER_WHOIS_USING" desc="Profile-picker title">Who’s using Vivaldi?</message>
+</grit-part>

@@ -41,11 +41,6 @@
   return prefService->GetBoolean(vivaldiprefs::kVivaldiTabStackEnabled);;
 }
 
-/// Returns whether inactive tabs available.
-+ (BOOL)isInactiveTabsAvailable {
-  return IsInactiveTabsAvailable();
-}
-
 /// Returns Homepage Url
 + (NSString*)getHomepageUrlWithPrefService:(PrefService*)prefService {
   NSString *url = base::SysUTF8ToNSString(

@@ -2,6 +2,8 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+# TODO:(crbug.com/406830591): Split build rule for save card bottomsheet classes.
+
 group("unit_tests") {
   testonly = true
   deps = [
@@ -30,25 +32,37 @@ source_set("bottom_sheet") {
   sources = [
     "autofill_edit_profile_bottom_sheet_coordinator.h",
     "autofill_edit_profile_bottom_sheet_coordinator.mm",
+    "autofill_edit_profile_bottom_sheet_handler.h",
+    "infobar_autofill_edit_profile_bottom_sheet_handler.h",
+    "infobar_autofill_edit_profile_bottom_sheet_handler.mm",
     "payments_suggestion_bottom_sheet_coordinator.h",
     "payments_suggestion_bottom_sheet_coordinator.mm",
     "payments_suggestion_bottom_sheet_exit_reason.h",
     "payments_suggestion_bottom_sheet_mediator.h",
     "payments_suggestion_bottom_sheet_mediator.mm",
+    "save_card_bottom_sheet_coordinator.h",
+    "save_card_bottom_sheet_coordinator.mm",
+    "save_card_bottom_sheet_mediator.h",
+    "save_card_bottom_sheet_mediator.mm",
+    "settings_autofill_edit_profile_bottom_sheet_handler.h",
+    "settings_autofill_edit_profile_bottom_sheet_handler.mm",
   ]
   deps = [
     ":bottom_sheet_ui",
     "//base",
     "//components/autofill/core/browser",
+    "//components/autofill/core/common:features",
     "//components/autofill/ios/browser",
     "//components/autofill/ios/common",
     "//components/autofill/ios/form_util",
+    "//components/infobars/core",
     "//components/strings",
     "//ios/chrome/app/strings",
     "//ios/chrome/browser/autofill/model",
     "//ios/chrome/browser/autofill/model:features",
     "//ios/chrome/browser/autofill/model:model_internal",
     "//ios/chrome/browser/autofill/model/bottom_sheet",
+    "//ios/chrome/browser/autofill/model/bottom_sheet:save_card_bottom_sheet_model",
     "//ios/chrome/browser/autofill/model/credit_card",
     "//ios/chrome/browser/autofill/ui_bundled/address_editor:autofill_shared_ui",
     "//ios/chrome/browser/autofill/ui_bundled/address_editor:constants",
@@ -77,6 +91,8 @@ source_set("bottom_sheet_ui") {
     "payments_suggestion_bottom_sheet_handler.h",
     "payments_suggestion_bottom_sheet_view_controller.h",
     "payments_suggestion_bottom_sheet_view_controller.mm",
+    "save_card_bottom_sheet_view_controller.h",
+    "save_card_bottom_sheet_view_controller.mm",
   ]
   deps = [
     ":constants",
@@ -132,6 +148,7 @@ source_set("bottom_sheet_unit_tests") {
     "//ios/chrome/browser/signin/model:authentication_service_factory",
     "//ios/chrome/browser/signin/model:test_support",
     "//ios/chrome/browser/tabs/model",
+    "//ios/chrome/browser/tips_manager/model:factory",
     "//ios/chrome/browser/webdata_services/model",
     "//ios/chrome/test:test_support",
     "//ios/web/public/test",

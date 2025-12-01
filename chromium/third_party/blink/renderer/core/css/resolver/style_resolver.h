@@ -205,7 +205,7 @@ class CORE_EXPORT StyleResolver final : public GarbageCollected<StyleResolver> {
                                    const ContainerSelector&,
                                    const TreeScope* selector_tree_scope);
 
-  Font ComputeFont(Element&, const ComputedStyle&, const CSSPropertyValueSet&);
+  Font* ComputeFont(Element&, const ComputedStyle&, const CSSPropertyValueSet&);
 
   // FIXME: Rename to reflect the purpose, like didChangeFontSize or something.
   void InvalidateMatchedPropertiesCache();
@@ -226,6 +226,8 @@ class CORE_EXPORT StyleResolver final : public GarbageCollected<StyleResolver> {
                                       const CSSPropertyName&,
                                       const CSSValue&);
   // Resolves a single CSSValue in the context of some element's computed style.
+  //
+  // This currently always resolves the value with tree_scope=Document.
   //
   // This is intended for use by the Inspector Agent.
   static const CSSValue* ResolveValue(Element& element,
@@ -360,6 +362,8 @@ class CORE_EXPORT StyleResolver final : public GarbageCollected<StyleResolver> {
   Document& GetDocument() const { return *document_; }
 
   bool IsForcedColorsModeEnabled() const;
+
+  void ExpandInheritedVisitedProperties(StyleResolverState& state);
 
   enum UASheetCacheKeyIndex {
     kHTMLUASheet,

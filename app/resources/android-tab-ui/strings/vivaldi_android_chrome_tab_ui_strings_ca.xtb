@@ -1,9 +1,17 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="ca">
+<translation id="2277224997687551299">Edita el nom del grup</translation>
+<translation id="2330212241471632770">{TABS_COUNT, plural,
+          =1 {Afegeix la pestanya als marcadors}
+          other {Afegeix les pestanyes als marcadors}
+        }</translation>
 <translation id="2947471979790858922">La teva activitat a aquestes pestanyes privades se suprimirà d'aquest dispositiu</translation>
 <translation id="3870643923290313246">{INCOGNITO_TABS_COUNT, plural,
         =1 {Pots trobar les pestanyes tancades a Pestanyes recents sota el menú principal de Vivaldi. Les pestanyes privades no estan disponibles.}
         other {Pots trobar les pestanyes tancades a Pestanyes recents sota el menú principal de Vivaldi. Les teves # pestanyes privades no estan disponibles.}}</translation>
+<translation id="4460014764210899310">Desagrupa</translation>
 <translation id="4871187110787939393">Tancar totes les pestanyes privades?</translation>
+<translation id="5494920125229734069">Selecciona-ho tot</translation>
+<translation id="6744956528665271406">Edita el color del grup</translation>
 </translationbundle>

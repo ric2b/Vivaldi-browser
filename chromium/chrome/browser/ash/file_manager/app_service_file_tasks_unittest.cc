@@ -39,6 +39,7 @@
 #include "components/services/app_service/public/cpp/intent_util.h"
 #include "components/sync_preferences/testing_pref_service_syncable.h"
 #include "components/user_manager/scoped_user_manager.h"
+#include "components/user_manager/test_helper.h"
 #include "components/user_manager/user_type.h"
 #include "content/public/test/browser_task_environment.h"
 #include "extensions/browser/entry_info.h"
@@ -626,20 +627,8 @@ TEST_F(AppServiceFileTasksTest, FindAppServiceArcAppWithExtensionMatching) {
   EXPECT_TRUE(tasks[0].is_file_extension_match);
 }
 
-// Enable MV3 File Handlers.
-class AppServiceFileHandlersTest : public AppServiceFileTasksTest {
- public:
-  AppServiceFileHandlersTest() {
-    feature_list_.InitAndEnableFeature(
-        extensions_features::kExtensionWebFileHandlers);
-  }
-
- private:
-  base::test::ScopedFeatureList feature_list_;
-};
-
 // Verify App Service tasks for extensions with MV3 File Handlers.
-TEST_F(AppServiceFileHandlersTest, FindAppServiceExtension) {
+TEST_F(AppServiceFileTasksTest, FileHandlersFindAppServiceExtension) {
   static constexpr char kAction[] = "/open.html";
   const std::string manifest = base::StringPrintf(R"(
     "version": "0.0.1",
@@ -941,13 +930,11 @@ class AppServiceFileTasksPolicyTest : public AppServiceFileTasksTest {
     AccountId account_id =
         AccountId::FromUserEmailGaiaId("test@example.com", GaiaId("12345"));
     profile_->SetIsNewProfile(true);
-    user_manager::User* user =
-        fake_user_manager_->AddUserWithAffiliationAndTypeAndProfile(
-            account_id, /*is_affiliated=*/false,
-            user_manager::UserType::kRegular, profile_.get());
-    fake_user_manager_->UserLoggedIn(account_id, user->username_hash(),
-                                     /*browser_restart=*/false,
-                                     /*is_child=*/false);
+    fake_user_manager_->AddUserWithAffiliationAndTypeAndProfile(
+        account_id, /*is_affiliated=*/false, user_manager::UserType::kRegular,
+        profile_.get());
+    fake_user_manager_->UserLoggedIn(
+        account_id, user_manager::TestHelper::GetFakeUsernameHash(account_id));
     fake_user_manager_->SimulateUserProfileLoad(account_id);
 
     policy::DlpRulesManagerFactory::GetInstance()->SetTestingFactory(

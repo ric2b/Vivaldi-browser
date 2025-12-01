@@ -11,6 +11,7 @@
 #include "chrome/browser/web_applications/proto/web_app_database_metadata.pb.h"
 #include "chrome/browser/web_applications/web_app.h"
 #include "chrome/browser/web_applications/web_app_database.h"
+#include "chrome/browser/web_applications/web_app_database_serialization.h"
 #include "chrome/browser/web_applications/web_app_helpers.h"
 #include "components/sync/model/data_type_store.h"
 #include "components/sync/model/model_error.h"
@@ -71,7 +72,7 @@ Registry FakeWebAppDatabaseFactory::ReadRegistry() {
             continue;
           }
 
-          auto app = WebAppDatabase::ParseWebApp(record.id, record.value);
+          auto app = ParseWebAppProtoForTesting(record.id, record.value);
           DCHECK(app);
 
           webapps::AppId app_id = app->app_id();
@@ -95,13 +96,13 @@ std::set<webapps::AppId> FakeWebAppDatabaseFactory::ReadAllAppIds() {
 }
 
 void FakeWebAppDatabaseFactory::WriteProtos(
-    const std::vector<std::unique_ptr<WebAppProto>>& protos) {
+    const std::vector<std::unique_ptr<proto::WebApp>>& protos) {
   base::RunLoop run_loop;
 
   std::unique_ptr<syncer::DataTypeStore::WriteBatch> write_batch =
       GetStore()->CreateWriteBatch();
 
-  for (const std::unique_ptr<WebAppProto>& proto : protos) {
+  for (const std::unique_ptr<proto::WebApp>& proto : protos) {
     GURL start_url(proto->sync_data().start_url());
     DCHECK(!start_url.is_empty());
     DCHECK(start_url.is_valid());
@@ -122,11 +123,10 @@ void FakeWebAppDatabaseFactory::WriteProtos(
 }
 
 void FakeWebAppDatabaseFactory::WriteRegistry(const Registry& registry) {
-  std::vector<std::unique_ptr<WebAppProto>> protos;
+  std::vector<std::unique_ptr<proto::WebApp>> protos;
   for (const Registry::value_type& kv : registry) {
     const WebApp* app = kv.second.get();
-    std::unique_ptr<WebAppProto> proto =
-        WebAppDatabase::CreateWebAppProto(*app);
+    std::unique_ptr<proto::WebApp> proto = WebAppToProto(*app);
     protos.push_back(std::move(proto));
   }
 

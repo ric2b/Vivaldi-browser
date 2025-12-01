@@ -3,12 +3,17 @@
 // found in the LICENSE file.
 package org.chromium.components.payments.secure_payment_confirmation;
 
+import static org.chromium.build.NullUtil.assumeNonNull;
+
 import android.content.Context;
+import android.content.res.Resources;
 import android.view.View;
 
-import androidx.annotation.NonNull;
+import androidx.annotation.StringRes;
 import androidx.annotation.VisibleForTesting;
 
+import org.chromium.build.annotations.NullMarked;
+import org.chromium.build.annotations.Nullable;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetContent;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetController;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetControllerProvider;
@@ -28,12 +33,13 @@ import org.chromium.ui.base.WindowAndroid;
  * between them. Any code in this component that needs to interact with another component does that
  * through this controller.
  */
+@NullMarked
 public class SecurePaymentConfirmationNoMatchingCredController {
     private final WebContents mWebContents;
-    private Runnable mHider;
-    private Runnable mResponseCallback;
-    private Runnable mOptOutCallback;
-    private SecurePaymentConfirmationNoMatchingCredView mView;
+    private @Nullable Runnable mHider;
+    private @Nullable Runnable mResponseCallback;
+    private @Nullable Runnable mOptOutCallback;
+    private @Nullable SecurePaymentConfirmationNoMatchingCredView mView;
 
     private InputProtector mInputProtector = new InputProtector();
 
@@ -53,11 +59,12 @@ public class SecurePaymentConfirmationNoMatchingCredController {
             new BottomSheetContent() {
                 @Override
                 public View getContentView() {
+                    assumeNonNull(mView);
                     return mView.getContentView();
                 }
 
                 @Override
-                public View getToolbarView() {
+                public @Nullable View getToolbarView() {
                     return null;
                 }
 
@@ -99,25 +106,25 @@ public class SecurePaymentConfirmationNoMatchingCredController {
                 }
 
                 @Override
-                public @NonNull String getSheetContentDescription(Context context) {
+                public String getSheetContentDescription(Context context) {
                     return context.getString(
                             R.string
                                     .secure_payment_confirmation_no_matching_credential_sheet_description);
                 }
 
                 @Override
-                public int getSheetHalfHeightAccessibilityStringId() {
+                public @StringRes int getSheetHalfHeightAccessibilityStringId() {
                     assert false : "This method should not be called";
-                    return 0;
+                    return Resources.ID_NULL;
                 }
 
                 @Override
-                public int getSheetFullHeightAccessibilityStringId() {
+                public @StringRes int getSheetFullHeightAccessibilityStringId() {
                     return R.string.secure_payment_confirmation_no_matching_credential_sheet_opened;
                 }
 
                 @Override
-                public int getSheetClosedAccessibilityStringId() {
+                public @StringRes int getSheetClosedAccessibilityStringId() {
                     return R.string.secure_payment_confirmation_no_matching_credential_sheet_closed;
                 }
             };
@@ -127,7 +134,7 @@ public class SecurePaymentConfirmationNoMatchingCredController {
      *
      * @param webContents The WebContents of the merchant.
      */
-    public static SecurePaymentConfirmationNoMatchingCredController create(
+    public static @Nullable SecurePaymentConfirmationNoMatchingCredController create(
             WebContents webContents) {
         return webContents != null
                 ? new SecurePaymentConfirmationNoMatchingCredController(webContents)
@@ -223,7 +230,7 @@ public class SecurePaymentConfirmationNoMatchingCredController {
     }
 
     @VisibleForTesting(otherwise = VisibleForTesting.NONE)
-    public SecurePaymentConfirmationNoMatchingCredView getView() {
+    public @Nullable SecurePaymentConfirmationNoMatchingCredView getView() {
         return mView;
     }
 

@@ -18,14 +18,6 @@
       "id": 4,
       "merge_method": "none"
     },
-    "vivaldi.address_bar.autocomplete.autocomplete_on_title": {
-      "id": 5,
-      "merge_method": "none"
-    },
-    "vivaldi.address_bar.autocomplete.autocomplete_on_domain_first": {
-      "id": 6,
-      "merge_method": "none"
-    },
     "vivaldi.address_bar.extensions.show_toggle": {
       "id": 7,
       "merge_method": "none"
@@ -58,22 +50,6 @@
       "id": 14,
       "merge_method": "none"
     },
-    "vivaldi.address_bar.omnibox.show_best_result": {
-      "id": 15,
-      "merge_method": "none"
-    },
-    "vivaldi.address_bar.omnibox.show_internal_urls": {
-      "id": 16,
-      "merge_method": "none"
-    },
-    "vivaldi.address_bar.omnibox.show_search_or_go_to": {
-      "id": 17,
-      "merge_method": "none"
-    },
-    "vivaldi.address_bar.omnibox.show_bookmarks": {
-      "id": 18,
-      "merge_method": "none"
-    },
     "vivaldi.address_bar.omnibox.show_nicknames": {
       "id": 19,
       "merge_method": "none"
@@ -88,10 +64,6 @@
     },
     "vivaldi.address_bar.omnibox.show_search_history": {
       "id": 22,
-      "merge_method": "none"
-    },
-    "vivaldi.address_bar.omnibox.dropdown_priority": {
-      "id": 23,
       "merge_method": "none"
     },
     "vivaldi.address_bar.position": {
@@ -112,10 +84,6 @@
     },
     "vivaldi.address_bar.search.keep_selected": {
       "id": 28,
-      "merge_method": "none"
-    },
-    "vivaldi.address_bar.search.typed_history_enabled": {
-      "id": 30,
       "merge_method": "none"
     },
     "vivaldi.address_bar.search.show_favicon": {
@@ -766,6 +734,10 @@
       "id": 193,
       "merge_method": "none"
     },
+    "vivaldi.quick_commands.show_bookmarks": {
+      "id": 194,
+      "merge_method": "none"
+    },
     "vivaldi.quick_commands.show_reading_list": {
       "id": 195,
       "merge_method": "none"
@@ -1242,10 +1214,6 @@
       "id": 316,
       "merge_method": "none"
     },
-    "vivaldi.address_bar.omnibox.show_open_tab": {
-      "id": 317,
-      "merge_method": "none"
-    },
     "vivaldi.quick_commands.first_run_tip_dismissed": {
       "id": 318,
       "merge_method": "none"
@@ -1272,6 +1240,18 @@
     },
     "vivaldi.privacy.ad_blocker.enable_document_blocking": {
       "id": 325,
+      "merge_method": "none"
+    },
+    "vivaldi.panels.window.show_duplicate": {
+      "id": 326,
+      "merge_method": "none"
+    },
+    "vivaldi.panels.window.show_inactive": {
+      "id": 327,
+      "merge_method": "none"
+    },
+    "vivaldi.panels.window.inactive_tabs_days": {
+      "id": 328,
       "merge_method": "none"
     }
   },
@@ -2922,6 +2902,11 @@
       ],
       "default_mac": [
         {
+          "COMMAND_EMAIL_LINK_OVERRIDE": {
+            "shortcuts": [
+              "meta+i"
+            ]
+          },
           "COMMAND_ADD_BOOKMARK": {
             "shortcuts": [
               "meta+d"
@@ -3746,14 +3731,6 @@
             "type": "boolean",
             "default": false
           }
-        },
-        "autocomplete_on_title": {
-          "type": "boolean",
-          "default": true
-        },
-        "autocomplete_on_domain_first": {
-          "type": "boolean",
-          "default": true
         }
       },
       "extensions": {
@@ -3798,18 +3775,6 @@
           "type": "boolean",
           "default": true
         },
-        "show_best_result": {
-          "type": "boolean",
-          "default": true
-        },
-        "show_internal_urls": {
-          "type": "boolean",
-          "default": true
-        },
-        "show_search_or_go_to": {
-          "type": "boolean",
-          "default": true
-        },
         "show_bookmarks": {
           "description": "[DEPRECATED 2025/02] Replaced by bookmarks",
           "type": "boolean",
@@ -3839,59 +3804,23 @@
           "type": "boolean",
           "default": true
         },
-        "show_top_sites": {
-          "type": "boolean",
-          "default": false
-        },
         "show_sync_tabs": {
           "type": "boolean",
           "default": true
         },
-        "show_open_tab": {
-          "type": "boolean",
-          "default": true
-        },
-        "number_of_bookmark_results": {
-          "type": "integer",
-          "default": 15
-        },
-        "number_of_typed_history_results": {
-          "type": "integer",
-          "default": 15
-        },
-        "number_of_history_results": {
-          "type": "integer",
-          "default": 15
-        },
-        "number_of_search_suggestions": {
-          "type": "integer",
-          "default": 5
-        },
-        "number_of_synced_tabs": {
-          "type": "integer",
-          "default": 15
-        },
-        "dropdown_priority": {
-          "description": "Dropdown result highlight priority",
-          "type": "list",
-          "default": [
-            "BEST_RESULT",
-            "SEARCH",
-            "OPEN_TAB",
-            "SUGGESTIONS",
-            "DIRECT_MATCH",
-            "NICKNAMES",
-            "BOOKMARKS",
-            "FREQ_VISIT",
-            "TYPED_HISTORY",
-            "HISTORY",
-            "SYNCED_TABS",
-            "INTERNAL_URLS"
-          ]
-        },
         "show_typed_history_button": {
           "type": "boolean",
           "default": false
+        },
+        "search_history_enable": {
+          "description": "Show search-history items",
+          "type": "boolean",
+          "default": true
+        },
+        "dropdown_size": {
+          "description": "The maximum number of items the dropdown can show",
+          "type": "integer",
+          "default": 12
         }
       },
       "position": {
@@ -3967,10 +3896,6 @@
           "type": "list",
           "default": []
         },
-        "typed_history_enabled": {
-          "type": "boolean",
-          "default": true
-        },
         "show_favicon": {
           "type": "boolean",
           "default": false
@@ -4029,11 +3954,6 @@
         "description": "[DEPRECATED 2022/04] VB-70320 Toolbar component",
         "type": "boolean",
         "default": false
-      },
-      "typed_history_enabled": {
-        "description": "[DEPRECATED 2024/08] VB-108294",
-        "type": "boolean",
-        "default": true
       },
       "url_open_shortcut": {
         "description": "Which modifier key to use for opening the url in a new tab",
@@ -5749,6 +5669,19 @@
             "sortOrder": 1,
             "sortField": "manually"
           }
+        },
+        "show_duplicate": {
+          "type": "boolean",
+          "default": true
+        },
+        "show_inactive": {
+          "type": "boolean",
+          "default": true
+        },
+        "inactive_tabs_days": {
+          "description": "How many days since lastAccessed before showing in Inactive Tabs list.",
+          "type": "integer",
+          "default": 21
         }
       },
       "web": {
@@ -7670,11 +7603,6 @@
           "default": "$timestamp $host $shortid"
         }
       },
-      "exceptions_keystroke": {
-        "description": "Sites allowed to override keystrokes",
-        "default": [],
-        "type": "list"
-      },
       "focus_trap": {
         "type": "boolean",
         "default": false,
@@ -8140,6 +8068,14 @@
         "type": "string",
         "default": ""
       }
+    },
+    "direct_match": {
+      "update_interval": {
+        "description": "Time between the direct match list download refresh in hours.",
+        "type": "integer",
+        "default": 24,
+        "syncable": false
+      }
     }
   },
   "chromium": {
@@ -8250,6 +8186,10 @@
     },
     "kExceptionsCamera": {
       "path": "profile.content_settings.exceptions.media_stream_camera",
+      "type": "dictionary"
+    },
+    "kExceptionsKeyShortcuts": {
+      "path": "profile.content_settings.exceptions.key_shortcuts",
       "type": "dictionary"
     },
     "kExceptionsMic": {

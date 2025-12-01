@@ -120,6 +120,7 @@
 #include "device/bluetooth/bluetooth_adapter_factory.h"
 #include "device/bluetooth/test/mock_bluetooth_adapter.h"
 #include "device/bluetooth/test/mock_bluetooth_device.h"
+#include "extensions/browser/extension_registrar.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/common/extension_builder.h"
 #include "google_apis/gaia/gaia_id.h"
@@ -345,11 +346,9 @@ class SiteSettingsHandlerBaseTest : public testing::Test {
         TestingBrowserProcess::GetGlobal());
     EXPECT_TRUE(testing_profile_manager_->SetUp());
     profile_ = testing_profile_manager_->CreateTestingProfile(
-        kTestUserEmail,
-        {TestingProfile::TestingFactory{
-            HistoryServiceFactory::GetInstance(),
-            HistoryServiceFactory::GetDefaultFactory()}},
-        /*is_main_profile=*/true);
+        kTestUserEmail, {TestingProfile::TestingFactory{
+                            HistoryServiceFactory::GetInstance(),
+                            HistoryServiceFactory::GetDefaultFactory()}});
     EXPECT_TRUE(profile_);
 
 #if BUILDFLAG(IS_CHROMEOS)
@@ -402,14 +401,14 @@ class SiteSettingsHandlerBaseTest : public testing::Test {
     // On ChromeOS a user account is needed in order to check whether the user
     // account is affiliated with the device owner for the purposes of applying
     // enterprise policy.
-    constexpr char kTestUserGaiaId[] = "1111111111";
+    constexpr GaiaId::Literal kTestUserGaiaId("1111111111");
     auto fake_user_manager = std::make_unique<ash::FakeChromeUserManager>();
     auto* fake_user_manager_ptr = fake_user_manager.get();
     scoped_user_manager_ = std::make_unique<user_manager::ScopedUserManager>(
         std::move(fake_user_manager));
 
     auto account_id =
-        AccountId::FromUserEmailGaiaId(kTestUserEmail, GaiaId(kTestUserGaiaId));
+        AccountId::FromUserEmailGaiaId(kTestUserEmail, kTestUserGaiaId);
     fake_user_manager_ptr->AddUserWithAffiliation(account_id,
                                                   /*is_affiliated=*/true);
     fake_user_manager_ptr->LoginUser(account_id);
@@ -974,11 +973,11 @@ class SiteSettingsHandlerBaseTest : public testing::Test {
     extensions::TestExtensionSystem* extension_system =
         static_cast<extensions::TestExtensionSystem*>(
             extensions::ExtensionSystem::Get(profile()));
-    extensions::ExtensionService* extension_service =
-        extension_system->CreateExtensionService(
-            base::CommandLine::ForCurrentProcess(), base::FilePath(),
-            /*autoupdate_enabled=*/false);
-    extension_service->AddExtension(extension.get());
+    extension_system->CreateExtensionService(
+        base::CommandLine::ForCurrentProcess(), base::FilePath(),
+        /*autoupdate_enabled=*/false);
+    extensions::ExtensionRegistrar::Get(profile())->AddExtension(
+        extension.get());
     return extension;
   }
 
@@ -3241,9 +3240,8 @@ TEST_F(SiteSettingsHandlerInfobarTest, SettingPermissionsTriggersInfobar) {
       extensions::ExtensionBuilder("Test")
           .SetID("fooooooooooooooooooooooooooooooo")
           .Build();
-  extensions::ExtensionSystem::Get(profile())
-      ->extension_service()
-      ->AddExtension(test_extension.get());
+  extensions::ExtensionRegistrar::Get(profile())->AddExtension(
+      test_extension.get());
 
   //               __________  ______________  ___________________  _______
   //   Window 2:  / insecure '/ origin_query \' example_subdomain \' about \

@@ -4,6 +4,7 @@
 <translation id="1000436330784933699">Je kunt Lens hier openen.</translation>
 <translation id="1042296835509784301">Opent Wachtwoordmanager in Chromium.</translation>
 <translation id="1047130070405668746">Selecteer Chromium</translation>
+<translation id="1086486568852410168">Zoeken met Google Lens</translation>
 <translation id="1091252999271033193">Dit betekent dat Chromium altijd de mobiele site opvraagt.</translation>
 <translation id="1115463765356382667">Voer de voorgestelde acties hieronder uit om het maximale uit Chromium te halen.</translation>
 <translation id="1140315115515116765">Chromium standaard gebruiken om makkelijk prijsinzichten te krijgen</translation>
@@ -30,7 +31,6 @@
 <translation id="159029779861043703">Chromium beveiligt je gevoelige gegevens met Face ID.</translation>
 <translation id="1591119736686995611">Opent het Chromium-tabbladraster.</translation>
 <translation id="16001233025397167">Veiligheidscheck beschermt je onder andere tegen gegevenslekken en onveilige websites. Krijg meldingen over privacy- of beveiligingsproblemen die Chromium voor je opspoort.</translation>
-<translation id="1611584326765829247">Laat Chromium je helpen je pakketten te volgen</translation>
 <translation id="1617663976202781617">Gegevens van Chromium-synchronisatie</translation>
 <translation id="164952285225495380">Dit pakket wordt al gevolgd in Chromium.</translation>
 <translation id="1707458603865303524">Gebruik Chromium als je op links in berichten of andere apps tikt.</translation>
@@ -70,11 +70,11 @@ Wacht een paar minuten voordat je uitlogt. Als je nu uitlogt, worden deze gegeve
 <translation id="2459183986985456602">Open mijn nieuwste tabblad in Chromium.</translation>
 <translation id="2476409803017965813">Je kunt je selecties op elk moment updaten in de Chromium-instellingen.</translation>
 <translation id="2478931088402984578">Selecteer <ph name="BEGIN_BOLD" />Chromium<ph name="END_BOLD" />.</translation>
+<translation id="2485774047568879945">Stel Chromium in als je standaardbrowser om links makkelijk te delen en te openen</translation>
 <translation id="2512597191798760956">Houd je vinger op het Chromium-icoon en klik op Startscherm bewerken</translation>
 <translation id="2517624234762908348">Je Chromium-gegevens synchroniseren</translation>
 <translation id="2592940277904433508">Chromium blijven gebruiken</translation>
 <translation id="2607609479243848905">Als je je wachtwoordzin bent vergeten of deze instelling wilt wijzigen, <ph name="BEGIN_LINK" />verwijder je de Chromium-gegevens in je account<ph name="END_LINK" />.</translation>
-<translation id="2618757400690011108">{COUNT,plural, =1{Chromium helpt je om dit pakket te volgen op de pagina Nieuw tabblad.}other{Chromium helpt je om deze pakketten te volgen op de pagina Nieuw tabblad.}}</translation>
 <translation id="2650312721222849884">Zet de synchronisatie aan om je tabbladen te bekijken vanaf elk apparaat waarop je Chromium gebruikt</translation>
 <translation id="2684230048001240293">Stel Chromium in als je standaardbrowser om je tabbladen, wachtwoorden en betalingsgegevens op al je apparaten te synchroniseren</translation>
 <translation id="2730884209570016437">Chromium kan je camera niet gebruiken omdat deze wordt gebruikt door een andere app</translation>
@@ -89,9 +89,9 @@ Ga naar <ph name="BEGIN_LINK" />Google-services<ph name="END_LINK" /> voor meer 
 <translation id="2977470724722393594">Chromium is up-to-date</translation>
 <translation id="3044857325852340337">Chromium-gegevens verwijderd</translation>
 <translation id="3054480780637153380">Open de Chromium-instellingen in iOS, tik op Standaard browser-app en selecteer Chromium.</translation>
-<translation id="3078941082359356771">{COUNT,plural, =1{Chromium kan je helpen om dit pakket te volgen op de pagina Nieuw tabblad.}other{Chromium kan je helpen om deze pakketten te volgen op de pagina Nieuw tabblad.}}</translation>
 <translation id="3102849287235003384">Als je op alle websites wilt uitloggen van je Google-account, <ph name="BEGIN_LINK" />log je uit bij Chromium<ph name="END_LINK" />.</translation>
 <translation id="3115956258722352278">Chromium instellen als je standaardbrowser?</translation>
+<translation id="3180939591219927904">Zet 'Incognitotabbladen vergrendelen als je Chromium sluit' aan</translation>
 <translation id="3242612358525156339">Open <ph name="TEXT_OF_THE_SETTINGS_MENU_ITEM" /> in de instellingen van je apparaat en selecteer Chromium</translation>
 <translation id="328933489847748230">{count,plural, =1{Er wordt nu 1 Chromium-venster getoond}other{Er worden nu {count} Chromium-vensters getoond}}</translation>
 <translation id="3344973607274501920">Chromium kan je wachtwoorden niet checken. Check de internetverbinding.</translation>
@@ -99,12 +99,15 @@ Ga naar <ph name="BEGIN_LINK" />Google-services<ph name="END_LINK" /> voor meer 
 <translation id="3387107508582892610">{THRESHOLD,plural, =1{Dit gebeurt als Chromium {THRESHOLD} minuut niet wordt gebruikt. Dit kunnen onder andere de geschiedenis en gegevens voor automatisch invullen zijn.}other{Dit gebeurt als Chromium {THRESHOLD} minuten niet wordt gebruikt. Dit kunnen onder andere de geschiedenis en gegevens voor automatisch invullen zijn.}}</translation>
 <translation id="3410395242749598859">Sommige van je Chromium-gegevens zijn nog niet opgeslagen in <ph name="EMAIL" />.
 Wacht een paar minuten voordat je van account wisselt. Als je nu van account wisselt, worden deze gegevens verwijderd.</translation>
+<translation id="3440830787838130530">Deel makkelijk en beveiligd een kopie van een wachtwoord met je gezinsgroep in Google Wachtwoordmanager</translation>
 <translation id="3472200483164753384">Niet ondersteund in Chromium Canary</translation>
 <translation id="347967311580159871">Ga naar <ph name="BEGIN_LINK" />Google-services<ph name="END_LINK" /> voor meer instellingen die gegevens gebruiken om de functionaliteit van Chromium te verbeteren.</translation>
 <translation id="3512168799938877162">Je wachtwoord is niet gedeeld. Check je internetverbinding en zorg dat je bent ingelogd bij Chromium. Probeer het daarna opnieuw.</translation>
 <translation id="3529798650269984835">Zet Incognitotabbladen vergrendelen als je Chromium sluit aan.</translation>
+<translation id="3541247799006476453">Krijg makkelijk toegang tot je wachtwoorden en toegangssleutels met Chromium voor automatisch invullen</translation>
 <translation id="3567399274263440288">Log in bij Chromium met je Google-account om het maximale uit Chromium te halen.</translation>
 <translation id="3581385059720151202">Visuele elementen zoeken in Chromium</translation>
+<translation id="3582640969619785896">Chromium biedt aan om je wachtwoord op te slaan</translation>
 <translation id="3594315078412605236">Betaalmethoden beheren in Chromium</translation>
 <translation id="3634039384458740619">Chromium-instellingen openen</translation>
 <translation id="3639997914391704523">Chromium kan je wachtwoorden checken als je inlogt met je Google-account.</translation>
@@ -161,12 +164,15 @@ Als je deze instelling wilt wijzigen, <ph name="BEGIN_LINK" />verwijder je de Ch
 <translation id="4999538639245140991">Omdat je uitlogt van een account dat wordt beheerd door <ph name="SIGNOUT_MANAGED_DOMAIN" />, worden je Chromium-gegevens van dit apparaat verwijderd. Je gegevens blijven echter wel in je Google-account staan.</translation>
 <translation id="5042011327527167688">Tik op 'Bekijken met Google Maps in Chromium'.</translation>
 <translation id="5044871537677053278">Chromium neemt adressen waar en gebruikt Google Maps om je routes en lokale informatie te geven.</translation>
+<translation id="5048140766121299007">Zet Chromium aan in de instellingen van <ph name="TEXT_OF_THE_SETTINGS_MENU_ITEM" /></translation>
 <translation id="5048795749726991615">Gebruik Chromium voor automatisch invullen om je opgeslagen wachtwoorden makkelijk te gebruiken in je andere apps</translation>
 <translation id="5053429694249468757">Chromium-gegevens verwijderen…</translation>
 <translation id="5071749685031362629">Chromium voor iOS</translation>
 <translation id="5088872414922783602">Open Chromium sneller via het dock op het startscherm.</translation>
 <translation id="5124429847818367226">Je kunt Chromium nu gebruiken als je browst of op links in berichten, documenten en andere apps tikt.</translation>
 <translation id="5131565040785979529">Je organisatie, <ph name="DOMAIN" />, beheert het account waarop je bent ingelogd en hoe Chromium wordt gebruikt.</translation>
+<translation id="5134464247000681876">Open links uit Gmail, Maps, YouTube en andere apps in Chromium</translation>
+<translation id="5203244847421322551">Wachtwoorden opslaan en automatisch invullen in Chromium</translation>
 <translation id="5224391634244552924">Geen opgeslagen wachtwoorden. Chromium kan je wachtwoorden checken als je deze hebt opgeslagen.</translation>
 <translation id="5259423875997548710">Zoek visuele elementen in Chromium.</translation>
 <translation id="5308226104666789935">Chromium kan niet checken op updates</translation>
@@ -181,6 +187,7 @@ Als je deze instelling wilt wijzigen, <ph name="BEGIN_LINK" />verwijder je de Ch
 1. Open Instellingen.
 2. Tik op Standaard browser-app.
 3. Selecteer Chromium.</translation>
+<translation id="5482686278086727777">Als je tabbladherinneringen van Chromium wilt krijgen, zet je meldingen aan via de iOS-instellingen.</translation>
 <translation id="5521125884468363740">Log in en zet de synchronisatie aan om je tabbladen te bekijken vanaf elk apparaat waarop je Chromium gebruikt</translation>
 <translation id="5534584691915394889">Hiermee worden vanuit Chromium en Google Lens afspraken gemaakt in je Apple-agenda.</translation>
 <translation id="5571094606370987472">Opent de recente Chromium-tabbladen.</translation>
@@ -202,7 +209,6 @@ Aandachtspunten:
   • Als je je geschiedenis synchroniseert met je Google-account, kunnen de statistieken ook informatie bevatten over de URL's die je bezoekt.<ph name="END_INDENT" /></translation>
 <translation id="5932787118589620366">Verwijder browsegegevens in Chromium.</translation>
 <translation id="593808800391107017">Krijg meldingen over privacy- of beveiligingsproblemen die Chromium automatisch voor je opspoort.</translation>
-<translation id="5945387852661427312">Je logt in met een account dat wordt beheerd door <ph name="DOMAIN" />, waarmee je de eigenaar beheer geeft over je Chromium-gegevens. Je gegevens worden permanent gekoppeld aan dit account. Als je uitlogt van Chromium, worden je gegevens van dit apparaat verwijderd. Ze blijven echter opgeslagen in je Google-account.</translation>
 <translation id="5951593919357934226">Haal het maximale uit Chromium.</translation>
 <translation id="5985254578475526217">Als je meldingen van Chromium wilt krijgen, zet je meldingen aan via je iOS-instellingen.</translation>
 <translation id="6104024151682120539">Openen in Chromium</translation>
@@ -210,10 +216,11 @@ Aandachtspunten:
 <translation id="6132149203299792222">Log in met je Google-account om onder andere je wachtwoorden en bookmarks te synchroniseren.</translation>
 <translation id="6148377327556085395">Bookmarks toevoegen aan Chromium</translation>
 <translation id="6154098560469640583">Gebruik Chromium als je op links in berichten, documenten en andere apps tikt.</translation>
+<translation id="6157162508956739031">Log snel in bij apps en sites door je wachtwoorden en toegangssleutels automatisch in te vullen vanuit Chromium</translation>
 <translation id="6170619162539716595">Sta toe dat Chromium Google Maps gebruikt om je routes en lokale informatie over gevonden adressen te geven.</translation>
-<translation id="6197255575340902638">Als je <ph name="MODULE_NAME" /> verbergt, volgt Chromium je toekomstige pakketten niet meer automatisch en worden al je eerdere pakkettrackinggegevens verwijderd.</translation>
 <translation id="6247557882553405851">Google Wachtwoordmanager</translation>
 <translation id="6268381023930128611">Uitloggen bij Chromium?</translation>
+<translation id="6301717043141881464">Kies Chromium voor automatisch invullen om je opgeslagen wachtwoorden makkelijk te gebruiken in je andere apps</translation>
 <translation id="6324041800010509197">Het tabbladraster in Chromium bezoeken</translation>
 <translation id="6325378625795868881">Gebruik Chromium als je op links in berichten en andere apps tikt.</translation>
 <translation id="6424492062988593837">Chromium is nu nog beter! Er is een nieuwe versie beschikbaar.</translation>
@@ -225,6 +232,7 @@ Aandachtspunten:
 <translation id="6574750762636192517">Wachtwoorden beheren in Chromium</translation>
 <translation id="6590232959690355435">Opent de pagina met je Chromium-geschiedenis.</translation>
 <translation id="6674470628873622334">Opent een nieuw Chromium-incognitotabblad.</translation>
+<translation id="6680609900732453726">Houd je browsen privé met apparaatverificatie als je Chromium sluit</translation>
 <translation id="6752854822223394465">Je organisatie stelt Chromium in…</translation>
 <translation id="6794054469102824109">Opent de Chromium Dino-game.</translation>
 <translation id="6820823224820483452">Chromium kan niet alle wachtwoorden checken. Probeer het morgen opnieuw.</translation>
@@ -254,22 +262,24 @@ Alleen iemand met je wachtwoordzin kan je versleutelde gegevens lezen. De wachtw
 <translation id="7337881442233988129">Chromium</translation>
 <translation id="7357211569052832586">De geselecteerde gegevens zijn verwijderd uit Chromium en van gesynchroniseerde apparaten. Voor je Google-account kunnen andere vormen van browsegeschiedenis (zoals zoekopdrachten en activiteit uit andere Google-services) beschikbaar zijn via history.google.com.</translation>
 <translation id="7395825497086981028">Je wachtwoord wordt opgeslagen in Wachtwoordmanager voor <ph name="EMAIL" />.</translation>
+<translation id="7504829997542308412">Open Chromium</translation>
 <translation id="7531461704633548377">Van Chromium</translation>
 <translation id="7554983317097061001">Chromium-tip: verplaats Chromium naar het dock</translation>
 <translation id="7576863740961052505">Chromium-instellingen beheren</translation>
 <translation id="7674213385180944843">Open Instellingen &gt; Privacy &gt; Camera &gt; Chromium en zet de camera aan.</translation>
 <translation id="7733418656985455268">Chromium-tip: Zoeken met Lens</translation>
 <translation id="7747820849741499258">Zoeken in Chromium</translation>
+<translation id="7753923083404296545">Geopend in Chromium-incognitomodus</translation>
 <translation id="7762622637388462191">Vergrendel de incognitotabbladen als je Chromium verlaat of overschakelt naar een andere app.</translation>
 <translation id="7763454117143368771">Gebruik Chromium als je standaardbrowser voor bescherming tegen gevaarlijke sites en om je wachtwoorden te beveiligen</translation>
 <translation id="7784950022329154821">Incognitotabbladen vergrendelen als je Chromium sluit</translation>
 <translation id="78025249032851484">Je Chromium is verouderd.</translation>
 <translation id="7859018312476869945">Als je in de adresbalk of het zoekvak typt, stuurt Chromium wat je typt naar je standaard zoekmachine om betere suggesties te krijgen. Dit staat uit in de incognitomodus.</translation>
-<translation id="7859432380288435856">Chromium herkent nummers voor pakkettracking op sites die je bezoekt en toont je pakketupdates op de pagina Nieuw tabblad. Je gegevens worden gedeeld met Google om deze functie te bieden en Shopping voor iedereen te verbeteren.</translation>
 <translation id="7890287942691234100">Chromium-scanner gebruiken</translation>
 <translation id="7905064834449738336">Als je een wachtwoord gebruikt, waarschuwt Chromium je als het online is gepubliceerd. Als dit wordt gedaan, zijn je wachtwoorden en gebruikersnamen versleuteld, zodat ze door niemand (ook niet Google) kunnen worden gelezen.</translation>
 <translation id="7928628054454574139">Chromium openen wanneer je op links in andere apps tikt</translation>
 <translation id="7934404985878918282">Chromium-leeslijst bekijken</translation>
+<translation id="7935734571048689933">Chromium wordt beheerd</translation>
 <translation id="7951793218148208717">Opent een nieuw tabblad in Chromium.</translation>
 <translation id="7980860476903281594">Chromium deelt je locatie met sites die je toestaat.</translation>
 <translation id="7994322153108931467">Zet meldingen aan via de iOS-instellingen om nuttige Chromium-tips te krijgen.</translation>
@@ -287,6 +297,7 @@ Alleen iemand met je wachtwoordzin kan je versleutelde gegevens lezen. De wachtw
 <translation id="8254729934443216898">Ontdek nieuwe functies waarmee je alles uit Chromium kunt halen.</translation>
 <translation id="8293572045658095405">Je bent in de Chromium-incognitomodus</translation>
 <translation id="830951810931292870">Hiermee worden de ingevoerde URL's in Chromium geopend in de incognitomodus.</translation>
+<translation id="8390323835464055390">Log in met je opgeslagen wachtwoorden en toegangssleutels vanuit elke app via Chromium voor automatisch invullen</translation>
 <translation id="8409374867500149834">Je hebt de krachtigste beveiliging van Chromium tegen schadelijke websites</translation>
 <translation id="8543509361021925846">{THRESHOLD,plural, =1{Dit gebeurt als Chromium {THRESHOLD} minuut niet wordt gebruikt. Gegevens die alleen op dit apparaat zijn opgeslagen terwijl je was ingelogd, worden verwijderd. Dit kunnen onder andere geschiedenis en wachtwoorden zijn.}other{Dit gebeurt als Chromium {THRESHOLD} minuten niet wordt gebruikt. Gegevens die alleen op dit apparaat zijn opgeslagen terwijl je was ingelogd, worden verwijderd. Dit kunnen onder andere geschiedenis en wachtwoorden zijn.}}</translation>
 <translation id="858114650497379505">Je kunt de wachtwoorden die je in Wachtwoordmanager hebt opgeslagen, gebruiken in andere apps op je iPhone.</translation>
@@ -299,11 +310,11 @@ Alleen iemand met je wachtwoordzin kan je versleutelde gegevens lezen. De wachtw
 <translation id="8754966941001340678">Chromium raadt Geoptimaliseerde beveiliging aan</translation>
 <translation id="8759037115129007407">Je gezinslid kan op dit moment geen wachtwoorden krijgen. Vraag hun Chromium te updaten en hun wachtwoorden te synchroniseren. <ph name="BEGIN_LINK" />Meer informatie<ph name="END_LINK" /></translation>
 <translation id="8776843108004031667">Dit account en niet-opgeslagen gegevens worden verwijderd uit Chromium.</translation>
+<translation id="8793333988063379360">Je vindt hier onder andere Chromium-instellingen</translation>
 <translation id="8805148242934787134">Chromium instellen als standaardbrowser</translation>
 <translation id="8826789549860004832">Haal het maximale uit Chromium door verder te gaan met het instellen van je browser.</translation>
 <translation id="88376265765385899">Opent de Chromium-bookmarks.</translation>
 <translation id="8860548555286245440">URL's in Chromium openen in de incognitomodus</translation>
-<translation id="8866191443434488382">Chromium herkent trackingcodes op sites die je bezoekt en toont pakketupdates op de pagina Nieuw tabblad. Het nummer voor pakkettracking en de naam van de website worden naar Chromium gestuurd om deze functie te bieden en de Shopping-functies voor iedereen te verbeteren. Je kunt dit altijd updaten in de <ph name="BEGIN_LINK" />instellingen voor Verzendstatus bijhouden<ph name="END_LINK" />.</translation>
 <translation id="8880024619507699923">Je organisatie vereist dat je inlogt om Chromium te gebruiken. <ph name="BEGIN_LINK" />Meer informatie<ph name="END_LINK" /></translation>
 <translation id="8900052431807804054">Krijg het hoogste beveiligingsniveau van Chromium</translation>
 <translation id="8950326149985259075">{THRESHOLD,plural, =1{Dit gebeurt als Chromium {THRESHOLD} minuut niet wordt gebruikt}other{Dit gebeurt als Chromium {THRESHOLD} minuten niet wordt gebruikt}}</translation>

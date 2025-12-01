@@ -20,6 +20,7 @@
 #include "chrome/browser/enterprise/connectors/test/deep_scanning_browsertest_base.h"
 #include "chrome/browser/enterprise/connectors/test/deep_scanning_test_utils.h"
 #include "chrome/browser/enterprise/connectors/test/fake_content_analysis_delegate.h"
+#include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/safe_browsing/cloud_content_scanning/deep_scanning_utils.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_window.h"
@@ -114,7 +115,7 @@ class ContentAnalysisDialogBehaviorBrowserTest
           std::tuple<bool, bool, base::TimeDelta>> {
  public:
   ContentAnalysisDialogBehaviorBrowserTest()
-      : ax_event_counter_(views::AXEventManager::Get()) {
+      : ax_event_counter_(views::AXUpdateNotifier::Get()) {
     ContentAnalysisDialog::SetObserverForTesting(this);
 
     expected_scan_result_ = dlp_success() && malware_success();

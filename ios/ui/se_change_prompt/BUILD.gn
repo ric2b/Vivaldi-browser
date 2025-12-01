@@ -19,10 +19,10 @@ source_set("search_engine_change_prompt") {
     "//ios/chrome/app/application_delegate:app_state",
     "//ios/chrome/app/profile",
     "//ios/chrome/app/strings",
+    "//ios/chrome/browser/device_orientation/ui_bundled",
     "//ios/chrome/browser/favicon/model",
     "//ios/chrome/browser/shared/coordinator/chrome_coordinator",
     "//ios/chrome/browser/shared/model/browser",
-    "//ios/chrome/browser/ui/device_orientation",
     "//ios/chrome/common/ui/util",
     "//ui/base",
     "//vivaldi/ios/ui/helpers",
@@ -44,6 +44,7 @@ swift_source_set("search_engine_change_prompt_swift") {
   ]
 
   deps = [
+    "//vivaldi/app:vivaldi_ios_native_strings",
     "//vivaldi/ios/ui/helpers:helpers_swift",
   ]
 

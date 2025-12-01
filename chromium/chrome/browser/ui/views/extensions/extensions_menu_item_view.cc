@@ -169,9 +169,9 @@ views::Builder<HoverButton> GetSitePermissionsButtonBuilder(
       views::Builder<HoverButton>(
           std::make_unique<HoverButton>(std::move(callback), std::u16string()))
           .SetLabelStyle(views::style::STYLE_BODY_5)
-          .SetEnabledTextColorIds(kColorExtensionsMenuSecondaryText)
-          .SetTextColorId(views::Button::ButtonState::STATE_DISABLED,
-                          kColorExtensionsMenuSecondaryText)
+          .SetEnabledTextColors(kColorExtensionsMenuSecondaryText)
+          .SetTextColor(views::Button::ButtonState::STATE_DISABLED,
+                        kColorExtensionsMenuSecondaryText)
           .SetImageLabelSpacing(button_icon_label_spacing)
           // Align the main and secondary row text by adding the primary
           // action button's icon size as margin.
@@ -411,6 +411,11 @@ ExtensionMenuItemView::ExtensionMenuItemView(
       std::u16string(), ax::mojom::DescriptionFrom::kAttributeExplicitlyEmpty);
   site_permissions_button_->GetViewAccessibility().SetDescription(
       std::u16string(), ax::mojom::DescriptionFrom::kAttributeExplicitlyEmpty);
+
+  // Add rounded corners to the site permissions button.
+  site_permissions_button_->SetFocusRingCornerRadius(
+      views::LayoutProvider::Get()->GetCornerRadiusMetric(
+          views::ShapeContextTokens::kExtensionsMenuButtonRadius));
 }
 
 ExtensionMenuItemView::~ExtensionMenuItemView() = default;
@@ -466,7 +471,7 @@ void ExtensionMenuItemView::UpdatePinButton(bool is_force_pinned,
                           !browser_->profile()->IsOffTheRecord());
 
   // Update the icon based on whether the extension is pinned.
-  const gfx::VectorIcon& icon = is_pinned ? kKeepFilledIcon : kKeepIcon;
+  const gfx::VectorIcon& icon = is_pinned ? kKeepOffIcon : kKeepIcon;
   const ui::ColorId icon_color_id =
       is_pinned ? kColorExtensionMenuPinButtonIcon : kColorExtensionMenuIcon;
   const ui::ColorId disabled_icon_color_id =

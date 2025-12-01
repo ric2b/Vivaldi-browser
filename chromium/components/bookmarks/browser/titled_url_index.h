@@ -66,7 +66,8 @@ class TitledUrlIndex {
   std::vector<TitledUrlMatch> GetResultsMatching(
       const std::u16string& query,
       size_t max_count,
-      query_parser::MatchingAlgorithm matching_algorithm);
+      query_parser::MatchingAlgorithm matching_algorithm,
+      bool special_characters = false);
 
   // Returns a normalized version of the UTF16 string `text`.  If it fails to
   // normalize the string, returns `text` itself as a best-effort.
@@ -157,7 +158,7 @@ class TitledUrlIndex {
 
   // Returns the set of query words from `query`.
   static std::vector<std::u16string> ExtractQueryWords(
-      const std::u16string& query);
+      const std::u16string& query, bool special_characters = false);
 
   // Return the index terms for `node`.
   static std::vector<std::u16string> ExtractIndexTerms(

@@ -286,6 +286,8 @@ class CORE_EXPORT LayoutInline : public LayoutBoxModelObject {
   LayoutBox* CreateAnonymousBoxToSplit(
       const LayoutBox* box_to_split) const final;
 
+  void MarkMayHaveAnchorQuery() final;
+
   void Paint(const PaintInfo&) const override;
 
   bool NodeAtPoint(HitTestResult&,
@@ -339,6 +341,7 @@ class CORE_EXPORT LayoutInline : public LayoutBoxModelObject {
 };
 
 inline wtf_size_t LayoutInline::FirstInlineFragmentItemIndex() const {
+  NOT_DESTROYED();
   if (!IsInLayoutNGInlineFormattingContext())
     return 0u;
   return first_fragment_item_index_;

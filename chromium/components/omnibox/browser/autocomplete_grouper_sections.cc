@@ -19,6 +19,8 @@
 namespace {
 constexpr size_t kMobileMostVisitedTilesLimit = 10;
 constexpr bool is_android = !!BUILDFLAG(IS_ANDROID);
+constexpr size_t kMaxSuggestionsPerUnscopedExtension = 4;
+constexpr size_t kMaxExtensions = 2;
 }
 
 Section::Section(size_t limit,
@@ -209,8 +211,10 @@ AndroidNTPZpsSection::AndroidNTPZpsSection(
           30,
           {
               {1, omnibox::GROUP_MOBILE_CLIPBOARD},
-              {15, omnibox::GROUP_PERSONALIZED_ZERO_SUGGEST},
-              {5, omnibox::GROUP_TRENDS},
+              {OmniboxFieldTrial::kOmniboxNumNtpZpsRecentSearches.Get(),
+               omnibox::GROUP_PERSONALIZED_ZERO_SUGGEST},
+              {OmniboxFieldTrial::kOmniboxNumNtpZpsTrendingSearches.Get(),
+               omnibox::GROUP_TRENDS},
           },
           group_configs) {}
 
@@ -220,8 +224,10 @@ AndroidSRPZpsSection::AndroidSRPZpsSection(
                  {
                      {1, omnibox::GROUP_MOBILE_SEARCH_READY_OMNIBOX},
                      {1, omnibox::GROUP_MOBILE_CLIPBOARD},
-                     {15, omnibox::GROUP_PREVIOUS_SEARCH_RELATED},
-                     {15, omnibox::GROUP_PERSONALIZED_ZERO_SUGGEST},
+                     {OmniboxFieldTrial::kOmniboxNumSrpZpsRelatedSearches.Get(),
+                      omnibox::GROUP_PREVIOUS_SEARCH_RELATED},
+                     {OmniboxFieldTrial::kOmniboxNumSrpZpsRecentSearches.Get(),
+                      omnibox::GROUP_PERSONALIZED_ZERO_SUGGEST},
                  },
                  group_configs) {}
 
@@ -232,10 +238,12 @@ AndroidWebZpsSection::AndroidWebZpsSection(
           {
               {1, omnibox::GROUP_MOBILE_SEARCH_READY_OMNIBOX},
               {1, omnibox::GROUP_MOBILE_CLIPBOARD},
-              {kMobileMostVisitedTilesLimit,
+              {OmniboxFieldTrial::kOmniboxNumWebZpsMostVisitedUrls.Get(),
                omnibox::GROUP_MOBILE_MOST_VISITED},
-              {8, omnibox::GROUP_VISITED_DOC_RELATED},
-              {15, omnibox::GROUP_PERSONALIZED_ZERO_SUGGEST},
+              {OmniboxFieldTrial::kOmniboxNumWebZpsRelatedSearches.Get(),
+               omnibox::GROUP_VISITED_DOC_RELATED},
+              {OmniboxFieldTrial::kOmniboxNumWebZpsRecentSearches.Get(),
+               omnibox::GROUP_PERSONALIZED_ZERO_SUGGEST},
           },
           group_configs) {}
 
@@ -244,9 +252,9 @@ DesktopNTPZpsSection::DesktopNTPZpsSection(
     size_t limit)
     : ZpsSection(limit,
                  {
-                     // Vivaldi: Increase from 8 to 20 to get more results
+                     // Vivaldi: Increase from 8 to 42 to get more results
                      // when showing RECENT_TYPED_HISTORY.
-                     {20, omnibox::GROUP_PERSONALIZED_ZERO_SUGGEST},
+                     {42, omnibox::GROUP_PERSONALIZED_ZERO_SUGGEST},
                      {8, omnibox::GROUP_TRENDS},
                  },
                  group_configs) {}
@@ -256,6 +264,17 @@ DesktopNTPZpsIPHSection::DesktopNTPZpsIPHSection(
     : ZpsSection(1,
                  {
                      {1, omnibox::GROUP_ZERO_SUGGEST_IN_PRODUCT_HELP},
+                 },
+                 group_configs) {}
+
+DesktopZpsUnscopedExtensionSection::DesktopZpsUnscopedExtensionSection(
+    omnibox::GroupConfigMap& group_configs)
+    : ZpsSection(kMaxSuggestionsPerUnscopedExtension * kMaxExtensions,
+                 {
+                     {kMaxSuggestionsPerUnscopedExtension,
+                      omnibox::GROUP_UNSCOPED_EXTENSION_1},
+                     {kMaxSuggestionsPerUnscopedExtension,
+                      omnibox::GROUP_UNSCOPED_EXTENSION_2},
                  },
                  group_configs) {}
 
@@ -291,24 +310,30 @@ DesktopSecondaryNTPZpsSection::DesktopSecondaryNTPZpsSection(
                  omnibox::GroupConfig_SideType_SECONDARY) {}
 
 DesktopSRPZpsSection::DesktopSRPZpsSection(
-    omnibox::GroupConfigMap& group_configs)
-    // Vivaldi: Increase from 8 to 20 to get more results
-    // when showing RECENT_TYPED_HISTORY.
-    : ZpsSection(20,
-                 {
-                     {8, omnibox::GROUP_PREVIOUS_SEARCH_RELATED},
-                     {20, omnibox::GROUP_PERSONALIZED_ZERO_SUGGEST},
-                 },
-                 group_configs) {}
+    omnibox::GroupConfigMap& group_configs,
+    size_t max_suggestions,
+    size_t search_limit,
+    size_t url_limit)
+    : ZpsSection(
+          max_suggestions,
+          {{
+               search_limit,
+               {{omnibox::GROUP_PREVIOUS_SEARCH_RELATED, {search_limit}},
+                {omnibox::GROUP_PERSONALIZED_ZERO_SUGGEST, {search_limit}}},
+           },
+           {url_limit, omnibox::GROUP_MOST_VISITED}},
+          group_configs) {}
 
 DesktopWebZpsSection::DesktopWebZpsSection(
-    omnibox::GroupConfigMap& group_configs)
-    // Vivaldi: Increase from 8 to 20 to get more results
-    // when showing RECENT_TYPED_HISTORY.
-    : ZpsSection(20,
+    omnibox::GroupConfigMap& group_configs,
+    size_t max_suggestions,
+    size_t search_limit,
+    size_t url_limit)
+    : ZpsSection(max_suggestions,
                  {
-                     {8, omnibox::GROUP_VISITED_DOC_RELATED},
-                     {20, omnibox::GROUP_PERSONALIZED_ZERO_SUGGEST},
+                     {url_limit, omnibox::GROUP_MOST_VISITED},
+                     {search_limit, omnibox::GROUP_VISITED_DOC_RELATED},
+                     {search_limit, omnibox::GROUP_PERSONALIZED_ZERO_SUGGEST},
                  },
                  group_configs) {}
 
@@ -394,8 +419,11 @@ void ZpsSectionWithMVTiles::InitFromMatches(ACMatches& matches) {
         return m.suggestion_group_id.value_or(omnibox::GROUP_INVALID) ==
                omnibox::GROUP_MOBILE_MOST_VISITED;
       });
+  const size_t max_most_visited_tiles =
+      is_android ? OmniboxFieldTrial::kOmniboxNumWebZpsMostVisitedUrls.Get()
+                 : kMobileMostVisitedTilesLimit;
   // In the event we find more MV tiles than we can accommodate, trim the limit.
-  limit_ += std::min(tile_count, kMobileMostVisitedTilesLimit);
+  limit_ += std::min(tile_count, max_most_visited_tiles);
   // Note that the horizontal render group takes a single slot in vertical list:
   // we therefore count it as an individual item, meaning this list:
   //     [ URL_WHAT_YOU_TYPED    ]

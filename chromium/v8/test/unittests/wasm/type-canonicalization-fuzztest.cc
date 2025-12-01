@@ -51,9 +51,11 @@ struct StructType {
       reps[i] = field_types[i].value_type;
       mutabilities[i] = field_types[i].mutability;
     }
-    builder->AddStructType(zone->New<wasm::StructType>(field_count, kNoOffsets,
-                                                       reps, mutabilities),
-                           kNotFinal, kNoSupertype);
+    bool is_descriptor = false;  // TODO(403372470): Add support.
+    builder->AddStructType(
+        zone->New<wasm::StructType>(field_count, kNoOffsets, reps, mutabilities,
+                                    is_descriptor),
+        kNotFinal, kNoSupertype);
   }
 
   void Print(std::ostream& os) const {
@@ -170,11 +172,17 @@ class TypeCanonicalizerTest
 // FuzzTest domain construction.
 
 static fuzztest::Domain<test::Module> ArbitraryModule() {
+  ValueType kI8 = kWasmI8;
+  ValueType kI16 = kWasmI16;
+  ValueType kI32 = kWasmI32;
+  ValueType kI64 = kWasmI64;
+  ValueType kF32 = kWasmF32;
+  ValueType kF64 = kWasmF64;
   auto storage_type_domain = fuzztest::ElementOf(
-      {kWasmI8, kWasmI16, kWasmI32, kWasmI64, kWasmF32, kWasmF64
+      {kI8, kI16, kI32, kI64, kF32, kF64
        /* TODO(381687256: Add kS128 on SIMD-enabled hosts */});
   auto value_type_domain = fuzztest::ElementOf(
-      {kWasmI32, kWasmI64, kWasmF32, kWasmF64
+      {kI32, kI64, kF32, kF64
        /* TODO(381687256: Add kS128 on SIMD-enabled hosts */});
 
   auto field_type_domain = fuzztest::StructOf<test::FieldType>(

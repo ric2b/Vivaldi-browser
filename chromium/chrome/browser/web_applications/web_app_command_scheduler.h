@@ -1,4 +1,4 @@
-// Copyright 2025 The Chromium Authors
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -44,6 +44,7 @@ class ComputedAppSizeWithOrigin;
 class IsolatedWebAppInstallSource;
 class IsolatedWebAppUrlInfo;
 class IsolatedWebAppUpdatePrepareAndStoreCommandUpdateInfo;
+class IsolatedWebAppApplyUpdateCommandSuccess;
 class IsolationData;
 class SignedWebBundleMetadata;
 class WebApp;
@@ -260,8 +261,8 @@ class WebAppCommandScheduler {
       std::unique_ptr<ScopedKeepAlive> optional_keep_alive,
       std::unique_ptr<ScopedProfileKeepAlive> optional_profile_keep_alive,
       base::OnceCallback<
-          void(base::expected<void, IsolatedWebAppApplyUpdateCommandError>)>
-          callback,
+          void(base::expected<IsolatedWebAppApplyUpdateCommandSuccess,
+                              IsolatedWebAppApplyUpdateCommandError>)> callback,
       const base::Location& call_location = FROM_HERE);
 
   // Given the |bundle_metadata| of a Signed Web Bundle, schedules a command to
@@ -541,8 +542,8 @@ class WebAppCommandScheduler {
   // Installs the web content at `install_url`, verifying that it has the
   // given resolved `manifest_id`. Returns the `InstallResultCode` and the
   // computed manifest id if successful. Used by Web Install API.
-  void InstallAppFromUrl(const GURL& manifest_id,
-                         const GURL& install_url,
+  void InstallAppFromUrl(const GURL& install_url,
+                         const std::optional<GURL>& manifest_id,
                          WebInstallFromUrlCommandCallback installed_callback,
                          const base::Location& location = FROM_HERE);
 

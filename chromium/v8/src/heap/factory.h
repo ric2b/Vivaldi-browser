@@ -92,6 +92,7 @@ class WasmInterpreterRuntime;
 
 class ArrayType;
 class StructType;
+class ContType;
 struct WasmElemSegment;
 class WasmValue;
 enum class OnResume : int;
@@ -169,7 +170,7 @@ class V8_EXPORT_PRIVATE Factory : public FactoryBase<Factory> {
 
   // Allocates a NameDictionary with an internal capacity calculated such that
   // |at_least_space_for| entries can be added without reallocating.
-  Handle<NameDictionary> NewNameDictionary(int at_least_space_for);
+  DirectHandle<NameDictionary> NewNameDictionary(int at_least_space_for);
 
   Handle<OrderedHashSet> NewOrderedHashSet();
   Handle<OrderedHashMap> NewOrderedHashMap();
@@ -226,8 +227,9 @@ class V8_EXPORT_PRIVATE Factory : public FactoryBase<Factory> {
   template <typename SeqString, template <typename> typename HandleType>
     requires(
         std::is_convertible_v<HandleType<SeqString>, DirectHandle<SeqString>>)
-  Handle<String> InternalizeString(HandleType<SeqString>, int from, int length,
-                                   bool convert_encoding = false);
+  Handle<String> InternalizeSubString(HandleType<SeqString>, uint32_t from,
+                                      uint32_t length,
+                                      bool convert_encoding = false);
 
   // Internalized strings are created in the old generation (data space).
   // TODO(b/42203211): InternalizeString and InternalizeName are templatized so
@@ -595,7 +597,7 @@ class V8_EXPORT_PRIVATE Factory : public FactoryBase<Factory> {
       DirectHandle<WeakArrayList> array, int grow_by,
       AllocationType allocation = AllocationType::kYoung);
 
-  Handle<WeakArrayList> CompactWeakArrayList(
+  DirectHandle<WeakArrayList> CompactWeakArrayList(
       DirectHandle<WeakArrayList> array, int new_capacity,
       AllocationType allocation = AllocationType::kYoung);
 
@@ -731,15 +733,15 @@ class V8_EXPORT_PRIVATE Factory : public FactoryBase<Factory> {
       DirectHandle<Map> map);
 
 #if V8_ENABLE_WEBASSEMBLY
-  Handle<WasmTrustedInstanceData> NewWasmTrustedInstanceData();
-  Handle<WasmDispatchTable> NewWasmDispatchTable(
+  DirectHandle<WasmTrustedInstanceData> NewWasmTrustedInstanceData();
+  DirectHandle<WasmDispatchTable> NewWasmDispatchTable(
       int length, wasm::CanonicalValueType table_type);
   DirectHandle<WasmTypeInfo> NewWasmTypeInfo(
-      wasm::CanonicalTypeIndex type_index,
-      wasm::CanonicalValueType element_type, Handle<Map> opt_parent);
+      wasm::CanonicalValueType type, wasm::CanonicalValueType element_type,
+      DirectHandle<Map> opt_parent);
   DirectHandle<WasmInternalFunction> NewWasmInternalFunction(
       DirectHandle<TrustedObject> ref, int function_index);
-  Handle<WasmFuncRef> NewWasmFuncRef(
+  DirectHandle<WasmFuncRef> NewWasmFuncRef(
       DirectHandle<WasmInternalFunction> internal_function,
       DirectHandle<Map> rtt);
   DirectHandle<WasmCapiFunctionData> NewWasmCapiFunctionData(
@@ -772,27 +774,35 @@ class V8_EXPORT_PRIVATE Factory : public FactoryBase<Factory> {
   DirectHandle<WasmResumeData> NewWasmResumeData(
       DirectHandle<WasmSuspenderObject> suspender, wasm::OnResume on_resume);
   DirectHandle<WasmSuspenderObject> NewWasmSuspenderObject();
-  Handle<WasmStruct> NewWasmStruct(const wasm::StructType* type,
-                                   wasm::WasmValue* args,
-                                   DirectHandle<Map> map);
-  Handle<WasmArray> NewWasmArray(wasm::ValueType element_type, uint32_t length,
-                                 wasm::WasmValue initial_value,
-                                 DirectHandle<Map> map);
-  Handle<WasmArray> NewWasmArrayFromElements(
+  DirectHandle<WasmStruct> NewWasmStruct(const wasm::StructType* type,
+                                         wasm::WasmValue* args,
+                                         DirectHandle<Map> map);
+  // The resulting struct will be uninitialized, which means GC might fail for
+  // reference structs until initialization. Follow this up with a
+  // {DisallowGarbageCollection} scope until initialization.
+  Handle<WasmStruct> NewWasmStructUninitialized(
+      const wasm::StructType* type, DirectHandle<Map> map,
+      AllocationType allocation = AllocationType::kYoung);
+
+  DirectHandle<WasmArray> NewWasmArray(wasm::ValueType element_type,
+                                       uint32_t length,
+                                       wasm::WasmValue initial_value,
+                                       DirectHandle<Map> map);
+  DirectHandle<WasmArray> NewWasmArrayFromElements(
       const wasm::ArrayType* type, base::Vector<wasm::WasmValue> elements,
       DirectHandle<Map> map);
-  Handle<WasmArray> NewWasmArrayFromMemory(
+  DirectHandle<WasmArray> NewWasmArrayFromMemory(
       uint32_t length, DirectHandle<Map> map,
       wasm::CanonicalValueType element_type, Address source);
   // Returns a handle to a WasmArray if successful, or a Smi containing a
   // {MessageTemplate} if computing the array's elements leads to an error.
-  Handle<Object> NewWasmArrayFromElementSegment(
-      Handle<WasmTrustedInstanceData> trusted_instance_data,
-      Handle<WasmTrustedInstanceData> shared_trusted_instance_data,
+  DirectHandle<Object> NewWasmArrayFromElementSegment(
+      DirectHandle<WasmTrustedInstanceData> trusted_instance_data,
+      DirectHandle<WasmTrustedInstanceData> shared_trusted_instance_data,
       uint32_t segment_index, uint32_t start_offset, uint32_t length,
       DirectHandle<Map> map, wasm::CanonicalValueType element_type);
   DirectHandle<WasmContinuationObject> NewWasmContinuationObject(
-      Address jmpbuf, wasm::StackMemory* stack, DirectHandle<HeapObject> parent,
+      wasm::StackMemory* stack, DirectHandle<HeapObject> parent,
       AllocationType allocation = AllocationType::kYoung);
 
   DirectHandle<SharedFunctionInfo> NewSharedFunctionInfoForWasmExportedFunction(
@@ -847,8 +857,8 @@ class V8_EXPORT_PRIVATE Factory : public FactoryBase<Factory> {
   DirectHandle<JSAsyncFromSyncIterator> NewJSAsyncFromSyncIterator(
       DirectHandle<JSReceiver> sync_iterator, DirectHandle<Object> next);
 
-  Handle<JSMap> NewJSMap();
-  Handle<JSSet> NewJSSet();
+  DirectHandle<JSMap> NewJSMap();
+  DirectHandle<JSSet> NewJSSet();
 
   // Allocates a bound function. If direct handles are enabled, it is the
   // responsibility of the caller to ensure that the memory pointed to by
@@ -909,8 +919,9 @@ class V8_EXPORT_PRIVATE Factory : public FactoryBase<Factory> {
                             MessageTemplate template_index,
                             base::Vector<const DirectHandle<Object>> args);
 
-  Handle<JSObject> NewSuppressedErrorAtDisposal(
-      Isolate* isolate, Handle<Object> error, Handle<Object> suppressed_error);
+  DirectHandle<JSObject> NewSuppressedErrorAtDisposal(
+      Isolate* isolate, DirectHandle<Object> error,
+      DirectHandle<Object> suppressed_error);
 
   template <typename... Args>
   DirectHandle<JSObject> NewError(DirectHandle<JSFunction> constructor,
@@ -1387,14 +1398,7 @@ class V8_EXPORT_PRIVATE Factory : public FactoryBase<Factory> {
                                               DirectHandle<Map> map);
 
 #if V8_ENABLE_DRUMBRAKE
-  // The resulting struct will be uninitialized, which means GC might fail for
-  // reference structs until initialization. Follow this up with a
-  // {DisallowGarbageCollection} scope until initialization.
-  Handle<WasmStruct> NewWasmStructUninitialized(const wasm::StructType* type,
-                                                Handle<Map> map);
-
-  // WasmInterpreterRuntime needs to call NewWasmStructUninitialized and
-  // NewWasmArrayUninitialized.
+  // WasmInterpreterRuntime needs to call NewWasmArrayUninitialized.
   friend class wasm::WasmInterpreterRuntime;
 #endif  // V8_ENABLE_DRUMBRAKE
 #endif  // V8_ENABLE_WEBASSEMBLY

@@ -6,6 +6,7 @@
 
 import os
 import sys
+from unittest import mock
 
 DEPOT_TOOLS_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, DEPOT_TOOLS_ROOT)
@@ -67,6 +68,8 @@ class GitRebaseUpdateTest(git_test_utils.GitRepoReadWriteTestBase):
         self.repo.git('branch', '--set-upstream-to', 'origin/main', 'branch_G')
 
         self.repo.to_schema_refs += ['origin/main']
+        mock.patch('git_rebase_update.RESET', '').start()
+        mock.patch('git_rebase_update.BRIGHT', '').start()
 
     def tearDown(self):
         self.origin.nuke()
@@ -191,7 +194,7 @@ class GitRebaseUpdateTest(git_test_utils.GitRepoReadWriteTestBase):
 
         self.repo.git('checkout', 'sub_K')
         output, _ = self.repo.capture_stdio(self.rp.main, ['foobar'])
-        self.assertIn('try squashing your branch first', output)
+        self.assertIn('Squashing failed', output)
 
         self.assertTrue(self.repo.run(self.gc.in_rebase))
 
@@ -257,7 +260,7 @@ class GitRebaseUpdateTest(git_test_utils.GitRepoReadWriteTestBase):
         self.repo.git('add', 'M')
         self.repo.git_commit('K NOPE')
 
-        # Add a commits to branch_L which would work if squashed
+        # Add a commits to branch_L which will work when squashed
         self.repo.git('checkout', 'branch_L')
         self.repo.git('reset', 'branch_L~')
         with self.repo.open('L', 'w') as f:
@@ -282,16 +285,7 @@ class GitRebaseUpdateTest(git_test_utils.GitRepoReadWriteTestBase):
         self.repo.git('rebase', '--skip')
 
         output, _ = self.repo.capture_stdio(self.reup.main)
-        self.assertIn('try squashing your branch first', output)
-
-        # manually squash the branch
-        self.repo.git('rebase', '--abort')
-        self.repo.git('squash-branch',)
-
-        # Try the rebase again
-        self.repo.git('rebase', '--skip')
-
-        output, _ = self.repo.capture_stdio(self.reup.main)
+        self.assertIn('Failed! Attempting to squash', output)
         self.assertIn('Deleted branch branch_G', output)
         self.assertIn('Deleted branch branch_L', output)
         self.assertIn('\'branch_G\' was merged', output)

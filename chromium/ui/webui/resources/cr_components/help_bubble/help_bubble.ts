@@ -110,17 +110,18 @@ export class HelpBubbleElement extends CrLitElement {
     };
   }
 
-  nativeId: string = '';
-  bodyText: string = '';
-  titleText: string = '';
-  closeButtonAltText: string = '';
-  closeButtonTabIndex: number = 0;
-  position: HelpBubbleArrowPosition = HelpBubbleArrowPosition.TOP_CENTER;
-  buttons: HelpBubbleButtonParams[] = [];
-  sortedButtons: HelpBubbleButtonParams[] = [];
-  progress: Progress|null = null;
-  bodyIconName: string|null = null;
-  bodyIconAltText: string = '';
+  accessor nativeId: string = '';
+  accessor bodyText: string = '';
+  accessor titleText: string = '';
+  accessor closeButtonAltText: string = '';
+  accessor closeButtonTabIndex: number = 0;
+  accessor position: HelpBubbleArrowPosition =
+      HelpBubbleArrowPosition.TOP_CENTER;
+  accessor buttons: HelpBubbleButtonParams[] = [];
+  accessor sortedButtons: HelpBubbleButtonParams[] = [];
+  accessor progress: Progress|null = null;
+  accessor bodyIconName: string|null = null;
+  accessor bodyIconAltText: string = '';
 
   timeoutMs: number|null = null;
   timeoutTimerId: number|null = null;
@@ -140,7 +141,7 @@ export class HelpBubbleElement extends CrLitElement {
    * Backing data for the dom-repeat that generates progress indicators.
    * The elements are placeholders only.
    */
-  protected progressData_: boolean[] = [];
+  protected accessor progressData_: boolean[] = [];
 
   /**
    * Watches the offsetParent for resize events, allowing the bubble to be
@@ -274,7 +275,7 @@ export class HelpBubbleElement extends CrLitElement {
     // As a fallback, focus the close button before trying to focus the anchor;
     // this will allow the focus to stay on the close button if the anchor
     // cannot be focused.
-    this.$.close!.focus();
+    this.$.close.focus();
 
     // Maybe try to focus the anchor. This is preferable to focusing the close
     // button, but not every element can be focused.

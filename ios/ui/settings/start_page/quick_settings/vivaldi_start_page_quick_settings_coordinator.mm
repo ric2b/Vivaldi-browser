@@ -3,6 +3,7 @@
 #import "ios/ui/settings/start_page/quick_settings/vivaldi_start_page_quick_settings_coordinator.h"
 
 #import "ios/chrome/browser/shared/model/browser/browser.h"
+#import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
 #import "ios/chrome/browser/shared/model/profile/profile_ios.h"
 #import "ios/ui/settings/start_page/quick_settings/quick_settings_swift.h"
 #import "ios/ui/settings/start_page/quick_settings/vivaldi_start_page_quick_settings_mediator.h"
@@ -66,8 +67,15 @@
   UISheetPresentationController* sheetPc =
       navController.sheetPresentationController;
 
-  sheetPc.detents = @[UISheetPresentationControllerDetent.mediumDetent,
-                      UISheetPresentationControllerDetent.largeDetent];
+  // When iPad full screen or 2/3 SplitView support only large detent because
+  // medium detent cuts the contents makes the dialog small and off centered.
+  if (IsSplitToolbarMode(self.baseViewController)) {
+    sheetPc.detents = @[UISheetPresentationControllerDetent.mediumDetent,
+                        UISheetPresentationControllerDetent.largeDetent];
+  } else {
+    sheetPc.detents = @[UISheetPresentationControllerDetent.largeDetent];
+  }
+
   sheetPc.prefersScrollingExpandsWhenScrolledToEdge = NO;
   sheetPc.widthFollowsPreferredContentSizeWhenEdgeAttached = YES;
   [self.baseViewController presentViewController:navController

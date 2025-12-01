@@ -68,7 +68,7 @@ RecentlyUsedFoldersComboModel::RecentlyUsedFoldersComboModel(
     }
 
     for (const BookmarkNode* mru_node : mru_bookmarks.account_nodes) {
-      items_.emplace_back(mru_node, mru_node == model->other_node()
+      items_.emplace_back(mru_node, mru_node == model->account_other_node()
                                         ? Item::TYPE_ALL_BOOKMARKS_NODE
                                         : Item::TYPE_NODE);
     }
@@ -249,11 +249,4 @@ void RecentlyUsedFoldersComboModel::MaybeChangeParent(const BookmarkNode* node,
 
 const BookmarkNode* RecentlyUsedFoldersComboModel::GetNodeAt(size_t index) {
   return (index < items_.size()) ? items_[index].node.get() : nullptr;
-}
-
-void RecentlyUsedFoldersComboModel::RemoveNode(const BookmarkNode* node) {
-  auto it = std::ranges::find(items_, Item(node, Item::TYPE_NODE));
-  if (it != items_.end()) {
-    items_.erase(it);
-  }
 }

@@ -234,8 +234,8 @@ class QualityTestVideoEncoder : public VideoEncoder,
       std::tie(min_bitrate_bps, max_bitrate_bps) =
           GetMinMaxBitratesBps(codec_settings_, si);
       double overshoot_factor = overshoot_factor_;
-      const uint32_t corrected_bitrate = rtc::checked_cast<uint32_t>(
-          overshoot_factor * spatial_layer_bitrate_bps);
+      const uint32_t corrected_bitrate =
+          checked_cast<uint32_t>(overshoot_factor * spatial_layer_bitrate_bps);
       if (corrected_bitrate < min_bitrate_bps) {
         overshoot_factor = min_bitrate_bps / spatial_layer_bitrate_bps;
       } else if (corrected_bitrate > max_bitrate_bps) {
@@ -246,8 +246,8 @@ class QualityTestVideoEncoder : public VideoEncoder,
         if (parameters.bitrate.HasBitrate(si, ti)) {
           overshot_allocation.SetBitrate(
               si, ti,
-              rtc::checked_cast<uint32_t>(
-                  overshoot_factor * parameters.bitrate.GetBitrate(si, ti)));
+              checked_cast<uint32_t>(overshoot_factor *
+                                     parameters.bitrate.GetBitrate(si, ti)));
         }
       }
     }
@@ -344,7 +344,7 @@ std::unique_ptr<VideoDecoder> VideoQualityTest::CreateVideoDecoder(
     decoder = decoder_factory_->Create(env, format);
   }
   if (!params_.logging.encoded_frame_base_path.empty()) {
-    rtc::StringBuilder str;
+    StringBuilder str;
     str << receive_logs_++;
     std::string path =
         params_.logging.encoded_frame_base_path + "." + str.str() + ".recv.ivf";
@@ -369,7 +369,7 @@ std::unique_ptr<VideoEncoder> VideoQualityTest::CreateVideoEncoder(
   std::vector<FileWrapper> encoded_frame_dump_files;
   if (!params_.logging.encoded_frame_base_path.empty()) {
     char ss_buf[100];
-    rtc::SimpleStringBuilder sb(ss_buf);
+    SimpleStringBuilder sb(ss_buf);
     sb << send_logs_++;
     std::string prefix =
         params_.logging.encoded_frame_base_path + "." + sb.str() + ".send.";
@@ -472,7 +472,7 @@ VideoQualityTest::InjectionComponents::~InjectionComponents() = default;
 void VideoQualityTest::TestBody() {}
 
 std::string VideoQualityTest::GenerateGraphTitle() const {
-  rtc::StringBuilder ss;
+  StringBuilder ss;
   ss << params_.video[0].codec;
   ss << " (" << params_.video[0].target_bitrate_bps / 1000 << "kbps";
   ss << ", " << params_.video[0].fps << " FPS";
@@ -659,7 +659,7 @@ void VideoQualityTest::FillScalabilitySettings(
     encoder_config.spatial_layers = params->ss[video_idx].spatial_layers;
     encoder_config.simulcast_layers = std::vector<VideoStream>(num_streams);
     encoder_config.video_stream_factory =
-        rtc::make_ref_counted<cricket::EncoderStreamFactory>(encoder_info);
+        rtc::make_ref_counted<EncoderStreamFactory>(encoder_info);
     params->ss[video_idx].streams =
         encoder_config.video_stream_factory->CreateEncoderStreams(
             env().field_trials(), params->video[video_idx].width,

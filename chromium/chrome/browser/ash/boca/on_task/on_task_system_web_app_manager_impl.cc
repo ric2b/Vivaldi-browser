@@ -4,12 +4,14 @@
 
 #include "chrome/browser/ash/boca/on_task/on_task_system_web_app_manager_impl.h"
 
+#include "ash/boca/on_task/on_task_pod_controller.h"
 #include "ash/webui/boca_ui/url_constants.h"
 #include "ash/wm/window_pin_util.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback_helpers.h"
 #include "base/location.h"
 #include "base/memory/weak_ptr.h"
+#include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/apps/app_service/launch_result_type.h"
 #include "chrome/browser/ash/boca/on_task/locked_session_window_tracker_factory.h"
 #include "chrome/browser/ash/boca/on_task/on_task_locked_session_window_tracker.h"
@@ -23,6 +25,7 @@
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/exclusive_access/exclusive_access_manager.h"
 #include "chrome/browser/ui/exclusive_access/fullscreen_controller.h"
+#include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chromeos/ash/components/boca/on_task/activity/active_tab_tracker.h"
 #include "chromeos/ash/components/boca/on_task/on_task_blocklist.h"
 #include "chromeos/ui/base/window_properties.h"
@@ -157,7 +160,88 @@ void OnTaskSystemWebAppManagerImpl::SetPinStateForSystemWebAppWindow(
   } else {
     UnpinWindow(native_window);
     browser->command_controller()->LockedFullscreenStateChanged();
+    DisableCommandsForDevTools(window_id);
   }
+}
+
+void OnTaskSystemWebAppManagerImpl::DisableCommandsForDevTools(
+    SessionID window_id) {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+  Browser* const browser = GetBrowserWindowWithID(window_id);
+  if (!browser) {
+    return;
+  }
+
+  // TODO(crbug.com/406052710): Allow dev channel to use commands for devtools.
+  chrome::BrowserCommandController* const command_controller =
+      browser->command_controller();
+  command_controller->UpdateCommandEnabled(IDC_DEV_TOOLS, false);
+  command_controller->UpdateCommandEnabled(IDC_DEV_TOOLS_CONSOLE, false);
+  command_controller->UpdateCommandEnabled(IDC_DEV_TOOLS_DEVICES, false);
+  command_controller->UpdateCommandEnabled(IDC_DEV_TOOLS_INSPECT, false);
+  command_controller->UpdateCommandEnabled(IDC_DEV_TOOLS_TOGGLE, false);
+}
+
+void OnTaskSystemWebAppManagerImpl::SetPauseStateForSystemWebAppWindow(
+    bool paused,
+    SessionID window_id) {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+  Browser* const browser = GetBrowserWindowWithID(window_id);
+  if (!browser) {
+    return;
+  }
+
+  auto* const immersive_mode_controller =
+      BrowserView::GetBrowserViewForBrowser(browser)
+          ->immersive_mode_controller();
+  bool avoid_using_immersive_mode =
+      platform_util::IsBrowserLockedFullscreen(browser) && paused;
+  if (avoid_using_immersive_mode) {
+    // Hide tab strip in pause mode.
+    immersive_mode_controller->SetEnabled(false);
+  } else if (platform_util::IsBrowserLockedFullscreen(browser)) {
+    immersive_mode_controller->SetEnabled(true);
+  }
+
+  if (paused) {
+    // Focus on the boca homepage in pause mode.
+    browser->tab_strip_model()->ActivateTabAt(0);
+  }
+
+  EnableOrDisableCommandsForTabSwitch(window_id, !paused);
+
+  // Update Ontask pod to enable or disable toggle tab strip visibility.
+  LockedSessionWindowTracker* const window_tracker = GetWindowTracker();
+  if (!window_tracker) {
+    return;
+  }
+  auto* const pod_controller = window_tracker->on_task_pod_controller();
+  if (pod_controller) {
+    pod_controller->OnPauseModeChanged();
+  }
+}
+
+void OnTaskSystemWebAppManagerImpl::EnableOrDisableCommandsForTabSwitch(
+    SessionID window_id,
+    bool enabled) {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+  Browser* const browser = GetBrowserWindowWithID(window_id);
+  if (!browser) {
+    return;
+  }
+
+  chrome::BrowserCommandController* const command_controller =
+      browser->command_controller();
+  command_controller->UpdateCommandEnabled(IDC_SELECT_NEXT_TAB, enabled);
+  command_controller->UpdateCommandEnabled(IDC_SELECT_PREVIOUS_TAB, enabled);
+  command_controller->UpdateCommandEnabled(IDC_SELECT_TAB_0, enabled);
+  command_controller->UpdateCommandEnabled(IDC_SELECT_TAB_1, enabled);
+  command_controller->UpdateCommandEnabled(IDC_SELECT_TAB_2, enabled);
+  command_controller->UpdateCommandEnabled(IDC_SELECT_TAB_3, enabled);
+  command_controller->UpdateCommandEnabled(IDC_SELECT_TAB_4, enabled);
+  command_controller->UpdateCommandEnabled(IDC_SELECT_TAB_5, enabled);
+  command_controller->UpdateCommandEnabled(IDC_SELECT_TAB_6, enabled);
+  command_controller->UpdateCommandEnabled(IDC_SELECT_TAB_7, enabled);
 }
 
 // TODO(b/367417612): Add unit test for this function.
@@ -236,12 +320,14 @@ void OnTaskSystemWebAppManagerImpl::PrepareSystemWebAppWindowForOnTask(
   if (!browser) {
     return;
   }
+  DisableCommandsForDevTools(window_id);
 
   // Configure the browser window for OnTask. This is required to ensure
   // downstream components (especially UI controls) are setup for locked mode
   // transitions.
   browser->SetLockedForOnTask(true);
   MakeWindowResizable(browser->window());
+  browser->set_force_skip_warning_user_on_close(true);
 
   // Remove the floating button on the browser window for OnTask.
   aura::Window* const native_window = browser->window()->GetNativeWindow();
@@ -285,6 +371,26 @@ void OnTaskSystemWebAppManagerImpl::SwitchToTab(SessionID tab_id) {
     if (tab_id == id) {
       browser->tab_strip_model()->ActivateTabAt(idx);
       return;
+    }
+  }
+}
+
+void OnTaskSystemWebAppManagerImpl::SetAllChromeTabsMuted(bool muted) {
+  Browser* const boca_browser =
+      GetBrowserWindowWithID(GetActiveSystemWebAppWindowID());
+  if (!boca_browser) {
+    return;
+  }
+  for (Browser* const browser : *BrowserList::GetInstance()) {
+    if (!browser || browser == boca_browser) {
+      continue;
+    }
+    for (int idx = 0; idx < browser->tab_strip_model()->count(); ++idx) {
+      content::WebContents* const tab =
+          browser->tab_strip_model()->GetWebContentsAt(idx);
+      if (tab) {
+        tab->SetAudioMuted(muted);
+      }
     }
   }
 }

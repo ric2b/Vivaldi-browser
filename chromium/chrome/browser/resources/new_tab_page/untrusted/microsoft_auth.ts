@@ -10,7 +10,6 @@
 import {MicrosoftAuthUntrustedDocumentProxy} from './microsoft_auth_proxy.js';
 import type {AuthenticationResult, AuthError, Configuration, PopupRequest} from './msal_browser.js';
 import {PublicClientApplication} from './msal_browser.js';
-import {AuthState} from './ntp_microsoft_auth_shared_ui.mojom-webui.js';
 import type {MicrosoftAuthUntrustedDocumentCallbackRouter} from './ntp_microsoft_auth_shared_ui.mojom-webui.js';
 import type {MicrosoftAuthUntrustedPageHandlerRemote} from './ntp_microsoft_auth_untrusted_ui.mojom-webui.js';
 
@@ -41,7 +40,7 @@ const msalApp = new PublicClientApplication(msalConfig);
 let callbackRouterToParent: MicrosoftAuthUntrustedDocumentCallbackRouter;
 let callbackRouterToHandler: MicrosoftAuthUntrustedDocumentCallbackRouter;
 let handler: MicrosoftAuthUntrustedPageHandlerRemote;
-msalApp.initialize().then(async () => {
+msalApp.initialize().then(() => {
   const proxy = MicrosoftAuthUntrustedDocumentProxy.getInstance();
   callbackRouterToParent = proxy.callbackRouterToParent;
   callbackRouterToHandler = proxy.callbackRouterToHandler;
@@ -49,11 +48,7 @@ msalApp.initialize().then(async () => {
   callbackRouterToHandler.acquireTokenSilent.addListener(acquireTokenSilent);
   callbackRouterToParent.acquireTokenPopup.addListener(acquireTokenPopup);
   callbackRouterToParent.signOut.addListener(signOut);
-
-  const {state} = await handler.getAuthState();
-  if (state === AuthState.kNone) {
-    acquireTokenSilent();
-  }
+  handler.maybeAcquireTokenSilent();
 });
 
 function handleAcquireTokenResponse(result: typeof AuthenticationResult|null) {
@@ -72,12 +67,8 @@ function handleAcquireTokenResponse(result: typeof AuthenticationResult|null) {
   }
 }
 
-function handleAuthError(_: typeof AuthError) {
-  // All authentication errors are currently treated the same:
-  // the service is marked as errored, which cancels the current
-  // authentication attempt and triggers UI updates to prompt
-  // the user to retry authenticating.
-  handler.setAuthStateError();
+function handleAuthError(err: typeof AuthError) {
+  handler.setAuthStateError(err.errorCode, err.errorMessage);
 }
 
 function acquireTokenPopup() {
@@ -87,9 +78,22 @@ function acquireTokenPopup() {
 }
 
 function acquireTokenSilent() {
-  msalApp.acquireTokenSilent(requestConfig)
-      .then(handleAcquireTokenResponse)
-      .catch(handleAuthError);
+  const accounts = msalApp.getAllAccounts();
+  if (accounts.length === 0) {
+    // If there is no account in the cache, attempt to silently request a token
+    // from the authentication server.
+    msalApp.ssoSilent(requestConfig)
+        .then(handleAcquireTokenResponse)
+        .catch(handleAuthError);
+  } else {
+    // Otherwise, attempt to get token silently with cached account.
+    if (!msalApp.getActiveAccount()) {
+      msalApp.setActiveAccount(accounts[0]!);
+    }
+    msalApp.acquireTokenSilent(requestConfig)
+        .then(handleAcquireTokenResponse)
+        .catch(handleAuthError);
+  }
 }
 
 function signOut() {

@@ -21,6 +21,7 @@
 #include "base/values.h"
 #include "build/build_config.h"
 #include "components/prefs/pref_service.h"
+#include "components/supervised_user/core/browser/supervised_user_error_page.h"
 #include "components/supervised_user/core/browser/supervised_user_service.h"
 #include "components/supervised_user/core/browser/supervised_user_utils.h"
 #include "components/supervised_user/core/browser/web_content_handler.h"
@@ -75,27 +76,15 @@ std::string SupervisedUserInterstitial::GetHTMLContents(
     FilteringBehaviorReason reason,
     bool already_sent_request,
     bool is_main_frame,
-    const std::string& application_locale) {
-  std::string custodian = supervised_user_service->GetCustodianName();
-  std::string second_custodian =
-      supervised_user_service->GetSecondCustodianName();
-  std::string custodian_email =
-      supervised_user_service->GetCustodianEmailAddress();
-  std::string second_custodian_email =
-      supervised_user_service->GetSecondCustodianEmailAddress();
-  std::string profile_image_url =
-      pref_service->GetString(prefs::kSupervisedUserCustodianProfileImageURL);
-  std::string profile_image_url2 = pref_service->GetString(
-      prefs::kSupervisedUserSecondCustodianProfileImageURL);
-
+    const std::string& application_locale,
+    std::optional<float> ios_font_size_multiplier) {
   bool allow_access_requests =
       supervised_user_service->remote_web_approvals_manager()
           .AreApprovalRequestsEnabled();
-
   return BuildErrorPageHtml(
-      allow_access_requests, profile_image_url, profile_image_url2, custodian,
-      custodian_email, second_custodian, second_custodian_email, reason,
-      application_locale, already_sent_request, is_main_frame);
+      allow_access_requests, supervised_user_service->GetCustodian(),
+      supervised_user_service->GetSecondCustodian(), reason, application_locale,
+      already_sent_request, is_main_frame, ios_font_size_multiplier);
 }
 
 void SupervisedUserInterstitial::GoBack() {

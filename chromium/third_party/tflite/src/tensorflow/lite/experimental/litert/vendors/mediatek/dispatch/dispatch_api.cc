@@ -28,16 +28,16 @@
 #include "tensorflow/lite/experimental/litert/c/litert_tensor_buffer.h"
 #include "tensorflow/lite/experimental/litert/c/litert_tensor_buffer_requirements.h"
 #include "tensorflow/lite/experimental/litert/cc/litert_expected.h"
-#include "tensorflow/lite/experimental/litert/cc/litert_tensor_buffer.h"
 #include "tensorflow/lite/experimental/litert/vendors/c/litert_dispatch.h"
 #include "tensorflow/lite/experimental/litert/vendors/c/litert_dispatch_api.h"
 #include "tensorflow/lite/experimental/litert/vendors/mediatek/dispatch/litert_dispatch_device_context.h"
 #include "tensorflow/lite/experimental/litert/vendors/mediatek/dispatch/litert_dispatch_invocation_context.h"
-#include "tensorflow/lite/experimental/litert/vendors/mediatek/neuron_adapter.h"
+#include "tensorflow/lite/experimental/litert/vendors/mediatek/neuron_adapter_api.h"
+#include "tensorflow/lite/experimental/litert/vendors/mediatek/schema/schema_resolver.h"
 
 namespace {
 
-litert::mediatek::NeuronAdapter* TheNeuronAdapter;
+litert::mediatek::NeuronAdapterApi* TheNeuronAdapter;
 char BuildId[256];
 
 }  // namespace
@@ -67,14 +67,14 @@ LiteRtStatus LiteRtInitialize(const LiteRtDispatchOption* options,
       shared_library_dir ? std::make_optional(std::string(shared_library_dir))
                          : std::nullopt;
 
-  if (auto neuron_adapter =
-          litert::mediatek::NeuronAdapter::Create(shared_library_dir_opt);
-      neuron_adapter) {
-    TheNeuronAdapter = neuron_adapter->release();
+  if (auto neuron_adapter_api =
+          litert::mediatek::NeuronAdapterApi::Create(shared_library_dir_opt);
+      neuron_adapter_api) {
+    TheNeuronAdapter = neuron_adapter_api->release();
   } else {
     LITERT_LOG(LITERT_INFO, "Initialization failure: %s",
-               neuron_adapter.Error().Message().c_str());
-    return neuron_adapter.Error().Status();
+               neuron_adapter_api.Error().Message().c_str());
+    return neuron_adapter_api.Error().Status();
   }
 
   auto get_version = TheNeuronAdapter->api().get_version;
@@ -172,8 +172,7 @@ LiteRtStatus LiteRtRegisterTensorBuffer(
     LiteRtDispatchDeviceContext device_context,
     LiteRtTensorBuffer tensor_buffer,
     LiteRtTensorBufferHandle* tensor_buffer_handle) {
-  litert::TensorBuffer tensor_buffer_(tensor_buffer, /*owned=*/false);
-  if (auto result = device_context->RegisterTensorBuffer(tensor_buffer_);
+  if (auto result = device_context->RegisterTensorBuffer(tensor_buffer);
       result) {
     *tensor_buffer_handle = *result;
     return kLiteRtStatusOk;
@@ -199,12 +198,13 @@ LiteRtStatus LiteRtUnregisterTensorBuffer(
 
 LiteRtStatus LiteRtInvocationContextCreate(
     LiteRtDispatchDeviceContext device_context,
-    LiteRtDispatchExecutableType exec_type, const void* exec_bytecode_ptr,
-    size_t exec_bytecode_size, const char* function_name, int num_inputs,
-    int num_outputs, LiteRtDispatchInvocationContext* invocation_context) {
+    LiteRtDispatchExecutableType exec_type,
+    const LiteRtMemBuffer* exec_bytecode_buffer, const char* function_name,
+    int num_inputs, int num_outputs,
+    LiteRtDispatchInvocationContext* invocation_context) {
   auto context = LiteRtDispatchInvocationContextT::Create(
-      *TheNeuronAdapter, device_context, exec_type, exec_bytecode_ptr,
-      exec_bytecode_size, function_name, num_inputs, num_outputs);
+      *TheNeuronAdapter, device_context, exec_type, exec_bytecode_buffer,
+      function_name, num_inputs, num_outputs);
   if (!context) {
     LITERT_LOG(LITERT_ERROR, "Failed to create context from context binary: %s",
                context.Error().Message().c_str());

@@ -23,6 +23,8 @@
 #include "ios/web/public/browser_state.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 
+#include "vivaldi/prefs/vivaldi_gen_prefs.h"
+
 namespace adblock_filter {
 
 namespace {
@@ -50,11 +52,21 @@ struct RuleServiceImpl::LoadData {
 
 RuleServiceImpl::RuleServiceImpl(
     web::BrowserState* browser_state,
+    PrefService* prefs,
     RuleSourceHandler::RulesCompiler rules_compiler,
     std::string locale)
     : browser_state_(browser_state),
+      prefs_(prefs),
       rules_compiler_(std::move(rules_compiler)),
-      locale_(std::move(locale)) {}
+      locale_(std::move(locale)) {
+  pref_change_registrar_.Init(prefs_);
+
+  // Unretained is ok, since we own the registrar and it owns the callback.
+  pref_change_registrar_.Add(
+      vivaldiprefs::kPrivacyAdBlockerEnableDocumentBlocking,
+      base::BindRepeating(&RuleServiceImpl::OnEnableDocumentBlockingChanged,
+                          base::Unretained(this)));
+}
 
 RuleServiceImpl::~RuleServiceImpl() = default;
 
@@ -259,6 +271,10 @@ StateAndLogs* RuleServiceImpl::GetStateAndLogs() {
   return nullptr;
 }
 
+StatsStore* RuleServiceImpl::GetStatsStore() {
+  return nullptr;
+}
+
 void RuleServiceImpl::OnExceptionListChanged(RuleGroup group,
                                              RuleManager::ExceptionsList list) {
 }
@@ -271,6 +287,15 @@ void RuleServiceImpl::OnRulesIndexChanged(
   state_store_->ScheduleSave();
   for (RuleService::Observer& observer : observers_)
     observer.OnRulesIndexBuilt(group, build_result);
+}
+
+void RuleServiceImpl::OnEnableDocumentBlockingChanged() {
+  // Force a recompilation of all sources
+  for (auto group : {RuleGroup::kTrackingRules, RuleGroup::kAdBlockingRules}) {
+    for (const auto& [source_id, _]: rule_manager_->GetRuleSources(group)) {
+      rule_manager_->FetchRuleSourceNow(group, source_id);
+    }
+  }
 }
 
 void RuleServiceImpl::OnStartApplyingRules(RuleGroup group) {

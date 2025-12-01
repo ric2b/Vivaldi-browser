@@ -4,11 +4,13 @@
 
 #import "base/i18n/message_formatter.h"
 #import "base/strings/sys_string_conversions.h"
+#import "base/test/ios/wait_util.h"
 #import "components/policy/policy_constants.h"
-#import "components/search_engines/search_engines_switches.h"
+#import "components/regional_capabilities/regional_capabilities_switches.h"
 #import "components/strings/grit/components_strings.h"
 #import "components/sync/base/features.h"
 #import "components/sync/base/user_selectable_type.h"
+#import "ios/chrome/browser/authentication/ui_bundled/signin/account_menu/account_menu_constants.h"
 #import "ios/chrome/browser/authentication/ui_bundled/signin_earl_grey.h"
 #import "ios/chrome/browser/authentication/ui_bundled/signin_earl_grey_app_interface.h"
 #import "ios/chrome/browser/authentication/ui_bundled/signin_earl_grey_ui_test_util.h"
@@ -29,6 +31,7 @@
 #import "ios/chrome/browser/settings/ui_bundled/password/password_manager_egtest_utils.h"
 #import "ios/chrome/browser/settings/ui_bundled/password/password_settings_app_interface.h"
 #import "ios/chrome/browser/settings/ui_bundled/settings_table_view_controller_constants.h"
+#import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/signin/model/fake_system_identity.h"
 #import "ios/chrome/common/ui/promo_style/constants.h"
 #import "ios/chrome/grit/ios_branded_strings.h"
@@ -174,12 +177,18 @@ void ExpectBatchUploadConfirmationSnackbar(int count, NSString* email) {
     config.features_disabled.push_back(kIdentityDiscAccountMenu);
   }
 
+  if ([self isRunningTest:@selector(testSwitchAccountFromAccountMenu)] ||
+      [self isRunningTest:@selector(testSignOutFromAccountFromAccountMenu)]) {
+    config.features_enabled.push_back(kIdentityDiscAccountMenu);
+    config.features_enabled.push_back(kUseAccountListFromIdentityManager);
+    config.features_enabled.push_back(kSeparateProfilesForManagedAccounts);
+  }
+
   return config;
 }
 
 // Tests that Sync settings is dismissed when the primary account is removed.
-// TODO(crbug.com/394154430): The test is flaky.
-- (void)FLAKY_testSignoutWhileManageSyncSettingsOpened {
+- (void)testSignoutWhileManageSyncSettingsOpened {
   FakeSystemIdentity* fakeIdentity = [FakeSystemIdentity fakeIdentity1];
   [SigninEarlGreyUI signinWithFakeIdentity:fakeIdentity];
   [ChromeEarlGreyUI openSettingsMenu];
@@ -191,12 +200,15 @@ void ExpectBatchUploadConfirmationSnackbar(int count, NSString* email) {
       assertWithMatcher:grey_notNil()];
   [SigninEarlGrey forgetFakeIdentity:fakeIdentity];
   [ChromeEarlGreyUI waitForAppToIdle];
-  [[EarlGrey selectElementWithMatcher:scrollViewMatcher]
-      assertWithMatcher:grey_nil()];
+
+  // Verify the "manage sync" view is popped.
+  [[EarlGrey
+      selectElementWithMatcher:grey_accessibilityID(
+                                   kManageSyncTableViewAccessibilityIdentifier)]
+      assertWithMatcher:grey_notVisible()];
 }
 
-// Tests that unified account settings row is showing, and the Sync row is not
-// showing.
+// Tests that unified account settings row is showing.
 - (void)testShowingUnifiedAccountSettings {
   FakeSystemIdentity* fakeIdentity = [FakeSystemIdentity fakeIdentity1];
   [SigninEarlGrey addFakeIdentity:fakeIdentity];
@@ -206,9 +218,6 @@ void ExpectBatchUploadConfirmationSnackbar(int count, NSString* email) {
   // Sign in with fake identity using the settings sign-in promo.
   SignInWithPromoFromAccountSettings(fakeIdentity,
                                      /*expect_history_sync_ui=*/YES);
-
-  // Verify the Sync settings row is not showing.
-  [SigninEarlGrey verifySyncUIIsHidden];
 
   // Verify the account settings row is showing.
   [[EarlGrey selectElementWithMatcher:SettingsAccountButton()]
@@ -1155,7 +1164,13 @@ void ExpectBatchUploadConfirmationSnackbar(int count, NSString* email) {
 
 // Tests that bulk upload moves the following data types to account:
 // - Passwords
-- (void)testBulkUploadForPasswords {
+// TODO(crbug.com/407020882): Remove FLAKY_ from this test.
+#if TARGET_IPHONE_SIMULATOR
+#define MAYBE_testBulkUploadForPasswords FLAKY_testBulkUploadForPasswords
+#else
+#define MAYBE_testBulkUploadForPasswords testBulkUploadForPasswords
+#endif
+- (void)MAYBE_testBulkUploadForPasswords {
   // Add local data.
   password_manager_test_utils::SavePasswordFormToProfileStore(
       @"password", @"user", @"https://example.com");
@@ -1689,6 +1704,142 @@ void ExpectBatchUploadConfirmationSnackbar(int count, NSString* email) {
   [[EarlGrey
       selectElementWithMatcher:chrome_test_util::SettingsCollectionView()]
       assertWithMatcher:grey_notNil()];
+}
+
+// Test switching account from the account menu.
+- (void)testSwitchAccountFromAccountMenu {
+  // Separate profiles are only available in iOS 17+.
+  if (!@available(iOS 17, *)) {
+    return;
+  }
+
+  FakeSystemIdentity* fakeIdentity = [FakeSystemIdentity fakeIdentity1];
+  FakeSystemIdentity* fakeIdentity2 = [FakeSystemIdentity fakeIdentity2];
+  [SigninEarlGrey addFakeIdentity:fakeIdentity];
+  [SigninEarlGrey addFakeIdentity:fakeIdentity2];
+
+  // Go to the Sync settings page.
+  [SigninEarlGrey signinWithFakeIdentity:fakeIdentity];
+  [ChromeEarlGreyUI openSettingsMenu];
+  [ChromeEarlGreyUI tapSettingsMenuButton:SettingsAccountButton()];
+
+  // Scroll to the bottom to view all section.
+  id<GREYMatcher> scroll_view_matcher =
+      grey_accessibilityID(kManageSyncTableViewAccessibilityIdentifier);
+  [[EarlGrey selectElementWithMatcher:scroll_view_matcher]
+      performAction:grey_scrollToContentEdge(kGREYContentEdgeBottom)];
+
+  // Tap on switch account item.
+  [[EarlGrey selectElementWithMatcher:
+                 grey_accessibilityLabel(l10n_util::GetNSString(
+                     IDS_IOS_GOOGLE_ACCOUNT_SETTINGS_SWITCH_ACCOUNT_ITEM))]
+      performAction:grey_tap()];
+
+  // Verify the account menu is shown.
+  [[EarlGrey
+      selectElementWithMatcher:grey_accessibilityID(kAccountMenuTableViewId)]
+      assertWithMatcher:grey_sufficientlyVisible()];
+
+  // Switch account.
+  [[EarlGrey selectElementWithMatcher:grey_accessibilityID(
+                                          kAccountMenuSecondaryAccountButtonId)]
+      performAction:grey_tap()];
+
+  // Verify the account menu is closed.
+  ConditionBlock wait_for_disappearance = ^{
+    NSError* error;
+    // Checking if collection view does not exist in the UI hierarchy.
+    [[EarlGrey
+        selectElementWithMatcher:grey_accessibilityID(kAccountMenuTableViewId)]
+        assertWithMatcher:grey_nil()
+                    error:&error];
+
+    return error == nil;
+  };
+  // The account menu fades with animation; wait for 5 seconds to ensure the
+  // animation is completed.
+  GREYAssert(base::test::ios::WaitUntilConditionOrTimeout(
+                 base::Seconds(5), wait_for_disappearance),
+             @"Account menu did not disappear.");
+
+  // Verify the account settings view is popped.
+  [[EarlGrey
+      selectElementWithMatcher:grey_accessibilityID(
+                                   kManageSyncTableViewAccessibilityIdentifier)]
+      assertWithMatcher:grey_notVisible()];
+
+  // Verfiy account is switched.
+  [SigninEarlGrey verifySignedInWithFakeIdentity:fakeIdentity2];
+}
+
+// Test signing out from the account menu.
+- (void)testSignOutFromAccountFromAccountMenu {
+  // TODO(crbug.com/404180896): Test fails on iPad.
+  if ([ChromeEarlGrey isIPadIdiom]) {
+    EARL_GREY_TEST_DISABLED(@"Fails on iPad.");
+  }
+
+  // Separate profiles are only available in iOS 17+.
+  if (!@available(iOS 17, *)) {
+    return;
+  }
+
+  FakeSystemIdentity* fakeIdentity = [FakeSystemIdentity fakeIdentity1];
+  FakeSystemIdentity* fakeIdentity2 = [FakeSystemIdentity fakeIdentity2];
+  [SigninEarlGrey addFakeIdentity:fakeIdentity];
+  [SigninEarlGrey addFakeIdentity:fakeIdentity2];
+
+  // Go to the Sync settings page.
+  [SigninEarlGrey signinWithFakeIdentity:fakeIdentity];
+  [ChromeEarlGreyUI openSettingsMenu];
+  [ChromeEarlGreyUI tapSettingsMenuButton:SettingsAccountButton()];
+
+  // Scroll to the bottom to view all section.
+  id<GREYMatcher> scroll_view_matcher =
+      grey_accessibilityID(kManageSyncTableViewAccessibilityIdentifier);
+  [[EarlGrey selectElementWithMatcher:scroll_view_matcher]
+      performAction:grey_scrollToContentEdge(kGREYContentEdgeBottom)];
+
+  // Tap on switch account item.
+  [[EarlGrey selectElementWithMatcher:
+                 grey_accessibilityLabel(l10n_util::GetNSString(
+                     IDS_IOS_GOOGLE_ACCOUNT_SETTINGS_SWITCH_ACCOUNT_ITEM))]
+      performAction:grey_tap()];
+
+  // Verify the account menu is shown.
+  [[EarlGrey
+      selectElementWithMatcher:grey_accessibilityID(kAccountMenuTableViewId)]
+      assertWithMatcher:grey_sufficientlyVisible()];
+
+  // Sign out.
+  [[EarlGrey selectElementWithMatcher:grey_accessibilityID(
+                                          kAccountMenuSignoutButtonId)]
+      performAction:grey_tap()];
+
+  [SigninEarlGrey verifySignedOut];
+
+  // Verify the account menu is closed.
+  ConditionBlock wait_for_disappearance = ^{
+    NSError* error;
+    // Checking if collection view does not exist in the UI hierarchy.
+    [[EarlGrey
+        selectElementWithMatcher:grey_accessibilityID(kAccountMenuTableViewId)]
+        assertWithMatcher:grey_nil()
+                    error:&error];
+
+    return error == nil;
+  };
+  // The account menu fades with animation; wait for 5 seconds to ensure the
+  // animation is completed.
+  GREYAssert(base::test::ios::WaitUntilConditionOrTimeout(
+                 base::Seconds(5), wait_for_disappearance),
+             @"Account menu did not disappear.");
+
+  // Verify the account settings view is popped.
+  [[EarlGrey
+      selectElementWithMatcher:grey_accessibilityID(
+                                   kManageSyncTableViewAccessibilityIdentifier)]
+      assertWithMatcher:grey_notVisible()];
 }
 
 @end

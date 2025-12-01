@@ -287,6 +287,7 @@
 #include "ui/base/ime/ash/ime_keyboard.h"
 #include "ui/base/ime/ash/input_method_manager.h"
 #include "ui/base/ime/ash/input_method_util.h"
+#include "ui/base/l10n/l10n_util.h"
 #include "ui/base/pointer/pointer_device.h"
 #include "ui/base/ui_base_features.h"
 #include "ui/events/ash/pref_names.h"
@@ -981,8 +982,9 @@ void ChromeBrowserMainPartsAsh::PreProfileInit() {
                      chromeos::version_loader::VERSION_FULL),
       base::BindOnce(&ChromeOSVersionCallback));
 
-  kiosk_controller_ =
-      std::make_unique<KioskControllerImpl>(user_manager::UserManager::Get());
+  kiosk_controller_ = std::make_unique<KioskControllerImpl>(
+      CHECK_DEREF(g_browser_process->local_state()),
+      user_manager::UserManager::Get());
 
   ambient_client_ = std::make_unique<AmbientClientImpl>();
 
@@ -1054,7 +1056,8 @@ void ChromeBrowserMainPartsAsh::PreProfileInit() {
   // CoralController depends on machine_learning::ServiceConnection, so needs to
   // be initialized after it.
   if (features::IsCoralFeatureEnabled()) {
-    Shell::Get()->coral_controller()->Initialize();
+    Shell::Get()->coral_controller()->Initialize(
+        l10n_util::GetLanguage(g_browser_process->GetApplicationLocale()));
   }
 
   // Needs to be initialized after crosapi_manager_.
@@ -1092,13 +1095,27 @@ void ChromeBrowserMainPartsAsh::PreProfileInit() {
       return;
     }
 
-    // In case of multi-profiles --login-profile will contain user_id_hash.
-    std::string user_id_hash =
+    auto& session_manager = CHECK_DEREF(session_manager::SessionManager::Get());
+    CHECK(session_manager.sessions().empty());
+
+    bool created = false;
+    if (!user_manager->FindUser(account_id)) {
+      // TODO(crbug.com/278643115): Because we know here's browser_restart,
+      // the user_type calculation can be much simplified.
+      user_manager::UserType user_type = user_manager->CalculateUserType(
+          account_id, /*user=*/nullptr, /*browser_restart=*/true,
+          /*is_child=*/false);
+      // If there's no User found, that means, in the previous Chrome process,
+      // the user was ephemeral (including Guest).
+      created = user_manager->EnsureUser(account_id, user_type,
+                                         /*is_ephemeral=*/true);
+    }
+
+    // In case of multi-profiles --login-profile will contain username_hash.
+    std::string username_hash =
         base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
             switches::kLoginProfile);
-
-    session_manager::SessionManager::Get()->CreateSessionForRestart(
-        account_id, user_id_hash);
+    session_manager.CreateSessionForRestart(account_id, username_hash, created);
 
     // If restarting demo session, mark demo session as started before primary
     // profile starts initialization so browser context keyed services created
@@ -1107,7 +1124,7 @@ void ChromeBrowserMainPartsAsh::PreProfileInit() {
     DemoSession::StartIfInDemoMode();
 
     VLOG(1) << "Relaunching browser for user: " << account_id.Serialize()
-            << " with hash: " << user_id_hash;
+            << " with hash: " << username_hash;
   }
 }
 
@@ -1199,7 +1216,8 @@ void ChromeBrowserMainPartsAsh::PostProfileInit(Profile* profile,
 
     ui::SetShowEmojiKeyboardCallback(base::BindRepeating(&EmojiUI::Show));
 
-    BootTimesRecorder::Get()->OnChromeProcessStart();
+    BootTimesRecorder::Get()->OnChromeProcessStart(
+        CHECK_DEREF(g_browser_process->local_state()));
 
     // Initialize the network portal detector for Chrome OS. The network
     // portal detector starts to listen for notifications from

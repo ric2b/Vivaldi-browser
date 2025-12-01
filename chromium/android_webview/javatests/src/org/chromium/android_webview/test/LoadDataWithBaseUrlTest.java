@@ -21,6 +21,7 @@ import org.junit.runners.Parameterized.UseParametersRunnerFactory;
 import org.chromium.android_webview.AwContents;
 import org.chromium.android_webview.AwCookieManager;
 import org.chromium.android_webview.AwSettings;
+import org.chromium.android_webview.AwWebResourceRequest;
 import org.chromium.android_webview.test.util.CommonResources;
 import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.Restriction;
@@ -679,7 +680,7 @@ public class LoadDataWithBaseUrlTest extends AwParameterizedTest {
                     @Override
                     public WebResourceResponseInfo shouldInterceptRequest(
                             AwWebResourceRequest request) {
-                        String url = request.url;
+                        String url = request.getUrl();
                         if (textUri.equals(url)) {
                             return new WebResourceResponseInfo(
                                     "text/plaintext",

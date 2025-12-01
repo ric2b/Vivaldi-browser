@@ -36,12 +36,12 @@ using chrome_test_util::WebStateScrollViewMatcher;
 namespace {
 
 // The page height of test pages. This must be big enough to triger fullscreen.
-const int kPageHeightEM = 200;
+const int kPageHeightEM = 400;
 
 // Hides the toolbar by scrolling down.
 void HideToolbarUsingUI() {
   [[EarlGrey selectElementWithMatcher:WebStateScrollViewMatcher()]
-      performAction:grey_swipeFastInDirection(kGREYDirectionUp)];
+      performAction:grey_swipeSlowInDirection(kGREYDirectionUp)];
 }
 
 // Asserts that the current URL is the `expectedURL` one.
@@ -213,8 +213,14 @@ std::unique_ptr<net::test_server::HttpResponse> CreateHttpResponse(
   [ChromeEarlGreyUI waitForToolbarVisible:NO];
 
   // Test that the toolbar is visible when moving from one chrome:// link to
-  // another chrome:// link.
-  [ChromeEarlGrey tapWebStateElementWithID:@"version"];
+  // another chrome:// link. The script below queries for the
+  // "chrome://version" link on the chrome://chrome-urls page, and clicks on
+  // it. The link is in the shadow DOM of the chrome-urls-app custom element
+  // that contains the page's UI.
+  NSString* clickLinkScript =
+      @"document.body.querySelector('chrome-urls-app')"
+       ".shadowRoot.querySelector('a[href=\"chrome://version\"]').click()";
+  [ChromeEarlGrey evaluateJavaScriptForSideEffect:clickLinkScript];
   [ChromeEarlGreyUI waitForToolbarVisible:YES];
 }
 

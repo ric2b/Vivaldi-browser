@@ -21,6 +21,7 @@
 #include <optional>
 #include <string>
 #include <utility>
+#include <variant>
 
 #include "base/feature_list.h"
 #include "base/functional/callback_helpers.h"
@@ -185,11 +186,6 @@ class PrimaryAccountManager : public ProfileOAuth2TokenServiceObserver {
                                  bool consented_to_sync,
                                  ScopedPrefCommit& scoped_pref_commit);
 
-  // Invoked during initialization, it logs metrics to understand what fraction
-  // of users have a sync-enabled primary account in the past, on the same
-  // profile.
-  void RecordHadPreviousSyncAccount() const;
-
   // Starts the sign out process.
   void StartSignOut(signin_metrics::ProfileSignout signout_source_metric,
                     RemoveAccountsOption remove_option);
@@ -206,7 +202,7 @@ class PrimaryAccountManager : public ProfileOAuth2TokenServiceObserver {
   // Fires OnPrimaryAccountChanged() notifications on all observers.
   void FirePrimaryAccountChanged(
       const signin::PrimaryAccountChangeEvent::State& previous_state,
-      absl::variant<signin_metrics::AccessPoint, signin_metrics::ProfileSignout>
+      std::variant<signin_metrics::AccessPoint, signin_metrics::ProfileSignout>
           event_source,
       ScopedPrefCommit& scoped_pref_commit);
 

@@ -128,6 +128,8 @@ bool StructTraits<blink::mojom::RendererPreferencesDataView,
     return false;
   }
 
+  out->canvas_noise_token = data.canvas_noise_token();
+
 // Vivaldi additions below
   out->allow_tab_cycle_from_webpage_into_ui =
       data.allow_tab_cycle_from_webpage_into_ui();

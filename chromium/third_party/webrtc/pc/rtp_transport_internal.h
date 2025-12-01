@@ -22,11 +22,12 @@
 #include "rtc_base/ssl_stream_adapter.h"
 
 namespace rtc {
-class CopyOnWriteBuffer;
 struct PacketOptions;
 }  // namespace rtc
 
 namespace webrtc {
+
+class CopyOnWriteBuffer;
 
 // This class is an internal interface; it is not accessible to API consumers
 // but is accessible to internal classes in order to send and receive RTP and
@@ -41,8 +42,8 @@ class RtpTransportInternal : public sigslot::has_slots<> {
   virtual const std::string& transport_name() const = 0;
 
   // Sets socket options on the underlying RTP or RTCP transports.
-  virtual int SetRtpOption(rtc::Socket::Option opt, int value) = 0;
-  virtual int SetRtcpOption(rtc::Socket::Option opt, int value) = 0;
+  virtual int SetRtpOption(Socket::Option opt, int value) = 0;
+  virtual int SetRtcpOption(Socket::Option opt, int value) = 0;
 
   virtual bool rtcp_mux_enabled() const = 0;
 

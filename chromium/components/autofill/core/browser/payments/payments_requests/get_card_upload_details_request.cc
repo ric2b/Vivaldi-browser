@@ -98,21 +98,13 @@ std::string GetCardUploadDetailsRequest::GetRequestContent() {
     case UploadCardSource::UPSTREAM_CARD_OCR:
       request_dict.Set("upload_card_source", "UPSTREAM_CARD_OCR");
       break;
-    case UploadCardSource::LOCAL_CARD_MIGRATION_CHECKOUT_FLOW:
-      request_dict.Set("upload_card_source",
-                       "LOCAL_CARD_MIGRATION_CHECKOUT_FLOW");
-      break;
-    case UploadCardSource::LOCAL_CARD_MIGRATION_SETTINGS_PAGE:
-      request_dict.Set("upload_card_source",
-                       "LOCAL_CARD_MIGRATION_SETTINGS_PAGE");
-      break;
     default:
       NOTREACHED();
   }
 
   std::string request_content;
   base::JSONWriter::Write(request_dict, &request_content);
-  VLOG(3) << "getdetailsforsavecard request body: " << request_content;
+  DVLOG(3) << "getdetailsforsavecard request body: " << request_content;
   return request_content;
 }
 

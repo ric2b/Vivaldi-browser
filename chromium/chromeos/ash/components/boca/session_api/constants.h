@@ -9,9 +9,6 @@
 
 namespace ash::boca {
 
-inline constexpr char kSchoolToolsApiBaseUrl[] =
-    "https://schooltools-pa.googleapis.com";
-
 inline constexpr char kCreateSessionUrlTemplate[] = "v1/teachers/$1/sessions";
 
 inline constexpr char kContentTypeApplicationJson[] = "application/json";
@@ -36,6 +33,9 @@ inline constexpr char kInsertStudentActivity[] =
 inline constexpr char kRemoveStudentUrlTemplate[] =
     "v1/teachers/$1/sessions/$2/students:remove";
 
+inline constexpr char kAddStudentsUrlTemplate[] =
+    "v1/teachers/$1/sessions/$2/students:add";
+
 inline constexpr char kJoinTachyonGroupUrlTemplate[] =
     "/v1/students/$1/sessions/$2/tachyon:join";
 
@@ -49,6 +49,9 @@ inline constexpr char kRegisterScreenUrlTemplate[] =
 
 inline constexpr char kUpdateViewScreenStateUrlTemplate[] =
     "v1/sessions/$1/viewScreen:updateState";
+
+inline constexpr char kStudentHeartbeatUrlTemplate[] =
+    "v1/sessions/$1/students/$2/devices/$3:heartbeat?studentGroupId=$4";
 
 inline constexpr char kSessionId[] = "sessionId";
 inline constexpr char kTeacher[] = "teacher";
@@ -71,12 +74,14 @@ inline constexpr char kCaptionsEnabled[] = "captionsEnabled";
 inline constexpr char kTranslationsEnabled[] = "translationsEnabled";
 inline constexpr char kStudentStatus[] = "studentStatuses";
 inline constexpr char kStudentStatusState[] = "state";
+inline constexpr char kDeviceStatusState[] = "state";
 inline constexpr char kUrl[] = "url";
 inline constexpr char kTitle[] = "title";
 inline constexpr char kFavIcon[] = "faviconUrl";
 inline constexpr char kContentConfigs[] = "contentConfigs";
 inline constexpr char kActiveBundle[] = "activeBundle";
 inline constexpr char kLocked[] = "locked";
+inline constexpr char kLockToAppHome[] = "lockToAppHome";
 inline constexpr char kLockedNavigationOptions[] = "lockedNavigationOptions";
 inline constexpr char kNavigationType[] = "navigationType";
 inline constexpr char kSeconds[] = "seconds";

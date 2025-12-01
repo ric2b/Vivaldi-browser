@@ -15,12 +15,12 @@
 #include <vector>
 
 #include <gtest/gtest.h>
-#include "xnnpack.h"
-#include "xnnpack/buffer.h"
-#include "xnnpack/isa-checks.h"
-#include "xnnpack/math.h"
-#include "xnnpack/microfnptr.h"
-#include "replicable_random_device.h"
+#include "include/xnnpack.h"
+#include "src/xnnpack/buffer.h"
+#include "src/xnnpack/isa-checks.h"
+#include "src/xnnpack/math.h"
+#include "src/xnnpack/microfnptr.h"
+#include "test/replicable_random_device.h"
 
 class VCMulMicrokernelTester {
  public:
@@ -105,7 +105,7 @@ class VCMulMicrokernelTester {
       // Verify results.
       for (size_t i = 0; i < batch_size(); i++) {
         const float tolerance = std::abs(y_ref[i]) * 1.0e-2f;
-        EXPECT_NEAR(y[i], y_ref[i], tolerance)
+        ASSERT_NEAR(y[i], y_ref[i], tolerance)
           << "at " << i << " / " << batch_size();
       }
     }
@@ -150,7 +150,7 @@ class VCMulMicrokernelTester {
 
       // Verify results.
       for (size_t i = 0; i < batch_size(); i++) {
-        EXPECT_NEAR(y[i], y_ref[i], std::abs(y_ref[i]) * 1.0e-4f)
+        ASSERT_NEAR(y[i], y_ref[i], std::abs(y_ref[i]) * 1.0e-4f)
           << "at " << i << " / " << batch_size();
       }
     }

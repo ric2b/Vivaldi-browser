@@ -20,7 +20,3 @@ void WebDatabaseTable::Shutdown() {
   meta_table_ = nullptr;
   encryptor_ = nullptr;
 }
-
-bool WebDatabaseTable::MigrateToVivaldiVersion(int version) {
-  return true;
-}

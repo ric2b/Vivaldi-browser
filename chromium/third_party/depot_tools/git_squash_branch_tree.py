@@ -13,38 +13,6 @@ import git_common as git
 import sys
 
 
-# Returns the list of branches that have diverged from their respective upstream
-# branch.
-def get_diverged_branches(tree):
-    diverged_branches = []
-    for branch, upstream_branch in tree.items():
-        # If the merge base of a branch and its upstream is not equal to the
-        # upstream, then it means that both branch diverged.
-        upstream_branch_hash = git.hash_one(upstream_branch)
-        merge_base_hash = git.hash_one(git.get_or_create_merge_base(branch))
-        if upstream_branch_hash != merge_base_hash:
-            diverged_branches.append(branch)
-    return diverged_branches
-
-
-# Returns a dictionary that contains the hash of every branch before the
-# squashing started.
-def get_initial_hashes(tree):
-    initial_hashes = {}
-    for branch, upstream_branch in tree.items():
-        initial_hashes[branch] = git.hash_one(branch)
-        initial_hashes[upstream_branch] = git.hash_one(upstream_branch)
-    return initial_hashes
-
-
-# Returns a dictionary that contains the downstream branches of every branch.
-def get_downstream_branches(tree):
-    downstream_branches = collections.defaultdict(list)
-    for branch, upstream_branch in tree.items():
-        downstream_branches[upstream_branch].append(branch)
-    return downstream_branches
-
-
 # Squash a branch, taking care to rebase the branch on top of the new commit
 # position of its upstream branch.
 def squash_branch(branch, initial_hashes):
@@ -102,7 +70,7 @@ def main(args=None):
         print('Use --ignore-no-upstream to ignore this check and proceed.')
         return 1
 
-    diverged_branches = get_diverged_branches(tree)
+    diverged_branches = git.get_diverged_branches(tree)
     if diverged_branches:
         print('Cannot use `git squash-branch-tree` since the following\n'
               'branches have diverged from their upstream and could cause\n'
@@ -115,8 +83,8 @@ def main(args=None):
     # we can go back to it at the end.
     return_branch = git.current_branch()
 
-    initial_hashes = get_initial_hashes(tree)
-    downstream_branches = get_downstream_branches(tree)
+    initial_hashes = git.get_hashes(tree)
+    downstream_branches = git.get_downstream_branches(tree)
     squash_subtree(opts.branch, initial_hashes, downstream_branches)
 
     git.run('checkout', return_branch)

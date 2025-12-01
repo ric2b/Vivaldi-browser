@@ -4,6 +4,7 @@
 
 #include "base/feature_list.h"
 #include "base/run_loop.h"
+#include "base/strings/strcat.h"
 #include "base/strings/string_util.h"
 #include "base/task/current_thread.h"
 #include "base/test/metrics/histogram_tester.h"
@@ -31,6 +32,8 @@
 #include "components/optimization_guide/core/model_execution/on_device_model_adaptation_loader.h"
 #include "components/optimization_guide/core/model_execution/on_device_model_service_controller.h"
 #include "components/optimization_guide/core/model_execution/optimization_guide_model_execution_error.h"
+#include "components/optimization_guide/core/model_execution/test/fake_model_assets.h"
+#include "components/optimization_guide/core/model_execution/test/feature_config_builder.h"
 #include "components/optimization_guide/core/model_quality/model_execution_logging_wrappers.h"
 #include "components/optimization_guide/core/model_quality/model_quality_log_entry.h"
 #include "components/optimization_guide/core/optimization_guide_constants.h"
@@ -57,10 +60,6 @@ namespace optimization_guide {
 
 namespace {
 
-const base::Value::Dict kTestManifest = base::Value::Dict().Set(
-    "BaseModelSpec",
-    base::Value::Dict().Set("version", "0.0.1").Set("name", "Test"));
-
 enum class ModelExecutionRemoteResponseType {
   kSuccessful = 0,
   kUnsuccessful = 1,
@@ -74,8 +73,8 @@ proto::ExecuteResponse BuildComposeResponse(const std::string& output) {
   compose_response.set_output(output);
   proto::ExecuteResponse execute_response;
   proto::Any* any_metadata = execute_response.mutable_response_metadata();
-  any_metadata->set_type_url("type.googleapis.com/" +
-                             compose_response.GetTypeName());
+  any_metadata->set_type_url(
+      base::StrCat({"type.googleapis.com/", compose_response.GetTypeName()}));
   compose_response.SerializeToString(any_metadata->mutable_value());
   auto response_data = ParsedAnyMetadata<proto::ComposeResponse>(*any_metadata);
   EXPECT_TRUE(response_data);
@@ -154,23 +153,6 @@ class ModelExecutionBrowserTestBase : public InProcessBrowserTest {
     InProcessBrowserTest::SetUp();
   }
 
-  void SetUpOnMainThread() override {
-    InProcessBrowserTest::SetUpOnMainThread();
-    identity_test_env_adaptor_ =
-        std::make_unique<IdentityTestEnvironmentProfileAdaptor>(
-            browser()->profile());
-    host_resolver()->AddRule("*", "127.0.0.1");
-  }
-
-  void SetUpInProcessBrowserTestFixture() override {
-    create_services_subscription_ =
-        BrowserContextDependencyManager::GetInstance()
-            ->RegisterCreateServicesCallbackForTesting(
-                base::BindRepeating(&ModelExecutionBrowserTestBase::
-                                        OnWillCreateBrowserContextServices,
-                                    base::Unretained(this)));
-  }
-
   void SetUpCommandLine(base::CommandLine* cmd) override {
     cmd->AppendSwitchASCII(
         switches::kOptimizationGuideServiceModelExecutionURL,
@@ -186,6 +168,21 @@ class ModelExecutionBrowserTestBase : public InProcessBrowserTest {
                 GURL(kOptimizationGuideServiceModelQualtiyDefaultURL).host(),
                 "/")
             .spec());
+  }
+
+  void SetUpBrowserContextKeyedServices(
+      content::BrowserContext* context) override {
+    InProcessBrowserTest::SetUpBrowserContextKeyedServices(context);
+    IdentityTestEnvironmentProfileAdaptor::
+        SetIdentityTestEnvironmentFactoriesOnBrowserContext(context);
+  }
+
+  void SetUpOnMainThread() override {
+    InProcessBrowserTest::SetUpOnMainThread();
+    identity_test_env_adaptor_ =
+        std::make_unique<IdentityTestEnvironmentProfileAdaptor>(
+            browser()->profile());
+    host_resolver()->AddRule("*", "127.0.0.1");
   }
 
   void TearDownOnMainThread() override {
@@ -369,11 +366,6 @@ class ModelExecutionBrowserTestBase : public InProcessBrowserTest {
     return std::move(response);
   }
 
-  void OnWillCreateBrowserContextServices(content::BrowserContext* context) {
-    IdentityTestEnvironmentProfileAdaptor::
-        SetIdentityTestEnvironmentFactoriesOnBrowserContext(context);
-  }
-
   // Virtualize for testing different feature configurations.
   virtual void InitializeFeatureList() {}
 
@@ -391,7 +383,6 @@ class ModelExecutionBrowserTestBase : public InProcessBrowserTest {
   // Identity test support.
   std::unique_ptr<IdentityTestEnvironmentProfileAdaptor>
       identity_test_env_adaptor_;
-  base::CallbackListSubscription create_services_subscription_;
 
   std::optional<ScopedSetMetricsConsent> scoped_metrics_consent_;
 
@@ -454,7 +445,7 @@ IN_PROC_BROWSER_TEST_F(ModelExecutionEnabledOnDeviceDisabledBrowserTest,
 IN_PROC_BROWSER_TEST_F(
     ModelExecutionEnabledOnDeviceDisabledBrowserTest,
     GetOnDeviceModelEligibilityExecutionDisabledNullDebugReason) {
-  EXPECT_NE(GetOnDeviceModelEligibility(ModelBasedCapabilityKey::kCompose, ),
+  EXPECT_NE(GetOnDeviceModelEligibility(ModelBasedCapabilityKey::kCompose),
             OnDeviceModelEligibilityReason::kSuccess);
 }
 
@@ -697,77 +688,89 @@ class OnDeviceModelExecutionEnabledBrowserTest
           {{"compatible_on_device_performance_classes", "*"}}}},
         {});
   }
-  void SetUpBaseModel() {
+
+  void SetUpGlobalAssets() {
     model_execution::prefs::RecordFeatureUsage(
         g_browser_process->local_state(), ModelBasedCapabilityKey::kCompose);
-    OnDeviceModelComponentStateManager::GetInstanceForTesting()->SetReady(
-        base::Version("0.1.1"), base::FilePath(FILE_PATH_LITERAL("/some/path")),
-        kTestManifest);
+    base_model_asset_.SetReadyIn(
+        *OnDeviceModelComponentStateManager::GetInstanceForTesting());
   }
 
-  void SetUpComposeModelExecutionConfig() {
-    proto::OnDeviceModelExecutionFeatureConfig feature_config;
-    feature_config.set_can_skip_text_safety(true);
-    auto sampling_params_proto =
-        std::make_unique<optimization_guide::proto::SamplingParams>();
-    sampling_params_proto->set_top_k(kTestDefaultTopK);
-    sampling_params_proto->set_temperature(kTestDefaultTemperature);
-    feature_config.set_allocated_sampling_params(
-        sampling_params_proto.release());
-    auto metadata = OnDeviceModelAdaptationMetadata::New(
-        nullptr, 123,
-        base::MakeRefCounted<OnDeviceModelFeatureAdapter>(
-            std::move(feature_config)));
-    ChromeOnDeviceModelServiceController::GetSingleInstanceMayBeNull()
-        ->MaybeUpdateModelAdaptation(ModelBasedCapabilityKey::kCompose,
-                                     std::move(metadata));
-    base::test::RunUntil([&]() {
-      return ChromeOnDeviceModelServiceController::GetSingleInstanceMayBeNull()
-          ->model_metadata_.get();
-    });
+  // Set up assets which are registered per-profile.
+  void SetUpProfileAssets() {
+    compose_asset_.SendTo(
+        *ChromeOnDeviceModelServiceController::GetSingleInstanceMayBeNull());
   }
+
+ private:
+  optimization_guide::FakeBaseModelAsset base_model_asset_;
+  FakeAdaptationAsset compose_asset_{{
+      .config =
+          []() {
+            proto::OnDeviceModelExecutionFeatureConfig config;
+            config.set_feature(proto::MODEL_EXECUTION_FEATURE_COMPOSE);
+            config.set_can_skip_text_safety(true);
+            auto* params = config.mutable_sampling_params();
+            params->set_top_k(kTestDefaultTopK);
+            params->set_temperature(kTestDefaultTemperature);
+            return config;
+          }(),
+  }};
 };
 
 IN_PROC_BROWSER_TEST_F(OnDeviceModelExecutionEnabledBrowserTest,
                        GetOnDeviceModelEligibilityInRegularProfile) {
-  SetUpBaseModel();
-  SetUpComposeModelExecutionConfig();
+  SetUpGlobalAssets();
+  SetUpProfileAssets();
 
-  EXPECT_EQ(GetOnDeviceModelEligibility(ModelBasedCapabilityKey::kCompose),
-            OnDeviceModelEligibilityReason::kSuccess);
+  ASSERT_TRUE(base::test::RunUntil([&]() {
+    return GetOnDeviceModelEligibility(ModelBasedCapabilityKey::kCompose,
+                                       nullptr) ==
+           OnDeviceModelEligibilityReason::kSuccess;
+  })) << "Timeout waiting for model to be marked eligible.";
 }
 
 IN_PROC_BROWSER_TEST_F(OnDeviceModelExecutionEnabledBrowserTest,
                        GetOnDeviceModelEligibilityInIncognito) {
-  SetUpBaseModel();
+  SetUpGlobalAssets();
 
   Browser* otr_browser = CreateIncognitoBrowser();
-  SetUpComposeModelExecutionConfig();
+  SetUpProfileAssets();
 
-  EXPECT_EQ(GetOnDeviceModelEligibility(ModelBasedCapabilityKey::kCompose,
-                                        otr_browser->profile()),
-            OnDeviceModelEligibilityReason::kSuccess);
+  ASSERT_TRUE(base::test::RunUntil([&]() {
+    return GetOnDeviceModelEligibility(ModelBasedCapabilityKey::kCompose,
+                                       otr_browser->profile()) ==
+           OnDeviceModelEligibilityReason::kSuccess;
+  })) << "Timeout waiting for model to be marked eligible.";
 }
 
 #if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_CHROMEOS)
 // Guest profile only available in some platforms.
 IN_PROC_BROWSER_TEST_F(OnDeviceModelExecutionEnabledBrowserTest,
                        GetOnDeviceModelEligibilityInGuestProfile) {
-  SetUpBaseModel();
+  SetUpGlobalAssets();
 
   Browser* guest_browser = CreateGuestBrowser();
-  SetUpComposeModelExecutionConfig();
+  SetUpProfileAssets();
 
-  EXPECT_EQ(GetOnDeviceModelEligibility(ModelBasedCapabilityKey::kCompose,
-                                        guest_browser->profile()),
-            OnDeviceModelEligibilityReason::kSuccess);
+  ASSERT_TRUE(base::test::RunUntil([&]() {
+    return GetOnDeviceModelEligibility(ModelBasedCapabilityKey::kCompose,
+                                       guest_browser->profile()) ==
+           OnDeviceModelEligibilityReason::kSuccess;
+  })) << "Timeout waiting for model to be marked eligible.";
 }
 #endif  // !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_CHROMEOS)
 
 IN_PROC_BROWSER_TEST_F(OnDeviceModelExecutionEnabledBrowserTest,
                        GetSamplingParamsConfig) {
-  SetUpBaseModel();
-  SetUpComposeModelExecutionConfig();
+  SetUpGlobalAssets();
+  SetUpProfileAssets();
+
+  ASSERT_TRUE(base::test::RunUntil([&]() {
+    return GetOnDeviceModelEligibility(ModelBasedCapabilityKey::kCompose,
+                                       nullptr) ==
+           OnDeviceModelEligibilityReason::kSuccess;
+  })) << "Timeout waiting for model to be marked eligible.";
 
   auto sampling_config =
       GetOptimizationGuideKeyedService()->GetSamplingParamsConfig(
@@ -814,8 +817,7 @@ class ModelExecutionEnabledBrowserTestWithExplicitBrowserSignin
  public:
   void InitializeFeatureList() override {
     scoped_feature_list_.InitWithFeatures(
-        {::switches::kExplicitBrowserSigninUIOnDesktop,
-         features::internal::kHistorySearchSettingsVisibility},
+        {features::internal::kHistorySearchSettingsVisibility},
         {features::internal::kTabOrganizationGraduated});
   }
 };
@@ -979,8 +981,6 @@ class ModelExecutionNewFeaturesEnabledAutomaticallyTest
       disabled_features.push_back(
           features::internal::kHistorySearchSettingsVisibility);
     }
-    enabled_features.push_back(
-        {::switches::kExplicitBrowserSigninUIOnDesktop, {}});
 
     scoped_feature_list_.InitWithFeaturesAndParameters(enabled_features,
                                                        disabled_features);

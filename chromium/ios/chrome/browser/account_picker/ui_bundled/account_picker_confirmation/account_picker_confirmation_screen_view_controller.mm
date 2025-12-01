@@ -229,10 +229,11 @@ UILabel* CreateGooglePhotosTitleLabel(NSString* title) {
   self.navigationController.navigationBar.maximumContentSizeCategory =
       UIContentSizeCategoryExtraExtraLarge;
   // Create the skip button.
-  UIBarButtonItem* cancelButtonItem = [[UIBarButtonItem alloc]
-      initWithBarButtonSystemItem:UIBarButtonSystemItemCancel
-                           target:self
-                           action:@selector(cancelButtonAction:)];
+  UIBarButtonItem* cancelButtonItem =
+      [[UIBarButtonItem alloc] initWithTitle:l10n_util::GetNSString(IDS_CANCEL)
+                                       style:UIBarButtonItemStylePlain
+                                      target:self
+                                      action:@selector(cancelButtonAction:)];
   cancelButtonItem.accessibilityIdentifier =
       kAccountPickerCancelButtonAccessibilityIdentifier;
   self.navigationItem.rightBarButtonItem = cancelButtonItem;
@@ -488,14 +489,15 @@ UILabel* CreateGooglePhotosTitleLabel(NSString* title) {
 - (void)showDefaultAccountWithFullName:(NSString*)fullName
                              givenName:(NSString*)givenName
                                  email:(NSString*)email
-                                avatar:(UIImage*)avatar {
+                                avatar:(UIImage*)avatar
+                               managed:(BOOL)managed {
   if (!self.viewLoaded) {
     // Load the view.
     [self view];
   }
   _submitString = _configuration.submitButtonTitle;
 
-  [_identityButtonControl setIdentityName:fullName email:email];
+  [_identityButtonControl setIdentityName:fullName email:email managed:managed];
   [_identityButtonControl setIdentityAvatar:avatar];
 
   // If spinner is active, delay UI updates until stopSpinner() is called.

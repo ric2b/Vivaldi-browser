@@ -38,6 +38,7 @@
 #include "src/maglev/maglev-graph-processor.h"
 #include "src/maglev/maglev-graph-verifier.h"
 #include "src/maglev/maglev-graph.h"
+#include "src/maglev/maglev-inlining.h"
 #include "src/maglev/maglev-interpreter-frame-state.h"
 #include "src/maglev/maglev-ir-inl.h"
 #include "src/maglev/maglev-ir.h"
@@ -111,6 +112,37 @@ bool MaglevCompiler::Compile(LocalIsolate* local_isolate,
       }
     }
 
+#ifdef DEBUG
+    {
+      GraphProcessor<MaglevGraphVerifier, /* visit_identity_nodes */ true>
+          verifier(compilation_info);
+      verifier.ProcessGraph(graph);
+    }
+#endif
+
+    if (v8_flags.maglev_non_eager_inlining) {
+      TRACE_EVENT0(TRACE_DISABLED_BY_DEFAULT("v8.compile"),
+                   "V8.Maglev.Inlining");
+
+      MaglevInliner inliner(compilation_info, graph);
+      inliner.Run(is_tracing_enabled);
+
+      // TODO(victorgomes): We need to remove all identity nodes before
+      // PhiRepresentationSelector. Since Identity has different semantics
+      // there. Check if we can remove the identity nodes during
+      // PhiRepresentationSelector instead.
+      GraphProcessor<SweepIdentityNodes, /* visit_identity_nodes */ true> sweep;
+      sweep.ProcessGraph(graph);
+    }
+
+#ifdef DEBUG
+    {
+      GraphProcessor<MaglevGraphVerifier, /* visit_identity_nodes */ true>
+          verifier(compilation_info);
+      verifier.ProcessGraph(graph);
+    }
+#endif
+
     if (v8_flags.maglev_licm) {
       TRACE_EVENT0(TRACE_DISABLED_BY_DEFAULT("v8.compile"),
                    "V8.Maglev.LoopOptimizations");
@@ -124,6 +156,14 @@ bool MaglevCompiler::Compile(LocalIsolate* local_isolate,
         PrintGraph(std::cout, compilation_info, graph);
       }
     }
+
+#ifdef DEBUG
+    {
+      GraphProcessor<MaglevGraphVerifier, /* visit_identity_nodes */ true>
+          verifier(compilation_info);
+      verifier.ProcessGraph(graph);
+    }
+#endif
 
     if (v8_flags.maglev_untagged_phis) {
       TRACE_EVENT0(TRACE_DISABLED_BY_DEFAULT("v8.compile"),
@@ -142,7 +182,8 @@ bool MaglevCompiler::Compile(LocalIsolate* local_isolate,
 
 #ifdef DEBUG
   {
-    GraphProcessor<MaglevGraphVerifier> verifier(compilation_info);
+    GraphProcessor<MaglevGraphVerifier, /* visit_identity_nodes */ true>
+        verifier(compilation_info);
     verifier.ProcessGraph(graph);
   }
 #endif
@@ -165,39 +206,45 @@ bool MaglevCompiler::Compile(LocalIsolate* local_isolate,
 
 #ifdef DEBUG
   {
-    GraphProcessor<MaglevGraphVerifier> verifier(compilation_info);
+    GraphProcessor<MaglevGraphVerifier, /* visit_identity_nodes */ true>
+        verifier(compilation_info);
     verifier.ProcessGraph(graph);
   }
 #endif
 
   {
-    // Preprocessing for register allocation and code gen:
-    //   - Remove dead nodes
-    //   - Collect input/output location constraints
-    //   - Find the maximum number of stack arguments passed to calls
-    //   - Collect use information, for SSA liveness and next-use distance.
-    //   - Mark
-    TRACE_EVENT0(TRACE_DISABLED_BY_DEFAULT("v8.compile"),
-                 "V8.Maglev.NodeProcessing");
-    GraphMultiProcessor<DeadNodeSweepingProcessor,
-                        ValueLocationConstraintProcessor, MaxCallDepthProcessor,
-                        LiveRangeAndNextUseProcessor,
-                        DecompressedUseMarkingProcessor>
-        processor(DeadNodeSweepingProcessor{compilation_info},
-                  LiveRangeAndNextUseProcessor{compilation_info});
-    processor.ProcessGraph(graph);
-  }
+    RegallocInfo regalloc_info;
+    {
+      // Preprocessing for register allocation and code gen:
+      //   - Remove dead nodes
+      //   - Collect input/output location constraints
+      //   - Find the maximum number of stack arguments passed to calls
+      //   - Collect use information, for SSA liveness and next-use distance.
+      //   - Mark
+      TRACE_EVENT0(TRACE_DISABLED_BY_DEFAULT("v8.compile"),
+                   "V8.Maglev.NodeProcessing");
+      GraphMultiProcessor<DeadNodeSweepingProcessor,
+                          ValueLocationConstraintProcessor,
+                          MaxCallDepthProcessor, LiveRangeAndNextUseProcessor,
+                          DecompressedUseMarkingProcessor>
+          processor(DeadNodeSweepingProcessor{compilation_info},
+                    LiveRangeAndNextUseProcessor{compilation_info, graph,
+                                                 &regalloc_info});
+      processor.ProcessGraph(graph);
+    }
 
-  if (is_tracing_enabled && v8_flags.print_maglev_graphs) {
-    UnparkedScopeIfOnBackground unparked_scope(local_isolate->heap());
-    std::cout << "After register allocation pre-processing" << std::endl;
-    PrintGraph(std::cout, compilation_info, graph);
-  }
+    if (is_tracing_enabled && v8_flags.print_maglev_graphs) {
+      UnparkedScopeIfOnBackground unparked_scope(local_isolate->heap());
+      std::cout << "After register allocation pre-processing" << std::endl;
+      PrintGraph(std::cout, compilation_info, graph);
+    }
 
-  {
-    TRACE_EVENT0(TRACE_DISABLED_BY_DEFAULT("v8.compile"),
-                 "V8.Maglev.RegisterAllocation");
-    StraightForwardRegisterAllocator allocator(compilation_info, graph);
+    {
+      TRACE_EVENT0(TRACE_DISABLED_BY_DEFAULT("v8.compile"),
+                   "V8.Maglev.RegisterAllocation");
+      StraightForwardRegisterAllocator allocator(compilation_info, graph,
+                                                 &regalloc_info);
+    }
 
     if (is_tracing_enabled &&
         (v8_flags.print_maglev_graph || v8_flags.print_maglev_graphs)) {
@@ -227,7 +274,7 @@ bool MaglevCompiler::Compile(LocalIsolate* local_isolate,
 }
 
 // static
-MaybeHandle<Code> MaglevCompiler::GenerateCode(
+std::pair<MaybeHandle<Code>, BailoutReason> MaglevCompiler::GenerateCode(
     Isolate* isolate, MaglevCompilationInfo* compilation_info) {
   compiler::CurrentHeapBrokerScope current_broker(compilation_info->broker());
   MaglevCodeGenerator* const code_generator =
@@ -244,7 +291,7 @@ MaybeHandle<Code> MaglevCompiler::GenerateCode(
           ->shared_function_info()
           .object()
           ->set_maglev_compilation_failed(true);
-      return {};
+      return {{}, BailoutReason::kCodeGenerationFailed};
     }
   }
 
@@ -257,7 +304,7 @@ MaybeHandle<Code> MaglevCompiler::GenerateCode(
       // TODO(v8:7700): Make this more robust, i.e.: don't recompile endlessly.
       compilation_info->toplevel_function()->SetInterruptBudget(
           isolate, BudgetModification::kReduce);
-      return {};
+      return {{}, BailoutReason::kBailedOutDueToDependencyChange};
     }
   }
 
@@ -273,7 +320,7 @@ MaybeHandle<Code> MaglevCompiler::GenerateCode(
 #endif
   }
 
-  return code;
+  return {code, BailoutReason::kNoReason};
 }
 
 }  // namespace maglev

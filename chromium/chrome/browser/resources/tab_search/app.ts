@@ -37,16 +37,17 @@ export class TabSearchAppElement extends CrLitElement {
   private apiProxy_: TabSearchApiProxy = TabSearchApiProxyImpl.getInstance();
   private listenerIds_: number[] = [];
   private documentVisibilityChangedListener_: () => void;
-  protected selectedTabSection_: TabSearchSection = TabSearchSection.kSearch;
-  protected tabNames_: string[] = [
+  protected accessor selectedTabSection_: TabSearchSection =
+      TabSearchSection.kSearch;
+  protected accessor tabNames_: string[] = [
     loadTimeData.getString('tabSearchTabName'),
     loadTimeData.getString('tabOrganizationTabName'),
   ];
-  protected tabOrganizationEnabled_: boolean =
+  protected accessor tabOrganizationEnabled_: boolean =
       loadTimeData.getBoolean('tabOrganizationEnabled');
-  protected declutterEnabled_: boolean =
+  protected accessor declutterEnabled_: boolean =
       loadTimeData.getBoolean('declutterEnabled');
-  protected availableHeight_: number = 0;
+  protected accessor availableHeight_: number = 0;
 
   static override get styles() {
     return getCss();
@@ -108,7 +109,7 @@ export class TabSearchAppElement extends CrLitElement {
     this.selectedTabSection_ = section;
     if (section === TabSearchSection.kOrganize) {
       const organizationSelector =
-          this.shadowRoot!.querySelector('tab-organization-selector');
+          this.shadowRoot.querySelector('tab-organization-selector');
       if (organizationSelector) {
         organizationSelector.maybeLogFeatureShow();
       }
@@ -150,7 +151,7 @@ export class TabSearchAppElement extends CrLitElement {
     if (this.selectedTabSection_ === TabSearchSection.kOrganize &&
         !this.declutterEnabled_) {
       const autoTabGroupsPage =
-          this.shadowRoot!.querySelector('auto-tab-groups-page')!;
+          this.shadowRoot.querySelector('auto-tab-groups-page')!;
       autoTabGroupsPage.classList.toggle('changed-state', false);
     }
   }

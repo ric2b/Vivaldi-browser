@@ -71,7 +71,7 @@
 #include "ui/events/keycodes/keyboard_codes_posix.h"
 #include "ui/gfx/geometry/point.h"
 #include "ui/gfx/geometry/rect.h"
-#include "ui/views/accessibility/ax_event_manager.h"
+#include "ui/views/accessibility/ax_update_notifier.h"
 #include "ui/views/background.h"
 #include "ui/views/controls/image_view.h"
 #include "ui/views/controls/label.h"
@@ -1400,7 +1400,7 @@ TEST_F(QuickInsertViewTest, NoMainResultsAndNoEmojisIsAnnounced) {
   widget->Show();
   QuickInsertView* quick_insert_view = GetQuickInsertViewFromWidget(*widget);
 
-  views::test::AXEventCounter counter(views::AXEventManager::Get());
+  views::test::AXEventCounter counter(views::AXUpdateNotifier::Get());
   PressAndReleaseKey(ui::KeyboardCode::VKEY_A, ui::EF_NONE);
   future.Take().Run({});
 
@@ -1427,7 +1427,7 @@ TEST_P(QuickInsertViewEmojiTest, NoMainResultsAndSomeEmojisIsAnnounced) {
   widget->Show();
   QuickInsertView* quick_insert_view = GetQuickInsertViewFromWidget(*widget);
 
-  views::test::AXEventCounter counter(views::AXEventManager::Get());
+  views::test::AXEventCounter counter(views::AXUpdateNotifier::Get());
   PressAndReleaseKey(ui::KeyboardCode::VKEY_A, ui::EF_NONE);
   future.Take().Run({});
 
@@ -2081,29 +2081,55 @@ TEST_F(QuickInsertViewTest, MainContentAboveSearchFieldNearBottomOfScreen) {
 }
 
 TEST_P(QuickInsertViewEmojiTest, ShowsEmojiPickerWhenClickingOnExpressions) {
-  FakeQuickInsertViewDelegate delegate({
-      .available_categories = {GetParam()},
-  });
-  auto widget = QuickInsertWidget::Create(&delegate, kDefaultAnchorBounds);
-  widget->Show();
+  {
+    FakeQuickInsertViewDelegate delegate({
+        .available_categories = {GetParam()},
+    });
+    auto widget = QuickInsertWidget::Create(&delegate, kDefaultAnchorBounds);
+    widget->Show();
 
-  LeftClickOn(GetFirstCategoryItemView(GetQuickInsertViewFromWidget(*widget)));
+    LeftClickOn(
+        GetFirstCategoryItemView(GetQuickInsertViewFromWidget(*widget)));
 
-  EXPECT_TRUE(widget->IsClosed());
-  EXPECT_THAT(delegate.emoji_picker_query(), Optional(Eq(u"")));
+    EXPECT_TRUE(widget->IsClosed());
+    EXPECT_THAT(delegate.emoji_picker_query(), Optional(Eq(u"")));
+  }
+
+  cros_events::Picker_FinishSession expected_event;
+  expected_event.SetOutcome(cros_events::PickerSessionOutcome::REDIRECTED)
+      .SetAction(cros_events::PickerAction::OPEN_EXPRESSIONS)
+      .SetResultSource(cros_events::PickerResultSource::UNKNOWN)
+      .SetResultType(cros_events::PickerResultType::UNKNOWN)
+      .SetTotalEdits(0)
+      .SetFinalQuerySize(0)
+      .SetResultIndex(-1);
+  EXPECT_THAT(metrics_recorder_.GetEvents(), ContainsEvent(expected_event));
 }
 
 TEST_F(QuickInsertViewTest, ShowsEditorWhenClickingOnEditor) {
-  FakeQuickInsertViewDelegate delegate({
-      .available_categories = {QuickInsertCategory::kEditorWrite},
-  });
-  auto widget = QuickInsertWidget::Create(&delegate, kDefaultAnchorBounds);
-  widget->Show();
+  {
+    FakeQuickInsertViewDelegate delegate({
+        .available_categories = {QuickInsertCategory::kEditorWrite},
+    });
+    auto widget = QuickInsertWidget::Create(&delegate, kDefaultAnchorBounds);
+    widget->Show();
 
-  LeftClickOn(GetFirstCategoryItemView(GetQuickInsertViewFromWidget(*widget)));
+    LeftClickOn(
+        GetFirstCategoryItemView(GetQuickInsertViewFromWidget(*widget)));
 
-  EXPECT_TRUE(widget->IsClosed());
-  EXPECT_TRUE(delegate.showed_editor());
+    EXPECT_TRUE(widget->IsClosed());
+    EXPECT_TRUE(delegate.showed_editor());
+  }
+
+  cros_events::Picker_FinishSession expected_event;
+  expected_event.SetOutcome(cros_events::PickerSessionOutcome::REDIRECTED)
+      .SetAction(cros_events::PickerAction::OPEN_EDITOR_WRITE)
+      .SetResultSource(cros_events::PickerResultSource::UNKNOWN)
+      .SetResultType(cros_events::PickerResultType::UNKNOWN)
+      .SetTotalEdits(0)
+      .SetFinalQuerySize(0)
+      .SetResultIndex(-1);
+  EXPECT_THAT(metrics_recorder_.GetEvents(), ContainsEvent(expected_event));
 }
 
 TEST_F(QuickInsertViewTest, PressingEnterDoesNothingOnEmptySearchResultsPage) {
@@ -2950,7 +2976,7 @@ TEST_F(
   });
   auto widget = QuickInsertWidget::Create(&delegate, kDefaultAnchorBounds);
   widget->Show();
-  views::test::AXEventCounter counter(views::AXEventManager::Get());
+  views::test::AXEventCounter counter(views::AXUpdateNotifier::Get());
 
   PressAndReleaseKey(ui::KeyboardCode::VKEY_DOWN, ui::EF_NONE);
 
@@ -2971,7 +2997,7 @@ TEST_F(
   });
   auto widget = QuickInsertWidget::Create(&delegate, kDefaultAnchorBounds);
   widget->Show();
-  views::test::AXEventCounter counter(views::AXEventManager::Get());
+  views::test::AXEventCounter counter(views::AXUpdateNotifier::Get());
 
   PressAndReleaseKey(ui::KeyboardCode::VKEY_DOWN, ui::EF_NONE);
   task_environment()->FastForwardBy(

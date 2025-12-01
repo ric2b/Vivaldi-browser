@@ -9,15 +9,12 @@
 #include "third_party/blink/renderer/core/css/properties/css_property.h"
 #include "third_party/blink/renderer/core/css/properties/longhands/custom_property.h"
 #include "third_party/blink/renderer/core/css/resolver/cascade_priority.h"
+#include "third_party/blink/renderer/core/css/style_rule.h"
 
 namespace blink {
 
-bool CascadeResolver::IsLocked(const CSSProperty& property) const {
-  return Find(property) != kNotFound;
-}
-
-bool CascadeResolver::IsLocked(const AtomicString& attribute) const {
-  return Find(attribute) != kNotFound;
+void CascadeResolver::CycleNode::Trace(blink::Visitor* visitor) const {
+  visitor->Trace(function);
 }
 
 bool CascadeResolver::AllowSubstitution(CSSVariableData* data) const {
@@ -29,14 +26,6 @@ bool CascadeResolver::AllowSubstitution(CSSVariableData* data) const {
     return !CSSAnimations::IsAnimationAffectingProperty(*property);
   }
   return true;
-}
-
-bool CascadeResolver::DetectCycle(const CSSProperty& property) {
-  return DetectCycle(Find(property));
-}
-
-bool CascadeResolver::DetectCycle(const AtomicString& attribute) {
-  return DetectCycle(Find(attribute));
 }
 
 bool CascadeResolver::DetectCycle(wtf_size_t index) {
@@ -53,12 +42,10 @@ bool CascadeResolver::InCycle() const {
   return stack_.size() > cycle_start_ && stack_.size() <= cycle_end_;
 }
 
-wtf_size_t CascadeResolver::Find(const CSSProperty& property) const {
+wtf_size_t CascadeResolver::Find(const CycleNode& node) const {
   wtf_size_t index = 0;
-  for (CycleElem elem : stack_) {
-    if (absl::holds_alternative<const CSSProperty*>(elem) &&
-        absl::get<const CSSProperty*>(elem)->HasEqualCSSPropertyName(
-            property)) {
+  for (const CycleNode& stack_node : stack_) {
+    if (stack_node == node) {
       return index;
     }
     ++index;
@@ -66,30 +53,11 @@ wtf_size_t CascadeResolver::Find(const CSSProperty& property) const {
   return kNotFound;
 }
 
-wtf_size_t CascadeResolver::Find(const AtomicString& attribute) const {
-  wtf_size_t index = 0;
-  for (CycleElem elem : stack_) {
-    if (absl::holds_alternative<AtomicString>(elem) &&
-        absl::get<AtomicString>(elem) == attribute) {
-      return index;
-    }
-    ++index;
-  }
-  return kNotFound;
-}
-
-CascadeResolver::AutoLock::AutoLock(const CSSProperty& property,
+CascadeResolver::AutoLock::AutoLock(const CycleNode& node,
                                     CascadeResolver& resolver)
     : resolver_(resolver) {
-  DCHECK(!resolver.IsLocked(property));
-  resolver_.stack_.push_back(&property);
-}
-
-CascadeResolver::AutoLock::AutoLock(const AtomicString& attribute,
-                                    CascadeResolver& resolver)
-    : resolver_(resolver) {
-  DCHECK(!resolver.IsLocked(attribute));
-  resolver_.stack_.push_back(attribute);
+  DCHECK(!resolver.IsLocked(node));
+  resolver_.stack_.push_back(node);
 }
 
 CascadeResolver::AutoLock::~AutoLock() {

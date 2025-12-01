@@ -32,6 +32,7 @@
 #include "av1/av1_iface_common.h"
 #include "av1/common/av1_common_int.h"
 #include "av1/common/enums.h"
+#include "av1/common/quant_common.h"
 #include "av1/common/scale.h"
 #include "av1/encoder/bitstream.h"
 #include "av1/encoder/enc_enums.h"
@@ -163,6 +164,7 @@ struct av1_extracfg {
   int enable_dnl_denoising;
 #endif
 
+  unsigned int enable_low_complexity_decode;
   unsigned int chroma_subsampling_x;
   unsigned int chroma_subsampling_y;
   int reduced_tx_type_set;
@@ -327,6 +329,8 @@ static const struct av1_extracfg default_extra_cfg = {
   32,  // noise_block_size
   1,   // enable_dnl_denoising
 #endif
+
+  0,  // enable_low_complexity_decode
   0,  // chroma_subsampling_x
   0,  // chroma_subsampling_y
   0,  // reduced_tx_type_set
@@ -479,15 +483,17 @@ static const struct av1_extracfg default_extra_cfg = {
   32,  // noise_block_size
   1,   // enable_dnl_denoising
 #endif
-  0,   // chroma_subsampling_x
-  0,   // chroma_subsampling_y
-  0,   // reduced_tx_type_set
-  0,   // use_intra_dct_only
-  0,   // use_inter_dct_only
-  1,   // use_intra_default_tx_only
-  1,   // enable_tx_size_search
-  0,   // quant_b_adapt
-  0,   // vbr_corpus_complexity_lap
+
+  0,  // enable_low_complexity_decode
+  0,  // chroma_subsampling_x
+  0,  // chroma_subsampling_y
+  0,  // reduced_tx_type_set
+  0,  // use_intra_dct_only
+  0,  // use_inter_dct_only
+  1,  // use_intra_default_tx_only
+  1,  // enable_tx_size_search
+  0,  // quant_b_adapt
+  0,  // vbr_corpus_complexity_lap
   {
       SEQ_LEVEL_MAX, SEQ_LEVEL_MAX, SEQ_LEVEL_MAX, SEQ_LEVEL_MAX, SEQ_LEVEL_MAX,
       SEQ_LEVEL_MAX, SEQ_LEVEL_MAX, SEQ_LEVEL_MAX, SEQ_LEVEL_MAX, SEQ_LEVEL_MAX,
@@ -733,7 +739,7 @@ static aom_codec_err_t validate_config(aom_codec_alg_priv_t *ctx,
   RANGE_CHECK_HI(extra_cfg, enable_auto_alt_ref, 1);
   RANGE_CHECK_HI(extra_cfg, enable_auto_bwd_ref, 2);
   RANGE_CHECK(extra_cfg, cpu_used, 0,
-              (cfg->g_usage == AOM_USAGE_REALTIME) ? 11 : 9);
+              (cfg->g_usage == AOM_USAGE_REALTIME) ? 12 : 9);
   RANGE_CHECK_HI(extra_cfg, noise_sensitivity, 6);
   RANGE_CHECK(extra_cfg, superblock_size, AOM_SUPERBLOCK_SIZE_64X64,
               AOM_SUPERBLOCK_SIZE_DYNAMIC);
@@ -869,8 +875,19 @@ static aom_codec_err_t validate_config(aom_codec_alg_priv_t *ctx,
 
   RANGE_CHECK(extra_cfg, max_reference_frames, 3, 7);
   RANGE_CHECK(extra_cfg, enable_reduced_reference_set, 0, 1);
+
+  RANGE_CHECK_HI(extra_cfg, enable_low_complexity_decode, 1);
   RANGE_CHECK_HI(extra_cfg, chroma_subsampling_x, 1);
   RANGE_CHECK_HI(extra_cfg, chroma_subsampling_y, 1);
+  // 6.4.2 Color config semantics
+  // If matrix_coefficients is equal to MC_IDENTITY, it is a requirement of
+  // bitstream conformance that subsampling_x is equal to 0 and subsampling_y
+  // is equal to 0.
+  if (extra_cfg->matrix_coefficients == AOM_CICP_MC_IDENTITY &&
+      (extra_cfg->chroma_subsampling_x != 0 ||
+       extra_cfg->chroma_subsampling_y != 0)) {
+    ERROR("Subsampling must be 0 with AOM_CICP_MC_IDENTITY.");
+  }
 
   RANGE_CHECK_HI(extra_cfg, disable_trellis_quant, 3);
   RANGE_CHECK(extra_cfg, coeff_cost_upd_freq, 0, 3);
@@ -939,6 +956,15 @@ static aom_codec_err_t validate_img(aom_codec_alg_priv_t *ctx,
 
   if (img->d_w != ctx->cfg.g_w || img->d_h != ctx->cfg.g_h)
     ERROR("Image size must match encoder init configuration size");
+
+  // 6.4.2 Color config semantics
+  // If matrix_coefficients is equal to MC_IDENTITY, it is a requirement of
+  // bitstream conformance that subsampling_x is equal to 0 and subsampling_y
+  // is equal to 0.
+  if (ctx->oxcf.color_cfg.matrix_coefficients == AOM_CICP_MC_IDENTITY &&
+      (img->x_chroma_shift != 0 || img->y_chroma_shift != 0)) {
+    ERROR("Subsampling must be 0 with AOM_CICP_MC_IDENTITY.");
+  }
 
 #if CONFIG_TUNE_BUTTERAUGLI
   if (ctx->extra_cfg.tuning == AOM_TUNE_BUTTERAUGLI) {
@@ -1300,6 +1326,13 @@ static void set_encoder_config(AV1EncoderConfig *oxcf,
       oxcf->speed < 7)
     oxcf->speed = 7;
 
+  // Now, low complexity decode mode is only supported for good-quality
+  // encoding speed 1 to 3. This can be further modified if needed.
+  oxcf->enable_low_complexity_decode =
+      extra_cfg->enable_low_complexity_decode &&
+      cfg->g_usage == AOM_USAGE_GOOD_QUALITY && oxcf->speed >= 1 &&
+      oxcf->speed <= 3;
+
   // Set Color related configuration.
   color_cfg->color_primaries = extra_cfg->color_primaries;
   color_cfg->transfer_characteristics = extra_cfg->transfer_characteristics;
@@ -1540,11 +1573,14 @@ static aom_codec_err_t encoder_set_config(aom_codec_alg_priv_t *ctx,
     // Note: function encoder_set_config() is allowed to be called multiple
     // times. However, when the original frame width or height is less than two
     // times of the new frame width or height, a forced key frame should be
-    // used. To make sure the correct detection of a forced key frame, we need
+    // used (for the case of single spatial layer, since otherwise a previous
+    // encoded frame at a lower layer may be the desired reference). To make
+    // sure the correct detection of a forced key frame, we need
     // to update the frame width and height only when the actual encoding is
     // performed. cpi->last_coded_width and cpi->last_coded_height are used to
     // track the actual coded frame size.
-    if (ctx->ppi->cpi->last_coded_width && ctx->ppi->cpi->last_coded_height &&
+    if (ctx->ppi->cpi->svc.number_spatial_layers == 1 &&
+        ctx->ppi->cpi->last_coded_width && ctx->ppi->cpi->last_coded_height &&
         (!valid_ref_frame_size(ctx->ppi->cpi->last_coded_width,
                                ctx->ppi->cpi->last_coded_height, cfg->g_w,
                                cfg->g_h) ||
@@ -1786,22 +1822,23 @@ static aom_codec_err_t ctrl_set_arnr_strength(aom_codec_alg_priv_t *ctx,
 
 static aom_codec_err_t handle_tuning(aom_codec_alg_priv_t *ctx,
                                      struct av1_extracfg *extra_cfg) {
-  if (extra_cfg->tuning == AOM_TUNE_SSIMULACRA2) {
+  if (extra_cfg->tuning == AOM_TUNE_IQ ||
+      extra_cfg->tuning == AOM_TUNE_SSIMULACRA2) {
     if (ctx->cfg.g_usage != AOM_USAGE_ALL_INTRA) return AOM_CODEC_INCAPABLE;
     // Enable QMs as they've been found to be beneficial for images, when used
     // with alternative QM formulas:
     // - aom_get_qmlevel_allintra()
     // - aom_get_qmlevel_luma_ssimulacra2()
-    // - aom_get_qmlevel_444_chroma_ssimulacra2()
+    // - aom_get_qmlevel_444_chroma()
     extra_cfg->enable_qm = 1;
-    extra_cfg->qm_min = QM_FIRST_SSIMULACRA2;
-    extra_cfg->qm_max = QM_LAST_SSIMULACRA2;
+    extra_cfg->qm_min = QM_FIRST_IQ_SSIMULACRA2;
+    extra_cfg->qm_max = QM_LAST_IQ_SSIMULACRA2;
     // We can turn on loop filter sharpness, as frames do not have to serve as
     // references to others.
     extra_cfg->sharpness = 7;
     // Using the QM-PSNR metric was found to be beneficial for images (over the
     // default PSNR metric), as it correlates better with subjective image
-    // quality consistency and better SSIMULACRA2 scores.
+    // quality consistency and better SSIMULACRA 2 scores.
     extra_cfg->dist_metric = AOM_DIST_METRIC_QM_PSNR;
     // CDEF_ALL has been found to blur images at medium and high quality
     // qindexes, so let's use a version that adapts CDEF strength on frame
@@ -1968,6 +2005,14 @@ static aom_codec_err_t ctrl_set_timing_info_type(aom_codec_alg_priv_t *ctx,
                                                  va_list args) {
   struct av1_extracfg extra_cfg = ctx->extra_cfg;
   extra_cfg.timing_info_type = CAST(AV1E_SET_TIMING_INFO_TYPE, args);
+  return update_extra_cfg(ctx, &extra_cfg);
+}
+
+static aom_codec_err_t ctrl_set_enable_low_complexity_decode(
+    aom_codec_alg_priv_t *ctx, va_list args) {
+  struct av1_extracfg extra_cfg = ctx->extra_cfg;
+  extra_cfg.enable_low_complexity_decode =
+      CAST(AV1E_SET_ENABLE_LOW_COMPLEXITY_DECODE, args);
   return update_extra_cfg(ctx, &extra_cfg);
 }
 
@@ -4376,6 +4421,11 @@ static aom_codec_err_t encoder_set_option(aom_codec_alg_priv_t *ctx,
   } else if (arg_match_helper(&arg, &g_av1_codec_arg_defs.enable_angle_delta,
                               argv, err_string)) {
     extra_cfg.enable_angle_delta = arg_parse_int_helper(&arg, err_string);
+  } else if (arg_match_helper(
+                 &arg, &g_av1_codec_arg_defs.enable_low_complexity_decode, argv,
+                 err_string)) {
+    extra_cfg.enable_low_complexity_decode =
+        arg_parse_int_helper(&arg, err_string);
   } else if (arg_match_helper(&arg, &g_av1_codec_arg_defs.reduced_tx_type_set,
                               argv, err_string)) {
     extra_cfg.reduced_tx_type_set = arg_parse_int_helper(&arg, err_string);
@@ -4707,6 +4757,8 @@ static aom_codec_ctrl_fn_map_t encoder_ctrl_maps[] = {
   { AV1E_SET_POSTENCODE_DROP_RTC, ctrl_set_postencode_drop_rtc },
   { AV1E_SET_MAX_CONSEC_FRAME_DROP_MS_CBR,
     ctrl_set_max_consec_frame_drop_ms_cbr },
+  { AV1E_SET_ENABLE_LOW_COMPLEXITY_DECODE,
+    ctrl_set_enable_low_complexity_decode },
 
   // Getters
   { AOME_GET_LAST_QUANTIZER, ctrl_get_quantizer },

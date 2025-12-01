@@ -15,11 +15,11 @@ const {urlString} = Platform.DevToolsPath;
 
 class ExtensionStorageListener {
   #model: Resources.ExtensionStorageModel.ExtensionStorageModel;
-  #storagesWatched: Array<Resources.ExtensionStorageModel.ExtensionStorage>;
+  #storagesWatched: Resources.ExtensionStorageModel.ExtensionStorage[];
 
   constructor(model: Resources.ExtensionStorageModel.ExtensionStorageModel) {
     this.#model = model;
-    this.#storagesWatched = new Array<Resources.ExtensionStorageModel.ExtensionStorage>();
+    this.#storagesWatched = [];
 
     this.#model.addEventListener(
         Resources.ExtensionStorageModel.Events.EXTENSION_STORAGE_ADDED, this.#extensionStorageAdded, this);

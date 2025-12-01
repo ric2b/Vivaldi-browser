@@ -80,10 +80,14 @@ const BasicShape* GetBasicShape(const CSSProperty& property,
 class UnderlyingCompatibilityChecker
     : public CSSInterpolationType::CSSConversionChecker {
  public:
-  UnderlyingCompatibilityChecker(scoped_refptr<const NonInterpolableValue>
-                                     underlying_non_interpolable_value)
-      : underlying_non_interpolable_value_(
-            std::move(underlying_non_interpolable_value)) {}
+  explicit UnderlyingCompatibilityChecker(
+      const NonInterpolableValue* underlying_non_interpolable_value)
+      : underlying_non_interpolable_value_(underlying_non_interpolable_value) {}
+
+  void Trace(Visitor* visitor) const override {
+    CSSInterpolationType::CSSConversionChecker::Trace(visitor);
+    visitor->Trace(underlying_non_interpolable_value_);
+  }
 
  private:
   bool IsValid(const StyleResolverState&,
@@ -93,25 +97,30 @@ class UnderlyingCompatibilityChecker
         *underlying.non_interpolable_value);
   }
 
-  scoped_refptr<const NonInterpolableValue> underlying_non_interpolable_value_;
+  Member<const NonInterpolableValue> underlying_non_interpolable_value_;
 };
 
 class InheritedShapeChecker
     : public CSSInterpolationType::CSSConversionChecker {
  public:
   InheritedShapeChecker(const CSSProperty& property,
-                        scoped_refptr<const BasicShape> inherited_shape)
-      : property_(property), inherited_shape_(std::move(inherited_shape)) {}
+                        const BasicShape* inherited_shape)
+      : property_(property), inherited_shape_(inherited_shape) {}
+
+  void Trace(Visitor* visitor) const override {
+    visitor->Trace(inherited_shape_);
+    CSSInterpolationType::CSSConversionChecker::Trace(visitor);
+  }
 
  private:
   bool IsValid(const StyleResolverState& state,
                const InterpolationValue&) const final {
     return base::ValuesEquivalent(
-        inherited_shape_.get(), GetBasicShape(property_, *state.ParentStyle()));
+        inherited_shape_.Get(), GetBasicShape(property_, *state.ParentStyle()));
   }
 
   const CSSProperty& property_;
-  scoped_refptr<const BasicShape> inherited_shape_;
+  Member<const BasicShape> inherited_shape_;
 };
 
 }  // namespace
@@ -122,7 +131,7 @@ InterpolationValue CSSBasicShapeInterpolationType::MaybeConvertNeutral(
   // const_cast is for taking refs.
   NonInterpolableValue* non_interpolable_value =
       const_cast<NonInterpolableValue*>(
-          underlying.non_interpolable_value.get());
+          underlying.non_interpolable_value.Get());
   conversion_checkers.push_back(
       MakeGarbageCollected<UnderlyingCompatibilityChecker>(
           non_interpolable_value));
@@ -210,29 +219,28 @@ void CSSBasicShapeInterpolationType::ApplyStandardPropertyValue(
     const InterpolableValue& interpolable_value,
     const NonInterpolableValue* non_interpolable_value,
     StyleResolverState& state) const {
-  scoped_refptr<BasicShape> shape =
-      basic_shape_interpolation_functions::CreateBasicShape(
-          interpolable_value, *non_interpolable_value,
-          state.CssToLengthConversionData());
+  BasicShape* shape = basic_shape_interpolation_functions::CreateBasicShape(
+      interpolable_value, *non_interpolable_value,
+      state.CssToLengthConversionData());
   switch (CssProperty().PropertyID()) {
     case CSSPropertyID::kShapeOutside:
-      state.StyleBuilder().SetShapeOutside(MakeGarbageCollected<ShapeValue>(
-          std::move(shape), CSSBoxType::kMissing));
+      state.StyleBuilder().SetShapeOutside(
+          MakeGarbageCollected<ShapeValue>(shape, CSSBoxType::kMissing));
       break;
     case CSSPropertyID::kOffsetPath:
       // TODO(sakhapov): handle coord box.
       state.StyleBuilder().SetOffsetPath(
-          MakeGarbageCollected<ShapeOffsetPathOperation>(std::move(shape),
+          MakeGarbageCollected<ShapeOffsetPathOperation>(shape,
                                                          CoordBox::kBorderBox));
       break;
     case CSSPropertyID::kClipPath:
       // TODO(pdr): Handle geometry box.
       state.StyleBuilder().SetClipPath(
           MakeGarbageCollected<ShapeClipPathOperation>(
-              std::move(shape), GeometryBox::kBorderBox));
+              shape, GeometryBox::kBorderBox));
       break;
     case CSSPropertyID::kObjectViewBox:
-      state.StyleBuilder().SetObjectViewBox(std::move(shape));
+      state.StyleBuilder().SetObjectViewBox(shape);
       break;
     default:
       NOTREACHED();

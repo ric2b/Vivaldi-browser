@@ -116,7 +116,7 @@ const UIStrings = {
   /**
    *@description Text in Debugger Plugin of the Sources panel
    */
-  sourceMapLoaded: 'Source map loaded.',
+  sourceMapLoaded: 'Source map loaded',
   /**
    *@description Title of the Filtered List WidgetProvider of Quick Open
    *@example {Ctrl+P Ctrl+O} PH1
@@ -134,11 +134,11 @@ const UIStrings = {
   /**
    *@description Text in Debugger Plugin of the Sources panel
    */
-  sourceMapSkipped: 'Source map skipped for this file.',
+  sourceMapSkipped: 'Source map skipped for this file',
   /**
    *@description Text in Debugger Plugin of the Sources panel
    */
-  sourceMapFailed: 'Source map failed to load.',
+  sourceMapFailed: 'Source map failed to load',
   /**
    *@description Text in Debugger Plugin of the Sources panel
    */
@@ -162,7 +162,7 @@ const UIStrings = {
    *@description Error message that is displayed when no debug info could be loaded
    *@example {app.wasm} PH1
    */
-  debugInfoNotFound: 'Failed to load any debug info for {PH1}.',
+  debugInfoNotFound: 'Failed to load any debug info for {PH1}',
   /**
    *@description Text of a button to open up details on a request when no debug info could be loaded
    */
@@ -171,7 +171,7 @@ const UIStrings = {
    *@description Tooltip text that shows on hovering over a button to see more details on a request
    */
   openDeveloperResources: 'Opens the request in the Developer resource panel',
-};
+} as const;
 const str_ = i18n.i18n.registerUIStrings('panels/sources/DebuggerPlugin.ts', UIStrings);
 const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
 
@@ -205,7 +205,7 @@ export class DebuggerPlugin extends Plugin {
   private executionLocation: Workspace.UISourceCode.UILocation|null = null;
   // Track state of the control key because holding it makes debugger
   // target locations show up in the editor
-  private controlDown: boolean = false;
+  private controlDown = false;
   private controlTimeout: number|undefined = undefined;
   private sourceMapInfobar: UI.Infobar.Infobar|null = null;
   private readonly scriptsPanel: SourcesPanel;
@@ -220,7 +220,7 @@ export class DebuggerPlugin extends Plugin {
   // content is edited and later saved, these are used as a source of
   // truth for re-creating the breakpoints.
   private breakpoints: BreakpointDescription[] = [];
-  private continueToLocations: {from: number, to: number, async: boolean, click: () => void}[]|null = null;
+  private continueToLocations: Array<{from: number, to: number, async: boolean, click: () => void}>|null = null;
   private readonly liveLocationPool: Bindings.LiveLocation.LiveLocationPool;
   // When the editor content is changed by the user, this becomes
   // true. When the plugin is muted, breakpoints show up as disabled
@@ -311,7 +311,6 @@ export class DebuggerPlugin extends Plugin {
           click: (view, block, event) => this.handleGutterClick(view.state.doc.lineAt(block.from), event as MouseEvent),
         },
       }),
-      infobarState,
       breakpointMarkers,
       TextEditor.ExecutionPositionHighlighter.positionHighlighter('cm-executionLine', 'cm-executionToken'),
       CodeMirror.Prec.lowest(continueToMarkers.field),
@@ -398,7 +397,6 @@ export class DebuggerPlugin extends Plugin {
         new UI.PopoverHelper.PopoverHelper(editor, this.getPopoverRequest.bind(this), 'sources.object-properties');
     this.popoverHelper.setDisableOnClick(true);
     this.popoverHelper.setTimeout(250, 250);
-    this.popoverHelper.setHasPadding(true);
   }
 
   static override accepts(uiSourceCode: Workspace.UISourceCode.UISourceCode): boolean {
@@ -429,20 +427,19 @@ export class DebuggerPlugin extends Plugin {
         UI.Infobar.Type.WARNING, i18nString(UIStrings.thisScriptIsOnTheDebuggersIgnore),
         [
           {
-            text: i18nString(UIStrings.removeFromIgnoreList),
-            highlight: false,
-            delegate: unIgnoreList,
-            dismiss: true,
-            jslogContext: 'remove-from-ignore-list',
-          },
-          {
             text: i18nString(UIStrings.configure),
-            highlight: false,
             delegate:
                 UI.ViewManager.ViewManager.instance().showView.bind(UI.ViewManager.ViewManager.instance(), 'blackbox'),
             dismiss: false,
             jslogContext: 'configure',
           },
+          {
+            text: i18nString(UIStrings.removeFromIgnoreList),
+            delegate: unIgnoreList,
+            buttonVariant: Buttons.Button.Variant.TONAL,
+            dismiss: true,
+            jslogContext: 'remove-from-ignore-list',
+          }
         ],
         undefined, 'script-on-ignore-list');
     this.ignoreListInfobar = infobar;
@@ -455,13 +452,13 @@ export class DebuggerPlugin extends Plugin {
 
   attachInfobar(bar: UI.Infobar.Infobar): void {
     if (this.editor) {
-      this.editor.dispatch({effects: addInfobar.of(bar)});
+      this.editor.dispatch({effects: SourceFrame.SourceFrame.addInfobar.of(bar)});
     }
   }
 
   removeInfobar(bar: UI.Infobar.Infobar|null): void {
     if (this.editor && bar) {
-      this.editor.dispatch({effects: removeInfobar.of(bar)});
+      this.editor.dispatch({effects: SourceFrame.SourceFrame.removeInfobar.of(bar)});
     }
   }
 
@@ -660,7 +657,10 @@ export class DebuggerPlugin extends Plugin {
         tokenType === 'PropertyDefinition';
   }
 
-  private getPopoverRequest(event: MouseEvent): UI.PopoverHelper.PopoverRequest|null {
+  private getPopoverRequest(event: MouseEvent|KeyboardEvent): UI.PopoverHelper.PopoverRequest|null {
+    if (event instanceof KeyboardEvent) {
+      return null;
+    }
     if (UI.KeyboardShortcut.KeyboardShortcut.eventHasCtrlEquivalentKey(event)) {
       return null;
     }
@@ -713,7 +713,7 @@ export class DebuggerPlugin extends Plugin {
     return {
       box,
       show: async (popover: UI.GlassPane.GlassPane) => {
-        let resolvedText: string = '';
+        let resolvedText = '';
         if (selectedCallFrame.script.isJavaScript()) {
           const nameMap = await SourceMapScopes.NamesResolver.allVariablesInCallFrame(selectedCallFrame);
           try {
@@ -795,7 +795,7 @@ export class DebuggerPlugin extends Plugin {
       this.setControlDown(false);
     }
     if (event.key === Platform.KeyboardUtilities.ESCAPE_KEY) {
-      if (this.popoverHelper && this.popoverHelper.isPopoverVisible()) {
+      if (this.popoverHelper?.isPopoverVisible()) {
         this.popoverHelper.hidePopover();
         event.consume();
         return true;
@@ -1052,7 +1052,7 @@ export class DebuggerPlugin extends Plugin {
       return null;
     }
 
-    const decorations: CodeMirror.Range<CodeMirror.Decoration>[] = [];
+    const decorations: Array<CodeMirror.Range<CodeMirror.Decoration>> = [];
 
     for (const [line, names] of variablesByLine) {
       const prevLine = variablesByLine.get(line - 1);
@@ -1172,7 +1172,7 @@ export class DebuggerPlugin extends Plugin {
   }
 
   private clearContinueToLocations(): void {
-    if (this.editor && this.editor.state.field(continueToMarkers.field).size) {
+    if (this.editor?.state.field(continueToMarkers.field).size) {
       this.editor.dispatch({effects: continueToMarkers.update.of(CodeMirror.Decoration.none)});
     }
   }
@@ -1189,10 +1189,10 @@ export class DebuggerPlugin extends Plugin {
     }
   }
 
-  private fetchBreakpoints(): {
+  private fetchBreakpoints(): Array<{
     position: number,
     breakpoint: Breakpoints.BreakpointManager.Breakpoint,
-  }[] {
+  }> {
     if (!this.editor) {
       return [];
     }
@@ -1225,12 +1225,12 @@ export class DebuggerPlugin extends Plugin {
   // gutter and inline in the code)
   private async computeBreakpointDecoration(state: CodeMirror.EditorState, breakpoints: BreakpointDescription[]):
       Promise<BreakpointDecoration> {
-    const decorations: CodeMirror.Range<CodeMirror.Decoration>[] = [];
-    const gutterMarkers: CodeMirror.Range<CodeMirror.GutterMarker>[] = [];
+    const decorations: Array<CodeMirror.Range<CodeMirror.Decoration>> = [];
+    const gutterMarkers: Array<CodeMirror.Range<CodeMirror.GutterMarker>> = [];
     const breakpointsByLine = new Map<number, Breakpoints.BreakpointManager.Breakpoint[]>();
     const inlineMarkersByLine =
-        new Map<number, {breakpoint: Breakpoints.BreakpointManager.Breakpoint | null, column: number}[]>();
-    const possibleBreakpointRequests: Promise<void>[] = [];
+        new Map<number, Array<{breakpoint: Breakpoints.BreakpointManager.Breakpoint | null, column: number}>>();
+    const possibleBreakpointRequests: Array<Promise<void>> = [];
     const inlineMarkerPositions = new Set<number>();
 
     const addInlineMarker =
@@ -1496,7 +1496,7 @@ export class DebuggerPlugin extends Plugin {
     for (const debuggerModel of SDK.TargetManager.TargetManager.instance().models(SDK.DebuggerModel.DebuggerModel)) {
       const scriptFile = Bindings.DebuggerWorkspaceBinding.DebuggerWorkspaceBinding.instance().scriptFile(
           this.uiSourceCode, debuggerModel);
-      if (scriptFile && scriptFile.hasSourceMapURL()) {
+      if (scriptFile?.hasSourceMapURL()) {
         return true;
       }
     }
@@ -1673,8 +1673,7 @@ export class DebuggerPlugin extends Plugin {
       await Bindings.DebuggerWorkspaceBinding.DebuggerWorkspaceBinding.instance().createCallFrameLiveLocation(
           callFrame.location(), async (liveLocation: Bindings.LiveLocation.LiveLocation) => {
             const uiLocation = await liveLocation.uiLocation();
-            if (uiLocation &&
-                uiLocation.uiSourceCode.canononicalScriptId() === this.uiSourceCode.canononicalScriptId()) {
+            if (uiLocation && uiLocation.uiSourceCode.canonicalScriptId() === this.uiSourceCode.canonicalScriptId()) {
               this.setExecutionLocation(uiLocation);
               this.updateMissingDebugInfoInfobar(callFrame.missingDebugInfoDetails);
               // We are paused and the user is specifically looking at this UISourceCode either because
@@ -1792,31 +1791,6 @@ export class BreakpointLocationRevealer implements
   }
 }
 
-// Infobar panel state, used to show additional panels below the editor.
-
-const addInfobar = CodeMirror.StateEffect.define<UI.Infobar.Infobar>();
-const removeInfobar = CodeMirror.StateEffect.define<UI.Infobar.Infobar>();
-
-const infobarState = CodeMirror.StateField.define<UI.Infobar.Infobar[]>({
-  create(): UI.Infobar.Infobar[] {
-    return [];
-  },
-  update(current, tr): UI.Infobar.Infobar[] {
-    for (const effect of tr.effects) {
-      if (effect.is(addInfobar)) {
-        current = current.concat(effect.value);
-      } else if (effect.is(removeInfobar)) {
-        current = current.filter(b => b !== effect.value);
-      }
-    }
-    return current;
-  },
-  provide: (field): CodeMirror.Extension => CodeMirror.showPanel.computeN(
-      [field],
-      (state): (() => CodeMirror.Panel)[] =>
-          state.field(field).map((bar): (() => CodeMirror.Panel) => (): CodeMirror.Panel => ({dom: bar.element}))),
-});
-
 // Enumerate non-breakable lines (lines without a known corresponding
 // position in the UISource).
 async function computeNonBreakableLines(
@@ -1849,7 +1823,7 @@ const muteBreakpoints = CodeMirror.StateEffect.define<null>();
 
 function muteGutterMarkers(markers: CodeMirror.RangeSet<CodeMirror.GutterMarker>, doc: CodeMirror.Text):
     CodeMirror.RangeSet<CodeMirror.GutterMarker> {
-  const newMarkers: CodeMirror.Range<CodeMirror.GutterMarker>[] = [];
+  const newMarkers: Array<CodeMirror.Range<CodeMirror.GutterMarker>> = [];
   markers.between(0, doc.length, (from, _to, marker) => {
     let className: string = marker.elementClass;
     if (!/cm-breakpoint-disabled/.test(className)) {
@@ -2007,7 +1981,7 @@ const markIfContinueTo = CodeMirror.EditorView.contentAttributes.compute([contin
 // Variable value decorations
 
 class ValueDecoration extends CodeMirror.WidgetType {
-  constructor(readonly pairs: [string, SDK.RemoteObject.RemoteObject][]) {
+  constructor(readonly pairs: Array<[string, SDK.RemoteObject.RemoteObject]>) {
     super();
   }
 
@@ -2030,7 +2004,7 @@ class ValueDecoration extends CodeMirror.WidgetType {
       const nameValuePair = widget.createChild('span');
       UI.UIUtils.createTextChild(nameValuePair, name + ' = ');
       const propertyCount = value.preview ? value.preview.properties.length : 0;
-      const entryCount = value.preview && value.preview.entries ? value.preview.entries.length : 0;
+      const entryCount = value.preview?.entries ? value.preview.entries.length : 0;
       if (value.preview && propertyCount + entryCount < 10) {
         formatter.appendObjectPreview(nameValuePair, value.preview, false /* isEntry */);
       } else {
@@ -2063,12 +2037,12 @@ function isScopeNode(tokenType: string): boolean {
 
 class SiblingScopeVariables {
   blockList: Set<string> = new Set<string>();
-  variables: {line: number, from: number, id: string}[] = [];
+  variables: Array<{line: number, from: number, id: string}> = [];
 }
 
 export function getVariableNamesByLine(
     editorState: CodeMirror.EditorState, fromPos: number, toPos: number,
-    currentPos: number): {line: number, from: number, id: string}[] {
+    currentPos: number): Array<{line: number, from: number, id: string}> {
   const fromLine = editorState.doc.lineAt(fromPos);
   fromPos = Math.min(fromLine.to, fromPos);
   toPos = editorState.doc.lineAt(toPos).from;
@@ -2080,12 +2054,12 @@ export function getVariableNamesByLine(
     return isScopeNode(node.name) && (node.to < currentPos || currentPos < node.from);
   }
 
-  const names: {line: number, from: number, id: string}[] = [];
+  const names: Array<{line: number, from: number, id: string}> = [];
   let curLine = fromLine;
   const siblingStack: SiblingScopeVariables[] = [];
   let currentLetConstDefinition: CodeMirror.SyntaxNode|null = null;
 
-  function currentNames(): {line: number, from: number, id: string}[] {
+  function currentNames(): Array<{line: number, from: number, id: string}> {
     return siblingStack.length ? siblingStack[siblingStack.length - 1].variables : names;
   }
 
@@ -2143,9 +2117,9 @@ export function getVariableNamesByLine(
 export async function computeScopeMappings(
     callFrame: SDK.DebuggerModel.CallFrame,
     rawLocationToEditorOffset: (l: SDK.DebuggerModel.Location|null) => Promise<number|null>):
-    Promise<{scopeStart: number, scopeEnd: number, variableMap: Map<string, SDK.RemoteObject.RemoteObject>}[]> {
+    Promise<Array<{scopeStart: number, scopeEnd: number, variableMap: Map<string, SDK.RemoteObject.RemoteObject>}>> {
   const scopeMappings:
-      {scopeStart: number, scopeEnd: number, variableMap: Map<string, SDK.RemoteObject.RemoteObject>}[] = [];
+      Array<{scopeStart: number, scopeEnd: number, variableMap: Map<string, SDK.RemoteObject.RemoteObject>}> = [];
   for (const scope of callFrame.scopeChain()) {
     const scopeStart = await rawLocationToEditorOffset(scope.range()?.start ?? null);
     if (!scopeStart) {
@@ -2174,9 +2148,10 @@ export async function computeScopeMappings(
 }
 
 export function getVariableValuesByLine(
-    scopeMappings: {scopeStart: number, scopeEnd: number, variableMap: Map<string, SDK.RemoteObject.RemoteObject>}[],
-    variableNames: {line: number, from: number, id: string}[]): Map<number, Map<string, SDK.RemoteObject.RemoteObject>>|
-    null {
+    scopeMappings:
+        Array<{scopeStart: number, scopeEnd: number, variableMap: Map<string, SDK.RemoteObject.RemoteObject>}>,
+    variableNames: Array<{line: number, from: number, id: string}>):
+    Map<number, Map<string, SDK.RemoteObject.RemoteObject>>|null {
   const namesPerLine = new Map<number, Map<string, SDK.RemoteObject.RemoteObject>>();
   for (const {line, from, id} of variableNames) {
     const varValue = findVariableInChain(id, from, scopeMappings);
@@ -2195,7 +2170,8 @@ export function getVariableValuesByLine(
   function findVariableInChain(
       name: string,
       pos: number,
-      scopeMappings: {scopeStart: number, scopeEnd: number, variableMap: Map<string, SDK.RemoteObject.RemoteObject>}[],
+      scopeMappings:
+          Array<{scopeStart: number, scopeEnd: number, variableMap: Map<string, SDK.RemoteObject.RemoteObject>}>,
       ): SDK.RemoteObject.RemoteObject|null {
     for (const scope of scopeMappings) {
       if (pos < scope.scopeStart || pos >= scope.scopeEnd) {
@@ -2507,20 +2483,20 @@ function lineNumberArrow(color: string, outline: string): string {
       encodeURIComponent(color)}" stroke="${encodeURIComponent(outline)}"/></svg>') 1 3 1 1`;
 }
 
-function inlineBreakpointArrow(color: string, outline: string, opacity: string = '1'): string {
+function inlineBreakpointArrow(color: string, outline: string, opacity = '1'): string {
   return `url('data:image/svg+xml,<svg width="11" height="12" viewBox="0 0 11 12" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M0.5 0.5H5.80139C6.29382 0.5 6.7549 0.741701 7.03503 1.14669L10.392 6L7.03503 10.8533C6.7549 11.2583 6.29382 11.5 5.80139 11.5H0.5V0.5Z" fill="${
       encodeURIComponent(
           color)}" stroke="${encodeURIComponent(outline)}" fill-opacity="${encodeURIComponent(opacity)}"/></svg>')`;
 }
 
-function inlineConditionalBreakpointArrow(color: string, outline: string, opacity: string = '1'): string {
+function inlineConditionalBreakpointArrow(color: string, outline: string, opacity = '1'): string {
   return `url('data:image/svg+xml,<svg width="11" height="12" viewBox="0 0 11 12" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M0.5 0.5H5.80139C6.29382 0.5 6.75489 0.741701 7.03503 1.14669L10.392 6L7.03503 10.8533C6.75489 11.2583 6.29382 11.5 5.80138 11.5H0.5V0.5Z" fill="${
       encodeURIComponent(color)}" fill-opacity="${encodeURIComponent(opacity)}" stroke="${
       encodeURIComponent(
           outline)}"/><path d="M3.51074 7.75635H4.68408V9H3.51074V7.75635ZM4.68408 7.23779H3.51074V6.56104C3.51074 6.271 3.55615 6.02344 3.64697 5.81836C3.73779 5.61328 3.90039 5.39648 4.13477 5.16797L4.53027 4.77686C4.71484 4.59814 4.83936 4.4502 4.90381 4.33301C4.97119 4.21582 5.00488 4.09424 5.00488 3.96826C5.00488 3.77197 4.9375 3.62402 4.80273 3.52441C4.66797 3.4248 4.46582 3.375 4.19629 3.375C3.9502 3.375 3.69238 3.42773 3.42285 3.5332C3.15625 3.63574 2.88232 3.78955 2.60107 3.99463V2.81689C2.88818 2.65283 3.17822 2.52979 3.47119 2.44775C3.76709 2.36279 4.06299 2.32031 4.35889 2.32031C4.95068 2.32031 5.41504 2.45801 5.75195 2.7334C6.08887 3.00879 6.25732 3.38818 6.25732 3.87158C6.25732 4.09424 6.20752 4.30225 6.10791 4.49561C6.0083 4.68604 5.8208 4.91602 5.54541 5.18555L5.15869 5.56348C4.95947 5.75684 4.83203 5.91504 4.77637 6.03809C4.7207 6.16113 4.69287 6.31201 4.69287 6.49072C4.69287 6.51709 4.69141 6.54785 4.68848 6.58301C4.68848 6.61816 4.68701 6.65625 4.68408 6.69727V7.23779Z" fill="white"/></svg>')`;
 }
 
-function inlineLogpointArrow(color: string, outline: string, opacity: string = '1'): string {
+function inlineLogpointArrow(color: string, outline: string, opacity = '1'): string {
   return `url('data:image/svg+xml,<svg width="11" height="12" viewBox="0 0 11 12" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M0.5 0.5H5.80139C6.29382 0.5 6.7549 0.741701 7.03503 1.14669L10.392 6L7.03503 10.8533C6.7549 11.2583 6.29382 11.5 5.80139 11.5H0.5V0.5Z" fill="${
       encodeURIComponent(color)}" stroke="${encodeURIComponent(outline)}" fill-opacity="${
       encodeURIComponent(

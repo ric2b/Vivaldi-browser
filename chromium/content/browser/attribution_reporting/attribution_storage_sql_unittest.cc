@@ -14,6 +14,7 @@
 #include <set>
 #include <string>
 #include <utility>
+#include <variant>
 #include <vector>
 
 #include "base/check.h"
@@ -69,7 +70,6 @@
 #include "sql/test/scoped_error_expecter.h"
 #include "sql/test/test_helpers.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/abseil-cpp/absl/types/variant.h"
 #include "third_party/blink/public/common/storage_key/storage_key.h"
 #include "url/gurl.h"
 #include "url/origin.h"
@@ -874,7 +874,7 @@ TEST_F(AttributionStorageSqlTest, CantOpenDb_NoCrash) {
           std::make_unique<ConfigurableStorageDelegate>());
 
   StoreSourceResult result = storage->StoreSource(SourceBuilder().Build());
-  ASSERT_TRUE(absl::holds_alternative<StoreSourceResult::InternalError>(
+  ASSERT_TRUE(std::holds_alternative<StoreSourceResult::InternalError>(
       result.result()));
   EXPECT_EQ(AttributionTrigger::EventLevelResult::kInternalError,
             storage->MaybeCreateAndStoreReport(DefaultTrigger())
@@ -1606,7 +1606,7 @@ TEST_F(AttributionStorageSqlTest,
        InvalidEventLevelMetadata_FailsDeserialization) {
   const struct {
     const char* desc;
-    absl::variant<AttributionEventLevelMetadataRecord, std::string> record;
+    std::variant<AttributionEventLevelMetadataRecord, std::string> record;
     bool valid;
   } kTestCases[] = {
       {
@@ -1652,13 +1652,13 @@ TEST_F(AttributionStorageSqlTest,
     CloseDatabase();
 
     std::string metadata =
-        absl::visit(base::Overloaded{
-                        [](const AttributionEventLevelMetadataRecord& record) {
-                          return SerializeReportMetadata(record);
-                        },
-                        [](const std::string& str) { return str; },
-                    },
-                    test_case.record);
+        std::visit(base::Overloaded{
+                       [](const AttributionEventLevelMetadataRecord& record) {
+                         return SerializeReportMetadata(record);
+                       },
+                       [](const std::string& str) { return str; },
+                   },
+                   test_case.record);
 
     StoreAttributionReport(AttributionReportRecord{
         .report_id = 1,
@@ -1696,7 +1696,7 @@ TEST_F(AttributionStorageSqlTest,
        InvalidAggregatableMetadata_FailsDeserialization) {
   const struct {
     const char* desc;
-    absl::variant<AttributionAggregatableMetadataRecord, std::string> record;
+    std::variant<AttributionAggregatableMetadataRecord, std::string> record;
     bool valid;
   } kTestCases[] = {
       {
@@ -1901,14 +1901,14 @@ TEST_F(AttributionStorageSqlTest,
     ASSERT_THAT(sources, SizeIs(1));
     CloseDatabase();
 
-    std::string metadata = absl::visit(
-        base::Overloaded{
-            [](const AttributionAggregatableMetadataRecord& record) {
-              return SerializeReportMetadata(record);
-            },
-            [](const std::string& str) { return str; },
-        },
-        test_case.record);
+    std::string metadata =
+        std::visit(base::Overloaded{
+                       [](const AttributionAggregatableMetadataRecord& record) {
+                         return SerializeReportMetadata(record);
+                       },
+                       [](const std::string& str) { return str; },
+                   },
+                   test_case.record);
 
     StoreAttributionReport(AttributionReportRecord{
         .report_id = 1,
@@ -1946,8 +1946,7 @@ TEST_F(AttributionStorageSqlTest,
        InvalidNullAggregatableMetadata_FailsDeserialization) {
   const struct {
     const char* desc;
-    absl::variant<AttributionNullAggregatableMetadataRecord, std::string>
-        record;
+    std::variant<AttributionNullAggregatableMetadataRecord, std::string> record;
     bool valid;
   } kTestCases[] = {
       {
@@ -2008,7 +2007,7 @@ TEST_F(AttributionStorageSqlTest,
     ASSERT_THAT(sources, SizeIs(1));
     CloseDatabase();
 
-    std::string metadata = absl::visit(
+    std::string metadata = std::visit(
         base::Overloaded{
             [](const AttributionNullAggregatableMetadataRecord& record) {
               return SerializeReportMetadata(record);
@@ -2743,6 +2742,32 @@ TEST_F(AttributionStorageSqlTest, MaxImpressionsPerOrigin_LimitsStorage) {
 
   ASSERT_THAT(storage()->GetActiveSources(),
               ElementsAre(SourceEventIdIs(5u), SourceEventIdIs(6u)));
+}
+
+TEST_F(AttributionStorageSqlTest, ClearData_OsRegistrationsDataDeleted) {
+  OpenDatabase();
+
+  url::Origin origin_1 = url::Origin::Create(GURL("https://a.test"));
+  url::Origin origin_2 = url::Origin::Create(GURL("https://b.test"));
+  url::Origin origin_3 = url::Origin::Create(GURL("https://c.test"));
+
+  storage()->StoreOsRegistrations({origin_1, origin_2, origin_3});
+
+  storage()->ClearData(
+      /*delete_begin=*/base::Time::Min(), /*delete_end=*/base::Time::Max(),
+      base::BindRepeating(std::equal_to<blink::StorageKey>(),
+                          blink::StorageKey::CreateFirstParty(origin_1)),
+      /*delete_rate_limit_data=*/false);
+
+  EXPECT_THAT(storage()->GetAllDataKeys(),
+              UnorderedElementsAre(AttributionDataModel::DataKey(origin_2),
+                                   AttributionDataModel::DataKey(origin_3)));
+
+  storage()->ClearData(/*delete_begin=*/base::Time::Min(),
+                       /*delete_end=*/base::Time::Max(),
+                       /*filter=*/base::NullCallback(),
+                       /*delete_rate_limit_data=*/false);
+  EXPECT_THAT(storage()->GetAllDataKeys(), IsEmpty());
 }
 
 }  // namespace

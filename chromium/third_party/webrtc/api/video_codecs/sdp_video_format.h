@@ -74,12 +74,18 @@ struct RTC_EXPORT SdpVideoFormat {
   // Well-known video codecs and their format parameters.
   static const SdpVideoFormat VP8();
   static const SdpVideoFormat H264();
+  static const SdpVideoFormat H265();
   static const SdpVideoFormat VP9Profile0();
   static const SdpVideoFormat VP9Profile1();
   static const SdpVideoFormat VP9Profile2();
   static const SdpVideoFormat VP9Profile3();
   static const SdpVideoFormat AV1Profile0();
   static const SdpVideoFormat AV1Profile1();
+
+  template <typename Sink>
+  friend void AbslStringify(Sink& sink, const SdpVideoFormat& format) {
+    sink.Append(format.ToString());
+  }
 };
 
 // For not so good reasons sometimes additional parameters are added to an

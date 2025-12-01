@@ -35,7 +35,6 @@ class V8PermissionState;
 
 class CORE_EXPORT HTMLPermissionElement final
     : public HTMLElement,
-      public mojom::blink::PermissionObserver,
       public mojom::blink::EmbeddedPermissionControlClient,
       public ScrollSnapshotClient,
       public LocalFrameView::LifecycleNotificationObserver,
@@ -53,8 +52,13 @@ class CORE_EXPORT HTMLPermissionElement final
   V8PermissionState initialPermissionStatus() const;
   V8PermissionState permissionStatus() const;
 
+  // The events `kDismiss` and `kResolve` will be deprecated and replaced by
+  // `kPromptaction` and `kPromptdismiss`. We will keep both for backward
+  // compability and will remove the old events in M138.
   DEFINE_ATTRIBUTE_EVENT_LISTENER(resolve, kResolve)
   DEFINE_ATTRIBUTE_EVENT_LISTENER(dismiss, kDismiss)
+  DEFINE_ATTRIBUTE_EVENT_LISTENER(promptaction, kPromptaction)
+  DEFINE_ATTRIBUTE_EVENT_LISTENER(promptdismiss, kPromptdismiss)
   DEFINE_ATTRIBUTE_EVENT_LISTENER(validationstatuschange,
                                   kValidationstatuschange)
 
@@ -65,6 +69,8 @@ class CORE_EXPORT HTMLPermissionElement final
   // CachedPermissionStatus::Client overrides.
   void OnPermissionStatusInitialized(
       PermissionStatusMap initilized_map) override;
+  void OnPermissionStatusChange(mojom::blink::PermissionName permission_name,
+                                mojom::blink::PermissionStatus status) override;
 
   InsertionNotificationRequest InsertedInto(ContainerNode&) override;
   void RemovedFrom(ContainerNode&) override;
@@ -97,54 +103,54 @@ class CORE_EXPORT HTMLPermissionElement final
   // to blink_unittests_v2 completes.
   friend class DeferredChecker;
   friend class RegistrationWaiter;
-  friend class HTMLPemissionElementIntersectionTest;
-  friend class HTMLPemissionElementLayoutChangeTest;
+  friend class HTMLPermissionElementIntersectionTest;
+  friend class HTMLPermissionElementLayoutChangeTest;
 
-  FRIEND_TEST_ALL_PREFIXES(HTMLPemissionElementClickingEnabledTest,
+  FRIEND_TEST_ALL_PREFIXES(HTMLPermissionElementClickingEnabledTest,
                            UnclickableBeforeRegistered);
-  FRIEND_TEST_ALL_PREFIXES(HTMLPemissionElementIntersectionTest,
+  FRIEND_TEST_ALL_PREFIXES(HTMLPermissionElementIntersectionTest,
                            IntersectionChanged);
-  FRIEND_TEST_ALL_PREFIXES(HTMLPemissionElementIntersectionTest,
+  FRIEND_TEST_ALL_PREFIXES(HTMLPermissionElementIntersectionTest,
                            IntersectionChangedDisableEnableDisable);
-  FRIEND_TEST_ALL_PREFIXES(HTMLPemissionElementIntersectionTest,
+  FRIEND_TEST_ALL_PREFIXES(HTMLPermissionElementIntersectionTest,
                            ClickingDisablePseudoClass);
-  FRIEND_TEST_ALL_PREFIXES(HTMLPemissionElementIntersectionTest,
+  FRIEND_TEST_ALL_PREFIXES(HTMLPermissionElementIntersectionTest,
                            ContainerDivRotates);
-  FRIEND_TEST_ALL_PREFIXES(HTMLPemissionElementIntersectionTest,
+  FRIEND_TEST_ALL_PREFIXES(HTMLPermissionElementIntersectionTest,
                            ContainerDivOpacity);
-  FRIEND_TEST_ALL_PREFIXES(HTMLPemissionElementIntersectionTest,
+  FRIEND_TEST_ALL_PREFIXES(HTMLPermissionElementIntersectionTest,
                            ContainerDivClipPath);
-  FRIEND_TEST_ALL_PREFIXES(HTMLPemissionElementIntersectionTest,
+  FRIEND_TEST_ALL_PREFIXES(HTMLPermissionElementIntersectionTest,
                            IntersectionVisibleOverlapsRecentAttachedInterval);
-  FRIEND_TEST_ALL_PREFIXES(HTMLPemissionElementFencedFrameTest,
+  FRIEND_TEST_ALL_PREFIXES(HTMLPermissionElementFencedFrameTest,
                            NotAllowedInFencedFrame);
-  FRIEND_TEST_ALL_PREFIXES(HTMLPemissionElementSimTest,
+  FRIEND_TEST_ALL_PREFIXES(HTMLPermissionElementSimTest,
                            BlockedByMissingFrameAncestorsCSP);
-  FRIEND_TEST_ALL_PREFIXES(HTMLPemissionElementSimTest,
+  FRIEND_TEST_ALL_PREFIXES(HTMLPermissionElementSimTest,
                            EnableClickingAfterDelay);
-  FRIEND_TEST_ALL_PREFIXES(HTMLPemissionElementSimTest,
+  FRIEND_TEST_ALL_PREFIXES(HTMLPermissionElementSimTest,
                            FontSizeCanDisableElement);
-  FRIEND_TEST_ALL_PREFIXES(HTMLPemissionElementSimTest,
+  FRIEND_TEST_ALL_PREFIXES(HTMLPermissionElementSimTest,
                            MovePEPCToAnotherDocument);
-  FRIEND_TEST_ALL_PREFIXES(HTMLPemissionElementLayoutChangeTest,
+  FRIEND_TEST_ALL_PREFIXES(HTMLPermissionElementLayoutChangeTest,
                            InvalidatePEPCAfterMove);
-  FRIEND_TEST_ALL_PREFIXES(HTMLPemissionElementLayoutChangeTest,
+  FRIEND_TEST_ALL_PREFIXES(HTMLPermissionElementLayoutChangeTest,
                            InvalidatePEPCAfterResize);
-  FRIEND_TEST_ALL_PREFIXES(HTMLPemissionElementLayoutChangeTest,
+  FRIEND_TEST_ALL_PREFIXES(HTMLPermissionElementLayoutChangeTest,
                            InvalidatePEPCAfterMoveContainer);
-  FRIEND_TEST_ALL_PREFIXES(HTMLPemissionElementLayoutChangeTest,
+  FRIEND_TEST_ALL_PREFIXES(HTMLPermissionElementLayoutChangeTest,
                            InvalidatePEPCAfterTransformContainer);
-  FRIEND_TEST_ALL_PREFIXES(HTMLPemissionElementLayoutChangeTest,
+  FRIEND_TEST_ALL_PREFIXES(HTMLPermissionElementLayoutChangeTest,
                            InvalidatePEPCLayoutInAnimationFrameCallback);
-  FRIEND_TEST_ALL_PREFIXES(HTMLPemissionElementDispatchValidationEventTest,
+  FRIEND_TEST_ALL_PREFIXES(HTMLPermissionElementDispatchValidationEventTest,
                            ChangeReasonRestartTimer);
-  FRIEND_TEST_ALL_PREFIXES(HTMLPemissionElementDispatchValidationEventTest,
+  FRIEND_TEST_ALL_PREFIXES(HTMLPermissionElementDispatchValidationEventTest,
                            DisableEnableClicking);
-  FRIEND_TEST_ALL_PREFIXES(HTMLPemissionElementDispatchValidationEventTest,
+  FRIEND_TEST_ALL_PREFIXES(HTMLPermissionElementDispatchValidationEventTest,
                            DisableEnableClickingDifferentReasons);
-  FRIEND_TEST_ALL_PREFIXES(HTMLPemissionElementTestBase,
+  FRIEND_TEST_ALL_PREFIXES(HTMLPermissionElementTestBase,
                            SetPreciseLocationAttribute);
-  FRIEND_TEST_ALL_PREFIXES(HTMLPemissionElementTest, SetTypeAfterInsertedInto);
+  FRIEND_TEST_ALL_PREFIXES(HTMLPermissionElementTest, SetTypeAfterInsertedInto);
 
   enum class DisableReason {
     kUnknown,
@@ -152,11 +158,6 @@ class CORE_EXPORT HTMLPermissionElement final
     // This element is temporarily disabled for a short period
     // (`kDefaultDisableTimeout`) after being attached to the layout tree.
     kRecentlyAttachedToLayoutTree,
-
-    // This element is temporarily disabled for a short period
-    // (`kDefaultDisableTimeout`) after its intersection status changed from
-    // invisible to visible (observed by IntersectionObserver).
-    kIntersectionRecentlyFullyVisible,
 
     // This element is disabled because it is outside the bounds of the
     // viewport, or the element is clipped.
@@ -183,7 +184,7 @@ class CORE_EXPORT HTMLPermissionElement final
     kInvalidType = 0,
     kFailedOrHasNotBeenRegistered = 1,
     kRecentlyAttachedToLayoutTree = 2,
-    kIntersectionRecentlyFullyVisible = 3,
+    // kIntersectionRecentlyFullyVisible = 3,    Deprecated.
     kInvalidStyle = 4,
     kUntrustedEvent = 5,
     kIntersectionWithViewportChanged = 6,
@@ -318,13 +319,6 @@ class CORE_EXPORT HTMLPermissionElement final
   // PermissionService's API.
   void RequestPageEmbededPermissions();
 
-  void RegisterPermissionObserver(
-      const mojom::blink::PermissionDescriptorPtr& descriptor,
-      mojom::blink::PermissionStatus current_status);
-
-  // mojom::blink::PermissionObserver override.
-  void OnPermissionStatusChange(mojom::blink::PermissionStatus status) override;
-
   // mojom::blink::EmbeddedPermissionControlClient override.
   void OnEmbeddedPermissionControlRegistered(
       bool allowed,
@@ -364,12 +358,9 @@ class CORE_EXPORT HTMLPermissionElement final
   // Return true if the state has been changed.
   bool NotifyClickingDisablePseudoStateChanged();
 
-  // Verify whether the element has been registered in browser process by
-  // checking `permission_status_map_`. This map is initially empty and is
-  // populated only *after* the permission element has been registered in
-  // browser process.
-  bool IsRegisteredInBrowserProcess() const {
-    return !permission_observer_receivers_.empty();
+  // Verify whether the element has been registered in browser process.
+  bool is_registered_in_browser_process() const {
+    return is_registered_in_browser_process_;
   }
 
   scoped_refptr<base::SingleThreadTaskRunner> GetTaskRunner();
@@ -491,17 +482,6 @@ class CORE_EXPORT HTMLPermissionElement final
 
   HeapMojoRemote<mojom::blink::PermissionService> permission_service_;
 
-  // Holds all `PermissionObserver` receivers connected with remotes in browser
-  // process. Each of them corresponds to a permission observer of one
-  // descriptor in `permission_descriptors_`.
-  // This set uses `PermissionName` as context type. Once a receiver call is
-  // triggered, we look into its name to determine which permission is changed.
-  HeapMojoReceiverSet<mojom::blink::PermissionObserver,
-                      HTMLPermissionElement,
-                      HeapMojoWrapperMode::kWithContextObserver,
-                      mojom::blink::PermissionName>
-      permission_observer_receivers_;
-
   // Holds a receiver connected with a remote `EmbeddedPermissionControlClient`
   // in browser process, allowing this element to receive PEPC events from
   // browser process.
@@ -522,6 +502,8 @@ class CORE_EXPORT HTMLPermissionElement final
   AtomicString type_;
 
   bool is_precise_location_ = false;
+
+  bool is_registered_in_browser_process_ = false;
 
   // Holds reasons for which clicking is currently disabled (if any). Each
   // entry will have an expiration time associated with it, which can be

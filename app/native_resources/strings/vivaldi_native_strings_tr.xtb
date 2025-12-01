@@ -36,6 +36,7 @@
 <translation id="2441056087170876076">Canavar 2</translation>
 <translation id="2444387452209867610">Not Ekle</translation>
 <translation id="2486841023299517366">Hayvan 4</translation>
+<translation id="2501278716633472235">Geri dön</translation>
 <translation id="2612127540243995147">Kurulmaya hazır. Vivaldi kapatılacak ve yeniden başlatılacak.</translation>
 <translation id="2613387515621326337">Güncelleme web sayfasını göster</translation>
 <translation id="2645477450146475243">Ne yazık ki, Opera ayarlarınız bu tarayıcı çalışırken kullanılamaz. Bu ayarları Vivaldi'ye aktarmak için çalışmanızı kaydedin ve tüm Opera pencerelerini kapatın. Ardından Devam'a tıklayın.</translation>
@@ -60,6 +61,7 @@
 <translation id="3259769196742189631">Geçerliliğini Doğrula</translation>
 <translation id="3291915639428159043">Otomatik oynatma engellendi</translation>
 <translation id="3302905971452834934">Canavar 1</translation>
+<translation id="3308738399950580893">reklamlar</translation>
 <translation id="3334610655141903168">(başlık yok)</translation>
 <translation id="3372505110412186107">Vivaldi <ph name="VERSION" /> şu anki en son sürüm.</translation>
 <translation id="3383198080133834965">Güncelsiniz!</translation>
@@ -82,6 +84,7 @@
 <translation id="3795800845758778870">Brave ayarları tarayıcı çalışırken aktarılamıyor. Bu ayarları Vivaldi'ye aktarmak için çalışmalarınızı kaydedın ve tüm Brave pencerelerini kapatın. Sonra devam ete tıklayın.</translation>
 <translation id="3822431842304177896">Yeni Ayırıcı</translation>
 <translation id="3832132597516774400">Manzara 5</translation>
+<translation id="3894751534882749287">Eğer sayfayı yine de görmek istiyorsanız, İzleme-engelleme açılır peneresınden ya da İzin ver düğmesine tıklayarak sayfanın izleme koruma düzeyini değiştirebilirsiniz</translation>
 <translation id="3914946330804881301">Opera'dan İçe Aktarıldı</translation>
 <translation id="3921292902397893431">Canavar 8</translation>
 <translation id="3943857333388298514">Yapıştır</translation>
@@ -106,6 +109,7 @@
 <translation id="4582480609585453144">Bağlantıyı Arka Plan Sekmesinde Aç</translation>
 <translation id="4636708767492582204">E-posta ile Gönder</translation>
 <translation id="4677434526832593569">Hayvan 8</translation>
+<translation id="4736016046474602958">İzleyici Engelleyici</translation>
 <translation id="474217410105706308">Sekmeyi Sustur</translation>
 <translation id="4861715717329665002">Otomatik Kaydedilen Oturumlar</translation>
 <translation id="4881695831933465202">Aç</translation>
@@ -150,6 +154,7 @@
 <translation id="7086554968911045110">Manzara 7</translation>
 <translation id="7099506190679014195">Güvenli anahtar deposu yükseltmesi</translation>
 <translation id="7111492742514999492">Manzara 9</translation>
+<translation id="7113310725918019676"><ph name="DOMAIN" /> adresinden <ph name="BLOCKED_TYPE" /> içeriğine izin ver</translation>
 <translation id="7208252576848052204">Ne yazık ki, Arc ayarlarınız bu tarayıcı çalışırken kullanılamaz. Bu ayarları Vivaldi'ye aktarmak için çalışmanızı kaydedin ve tüm Arc pencerelerini kapatın. Ardından Devam'a tıklayın.</translation>
 <translation id="7321500017121629018">Dün aktifti</translation>
 <translation id="7337881442233988129">Chromium</translation>
@@ -165,9 +170,9 @@
 <translation id="8027581147000338959">Yeni Pencerede Aç</translation>
 <translation id="8044382196220116469">Sitelerin otomatik olarak video oynatmasına izin verme</translation>
 <translation id="8099620695029051217">Sayfa Adresini Kopyala</translation>
+<translation id="8119307142152921512">izleyiciler ve reklamlar</translation>
 <translation id="8197810018650377191">Yer İmi Sayfası</translation>
 <translation id="8261506727792406068">Sil</translation>
-<translation id="8263047843452521549">Arka plan hizmet çalışanını inceleyin</translation>
 <translation id="8331671104904436324">Yeni Arka Plan Sekmesinde Aç</translation>
 <translation id="8373293945112511707">Manzara 1</translation>
 <translation id="8388552048012645975">Güncelleme indiriliyor...</translation>
@@ -181,7 +186,6 @@
 <translation id="8651348004684669199">Etkin Sekmeyi Ekle</translation>
 <translation id="8669345741879513971">Canavar 10</translation>
 <translation id="867544375504146191">Yandex</translation>
-<translation id="8689295374912158752">Portal-belgesini inceleyin</translation>
 <translation id="875142999698251063">Şimdi Çık</translation>
 <translation id="8768970203213061953">Manzara 14</translation>
 <translation id="8773635261052182196">Artık bu bildirimleri görmeyeceksiniz. Bunları vivaldi ayarlarından tekrar etkinleştirebilirsiniz.</translation>
@@ -189,6 +193,7 @@
 <translation id="8813277370772331957">Sonra hatırlat</translation>
 <translation id="8894900864683381599">Bağlantıyı Panele Ekle</translation>
 <translation id="8912720443398351457">Gerçekten Vivaldi'den Çıkmak İstiyor Musunuz?</translation>
+<translation id="8940028675168378100"><ph name="BLOCKER_NAME" /> tarafından engellendi</translation>
 <translation id="8947109330183116400">HTML yer imi dosyasını seç</translation>
 <translation id="9017566390391482291">İçe aktarmak için Vivaldi profili klasörünü seç</translation>
 <translation id="9048058608784130603"><ph name="VERSION" /> sürümüne güncelleme bekleniyor</translation>
@@ -199,6 +204,7 @@
 <translation id="912022491595344261">Resmi <ph name="USER" /> olarak aç</translation>
 <translation id="9157539936604258187">Bağlantıyı Aç</translation>
 <translation id="9169060351863393881">Opera 12.x</translation>
+<translation id="9180553614777056266">Reklam Engelleyici</translation>
 <translation id="939305735877869636">Brave</translation>
 <translation id="970294721402795299">Manzara 16</translation>
 </translationbundle>

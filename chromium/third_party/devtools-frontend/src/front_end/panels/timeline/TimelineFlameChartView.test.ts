@@ -6,6 +6,7 @@ import type * as Common from '../../core/common/common.js';
 import * as Platform from '../../core/platform/platform.js';
 import * as Bindings from '../../models/bindings/bindings.js';
 import * as Trace from '../../models/trace/trace.js';
+import {doubleRaf} from '../../testing/DOMHelpers.js';
 import {describeWithEnvironment} from '../../testing/EnvironmentHelpers.js';
 import {setupIgnoreListManagerEnvironment} from '../../testing/TraceHelpers.js';
 import {TraceLoader} from '../../testing/TraceLoader.js';
@@ -173,7 +174,7 @@ describeWithEnvironment('TimelineFlameChartView', function() {
     // Find the first node that has children to collapse and is visible in the timeline
     const nodeOfGroup = flameChartView.getMainDataProvider().groupTreeEvents(mainTrack);
     const firstNodeWithChildren = nodeOfGroup?.find(node => {
-      const childrenAmount = parsedTrace.Renderer.entryToNode.get(node as Trace.Types.Events.Event)?.children.length;
+      const childrenAmount = parsedTrace.Renderer.entryToNode.get(node)?.children.length;
       if (!childrenAmount) {
         return false;
       }
@@ -214,7 +215,7 @@ describeWithEnvironment('TimelineFlameChartView', function() {
        // Find the first node that has children to collapse and is visible in the timeline
        const groupTreeEvents = flameChartView.getMainDataProvider().groupTreeEvents(mainTrack);
        const firstEventWithChildren = groupTreeEvents?.find(node => {
-         const childrenAmount = parsedTrace.Renderer.entryToNode.get(node as Trace.Types.Events.Event)?.children.length;
+         const childrenAmount = parsedTrace.Renderer.entryToNode.get(node)?.children.length;
          if (!childrenAmount) {
            return false;
          }
@@ -259,7 +260,7 @@ describeWithEnvironment('TimelineFlameChartView', function() {
        // Find the first node that has children to collapse and is visible in the timeline
        const nodeOfGroup = flameChartView.getMainDataProvider().groupTreeEvents(mainTrack);
        const firstNodeWithChildren = nodeOfGroup?.find(node => {
-         const childrenAmount = parsedTrace.Renderer.entryToNode.get(node as Trace.Types.Events.Event)?.children.length;
+         const childrenAmount = parsedTrace.Renderer.entryToNode.get(node)?.children.length;
          if (!childrenAmount) {
            return false;
          }
@@ -637,8 +638,7 @@ describeWithEnvironment('TimelineFlameChartView', function() {
 
            const mainThread = getMainThread(parsedTrace.Renderer);
            const entry = findFirstEntry(mainThread.entries, entry => {
-             const childrenAmount =
-                 parsedTrace.Renderer.entryToNode.get(entry as Trace.Types.Events.Event)?.children.length;
+             const childrenAmount = parsedTrace.Renderer.entryToNode.get(entry)?.children.length;
              if (!childrenAmount) {
                return false;
              }
@@ -790,13 +790,14 @@ describeWithEnvironment('TimelineFlameChartView', function() {
       // Find some task in the main thread that we can build an AI Call Tree from
       const task = parsedTrace.Renderer.allTraceEntries.find(event => {
         return Trace.Types.Events.isRunTask(event) && event.dur > 5_000 &&
-            Utils.AICallTree.AICallTree.from(event, parsedTrace) !== null;
+            Utils.AICallTree.AICallTree.fromEvent(event, parsedTrace) !== null;
       });
 
       assert.isOk(task);
       UI.Context.Context.instance().setFlavor(Utils.AICallTree.AICallTree, null);
       const selection = Timeline.TimelineSelection.selectionFromEvent(task);
       flameChartView.setSelectionAndReveal(selection);
+      await doubleRaf();  // the updating of the AI Call Tree is done in a rAF to not block.
       const flavor = UI.Context.Context.instance().flavor(Utils.AICallTree.AICallTree);
       assert.instanceOf(flavor, Utils.AICallTree.AICallTree);
     });

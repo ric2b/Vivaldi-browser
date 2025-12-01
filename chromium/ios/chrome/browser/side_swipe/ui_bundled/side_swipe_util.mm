@@ -6,7 +6,10 @@
 
 #import <UIKit/UIKit.h>
 
+#import "ios/chrome/browser/lens_overlay/coordinator/lens_overlay_availability.h"
+#import "ios/chrome/browser/lens_overlay/model/lens_overlay_tab_helper.h"
 #import "ios/chrome/browser/ntp/model/new_tab_page_util.h"
+#import "ios/chrome/browser/shared/model/profile/profile_ios.h"
 #import "ios/chrome/browser/shared/model/url/chrome_url_constants.h"
 #import "ios/chrome/browser/shared/model/url/url_util.h"
 #import "ios/chrome/browser/shared/ui/util/rtl_geometry.h"
@@ -44,4 +47,43 @@ BOOL UseNativeSwipe(web::NavigationItem* item) {
   }
 
   return NO;
+}
+
+BOOL SwipingBackLeadsToLensOverlay(web::WebState* activeWebState) {
+  if (!activeWebState) {
+    return NO;
+  }
+  ProfileIOS* profile =
+      ProfileIOS::FromBrowserState(activeWebState->GetBrowserState());
+  if (!IsLensOverlaySameTabNavigationEnabled(profile->GetPrefs())) {
+    return NO;
+  }
+
+  LensOverlayTabHelper* lensOverlayTabHelper =
+      LensOverlayTabHelper::FromWebState(activeWebState);
+
+  return lensOverlayTabHelper &&
+         lensOverlayTabHelper->IsLensOverlayInvokedOnMostRecentBackItem();
+}
+
+BOOL IsSwipingToAnOverlay(UISwipeGestureRecognizerDirection direction,
+                          web::WebState* activeWebState) {
+  if (IsSwipingBack(direction) &&
+      SwipingBackLeadsToLensOverlay(activeWebState)) {
+    return YES;
+  }
+
+  return NO;
+}
+
+UIImage* SwipeNavigationSnapshot(UISwipeGestureRecognizerDirection direction,
+                                 web::WebState* activeWebState) {
+  if (IsSwipingBack(direction) &&
+      SwipingBackLeadsToLensOverlay(activeWebState)) {
+    LensOverlayTabHelper* lensOverlayTabHelper =
+        LensOverlayTabHelper::FromWebState(activeWebState);
+    return lensOverlayTabHelper->GetViewportSnapshot();
+  }
+
+  return nil;
 }

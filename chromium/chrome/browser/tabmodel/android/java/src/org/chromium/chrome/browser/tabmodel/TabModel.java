@@ -18,7 +18,7 @@ import org.chromium.chrome.browser.tab.TabSelectionType;
  * TabModel organizes all the open tabs and allows you to create new ones. Regular and Incognito
  * tabs are kept in different TabModels.
  */
-public interface TabModel extends TabList {
+public interface TabModel extends SupportsTabModelObserver, TabList {
     /** Returns the profile associated with the current model. */
     Profile getProfile();
 
@@ -67,12 +67,6 @@ public interface TabModel extends TabList {
      * @param tabId The id of the {@link Tab} to undo.
      */
     void cancelTabClosure(int tabId);
-
-    /**
-     * Notifies observers that all tabs closure action has been completed and tabs have been
-     * restored.
-     */
-    void notifyAllTabsClosureUndone();
 
     /**
      * Restores the most recent closure, bringing the tab(s) back into their original tab model or
@@ -137,31 +131,4 @@ public interface TabModel extends TabList {
      * @param creationState How the tab was created.
      */
     void addTab(Tab tab, int index, @TabLaunchType int type, @TabCreationState int creationState);
-
-    /**
-     * Subscribes a {@link TabModelObserver} to be notified about changes to this model.
-     *
-     * @param observer The observer to be subscribed.
-     */
-    void addObserver(TabModelObserver observer);
-
-    /**
-     * Unsubscribes a previously subscribed {@link TabModelObserver}.
-     *
-     * @param observer The observer to be unsubscribed.
-     */
-    void removeObserver(TabModelObserver observer);
-
-    /**
-     * Returns the count of non-custom tabs that have a {@link
-     * Tab#getLastNavigationCommittedTimestampMillis()} within the time range [beginTimeMs,
-     * endTimeMs).
-     */
-    int getTabCountNavigatedInTimeWindow(long beginTimeMs, long endTimeMs);
-
-    /**
-     * Closes non-custom tabs that have a {@link Tab#getLastNavigationCommittedTimestampMillis()}
-     * within the time range [beginTimeMs, endTimeMs).
-     */
-    void closeTabsNavigatedInTimeWindow(long beginTimeMs, long endTimeMs);
 }

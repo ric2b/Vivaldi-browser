@@ -6,6 +6,8 @@
 #define V8_HANDLES_TRACED_HANDLES_INL_H_
 
 #include "src/handles/traced-handles.h"
+// Include the non-inl header before the rest of the headers.
+
 #include "src/heap/heap-layout-inl.h"
 #include "src/heap/heap-write-barrier-inl.h"
 #include "src/objects/slots-inl.h"
@@ -120,8 +122,8 @@ FullObjectSlot TracedHandles::Create(
   // `Publish()`.
   if (needs_young_bit_update && !block->InYoungList()) {
     young_blocks_.PushFront(block);
-    block->SetInYoungList(true);
     DCHECK(block->InYoungList());
+    num_young_blocks_++;
   }
   if (needs_black_allocation) {
     WriteBarrier::MarkingFromTracedHandle(object);

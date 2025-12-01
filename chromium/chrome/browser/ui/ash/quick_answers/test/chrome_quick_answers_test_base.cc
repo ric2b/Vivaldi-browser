@@ -67,9 +67,7 @@ user_manager::User* ChromeQuickAnswersTestBase::StartUserSession() {
   // TODO(crbug.com/278643115): Use SessionManager.
   user_manager_->UserLoggedIn(
       user->GetAccountId(),
-      user_manager::FakeUserManager::GetFakeUsernameHash(user->GetAccountId()),
-      /*browser_restart=*/false,
-      /*is_child=*/false);
+      user_manager::TestHelper::GetFakeUsernameHash(user->GetAccountId()));
   return user;
 }
 
@@ -92,25 +90,18 @@ void ChromeQuickAnswersTestBase::SetUp() {
   profile_builder.SetProfileName(user->GetAccountId().GetUserEmail());
   profile_ = profile_builder.Build();
 
-  // To inject PrefService created outside of AshTestBase, we must not call
-  // SimulateUserLogin, because it forces to instantiate PrefService inside
-  // AshTestBase or requires the ownership of the PrefService instance.
-  // Instead, directly notify TestSessionController to inject PrefService.
   // TODO(crbug.com/383442863): the strategy of preference handling needs to be
   // redesigned.
-  auto* test_session_controller_client =
-      ash_test_helper()->test_session_controller_client();
-  test_session_controller_client->AddUserSession(
-      user->GetAccountId(), user->GetDisplayEmail(), user->GetType(),
-      /*provide_or_pref_service=*/false,
-      /*is_new_profile=*/false, base::UTF16ToUTF8(user->GetGivenName()),
-      user->is_managed().value_or(false));
+  auto* test_session_controller_client = GetSessionControllerClient();
   test_session_controller_client->SetUnownedUserPrefService(
       user->GetAccountId(), profile_->GetPrefs());
-  test_session_controller_client->SwitchActiveUser(user->GetAccountId());
-  test_session_controller_client->SetSessionState(
-      session_manager::SessionState::ACTIVE);
-
+  SimulateUserLogin({.display_email = user->GetDisplayEmail(),
+                     .user_type = user->GetType(),
+                     .given_name = base::UTF16ToUTF8(user->GetGivenName())},
+                    user->GetAccountId());
+  CHECK(
+      profile_->GetPrefs() ==
+      test_session_controller_client->GetUserPrefService(user->GetAccountId()));
   SetUpInitialPrefValues();
   quick_answers_controller_ =
       CreateQuickAnswersControllerImpl(read_write_cards_ui_controller_);

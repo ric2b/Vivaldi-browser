@@ -328,7 +328,8 @@ class MediaRecorderHandlerFixture : public ScopedMockOverlayScrollbars {
           base::HeapArray<uint8_t>::CopiedFrom(mapped_h264_file.bytes());
     }
     media::Muxer::VideoParameters video_params(
-        gfx::Size(), 1, media::VideoCodec::kH264, gfx::ColorSpace());
+        gfx::Size(), 1, media::VideoCodec::kH264, gfx::ColorSpace(),
+        media::kNoTransformation);
     auto buffer = media::DecoderBuffer::CopyFrom(h264_video_stream_);
     std::string alpha_data = "alpha";
     buffer->WritableSideData().alpha_data =
@@ -627,7 +628,7 @@ TEST_P(MediaRecorderHandlerTest, EncodeVideoFrames) {
   EXPECT_TRUE(media_recorder_handler_->Initialize(
       recorder, registry_.test_stream(), mime_type, codecs,
       AudioTrackRecorder::BitrateMode::kVariable));
-  EXPECT_TRUE(media_recorder_handler_->Start(0, mime_type, 0, 0));
+  EXPECT_TRUE(media_recorder_handler_->Start(0, mime_type, 1000000, 1000000));
 
   InSequence s;
   const scoped_refptr<media::VideoFrame> video_frame =
@@ -671,7 +672,7 @@ TEST_P(MediaRecorderHandlerTest, EncodeVideoFrames) {
     }
     Mock::VerifyAndClearExpectations(recorder);
     {
-      const size_t kEncodedSizeThreshold = 12;
+      const size_t kEncodedSizeThreshold = 10;
       base::RunLoop run_loop;
       // The second time around writeData() is called a number of times to write
       // the WebM frame header, and then is pinged with the encoded data.
@@ -936,7 +937,8 @@ TEST_P(MediaRecorderHandlerTest, PauseRecorderForVideo) {
 #if BUILDFLAG(USE_PROPRIETARY_CODECS)
     EXPECT_CALL(*recorder, WriteData).Times(AtLeast(1));
     media::Muxer::VideoParameters params(
-        gfx::Size(), 1, media::VideoCodec::kH264, gfx::ColorSpace());
+        gfx::Size(), 1, media::VideoCodec::kH264, gfx::ColorSpace(),
+        media::kNoTransformation);
     std::vector<uint8_t> codec_description;
     PopulateAVCDecoderConfiguration(codec_description);
     OnEncodedH264VideoForTesting(base::TimeTicks::Now(),
@@ -946,7 +948,8 @@ TEST_P(MediaRecorderHandlerTest, PauseRecorderForVideo) {
   } else {
     EXPECT_CALL(*recorder, WriteData).Times(AtLeast(1));
     media::Muxer::VideoParameters params(
-        gfx::Size(), 1, media::VideoCodec::kVP9, gfx::ColorSpace());
+        gfx::Size(), 1, media::VideoCodec::kVP9, gfx::ColorSpace(),
+        media::kNoTransformation);
     if (IsAvcCodecSupported(codecs)) {
       OnEncodedH264VideoForTesting(base::TimeTicks::Now());
     } else {
@@ -997,7 +1000,8 @@ TEST_P(MediaRecorderHandlerTest, StartStopStartRecorderForVideo) {
 
   EXPECT_CALL(*recorder, WriteData).Times(AtLeast(1));
   media::Muxer::VideoParameters params(gfx::Size(), 1, media::VideoCodec::kVP9,
-                                       gfx::ColorSpace());
+                                       gfx::ColorSpace(),
+                                       media::kNoTransformation);
   if (IsAvcCodecSupported(codecs)) {
     OnEncodedH264VideoForTesting(base::TimeTicks::Now());
   } else {
@@ -1367,7 +1371,8 @@ class MediaRecorderHandlerAudioVideoTest : public testing::Test,
 
   void FeedVideo() {
     media::Muxer::VideoParameters video_params(
-        gfx::Size(), 1, media::VideoCodec::kVP9, gfx::ColorSpace());
+        gfx::Size(), 1, media::VideoCodec::kVP9, gfx::ColorSpace(),
+        media::kNoTransformation);
     auto buffer = media::DecoderBuffer::CopyFrom(base::as_byte_span("video"));
     std::string alpha_data = "alpha";
     buffer->WritableSideData().alpha_data =

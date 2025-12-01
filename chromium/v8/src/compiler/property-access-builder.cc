@@ -22,7 +22,7 @@ namespace v8 {
 namespace internal {
 namespace compiler {
 
-Graph* PropertyAccessBuilder::graph() const { return jsgraph()->graph(); }
+TFGraph* PropertyAccessBuilder::graph() const { return jsgraph()->graph(); }
 
 Isolate* PropertyAccessBuilder::isolate() const { return jsgraph()->isolate(); }
 
@@ -48,6 +48,17 @@ bool HasOnlyStringWrapperMaps(JSHeapBroker* broker,
     auto elements_kind = map.elements_kind();
     if (elements_kind != FAST_STRING_WRAPPER_ELEMENTS &&
         elements_kind != SLOW_STRING_WRAPPER_ELEMENTS) {
+      return false;
+    }
+  }
+  return true;
+}
+
+bool HasOnlyNonResizableTypedArrayMaps(JSHeapBroker* broker,
+                                       ZoneVector<MapRef> const& maps) {
+  for (MapRef map : maps) {
+    if (!map.IsJSTypedArrayMap()) return false;
+    if (IsRabGsabTypedArrayElementsKind(map.elements_kind())) {
       return false;
     }
   }

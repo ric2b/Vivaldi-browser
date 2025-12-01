@@ -2,6 +2,7 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import("//build/config/gclient_args.gni")
 import("//chrome/common/features.gni")
 import("//mojo/public/tools/bindings/mojom.gni")
 
@@ -9,101 +10,135 @@ assert(enable_glic)
 
 source_set("glic") {
   sources = [
-    "auth_controller.h",
-    "border_view.h",
-    "glic_cookie_synchronizer.h",
+    "browser_ui/glic_border_view.h",
+    "browser_ui/glic_button_controller.h",
+    "browser_ui/glic_button_controller_delegate.h",
+    "browser_ui/glic_iph_controller.h",
+    "browser_ui/glic_tab_indicator_helper.h",
+    "browser_ui/glic_vector_icon_manager.h",
+    "browser_ui/scoped_glic_button_indicator.h",
+    "fre/glic_fre_ui.h",
     "glic_enabling.h",
-    "glic_focused_tab_manager.h",
-    "glic_iph_controller.h",
     "glic_keyed_service.h",
     "glic_keyed_service_factory.h",
-    "glic_page_context_fetcher.h",
-    "glic_page_handler.h",
     "glic_pref_names.h",
-    "glic_profile_configuration.h",
     "glic_profile_manager.h",
     "glic_settings_util.h",
-    "glic_tab_data.h",
-    "glic_tab_indicator_helper.h",
-    "glic_ui.h",
-    "glic_vector_icon_manager.h",
-    "glic_view.h",
-    "glic_web_client_access.h",
-    "glic_window_controller.h",
-    "glic_window_resize_animation.h",
-    "guest_util.h",
-    "scoped_glic_button_indicator.h",
+    "host/auth_controller.h",
+    "host/context/glic_focused_tab_manager.h",
+    "host/context/glic_page_context_fetcher.h",
+    "host/context/glic_tab_data.h",
+    "host/glic_actor_controller.h",
+    "host/glic_annotation_manager.cc",
+    "host/glic_annotation_manager.h",
+    "host/glic_cookie_synchronizer.h",
+    "host/glic_page_handler.h",
+    "host/glic_ui.h",
+    "host/glic_web_client_access.h",
+    "host/guest_util.h",
+    "widget/glic_view.h",
+    "widget/glic_window_controller.h",
   ]
   public_deps = [
+    ":enum",
     ":mojo_bindings",
     "//base",
     "//chrome/browser:shell_integration",
     "//chrome/browser/content_extraction:content_extraction",
     "//chrome/browser/glic/resources:browser_resources",
+    "//chrome/browser/permissions/system:system",
     "//chrome/browser/profiles:profile",
     "//chrome/browser/ui:browser_list",
     "//chrome/browser/ui/browser_window:browser_window",
     "//chrome/browser/ui/tabs:tab_strip_model_observer",
+    "//components/favicon/core:core",
+    "//components/metrics:metrics",
     "//components/optimization_guide/content/browser:browser",
     "//components/prefs",
     "//components/signin/public/identity_manager:identity_manager",
+    "//components/variations:variations",
     "//content/public/browser",
     "//pdf/mojom:mojom",
     "//ui/views:views",
     "//ui/views/controls/webview",
     "//ui/webui",
   ]
-  deps = [ "//components/user_education/common" ]
+  deps = [
+    "//chrome/common",
+    "//components/user_education/common",
+  ]
+}
+
+source_set("enum") {
+  sources = [ "glic_enums.h" ]
 }
 
 source_set("impl") {
   sources = [
-    "auth_controller.cc",
-    "border_view.cc",
-    "fre_util.cc",
-    "fre_util.h",
-    "glic_cookie_synchronizer.cc",
+    "browser_ui/glic_border_view.cc",
+    "browser_ui/glic_button_controller.cc",
+    "browser_ui/glic_iph_controller.cc",
+    "browser_ui/glic_tab_indicator_helper.cc",
+    "browser_ui/glic_vector_icon_manager.cc",
+    "browser_ui/scoped_glic_button_indicator.cc",
+    "browser_ui/theme_util.cc",
+    "browser_ui/theme_util.h",
+    "fre/fre_util.cc",
+    "fre/fre_util.h",
+    "fre/glic_fre_controller.cc",
+    "fre/glic_fre_controller.h",
+    "fre/glic_fre_dialog_view.cc",
+    "fre/glic_fre_dialog_view.h",
+    "fre/glic_fre_page_handler.cc",
+    "fre/glic_fre_page_handler.h",
+    "fre/glic_fre_ui.cc",
     "glic_enabling.cc",
-    "glic_focused_tab_manager.cc",
-    "glic_fre_controller.cc",
-    "glic_fre_controller.h",
-    "glic_fre_dialog_view.cc",
-    "glic_fre_dialog_view.h",
-    "glic_fre_page_handler.cc",
-    "glic_fre_page_handler.h",
-    "glic_iph_controller.cc",
+    "glic_hotkey.cc",
+    "glic_hotkey.h",
     "glic_keyed_service.cc",
     "glic_keyed_service_factory.cc",
     "glic_metrics.cc",
     "glic_metrics.h",
-    "glic_page_context_fetcher.cc",
-    "glic_page_handler.cc",
-    "glic_profile_configuration.cc",
+    "glic_pref_names.cc",
     "glic_profile_manager.cc",
-    "glic_screenshot_capturer.cc",
-    "glic_screenshot_capturer.h",
     "glic_settings_util.cc",
-    "glic_tab_data.cc",
-    "glic_tab_indicator_helper.cc",
-    "glic_ui.cc",
-    "glic_vector_icon_manager.cc",
-    "glic_view.cc",
-    "glic_window_controller.cc",
-    "glic_window_resize_animation.cc",
-    "guest_util.cc",
-    "scoped_glic_button_indicator.cc",
-    "webui_contents_container.cc",
-    "webui_contents_container.h",
+    "host/auth_controller.cc",
+    "host/context/glic_focused_tab_manager.cc",
+    "host/context/glic_page_context_fetcher.cc",
+    "host/context/glic_screenshot_capturer.cc",
+    "host/context/glic_screenshot_capturer.h",
+    "host/context/glic_tab_data.cc",
+    "host/glic_actor_controller.cc",
+    "host/glic_cookie_synchronizer.cc",
+    "host/glic_page_handler.cc",
+    "host/glic_synthetic_trial_manager.cc",
+    "host/glic_synthetic_trial_manager.h",
+    "host/glic_ui.cc",
+    "host/guest_util.cc",
+    "host/webui_contents_container.cc",
+    "host/webui_contents_container.h",
+    "widget/browser_conditions.cc",
+    "widget/browser_conditions.h",
+    "widget/glic_view.cc",
+    "widget/glic_widget.cc",
+    "widget/glic_widget.h",
+    "widget/glic_window_animator.cc",
+    "widget/glic_window_animator.h",
+    "widget/glic_window_controller.cc",
+    "widget/glic_window_resize_animation.cc",
+    "widget/glic_window_resize_animation.h",
   ]
   public_deps = [ "//chrome/browser:browser_public_dependencies" ]
   deps = [
     ":glic",
     "//chrome/browser:browser_process",
     "//chrome/browser:global_features",
-    "//chrome/browser/glic/launcher",
+    "//chrome/browser/actor",
+    "//chrome/browser/background/glic",
     "//chrome/browser/media/webrtc",
     "//chrome/browser/profiles:profile_util",
     "//chrome/browser/resources/glic:resources",
+    "//chrome/browser/resources/glic/fre:resources",
     "//chrome/browser/themes:themes",
     "//chrome/browser/ui:browser_element_identifiers",
     "//chrome/browser/ui:browser_list",
@@ -117,6 +152,8 @@ source_set("impl") {
     "//components/feature_engagement/public:feature_constants",
     "//components/guest_view/browser",
     "//components/language/core/common",
+    "//components/metrics_services_manager:metrics_services_manager",
+    "//components/optimization_guide/proto:optimization_guide_proto",
     "//components/pdf/browser:browser",
     "//components/pdf/common:constants",
     "//components/sessions",
@@ -131,10 +168,14 @@ source_set("impl") {
 }
 
 mojom("mojo_bindings") {
-  sources = [ "glic.mojom" ]
+  sources = [
+    "fre/glic_fre.mojom",
+    "host/glic.mojom",
+  ]
   webui_module_path = "/"
 
   public_deps = [
+    "//components/content_settings/core/common:content_settings_types",
     "//mojo/public/mojom/base",
     "//mojo/public/mojom/base:protobuf_support",
     "//skia/public/mojom",
@@ -147,14 +188,20 @@ mojom("mojo_bindings") {
 source_set("test_support") {
   testonly = true
   sources = [
-    "glic_test_environment.cc",
-    "glic_test_environment.h",
-    "interactive_glic_test.cc",
-    "interactive_glic_test.h",
+    "test_support/glic_test_environment.cc",
+    "test_support/glic_test_environment.h",
+    "test_support/glic_test_util.cc",
+    "test_support/glic_test_util.h",
+    "test_support/interactive_glic_test.cc",
+    "test_support/interactive_glic_test.h",
+    "test_support/interactive_test_util.cc",
+    "test_support/interactive_test_util.h",
   ]
   deps = [
     ":glic",
     ":impl",
+    "//components/signin/public/identity_manager:test_support",
+    "//ui/events:test_support",
   ]
   public_deps = [ "//chrome/test:test_support" ]
 }
@@ -162,17 +209,22 @@ source_set("test_support") {
 source_set("unit_tests") {
   testonly = true
   sources = [
-    "glic_cookie_synchronizer_unittest.cc",
+    "browser_ui/glic_button_controller_unittest.cc",
+    "fre/glic_fre_controller_unittest.cc",
     "glic_enabling_unittest.cc",
-    "glic_fre_controller_unittest.cc",
     "glic_metrics_unittest.cc",
-    "glic_profile_manager_unittest.cc",
+    "host/context/glic_screenshot_capturer_unittest.cc",
+    "host/glic_cookie_synchronizer_unittest.cc",
   ]
   deps = [
     ":glic",
     ":impl",
+    ":test_support",
     "//base/test:test_support",
-    "//chrome/browser/glic/launcher:launcher",
+    "//chrome/browser:global_features",
+    "//chrome/browser/background:background",
+    "//chrome/browser/background/glic",
+    "//chrome/browser/status_icons:status_icons",
     "//chrome/browser/ui",
     "//chrome/common:chrome_features",
     "//chrome/test:test_support",
@@ -185,10 +237,12 @@ source_set("browser_tests") {
   testonly = true
   defines = [ "HAS_OUT_OF_PROC_TEST_RUNNER" ]
   sources = [
+    "fre/glic_fre_controller_browsertest.cc",
     "glic_browsertest.cc",
+    "glic_enabling_browsertest.cc",
     "glic_policy_browsertest.cc",
-    "glic_window_resize_animation_browsertest.cc",
-    "guest_util_browsertest.cc",
+    "glic_profile_manager_browsertest.cc",
+    "host/guest_util_browsertest.cc",
   ]
   deps = [
     ":glic",
@@ -197,8 +251,8 @@ source_set("browser_tests") {
     "//chrome/browser",
     "//chrome/browser:browser_process",
     "//chrome/browser:global_features",
+    "//chrome/browser/background/glic",
     "//chrome/browser/extensions:extensions",
-    "//chrome/browser/glic/launcher",
     "//chrome/browser/policy:test_support",
     "//chrome/browser/ui",
     "//chrome/common:constants",
@@ -206,6 +260,7 @@ source_set("browser_tests") {
     "//chrome/test:test_support_ui",
     "//content/test:test_support",
     "//extensions/browser",
+    "//ui/base:ozone_buildflags",
     "//ui/events:test_support",
   ]
 }
@@ -214,22 +269,36 @@ source_set("interactive_ui_tests") {
   testonly = true
   defines = [ "HAS_OUT_OF_PROC_TEST_RUNNER" ]
   sources = [
-    "border_view_interactive_uitest.cc",
+    "browser_ui/glic_border_view_interactive_uitest.cc",
+    "browser_ui/glic_tab_indicator_helper_interactive_uitest.cc",
+    "fre/glic_fre_controller_interactive_uitest.cc",
+    "glic_profile_manager_interactive_uitest.cc",
     "glic_settings_util_interactive_uitest.cc",
-    "glic_tab_indicator_helper_interactive_uitest.cc",
-    "glic_ui_interactive_uitest.cc",
-    "glic_window_controller_interactive_uitest.cc",
+    "host/glic_actor_controller_interactive_uitest.cc",
+    "host/glic_annotation_manager_interactive_uitest.cc",
+    "host/glic_api_uitest.cc",
+    "host/glic_permission_enforcement_interactive_uitest.cc",
+    "host/glic_ui_interactive_uitest.cc",
+    "widget/glic_window_animator_interactive_uitest.cc",
+    "widget/glic_window_controller_interactive_uitest.cc",
+    "widget/glic_window_resize_animation_interactive_uitest.cc",
   ]
   deps = [
     ":glic",
     ":impl",
     ":test_support",
     "//chrome/browser",
+    "//chrome/browser:global_features",
+    "//chrome/browser/actor:test_support",
+    "//chrome/browser/background/glic",
     "//chrome/browser/ui",
     "//chrome/common",
     "//chrome/test:test_support",
     "//content/test:test_support",
     "//ui/display:test_support",
   ]
+  if (checkout_glic_e2e_tests) {
+    deps += [ "test/internal:glic_e2e_interactive_ui_tests" ]
+  }
   data_deps = [ "//chrome/test/data/webui/glic:generate_test_files" ]
 }

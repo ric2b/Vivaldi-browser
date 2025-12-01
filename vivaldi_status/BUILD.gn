@@ -1,0 +1,27 @@
+# Copyright (c) 2025 Vivaldi Technologies AS. All rights reserved
+
+source_set("vivaldi_status") {
+  sources = [
+    "vivaldi_status.cc",
+    "vivaldi_status.h",
+  ]
+  deps = [
+    "//base",
+  ]
+  if (!is_ios) {
+    deps += [
+      "//content/public/browser",
+    ]
+  }
+}
+
+static_library("browser") {
+  sources = [
+    "vivaldi_status_factory.cc",
+    "vivaldi_status_factory.h",
+  ]
+  deps = [
+    ":vivaldi_status",
+    "//base",
+  ]
+}

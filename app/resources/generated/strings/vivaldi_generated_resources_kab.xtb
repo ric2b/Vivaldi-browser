@@ -1,4 +1,360 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="kab">
+<translation id="1017280919048282932">&amp;Rnu ɣer umawal</translation>
+<translation id="1029317248976101138">Semɣeṛ</translation>
+<translation id="1031362278801463162">Asali n teskant</translation>
+<translation id="1047431265488717055">Nɣel aḍ&amp;ris n useɣwen</translation>
+<translation id="1049795001945932310">&amp;Iɣewwaren n tutlayt</translation>
+<translation id="1054153489933238809">Ldi &amp;tugna taneẓlit deg yiccer amaynut</translation>
+<translation id="1056898198331236512">Ɣur-k</translation>
+<translation id="1084824384139382525">Nɣel tan&amp;sa n useɣwen</translation>
+<translation id="1163931534039071049">&amp;Sken aɣbalu n ukatar</translation>
+<translation id="1165039591588034296">Tuccḍa</translation>
+<translation id="1181037720776840403">Kkes</translation>
+<translation id="1187722533808055681">Tanekra deg usenɣes</translation>
+<translation id="1221825588892235038">Afran kan</translation>
+<translation id="1244303850296295656">Tuccḍa deg usiɣzef</translation>
+<translation id="125220115284141797">Amezwer</translation>
+<translation id="1297175357211070620">Taɣerwaḍt</translation>
+<translation id="1303101771013849280">Afaylu n tecraḍ n yisebtar s usmel HTML</translation>
+<translation id="1430915738399379752">Imprimer</translation>
+<translation id="1451375123200651445">Asebter web, yiwen n ufaylu</translation>
+<translation id="1465176863081977902">N&amp;ɣel tansa n umeslaw</translation>
+<translation id="1476607407192946488">&amp;Iɣewwaren n tutlayt</translation>
+<translation id="1546280085599573572">Asiɣzef-a ibeddel asebter i d-yettbinen mi tettekkaḍ ɣef tqeffalt n Usebter agejdan.</translation>
+<translation id="15662109988763471">Tasaggazt i yettwafernen ulac-itt neɣ ur tettwasebded ara akken ilaq. Senqed tasaggazt-ik•im neɣ ɛreḍ ad tferneḍ tasaggazt-nniḍen.</translation>
+<translation id="1588438908519853928">Amagnu</translation>
+<translation id="1588870296199743671">Ldi aseɣwen s...</translation>
+<translation id="159359590073980872">Tuffirt n tugniwin</translation>
+<translation id="1601560923496285236">Snes</translation>
+<translation id="1603914832182249871">(Tunigin tusligt)</translation>
+<translation id="1627276047960621195">Ineglamen n ufaylu</translation>
+<translation id="1682548588986054654">Asfaylu amaynut n tunigin tusligt</translation>
+<translation id="1708338024780164500">(Arurmid)</translation>
+<translation id="1723824996674794290">&amp;Asfaylu amaynut</translation>
+<translation id="1729533290416704613">Isenqad ula d asebter ara d-ibanen mi ara tnadiḍ deg Omnibox.</translation>
+<translation id="174123615272205933">Udmawan</translation>
+<translation id="1744108098763830590">asebter n ugilal</translation>
+<translation id="176587472219019965">&amp;Asfaylu amaynut</translation>
+<translation id="1769104665586091481">Ldi aseɣwen deg &amp;usfaylu amaynut</translation>
+<translation id="1779468444204342338">Adda</translation>
+<translation id="1815083418640426271">Senteḍ am wakken d aḍris aččuran</translation>
+<translation id="1828901632669367785">Siggez s useqdec n udiwenni n unagraw...</translation>
+<translation id="1850508293116537636">Tuzzya &amp;tusrigt</translation>
+<translation id="1886996562706621347">Sireg ismal ad ssutren ad uɣalen d imsefraken n yineggafen s wudem amezwer (ad yelhu)</translation>
+<translation id="1901303067676059328">Fren &amp;akk</translation>
+<translation id="1921584744613111023"><ph name="DPI" /> n wagazen s udebbuz</translation>
+<translation id="1936931585862840749">Mel-d amḍan n yinɣal ara yilin i usuggez (1 ar <ph name="MAX_COPIES" />).</translation>
+<translation id="2019718679933488176">&amp;Ldi ameslaw deg yiccer amaynut</translation>
+<translation id="2050339315714019657">Tafrist</translation>
+<translation id="2076269580855484719">Ffer azegrir-a</translation>
+<translation id="2087822576218954668">Siggez: <ph name="PRINT_NAME" /></translation>
+<translation id="2114326799768592691">Smiren &amp;akatar</translation>
+<translation id="2142328300403846845">Ldi aseɣwen am</translation>
+<translation id="2148892889047469596">Azen iccer</translation>
+<translation id="2150139952286079145">Nadi iserkan</translation>
+<translation id="215753907730220065">Ffeɣseg ugdil aččaran</translation>
+<translation id="2177950615300672361">Iccer n tunigin tusligt: <ph name="TAB_NAME" /></translation>
+<translation id="219008588003277019">Azegrir n umsaɣ anaṣli: <ph name="NEXE_NAME" /></translation>
+<translation id="2218515861914035131">Senteḍ am wakkken d aḍris aččuran</translation>
+<translation id="2249605167705922988">md. 1-5, 8, 11-13</translation>
+<translation id="2280486287150724112">Tama tayeffust</translation>
+<translation id="2282146716419988068">Akala n GPU</translation>
+<translation id="2301382460326681002">Akaram n uẓar n usiɣzef d arameɣtu.</translation>
+<translation id="2318143611928805047">Teɣzi n lkaɣeḍ</translation>
+<translation id="2322193970951063277">Iqerra d yiḍarren n usebter</translation>
+<translation id="2326931316514688470">&amp;Smiren asnas</translation>
+<translation id="2327492829706409234">Rmed asnas</translation>
+<translation id="2348176352564285430">Asnas: <ph name="ARC_PROCESS_NAME" /></translation>
+<translation id="2378982052244864789">Fren akaram n usiɣzef.</translation>
+<translation id="2379281330731083556">Siggez s useqdec n udiwenni n unagraw... <ph name="SHORTCUT_KEY" /></translation>
+<translation id="241082044617551207">Azegrir arussin</translation>
+<translation id="2423578206845792524">Sek&amp;les tugna am...</translation>
+<translation id="2439110203301358333">Ahil-nniḍen ɣef uselkim-inek·inem yerna asiɣzef i izemren ad ibeddel abrid n umahel n Vivaldi.</translation>
+<translation id="2445081178310039857">Akaram n uẓar n usiɣzef yettusra.</translation>
+<translation id="2498539833203011245">Semẓi</translation>
+<translation id="2509495747794740764">Ameskar n teskala ilaq ad yili d amḍan gar 10 d 200.</translation>
+<translation id="253557089021624350">Amḍan Keepalive</translation>
+<translation id="2550212893339833758">Takatut n usemmeskel</translation>
+<translation id="2553440850688409052">Ffer azegrir-a</translation>
+<translation id="26224892172169984">Ur sirig ara ismal ad sferken ineggafen</translation>
+<translation id="2662876636500006917">Chrome Web Store</translation>
+<translation id="2678063897982469759">Ales armad</translation>
+<translation id="2721037002783622288">&amp;Nadi deg <ph name="SEARCH_ENGINE" /> ɣef tugna</translation>
+<translation id="2785873697295365461">Ineglamen n ufaylu</translation>
+<translation id="2850541429955027218">Rnu asentel</translation>
+<translation id="2861941300086904918">Amsefrak n taɣellist Native Client</translation>
+<translation id="2881076733170862447">Mi ara tettekkiḍ ɣef usiɣzef</translation>
+<translation id="2889064240420137087">Ldi aseɣwen s...</translation>
+<translation id="2902127500170292085">Ulac akk taywalt gar useɣzan "<ph name="EXTENSION_NAME" />" d tsaggazt-a. Wali ma yella tasaggazt teqqen, syen ales i tikelt-nniḍen.</translation>
+<translation id="2931157624143513983">Sezg ɣer temnaḍt n usiggez</translation>
+<translation id="2932085390869194046">Sumer-d awal uffir...</translation>
+<translation id="2932883381142163287">Azen aneqqis ɣef yir aseqdec</translation>
+<translation id="2941112035454246133">Adday</translation>
+<translation id="3003623123441819449">Tuffirt CSS</translation>
+<translation id="3012631534724231212">(iframe)</translation>
+<translation id="3021678814754966447">&amp;Sken aɣbalu n ukatar</translation>
+<translation id="3036546437875325427">Rmed Flash</translation>
+<translation id="3046910703532196514">Asebter web, d ummid</translation>
+<translation id="3067198360141518313">Selkem azegrir-a</translation>
+<translation id="3080207940057008665">Ahil-nniḍen deg uselkim-ik•im yerna-d asentel i izemren ad ibeddel amek i yetteddu Vivaldi.</translation>
+<translation id="3084548735795614657">Ẓuɣer akken ad tesbeddeḍ</translation>
+<translation id="3122464029669770682">CPU</translation>
+<translation id="3124111068741548686">Amsefrak n useqdac</translation>
+<translation id="3129173833825111527">Tama tazelmaḍt</translation>
+<translation id="3144647712221361880">Ldi aseɣwen am</translation>
+<translation id="3222066309010235055">Tiririt tuzwirt: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
+<translation id="3241680850019875542">Fren akaram aẓar n usiɣzef i tigin n ukemmus. I uleqqem n usiɣzef, fren daɣen afaylu n tsarut uslig i wallus n useqdec-ines.</translation>
+<translation id="3280237271814976245">Sekles s yisem...</translation>
+<translation id="3285322247471302225">&amp;iccer amaynut</translation>
+<translation id="329838636886466101">Seggem</translation>
+<translation id="33022249435934718">Amsefrk GDI</translation>
+<translation id="3303818374450886607">Tunɣilin</translation>
+<translation id="3305661444342691068">Ldi afaylu PDF deg teskant</translation>
+<translation id="3317459757438853210">I sin n wudmawen</translation>
+<translation id="3341703758641437857">Sireg anekcum ɣer tansiwin URL n yifuyla</translation>
+<translation id="3347086966102161372">N&amp;ɣel tansa n tugna</translation>
+<translation id="3360297538363969800">Asiggez yecceḍ. Ttxil-k·m senqed tasaggazt-inek·inem syen εreḍ tikkelt-nniḍen.</translation>
+<translation id="3378572629723696641">Asiɣzef-a yezmer yerreẓ.</translation>
+<translation id="3387614642886316601">Seqdec imseɣti n tira ifazen</translation>
+<translation id="345693547134384690">Ldi &amp;tugna deg yiccer amaynut</translation>
+<translation id="3511307672085573050">Nɣel tan&amp;sa n useɣwen</translation>
+<translation id="354068948465830244">Aya yezmer ad d-iɣer yerna ad ibeddel isefka n usmel</translation>
+<translation id="3560034655160545939">&amp;Asenqad n tira</translation>
+<translation id="3587482841069643663">Meṛṛa</translation>
+<translation id="3627588569887975815">&amp;Ldi aseɣwen deg usfayly uslig</translation>
+<translation id="3678156199662914018">Asiɣzef: <ph name="EXTENSION_NAME" /></translation>
+<translation id="3683524264665795342"><ph name="APP_NAME" /> asuter n beṭṭu n ugdil</translation>
+<translation id="3711931198657368127">Sen&amp;teḍ syen ddu ɣer <ph name="URL" /></translation>
+<translation id="3727187387656390258">Sweḍ asfaylu udhim</translation>
+<translation id="3760460896538743390">Sweḍ &amp;asebter n ugdil</translation>
+<translation id="3810973564298564668">Sefrek</translation>
+<translation id="3838085852053358637">Asali n usiɣzef ur yeddi ara</translation>
+<translation id="383891835335927981">Ula d asebter ur yettwasemɣer neɣ yettwasemẓi</translation>
+<translation id="385051799172605136">Ɣer deffir</translation>
+<translation id="3905761538810670789">Seggem asnas</translation>
+<translation id="3908501907586732282">Rmed asiɣzef</translation>
+<translation id="3927932062596804919">Agi</translation>
+<translation id="3936390757709632190">&amp;Ldi ameslaw deg yiccer amaynut</translation>
+<translation id="3948116654032448504">&amp;Nadi deg <ph name="SEARCH_ENGINE" /> ɣef tugna</translation>
+<translation id="3979395879372752341">Yettwarna usiɣzf amaynut (<ph name="EXTENSION_NAME" />)</translation>
+<translation id="4021279097213088397">–</translation>
+<translation id="4022426551683927403">&amp;Rnu ɣer umawal</translation>
+<translation id="407520071244661467">Échelle</translation>
+<translation id="4079140982534148664">Seqdec imseɣti n tira ifazen</translation>
+<translation id="4087089424473531098">Asiɣzef yettwarna:
+
+<ph name="EXTENSION_FILE" /></translation>
+<translation id="4100839878934973028">Ahil-nniḍen ɣef uselkim-inek·inem yerna asnas i izemren ad ibeddel abrid n umahel n Vivaldi.</translation>
+<translation id="4109898769411476438">Mdel iminig send akter</translation>
+<translation id="4131410914670010031">Aberkan d umellal</translation>
+<translation id="4176463684765177261">Yensa</translation>
+<translation id="4200983522494130825">&amp;iccer amaynut</translation>
+<translation id="4225397296022057997">Deg yismal akk</translation>
+<translation id="4256316378292851214">Sek&amp;les tavidyut am...</translation>
+<translation id="4309420042698375243"><ph name="NUM_KILOBYTES" />Kaṭ (<ph name="NUM_KILOBYTES_LIVE" />Kaṭ usrid)</translation>
+<translation id="4345587454538109430">Swel...</translation>
+<translation id="4348766275249686434">Lqeḍ tuccḍiwin</translation>
+<translation id="4384652540891215547">Rmed asiɣzef</translation>
+<translation id="4409697491990005945">Timiwa</translation>
+<translation id="4423376891418188461">Err-d iɣewwaren n tazwara</translation>
+<translation id="4478664379124702289">Sekles aseɣ&amp;wen am...</translation>
+<translation id="4595560905247879544">Isnasen d yiseɣzaf zemren ad ttwabeddlen s umsefrak kan (<ph name="CUSTODIAN_NAME" />).</translation>
+<translation id="4613271546271159013">Yiwen n usiɣzef ibeddel asebter i d-yettbinen mi teldiḍ iccer amaynut.</translation>
+<translation id="4643612240819915418">&amp;Ldi tavidyut deg yiccer amaynut</translation>
+<translation id="4677772697204437347">Takatut n GPU</translation>
+<translation id="4681930562518940301">Ldi tugna &amp;taneẓlit deg yiccer amaynut</translation>
+<translation id="4711638718396952945">Err-d iɣewwaren n tazwara</translation>
+<translation id="4726710629007580002">Llan yismigal deg usebded n usiɣzef-a:</translation>
+<translation id="479536056609751218">Asebter web, afaylu HTML kan</translation>
+<translation id="4839303808932127586">Sek&amp;les tavidyut am...</translation>
+<translation id="488785315393301722">Sken tealqayt</translation>
+<translation id="4912643508233590958">Tanekra deg usenɣes</translation>
+<translation id="4927753642311223124">Ulac d acu ara twaliḍ da, ddu.</translation>
+<translation id="4930714375720679147">Rmed</translation>
+<translation id="4988526792673242964">Isebtar</translation>
+<translation id="49896407730300355">Tuzzya m&amp;galusrig</translation>
+<translation id="4989966318180235467">Sweḍ &amp;asebter n ugdil</translation>
+<translation id="5027562294707732951">Rnu asiɣzef</translation>
+<translation id="5039804452771397117">Sireg</translation>
+<translation id="5057110919553308744">Mi ara tettekkiḍ ɣef usiɣzef</translation>
+<translation id="5063480226653192405">Aseqdec</translation>
+<translation id="5116628073786783676">Sek&amp;les ameslaw am...</translation>
+<translation id="5143374789336132547">Asiɣzef "<ph name="EXTENSION_NAME" />" ibeddel tugna ara d-yettuseknen mi ara tesdeḍ ɣef tqeffalt n Ugejdan.</translation>
+<translation id="5154108062446123722">Iɣewwaren leqqayen i <ph name="PRINTING_DESTINATION" /></translation>
+<translation id="5171343362375269016">Takatut n usemmeskel</translation>
+<translation id="5233019165164992427">Tawwurt n temseɣtayt NaCl</translation>
+<translation id="5233231016133573565">Asulay n ukala</translation>
+<translation id="5233736638227740678">&amp;Senteḍ</translation>
+<translation id="5256861893479663409">Deg yismal akk</translation>
+<translation id="5269977353971873915">Asiggez yecceḍ</translation>
+<translation id="5284445933715251131">Kemmel asader</translation>
+<translation id="52912272896845572">Afaylu n tsarut tusligt d arameɣtu.</translation>
+<translation id="5317780077021120954">Sekles</translation>
+<translation id="5334142896108694079">Tuffirt n usekript</translation>
+<translation id="5362741141255528695">Fren afaylu n tsarut tuzzigt.</translation>
+<translation id="536638840841140142">Ula d yiwen</translation>
+<translation id="5398572795982417028">Tamsisɣelt n usebter beṛṛa n tilisa, talast d <ph name="MAXIMUM_PAGE" /></translation>
+<translation id="5425042808445046667">Kemmel asader</translation>
+<translation id="5427459444770871191">Tuzzya &amp;tusrigt</translation>
+<translation id="5431318178759467895">Ini</translation>
+<translation id="5485102783864353244">Rnu asnas</translation>
+<translation id="5486561344817861625">Serwes allus n usenker n yiminig</translation>
+<translation id="5509693895992845810">Sekl&amp;es s yisem...</translation>
+<translation id="5521078259930077036">D asebter-a agejdan i telliḍ tettraǧuḍ?</translation>
+<translation id="5542132724887566711">Amaɣnu</translation>
+<translation id="5556459405103347317">Smiren</translation>
+<translation id="5575473780076478375">Asiɣzef s uskar n tunigin tusligt: <ph name="EXTENSION_NAME" /></translation>
+<translation id="5614553682702429503">Sekles awal uffir?</translation>
+<translation id="5623842676595125836">Aɣmis</translation>
+<translation id="5677928146339483299">Yewḥel</translation>
+<translation id="5707185214361380026">Yecceḍ usali n usiɣzef seg:</translation>
+<translation id="5715711091495208045">Asefrak n yizegrar: <ph name="PLUGIN_NAME" /></translation>
+<translation id="5746169159649715125">Sekles s umasal PDF</translation>
+<translation id="5747809636523347288">Sen&amp;teḍ syen ddu ɣer <ph name="URL" /></translation>
+<translation id="5759728514498647443">Isemliyen i tuzneḍ i usiggez s <ph name="APP_NAME" /> zemren ad ttwaɣren s <ph name="APP_NAME" />.</translation>
+<translation id="5764483294734785780">Sek&amp;les ameslaw am...</translation>
+<translation id="5780973441651030252">Tazwart n ukala</translation>
+<translation id="5804241973901381774">Tisirag</translation>
+<translation id="5828633471261496623">Asiggez...</translation>
+<translation id="583281660410589416">Arussin</translation>
+<translation id="5860491529813859533">Rmed</translation>
+<translation id="5910363049092958439">Sek&amp;les tugna am...</translation>
+<translation id="5963453369025043595"><ph name="NUM_HANDLES" /> (<ph name="NUM_KILOBYTES_LIVE" /> n tqacuct)</translation>
+<translation id="5978277834170881274">&amp;Seqdec asenqad n tira azadur</translation>
+<translation id="6042308850641462728">Ugar</translation>
+<translation id="6086846494333236931">Yesbedd-it unedbal-ik•im</translation>
+<translation id="6101226222197207147">Yettwarna usnas amaynut (<ph name="EXTENSION_NAME" />)</translation>
+<translation id="6147020289383635445">Asiggez n teskant ur yeddi ara.</translation>
+<translation id="6156863943908443225">Tuffirt n usekript</translation>
+<translation id="6196854373336333322">Asiɣzef "<ph name="EXTENSION_NAME" />" isenqad iɣewwaren n upṛuksi-ine·inem, ayen ibɣan ad d-yini meṛṛa tigawin i tgiḍ srid zemrent ad beddlen, ad rrẓent neɣ ad ttwakrent. Ma yella ur teẓriḍ ara ayɣer i d-yella ubeddel-a, yemzer ad yili ur t-tebɣiḍ ara.</translation>
+<translation id="6206311232642889873">Nɣe&amp;l tugna</translation>
+<translation id="6239558157302047471">Smiren &amp;akatar</translation>
+<translation id="6247802389331535091">Anagraw: <ph name="ARC_PROCESS_NAME" /></translation>
+<translation id="6248988683584659830">Nadi iɣewwaren</translation>
+<translation id="6251870443722440887">Amsefrak GDI</translation>
+<translation id="6264365405983206840">Fren ak&amp;k</translation>
+<translation id="6268252012308737255">Ldi s <ph name="APP" /></translation>
+<translation id="6273677812470008672">Taɣara</translation>
+<translation id="6295158916970320988">Akk ismal</translation>
+<translation id="6295855836753816081">Asekles...</translation>
+<translation id="6308937455967653460">Sekles aseɣ&amp;wen am...</translation>
+<translation id="6315493146179903667">Awi kullec ɣer uɣawas n tazwara</translation>
+<translation id="6326855256003666642">Amḍan Keepalive</translation>
+<translation id="6374469231428023295">Ɛreḍ tikkelt-nniḍen</translation>
+<translation id="6398765197997659313">Ffeɣ seg ugdil aččuran</translation>
+<translation id="6406303162637086258">Serwes allus n usenker n yiminig</translation>
+<translation id="6445450263907939268">Ma ur tebɣiḍ ara ibeddilen-a, tzemreḍ ad d-terreḍ iɣewwaren yezrin.</translation>
+<translation id="6447842834002726250">Inagan n tuqqna</translation>
+<translation id="6498249116389603658">&amp;Akk tutlayin</translation>
+<translation id="6503077044568424649">Iɣer rezzun s waṭas</translation>
+<translation id="6508261954199872201">Asnas: <ph name="APP_NAME" /></translation>
+<translation id="6518014396551869914">Nɣe&amp;l tugna</translation>
+<translation id="6550675742724504774">Tinefrunin</translation>
+<translation id="6639554308659482635">Takatut SQLite</translation>
+<translation id="6686817083349815241">Sekles awal-ik•im uffir</translation>
+<translation id="6798954102094737107">Azegrir: <ph name="PLUGIN_NAME" /></translation>
+<translation id="6812841287760418429">Ḥrez ibeddilen</translation>
+<translation id="6824564591481349393">Nɣel &amp;tansa n yimayl</translation>
+<translation id="6840155290835956714">Suter send tuzzna</translation>
+<translation id="6878862640969460273">Agama</translation>
+<translation id="6886871292305414135">Ldi aseɣwen deg &amp;yiccer amaynut</translation>
+<translation id="6892812721183419409">Ldi aseɣwen d <ph name="USER" /></translation>
+<translation id="6900284862687837908">Asnas n ugilal: <ph name="BACKGROUND_APP_URL" /></translation>
+<translation id="6945221475159498467">Fren</translation>
+<translation id="6955446738988643816">Sweḍ asfaylu udhim</translation>
+<translation id="6970856801391541997">Siggez isebtar ufrinen</translation>
+<translation id="6991665348624301627">Fren aserken</translation>
+<translation id="7005848115657603926">Tagrumma n yisebtar mačči d tameɣtut, seqdec <ph name="EXAMPLE_PAGE_RANGE" /></translation>
+<translation id="7006634003215061422">Tama n wadda</translation>
+<translation id="7053983685419859001">Sewḥel</translation>
+<translation id="7070484045139057854">Aya yezmer ad d-iɣer yerna ad ibeddel isefka n usmel</translation>
+<translation id="708060913198414444">N&amp;ɣel tansa n umeslaw</translation>
+<translation id="7175353351958621980">Yettwasuli-d seg:</translation>
+<translation id="7287143125007575591">Anekcum yegdel.</translation>
+<translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" />x<ph name="VERTICAL_DPI" /> n waggazen s udebbuz</translation>
+<translation id="7385854874724088939">Tella-d tuccḍa deg uɛraḍ n usiggez.  Ttxil senqed tasaggazt-ik•im tɛawdeḍ tikkelt-nniḍen.</translation>
+<translation id="7412226954991670867">Takatut n GPU</translation>
+<translation id="7421925624202799674">&amp;Sken aɣbalu n usebter</translation>
+<translation id="7427348830195639090">Asebter n ugilal: <ph name="BACKGROUND_PAGE_URL" /></translation>
+<translation id="7453008956351770337">S ufran n tsaggazt-a, aql-ak•kem tefkiḍ tasiregt i usiɣzef-a ad yekcem ɣer tsaggazt-ik•im:</translation>
+<translation id="7564847347806291057">Seḥbes akala</translation>
+<translation id="7576690715254076113">Sdukkel</translation>
+<translation id="7629827748548208700">Iccer: <ph name="TAB_NAME" /></translation>
+<translation id="7661259717474717992">Sireg ismal ad skelsen, ad ɣren isefka n yinagan n tuqqna</translation>
+<translation id="7663719505383602579">Anermas: <ph name="ARC_PROCESS_NAME" /></translation>
+<translation id="7684212569183643648">Yesbedd-it unedbal-ik•im</translation>
+<translation id="7685049629764448582">Takatut JavaScript</translation>
+<translation id="7701869757853594372">Amsefrak n useqdac</translation>
+<translation id="7704305437604973648">Tawuri</translation>
+<translation id="7710568461918838723">&amp;Azen...</translation>
+<translation id="7750228210027921155">Tugna deg tugna</translation>
+<translation id="7771452384635174008">Asettef</translation>
+<translation id="7782102568078991263">Ulac isumar-nniḍen sɣur Google</translation>
+<translation id="7786889348652477777">&amp;Smiren asnas</translation>
+<translation id="7800518121066352902">Tuzzya m&amp;galusrig</translation>
+<translation id="7818135753970109980">Yettwarna usentel amaynut (<ph name="EXTENSION_NAME" />)</translation>
+<translation id="782057141565633384">N&amp;ɣel tansa n tvidyut</translation>
+<translation id="7849264908733290972">Ldi &amp;tugna deg yiccer amaynut</translation>
+<translation id="786073089922909430">Ameẓlu: <ph name="ARC_PROCESS_NAME" /></translation>
+<translation id="7903925330883316394">Allal: <ph name="UTILITY_TYPE" /></translation>
+<translation id="7947962633355574091">N&amp;ɣel tansa n tvidyut</translation>
+<translation id="7966241909927244760">N&amp;ɣel tansa n tugna</translation>
+<translation id="7978412674231730200">Tasarut tusligt</translation>
+<translation id="7982789257301363584">Réseau</translation>
+<translation id="7997826902155442747">Tazwart n ukala</translation>
+<translation id="7999229196265990314">Ifuyla i d-itteddun ttwarnan:
+
+Asiɣzef: <ph name="EXTENSION_FILE" />
+Afaylu n tsarut: <ph name="KEY_FILE" />
+
+Ḥrez afaylu-k•m n tsarut deg wadzg aɣellsan. Ad t-teḥwiǧeḍ mi ara d-tesnulfuḍ ileqman imaynuten n usiɣzef.</translation>
+<translation id="8004582292198964060">Iminig</translation>
+<translation id="8018313076035239964">Senqed tilɣa i zemren yismal web ad sqedcen d ugbur i zemren ad ak•am-d-sseknen</translation>
+<translation id="8071432093239591881">Siggez am tugna</translation>
+<translation id="8135557862853121765"><ph name="NUM_KILOBYTES" />K</translation>
+<translation id="8212008074015601248">{NUM_DOWNLOAD, plural,
+        =1 {Asader iteddu} wayeḍ {Isadaren teddun}}</translation>
+<translation id="8230134520748321204">Ad yettwasekles wawal uffir i <ph name="ORIGIN" />?</translation>
+<translation id="8261378640211443080">Asiɣzef-a ur d-yettwabder ara deg <ph name="IDS_EXTENSION_WEB_STORE_TITLE" />, yezmer ad yettwarnu mebla ma teẓriḍ.</translation>
+<translation id="8351419472474436977">Asiɣzef-a yettεassa iɣewwaren-inek·inem n upṛuksi, aya yebɣa ad d-yini yezmer ad ibeddel, ad yerreẓ neɣ ad iεass ayen i txeddmeḍ srid. Ma yella ur teẓriḍ ayɣer i d-yeḍra ubeddel-a, yezmer ahat ur t-tebɣiḍ ara.</translation>
+<translation id="8382913212082956454">Nɣel &amp;tansa n yimayl</translation>
+<translation id="8434480141477525001">Tawwurt n temseɣtayt NaCl</translation>
+<translation id="8449008133205184768">Senteḍ s uɣanib</translation>
+<translation id="8496717697661868878">Selkem azegrir-a</translation>
+<translation id="8512476990829870887">Seḥbes akala</translation>
+<translation id="8523493869875972733">Ḥrez ibeddilen</translation>
+<translation id="8546306075665861288">Tuffirt n tugniwin</translation>
+<translation id="8569682776816196752">Ukac iserkan yettwafen</translation>
+<translation id="8584280235376696778">&amp;Ldi tavidyut deg yiccer amaynut</translation>
+<translation id="8605428685123651449">Takatut SQLite</translation>
+<translation id="8615618338313291042">Asnas s uskar n tunigin tusligt: <ph name="APP_NAME" /></translation>
+<translation id="862750493060684461">Tuffirt CSS</translation>
+<translation id="8661290697478713397">&amp;Ldi aseɣwen deg usfayly uslig</translation>
+<translation id="8664389313780386848">&amp;Sken aɣbalu n usebter</translation>
+<translation id="8708000541097332489">Sfeḍ deg tuffɣa</translation>
+<translation id="8714838604780058252">Udlifen n ugilal</translation>
+<translation id="8725066075913043281">Ɛreḍ tikkelt-nniḍen</translation>
+<translation id="8774934320277480003">Tama n ufella</translation>
+<translation id="8798099450830957504">Amezwer</translation>
+<translation id="8808478386290700967">Taḥanut Web</translation>
+<translation id="8823514049557262177">Nɣel aḍ&amp;ris n useɣwen</translation>
+<translation id="8823704566850948458">Suter-d awal uffir...</translation>
+<translation id="8859174528519900719">Akatar n ddaw: <ph name="SUBFRAME_SITE" /></translation>
+<translation id="8899851313684471736">Ldi aseɣwen deg &amp;usfaylu amaynut</translation>
+<translation id="8915370057835397490">Asali n usumer</translation>
+<translation id="8916476537757519021">Akatar adday s uskar n tunigin tusligt: <ph name="SUBFRAME_SITE" /></translation>
+<translation id="895944840846194039">Takatut JavaScript</translation>
+<translation id="8962083179518285172">Ffer ifutas</translation>
+<translation id="8973557916016709913">Kkes aswir n usemɣer</translation>
+<translation id="9003647077635673607">Sireg deg yismal web akk</translation>
+<translation id="9027459031423301635">Ldi aseɣwen deg &amp;yiccer amaynut</translation>
+<translation id="9056810968620647706">Ulac amṣada yettwafen.</translation>
+<translation id="9137916601698928395">Ldi aseɣwen s umiḍan <ph name="USER" /></translation>
+<translation id="916607977885256133">Tugna deg tugna</translation>
+<translation id="9215293857209265904">"<ph name="EXTENSION_NAME" />" yettwarna</translation>
+<translation id="9218430445555521422">Sbadu d amezwer</translation>
+<translation id="93766956588638423">Seggem asiɣzef</translation>
+<translation id="998747458861718449">S&amp;weḍ</translation>
 </translationbundle>

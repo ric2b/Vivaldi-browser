@@ -12,7 +12,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include "xnnpack/common.h"
+#include "src/xnnpack/common.h"
 
 // SIMD vector type for f32 using SSE2.
 typedef __m128 xnn_simd_f32_t;
@@ -31,7 +31,7 @@ typedef __m128 xnn_simd_f32_t;
 
 // Include the header for generic functions _after_ declaring the arch-specific
 // types and sizes.
-#include "xnnpack/simd/f32-generic-functions.h"
+#include "src/xnnpack/simd/f32-generic-functions.h"
 
 // Arithmetic operations.
 
@@ -129,6 +129,19 @@ static XNN_INLINE xnn_simd_f32_t xnn_cmpeq_f32(xnn_simd_f32_t a,
       _mm_cmpeq_epi32(_mm_castps_si128(a), _mm_castps_si128(b)));
 }
 
+static XNN_INLINE xnn_simd_f32_t xnn_round_f32(xnn_simd_f32_t a) {
+  // Create a filter for all non-finite values in `a` (all exponent bits set).
+  XNN_SIMD_CONST_F32_FROM_INT32(vexp_bits, 0x7f800000);
+  const xnn_simd_f32_t vfilter =
+      xnn_cmpeq_f32(xnn_and_f32(a, vexp_bits), vexp_bits);
+
+  // Round by converting to `int` and back.
+  const xnn_simd_f32_t vresult = _mm_cvtepi32_ps(_mm_cvtps_epi32(a));
+
+  // Apply the non-finite value filter to repace any non-finite input with `a`.
+  return _mm_or_ps(_mm_andnot_ps(vfilter, vresult), _mm_and_ps(vfilter, a));
+}
+
 // Special functions.
 
 #define XNN_SIMD_HAVE_RCP_F32 1
@@ -184,6 +197,21 @@ xnn_load_tail_f32(const float* input, size_t num_elements) XNN_OOB_READS {
   assert(num_elements > 0);
   assert(num_elements < xnn_simd_size_f32);
   return _mm_loadu_ps(input);
+}
+
+static XNN_INLINE xnn_simd_f32_t
+xnn_load_tail_safe_f32(const float* input, size_t num_elements) {
+  assert(num_elements > 0);
+  assert(num_elements < xnn_simd_size_f32);
+
+  XNN_ALIGN(16) float padded[4];
+  float* dst = padded;
+  switch (num_elements) {
+  case 3: *dst++ = *input++;
+  case 2: *dst++ = *input++;
+  default: *dst++ = *input++;
+  }
+  return _mm_load_ps(padded);
 }
 
 static XNN_INLINE void xnn_store_tail_f32(float* output, xnn_simd_f32_t v,

@@ -40,11 +40,15 @@
 #import "services/network/public/cpp/shared_url_loader_factory.h"
 
 #if BUILDFLAG(BUILD_WITH_INTERNAL_OPTIMIZATION_GUIDE)
+#import "components/optimization_guide/core/model_execution/on_device_asset_manager.h"
 #import "components/optimization_guide/core/model_execution/on_device_model_component.h"
 #import "ios/chrome/browser/optimization_guide/model/on_device_model_service_controller_ios.h"
 #endif  // BUILDFLAG(BUILD_WITH_INTERNAL_OPTIMIZATION_GUIDE)
 
 namespace {
+
+using ModelExecutionError = optimization_guide::
+    OptimizationGuideModelExecutionError::ModelExecutionError;
 
 #if BUILDFLAG(BUILD_WITH_INTERNAL_OPTIMIZATION_GUIDE)
 using ::optimization_guide::OnDeviceModelComponentStateManager;
@@ -170,9 +174,9 @@ OptimizationGuideService::OptimizationGuideService(
   }
 
   if (!off_the_record_) {
+#if BUILDFLAG(BUILD_WITH_INTERNAL_OPTIMIZATION_GUIDE)
     PrefService* local_state = GetApplicationContext()->GetLocalState();
 
-#if BUILDFLAG(BUILD_WITH_INTERNAL_OPTIMIZATION_GUIDE)
     // Create and startup the on-device model's state manager.
     on_device_model_state_manager_ =
         optimization_guide::OnDeviceModelComponentStateManager::CreateOrGet(
@@ -190,17 +194,20 @@ OptimizationGuideService::OptimizationGuideService(
         on_device_model_service_controller =
             GetApplicationContext()->GetOnDeviceModelServiceController(
                 on_device_model_state_manager_->GetWeakPtr());
+    on_device_asset_manager_ =
+        std::make_unique<optimization_guide::OnDeviceAssetManager>(
+            local_state, on_device_model_service_controller->GetWeakPtr(),
+            on_device_model_state_manager_->GetWeakPtr(), this);
     model_execution_manager_ =
         std::make_unique<optimization_guide::ModelExecutionManager>(
-            url_loader_factory, local_state, identity_manager,
-            std::move(on_device_model_service_controller), this,
-            on_device_model_state_manager_->GetWeakPtr(),
+            url_loader_factory, identity_manager,
+            std::move(on_device_model_service_controller),
             optimization_guide_logger_.get(), nullptr);
 #else   // BUILDFLAG(BUILD_WITH_INTERNAL_OPTIMIZATION_GUIDE)
     model_execution_manager_ =
         std::make_unique<optimization_guide::ModelExecutionManager>(
-            url_loader_factory, local_state, identity_manager, nullptr, this,
-            nullptr, optimization_guide_logger_.get(), nullptr);
+            url_loader_factory, identity_manager, nullptr,
+            optimization_guide_logger_.get(), nullptr);
 #endif  // BUILDFLAG(BUILD_WITH_INTERNAL_OPTIMIZATION_GUIDE)
   }
 
@@ -346,7 +353,39 @@ void OptimizationGuideService::OnBrowsingDataRemoved() {
   hints_manager_->ClearFetchedHints();
 }
 
+std::string OptimizationGuideService::ResponseForErrorCode(int error_code) {
+  ModelExecutionError model_execution_error =
+      static_cast<ModelExecutionError>(error_code);
+  switch (model_execution_error) {
+    case ModelExecutionError::kUnknown:
+      return "Unknown error (error code 0)";
+    case ModelExecutionError::kInvalidRequest:
+      return "Invalid request (error code 1)";
+    case ModelExecutionError::kRequestThrottled:
+      return "Request throttled (error code 2)";
+    case ModelExecutionError::kPermissionDenied:
+      return "Permission denied (error code 3)";
+    case ModelExecutionError::kGenericFailure:
+      return "Generic failure (error code 4)";
+    case ModelExecutionError::kRetryableError:
+      return "Retryable error in server (error code 5)";
+    case ModelExecutionError::kNonRetryableError:
+      return "Non-retryable error in server (error code 6)";
+    case ModelExecutionError::kUnsupportedLanguage:
+      return "Unsupported language (error code 7)";
+    case ModelExecutionError::kFiltered:
+      return "Request was filtered (error code 8)";
+    case ModelExecutionError::kDisabled:
+      return "Response was disabled (error code 9)";
+    case ModelExecutionError::kCancelled:
+      return "Response was cancelled (error code 10)";
+    case ModelExecutionError::kResponseLowQuality:
+      return "Low quality response (error code 11)";
+  }
+}
+
 #pragma mark - optimization_guide::OptimizationGuideModelProvider implementation
+
 void OptimizationGuideService::AddObserverForOptimizationTargetModel(
     optimization_guide::proto::OptimizationTarget optimization_target,
     const std::optional<optimization_guide::proto::Any>& model_metadata,

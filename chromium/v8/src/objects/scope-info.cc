@@ -21,12 +21,35 @@
 namespace v8 {
 namespace internal {
 
-#ifdef DEBUG
-bool ScopeInfo::Equals(Tagged<ScopeInfo> other,
-                       bool is_live_edit_compare) const {
+namespace {
+bool NameToIndexHashTableEquals(Tagged<NameToIndexHashTable> a,
+                                Tagged<NameToIndexHashTable> b) {
+  if (a->Capacity() != b->Capacity()) return false;
+  if (a->NumberOfElements() != b->NumberOfElements()) return false;
+
+  InternalIndex max(a->Capacity());
+  InternalIndex entry(0);
+
+  while (entry < max) {
+    Tagged<Object> key_a = a->KeyAt(entry);
+    Tagged<Object> key_b = b->KeyAt(entry);
+    if (key_a != key_b) return false;
+
+    Tagged<Object> value_a = a->ValueAt(entry);
+    Tagged<Object> value_b = b->ValueAt(entry);
+    if (value_a != value_b) return false;
+  }
+  return true;
+}
+}  // namespace
+
+// TODO(crbug.com/401059828): make it DEBUG only, once investigation is over.
+bool ScopeInfo::Equals(Tagged<ScopeInfo> other, bool is_live_edit_compare,
+                       int* out_last_checked_field) const {
   if (length() != other->length()) return false;
   if (Flags() != other->Flags()) return false;
   for (int index = 0; index < length(); ++index) {
+    if (out_last_checked_field) *out_last_checked_field = index;
     if (index == kFlags) continue;
     if (is_live_edit_compare && index >= kPositionInfoStart &&
         index <= kPositionInfoEnd) {
@@ -65,6 +88,13 @@ bool ScopeInfo::Equals(Tagged<ScopeInfo> other,
         DCHECK(IsDependentCode(other_entry));
         // Ignore the dependent code field since all the code have to be
         // deoptimized anyway in case of a live-edit.
+
+      } else if (IsNameToIndexHashTable(entry)) {
+        if (!NameToIndexHashTableEquals(
+                Cast<NameToIndexHashTable>(entry),
+                Cast<NameToIndexHashTable>(other_entry))) {
+          return false;
+        }
       } else {
         UNREACHABLE();
       }
@@ -72,7 +102,6 @@ bool ScopeInfo::Equals(Tagged<ScopeInfo> other,
   }
   return true;
 }
-#endif
 
 // static
 template <typename IsolateT>

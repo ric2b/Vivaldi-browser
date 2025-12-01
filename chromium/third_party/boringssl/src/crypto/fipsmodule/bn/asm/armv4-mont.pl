@@ -102,8 +102,6 @@ $_n0="$num,#14*4";
 $_num="$num,#15*4";	$_bpend=$_num;
 
 $code=<<___;
-#include <openssl/arm_arch.h>
-
 @ Silence ARMv8 deprecated IT instruction warnings. This file is used by both
 @ ARMv7 and ARMv8 processors and does not use ARMv8 instructions.
 .arch  armv7-a
@@ -123,14 +121,9 @@ $code=<<___;
 bn_mul_mont_nohw:
 	ldr	ip,[sp,#4]		@ load num
 	stmdb	sp!,{r0,r2}		@ sp points at argument block
-	cmp	ip,#2
+	@ No return value. Instead, the caller must ensure num >= 2
 	mov	$num,ip			@ load num
-#ifdef	__thumb2__
-	ittt	lt
-#endif
-	movlt	r0,#0
-	addlt	sp,sp,#2*4
-	blt	.Labrt
+	@ No return value
 
 	stmdb	sp!,{r4-r12,lr}		@ save 10 registers
 
@@ -264,8 +257,7 @@ bn_mul_mont_nohw:
 	add	sp,sp,#4		@ skip over tp[num+1]
 	ldmia	sp!,{r4-r12,lr}		@ restore registers
 	add	sp,sp,#2*4		@ skip over {r0,r2}
-	mov	r0,#1
-.Labrt:
+	@ No return value
 #if __ARM_ARCH>=5
 	ret				@ bx lr
 #else
@@ -719,6 +711,7 @@ $code.=<<___;
 	mov	sp,ip
         vldmia  sp!,{d8-d15}
         ldmia   sp!,{r4-r11}
+	@ No return value
 	ret						@ bx lr
 .size	bn_mul8x_mont_neon,.-bn_mul8x_mont_neon
 #endif

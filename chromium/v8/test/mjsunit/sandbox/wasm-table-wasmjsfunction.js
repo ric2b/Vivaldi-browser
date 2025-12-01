@@ -2,7 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-// Flags: --sandbox-testing --wasm-staging
+// Flags: --sandbox-testing --allow-natives-syntax
+// Flags: --experimental-wasm-type-reflection
 
 d8.file.execute('test/mjsunit/wasm/wasm-module-builder.js');
 
@@ -61,9 +62,7 @@ function setField(obj, offset, value) {
   memory.setUint32(obj + offset - kHeapObjectTag, value, true);
 }
 
-const kRef = 10;
 const kSmiTagSize = 1;
-const kHeapTypeShift = 5;
 
 // Put a WasmJSFunction into table1 while it still has type $sig1.
 table1.set(0, new WebAssembly.Function(
@@ -74,7 +73,7 @@ table1.set(0, new WebAssembly.Function(
 let t0 = getPtr(table0);
 let t1 = getPtr(table1);
 let t0_type = getField(t0, kWasmTableObjectTypeOffset);
-let expected_old_type = (($sig1 << kHeapTypeShift) | kRef) << kSmiTagSize;
+let expected_old_type = %BuildRefTypeBitfield($sig1, instance0) << kSmiTagSize;
 assertEquals(expected_old_type, getField(t1, kWasmTableObjectTypeOffset));
 setField(t1, kWasmTableObjectTypeOffset, t0_type);
 

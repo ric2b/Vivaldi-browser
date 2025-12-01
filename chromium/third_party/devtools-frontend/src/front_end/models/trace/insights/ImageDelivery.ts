@@ -3,18 +3,20 @@
 // found in the LICENSE file.
 
 import * as i18n from '../../../core/i18n/i18n.js';
+import type * as Handlers from '../handlers/handlers.js';
 import * as Helpers from '../helpers/helpers.js';
 import type * as Types from '../types/types.js';
 
 import {metricSavingsForWastedBytes} from './Common.js';
 import {
   InsightCategory,
+  InsightKeys,
   type InsightModel,
   type InsightSetContext,
-  type RequiredData,
+  type PartialInsightModel,
 } from './types.js';
 
-const UIStrings = {
+export const UIStrings = {
   /**
    * @description Title of an insight that recommends ways to reduce the size of images downloaded and used on the page.
    */
@@ -26,32 +28,47 @@ const UIStrings = {
       'Reducing the download time of images can improve the perceived load time of the page and LCP. [Learn more about optimizing image size](https://developer.chrome.com/docs/lighthouse/performance/uses-optimized-images/)',
   /**
    * @description Message displayed in a chip explaining that an image file size is large for the # of pixels it has and recommends possible adjustments to improve the image size.
-   * @example {50 MB} PH1
    */
-  useCompression: 'Increasing the image compression factor could improve this image\'s download size. (Est {PH1})',
+  useCompression: 'Increasing the image compression factor could improve this image\'s download size.',
   /**
    * @description Message displayed in a chip explaining that an image file size is large for the # of pixels it has and recommends possible adjustments to improve the image size.
-   * @example {50 MB} PH1
    */
   useModernFormat:
-      'Using a modern image format (WebP, AVIF) or increasing the image compression could improve this image\'s download size. (Est {PH1})',
+      'Using a modern image format (WebP, AVIF) or increasing the image compression could improve this image\'s download size.',
   /**
    * @description Message displayed in a chip advising the user to use video formats instead of GIFs because videos generally have smaller file sizes.
-   * @example {50 MB} PH1
    */
-  useVideoFormat: 'Using video formats instead of GIFs can improve the download size of animated content. (Est {PH1})',
+  useVideoFormat: 'Using video formats instead of GIFs can improve the download size of animated content.',
   /**
    * @description Message displayed in a chip explaining that an image was displayed on the page with dimensions much smaller than the image file dimensions.
-   * @example {50 MB} PH1
-   * @example {1000x500} PH2
-   * @example {100x50} PH3
+   * @example {1000x500} PH1
+   * @example {100x50} PH2
    */
   useResponsiveSize:
-      'This image file is larger than it needs to be ({PH2}) for its displayed dimensions ({PH3}). Use responsive images to reduce the image download size. (Est {PH1})',
-};
+      'This image file is larger than it needs to be ({PH1}) for its displayed dimensions ({PH2}). Use responsive images to reduce the image download size.',
+  /**
+   * @description Column header for a table column containing network requests for images which can improve their file size (e.g. use a different format, increase compression, etc).
+   */
+  optimizeFile: 'Optimize file size',
+  /**
+   * @description Table row value representing the remaining items not shown in the table due to size constraints. This row will always represent at least 2 items.
+   * @example {5} PH1
+   */
+  others: '{PH1} others',
+  /**
+   * @description Text status indicating that no potential optimizations were found for any image file
+   */
+  noOptimizableImages: 'No optimizable images',
+  /**
+   * @description Text describing the estimated number of bytes that an image file optimization can save. This text is appended to another block of text describing the image optimization in more detail. "Est" means "Estimated".
+   * @example {Use the correct image dimensions to reduce the image file size.} PH1
+   * @example {50 MB} PH2
+   */
+  estimatedSavings: '{PH1} (Est {PH2})',
+} as const;
 
 const str_ = i18n.i18n.registerUIStrings('models/trace/insights/ImageDelivery.ts', UIStrings);
-const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
+export const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
 
 /**
  * Even JPEGs with lots of detail can usually be compressed down to <1 byte per pixel
@@ -78,9 +95,8 @@ const GIF_SIZE_THRESHOLD = 100 * 1024;
 
 const BYTE_SAVINGS_THRESHOLD = 4096;
 
-export function deps(): ['NetworkRequests', 'Meta', 'ImagePainting'] {
-  return ['NetworkRequests', 'Meta', 'ImagePainting'];
-}
+// Ignore up to 12KB of waste for responsive images if an effort was made with breakpoints.
+const BYTE_SAVINGS_THRESHOLD_RESPONSIVE_BREAKPOINTS = 12288;
 
 export enum ImageOptimizationType {
   ADJUST_COMPRESSION = 'ADJUST_COMPRESSION',
@@ -112,39 +128,45 @@ export interface OptimizableImage {
   largestImagePaint: Types.Events.PaintImage;
 }
 
-export type ImageDeliveryInsightModel = InsightModel<{
+export type ImageDeliveryInsightModel = InsightModel<typeof UIStrings, {
+  /** Sorted by potential byte savings, then by size of image. */
   optimizableImages: OptimizableImage[],
   totalByteSavings: number,
 }>;
 
-function getOptimizationMessage(optimization: ImageOptimization): string {
-  const byteSavingsText = i18n.ByteUtilities.bytesToString(optimization.byteSavings);
+export function getOptimizationMessage(optimization: ImageOptimization): string {
   switch (optimization.type) {
     case ImageOptimizationType.ADJUST_COMPRESSION:
-      return i18nString(UIStrings.useCompression, {PH1: byteSavingsText});
+      return i18nString(UIStrings.useCompression);
     case ImageOptimizationType.MODERN_FORMAT_OR_COMPRESSION:
-      return i18nString(UIStrings.useModernFormat, {PH1: byteSavingsText});
+      return i18nString(UIStrings.useModernFormat);
     case ImageOptimizationType.VIDEO_FORMAT:
-      return i18nString(UIStrings.useVideoFormat, {PH1: byteSavingsText});
+      return i18nString(UIStrings.useVideoFormat);
     case ImageOptimizationType.RESPONSIVE_SIZE:
       return i18nString(UIStrings.useResponsiveSize, {
-        PH1: byteSavingsText,
-        PH2: `${optimization.fileDimensions.width}x${optimization.fileDimensions.height}`,
-        PH3: `${optimization.displayDimensions.width}x${optimization.displayDimensions.height}`,
+        PH1: `${optimization.fileDimensions.width}x${optimization.fileDimensions.height}`,
+        PH2: `${optimization.displayDimensions.width}x${optimization.displayDimensions.height}`,
       });
   }
 }
 
-function finalize(partialModel: Omit<ImageDeliveryInsightModel, 'title'|'description'|'category'|'shouldShow'>):
-    ImageDeliveryInsightModel {
+export function getOptimizationMessageWithBytes(optimization: ImageOptimization): string {
+  const byteSavingsText = i18n.ByteUtilities.bytesToString(optimization.byteSavings);
+  const optimizationMessage = getOptimizationMessage(optimization);
+  return i18nString(UIStrings.estimatedSavings, {PH1: optimizationMessage, PH2: byteSavingsText});
+}
+
+function finalize(partialModel: PartialInsightModel<ImageDeliveryInsightModel>): ImageDeliveryInsightModel {
   return {
+    insightKey: InsightKeys.IMAGE_DELIVERY,
+    strings: UIStrings,
     title: i18nString(UIStrings.title),
     description: i18nString(UIStrings.description),
     category: InsightCategory.LCP,
-    shouldShow: partialModel.optimizableImages.length > 0,
+    state: partialModel.optimizableImages.length > 0 ? 'fail' : 'pass',
     ...partialModel,
-    relatedEvents: new Map(
-        partialModel.optimizableImages.map(image => [image.request, image.optimizations.map(getOptimizationMessage)])),
+    relatedEvents: new Map(partialModel.optimizableImages.map(
+        image => [image.request, image.optimizations.map(getOptimizationMessageWithBytes)])),
   };
 }
 
@@ -164,7 +186,7 @@ function getPixelCounts(paintImage: Types.Events.PaintImage): {displayedPixels: 
 }
 
 export function generateInsight(
-    parsedTrace: RequiredData<typeof deps>, context: InsightSetContext): ImageDeliveryInsightModel {
+    parsedTrace: Handlers.Types.ParsedTrace, context: InsightSetContext): ImageDeliveryInsightModel {
   const isWithinContext = (event: Types.Events.Event): boolean => Helpers.Timing.eventIsInBounds(event, context.bounds);
 
   const contextRequests = parsedTrace.NetworkRequests.byTime.filter(isWithinContext);
@@ -179,8 +201,9 @@ export function generateInsight(
       continue;
     }
 
-    const imagePaints =
-        parsedTrace.ImagePainting.paintImageEventForUrl.get(request.args.data.url)?.filter(isWithinContext);
+    // If the request was redirected, the image paints will have the pre-redirect URL.
+    const url = request.args.data.redirects[0]?.url ?? request.args.data.url;
+    const imagePaints = parsedTrace.ImagePainting.paintImageEventForUrl.get(url)?.filter(isWithinContext);
 
     // This will filter out things like preloaded image requests where an image file is downloaded
     // but never rendered on the page.
@@ -232,25 +255,31 @@ export function generateInsight(
     let imageByteSavings = imageByteSavingsFromFormat;
 
     const wastedPixelRatio = 1 - (largestImageDisplayPixels / imageFilePixels);
-    if (wastedPixelRatio > 0) {
+
+    // Ignore CSS images because it's difficult to determine what is a spritesheet,
+    // and the reward-to-effort ratio for responsive CSS images is quite low https://css-tricks.com/responsive-images-css/.
+    if (wastedPixelRatio > 0 && !largestImagePaint.args.data.isCSS) {
       const byteSavings = Math.round(wastedPixelRatio * imageBytes);
 
-      // This will compound the byte savings from any potential format changes with the image size
-      // optimization added here.
-      imageByteSavings += Math.round(wastedPixelRatio * (imageBytes - imageByteSavingsFromFormat));
+      const hadBreakpoints = largestImagePaint.args.data.isPicture || largestImagePaint.args.data.srcsetAttribute;
+      if (!hadBreakpoints || byteSavings > BYTE_SAVINGS_THRESHOLD_RESPONSIVE_BREAKPOINTS) {
+        // This will compound the byte savings from any potential format changes with the image size
+        // optimization added here.
+        imageByteSavings += Math.round(wastedPixelRatio * (imageBytes - imageByteSavingsFromFormat));
 
-      optimizations.push({
-        type: ImageOptimizationType.RESPONSIVE_SIZE,
-        byteSavings,
-        fileDimensions: {
-          width: Math.round(largestImagePaint.args.data.srcWidth),
-          height: Math.round(largestImagePaint.args.data.srcHeight),
-        },
-        displayDimensions: {
-          width: Math.round(largestImagePaint.args.data.width),
-          height: Math.round(largestImagePaint.args.data.height),
-        },
-      });
+        optimizations.push({
+          type: ImageOptimizationType.RESPONSIVE_SIZE,
+          byteSavings,
+          fileDimensions: {
+            width: Math.round(largestImagePaint.args.data.srcWidth),
+            height: Math.round(largestImagePaint.args.data.srcHeight),
+          },
+          displayDimensions: {
+            width: Math.round(largestImagePaint.args.data.width),
+            height: Math.round(largestImagePaint.args.data.height),
+          },
+        });
+      }
     }
 
     optimizations = optimizations.filter(optimization => optimization.byteSavings > BYTE_SAVINGS_THRESHOLD);
@@ -269,6 +298,15 @@ export function generateInsight(
   for (const image of optimizableImages) {
     wastedBytesByRequestId.set(image.request.args.data.requestId, image.byteSavings);
   }
+
+  // Sort by savings, then by size of image.
+  optimizableImages.sort((a, b) => {
+    if (b.byteSavings !== a.byteSavings) {
+      return b.byteSavings - a.byteSavings;
+    }
+
+    return b.request.args.data.decodedBodyLength - a.request.args.data.decodedBodyLength;
+  });
 
   return finalize({
     optimizableImages,

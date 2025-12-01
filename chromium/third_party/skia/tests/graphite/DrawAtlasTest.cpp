@@ -62,7 +62,7 @@ bool fill_plot(DrawAtlas* atlas,
 DEF_GRAPHITE_TEST_FOR_RENDERING_CONTEXTS(BasicDrawAtlas,
                                          reporter,
                                          context,
-                                         CtsEnforcement::kNextRelease) {
+                                         CtsEnforcement::kNever) {
     auto recorder = context->makeRecorder();
 
     SkColorType atlasColorType = kAlpha_8_SkColorType;
@@ -78,7 +78,7 @@ DEF_GRAPHITE_TEST_FOR_RENDERING_CONTEXTS(BasicDrawAtlas,
                                                        DrawAtlas::UseStorageTextures::kNo,
                                                        &evictor,
                                                        /*label=*/"BasicDrawAtlasTest");
-    check(reporter, atlas.get(), 0, 0);
+    check(reporter, atlas.get(), /*expectedActive=*/0, /*expectedEvictCount=*/0);
 
     // Fill up the first page
     skgpu::AtlasLocator atlasLocator;
@@ -90,28 +90,28 @@ DEF_GRAPHITE_TEST_FOR_RENDERING_CONTEXTS(BasicDrawAtlas,
         if (i == 0) {
             testAtlasLocator = atlasLocator;
         }
-        check(reporter, atlas.get(), 1, 0);
+        check(reporter, atlas.get(), /*expectedActive=*/1, /*expectedEvictCount=*/0);
     }
 
     // Force creation of a second page.
     bool result = fill_plot(atlas.get(), recorder.get(), &atlasLocator, 4 * 32);
     REPORTER_ASSERT(reporter, result);
-    check(reporter, atlas.get(), 2, 0);
+    check(reporter, atlas.get(), /*expectedActive=*/2, /*expectedEvictCount=*/0);
 
     // Simulate a lot of draws using only the first plot. The last texture should be compacted.
     for (int i = 0; i < 512; ++i) {
         atlas->setLastUseToken(testAtlasLocator, recorder->priv().tokenTracker()->nextFlushToken());
         recorder->priv().issueFlushToken();
-        atlas->compact(recorder->priv().tokenTracker()->nextFlushToken(), /*forceCompact=*/false);
+        atlas->compact(recorder->priv().tokenTracker()->nextFlushToken());
     }
-    check(reporter, atlas.get(), 1, 0);
+    check(reporter, atlas.get(), /*expectedActive=*/1, /*expectedEvictCount=*/1);
 
     // Simulate a lot of non-atlas draws. We should end up with no textures.
     for (int i = 0; i < 512; ++i) {
         recorder->priv().issueFlushToken();
-        atlas->compact(recorder->priv().tokenTracker()->nextFlushToken(), /*forceCompact=*/false);
+        atlas->compact(recorder->priv().tokenTracker()->nextFlushToken());
     }
-    check(reporter, atlas.get(), 0, 1);
+    check(reporter, atlas.get(), /*expectedActive=*/0, /*expectedEvictCount=*/5);
 
     // Fill the atlas all the way up.
     gEvictCount = 0;
@@ -125,11 +125,34 @@ DEF_GRAPHITE_TEST_FOR_RENDERING_CONTEXTS(BasicDrawAtlas,
             }
             REPORTER_ASSERT(reporter, result);
         }
-        check(reporter, atlas.get(), p, 0);
+        check(reporter, atlas.get(), /*expectedActive=*/p, /*expectedEvictCount=*/0);
     }
     // Try one more, it should fail.
     result = fill_plot(atlas.get(), recorder.get(), &atlasLocator, 0xff);
     REPORTER_ASSERT(reporter, !result);
+
+    // Try to clear everything out. Should fail because there are pending "draws."
+    atlas->freeGpuResources(recorder->priv().tokenTracker()->nextFlushToken());
+    check(reporter, atlas.get(), /*expectedActive=*/4, /*expectedEvictCount=*/0);
+
+    // Flush those draws
+    recorder->priv().issueFlushToken();
+    atlas->compact(recorder->priv().tokenTracker()->nextFlushToken());
+
+    // Simulate a draw using only a plot in the 3rd page
+    atlas->setLastUseToken(testAtlasLocator, recorder->priv().tokenTracker()->nextFlushToken());
+
+    // FreeGpuResources should only remove the 4th page
+    atlas->freeGpuResources(recorder->priv().tokenTracker()->nextFlushToken());
+    check(reporter, atlas.get(), /*expectedActive=*/3, /*expectedEvictCount=*/4);
+
+    // Now flush
+    recorder->priv().issueFlushToken();
+    atlas->compact(recorder->priv().tokenTracker()->nextFlushToken());
+
+    // FreeGpuResources should clear everything out
+    atlas->freeGpuResources(recorder->priv().tokenTracker()->nextFlushToken());
+    check(reporter, atlas.get(), /*expectedActive=*/0, /*expectedEvictCount=*/16);
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
@@ -144,7 +167,7 @@ void test_draw_atlas_config(skiatest::Reporter* reporter, int maxTextureSize, si
 }
 }  // anonymous namespace
 
-DEF_GRAPHITE_TEST(DrawAtlasConfig_Basic, reporter, CtsEnforcement::kNextRelease) {
+DEF_GRAPHITE_TEST(DrawAtlasConfig_Basic, reporter, CtsEnforcement::kNever) {
     // 1/4 MB
     test_draw_atlas_config(reporter, 65536, 256 * 1024, MaskFormat::kARGB,
                            { 256, 256 }, { 256, 256 });

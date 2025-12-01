@@ -16,9 +16,10 @@
 #include "ui/menus/simple_menu_model.h"
 
 #include "browser/menus/vivaldi_menu_enums.h"
-#include "extensions/tools/vivaldi_tools.h"
-#include "ui/vivaldi_browser_window.h"
 #include "browser/menus/vivaldi_menubar_controller.h"
+#include "extensions/tools/vivaldi_tools.h"
+#include "extensions/vivaldi_browser_component_wrapper.h"
+#include "ui/vivaldi_browser_window.h"
 
 namespace extensions {
 
@@ -214,7 +215,9 @@ ExtensionFunction::ResponseAction MenubarMenuShowFunction::Run() {
   EXTENSION_FUNCTION_VALIDATE(params);
 
   VivaldiBrowserWindow* window =
-    VivaldiBrowserWindow::FromId(params->properties.window_id);
+      VivaldiBrowserComponentWrapper::GetInstance()->
+          VivaldiBrowserWindowFromId(
+            params->properties.window_id);
   if (!window) {
     return RespondNow(Error("No such window"));
   }

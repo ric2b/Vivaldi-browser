@@ -14,6 +14,7 @@
 <translation id="1454726940098520109">Не показувати це підтвердження</translation>
 <translation id="1462666970065907900">Ви дійсно бажаєте закрити це вікно?</translation>
 <translation id="1480046233931937785">Подяка</translation>
+<translation id="1490502035430975848">Інспектувати Portal Document</translation>
 <translation id="1521774566618522728">Активний сьогодні</translation>
 <translation id="1526344461589023948">Під час збереження завантажених файлів оновлення сталася помилка. Будь ласка, перевірте наявність вільного місця на диску та спробуйте ще раз.</translation>
 <translation id="1635542496948266458">Перемкнути профілі</translation>
@@ -34,9 +35,11 @@
 <translation id="2141974047387702305">Під час завантаження файлів оновлення сталася помилка. Будь ласка, перевірте інтернет-з'єднання та спробуйте ще раз.</translation>
 <translation id="2226825946708954262">⚠ Продовжити зі втратою даних</translation>
 <translation id="2339641773402824483">Перевірка оновлень...</translation>
+<translation id="2429571091666452569">Зі списку:</translation>
 <translation id="2441056087170876076">Монстр 2</translation>
 <translation id="2444387452209867610">Вставити нотатку</translation>
 <translation id="2486841023299517366">Тварина 4</translation>
+<translation id="2501278716633472235">Повернутися</translation>
 <translation id="2612127540243995147">Оновлення готове до встановлення. Vivaldi буде перезапущено.</translation>
 <translation id="2613387515621326337">Показати сторінку оновлення</translation>
 <translation id="2645477450146475243">На жаль, налаштування Opera недоступні, коли цей браузер працює. Щоб імпортувати ці налаштування до Vivaldi, збережіть свою роботу та закрийте всі вікна Opera. Потім натисніть Продовжити.</translation>
@@ -61,6 +64,7 @@
 <translation id="3259769196742189631">Перевірка на W3C</translation>
 <translation id="3291915639428159043">Автовідтворення заблоковане</translation>
 <translation id="3302905971452834934">Монстр 1</translation>
+<translation id="3308738399950580893">рекламу</translation>
 <translation id="3334610655141903168">(немає заголовку)</translation>
 <translation id="3372505110412186107">Версія Vivaldi <ph name="VERSION" /> є найновішою.</translation>
 <translation id="3383198080133834965">Оновлення завершене!</translation>
@@ -71,9 +75,11 @@
 <translation id="3521635864657970829">Ви дійсно бажаєте закрити це вікно?</translation>
 <translation id="3540597690227428180">Тварина 9</translation>
 <translation id="3542768452570884558">Відкрити посилання у новому вікні</translation>
+<translation id="3586931643579894722">Приховати деталі</translation>
 <translation id="3588820906588687999">Відкрити зображення в новій вкладці</translation>
 <translation id="3601066750251199488">Монстр 3</translation>
 <translation id="3620979700683094848">Сайти можуть автоматично відтворювати відео</translation>
+<translation id="3650023731264842343">Під час завантаження такої сторінки:</translation>
 <translation id="3658651522139217005">Opera GX</translation>
 <translation id="3680031241659195730">Доступна нова версія Vivaldi!</translation>
 <translation id="3708982624815781692">Завантаження було скасовано.</translation>
@@ -83,6 +89,7 @@
 <translation id="3795800845758778870">На жаль, налаштування Brave недоступні, коли браузер працює. Для того, щоб імортувати налаштування до Vivaldi, збережіть вашу роботу та закрийте всі вікна Brave. Потім продовжіть процес імпорту.</translation>
 <translation id="3822431842304177896">Новий роздільник</translation>
 <translation id="3832132597516774400">Краєвид 5</translation>
+<translation id="3894751534882749287">Якщо ви хочете переглянути сторінку в будь-якому випадку, ви можете змінити рівень захисту у спливаючому вікні або натисніть кнопку Дозволити</translation>
 <translation id="3914946330804881301">Імпортовано з Opera</translation>
 <translation id="3921292902397893431">Монстр 8</translation>
 <translation id="3943857333388298514">Вставити</translation>
@@ -107,6 +114,7 @@
 <translation id="4582480609585453144">Відкрити посилання у фоновій вкладці</translation>
 <translation id="4636708767492582204">Надіслати по пошті</translation>
 <translation id="4677434526832593569">Тварина 8</translation>
+<translation id="4736016046474602958">Блокувальник стеження</translation>
 <translation id="474217410105706308">Вимкнути звук</translation>
 <translation id="4861715717329665002">Автозбережені сесії</translation>
 <translation id="4881695831933465202">Відкрити</translation>
@@ -133,9 +141,11 @@
 <translation id="588258955323874662">Повноекранний режим</translation>
 <translation id="5916080360077521750">На жаль, налаштування Chrome недоступні, якщо браузер працює. Для імпортування цих налаштувань до Vivaldi, збережіть свої дані та закрийте всі вікна Chrome. Потім натисніть "Продовжити".</translation>
 <translation id="6040143037577758943">Закрити</translation>
+<translation id="6140948187512243695">Показати деталі</translation>
 <translation id="6229528619562190452">Натисніть тут, щоб оновити Vivaldi.</translation>
 <translation id="6234173136417926046">Установити як фон Експрес-панелі</translation>
 <translation id="6339818817272922368">Локальний обліковий запис</translation>
+<translation id="6376435169746695498">Завантаження цієї сторінки було заблоковано збігом <ph name="BLOCKER_NAME" /></translation>
 <translation id="6398710281890660037">Захистити мій профіль</translation>
 <translation id="6438786710866753178">Краєвид 4</translation>
 <translation id="6477028720702061455">Виберіть папку профілю Opera для імпорту</translation>
@@ -152,6 +162,7 @@
 <translation id="7086554968911045110">Краєвид 7</translation>
 <translation id="7099506190679014195">Безпечне оновлення сховища ключів</translation>
 <translation id="7111492742514999492">Краєвид 9</translation>
+<translation id="7113310725918019676">Дозволити <ph name="BLOCKED_TYPE" /> з сервера <ph name="DOMAIN" /></translation>
 <translation id="7208252576848052204">На жаль, налаштування Arc недоступні, коли цей браузер працює. Щоб імпортувати його налаштування до Vivaldi, збережіть свою роботу та закрийте всі вікна Arc. Потім натисніть Продовжити.</translation>
 <translation id="7321500017121629018">Активний вчора</translation>
 <translation id="7337881442233988129">Chromium</translation>
@@ -167,12 +178,13 @@
 <translation id="8027581147000338959">Відкрити у новому вікні</translation>
 <translation id="8044382196220116469">Не дозволяти сайтам автоматично відтворювати відео</translation>
 <translation id="8099620695029051217">Копіювати адресу сторінки</translation>
+<translation id="8119307142152921512">стеження та рекламу</translation>
 <translation id="8197810018650377191">Помістити сторінку в закладки</translation>
 <translation id="8261506727792406068">Видалити</translation>
-<translation id="8263047843452521549">Перевірити фоновий обробник</translation>
 <translation id="8331671104904436324">Відкрити у фоновій вкладці</translation>
 <translation id="8373293945112511707">Краєвид 1</translation>
 <translation id="8388552048012645975">Завантаження оновлення...</translation>
+<translation id="8392904568172593155">Без параметрів</translation>
 <translation id="8427094907586191051">Краєвид 17</translation>
 <translation id="8439034818057146672">Нова версія Vivaldi готова для встановлення.</translation>
 <translation id="8446668873108041390">Виконання JavaScript через AppleScript відключено. У налаштуваннях Settings &gt; Privacy &gt; Apple Events ви можете дозволити JavaScript з Apple Events.</translation>
@@ -183,14 +195,15 @@
 <translation id="8651348004684669199">Додати активну вкладку</translation>
 <translation id="8669345741879513971">Монстр 10</translation>
 <translation id="867544375504146191">Яндекс</translation>
-<translation id="8689295374912158752">Перевірити документ-портали</translation>
 <translation id="875142999698251063">Вийти зараз</translation>
 <translation id="8768970203213061953">Краєвид 14</translation>
 <translation id="8773635261052182196">Ви більше не будете отримувати повідомлення. Ви можете включити їх в налаштуваннях Vivaldi.</translation>
 <translation id="8774017153185436870">Сайти можуть автоматично відтворювати відео</translation>
 <translation id="8813277370772331957">Нагадати пізніше</translation>
+<translation id="8837256239226739065">Інспектувати фоновий Service Worker</translation>
 <translation id="8894900864683381599">Додати посилання на веб-панель</translation>
 <translation id="8912720443398351457">Ви дійсно бажаєте вийти з Vivaldi?</translation>
+<translation id="8940028675168378100">Блоковано <ph name="BLOCKER_NAME" /></translation>
 <translation id="8947109330183116400">Вибрати HTML файл закладок</translation>
 <translation id="9017566390391482291">Виберіть папку профілю Vivaldi для імпорту</translation>
 <translation id="9048058608784130603">Оновлення готове <ph name="VERSION" /></translation>
@@ -201,6 +214,7 @@
 <translation id="912022491595344261">Відкрити зображення як <ph name="USER" /></translation>
 <translation id="9157539936604258187">Відкрити посилання</translation>
 <translation id="9169060351863393881">Opera 12.x</translation>
+<translation id="9180553614777056266">Блокувальник реклами</translation>
 <translation id="939305735877869636">Brave</translation>
 <translation id="970294721402795299">Краєвид 16</translation>
 </translationbundle>

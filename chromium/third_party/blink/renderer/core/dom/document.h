@@ -49,7 +49,6 @@
 #include "third_party/blink/public/common/metrics/document_update_reason.h"
 #include "third_party/blink/public/common/tokens/tokens.h"
 #include "third_party/blink/public/mojom/css/preferred_color_scheme.mojom-blink-forward.h"
-#include "third_party/blink/public/mojom/facilitated_payments/payment_link_handler.mojom-blink.h"
 #include "third_party/blink/public/mojom/frame/color_scheme.mojom-blink-forward.h"
 #include "third_party/blink/public/mojom/input/focus_type.mojom-blink-forward.h"
 #include "third_party/blink/public/mojom/page/page.mojom-blink-forward.h"
@@ -72,6 +71,7 @@
 #include "third_party/blink/renderer/core/dom/document_timing.h"
 #include "third_party/blink/renderer/core/dom/element.h"
 #include "third_party/blink/renderer/core/dom/events/event_path.h"
+#include "third_party/blink/renderer/core/dom/focus_params.h"
 #include "third_party/blink/renderer/core/dom/live_node_list_registry.h"
 #include "third_party/blink/renderer/core/dom/node_list_invalidation_type.h"
 #include "third_party/blink/renderer/core/dom/qualified_name.h"
@@ -81,13 +81,13 @@
 #include "third_party/blink/renderer/core/editing/forward.h"
 #include "third_party/blink/renderer/core/html/forms/listed_element.h"
 #include "third_party/blink/renderer/core/html/parser/parser_synchronization_policy.h"
+#include "third_party/blink/renderer/core/layout/geometry/physical_offset.h"
 #include "third_party/blink/renderer/platform/heap/collection_support/heap_hash_map.h"
 #include "third_party/blink/renderer/platform/heap/collection_support/heap_hash_set.h"
 #include "third_party/blink/renderer/platform/heap/collection_support/heap_linked_hash_set.h"
 #include "third_party/blink/renderer/platform/heap/collection_support/heap_vector.h"
 #include "third_party/blink/renderer/platform/heap_observer_list.h"
 #include "third_party/blink/renderer/platform/instrumentation/use_counter.h"
-#include "third_party/blink/renderer/platform/mojo/heap_mojo_remote.h"
 #include "third_party/blink/renderer/platform/scheduler/public/post_cancellable_task.h"
 #include "third_party/blink/renderer/platform/supplementable.h"
 #include "third_party/blink/renderer/platform/timer.h"
@@ -96,6 +96,11 @@
 #include "third_party/blink/renderer/platform/wtf/gc_plugin.h"
 #include "third_party/blink/renderer/platform/wtf/hash_set.h"
 #include "third_party/perfetto/include/perfetto/tracing/traced_value_forward.h"
+
+#if BUILDFLAG(IS_ANDROID)
+#include "third_party/blink/public/mojom/facilitated_payments/payment_link_handler.mojom-blink.h"
+#include "third_party/blink/renderer/platform/mojo/heap_mojo_remote.h"
+#endif
 
 namespace base {
 class SingleThreadTaskRunner;
@@ -215,6 +220,7 @@ class MediaQueryMatcher;
 class NodeIterator;
 class NthIndexCache;
 class Page;
+class PaintLayerScrollableArea;
 class PendingAnimations;
 class PendingLinkPreload;
 class ProcessingInstruction;
@@ -235,10 +241,12 @@ class ScriptRunnerDelayer;
 class ScriptValue;
 class ScriptableDocumentParser;
 class ScriptedAnimationController;
+class ScrollMarkerGroupData;
 class SecurityOrigin;
 class SelectorQueryCache;
 class SerializedScriptValue;
 class SetHTMLOptions;
+class SetHTMLUnsafeOptions;
 class Settings;
 class SlotAssignmentEngine;
 class StyleEngine;
@@ -266,7 +274,6 @@ enum class CSSPropertyID;
 struct DraggableRegionValue;
 struct FocusParams;
 struct IconURL;
-struct PhysicalOffset;
 struct TextDiffRange;
 struct WebPrintPageDescription;
 
@@ -306,14 +313,15 @@ using DocumentClassFlags = base::
 // storage, but only store a single element vector which is DCHECKED at the
 // calling site.
 using ExplicitlySetAttrElementsMap =
-    HeapHashMap<QualifiedName, Member<HeapLinkedHashSet<WeakMember<Element>>>>;
+    GCedHeapHashMap<QualifiedName,
+                    Member<GCedHeapLinkedHashSet<WeakMember<Element>>>>;
 
 // A map of IDL attribute name to Element FrozenArray value, for one particular
 // element.
 // This represents 'cached attr-associated elements' in the HTML specification.
 // https://html.spec.whatwg.org/multipage/common-dom-interfaces.html#cached-attr-associated-elements
 using CachedAttrAssociatedElementsMap =
-    HeapHashMap<QualifiedName, Member<FrozenArray<Element>>>;
+    GCedHeapHashMap<QualifiedName, Member<FrozenArray<Element>>>;
 
 // Represents the start and end time of the unload event.
 struct UnloadEventTiming {
@@ -756,7 +764,13 @@ class CORE_EXPORT Document : public ContainerNode,
   // does its own ancestor tree walk).
   void UpdateStyleAndLayoutTreeForThisDocument();
 
-  void UpdateStyleAndLayoutTreeForElement(const Element*, DocumentUpdateReason);
+  // `only_cv_auto` is passed to the constructor of
+  // DisplayLockUtilities::ScopedForcedUpdate. When set to true, this element
+  // won't get a style/layout update if it is inside a content-visibility:hidden
+  // subtree.
+  void UpdateStyleAndLayoutTreeForElement(const Element*,
+                                          DocumentUpdateReason,
+                                          bool only_cv_auto = false);
   void UpdateStyleAndLayoutTreeForSubtree(const Element*, DocumentUpdateReason);
 
   void UpdateStyleAndLayout(DocumentUpdateReason);
@@ -890,9 +904,27 @@ class CORE_EXPORT Document : public ContainerNode,
   void writeln(v8::Isolate*, const Vector<String>& text, ExceptionState&);
 
   // TrustedHTML variants of the above.
-  // TODO(mkwst): Write a spec for this.
   void write(v8::Isolate*, TrustedHTML*, ExceptionState&);
   void writeln(v8::Isolate*, TrustedHTML*, ExceptionState&);
+  void write(v8::Isolate*,
+             TrustedHTML*,
+             HeapVector<Member<V8UnionStringOrTrustedHTML>>,
+             ExceptionState&);
+  void writeln(v8::Isolate*,
+               TrustedHTML*,
+               HeapVector<Member<V8UnionStringOrTrustedHTML>>,
+               ExceptionState&);
+
+  // Corresponds to https://html.spec.whatwg.org/#document-write-steps
+  //
+  // This implements steps 1-5 of the algorithm, and calls
+  // write(const String&, LocalDOMWindow*, ExceptionState&) for the remainder.
+  void Write(v8::Isolate*,
+             TrustedHTML*,
+             HeapVector<Member<V8UnionStringOrTrustedHTML>>,
+             bool line_feed,
+             const char* sink,
+             ExceptionState&);
 
   bool WellFormed() const { return well_formed_; }
 
@@ -1811,7 +1843,6 @@ class CORE_EXPORT Document : public ContainerNode,
   // null if the document is stopped.
   FontMatchingMetrics* GetFontMatchingMetrics();
 
-  void MaybeRecordShapeTextElapsedTime(base::TimeDelta elapsed_time);
   void MaybeRecordSvgImageProcessingTime(
       int data_change_count,
       base::TimeDelta data_change_elapsed_time) const;
@@ -1865,7 +1896,7 @@ class CORE_EXPORT Document : public ContainerNode,
   }
 
   bool IsVerticalScrollEnforced() const { return is_vertical_scroll_enforced_; }
-  bool IsFocusAllowed() const;
+  bool IsFocusAllowed(FocusTrigger trigger) const;
 
   LazyLoadImageObserver& EnsureLazyLoadImageObserver();
 
@@ -1877,7 +1908,7 @@ class CORE_EXPORT Document : public ContainerNode,
   DisplayLockDocumentState& GetDisplayLockDocumentState() const;
 
   // Deferred compositor commits are disallowed by default, and are only allowed
-  // for same-origin navigations to an html document fetched with http.
+  // for html documents fetched via the http family of protocols.
   bool DeferredCompositorCommitIsAllowed() const;
   void SetDeferredCompositorCommitIsAllowed(bool new_value) {
     deferred_compositor_commit_is_allowed_ = new_value;
@@ -1982,13 +2013,25 @@ class CORE_EXPORT Document : public ContainerNode,
     return render_blocking_resource_manager_.Get();
   }
 
-  void SetHasRenderBlockingExpectLinkElements(bool flag) {
-    has_render_blocking_expect_link_elements_ = flag;
-  }
+  void SetHasRenderBlockingExpectLinkElements(bool flag);
 
   bool HasRenderBlockingExpectLinkElements() const {
     return has_render_blocking_expect_link_elements_;
   }
+
+  void SetHasFullFrameRateBlockingExpectLinkElements(bool flag);
+
+  bool HasFullFrameRateBlockingExpectLinkElements() const {
+    return has_frame_rate_blocking_expect_link_elements_;
+  }
+
+  // Whether the document has any pending elements that need to be tracked for
+  // full render blocking or full frame rate blocking.
+  bool HasPendingExpectLinkElements() const {
+    return has_pending_expect_link_elements_;
+  }
+
+  void UpdateRenderFrameRate();
 
   // Called when a previously render-blocking resource is no longer render-
   // blocking, due to it has finished loading or has given up render-blocking.
@@ -2111,7 +2154,7 @@ class CORE_EXPORT Document : public ContainerNode,
   // should be merged.
   static Document* parseHTMLUnsafe(ExecutionContext* context,
                                    const String& html,
-                                   SetHTMLOptions* options,
+                                   SetHTMLUnsafeOptions* options,
                                    ExceptionState& exception_state);
   static Document* parseHTML(ExecutionContext* context,
                              const String& html,
@@ -2136,6 +2179,24 @@ class CORE_EXPORT Document : public ContainerNode,
   // creation on the next layout.
   void ScheduleShadowTreeCreation(HTMLInputElement& element);
   void UnscheduleShadowTreeCreation(HTMLInputElement& element);
+
+  // Traverses DOM tree and collects HTMLAnchorElements to closest ancestor
+  // element with scroll-marker-contain property.
+  void UpdateScrollMarkerGroupRelations();
+  void SetNeedsScrollMarkerGroupRelationsUpdate() {
+    needs_scroll_marker_contain_relations_update_ = true;
+  }
+
+  // Subscribes each ScrollMarkerGroupData to all scrollers
+  // that own corresponding scroll marker's scroll target (see
+  // scroll_marker_group_to_scrollable_areas_ for details), so that the scroller
+  // will notify ScrollMarkerGroupData of updates.
+  void UpdateScrollMarkerGroupToScrollableAreasMap();
+  void AddScrollMarkerGroup(ScrollMarkerGroupData* scroll_marker_group);
+  void RemoveScrollMarkerGroup(ScrollMarkerGroupData* scroll_marker_group);
+  void SetNeedsScrollMarkerGroupsMapUpdate() {
+    needs_scroll_marker_groups_map_update_ = true;
+  }
 
   void ScheduleSelectionchangeEvent();
 
@@ -2418,8 +2479,6 @@ class CORE_EXPORT Document : public ContainerNode,
   // Common implementation for parseHTML and parseHTMLUnsafe.
   static Document* parseHTMLInternal(ExecutionContext* context,
                                      const String& html,
-                                     SetHTMLOptions* options,
-                                     bool safe,
                                      ExceptionState& exception_state);
 
   // Mutable because the token is lazily-generated on demand if no token is
@@ -2606,6 +2665,10 @@ class CORE_EXPORT Document : public ContainerNode,
   bool contains_plugins_ = false;
 
   bool has_render_blocking_expect_link_elements_ = false;
+
+  bool has_frame_rate_blocking_expect_link_elements_ = false;
+
+  bool has_pending_expect_link_elements_ = false;
 
   // Set to true whenever shadow root is attached to document. Does not
   // get reset if all roots are removed.
@@ -2963,6 +3026,27 @@ class CORE_EXPORT Document : public ContainerNode,
 
   // If legacy DOM Mutation event listeners are supported by the embedder.
   std::optional<bool> legacy_dom_mutations_supported_;
+
+  // True if the document has scroll marker groups that need to be
+  // recalculated due to e.g. a new element with scroll-marker-contain
+  // property was added or removed, hence it can now be a container
+  // for some html anchor scroll marker elements of other container.
+  bool needs_scroll_marker_contain_relations_update_ = false;
+  // True if the document has elements with scroll-marker-contain property
+  // and some html anchor scroll marker elements. It is a signal to update a
+  // map between scroll marker groups and scrollable areas to subscribe scroll
+  // marker groups to scrollable areas changes.
+  bool needs_scroll_marker_groups_map_update_ = false;
+  // Every element with scroll-marker-contain property set collects
+  // HTMLAnchorElements as scroll markers inside its ScrollMarkerGroupData.
+  // This is the map of ScrollMarkerGroupData to all scrollers that is the
+  // closest scroller to scroll marker's scroll target (e.g. scroll marker is <a
+  // href="#target"> then scroll target is some element with id="target" and
+  // scroller is closest ancestor scroller of scroll target).
+  // It's needed to subscribe ScrollMarkerGroupData to changes in scrollers.
+  HeapHashMap<Member<ScrollMarkerGroupData>,
+              HeapHashSet<Member<PaintLayerScrollableArea>>>
+      scroll_marker_group_to_scrollable_areas_;
 
   // For rendering media URLs in a top-level context that use the
   // Content-Security-Policy header to sandbox their content. This causes

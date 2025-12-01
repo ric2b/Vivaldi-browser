@@ -223,6 +223,8 @@ class VideoOverlayWindowViewsTest : public ChromeViewsTestBase {
         base::Milliseconds(1));
   }
 
+  void WaitForLayout() { task_environment()->FastForwardBy(base::Seconds(1)); }
+
   void DestroyOverlayWindow() { overlay_window_.reset(); }
 
   void AddEnabledFeature(base::test::FeatureRef feature) {
@@ -764,6 +766,18 @@ TEST_F(VideoOverlayWindowViewsTest, TimestampNotDrawnWhen2024UIIsDisabled) {
   ASSERT_EQ(nullptr, timestamp);
 }
 
+TEST_F(VideoOverlayWindowViewsTest, LiveStatusNotDrawnWhen2024UIIsDisabled) {
+  overlay_window().ForceControlsVisibleForTesting(true);
+  media_session::MediaPosition media_position(
+      /*playback_rate=*/0,
+      /*duration=*/base::TimeDelta::Max(),
+      /*position=*/base::Seconds(42),
+      /*end_of_media=*/false);
+  overlay_window().SetMediaPosition(media_position);
+  views::Label* live_status = overlay_window().live_status_for_testing();
+  ASSERT_EQ(nullptr, live_status);
+}
+
 TEST_F(VideoOverlayWindowViewsTest,
        ReplayAndForward10SecondsNotDrawnWhen2024UIIsDisabled) {
   overlay_window().ForceControlsVisibleForTesting(true);
@@ -836,7 +850,7 @@ TEST_F(VideoOverlayWindowViewsWith2024UITest, ProgressBarSeeksVideo) {
   overlay_window().ForceControlsVisibleForTesting(true);
 
   // Move time forward to ensure controls layout is completed.
-  task_environment()->FastForwardBy(base::Seconds(1));
+  WaitForLayout();
 
   global_media_controls::MediaProgressView* progress_view =
       overlay_window().progress_view_for_testing();
@@ -1020,7 +1034,7 @@ TEST_F(VideoOverlayWindowViewsWith2024UITest,
   overlay_window().ForceControlsVisibleForTesting(true);
 
   // Move time forward to ensure controls layout is completed.
-  task_environment()->FastForwardBy(base::Seconds(1));
+  WaitForLayout();
 
   global_media_controls::MediaProgressView* progress_view =
       overlay_window().progress_view_for_testing();
@@ -1051,4 +1065,120 @@ TEST_F(VideoOverlayWindowViewsWith2024UITest,
   // Once the drag ends, the controls should be able to hide.
   task_environment()->FastForwardBy(base::Seconds(7));
   EXPECT_TRUE(overlay_window().GetControlsContainerView()->IsDrawn());
+}
+
+TEST_F(VideoOverlayWindowViewsWith2024UITest, LiveStatusShownForLiveVideos) {
+  overlay_window().ForceControlsVisibleForTesting(true);
+  views::Label* timestamp = overlay_window().timestamp_for_testing();
+  views::Label* live_status = overlay_window().live_status_for_testing();
+  ASSERT_NE(nullptr, timestamp);
+  ASSERT_NE(nullptr, live_status);
+
+  // The timestamp should start out visible while the live status should start
+  // out hidden.
+  EXPECT_FALSE(live_status->GetVisible());
+  EXPECT_TRUE(timestamp->GetVisible());
+
+  // Setting the position to live should hide the timestamp and show the live
+  // status.
+  media_session::MediaPosition live_media_position(
+      /*playback_rate=*/0,
+      /*duration=*/base::TimeDelta::Max(),
+      /*position=*/base::Seconds(42),
+      /*end_of_media=*/false);
+  overlay_window().SetMediaPosition(live_media_position);
+  EXPECT_TRUE(live_status->GetVisible());
+  EXPECT_FALSE(timestamp->GetVisible());
+
+  // Setting the position to a non-live video should hide the live status and
+  // show the timestamp.
+  media_session::MediaPosition media_position(/*playback_rate=*/0,
+                                              /*duration=*/base::Seconds(100),
+                                              /*position=*/base::Seconds(42),
+                                              /*end_of_media=*/false);
+  overlay_window().SetMediaPosition(media_position);
+  EXPECT_FALSE(live_status->GetVisible());
+  EXPECT_TRUE(timestamp->GetVisible());
+}
+
+TEST_F(VideoOverlayWindowViewsWith2024UITest, NextAndPreviousShareVisibility) {
+  overlay_window().ForceControlsVisibleForTesting(true);
+  SimpleOverlayWindowImageButton* next_button =
+      overlay_window().next_track_controls_view_for_testing();
+  SimpleOverlayWindowImageButton* prev_button =
+      overlay_window().previous_track_controls_view_for_testing();
+
+  ASSERT_NE(nullptr, next_button);
+  ASSERT_NE(nullptr, prev_button);
+
+  // If only "nexttrack" is enabled, both buttons are shown but only the next
+  // button is enabled.
+  overlay_window().SetNextTrackButtonVisibility(true);
+  WaitForLayout();
+  EXPECT_TRUE(next_button->GetVisible());
+  EXPECT_TRUE(prev_button->GetVisible());
+  EXPECT_TRUE(next_button->GetEnabled());
+  EXPECT_FALSE(prev_button->GetEnabled());
+
+  // If both previous and next track are enabled, then both buttons are shown
+  // and enabled.
+  overlay_window().SetPreviousTrackButtonVisibility(true);
+  WaitForLayout();
+  EXPECT_TRUE(next_button->GetVisible());
+  EXPECT_TRUE(prev_button->GetVisible());
+  EXPECT_TRUE(next_button->GetEnabled());
+  EXPECT_TRUE(prev_button->GetEnabled());
+
+  // When disabled again, the buttons are hidden.
+  overlay_window().SetNextTrackButtonVisibility(false);
+  overlay_window().SetPreviousTrackButtonVisibility(false);
+  WaitForLayout();
+  EXPECT_FALSE(next_button->GetVisible());
+  EXPECT_FALSE(prev_button->GetVisible());
+
+  // If only "previousslide" is enabled, both buttons are shown but only the
+  // previous button is enabled.
+  overlay_window().SetPreviousSlideButtonVisibility(true);
+  WaitForLayout();
+  EXPECT_TRUE(next_button->GetVisible());
+  EXPECT_TRUE(prev_button->GetVisible());
+  EXPECT_FALSE(next_button->GetEnabled());
+  EXPECT_TRUE(prev_button->GetEnabled());
+
+  // If both previous and next slide are enabled, then both buttons are shown
+  // and enabled.
+  overlay_window().SetNextSlideButtonVisibility(true);
+  WaitForLayout();
+  EXPECT_TRUE(next_button->GetVisible());
+  EXPECT_TRUE(prev_button->GetVisible());
+  EXPECT_TRUE(next_button->GetEnabled());
+  EXPECT_TRUE(prev_button->GetEnabled());
+
+  // When disabled again, the buttons are hidden.
+  overlay_window().SetNextSlideButtonVisibility(false);
+  overlay_window().SetPreviousSlideButtonVisibility(false);
+  WaitForLayout();
+  EXPECT_FALSE(next_button->GetVisible());
+  EXPECT_FALSE(prev_button->GetVisible());
+}
+
+TEST_F(VideoOverlayWindowViewsWith2024UITest,
+       FastForwardAndRewindAreHiddenForLiveVideos) {
+  overlay_window().ForceControlsVisibleForTesting(true);
+  SimpleOverlayWindowImageButton* replay_10_seconds_button =
+      overlay_window().replay_10_seconds_button_for_testing();
+  SimpleOverlayWindowImageButton* forward_10_seconds_button =
+      overlay_window().forward_10_seconds_button_for_testing();
+  ASSERT_NE(nullptr, replay_10_seconds_button);
+  ASSERT_NE(nullptr, forward_10_seconds_button);
+
+  // For live media, the fast-forward and rewind buttons should be hidden.
+  media_session::MediaPosition live_media_position(
+      /*playback_rate=*/0,
+      /*duration=*/base::TimeDelta::Max(),
+      /*position=*/base::Seconds(42),
+      /*end_of_media=*/false);
+  overlay_window().SetMediaPosition(live_media_position);
+  EXPECT_FALSE(replay_10_seconds_button->GetVisible());
+  EXPECT_FALSE(forward_10_seconds_button->GetVisible());
 }

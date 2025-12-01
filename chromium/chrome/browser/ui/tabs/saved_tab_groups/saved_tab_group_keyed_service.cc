@@ -27,7 +27,6 @@
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/browser_window.h"
-#include "chrome/browser/ui/tabs/public/tab_interface.h"
 #include "chrome/browser/ui/tabs/saved_tab_groups/saved_tab_group_model_listener.h"
 #include "chrome/browser/ui/tabs/saved_tab_groups/saved_tab_group_pref_names.h"
 #include "chrome/browser/ui/tabs/saved_tab_groups/saved_tab_group_utils.h"
@@ -38,15 +37,18 @@
 #include "components/data_sharing/public/features.h"
 #include "components/saved_tab_groups/internal/saved_tab_group_model.h"
 #include "components/saved_tab_groups/internal/saved_tab_group_sync_bridge.h"
+#include "components/saved_tab_groups/internal/shared_tab_group_account_data_sync_bridge.h"
 #include "components/saved_tab_groups/internal/stats.h"
 #include "components/saved_tab_groups/internal/sync_data_type_configuration.h"
 #include "components/saved_tab_groups/internal/tab_group_sync_bridge_mediator.h"
 #include "components/saved_tab_groups/internal/tab_group_sync_metrics_logger_impl.h"
 #include "components/saved_tab_groups/public/features.h"
 #include "components/saved_tab_groups/public/saved_tab_group_tab.h"
+#include "components/saved_tab_groups/public/tab_group_sync_metrics_logger.h"
 #include "components/saved_tab_groups/public/tab_group_sync_service.h"
 #include "components/saved_tab_groups/public/types.h"
 #include "components/sync/base/data_type.h"
+#include "components/sync/base/features.h"
 #include "components/sync/base/report_unrecoverable_error.h"
 #include "components/sync/model/client_tag_based_data_type_processor.h"
 #include "components/sync/model/data_type_local_change_processor.h"
@@ -55,6 +57,7 @@
 #include "components/sync/service/sync_user_settings.h"
 #include "components/sync_device_info/device_info_sync_service.h"
 #include "components/sync_device_info/device_info_tracker.h"
+#include "components/tab_collections/public/tab_interface.h"
 #include "components/tab_groups/tab_group_id.h"
 #include "components/tab_groups/tab_group_visual_data.h"
 #include "content/public/browser/web_contents.h"
@@ -109,13 +112,33 @@ CreateSharedTabGroupDataChangeProcessor() {
 std::unique_ptr<SyncDataTypeConfiguration>
 MaybeCreateSyncConfigurationForSharedTabGroupData(
     syncer::OnceDataTypeStoreFactory store_factory) {
-  if (!base::FeatureList::IsEnabled(
-          data_sharing::features::kDataSharingFeature)) {
+  if (!data_sharing::features::IsDataSharingFunctionalityEnabled()) {
     return nullptr;
   }
 
   return std::make_unique<SyncDataTypeConfiguration>(
       CreateSharedTabGroupDataChangeProcessor(), std::move(store_factory));
+}
+
+std::unique_ptr<syncer::DataTypeLocalChangeProcessor>
+CreateSharedTabGroupAccountDataChangeProcessor() {
+  return std::make_unique<syncer::ClientTagBasedDataTypeProcessor>(
+      syncer::SHARED_TAB_GROUP_ACCOUNT_DATA,
+      base::BindRepeating(&syncer::ReportUnrecoverableError,
+                          chrome::GetChannel()));
+}
+
+std::unique_ptr<SyncDataTypeConfiguration>
+MaybeCreateSyncConfigurationForSharedTabGroupAccountData(
+    syncer::OnceDataTypeStoreFactory store_factory) {
+  if (!data_sharing::features::IsDataSharingFunctionalityEnabled() ||
+      !base::FeatureList::IsEnabled(syncer::kSyncSharedTabGroupAccountData)) {
+    return nullptr;
+  }
+
+  return std::make_unique<SyncDataTypeConfiguration>(
+      CreateSharedTabGroupAccountDataChangeProcessor(),
+      std::move(store_factory));
 }
 
 }  // anonymous namespace
@@ -132,6 +155,7 @@ SavedTabGroupKeyedService::SavedTabGroupKeyedService(
       sync_bridge_mediator_(std::make_unique<TabGroupSyncBridgeMediator>(
           model(),
           profile->GetPrefs(),
+          /*logger=*/nullptr,
           std::make_unique<SyncDataTypeConfiguration>(
               CreateSavedTabGroupChangeProcessor(),
               GetStoreFactory()),
@@ -139,6 +163,14 @@ SavedTabGroupKeyedService::SavedTabGroupKeyedService(
               GetStoreFactory()))),
       metrics_logger_(std::make_unique<TabGroupSyncMetricsLoggerImpl>(
           device_info_tracker)) {
+  std::unique_ptr<SyncDataTypeConfiguration> shared_tab_account_configuration =
+      MaybeCreateSyncConfigurationForSharedTabGroupAccountData(
+          GetStoreFactory());
+  if (shared_tab_account_configuration) {
+    shared_tab_group_account_data_bridge_ =
+        std::make_unique<SharedTabGroupAccountDataSyncBridge>(
+            std::move(shared_tab_account_configuration));
+  }
   model_->AddObserver(this);
 
   metrics_timer_.Start(
@@ -165,6 +197,13 @@ SavedTabGroupKeyedService::GetSavedTabGroupControllerDelegate() {
 base::WeakPtr<syncer::DataTypeControllerDelegate>
 SavedTabGroupKeyedService::GetSharedTabGroupControllerDelegate() {
   return sync_bridge_mediator_->GetSharedTabGroupControllerDelegate();
+}
+
+base::WeakPtr<syncer::DataTypeControllerDelegate>
+SavedTabGroupKeyedService::GetSharedTabGroupAccountControllerDelegate() {
+  CHECK(shared_tab_group_account_data_bridge_);
+  return shared_tab_group_account_data_bridge_->change_processor()
+      ->GetControllerDelegate();
 }
 
 void SavedTabGroupKeyedService::ConnectRestoredGroupToSaveId(
@@ -528,6 +567,8 @@ void SavedTabGroupKeyedService::SavedTabGroupModelLoaded() {
   // Clear restored groups to connect and save now that we have processed them.
   restored_groups_to_connect_on_load_.clear();
   restored_groups_to_save_on_load_.clear();
+
+  RecordStartupMetrics();
 }
 
 void SavedTabGroupKeyedService::SavedTabGroupRemovedFromSync(
@@ -694,6 +735,29 @@ void SavedTabGroupKeyedService::UpdateGroupVisualData(
       saved_group->title(), saved_group->color(),
       /*is_collapsed=*/tab_group->visual_data()->is_collapsed());
   tab_group->SetVisualData(visual_data, /*is_customized=*/true);
+}
+
+bool SavedTabGroupKeyedService::IsRemoteDevice(
+    const std::optional<std::string>& cache_guid) const {
+  std::optional<std::string> local_cache_guid =
+      sync_bridge_mediator_->GetLocalCacheGuidForSavedBridge();
+  if (!local_cache_guid || !cache_guid) {
+    return false;
+  }
+
+  return local_cache_guid.value() != cache_guid.value();
+}
+
+void SavedTabGroupKeyedService::RecordStartupMetrics() {
+  auto saved_tab_groups = model_->saved_tab_groups();
+  std::vector<bool> is_remote(saved_tab_groups.size());
+
+  for (size_t i = 0; i < saved_tab_groups.size(); ++i) {
+    is_remote[i] = IsRemoteDevice(saved_tab_groups[i].creator_cache_guid());
+  }
+
+  TabGroupSyncMetricsLoggerImpl metrics_logger(nullptr);
+  metrics_logger.RecordMetricsOnStartup(saved_tab_groups, is_remote);
 }
 
 void SavedTabGroupKeyedService::RecordMetrics() {

@@ -27,7 +27,6 @@
 #include "ui/views/border.h"
 #include "ui/views/controls/button/menu_button_controller.h"
 #include "ui/views/controls/highlight_path_generator.h"
-#include "ui/views/controls/styled_label.h"
 #include "ui/views/focus/focus_manager.h"
 #include "ui/views/layout/box_layout.h"
 #include "ui/views/layout/flex_layout.h"
@@ -79,8 +78,9 @@ class IconWrapper : public views::View {
   // views::View:
   gfx::Size CalculatePreferredSize(
       const views::SizeBounds& available_size) const override {
-    const int icon_height = icon_->GetPreferredSize(available_size).height();
-    return gfx::Size(icon_height + icon_label_spacing_, icon_height);
+    const gfx::Size icon_size = icon_->GetPreferredSize(available_size);
+    return gfx::Size(icon_size.width() + icon_label_spacing_,
+                     icon_size.height());
   }
 
   views::View* icon() { return icon_; }
@@ -145,7 +145,8 @@ HoverButton::HoverButton(PressedCallback callback,
                          std::unique_ptr<views::View> secondary_view,
                          bool add_vertical_label_spacing,
                          const std::u16string& footer,
-                         int icon_label_spacing)
+                         int icon_label_spacing,
+                         bool multiline_subtitle)
     : HoverButton(std::move(callback), std::u16string()) {
   label()->SetHandlesTooltips(false);
 
@@ -170,11 +171,9 @@ HoverButton::HoverButton(PressedCallback callback,
   // present.
   auto label_wrapper = std::make_unique<views::View>();
 
-  title_ = label_wrapper->AddChildView(std::make_unique<views::StyledLabel>());
+  title_ = label_wrapper->AddChildView(std::make_unique<views::Label>());
   title_->SetText(title);
-  // Allow the StyledLabel for title to assume its preferred size on a single
-  // line and let the flex layout attenuate its width if necessary.
-  title_->SizeToFit(0);
+  title_->SetHorizontalAlignment(gfx::HorizontalAlignment::ALIGN_LEFT);
   // Hover the whole button when hovering |title_|. This is OK because |title_|
   // will never have a link in it.
   title_->SetCanProcessEventsWithinSubtree(false);
@@ -188,6 +187,7 @@ HoverButton::HoverButton(PressedCallback callback,
   if (!subtitle.empty()) {
     std::unique_ptr<views::Label> subtitle_label =
         CreateSecondaryLabel(subtitle);
+    subtitle_label->SetMultiLine(multiline_subtitle);
     subtitle_ = label_wrapper->AddChildView(std::move(subtitle_label));
   }
   if (!footer.empty()) {
@@ -277,10 +277,10 @@ void HoverButton::SetTitleTextStyle(views::style::TextStyle text_style,
     return;
   }
 
-  title_->SetDefaultTextStyle(text_style);
-  title_->SetDisplayedOnBackgroundColor(background_color);
+  title_->SetTextStyle(text_style);
+  title_->SetBackgroundColor(background_color);
   if (color_id) {
-    title_->SetDefaultEnabledColorId(color_id);
+    title_->SetEnabledColor(color_id.value());
   }
 }
 
@@ -333,10 +333,8 @@ void HoverButton::UpdateTooltipAndAccessibleName() {
   }
   const std::u16string accessible_name = base::JoinString(texts, u"\n");
 
-  // views::StyledLabels only add tooltips for any links they may have. However,
-  // since HoverButton will never insert a link inside its child StyledLabel,
-  // decide whether it needs a tooltip by checking whether the available space
-  // is smaller than its preferred size.
+  // Only use a tooltip if the available space is smaller than its preferred
+  // size.
   const bool needs_tooltip =
       label_wrapper_->GetPreferredSize().width() > label_wrapper_->width();
   SetTooltipText(needs_tooltip ? accessible_name : std::u16string());

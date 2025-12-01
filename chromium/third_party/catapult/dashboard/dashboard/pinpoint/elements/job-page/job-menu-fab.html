@@ -6,7 +6,6 @@ found in the LICENSE file.
 -->
 
 <link rel="import" href="/elements/base-style.html">
-<link rel="import" href="/elements/job-page/patch-job-fab.html">
 <link rel="import" href="/elements/jobs-page/new-job-fab.html">
 
 <dom-module id="job-menu-fab">
@@ -42,7 +41,6 @@ found in the LICENSE file.
 
     <div class="root">
       <div class="fabs" opened$="[[showing]]">
-        <patch-job-fab job="[[job]]" user="[[user]]" client="{{client}}" isBisecJob="[[isBisecJob]]"></patch-job-fab>
         <new-job-fab submenu job="[[job]]" user="[[user]]" client="{{client}}"></new-job-fab>
       </div>
       <paper-fab id="expandButton" icon="add" on-tap="toggleMenu"></paper-fab>
@@ -60,10 +58,6 @@ found in the LICENSE file.
           type: Boolean,
           value: false
         },
-        isBisecJob: {
-          type: Boolean,
-          value: false
-        }
       },
 
       toggleMenu() {

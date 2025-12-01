@@ -79,15 +79,13 @@ export class WorkerRPC<LocalInterface extends Record<string, any>, RemoteInterfa
   private nextRequestId = 0;
   private readonly channel: Channel<LocalInterface, RemoteInterface>;
   private readonly localHandler: LocalInterface;
-  private readonly requests: Map<number, {resolve: (params: unknown) => void, reject: (message: Error) => void}> =
-      new Map();
-  private readonly semaphore: Int32Array;
+  private readonly requests = new Map<number, {resolve: (params: unknown) => void, reject: (message: Error) => void}>();
+  private readonly semaphore = new Int32Array(new SharedArrayBuffer(4));
 
   constructor(channel: Channel<LocalInterface, RemoteInterface>, localHandler: LocalInterface) {
     this.channel = channel;
     this.channel.onmessage = this.onmessage.bind(this);
     this.localHandler = localHandler;
-    this.semaphore = new Int32Array(new SharedArrayBuffer(4));
   }
 
   sendMessage<Method extends keyof RemoteInterface>(method: Method, ...params: Parameters<RemoteInterface[Method]>):
@@ -113,6 +111,7 @@ export class WorkerRPC<LocalInterface extends Record<string, any>, RemoteInterfa
       },
     });
     while (Atomics.wait(this.semaphore, 0, 0) !== 'not-equal') {
+      // Await the semaphore to be equal
     }
     const [response] = this.semaphore;
 

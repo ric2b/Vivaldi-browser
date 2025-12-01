@@ -5,6 +5,9 @@
 #ifndef V8_OBJECTS_OBJECTS_BODY_DESCRIPTORS_INL_H_
 #define V8_OBJECTS_OBJECTS_BODY_DESCRIPTORS_INL_H_
 
+#include "src/objects/objects-body-descriptors.h"
+// Include the non-inl header before the rest of the headers.
+
 #include <algorithm>
 
 #include "include/v8-internal.h"
@@ -33,7 +36,6 @@
 #include "src/objects/js-weak-refs.h"
 #include "src/objects/literal-objects.h"
 #include "src/objects/megadom-handler-inl.h"
-#include "src/objects/objects-body-descriptors.h"
 #include "src/objects/ordered-hash-table-inl.h"
 #include "src/objects/property-descriptor-object.h"
 #include "src/objects/source-text-module.h"
@@ -1021,10 +1023,12 @@ class WasmTypeInfo::BodyDescriptor final : public BodyDescriptorBase {
   }
 };
 
-class WasmMemoryMapDescriptor::BodyDescriptor : public DataOnlyBodyDescriptor {
+class WasmMemoryMapDescriptor::BodyDescriptor : public BodyDescriptorBase {
  public:
-  static_assert(WasmMemoryMapDescriptor::kStartOfStrongFieldsOffset ==
-                WasmMemoryMapDescriptor::kEndOfStrongFieldsOffset);
+  static inline void IterateBody(Tagged<Map> map, Tagged<HeapObject> obj,
+                                 int object_size, ObjectVisitor* v) {
+    IterateMaybeWeakPointer(obj, kMemoryOffset, v);
+  }
 
   static inline int SizeOf(Tagged<Map> map, Tagged<HeapObject> object) {
     return map->instance_size();
@@ -1173,6 +1177,11 @@ class WasmStruct::BodyDescriptor final : public BodyDescriptorBase {
                                  int object_size, ObjectVisitor* v) {
     Tagged<WasmStruct> wasm_struct = UncheckedCast<WasmStruct>(obj);
     const wasm::CanonicalStructType* type = WasmStruct::GcSafeType(map);
+    if (type->is_descriptor()) {
+      // The associated Map is stored where the first field would otherwise be.
+      DCHECK_NE(type->field_offset(0), 0);
+      v->VisitPointer(wasm_struct, wasm_struct->RawField(0));
+    }
     for (uint32_t i = 0; i < type->field_count(); i++) {
       if (!type->field(i).is_reference()) continue;
       int offset = static_cast<int>(type->field_offset(i));

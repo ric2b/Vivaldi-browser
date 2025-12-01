@@ -80,7 +80,7 @@ describe('FrameManager', () => {
   function setupEventSink(
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       frameManager: FrameManager, events: SDK.FrameManager.Events[]): Array<{type: string, data: any}> {
-    const dispatchedEvents: Array<{type: string, data: {}}> = [];
+    const dispatchedEvents: Array<{type: string, data: object}> = [];
     for (const event of events) {
       frameManager.addEventListener(event, e => dispatchedEvents.push({type: event || '', data: e.data}));
     }
@@ -132,7 +132,7 @@ describe('FrameManager', () => {
     assert.deepEqual(dispatchedEvents[2].data, {frameId: childFrameId});
     let frameFromId = frameManager.getFrame(parentFrameId);
     assert.strictEqual(frameFromId?.id, parentFrameId);
-    assert.strictEqual(frameFromId?.resourceTreeModel().target().id(), targetId as Protocol.Target.TargetID);
+    assert.strictEqual(frameFromId?.resourceTreeModel().target().id(), targetId);
     frameFromId = frameManager.getFrame(childFrameId);
     assert.isNull(frameFromId);
   });
@@ -199,10 +199,10 @@ describe('FrameManager', () => {
     });
     let frameFromId = frameManager.getFrame(parentFrameId);
     assert.strictEqual(frameFromId?.id, parentFrameId);
-    assert.strictEqual(frameFromId?.resourceTreeModel().target().id(), parentTargetId as Protocol.Target.TargetID);
+    assert.strictEqual(frameFromId?.resourceTreeModel().target().id(), parentTargetId);
     frameFromId = frameManager.getFrame(childFrameId);
     assert.strictEqual(frameFromId?.id, childFrameId);
-    assert.strictEqual(frameFromId?.resourceTreeModel().target().id(), childTargetId as Protocol.Target.TargetID);
+    assert.strictEqual(frameFromId?.resourceTreeModel().target().id(), childTargetId);
   });
 
   it('transfers frame creation stack traces during OOPIF transfer (case 1)', () => {

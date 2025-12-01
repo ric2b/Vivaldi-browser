@@ -2,11 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/40284755): Remove this and spanify to fix the errors.
-#pragma allow_unsafe_buffers
-#endif
-
 #include "base/sampling_heap_profiler/sampling_heap_profiler.h"
 
 #include <algorithm>
@@ -86,20 +81,21 @@ const char* GetAndLeakThreadName() {
   // enabled.
   int err = prctl(PR_GET_NAME, name);
   if (!err) {
-    return strdup(name);
+    return UNSAFE_TODO(strdup(name));
   }
 #elif BUILDFLAG(IS_APPLE)
   int err = pthread_getname_np(pthread_self(), name, kBufferLen);
   if (err == 0 && *name != '\0') {
-    return strdup(name);
+    return UNSAFE_TODO(strdup(name));
   }
 #endif  // BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS) ||
         // BUILDFLAG(IS_ANDROID)
 
   // Use tid if we don't have a thread name.
-  snprintf(name, sizeof(name), "Thread %lu",
-           static_cast<unsigned long>(base::PlatformThread::CurrentId()));
-  return strdup(name);
+  UNSAFE_TODO(snprintf(
+      name, sizeof(name), "Thread %lu",
+      static_cast<unsigned long>(base::PlatformThread::CurrentId().raw())));
+  return UNSAFE_TODO(strdup(name));
 }
 
 const char* UpdateAndGetThreadName(const char* name) {

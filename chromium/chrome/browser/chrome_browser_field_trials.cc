@@ -14,7 +14,6 @@
 #include "base/strings/string_util.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
-#include "build/chromeos_buildflags.h"
 #include "chrome/browser/metrics/chrome_browser_sampling_trials.h"
 #include "chrome/browser/metrics/chrome_metrics_service_accessor.h"
 #include "chrome/browser/metrics/chrome_metrics_service_client.h"
@@ -33,20 +32,9 @@
 #include "chrome/common/chrome_features.h"
 #endif
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
-#include "ash/login/ui/management_disclosure_field_trial.h"
+#if BUILDFLAG(IS_CHROMEOS)
 #include "chrome/common/channel_info.h"
 #include "chromeos/ash/services/multidevice_setup/public/cpp/first_run_field_trial.h"
-#endif
-
-#if BUILDFLAG(IS_CHROMEOS_LACROS)
-// GN doesn't understand conditional includes, so we need nogncheck here.
-// See crbug.com/1125897.
-#include "chromeos/startup/startup.h"  // nogncheck
-#endif
-
-#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_CHROMEOS)
-#include "chrome/browser/ui/startup/default_browser_prompt/default_browser_prompt_trial.h"
 #endif
 
 #if BUILDFLAG(IS_LINUX)
@@ -78,12 +66,10 @@ void ChromeBrowserFieldTrials::SetUpClientSideFieldTrials(
   metrics::CreateFallbackUkmSamplingTrialIfNeeded(
       entropy_providers.default_entropy(), feature_list);
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
   if (!has_seed) {
     ash::multidevice_setup::CreateFirstRunFieldTrial(feature_list);
   }
-  ash::management_disclosure_field_trial::Create(feature_list, local_state_,
-                                                 entropy_providers);
 #endif
 }
 
@@ -129,10 +115,6 @@ void ChromeBrowserFieldTrials::RegisterSyntheticTrials() {
         kBackgroundThreadPoolTrial, group_name);
   }
 #endif  // BUILDFLAG(IS_ANDROID)
-
-#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_CHROMEOS)
-  DefaultBrowserPromptTrial::EnsureStickToDefaultBrowserPromptCohort();
-#endif
 }
 
 #if BUILDFLAG(IS_LINUX)

@@ -122,7 +122,7 @@ bool MenuController::VivaldiStepSiblingMenu(bool next) {
     return false;
   delegate_->SiblingMenuCreated(alt_menu);
   did_capture_ = false;
-  UpdateInitialLocation(rect, anchor, false);
+  UpdateInitialLocation(rect, anchor, MenuType::kNormal);
   alt_menu->PrepareForRun(
       has_mnemonics,
       source->GetMenuItem()->GetRootMenuItem()->show_mnemonics_);

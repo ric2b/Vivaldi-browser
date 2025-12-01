@@ -83,7 +83,7 @@ PseudoElement* PseudoElement::Create(Element* parent,
                                      PseudoId pseudo_id,
                                      const AtomicString& view_transition_name) {
   if (pseudo_id == kPseudoIdCheckMark) {
-    CHECK(RuntimeEnabledFeatures::CustomizableSelectEnabled());
+    CHECK(HTMLSelectElement::CustomizableSelectEnabled(parent));
 
     if (!IsA<HTMLOptionElement>(parent)) {
       // The `::checkmark` pseudo element should only be created for option
@@ -93,7 +93,7 @@ PseudoElement* PseudoElement::Create(Element* parent,
   }
 
   if (pseudo_id == kPseudoIdPickerIcon) {
-    CHECK(RuntimeEnabledFeatures::CustomizableSelectEnabled());
+    CHECK(HTMLSelectElement::CustomizableSelectEnabled(parent));
 
     if (!IsA<HTMLSelectElement>(parent)) {
       // The `::picker-icon` pseudo element should only be created for select
@@ -105,8 +105,7 @@ PseudoElement* PseudoElement::Create(Element* parent,
   if (pseudo_id == kPseudoIdFirstLetter) {
     return MakeGarbageCollected<FirstLetterPseudoElement>(parent);
   } else if (IsTransitionPseudoElement(pseudo_id)) {
-    auto* transition =
-        ViewTransitionUtils::GetTransition(parent->GetDocument());
+    auto* transition = ViewTransitionUtils::GetTransition(*parent);
     DCHECK(transition);
     return transition->CreatePseudoElement(parent, pseudo_id,
                                            view_transition_name);
@@ -577,21 +576,29 @@ Node* PseudoElement::InnerNodeForHitTesting() {
 
 void PseudoElement::AccessKeyAction(
     SimulatedClickCreationScope creation_scope) {
-  // Even though pseudo elements can't use the accesskey attribute, assistive
-  // tech can still attempt to interact with pseudo elements if they are in
-  // the AX tree (usually due to their text/image content).
+  // If this is a pseudo element with activation behavior such as a
+  // ::scroll-marker or ::scroll-button, we should invoke it.
+  if (HasActivationBehavior()) {
+    DispatchSimulatedClick(nullptr, creation_scope);
+    return;
+  }
+
+  // Even though regular pseudo elements can't use the accesskey attribute,
+  // assistive tech can still attempt to interact with pseudo elements if
+  // they are in the AX tree (usually due to their text/image content).
   // Just pass this request to the originating element.
-  DCHECK(UltimateOriginatingElement());
-  UltimateOriginatingElement()->AccessKeyAction(creation_scope);
+  UltimateOriginatingElement().AccessKeyAction(creation_scope);
 }
 
-Element* PseudoElement::UltimateOriginatingElement() const {
+Element& PseudoElement::UltimateOriginatingElement() const {
   auto* parent = parentElement();
 
   while (parent && parent->IsPseudoElement())
     parent = parent->parentElement();
 
-  return parent;
+  // Should not invoke this method on disposed pseudo elements.
+  CHECK(parent);
+  return *parent;
 }
 
 bool PseudoElementLayoutObjectIsNeeded(PseudoId pseudo_id,

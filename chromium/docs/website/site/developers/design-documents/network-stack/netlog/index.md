@@ -144,34 +144,46 @@ As was alluded to earlier in the overview, [FileNetLogObserver](https://cs.chrom
 
 # How custom parameters are attached to events
 
-Custom parameters are specified by a `base::Value*`. Value is used to represent a hierarchy of nodes, that maps directly into JSON; it has all the expected building blocks -- dictionaries, strings, numbers, arrays. See [values.h](https://cs.chromium.org/chromium/src/base/values.h) for more details.
-For the sake of efficiency, you do not directly create a `base::Value*` when emitting events. Rather, you pass in a Callback which knows how to build the `Value*`, in case one is needed.
-This decoupling allows deferring the creation of Values until really necessary. This is good since, in the common case when not exporting events, we simply don’t need that data. Creating the custom Value parameters is not free since it involves copying internal state into a new `Value*` hierarchy.
-This makes it easy to piece things together without needing to define helper structures! You are guaranteed that the parameter callback will only be invoked synchronously before the return of the logging function.
+Custom parameters are specified by a `base::Value::Dict`. `Value::Dict` is used to represent a hierarchy of nodes, that maps directly into JSON; it has all the expected building blocks -- dictionaries, strings, numbers, arrays. See [values.h](https://cs.chromium.org/chromium/src/base/values.h) for more details.
+For the sake of efficiency, you do not directly create a `base::Value::Dict` when emitting events. Rather, you pass in a lambda which knows how to build the `Dict`, in case one is needed.
+This decoupling allows deferring the creation of Values until really necessary. This is good since, in the common case when not exporting events, we simply don’t need that data. Creating the custom parameters is not free since it involves copying internal state into a new `Value::Dict` hierarchy.
+This makes it easy to piece things together without needing to define helper structures! You are guaranteed that the lambda will only be invoked synchronously before the return of the logging function.
 
 Here is an example of how to emit an event with custom parameters:
 
 ```
 net_log_.BeginEvent(
-    NetLog::TYPE_URL_REQUEST_START_JOB,
-    base::Bind(&NetLogURLRequestStartCallback,
-    &url(), &method_, load_flags_, priority_));
+    NetLogEventType::URL_REQUEST_START_JOB, [&] {
+      return NetLogURLRequestStartParams(url(), method_, load_flags_);
+});
 ```
 
-By the time BeginEvent returns, NetLogURLRequestStartCallback() will have been invoked if-and-only-if the `Value*` parameter was needed. That is why it is safe for the callback to take pointers to url() and method_ (pointers are preferred in this case to avoid making unnecessary copies).
+By the time `BeginEvent` returns, `NetLogURLRequestStartParams()` will have been invoked if-and-only-if the `Value::Dict` parameter was needed. That is why it is safe for the lambda to capture by reference.
 
 Here is what the bound function might look like:
 
 ```
-Value* NetLogURLRequestStartCallback(const GURL* url, const std::string* method, int load_flags, RequestPriority priority, NetLog::LogLevel) {
-    DictionaryValue* dict = new DictionaryValue();
-    dict->SetString("url", url->possibly_invalid_spec());
-    dict->SetString("method", *method);
-    dict->SetInteger("load_flags", load_flags);
-    dict->SetInteger("priority", static_cast<int>(priority));
-    return dict;
+base::Value::Dict NetLogURLRequestStartParams(const GURL& url,
+                                              const std::string& method,
+                                              int load_flags) {
+    return base::Value::Dict()
+      .Set("url", url.possibly_invalid_spec())
+      .Set("method", method)
+      .Set("load_flags", load_flags);
 }
 ```
+
+The `Value::Dict` object can also be created inline in the lambda:
+
+```
+net_log_.BeginEvent(NetLogEventType::HTTP_STREAM_POOL_GROUP_ALIVE, [&] {
+  return base::Value::Dict()
+    .Set("stream_key", stream_key_.ToValue())
+    .Set("force_quic", force_quic_);
+});
+```
+
+Parameters should be documented in [//net/log/net_log_event_type_list.h](https://source.chromium.org/chromium/chromium/src/+/main:net/log/net_log_event_type_list.h).
 
 # What does NetLog actually log?
 

@@ -320,8 +320,7 @@ class ExistingUserController : public HttpAuthDialog::Observer,
   // URL to append to start Guest mode with.
   GURL guest_mode_url_;
 
-  // Once Lacros is shipped, this will no longer be necessary.
-  std::unique_ptr<HttpAuthDialog::ScopedEnabler> enable_ash_httpauth_;
+  std::unique_ptr<HttpAuthDialog::ScopedEnabler> enable_system_httpauth_;
 
   // The displayed email for the next login attempt set by `SetDisplayEmail`.
   std::string display_email_;
@@ -329,12 +328,15 @@ class ExistingUserController : public HttpAuthDialog::Observer,
   // Whether login attempt is running.
   bool is_login_in_progress_ = false;
 
+  // Whether the user has empty password.
+  std::optional<bool> user_has_empty_password_;
+
   // Whether user signin is completed.
   bool is_signin_completed_ = false;
 
   // True if password has been changed for user who is completing sign in.
   // Set in OnLoginSuccess. Before that use LoginPerformer::password_changed().
-  bool password_changed_ = false;
+  bool password_changed_;
 
   // Set in OnLoginSuccess. Before that use LoginPerformer::auth_mode().
   // Initialized with `kExternal` as more restricted mode.

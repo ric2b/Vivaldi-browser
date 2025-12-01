@@ -16,7 +16,6 @@
 #include "base/check_op.h"
 #include "base/command_line.h"
 #include "base/compiler_specific.h"
-#include "base/containers/adapters.h"
 #include "base/feature_list.h"
 #include "base/file_version_info.h"
 #include "base/functional/bind.h"
@@ -62,11 +61,9 @@
 #include "net/cookies/cookie_store.h"
 #include "net/cookies/cookie_util.h"
 #include "net/cookies/parsed_cookie.h"
-#include "net/filter/brotli_source_stream.h"
 #include "net/filter/filter_source_stream.h"
-#include "net/filter/gzip_source_stream.h"
 #include "net/filter/source_stream.h"
-#include "net/filter/zstd_source_stream.h"
+#include "net/filter/source_stream_type.h"
 #include "net/first_party_sets/first_party_set_entry.h"
 #include "net/first_party_sets/first_party_set_metadata.h"
 #include "net/first_party_sets/first_party_sets_cache_filter.h"
@@ -250,6 +247,23 @@ enum class ContentEncodingType {
   kMaxValue = kZstd,
 };
 
+ContentEncodingType ToContentEncodingType(net::SourceStreamType type) {
+  switch (type) {
+    case net::SourceStreamType::kBrotli:
+      return ContentEncodingType::kBrotli;
+    case net::SourceStreamType::kDeflate:
+      return ContentEncodingType::kDeflate;
+    case net::SourceStreamType::kGzip:
+      return ContentEncodingType::kGZip;
+    case net::SourceStreamType::kZstd:
+      return ContentEncodingType::kZstd;
+    case net::SourceStreamType::kUnknown:
+      return ContentEncodingType::kUnknown;
+    case net::SourceStreamType::kNone:
+      return ContentEncodingType::kUnknown;
+  }
+}
+
 // These values are persisted to logs. Entries should not be renumbered and
 // numeric values should never be reused.
 enum class HttpRequestStsState {
@@ -344,7 +358,8 @@ std::unique_ptr<URLRequestJob> URLRequestHttpJob::Create(URLRequest* request) {
           request->context()->transport_security_state()) {
     upgrade_decision = hsts->GetSSLUpgradeDecision(
         url.host(),
-        /*is_top_level_nav=*/request->isolation_info().IsMainFrameRequest(),
+        /*is_top_level_nav=*/
+        request->isolation_info().IsOutermostMainFrameRequest(),
         request->net_log());
   }
 
@@ -936,13 +951,17 @@ void URLRequestHttpJob::SetCookieHeaderAndStart(
   device_bound_sessions::SessionService* service =
       request_->context()->device_bound_session_service();
   if (service) {
-    std::optional<device_bound_sessions::Session::Id> id =
-        service->GetAnySessionRequiringDeferral(request_);
-    // If the request needs to be deferred while waiting for refresh,
-    // do not start the transaction at this time.
-    if (id) {
+    std::optional<device_bound_sessions::SessionService::DeferralParams>
+        deferral = service->ShouldDefer(request_, first_party_set_metadata_);
+    // If the request needs to be deferred while waiting for refresh, do not
+    // start the transaction at this time. This may also kick off a refresh.
+    if (deferral) {
+      device_bound_session_deferral_count_++;
+      if (device_bound_session_deferral_count_ == 1) {
+        device_bound_session_first_deferral_ = base::TimeTicks::Now();
+      }
       service->DeferRequestForRefresh(
-          request_, *id,
+          request_, *deferral,
           // restart with new cookies callback
           base::BindOnce(&URLRequestHttpJob::RestartTransactionForRefresh,
                          weak_factory_.GetWeakPtr()),
@@ -950,6 +969,14 @@ void URLRequestHttpJob::SetCookieHeaderAndStart(
           base::BindOnce(&URLRequestHttpJob::StartTransaction,
                          weak_factory_.GetWeakPtr()));
       return;
+    }
+
+    base::UmaHistogramCounts100("Net.DeviceBoundSessions.RequestDeferralCount",
+                                device_bound_session_deferral_count_);
+    if (device_bound_session_deferral_count_ > 0) {
+      base::UmaHistogramTimes(
+          "Net.DeviceBoundSessions.TotalRequestDeferredDuration",
+          base::TimeTicks::Now() - device_bound_session_first_deferral_);
     }
   }
 #endif  // BUILDFLAG(ENABLE_DEVICE_BOUND_SESSIONS)
@@ -1142,12 +1169,20 @@ void URLRequestHttpJob::OnSetCookieResult(const CookieOptions& options,
 
 #if BUILDFLAG(ENABLE_DEVICE_BOUND_SESSIONS)
 void URLRequestHttpJob::ProcessDeviceBoundSessionsHeader() {
+  if (!request_->allows_device_bound_sessions() &&
+      !features::kDeviceBoundSessionsForceEnableForTesting.Get()) {
+    return;
+  }
+
   device_bound_sessions::SessionService* service =
       request_->context()->device_bound_session_service();
   if (!service) {
     return;
   }
 
+  // If response header Sec-Session-Registration is present and configured
+  // appropriately, trigger a registration request per header value to attempt
+  // to create a new session.
   const auto& request_url = request_->url();
   auto* headers = GetResponseHeaders();
   std::vector<device_bound_sessions::RegistrationFetcherParam> params =
@@ -1159,6 +1194,10 @@ void URLRequestHttpJob::ProcessDeviceBoundSessionsHeader() {
         request_->isolation_info(), request_->net_log(), request_->initiator());
   }
 
+  // If response header Sec-Session-Challenge is present and configured
+  // appropriately, for each header value, store the challenge in advance for
+  // the next relevant refresh request that gets triggered. This is to help
+  // avoid a round-trip for when the next refresh request is required.
   std::vector<device_bound_sessions::SessionChallengeParam> challenge_params =
       device_bound_sessions::SessionChallengeParam::CreateIfValid(request_url,
                                                                   headers);
@@ -1413,6 +1452,12 @@ bool URLRequestHttpJob::GetCharset(std::string* charset) {
   return GetResponseHeaders()->GetCharset(charset);
 }
 
+void URLRequestHttpJob::GetClientSideContentDecodingTypes(
+    std::vector<net::SourceStreamType>* types) const {
+  CHECK(types);
+  *types = client_side_content_decoding_types_;
+}
+
 void URLRequestHttpJob::GetResponseInfo(HttpResponseInfo* info) {
   if (override_response_info_) {
     DCHECK(!transaction_.get());
@@ -1437,6 +1482,13 @@ void URLRequestHttpJob::GetLoadTimingInfo(
     return;
   if (transaction_->GetLoadTimingInfo(load_timing_info))
     load_timing_info->receive_headers_end = receive_headers_end_;
+}
+
+void URLRequestHttpJob::PopulateLoadTimingInternalInfo(
+    LoadTimingInternalInfo* load_timing_internal_info) const {
+  if (transaction_) {
+    transaction_->PopulateLoadTimingInternalInfo(load_timing_internal_info);
+  }
 }
 
 bool URLRequestHttpJob::GetTransactionRemoteEndpoint(
@@ -1469,71 +1521,26 @@ std::unique_ptr<SourceStream> URLRequestHttpJob::SetUpSourceStream() {
     return nullptr;
 
   std::unique_ptr<SourceStream> upstream = URLRequestJob::SetUpSourceStream();
+
   HttpResponseHeaders* headers = GetResponseHeaders();
-  std::vector<SourceStream::SourceType> types;
-  size_t iter = 0;
-  while (std::optional<std::string_view> type =
-             headers->EnumerateHeader(&iter, "Content-Encoding")) {
-    SourceStream::SourceType source_type =
-        FilterSourceStream::ParseEncodingType(*type);
-    switch (source_type) {
-      case SourceStream::TYPE_BROTLI:
-      case SourceStream::TYPE_DEFLATE:
-      case SourceStream::TYPE_GZIP:
-      case SourceStream::TYPE_ZSTD:
-        if (request_->accepted_stream_types() &&
-            !request_->accepted_stream_types()->contains(source_type)) {
-          // If the source type is disabled, we treat it
-          // in the same way as SourceStream::TYPE_UNKNOWN.
-          return upstream;
-        }
-        types.push_back(source_type);
-        break;
-      case SourceStream::TYPE_NONE:
-        // Identity encoding type. Pass through raw response body.
-        return upstream;
-      case SourceStream::TYPE_UNKNOWN:
-        // Unknown encoding type. Pass through raw response body.
-        // Request will not be canceled; though
-        // it is expected that user will see malformed / garbage response.
-        return upstream;
-    }
+  std::vector<SourceStreamType> types =
+      FilterSourceStream::GetContentEncodingTypes(
+          request_->accepted_stream_types(), *headers);
+
+  if (request()->client_side_content_decoding_enabled()) {
+    // When client side content encoding is enabled, the client will decode the
+    // body. So returns the original stream.
+    client_side_content_decoding_types_ = std::move(types);
+    return upstream;
   }
-
-  ContentEncodingType content_encoding_type = ContentEncodingType::kUnknown;
-
-  for (const auto& type : base::Reversed(types)) {
-    std::unique_ptr<FilterSourceStream> downstream;
-    switch (type) {
-      case SourceStream::TYPE_BROTLI:
-        downstream = CreateBrotliSourceStream(std::move(upstream));
-        content_encoding_type = ContentEncodingType::kBrotli;
-        break;
-      case SourceStream::TYPE_GZIP:
-      case SourceStream::TYPE_DEFLATE:
-        downstream = GzipSourceStream::Create(std::move(upstream), type);
-        content_encoding_type = type == SourceStream::TYPE_GZIP
-                                    ? ContentEncodingType::kGZip
-                                    : ContentEncodingType::kDeflate;
-        break;
-      case SourceStream::TYPE_ZSTD:
-        downstream = CreateZstdSourceStream(std::move(upstream));
-        content_encoding_type = ContentEncodingType::kZstd;
-        break;
-      case SourceStream::TYPE_NONE:
-      case SourceStream::TYPE_UNKNOWN:
-        NOTREACHED();
-    }
-    if (downstream == nullptr)
-      return nullptr;
-    upstream = std::move(downstream);
-  }
-
   // Note: If multiple encoding types were specified, this only records the last
   // encoding type.
-  UMA_HISTOGRAM_ENUMERATION("Net.ContentEncodingType", content_encoding_type);
-
-  return upstream;
+  UMA_HISTOGRAM_ENUMERATION(
+      "Net.ContentEncodingType2",
+      ToContentEncodingType(types.empty() ? SourceStreamType::kNone
+                                          : types[0]));
+  return FilterSourceStream::CreateDecodingSourceStream(std::move(upstream),
+                                                        types);
 }
 
 bool URLRequestHttpJob::CopyFragmentOnRedirect(const GURL& location) const {

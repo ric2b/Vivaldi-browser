@@ -3,17 +3,9 @@
 // found in the LICENSE file.
 
 'use strict';
-
-const tsParser = require('@typescript-eslint/parser');
-
 const rule = require('../lib/l10n-no-i18nString-calls-module-instantiation.js');
-const ruleTester = new (require('eslint').RuleTester)({
-  languageOptions: {
-    ecmaVersion: 'latest',
-    sourceType: 'module',
-    parser: tsParser,
-  },
-});
+
+const {RuleTester} = require('./utils/utils.js');
 
 const expectedErrors = [
   {
@@ -21,7 +13,7 @@ const expectedErrors = [
   },
 ];
 
-ruleTester.run('l10n-no-i18nString-calls-module-instantiation', rule, {
+new RuleTester().run('l10n-no-i18nString-calls-module-instantiation', rule, {
   valid: [
     {
       code: 'function foo() { i18nString("test"); }',

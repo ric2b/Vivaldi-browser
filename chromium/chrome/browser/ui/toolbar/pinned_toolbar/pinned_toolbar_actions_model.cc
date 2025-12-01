@@ -8,7 +8,6 @@
 #include <string>
 #include <vector>
 
-#include "base/feature_list.h"
 #include "base/functional/bind.h"
 #include "base/metrics/user_metrics.h"
 #include "base/metrics/user_metrics_action.h"
@@ -22,6 +21,7 @@
 #include "chrome/browser/ui/toolbar/pinned_toolbar/pinned_toolbar_actions_model_factory.h"
 #include "chrome/browser/ui/toolbar/toolbar_pref_names.h"
 #include "chrome/browser/ui/ui_features.h"
+#include "chrome/common/chrome_features.h"
 #include "chrome/common/pref_names.h"
 #include "components/prefs/pref_change_registrar.h"
 #include "components/prefs/pref_service.h"
@@ -236,17 +236,25 @@ bool PinnedToolbarActionsModel::IsDefault() const {
   return action_are_default && home_is_default && forward_is_default;
 }
 
-void PinnedToolbarActionsModel::MaybeMigrateChromeLabsPinnedState() {
-  if (!features::IsToolbarPinningEnabled()) {
+void PinnedToolbarActionsModel::MaybeMigrateExistingPinnedStates() {
+  if (!CanUpdate()) {
     return;
   }
-  if (pref_service_->GetBoolean(prefs::kPinnedChromeLabsMigrationComplete)) {
-    return;
-  }
-
-  if (CanUpdate()) {
+  if (!pref_service_->GetBoolean(prefs::kPinnedChromeLabsMigrationComplete)) {
     UpdatePinnedState(kActionShowChromeLabs, true);
     pref_service_->SetBoolean(prefs::kPinnedChromeLabsMigrationComplete, true);
+  }
+  if (features::HasTabSearchToolbarButton() &&
+      !pref_service_->GetBoolean(prefs::kTabSearchMigrationComplete)) {
+    UpdatePinnedState(kActionTabSearch, true);
+    pref_service_->SetBoolean(prefs::kTabSearchMigrationComplete, true);
+  }
+  if (base::FeatureList::IsEnabled(features::kPinnedCastButton) &&
+      !pref_service_->GetBoolean(prefs::kPinnedCastMigrationComplete)) {
+    bool previously_pinned =
+        pref_service_->GetBoolean(prefs::kShowCastIconInToolbar);
+    UpdatePinnedState(kActionRouteMedia, previously_pinned);
+    pref_service_->SetBoolean(prefs::kPinnedCastMigrationComplete, true);
   }
 }
 

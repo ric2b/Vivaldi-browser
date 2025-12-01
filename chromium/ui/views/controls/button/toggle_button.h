@@ -6,11 +6,12 @@
 #define UI_VIEWS_CONTROLS_BUTTON_TOGGLE_BUTTON_H_
 
 #include <optional>
+#include <variant>
 
 #include "base/memory/raw_ptr.h"
-#include "third_party/abseil-cpp/absl/types/variant.h"
 #include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/color/color_id.h"
+#include "ui/color/color_variant.h"
 #include "ui/gfx/animation/slide_animation.h"
 #include "ui/views/controls/button/button.h"
 
@@ -40,15 +41,11 @@ class VIEWS_EXPORT ToggleButton : public Button {
   void SetIsOn(bool is_on);
   bool GetIsOn() const;
 
-  // Sets and gets custom thumb and track colors.
-  void SetThumbOnColor(SkColor thumb_on_color);
-  std::optional<SkColor> GetThumbOnColor() const;
-  void SetThumbOffColor(SkColor thumb_off_color);
-  std::optional<SkColor> GetThumbOffColor() const;
-  void SetTrackOnColor(SkColor track_on_color);
-  std::optional<SkColor> GetTrackOnColor() const;
-  void SetTrackOffColor(SkColor track_off_color);
-  std::optional<SkColor> GetTrackOffColor() const;
+  // Sets custom thumb and track colors.
+  void SetThumbOnColor(ui::ColorVariant thumb_on_color);
+  void SetThumbOffColor(ui::ColorVariant thumb_off_color);
+  void SetTrackOnColor(ui::ColorVariant track_on_color);
+  void SetTrackOffColor(ui::ColorVariant track_off_color);
 
   // Sets if the inner border is drawn. If `enabled`, it is drawn when the
   // switch is off. If `enabled` is false, it's never drawn.
@@ -114,10 +111,9 @@ class VIEWS_EXPORT ToggleButton : public Button {
   gfx::SlideAnimation slide_animation_{this};
   gfx::SlideAnimation hover_animation_{this};
   raw_ptr<ThumbView> thumb_view_;
-  absl::variant<ui::ColorId, SkColor> track_on_color_ =
-      ui::kColorToggleButtonTrackOn;
-  absl::variant<ui::ColorId, SkColor> track_off_color_ =
-      ui::kColorToggleButtonTrackOff;
+
+  std::optional<ui::ColorVariant> track_on_color_;
+  std::optional<ui::ColorVariant> track_off_color_;
 
   // When false, this button won't accept input. Different from View::SetEnabled
   // in that the view retains focus when this is false but not when disabled.

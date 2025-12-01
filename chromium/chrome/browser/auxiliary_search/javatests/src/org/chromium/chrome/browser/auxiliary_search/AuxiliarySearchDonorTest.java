@@ -22,6 +22,7 @@ import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
+import org.mockito.Mock;
 import org.mockito.junit.MockitoJUnit;
 import org.mockito.junit.MockitoRule;
 
@@ -49,6 +50,8 @@ public final class AuxiliarySearchDonorTest {
     public BaseActivityTestRule<BlankUiTestActivity> mActivityTestRule =
             new BaseActivityTestRule<>(BlankUiTestActivity.class);
 
+    @Mock private AuxiliarySearchHooks mHooks;
+
     private int[] mIds;
     private String[] mUrls;
     private String[] mTitles;
@@ -59,6 +62,8 @@ public final class AuxiliarySearchDonorTest {
 
     @Before
     public void setUp() {
+        AuxiliarySearchControllerFactory.getInstance().setHooksForTesting(mHooks);
+
         mActivityTestRule.launchActivity(null);
         mAuxiliarySearchDonor = AuxiliarySearchDonor.getInstance();
 
@@ -75,8 +80,7 @@ public final class AuxiliarySearchDonorTest {
 
     @After
     public void tearDown() {
-        ThreadUtils.runOnUiThreadBlocking(
-                () -> mAuxiliarySearchDonor.deleteAllTabs((result) -> {}));
+        ThreadUtils.runOnUiThreadBlocking(() -> mAuxiliarySearchDonor.deleteAll((result) -> {}));
     }
 
     @Test
@@ -103,9 +107,9 @@ public final class AuxiliarySearchDonorTest {
             entryList.add(entry);
         }
 
-        Map<Integer, Bitmap> map = new HashMap<>();
-        map.put(mIds[0], mBitmap[0]);
-        map.put(mIds[1], mBitmap[1]);
+        Map<AuxiliarySearchEntry, Bitmap> map = new HashMap<>();
+        map.put(entryList.get(0), mBitmap[0]);
+        map.put(entryList.get(1), mBitmap[1]);
 
         ThreadUtils.runOnUiThreadBlocking(
                 () -> {
@@ -133,7 +137,9 @@ public final class AuxiliarySearchDonorTest {
                             GenericDocument genericDocument = result.getGenericDocument();
                             WebPage webPage = genericDocument.toDocumentClass(WebPage.class);
 
-                            String documentId = AuxiliarySearchDonor.getDocumentId(mIds[i]);
+                            String documentId =
+                                    AuxiliarySearchDonor.getDocumentId(
+                                            AuxiliarySearchEntryType.TAB, mIds[i]);
                             assertEquals(documentId, genericDocument.getId());
                             assertEquals(
                                     mLastAccessTimestamps[i],
@@ -145,7 +151,7 @@ public final class AuxiliarySearchDonorTest {
                             assertEquals(
                                     mLastAccessTimestamps[i], webPage.getCreationTimestampMillis());
                             assertEquals(
-                                    mAuxiliarySearchDonor.getDocumentTtlMs(),
+                                    mAuxiliarySearchDonor.getTabDocumentTtlMs(),
                                     webPage.getDocumentTtlMillis());
                             assertTrue(
                                     Arrays.equals(

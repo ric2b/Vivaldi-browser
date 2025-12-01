@@ -194,7 +194,7 @@ END_METADATA
 
 void AddResourceIcon(const gfx::ImageSkia* skia_image, void* data) {
   views::View* parent = static_cast<views::View*>(data);
-  parent->AddChildView(
+  parent->AddChildViewRaw(
       new RatingStar(ui::ImageModel::FromImageSkia(*skia_image)));
 }
 
@@ -313,7 +313,7 @@ class ExtensionInstallDialogView::ExtensionJustificationView
   ~ExtensionJustificationView() override = default;
 
   // Get the text currently present in the justification text field.
-  std::u16string GetJustificationText() {
+  std::u16string_view GetJustificationText() {
     DCHECK(justification_field_);
     return justification_field_->GetText();
   }
@@ -339,13 +339,17 @@ class ExtensionInstallDialogView::ExtensionJustificationView
         base::NumberToString16(justification_field_->GetText().length()),
         base::NumberToString16(kMaxJustificationTextLength)));
 
-    justification_text_length_->SetEnabledColorId(
-        IsJustificationLengthWithinLimit()
-            // The original color is not stored because the theme may change
-            // while the dialog is visible. To get around this, another label
-            // (justification_field_label_) is used as the color reference.
-            ? justification_field_label_->GetEnabledColorId()
-            : ui::kColorAlertHighSeverity);
+    // The original color is not stored because the theme may change
+    // while the dialog is visible. To get around this, another label
+    // (justification_field_label_) is used as the color reference.
+    if (IsJustificationLengthWithinLimit()) {
+      if (auto enabled_color =
+              justification_field_label_->GetRequestedEnabledColor()) {
+        justification_text_length_->SetEnabledColor(*enabled_color);
+      }
+    } else {
+      justification_text_length_->SetEnabledColor(ui::kColorAlertHighSeverity);
+    }
   }
 
   void ChildPreferredSizeChanged(views::View* child) override {
@@ -712,10 +716,11 @@ void ExtensionInstallDialogView::CreateContents() {
         section.header, views::style::CONTEXT_DIALOG_BODY_TEXT);
     header_label->SetMultiLine(true);
     header_label->SetHorizontalAlignment(gfx::ALIGN_LEFT);
-    extension_info_container->AddChildView(header_label);
+    extension_info_container->AddChildViewRaw(header_label);
 
     if (section.contents_view) {
-      extension_info_container->AddChildView(section.contents_view.release());
+      extension_info_container->AddChildViewRaw(
+          section.contents_view.release());
     }
   }
 
@@ -737,7 +742,7 @@ void ExtensionInstallDialogView::CreateContents() {
   scroll_view_->ClipHeightTo(
       0, provider->GetDistanceMetric(
              views::DISTANCE_DIALOG_SCROLLABLE_AREA_MAX_HEIGHT));
-  AddChildView(scroll_view_.get());
+  AddChildViewRaw(scroll_view_.get());
 }
 
 void ExtensionInstallDialogView::ContentsChanged(

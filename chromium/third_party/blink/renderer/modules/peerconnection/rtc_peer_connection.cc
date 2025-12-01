@@ -28,11 +28,6 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
-#pragma allow_unsafe_buffers
-#endif
-
 #include "third_party/blink/renderer/modules/peerconnection/rtc_peer_connection.h"
 
 #include <algorithm>
@@ -41,6 +36,7 @@
 #include <string>
 #include <utility>
 
+#include "base/compiler_specific.h"
 #include "base/containers/to_vector.h"
 #include "base/feature_list.h"
 #include "base/lazy_instance.h"
@@ -246,7 +242,7 @@ RTCIceCandidatePlatform* ConvertToRTCIceCandidatePlatform(
   return MakeGarbageCollected<RTCIceCandidatePlatform>(
       candidate->candidate(), candidate->sdpMid(), sdp_m_line_index,
       candidate->usernameFragment(),
-      /*url can not be reconstruncted*/ std::nullopt);
+      /*url can not be reconstruncted*/ String());
 }
 
 webrtc::PeerConnectionInterface::IceTransportsType IceTransportPolicyFromEnum(
@@ -1683,7 +1679,7 @@ void RTCPeerConnection::restartIce() {
   peer_handler_->RestartIce();
 }
 
-void RTCPeerConnection::addStream(ScriptState* script_state,
+void RTCPeerConnection::addStream(v8::Isolate* isolate,
                                   MediaStream* stream,
                                   ExceptionState& exception_state) {
   if (ThrowExceptionIfSignalingStateClosed(signaling_state_, &exception_state))
@@ -1692,13 +1688,14 @@ void RTCPeerConnection::addStream(ScriptState* script_state,
   MediaStreamVector streams;
   streams.push_back(stream);
   for (const auto& track : stream->getTracks()) {
-    addTrack(track, streams, IGNORE_EXCEPTION);
+    addTrack(track, streams, IgnoreException(isolate));
   }
 
   stream->RegisterObserver(this);
 }
 
-void RTCPeerConnection::removeStream(MediaStream* stream,
+void RTCPeerConnection::removeStream(v8::Isolate* isolate,
+                                     MediaStream* stream,
                                      ExceptionState& exception_state) {
   if (ThrowExceptionIfSignalingStateClosed(signaling_state_, &exception_state))
     return;
@@ -1706,7 +1703,7 @@ void RTCPeerConnection::removeStream(MediaStream* stream,
     auto* sender = FindSenderForTrackAndStream(track, stream);
     if (!sender)
       continue;
-    removeTrack(sender, IGNORE_EXCEPTION);
+    removeTrack(sender, IgnoreException(isolate));
   }
   stream->UnregisterObserver(this);
 }
@@ -1873,7 +1870,7 @@ RTCRtpTransceiver* RTCPeerConnection::addTransceiver(
     }
     case V8UnionMediaStreamTrackOrString::ContentType::kString: {
       const String& kind_string = track_or_kind->GetAsString();
-      // TODO(hbos): Make cricket::MediaType an allowed identifier in
+      // TODO(hbos): Make webrtc::MediaType an allowed identifier in
       // rtc_peer_connection.cc and use that instead of a boolean.
       String kind;
       if (kind_string == "audio") {
@@ -2431,7 +2428,8 @@ void RTCPeerConnection::DidModifyTransceivers(
   // Remove transceivers and update their states to reflect that they are
   // necessarily stopped.
   for (auto id : removed_transceiver_ids) {
-    for (auto it = transceivers_.begin(); it != transceivers_.end(); ++it) {
+    for (auto it = transceivers_.begin(); it != transceivers_.end();
+         UNSAFE_TODO(++it)) {
       if ((*it)->platform_transceiver()->Id() == id) {
         // All streams are removed on stop, update `remove_list` if necessary.
         auto* track = (*it)->receiver()->track();
@@ -2924,7 +2922,7 @@ void RTCPeerConnection::DispatchScheduledEvents() {
   events.swap(scheduled_events_);
 
   HeapVector<Member<EventWrapper>>::iterator it = events.begin();
-  for (; it != events.end(); ++it) {
+  for (; it != events.end(); UNSAFE_TODO(++it)) {
     if ((*it)->Setup()) {
       DispatchEvent(*(*it)->event_.Release());
     }

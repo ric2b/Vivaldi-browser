@@ -30,6 +30,16 @@ bool ConnectorsService::IsConnectorEnabled(AnalysisConnector connector) const {
   return false;
 }
 
+std::optional<std::string> ConnectorsService::GetBrowserDmToken() const {
+  auto browser_dm_token =
+      policy::BrowserDMTokenStorage::Get()->RetrieveDMToken();
+  if (!browser_dm_token.is_valid()) {
+    return std::nullopt;
+  }
+
+  return browser_dm_token.value();
+}
+
 std::optional<ConnectorsServiceBase::DmToken> ConnectorsService::GetDmToken(
     const char* scope_pref) const {
   policy::PolicyScope scope =
@@ -44,13 +54,11 @@ std::optional<ConnectorsServiceBase::DmToken> ConnectorsService::GetDmToken(
   }
 
   DCHECK_EQ(scope, policy::PolicyScope::POLICY_SCOPE_MACHINE);
-  auto browser_dm_token =
-      policy::BrowserDMTokenStorage::Get()->RetrieveDMToken();
-  if (!browser_dm_token.is_valid()) {
+  auto browser_dm_token = GetBrowserDmToken();
+  if (!browser_dm_token) {
     return std::nullopt;
   }
-
-  return DmToken(browser_dm_token.value(),
+  return DmToken(std::move(*browser_dm_token),
                  policy::PolicyScope::POLICY_SCOPE_MACHINE);
 }
 
@@ -78,6 +86,12 @@ const ConnectorsManagerBase* ConnectorsService::GetConnectorsManagerBase()
 policy::CloudPolicyManager*
 ConnectorsService::GetManagedUserCloudPolicyManager() const {
   return user_cloud_policy_manager_.get();
+}
+
+std::unique_ptr<ClientMetadata> ConnectorsService::BuildClientMetadata(
+    bool is_cloud) {
+  // TODO(crbug.com/406048604): Build ClientMetadata for iOS.
+  return nullptr;
 }
 
 }  // namespace enterprise_connectors

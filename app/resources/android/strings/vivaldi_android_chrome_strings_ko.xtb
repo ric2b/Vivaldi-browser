@@ -14,13 +14,17 @@
 <translation id="2433507940547922241">모양</translation>
 <translation id="2501278716633472235">이전으로</translation>
 <translation id="2633278372998075009">시크릿 탭</translation>
+<translation id="265156376773362237">표준 미리 로드</translation>
 <translation id="272026394418727548">Vivaldi 홈페이지</translation>
+<translation id="2871733351037274014">페이지 미리 로드</translation>
 <translation id="2951071800649516099">나중에 읽을 수 있도록 읽기 목록에 페이지 추가</translation>
 <translation id="3060635849835183725">{BOOKMARKS_COUNT, plural,
           =1 {북마크 <ph name="BOOKMARKS_COUNT_ONE" />개}
           other {북마크 <ph name="BOOKMARKS_COUNT_MANY" />개}}</translation>
 <translation id="3076631378407175873">Copyright <ph name="YEAR" /> Vivaldi Inc. 모든 권리 보유.</translation>
+<translation id="3232293466644486101">인터넷 사용 기록 삭제…</translation>
 <translation id="3234355010754616171">새 사생활 보호 탭</translation>
+<translation id="3237087289225714896">표준 미리 로드:</translation>
 <translation id="3377025655491224618">시크릿 탭</translation>
 <translation id="3504699618187058974">탭</translation>
 <translation id="3518985090088779359">동의 &amp; 계속하기</translation>
@@ -28,6 +32,7 @@
 <translation id="3602290021589620013">미리보기</translation>
 <translation id="3700829948786686853">Vivaldi에 오신 것을 환영합니다</translation>
 <translation id="3719826155360621982">홈페이지</translation>
+<translation id="3738139272394829648">터치해서 검색</translation>
 <translation id="385051799172605136">이전</translation>
 <translation id="399014816462153200">글 읽기:</translation>
 <translation id="4121750346708795461">이 애플리케이션을 사용하면 Vivaldi의 <ph name="BEGIN_LINK1" />최종 사용자 라이선스 계약<ph name="END_LINK1" />과 <ph name="BEGIN_LINK2" />개인정보 보호 정책<ph name="END_LINK2" />에 동의하는 것으로 간주됩니다.</translation>
@@ -36,6 +41,7 @@
 <translation id="4195643157523330669">새 탭에서 열기</translation>
 <translation id="4225895483398857530">툴바 바로가기</translation>
 <translation id="4243710787042215766">시크릿 탭으로 열기</translation>
+<translation id="4291407919474070700"><ph name="BEGIN_LINK" />Android 설정에서 화면 잠금 설정하기<ph name="END_LINK" /></translation>
 <translation id="4304713468139749426">비밀번호 관리자</translation>
 <translation id="451872707440238414">북마크 검색</translation>
 <translation id="4526803704855831732">사생활 보호 탭</translation>
@@ -57,24 +63,34 @@ Touch to Search는 Google이 Vivaldi의 기본 검색 엔진으로 설정된 경
 <translation id="572328651809341494">최근 탭</translation>
 <translation id="6150320133806434356">북마크 저장됨</translation>
 <translation id="6336451774241870485">새 시크릿 탭</translation>
+<translation id="6337323516034698937">이 탭을 다른 기기로 전송하려면 두 기기 모두에서 Vivaldi Sync에 로그인하세요. 필요한 경우 암호화 비밀번호를 입력했는지 확인하세요.</translation>
 <translation id="6404511346730675251">북마크 수정</translation>
 <translation id="6585139692466700358">페이지를 Vivaldi의 번역 서비스를 사용해서 다른 언어로 번역하도록 제안</translation>
+<translation id="6588043302623806746">보안 DNS 사용</translation>
 <translation id="6593061639179217415">데스크톱 사이트</translation>
 <translation id="6610147964972079463">시크릿 탭 닫기</translation>
 <translation id="7029995644714925509">사이트가 페이지에 링크를 비공개로 미리 불러오도록 요청하면 Vivaldi는 쿠키 없이 Google 서버를 통해 페이지를 암호화하고 미리 불러옵니다. 이렇게 하면 미리 불러온 사이트에서 사용자의 정보가 숨겨집니다.</translation>
 <translation id="706339621163631076">브라우저 개인정보처리방침</translation>
 <translation id="732145680195464316"><ph name="PRODUCT_NAME" />에 북마크가 저장됨</translation>
+<translation id="7324354302972299151">“Do Not Track” 요청 전송</translation>
+<translation id="7359002509206457351">결제 수단 액세스</translation>
+<translation id="7419565702166471774">항상 보안 연결 사용</translation>
 <translation id="7427132068601343474">Vivaldi 정보</translation>
+<translation id="7456774706094330779">확장된 미리 로드</translation>
 <translation id="7465104139234185284">모든 시크릿 탭 닫기</translation>
 <translation id="7481312909269577407">앞으로</translation>
 <translation id="7968014550143838305">읽기 목록에 추가됨</translation>
 <translation id="804786196054284061">최종 사용자 라이선스 계약</translation>
+<translation id="8062594758852531064">확장된 미리 로드:</translation>
 <translation id="8127542551745560481">홈페이지 수정</translation>
+<translation id="8348430946834215779">가능할 때마다 HTTPS를 사용하고 이를 지원하지 않는 사이트를 로드하기 전에 경고를 받으세요</translation>
 <translation id="8560602726703398413">북마크에서 읽기 목록 찾기</translation>
 <translation id="85991616550051997">홈페이지로 이동</translation>
 <translation id="8820817407110198400">북마크</translation>
 <translation id="9042893549633094279">개인정보 보호 및 보안</translation>
 <translation id="9063523880881406963">데스크톱 버전으로 보기 사용 중지</translation>
 <translation id="9080642952018487277">사생활 보호 모드로 들어가기</translation>
+<translation id="930124987204876019">방문 기록, 쿠키, 사이트 데이터, 캐시 삭제…</translation>
+<translation id="961856697154696964">인터넷 사용 기록 삭제</translation>
 <translation id="96681097142096641">간소화된 페이지를 보시겠습니까?</translation>
 </translationbundle>

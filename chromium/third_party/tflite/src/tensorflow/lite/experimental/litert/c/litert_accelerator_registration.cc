@@ -18,12 +18,12 @@
 #include <utility>
 
 #include "tensorflow/lite/experimental/litert/c/litert_accelerator.h"
+#include "tensorflow/lite/experimental/litert/c/litert_accelerator_compilation_options.h"
 #include "tensorflow/lite/experimental/litert/c/litert_common.h"
-#include "tensorflow/lite/experimental/litert/c/litert_compiled_model.h"
 #include "tensorflow/lite/experimental/litert/c/litert_environment.h"
 #include "tensorflow/lite/experimental/litert/cc/litert_expected.h"
-#include "tensorflow/lite/experimental/litert/core/accelerator.h"
 #include "tensorflow/lite/experimental/litert/core/environment.h"
+#include "tensorflow/lite/experimental/litert/runtime/accelerator.h"
 
 LiteRtStatus LiteRtCreateAccelerator(LiteRtAccelerator* accelerator) {
   if (!accelerator) {
@@ -95,13 +95,28 @@ LiteRtStatus LiteRtSetAcceleratorGetHardwareSupport(
   return kLiteRtStatusOk;
 }
 
-LiteRtStatus LiteRtSetApplyToModel(
+LiteRtStatus LiteRtSetDelegateFunction(
     LiteRtAccelerator accelerator,
-    LiteRtStatus (*ApplyToModel)(LiteRtAccelerator accelerator,
-                                 LiteRtCompiledModel compiled_model)) {
+    LiteRtStatus (*CreateDelegate)(LiteRtAccelerator accelerator,
+                                   LiteRtAcceleratorCompilationOptions options,
+                                   void** delegate),
+    void (*DestroyDelegate)(void* delegate)) {
   if (!accelerator) {
     return kLiteRtStatusErrorInvalidArgument;
   }
-  accelerator->ApplyToModel = ApplyToModel;
+  accelerator->CreateDelegate = CreateDelegate;
+  accelerator->DestroyDelegate = DestroyDelegate;
+  return kLiteRtStatusOk;
+}
+
+LiteRtStatus LiteRtSetIsAcceleratorDelegateResponsibleForJitCompilation(
+    LiteRtAccelerator accelerator,
+    LiteRtStatus (*IsTfLiteDelegateResponsibleForJitCompilation)(
+        LiteRtAcceleratorT* accelerator, bool* does_jit_compilation)) {
+  if (!accelerator) {
+    return kLiteRtStatusErrorInvalidArgument;
+  }
+  accelerator->IsTfLiteDelegateResponsibleForJitCompilation =
+      IsTfLiteDelegateResponsibleForJitCompilation;
   return kLiteRtStatusOk;
 }

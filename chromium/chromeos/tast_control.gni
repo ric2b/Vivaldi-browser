@@ -84,6 +84,31 @@ tast_disabled_tests_from_chrome_all = [
   "security.NetworkListenersNonARC@jacuzzi",
   "security.NetworkListenersNonARC@octopus",
 
+  # https://crbug.com/394821952
+  "ui.WebUIJSErrors",
+  "ui.WebUIJSErrors.field_trial_off",
+  "ui.WebUIJSErrors.field_trial_on",
+
+  # b/394409115
+  "network.AllowCACertificateManagement",
+  "network.AllowClientCertificateManagement",
+
+  #b/400849446
+  "network.ARCCreateWifiInShillByCmd.manual_proxy",
+
+  # b/404605466, Failing on reven-vmtest, blocking uprev.
+  "flex.HWIS",
+
+  # b/404564227, Failing on jacuzzi, blocking uprev.
+  "oobe.SmokeEndToEnd",
+
+  # b/404950758, Flaky, blocking uprev.
+  "secagentd.AuthenticationEvents",
+
+  # b/405201316, Culprit found, but fix is tricky so disabling temporarily.
+  "terminal.SSH",
+  "arc.Print.vm_t",
+
   # READ COMMENT AT TOP BEFORE ADDING NEW TESTS HERE.
 ]
 

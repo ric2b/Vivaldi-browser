@@ -17,7 +17,7 @@ const UIStrings = {
   /**
    * @description Message to display if a setting change requires a reload of DevTools
    */
-  oneOrMoreSettingsHaveChanged: 'One or more settings have changed which requires a reload to take effect.',
+  oneOrMoreSettingsHaveChanged: 'One or more settings have changed which requires a reload to take effect',
   /**
    * @description Text in Command Menu of the Command Menu
    */
@@ -38,7 +38,7 @@ const UIStrings = {
    * @description Hint text to indicate that a selected command is deprecated
    */
   deprecated: '— deprecated',
-};
+} as const;
 const str_ = i18n.i18n.registerUIStrings('ui/legacy/components/quick_open/CommandMenu.ts', UIStrings);
 const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
 
@@ -194,7 +194,7 @@ export class CommandMenu {
         locations.set(name, category);
       }
     }
-    const views = UI.ViewManager.getRegisteredViewExtensions(Common.Settings.Settings.instance().getHostConfig());
+    const views = UI.ViewManager.getRegisteredViewExtensions();
     for (const view of views) {
       const viewLocation = view.location();
       const category = viewLocation && locations.get(viewLocation);

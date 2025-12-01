@@ -5,7 +5,7 @@
 use crate::config::BuildConfig;
 use crate::crates;
 use crate::group::Group;
-use crate::paths;
+use crate::paths::{self, get_vendor_dir_for_package};
 use anyhow::{bail, format_err, Result};
 use itertools::Itertools;
 use semver::Version;
@@ -75,7 +75,7 @@ pub fn readme_file_from_package<'a>(
     let crate_dir = paths
         .third_party_cargo_root
         .join("vendor")
-        .join(format!("{}-{}", package.name, package.version));
+        .join(get_vendor_dir_for_package(&package.name, &package.version));
     let group = find_group(&package.id);
 
     let security_critical = find_security_critical(&package.id).unwrap_or(match group {
@@ -125,7 +125,7 @@ pub fn readme_file_from_package<'a>(
         let does_crbug_369075726_apply = !shipped
             && crate_config
                 .as_ref()
-                .map_or(false, |cfg| cfg.no_license_file_tracked_in_crbug_369075726);
+                .is_some_and(|cfg| cfg.no_license_file_tracked_in_crbug_369075726);
         if !does_crbug_369075726_apply {
             bail!(
                 "License file not found for crate {name}.\n
@@ -145,7 +145,7 @@ pub fn readme_file_from_package<'a>(
             paths
                 .third_party_cargo_root
                 .join("vendor")
-                .join(format!("{}-{}", package.name, package.version))
+                .join(get_vendor_dir_for_package(&package.name, &package.version))
                 .join(".cargo_vcs_info.json"),
         ) {
             #[derive(Deserialize)]
@@ -179,6 +179,9 @@ pub fn readme_file_from_package<'a>(
     Ok((dir, readme))
 }
 
+/// REVIEW REQUIREMENT: When adding a new `LicenseKind`, please consult
+/// `readme.rs-third-party-license-review.md`.
+#[allow(clippy::upper_case_acronyms)]
 #[derive(Debug, Eq, Hash, PartialEq, Clone, Copy)]
 enum LicenseKind {
     /// https://spdx.org/licenses/Apache-2.0.html

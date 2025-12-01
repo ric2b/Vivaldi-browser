@@ -235,12 +235,12 @@ class ClearUtils final : angle::NonCopyable
         const gl::Context *context,
         RenderCommandEncoder *cmdEncoder,
         const ClearRectParams &params,
-        AutoObjCPtr<id<MTLRenderPipelineState>> *outPipelineState);
+        angle::ObjCPtr<id<MTLRenderPipelineState>> *outPipelineState);
 
     const std::string mFragmentShaderName;
 
-    AutoObjCPtr<id<MTLFunction>> mVertexShader;
-    std::array<AutoObjCPtr<id<MTLFunction>>, kMaxRenderTargets + 1> mFragmentShaders;
+    angle::ObjCPtr<id<MTLFunction>> mVertexShader;
+    std::array<angle::ObjCPtr<id<MTLFunction>>, kMaxRenderTargets + 1> mFragmentShaders;
 };
 
 class ColorBlitUtils final : angle::NonCopyable
@@ -255,33 +255,54 @@ class ColorBlitUtils final : angle::NonCopyable
                                     const ColorBlitParams &params);
 
   private:
+    ANGLE_ENABLE_STRUCT_PADDING_WARNINGS
     struct ShaderKey
     {
-        uint32_t numColorAttachments = 0;
         int sourceTextureType        = 0;
-        bool unmultiplyAlpha         = false;
-        bool premultiplyAlpha        = false;
-        bool transformLinearToSrgb   = false;
+        uint32_t numColorAttachments : 29;
+        uint32_t unmultiplyAlpha : 1;
+        uint32_t premultiplyAlpha : 1;
+        uint32_t transformLinearToSrgb : 1;
+        ShaderKey()
+            : numColorAttachments(0),
+              unmultiplyAlpha(false),
+              premultiplyAlpha(false),
+              transformLinearToSrgb(false)
+        {}
+        ShaderKey(int sourceTextureType,
+                  uint32_t numColorAttachments,
+                  bool unmultiplyAlpha,
+                  bool premultiplyAlpha,
+                  bool transformLinearToSrgb)
+            : sourceTextureType(sourceTextureType),
+              numColorAttachments(numColorAttachments),
+              unmultiplyAlpha(unmultiplyAlpha != premultiplyAlpha ? unmultiplyAlpha : false),
+              premultiplyAlpha(unmultiplyAlpha != premultiplyAlpha ? premultiplyAlpha : false),
+              transformLinearToSrgb(transformLinearToSrgb)
+        {}
         bool operator==(const ShaderKey &other) const
         {
-            return numColorAttachments == other.numColorAttachments &&
+            return sourceTextureType == other.sourceTextureType &&
+                   numColorAttachments == other.numColorAttachments &&
                    unmultiplyAlpha == other.unmultiplyAlpha &&
                    premultiplyAlpha == other.premultiplyAlpha &&
-                   transformLinearToSrgb == other.transformLinearToSrgb &&
-                   sourceTextureType == other.sourceTextureType;
+                   transformLinearToSrgb == other.transformLinearToSrgb;
         }
         struct Hash
         {
             size_t operator()(const ShaderKey &k) const noexcept
             {
-                return angle::HashMultiple(k.numColorAttachments, k.unmultiplyAlpha,
-                                           k.premultiplyAlpha, k.sourceTextureType);
+                return angle::HashMultiple(k.sourceTextureType, k.numColorAttachments,
+                                           k.unmultiplyAlpha, k.premultiplyAlpha,
+                                           k.transformLinearToSrgb);
             }
         };
     };
+    ANGLE_DISABLE_STRUCT_PADDING_WARNINGS
+    static_assert(sizeof(ShaderKey) == 8);
     angle::Result ensureShadersInitialized(ContextMtl *ctx,
                                            const ShaderKey &key,
-                                           AutoObjCPtr<id<MTLFunction>> *fragmentShaderOut);
+                                           angle::ObjCPtr<id<MTLFunction>> *fragmentShaderOut);
 
     angle::Result setupColorBlitWithDraw(const gl::Context *context,
                                          RenderCommandEncoder *cmdEncoder,
@@ -291,14 +312,14 @@ class ColorBlitUtils final : angle::NonCopyable
         const gl::Context *context,
         RenderCommandEncoder *cmdEncoder,
         const ColorBlitParams &params,
-        AutoObjCPtr<id<MTLRenderPipelineState>> *outPipelineState);
+        angle::ObjCPtr<id<MTLRenderPipelineState>> *outPipelineState);
 
     const std::string mFragmentShaderName;
 
-    AutoObjCPtr<id<MTLFunction>> mVertexShader;
+    angle::ObjCPtr<id<MTLFunction>> mVertexShader;
 
     // Blit fragment shaders.
-    std::unordered_map<ShaderKey, AutoObjCPtr<id<MTLFunction>>, ShaderKey::Hash>
+    std::unordered_map<ShaderKey, angle::ObjCPtr<id<MTLFunction>>, ShaderKey::Hash>
         mBlitFragmentShaders;
 };
 
@@ -321,7 +342,7 @@ class DepthStencilBlitUtils final : angle::NonCopyable
     angle::Result ensureShadersInitialized(ContextMtl *ctx,
                                            int sourceDepthTextureType,
                                            int sourceStencilTextureType,
-                                           AutoObjCPtr<id<MTLFunction>> *fragmentShaderOut);
+                                           angle::ObjCPtr<id<MTLFunction>> *fragmentShaderOut);
 
     angle::Result setupDepthStencilBlitWithDraw(const gl::Context *context,
                                                 RenderCommandEncoder *cmdEncoder,
@@ -331,24 +352,24 @@ class DepthStencilBlitUtils final : angle::NonCopyable
         const gl::Context *context,
         RenderCommandEncoder *cmdEncoder,
         const DepthStencilBlitParams &params,
-        AutoObjCPtr<id<MTLRenderPipelineState>> *outRenderPipelineState);
+        angle::ObjCPtr<id<MTLRenderPipelineState>> *outRenderPipelineState);
 
     angle::Result getStencilToBufferComputePipelineState(
         ContextMtl *ctx,
         const StencilBlitViaBufferParams &params,
-        AutoObjCPtr<id<MTLComputePipelineState>> *outComputePipelineState);
+        angle::ObjCPtr<id<MTLComputePipelineState>> *outComputePipelineState);
 
-    AutoObjCPtr<id<MTLFunction>> mVertexShader;
+    angle::ObjCPtr<id<MTLFunction>> mVertexShader;
 
-    std::array<AutoObjCPtr<id<MTLFunction>>, mtl_shader::kTextureTypeCount>
+    std::array<angle::ObjCPtr<id<MTLFunction>>, mtl_shader::kTextureTypeCount>
         mDepthBlitFragmentShaders;
-    std::array<AutoObjCPtr<id<MTLFunction>>, mtl_shader::kTextureTypeCount>
+    std::array<angle::ObjCPtr<id<MTLFunction>>, mtl_shader::kTextureTypeCount>
         mStencilBlitFragmentShaders;
-    std::array<std::array<AutoObjCPtr<id<MTLFunction>>, mtl_shader::kTextureTypeCount>,
+    std::array<std::array<angle::ObjCPtr<id<MTLFunction>>, mtl_shader::kTextureTypeCount>,
                mtl_shader::kTextureTypeCount>
         mDepthStencilBlitFragmentShaders;
 
-    std::array<AutoObjCPtr<id<MTLFunction>>, mtl_shader::kTextureTypeCount>
+    std::array<angle::ObjCPtr<id<MTLFunction>>, mtl_shader::kTextureTypeCount>
         mStencilBlitToBufferComputeShaders;
 
     // Intermediate buffer for storing copied stencil data. Used when device doesn't support
@@ -387,30 +408,18 @@ class IndexGeneratorUtils final : angle::NonCopyable
     angle::Result generateLineLoopLastSegmentFromElementsArray(ContextMtl *contextMtl,
                                                                const IndexGenerationParams &params);
 
-    angle::Result generatePrimitiveRestartPointsBuffer(ContextMtl *contextMtl,
-                                                       const IndexGenerationParams &params,
-                                                       size_t *indicesGenerated);
-
-    angle::Result generatePrimitiveRestartLinesBuffer(ContextMtl *contextMtl,
-                                                      const IndexGenerationParams &params,
-                                                      size_t *indicesGenerated);
-
-    angle::Result generatePrimitiveRestartTrianglesBuffer(ContextMtl *contextMtl,
-                                                          const IndexGenerationParams &params,
-                                                          size_t *indicesGenerated);
-
   private:
     // Index generator compute shaders:
     //  - First dimension: index type.
     //  - second dimension: source buffer's offset is aligned or not.
-    using IndexConversionShaderArray = std::array<std::array<AutoObjCPtr<id<MTLFunction>>, 2>,
+    using IndexConversionShaderArray = std::array<std::array<angle::ObjCPtr<id<MTLFunction>>, 2>,
                                                   angle::EnumSize<gl::DrawElementsType>()>;
 
     angle::Result getIndexConversionPipeline(
         ContextMtl *contextMtl,
         gl::DrawElementsType srcType,
         uint32_t srcOffset,
-        AutoObjCPtr<id<MTLComputePipelineState>> *outComputePipeline);
+        angle::ObjCPtr<id<MTLComputePipelineState>> *outComputePipeline);
     // Get compute pipeline to generate tri fan/line loop index for glDrawElements().
     angle::Result getIndicesFromElemArrayGeneratorPipeline(
         ContextMtl *contextMtl,
@@ -418,15 +427,15 @@ class IndexGeneratorUtils final : angle::NonCopyable
         uint32_t srcOffset,
         NSString *shaderName,
         IndexConversionShaderArray *pipelineCacheArray,
-        AutoObjCPtr<id<MTLComputePipelineState>> *outComputePipeline);
+        angle::ObjCPtr<id<MTLComputePipelineState>> *outComputePipeline);
     // Defer loading of compute pipeline to generate tri fan index for glDrawArrays().
     angle::Result getTriFanFromArrayGeneratorPipeline(
         ContextMtl *contextMtl,
-        AutoObjCPtr<id<MTLComputePipelineState>> *outComputePipeline);
+        angle::ObjCPtr<id<MTLComputePipelineState>> *outComputePipeline);
     // Defer loading of compute pipeline to generate line loop index for glDrawArrays().
     angle::Result getLineLoopFromArrayGeneratorPipeline(
         ContextMtl *contextMtl,
-        AutoObjCPtr<id<MTLComputePipelineState>> *outComputePipeline);
+        angle::ObjCPtr<id<MTLComputePipelineState>> *outComputePipeline);
 
     angle::Result generateTriFanBufferFromElementsArrayGPU(
         ContextMtl *contextMtl,
@@ -457,18 +466,13 @@ class IndexGeneratorUtils final : angle::NonCopyable
         ContextMtl *contextMtl,
         const IndexGenerationParams &params);
 
-    angle::Result generatePrimitiveRestartBuffer(ContextMtl *contextMtl,
-                                                 unsigned numVerticesPerPrimitive,
-                                                 const IndexGenerationParams &params,
-                                                 size_t *indicesGenerated);
-
     IndexConversionShaderArray mIndexConversionShaders;
 
     IndexConversionShaderArray mTriFanFromElemArrayGeneratorShaders;
-    AutoObjCPtr<id<MTLFunction>> mTriFanFromArraysGeneratorShader;
+    angle::ObjCPtr<id<MTLFunction>> mTriFanFromArraysGeneratorShader;
 
     IndexConversionShaderArray mLineLoopFromElemArrayGeneratorShaders;
-    AutoObjCPtr<id<MTLFunction>> mLineLoopFromArraysGeneratorShader;
+    angle::ObjCPtr<id<MTLFunction>> mLineLoopFromArraysGeneratorShader;
 };
 
 // Util class for handling visibility query result
@@ -486,11 +490,11 @@ class VisibilityResultUtils final : angle::NonCopyable
     angle::Result getVisibilityResultCombinePipeline(
         ContextMtl *contextMtl,
         bool keepOldValue,
-        AutoObjCPtr<id<MTLComputePipelineState>> *outComputePipeline);
+        angle::ObjCPtr<id<MTLComputePipelineState>> *outComputePipeline);
     // Visibility combination compute shaders:
     // - 0: This compute shader only combines the new values and discard old value.
     // - 1: This compute shader keep the old value and combines with new values.
-    std::array<AutoObjCPtr<id<MTLFunction>>, 2> mVisibilityResultCombineComputeShaders;
+    std::array<angle::ObjCPtr<id<MTLFunction>>, 2> mVisibilityResultCombineComputeShaders;
 };
 
 // Util class for handling mipmap generation
@@ -506,22 +510,22 @@ class MipmapUtils final : angle::NonCopyable
   private:
     angle::Result get3DMipGeneratorPipeline(
         ContextMtl *contextMtl,
-        AutoObjCPtr<id<MTLComputePipelineState>> *outComputePipeline);
+        angle::ObjCPtr<id<MTLComputePipelineState>> *outComputePipeline);
     angle::Result get2DMipGeneratorPipeline(
         ContextMtl *contextMtl,
-        AutoObjCPtr<id<MTLComputePipelineState>> *outComputePipeline);
+        angle::ObjCPtr<id<MTLComputePipelineState>> *outComputePipeline);
     angle::Result get2DArrayMipGeneratorPipeline(
         ContextMtl *contextMtl,
-        AutoObjCPtr<id<MTLComputePipelineState>> *outComputePipeline);
+        angle::ObjCPtr<id<MTLComputePipelineState>> *outComputePipeline);
     angle::Result getCubeMipGeneratorPipeline(
         ContextMtl *contextMtl,
-        AutoObjCPtr<id<MTLComputePipelineState>> *outComputePipeline);
+        angle::ObjCPtr<id<MTLComputePipelineState>> *outComputePipeline);
 
     // Mipmaps generating compute pipeline:
-    AutoObjCPtr<id<MTLFunction>> m3DMipGeneratorShader;
-    AutoObjCPtr<id<MTLFunction>> m2DMipGeneratorShader;
-    AutoObjCPtr<id<MTLFunction>> m2DArrayMipGeneratorShader;
-    AutoObjCPtr<id<MTLFunction>> mCubeMipGeneratorShader;
+    angle::ObjCPtr<id<MTLFunction>> m3DMipGeneratorShader;
+    angle::ObjCPtr<id<MTLFunction>> m2DMipGeneratorShader;
+    angle::ObjCPtr<id<MTLFunction>> m2DArrayMipGeneratorShader;
+    angle::ObjCPtr<id<MTLFunction>> mCubeMipGeneratorShader;
 };
 
 // Util class for handling pixels copy between buffers and textures
@@ -544,12 +548,12 @@ class CopyPixelsUtils final : angle::NonCopyable
         const angle::Format &angleFormat,
         const TextureRef &texture,
         bool bufferWrite,
-        AutoObjCPtr<id<MTLComputePipelineState>> *outComputePipeline);
+        angle::ObjCPtr<id<MTLComputePipelineState>> *outComputePipeline);
     // Copy pixels between buffer and texture compute pipelines:
     // - First dimension: pixel format.
     // - Second dimension: texture type * (buffer read/write flag)
     using PixelsCopyComputeShaderArray =
-        std::array<std::array<AutoObjCPtr<id<MTLFunction>>, mtl_shader::kTextureTypeCount * 2>,
+        std::array<std::array<angle::ObjCPtr<id<MTLFunction>>, mtl_shader::kTextureTypeCount * 2>,
                    angle::kNumANGLEFormats>;
     PixelsCopyComputeShaderArray mPixelsCopyComputeShaders;
 
@@ -585,22 +589,22 @@ class VertexFormatConversionUtils final : angle::NonCopyable
   private:
     angle::Result getComponentsExpandComputePipeline(
         ContextMtl *contextMtl,
-        AutoObjCPtr<id<MTLComputePipelineState>> *outPipelineState);
+        angle::ObjCPtr<id<MTLComputePipelineState>> *outPipelineState);
     angle::Result getComponentsExpandRenderPipeline(
         ContextMtl *contextMtl,
         RenderCommandEncoder *renderEncoder,
-        AutoObjCPtr<id<MTLRenderPipelineState>> *outPipelineState);
+        angle::ObjCPtr<id<MTLRenderPipelineState>> *outPipelineState);
 
     angle::Result getFloatConverstionComputePipeline(
         ContextMtl *contextMtl,
         const angle::Format &srcAngleFormat,
-        AutoObjCPtr<id<MTLComputePipelineState>> *outPipelineState);
+        angle::ObjCPtr<id<MTLComputePipelineState>> *outPipelineState);
 
     angle::Result getFloatConverstionRenderPipeline(
         ContextMtl *contextMtl,
         RenderCommandEncoder *renderEncoder,
         const angle::Format &srcAngleFormat,
-        AutoObjCPtr<id<MTLRenderPipelineState>> *outPipelineState);
+        angle::ObjCPtr<id<MTLRenderPipelineState>> *outPipelineState);
 
     template <typename EncoderType, typename PipelineType>
     angle::Result setupCommonConvertVertexFormatToFloat(ContextMtl *contextMtl,
@@ -616,15 +620,15 @@ class VertexFormatConversionUtils final : angle::NonCopyable
                                                           const VertexFormatConvertParams &params);
 
     using ConvertToFloatComputeShaderArray =
-        std::array<AutoObjCPtr<id<MTLFunction>>, angle::kNumANGLEFormats>;
+        std::array<angle::ObjCPtr<id<MTLFunction>>, angle::kNumANGLEFormats>;
     using ConvertToFloatVertexShaderArray =
-        std::array<AutoObjCPtr<id<MTLFunction>>, angle::kNumANGLEFormats>;
+        std::array<angle::ObjCPtr<id<MTLFunction>>, angle::kNumANGLEFormats>;
 
     ConvertToFloatComputeShaderArray mConvertToFloatCompPipelineCaches;
     ConvertToFloatVertexShaderArray mConvertToFloatVertexShaders;
 
-    AutoObjCPtr<id<MTLFunction>> mComponentsExpandComputeShader;
-    AutoObjCPtr<id<MTLFunction>> mComponentsExpandVertexShader;
+    angle::ObjCPtr<id<MTLFunction>> mComponentsExpandComputeShader;
+    angle::ObjCPtr<id<MTLFunction>> mComponentsExpandVertexShader;
 };
 
 // Util class for linearizing PVRTC1 data for buffer to texture uploads
@@ -636,9 +640,9 @@ class BlockLinearizationUtils final : angle::NonCopyable
   private:
     angle::Result getBlockLinearizationComputePipeline(
         ContextMtl *contextMtl,
-        AutoObjCPtr<id<MTLComputePipelineState>> *outComputePipeline);
+        angle::ObjCPtr<id<MTLComputePipelineState>> *outComputePipeline);
 
-    AutoObjCPtr<id<MTLFunction>> mLinearizeBlocksComputeShader;
+    angle::ObjCPtr<id<MTLFunction>> mLinearizeBlocksComputeShader;
 };
 
 // Util class for saturating floating-pont depth data for texture uploads
@@ -650,9 +654,9 @@ class DepthSaturationUtils final : angle::NonCopyable
   private:
     angle::Result getDepthSaturationComputePipeline(
         ContextMtl *contextMtl,
-        AutoObjCPtr<id<MTLComputePipelineState>> *outComputePipeline);
+        angle::ObjCPtr<id<MTLComputePipelineState>> *outComputePipeline);
 
-    AutoObjCPtr<id<MTLFunction>> mSaturateDepthComputeShader;
+    angle::ObjCPtr<id<MTLFunction>> mSaturateDepthComputeShader;
 };
 
 // RenderUtils: container class of various util classes above
@@ -749,12 +753,6 @@ class RenderUtils : angle::NonCopyable
                                                  const angle::Format &srcAngleFormat,
                                                  const VertexFormatConvertParams &params);
 
-    angle::Result generatePrimitiveRestartPointsBuffer(ContextMtl *contextMtl,
-                                                       const IndexGenerationParams &params,
-                                                       size_t *indicesGenerated);
-    angle::Result generatePrimitiveRestartLinesBuffer(ContextMtl *contextMtl,
-                                                      const IndexGenerationParams &params,
-                                                      size_t *indicesGenerated);
     angle::Result generatePrimitiveRestartTrianglesBuffer(ContextMtl *contextMtl,
                                                           const IndexGenerationParams &params,
                                                           size_t *indicesGenerated);

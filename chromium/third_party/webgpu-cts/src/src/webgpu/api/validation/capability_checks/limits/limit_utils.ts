@@ -2,11 +2,7 @@ import { kUnitCaseParamsBuilder } from '../../../../../common/framework/params_b
 import { makeTestGroup } from '../../../../../common/framework/test_group.js';
 import { getGPU } from '../../../../../common/util/navigator_gpu.js';
 import { assert, range, reorder, ReorderOrder } from '../../../../../common/util/util.js';
-import {
-  getDefaultLimits,
-  getDefaultLimitsForAdapter,
-  kLimits,
-} from '../../../../capability_info.js';
+import { getDefaultLimitsForCTS, kLimits } from '../../../../capability_info.js';
 import { GPUConst } from '../../../../constants.js';
 import { GPUTestBase } from '../../../../gpu_test.js';
 
@@ -50,7 +46,7 @@ export function getPipelineTypeForBindingCombination(bindingCombination: Binding
   }
 }
 
-export function getStageVisibilityForBinidngCombination(bindingCombination: BindingCombination) {
+export function getStageVisibilityForBindingCombination(bindingCombination: BindingCombination) {
   switch (bindingCombination) {
     case 'vertex':
       return GPUConst.ShaderStage.VERTEX;
@@ -302,7 +298,7 @@ export const kMinimumLimitValueTests = [
 export type MinimumLimitValueTest = (typeof kMinimumLimitValueTests)[number];
 
 export function getDefaultLimitForAdapter(adapter: GPUAdapter, limit: GPUSupportedLimit): number {
-  const limitInfo = getDefaultLimitsForAdapter(adapter);
+  const limitInfo = getDefaultLimitsForCTS();
   return limitInfo[limit as keyof typeof limitInfo].default;
 }
 
@@ -429,7 +425,7 @@ export class LimitTestsImpl extends GPUTestBase {
   }
 
   getDefaultLimits() {
-    return getDefaultLimits(this.isCompatibility ? 'compatibility' : 'core');
+    return getDefaultLimitsForCTS();
   }
 
   getDefaultLimit(limit: (typeof kLimits)[number]) {
@@ -1204,6 +1200,12 @@ export class LimitTestsImpl extends GPUTestBase {
 
   skipIfNotEnoughStorageBuffersInStage(visibility: GPUShaderStageFlags, numRequired: number) {
     const { device } = this;
+
+    this.skipIf(
+      numRequired > device.limits.maxStorageBuffersPerShaderStage,
+      `maxStorageBuffersPerShaderStage = ${device.limits.maxSamplersPerShaderStage} which is less than ${numRequired}`
+    );
+
     this.skipIf(
       this.isCompatibility &&
         // If we're using the fragment stage

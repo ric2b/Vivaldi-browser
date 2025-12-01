@@ -6,18 +6,9 @@ import {MetricsBrowserProxyImpl, ReadAnythingSpeechError, ReadAnythingVoiceType}
 import type {MetricsBrowserProxy, ReadAloudSettingsChange, ReadAnythingSettingsChange} from './metrics_browser_proxy.js';
 import {isEspeak, isNatural} from './voice_language_util.js';
 
-// TODO(crbug.com/40927698) - Investigate if both App and AppConstructor logs
-// are needed.
 export enum TimeFrom {
   APP = 'App',
-  APP_CONSTRUCTOR = 'AppConstructor',
   TOOLBAR = 'Toolbar',
-  TOOLBAR_CONSTRUCTOR = 'ToolbarConstructor',
-}
-
-export enum TimeTo {
-  CONNNECTED_CALLBACK = 'ConnectedCallback',
-  CONSTRUCTOR = 'Constructor',
 }
 
 export enum SpeechControls {
@@ -30,6 +21,10 @@ export enum SpeechControls {
 // Handles the business logic for logging.
 export class ReadAnythingLogger {
   private metrics: MetricsBrowserProxy = MetricsBrowserProxyImpl.getInstance();
+
+  logSpeechStopSource(source: number) {
+    this.metrics.recordSpeechStopSource(source);
+  }
 
   logSpeechError(errorCode: string) {
     let error: ReadAnythingSpeechError;
@@ -70,10 +65,9 @@ export class ReadAnythingLogger {
     this.metrics.recordSpeechError(error);
   }
 
-  logTimeBetween(
-      from: TimeFrom, to: TimeTo, startTime: number, endTime: number) {
+  logTimeFrom(from: TimeFrom, startTime: number, endTime: number) {
     const umaName = 'Accessibility.ReadAnything.' +
-        'TimeFrom' + from + 'StartedTo' + to;
+        'TimeFrom' + from + 'StartedToConstructor';
     this.metrics.recordTime(umaName, endTime - startTime);
   }
 
@@ -124,7 +118,7 @@ export class ReadAnythingLogger {
     // base lang and the locale are the same, just use the base lang.
     let langToLog = lang;
     const langSplit = lang.toLowerCase().split('-');
-    if (langSplit.length === 2 && langSplit[0] === langSplit[1]) {
+    if (langSplit.length === 2 && langSplit[0]! === langSplit[1]!) {
       langToLog = langSplit[0];
     }
     this.metrics.recordLanguage(langToLog);

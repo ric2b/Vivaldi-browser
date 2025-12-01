@@ -13,6 +13,7 @@ import {
   goToHtml,
   hover,
   waitFor,
+  waitForAria,
   waitForFunction,
   waitForMany,
 } from '../../shared/helper.js';
@@ -33,11 +34,11 @@ import {
   waitForContentOfSelectedElementsNode,
   waitForCSSPropertyValue,
   waitForElementsStyleSection,
-  waitForPartialContentOfSelectedElementsNode,
   waitForPropertyToHighlight,
   waitForStyleRule,
 } from '../helpers/elements-helpers.js';
 import {openPanelViaMoreTools} from '../helpers/settings-helpers.js';
+import {expectVeEvents, veImpression, veImpressionsUnder} from '../helpers/visual-logging-helpers.js';
 
 const PROPERTIES_TO_DELETE_SELECTOR = '#properties-to-delete';
 const PROPERTIES_TO_INSPECT_SELECTOR = '#properties-to-inspect';
@@ -52,7 +53,6 @@ const SIDEBAR_SEPARATOR_SELECTOR = '.sidebar-separator';
 
 const prepareElementsTab = async () => {
   await waitForElementsStyleSection();
-  await waitForContentOfSelectedElementsNode('<body>\u200B');
   await expandSelectedNodeRecursively();
 };
 
@@ -136,7 +136,7 @@ describe('The Styles pane', () => {
     // Specifying 10px from the left of the value to click on the word var rather than in the middle which would jump to
     // the property definition.
     await propertyValue.click();
-    const editedValueText = await propertyValue.evaluate(node => node.textContent);
+    const editedValueText = await propertyValue.evaluate(node => (node as HTMLElement).innerText);
     assert.strictEqual(editedValueText, 'var(--title-color)', 'The value is incorrect when being edited');
   });
 
@@ -162,9 +162,131 @@ describe('The Styles pane', () => {
 
     const propertiesSection = await getStyleRule(KEYFRAMES_100_PERCENT_RULE_SELECTOR);
     const propertyValue = await waitFor(FIRST_PROPERTY_VALUE_SELECTOR, propertiesSection);
-    const propertyValueText = await propertyValue.evaluate(node => node.textContent);
+    const propertyValueText = await propertyValue.evaluate(node => (node as HTMLElement).innerText);
     assert.strictEqual(
-        propertyValueText, 'var( --move-final-width)', 'CSS variable in @keyframes rule is not correctly rendered');
+        propertyValueText, 'var(--move-final-width)', 'CSS variable in @keyframes rule is not correctly rendered');
+  });
+
+  it('Shows a CSS hint popover', async () => {
+    await goToHtml(`
+       <style>
+         body {
+           grid-column-end: 4;
+         }
+       </style>`);
+    await waitForElementsStyleSection();
+
+    await hover('.hint-wrapper');
+
+    const infobox = await waitFor(':popover-open');
+    const textContent: string = await infobox.evaluate(e => e.deepTextContent());
+    assert.strictEqual(
+        textContent.replaceAll(/\s+/g, ' ').trim(),
+        'The display: block property prevents grid-column-end from having an effect. Try setting display to something other than block.');
+    await expectVeEvents([veImpressionsUnder(
+        'Panel: elements > Pane: styles > Section: style-properties > Tree > TreeItem: grid-column-end',
+        [veImpression('Popover', 'elements.css-hint')])]);
+  });
+
+  it('Shows a syntax error popover for registered property', async () => {
+    await goToHtml(`
+       <style>
+         body {
+           --color: 2px;
+         }
+         @property --color {
+           syntax: "<color>";
+           inherits: false;
+           initial-value: green;
+         }
+       </style>`);
+    await waitForElementsStyleSection();
+
+    await hover('.exclamation-mark');
+
+    const infobox = await waitFor(':popover-open');
+    const textContent: string = await infobox.evaluate(e => e.deepTextContent());
+    assert.strictEqual(
+        textContent.replaceAll(/\s+/g, ' ').trim(),
+        'Invalid property value, expected type "<color>" View registered property');
+    await expectVeEvents([veImpressionsUnder(
+        'Panel: elements > Pane: styles > Section: style-properties > Tree > TreeItem: custom-property',
+        [veImpression('Popover', 'elements.invalid-property-decl-popover')])]);
+  });
+
+  it('shows variable values in a popover for property values', async () => {
+    await goToResourceAndWaitForStyleSection('elements/css-variables.html');
+
+    // Select div that we will inspect the CSS variables for
+    await waitForAndClickTreeElementWithPartialText('properties-to-inspect');
+    await waitForContentOfSelectedElementsNode('<div id=\u200B"properties-to-inspect">\u200B</div>\u200B');
+
+    const testElementRule = await getStyleRule(PROPERTIES_TO_INSPECT_SELECTOR);
+    await hover('.link-swatch-link', {root: testElementRule});
+
+    const infobox = await waitFor('[aria-label="CSS property value: var(--title-color)"] :popover-open');
+    const textContent = await infobox.evaluate(e => e.deepTextContent());
+    assert.strictEqual(textContent.trim(), 'black');
+    await expectVeEvents([veImpressionsUnder(
+        'Panel: elements > Pane: styles > Section: style-properties > Tree > TreeItem: color > Value > Link: css-variable',
+        [veImpression('Popover', 'elements.css-var')])]);
+  });
+
+  it('shows variable values in a popover for property names', async () => {
+    await goToHtml(`
+       <style>
+         body {
+           --color: red;
+         }
+       </style>`);
+    await waitForElementsStyleSection();
+
+    await hover('aria/CSS property name: --color');
+
+    const infobox = await waitFor('.tree-outline :popover-open');
+    const textContent = await infobox.evaluate(e => e.deepTextContent());
+    assert.strictEqual(textContent.trim(), 'red');
+    await expectVeEvents([veImpressionsUnder(
+        'Panel: elements > Pane: styles > Section: style-properties > Tree > TreeItem: custom-property > Key',
+        [veImpression('Popover', 'elements.css-var')])]);
+  });
+
+  it('shows mixed colors in a popover', async () => {
+    await goToHtml(`
+       <style>
+         body {
+           color: color-mix(in srgb, red, blue);
+         }
+       </style>`);
+    await waitForElementsStyleSection();
+
+    await hover('devtools-color-mix-swatch');
+
+    const infobox = await waitFor('[aria-label="CSS property value: color-mix(in srgb, red, blue)"] :popover-open');
+    const textContent = await infobox.evaluate(e => e.deepTextContent());
+    assert.strictEqual(textContent.trim(), '#800080');
+    await expectVeEvents([veImpressionsUnder(
+        'Panel: elements > Pane: styles > Section: style-properties > Tree > TreeItem: color > Value',
+        [veImpression('Popover', 'elements.css-color-mix')])]);
+  });
+
+  it('shows absolute length units in a popover', async () => {
+    await goToHtml(`
+       <style>
+         body {
+           width: 1em;
+         }
+       </style>`);
+    await waitForElementsStyleSection();
+
+    await hover('text/1em', {root: await waitForAria('CSS property value: 1em')});
+
+    const infobox = await waitFor('[aria-label="CSS property value: 1em"] :popover-open');
+    const textContent = await infobox.evaluate(e => e.deepTextContent());
+    assert.strictEqual(textContent.trim(), '16px');
+    await expectVeEvents([veImpressionsUnder(
+        'Panel: elements > Pane: styles > Section: style-properties > Tree > TreeItem: width > Value',
+        [veImpression('Popover', 'length-popover')])]);
   });
 
   it('can remove a CSS property when its name or value is deleted', async () => {
@@ -379,10 +501,9 @@ describe('The Styles pane', () => {
     const nodeLabelName = await waitFor('.node-label-name', containerLink);
     const nodeLabelNameContent = await nodeLabelName.evaluate(node => node.textContent as string);
     assert.strictEqual(nodeLabelNameContent, 'body', 'container link name does not match');
-    containerLink.hover();
+    await containerLink.hover();
     const queriedSizeDetails = await waitFor('.queried-size-details');
-    const queriedSizeDetailsContent =
-        await queriedSizeDetails.evaluate(node => (node as HTMLElement).innerText as string);
+    const queriedSizeDetailsContent = await queriedSizeDetails.evaluate(node => (node as HTMLElement).innerText);
     assert.strictEqual(
         queriedSizeDetailsContent, '(size) width: 200px height: 0px', 'container queried details does not match');
   });
@@ -396,7 +517,7 @@ describe('The Styles pane', () => {
 
     const rule1PropertiesSection = await getStyleRule(RULE1_SELECTOR);
     const supportsQuery = await waitFor('.query.editable', rule1PropertiesSection);
-    const supportsQueryText = await supportsQuery.evaluate(node => (node as HTMLElement).innerText as string);
+    const supportsQueryText = await supportsQuery.evaluate(node => (node as HTMLElement).innerText);
     assert.deepEqual(supportsQueryText, '@supports (width: 10px) {', 'incorrectly displayed @supports rule');
   });
 
@@ -680,214 +801,6 @@ describe('The Styles pane', () => {
     assert.deepEqual(fooRules, expected);
   });
 
-  it('can show overridden shorthands as inactive (ported layout test)', async () => {
-    await goToResourceAndWaitForStyleSection('elements/css-shorthand-override.html');
-    await prepareElementsTab();
-    await waitForStyleRule('body');
-
-    await waitForAndClickTreeElementWithPartialText('id=\u200B"inspected1"');
-    await waitForStyleRule('#inspected1');
-    const inspected1Rules = await getDisplayedStyleRules();
-    const expectedInspected1Rules = [
-      {selectorText: 'element.style', propertyData: []},
-      {
-        selectorText: '#inspected1',
-        propertyData: [
-          {propertyName: 'margin-top', isOverLoaded: true, isInherited: false},
-          {propertyName: 'margin', isOverLoaded: false, isInherited: false},
-          {propertyName: 'margin-top', isOverLoaded: false, isInherited: false},
-          {propertyName: 'margin-right', isOverLoaded: false, isInherited: false},
-          {propertyName: 'margin-bottom', isOverLoaded: false, isInherited: false},
-          {propertyName: 'margin-left', isOverLoaded: false, isInherited: false},
-        ],
-      },
-      {
-        selectorText: 'div',
-        propertyData: [
-          {propertyName: 'display', isOverLoaded: false, isInherited: false},
-          {propertyName: 'unicode-bidi', isOverLoaded: false, isInherited: false},
-        ],
-      },
-    ];
-    assert.deepEqual(inspected1Rules, expectedInspected1Rules);
-
-    await waitForAndClickTreeElementWithPartialText('id=\u200B"inspected2"');
-    await waitForStyleRule('#inspected2');
-    const inspected2Rules = await getDisplayedStyleRules();
-
-    const expectedInspected2Rules = [
-      {selectorText: 'element.style', propertyData: []},
-      {
-        selectorText: '#inspected2',
-        propertyData: [
-          {propertyName: 'padding', isOverLoaded: true, isInherited: false},
-          {propertyName: 'padding-top', isOverLoaded: false, isInherited: false},
-          {propertyName: 'padding-right', isOverLoaded: false, isInherited: false},
-          {propertyName: 'padding-bottom', isOverLoaded: false, isInherited: false},
-          {propertyName: 'padding-left', isOverLoaded: false, isInherited: false},
-          {propertyName: 'padding', isOverLoaded: false, isInherited: false},
-          {propertyName: 'padding-top', isOverLoaded: false, isInherited: false},
-          {propertyName: 'padding-right', isOverLoaded: false, isInherited: false},
-          {propertyName: 'padding-bottom', isOverLoaded: false, isInherited: false},
-          {propertyName: 'padding-left', isOverLoaded: false, isInherited: false},
-        ],
-      },
-      {
-        selectorText: 'div',
-        propertyData: [
-          {propertyName: 'display', isOverLoaded: false, isInherited: false},
-          {propertyName: 'unicode-bidi', isOverLoaded: false, isInherited: false},
-        ],
-      },
-    ];
-    assert.deepEqual(inspected2Rules, expectedInspected2Rules);
-    await waitForAndClickTreeElementWithPartialText('id=\u200B"inspected3"');
-    await waitForStyleRule('#inspected3');
-    const inspected3Rules = await getDisplayedStyleRules();
-    const expectedInspected3Rules = [
-      {
-        selectorText: 'element.style',
-        propertyData: [],
-      },
-      {
-        selectorText: '#inspected3',
-        propertyData: [
-          {
-            propertyName: 'border-width',
-            isOverLoaded: false,
-            isInherited: false,
-          },
-          {
-            propertyName: 'border-top-width',
-            isOverLoaded: true,
-            isInherited: false,
-          },
-          {
-            propertyName: 'border-right-width',
-            isOverLoaded: true,
-            isInherited: false,
-          },
-          {
-            propertyName: 'border-bottom-width',
-            isOverLoaded: true,
-            isInherited: false,
-          },
-          {
-            propertyName: 'border-left-width',
-            isOverLoaded: true,
-            isInherited: false,
-          },
-          {
-            propertyName: 'border',
-            isOverLoaded: false,
-            isInherited: false,
-          },
-          {
-            propertyName: 'border-top-width',
-            isOverLoaded: false,
-            isInherited: false,
-          },
-          {
-            propertyName: 'border-right-width',
-            isOverLoaded: false,
-            isInherited: false,
-          },
-          {
-            propertyName: 'border-bottom-width',
-            isOverLoaded: false,
-            isInherited: false,
-          },
-          {
-            propertyName: 'border-left-width',
-            isOverLoaded: false,
-            isInherited: false,
-          },
-          {
-            propertyName: 'border-top-style',
-            isOverLoaded: false,
-            isInherited: false,
-          },
-          {
-            propertyName: 'border-right-style',
-            isOverLoaded: false,
-            isInherited: false,
-          },
-          {
-            propertyName: 'border-bottom-style',
-            isOverLoaded: false,
-            isInherited: false,
-          },
-          {
-            propertyName: 'border-left-style',
-            isOverLoaded: false,
-            isInherited: false,
-          },
-          {
-            propertyName: 'border-top-color',
-            isOverLoaded: false,
-            isInherited: false,
-          },
-          {
-            propertyName: 'border-right-color',
-            isOverLoaded: false,
-            isInherited: false,
-          },
-          {
-            propertyName: 'border-bottom-color',
-            isOverLoaded: false,
-            isInherited: false,
-          },
-          {
-            propertyName: 'border-left-color',
-            isOverLoaded: false,
-            isInherited: false,
-          },
-          {
-            propertyName: 'border-image-source',
-            isOverLoaded: false,
-            isInherited: false,
-          },
-          {
-            propertyName: 'border-image-slice',
-            isOverLoaded: false,
-            isInherited: false,
-          },
-          {
-            propertyName: 'border-image-width',
-            isOverLoaded: false,
-            isInherited: false,
-          },
-          {
-            propertyName: 'border-image-outset',
-            isOverLoaded: false,
-            isInherited: false,
-          },
-          {
-            propertyName: 'border-image-repeat',
-            isOverLoaded: false,
-            isInherited: false,
-          },
-        ],
-      },
-      {
-        selectorText: 'div',
-        propertyData: [
-          {
-            propertyName: 'display',
-            isOverLoaded: false,
-            isInherited: false,
-          },
-          {
-            propertyName: 'unicode-bidi',
-            isOverLoaded: false,
-            isInherited: false,
-          },
-        ],
-      },
-    ];
-    assert.deepEqual(inspected3Rules, expectedInspected3Rules);
-  });
-
   it('shows longhands overridden by shorthands with var() as inactive (ported layout test)', async () => {
     await goToResourceAndWaitForStyleSection('elements/css-longhand-override.html');
     await prepareElementsTab();
@@ -1136,7 +1049,7 @@ describe('The Styles pane', () => {
         await expandSelectedNodeRecursively();
         await target.evaluate(async () => {
           const iframe = document.querySelector('iframe');
-          if (!iframe || !iframe.contentDocument) {
+          if (!iframe?.contentDocument) {
             return;
           }
           const style = iframe.contentDocument.createElement('style');
@@ -1232,7 +1145,7 @@ describe('The Styles pane', () => {
 
     const rule1PropertiesSection = await getStyleRule(RULE1_SELECTOR);
     const scopeQuery = await waitFor('.query.editable', rule1PropertiesSection);
-    const scopeQueryText = await scopeQuery.evaluate(node => (node as HTMLElement).innerText as string);
+    const scopeQueryText = await scopeQuery.evaluate(node => (node as HTMLElement).innerText);
     assert.deepEqual(scopeQueryText, '@scope (body) {', 'incorrectly displayed @supports rule');
   });
 
@@ -1248,12 +1161,13 @@ describe('The Styles pane', () => {
     await hover('.selector-matches', {root: testElementRule});
 
     // Check if an infobox is shown or not. If not, this will throw
-    const infobox = await waitFor('body > .vbox.flex-auto');
+    const infobox = await waitFor('.styles-selector :popover-open');
+    await expectVeEvents([veImpressionsUnder(
+        'Panel: elements > Pane: styles > Section: style-properties > CSSRuleHeader: selector',
+        [veImpression('Popover', 'elements.css-selector-specificity')])]);
 
     // Make sure it’s the specificity infobox
-    const innerText = await infobox.evaluate(node => {
-      return node.shadowRoot?.querySelector('span')?.innerText;
-    });
+    const innerText = await infobox.evaluate(node => (node as HTMLElement).innerText);
     assert.isTrue(innerText?.toLowerCase().startsWith('specificity'));
   });
 
@@ -1329,7 +1243,6 @@ describe('The Styles pane', () => {
      }
      </style>`);
     await waitForElementsStyleSection();
-    await waitForPartialContentOfSelectedElementsNode('<body>\u200B');
 
     const {target} = getBrowserAndPages();
 

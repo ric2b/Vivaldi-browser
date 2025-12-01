@@ -44,6 +44,11 @@ struct JumpBuffer {
     Retired     // A finished stack. The jump buffer is invalid in that state.
   };
   StackState state;
+#if V8_ENABLE_SANDBOX
+  // Store a pointer to the parent jump buffer here, so that we can validate
+  // that it matches the continuation's parent when we return/suspend.
+  JumpBuffer* caller;
+#endif
 };
 
 constexpr int kJmpBufSpOffset = offsetof(JumpBuffer, sp);
@@ -51,11 +56,12 @@ constexpr int kJmpBufFpOffset = offsetof(JumpBuffer, fp);
 constexpr int kJmpBufPcOffset = offsetof(JumpBuffer, pc);
 constexpr int kJmpBufStackLimitOffset = offsetof(JumpBuffer, stack_limit);
 constexpr int kJmpBufStateOffset = offsetof(JumpBuffer, state);
+#if V8_ENABLE_SANDBOX
+constexpr int kJmpBufCaller = offsetof(JumpBuffer, caller);
+#endif
 
 class StackMemory {
  public:
-  static constexpr ExternalPointerTag kManagedTag = kWasmStackMemoryTag;
-
   static std::unique_ptr<StackMemory> New() {
     return std::unique_ptr<StackMemory>(new StackMemory());
   }
@@ -65,13 +71,23 @@ class StackMemory {
   static StackMemory* GetCentralStackView(Isolate* isolate);
 
   ~StackMemory();
-  void* jslimit() const {
-    return (active_segment_ ? active_segment_->limit_ : limit_) +
-           kJSLimitOffsetKB * KB;
-  }
+  void* jslimit() const;
   Address base() const {
-    return active_segment_ ? active_segment_->base()
-                           : reinterpret_cast<Address>(limit_ + size_);
+    Address memory_limit = active_segment_
+                               ? active_segment_->base()
+                               : reinterpret_cast<Address>(limit_ + size_);
+#ifdef USE_SIMULATOR
+    // To perform runtime calls with different signatures, some simulators
+    // prepare a fixed number of arguments which is an upper bound of the actual
+    // parameter count. The extra stack slots contain arbitrary data and are
+    // never used, but with stack-switching this can happen close to the stack
+    // start, so we need to reserve a safety gap to ensure that the addresses
+    // are at least mapped to prevent a crash.
+    constexpr int kStackBaseSafetyOffset = 20 * kSystemPointerSize;
+#else
+    constexpr int kStackBaseSafetyOffset = 0;
+#endif
+    return memory_limit - kStackBaseSafetyOffset;
   }
   JumpBuffer* jmpbuf() { return &jmpbuf_; }
   bool Contains(Address addr) {
@@ -166,6 +182,9 @@ class StackMemory {
   constexpr static uint32_t stack_switch_target_sp_offset() {
     return OFFSET_OF(StackMemory, stack_switch_info_) +
            OFFSET_OF(StackMemory::StackSwitchInfo, target_sp);
+  }
+  constexpr static uint32_t jmpbuf_offset() {
+    return OFFSET_OF(StackMemory, jmpbuf_);
   }
 
  private:

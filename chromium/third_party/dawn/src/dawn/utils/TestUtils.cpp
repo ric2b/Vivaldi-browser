@@ -61,11 +61,13 @@ uint32_t GetMinimumBytesPerRow(wgpu::TextureFormat format,
     return Align(bytesPerBlock * (width / blockWidth), textureBytesPerRowAlignment);
 }
 
-TextureDataCopyLayout GetTextureDataCopyLayoutForTextureAtLevel(wgpu::TextureFormat format,
-                                                                wgpu::Extent3D textureSizeAtLevel0,
-                                                                uint32_t mipmapLevel,
-                                                                wgpu::TextureDimension dimension,
-                                                                uint32_t rowsPerImage) {
+TextureDataCopyLayout GetTextureDataCopyLayoutForTextureAtLevel(
+    wgpu::TextureFormat format,
+    wgpu::Extent3D textureSizeAtLevel0,
+    uint32_t mipmapLevel,
+    wgpu::TextureDimension dimension,
+    uint32_t rowsPerImage,
+    uint32_t textureBytesPerRowAlignment) {
     // Compressed texture formats not supported in this function yet.
     DAWN_ASSERT(dawn::utils::GetTextureFormatBlockWidth(format) == 1);
 
@@ -80,7 +82,8 @@ TextureDataCopyLayout GetTextureDataCopyLayoutForTextureAtLevel(wgpu::TextureFor
             std::max(textureSizeAtLevel0.depthOrArrayLayers >> mipmapLevel, 1u);
     }
 
-    layout.bytesPerRow = GetMinimumBytesPerRow(format, layout.mipSize.width);
+    layout.bytesPerRow =
+        GetMinimumBytesPerRow(format, layout.mipSize.width, textureBytesPerRowAlignment);
 
     if (rowsPerImage == wgpu::kCopyStrideUndefined) {
         rowsPerImage = layout.mipSize.height;
@@ -153,14 +156,14 @@ void UnalignDynamicUploader(wgpu::Device device) {
     descriptor.usage = wgpu::TextureUsage::CopyDst | wgpu::TextureUsage::CopySrc;
     wgpu::Texture texture = device.CreateTexture(&descriptor);
 
-    wgpu::ImageCopyTexture imageCopyTexture =
-        dawn::utils::CreateImageCopyTexture(texture, 0, {0, 0, 0});
-    wgpu::TextureDataLayout textureDataLayout =
-        dawn::utils::CreateTextureDataLayout(0, wgpu::kCopyStrideUndefined);
+    wgpu::TexelCopyTextureInfo texelCopyTextureInfo =
+        dawn::utils::CreateTexelCopyTextureInfo(texture, 0, {0, 0, 0});
+    wgpu::TexelCopyBufferLayout texelCopyBufferLayout =
+        dawn::utils::CreateTexelCopyBufferLayout(0, wgpu::kCopyStrideUndefined);
     wgpu::Extent3D copyExtent = {1, 1, 1};
 
     // WriteTexture with exactly 1 byte of data.
-    device.GetQueue().WriteTexture(&imageCopyTexture, data.data(), 1, &textureDataLayout,
+    device.GetQueue().WriteTexture(&texelCopyTextureInfo, data.data(), 1, &texelCopyBufferLayout,
                                    &copyExtent);
 }
 

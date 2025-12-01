@@ -69,6 +69,10 @@
   // No op.
 }
 
+- (void)setPreferenceShowAddButton:(BOOL)showAddButton {
+  // No op.
+}
+
 - (void)setPreferenceSpeedDialLayout:(VivaldiStartPageLayoutStyle)layout {
   [VivaldiStartPagePrefsHelper setStartPageLayoutStyle:layout];
 }

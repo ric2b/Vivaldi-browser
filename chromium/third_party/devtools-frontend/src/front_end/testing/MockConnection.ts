@@ -7,7 +7,7 @@ import type * as SDK from '../core/sdk/sdk.js';
 import type {ProtocolMapping} from '../generated/protocol-mapping.js';
 import type * as ProtocolProxyApi from '../generated/protocol-proxy-api.js';
 
-import {resetTestDOM} from './DOMHelpers.js';
+import {cleanTestDOM} from './DOMHelpers.js';
 import {deinitializeGlobalVars, initializeGlobalVars} from './EnvironmentHelpers.js';
 import {setMockResourceTree} from './ResourceTreeHelpers.js';
 
@@ -26,12 +26,12 @@ interface Message {
 
 interface OutgoingMessageListenerEntry {
   promise: Promise<void>;
-  resolve: Function;
+  resolve: () => void;
 }
 
 // Note that we can't set the Function to the correct handler on the basis
 // that we don't know which ProtocolCommand will be stored.
-const responseMap = new Map<ProtocolCommand, Function>();
+const responseMap = new Map<ProtocolCommand, ProtocolCommandHandler<ProtocolCommand>>();
 const outgoingMessageListenerEntryMap = new Map<ProtocolCommand, OutgoingMessageListenerEntry>();
 export function setMockConnectionResponseHandler<C extends ProtocolCommand>(
     command: C, handler: ProtocolCommandHandler<C>) {
@@ -40,10 +40,6 @@ export function setMockConnectionResponseHandler<C extends ProtocolCommand>(
   }
 
   responseMap.set(command, handler);
-}
-
-export function getMockConnectionResponseHandler(method: ProtocolCommand) {
-  return responseMap.get(method);
 }
 
 export function clearMockConnectionResponseHandler(method: ProtocolCommand) {
@@ -138,9 +134,9 @@ async function disable() {
   if (outgoingMessageListenerEntryMap.size > 0) {
     throw new Error('MockConnection still has pending listeners. All promises should be awaited.');
   }
-  resetTestDOM();
+  await cleanTestDOM();
   await deinitializeGlobalVars();
-  // @ts-ignore Setting back to undefined as a hard reset.
+  // @ts-expect-error Setting back to undefined as a hard reset.
   ProtocolClient.InspectorBackend.Connection.setFactory(undefined);
 }
 

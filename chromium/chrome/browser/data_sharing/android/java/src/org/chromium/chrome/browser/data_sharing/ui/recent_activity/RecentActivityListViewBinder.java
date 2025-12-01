@@ -16,10 +16,13 @@ import android.view.View;
 import android.widget.ImageView;
 import android.widget.TextView;
 
+import org.chromium.base.Callback;
+import org.chromium.build.annotations.NullMarked;
 import org.chromium.ui.modelutil.PropertyKey;
 import org.chromium.ui.modelutil.PropertyModel;
 
 /** View binder for the single recent activity row UI. */
+@NullMarked
 class RecentActivityListViewBinder {
     /** Stateless propagation of properties. */
     public static void bind(PropertyModel model, View view, PropertyKey propertyKey) {
@@ -38,9 +41,14 @@ class RecentActivityListViewBinder {
         } else if (ON_CLICK_LISTENER == propertyKey) {
             view.setOnClickListener(model.get(ON_CLICK_LISTENER));
         } else if (FAVICON_PROVIDER == propertyKey) {
+            Callback faviconProvider = model.get(FAVICON_PROVIDER);
             ImageView faviconView = view.findViewById(R.id.favicon);
-            faviconView.setImageDrawable(null);
-            model.get(FAVICON_PROVIDER).onResult(faviconView);
+            if (faviconProvider == null) {
+                faviconView.setVisibility(View.GONE);
+            } else {
+                faviconView.setImageDrawable(null);
+                faviconProvider.onResult(faviconView);
+            }
         } else if (AVATAR_PROVIDER == propertyKey) {
             ImageView avatarView = view.findViewById(R.id.avatar);
             avatarView.setImageDrawable(null);

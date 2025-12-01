@@ -66,7 +66,8 @@ bool ConvertPermissionType(::permissions::RequestType type,
     case ::permissions::RequestType::kWindowManagement:
     case ::permissions::RequestType::kHandTracking:
     case ::permissions::RequestType::kWebAppInstallation:
-    // This one is only available on some platforms...
+    case ::permissions::RequestType::kLocalNetworkAccess:
+      // This one is only available on some platforms...
 #if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_WIN)
     case ::permissions::RequestType::kProtectedMediaIdentifier:
 #endif

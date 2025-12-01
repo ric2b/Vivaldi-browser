@@ -49,7 +49,7 @@ import computedStyleSidebarPaneStyles from './computedStyleSidebarPane.css.js';
 import {ImagePreviewPopover} from './ImagePreviewPopover.js';
 import {PlatformFontsWidget} from './PlatformFontsWidget.js';
 import {categorizePropertyName, type Category, DefaultCategoryOrder} from './PropertyNameCategories.js';
-import {type MatchRenderer, Renderer, type RenderingContext, StringRenderer, URLRenderer} from './PropertyRenderer.js';
+import {Renderer, rendererBase, type RenderingContext, StringRenderer, URLRenderer} from './PropertyRenderer.js';
 import {StylePropertiesSection} from './StylePropertiesSection.js';
 
 const {html} = Lit;
@@ -81,7 +81,7 @@ const UIStrings = {
    * for this computed property.
    */
   navigateToStyle: 'Navigate to style',
-};
+} as const;
 const str_ = i18n.i18n.registerUIStrings('panels/elements/ComputedStyleWidget.ts', UIStrings);
 const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
 
@@ -100,6 +100,13 @@ const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
  */
 const propertyContentsCache = new Map<string, {name: Element, value: Element}>();
 
+function matchProperty(name: string, value: string): SDK.CSSPropertyParser.BottomUpTreeMatching|null {
+  return SDK.CSSPropertyParser.matchDeclaration(name, value, [
+    new SDK.CSSPropertyParserMatchers.ColorMatcher(), new SDK.CSSPropertyParserMatchers.URLMatcher(),
+    new SDK.CSSPropertyParserMatchers.StringMatcher()
+  ]);
+}
+
 function renderPropertyContents(
     node: SDK.DOMModel.DOMNode, propertyName: string, propertyValue: string): {name: Element, value: Element} {
   const cacheKey = propertyName + ':' + propertyValue;
@@ -109,8 +116,11 @@ function renderPropertyContents(
   }
   const name = Renderer.renderNameElement(propertyName);
   name.slot = 'name';
-  const value = Renderer.renderValueElement(
-      propertyName, propertyValue, [new ColorRenderer(), new URLRenderer(null, node), new StringRenderer()]);
+  const value = Renderer
+                    .renderValueElement(
+                        {name: propertyName, value: propertyValue}, matchProperty(propertyName, propertyValue),
+                        [new ColorRenderer(), new URLRenderer(null, node), new StringRenderer()])
+                    .valueElement;
   value.slot = 'value';
   propertyContentsCache.set(cacheKey, {name, value});
   return {name, value};
@@ -147,8 +157,9 @@ const createTraceElement =
      linkifier: Components.Linkifier.Linkifier): ElementsComponents.ComputedStyleTrace.ComputedStyleTrace => {
       const trace = new ElementsComponents.ComputedStyleTrace.ComputedStyleTrace();
 
-      const valueElement = Renderer.renderValueElement(
-          property.name, property.value, [new ColorRenderer(), new URLRenderer(null, node), new StringRenderer()]);
+      const {valueElement} = Renderer.renderValueElement(
+          property, matchProperty(property.name, property.value),
+          [new ColorRenderer(), new URLRenderer(null, node), new StringRenderer()]);
       valueElement.slot = 'trace-value';
       trace.appendChild(valueElement);
 
@@ -178,8 +189,10 @@ const createTraceElement =
       return trace;
     };
 
-class ColorRenderer implements MatchRenderer<SDK.CSSPropertyParserMatchers.ColorMatch> {
-  render(match: SDK.CSSPropertyParserMatchers.ColorMatch, context: RenderingContext): Node[] {
+// clang-format off
+class ColorRenderer extends rendererBase(SDK.CSSPropertyParserMatchers.ColorMatch) {
+  // clang-format on
+  override render(match: SDK.CSSPropertyParserMatchers.ColorMatch, context: RenderingContext): Node[] {
     const color = Common.Color.parse(match.text);
     if (!color) {
       return [document.createTextNode(match.text)];
@@ -345,7 +358,7 @@ export class ComputedStyleWidget extends UI.ThrottledWidget.ThrottledWidget {
       return null;
     }
 
-    return cssModel.cachedMatchedCascadeForNode(node).then(validateStyles.bind(this));
+    return await cssModel.cachedMatchedCascadeForNode(node).then(validateStyles.bind(this));
 
     function validateStyles(this: ComputedStyleWidget, matchedStyles: SDK.CSSMatchedStyles.CSSMatchedStyles|null):
         SDK.CSSMatchedStyles.CSSMatchedStyles|null {
@@ -369,7 +382,7 @@ export class ComputedStyleWidget extends UI.ThrottledWidget.ThrottledWidget {
     const propertyTraces = this.computePropertyTraces(matchedStyles);
     const nonInheritedProperties = this.computeNonInheritedProperties(matchedStyles);
     const showInherited = this.showInheritedComputedStylePropertiesSetting.get();
-    const tree: TreeOutline.TreeOutlineUtils.TreeNode<ComputedStyleData>[] = [];
+    const tree: Array<TreeOutline.TreeOutlineUtils.TreeNode<ComputedStyleData>> = [];
     for (const propertyName of uniqueProperties) {
       const propertyValue = nodeStyle.computedStyle.get(propertyName) || '';
       const canonicalName = SDK.CSSMetadata.cssMetadata().canonicalPropertyName(propertyName);
@@ -412,7 +425,7 @@ export class ComputedStyleWidget extends UI.ThrottledWidget.ThrottledWidget {
 
     const propertiesByCategory = new Map<Category, string[]>();
 
-    const tree: TreeOutline.TreeOutlineUtils.TreeNode<ComputedStyleData>[] = [];
+    const tree: Array<TreeOutline.TreeOutlineUtils.TreeNode<ComputedStyleData>> = [];
     for (const [propertyName, propertyValue] of nodeStyle.computedStyle) {
       const canonicalName = SDK.CSSMetadata.cssMetadata().canonicalPropertyName(propertyName);
       const isInherited = !nonInheritedProperties.has(canonicalName);
@@ -439,7 +452,7 @@ export class ComputedStyleWidget extends UI.ThrottledWidget.ThrottledWidget {
     for (const category of DefaultCategoryOrder) {
       const properties = propertiesByCategory.get(category);
       if (properties && properties.length > 0) {
-        const propertyNodes: TreeOutline.TreeOutlineUtils.TreeNode<ComputedStyleData>[] = [];
+        const propertyNodes: Array<TreeOutline.TreeOutlineUtils.TreeNode<ComputedStyleData>> = [];
         for (const propertyName of properties) {
           const propertyValue = nodeStyle.computedStyle.get(propertyName) || '';
           const canonicalName = SDK.CSSMetadata.cssMetadata().canonicalPropertyName(propertyName);
@@ -455,7 +468,7 @@ export class ComputedStyleWidget extends UI.ThrottledWidget.ThrottledWidget {
       compact: true,
       defaultRenderer,
     };
-    return this.filterGroupLists();
+    return await this.filterGroupLists();
   }
 
   private buildTraceNode(property: SDK.CSSProperty.CSSProperty):
@@ -592,7 +605,7 @@ export class ComputedStyleWidget extends UI.ThrottledWidget.ThrottledWidget {
   async filterComputedStyles(regex: RegExp|null): Promise<void> {
     this.filterRegex = regex;
     if (this.groupComputedStylesSetting.get()) {
-      return this.filterGroupLists();
+      return await this.filterGroupLists();
     }
     return this.filterAlphabeticalList();
   }
@@ -624,7 +637,7 @@ export class ComputedStyleWidget extends UI.ThrottledWidget.ThrottledWidget {
     if (!this.#treeData) {
       return;
     }
-    const tree: TreeOutline.TreeOutlineUtils.TreeNode<ComputedStyleData>[] = [];
+    const tree: Array<TreeOutline.TreeOutlineUtils.TreeNode<ComputedStyleData>> = [];
     for (const group of this.#treeData.tree) {
       const data = group.treeNodeData;
       if (data.tag !== 'category' || !group.children) {

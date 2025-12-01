@@ -14,6 +14,7 @@
 #import "components/sync/base/user_selectable_type.h"
 #import "components/sync/service/sync_service.h"
 #import "components/sync/service/sync_user_settings.h"
+#import "ios/chrome/browser/authentication/ui_bundled/enterprise/enterprise_utils.h"
 #import "ios/chrome/browser/authentication/ui_bundled/signin/consistency_promo_signin/consistency_default_account/consistency_default_account_consumer.h"
 #import "ios/chrome/browser/authentication/ui_bundled/signin/signin_utils.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
@@ -145,8 +146,10 @@ NSString* GetPromoLabelString(
     case signin_metrics::AccessPoint::kAddressBubble:
     case signin_metrics::AccessPoint::kCctAccountMismatchNotification:
     case signin_metrics::AccessPoint::kDriveFilePickerIos:
-    case signin_metrics::AccessPoint::kCollaborationTabGroup:
+    case signin_metrics::AccessPoint::kCollaborationShareTabGroup:
     case signin_metrics::AccessPoint::kGlicLaunchButton:
+    case signin_metrics::AccessPoint::kHistoryPage:
+    case signin_metrics::AccessPoint::kCollaborationJoinTabGroup:
       // Nothing prevents instantiating ConsistencyDefaultAccountViewController
       // with an arbitrary entry point, API-wise. In doubt, no label is a good,
       // generic default that fits all entry points.
@@ -279,10 +282,12 @@ NSString* GetPromoLabelString(
   id<SystemIdentity> selectedIdentity = self.selectedIdentity;
   UIImage* avatar = _accountManagerService->GetIdentityAvatarWithIdentity(
       selectedIdentity, IdentityAvatarSize::TableViewIcon);
+  BOOL isManaged = [self isIdentityKnownToBeManaged:selectedIdentity];
   [self.consumer showDefaultAccountWithFullName:selectedIdentity.userFullName
                                       givenName:selectedIdentity.userGivenName
                                           email:selectedIdentity.userEmail
-                                         avatar:avatar];
+                                         avatar:avatar
+                                        managed:isManaged];
 }
 
 - (void)handleIdentityListChanged {
@@ -295,6 +300,26 @@ NSString* GetPromoLabelString(
   }
 }
 
+// Returns true if `identity` is known to be managed.
+// Returns false if the identity is known not to be managed or if the management
+// status is unknown. If the management status is unknown, it is fetched by
+// calling `FetchManagedStatusForIdentity`. `handleIdentityUpdated:` will be
+// called asynchronously when the management status if retrieved and the
+// identity is managed.
+- (BOOL)isIdentityKnownToBeManaged:(id<SystemIdentity>)identity {
+  if (std::optional<BOOL> managed = IsIdentityManaged(identity);
+      managed.has_value()) {
+    return managed.value();
+  }
+
+  __weak __typeof(self) weakSelf = self;
+  FetchManagedStatusForIdentity(identity, base::BindOnce(^(bool managed) {
+                                  if (managed) {
+                                    [weakSelf handleIdentityUpdated:identity];
+                                  }
+                                }));
+  return NO;
+}
 #pragma mark - ChromeAccountManagerServiceObserver
 
 - (void)identityListChanged {
@@ -338,5 +363,4 @@ NSString* GetPromoLabelString(
       _accountManagerService->GetIdentityOnDeviceWithGaiaID(info.gaia);
   [self handleIdentityUpdated:identity];
 }
-
 @end

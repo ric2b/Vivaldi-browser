@@ -20,6 +20,7 @@ try_.defaults.set(
     # Max. pending time for builds. CQ considers builds pending >2h as timed
     # out: http://shortn/_8PaHsdYmlq. Keep this in sync.
     expiration_timeout = 2 * time.hour,
+    reclient_enabled = False,
     service_account = "chromium-try-gpu-builder@chops-service-accounts.iam.gserviceaccount.com",
     siso_enabled = True,
     siso_project = siso.project.DEFAULT_UNTRUSTED,
@@ -113,6 +114,16 @@ gpu_android_builder(
     mirrors = [
         "ci/GPU FYI Android arm Builder",
         "ci/Android FYI Release (Samsung A13)",
+    ],
+    gn_args = "ci/GPU FYI Android arm Builder",
+)
+
+gpu_android_builder(
+    name = "gpu-fyi-try-android-a23-32",
+    description_html = "Runs GPU tests on Samsung A23 phones",
+    mirrors = [
+        "ci/GPU FYI Android arm Builder",
+        "ci/Android FYI Release (Samsung A23)",
     ],
     gn_args = "ci/GPU FYI Android arm Builder",
 )
@@ -221,6 +232,15 @@ gpu_linux_builder(
     mirrors = [
         "ci/GPU FYI Linux Builder",
         "ci/Linux FYI Release (AMD RX 5500 XT)",
+    ],
+    gn_args = "ci/GPU FYI Linux Builder",
+)
+
+gpu_linux_builder(
+    name = "gpu-fyi-try-linux-amd-rx-7600-rel",
+    mirrors = [
+        "ci/GPU FYI Linux Builder",
+        "ci/Linux FYI Release (AMD RX 7600)",
     ],
     gn_args = "ci/GPU FYI Linux Builder",
 )
@@ -583,6 +603,15 @@ gpu_win_builder(
     mirrors = [
         "ci/GPU FYI Win x64 Builder",
         "ci/Win10 FYI x64 Release (NVIDIA)",
+    ],
+    gn_args = "ci/GPU FYI Win x64 Builder",
+)
+
+gpu_win_builder(
+    name = "gpu-fyi-try-win11-amd-rel-64",
+    mirrors = [
+        "ci/GPU FYI Win x64 Builder",
+        "ci/Win11 FYI x64 Release (AMD RX 7600)",
     ],
     gn_args = "ci/GPU FYI Win x64 Builder",
 )

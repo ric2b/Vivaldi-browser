@@ -129,14 +129,9 @@ interface AutofillDriver {
   //
   // `field_id` must identify a field of `form`. This is enforced by
   // ContentAutofillDriver.
-  //
-  // `formatting_only` is true if JavaScript only modified whitespaces, symbols
-  // and capitalization, and in that case, the field is still considered
-  // autofilled.
   JavaScriptChangedAutofilledValue(FormData form,
                                    FieldRendererId field_id,
-                                   mojo_base.mojom.String16 old_value,
-                                   bool formatting_only);
+                                   mojo_base.mojom.String16 old_value);
 };
 
 // There is one instance of this interface per web contents in the browser
@@ -196,16 +191,6 @@ interface PasswordManagerDriver {
   // Similar for the password field.
   ShowPasswordSuggestions(PasswordSuggestionRequest request);
 
-  // Instructs the browser to show a keyboard replacing surface (e.g.
-  // TouchToFill) and whether the form is ready for submission after filling. If
-  // `is_webauthn`, Android U+ can display Credential Manager UI instead of
-  // TouchToFill UI.
-  // TODO(crbug.com/40274966): Remove this API once PasswordSuggestionBottomSheetV2
-  // is launched.
-  [EnableIf=is_android]
-  ShowKeyboardReplacingSurface(SubmissionReadinessState submission_readiness,
-                  bool is_webauthn);
-
   // Checks the safe browsing reputation of the website where the focused
   // username/password field is on.
   CheckSafeBrowsingReputation(
@@ -232,22 +217,6 @@ interface PasswordGenerationDriver {
   AutomaticGenerationAvailable(
     PasswordGenerationUIData password_generation_ui_data);
 
-  // Instructs the browser to show the popup for editing a generated password.
-  // The location should be specified in the renderers coordinate system. Form
-  // is the form associated with the password field. `field_renderer_id` is the
-  // ID of the password field triggering generation. This method does nothing on
-  // Android platform because showing popups there obscures the view too much.
-  ShowPasswordEditingPopup(
-    gfx.mojom.RectF bounds,
-    FormData form_data,
-    FieldRendererId field_renderer_id,
-    mojo_base.mojom.String16 password_value);
-
-  // Informs the browser that the password generation option was rejected
-  // by the user typing more characters than the maximum offer size into the
-  // password field.
-  PasswordGenerationRejectedByTyping();
-
   // Instructs the browser to presave the form with generated password.
   PresaveGeneratedPassword(FormData form_data,
                            mojo_base.mojom.String16 password_value);
@@ -256,11 +225,34 @@ interface PasswordGenerationDriver {
   // the presaved form should be removed.
   PasswordNoLongerGenerated(FormData form_data);
 
+  // Instructs the browser to show the popup for editing a generated password.
+  // The location should be specified in the renderers coordinate system. Form
+  // is the form associated with the password field. `field_renderer_id` is the
+  // ID of the password field triggering generation. On Android bottom sheet is
+  // displayed instead of the editing popup.
+  [EnableIfNot=is_android]
+  ShowPasswordEditingPopup(
+    gfx.mojom.RectF bounds,
+    FormData form_data,
+    FieldRendererId field_renderer_id,
+    mojo_base.mojom.String16 password_value);
+
+  // Informs the browser that the password generation option was rejected
+  // by the user typing more characters than the maximum offer size into the
+  // password field. Obsolete for Android since it's only a signal to hide
+  // generation popup.
+  [EnableIfNot=is_android]
+  PasswordGenerationRejectedByTyping();
+
   // Communicates to the browser that a scroll event happened on the frame. This
-  // event affects the password generation popup position.
+  // event affects the password generation popup position. On Android bottom
+  // sheet is displayed instead of generation popup.
+  [EnableIfNot=is_android]
   FrameWasScrolled();
 
   // Informs the browser that the generation element lost focus, so the browser
-  // might hide the generation popup.
+  // might hide the generation popup. On Android bottom sheet is displayed
+  // instead of generation popup.
+  [EnableIfNot=is_android]
   GenerationElementLostFocus();
 };

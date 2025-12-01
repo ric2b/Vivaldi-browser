@@ -7,6 +7,7 @@
 
 #import <UIKit/UIKit.h>
 
+#import "components/policy/core/browser/signin/profile_separation_policies.h"
 #import "ios/chrome/browser/signin/model/capabilities_dict.h"
 #import "url/gurl.h"
 
@@ -52,13 +53,16 @@ enum class UserSelectableType;
 // Returns YES if the identity was added to the fake identity service.
 + (BOOL)isIdentityAdded:(FakeSystemIdentity*)fakeIdentity;
 
-// Returns the gaia ID of the signed-in account.
-// If there is no signed-in account returns an empty string.
+// Returns the gaia ID of the primary account.
+// If there is no primary account returns an empty string.
 + (NSString*)primaryAccountGaiaID;
 
 // Returns the email of the primary account base on `consentLevel`.
 // If there is no signed-in account returns an empty string.
 + (NSString*)primaryAccountEmailWithConsent:(signin::ConsentLevel)consentLevel;
+
+// Returns the gaia IDs of all accounts in the current profile.
++ (NSSet<NSString*>*)accountsInProfileGaiaIDs;
 
 // Checks that no identity is signed in.
 + (BOOL)isSignedOut;
@@ -72,11 +76,14 @@ enum class UserSelectableType;
 // `fakeIdentity` is added if it was not added yet.
 + (void)signinWithFakeIdentity:(FakeSystemIdentity*)identity;
 
-// TODO(crbug.com/40066949): Remove all tests invoking this when deleting the
-// MaybeMigrateSyncingUserToSignedIn() call on //ios (not right after launching
-// kMigrateSyncingUserToSignedIn).
+// Signs in with the fake managed identity and access point Settings.
+// Adds the fake-identity to the identity manager if necessary.
+// Converts the personal profile into a managed one.
+// Call `[SigninEarlGrey
+// signinWithFakeManagedIdentityInPersonalProfile:identity]` instead.
 // `fakeIdentity` is added if it was not added yet.
-+ (void)signinAndEnableLegacySyncFeature:(FakeSystemIdentity*)identity;
++ (void)signinWithFakeManagedIdentityInPersonalProfile:
+    (FakeSystemIdentity*)identity;
 
 // Signs in with `identity` without history sync consent.
 // `fakeIdentity` is added if it was not added yet.
@@ -100,6 +107,18 @@ enum class UserSelectableType;
 
 // Returns if the data type is enabled for the sync service.
 + (BOOL)isSelectedTypeEnabled:(syncer::UserSelectableType)type;
+
+// Stores a policy that will be returned for the next fetch profile separation
+// policy request.
++ (void)setPolicyResponseForNextProfileSeparationPolicyRequest:
+    (policy::ProfileSeparationDataMigrationSettings)
+        profileSeparationDataMigrationSettings;
+
+// Returns whether the feature to put each managed account into its own separate
+// profile is enabled. This depends on the `kSeparateProfilesForManagedAccounts`
+// feature flag, plus some additional conditions which can't be directly checked
+// in the test app.
++ (BOOL)areSeparateProfilesForManagedAccountsEnabled;
 
 @end
 

@@ -170,6 +170,7 @@
 <translation id="3838085852053358637">Razširitve ni bilo mogoče naložiti</translation>
 <translation id="383891835335927981">Nobeno spletno mesto ni povečano ali pomanjšano</translation>
 <translation id="385051799172605136">Nazaj</translation>
+<translation id="3858860766373142691">Ime</translation>
 <translation id="3861977424605124250">Pokaži ob zagonu</translation>
 <translation id="3867944738977021751">Polja certifikata</translation>
 <translation id="3905761538810670789">Popravi aplikacijo</translation>
@@ -415,6 +416,10 @@ Datoteko s ključem shranite na varnem. Potrebovali jo boste za izdelavo novih r
 <translation id="8004582292198964060">Brskalnik</translation>
 <translation id="8018313076035239964">Nadzirajte, katere podatke lahko uporabijo spletna mesta in katero vsebino vam lahko pokažejo</translation>
 <translation id="8071432093239591881">Natisni kot sliko</translation>
+<translation id="8118448640060360549">{EXTENSIONS_COUNT, plural,
+        =1 {# zaznamek}
+        few {# zaznamka}
+        other {# zaznamkov}}</translation>
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" /> KB</translation>
 <translation id="8212008074015601248">{NUM_DOWNLOAD,plural,¸
  =1 {Poteka prenos} one {Poteka prenos} two {Potekata prenosa} few {Potekajo prenosi} other {Potekajo prenosi}}</translation>
@@ -465,7 +470,7 @@ Datoteko s ključem shranite na varnem. Potrebovali jo boste za izdelavo novih r
 <translation id="9137916601698928395">Odpri povezavo kot <ph name="USER" /></translation>
 <translation id="916607977885256133">Slika v sliki</translation>
 <translation id="9170848237812810038">&amp;Razveljavi</translation>
-<translation id="9215293857209265904">Razširitev »<ph name="EXTENSION_NAME" />« je dodana</translation>
+<translation id="9215293857209265904">"<ph name="EXTENSION_NAME" />" je dodana</translation>
 <translation id="9218430445555521422">Nastavi kot privzeto</translation>
 <translation id="93766956588638423">Popravi razširitev</translation>
 <translation id="961012016278832836">Microsoft Edge Legacy</translation>

@@ -4,14 +4,21 @@
 
 module blink.mojom;
 
+import "mojo/public/mojom/base/values.mojom";
+
 // Implementation of the proposed Digital Identity Credential API.
 //
 // Proposal: https://wicg.github.io/digital-identities
 
+union RequestData {
+  string str;
+  mojo_base.mojom.Value value;
+};
+
 // The specification of the request to digital credentials.
 struct DigitalCredentialRequest {
   string protocol;
-  string data;
+  RequestData data;
 };
 
 // Represents the format of the request that should be used when communicating
@@ -51,7 +58,7 @@ interface DigitalIdentityRequest {
   Get(array<DigitalCredentialRequest> digital_credential_requests, GetRequestFormat format) =>
       (RequestDigitalIdentityStatus status,
       string? protocol,
-      string? token);
+      mojo_base.mojom.Value? token);
 
   // Requests a token to be generated, given a DigitalCredentialRequest.
   // Returns:
@@ -64,7 +71,7 @@ interface DigitalIdentityRequest {
   Create(DigitalCredentialRequest digital_credential_request) =>
       (RequestDigitalIdentityStatus status,
       string? protocol,
-      string? token);
+      mojo_base.mojom.Value? token);
 
   // Aborts the pending request, if any.
   Abort();

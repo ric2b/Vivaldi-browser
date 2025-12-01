@@ -2,8 +2,10 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="ro">
 <translation id="1368832886055348810">De la stânga la dreapta</translation>
+<translation id="1591184457164800433">{MINUTES,plural, =1 {Un minut și } few {# minute și } other {# de minute și }}</translation>
 <translation id="1761785978543082658"><ph name="QUANTITY" /> B</translation>
 <translation id="1809410197924942083"><ph name="QUANTITY" /> MiB/s</translation>
+<translation id="1830179671306812954">{HOURS,plural, =1 {O oră și } few {# ore și } other {# de ore și }}</translation>
 <translation id="1859234291848436338">Direcție de scriere</translation>
 <translation id="2297836609126180313"><ph name="QUANTITY" /> TiB/s</translation>
 <translation id="3049748772180311791"><ph name="QUANTITY" /> MiB</translation>
@@ -14,6 +16,7 @@
 <translation id="5076340679995252485">Li&amp;pește</translation>
 <translation id="520299402983819650"><ph name="QUANTITY" /> PiB</translation>
 <translation id="5613020302032141669">Săgeata din stânga</translation>
+<translation id="5768079895599174203">{DAYS,plural, =1 {O zi și } few {# zile și } other {# de zile și }}</translation>
 <translation id="6142413573757616983"><ph name="QUANTITY" /> B/s</translation>
 <translation id="6907759265145635167"><ph name="QUANTITY" /> PiB/s</translation>
 <translation id="6974053822202609517">De la dreapta la stânga</translation>

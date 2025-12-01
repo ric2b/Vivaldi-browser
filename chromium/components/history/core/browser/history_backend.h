@@ -307,8 +307,6 @@ class HistoryBackend : public base::RefCountedThreadSafe<HistoryBackend>,
   // Querying ------------------------------------------------------------------
 
   QueryURLResult QueryURL(const GURL& url, bool want_visits);
-  std::vector<QueryURLResult> QueryURLs(const std::vector<GURL>& urls,
-                                        bool want_visits);
   QueryResults QueryHistory(const std::u16string& text_query,
                             const QueryOptions& options);
 
@@ -329,7 +327,15 @@ class HistoryBackend : public base::RefCountedThreadSafe<HistoryBackend>,
 
   // Request the `result_count` most visited URLs and the chain of
   // redirects leading to each of these URLs. Used by TopSites.
-  MostVisitedURLList QueryMostVisitedURLs(int result_count);
+  // `recency_factor_name` is the type of scoring algorithm SegmentScorer
+  // will use when rankings results.
+  // `recency_window_days` is the number of days of history to consider
+  // when scoring segments. A result older than this window will not add to a
+  // segment's score.
+  MostVisitedURLList QueryMostVisitedURLs(
+      int result_count,
+      const std::optional<std::string>& recency_factor_name = std::nullopt,
+      std::optional<size_t> recency_window_days = std::nullopt);
 
   // Request `result_count` of the most repeated queries for the given keyword.
   // Used by TopSites.
@@ -404,12 +410,6 @@ class HistoryBackend : public base::RefCountedThreadSafe<HistoryBackend>,
   HistoryLastVisitResult GetLastVisitToOrigin(const url::Origin& origin,
                                               base::Time begin_time,
                                               base::Time end_time);
-
-  // Gets the last time `url` was visited before `end_time`. If the given URL
-  // has not been visited in the past, the result will have a null base::Time,
-  // but still report success.
-  HistoryLastVisitResult GetLastVisitToURL(const GURL& url,
-                                           base::Time end_time);
 
   // Gets counts for total visits and days visited for pages matching `host`'s
   // scheme, port, and host. Counts only user-visible visits.
@@ -654,10 +654,6 @@ class HistoryBackend : public base::RefCountedThreadSafe<HistoryBackend>,
   // TODO(manukh): DEPRECATED (see above comment)
   bool GetVisitsForURL(URLID id, VisitVector* visits);
 
-  // TODO(manukh): Rename to `GetMostRecentVisitsForEachGurl`.
-  std::map<GURL, VisitRow> GetMostRecentVisitForEachURL(
-      const std::vector<GURL>& urls);
-
   // TODO(manukh): DEPRECATED (see above comment)
   bool GetMostRecentVisitForURL(URLID id, VisitRow* visit_row) override;
 
@@ -889,9 +885,7 @@ class HistoryBackend : public base::RefCountedThreadSafe<HistoryBackend>,
   // If the caller wants to add this visit to the VisitedLinkDatabase, it needs
   // to provide values for the `top_level_url`, `frame_url`, `is_ephemeral`
   // parameters. `top_level_url` is a GURL representing the top-level frame that
-  // this navigation originated from. Context clicks may replace an invalid
-  // `top_level_url` with a valid `opener_url`, which contains only the GURL
-  // from `opener_visit` for quick access. `frame_url` is GURL representing the
+  // this navigation originated from. `frame_url` is GURL representing the
   // immediate frame that this navigation originated from. For example, if a
   // link to `c.com` is clicked in an iframe `b.com` that is embedded in
   // `a.com`, the `top_level_url` is `a.com` and the `frame_url` is `b.com` (and
@@ -918,7 +912,6 @@ class HistoryBackend : public base::RefCountedThreadSafe<HistoryBackend>,
       std::optional<std::u16string> title = std::nullopt,
       std::optional<GURL> top_level_url = std::nullopt,
       std::optional<GURL> frame_url = std::nullopt,
-      std::optional<GURL> opener_url = std::nullopt,
       std::optional<std::string> app_id = std::nullopt,
       std::optional<base::TimeDelta> visit_duration = std::nullopt,
       std::optional<std::string> originator_cache_guid = std::nullopt,

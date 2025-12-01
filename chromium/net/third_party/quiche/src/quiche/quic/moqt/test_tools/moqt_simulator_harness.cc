@@ -4,18 +4,25 @@
 
 #include "quiche/quic/moqt/test_tools/moqt_simulator_harness.h"
 
+#include <memory>
+#include <optional>
 #include <string>
 
+#include "absl/strings/string_view.h"
 #include "quiche/quic/core/crypto/quic_compressed_certs_cache.h"
 #include "quiche/quic/core/crypto/quic_crypto_server_config.h"
 #include "quiche/quic/core/crypto/quic_random.h"
+#include "quiche/quic/core/quic_alarm_factory_proxy.h"
 #include "quiche/quic/core/quic_generic_session.h"
+#include "quiche/quic/core/quic_time.h"
 #include "quiche/quic/core/quic_types.h"
 #include "quiche/quic/moqt/moqt_messages.h"
 #include "quiche/quic/moqt/moqt_session.h"
+#include "quiche/quic/moqt/moqt_session_callbacks.h"
 #include "quiche/quic/test_tools/crypto_test_utils.h"
 #include "quiche/quic/test_tools/simulator/simulator.h"
 #include "quiche/quic/test_tools/simulator/test_harness.h"
+#include "quiche/common/platform/api/quiche_logging.h"
 
 namespace moqt::test {
 
@@ -24,7 +31,15 @@ MoqtSessionParameters CreateParameters(quic::Perspective perspective,
                                        MoqtVersion version) {
   MoqtSessionParameters parameters(perspective, "");
   parameters.version = version;
+  parameters.deliver_partial_objects = false;
   return parameters;
+}
+
+MoqtSessionCallbacks CreateCallbacks(quic::simulator::Simulator* simulator) {
+  return MoqtSessionCallbacks(
+      +[] {}, +[](absl::string_view) {}, +[](absl::string_view) {}, +[] {},
+      DefaultIncomingAnnounceCallback,
+      DefaultIncomingSubscribeAnnouncesCallback, simulator->GetClock());
 }
 }  // namespace
 
@@ -41,7 +56,9 @@ MoqtClientEndpoint::MoqtClientEndpoint(quic::simulator::Simulator* simulator,
                     /*visitor_owned=*/false, nullptr, &crypto_config_),
       session_(&quic_session_,
                CreateParameters(quic::Perspective::IS_CLIENT, version),
-               MoqtSessionCallbacks()) {
+               std::make_unique<quic::QuicAlarmFactoryProxy>(
+                   simulator->GetAlarmFactory()),
+               CreateCallbacks(simulator)) {
   quic_session_.Initialize();
 }
 
@@ -64,8 +81,34 @@ MoqtServerEndpoint::MoqtServerEndpoint(quic::simulator::Simulator* simulator,
                     &compressed_certs_cache_),
       session_(&quic_session_,
                CreateParameters(quic::Perspective::IS_SERVER, version),
-               MoqtSessionCallbacks()) {
+               std::make_unique<quic::QuicAlarmFactoryProxy>(
+                   simulator->GetAlarmFactory()),
+               CreateCallbacks(simulator)) {
   quic_session_.Initialize();
+}
+
+void RunHandshakeOrDie(quic::simulator::Simulator& simulator,
+                       MoqtClientEndpoint& client, MoqtServerEndpoint& server,
+                       std::optional<quic::QuicTimeDelta> timeout) {
+  constexpr quic::QuicTimeDelta kDefaultTimeout =
+      quic::QuicTimeDelta::FromSeconds(3);
+  bool client_established = false;
+  bool server_established = false;
+
+  // Retaining pointers to local variables is safe here, since if the handshake
+  // succeeds, both callbacks are executed and deleted, and if either fails, the
+  // program crashes.
+  client.session()->callbacks().session_established_callback =
+      [&client_established] { client_established = true; };
+  server.session()->callbacks().session_established_callback =
+      [&server_established] { server_established = true; };
+
+  client.quic_session()->CryptoConnect();
+  simulator.RunUntilOrTimeout(
+      [&]() { return client_established && server_established; },
+      timeout.value_or(kDefaultTimeout));
+  QUICHE_CHECK(client_established) << "Client failed to establish session";
+  QUICHE_CHECK(server_established) << "Server failed to establish session";
 }
 
 }  // namespace moqt::test

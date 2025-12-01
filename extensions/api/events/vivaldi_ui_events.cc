@@ -5,29 +5,16 @@
 #include "app/vivaldi_apptools.h"
 #include "base/logging.h"
 #include "base/no_destructor.h"
-#include "browser/vivaldi_browser_finder.h"
 #include "build/build_config.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/ui/browser.h"
-#include "chrome/browser/ui/browser_finder.h"
-#include "chrome/browser/ui/browser_list.h"
-#include "components/input/native_web_keyboard_event.h"
-#include "components/input/render_widget_host_view_input.h"
-#include "components/prefs/pref_service.h"
 #include "components/web_modal/web_contents_modal_dialog_manager.h"
-#include "content/browser/renderer_host/render_view_host_impl.h"
-#include "content/browser/renderer_host/render_widget_host_impl.h"
 #include "content/browser/renderer_host/render_widget_host_view_base.h"  // nogncheck
 #include "content/browser/web_contents/web_contents_impl.h"
-#include "content/public/browser/web_contents.h"
 #include "extensions/schema/tabs_private.h"
 #include "extensions/tools/vivaldi_tools.h"
-#include "prefs/vivaldi_gen_prefs.h"
-#include "prefs/vivaldi_pref_names.h"
-#include "third_party/blink/public/common/input/web_mouse_wheel_event.h"
+#include "extensions/vivaldi_browser_component_wrapper.h"
 #include "third_party/blink/renderer/platform/keyboard_codes.h"  //nogncheck
 #include "ui/vivaldi_browser_window.h"
-#include "ui/vivaldi_ui_utils.h"
 
 namespace extensions {
 
@@ -75,8 +62,8 @@ VivaldiBrowserWindow* FindMouseEventWindowFromView(
   // web_contents is not ourtermost content when the root_view corresponds
   // to a native control like date picker on Mac.
   web_contents = web_contents->GetOutermostWebContents();
-  VivaldiBrowserWindow* window =
-      ::vivaldi::FindWindowForEmbedderWebContents(web_contents);
+  VivaldiBrowserWindow* window = VivaldiBrowserComponentWrapper::GetInstance()
+      ->FindWindowForEmbedderWebContents(web_contents);
   if (window && ShouldPreventWindowGestures(window)) {
     window = nullptr;
   }
@@ -84,15 +71,9 @@ VivaldiBrowserWindow* FindMouseEventWindowFromView(
 }
 
 VivaldiBrowserWindow* FindMouseEventWindowFromId(SessionID::id_type window_id) {
-  VivaldiBrowserWindow* window = nullptr;
-  Browser* browser = ::vivaldi::FindBrowserByWindowId(window_id);
-  if (browser) {
-    window = VivaldiBrowserWindow::FromBrowser(browser);
-    if (window && ShouldPreventWindowGestures(window)) {
-      window = nullptr;
-    }
-  }
-  return window;
+  VivaldiBrowserWindow* window = VivaldiBrowserComponentWrapper::GetInstance()
+      ->VivaldiBrowserWindowFromId(window_id);
+  return window && ShouldPreventWindowGestures(window) ? nullptr : window;
 }
 
 // Transform screen coordinates to the UI coordinates for the given window.
@@ -526,8 +507,8 @@ bool VivaldiUIEvents::DoHandleKeyboardEvent(
   if (!web_contents)
     return false;
   web_contents = web_contents->GetOutermostWebContents();
-  VivaldiBrowserWindow* window =
-      ::vivaldi::FindWindowForEmbedderWebContents(web_contents);
+  VivaldiBrowserWindow* window = VivaldiBrowserComponentWrapper::GetInstance()
+      ->FindWindowForEmbedderWebContents(web_contents);
   if (!window)
     return false;
 
@@ -686,7 +667,8 @@ bool VivaldiUIEvents::DoHandleDragEnd(content::WebContents* web_contents,
     cancelled = true;
   }
 #endif
-  bool outside = ::vivaldi::ui_tools::IsOutsideAppWindow(screen_x, screen_y);
+  bool outside = VivaldiBrowserComponentWrapper::GetInstance()
+      ->IsOutsideAppWindow(screen_x, screen_y);
   if (!outside && operation == ui::mojom::DragOperation::kNone) {
     // None of browser windows accepted the drag and we do not moving tabs out.
     cancelled = true;
@@ -698,44 +680,6 @@ bool VivaldiUIEvents::DoHandleDragEnd(content::WebContents* web_contents,
       web_contents->GetBrowserContext());
 
   return outside;
-}
-
-// static
-void VivaldiUIEvents::SendKeyboardShortcutEvent(
-    SessionID::id_type window_id,
-    content::BrowserContext* browser_context,
-    const input::NativeWebKeyboardEvent& event,
-    bool is_auto_repeat,
-    bool forced_browser_priority) {
-  // We don't allow AltGr keyboard shortcuts
-  if (event.GetModifiers() & blink::WebInputEvent::kAltGrKey)
-    return;
-  // Don't send if event contains only modifiers.
-  int key_code = event.windows_key_code;
-  if (key_code == ui::VKEY_CONTROL || key_code == ui::VKEY_SHIFT ||
-      key_code == ui::VKEY_MENU) {
-    return;
-  }
-  if (event.GetType() == blink::WebInputEvent::Type::kKeyUp)
-    return;
-
-  std::string shortcut_text = ::vivaldi::ShortcutTextFromEvent(event);
-
-  // If the event wasn't prevented we'll get a rawKeyDown event. In some
-  // exceptional cases we'll never get that, so we let these through
-  // unconditionally
-  std::vector<std::string> exceptions = {"Up", "Down", "Shift+Delete",
-                                         "Meta+Shift+V", "Esc"};
-  bool is_exception = std::find(exceptions.begin(), exceptions.end(),
-                                shortcut_text) != exceptions.end();
-  if (event.GetType() == blink::WebInputEvent::Type::kRawKeyDown ||
-      is_exception) {
-    ::vivaldi::BroadcastEvent(tabs_private::OnKeyboardShortcut::kEventName,
-                              tabs_private::OnKeyboardShortcut::Create(
-                                  window_id, shortcut_text, is_auto_repeat,
-                                  event.from_devtools, forced_browser_priority),
-                              browser_context);
-  }
 }
 
 // static

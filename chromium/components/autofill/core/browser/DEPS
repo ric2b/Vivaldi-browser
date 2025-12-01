@@ -1,6 +1,5 @@
 include_rules = [
   # go/keep-sorted start
-  "+components/autofill_ai/core/browser/autofill_ai_features.h",
   "+components/browser_ui/device_lock/android",
   "+components/device_reauth/device_authenticator.h",
   "+components/feature_engagement",
@@ -16,6 +15,7 @@ include_rules = [
   "+components/optimization_guide",
   "+components/optimization_guide/core",
   "+components/password_manager/core/browser/features/password_features.h",
+  "+components/payments/core/currency_formatter.h",
   "+components/policy",
   "+components/profile_metrics",
   "+components/resources",
@@ -28,7 +28,6 @@ include_rules = [
   "+components/sync_preferences",
   "+components/translate/core/browser",
   "+components/translate/core/common",
-  "+components/user_annotations",
   "+components/variations",
   "+components/version_info",
   "+components/webdata/common",
@@ -45,6 +44,7 @@ include_rules = [
   "+services/network/test",
   "+sql",
   "+third_party/icu/fuzzers/fuzzer_utils.h", # For fuzz-tests.
+  "+third_party/jni_zero",
   "+third_party/libaddressinput", # For address i18n.
   "+third_party/libphonenumber",  # For phone number i18n.
   "+third_party/re2",

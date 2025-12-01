@@ -2659,6 +2659,13 @@ TEST_P(PartitionAllocDeathTest, ImmediateDoubleFree) {
   EXPECT_TRUE(ptr);
   allocator.root()->Free(ptr);
   EXPECT_DEATH(allocator.root()->Free(ptr), "");
+  if (
+#if PA_BUILDFLAG(ENABLE_BACKUP_REF_PTR_SUPPORT)
+      allocator.root()->brp_enabled() ||
+#endif  // PA_BUILDFLAG(ENABLE_BACKUP_REF_PTR_SUPPORT)
+      allocator.root()->settings.use_cookie) {
+    EXPECT_DEATH(allocator.root()->CheckMetadataIntegrity(ptr), "");
+  }
 }
 
 // As above, but when this isn't the only slot in the span.
@@ -2669,6 +2676,13 @@ TEST_P(PartitionAllocDeathTest, ImmediateDoubleFree2ndSlot) {
   EXPECT_TRUE(ptr);
   allocator.root()->Free(ptr);
   EXPECT_DEATH(allocator.root()->Free(ptr), "");
+  if (
+#if PA_BUILDFLAG(ENABLE_BACKUP_REF_PTR_SUPPORT)
+      allocator.root()->brp_enabled() ||
+#endif  // PA_BUILDFLAG(ENABLE_BACKUP_REF_PTR_SUPPORT)
+      allocator.root()->settings.use_cookie) {
+    EXPECT_DEATH(allocator.root()->CheckMetadataIntegrity(ptr), "");
+  }
   allocator.root()->Free(ptr0);
 }
 
@@ -2828,6 +2842,8 @@ TEST_P(PartitionAllocDeathTest, OffByOneDetectionByCookie) {
   // Crash at `free()`, either by cookie check failure or InSlotMetadata
   // corruption.
   EXPECT_DEATH(allocator.root()->Free(array), "");
+  // It should also crash with `CheckMetadataIntegrity()`.
+  EXPECT_DEATH(allocator.root()->CheckMetadataIntegrity(array), "");
   // Restore integrity, otherwise the process will crash in TearDown().
   array[usable_size] = previous_value;
   allocator.root()->Free(array);
@@ -2852,6 +2868,8 @@ TEST_P(PartitionAllocDeathTest, OffByOneDetectionByCookieWithRealisticData) {
   // Crash at `free()`, either by cookie check failure or InSlotMetadata
   // corruption.
   EXPECT_DEATH(allocator.root()->Free(array), "");
+  // It should also crash with `CheckMetadataIntegrity()`.
+  EXPECT_DEATH(allocator.root()->CheckMetadataIntegrity(array), "");
   // Restore integrity, otherwise the process will crash in TearDown().
   array[usable_size] = previous_value;
   allocator.root()->Free(array);
@@ -4531,7 +4549,9 @@ TEST_P(PartitionAllocTest, RefCountBasic) {
   }
 
   constexpr uint64_t kCookie = 0x1234567890ABCDEF;
+#if !PA_BUILDFLAG(IS_IOS)
   constexpr uint64_t kQuarantined = 0xEFEFEFEFEFEFEFEF;
+#endif  // !PA_BUILDFLAG(IS_IOS)
 
   size_t alloc_size = 64 - ExtraAllocSize(allocator);
   uint64_t* ptr1 =
@@ -4556,8 +4576,10 @@ TEST_P(PartitionAllocTest, RefCountBasic) {
   // The allocation shouldn't be reclaimed, and its contents should be zapped.
   // Retag ptr1 to get its correct MTE tag.
   ptr1 = TagPtr(ptr1);
+#if !PA_BUILDFLAG(IS_IOS)
   EXPECT_NE(*ptr1, kCookie);
   EXPECT_EQ(*ptr1, kQuarantined);
+#endif  // !PA_BUILDFLAG(IS_IOS)
 
   // The allocator should not reuse the original slot since its reference count
   // doesn't equal zero.
@@ -4639,6 +4661,93 @@ TEST_P(PartitionAllocTest, RefCountRealloc) {
     RunRefCountReallocSubtest(alloc_size, alloc_size / 10 * 11);
     RunRefCountReallocSubtest(alloc_size, alloc_size / 10 * 9);
   }
+}
+
+TEST_P(PartitionAllocTest, ExtraExtrasSize) {
+  constexpr size_t kExtraExtrasSize = 4;
+  constexpr size_t kSlotSize = 64;
+
+  std::unique_ptr<PartitionRoot> root_with_extra = CreateCustomTestRoot(
+      [&]() {
+        PartitionOptions opts = GetCommonPartitionOptions();
+        opts.backup_ref_ptr = PartitionOptions::kEnabled;
+        opts.backup_ref_ptr_extra_extras_size = kExtraExtrasSize;
+        return opts;
+      }(),
+      {});
+  std::unique_ptr<PartitionRoot> root_no_extra = CreateCustomTestRoot(
+      [&]() {
+        PartitionOptions opts = GetCommonPartitionOptions();
+        opts.backup_ref_ptr = PartitionOptions::kEnabled;
+        return opts;
+      }(),
+      {});
+
+  // Max size which fits within 64 bytes bucket when there is no extra.
+  const size_t alloc_size =
+      root_no_extra->AdjustSizeForExtrasSubtract(kSlotSize);
+
+  EXPECT_EQ(
+      root_with_extra->AdjustSizeForExtrasAdd(alloc_size),
+      root_no_extra->AdjustSizeForExtrasAdd(alloc_size) + kExtraExtrasSize);
+
+  void* ptr1 = root_with_extra->Alloc(alloc_size, type_name);
+  auto* slot_span1 =
+      SlotSpan::FromSlotStart(root_with_extra->ObjectToSlotStart(ptr1));
+
+  void* ptr2 = root_no_extra->Alloc(alloc_size, type_name);
+  auto* slot_span2 =
+      SlotSpan::FromSlotStart(root_no_extra->ObjectToSlotStart(ptr2));
+
+  // Verify adding extra consumes more memory.
+  EXPECT_NE(slot_span1->bucket->slot_size, slot_span2->bucket->slot_size);
+
+  root_no_extra->Free(ptr2);
+}
+
+TEST_P(PartitionAllocTest, ExtraExtrasNullfyOffByOneDetection) {
+#if !PA_BUILDFLAG(HAS_64_BIT_POINTERS)
+  GTEST_SKIP()
+      << "This test is not compatible with 32-bit bucket distribution.";
+#else
+  std::unique_ptr<PartitionRoot> root_no_extra = CreateCustomTestRoot(
+      [&]() {
+        PartitionOptions opts = GetCommonPartitionOptions();
+        opts.backup_ref_ptr = PartitionOptions::kEnabled;
+        return opts;
+      }(),
+      {});
+
+  // `ptr1` can be located at page start hence lacks in-slot style
+  // `InSlotMetadata`. See `InSlotMetadataPointer`.
+  int64_t* ptr1 = static_cast<int64_t*>(root_no_extra->Alloc(8));
+  int64_t* ptr2 = static_cast<int64_t*>(root_no_extra->Alloc(8));
+
+  // Off-by-one (8 bytes).
+  EXPECT_DEATH_IF_SUPPORTED((ptr2[1] = 0, root_no_extra->Free(ptr2)), "");
+
+  root_no_extra->Free(ptr2);
+  root_no_extra->Free(ptr1);
+
+  // Repeat the same but with extra extras of 8 bytes.
+  std::unique_ptr<PartitionRoot> root_with_extra = CreateCustomTestRoot(
+      [&]() {
+        PartitionOptions opts = GetCommonPartitionOptions();
+        opts.backup_ref_ptr = PartitionOptions::kEnabled;
+        opts.backup_ref_ptr_extra_extras_size = 8;
+        return opts;
+      }(),
+      {});
+
+  ptr1 = static_cast<int64_t*>(root_with_extra->Alloc(8));
+  ptr2 = static_cast<int64_t*>(root_with_extra->Alloc(8));
+
+  // This off-by-one overwrites the extra extras and does not corrupt
+  // `InSlotMetadata`.
+  ptr2[1] = 0;
+  root_with_extra->Free(ptr2);
+  root_with_extra->Free(ptr1);
+#endif  // !PA_BUILDFLAG(HAS_64_BIT_POINTERS)
 }
 
 int g_unretained_dangling_raw_ptr_detected_count = 0;

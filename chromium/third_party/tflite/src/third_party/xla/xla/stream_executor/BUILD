@@ -1,5 +1,5 @@
 load("@bazel_skylib//:bzl_library.bzl", "bzl_library")
-load("//xla:xla.bzl", "xla_cc_test")
+load("//xla:xla.default.bzl", "xla_cc_test")
 load("//xla/stream_executor:build_defs.bzl", "stream_executor_build_defs_bzl_deps", "stream_executor_friends", "stream_executor_internal")
 load("//xla/tsl:tsl.bzl", "if_google", "if_oss", "internal_visibility")
 load("//xla/tsl/platform:build_config.bzl", "tf_proto_library")
@@ -31,7 +31,7 @@ bzl_library(
         "//xla/tsl/platform:rules_cc_bzl",
         "//xla/tsl/platform/default:cuda_build_defs_bzl",
         "@local_config_cuda//cuda:build_defs_bzl",
-        "@local_tsl//third_party/py/rules_pywrap:pywrap_bzl",
+        "@local_xla//third_party/py/rules_pywrap:pywrap_bzl",
     ] + stream_executor_build_defs_bzl_deps(),
 )
 
@@ -250,16 +250,6 @@ cc_library(
         "@local_tsl//tsl/platform:logging",
         "@local_tsl//tsl/platform:numbers",
         "@local_tsl//tsl/platform:statusor",
-    ],
-)
-
-cc_library(
-    name = "host_memory_allocation",
-    srcs = ["host_memory_allocation.cc"],
-    hdrs = ["host_memory_allocation.h"],
-    deps = [
-        ":memory_allocation",
-        ":stream_executor_h",
     ],
 )
 
@@ -619,12 +609,12 @@ cc_library(
         ":device_memory",
         ":kernel",
         ":launch_dim",
-        "//xla/tsl/lib/gtl:int_type",
+        "//xla/tsl/platform:errors",
         "@com_google_absl//absl/functional:any_invocable",
         "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings:string_view",
         "@com_google_absl//absl/types:span",
-        "@local_tsl//tsl/platform:errors",
     ],
 )
 
@@ -712,7 +702,6 @@ cc_library(
         ":dnn",
         ":executor_cache",
         ":fft",
-        ":host_memory_allocation",  # build_cleaner: keep
         ":kernel",
         ":kernel_spec",
         ":launch_dim",
@@ -729,18 +718,18 @@ cc_library(
 # StreamExecutor tests
 #===--------------------------------------------------------------------------------------------===#
 
-cc_test(
+xla_cc_test(
     name = "generic_memory_allocation_test",
     srcs = ["generic_memory_allocation_test.cc"],
     deps = [
         ":generic_memory_allocation",
         "//xla/tsl/platform:macros",
-        "@com_google_googletest//:gtest_main",
+        "@com_google_googletest//:gtest",
         "@local_tsl//tsl/platform:test_main",
     ],
 )
 
-cc_test(
+xla_cc_test(
     name = "generic_memory_allocator_test",
     srcs = ["generic_memory_allocator_test.cc"],
     deps = [
@@ -752,12 +741,12 @@ cc_test(
         "//xla/tsl/platform:statusor",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/status:statusor",
-        "@com_google_googletest//:gtest_main",
+        "@com_google_googletest//:gtest",
         "@local_tsl//tsl/platform:test_main",
     ],
 )
 
-cc_test(
+xla_cc_test(
     name = "semantic_version_test",
     srcs = ["semantic_version_test.cc"],
     deps = [
@@ -901,7 +890,7 @@ xla_cc_test(
     ],
 )
 
-cc_test(
+xla_cc_test(
     name = "bit_pattern_test",
     srcs = ["bit_pattern_test.cc"],
     deps = [

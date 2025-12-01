@@ -10,7 +10,6 @@
 #include <set>
 #include <sstream>
 #include <string>
-#include <unordered_map>
 #include <utility>
 
 #include "base/memory/raw_ptr.h"
@@ -18,6 +17,7 @@
 #include "base/numerics/checked_math.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
+#include "base/strings/to_string.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/trace_event/memory_allocator_dump.h"
@@ -25,6 +25,7 @@
 #include "base/trace_event/memory_dump_provider.h"
 #include "base/trace_event/process_memory_dump.h"
 #include "build/build_config.h"
+#include "third_party/abseil-cpp/absl/container/flat_hash_map.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/accessibility/ax_action_data.h"
 #include "ui/accessibility/ax_enums.mojom-shared-internal.h"
@@ -80,7 +81,7 @@ bool FindDescendantRoleWithMaxDepth(const AXPlatformNodeBase* node,
 
 // Map from each AXPlatformNode's unique id to its instance.
 using UniqueIdMap =
-    std::unordered_map<int32_t, raw_ptr<AXPlatformNode, CtnExperimental>>;
+    absl::flat_hash_map<int32_t, raw_ptr<AXPlatformNode, CtnExperimental>>;
 base::LazyInstance<UniqueIdMap>::Leaky g_unique_id_map =
     LAZY_INSTANCE_INITIALIZER;
 
@@ -136,10 +137,11 @@ const std::string AXPlatformNodeBase::kAriaActionsPrefix = "custom";
 // fuchsia has native accessibility.
 #if !BUILDFLAG(HAS_NATIVE_ACCESSIBILITY) && !BUILDFLAG(IS_FUCHSIA)
 // static
-AXPlatformNode* AXPlatformNode::Create(AXPlatformNodeDelegate* delegate) {
+AXPlatformNode::Pointer AXPlatformNode::Create(
+    AXPlatformNodeDelegate* delegate) {
   AXPlatformNodeBase* node = new AXPlatformNodeBase();
   node->Init(delegate);
-  return node;
+  return Pointer(node);
 }
 #endif
 
@@ -316,8 +318,13 @@ base::stack<gfx::NativeViewAccessible> AXPlatformNodeBase::GetAncestors() {
   base::stack<gfx::NativeViewAccessible> ancestors;
   gfx::NativeViewAccessible current_node = GetNativeViewAccessible();
   while (current_node) {
+    AXPlatformNodeBase* current_platform_node =
+        FromNativeViewAccessible(current_node);
+    if (!current_platform_node) {
+      break;
+    }
     ancestors.push(current_node);
-    current_node = FromNativeViewAccessible(current_node)->GetParent();
+    current_node = current_platform_node->GetParent();
   }
 
   return ancestors;
@@ -1613,6 +1620,9 @@ void AXPlatformNodeBase::ComputeAttributes(PlatformAttributeList* attributes) {
       case ax::mojom::DetailsFrom::kInterestTarget:
         AddAttributeToList("details-from", "interest-target", attributes);
         break;
+      case ax::mojom::DetailsFrom::kCommandfor:
+        AddAttributeToList("details-from", "command-for", attributes);
+        break;
     }
   }
 
@@ -1655,7 +1665,7 @@ void AXPlatformNodeBase::AddAttributeToList(
   DCHECK(attributes);
   bool value;
   if (GetBoolAttribute(attribute, &value)) {
-    AddAttributeToList(name, value ? "true" : "false", attributes);
+    AddAttributeToList(name, base::ToString(value), attributes);
   }
 }
 

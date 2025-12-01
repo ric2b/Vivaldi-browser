@@ -536,6 +536,11 @@ static int cudascale_scale(AVFilterContext *ctx, AVFrame *out, AVFrame *in)
     if (ret < 0)
         return ret;
 
+    if (out->width != in->width || out->height != in->height) {
+        av_frame_side_data_remove_by_props(&out->side_data, &out->nb_side_data,
+                                           AV_SIDE_DATA_PROP_SIZE_DEPENDENT);
+    }
+
     return 0;
 }
 
@@ -636,15 +641,16 @@ static const AVFilterPad cudascale_outputs[] = {
     },
 };
 
-const AVFilter ff_vf_scale_cuda = {
-    .name      = "scale_cuda",
-    .description = NULL_IF_CONFIG_SMALL("GPU accelerated video resizer"),
+const FFFilter ff_vf_scale_cuda = {
+    .p.name        = "scale_cuda",
+    .p.description = NULL_IF_CONFIG_SMALL("GPU accelerated video resizer"),
+
+    .p.priv_class  = &cudascale_class,
 
     .init          = cudascale_init,
     .uninit        = cudascale_uninit,
 
     .priv_size = sizeof(CUDAScaleContext),
-    .priv_class = &cudascale_class,
 
     FILTER_INPUTS(cudascale_inputs),
     FILTER_OUTPUTS(cudascale_outputs),

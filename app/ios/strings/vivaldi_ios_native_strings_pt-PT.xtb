@@ -1,15 +1,15 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="pt-PT">
+<translation id="1005988755245269515">Definições de ampliação de websites específicos</translation>
 <translation id="1016495303386450659">Item atualizado</translation>
 <translation id="1033201038396796706">Problemas com o modo escuro, taxa de refrescamento ou temas</translation>
 <translation id="1041637248958093184">Quando usa separadores privados as pesquisas, websites visitados, cookies e ficheiros temporários não são guardados pelo Vivaldi.</translation>
 <translation id="1062373127858055283">Indique o URL da imagem</translation>
 <translation id="1066692930984703744">Ative o bloqueio de rastreios e anúncios para uma navegação mais rápida e segura</translation>
-<translation id="1116694919640316211">Sobre</translation>
+<translation id="1116694919640316211">Acerca do</translation>
 <translation id="1123707809902612118">Bloquear rastreios e anúncios</translation>
 <translation id="1134179431044204911">Os gestos ou a navegação são difíceis de usar</translation>
-<translation id="1149336474099429879">Permite o acesso rápido a websites específicos diretamente a partir da barra de endereço, poupando cliques em comparação com a utilização de um motor de pesquisa. Saiba mais sobre a [Correspondência direta]</translation>
 <translation id="1151972924205500581">Necessário palavra-passe</translation>
 <translation id="1166425484559430538">Os seus dados de sincronização estão encriptados. Indique a sua palavra-passe de encriptação para desencriptar os dados.</translation>
 <translation id="1173894706177603556">Renomear</translation>
@@ -27,6 +27,7 @@
 <translation id="1315107593850379616">Correio eletrónico de recuperação</translation>
 <translation id="1325473901257014816">Com o Vivaldi, mantenha todos os seus separadores num navegador e sincronize-os entre todos os equipamentos.</translation>
 <translation id="132683371494960526">Duplo toque para mudar a pasta acima.</translation>
+<translation id="1332917497715783196">Acesso rápido a alguns websites específicos diretamente a partir da barra de endereços. Descubra mais sobre a [Correspondência direta]</translation>
 <translation id="1341156196125040601">Escolha onde pretende ter o campo de endereços.</translation>
 <translation id="1354002567845495520">Sincronizar notas do Vivaldi (os anexos não são sincronizáveis)</translation>
 <translation id="1365181765792690850">A ativação desta definição pode corromper alguns websites e/ou imagens. Requer um reinício para ter efeito total.</translation>
@@ -40,6 +41,7 @@
 <translation id="1430638949087011281">Sem bloqueio</translation>
 <translation id="1446108955355168157">Para encriptar e proteger os seus dados de sincronização (palavras-passe, favoritos, notas e outros), crie uma palavra-passe de encriptação. Esta palavra-passe nunca nos será enviada.</translation>
 <translation id="145015347812617860"><ph name="COUNT" /> itens</translation>
+<translation id="1463778422663193902">Nível de ampliação para websites</translation>
 <translation id="1468415711258933398">Separador normal</translation>
 <translation id="1470330357709335121">O Vivaldi é lento ou arrasta-se</translation>
 <translation id="1502492982318476895">Falha ao sincronizar: <ph name="ERROR_MESSAGE" /></translation>
@@ -55,6 +57,7 @@
 <translation id="1655816024544228768">Desporto</translation>
 <translation id="1659112017960130179">Coreano (<ph name="ORIGIN" />)</translation>
 <translation id="1689333818294560261">Abreviatura</translation>
+<translation id="1700701458278093377">Atualizar ligação</translation>
 <translation id="1711184756728070210"><ph name="BEGIN_LINK" />Condições de utilização ➔<ph name="END_LINK" />     <ph name="BEGIN_LINK2" />Política de privacidade<ph name="END_LINK2" /></translation>
 <translation id="1717473843091433383">Forçar um tema escuro em todos os websites</translation>
 <translation id="1721265415699013829">Por favor, seja o mais específico/a possível</translation>
@@ -62,6 +65,7 @@
 <translation id="1751280147639351837">Bloqueador de anúncios e de rastreios</translation>
 <translation id="1752547299766512813">Guardar palavras-passe</translation>
 <translation id="1754797958074421486">Condições de utilização</translation>
+<translation id="1755590309862395270">Para sugestões apagáveis de preenchimento automático.</translation>
 <translation id="1763111582687651119">Ativar as abreviaturas de motores de pesquisa</translation>
 <translation id="1771413903824396513">Por abreviatura</translation>
 <translation id="1771605894228673800">Pretendo uma funcionalidade VPN integrada</translation>
@@ -76,7 +80,6 @@
 <translation id="1921508034244765766">O Vivaldi é lento, crasha ou aquece o equipamento</translation>
 <translation id="1929299157575856072">NÍVEL DE BLOQUEIO PREDEFINIDO</translation>
 <translation id="1968240832686794952">Abrir imagem num separador em segundo plano</translation>
-<translation id="197173004900281541">Definir como nível de ampliação global</translation>
 <translation id="1986733655397734221">Nenhum destes</translation>
 <translation id="1994506778397655062">Abrir num novo separador em segundo plano</translation>
 <translation id="1996915956617647318">Esconder Editar</translation>
@@ -108,8 +111,6 @@
 <translation id="2478478121390627077">Cor atualmente selecionada</translation>
 <translation id="2496616243169085015">Fotografia</translation>
 <translation id="2536780277491102902">EXCEÇÕES</translation>
-<translation id="2538889169193998601">Dar prioridade à correspondência direta nas sugestões do preenchimento automático.</translation>
-<translation id="2548691622513184929">Dar prioridade aos favoritos nas sugestões de preenchimento automático.</translation>
 <translation id="2558801801411970131">A bloquear rastreios</translation>
 <translation id="2562040727226360285">Remova incómodos, os websites podem funcionar mal (<ph name="ORIGIN" />)</translation>
 <translation id="2563886993995570961">Máximo de colunas</translation>
@@ -129,7 +130,6 @@ bloqueado</translation>
 <translation id="2701366016894985129">Anúncios nos resultados de pesquisa</translation>
 <translation id="2702801445560668637">Lista de leitura</translation>
 <translation id="2709516037105925701">Preenchimento automático</translation>
-<translation id="271033894570825754">Novo</translation>
 <translation id="2712076950889800659">Ao continuar, aceita as <ph name="BEGIN_LINK" />condições de utilização<ph name="END_LINK" /> do Vivaldi e a sua <ph name="BEGIN_LINK" />política de privacidade<ph name="END_LINK" /></translation>
 <translation id="2725892265692641195">Novo <ph name="ITEM_TYPE" /></translation>
 <translation id="2745324713975967671">Palavra-passe de encriptação</translation>
@@ -137,12 +137,13 @@ bloqueado</translation>
 <translation id="2765217105034171413">Pequeno</translation>
 <translation id="2767124759205735526">Sincronize o histórico e os URLs digitados</translation>
 <translation id="2770868136620962117">Uau, ficamos contentes em sabê-lo!</translation>
+<translation id="2818665331928314854">Ativar favoritos</translation>
 <translation id="2825232297853754349">Tem de concordar com as condições de utilização.</translation>
 <translation id="2842985007712546952">Pasta acima</translation>
 <translation id="2843343418360315034">Húngaro (<ph name="ORIGIN" />)</translation>
 <translation id="2850144663494818309">A iniciar sincronização...</translation>
 <translation id="2862504765180635001">Lamentamos sabê-lo!</translation>
-<translation id="2874111661876416905">Pesquisar com o Vivaldi</translation>
+<translation id="2878511608894704031">Eliminar todas</translation>
 <translation id="2884735088411646852">Ordenação</translation>
 <translation id="2898963176829412617">Nova pasta…</translation>
 <translation id="2918704853620385162">Abrir novo separador ao fechar o último separador</translation>
@@ -165,11 +166,14 @@ bloqueado</translation>
 <translation id="3177673846235066154">O servidor rejeitou as suas credenciais.</translation>
 <translation id="3180057018690062250">Streaming</translation>
 <translation id="3180358318770512945">Parentalidade</translation>
+<translation id="3214425117040117431">Repor as definições de ampliação em todos os websites</translation>
 <translation id="3229182533910980085">Para adicionar o seu primeiro favorito, toque no ícone '+', em baixo</translation>
 <translation id="3236835587712044564">Satisfeito/a com o Vivaldi? Defina-o como predefinido.</translation>
 <translation id="3270894089048358271">Configurar o Vivaldi como predefinido</translation>
 <translation id="3270930591809084274">Separadores sincronizados</translation>
+<translation id="3285898158753554866">Copiar tradução</translation>
 <translation id="3335772982573114336">Nova nota</translation>
+<translation id="3337207574172839542">Permitir sugestões de pesquisa</translation>
 <translation id="33451081266695216">Ligação limitada pelo servidor.</translation>
 <translation id="3346386541263128307">Os endereços de correio eletrónico têm de ser iguais.</translation>
 <translation id="3363375699928395745">Introduzir título</translation>
@@ -181,6 +185,7 @@ bloqueado</translation>
 <translation id="3438160227308459316">Romeno (<ph name="ORIGIN" />)</translation>
 <translation id="3451109402849920193">Fornecido por Lingvanex, hospedado pelo Vivaldi.</translation>
 <translation id="3451162533623145500">Crie uma conta</translation>
+<translation id="3454019142213142426">Níveis de ampliação da página</translation>
 <translation id="3500626002244909877">Obrigado pelo seu tempo a partilhar connosco a sua opinião!</translation>
 <translation id="3509379002674019679">Crie, guarde e faça a gestão das suas palavras-passe para poder aceder facilmente a websites e aplicações.</translation>
 <translation id="3513566764071045027">Sair</translation>
@@ -197,6 +202,7 @@ bloqueado</translation>
 <translation id="3646647753063635401">Sincronizar todos os dados, e ativar automaticamente a sincronização de novos tipos de dados</translation>
 <translation id="3682791711395736890">Ver a versão do website para computador</translation>
 <translation id="3689125468279190285">Mostrar botão de Início</translation>
+<translation id="3694122362646626770">Websites</translation>
 <translation id="3699026013955941879">O código expirou. Peça um novo código de ativação.</translation>
 <translation id="3700829948786686853">Bem-vindo/a ao Vivaldi</translation>
 <translation id="3719826155360621982">Página principal</translation>
@@ -209,22 +215,23 @@ bloqueado</translation>
 <translation id="383723620494271391">Há mais alguma coisa que queira adicionar?</translation>
 <translation id="3842727926262967527">Escolha onde prefere ter a barra de separadores e o campo de endereços.</translation>
 <translation id="3845564230651302310">A aplicar novas definições de bloqueio...</translation>
-<translation id="3849247505224543110">A sincronização Vivaldi foi inicializada mas falta-lhe alguma informação para funcionar.
-Por favor, vá às definições para resolver o problema.</translation>
 <translation id="3858860766373142691">Nome</translation>
 <translation id="3861379244432690245">Ativar correspondência direta</translation>
 <translation id="3866249974567520381">Descrição</translation>
 <translation id="3872195896030547485">Introduza um endereço de correio eletrónico válido.</translation>
 <translation id="3891045256838140223">Pode partilhar connosco o que não está bem?</translation>
+<translation id="3893665538496915434">Ativar histórico</translation>
 <translation id="3897092660631435901">Menu</translation>
 <translation id="3920366244737784074">Adicionar <ph name="ITEM_TYPE" /></translation>
 <translation id="3921585859122905677">Posição da barra de endereços</translation>
 <translation id="3925725503020335904">Para apoiar o desenvolvimento do Vivaldi, aliámo-nos a <ph name="NEW_SEARCH_ENGINE_1" /> que passa a ser o nosso novo motor de busca predefinido. <ph name="NEW_SEARCH_ENGINE_2" /> é um motor de busca privado de que gostamos e de que esperamos que também goste.</translation>
+<translation id="3934481038955624945">Repor tudo</translation>
 <translation id="3953599441418463312">Japonês (<ph name="ORIGIN" />)</translation>
 <translation id="395506590020066151">Rastreio bloqueado</translation>
 <translation id="3958433364221339259">Pesquisar com <ph name="SEARCH_ENGINE" /></translation>
 <translation id="3960532956440723967">O tamanho do texto é demasiado pequeno ou grande</translation>
 <translation id="3972953605944268742">A interface é confusa ou desorganizada</translation>
+<translation id="3981442865425348629">Remover ligação</translation>
 <translation id="3989040793235713489">Gostava de ter mais ou melhores opções de temas</translation>
 <translation id="3997823869212225788">Digite o código de 6 dígitos</translation>
 <translation id="4002066346123236978">Título</translation>
@@ -282,6 +289,7 @@ bloqueados</translation>
 <translation id="4553717494760925411">Página anterior</translation>
 <translation id="4563480492836333884">Endereço de correio eletrónico não aceite. Use outro domínio.</translation>
 <translation id="457386861538956877">Mais...</translation>
+<translation id="4591413025758301858">Tradução de <ph name="SOURCE_LANGUAGE" /> para <ph name="DESTINATION_LANGUAGE" /></translation>
 <translation id="460370326897402035">A palavra-passe não é válida.</translation>
 <translation id="4619615317237390068">Separadores de outros equipamentos</translation>
 <translation id="462860218383788109">Data de edição</translation>
@@ -290,8 +298,8 @@ bloqueados</translation>
 <translation id="4654578955713250802">Bloquear anúncios e rastreadores</translation>
 <translation id="4655510151391078468">Este código não corresponde ao que lhe enviámos.
         Tem mais <ph name="ATTEMPTS" /> tentativas.</translation>
-<translation id="46613249405673440">Escolher como imagem de fundo</translation>
 <translation id="466494460776294423">Necessário código de verificação</translation>
+<translation id="4700341416469973823">Eliminar selecionadas</translation>
 <translation id="4714431804859029826">Repor predefinições</translation>
 <translation id="4727698999970341158">Islandês (<ph name="ORIGIN" />)</translation>
 <translation id="473775607612524610">Atualizar</translation>
@@ -312,6 +320,7 @@ bloqueado</translation>
 <translation id="4852383705713307704">Anúncio bloqueado</translation>
 <translation id="4899260893220375866">Preciso de mais controlo sobre cookies e permissões de websites</translation>
 <translation id="4903325570808402486">Sincronizar definições do Vivaldi (nem todas são sincronizáveis ainda)</translation>
+<translation id="4906074979036008980">Indique o novo título</translation>
 <translation id="4925542198780948858">Os controlos multimédia não funcionam como esperado</translation>
 <translation id="4929196061847506605">Poderoso. Pessoal. Privado.</translation>
 <translation id="4936675324097895694">Finanças</translation>
@@ -321,6 +330,7 @@ bloqueado</translation>
 <translation id="495421405224926623">Li e concordo com as condições de utilização e a política de privacidade</translation>
 <translation id="497942794017668482">A bloquear anúncios e rastreios</translation>
 <translation id="4993477362660748586">Sincronização</translation>
+<translation id="500392125908657603">Opções do campo de endereço</translation>
 <translation id="5037761343305489956">Copiado para nota</translation>
 <translation id="504986598654589766">Navegar num separador privado quer dizer que as pesquisas, websites visitados, cookies e ficheiros temporários não serão guardados pelo Vivaldi. Não encripta nem altera de qualquer outra forma a sua ligação.</translation>
 <translation id="5052190740258132773">Dar prioridade aos favoritos</translation>
@@ -333,6 +343,7 @@ bloqueado</translation>
 <translation id="5160018607418677056"><ph name="BEGIN_LINK" />Reenviar o código<ph name="END_LINK" /></translation>
 <translation id="5166345991950198590">Mostrar os principais websites</translation>
 <translation id="5191012692655103305">A obter separadores e histórico...</translation>
+<translation id="5195305454041437917">Mostrar X para eliminar a sugestão</translation>
 <translation id="5238642303473095117">Apagar dados</translation>
 <translation id="5245732982828228444">Encontra aqui as suas notas</translation>
 <translation id="5249199221558969362">Indique uma idade realista.</translation>
@@ -350,6 +361,7 @@ bloqueado</translation>
 <translation id="5439835075346716808">Registos a partir deste IP estão temporariamente bloqueados. Tente novamente mais tarde.</translation>
 <translation id="5475116651001049780">Ocultar website para dispositivos móveis</translation>
 <translation id="5486261815000869482">Confirmar palavra-passe</translation>
+<translation id="5493100027274177356">O texto original é <ph name="SOURCE_TEXT" /> e o texto traduzido é <ph name="TRANSLATED_TEXT" /></translation>
 <translation id="5494016731375030300">Separadores fechados recentemente</translation>
 <translation id="5517833250460609673">Os vídeos ou música não são reproduzidos corretamente</translation>
 <translation id="5519187824830275200">Esconder Adicionar a ...</translation>
@@ -357,7 +369,6 @@ bloqueado</translation>
 <translation id="5564687523685713029">Mostrar apenas grupos</translation>
 <translation id="5577770221789895760">Escolha a página a abrir quando tocar no botão de Início.</translation>
 <translation id="5600792731098584229">Tamanho do Speed Dial</translation>
-<translation id="5607445917275004427">Mostrar o endereço completo na barra de endereços em vez de apenas o domínio.</translation>
 <translation id="5639137028584114536">A sua organização requer que navegue de forma privada. Os separadores não são guardados no modo privado.
         <ph name="BEGIN_LINK" />Saiba mais<ph name="END_LINK" /></translation>
 <translation id="5669616832972782345">Eliminar sugestão</translation>
@@ -365,10 +376,8 @@ bloqueado</translation>
 <translation id="5710478562694930157">Crescente</translation>
 <translation id="574392208103952083">Médio</translation>
 <translation id="5756451123057329358">Reabrir página inicial com</translation>
-<translation id="5775233583238650955">Permitir sugestões de pesquisa no campo de endereços</translation>
 <translation id="5787420647064736989">Nome do equipamento</translation>
 <translation id="5801825598531634872">Dias de inatividade</translation>
-<translation id="5807727552551031368">Dar prioridade às abreviaturas de favoritos nas sugestões de preenchimento automático.</translation>
 <translation id="5822336771053074270">Adicionar nota</translation>
 <translation id="5823830882692559950">O vivaldi.net rejeitou as suas credenciais: <ph name="SERVER_ERROR" /> (<ph name="ERROR_CODE" />)</translation>
 <translation id="5857090052475505287">Nova pasta</translation>
@@ -381,14 +390,19 @@ bloqueado</translation>
 <translation id="5907851754429991366">Gostaríamos de ver os seus comentários na App Store.</translation>
 <translation id="5914847543920496660">Prefiro software Open Source pela transparência</translation>
 <translation id="591684450784861763">Adicionar página a...</translation>
+<translation id="5922915428124940994">(Alterada)</translation>
 <translation id="5939518447894949180">Repor</translation>
 <translation id="6005497458542935062">Mover para fora da pasta</translation>
 <translation id="603230602684548091">Escolha o idioma de origem</translation>
 <translation id="6040304352785030331">Quero usar extensões/add-ons no navegador</translation>
 <translation id="6042308850641462728">Mais</translation>
+<translation id="6048889899469181614">A sincronização não está a funcionar, de momento.
+ Abra as definições para resolver o problema.</translation>
 <translation id="604930981600990598">Tradução copiada!</translation>
+<translation id="6052689967593623141">O Vivaldi pode ganhar uma comissão se fizer uma compra depois de clicar em alguma destas ligações. Isto apoia o desenvolvimento do Vivaldi e a manter a independência do navegador. Obrigado pelo seu apoio!</translation>
 <translation id="6077943432358741146">Speed Dial</translation>
 <translation id="6079696972035130497">Ilimitado</translation>
+<translation id="6110857187283700804">O que escrever é enviado ao seu motor de busca para sugestões. Isto está desligado numa janela privada.</translation>
 <translation id="614539368862754027"><ph name="NUMBER_OF_SELECTED_NOTES" /> items movidos</translation>
 <translation id="6147094071357011481">Separadores fechados recentemente não estão disponíveis</translation>
 <translation id="6177301865411451337">A sincronização Vivaldi pode estar com problemas. Saiba o estado do serviço em <ph name="BEGIN_LINK" />VivaldiStatus.com<ph name="END_LINK" /></translation>
@@ -398,6 +412,7 @@ bloqueado</translation>
 <translation id="6253990869902066991">O Vivaldi refresca as páginas de forma inesperada</translation>
 <translation id="6257488392933423163">Ver como HTML</translation>
 <translation id="6275978505813092431">Inserir a imagem</translation>
+<translation id="6329717714920146925">Websites (apenas visualização)</translation>
 <translation id="6365929278691047681">Alemão (<ph name="ORIGIN" />)</translation>
 <translation id="638249699236255123">O aspeto do website é estranho</translation>
 <translation id="6383855939619098095">É difícil personalizar a página inicial do Vivaldi</translation>
@@ -440,7 +455,6 @@ bloqueado</translation>
 <translation id="6875510405870945573">Escolha o seu nível pretendido de bloqueio.</translation>
 <translation id="6878199227380123461">Preferir o painel de tradução</translation>
 <translation id="6887143077297974801">Falhou o início da sincronização.</translation>
-<translation id="6887865947291302490">O que escrever na barra de endereços é enviado para o seu fornecedor de pesquisa para obter sugestões. Isto está desativado na janela privada.</translation>
 <translation id="6896758677409633944">Copiar</translation>
 <translation id="691132463664340655">Tema do navegador</translation>
 <translation id="6918338082370824763">Página específica</translation>
@@ -450,15 +464,16 @@ bloqueado</translation>
 <translation id="6946395294519639514">Com os painéis pode manter as suas ferramentas habituais à mão, na barra lateral do navegador.</translation>
 <translation id="6951435330868954105">Gerir definições predefinidas</translation>
 <translation id="6951948201878750661">Toque para escolher esta cor</translation>
-<translation id="6957289124457864569">Mostrar X nas sugestões</translation>
 <translation id="6967884871145366229">Gerir definições de privacidade</translation>
 <translation id="6973630695168034713">Pastas</translation>
 <translation id="7006864796794806241">Recuperar palavra-passe</translation>
 <translation id="7029809446516969842">Palavras-passe</translation>
 <translation id="7041964446309059643">Manual</translation>
+<translation id="7049134228091523877">Mudar o título</translation>
 <translation id="7072317570101031415">Livros</translation>
 <translation id="7083011465470143310">Esqueceu-se da <ph name="BEGIN_LINK" />palavra-passe<ph name="END_LINK" />?</translation>
 <translation id="7083783675072250424">É difícil organizar ou gerir os separadores</translation>
+<translation id="7088311594489627417">Definições de ampliação do website não disponíveis</translation>
 <translation id="7096550097771629450">Copia o texto traduzido para a área de transferência</translation>
 <translation id="7110758301321962823">Recuperar nome de utilizador</translation>
 <translation id="711946737922560234">Inserir hiperligação</translation>
@@ -488,6 +503,7 @@ bloqueado</translation>
 <translation id="7393145587390257456">O bloqueador de anúncios não funciona bem</translation>
 <translation id="7400418766976504921">URL</translation>
 <translation id="7417521636956146248">Os motores de busca serão repostos para os valores predefinidos, o que também vai eliminar os seus motores de busca personalizados.</translation>
+<translation id="7418655219500602072">Prioridades do campo de endereço</translation>
 <translation id="7451784507428459503">Problemas a reproduzir vídeos no YouTube</translation>
 <translation id="7454640759045234067">Rastreadores bloqueados</translation>
 <translation id="7461899062138731833">FONTES</translation>
@@ -505,6 +521,7 @@ bloqueado</translation>
 <translation id="7587132259180664054">Mensagem de correio eletrónico enviada com sucesso</translation>
 <translation id="7587287726969638956">Aspeto do website</translation>
 <translation id="7593546601395782810">Ocultar notas</translation>
+<translation id="7600840048521751013">Histórico de tradução</translation>
 <translation id="7602336701644200880">Falha ao enviar mensagem de correio eletrónico. Tente novamente.</translation>
 <translation id="7606108789437688910">Abrir endereços das notas em modo incógnito</translation>
 <translation id="7616284412875773842">Desapontado/a</translation>
@@ -528,6 +545,7 @@ bloqueado</translation>
 <translation id="7931102520806266819">Abrir em privado</translation>
 <translation id="7961270736686975887">Trocar idiomas</translation>
 <translation id="7967161908152532036">Endereço do website</translation>
+<translation id="7979036127916589816">Erro de sincronização</translation>
 <translation id="8008214489230610096">Confirmar endereço de correio eletrónico para recuperação</translation>
 <translation id="8038592796033755028">Equipamentos de <ph name="USERNAME" /></translation>
 <translation id="8041093619605951337">Contente</translation>
@@ -577,27 +595,28 @@ bloqueado</translation>
 <translation id="8546963963006468833">Com o Vivaldi, pode abrir ligações diretamente, procurar a partir de widgets e preencher automaticamente palavras-passe noutras aplicações.</translation>
 <translation id="8546995005405883065">Idiomas preferidos, aceites por websites compatíveis na ordem indicada.</translation>
 <translation id="8562452229998620586">As palavras-passe guardadas vão aparecer aqui.</translation>
+<translation id="856439694359429369">Toque para mais opções ou dê um toque duplo para abrir.</translation>
 <translation id="8591818185775466306">Apagar <ph name="ITEM_TYPE" /></translation>
 <translation id="8605953154325672921">Necessário nome de utilizador</translation>
 <translation id="8675578805254882416">A obter</translation>
 <translation id="8677007239430848917">Para adicionar a sua primeira nota, toque no ícone '+', em baixo</translation>
 <translation id="8684294196284714094">Configurar o Vivaldi como seu navegador predefinido?</translation>
+<translation id="8687583747694652488">Copiar original</translation>
 <translation id="8696653005998192569">Os websites não carregam imagens ou vídeos</translation>
 <translation id="8730621377337864115">Concluído</translation>
 <translation id="8733945742171960420">Assim que começar a navegar, os seus websites principais serão apresentados aqui.</translation>
 <translation id="8740815429790728127"><ph name="NUMBER_OF_SELECTED_NOTES" /> items eliminados</translation>
 <translation id="8763006697839582351">Abrir em privado no Vivaldi</translation>
 <translation id="8765173886020357878">Sugestões de pesquisa</translation>
-<translation id="8781761277913645314">Sincronização desativada</translation>
 <translation id="8804164990146287819">Política de privacidade</translation>
 <translation id="8805346136361295421">Ocultar procura na página</translation>
 <translation id="8818152010000655963">Imagem de fundo</translation>
 <translation id="8819841443522803117">Está na hora de trocar o seu navegador predefinido? Escolha o Vivaldi.</translation>
 <translation id="8820817407110198400">Favoritos</translation>
 <translation id="8855707633300847215">Mostrar barra de separadores</translation>
-<translation id="8866638710644054825">Dar prioridade às abreviaturas dos favoritos</translation>
 <translation id="8892354889971902600">Os separadores que tenha fechado recentemente irão aparecer aqui.</translation>
 <translation id="89390081013973080">Tudo pronto! Hora de decidir o que sincronizar entre equipamentos.</translation>
+<translation id="8948792607467387336">Usar como imagem de fundo</translation>
 <translation id="8964449607824577665">Sem a sua palavra-passe de encriptação atual, não podemos desencriptar os seus dados. A reposição desta palavra-passe requer a eliminação de todos os dados de sincronização existentes nos servidores Vivaldi.</translation>
 <translation id="8965371804397726192">Começar a sincronizar todos os dados</translation>
 <translation id="8993821994276892302">{count, plural,
@@ -606,7 +625,6 @@ bloqueado</translation>
 <translation id="9028089729841356743">Erro de rede.</translation>
 <translation id="9043882097999887291">Anúncios
 bloqueados</translation>
-<translation id="9057878297040412504">Visível para sugestões de preenchimento automático apagáveis, como o histórico de digitação ou a correspondência direta.</translation>
 <translation id="9065203028668620118">Editar</translation>
 <translation id="9077265667054763280">Websites carregam devagar</translation>
 <translation id="9079251484401922158">Finlandês (<ph name="ORIGIN" />)</translation>
@@ -615,16 +633,20 @@ bloqueados</translation>
 <translation id="9097127519290088802">Necessária palavra-passe de encriptação</translation>
 <translation id="9139318394846604261">Compras</translation>
 <translation id="9152984048904392513">Abrir tudo em segundo plano</translation>
+<translation id="9157459516617966251">Editar ligação</translation>
+<translation id="9157539936604258187">Abrir ligação</translation>
 <translation id="9195659219948942754">Continuar a usar os dados sincronizados na sua conta Vivaldi</translation>
+<translation id="9195802773917252923">Ativar abreviaturas de favoritos</translation>
 <translation id="9212737146310746733">Persa (<ph name="ORIGIN" />)</translation>
 <translation id="9218693288527810093">Bloquear rastreadores</translation>
-<translation id="924053859552461110">Personalizar Página inicial</translation>
 <translation id="925891113183098411">Tenho problemas a sincronizar os meus dados entre equipamentos</translation>
 <translation id="932327136139879170">Início</translation>
 <translation id="937440209447114831">Não bloqueamos quaisquer anúncios ou rastreios.</translation>
+<translation id="941088499334202542">Pode alterar a ligação, removê-la ou abri-la num novo separador.</translation>
 <translation id="958688202859970851">Aqui vão aparecer os separadores visitados recentemente</translation>
 <translation id="984650419570014454">O código de ativação deve ter 6 dígitos.</translation>
 <translation id="987264212798334818">Geral</translation>
 <translation id="992440609313570947">Novo/a no Vivaldi? <ph name="BEGIN_LINK" />Crie uma conta ➔<ph name="END_LINK" /></translation>
+<translation id="994333983174240900">Copiar ambos</translation>
 <translation id="998988732385109770">Os favoritos são difíceis de usar ou gerir</translation>
 </translationbundle>

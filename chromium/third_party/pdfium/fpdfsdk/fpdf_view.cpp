@@ -710,7 +710,7 @@ FPDF_EXPORT void FPDF_CALLCONV FPDF_RenderPageBitmap(FPDF_BITMAP bitmap,
   if (!pBitmap) {
     return;
   }
-  CHECK(!pBitmap->IsPremultiplied());
+  ValidateBitmapPremultiplyState(pBitmap);
 
   auto owned_context = std::make_unique<CPDF_PageRenderContext>();
   CPDF_PageRenderContext* context = owned_context.get();
@@ -718,8 +718,7 @@ FPDF_EXPORT void FPDF_CALLCONV FPDF_RenderPageBitmap(FPDF_BITMAP bitmap,
   pPage->SetRenderContext(std::move(owned_context));
 
 #if defined(PDF_USE_SKIA)
-  CFX_DIBitmap::ScopedPremultiplier scoped_premultiplier(
-      pBitmap, CFX_DefaultRenderDevice::UseSkiaRenderer());
+  CFX_DIBitmap::ScopedPremultiplier scoped_premultiplier(pBitmap);
 #endif
   auto device = std::make_unique<CFX_DefaultRenderDevice>();
   device->AttachWithRgbByteOrder(std::move(pBitmap),
@@ -747,7 +746,7 @@ FPDF_RenderPageBitmapWithMatrix(FPDF_BITMAP bitmap,
   if (!pBitmap) {
     return;
   }
-  CHECK(!pBitmap->IsPremultiplied());
+  ValidateBitmapPremultiplyState(pBitmap);
 
   auto owned_context = std::make_unique<CPDF_PageRenderContext>();
   CPDF_PageRenderContext* context = owned_context.get();
@@ -755,8 +754,7 @@ FPDF_RenderPageBitmapWithMatrix(FPDF_BITMAP bitmap,
   pPage->SetRenderContext(std::move(owned_context));
 
 #if defined(PDF_USE_SKIA)
-  CFX_DIBitmap::ScopedPremultiplier scoped_premultiplier(
-      pBitmap, CFX_DefaultRenderDevice::UseSkiaRenderer());
+  CFX_DIBitmap::ScopedPremultiplier scoped_premultiplier(pBitmap);
 #endif
   auto device = std::make_unique<CFX_DefaultRenderDevice>();
   device->AttachWithRgbByteOrder(std::move(pBitmap),
@@ -893,7 +891,7 @@ FPDF_EXPORT FPDF_BITMAP FPDF_CALLCONV FPDFBitmap_Create(int width,
     return nullptr;
   }
 
-  CHECK(!pBitmap->IsPremultiplied());
+  ValidateBitmapPremultiplyState(pBitmap);
 
   // Caller takes ownership.
   return FPDFBitmapFromCFXDIBitmap(pBitmap.Leak());
@@ -916,7 +914,7 @@ FPDF_EXPORT FPDF_BITMAP FPDF_CALLCONV FPDFBitmap_CreateEx(int width,
     return nullptr;
   }
 
-  CHECK(!pBitmap->IsPremultiplied());
+  ValidateBitmapPremultiplyState(pBitmap);
 
   // Caller takes ownership.
   return FPDFBitmapFromCFXDIBitmap(pBitmap.Leak());
@@ -938,6 +936,11 @@ FPDF_EXPORT int FPDF_CALLCONV FPDFBitmap_GetFormat(FPDF_BITMAP bitmap) {
       return FPDFBitmap_BGRx;
     case FXDIB_Format::kBgra:
       return FPDFBitmap_BGRA;
+#if defined(PDF_USE_SKIA)
+    case FXDIB_Format::kBgraPremul:
+      return CFX_DefaultRenderDevice::UseSkiaRenderer() ? FPDFBitmap_BGRA_Premul
+                                                        : FPDFBitmap_Unknown;
+#endif
     default:
       return FPDFBitmap_Unknown;
   }
@@ -953,7 +956,7 @@ FPDF_EXPORT FPDF_BOOL FPDF_CALLCONV FPDFBitmap_FillRect(FPDF_BITMAP bitmap,
   if (!pBitmap) {
     return false;
   }
-  CHECK(!pBitmap->IsPremultiplied());
+  ValidateBitmapPremultiplyState(pBitmap);
 
   FX_SAFE_INT32 right = left;
   right += width;

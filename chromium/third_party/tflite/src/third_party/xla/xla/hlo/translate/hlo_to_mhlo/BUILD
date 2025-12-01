@@ -1,4 +1,4 @@
-load("//xla:xla.bzl", "xla_cc_test")
+load("//xla:xla.default.bzl", "xla_cc_test")
 load("//xla/tsl:tsl.bzl", "internal_visibility")
 load("//xla/tsl/platform:rules_cc.bzl", "cc_library")
 
@@ -41,13 +41,13 @@ cc_library(
         "//xla:xla_data_proto_cc",
         "//xla/hlo/ir:hlo",
         "//xla/mlir_hlo",
+        "//xla/tsl/platform:errors",
         "@com_google_absl//absl/log:check",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/status:statusor",
         "@llvm-project//llvm:Support",
         "@llvm-project//mlir:FuncDialect",
         "@llvm-project//mlir:IR",
-        "@local_tsl//tsl/platform:errors",
     ],
 )
 
@@ -75,8 +75,10 @@ cc_library(
     srcs = ["stack_location_utils.cc"],
     hdrs = ["stack_location_utils.h"],
     deps = [
+        ":hlo_utils",
         "//xla/hlo/ir:hlo",
         "//xla/service:hlo_proto_cc",
+        "@llvm-project//llvm:Support",
         "@llvm-project//mlir:IR",
         "@llvm-project//mlir:Support",
     ],
@@ -102,10 +104,11 @@ cc_library(
         "//xla/hlo/ir:hlo",
         "//xla/mlir_hlo",
         "//xla/service:hlo_proto_cc",
+        "//xla/tsl/platform:errors",
+        "//xla/tsl/platform:statusor",
         "@com_google_absl//absl/log:check",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/status:statusor",
-        "@com_google_absl//absl/types:optional",
         "@com_google_absl//absl/types:span",
         "@llvm-project//llvm:Support",
         "@llvm-project//mlir:ArithDialect",
@@ -115,8 +118,6 @@ cc_library(
         "@llvm-project//mlir:SideEffectInterfaces",
         "@llvm-project//mlir:SparseTensorDialect",
         "@llvm-project//mlir:Support",
-        "@local_tsl//tsl/platform:errors",
-        "@local_tsl//tsl/platform:statusor",
         "@stablehlo//:base",
     ],
 )
@@ -136,14 +137,14 @@ cc_library(
         "//xla:xla_proto_cc",
         "//xla/hlo/ir:hlo",
         "//xla/mlir_hlo",
+        "//xla/tsl/platform:errors",
+        "//xla/tsl/platform:statusor",
         "@com_google_absl//absl/status",
         "@llvm-project//llvm:Support",
         "@llvm-project//mlir:ArithDialect",
         "@llvm-project//mlir:FuncDialect",
         "@llvm-project//mlir:IR",
         "@llvm-project//mlir:QuantOps",
-        "@local_tsl//tsl/platform:errors",
-        "@local_tsl//tsl/platform:statusor",
     ],
 )
 
@@ -156,13 +157,13 @@ cc_library(
         "//xla/mlir/utils:error_util",
         "//xla/mlir_hlo:mhlo_passes",
         "//xla/service/llvm_ir:llvm_util",
+        "//xla/tsl/platform:errors",
+        "//xla/tsl/platform:statusor",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/status:statusor",
         "@llvm-project//mlir:IR",
         "@llvm-project//mlir:Pass",
         "@llvm-project//mlir:Support",
-        "@local_tsl//tsl/platform:errors",
-        "@local_tsl//tsl/platform:statusor",
     ],
 )
 
@@ -179,12 +180,12 @@ cc_library(
         "//xla:xla_data_proto_cc",
         "//xla/mlir/utils:type_util",
         "//xla/mlir_hlo",
+        "//xla/tsl/platform:statusor",
         "@com_google_absl//absl/status:statusor",
         "@llvm-project//llvm:Support",
         "@llvm-project//mlir:IR",
         "@llvm-project//mlir:SparseTensorDialect",
         "@llvm-project//mlir:SparseTensorEnums",
-        "@local_tsl//tsl/platform:statusor",
     ],
 )
 
@@ -200,11 +201,11 @@ xla_cc_test(
         "//xla:xla_data_proto_cc",
         "//xla/mlir_hlo",
         "//xla/tsl/lib/core:status_test_util",
+        "//xla/tsl/platform:statusor",
+        "//xla/tsl/platform:test_main",
         "@com_google_googletest//:gtest",
-        "@com_google_googletest//:gtest_main",
         "@llvm-project//mlir:IR",
         "@llvm-project//mlir:Support",
-        "@local_tsl//tsl/platform:statusor",
     ],
 )
 
@@ -214,6 +215,7 @@ cc_library(
     hdrs = ["location_importer.h"],
     deps = [
         "stack_location_utils",
+        ":hlo_utils",
         "//xla/hlo/ir:hlo",
         "@llvm-project//mlir:IR",
         "@llvm-project//mlir:Support",
@@ -236,8 +238,12 @@ cc_library(
         "//xla/service:computation_layout",
         "//xla/service:hlo_module_config",
         "@com_google_absl//absl/container:flat_hash_map",
+        "@com_google_absl//absl/log:check",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/strings:string_view",
         "@com_google_absl//absl/types:span",
         "@llvm-project//llvm:Support",
+        "@llvm-project//mlir:FuncDialect",
         "@llvm-project//mlir:IR",
     ],
 )

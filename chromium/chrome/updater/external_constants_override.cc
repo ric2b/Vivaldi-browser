@@ -79,7 +79,7 @@ std::optional<base::FilePath> GetOverrideFilePath(UpdaterScope scope) {
   if (!base) {
     return std::nullopt;
   }
-  return base->DirName().AppendASCII(kDevOverrideFileName);
+  return base->DirName().AppendUTF8(kDevOverrideFileName);
 }
 
 ExternalConstantsOverrider::ExternalConstantsOverrider(
@@ -104,7 +104,6 @@ std::vector<GURL> ExternalConstantsOverrider::UpdateURL() const {
     default:
       LOG(FATAL) << "Unexpected type of override[" << kDevOverrideKeyUrl
                  << "]: " << base::Value::GetTypeName(update_url_value->type());
-      NOTREACHED();
   }
 }
 

@@ -120,8 +120,8 @@ class UncompiledData
                                            ExposedTrustedObject> {
  public:
   inline void InitAfterBytecodeFlush(
-      IsolateForSandbox isolate, Tagged<String> inferred_name,
-      int start_position, int end_position,
+      Isolate* isolate, Tagged<String> inferred_name, int start_position,
+      int end_position,
       std::function<void(Tagged<HeapObject> object, ObjectSlot slot,
                          Tagged<HeapObject> target)>
           gc_notify_updated_slot);
@@ -580,6 +580,9 @@ class SharedFunctionInfo
   // Indicates that the private name lookups inside the function skips the
   // closest outer class scope.
   DECL_BOOLEAN_ACCESSORS(private_name_lookup_skips_outer_class)
+
+  // Indicates that the shared function info was live-edited.
+  DECL_BOOLEAN_ACCESSORS(live_edited)
 
   inline FunctionKind kind() const;
 

@@ -13,6 +13,7 @@
 #include "components/bookmarks/browser/bookmark_utils.h"
 #include "components/bookmarks/browser/titled_url_match.h"
 #include "components/bookmarks/browser/titled_url_node.h"
+#include "components/omnibox/common/string_cleaning.h"
 #include "components/query_parser/query_parser.h"
 
 namespace bookmarks {
@@ -43,7 +44,7 @@ std::vector<TitledUrlMatch> TitledUrlIndex::GetResultsNicknameMatching(
     const std::u16string& input_query,
     size_t max_count) {
   const std::u16string query = Normalize(input_query);
-  std::vector<std::u16string> terms = ExtractQueryWords(query);
+  std::vector<std::u16string> terms = ExtractQueryWords(query, true);
   if (terms.empty())
     return {};
 
@@ -92,8 +93,8 @@ std::optional<TitledUrlMatch> TitledUrlIndex::MatchNicknameNodeWithQuery(
   // Clean up the title, URL, and ancestor titles in preparation for string
   // comparisons.
   base::OffsetAdjuster::Adjustments adjustments;
-  const std::u16string clean_url =
-      CleanUpUrlForMatching(node->GetTitledUrlNodeUrl(), &adjustments);
+  const std::u16string clean_url = string_cleaning::CleanUpUrlForMatching(
+      node->GetTitledUrlNodeUrl(), &adjustments);
 
   const std::u16string nickname =
       base::i18n::ToLower(Normalize(node->GetTitledUrlNodeNickName()));
@@ -135,7 +136,7 @@ std::optional<TitledUrlMatch> TitledUrlIndex::MatchNicknameNodeWithQuery(
                                                &description_words);
   const std::u16string lower_nickname =
       base::i18n::ToLower(Normalize(node->GetTitledUrlNodeNickName()));
-  query_parser::QueryParser::ExtractQueryWords(lower_nickname, &nickname_words);
+  query_parser::QueryParser::ExtractQueryWords(lower_nickname, &nickname_words, true);
 
   query_parser::Snippet::MatchPositions description_matches, nickname_matches;
 

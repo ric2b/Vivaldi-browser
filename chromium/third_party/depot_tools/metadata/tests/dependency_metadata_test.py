@@ -299,7 +299,7 @@ class DependencyValidationTest(unittest.TestCase):
             repo_root_dir=_THIS_DIR,
         )
         self.assertEqual(len(results), 1)
-        self.assertTrue(isinstance(results[0], vr.ValidationError))
+        self.assertTrue(isinstance(results[0], vr.ValidationWarning))
         self.assertEqual(results[0].get_reason(), "License File is invalid.")
 
     def test_multiple_validation_issues(self):

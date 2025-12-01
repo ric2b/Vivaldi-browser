@@ -273,7 +273,7 @@ void HttpsUpgradesInterceptor::MaybeCreateLoader(
   }
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
-  // If this is a GuestView (e.g., Chrome Apps <webview>) then HTTPS-First Mode 
+  // If this is a GuestView (e.g., Chrome Apps <webview>) then HTTPS-First Mode
   // should not apply. See crbug.com/1233889 for more details.
   if (!vivaldi::IsVivaldiRunning())
   if (guest_view::GuestViewBase::IsGuest(frame_tree_node_id_)) {
@@ -417,7 +417,7 @@ void HttpsUpgradesInterceptor::MaybeCreateLoader(
   network_context->IsHSTSActiveForHost(
       tentative_resource_request.url.host(),
       tentative_resource_request.trusted_params->isolation_info
-          .IsMainFrameRequest(),
+          .IsOutermostMainFrameRequest(),
       mojo::WrapCallbackWithDefaultInvokeIfNotRun(
           std::move(query_complete_callback),
           /*is_hsts_active_for_host=*/false));

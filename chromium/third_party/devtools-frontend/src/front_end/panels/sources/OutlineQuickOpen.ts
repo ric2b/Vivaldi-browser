@@ -24,7 +24,7 @@ const UIStrings = {
    *@description Text to show no results have been found
    */
   noResultsFound: 'No results found',
-};
+} as const;
 const str_ = i18n.i18n.registerUIStrings('panels/sources/OutlineQuickOpen.ts', UIStrings);
 const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
 
@@ -43,7 +43,8 @@ export function outline(state: CodeMirror.EditorState): OutlineItem[] {
   }
 
   function subtitleFromParamList(): string {
-    while (cursor.name !== 'ParamList' && cursor.nextSibling()) {
+    while (cursor.name !== 'ParamList') {
+      cursor.nextSibling();
     }
     let parameters = '';
     if (cursor.name === 'ParamList' && cursor.firstChild()) {
@@ -173,7 +174,10 @@ export function outline(state: CodeMirror.EditorState): OutlineItem[] {
             ])) {
           let title = state.sliceDoc(cursor.from, cursor.to);
           const {lineNumber, columnNumber} = toLineColumn(cursor.from);
-          while (cursor.name as string !== 'Equals' && cursor.next()) {
+          while (cursor.name as string !== 'Equals') {
+            if (!cursor.next()) {
+              return items;
+            }
           }
           if (!cursor.nextSibling()) {
             break;
@@ -268,7 +272,7 @@ export function outline(state: CodeMirror.EditorState): OutlineItem[] {
 
 export class OutlineQuickOpen extends QuickOpen.FilteredListWidget.Provider {
   private items: OutlineItem[] = [];
-  private active: boolean = false;
+  private active = false;
 
   constructor() {
     super('source-symbol');
@@ -352,7 +356,7 @@ export class OutlineQuickOpen extends QuickOpen.FilteredListWidget.Provider {
 
   private currentSourceFrame(): UISourceCodeFrame|null {
     const sourcesView = UI.Context.Context.instance().flavor(SourcesView);
-    return sourcesView && sourcesView.currentSourceFrame();
+    return sourcesView?.currentSourceFrame() ?? null;
   }
 
   override notFoundText(): string {

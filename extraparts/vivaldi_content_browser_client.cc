@@ -9,6 +9,7 @@
 #include "content/public/browser/browser_main_parts.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/navigation_handle.h"
+#include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
 
 #include "app/vivaldi_apptools.h"
@@ -19,10 +20,12 @@
 #include "components/content_injection/frame_injection_helper.h"
 #include "components/content_injection/mojom/content_injection.mojom.h"
 #include "components/request_filter/adblock_filter/adblock_cosmetic_filter.h"
+#include "components/request_filter/adblock_filter/adblock_rule_service_content.h"
+#include "components/request_filter/adblock_filter/adblock_rule_service_factory.h"
 #include "components/request_filter/adblock_filter/interstitial/document_blocked_throttle.h"
 #include "components/request_filter/adblock_filter/mojom/adblock_cosmetic_filter.mojom.h"
-#include "components/panel/vivaldi_panels_filter.h"
 #include "extraparts/vivaldi_browser_main_extra_parts.h"
+#include "mojo/public/cpp/bindings/self_owned_receiver.h"
 
 #if !BUILDFLAG(IS_ANDROID)
 #include "extensions/helper/vivaldi_frame_host_service_impl.h"
@@ -43,8 +46,7 @@ VivaldiContentBrowserClient::CreateBrowserMainParts(bool is_integration_test) {
 
   if (vivaldi::IsVivaldiRunning() || vivaldi::ForcedVivaldiRunning()) {
     main_parts_actual->AddParts(VivaldiBrowserMainExtraParts::Create());
-  }
-  else {
+  } else {
     main_parts_actual->AddParts(VivaldiBrowserMainExtraPartsSmall::Create());
   }
   return main_parts;
@@ -76,9 +78,6 @@ VivaldiContentBrowserClient::CreateThrottlesForNavigation(
   }
 
   throttles.push_back(
-      std::make_unique<VivaldiPanelsThrottle>(handle));
-
-  throttles.push_back(
       std::make_unique<adblock_filter::DocumentBlockedThrottle>(handle));
 
   return throttles;
@@ -95,24 +94,30 @@ bool VivaldiContentBrowserClient::CanCommitURL(
 
 #endif  // !IS_ANDROID
 
+void BindCosmeticFilter(
+    content::RenderFrameHost* frame,
+    mojo::PendingReceiver<adblock_filter::mojom::CosmeticFilter> receiver) {
+  mojo::MakeSelfOwnedReceiver(
+      adblock_filter::RuleServiceFactory::GetForBrowserContext(
+          frame->GetProcess()->GetBrowserContext())
+          ->MakeCosmeticFilter(frame),
+      std::move(receiver));
+}
+
 void VivaldiContentBrowserClient::RegisterBrowserInterfaceBindersForFrame(
     content::RenderFrameHost* render_frame_host,
     mojo::BinderMapWithContext<content::RenderFrameHost*>* map) {
+  map->Add<adblock_filter::mojom::CosmeticFilter>(
+      base::BindRepeating(BindCosmeticFilter));
+  map->Add<content_injection::mojom::FrameInjectionHelper>(
+      base::BindRepeating(&content_injection::FrameInjectionHelper::Create));
+
   ChromeContentBrowserClient::RegisterBrowserInterfaceBindersForFrame(
       render_frame_host, map);
 
-  // Register Vivaldi bindings after Chromium bindings, so we can
+  // Register these bindings after Chromium bindings, so we can
   // replace them with our own, if needed.
-  //map->Add<adblock_filter::mojom::CosmeticFilter>(
-  //   base::BindRepeating(&adblock_filter::CosmeticFilter::Create));
-  //map->Add<content_injection::mojom::FrameInjectionHelper>(
-  //    base::BindRepeating(&content_injection::FrameInjectionHelper::Create));
 
   map->Add<translate::mojom::ContentTranslateDriver>(
       base::BindRepeating(&vivaldi::BindVivaldiContentTranslateDriver));
-
-#if !BUILDFLAG(IS_ANDROID)
-  //map->Add<vivaldi::mojom::VivaldiFrameHostService>(
-  //    base::BindRepeating(&VivaldiFrameHostServiceImpl::BindHandler));
-#endif
 }

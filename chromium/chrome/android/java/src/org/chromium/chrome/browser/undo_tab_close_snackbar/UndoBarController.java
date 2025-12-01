@@ -32,6 +32,7 @@ import java.util.Set;
 
 // Vivaldi
 import org.chromium.build.BuildConfig;
+import org.vivaldi.browser.common.VivaldiUtils;
 import org.vivaldi.browser.preferences.VivaldiPreferences;
 
 /**
@@ -91,6 +92,7 @@ public class UndoBarController implements SnackbarManager.SnackbarController {
                         if (BuildConfig.IS_VIVALDI) {
                             boolean show = VivaldiPreferences.getSharedPreferencesManager()
                                     .readBoolean("show_undo_tab_close", false);
+                            if (!VivaldiUtils.sOverrideCanShowUndo) return true;
                             return showingUndoBar && !show;
                         }
                         return showingUndoBar
@@ -257,7 +259,7 @@ public class UndoBarController implements SnackbarManager.SnackbarController {
         Set<Integer> fullyClosingRootIds = new HashSet<>();
         int ungroupedOrPartialGroupTabs = 0;
         LazyOneshotSupplier<Set<Token>> tabGroupIdsInComprehensiveModel =
-                filter.getLazyAllTabGroupIdsInComprehensiveModel(closedTabs);
+                filter.getLazyAllTabGroupIds(closedTabs, /* includePendingClosures= */ true);
         for (Tab tab : closedTabs) {
             // We are not deleting a tab group if:
             // 1. Any of the tabs are in a group that is hiding.
@@ -382,13 +384,7 @@ public class UndoBarController implements SnackbarManager.SnackbarController {
             for (Tab tab : (List<Tab>) actionData) {
                 cancelTabClosure(tab.getId());
             }
-            notifyAllTabsClosureUndone();
         }
-    }
-
-    private void notifyAllTabsClosureUndone() {
-        TabModel model = mTabModelSelector.getCurrentModel();
-        if (model != null) model.notifyAllTabsClosureUndone();
     }
 
     private void cancelTabClosure(int tabId) {

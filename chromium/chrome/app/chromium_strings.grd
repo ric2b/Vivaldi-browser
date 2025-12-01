@@ -349,26 +349,29 @@ If you update this file, be sure also to update google_chrome_strings.grd. -->
           Task Manager - Chromium
         </message>
       </if>
-      <message name="IDS_TASK_MANAGER_SEARCH_PLACEHOLDER" desc="The placeholder text for the Search bar in the Task Manager window" translateable="false">
+      <message name="IDS_TASK_MANAGER_SEARCH_PLACEHOLDER" desc="The placeholder text for the Search bar in the Task Manager window">
         Search
       </message>
-      <message name="IDS_TASK_MANAGER_SEARCH_ACCESSIBILITY_NAME" desc="The accessibility description for the Search bar in the Task Manager window" translateable="false">
-        Look up the name of any tab title or extension to highlight it in the process table.
+      <message name="IDS_TASK_MANAGER_SEARCH_ACCESSIBILITY_NAME" desc="The accessibility description for the Search bar in the Task Manager window">
+        Search for any process from the list.
       </message>
       <message name="IDS_TASK_MANAGER_CLEAR_SEARCH_BUTTON_ACCESSIBILITY_NAME" desc="The accessibility name for the clear button accompanying the task manager search bar input.">
         Clear search
       </message>
-      <message name="IDS_TASK_MANAGER_KILL_ACCESSIBILITY_NAME" desc="The accessibility description for the End Process button in the Task Manager window" translateable="false">
-        Ends the highlighted process.
+      <message name="IDS_TASK_MANAGER_KILL_ACCESSIBILITY_NAME" desc="The accessibility description for the End Task button in the Task Manager window">
+        Ends the highlighted task.
       </message>
-      <message name="IDS_TASK_MANAGER_CATEGORY_TABS_AND_EXTENSIONS_NAME" desc="The title of the 'Tabs and Extensions' filter category." translateable="false">
-        Tabs &amp; Extensions
+      <message name="IDS_TASK_MANAGER_CATEGORY_TABS_AND_EXTENSIONS_NAME" desc="The title of the 'Tabs and Extensions' filter category.">
+        Tabs &amp; extensions
       </message>
-      <message name="IDS_TASK_MANAGER_CATEGORY_SYSTEM_NAME" desc="The title of the 'System' filter category on ChromeOS." translateable="false">
+      <message name="IDS_TASK_MANAGER_CATEGORY_SYSTEM_NAME" desc="The title of the 'System' filter category on ChromeOS.">
         System
       </message>
-      <message name="IDS_TASK_MANAGER_CATEGORY_BROWSER_NAME" desc="The title of the 'System' filter category on Windows/Mac/Linux." translateable="false">
+      <message name="IDS_TASK_MANAGER_CATEGORY_BROWSER_NAME" desc="The title of the 'System' filter category on Windows/Mac/Linux.">
         Browser
+      </message>
+      <message name="IDS_TASK_MANAGER_CATEGORY_ALL_NAME" desc="The title of the 'All tasks' filter category on Windows/Mac/Linux/ChromeOS.">
+        All tasks
       </message>
       <message name="IDS_SESSION_CRASHED_VIEW_UMA_OPTIN" desc="Text besides the checkbox to let users optin to UMA in the restore from previous crash bubble.">
         Help make Chromium better by sending crash reports and <ph name="UMA_LINK">$1<ex>usage statistics</ex></ph> to Google
@@ -478,7 +481,7 @@ If you update this file, be sure also to update google_chrome_strings.grd. -->
       </if>
       <if expr="is_macosx">
         <message name="IDS_MACOS_OBSOLETE" desc="A message displayed on an at-launch infobar and About (Help) page warning the user that the OS version they are using will soon be or is already unsupported.">
-          To get future Chromium updates, you'll need macOS 11 or later. This computer is using macOS 10.15.
+          To get future Chromium updates, you'll need macOS 12 or later. This computer is using macOS 11.
         </message>
       </if>
       <if expr="is_win">
@@ -548,6 +551,16 @@ If you update this file, be sure also to update google_chrome_strings.grd. -->
       <if expr="not use_titlecase">
         <message name="IDS_STATUS_TRAY_KEEP_CHROME_RUNNING_IN_BACKGROUND" desc="The checkbox in the status tray context menu that controls whether chrome keeps running in the background after the last window is closed">
           Let Chromium run in the background
+        </message>
+      </if>
+      <if expr="use_titlecase">
+        <message name="IDS_STATUS_TRAY_KEEP_CHROME_RUNNING_IN_BACKGROUND_SETTING" desc="In Title Case: The checkbox in the status tray context menu that controls whether chrome keeps running in the background after the last window is closed">
+          Disable Chromium Running in Background for Apps
+        </message>
+      </if>
+      <if expr="not use_titlecase">
+        <message name="IDS_STATUS_TRAY_KEEP_CHROME_RUNNING_IN_BACKGROUND_SETTING" desc="The checkbox in the status tray context menu that controls whether chrome keeps running in the background after the last window is closed">
+          Disable Chromium running in background for apps
         </message>
       </if>
       <message name="IDS_CANT_WRITE_USER_DIRECTORY_SUMMARY" desc="Summary of problem displayed in dialog when we can't create a directory for this user.">
@@ -682,9 +695,17 @@ Chromium is unable to recover your settings.
           Uninstall
         </message>
       </if>
-      <message name="IDS_DEFAULT_BROWSER_INFOBAR_TEXT" desc="Text to show in an infobar when Chromium is not the current default browser.">
-        Chromium isn't your default browser
+        <message name="IDS_DEFAULT_BROWSER_INFOBAR_TEXT" desc="Text to show in an infobar when Chromium is not the current default browser.">
+          Chromium isn't your default browser
       </message>
+      <message name="IDS_DEFAULT_BROWSER_PIN_INFOBAR_TEXT" desc="Text to show in an infobar when Chromium is not the current default browser and can be pinned to the taskbar.">
+        Set Chromium as your default browser and pin it to your taskbar
+      </message>
+      <if expr="is_win or is_macosx">
+        <message name="IDS_PDF_INFOBAR_TEXT" desc="Text to show in an infobar when Chromium is not the default PDF viewer.">
+          Set Chromium as your default PDF viewer
+        </message>
+      </if>
       <!-- Download Bubble Items -->
       <message name="IDS_DOWNLOAD_BUBBLE_SUBPAGE_SUMMARY_UNKNOWN_SOURCE"
                desc="Summary of dangerous warning for a file (like an extension) from an unknown source.">
@@ -735,10 +756,6 @@ Chromium is unable to recover your settings.
       <message name="IDS_BLOCK_DOWNLOAD_REASON_DANGEROUS_COOKIE_THEFT"
                desc="On the chrome://downloads page, the description shown for a blocked file that is dangerous because of cookie theft.">
         Chromium blocked this download because the file can harm your personal and social network accounts
-      </message>
-      <message name="IDS_BLOCK_DOWNLOAD_REASON_DANGEROUS_COOKIE_THEFT_AND_ACCOUNT"
-               desc="On the chrome://downloads page, the description with account info shown for a blocked file that is dangerous because of cookie theft.">
-        Chromium blocked this download because the file can harm your personal and social network accounts, including <ph name="USER_EMAIL">$1<ex>john@google.com</ex></ph>
       </message>
       <message name="IDS_BLOCK_DOWNLOAD_REASON_UNCOMMON"
                desc="On the chrome://downloads page, the description shown for a blocked file that is uncommon.">
@@ -795,7 +812,7 @@ Chromium is unable to recover your settings.
         Google API keys are missing. Some functionality of Chromium will be disabled.
       </message>
 
-      <if expr="enable_extensions">
+      <if expr="enable_extensions_core">
         <!-- Extension installed bubble -->
         <message name="IDS_EXTENSION_INSTALLED_HEADING" desc="Title of the extension-installed bubble. Instructs that the extension was installed.">
           <ph name="EXTENSION_NAME">$1<ex>Gmail Checker</ex></ph> has been added to Chromium
@@ -880,6 +897,9 @@ Chromium is unable to recover your settings.
       </message>
       <message name="IDS_EXTENSIONS_SHORTCUT_SCOPE_IN_CHROME" desc="The label to indicate that a shortcut will be triggerable only from within the Chrome application.">
         In Chromium
+      </message>
+      <message name="IDS_PENDING_CHANGE_WARNING" desc="The message shown to users when an extension setting change will ba applied after Chrome restarts.">
+        Changes to this setting will be applied once Chromium restarts.
       </message>
 
       <if expr="enable_extensions">
@@ -988,6 +1008,9 @@ Chromium is unable to recover your settings.
       </if>
 
       <!-- Enterprise sign-in dialog -->
+      <message name="IDS_ENTERPRISE_VALUE_PROPOSITION_PROFILE_REQUIRED_BY_ORG_TITLE" desc="Title of the screen in the profile creation flow where the user is asked whether they want to confirm signing in to Chromium with their enterprise account when it is mandatory to sign in to Chromium with the enterprise account.">
+        Your organization requires you to sign into Chromium
+      </message>
       <if expr="toolkit_views">
         <message name="IDS_ENTERPRISE_SIGNIN_TITLE" desc="The title of the dialog to confirm linking the browser profile with the signed-in enterprise account">
           Link your Chromium data to this account?
@@ -1009,9 +1032,6 @@ Chromium is unable to recover your settings.
         </message>
         <message name="IDS_ENTERPRISE_SIGNIN_WORK_PROFILE_EXPLANATION" desc="The warning message displayed to an enterprise user about to link their profile to their Google account. This message is followed by a 'Learn more' link.">
           Any Chromium data that is generated during the use of this profile (such as the creation of bookmarks, history, passwords, and other settings) can be removed by the work profile administrator. <ph name="LEARN_MORE">$1<ex>Learn more</ex></ph>
-        </message>
-        <message name="IDS_ENTERPRISE_VALUE_PROPOSITION_PROFILE_REQUIRED_BY_ORG_TITLE" desc="Title of the screen in the profile creation flow where the user is asked whether they want to confirm signing in to Chromium with their enterprise account when it is mandatory to sign in to Chromium with the enterprise account.">
-          Your organization requires you to sign into Chromium
         </message>
         <message name="IDS_ENTERPRISE_VALUE_PROPOSITION_PROFILE_REQUIRED_BY_ORG_KNOWN_DOMAIN_TITLE" desc="Title of the screen in the profile creation flow where the user is asked whether they want to confirm signing in to Chromium with their enterprise account when it is mandatory to sign in to Chromium with the enterprise account.">
           Your organization, <ph name="MANAGER">$1<ex>manager.com</ex></ph>, requires you to sign into Chromium
@@ -1041,7 +1061,7 @@ Chromium is unable to recover your settings.
 
       <!-- Managed profile required interstitial -->
       <message name="IDS_MANAGED_PROFILE_INTERSTITIAL_PRIMARY_PARAGRAPH" desc="The main text of the interstitial that tells the user that their organization requires them to sign in to Chrome with their managed account in order to access it.">
-       To continue, you'll need to sign in to Chromium with <ph name="EMAIL">$1<ex>user@example.com</ex></ph>. This ensures compliance with your organization's policies.
+       To continue, sign in to Chromium as <ph name="EMAIL">$1<ex>user@example.com</ex></ph>. This makes sure that you've got your organization's policies.
       </message>
 
       <!-- Extension requests sign in to Chrome through chrome.identity API -->
@@ -1117,17 +1137,11 @@ Chromium is unable to recover your settings.
       </if>
 
       <if expr="not is_chromeos and not is_android">
-        <message name="IDS_SIGNIN_DICE_WEB_INTERCEPT_CREATE_BUBBLE_TITLE" desc="Title of the web signin interception bubble">
-          Continue in a new Chromium profile?
-        </message>
         <message name="IDS_SIGNIN_DICE_WEB_INTERCEPT_CREATE_BUBBLE_TITLE_V2" desc="Title of the web signin interception bubble used when Explicit browser Sign in is enabled">
           Sign in to Chromium in a new profile?
         </message>
         <message name="IDS_SIGNIN_DICE_WEB_INTERCEPT_SWITCH_BUBBLE_TITLE" desc="Title for the profile switch interception bubble">
           Switch to existing Chromium profile?
-        </message>
-        <message name="IDS_SIGNIN_DICE_WEB_INTERCEPT_SWITCH_BUBBLE_DESC" desc="Description for the profile switch interception bubble">
-          A Chromium profile with this account already exists
         </message>
         <message name="IDS_SIGNIN_DICE_WEB_INTERCEPT_SWITCH_BUBBLE_DESC_V2" desc="This string is the body text for a dialog that appears when the user is already signed in to Chromium, but they just tried to sign in to a Google service (like Gmail) with a different Google Account that already has its own Chromium profile on this device. The body text is after the 'Switch to existing Chromium profile?' string. The tone should be inviting and helpful.">
           You're already signed in as <ph name="USER_EMAIL_ADDRESS">$1<ex>foo@gmail.com</ex></ph> in another Chromium profile
@@ -1139,13 +1153,7 @@ Chromium is unable to recover your settings.
           <ph name="EXISTING_USER">$1<ex>Elisa</ex></ph> is already signed in to this Chromium profile. To keep your browsing separate, Chromium can create your own profile for you.
         </message>
         <message name="IDS_SIGNIN_DICE_WEB_INTERCEPT_CREATE_BUBBLE_DESC" desc="Body of the web signin interception bubble. It is shown when the user signs in on the web while they already have another account present in the current profile.">
-         <ph name="EXISTING_USER">$1<ex>Elisa</ex></ph> is already signed in.  To keep your browsing separate, sign in to Chromium in your own profile as <ph name="USER_EMAIL_ADDRESS">$2<ex>foo@gmail.com</ex></ph>.
-        </message>
-        <message name="IDS_SIGNIN_DICE_WEB_INTERCEPT_CONSUMER_BUBBLE_DESC_MANAGED_DEVICE" desc="Body of the web signin interception bubble on a managed device">
-          <ph name="EXISTING_USER">$1<ex>Elisa</ex></ph> is already signed in to this Chromium profile. This will create a new Chromium profile for <ph name="USER_EMAIL_ADDRESS">$2<ex>foo@gmail.com</ex></ph>
-        </message>
-        <message name="IDS_SIGNIN_DICE_WEB_INTERCEPT_ENTERPRISE_BUBBLE_DESC_MANAGED_DEVICE" desc="Body of the web signin interception bubble when the new account is personal and the existing account is managed on a managed device">
-          This will create a new Chromium profile for <ph name="USER_EMAIL_ADDRESS">$1<ex>foo@gmail.com</ex></ph>
+          <ph name="EXISTING_USER">$1<ex>Elisa</ex></ph> is already signed in.  To keep your browsing separate, sign in to Chromium in your own profile as <ph name="USER_EMAIL_ADDRESS">$2<ex>foo@gmail.com</ex></ph>.
         </message>
         <message name="IDS_SIGNIN_DICE_WEB_INTERCEPT_BUBBLE_CHROME_SIGNIN_SUBTITLE" desc="Subtitle of the Chromium Signin Bubble intercept that is shown when a signed out user signs in on the web with it's first account.">
           To get your passwords and more on all your devices, sign in to Chromium
@@ -1164,6 +1172,9 @@ Chromium is unable to recover your settings.
         </message>
         <message name="IDS_CHROME_SIGNOUT_CONFIRMATION_PROMPT_NO_UNSYNCED_BODY" desc="This is the subtitle of a confirmation dialog that asks the user to confirm that they want to sign out of Chromium. It appears when the user opens the Chromium Profile Menu and chooses 'Sign out of Chromium'. This subtitle is after the 'Sign out of Chromium?' string. The tone should be calm, because we want to explain to the user that their data is saved; however, we want to set expectations by clarifying that the data will be removed from the device. This string provides a path to resolution because it explains how the user can see their data again (by signing back in).">
           Your passwords, payment methods, and addresses that you saved in your Google Account will be removed from this device. To use them again in Chromium, sign back in.
+        </message>
+        <message name="IDS_CHROME_SIGNOUT_CONFIRMATION_PROMPT_NO_UNSYNCED_DATA_BODY" desc="This is the subtitle of a confirmation dialog that asks the user to confirm that they want to sign out of Chromium. It appears when the user opens the Chromium Profile Menu and chooses 'Sign out of Chromium'. This subtitle is after the 'Sign out of Chromium?' string. The tone should be calm, because we want to explain to the user that their data is saved; however, we want to set expectations by clarifying that the data will be removed from the device. This string provides a path to resolution because it explains how the user can see their data again (by signing back in).">
+          Your passwords and other Chromium data that you saved in your Google Account will be removed from this device. To use them again in Chromium, sign back in.
         </message>
         <message name="IDS_CHROME_SIGNOUT_CONFIRMATION_PROMPT_VERIFY_BODY" desc="This is the subtitle of an error message dialog that appears when the user opens the Chromium Profile Menu and chooses 'Sign out of Chromium'. The error message appears when the user has saved some data (like a password or payment method) to Chromium, but Chromium wasn't able to save the data to the user's Google Account due to a sign-in error; but, the data has been saved locally to Chromium. This subtitle is after the 'Some data isn’t saved yet' string. The tone should be cautionary, because we want to explain to the user that their data is not saved to their Google Account. This string provides a path to resolution because it explains how the user can properly save their data before they sign out of Chromium.">
           Chromium needs to verify it’s you before some data can be saved in your Google Account and used on all your devices. If you sign out, this data will stay on this device.
@@ -1585,16 +1596,16 @@ Chromium is unable to recover your settings.
         Chromium Tab
       </message>
       <message name="IDS_DESKTOP_MEDIA_PICKER_SCREEN_PERMISSION_TEXT_MAC" desc="Instructive text for how to enable screen recording on Mac when trying to share a screen." >
-        To share your screen, allow screen recording for Chromium in System Preferences
+        To share your screen, allow screen recording for Chromium in System Settings
       </message>
       <message name="IDS_DESKTOP_MEDIA_PICKER_SCREEN_PERMISSION_TEXT_PERIOD_MAC" desc="Instructive text for how to enable screen recording on Mac when trying to share a screen, ending with period to allow a supplementary text to follow." >
-        To share your screen, allow screen recording for Chromium in System Preferences.
+        To share your screen, allow screen recording for Chromium in System Settings.
       </message>
       <message name="IDS_DESKTOP_MEDIA_PICKER_WINDOW_PERMISSION_TEXT_MAC" desc="Instructive text for how to enable screen recording on Mac when trying to share a window." >
-        To share your window, allow screen recording for Chromium in System Preferences
+        To share your window, allow screen recording for Chromium in System Settings
       </message>
       <message name="IDS_DESKTOP_MEDIA_PICKER_WINDOW_PERMISSION_TEXT_PERIOD_MAC" desc="Instructive text for how to enable screen recording on Mac when trying to share a window, ending with period to allow a supplementary text to follow." >
-        To share your window, allow screen recording for Chromium in System Preferences.
+        To share your window, allow screen recording for Chromium in System Settings.
       </message>
       <message name="IDS_DESKTOP_MEDIA_PICKER_PERMISSION_RESTART_TEXT_MAC" desc="Supplementary text about the need to restart Chrome, displayed below the message about enabling screen-recording permissions on Mac when those permissions are missing." >
         You'll then need to restart Chromium.
@@ -1706,6 +1717,9 @@ Chromium is unable to recover your settings.
           desc="Text that is shown in the more options menu to open the user's activity page.">
           My Activity
         </message>
+        <message name="IDS_LENS_OVERLAY_TOAST_PAGE_CONTENT_NOT_FOUND_MESSAGE">
+          Can't find content in page
+        </message>
         <message name="IDS_LENS_OVERLAY_TOAST_DISMISS_MESSAGE"
           desc="The label for the button that dismisses the toast message">
           Dismiss
@@ -1737,6 +1751,15 @@ Chromium is unable to recover your settings.
         <message name="IDS_LENS_OVERLAY_INITIAL_TOAST_MESSAGE"
           desc="Text that is shown in the Lens Overlay education bubble when starting the feature. Informs the user to tap an object or drag over the screen to select a region to search with Google Lens.">
           Select anything to search with Image Search
+        </message>
+        <message name="IDS_LENS_OVERLAY_INITIAL_TOAST_LABEL_SIMPLIFIED"
+          desc="Accessibility label for the initial user eduction bubble that appears at the top of the screen after the user invokes the Lens Overlay feature. Informs the user to select an object to search with Google Lens, or use the escape key to exit the feature."
+          is_accessibility_with_no_ui="true">
+          Select any text or image to search with Image Search or press escape to exit Image Search
+        </message>
+        <message name="IDS_LENS_OVERLAY_INITIAL_TOAST_MESSAGE_SIMPLIFIED"
+          desc="Text that is shown in the Lens Overlay education bubble when starting the feature. Informs the user to tap an object or drag over the screen to select a region to search with Google Lens.">
+          Select any text or image to search with Image Search
         </message>
         <message name="IDS_LENS_OVERLAY_INITIAL_TOAST_MESSAGE_SELECT_TEXT"
           desc="Text that is shown in the Lens Overlay education bubble when starting the feature. Informs the user to drag over the screen to select text to search with Google Lens.">
@@ -2048,7 +2071,7 @@ Chromium is unable to recover your settings.
       <if expr="not is_chromeos and not is_android">
         <!-- Enterprise profile welcome screen -->
         <message name="IDS_ENTERPRISE_WELCOME_PROFILE_INFORMATION_DETAILS" desc="Paragraph disclaiming to the user what their organization can do with their profile information.">
-          Your organization can see and manage browsing data, such as your bookmarks, history, and passwords. It can't see browsing data in personal Chromium profiles.
+          Your organization can see and manage browsing data, such as your bookmarks, history, and passwords. It can't see browsing data in other Chromium profiles
         </message>
         <!-- Profile Picker -->
         <message name="IDS_PROFILE_PICKER_MAIN_VIEW_TITLE" desc="Profile picker main view title">
@@ -2058,10 +2081,7 @@ Chromium is unable to recover your settings.
           Who's using Chromium?
         </message>
         <message name="IDS_PROFILE_PICKER_MAIN_VIEW_SUBTITLE" desc="Profile picker main view subtitle">
-          With Chromium profiles you can separate all your Chromium stuff. Create profiles for friends and family, or split between work and fun.
-        </message>
-        <message name="IDS_PROFILE_PICKER_PROFILE_CREATION_FLOW_PROFILE_TYPE_CHOICE_SUBTITLE" desc="Profile picker profile type choice subtitle">
-          To access your Chromium stuff across all your devices, sign in, then turn on sync.
+          With Chromium profiles, you can separate all your Chromium stuff. Create profiles for friends and family, or split between work and fun.
         </message>
         <message name="IDS_PROFILE_PICKER_PROFILE_CREATION_FLOW_PROFILE_TYPE_CHOICE_TITLE" desc="Profile picker profile type choice title">
           Set up your new Chromium profile
@@ -2077,6 +2097,9 @@ Chromium is unable to recover your settings.
         </message>
         <message name="IDS_PROFILE_PICKER_PROFILE_SWITCH_SUBTITLE" desc="Profile picker profile switch subtitle">
           A Chromium profile with this account already exists on this device
+        </message>
+        <message name="IDS_PROFILE_PICKER_FORCE_SIGN_IN_ERROR_DIALOG_NOT_SUPPORTED_BY_GLIC_FLOW_BODY" desc="Body of the force sign in error dialog, the dialog is shown when the user attempts to reauth a profile while in the Glic version. This flow is not supported in this version of the picker. The overall purpose of the dialog is to redirect the user to the regular picker to finalize the reauth." translateable="false">
+          To use this profile with Glic, open Chromium and sign in
         </message>
 
         <!-- First Run Experience -->
@@ -2456,21 +2479,23 @@ Chromium is unable to recover your settings.
         <message name="IDS_PERFORMANCE_INTERVENTION_DIALOG_BODY_V1" desc="Body text for a dialog suggesting users to deactivate certain tabs to improve performance.">
           These tabs are using extra resources. To improve your performance, let Chromium make them inactive.
         </message>
-        <message name="IDS_PERFORMANCE_INTERVENTION_DIALOG_BODY_V2" desc="Body text for a dialog suggesting users to deactivate certain tabs to improve performance.">
-          Chromium can make these tabs inactive to improve your browsing experience and free up resources.
-        </message>
-        <message name="IDS_PERFORMANCE_INTERVENTION_DIALOG_BODY_V3" desc="Body text for a dialog suggesting users to deactivate certain tabs to improve performance.">
-          Chromium can make these tabs inactive to improve your browsing experience and keep things fast.
-        </message>
         <message name="IDS_PERFORMANCE_INTERVENTION_DIALOG_BODY_SINGULAR_V1" desc="Body text for a dialog suggesting users to deactivate certain tabs to improve performance.">
           This tab is using extra resources. To improve your performance, let Chromium make it inactive.
         </message>
-        <message name="IDS_PERFORMANCE_INTERVENTION_DIALOG_BODY_SINGULAR_V2" desc="Body text for a dialog suggesting users to deactivate certain tabs to improve performance.">
-          Chromium can make this tab inactive to improve your browsing experience and free up resources.
-        </message>
-        <message name="IDS_PERFORMANCE_INTERVENTION_DIALOG_BODY_SINGULAR_V3" desc="Body text for a dialog suggesting users to deactivate certain tabs to improve performance.">
-          Chromium can make this tab inactive to improve your browsing experience and keep things fast.
-        </message>
+        <if expr="use_titlecase">
+          <message name="IDS_PERFORMANCE_INTERVENTION_DIALOG_TITLE_UPDATED_V3" desc="Title text for a dialog with information on tabs that could be causing performance issues.">
+            {NUM_TABS, plural,
+            =1 {Chromium Recommends Pausing the Tab Slowing Your Browser}
+            other {Chromium Recommends Pausing the Tabs Slowing Your Browser}}
+          </message>
+        </if>
+        <if expr="not use_titlecase">
+          <message name="IDS_PERFORMANCE_INTERVENTION_DIALOG_TITLE_UPDATED_V3" desc="Title text for a dialog with information on tabs that could be causing performance issues.">
+            {NUM_TABS, plural,
+            =1 {Chromium recommends pausing the tab slowing your browser}
+            other {Chromium recommends pausing the tabs slowing your browser}}
+          </message>
+        </if>
       </if>
 
       <!-- Delete Browsing Data -->
@@ -2498,14 +2523,16 @@ Chromium is unable to recover your settings.
       </if>
 
       <!-- UNO Promo strings for extensions -->
-      <message name="IDS_EXTENSIONS_EXPLICIT_SIGNIN_BUTTON" desc="Button in the profile user menu to explicitly sign in.">
-        Sign in to Chromium
-      </message>
       <if expr="enable_extensions">
         <message name="IDS_EXTENSION_INSTALLED_PROMO_EXPLICIT_SIGNIN_MESSAGE" desc="Text of the promo displayed at the bottom of the extension installed bubble asking the user to enable UNO.">
-          To get your extensions on all your computers, sign in to Chromium
+          To get this extension and more on all your computers, sign in to Chromium
         </message>
       </if>
+
+      <!-- UNO Promo strings for bookmarks -->
+      <message name="IDS_BOOKMARK_INSTALLED_PROMO_EXPLICIT_SIGNIN_MESSAGE" desc="Text of the promo displayed at the bottom of the bookmark bubble asking the user to enable UNO.">
+        To get this bookmark and more on all your devices, sign in to Chromium
+      </message>
     </messages>
   </release>
 </grit>

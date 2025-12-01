@@ -34,7 +34,7 @@ import {getHtml} from './detail_view.html.js';
 import type {ItemDelegate} from './item.js';
 import {DummyItemDelegate} from './item.js';
 import {ItemMixin} from './item_mixin.js';
-import {computeInspectableViewLabel, convertSafetyCheckReason, createDummyExtensionInfo, EnableControl, getEnableControl, getEnableToggleAriaLabel, getEnableToggleTooltipText, getItemSource, getItemSourceString, isEnabled, SAFETY_HUB_EXTENSION_KEPT_HISTOGRAM_NAME, SAFETY_HUB_EXTENSION_REMOVED_HISTOGRAM_NAME, SAFETY_HUB_WARNING_REASON_MAX_SIZE, sortViews, userCanChangeEnablement} from './item_util.js';
+import {computeInspectableViewLabel, convertSafetyCheckReason, createDummyExtensionInfo, EnableControl, getEnableControl, getEnableToggleAriaLabel, getEnableToggleTooltipText, getItemSource, getItemSourceString, isEnabled, SAFETY_HUB_EXTENSION_KEPT_HISTOGRAM_NAME, SAFETY_HUB_EXTENSION_REMOVED_HISTOGRAM_NAME, SAFETY_HUB_WARNING_REASON_MAX_SIZE, sortViews, UPLOAD_EXTENSION_TO_ACCOUNT_DETAILS_VIEW_PAGE_HISTOGRAM_NAME, userCanChangeEnablement} from './item_util.js';
 import type {Mv2DeprecationDelegate} from './mv2_deprecation_delegate.js';
 import {getMv2ExperimentStage, Mv2ExperimentStage} from './mv2_deprecation_util.js';
 import {navigation, Page} from './navigation_helper.js';
@@ -121,17 +121,19 @@ export class ExtensionsDetailViewElement extends
     };
   }
 
-  data: chrome.developerPrivate.ExtensionInfo = createDummyExtensionInfo();
-  delegate: ItemDelegate&Mv2DeprecationDelegate = new DummyDetailViewDelegate();
-  inDevMode: boolean = false;
-  enableEnhancedSiteControls: boolean = false;
-  incognitoAvailable: boolean = false;
-  showActivityLog: boolean = false;
-  fromActivityLog: boolean = false;
-  protected showSafetyCheck_: boolean = false;
-  protected size_: string = '';
-  protected sortedViews_: chrome.developerPrivate.ExtensionView[] = [];
-  private mv2ExperimentStage_: Mv2ExperimentStage =
+  accessor data: chrome.developerPrivate.ExtensionInfo =
+      createDummyExtensionInfo();
+  accessor delegate: ItemDelegate&Mv2DeprecationDelegate =
+      new DummyDetailViewDelegate();
+  accessor inDevMode: boolean = false;
+  accessor enableEnhancedSiteControls: boolean = false;
+  accessor incognitoAvailable: boolean = false;
+  accessor showActivityLog: boolean = false;
+  accessor fromActivityLog: boolean = false;
+  protected accessor showSafetyCheck_: boolean = false;
+  protected accessor size_: string = '';
+  protected accessor sortedViews_: chrome.developerPrivate.ExtensionView[] = [];
+  private accessor mv2ExperimentStage_: Mv2ExperimentStage =
       getMv2ExperimentStage(loadTimeData.getInteger('MV2ExperimentStage'));
 
   override firstUpdated() {
@@ -284,6 +286,10 @@ export class ExtensionsDetailViewElement extends
     return this.data.incognitoAccess.isEnabled && this.incognitoAvailable;
   }
 
+  protected showUserScriptSectionToggle_(): boolean {
+    return this.data.userScriptsAccess.isEnabled;
+  }
+
   protected onEnableToggleChange_() {
     this.delegate.setItemEnabled(this.data.id, this.$.enableToggle.checked);
     this.$.enableToggle.checked = this.isEnabled_();
@@ -302,8 +308,10 @@ export class ExtensionsDetailViewElement extends
     this.reloadItem().catch((loadError) => this.fire('load-error', loadError));
   }
 
-  protected onUploadClick_() {
-    this.delegate.uploadItemToAccount(this.data.id);
+  protected async onUploadClick_() {
+    const uploaded = await this.delegate.uploadItemToAccount(this.data.id);
+    chrome.metricsPrivate.recordBoolean(
+        UPLOAD_EXTENSION_TO_ACCOUNT_DETAILS_VIEW_PAGE_HISTOGRAM_NAME, uploaded);
   }
 
   protected onRemoveClick_() {
@@ -373,7 +381,7 @@ export class ExtensionsDetailViewElement extends
   protected onPinnedToToolbarChange_() {
     this.delegate.setItemPinnedToToolbar(
         this.data.id,
-        this.shadowRoot!
+        this.shadowRoot
             .querySelector<ExtensionsToggleRowElement>(
                 '#pin-to-toolbar')!.checked);
   }
@@ -381,23 +389,49 @@ export class ExtensionsDetailViewElement extends
   protected onAllowIncognitoChange_() {
     this.delegate.setItemAllowedIncognito(
         this.data.id,
-        this.shadowRoot!
+        this.shadowRoot
             .querySelector<ExtensionsToggleRowElement>(
                 '#allow-incognito')!.checked);
+
+    if (this.data.controlledInfo) {
+      // If admin-installed, the change might be postponed until Chromium
+      // restarts.
+      this.data = {
+        ...this.data,
+        incognitoAccessPendingChange: !this.data.incognitoAccessPendingChange,
+      };
+    }
+  }
+
+  protected onAllowUserScriptsChange_() {
+    this.delegate.setItemAllowedUserScripts(
+        this.data.id,
+        this.shadowRoot
+            .querySelector<ExtensionsToggleRowElement>(
+                '#allow-user-scripts')!.checked);
   }
 
   protected onAllowOnFileUrlsChange_() {
     this.delegate.setItemAllowedOnFileUrls(
         this.data.id,
-        this.shadowRoot!
+        this.shadowRoot
             .querySelector<ExtensionsToggleRowElement>(
                 '#allow-on-file-urls')!.checked);
+
+    if (this.data.controlledInfo) {
+      // If admin-installed, the change might be postponed until Chromium
+      // restarts.
+      this.data = {
+        ...this.data,
+        fileAccessPendingChange: !this.data.fileAccessPendingChange,
+      };
+    }
   }
 
   protected onCollectErrorsChange_() {
     this.delegate.setItemCollectsErrors(
         this.data.id,
-        this.shadowRoot!
+        this.shadowRoot
             .querySelector<ExtensionsToggleRowElement>(
                 '#collect-errors')!.checked);
   }
@@ -472,7 +506,7 @@ export class ExtensionsDetailViewElement extends
 
   protected onShowAccessRequestsChange_() {
     const showAccessRequestsToggle =
-        this.shadowRoot!.querySelector<ExtensionsToggleRowElement>(
+        this.shadowRoot.querySelector<ExtensionsToggleRowElement>(
             '#show-access-requests-toggle');
     assert(showAccessRequestsToggle);
     this.delegate.setShowAccessRequestsInToolbar(

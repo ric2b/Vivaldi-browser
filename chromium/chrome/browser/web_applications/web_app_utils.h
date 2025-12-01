@@ -13,7 +13,6 @@
 #include <vector>
 
 #include "build/build_config.h"
-#include "build/chromeos_buildflags.h"
 #include "chrome/browser/web_applications/mojom/user_display_mode.mojom.h"
 #include "chrome/browser/web_applications/web_app_constants.h"
 #include "chrome/browser/web_applications/web_app_management_type.h"
@@ -153,7 +152,7 @@ bool IsInScope(const GURL& url, const GURL& scope);
 // Returns whether the `login_mode` should force a start at OS login.
 bool IsRunOnOsLoginModeEnabledForAutostart(RunOnOsLoginMode login_mode);
 
-constexpr char kAppSettingsPageEntryPointsHistogramName[] =
+inline constexpr char kAppSettingsPageEntryPointsHistogramName[] =
     "WebApp.AppSettingsPage.EntryPoints";
 
 // These are used in histograms, do not remove/renumber entries. If you're

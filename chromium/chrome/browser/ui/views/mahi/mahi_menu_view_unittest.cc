@@ -6,6 +6,7 @@
 
 #include <memory>
 #include <string>
+#include <string_view>
 
 #include "base/run_loop.h"
 #include "base/test/metrics/histogram_tester.h"
@@ -55,7 +56,7 @@ class MockMahiWebContentsManager : public ::mahi::FakeMahiWebContentsManager {
               OnContextMenuClicked,
               (int64_t display_id,
                ::chromeos::mahi::ButtonType button_type,
-               const std::u16string& question,
+               std::u16string_view question,
                const gfx::Rect& mahi_menu_bounds),
               (override));
 };
@@ -157,14 +158,13 @@ TEST_F(MahiMenuViewTest, SummaryButtonClicked) {
       .WillOnce([&run_loop, &menu_widget](
                     int64_t display_id,
                     ::chromeos::mahi::ButtonType button_type,
-                    const std::u16string& question,
-                    gfx::Rect mahi_menu_bounds) {
+                    std::u16string_view question, gfx::Rect mahi_menu_bounds) {
         EXPECT_EQ(display::Screen::GetScreen()
                       ->GetDisplayNearestWindow(menu_widget->GetNativeWindow())
                       .id(),
                   display_id);
         EXPECT_EQ(::chromeos::mahi::ButtonType::kSummary, button_type);
-        EXPECT_EQ(std::u16string(), question);
+        EXPECT_EQ(std::u16string_view(), question);
         run_loop.Quit();
       });
 
@@ -209,15 +209,14 @@ TEST_F(MahiMenuViewTest, SummaryOfSelectionButtonClicked) {
       .WillOnce([&run_loop, &menu_widget](
                     int64_t display_id,
                     ::chromeos::mahi::ButtonType button_type,
-                    const std::u16string& question,
-                    gfx::Rect mahi_menu_bounds) {
+                    std::u16string_view question, gfx::Rect mahi_menu_bounds) {
         EXPECT_EQ(display::Screen::GetScreen()
                       ->GetDisplayNearestWindow(menu_widget->GetNativeWindow())
                       .id(),
                   display_id);
         EXPECT_EQ(::chromeos::mahi::ButtonType::kSummaryOfSelection,
                   button_type);
-        EXPECT_EQ(std::u16string(), question);
+        EXPECT_EQ(std::u16string_view(), question);
         run_loop.Quit();
       });
 
@@ -239,8 +238,6 @@ TEST_F(MahiMenuViewTest, SummaryButtonAvailability) {
   auto* menu_view = menu_widget->SetContentsView(
       std::make_unique<MahiMenuView>(button_status));
   EXPECT_TRUE(menu_view->GetViewByID(ViewID::kSummaryButton)->GetEnabled());
-  EXPECT_EQ(menu_view->GetViewByID(ViewID::kSummaryButton)->GetTooltipText(),
-            l10n_util::GetStringUTF16(IDS_MAHI_SUMMARIZE_BUTTON_TOOL_TIP));
 
   // kTooShort shows the button but disabled.
   button_status.summary_of_selection_eligibility = SelectedTextState::kTooShort;
@@ -256,9 +253,6 @@ TEST_F(MahiMenuViewTest, SummaryButtonAvailability) {
   menu_view = menu_widget->SetContentsView(
       std::make_unique<MahiMenuView>(button_status));
   EXPECT_TRUE(menu_view->GetViewByID(ViewID::kSummaryButton)->GetEnabled());
-  EXPECT_EQ(menu_view->GetViewByID(ViewID::kSummaryButton)->GetTooltipText(),
-            l10n_util::GetStringUTF16(
-                IDS_MAHI_SUMMARIZE_BUTTON_TOOL_TIP_FOR_SELECTION));
 }
 
 TEST_F(MahiMenuViewTest, ElucidationButtonVisibilityAvailability) {
@@ -328,14 +322,13 @@ TEST_F(MahiMenuViewTest, ElucidationButtonClicked) {
       .WillOnce([&run_loop, &menu_widget](
                     int64_t display_id,
                     ::chromeos::mahi::ButtonType button_type,
-                    const std::u16string& question,
-                    gfx::Rect mahi_menu_bounds) {
+                    std::u16string_view question, gfx::Rect mahi_menu_bounds) {
         EXPECT_EQ(display::Screen::GetScreen()
                       ->GetDisplayNearestWindow(menu_widget->GetNativeWindow())
                       .id(),
                   display_id);
         EXPECT_EQ(::chromeos::mahi::ButtonType::kElucidation, button_type);
-        EXPECT_EQ(std::u16string(), question);
+        EXPECT_EQ(std::u16string_view(), question);
         run_loop.Quit();
       });
 
@@ -405,7 +398,7 @@ TEST_F(MahiMenuViewTest, QuestionSubmitted) {
       .WillOnce([&run_loop, &menu_widget](
                     int64_t display_id,
                     ::chromeos::mahi::ButtonType button_type,
-                    const std::u16string& question,
+                    std::u16string_view question,
                     const gfx::Rect& mahi_menu_bounds) {
         EXPECT_EQ(display::Screen::GetScreen()
                       ->GetDisplayNearestWindow(menu_widget->GetNativeWindow())

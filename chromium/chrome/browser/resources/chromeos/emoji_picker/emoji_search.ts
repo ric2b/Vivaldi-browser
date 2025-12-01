@@ -61,7 +61,6 @@ export class EmojiSearch extends PolymerElement {
       gifSupport: {type: Boolean, value: false},
       sealSupport: {type: Boolean, value: false},
       status: {type: Status, value: null},
-      searchQuery: {type: String, value: ''},
       nextGifPos: {type: String, value: ''},
       errorMessage: {type: String, value: NO_INTERNET_SEARCH_ERROR_MSG},
       closeGifNudgeOverlay: {type: Object},
@@ -100,6 +99,7 @@ export class EmojiSearch extends PolymerElement {
   private fuseInstances = new Map<CategoryEnum, Fuse<EmojiVariants>>();
   private nextGifPos: string;  // This variable ensures that we get the correct
                                // set of GIFs when fetching more.
+  private errorMessage: string;
   private scrollTimeout: number|null;
 
   static get observers() {
@@ -391,8 +391,8 @@ export class EmojiSearch extends PolymerElement {
 
     // Append more GIFs to show if user is near the bottom of the currently
     // rendered GIFs (300px is around the average height of 2 GIFs).
-    if (searchResultRect!.getBoundingClientRect().bottom -
-            thisRect!.getBoundingClientRect().bottom <=
+    if (searchResultRect.getBoundingClientRect().bottom -
+            thisRect.getBoundingClientRect().bottom <=
         300) {
       const gifIndex = this.searchResults.findIndex(
           group => group.category === CategoryEnum.GIF);

@@ -155,6 +155,9 @@ class MetricsLog {
   // Assign a unique finalized record id to this log.
   void AssignFinalizedRecordId(PrefService* local_state);
 
+  // Sets the creation source for this log.
+  void SetLogCreationType(ChromeUserMetricsExtension::LogType log_type);
+
   // Assign a unique record id to this log.
   void AssignRecordId(PrefService* local_state);
 
@@ -162,7 +165,7 @@ class MetricsLog {
   void RecordUserAction(const std::string& key, base::TimeTicks action_time);
 
   // Record any changes in a given histogram for transmission.
-  void RecordHistogramDelta(const std::string& histogram_name,
+  void RecordHistogramDelta(std::string_view histogram_name,
                             const base::HistogramSamples& snapshot);
 
   // TODO(rkaplow): I think this can be a little refactored as it currently

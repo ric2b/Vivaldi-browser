@@ -64,7 +64,7 @@ const UIStrings = {
    * no properties matched the filter and thus no results were returned.
    */
   noMatchingProperty: 'No matching property',
-};
+} as const;
 const str_ = i18n.i18n.registerUIStrings('panels/elements/PropertiesWidget.ts', UIStrings);
 const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
 
@@ -179,7 +179,7 @@ export class PropertiesWidget extends UI.ThrottledWidget.ThrottledWidget {
       return;
     }
     const data = event.data;
-    const node = (data instanceof SDK.DOMModel.DOMNode ? data : data.node as SDK.DOMModel.DOMNode);
+    const node = (data instanceof SDK.DOMModel.DOMNode ? data : data.node);
     if (this.node !== node) {
       return;
     }

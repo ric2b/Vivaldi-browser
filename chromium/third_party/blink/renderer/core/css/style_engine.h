@@ -92,6 +92,7 @@ class Font;
 class FontSelector;
 class HTMLBodyElement;
 class MediaQueryEvaluator;
+class MediaQuerySet;
 class Node;
 class ReferenceFilterOperation;
 class RuleFeatureSet;
@@ -319,6 +320,11 @@ class CORE_EXPORT StyleEngine final : public GarbageCollected<StyleEngine>,
   // Note that this can return nullptr when the associated media query
   // does not match.
   RuleSet* CreateUnconnectedRuleSet(CSSStyleSheet&);
+
+  // A functional @media query is evaluated as a part of some function
+  // during value resolution. This is different from regular media queries,
+  // which are evaluated when building the RuleSet.
+  bool EvaluateFunctionalMediaQuery(const MediaQuerySet&);
   void MediaQueryAffectingValueChanged(MediaValueChange change);
   void UpdateActiveStyle();
 
@@ -382,6 +388,7 @@ class CORE_EXPORT StyleEngine final : public GarbageCollected<StyleEngine>,
   }
   bool UpdateRootFontRelativeUnits(const ComputedStyle* old_root_style,
                                    const ComputedStyle* new_root_style);
+  void SetUsesTreeCountingFunctions() { uses_tree_counting_functions_ = true; }
 
   void ResetCSSFeatureFlags(const RuleFeatureSet&);
 
@@ -407,21 +414,16 @@ class CORE_EXPORT StyleEngine final : public GarbageCollected<StyleEngine>,
 
   void SetRuleUsageTracker(StyleRuleUsageTracker*);
 
-  Font ComputeFont(Element& element,
-                   const ComputedStyle& font_style,
-                   const CSSPropertyValueSet& font_properties);
+  const Font* ComputeFont(Element& element,
+                          const ComputedStyle& font_style,
+                          const CSSPropertyValueSet& font_properties);
 
   PendingInvalidations& GetPendingNodeInvalidations() {
     return pending_invalidations_;
   }
   // Push all pending invalidations on the document.
   void InvalidateStyle();
-  bool HasViewportDependentMediaQueries() {
-    DCHECK(global_rule_set_);
-    UpdateActiveStyle();
-    return global_rule_set_->GetRuleFeatureSet()
-        .HasViewportDependentMediaQueries();
-  }
+  bool HasViewportDependentMediaQueries();
   bool HasViewportDependentPropertyRegistrations();
 
   class InApplyAnimationUpdateScope {
@@ -639,6 +641,14 @@ class CORE_EXPORT StyleEngine final : public GarbageCollected<StyleEngine>,
   const CounterStyle& FindCounterStyleAcrossScopes(const AtomicString&,
                                                    const TreeScope*) const;
 
+  // Resolve a tree-scoped reference to a @function rule.
+  //
+  // https://drafts.csswg.org/css-mixins-1/#function-rule
+  // https://drafts.csswg.org/css-scoping-1/#css-tree-scoped-reference
+  std::pair<StyleRuleFunction*, const TreeScope*> FindFunctionAcrossScopes(
+      const AtomicString& name,
+      const TreeScope*) const;
+
   const CascadeLayerMap* GetUserCascadeLayerMap() const {
     return user_cascade_layer_map_.Get();
   }
@@ -758,7 +768,8 @@ class CORE_EXPORT StyleEngine final : public GarbageCollected<StyleEngine>,
   void Trace(Visitor*) const override;
   const char* NameInHeapSnapshot() const override { return "StyleEngine"; }
 
-  RuleSet* DefaultViewTransitionStyle() const;
+  RuleSet* DefaultViewTransitionStyle(const Element&) const;
+
   void UpdateViewTransitionOptIn();
 
   const ActiveStyleSheetVector& ActiveUserStyleSheets() const {
@@ -776,7 +787,7 @@ class CORE_EXPORT StyleEngine final : public GarbageCollected<StyleEngine>,
   // Returns true if marked dirty for layout
   bool UpdateLastSuccessfulPositionFallbacksAndAnchorScrollShift();
 
-  void RevisitActiveStyleSheetsForInspector();
+  void RevisitStyleSheetForInspector(StyleSheetContents* contents);
 
  private:
   void UpdateCounters(const Element& element,
@@ -925,6 +936,7 @@ class CORE_EXPORT StyleEngine final : public GarbageCollected<StyleEngine>,
                                               const StyleRecalcContext&);
 
   void RecalcTransitionPseudoStyle();
+  void RebuildTransitionPseudoLayoutTrees();
 
   // We may need to update whitespaces in the layout tree after a flat tree
   // removal which caused a layout subtree to be detached.
@@ -966,6 +978,9 @@ class CORE_EXPORT StyleEngine final : public GarbageCollected<StyleEngine>,
 
   // Initialization value for SkipStyleRecalcScope.
   bool AllowSkipStyleRecalcForScope() const;
+
+  // See EvaluateFunctionalMediaQuery
+  void InvalidateFunctionalMediaDependentStylesIfNeeded();
 
   Member<Document> document_;
 
@@ -1013,6 +1028,9 @@ class CORE_EXPORT StyleEngine final : public GarbageCollected<StyleEngine>,
   bool uses_root_font_relative_units_{false};
   bool uses_glyph_relative_units_{false};
   bool uses_line_height_units_{false};
+  // True if we ever resolved style that involved tree-counting functions such
+  // as sibling-count() and sibling-index().
+  bool uses_tree_counting_functions_{false};
   // True if we have performed style recalc for at least one element that
   // depends on container queries.
   bool style_affected_by_layout_{false};
@@ -1056,6 +1074,9 @@ class CORE_EXPORT StyleEngine final : public GarbageCollected<StyleEngine>,
 
   // True if some data backing env() has changed.
   bool is_env_dirty_{false};
+
+  // Flags collected from all calls to EvaluateFunctionalMediaQuery.
+  MediaQueryResultFlags functional_media_query_result_flags_;
 
   // True if the document has elements referencing env(safe-area-inset-bottom)
   bool has_complex_safe_area_constraints_{false};
@@ -1209,6 +1230,17 @@ class CORE_EXPORT StyleEngine final : public GarbageCollected<StyleEngine>,
   // successful option with position-try-fallbacks referring any of these names
   // will be invalidated.
   HashSet<AtomicString> dirty_position_try_names_;
+
+  // Maps a functional media query to its evaluated result. When media values
+  // change, this can be used to check if we need to invalidate any elements
+  // as a response to that.
+  //
+  // Note that MediaQuerySets are cached during parsing [1], so identical @media
+  // preludes are represented by the same pointer.
+  //
+  // [1] CSSParserImpl::ConsumeMediaRule
+  HeapHashMap<Member<const MediaQuerySet>, bool>
+      functional_media_query_results_;
 };
 
 void PossiblyScheduleNthPseudoInvalidations(Node& node);

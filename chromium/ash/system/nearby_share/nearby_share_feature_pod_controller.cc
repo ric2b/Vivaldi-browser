@@ -4,6 +4,8 @@
 
 #include "ash/system/nearby_share/nearby_share_feature_pod_controller.h"
 
+#include <string>
+
 #include "ash/constants/quick_settings_catalogs.h"
 #include "ash/public/cpp/nearby_share_delegate.h"
 #include "ash/resources/vector_icons/vector_icons.h"
@@ -38,6 +40,14 @@ std::u16string RemainingTimeString(base::TimeDelta remaining_time) {
   return l10n_util::GetStringFUTF16Int(
       IDS_ASH_STATUS_TRAY_NEARBY_SHARE_REMAINING_SECONDS,
       static_cast<int>(remaining_time.InSeconds()) + 1);
+}
+
+std::u16string IconTooltipString(bool is_enabled) {
+  return l10n_util::GetStringFUTF16(
+      IDS_ASH_STATUS_TRAY_NEARBY_SHARE_ICON_TOOLTIP,
+      l10n_util::GetStringUTF16(
+          is_enabled ? IDS_ASH_STATUS_TRAY_NEARBY_SHARE_TILE_LABEL_ON
+                     : IDS_ASH_STATUS_TRAY_NEARBY_SHARE_TILE_LABEL_OFF));
 }
 
 }  // namespace
@@ -225,12 +235,18 @@ void NearbyShareFeaturePodController::ToggleTileOn() {
   auto& on_icon = nearby_share_delegate_->GetIcon(/*on_icon=*/true);
   tile_->SetVectorIcon(on_icon.is_empty() ? kQuickSettingsNearbyShareOnIcon
                                           : on_icon);
+  tile_->SetIconButtonTooltipText(IconTooltipString(/*is_enabled=*/true));
   tile_->SetToggled(true);
+
+  const std::u16string remaining_time_string =
+      RemainingTimeString(RemainingHighVisibilityTime());
 
   if (nearby_share_delegate_->IsHighVisibilityOn()) {
     tile_->SetSubLabel(l10n_util::GetStringFUTF16(
-        IDS_ASH_STATUS_TRAY_NEARBY_SHARE_TILE_ON_STATE,
-        RemainingTimeString(RemainingHighVisibilityTime())));
+        IDS_ASH_STATUS_TRAY_NEARBY_SHARE_TILE_ON_STATE, remaining_time_string));
+    tile_->SetTooltipText(l10n_util::GetStringFUTF16(
+        IDS_ASH_STATUS_TRAY_NEARBY_SHARE_TILE_TOOLTIP_HIGH_VISIBILITY,
+        remaining_time_string));
     return;
   }
 
@@ -238,14 +254,26 @@ void NearbyShareFeaturePodController::ToggleTileOn() {
     case ::nearby_share::mojom::Visibility::kYourDevices:
       tile_->SetSubLabel(l10n_util::GetStringUTF16(
           IDS_ASH_STATUS_TRAY_NEARBY_SHARE_TILE_LABEL_YOUR_DEVICES));
+      tile_->SetTooltipText(l10n_util::GetStringFUTF16(
+          IDS_ASH_STATUS_TRAY_NEARBY_SHARE_TILE_TOOLTIP_ENABLED,
+          l10n_util::GetStringUTF16(
+              IDS_ASH_STATUS_TRAY_NEARBY_SHARE_TILE_LABEL_YOUR_DEVICES)));
       break;
     case ::nearby_share::mojom::Visibility::kAllContacts:
       tile_->SetSubLabel(l10n_util::GetStringUTF16(
           IDS_ASH_STATUS_TRAY_NEARBY_SHARE_TILE_LABEL_CONTACTS));
+      tile_->SetTooltipText(l10n_util::GetStringFUTF16(
+          IDS_ASH_STATUS_TRAY_NEARBY_SHARE_TILE_TOOLTIP_ENABLED,
+          l10n_util::GetStringUTF16(
+              IDS_ASH_STATUS_TRAY_NEARBY_SHARE_TILE_LABEL_CONTACTS)));
       break;
     case ::nearby_share::mojom::Visibility::kNoOne:
       tile_->SetSubLabel(l10n_util::GetStringUTF16(
           IDS_ASH_STATUS_TRAY_NEARBY_SHARE_TILE_LABEL_HIDDEN));
+      tile_->SetTooltipText(l10n_util::GetStringFUTF16(
+          IDS_ASH_STATUS_TRAY_NEARBY_SHARE_TILE_TOOLTIP_ENABLED,
+          l10n_util::GetStringUTF16(
+              IDS_ASH_STATUS_TRAY_NEARBY_SHARE_TILE_LABEL_HIDDEN)));
       break;
     default:
       break;
@@ -259,8 +287,12 @@ void NearbyShareFeaturePodController::ToggleTileOff() {
   tile_->SetVectorIcon(off_icon.is_empty() ? kQuickSettingsNearbyShareOffIcon
                                            : off_icon);
   tile_->SetToggled(false);
+
+  tile_->SetIconButtonTooltipText(IconTooltipString(/*is_enabled=*/false));
   tile_->SetSubLabel(l10n_util::GetStringUTF16(
       IDS_ASH_STATUS_TRAY_NEARBY_SHARE_TILE_LABEL_OFF));
+  tile_->SetTooltipText(l10n_util::GetStringUTF16(
+      IDS_ASH_STATUS_TRAY_NEARBY_SHARE_TILE_TOOLTIP_DISABLED));
 }
 
 base::TimeDelta NearbyShareFeaturePodController::RemainingHighVisibilityTime()

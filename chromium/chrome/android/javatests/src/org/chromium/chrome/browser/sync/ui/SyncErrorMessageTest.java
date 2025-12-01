@@ -36,7 +36,8 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
-import org.mockito.MockitoAnnotations;
+import org.mockito.junit.MockitoJUnit;
+import org.mockito.junit.MockitoRule;
 
 import org.chromium.base.ContextUtils;
 import org.chromium.base.ThreadUtils;
@@ -64,7 +65,8 @@ import org.chromium.chrome.test.util.ChromeRenderTestRule;
 import org.chromium.components.embedder_support.util.UrlConstants;
 import org.chromium.components.messages.MessageBannerProperties;
 import org.chromium.components.messages.MessageDispatcher;
-import org.chromium.components.signin.base.GoogleServiceAuthError;
+import org.chromium.google_apis.gaia.GoogleServiceAuthError;
+import org.chromium.google_apis.gaia.GoogleServiceAuthErrorState;
 import org.chromium.ui.modelutil.PropertyModel;
 
 import java.io.IOException;
@@ -79,6 +81,8 @@ public class SyncErrorMessageTest {
     @Mock private MessageDispatcher mMessageDispatcher;
     private FakeSyncServiceImpl mFakeSyncServiceImpl;
     private final Context mContext = ContextUtils.getApplicationContext();
+
+    @Rule public final MockitoRule mMockitoRule = MockitoJUnit.rule();
 
     @Rule
     public final SyncTestRule mSyncTestRule =
@@ -102,7 +106,6 @@ public class SyncErrorMessageTest {
 
     @Before
     public void setUp() {
-        MockitoAnnotations.initMocks(this);
         PasswordManagerUtilBridgeJni.setInstanceForTesting(mPasswordManagerUtilBridgeJniMock);
         SyncErrorMessageImpressionTracker.resetLastShownTime();
         mFakeSyncServiceImpl = (FakeSyncServiceImpl) mSyncTestRule.getSyncService();
@@ -128,13 +131,15 @@ public class SyncErrorMessageTest {
 
         // Sign in.
         mSyncTestRule.setUpAccountAndSignInForTesting();
-        mFakeSyncServiceImpl.setAuthError(GoogleServiceAuthError.State.INVALID_GAIA_CREDENTIALS);
+        mFakeSyncServiceImpl.setAuthError(
+                new GoogleServiceAuthError(GoogleServiceAuthErrorState.INVALID_GAIA_CREDENTIALS));
         mSyncTestRule.loadUrl(UrlConstants.VERSION_URL);
         verifyHasShownMessage();
         watchIdentityErrorMessageShownHistogram.assertExpected();
 
         // Resolving the error should dismiss the current message.
-        mFakeSyncServiceImpl.setAuthError(GoogleServiceAuthError.State.NONE);
+        mFakeSyncServiceImpl.setAuthError(
+                new GoogleServiceAuthError(GoogleServiceAuthErrorState.NONE));
         verifyHasDismissedMessage();
     }
 
@@ -243,13 +248,13 @@ public class SyncErrorMessageTest {
         verify(mMessageDispatcher).enqueueWindowScopedMessage(mModelCaptor.capture(), anyBoolean());
         PropertyModel mModel = mModelCaptor.getValue();
         Assert.assertEquals(
-                mContext.getString(R.string.password_sync_trusted_vault_error_title_1),
+                mContext.getString(R.string.password_sync_trusted_vault_error_title),
                 mModel.get(MessageBannerProperties.TITLE));
         Assert.assertEquals(
-                mContext.getString(R.string.password_sync_trusted_vault_error_hint_1),
+                mContext.getString(R.string.password_sync_trusted_vault_error_hint),
                 mModel.get(MessageBannerProperties.DESCRIPTION));
         Assert.assertEquals(
-                mContext.getString(R.string.identity_error_card_button_verify),
+                mContext.getString(R.string.identity_error_message_button_verify),
                 mModel.get(MessageBannerProperties.PRIMARY_BUTTON_TEXT));
     }
 
@@ -270,13 +275,13 @@ public class SyncErrorMessageTest {
         verify(mMessageDispatcher).enqueueWindowScopedMessage(mModelCaptor.capture(), anyBoolean());
         PropertyModel mModel = mModelCaptor.getValue();
         Assert.assertEquals(
-                mContext.getString(R.string.password_sync_trusted_vault_error_title_2),
+                mContext.getString(R.string.password_sync_trusted_vault_error_title),
                 mModel.get(MessageBannerProperties.TITLE));
         Assert.assertEquals(
-                mContext.getString(R.string.password_sync_trusted_vault_error_hint_2),
+                mContext.getString(R.string.password_sync_trusted_vault_error_hint),
                 mModel.get(MessageBannerProperties.DESCRIPTION));
         Assert.assertEquals(
-                mContext.getString(R.string.identity_error_card_button_verify),
+                mContext.getString(R.string.identity_error_card_button_okay),
                 mModel.get(MessageBannerProperties.PRIMARY_BUTTON_TEXT));
     }
 
@@ -308,7 +313,8 @@ public class SyncErrorMessageTest {
         // Sign in.
         mSyncTestRule.setUpAccountAndSignInForTesting();
         mFakeSyncServiceImpl.setEngineInitialized(true);
-        mFakeSyncServiceImpl.setAuthError(GoogleServiceAuthError.State.NONE);
+        mFakeSyncServiceImpl.setAuthError(
+                new GoogleServiceAuthError(GoogleServiceAuthErrorState.NONE));
         mFakeSyncServiceImpl.setPassphraseRequiredForPreferredDataTypes(false);
         mFakeSyncServiceImpl.setRequiresClientUpgrade(false);
 
@@ -344,7 +350,8 @@ public class SyncErrorMessageTest {
         SyncErrorMessage.setMessageDispatcherForTesting(null);
         // Sign in.
         mSyncTestRule.setUpAccountAndSignInForTesting();
-        mFakeSyncServiceImpl.setAuthError(GoogleServiceAuthError.State.INVALID_GAIA_CREDENTIALS);
+        mFakeSyncServiceImpl.setAuthError(
+                new GoogleServiceAuthError(GoogleServiceAuthErrorState.INVALID_GAIA_CREDENTIALS));
         mSyncTestRule.loadUrl(UrlConstants.VERSION_URL);
         ViewGroup view = mSyncTestRule.getActivity().findViewById(R.id.message_container);
         // Wait until the message ui is shown.

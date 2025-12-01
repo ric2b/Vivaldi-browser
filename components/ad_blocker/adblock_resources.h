@@ -43,8 +43,6 @@ class Resources {
   Resources(const Resources&) = delete;
   Resources& operator=(const Resources&) = delete;
 
-  base::WeakPtr<Resources> AsWeakPtr() { return weak_factory_.GetWeakPtr(); }
-
   void AddObserver(Observer* observer);
   void RemoveObserver(Observer* observer);
 
@@ -69,7 +67,7 @@ class Resources {
 
   base::ObserverList<Observer> observers_;
 
-  base::WeakPtrFactory<Resources> weak_factory_;
+  base::WeakPtrFactory<Resources> weak_factory_{this};
 };
 
 }  // namespace adblock_filter

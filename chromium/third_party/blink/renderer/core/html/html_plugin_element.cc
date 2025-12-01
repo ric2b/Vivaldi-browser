@@ -25,10 +25,10 @@
 #include <algorithm>
 
 #include "base/feature_list.h"
+#include "services/network/public/cpp/permissions_policy/permissions_policy_declaration.h"
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/mojom/fetch/fetch_api_request.mojom-blink.h"
 #include "third_party/blink/public/mojom/loader/request_context_frame_type.mojom-blink.h"
-#include "third_party/blink/public/mojom/permissions_policy/permissions_policy.mojom-blink.h"
 #include "third_party/blink/public/mojom/permissions_policy/policy_value.mojom-blink-forward.h"
 #include "third_party/blink/public/platform/web_url_request.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_controller.h"
@@ -261,9 +261,9 @@ void HTMLPlugInElement::AttachLayoutTree(AttachContext& context) {
   dispose_view_ = false;
 }
 
-void HTMLPlugInElement::IntrinsicSizingInfoChanged() {
+void HTMLPlugInElement::NaturalSizingInfoChanged() {
   if (auto* embedded_object = GetLayoutEmbeddedObject())
-    embedded_object->IntrinsicSizeChanged();
+    embedded_object->NaturalSizeChanged();
 }
 
 void HTMLPlugInElement::UpdatePlugin() {
@@ -294,7 +294,8 @@ bool HTMLPlugInElement::ShouldAccelerate() const {
   return plugin && plugin->CcLayer();
 }
 
-ParsedPermissionsPolicy HTMLPlugInElement::ConstructContainerPolicy() const {
+network::ParsedPermissionsPolicy HTMLPlugInElement::ConstructContainerPolicy()
+    const {
   return GetLegacyFramePolicies();
 }
 

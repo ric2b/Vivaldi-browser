@@ -107,6 +107,7 @@ public class BasicSuggestionProcessor extends BaseSuggestionViewProcessor {
 
                 case OmniboxSuggestionType.SEARCH_SUGGEST_PERSONALIZED:
                 case OmniboxSuggestionType.SEARCH_HISTORY:
+                case OmniboxSuggestionType.RECENT_TYPED_HISTORY: // Vivaldi
                     icon = R.drawable.ic_history_googblue_24dp;
                     break;
 

@@ -693,7 +693,7 @@ std::wstring SanitizeShortcutProfileNameString(
 
 namespace profiles {
 
-const base::FilePath::StringPieceType kProfileIconFileName =
+const base::FilePath::StringViewType kProfileIconFileName =
 #ifdef VIVALDI_BUILD
     FILE_PATH_LITERAL("Vivaldi Profile.ico");
 #else
@@ -871,11 +871,8 @@ bool ProfileShortcutManager::IsFeatureEnabled() {
   base::FilePath user_data_dir;
   bool success = base::PathService::Get(chrome::DIR_USER_DATA, &user_data_dir);
   DCHECK(success);
-  base::FilePath default_user_data_dir;
-  success = chrome::GetDefaultUserDataDirectory(&default_user_data_dir);
-  DCHECK(success);
-  return user_data_dir == default_user_data_dir ||
-         user_data_dir == policy_user_data_dir;
+  return user_data_dir == policy_user_data_dir ||
+         chrome::IsUsingDefaultDataDirectory().value_or(false);
 }
 
 // static

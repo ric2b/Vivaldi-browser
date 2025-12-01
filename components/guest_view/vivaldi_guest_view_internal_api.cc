@@ -7,6 +7,7 @@
 #include "chrome/browser/profiles/profile.h"
 #include "components/guest_view/browser/guest_view_base.h"
 #include "components/guest_view/browser/guest_view_manager.h"
+#include "extensions/vivaldi_browser_component_wrapper.h"
 
 using guest_view::GuestViewBase;
 using guest_view::GuestViewManager;
@@ -33,7 +34,9 @@ bool GuestViewInternalCreateGuestFunction::GetExternalWebContents(
     bool include_incognito = true;
     Profile* profile = Profile::FromBrowserContext(browser_context());
     WindowController* browser;
-    extensions::ExtensionTabUtil::GetTabById(tab_id, profile, include_incognito,
+    VivaldiBrowserComponentWrapper::GetInstance()
+        ->ExtensionTabUtilGetTabById(tab_id, profile,
+                                               include_incognito,
                                              &browser, &contents,
                                              &tab_index);
   }
@@ -43,7 +46,9 @@ bool GuestViewInternalCreateGuestFunction::GetExternalWebContents(
   // is a devtools item with a webcontents. Find the guest and delete it to
   // prevent dangling guest objects.
   content::WebContents* devtools_contents =
-      DevToolsWindow::GetDevtoolsWebContentsForInspectedWebContents(contents);
+      VivaldiBrowserComponentWrapper::GetInstance()->
+          DevToolsWindowGetDevtoolsWebContentsForInspectedWebContents(
+              contents);
 
   if (devtools_contents) {
     contents = devtools_contents;

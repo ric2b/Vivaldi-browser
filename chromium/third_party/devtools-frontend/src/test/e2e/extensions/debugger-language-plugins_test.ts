@@ -11,6 +11,7 @@ import {
   $$,
   assertNotNullOrUndefined,
   click,
+  drainFrontendTaskQueue,
   getAllTextContents,
   getBrowserAndPages,
   getDevToolsFrontendHostname,
@@ -267,12 +268,9 @@ describe('The Debugger Language Plugins', () => {
         /* allowFileAccess */ true);
     await extension.evaluateHandle(() => {
       class VariableListingPlugin {
-        private modules:
-            Map<string,
-                {rawLocationRange?: Chrome.DevTools.RawLocationRange, sourceLocation?: Chrome.DevTools.SourceLocation}>;
-        constructor() {
-          this.modules = new Map();
-        }
+        private modules = new Map<
+            string,
+            {rawLocationRange?: Chrome.DevTools.RawLocationRange, sourceLocation?: Chrome.DevTools.SourceLocation}>();
 
         async addRawModule(rawModuleId: string, symbols: string, rawModule: Chrome.DevTools.RawModule) {
           const sourceFileURL = new URL('unreachable.ll', rawModule.url || symbols).href;
@@ -331,13 +329,10 @@ describe('The Debugger Language Plugins', () => {
         /* allowFileAccess */ true);
     await extension.evaluate(() => {
       class InliningPlugin {
-        private modules: Map<string, {
+        private modules = new Map<string, {
           rawLocationRange?: Chrome.DevTools.RawLocationRange,
           sourceLocations?: Chrome.DevTools.SourceLocation[],
-        }>;
-        constructor() {
-          this.modules = new Map();
-        }
+        }>();
 
         async addRawModule(rawModuleId: string, symbols: string, rawModule: Chrome.DevTools.RawModule) {
           const sourceFileURL = new URL('unreachable.ll', rawModule.url || symbols).href;
@@ -439,13 +434,10 @@ describe('The Debugger Language Plugins', () => {
         /* allowFileAccess */ true);
     await extension.evaluate(() => {
       class InliningPlugin {
-        private modules: Map<string, {
+        private modules = new Map<string, {
           rawLocationRange?: Chrome.DevTools.RawLocationRange,
           sourceLocations?: Chrome.DevTools.SourceLocation[],
-        }>;
-        constructor() {
-          this.modules = new Map();
-        }
+        }>();
 
         async addRawModule(rawModuleId: string, symbols: string, rawModule: Chrome.DevTools.RawModule) {
           const sourceFileURL = new URL('unreachable.ll', rawModule.url || symbols).href;
@@ -493,6 +485,8 @@ describe('The Debugger Language Plugins', () => {
     await goToResource('sources/wasm/unreachable.html');
     await addDummyExternalDWARFInfo('unreachable.wasm');
     await waitFor(RESUME_BUTTON);
+    // TODO: it should actually wait for rendering to finish.
+    await drainFrontendTaskQueue();
 
     // Call stack shows inline function names and source locations.
     const funcNames = await getCallFrameNames();
@@ -507,14 +501,10 @@ describe('The Debugger Language Plugins', () => {
         /* allowFileAccess */ true);
     await extension.evaluate(() => {
       class MissingInfoPlugin {
-        private modules: Map<string, {
+        private modules = new Map<string, {
           rawLocationRange?: Chrome.DevTools.RawLocationRange,
           sourceLocations?: Chrome.DevTools.SourceLocation[],
-        }>;
-        constructor() {
-          this.modules = new Map();
-        }
-
+        }>();
         async addRawModule() {
           return {missingSymbolFiles: ['test.wasm']};
         }
@@ -530,7 +520,7 @@ describe('The Debugger Language Plugins', () => {
     await waitFor(RESUME_BUTTON);
     await addDummyExternalDWARFInfo('unreachable.wasm');
 
-    const incompleteMessage = `Failed to load any debug info for ${getResourcesPath()}/sources/wasm/unreachable.wasm.`;
+    const incompleteMessage = `Failed to load any debug info for ${getResourcesPath()}/sources/wasm/unreachable.wasm`;
     const infoBar = await waitFor(`.infobar-error[aria-label="${incompleteMessage}"`);
     const details = await waitFor('.infobar-details-rows', infoBar);
     const text = await details.evaluate(e => e.textContent);
@@ -552,13 +542,10 @@ describe('The Debugger Language Plugins', () => {
         /* allowFileAccess */ true);
     await extension.evaluate(() => {
       class MissingInfoPlugin {
-        private modules: Map<string, {
+        private modules = new Map<string, {
           rawLocationRange?: Chrome.DevTools.RawLocationRange,
           sourceLocations?: Chrome.DevTools.SourceLocation[],
-        }>;
-        constructor() {
-          this.modules = new Map();
-        }
+        }>();
 
         async addRawModule(rawModuleId: string, symbols: string, rawModule: Chrome.DevTools.RawModule) {
           const sourceFileURL = new URL('unreachable.ll', rawModule.url || symbols).href;
@@ -649,12 +636,9 @@ describe('The Debugger Language Plugins', () => {
     const incompleteMessage = 'The debug information for function $Main is incomplete';
     const infoBar = await waitFor(`.infobar-error[aria-label="${incompleteMessage}"`);
 
-    assert.deepEqual(await getTextContent('devtools-button', infoBar), 'Show more');
+    await click('summary', {root: infoBar});
+    assert.deepEqual(await getTextContent('devtools-button', infoBar), 'Show request');
     await click('devtools-button', {root: infoBar});
-
-    const detailsRowMessage = await waitFor('.infobar-row-message');
-    assert.deepEqual(await getTextContent('devtools-button', detailsRowMessage), 'Show request');
-    await click('devtools-button', {root: detailsRowMessage});
 
     await checkIfTabExistsInDrawer(DEVELOPER_RESOURCES_TAB_SELECTOR);
 
@@ -669,6 +653,7 @@ describe('The Debugger Language Plugins', () => {
       dwoUrl,
       initiatorUrl,
       '',
+      '',
       '404',
       '',
     ]);
@@ -680,12 +665,9 @@ describe('The Debugger Language Plugins', () => {
         /* allowFileAccess */ true);
     await extension.evaluate(() => {
       class EvalPlugin {
-        private modules:
-            Map<string,
-                {rawLocationRange?: Chrome.DevTools.RawLocationRange, sourceLocation?: Chrome.DevTools.SourceLocation}>;
-        constructor() {
-          this.modules = new Map();
-        }
+        private modules = new Map<
+            string,
+            {rawLocationRange?: Chrome.DevTools.RawLocationRange, sourceLocation?: Chrome.DevTools.SourceLocation}>();
 
         async addRawModule(rawModuleId: string, symbols: string, rawModule: Chrome.DevTools.RawModule) {
           const sourceFileURL = new URL('unreachable.ll', rawModule.url || symbols).href;
@@ -806,12 +788,9 @@ describe('The Debugger Language Plugins', () => {
         /* allowFileAccess */ true);
     await extension.evaluate(() => {
       class VariableListingPlugin {
-        private modules:
-            Map<string,
-                {rawLocationRange?: Chrome.DevTools.RawLocationRange, sourceLocation?: Chrome.DevTools.SourceLocation}>;
-        constructor() {
-          this.modules = new Map();
-        }
+        private modules = new Map<
+            string,
+            {rawLocationRange?: Chrome.DevTools.RawLocationRange, sourceLocation?: Chrome.DevTools.SourceLocation}>();
 
         async addRawModule(rawModuleId: string, symbols: string, rawModule: Chrome.DevTools.RawModule) {
           const sourceFileURL = new URL('unreachable.ll', rawModule.url || symbols).href;
@@ -890,12 +869,9 @@ describe('The Debugger Language Plugins', () => {
         /* allowFileAccess */ true);
     await extension.evaluate(() => {
       class FormattingErrorsPlugin {
-        private modules:
-            Map<string,
-                {rawLocationRange?: Chrome.DevTools.RawLocationRange, sourceLocation?: Chrome.DevTools.SourceLocation}>;
-        constructor() {
-          this.modules = new Map();
-        }
+        private modules = new Map<
+            string,
+            {rawLocationRange?: Chrome.DevTools.RawLocationRange, sourceLocation?: Chrome.DevTools.SourceLocation}>();
 
         async addRawModule(rawModuleId: string, symbols: string, rawModule: Chrome.DevTools.RawModule) {
           const sourceFileURL = new URL('unreachable.ll', rawModule.url || symbols).href;
@@ -1130,7 +1106,7 @@ describe('The Debugger Language Plugins', () => {
     await goToWasmResource('stepping.wasm', {autoLoadModule: true});
     await openSourcesPanel();
 
-    installEventListener(frontend, DEBUGGER_PAUSED_EVENT);
+    await installEventListener(frontend, DEBUGGER_PAUSED_EVENT);
     await locationLabels.setBreakpointInWasmAndRun('FIRST_PAUSE', 'window.Module.instance.exports.Main(16)');
     await waitFor('.paused-status');
     await locationLabels.checkLocationForLabel('FIRST_PAUSE');
@@ -1226,7 +1202,7 @@ describe('The Debugger Language Plugins', () => {
 
     await waitFor('.paused-status');
     await locationLabels.checkLocationForLabel('FIRST_PAUSE');
-    installEventListener(frontend, DEBUGGER_PAUSED_EVENT);
+    await installEventListener(frontend, DEBUGGER_PAUSED_EVENT);
     await stepOver();
     await locationLabels.checkLocationForLabel('SECOND_PAUSE');
     await stepOver();

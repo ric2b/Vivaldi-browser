@@ -170,6 +170,8 @@ component("network") {
     "network_handler_callbacks.h",
     "network_ip_config.cc",
     "network_ip_config.h",
+    "network_login_screen_protocol_handler_observer.cc",
+    "network_login_screen_protocol_handler_observer.h",
     "network_metadata_observer.cc",
     "network_metadata_observer.h",
     "network_metadata_store.cc",
@@ -222,6 +224,27 @@ component("network") {
     "traffic_counters_handler.cc",
     "traffic_counters_handler.h",
   ]
+}
+
+# This is separate from :network to prevent a dependency cycle due to:
+#  //chromeos/ash/services/network_config:in_process_instance ->
+#  //chromeos/ash/components/network:network
+component("vpn_providers_observer") {
+  configs += [ ":network_config" ]
+
+  sources = [
+    "vpn_providers_observer.cc",
+    "vpn_providers_observer.h",
+  ]
+
+  public_deps = [
+    "//base",
+    "//chromeos/services/network_config/public/cpp",
+    "//chromeos/services/network_config/public/mojom",
+    "//mojo/public/cpp/bindings",
+  ]
+
+  deps = [ "//chromeos/ash/services/network_config:in_process_instance" ]
 }
 
 source_set("test_support") {

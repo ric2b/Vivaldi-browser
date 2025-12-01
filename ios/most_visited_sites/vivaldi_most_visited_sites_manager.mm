@@ -4,6 +4,9 @@
 
 #import "base/strings/sys_string_conversions.h"
 #import "components/prefs/pref_service.h"
+#import "ios/chrome/browser/content_suggestions/ui_bundled/cells/content_suggestions_tile_saver.h"
+#import "ios/chrome/browser/content_suggestions/ui_bundled/cells/most_visited_tiles_config.h"
+#import "ios/chrome/browser/content_suggestions/ui_bundled/content_suggestions_image_data_source.h"
 #import "ios/chrome/browser/favicon/model/ios_chrome_large_icon_cache_factory.h"
 #import "ios/chrome/browser/favicon/model/ios_chrome_large_icon_service_factory.h"
 #import "ios/chrome/browser/favicon/ui_bundled/favicon_attributes_provider.h"
@@ -12,9 +15,8 @@
 #import "ios/chrome/browser/shared/model/application_context/application_context.h"
 #import "ios/chrome/browser/shared/model/prefs/pref_names.h"
 #import "ios/chrome/browser/shared/model/profile/profile_ios.h"
-#import "ios/chrome/browser/ui/content_suggestions/cells/content_suggestions_tile_saver.h"
-#import "ios/chrome/browser/ui/content_suggestions/cells/most_visited_tiles_config.h"
-#import "ios/chrome/browser/ui/content_suggestions/content_suggestions_image_data_source.h"
+#import "ios/chrome/browser/signin/model/chrome_account_manager_service_factory.h"
+#import "ios/chrome/browser/signin/model/chrome_account_manager_service.h"
 #import "ios/chrome/common/app_group/app_group_constants.h"
 
 namespace {
@@ -49,6 +51,7 @@ const CGFloat kMostVisitedFaviconMinimalSize = 32;
   std::map<GURL, FaviconCompletionHandler> _mostVisitedFetchFaviconCallbacks;
   // Most visited items from the MostVisitedSites service currently displayed.
   MostVisitedTilesConfig* _mostVisitedConfig;
+  raw_ptr<ChromeAccountManagerService> _accountManagerService;
 }
 
 @synthesize consumer = _consumer;
@@ -186,7 +189,8 @@ const CGFloat kMostVisitedFaviconMinimalSize = 32;
   // This is used by the content widget.
   content_suggestions_tile_saver::SaveMostVisitedToDisk(
       mostVisited, _mostVisitedAttributesProvider,
-      app_group::ShortcutsWidgetFaviconsFolder());
+      app_group::ShortcutsWidgetFaviconsFolder(),
+      ChromeAccountManagerServiceFactory::GetForProfile(self.profile));
 
   _freshMostVisitedItems = [NSMutableArray array];
   for (const ntp_tiles::NTPTile& tile : mostVisited) {
@@ -206,7 +210,8 @@ const CGFloat kMostVisitedFaviconMinimalSize = 32;
   // This is used by the content widget.
   content_suggestions_tile_saver::UpdateSingleFavicon(
       siteURL, _mostVisitedAttributesProvider,
-      app_group::ShortcutsWidgetFaviconsFolder());
+      app_group::ShortcutsWidgetFaviconsFolder(),
+      ChromeAccountManagerServiceFactory::GetForProfile(self.profile));
   for (ContentSuggestionsMostVisitedItem* item in _mostVisitedConfig
        .mostVisitedItems) {
          if (item.URL == siteURL) {

@@ -7,7 +7,7 @@
 #import "base/apple/foundation_util.h"
 #import "base/strings/sys_string_conversions.h"
 #import "components/autofill/core/browser/data_manager/test_personal_data_manager.h"
-#import "components/autofill/core/browser/data_model/autofill_profile.h"
+#import "components/autofill/core/browser/data_model/addresses/autofill_profile.h"
 #import "components/autofill/core/browser/test_utils/autofill_test_utils.h"
 #import "components/autofill/ios/common/features.h"
 #import "components/strings/grit/components_strings.h"
@@ -60,13 +60,15 @@ class AutofillProfileEditTableViewControllerTest
         personalDataManager:personal_data_manager_.get()
             autofillProfile:profile_.get()
           isMigrationPrompt:(GetParam().prompt_mode ==
-                             AutofillSaveProfilePromptMode::kMigrateProfile)];
+                             AutofillSaveProfilePromptMode::kMigrateProfile)
+           addManualAddress:NO];
     autofill_profile_edit_table_view_controller_ =
         [[AutofillProfileEditTableViewController alloc]
             initWithDelegate:autofill_profile_edit_mediator_
                    userEmail:base::SysUTF16ToNSString(kTestSyncingEmail)
                   controller:controller()
-                settingsView:GetParam().is_settings];
+                settingsView:GetParam().is_settings
+            addManualAddress:NO];
     autofill_profile_edit_mediator_.consumer =
         autofill_profile_edit_table_view_controller_;
 
@@ -454,10 +456,12 @@ INSTANTIATE_TEST_SUITE_P(
             AutofillSaveProfilePromptMode::kMigrateProfile,
             /*account_profile=*/NO, /*is_settings=*/NO}));
 
-// Test the sections and items in the section on initialisation as well as when
-// country value is changed.
+// Tests that the sections and items are as expected on initialization, as well
+// as when the country value is changed.
+// TODO(crbug.com/402776694): Re-enable the test once the NumberOfItemsInSection
+// based on the selected country problem is fixed.
 TEST_P(AutofillProfileEditTableViewControllerTestWithDynamicFieldsEnabled,
-       SectionsAndItems) {
+       DISABLED_SectionsAndItems) {
   auto test_case = GetParam();
   if (test_case.is_settings) {
     EXPECT_EQ(NumberOfSections(), test_case.account_profile ? 4 : 3);

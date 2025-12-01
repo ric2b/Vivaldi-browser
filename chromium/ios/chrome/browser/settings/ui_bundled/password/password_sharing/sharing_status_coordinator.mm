@@ -74,7 +74,7 @@
       [[SharingStatusViewController alloc] initWithNibName:nil bundle:nil];
   self.viewController.delegate = self;
 
-  ProfileIOS* profile = self.browser->GetProfile();
+  ProfileIOS* profile = self.profile;
   self.mediator = [[SharingStatusMediator alloc]
         initWithAuthService:AuthenticationServiceFactory::GetForProfile(profile)
       accountManagerService:ChromeAccountManagerServiceFactory::GetForProfile(
@@ -90,7 +90,7 @@
   self.viewController.presentationController.delegate = self;
   self.viewController.sheetPresentationController.detents = @[
     self.viewController.preferredHeightDetent,
-    UISheetPresentationControllerDetent.largeDetent
+    [UISheetPresentationControllerDetent largeDetent]
   ];
 
   [self.baseViewController presentViewController:self.viewController

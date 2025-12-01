@@ -12,7 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// Not all functions are used from all test targets. So allow unused functions in this module.
+#![allow(unused)]
+
 use crabby_avif::*;
+use png;
+use std::fs::File;
 
 #[cfg(test)]
 pub fn get_test_file(filename: &str) -> String {
@@ -35,6 +40,17 @@ pub fn get_decoder(filename: &str) -> decoder::Decoder {
         .set_io_file(&abs_filename)
         .expect("Failed to set IO");
     decoder
+}
+
+#[cfg(test)]
+pub fn decode_png(filename: &str) -> Vec<u8> {
+    let decoder = png::Decoder::new(File::open(get_test_file(filename)).unwrap());
+    let mut reader = decoder.read_info().unwrap();
+    // Indexed colors are not supported.
+    assert_ne!(reader.output_color_type().0, png::ColorType::Indexed);
+    let mut pixels = vec![0; reader.output_buffer_size()];
+    let info = reader.next_frame(&mut pixels).unwrap();
+    pixels
 }
 
 #[cfg(test)]

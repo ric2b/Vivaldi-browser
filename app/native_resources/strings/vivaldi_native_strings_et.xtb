@@ -14,6 +14,7 @@
 <translation id="1454726940098520109">Seda kinnitust rohkem ei näidata</translation>
 <translation id="1462666970065907900">Kas oled kindel, et tahad selle akna sulgeda?</translation>
 <translation id="1480046233931937785">Tänuavaldused</translation>
+<translation id="1490502035430975848">Inspekteeri portaalidokumenti</translation>
 <translation id="1521774566618522728">Aktiivne täna</translation>
 <translation id="1526344461589023948">Allalaaditud uuenduse salvestamisel tekkis tõrge. Palun vaata, et arvutis oleks piisavalt vaba kettaruumi, ja proovi siis uuesti.</translation>
 <translation id="1635542496948266458">Vaheta profiili</translation>
@@ -34,9 +35,11 @@
 <translation id="2141974047387702305">Uuendusfailide allalaadimisel tekkis tõrge. Palun vaata, et Interneti-ühendus toimiks, ja proovi siis uuesti.</translation>
 <translation id="2226825946708954262">⚠ Jätka andmekaoga</translation>
 <translation id="2339641773402824483">Uuenduste otsimine...</translation>
+<translation id="2429571091666452569">Loendist:</translation>
 <translation id="2441056087170876076">Koll 2</translation>
 <translation id="2444387452209867610">Sisesta märge</translation>
 <translation id="2486841023299517366">Loom 4</translation>
+<translation id="2501278716633472235">Mine tagasi</translation>
 <translation id="2612127540243995147">Valmis paigaldamiseks. Vivaldi suletakse ja avakse uuesti.</translation>
 <translation id="2613387515621326337">Ava uuenduste veebisait</translation>
 <translation id="2645477450146475243">Opera töötamise ajal pole sinu seaded kahjuks kättesaadavad. Nende Vivaldisse importimiseks salvesta oma töö ja sulge kõik Opera aknad. Seejärel klõpsa „Jätka”.</translation>
@@ -61,6 +64,7 @@
 <translation id="3259769196742189631">Valideeri</translation>
 <translation id="3291915639428159043">Automaatesitus blokeeritud</translation>
 <translation id="3302905971452834934">Koll 1</translation>
+<translation id="3308738399950580893">reklaamid</translation>
 <translation id="3334610655141903168">(pealkirjata)</translation>
 <translation id="3372505110412186107">Vivaldi <ph name="VERSION" /> on praegu uusim saadaolev versioon.</translation>
 <translation id="3383198080133834965">Sul juba on Vivaldi uusim versioon.</translation>
@@ -71,9 +75,11 @@
 <translation id="3521635864657970829">Kas oled kindel, et tahad selle akna sulgeda?</translation>
 <translation id="3540597690227428180">Loom 9</translation>
 <translation id="3542768452570884558">Ava link uues aknas</translation>
+<translation id="3586931643579894722">Peida üksikasjad</translation>
 <translation id="3588820906588687999">Ava pilt uuel kaardil</translation>
 <translation id="3601066750251199488">Koll 3</translation>
 <translation id="3620979700683094848">Saidid saavad automaatselt videosisu esitada</translation>
+<translation id="3650023731264842343">Järgneva lehe laadimisel:</translation>
 <translation id="3658651522139217005">Opera GX</translation>
 <translation id="3680031241659195730">Vivaldi uus versioon on saadaval!</translation>
 <translation id="3708982624815781692">Allalaadimine katkestati.</translation>
@@ -83,6 +89,7 @@
 <translation id="3795800845758778870">Brave’i töötamise ajal pole sinu seaded kahjuks kättesaadavad. Nende Vivaldisse importimiseks salvesta oma töö ja sulge kõik Brave’i aknad. Seejärel klõpsa „Jätka”.</translation>
 <translation id="3822431842304177896">Uus eraldaja</translation>
 <translation id="3832132597516774400">Maastik 5</translation>
+<translation id="3894751534882749287">Kui soovid seda lehte siiski vaadata, võid muuta selle jälitajate blokeerimise taset sisublokeerija hüpikmenüüst või klõpsates nuppu „Luba”.</translation>
 <translation id="3914946330804881301">Operast imporditud</translation>
 <translation id="3921292902397893431">Koll 8</translation>
 <translation id="3943857333388298514">Aseta</translation>
@@ -107,6 +114,7 @@
 <translation id="4582480609585453144">Ava link taustakaardil</translation>
 <translation id="4636708767492582204">Saada meiliga</translation>
 <translation id="4677434526832593569">Loom 5</translation>
+<translation id="4736016046474602958">jälitajate blokeerija</translation>
 <translation id="474217410105706308">Vaigista kaart</translation>
 <translation id="4861715717329665002">Automaatselt salvestatud seansid</translation>
 <translation id="4881695831933465202">Ava</translation>
@@ -133,9 +141,11 @@
 <translation id="588258955323874662">Täisekraan</translation>
 <translation id="5916080360077521750">Chrome’i töötamise ajal pole sinu seaded kahjuks kättesaadavad. Nende Vivaldisse importimiseks salvesta oma töö ja sulge kõik Chrome’i aknad. Seejärel klõpsa „Jätka”.</translation>
 <translation id="6040143037577758943">Sulge</translation>
+<translation id="6140948187512243695">Näita üksikasju</translation>
 <translation id="6229528619562190452">Klõpsa siin Vivaldi uuendamiseks.</translation>
 <translation id="6234173136417926046">Kasuta pilti avalehe taustana</translation>
 <translation id="6339818817272922368">Kohalik konto</translation>
+<translation id="6376435169746695498">Vivaldi <ph name="BLOCKER_NAME" /> blokeeris selle lehe laadimise</translation>
 <translation id="6398710281890660037">Kindlusta profiil</translation>
 <translation id="6438786710866753178">Maastik 4</translation>
 <translation id="6477028720702061455">Imporditava Opera profiilikausta valimine</translation>
@@ -152,6 +162,7 @@
 <translation id="7086554968911045110">Maastik 7</translation>
 <translation id="7099506190679014195">Turvalise võtmehoidla uuendamine</translation>
 <translation id="7111492742514999492">Maastik 9</translation>
+<translation id="7113310725918019676">Luba <ph name="BLOCKED_TYPE" /> domeenist <ph name="DOMAIN" /></translation>
 <translation id="7208252576848052204">Arc’i töötamise ajal pole sinu seaded kahjuks kättesaadavad. Nende Vivaldisse importimiseks salvesta oma töö ja sulge kõik Arc’i aknad. Seejärel klõpsa „Jätka”.</translation>
 <translation id="7321500017121629018">Aktiivne eile</translation>
 <translation id="7337881442233988129">Chromium</translation>
@@ -167,12 +178,13 @@
 <translation id="8027581147000338959">Ava uues aknas</translation>
 <translation id="8044382196220116469">Saitidel ei lubata automaatselt videosisu esitada</translation>
 <translation id="8099620695029051217">Kopeeri lehe aadress</translation>
+<translation id="8119307142152921512">jälitajad ja reklaamid</translation>
 <translation id="8197810018650377191">Lisa leht järjehoidjatesse</translation>
 <translation id="8261506727792406068">Kustuta</translation>
-<translation id="8263047843452521549">Inspekteeri taustateenusetöölist</translation>
 <translation id="8331671104904436324">Ava taustakaardil</translation>
 <translation id="8373293945112511707">Maastik 1</translation>
 <translation id="8388552048012645975">Uuenduse allalaadimine...</translation>
+<translation id="8392904568172593155">Ilma parameetriteta</translation>
 <translation id="8427094907586191051">Maastik 17</translation>
 <translation id="8439034818057146672">Vivaldi uus versioon on paigaldamiseks valmis.</translation>
 <translation id="8446668873108041390">JavaScripti käitamine AppleScripti kaudu on välja lülitatud. Selle sisselülitamiseks ava Seaded &gt; Privaatsus &gt; Apple Events ja märgi ruut „Apple Eventsi JavaScripti lubamine”.</translation>
@@ -183,14 +195,15 @@
 <translation id="8651348004684669199">Lisa aktiivne kaart</translation>
 <translation id="8669345741879513971">Koll 10</translation>
 <translation id="867544375504146191">Yandex</translation>
-<translation id="8689295374912158752">Inspekteeri portaalidokumenti</translation>
 <translation id="875142999698251063">Sulge</translation>
 <translation id="8768970203213061953">Maastik 14</translation>
 <translation id="8773635261052182196">Neid märguandeid rohkem ei näidata. Kui soovid need hiljem taas sisse lülitada, saad seda teha Vivaldi seadetes.</translation>
 <translation id="8774017153185436870">Saidid võivad automaatselt videosisu esitada</translation>
 <translation id="8813277370772331957">Tuleta hiljem meelde</translation>
+<translation id="8837256239226739065">Inspekteeri taustateenusetöölist</translation>
 <translation id="8894900864683381599">Lisa link veebipaneelina</translation>
 <translation id="8912720443398351457">Kas oled kindel, et tahad Vivaldist väljuda?</translation>
+<translation id="8940028675168378100">Blokeeritud <ph name="BLOCKER_NAME" />ga</translation>
 <translation id="8947109330183116400">Järjehoidjate HTML-faili valimine</translation>
 <translation id="9017566390391482291">Imporditava Vivaldi profiilikausta valimine</translation>
 <translation id="9048058608784130603">Uuendus <ph name="VERSION" />-le ootel</translation>
@@ -201,6 +214,7 @@
 <translation id="912022491595344261">Ava pilt kasutajana <ph name="USER" /></translation>
 <translation id="9157539936604258187">Ava link</translation>
 <translation id="9169060351863393881">Opera 12.x</translation>
+<translation id="9180553614777056266">reklaamiblokeerija</translation>
 <translation id="939305735877869636">Brave</translation>
 <translation id="970294721402795299">Maastik 16</translation>
 </translationbundle>

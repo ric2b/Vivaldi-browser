@@ -16,19 +16,12 @@ Examples:
     - can be passed to requestAdapter as requiredFeatures
 `;
 
-import { TestCaseRecorder, TestParams } from '../../common/framework/fixture.js';
 import { makeTestGroup } from '../../common/framework/test_group.js';
 import { keysOf } from '../../common/util/data_tables.js';
 import { getGPU } from '../../common/util/navigator_gpu.js';
 import { assert, objectEquals, unreachable } from '../../common/util/util.js';
-import { getDefaultLimitsForAdapter, kLimits } from '../capability_info.js';
-import {
-  DeviceSelectionDescriptor,
-  GPUTest,
-  GPUTestSubcaseBatchState,
-  initUncanonicalizedDeviceDescriptor,
-} from '../gpu_test.js';
-import { CanonicalDeviceDescriptor, DescriptorModifier } from '../util/device_pool.js';
+import { getDefaultLimitsForDevice, kLimits } from '../capability_info.js';
+import { AllFeaturesMaxLimitsGPUTest, GPUTest } from '../gpu_test.js';
 
 // MAINTENANCE_TODO: Remove this filter when these limits are added to the spec.
 const isUnspecifiedLimit = (limit: string) =>
@@ -36,61 +29,28 @@ const isUnspecifiedLimit = (limit: string) =>
 
 const kSpecifiedLimits = kLimits.filter(s => !isUnspecifiedLimit(s));
 
-function addAllFeatures(adapter: GPUAdapter, desc: CanonicalDeviceDescriptor | undefined) {
-  const descWithMaxLimits: CanonicalDeviceDescriptor = {
-    defaultQueue: {},
-    ...desc,
-    requiredFeatures: [...adapter.features] as GPUFeatureName[],
-    requiredLimits: { ...(desc?.requiredLimits ?? {}) },
-  };
-  return descWithMaxLimits;
-}
-
-/**
- * Used to request a device with all the max limits of the adapter.
- */
-class AllFeaturesGPUTestSubcaseBatchState extends GPUTestSubcaseBatchState {
-  override requestDeviceWithRequiredParametersOrSkip(
-    descriptor: DeviceSelectionDescriptor,
-    descriptorModifier?: DescriptorModifier
-  ): void {
-    const mod: DescriptorModifier = {
-      descriptorModifier(adapter: GPUAdapter, desc: CanonicalDeviceDescriptor | undefined) {
-        desc = descriptorModifier?.descriptorModifier
-          ? descriptorModifier.descriptorModifier(adapter, desc)
-          : desc;
-        return addAllFeatures(adapter, desc);
-      },
-      keyModifier(baseKey: string) {
-        return `${baseKey}:AllFeaturesTest`;
-      },
-    };
-    super.requestDeviceWithRequiredParametersOrSkip(
-      initUncanonicalizedDeviceDescriptor(descriptor),
-      mod
-    );
-  }
-}
-
-/**
- * A Test that requests all the max limits from the adapter on the device.
- */
-class AllFeaturesTest extends GPUTest {
-  public static override MakeSharedState(
-    recorder: TestCaseRecorder,
-    params: TestParams
-  ): GPUTestSubcaseBatchState {
-    return new AllFeaturesGPUTestSubcaseBatchState(recorder, params);
-  }
-}
-
 type ResourceInfo = {
   create: (t: GPUTest) => Object;
   requiredKeys: readonly string[];
   getters: readonly string[];
   settable: readonly string[];
+  sameObject: readonly string[];
+  // Note: some of the tests need to be skipped in compatibility mode related to 'gpu'.
+  // This is because getGPU() doesn't return the actual `navigator.gpu` in compatibility mode.
+  // Instead it returns something that's wrapped to request compatibility mode.
+  skipInCompatibility?: boolean;
 };
 const kResourceInfo: { [key: string]: ResourceInfo } = {
+  gpu: {
+    create(t: GPUTest) {
+      return getGPU(null);
+    },
+    requiredKeys: ['wgslLanguageFeatures', 'requestAdapter'],
+    getters: ['wgslLanguageFeatures'],
+    settable: [],
+    sameObject: ['wgslLanguageFeatures'],
+    skipInCompatibility: true,
+  },
   buffer: {
     create(t: GPUTest) {
       return t.createBufferTracked({ size: 16, usage: GPUBufferUsage.UNIFORM });
@@ -107,6 +67,7 @@ const kResourceInfo: { [key: string]: ResourceInfo } = {
     ],
     getters: ['label', 'mapState', 'size', 'usage'],
     settable: ['label'],
+    sameObject: [],
   },
   texture: {
     create(t: GPUTest) {
@@ -141,6 +102,7 @@ const kResourceInfo: { [key: string]: ResourceInfo } = {
       'width',
     ],
     settable: ['label'],
+    sameObject: [],
   },
   querySet: {
     create(t: GPUTest) {
@@ -152,6 +114,7 @@ const kResourceInfo: { [key: string]: ResourceInfo } = {
     requiredKeys: ['count', 'destroy', 'label', 'type'],
     getters: ['count', 'label', 'type'],
     settable: ['label'],
+    sameObject: [],
   },
   adapter: {
     create(t: GPUTest) {
@@ -160,6 +123,7 @@ const kResourceInfo: { [key: string]: ResourceInfo } = {
     requiredKeys: ['features', 'info', 'limits', 'requestDevice'],
     getters: ['features', 'info', 'limits'],
     settable: [],
+    sameObject: ['features', 'info', 'limits'],
   },
   device: {
     create(t: GPUTest) {
@@ -197,6 +161,7 @@ const kResourceInfo: { [key: string]: ResourceInfo } = {
     ],
     getters: ['adapterInfo', 'features', 'label', 'limits', 'lost', 'onuncapturederror', 'queue'],
     settable: ['label', 'onuncapturederror'],
+    sameObject: ['adapterInfo', 'features', 'limits', 'queue'],
   },
   'adapter.limits': {
     create(t: GPUTest) {
@@ -205,6 +170,7 @@ const kResourceInfo: { [key: string]: ResourceInfo } = {
     requiredKeys: kSpecifiedLimits,
     getters: kSpecifiedLimits,
     settable: [],
+    sameObject: [],
   },
   'device.limits': {
     create(t: GPUTest) {
@@ -213,6 +179,7 @@ const kResourceInfo: { [key: string]: ResourceInfo } = {
     requiredKeys: kSpecifiedLimits,
     getters: kSpecifiedLimits,
     settable: [],
+    sameObject: [],
   },
 } as const;
 const kResources = keysOf(kResourceInfo);
@@ -254,12 +221,15 @@ function aHasBElements(
   }
 }
 
-export const g = makeTestGroup(AllFeaturesTest);
+export const g = makeTestGroup(AllFeaturesMaxLimitsGPUTest);
 g.test('obj,Object_keys')
   .desc('tests returns nothing for Object.keys()')
   .params(u => u.combine('type', kResources))
   .fn(t => {
     const { type } = t.params;
+    const { skipInCompatibility } = kResourceInfo[type];
+    t.skipIf(t.isCompatibility && !!skipInCompatibility, 'skipped in compatibility mode');
+
     const obj = createResource(t, type);
     t.expect(objectEquals([...Object.keys(obj)], []), `[...Object.keys(${type})] === []`);
   });
@@ -269,6 +239,9 @@ g.test('obj,spread')
   .params(u => u.combine('type', kResources))
   .fn(t => {
     const { type } = t.params;
+    const { skipInCompatibility } = kResourceInfo[type];
+    t.skipIf(t.isCompatibility && !!skipInCompatibility, 'skipped in compatibility mode');
+
     const obj = createResource(t, type);
     t.expect(objectEquals({ ...obj }, {}), `{ ...${type} ] === {}`);
   });
@@ -298,6 +271,9 @@ g.test('obj,getOwnPropertyDescriptors')
   .params(u => u.combine('type', kResources))
   .fn(t => {
     const { type } = t.params;
+    const { skipInCompatibility } = kResourceInfo[type];
+    t.skipIf(t.isCompatibility && !!skipInCompatibility, 'skipped in compatibility mode');
+
     const obj = createResource(t, type);
     t.expect(
       objectEquals(Object.getOwnPropertyDescriptors(obj), {}),
@@ -305,42 +281,60 @@ g.test('obj,getOwnPropertyDescriptors')
     );
   });
 
+const kSetLikeFeaturesInfo: { [key: string]: (t: GPUTest) => GPUSupportedFeatures } = {
+  adapterFeatures(t: GPUTest) {
+    return t.adapter.features;
+  },
+  deviceFeatures(t: GPUTest) {
+    return t.device.features;
+  },
+};
+const kSetLikeFeatures = keysOf(kSetLikeFeaturesInfo);
+
+const kSetLikeInfo: { [key: string]: (t: GPUTest) => ReadonlySet<string> } = {
+  ...kSetLikeFeaturesInfo,
+  wgslLanguageFeatures() {
+    return getGPU(null).wgslLanguageFeatures;
+  },
+};
+const kSetLikes = keysOf(kSetLikeInfo);
+
 g.test('setlike,spread')
   .desc('obj spreads')
-  .params(u => u.combine('type', ['adapter', 'device'] as const))
+  .params(u => u.combine('type', kSetLikes))
   .fn(t => {
     const { type } = t.params;
-    const obj = type === 'adapter' ? t.adapter : t.device;
-    const copy = [...obj.features];
-    aHasBElements(t, copy, obj.features);
-    aHasBElements(t, obj.features, copy);
+    const setLike = kSetLikeInfo[type](t);
+    const copy = [...setLike];
+    aHasBElements(t, copy, setLike);
+    aHasBElements(t, setLike, copy);
   });
 
 g.test('setlike,set')
   .desc('obj copies to set')
-  .params(u => u.combine('type', ['adapter', 'device'] as const))
+  .params(u => u.combine('type', kSetLikes))
   .fn(t => {
     const { type } = t.params;
-    const obj = type === 'adapter' ? t.adapter : t.device;
-    const copy = new Set(obj.features);
-    aHasBElements(t, copy, obj.features);
-    aHasBElements(t, obj.features, copy);
+    const setLike = kSetLikeInfo[type](t);
+    const copy = new Set(setLike);
+    aHasBElements(t, copy, setLike);
+    aHasBElements(t, setLike, copy);
   });
 
 g.test('setlike,requiredFeatures')
   .desc('can be passed as required features')
-  .params(u => u.combine('type', ['adapter', 'device'] as const))
+  .params(u => u.combine('type', kSetLikeFeatures))
   .fn(async t => {
     const { type } = t.params;
-    const obj = type === 'adapter' ? t.adapter : t.device;
+    const features = kSetLikeFeaturesInfo[type](t);
 
     const gpu = getGPU(null);
     const adapter = await gpu.requestAdapter();
     const device = await t.requestDeviceTracked(adapter!, {
-      requiredFeatures: obj.features as Iterable<GPUFeatureName>,
+      requiredFeatures: features as Iterable<GPUFeatureName>,
     });
-    aHasBElements(t, device.features, obj.features);
-    aHasBElements(t, obj.features, device.features);
+    aHasBElements(t, device.features, features);
+    aHasBElements(t, features, device.features);
   });
 
 g.test('limits')
@@ -356,7 +350,7 @@ g.test('limits')
     const device = await t.requestDeviceTracked(adapter, {
       requiredLimits: obj.limits as unknown as Record<string, number>,
     });
-    const defaultLimits = getDefaultLimitsForAdapter(adapter);
+    const defaultLimits = getDefaultLimitsForDevice(device);
     for (const [key, { default: defaultLimit }] of Object.entries(defaultLimits)) {
       if (isUnspecifiedLimit(key)) {
         continue;
@@ -473,7 +467,9 @@ g.test('method_replacement')
   .params(u => u.combine('type', kResources))
   .fn(t => {
     const { type } = t.params;
-    const { requiredKeys, getters } = kResourceInfo[type];
+    const { requiredKeys, getters, skipInCompatibility } = kResourceInfo[type];
+    t.skipIf(t.isCompatibility && !!skipInCompatibility, 'skipped in compatibility mode');
+
     const gettersSet = new Set<string>(getters);
     const methods = requiredKeys.filter(k => !gettersSet.has(k));
 
@@ -509,5 +505,36 @@ g.test('method_replacement')
         (obj as unknown as Record<string, unknown>)[method] === origFunc,
         `instance of ${type}.${method} === ${type}.prototype.${method}`
       );
+    }
+  });
+
+g.test('sameObject')
+  .desc(
+    `
+    Test that property that are supposed to return the sameObject do.
+    `
+  )
+  .params(u => u.combine('type', kResources))
+  .fn(t => {
+    const { type } = t.params;
+    const { sameObject } = kResourceInfo[type];
+    const obj = createResource(t, type);
+    for (const property of sameObject) {
+      const origValue1 = (obj as unknown as Record<string, Record<string, string>>)[property];
+      const origValue2 = (obj as unknown as Record<string, Record<string, string>>)[property];
+      t.expect(typeof origValue1 === 'object');
+      t.expect(typeof origValue2 === 'object');
+      // Seems like this should be enough if they are objects.
+      t.expect(origValue1 === origValue2);
+      // add a property
+      origValue1['foo'] = 'test';
+      // see that it appears on the object.
+      t.expect(origValue1.foo === 'test');
+      t.expect(origValue2.foo === 'test');
+      // Delete the property.
+      delete origValue2.foo;
+      // See it was removed.
+      assert(origValue1.foo === undefined);
+      assert(origValue2.foo === undefined);
     }
   });

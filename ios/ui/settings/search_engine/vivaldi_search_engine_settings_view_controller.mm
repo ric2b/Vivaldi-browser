@@ -14,15 +14,12 @@
 namespace {
 typedef NS_ENUM(NSInteger, SectionIdentifier) {
   SectionIdentifierSearchEngineList = kSectionIdentifierEnumZero,
-  SectionIdentifierSearchSuggestions,
 };
 
 typedef NS_ENUM(NSInteger, ItemType) {
   SettingsItemTypeRegularSearchEngine = kItemTypeEnumZero,
   SettingsItemTypePrivateSearchEngine,
   SettingsItemTypeSearchEngineNickname,
-  SettingsItemTypeSearchSuggestions,
-  SettingsItemTypeSearchSuggestionsFooter,
 };
 
 NSString* const kRegularTabsSearchEngineCellId =
@@ -37,13 +34,11 @@ NSString* const kPrivateTabsSearchEngineCellId =
 
   TableViewDetailIconItem* _regularSearchEngineItem;
   TableViewDetailIconItem* _privateSearchEngineItem;
-  TableViewSwitchItem* _enableSearchSuggestionsToggleItem;
   TableViewSwitchItem* _enableNicknameToggleItem;
 
   NSString* _regularTabsSearchEngine;
   NSString* _privateTabsSearchEngine;
   BOOL _nicknameEnabled;
-  BOOL _searchSuggestionsEnabled;
 
   // Whether Settings have been dismissed.
   BOOL _settingsAreDismissed;
@@ -83,7 +78,6 @@ NSString* const kPrivateTabsSearchEngineCellId =
 
   TableViewModel* model = self.tableViewModel;
   [model addSectionWithIdentifier:SectionIdentifierSearchEngineList];
-  [model addSectionWithIdentifier:SectionIdentifierSearchSuggestions];
 
   [model addItem:[self regularSearchEngineDetailItem]
       toSectionWithIdentifier:SectionIdentifierSearchEngineList];
@@ -91,18 +85,6 @@ NSString* const kPrivateTabsSearchEngineCellId =
       toSectionWithIdentifier:SectionIdentifierSearchEngineList];
   [model addItem:[self searchEngineNicknameToggleItem]
       toSectionWithIdentifier:SectionIdentifierSearchEngineList];
-
-  [model addItem:[self searchSuggestionsToggleItem]
-      toSectionWithIdentifier:SectionIdentifierSearchSuggestions];
-  TableViewLinkHeaderFooterItem* footer =
-      [[TableViewLinkHeaderFooterItem alloc]
-          initWithType:SettingsItemTypeSearchSuggestionsFooter];
-  footer.forceIndents = YES;
-  footer.text =
-      l10n_util::GetNSString(
-          IDS_VIVALDI_SEARCH_ENGINE_ENABLE_SEARCH_SUGGESTION_DESCRIPTION);
-  [model setFooter:footer
-      forSectionWithIdentifier:SectionIdentifierSearchSuggestions];
 }
 
 
@@ -141,15 +123,6 @@ NSString* const kPrivateTabsSearchEngineCellId =
   NSInteger itemType = [self.tableViewModel itemTypeForIndexPath:indexPath];
 
   switch (itemType) {
-    case SettingsItemTypeSearchSuggestions: {
-      TableViewSwitchCell* switchCell =
-          base::apple::ObjCCastStrict<TableViewSwitchCell>(cell);
-      [switchCell.switchView
-          addTarget:self
-              action:@selector(searchSuggestionToggleChanged:)
-                  forControlEvents:UIControlEventValueChanged];
-      break;
-    }
     case SettingsItemTypeSearchEngineNickname: {
       TableViewSwitchCell* switchCell =
           base::apple::ObjCCastStrict<TableViewSwitchCell>(cell);
@@ -180,7 +153,6 @@ NSString* const kPrivateTabsSearchEngineCellId =
 
   _profile = nullptr;
 
-  _searchSuggestionsEnabled = NO;
   _nicknameEnabled = YES;
   _settingsAreDismissed = YES;
 }
@@ -201,14 +173,6 @@ NSString* const kPrivateTabsSearchEngineCellId =
     return;
   _privateSearchEngineItem.detailText = searchEngine;
   [self reconfigureCellsForItems:@[ _privateSearchEngineItem ]];
-}
-
-- (void)setPreferenceForEnableSearchSuggestions:(BOOL)enable {
-  _searchSuggestionsEnabled = enable;
-  if (!_enableSearchSuggestionsToggleItem) {
-    return;
-  }
-  _enableSearchSuggestionsToggleItem.on = _searchSuggestionsEnabled;
 }
 
 - (void)setPreferenceForEnableSearchEngineNickname:(BOOL)enable {
@@ -247,21 +211,6 @@ NSString* const kPrivateTabsSearchEngineCellId =
   return _privateSearchEngineItem;
 }
 
-- (TableViewSwitchItem*)searchSuggestionsToggleItem {
-  if (!_enableSearchSuggestionsToggleItem) {
-    _enableSearchSuggestionsToggleItem =
-        [[TableViewSwitchItem alloc]
-            initWithType:SettingsItemTypeSearchSuggestions];
-    NSString* title =
-        l10n_util::GetNSString(
-            IDS_VIVALDI_SEARCH_ENGINE_ENABLE_SEARCH_SUGGESTION_TITLE);
-    _enableSearchSuggestionsToggleItem.text = title;
-    _enableSearchSuggestionsToggleItem.on = _searchSuggestionsEnabled;
-    _enableSearchSuggestionsToggleItem.accessibilityIdentifier = title;
-  }
-  return _enableSearchSuggestionsToggleItem;
-}
-
 - (TableViewSwitchItem*)searchEngineNicknameToggleItem {
   if (!_enableNicknameToggleItem) {
     _enableNicknameToggleItem =
@@ -275,10 +224,6 @@ NSString* const kPrivateTabsSearchEngineCellId =
     _enableNicknameToggleItem.accessibilityIdentifier = title;
   }
   return _enableNicknameToggleItem;
-}
-
-- (void)searchSuggestionToggleChanged:(UISwitch*)switchView {
-  [self.delegate searchSuggestionsEnabled:switchView.isOn];
 }
 
 - (void)searchEngineNicknameToggleChanged:(UISwitch*)switchView {

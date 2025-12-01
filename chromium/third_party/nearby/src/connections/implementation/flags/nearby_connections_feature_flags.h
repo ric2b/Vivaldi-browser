@@ -40,6 +40,9 @@ constexpr auto kEnableAutoReconnect =
 // Disable/Enable BLE v2 in Nearby Connections SDK.
 constexpr auto kEnableBleV2 =
     flags::Flag<bool>(kConfigPackage, "45401515", false);
+// Disable/Enable BLE L2CAP in Nearby Connections SDK.
+constexpr auto kEnableBleL2cap =
+    flags::Flag<bool>(kConfigPackage, "45685706", false);
 // Disable/Enable GATT query in thread in BLE V2.
 // Manual edit: setting this to false for ChromeOS rollout as well.
 constexpr auto kEnableGattQueryInThread =
@@ -83,6 +86,9 @@ constexpr auto kSafeToDisconnectVersion =
 // When true, use stable endpoint ID.
 constexpr auto kUseStableEndpointId =
     flags::Flag<bool>(kConfigPackage, "45639298", false);
+// When true, disable instant on lost on BLE without extended feature.
+constexpr auto kDisableInstantOnLostOnBleWithoutExtended =
+    flags::Flag<bool>(kConfigPackage, "45687098", true);
 
 }  // namespace nearby_connections_feature
 }  // namespace config_package_nearby

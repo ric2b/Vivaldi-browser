@@ -649,7 +649,7 @@ V8_NOINLINE DirectHandle<JSFunction> CreateSharedObjectConstructor(
 
 V8_NOINLINE void SimpleInstallGetterSetter(Isolate* isolate,
                                            DirectHandle<JSObject> base,
-                                           Handle<Name> name,
+                                           DirectHandle<Name> name,
                                            Builtin call_getter,
                                            Builtin call_setter) {
   DirectHandle<String> getter_name =
@@ -678,7 +678,7 @@ void SimpleInstallGetterSetter(Isolate* isolate, DirectHandle<JSObject> base,
 }
 
 V8_NOINLINE Handle<JSFunction> SimpleInstallGetter(
-    Isolate* isolate, DirectHandle<JSObject> base, Handle<Name> name,
+    Isolate* isolate, DirectHandle<JSObject> base, DirectHandle<Name> name,
     DirectHandle<Name> property_name, Builtin call, AdaptArguments adapt) {
   DirectHandle<String> getter_name =
       Name::ToFunctionName(isolate, name, isolate->factory()->get_string())
@@ -697,7 +697,7 @@ V8_NOINLINE Handle<JSFunction> SimpleInstallGetter(
 
 V8_NOINLINE Handle<JSFunction> SimpleInstallGetter(Isolate* isolate,
                                                    DirectHandle<JSObject> base,
-                                                   Handle<Name> name,
+                                                   DirectHandle<Name> name,
                                                    Builtin call,
                                                    AdaptArguments adapt) {
   return SimpleInstallGetter(isolate, base, name, name, call, adapt);
@@ -845,7 +845,7 @@ DirectHandle<JSFunction> Genesis::GetThrowTypeErrorIntrinsic() {
       .Assert();
 
   // length needs to be non configurable.
-  Handle<Object> value(Smi::FromInt(function->length()), isolate());
+  DirectHandle<Object> value(Smi::FromInt(function->length()), isolate());
   JSObject::SetOwnPropertyIgnoreAttributes(
       function, factory()->length_string(), value,
       static_cast<PropertyAttributes>(DONT_ENUM | DONT_DELETE | READ_ONLY))
@@ -4654,15 +4654,30 @@ void Genesis::InitializeGlobal(DirectHandle<JSGlobalObject> global_object,
         isolate_, prototype, "delete", Builtin::kSetPrototypeDelete, 1, kAdapt);
     native_context()->set_set_delete(*set_delete);
 
+    SimpleInstallFunction(isolate_, prototype, "difference",
+                          Builtin::kSetPrototypeDifference, 1, kAdapt);
     SimpleInstallFunction(isolate_, prototype, "clear",
                           Builtin::kSetPrototypeClear, 0, kAdapt);
     SimpleInstallFunction(isolate_, prototype, "entries",
                           Builtin::kSetPrototypeEntries, 0, kAdapt);
     SimpleInstallFunction(isolate_, prototype, "forEach",
                           Builtin::kSetPrototypeForEach, 1, kDontAdapt);
+    SimpleInstallFunction(isolate_, prototype, "intersection",
+                          Builtin::kSetPrototypeIntersection, 1, kAdapt);
+    SimpleInstallFunction(isolate_, prototype, "isSubsetOf",
+                          Builtin::kSetPrototypeIsSubsetOf, 1, kAdapt);
+    SimpleInstallFunction(isolate_, prototype, "isSupersetOf",
+                          Builtin::kSetPrototypeIsSupersetOf, 1, kAdapt);
+    SimpleInstallFunction(isolate_, prototype, "isDisjointFrom",
+                          Builtin::kSetPrototypeIsDisjointFrom, 1, kAdapt);
     SimpleInstallGetter(isolate_, prototype,
                         factory->InternalizeUtf8String("size"),
                         Builtin::kSetPrototypeGetSize, kAdapt);
+    SimpleInstallFunction(isolate_, prototype, "symmetricDifference",
+                          Builtin::kSetPrototypeSymmetricDifference, 1, kAdapt);
+    SimpleInstallFunction(isolate_, prototype, "union",
+                          Builtin::kSetPrototypeUnion, 1, kAdapt);
+
     DirectHandle<JSFunction> values = SimpleInstallFunction(
         isolate_, prototype, "values", Builtin::kSetPrototypeValues, 0, kAdapt);
     JSObject::AddProperty(isolate_, prototype, factory->keys_string(), values,
@@ -4701,6 +4716,104 @@ void Genesis::InitializeGlobal(DirectHandle<JSGlobalObject> global_object,
                                 attribs, Representation::Tagged());
       map->AppendDescriptor(isolate(), &d);
     }
+  }
+
+  {  // -- I t e r a t o r and helpers
+    DirectHandle<JSObject> iterator_prototype(
+        native_context()->initial_iterator_prototype(), isolate());
+    DirectHandle<JSFunction> iterator_function = InstallFunction(
+        isolate(), global, "Iterator", JS_OBJECT_TYPE, JSObject::kHeaderSize, 0,
+        iterator_prototype, Builtin::kIteratorConstructor, 0, kAdapt);
+
+    SimpleInstallFunction(isolate(), iterator_function, "from",
+                          Builtin::kIteratorFrom, 1, kAdapt);
+    InstallWithIntrinsicDefaultProto(isolate(), iterator_function,
+                                     Context::ITERATOR_FUNCTION_INDEX);
+
+    // --- %WrapForValidIteratorPrototype%
+    DirectHandle<JSObject> wrap_for_valid_iterator_prototype =
+        factory->NewJSObject(isolate()->object_function(),
+                             AllocationType::kOld);
+    JSObject::ForceSetPrototype(isolate(), wrap_for_valid_iterator_prototype,
+                                iterator_prototype);
+    JSObject::AddProperty(isolate(), iterator_prototype,
+                          factory->constructor_string(), iterator_function,
+                          DONT_ENUM);
+    SimpleInstallFunction(isolate(), wrap_for_valid_iterator_prototype, "next",
+                          Builtin::kWrapForValidIteratorPrototypeNext, 0,
+                          kAdapt);
+    SimpleInstallFunction(
+        isolate(), wrap_for_valid_iterator_prototype, "return",
+        Builtin::kWrapForValidIteratorPrototypeReturn, 0, kAdapt);
+    DirectHandle<Map> valid_iterator_wrapper_map =
+        factory->NewContextfulMapForCurrentContext(
+            JS_VALID_ITERATOR_WRAPPER_TYPE, JSValidIteratorWrapper::kHeaderSize,
+            TERMINAL_FAST_ELEMENTS_KIND, 0);
+    Map::SetPrototype(isolate(), valid_iterator_wrapper_map,
+                      wrap_for_valid_iterator_prototype);
+    valid_iterator_wrapper_map->SetConstructor(*iterator_function);
+    native_context()->set_valid_iterator_wrapper_map(
+        *valid_iterator_wrapper_map);
+
+    // --- %IteratorHelperPrototype%
+    DirectHandle<JSObject> iterator_helper_prototype = factory->NewJSObject(
+        isolate()->object_function(), AllocationType::kOld);
+    JSObject::ForceSetPrototype(isolate(), iterator_helper_prototype,
+                                iterator_prototype);
+    InstallToStringTag(isolate(), iterator_helper_prototype, "Iterator Helper");
+    SimpleInstallFunction(isolate(), iterator_helper_prototype, "next",
+                          Builtin::kIteratorHelperPrototypeNext, 0, kAdapt);
+    SimpleInstallFunction(isolate(), iterator_helper_prototype, "return",
+                          Builtin::kIteratorHelperPrototypeReturn, 0, kAdapt);
+    SimpleInstallFunction(isolate(), iterator_prototype, "reduce",
+                          Builtin::kIteratorPrototypeReduce, 1, kDontAdapt);
+    SimpleInstallFunction(isolate(), iterator_prototype, "toArray",
+                          Builtin::kIteratorPrototypeToArray, 0, kAdapt);
+    SimpleInstallFunction(isolate(), iterator_prototype, "forEach",
+                          Builtin::kIteratorPrototypeForEach, 1, kAdapt);
+    SimpleInstallFunction(isolate(), iterator_prototype, "some",
+                          Builtin::kIteratorPrototypeSome, 1, kAdapt);
+    SimpleInstallFunction(isolate(), iterator_prototype, "every",
+                          Builtin::kIteratorPrototypeEvery, 1, kAdapt);
+    SimpleInstallFunction(isolate(), iterator_prototype, "find",
+                          Builtin::kIteratorPrototypeFind, 1, kAdapt);
+    SimpleInstallGetterSetter(isolate(), iterator_prototype,
+                              factory->to_string_tag_symbol(),
+                              Builtin::kIteratorPrototypeGetToStringTag,
+                              Builtin::kIteratorPrototypeSetToStringTag);
+
+    SimpleInstallGetterSetter(isolate(), iterator_prototype,
+                              factory->constructor_string(),
+                              Builtin::kIteratorPrototypeGetConstructor,
+                              Builtin::kIteratorPrototypeSetConstructor);
+
+    // --- Helper maps
+#define INSTALL_ITERATOR_HELPER(lowercase_name, Capitalized_name,              \
+                                ALL_CAPS_NAME, argc)                           \
+  {                                                                            \
+    DirectHandle<Map> map = factory->NewContextfulMapForCurrentContext(        \
+        JS_ITERATOR_##ALL_CAPS_NAME##_HELPER_TYPE,                             \
+        JSIterator##Capitalized_name##Helper::kHeaderSize,                     \
+        TERMINAL_FAST_ELEMENTS_KIND, 0);                                       \
+    Map::SetPrototype(isolate(), map, iterator_helper_prototype);              \
+    map->SetConstructor(*iterator_function);                                   \
+    native_context()->set_iterator_##lowercase_name##_helper_map(*map);        \
+    SimpleInstallFunction(isolate(), iterator_prototype, #lowercase_name,      \
+                          Builtin::kIteratorPrototype##Capitalized_name, argc, \
+                          kAdapt);                                             \
+  }
+
+#define ITERATOR_HELPERS(V)    \
+  V(map, Map, MAP, 1)          \
+  V(filter, Filter, FILTER, 1) \
+  V(take, Take, TAKE, 1)       \
+  V(drop, Drop, DROP, 1)       \
+  V(flatMap, FlatMap, FLAT_MAP, 1)
+
+    ITERATOR_HELPERS(INSTALL_ITERATOR_HELPER)
+
+#undef INSTALL_ITERATOR_HELPER
+#undef ITERATOR_HELPERS
   }
 
   {  // -- I t e r a t o r R e s u l t
@@ -5518,110 +5631,6 @@ EMPTY_INITIALIZE_GLOBAL_FOR_FEATURE(harmony_remove_intl_locale_info_getters)
 
 #undef EMPTY_INITIALIZE_GLOBAL_FOR_FEATURE
 
-void Genesis::InitializeGlobal_harmony_iterator_helpers() {
-  if (!v8_flags.harmony_iterator_helpers) return;
-
-  // --- Iterator
-  DirectHandle<JSGlobalObject> global(native_context()->global_object(),
-                                      isolate());
-  DirectHandle<JSObject> iterator_prototype(
-      native_context()->initial_iterator_prototype(), isolate());
-  DirectHandle<JSFunction> iterator_function = InstallFunction(
-      isolate(), global, "Iterator", JS_OBJECT_TYPE, JSObject::kHeaderSize, 0,
-      iterator_prototype, Builtin::kIteratorConstructor, 0, kAdapt);
-  SimpleInstallFunction(isolate(), iterator_function, "from",
-                        Builtin::kIteratorFrom, 1, kAdapt);
-  InstallWithIntrinsicDefaultProto(isolate(), iterator_function,
-                                   Context::ITERATOR_FUNCTION_INDEX);
-
-  // --- %WrapForValidIteratorPrototype%
-  DirectHandle<JSObject> wrap_for_valid_iterator_prototype =
-      factory()->NewJSObject(isolate()->object_function(),
-                             AllocationType::kOld);
-  JSObject::ForceSetPrototype(isolate(), wrap_for_valid_iterator_prototype,
-                              iterator_prototype);
-  JSObject::AddProperty(isolate(), iterator_prototype,
-                        factory()->constructor_string(), iterator_function,
-                        DONT_ENUM);
-  SimpleInstallFunction(isolate(), wrap_for_valid_iterator_prototype, "next",
-                        Builtin::kWrapForValidIteratorPrototypeNext, 0, kAdapt);
-  SimpleInstallFunction(isolate(), wrap_for_valid_iterator_prototype, "return",
-                        Builtin::kWrapForValidIteratorPrototypeReturn, 0,
-                        kAdapt);
-  DirectHandle<Map> valid_iterator_wrapper_map =
-      factory()->NewContextfulMapForCurrentContext(
-          JS_VALID_ITERATOR_WRAPPER_TYPE, JSValidIteratorWrapper::kHeaderSize,
-          TERMINAL_FAST_ELEMENTS_KIND, 0);
-  Map::SetPrototype(isolate(), valid_iterator_wrapper_map,
-                    wrap_for_valid_iterator_prototype);
-  valid_iterator_wrapper_map->SetConstructor(*iterator_function);
-  native_context()->set_valid_iterator_wrapper_map(*valid_iterator_wrapper_map);
-  LOG(isolate(), MapDetails(*valid_iterator_wrapper_map));
-
-  // --- %IteratorHelperPrototype%
-  DirectHandle<JSObject> iterator_helper_prototype = factory()->NewJSObject(
-      isolate()->object_function(), AllocationType::kOld);
-  JSObject::ForceSetPrototype(isolate(), iterator_helper_prototype,
-                              iterator_prototype);
-  InstallToStringTag(isolate(), iterator_helper_prototype, "Iterator Helper");
-  SimpleInstallFunction(isolate(), iterator_helper_prototype, "next",
-                        Builtin::kIteratorHelperPrototypeNext, 0, kAdapt);
-  SimpleInstallFunction(isolate(), iterator_helper_prototype, "return",
-                        Builtin::kIteratorHelperPrototypeReturn, 0, kAdapt);
-  SimpleInstallFunction(isolate(), iterator_prototype, "reduce",
-                        Builtin::kIteratorPrototypeReduce, 1, kDontAdapt);
-  SimpleInstallFunction(isolate(), iterator_prototype, "toArray",
-                        Builtin::kIteratorPrototypeToArray, 0, kAdapt);
-  SimpleInstallFunction(isolate(), iterator_prototype, "forEach",
-                        Builtin::kIteratorPrototypeForEach, 1, kAdapt);
-  SimpleInstallFunction(isolate(), iterator_prototype, "some",
-                        Builtin::kIteratorPrototypeSome, 1, kAdapt);
-  SimpleInstallFunction(isolate(), iterator_prototype, "every",
-                        Builtin::kIteratorPrototypeEvery, 1, kAdapt);
-  SimpleInstallFunction(isolate(), iterator_prototype, "find",
-                        Builtin::kIteratorPrototypeFind, 1, kAdapt);
-
-  // https://github.com/tc39/proposal-iterator-helpers/pull/287
-  SimpleInstallGetterSetter(isolate(), iterator_prototype,
-                            isolate()->factory()->to_string_tag_symbol(),
-                            Builtin::kIteratorPrototypeGetToStringTag,
-                            Builtin::kIteratorPrototypeSetToStringTag);
-
-  SimpleInstallGetterSetter(isolate(), iterator_prototype,
-                            isolate()->factory()->constructor_string(),
-                            Builtin::kIteratorPrototypeGetConstructor,
-                            Builtin::kIteratorPrototypeSetConstructor);
-
-  // --- Helper maps
-#define INSTALL_ITERATOR_HELPER(lowercase_name, Capitalized_name,              \
-                                ALL_CAPS_NAME, argc)                           \
-  {                                                                            \
-    DirectHandle<Map> map = factory()->NewContextfulMapForCurrentContext(      \
-        JS_ITERATOR_##ALL_CAPS_NAME##_HELPER_TYPE,                             \
-        JSIterator##Capitalized_name##Helper::kHeaderSize,                     \
-        TERMINAL_FAST_ELEMENTS_KIND, 0);                                       \
-    Map::SetPrototype(isolate(), map, iterator_helper_prototype);              \
-    map->SetConstructor(*iterator_function);                                   \
-    native_context()->set_iterator_##lowercase_name##_helper_map(*map);        \
-    LOG(isolate(), MapDetails(*map));                                          \
-    SimpleInstallFunction(isolate(), iterator_prototype, #lowercase_name,      \
-                          Builtin::kIteratorPrototype##Capitalized_name, argc, \
-                          kAdapt);                                             \
-  }
-
-#define ITERATOR_HELPERS(V)    \
-  V(map, Map, MAP, 1)          \
-  V(filter, Filter, FILTER, 1) \
-  V(take, Take, TAKE, 1)       \
-  V(drop, Drop, DROP, 1)       \
-  V(flatMap, FlatMap, FLAT_MAP, 1)
-
-  ITERATOR_HELPERS(INSTALL_ITERATOR_HELPER)
-
-#undef INSTALL_ITERATOR_HELPER
-#undef ITERATOR_HELPERS
-}
-
 void Genesis::InitializeGlobal_js_atomics_pause() {
   if (!v8_flags.js_atomics_pause) return;
   DirectHandle<JSGlobalObject> global(native_context()->global_object(),
@@ -5646,32 +5655,6 @@ void Genesis::InitializeGlobal_js_error_iserror() {
                                      isolate());
   InstallFunctionWithBuiltinId(isolate(), error_fun, "isError",
                                Builtin::kErrorIsError, 1, kAdapt);
-}
-
-void Genesis::InitializeGlobal_harmony_set_methods() {
-  if (!v8_flags.harmony_set_methods) return;
-
-  DirectHandle<JSObject> set_prototype(
-      native_context()->initial_set_prototype(), isolate());
-  SimpleInstallFunction(isolate(), set_prototype, "union",
-                        Builtin::kSetPrototypeUnion, 1, kAdapt);
-  SimpleInstallFunction(isolate(), set_prototype, "intersection",
-                        Builtin::kSetPrototypeIntersection, 1, kAdapt);
-  SimpleInstallFunction(isolate(), set_prototype, "difference",
-                        Builtin::kSetPrototypeDifference, 1, kAdapt);
-  SimpleInstallFunction(isolate(), set_prototype, "symmetricDifference",
-                        Builtin::kSetPrototypeSymmetricDifference, 1, kAdapt);
-  SimpleInstallFunction(isolate(), set_prototype, "isSubsetOf",
-                        Builtin::kSetPrototypeIsSubsetOf, 1, kAdapt);
-  SimpleInstallFunction(isolate(), set_prototype, "isSupersetOf",
-                        Builtin::kSetPrototypeIsSupersetOf, 1, kAdapt);
-  SimpleInstallFunction(isolate(), set_prototype, "isDisjointFrom",
-                        Builtin::kSetPrototypeIsDisjointFrom, 1, kAdapt);
-
-  // The fast path in the Set constructor builtin checks for Set.prototype
-  // having been modified from its initial state. So, after adding new methods,
-  // we should reset the Set.prototype initial map.
-  native_context()->set_initial_set_prototype_map(set_prototype->map());
 }
 
 void Genesis::InitializeGlobal_harmony_shadow_realm() {
@@ -5978,6 +5961,15 @@ void Genesis::InitializeGlobal_js_float16array() {
                                    Context::FLOAT16_ARRAY_FUN_INDEX);
 }
 
+void Genesis::InitializeGlobal_js_regexp_escape() {
+  if (!v8_flags.js_regexp_escape) return;
+
+  DirectHandle<JSFunction> regexp_fun(native_context()->regexp_function(),
+                                      isolate());
+  SimpleInstallFunction(isolate(), regexp_fun, "escape", Builtin::kRegExpEscape,
+                        1, kAdapt);
+}
+
 void Genesis::InitializeGlobal_js_source_phase_imports() {
   if (!v8_flags.js_source_phase_imports) return;
   Factory* factory = isolate()->factory();
@@ -6007,19 +5999,24 @@ void Genesis::InitializeGlobal_js_source_phase_imports() {
 void Genesis::InitializeGlobal_js_base_64() {
   if (!v8_flags.js_base_64) return;
 
-  Handle<JSGlobalObject> global(native_context()->global_object(), isolate());
-  Handle<JSObject> uint8_array_function =
+  DirectHandle<JSGlobalObject> global(native_context()->global_object(),
+                                      isolate());
+  DirectHandle<JSObject> uint8_array_function =
       Cast<JSObject>(JSReceiver::GetProperty(isolate(), global, "Uint8Array")
                          .ToHandleChecked());
   SimpleInstallFunction(isolate(), uint8_array_function, "fromBase64",
                         Builtin::kUint8ArrayFromBase64, 1, kDontAdapt);
+  SimpleInstallFunction(isolate(), uint8_array_function, "fromHex",
+                        Builtin::kUint8ArrayFromHex, 1, kDontAdapt);
 
   DirectHandle<JSObject> uint8_array_prototype(
       Cast<JSObject>(
           Cast<JSFunction>(uint8_array_function)->instance_prototype()),
       isolate());
   SimpleInstallFunction(isolate(), uint8_array_prototype, "toBase64",
-                        Builtin::kUint8ArrayToBase64, 0, kDontAdapt);
+                        Builtin::kUint8ArrayPrototypeToBase64, 0, kDontAdapt);
+  SimpleInstallFunction(isolate(), uint8_array_prototype, "toHex",
+                        Builtin::kUint8ArrayPrototypeToHex, 0, kDontAdapt);
 }
 
 void Genesis::InitializeGlobal_regexp_linear_flag() {
@@ -6123,8 +6120,8 @@ bool Genesis::InstallABunchOfRandomThings() {
   native_context()->set_fast_template_instantiations_cache(
       *fast_template_instantiations_cache);
 
-  auto slow_template_instantiations_cache = SimpleNumberDictionary::New(
-      isolate(), ApiNatives::kInitialFunctionCacheSize);
+  auto slow_template_instantiations_cache =
+      EphemeronHashTable::New(isolate(), ApiNatives::kInitialFunctionCacheSize);
   native_context()->set_slow_template_instantiations_cache(
       *slow_template_instantiations_cache);
 

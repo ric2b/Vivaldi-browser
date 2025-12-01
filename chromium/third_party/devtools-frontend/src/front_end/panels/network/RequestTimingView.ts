@@ -235,7 +235,7 @@ const UIStrings = {
    *@example {network} PH1
    */
   routerActualSource: 'Actual source: {PH1}',
-};
+} as const;
 const str_ = i18n.i18n.registerUIStrings('panels/network/RequestTimingView.ts', UIStrings);
 const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
 export class RequestTimingView extends UI.Widget.VBox {
@@ -482,10 +482,8 @@ export class RequestTimingView extends UI.Widget.VBox {
         if (!serviceworkerHeader) {
           serviceworkerHeader = createHeader('Service Worker');
         }
-      } else {
-        if (!dataHeader) {
-          dataHeader = createHeader(i18nString(UIStrings.requestresponse));
-        }
+      } else if (!dataHeader) {
+        dataHeader = createHeader(i18nString(UIStrings.requestresponse));
       }
 
       const left = (scale * (range.start - startTime));

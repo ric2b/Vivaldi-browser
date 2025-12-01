@@ -12,8 +12,8 @@
 #include "include/core/SkColorSpace.h"
 #include "include/core/SkStream.h"
 #include "include/gpu/graphite/Recorder.h"
-#include "include/private/SkColorData.h"
 #include "include/private/base/SkTPin.h"
+#include "src/core/SkColorData.h"
 
 #include "src/base/SkMathPriv.h"
 #include "src/core/SkTraceEvent.h"
@@ -109,12 +109,17 @@ DrawAtlas::DrawAtlas(SkColorType colorType, size_t bpp, int width, int height,
     this->createPages(generationCounter);
 }
 
-inline void DrawAtlas::processEviction(PlotLocator plotLocator) {
-    for (PlotEvictionCallback* evictor : fEvictionCallbacks) {
-        evictor->evict(plotLocator);
+inline void DrawAtlas::processEvictionAndResetRects(Plot* plot) {
+    // Process evictions
+    if (!plot->isEmpty()) {
+        const PlotLocator& plotLocator = plot->plotLocator();
+        for (PlotEvictionCallback* evictor : fEvictionCallbacks) {
+            evictor->evict(plotLocator);
+        }
+        fAtlasGeneration = fGenerationCounter->next();
     }
 
-    fAtlasGeneration = fGenerationCounter->next();
+    plot->resetRects();
 }
 
 inline void DrawAtlas::updatePlot(Plot* plot, AtlasLocator* atlasLocator) {
@@ -184,6 +189,9 @@ bool DrawAtlas::recordUploads(DrawContext* dc, Recorder* recorder) {
 // to hang around for a bit in case it's needed. The assumption is that flushes
 // are rare; i.e., we are not continually refreshing the frame.
 static constexpr auto kPlotRecentlyUsedCount = 32;
+// Number of flushes before we'll try to evict a plot from a sparsely used page.
+static constexpr auto kPlotUsedCountBeforeEvict = 8;
+// Number of flushes beyond which we'll consider the atlas no longer in use.
 static constexpr auto kAtlasRecentlyUsedCount = 128;
 
 DrawAtlas::ErrorCode DrawAtlas::addRect(Recorder* recorder,
@@ -277,7 +285,7 @@ SkIPoint DrawAtlas::prepForRender(const AtlasLocator& locator, SkAutoPixmapStora
     return plot->prepForRender(locator, pixmap);
 }
 
-void DrawAtlas::compact(AtlasToken startTokenForNextFlush, bool forceCompact) {
+void DrawAtlas::compact(AtlasToken startTokenForNextFlush) {
     if (fNumActivePages < 1) {
         fPrevFlushToken = startTokenForNextFlush;
         return;
@@ -309,11 +317,11 @@ void DrawAtlas::compact(AtlasToken startTokenForNextFlush, bool forceCompact) {
     // hasn't been used in a long time.
     // This is to handle the case where a lot of text or path rendering has occurred but then just
     // a blinking cursor is drawn.
-    if (forceCompact || atlasUsedThisFlush || fFlushesSinceLastUse > kAtlasRecentlyUsedCount) {
+    if (atlasUsedThisFlush || fFlushesSinceLastUse > kAtlasRecentlyUsedCount) {
         TArray<Plot*> availablePlots;
         uint32_t lastPageIndex = fNumActivePages - 1;
 
-        // For all plots but the last one, update number of flushes since used, and check to see
+        // For all pages but the last one, update number of flushes since used, and check to see
         // if there are any in the first pages that the last page can safely upload to.
         for (uint32_t pageIndex = 0; pageIndex < lastPageIndex; ++pageIndex) {
             if constexpr (kDumpAtlasData) {
@@ -388,7 +396,9 @@ void DrawAtlas::compact(AtlasToken startTokenForNextFlush, bool forceCompact) {
             plotIter.init(fPages[lastPageIndex].fPlotList, PlotList::Iter::kHead_IterStart);
             while (Plot* plot = plotIter.get()) {
                 // If this plot was used recently
-                if (plot->flushesSinceLastUsed() <= kPlotRecentlyUsedCount) {
+                int plotFlushes = plot->flushesSinceLastUsed();
+                if (kPlotUsedCountBeforeEvict <= plotFlushes &&
+                    plotFlushes <= kPlotRecentlyUsedCount) {
                     // See if there's room in an lower index page and if so evict.
                     // We need to be somewhat harsh here so that a handful of plots that are
                     // consistently in use don't end up locking the page in memory.
@@ -494,7 +504,7 @@ inline void DrawAtlas::deactivateLastPage() {
             uint32_t plotIndex = r * numPlotsX + c;
 
             Plot* currPlot = fPages[lastPageIndex].fPlotArray[plotIndex].get();
-            currPlot->resetRects();
+            this->processEvictionAndResetRects(currPlot);
             currPlot->resetFlushesSinceLastUsed();
 
             // rebuild the LRU list
@@ -516,6 +526,23 @@ void DrawAtlas::markUsedPlotsAsFull() {
             plot->markFullIfUsed();
             plotIter.next();
         }
+    }
+}
+
+void DrawAtlas::freeGpuResources(AtlasToken token) {
+    PlotList::Iter plotIter;
+    for (int pageIndex = (int)(fNumActivePages)-1; pageIndex >= 0; --pageIndex) {
+        const Page& currPage = fPages[pageIndex];
+        plotIter.init(currPage.fPlotList, PlotList::Iter::kHead_IterStart);
+        while (Plot* plot = plotIter.get()) {
+            if (plot->lastUseToken().inInterval(fPrevFlushToken, token)) {
+                // This page is in use and we can only deactivate pages from high index
+                // to low index, so bail.
+                return;
+            }
+            plotIter.next();
+        }
+        this->deactivateLastPage();
     }
 }
 

@@ -26,7 +26,6 @@ import androidx.core.widget.ImageViewCompat;
 import com.google.android.material.tabs.TabLayout;
 
 import org.chromium.chrome.browser.feed.FeedFeatures;
-import org.chromium.chrome.browser.feed.FeedUma;
 import org.chromium.chrome.browser.feed.R;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.user_education.IphCommandBuilder;
@@ -129,11 +128,13 @@ public class SectionHeaderView extends LinearLayout {
     private @Px int mToolbarHeight;
     private @Px int mTouchSize;
     private boolean mIsTablet;
+    private final boolean mIsNewTabPageCustomizationEnabled;
 
     public SectionHeaderView(Context context, @Nullable AttributeSet attrs) {
         super(context, attrs);
         mTouchSize = getResources().getDimensionPixelSize(R.dimen.feed_v2_header_menu_touch_size);
         mIsTablet = DeviceFormFactor.isNonMultiDisplayContextOnTablet(getContext());
+        mIsNewTabPageCustomizationEnabled = ChromeFeatureList.sNewTabPageCustomization.isEnabled();
     }
 
     public void setToolbarHeight(@Px int toolbarHeight) {
@@ -190,7 +191,15 @@ public class SectionHeaderView extends LinearLayout {
         super.onFinishInflate();
 
         mTitleView = findViewById(R.id.header_title);
+
         mMenuView = findViewById(R.id.header_menu);
+        if (mIsNewTabPageCustomizationEnabled) {
+            // When NTP Customization is turned on, the section header menu is no longer visible.
+            // It's relocated to the NTP Customization Discover Feed bottom sheet.
+            mMenuView.setVisibility(View.INVISIBLE);
+            mMenuView = null;
+        }
+
         mLeadingStatusIndicator = findViewById(R.id.section_status_indicator);
         mTabLayout = findViewById(R.id.tab_list_view);
         mContent = findViewById(R.id.main_content);
@@ -225,20 +234,24 @@ public class SectionHeaderView extends LinearLayout {
                     indicatorViewMarginLayoutParams.getMarginEnd() + tabLayoutLateralMargin);
         }
 
-        // #getHitRect() will not be valid until the first layout pass completes. Additionally, if
-        // the header's enabled state changes, |mMenuView| will move slightly sideways, and the
-        // touch target needs to be adjusted. This is a bit chatty during animations, but it should
-        // also be fairly cheap.
-        mMenuView.addOnLayoutChangeListener(
-                (View v,
-                        int left,
-                        int top,
-                        int right,
-                        int bottom,
-                        int oldLeft,
-                        int oldTop,
-                        int oldRight,
-                        int oldBottom) -> adjustTouchDelegate(mMenuView));
+        if (!mIsNewTabPageCustomizationEnabled) {
+            // #getHitRect() will not be valid until the first layout pass completes. Additionally,
+            // if
+            // the header's enabled state changes, |mMenuView| will move slightly sideways, and the
+            // touch target needs to be adjusted. This is a bit chatty during animations, but it
+            // should
+            // also be fairly cheap.
+            mMenuView.addOnLayoutChangeListener(
+                    (View v,
+                            int left,
+                            int top,
+                            int right,
+                            int bottom,
+                            int oldLeft,
+                            int oldTop,
+                            int oldRight,
+                            int oldBottom) -> adjustTouchDelegate(mMenuView));
+        }
 
         // Ensures that the whole header doesn't get focused for a11y.
         setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
@@ -564,8 +577,6 @@ public class SectionHeaderView extends LinearLayout {
     }
 
     private void displayMenu(ModelList listItems, ListMenu.Delegate listMenuDelegate) {
-        FeedUma.recordFeedControlsAction(FeedUma.CONTROLS_ACTION_CLICKED_FEED_HEADER_MENU);
-
         if (listItems == null) {
             assert false : "No list items model to display the menu";
             return;

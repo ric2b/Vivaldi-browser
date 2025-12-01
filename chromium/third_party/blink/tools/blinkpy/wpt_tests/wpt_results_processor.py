@@ -60,8 +60,6 @@ from blinkpy.web_tests.models.test_expectations import TestExpectations
 from blinkpy.web_tests.models.test_run_results import convert_to_hierarchical_view
 from blinkpy.web_tests.models.typ_types import (
     Artifacts,
-    Expectation,
-    ExpectationType,
     Result,
     ResultSinkReporter,
     ResultType,
@@ -155,16 +153,18 @@ class WPTResult(Result):
     def __init__(self,
                  *args,
                  test_type: Optional[str] = None,
-                 exp_line: Optional[ExpectationType] = None,
                  baseline: Optional[List[TestharnessLine]] = None,
+                 no_expectations: bool = False,
+                 sanitizer_mode: bool = False,
                  **kwargs):
-        kwargs.setdefault('expected', exp_line.results)
         super().__init__(*args, **kwargs)
         self.testharness_results = []
         self.test_type = test_type
-        self._exp_line = exp_line or Expectation()
         self._baseline = baseline or []
         self.image_diff_stats = None
+        self.no_expectations = no_expectations
+        # Do not compare baseline when run with sanitizer enabled
+        self.sanitizer_mode = sanitizer_mode
         # TODO(crbug.com/41494889): Populate `self.failure_reason` like
         # `run_web_tests.py` does to help LUCI cluster failures.
 
@@ -174,7 +174,9 @@ class WPTResult(Result):
 
     @functools.cached_property
     def can_have_subtests(self) -> bool:
-        return self.test_type in {'testharness', 'wdspec'}
+        return not self.sanitizer_mode and self.test_type in {
+            'testharness', 'wdspec'
+        }
 
     def _maybe_add_testharness_result(self,
                                       status: str,
@@ -213,6 +215,9 @@ class WPTResult(Result):
                 self.actual = ResultType.Pass
             else:
                 self.actual = ResultType.Failure
+        # When run with --no-expectations, all results are expected
+        if self.no_expectations:
+            self.expected = [self.actual]
         self.unexpected = self.actual not in self.expected
         self.is_regression = self.actual != ResultType.Pass and self.unexpected
 
@@ -625,6 +630,7 @@ class WPTResultsProcessor:
             baseline = parse_testharness_baseline(expected_text.decode())
         else:
             baseline = []
+        expected = self._expectations.get_expectations(test).results
         self._results[test] = WPTResult(
             test,
             # Placeholder status that has the lowest priority possible.
@@ -635,8 +641,10 @@ class WPTResultsProcessor:
             worker=0,
             file_path=self._file_path_for_test(test),
             test_type=self.get_test_type(test),
-            exp_line=self._expectations.get_expectations(test),
-            baseline=baseline)
+            expected=expected,
+            baseline=baseline,
+            no_expectations=self.port.get_option('no_expectations'),
+            sanitizer_mode=self.port.get_option('enable_sanitizer'))
 
     def get_path_from_test_root(self, test: str) -> str:
         wpt_dir, url_from_wpt_dir = self.port.split_wpt_dir(test)
@@ -684,6 +692,8 @@ class WPTResultsProcessor:
         result = self._results.pop(test, None)
         if not result:
             raise EventProcessingError('Test not started: %s' % test)
+        if 'SKIP' in expected:
+            result.expected |= {ResultType.Skip}
         result.took = max(0, event.time - result.started) / 1000
         result.pid = (extra or {}).get('browser_pid', 0)
         result.update_from_test(status, message)
@@ -700,7 +710,8 @@ class WPTResultsProcessor:
             artifact_output_dir=self.fs.dirname(self.artifacts_dir),
             expectations=None,
             test_file_location=result.file_path,
-            html_summary=result.summarize(product))
+            html_summary=result.summarize(product),
+            additional_tags=self._tags(result))
         _log.debug(
             'Reported result for %s, iteration %d (actual: %s, '
             'expected: %s, artifacts: %s)', result.name, self._iteration,
@@ -710,6 +721,21 @@ class WPTResultsProcessor:
         if self._iteration == 0:
             self._num_failures_by_status[result.actual] += 1
         self._results_by_name[test].append(result)
+
+    def _tags(self, result: WPTResult) -> List[Tuple[str, str]]:
+        # Add tags needed by the Blink Unexpected Pass Finder.
+        #
+        # TODO(crbug.com/406299273): Use the same logic to generate tags for all
+        # test results.
+        test_cls = wpttest.manifest_test_cls[result.test_type]
+        # Units are in seconds.
+        base_timeout = test_cls.default_timeout
+        base_timeout *= self.port.get_option('timeout_multiplier') or 1
+        tags = [('web_tests_base_timeout', str(base_timeout))]
+        for exp_file in self.port.used_expectations_files():
+            tags.append(('web_tests_used_expectation_file',
+                         self.port.relative_test_filename(exp_file)))
+        return tags
 
     def _handle_unexpected_result(self, result: WPTResult):
         if result.actual == ResultType.Failure:
@@ -891,14 +917,18 @@ class WPTResultsProcessor:
         actual_text = result.format_baseline()
         artifacts.CreateArtifact('actual_text', actual_subpath,
                                  actual_text.encode())
-        if self.reset_results and self._iteration == 0 and result.actual not in {
-                ResultType.Crash,
-                ResultType.Timeout,
-        }:
+        if self.reset_results and self._iteration == 0:
             source = self.fs.join(self.artifacts_dir, actual_subpath)
-            dest = self.fs.join(self.port.baseline_version_dir(),
-                                expected_subpath)
-            self.fs.maybe_make_directory(self.fs.dirname(dest))
+            if self.port.flag_specific_config_name():
+                output_dir = self.fs.join(
+                    self.port.baseline_flag_specific_dir(),
+                    self.fs.dirname(expected_subpath))
+            else:
+                output_dir = self.fs.dirname(
+                    self.port.expected_filename(
+                        result.name, '.txt', fallback_base_for_virtual=False))
+            dest = self.fs.join(output_dir, self.fs.basename(expected_subpath))
+            self.fs.maybe_make_directory(output_dir)
             self.fs.copyfile(source, dest)
 
         expected_text = self.port.expected_text(result.name)

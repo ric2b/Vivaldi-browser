@@ -12,15 +12,15 @@
 #include "base/values.h"
 #include "chrome/browser/translate/chrome_translate_client.h"
 #include "chrome/browser/ui/tabs/public/tab_features.h"
-#include "chrome/browser/ui/tabs/public/tab_interface.h"
 #include "chrome/browser/ui/views/side_panel/read_anything/read_anything_side_panel_controller.h"
+#include "chrome/browser/ui/views/side_panel/side_panel_registry.h"
 #include "chrome/browser/ui/webui/side_panel/read_anything/read_anything_prefs.h"
 #include "chrome/common/read_anything/read_anything.mojom-forward.h"
 #include "chrome/common/read_anything/read_anything.mojom.h"
-#include "chrome/common/read_anything/read_anything_constants.h"
 #include "chrome/test/base/browser_with_test_window_test.h"
 #include "components/language_detection/core/constants.h"
 #include "components/prefs/pref_value_map.h"
+#include "components/tab_collections/public/tab_interface.h"
 #include "components/translate/core/browser/translate_manager.h"
 #include "content/public/browser/tts_controller.h"
 #include "content/public/test/test_web_ui.h"
@@ -39,6 +39,7 @@
 namespace {
 
 using testing::_;
+using testing::ElementsAre;
 
 class MockPage : public read_anything::mojom::UntrustedPage {
  public:
@@ -86,6 +87,8 @@ class MockPage : public read_anything::mojom::UntrustedPage {
   MOCK_METHOD(void, SetLanguageCode, (const std::string&));
   MOCK_METHOD(void, SetDefaultLanguageCode, (const std::string&));
   MOCK_METHOD(void, ScreenAIServiceReady, ());
+  MOCK_METHOD(void, OnReadingModeHidden, ());
+  MOCK_METHOD(void, OnTabWillDetach, ());
   MOCK_METHOD(void,
               OnGetVoicePackInfo,
               (read_anything::mojom::VoicePackInfoPtr voice_pack_info));
@@ -202,6 +205,13 @@ class ReadAnythingUntrustedPageHandlerTest : public BrowserWithTestWindowTest {
     BrowserWithTestWindowTest::TearDown();
   }
 
+  ReadAnythingSidePanelController* side_panel_controller() {
+    return browser()
+        ->GetActiveTabInterface()
+        ->GetTabFeatures()
+        ->read_anything_side_panel_controller();
+  }
+
   ChromeTranslateClient* GetChromeTranslateClient() {
     return ChromeTranslateClient::FromWebContents(
         browser()
@@ -260,6 +270,22 @@ class ReadAnythingUntrustedPageHandlerTest : public BrowserWithTestWindowTest {
 
   void OnSpeechRateChange(double rate) { handler_->OnSpeechRateChange(rate); }
 
+  void OnTabWillDetach() { handler_->OnTabWillDetach(); }
+
+  void Activate(bool active) {
+    SidePanelEntry* entry = browser()
+                                ->GetActiveTabInterface()
+                                ->GetTabFeatures()
+                                ->side_panel_registry()
+                                ->GetEntryForKey(SidePanelEntry::Key(
+                                    SidePanelEntry::Id::kReadAnything));
+    if (active) {
+      side_panel_controller()->OnEntryShown(entry);
+    } else {
+      side_panel_controller()->OnEntryHidden(entry);
+    }
+  }
+
   void OnImageDataRequested(const ui::AXTreeID& target_tree_id,
                             ui::AXNodeID target_node_id) {
     handler_->OnImageDataRequested(target_tree_id, target_node_id);
@@ -314,7 +340,7 @@ TEST_F(ReadAnythingUntrustedPageHandlerTest,
   bool expected_images_enabled = true;
   read_anything::mojom::Colors expected_color =
       read_anything::mojom::Colors::kBlue;
-  double expected_speech_rate = kReadAnythingDefaultSpeechRate;
+  double expected_speech_rate = 1.0;
   read_anything::mojom::HighlightGranularity expected_highlight_granularity =
       read_anything::mojom::HighlightGranularity::kDefaultValue;
   PrefService* prefs = profile()->GetPrefs();
@@ -596,12 +622,11 @@ TEST_F(ReadAnythingUntrustedPageHandlerTest,
       .Times(1)
       .WillOnce(testing::WithArgs<8, 9>(testing::Invoke(
           [&](base::Value::Dict voices, base::Value::List langs) {
-            EXPECT_THAT(voices, base::test::DictionaryHasValue(
-                                    kLang1, base::Value(kVoice1)));
-            EXPECT_THAT(voices, base::test::DictionaryHasValue(
-                                    kLang2, base::Value(kVoice2)));
-            EXPECT_THAT(voices, base::test::DictionaryHasValue(
-                                    kLang3, base::Value(kVoice3)));
+            EXPECT_THAT(voices, base::test::DictionaryHasValues(
+                                    base::Value::Dict()
+                                        .Set(kLang1, kVoice1)
+                                        .Set(kLang2, kVoice2)
+                                        .Set(kLang3, kVoice3)));
             EXPECT_EQ(3u, langs.size());
             EXPECT_EQ(langs[0].GetString(), kLang1);
             EXPECT_EQ(langs[1].GetString(), kLang2);
@@ -626,10 +651,10 @@ TEST_F(ReadAnythingUntrustedPageHandlerTest, OnVoiceChange_StoresInPrefs) {
   const base::Value::Dict* voices = &profile()->GetPrefs()->GetDict(
       prefs::kAccessibilityReadAnythingVoiceName);
   ASSERT_EQ(voices->size(), 2u);
-  EXPECT_THAT(*voices,
-              base::test::DictionaryHasValue(kLang1, base::Value(kVoice1)));
-  EXPECT_THAT(*voices,
-              base::test::DictionaryHasValue(kLang2, base::Value(kVoice2)));
+  EXPECT_THAT(
+      *voices,
+      base::test::DictionaryHasValues(
+          base::Value::Dict().Set(kLang1, kVoice1).Set(kLang2, kVoice2)));
 }
 
 TEST_F(ReadAnythingUntrustedPageHandlerTest,
@@ -665,9 +690,8 @@ TEST_F(ReadAnythingUntrustedPageHandlerTest,
       prefs::kAccessibilityReadAnythingVoiceName);
   ASSERT_EQ(voices->size(), 2u);
   EXPECT_THAT(*voices,
-              base::test::DictionaryHasValue(kLang1, base::Value(kVoice)));
-  EXPECT_THAT(*voices,
-              base::test::DictionaryHasValue(kLang2, base::Value(kVoice)));
+              base::test::DictionaryHasValues(
+                  base::Value::Dict().Set(kLang1, kVoice).Set(kLang2, kVoice)));
 }
 
 TEST_F(ReadAnythingUntrustedPageHandlerTest, BadImageData) {
@@ -945,5 +969,43 @@ TEST_F(ReadAnythingUntrustedPageHandlerTest, OnUpdateLanguageStatus_Unknown) {
           })));
 }
 #endif  // !BUILDFLAG(IS_CHROMEOS)
+
+TEST_F(ReadAnythingUntrustedPageHandlerTest, OnTabWillDetach) {
+  handler_ = std::make_unique<TestReadAnythingUntrustedPageHandler>(
+      page_.BindAndGetRemote(), test_web_ui_.get());
+
+  OnTabWillDetach();
+  EXPECT_CALL(page_, OnTabWillDetach).Times(1);
+  EXPECT_CALL(page_, OnReadingModeHidden).Times(0);
+}
+
+TEST_F(ReadAnythingUntrustedPageHandlerTest, OnTabWillDetach_SendsOnce) {
+  handler_ = std::make_unique<TestReadAnythingUntrustedPageHandler>(
+      page_.BindAndGetRemote(), test_web_ui_.get());
+
+  OnTabWillDetach();
+  OnTabWillDetach();
+  OnTabWillDetach();
+  EXPECT_CALL(page_, OnTabWillDetach).Times(1);
+  EXPECT_CALL(page_, OnReadingModeHidden).Times(0);
+}
+
+TEST_F(ReadAnythingUntrustedPageHandlerTest,
+       Activate_OnDeactivateTab_NotifiesPage) {
+  handler_ = std::make_unique<TestReadAnythingUntrustedPageHandler>(
+      page_.BindAndGetRemote(), test_web_ui_.get());
+
+  Activate(false);
+  EXPECT_CALL(page_, OnReadingModeHidden).Times(1);
+}
+
+TEST_F(ReadAnythingUntrustedPageHandlerTest,
+       Activate_OnActivateTab_DoesNotNotifyPage) {
+  handler_ = std::make_unique<TestReadAnythingUntrustedPageHandler>(
+      page_.BindAndGetRemote(), test_web_ui_.get());
+
+  Activate(true);
+  EXPECT_CALL(page_, OnReadingModeHidden).Times(0);
+}
 
 }  // namespace

@@ -20,7 +20,6 @@
 #include "base/strings/stringize_macros.h"
 #include "build/branding_buildflags.h"
 #include "build/build_config.h"
-#include "build/chromeos_buildflags.h"
 #include "google_apis/buildflags.h"
 #include "google_apis/default_api_keys.h"
 #include "google_apis/gaia/gaia_config.h"
@@ -153,7 +152,7 @@ ApiKeyCache::ApiKeyCache(const DefaultApiKeys& default_api_keys) {
       default_api_keys.allow_unset_values);
 #endif
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
   api_key_sharing_ = CalculateKeyValue(
       default_api_keys.google_api_key_sharing,
       STRINGIZE_NO_EXPANSION(GOOGLE_API_KEY_SHARING), nullptr, std::string(),
@@ -181,6 +180,21 @@ ApiKeyCache::ApiKeyCache(const DefaultApiKeys& default_api_keys) {
       environment.get(), command_line, gaia_config,
       default_api_keys.allow_override_via_environment,
       default_api_keys.allow_unset_values);
+
+  api_key_cros_system_geo_ = CalculateKeyValue(
+      default_api_keys.google_api_key_cros_system_geo_,
+      STRINGIZE_NO_EXPANSION(GOOGLE_API_KEY_CROS_SYSTEM_GEO), nullptr,
+      std::string(), environment.get(), command_line, gaia_config,
+      default_api_keys.allow_override_via_environment,
+      default_api_keys.allow_unset_values);
+
+  api_key_cros_chrome_geo_ = CalculateKeyValue(
+      default_api_keys.google_api_key_cros_chrome_geo_,
+      STRINGIZE_NO_EXPANSION(GOOGLE_API_KEY_CROS_CHROME_GEO), nullptr,
+      std::string(), environment.get(), command_line, gaia_config,
+      default_api_keys.allow_override_via_environment,
+      default_api_keys.allow_unset_values);
+
 #endif
 
   metrics_key_ = CalculateKeyValue(

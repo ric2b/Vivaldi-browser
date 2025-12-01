@@ -87,20 +87,16 @@ struct cross_impl<Derived, OtherDerived, 2> {
  */
 template <typename Derived>
 template <typename OtherDerived>
-EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE
-#ifndef EIGEN_PARSED_BY_DOXYGEN
-    typename internal::cross_impl<Derived, OtherDerived>::return_type
-#else
-    inline std::conditional_t<SizeAtCompileTime == 2, Scalar, PlainObject>
-#endif
-    MatrixBase<Derived>::cross(const MatrixBase<OtherDerived>& other) const {
+EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE typename internal::cross_impl<Derived, OtherDerived>::return_type
+MatrixBase<Derived>::cross(const MatrixBase<OtherDerived>& other) const {
   return internal::cross_impl<Derived, OtherDerived>::run(*this, other);
 }
 
 namespace internal {
 
 template <int Arch, typename VectorLhs, typename VectorRhs, typename Scalar = typename VectorLhs::Scalar,
-          bool Vectorizable = bool((evaluator<VectorLhs>::Flags & evaluator<VectorRhs>::Flags) & PacketAccessBit)>
+          bool Vectorizable =
+              bool((int(evaluator<VectorLhs>::Flags) & int(evaluator<VectorRhs>::Flags)) & PacketAccessBit)>
 struct cross3_impl {
   EIGEN_DEVICE_FUNC static inline typename internal::plain_matrix_type<VectorLhs>::type run(const VectorLhs& lhs,
                                                                                             const VectorRhs& rhs) {

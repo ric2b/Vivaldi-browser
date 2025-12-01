@@ -132,20 +132,30 @@ void LayoutFieldset::UpdateAnonymousChildStyle(
   child_style_builder.SetBoxDecorationBreak(StyleRef().BoxDecorationBreak());
 
   if (StyleRef().SpecifiesColumns() && AllowsColumns()) {
-    child_style_builder.SetColumnCount(StyleRef().ColumnCount());
-    child_style_builder.SetColumnWidth(StyleRef().ColumnWidth());
-  } else {
-    child_style_builder.SetHasAutoColumnCount();
-    child_style_builder.SetHasAutoColumnWidth();
+    if (!StyleRef().HasAutoColumnCount()) {
+      child_style_builder.SetColumnCount(StyleRef().ColumnCount());
+    }
+    if (!StyleRef().HasAutoColumnWidth()) {
+      child_style_builder.SetColumnWidth(StyleRef().ColumnWidth());
+    }
+    if (!StyleRef().HasAutoColumnHeight()) {
+      child_style_builder.SetColumnHeight(StyleRef().ColumnHeight());
+    }
+    child_style_builder.SetColumnWrap(StyleRef().ColumnWrap());
   }
   child_style_builder.SetColumnGap(StyleRef().ColumnGap());
   child_style_builder.SetColumnFill(StyleRef().GetColumnFill());
   child_style_builder.SetColumnRuleColor(
       GapDataList<StyleColor>(StyleColor(LayoutObject::ResolveColor(
           StyleRef(), GetCSSPropertyColumnRuleColor()))));
+  child_style_builder.SetRowRuleColor(GapDataList<StyleColor>(StyleColor(
+      LayoutObject::ResolveColor(StyleRef(), GetCSSPropertyRowRuleColor()))));
   child_style_builder.SetColumnRuleStyle(StyleRef().ColumnRuleStyle());
+  child_style_builder.SetRowRuleStyle(StyleRef().RowRuleStyle());
   child_style_builder.SetColumnRuleWidth(
       GapDataList<int>(StyleRef().ColumnRuleWidth()));
+  child_style_builder.SetRowRuleWidth(
+      GapDataList<int>(StyleRef().RowRuleWidth()));
 
   child_style_builder.SetFlexDirection(StyleRef().FlexDirection());
   child_style_builder.SetFlexWrap(StyleRef().FlexWrap());

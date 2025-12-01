@@ -52,7 +52,8 @@ class BookmarkNicknameProvider : public AutocompleteProvider {
   // Calculates the relevance score for |match|.
   // Also returns the number of bookmarks containing the destination URL.
   std::pair<int, int> CalculateBookmarkMatchRelevance(
-      const bookmarks::TitledUrlMatch& match) const;
+      const bookmarks::TitledUrlMatch& match,
+      const AutocompleteInput& input) const;
 
   const raw_ptr<AutocompleteProviderClient> client_;
   const raw_ptr<bookmarks::BookmarkModel> bookmark_model_;

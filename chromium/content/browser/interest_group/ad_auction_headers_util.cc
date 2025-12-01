@@ -31,10 +31,10 @@
 #include "content/public/browser/render_frame_host.h"
 #include "net/http/http_response_headers.h"
 #include "services/network/public/cpp/is_potentially_trustworthy.h"
+#include "services/network/public/cpp/permissions_policy/permissions_policy.h"
 #include "services/network/public/cpp/resource_request.h"
 #include "services/network/public/mojom/permissions_policy/permissions_policy_feature.mojom-shared.h"
 #include "third_party/blink/public/common/features.h"
-#include "third_party/blink/public/common/permissions_policy/permissions_policy.h"
 #include "third_party/blink/public/mojom/devtools/console_message.mojom.h"
 #include "url/origin.h"
 
@@ -113,6 +113,8 @@ bool IsAdAuctionHeadersEligibleInternal(Page& page,
 bool IsAdAuctionHeadersEligible(
     RenderFrameHostImpl& initiator_rfh,
     const network::ResourceRequest& resource_request) {
+  DCHECK(resource_request.ad_auction_headers);
+
   // Fenced frames disallow most permissions policies which would let this
   // function return false regardless, but adding this check to be more
   // explicit.
@@ -123,11 +125,12 @@ bool IsAdAuctionHeadersEligible(
     return false;
   }
 
-  const blink::PermissionsPolicy* permissions_policy =
+  const network::PermissionsPolicy* permissions_policy =
       initiator_rfh.GetPermissionsPolicy();
-  if (!permissions_policy->IsFeatureEnabledForSubresourceRequest(
+  if (!permissions_policy->IsFeatureEnabledForOrigin(
           network::mojom::PermissionsPolicyFeature::kRunAdAuction,
-          url::Origin::Create(resource_request.url), resource_request)) {
+          url::Origin::Create(resource_request.url),
+          /*override_default_policy_to_all=*/true)) {
     base::UmaHistogramEnumeration(
         "Ads.InterestGroup.NetHeaderResponse.StartRequestOutcome",
         AdAuctionHeadersIsEligibleOutcomeForMetrics::
@@ -158,7 +161,7 @@ bool IsAdAuctionHeadersEligibleForNavigation(
     return false;
   }
 
-  const blink::PermissionsPolicy* parent_policy =
+  const network::PermissionsPolicy* parent_policy =
       frame.GetParentOrOuterDocument()->GetPermissionsPolicy();
   DCHECK(parent_policy);
   if (!parent_policy->IsFeatureEnabledForOrigin(

@@ -31,7 +31,7 @@ typedef struct ChromaticAberrationVulkanContext {
 
     int initialized;
     FFVkExecPool e;
-    FFVkQueueFamilyCtx qf;
+    AVVulkanDeviceQueueFamily *qf;
     FFVulkanShader shd;
     VkSampler sampler;
 
@@ -88,8 +88,14 @@ static av_cold int init_filter(AVFilterContext *ctx, AVFrame *in)
         return AVERROR_EXTERNAL;
     }
 
-    ff_vk_qf_init(vkctx, &s->qf, VK_QUEUE_COMPUTE_BIT);
-    RET(ff_vk_exec_pool_init(vkctx, &s->qf, &s->e, s->qf.nb_queues*4, 0, 0, 0, NULL));
+    s->qf = ff_vk_qf_find(vkctx, VK_QUEUE_COMPUTE_BIT, 0);
+    if (!s->qf) {
+        av_log(ctx, AV_LOG_ERROR, "Device has no compute queues\n");
+        err = AVERROR(ENOTSUP);
+        goto fail;
+    }
+
+    RET(ff_vk_exec_pool_init(vkctx, s->qf, &s->e, s->qf->num*4, 0, 0, 0, NULL));
     RET(ff_vk_init_sampler(vkctx, &s->sampler, 0, VK_FILTER_LINEAR));
     RET(ff_vk_shader_init(vkctx, &s->shd, "chromatic_abberation",
                           VK_SHADER_STAGE_COMPUTE_BIT,
@@ -243,16 +249,16 @@ static const AVFilterPad chromaber_vulkan_outputs[] = {
     },
 };
 
-const AVFilter ff_vf_chromaber_vulkan = {
-    .name           = "chromaber_vulkan",
-    .description    = NULL_IF_CONFIG_SMALL("Offset chroma of input video (chromatic aberration)"),
+const FFFilter ff_vf_chromaber_vulkan = {
+    .p.name         = "chromaber_vulkan",
+    .p.description  = NULL_IF_CONFIG_SMALL("Offset chroma of input video (chromatic aberration)"),
+    .p.priv_class   = &chromaber_vulkan_class,
+    .p.flags        = AVFILTER_FLAG_HWDEVICE,
     .priv_size      = sizeof(ChromaticAberrationVulkanContext),
     .init           = &ff_vk_filter_init,
     .uninit         = &chromaber_vulkan_uninit,
     FILTER_INPUTS(chromaber_vulkan_inputs),
     FILTER_OUTPUTS(chromaber_vulkan_outputs),
     FILTER_SINGLE_PIXFMT(AV_PIX_FMT_VULKAN),
-    .priv_class     = &chromaber_vulkan_class,
     .flags_internal = FF_FILTER_FLAG_HWFRAME_AWARE,
-    .flags          = AVFILTER_FLAG_HWDEVICE,
 };

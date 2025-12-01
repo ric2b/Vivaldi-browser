@@ -9,31 +9,32 @@
 
 #include "base/functional/bind.h"
 #include "base/test/bind.h"
+#include "base/test/scoped_feature_list.h"
 #include "base/test/test_future.h"
+#include "chrome/browser/autofill/autofill_entity_data_manager_factory.h"
 #include "chrome/browser/autofill/autofill_uitest_util.h"
 #include "chrome/browser/extensions/api/autofill_private/autofill_private_event_router.h"
 #include "chrome/browser/extensions/api/autofill_private/autofill_private_event_router_factory.h"
 #include "chrome/browser/extensions/extension_apitest.h"
 #include "chrome/browser/ui/autofill/chrome_autofill_client.h"
 #include "chrome/browser/ui/browser.h"
-#include "chrome/browser/user_annotations/user_annotations_service_factory.h"
 #include "components/autofill/content/browser/test_autofill_client_injector.h"
 #include "components/autofill/content/browser/test_content_autofill_client.h"
 #include "components/autofill/core/browser/data_manager/addresses/test_address_data_manager.h"
 #include "components/autofill/core/browser/data_manager/payments/payments_data_manager.h"
-#include "components/autofill/core/browser/data_model/credit_card.h"
+#include "components/autofill/core/browser/data_model/payments/credit_card.h"
 #include "components/autofill/core/browser/foundations/autofill_client.h"
 #include "components/autofill/core/browser/metrics/payments/mandatory_reauth_metrics.h"
 #include "components/autofill/core/browser/payments/payments_autofill_client.h"
 #include "components/autofill/core/browser/payments/payments_request_details.h"
 #include "components/autofill/core/browser/payments/test_payments_network_interface.h"
+#include "components/autofill/core/browser/permissions/autofill_ai/autofill_ai_permission_utils.h"
 #include "components/autofill/core/browser/test_utils/autofill_test_utils.h"
+#include "components/autofill/core/common/autofill_features.h"
 #include "components/autofill/core/common/autofill_prefs.h"
 #include "components/device_reauth/mock_device_authenticator.h"
 #include "components/prefs/pref_service.h"
 #include "components/sync/test/test_sync_service.h"
-#include "components/user_annotations/test_user_annotations_service.h"
-#include "components/user_annotations/user_annotations_types.h"
 #include "content/public/test/browser_test.h"
 
 namespace {
@@ -195,13 +196,7 @@ class AutofillPrivateApiUnitTest : public extensions::ExtensionApiTest {
   void SetUpOnMainThread() override {
     ExtensionApiTest::SetUpOnMainThread();
     payments_data_manager().SetSyncingForTest(/*is_syncing_for_test=*/true);
-    UserAnnotationsServiceFactory::GetInstance()->SetTestingFactoryAndUse(
-        profile(),
-        base::BindLambdaForTesting([](content::BrowserContext* context)
-                                       -> std::unique_ptr<KeyedService> {
-          return std::make_unique<
-              user_annotations::TestUserAnnotationsService>();
-        }));
+    payments_data_manager().SetPrefService(autofill_client()->GetPrefs());
   }
 
   void TearDownOnMainThread() override {
@@ -222,18 +217,6 @@ class AutofillPrivateApiUnitTest : public extensions::ExtensionApiTest {
     return autofill_client()->GetPersonalDataManager();
   }
 
-  user_annotations::TestUserAnnotationsService* user_annotations_service() {
-    return static_cast<user_annotations::TestUserAnnotationsService*>(
-        UserAnnotationsServiceFactory::GetForProfile(profile()));
-  }
-
-  user_annotations::UserAnnotationsEntries GetAllUserAnnotationsEntries() {
-    base::test::TestFuture<user_annotations::UserAnnotationsEntries>
-        test_future;
-    user_annotations_service()->RetrieveAllEntries(test_future.GetCallback());
-    return test_future.Take();
-  }
-
  protected:
   bool RunAutofillSubtest(const std::string& subtest) {
     const std::string extension_url = "main.html?" + subtest;
@@ -245,8 +228,8 @@ class AutofillPrivateApiUnitTest : public extensions::ExtensionApiTest {
  private:
   autofill::TestAutofillClientInjector<autofill::TestContentAutofillClient>
       test_autofill_client_injector_;
-  raw_ptr<user_annotations::TestUserAnnotationsService>
-      user_annotations_service_;
+  base::test::ScopedFeatureList feature_list_{
+      autofill::features::kAutofillAiWithDataSchema};
 };
 
 // Test to verify all the CVCs(server and local) are bulk deleted when the API
@@ -290,58 +273,6 @@ IN_PROC_BROWSER_TEST_F(AutofillPrivateApiUnitTest, BulkDeleteAllCvcs) {
       EXPECT_EQ(card->number(), local_card.number());
     }
   }
-}
-
-IN_PROC_BROWSER_TEST_F(AutofillPrivateApiUnitTest, RetrieveAllUserAnnotations) {
-  ASSERT_EQ(user_annotations_service()->count_entries_retrieved(), 0u);
-  RunAutofillSubtest("getUserAnnotationsEntries");
-  ASSERT_EQ(user_annotations_service()->count_entries_retrieved(), 1u);
-}
-
-IN_PROC_BROWSER_TEST_F(AutofillPrivateApiUnitTest, RemoveUserAnnotationEntry) {
-  // Seed user annotations service with entries.
-  ASSERT_TRUE(RunAutofillSubtest("deleteUserAnnotationsEntry"));
-  optimization_guide::proto::UserAnnotationsEntry entry_1;
-  entry_1.set_entry_id(123);
-  optimization_guide::proto::UserAnnotationsEntry entry_2;
-  entry_2.set_entry_id(321);
-  user_annotations_service()->ReplaceAllEntries({entry_1, entry_2});
-  EXPECT_EQ(GetAllUserAnnotationsEntries().size(), 2u);
-
-  // By default, the test deletes the entry whose id is 123.
-  RunAutofillSubtest("deleteUserAnnotationsEntry");
-
-  user_annotations::UserAnnotationsEntries entries =
-      GetAllUserAnnotationsEntries();
-  EXPECT_EQ(entries.size(), 1u);
-  EXPECT_EQ(entries[0].entry_id(), 321u);
-}
-
-IN_PROC_BROWSER_TEST_F(AutofillPrivateApiUnitTest, RemoveAllUserAnnotations) {
-  // Seed user annotations service with entries.
-  optimization_guide::proto::UserAnnotationsEntry entry;
-  entry.set_entry_id(0);
-  user_annotations_service()->ReplaceAllEntries({entry});
-  EXPECT_EQ(GetAllUserAnnotationsEntries().size(), 1u);
-
-  RunAutofillSubtest("deleteAllUserAnnotationsEntries");
-  EXPECT_TRUE(GetAllUserAnnotationsEntries().empty());
-}
-
-IN_PROC_BROWSER_TEST_F(AutofillPrivateApiUnitTest,
-                       PredictionImprovementsIphFeatureUsed) {
-  using NotifyIphMockCallback =
-      testing::MockFunction<void(autofill::AutofillClient::IphFeature)>;
-  NotifyIphMockCallback mock_callback;
-  autofill_client()->set_notify_iph_feature_used_mock_callback(
-      base::BindRepeating(&NotifyIphMockCallback::Call,
-                          base::Unretained(&mock_callback)));
-
-  EXPECT_CALL(mock_callback,
-              Call(autofill::AutofillClient::IphFeature::kAutofillAi));
-
-  RunAutofillSubtest("predictionImprovementsIphFeatureUsed");
-  EXPECT_TRUE(GetAllUserAnnotationsEntries().empty());
 }
 
 IN_PROC_BROWSER_TEST_F(AutofillPrivateApiUnitTest, LogServerCardLinkClicked) {
@@ -397,6 +328,93 @@ IN_PROC_BROWSER_TEST_F(AutofillPrivateApiUnitTest,
   EXPECT_TRUE(RunAutofillSubtest("setAutofillSyncToggleEnabled"));
   EXPECT_TRUE(test_sync_service.GetUserSettings()->GetSelectedTypes().Has(
       syncer::UserSelectableType::kAutofill));
+}
+
+// TODO(crbug.com/40759629): Fix and re-enable this test.
+#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
+#define MAYBE_EntityInstances DISABLED_EntityInstances
+#else
+#define MAYBE_EntityInstances EntityInstances
+#endif
+IN_PROC_BROWSER_TEST_F(AutofillPrivateApiUnitTest, MAYBE_EntityInstances) {
+  // Test that loading, adding, editing and deleting entity instances works.
+  ASSERT_TRUE(RunAutofillSubtest("loadEmptyEntityInstancesList"));
+  ASSERT_TRUE(RunAutofillSubtest("addEntityInstance"));
+  ASSERT_TRUE(RunAutofillSubtest("addEntityInstanceWithIncompleteDate"));
+  ASSERT_TRUE(RunAutofillSubtest("getEntityInstanceByGuid"));
+  ASSERT_TRUE(RunAutofillSubtest("loadFirstEntityInstance"));
+  ASSERT_TRUE(RunAutofillSubtest("updateEntityInstance"));
+  ASSERT_TRUE(RunAutofillSubtest("loadUpdatedEntityInstance"));
+  ASSERT_TRUE(RunAutofillSubtest("removeEntityInstance"));
+  ASSERT_TRUE(RunAutofillSubtest("loadEmptyEntityInstancesList"));
+  ASSERT_TRUE(RunAutofillSubtest("testExpectedLabelsAreGenerated"));
+  //  Test that retrieving general entity type information works.
+  ASSERT_TRUE(RunAutofillSubtest("getAllEntityTypes"));
+  ASSERT_TRUE(RunAutofillSubtest("getAllAttributeTypesForEntityTypeName"));
+}
+
+IN_PROC_BROWSER_TEST_F(AutofillPrivateApiUnitTest,
+                       GetEmptyPayOverTimeIssuerList) {
+  ASSERT_TRUE(RunAutofillSubtest("getEmptyPayOverTimeIssuerList"));
+}
+
+IN_PROC_BROWSER_TEST_F(AutofillPrivateApiUnitTest, SetAutofillAiOptIn) {
+  autofill_client()->set_entity_data_manager(
+      autofill::AutofillEntityDataManagerFactory::GetForProfile(profile()));
+  autofill_client()->SetUpPrefsAndIdentityForAutofillAi();
+  EXPECT_TRUE(autofill::SetAutofillAiOptInStatus(*autofill_client(), false));
+  EXPECT_FALSE(autofill::GetAutofillAiOptInStatus(*autofill_client()));
+  EXPECT_TRUE(RunAutofillSubtest("verifyUserOptedOutOfAutofillAi"));
+
+  base::test::TestFuture<autofill::AutofillClient::IphFeature>
+      feature_used_future;
+  autofill_client()->set_notify_iph_feature_used_mock_callback(
+      feature_used_future.GetRepeatingCallback());
+
+  EXPECT_TRUE(RunAutofillSubtest("optIntoAutofillAi"));
+  EXPECT_EQ(feature_used_future.Get(),
+            autofill::AutofillClient::IphFeature::kAutofillAi);
+  EXPECT_TRUE(autofill::GetAutofillAiOptInStatus(*autofill_client()));
+  EXPECT_TRUE(RunAutofillSubtest("verifyUserOptedIntoAutofillAi"));
+
+  EXPECT_TRUE(RunAutofillSubtest("optOutOfAutofillAi"));
+  EXPECT_FALSE(autofill::GetAutofillAiOptInStatus(*autofill_client()));
+  EXPECT_TRUE(RunAutofillSubtest("verifyUserOptedOutOfAutofillAi"));
+}
+
+// Tests that the scenario where the user becomes ineligible and then tries
+// opting into Autofill AI behaves as expected.
+IN_PROC_BROWSER_TEST_F(AutofillPrivateApiUnitTest,
+                       SetAutofillAiOptIn_SwitchEligibility) {
+  autofill_client()->set_entity_data_manager(
+      autofill::AutofillEntityDataManagerFactory::GetForProfile(profile()));
+  autofill_client()->SetUpPrefsAndIdentityForAutofillAi();
+  EXPECT_TRUE(autofill::SetAutofillAiOptInStatus(*autofill_client(), false));
+  EXPECT_FALSE(autofill::GetAutofillAiOptInStatus(*autofill_client()));
+  EXPECT_TRUE(RunAutofillSubtest("verifyUserOptedOutOfAutofillAi"));
+
+  ASSERT_TRUE(autofill::MayPerformAutofillAiAction(
+      *autofill_client(), autofill::AutofillAiAction::kOptIn));
+
+  // Verify that we can opt into Autofill AI while eligible.
+  ASSERT_TRUE(RunAutofillSubtest("optIntoAutofillAi"));
+  EXPECT_TRUE(autofill::GetAutofillAiOptInStatus(*autofill_client()));
+  EXPECT_TRUE(RunAutofillSubtest("verifyUserOptedIntoAutofillAi"));
+
+  // Verify that we can opt out of Autofill AI while eligible.
+  ASSERT_TRUE(RunAutofillSubtest("optOutOfAutofillAi"));
+  EXPECT_FALSE(autofill::GetAutofillAiOptInStatus(*autofill_client()));
+  EXPECT_TRUE(RunAutofillSubtest("verifyUserOptedOutOfAutofillAi"));
+
+  // Become ineligible.
+  autofill_client()->set_app_locale("de-DE");
+  ASSERT_FALSE(autofill::MayPerformAutofillAiAction(
+      *autofill_client(), autofill::AutofillAiAction::kOptIn));
+
+  // Verify that we cannot opt into Autofill AI anymore.
+  ASSERT_TRUE(RunAutofillSubtest("optIntoAutofillAi"));
+  EXPECT_FALSE(autofill::GetAutofillAiOptInStatus(*autofill_client()));
+  EXPECT_TRUE(RunAutofillSubtest("verifyUserOptedOutOfAutofillAi"));
 }
 
 }  // namespace

@@ -9,21 +9,18 @@ import static android.view.View.LAYOUT_DIRECTION_RTL;
 import android.animation.Animator;
 import android.app.Activity;
 import android.graphics.Canvas;
-import android.os.Build;
-import android.os.Build.VERSION;
 import android.view.View;
 import android.view.View.OnKeyListener;
 
+import androidx.annotation.DrawableRes;
 import androidx.annotation.IdRes;
 import androidx.annotation.Nullable;
-import androidx.appcompat.widget.TooltipCompat;
 
 import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.base.supplier.OneshotSupplier;
 import org.chromium.base.supplier.Supplier;
 import org.chromium.chrome.browser.browser_controls.BrowserStateBrowserControlsVisibilityDelegate;
 import org.chromium.chrome.browser.theme.ThemeColorProvider;
-import org.chromium.chrome.browser.toolbar.R;
 import org.chromium.chrome.browser.toolbar.menu_button.MenuButtonProperties.ShowBadgeProperty;
 import org.chromium.chrome.browser.toolbar.menu_button.MenuButtonProperties.ThemeProperty;
 import org.chromium.chrome.browser.ui.appmenu.AppMenuButtonHelper;
@@ -34,11 +31,8 @@ import org.chromium.ui.base.WindowAndroid;
 import org.chromium.ui.modelutil.PropertyModel;
 import org.chromium.ui.modelutil.PropertyModelChangeProcessor;
 
-import android.widget.ImageButton;
-
 // Vivaldi
 import android.view.ViewGroup;
-import org.chromium.build.BuildConfig;
 
 /**
  * Root component for the app menu button on the toolbar. Owns the MenuButton view and handles
@@ -121,24 +115,6 @@ public class MenuButtonCoordinator {
             mChangeProcessor =
                     PropertyModelChangeProcessor.create(
                             mPropertyModel, mMenuButton, new MenuButtonViewBinder());
-
-            // Set tooltip text for menu button.
-            if (VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                TooltipCompat.setTooltipText(
-                        mMenuButton,
-                        mActivity
-                                .getResources()
-                                .getString(R.string.accessibility_toolbar_btn_menu));
-
-                // Vivaldi (ref. VAB-9155)
-                if (BuildConfig.IS_VIVALDI) {
-                    TooltipCompat.setTooltipText(
-                            mMenuButton,
-                            mActivity
-                                    .getResources()
-                                    .getString(R.string.v_menu_button_hint));
-                }
-            }
         }
     }
 
@@ -287,10 +263,13 @@ public class MenuButtonCoordinator {
         return mPropertyModel.get(MenuButtonProperties.SHOW_UPDATE_BADGE).mShowUpdateBadge;
     }
 
-    /** Vivaldi */
-    public ImageButton getMenuImageButton()
-    {
-        return mMenuButton.getImageButton();
+    /**
+     * Updates the menu button background.
+     *
+     * @param backgroundResId The button background resource.
+     */
+    public void updateButtonBackground(@DrawableRes int backgroundResId) {
+        mMenuButton.getImageButton().setBackgroundResource(backgroundResId);
     }
 
     /** Vivaldi **/
@@ -302,4 +281,5 @@ public class MenuButtonCoordinator {
                 org.chromium.chrome.browser.toolbar.R.dimen.toolbar_buttons_offset_padding);
         return params;
     }
+    // End Vivaldi
 }

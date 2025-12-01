@@ -2,12 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifndef V8_COMPILER_WASM_COMPILER_DEFINITIONS_H_
+#define V8_COMPILER_WASM_COMPILER_DEFINITIONS_H_
+
 #if !V8_ENABLE_WEBASSEMBLY
 #error This header should only be included if WebAssembly is enabled.
 #endif  // !V8_ENABLE_WEBASSEMBLY
-
-#ifndef V8_COMPILER_WASM_COMPILER_DEFINITIONS_H_
-#define V8_COMPILER_WASM_COMPILER_DEFINITIONS_H_
 
 #include <ostream>
 
@@ -36,9 +36,14 @@ class CallDescriptor;
 // {from} may change in compiler optimization passes as the object's type gets
 // narrowed.
 // TODO(12166): Add modules if we have cross-module inlining.
+enum ExactOrSubtype : bool {
+  kMayBeSubtype = false,
+  kExactMatchOnly = true,
+};
 struct WasmTypeCheckConfig {
   wasm::ValueType from;
   const wasm::ValueType to;
+  ExactOrSubtype exactness{kMayBeSubtype};
 };
 
 V8_INLINE std::ostream& operator<<(std::ostream& os,

@@ -7,7 +7,7 @@ License File: CREDITS.chromium
 Shipped: yes
 Security Critical: yes
 Upstream Git: git://source.ffmpeg.org/ffmpeg.git
-Last Upstream Merge: c1e3d55f99d3a669642d7d8d6cd0dc4d90f60bc1, Dec 09 2024
+Last Upstream Merge: d5873be583ada9e1fb887e2fe8dcfd4b12e0efcd, Jan 13 2025
 This file documents the layout of the Chromium copy of FFmpeg, some common
 tasks, and how to create the build files and related configurations.
 

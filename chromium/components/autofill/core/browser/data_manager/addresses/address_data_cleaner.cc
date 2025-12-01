@@ -10,8 +10,8 @@
 #include "base/notreached.h"
 #include "components/autofill/core/browser/data_manager/addresses/address_data_manager.h"
 #include "components/autofill/core/browser/data_manager/personal_data_manager.h"
-#include "components/autofill/core/browser/data_model/autofill_profile.h"
-#include "components/autofill/core/browser/data_model/autofill_profile_comparator.h"
+#include "components/autofill/core/browser/data_model/addresses/autofill_profile.h"
+#include "components/autofill/core/browser/data_model/addresses/autofill_profile_comparator.h"
 #include "components/autofill/core/browser/data_quality/addresses/profile_token_quality.h"
 #include "components/autofill/core/browser/field_types.h"
 #include "components/autofill/core/browser/metrics/address_data_cleaner_metrics.h"
@@ -84,7 +84,8 @@ void DeduplicateProfiles(const AutofillProfileComparator& comparator,
       merge_candidate->MergeDataFrom(*local_profile_it,
                                      comparator.app_locale());
       adm.UpdateProfile(*merge_candidate);
-      adm.RemoveProfile(local_profile_it->guid());
+      adm.RemoveProfile(local_profile_it->guid(),
+                        /*is_deduplication_initiated=*/true);
       num_profiles_deleted++;
       continue;
     }
@@ -98,7 +99,8 @@ void DeduplicateProfiles(const AutofillProfileComparator& comparator,
                      local_profile_it->IsSubsetOf(comparator, account_profile);
             });
         superset_account_profile != profiles.end()) {
-      adm.RemoveProfile(local_profile_it->guid());
+      adm.RemoveProfile(local_profile_it->guid(),
+                        /*is_deduplication_initiated=*/true);
       num_profiles_deleted++;
       // Account profiles track from which service they originate. This allows
       // Autofill to distinguish between Chrome and non-Chrome account
@@ -279,8 +281,11 @@ void AddressDataCleaner::ApplyDeduplicationRoutine() {
 
 void AddressDataCleaner::DeleteDisusedAddresses() {
   const std::vector<const AutofillProfile*>& profiles =
-      address_data_manager_->GetProfilesByRecordType(
-          AutofillProfile::RecordType::kLocalOrSyncable);
+      base::FeatureList::IsEnabled(
+          features::kAutofillDeduplicateAccountAddresses)
+          ? address_data_manager_->GetProfiles()
+          : address_data_manager_->GetProfilesByRecordType(
+                AutofillProfile::RecordType::kLocalOrSyncable);
   // Early return to prevent polluting metrics with uninteresting events.
   if (profiles.empty()) {
     return;
@@ -295,7 +300,8 @@ void AddressDataCleaner::DeleteDisusedAddresses() {
     }
   }
   for (const std::string& guid : guids_to_delete) {
-    address_data_manager_->RemoveProfile(guid);
+    address_data_manager_->RemoveProfile(guid,
+                                         /*is_deduplication_initiated=*/true);
   }
   autofill_metrics::LogNumberOfAddressesDeletedForDisuse(
       guids_to_delete.size());

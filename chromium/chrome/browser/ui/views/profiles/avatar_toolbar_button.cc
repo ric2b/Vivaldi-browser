@@ -221,7 +221,7 @@ void AvatarToolbarButton::UpdateAccessibilityLabel() {
   // accessibility label: the tooltip or no text if the button content has no
   // text initially. All the values needs to be overridden every time in order
   // clear the previous state effect.
-  std::u16string button_content = GetText();
+  std::u16string button_content(GetText());
   if (accessibility_label.has_value()) {
     if (button_content.empty()) {
       name = accessibility_label.value();
@@ -346,6 +346,7 @@ void AvatarToolbarButton::MaybeShowProfileSwitchIPH() {
   }
 }
 
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
 void AvatarToolbarButton::MaybeShowSupervisedUserSignInIPH() {
   if (!base::FeatureList::IsEnabled(
           feature_engagement::kIPHSupervisedUserProfileSigninFeature)) {
@@ -388,6 +389,7 @@ void AvatarToolbarButton::MaybeShowSupervisedUserSignInIPH() {
   params.title_params = base::UTF8ToUTF16(account_info.given_name);
   browser_->window()->MaybeShowFeaturePromo(std::move(params));
 }
+#endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
 
 void AvatarToolbarButton::MaybeShowExplicitBrowserSigninPreferenceRememberedIPH(
     const AccountInfo& account_info) {
@@ -399,7 +401,6 @@ void AvatarToolbarButton::MaybeShowExplicitBrowserSigninPreferenceRememberedIPH(
 }
 
 void AvatarToolbarButton::MaybeShowWebSignoutIPH(const GaiaId& gaia_id) {
-  CHECK(switches::IsExplicitBrowserSigninUIOnDesktopEnabled());
   browser_->window()->MaybeShowFeaturePromo(user_education::FeaturePromoParams(
       feature_engagement::kIPHSignoutWebInterceptFeature, gaia_id.ToString()));
 }

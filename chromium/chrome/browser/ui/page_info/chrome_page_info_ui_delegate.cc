@@ -16,6 +16,7 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/chrome_pages.h"
+#include "chrome/browser/ui/page_info/merchant_trust_side_panel.h"
 #include "chrome/browser/ui/ui_features.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/pref_names.h"
@@ -308,17 +309,19 @@ content::PermissionResult ChromePageInfoUiDelegate::GetPermissionResult(
           permission, url::Origin::Create(site_url_));
 }
 
-bool ChromePageInfoUiDelegate::IsTrackingProtection3pcdEnabled() {
-  return TrackingProtectionSettingsFactory::GetForProfile(GetProfile())
-      ->IsTrackingProtection3pcdEnabled();
-}
-
 std::optional<content::PermissionResult>
 ChromePageInfoUiDelegate::GetEmbargoResult(ContentSettingsType type) {
   return permissions::PermissionsClient::Get()
       ->GetPermissionDecisionAutoBlocker(GetProfile())
       ->GetEmbargoResult(site_url_, type);
 }
+
+#if !BUILDFLAG(IS_ANDROID)
+void ChromePageInfoUiDelegate::OpenMerchantTrustSidePanel(const GURL& url) {
+  DCHECK(page_info::IsMerchantTrustFeatureEnabled());
+  ShowMerchantTrustSidePanel(web_contents_, url);
+}
+#endif
 
 void ChromePageInfoUiDelegate::GetMerchantTrustInfo(
     page_info::MerchantDataCallback callback) {
@@ -340,6 +343,15 @@ void ChromePageInfoUiDelegate::RecordMerchantTrustButtonShown() {
     service->RecordMerchantTrustInteraction(
         web_contents_->GetVisibleURL(),
         page_info::MerchantTrustInteraction::kPageInfoRowShown);
+  }
+}
+
+void ChromePageInfoUiDelegate::RecordMerchantTrustSidePanelOpened() {
+  if (auto* service =
+          MerchantTrustServiceFactory::GetForProfile(GetProfile())) {
+    service->RecordMerchantTrustInteraction(
+        web_contents_->GetVisibleURL(),
+        page_info::MerchantTrustInteraction::kSidePanelOpened);
   }
 }
 

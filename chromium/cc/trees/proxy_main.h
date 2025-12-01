@@ -110,6 +110,7 @@ class CC_EXPORT ProxyMain : public Proxy {
                              PaintHoldingReason reason) override;
   void StopDeferringCommits(PaintHoldingCommitTrigger) override;
   bool IsDeferringCommits() const override;
+  void SetShouldThrottleFrameRate(bool flag) override;
   bool CommitRequested() const override;
   void Start() override;
   void Stop() override;
@@ -129,6 +130,8 @@ class CC_EXPORT ProxyMain : public Proxy {
   void SetSourceURL(ukm::SourceId source_id, const GURL& url) override;
   void SetUkmSmoothnessDestination(
       base::WritableSharedMemoryMapping ukm_smoothness_data) override;
+  void SetUkmDroppedFramesDestination(
+      base::WritableSharedMemoryMapping ukm_dropped_frames_data) override;
   void SetRenderFrameObserver(
       std::unique_ptr<RenderFrameMetadataObserver> observer) override;
   void CompositeImmediatelyForTest(base::TimeTicks frame_begin_time,

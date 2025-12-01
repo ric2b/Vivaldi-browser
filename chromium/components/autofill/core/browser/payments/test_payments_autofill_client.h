@@ -9,8 +9,8 @@
 
 #include "base/memory/raw_ref.h"
 #include "build/build_config.h"
-#include "components/autofill/core/browser/data_model/credit_card.h"
-#include "components/autofill/core/browser/data_model/iban.h"
+#include "components/autofill/core/browser/data_model/payments/credit_card.h"
+#include "components/autofill/core/browser/data_model/payments/iban.h"
 #include "components/autofill/core/browser/payments/autofill_error_dialog_context.h"
 #include "components/autofill/core/browser/payments/autofill_offer_manager.h"
 #include "components/autofill/core/browser/payments/legal_message_line.h"
@@ -22,6 +22,7 @@
 #include "components/autofill/core/browser/payments/test_payments_network_interface.h"
 #include "components/autofill/core/browser/single_field_fillers/payments/mock_merchant_promo_code_manager.h"
 #include "components/autofill/core/browser/suggestions/suggestion.h"
+#include "components/autofill/core/browser/ui/payments/bnpl_tos_controller.h"
 
 #if !BUILDFLAG(IS_IOS)
 namespace webauthn {
@@ -37,13 +38,14 @@ class AutofillDriver;
 #endif  // !BUILDFLAG(IS_IOS)
 class CreditCardCvcAuthenticator;
 class CreditCardOtpAuthenticator;
+class MockBnplManager;
 class TouchToFillDelegate;
 class VirtualCardEnrollmentManager;
 
 namespace payments {
 
-class PaymentsWindowManager;
 class BnplManager;
+class PaymentsWindowManager;
 
 // This class is for easier writing of tests. It is owned by TestAutofillClient.
 class TestPaymentsAutofillClient : public PaymentsAutofillClient {
@@ -60,14 +62,6 @@ class TestPaymentsAutofillClient : public PaymentsAutofillClient {
 
   // PaymentsAutofillClient:
 #if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
-  void ShowLocalCardMigrationDialog(
-      base::OnceClosure show_migration_dialog_closure) override;
-  void ConfirmMigrateLocalCardToCloud(
-      const LegalMessageLines& legal_message_lines,
-      const std::string& user_email,
-      const std::vector<MigratableCreditCard>& migratable_credit_cards,
-      PaymentsAutofillClient::LocalCardMigrationCallback
-          start_migrating_cards_callback) override;
   void ConfirmSaveIbanLocally(
       const Iban& iban,
       bool should_show_prompt,
@@ -122,7 +116,7 @@ class TestPaymentsAutofillClient : public PaymentsAutofillClient {
 #endif
   MockMandatoryReauthManager* GetOrCreatePaymentsMandatoryReauthManager()
       override;
-  const PaymentsDataManager& GetPaymentsDataManager() const override;
+  PaymentsDataManager& GetPaymentsDataManager() final;
   void ShowUnmaskAuthenticatorSelectionDialog(
       const std::vector<CardUnmaskChallengeOption>& challenge_options,
       base::OnceCallback<void(const std::string&)>
@@ -132,11 +126,6 @@ class TestPaymentsAutofillClient : public PaymentsAutofillClient {
   bool GetMandatoryReauthOptInPromptWasShown();
 
   bool GetMandatoryReauthOptInPromptWasReshown();
-
-  void set_migration_card_selections(
-      const std::vector<std::string>& migration_card_selection) {
-    migration_card_selection_ = migration_card_selection;
-  }
 
   bool autofill_progress_dialog_shown() {
     return autofill_progress_dialog_shown_;
@@ -160,6 +149,9 @@ class TestPaymentsAutofillClient : public PaymentsAutofillClient {
   }
 
   bool risk_data_loaded() const { return risk_data_loaded_; }
+  void set_risk_data_loaded(bool risk_data_loaded) {
+    risk_data_loaded_ = risk_data_loaded;
+  }
 
   bool ConfirmUploadIbanToCloudWasCalled() const {
     return confirm_upload_iban_to_cloud_called_ &&
@@ -195,6 +187,8 @@ class TestPaymentsAutofillClient : public PaymentsAutofillClient {
     autofill_offer_manager_ = std::move(autofill_offer_manager);
   }
 
+  MockBnplManager& CreateOrGetMockBnplManager();
+
   bool unmask_authenticator_selection_dialog_shown() const {
     return unmask_authenticator_selection_dialog_shown_;
   }
@@ -209,8 +203,6 @@ class TestPaymentsAutofillClient : public PaymentsAutofillClient {
   const raw_ref<AutofillClient> client_;
 
   std::unique_ptr<PaymentsNetworkInterface> payments_network_interface_;
-
-  std::vector<std::string> migration_card_selection_;
 
   bool autofill_progress_dialog_shown_ = false;
 

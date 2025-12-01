@@ -46,10 +46,10 @@ using base::trace_event::TraceLog;
 
 }  // namespace
 
-bool g_tracing_initialized_after_threadpool_and_featurelist = false;
+bool g_tracing_initialized_after_featurelist = false;
 
 bool IsTracingInitialized() {
-  return g_tracing_initialized_after_threadpool_and_featurelist;
+  return g_tracing_initialized_after_featurelist;
 }
 
 void EnableStartupTracingIfNeeded() {
@@ -98,11 +98,11 @@ bool EnableStartupTracingForProcess(
   return true;
 }
 
-void InitTracingPostThreadPoolStartAndFeatureList(bool enable_consumer) {
-  if (g_tracing_initialized_after_threadpool_and_featurelist)
+void InitTracingPostFeatureList(bool enable_consumer) {
+  if (g_tracing_initialized_after_featurelist) {
     return;
-  g_tracing_initialized_after_threadpool_and_featurelist = true;
-  DCHECK(base::ThreadPoolInstance::Get());
+  }
+  g_tracing_initialized_after_featurelist = true;
   DCHECK(base::FeatureList::GetInstance());
 
   // Create the PerfettoTracedProcess.
@@ -157,9 +157,9 @@ base::UnsafeSharedMemoryRegion CreateTracingOutputSharedMemory() {
   DCHECK(startup_config.IsEnabled() || trace_log->IsEnabled());
 
   if (!startup_config.IsEnabled()) {
-    bool has_relevant_config = std::any_of(
-        trace_log->GetTrackEventSessions().begin(),
-        trace_log->GetTrackEventSessions().end(), [](const auto& session) {
+    const auto sessions = trace_log->GetTrackEventSessions();
+    bool has_relevant_config =
+        std::any_of(sessions.begin(), sessions.end(), [](const auto& session) {
           return session.backend_type == perfetto::kCustomBackend &&
                  !session.config.has_interceptor_config();
         });
@@ -167,7 +167,8 @@ base::UnsafeSharedMemoryRegion CreateTracingOutputSharedMemory() {
   }
 #endif  // DCHECK_IS_ON()
 
-  auto shm = base::UnsafeSharedMemoryRegion::Create(kDefaultSharedMemorySize);
+  auto shm = base::UnsafeSharedMemoryRegion::Create(
+      features::kPerfettoSharedMemorySizeBytes.Get());
   if (!shm.IsValid()) {
     return base::UnsafeSharedMemoryRegion();
   }

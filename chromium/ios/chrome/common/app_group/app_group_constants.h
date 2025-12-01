@@ -76,11 +76,22 @@ extern const char kChromeAppGroupCommandCommandPreference[];
 // The command to open a URL. Parameter must contain the URL.
 extern const char kChromeAppGroupOpenURLCommand[];
 
+// The command to open a URL in incognito. Parameter must contain the URL.
+extern NSString* const kChromeAppGroupOpenURLInIcognitoCommand;
+
 // The command to search some text. Parameter must contain the text.
 extern const char kChromeAppGroupSearchTextCommand[];
 
+// The command to search some text in incognito. Parameter must contain the
+// text.
+extern NSString* const kChromeAppGroupIncognitoSearchTextCommand;
+
 // The command to search an image. Data parameter must contain the image.
 extern const char kChromeAppGroupSearchImageCommand[];
+
+// The command to search an image in incognito. Data parameter must contain the
+// image.
+extern NSString* const kChromeAppGroupIncognitoSearchImageCommand;
 
 // The command to trigger a voice search.
 extern const char kChromeAppGroupVoiceSearchCommand[];
@@ -162,12 +173,18 @@ extern NSString* const kOpenCommandSourceShareExtension;
 extern NSString* const kOpenCommandSourceCredentialsExtension;
 extern NSString* const kOpenCommandSourceOpenExtension;
 
-// The value of the key for the sharedDefaults used by the Content Widget.
+// The value of the key for the sharedDefaults used by the Shortcuts Widget.
 extern NSString* const kSuggestedItems;
-
 // The value of the key for the sharedDefaults last modification date used by
 // the Shortcuts Widget.
 extern NSString* const kSuggestedItemsLastModificationDate;
+
+// NSUserDefaults key containing a dictionary with most visited sites data for a
+// given gaiaID. Used by the Shortcuts Widget.
+extern NSString* const kSuggestedItemsForMultiprofile;
+// NSUserDefaults key containing the last modification date. Used by
+// the Shortcuts Widget.
+extern NSString* const kSuggestedItemsLastModificationDateForMultiprofile;
 
 // The current epoch time, on the first run of chrome on this machine. It is set
 // once and must be attached to metrics reports forever thereafter.
@@ -194,11 +211,19 @@ extern NSString* const kOpenExtensionOutcomes;
 // passed to widgets.
 extern NSString* const kAccountsOnDevice;
 // Names of keys in dictionary saved in kAccountsOnDevice.
-extern NSString* const kHostedDomain;
 extern NSString* const kEmail;
+// Key used to save info for widgets when no account is signed-in.
+extern NSString* const kDefaultAccount;
 
 // Supported bundle IDs for opening incognito links in Chrome.
 extern NSString* const kYoutubeBundleID;
+
+// Stores in NSUserDefaults info about the latest changed primary account for
+// all profiles. Empty if last operation was a sign-out.
+extern NSString* const kPrimaryAccount;
+
+// Key in storage indicating if Chrome is likely the default browser.
+extern NSString* const kChromeLikelyDefaultBrowser;
 
 // Conversion helpers between keys and OpenExtensionOutcome.
 NSString* KeyForOpenExtensionOutcomeType(OpenExtensionOutcome);

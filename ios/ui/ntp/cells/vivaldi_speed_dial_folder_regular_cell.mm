@@ -120,7 +120,6 @@ const UIEdgeInsets titleLabelPadding =
 
 #pragma mark - SETTERS
 - (void)configureCellWith:(VivaldiSpeedDialItem*)item
-                   addNew:(bool)addNew
               layoutStyle:(VivaldiStartPageLayoutStyle)style {
 
   switch (style) {
@@ -147,17 +146,8 @@ const UIEdgeInsets titleLabelPadding =
       break;
   }
 
-  if (addNew) {
-    self.iconView.image = [UIImage imageNamed: vNTPAddNewSpeedDialIcon];
-    NSString* newSpeedDialTitle =
-      (style == VivaldiStartPageLayoutStyleSmall) ?
-      l10n_util::GetNSString(IDS_IOS_NEW_SPEED_DIAL_SMALL) :
-      l10n_util::GetNSString(IDS_IOS_NEW_SPEED_DIAL);
-    self.titleLabel.text = newSpeedDialTitle;
-  } else {
-    self.iconView.image = [UIImage imageNamed:vNTPSpeedDialFolderIcon];
-    self.titleLabel.text = item.title;
-  }
+  self.iconView.image = [UIImage imageNamed:vNTPSpeedDialFolderIcon];
+  self.titleLabel.text = item.title;
 }
 
 @end

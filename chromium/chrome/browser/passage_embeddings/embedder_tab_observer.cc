@@ -25,7 +25,6 @@
 #include "content/public/browser/weak_document_ptr.h"
 #include "content/public/browser/web_contents.h"
 #include "mojo/public/cpp/bindings/callback_helpers.h"
-#include "services/passage_embeddings/public/mojom/passage_embeddings.mojom.h"
 #include "services/service_manager/public/cpp/interface_provider.h"
 #include "url/gurl.h"
 
@@ -42,7 +41,9 @@ blink::mojom::InnerTextParamsPtr MakeInnerTextParams() {
 }
 
 void OnGotEmbeddings(base::ElapsedTimer embeddings_computation_timer,
-                     std::vector<mojom::PassageEmbeddingsResultPtr> results,
+                     std::vector<std::string> passages,
+                     std::vector<Embedding> embeddings,
+                     Embedder::TaskId task_id,
                      ComputeEmbeddingsStatus status) {
   if (status != ComputeEmbeddingsStatus::kSuccess) {
     return;
@@ -92,7 +93,13 @@ bool EmbedderTabObserver::ScheduleExtraction(
 
 void EmbedderTabObserver::MaybeExtractPassages(
     content::WeakDocumentPtr weak_render_frame_host) {
-  if (resource_coordinator::TabLoadTracker::Get()->GetLoadingTabCount() > 0) {
+  // Do not wait for all tabs when using performance scenario.
+  // SchedulingEmbedder will use performance scenario which takes loading states
+  // into account. By not enforcing this custom non-contention logic, the
+  // performance scenario load state handling can be tuned and the feature
+  // behavior will follow.
+  if (resource_coordinator::TabLoadTracker::Get()->GetLoadingTabCount() > 0 &&
+      !kUsePerformanceScenario.Get()) {
     VLOG(3) << "Extraction to be rescheduled; tabs still loading";
     ScheduleExtraction(weak_render_frame_host);
     return;
@@ -150,10 +157,12 @@ void EmbedderTabObserver::OnGotPassages(
           << total_text_size;
 
   base::ElapsedTimer embeddings_computation_timer;
-  ChromePassageEmbeddingsServiceController::Get()->GetEmbeddings(
-      std::move(passages), PassagePriority::kPassive,
-      base::BindOnce(&OnGotEmbeddings,
-                     std::move(embeddings_computation_timer)));
+  ChromePassageEmbeddingsServiceController::Get()
+      ->GetEmbedder()
+      ->ComputePassagesEmbeddings(
+          PassagePriority::kPassive, std::move(passages),
+          base::BindOnce(&OnGotEmbeddings,
+                         std::move(embeddings_computation_timer)));
 }
 
 Profile* EmbedderTabObserver::GetProfile() {

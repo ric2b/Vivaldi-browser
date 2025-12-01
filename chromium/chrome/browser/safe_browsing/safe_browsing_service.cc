@@ -87,15 +87,14 @@
 #include "components/safe_browsing/content/browser/password_protection/password_protection_service.h"
 #endif
 
-#if BUILDFLAG(FULL_SAFE_BROWSING)
+#if BUILDFLAG(SAFE_BROWSING_DOWNLOAD_PROTECTION)
 #include "chrome/browser/safe_browsing/download_protection/download_protection_service.h"
 #include "chrome/browser/safe_browsing/download_protection/download_protection_util.h"
-#include "chrome/browser/safe_browsing/hash_realtime_service_factory.h"
-#include "chrome/browser/safe_browsing/incident_reporting/binary_integrity_analyzer.h"
 #endif
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
-#include "chromeos/ash/components/browser_context_helper/browser_context_types.h"
+#if BUILDFLAG(FULL_SAFE_BROWSING)
+#include "chrome/browser/safe_browsing/hash_realtime_service_factory.h"
+#include "chrome/browser/safe_browsing/incident_reporting/binary_integrity_analyzer.h"
 #endif
 
 using content::BrowserThread;
@@ -109,7 +108,7 @@ namespace {
 // The number of user gestures to trace back for the referrer chain.
 const int kReferrerChainUserGestureLimit = 2;
 
-#if BUILDFLAG(FULL_SAFE_BROWSING)
+#if BUILDFLAG(SAFE_BROWSING_DOWNLOAD_PROTECTION)
 void PopulateDownloadWarningActions(download::DownloadItem* download,
                                     ClientSafeBrowsingReportRequest* report) {
   for (auto& event :
@@ -628,7 +627,7 @@ void SafeBrowsingServiceImpl::RefreshState() {
   services_delegate_->RefreshState(enabled_by_prefs_);
 }
 
-#if BUILDFLAG(FULL_SAFE_BROWSING)
+#if BUILDFLAG(SAFE_BROWSING_DOWNLOAD_PROTECTION)
 void SafeBrowsingServiceImpl::SendDownloadReport(
     download::DownloadItem* download,
     ClientSafeBrowsingReportRequest::ReportType report_type,
@@ -671,7 +670,9 @@ void SafeBrowsingServiceImpl::PersistDownloadReportAndSendOnNextStartup(
       result);
   return;
 }
+#endif  // BUILDFLAG(SAFE_BROWSING_DOWNLOAD_PROTECTION)
 
+#if BUILDFLAG(FULL_SAFE_BROWSING)
 bool SafeBrowsingServiceImpl::SendPhishyInteractionsReport(
     Profile* profile,
     const GURL& url,
@@ -708,7 +709,7 @@ bool SafeBrowsingServiceImpl::SendPhishyInteractionsReport(
   return ping_manager->ReportThreatDetails(std::move(report)) ==
          PingManager::ReportThreatDetailsResult::SUCCESS;
 }
-#endif
+#endif  // BUILDFLAG(FULL_SAFE_BROWSING)
 
 bool SafeBrowsingServiceImpl::MaybeSendNotificationsAcceptedReport(
     content::RenderFrameHost* render_frame_host,

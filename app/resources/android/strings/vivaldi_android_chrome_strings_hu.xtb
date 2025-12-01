@@ -1,7 +1,10 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="hu">
+<translation id="1204037785786432551">Hivatkozás letöltése</translation>
+<translation id="1206892813135768548">Hivatkozás szövegének másolása</translation>
 <translation id="1397811292916898096">Keresés a(z) <ph name="PRODUCT_NAME" /> keresőmotorral</translation>
+<translation id="1435593198351412143">PDF-fájlok automatikus megnyitása</translation>
 <translation id="1456207338570705181">Az "Érintéses keresés" egy olyan funkció, mely csak akkor érhető el, ha a Vivaldi alakértelmezett keresőmotorja a Google. Elküldi a kiválasztott szót és az aktuális oldalt a Google keresőnek. A <ph name="BEGIN_LINK" />Beállítások<ph name="END_LINK" /> alatt kikapcsolható.</translation>
 <translation id="1598449788754183301">Normál/privát lap váltása</translation>
 <translation id="1644574205037202324">Előzmények</translation>
@@ -14,10 +17,14 @@
 <translation id="2433507940547922241">Megjelenés</translation>
 <translation id="2501278716633472235">Visszalépés</translation>
 <translation id="2633278372998075009">Privát lapok</translation>
+<translation id="2650751991977523696">A fájl újbóli letöltése?</translation>
 <translation id="265156376773362237">Normál előtöltés</translation>
 <translation id="272026394418727548">Vivaldi kezdőlap</translation>
+<translation id="2842985007712546952">Szülőmappa</translation>
 <translation id="2871733351037274014">Oldalak előtöltése</translation>
+<translation id="2904300462646366554">A letöltött PDF-fájlok automatikusan megnyílnak az eszközön használt PDF-megtekintők egyikével</translation>
 <translation id="2951071800649516099">Oldalak felvétele az olvasólistára, későbbi elolvasáshoz</translation>
+<translation id="3029276696788198026">Nincs előtöltés</translation>
 <translation id="3060635849835183725">{BOOKMARKS_COUNT, plural,
           =1 {<ph name="BOOKMARKS_COUNT_ONE" /> könyvjelző}
           other {<ph name="BOOKMARKS_COUNT_MANY" /> könyvjelző}}</translation>
@@ -34,6 +41,7 @@
 <translation id="3719826155360621982">Kezdőlap</translation>
 <translation id="3738139272394829648">Kereséshez koppintás</translation>
 <translation id="385051799172605136">Vissza</translation>
+<translation id="3987993985790029246">Hivatkozás másolása</translation>
 <translation id="399014816462153200">Olvasott cikkek:</translation>
 <translation id="4121750346708795461">Az alkalmazás használatával elfogadod a Vivaldi <ph name="BEGIN_LINK1" />Általános Szerződési Feltételeit<ph name="END_LINK1" /> és <ph name="BEGIN_LINK2" />Adatvédelmi szabályzatát<ph name="END_LINK2" />.</translation>
 <translation id="4137746084635924146">Aktuális eszköz nyelve</translation>
@@ -41,10 +49,13 @@
 <translation id="4195643157523330669">Megnyitás új lapon</translation>
 <translation id="4225895483398857530">Eszköztár parancsikon</translation>
 <translation id="4243710787042215766">Megnyitás privát lapon</translation>
+<translation id="4269820728363426813">Hivatkozási cím másolása</translation>
 <translation id="4291407919474070700"><ph name="BEGIN_LINK" />Képernyőzár bekapcsolása az Android beállításai között<ph name="END_LINK" /></translation>
 <translation id="4304713468139749426">Jelszókezelő</translation>
 <translation id="451872707440238414">Keresés a könyvjelzők közt</translation>
 <translation id="4526803704855831732">Privát lapok</translation>
+<translation id="4532845899244822526">Mappa választása</translation>
+<translation id="4699172675775169585">Képek és fájlok a gyorsítótárban</translation>
 <translation id="4719086422742491124">Az oldal elhagyása nélkül tudj meg többet a weboldalak témáiról. Válassz ki egy vagy több szót az oldalon a keresésükhöz.
 
 Az "Érintéses keresés" csak akkor érhető el, ha a Vivaldi alapértelmezett keresőmotorja a Google.</translation>
@@ -55,19 +66,34 @@ Az "Érintéses keresés" csak akkor érhető el, ha a Vivaldi alapértelmezett 
 <translation id="49576331685473090">Tartalom blokkolása</translation>
 <translation id="5079259810715830221">Mikor egy Google weboldal a hivatkozásokat privát módon kívánja előtölteni, a Vivaldi titkosítja és előtölti az oldalakat a Google szerverein keresztül. Ezzel elrejthető a személyazonosságod az előre betöltött weboldal elől.</translation>
 <translation id="5118676864324397542"><ph name="APP_NAME" /> tárhely</translation>
+<translation id="5144385790872094440">A felkeresett oldalak némelyikét előtölti a rendszer. Az oldalakat előre betöltheti a rendszer a Google szerverein keresztül, ha Google-webhely vagy -alkalmazás hivatkozik rájuk.</translation>
 <translation id="5186185447130319458">Privát</translation>
+<translation id="5206168361184759344">{FILE_COUNT, plural,
+            =1 {Fájl letöltése...}
+            other {# fájl letöltése…}}</translation>
 <translation id="5233638681132016545">Új lap</translation>
 <translation id="5375131951310889874">Az oldal elhagyása nélkül tudj meg többet a weboldalak témáiról. Az "Érintéses keresés" csak akkor érhető el, ha a Vivaldi alapértelmezett keresőmotorja a Google. Egy szót és annak szövegkörnyezetét elküldi a Google keresőnek, mely fogalmakat, képeket, keresési eredményeket és egyéb részleteket ad vissza.
 
 A keresési kifejezés módosításához tarts hosszan nyomva. A keresés finomításához teljesen húzd fel a panelt, és koppintson a keresőmezőre.</translation>
+<translation id="543338862236136125">Jelszó módosítása</translation>
 <translation id="572328651809341494">Nemrég megnyitott lapok</translation>
+<translation id="5833984609253377421">Hivatkozás megosztása</translation>
 <translation id="6150320133806434356">Könyvjelző mentve</translation>
+<translation id="6193448654517602979">Lapok kiválasztása</translation>
 <translation id="6336451774241870485">Új privát lap</translation>
+<translation id="6337323516034698937">Hogy másik eszközre küldhesd a lapot, mindkét eszközön jelentkezz be a Vivaldi szinkronizálásba. Ha szükséges, add meg a titkosítási jelszót.</translation>
+<translation id="6341580099087024258">Rákérdezés a fájlok mentésének helyére</translation>
 <translation id="6404511346730675251">Könyvjelző szerkesztése</translation>
+<translation id="650224091954855786">{FILE_COUNT, plural,
+          =1 {Fájl letöltve}
+          other {# letöltés befejeződött}}</translation>
 <translation id="6585139692466700358">Oldalak fordítása más nyelvekre a Vivaldi fordítás szolgáltatása segítségével</translation>
 <translation id="6588043302623806746">Biztonságos DNS használata</translation>
 <translation id="6593061639179217415">Asztali webhely</translation>
 <translation id="6610147964972079463">Privát lapok bezárása</translation>
+<translation id="6627583120233659107">Mappa szerkesztése</translation>
+<translation id="6865313869410766144">Űrlapok automatikus kitöltésű adatai</translation>
+<translation id="6909589135458168665">Oldalak előtöltése</translation>
 <translation id="7029995644714925509">Mikor egy weboldal a hivatkozásokat privát módon kívánja előtölteni, a Vivaldi titkosítja és előtölti az oldalakat a Google szerverein keresztül. Ezzel elrejthető a személyazonosságod az előre betöltött weboldal elől.</translation>
 <translation id="706339621163631076">Vivaldi - Adatvédelmi szabályzat</translation>
 <translation id="732145680195464316">Könyvjelző mentve (<ph name="PRODUCT_NAME" />)</translation>
@@ -78,11 +104,14 @@ A keresési kifejezés módosításához tarts hosszan nyomva. A keresés finom�
 <translation id="7456774706094330779">Kiterjesztett előtöltés</translation>
 <translation id="7465104139234185284">Minden privát lap bezárása</translation>
 <translation id="7481312909269577407">Előre</translation>
+<translation id="7764225426217299476">Cím hozzáadása</translation>
 <translation id="7968014550143838305">Hozzáadva az Olvasási listához</translation>
 <translation id="804786196054284061">Általános Szerződési Feltételek</translation>
 <translation id="8062594758852531064">Kiterjesztett előtöltés:</translation>
+<translation id="8073388330009372546">Kép megnyitása új lapon</translation>
 <translation id="8127542551745560481">Kezdőlap szerkesztése</translation>
-<translation id="8348430946834215779">HTTPS használata, amikor csak lehetséges, és figyelmeztetés megjelenítése a protokollt nem támogató webhelyek betöltése előtt.</translation>
+<translation id="8266862848225348053">Letöltési hely</translation>
+<translation id="8348430946834215779">HTTPS használata, amikor csak lehetséges, és figyelmeztetés megjelenítése a protokollt nem támogató webhelyek betöltése előtt</translation>
 <translation id="8560602726703398413">Olvasási lista keresése a Könyvjelzőkben</translation>
 <translation id="85991616550051997">Kezdőlapra ugrás</translation>
 <translation id="8820817407110198400">Könyvjelzők</translation>

@@ -12,14 +12,8 @@ import * as Components from '../../../ui/legacy/components/utils/utils.js';
 import * as Lit from '../../../ui/lit/lit.js';
 import * as VisualLogging from '../../../ui/visual_logging/visual_logging.js';
 
-import stackTraceLinkButtonStylesRaw from './stackTraceLinkButton.css.js';
-import stackTraceRowStylesRaw from './stackTraceRow.css.js';
-
-// TODO(crbug.com/391381439): Fully migrate off of constructed style sheets.
-const stackTraceLinkButtonStyles = new CSSStyleSheet();
-stackTraceLinkButtonStyles.replaceSync(stackTraceLinkButtonStylesRaw.cssContent);
-const stackTraceRowStyles = new CSSStyleSheet();
-stackTraceRowStyles.replaceSync(stackTraceRowStylesRaw.cssContent);
+import stackTraceLinkButtonStyles from './stackTraceLinkButton.css.js';
+import stackTraceRowStyles from './stackTraceRow.css.js';
 
 const {html} = Lit;
 
@@ -41,7 +35,7 @@ const UIStrings = {
    * stack trace for the line of code which caused the creation of the iframe. This is the stack trace we are showing here.
    */
   creationStackTrace: 'Frame Creation `Stack Trace`',
-};
+} as const;
 const str_ = i18n.i18n.registerUIStrings('panels/application/components/StackTrace.ts', UIStrings);
 const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
 
@@ -52,9 +46,9 @@ export interface StackTraceData {
       target: SDK.Target.Target|null,
       linkifier: Components.Linkifier.Linkifier,
       tabStops: boolean|undefined,
-      updateCallback?: (arg0: (Components.JSPresentationUtils.StackTraceRegularRow|
-                               Components.JSPresentationUtils.StackTraceAsyncRow)[]) => void,
-      ) => (Components.JSPresentationUtils.StackTraceRegularRow | Components.JSPresentationUtils.StackTraceAsyncRow)[];
+      updateCallback?: (arg0: Array<Components.JSPresentationUtils.StackTraceRegularRow|
+                                    Components.JSPresentationUtils.StackTraceAsyncRow>) => void,
+      ) => Array<Components.JSPresentationUtils.StackTraceRegularRow|Components.JSPresentationUtils.StackTraceAsyncRow>;
 }
 
 interface StackTraceRowData {
@@ -71,16 +65,13 @@ export class StackTraceRow extends HTMLElement {
     this.#render();
   }
 
-  connectedCallback(): void {
-    this.#shadow.adoptedStyleSheets = [stackTraceRowStyles];
-  }
-
   #render(): void {
     if (!this.#stackTraceRowItem) {
       return;
     }
     Lit.render(
         html`
+      <style>${stackTraceRowStyles.cssText}</style>
       <div class="stack-trace-row">
               <div class="stack-trace-function-name text-ellipsis" title=${this.#stackTraceRowItem.functionName}>
                 ${this.#stackTraceRowItem.functionName}
@@ -108,17 +99,13 @@ export class StackTraceLinkButton extends HTMLElement {
 
   #onShowAllClick: () => void = () => {};
   #hiddenCallFramesCount: number|null = null;
-  #expandedView: boolean = false;
+  #expandedView = false;
 
   set data(data: StackTraceLinkButtonData) {
     this.#onShowAllClick = data.onShowAllClick;
     this.#hiddenCallFramesCount = data.hiddenCallFramesCount;
     this.#expandedView = data.expandedView;
     this.#render();
-  }
-
-  connectedCallback(): void {
-    this.#shadow.adoptedStyleSheets = [stackTraceLinkButtonStyles];
   }
 
   #render(): void {
@@ -129,6 +116,7 @@ export class StackTraceLinkButton extends HTMLElement {
                                           i18nString(UIStrings.showSMoreFrames, {n: this.#hiddenCallFramesCount});
     Lit.render(
         html`
+      <style>${stackTraceLinkButtonStyles.cssText}</style>
       <div class="stack-trace-row">
           <button class="link" @click=${() => this.#onShowAllClick()}>
             ${linkText}
@@ -142,8 +130,8 @@ export class StackTraceLinkButton extends HTMLElement {
 export class StackTrace extends HTMLElement {
   readonly #shadow = this.attachShadow({mode: 'open'});
   readonly #linkifier = new Components.Linkifier.Linkifier();
-  #stackTraceRows: (Components.JSPresentationUtils.StackTraceRegularRow|
-                    Components.JSPresentationUtils.StackTraceAsyncRow)[] = [];
+  #stackTraceRows:
+      Array<Components.JSPresentationUtils.StackTraceRegularRow|Components.JSPresentationUtils.StackTraceAsyncRow> = [];
   #showHidden = false;
 
   set data(data: StackTraceData) {
@@ -157,8 +145,10 @@ export class StackTrace extends HTMLElement {
     this.#render();
   }
 
-  #onStackTraceRowsUpdated(stackTraceRows: (Components.JSPresentationUtils.StackTraceRegularRow|
-                                            Components.JSPresentationUtils.StackTraceAsyncRow)[]): void {
+  #onStackTraceRowsUpdated(
+      stackTraceRows:
+          Array<Components.JSPresentationUtils.StackTraceRegularRow|Components.JSPresentationUtils.StackTraceAsyncRow>):
+      void {
     this.#stackTraceRows = stackTraceRows;
     this.#render();
   }

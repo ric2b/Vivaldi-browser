@@ -9,31 +9,51 @@
 #include "base/android/callback_android.h"
 #include "base/android/jni_android.h"
 #include "base/android/jni_array.h"
+#include "base/android/jni_string.h"
 #include "base/barrier_callback.h"
 #include "base/functional/bind.h"
+#include "base/hash/hash.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/singleton.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/android/persisted_tab_data/sensitivity_persisted_tab_data_android.h"
 #include "chrome/browser/android/tab_android.h"
+#include "chrome/browser/auxiliary_search/fetch_and_rank_helper.h"
 #include "chrome/browser/auxiliary_search/proto/auxiliary_search_group.pb.h"
-#include "chrome/browser/bookmarks/bookmark_model_factory.h"
 #include "chrome/browser/flags/android/chrome_feature_list.h"
+#include "chrome/browser/ntp_tiles/chrome_most_visited_sites_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_keyed_service_factory.h"
-#include "components/bookmarks/browser/bookmark_model.h"
-#include "components/bookmarks/browser/bookmark_node.h"
-#include "components/bookmarks/browser/bookmark_utils.h"
+#include "chrome/browser/visited_url_ranking/visited_url_ranking_service_factory.h"
+#include "components/ntp_tiles/constants.h"
+#include "components/visited_url_ranking/public/features.h"
+#include "components/visited_url_ranking/public/fetch_options.h"
+#include "components/visited_url_ranking/public/url_visit.h"
+#include "components/visited_url_ranking/public/url_visit_util.h"
+#include "components/visited_url_ranking/public/visited_url_ranking_service.h"
+#include "url/android/gurl_android.h"
 #include "url/url_constants.h"
 
 // Must come after all headers that specialize FromJniType() / ToJniType().
 #include "chrome/browser/auxiliary_search/jni_headers/AuxiliarySearchBridge_jni.h"
 
 using base::android::ToJavaByteArray;
-using bookmarks::BookmarkModel;
-using bookmarks::BookmarkNode;
+using visited_url_ranking::Config;
+using visited_url_ranking::Fetcher;
+using visited_url_ranking::FetchOptions;
+using visited_url_ranking::ResultStatus;
+using visited_url_ranking::URLVisitAggregate;
+using visited_url_ranking::URLVisitAggregatesTransformType;
+using visited_url_ranking::URLVisitsMetadata;
+using visited_url_ranking::URLVisitVariantHelper;
+using visited_url_ranking::VisitedURLRankingService;
+using visited_url_ranking::VisitedURLRankingServiceFactory;
 
 namespace {
+// Must match Java Tab.INVALID_TAB_ID.
+static constexpr int kInvalidTabId = -1;
+
+const int kMaxNumMostVisitedSites = 4;
 
 using BackToJavaCallback = base::OnceCallback<void(
     std::unique_ptr<std::vector<base::WeakPtr<TabAndroid>>>)>;
@@ -56,7 +76,10 @@ class AuxiliarySearchProviderFactory : public ProfileKeyedServiceFactory {
                 .WithRegular(ProfileSelection::kRedirectedToOriginal)
                 .WithGuest(ProfileSelection::kNone)
                 .Build()) {
-    DependsOn(BookmarkModelFactory::GetInstance());
+    if (base::FeatureList::IsEnabled(
+            chrome::android::kAndroidAppIntegrationMultiDataSource)) {
+      DependsOn(VisitedURLRankingServiceFactory::GetInstance());
+    }
   }
 
  private:
@@ -66,8 +89,13 @@ class AuxiliarySearchProviderFactory : public ProfileKeyedServiceFactory {
     Profile* profile = Profile::FromBrowserContext(context);
     DCHECK(!profile->IsOffTheRecord());
 
-    return std::make_unique<AuxiliarySearchProvider>(
-        BookmarkModelFactory::GetForBrowserContext(profile));
+    if (base::FeatureList::IsEnabled(
+            chrome::android::kAndroidAppIntegrationMultiDataSource)) {
+      return std::make_unique<AuxiliarySearchProvider>(
+          VisitedURLRankingServiceFactory::GetForProfile(profile),
+          ChromeMostVisitedSitesFactory::NewForProfile(profile));
+    }
+    return std::make_unique<AuxiliarySearchProvider>(nullptr, nullptr);
   }
 };
 
@@ -108,24 +136,32 @@ base::WeakPtr<TabAndroid> FilterNonSensitiveSearchableTab(
   return tab;
 }
 
+void OnDataReady(JNIEnv* env,
+                 base::android::ScopedJavaGlobalRef<jobject> j_callback,
+                 std::vector<jni_zero::ScopedJavaLocalRef<jobject>> entries) {
+  Java_AuxiliarySearchBridge_onDataReady(env, entries, j_callback);
+}
+
+// Converts the score to be an integer. Usually the score is between 0 and 1.0.
+int convertSiteSuggestionScore(double score) {
+  return std::max(0, static_cast<int>(score * 100));
+}
+
 }  // namespace
 
 AuxiliarySearchProvider::AuxiliarySearchProvider(
-    bookmarks::BookmarkModel* bookmark_model)
-    : bookmark_model_(bookmark_model) {}
+    VisitedURLRankingService* ranking_service,
+    std::unique_ptr<ntp_tiles::MostVisitedSites> most_visited_sites)
+    : ranking_service_(ranking_service),
+      most_visited_sites_(std::move(most_visited_sites)) {}
 
 AuxiliarySearchProvider::~AuxiliarySearchProvider() = default;
 
-base::android::ScopedJavaLocalRef<jbyteArray>
-AuxiliarySearchProvider::GetBookmarksSearchableData(JNIEnv* env) const {
-  auxiliary_search::AuxiliarySearchBookmarkGroup group = GetBookmarks();
-
-  std::string serialized_group;
-  if (!group.SerializeToString(&serialized_group)) {
-    serialized_group.clear();
+void AuxiliarySearchProvider::Shutdown() {
+  if (most_visited_sites_) {
+    most_visited_sites_->RemoveMostVisitedURLsObserver(this);
+    most_visited_sites_.reset();
   }
-
-  return ToJavaByteArray(env, serialized_group);
 }
 
 void AuxiliarySearchProvider::GetNonSensitiveTabs(
@@ -143,33 +179,74 @@ void AuxiliarySearchProvider::GetNonSensitiveTabs(
           base::android::ScopedJavaGlobalRef<jobject>(j_callback_obj)));
 }
 
-auxiliary_search::AuxiliarySearchBookmarkGroup
-AuxiliarySearchProvider::GetBookmarks() const {
-  auxiliary_search::AuxiliarySearchBookmarkGroup group;
-  std::vector<const BookmarkNode*> nodes;
-  bookmarks::GetMostRecentlyUsedEntries(
-      bookmark_model_,
-      chrome::android::kAuxiliarySearchMaxBookmarksCountParam.Get(), &nodes);
-  for (const BookmarkNode* node : nodes) {
-    const GURL& url = node->url();
-    if (!IsSchemeAllowed(node->url())) {
+void AuxiliarySearchProvider::GetNonSensitiveHistoryData(
+    JNIEnv* env,
+    const base::android::JavaParamRef<jobject>& j_callback_obj) const {
+  CHECK(ranking_service_ != nullptr);
+  scoped_refptr<FetchAndRankHelper> helper =
+      base::MakeRefCounted<FetchAndRankHelper>(
+          ranking_service_,
+          base::BindOnce(
+              &OnDataReady, env,
+              base::android::ScopedJavaGlobalRef<jobject>(j_callback_obj)));
+
+  helper->StartFetching();
+}
+
+void AuxiliarySearchProvider::SetObserverAndTrigger(
+    JNIEnv* env,
+    const base::android::JavaRef<jobject>& j_ref_obj) {
+  j_ref_ = base::android::ScopedJavaGlobalRef<jobject>(j_ref_obj);
+
+  CHECK(most_visited_sites_);
+  most_visited_sites_->AddMostVisitedURLsObserver(this,
+                                                  kMaxNumMostVisitedSites);
+}
+
+void AuxiliarySearchProvider::GetMostVisitedSites(JNIEnv* env) const {
+  CHECK(most_visited_sites_);
+
+  most_visited_sites_->RefreshTiles();
+}
+
+void AuxiliarySearchProvider::OnURLsAvailable(
+    const std::map<ntp_tiles::SectionType, ntp_tiles::NTPTilesVector>&
+        sections) {
+  CHECK(most_visited_sites_);
+
+  JNIEnv* env = base::android::AttachCurrentThread();
+  std::vector<jni_zero::ScopedJavaLocalRef<jobject>> entries;
+  // Uses only personalized tiles for auxiliary search.
+  auto it = sections.find(ntp_tiles::SectionType::PERSONALIZED);
+  if (it == sections.end()) {
+    return;
+  }
+
+  for (const ntp_tiles::NTPTile& tile : it->second) {
+    // Filters the tile list to include only TOP_SITES and CUSTOM_LINKS tiles.
+    if (tile.source != ntp_tiles::TileSource::TOP_SITES &&
+        tile.source != ntp_tiles::TileSource::CUSTOM_LINKS) {
       continue;
     }
 
-    auxiliary_search::AuxiliarySearchEntry* bookmark = group.add_bookmark();
-    bookmark->set_title(base::UTF16ToUTF8(node->GetTitle()));
-    bookmark->set_url(url.spec());
-    if (!node->date_added().is_null()) {
-      bookmark->set_creation_timestamp(
-          node->date_added().InMillisecondsSinceUnixEpoch());
-    }
-    if (!node->date_last_used().is_null()) {
-      bookmark->set_last_access_timestamp(
-          node->date_last_used().InMillisecondsSinceUnixEpoch());
-    }
+    entries.push_back(Java_AuxiliarySearchBridge_addDataEntry(
+        env, static_cast<int>(AuxiliarySearchEntryType::kTopSite),
+        url::GURLAndroid::FromNativeGURL(env, tile.url),
+        base::android::ConvertUTF16ToJavaString(env, tile.title),
+        tile.last_visit_time.InMillisecondsSinceUnixEpoch(), kInvalidTabId,
+        /* appId= */ nullptr,
+        std::abs(static_cast<int>(
+            base::Hash(tile.url.spec() + base::UTF16ToUTF8(tile.title)))),
+        convertSiteSuggestionScore(tile.score)));
   }
 
-  return group;
+  Java_AuxiliarySearchBridge_onMostVisitedSitesURLsAvailable(env, j_ref_,
+                                                             entries);
+}
+
+void AuxiliarySearchProvider::OnIconMadeAvailable(const GURL& site_url) {
+  JNIEnv* env = base::android::AttachCurrentThread();
+  Java_AuxiliarySearchBridge_onIconMadeAvailable(env, j_ref_, site_url);
 }
 
 // static

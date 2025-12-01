@@ -9,6 +9,7 @@
 #include <utility>
 
 #include "src/base/logging.h"
+#include "src/execution/isolate-inl.h"
 #include "src/heap/gc-tracer-inl.h"
 #include "src/heap/gc-tracer.h"
 #include "src/heap/heap-inl.h"
@@ -195,6 +196,9 @@ class ArrayBufferSweeper::SweepingState::SweepingJob final : public JobTask {
 
 void ArrayBufferSweeper::SweepingState::SweepingJob::Run(
     JobDelegate* delegate) {
+  // Set the current isolate such that trusted pointer tables etc are
+  // available and the cage base is set correctly for multi-cage mode.
+  SetCurrentIsolateScope isolate_scope(heap_->isolate());
   const ThreadKind thread_kind =
       delegate->IsJoiningThread() ? ThreadKind::kMain : ThreadKind::kBackground;
   if (treat_all_young_as_promoted_ == TreatAllYoungAsPromoted::kNo) {

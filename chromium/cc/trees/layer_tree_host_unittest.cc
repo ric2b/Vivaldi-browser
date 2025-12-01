@@ -2113,31 +2113,23 @@ class LayerTreeHostTestEffectTreeSync : public LayerTreeHostTest {
     switch (layer_tree_host()->SourceFrameNumber()) {
       case 1:
         node->opacity = 0.5f;
-        node->is_currently_animating_opacity = true;
         break;
       case 2:
-        node->is_currently_animating_opacity = true;
         break;
       case 3:
-        node->is_currently_animating_opacity = false;
         break;
       case 4:
         node->opacity = 0.25f;
-        node->is_currently_animating_opacity = true;
         break;
       case 5:
         node->filters = blur_filter_;
-        node->is_currently_animating_filter = true;
         break;
       case 6:
-        node->is_currently_animating_filter = true;
         break;
       case 7:
-        node->is_currently_animating_filter = false;
         break;
       case 8:
         node->filters = sepia_filter_;
-        node->is_currently_animating_filter = true;
         break;
     }
   }
@@ -4186,7 +4178,6 @@ class OnDrawLayerTreeFrameSink : public TestLayerTreeFrameSink {
   OnDrawLayerTreeFrameSink(
       scoped_refptr<viz::RasterContextProvider> compositor_context_provider,
       scoped_refptr<viz::RasterContextProvider> worker_context_provider,
-      gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager,
       const viz::RendererSettings& renderer_settings,
       const viz::DebugRendererSettings* const debug_settings,
       TaskRunnerProvider* task_runner_provider,
@@ -4196,7 +4187,6 @@ class OnDrawLayerTreeFrameSink : public TestLayerTreeFrameSink {
       : TestLayerTreeFrameSink(std::move(compositor_context_provider),
                                std::move(worker_context_provider),
                                /*shared_image_interface=*/nullptr,
-                               gpu_memory_buffer_manager,
                                renderer_settings,
                                debug_settings,
                                task_runner_provider,
@@ -4238,8 +4228,8 @@ class LayerTreeHostTestAbortedCommitDoesntStallSynchronousCompositor
         base::Unretained(this));
     auto frame_sink = std::make_unique<OnDrawLayerTreeFrameSink>(
         compositor_context_provider, std::move(worker_context_provider),
-        gpu_memory_buffer_manager(), renderer_settings, &debug_settings_,
-        task_runner_provider(), false /* synchronous_composite */, refresh_rate,
+        renderer_settings, &debug_settings_, task_runner_provider(),
+        false /* synchronous_composite */, refresh_rate,
         std::move(on_draw_callback));
     layer_tree_frame_sink_ = frame_sink.get();
     return std::move(frame_sink);
@@ -4280,8 +4270,7 @@ class LayerTreeHostTestSynchronousCompositorActivateWithoutDraw
     // Make |invalidate_callback| do nothing so there is no draw.
     auto frame_sink = std::make_unique<OnDrawLayerTreeFrameSink>(
         compositor_context_provider, std::move(worker_context_provider),
-        gpu_memory_buffer_manager(), renderer_settings, &debug_settings_,
-        task_runner_provider(),
+        renderer_settings, &debug_settings_, task_runner_provider(),
         /*synchronous_composite=*/false, refresh_rate,
         /*invalidate_callback=*/base::DoNothing());
     return std::move(frame_sink);
@@ -7054,9 +7043,9 @@ class LayerTreeHostTestSynchronousCompositeSwapPromise
         !layer_tree_host()->GetSettings().single_thread_proxy_scheduler;
     return std::make_unique<TestLayerTreeFrameSink>(
         compositor_context_provider, std::move(worker_context_provider),
-        /*shared_image_interface=*/nullptr, gpu_memory_buffer_manager(),
-        renderer_settings, &debug_settings_, task_runner_provider(),
-        synchronous_composite, disable_display_vsync, refresh_rate);
+        /*shared_image_interface=*/nullptr, renderer_settings, &debug_settings_,
+        task_runner_provider(), synchronous_composite, disable_display_vsync,
+        refresh_rate);
   }
 
   void BeginTest() override {
@@ -9698,6 +9687,8 @@ class LayerTreeHostUkmSmoothnessMetric : public LayerTreeTest {
   void SetupTree() override {
     LayerTreeTest::SetupTree();
     shmem_region_ = layer_tree_host()->CreateSharedMemoryForSmoothnessUkm();
+    shmem_region_dropped_frames_ =
+        layer_tree_host()->CreateSharedMemoryForDroppedFramesUkm();
   }
 
   void BeginTest() override {
@@ -9713,6 +9704,9 @@ class LayerTreeHostUkmSmoothnessMetric : public LayerTreeTest {
     // It is not always possible to guarantee an exact number of dropped frames.
     // So validate that there are non-zero dropped frames.
     EXPECT_GT(smoothness->data.avg_smoothness, 0);
+
+    ASSERT_TRUE(shmem_region_dropped_frames_.IsValid());
+    // TODO(crbug.com/395868899): Test that values are exported here.
   }
 
   void WillBeginImplFrameOnThread(LayerTreeHostImpl* host_impl,
@@ -9747,6 +9741,7 @@ class LayerTreeHostUkmSmoothnessMetric : public LayerTreeTest {
   bool fcp_sent_ = false;
   viz::BeginFrameArgs last_args_;
   base::ReadOnlySharedMemoryRegion shmem_region_;
+  base::ReadOnlySharedMemoryRegion shmem_region_dropped_frames_;
 };
 
 MULTI_THREAD_TEST_F(LayerTreeHostUkmSmoothnessMetric);
@@ -10763,7 +10758,8 @@ class LayerTreeHostTestDamagePropagatesFromViewTransitionSurface
     root->AddChild(layer_with_view_transition_content_);
 
     blink::ViewTransitionToken transition_token;
-    resource_id_ = viz::ViewTransitionElementResourceId(transition_token, 1);
+    resource_id_ =
+        viz::ViewTransitionElementResourceId(transition_token, 1, false);
     view_transition_layer_ = ViewTransitionContentLayer::Create(
         resource_id_, /*is_live_content_layer=*/true);
     CopyProperties(root, view_transition_layer_.get());

@@ -13,8 +13,8 @@ if (use_blink) {
     ]
     public_deps = [ "//content/public/browser" ]
     deps = [
+      "../common:features",
       "//base",
-      "//components/fingerprinting_protection_filter/interventions/common:features",
     ]
   }
 
@@ -24,8 +24,8 @@ if (use_blink) {
     public_deps = [ "//content/public/browser" ]
     deps = [
       ":browser",
+      "../common:features",
       "//base",
-      "//components/fingerprinting_protection_filter/interventions/common:features",
       "//content/test:test_support",
       "//testing/gtest",
       "//third_party/blink/public/common",

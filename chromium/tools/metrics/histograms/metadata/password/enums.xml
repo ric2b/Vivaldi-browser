@@ -221,6 +221,15 @@ chromium-metrics-reviews@google.com.
   <int value="1" label="User edited the generated password"/>
 </enum>
 
+<enum name="BooleanProfilePicker">
+  <int value="0"
+      label="Forced browser sign-in is disabled, so we attempt to save the
+             password hash from the profile picker"/>
+  <int value="1"
+      label="Forced browser sign-in is enabled, so attempting to save the
+             password hash from the profile picker was skipped"/>
+</enum>
+
 <enum name="BooleanRootPopupSuggestionAccepted">
   <int value="0" label="Suggestion was accepted from the subpopup"/>
   <int value="1" label="Suggestion was accepted from the root popup"/>
@@ -246,11 +255,6 @@ chromium-metrics-reviews@google.com.
   <int value="1" label="Character class was absent and is added"/>
   <int value="2" label="All characters belonging to the class are removed"/>
   <int value="3" label="Set of character class members changed"/>
-</enum>
-
-<enum name="CredentialEditError">
-  <int value="0" label="Empty password"/>
-  <int value="1" label="Duplicate username"/>
 </enum>
 
 <enum name="CredentialEntryAction">
@@ -304,6 +308,7 @@ chromium-metrics-reviews@google.com.
   <int value="5" label="Backend downstream implementation is not available"/>
   <int value="6" label="ApiException"/>
   <int value="7" label="Other API error"/>
+  <int value="8" label="Password manager not available"/>
 </enum>
 
 <enum name="CredentialManagerGetResult">
@@ -341,6 +346,16 @@ chromium-metrics-reviews@google.com.
   <int value="2" label="Skipped"/>
 </enum>
 
+<enum name="DownloadCsvFlowStep">
+  <int value="0" label="Dialog dismissed"/>
+  <int value="1" label="No screen lock"/>
+  <int value="2" label="Reauthentication failed"/>
+  <int value="3" label="Download location not selected"/>
+  <int value="4" label="Source CSV could not be found"/>
+  <int value="5" label="CSV copying failed"/>
+  <int value="6" label="Success"/>
+</enum>
+
 <enum name="EditsInGeneratedPasswordMask">
   <int value="0" label="No changes (not reported)"/>
   <int value="1" label="Length"/>
@@ -358,6 +373,15 @@ chromium-metrics-reviews@google.com.
   <int value="13" label="Symbols,Numerics,Length"/>
   <int value="14" label="Symbols,Numerics,Letters"/>
   <int value="15" label="Symbols,Numerics,Letters,Length"/>
+</enum>
+
+<enum name="FillDataRetrievalStatusIOS">
+  <int value="0" label="Success"/>
+  <int value="1" label="No FillData matching frame"/>
+  <int value="2" label="No FillData matching form"/>
+  <int value="3" label="No FillData matching field"/>
+  <int value="4" label="No credentials matching username"/>
+  <int value="5" label="No cached last request form"/>
 </enum>
 
 <enum name="GaiaPasswordHashChange">
@@ -491,16 +515,6 @@ chromium-metrics-reviews@google.com.
       label="Should not delete, deleting undecryptable logins was disabled by
              policy"/>
 </enum>
-
-<!-- LINT.IfChange(LoginDbDeprecationExportProgress)-->
-
-<enum name="LoginDbDeprecationExportProgress">
-  <int value="0" label="Scheduled"/>
-  <int value="1" label="Started"/>
-  <int value="2" label="Finished"/>
-</enum>
-
-<!-- LINT.ThenChange(/components/password_manager/core/browser/export/login_db_deprecation_runner.h:LoginDbDeprecationExportProgress)-->
 
 <!-- LINT.IfChange(LoginDbDeprecationExportResult) -->
 
@@ -812,6 +826,12 @@ chromium-metrics-reviews@google.com.
   <int value="2" label="Password export confirmed by the user"/>
 </enum>
 
+<enum name="PasswordFillingReauthPromoShown">
+  <int value="0" label="Not shown"/>
+  <int value="1" label="Shown among other suggestions"/>
+  <int value="2" label="Shown alone"/>
+</enum>
+
 <enum name="PasswordFormHadUsernameField">
   <int value="0" label="No username field"/>
   <int value="1" label="Username match"/>
@@ -1019,12 +1039,6 @@ chromium-metrics-reviews@google.com.
   <int value="1" label="Got it button clicked"/>
   <int value="2" label="Manage passwords button clicked"/>
   <int value="3" label="Close button clicked"/>
-</enum>
-
-<enum name="PasswordManager.Store">
-  <int value="0" label="Not set"/>
-  <int value="1" label="Profile store"/>
-  <int value="2" label="Account store"/>
 </enum>
 
 <enum name="PasswordManager.SurfaceVisit">
@@ -1261,6 +1275,17 @@ chromium-metrics-reviews@google.com.
   </int>
 </enum>
 
+<!-- LINT.IfChange(PasswordManagerNotAvailableReason) -->
+
+<enum name="PasswordManagerNotAvailableReason">
+  <int value="0" label="Internal backend missing"/>
+  <int value="1" label="No GMS, no Play Store"/>
+  <int value="2" label="Outdated GMS"/>
+  <int value="3" label="Auto-export pending"/>
+</enum>
+
+<!-- LINT.ThenChange(/chrome/browser/password_manager/android/password_manager_android_util.h:PasswordManagerNotAvailableReason) -->
+
 <enum name="PasswordManagerOfferedAndroidCredentials">
   <int value="0" label="None from Android"/>
   <int value="1" label="1+ from Android"/>
@@ -1317,33 +1342,6 @@ chromium-metrics-reviews@google.com.
   <int value="15"
       label="Clicked 'About password change' link in the password change
              bubble."/>
-</enum>
-
-<enum name="PasswordMigrationWarningSheetStateAtClosing">
-  <int value="0" label="The sheet was displaying content when it was closed."/>
-  <int value="1" label="An empty sheet was dismissed by user interaction"/>
-  <int value="2" label="An empty sheet was dismissed without user interaction"/>
-</enum>
-
-<enum name="PasswordMigrationWarningTriggers">
-  <int value="0" label="Chrome started up"/>
-  <int value="1" label="A password was saved or updated"/>
-  <int value="2" label="Password settings UI was accessed"/>
-  <int value="3" label="A credential was filled via touch to fill sheet"/>
-  <int value="4" label="A credential was filled via keyboard accessory sheet"/>
-  <int value="5" label="A credential was filled via keyboard accessory bar"/>
-  <int value="6" label="A credential was filled via all passwords sheet"/>
-</enum>
-
-<enum name="PasswordMigrationWarningUserActions">
-  <int value="0" label="The warning was acknowledged"/>
-  <int value="1" label="The more options button was clicked"/>
-  <int value="2" label="The user chose to start syncing"/>
-  <int value="3" label="The user chose to export passwords"/>
-  <int value="4" label="The cancel button was clicked"/>
-  <int value="5" label="The sheet with the introduction was dismissed"/>
-  <int value="6" label="The sheet with more options was dismissed"/>
-  <int value="7" label="The sheet without content was dismissed (Obsolete)"/>
 </enum>
 
 <enum name="PasswordNoteAction">

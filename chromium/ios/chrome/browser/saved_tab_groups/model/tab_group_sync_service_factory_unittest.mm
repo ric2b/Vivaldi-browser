@@ -22,7 +22,6 @@ class TabGroupSyncServiceFactoryTest : public PlatformTest {
         {
             kTabGroupSync,
             kTabGroupsIPad,
-            kModernTabStrip,
         },
         /*disable_features=*/{});
     TestProfileIOS::Builder builder;
@@ -39,6 +38,10 @@ class TabGroupSyncServiceFactoryTest : public PlatformTest {
 
 // Tests the creation of the service in regular.
 TEST_F(TabGroupSyncServiceFactoryTest, ServiceCreatedInRegularProfile) {
+  if (!IsTabGroupInGridEnabled()) {
+    // Disabled on iPadOS 16.
+    return;
+  }
   TabGroupSyncService* service =
       TabGroupSyncServiceFactory::GetForProfile(profile_.get());
   EXPECT_TRUE(service);

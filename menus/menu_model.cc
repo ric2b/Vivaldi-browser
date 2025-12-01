@@ -219,23 +219,20 @@ void Menu_Model::LoadFinished(std::unique_ptr<MenuLoadDetails> details) {
 bool Menu_Model::Move(const Menu_Node* node,
                       const Menu_Node* new_parent,
                       size_t index) {
-  if (!loaded_ || !node || !IsValidIndex(new_parent, index)) {
-    NOTREACHED();
-    //return false;
-  }
+  CHECK(node);
+  CHECK(new_parent);
 
-  DCHECK(!new_parent->HasAncestor(node));
-  if (new_parent->HasAncestor(node)) {
-    // Can't make an ancestor of the node be a child of the node.
-    NOTREACHED();
-    //return false;
-  }
+  // Can't move to itself.
+  if (node == new_parent)
+    return false;
+
+  CHECK(IsValidIndex(new_parent, index));
+
+  // Can't make an ancestor of the node be a child of the node.
+  CHECK(!new_parent->HasAncestor(node));
 
   const Menu_Node* menu = new_parent->GetMenu();
-  if (!menu) {
-    NOTREACHED();
-    //return false;
-  }
+  CHECK(menu);
 
   const Menu_Node* old_parent = node->parent();
   size_t old_index = old_parent->GetIndexOf(node).value();

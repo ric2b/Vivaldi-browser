@@ -148,6 +148,14 @@ void AuctionRunner::ResolvedPromiseParam(
       }
       config->non_shared_params.seller_signals = std::move(new_val);
       break;
+
+    case blink::mojom::AuctionAdConfigField::kSellerTKVSignals:
+      if (!config->non_shared_params.seller_tkv_signals.is_promise()) {
+        mojo::ReportBadMessage("ResolvedPromiseParam updating non-promise");
+        return;
+      }
+      config->non_shared_params.seller_tkv_signals = std::move(new_val);
+      break;
   }
 
   NotifyPromiseResolved(auction_id.get(), config);
@@ -439,6 +447,7 @@ void AuctionRunner::Abort() {
   base::UmaHistogramMediumTimes(
       uma_prefix + "SignaledAbortTime",
       base::TimeTicks::Now() - auction_.creation_time());
+  auction_.SetReceivedAbortSignal();
   FailAuction(/*aborted_by_script=*/true);
 }
 
@@ -503,17 +512,19 @@ void AuctionRunner::FailAuction(
   auto [contained_server_auction, contained_on_device_auction] =
       IncludesServerAndOnDeviceAuctions();
 
+  AuctionResult auction_result = auction_.final_auction_result().value_or(
+      aborted_by_script ? AuctionResult::kAbortSignal
+                        : AuctionResult::kDocumentDestruction);
   // When the auction fails, private aggregation requests of non-reserved event
   // types cannot be triggered anyway, so no need to pass it along.
-  std::move(callback_).Run(
-      this, aborted_by_script,
-      /*winning_group_key=*/std::nullopt,
-      /*requested_ad_size=*/std::nullopt,
-      /*ad_descriptor=*/std::nullopt,
-      /*ad_component_descriptors=*/{}, auction_.TakeErrors(),
-      /*reporter=*/nullptr, contained_server_auction,
-      contained_on_device_auction,
-      auction_.final_auction_result().value_or(AuctionResult::kAborted));
+  std::move(callback_).Run(this, aborted_by_script,
+                           /*winning_group_key=*/std::nullopt,
+                           /*requested_ad_size=*/std::nullopt,
+                           /*ad_descriptor=*/std::nullopt,
+                           /*ad_component_descriptors=*/{},
+                           auction_.TakeErrors(),
+                           /*reporter=*/nullptr, contained_server_auction,
+                           contained_on_device_auction, auction_result);
 }
 
 AuctionRunner::AuctionRunner(
@@ -556,6 +567,7 @@ AuctionRunner::AuctionRunner(
       callback_(std::move(callback)),
       promise_fields_in_auction_config_(owned_auction_config_->NumPromises()),
       auction_(kanon_mode_,
+               url_loader_factory_,
                main_frame_origin,
                client_security_state_->ip_address_space,
                owned_auction_config_.get(),
@@ -599,8 +611,6 @@ void AuctionRunner::OnLoadInterestGroupsComplete(bool success) {
   }
 
   if (base::FeatureList::IsEnabled(
-          blink::features::kBiddingAndScoringDebugReportingAPI) &&
-      base::FeatureList::IsEnabled(
           blink::features::kFledgeSampleDebugReports)) {
     // All sellers and buyers in the auction.
     base::flat_set<url::Origin> origins = auction_.GetSellersAndBuyers();
@@ -672,7 +682,7 @@ void AuctionRunner::OnBidsGeneratedAndScored(base::TimeTicks start_time,
 
   std::unique_ptr<InterestGroupAuctionReporter> reporter =
       auction_.CreateReporter(
-          browser_context_, private_aggregation_manager_, url_loader_factory_,
+          browser_context_, private_aggregation_manager_,
           ad_auction_page_data_callback_, std::move(owned_auction_config_),
           main_frame_origin_, frame_origin_, client_security_state_.Clone(),
           std::move(interest_groups_that_bid));
@@ -691,7 +701,8 @@ void AuctionRunner::OnBidsGeneratedAndScored(base::TimeTicks start_time,
       std::move(component_ad_descriptors_with_replacements), std::move(errors),
       std::move(reporter), contained_server_auction,
       contained_on_device_auction,
-      auction_.final_auction_result().value_or(AuctionResult::kAborted));
+      auction_.final_auction_result().value_or(
+          AuctionResult::kDocumentDestruction));
 }
 
 void AuctionRunner::UpdateInterestGroupsPostAuction() {

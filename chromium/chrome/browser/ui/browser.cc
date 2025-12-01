@@ -131,7 +131,6 @@
 #include "chrome/browser/ui/tab_dialogs.h"
 #include "chrome/browser/ui/tab_helpers.h"
 #include "chrome/browser/ui/tab_modal_confirm_dialog.h"
-#include "chrome/browser/ui/tabs/public/tab_interface.h"
 #include "chrome/browser/ui/tabs/tab_enums.h"
 #include "chrome/browser/ui/tabs/tab_group.h"
 #include "chrome/browser/ui/tabs/tab_group_deletion_dialog_controller.h"
@@ -143,11 +142,15 @@
 #include "chrome/browser/ui/unload_controller.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/frame/contents_web_view.h"
+#include "chrome/browser/ui/views/status_bubble_views.h"
 #include "chrome/browser/ui/web_applications/app_browser_controller.h"
 #include "chrome/browser/ui/web_applications/web_app_launch_utils.h"
 #include "chrome/browser/ui/webui/signin/login_ui_service.h"
 #include "chrome/browser/ui/webui/signin/login_ui_service_factory.h"
 #include "chrome/browser/ui/window_sizer/window_sizer.h"
+#include "chrome/browser/web_applications/web_app_provider.h"
+#include "chrome/browser/web_applications/web_app_registrar.h"
+#include "chrome/browser/web_applications/web_app_utils.h"
 #include "chrome/common/chrome_constants.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/chrome_switches.h"
@@ -190,6 +193,7 @@
 #include "components/sessions/core/session_types.h"
 #include "components/sessions/core/tab_restore_service.h"
 #include "components/startup_metric_utils/browser/startup_metric_utils.h"
+#include "components/tab_collections/public/tab_interface.h"
 #include "components/user_manager/user_manager.h"
 #include "components/web_modal/web_contents_modal_dialog_manager.h"
 #include "components/zoom/zoom_controller.h"
@@ -288,6 +292,10 @@
 
 #if !BUILDFLAG(IS_ANDROID)
 #include "chrome/browser/preloading/preview/preview_manager.h"
+#endif
+
+#if BUILDFLAG(IS_OZONE)
+#include "ui/ozone/public/platform_session_manager.h"
 #endif
 
 #include "app/vivaldi_apptools.h"
@@ -689,6 +697,19 @@ Browser::Browser(const CreateParams& params)
   features_ = BrowserWindowFeatures::CreateBrowserWindowFeatures();
   features_->Init(this);
 
+  SessionServiceBase* session_service =
+      GetAppropriateSessionServiceForSessionRestore(this);
+#if BUILDFLAG(IS_OZONE)
+  if (session_service && session_service->GetPlatformSessionId()) {
+    platform_session_data_ = ui::PlatformSessionWindowData{
+        .session_id = session_service->GetPlatformSessionId().value(),
+        .window_id = session_id_.id(),
+        .restore_id = params.restore_id > Browser::kDefaultRestoreId
+                          ? std::optional<int32_t>(params.restore_id)
+                          : std::nullopt};
+  }
+#endif  // BUILDFLAG(IS_OZONE)
+
   window_ = params.window ? params.window.get()
                           : CreateBrowserWindow(std::unique_ptr<Browser>(this),
                                                 params.user_gesture,
@@ -702,11 +723,8 @@ Browser::Browser(const CreateParams& params)
   extension_window_controller_ =
       std::make_unique<extensions::BrowserExtensionWindowController>(this);
 
-  SessionServiceBase* service =
-      GetAppropriateSessionServiceForSessionRestore(this);
-
-  if (service) {
-    service->WindowOpened(this);
+  if (session_service) {
+    session_service->WindowOpened(this);
   }
 
   exclusive_access_manager_ = std::make_unique<ExclusiveAccessManager>(
@@ -1166,8 +1184,8 @@ Browser* Browser::GetBrowserForOpeningWebUi() {
   return opener_browser_;
 }
 
-StatusBubble* Browser::GetStatusBubbleForTesting() {
-  return GetStatusBubble();
+std::vector<StatusBubble*> Browser::GetStatusBubblesForTesting() {
+  return GetStatusBubbles();
 }
 
 void Browser::SetForceShowBookmarkBarFlag(ForceShowBookmarkBarFlag flag) {
@@ -1222,6 +1240,18 @@ views::View* Browser::TopContainer() {
   return window_->GetTopContainer();
 }
 
+bool Browser::IsMinimized() const {
+  return window_->IsMinimized();
+}
+
+base::WeakPtr<BrowserWindowInterface> Browser::GetWeakPtr() {
+  return AsWeakPtr();
+}
+
+views::View* Browser::LensOverlayView() {
+  return window_->GetLensOverlayView();
+}
+
 base::CallbackListSubscription Browser::RegisterActiveTabDidChange(
     ActiveTabChangeCallback callback) {
   return did_active_tab_change_callback_list_.Add(std::move(callback));
@@ -1240,7 +1270,7 @@ Browser::GetWebContentsModalDialogHostForWindow() {
   return window_->GetWebContentsModalDialogHost();
 }
 
-bool Browser::IsActive() {
+bool Browser::IsActive() const {
 // TODO(https://crbug.com/376306245): This is a temporary workaround for the
 // fact that window_->IsActive() does not return the right result for macOS
 // standalone PWA windows. This new behavior is still not technically correct,
@@ -1248,14 +1278,11 @@ bool Browser::IsActive() {
 // whether `this` is active.
 #if BUILDFLAG(IS_MAC)
   // If this is a standalone PWA window, check BrowserList instead.
-  if (GetAppBrowserController()) {
+  if (app_controller_) {
     return BrowserList::GetInstance()->GetLastActive() == this;
-  } else {
-    return window_->IsActive();
   }
-#else
-  return window_->IsActive();
 #endif
+  return is_active_;
 }
 
 base::CallbackListSubscription Browser::RegisterDidBecomeActive(
@@ -1270,6 +1297,10 @@ base::CallbackListSubscription Browser::RegisterDidBecomeInactive(
 
 ExclusiveAccessManager* Browser::GetExclusiveAccessManager() {
   return exclusive_access_manager();
+}
+
+ImmersiveModeController* Browser::GetImmersiveModeController() {
+  return GetBrowserView().immersive_mode_controller();
 }
 
 BrowserActions* Browser::GetActions() {
@@ -1301,13 +1332,19 @@ Browser* Browser::GetBrowserForMigrationOnly() {
 }
 
 void Browser::DidBecomeActive() {
-  BrowserList::SetLastActive(this);
-  did_become_active_callback_list_.Notify(this);
+  if (!is_active_) {
+    is_active_ = true;
+    BrowserList::SetLastActive(this);
+    did_become_active_callback_list_.Notify(this);
+  }
 }
 
 void Browser::DidBecomeInactive() {
-  BrowserList::NotifyBrowserNoLongerActive(this);
-  did_become_inactive_callback_list_.Notify(this);
+  if (is_active_) {
+    is_active_ = false;
+    BrowserList::NotifyBrowserNoLongerActive(this);
+    did_become_inactive_callback_list_.Notify(this);
+  }
 }
 
 #if BUILDFLAG(IS_CHROMEOS)
@@ -1494,8 +1531,9 @@ void Browser::OpenFile() {
 }
 
 void Browser::UpdateDownloadShelfVisibility(bool visible) {
-  if (GetStatusBubble()) {
-    GetStatusBubble()->UpdateDownloadShelfVisibility(visible);
+  std::vector<StatusBubble*> status_bubbles = GetStatusBubbles();
+  for (StatusBubble* status_bubble : status_bubbles) {
+    status_bubble->UpdateDownloadShelfVisibility(visible);
   }
 }
 
@@ -1530,8 +1568,9 @@ void Browser::UpdateUIForNavigationInTab(WebContents* contents,
     window()->GetLocationBar()->Revert();
   }
 
-  if (GetStatusBubble()) {
-    GetStatusBubble()->Hide();
+  std::vector<StatusBubble*> status_bubbles = GetStatusBubbles();
+  for (StatusBubble* status_bubble : status_bubbles) {
+    status_bubble->Hide();
   }
 
   // Update the location bar. This is synchronous. We specifically don't
@@ -1653,9 +1692,24 @@ void Browser::OnTabGroupChanged(const TabGroupChange& change) {
   // would be the best way to achieve that.
   DCHECK(!IsRelevantToAppSessionService(type_));
   DCHECK(tab_strip_model_->group_model());
+
   if (change.type == TabGroupChange::kVisualsChanged) {
     UpdateTabGroupSessionMetadata(this, change.group);
-  } else if (change.type == TabGroupChange::kClosed) {
+  } else if (change.type == TabGroupChange::kCreated &&
+             change.GetCreateChange()->reason() ==
+                 TabGroupChange::TabGroupCreationReason::
+                     kInsertedFromAnotherTabstrip) {
+    // When a detached group is inserted, we need to update the group of all the
+    // corresponding detached tab in session service.
+    for (tabs::TabInterface* tab :
+         change.GetCreateChange()->GetDetachedTabs()) {
+      UpdateTabGroupSessionDataForTab(tab, change.group);
+    }
+  } else if (change.type == TabGroupChange::kClosed &&
+             change.GetCloseChange()->reason() ==
+                 TabGroupChange::TabGroupClosureReason::kGroupClosed) {
+    // When a group is detached, we do not need to add the information for all
+    // the detached tabs in tab restore service.
     sessions::TabRestoreService* tab_restore_service =
         TabRestoreServiceFactory::GetForProfile(profile());
     if (tab_restore_service) {
@@ -1681,9 +1735,17 @@ void Browser::TabPinnedStateChanged(TabStripModel* tab_strip_model,
 }
 
 void Browser::TabGroupedStateChanged(
-    std::optional<tab_groups::TabGroupId> group,
+    TabStripModel* tab_strip_model,
+    std::optional<tab_groups::TabGroupId> old_group,
+    std::optional<tab_groups::TabGroupId> new_group,
     tabs::TabInterface* tab,
     int index) {
+  UpdateTabGroupSessionDataForTab(tab, new_group);
+}
+
+void Browser::UpdateTabGroupSessionDataForTab(
+    tabs::TabInterface* tab,
+    std::optional<tab_groups::TabGroupId> group) {
   // See comment in Browser::OnTabGroupChanged
   DCHECK(!IsRelevantToAppSessionService(type_));
   SessionService* const session_service =
@@ -1764,6 +1826,11 @@ void Browser::SetFocusToLocationBar() {
   //     renderer initiated focus (this method is a WebContentsDelegate
   //     override).
   window_->SetFocusToLocationBar(false);
+}
+
+bool Browser::PreHandleMouseEvent(content::WebContents* source,
+                                  const blink::WebMouseEvent& event) {
+  return window()->PreHandleMouseEvent(event);
 }
 
 content::KeyboardEventProcessingResult Browser::PreHandleKeyboardEvent(
@@ -2096,7 +2163,7 @@ content::WebContents* Browser::AddNewContents(
     // cannot switch their independent spaces simultaneously (crbug.com/1315749)
     auto web_contents_creation_callback = base::BindOnce(
         &chrome::AddWebContents, this, source, std::move(new_contents),
-        target_url, disposition, window_features, window_action);
+        target_url, disposition, window_features, window_action, user_gesture);
     fullscreen_controller->RunOrDeferUntilTransitionIsComplete(base::BindOnce(
         base::IgnoreResult(std::move(web_contents_creation_callback))));
     return nullptr;
@@ -2104,7 +2171,7 @@ content::WebContents* Browser::AddNewContents(
 
   return chrome::AddWebContents(this, source, std::move(new_contents),
                                 target_url, disposition, window_features,
-                                window_action);
+                                window_action, user_gesture);
 }
 
 void Browser::ActivateContents(WebContents* contents) {
@@ -2151,12 +2218,16 @@ void Browser::SetContentsBounds(WebContents* source, const gfx::Rect& bounds) {
 }
 
 void Browser::UpdateTargetURL(WebContents* source, const GURL& url) {
-  if (!GetStatusBubble()) {
-    return;
-  }
-
-  if (source == tab_strip_model_->GetActiveWebContents()) {
-    GetStatusBubble()->SetURL(url);
+  std::vector<StatusBubble*> status_bubbles = GetStatusBubbles();
+  for (StatusBubble* status_bubble : status_bubbles) {
+    StatusBubbleViews* status_bubble_views =
+        static_cast<StatusBubbleViews*>(status_bubble);
+    ContentsWebView* anchor =
+        static_cast<ContentsWebView*>(status_bubble_views->base_view());
+    if (source == anchor->GetWebContents()) {
+      status_bubble->SetURL(url);
+      break;
+    }
   }
 }
 
@@ -2171,11 +2242,19 @@ void Browser::ContentsMouseEvent(WebContents* source, const ui::Event& event) {
   }
 
   // Mouse motion events update the status bubble, if it exists.
-  if (GetStatusBubble() && source == tab_strip_model_->GetActiveWebContents() &&
-      (type == ui::EventType::kMouseMoved || exited)) {
-    GetStatusBubble()->MouseMoved(exited);
-    if (exited) {
-      GetStatusBubble()->SetURL(GURL());
+  std::vector<StatusBubble*> status_bubbles = GetStatusBubbles();
+  for (StatusBubble* status_bubble : status_bubbles) {
+    StatusBubbleViews* status_bubble_views =
+        static_cast<StatusBubbleViews*>(status_bubble);
+    ContentsWebView* anchor =
+        static_cast<ContentsWebView*>(status_bubble_views->base_view());
+    if (source == anchor->GetWebContents() &&
+        (type == ui::EventType::kMouseMoved || exited)) {
+      status_bubble->MouseMoved(exited);
+      if (exited) {
+        status_bubble->SetURL(GURL());
+      }
+      break;
     }
   }
 }
@@ -2364,6 +2443,38 @@ void Browser::DraggableRegionsChanged(
   }
 }
 
+std::vector<blink::mojom::RelatedApplicationPtr>
+Browser::GetSavedRelatedApplications(WebContents* web_contents) {
+  Profile* profile =
+      Profile::FromBrowserContext(web_contents->GetBrowserContext());
+  CHECK(profile);
+  if (!web_app::AreWebAppsEnabled(profile)) {
+    return {};
+  }
+  const webapps::AppId* app_id =
+      web_app::WebAppTabHelper::GetAppId(web_contents);
+  if (!app_id || app_id->empty()) {
+    return {};
+  }
+  web_app::WebAppProvider* provider =
+      web_app::WebAppProvider::GetForWebApps(profile);
+  CHECK(provider);
+  std::vector<blink::Manifest::RelatedApplication> saved_related_apps =
+      provider->registrar_unsafe().GetRelatedApplications(*app_id);
+  std::vector<blink::mojom::RelatedApplicationPtr> related_apps_ptr;
+  for (const auto& app : saved_related_apps) {
+    auto related_app = blink::mojom::RelatedApplication::New();
+    related_app->platform =
+        base::UTF16ToUTF8(app.platform.value_or(std::u16string()));
+    related_app->id = base::UTF16ToUTF8(app.id.value_or(std::u16string()));
+    if (!app.url.is_empty()) {
+      related_app->url = app.url.spec();
+    }
+    related_apps_ptr.push_back(std::move(related_app));
+  }
+  return related_apps_ptr;
+}
+
 void Browser::DidFinishNavigation(
     content::WebContents* web_contents,
     content::NavigationHandle* navigation_handle) {
@@ -2403,8 +2514,8 @@ bool Browser::CanUseWindowingControls(
   return true;
 }
 
-void Browser::OnCanResizeFromWebAPIChanged() {
-  window_->OnCanResizeFromWebAPIChanged();
+void Browser::OnWebApiWindowResizableChanged() {
+  window_->OnWebApiWindowResizableChanged();
 }
 
 bool Browser::GetCanResize() {
@@ -3006,20 +3117,29 @@ void Browser::OnActiveTabChanged(WebContents* old_contents,
   command_controller_->TabStateChanged();
 
   // Reset the status bubble.
-  StatusBubble* status_bubble = GetStatusBubble();
-  if (status_bubble) {
+  std::vector<StatusBubble*> status_bubbles = GetStatusBubbles();
+  for (StatusBubble* status_bubble : status_bubbles) {
     status_bubble->Hide();
 
     // Show the loading state (if any).
-    status_bubble->SetStatus(
-        CoreTabHelper::FromWebContents(tab_strip_model_->GetActiveWebContents())
-            ->GetStatusText());
+    if (status_bubble == status_bubbles.front()) {
+      status_bubble->SetStatus(CoreTabHelper::FromWebContents(
+                                   tab_strip_model_->GetActiveWebContents())
+                                   ->GetStatusText());
+    }
   }
 
   if (!is_vivaldi()) {
   if (HasFindBarController()) {
     find_bar_controller_->ChangeWebContents(new_contents);
     find_bar_controller_->find_bar()->MoveWindowIfNecessary();
+    find_in_page::FindTabHelper* find_tab_helper =
+        find_in_page::FindTabHelper::FromWebContents(new_contents);
+    if (find_tab_helper && find_tab_helper->find_ui_active()) {
+      if (!find_bar_controller_->find_bar()->HasFocus()) {
+        find_bar_controller_->find_bar()->RestoreSavedFocus();
+      }
+    }
   }
   }
 
@@ -3205,8 +3325,9 @@ void Browser::ProcessPendingUIUpdates() {
       // Updates that only matter when the tab is selected go here.
 
       // Updating the URL happens synchronously in ScheduleUIUpdate.
-      if (flags & content::INVALIDATE_TYPE_LOAD && GetStatusBubble()) {
-        GetStatusBubble()->SetStatus(
+      std::vector<StatusBubble*> status_bubbles = GetStatusBubbles();
+      if (flags & content::INVALIDATE_TYPE_LOAD && status_bubbles.size() > 0) {
+        status_bubbles.front()->SetStatus(
             CoreTabHelper::FromWebContents(
                 tab_strip_model_->GetActiveWebContents())
                 ->GetStatusText());
@@ -3256,10 +3377,10 @@ void Browser::RemoveScheduledUpdatesFor(WebContents* contents) {
 ///////////////////////////////////////////////////////////////////////////////
 // Browser, Getters for UI (private):
 
-StatusBubble* Browser::GetStatusBubble() {
+std::vector<StatusBubble*> Browser::GetStatusBubbles() {
   // For kiosk and exclusive app mode we want to always hide the status bubble.
   if (IsRunningInAppMode()) {
-    return nullptr;
+    return {};
   }
 
   // We hide the status bar for web apps windows as this matches native
@@ -3267,10 +3388,14 @@ StatusBubble* Browser::GetStatusBubble() {
   // mode, as the minimal browser UI includes the status bar.
   if (web_app::AppBrowserController::IsWebApp(this) &&
       !app_controller()->HasMinimalUiButtons()) {
-    return nullptr;
+    return {};
   }
 
-  return window_ ? window_->GetStatusBubble() : nullptr;
+  if (window_) {
+    return window_->GetStatusBubbles();
+  } else {
+    return {};
+  }
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -3471,10 +3596,11 @@ void Browser::UpdateWindowForLoadingStateChanged(content::WebContents* source,
   if (source == selected_contents) {
     bool is_loading = source->IsLoading() && should_show_loading_ui;
     command_controller_->LoadingStateChanged(is_loading, false);
-    if (GetStatusBubble()) {
-      GetStatusBubble()->SetStatus(CoreTabHelper::FromWebContents(
-                                       tab_strip_model_->GetActiveWebContents())
-                                       ->GetStatusText());
+
+    std::vector<StatusBubble*> status_bubbles = GetStatusBubbles();
+    if (status_bubbles.size() > 0) {
+      status_bubbles.front()->SetStatus(
+          CoreTabHelper::FromWebContents(selected_contents)->GetStatusText());
     }
   }
 }
@@ -3788,7 +3914,7 @@ BackgroundContents* Browser::CreateBackgroundContents(
   return contents;
 }
 
-void Browser::AddNewContentsVivaldi(
+content::WebContents* Browser::AddNewContentsVivaldi(
     content::WebContents* source,
     std::unique_ptr<content::WebContents> new_contents,
     const GURL& target_url,
@@ -3796,7 +3922,7 @@ void Browser::AddNewContentsVivaldi(
     const blink::mojom::WindowFeatures& window_features,
     bool user_gesture,
     bool* was_blocked) {
-  AddNewContents(source, std::move(new_contents), target_url,
+  return AddNewContents(source, std::move(new_contents), target_url,
                         disposition, window_features, user_gesture,
                         was_blocked);
 }

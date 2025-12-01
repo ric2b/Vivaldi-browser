@@ -7,6 +7,7 @@
 
 #include <memory>
 #include <string>
+#include <variant>
 
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
@@ -19,9 +20,9 @@
 #include "content/browser/interest_group/devtools_enums.h"
 #include "content/browser/interest_group/interest_group_manager_impl.h"
 #include "content/browser/renderer_host/frame_tree_node.h"
-#include "content/browser/renderer_host/render_frame_host_impl.h"
 #include "content/browser/shared_storage/shared_storage_runtime_manager.h"
 #include "storage/browser/quota/quota_manager.h"
+#include "third_party/blink/public/common/shared_storage/shared_storage_utils.h"
 
 namespace storage {
 class QuotaOverrideHandle;
@@ -29,6 +30,7 @@ class QuotaOverrideHandle;
 
 namespace content {
 class AttributionManager;
+class RenderFrameHostImpl;
 class StoragePartition;
 
 namespace protocol {
@@ -184,7 +186,7 @@ class StorageHandler
   IndexedDBObserver* GetIndexedDBObserver();
 
   SharedStorageRuntimeManager* GetSharedStorageRuntimeManager();
-  absl::variant<protocol::Response, storage::SharedStorageManager*>
+  std::variant<protocol::Response, storage::SharedStorageManager*>
   GetSharedStorageManager();
   storage::QuotaManagerProxy* GetQuotaManagerProxy();
   AttributionManager* GetAttributionManager();
@@ -211,8 +213,9 @@ class StorageHandler
 
   void NotifySharedStorageAccessed(
       const base::Time& access_time,
-      SharedStorageRuntimeManager::SharedStorageObserverInterface::AccessType
-          type,
+      blink::SharedStorageAccessScope scope,
+      SharedStorageRuntimeManager::SharedStorageObserverInterface::AccessMethod
+          method,
       FrameTreeNodeId main_frame_id,
       const std::string& owner_origin,
       const SharedStorageEventParams& params);

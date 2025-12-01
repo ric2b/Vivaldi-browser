@@ -65,6 +65,7 @@
 #import "ios/chrome/browser/lens_overlay/coordinator/lens_overlay_availability.h"
 #import "ios/chrome/browser/lens_overlay/model/lens_overlay_tab_helper.h"
 #import "ios/chrome/browser/link_to_text/model/link_to_text_tab_helper.h"
+#import "ios/chrome/browser/metrics/model/dwa_web_state_observer.h"
 #import "ios/chrome/browser/metrics/model/pageload_foreground_duration_tab_helper.h"
 #import "ios/chrome/browser/ntp/model/new_tab_page_tab_helper.h"
 #import "ios/chrome/browser/optimization_guide/model/optimization_guide_service.h"
@@ -73,7 +74,7 @@
 #import "ios/chrome/browser/optimization_guide/model/optimization_guide_validation_tab_helper.h"
 #import "ios/chrome/browser/overlays/model/public/overlay_request_queue.h"
 #import "ios/chrome/browser/overscroll_actions/model/overscroll_actions_tab_helper.h"
-#import "ios/chrome/browser/page_info/about_this_site_tab_helper.h"
+#import "ios/chrome/browser/page_info/model/about_this_site_tab_helper.h"
 #import "ios/chrome/browser/page_info/ui_bundled/features.h"
 #import "ios/chrome/browser/passwords/model/password_controller.h"
 #import "ios/chrome/browser/passwords/model/password_tab_helper.h"
@@ -81,6 +82,7 @@
 #import "ios/chrome/browser/permissions/model/permissions_tab_helper.h"
 #import "ios/chrome/browser/policy_url_blocking/model/policy_url_blocking_tab_helper.h"
 #import "ios/chrome/browser/prerender/model/prerender_service_factory.h"
+#import "ios/chrome/browser/reader_mode/model/reader_mode_tab_helper.h"
 #import "ios/chrome/browser/reading_list/model/offline_page_tab_helper.h"
 #import "ios/chrome/browser/reading_list/model/reading_list_model_factory.h"
 #import "ios/chrome/browser/reading_list/model/reading_list_web_state_observer.h"
@@ -131,6 +133,7 @@
 // Vivaldi
 #import "ios/translate/vivaldi_ios_translate_client.h"
 #import "ios/website_dark_mode/website_dark_mode_tab_helper.h"
+#import "ios/background_audio/background_audio_tab_helper.h"
 // End Vivaldi
 
 namespace {
@@ -149,8 +152,8 @@ void AttachTabHelpers(web::WebState* web_state, TabHelperFilter filter_flags) {
   const bool is_off_the_record = profile->IsOffTheRecord();
   const bool for_prerender =
       IsTabHelperFilterMaskSet(filter_flags, TabHelperFilter::kPrerender);
-  const bool for_bottom_sheet =
-      IsTabHelperFilterMaskSet(filter_flags, TabHelperFilter::kBottomSheet);
+  const bool for_lens_overlay =
+      IsTabHelperFilterMaskSet(filter_flags, TabHelperFilter::kLensOverlay);
 
   // When adding a new tab helper, please consider whether it should be filtered
   // out when the web_state is presented in the following context:
@@ -180,13 +183,18 @@ void AttachTabHelpers(web::WebState* web_state, TabHelperFilter filter_flags) {
     JavaScriptFindTabHelper::CreateForWebState(web_state);
   }
 
-  if (!for_bottom_sheet) {
+  if (!for_lens_overlay) {
     HistoryTabHelper::CreateForWebState(web_state);
+  } else if (base::FeatureList::IsEnabled(kLensOverlayNavigationHistory)) {
+    HistoryTabHelper::CreateForWebState(web_state);
+    HistoryTabHelper::FromWebState(web_state)->EnableLensURLProcessing();
   }
+
   LoadTimingTabHelper::CreateForWebState(web_state);
+  DwaWebStateObserver::CreateForWebState(web_state);
   OverscrollActionsTabHelper::CreateForWebState(web_state);
   IOSTaskTabHelper::CreateForWebState(web_state);
-  if (!for_bottom_sheet &&
+  if (!for_lens_overlay &&
       IsPriceAlertsEligible(web_state->GetBrowserState())) {
     ShoppingPersistedDataTabHelper::CreateForWebState(web_state);
   }
@@ -194,16 +202,17 @@ void AttachTabHelpers(web::WebState* web_state, TabHelperFilter filter_flags) {
       web_state, is_off_the_record,
       commerce::ShoppingServiceFactory::GetForProfile(profile));
 
-  if (!for_bottom_sheet && !for_prerender) {
+  if (!for_lens_overlay && !for_prerender) {
     // Since LensTabHelper listens for a custom scheme, it needs to be
     // created before AppLauncherTabHelper, which will filter out
     // unhandled schemes.
     LensTabHelper::CreateForWebState(web_state);
-    if (IsLensOverlayAvailable()) {
+    if (IsLensOverlayAvailable(profile->GetPrefs())) {
       LensOverlayTabHelper::CreateForWebState(web_state);
     }
     AppLauncherTabHelper::CreateForWebState(
         web_state, [[AppLauncherAbuseDetector alloc] init], is_off_the_record);
+    ReaderModeTabHelper::CreateForWebState(web_state);
   }
   security_interstitials::IOSBlockingPageTabHelper::CreateForWebState(
       web_state);
@@ -212,7 +221,7 @@ void AttachTabHelpers(web::WebState* web_state, TabHelperFilter filter_flags) {
 
   InvalidUrlTabHelper::CreateForWebState(web_state);
 
-  if (!for_bottom_sheet) {
+  if (!for_lens_overlay) {
     InfobarOverlayRequestInserter::CreateForWebState(
         web_state, &DefaultInfobarOverlayRequestFactory);
     InfobarOverlayTabHelper::CreateForWebState(web_state);
@@ -283,7 +292,7 @@ void AttachTabHelpers(web::WebState* web_state, TabHelperFilter filter_flags) {
   // allows to inhibit the creation of some of them. Once PreloadController
   // has been refactored to only create the necessary tab helpers, this
   // condition can be removed.
-  if (!for_bottom_sheet && !for_prerender) {
+  if (!for_lens_overlay && !for_prerender) {
     SadTabTabHelper::CreateForWebState(
         web_state, SadTabTabHelper::kDefaultRepeatFailureInterval);
     SnapshotTabHelper::CreateForWebState(web_state);
@@ -301,6 +310,7 @@ void AttachTabHelpers(web::WebState* web_state, TabHelperFilter filter_flags) {
 
     // Vivaldi
     WebsiteDarkModeTabHelper::CreateForWebState(web_state);
+    BackgroundAudioTabHelper::CreateForWebState(web_state);
     // End Vivaldi
 
     FormSuggestionTabHelper::CreateForWebState(web_state, @[
@@ -309,7 +319,7 @@ void AttachTabHelpers(web::WebState* web_state, TabHelperFilter filter_flags) {
     ]);
   }
 
-  if (!for_bottom_sheet) {
+  if (!for_lens_overlay) {
     InfobarBadgeTabHelper::GetOrCreateForWebState(web_state);
   }
 
@@ -343,19 +353,18 @@ void AttachTabHelpers(web::WebState* web_state, TabHelperFilter filter_flags) {
     FollowTabHelper::CreateForWebState(web_state);
   }
 
-  if (!for_bottom_sheet && !is_off_the_record) {
+  if (!for_lens_overlay && !is_off_the_record) {
     PriceNotificationsTabHelper::CreateForWebState(web_state);
   }
 
-  if (!for_bottom_sheet && !is_off_the_record && IsContextualPanelEnabled()) {
+  if (!for_lens_overlay && !is_off_the_record && IsContextualPanelEnabled()) {
     ContextualPanelModelService* model_service =
-        ContextualPanelModelServiceFactory::GetForProfile(
-            ProfileIOS::FromBrowserState(profile));
+        ContextualPanelModelServiceFactory::GetForProfile(profile);
     ContextualPanelTabHelper::CreateForWebState(web_state,
                                                 model_service->models());
   }
 
-  if (!for_bottom_sheet && !is_off_the_record &&
+  if (!for_lens_overlay && !is_off_the_record &&
       IsAboutThisSiteFeatureEnabled()) {
     if (auto* optimization_guide_decider =
             OptimizationGuideServiceFactory::GetForProfile(profile)) {

@@ -13,8 +13,7 @@ import androidx.annotation.ColorInt;
 import org.chromium.build.annotations.NullMarked;
 import org.chromium.build.annotations.Nullable;
 import org.chromium.chrome.browser.omnibox.R;
-import org.chromium.chrome.browser.ui.theme.BrandedColorScheme;
-import org.chromium.components.browser_ui.styles.ChromeColors;
+import org.chromium.chrome.browser.omnibox.styles.OmniboxResourceProvider;
 import org.chromium.ui.modelutil.ListObservable;
 import org.chromium.ui.modelutil.MVCListAdapter.ModelList;
 import org.chromium.ui.modelutil.PropertyKey;
@@ -99,18 +98,14 @@ class SuggestionListViewBinder {
             updateContainerVisibility(model, view);
         } else if (SuggestionListProperties.COLOR_SCHEME.equals(propertyKey)) {
             view.dropdown.refreshPopupBackground(model.get(SuggestionListProperties.COLOR_SCHEME));
-        } else if (SuggestionListProperties.CONTAINER_ALWAYS_VISIBLE.equals(propertyKey)) {
+        } else if (SuggestionListProperties.CONTAINER_ALWAYS_VISIBLE.equals(propertyKey)
+                || SuggestionListProperties.ACTIVITY_WINDOW_FOCUSED.equals(propertyKey)) {
             if (model.get(SuggestionListProperties.CONTAINER_ALWAYS_VISIBLE)) {
                 Context context = view.dropdown.getContext();
-                boolean isIncognito =
-                        model.get(SuggestionListProperties.COLOR_SCHEME)
-                                == BrandedColorScheme.INCOGNITO;
                 @ColorInt
                 int backgroundColor =
-                        isIncognito
-                                ? context.getColor(R.color.default_bg_color_dark_elev_3_baseline)
-                                : ChromeColors.getSurfaceColor(
-                                        context, R.dimen.omnibox_suggestion_dropdown_bg_elevation);
+                        OmniboxResourceProvider.getSuggestionsDropdownBackgroundColor(
+                                context, model.get(SuggestionListProperties.COLOR_SCHEME));
                 view.container.setBackgroundColor(backgroundColor);
             }
             updateContainerVisibility(model, view);
@@ -132,7 +127,8 @@ class SuggestionListViewBinder {
         boolean shouldListBeVisible =
                 model.get(SuggestionListProperties.OMNIBOX_SESSION_ACTIVE) && listItems.size() > 0;
         boolean shouldContainerBeVisible =
-                model.get(SuggestionListProperties.OMNIBOX_SESSION_ACTIVE)
+                model.get(SuggestionListProperties.ACTIVITY_WINDOW_FOCUSED)
+                        && model.get(SuggestionListProperties.OMNIBOX_SESSION_ACTIVE)
                         && (listItems.size() > 0
                                 || model.get(SuggestionListProperties.CONTAINER_ALWAYS_VISIBLE));
         int listVisibility = shouldListBeVisible ? View.VISIBLE : View.GONE;

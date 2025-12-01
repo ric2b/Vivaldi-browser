@@ -631,6 +631,27 @@ TEST_P(MultithreadTests, CreateRenderPipelineInParallel) {
     }
 }
 
+// Test that creating and destroying bind groups from the same bind group layout on multiple threads
+// won't race. The bind groups will all be allocated by same SlabAllocator.
+TEST_P(MultithreadTests, CreateAndDestroyBindGroupsInParallel) {
+    wgpu::BindGroupLayout layout = utils::MakeBindGroupLayout(
+        device, {
+                    {0, wgpu::ShaderStage::Fragment, wgpu::BufferBindingType::Storage},
+                });
+    wgpu::Buffer ssbo =
+        CreateBuffer(sizeof(uint32_t), wgpu::BufferUsage::Storage | wgpu::BufferUsage::CopySrc |
+                                           wgpu::BufferUsage::CopyDst);
+    utils::RunInParallel(100, [&, this](uint32_t) {
+        for (int i = 0; i < 10; ++i) {
+            wgpu::BindGroup bindGroup = utils::MakeBindGroup(device, layout,
+                                                             {
+                                                                 {0, ssbo, 0, sizeof(uint32_t)},
+                                                             });
+            EXPECT_NE(nullptr, bindGroup.Get());
+        }
+    });
+}
+
 class MultithreadCachingTests : public MultithreadTests {
   protected:
     wgpu::ShaderModule CreateComputeShaderModule() const {
@@ -887,12 +908,13 @@ class MultithreadTextureCopyTests : public MultithreadTests {
 
         wgpu::Extent3D textureSize = {width, height, 1};
 
-        wgpu::ImageCopyTexture imageCopyTexture =
-            utils::CreateImageCopyTexture(texture, 0, {0, 0, 0}, wgpu::TextureAspect::All);
-        wgpu::TextureDataLayout textureDataLayout =
-            utils::CreateTextureDataLayout(0, dataSize / height);
+        wgpu::TexelCopyTextureInfo texelCopyTextureInfo =
+            utils::CreateTexelCopyTextureInfo(texture, 0, {0, 0, 0}, wgpu::TextureAspect::All);
+        wgpu::TexelCopyBufferLayout texelCopyBufferLayout =
+            utils::CreateTexelCopyBufferLayout(0, dataSize / height);
 
-        queue.WriteTexture(&imageCopyTexture, data, dataSize, &textureDataLayout, &textureSize);
+        queue.WriteTexture(&texelCopyTextureInfo, data, dataSize, &texelCopyBufferLayout,
+                           &textureSize);
 
         return texture;
     }
@@ -904,12 +926,12 @@ class MultithreadTextureCopyTests : public MultithreadTests {
 
     void CopyTextureToTextureHelper(
         const wgpu::Texture& srcTexture,
-        const wgpu::ImageCopyTexture& dst,
+        const wgpu::TexelCopyTextureInfo& dst,
         const wgpu::Extent3D& dstSize,
         const wgpu::CommandEncoder& encoder,
         const wgpu::CopyTextureForBrowserOptions* copyForBrowerOptions = nullptr) {
-        wgpu::ImageCopyTexture srcView =
-            utils::CreateImageCopyTexture(srcTexture, 0, {0, 0, 0}, wgpu::TextureAspect::All);
+        wgpu::TexelCopyTextureInfo srcView =
+            utils::CreateTexelCopyTextureInfo(srcTexture, 0, {0, 0, 0}, wgpu::TextureAspect::All);
 
         if (copyForBrowerOptions == nullptr) {
             encoder.CopyTextureToTexture(&srcView, &dst, &dstSize);
@@ -925,11 +947,11 @@ class MultithreadTextureCopyTests : public MultithreadTests {
 
     void CopyBufferToTextureHelper(const wgpu::Buffer& srcBuffer,
                                    uint32_t srcBytesPerRow,
-                                   const wgpu::ImageCopyTexture& dst,
+                                   const wgpu::TexelCopyTextureInfo& dst,
                                    const wgpu::Extent3D& dstSize,
                                    const wgpu::CommandEncoder& encoder) {
-        wgpu::ImageCopyBuffer srcView =
-            utils::CreateImageCopyBuffer(srcBuffer, 0, srcBytesPerRow, dstSize.height);
+        wgpu::TexelCopyBufferInfo srcView =
+            utils::CreateTexelCopyBufferInfo(srcBuffer, 0, srcBytesPerRow, dstSize.height);
 
         encoder.CopyBufferToTexture(&srcView, &dst, &dstSize);
 
@@ -994,7 +1016,7 @@ TEST_P(MultithreadTextureCopyTests, CopyDepthToDepthNoRace) {
 
         // Copy from depthTexture to destTexture.
         const wgpu::Extent3D dstSize = {kWidth, kHeight, 1};
-        wgpu::ImageCopyTexture dest = utils::CreateImageCopyTexture(
+        wgpu::TexelCopyTextureInfo dest = utils::CreateTexelCopyTextureInfo(
             destTexture, /*dstMipLevel=*/1, {0, 0, 0}, wgpu::TextureAspect::All);
         auto encoder = device.CreateCommandEncoder();
         lockStep.Wait(Step::WriteTexture);
@@ -1062,7 +1084,7 @@ TEST_P(MultithreadTextureCopyTests, CopyBufferToDepthNoRace) {
 
         auto encoder = device.CreateCommandEncoder();
 
-        wgpu::ImageCopyTexture dest = utils::CreateImageCopyTexture(
+        wgpu::TexelCopyTextureInfo dest = utils::CreateTexelCopyTextureInfo(
             destTexture, /*dstMipLevel=*/0, {0, 0, 0}, wgpu::TextureAspect::All);
 
         // Wait until src buffer is written.
@@ -1130,7 +1152,7 @@ TEST_P(MultithreadTextureCopyTests, CopyStencilToStencilNoRace) {
 
         // Copy from stencilTexture to destTexture.
         const wgpu::Extent3D dstSize = {kWidth, kHeight, 1};
-        wgpu::ImageCopyTexture dest = utils::CreateImageCopyTexture(
+        wgpu::TexelCopyTextureInfo dest = utils::CreateTexelCopyTextureInfo(
             destTexture, /*dstMipLevel=*/1, {0, 0, 0}, wgpu::TextureAspect::All);
         auto encoder = device.CreateCommandEncoder();
         lockStep.Wait(Step::WriteTexture);
@@ -1189,7 +1211,7 @@ TEST_P(MultithreadTextureCopyTests, CopyBufferToStencilNoRace) {
 
         auto encoder = device.CreateCommandEncoder();
 
-        wgpu::ImageCopyTexture dest = utils::CreateImageCopyTexture(
+        wgpu::TexelCopyTextureInfo dest = utils::CreateTexelCopyTextureInfo(
             destTexture, /*dstMipLevel=*/0, {0, 0, 0}, wgpu::TextureAspect::All);
 
         // Wait until src buffer is written.
@@ -1259,7 +1281,7 @@ TEST_P(MultithreadTextureCopyTests, CopyTextureForBrowserNoRace) {
 
         // Copy from srcTexture to destTexture.
         const wgpu::Extent3D dstSize = {kWidth, kHeight, 1};
-        wgpu::ImageCopyTexture dest = utils::CreateImageCopyTexture(
+        wgpu::TexelCopyTextureInfo dest = utils::CreateTexelCopyTextureInfo(
             destTexture, /*dstMipLevel=*/0, {0, 0, 0}, wgpu::TextureAspect::All);
         wgpu::CopyTextureForBrowserOptions options;
         options.flipY = true;
@@ -1324,7 +1346,7 @@ TEST_P(MultithreadTextureCopyTests, CopyTextureForBrowserErrorNoDeadLock) {
 
         // Copy from srcTexture to destTexture.
         const wgpu::Extent3D dstSize = {kWidth, kHeight, 1};
-        wgpu::ImageCopyTexture dest = utils::CreateImageCopyTexture(
+        wgpu::TexelCopyTextureInfo dest = utils::CreateTexelCopyTextureInfo(
             destTexture, /*dstMipLevel=*/0, {0, 0, 0}, wgpu::TextureAspect::All);
         wgpu::CopyTextureForBrowserOptions options = {};
 

@@ -19,8 +19,10 @@ limitations under the License.
 #include <utility>
 
 #include "absl/container/flat_hash_map.h"
+#include "absl/log/check.h"
 #include "tensorflow/core/platform/logging.h"
 #include "tensorflow/core/profiler/protobuf/op_metrics.pb.h"
+#include "tsl/platform/protobuf.h"
 
 namespace tensorflow {
 namespace profiler {
@@ -87,8 +89,8 @@ void CombineOpMetrics(const OpMetrics& src, OpMetrics* dst,
 }
 
 void CombineMemoryAccessedBreakdown(
-    const protobuf::RepeatedPtrField<OpMetrics_MemoryAccessed>& src,
-    protobuf::RepeatedPtrField<OpMetrics_MemoryAccessed>* dst) {
+    const tsl::protobuf::RepeatedPtrField<OpMetrics_MemoryAccessed>& src,
+    tsl::protobuf::RepeatedPtrField<OpMetrics_MemoryAccessed>* dst) {
   if (src.empty()) return;
   absl::flat_hash_map<std::pair<uint64 /*memory_space*/, OperationType>,
                       OpMetrics_MemoryAccessed*>
@@ -131,8 +133,7 @@ void OpMetricsDbCombiner::Combine(const OpMetricsDb& src,
 
   for (const auto& src_metrics : src.metrics_db()) {
     auto* dst_metrics = LookupOrInsertNewOpMetrics(src_metrics.hlo_module_id(),
-                                                   src_metrics.name(),
-                                                   src_metrics.fingerprint());
+                                                   src_metrics.name());
     CopyOpMetricsMetadata(src_metrics, dst_metrics);
     CombineOpMetrics(src_metrics, dst_metrics, update_num_cores);
   }

@@ -46,8 +46,9 @@ class TabStateAndLogs {
   };
 
   struct RuleData {
-    RequestFilterRule::Decision decision;
+    RequestFilterRule::Decision decision = RequestFilterRule::Decision::kPass;
 
+    std::string_view rule_text;
     uint32_t rule_source_id;
   };
 
@@ -68,9 +69,8 @@ class TabStateAndLogs {
 
   virtual const TabBlockedUrlInfo& GetBlockedUrlsInfo(
       RuleGroup group) const = 0;
-  virtual bool WasFrameBlocked(
-      RuleGroup group,
-      content::FrameTreeNodeId frame_tree_node_id) const = 0;
+  virtual std::array<std::optional<TabStateAndLogs::RuleData>, kRuleGroupCount>
+  WasFrameBlocked(content::FrameTreeNodeId frame_tree_node_id) const = 0;
 
   virtual const TabActivations& GetTabActivations(RuleGroup group) const = 0;
 };

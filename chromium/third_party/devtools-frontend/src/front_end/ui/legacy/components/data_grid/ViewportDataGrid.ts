@@ -9,24 +9,27 @@ import * as RenderCoordinator from '../../../components/render_coordinator/rende
 
 import {type DataGridData, DataGridImpl, DataGridNode, type Parameters} from './DataGrid.js';
 
+let nextId = 0;
+
 export class ViewportDataGrid<T> extends Common.ObjectWrapper.eventMixin<EventTypes, typeof DataGridImpl>(
     DataGridImpl)<ViewportDataGridNode<T>> {
   private readonly onScrollBound: (event: Event|null) => void;
-  private visibleNodes: ViewportDataGridNode<T>[];
+  private visibleNodes: Array<ViewportDataGridNode<T>>;
   /** A datagrid preference to express that the grid represents an updating log of rows (eg Network panel request log, websocket messages).
    * If `true`, the datagrid will mostly keep the scroll at the bottom, so new items are visible.
    * If the data is sorted descending (eg Performance Call Tree, heap snapshot), keep the default of `false`.
    */
-  enableAutoScrollToBottom: boolean = false;
+  enableAutoScrollToBottom = false;
   /** When true, the datagrid will manipulate the scrollTop to focus on the bottom, mostly so new additions are visible.
    * Some actions will unset this, like revealing or expanding a particular node.
    * Only matters if enableAutoScrollToBottom is true. */
-  keepScrollingToBottom: boolean = false;
+  keepScrollingToBottom = false;
   private updateIsFromUser: boolean;
   private lastScrollTop: number;
   private firstVisibleIsStriped: boolean;
   private isStriped: boolean;
   private filters: readonly TextUtils.TextUtils.ParsedFilter[] = [];
+  private id = nextId++;
 
   constructor(dataGridParameters: Parameters) {
     super(dataGridParameters);
@@ -49,7 +52,7 @@ export class ViewportDataGrid<T> extends Common.ObjectWrapper.eventMixin<EventTy
     this.isStriped = striped;
     let startsWithOdd = true;
     if (this.visibleNodes.length) {
-      const allChildren = (this.rootNode() as ViewportDataGridNode<T>).flatChildren();
+      const allChildren = this.filteredNodes();
       startsWithOdd = Boolean(allChildren.indexOf(this.visibleNodes[0]));
     }
     this.updateStripesClass(startsWithOdd);
@@ -98,7 +101,7 @@ export class ViewportDataGrid<T> extends Common.ObjectWrapper.eventMixin<EventTy
 
   scheduleUpdate(isFromUser?: boolean): void {
     this.updateIsFromUser = this.updateIsFromUser || Boolean(isFromUser);
-    void RenderCoordinator.write('ViewportDataGrid.render', this.update.bind(this));
+    void RenderCoordinator.write(`ViewportDataGrid.render ${this.id}`, this.update.bind(this));
   }
 
   // TODO(allada) This should be fixed to never be needed. It is needed right now for network because removing
@@ -165,8 +168,7 @@ export class ViewportDataGrid<T> extends Common.ObjectWrapper.eventMixin<EventTy
     visibleNodes: Array<ViewportDataGridNode<T>>,
     offset: number,
   } {
-    const nodes =
-        (this.rootNode() as ViewportDataGridNode<T>).flatChildren().filter(this.testNodeWithFilters.bind(this));
+    const nodes = this.filteredNodes();
 
     if (this.inline) {
       return {topPadding: 0, bottomPadding: 0, contentHeight: 0, visibleNodes: nodes, offset: 0};
@@ -207,14 +209,11 @@ export class ViewportDataGrid<T> extends Common.ObjectWrapper.eventMixin<EventTy
   }
 
   override getNumberOfRows(): number {
-    return (this.rootNode() as ViewportDataGridNode<T>)
-        .flatChildren()
-        .filter(this.testNodeWithFilters.bind(this))
-        .length;
+    return this.filteredNodes().length;
   }
 
   private contentHeight(): number {
-    const nodes = (this.rootNode() as ViewportDataGridNode<T>).flatChildren();
+    const nodes = this.filteredNodes();
     let result = 0;
     for (let i = 0, size = nodes.length; i < size; ++i) {
       result += nodes[i].nodeSelfHeight();
@@ -257,7 +256,7 @@ export class ViewportDataGrid<T> extends Common.ObjectWrapper.eventMixin<EventTy
     let offset = viewportState.offset;
 
     if (visibleNodes.length) {
-      const nodes = (this.rootNode() as ViewportDataGridNode<T>).flatChildren();
+      const nodes = this.filteredNodes();
       const index = nodes.indexOf(visibleNodes[0]);
       this.updateStripesClass(Boolean(index % 2));
       if (this.keepScrollingToBottom && index !== -1 && Boolean(index % 2) !== this.firstVisibleIsStriped) {
@@ -269,7 +268,7 @@ export class ViewportDataGrid<T> extends Common.ObjectWrapper.eventMixin<EventTy
 
     for (let i = 0; i < visibleNodes.length; ++i) {
       const node = visibleNodes[i];
-      const element = (node.element() as HTMLElement);
+      const element = (node.element());
       node.setStriped((offset + i) % 2 === 0);
       if (element !== previousElement.nextSibling) {
         tBody.insertBefore(element, previousElement.nextSibling);
@@ -294,7 +293,7 @@ export class ViewportDataGrid<T> extends Common.ObjectWrapper.eventMixin<EventTy
   }
 
   revealViewportNode(node: ViewportDataGridNode<T>): void {
-    const nodes = (this.rootNode() as ViewportDataGridNode<T>).flatChildren();
+    const nodes = this.filteredNodes();
     const index = nodes.indexOf(node);
     if (index === -1) {
       return;
@@ -314,6 +313,10 @@ export class ViewportDataGrid<T> extends Common.ObjectWrapper.eventMixin<EventTy
     }
     this.scrollContainer.scrollTop = scrollTop;
   }
+
+  private filteredNodes(): Array<ViewportDataGridNode<T>> {
+    return (this.rootNode() as ViewportDataGridNode<T>).flatChildren().filter(this.testNodeWithFilters.bind(this));
+  }
 }
 
 export const enum Events {
@@ -326,7 +329,7 @@ export interface EventTypes {
 
 export class ViewportDataGridNode<T> extends DataGridNode<ViewportDataGridNode<T>> {
   private stale: boolean;
-  private flatNodes: ViewportDataGridNode<T>[]|null;
+  private flatNodes: Array<ViewportDataGridNode<T>>|null;
   private isStripedInternal: boolean;
 
   constructor(data?: DataGridData|null, hasChildren?: boolean) {
@@ -370,12 +373,12 @@ export class ViewportDataGridNode<T> extends DataGridNode<ViewportDataGridNode<T
     }
   }
 
-  flatChildren(): ViewportDataGridNode<T>[] {
+  flatChildren(): Array<ViewportDataGridNode<T>> {
     if (this.flatNodes) {
       return this.flatNodes;
     }
-    const flatNodes: ViewportDataGridNode<T>[] = [];
-    const children = ([this.children] as ViewportDataGridNode<T>[][]);
+    const flatNodes: Array<ViewportDataGridNode<T>> = [];
+    const children = ([this.children] as Array<Array<ViewportDataGridNode<T>>>);
     const counters: number[] = [0];
     let depth = 0;
     while (depth >= 0) {
@@ -387,7 +390,7 @@ export class ViewportDataGridNode<T> extends DataGridNode<ViewportDataGridNode<T
       flatNodes.push(node);
       if (node.expanded && node.children.length) {
         depth++;
-        children[depth] = (node.children as ViewportDataGridNode<T>[]);
+        children[depth] = (node.children as Array<ViewportDataGridNode<T>>);
         counters[depth] = 0;
       }
     }
@@ -424,10 +427,10 @@ export class ViewportDataGridNode<T> extends DataGridNode<ViewportDataGridNode<T
   }
 
   override removeChild(child: DataGridNode<ViewportDataGridNode<T>>): void {
-    this.clearFlatNodes();
     if (this.dataGrid) {
       this.dataGrid.updateSelectionBeforeRemoval(child, false);
     }
+    this.clearFlatNodes();
     if (child.previousSibling) {
       child.previousSibling.nextSibling = child.nextSibling;
     }
@@ -435,7 +438,7 @@ export class ViewportDataGridNode<T> extends DataGridNode<ViewportDataGridNode<T
       child.nextSibling.previousSibling = child.previousSibling;
     }
     if (child.parent !== this) {
-      throw 'removeChild: Node is not a child of this node.';
+      throw new Error('removeChild: Node is not a child of this node.');
     }
 
     Platform.ArrayUtilities.removeElement(this.children, child, true);
@@ -450,14 +453,14 @@ export class ViewportDataGridNode<T> extends DataGridNode<ViewportDataGridNode<T
   }
 
   override removeChildren(): void {
-    this.clearFlatNodes();
     if (this.dataGrid) {
       this.dataGrid.updateSelectionBeforeRemoval(this, true);
     }
+    this.clearFlatNodes();
     for (let i = 0; i < this.children.length; ++i) {
       (this.children[i] as ViewportDataGridNode<T>).unlink();
     }
-    this.children = ([] as ViewportDataGridNode<T>[]);
+    this.children = ([] as Array<ViewportDataGridNode<T>>);
 
     if (this.expanded && this.dataGrid) {
       (this.dataGrid as ViewportDataGrid<T>).scheduleUpdateStructure();
@@ -520,7 +523,7 @@ export class ViewportDataGridNode<T> extends DataGridNode<ViewportDataGridNode<T
 
   attached(): boolean {
     const existingElement = this.existingElement();
-    return Boolean(this.dataGrid && existingElement && existingElement.parentElement);
+    return Boolean(this.dataGrid && existingElement?.parentElement);
   }
 
   override refresh(): void {

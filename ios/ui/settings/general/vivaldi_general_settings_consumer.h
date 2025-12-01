@@ -12,6 +12,8 @@
 - (void)setPreferenceForHomepageSwitch:(BOOL)homepageEnabled;
 // Updates the home page url setting state
 - (void)setPreferenceForHomepageUrl:(NSString*)url;
+- (void)setPreferenceForBackgroundAudioEnabled:(BOOL)enabled;
+
 @end
 
 #endif  // IOS_UI_SETTINGS_GENERAL_VIVALDI_GENERAL_SETTINGS_CONSUMER_H_

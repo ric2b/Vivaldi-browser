@@ -215,7 +215,7 @@ void GPU::OnRequestAdapterCallback(
     // there are error messages.
     case wgpu::RequestAdapterStatus::Unavailable:
     case wgpu::RequestAdapterStatus::Error:
-    case wgpu::RequestAdapterStatus::InstanceDropped:
+    case wgpu::RequestAdapterStatus::CallbackCancelled:
       break;
   }
   if (error_message.length != 0) {

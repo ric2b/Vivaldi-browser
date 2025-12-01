@@ -49,7 +49,9 @@ VivaldiQuitConfirmationDialog::VivaldiQuitConfirmationDialog(
     gfx::NativeWindow window,
     gfx::NativeView view,
     VivaldiDialogDelegate* delegate)
-    : quit_callback_(std::move(quit_callback)), delegate_(delegate) {
+    : views::DialogDelegateView(CreatePassKey()),
+      quit_callback_(std::move(quit_callback)),
+      delegate_(delegate) {
   SetLayoutManager(std::make_unique<views::FillLayout>());
   SetBorder(views::CreateEmptyBorder(
       views::LayoutProvider::Get()->GetDialogInsetsForContentType(

@@ -147,7 +147,7 @@ const CGFloat kNoteCellHorizonalInset = 17.0;
         l10n_util::GetNSString(IDS_VIVALDI_NOTE_ROW_MODIFIED);
     self.createdLabel.text =
         [NSString stringWithFormat:@"%@ %@",
-            [self.formatter stringFromDate:createdAt], modifiedMarker];
+            [self.formatter stringFromDate:modifiedAt], modifiedMarker];
   }
 }
 

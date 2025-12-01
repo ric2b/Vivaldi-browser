@@ -31,6 +31,7 @@
 #include "net/filter/brotli_source_stream.h"
 #include "net/filter/filter_source_stream.h"
 #include "net/filter/source_stream.h"
+#include "net/filter/source_stream_type.h"
 #include "net/filter/zstd_source_stream.h"
 #include "net/http/http_request_info.h"
 #include "net/http/structured_headers.h"
@@ -47,7 +48,7 @@ namespace {
 class ProxyingSourceStream : public SourceStream {
  public:
   explicit ProxyingSourceStream(HttpTransaction* transaction)
-      : SourceStream(SourceStream::TYPE_NONE), transaction_(transaction) {}
+      : SourceStream(SourceStreamType::kNone), transaction_(transaction) {}
 
   ProxyingSourceStream(const ProxyingSourceStream&) = delete;
   ProxyingSourceStream& operator=(const ProxyingSourceStream&) = delete;
@@ -221,8 +222,8 @@ void SharedDictionaryNetworkTransaction::ModifyRequestHeaders(
     shared_dictionary_.reset();
     return;
   }
-  dictionary_hash_base64_ = base::StrCat(
-      {":", base::Base64Encode(shared_dictionary_->hash().data), ":"});
+  dictionary_hash_base64_ =
+      base::StrCat({":", base::Base64Encode(shared_dictionary_->hash()), ":"});
   request_headers->SetHeader(shared_dictionary::kAvailableDictionaryHeaderName,
                              dictionary_hash_base64_);
   if (enable_shared_zstd_) {
@@ -430,6 +431,12 @@ void SharedDictionaryNetworkTransaction::SetQuicServerInfo(
 bool SharedDictionaryNetworkTransaction::GetLoadTimingInfo(
     LoadTimingInfo* load_timing_info) const {
   return network_transaction_->GetLoadTimingInfo(load_timing_info);
+}
+
+void SharedDictionaryNetworkTransaction::PopulateLoadTimingInternalInfo(
+    LoadTimingInternalInfo* load_timing_internal_info) const {
+  network_transaction_->PopulateLoadTimingInternalInfo(
+      load_timing_internal_info);
 }
 
 bool SharedDictionaryNetworkTransaction::GetRemoteEndpoint(

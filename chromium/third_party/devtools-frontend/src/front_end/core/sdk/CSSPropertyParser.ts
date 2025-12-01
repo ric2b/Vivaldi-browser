@@ -5,6 +5,8 @@
 import type * as Platform from '../../core/platform/platform.js';
 import * as CodeMirror from '../../third_party/codemirror.next/codemirror.next.js';
 
+import {TextMatcher} from './CSSPropertyParserMatchers.js';
+
 const globalValues = new Set<string>(['inherit', 'initial', 'unset']);
 
 const tagRegexp = /[\x20-\x7E]{4}/;
@@ -16,10 +18,10 @@ const fontVariationSettingsRegexp =
  * Extracts information about font variation settings assuming
  * value is valid according to the spec: https://drafts.csswg.org/css-fonts-4/#font-variation-settings-def
  */
-export function parseFontVariationSettings(value: string): {
+export function parseFontVariationSettings(value: string): Array<{
   tag: string,
   value: number,
-}[] {
+}> {
   if (globalValues.has(value.trim()) || value.trim() === 'normal') {
     return [];
   }
@@ -148,21 +150,22 @@ export abstract class TreeWalker {
       return;
     }
     if (this.enter(tree)) {
-      ASTUtils.declValue(tree)?.cursor().iterate(this.enter.bind(this), this.leave.bind(this));
+      for (const sibling of ASTUtils.siblings(ASTUtils.declValue(tree))) {
+        sibling.cursor().iterate(this.enter.bind(this), this.leave.bind(this));
+      }
     }
     this.leave(tree);
   }
 
   protected iterate(tree: CodeMirror.SyntaxNode): void {
-    tree.cursor().iterate(this.enter.bind(this), this.leave.bind(this));
+    // Includes siblings of tree.
+    for (const sibling of ASTUtils.siblings(tree)) {
+      sibling.cursor().iterate(this.enter.bind(this), this.leave.bind(this));
+    }
   }
 
   protected iterateExcludingSuccessors(tree: CodeMirror.SyntaxNode): void {
-    // Customize the first step to avoid visiting siblings of `tree`
-    if (this.enter(tree)) {
-      tree.firstChild?.cursor().iterate(this.enter.bind(this), this.leave.bind(this));
-    }
-    this.leave(tree);
+    tree.cursor().iterate(this.enter.bind(this), this.leave.bind(this));
   }
 
   protected enter(_node: SyntaxNodeRef): boolean {
@@ -179,24 +182,21 @@ export interface Match {
   computedText?(): string|null;
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export type Constructor<T = any> = (abstract new (...args: any[]) => T)|(new (...args: any[]) => T);
-
 export interface Matcher<MatchT extends Match> {
-  readonly matchType: Constructor<MatchT>;
+  readonly matchType: Platform.Constructor.ConstructorOrAbstract<MatchT>;
   accepts(propertyName: string): boolean;
-  matches(node: CodeMirror.SyntaxNode, matching: BottomUpTreeMatching): Match|null;
+  matches(node: CodeMirror.SyntaxNode, matching: BottomUpTreeMatching): MatchT|null;
 }
 
 // eslint-disable-next-line @typescript-eslint/explicit-function-return-type
-export function matcherBase<MatchT extends Match>(matchT: Constructor<MatchT>) {
+export function matcherBase<MatchT extends Match>(matchT: Platform.Constructor.ConstructorOrAbstract<MatchT>) {
   class MatcherBase implements Matcher<MatchT> {
     matchType = matchT;
     accepts(_propertyName: string): boolean {
       return true;
     }
 
-    matches(_node: CodeMirror.SyntaxNode, _matching: BottomUpTreeMatching): Match|null {
+    matches(_node: CodeMirror.SyntaxNode, _matching: BottomUpTreeMatching): MatchT|null {
       return null;
     }
   }
@@ -205,7 +205,7 @@ export function matcherBase<MatchT extends Match>(matchT: Constructor<MatchT>) {
 
 type MatchKey = Platform.Brand.Brand<string, 'MatchKey'>;
 export class BottomUpTreeMatching extends TreeWalker {
-  #matchers: Matcher<Match>[] = [];
+  #matchers: Array<Matcher<Match>> = [];
   #matchedNodes = new Map<MatchKey, Match>();
   readonly computedText: ComputedText;
 
@@ -213,7 +213,7 @@ export class BottomUpTreeMatching extends TreeWalker {
     return `${node.from}:${node.to}` as MatchKey;
   }
 
-  constructor(ast: SyntaxTree, matchers: Matcher<Match>[]) {
+  constructor(ast: SyntaxTree, matchers: Array<Matcher<Match>>) {
     super(ast);
     this.computedText = new ComputedText(ast.rule.substring(ast.tree.from));
     this.#matchers.push(...matchers.filter(m => !ast.propertyName || m.accepts(ast.propertyName)));
@@ -238,6 +238,10 @@ export class BottomUpTreeMatching extends TreeWalker {
     this.#matchers.push(...matchers);
   }
 
+  hasMatches(...matchTypes: Array<Platform.Constructor.Constructor<Match>>): boolean {
+    return Boolean(this.#matchedNodes.values().find(match => matchTypes.some(matchType => match instanceof matchType)));
+  }
+
   getMatch(node: CodeMirror.SyntaxNode): Match|undefined {
     return this.#matchedNodes.get(this.#key(node));
   }
@@ -252,6 +256,11 @@ export class BottomUpTreeMatching extends TreeWalker {
 
   getComputedText(node: CodeMirror.SyntaxNode, substitutions?: Map<Match, string>): string {
     return this.getComputedTextRange(node, node, substitutions);
+  }
+
+  getComputedPropertyValueText(): string {
+    const [from, to] = ASTUtils.range(ASTUtils.siblings(ASTUtils.declValue(this.ast.tree)));
+    return this.getComputedTextRange(from ?? this.ast.tree, to ?? this.ast.tree);
   }
 
   getComputedTextRange(from: CodeMirror.SyntaxNode, to: CodeMirror.SyntaxNode, substitutions?: Map<Match, string>):
@@ -291,7 +300,7 @@ class ComputedTextChunk {
 export class ComputedText {
   readonly #chunks: ComputedTextChunk[] = [];
   readonly text: string;
-  #sorted: boolean = true;
+  #sorted = true;
   constructor(text: string) {
     this.text = text;
   }
@@ -448,6 +457,11 @@ export namespace ASTUtils {
     return siblings(node?.firstChild ?? null);
   }
 
+  export function range(node: CodeMirror.SyntaxNode[]):
+      [CodeMirror.SyntaxNode, CodeMirror.SyntaxNode]|[undefined, undefined] {
+    return [node[0], node[node.length - 1]];
+  }
+
   export function declValue(node: CodeMirror.SyntaxNode): CodeMirror.SyntaxNode|null {
     if (node.name !== 'Declaration') {
       return null;
@@ -492,104 +506,6 @@ export namespace ASTUtils {
 
   export function equals(a: CodeMirror.SyntaxNode, b: CodeMirror.SyntaxNode): boolean {
     return a.name === b.name && a.from === b.from && a.to === b.to;
-  }
-}
-
-export class VariableMatch implements Match {
-  constructor(
-      readonly text: string,
-      readonly node: CodeMirror.SyntaxNode,
-      readonly name: string,
-      readonly fallback: CodeMirror.SyntaxNode[],
-      readonly matching: BottomUpTreeMatching,
-      readonly computedTextCallback: (match: VariableMatch, matching: BottomUpTreeMatching) => string | null,
-  ) {
-  }
-
-  computedText(): string|null {
-    return this.computedTextCallback(this, this.matching);
-  }
-}
-
-// clang-format off
-export class VariableMatcher extends matcherBase(VariableMatch) {
-  // clang-format on
-  readonly #computedTextCallback: (match: VariableMatch, matching: BottomUpTreeMatching) => string | null;
-  constructor(computedTextCallback: (match: VariableMatch, matching: BottomUpTreeMatching) => string | null) {
-    super();
-    this.#computedTextCallback = computedTextCallback;
-  }
-
-  override matches(node: CodeMirror.SyntaxNode, matching: BottomUpTreeMatching): Match|null {
-    const callee = node.getChild('Callee');
-    const args = node.getChild('ArgList');
-    if (node.name !== 'CallExpression' || !callee || (matching.ast.text(callee) !== 'var') || !args) {
-      return null;
-    }
-
-    const [lparenNode, nameNode, ...fallbackOrRParenNodes] = ASTUtils.children(args);
-
-    if (lparenNode?.name !== '(' || nameNode?.name !== 'VariableName') {
-      return null;
-    }
-
-    if (fallbackOrRParenNodes.length <= 1 && fallbackOrRParenNodes[0]?.name !== ')') {
-      return null;
-    }
-
-    let fallback: CodeMirror.SyntaxNode[] = [];
-    if (fallbackOrRParenNodes.length > 1) {
-      if (fallbackOrRParenNodes.shift()?.name !== ',') {
-        return null;
-      }
-      if (fallbackOrRParenNodes.pop()?.name !== ')') {
-        return null;
-      }
-      fallback = fallbackOrRParenNodes;
-      if (fallback.length === 0) {
-        return null;
-      }
-      if (fallback.some(n => n.name === ',')) {
-        return null;
-      }
-    }
-
-    const varName = matching.ast.text(nameNode);
-    if (!varName.startsWith('--')) {
-      return null;
-    }
-
-    return new VariableMatch(matching.ast.text(node), node, varName, fallback, matching, this.#computedTextCallback);
-  }
-}
-
-export class TextMatch implements Match {
-  computedText?: () => string;
-  constructor(readonly text: string, readonly node: CodeMirror.SyntaxNode) {
-    if (node.name === 'Comment') {
-      this.computedText = () => '';
-    }
-  }
-  render(): Node[] {
-    return [document.createTextNode(this.text)];
-  }
-}
-
-// clang-format off
-class TextMatcher extends matcherBase(TextMatch) {
-  // clang-format on
-  override accepts(): boolean {
-    return true;
-  }
-  override matches(node: CodeMirror.SyntaxNode, matching: BottomUpTreeMatching): Match|null {
-    if (!node.firstChild || node.name === 'NumberLiteral' /* may have a Unit child */) {
-      // Leaf node, just emit text
-      const text = matching.ast.text(node);
-      if (text.length) {
-        return new TextMatch(text, node);
-      }
-    }
-    return null;
   }
 }
 
@@ -646,6 +562,14 @@ export function tokenizePropertyName(name: string): string|null {
   }
 
   return nodeText(propertyName, rule);
+}
+
+export function matchDeclaration(name: string, value: string, matchers: Array<Matcher<Match>>): BottomUpTreeMatching|
+    null {
+  const ast = tokenizeDeclaration(name, value);
+  const matchedResult = ast && BottomUpTreeMatching.walk(ast, matchers);
+  ast?.trailingNodes.forEach(n => matchedResult?.matchText(n));
+  return matchedResult;
 }
 
 export class TreeSearch extends TreeWalker {

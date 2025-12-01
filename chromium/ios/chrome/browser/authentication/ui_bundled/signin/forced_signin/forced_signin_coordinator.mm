@@ -24,7 +24,8 @@
 @interface ForcedSigninCoordinator () <FirstRunScreenDelegate>
 
 @property(nonatomic, strong) ScreenProvider* screenProvider;
-@property(nonatomic, strong) InterruptibleChromeCoordinator* childCoordinator;
+@property(nonatomic, strong)
+    ChromeCoordinator<InterruptibleChromeCoordinator>* childCoordinator;
 
 // The view controller used by ForcedSigninCoordinator.
 @property(nonatomic, strong) UINavigationController* navigationController;
@@ -86,7 +87,7 @@
 - (void)finishPresentingScreens {
   __weak __typeof(self) weakSelf = self;
   AuthenticationService* authService =
-      AuthenticationServiceFactory::GetForProfile(self.browser->GetProfile());
+      AuthenticationServiceFactory::GetForProfile(self.profile);
   id<SystemIdentity> identity =
       authService->GetPrimaryIdentity(signin::ConsentLevel::kSignin);
   void (^completion)(void) = ^{
@@ -112,8 +113,8 @@
 }
 
 // Creates a screen coordinator according to `type`.
-- (InterruptibleChromeCoordinator*)createChildCoordinatorWithScreenType:
-    (ScreenType)type {
+- (ChromeCoordinator<InterruptibleChromeCoordinator>*)
+    createChildCoordinatorWithScreenType:(ScreenType)type {
   switch (type) {
     case kSignIn:
       return [[SigninScreenCoordinator alloc]
@@ -128,6 +129,7 @@
     case kDefaultBrowserPromo:
     case kChoice:
     case kDockingPromo:
+    case kBestFeatures:
     case kStepsCompleted:
       NOTREACHED() << "Type of screen not supported." << static_cast<int>(type);
   }
@@ -153,56 +155,17 @@
   [self presentScreen:[self.screenProvider nextScreenType]];
 }
 
-#pragma mark - SigninCoordinator
+#pragma mark - InterruptibleChromeCoordinator
 
-- (void)interruptWithAction:(SigninCoordinatorInterrupt)action
-                 completion:(ProceduralBlock)completion {
-  __weak __typeof(self) weakSelf = self;
-  ProceduralBlock finishCompletion = ^() {
-    [weakSelf finishWithResult:SigninCoordinatorResultInterrupted identity:nil];
-    if (completion) {
-      completion();
-    }
-  };
-  BOOL animated = NO;
-  switch (action) {
-    case SigninCoordinatorInterrupt::UIShutdownNoDismiss: {
-      CHECK(!IsInterruptibleCoordinatorAlwaysDismissedEnabled(),
-            base::NotFatalUntil::M136);
-      [self.childCoordinator
-          interruptWithAction:SigninCoordinatorInterrupt::UIShutdownNoDismiss
-                   completion:finishCompletion];
-      return;
-    }
-    case SigninCoordinatorInterrupt::DismissWithoutAnimation: {
-      animated = NO;
-      break;
-    }
-    case SigninCoordinatorInterrupt::DismissWithAnimation: {
-      animated = YES;
-      break;
-    }
-  }
-
-  ProceduralBlock childCompletion = ^{
-    if (IsInterruptibleCoordinatorStoppedSynchronouslyEnabled()) {
-      [weakSelf.navigationController.presentingViewController
-          dismissViewControllerAnimated:animated
-                             completion:nil];
-      finishCompletion();
-
-    } else {
-      [weakSelf.navigationController.presentingViewController
-          dismissViewControllerAnimated:animated
-                             completion:finishCompletion];
-    }
-  };
-
+- (void)interruptAnimated:(BOOL)animated {
   // Interrupt the child coordinator UI first before dismissing the forced
   // sign-in navigation controller.
-  [self.childCoordinator
-      interruptWithAction:SigninCoordinatorInterrupt::DismissWithoutAnimation
-               completion:childCompletion];
+  [self.childCoordinator interruptAnimated:NO];
+
+  [self.navigationController.presentingViewController
+      dismissViewControllerAnimated:animated
+                         completion:nil];
+  [self finishWithResult:SigninCoordinatorResultInterrupted identity:nil];
 }
 
 #pragma mark - NSObject

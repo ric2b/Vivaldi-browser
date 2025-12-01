@@ -34,9 +34,8 @@ namespace vivaldi {
 ui::KeyboardCode GetFunctionKey(std::string token);
 ui::Accelerator ParseShortcut(const std::string& accelerator,
                               bool should_parse_media_keys);
-
-// Find first available Vivaldi browser.
-Browser* FindVivaldiBrowser();
+ui::Accelerator VivaldiShortcut2Accelerator(const std::string& shortcut);
+std::string GetMacOSEmailLinkShortcut(Profile* profile);
 
 void BroadcastEvent(const std::string& eventname,
                     base::Value::List args,
@@ -56,7 +55,7 @@ void FromUICoordinates(content::WebContents* web_contents, gfx::RectF* rect);
 gfx::PointF ToUICoordinates(content::WebContents* web_contents,
                             const gfx::PointF& p);
 
-std::u16string KeyCodeToName(ui::KeyboardCode key_code);
+std::string KeyCodeToName(ui::KeyboardCode key_code);
 
 std::string ShortcutTextFromEvent(const input::NativeWebKeyboardEvent& event);
 

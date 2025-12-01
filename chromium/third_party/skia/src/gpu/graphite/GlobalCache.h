@@ -58,23 +58,33 @@ public:
     void purgePipelinesNotUsedSince(
             StdSteadyClock::time_point purgeTime) SK_EXCLUDES(fSpinLock);
 
+    void reportPipelineStats() SK_EXCLUDES(fSpinLock);
+
 #if defined(GPU_TEST_UTILS)
     int numGraphicsPipelines() const SK_EXCLUDES(fSpinLock);
     void resetGraphicsPipelines() SK_EXCLUDES(fSpinLock);
     void forEachGraphicsPipeline(
             const std::function<void(const UniqueKey&, const GraphicsPipeline*)>& fn)
             SK_EXCLUDES(fSpinLock);
+#endif
 
     struct PipelineStats {
+#if defined(GPU_TEST_UTILS)
         int fGraphicsCacheHits = 0;
         int fGraphicsCacheMisses = 0;
         int fGraphicsCacheAdditions = 0;
         int fGraphicsRaces = 0;
         int fGraphicsPurges = 0;
+#endif
+        // Normally compiled Pipelines that were skipped bc of a preexisting Precompiled Pipeline
+        uint32_t fNormalPreemptedByPrecompile = 0;
+        // Precompiled Pipelines that made it into the cache
+        uint32_t fUnpreemptedPrecompilePipelines = 0;
+        // Precompiled Pipelines that were purged from the cache prior to use
+        uint32_t fPurgedUnusedPrecompiledPipelines = 0;
     };
 
     PipelineStats getStats() const SK_EXCLUDES(fSpinLock);
-#endif
 
     // Find and add operations for ComputePipelines, with the same pattern as GraphicsPipelines.
     sk_sp<ComputePipeline> findComputePipeline(const UniqueKey&) SK_EXCLUDES(fSpinLock);
@@ -91,14 +101,19 @@ public:
     using PipelineCallback = void (*)(PipelineCallbackContext context, sk_sp<SkData> pipelineData);
     void setPipelineCallback(PipelineCallback, PipelineCallbackContext) SK_EXCLUDES(fSpinLock);
 
+    void invokePipelineCallback(SharedContext*,
+                                const GraphicsPipelineDesc&,
+                                const RenderPassDesc&);
 private:
     struct KeyHash {
         uint32_t operator()(const UniqueKey& key) const { return key.hash(); }
     };
 
-    static void LogPurge(const UniqueKey& key, sk_sp<GraphicsPipeline>* p);
+    static void LogPurge(void* context, const UniqueKey& key, sk_sp<GraphicsPipeline>* p);
     struct PurgeCB {
-        void operator()(const UniqueKey& k, sk_sp<GraphicsPipeline>* p) const { LogPurge(k, p); }
+        void operator()(void* context, const UniqueKey& k, sk_sp<GraphicsPipeline>* p) const {
+            LogPurge(context, k, p);
+        }
     };
 
     using GraphicsPipelineCache = SkLRUCache<UniqueKey, sk_sp<GraphicsPipeline>, KeyHash, PurgeCB>;
@@ -118,9 +133,7 @@ private:
     PipelineCallback fPipelineCallback SK_GUARDED_BY(fSpinLock) = nullptr;
     PipelineCallbackContext fPipelineCallbackContext SK_GUARDED_BY(fSpinLock) = nullptr;
 
-#if defined(GPU_TEST_UTILS)
     PipelineStats fStats SK_GUARDED_BY(fSpinLock);
-#endif
 };
 
 }  // namespace skgpu::graphite

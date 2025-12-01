@@ -4,6 +4,8 @@
 
 #include "content/browser/worker_host/worker_script_fetcher.h"
 
+#include <variant>
+
 #include "base/feature_list.h"
 #include "base/functional/bind.h"
 #include "base/task/single_thread_task_runner.h"
@@ -46,6 +48,7 @@
 #include "services/metrics/public/cpp/ukm_source_id.h"
 #include "services/network/public/cpp/constants.h"
 #include "services/network/public/cpp/ip_address_space_util.h"
+#include "services/network/public/cpp/permissions_policy/permissions_policy.h"
 #include "services/network/public/cpp/record_ontransfersizeupdate_utils.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 #include "services/network/public/mojom/client_security_state.mojom.h"
@@ -310,6 +313,13 @@ void WorkerScriptFetcher::CreateAndStart(
       ancestor_render_frame_host.GetStorageKey().ToPartialNetIsolationInfo();
   resource_request->storage_access_api_status = storage_access_api_status;
 
+  // TODO(https://crbug.com/406525486): Permissions policies for workers are
+  // currently not supported so an all-blocking permissions policy is set.
+  // Propagate the actual permissions policy once it is available.
+  resource_request->permissions_policy =
+      *network::PermissionsPolicy::CreateFromParsedPolicy(
+          {}, {}, url::Origin::Create(resource_request->url));
+
   // For a classic worker script request:
   // https://html.spec.whatwg.org/C/#fetch-a-classic-worker-script
   // Step 1: "Let request be a new request whose ..., mode is "same-origin",
@@ -497,7 +507,7 @@ void WorkerScriptFetcher::CreateScriptLoader(
   // the closest ancestor's frame is gone, `wc_getter` will returns nullptr,
   // and `WebEngineContentBrowserClient::CreateURLLoaderThrottles()` also
   // returns {}.
-  if (absl::holds_alternative<blink::DedicatedWorkerToken>(worker_token)) {
+  if (std::holds_alternative<blink::DedicatedWorkerToken>(worker_token)) {
     frame_tree_node_id = ancestor_render_frame_host.GetFrameTreeNodeId();
     wc_getter = base::BindRepeating(&WebContents::FromFrameTreeNodeId,
                                     frame_tree_node_id);

@@ -74,17 +74,6 @@ constexpr base::TimeDelta kSyncOperationTimeout = base::Seconds(10);
 - (AppLaunchConfiguration)appConfigurationForTestCase {
   AppLaunchConfiguration config = [super appConfigurationForTestCase];
 
-  // TODO(b/298795580): Remove this once the User Policy field trial config is
-  // merged.
-  config.features_enabled.push_back(
-      policy::kUserPolicyForSigninAndNoSyncConsentLevel);
-  if ([self isRunningTest:@selector
-            (testSignOutWithManagedAccountFromNoneSyncingAccount)]) {
-    // Disable `kClearDeviceDataOnSignOutForManagedUsers` because the feature
-    // shows a different dialog
-    config.features_disabled.push_back(
-        kClearDeviceDataOnSignOutForManagedUsers);
-  }
   config.features_disabled.push_back(kIdentityDiscAccountMenu);
 
   return config;
@@ -197,10 +186,11 @@ constexpr base::TimeDelta kSyncOperationTimeout = base::Seconds(10);
       selectElementWithMatcher:chrome_test_util::ButtonWithAccessibilityLabel(
                                    fakeIdentity.userEmail)]
       performAction:grey_tap()];
-  [[EarlGrey
-      selectElementWithMatcher:
-          chrome_test_util::ButtonWithAccessibilityLabel(
-              l10n_util::GetNSString(IDS_IOS_MANAGE_YOUR_GOOGLE_ACCOUNT_TITLE))]
+  [[EarlGrey selectElementWithMatcher:
+                 grey_allOf(chrome_test_util::ButtonWithAccessibilityLabel(
+                                l10n_util::GetNSString(
+                                    IDS_IOS_MANAGE_YOUR_GOOGLE_ACCOUNT_TITLE)),
+                            grey_sufficientlyVisible(), nil)]
       performAction:grey_tap()];
   [ChromeEarlGreyUI waitForAppToIdle];
 
@@ -266,7 +256,6 @@ constexpr base::TimeDelta kSyncOperationTimeout = base::Seconds(10);
 }
 
 // Tests to open the account details twice in a row.
-// TODO(crbug.com/357145635): Test failing on builders.
 - (void)testOpenTwiceAccountDetails {
   FakeSystemIdentity* fakeIdentity = [FakeSystemIdentity fakeIdentity1];
 
@@ -279,10 +268,12 @@ constexpr base::TimeDelta kSyncOperationTimeout = base::Seconds(10);
         selectElementWithMatcher:chrome_test_util::ButtonWithAccessibilityLabel(
                                      fakeIdentity.userEmail)]
         performAction:grey_tap()];
-    [[EarlGrey selectElementWithMatcher:
-                   chrome_test_util::ButtonWithAccessibilityLabel(
-                       l10n_util::GetNSString(
-                           IDS_IOS_MANAGE_YOUR_GOOGLE_ACCOUNT_TITLE))]
+    [[EarlGrey
+        selectElementWithMatcher:
+            grey_allOf(chrome_test_util::ButtonWithAccessibilityLabel(
+                           l10n_util::GetNSString(
+                               IDS_IOS_MANAGE_YOUR_GOOGLE_ACCOUNT_TITLE)),
+                       grey_sufficientlyVisible(), nil)]
         performAction:grey_tap()];
     [[EarlGrey selectElementWithMatcher:grey_accessibilityID(
                                             kFakeAccountDetailsViewIdentifier)]
@@ -476,8 +467,8 @@ constexpr base::TimeDelta kSyncOperationTimeout = base::Seconds(10);
   [SigninEarlGrey verifySignedOut];
 }
 
-// Tests to sign out with a non managed account without syncing.
-- (void)testSignOutWithNonManagedAccountFromNoneSyncingAccount {
+// Tests to sign out with a non managed account.
+- (void)testSignOutWithNonManagedAccount {
   FakeSystemIdentity* fakeIdentity = [FakeSystemIdentity fakeIdentity1];
 
   [SigninEarlGrey signinWithFakeIdentity:fakeIdentity];
@@ -496,23 +487,36 @@ constexpr base::TimeDelta kSyncOperationTimeout = base::Seconds(10);
   [BookmarkEarlGreyUI verifyEmptyBackgroundIsAbsent];
 }
 
-// Tests to sign out with a managed account without syncing.
-- (void)testSignOutWithManagedAccountFromNoneSyncingAccount {
+// Tests to sign out with a managed account.
+- (void)testSignOutWithManagedAccount {
   // Sign In `fakeManagedIdentity`.
   FakeSystemIdentity* fakeIdentity = [FakeSystemIdentity fakeManagedIdentity];
-  [SigninEarlGrey signinWithFakeIdentity:fakeIdentity];
+  if (AreSeparateProfilesForManagedAccountsEnabled()) {
+    [SigninEarlGrey
+        signinWithFakeManagedIdentityInPersonalProfile:fakeIdentity];
+  } else {
+    [SigninEarlGrey signinWithFakeIdentity:fakeIdentity];
+  }
 
   [BookmarkEarlGrey
       setupStandardBookmarksInStorage:BookmarkStorageType::kLocalOrSyncable];
 
-  [SigninEarlGreyUI signOut];
+  [SigninEarlGreyUI signOutWithClearDataConfirmation:
+                        !AreSeparateProfilesForManagedAccountsEnabled()];
 
   // Open the Bookmarks screen on the Tools menu.
   [BookmarkEarlGreyUI openBookmarks];
-  [BookmarkEarlGreyUI openMobileBookmarks];
 
-  // Assert that the empty state background is absent.
-  [BookmarkEarlGreyUI verifyEmptyBackgroundIsAbsent];
+  if (!AreSeparateProfilesForManagedAccountsEnabled()) {
+    [BookmarkEarlGreyUI openMobileBookmarks];
+    // Assert that the empty state background is absent.
+    [BookmarkEarlGreyUI verifyEmptyBackgroundIsAbsent];
+  } else {
+    // With multi profiles, when we signout from a managed profile,
+    // we switch back to the personal profile, that profile would have
+    // no bookmarks in this test.
+    [BookmarkEarlGreyUI verifyEmptyBackgroundAppears];
+  }
 }
 
 @end

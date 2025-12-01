@@ -75,9 +75,11 @@ class Origin;
 
 class GURL;
 
+#if BUILDFLAG(SAFE_BROWSING_AVAILABLE) || BUILDFLAG(IS_IOS)
 namespace safe_browsing {
 class PasswordProtectionService;
 }
+#endif
 
 namespace device_reauth {
 class DeviceAuthenticator;
@@ -113,18 +115,6 @@ class WebAuthnCredentialsDelegate;
 struct PasswordForm;
 
 enum class ErrorMessageFlowType { kSaveFlow, kFillFlow };
-
-#if BUILDFLAG(IS_ANDROID)
-struct PasswordFillingParams {
-  autofill::FormData form;
-  uint64_t username_field_index;
-  uint64_t password_field_index;
-  autofill::FieldRendererId focused_field_renderer_id_;
-  // TODO(crbug.com/40274966): Remove this param after
-  // PasswordSuggestionBottomSheetV2 is launched.
-  autofill::mojom::SubmissionReadinessState submission_readiness;
-};
-#endif  // BUILDFLAG(IS_ANDROID)
 
 // An abstraction of operations that depend on the embedders (e.g. Chrome)
 // environment. PasswordManagerClient is instantiated once per WebContents.
@@ -226,9 +216,7 @@ class PasswordManagerClient {
   // storage notice is gone.
   virtual void ShowKeyboardReplacingSurface(
       PasswordManagerDriver* driver,
-      const PasswordFillingParams& password_filling_params,
-      bool is_webauthn_form,
-      base::OnceCallback<void(bool)> shown_cb);
+      const autofill::PasswordSuggestionRequest& request);
 #endif
 
   // Checks whether user re-authentication should be triggered before password
@@ -416,9 +404,11 @@ class PasswordManagerClient {
   // Returns the current best guess as to the page's display language.
   virtual autofill::LanguageCode GetPageLanguage() const;
 
+#if BUILDFLAG(SAFE_BROWSING_AVAILABLE) || BUILDFLAG(IS_IOS)
   // Return the PasswordProtectionService associated with this instance.
   virtual safe_browsing::PasswordProtectionService*
   GetPasswordProtectionService() const = 0;
+#endif
 
   // Maybe triggers a hats survey that measures the user's perception of
   // Autofill for passwords. When triggering happens, the survey dialog will be
@@ -430,7 +420,7 @@ class PasswordManagerClient {
   virtual void TriggerUserPerceptionOfPasswordManagerSurvey(
       const std::string& filling_assistance);
 
-#if defined(ON_FOCUS_PING_ENABLED)
+#if defined(ON_FOCUS_PING_ENABLED) && BUILDFLAG(SAFE_BROWSING_AVAILABLE)
   // Checks the safe browsing reputation of the webpage when the
   // user focuses on a username/password field. This is used for reporting
   // only, and won't trigger a warning.
@@ -489,6 +479,7 @@ class PasswordManagerClient {
 
   // Returns the identity manager for profile.
   virtual signin::IdentityManager* GetIdentityManager() = 0;
+  virtual const signin::IdentityManager* GetIdentityManager() const = 0;
 
   // Returns the field info manager for profile.
   virtual password_manager::FieldInfoManager* GetFieldInfoManager() const;
@@ -539,14 +530,7 @@ class PasswordManagerClient {
   // Refreshes password manager settings stored in prefs.
   virtual void RefreshPasswordManagerSettingsIfNeeded() const;
 
-  // Display username/password options to the user in the "ambient" sign-in
-  // bubble, which can also display other credential types for sign-in.
-  // If the user selects a password from the bubble, `callback` is invoked with
-  // the selected `PasswordForm`.
-  virtual void ShowCredentialsInAmbientBubble(
-      std::vector<std::unique_ptr<password_manager::PasswordForm>> forms,
-      int credential_type_flags,
-      CredentialsCallback callback);
+  virtual void TriggerSignIn(signin_metrics::AccessPoint access_point) const;
 
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_MAC) || \
     BUILDFLAG(IS_CHROMEOS)

@@ -13,14 +13,14 @@ import hideIssuesMenuStylesRaw from './hideIssuesMenu.css.js';
 
 // TODO(crbug.com/391381439): Fully migrate off of constructed style sheets.
 const hideIssuesMenuStyles = new CSSStyleSheet();
-hideIssuesMenuStyles.replaceSync(hideIssuesMenuStylesRaw.cssContent);
+hideIssuesMenuStyles.replaceSync(hideIssuesMenuStylesRaw.cssText);
 
 const UIStrings = {
   /**
    *@description Title for the tooltip of the (3 dots) Hide Issues menu icon.
    */
   tooltipTitle: 'Hide issues',
-};
+} as const;
 
 const str_ = i18n.i18n.registerUIStrings('panels/issues/components/HideIssuesMenu.ts', UIStrings);
 const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);

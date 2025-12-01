@@ -556,13 +556,11 @@ bool BrowserNonClientFrameViewChromeOS::DoesIntersectRect(
   }
 
   bool should_leave_to_top_container = false;
-#if BUILDFLAG(IS_CHROMEOS)
   // In immersive mode, the caption buttons container is reparented to the
   // TopContainerView and hence |rect| should not be claimed here.  See
   // BrowserNonClientFrameViewChromeOS::OnImmersiveRevealStarted().
   should_leave_to_top_container =
       browser_view()->immersive_mode_controller()->IsRevealed();
-#endif
 
   return !should_leave_to_top_container;
 }
@@ -936,8 +934,7 @@ bool BrowserNonClientFrameViewChromeOS::GetShouldPaint() const {
 void BrowserNonClientFrameViewChromeOS::OnAddedToOrRemovedFromOverview() {
   const bool should_show_caption_buttons = GetShowCaptionButtons();
   caption_button_container_->SetVisible(should_show_caption_buttons);
-  if (!chromeos::features::AreOverviewSessionInitOptimizationsEnabled() ||
-      browser_view()->GetIsWebAppType()) {
+  if (browser_view()->GetIsWebAppType()) {
     // The WebAppFrameToolbarView is part of the BrowserView, so make sure the
     // BrowserView is re-layed out to take into account these changes.
     browser_view()->InvalidateLayout();

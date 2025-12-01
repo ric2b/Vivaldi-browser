@@ -61,7 +61,7 @@ class CertProvisioningWorkerDynamic : public CertProvisioningWorker {
   base::Time GetLastUpdateTime() const override;
   const std::optional<BackendServerError>& GetLastBackendServerError()
       const override;
-  std::string GetFailureMessage() const override;
+  std::string GetFailureMessageWithPii() const override;
 
  private:
   friend class CertProvisioningSerializer;
@@ -75,8 +75,7 @@ class CertProvisioningWorkerDynamic : public CertProvisioningWorker {
                                 chromeos::platform_keys::Status status);
 
   void GenerateKeyForVa();
-  void OnGenerateKeyForVaDone(base::TimeTicks start_time,
-                              const attestation::TpmChallengeKeyResult& result);
+  void OnGenerateKeyForVaDone(const attestation::TpmChallengeKeyResult& result);
 
   void Start();
   void OnStartResponse(
@@ -98,7 +97,6 @@ class CertProvisioningWorkerDynamic : public CertProvisioningWorker {
 
   void BuildVaChallengeResponse();
   void OnBuildVaChallengeResponseDone(
-      base::TimeTicks start_time,
       const attestation::TpmChallengeKeyResult& result);
 
   void RegisterKey();
@@ -117,8 +115,7 @@ class CertProvisioningWorkerDynamic : public CertProvisioningWorker {
       base::expected<void, CertProvisioningClient::Error> response);
 
   void BuildProofOfPossession();
-  void OnBuildProofOfPossessionDone(base::TimeTicks start_time,
-                                    std::vector<uint8_t> signature,
+  void OnBuildProofOfPossessionDone(std::vector<uint8_t> signature,
                                     chromeos::platform_keys::Status status);
 
   void UploadProofOfPossession();
@@ -134,11 +131,14 @@ class CertProvisioningWorkerDynamic : public CertProvisioningWorker {
   // require an invalidation to continue.
   void ScheduleNextStep(base::TimeDelta delay,
                         bool try_provisioning_on_timeout);
+  // Same as ScheduleNextStep, but also calls `state_change_callback` given
+  // in the constructor.
+  void ScheduleNextStepAndNotifyStateChange(base::TimeDelta delay,
+                                            bool try_provisioning_on_timeout);
   void CancelScheduledTasks();
 
   enum class ContinueReason {
     kTimeout,
-    kSubscribedToInvalidation,
     kInvalidationReceived
   };
   void OnShouldContinue(ContinueReason reason);
@@ -194,7 +194,7 @@ class CertProvisioningWorkerDynamic : public CertProvisioningWorker {
 
   // A convenience method to generate a string that contains some additional
   // info and should be included in all logs.
-  std::string GetLogInfoBlock();
+  std::string GetLogInfoBlock() const;
 
   std::string process_id_;
   CertScope cert_scope_ = CertScope::kUser;
@@ -267,13 +267,13 @@ class CertProvisioningWorkerDynamic : public CertProvisioningWorker {
   // Holds a message describing the reason for failure when the worker fails.
   // This may not contain PII or stable identifiers as it will be logged.
   // If the worker did not fail, this message is empty.
-  std::string failure_message_;
+  std::string failure_message_no_pii_;
   // Optionally holds a message like `failure_message_` but containing PII or
   // stable identifiers for display on the UI.
   // If the worker did not fail, this is absent.
   // If the worker did fail and this is absent, the UI should display
   // failure_message_.
-  std::optional<std::string> failure_message_ui_;
+  std::optional<std::string> failure_message_with_pii_;
 
   // IMPORTANT:
   // Increment this when you add/change any member in

@@ -2,17 +2,16 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifndef V8_WASM_WELL_KNOWN_IMPORTS_H_
+#define V8_WASM_WELL_KNOWN_IMPORTS_H_
+
 #if !V8_ENABLE_WEBASSEMBLY
 #error This header should only be included if WebAssembly is enabled.
 #endif  // !V8_ENABLE_WEBASSEMBLY
 
-#ifndef V8_WASM_WELL_KNOWN_IMPORTS_H_
-#define V8_WASM_WELL_KNOWN_IMPORTS_H_
-
 #include <atomic>
 #include <memory>
 
-#include "src/base/platform/mutex.h"
 #include "src/base/vector.h"
 
 namespace v8::internal::wasm {

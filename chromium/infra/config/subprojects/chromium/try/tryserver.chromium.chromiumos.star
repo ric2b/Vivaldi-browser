@@ -24,9 +24,6 @@ try_.defaults.set(
     orchestrator_siso_remote_jobs = siso.remote_jobs.HIGH_JOBS_FOR_CQ,
     service_account = try_.DEFAULT_SERVICE_ACCOUNT,
     siso_enabled = True,
-    # crbug.com/391160876: fast deps with CrOS toolchain may cause
-    # incorrect results.
-    siso_experiments = ["no-fast-deps"],
     siso_project = siso.project.DEFAULT_UNTRUSTED,
     siso_remote_jobs = siso.remote_jobs.LOW_JOBS_FOR_CQ,
     siso_remote_linking = True,
@@ -225,8 +222,6 @@ try_.builder(
     experiments = {
         # crbug/940930
         "chromium.enable_cleandead": 100,
-        # b/346598710
-        "chromium.luci_analysis_v2": 100,
     },
     main_list_view = "try",
 )
@@ -245,8 +240,6 @@ try_.builder(
     experiments = {
         # crbug/940930
         "chromium.enable_cleandead": 100,
-        # b/346598710
-        "chromium.luci_analysis_v2": 100,
     },
     main_list_view = "try",
     siso_remote_jobs = siso.remote_jobs.HIGH_JOBS_FOR_CQ,
@@ -350,8 +343,6 @@ try_.orchestrator_builder(
         "chromium.add_one_test_shard": 10,
         # crbug/940930
         "chromium.enable_cleandead": 100,
-        # b/346598710
-        "chromium.luci_analysis_v2": 100,
     },
     main_list_view = "try",
     # TODO(crbug.com/40241638): Use orchestrator pool once overloaded test pools

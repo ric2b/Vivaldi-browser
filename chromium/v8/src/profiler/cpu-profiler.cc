@@ -12,6 +12,7 @@
 #include "src/base/template-utils.h"
 #include "src/debug/debug.h"
 #include "src/execution/frames-inl.h"
+#include "src/execution/isolate-inl.h"
 #include "src/execution/v8threads.h"
 #include "src/execution/vm-state-inl.h"
 #include "src/libsampler/sampler.h"
@@ -276,6 +277,8 @@ SamplingEventsProcessor::ProcessOneSample() {
 }
 
 void SamplingEventsProcessor::Run() {
+  // Set the current isolate such that trusted pointer tables etc are available.
+  SetCurrentIsolateScope isolate_scope(isolate_);
   base::MutexGuard guard(&running_mutex_);
   while (running_.load(std::memory_order_relaxed)) {
     base::TimeTicks nextSampleTime = base::TimeTicks::Now() + period_;
@@ -464,12 +467,12 @@ namespace {
 class CpuProfilersManager {
  public:
   void AddProfiler(Isolate* isolate, CpuProfiler* profiler) {
-    base::SpinningMutexGuard lock(&mutex_);
+    base::MutexGuard lock(&mutex_);
     profilers_.emplace(isolate, profiler);
   }
 
   void RemoveProfiler(Isolate* isolate, CpuProfiler* profiler) {
-    base::SpinningMutexGuard lock(&mutex_);
+    base::MutexGuard lock(&mutex_);
     auto range = profilers_.equal_range(isolate);
     for (auto it = range.first; it != range.second; ++it) {
       if (it->second != profiler) continue;
@@ -481,7 +484,7 @@ class CpuProfilersManager {
 
   void CallCollectSample(Isolate* isolate,
                          const std::optional<uint64_t> trace_id) {
-    base::SpinningMutexGuard lock(&mutex_);
+    base::MutexGuard lock(&mutex_);
     auto range = profilers_.equal_range(isolate);
     for (auto it = range.first; it != range.second; ++it) {
       it->second->CollectSample(trace_id);
@@ -489,7 +492,7 @@ class CpuProfilersManager {
   }
 
   size_t GetAllProfilersMemorySize(Isolate* isolate) {
-    base::SpinningMutexGuard lock(&mutex_);
+    base::MutexGuard lock(&mutex_);
     size_t estimated_memory = 0;
     auto range = profilers_.equal_range(isolate);
     for (auto it = range.first; it != range.second; ++it) {
@@ -500,7 +503,7 @@ class CpuProfilersManager {
 
  private:
   std::unordered_multimap<Isolate*, CpuProfiler*> profilers_;
-  base::SpinningMutex mutex_;
+  base::Mutex mutex_;
 };
 
 DEFINE_LAZY_LEAKY_OBJECT_GETTER(CpuProfilersManager, GetProfilersManager)
@@ -636,8 +639,33 @@ CpuProfilingResult CpuProfiler::StartProfiling(
     TRACE_EVENT0("v8", "CpuProfiler::StartProfiling");
     AdjustSamplingInterval();
     StartProcessorIfNotStarted();
-  }
 
+    // Collect script rundown at the start of profiling if trace category is
+    // turned on
+    bool source_rundown_trace_enabled;
+    bool source_rundown_sources_trace_enabled;
+    TRACE_EVENT_CATEGORY_GROUP_ENABLED(
+        TRACE_DISABLED_BY_DEFAULT("devtools.v8-source-rundown"),
+        &source_rundown_trace_enabled);
+    TRACE_EVENT_CATEGORY_GROUP_ENABLED(
+        TRACE_DISABLED_BY_DEFAULT("devtools.v8-source-rundown-sources"),
+        &source_rundown_sources_trace_enabled);
+    if (source_rundown_trace_enabled || source_rundown_sources_trace_enabled) {
+      Handle<WeakArrayList> script_objects = isolate_->factory()->script_list();
+      for (int i = 0; i < script_objects->length(); i++) {
+        if (Tagged<HeapObject> script_object;
+            script_objects->get(i).GetHeapObjectIfWeak(&script_object)) {
+          Tagged<Script> script(Cast<Script>(script_object));
+          if (source_rundown_trace_enabled) {
+            script->TraceScriptRundown();
+          }
+          if (source_rundown_sources_trace_enabled) {
+            script->TraceScriptRundownSources();
+          }
+        }
+      }
+    }
+  }
   return result;
 }
 

@@ -4,15 +4,17 @@
 load("@local_config_cuda//cuda:build_defs.bzl", "if_cuda")
 load("@local_config_syslibs//:build_defs.bzl", "if_not_system_lib")
 load(
-    "@local_tsl//third_party/py:py_import.bzl",
+    "@local_xla//third_party/py:py_import.bzl",
     "py_import",
 )
 load(
-    "@local_tsl//third_party/py:py_manylinux_compliance_test.bzl",
+    "@local_xla//third_party/py:py_manylinux_compliance_test.bzl",
     "verify_manylinux_compliance_test",
 )
+load("@local_xla//third_party/py:python_wheel.bzl", "collect_data_files", "transitive_py_deps")
 load("@local_xla//xla/tsl/mkl:build_defs.bzl", "if_enable_mkl", "if_mkl", "if_mkl_ml")
 load("//tensorflow:tensorflow.bzl", "if_wheel_dependency", "if_with_tpu_support", "transitive_hdrs")
+load("//tensorflow:tf_version.bzl", "TF_SEMANTIC_VERSION_SUFFIX", "TF_VERSION")
 load(
     "//tensorflow/core/platform:build_config_root.bzl",
     "if_pywrap",
@@ -20,8 +22,6 @@ load(
     "tf_cuda_tests_tags",
     "tf_exec_properties",
 )
-load("//tensorflow/tools/pip_package/utils:data_deps.bzl", "collect_data_files")
-load("//tensorflow/tools/pip_package/utils:py_deps.bzl", "transitive_py_deps")
 load("//tensorflow/tools/pip_package/utils:tf_wheel.bzl", "tf_wheel", "tf_wheel_dep")
 
 package(default_visibility = ["//visibility:public"])
@@ -109,12 +109,11 @@ filegroup(
         "@llvm-project//llvm:LICENSE.TXT",
         "@llvm-project//mlir:LICENSE.TXT",
         "@local_config_tensorrt//:LICENSE",
-        "@ml_dtypes//:LICENSE",
+        "@ml_dtypes_py//:LICENSE",
         "@org_brotli//:LICENSE",
         "@pasta//:LICENSE",
         "@png//:LICENSE",
         "@ruy//:LICENSE",
-        "@six_archive//:LICENSE",
         "@snappy//:COPYING",
         "@stablehlo//:LICENSE",
         "@tf_runtime//:LICENSE",
@@ -126,11 +125,6 @@ filegroup(
         "//conditions:default": [
             "@com_github_googlecloudplatform_google_cloud_cpp//:LICENSE",
         ],
-    }) + select({
-        "@local_xla//xla/tsl:with_numa_support": [
-            "@hwloc//:COPYING",
-        ],
-        "//conditions:default": [],
     }) + if_cuda([
         "@cub_archive//:LICENSE.TXT",
         "@local_config_nccl//:LICENSE",
@@ -275,6 +269,27 @@ transitive_py_deps(
     deps = COMMON_PIP_DEPS,
 )
 
+genrule(
+    name = "setup_py",
+    srcs = ["setup.py.tpl"],
+    outs = ["setup.py"],
+    cmd = """sed -E "s/_VERSION = '0.0.0'/_VERSION = '{wheel_version}{wheel_version_suffix}'/" \
+$(location setup.py.tpl) > $@;""".format(
+        wheel_version = TF_VERSION,
+        wheel_version_suffix = TF_SEMANTIC_VERSION_SUFFIX,
+    ),
+)
+
+py_binary(
+    name = "setup_py_binary",
+    srcs = [":setup_py"],
+    data = [
+        "//:AUTHORS",
+        "//:LICENSE",
+    ],
+    main = "setup.py",
+)
+
 tf_wheel(
     name = "wheel",
     headers = [
@@ -297,7 +312,7 @@ tf_wheel(
     source_files = [
         "MANIFEST.in",
         "//tensorflow/tools/pip_package:THIRD_PARTY_NOTICES.txt",
-        "setup.py",
+        ":setup_py",
         ":cc_deps",
         ":py_deps",
         "//tensorflow:tf_python_api_gen_v2",
@@ -321,7 +336,9 @@ tf_wheel(
             if_false = [
                 "//tensorflow/python:pywrap_tensorflow_import_lib_file",
             ],
-            if_true = [],
+            if_true = [
+                "//tensorflow/python:pywrap_tensorflow_binaries",
+            ],
         ),
     }) + if_mkl_ml(["@local_xla//xla/tsl/mkl:intel_binary_blob"]),
     xla_aot_compiled = [
@@ -346,7 +363,6 @@ py_test(
     tags = [
         "cpu",
         "manual",
-        "windows_excluded",
     ],
     deps = if_wheel_dependency(tf_wheel_dep()),
 )
@@ -365,7 +381,6 @@ py_test(
     tags = [
         "gpu",
         "manual",
-        "windows_excluded",
     ],
     deps = if_wheel_dependency(tf_wheel_dep()),
 )
@@ -377,7 +392,6 @@ py_test(
     tags = [
         "cpu",
         "manual",
-        "windows_excluded",
     ],
     deps = [
         ":tf_py_import",
@@ -395,7 +409,6 @@ py_test(
     tags = [
         "gpu",
         "manual",
-        "windows_excluded",
     ],
     deps = [
         ":tf_py_import",

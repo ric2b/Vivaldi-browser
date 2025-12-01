@@ -13,7 +13,7 @@
             "builder_id": {
               "bucket": "ci",
               "builder": "Dawn Chromium Presubmit",
-              "project": "chromium-m134"
+              "project": "chromium-m136"
             },
             "builder_spec": {
               "builder_group": "chromium.dawn",
@@ -41,7 +41,7 @@
         {
           "bucket": "ci",
           "builder": "Dawn Chromium Presubmit",
-          "project": "chromium-m134"
+          "project": "chromium-m136"
         }
       ],
       "retry_failed_shards": false,
@@ -49,18 +49,15 @@
       "targets_spec_directory": "src/infra/config/generated/builders/try/dawn-chromium-presubmit/targets"
     }
   },
-  "$build/reclient": {
-    "instance": "rbe-chromium-untrusted",
-    "metrics_project": "chromium-reclient-metrics",
-    "scandeps_server": true
-  },
   "$build/siso": {
     "configs": [
       "builder"
     ],
+    "enable_cloud_monitoring": true,
     "enable_cloud_profiler": true,
     "enable_cloud_trace": true,
     "experiments": [],
+    "metrics_project": "chromium-reclient-metrics",
     "project": "rbe-chromium-untrusted",
     "remote_jobs": 150
   },

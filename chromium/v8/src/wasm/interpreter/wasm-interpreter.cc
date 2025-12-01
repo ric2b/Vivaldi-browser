@@ -157,7 +157,7 @@ WasmInterpreterThread* WasmInterpreterThreadMap::GetCurrentInterpreterThread(
     Isolate* isolate) {
   const int current_thread_id = ThreadId::Current().ToInteger();
   {
-    base::SpinningMutexGuard guard(&mutex_);
+    base::MutexGuard guard(&mutex_);
 
     auto it = map_.find(current_thread_id);
     if (it == map_.end()) {
@@ -170,7 +170,7 @@ WasmInterpreterThread* WasmInterpreterThreadMap::GetCurrentInterpreterThread(
 }
 
 void WasmInterpreterThreadMap::NotifyIsolateDisposal(Isolate* isolate) {
-  base::SpinningMutexGuard guard(&mutex_);
+  base::MutexGuard guard(&mutex_);
 
   auto it = map_.begin();
   while (it != map_.end()) {
@@ -186,21 +186,21 @@ void WasmInterpreterThreadMap::NotifyIsolateDisposal(Isolate* isolate) {
 
 void FrameState::SetCaughtException(Isolate* isolate,
                                     uint32_t catch_block_index,
-                                    Handle<Object> exception) {
+                                    DirectHandle<Object> exception) {
   if (caught_exceptions_.is_null()) {
     DCHECK_NOT_NULL(current_function_);
     uint32_t blocks_count = current_function_->GetBlocksCount();
-    Handle<FixedArray> caught_exceptions =
+    DirectHandle<FixedArray> caught_exceptions =
         isolate->factory()->NewFixedArrayWithHoles(blocks_count);
     caught_exceptions_ = isolate->global_handles()->Create(*caught_exceptions);
   }
   caught_exceptions_->set(catch_block_index, *exception);
 }
 
-Handle<Object> FrameState::GetCaughtException(
+DirectHandle<Object> FrameState::GetCaughtException(
     Isolate* isolate, uint32_t catch_block_index) const {
-  Handle<Object> exception =
-      handle(caught_exceptions_->get(catch_block_index), isolate);
+  DirectHandle<Object> exception(caught_exceptions_->get(catch_block_index),
+                                 isolate);
   DCHECK(!IsTheHole(*exception));
   return exception;
 }
@@ -352,8 +352,8 @@ void NopFinalizer(const v8::WeakCallbackInfo<void>& data) {
   GlobalHandles::Destroy(global_handle_location);
 }
 
-Handle<WasmInstanceObject> MakeWeak(
-    Isolate* isolate, Handle<WasmInstanceObject> instance_object) {
+DirectHandle<WasmInstanceObject> MakeWeak(
+    Isolate* isolate, DirectHandle<WasmInstanceObject> instance_object) {
   Handle<WasmInstanceObject> weak_instance =
       isolate->global_handles()->Create<WasmInstanceObject>(*instance_object);
   Address* global_handle_location = weak_instance.location();
@@ -473,7 +473,7 @@ void WasmInterpreterThread::EnsureRefStackSpace(size_t new_size) {
                       std::max(2 * current_ref_stack_size_, requested_size));
   int grow_by = static_cast<int>(new_size - current_ref_stack_size_);
   HandleScope handle_scope(isolate_);  // Avoid leaking handles.
-  Handle<FixedArray> new_ref_stack =
+  DirectHandle<FixedArray> new_ref_stack =
       isolate_->factory()->CopyFixedArrayAndGrow(reference_stack_, grow_by);
   new_ref_stack->FillWithHoles(static_cast<int>(current_ref_stack_size_),
                                static_cast<int>(new_size));
@@ -492,7 +492,7 @@ void WasmInterpreterThread::RaiseException(Isolate* isolate,
   DCHECK_EQ(WasmInterpreterThread::TRAPPED, state_);
   if (!isolate->has_exception()) {
     ClearThreadInWasmScope wasm_flag(isolate);
-    Handle<JSObject> error_obj =
+    DirectHandle<JSObject> error_obj =
         isolate->factory()->NewWasmRuntimeError(message);
     JSObject::AddProperty(isolate, error_obj,
                           isolate->factory()->wasm_uncatchable_symbol(),
@@ -630,9 +630,10 @@ void InitInstructionTableOnce(Isolate* isolate) {
 }
 #endif  // !V8_DRUMBRAKE_BOUNDS_CHECKS
 
-WasmInterpreter::WasmInterpreter(Isolate* isolate, const WasmModule* module,
-                                 const ModuleWireBytes& wire_bytes,
-                                 Handle<WasmInstanceObject> instance_object)
+WasmInterpreter::WasmInterpreter(
+    Isolate* isolate, const WasmModule* module,
+    const ModuleWireBytes& wire_bytes,
+    DirectHandle<WasmInstanceObject> instance_object)
     : zone_(isolate->allocator(), ZONE_NAME),
       instance_object_(MakeWeak(isolate, instance_object)),
       module_bytes_(wire_bytes.start(), wire_bytes.end(), &zone_),
@@ -5567,9 +5568,9 @@ class Handlers : public HandlersBase {
 
       uint32_t tag_index = Read<int32_t>(code);
 
-      Handle<WasmExceptionPackage> exception_object =
+      DirectHandle<WasmExceptionPackage> exception_object =
           wasm_runtime->CreateWasmExceptionPackage(tag_index);
-      Handle<FixedArray> encoded_values = Cast<FixedArray>(
+      DirectHandle<FixedArray> encoded_values = Cast<FixedArray>(
           WasmExceptionPackage::GetExceptionValues(isolate, exception_object));
 
       // Encode the exception values on the operand stack into the exception
@@ -5614,9 +5615,9 @@ class Handlers : public HandlersBase {
           }
           case kRef:
           case kRefNull: {
-            Handle<Object> ref = pop<WasmRef>(sp, code, wasm_runtime);
+            DirectHandle<Object> ref = pop<WasmRef>(sp, code, wasm_runtime);
             if (IsWasmNull(*ref, isolate)) {
-              ref = handle(ReadOnlyRoots(isolate).null_value(), isolate);
+              ref = direct_handle(ReadOnlyRoots(isolate).null_value(), isolate);
             }
             encoded_values->set(encoded_index++, *ref);
             break;
@@ -5742,10 +5743,10 @@ class Handlers : public HandlersBase {
                         bool null_succeeds,
                         WasmInterpreterRuntime* wasm_runtime) {
     if (target_type.is_index()) {
-      Handle<Map> rtt = wasm_runtime->RttCanon(target_type.ref_index().index);
+      DirectHandle<Map> rtt =
+          wasm_runtime->RttCanon(target_type.ref_index().index);
       return wasm_runtime->SubtypeCheck(ref, ref_type, rtt,
-                                        ValueType::Rtt(target_type.ref_index()),
-                                        null_succeeds);
+                                        target_type.ref_index(), null_succeeds);
     } else {
       switch (target_type.representation()) {
         case HeapType::kEq:
@@ -5928,9 +5929,9 @@ class Handlers : public HandlersBase {
                                          WasmInterpreterRuntime* wasm_runtime,
                                          int64_t r0, double fp0) {
     uint32_t index = Read<int32_t>(code);
-    std::pair<Handle<WasmStruct>, const StructType*> struct_new_result =
+    std::pair<DirectHandle<WasmStruct>, const StructType*> struct_new_result =
         wasm_runtime->StructNewUninitialized(index);
-    Handle<HeapObject> struct_obj = struct_new_result.first;
+    DirectHandle<HeapObject> struct_obj = struct_new_result.first;
     const StructType* struct_type = struct_new_result.second;
 
     {
@@ -5998,9 +5999,9 @@ class Handlers : public HandlersBase {
       const uint8_t* code, uint32_t* sp, WasmInterpreterRuntime* wasm_runtime,
       int64_t r0, double fp0) {
     uint32_t index = Read<int32_t>(code);
-    std::pair<Handle<WasmStruct>, const StructType*> struct_new_result =
+    std::pair<DirectHandle<WasmStruct>, const StructType*> struct_new_result =
         wasm_runtime->StructNewUninitialized(index);
-    Handle<HeapObject> struct_obj = struct_new_result.first;
+    DirectHandle<HeapObject> struct_obj = struct_new_result.first;
     const StructType* struct_type = struct_new_result.second;
 
     {
@@ -6151,9 +6152,9 @@ class Handlers : public HandlersBase {
     const uint32_t elem_count = pop<int32_t>(sp, code, wasm_runtime);
     const T value = pop<T>(sp, code, wasm_runtime);
 
-    std::pair<Handle<WasmArray>, const ArrayType*> array_new_result =
+    std::pair<DirectHandle<WasmArray>, const ArrayType*> array_new_result =
         wasm_runtime->ArrayNewUninitialized(elem_count, array_index);
-    Handle<WasmArray> array = array_new_result.first;
+    DirectHandle<WasmArray> array = array_new_result.first;
     if (V8_UNLIKELY(array.is_null())) {
       TRAP(TrapReason::kTrapArrayTooLarge)
     }
@@ -6194,9 +6195,9 @@ class Handlers : public HandlersBase {
     const uint32_t elem_count = pop<int32_t>(sp, code, wasm_runtime);
     const WasmRef value = pop<WasmRef>(sp, code, wasm_runtime);
 
-    std::pair<Handle<WasmArray>, const ArrayType*> array_new_result =
+    std::pair<DirectHandle<WasmArray>, const ArrayType*> array_new_result =
         wasm_runtime->ArrayNewUninitialized(elem_count, array_index);
-    Handle<WasmArray> array = array_new_result.first;
+    DirectHandle<WasmArray> array = array_new_result.first;
     if (V8_UNLIKELY(array.is_null())) {
       TRAP(TrapReason::kTrapArrayTooLarge)
     }
@@ -6233,9 +6234,9 @@ class Handlers : public HandlersBase {
     const uint32_t array_index = Read<int32_t>(code);
     const uint32_t elem_count = Read<int32_t>(code);
 
-    std::pair<Handle<WasmArray>, const ArrayType*> array_new_result =
+    std::pair<DirectHandle<WasmArray>, const ArrayType*> array_new_result =
         wasm_runtime->ArrayNewUninitialized(elem_count, array_index);
-    Handle<WasmArray> array = array_new_result.first;
+    DirectHandle<WasmArray> array = array_new_result.first;
     if (V8_UNLIKELY(array.is_null())) {
       TRAP(TrapReason::kTrapArrayTooLarge)
     }
@@ -6310,9 +6311,9 @@ class Handlers : public HandlersBase {
     const uint32_t array_index = Read<int32_t>(code);
     const uint32_t elem_count = pop<int32_t>(sp, code, wasm_runtime);
 
-    std::pair<Handle<WasmArray>, const ArrayType*> array_new_result =
+    std::pair<DirectHandle<WasmArray>, const ArrayType*> array_new_result =
         wasm_runtime->ArrayNewUninitialized(elem_count, array_index);
-    Handle<WasmArray> array = array_new_result.first;
+    DirectHandle<WasmArray> array = array_new_result.first;
     if (V8_UNLIKELY(array.is_null())) {
       TRAP(TrapReason::kTrapArrayTooLarge)
     }
@@ -6578,8 +6579,10 @@ class Handlers : public HandlersBase {
       TRAP(TrapReason::kTrapArrayOutOfBounds)
     }
 
-    push<WasmRef>(sp, code, wasm_runtime,
-                  wasm_runtime->GetWasmArrayRefElement(array, index));
+    WasmRef element =
+        Handle<Object>(*wasm_runtime->GetWasmArrayRefElement(array, index),
+                       wasm_runtime->GetIsolate());
+    push<WasmRef>(sp, code, wasm_runtime, element);
 
     NextOp();
   }
@@ -7170,7 +7173,6 @@ PWasmOp* kInstructionTable[kInstructionTableSize] = {
                 FOREACH_LOAD_STORE_INSTR_HANDLER(V)
                     FOREACH_LOAD_STORE_DUPLICATED_INSTR_HANDLER(V)
 #undef V
-
 #endif  // !V8_DRUMBRAKE_BOUNDS_CHECKS
 
 #define V(name) Handlers<false>::name,
@@ -7361,11 +7363,12 @@ pc_t WasmBytecode::GetPcFromTrapCode(const uint8_t* current_code) const {
 }
 
 // static
-size_t WasmBytecodeGenerator::total_bytecode_size_ = 0;
+std::atomic<size_t> WasmBytecodeGenerator::total_bytecode_size_ = 0;
 // static
-size_t WasmBytecodeGenerator::emitted_short_slot_offset_count_ = 0;
+std::atomic<size_t> WasmBytecodeGenerator::emitted_short_slot_offset_count_ = 0;
 // static
-size_t WasmBytecodeGenerator::emitted_short_memory_offset_count_ = 0;
+std::atomic<size_t> WasmBytecodeGenerator::emitted_short_memory_offset_count_ =
+    0;
 
 WasmBytecodeGenerator::WasmBytecodeGenerator(uint32_t function_index,
                                              InterpreterCode* wasm_code,
@@ -8137,7 +8140,6 @@ WasmInstruction WasmBytecodeGenerator::DecodeInstruction(pc_t pc,
   case kExpr##name: {                                                     \
     MemoryAccessImmediate imm(                                            \
         &decoder, wasm_code_->at(pc + 1), sizeof(ctype),                  \
-        !module_->memories.empty() && module_->memories[0].is_memory64(), \
         Decoder::kNoValidation);                                          \
     len = 1 + imm.length;                                                 \
     optional.offset = imm.offset;                                         \
@@ -8163,7 +8165,6 @@ WasmInstruction WasmBytecodeGenerator::DecodeInstruction(pc_t pc,
   case kExpr##name: {                                                     \
     MemoryAccessImmediate imm(                                            \
         &decoder, wasm_code_->at(pc + 1), sizeof(ctype),                  \
-        !module_->memories.empty() && module_->memories[0].is_memory64(), \
         Decoder::kNoValidation);                                          \
     len = 1 + imm.length;                                                 \
     optional.offset = imm.offset;                                         \
@@ -8550,7 +8551,7 @@ void WasmBytecodeGenerator::DecodeAtomicOp(WasmOpcode opcode,
       MachineType memtype = MachineType::Uint32();
       MemoryAccessImmediate imm(decoder, code->at(pc + *len),
                                 ElementSizeLog2Of(memtype.representation()),
-                                IsMemory64(), Decoder::kNoValidation);
+                                Decoder::kNoValidation);
       optional->offset = imm.offset;
       *len += imm.length;
       break;
@@ -8559,7 +8560,7 @@ void WasmBytecodeGenerator::DecodeAtomicOp(WasmOpcode opcode,
       MachineType memtype = MachineType::Uint64();
       MemoryAccessImmediate imm(decoder, code->at(pc + *len),
                                 ElementSizeLog2Of(memtype.representation()),
-                                IsMemory64(), Decoder::kNoValidation);
+                                Decoder::kNoValidation);
       optional->offset = imm.offset;
       *len += imm.length;
       break;
@@ -8573,7 +8574,7 @@ void WasmBytecodeGenerator::DecodeAtomicOp(WasmOpcode opcode,
     MachineType memtype = MachineType::Type();                              \
     MemoryAccessImmediate imm(decoder, code->at(pc + *len),                 \
                               ElementSizeLog2Of(memtype.representation()),  \
-                              IsMemory64(), Decoder::kNoValidation);        \
+                              Decoder::kNoValidation);                      \
     optional->offset = imm.offset;                                          \
     *len += imm.length;                                                     \
     break;                                                                  \
@@ -8586,7 +8587,7 @@ void WasmBytecodeGenerator::DecodeAtomicOp(WasmOpcode opcode,
     MachineType memtype = MachineType::Type();                             \
     MemoryAccessImmediate imm(decoder, code->at(pc + *len),                \
                               ElementSizeLog2Of(memtype.representation()), \
-                              IsMemory64(), Decoder::kNoValidation);       \
+                              Decoder::kNoValidation);                     \
     optional->offset = imm.offset;                                         \
     *len += imm.length;                                                    \
     break;                                                                 \
@@ -8668,13 +8669,15 @@ void WasmInterpreter::GlobalTearDown() {
 
 // static
 void WasmBytecodeGenerator::PrintBytecodeCompressionStats() {
-  printf("Total bytecode size: %zu bytes.\n", total_bytecode_size_);
-  size_t space_saved_in_bytes = 2 * emitted_short_slot_offset_count_ +
-                                4 * emitted_short_memory_offset_count_;
-  double saved_pct = (total_bytecode_size_ + space_saved_in_bytes == 0)
+  size_t total_bytecode_size = std::atomic_load(&total_bytecode_size_);
+  printf("Total bytecode size: %zu bytes.\n", total_bytecode_size);
+  size_t space_saved_in_bytes =
+      2 * std::atomic_load(&emitted_short_slot_offset_count_) +
+      4 * std::atomic_load(&emitted_short_memory_offset_count_);
+  double saved_pct = (total_bytecode_size + space_saved_in_bytes == 0)
                          ? .0
                          : 100.0 * space_saved_in_bytes /
-                               (total_bytecode_size_ + space_saved_in_bytes);
+                               (total_bytecode_size + space_saved_in_bytes);
   printf("Bytes saved: %zu (%.1f%%).\n", space_saved_in_bytes, saved_pct);
 }
 

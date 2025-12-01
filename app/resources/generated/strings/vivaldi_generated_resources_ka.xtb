@@ -170,6 +170,7 @@
 <translation id="3838085852053358637">გაფართოების ჩატვირთვა ჩავარდა</translation>
 <translation id="383891835335927981">საიტები არც გადიდებულა, არც დაპატარავებულა</translation>
 <translation id="385051799172605136">უკან</translation>
+<translation id="3858860766373142691">სახელი</translation>
 <translation id="3861977424605124250">ჩვენება გაშვებისას</translation>
 <translation id="3867944738977021751">სერტიფიკატის ველები</translation>
 <translation id="3905761538810670789">აპის შეკეთება</translation>
@@ -415,6 +416,9 @@
 <translation id="8004582292198964060">ბრაუზერი</translation>
 <translation id="8018313076035239964">აკონტროლეთ, რა ინფორმაცია შეუძლათ ვებგვერდებს, გამოიყენონ და რა შემცველობა შეუძლიათ, გაჩვენოთ</translation>
 <translation id="8071432093239591881">გამოსახულების სახით დაბეჭდვა</translation>
+<translation id="8118448640060360549">{EXTENSIONS_COUNT, plural,
+        =1 {# სანიშნე}
+        other {# სანიშნე}}</translation>
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" />კ</translation>
 <translation id="8212008074015601248">{NUM_DOWNLOAD, plural,
         =1 {გადმოწერა} other {გადმოწერა}}</translation>

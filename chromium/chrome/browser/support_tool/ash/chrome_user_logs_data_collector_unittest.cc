@@ -28,6 +28,7 @@
 #include "components/prefs/testing_pref_service.h"
 #include "components/user_manager/fake_user_manager.h"
 #include "components/user_manager/scoped_user_manager.h"
+#include "components/user_manager/test_helper.h"
 #include "content/public/test/browser_task_environment.h"
 #include "google_apis/gaia/gaia_id.h"
 #include "testing/gmock/include/gmock/gmock-matchers.h"
@@ -49,7 +50,7 @@ struct FakeUserLog {
 };
 
 const char kFakeUserEmail[] = "fakeusername@example.com";
-const char kFakeGaiaId[] = "gaia-id";
+const GaiaId::Literal kFakeGaiaId("gaia-id");
 
 const FakeUserLog kFakeUserLogs[] = {
     {/*path=*/base::FilePath("log/chrome"), /*log_name=*/"chrome",
@@ -74,15 +75,14 @@ class ChromeUserLogsDataCollectorTest : public ::testing::Test {
     fake_user_manager_.Reset(
         std::make_unique<user_manager::FakeUserManager>(&local_state_));
     AccountId fake_user_account =
-        AccountId::FromUserEmailGaiaId(kFakeUserEmail, GaiaId(kFakeGaiaId));
+        AccountId::FromUserEmailGaiaId(kFakeUserEmail, kFakeGaiaId);
     fake_user_hash_ =
-        user_manager::FakeUserManager::GetFakeUsernameHash(fake_user_account);
+        user_manager::TestHelper::GetFakeUsernameHash(fake_user_account);
     // Add the fake user to `fake_user_manager` and make it primary user by
     // making user logged in.
     fake_user_manager_->AddGaiaUser(fake_user_account,
                                     user_manager::UserType::kRegular);
-    fake_user_manager_->UserLoggedIn(fake_user_account, fake_user_hash_,
-                                     /*browser_restart=*/false, false);
+    fake_user_manager_->UserLoggedIn(fake_user_account, fake_user_hash_);
 
     // Set up task runner and container for RedactionTool. We will use when
     // calling CollectDataAndDetectPII() and ExportCollectedDataWithPII()

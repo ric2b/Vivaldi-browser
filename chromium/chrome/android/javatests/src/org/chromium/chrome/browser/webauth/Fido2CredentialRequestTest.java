@@ -41,7 +41,8 @@ import org.junit.runner.RunWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.Mockito;
-import org.mockito.MockitoAnnotations;
+import org.mockito.junit.MockitoJUnit;
+import org.mockito.junit.MockitoRule;
 
 import org.chromium.base.Callback;
 import org.chromium.base.ContextUtils;
@@ -63,6 +64,7 @@ import org.chromium.blink.mojom.AuthenticatorStatus;
 import org.chromium.blink.mojom.AuthenticatorTransport;
 import org.chromium.blink.mojom.GetAssertionAuthenticatorResponse;
 import org.chromium.blink.mojom.MakeCredentialAuthenticatorResponse;
+import org.chromium.blink.mojom.Mediation;
 import org.chromium.blink.mojom.PaymentOptions;
 import org.chromium.blink.mojom.PrfValues;
 import org.chromium.blink.mojom.PublicKeyCredentialCreationOptions;
@@ -70,9 +72,11 @@ import org.chromium.blink.mojom.PublicKeyCredentialDescriptor;
 import org.chromium.blink.mojom.PublicKeyCredentialParameters;
 import org.chromium.blink.mojom.PublicKeyCredentialRequestOptions;
 import org.chromium.blink.mojom.PublicKeyCredentialType;
+import org.chromium.blink.mojom.RemoteDesktopClientOverride;
 import org.chromium.blink.mojom.ResidentKeyRequirement;
 import org.chromium.blink_public.common.BlinkFeatures;
 import org.chromium.build.BuildConfig;
+import org.chromium.build.annotations.Nullable;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.test.ChromeJUnit4RunnerDelegate;
 import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
@@ -104,6 +108,7 @@ import org.chromium.content_public.browser.WebContents;
 import org.chromium.content_public.browser.test.mock.MockRenderFrameHost;
 import org.chromium.content_public.browser.test.mock.MockWebContents;
 import org.chromium.content_public.common.ContentSwitches;
+import org.chromium.device.DeviceFeatureList;
 import org.chromium.net.test.EmbeddedTestServer;
 import org.chromium.ui.test.util.GmsCoreVersionRestriction;
 import org.chromium.url.GURL;
@@ -132,6 +137,8 @@ public class Fido2CredentialRequestTest {
     @ClassRule
     public static final ChromeTabbedActivityTestRule sActivityTestRule =
             new ChromeTabbedActivityTestRule();
+
+    @Rule public final MockitoRule mMockitoRule = MockitoJUnit.rule();
 
     @Rule
     public final BlankCTATabInitialStateRule mInitialStateRule =
@@ -225,6 +232,18 @@ public class Fido2CredentialRequestTest {
         @Override
         public List<ParameterSet> getParameters() {
             return sErrorTestParams;
+        }
+    }
+
+    public static class SameOriginTestParams implements ParameterProvider {
+        private static List<ParameterSet> sSameOriginTestParams =
+                Arrays.asList(
+                        new ParameterSet().value(true).name("SameOrigin"),
+                        new ParameterSet().value(false).name("CrossOrigin"));
+
+        @Override
+        public List<ParameterSet> getParameters() {
+            return sSameOriginTestParams;
         }
     }
 
@@ -463,10 +482,15 @@ public class Fido2CredentialRequestTest {
                 String relyingPartyId,
                 Origin effectiveOrigin,
                 boolean isPaymentCredentialCreation,
+                @Nullable Origin remoteDesktopClientOverrideOrigin,
                 Callback<WebAuthSecurityChecksResults> callback) {
             mIsPaymentCredentialCreation = isPaymentCredentialCreation;
             super.performMakeCredentialWebAuthSecurityChecks(
-                    relyingPartyId, effectiveOrigin, isPaymentCredentialCreation, callback);
+                    relyingPartyId,
+                    effectiveOrigin,
+                    isPaymentCredentialCreation,
+                    remoteDesktopClientOverrideOrigin,
+                    callback);
         }
     }
 
@@ -509,7 +533,6 @@ public class Fido2CredentialRequestTest {
         mWebContents = new MockWebContents();
         mWebContents.renderFrameHost = mFrameHost;
 
-        MockitoAnnotations.initMocks(this);
         mTestAuthenticatorImplJni = new TestAuthenticatorImplJni(mCallback);
         InternalAuthenticatorJni.setInstanceForTesting(mTestAuthenticatorImplJni);
         UkmRecorderJni.setInstanceForTesting(mUkmRecorderJniMock);
@@ -1347,10 +1370,13 @@ public class Fido2CredentialRequestTest {
 
         ThreadUtils.runOnUiThreadBlocking(
                 () -> {
-                    authenticator.getAssertion(
+                    authenticator.getCredential(
                             mRequestOptions,
-                            (status, response, dom_exception) ->
-                                    mCallback.onSignResponse(status, response));
+                            (getCredentialResponse) ->
+                                    mCallback.onSignResponse(
+                                            getCredentialResponse.getGetAssertionResponse().status,
+                                            getCredentialResponse.getGetAssertionResponse()
+                                                    .credential));
                 });
         mCallback.blockUntilCalled();
         Assert.assertEquals(mCallback.getStatus(), Integer.valueOf(AuthenticatorStatus.SUCCESS));
@@ -1382,10 +1408,13 @@ public class Fido2CredentialRequestTest {
 
         ThreadUtils.runOnUiThreadBlocking(
                 () -> {
-                    authenticator.getAssertion(
+                    authenticator.getCredential(
                             mRequestOptions,
-                            (status, response, dom_exception) ->
-                                    mCallback.onSignResponse(status, response));
+                            (getCredentialResponse) ->
+                                    mCallback.onSignResponse(
+                                            getCredentialResponse.getGetAssertionResponse().status,
+                                            getCredentialResponse.getGetAssertionResponse()
+                                                    .credential));
                 });
         mCallback.blockUntilCalled();
 
@@ -1398,7 +1427,7 @@ public class Fido2CredentialRequestTest {
 
     @Test
     @SmallTest
-    public void testAuthenticatorImplGetAssertion_resultCanceled() {
+    public void testAuthenticatorImplGetCredential_resultCanceled() {
         AuthenticatorImpl authenticator =
                 new AuthenticatorImpl(
                         mContext,
@@ -1410,10 +1439,13 @@ public class Fido2CredentialRequestTest {
         mIntentSender.setNextResult(Activity.RESULT_CANCELED, null);
         ThreadUtils.runOnUiThreadBlocking(
                 () -> {
-                    authenticator.getAssertion(
+                    authenticator.getCredential(
                             mRequestOptions,
-                            (status, response, dom_exception) ->
-                                    mCallback.onSignResponse(status, response));
+                            (getCredentialResponse) ->
+                                    mCallback.onSignResponse(
+                                            getCredentialResponse.getGetAssertionResponse().status,
+                                            getCredentialResponse.getGetAssertionResponse()
+                                                    .credential));
                 });
         mCallback.blockUntilCalled();
         Assert.assertEquals(
@@ -1425,7 +1457,7 @@ public class Fido2CredentialRequestTest {
     @Test
     @SmallTest
     @DisabledTest(message = "crbug.com/347310677")
-    public void testInternalAuthenticatorGetAssertionWithUvmRequestedWithUvmResponded_success() {
+    public void testInternalAuthenticatorGetCredentialWithUvmRequestedWithUvmResponded_success() {
         InternalAuthenticator authenticator =
                 InternalAuthenticator.createForTesting(
                         mContext, mIntentSender, mFrameHost, mOrigin);
@@ -1445,7 +1477,7 @@ public class Fido2CredentialRequestTest {
 
     @Test
     @SmallTest
-    public void testInternalAuthenticatorGetAssertion_resultCanceled() {
+    public void testInternalAuthenticatorGetCredential_resultCanceled() {
         InternalAuthenticator authenticator =
                 InternalAuthenticator.createForTesting(
                         mContext, mIntentSender, mFrameHost, mOrigin);
@@ -1612,7 +1644,7 @@ public class Fido2CredentialRequestTest {
     @DisableIf.Build(
             sdk_is_greater_than = Build.VERSION_CODES.TIRAMISU,
             message = "crbug.com/347310677")
-    public void testGetAssertion_emptyAllowCredentials1() {
+    public void testGetCredential_emptyAllowCredentials1() {
         // Passes conversion and gets rejected by GmsCore
         PublicKeyCredentialRequestOptions customOptions = mRequestOptions;
         customOptions.allowCredentials = new PublicKeyCredentialDescriptor[0];
@@ -1648,7 +1680,7 @@ public class Fido2CredentialRequestTest {
     @DisableIf.Build(
             sdk_is_greater_than = Build.VERSION_CODES.TIRAMISU,
             message = "crbug.com/347310677")
-    public void testGetAssertion_emptyAllowCredentials2() {
+    public void testGetCredential_emptyAllowCredentials2() {
         // Passes conversion and gets rejected by GmsCore
         PublicKeyCredentialRequestOptions customOptions = mRequestOptions;
         customOptions.allowCredentials = new PublicKeyCredentialDescriptor[0];
@@ -1978,7 +2010,7 @@ public class Fido2CredentialRequestTest {
                         }));
 
         mRequestOptions.allowCredentials = new PublicKeyCredentialDescriptor[0];
-        mRequestOptions.isConditional = true;
+        mRequestOptions.mediation = Mediation.CONDITIONAL;
 
         mRequest.handleGetAssertionRequest(
                 mRequestOptions,
@@ -2009,7 +2041,7 @@ public class Fido2CredentialRequestTest {
                             Fido2ApiTestHelper.getCredentialDetails()
                         }));
         mRequestOptions.allowCredentials = new PublicKeyCredentialDescriptor[0];
-        mRequestOptions.isConditional = true;
+        mRequestOptions.mediation = Mediation.CONDITIONAL;
 
         mRequest.handleGetAssertionRequest(
                 mRequestOptions,
@@ -2040,7 +2072,7 @@ public class Fido2CredentialRequestTest {
         mMockBrowserBridge.setExpectedCredentialDetailsList(new ArrayList<>());
 
         mRequestOptions.allowCredentials = new PublicKeyCredentialDescriptor[0];
-        mRequestOptions.isConditional = true;
+        mRequestOptions.mediation = Mediation.CONDITIONAL;
 
         mRequest.handleGetAssertionRequest(
                 mRequestOptions,
@@ -2061,7 +2093,7 @@ public class Fido2CredentialRequestTest {
     @SmallTest
     public void testGetAssertion_conditionalUi_cancelWhileFetchingCredentials() {
         mRequestOptions.allowCredentials = new PublicKeyCredentialDescriptor[0];
-        mRequestOptions.isConditional = true;
+        mRequestOptions.mediation = Mediation.CONDITIONAL;
 
         mFido2ApiCallHelper.setInvokeCallbackImmediately(false);
 
@@ -2098,7 +2130,7 @@ public class Fido2CredentialRequestTest {
         mMockBrowserBridge.setInvokeCallbackImmediately(
                 MockBrowserBridge.CallbackInvocationType.DELAYED);
         mRequestOptions.allowCredentials = new PublicKeyCredentialDescriptor[0];
-        mRequestOptions.isConditional = true;
+        mRequestOptions.mediation = Mediation.CONDITIONAL;
 
         mRequest.handleGetAssertionRequest(
                 mRequestOptions,
@@ -2127,7 +2159,7 @@ public class Fido2CredentialRequestTest {
                         }));
 
         mRequestOptions.allowCredentials = new PublicKeyCredentialDescriptor[0];
-        mRequestOptions.isConditional = true;
+        mRequestOptions.mediation = Mediation.CONDITIONAL;
 
         mIntentSender.setInvokeCallbackImmediately(false);
 
@@ -2162,7 +2194,7 @@ public class Fido2CredentialRequestTest {
                         }));
 
         mRequestOptions.allowCredentials = new PublicKeyCredentialDescriptor[0];
-        mRequestOptions.isConditional = true;
+        mRequestOptions.mediation = Mediation.CONDITIONAL;
 
         mIntentSender.setInvokeCallbackImmediately(false);
 
@@ -2197,7 +2229,7 @@ public class Fido2CredentialRequestTest {
                         }));
 
         mRequestOptions.allowCredentials = new PublicKeyCredentialDescriptor[0];
-        mRequestOptions.isConditional = true;
+        mRequestOptions.mediation = Mediation.CONDITIONAL;
 
         mRequest.handleGetAssertionRequest(
                 mRequestOptions,
@@ -2226,7 +2258,7 @@ public class Fido2CredentialRequestTest {
                         }));
 
         mRequestOptions.allowCredentials = new PublicKeyCredentialDescriptor[0];
-        mRequestOptions.isConditional = true;
+        mRequestOptions.mediation = Mediation.CONDITIONAL;
 
         mRequest.handleGetAssertionRequest(
                 mRequestOptions,
@@ -2261,7 +2293,7 @@ public class Fido2CredentialRequestTest {
                             Fido2ApiTestHelper.getCredentialDetails()
                         }));
 
-        mRequestOptions.isConditional = true;
+        mRequestOptions.mediation = Mediation.CONDITIONAL;
 
         mRequest.handleGetAssertionRequest(
                 mRequestOptions,
@@ -2292,7 +2324,7 @@ public class Fido2CredentialRequestTest {
         descriptor.id = new byte[] {3, 2, 1};
         descriptor.transports = new int[] {0};
         mRequestOptions.allowCredentials = new PublicKeyCredentialDescriptor[] {descriptor};
-        mRequestOptions.isConditional = true;
+        mRequestOptions.mediation = Mediation.CONDITIONAL;
 
         mRequest.handleGetAssertionRequest(
                 mRequestOptions,
@@ -2406,7 +2438,7 @@ public class Fido2CredentialRequestTest {
                 MockBrowserBridge.CallbackInvocationType.IMMEDIATE_HYBRID);
 
         mRequestOptions.allowCredentials = new PublicKeyCredentialDescriptor[0];
-        mRequestOptions.isConditional = true;
+        mRequestOptions.mediation = Mediation.CONDITIONAL;
 
         mRequest.handleGetAssertionRequest(
                 mRequestOptions,
@@ -2684,6 +2716,132 @@ public class Fido2CredentialRequestTest {
         Assert.assertEquals(
                 new String(
                         mCallback.getMakeCredentialResponse().info.clientDataJson,
+                        StandardCharsets.UTF_8),
+                clientDataJson);
+    }
+
+    @Test
+    @SmallTest
+    @UseMethodParameter(SameOriginTestParams.class)
+    @EnableFeatures(DeviceFeatureList.WEBAUTHN_REMOTE_DESKTOP_ALLOWED_ORIGINS)
+    public void testMakeCredential_remoteDesktopClientOverride_generatesCorrectClientDataJson(
+            boolean sameOriginWithAncestors) {
+        mIntentSender.setNextResultIntent(
+                Fido2ApiTestHelper.createSuccessfulMakeCredentialIntent());
+
+        // Mock ClientDataJsonImplJni to capture the call arguments.
+        ClientDataJsonImplJni.setInstanceForTesting(mClientDataJsonImplMock);
+        String clientDataJson = "fakeClientDataJson";
+        when(mClientDataJsonImplMock.buildClientDataJson(
+                        anyInt(), any(), any(), anyBoolean(), any(), any(), any()))
+                .thenReturn(clientDataJson);
+
+        // Set a remote desktop client override origin.
+        org.chromium.url.internal.mojom.Origin remoteDesktopClientOverrideOriginMojom =
+                new org.chromium.url.internal.mojom.Origin();
+        remoteDesktopClientOverrideOriginMojom.scheme = "https";
+        remoteDesktopClientOverrideOriginMojom.host = "remotedesktop.example.com";
+        remoteDesktopClientOverrideOriginMojom.port = 443;
+        Origin remoteDesktopClientOverrideOrigin =
+                new Origin(remoteDesktopClientOverrideOriginMojom);
+        mCreationOptions.remoteDesktopClientOverride = new RemoteDesktopClientOverride();
+        mCreationOptions.remoteDesktopClientOverride.origin =
+                remoteDesktopClientOverrideOriginMojom;
+        mCreationOptions.remoteDesktopClientOverride.sameOriginWithAncestors =
+                sameOriginWithAncestors;
+
+        mFrameHost.setLastCommittedUrl(new GURL("https://www.example.com"));
+        mRequest.handleMakeCredentialRequest(
+                mCreationOptions,
+                mBrowserOptions,
+                mOrigin,
+                mOrigin,
+                /* paymentOptions= */ null,
+                mCallback::onRegisterResponse,
+                mCallback::onError,
+                mCallback::onRequestOutcome);
+        mCallback.blockUntilCalled();
+
+        Mockito.verify(mClientDataJsonImplMock, Mockito.times(1))
+                .buildClientDataJson(
+                        eq(ClientDataRequestType.WEB_AUTHN_CREATE),
+                        // Verify that the origin used in buildClientDataJson is the
+                        // remote desktop client override origin, not the original origin.
+                        eq(
+                                Fido2CredentialRequest.convertOriginToString(
+                                        remoteDesktopClientOverrideOrigin)),
+                        eq(mCreationOptions.challenge),
+                        /* isCrossOrigin= */ eq(!sameOriginWithAncestors),
+                        /* optionsByteBuffer= */ isNull(),
+                        eq(mCreationOptions.relyingParty.name),
+                        eq(mOrigin));
+
+        Assert.assertEquals(Integer.valueOf(AuthenticatorStatus.SUCCESS), mCallback.getStatus());
+        Assert.assertEquals(
+                new String(
+                        mCallback.getMakeCredentialResponse().info.clientDataJson,
+                        StandardCharsets.UTF_8),
+                clientDataJson);
+    }
+
+    @Test
+    @SmallTest
+    @UseMethodParameter(SameOriginTestParams.class)
+    @EnableFeatures(DeviceFeatureList.WEBAUTHN_REMOTE_DESKTOP_ALLOWED_ORIGINS)
+    public void testGetAssertion_remoteDesktopClientOverride_generatesCorrectClientDataJson(
+            boolean sameOriginWithAncestors) {
+        mIntentSender.setNextResultIntent(Fido2ApiTestHelper.createSuccessfulGetAssertionIntent());
+
+        // Mock ClientDataJsonImplJni to capture the call arguments.
+        ClientDataJsonImplJni.setInstanceForTesting(mClientDataJsonImplMock);
+        String clientDataJson = "fakeClientDataJson";
+        when(mClientDataJsonImplMock.buildClientDataJson(
+                        anyInt(), any(), any(), anyBoolean(), any(), any(), any()))
+                .thenReturn(clientDataJson);
+
+        // Set a remote desktop client override origin.
+        org.chromium.url.internal.mojom.Origin remoteDesktopClientOverrideOriginMojom =
+                new org.chromium.url.internal.mojom.Origin();
+        remoteDesktopClientOverrideOriginMojom.scheme = "https";
+        remoteDesktopClientOverrideOriginMojom.host = "remotedesktop.example.com";
+        remoteDesktopClientOverrideOriginMojom.port = 443;
+        Origin remoteDesktopClientOverrideOrigin =
+                new Origin(remoteDesktopClientOverrideOriginMojom);
+        mRequestOptions.extensions.remoteDesktopClientOverride = new RemoteDesktopClientOverride();
+        mRequestOptions.extensions.remoteDesktopClientOverride.origin =
+                remoteDesktopClientOverrideOriginMojom;
+        mRequestOptions.extensions.remoteDesktopClientOverride.sameOriginWithAncestors =
+                sameOriginWithAncestors;
+
+        mFrameHost.setLastCommittedUrl(new GURL("https://www.example.com"));
+        mRequest.handleGetAssertionRequest(
+                mRequestOptions,
+                mOrigin,
+                mOrigin,
+                /* payment= */ null,
+                mCallback::onSignResponse,
+                mCallback::onError,
+                mCallback::onRequestOutcome);
+        mCallback.blockUntilCalled();
+
+        Mockito.verify(mClientDataJsonImplMock, Mockito.times(1))
+                .buildClientDataJson(
+                        eq(ClientDataRequestType.WEB_AUTHN_GET),
+                        // Verify that the origin used in buildClientDataJson is the
+                        // remote desktop client override origin, not the original origin.
+                        eq(
+                                Fido2CredentialRequest.convertOriginToString(
+                                        remoteDesktopClientOverrideOrigin)),
+                        eq(mRequestOptions.challenge),
+                        /* isCrossOrigin= */ eq(!sameOriginWithAncestors),
+                        /* optionsByteBuffer= */ isNull(),
+                        eq(mRequestOptions.relyingPartyId),
+                        eq(mOrigin));
+
+        Assert.assertEquals(Integer.valueOf(AuthenticatorStatus.SUCCESS), mCallback.getStatus());
+        Assert.assertEquals(
+                new String(
+                        mCallback.getGetAssertionResponse().info.clientDataJson,
                         StandardCharsets.UTF_8),
                 clientDataJson);
     }

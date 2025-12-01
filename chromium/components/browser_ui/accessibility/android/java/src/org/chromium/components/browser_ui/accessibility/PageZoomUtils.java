@@ -255,13 +255,8 @@ public class PageZoomUtils {
         // The default (float) |fontScale| is 1, the default page zoom is 1.
         boolean isUsingDefaultSystemFontScale = MathUtils.areFloatsEqual(getSystemFontScale(), 1f);
 
-        // If the user has a system font scale other than the default, we will show the menu item if
-        // OS-level adjustments is enabled, or, if the page zoom enhancements (fast-follow) feature
-        // is enabled (which includes a greater presence in the 3-dot menu).
-        if (!isUsingDefaultSystemFontScale
-                && (HostZoomMap.shouldAdjustForOSLevel()
-                        || ContentFeatureMap.isEnabled(
-                                ContentFeatureList.ACCESSIBILITY_PAGE_ZOOM_ENHANCEMENTS))) {
+        // If the user has a system font scale other than the default, we will show the menu item.
+        if (!isUsingDefaultSystemFontScale) {
             PageZoomUma.logAppMenuEnabledStateHistogram(
                     PageZoomUma.AccessibilityPageZoomAppMenuEnabledState.OS_ENABLED);
             return true;
@@ -291,9 +286,7 @@ public class PageZoomUtils {
      * @return boolean
      */
     public static boolean hasUserSetIncludeOSAdjustmentOption() {
-        assert ContentFeatureMap.isEnabled(ContentFeatureList.ACCESSIBILITY_PAGE_ZOOM_ENHANCEMENTS)
-                        && ContentFeatureMap.isEnabled(
-                                ContentFeatureList.ACCESSIBILITY_PAGE_ZOOM_V2)
+        assert ContentFeatureMap.isEnabled(ContentFeatureList.ACCESSIBILITY_PAGE_ZOOM_V2)
                 : "hasUserSetIncludeOSAdjustmentOption should only be called if the flag is"
                         + " enabled.";
         return ContextUtils.getAppSharedPreferences()
@@ -307,9 +300,7 @@ public class PageZoomUtils {
      * @return boolean
      */
     public static boolean shouldIncludeOSAdjustment() {
-        assert ContentFeatureMap.isEnabled(ContentFeatureList.ACCESSIBILITY_PAGE_ZOOM_ENHANCEMENTS)
-                        && ContentFeatureMap.isEnabled(
-                                ContentFeatureList.ACCESSIBILITY_PAGE_ZOOM_V2)
+        assert ContentFeatureMap.isEnabled(ContentFeatureList.ACCESSIBILITY_PAGE_ZOOM_V2)
                 : "shouldIncludeOSAdjustment should only be called if the flag is enabled.";
         return ContextUtils.getAppSharedPreferences()
                 .getBoolean(
@@ -323,9 +314,7 @@ public class PageZoomUtils {
      * @param newValue boolean
      */
     public static void setShouldIncludeOSAdjustment(boolean newValue) {
-        assert ContentFeatureMap.isEnabled(ContentFeatureList.ACCESSIBILITY_PAGE_ZOOM_ENHANCEMENTS)
-                        && ContentFeatureMap.isEnabled(
-                                ContentFeatureList.ACCESSIBILITY_PAGE_ZOOM_V2)
+        assert ContentFeatureMap.isEnabled(ContentFeatureList.ACCESSIBILITY_PAGE_ZOOM_V2)
                 : "setShouldIncludeOSAdjustment should only be called if the flag is enabled.";
         ContextUtils.getAppSharedPreferences()
                 .edit()

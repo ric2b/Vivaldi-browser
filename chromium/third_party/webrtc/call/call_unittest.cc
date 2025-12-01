@@ -29,7 +29,6 @@
 #include "api/units/timestamp.h"
 #include "api/video/builtin_video_bitrate_allocator_factory.h"
 #include "api/video_codecs/sdp_video_format.h"
-#include "audio/audio_receive_stream.h"
 #include "audio/audio_send_stream.h"
 #include "call/adaptation/test/fake_resource.h"
 #include "call/adaptation/test/mock_resource_listener.h"
@@ -55,7 +54,6 @@ namespace webrtc {
 namespace {
 
 using ::testing::_;
-using ::testing::Contains;
 using ::testing::MockFunction;
 using ::testing::NiceMock;
 using ::testing::StrictMock;

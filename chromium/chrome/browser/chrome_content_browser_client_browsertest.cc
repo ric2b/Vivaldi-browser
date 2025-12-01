@@ -15,6 +15,7 @@
 #include "base/command_line.h"
 #include "base/functional/bind.h"
 #include "base/memory/raw_ptr.h"
+#include "base/path_service.h"
 #include "base/strings/strcat.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
@@ -23,6 +24,8 @@
 #include "chrome/browser/browser_features.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/custom_handlers/protocol_handler_registry_factory.h"
+#include "chrome/browser/enterprise/connectors/analysis/clipboard_request_handler.h"
+#include "chrome/browser/enterprise/connectors/test/fake_clipboard_request_handler.h"
 #include "chrome/browser/external_protocol/external_protocol_handler.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/search/instant_service.h"
@@ -46,6 +49,10 @@
 #include "components/custom_handlers/protocol_handler.h"
 #include "components/custom_handlers/protocol_handler_registry.h"
 #include "components/enterprise/buildflags/buildflags.h"
+#include "components/guest_view/browser/guest_view_base.h"
+#include "components/guest_view/browser/guest_view_manager.h"
+#include "components/guest_view/browser/guest_view_manager_delegate.h"
+#include "components/guest_view/browser/test_guest_view_manager.h"
 #include "components/network_session_configurator/common/network_switches.h"
 #include "components/policy/core/common/cloud/cloud_policy_constants.h"
 #include "components/policy/core/common/policy_pref_names.h"
@@ -74,6 +81,7 @@
 #include "content/public/test/test_frame_navigation_observer.h"
 #include "content/public/test/test_navigation_observer.h"
 #include "content/public/test/url_loader_interceptor.h"
+#include "extensions/browser/api/extensions_api_client.h"
 #include "net/dns/mock_host_resolver.h"
 #include "net/http/http_status_code.h"
 #include "net/test/embedded_test_server/controllable_http_response.h"
@@ -107,6 +115,10 @@
 #include "chrome/test/base/launchservices_utils_mac.h"
 #endif
 
+#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_WIN)
+#include "third_party/blink/public/common/features.h"
+#endif  //  BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_WIN)
+
 #if BUILDFLAG(ENTERPRISE_CONTENT_ANALYSIS)
 #include "base/files/scoped_temp_dir.h"
 #include "base/test/bind.h"
@@ -121,6 +133,11 @@
 #endif  // BUILDFLAG(ENTERPRISE_LOCAL_CONTENT_ANALYSIS)
 
 #endif  // BUILDFLAG(ENTERPRISE_CONTENT_ANALYSIS)
+
+#if BUILDFLAG(ENABLE_GLIC)
+#include "chrome/browser/glic/test_support/glic_test_environment.h"
+#include "chrome/browser/glic/test_support/glic_test_util.h"
+#endif
 
 namespace {
 
@@ -309,113 +326,6 @@ IN_PROC_BROWSER_TEST_F(OpenWindowFromNTPBrowserTest,
       opened_tab->GetPrimaryMainFrame()->GetProcess()->GetDeprecatedID()));
 }
 
-// Test that the System AccentColor keyword is supported ONLY for installed
-// WebApps. Currently this test is appliable ONLY for Windows and ChromeOS, Mac
-// uses it own implementation to derive System AccentColor and doesn't use same
-// pipeline.
-#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_CHROMEOS)
-class SystemAccentColorTest : public InProcessBrowserTest {
- protected:
-  SystemAccentColorTest() : browser_client_(&test_theme_) {}
-
-  ~SystemAccentColorTest() override {
-    CHECK_EQ(&browser_client_, SetBrowserClientForTesting(original_client_));
-  }
-
-  void SetUpOnMainThread() override {
-    InProcessBrowserTest::SetUpOnMainThread();
-  }
-
-  void SetUpCommandLine(base::CommandLine* command_line) override {
-    command_line->AppendSwitchASCII(switches::kEnableBlinkFeatures,
-                                    "CSSAccentColorKeyword");
-  }
-
-  void SetWebAppScope(const GURL web_app_scope) {
-    browser_client_.set_web_app_scope(web_app_scope);
-    original_client_ = content::SetBrowserClientForTesting(&browser_client_);
-    browser()
-        ->tab_strip_model()
-        ->GetActiveWebContents()
-        ->OnWebPreferencesChanged();
-  }
-
-  ui::TestNativeTheme test_theme_;
-
- private:
-  class BrowserClientForAccentColorTest : public ChromeContentBrowserClient {
-   public:
-    explicit BrowserClientForAccentColorTest(const ui::NativeTheme* theme)
-        : theme_(theme) {}
-
-    void set_web_app_scope(const GURL& web_app_scope) {
-      web_app_scope_ = web_app_scope;
-    }
-
-    void OverrideWebPreferences(
-        content::WebContents* web_contents,
-        content::SiteInstance& main_frame_site,
-        blink::web_pref::WebPreferences* web_prefs) override {
-      ChromeContentBrowserClient::OverrideWebPreferences(
-          web_contents, main_frame_site, web_prefs);
-
-      web_prefs->web_app_scope = web_app_scope_;
-    }
-
-   protected:
-    const ui::NativeTheme* GetWebTheme() const override { return theme_; }
-
-   private:
-    const raw_ptr<const ui::NativeTheme> theme_;
-    GURL web_app_scope_;
-  };
-
-  BrowserClientForAccentColorTest browser_client_;
-  raw_ptr<content::ContentBrowserClient> original_client_ = nullptr;
-};
-
-IN_PROC_BROWSER_TEST_F(SystemAccentColorTest,
-                       SystemAccentColorKeywordForInstalledWebApp) {
-  GURL web_app_scope = ui_test_utils::GetTestUrl(
-      base::FilePath(base::FilePath::kCurrentDirectory),
-      base::FilePath(FILE_PATH_LITERAL("system-accent-color.html")));
-  SetWebAppScope(web_app_scope);
-  ui::NativeTheme::GetInstanceForWeb()->set_user_color(
-      SkColorSetRGB(135, 115, 10));
-  ui::NativeTheme::GetInstanceForWeb()->NotifyOnNativeThemeUpdated();
-
-  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), web_app_scope));
-  // For installled WebApps we expect System AccentColor keyword resolve to
-  // OS-defined accent-color, which are currently pumped for ChromeOS and
-  // Windows.
-  EXPECT_EQ("rgb(135, 115, 10)",
-            EvalJs(browser()->tab_strip_model()->GetActiveWebContents(),
-                   base::StringPrintf(
-                       "window.getComputedStyle(document.getElementById('"
-                       "header_element')).backgroundColor")));
-}
-
-IN_PROC_BROWSER_TEST_F(SystemAccentColorTest,
-                       SystemAccentColorKeywordForNonWebApp) {
-  GURL web_app_scope = ui_test_utils::GetTestUrl(
-      base::FilePath(base::FilePath::kCurrentDirectory),
-      base::FilePath(FILE_PATH_LITERAL("system-accent-color.html")));
-  SetWebAppScope(GURL());
-  ui::NativeTheme::GetInstanceForWeb()->set_user_color(
-      SkColorSetRGB(135, 115, 10));
-  ui::NativeTheme::GetInstanceForWeb()->NotifyOnNativeThemeUpdated();
-
-  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), web_app_scope));
-  // System AccentColor keyword returns a hard coded value (Shade of blue) for
-  // non-installed websites.
-  EXPECT_EQ("rgb(0, 117, 255)",
-            EvalJs(browser()->tab_strip_model()->GetActiveWebContents(),
-                   base::StringPrintf(
-                       "window.getComputedStyle(document.getElementById('"
-                       "header_element')).backgroundColor")));
-}
-#endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_CHROMEOS)
-
 // Test for the state of Forced Colors Mode for a given WebContents across
 // various scenarios.
 class ForcedColorsTest : public testing::WithParamInterface<bool>,
@@ -595,6 +505,12 @@ class PrefersColorSchemeTest
       : theme_client_(&test_theme_),
         color_provider_source_(GetIsDarkColorProviderColorMode()) {
     test_theme_.SetDarkMode(GetIsDarkNativeTheme());
+#if BUILDFLAG(ENABLE_GLIC)
+    feature_list_.InitWithFeatures(
+        /*enabled_features=*/{features::kGlic, features::kTabstripComboButton},
+        /*disabled_features=*/{features::kGlicWarming,
+                               features::kGlicFreWarming});
+#endif
   }
   ~PrefersColorSchemeTest() override {
     CHECK_EQ(&theme_client_, SetBrowserClientForTesting(original_client_));
@@ -623,28 +539,55 @@ class PrefersColorSchemeTest
     }
 
     // Pages in regular profiles should follow the browser theme, reflected by
-    // the color mode of the associated ColorProvider, if the feature is
-    // enabled.
-    return base::FeatureList::IsEnabled(
-               features::kContentUsesBrowserThemeColorMode)
-               ? color_provider_color_mode
-               : native_theme_color_mode;
+    // the color mode of the associated ColorProvider.
+    return color_provider_color_mode;
   }
 
   void SetUpOnMainThread() override {
     InProcessBrowserTest::SetUpOnMainThread();
     original_client_ = SetBrowserClientForTesting(&theme_client_);
     test_theme_.SetDarkMode(GetIsDarkNativeTheme());
+
+#if BUILDFLAG(ENABLE_GLIC)
+    embedded_test_server()->ServeFilesFromDirectory(
+        base::PathService::CheckedGet(base::DIR_ASSETS)
+            .AppendASCII("gen/chrome/test/data/webui/glic/"));
+    ASSERT_TRUE(embedded_test_server()->Start());
+    auto* command_line = base::CommandLine::ForCurrentProcess();
+    command_line->AppendSwitchASCII(
+        ::switches::kGlicGuestURL,
+        embedded_test_server()->GetURL("/glic/test_client/index.html").spec());
+    glic_test_environment_ =
+        std::make_unique<glic::GlicTestEnvironment>(browser()->profile());
+#endif
+
+    guest_view_manager_ =
+        guest_view_manager_factory_.GetOrCreateTestGuestViewManager(
+            browser()->profile(), extensions::ExtensionsAPIClient::Get()
+                                      ->CreateGuestViewManagerDelegate());
+
     browser()
         ->tab_strip_model()
         ->GetActiveWebContents()
         ->SetColorProviderSource(&color_provider_source_);
   }
 
+  void TearDownOnMainThread() override {
+#if BUILDFLAG(ENABLE_GLIC)
+    glic_test_environment_.reset();
+#endif
+    guest_view_manager_ = nullptr;
+    InProcessBrowserTest::TearDownOnMainThread();
+  }
+
  protected:
   bool GetIsDarkNativeTheme() const { return std::get<0>(GetParam()); }
   bool GetIsDarkColorProviderColorMode() const {
     return std::get<1>(GetParam());
+  }
+
+  guest_view::TestGuestViewManager* guest_view_manager() const {
+    return guest_view_manager_;
   }
 
   ui::TestNativeTheme test_theme_;
@@ -703,6 +646,11 @@ class PrefersColorSchemeTest
   base::test::ScopedFeatureList feature_list_;
   ChromeContentBrowserClientWithWebTheme theme_client_;
   MockColorProviderSource color_provider_source_;
+#if BUILDFLAG(ENABLE_GLIC)
+  std::unique_ptr<glic::GlicTestEnvironment> glic_test_environment_;
+#endif
+  guest_view::TestGuestViewManagerFactory guest_view_manager_factory_;
+  raw_ptr<guest_view::TestGuestViewManager> guest_view_manager_ = nullptr;
 };
 
 IN_PROC_BROWSER_TEST_P(PrefersColorSchemeTest, PrefersColorScheme) {
@@ -737,6 +685,26 @@ IN_PROC_BROWSER_TEST_P(PrefersColorSchemeTest, FeatureOverridesChromeSchemes) {
                  ExpectedColorScheme())));
 }
 
+#if BUILDFLAG(ENABLE_GLIC)
+IN_PROC_BROWSER_TEST_P(PrefersColorSchemeTest, PrefersColorSchemeGlic) {
+  ASSERT_TRUE(
+      ui_test_utils::NavigateToURL(browser(), GURL(chrome::kChromeUIGlicURL)));
+
+  guest_view::GuestViewBase* guest_view =
+      guest_view_manager()->WaitForSingleGuestViewCreated();
+  // Intentionally ignore the return value. It seems that on Windows and Linux
+  // the guest contents could have already been loaded by the time we get here.
+  std::ignore = guest_view_manager()->WaitUntilAttachedAndLoaded(guest_view);
+
+  EXPECT_EQ(
+      true,
+      EvalJs(guest_view->GetGuestMainFrame(),
+             base::StringPrintf(
+                 "window.matchMedia('(prefers-color-scheme: %s)').matches",
+                 ExpectedColorScheme())));
+}
+#endif
+
 #if BUILDFLAG(ENABLE_EXTENSIONS)
 IN_PROC_BROWSER_TEST_P(PrefersColorSchemeTest, FeatureOverridesPdfUI) {
   browser()
@@ -764,14 +732,19 @@ INSTANTIATE_TEST_SUITE_P(All,
                          testing::Combine(testing::Bool(), testing::Bool()));
 
 class PreferredRootScrollbarColorSchemeChromeClientTest
-    : public testing::WithParamInterface<std::tuple<bool, bool, bool>>,
+    : public testing::WithParamInterface<std::tuple<bool, bool>>,
       public InProcessBrowserTest {
  protected:
   PreferredRootScrollbarColorSchemeChromeClientTest()
       : dark_mode_(std::get<0>(GetParam())),
         uses_custom_theme_(std::get<1>(GetParam())),
-        theme_client_(&test_theme_) {
+        theme_client_(&test_theme_),
+        theme_color_(dark_mode_ ? SK_ColorDKGRAY : SK_ColorLTGRAY) {
     test_theme_.SetDarkMode(dark_mode_);
+#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_WIN)
+    feature_list_.InitAndEnableFeature(
+        blink::features::kRootScrollbarFollowsBrowserTheme);
+#endif  //  BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_WIN)
   }
 
   void SetUpOnMainThread() override {
@@ -781,9 +754,12 @@ class PreferredRootScrollbarColorSchemeChromeClientTest
     ui::NativeTheme::GetInstanceForNativeUi()->set_use_dark_colors(dark_mode_);
     ThemeService* theme_service =
         ThemeServiceFactory::GetForProfile(browser()->profile());
-    theme_service->UseDeviceTheme(std::get<2>(GetParam()));
     if (uses_custom_theme_) {
-      theme_service->BuildAutogeneratedThemeFromColor(SK_ColorRED);
+      // Browser themes adapt their hue to match the used color scheme (light
+      // or dark), however autogenerated themes don't take color schemes into
+      // consideration. So we select which color to use based on the color
+      // scheme to simulate this behavior.
+      theme_service->BuildAutogeneratedThemeFromColor(theme_color_);
     } else {
       theme_service->UseDefaultTheme();
     }
@@ -794,18 +770,43 @@ class PreferredRootScrollbarColorSchemeChromeClientTest
   }
 
   blink::mojom::PreferredColorScheme ExpectedColorScheme() const {
-    return dark_mode_ && !uses_custom_theme_ && !UsesDeviceTheme()
-               ? blink::mojom::PreferredColorScheme::kDark
-               : blink::mojom::PreferredColorScheme::kLight;
+    return dark_mode_ ? blink::mojom::PreferredColorScheme::kDark
+                      : blink::mojom::PreferredColorScheme::kLight;
+  }
+
+  bool ThemeColorMatches() const {
+    const std::optional<SkColor> root_scrollbar_pref =
+        browser()
+            ->tab_strip_model()
+            ->GetActiveWebContents()
+            ->GetOrCreateWebPreferences()
+            .root_scrollbar_theme_color;
+    // If not using a custom theme, `root_scrollbar_theme_color` shouldn't be
+    // set.
+    if (!uses_custom_theme_) {
+      return !root_scrollbar_pref.has_value();
+    }
+    EXPECT_TRUE(root_scrollbar_pref.has_value());
+    const SkColor root_scrollbar_color = root_scrollbar_pref.value();
+    // `root_scrollbar_theme_color` is set based off the toolbar color, which is
+    // generated using the theme's color. Because of this, we can't directly
+    // compare equality between the two colors and we check that they are
+    // similar enough.
+    const double r_diff =
+        std::abs(SkColorGetR(root_scrollbar_color) -
+                 static_cast<double>(SkColorGetR(theme_color_)));
+    const double g_diff =
+        std::abs(SkColorGetG(root_scrollbar_color) -
+                 static_cast<double>(SkColorGetG(theme_color_)));
+    const double b_diff =
+        std::abs(SkColorGetB(root_scrollbar_color) -
+                 static_cast<double>(SkColorGetB(theme_color_)));
+
+    const int kMaxDiff = 20;
+    return r_diff < kMaxDiff && b_diff < kMaxDiff && g_diff < kMaxDiff;
   }
 
  private:
-  bool UsesDeviceTheme() const {
-    ThemeService* theme_service =
-        ThemeServiceFactory::GetForProfile(browser()->profile());
-    return theme_service->UsingDeviceTheme();
-  }
-
   class ChromeContentBrowserClientWithWebTheme
       : public ChromeContentBrowserClient {
    public:
@@ -825,6 +826,8 @@ class PreferredRootScrollbarColorSchemeChromeClientTest
   raw_ptr<content::ContentBrowserClient> original_client_ = nullptr;
   ui::TestNativeTheme test_theme_;
   ChromeContentBrowserClientWithWebTheme theme_client_;
+  const SkColor theme_color_;
+  base::test::ScopedFeatureList feature_list_;
 };
 
 // This test verifies that the preferred color scheme for root scrollbars is set
@@ -840,11 +843,18 @@ IN_PROC_BROWSER_TEST_P(PreferredRootScrollbarColorSchemeChromeClientTest,
             ExpectedColorScheme());
 }
 
+#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_WIN)
+// This test verifies that the root scrollbar color theme is set correctly only
+// when using a custom theme.
+IN_PROC_BROWSER_TEST_P(PreferredRootScrollbarColorSchemeChromeClientTest,
+                       VerifyRootScrollbarColorTheme) {
+  EXPECT_TRUE(ThemeColorMatches());
+}
+#endif  //  BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_WIN)
+
 INSTANTIATE_TEST_SUITE_P(All,
                          PreferredRootScrollbarColorSchemeChromeClientTest,
-                         testing::Combine(testing::Bool(),
-                                          testing::Bool(),
-                                          testing::Bool()));
+                         testing::Combine(testing::Bool(), testing::Bool()));
 
 class PrefersContrastTest
     : public testing::WithParamInterface<ui::NativeTheme::PreferredContrast>,
@@ -1242,30 +1252,14 @@ class ClipboardTestContentAnalysisDelegate
             base::BindRepeating(&ClipboardTestContentAnalysisDelegate::
                                     FakeUploadFileForDeepScanning,
                                 base::Unretained(ret.get()))));
+    enterprise_connectors::ClipboardRequestHandler::SetFactoryForTesting(
+        base::BindRepeating(
+            &enterprise_connectors::test::FakeClipboardRequestHandler::Create,
+            base::Unretained(ret.get())));
     return ret;
   }
 
  private:
-  void UploadTextForDeepScanning(
-      std::unique_ptr<safe_browsing::BinaryUploadService::Request> request)
-      override {
-    ASSERT_EQ(request->reason(),
-              enterprise_connectors::ContentAnalysisRequest::CLIPBOARD_PASTE);
-
-    enterprise_connectors::test::FakeContentAnalysisDelegate::
-        UploadTextForDeepScanning(std::move(request));
-  }
-
-  void UploadImageForDeepScanning(
-      std::unique_ptr<safe_browsing::BinaryUploadService::Request> request)
-      override {
-    ASSERT_EQ(request->reason(),
-              enterprise_connectors::ContentAnalysisRequest::CLIPBOARD_PASTE);
-
-    enterprise_connectors::test::FakeContentAnalysisDelegate::
-        UploadImageForDeepScanning(std::move(request));
-  }
-
   void FakeUploadFileForDeepScanning(
       safe_browsing::BinaryUploadService::Result result,
       const base::FilePath& path,
@@ -1756,7 +1750,8 @@ IN_PROC_BROWSER_TEST_F(IsClipboardPasteAllowedTest, CustomDataBlocked) {
           }));
 }
 
-IN_PROC_BROWSER_TEST_F(IsClipboardPasteAllowedTest, AllFilesAllowed) {
+// TODO(crbug.com/391682998): Enable.
+IN_PROC_BROWSER_TEST_F(IsClipboardPasteAllowedTest, DISABLED_AllFilesAllowed) {
   std::vector<base::FilePath> paths;
   paths.push_back(CreateTestFile(FILE_PATH_LITERAL("allow0"), "data"));
   paths.push_back(CreateTestFile(FILE_PATH_LITERAL("allow1"), "data"));
@@ -1786,7 +1781,8 @@ IN_PROC_BROWSER_TEST_F(IsClipboardPasteAllowedTest, AllFilesAllowed) {
           }));
 }
 
-IN_PROC_BROWSER_TEST_F(IsClipboardPasteAllowedTest, AllFilesBlocked) {
+// TODO(crbug.com/391682998): Enable.
+IN_PROC_BROWSER_TEST_F(IsClipboardPasteAllowedTest, DISABLED_AllFilesBlocked) {
   std::vector<base::FilePath> paths;
   paths.push_back(CreateTestFile(FILE_PATH_LITERAL("block0"), "data"));
   paths.push_back(CreateTestFile(FILE_PATH_LITERAL("block1"), "data"));
@@ -1824,7 +1820,8 @@ IN_PROC_BROWSER_TEST_F(IsClipboardPasteAllowedTest, AllFilesBlocked) {
           }));
 }
 
-IN_PROC_BROWSER_TEST_F(IsClipboardPasteAllowedTest, SomeFilesBlocked) {
+// TODO(crbug.com/391682998): Re-enable this test
+IN_PROC_BROWSER_TEST_F(IsClipboardPasteAllowedTest, DISABLED_SomeFilesBlocked) {
   std::vector<base::FilePath> paths;
   paths.push_back(CreateTestFile(FILE_PATH_LITERAL("allow0"), "data"));
   paths.push_back(CreateTestFile(FILE_PATH_LITERAL("block1"), "data"));

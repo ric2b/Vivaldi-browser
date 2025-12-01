@@ -35,13 +35,10 @@ inline bool MaybeIdeograph(UScriptCode script, StringView text) {
   // They will be, for example, `USCRIPT_LATIN` if the previous character is
   // `USCRIPT_LATIN`. Check if we have any such characters.
   CHECK(!text.Is8Bit());
-  // TODO(crbug.com/351564777): Resolve a buffer safety issue.
-  return std::any_of(text.Characters16(),
-                     UNSAFE_TODO(text.Characters16() + text.length()),
-                     [](const UChar ch) {
-                       return ch >= TextAutoSpace::kNonHanIdeographMin &&
-                              ch <= TextAutoSpace::kNonHanIdeographMax;
-                     });
+  return std::ranges::any_of(text.Span16(), [](const UChar ch) {
+    return ch >= TextAutoSpace::kNonHanIdeographMin &&
+           ch <= TextAutoSpace::kNonHanIdeographMax;
+  });
 }
 
 // `TextAutoSpace::ApplyIfNeeded` computes offsets to insert spacing *before*,
@@ -51,13 +48,14 @@ inline bool MaybeIdeograph(UScriptCode script, StringView text) {
 // previous item's `shape_result_` for this purpose.
 class SpacingApplier {
   STACK_ALLOCATED();
+
  public:
   void SetSpacing(const Vector<wtf_size_t, 16>& offsets,
                   const InlineItem* current_item,
                   const ComputedStyle& style) {
     DCHECK(current_item->TextShapeResult());
-    const float spacing = TextAutoSpace::GetSpacingWidth(&style.GetFont());
-    auto offset = offsets.begin();
+    const float spacing = TextAutoSpace::GetSpacingWidth(style.GetFont());
+    auto offset = base::span(offsets).begin();
     if (!offsets.empty() && *offset == current_item->StartOffset()) {
       DCHECK(last_item_);
       // If the previous item's direction is from the left to the right, it is
@@ -70,8 +68,7 @@ class SpacingApplier {
         // https://drafts.csswg.org/css-text-4/#propdef-text-autospace.
         offsets_with_spacing_.emplace_back(
             OffsetWithSpacing({.offset = *offset, .spacing = spacing}));
-        // TODO(crbug.com/351564777): Resolve a buffer safety issue.
-        UNSAFE_TODO(++offset);
+        ++offset;
       } else {
         // This branch holds an assumption that RTL texts cannot be ideograph.
         // The assumption might be wrong, but should work for almost all cases.
@@ -87,8 +84,7 @@ class SpacingApplier {
 
     // Update the previous item in prepare for the next iteration.
     last_item_ = current_item;
-    // TODO(crbug.com/351564777): Resolve a buffer safety issue.
-    for (; offset != offsets.end(); UNSAFE_TODO(++offset)) {
+    for (; offset != offsets.end(); ++offset) {
       offsets_with_spacing_.emplace_back(
           OffsetWithSpacing({.offset = *offset, .spacing = spacing}));
     }
@@ -117,7 +113,7 @@ class SpacingApplier {
 }  // namespace
 
 void InlineTextAutoSpace::Initialize(const InlineItemsData& data) {
-  const HeapVector<InlineItem>& items = data.items;
+  const InlineItems& items = data.items;
   if (items.empty()) [[unlikely]] {
     return;
   }
@@ -127,7 +123,8 @@ void InlineTextAutoSpace::Initialize(const InlineItemsData& data) {
   // packed in `InlineItemSegments` to save memory.
   const String& text = data.text_content;
   if (!data.segments) {
-    for (const InlineItem& item : items) {
+    for (const Member<InlineItem>& item_ptr : items) {
+      const InlineItem& item = *item_ptr;
       if (item.Type() != InlineItem::kText) {
         // Only `kText` has the data, see `InlineItem::SetSegmentData`.
         continue;
@@ -162,14 +159,15 @@ void InlineTextAutoSpace::Apply(InlineItemsData& data,
 
   Vector<wtf_size_t, 16> offsets;
   CHECK(!ranges_.empty());
-  auto range = ranges_.begin();
+  auto range = base::span(ranges_).begin();
   std::optional<CharType> last_type = kOther;
 
   // The initial value does not matter, as the value is used for determine
   // whether to add spacing into the bound of two items.
   TextDirection last_direction = TextDirection::kLtr;
   SpacingApplier applier;
-  for (const InlineItem& item : data.items) {
+  for (const Member<InlineItem>& item_ptr : data.items) {
+    const InlineItem& item = *item_ptr;
     if (item.Type() != InlineItem::kText) {
       if (item.Length()) {
         // If `item` has a length, e.g., inline-block, set the `last_type`.
@@ -205,9 +203,8 @@ void InlineTextAutoSpace::Apply(InlineItemsData& data,
     do {
       // Find the `RunSegmenterRange` for `offset`.
       while (offset >= range->end) {
-        // TODO(crbug.com/351564777): Resolve a buffer safety issue.
-        UNSAFE_TODO(++range);
-        CHECK_NE(range, ranges_.end());
+        ++range;
+        CHECK(range != base::span(ranges_).end());
       }
       DCHECK_GE(offset, range->start);
       DCHECK_LT(offset, range->end);

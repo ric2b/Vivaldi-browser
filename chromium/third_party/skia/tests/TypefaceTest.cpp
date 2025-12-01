@@ -93,7 +93,8 @@ static void TypefaceStyle_test(skiatest::Reporter* reporter,
                     (weight ==    4 && newStyle.weight() == 350) ||  // GDI weirdness
                     (weight ==    5 && newStyle.weight() == 400) ||  // GDI weirdness
                     (weight ==    0 && newStyle.weight() ==   1) ||  // DW weirdness
-                    (weight == 1000 && newStyle.weight() == 999)     // DW weirdness
+                    (weight == 1000 && newStyle.weight() == 999),    // DW weirdness
+                    "newStyle.weight(): %d weight: %" PRIu16, newStyle.weight(), weight
     );
 
     // Some back-ends (GDI) don't support width, ensure these always report 'normal'.
@@ -116,6 +117,40 @@ DEF_TEST(TypefaceStyle, reporter) {
     }
     for (int width = SkFS::kUltraCondensed_Width; width <= SkFS::kUltraExpanded_Width; ++width) {
         TypefaceStyle_test(reporter, 400, width, data.get());
+    }
+}
+
+void TestSkTypefaceGlyphToUnicodeMap(SkTypeface& typeface, SkUnichar* codepoints) {
+    typeface.getGlyphToUnicodeMap(codepoints);
+}
+
+DEF_TEST(TypefaceGlyphToUnicode, reporter) {
+    std::unique_ptr<SkStreamAsset> stream(GetResourceAsStream("fonts/Em.ttf"));
+    if (!stream) {
+        REPORT_FAILURE(reporter, "fonts/Em.ttf", SkString("Cannot load resource"));
+        return;
+    }
+    sk_sp<SkTypeface> typeface(ToolUtils::TestFontMgr()->makeFromStream(stream->duplicate()));
+    if (!typeface) {
+        // Not all SkFontMgr can MakeFromStream().
+        return;
+    }
+
+    constexpr int expectedGlyphs = 6;
+    int actualGlyphs = typeface->countGlyphs();
+    if (actualGlyphs != expectedGlyphs) {
+        REPORTER_ASSERT(reporter, actualGlyphs == expectedGlyphs,
+                        "%d != %d", actualGlyphs, expectedGlyphs);
+        return;
+    }
+    SkUnichar codepoints[expectedGlyphs];
+    TestSkTypefaceGlyphToUnicodeMap(*typeface, codepoints);
+    constexpr SkUnichar expectedCodepoints[expectedGlyphs] = {0, 0, 0, 9747, 11035, 11036};
+    for (size_t i = 0; i < expectedGlyphs; ++i) {
+        // CoreText before macOS 11 sometimes infers space (0x20) for empty glyphs.
+        REPORTER_ASSERT(reporter, codepoints[i] == expectedCodepoints[i] ||
+                                 (codepoints[i] == 32 && expectedCodepoints[i] == 0),
+                        "codepoints[%zu] == %d != %d", i, codepoints[i], expectedCodepoints[i]);
     }
 }
 

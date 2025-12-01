@@ -13,10 +13,12 @@ namespace content {
 
 ClientMetadata::ClientMetadata(const GURL& terms_of_service_url,
                                const GURL& privacy_policy_url,
-                               const GURL& brand_icon_url)
+                               const GURL& brand_icon_url,
+                               const gfx::Image& brand_decoded_icon)
     : terms_of_service_url{terms_of_service_url},
       privacy_policy_url(privacy_policy_url),
-      brand_icon_url(brand_icon_url) {}
+      brand_icon_url(brand_icon_url),
+      brand_decoded_icon(brand_decoded_icon) {}
 ClientMetadata::ClientMetadata(const ClientMetadata& other) = default;
 ClientMetadata::~ClientMetadata() = default;
 
@@ -41,6 +43,11 @@ IdentityProviderData::IdentityProviderData(
 
 IdentityProviderData::~IdentityProviderData() = default;
 
+RelyingPartyData::RelyingPartyData(const std::string& rp_for_display)
+    : rp_for_display(rp_for_display) {}
+RelyingPartyData::RelyingPartyData(const RelyingPartyData& other) = default;
+RelyingPartyData::~RelyingPartyData() = default;
+
 int IdentityRequestDialogController::GetBrandIconIdealSize(
     blink::mojom::RpMode rp_mode) {
   return 0;
@@ -56,7 +63,7 @@ void IdentityRequestDialogController::SetIsInterceptionEnabled(bool enabled) {
 }
 
 bool IdentityRequestDialogController::ShowAccountsDialog(
-    const std::string& rp_for_display,
+    content::RelyingPartyData rp_data,
     const std::vector<scoped_refptr<content::IdentityProviderData>>& idp_list,
     const std::vector<scoped_refptr<content::IdentityRequestAccount>>& accounts,
     content::IdentityRequestAccount::SignInMode sign_in_mode,
@@ -150,5 +157,7 @@ void IdentityRequestDialogController::RequestIdPRegistrationPermision(
     base::OnceCallback<void(bool accepted)> callback) {
   std::move(callback).Run(false);
 }
+
+void IdentityRequestDialogController::NotifyAutofillSourceReadyForTesting() {}
 
 }  // namespace content

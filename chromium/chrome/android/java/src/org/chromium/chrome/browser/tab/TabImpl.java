@@ -587,10 +587,7 @@ class TabImpl implements Tab {
     public boolean isThemingAllowed() {
         // Do not apply the theme color if there are any security issues on the page.
         int securityLevel = SecurityStateModel.getSecurityLevelForWebContents(getWebContents());
-        boolean hasSecurityIssue =
-                securityLevel == ConnectionSecurityLevel.DANGEROUS
-                        || securityLevel
-                                == ConnectionSecurityLevel.SECURE_WITH_POLICY_INSTALLED_CERT;
+        boolean hasSecurityIssue = securityLevel == ConnectionSecurityLevel.DANGEROUS;
         // If chrome is showing an error page, allow theming so the system UI can match the page.
         // This is considered acceptable since chrome is in control of the error page. Otherwise, if
         // the page has a security issue, disable theming.
@@ -1055,21 +1052,6 @@ class TabImpl implements Tab {
     public final void hide(@TabHidingType int type) {
         try {
             TraceEvent.begin("Tab.hide");
-
-            if (ChromeFeatureList.isEnabled(
-                    ChromeFeatureList
-                            .ANDROID_DISCONNECT_FILE_CHOOSER_ON_TAB_DEACTIVATE_KILL_SWITCH)) {
-                WebContents webContents = getWebContents();
-                // File select related dialogs typical does not have indication on which origin or
-                // tab made the request. So to avoid security issues from user confusion, if a tab
-                // changes makes this no longer the active tab, then disconnect any file select
-                // dialogs. Notably only want to do this for tab change, but not (as an example)
-                // for hiding the activity.
-                if (type == TabHidingType.CHANGED_TABS && webContents != null) {
-                    webContents.disconnectFileSelectListenerIfAny();
-                }
-            }
-
             if (isHidden()) return;
             mIsHidden = true;
             updateInteractableState();
@@ -1284,7 +1266,7 @@ class TabImpl implements Tab {
             int themeColor = 0;
             if (tabState != null) {
                 appId = tabState.openerAppId;
-                themeColor = tabState.getThemeColor();
+                themeColor = tabState.themeColor;
                 hasThemeColor = tabState.hasThemeColor();
             }
             if (hasThemeColor != null) {
@@ -1946,7 +1928,7 @@ class TabImpl implements Tab {
             mContentView.addOnAttachStateChangeListener(mAttachStateChangeListener);
             updateInteractableState();
 
-            mWebContentsDelegate = createWebContentsDelegate();
+            updateWebContentsDelegate();
 
             // TODO(crbug.com/40942165): Find a better way of indicating this is a background tab
             // (or
@@ -1992,9 +1974,12 @@ class TabImpl implements Tab {
         }
     }
 
-    private TabWebContentsDelegateAndroidImpl createWebContentsDelegate() {
+    private void updateWebContentsDelegate() {
+        if (mWebContentsDelegate != null) {
+            mWebContentsDelegate.destroy();
+        }
         TabWebContentsDelegateAndroid delegate = mDelegateFactory.createWebContentsDelegate(this);
-        return new TabWebContentsDelegateAndroidImpl(this, delegate);
+        mWebContentsDelegate = new TabWebContentsDelegateAndroidImpl(this, delegate);
     }
 
     /**
@@ -2067,7 +2052,7 @@ class TabImpl implements Tab {
         // Update the delegate factory, then recreate and propagate all delegates.
         mDelegateFactory = factory;
 
-        mWebContentsDelegate = createWebContentsDelegate();
+        updateWebContentsDelegate();
 
         WebContents webContents = getWebContents();
         if (webContents != null) {
@@ -2298,6 +2283,7 @@ class TabImpl implements Tab {
      * @return parent identifier for the {@link Tab}
      */
     @Override
+    @CalledByNative
     public int getParentId() {
         return mParentId;
     }
@@ -2322,6 +2308,7 @@ class TabImpl implements Tab {
     }
 
     @Override
+    @CalledByNative
     public @Nullable Token getTabGroupId() {
         return mTabGroupId;
     }
@@ -2393,6 +2380,7 @@ class TabImpl implements Tab {
     }
 
     @Override
+    @CalledByNative
     public @TabLaunchType int getTabLaunchTypeAtCreation() {
         return mTabLaunchTypeAtCreation;
     }
@@ -2433,9 +2421,10 @@ class TabImpl implements Tab {
 
     /**
      * Destroys the current {@link WebContents}.
+     *
      * @param deleteNativeWebContents Whether or not to delete the native WebContents pointer.
      */
-    private final void destroyWebContents(boolean deleteNativeWebContents) {
+    private void destroyWebContents(boolean deleteNativeWebContents) {
         if (mWebContents == null) return;
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.VANILLA_ICE_CREAM
@@ -2461,7 +2450,10 @@ class TabImpl implements Tab {
             ((TabViewAndroidDelegate) contentsToDestroy.getViewAndroidDelegate()).destroy();
         }
         mWebContents = null;
-        mWebContentsDelegate = null;
+        if (mWebContentsDelegate != null) {
+            mWebContentsDelegate.destroy();
+            mWebContentsDelegate = null;
+        }
 
         assert mNativeTabAndroid != 0;
         if (deleteNativeWebContents) {

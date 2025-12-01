@@ -110,22 +110,14 @@ class HttpStreamPool::AttemptManager
   const NetLogWithSource& net_log();
 
   // Starts a Job. Will call one of Job::Delegate methods to notify results.
-  void StartJob(Job* job,
-                RequestPriority priority,
-                const std::vector<SSLConfig::CertAndStatus>& allowed_bad_certs,
-                quic::ParsedQuicVersion quic_version,
-                const NetLogWithSource& request_net_log,
-                const NetLogWithSource& job_controller_net_log);
+  void StartJob(Job* job, const NetLogWithSource& request_net_log);
 
   // Creates idle streams or sessions for `num_streams` be opened.
-  // Note that this method finishes synchronously, or `callback` is called, once
-  // `this` has enough streams/sessions for `num_streams` be opened. This means
-  // that when there are two preconnect requests with `num_streams = 1`, all
-  // callbacks are invoked when one stream/session is established (not two).
-  int Preconnect(size_t num_streams,
-                 quic::ParsedQuicVersion quic_version,
-                 const NetLogWithSource& job_controller_net_log,
-                 CompletionOnceCallback callback);
+  // Note that `job` will be notified once `this` has enough streams/sessions
+  // for `num_streams` be opened. This means that when there are two preconnect
+  // requests with `num_streams = 1`, all jobs are notified when one
+  // stream/session is established (not two).
+  void Preconnect(Job* job);
 
   // HostResolver::ServiceEndpointRequest::Delegate implementation:
   void OnServiceEndpointsUpdated() override;
@@ -214,6 +206,33 @@ class HttpStreamPool::AttemptManager
   FRIEND_TEST_ALL_PREFIXES(HttpStreamPoolAttemptManagerTest,
                            GetIPEndPointToAttempt);
 
+  // Represents the initial attempt state of this manager.
+  // These values are persisted to logs. Entries should not be renumbered and
+  // numeric values should never be reused.
+  //
+  // LINT.IfChange(InitialAttemptState)
+  enum class InitialAttemptState {
+    kOther = 0,
+    // CanUseQuic() && quic_version_.IsKnown() && !SupportsSpdy()
+    kCanUseQuicWithKnownVersion = 1,
+    // CanUseQuic() && quic_version_.IsKnown() && SupportsSpdy()
+    kCanUseQuicWithKnownVersionAndSupportsSpdy = 2,
+    // CanUseQuic() && !quic_version_.IsKnown() && !SupportsSpdy()
+    kCanUseQuicWithUnknownVersion = 3,
+    // CanUseQuic() && !quic_version_.IsKnown() && SupportsSpdy()
+    kCanUseQuicWithUnknownVersionAndSupportsSpdy = 4,
+    // !CanUseQuic() && quic_version_.IsKnown() && !SupportsSpdy()
+    kCannotUseQuicWithKnownVersion = 5,
+    // !CanUseQuic() && quic_version_.IsKnown() && SupportsSpdy()
+    kCannotUseQuicWithKnownVersionAndSupportsSpdy = 6,
+    // !CanUseQuic() && !quic_version_.IsKnown() && !SupportsSpdy()
+    kCannotUseQuicWithUnknownVersion = 7,
+    // !CanUseQuic() && !quic_version_.IsKnown() && SupportsSpdy()
+    kCannotUseQuicWithUnknownVersionAndSupportsSpdy = 8,
+    kMaxValue = kCannotUseQuicWithUnknownVersionAndSupportsSpdy,
+  };
+  // LINT.ThenChange(//tools/metrics/histograms/metadata/net/enums.xml:HttpStreamPoolInitialAttemptState)
+
   // Represents failure of connection attempts. Used to notify job of completion
   // for failure cases.
   enum class FailureKind {
@@ -240,10 +259,11 @@ class HttpStreamPool::AttemptManager
     kAllEndpointsFailed,
   };
 
+  std::string_view InitialAttemptStateToString(InitialAttemptState state);
+
   using JobQueue = PriorityQueue<raw_ptr<Job>>;
 
   class InFlightAttempt;
-  struct PreconnectEntry;
 
   static std::string_view CanAttemptResultToString(CanAttemptResult result);
 
@@ -258,9 +278,9 @@ class HttpStreamPool::AttemptManager
 
   const QuicSessionAliasKey& quic_session_alias_key() const;
 
-  HttpNetworkSession* http_network_session();
-  SpdySessionPool* spdy_session_pool();
-  QuicSessionPool* quic_session_pool();
+  HttpNetworkSession* http_network_session() const;
+  SpdySessionPool* spdy_session_pool() const;
+  QuicSessionPool* quic_session_pool() const;
 
   HttpStreamPool* pool();
   const HttpStreamPool* pool() const;
@@ -275,6 +295,9 @@ class HttpStreamPool::AttemptManager
 
   int WaitForSSLConfigReady();
 
+  void SetInitialAttemptState();
+  InitialAttemptState CalculateInitialAttemptState();
+
   base::expected<SSLConfig, TlsStreamAttempt::GetSSLConfigError> GetSSLConfig(
       InFlightAttempt* attempt);
 
@@ -282,7 +305,7 @@ class HttpStreamPool::AttemptManager
 
   bool RequiresHTTP11();
 
-  void StartInternal(RequestPriority priority);
+  void StartInternal(Job* job);
 
   void ResolveServiceEndpoint(RequestPriority initial_priority);
 
@@ -339,6 +362,10 @@ class HttpStreamPool::AttemptManager
   // Returns true only when there are no jobs that disable alternative services.
   bool IsAlternativeServiceEnabled() const;
 
+  // Returns true when the destination is known to support HTTP/2. Note that
+  // this could return false while initializing HttpServerProperties.
+  bool SupportsSpdy() const;
+
   // Returns true when connection attempts should be throttled because there is
   // an in-flight attempt and the destination is known to support HTTP/2.
   bool ShouldThrottleAttemptForSpdy() const;
@@ -389,10 +416,10 @@ class HttpStreamPool::AttemptManager
   void ProcessPreconnectsAfterAttemptComplete(int rv,
                                               size_t active_stream_count);
 
-  // Helper methods to post a task to invoke `callback`. If `this` is deleted
-  // `callback` is canceled.
-  void InvokePreconnectCallbackLater(CompletionOnceCallback callback, int rv);
-  void InvokePreconnectCallback(CompletionOnceCallback callback, int rv);
+  // Helper methods to post a task to notify a job of preconnect completion. If
+  // `this` is deleted the notification is canceled.
+  void NotifyJobOfPreconnectCompleteLater(Job* job, int rv);
+  void NotifyJobOfPreconnectComplete(Job* job, int rv);
 
   // Creates a text based stream and notifies the highest priority job.
   void CreateTextBasedStreamAndNotify(
@@ -400,7 +427,9 @@ class HttpStreamPool::AttemptManager
       StreamSocketHandle::SocketReuseType reuse_type,
       LoadTimingInfo::ConnectTiming connect_timing);
 
-  void CreateSpdyStreamAndNotify();
+  bool HasAvailableSpdySession() const;
+
+  void CreateSpdyStreamAndNotify(base::WeakPtr<SpdySession> spdy_session);
 
   void CreateQuicStreamAndNotify();
 
@@ -408,8 +437,9 @@ class HttpStreamPool::AttemptManager
                          NextProto negotiated_protocol);
 
   // Called when a SPDY session is ready to use. Cancels in-flight attempts.
-  // Closes idle streams. Completes preconnects.
-  void HandleSpdySessionReady(StreamSocketCloseReason refresh_group_reason);
+  // Closes idle streams. Completes preconnects and jobs.
+  void HandleSpdySessionReady(base::WeakPtr<SpdySession> spdy_session,
+                              StreamSocketCloseReason refresh_group_reason);
 
   // Called when a QUIC session is ready to use. Cancels in-flight attempts.
   // Closes idle streams. Completes preconnects.
@@ -452,10 +482,6 @@ class HttpStreamPool::AttemptManager
   // Called when `stream_attempt_delay_timer_` is fired.
   void OnStreamAttemptDelayPassed();
 
-  // If the destination is forced to use QUIC and the QUIC version is unknown,
-  // try the preferred QUIC version that is supported by default.
-  void MaybeUpdateQuicVersionWhenForced(quic::ParsedQuicVersion& quic_version);
-
   bool CanUseTcpBasedProtocols();
 
   bool CanUseQuic();
@@ -487,6 +513,10 @@ class HttpStreamPool::AttemptManager
 
   const NetLogWithSource net_log_;
 
+  // Keeps the initial attempt state. Set when `this` starts a job or
+  // preconnect.
+  std::optional<InitialAttemptState> initial_attempt_state_;
+
   NextProtoSet allowed_alpns_ = NextProtoSet::All();
 
   // Holds jobs that are waiting for notifications.
@@ -502,8 +532,7 @@ class HttpStreamPool::AttemptManager
   base::flat_set<raw_ptr<Job>> alternative_service_disabling_jobs_;
 
   // Holds preconnect requests.
-  std::set<std::unique_ptr<PreconnectEntry>, base::UniquePtrComparator>
-      preconnects_;
+  std::set<raw_ptr<Job>> preconnect_jobs_;
   size_t notifying_preconnect_completion_count_ = 0;
 
   std::unique_ptr<HostResolver::ServiceEndpointRequest>
@@ -557,9 +586,6 @@ class HttpStreamPool::AttemptManager
   base::OneShotTimer spdy_throttle_timer_;
   bool spdy_throttle_delay_passed_ = false;
 
-  // True when the destination supports SPDY.
-  bool supports_spdy_ = false;
-
   // When true, try to use IPv6 for the next attempt first.
   bool prefer_ipv6_ = true;
   // Updated when a stream attempt is completed or considered slow. Used to
@@ -569,9 +595,6 @@ class HttpStreamPool::AttemptManager
   // The current state of TCP/TLS connection attempts.
   TcpBasedAttemptState tcp_based_attempt_state_ =
       TcpBasedAttemptState::kNotStarted;
-
-  // Initialized when one of an attempt is negotiated to use HTTP/2.
-  base::WeakPtr<SpdySession> spdy_session_;
 
   // QUIC version that is known to be used for the destination, usually coming
   // from Alt-Svc.

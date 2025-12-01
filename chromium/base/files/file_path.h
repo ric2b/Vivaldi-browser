@@ -172,9 +172,6 @@ class BASE_EXPORT FilePath {
 
   using CharType = StringType::value_type;
   using StringViewType = std::basic_string_view<CharType>;
-  // DEPRECATED. Use `StringViewType` in new code.
-  // TODO(thestig): Remove.
-  using StringPieceType = StringViewType;
 
   // Null-terminated array of separators used to separate components in paths.
   // Each character in this array is a valid separator, but kSeparators[0] is
@@ -332,6 +329,13 @@ class BASE_EXPORT FilePath {
   [[nodiscard]] FilePath InsertBeforeExtensionASCII(
       std::string_view suffix) const;
 
+  // Like above, but takes the `suffix` as an UTF8 string.
+  // While all modern OSes support UTF-8, there is no requirement for the
+  // filenames to actually be UTF-8, e.g. on Linux. So inserting UTF-8 could
+  // result in Mojibake filenames.
+  [[nodiscard]] FilePath InsertBeforeExtensionUTF8(
+      std::string_view suffix) const;
+
   // Adds |extension| to |file_name|. Returns the current FilePath if
   // |extension| is empty. Returns "" if BaseName() == "." or "..".
   [[nodiscard]] FilePath AddExtension(StringViewType extension) const;
@@ -339,6 +343,13 @@ class BASE_EXPORT FilePath {
   // Like above, but takes the extension as an ASCII string. See AppendASCII for
   // details on how this is handled.
   [[nodiscard]] FilePath AddExtensionASCII(std::string_view extension) const;
+
+  // Like above, but takes the extension as an UTF8 string. See AppendUTF8 for
+  // details on how this is handled.
+  // While all modern OSes support UTF-8, there is no requirement for the
+  // filenames to actually be UTF-8, e.g. on Linux. So appending UTF-8 could
+  // result in Mojibake filenames.
+  [[nodiscard]] FilePath AddExtensionUTF8(std::string_view extension) const;
 
   // Replaces the extension of |file_name| with |extension|.  If |file_name|
   // does not have an extension, then |extension| is added.  If |extension| is
@@ -371,6 +382,12 @@ class BASE_EXPORT FilePath {
   // ASCII is a valid subset, regardless of the encoding, since many operating
   // system paths will always be ASCII.
   [[nodiscard]] FilePath AppendASCII(std::string_view component) const;
+
+  // Like above, but takes the `component` as an UTF8 string.
+  // While all modern OSes support UTF-8, there is no requirement for the
+  // filenames to actually be UTF-8, e.g. on Linux. So appending UTF-8 could
+  // result in Mojibake filenames.
+  [[nodiscard]] FilePath AppendUTF8(std::string_view component) const;
 
   // Returns true if this FilePath contains an absolute path.  On Windows, an
   // absolute path begins with either a drive letter specification followed by
@@ -449,7 +466,7 @@ class BASE_EXPORT FilePath {
   // (if FILE_PATH_USES_WIN_SEPARATORS is true), or do nothing on POSIX systems.
   [[nodiscard]] FilePath NormalizePathSeparators() const;
 
-  // Normalize all path separattors to given type on Windows
+  // Normalize all path separators to given type on Windows
   // (if FILE_PATH_USES_WIN_SEPARATORS is true), or do nothing on POSIX systems.
   [[nodiscard]] FilePath NormalizePathSeparatorsTo(CharType separator) const;
 

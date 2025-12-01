@@ -20,7 +20,7 @@ const UIViewAnimationOptions kHideAnimationOptions =
   UIViewAnimationOptionCurveEaseIn;
 
 // Layout constants
-const CGFloat kBaseHeight = 125;
+const CGFloat kBaseHeight = 184.0;
 const CGFloat kAnimationDelay = 0;
 }  // namespace
 

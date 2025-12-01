@@ -32,6 +32,50 @@
 
 namespace cc {
 
+class TestLayerTreeFrameSink::TestCompositorFrameSinkSupport
+    : public viz::CompositorFrameSinkSupport {
+ public:
+  TestCompositorFrameSinkSupport(viz::mojom::CompositorFrameSinkClient* client,
+                                 TestLayerTreeFrameSinkClient* test_client,
+                                 TaskRunnerProvider* task_runner_provider,
+                                 viz::FrameSinkManagerImpl* frame_sink_manager,
+                                 const viz::FrameSinkId& frame_sink_id,
+                                 bool is_root,
+                                 viz::Display* display)
+      : viz::CompositorFrameSinkSupport(client,
+                                        frame_sink_manager,
+                                        frame_sink_id,
+                                        is_root),
+        display_(display),
+        test_client_(test_client),
+        task_runner_provider_(task_runner_provider) {}
+  ~TestCompositorFrameSinkSupport() override = default;
+
+  void SubmitCompositorFrame(
+      const viz::LocalSurfaceId& local_surface_id,
+      viz::CompositorFrame frame,
+      std::optional<viz::HitTestRegionList> hit_test_region_list,
+      uint64_t submit_time) override {
+    DebugScopedSetImplThread impl(task_runner_provider_);
+    test_client_->DisplayReceivedCompositorFrame(frame);
+
+    // Ensure that the display's local surface ID and its size are initialized
+    // (note that these calls will be no-ops if already called for this surface
+    // ID/device scale factor/frame size on a previous invocation of
+    // SubmitCompositorFrame()).
+    display_->SetLocalSurfaceId(local_surface_id, frame.device_scale_factor());
+    display_->Resize(frame.size_in_pixels());
+
+    viz::CompositorFrameSinkSupport::SubmitCompositorFrame(
+        local_surface_id, std::move(frame), hit_test_region_list, submit_time);
+  }
+
+ private:
+  raw_ptr<viz::Display> display_;
+  raw_ptr<TestLayerTreeFrameSinkClient> test_client_ = nullptr;
+  raw_ptr<TaskRunnerProvider> task_runner_provider_;
+};
+
 class TestLayerTreeFrameSink::TestCompositorFrameSinkImpl
     : public viz::mojom::CompositorFrameSink {
  public:
@@ -81,7 +125,6 @@ TestLayerTreeFrameSink::TestLayerTreeFrameSink(
     scoped_refptr<viz::RasterContextProvider> compositor_context_provider,
     scoped_refptr<viz::RasterContextProvider> worker_context_provider,
     scoped_refptr<gpu::SharedImageInterface> shared_image_interface,
-    gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager,
     const viz::RendererSettings& renderer_settings,
     const viz::DebugRendererSettings* const debug_settings,
     TaskRunnerProvider* task_runner_provider,
@@ -101,7 +144,6 @@ TestLayerTreeFrameSink::TestLayerTreeFrameSink(
           task_runner_provider->HasImplThread()
               ? task_runner_provider->ImplThreadTaskRunner()
               : task_runner_provider->MainThreadTaskRunner(),
-          gpu_memory_buffer_manager,
           shared_image_interface
               ? base::MakeRefCounted<TestClientSharedImageInterface>(
                     shared_image_interface)
@@ -205,8 +247,9 @@ bool TestLayerTreeFrameSink::BindToClient(LayerTreeFrameSinkClient* client) {
       std::move(scheduler), compositor_task_runner_);
 
   constexpr bool is_root = true;
-  support_ = std::make_unique<viz::CompositorFrameSinkSupport>(
-      this, frame_sink_manager_.get(), frame_sink_id_, is_root);
+  support_ = std::make_unique<TestCompositorFrameSinkSupport>(
+      this, test_client_, task_runner_provider_, frame_sink_manager_.get(),
+      frame_sink_id_, is_root, display_.get());
   support_->SetWantsAnimateOnlyBeginFrames();
   client_->SetBeginFrameSource(&external_begin_frame_source_);
   if (display_begin_frame_source_) {
@@ -269,25 +312,22 @@ void TestLayerTreeFrameSink::SubmitCompositorFrame(viz::CompositorFrame frame,
   DebugScopedSetImplThread impl(task_runner_provider_);
   DCHECK(frame.metadata.begin_frame_ack.has_damage);
   DCHECK(frame.metadata.begin_frame_ack.frame_id.IsSequenceValid());
-  test_client_->DisplayReceivedCompositorFrame(frame);
 
   gfx::Size frame_size = frame.size_in_pixels();
   float device_scale_factor = frame.device_scale_factor();
-  viz::LocalSurfaceId local_surface_id =
-      parent_local_surface_id_allocator_->GetCurrentLocalSurfaceId();
 
   if (frame_size != display_size_ ||
       device_scale_factor != device_scale_factor_) {
     parent_local_surface_id_allocator_->GenerateId();
-    local_surface_id =
-        parent_local_surface_id_allocator_->GetCurrentLocalSurfaceId();
-    display_->SetLocalSurfaceId(local_surface_id, device_scale_factor);
-    display_->Resize(frame_size);
     display_size_ = frame_size;
     device_scale_factor_ = device_scale_factor;
   }
 
-  support_->SubmitCompositorFrame(local_surface_id, std::move(frame));
+  viz::LocalSurfaceId local_surface_id =
+      parent_local_surface_id_allocator_->GetCurrentLocalSurfaceId();
+
+  support_->SubmitCompositorFrame(local_surface_id, std::move(frame),
+                                  std::nullopt, 0);
 
   if (!display_->has_scheduler()) {
     display_->DrawAndSwap({base::TimeTicks::Now(), base::TimeTicks::Now()});

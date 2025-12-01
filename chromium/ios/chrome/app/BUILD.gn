@@ -79,6 +79,7 @@ source_set("unit_tests") {
   sources = [
     "app_metrics_app_state_agent_unittest.mm",
     "app_startup_parameters_unittest.mm",
+    "change_profile_animator_unittest.mm",
     "deferred_initialization_runner_unittest.mm",
     "safe_mode_app_state_agent_unittest.mm",
     "tab_opener_unittest.mm",
@@ -88,6 +89,7 @@ source_set("unit_tests") {
     ":app",
     ":app_internal",
     ":app_metrics_app_state_agent",
+    ":change_profile_animator",
     ":safe_mode_app_state_agent",
     ":variations_app_state_agent",
     "//base",
@@ -112,6 +114,7 @@ source_set("unit_tests") {
     "//ios/chrome/app/application_delegate:url_opener",
     "//ios/chrome/app/application_delegate:url_opener_params",
     "//ios/chrome/app/profile",
+    "//ios/chrome/app/profile:test_utils",
     "//ios/chrome/browser/bookmarks/model",
     "//ios/chrome/browser/bookmarks/model:test_support",
     "//ios/chrome/browser/browsing_data/model",
@@ -453,10 +456,12 @@ source_set("app_internal") {
     "//ios/chrome/browser/crash_report/model/breadcrumbs",
     "//ios/chrome/browser/credential_provider/model:buildflags",
     "//ios/chrome/browser/default_browser/model:utils",
+    "//ios/chrome/browser/device_orientation/ui_bundled",
     "//ios/chrome/browser/discover_feed/model:discover_feed_app_agent",
     "//ios/chrome/browser/download/model",
+    "//ios/chrome/browser/download/model/auto_deletion",
     "//ios/chrome/browser/download/model/background_service:background_service",
-    "//ios/chrome/browser/download/ui_bundled",
+    "//ios/chrome/browser/download/ui",
     "//ios/chrome/browser/favicon/model",
     "//ios/chrome/browser/first_run/model",
     "//ios/chrome/browser/first_run/ui_bundled",
@@ -501,7 +506,6 @@ source_set("app_internal") {
     "//ios/chrome/browser/tab_switcher/ui_bundled/tab_grid:tab_grid_ui",
     "//ios/chrome/browser/tabs/ui_bundled",
     "//ios/chrome/browser/toolbar/ui_bundled:ui",
-    "//ios/chrome/browser/ui/device_orientation",
     "//ios/chrome/browser/upgrade/model:public",
     "//ios/chrome/browser/url_loading/model",
     "//ios/chrome/browser/variations/model:ios_chrome_ui_string_overrider_factory",
@@ -533,6 +537,10 @@ source_set("app_internal") {
     "//ui/resources",
     "//ui/strings:ui_strings",
   ]
+
+  if (target_environment != "catalyst") {
+    deps += [ "//ios/chrome/browser/default_browser/model/default_status" ]
+  }
 
   if (ios_enable_credential_provider_extension) {
     deps += [ ":credential_provider_migrator_app_agent" ]
@@ -590,6 +598,7 @@ source_set("change_profile_animator") {
     "//base",
     "//ios/chrome/app/profile",
     "//ios/chrome/browser/shared/coordinator/scene:scene_state_header",
+    "//ios/third_party/material_components_ios",
   ]
 }
 
@@ -613,6 +622,7 @@ source_set("main") {
     "//base",
     "//build:blink_buildflags",
     "//components/component_updater",
+    "//components/crash/core/app",
     "//components/crash/core/common",
     "//ios/chrome/app:tests_hook",
     "//ios/chrome/app/startup:ios_enable_sandbox_dump_buildflags",

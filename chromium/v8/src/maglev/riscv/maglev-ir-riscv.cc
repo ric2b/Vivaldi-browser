@@ -164,7 +164,7 @@ void BuiltinStringFromCharCode::GenerateCode(MaglevAssembler* masm,
 }
 
 void InlinedAllocation::SetValueLocationConstraints() {
-  UseRegister(allocation_block());
+  UseRegister(allocation_block_input());
   if (offset() == 0) {
     DefineSameAsFirst(this);
   } else {
@@ -175,7 +175,7 @@ void InlinedAllocation::SetValueLocationConstraints() {
 void InlinedAllocation::GenerateCode(MaglevAssembler* masm,
                                      const ProcessingState& state) {
   Register out = ToRegister(result());
-  Register value = ToRegister(allocation_block());
+  Register value = ToRegister(allocation_block_input());
   if (offset() != 0) {
     __ AddWord(out, value, Operand(offset()));
   }
@@ -299,7 +299,7 @@ void Int32MultiplyWithOverflow::GenerateCode(MaglevAssembler* masm,
   }
 
   Register scratch = temps.Acquire();
-  __ MulOverflow32(res, left, Operand(right), scratch);
+  __ MulOverflow32(res, left, Operand(right), scratch, false);
 
   static_assert(Int32MultiplyWithOverflow::kProperties.can_eager_deopt());
   // if res != (res[0:31] sign extended to 64 bits), then the multiplication
@@ -844,16 +844,12 @@ void HandleInterruptsAndTiering(MaglevAssembler* masm, ZoneLabelRef done,
 }
 
 void GenerateReduceInterruptBudget(MaglevAssembler* masm, Node* node,
+                                   Register feedback_cell,
                                    ReduceInterruptBudgetType type, int amount) {
   MaglevAssembler::TemporaryRegisterScope temps(masm);
   Register scratch = temps.Acquire();
-  Register feedback_cell = scratch;
-  Register budget = temps.Acquire();
-  __ LoadWord(feedback_cell,
-              MemOperand(fp, StandardFrameConstants::kFunctionOffset));
-  __ LoadTaggedField(
-      feedback_cell,
-      FieldMemOperand(feedback_cell, JSFunction::kFeedbackCellOffset));
+  Register budget = scratch;
+
   __ Lw(budget,
         FieldMemOperand(feedback_cell, FeedbackCell::kInterruptBudgetOffset));
   __ Sub32(budget, budget, Operand(amount));
@@ -876,22 +872,24 @@ void GenerateReduceInterruptBudget(MaglevAssembler* masm, Node* node,
 
 int ReduceInterruptBudgetForLoop::MaxCallStackArgs() const { return 1; }
 void ReduceInterruptBudgetForLoop::SetValueLocationConstraints() {
-  set_temporaries_needed(2);
+  UseRegister(feedback_cell());
+  set_temporaries_needed(1);
 }
 void ReduceInterruptBudgetForLoop::GenerateCode(MaglevAssembler* masm,
                                                 const ProcessingState& state) {
-  GenerateReduceInterruptBudget(masm, this, ReduceInterruptBudgetType::kLoop,
-                                amount());
+  GenerateReduceInterruptBudget(masm, this, ToRegister(feedback_cell()),
+                                ReduceInterruptBudgetType::kLoop, amount());
 }
 
 int ReduceInterruptBudgetForReturn::MaxCallStackArgs() const { return 1; }
 void ReduceInterruptBudgetForReturn::SetValueLocationConstraints() {
-  set_temporaries_needed(2);
+  UseRegister(feedback_cell());
+  set_temporaries_needed(1);
 }
 void ReduceInterruptBudgetForReturn::GenerateCode(
     MaglevAssembler* masm, const ProcessingState& state) {
-  GenerateReduceInterruptBudget(masm, this, ReduceInterruptBudgetType::kReturn,
-                                amount());
+  GenerateReduceInterruptBudget(masm, this, ToRegister(feedback_cell()),
+                                ReduceInterruptBudgetType::kReturn, amount());
 }
 
 // ---
@@ -913,29 +911,27 @@ void Return::GenerateCode(MaglevAssembler* masm, const ProcessingState& state) {
   // We cannot use scratch registers, since they're used in LeaveFrame and
   // DropArguments.
   Register actual_params_size = a5;
-  Register params_size = a6;
 
   // Compute the size of the actual parameters + receiver (in bytes).
   // TODO(leszeks): Consider making this an input into Return to reuse the
   // incoming argc's register (if it's still valid).
   __ LoadWord(actual_params_size,
               MemOperand(fp, StandardFrameConstants::kArgCOffset));
-  __ Move(params_size, formal_params_size);
-
-  // If actual is bigger than formal, then we should use it to free up the stack
-  // arguments.
-  Label corrected_args_count;
-  __ MacroAssembler::Branch(&corrected_args_count, ge, params_size,
-                            Operand(actual_params_size),
-                            Label::Distance::kNear);
-  __ Move(params_size, actual_params_size);
-  __ bind(&corrected_args_count);
 
   // Leave the frame.
   __ LeaveFrame(StackFrame::MAGLEV);
 
+  // If actual is bigger than formal, then we should use it to free up the stack
+  // arguments.
+  Label corrected_args_count;
+  __ MacroAssembler::Branch(&corrected_args_count, gt, actual_params_size,
+                            Operand(formal_params_size),
+                            Label::Distance::kNear);
+  __ Move(actual_params_size, formal_params_size);
+
+  __ bind(&corrected_args_count);
   // Drop receiver + arguments according to dynamic arguments size.
-  __ DropArguments(params_size);
+  __ DropArguments(actual_params_size);
   __ Ret();
 }
 

@@ -17,6 +17,7 @@
 #include "components/omnibox/browser/autocomplete_provider_client.h"
 #include "components/omnibox/browser/autocomplete_result.h"
 #include "components/search_engines/template_url_service.h"
+#include "vivaldi/prefs/vivaldi_gen_prefs.h"
 
 using metrics::OmniboxInputType;
 
@@ -58,8 +59,7 @@ AutocompleteMatch RecentTypedHistoryToAutocompleteMatch(
 RecentTypedHistoryProvider::RecentTypedHistoryProvider(
     AutocompleteProviderClient* client)
     : AutocompleteProvider(AutocompleteProvider::TYPE_RECENT_TYPED_HISTORY),
-      client_(client),
-      max_matches_(AutocompleteResult::GetMaxMatches(true)) {}
+      client_(client) {}
 
 RecentTypedHistoryProvider::~RecentTypedHistoryProvider() = default;
 
@@ -79,6 +79,18 @@ void RecentTypedHistoryProvider::Start(const AutocompleteInput& input,
   }
 }
 
+void RecentTypedHistoryProvider::DeleteMatch(const AutocompleteMatch& match) {
+  GURL url = match.destination_url;
+  history::HistoryService* const history_service = client_->GetHistoryService();
+  history::WebHistoryService* web_history = client_->GetWebHistoryService();
+  history_service->DeleteLocalAndRemoteUrl(web_history, url);
+
+  // Immediately update the list of matches to reflect the match was deleted.
+  std::erase_if(matches_, [&](const auto& item) {
+    return match.destination_url == item.destination_url;
+  });
+}
+
 void RecentTypedHistoryProvider::QueryRecentTypedHistory(
       const AutocompleteInput& input) {
   done_ = true;
@@ -92,11 +104,22 @@ void RecentTypedHistoryProvider::QueryRecentTypedHistory(
   if (!url_db)
     return;
 
-  url_db->GetRecentTypedHistoryItems(
-      base::BindOnce(
-          &RecentTypedHistoryProvider::OnGetRecentTypedHistoryOrSearchDone,
-          base::Unretained(this)),
-      max_matches_);
+  const bool show_search_queries = client_->GetPrefs()->GetBoolean(
+    vivaldiprefs::kAddressBarOmniboxShowSearchHistory);
+
+  if (show_search_queries) {
+    url_db->GetRecentTypedHistoryItems(
+        base::BindOnce(
+            &RecentTypedHistoryProvider::OnGetRecentTypedHistoryOrSearchDone,
+            base::Unretained(this)),
+        provider_max_matches_);
+  } else {
+    url_db->GetRecentTypedUrlItems(
+        base::BindOnce(
+            &RecentTypedHistoryProvider::OnGetRecentTypedHistoryOrSearchDone,
+            base::Unretained(this)),
+        provider_max_matches_);
+  }
 }
 
 void RecentTypedHistoryProvider::QueryRecentTypedSearch(
@@ -123,7 +146,7 @@ void RecentTypedHistoryProvider::QueryRecentTypedSearch(
       base::BindOnce(
           &RecentTypedHistoryProvider::OnGetRecentTypedHistoryOrSearchDone,
           base::Unretained(this)),
-      max_matches_,
+      provider_max_matches_,
       template_url_service->GetTemplateURLForGUID(input.search_engine_guid)
           ->id());
 }
@@ -139,7 +162,7 @@ void RecentTypedHistoryProvider::OnGetRecentTypedHistoryOrSearchDone(
     item.url = GURL(statement.ColumnString(1));
     items.push_back(item);
   }
-  DCHECK_LE(items.size(), max_matches_);
+  DCHECK_LE(items.size(), provider_max_matches_);
   int relevance = 100;
   for (const auto& item : items) {
     matches_.push_back(

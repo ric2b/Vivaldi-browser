@@ -81,14 +81,6 @@ export class SettingsLanguagesPageElement extends
   static get properties() {
     return {
       /**
-       * Preferences state.
-       */
-      prefs: {
-        type: Object,
-        notify: true,
-      },
-
-      /**
        * Read-only reference to the languages model provided by the
        * 'settings-languages' instance.
        */
@@ -193,7 +185,7 @@ export class SettingsLanguagesPageElement extends
       return false;
     }
 
-    const compareLanguage = this.languages.enabled[n]!;
+    const compareLanguage = this.languages.enabled[n];
     return this.detailLanguage_.language === compareLanguage.language;
   }
 

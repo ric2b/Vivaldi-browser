@@ -28,6 +28,7 @@
 #include "api/rtp_transceiver_interface.h"
 #include "api/scoped_refptr.h"
 #include "api/stats/rtc_stats_report.h"
+#include "pc/peer_connection.h"
 #include "pc/test/mock_peer_connection_observers.h"
 
 namespace webrtc {
@@ -61,6 +62,8 @@ class PeerConnectionWrapper {
   PeerConnectionFactoryInterface* pc_factory();
   PeerConnectionInterface* pc();
   MockPeerConnectionObserver* observer();
+
+  PeerConnection* GetInternalPeerConnection();
 
   // Calls the underlying PeerConnection's CreateOffer method and returns the
   // resulting SessionDescription once it is available. If the method call
@@ -129,9 +132,9 @@ class PeerConnectionWrapper {
   // AddTransceiver method. They return the result of calling AddTransceiver
   // with the given arguments, DCHECKing if there is an error.
   rtc::scoped_refptr<RtpTransceiverInterface> AddTransceiver(
-      cricket::MediaType media_type);
+      webrtc::MediaType media_type);
   rtc::scoped_refptr<RtpTransceiverInterface> AddTransceiver(
-      cricket::MediaType media_type,
+      webrtc::MediaType media_type,
       const RtpTransceiverInit& init);
   rtc::scoped_refptr<RtpTransceiverInterface> AddTransceiver(
       rtc::scoped_refptr<MediaStreamTrackInterface> track);
@@ -191,9 +194,9 @@ class PeerConnectionWrapper {
 
  private:
   std::unique_ptr<SessionDescriptionInterface> CreateSdp(
-      rtc::FunctionView<void(CreateSessionDescriptionObserver*)> fn,
+      FunctionView<void(CreateSessionDescriptionObserver*)> fn,
       std::string* error_out);
-  bool SetSdp(rtc::FunctionView<void(SetSessionDescriptionObserver*)> fn,
+  bool SetSdp(FunctionView<void(SetSessionDescriptionObserver*)> fn,
               std::string* error_out);
 
   rtc::scoped_refptr<PeerConnectionFactoryInterface> pc_factory_;

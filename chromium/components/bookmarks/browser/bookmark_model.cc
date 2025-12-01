@@ -42,8 +42,8 @@
 #include "components/bookmarks/common/bookmark_features.h"
 #include "components/bookmarks/common/bookmark_metrics.h"
 #include "components/favicon_base/favicon_types.h"
+#include "components/signin/public/base/signin_switches.h"
 #include "components/strings/grit/components_strings.h"
-#include "components/sync/base/features.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/gfx/favicon_size.h"
 
@@ -61,7 +61,7 @@ namespace {
 
 bool AreFoldersForAccountStorageAllowed() {
   return base::FeatureList::IsEnabled(
-      syncer::kSyncEnableBookmarksInTransportMode);
+      switches::kSyncEnableBookmarksInTransportMode);
 }
 
 // Helper to get a mutable bookmark node.
@@ -257,6 +257,31 @@ const BookmarkNode* BookmarkModel::account_mobile_node() const {
   return account_mobile_node_;
 }
 
+bool BookmarkModel::IsNodeVisible(const BookmarkNode& node) const {
+  if (!node.is_permanent_node()) {
+    return true;
+  }
+
+  if (!node.children().empty()) {
+    return true;
+  }
+
+  if (!BookmarkPermanentNode::IsTypeVisibleWhenEmpty(node.type())) {
+    return false;
+  }
+
+#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
+  if (IsLocalOnlyNode(node) && account_bookmark_bar_node() &&
+      !HasLocalOrSyncableBookmarks(this)) {
+    // Prune this local empty permanent node, since the user has account
+    // permanent folders.
+    return false;
+  }
+#endif  // !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
+
+  return true;
+}
+
 bool BookmarkModel::IsLocalOnlyNode(const BookmarkNode& node) const {
   if (is_root_node(&node)) {
     // The semantics aren't clear for the root, but returning true seems most
@@ -357,7 +382,8 @@ void BookmarkModel::Remove(const BookmarkNode* node,
   // that are difficult to trace back.
   CHECK(!is_permanent_node(node)) << "for type " << node->type();
 
-  RemoveChildAt(parent, index.value(), location, source, /*is_undoable=*/true);
+  RemoveChildAt(parent, index.value(), location, source, /*is_undoable=*/true,
+                /*notify_observers=*/true);
 }
 
 void BookmarkModel::RemoveLastChild(const BookmarkNode* parent,
@@ -371,7 +397,7 @@ void BookmarkModel::RemoveLastChild(const BookmarkNode* parent,
   CHECK(!parent->children().empty());
 
   RemoveChildAt(parent, /*index=*/parent->children().size() - 1, location,
-                source, /*is_undoable=*/true);
+                source, /*is_undoable=*/true, /*notify_observers=*/true);
 }
 
 void BookmarkModel::RemoveAllUserBookmarks(const base::Location& location) {
@@ -1119,15 +1145,16 @@ void BookmarkModel::ResetDateFolderModified(const BookmarkNode* node) {
 std::vector<TitledUrlMatch> BookmarkModel::GetBookmarksMatching(
     const std::u16string& query,
     size_t max_count_hint,
-    query_parser::MatchingAlgorithm matching_algorithm) const {
+    query_parser::MatchingAlgorithm matching_algorithm,
+    bool special_characters) const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   if (!loaded_) {
     return {};
   }
 
-  return titled_url_index_->GetResultsMatching(query, max_count_hint,
-                                               matching_algorithm);
+  return titled_url_index_->GetResultsMatching(
+      query, max_count_hint, matching_algorithm, special_characters);
 }
 
 void BookmarkModel::DisableWritesToDiskForTest() {
@@ -1286,17 +1313,27 @@ void BookmarkModel::OnVivaldiSyncedFilesStoreLoaded(
           : base::DoNothing());
 
   if (AreFoldersForAccountStorageAllowed()) {
-    client_->DecodeAccountBookmarkSyncMetadata(
+    switch (client_->DecodeAccountBookmarkSyncMetadata(
         details->account_sync_metadata_str(),
         account_store_
             ? base::BindRepeating(&BookmarkStorage::ScheduleSave,
                                   base::Unretained(account_store_.get()))
-            : base::DoNothing());
+            : base::DoNothing())) {
+      case BookmarkClient::DecodeAccountBookmarkSyncMetadataResult::kSuccess:
+        // Nothing to do.
+        break;
+      case BookmarkClient::DecodeAccountBookmarkSyncMetadataResult::
+          kMustRemoveAccountPermanentFolders:
+        RemoveAccountPermanentFoldersImpl(/*notify_observers=*/false);
+        break;
+    }
   }
 
   const base::TimeDelta load_duration =
       base::TimeTicks::Now() - details->load_start();
   metrics::RecordTimeToLoadAtStartup(load_duration);
+
+  loaded_ = true;
 
   // Notify our direct observers.
   for (BookmarkModelObserver& observer : observers_) {
@@ -1350,9 +1387,10 @@ void BookmarkModel::RemoveChildAt(
     size_t index,
     const base::Location& location,
     std::optional<metrics::BookmarkEditSource> source,
-    bool is_undoable) {
+    bool is_undoable,
+    bool notify_observers) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  DCHECK(loaded_);
+  DCHECK(loaded_ || !notify_observers);
   DCHECK(parent);
   DCHECK(IsValidIndex(parent, index, false));
 
@@ -1361,8 +1399,10 @@ void BookmarkModel::RemoveChildAt(
   const NodeTypeForUuidLookup type_for_uuid_lookup =
       DetermineTypeForUuidLookupForExistingNode(node);
 
-  for (BookmarkModelObserver& observer : observers_) {
-    observer.OnWillRemoveBookmarks(parent, index, node, location);
+  if (notify_observers) {
+    for (BookmarkModelObserver& observer : observers_) {
+      observer.OnWillRemoveBookmarks(parent, index, node, location);
+    }
   }
 
   // Schedule the save before actually removing the node for
@@ -1376,8 +1416,10 @@ void BookmarkModel::RemoveChildAt(
       url_index_->RemoveChildAt(AsMutable(parent), index, &removed_urls);
   RemoveNodeFromIndicesRecursive(owned_node.get(), type_for_uuid_lookup);
 
-  for (BookmarkModelObserver& observer : observers_) {
-    observer.BookmarkNodeRemoved(parent, index, node, removed_urls, location);
+  if (notify_observers) {
+    for (BookmarkModelObserver& observer : observers_) {
+      observer.BookmarkNodeRemoved(parent, index, node, removed_urls, location);
+    }
   }
 
   if (is_undoable) {
@@ -1390,11 +1432,51 @@ void BookmarkModel::RemoveChildAt(
   }
 }
 
+void BookmarkModel::RemoveAccountPermanentFoldersImpl(bool notify_observers) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  CHECK(AreFoldersForAccountStorageAllowed());
+
+  // No-op if account permanent folders don't exist.
+  if (!account_bookmark_bar_node_) {
+    CHECK(!account_other_node_);
+    CHECK(!account_mobile_node_);
+    CHECK(!account_trash_node_); // Vivaldi
+    return;
+  }
+
+  base::ScopedUmaHistogramTimer scoped_timer(
+      "Bookmarks.RemoveAccountPermanentFoldersDuration",
+      base::ScopedUmaHistogramTimer::ScopedHistogramTiming::kMediumTimes);
+
+  CHECK(account_other_node_);
+  CHECK(account_mobile_node_);
+  CHECK(account_trash_node_ || !vivaldi::IsVivaldiRunning());
+
+  // Make a copy of the pointers before deleting the nodes, to avoid raw_ptr
+  // reporting dangling pointers.
+  std::vector<BookmarkNode*> account_permanent_folders{
+      account_mobile_node_, account_other_node_, account_bookmark_bar_node_};
+
+  if (vivaldi::IsVivaldiRunning()) {
+    account_permanent_folders.push_back(account_trash_node_);
+  }
+
+  account_bookmark_bar_node_ = nullptr;
+  account_other_node_ = nullptr;
+  account_mobile_node_ = nullptr;
+  account_trash_node_ = nullptr; // Vivaldi
+
+  for (const BookmarkNode* node : account_permanent_folders) {
+    RemoveChildAt(node->parent(), node->parent()->GetIndexOf(node).value(),
+                  FROM_HERE, /*source=*/std::nullopt, /*is_undoable=*/false,
+                  notify_observers);
+  }
+}
+
 void BookmarkModel::RemoveNodeFromIndicesRecursive(
     BookmarkNode* node,
     NodeTypeForUuidLookup type_for_uuid_lookup) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  DCHECK(loaded_);
   DCHECK(!is_permanent_node(node));
 
   if (node->is_url()) {
@@ -1554,39 +1636,7 @@ void BookmarkModel::RemoveAccountPermanentFolders() {
   CHECK(AreFoldersForAccountStorageAllowed());
   CHECK(loaded_);
 
-  // No-op if account permanent folders don't exist.
-  if (!account_bookmark_bar_node_) {
-    CHECK(!account_other_node_);
-    CHECK(!account_mobile_node_);
-    CHECK(!account_trash_node_);
-    return;
-  }
-
-  base::ScopedUmaHistogramTimer scoped_timer(
-      "Bookmarks.RemoveAccountPermanentFoldersDuration",
-      base::ScopedUmaHistogramTimer::ScopedHistogramTiming::kMediumTimes);
-
-  CHECK(account_other_node_);
-  CHECK(account_mobile_node_);
-  CHECK(account_trash_node_ || !vivaldi::IsVivaldiRunning());
-
-  // Make a copy of the pointers before deleting the nodes, to avoid raw_ptr
-  // reporting dangling pointers.
-  std::vector<BookmarkNode*> account_permanent_folders{
-      account_mobile_node_, account_other_node_, account_bookmark_bar_node_};
-  if (vivaldi::IsVivaldiRunning()) {
-    account_permanent_folders.push_back(account_trash_node_);
-  }
-
-  account_bookmark_bar_node_ = nullptr;
-  account_other_node_ = nullptr;
-  account_mobile_node_ = nullptr;
-  account_trash_node_ = nullptr;
-
-  for (const BookmarkNode* node : account_permanent_folders) {
-    RemoveChildAt(node->parent(), node->parent()->GetIndexOf(node).value(),
-                  FROM_HERE, /*source=*/std::nullopt, /*is_undoable=*/false);
-  }
+  RemoveAccountPermanentFoldersImpl(/*notify_observers=*/true);
 }
 
 size_t BookmarkModel::GetTotalNumberOfUrlsAndFoldersIncludingManagedNodes()

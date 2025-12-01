@@ -2,11 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
-#pragma allow_unsafe_buffers
-#endif
-
 #include "third_party/blink/renderer/modules/media_capabilities/media_capabilities.h"
 
 #include <memory>
@@ -32,7 +27,7 @@
 #include "media/mojo/mojom/media_metrics_provider.mojom-blink.h"
 #include "media/mojo/mojom/media_types.mojom-blink.h"
 #include "media/video/gpu_video_accelerator_factories.h"
-#include "third_party/blink/public/mojom/permissions_policy/permissions_policy.mojom-blink.h"
+#include "services/network/public/mojom/permissions_policy/permissions_policy_feature.mojom-blink.h"
 #include "third_party/blink/public/mojom/use_counter/metrics/web_feature.mojom-blink.h"
 #include "third_party/blink/public/platform/browser_interface_broker_proxy.h"
 #include "third_party/blink/public/platform/platform.h"
@@ -998,14 +993,6 @@ ScriptPromise<MediaCapabilitiesDecodingInfo> MediaCapabilities::decodingInfo(
                                     &hdr_metadata_type);
   }
 
-  if (config->hasKeySystemConfiguration()) {
-    // GetEmeSupport() will call the VideoDecodePerfHistory service after
-    // receiving info about support for the configuration for encrypted content.
-    return GetEmeSupport(script_state, video_codec, video_profile,
-                         video_color_space, config, request_time,
-                         exception_state);
-  }
-
   bool audio_supported = true;
 
   if (config->hasAudio()) {
@@ -1027,6 +1014,14 @@ ScriptPromise<MediaCapabilitiesDecodingInfo> MediaCapabilities::decodingInfo(
   if (!IsVideoConfigurationSupported(video_mime_str, video_codec_str,
                                      video_color_space, hdr_metadata_type)) {
     return CreateResolvedPromiseToDecodingInfoWith(false, script_state, config);
+  }
+
+  if (config->hasKeySystemConfiguration()) {
+    // GetEmeSupport() will call the VideoDecodePerfHistory service after
+    // receiving info about support for the configuration for encrypted content.
+    return GetEmeSupport(script_state, video_codec, video_profile,
+                         video_color_space, config, request_time,
+                         exception_state);
   }
 
   auto* resolver = MakeGarbageCollected<
@@ -1096,7 +1091,7 @@ ScriptPromise<MediaCapabilitiesInfo> MediaCapabilities::encodingInfo(
               : std::nullopt;
 
       std::optional<webrtc::SdpVideoFormat> sdp_video_format;
-      std::optional<String> scalability_mode;
+      String scalability_mode;
       media::VideoCodecProfile codec_profile =
           media::VIDEO_CODEC_PROFILE_UNKNOWN;
       int video_pixels = 0;
@@ -1104,10 +1099,9 @@ ScriptPromise<MediaCapabilitiesInfo> MediaCapabilities::encodingInfo(
       if (config->hasVideo()) {
         sdp_video_format =
             std::make_optional(ToSdpVideoFormat(config->video()));
-        scalability_mode =
-            config->video()->hasScalabilityMode()
-                ? std::make_optional(config->video()->scalabilityMode())
-                : std::nullopt;
+        if (config->video()->hasScalabilityMode()) {
+          scalability_mode = config->video()->scalabilityMode();
+        }
 
         // Additional information needed for lookup in WebrtcVideoPerfHistory.
         codec_profile =

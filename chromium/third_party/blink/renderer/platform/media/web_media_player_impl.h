@@ -178,7 +178,7 @@ class PLATFORM_EXPORT WebMediaPlayerImpl
 
   // Playback controls.
   void Play() override;
-  void Pause() override;
+  void Pause(PauseReason pause_reason) override;
   void Seek(double seconds) override;
   void SetRate(double rate) override;
   void SetVolume(double volume) override;
@@ -270,6 +270,7 @@ class PLATFORM_EXPORT WebMediaPlayerImpl
   void SetContentDecryptionModule(
       WebContentDecryptionModule* cdm,
       WebContentDecryptionModuleResult result) override;
+  void SetRenderMutedAudio(bool render_muted_audio) override;
 
   void EnteredFullscreen() override;
   void ExitedFullscreen() override;
@@ -602,6 +603,8 @@ class PLATFORM_EXPORT WebMediaPlayerImpl
   bool IsPausedBecausePageHidden() const;
   bool IsPausedBecauseFrameHidden() const;
 
+  bool ShouldResetVisibilityPauseReason(PauseReason pause_reason) const;
+
   // Returns true if the player is in streaming mode, meaning that the source
   // or the demuxer doesn't support timeline or seeking.
   bool IsStreaming() const;
@@ -631,7 +634,7 @@ class PLATFORM_EXPORT WebMediaPlayerImpl
   // Must be called when either of the following happens:
   // - right after the video was hidden,
   // - right after the pipeline has resumed if the video is hidden.
-  void PauseVideoIfNeeded();
+  void PauseVideoIfNeeded(PauseReason pause_reason);
 
   // Disables the video track to save power if possible.
   // Must be called when either of the following happens:
@@ -699,10 +702,10 @@ class PLATFORM_EXPORT WebMediaPlayerImpl
   void RecordEncryptionScheme(const std::string& stream_name,
                               media::EncryptionScheme encryption_scheme);
 
-  // Returns whether the player is currently displayed in Picture-in-Picture.
-  // It will return true even if the player is in AutoPIP mode.
-  // The player MUST have a `client_` when this call happen.
-  bool IsInPictureInPicture() const;
+  // Returns whether the player is currently displayed in video
+  // Picture-in-Picture. It will return true even if the player is in AutoPIP
+  // (Android) mode. The player MUST have a `client_` when this call happen.
+  bool IsInVideoPictureInPicture() const;
 
   // Sets the UKM container name if needed.
   void MaybeSetContainerNameForMetrics();
@@ -813,7 +816,7 @@ class PLATFORM_EXPORT WebMediaPlayerImpl
   // Set if paused automatically when hidden. Reset if paused for any other
   // reason. If set to PauseReason::kPageHidden, playback should be resumed when
   // the page becomes visible.
-  std::optional<MediaPlayerClient::PauseReason> visibility_pause_reason_;
+  std::optional<PauseReason> visibility_pause_reason_;
 
   // Set when starting, seeking, and resuming (all of which require a Pipeline
   // seek). |seek_time_| is only valid when |seeking_| is true.

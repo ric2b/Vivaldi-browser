@@ -12,18 +12,22 @@
 
 #if BUILDFLAG(ENABLE_GLIC)
 namespace glic {
+class GlicButtonController;
 class GlicIphController;
-}
+}  // namespace glic
 #endif
 
 class Browser;
 class BrowserView;
 class BrowserWindowInterface;
 class ChromeLabsCoordinator;
+class HistorySidePanelCoordinator;
 class MemorySaverOptInIPHController;
 class SidePanelCoordinator;
 class SidePanelUI;
+class TabSearchToolbarButtonController;
 class TabStripModel;
+class TranslateBubbleController;
 class ToastController;
 class ToastService;
 class DataSharingOpenGroupHelper;
@@ -57,9 +61,14 @@ namespace media_router {
 class CastBrowserController;
 }  // namespace media_router
 
+namespace memory_saver {
+class MemorySaverBubbleController;
+}  // namespace memory_saver
+
 namespace tab_groups {
 class SessionServiceTabGroupSyncObserver;
-class MostRecentUpdateStore;
+class SharedTabGroupFeedbackController;
+class MostRecentSharedTabUpdateStore;
 }  // namespace tab_groups
 
 namespace send_tab_to_self {
@@ -121,6 +130,10 @@ class BrowserWindowFeatures {
     return cast_browser_controller_.get();
   }
 
+  HistorySidePanelCoordinator* history_side_panel_coordinator() {
+    return history_side_panel_coordinator_.get();
+  }
+
   // TODO(crbug.com/346158959): For historical reasons, side_panel_ui is an
   // abstract base class that contains some, but not all of the public interface
   // of SidePanelCoordinator. One of the accessors side_panel_ui() or
@@ -148,6 +161,7 @@ class BrowserWindowFeatures {
   tabs::GlicNudgeController* glic_nudge_controller() {
     return glic_nudge_controller_.get();
   }
+
   TabStripModel* tab_strip_model() { return tab_strip_model_; }
 
   // Returns a pointer to the ToastController for the browser window. This can
@@ -177,8 +191,26 @@ class BrowserWindowFeatures {
     return download_toolbar_ui_controller_.get();
   }
 
-  tab_groups::MostRecentUpdateStore* most_recent_update_store() {
-    return most_recent_update_store_.get();
+  tab_groups::MostRecentSharedTabUpdateStore*
+  most_recent_shared_tab_update_store() {
+    return most_recent_shared_tab_update_store_.get();
+  }
+
+  memory_saver::MemorySaverBubbleController* memory_saver_bubble_controller() {
+    return memory_saver_bubble_controller_.get();
+  }
+
+  tab_groups::SharedTabGroupFeedbackController*
+  shared_tab_group_feedback_controller() {
+    return shared_tab_group_feedback_controller_.get();
+  }
+
+  TranslateBubbleController* translate_bubble_controller() {
+    return translate_bubble_controller_.get();
+  }
+
+  TabSearchToolbarButtonController* tab_search_toolbar_button_controller() {
+    return tab_search_toolbar_button_controller_.get();
   }
 
   // Vivaldi
@@ -217,6 +249,8 @@ class BrowserWindowFeatures {
   std::unique_ptr<MemorySaverOptInIPHController>
       memory_saver_opt_in_iph_controller_;
 
+  std::unique_ptr<HistorySidePanelCoordinator> history_side_panel_coordinator_;
+
   std::unique_ptr<SidePanelCoordinator> side_panel_coordinator_;
 
   std::unique_ptr<tab_groups::SessionServiceTabGroupSyncObserver>
@@ -239,14 +273,28 @@ class BrowserWindowFeatures {
   std::unique_ptr<tabs::GlicNudgeController> glic_nudge_controller_;
 
 #if BUILDFLAG(ENABLE_GLIC)
+  std::unique_ptr<glic::GlicButtonController> glic_button_controller_;
   std::unique_ptr<glic::GlicIphController> glic_iph_controller_;
 #endif
 
-  std::unique_ptr<tab_groups::MostRecentUpdateStore> most_recent_update_store_;
+  std::unique_ptr<tab_groups::MostRecentSharedTabUpdateStore>
+      most_recent_shared_tab_update_store_;
+
+  std::unique_ptr<memory_saver::MemorySaverBubbleController>
+      memory_saver_bubble_controller_;
+
+  std::unique_ptr<tab_groups::SharedTabGroupFeedbackController>
+      shared_tab_group_feedback_controller_;
+
+  std::unique_ptr<TranslateBubbleController> translate_bubble_controller_;
+
+  std::unique_ptr<TabSearchToolbarButtonController>
+      tab_search_toolbar_button_controller_;
 
   // Vivaldi
   std::unique_ptr<vivaldi::SidePanelCoordinator> vivaldi_side_panel_coordinator_;
   raw_ptr<BrowserWindow> browser_window_;
+  // End Vivaldi
 };
 
 #endif  // CHROME_BROWSER_UI_BROWSER_WINDOW_PUBLIC_BROWSER_WINDOW_FEATURES_H_

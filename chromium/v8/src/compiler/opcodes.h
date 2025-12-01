@@ -287,38 +287,42 @@
   V(TruncateTaggedToBit)             \
   V(TruncateTaggedPointerToBit)
 
-#define SIMPLIFIED_CHECKED_OP_LIST(V) \
-  V(CheckedInt32Add)                  \
-  V(CheckedInt32Sub)                  \
-  V(CheckedInt32Div)                  \
-  V(CheckedInt32Mod)                  \
-  V(CheckedUint32Div)                 \
-  V(CheckedUint32Mod)                 \
-  V(CheckedInt32Mul)                  \
-  V(CheckedInt64Add)                  \
-  V(CheckedInt64Sub)                  \
-  V(CheckedInt64Mul)                  \
-  V(CheckedInt64Div)                  \
-  V(CheckedInt64Mod)                  \
-  V(CheckedInt32ToTaggedSigned)       \
-  V(CheckedInt64ToInt32)              \
-  V(CheckedInt64ToTaggedSigned)       \
-  V(CheckedUint32Bounds)              \
-  V(CheckedUint32ToInt32)             \
-  V(CheckedUint32ToTaggedSigned)      \
-  V(CheckedUint64Bounds)              \
-  V(CheckedUint64ToInt32)             \
-  V(CheckedUint64ToInt64)             \
-  V(CheckedUint64ToTaggedSigned)      \
-  V(CheckedFloat64ToInt32)            \
-  V(CheckedFloat64ToInt64)            \
-  V(CheckedTaggedSignedToInt32)       \
-  V(CheckedTaggedToInt32)             \
-  V(CheckedTaggedToArrayIndex)        \
-  V(CheckedTruncateTaggedToWord32)    \
-  V(CheckedTaggedToFloat64)           \
-  V(CheckedTaggedToInt64)             \
-  V(CheckedTaggedToTaggedSigned)      \
+#define SIMPLIFIED_CHECKED_OP_LIST(V)    \
+  V(CheckedInt32Add)                     \
+  V(CheckedInt32Sub)                     \
+  V(CheckedInt32Div)                     \
+  V(CheckedInt32Mod)                     \
+  V(CheckedUint32Div)                    \
+  V(CheckedUint32Mod)                    \
+  V(CheckedInt32Mul)                     \
+  V(CheckedInt64Add)                     \
+  V(CheckedAdditiveSafeIntegerAdd)       \
+  V(CheckedAdditiveSafeIntegerSub)       \
+  V(CheckedInt64Sub)                     \
+  V(CheckedInt64Mul)                     \
+  V(CheckedInt64Div)                     \
+  V(CheckedInt64Mod)                     \
+  V(CheckedInt32ToTaggedSigned)          \
+  V(CheckedInt64ToInt32)                 \
+  V(CheckedInt64ToTaggedSigned)          \
+  V(CheckedUint32Bounds)                 \
+  V(CheckedUint32ToInt32)                \
+  V(CheckedUint32ToTaggedSigned)         \
+  V(CheckedUint64Bounds)                 \
+  V(CheckedUint64ToInt32)                \
+  V(CheckedUint64ToInt64)                \
+  V(CheckedUint64ToTaggedSigned)         \
+  V(CheckedFloat64ToInt32)               \
+  V(CheckedFloat64ToInt64)               \
+  V(CheckedFloat64ToAdditiveSafeInteger) \
+  V(CheckedTaggedSignedToInt32)          \
+  V(CheckedTaggedToInt32)                \
+  V(CheckedTaggedToArrayIndex)           \
+  V(CheckedTruncateTaggedToWord32)       \
+  V(CheckedTaggedToFloat64)              \
+  V(CheckedTaggedToAdditiveSafeInteger)  \
+  V(CheckedTaggedToInt64)                \
+  V(CheckedTaggedToTaggedSigned)         \
   V(CheckedTaggedToTaggedPointer)
 
 #define SIMPLIFIED_COMPARE_BINOP_LIST(V) \
@@ -385,8 +389,10 @@
   V(SpeculativeNumberShiftLeft)                     \
   V(SpeculativeNumberShiftRight)                    \
   V(SpeculativeNumberShiftRightLogical)             \
-  V(SpeculativeSafeIntegerAdd)                      \
-  V(SpeculativeSafeIntegerSubtract)
+  V(SpeculativeAdditiveSafeIntegerAdd)              \
+  V(SpeculativeAdditiveSafeIntegerSubtract)         \
+  V(SpeculativeSmallIntegerAdd)                     \
+  V(SpeculativeSmallIntegerSubtract)
 
 #define SIMPLIFIED_NUMBER_UNOP_LIST(V) \
   V(NumberAbs)                         \
@@ -422,8 +428,6 @@
   V(NumberToString)                    \
   V(NumberToUint32)                    \
   V(NumberToUint8Clamped)              \
-  V(NumberToFloat16RawBits)            \
-  V(Float16RawBitsToNumber)            \
   V(Integral32OrMinusZeroToBigInt)     \
   V(NumberSilenceNaN)
 
@@ -1139,6 +1143,9 @@
   IF_WASM(V, F32x4AddReduce)              \
   IF_WASM(V, F64x2AddReduce)              \
   IF_WASM(V, I8x16Shuffle)                \
+  IF_WASM(V, I8x8Shuffle)                 \
+  IF_WASM(V, I8x4Shuffle)                 \
+  IF_WASM(V, I8x2Shuffle)                 \
   IF_WASM(V, V128AnyTrue)                 \
   IF_WASM(V, I64x2AllTrue)                \
   IF_WASM(V, I32x4AllTrue)                \

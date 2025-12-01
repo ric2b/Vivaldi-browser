@@ -55,6 +55,9 @@
 #import "ios/chrome/browser/shared/model/profile/profile_ios.h"
 #import "ios/chrome/browser/shared/model/profile/profile_manager_ios.h"
 #import "ios/chrome/browser/shared/model/utils/first_run_util.h"
+#import "ios/chrome/browser/shared/public/commands/application_commands.h"
+#import "ios/chrome/browser/shared/public/commands/command_dispatcher.h"
+#import "ios/chrome/browser/shared/public/commands/settings_commands.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/signin/model/authentication_service.h"
 #import "ios/chrome/browser/signin/model/authentication_service_factory.h"
@@ -89,52 +92,59 @@ enum class PushNotificationLifecycleEvent {
   kMaxValue = kNotificationInteraction
 };
 
+// Extract the notification information from `attr`, and store them into
+// `mapping`. Will also copy the notification permission from the profile's
+// pref into the `attr` if the profile is loaded.
+void ExtractNotificationInformation(ProfileManagerIOS* manager,
+                                    NSMutableDictionary* mapping,
+                                    ProfileAttributesIOS& attr) {
+  const GaiaId& gaia_id = attr.GetGaiaId();
+  if (gaia_id.empty()) {
+    return;
+  }
+
+  // Get the permissions from `attr` but if they are missing, check if they
+  // can be found in the profile (if it is loaded).
+  const base::Value::Dict* permissions = attr.GetNotificationPermissions();
+  if (!permissions) {
+    ProfileIOS* profile = manager->GetProfileWithName(attr.GetProfileName());
+    if (profile) {
+      const base::Value::Dict& profile_permissions =
+          profile->GetPrefs()->GetDict(
+              prefs::kFeaturePushNotificationPermissions);
+      attr.SetNotificationPermissions(profile_permissions.Clone());
+      permissions = attr.GetNotificationPermissions();
+    }
+  }
+
+  // There is no permissions for the profile in attr (or no permission could
+  // be copied from the profile's pref, possibly because the profile is not
+  // yet loaded).
+  if (!permissions) {
+    return;
+  }
+
+  NSMutableDictionary* permissions_map = [[NSMutableDictionary alloc] init];
+  for (const auto pair : *permissions) {
+    permissions_map[base::SysUTF8ToNSString(pair.first)] =
+        [NSNumber numberWithBool:pair.second.GetBool()];
+  }
+
+  mapping[gaia_id.ToNSString()] = permissions_map;
+}
+
 // This function creates a dictionary that maps signed-in user's GAIA IDs to a
 // map of each user's preferences for each push notification enabled feature.
 GaiaIdToPushNotificationPreferenceMap*
 GaiaIdToPushNotificationPreferenceMapFromCache() {
   ProfileManagerIOS* manager = GetApplicationContext()->GetProfileManager();
   ProfileAttributesStorageIOS* storage = manager->GetProfileAttributesStorage();
-  PushNotificationService* service =
-      GetApplicationContext()->GetPushNotificationService();
-  PushNotificationAccountContextManager* account_context_manager =
-      service->GetAccountContextManager();
+
   NSMutableDictionary* account_preference_map =
       [[NSMutableDictionary alloc] init];
 
-  const size_t number_of_profiles = storage->GetNumberOfProfiles();
-  for (size_t i = 0; i < number_of_profiles; i++) {
-    ProfileAttributesIOS attr = storage->GetAttributesForProfileAtIndex(i);
-    if (attr.GetGaiaId().empty()) {
-      continue;
-    }
-
-    const base::Value::Dict* permissions = attr.GetNotificationPermissions();
-    if (!permissions) {
-      std::string profile_name = attr.GetProfileName();
-      ProfileIOS* profile = manager->GetProfileWithName(profile_name);
-      if (profile) {
-        [account_context_manager setAttributesForProfile:profile_name
-                                               fromPrefs:profile->GetPrefs()];
-        permissions = attr.GetNotificationPermissions();
-      }
-    }
-
-    if (!permissions) {
-      // Either the profile is not loaded, or there was not
-      // permissions in the profile prefs.
-      continue;
-    }
-
-    NSMutableDictionary<NSString*, NSNumber*>* preference_map =
-        [[NSMutableDictionary alloc] init];
-    for (const auto pair : *permissions) {
-      preference_map[base::SysUTF8ToNSString(pair.first)] =
-          [NSNumber numberWithBool:pair.second.GetBool()];
-    }
-
-    account_preference_map[attr.GetGaiaId().ToNSString()] = preference_map;
-  }
+  storage->IterateOverProfileAttributes(base::BindRepeating(
+      &ExtractNotificationInformation, manager, account_preference_map));
 
   return account_preference_map;
 }
@@ -167,10 +177,19 @@ void SendNAUFConfigurationForProfileWithSettings(
 @interface PushNotificationDelegate () <AppStateObserver,
                                         ProfileStateObserver,
                                         SceneStateObserver>
+
+// The first connected scene that is foreground active, or nil if there are
+// none.
+@property(nonatomic, readonly) SceneState* foregroundActiveScene;
+
 @end
 
 @implementation PushNotificationDelegate {
   __weak AppState* _appState;
+  // Stores blocks to execute once the app has reached init stage "final".
+  NSMutableArray<ProceduralBlock>* _runAfterInit;
+  // Stores blocks to execute once the app is finished foregrounding.
+  NSMutableArray<ProceduralBlock>* _runAfterForeground;
 }
 
 - (instancetype)initWithAppState:(AppState*)appState {
@@ -186,15 +205,16 @@ void SendNAUFConfigurationForProfileWithSettings(
 - (void)userNotificationCenter:(UNUserNotificationCenter*)center
     didReceiveNotificationResponse:(UNNotificationResponse*)response
              withCompletionHandler:(void (^)(void))completionHandler {
-  [self recordLifeCycleEvent:PushNotificationLifecycleEvent::
-                                 kNotificationInteraction];
   // This method is invoked by iOS to process the user's response to a delivered
   // notification.
-  auto* clientManager = GetApplicationContext()
-                            ->GetPushNotificationService()
-                            ->GetPushNotificationClientManager();
-  DCHECK(clientManager);
-  clientManager->HandleNotificationInteraction(response);
+  [self recordLifeCycleEvent:PushNotificationLifecycleEvent::
+                                 kNotificationInteraction];
+  __weak __typeof(self) weakSelf = self;
+  [self executeWhenInitStageFinal:^{
+    [weakSelf handleNotificationResponse:response];
+  }];
+  // TODO(crbug.com/401537165): Consider changing when completionHandler is
+  // called.
   if (completionHandler) {
     completionHandler();
   }
@@ -223,13 +243,21 @@ void SendNAUFConfigurationForProfileWithSettings(
     // displayed.
     if ([notification.request.content.userInfo[kPushNotificationClientIdKey]
             intValue] == static_cast<int>(PushNotificationClientId::kSendTab) &&
-        [self isSceneLevelForegroundActive]) {
+        self.foregroundActiveScene) {
       completionHandler(UNNotificationPresentationOptionNone);
     }
     completionHandler(UNNotificationPresentationOptionBanner);
   }
   base::UmaHistogramEnumeration(kAppLaunchSource,
                                 AppLaunchSource::NOTIFICATION);
+}
+
+- (void)userNotificationCenter:(UNUserNotificationCenter*)center
+    openSettingsForNotification:(UNNotification*)notification {
+  __weak __typeof(self) weakSelf = self;
+  [self executeWhenForeground:^{
+    [weakSelf openSettingsForNotification:notification];
+  }];
 }
 
 #pragma mark - PushNotificationDelegate
@@ -327,6 +355,16 @@ void SendNAUFConfigurationForProfileWithSettings(
 
 #pragma mark - AppStateObserver
 
+- (void)appState:(AppState*)appState
+    didTransitionFromInitStage:(AppInitStage)previousInitStage {
+  if (appState.initStage == AppInitStage::kFinal && _runAfterInit) {
+    for (ProceduralBlock block in _runAfterInit) {
+      block();
+    }
+    _runAfterInit = nil;
+  }
+}
+
 - (void)appState:(AppState*)appState sceneConnected:(SceneState*)sceneState {
   [sceneState addObserver:self];
   [self sceneState:sceneState
@@ -384,6 +422,10 @@ void SendNAUFConfigurationForProfileWithSettings(
           ->GetPushNotificationClientManager();
   DCHECK(clientManager);
   clientManager->OnSceneActiveForegroundBrowserReady();
+  for (ProceduralBlock block in _runAfterForeground) {
+    block();
+  }
+  _runAfterForeground = nil;
   ProfileIOS* profile = sceneState.browserProviderInterface.mainBrowserProvider
                             .browser->GetProfile();
   if (IsContentNotificationEnabled(profile)) {
@@ -458,8 +500,9 @@ void SendNAUFConfigurationForProfileWithSettings(
          IsContentNotificationRegistered(profile);
 }
 
-// Returns YES if there is a foreground active scene for any profile.
-- (BOOL)isSceneLevelForegroundActive {
+// Returns the first connected foreground active `SceneState`, or nil if there
+// isn't one.
+- (SceneState*)foregroundActiveScene {
   for (SceneState* sceneState in _appState.connectedScenes) {
     if (sceneState.activationLevel < SceneActivationLevelForegroundActive) {
       continue;
@@ -469,10 +512,10 @@ void SendNAUFConfigurationForProfileWithSettings(
       continue;
     }
 
-    return YES;
+    return sceneState;
   }
 
-  return NO;
+  return nil;
 }
 
 // If user has not previously disabled Send Tab notifications, either 1) If user
@@ -514,6 +557,65 @@ void SendNAUFConfigurationForProfileWithSettings(
                                          withAuthService:authService
                                    deviceInfoSyncService:deviceInfoSyncService];
   }
+}
+
+// Runs the given `block` immediately if the app's `initStage` is already
+// final, otherwise stores it to be called when the `initStage is final.
+- (void)executeWhenInitStageFinal:(ProceduralBlock)block {
+  if (_appState.initStage == AppInitStage::kFinal) {
+    block();
+    return;
+  }
+
+  if (!_runAfterInit) {
+    _runAfterInit = [[NSMutableArray alloc] init];
+  }
+  [_runAfterInit addObject:block];
+}
+
+// Runs the given `block` immediately if the app has an active foreground
+// scene connected, otherwise stores it to be called when the app is
+// foregrounded.
+- (void)executeWhenForeground:(ProceduralBlock)block {
+  if (self.foregroundActiveScene) {
+    block();
+    return;
+  }
+
+  if (!_runAfterForeground) {
+    _runAfterForeground = [[NSMutableArray alloc] init];
+  }
+  [_runAfterForeground addObject:block];
+}
+
+// Handles a notification response by sending it to the push notification
+// client manager.
+- (void)handleNotificationResponse:(UNNotificationResponse*)response {
+  DCHECK_GE(_appState.initStage,
+            AppInitStage::kBrowserObjectsForBackgroundHandlers);
+  PushNotificationClientManager* clientManager =
+      GetApplicationContext()
+          ->GetPushNotificationService()
+          ->GetPushNotificationClientManager();
+  clientManager->HandleNotificationInteraction(response);
+}
+
+// Shows the app's notification settings in the first foreground active
+// connected scene. Must only be called when the app has a foreground active
+// scene.
+- (void)openSettingsForNotification:(UNNotification*)notification {
+  SceneState* sceneState = self.foregroundActiveScene;
+  CHECK(sceneState);
+  Browser* browser =
+      sceneState.browserProviderInterface.mainBrowserProvider.browser;
+  CommandDispatcher* dispatcher = browser->GetCommandDispatcher();
+  id<ApplicationCommands> applicationHandler =
+      HandlerForProtocol(dispatcher, ApplicationCommands);
+  id<SettingsCommands> settingsHandler =
+      HandlerForProtocol(dispatcher, SettingsCommands);
+  [applicationHandler prepareToPresentModal:^{
+    [settingsHandler showNotificationsSettings];
+  }];
 }
 
 @end

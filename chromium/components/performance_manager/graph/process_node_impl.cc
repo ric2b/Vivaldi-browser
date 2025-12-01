@@ -6,6 +6,7 @@
 
 #include <optional>
 #include <utility>
+#include <variant>
 
 #include "base/check_op.h"
 #include "base/command_line.h"
@@ -18,7 +19,7 @@
 #include "components/performance_manager/graph/page_node_impl.h"
 #include "components/performance_manager/graph/worker_node_impl.h"
 #include "components/performance_manager/public/execution_context/execution_context_registry.h"
-#include "components/performance_manager/public/scenarios/performance_scenarios.h"
+#include "components/performance_manager/scenarios/browser_performance_scenarios.h"
 #include "components/performance_manager/v8_memory/v8_context_tracker.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
@@ -66,24 +67,18 @@ ProcessNodeImpl::ProcessNodeImpl(content::ProcessType process_type,
     : process_type_(process_type),
       child_process_host_proxy_(std::move(proxy)),
       priority_(priority) {
-  // Nodes are created on the UI thread, then accessed on the PM sequence.
-  // `weak_this_` can be returned from GetWeakPtrOnUIThread() and dereferenced
-  // on the PM sequence.
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-  DETACH_FROM_SEQUENCE(sequence_checker_);
-  weak_this_ = weak_factory_.GetWeakPtr();
-
   // Child process nodes must have a valid proxy.
   switch (process_type) {
     case content::PROCESS_TYPE_BROWSER:
       // Do nothing.
       break;
     case content::PROCESS_TYPE_RENDERER:
-      CHECK(absl::get<RenderProcessHostProxy>(child_process_host_proxy_)
+      CHECK(std::get<RenderProcessHostProxy>(child_process_host_proxy_)
                 .is_valid());
       break;
     default:
-      CHECK(absl::get<BrowserChildProcessHostProxy>(child_process_host_proxy_)
+      CHECK(std::get<BrowserChildProcessHostProxy>(child_process_host_proxy_)
                 .is_valid());
       break;
   }
@@ -159,6 +154,25 @@ void ProcessNodeImpl::OnRemoteIframeAttached(
     mojom::IframeAttributionDataPtr iframe_attribution_data) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK_EQ(process_type_, content::PROCESS_TYPE_RENDERER);
+
+  // Only dispatch if the frame and its parent still exist when the mojo message
+  // reaches the browser process. If the frame still exists but now has no
+  // parent, we don't need to record IframeAttribution data for it since it's
+  // now unreachable.
+  //
+  // An example of this is the custom <webview> element used in Chrome UI
+  // (extensions/renderer/resources/guest_view/web_view/web_view.js). This
+  // element has an inner web contents with an opener relationship to the
+  // webview, but no parent-child relationship. However since it is a custom
+  // element implemented on top of <iframe>, the renderer has no way to
+  // distinguish it from a regular iframe. At the moment the contents is
+  // attached it has a transient parent frame, which is reported through
+  // OnRemoteIframeAttached, but the parent frame disappears shortly
+  // afterward.
+  //
+  // TODO(crbug.com/40132061): Write an end-to-end browsertest that covers
+  // this case once all parts of the measure memory API are hooked up.
+
   if (auto* tracker = v8_memory::V8ContextTracker::GetFromGraph(graph())) {
     auto* ec_registry =
         execution_context::ExecutionContextRegistry::GetFromGraph(graph());
@@ -281,7 +295,7 @@ RenderProcessHostId ProcessNodeImpl::GetRenderProcessHostId() const {
 const RenderProcessHostProxy& ProcessNodeImpl::GetRenderProcessHostProxy()
     const {
   DCHECK_EQ(process_type_, content::PROCESS_TYPE_RENDERER);
-  return absl::get<RenderProcessHostProxy>(child_process_host_proxy_);
+  return std::get<RenderProcessHostProxy>(child_process_host_proxy_);
 }
 
 const BrowserChildProcessHostProxy&
@@ -289,7 +303,7 @@ ProcessNodeImpl::GetBrowserChildProcessHostProxy() const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK_NE(process_type_, content::PROCESS_TYPE_BROWSER);
   DCHECK_NE(process_type_, content::PROCESS_TYPE_RENDERER);
-  return absl::get<BrowserChildProcessHostProxy>(child_process_host_proxy_);
+  return std::get<BrowserChildProcessHostProxy>(child_process_host_proxy_);
 }
 
 base::TaskPriority ProcessNodeImpl::GetPriority() const {
@@ -392,11 +406,6 @@ void ProcessNodeImpl::add_hosted_content_type(ContentType content_type) {
   hosted_content_types_.Put(content_type);
 }
 
-base::WeakPtr<ProcessNodeImpl> ProcessNodeImpl::GetWeakPtrOnUIThread() {
-  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-  return weak_this_;
-}
-
 base::WeakPtr<ProcessNodeImpl> ProcessNodeImpl::GetWeakPtr() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   return weak_factory_.GetWeakPtr();
@@ -450,12 +459,6 @@ void ProcessNodeImpl::OnAllFramesInProcessFrozen() {
 
 void ProcessNodeImpl::OnInitializingProperties() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-
-  // Make sure all weak pointers, even `weak_this_` that was created on the UI
-  // thread in the constructor, can only be dereferenced on the graph sequence.
-  weak_factory_.BindToCurrentSequence(
-      base::subtle::BindWeakPtrFactoryPassKey());
-
   NodeAttachedDataStorage::Create(this);
 }
 

@@ -554,6 +554,14 @@ inline void MaglevAssembler::OrInt32(Register reg, int mask) {
   orl(reg, Immediate(mask));
 }
 
+inline void MaglevAssembler::AndInt32(Register reg, Register other) {
+  andl(reg, other);
+}
+
+inline void MaglevAssembler::OrInt32(Register reg, Register other) {
+  orl(reg, other);
+}
+
 inline void MaglevAssembler::ShiftLeft(Register reg, int amount) {
   shll(reg, Immediate(amount));
 }
@@ -953,6 +961,11 @@ inline void MaglevAssembler::EmitEagerDeoptStress(Label* target) {
   }
 
   ExternalReference counter = ExternalReference::stress_deopt_count(isolate());
+  // The following code assumes that `Isolate::stress_deopt_count_` is 8 bytes
+  // wide.
+  static constexpr size_t kSizeofRAX = 8;
+  static_assert(sizeof(decltype(*isolate()->stress_deopt_count_address())) ==
+                kSizeofRAX);
 
   Label fallthrough;
   pushfq();

@@ -16,7 +16,6 @@
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
-#include "build/chromeos_buildflags.h"
 #include "chrome/browser/media/webrtc/capture_policy_utils.h"
 #include "chrome/browser/media/webrtc/desktop_capture_devices_util.h"
 #include "chrome/browser/media/webrtc/desktop_media_picker_controller.h"
@@ -55,13 +54,11 @@
 #include "third_party/blink/public/mojom/mediastream/media_stream.mojom.h"
 #include "third_party/webrtc/modules/desktop_capture/desktop_capture_types.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "ui/gfx/native_widget_types.h"
 #include "url/origin.h"
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
-#include "ash/shell.h"
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
-
 #if BUILDFLAG(IS_CHROMEOS)
+#include "ash/shell.h"
 #include "chrome/browser/chromeos/policy/dlp/dlp_content_manager.h"
 #include "ui/base/ui_base_features.h"
 #endif  // BUILDFLAG(IS_CHROMEOS)
@@ -120,7 +117,7 @@ gfx::NativeWindow FindParentWindowForWebContents(
       return app_window->GetNativeWindow();
   }
 
-  return nullptr;
+  return gfx::NativeWindow();
 }
 #endif
 
@@ -280,17 +277,12 @@ void DesktopCaptureAccessHandler::ProcessScreenCaptureAccessRequest(
           DesktopMediaPicker::Params::RequestSource::kExtension);
 
 #if BUILDFLAG(IS_CHROMEOS)
-#if BUILDFLAG(IS_CHROMEOS_ASH)
   const content::DesktopMediaID screen_id =
       content::DesktopMediaID::RegisterNativeWindow(
           content::DesktopMediaID::TYPE_SCREEN,
           primary_root_window_for_testing_
               ? primary_root_window_for_testing_.get()
               : ash::Shell::Get()->GetPrimaryRootWindow());
-#elif BUILDFLAG(IS_CHROMEOS_LACROS)
-  const content::DesktopMediaID screen_id = content::DesktopMediaID(
-      content::DesktopMediaID::TYPE_SCREEN, webrtc::kFullDesktopScreenId);
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
   // base::Unretained(this) is safe because DesktopCaptureAccessHandler is owned
   // by MediaCaptureDevicesDispatcher, which is a lazy singleton which is

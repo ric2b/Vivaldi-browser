@@ -34,6 +34,7 @@
 #include "content/public/browser/page.h"
 #include "content/public/browser/page_navigator.h"
 #include "content/public/browser/prefetch_handle.h"
+#include "content/public/browser/preload_pipeline_info.h"
 #include "content/public/browser/preloading.h"
 #include "content/public/browser/preloading_trigger_type.h"
 #include "content/public/browser/prerender_handle.h"
@@ -66,6 +67,8 @@
 #if BUILDFLAG(IS_ANDROID)
 #include "third_party/jni_zero/jni_zero.h"
 #endif
+
+class StorageAccessGrantPermissionContext;
 
 namespace base {
 class FilePath;
@@ -418,6 +421,7 @@ class WebContents : public PageNavigator, public base::SupportsUserData {
   // Gets the NavigationController for primary frame tree of this WebContents.
   // See comments on NavigationController for more details.
   virtual NavigationController& GetController() = 0;
+  virtual const NavigationController& GetController() const = 0;
 
   // Returns the user browser context associated with this WebContents (via the
   // NavigationController).
@@ -444,7 +448,7 @@ class WebContents : public PageNavigator, public base::SupportsUserData {
   // See also GetVisibleURL above, which may differ from this URL. Note that
   // this might return an empty GURL if no navigation has committed in the
   // WebContents' main frame.
-  virtual const GURL& GetLastCommittedURL() = 0;
+  virtual const GURL& GetLastCommittedURL() const = 0;
 
   // Returns the primary main frame for the currently active page. Always
   // non-null except during WebContents destruction. This WebContents may
@@ -1551,6 +1555,8 @@ class WebContents : public PageNavigator, public base::SupportsUserData {
   //   perspectives. Normally it should be nullopt and then the opaque origin is
   //   used internally, but if necessary, custom value from trusted surfaces can
   //   be embedded into it here.
+  // - `preload_pipeline_info` is used to designate what pipeline this prefetch
+  //   belongs to.
   // - `attempt` is used to record some metrics associated with this prefetch
   //   request.
   // - `holdback_status_override` is used to override holdback status, if
@@ -1563,6 +1569,8 @@ class WebContents : public PageNavigator, public base::SupportsUserData {
       bool use_prefetch_proxy,
       const blink::mojom::Referrer& referrer,
       const std::optional<url::Origin>& referring_origin,
+      std::optional<net::HttpNoVarySearchData> no_vary_search_hint,
+      scoped_refptr<PreloadPipelineInfo> preload_pipeline_info,
       base::WeakPtr<PreloadingAttempt> attempt,
       std::optional<PreloadingHoldbackStatus> holdback_status_override) = 0;
 
@@ -1591,6 +1599,7 @@ class WebContents : public PageNavigator, public base::SupportsUserData {
       bool should_warm_up_compositor,
       bool should_prepare_paint_tree,
       PreloadingHoldbackStatus holdback_status_override,
+      scoped_refptr<PreloadPipelineInfo> preload_pipeline_info,
       PreloadingAttempt* preloading_attempt,
       base::RepeatingCallback<bool(const GURL&,
                                    const std::optional<UrlMatchType>&)>
@@ -1651,9 +1660,18 @@ class WebContents : public PageNavigator, public base::SupportsUserData {
   // be bound.
   virtual net::handles::NetworkHandle GetTargetNetwork() = 0;
 
-  // Disconnect any outstanding `FileSelectListener` so that any calls will be
-  // no-op.
-  virtual void DisconnectFileSelectListenerIfAny() = 0;
+  // Returns true if `this` is a partitioned popin. If you are calling this to
+  // check if a `RenderFrameHost` should be partitioned due to being in a popin,
+  // check `ShouldPartitionAsPopin` on that host instead.
+  // See https://explainers-by-googlers.github.io/partitioned-popins/
+  virtual bool IsPartitionedPopin() const = 0;
+
+  // Returns the origin of the popin's opener if this is a partitioned popin.
+  // CHECKS if this is not a partitioned popin, as it should never be called
+  // in that case. This is used in permissions checks.
+  // See https://explainers-by-googlers.github.io/partitioned-popins/
+  virtual GURL GetPartitionedPopinEmbedderOrigin(
+      base::PassKey<StorageAccessGrantPermissionContext>) const = 0;
 
  private:
   // This interface should only be implemented inside content.

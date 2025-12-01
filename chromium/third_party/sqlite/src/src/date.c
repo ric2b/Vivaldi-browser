@@ -222,6 +222,9 @@ static int parseHhMmSs(const char *zDate, DateTime *p){
         zDate++;
       }
       ms /= rScale;
+      /* Truncate to avoid problems with sub-milliseconds
+      ** rounding. https://sqlite.org/forum/forumpost/766a2c9231 */
+      if( ms>0.999 ) ms = 0.999;
     }
   }else{
     s = 0;
@@ -271,8 +274,8 @@ static void computeJD(DateTime *p){
     Y--;
     M += 12;
   }
-  A = Y/100;
-  B = 2 - A + (A/4);
+  A = (Y+4800)/100;
+  B = 38 - A + (A/4);
   X1 = 36525*(Y+4716)/100;
   X2 = 306001*(M+1)/10000;
   p->iJD = (sqlite3_int64)((X1 + X2 + D + B - 1524.5 ) * 86400000);
@@ -456,7 +459,7 @@ static int validJulianDay(sqlite3_int64 iJD){
 ** Compute the Year, Month, and Day from the julian day number.
 */
 static void computeYMD(DateTime *p){
-  int Z, A, B, C, D, E, X1;
+  int Z, alpha, A, B, C, D, E, X1;
   if( p->validYMD ) return;
   if( !p->validJD ){
     p->Y = 2000;
@@ -467,8 +470,8 @@ static void computeYMD(DateTime *p){
     return;
   }else{
     Z = (int)((p->iJD + 43200000)/86400000);
-    A = (int)((Z - 1867216.25)/36524.25);
-    A = Z + 1 + A - (A/4);
+    alpha = (int)((Z + 32044.75)/36524.25) - 52;
+    A = Z + 1 + alpha - ((alpha+100)/4) + 25;
     B = A + 1524;
     C = (int)((B - 122.1)/365.25);
     D = (36525*(C&32767))/100;
@@ -667,8 +670,8 @@ static const struct {
   /* 1 */ { 6, "minute",   7.7379e+12,        60.0  },
   /* 2 */ { 4, "hour",     1.2897e+11,      3600.0  },
   /* 3 */ { 3, "day",      5373485.0,      86400.0  },
-  /* 4 */ { 5, "month",    176546.0,  30.0*86400.0  },
-  /* 5 */ { 4, "year",     14713.0,  365.0*86400.0  },
+  /* 4 */ { 5, "month",    176546.0,     2592000.0  },
+  /* 5 */ { 4, "year",     14713.0,     31536000.0  },
 };
 
 /*
@@ -1429,7 +1432,7 @@ static void strftimeFunc(
       }
       case 'f': {  /* Fractional seconds.  (Non-standard) */
         double s = x.s;
-        if( s>59.999 ) s = 59.999;
+        if( NEVER(s>59.999) ) s = 59.999;
         sqlite3_str_appendf(&sRes, "%06.3f", s);
         break;
       }

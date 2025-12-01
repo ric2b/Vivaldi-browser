@@ -15,11 +15,9 @@
 #include <memory>
 #include <utility>
 
-#include "absl/base/nullability.h"
 #include "api/environment/environment.h"
 #include "api/media_types.h"
 #include "api/sequence_checker.h"
-#include "api/transport/network_control.h"
 #include "api/units/data_rate.h"
 #include "api/units/time_delta.h"
 #include "api/units/timestamp.h"
@@ -83,13 +81,6 @@ void ReceiveSideCongestionController::PickEstimator(
     }
   }
 }
-
-ReceiveSideCongestionController::ReceiveSideCongestionController(
-    const Environment& env,
-    TransportSequenceNumberFeedbackGenenerator::RtcpSender feedback_sender,
-    RembThrottler::RembSender remb_sender,
-    absl::Nullable<NetworkStateEstimator*> /* unused */)
-    : ReceiveSideCongestionController(env, feedback_sender, remb_sender) {}
 
 ReceiveSideCongestionController::ReceiveSideCongestionController(
     const Environment& env,

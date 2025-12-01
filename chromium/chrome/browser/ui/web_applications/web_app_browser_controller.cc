@@ -53,6 +53,7 @@
 #include "ui/gfx/image/image.h"
 #include "ui/native_theme/native_theme.h"
 #include "url/gurl.h"
+#include "url/origin.h"
 
 #if BUILDFLAG(IS_CHROMEOS)
 #include "ash/constants/ash_features.h"
@@ -103,24 +104,6 @@ base::OnceClosure& IconLoadCallbackForTesting() {
 base::OnceClosure& ManifestUpdateAppliedCallbackForTesting() {
   static base::NoDestructor<base::OnceClosure> callback;
   return *callback;
-}
-
-// Returns the list of patterns to match URLs against for tabbed mode home
-// tab navigations.
-std::vector<TabbedModeScopeMatcher> CreateTabbedHomeTabScope(
-    const WebApp* web_app) {
-  std::vector<TabbedModeScopeMatcher> matchers;
-  if (!web_app) {
-    return matchers;
-  }
-  TabStrip tab_strip = web_app->tab_strip().value();
-  if (const auto* params =
-          absl::get_if<blink::Manifest::HomeTabParams>(&tab_strip.home_tab)) {
-    for (auto& pattern : params->scope_patterns) {
-      matchers.emplace_back(pattern);
-    }
-  }
-  return matchers;
 }
 
 }  // namespace
@@ -487,42 +470,7 @@ bool WebAppBrowserController::ShouldHideNewTabButton() const {
 }
 
 bool WebAppBrowserController::IsUrlInHomeTabScope(const GURL& url) const {
-  if (!registrar().IsTabbedWindowModeEnabled(app_id())) {
-    return false;
-  }
-
-  if (!IsUrlInAppScope(url)) {
-    return false;
-  }
-
-  // Retrieve the start URL for the app. Start URL is always in home tab scope.
-  // TODO(b/330640982): rename GetAppPinnedHomeTabUrl() to something more
-  // sensible.
-  std::optional<GURL> pinned_home_url =
-      registrar().GetAppPinnedHomeTabUrl(app_id());
-  if (!pinned_home_url) {
-    return false;
-  }
-
-  // We ignore hash ref when deciding what should be opened as the home tab.
-  GURL::Replacements replacements;
-  replacements.ClearRef();
-  if (url.ReplaceComponents(replacements) ==
-      pinned_home_url.value().ReplaceComponents(replacements)) {
-    return true;
-  }
-
-  if (!home_tab_scope_) {
-    home_tab_scope_ = std::make_unique<std::vector<TabbedModeScopeMatcher>>(
-        CreateTabbedHomeTabScope(registrar().GetAppById(app_id())));
-  }
-
-  for (auto& matcher : *home_tab_scope_) {
-    if (matcher.Match(url)) {
-      return true;
-    }
-  }
-  return false;
+  return registrar().IsUrlInHomeTabScope(url, app_id());
 }
 
 bool WebAppBrowserController::ShouldShowAppIconOnTab(int index) const {
@@ -563,7 +511,7 @@ bool WebAppBrowserController::IsUrlInAppScope(const GURL& url) const {
   // https://w3c.github.io/manifest/#navigation-scope
   // If url is same origin as scope and url path starts with scope path, return
   // true. Otherwise, return false.
-  if (app_scope.DeprecatedGetOriginAsURL() != url.DeprecatedGetOriginAsURL()) {
+  if (!url::IsSameOriginWith(app_scope, url)) {
     // We allow an upgrade from http |app_scope| to https |url|.
     if (app_scope.scheme() != url::kHttpScheme) {
       return false;
@@ -572,12 +520,22 @@ bool WebAppBrowserController::IsUrlInAppScope(const GURL& url) const {
     GURL::Replacements rep;
     rep.SetSchemeStr(url::kHttpsScheme);
     GURL secure_app_scope = app_scope.ReplaceComponents(rep);
-    if (secure_app_scope.DeprecatedGetOriginAsURL() !=
-        url.DeprecatedGetOriginAsURL()) {
+    if (!url::IsSameOriginWith(secure_app_scope, url)) {
       return false;
     }
   }
+  // Past here, the url and scope must be same-origin.
 
+  // For scopes without paths, return 'true' early (allowing blobs to be in
+  // scope).
+  if (!app_scope.has_path() || app_scope.path() == "/") {
+    return true;
+  }
+  if (url.scheme() == url::kBlobScheme) {
+    // Blobs can only be in-scope in the above case where the app scope doesn't
+    // have a path.
+    return false;
+  }
   std::string scope_path = app_scope.path();
   std::string url_path = url.path();
   return base::StartsWith(url_path, scope_path, base::CompareCase::SENSITIVE);

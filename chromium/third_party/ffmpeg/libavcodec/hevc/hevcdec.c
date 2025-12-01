@@ -28,6 +28,7 @@
 #include "libavutil/attributes.h"
 #include "libavutil/avstring.h"
 #include "libavutil/common.h"
+#include "libavutil/container_fifo.h"
 #include "libavutil/film_grain_params.h"
 #include "libavutil/internal.h"
 #include "libavutil/md5.h"
@@ -41,7 +42,6 @@
 #include "bswapdsp.h"
 #include "cabac_functions.h"
 #include "codec_internal.h"
-#include "container_fifo.h"
 #include "decode.h"
 #include "golomb.h"
 #include "hevc.h"
@@ -52,7 +52,7 @@
 #include "internal.h"
 #include "profiles.h"
 #include "progressframe.h"
-#include "refstruct.h"
+#include "libavutil/refstruct.h"
 #include "thread.h"
 #include "threadprogress.h"
 
@@ -92,8 +92,8 @@ static void pic_arrays_free(HEVCLayerContext *l)
         av_freep(&l->sao_pixel_buffer_v[i]);
     }
 
-    ff_refstruct_pool_uninit(&l->tab_mvf_pool);
-    ff_refstruct_pool_uninit(&l->rpl_tab_pool);
+    av_refstruct_pool_uninit(&l->tab_mvf_pool);
+    av_refstruct_pool_uninit(&l->rpl_tab_pool);
 }
 
 /* allocate arrays that depend on frame dimensions */
@@ -139,8 +139,8 @@ static int pic_arrays_init(HEVCLayerContext *l, const HEVCSPS *sps)
     if (!l->horizontal_bs || !l->vertical_bs)
         goto fail;
 
-    l->tab_mvf_pool = ff_refstruct_pool_alloc(min_pu_size * sizeof(MvField), 0);
-    l->rpl_tab_pool = ff_refstruct_pool_alloc(ctb_count   * sizeof(RefPicListTab), 0);
+    l->tab_mvf_pool = av_refstruct_pool_alloc(min_pu_size * sizeof(MvField), 0);
+    l->rpl_tab_pool = av_refstruct_pool_alloc(ctb_count   * sizeof(RefPicListTab), 0);
     if (!l->tab_mvf_pool || !l->rpl_tab_pool)
         goto fail;
 
@@ -403,8 +403,12 @@ static int export_stream_params_from_sei(HEVCContext *s)
 {
     AVCodecContext *avctx = s->avctx;
 
+#if FF_API_CODEC_PROPS
+FF_DISABLE_DEPRECATION_WARNINGS
     if (s->sei.common.a53_caption.buf_ref)
         s->avctx->properties |= FF_CODEC_PROPERTY_CLOSED_CAPTIONS;
+FF_ENABLE_DEPRECATION_WARNINGS
+#endif
 
     if (s->sei.common.alternative_transfer.present &&
         av_color_transfer_name(s->sei.common.alternative_transfer.preferred_transfer_characteristics) &&
@@ -412,12 +416,13 @@ static int export_stream_params_from_sei(HEVCContext *s)
         avctx->color_trc = s->sei.common.alternative_transfer.preferred_transfer_characteristics;
     }
 
-    if ((s->sei.common.film_grain_characteristics &&
-         s->sei.common.film_grain_characteristics->present) ||
-        (s->sei.common.aom_film_grain &&
-         s->sei.common.aom_film_grain->enable)) {
-      avctx->properties |= FF_CODEC_PROPERTY_FILM_GRAIN;
-    }
+#if FF_API_CODEC_PROPS
+FF_DISABLE_DEPRECATION_WARNINGS
+    if ((s->sei.common.film_grain_characteristics && s->sei.common.film_grain_characteristics->present) ||
+        s->sei.common.aom_film_grain.enable)
+        avctx->properties |= FF_CODEC_PROPERTY_FILM_GRAIN;
+FF_ENABLE_DEPRECATION_WARNINGS
+#endif
 
     return 0;
 }
@@ -680,8 +685,8 @@ static int set_sps(HEVCContext *s, HEVCLayerContext *l, const HEVCSPS *sps)
     int ret;
 
     pic_arrays_free(l);
-    ff_refstruct_unref(&l->sps);
-    ff_refstruct_unref(&s->vps);
+    av_refstruct_unref(&l->sps);
+    av_refstruct_unref(&s->vps);
 
     if (!sps)
         return 0;
@@ -694,14 +699,14 @@ static int set_sps(HEVCContext *s, HEVCLayerContext *l, const HEVCSPS *sps)
     ff_hevc_dsp_init (&s->hevcdsp, sps->bit_depth);
     ff_videodsp_init (&s->vdsp,    sps->bit_depth);
 
-    l->sps    = ff_refstruct_ref_c(sps);
-    s->vps    = ff_refstruct_ref_c(sps->vps);
+    l->sps    = av_refstruct_ref_c(sps);
+    s->vps    = av_refstruct_ref_c(sps->vps);
 
     return 0;
 
 fail:
     pic_arrays_free(l);
-    ff_refstruct_unref(&l->sps);
+    av_refstruct_unref(&l->sps);
     return ret;
 }
 
@@ -3090,14 +3095,11 @@ static int set_side_data(HEVCContext *s)
         return ret;
 
     if (s->sei.common.dynamic_hdr_vivid.info) {
-        AVBufferRef *info_ref = av_buffer_ref(s->sei.common.dynamic_hdr_vivid.info);
-        if (!info_ref)
+        if (!av_frame_side_data_add(&out->side_data, &out->nb_side_data,
+                                    AV_FRAME_DATA_DYNAMIC_HDR_VIVID,
+                                    &s->sei.common.dynamic_hdr_vivid.info,
+                                    AV_FRAME_SIDE_DATA_FLAG_NEW_REF))
             return AVERROR(ENOMEM);
-
-        if (!av_frame_new_side_data_from_buf(out, AV_FRAME_DATA_DYNAMIC_HDR_VIVID, info_ref)) {
-            av_buffer_unref(&info_ref);
-            return AVERROR(ENOMEM);
-        }
     }
 
     return 0;
@@ -3165,7 +3167,7 @@ static int hevc_frame_start(HEVCContext *s, HEVCLayerContext *l,
         return AVERROR_INVALIDDATA;
     }
 
-    ff_refstruct_replace(&s->pps, pps);
+    av_refstruct_replace(&s->pps, pps);
     if (l->sps != sps) {
         const HEVCSPS *sps_base = s->layers[0].sps;
         enum AVPixelFormat pix_fmt = sps->pix_fmt;
@@ -3754,7 +3756,7 @@ static int hevc_receive_frame(AVCodecContext *avctx, AVFrame *frame)
 
     s->pkt_dts = AV_NOPTS_VALUE;
 
-    if (ff_container_fifo_can_read(s->output_fifo))
+    if (av_container_fifo_can_read(s->output_fifo))
         goto do_output;
 
     av_packet_unref(avpkt);
@@ -3792,7 +3794,7 @@ static int hevc_receive_frame(AVCodecContext *avctx, AVFrame *frame)
         return ret;
 
 do_output:
-    if (ff_container_fifo_read(s->output_fifo, frame) >= 0) {
+    if (av_container_fifo_read(s->output_fifo, frame, 0) >= 0) {
         if (!(avctx->export_side_data & AV_CODEC_EXPORT_DATA_FILM_GRAIN))
             av_frame_remove_side_data(frame, AV_FRAME_DATA_FILM_GRAIN_PARAMS);
 
@@ -3817,10 +3819,10 @@ static int hevc_ref_frame(HEVCFrame *dst, const HEVCFrame *src)
         dst->needs_fg = 1;
     }
 
-    dst->pps     = ff_refstruct_ref_c(src->pps);
-    dst->tab_mvf = ff_refstruct_ref(src->tab_mvf);
-    dst->rpl_tab = ff_refstruct_ref(src->rpl_tab);
-    dst->rpl = ff_refstruct_ref(src->rpl);
+    dst->pps     = av_refstruct_ref_c(src->pps);
+    dst->tab_mvf = av_refstruct_ref(src->tab_mvf);
+    dst->rpl_tab = av_refstruct_ref(src->rpl_tab);
+    dst->rpl = av_refstruct_ref(src->rpl);
     dst->nb_rpl_elems = src->nb_rpl_elems;
 
     dst->poc        = src->poc;
@@ -3829,7 +3831,7 @@ static int hevc_ref_frame(HEVCFrame *dst, const HEVCFrame *src)
 
     dst->base_layer_frame = src->base_layer_frame;
 
-    ff_refstruct_replace(&dst->hwaccel_picture_private,
+    av_refstruct_replace(&dst->hwaccel_picture_private,
                           src->hwaccel_picture_private);
 
     return 0;
@@ -3841,18 +3843,18 @@ static av_cold int hevc_decode_free(AVCodecContext *avctx)
 
     for (int i = 0; i < FF_ARRAY_ELEMS(s->layers); i++) {
         pic_arrays_free(&s->layers[i]);
-        ff_refstruct_unref(&s->layers[i].sps);
+        av_refstruct_unref(&s->layers[i].sps);
     }
 
-    ff_refstruct_unref(&s->vps);
-    ff_refstruct_unref(&s->pps);
+    av_refstruct_unref(&s->vps);
+    av_refstruct_unref(&s->pps);
 
     ff_dovi_ctx_unref(&s->dovi_ctx);
     av_buffer_unref(&s->rpu_buf);
 
     av_freep(&s->md5_ctx);
 
-    ff_container_fifo_free(&s->output_fifo);
+    av_container_fifo_free(&s->output_fifo);
 
     for (int layer = 0; layer < FF_ARRAY_ELEMS(s->layers); layer++) {
         HEVCLayerContext *l = &s->layers[layer];
@@ -3896,7 +3898,7 @@ static av_cold int hevc_init_context(AVCodecContext *avctx)
     s->local_ctx[0].logctx = avctx;
     s->local_ctx[0].common_cabac_state = &s->cabac;
 
-    s->output_fifo = ff_container_fifo_alloc_avframe(0);
+    s->output_fifo = av_container_fifo_alloc_avframe(0);
     if (!s->output_fifo)
         return AVERROR(ENOMEM);
 
@@ -3951,16 +3953,16 @@ static int hevc_update_thread_context(AVCodecContext *dst,
     }
 
     for (int i = 0; i < FF_ARRAY_ELEMS(s->ps.vps_list); i++)
-        ff_refstruct_replace(&s->ps.vps_list[i], s0->ps.vps_list[i]);
+        av_refstruct_replace(&s->ps.vps_list[i], s0->ps.vps_list[i]);
 
     for (int i = 0; i < FF_ARRAY_ELEMS(s->ps.sps_list); i++)
-        ff_refstruct_replace(&s->ps.sps_list[i], s0->ps.sps_list[i]);
+        av_refstruct_replace(&s->ps.sps_list[i], s0->ps.sps_list[i]);
 
     for (int i = 0; i < FF_ARRAY_ELEMS(s->ps.pps_list); i++)
-        ff_refstruct_replace(&s->ps.pps_list[i], s0->ps.pps_list[i]);
+        av_refstruct_replace(&s->ps.pps_list[i], s0->ps.pps_list[i]);
 
     // PPS do not persist between frames
-    ff_refstruct_unref(&s->pps);
+    av_refstruct_unref(&s->pps);
 
     s->poc_tid0   = s0->poc_tid0;
     s->eos        = s0->eos;

@@ -4,6 +4,8 @@
 
 #include "base/test/scoped_feature_list.h"
 #include "base/test/test_future.h"
+#include "build/buildflag.h"
+#include "cc/base/features.h"
 #include "cc/test/pixel_comparator.h"
 #include "cc/test/pixel_test_utils.h"
 #include "components/viz/host/host_frame_sink_manager.h"
@@ -400,11 +402,13 @@ class ViewTransitionCaptureTest
       public ::testing::WithParamInterface<std::string> {
  public:
   ViewTransitionCaptureTest() {
-    EnablePixelOutput();
+    EnablePixelOutput(1.f);
     feature_list_.InitWithFeatures(
         /*enabled_features=*/
-        {viz::mojom::EnableVizTestApis},
-        /*disabled_features=*/{});
+        {viz::mojom::EnableVizTestApis,
+         features::kViewTransitionCaptureAndDisplay},
+        /*disabled_features=*/
+        {blink::features::kPaintHolding});
   }
 
   void SetUpOnMainThread() override {
@@ -439,14 +443,17 @@ class ViewTransitionCaptureTest
 };
 
 IN_PROC_BROWSER_TEST_P(ViewTransitionCaptureTest,
-                       DISABLED_ViewTransitionNoArtifactDuringCapture) {
+                       ViewTransitionNoArtifactDuringCapture) {
   GURL test_url(embedded_test_server()->GetURL(GetParam()));
   auto* web_contents = shell()->web_contents();
-  web_contents->Resize({0, 0, 20, 20});
   ASSERT_TRUE(NavigateToURL(web_contents, test_url));
+  shell()->ResizeWebContentForTests(gfx::Size(20, 20));
+
   ASSERT_EQ(EvalJs(web_contents, JsReplace(R"(
             new Promise(resolve => {
-              requestAnimationFrame(() => resolve("ok"));
+              requestAnimationFrame(() => {
+                requestAnimationFrame(() => resolve("ok"));
+              });
             }))")),
             "ok");
   WaitForCopyableViewInWebContents(shell()->web_contents());
@@ -454,14 +461,14 @@ IN_PROC_BROWSER_TEST_P(ViewTransitionCaptureTest,
 
   // Sanity to see that we've captured something.
   ASSERT_NE(before_bitmap.getColor(5, 5), 0u);
-  // This starts a view transition with a "hanging" promise that never resolves.
-  // When the view-transition callback is called, we resolve the external
-  // promise that signals us that it's time to capture.
+  // This starts a view transition with a callback that signals that we're ok
+  // to capture, but otherwise never finishes running the callback.
   ASSERT_EQ(EvalJs(web_contents, JsReplace(R"(
-              new Promise(ready_to_capture => {
-                document.startViewTransition(() => new Promise(() => {
-                    ready_to_capture('ok');
-                }));
+              new Promise(dom_callback_started => {
+                document.startViewTransition(async () => {
+                  dom_callback_started('ok');
+                  await new Promise(() => {});
+                });
               }))")),
             "ok");
   WaitForSurfaceAnimationManager(
@@ -469,8 +476,14 @@ IN_PROC_BROWSER_TEST_P(ViewTransitionCaptureTest,
   auto after_bitmap = TakeScreenshot();
   ASSERT_EQ(before_bitmap.width(), after_bitmap.width());
   ASSERT_EQ(before_bitmap.height(), after_bitmap.height());
-  EXPECT_TRUE(cc::MatchesBitmap(after_bitmap, before_bitmap,
-                                cc::ExactPixelComparator()));
+
+  cc::FuzzyPixelComparator comparator;
+  // Allow 50% of pixels to different by at most 3 in all channels.
+  // The small differences on some platforms seem to be noise, and don't
+  // invalidate the test intent.
+  comparator.SetAbsErrorLimit(255, 3);
+  comparator.SetErrorPixelsPercentageLimit(0, 50);
+  EXPECT_TRUE(cc::MatchesBitmap(after_bitmap, before_bitmap, comparator));
 }
 
 INSTANTIATE_TEST_SUITE_P(

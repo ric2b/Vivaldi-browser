@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <utility>
+#include <variant>
 #include <vector>
 
 #include "base/containers/contains.h"
@@ -18,8 +19,8 @@
 #include "base/types/cxx23_to_underlying.h"
 #include "components/autofill/core/browser/autofill_field.h"
 #include "components/autofill/core/browser/autofill_type.h"
-#include "components/autofill/core/browser/data_model/autofill_offer_data.h"
-#include "components/autofill/core/browser/data_model/credit_card.h"
+#include "components/autofill/core/browser/data_model/payments/autofill_offer_data.h"
+#include "components/autofill/core/browser/data_model/payments/credit_card.h"
 #include "components/autofill/core/browser/data_quality/autofill_data_util.h"
 #include "components/autofill/core/browser/data_quality/validation.h"
 #include "components/autofill/core/browser/field_type_utils.h"
@@ -37,6 +38,7 @@
 #include "components/autofill/core/common/autofill_prefs.h"
 #include "components/autofill/core/common/form_data.h"
 #include "components/autofill/core/common/form_interactions_flow.h"
+#include "components/autofill/core/common/metrics_enums.h"
 #include "components/language/core/browser/language_usage_metrics.h"
 #include "services/metrics/public/cpp/metrics_utils.h"
 #include "services/metrics/public/cpp/ukm_builders.h"
@@ -292,6 +294,8 @@ std::string_view AutofillMetrics::GetDialogTypeStringForLogging(
       return "CardInfoRetrievalEnrolledUnmask";
     case AutofillProgressDialogType::k3dsFetchVcnProgressDialog:
       return "3dsFetchVirtualCard";
+    case AutofillProgressDialogType::kBnplFetchVcnProgressDialog:
+      return "BnplFetchVirtualCard";
     case AutofillProgressDialogType::kUnspecified:
       NOTREACHED();
   }
@@ -1269,9 +1273,9 @@ void AutofillMetrics::LogAutofillFieldInfoAfterSubmission(
     ukm::builders::Autofill2_FieldInfoAfterSubmission builder(source_id);
     builder
         .SetFormSessionIdentifier(
-            AutofillMetrics::FormGlobalIdToHash64Bit(form.global_id()))
+            autofill_metrics::FormGlobalIdToHash64Bit(form.global_id()))
         .SetFieldSessionIdentifier(
-            AutofillMetrics::FieldGlobalIdToHash64Bit(field->global_id()));
+            autofill_metrics::FieldGlobalIdToHash64Bit(field->global_id()));
 
     const FieldTypeSet& type_set = field->possible_types();
     if (!type_set.empty()) {
@@ -1490,9 +1494,9 @@ const std::string PaymentsRpcResultToMetricsSuffix(PaymentsRpcResult result) {
 
 // static
 std::string AutofillMetrics::GetHistogramStringForCardType(
-    absl::variant<PaymentsRpcCardType, CreditCard::RecordType> card_type) {
-  if (absl::holds_alternative<PaymentsRpcCardType>(card_type)) {
-    switch (absl::get<PaymentsRpcCardType>(card_type)) {
+    std::variant<PaymentsRpcCardType, CreditCard::RecordType> card_type) {
+  if (std::holds_alternative<PaymentsRpcCardType>(card_type)) {
+    switch (std::get<PaymentsRpcCardType>(card_type)) {
       case PaymentsRpcCardType::kServerCard:
         return ".ServerCard";
       case PaymentsRpcCardType::kVirtualCard:
@@ -1501,8 +1505,8 @@ std::string AutofillMetrics::GetHistogramStringForCardType(
         DUMP_WILL_BE_NOTREACHED();
         break;
     }
-  } else if (absl::holds_alternative<CreditCard::RecordType>(card_type)) {
-    switch (absl::get<CreditCard::RecordType>(card_type)) {
+  } else if (std::holds_alternative<CreditCard::RecordType>(card_type)) {
+    switch (std::get<CreditCard::RecordType>(card_type)) {
       case CreditCard::RecordType::kFullServerCard:
       case CreditCard::RecordType::kMaskedServerCard:
         return ".ServerCard";
@@ -1537,19 +1541,24 @@ void AutofillMetrics::LogDeleteAddressProfileFromKeyboardAccessory() {
 }
 
 // static
-uint64_t AutofillMetrics::FormGlobalIdToHash64Bit(
-    const FormGlobalId& form_global_id) {
-  return StrToHash64Bit(
-      base::NumberToString(form_global_id.renderer_id.value()) +
-      form_global_id.frame_token.ToString());
+void AutofillMetrics::LogDataListSuggestionsShown() {
+  base::UmaHistogramEnumeration(
+      "Autofill.DataList.Events",
+      AutofillDataListEvents::kDataListSuggestionsShown);
 }
 
 // static
-uint64_t AutofillMetrics::FieldGlobalIdToHash64Bit(
-    const FieldGlobalId& field_global_id) {
-  return StrToHash64Bit(
-      base::NumberToString(field_global_id.renderer_id.value()) +
-      field_global_id.frame_token.ToString());
+void AutofillMetrics::LogDataListSuggestionsUpdated() {
+  base::UmaHistogramEnumeration(
+      "Autofill.DataList.Events",
+      AutofillDataListEvents::kDataListSuggestionsUpdated);
+}
+
+// static
+void AutofillMetrics::LogDataListSuggestionsInserted() {
+  base::UmaHistogramEnumeration(
+      "Autofill.DataList.Events",
+      AutofillDataListEvents::kDataListSuggestionsInserted);
 }
 
 }  // namespace autofill

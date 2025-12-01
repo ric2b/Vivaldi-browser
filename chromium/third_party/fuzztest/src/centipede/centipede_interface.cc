@@ -38,7 +38,6 @@
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/ascii.h"
-#include "absl/strings/numbers.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_format.h"
 #include "absl/strings/str_join.h"
@@ -209,10 +208,10 @@ int Fuzz(const Environment &env, const BinaryInfo &binary_info,
         csv_appender.ReportCurrStats();
       },
       PeriodicAction::Options{
-          .sleep_before_each =
-              [](size_t iteration) {
-                return absl::Minutes(std::clamp(iteration, 0UL, 10UL));
-              },
+          /*sleep_before_each=*/
+          [](size_t iteration) {
+            return absl::Minutes(std::clamp(iteration, 0UL, 10UL));
+          },
       });
   if (!envs.front().experiment.empty() || ABSL_VLOG_IS_ON(1)) {
     stats_reporters.emplace_back(
@@ -220,10 +219,10 @@ int Fuzz(const Environment &env, const BinaryInfo &binary_info,
           logger.ReportCurrStats();
         },
         PeriodicAction::Options{
-            .sleep_before_each =
-                [](size_t iteration) {
-                  return absl::Seconds(std::clamp(iteration, 5UL, 600UL));
-                },
+            /*sleep_before_each=*/
+            [](size_t iteration) {
+              return absl::Seconds(std::clamp(iteration, 5UL, 600UL));
+            },
         });
   }
 
@@ -306,10 +305,10 @@ absl::flat_hash_set<std::string> PruneOldCrashesAndGetRemainingCrashMetadata(
     const bool is_reproducible = !scoped_callbacks.callbacks()->Execute(
         env.binary, {crashing_input}, batch_result);
     const bool is_duplicate =
-        is_reproducible &&
+        is_reproducible && !batch_result.IsSetupFailure() &&
         !remaining_crash_metadata.insert(batch_result.failure_description())
              .second;
-    if (!is_reproducible || is_duplicate) {
+    if (!is_reproducible || batch_result.IsSetupFailure() || is_duplicate) {
       CHECK_OK(RemotePathDelete(crashing_input_file, /*recursively=*/false));
     } else {
       CHECK_OK(RemotePathTouchExistingFile(crashing_input_file));
@@ -318,6 +317,7 @@ absl::flat_hash_set<std::string> PruneOldCrashesAndGetRemainingCrashMetadata(
   return remaining_crash_metadata;
 }
 
+// TODO(b/405382531): Add unit tests once the function is unit-testable.
 void DeduplicateAndStoreNewCrashes(
     const std::filesystem::path &crashing_dir, const WorkDir &workdir,
     size_t total_shards, absl::flat_hash_set<std::string> crash_metadata) {
@@ -339,12 +339,19 @@ void DeduplicateAndStoreNewCrashes(
       const std::string crash_metadata_file =
           crash_metadata_dir / crashing_input_file_name;
       std::string new_crash_metadata;
-      CHECK_OK(RemoteFileGetContents(crash_metadata_file, new_crash_metadata));
+      const absl::Status status =
+          RemoteFileGetContents(crash_metadata_file, new_crash_metadata);
+      if (!status.ok()) {
+        LOG(WARNING) << "Ignoring crashing input " << crashing_input_file_name
+                     << " due to failure to read the crash metadata file: "
+                     << status;
+        continue;
+      }
       const bool is_duplicate =
           !crash_metadata.insert(new_crash_metadata).second;
       if (is_duplicate) continue;
       CHECK_OK(
-          RemotePathRename(crashing_input_file,
+          RemoteFileRename(crashing_input_file,
                            (crashing_dir / crashing_input_file_name).c_str()));
     }
   }
@@ -436,6 +443,11 @@ int UpdateCorpusDatabaseForFuzzTests(
           ? std::filesystem::path()
           : std::filesystem::path(fuzztest_config.stats_root) /
                 fuzztest_config.binary_identifier;
+  const auto workdir_root_path =
+      fuzztest_config.workdir_root.empty()
+          ? corpus_database_path
+          : std::filesystem::path(fuzztest_config.workdir_root) /
+                fuzztest_config.binary_identifier;
   const auto execution_stamp = [] {
     std::string stamp =
         absl::FormatTime("%Y-%m-%d-%H-%M-%S", absl::Now(), absl::UTCTimeZone());
@@ -464,7 +476,7 @@ int UpdateCorpusDatabaseForFuzzTests(
   const auto base_workdir_path =
       is_workdir_specified
           ? std::filesystem::path{}  // Will not be used.
-          : corpus_database_path /
+          : workdir_root_path /
                 absl::StrFormat("workdir%s.%03d",
                                 fuzztest_config.only_replay ? "-replay" : "",
                                 test_shard_index);
@@ -642,7 +654,7 @@ int UpdateCorpusDatabaseForFuzzTests(
     if (!stats_root_path.empty()) {
       const auto stats_dir = stats_root_path / fuzz_tests_to_run[i];
       CHECK_OK(RemoteMkdir(stats_dir.c_str()));
-      CHECK_OK(RemotePathRename(
+      CHECK_OK(RemoteFileRename(
           workdir.FuzzingStatsPath(),
           (stats_dir / absl::StrCat("fuzzing_stats_", execution_stamp))
               .c_str()));
@@ -667,7 +679,7 @@ int UpdateCorpusDatabaseForFuzzTests(
       const std::string file_name =
           std::filesystem::path(corpus_file).filename();
       CHECK_OK(
-          RemotePathRename(corpus_file, (coverage_dir / file_name).c_str()));
+          RemoteFileRename(corpus_file, (coverage_dir / file_name).c_str()));
     }
 
     // Deduplicate and update the crashing inputs.
@@ -679,6 +691,70 @@ int UpdateCorpusDatabaseForFuzzTests(
                                   std::move(crash_metadata));
   }
 
+  return EXIT_SUCCESS;
+}
+
+int ReplayCrash(const Environment &env,
+                const fuzztest::internal::Configuration &target_config,
+                CentipedeCallbacksFactory &callbacks_factory) {
+  CHECK(!env.crash_id.empty()) << "Need crash_id to be set for replay a crash";
+  CHECK(target_config.fuzz_tests_in_current_shard.size() == 1)
+      << "Expecting exactly one test for replay_crash";
+  // TODO: b/406003594 - move the path construction to a libarary.
+  const auto crash_dir = std::filesystem::path(target_config.corpus_database) /
+                         target_config.binary_identifier /
+                         target_config.fuzz_tests_in_current_shard[0] /
+                         "crashing";
+  const WorkDir workdir{env};
+  SeedCorpusSource crash_corpus_source;
+  crash_corpus_source.dir_glob = crash_dir;
+  crash_corpus_source.num_recent_dirs = 1;
+  crash_corpus_source.individual_input_rel_glob = env.crash_id;
+  crash_corpus_source.sampled_fraction_or_count = 1.0f;
+  const SeedCorpusConfig crash_corpus_config = {
+      /*sources=*/{crash_corpus_source},
+      /*destination=*/{
+          /*dir_path=*/env.workdir,
+          /*shard_rel_glob=*/
+          std::filesystem::path{workdir.CorpusFilePaths().AllShardsGlob()}
+              .filename(),
+          /*shard_index_digits=*/WorkDir::kDigitsInShardIndex,
+          /*num_shards=*/1}};
+  CHECK_OK(GenerateSeedCorpusFromConfig(crash_corpus_config, env.binary_name,
+                                        env.binary_hash));
+  Environment run_crash_env = env;
+  run_crash_env.load_shards_only = true;
+  return Fuzz(run_crash_env, {}, "", callbacks_factory);
+}
+
+int ExportCrash(const Environment &env,
+                const fuzztest::internal::Configuration &target_config) {
+  CHECK(!env.crash_id.empty())
+      << "Need crash_id to be set for exporting a crash";
+  CHECK(!env.export_crash_file.empty())
+      << "Need export_crash_file to be set for exporting a crash";
+  CHECK(target_config.fuzz_tests_in_current_shard.size() == 1)
+      << "Expecting exactly one test for exporting a crash";
+  // TODO: b/406003594 - move the path construction to a libarary.
+  const auto crash_dir = std::filesystem::path(target_config.corpus_database) /
+                         target_config.binary_identifier /
+                         target_config.fuzz_tests_in_current_shard[0] /
+                         "crashing";
+  std::string crash_contents;
+  const auto read_status =
+      RemoteFileGetContents((crash_dir / env.crash_id).c_str(), crash_contents);
+  if (!read_status.ok()) {
+    LOG(ERROR) << "Failed reading the crash " << env.crash_id << " from "
+               << crash_dir.c_str() << ": " << read_status;
+    return EXIT_FAILURE;
+  }
+  const auto write_status =
+      RemoteFileSetContents(env.export_crash_file, crash_contents);
+  if (!write_status.ok()) {
+    LOG(ERROR) << "Failed write the crash " << env.crash_id << " to "
+               << env.export_crash_file << ": " << write_status;
+    return EXIT_FAILURE;
+  }
   return EXIT_SUCCESS;
 }
 
@@ -729,7 +805,10 @@ int CentipedeMain(const Environment &env,
   // We don't update the corpus database for standalone binaries (i.e., when
   // `env.has_input_wildcards` is true).
   if (!env.binary.empty() && !env.has_input_wildcards) {
-    const absl::StatusOr<std::string> serialized_target_config = [&] {
+    const auto serialized_target_config = [&]() -> absl::StatusOr<std::string> {
+      if (!env.fuzztest_configuration.empty()) {
+        return env.fuzztest_configuration;
+      }
       ScopedCentipedeCallbacks scoped_callbacks(callbacks_factory, env);
       return scoped_callbacks.callbacks()->GetSerializedTargetConfig();
     }();
@@ -740,6 +819,15 @@ int CentipedeMain(const Environment &env,
       CHECK_OK(target_config.status())
           << "Failed to deserialize target configuration";
       if (!target_config->corpus_database.empty()) {
+        CHECK(!env.replay_crash || !env.export_crash)
+            << "replay_crash and export_crash cannot be both set";
+        if (env.replay_crash) {
+          return ReplayCrash(env, *target_config, callbacks_factory);
+        }
+        if (env.export_crash) {
+          return ExportCrash(env, *target_config);
+        }
+
         const auto time_limit_per_test = target_config->GetTimeLimitPerTest();
         CHECK(target_config->only_replay ||
               time_limit_per_test < absl::InfiniteDuration())

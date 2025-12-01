@@ -1,0 +1,21 @@
+# Copyright (c) 2025 Vivaldi Technologies AS. All rights reserved
+
+import("//ios/web/public/js_messaging/optimize_js.gni")
+
+source_set("background_audio") {
+  sources = [
+    "background_audio_tab_helper.h",
+    "background_audio_tab_helper.mm",
+  ]
+
+  deps = [
+    ":background_audio_js",
+    "//base",
+    "//components/prefs",
+  ]
+}
+
+optimize_js("background_audio_js") {
+  primary_script = "resources/background_audio.js"
+  sources = [ "resources/background_audio.js" ]
+}

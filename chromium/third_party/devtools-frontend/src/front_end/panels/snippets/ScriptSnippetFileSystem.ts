@@ -23,7 +23,7 @@ const UIStrings = {
    *@example {example.url} PH1
    */
   linkedTo: 'Linked to {PH1}',
-};
+} as const;
 const str_ = i18n.i18n.registerUIStrings('panels/snippets/ScriptSnippetFileSystem.ts', UIStrings);
 const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
 
@@ -39,7 +39,9 @@ export class SnippetFileSystem extends Persistence.PlatformFileSystem.PlatformFi
   private readonly lastSnippetIdentifierSetting: Common.Settings.Setting<number>;
   private readonly snippetsSetting: Common.Settings.Setting<Snippet[]>;
   constructor() {
-    super('snippet://' as Platform.DevToolsPath.UrlString, 'snippets');
+    super(
+        'snippet://' as Platform.DevToolsPath.UrlString, Persistence.PlatformFileSystem.PlatformFileSystemType.SNIPPETS,
+        false);
     this.lastSnippetIdentifierSetting =
         Common.Settings.Settings.instance().createSetting('script-snippets-last-identifier', 0);
     this.snippetsSetting = Common.Settings.Settings.instance().createSetting('script-snippets', []);
@@ -50,8 +52,9 @@ export class SnippetFileSystem extends Persistence.PlatformFileSystem.PlatformFi
     return savedSnippets.map(snippet => escapeSnippetName(snippet.name));
   }
 
-  override async createFile(_path: Platform.DevToolsPath.EncodedPathString, _name: Platform.DevToolsPath.RawPathString|null):
-      Promise<Platform.DevToolsPath.EncodedPathString|null> {
+  override async createFile(
+      _path: Platform.DevToolsPath.EncodedPathString,
+      _name: Platform.DevToolsPath.RawPathString|null): Promise<Platform.DevToolsPath.EncodedPathString|null> {
     const nextId = this.lastSnippetIdentifierSetting.get() + 1;
     this.lastSnippetIdentifierSetting.set(nextId);
 
@@ -203,7 +206,8 @@ export function isSnippetsUISourceCode(uiSourceCode: Workspace.UISourceCode.UISo
 
 export function isSnippetsProject(project: Workspace.Workspace.Project): boolean {
   return project.type() === Workspace.Workspace.projectTypes.FileSystem &&
-      Persistence.FileSystemWorkspaceBinding.FileSystemWorkspaceBinding.fileSystemType(project) === 'snippets';
+      Persistence.FileSystemWorkspaceBinding.FileSystemWorkspaceBinding.fileSystemType(project) ===
+      Persistence.PlatformFileSystem.PlatformFileSystemType.SNIPPETS;
 }
 
 export function findSnippetsProject(): Workspace.Workspace.Project {

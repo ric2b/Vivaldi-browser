@@ -215,11 +215,12 @@ export class ActivityLogHistoryElement extends CrLitElement {
     };
   }
 
-  extensionId: string = '';
-  delegate: ActivityLogDelegate = new DummyActivityLogDelegate();
-  protected activityData_: ActivityGroup[] = [];
-  private pageState_: ActivityLogPageState = ActivityLogPageState.LOADING;
-  private lastSearch_: string = '';
+  accessor extensionId: string = '';
+  accessor delegate: ActivityLogDelegate = new DummyActivityLogDelegate();
+  protected accessor activityData_: ActivityGroup[] = [];
+  private accessor pageState_: ActivityLogPageState =
+      ActivityLogPageState.LOADING;
+  private accessor lastSearch_: string = '';
 
   /**
    * A promise resolver for any external files waiting for the
@@ -277,18 +278,17 @@ export class ActivityLogHistoryElement extends CrLitElement {
   }
 
   protected onMoreActionsClick_() {
-    const moreButton = this.shadowRoot!.querySelector('cr-icon-button');
+    const moreButton = this.shadowRoot.querySelector('cr-icon-button');
     assert(moreButton);
-    this.shadowRoot!.querySelector('cr-action-menu')!.showAt(moreButton);
+    this.shadowRoot.querySelector('cr-action-menu')!.showAt(moreButton);
   }
 
   private expandItems_(expanded: boolean) {
     // Do not use .filter here as we need the original index of the item
     // in |activityData_|.
-    const items =
-        this.shadowRoot!.querySelectorAll('activity-log-history-item');
+    const items = this.shadowRoot.querySelectorAll('activity-log-history-item');
     items.forEach(item => item.expand(expanded));
-    this.shadowRoot!.querySelector('cr-action-menu')!.close();
+    this.shadowRoot.querySelector('cr-action-menu')!.close();
   }
 
   protected onExpandAllClick_() {

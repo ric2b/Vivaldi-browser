@@ -34,8 +34,13 @@ enum class NudgeDecision {
   // The page was eligible for the nudge, but the user was currently being
   // presented the IPH.
   kNudgeNotShownIPH = 9,
+  // The page was eligible for the nudge, but the user already has the feature
+  // window open.
+  kNudgeNotShownWindowShowing = 10,
+  // User closes the tab/window as a nudge decision is being computed.
+  kNudgeDecisionInterrupted = 11,
   // New values above this line.
-  kMaxValue = kNudgeNotShownIPH,
+  kMaxValue = kNudgeDecisionInterrupted,
 };
 // LINT.ThenChange(/tools/metrics/histograms/metadata/contextual_cueing/enums.xml:NudgeDecision)
 

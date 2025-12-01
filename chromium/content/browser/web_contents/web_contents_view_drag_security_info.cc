@@ -24,7 +24,7 @@ void WebContentsViewDragSecurityInfo::OnDragInitiated(
   image_accessible_from_frame_ = drop_data.file_contents_image_accessible;
 
   // Used in Vivaldi.
-  source_rwh_ = source_rwh;
+  source_rwh_ = source_rwh->GetWeakPtr();
 }
 
 void WebContentsViewDragSecurityInfo::OnDragEnded() {
@@ -33,7 +33,7 @@ void WebContentsViewDragSecurityInfo::OnDragEnded() {
   image_accessible_from_frame_ = true;
 
   // Used in Vivaldi.
-  source_rwh_ = nullptr;
+  source_rwh_.reset();
 }
 
 bool WebContentsViewDragSecurityInfo::IsImageAccessibleFromFrame() const {
@@ -68,7 +68,7 @@ bool WebContentsViewDragSecurityInfo::IsValidDragTarget(
 
   if (vivaldi::IsVivaldiRunning()) {
     auto* source_web_contents =
-        content::WebContentsImpl::FromRenderWidgetHostImpl(source_rwh_);
+        content::WebContentsImpl::FromRenderWidgetHostImpl(source_rwh_.get());
     auto* target_web_contents =
         content::WebContentsImpl::FromRenderWidgetHostImpl(target_rwh);
 

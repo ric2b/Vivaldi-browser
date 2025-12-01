@@ -18,9 +18,7 @@ export interface InsightDetails {
 export class InsightActivated extends Event {
   static readonly eventName = 'insightactivated';
 
-  constructor(
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      public model: InsightModel<any>, public insightSetKey: string) {
+  constructor(public model: InsightModel, public insightSetKey: string) {
     super(InsightActivated.eventName, {bubbles: true, composed: true});
   }
 }
@@ -50,7 +48,7 @@ export class InsightProvideOverlays extends Event {
   static readonly eventName = 'insightprovideoverlays';
 
   constructor(
-      public overlays: Array<Overlays.Overlays.TimelineOverlay>,
+      public overlays: Overlays.Overlays.TimelineOverlay[],
       public options: Overlays.Overlays.TimelineOverlaySetOptions) {
     super(InsightProvideOverlays.eventName, {bubbles: true, composed: true});
   }

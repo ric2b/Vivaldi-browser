@@ -153,6 +153,7 @@ class StubXrJavaCoordinator : public XrJavaCoordinator {
     NOTREACHED();
   }
   void EndSession() override {}
+  void EndSession(JavaShutdownCallback destroyed_callback) override {}
 
   bool EnsureARCoreLoaded() override { return true; }
 
@@ -220,6 +221,12 @@ class StubCompositorFrameSink
   void ForceImmediateDrawAndSwapIfPossible() override {}
   void SetVSyncPaused(bool paused) override {}
   void UpdateRefreshRate(float refresh_rate) override {}
+  void SetAdaptiveRefreshRateInfo(
+      bool has_support,
+      float suggested_normal,
+      float suggested_high,
+      const std::vector<float>& supported_refresh_rates,
+      float device_scale_factor) override {}
   void SetSupportedRefreshRates(
       const std::vector<float>& supported_refresh_rates) override {}
   void PreserveChildSurfaceControls() override {}

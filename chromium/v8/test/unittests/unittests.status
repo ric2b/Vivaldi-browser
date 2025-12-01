@@ -312,13 +312,13 @@
 ##############################################################################
 # Behavioural differences between Maglev and Turbofan when the former is used
 # for OptimizeFunctionOnNextCall.
-['variant in (stress_maglev, stress_maglev_future, stress_maglev_no_turbofan, maglev_no_turbofan)', {
+['variant in (stress_maglev, stress_maglev_non_eager_inlining, stress_maglev_future, stress_maglev_no_turbofan, maglev_no_turbofan)', {
   # Maglev doesn't support compiler::NodeObserver machinery.
   'SloppyEqualityTest.SloppyEqualityTest': [FAIL],
   # Maglev doesn't produce optimized enough code to trigger expected
   # deoptimization.
   'FeedbackVectorTest.VectorCallSpeculationModeAndFeedbackContent': [FAIL],
-}],  # variant in (stress_maglev, stress_maglev_future, stress_maglev_no_turbofan, maglev_no_turbofan)
+}],  # variant in (stress_maglev, stress_maglev_non_eager_inlining, stress_maglev_future, stress_maglev_no_turbofan, maglev_no_turbofan)
 
 ##############################################################################
 ['system == windows', {
@@ -342,11 +342,6 @@
   # https://crbug.com/374300658
   'SandboxTest.*': [SKIP],
 }],  # 'device_type == bullhead'
-
-##############################################################################
-['variant == stress_pinning_scavenger', {
-  'ExperimentalFlagImplication/ExperimentalFlagImplicationTest.TestExperimentalNotEnabled/*': [SKIP],
-}],  # variant == stress_pinning_scavenger
 
 ##############################################################################
 ['simulator_run', {

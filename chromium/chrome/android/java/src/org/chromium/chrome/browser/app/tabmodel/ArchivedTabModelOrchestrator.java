@@ -6,6 +6,7 @@ package org.chromium.chrome.browser.app.tabmodel;
 
 import android.content.Context;
 
+import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 
 import org.chromium.base.ApplicationState;
@@ -73,6 +74,7 @@ public class ArchivedTabModelOrchestrator extends TabModelOrchestrator implement
     }
 
     private static ProfileKeyedMap<ArchivedTabModelOrchestrator> sProfileMap;
+    private static ArchivedTabModelOrchestrator sInstanceForTesting;
 
     // TODO(crbug.com/333572160): Rely on PKM destroy infra when it's working.
     @VisibleForTesting
@@ -90,7 +92,11 @@ public class ArchivedTabModelOrchestrator extends TabModelOrchestrator implement
             new TabArchiveSettings.Observer() {
                 @Override
                 public void onSettingChanged() {
-                    if (!mTabArchiveSettings.getArchiveEnabled()) {
+                    // In the case where CTA was destroyed in the background, skip rescuing
+                    // archived tabs. It will be picked up when CTA is re-created, and the tab
+                    // model orchestrator is re-registered.
+                    if (!mTabArchiveSettings.getArchiveEnabled()
+                            && mActivityTabModelOrchestrators.size() > 0) {
                         rescueArchivedTabs(mActivityTabModelOrchestrators.get(0));
                     }
                 }
@@ -101,6 +107,14 @@ public class ArchivedTabModelOrchestrator extends TabModelOrchestrator implement
                 @Override
                 public void onDeclutterPassCompleted() {
                     saveState();
+                }
+
+                @Override
+                public void onArchivePersistedTabDataCreated() {
+                    if (mTriggerAutodeleteAfterDataCreated) {
+                        mTabArchiver.doAutodeletePass();
+                        mTriggerAutodeleteAfterDataCreated = false;
+                    }
                 }
             };
 
@@ -131,7 +145,8 @@ public class ArchivedTabModelOrchestrator extends TabModelOrchestrator implement
     private boolean mRescueTabsCalled;
     private CallbackController mCallbackController = new CallbackController();
     private ObservableSupplier<Integer> mUnderlyingTabCountSupplier;
-    private HistoricalTabModelObserver mHistoricalTabModelObserver;
+    private @Nullable HistoricalTabModelObserver mHistoricalTabModelObserver;
+    private boolean mTriggerAutodeleteAfterDataCreated;
 
     /**
      * Returns the ArchivedTabModelOrchestrator that corresponds to the given profile. Must be
@@ -141,6 +156,10 @@ public class ArchivedTabModelOrchestrator extends TabModelOrchestrator implement
      * @return The corresponding {@link ArchivedTabModelOrchestrator}.
      */
     public static ArchivedTabModelOrchestrator getForProfile(Profile profile) {
+        if (sInstanceForTesting != null) {
+            return sInstanceForTesting;
+        }
+
         if (sProfileMap == null) {
             ThreadUtils.assertOnUiThread();
             sProfileMap =
@@ -249,7 +268,8 @@ public class ArchivedTabModelOrchestrator extends TabModelOrchestrator implement
      */
     public void registerTabModelOrchestrator(TabbedModeTabModelOrchestrator orchestrator) {
         mActivityTabModelOrchestrators.add(orchestrator);
-        if (ChromeFeatureList.sAndroidTabDeclutter.isEnabled()) {
+        if (ChromeFeatureList.sAndroidTabDeclutter.isEnabled()
+                && mTabArchiveSettings.getArchiveEnabled()) {
             doDeclutterPassAndScheduleNext(new WeakReference<>(orchestrator));
         } else {
             rescueArchivedTabs(orchestrator);
@@ -394,7 +414,7 @@ public class ArchivedTabModelOrchestrator extends TabModelOrchestrator implement
     private void doDeclutterPassImpl(TabbedModeTabModelOrchestrator orchestrator) {
         if (!mTabArchiveSettings.getArchiveEnabled()) return;
         assert ChromeFeatureList.sAndroidTabDeclutter.isEnabled();
-        disableSaveTabList(orchestrator);
+        pauseSaveTabList(orchestrator);
 
         int archiveTimeHours = mTabArchiveSettings.getArchiveTimeDeltaHours();
         if (ChromeFeatureList.sAndroidTabDeclutterArchiveAllButActiveTab.isEnabled()) {
@@ -409,16 +429,12 @@ public class ArchivedTabModelOrchestrator extends TabModelOrchestrator implement
                                 .isEnabled()) {
                             mTabArchiveSettings.setArchiveTimeDeltaHours(archiveTimeHours);
                         }
-                        enableSaveTabListAndSave(orchestrator);
-                    }
-
-                    @Override
-                    public void onArchivePersistedTabDataCreated() {
-                        mTabArchiver.doAutodeletePass();
+                        resumeSaveTabList(orchestrator);
                         mTabArchiver.removeObserver(this);
                     }
                 });
 
+        mTriggerAutodeleteAfterDataCreated = true;
         mTabArchiver.doArchivePass(orchestrator.getTabModelSelector());
     }
 
@@ -441,17 +457,25 @@ public class ArchivedTabModelOrchestrator extends TabModelOrchestrator implement
 
     private void rescueArchivedTabsImpl(TabbedModeTabModelOrchestrator orchestrator) {
         assert ChromeFeatureList.sAndroidTabDeclutterRescueKillSwitch.isEnabled();
-        disableSaveTabList(orchestrator);
+        pauseSaveTabList(orchestrator);
         mTabArchiver.rescueArchivedTabs(
                 orchestrator
                         .getTabModelSelector()
                         .getTabCreatorManager()
                         .getTabCreator(/* incognito= */ false));
-        enableSaveTabListAndSave(orchestrator);
+        resumeSaveTabList(orchestrator);
     }
 
     public void initializeHistoricalTabModelObserver(Supplier<TabModel> regularTabModelSupplier) {
-        mHistoricalTabModelObserver.addSecodaryTabModelSupplier(regularTabModelSupplier);
+        if (mHistoricalTabModelObserver != null) {
+            mHistoricalTabModelObserver.addSecondaryTabModelSupplier(regularTabModelSupplier);
+        }
+    }
+
+    public void removeHistoricalTabModelObserver(Supplier<TabModel> regularTabModelSupplier) {
+        if (mHistoricalTabModelObserver != null) {
+            mHistoricalTabModelObserver.removeSecondaryTabModelSupplier(regularTabModelSupplier);
+        }
     }
 
     // TabModelOrchestrator lifecycle methods.
@@ -510,18 +534,16 @@ public class ArchivedTabModelOrchestrator extends TabModelOrchestrator implement
 
     // Private methods
 
-    private void disableSaveTabList(TabbedModeTabModelOrchestrator orchestrator) {
+    private void pauseSaveTabList(TabbedModeTabModelOrchestrator orchestrator) {
         // Temporarily disable #saveTabListAsynchronously while running a bulk operation.
-        orchestrator.getTabPersistentStore().setSkipSaveTabList(true);
-        mTabPersistentStore.setSkipSaveTabList(true);
+        orchestrator.getTabPersistentStore().pauseSaveTabList();
+        mTabPersistentStore.pauseSaveTabList();
     }
 
-    private void enableSaveTabListAndSave(TabbedModeTabModelOrchestrator orchestrator) {
-        // Temporarily disable #saveTabListAsynchronously while running a bulk operation.
-        orchestrator.getTabPersistentStore().setSkipSaveTabList(false);
-        orchestrator.getTabPersistentStore().saveTabListAsynchronously();
-        mTabPersistentStore.setSkipSaveTabList(false);
-        mTabPersistentStore.saveTabListAsynchronously();
+    private void resumeSaveTabList(TabbedModeTabModelOrchestrator orchestrator) {
+        // Re-enable #saveTabListAsynchronously after running a bulk operation.
+        orchestrator.getTabPersistentStore().resumeSaveTabList();
+        mTabPersistentStore.resumeSaveTabList();
     }
 
     // Testing-specific methods
@@ -537,5 +559,9 @@ public class ArchivedTabModelOrchestrator extends TabModelOrchestrator implement
 
     public void setTabModelSelectorForTesting(TabModelSelectorBase tabModelSelector) {
         mTabModelSelector = tabModelSelector;
+    }
+
+    public static void setInstanceForTesting(ArchivedTabModelOrchestrator instance) {
+        sInstanceForTesting = instance;
     }
 }

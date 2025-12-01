@@ -146,6 +146,7 @@ class FakeServiceEndpointResolver : public HostResolver {
       NetworkAnonymizationKey network_anonymization_key,
       NetLogWithSource net_log,
       ResolveHostParameters parameters) override;
+  bool IsHappyEyeballsV3Enabled() const override;
 
  private:
   std::list<std::unique_ptr<FakeServiceEndpointRequest>> requests_;
@@ -209,9 +210,15 @@ class FakeStreamSocket : public MockClientSocket {
   bool WasEverUsed() const override;
   bool GetSSLInfo(SSLInfo* ssl_info) override;
 
+  // Simulate a situation where a connected socket immediately disconnects after
+  // checking IsConnected(). This could happen in the real world.
+  void DisconnectAfterIsConnectedCall();
+
  private:
   bool is_idle_ = true;
   bool was_ever_used_ = false;
+  bool disconnect_after_is_connected_call_ = false;
+  mutable std::optional<bool> is_connected_override_;
   std::optional<SSLInfo> ssl_info_;
 };
 
@@ -306,6 +313,7 @@ class TestJobDelegate : public HttpStreamPool::Job::Delegate {
                           const SSLInfo& ssl_info) override;
   void OnNeedsClientAuth(HttpStreamPool::Job* job,
                          SSLCertRequestInfo* cert_info) override;
+  void OnPreconnectComplete(HttpStreamPool::Job* job, int status) override;
 
   HttpStreamKey GetStreamKey() const { return key_builder_.Build(); }
 
@@ -331,6 +339,9 @@ class TestJobDelegate : public HttpStreamPool::Job::Delegate {
 
 // Convert a ClientSocketPool::GroupId to an HttpStreamKey.
 HttpStreamKey GroupIdToHttpStreamKey(const ClientSocketPool::GroupId& group_id);
+
+// Wait for the `group`'s current AttemptManager completion.
+void WaitForAttemptManagerComplete(HttpStreamPool::Group& group);
 
 }  // namespace net
 

@@ -115,7 +115,7 @@ class LicenseFileField(field_types.SingleLineTextField):
 
         if invalid_values:
             missing = ", ".join(invalid_values)
-            return vr.ValidationError(
+            return vr.ValidationWarning(
                 reason=f"{self._name} is invalid.",
                 additional=[
                     "Failed to find all license files on local disk.",

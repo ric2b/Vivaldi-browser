@@ -18,6 +18,7 @@
 #include "base/memory/scoped_refptr.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/notreached.h"
+#include "base/task/common/task_annotator.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/time/time.h"
 #include "base/trace_event/traced_value.h"
@@ -455,8 +456,8 @@ void WidgetInputHandlerManager::InputEventsDispatched(bool raf_aligned) {
   }
 }
 
-void WidgetInputHandlerManager::SetNeedsMainFrame() {
-  widget_->RequestAnimationAfterDelay(base::TimeDelta());
+void WidgetInputHandlerManager::SetNeedsMainFrame(bool urgent) {
+  widget_->RequestAnimationAfterDelay(base::TimeDelta(), urgent);
 }
 
 bool WidgetInputHandlerManager::RequestedMainFramePending() {
@@ -701,6 +702,8 @@ void WidgetInputHandlerManager::DispatchEvent(
   if (!widget_is_embedded_ &&
       (suppressing_input_events_state_ &
        static_cast<uint16_t>(SuppressingInputEventsBits::kHasNotPainted))) {
+    // TODO(https://crbug.com/40057499): Remove the old metric and related code,
+    // including the states like `widget_is_embedded_`.
     main_thread_task_runner_->PostTask(
         FROM_HERE,
         base::BindOnce(&WidgetInputHandlerManager::StartFirstPaintMaxDelayTimer,
@@ -719,17 +722,8 @@ void WidgetInputHandlerManager::DispatchEvent(
 
   uint16_t suppress_input = suppressing_input_events_state_;
 
-  bool ignore_first_paint = !base::FeatureList::IsEnabled(
-      blink::features::kDropInputEventsBeforeFirstPaint);
-  // TODO(https://crbug.com/1490296): Investigate the possibility of a stale
-  // subframe after navigation.
-  if (widget_is_embedded_) {
-    ignore_first_paint = true;
-  }
-  if (ignore_first_paint) {
-    suppress_input &=
-        ~static_cast<uint16_t>(SuppressingInputEventsBits::kHasNotPainted);
-  }
+  suppress_input &=
+      ~static_cast<uint16_t>(SuppressingInputEventsBits::kHasNotPainted);
 
   if (dev_tools_session_attached_ || !ignore_hidden_input_) {
     suppress_input &=

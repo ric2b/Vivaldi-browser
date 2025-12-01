@@ -48,23 +48,20 @@ enum class SearchWithContext {
 
 // Log an event when user triggers search with.
 void LogTrigger(bool incognito, bool search_engine_google) {
-  if (!incognito) {
-    if (search_engine_google) {
-      base::UmaHistogramEnumeration("IOS.SearchWith.Trigger",
-                                    SearchWithContext::kNormalGoogle);
-    } else {
-      base::UmaHistogramEnumeration("IOS.SearchWith.Trigger",
-                                    SearchWithContext::kNormalOther);
-    }
+  SearchWithContext context;
+  if (incognito) {
+    context = search_engine_google ? SearchWithContext::kIncognitoGoogle
+                                   : SearchWithContext::kIncognitoOther;
   } else {
-    if (search_engine_google) {
-      base::UmaHistogramEnumeration("IOS.SearchWith.Trigger",
-                                    SearchWithContext::kIncognitoGoogle);
-    } else {
-      base::UmaHistogramEnumeration("IOS.SearchWith.Trigger",
-                                    SearchWithContext::kIncognitoOther);
-    }
+    context = search_engine_google ? SearchWithContext::kNormalGoogle
+                                   : SearchWithContext::kNormalOther;
   }
+  base::UmaHistogramEnumeration("IOS.SearchWith.Trigger", context);
+}
+
+// Log the number of characters selected.
+void LogSelectedNumberChar(NSUInteger text_length) {
+  base::UmaHistogramCounts1000("IOS.SearchWith.CharSelected", text_length);
 }
 
 }  // namespace
@@ -200,6 +197,7 @@ void LogTrigger(bool incognito, bool search_engine_google) {
           _templateURLService->search_terms_data()) ==
       SearchEngineType::SEARCH_ENGINE_GOOGLE;
   LogTrigger(self.incognito, isDefaultSearchEngineGoogle);
+  LogSelectedNumberChar([text length]);
   OpenNewTabCommand* command =
       [[OpenNewTabCommand alloc] initWithURL:searchURL
                                     referrer:web::Referrer()
@@ -223,7 +221,8 @@ void LogTrigger(bool incognito, bool search_engine_google) {
       };
   UIDeferredMenuElement* deferredMenuElement =
       [UIDeferredMenuElement elementWithProvider:provider];
-  edit_menu::AddElementToChromeMenu(builder, deferredMenuElement);
+  edit_menu::AddElementToChromeMenu(builder, deferredMenuElement,
+                                    /*primary*/ YES);
 }
 
 @end

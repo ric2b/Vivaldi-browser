@@ -625,6 +625,60 @@ def get_branch_tree(use_limit=False):
     return skipped, branch_tree
 
 
+def get_diverged_branches(branch_tree=None):
+    """Gets the branches from the tree that have diverged from their upstream
+
+    Returns the list of branches that have diverged from their respective
+    upstream branch.
+    Expects to receive a tree as generated from `get_branch_tree`, which it will
+    call if not supplied, ignoring branches without upstreams.
+    """
+    if not branch_tree:
+        _, branch_tree = get_branch_tree()
+    diverged_branches = []
+    for branch, upstream_branch in branch_tree.items():
+        # If the merge base of a branch and its upstream is not equal to the
+        # upstream, then it means that both branch diverged.
+        upstream_branch_hash = hash_one(upstream_branch)
+        merge_base_hash = hash_one(get_or_create_merge_base(branch))
+        if upstream_branch_hash != merge_base_hash:
+            diverged_branches.append(branch)
+    return diverged_branches
+
+
+def get_hashes(branch_tree=None):
+    """Get the dictionary of {branch: hash}
+
+    Returns a dictionary that contains the hash of every branch. Suitable for
+    saving hashes before performing destructive operations to perform
+    appropriate rebases.
+    Expects to receive a tree as generated from `get_branch_tree`, which it will
+    call if not supplied, ignoring branches without upstreams.
+    """
+    if not branch_tree:
+        _, branch_tree = get_branch_tree()
+    hashes = {}
+    for branch, upstream_branch in branch_tree.items():
+        hashes[branch] = hash_one(branch)
+        hashes[upstream_branch] = hash_one(upstream_branch)
+    return hashes
+
+
+def get_downstream_branches(branch_tree=None):
+    """Get the dictionary of {branch: children}
+
+    Returns a dictionary that contains the list of downstream branches for every
+    branch.
+    Expects to receive a tree as generated from `get_branch_tree`, which it will
+    call if not supplied, ignoring branches without upstreams.
+    """
+    if not branch_tree:
+        _, branch_tree = get_branch_tree()
+    downstream_branches = collections.defaultdict(list)
+    for branch, upstream_branch in branch_tree.items():
+        downstream_branches[upstream_branch].append(branch)
+    return downstream_branches
+
 def get_or_create_merge_base(branch, parent=None) -> Optional[str]:
     """Finds the configured merge base for branch.
 

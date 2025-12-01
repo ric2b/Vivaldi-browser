@@ -197,6 +197,7 @@ const BasePromise: Omit<PromiseConstructor, UntrackedPromiseMethod> = {
   reject: Promise.reject,
   resolve: Promise.resolve,
   withResolvers: Promise.withResolvers,
+  try: Promise.try,
 };
 
 // We can't subclass native Promise here as this will cause all derived promises
@@ -253,7 +254,7 @@ interface Stub<TKey extends keyof typeof window> {
   stubWith: (typeof window)[TKey];
 }
 
-const stubs: Stub<keyof typeof window>[] = [];
+const stubs: Array<Stub<keyof typeof window>> = [];
 
 function stub<T extends keyof typeof window>(name: T, stubWith: (typeof window)[T]) {
   const original = window[name];

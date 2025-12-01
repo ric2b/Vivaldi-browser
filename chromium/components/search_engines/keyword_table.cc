@@ -36,7 +36,8 @@
 
 #include "components/sync/protocol/unique_position.pb.h"
 
-using base::Time;
+using ::base::Time;
+using ::country_codes::CountryId;
 
 namespace features {
 BASE_FEATURE(kKeywordTableHashVerification,
@@ -335,15 +336,15 @@ bool KeywordTable::ClearBuiltinKeywordMilestone() {
   return meta_table()->DeleteKey(kBuiltinKeywordMilestone);
 }
 
-bool KeywordTable::SetBuiltinKeywordCountry(int country_id) {
-  return meta_table()->SetValue(kBuiltinKeywordCountry, country_id);
+bool KeywordTable::SetBuiltinKeywordCountry(CountryId country_id) {
+  return meta_table()->SetValue(kBuiltinKeywordCountry, country_id.Serialize());
 }
 
-int KeywordTable::GetBuiltinKeywordCountry() {
+CountryId KeywordTable::GetBuiltinKeywordCountry() {
   int country_id = 0;
   return meta_table()->GetValue(kBuiltinKeywordCountry, &country_id)
-             ? country_id
-             : 0;
+             ? CountryId::Deserialize(country_id)
+             : CountryId();
 }
 
 bool KeywordTable::SetStarterPackKeywordVersion(int version) {
@@ -590,7 +591,7 @@ std::optional<TemplateURLData> KeywordTable::GetKeywordDataFromStatement(
   // reading these out.  (GetKeywords() will delete these entries on return.)
   // NOTE: This code should only be needed as long as we might be reading such
   // potentially-old data and can be removed afterward.
-  if (s.ColumnString(4).empty()) {
+  if (s.ColumnStringView(4).empty()) {
     return std::nullopt;
   }
   data.SetURL(s.ColumnString(4));
@@ -600,17 +601,20 @@ std::optional<TemplateURLData> KeywordTable::GetKeywordDataFromStatement(
   data.search_url_post_params = s.ColumnString(17);
   data.suggestions_url_post_params = s.ColumnString(18);
   data.image_url_post_params = s.ColumnString(19);
-  data.favicon_url = GURL(s.ColumnString(3));
-  data.originating_url = GURL(s.ColumnString(6));
+  data.favicon_url = GURL(s.ColumnStringView(3));
+  data.originating_url = GURL(s.ColumnStringView(6));
   data.safe_for_autoreplace = s.ColumnBool(5);
   data.input_encodings = base::SplitString(
-      s.ColumnString(9), ";", base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
+      s.ColumnStringView(9), ";", base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
   data.id = s.ColumnInt64(0);
   data.date_created = s.ColumnTime(7);
   data.last_modified = s.ColumnTime(13);
   data.policy_origin =
       static_cast<TemplateURLData::PolicyOrigin>(s.ColumnInt(12));
-  data.created_from_play_api = s.ColumnBool(22);
+  // TODO(b:322513019): support other regulatory programs.
+  data.regulatory_origin = s.ColumnBool(22)
+                               ? RegulatoryExtensionType::kAndroidEEA
+                               : RegulatoryExtensionType::kDefault;
   data.usage_count = s.ColumnInt(8);
   data.prepopulate_id = s.ColumnInt(11);
   data.sync_guid = s.ColumnString(14);
@@ -619,7 +623,8 @@ std::optional<TemplateURLData> KeywordTable::GetKeywordDataFromStatement(
   data.enforced_by_policy = s.ColumnBool(25 + 1 /* vivaldi position field */);
   data.featured_by_policy = s.ColumnBool(26 + 1 /* vivaldi position field */);
 
-  std::optional<base::Value> value(base::JSONReader::Read(s.ColumnString(15)));
+  std::optional<base::Value> value(
+      base::JSONReader::Read(s.ColumnStringView(15)));
   if (value && value->is_list()) {
     for (const base::Value& alternate_url : value->GetList()) {
       if (alternate_url.is_string()) {
@@ -718,7 +723,9 @@ void KeywordTable::BindURLToStatement(const TemplateURLData& data,
   s->BindString(starting_column + 18, data.image_url_post_params);
   s->BindString(starting_column + 19, data.new_tab_url);
   s->BindTime(starting_column + 20, data.last_visited);
-  s->BindBool(starting_column + 21, data.created_from_play_api);
+  // TODO(b:322513019): support other regulatory programs.
+  s->BindBool(starting_column + 21,
+              data.regulatory_origin == RegulatoryExtensionType::kAndroidEEA);
   s->BindInt(starting_column + 22, static_cast<int>(data.is_active));
 
   // The column added by Vivaldi offsets future columns added by chromium.

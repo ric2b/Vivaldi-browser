@@ -64,8 +64,9 @@ class FakeLobsterSession : public LobsterSession {
                       const std::string& description) override {
     return feedback_submission_status_;
   }
-  void ShowDisclaimerUIAndCacheQuery(
-      std::optional<std::string> query) override {}
+  void ShowDisclaimerUIAndCacheContext(
+      std::optional<std::string> query,
+      const gfx::Rect& anchor_bounds) override {}
   void LoadUI(std::optional<std::string> query,
               LobsterMode mode,
               const gfx::Rect& caret_bounds) override {}
@@ -114,10 +115,13 @@ TEST_F(LobsterPageHandlerTest,
   std::vector<LobsterImageCandidate> image_candidates = {
       LobsterImageCandidate(/*id=*/0, /*image_bytes=*/kRawBytes1.data(),
                             /*seed=*/20,
-                            /*query=*/"a nice strawberry"),
-      LobsterImageCandidate(/*id=*/1, /*image_bytes=*/kRawBytes2.data(),
-                            /*seed=*/21,
-                            /*query=*/"a nice strawberry")};
+                            /*user_query=*/"a nice strawberry",
+                            /*rewritten_query=*/"rewritten: a nice strawberry"),
+      LobsterImageCandidate(
+          /*id=*/1, /*image_bytes=*/kRawBytes2.data(),
+          /*seed=*/21,
+          /*user_query=*/"a nice strawberry",
+          /*rewritten_query=*/"rewritten: a nice strawberry")};
   FakeLobsterSession session(std::move(image_candidates),
                              /*commit_or_download_status=*/true,
                              /*feedback_submission_status=*/true);

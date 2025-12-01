@@ -91,7 +91,7 @@ void LayoutImage::StyleDidChange(StyleDifference diff,
       old_style ? old_style->ImageOrientation()
                 : ComputedStyleInitialValues::InitialImageOrientation();
   if (StyleRef().ImageOrientation() != old_orientation) {
-    IntrinsicSizeChanged();
+    NaturalSizeChanged();
   }
 
   bool tracing_enabled;
@@ -346,23 +346,14 @@ bool LayoutImage::NodeAtPoint(HitTestResult& result,
 PhysicalNaturalSizingInfo LayoutImage::GetNaturalDimensions() const {
   NOT_DESTROYED();
   PhysicalNaturalSizingInfo natural_dimensions = natural_dimensions_;
-  if (EmbeddedSVGImage()) {
+  if (RuntimeEnabledFeatures::
+          LayoutImageRevalidationCheckForSvgImagesEnabled() &&
+      EmbeddedSVGImage()) {
     // The value returned by LayoutImageResource will be in zoomed CSS
     // pixels, but for the 'scale-down' object-fit value we want "zoomed
     // device pixels", so undo the DPR part here.
     if (StyleRef().GetObjectFit() == EObjectFit::kScaleDown) {
       natural_dimensions.size.Scale(1 / ImageDevicePixelRatio());
-    }
-  } else if (RuntimeEnabledFeatures::
-                 LayoutImageForceAspectRatioOfOneOnErrorEnabled()) {
-    // Don't compute an intrinsic ratio to preserve historical WebKit behavior
-    // if we're painting alt text and/or a broken image.
-    // Video is excluded from this behavior because video elements have a
-    // default aspect ratio that a failed poster image load should not
-    // override.
-    if (image_resource_->ErrorOccurred() && !IsA<LayoutVideo>(this)) {
-      natural_dimensions.aspect_ratio =
-          PhysicalSize(LayoutUnit(1), LayoutUnit(1));
     }
   }
   return natural_dimensions;
@@ -381,6 +372,7 @@ SVGImage* LayoutImage::EmbeddedSVGImage() const {
 }
 
 bool LayoutImage::IsUnsizedImage() const {
+  NOT_DESTROYED();
   const ComputedStyle& style = this->StyleRef();
   const auto explicit_width = style.LogicalWidth().IsSpecified();
   const auto explicit_height = style.LogicalHeight().IsSpecified();

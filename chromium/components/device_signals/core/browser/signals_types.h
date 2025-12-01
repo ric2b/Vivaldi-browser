@@ -37,7 +37,9 @@ enum class SignalName {
   kFileSystemInfo,
   kSystemSettings,
   kAgent,
-  kMaxValue = kAgent
+  kOsSignals,
+  kBrowserContextSignals,
+  kMaxValue = kBrowserContextSignals
 };
 
 // Superset of all signal collection errors that can occur, including top-level
@@ -67,21 +69,34 @@ const std::string ErrorToString(SignalCollectionError error);
 struct BaseSignalResponse {
   virtual ~BaseSignalResponse();
 
+  bool operator==(const BaseSignalResponse&) const;
+
   // If set, represents a collection error that occurred while getting the
   // signal.
   std::optional<SignalCollectionError> collection_error = std::nullopt;
 };
 
 #if BUILDFLAG(IS_WIN)
+// Values representing the overall antivirus software state of a device.
+enum class InstalledAntivirusState {
+  kNone = 0,
+  kDisabled = 1,
+  kEnabled = 2,
+};
+
 struct AntiVirusSignalResponse : BaseSignalResponse {
   AntiVirusSignalResponse();
 
   AntiVirusSignalResponse(const AntiVirusSignalResponse&);
   AntiVirusSignalResponse& operator=(const AntiVirusSignalResponse&);
 
+  bool operator==(const AntiVirusSignalResponse&) const;
+
   ~AntiVirusSignalResponse() override;
 
   std::vector<AvProduct> av_products{};
+
+  InstalledAntivirusState antivirus_state{InstalledAntivirusState::kNone};
 };
 
 struct HotfixSignalResponse : BaseSignalResponse {
@@ -89,6 +104,8 @@ struct HotfixSignalResponse : BaseSignalResponse {
 
   HotfixSignalResponse(const HotfixSignalResponse&);
   HotfixSignalResponse& operator=(const HotfixSignalResponse&);
+
+  bool operator==(const HotfixSignalResponse&) const;
 
   ~HotfixSignalResponse() override;
 
@@ -108,6 +125,8 @@ struct GetSettingsOptions {
 
   GetSettingsOptions(const GetSettingsOptions&);
   GetSettingsOptions& operator=(const GetSettingsOptions&);
+
+  bool operator==(const GetSettingsOptions&) const;
 
   ~GetSettingsOptions();
 
@@ -136,8 +155,6 @@ struct GetSettingsOptions {
   // Windows registry hive containing the desired value. This values is required
   // on Windows, but will be ignored on Mac.
   std::optional<RegistryHive> hive = std::nullopt;
-
-  bool operator==(const GetSettingsOptions& other) const;
 };
 
 struct SettingsItem {
@@ -145,6 +162,8 @@ struct SettingsItem {
 
   SettingsItem(const SettingsItem&);
   SettingsItem& operator=(const SettingsItem&);
+
+  bool operator==(const SettingsItem&) const;
 
   ~SettingsItem();
 
@@ -161,8 +180,6 @@ struct SettingsItem {
   // setting was found and `get_value` was true on the corresponding request
   // options.
   std::optional<std::string> setting_json_value = std::nullopt;
-
-  bool operator==(const SettingsItem& other) const;
 };
 
 struct SettingsResponse : BaseSignalResponse {
@@ -171,9 +188,47 @@ struct SettingsResponse : BaseSignalResponse {
   SettingsResponse(const SettingsResponse&);
   SettingsResponse& operator=(const SettingsResponse&);
 
+  bool operator==(const SettingsResponse&) const;
+
   ~SettingsResponse() override;
 
   std::vector<SettingsItem> settings_items{};
+};
+
+struct OsSignalsResponse : BaseSignalResponse {
+  OsSignalsResponse();
+
+  OsSignalsResponse(const OsSignalsResponse&);
+  OsSignalsResponse& operator=(const OsSignalsResponse&);
+
+  bool operator==(const OsSignalsResponse&) const;
+
+  ~OsSignalsResponse() override;
+
+  // Common to all platforms
+  std::optional<std::string> display_name = std::nullopt;
+  std::string browser_version{};
+  std::optional<std::string> device_enrollment_domain = std::nullopt;
+  std::string device_manufacturer{};
+  std::string device_model{};
+  device_signals::SettingValue disk_encryption =
+      device_signals::SettingValue::UNKNOWN;
+  std::optional<std::string> hostname = std::nullopt;
+  std::optional<std::vector<std::string>> mac_addresses = std::nullopt;
+  std::string operating_system{};
+  device_signals::SettingValue os_firewall =
+      device_signals::SettingValue::UNKNOWN;
+  std::string os_version{};
+  device_signals::SettingValue screen_lock_secured =
+      device_signals::SettingValue::UNKNOWN;
+  std::optional<std::string> serial_number = std::nullopt;
+  std::optional<std::vector<std::string>> system_dns_servers = std::nullopt;
+
+  // Windows specific
+  std::optional<std::string> machine_guid = std::nullopt;
+  std::optional<device_signals::SettingValue> secure_boot_mode = std::nullopt;
+  std::optional<std::string> windows_machine_domain = std::nullopt;
+  std::optional<std::string> windows_user_domain = std::nullopt;
 };
 
 struct FileSystemInfoResponse : BaseSignalResponse {
@@ -181,6 +236,8 @@ struct FileSystemInfoResponse : BaseSignalResponse {
 
   FileSystemInfoResponse(const FileSystemInfoResponse&);
   FileSystemInfoResponse& operator=(const FileSystemInfoResponse&);
+
+  bool operator==(const FileSystemInfoResponse&) const;
 
   ~FileSystemInfoResponse() override;
 
@@ -192,6 +249,8 @@ struct AgentSignalsResponse : BaseSignalResponse {
 
   AgentSignalsResponse(const AgentSignalsResponse&);
   AgentSignalsResponse& operator=(const AgentSignalsResponse&);
+
+  bool operator==(const AgentSignalsResponse&) const;
 
   ~AgentSignalsResponse() override;
 
@@ -210,6 +269,8 @@ struct SignalsAggregationRequest {
   SignalsAggregationRequest& operator=(const SignalsAggregationRequest&);
   SignalsAggregationRequest& operator=(SignalsAggregationRequest&&);
 
+  bool operator==(const SignalsAggregationRequest&) const;
+
   ~SignalsAggregationRequest();
 
   // Names of the signals that need to be collected.
@@ -220,8 +281,6 @@ struct SignalsAggregationRequest {
   std::vector<GetFileSystemInfoOptions> file_system_signal_parameters{};
 
   std::vector<GetSettingsOptions> settings_signal_parameters{};
-
-  bool operator==(const SignalsAggregationRequest& other) const;
 };
 
 // Response from a signal collection request sent through the SignalsAggregator.
@@ -235,6 +294,8 @@ struct SignalsAggregationResponse {
   SignalsAggregationResponse& operator=(const SignalsAggregationResponse&);
   SignalsAggregationResponse& operator=(SignalsAggregationResponse&&);
 
+  bool operator==(const SignalsAggregationResponse&) const;
+
   ~SignalsAggregationResponse();
 
   // If set, represents an error that occurred before any signal could be
@@ -246,6 +307,7 @@ struct SignalsAggregationResponse {
   std::optional<HotfixSignalResponse> hotfix_signal_response = std::nullopt;
 #endif  // BUILDFLAG(IS_WIN)
   std::optional<SettingsResponse> settings_response = std::nullopt;
+  std::optional<OsSignalsResponse> os_signals_response = std::nullopt;
 
   std::optional<FileSystemInfoResponse> file_system_info_response =
       std::nullopt;

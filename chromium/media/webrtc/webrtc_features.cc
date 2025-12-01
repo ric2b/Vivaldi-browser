@@ -63,14 +63,14 @@ BASE_FEATURE(kWebRtcApmTellsIfPlayoutReferenceIsNeeded,
 // negotiate usage of H.265 in SDP in the direction of sending.
 BASE_FEATURE(kWebRtcAllowH265Send,
              "WebRtcAllowH265Send",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 // When enabled, allow H.265 codec to be used for receiving WebRTC streams.
 // Platform hardware H.265 decoder needs to be supported and enabled in order to
 // negotiate usage of H.265 in SDP in the direction of receiving.
 BASE_FEATURE(kWebRtcAllowH265Receive,
              "WebRtcAllowH265Receive",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 // When enabled, allows H.265 L1T2 to be used for sending WebRTC streams, if the
 // accelerator reports support of encoding in L1T2.
@@ -84,6 +84,17 @@ BASE_FEATURE(kWebRtcH265L1T2,
 BASE_FEATURE(kWebRtcH265L1T3,
              "WebRtcH265L1T3",
              base::FEATURE_DISABLED_BY_DEFAULT);
+
+// When enabled, allows AV1 HW encoding to be used for WebRTC streams, if the
+// platform accelerator supports encoding of AV1.
+BASE_FEATURE(kWebRtcAV1HWEncode,
+             "WebRtcAV1HWEncode",
+#if BUILDFLAG(IS_WIN)
+             base::FEATURE_DISABLED_BY_DEFAULT
+#else
+             base::FEATURE_ENABLED_BY_DEFAULT
+#endif  // BUILDFLAG(IS_WIN)
+);
 
 #if BUILDFLAG(IS_ANDROID)
 // Kill-switch for using 48 kHz as sample rate for Audio Processing Module

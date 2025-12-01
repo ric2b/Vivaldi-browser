@@ -46,6 +46,10 @@ enum class ModelBasedCapabilityKey {
       proto::ModelExecutionFeature::MODEL_EXECUTION_FEATURE_PERMISSIONS_AI,
   kWritingAssistanceApi = proto::ModelExecutionFeature::
       MODEL_EXECUTION_FEATURE_WRITING_ASSISTANCE_API,
+  kEnhancedCalendar =
+      proto::ModelExecutionFeature::MODEL_EXECUTION_FEATURE_ENHANCED_CALENDAR,
+  kZeroStateSuggestions = proto::ModelExecutionFeature::
+      MODEL_EXECUTION_FEATURE_ZERO_STATE_SUGGESTIONS,
 };
 
 inline std::ostream& operator<<(std::ostream& out,
@@ -85,11 +89,15 @@ inline std::ostream& operator<<(std::ostream& out,
       return out << "PermissionsAi";
     case ModelBasedCapabilityKey::kWritingAssistanceApi:
       return out << "WritingAssistanceApi";
+    case ModelBasedCapabilityKey::kEnhancedCalendar:
+      return out << "EnhancedCalendar";
+    case ModelBasedCapabilityKey::kZeroStateSuggestions:
+      return out << "ZeroStateSuggestions";
   }
   return out;
 }
 
-inline constexpr std::array<ModelBasedCapabilityKey, 17>
+inline constexpr std::array<ModelBasedCapabilityKey, 19>
     kAllModelBasedCapabilityKeys = {
         ModelBasedCapabilityKey::kCompose,
         ModelBasedCapabilityKey::kTabOrganization,
@@ -108,6 +116,8 @@ inline constexpr std::array<ModelBasedCapabilityKey, 17>
         ModelBasedCapabilityKey::kScamDetection,
         ModelBasedCapabilityKey::kPermissionsAi,
         ModelBasedCapabilityKey::kWritingAssistanceApi,
+        ModelBasedCapabilityKey::kEnhancedCalendar,
+        ModelBasedCapabilityKey::kZeroStateSuggestions,
 };
 
 // A "real" feature implemented by a model-based capability.
@@ -192,6 +202,12 @@ inline ModelBasedCapabilityKey ToModelBasedCapabilityKey(
     case proto::ModelExecutionFeature::
         MODEL_EXECUTION_FEATURE_WRITING_ASSISTANCE_API:
       return ModelBasedCapabilityKey::kWritingAssistanceApi;
+    case proto::ModelExecutionFeature::
+        MODEL_EXECUTION_FEATURE_ENHANCED_CALENDAR:
+      return ModelBasedCapabilityKey::kEnhancedCalendar;
+    case proto::ModelExecutionFeature::
+        MODEL_EXECUTION_FEATURE_ZERO_STATE_SUGGESTIONS:
+      return ModelBasedCapabilityKey::kZeroStateSuggestions;
     case proto::ModelExecutionFeature::MODEL_EXECUTION_FEATURE_UNSPECIFIED:
       NOTREACHED() << "Invalid feature";
   }
@@ -246,6 +262,12 @@ inline proto::ModelExecutionFeature ToModelExecutionFeatureProto(
     case ModelBasedCapabilityKey::kWritingAssistanceApi:
       return proto::ModelExecutionFeature::
           MODEL_EXECUTION_FEATURE_WRITING_ASSISTANCE_API;
+    case ModelBasedCapabilityKey::kEnhancedCalendar:
+      return proto::ModelExecutionFeature::
+          MODEL_EXECUTION_FEATURE_ENHANCED_CALENDAR;
+    case ModelBasedCapabilityKey::kZeroStateSuggestions:
+      return proto::ModelExecutionFeature::
+          MODEL_EXECUTION_FEATURE_ZERO_STATE_SUGGESTIONS;
   }
 }
 

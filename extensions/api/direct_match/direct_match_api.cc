@@ -29,6 +29,9 @@ DirectMatchAPI::DirectMatchAPI(content::BrowserContext* context)
   if (service) {
     service->AddObserver(this);
   }
+  favicon_installer_ = base::WrapUnique(
+      new direct_match::DirectMatchFaviconInstaller(
+          Profile::FromBrowserContext(browser_context_)));
 }
 
 void DirectMatchAPI::Shutdown() {
@@ -53,6 +56,7 @@ void DirectMatchAPI::OnExtensionReady(content::BrowserContext* browser_context,
 }
 
 void DirectMatchAPI::OnFinishedDownloadingDirectMatchUnitsIcon() {
+  favicon_installer_->Start();
   ::vivaldi::BroadcastEvent(
       vivaldi::direct_match::OnPopularSitesReady::kEventName,
       vivaldi::direct_match::OnPopularSitesReady::Create(),
@@ -84,42 +88,6 @@ DirectMatchAPI::GetFactoryInstance() {
 template <>
 void BrowserContextKeyedAPIFactory<
     DirectMatchAPI>::DeclareFactoryDependencies() {}
-
-ExtensionFunction::ResponseAction DirectMatchGetFunction::Run() {
-  using vivaldi::direct_match::Get::Params;
-  namespace Results = vivaldi::direct_match::Get::Results;
-  absl::optional<Params> params = Params::Create(args());
-  EXTENSION_FUNCTION_VALIDATE(params);
-
-  auto isWhitespaceOnly = [](const std::string& str) {
-    return std::all_of(str.begin(), str.end(),
-                       [](unsigned char ch) { return std::isspace(ch); });
-  };
-
-  if (isWhitespaceOnly(params->query)) {
-    return RespondNow(NoArguments());
-  }
-
-  auto* service =
-      DirectMatchServiceFactory::GetForBrowserContext(browser_context());
-  auto [unit_found, allowed_to_be_default_match] =
-      service->GetDirectMatch(params->query);
-  if (unit_found) {
-    vivaldi::direct_match::Item item;
-    item.name = unit_found->name;
-    item.title = unit_found->title;
-    item.image_url = unit_found->image_url;
-    item.image_path = unit_found->image_path;
-    item.category = unit_found->category;
-    item.display_location_address_bar =
-        unit_found->display_locations.address_bar;
-    item.display_location_sd_dialog = unit_found->display_locations.sd_dialog;
-    item.redirect_url = unit_found->redirect_url;
-    item.allowed_to_be_default_match = allowed_to_be_default_match;
-    return RespondNow(ArgumentList(Results::Create(item)));
-  }
-  return RespondNow(NoArguments());
-}
 
 ExtensionFunction::ResponseAction DirectMatchHideFunction::Run() {
   using vivaldi::direct_match::Hide::Params;

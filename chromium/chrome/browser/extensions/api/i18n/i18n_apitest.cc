@@ -6,27 +6,21 @@
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/threading/thread_restrictions.h"
+#include "chrome/browser/extensions/extension_apitest.h"
 #include "content/public/test/browser_test.h"
 #include "extensions/common/extension.h"
 #include "extensions/test/result_catcher.h"
 #include "extensions/test/test_extension_dir.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 
-#if BUILDFLAG(IS_ANDROID)
-#include "chrome/browser/extensions/extension_platform_apitest.h"
-#else
-#include "chrome/browser/extensions/extension_apitest.h"
+#if !BUILDFLAG(IS_ANDROID)
 #include "chrome/browser/ui/browser.h"
 #include "chrome/test/base/ui_test_utils.h"
 #endif  // BUILDFLAG(IS_ANDROID)
 
 namespace extensions {
 
-#if BUILDFLAG(IS_ANDROID)
-using ExtensionI18nTest = ExtensionPlatformApiTest;
-#else
 using ExtensionI18nTest = ExtensionApiTest;
-#endif
 
 IN_PROC_BROWSER_TEST_F(ExtensionI18nTest, I18nBasic) {
   ASSERT_TRUE(StartEmbeddedTestServer());
@@ -35,7 +29,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionI18nTest, I18nBasic) {
 
 #if !BUILDFLAG(IS_ANDROID)
 // TODO(crbug.com/391920604): Port to desktop Android once ReloadExtension() is
-// supported by ExtensionPlatformApiTest.
+// supported by ExtensionApiTest.
 IN_PROC_BROWSER_TEST_F(ExtensionI18nTest, I18NUpdate) {
   ASSERT_TRUE(embedded_test_server()->Start());
   // Create an Extension whose messages.json file will be updated.

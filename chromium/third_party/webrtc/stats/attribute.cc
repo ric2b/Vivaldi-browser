@@ -10,9 +10,15 @@
 
 #include "api/stats/attribute.h"
 
+#include <cstdint>
+#include <cstdio>
+#include <map>
+#include <optional>
 #include <string>
+#include <type_traits>
+#include <variant>
+#include <vector>
 
-#include "absl/types/variant.h"
 #include "rtc_base/arraysize.h"
 #include "rtc_base/checks.h"
 #include "rtc_base/string_encode.h"
@@ -63,7 +69,7 @@ struct VisitToString {
   // Vector attributes.
   template <typename T>
   std::string operator()(const std::optional<std::vector<T>>* attribute) {
-    rtc::StringBuilder sb;
+    StringBuilder sb;
     sb << "[";
     const char* separator = "";
     constexpr bool element_is_string = std::is_same<T, std::string>::value;
@@ -85,7 +91,7 @@ struct VisitToString {
   template <typename T>
   std::string operator()(
       const std::optional<std::map<std::string, T>>* attribute) {
-    rtc::StringBuilder sb;
+    StringBuilder sb;
     sb << "{";
     const char* separator = "";
     constexpr bool element_is_string = std::is_same<T, std::string>::value;
@@ -134,27 +140,27 @@ const Attribute::StatVariant& Attribute::as_variant() const {
 }
 
 bool Attribute::has_value() const {
-  return absl::visit([](const auto* attr) { return attr->has_value(); },
-                     attribute_);
+  return std::visit([](const auto* attr) { return attr->has_value(); },
+                    attribute_);
 }
 
 bool Attribute::is_sequence() const {
-  return absl::visit(VisitIsSequence(), attribute_);
+  return std::visit(VisitIsSequence(), attribute_);
 }
 
 bool Attribute::is_string() const {
-  return absl::holds_alternative<const std::optional<std::string>*>(attribute_);
+  return std::holds_alternative<const std::optional<std::string>*>(attribute_);
 }
 
 std::string Attribute::ToString() const {
   if (!has_value()) {
     return "null";
   }
-  return absl::visit(VisitToString(), attribute_);
+  return std::visit(VisitToString(), attribute_);
 }
 
 bool Attribute::operator==(const Attribute& other) const {
-  return absl::visit(VisitIsEqual{.other = other}, attribute_);
+  return std::visit(VisitIsEqual{.other = other}, attribute_);
 }
 
 bool Attribute::operator!=(const Attribute& other) const {

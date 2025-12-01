@@ -81,7 +81,7 @@ typedef struct {
 static bool SuspendThread(pid_t pid) {
   // This may fail if the thread has just died or debugged.
   errno = 0;
-  if (sys_ptrace(PTRACE_ATTACH, pid, NULL, NULL) != 0 &&
+  if (sys_ptrace(PTRACE_ATTACH, pid, nullptr, nullptr) != 0 &&
       errno != 0) {
     return false;
   }
@@ -89,7 +89,7 @@ static bool SuspendThread(pid_t pid) {
     int status;
     int r = HANDLE_EINTR(sys_waitpid(pid, &status, __WALL));
     if (r < 0) {
-      sys_ptrace(PTRACE_DETACH, pid, NULL, NULL);
+      sys_ptrace(PTRACE_DETACH, pid, nullptr, nullptr);
       return false;
     }
 
@@ -104,7 +104,7 @@ static bool SuspendThread(pid_t pid) {
 
     // Signals other than SIGSTOP that are received need to be reinjected,
     // or they will otherwise get lost.
-    r = sys_ptrace(PTRACE_CONT, pid, NULL,
+    r = sys_ptrace(PTRACE_CONT, pid, nullptr,
                    reinterpret_cast<void*>(WSTOPSIG(status)));
     if (r < 0)
       return false;
@@ -118,14 +118,14 @@ static bool SuspendThread(pid_t pid) {
   // We thus test the stack pointer and exclude any threads that are part of
   // the seccomp sandbox's trusted code.
   user_regs_struct regs;
-  if (sys_ptrace(PTRACE_GETREGS, pid, NULL, &regs) == -1 ||
+  if (sys_ptrace(PTRACE_GETREGS, pid, nullptr, &regs) == -1 ||
 #if defined(__i386)
       !regs.esp
 #elif defined(__x86_64)
       !regs.rsp
 #endif
       ) {
-    sys_ptrace(PTRACE_DETACH, pid, NULL, NULL);
+    sys_ptrace(PTRACE_DETACH, pid, nullptr, nullptr);
     return false;
   }
 #endif
@@ -134,7 +134,7 @@ static bool SuspendThread(pid_t pid) {
 
 // Resumes a thread by detaching from it.
 static bool ResumeThread(pid_t pid) {
-  return sys_ptrace(PTRACE_DETACH, pid, NULL, NULL) >= 0;
+  return sys_ptrace(PTRACE_DETACH, pid, nullptr, nullptr) >= 0;
 }
 
 namespace google_breakpad {
@@ -242,8 +242,8 @@ bool LinuxPtraceDumper::ReadRegisterSet(ThreadInfo* info, pid_t tid)
 bool LinuxPtraceDumper::ReadRegisters(ThreadInfo* info, pid_t tid) {
 #ifdef PTRACE_GETREGS
   void* gp_addr;
-  info->GetGeneralPurposeRegisters(&gp_addr, NULL);
-  if (sys_ptrace(PTRACE_GETREGS, tid, NULL, gp_addr) == -1) {
+  info->GetGeneralPurposeRegisters(&gp_addr, nullptr);
+  if (sys_ptrace(PTRACE_GETREGS, tid, nullptr, gp_addr) == -1) {
     return false;
   }
 
@@ -260,8 +260,8 @@ bool LinuxPtraceDumper::ReadRegisters(ThreadInfo* info, pid_t tid) {
   // aren't written to the cpu context anyway, so just don't get them here.
   // See http://crbug.com/508324
   void* fp_addr;
-  info->GetFloatingPointRegisters(&fp_addr, NULL);
-  if (sys_ptrace(PTRACE_GETFPREGS, tid, NULL, fp_addr) == -1) {
+  info->GetFloatingPointRegisters(&fp_addr, nullptr);
+  if (sys_ptrace(PTRACE_GETFPREGS, tid, nullptr, fp_addr) == -1) {
   // We are going to check if we can read VFP registers on ARM32.
   // Currently breakpad does not support VFP registers to be a part of minidump,
   // so this is only to confirm that we can actually read FP registers.
@@ -299,7 +299,7 @@ bool LinuxPtraceDumper::GetThreadInfoByIndex(size_t index, ThreadInfo* info) {
 
   pid_t tid = threads_[index];
 
-  assert(info != NULL);
+  assert(info != nullptr);
   char status_path[NAME_MAX];
   if (!BuildProcPath(status_path, tid, "status"))
     return false;
@@ -342,7 +342,7 @@ bool LinuxPtraceDumper::GetThreadInfoByIndex(size_t index, ThreadInfo* info) {
   int eax, ebx, ecx, edx;
   __cpuid(1, eax, ebx, ecx, edx);
   if (edx & bit_FXSAVE) {
-    if (sys_ptrace(PTRACE_GETFPXREGS, tid, NULL, &info->fpxregs) == -1) {
+    if (sys_ptrace(PTRACE_GETFPXREGS, tid, nullptr, &info->fpxregs) == -1) {
       return false;
     }
   } else {

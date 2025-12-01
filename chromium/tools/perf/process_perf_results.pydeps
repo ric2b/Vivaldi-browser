@@ -5,6 +5,7 @@
 ../../build/android/pylib/constants/host_paths.py
 ../../build/android/pylib/utils/__init__.py
 ../../build/android/pylib/utils/decorators.py
+../../build/android/pylib/utils/google_storage_helper.py
 ../../build/android/pylib/utils/logdog_helper.py
 ../../components/variations/service/generate_ui_string_overrider.py
 ../../third_party/catapult/common/py_trace_event/py_trace_event/__init__.py
@@ -75,11 +76,11 @@
 ../../third_party/catapult/devil/devil/android/device_signal.py
 ../../third_party/catapult/devil/devil/android/device_temp_file.py
 ../../third_party/catapult/devil/devil/android/device_utils.py
+../../third_party/catapult/devil/devil/android/devil_util.py
 ../../third_party/catapult/devil/devil/android/flag_changer.py
 ../../third_party/catapult/devil/devil/android/forwarder.py
 ../../third_party/catapult/devil/devil/android/install_commands.py
 ../../third_party/catapult/devil/devil/android/logcat_monitor.py
-../../third_party/catapult/devil/devil/android/md5sum.py
 ../../third_party/catapult/devil/devil/android/ndk/__init__.py
 ../../third_party/catapult/devil/devil/android/ndk/abis.py
 ../../third_party/catapult/devil/devil/android/perf/__init__.py
@@ -401,6 +402,7 @@
 ../../third_party/catapult/third_party/typ/typ/pool.py
 ../../third_party/catapult/third_party/typ/typ/printer.py
 ../../third_party/catapult/third_party/typ/typ/python_2_3_compat.py
+../../third_party/catapult/third_party/typ/typ/reduced_glob.py
 ../../third_party/catapult/third_party/typ/typ/result_sink.py
 ../../third_party/catapult/third_party/typ/typ/runner.py
 ../../third_party/catapult/third_party/typ/typ/stats.py
@@ -453,6 +455,7 @@
 ../../third_party/logdog/logdog/streamname.py
 ../../third_party/logdog/logdog/varint.py
 ../json_comment_eater/json_comment_eater.py
+../json_to_struct/aggregation.py
 ../json_to_struct/class_generator.py
 ../json_to_struct/element_generator.py
 ../json_to_struct/java_element_generator.py
@@ -603,6 +606,8 @@ core/tbmv3/trace_processor.py
 core/testing.py
 core/upload_results_to_perf_dashboard.py
 cross_device_test_config.py
+json_constants.py
+json_util.py
 measurements/__init__.py
 measurements/dual_metric_measurement.py
 measurements/multipage_skpicture_printer.py

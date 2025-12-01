@@ -30,7 +30,7 @@ ObliviousHttpRequest::ObliviousHttpRequest(
     bssl::UniquePtr<EVP_HPKE_CTX> hpke_context, std::string encapsulated_key,
     const ObliviousHttpHeaderKeyConfig& ohttp_key_config,
     std::string req_ciphertext, std::string req_plaintext)
-    : oblivious_http_request_context_(absl::make_optional(
+    : oblivious_http_request_context_(std::make_optional(
           Context(std::move(hpke_context), std::move(encapsulated_key)))),
       key_config_(ohttp_key_config),
       request_ciphertext_(std::move(req_ciphertext)),
@@ -193,7 +193,7 @@ absl::StatusOr<ObliviousHttpRequest> ObliviousHttpRequest::EncapsulateWithSeed(
 
 // Request Serialize.
 // Builds request=[hdr, enc, ct].
-// https://www.ietf.org/archive/id/draft-ietf-ohai-ohttp-03.html#section-4.1-4.5
+// https://www.rfc-editor.org/rfc/rfc9458.html#section-4.3-4.5.1
 std::string ObliviousHttpRequest::EncapsulateAndSerialize() const {
   if (!oblivious_http_request_context_.has_value()) {
     QUICHE_BUG(ohttp_encapsulate_after_context_extract)

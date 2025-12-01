@@ -1661,11 +1661,13 @@ TEST_P(CompositorFrameSinkSupportTest, OnFrameTokenUpdate) {
   LocalSurfaceId child_local_surface_id(1, kAnotherArbitraryToken);
   SurfaceId child_id(kAnotherArbitraryFrameSinkId, child_local_surface_id);
 
+  // TODO(crbug.com/358957649) audit these tests to ensure we have sufficient
+  // coverage of `SetIsHandlingInteraction` while maintaining coverage for
+  // `SetActivationDependencies` for non-interactions.
   auto frame = CompositorFrameBuilder()
                    .AddDefaultRenderPass()
                    .SetSendFrameTokenToEmbedder(true)
                    .SetActivationDependencies({child_id})
-                   .SetIsHandlingInteraction(true)
                    .Build();
   uint32_t frame_token = frame.metadata.frame_token;
   ASSERT_NE(frame_token, 0u);
@@ -2224,7 +2226,7 @@ TEST_P(CompositorFrameSinkSupportTest, ViewTransitionBlitRequestTextureQuad) {
   SharedQuadState* shared_quad_state =
       root_render_pass->CreateAndAppendSharedQuadState();
   blink::ViewTransitionToken transition_token;
-  ViewTransitionElementResourceId resource_id(transition_token, 1);
+  ViewTransitionElementResourceId resource_id(transition_token, 1, false);
 
   auto* vt_quad =
       root_render_pass->CreateAndAppendDrawQuad<SharedElementDrawQuad>();
@@ -2430,6 +2432,31 @@ TEST_P(CompositorFrameSinkSupportTest,
   EXPECT_EQ((gfx::Rect{0, 0, 13, 13}), region_properties->render_pass_subrect);
   EXPECT_EQ(kDefaultSize, region_properties->root_render_pass_size);
   EXPECT_TRUE(region_properties->transform_to_root.IsIdentity());
+}
+
+// Regression test for https://crbug.com/40286473.
+TEST_P(CompositorFrameSinkSupportTest, DoNotSendTheSameBeginFrameIdTwice) {
+  FakeExternalBeginFrameSource begin_frame_source(0.f, false);
+
+  MockCompositorFrameSinkClient mock_client;
+  auto support = std::make_unique<CompositorFrameSinkSupport>(
+      &mock_client, manager_.get(), kAnotherArbitraryFrameSinkId,
+      /*is_root=*/true);
+  support->SetBeginFrameSource(&begin_frame_source);
+  support->SetNeedsBeginFrame(true);
+
+  BeginFrameArgs args1 = CreateBeginFrameArgsForTesting(BEGINFRAME_FROM_HERE, 7,
+                                                        42, base::TimeTicks());
+  EXPECT_CALL(mock_client, OnBeginFrame(args1, _, _, _));
+  begin_frame_source.TestOnBeginFrame(args1);
+  testing::Mock::VerifyAndClearExpectations(&mock_client);
+
+  BeginFrameArgs args2 = CreateBeginFrameArgsForTesting(
+      BEGINFRAME_FROM_HERE, args1.frame_id.source_id,
+      args1.frame_id.sequence_number, base::TimeTicks());
+  EXPECT_CALL(mock_client, OnBeginFrame(_, _, _, _)).Times(0);
+  begin_frame_source.TestOnBeginFrame(args2);
+  testing::Mock::VerifyAndClearExpectations(&mock_client);
 }
 
 INSTANTIATE_TEST_SUITE_P(,

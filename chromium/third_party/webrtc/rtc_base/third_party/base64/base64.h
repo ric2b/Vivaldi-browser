@@ -18,9 +18,8 @@
 #include <vector>
 
 #include "absl/strings/string_view.h"
-#include "rtc_base/system/rtc_export.h"
 
-namespace rtc {
+namespace webrtc {
 
 class Base64 {
  public:
@@ -61,14 +60,14 @@ class Base64 {
   // encoded characters.
   static bool IsBase64Encoded(absl::string_view str);
 
-  RTC_EXPORT static void EncodeFromArray(const void* data,
-                                         size_t len,
-                                         std::string* result);
-  RTC_EXPORT static bool DecodeFromArray(const char* data,
-                                         size_t len,
-                                         DecodeFlags flags,
-                                         std::string* result,
-                                         size_t* data_used);
+  static void EncodeFromArray(const void* data,
+                              size_t len,
+                              std::string* result);
+  static bool DecodeFromArray(const char* data,
+                              size_t len,
+                              DecodeFlags flags,
+                              std::string* result,
+                              size_t* data_used);
   static bool DecodeFromArray(const char* data,
                               size_t len,
                               DecodeFlags flags,
@@ -123,6 +122,12 @@ class Base64 {
                                       size_t* data_used);
 };
 
+}  //  namespace webrtc
+
+// Re-export symbols from the webrtc namespace for backwards compatibility.
+// TODO(bugs.webrtc.org/4222596): Remove once all references are updated.
+namespace rtc {
+using ::webrtc::Base64;
 }  // namespace rtc
 
 #endif /* RTC_BASE_THIRD_PARTY_BASE64_BASE64_H_ */

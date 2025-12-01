@@ -415,7 +415,10 @@ cc_library(
     hdrs = ["voidify.h"],
     copts = ABSL_DEFAULT_COPTS,
     linkopts = ABSL_DEFAULT_LINKOPTS,
-    deps = ["//absl/base:config"],
+    deps = [
+        "//absl/base:config",
+        "//absl/base:core_headers",
+    ],
 )
 
 cc_library(
@@ -459,11 +462,12 @@ cc_library(
         "//absl/log:__subpackages__",
     ],
     deps = [
+        ":fnmatch",
         "//absl/base",
         "//absl/base:config",
         "//absl/base:core_headers",
         "//absl/base:no_destructor",
-        "//absl/log/internal:fnmatch",
+        "//absl/base:nullability",
         "//absl/memory",
         "//absl/strings",
         "//absl/synchronization",

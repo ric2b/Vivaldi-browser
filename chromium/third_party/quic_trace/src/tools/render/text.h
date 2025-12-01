@@ -18,8 +18,9 @@
 #include <memory>
 #include <unordered_map>
 
+#include <SDL_ttf.h>
+
 #include "absl/container/node_hash_map.h"
-#include "external/sdl2_ttf/SDL_ttf.h"
 #include "tools/render/program_state.h"
 #include "tools/render/sdl_util.h"
 #include "tools/render/shader.h"

@@ -39,6 +39,7 @@
 #include "api/rtp_sender_interface.h"
 #include "api/scoped_refptr.h"
 #include "api/transport/rtp/rtp_source.h"
+#include "api/units/data_rate.h"
 #include "api/units/time_delta.h"
 #include "api/units/timestamp.h"
 #include "api/video/recordable_encoded_frame.h"
@@ -178,7 +179,7 @@ class MediaChannelNetworkInterface {
   virtual bool SendRtcp(rtc::CopyOnWriteBuffer* packet,
                         const rtc::PacketOptions& options) = 0;
   virtual int SetOption(SocketType type,
-                        rtc::Socket::Option opt,
+                        webrtc::Socket::Option opt,
                         int option) = 0;
   virtual ~MediaChannelNetworkInterface() {}
 };
@@ -190,7 +191,7 @@ class MediaSendChannelInterface {
   virtual VideoMediaSendChannelInterface* AsVideoSendChannel() = 0;
 
   virtual VoiceMediaSendChannelInterface* AsVoiceSendChannel() = 0;
-  virtual cricket::MediaType media_type() const = 0;
+  virtual webrtc::MediaType media_type() const = 0;
 
   // Gets the currently set codecs/payload types to be used for outgoing media.
   virtual std::optional<Codec> GetSendCodec() const = 0;
@@ -266,7 +267,7 @@ class MediaReceiveChannelInterface {
   virtual VideoMediaReceiveChannelInterface* AsVideoReceiveChannel() = 0;
   virtual VoiceMediaReceiveChannelInterface* AsVoiceReceiveChannel() = 0;
 
-  virtual cricket::MediaType media_type() const = 0;
+  virtual webrtc::MediaType media_type() const = 0;
   // Creates a new incoming media stream with SSRCs, CNAME as described
   // by sp. In the case of a sp without SSRCs, the unsignaled sp is cached
   // to be used later for unsignaled streams received.
@@ -386,7 +387,7 @@ struct MediaSenderInfo {
   // https://w3c.github.io/webrtc-stats/#dom-rtcoutboundrtpstreamstats-nackcount
   uint32_t nacks_received = 0;
   // https://w3c.github.io/webrtc-stats/#dom-rtcoutboundrtpstreamstats-targetbitrate
-  std::optional<double> target_bitrate;
+  std::optional<webrtc::DataRate> target_bitrate;
   int packets_lost = 0;
   float fraction_lost = 0.0f;
   int64_t rtt_ms = 0;
@@ -575,6 +576,7 @@ struct VoiceReceiverInfo : public MediaReceiverInfo {
 struct VideoSenderInfo : public MediaSenderInfo {
   VideoSenderInfo();
   ~VideoSenderInfo();
+  std::optional<size_t> encoding_index;
   std::vector<SsrcGroup> ssrc_groups;
   std::optional<std::string> encoder_implementation_name;
   int firs_received = 0;

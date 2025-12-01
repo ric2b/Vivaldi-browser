@@ -487,7 +487,8 @@ void SkiaOutputSurfaceImplOnGpu::FinishPaintCurrentFrame(
                                              /*begin_semaphores=*/nullptr,
                                              /*end_semaphores=*/nullptr);
     bool draw_success = scoped_output_device_paint_->Draw(
-        std::move(graphite_recording), std::move(on_finished));
+        context_state_->graphite_context(), std::move(graphite_recording),
+        std::move(on_finished));
     RecordInsertRenderPassRecording(draw_success);
     if (!draw_success) {
       draw_render_pass_failed_ = true;
@@ -714,6 +715,7 @@ void SkiaOutputSurfaceImplOnGpu::FinishPaintRenderPass(
     if (insert_success) {
       skia_representation->SetCleared();
     } else {
+      DLOG(ERROR) << "Failed to insert recording";
       draw_render_pass_failed_ = true;
     }
     return;
@@ -1875,11 +1877,14 @@ void SkiaOutputSurfaceImplOnGpu::SetVSyncDisplayID(int64_t display_id) {
   output_device_->SetVSyncDisplayID(display_id);
 }
 
-void SkiaOutputSurfaceImplOnGpu::SetFrameRate(float frame_rate) {
+#if BUILDFLAG(IS_ANDROID)
+void SkiaOutputSurfaceImplOnGpu::SetFrameRate(
+    gfx::SurfaceControlFrameRate frame_rate) {
   if (presenter_) {
     presenter_->SetFrameRate(frame_rate);
   }
 }
+#endif
 
 void SkiaOutputSurfaceImplOnGpu::SetCapabilitiesForTesting(
     const OutputSurface::Capabilities& capabilities) {
@@ -2309,7 +2314,7 @@ void SkiaOutputSurfaceImplOnGpu::SwapBuffersInternal(
   gl::ScopedProgressReporter scoped_process_reporter(
       context_state_->progress_reporter());
   output_device_->Submit(
-      sync_cpu,
+      context_state_, sync_cpu,
       base::BindOnce(&SkiaOutputSurfaceImplOnGpu::PostSubmit,
                      base::Unretained(this), std::move(frame), skip_present));
 }

@@ -190,6 +190,11 @@
       },
     },
   },
+  'gpu_enable_metal_debug_layers': {
+    'args': [
+      '--enable-metal-debug-layers',
+    ],
+  },
   'gpu_force_angle_d3d11': {
     'args': [
       '--extra-browser-args=--use-angle=d3d11',
@@ -215,6 +220,16 @@
       '--extra-browser-args=--use-angle=metal',
     ],
   },
+  'gpu_force_angle_swiftshader': {
+    'args': [
+      '--extra-browser-args=--use-angle=swiftshader',
+    ],
+  },
+  'gpu_force_angle_vulkan': {
+    'args': [
+      '--extra-browser-args=--use-angle=vulkan',
+    ],
+  },
   'gpu_force_command_decoder_passthrough': {
     'args': [
       '--extra-browser-args=--use-cmd-decoder=passthrough --use-gl=angle',
@@ -223,6 +238,16 @@
   'gpu_force_command_decoder_validating': {
     'args': [
       '--extra-browser-args=--use-cmd-decoder=validating',
+    ],
+  },
+  'gpu_force_high_performance_gpu': {
+    'args': [
+      '--extra-browser-args=--force_high_performance_gpu',
+    ],
+  },
+  'gpu_force_high_performance_gpu_for_webgl_metal': {
+    'args': [
+      '--extra-browser-args=--enable-features=EGLDualGPURendering,ForceHighPerformanceGPUForWebGL',
     ],
   },
   'gpu_force_skia_ganesh': {
@@ -284,7 +309,6 @@
   },
   'gpu_integration_test_webgl1_args': {
     'args': [
-      '--extra-browser-args=--force_high_performance_gpu',
       '$$MAGIC_SUBSTITUTION_GPUWebGLRuntimeFile',
     ],
   },
@@ -292,7 +316,6 @@
     'args': [
       '--webgl-conformance-version=2.0.1',
       '$$MAGIC_SUBSTITUTION_GPUWebGLRuntimeFile',
-      '--extra-browser-args=--force_high_performance_gpu',
     ],
   },
   'gpu_nvidia_shield_tv_stable': {
@@ -360,8 +383,8 @@
     'swarming': {
       'dimensions': {
         'os': 'Android',
-        'device_type': 'a23',
-        'device_os': 'SP1A.210812.016',
+        'device_type': 'a23xq',
+        'device_os': 'TP1A.220624.014',
         'device_os_type': 'user',
         'pool': 'chromium.tests.gpu',
       },
@@ -437,6 +460,17 @@
       'dimensions': {
         'gpu': '1002:7340-23.2.1',
         'os': 'Ubuntu-22.04',
+        'display_attached': '1',
+        'pool': 'chromium.tests.gpu',
+      },
+    },
+  },
+  'linux_amd_rx_7600_stable': {
+    'fail_if_unused': False,
+    'swarming': {
+      'dimensions': {
+        'gpu': '1002:7480-24.2.8',
+        'os': 'Ubuntu-24.04',
         'display_attached': '1',
         'pool': 'chromium.tests.gpu',
       },
@@ -565,7 +599,7 @@
     'swarming': {
       'dimensions': {
         'cpu': 'arm64',
-        'os': 'Mac-14',
+        'os': 'Mac-14|Mac-15',
       },
     },
   },
@@ -573,7 +607,7 @@
     'swarming': {
       'dimensions': {
         'cpu': 'x86-64',
-        'os': 'Mac-14',
+        'os': 'Mac-14|Mac-15',
       },
     },
   },
@@ -836,6 +870,17 @@
         'display_attached': '1',
         'gpu': '10de:2184-31.0.15.4601',
         'os': 'Windows-10-19045',
+        'pool': 'chromium.tests.gpu',
+      },
+    },
+  },
+  'win11_amd_rx_7600_stable': {
+    'fail_if_unused': False,
+    'swarming': {
+      'dimensions': {
+        'display_attached': '1',
+        'gpu': '1002:7480-32.0.12033.1030',
+        'os': 'Windows-11-26100',
         'pool': 'chromium.tests.gpu',
       },
     },

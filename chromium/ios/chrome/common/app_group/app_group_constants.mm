@@ -35,8 +35,13 @@ const char kChromeAppGroupCommandDataPreference[] = "Data";
 const char kChromeAppGroupCommandIndexPreference[] = "Index";
 
 const char kChromeAppGroupOpenURLCommand[] = "openurl";
+NSString* const kChromeAppGroupOpenURLInIcognitoCommand = @"openurlIncognito";
 const char kChromeAppGroupSearchTextCommand[] = "searchtext";
+NSString* const kChromeAppGroupIncognitoSearchTextCommand =
+    @"incognitosearchtext";
 const char kChromeAppGroupSearchImageCommand[] = "searchimage";
+NSString* const kChromeAppGroupIncognitoSearchImageCommand =
+    @"incognitosearchimage";
 const char kChromeAppGroupVoiceSearchCommand[] = "voicesearch";
 const char kChromeAppGroupNewTabCommand[] = "newtab";
 const char kChromeAppGroupFocusOmniboxCommand[] = "focusomnibox";
@@ -73,9 +78,12 @@ NSString* const kOpenCommandSourceCredentialsExtension =
 NSString* const kOpenCommandSourceOpenExtension = @"ChromeOpenExtension";
 
 NSString* const kSuggestedItems = @"SuggestedItems";
-
 NSString* const kSuggestedItemsLastModificationDate =
     @"SuggestedItemsLastModificationDate";
+
+NSString* const kSuggestedItemsForMultiprofile = @"SuggestedItemsForMIM";
+NSString* const kSuggestedItemsLastModificationDateForMultiprofile =
+    @"SuggestedItemsLastModificationDateForMIM";
 
 NSString* const kOpenExtensionOutcomes = @"ChromeOpenExtensionOutcomes";
 
@@ -90,10 +98,14 @@ NSString* const kOpenExtensionOutcomeFailureUnsupportedScheme =
     @"OpenExtensionOutcomeFailureUnsupportedScheme";
 
 NSString* const kAccountsOnDevice = @"ios.registered_accounts_on_device";
-NSString* const kHostedDomain = @"hosted_domain";
 NSString* const kEmail = @"email";
+NSString* const kDefaultAccount = @"Default";
 
 NSString* const kYoutubeBundleID = @"com.google.youtube";
+
+NSString* const kPrimaryAccount = @"ios.primary_account";
+
+NSString* const kChromeLikelyDefaultBrowser = @"ChromeLikelyDefaultBrowser";
 
 NSString* ApplicationGroup() {
   return [AppGroupHelper applicationGroup];

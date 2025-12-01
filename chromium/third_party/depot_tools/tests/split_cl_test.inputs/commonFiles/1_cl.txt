@@ -1,0 +1,12 @@
+# CLs in this file must have the following format:
+# A 'Reviewers: [...]' line, where '...' is a (possibly empty) list of reviewer emails.
+# A 'Description: ...' line, where '...' is any string (by default, the list of directories the files have been pulled from).
+# One or more file lines, consisting of an <action>, <file> pair, in the format output by `git status`.
+
+# Each 'Reviewers' line begins a new CL.
+# To use the splitting in this file, use the --from-file option.
+
+Reviewers: [a@example.com]
+Description: ['chrome/browser']
+M, chrome/browser/a.cc
+M, chrome/browser/b.cc

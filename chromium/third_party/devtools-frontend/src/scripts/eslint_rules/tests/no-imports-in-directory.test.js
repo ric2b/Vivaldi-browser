@@ -2,19 +2,13 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-const tsParser = require('@typescript-eslint/parser');
 const path = require('path');
 
 const rule = require('../lib/no-imports-in-directory.js');
-const ruleTester = new (require('eslint').RuleTester)({
-  languageOptions: {
-    ecmaVersion: 'latest',
-    sourceType: 'module',
-    parser: tsParser,
-  },
-});
 
-ruleTester.run('no-imports-in-directory', rule, {
+const {RuleTester} = require('./utils/utils.js');
+
+new RuleTester().run('no-imports-in-directory', rule, {
   valid: [
     {
       code: 'import * as SDK from \'../../../core/sdk/sdk.js\';',
@@ -35,7 +29,6 @@ ruleTester.run('no-imports-in-directory', rule, {
           ],
         },
       ],
-      errors: [{messageId: 'invalidImport'}],
     },
   ],
   invalid: [

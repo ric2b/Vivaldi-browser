@@ -241,9 +241,8 @@ SvgTextLayoutAttributesBuilder::SvgTextLayoutAttributesBuilder(InlineNode ifc)
 // resolve_dy, "rotate" of result[], and "anchored chunk" of result[].
 //
 // [1]: https://svgwg.org/svg2-draft/text.html#TextLayoutAlgorithm
-void SvgTextLayoutAttributesBuilder::Build(
-    const String& ifc_text_content,
-    const HeapVector<InlineItem>& items) {
+void SvgTextLayoutAttributesBuilder::Build(const String& ifc_text_content,
+                                           const InlineItems& items) {
   LayoutAttributesStack attr_stack;
   HeapVector<SVGTextLengthContext> text_length_stack;
   unsigned addressable_index = 0;
@@ -258,7 +257,8 @@ void SvgTextLayoutAttributesBuilder::Build(
     text_length_stack.push_back(
         SVGTextLengthContext{block_flow_, addressable_index});
   }
-  for (const auto& item : items) {
+  for (const auto& item_ptr : items) {
+    const InlineItem& item = *item_ptr;
     const LayoutObject* object = item.GetLayoutObject();
 
     if (item.Type() == InlineItem::kOpenTag) {

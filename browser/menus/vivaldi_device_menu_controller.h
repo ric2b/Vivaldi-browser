@@ -16,6 +16,7 @@ class Browser;
 
 namespace content {
 struct ContextMenuParams;
+class WebContents;
 }
 
 namespace vivaldi {
@@ -27,6 +28,8 @@ class DeviceMenuController {
   DeviceMenuController(VivaldiRenderViewContextMenu* rv_context_menu,
                        GURL& url, std::string url_title);
   ~DeviceMenuController();
+
+  static bool HasSupport(content::WebContents* web_contents);
 
   void Populate(Browser* browser,
                 std::u16string label,

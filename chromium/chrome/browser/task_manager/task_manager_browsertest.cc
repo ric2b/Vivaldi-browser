@@ -706,6 +706,8 @@ IN_PROC_BROWSER_TEST_F(TaskManagerBrowserTest, JSHeapMemory) {
 #define MAYBE_SentDataObserved SentDataObserved
 #endif
 IN_PROC_BROWSER_TEST_F(TaskManagerBrowserTest, MAYBE_SentDataObserved) {
+  // TODO(crbug.com/397484647): Migrate TaskManagerDesktopRefreshBrowserTest
+  // version of this test into this one.
   ShowTaskManager();
   GURL test_gurl = embedded_test_server()->GetURL("/title1.html");
 
@@ -735,6 +737,9 @@ IN_PROC_BROWSER_TEST_F(TaskManagerBrowserTest, MAYBE_SentDataObserved) {
   // There shouldn't be too much usage on the browser process. Note that it
   // should be the first row since tasks are sorted by process ID then by task
   // ID.
+  if (base::FeatureList::IsEnabled(features::kTaskManagerDesktopRefresh)) {
+    model()->UpdateModel(DisplayCategory::kSystem, u"");
+  }
   EXPECT_GE(20000,
             model()->GetColumnValue(ColumnSpecifier::TOTAL_NETWORK_USE, 0));
 }
@@ -747,6 +752,8 @@ IN_PROC_BROWSER_TEST_F(TaskManagerBrowserTest, MAYBE_SentDataObserved) {
 #define MAYBE_TotalSentDataObserved TotalSentDataObserved
 #endif
 IN_PROC_BROWSER_TEST_F(TaskManagerBrowserTest, MAYBE_TotalSentDataObserved) {
+  // TODO(crbug.com/397484647): Migrate TaskManagerDesktopRefreshBrowserTest
+  // version of this test into this one.
   ShowTaskManager();
   GURL test_gurl = embedded_test_server()->GetURL("/title1.html");
 
@@ -794,6 +801,9 @@ IN_PROC_BROWSER_TEST_F(TaskManagerBrowserTest, MAYBE_TotalSentDataObserved) {
   // There shouldn't be too much usage on the browser process. Note that it
   // should be the first row since tasks are sorted by process ID then by task
   // ID.
+  if (base::FeatureList::IsEnabled(features::kTaskManagerDesktopRefresh)) {
+    model()->UpdateModel(DisplayCategory::kSystem, u"");
+  }
   EXPECT_GE(20000,
             model()->GetColumnValue(ColumnSpecifier::TOTAL_NETWORK_USE, 0));
 }
@@ -2254,7 +2264,7 @@ class TaskManagerDesktopRefreshBrowserTest : public TaskManagerBrowserTest {
   ~TaskManagerDesktopRefreshBrowserTest() override = default;
 
   void UpdateModel(const DisplayCategory display_category,
-                   const std::u16string& search_term) {
+                   std::u16string_view search_term) {
     model()->UpdateModel(display_category, search_term);
   }
 
@@ -2278,9 +2288,9 @@ IN_PROC_BROWSER_TEST_F(TaskManagerDesktopRefreshBrowserTest,
   ASSERT_NO_FATAL_FAILURE(WaitForTaskManagerRows(0, MatchAnyExtension()));
   ASSERT_NO_FATAL_FAILURE(WaitForTaskManagerRows(0, MatchAnyUtility()));
 
-  // Load an extension which should not be shown in the default
-  // `Tabs & Extensions` tab of the task manager. Current the task list is like
-  // below. The utility processes might be different for different systems.
+  // Load an extension which should be shown in the default `Tabs & Extensions`
+  // tab of the task manager. Current the task list is like below. The utility
+  // processes might be different for different systems.
   // Utility: Network Service
   // Utility: Video Capture
   // Utility: Storage Service

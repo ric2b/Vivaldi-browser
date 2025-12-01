@@ -52,7 +52,12 @@
 
 #if !BUILDFLAG(IS_IOS)
 #include "components/history_clusters/core/config.h"  // nogncheck
-#endif  // !BUILDFLAG(IS_IOS)
+#endif                                                // !BUILDFLAG(IS_IOS)
+
+// Vivaldi
+#include "app/vivaldi_apptools.h"
+#include "vivaldi/prefs/vivaldi_gen_prefs.h"
+// End Vivaldi
 
 constexpr bool kIsDesktop = !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS);
 
@@ -296,21 +301,7 @@ void ShortcutsProvider::DoAutocomplete(const AutocompleteInput& input,
     shortcuts_by_url[stripped_destination_url].push_back(&shortcut);
   }
 
-  if (!input.omit_asynchronous_matches()) {
-    // Inputs like 'http' or 'chrome' might have a more than 100 shortcuts,
-    // which precludes `UMA_HISTOGRAM_EXACT_LINEAR`.
-    UMA_HISTOGRAM_COUNTS_1000(
-        "Omnibox.Shortcuts.NumberOfUniqueShortcutsIterated",
-        shortcuts_by_url.size());
-  }
-
   for (const auto& [url, shortcuts] : shortcuts_by_url) {
-    if (!input.omit_asynchronous_matches()) {
-      UMA_HISTOGRAM_EXACT_LINEAR(
-          "Omnibox.Shortcuts.NumberOfDuplicatesPerShortcutIterated",
-          shortcuts.size(), 11);
-    }
-
     ShortcutMatch shortcut_match = CreateScoredShortcutMatch(
         lower_input.length(), url, shortcuts, max_relevance);
 
@@ -325,6 +316,25 @@ void ShortcutsProvider::DoAutocomplete(const AutocompleteInput& input,
       // not allow default or inline autocomplete for the keyword mode refresh.
       continue;
     }
+
+    if (vivaldi::IsVivaldiRunning()) {
+      PrefService* prefs = client_->GetPrefs();
+      auto show_search = prefs->GetBoolean(
+          vivaldiprefs::kAddressBarOmniboxSearchHistoryEnable);
+      if (AutocompleteMatch::IsSearchType(
+              shortcut_match.shortcut->match_core.type) &&
+          !show_search) {
+        continue;
+      }
+
+      auto show_history =
+          prefs->GetBoolean(vivaldiprefs::kAddressBarOmniboxShowBrowserHistory);
+      if (shortcut_match.shortcut->match_core.type ==
+              AutocompleteMatch::Type::HISTORY_CLUSTER &&
+          !show_history) {
+        continue;
+      }
+    }  // End Vivaldi
 
     if (shortcut_match.shortcut->match_core.type ==
         AutocompleteMatch::Type::HISTORY_CLUSTER) {
@@ -341,7 +351,7 @@ void ShortcutsProvider::DoAutocomplete(const AutocompleteInput& input,
     // Promote the shortcut with most hits to compete for the default slot.
     // Won't necessarily be the highest scoring shortcut, as scoring also
     // depends on visit times and input length. Therefore, has to be done before
-    // the partial sort before to ensure the match isn't erased. The match may
+    // the partial sort below to ensure the match isn't erased. The match may
     // be not-allowed-to-be-default, in which case, it'll be competing for top
     // slot in the URL grouped suggestions. This won't affect the scores of
     // other shortcuts, as they're already scored less than
@@ -369,6 +379,10 @@ void ShortcutsProvider::DoAutocomplete(const AutocompleteInput& input,
                    ? elem1.contents < elem2.contents
                    : elem1.relevance > elem2.relevance;
       });
+  // TODO(manukh): Some inputs have 1000+ shortcuts. Even if
+  //   `IsMlUrlScoringUnlimitedNumCandidatesEnabled()` is enabled, we should use
+  //   some limit, greater than `provider_max_matches_`, but less than 1000.
+  //   Likewise for other providers.
   bool ignore_provider_limit =
       OmniboxFieldTrial::IsMlUrlScoringUnlimitedNumCandidatesEnabled();
   if (!ignore_provider_limit &&
@@ -574,11 +588,11 @@ AutocompleteMatch ShortcutsProvider::ShortcutMatchToACMatch(
       bool autocompleted =
           match.type == AutocompleteMatch::Type::DOCUMENT_SUGGESTION
               ? match.TryRichAutocompletion(
-                    u"", ShortcutsBackend::GetSwappedContents(match), input,
+                    input, u"", ShortcutsBackend::GetSwappedContents(match),
                     shortcut.text)
               : match.TryRichAutocompletion(
-                    ShortcutsBackend::GetSwappedContents(match),
-                    ShortcutsBackend::GetSwappedDescription(match), input,
+                    input, ShortcutsBackend::GetSwappedContents(match),
+                    ShortcutsBackend::GetSwappedDescription(match),
                     shortcut.text);
       if (!autocompleted) {
         const size_t inline_autocomplete_offset =

@@ -5,6 +5,7 @@
 #include "chrome/browser/ai/ai_test_utils.h"
 
 #include "chrome/browser/ai/ai_manager.h"
+#include "chrome/browser/ai/ai_summarizer.h"
 #include "chrome/browser/optimization_guide/optimization_guide_keyed_service_factory.h"
 #include "third_party/blink/public/mojom/ai/model_download_progress_observer.mojom.h"
 
@@ -36,6 +37,39 @@ AITestUtils::MockCreateLanguageModelClient::~MockCreateLanguageModelClient() =
 mojo::PendingRemote<blink::mojom::AIManagerCreateLanguageModelClient>
 AITestUtils::MockCreateLanguageModelClient::BindNewPipeAndPassRemote() {
   return receiver_.BindNewPipeAndPassRemote();
+}
+AITestUtils::FakeComponent::FakeComponent(std::string id, uint64_t total_bytes)
+    : id_(std::move(id)), total_bytes_(total_bytes) {}
+
+component_updater::CrxUpdateItem AITestUtils::FakeComponent::CreateUpdateItem(
+    update_client::ComponentState state,
+    uint64_t downloaded_bytes) const {
+  component_updater::CrxUpdateItem update_item;
+  update_item.state = state;
+  update_item.id = id_;
+  update_item.downloaded_bytes = downloaded_bytes;
+  update_item.total_bytes = total_bytes_;
+  return update_item;
+}
+
+AITestUtils::MockComponentUpdateService::MockComponentUpdateService() = default;
+AITestUtils::MockComponentUpdateService::~MockComponentUpdateService() =
+    default;
+
+void AITestUtils::MockComponentUpdateService::AddObserver(Observer* observer) {
+  observer_list_.AddObserver(observer);
+}
+
+void AITestUtils::MockComponentUpdateService::RemoveObserver(
+    Observer* observer) {
+  observer_list_.RemoveObserver(observer);
+}
+
+void AITestUtils::MockComponentUpdateService::SendUpdate(
+    const component_updater::CrxUpdateItem& item) {
+  for (Observer& observer : observer_list_) {
+    observer.OnEvent(item);
+  }
 }
 
 AITestUtils::AITestBase::AITestBase() = default;
@@ -70,6 +104,31 @@ void AITestUtils::AITestBase::SetupNullOptimizationGuideKeyedService() {
       profile(), base::BindRepeating(
                      [](content::BrowserContext* context)
                          -> std::unique_ptr<KeyedService> { return nullptr; }));
+}
+
+void AITestUtils::AITestBase::SetupMockSession() {
+  ON_CALL(*mock_optimization_guide_keyed_service_,
+          StartSession(testing::_, testing::_))
+      .WillByDefault([&] {
+        return std::make_unique<
+            testing::NiceMock<optimization_guide::MockSession>>(&session_);
+      });
+  ON_CALL(session_, GetContextSizeInTokens(testing::_, testing::_))
+      .WillByDefault(
+          [&](optimization_guide::MultimodalMessageReadView request_metadata,
+              optimization_guide::OptimizationGuideModelSizeInTokenCallback
+                  callback) {
+            std::move(callback).Run(
+                blink::mojom::kWritingAssistanceMaxInputTokenSize);
+          });
+  ON_CALL(session_, GetExecutionInputSizeInTokens(testing::_, testing::_))
+      .WillByDefault(
+          [&](optimization_guide::MultimodalMessageReadView request_metadata,
+              optimization_guide::OptimizationGuideModelSizeInTokenCallback
+                  callback) {
+            std::move(callback).Run(
+                blink::mojom::kWritingAssistanceMaxInputTokenSize);
+          });
 }
 
 blink::mojom::AIManager* AITestUtils::AITestBase::GetAIManagerInterface() {
@@ -135,4 +194,37 @@ void AITestUtils::CheckWritingAssistanceApiRequest(
   EXPECT_EQ(request->options().output_length(),
             expected_options.output_length());
   EXPECT_EQ(request->rewrite_text(), expected_input);
+}
+
+// static
+void AITestUtils::CheckSummarizeRequest(
+    const google::protobuf::MessageLite& request_metadata,
+    const std::string& expected_shared_context,
+    const std::string& expected_context,
+    const optimization_guide::proto::SummarizeOptions& expected_options,
+    const std::string& expected_input) {
+  const optimization_guide::proto::SummarizeRequest* request =
+      static_cast<const optimization_guide::proto::SummarizeRequest*>(
+          &request_metadata);
+  EXPECT_EQ(request->context(), AISummarizer::CombineContexts(
+                                    expected_shared_context, expected_context));
+  EXPECT_EQ(request->options().output_type(), expected_options.output_type());
+  EXPECT_EQ(request->options().output_format(),
+            expected_options.output_format());
+  EXPECT_EQ(request->options().output_length(),
+            expected_options.output_length());
+  EXPECT_EQ(request->article(), expected_input);
+}
+
+// static
+std::vector<blink::mojom::AILanguageCodePtr> AITestUtils::ToMojoLanguageCodes(
+    const std::vector<std::string>& language_codes) {
+  std::vector<blink::mojom::AILanguageCodePtr> result;
+  result.reserve(language_codes.size());
+  std::ranges::transform(
+      language_codes, std::back_inserter(result),
+      [](const std::string& language_code) {
+        return blink::mojom::AILanguageCode::New(language_code);
+      });
+  return result;
 }

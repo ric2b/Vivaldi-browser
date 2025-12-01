@@ -4,6 +4,7 @@
 <translation id="1033008476608128425">Dreach-tìre 3</translation>
 <translation id="1118377629180821201">Dreach-tìre 12</translation>
 <translation id="1158503667684816647">Na seall an dearbhadh a-rithist</translation>
+<translation id="1159983379553246472">Ath-luchdaich an taba seo airson duilgheadasan le cluich nam meadhanan a chàradh.</translation>
 <translation id="1222195720020481779">A’ cur gu dol an stàlaicheir…</translation>
 <translation id="1224683873953469764">Faigh Vivaldi air uidheam mobile</translation>
 <translation id="1270785070369717623">Gu mì-fhortanach, chan eil na roghainnean Opera GX agad ri làimh fhad ’s a bhios am brabhsair ud a’ ruith. Gus na roghainnean seo ion-phortadh dha Vivaldi, sàbhail d’ obair ann is dùin gach uinneag aig Opera GX. Briog air “Air adhart” an uair sin.</translation>
@@ -33,9 +34,11 @@
 <translation id="2141974047387702305">Thachair mearachd fhad ’s a bha sinn a’ luchdadh a-nuas faidhlichean an ùrachaidh. Thoir sùil air a’ cheangal agad ris an eadar-lìn is feuch ris a-rithist an ceann greis.</translation>
 <translation id="2226825946708954262">⚠ Lean air adhart le call dàta</translation>
 <translation id="2339641773402824483">A’ toirt sùil airson ùrachaidhean…</translation>
+<translation id="2429571091666452569">On liosta:</translation>
 <translation id="2441056087170876076">Uilebheist 2</translation>
 <translation id="2444387452209867610">Cuir nòta a-steach</translation>
 <translation id="2486841023299517366">Beathach 4</translation>
+<translation id="2501278716633472235">Air ais</translation>
 <translation id="2612127540243995147">Deiseil airson stàladh. Thèid Vivaldi a dhùnadh is ath-thòiseachadh.</translation>
 <translation id="2613387515621326337">Seall làrach-lìn an ùrachaidh</translation>
 <translation id="2645477450146475243">Gu mì-fhortanach, chan eil na roghainnean Opera agad ri làimh fhad ’s a bhios am brabhsair ud a’ ruith. Gus na roghainnean seo ion-phortadh dha Vivaldi, sàbhail d’ obair ann is dùin gach uinneag aig Opera. Briog air “Air adhart” an uair sin.</translation>
@@ -60,6 +63,7 @@
 <translation id="3259769196742189631">Dearbh</translation>
 <translation id="3291915639428159043">Fèin-chluich air a bhacadh</translation>
 <translation id="3302905971452834934">Uilebheist 1</translation>
+<translation id="3308738399950580893">sanasachd</translation>
 <translation id="3334610655141903168">(gun tiotal)</translation>
 <translation id="3372505110412186107">’S e Vivaldi <ph name="VERSION" /> an tionndadh as ùire a tha ri làimh aig an àm seo.</translation>
 <translation id="3383198080133834965">Tha rudan cho ùr ’s a ghabhas!</translation>
@@ -82,6 +86,7 @@
 <translation id="3795800845758778870">Gu mì-fhortanach, chan eil na roghainnean Brave agad ri làimh fhad ’s a bhios am brabhsair ud a’ ruith. Gus na roghainnean seo ion-phortadh dha Vivaldi, sàbhail d’ obair ann is dùin gach uinneag aig Brave. Briog air “Air adhart” an uairsin.</translation>
 <translation id="3822431842304177896">Sgaradair ùr</translation>
 <translation id="3832132597516774400">Dreach-tìre 5</translation>
+<translation id="3894751534882749287">Ma tha thu airson coimhead air an duilleag co-dhiù, is urrainn dhut ìre an dìon o thracadh a chur air gleus ann am priob-uinneag blocaiche nan tracaichean no le bhith a’ briogadh air a’ phutan “Ceadaich”</translation>
 <translation id="3914946330804881301">Air ion-phortadh o Opera</translation>
 <translation id="3921292902397893431">Uilebheist 8</translation>
 <translation id="3943857333388298514">Cuir ann</translation>
@@ -106,6 +111,7 @@
 <translation id="4582480609585453144">Fosgail an ceangal ann an taba sa chùlaibh</translation>
 <translation id="4636708767492582204">Cuir sa phost</translation>
 <translation id="4677434526832593569">Beathach 8</translation>
+<translation id="4736016046474602958">Blocaiche nan tracaichean</translation>
 <translation id="474217410105706308">Mùch an taba</translation>
 <translation id="4861715717329665002">Seiseanan air am fèin-sàbhaladh</translation>
 <translation id="4881695831933465202">Fosgail</translation>
@@ -122,6 +128,7 @@
 <translation id="5388358297987318779">Fosgail an dealbh</translation>
 <translation id="5416008465899576639">Tha tionndadh ùr de Vivaldi ri fhaighinn.</translation>
 <translation id="5497042274492038489">Dearbh dùnadh na h-uinneige</translation>
+<translation id="5556459405103347317">Ath-luchdaich</translation>
 <translation id="5594602170491763400">Uilebheist 5</translation>
 <translation id="5648110075441906505">Fosgail an dealbh ann an uinneag ùr</translation>
 <translation id="5656371807944747581">Mearachd an ùrachaidh!</translation>
@@ -150,6 +157,7 @@
 <translation id="7086554968911045110">Dreach-tìre 7</translation>
 <translation id="7099506190679014195">Àrdachadh tèarainte airson stòras nan iuchraichean</translation>
 <translation id="7111492742514999492">Dreach-tìre 9</translation>
+<translation id="7113310725918019676">Ceadaich <ph name="BLOCKED_TYPE" /> o <ph name="DOMAIN" /></translation>
 <translation id="7208252576848052204">Gu mì-fhortanach, chan eil na roghainnean Arc agad ri làimh fhad ’s a bhios am brabhsair ud a’ ruith. Gus na roghainnean seo ion-phortadh dha Vivaldi, sàbhail d’ obair ann is dùin gach uinneag aig Arc. Briog air “Air adhart” an uair sin.</translation>
 <translation id="7321500017121629018">Gnìomhach an-dè</translation>
 <translation id="7337881442233988129">Chromium</translation>
@@ -165,9 +173,9 @@
 <translation id="8027581147000338959">Fosgail ann an uinneag ùr</translation>
 <translation id="8044382196220116469">Na leig le làraichean video a chluich gu fèin-obrachail</translation>
 <translation id="8099620695029051217">Dèan lethbhreac de sheòladh na duilleige</translation>
+<translation id="8119307142152921512">tracaichean is sanasachd</translation>
 <translation id="8197810018650377191">Dèan comharra-lìn dhen duilleag</translation>
 <translation id="8261506727792406068">Sguab às</translation>
-<translation id="8263047843452521549">Sgrùd obraiche seirbheise a’ chùlaibh</translation>
 <translation id="8331671104904436324">Fosgail ann an taba sa chùlaibh</translation>
 <translation id="8373293945112511707">Dreach-tìre 1</translation>
 <translation id="8388552048012645975">A’ luchdadh a-nuas ùrachadh…</translation>
@@ -181,7 +189,6 @@
 <translation id="8651348004684669199">Cuir taba gnìomhach ris</translation>
 <translation id="8669345741879513971">Uilebheist 10</translation>
 <translation id="867544375504146191">Yandex</translation>
-<translation id="8689295374912158752">Sgrùd sgrìobhainn a’ phortail</translation>
 <translation id="875142999698251063">Dèan fàgail an-dràsta</translation>
 <translation id="8768970203213061953">Dreach-tìre 14</translation>
 <translation id="8773635261052182196">Chan fhaic thu na brathan seo a-rithist. ’S urrainn dhut an cur an comas às ùr ann an roghainnean Vivaldi.</translation>
@@ -189,6 +196,7 @@
 <translation id="8813277370772331957">Cuir nam chuimhne uaireigin eile</translation>
 <translation id="8894900864683381599">Cuir an ceangal ris a’ phanail-lìn</translation>
 <translation id="8912720443398351457">A bheil thu cinnteach gu bheil thu airson Vivaldi fhàgail?</translation>
+<translation id="8940028675168378100">Air a bhacadh le <ph name="BLOCKER_NAME" /></translation>
 <translation id="8947109330183116400">Tagh faidhle comharran-lìn HTML</translation>
 <translation id="9017566390391482291">Tagh pasgan pròifil Vivaldi gus ion-phortadh</translation>
 <translation id="9048058608784130603">Ùrachadh ri dhèiligeadh <ph name="VERSION" /></translation>
@@ -199,6 +207,7 @@
 <translation id="912022491595344261">Fosgail an dealbh mar <ph name="USER" /></translation>
 <translation id="9157539936604258187">Fosgail an ceangal</translation>
 <translation id="9169060351863393881">Opera 12.x</translation>
+<translation id="9180553614777056266">Bacaiche na sanasachd</translation>
 <translation id="939305735877869636">Brave</translation>
 <translation id="970294721402795299">Dreach-tìre 16</translation>
 </translationbundle>

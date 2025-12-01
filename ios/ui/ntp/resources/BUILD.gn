@@ -59,6 +59,14 @@ bundle_data_xcassets("assets") {
     "Assets.xcassets/vivaldi_ntp_toolbar_more.imageset/Contents.json",
     "Assets.xcassets/vivaldi_ntp_toolbar_more.imageset/vivaldi_ntp_toolbar_more.pdf",
 
+    # vivaldi_ntp_toolbar_add
+    "Assets.xcassets/vivaldi_ntp_toolbar_add.imageset/Contents.json",
+    "Assets.xcassets/vivaldi_ntp_toolbar_add.imageset/vivaldi_ntp_toolbar_add.svg",
+
+     # vivaldi_ntp_toolbar_customize
+    "Assets.xcassets/vivaldi_ntp_toolbar_customize.imageset/Contents.json",
+    "Assets.xcassets/vivaldi_ntp_toolbar_customize.imageset/vivaldi_ntp_toolbar_customize.svg",
+
     # vivaldi_ntp_add_new_speed_dial
     "Assets.xcassets/vivaldi_ntp_add_new_speed_dial.imageset/Contents.json",
     "Assets.xcassets/vivaldi_ntp_add_new_speed_dial.imageset/vivaldi_ntp_add_new_speed_dial.pdf",

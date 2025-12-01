@@ -369,7 +369,11 @@ int WebSocketBasicStream::HandleReadResult(
     int result,
     std::vector<std::unique_ptr<WebSocketFrame>>* frames) {
   DCHECK_NE(ERR_IO_PENDING, result);
-  DCHECK(frames->empty());
+
+  // This CHECK() is critical to prevent data corruption. See
+  // https://crbug.com/393000981.
+  CHECK(frames->empty());
+
   if (result < 0)
     return result;
   if (result == 0)
@@ -378,9 +382,8 @@ int WebSocketBasicStream::HandleReadResult(
   buffer_size_manager_.OnReadComplete(base::TimeTicks::Now(), result);
 
   std::vector<std::unique_ptr<WebSocketFrameChunk>> frame_chunks;
-  if (!parser_.Decode(
-          read_buffer_->span().first(base::checked_cast<size_t>(result)),
-          &frame_chunks)) {
+  if (!parser_.Decode(read_buffer_->first(base::checked_cast<size_t>(result)),
+                      &frame_chunks)) {
     return WebSocketErrorToNetError(parser_.websocket_error());
   }
   if (frame_chunks.empty())

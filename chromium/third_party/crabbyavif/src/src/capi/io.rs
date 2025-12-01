@@ -164,6 +164,7 @@ impl avifIOWrapper {
 }
 
 impl crate::decoder::IO for avifIOWrapper {
+    #[cfg_attr(feature = "disable_cfi", no_sanitize(cfi))]
     fn read(&mut self, offset: u64, size: usize) -> AvifResult<&[u8]> {
         let res = unsafe {
             (self.io.read)(

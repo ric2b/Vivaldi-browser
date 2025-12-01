@@ -275,6 +275,12 @@ static bool BlockSuppressesAutosizing(const LayoutBlock* block) {
   if (BlockHeightConstrained(block))
     return true;
 
+  if (RuntimeEnabledFeatures::TextAutoSizingDisabledOnFlexboxEnabled() &&
+      block->IsFlexItem()) {
+    block->GetDocument().CountUse(WebFeature::kTextAutoSizingDisabledOnFlexbox);
+    return true;
+  }
+
   return false;
 }
 
@@ -892,8 +898,7 @@ TextAutosizer::Fingerprint TextAutosizer::ComputeFingerprint(
 
     // TODO(kojii): The width can be computed from style only when it's fixed.
     // consider for adding: writing mode, padding.
-    data.width_ =
-        width.IsFixed() ? WTF::NormalizeSign(width.GetFloatValue()) : 0.0f;
+    data.width_ = width.IsFixed() ? WTF::NormalizeSign(width.Pixels()) : 0.0f;
   }
 
   // Use nodeIndex as a rough approximation of column number
@@ -1066,8 +1071,9 @@ float TextAutosizer::WidthFromBlock(const LayoutBlock* block) const {
     float width;
     Length specified_width = block->StyleRef().LogicalWidth();
     if (specified_width.IsFixed()) {
-      if ((width = specified_width.Value()) > 0)
+      if ((width = specified_width.Pixels()) > 0) {
         return width;
+      }
     }
     if (specified_width.HasPercent()) {
       if (float container_width = ContentInlineSize(block->ContainingBlock())) {
@@ -1234,23 +1240,9 @@ void TextAutosizer::ApplyMultiplier(LayoutObject* layout_object,
   DCHECK(layout_object);
   const ComputedStyle& current_style = layout_object->StyleRef();
   if (!current_style.GetTextSizeAdjust().IsAuto()) {
-    if (RuntimeEnabledFeatures::TextSizeAdjustImprovementsEnabled()) {
-      // Non-auto values of text-size-adjust should fully disable automatic
-      // text size adjustment, including the accessibility font scale factor.
-      multiplier = 1;
-    } else {
-      // The accessibility font scale factor is applied by the autosizer so we
-      // need to apply that scale factor on top of the text-size-adjust
-      // multiplier. Only apply the accessibility factor if the autosizer has
-      // determined a multiplier should be applied so that text-size-adjust:none
-      // does not cause a multiplier to be applied when it wouldn't be
-      // otherwise.
-      bool should_apply_accessibility_font_scale_factor = multiplier > 1;
-      multiplier = current_style.GetTextSizeAdjust().Multiplier();
-      if (should_apply_accessibility_font_scale_factor) {
-        multiplier *= page_info_.accessibility_font_scale_factor_;
-      }
-    }
+    // Non-auto values of text-size-adjust should fully disable automatic text
+    // size adjustment, including the accessibility font scale factor.
+    multiplier = 1;
   } else if (multiplier < 1) {
     // Unlike text-size-adjust, the text autosizer should only inflate fonts.
     multiplier = 1;

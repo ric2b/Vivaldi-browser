@@ -295,6 +295,7 @@
 <translation id="2867808975387772810">ዋቢ መጽሐፍት</translation>
 <translation id="2873259058405069099">ወደ የሠንጠረዡ መጀመሪያ ይሂዱ</translation>
 <translation id="287383510823843610">ደማቅ ብርቱካናማ</translation>
+<translation id="2876760662374103627">የፊት መቆጣጠሪያ ገቢር ነው</translation>
 <translation id="2879867157561757640">ሦስት ጣቶችን ወደ ታች ያንሸራትቱ</translation>
 <translation id="288178314850623291">ወደተወሰኑ አባለ-ነገሮች ዘልለው ለመሄድ የመዝለል ትዕዛዞችን ይጠቀሙ። በርዕሶች መካከል ወደፊት ለመዝለል Search + H ይጫኑ፣ ወይም ወደ ኋላ ለመዝለል Search + Shift + H ይጫኑ።</translation>
 <translation id="2885764457467528513">{COUNT,plural, =1{ደቂቃ}one{ደቂቃዎች}other{ደቂቃዎች}}</translation>
@@ -1115,6 +1116,7 @@
 <translation id="8316881042119029234">አሮጌ ጫማ ማሰሪያ</translation>
 <translation id="8326783648485765113">የሣር ሜዳ አረንጓዴ</translation>
 <translation id="8345569862449483843">{COUNT,plural, =1{መሰላል}one{# የመሰላል ምልክቶች}other{# የመሰላል ምልክቶች}}</translation>
+<translation id="8351821207686449674">የመግለጫ ጽሑፎችን ቀያይር</translation>
 <translation id="8378855320830505539">ክልል</translation>
 <translation id="8382679411218029383">ራስ-አጠናቅቅ መስመር ውስጥ እና ዝርዝር</translation>
 <translation id="8394908167088220973">ሚዲያ አጫውት/ለአፍታ አቁም</translation>

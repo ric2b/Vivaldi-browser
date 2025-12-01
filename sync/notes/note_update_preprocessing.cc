@@ -8,6 +8,7 @@
 
 #include "base/base64.h"
 #include "base/containers/span.h"
+#include "base/feature_list.h"
 #include "base/hash/sha1.h"
 #include "base/logging.h"
 #include "base/metrics/histogram_functions.h"
@@ -17,6 +18,7 @@
 #include "base/strings/stringprintf.h"
 #include "base/uuid.h"
 #include "components/sync/base/data_type.h"
+#include "components/sync/base/features.h"
 #include "components/sync/base/unique_position.h"
 #include "components/sync/protocol/sync.pb.h"
 #include "sync/vivaldi_hash_util.h"
@@ -127,6 +129,17 @@ sync_pb::UniquePosition GetUniquePositionFromSyncEntity(
 bool AdaptUniquePositionForNote(const sync_pb::SyncEntity& update_entity,
                                 sync_pb::EntitySpecifics* specifics) {
   DCHECK(specifics);
+
+  if (!update_entity.deleted() && specifics->notes().has_unique_position() &&
+      base::FeatureList::IsEnabled(kSyncSimulateBookmarksPingPongForTesting)) {
+    // Returning true here will trigger an upload, exercising a codepath that is
+    // originally meant to populate the `unique_position` field. With this
+    // test-only feature flag enabled, the effect is the opposite: the upload
+    // will cause the field in specifics to be cleared (which will ping-pong if
+    // another device is online, without this flag set).
+    return true;
+  }
+
   // Nothing to do if the field is set or if it's a deletion.
   if (specifics->notes().has_unique_position() || update_entity.deleted()) {
     return false;
@@ -163,7 +176,7 @@ void AdaptTypeForNote(const sync_pb::SyncEntity& update_entity,
   }
   // Remaining cases should be unreachable today. In case SyncEntity.folder gets
   // removed in the future, with legacy data still being around prior to M94,
-  // infer folderness based on the present of field |content| (only populated
+  // infer folderness based on the present of field `content` (only populated
   // for normal notes).
   if (!specifics->notes().has_content())
     specifics->mutable_notes()->set_special_node_type(

@@ -197,6 +197,12 @@ bool ValidateDebugMessageCallback(const Context *context,
                                   GLDEBUGPROC callback,
                                   const void *userParam)
 {
+    if (context->getClientVersion() < ES_3_2)
+    {
+        ANGLE_VALIDATION_ERROR(GL_INVALID_OPERATION, kES32Required);
+        return false;
+    }
+
     return true;
 }
 
@@ -209,7 +215,13 @@ bool ValidateDebugMessageControl(const Context *context,
                                  const GLuint *ids,
                                  GLboolean enabled)
 {
-    return true;
+    if (context->getClientVersion() < ES_3_2)
+    {
+        ANGLE_VALIDATION_ERROR(GL_INVALID_OPERATION, kES32Required);
+        return false;
+    }
+
+    return ValidateDebugMessageControlBase(context, entryPoint, source, type, severity, count, ids);
 }
 
 bool ValidateDebugMessageInsert(const Context *context,
@@ -221,7 +233,14 @@ bool ValidateDebugMessageInsert(const Context *context,
                                 GLsizei length,
                                 const GLchar *buf)
 {
-    return true;
+    if (context->getClientVersion() < ES_3_2)
+    {
+        ANGLE_VALIDATION_ERROR(GL_INVALID_OPERATION, kES32Required);
+        return false;
+    }
+
+    return ValidateDebugMessageInsertBase(context, entryPoint, source, type, id, severity, length,
+                                          buf);
 }
 
 bool ValidateDisablei(const PrivateState &state,
@@ -484,7 +503,7 @@ bool ValidateGetSamplerParameterIiv(const Context *context,
         ANGLE_VALIDATION_ERROR(GL_INVALID_OPERATION, kES32Required);
         return false;
     }
-    return ValidateGetSamplerParameterBase(context, entryPoint, sampler, pname, nullptr);
+    return ValidateGetSamplerParameterBase(context, entryPoint, sampler, pname, nullptr, params);
 }
 
 bool ValidateGetSamplerParameterIuiv(const Context *context,
@@ -498,7 +517,7 @@ bool ValidateGetSamplerParameterIuiv(const Context *context,
         ANGLE_VALIDATION_ERROR(GL_INVALID_OPERATION, kES32Required);
         return false;
     }
-    return ValidateGetSamplerParameterBase(context, entryPoint, sampler, pname, nullptr);
+    return ValidateGetSamplerParameterBase(context, entryPoint, sampler, pname, nullptr, params);
 }
 
 bool ValidateGetTexParameterIiv(const Context *context,
@@ -712,7 +731,7 @@ bool ValidateReadnPixels(const Context *context,
 
     if (bufSize < 0)
     {
-        ANGLE_VALIDATION_ERROR(GL_INVALID_VALUE, kNegativeBufferSize);
+        ANGLE_VALIDATION_ERROR(GL_INVALID_VALUE, kNegativeBufSize);
         return false;
     }
 

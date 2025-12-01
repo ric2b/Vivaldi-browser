@@ -10,6 +10,7 @@
 #include <utility>
 #include <vector>
 
+#include "base/check_op.h"
 #include "base/containers/flat_set.h"
 #include "base/functional/bind.h"
 #include "base/memory/ptr_util.h"
@@ -29,6 +30,7 @@
 #include "ui/base/mojom/ui_base_types.mojom-shared.h"
 #include "ui/base/mojom/window_show_state.mojom.h"
 #include "ui/base/win/event_creation_utils.h"
+#include "ui/base/win/hwnd_metrics.h"
 #include "ui/base/win/win_cursor.h"
 #include "ui/compositor/compositor.h"
 #include "ui/compositor/layer.h"
@@ -183,8 +185,6 @@ void DesktopWindowTreeHostWin::OnWidgetThemeChanged(Widget* widget) {
 // DesktopWindowTreeHostWin, DesktopWindowTreeHost implementation:
 
 void DesktopWindowTreeHostWin::Init(const Widget::InitParams& params) {
-  wants_mouse_events_when_inactive_ = params.wants_mouse_events_when_inactive;
-
   wm::SetAnimationHost(content_window(), this);
   if (params.type == Widget::InitParams::TYPE_WINDOW &&
       !params.remove_standard_frame) {
@@ -192,8 +192,7 @@ void DesktopWindowTreeHostWin::Init(const Widget::InitParams& params) {
   }
 
   message_handler_ = HWNDMessageHandler::Create(
-      this, native_widget_delegate_->AsWidget()->GetName(),
-      params.ShouldInitAsHeadless());
+      this, native_widget_delegate_->AsWidget()->GetName());
 
   ConfigureWindowStyles(message_handler_.get(), params,
                         GetWidget()->widget_delegate(),
@@ -752,7 +751,8 @@ DesktopWindowTreeHostWin::GetBoundsInAcceleratedWidgetPixelCoordinates() {
     return gfx::Rect(window_bounds.size());
   }
   const gfx::Vector2d offset = client_bounds.origin() - window_bounds.origin();
-  DCHECK(offset.x() >= 0 && offset.y() >= 0);
+  DCHECK_GE(offset.x(), 0);
+  DCHECK_GE(offset.y(), 0);
   return gfx::Rect(gfx::Point() + offset, client_bounds.size());
 }
 
@@ -916,10 +916,6 @@ bool DesktopWindowTreeHostWin::CanActivate() const {
                                  : false;
 }
 
-bool DesktopWindowTreeHostWin::WantsMouseEventsWhenInactive() const {
-  return wants_mouse_events_when_inactive_;
-}
-
 bool DesktopWindowTreeHostWin::WidgetSizeIsClientSize() const {
   if (IsMaximized()) {
     return true;
@@ -948,11 +944,19 @@ int DesktopWindowTreeHostWin::GetNonClientComponent(
   return native_widget_delegate_->GetNonClientComponent(dip_position);
 }
 
-void DesktopWindowTreeHostWin::GetWindowMask(const gfx::Size& size,
+void DesktopWindowTreeHostWin::GetWindowMask(const gfx::Size& size_px,
                                              SkPath* path) {
+  // Request the window mask for hwnd of `size_px`. The hwnd size must be
+  // adjusted by `window_enlargement` to return to the client-expected window
+  // size (see crbug.com/41047830).
+  const gfx::Size adjusted_size_in_px =
+      size_px - gfx::Size(window_enlargement_.x(), window_enlargement_.y());
+
   if (Widget* widget = GetWidget(); widget && widget->non_client_view()) {
     widget->non_client_view()->GetWindowMask(
-        display::win::ScreenWin::ScreenToDIPSize(GetHWND(), size), path);
+        display::win::ScreenWin::ScreenToDIPSize(GetHWND(),
+                                                 adjusted_size_in_px),
+        path);
     // Convert path in DIPs to pixels.
     if (!path->isEmpty()) {
       const float scale =
@@ -963,16 +967,29 @@ void DesktopWindowTreeHostWin::GetWindowMask(const gfx::Size& size,
       path->transform(matrix);
     }
   } else if (!window_enlargement_.IsZero()) {
-    gfx::Rect bounds(WidgetSizeIsClientSize()
-                         ? message_handler_->GetClientAreaBoundsInScreen()
-                         : message_handler_->GetWindowBoundsInScreen());
-    InsetBottomRight(&bounds, window_enlargement_);
-    path->addRect(SkRect::MakeXYWH(0, 0, bounds.width(), bounds.height()));
+    path->addRect(SkRect::MakeXYWH(0, 0, adjusted_size_in_px.width(),
+                                   adjusted_size_in_px.height()));
   }
 }
 
 bool DesktopWindowTreeHostWin::GetClientAreaInsets(gfx::Insets* insets,
                                                    HMONITOR monitor) const {
+  // WS_THICKFRAME style has a system titlebar. Remove this titlebar for
+  // borderless windows.
+  if (desktop_native_widget_aura_->widget_type() ==
+          Widget::InitParams::TYPE_WINDOW_FRAMELESS &&
+      (GetWindowLong(GetHWND(), GWL_STYLE) & WS_THICKFRAME)) {
+    int frame_thickness = ui::GetFrameThickness(monitor);
+    *insets = gfx::Insets(frame_thickness);
+    // In non-maximized window, the top-border inset must be zero, otherwise
+    // Windows will draw a full native titlebar.
+    if (!IsMaximized()) {
+      insets->set_top(0);
+    }
+
+    return true;
+  }
+
   return false;
 }
 
@@ -1109,6 +1126,18 @@ void DesktopWindowTreeHostWin::HandleBeginWMSizeMove() {
 void DesktopWindowTreeHostWin::HandleEndWMSizeMove() {
   if (native_widget_delegate_) {
     native_widget_delegate_->OnNativeWidgetEndUserBoundsChange();
+  }
+}
+
+void DesktopWindowTreeHostWin::HandleBeginUserResize() {
+  if (native_widget_delegate_) {
+    native_widget_delegate_->OnNativeWidgetUserResizeStarted();
+  }
+}
+
+void DesktopWindowTreeHostWin::HandleEndUserResize() {
+  if (native_widget_delegate_) {
+    native_widget_delegate_->OnNativeWidgetUserResizeEnded();
   }
 }
 

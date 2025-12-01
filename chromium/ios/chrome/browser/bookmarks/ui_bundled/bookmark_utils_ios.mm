@@ -41,6 +41,7 @@
 #import "ios/chrome/browser/bookmarks/model/bookmarks_utils.h"
 #import "ios/chrome/browser/bookmarks/ui_bundled/undo_manager_wrapper.h"
 #import "ios/chrome/browser/ntp/shared/metrics/home_metrics.h"
+#import "ios/chrome/browser/shared/model/profile/profile_ios.h"
 #import "ios/chrome/browser/shared/public/features/system_flags.h"
 #import "ios/chrome/browser/shared/ui/util/snackbar_util.h"
 #import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
@@ -135,11 +136,6 @@ bool IsAccountBookmarkStorageOptedIn(syncer::SyncService* sync_service) {
   if (sync_service->GetAccountInfo().IsEmpty()) {
     return false;
   }
-  // TODO(crbug.com/40066949): Remove this after UNO phase 3. See
-  // ConsentLevel::kSync documentation for more details.
-  if (sync_service->HasSyncConsent()) {
-    return false;
-  }
   syncer::UserSelectableTypeSet selected_types =
       sync_service->GetUserSettings()->GetSelectedTypes();
   return selected_types.Has(syncer::UserSelectableType::kBookmarks);
@@ -208,16 +204,7 @@ bool bookmarkSavedIntoAccount(
     BookmarkStorageType bookmarkStorageType,
     base::WeakPtr<AuthenticationService> authenticationService,
     raw_ptr<syncer::SyncService> syncService) {
-  // TODO(crbug.com/40066949): Simplify once kSync becomes unreachable or is
-  // deleted from the codebase. See ConsentLevel::kSync documentation for
-  // details.
-  BOOL hasSyncConsent =
-      authenticationService->HasPrimaryIdentity(signin::ConsentLevel::kSync);
-  BOOL savedIntoAccount =
-      (bookmarkStorageType == BookmarkStorageType::kAccount) ||
-      (hasSyncConsent && syncService->GetUserSettings()->GetSelectedTypes().Has(
-                             syncer::UserSelectableType::kBookmarks));
-  return savedIntoAccount;
+  return bookmarkStorageType == BookmarkStorageType::kAccount;
 }
 
 NSString* messageForAddingBookmarksInFolder(
@@ -266,9 +253,8 @@ NSString* messageForAddingBookmarksInFolder(
     }
   }
 
-  // The user is signed in and bookmark sync is on (either account bookmarks or
-  // the legacy sync-the-feature). It is still possible that the folder saving
-  // into is a local-only folder.
+  // The user is signed in and account bookmarks are on. It is still possible
+  // that the folder saving into is a local-only folder.
   if (model->IsLocalOnlyNode(*folder)) {
     std::u16string title = base::SysNSStringToUTF16(folderTitle);
     std::u16string pattern = l10n_util::GetStringUTF16(
@@ -353,7 +339,8 @@ MDCSnackbarMessage* CreateBookmarkAtPositionWithUndoToast(
       [[UndoManagerWrapper alloc] initWithProfile:profile];
   [wrapper startGroupingActions];
 
-  RecordModuleFreshnessSignal(ContentSuggestionsModuleType::kShortcuts);
+  RecordModuleFreshnessSignal(ContentSuggestionsModuleType::kShortcuts,
+                              profile->GetPrefs());
   base::RecordAction(base::UserMetricsAction("BookmarkAdded"));
   const BookmarkNode* node =
       model->AddNewURL(folder, folder->children().size(), titleString, url);

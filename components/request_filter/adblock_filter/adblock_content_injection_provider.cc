@@ -48,9 +48,6 @@ ContentInjectionProvider::GetInjectionsForFrame(
     content::RenderFrameHost* frame) {
   auto result = content_injection::mojom::InjectionsForFrame::New();
 
-  RuleService* service = RuleServiceFactory::GetForBrowserContext(
-      frame->GetProcess()->GetBrowserContext());
-
   if (!url.SchemeIsHTTPOrHTTPS())
     return result;
 
@@ -61,7 +58,7 @@ ContentInjectionProvider::GetInjectionsForFrame(
   std::string stylesheet;
 
   for (auto group : {RuleGroup::kTrackingRules, RuleGroup::kAdBlockingRules}) {
-    if (!service->IsRuleGroupEnabled(group))
+    if (!rule_service_->IsRuleGroupEnabled(group))
       continue;
 
     RulesIndex* rule_index = rule_service_->GetRuleIndex(group);
@@ -71,7 +68,8 @@ ContentInjectionProvider::GetInjectionsForFrame(
 
     RulesIndex::ActivationResults activations =
         rule_index->GetActivationsForFrame(
-            base::BindRepeating(&IsOriginWanted, service, group), frame, url);
+            base::BindRepeating(&IsOriginWanted, rule_service_, group), frame,
+            url);
 
     if (activations[flat::ActivationType_DOCUMENT].GetDecision().value_or(
             flat::Decision_MODIFY) == flat::Decision_PASS ||

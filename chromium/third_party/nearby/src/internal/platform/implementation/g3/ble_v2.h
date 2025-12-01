@@ -164,6 +164,10 @@ class BleV2Medium : public api::ble_v2::BleMedium {
                      api::ble_v2::TxPowerLevel tx_power_level,
                      ScanCallback callback) override
       ABSL_LOCKS_EXCLUDED(mutex_);
+  bool StartMultipleServicesScanning(const std::vector<Uuid>& service_uuids,
+                                     api::ble_v2::TxPowerLevel tx_power_level,
+                                     ScanCallback callback)
+      override ABSL_LOCKS_EXCLUDED(mutex_);
   bool StopScanning() override ABSL_LOCKS_EXCLUDED(mutex_);
   std::unique_ptr<ScanningSession> StartScanning(
       const Uuid& service_uuid, api::ble_v2::TxPowerLevel tx_power_level,
@@ -182,6 +186,9 @@ class BleV2Medium : public api::ble_v2::BleMedium {
   // On success, returns a new BleServerSocket.
   // On error, returns nullptr.
   std::unique_ptr<api::ble_v2::BleServerSocket> OpenServerSocket(
+      const std::string& service_id) override ABSL_LOCKS_EXCLUDED(mutex_);
+
+  std::unique_ptr<api::ble_v2::BleL2capServerSocket> OpenL2capServerSocket(
       const std::string& service_id) override ABSL_LOCKS_EXCLUDED(mutex_);
 
   // Connects to existing remote Ble peripheral.
@@ -333,6 +340,7 @@ class BleV2Medium : public api::ble_v2::BleMedium {
   absl::flat_hash_set<std::pair<Uuid, std::uint32_t>>
       scanning_internal_session_ids_ ABSL_GUARDED_BY(mutex_);
   bool is_extended_advertisements_available_ = false;
+  ScanCallback scan_callback_;
 };
 
 }  // namespace g3

@@ -30,6 +30,7 @@
 #include <cassert>
 #include <memory>
 #include <utility>
+#include <variant>
 
 #include "base/feature_list.h"
 #include "base/task/single_thread_task_runner.h"
@@ -73,7 +74,7 @@ namespace blink {
 namespace {
 
 void NotifyFinishObservers(
-    HeapHashSet<WeakMember<ResourceFinishObserver>>* observers) {
+    GCedHeapHashSet<WeakMember<ResourceFinishObserver>>* observers) {
   for (const auto& observer : *observers)
     observer->NotifyFinished();
 }
@@ -95,7 +96,7 @@ void GetSharedBufferMemoryDump(SharedBuffer* buffer,
 // These response headers are not copied from a revalidated response to the
 // cached response headers. For compatibility, this list is based on Chromium's
 // net/http/http_response_headers.cc.
-const auto kHeadersToIgnoreAfterRevalidation = std::to_array<const char*>({
+constexpr auto kHeadersToIgnoreAfterRevalidation = std::to_array<const char*>({
     "allow",
     "connection",
     "etag",
@@ -203,11 +204,17 @@ void Resource::CheckResourceIntegrity() {
 
   // Check `Unencoded-Digest` headers. If the digest doesn't match, fail.
   // Otherwise, fall through to validating SRI.
-  auto unencoded_digest = GetResponse().UnencodedDigest();
+  const FeatureContext* feature_context =
+      loader_ ? loader_->GetFeatureContext() : nullptr;
+  auto unencoded_digest = GetResponse().UnencodedDigest(feature_context);
   if (unencoded_digest.has_value() && !unencoded_digest->DoesMatch(Data())) {
-    DCHECK(RuntimeEnabledFeatures::UnencodedDigestEnabled());
+    DCHECK(RuntimeEnabledFeatures::UnencodedDigestEnabled(feature_context));
     integrity_disposition_ =
         ResourceIntegrityDisposition::kFailedUnencodedDigest;
+    integrity_report_.AddConsoleErrorMessage(
+        "The resource '" + Url().ElidedString() +
+        "' has an `unencoded-digest` header which asserts a digest which does "
+        "not match the resource's body.");
     return;
   }
 
@@ -222,8 +229,8 @@ void Resource::CheckResourceIntegrity() {
     integrity_disposition_ = ResourceIntegrityDisposition::kPassed;
   } else {
     if (SubresourceIntegrity::CheckSubresourceIntegrity(
-            IntegrityMetadata(), Data(), Url(), *this, integrity_report_,
-            &integrity_hashes)) {
+            IntegrityMetadata(), Data(), Url(), *this, feature_context,
+            integrity_report_, &integrity_hashes)) {
       integrity_disposition_ = ResourceIntegrityDisposition::kPassed;
     } else {
       integrity_disposition_ =
@@ -242,7 +249,7 @@ void Resource::CheckResourceIntegrity() {
         if (auto calculated_integrity_hash =
                 SubresourceIntegrity::GetSubresourceIntegrityHash(Data(),
                                                                   algorithm)) {
-          integrity_hashes.insert(algorithm, calculated_integrity_hash.value());
+          integrity_hashes.insert(algorithm, calculated_integrity_hash);
         }
       }
     }
@@ -271,14 +278,14 @@ void Resource::MarkClientFinished(ResourceClient* client) {
 }
 
 void Resource::AppendData(
-    absl::variant<SegmentedBuffer, base::span<const char>> data) {
+    std::variant<SegmentedBuffer, base::span<const char>> data) {
   DCHECK(!IsCacheValidator());
   DCHECK(!ErrorOccurred());
-  if (absl::holds_alternative<SegmentedBuffer>(data)) {
-    AppendDataImpl(std::move(absl::get<SegmentedBuffer>(data)));
+  if (std::holds_alternative<SegmentedBuffer>(data)) {
+    AppendDataImpl(std::move(std::get<SegmentedBuffer>(data)));
   } else {
-    CHECK(absl::holds_alternative<base::span<const char>>(data));
-    AppendDataImpl(absl::get<base::span<const char>>(data));
+    CHECK(std::holds_alternative<base::span<const char>>(data));
+    AppendDataImpl(std::get<base::span<const char>>(data));
   }
 }
 
@@ -332,7 +339,7 @@ void Resource::TriggerNotificationForFinishObservers(
     return;
 
   auto* new_collections =
-      MakeGarbageCollected<HeapHashSet<WeakMember<ResourceFinishObserver>>>(
+      MakeGarbageCollected<GCedHeapHashSet<WeakMember<ResourceFinishObserver>>>(
           std::move(finish_observers_));
   finish_observers_.clear();
 
@@ -426,7 +433,10 @@ AtomicString Resource::HttpContentType() const {
 }
 
 bool Resource::ForceIntegrityChecks() const {
-  return IsLinkPreload() || GetResponse().UnencodedDigest().has_value();
+  const FeatureContext* feature_context =
+      loader_ ? loader_->GetFeatureContext() : nullptr;
+  return IsLinkPreload() ||
+         GetResponse().UnencodedDigest(feature_context).has_value();
 }
 
 bool Resource::MustRefetchDueToIntegrityMetadata(

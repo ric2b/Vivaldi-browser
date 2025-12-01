@@ -135,6 +135,7 @@ screenai::UiElement CreateUiElementProto(
   bool offscreen = false;
   gfx::RectF bounds =
       tree.GetTreeBounds(node, &offscreen, /* clip_bounds= */ false);
+  AddAttribute("/extras/styles/offscreen", offscreen, uie);
 
   // Bounding Box Pixels. Note: this does a floor on the bounds, as bounds is
   // a rect_f and the proto fields are int32_t.
@@ -187,18 +188,7 @@ void AddSubTree(const ui::AXTree& tree,
                 const ::screenai::BoundingBoxPixels& parent_bounds,
                 gfx::SizeF& tree_dimensions) {
   // Ensure that node id and index are the same.
-  DCHECK(proto.ui_elements_size() == next_unused_node_id);
-
-  // Do not include kInlineTextBox nodes in the tree. They contain no text and
-  // will result in ScreenAI missing their kStaticText parent nodes.
-  // The pruning should not be done when data is stored for Screen2x library
-  // training.
-  // TODO(crbug.com/359853518): Consider removing pruning when it's done in
-  // the Screen2x library.
-  if (node->data().role == ax::mojom::Role::kInlineTextBox &&
-      !features::IsDataCollectionModeForScreen2xEnabled()) {
-    return;
-  }
+  CHECK(proto.ui_elements_size() == next_unused_node_id);
 
   // Create and add proto.
   int current_node_id = next_unused_node_id;
@@ -208,15 +198,9 @@ void AddSubTree(const ui::AXTree& tree,
   const ::screenai::BoundingBoxPixels current_node_bounds =
       proto.ui_elements(current_node_id).bounding_box_pixels();
 
-  // Add children (except for kInlineTextBox children).
+  // Add children.
   std::vector<int> child_ids;
   for (auto it = node->AllChildrenBegin(); it != node->AllChildrenEnd(); ++it) {
-    // TODO(crbug.com/359853518): Consider removing pruning when it's done in
-    // the Screen2x library.
-    if ((*it).data().role == ax::mojom::Role::kInlineTextBox &&
-        !features::IsDataCollectionModeForScreen2xEnabled()) {
-      continue;
-    }
     child_ids.push_back(++next_unused_node_id);
     AddSubTree(tree, it.get(), proto, next_unused_node_id, current_node_id,
                current_node_bounds, tree_dimensions);
@@ -256,8 +240,8 @@ std::optional<ViewHierarchyAndTreeSize> SnapshotToViewHierarchy(
       tree_dimensions.width());
   proto.mutable_ui_elements(0)->mutable_bounding_box_pixels()->set_bottom(
       tree_dimensions.height());
-  DCHECK_EQ(proto.ui_elements(0).bounding_box().right(), 0);
-  DCHECK_EQ(proto.ui_elements(0).bounding_box().top(), 0);
+  CHECK_EQ(proto.ui_elements(0).bounding_box().right(), 0);
+  CHECK_EQ(proto.ui_elements(0).bounding_box().top(), 0);
 
   // Set relative sizes.
   for (int i = 0; i < proto.ui_elements_size(); i++) {

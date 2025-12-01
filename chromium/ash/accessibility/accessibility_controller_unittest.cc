@@ -37,7 +37,9 @@
 #include "ash/test/ash_test_base.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback_helpers.h"
+#include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/test/bind.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/time/time.h"
@@ -54,8 +56,8 @@
 #include "ui/message_center/message_center.h"
 #include "ui/message_center/public/cpp/notification.h"
 #include "ui/message_center/public/cpp/notification_types.h"
+#include "ui/native_theme/features/native_theme_features.h"
 #include "ui/native_theme/native_theme.h"
-#include "ui/native_theme/native_theme_features.h"
 
 using message_center::MessageCenter;
 
@@ -139,9 +141,8 @@ class AccessibilityControllerTest : public AccessibilityControllerTestBase {
                               ::features::kAccessibilityAccelerator,
                               ::features::kAccessibilityFaceGaze,
                               ::features::kAccessibilityMouseKeys,
-                              ::features::kAccessibilityFlashScreenFeature,
-                              ::features::kOverlayScrollbarsOSSetting},
-        /*disabled_features=*/{::features::kOverlayScrollbar});
+                              ::features::kAccessibilityFlashScreenFeature},
+        /*disabled_features=*/{});
     AccessibilityControllerTestBase::SetUp();
   }
 
@@ -355,8 +356,8 @@ TEST_F(AccessibilityControllerTest, PrefsAreRegistered) {
       prefs()->FindPreference(prefs::kAccessibilityFlashNotificationsEnabled));
   EXPECT_TRUE(
       prefs()->FindPreference(prefs::kAccessibilityFlashNotificationsColor));
-  EXPECT_TRUE(
-      prefs()->FindPreference(prefs::kAccessibilityOverlayScrollbarEnabled));
+  EXPECT_TRUE(prefs()->FindPreference(
+      prefs::kAccessibilityAlwaysShowScrollbarsEnabled));
 }
 
 TEST_F(AccessibilityControllerTest, SetAlwaysShowScrollbarEnabled) {
@@ -1942,6 +1943,38 @@ TEST_F(AccessibilityControllerTest, FaceGazeNotifications) {
   ASSERT_EQ(1u, MessageCenter::Get()->GetVisibleNotifications().size());
 }
 
+TEST_F(AccessibilityControllerTest, ShowNotificationOnFaceGaze) {
+  // Enabling FaceGaze should show a pinned notification.
+  controller()->face_gaze().SetEnabled(true);
+  message_center::NotificationList::Notifications notifications =
+      MessageCenter::Get()->GetVisibleNotifications();
+  ASSERT_EQ(1u, notifications.size());
+  EXPECT_EQ(u"Face control active", (*notifications.begin())->title());
+  ASSERT_TRUE((*notifications.begin())->pinned());
+
+  // Disabling FaceGaze should clear the notification.
+  controller()->face_gaze().SetEnabled(false);
+  notifications = MessageCenter::Get()->GetVisibleNotifications();
+  EXPECT_EQ(0u, notifications.size());
+}
+
+TEST_F(AccessibilityControllerTest, ClickNotification) {
+  // Enabling FaceGaze should show a notification.
+  controller()->face_gaze().SetEnabled(true);
+  message_center::NotificationList::Notifications notifications =
+      MessageCenter::Get()->GetVisibleNotifications();
+  ASSERT_EQ(1u, notifications.size());
+
+  // Clicking the notification will show a confirmation dialog.
+  base::RunLoop dialog_waiter;
+  controller()->AddFeatureDisableDialogCallbackForTesting(
+      base::BindLambdaForTesting([&dialog_waiter]() { dialog_waiter.Quit(); }));
+  (*notifications.begin())
+      ->delegate()
+      ->Click(/*button_index=*/1, /*reply=*/std::nullopt);
+  dialog_waiter.Run();
+}
+
 namespace {
 
 enum class TestUserLoginType {
@@ -1975,7 +2008,7 @@ class AccessibilityControllerSigninTest
         break;
 
       case TestUserLoginType::kExistingUser:
-        SimulateUserLogin(kUserEmail);
+        SimulateUserLogin({kUserEmail});
         break;
     }
   }

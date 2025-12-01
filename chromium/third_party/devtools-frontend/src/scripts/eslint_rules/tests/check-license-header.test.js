@@ -3,20 +3,13 @@
 // found in the LICENSE file.
 'use strict';
 
-const tsParser = require('@typescript-eslint/parser');
-
 const rule = require('../lib/check-license-header.js');
-const ruleTester = new (require('eslint').RuleTester)({
-  languageOptions: {
-    ecmaVersion: 'latest',
-    sourceType: 'module',
-    parser: tsParser,
-  },
-});
+
+const {RuleTester} = require('./utils/utils.js');
 
 const CURRENT_YEAR = new Date().getFullYear();
 
-ruleTester.run('check-license-header', rule, {
+new RuleTester().run('check-license-header', rule, {
   valid: [
     {
       code: '',

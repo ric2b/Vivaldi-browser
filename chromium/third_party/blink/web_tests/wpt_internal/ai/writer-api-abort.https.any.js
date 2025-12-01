@@ -2,24 +2,20 @@
 
 promise_test(async t => {
   await testAbortPromise(t, signal => {
-    return ai.writer.create({
-      signal: signal
-    });
+    return Writer.create({ signal: signal });
   });
-}, "Aborting AIWriter.create().");
+}, "Aborting Writer.create().");
 
 promise_test(async t => {
-  const session = await ai.writer.create();
+  const session = await Writer.create();
   await testAbortPromise(t, signal => {
     return session.write(kTestPrompt, { signal: signal });
   });
-}, "Aborting AIWriter.write().");
+}, "Aborting Writer.write().");
 
 promise_test(async t => {
-  const session = await ai.writer.create();
+  const session = await Writer.create();
   await testAbortReadableStream(t, signal => {
-    return session.writeStreaming(
-      kTestPrompt, { signal: signal }
-    );
+    return session.writeStreaming(kTestPrompt, { signal: signal });
   });
-}, "Aborting AIWriter.writeStreaming().");
+}, "Aborting Writer.writeStreaming().");

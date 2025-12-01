@@ -2,12 +2,13 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import * as Host from '../../../core/host/host.js';
 import * as i18n from '../../../core/i18n/i18n.js';
 import * as Platform from '../../../core/platform/platform.js';
 import * as CrUXManager from '../../../models/crux-manager/crux-manager.js';
+import type * as Trace from '../../../models/trace/trace.js';
 import * as Buttons from '../../../ui/components/buttons/buttons.js';
 import * as ComponentHelpers from '../../../ui/components/helpers/helpers.js';
+import * as UI from '../../../ui/legacy/legacy.js';
 import * as Lit from '../../../ui/lit/lit.js';
 
 import metricCardStylesRaw from './metricCard.css.js';
@@ -26,11 +27,11 @@ import {
 
 // TODO(crbug.com/391381439): Fully migrate off of constructed style sheets.
 const metricCardStyles = new CSSStyleSheet();
-metricCardStyles.replaceSync(metricCardStylesRaw.cssContent);
+metricCardStyles.replaceSync(metricCardStylesRaw.cssText);
 
 // TODO(crbug.com/391381439): Fully migrate off of constructed style sheets.
 const metricValueStyles = new CSSStyleSheet();
-metricValueStyles.replaceSync(metricValueStylesRaw.cssContent);
+metricValueStyles.replaceSync(metricValueStylesRaw.cssText);
 
 const {html, nothing} = Lit;
 
@@ -43,6 +44,10 @@ const UIStrings = {
    * @description Label for the 75th percentile of a metric according to data collected from real users in the field. This should be interpreted as "75th percentile of real users".
    */
   field75thPercentile: 'Field 75th percentile',
+  /**
+   * @description Column header for the 75th percentile of a metric according to data collected from real users in the field. This should be interpreted as "75th percentile of real users". Width of the column is limited so character length should be as small as possible.
+   */
+  fieldP75: 'Field p75',
   /**
    * @description Text label for values that are classified as "good".
    */
@@ -129,10 +134,6 @@ const UIStrings = {
    */
   phase: 'Phase',
   /**
-   * @description Column header for table cell values representing a phase duration (in milliseconds) that was measured in the developers local environment.
-   */
-  duration: 'Local duration (ms)',
-  /**
    * @description Tooltip text for a link that goes to documentation explaining the Largest Contentful Paint (LCP) metric. "LCP" is an acronym and should not be translated.
    */
   lcpHelpTooltip:
@@ -146,10 +147,12 @@ const UIStrings = {
    */
   inpHelpTooltip:
       'INP measures the overall responsiveness to all click, tap, and keyboard interactions. Click here to learn more about INP.',
-};
+} as const;
 
 const str_ = i18n.i18n.registerUIStrings('panels/timeline/components/MetricCard.ts', UIStrings);
 const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
+
+export type PhaseTable = Array<[string, Trace.Types.Timing.Milli, Trace.Types.Timing.Milli?]>;
 
 export interface MetricCardData {
   metric: 'LCP'|'CLS'|'INP';
@@ -157,7 +160,7 @@ export interface MetricCardData {
   fieldValue?: number|string;
   histogram?: CrUXManager.MetricResponse['histogram'];
   tooltipContainer?: HTMLElement;
-  phases?: Array<[string, number]>;
+  phases?: PhaseTable;
   warnings?: string[];
 }
 
@@ -572,33 +575,49 @@ export class MetricCard extends HTMLElement {
     // clang-format on
   }
 
-  #renderPhaseTable(): Lit.LitTemplate {
-    const localValue = this.#getLocalValue();
-    const phases = this.#data.phases;
-    if (!phases || !localValue) {
-      return Lit.nothing;
-    }
+  #renderPhaseTable(phases: PhaseTable): Lit.LitTemplate {
+    const hasFieldData = phases.every(phase => phase[2] !== undefined);
 
+    // clang-format off
     return html`
       <hr class="divider">
       <div class="phase-table" role="table">
         <div class="phase-table-row phase-table-header-row" role="row">
-          <div role="columnheader">${i18nString(UIStrings.phase)}</div>
-          <div role="columnheader">${i18nString(UIStrings.duration)}</div>
+          <div role="columnheader" style="grid-column: 1">${i18nString(UIStrings.phase)}</div>
+          <div role="columnheader" class="phase-table-value" style="grid-column: 2">${i18nString(UIStrings.localValue)}</div>
+          ${hasFieldData ? html`
+            <div
+              role="columnheader"
+              class="phase-table-value"
+              style="grid-column: 3"
+              title=${i18nString(UIStrings.field75thPercentile)}>${i18nString(UIStrings.fieldP75)}</div>
+          ` : nothing}
         </div>
         ${phases.map(phase => html`
           <div class="phase-table-row" role="row">
             <div role="cell">${phase[0]}</div>
-            <div role="cell">${Math.round(phase[1])}</div>
+            <div role="cell" class="phase-table-value">${i18n.TimeUtilities.preciseMillisToString(phase[1])}</div>
+            ${phase[2] !== undefined ? html`
+              <div role="cell" class="phase-table-value">${i18n.TimeUtilities.preciseMillisToString(phase[2])}</div>
+            ` : nothing}
           </div>
         `)}
       </div>
     `;
+    // clang-format on
   }
 
   #render = (): void => {
     const fieldEnabled = CrUXManager.CrUXManager.instance().getConfigSetting().get().enabled;
     const helpLink = this.#getHelpLink();
+
+    const localValue = this.#getLocalValue();
+    const fieldValue = this.#getFieldValue();
+    const thresholds = this.#getThresholds();
+    const formatFn = this.#getFormatFn();
+
+    const localValueEl = renderMetricValue(this.#getMetricValueLogContext(true), localValue, thresholds, formatFn);
+    const fieldValueEl = renderMetricValue(this.#getMetricValueLogContext(false), fieldValue, thresholds, formatFn);
 
     // clang-format off
     const output = html`
@@ -610,7 +629,7 @@ export class MetricCard extends HTMLElement {
             title=${this.#getHelpTooltip()}
             .iconName=${'help'}
             .variant=${Buttons.Button.Variant.ICON}
-            @click=${() => Host.InspectorFrontendHost.InspectorFrontendHostInstance.openInNewTab(helpLink)}
+            @click=${() => UI.UIUtils.openInNewTab(helpLink)}
           ></devtools-button>
         </h3>
         <div tabindex="0" class="metric-values-section"
@@ -621,16 +640,12 @@ export class MetricCard extends HTMLElement {
           aria-describedby="tooltip"
         >
           <div class="metric-source-block">
-            <div class="metric-source-value" id="local-value">${renderMetricValue(
-              this.#getMetricValueLogContext(true),
-              this.#getLocalValue(), this.#getThresholds(), this.#getFormatFn())}</div>
+            <div class="metric-source-value" id="local-value">${localValueEl}</div>
             ${fieldEnabled ? html`<div class="metric-source-label">${i18nString(UIStrings.localValue)}</div>` : nothing}
           </div>
           ${fieldEnabled ? html`
             <div class="metric-source-block">
-              <div class="metric-source-value" id="field-value">${renderMetricValue(
-                this.#getMetricValueLogContext(false),
-                this.#getFieldValue(), this.#getThresholds(), this.#getFormatFn())}</div>
+              <div class="metric-source-value" id="field-value">${fieldValueEl}</div>
               <div class="metric-source-label">${i18nString(UIStrings.field75thPercentile)}</div>
             </div>
           `: nothing}
@@ -643,10 +658,16 @@ export class MetricCard extends HTMLElement {
               this.#tooltipEl = node as HTMLElement;
             })}
           >
-            ${this.#renderDetailedCompareString()}
-            <hr class="divider">
-            ${this.#renderFieldHistogram()}
-            ${this.#renderPhaseTable()}
+            <div class="tooltip-scroll">
+              <div class="tooltip-contents">
+                <div>
+                  ${this.#renderDetailedCompareString()}
+                  <hr class="divider">
+                  ${this.#renderFieldHistogram()}
+                  ${localValue && this.#data.phases ? this.#renderPhaseTable(this.#data.phases) : nothing}
+                </div>
+              </div>
+            </div>
           </div>
         </div>
         ${fieldEnabled ? html`<hr class="divider">` : nothing}

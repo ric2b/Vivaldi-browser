@@ -1,4 +1,627 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="si">
+<translation id="1016495303386450659">අයිතමය යාවත්කාලීන කරන ලදී</translation>
+<translation id="1033201038396796706">අඳුරු ප්‍රකාරය, නැවුම් කිරීමේ අනුපාතය හෝ තේමා ගැටළු</translation>
+<translation id="1041637248958093184">පුද්ගලික ටැබ් භාවිතා කරන විට විවාල්ඩි විසින් සෙවුම්, නැරඹූ අඩවි, කුකීස් සහ තාවකාලික ගොනු ගබඩා නොකරනු ඇත.</translation>
+<translation id="1062373127858055283">කරුණාකර රූප URL එක ඇතුළත් කරන්න.</translation>
+<translation id="1066692930984703744">වේගවත් සහ ආරක්ෂිත බ්‍රවුස් කිරීම සඳහා ට්‍රැකර් සහ දැන්වීම් අවහිර කිරීම සක්‍රීය කරන්න</translation>
+<translation id="1116694919640316211">ගැන</translation>
+<translation id="1123707809902612118">ට්‍රැකර් සහ දැන්වීම් අවහිර කරන්න</translation>
+<translation id="1134179431044204911">මට අභිනයන් හෝ සංචාලනය භාවිතා කිරීමට අපහසුයි.</translation>
+<translation id="1151972924205500581">මුරපදය අවශ්‍යයි</translation>
+<translation id="1166425484559430538">ඔබගේ සමමුහුර්ත දත්ත සංකේතනය කර ඇත. දත්ත විකේතනය කිරීම සඳහා ඔබගේ සංකේතාංකන මුරපදය ලබා දෙන්න.</translation>
+<translation id="1173894706177603556">නැවත නම් කරන්න</translation>
+<translation id="1181037720776840403">ඉවත් කරන්න</translation>
+<translation id="1182668946911971500">සටහන් තීරුව</translation>
+<translation id="1198271701881992799">අපි පටන් ගනිමු</translation>
+<translation id="1201402288615127009">ඊළඟ</translation>
+<translation id="1208495925646914304">ශීර්ෂය</translation>
+<translation id="1254117744268754948">ෆෝල්ඩරය තෝරන්න</translation>
+<translation id="1265555169187992603">කරුණාකර අකුරු 3 ත් 30 ත් අතර (az හෝ AZ) සහ ඉලක්කම් (0-9) අතර පමණක් පරිශීලක නාමයක් තෝරන්න.</translation>
+<translation id="1267954839079880017">ඉතාලි (<ph name="ORIGIN" />)</translation>
+<translation id="1272729688996227528">සමමුහුර්ත කිරීම සක්‍රියයි</translation>
+<translation id="1275213816424141989">සමහර විට පසුව</translation>
+<translation id="1288585320003964783">තෝරාගත් පෙළ පරිවර්තනය කිරීමේදී සංවාදය වෙනුවට පරිවර්තන පැනලය භාවිතා කරනු ඇත.</translation>
+<translation id="1315107593850379616">ප්‍රතිසාධන ඊමේල් ලිපිනය</translation>
+<translation id="1325473901257014816">Vivaldi සමඟින්, ඔබගේ සියලුම ටැබ් එකම බ්‍රවුසරයක තබාගෙන සියලුම උපාංග හරහා ඒවා සමමුහුර්ත කරන්න.</translation>
+<translation id="132683371494960526">මව් ෆෝල්ඩරය වෙනස් කිරීමට දෙවරක් තට්ටු කරන්න.</translation>
+<translation id="1341156196125040601">ලිපින ක්ෂේත්‍රය තිබීමට ඔබ කැමති ස්ථානය තෝරන්න.</translation>
+<translation id="1354002567845495520">විවාල්ඩි සටහන් සමමුහුර්ත කරන්න (ඇමුණුම් සමමුහුර්ත කළ නොහැක)</translation>
+<translation id="1365181765792690850">මෙම සැකසුම සබල කිරීමෙන් සමහර වෙබ් අඩවි සහ/හෝ රූප බිඳ වැටිය හැක. සම්පූර්ණ බලපෑම ලබා ගැනීමට නැවත ආරම්භ කිරීමක් අවශ්‍ය වේ.</translation>
+<translation id="1379470994139227452">විවාල්ඩි පෙරනිමිය ලෙස සකසන්න</translation>
+<translation id="1381484244248892686">ඔබට ඕනෑම උපාංගයක සුරකින ලද මුරපද භාවිතා කළ හැකිය. ඒවා <ph name="EMAIL" />සඳහා Vivaldi මුරපද කළමනාකරු වෙත සුරකිනු ලැබේ.</translation>
+<translation id="1383876407941801731">සෙවීම</translation>
+<translation id="1397515084080510783">සමමුහුර්ත කළ ටැබ් නැත</translation>
+<translation id="1401336397986481078">එකතු කරන ලදී</translation>
+<translation id="1410197035576869800">යෙදුම් නිරූපකය</translation>
+<translation id="1430308140197327248">සම්පූර්ණ ලිපිනය පෙන්වන්න</translation>
+<translation id="1430638949087011281">අවහිර කිරීමක් නැත</translation>
+<translation id="1446108955355168157">ඔබගේ සමමුහුර්ත දත්ත (මුරපද, පිටු සලකුණු, සටහන් සහ තවත් දේ) සංකේතනය කර ආරක්ෂා කිරීමට, කරුණාකර සංකේතාංකන මුරපදයක් සාදන්න. මෙම මුරපදය කිසිදා අපට එවනු නොලැබේ.</translation>
+<translation id="145015347812617860"><ph name="COUNT" /> අයිතම</translation>
+<translation id="1468415711258933398">සම්මත ටැබ්</translation>
+<translation id="1470330357709335121">විවාල්ඩි මන්දගාමී හෝ මන්දගාමී ය</translation>
+<translation id="1502492982318476895">සමමුහුර්ත කිරීම අසාර්ථක විය: <ph name="ERROR_MESSAGE" /></translation>
+<translation id="1521731267649138856">ඔබගේ ප්‍රතිසාධන විද්‍යුත් තැපැල් ලිපිනය.</translation>
+<translation id="1535446875484049224">අඳුරු ප්‍රකාරය දෝෂ සහිතයි හෝ නිවැරදි ලෙස නොපෙනේ.</translation>
+<translation id="1567659716528258242">විවාල්ඩි මගේ උපාංගය රත් කරයි</translation>
+<translation id="156793582229023040">මම ලුහුබැඳීම හෝ දත්ත රැස් කිරීම ගැන සැලකිලිමත් වෙනවා.</translation>
+<translation id="1573784689611551537">දැන්වීම් අවහිර කිරීමේ මූලාශ්‍ර කළමනාකරණය කරන්න</translation>
+<translation id="1577761519530347814">ගබඩා කළ වෙබ් පිටු මුරපද සමමුහුර්ත කරන්න</translation>
+<translation id="1620921465699122417">පරිවර්තනය කිරීමට පෙළ ඇතුළත් කරන්න</translation>
+<translation id="1631998297781042533">ජනප්‍රිය අඩවි</translation>
+<translation id="1644574205037202324">ඉතිහාසය</translation>
+<translation id="1655816024544228768">ක්‍රීඩාව</translation>
+<translation id="1659112017960130179">කොරියානු (<ph name="ORIGIN" />)</translation>
+<translation id="1689333818294560261">අන්වර්ථ නාමය</translation>
+<translation id="1700701458278093377">සබැඳිය යාවත්කාලීන කරන්න</translation>
+<translation id="1711184756728070210"><ph name="BEGIN_LINK" />භාවිත නියමයන් ➔<ph name="END_LINK" />     <ph name="BEGIN_LINK2" />රහස්‍යතා ප්‍රතිපත්තිය ➔<ph name="END_LINK2" /></translation>
+<translation id="1717473843091433383">සියලුම වෙබ් අඩවි වල අඳුරු තේමාවක් බලෙන් යොදන්න</translation>
+<translation id="1721265415699013829">කරුණාකර හැකිතාක් නිශ්චිත වන්න.</translation>
+<translation id="173924678149983125">අවහිර කිරීමේ නීති ආයාත කිරීමට URL එක ඇතුළත් කරන්න.</translation>
+<translation id="1751280147639351837">දැන්වීම් සහ ට්‍රැකර් අවහිර කරන්නා</translation>
+<translation id="1752547299766512813">මුරපද සුරකින්න</translation>
+<translation id="1754797958074421486">භාවිත නියම</translation>
+<translation id="1763111582687651119">සෙවුම් යන්ත්‍ර අන්වර්ථ නාම සක්‍රීය කරන්න</translation>
+<translation id="1771413903824396513">අන්වර්ථ නාමයෙන්</translation>
+<translation id="1771605894228673800">මට බිල්ට්-ඉන් VPN විශේෂාංගයක් අවශ්‍යයි.</translation>
+<translation id="1800685789463945995">විවාල්ඩි දිගටම කඩා වැටෙමින් හෝ කැටි වෙමින් පවතී</translation>
+<translation id="1804522390855853698">චීන (<ph name="ORIGIN" />)</translation>
+<translation id="1807246157184219062">ආලෝකය</translation>
+<translation id="1809939268435598390">ෆෝල්ඩරය මකන්න</translation>
+<translation id="1813686536470127172">වෙනත් ෆෝල්ඩරය</translation>
+<translation id="1828800626900562968">නව ටැබ් එකක් සෑදීමට පහත ධන නිරූපකය තට්ටු කරන්න.</translation>
+<translation id="1861262398884155592">මෙම ෆෝල්ඩරය හිස්ය.</translation>
+<translation id="1871058849247304245"><ph name="HOST" />සඳහා විශාලන මට්ටම</translation>
+<translation id="1921508034244765766">Vivaldi උපාංගය මන්දගාමීයි, බිඳ වැටෙයි, නැතහොත් රත් වේ</translation>
+<translation id="1929299157575856072">අක්‍රීය අවහිර කිරීමේ මට්ටම</translation>
+<translation id="1968240832686794952">පසුබිම් පටිත්තෙහි රූපය විවෘත කරන්න</translation>
+<translation id="1986733655397734221">මේවායින් කිසිවක් නැත</translation>
+<translation id="1994506778397655062">නව පසුබිම් පටිත්තක විවෘත කරන්න</translation>
+<translation id="1996915956617647318">සංස්කරණය සඟවන්න</translation>
+<translation id="2030706494969937066">ඔබගේ අක්තපත්‍ර ලබා ගැනීමට අසමත් විය. කරුණාකර නැවත පුරනය වන්න.</translation>
+<translation id="2034405583989639424">වේග ඩයල් එක සංස්කරණය කරන්න</translation>
+<translation id="2048247880942380698">අරාබි (<ph name="ORIGIN" />)</translation>
+<translation id="2079545284768500474">අහෝසි කරන්න</translation>
+<translation id="2129408066358825297">වයස</translation>
+<translation id="2148384276939959392">සමමුහුර්ත කිරීම තෝරා ඇත</translation>
+<translation id="2195713384412091023">මෙය අපගේ සේවාදායකයේ ගබඩා කර ඇති සියලුම සමමුහුර්ත දත්ත ඉවත් කර, ඔබගේ සංකේතාංකන මුරපදය නැවත සකසනු ඇති අතර, ඔබව ලොග් අවුට් කරනු ඇත.</translation>
+<translation id="2228584369802328636">ක්‍රීඩා කිරීම</translation>
+<translation id="2243210264130642074">සටහන සුරකින ලදී</translation>
+<translation id="2272338747456392228">ගිණුම අගුළු දමා ඇත.</translation>
+<translation id="2273327106802955778">තවත් මෙනුව</translation>
+<translation id="2283599456633275070">ගමන්</translation>
+<translation id="2324160330092901720"><ph name="EMAIL_ID" />වෙත සත්‍යාපන කේතයක් යවා ඇත.</translation>
+<translation id="2324257568471626606">නව සෙවුම් යන්ත්‍රයක්</translation>
+<translation id="2330644510603114741">ටැබ් හැසිරීම</translation>
+<translation id="2336309953058658733">කුණු කූඩය හිස් කරන්න</translation>
+<translation id="2359808026110333948">ඉදිරියට යන්න</translation>
+<translation id="2386793615875593361">1ක් තෝරා ගන්නා ලදී</translation>
+<translation id="2387049655823108978">වෙනත් උපාංගවලින් විවෘත ටැබ් සමමුහුර්ත කරන්න</translation>
+<translation id="2388224692799337242">ඔබ බ්‍රවුස් කිරීම ආරම්භ කළ පසු, ඔබේ ඉතිහාසය මෙහි දිස්වනු ඇත.</translation>
+<translation id="2391028308389203648">තුර්කි (<ph name="ORIGIN" />)</translation>
+<translation id="2392369802118427583">සක්‍රිය කරන්න</translation>
+<translation id="2414886740292270097">අඳුරු</translation>
+<translation id="2434910957904013691">සියල්ල සමමුහුර්ත කරන්න</translation>
+<translation id="2448144008809286557"><ph name="BEGIN_LINK" />පරිශීලක නාමය<ph name="END_LINK" /> හෝ <ph name="BEGIN_LINK" />මුරපදය<ph name="END_LINK" />අමතක වුනාද?</translation>
+<translation id="2478478121390627077">දැනට තෝරාගෙන ඇති වර්ණය</translation>
+<translation id="2496616243169085015">ඡායාරූපකරණය</translation>
+<translation id="2536780277491102902">ව්‍යතිරේක</translation>
+<translation id="2558801801411970131">ට්‍රැකර් අවහිර කිරීම</translation>
+<translation id="2562040727226360285">කරදර ඉවත් කරන්න, අඩවි බිඳ දැමිය හැකිය (<ph name="ORIGIN" />)</translation>
+<translation id="2563886993995570961">උපරිම තීරු</translation>
+<translation id="257674075312929031">සමූහය</translation>
+<translation id="2577446409661931381">නව සටහන</translation>
+<translation id="2578190116190373975"><ph name="OLD_SEARCH_ENGINE" />භාවිතා කිරීම දිගටම කරගෙන යන්න</translation>
+<translation id="2590350610957954839">අවසන් වරට පැමිණි කණ්ඩායම</translation>
+<translation id="261264557609353020">ආරම්භක පිටුව</translation>
+<translation id="2619628557366098325">පෘතුගීසි (<ph name="ORIGIN" />)</translation>
+<translation id="2620436844016719705">පද්ධතිය</translation>
+<translation id="2653659639078652383">ඉදිරිපත් කරන්න</translation>
+<translation id="2666092431469916601">ඉහළට</translation>
+<translation id="2677862276555105603">දැන්වීම
+අවහිර කර ඇත</translation>
+<translation id="2678542925523700624">එස්තෝනියානු (<ph name="ORIGIN" />)</translation>
+<translation id="2697254781659515880">Vivaldi හි සංවර්ධනයට සහාය වීම සඳහා, අපි <ph name="NEW_SEARCH_ENGINE" /> සමඟ හවුල් වී එය ඔබගේ නව පෙරනිමි සෙවුම් යන්ත්‍රය ලෙස සකසා ඇත්තෙමු.</translation>
+<translation id="2701366016894985129">සෙවුම් ප්‍රතිඵලවල දැන්වීම්</translation>
+<translation id="2702801445560668637">කියවීම් ලැයිස්තුව</translation>
+<translation id="2709516037105925701">ස්වයං පිරවුම</translation>
+<translation id="2712076950889800659">ඉදිරියට යාමෙන්, ඔබ Vivaldi හි <ph name="BEGIN_LINK" />අවසාන පරිශීලක බලපත්‍ර ගිවිසුම<ph name="END_LINK" /> සහ <ph name="BEGIN_LINK" />රහස්‍යතා ප්‍රතිපත්තිය<ph name="END_LINK" />ට එකඟ වේ.</translation>
+<translation id="2725892265692641195">නව <ph name="ITEM_TYPE" /></translation>
+<translation id="2745324713975967671">සංකේතන මුරපදය</translation>
+<translation id="276436995507680929">කියවීම් ලැයිස්තුව සමමුහුර්ත කරන්න</translation>
+<translation id="2765217105034171413">කුඩා</translation>
+<translation id="2767124759205735526">සමමුහුර්ත ඉතිහාසය සහ ටයිප් කළ URL</translation>
+<translation id="2770868136620962117">වාව්, අපිට ඒක ඇහුණාම හරිම සතුටුයි!</translation>
+<translation id="2825232297853754349">ඔබ නියමයන් සහ කොන්දේසි වලට එකඟ විය යුතුය.</translation>
+<translation id="2842985007712546952">මව් ෆෝල්ඩරය</translation>
+<translation id="2843343418360315034">හංගේරියානු (<ph name="ORIGIN" />)</translation>
+<translation id="2850144663494818309">සමමුහුර්ත කිරීම ආරම්භ කරමින්...</translation>
+<translation id="2862504765180635001">ඒක ඇසීම ගැන අපිට කණගාටුයි!</translation>
+<translation id="2878511608894704031">සියල්ල මකන්න</translation>
+<translation id="2884735088411646852">වර්ග කිරීම</translation>
+<translation id="2898963176829412617">නව ෆෝල්ඩරය…</translation>
+<translation id="2918704853620385162">අවසාන ටැබ් එක වැසීමේදී නව ටැබ් එක විවෘත කරන්න</translation>
+<translation id="2924890236896835588">කණ්ඩායම් නම</translation>
+<translation id="294138200684170250">දැන්වීම් සහ ට්‍රැකර් අවහිර කරන්නා, සහ අඩවි සැකසුම්</translation>
+<translation id="2961573414320947355">Vivaldi හි සියලුම සබැඳි විවෘත කිරීමට අවශ්‍යද? අපව පෙරනිමිය ලෙස සැකසීමට වග බලා ගන්න.</translation>
+<translation id="3006429105107822794">ඔබට මෙම මුරපදය මතක තබා ගැනීමට අවශ්‍ය නොවනු ඇත. එය Vivaldi මුරපද කළමනාකරු වෙත සුරකිනු ඇත.</translation>
+<translation id="3018244467214569202">ග්‍රීක (<ph name="ORIGIN" />)</translation>
+<translation id="3029426144711327484">වේග ඩයල් පෙන්වන්න</translation>
+<translation id="3039671569659952257">ෆෝල්ඩරය මකන්න</translation>
+<translation id="3073196329485613487">ඔබගේ ගිණුමට ලොග් වන්න</translation>
+<translation id="3086746722712840547">සටහන</translation>
+<translation id="3087734570205094154">පහළ</translation>
+<translation id="309084557304084991">මට පෙර පූරණය කළ පිටු සලකුණු සහ වේග ඩයල් අවශ්‍ය නැහැ.</translation>
+<translation id="3091563570137981919">ට්රැකර් සහ දැන්වීම් අවහිර කිරීම</translation>
+<translation id="3134385238404760368">මෑත කාලීන ටැබ් නැත</translation>
+<translation id="3142562627629111859">නව කණ්ඩායම</translation>
+<translation id="3157931365184549694">ප්‍රතිසාධනය කරන්න</translation>
+<translation id="3159285901314605198">පසුබිම් රූපය</translation>
+<translation id="3177673846235066154">සේවාදායකය ඔබගේ අක්තපත්‍ර ප්‍රතික්ෂේප කළේය.</translation>
+<translation id="3180057018690062250">ප්‍රවාහය</translation>
+<translation id="3180358318770512945">මාපිය කටයුතු</translation>
+<translation id="3229182533910980085">පහත ධන නිරූපකය තට්ටු කිරීමෙන් ඔබේ පළමු පිටු සලකුණ එක් කරන්න.</translation>
+<translation id="3236835587712044564">විවාල්ඩි ගැන සතුටුද? එය ඔබේ පෙරනිමිය කරන්න.</translation>
+<translation id="3270894089048358271">Vivaldi ඔබේ පෙරනිමිය ලෙස සකසන්න</translation>
+<translation id="3270930591809084274">සමමුහුර්ත කළ ටැබ්</translation>
+<translation id="3285898158753554866">පරිවර්තනය කළ පිටපත</translation>
+<translation id="3335772982573114336">නව සටහන</translation>
+<translation id="33451081266695216">සේවාදායකය මඟින් සම්බන්ධතාවය පාලනය කර ඇත.</translation>
+<translation id="3346386541263128307">ඊමේල් ලිපින ගැළපිය යුතුයි.</translation>
+<translation id="3363375699928395745">මාතෘකාව ඇතුළත් කරන්න</translation>
+<translation id="3365991203476235715">ඉංග්‍රීසි (<ph name="ORIGIN" />)</translation>
+<translation id="3368960138304620657">ලිතුවේනියානු (<ph name="ORIGIN" />)</translation>
+<translation id="3377025655491224618">පුද්ගලික ටැබය</translation>
+<translation id="3394474617110693560">කාණ්ඩ</translation>
+<translation id="3435896845095436175">සක්‍රීය කරන්න</translation>
+<translation id="3438160227308459316">රුමේනියානු (<ph name="ORIGIN" />)</translation>
+<translation id="3451109402849920193">විවාල්ඩි විසින් සත්කාරකත්වය දරනු ලබන Lingvanex විසින් බලගන්වන ලදී.</translation>
+<translation id="3451162533623145500">ගිණුමක් තනන්න</translation>
+<translation id="3500626002244909877">ඔබේ ප්‍රතිපෝෂණය බෙදා ගැනීමට කාලය ගත කිරීම ගැන ස්තූතියි!</translation>
+<translation id="3509379002674019679">ඔබට පහසුවෙන් අඩවි සහ යෙදුම් වෙත පුරනය විය හැකි වන පරිදි ඔබේ මුරපද සාදන්න, සුරකින්න සහ කළමනාකරණය කරන්න.</translation>
+<translation id="3513566764071045027">ඉවත් වන්න</translation>
+<translation id="3527085408025491307">ෆෝල්ඩරය</translation>
+<translation id="3530991200302302959">බල්ගේරියානු (<ph name="ORIGIN" />)</translation>
+<translation id="3588477659268085586">පරිවර්තකය විවෘත කරන්න</translation>
+<translation id="3601414719864711130">දිනය අනුව</translation>
+<translation id="3602290021589620013">පෙරදසුන</translation>
+<translation id="3607176258839749451">දෝෂයක් හේතුවෙන් ලියාපදිංචිය අසාර්ථක විය. කරුණාකර පසුව නැවත උත්සාහ කරන්න.</translation>
+<translation id="3628734956995390149">{count, plural,
+          =1 {පිටු සලකුණ "{title}"}
+          other {{count} පිටු සලකුණු "{title}"}}වෙත ගෙන යන ලදී</translation>
+<translation id="3638687955382971136">පෙළ විශාලනය කරන්න</translation>
+<translation id="3646647753063635401">සියලු දත්ත සමමුහුර්ත කරන්න, සහ නව දත්ත වර්ගවල සමමුහුර්තකරණය ස්වයංක්‍රීයව සක්‍රීය කරන්න.</translation>
+<translation id="3682791711395736890">අඩවියේ ඩෙස්ක්ටොප් අනුවාදය බලන්න</translation>
+<translation id="3689125468279190285">මුල් පිටුව බොත්තම පෙන්වන්න</translation>
+<translation id="3699026013955941879">කේතය කල් ඉකුත් වී ඇත. කරුණාකර නව සක්‍රිය කිරීමේ කේතයක් ඉල්ලන්න.</translation>
+<translation id="3700829948786686853">විවාල්ඩි වෙත සාදරයෙන් පිළිගනිමු</translation>
+<translation id="3719826155360621982">මුල් පිටුව</translation>
+<translation id="373855430416507951">පිටුව තුළ සොයන්න</translation>
+<translation id="3745190878148784130">විශාලන පෙළ සඟවන්න</translation>
+<translation id="3766350025418769949">ඔබ Vivaldi මුරපද කළමනාකරු වෙත සුරකින ලද මුරපද ඔබගේ iPad හි අනෙකුත් යෙදුම්වල භාවිතා කළ හැක.</translation>
+<translation id="3782426324365706059"><ph name="NEW_SEARCH_ENGINE" />භාවිතා කරන්න</translation>
+<translation id="3815158430926662417">මට මගේ Vivaldi සමමුහුර්ත ගිණුමට පුරනය විය නොහැක.</translation>
+<translation id="3817539520771282781">කරුණාව අනුව</translation>
+<translation id="383723620494271391">ඔබට තවත් යමක් එකතු කිරීමට අවශ්‍යද?</translation>
+<translation id="3842727926262967527">ටැබ් තීරුව සහ ලිපින ක්ෂේත්‍රය ඔබ කැමති තැන තෝරන්න.</translation>
+<translation id="3845564230651302310">නව අවහිර කරන්නා සැකසුම් යොදමින්...</translation>
+<translation id="3858860766373142691">නම</translation>
+<translation id="3861379244432690245">සෘජු ගැළපීම සක්‍රීය කරන්න</translation>
+<translation id="3866249974567520381">විස්තර</translation>
+<translation id="3872195896030547485">කරණාකර වලංගු ඊතැපැල් ලිපිනයක් ඇතුළු කරන්න.</translation>
+<translation id="3891045256838140223">හරියටම හරි නැති දේ ඔයාට අපිත් එක්ක බෙදා ගන්න පුළුවන්ද?</translation>
+<translation id="3897092660631435901">මෙනුව</translation>
+<translation id="3920366244737784074"><ph name="ITEM_TYPE" />එකතු කරන්න</translation>
+<translation id="3921585859122905677">ලිපින තීරු ස්ථානය</translation>
+<translation id="3925725503020335904">Vivaldi හි සංවර්ධනයට සහාය වීම සඳහා, අපි <ph name="NEW_SEARCH_ENGINE_1" /> සමඟ හවුල් වී එය ඔබගේ නව පෙරනිමි සෙවුම් යන්ත්‍රය ලෙස සකසා ඇත්තෙමු. <ph name="NEW_SEARCH_ENGINE_2" /> යනු අපි කැමති පුද්ගලික සෙවුම් යන්ත්‍රයක් වන අතර, ඔබත් එයට කැමති වේ යැයි අපි බලාපොරොත්තු වෙමු.</translation>
+<translation id="3953599441418463312">ජපන් (<ph name="ORIGIN" />)</translation>
+<translation id="395506590020066151">ට්‍රැකර් අවහිර කර ඇත</translation>
+<translation id="3958433364221339259"><ph name="SEARCH_ENGINE" />සමඟ සොයන්න</translation>
+<translation id="3960532956440723967">පෙළ ප්‍රමාණය ඉතා කුඩා හෝ විශාලයි.</translation>
+<translation id="3972953605944268742">UI එක අවුල් සහගත හෝ අවුල් සහගතයි.</translation>
+<translation id="3981442865425348629">සබැඳිය ඉවත් කරන්න</translation>
+<translation id="3989040793235713489">මට තව හෝ හොඳ තේමා විකල්ප අවශ්‍යයි.</translation>
+<translation id="3997823869212225788">ඉලක්කම්-6 කේතය ඇතුළු කරන්න</translation>
+<translation id="4002066346123236978">ශීර්ෂය</translation>
+<translation id="4032606071208172574">(පෙරනිමිය)</translation>
+<translation id="4048057312173843244">අනෙකුත් උපාංගවලින් සමමුහුර්ත කළ ටැබ් මෙහි දිස්වනු ඇත. මෙම සේවාව භාවිතා කිරීමට සමමුහුර්ත කිරීමට පුරනය වන්න.</translation>
+<translation id="4071269289580887166">ඩෙස්ක්ටොප් අඩවිය</translation>
+<translation id="4072876042695422377">පරිවර්තන දසුන වසන්න</translation>
+<translation id="4073968054795398875">සමමුහුර්ත සේවාදායකය ගැටළු වලට මුහුණ දෙයි. ඉක්මනින් සමමුහුර්ත කිරීම නැවත උත්සාහ කරමින්...</translation>
+<translation id="4084682180776658562">පිටු සලකුණ</translation>
+<translation id="408984524719804241">මට දැන්වීම් පෙනෙන්නේ ඇයි?</translation>
+<translation id="4096707694175478403">පැනලය</translation>
+<translation id="4118801221225128605">පරිවර්තනය කළ පෙළ</translation>
+<translation id="4134597009271720826">යෙදුම ශ්‍රේණිගත කරන්න</translation>
+<translation id="414098425907666915">පුද්ගලික සෙවීම</translation>
+<translation id="4141861385728508836">නෝර්ඩික් (<ph name="ORIGIN" />)</translation>
+<translation id="4145489350420416595">අනපේක්ෂිත දෝෂයක්.</translation>
+<translation id="4151468644762710975">පෙරනිමි සෙවුම් යන්ත්‍ර ප්‍රතිසාධනය කරන්න</translation>
+<translation id="4152011295694446843">ඔබට ඔබේ පිටු සලකුණු මෙතැනින් සොයාගත හැකිය.</translation>
+<translation id="4152623049003960417">ට්‍රැකර් විස්තර</translation>
+<translation id="4176463684765177261">අබලයි</translation>
+<translation id="4184746246941929945">මෙම පිටුවේ දැන්වීම් අවහිර නොකිරීමට Vivaldi <ph name="PARTNER_NAME" /> සමඟ හවුල් වී ඇත. මෙම දැන්වීම් Vivaldi සංවර්ධනය සඳහා අරමුදල් සැපයීමට උපකාරී වේ.</translation>
+<translation id="4193549853510262477">ස්වයංක්‍රීයව අනාවරණය විය</translation>
+<translation id="4209092469652827314">විශාල</translation>
+<translation id="4219175188138757774">චෙක් සහ ස්ලෝවැක් (<ph name="ORIGIN" />)</translation>
+<translation id="4222285809803895512">නිර්මාණය කළ දිනය</translation>
+<translation id="4274598629843497594">ආරම්භක පිටුවේ මෙම කණ්ඩායම දෘශ්‍යමාන කිරීමට සංදර්ශක වේග ඩයල් සක්‍රීය කරන්න. ඔබට තවමත් පිටු සලකුණු පැනල් හරහා කණ්ඩායමට ප්‍රවේශ විය හැකිය.</translation>
+<translation id="4276839458685471670">නිර්මාණය කරන ලද්දේ</translation>
+<translation id="4277085371281330061">ට්‍රැකර් අවහිර කර ඇත</translation>
+<translation id="4299298331965375737">Vivaldi ඔබේ පෙරනිමි බ්‍රව්සරය කරන්නද?</translation>
+<translation id="4304224509867189079">ඇතුල් වන්න</translation>
+<translation id="4304752732957821175">පිරිසැලසුම හෝ බොත්තම් අවුල් සහගතයි.</translation>
+<translation id="4314476537497682637">ඩෙස්ක්ටොප් අඩවිය සඟවන්න</translation>
+<translation id="4316955624679873896">පිටු සලකුණු කර ඇත</translation>
+<translation id="432696242656678770">රුසියානු (<ph name="ORIGIN" />)</translation>
+<translation id="4350751486125178847">ස්පාඤ්ඤ (<ph name="ORIGIN" />)</translation>
+<translation id="4376661454588260127">වියට්නාම (<ph name="ORIGIN" />)</translation>
+<translation id="4380745054983890306">මට පිටු PDF ලෙස සුරැකිය හැකි නම් හොඳයි.</translation>
+<translation id="4394049700291259645">අබල කරන්න</translation>
+<translation id="440304190776086038">සෘජු ගැළපීමට ප්‍රමුඛත්වය දෙන්න</translation>
+<translation id="4413780690230851155">බ්‍රවුස් කිරීමේ ඉතිහාසය මකන්න</translation>
+<translation id="443008484043213881">මෙවලම්</translation>
+<translation id="4452878871193896747">ඉන්දුනීසියානු (<ph name="ORIGIN" />)</translation>
+<translation id="445620040230332178">ටැබ් විලාසය</translation>
+<translation id="4461652107878667683">ඉදිරියට සංචාලනය</translation>
+<translation id="4474581062946673155">ඔබට දැනට වෙනත් උපාංගවලින් සමමුහුර්ත කළ ටැබ් නොමැත.</translation>
+<translation id="4488900295693536220">ලිපින තීරුව පහළින් ඇති විට අදාළ වන අතර, ඉහළම යෝජනා වෙත ළඟා වීම පහසු කරයි.</translation>
+<translation id="4497115807425788318">ස්ථානය</translation>
+<translation id="4507213865286211606">ප්‍රමාණයේ පෙරදසුන</translation>
+<translation id="4515084385531683114">මෙම උපාංගයේ මුරපද කළමනාකරු වෙත සුරකිනු ලැබේ.</translation>
+<translation id="4518934934246049498">ඔබ Vivaldi භාවිතා කිරීම ගැන අපි ගොඩක් සතුටු වෙනවා!</translation>
+<translation id="4525945044609022380">මෙම ඊමේල් ලිපිනය දැනටමත් වෙනත් ගිණුමක් සමඟ සම්බන්ධ කර ඇත.</translation>
+<translation id="4526803704855831732">පුද්ගලික ටැබ්</translation>
+<translation id="4542001945479572846">වෙන දෙයක්</translation>
+<translation id="4553717494760925411">සංචාලනය ආපසු</translation>
+<translation id="4563480492836333884">විද්‍යුත් තැපෑල පිළිගනු නොලැබේ. කරුණාකර වෙනත් වසමක් භාවිතා කරන්න.</translation>
+<translation id="457386861538956877">තව...</translation>
+<translation id="4591413025758301858"><ph name="SOURCE_LANGUAGE" /> සිට <ph name="DESTINATION_LANGUAGE" />දක්වා පරිවර්තනය</translation>
+<translation id="460370326897402035">මුරපදය වලංගු නැත.</translation>
+<translation id="4619615317237390068">වෙනත් උපාංගවලින් ටැබ්</translation>
+<translation id="462860218383788109">සංස්කරණය කළ දිනය</translation>
+<translation id="4640946580087069269">සටහනට පිටපත් කරන්න</translation>
+<translation id="4643117005422448078">ඉහළම අඩවි</translation>
+<translation id="4654578955713250802">දැන්වීම් සහ ලුහුබැඳීම් අවහිර කරන්න</translation>
+<translation id="4655510151391078468">මෙම කේතය අප ඔබට එවූ කේතයට නොගැලපේ.
+        ඔබට තවත් උත්සාහයන් <ph name="ATTEMPTS" /> ක් ඉතිරිව ඇත.</translation>
+<translation id="466494460776294423">සත්‍යාපන කේතය අවශ්‍යයි</translation>
+<translation id="4700341416469973823">තෝරාගත් ඒවා මකන්න</translation>
+<translation id="4714431804859029826">පෙරනිමි ප්‍රතිසාධනය කරන්න</translation>
+<translation id="4727698999970341158">අයිස්ලන්ත (<ph name="ORIGIN" />)</translation>
+<translation id="473775607612524610">යාවත්කාලීන කරන්න</translation>
+<translation id="4739712911308055817">ලබාගෙන නැත</translation>
+<translation id="4749460556537826127">මට මුරපද සහ පිටු සලකුණු අපනයනය කිරීමට හෝ ආයාත කිරීමට අවශ්‍යයි.</translation>
+<translation id="4750394297954878236">යෝජනා</translation>
+<translation id="4759238208242260848">බාගැනීම්</translation>
+<translation id="4759399863961855552">අනුපිළිවෙලට සකසන්න</translation>
+<translation id="4780953868408193639">ට්‍රැකර්
+අවහිර කර ඇත</translation>
+<translation id="4807415245238822255">මුරපද ගැළපිය යුතුයි.</translation>
+<translation id="4818836520802586445">උච්චාරණ වර්ණය</translation>
+<translation id="4821701638681626529">පුද්ගලික ටැබ් භාවිතා කරන අතරතුර විවාල්ඩි ගවේෂණ ඉතිහාසය වාර්තා නොකරයි.</translation>
+<translation id="4825714975043873206">වෙබ් අඩවි සෙමින් පූරණය වේ හෝ විවෘත නොවේ.</translation>
+<translation id="4833044618885331665">සමමුහුර්තකරණය භාවිතා කිරීමට ඔබ Vivaldi උත්ශ්‍රේණි කළ යුතුය.</translation>
+<translation id="484344804915260122">මට බිල්ට්-ඉන් පරිවර්තකයක් අවශ්‍යයි.</translation>
+<translation id="484462545196658690">ස්වයංක්‍රීය</translation>
+<translation id="4852383705713307704">දැන්වීම අවහිර කර ඇත</translation>
+<translation id="4899260893220375866">මට කුකීස් සහ අඩවි අවසර පිළිබඳ වැඩි පාලනයක් අවශ්‍යයි.</translation>
+<translation id="4903325570808402486">විවාල්ඩි සැකසුම් සමමුහුර්ත කරන්න (සියලුම සැකසුම් තවමත් සමමුහුර්ත කර නොමැත)</translation>
+<translation id="4925542198780948858">මාධ්‍ය පාලන අපේක්ෂා කළ පරිදි ක්‍රියා නොකරයි.</translation>
+<translation id="4929196061847506605">බලවත්. පුද්ගලික. පෞද්ගලික.</translation>
+<translation id="4936675324097895694">මූල්‍ය</translation>
+<translation id="4936710149174207991">සමමුහුර්ත කර නැත</translation>
+<translation id="4943266325467647391">Vivaldi හි බිල්ට්-ඉන් ට්‍රැකර් සහ දැන්වීම් අවහිර කරන්නා ඔබව අනිෂ්ට මෘදුකාංග සහ දැන්වීම් වලින් ආරක්ෂා කරයි.</translation>
+<translation id="4950266778127803750">පසුබිම් ටැබ් සඳහා X බොත්තම පෙන්වන්න</translation>
+<translation id="495421405224926623">මම භාවිත නියමයන් සහ රහස්‍යතා ප්‍රතිපත්තිය කියවා එකඟ වෙමි.</translation>
+<translation id="497942794017668482">ට්රැකර් සහ දැන්වීම් අවහිර කිරීම</translation>
+<translation id="4993477362660748586">සමමුහුර්තකරණය</translation>
+<translation id="5037761343305489956">සටහනට පිටපත් කරන ලදී</translation>
+<translation id="504986598654589766">පුද්ගලික ටැබ් එකක බ්‍රවුස් කිරීම යනු සෙවුම්, නැරඹූ අඩවි, කුකීස් සහ තාවකාලික ගොනු Vivaldi විසින් ගබඩා නොකරන බවයි. එය ඔබගේ සම්බන්ධතාවය සංකේතනය කරන්නේ හෝ වෙනත් ආකාරයකින් වෙනස් කරන්නේ නැත.</translation>
+<translation id="505774819758747674">තෝරාගත් උච්චාරණ වර්ණය සමඟ මෙවලම් තීරුව සඳහා පෙරදසුන</translation>
+<translation id="5094183365876568934">සමහර වෙබ් අඩවි පරිශීලක මනාපයන් අනුව ඔවුන්ගේ වර්ණ පටිපාටිය අභිරුචිකරණය කරයි. මෙම වෙබ් අඩවි භාවිතා කිරීමට ඔබ කැමති වර්ණ පටිපාටිය තෝරන්න.</translation>
+<translation id="5094376253685335202">සමමුහුර්ත කිරීම සක්‍රීය කරන්න</translation>
+<translation id="5116316489033177455">පිටු සලකුණු සහ වේග ඩයල් සමමුහුර්ත කරන්න</translation>
+<translation id="5122095890854520072">ලැට්වියානු (<ph name="ORIGIN" />)</translation>
+<translation id="5153806174841856652">ඇතුළු වීම අසාර්ථක විය</translation>
+<translation id="5160018607418677056"><ph name="BEGIN_LINK" />කේතය නැවත යවන්න<ph name="END_LINK" /></translation>
+<translation id="5166345991950198590">ඉහළම අඩවි පෙන්වන්න</translation>
+<translation id="5191012692655103305">ටැබ් සහ ඉතිහාසය ලබා ගනිමින්...</translation>
+<translation id="5238642303473095117">දත්ත මකන්න</translation>
+<translation id="5245732982828228444">ඔබට ඔබේ සටහන් මෙතැනින් සොයාගත හැකිය.</translation>
+<translation id="5249199221558969362">කරුණාකර යථාර්ථවාදී ආයුකාල අංකයක් ඇතුළත් කරන්න.</translation>
+<translation id="5271549068863921519">මුරපදය සුරකින්න</translation>
+<translation id="5290452628447338707">සටහන් නැත</translation>
+<translation id="5317780077021120954">සුරකින්න</translation>
+<translation id="5349678548463426691">විස්තරය අනුව</translation>
+<translation id="5350737901534958404">අපගේ හවුල්කරුවන්ගෙන් දැන්වීම් වලට ඉඩ දෙන්න (විවාල්ඩිට සහාය වන්න)</translation>
+<translation id="5351912500249789547">Vivaldi.net ඔබගේ අක්තපත්‍ර ප්‍රතික්ෂේප කළේය: දෝෂ කේතය <ph name="ERROR_CODE" /></translation>
+<translation id="535312628536375213">අපි මෙම වෙබ් අඩවිය සමඟ හවුල්කාරිත්වයක් ඇති අතර සෙවුම් ප්‍රතිඵලයේ දැන්වීම් පෙරනිමියෙන් අවහිර කිරීමෙන් නිදහස් කරමු. ඔබ ඔවුන් සමඟ අන්තර් ක්‍රියා කරන්නේ නම් මෙම දැන්වීම් Vivaldi සඳහා ආදායමක් උපයා දෙයි.</translation>
+<translation id="5378841821586202982">කුණු කූඩ ෆෝල්ඩරය</translation>
+<translation id="5398772614898833570">දැන්වීම් අවහිර කර ඇත</translation>
+<translation id="5421638721143596928">ඔබගේ අක්තපත්‍ර විකේතනය කිරීමට අසමත් විය. කරුණාකර නැවත පුරනය වන්න.</translation>
+<translation id="5439599923922718668">නිතර පැමිණෙන</translation>
+<translation id="5439835075346716808">මෙම IP ලිපිනයෙන් ලියාපදිංචිය තාවකාලිකව අවහිර කර ඇත. කරුණාකර පසුව නැවත උත්සාහ කරන්න.</translation>
+<translation id="5475116651001049780">ජංගම අඩවිය සඟවන්න</translation>
+<translation id="5486261815000869482">මුරපදය තහවුරු කරන්න</translation>
+<translation id="5493100027274177356">මූලාශ්‍ර පෙළ <ph name="SOURCE_TEXT" /> වන අතර පරිවර්තනය කළ පෙළ <ph name="TRANSLATED_TEXT" />වේ.</translation>
+<translation id="5494016731375030300">මෑතකදී වැසූ ටැබ්</translation>
+<translation id="5517833250460609673">වීඩියෝ හෝ සංගීතය නිසි ලෙස වාදනය නොවේ.</translation>
+<translation id="5519187824830275200">සඟවන්න වෙත එකතු කරන්න...</translation>
+<translation id="5521914729572529753">මම පෞද්ගලිකත්වය හෝ ආරක්ෂාව ගැන කනස්සල්ලෙන් සිටිමි.</translation>
+<translation id="5564687523685713029">කණ්ඩායම් පමණක් පෙන්වන්න</translation>
+<translation id="5577770221789895760">මුල් පිටුව බොත්තම තට්ටු කළ විට විවෘත කළ යුතු පිටුව තෝරන්න.</translation>
+<translation id="5600792731098584229">වේග ඩයල් ප්‍රමාණය</translation>
+<translation id="5639137028584114536">ඔබේ සංවිධානය ඔබට පෞද්ගලිකව බ්‍රවුස් කිරීමට අවශ්‍ය කරයි. ටැබ් පුද්ගලික ප්‍රකාරයේදී සුරකිනු නොලැබේ.
+        <ph name="BEGIN_LINK" />තව දැනගන්න<ph name="END_LINK" /></translation>
+<translation id="5669616832972782345">යෝජනාව මකන්න</translation>
+<translation id="5684277895745049190">ලැයිස්තුව</translation>
+<translation id="5710478562694930157">ආරෝහණය</translation>
+<translation id="574392208103952083">මධ්‍යම</translation>
+<translation id="5756451123057329358">ආරම්භක පිටුව නැවත විවෘත කරන්න</translation>
+<translation id="5787420647064736989">උපාංගයේ නම</translation>
+<translation id="5801825598531634872">දින ගණනකට පසු අක්‍රියයි</translation>
+<translation id="5822336771053074270">සටහනක් එක් කරන්න</translation>
+<translation id="5823830882692559950">Vivaldi.net ඔබගේ අක්තපත්‍ර ප්‍රතික්ෂේප කළේය: <ph name="SERVER_ERROR" /> (<ph name="ERROR_CODE" />)</translation>
+<translation id="5857090052475505287">නව ෆෝල්ඩරය</translation>
+<translation id="5859825823508296659">වසම සංස්කරණය කරන්න</translation>
+<translation id="5867841422488265304">වෙබ් ලිපිනය සොයන්න හෝ ටයිප් කරන්න</translation>
+<translation id="5869217094746242845">පෞද්ගලිකත්වය සහ ආරක්ෂාව පිළිබඳ තව දැන ගන්න</translation>
+<translation id="5871497086027727873">අයිතම 1ක් ගෙන යන ලදී</translation>
+<translation id="5898502570200301364">ඔබ Vivaldi මුරපද කළමනාකරු වෙත සුරකින ලද මුරපද ඔබගේ iPhone හි අනෙකුත් යෙදුම්වල භාවිතා කළ හැක.</translation>
+<translation id="5900160494089383343">මෙම පරිශීලක නාමය ලබා ගත නොහැක.</translation>
+<translation id="5907851754429991366">App Store පිළිබඳ ඔබගේ ප්‍රතිපෝෂණය දැකීමට අපි කැමතියි.</translation>
+<translation id="5914847543920496660">විනිවිදභාවය සඳහා මම විවෘත මූලාශ්‍ර මෘදුකාංග වලට කැමතියි.</translation>
+<translation id="591684450784861763">පිටුව එකතු කරන්න...</translation>
+<translation id="5922915428124940994">(වෙනස් කරන ලදී)</translation>
+<translation id="5939518447894949180">නැවත සකසන්න</translation>
+<translation id="6005497458542935062">ෆෝල්ඩරයෙන් පිටතට ගෙන යන්න</translation>
+<translation id="603230602684548091">මූලාශ්‍ර භාෂාව තෝරන්න</translation>
+<translation id="6040304352785030331">මට බ්‍රව්සර් දිගු/ඇඩෝන භාවිතා කිරීමට අවශ්‍යයි.</translation>
+<translation id="6042308850641462728">තව</translation>
+<translation id="604930981600990598">පරිවර්තනය පිටපත් කරන ලදී!</translation>
+<translation id="6077943432358741146">වේග ඩයල් එක</translation>
+<translation id="6079696972035130497">අසීමිත</translation>
+<translation id="614539368862754027"><ph name="NUMBER_OF_SELECTED_NOTES" /> අයිතම ගෙන යන ලදී</translation>
+<translation id="6147094071357011481">මෑතකදී වසා දැමූ ටැබ් නොමැත.</translation>
+<translation id="6177301865411451337">Vivaldi සමමුහුර්ත සේවාව ගැටළු වලට මුහුණ දෙනවා විය හැක. සේවා යාවත්කාලීන කිරීම් මෙතැනින් ලබා ගන්න: <ph name="BEGIN_LINK" />VivaldiStatus.com<ph name="END_LINK" /></translation>
+<translation id="6180515952840978051">වෙබ් අඩවියක් ස්පීඩ් ඩයල් එකක් ලෙස සුරැකීම මට අපහසුයි.</translation>
+<translation id="6193995664633100765">ඉන්දියානු (<ph name="ORIGIN" />)</translation>
+<translation id="6224086034182508647">වෙබ් අඩවි පෙනුම විකල්ප</translation>
+<translation id="6253990869902066991">විවාල්ඩි අනපේක්ෂිත ලෙස වෙබ් පිටු නැවත පූරණය කරයි</translation>
+<translation id="6257488392933423163">HTML ලෙස බලන්න</translation>
+<translation id="6275978505813092431">ආදාන රූපය</translation>
+<translation id="6365929278691047681">ජර්මානු (<ph name="ORIGIN" />)</translation>
+<translation id="638249699236255123">වෙබ් අඩවි පිරිසැලසුම කැඩී ඇත හෝ අමුතු ලෙස පෙනේ.</translation>
+<translation id="6383855939619098095">විවාල්ඩි හි ආරම්භක පිටුව අභිරුචිකරණය කිරීම දුෂ්කර ය.</translation>
+<translation id="6406506848690869874">සමමුහුර්ත කරන්න</translation>
+<translation id="641394169129472837">නව ටැබ් බොත්තම තට්ටු කළ විට විවෘත කළ යුතු පිටුව තෝරන්න.</translation>
+<translation id="6438416544409849235"><ph name="NUMBER_OF_SELECTED_NOTES" /> තෝරා ගන්නා ලදී</translation>
+<translation id="6442584491342758233">සෘජු ගැළපීම</translation>
+<translation id="6443682944493983866">භාෂා පිළිගන්න</translation>
+<translation id="6468130661190228905">කණගාටුයි, අපගේ ප්‍රජාවට සම්බන්ධ වීමට පෙර ඔබ ටිකක් බලා සිටිය යුතු බව පෙනේ. අපගේ සාමාජිකයින්ට සම්බන්ධ වීමට අවම වශයෙන් අවුරුදු 16 ක් වත් විය යුතුය.</translation>
+<translation id="6487150267908786236"><ph name="BEGIN_LINK" />ආයාත කරන්න<ph name="END_LINK" /></translation>
+<translation id="6517411226162529295">උපස්ථ සංකේතන යතුර</translation>
+<translation id="6527303717912515753">බෙදාගන්න</translation>
+<translation id="6535988230515403205">පෝලන්ත (<ph name="ORIGIN" />)</translation>
+<translation id="6536226749629478563">මට වඩා හොඳ මුරපද කළමනාකරණ ආරක්ෂාවක් අවශ්‍යයි.</translation>
+<translation id="6544880104552732240">ගමනාන්ත භාෂාව තෝරන්න</translation>
+<translation id="659351303388691480">බ්‍රවුස් කිරීමේ දත්ත හිස් කරන්න...</translation>
+<translation id="6602272356389933803">පෙනුම සහ තේමාව</translation>
+<translation id="6614744450826097546">දැන්වීම් විස්තර</translation>
+<translation id="6631760746795162665">කොලොම්බියානු (<ph name="ORIGIN" />)</translation>
+<translation id="6639866709520319699">ට්‍රැකර් සහ දැන්වීම් අවහිර කර ඇත. සමහර අඩවි කැඩී යා හැක.</translation>
+<translation id="6642196070615520677">දුරස්ථ සමමුහුර්ත දත්ත මකන්න</translation>
+<translation id="6645228090427373820">ට්‍රැකර් අවහිර කර ඇත, නමුත් දැන්වීම් නොවේ. සමහර අඩවි කැඩී යා හැක.</translation>
+<translation id="6656103420185847513">ෆෝල්ඩරය සංස්කරණය කරන්න</translation>
+<translation id="6657585470893396449">මුරපදය</translation>
+<translation id="6659376785721135061">ආදාන ක්ෂේත්‍රය හිස් කරයි</translation>
+<translation id="6690955457036363013">අඩවියකට අවහිර කිරීමේ මට්ටම කළමනාකරණය කරන්න</translation>
+<translation id="6700868474099335777">පිටු විශාලනය</translation>
+<translation id="6703516503311038964">මට විවාල්ඩිගේ පුවත් පත්‍රිකාව ලබා ගැනීමට අවශ්‍යයි.</translation>
+<translation id="6709133671862442373">පුවත්</translation>
+<translation id="6724024423419410528">වර්ණ</translation>
+<translation id="6745857330065678428">පිටුවෙන් උච්චාරණ වර්ණය උරුම කරගන්න</translation>
+<translation id="6756507620369789050">ප්‍රතිපෝෂණ බෙදා ගන්න</translation>
+<translation id="6798469570047202628">වැරදි මුරපදයක් ඇතුළත් කර ඇත.</translation>
+<translation id="6807791860691150411">අධ්‍යාපනය</translation>
+<translation id="681368974849482173">අයිතමය නිර්මාණය කරන ලදී</translation>
+<translation id="6830986331692390764">සමමුහුර්ත දත්ත හිස් කරමින්. කරුණාකර රැඳී සිටින්න.</translation>
+<translation id="6831043979455480757">පරිවර්තනය කරන්න</translation>
+<translation id="6838968771741416244">ඔබගේ ප්‍රතිපෝෂණය පිළිබඳ අමතර විස්තර සපයයි</translation>
+<translation id="6850275739048136176">මූලාශ්‍ර සහ ගමනාන්ත භාෂා මාරු කරයි</translation>
+<translation id="6875510405870945573">ඔබ කැමති අවහිර කිරීමේ මට්ටම තෝරන්න.</translation>
+<translation id="6878199227380123461">පරිවර්තන පැනලය කැමති</translation>
+<translation id="6887143077297974801">සමමුහුර්ත කිරීම ආරම්භ කිරීමට අසමත් විය.</translation>
+<translation id="6896758677409633944">පිටපත් කරන්න</translation>
+<translation id="691132463664340655">බ්‍රව්සර් තේමාව</translation>
+<translation id="6918338082370824763">නිශ්චිත පිටුව</translation>
+<translation id="6937750621455385628">පුරනය වීමට ඔබ Vivaldi ගිණුමක් භාවිතා කළ යුතුය.</translation>
+<translation id="6941852195052765076">සෞඛ්‍යය</translation>
+<translation id="6945221475159498467">තෝරන්න</translation>
+<translation id="6946395294519639514">පැනල් සමඟින් ඔබට බ්‍රවුසරයේ පැති තීරුවේ පහසුවෙන් ළඟා විය හැකි දුරින් go-to මෙවලම් තබා ගත හැක.</translation>
+<translation id="6951435330868954105">පෙරනිමි සැකසුම් කළමනාකරණය කරන්න</translation>
+<translation id="6951948201878750661">මෙම වර්ණය තෝරා ගැනීමට තට්ටු කරන්න</translation>
+<translation id="6967884871145366229">රහස්‍යතා සැකසීම් කළමනාකරණය කරන්න</translation>
+<translation id="6973630695168034713">ෆෝල්ඩර</translation>
+<translation id="7006864796794806241">මුරපදය නැවත ලබා ගන්න</translation>
+<translation id="7029809446516969842">මුරපද</translation>
+<translation id="7041964446309059643">අත්පොත</translation>
+<translation id="7072317570101031415">පොත්</translation>
+<translation id="7083011465470143310"><ph name="BEGIN_LINK" />මුරපදය<ph name="END_LINK" />අමතක වුනාද?</translation>
+<translation id="7083783675072250424">ටැබ් කළමනාකරණය කිරීමට හෝ සංවිධානය කිරීමට අපහසුය.</translation>
+<translation id="7096550097771629450">පරිවර්තනය කළ පෙළ පසුරු පුවරුවට පිටපත් කරයි</translation>
+<translation id="7110758301321962823">පරිශීලක නාමය නැවත ලබා ගන්න</translation>
+<translation id="711946737922560234">ආදාන සබැඳිය</translation>
+<translation id="7120229714826964836">පිටුව බෙදා ගන්න</translation>
+<translation id="713792263829536729">ප්‍රවාහ සේවා නිසි ලෙස ක්‍රියා නොකරයි.</translation>
+<translation id="7158507293261405349">නව සමූහයක් එක් කරන්න</translation>
+<translation id="7173114856073700355">සැකසුම් විවෘත කරන්න</translation>
+<translation id="718052827125696482">තිරය නිසි ලෙස භ්‍රමණය නොවේ.</translation>
+<translation id="7180919683305939836">මට AI-බලගැන්වූ විශේෂාංග (සාරාංශගත කිරීම, කතාබස්, ආදිය) අවශ්‍යයි.</translation>
+<translation id="7182884564543065232">ඇතැම් වෙබ් අඩවි විවෘත නොවේ.</translation>
+<translation id="7192066917392691622">අවරෝහණය</translation>
+<translation id="7194677467200983873">අවසන් සමමුහුර්ත කිරීම:</translation>
+<translation id="7203411967620588391"><ph name="ITEM_TYPE" />සංස්කරණය කරන්න</translation>
+<translation id="7210372243397300116">ෆෝල්ඩරය සොයන්න</translation>
+<translation id="7215420652436283416">ලිපිනය අනුව</translation>
+<translation id="7229439505896086266">සටහනක් සාදන්න</translation>
+<translation id="7311118006561484338">මාතෘකාව අනුව</translation>
+<translation id="7325310788570036874">Vivaldi සමඟින් වෙබය දක්ෂ ලෙස, සුමටව සහ වේගයෙන් බ්‍රවුස් කරන්න.</translation>
+<translation id="734110743815267231">හෙබ්‍රෙව් (<ph name="ORIGIN" />)</translation>
+<translation id="7347289093190902150">පෞද්ගලිකව විවෘත කරන්නද?</translation>
+<translation id="735361677607128142">සෙවුම් යෝජනා මට වැඩ කරන්නේ නැහැ.</translation>
+<translation id="7362952245780030555">සම්පූර්ණ ඩෙස්ක්ටොප් ටැබ් හෝ සරල කළ ටැබ් මාරු කරන්නා අතර තෝරන්න.</translation>
+<translation id="736592699917579616">ආහාර</translation>
+<translation id="7379938540614588640">ලන්දේසි (<ph name="ORIGIN" />)</translation>
+<translation id="7386354767119759965">ජංගම අඩවිය</translation>
+<translation id="7388525939184421699">නව මූලාශ්‍රයක් එක් කරන්න</translation>
+<translation id="7393145587390257456">දැන්වීම් අවහිර කරන්නා හොඳින් ක්‍රියා නොකරයි.</translation>
+<translation id="7400418766976504921">URL එක</translation>
+<translation id="7417521636956146248">සෙවුම් යන්ත්‍ර පෙරනිමි සැකසුම් වෙත යළි පිහිටුවනු ලබන අතර, එය ඔබගේ අභිරුචි සෙවුම් යන්ත්‍ර ද යළි පිහිටුවනු ඇත.</translation>
+<translation id="7451784507428459503">YouTube වීඩියෝ වාදනය නොවේ හෝ ගැටළු තිබේ.</translation>
+<translation id="7454640759045234067">ට්‍රැකර් අවහිර කර ඇත</translation>
+<translation id="7461899062138731833">මූලාශ්‍ර</translation>
+<translation id="7473891865547856676">නැ ස්තුතියි</translation>
+<translation id="749277285729135008">නව ටැබයේ ලිපින තීරුව වෙත අවධානය යොමු කරන්න</translation>
+<translation id="7504733216949066481">පරිවර්තනය අසාර්ථකයි!</translation>
+<translation id="750493650310597496">0 තෝරා ගන්නා ලදී</translation>
+<translation id="7525067979554623046">නිර්මාණය කරන්න</translation>
+<translation id="753732157349120914">ටැබ් මාරු කරන්නා</translation>
+<translation id="7541018845757104937">විවාල්ඩි මගේ බැටරිය ඉක්මනින් බැස යයි</translation>
+<translation id="755410338177348055">ශ්‍රව්‍ය හෝ දෘශ්‍ය බෆරින් වෙමින් හෝ කැටි වෙමින් පවතී</translation>
+<translation id="7562758693157424472">ඔබේ අදහස් අප සමඟ බෙදා ගැනීමට ඉක්මන් මොහොතක් ගත කළ හැකිද?</translation>
+<translation id="7573518470897278603">අඩවියේ ජංගම අනුවාදය බලන්න</translation>
+<translation id="7574321014880720413">නව වසමක් එක් කරන්න</translation>
+<translation id="7587132259180664054">විද්‍යුත් තැපෑල සාර්ථකව යවන ලදී.</translation>
+<translation id="7587287726969638956">වෙබ් අඩවි පෙනුම</translation>
+<translation id="7593546601395782810">සටහන් සඟවන්න</translation>
+<translation id="7600840048521751013">පරිවර්තන ඉතිහාසය</translation>
+<translation id="7602336701644200880">විද්‍යුත් තැපෑල යැවීම අසාර්ථක විය. කරුණාකර නැවත උත්සාහ කරන්න.</translation>
+<translation id="7606108789437688910">සටහන් ලිපින අප්‍රසිද්ධ ආකාරයෙන් විවෘත කරන්න</translation>
+<translation id="7616284412875773842">කලකිරීමට පත් විය</translation>
+<translation id="7622661618259256505">කරුණාකර අවම වශයෙන් අක්ෂර 12ක් දිග මුරපදයක් තෝරන්න.</translation>
+<translation id="7658239707568436148">අවලංගු කරන්න</translation>
+<translation id="767363698559661695">ඔබගේ ටැබ් විලාසය සකසන්න</translation>
+<translation id="7702907602086592255">වසම</translation>
+<translation id="7703885416803110670">වේග ඇමතුම් කණ්ඩායම් යනු ඔබේ පිටු සලකුණු සංවිධානය කිරීමට හොඳ ක්‍රමයකි.</translation>
+<translation id="7730831244010940855">iPad එකේ ඔයාගේ default එක Vivaldi වලට මාරු කරන්නද?</translation>
+<translation id="7732622593814325274">ට්‍රැකර් අවහිර කිරීමේ මූලාශ්‍ර කළමනාකරණය කරන්න</translation>
+<translation id="7765158879357617694">චලනය කරන්න</translation>
+<translation id="7771452384635174008">පිරිසැලසුම</translation>
+<translation id="7781069478569868053">නව ටැබ් පිටුව</translation>
+<translation id="7801111502975417831">මට පසුබිමේ වීඩියෝ වාදනය කිරීමට හැකි වීමට අවශ්‍යයි.</translation>
+<translation id="7801204999757211519">දැනටමත් ගිණුමක් තිබේද? <ph name="BEGIN_LINK" />ලොග් වන්න ➔<ph name="END_LINK" /></translation>
+<translation id="7850070199083838600">නව කණ්ඩායමක් සාදන්නද?</translation>
+<translation id="7870765213383950011">පළමු කණ්ඩායම</translation>
+<translation id="7914995060146784406">සටහන සංස්කරණය කරන්න</translation>
+<translation id="7925340978147141704">මුරපදය පෙන්වන්න</translation>
+<translation id="7930665886069596866">විශේෂාංගයක් නිවැරදිව ක්‍රියා නොකරයි.</translation>
+<translation id="7931102520806266819">පෞද්ගලිකව විවෘත කරන්න</translation>
+<translation id="7961270736686975887">භාෂා මාරු කරන්න</translation>
+<translation id="7967161908152532036">වෙබ් අඩවි ලිපිනය</translation>
+<translation id="7979036127916589816">සමමුහුර්ත දෝෂය</translation>
+<translation id="8008214489230610096">ප්‍රතිසාධන ඊමේල් ලිපිනය තහවුරු කරන්න</translation>
+<translation id="8038592796033755028"><ph name="USERNAME" />ගේ උපාංග</translation>
+<translation id="8041093619605951337">සතුටුයි</translation>
+<translation id="8046542428651654244">සිඟිති රුව යාවත්කාලීන කරන්න</translation>
+<translation id="804786196054284061">අවසාන පරිශීලක බලපත්‍ර ගිවිසුම</translation>
+<translation id="8053851743673939284">ප්‍රංශ (<ph name="ORIGIN" />)</translation>
+<translation id="8058018971942772071">කණ්ඩායමක් ලෙස භාවිතා කරන්න</translation>
+<translation id="8066170816074394954">සේවාදායක දෝෂයකි.</translation>
+<translation id="8076492880354921740">ටැබ්</translation>
+<translation id="8077675488769462025">අක්‍රිය ටැබ්</translation>
+<translation id="8112996065264879835">මෙම කේතය අප ඔබට එවූ කේතයට නොගැලපේ.
+        ඔබ උපරිම වැරදි උත්සාහ සීමාවට ළඟා වී ඇත. කරුණාකර පහත නැවත යැවීමේ විකල්පය භාවිතා කර නව කේතයක් ඉල්ලන්න.</translation>
+<translation id="8131740175452115882">තහවුරු කරන්න</translation>
+<translation id="8134672010161840864">රූපය කප්පාදු කර ස්ථානගත කිරීමට පින්ච් කරන්න</translation>
+<translation id="8142291334394582384">සෙවුම් යෝජනා අනුපිළිවෙල ප්‍රතිලෝම කරන්න</translation>
+<translation id="8147118677117542370">කරුණාකර ඔබේ වයස ලබා දෙන්න.</translation>
+<translation id="8165573437634525334">සංකේතාංකන මුරපදය මඟින් දත්ත සුරක්ෂිත කර ඇත</translation>
+<translation id="8237090677709100373">අභිරුචි වර්ණ කේතය</translation>
+<translation id="8257908958623224237">වෙනත් සේවාදායකයෙකුගේ දත්ත සමඟ ගැටුමක්.</translation>
+<translation id="8261506727792406068">මකන්න</translation>
+<translation id="8273666073173891138">සටහන <ph name="FOLDER_TITLE" />වෙත සුරකින ලදී</translation>
+<translation id="8275038454117074363">ආනයනය කරන්න</translation>
+<translation id="8284356787013856231">ගොනුව විවෘත කිරීමට අවසර දීම ප්‍රතික්ෂේප කරන ලදී.</translation>
+<translation id="8289933454364510719">ඉහළ හෝ පහළ</translation>
+<translation id="8304044605002588416">ආරම්භක පිටුවේ බොත්තම අභිරුචිකරණය කරන්න</translation>
+<translation id="8323167517179506834">URL එක ටයිප් කරන්න</translation>
+<translation id="8326104954595890674">නව පුද්ගලික ටැබය</translation>
+<translation id="8329813750766387010">යාවත්කාලීන කරන ලදී: <ph name="DATE" /></translation>
+<translation id="8339701072035560935">හිස් පිටුව</translation>
+<translation id="8347535536909603600">කුකී අනතුරු ඇඟවීම් ඉවත් කරන්න (<ph name="TYPE" />)</translation>
+<translation id="8359194106448244241">වෙනත් උපාංගවලින් ටැබ් බැලීමට, ඔබ සමමුහුර්තකරණය සක්‍රීය කළ යුතුය.</translation>
+<translation id="8366175803122817174">සියලුම සටහන් ලිපින විවෘත කරන්න</translation>
+<translation id="8372721116225477180">සමාජ මාධ්‍ය</translation>
+<translation id="8395378633507873708">ලිපින තීරුව</translation>
+<translation id="839736845446313156">ලියාපදිංචි වන්න</translation>
+<translation id="8404556771547317369">කරුණාකර URL එක ඇතුළත් කරන්න.</translation>
+<translation id="8414685983518053656">සටහන්</translation>
+<translation id="8423076545503792640">දෝෂයක් හේතුවෙන් ඉල්ලීම අසාර්ථක විය. කරුණාකර පසුව නැවත උත්සාහ කරන්න.</translation>
+<translation id="8428213095426709021">සැකසුම්</translation>
+<translation id="8458397775385147834">1 අයිතමයක් මකා දමන ලදී</translation>
+<translation id="846569642435104154">මෙය සියලුම පිටු සඳහා තෝරාගත් විශාලන මට්ටම සකසනු ඇත.</translation>
+<translation id="8466547766474747336">මට අවශ්‍ය විශේෂාංගයක් අතුරුදහන්.</translation>
+<translation id="8500459200727969761">බිල්ට්-ඉන් ලැයිස්තු ප්‍රතිසාධනය කරන්න</translation>
+<translation id="8503813439785031346">පරිශීලක නාමය</translation>
+<translation id="8515808232153642813">විකේතනය කරන්න</translation>
+<translation id="8517852590337319813">ඔබගේ ගිණුම සක්‍රිය කරන්න</translation>
+<translation id="8546963963006468833">Vivaldi සමඟින්, ඔබට සබැඳි බාධාවකින් තොරව විවෘත කිරීමට, විජට් වලින් සෙවීමට සහ වෙනත් යෙදුම්වල මුරපද ස්වයංක්‍රීයව පුරවා ගැනීමට හැකිය.</translation>
+<translation id="8546995005405883065">දී ඇති අනුපිළිවෙලට අනුකූල වෙබ් අඩවි විසින් පිළිගනු ලබන කැමති භාෂා.</translation>
+<translation id="8562452229998620586">සුරකින ලද මුරපද මෙහි දිස්වනු ඇත.</translation>
+<translation id="856439694359429369">තවත් විකල්ප සඳහා තට්ටු කරන්න හෝ විවෘත කිරීමට දෙවරක් තට්ටු කරන්න.</translation>
+<translation id="8591818185775466306"><ph name="ITEM_TYPE" />මකන්න</translation>
+<translation id="8605953154325672921">පරිශීලක නාමය අවශ්‍යයි</translation>
+<translation id="8675578805254882416">ලබා ගනිමින්</translation>
+<translation id="8677007239430848917">පහත ධන නිරූපකය තට්ටු කිරීමෙන් ඔබේ පළමු සටහන එක් කරන්න.</translation>
+<translation id="8684294196284714094">Vivaldi ඔබේ පෙරනිමි බ්‍රව්සරය ලෙස සැකසීමට සූදානම්ද?</translation>
+<translation id="8687583747694652488">මූලාශ්‍රය පිටපත් කරන්න</translation>
+<translation id="8696653005998192569">වෙබ් අඩවිවල රූප හෝ වීඩියෝ පූරණය නොවේ.</translation>
+<translation id="8730621377337864115">කළා</translation>
+<translation id="8733945742171960420">ඔබ බ්‍රවුස් කිරීම ආරම්භ කළ වහාම, ඔබේ ඉහළම අඩවි මෙහි පෙන්වනු ඇත.</translation>
+<translation id="8740815429790728127"><ph name="NUMBER_OF_SELECTED_NOTES" /> අයිතම මකා දමන ලදී</translation>
+<translation id="8763006697839582351">Vivaldi Private හි විවෘතයි</translation>
+<translation id="8765173886020357878">සෙවුම් යෝජනා</translation>
+<translation id="8804164990146287819">රහස්යතා ප්රතිපත්තිය</translation>
+<translation id="8805346136361295421">පිටුවේ සොයන්න සඟවන්න</translation>
+<translation id="8818152010000655963">බිතුපත</translation>
+<translation id="8819841443522803117">ඔබේ පෙරනිමි බ්‍රව්සරය වෙනස් කිරීමට කාලය හරිද? Vivaldi තෝරන්න.</translation>
+<translation id="8820817407110198400">පිටු සලකුණු</translation>
+<translation id="8855707633300847215">ටැබ් තීරුව පෙන්වන්න</translation>
+<translation id="8892354889971902600">ඔබ මෑතකදී වසා දැමූ ටැබ් මෙහි දිස්වනු ඇත.</translation>
+<translation id="89390081013973080">සියල්ල සූදානම්! උපාංග අතර සමමුහුර්ත කළ යුතු දත්ත තීරණය කිරීමට කාලයයි.</translation>
+<translation id="8964449607824577665">ඔබගේ වත්මන් සංකේතන මුරපදය නොමැතිව අපට ඔබගේ දත්ත විකේතනය කළ නොහැක. මෙම මුරපදය නැවත සැකසීමට Vivaldi සේවාදායකයන්හි පවතින සියලුම සමමුහුර්ත දත්ත මකා දැමීමට අවශ්‍ය වේ.</translation>
+<translation id="8965371804397726192">සියලු දත්ත සමමුහුර්ත කිරීම ආරම්භ කරන්න</translation>
+<translation id="8993821994276892302">{count, plural,
+          =1 {පිටු සලකුණ "{title}"}
+          other {පිටු සලකුණු "{title}"}}වෙත ගෙන යන ලදී</translation>
+<translation id="9028089729841356743">ජාල දෝෂයකි.</translation>
+<translation id="9043882097999887291">දැන්වීම්
+අවහිර කර ඇත</translation>
+<translation id="9065203028668620118">සංස්කරණය කරන්න</translation>
+<translation id="9077265667054763280">වෙබ් අඩවි ඉතා සෙමින් පූරණය වේ.</translation>
+<translation id="9079251484401922158">ෆින්ලන්ත (<ph name="ORIGIN" />)</translation>
+<translation id="9083392325882095631">අයිතම 1ක්</translation>
+<translation id="9091665118798175641">පෝරම ස්වයං පිරවුම් තොරතුරු සමමුහුර්ත කරන්න</translation>
+<translation id="9097127519290088802">සංකේතන මුරපදය අවශ්‍යයි</translation>
+<translation id="9139318394846604261">සාප්පුයාම</translation>
+<translation id="9152984048904392513">පසුබිමේ සියල්ල විවෘත කරන්න</translation>
+<translation id="9157459516617966251">සබැඳිය සංස්කරණය කරන්න</translation>
+<translation id="9157539936604258187">සබැඳිය විවෘත කරන්න</translation>
+<translation id="9195659219948942754">ඔබගේ Vivaldi ගිණුමේ සමමුහුර්ත දත්ත භාවිතා කිරීම දිගටම කරගෙන යන්න</translation>
+<translation id="9195802773917252923">පිටු සලකුණු අන්වර්ථ නාම සක්‍රීය කරන්න</translation>
+<translation id="9212737146310746733">ෆාර්සි (<ph name="ORIGIN" />)</translation>
+<translation id="9218693288527810093">ට්‍රැකර් අවහිර කරන්න</translation>
+<translation id="925891113183098411">මගේ දත්ත උපාංග හරහා සමමුහුර්ත කිරීමේදී මට ගැටලුවක් තිබෙනවා.</translation>
+<translation id="932327136139879170">මුල් පිටුව</translation>
+<translation id="937440209447114831">අපි කිසිදු වෙළඳ දැන්වීමක් හෝ ට්‍රැකර් එකක් අවහිර නොකරමු.</translation>
+<translation id="941088499334202542">ඔබට සබැඳිය වෙනස් කිරීමට, ඉවත් කිරීමට හෝ නව ටැබ් එකකින් විවෘත කිරීමට හැකිය.</translation>
+<translation id="958688202859970851">මෑතකදී පිවිසි ටැබ් මෙහි දිස්වනු ඇත.</translation>
+<translation id="984650419570014454">සක්‍රිය කිරීමේ කේතය ඉලක්කම් 6ක් විය යුතුය.</translation>
+<translation id="987264212798334818">ජනරාල්</translation>
+<translation id="992440609313570947">විවාල්ඩි වලට අලුත්ද? <ph name="BEGIN_LINK" />ගිණුමක් සාදන්න ➔<ph name="END_LINK" /></translation>
+<translation id="994333983174240900">දෙකම පිටපත් කරන්න</translation>
+<translation id="998988732385109770">පිටුසන් භාවිතා කිරීමට හෝ කළමනාකරණය කිරීමට අපහසුය.</translation>
 </translationbundle>

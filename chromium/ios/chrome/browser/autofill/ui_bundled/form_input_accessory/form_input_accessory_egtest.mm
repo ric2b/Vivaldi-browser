@@ -8,8 +8,11 @@
 #import <tuple>
 
 #import "base/strings/sys_string_conversions.h"
+#import "base/test/ios/wait_util.h"
+#import "base/time/time.h"
 #import "components/autofill/core/browser/test_utils/autofill_test_utils.h"
 #import "components/autofill/core/common/autofill_features.h"
+#import "components/autofill/ios/common/features.h"
 #import "components/password_manager/core/browser/features/password_features.h"
 #import "components/password_manager/core/common/password_manager_features.h"
 #import "components/sync/service/sync_prefs.h"
@@ -126,6 +129,19 @@ void CheckPasswordAutofillSuggestionAcceptedIndexMetricsCount(
       @"suggestion index.");
 }
 
+// Slowly type characters using the keyboard by waiting between each tap.
+void SlowlyTypeText(NSString* text) {
+  for (NSUInteger i = 0; i < [text length]; ++i) {
+    // Wait some time before typing the character.
+    base::test::ios::SpinRunLoopWithMinDelay(base::Milliseconds(200));
+    // Type a single character so the user input can be effective.
+    [ChromeEarlGrey
+        simulatePhysicalKeyboardEvent:[text
+                                          substringWithRange:NSMakeRange(i, 1)]
+                                flags:0];
+  }
+}
+
 }  // namespace
 
 @interface FormInputAccessoryEGTest : WebHttpServerChromeTestCase
@@ -174,8 +190,10 @@ void CheckPasswordAutofillSuggestionAcceptedIndexMetricsCount(
   AppLaunchConfiguration config;
   config.features_disabled.push_back(
       autofill::features::test::kAutofillServerCommunication);
-  if ([self isRunningTest:@selector(testOpenExpandedManualFillView)]) {
-    config.features_enabled.push_back(kIOSKeyboardAccessoryUpgrade);
+  if ([self isRunningTest:@selector(testOpenExpandedManualFillView)] ||
+      [self isRunningTest:@selector
+            (testManualFillButtonTitleIsHiddenInCompactMode)]) {
+    config.features_enabled.push_back(kIOSKeyboardAccessoryUpgradeForIPad);
   }
   if ([self isRunningTest:@selector(testFillXframeCreditCardForm)] ||
       [self isRunningTest:@selector(testFillXframeCreditCardFormThrottled)]) {
@@ -185,6 +203,13 @@ void CheckPasswordAutofillSuggestionAcceptedIndexMetricsCount(
   if ([self isRunningTest:@selector(testFillXframeCreditCardFormThrottled)]) {
     config.features_enabled.push_back(
         autofill::features::kAutofillAcrossIframesIosThrottling);
+  }
+  if ([self isRunningTest:@selector
+            (testFillCreditCardFieldsOnForm_WithUserEditedFix_UserEdited)] ||
+      [self isRunningTest:@selector
+            (testFillCreditCardFieldsOnForm_WithUserEditedFix_NotUserEdited)]) {
+    config.features_enabled.push_back(
+        kAutofillCorrectUserEditedBitInParsedField);
   }
   return config;
 }
@@ -499,6 +524,67 @@ id<GREYMatcher> PaymentsBottomSheetUseKeyboardButton() {
   [AutofillAppInterface clearMockReauthenticationModule];
 }
 
+// Tests that the fix on the is_user_edited bit in the parsed form fields is
+// effective in the case the user has edited the input field for real.
+- (void)testFillCreditCardFieldsOnForm_WithUserEditedFix_UserEdited {
+  // Fill using another test. The CVC number won't be filled because a local
+  // card is used.
+  [self testFillCreditCardFieldsOnForm];
+
+  // Focus on the cvc field to fill it.
+  [ChromeEarlGrey evaluateJavaScriptForSideEffect:
+                      @"document.getElementById('cvc').focus();"];
+  // Wait some time so the keyboard has time to show up then slowly type the CVC
+  // number.
+  base::test::ios::SpinRunLoopWithMinDelay(base::Milliseconds(200));
+  SlowlyTypeText(@"123");
+
+  // Submit so the perfect fill metric is recorded.
+  [ChromeEarlGrey tapWebStateElementWithID:@"Submit"];
+
+  // Verify the perfect fill metric in a wait loop to let the time to the submit
+  // event to be propagated down to the browser. A not perfect fill should be
+  // recorded because the user has manually edited the CVC field which wasn't
+  // filled.
+  GREYAssertTrue(
+      base::test::ios::WaitUntilConditionOrTimeout(
+          base::Seconds(2),
+          ^() {
+            return [MetricsAppInterface
+                       expectUniqueSampleWithCount:1
+                                         forBucket:0
+                                      forHistogram:@"Autofill.PerfectFilling."
+                                                   @"CreditCards"] == nil;
+          }),
+      @"Autofill.PerfectFilling.CreditCards verification failed");
+}
+
+// Tests that the fix on the is_user_edited bit in the parsed form fields is
+// effective in the case the user didn't edit the fields that weren't filled.
+- (void)testFillCreditCardFieldsOnForm_WithUserEditedFix_NotUserEdited {
+  // Fill using another test. The CVC number won't be filled because a local
+  // card is used.
+  [self testFillCreditCardFieldsOnForm];
+
+  // Submit so the perfect fill metric is recorded.
+  [ChromeEarlGrey tapWebStateElementWithID:@"Submit"];
+
+  // Verify the perfect fill metric in a wait loop to let the time to the submit
+  // event to be propagated down to the browser. A perfect fill should be
+  // recorded because the user didn't edit the unfilled CVC field.
+  GREYAssertTrue(
+      base::test::ios::WaitUntilConditionOrTimeout(
+          base::Seconds(2),
+          ^() {
+            return [MetricsAppInterface
+                       expectUniqueSampleWithCount:1
+                                         forBucket:1
+                                      forHistogram:@"Autofill.PerfectFilling."
+                                                   @"CreditCards"] == nil;
+          }),
+      @"Autofill.PerfectFilling.CreditCards verification failed");
+}
+
 // Tests that a xframe credit card form can be filled from the keyboard
 // accessory.
 - (void)testFillXframeCreditCardForm {
@@ -647,11 +733,6 @@ id<GREYMatcher> PaymentsBottomSheetUseKeyboardButton() {
 
 // Tests that the manual fill button opens the expanded manual fill view.
 - (void)testOpenExpandedManualFillView {
-  // The expanded manual fill view UI is not available on tablets.
-  if ([ChromeEarlGrey isIPadIdiom]) {
-    EARL_GREY_TEST_SKIPPED(@"Test not supported on iPad");
-  }
-
   [self loadLoginPage];
 
   [[EarlGrey selectElementWithMatcher:chrome_test_util::WebViewMatcher()]
@@ -674,6 +755,50 @@ id<GREYMatcher> PaymentsBottomSheetUseKeyboardButton() {
 
   [[EarlGrey selectElementWithMatcher:expanded_manual_fill_view]
       assertWithMatcher:grey_sufficientlyVisible()];
+}
+
+// Tests that the manual fill button title is hidden in compact mode (tablets
+// only).
+- (void)testManualFillButtonTitleIsHiddenInCompactMode {
+  if (![ChromeEarlGrey areMultipleWindowsSupported] ||
+      ![AutofillAppInterface isKeyboardAccessoryUpgradeEnabled]) {
+    EARL_GREY_TEST_SKIPPED(
+        @"Skipped for iPhone (the manual fill button has no title on iPhone) "
+        @"or when the Keyboard Accessory Upgrade feature is disabled.");
+  }
+
+  [self loadAddressPage];
+
+  [[EarlGrey selectElementWithMatcher:chrome_test_util::WebViewMatcher()]
+      performAction:chrome_test_util::TapWebElementWithId(kFormZip)];
+
+  id<GREYMatcher> manual_fill_button = grey_accessibilityLabel(
+      l10n_util::GetNSString(IDS_IOS_AUTOFILL_ACCNAME_AUTOFILL_DATA));
+  id<GREYMatcher> manual_fill_button_title = grey_text(
+      l10n_util::GetNSString(IDS_IOS_AUTOFILL_ACCNAME_ALL_AUTOFILL_DATA));
+
+  // Verify that the manual fill button is visible.
+  [ChromeEarlGrey waitForUIElementToAppearWithMatcher:manual_fill_button];
+
+  // Verify that the manual fill button title is visible.
+  [[EarlGrey selectElementWithMatcher:manual_fill_button_title]
+      assertWithMatcher:grey_sufficientlyVisible()];
+
+  // Make the window compact by using split screen.
+  [ChromeEarlGrey openNewWindow];
+  [ChromeEarlGrey waitForForegroundWindowCount:2];
+
+  // Verify that the manual fill button is still visible.
+  [[EarlGrey selectElementWithMatcher:manual_fill_button]
+      assertWithMatcher:grey_sufficientlyVisible()];
+
+  // Verify that the manual fill button has no title.
+  [[EarlGrey selectElementWithMatcher:manual_fill_button_title]
+      assertWithMatcher:grey_notVisible()];
+
+  // Exit split screen.
+  [ChromeEarlGrey closeWindowWithNumber:1];
+  [ChromeEarlGrey waitForForegroundWindowCount:1];
 }
 
 @end

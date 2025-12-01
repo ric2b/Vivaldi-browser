@@ -39,7 +39,6 @@
 #include "src/tint/lang/wgsl/ir/builtin_call.h"
 #include "src/tint/lang/wgsl/writer/raise/ptr_to_ref.h"
 #include "src/tint/lang/wgsl/writer/raise/value_to_let.h"
-#include "src/tint/utils/result/result.h"
 
 namespace tint::wgsl::writer {
 namespace {
@@ -195,6 +194,10 @@ wgsl::BuiltinFn Convert(core::BuiltinFn fn) {
         CASE(kQuadSwapX)
         CASE(kQuadSwapY)
         CASE(kQuadSwapDiagonal)
+        CASE(kSubgroupMatrixLoad)
+        CASE(kSubgroupMatrixStore)
+        CASE(kSubgroupMatrixMultiply)
+        CASE(kSubgroupMatrixMultiplyAccumulate)
         case core::BuiltinFn::kNone:
             break;
     }
@@ -205,6 +208,13 @@ void ReplaceBuiltinFnCall(core::ir::Builder& b, core::ir::CoreBuiltinCall* call)
     Vector<core::ir::Value*, 8> args(call->Args());
     auto* replacement = b.CallWithResult<wgsl::ir::BuiltinCall>(
         call->DetachResult(), Convert(call->Func()), std::move(args));
+    if (!call->ExplicitTemplateParams().IsEmpty()) {
+        Vector<const core::type::Type*, 4> tmpl_args;
+        for (auto p : call->ExplicitTemplateParams()) {
+            tmpl_args.Push(p);
+        }
+        replacement->SetExplicitTemplateParams(std::move(tmpl_args));
+    }
     call->ReplaceWith(replacement);
     call->Destroy();
 }

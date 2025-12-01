@@ -684,8 +684,8 @@ Deoptimizer::Deoptimizer(Isolate* isolate, Tagged<JSFunction> function,
   CHECK(CodeKindCanDeoptimize(compiled_code_->kind()));
   {
     HandleScope scope(isolate_);
-    PROFILE(isolate_, CodeDeoptEvent(handle(compiled_code_, isolate_), kind,
-                                     from_, fp_to_sp_delta_));
+    PROFILE(isolate_, CodeDeoptEvent(direct_handle(compiled_code_, isolate_),
+                                     kind, from_, fp_to_sp_delta_));
   }
   unsigned size = ComputeInputFrameSize();
   const int parameter_count = compiled_code_->parameter_count();
@@ -871,10 +871,11 @@ void Deoptimizer::TraceMarkForDeoptimization(Isolate* isolate,
   no_gc.Release();
   {
     HandleScope handle_scope(isolate);
-    PROFILE(isolate, CodeDependencyChangeEvent(
-                         handle(code, isolate),
-                         handle(deopt_data->GetSharedFunctionInfo(), isolate),
-                         DeoptimizeReasonToString(reason)));
+    PROFILE(isolate,
+            CodeDependencyChangeEvent(
+                direct_handle(code, isolate),
+                direct_handle(deopt_data->GetSharedFunctionInfo(), isolate),
+                DeoptimizeReasonToString(reason)));
   }
 }
 
@@ -1404,7 +1405,7 @@ void Deoptimizer::DoComputeOutputFramesWasmImpl() {
     // otherwise.
     wasm::TypeFeedbackStorage& feedback =
         native_module->module()->type_feedback;
-    base::SpinningMutexGuard mutex_guard(&feedback.mutex);
+    base::MutexGuard mutex_guard(&feedback.mutex);
     for (const TranslatedFrame& frame : translated_state_) {
       int index = frame.wasm_function_index();
       auto iter = feedback.feedback_for_function.find(index);
@@ -1701,7 +1702,7 @@ void Deoptimizer::DoComputeOutputFrames() {
             CachedTieringDecision::kNormal);
       }
     }
-    function_->ResetTieringRequests(isolate_);
+    function_->ResetTieringRequests();
     // This allows us to quickly re-spawn a new compilation request even if
     // there is already one running. In particular it helps to squeeze in a
     // maglev compilation when there is a long running turbofan one that was

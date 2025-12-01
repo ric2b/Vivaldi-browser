@@ -1,4 +1,4 @@
-load("//xla:xla.bzl", "xla_cc_test")
+load("//xla:xla.default.bzl", "xla_cc_test")
 load("//xla/python/pjrt_ifrt:pjrt_ifrt.bzl", "pjrt_ifrt_package_groups")
 load("//xla/tsl:tsl.bzl", "if_google", "internal_visibility")
 load("//xla/tsl:tsl.default.bzl", "get_compatible_with_portable")
@@ -133,6 +133,7 @@ cc_library(
         "//xla/tsl/lib/core:status_test_util",
         "//xla/tsl/platform:statusor",
         "//xla/tsl/platform:test",
+        "@com_google_absl//absl/status",
         "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/types:span",
@@ -164,6 +165,7 @@ xla_cc_test(
         "//xla/hlo/ir:hlo",
         "//xla/hlo/ir:tile_assignment",
         "//xla/python/ifrt",
+        "//xla/python/ifrt:basic_device_list",
         "//xla/python/ifrt:device_test_util",
         "//xla/python/ifrt:tuple_impl_test_lib",
         "//xla/tsl/concurrency:ref_count",
@@ -212,6 +214,8 @@ cc_library(
         "//xla:status_macros",
         "//xla:util",
         "//xla:xla_data_proto_cc",
+        "//xla/ffi:execution_context",
+        "//xla/ffi:type_id_registry",
         "//xla/hlo/ir:hlo",
         "//xla/hlo/translate/mhlo_to_hlo:type_to_shape",
         "//xla/pjrt:host_callback",
@@ -229,6 +233,9 @@ cc_library(
         "//xla/pjrt/distributed:topology_util",
         "//xla/python/ifrt",
         "//xla/python/ifrt:attribute_map",
+        "//xla/python/ifrt:basic_device_list",
+        "//xla/python/ifrt:client_impl_util",
+        "//xla/python/ifrt:user_context",
         "//xla/python/ifrt/hlo:hlo_program",
         "//xla/service:computation_placer_hdr",
         "//xla/service:hlo_proto_cc",
@@ -238,6 +245,7 @@ cc_library(
         "//xla/tsl/platform:statusor",
         "@com_google_absl//absl/algorithm:container",
         "@com_google_absl//absl/base:core_headers",
+        "@com_google_absl//absl/base:nullability",
         "@com_google_absl//absl/container:flat_hash_map",
         "@com_google_absl//absl/container:flat_hash_set",
         "@com_google_absl//absl/container:inlined_vector",
@@ -452,6 +460,7 @@ xla_cc_test(
 #     srcs = ["pjrt_ifrt.bzl"],
 #     parse_tests = False,
 #     visibility = ["//visibility:private"],
+#     deps = ["//xla/tsl:package_groups_bzl"],
 # )
 #
 # bzl_library(

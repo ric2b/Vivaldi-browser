@@ -51,6 +51,7 @@ swift_source_set("nsd_swift") {
   ]
 
   deps = [
+    "//vivaldi/app:vivaldi_ios_native_strings",
     "//vivaldi/ios/ui/helpers:helpers_swift",
   ]
 

@@ -29,6 +29,7 @@
 
 #include <memory>
 #include <optional>
+#include <variant>
 
 #include "base/task/sequenced_task_runner.h"
 #include "base/trace_event/trace_event.h"
@@ -125,9 +126,10 @@ void ScanScriptWebBundle(
     scoped_refptr<const PreloadRequest::ExclusionInfo>& exclusion_info) {
   auto rule_or_error =
       ScriptWebBundleRule::ParseJson(inline_text, base_url, /*logger*/ nullptr);
-  if (!absl::holds_alternative<ScriptWebBundleRule>(rule_or_error))
+  if (!std::holds_alternative<ScriptWebBundleRule>(rule_or_error)) {
     return;
-  auto& rule = absl::get<ScriptWebBundleRule>(rule_or_error);
+  }
+  auto& rule = std::get<ScriptWebBundleRule>(rule_or_error);
 
   HashSet<KURL> scopes;
   HashSet<KURL> resources;
@@ -395,8 +397,8 @@ class TokenPreloadScanner::StartTagScanner {
     } else if (!integrity_attr_set_ &&
                Match(attribute_name, html_names::kIntegrityAttr)) {
       integrity_attr_set_ = true;
-      SubresourceIntegrity::ParseIntegrityAttribute(attribute_value,
-                                                    integrity_metadata_);
+      SubresourceIntegrity::ParseIntegrityAttribute(
+          attribute_value, integrity_metadata_, nullptr);
     } else if (Match(attribute_name, html_names::kTypeAttr)) {
       type_attribute_value_ = attribute_value;
     } else if (Match(attribute_name, html_names::kLanguageAttr)) {
@@ -518,8 +520,8 @@ class TokenPreloadScanner::StartTagScanner {
     } else if (!integrity_attr_set_ &&
                Match(attribute_name, html_names::kIntegrityAttr)) {
       integrity_attr_set_ = true;
-      SubresourceIntegrity::ParseIntegrityAttribute(attribute_value,
-                                                    integrity_metadata_);
+      SubresourceIntegrity::ParseIntegrityAttribute(
+          attribute_value, integrity_metadata_, nullptr);
     } else if (Match(attribute_name, html_names::kImagesrcsetAttr) &&
                srcset_attribute_value_.IsNull()) {
       srcset_attribute_value_ = attribute_value;

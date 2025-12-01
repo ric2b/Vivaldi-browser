@@ -40,6 +40,11 @@ import siso
 if sys.platform in ["darwin", "linux"]:
     import resource
 
+_SISO_SUGGESTION = """Please run 'gn clean {output_dir}' when convenient to
+upgrade this output directory to Siso (Chromium’s Ninja replacement). If you
+run into any issues, please file a bug via go/siso-bug and switch back
+temporarily by setting the GN arg 'use_siso = false'"""
+
 _SCRIPT_DIR = os.path.dirname(os.path.realpath(__file__))
 _NINJALOG_UPLOADER = os.path.join(_SCRIPT_DIR, "ninjalog_uploader.py")
 
@@ -133,53 +138,66 @@ def _print_cmd(cmd):
     print(*[shell_quoter(arg) for arg in cmd], file=sys.stderr)
 
 
-def _get_use_reclient_value(output_dir):
+def _get_remoteexec_defaults():
     root_dir = gclient_paths.GetPrimarySolutionPath()
     if not root_dir:
         return None
-    script_path = os.path.join(root_dir,
-                               "build/toolchain/use_reclient_value.py")
-    if not os.path.exists(script_path):
-        return None
+    default_file = os.path.join(root_dir,
+                                "build/toolchain/remoteexec_defaults.gni")
+    values = {
+        "use_reclient_on_siso": True,
+        "use_reclient_on_ninja": True,
+    }
+    if not os.path.exists(default_file):
+        return values
+    pattern = re.compile(r"(^|\s*)([^=\s]*)\s*=\s*(\S*)\s*$")
+    with open(default_file, encoding="utf-8") as f:
+        for line in f:
+            line = line.split("#")[0]
+            m = pattern.match(line)
+            if not m:
+                continue
+            values[m.group(2)] = m.group(3) == "true"
+    return values
 
-    script = _import_from_path("use_reclient_value", script_path)
-    try:
-        r = script.use_reclient_value(output_dir)
-    except:
-        raise RuntimeError(
-            'Could not call method "use_reclient_value" in {}"'.format(
-                script_path))
-    if not isinstance(r, bool):
-        raise TypeError(
-            'Method "use_reclient_defualt" in "{}" returns invalid result. Expected bool, got "{}" (type "{}")'
-            .format(script_path, r, type(r)))
-    return r
+
+def _siso_supported(output_dir):
+    root_dir = gclient_paths.GetPrimarySolutionPath()
+    if not root_dir:
+        return False
+    sisoenv_path = os.path.join(root_dir, "build/config/siso/.sisoenv")
+    if not os.path.exists(sisoenv_path):
+        return False
+    # If it's not chromium project, use Ninja.
+    gclient_args_gni = os.path.join(root_dir, "build/config/gclient_args.gni")
+    if not os.path.exists(gclient_args_gni):
+        return False
+    with open(gclient_args_gni) as f:
+        if "build_with_chromium = true" not in f.read():
+            return False
+    # Use Siso by default for Googlers working on corp machine.
+    if _is_google_corp_machine():
+        return True
+    # Otherwise, use Ninja, until we are ready to roll it out
+    # on non-corp machines, too.
+    # TODO(378078715): enable True by default.
+    return False
 
 
 def _get_use_siso_default(output_dir):
-    # TODO(379584977): move this in depot_tools
-    # once gn rule for action_remote.py, which check use_siso` is removed.
-    root_dir = gclient_paths.GetPrimarySolutionPath()
-    if not root_dir:
-        return None
-    script_path = os.path.join(root_dir, "build/toolchain/use_siso_default.py")
-    if not os.path.exists(script_path):
-        return None
+    """Returns use_siso default value."""
+    if not _siso_supported(output_dir):
+        return False
 
-    script = _import_from_path("use_siso_default", script_path)
-    try:
-        # Older versions of chromium won't have this function.
-        use_siso_default = getattr(script, "use_siso_default_and_suggest_siso", script.use_siso_default)
-        r = use_siso_default(output_dir)
-    except:
-        raise RuntimeError(
-            'Could not call method "use_siso_default" in {}"'.format(
-                script_path))
-    if not isinstance(r, bool):
-        raise TypeError(
-            'Method "use_siso_default" in "{}" returns invalid result. Expected bool, got "{}" (type "{}")'
-            .format(script_path, r, type(r)))
-    return r
+    # This output directory is already using Siso.
+    if os.path.exists(os.path.join(output_dir, ".siso_deps")):
+        return True
+
+    # This output directory is still using Ninja.
+    if os.path.exists(os.path.join(output_dir, ".ninja_deps")):
+        print(_SISO_SUGGESTION.format(output_dir=output_dir), file=sys.stderr)
+        return False
+    return True
 
 
 def _main_inner(input_args, build_id, should_collect_logs=False):
@@ -233,14 +251,14 @@ def _main_inner(input_args, build_id, should_collect_logs=False):
             print(file=sys.stderr)
 
     use_remoteexec = False
-    use_reclient = _get_use_reclient_value(output_dir)
+    use_reclient = None
     use_android_build_server = False
+    use_siso = None
 
     # Attempt to auto-detect remote build acceleration. We support gn-based
     # builds, where we look for args.gn in the build tree, and cmake-based
     # builds where we look for rules.ninja.
     if gn_helper.exists(output_dir):
-        use_siso = None
         for k, v in gn_helper.args(output_dir):
             # use_remoteexec will activate build acceleration.
             #
@@ -275,105 +293,122 @@ def _main_inner(input_args, build_id, should_collect_logs=False):
             use_siso = _get_use_siso_default(output_dir)
 
         if use_reclient is None:
-            use_reclient = use_remoteexec
+            if os.path.exists(os.path.join(output_dir, ".reproxy_tmp")):
+                use_reclient = True
+            elif use_remoteexec:
+                values = _get_remoteexec_defaults()
+                if use_siso:
+                    use_reclient = values["use_reclient_on_siso"]
+                else:
+                    use_reclient = values["use_reclient_on_ninja"]
 
-        if use_remoteexec:
-            if use_reclient:
-                project = _reclient_rbe_project()
-            elif use_siso and project is None:
-                # siso runs locally if empty project is given
-                # even if use_remoteexec=true is set.
-                project = _siso_rbe_project()
+    if use_remoteexec:
+        if use_reclient:
+            project = _reclient_rbe_project()
+        elif use_siso and project is None:
+            # siso runs locally if empty project is given
+            # even if use_remoteexec=true is set.
+            project = _siso_rbe_project()
 
-            if _is_google_corp_machine():
-                # user may login on non-@google.com account on corp,
-                # but need to use @google.com and rbe-chrome-untrusted
-                # on corp machine.
-                if project == 'rbe-chromium-untrusted':
-                    print(
-                        "You can't use rbe-chromium-untrusted on corp "
-                        "machine.\n"
-                        "Please use rbe-chrome-untrusted and @google.com "
-                        "account instead to build chromium.\n",
-                        file=sys.stderr,
-                    )
-                    return 1
-            else:
-                # only @google.com is allowed to use rbe-chrome-untrusted
-                # and use @google.com on non-corp machine is not allowed
-                # by corp security policy.
-                if project == 'rbe-chrome-untrusted':
-                    print(
-                        "You can't use rbe-chrome-untrusted on non-corp "
-                        "machine.\n"
-                        "Plase use rbe-chromium-untrusted and non-@google.com "
-                        "account instead to build chromium.",
-                        file=sys.stderr,
-                    )
-                    return 1
-
-        if gclient_utils.IsEnvCog():
-            if not use_remoteexec or use_reclient or not use_siso:
+        if _is_google_corp_machine():
+            # user may login on non-@google.com account on corp,
+            # but need to use @google.com and rbe-chrome-untrusted
+            # on corp machine.
+            if project == 'rbe-chromium-untrusted':
                 print(
-                    "WARNING: You're not using Siso's built-in remote "
-                    "execution. The build will be slow.\n"
-                    "You should set the following in args.gn to get better "
-                    "performance:\n"
-                    "  use_remoteexec=true\n"
-                    "  use_reclient=false\n"
-                    "  use_siso=true\n",
+                    "You can't use rbe-chromium-untrusted on corp "
+                    "machine.\n"
+                    "Please use rbe-chrome-untrusted and @google.com "
+                    "account instead to build chromium.\n",
                     file=sys.stderr,
                 )
-
-        siso_marker = os.path.join(output_dir, ".siso_deps")
-        if use_siso:
-            # siso generates a .ninja_log file so the mere existence of a
-            # .ninja_log file doesn't imply that a ninja build was done. However
-            # if there is a .ninja_log but no .siso_deps then that implies a
-            # ninja build.
-            ninja_marker = os.path.join(output_dir, ".ninja_log")
-            if os.path.exists(ninja_marker) and not os.path.exists(siso_marker):
+                return 1
+        else:
+            # only @google.com is allowed to use rbe-chrome-untrusted
+            # and use @google.com on non-corp machine is not allowed
+            # by corp security policy.
+            if project == 'rbe-chrome-untrusted':
                 print(
-                    "Run gn clean before switching from ninja to siso in %s" %
-                    output_dir,
+                    "You can't use rbe-chrome-untrusted on non-corp "
+                    "machine.\n"
+                    "Plase use rbe-chromium-untrusted and non-@google.com "
+                    "account instead to build chromium.",
                     file=sys.stderr,
                 )
                 return 1
 
-            # Build ID consistently used in other tools. e.g. Reclient, ninjalog.
-            os.environ.setdefault("SISO_BUILD_ID", build_id)
-            with android_build_server_helper.build_server_context(
-                    build_id,
-                    use_android_build_server=use_android_build_server):
-                if use_remoteexec:
-                    if use_reclient and not t_specified:
-                        return reclient_helper.run_siso(
-                            [
-                                'siso',
-                                'ninja',
-                                # Do not authenticate when using Reproxy.
-                                '-project=',
-                                '-reapi_instance=',
-                            ] + input_args[1:],
-                            should_collect_logs)
-                    return siso.main(["siso", "ninja"] + input_args[1:])
-                if not project:
-                    project = _siso_rbe_project()
-                if not t_specified and project and not offline:
-                    print(
-                        'Missing "use_remoteexec=true". No remote execution',
-                        file=sys.stderr,
-                    )
-                return siso.main(["siso", "ninja", "--offline"] +
-                                 input_args[1:])
+    # If --offline is set, then reclient will use the local compiler
+    # instead of doing a remote compile. This is convenient if you want
+    # to briefly disable remote compile. It avoids having to rebuild the
+    # world when transitioning between RBE/non-RBE builds. However, it is
+    # not as fast as doing a "normal" non-RBE build because an extra
+    # process is created for each compile step.
+    if offline and use_reclient:
+        # Tell reclient to do local compiles.
+        os.environ["RBE_remote_disabled"] = "1"
 
-        if os.path.exists(siso_marker):
+    if gclient_utils.IsEnvCog():
+        if not use_remoteexec or use_reclient or not use_siso:
             print(
-                "Run gn clean before switching from siso to ninja in %s" %
+                "WARNING: You're not using Siso's built-in remote "
+                "execution. The build will be slow.\n"
+                "You should set the following in args.gn to get better "
+                "performance:\n"
+                "  use_remoteexec=true\n"
+                "  use_reclient=false\n"
+                "  use_siso=true\n",
+                file=sys.stderr,
+            )
+
+    siso_marker = os.path.join(output_dir, ".siso_deps")
+    if use_siso:
+        # siso generates a .ninja_log file so the mere existence of a
+        # .ninja_log file doesn't imply that a ninja build was done. However
+        # if there is a .ninja_log but no .siso_deps then that implies a
+        # ninja build.
+        ninja_marker = os.path.join(output_dir, ".ninja_log")
+        if os.path.exists(ninja_marker) and not os.path.exists(siso_marker):
+            print(
+                "Run gn clean before switching from ninja to siso in %s" %
                 output_dir,
                 file=sys.stderr,
             )
             return 1
+
+        # Build ID consistently used in other tools. e.g. Reclient, ninjalog.
+        os.environ.setdefault("SISO_BUILD_ID", build_id)
+        with android_build_server_helper.build_server_context(
+                build_id,
+                output_dir,
+                use_android_build_server=use_android_build_server):
+            if use_remoteexec:
+                if use_reclient and not t_specified:
+                    return reclient_helper.run_siso(
+                        [
+                            'siso',
+                            'ninja',
+                            # Do not authenticate when using Reproxy.
+                            '-project=',
+                            '-reapi_instance=',
+                        ] + input_args[1:],
+                        should_collect_logs)
+                return siso.main(["siso", "ninja"] + input_args[1:])
+            if not project:
+                project = _siso_rbe_project()
+            if not t_specified and project and not offline:
+                print(
+                    'Missing "use_remoteexec=true". No remote execution',
+                    file=sys.stderr,
+                )
+            return siso.main(["siso", "ninja", "--offline"] + input_args[1:])
+
+    if os.path.exists(siso_marker):
+        print(
+            "Run gn clean before switching from siso to ninja in %s" %
+            output_dir,
+            file=sys.stderr,
+        )
+        return 1
 
     # Strip -o/--offline so ninja doesn't see them.
     input_args = [arg for arg in input_args if arg not in ("-o", "--offline")]
@@ -388,15 +423,6 @@ def _main_inner(input_args, build_id, should_collect_logs=False):
             # just set it here for us and it'll apply to the build tool we
             # spawn later.
             os.nice(10)
-
-    # If --offline is set, then reclient will use the local compiler instead of
-    # doing a remote compile. This is convenient if you want to briefly disable
-    # remote compile. It avoids having to rebuild the world when transitioning
-    # between RBE/non-RBE builds. However, it is not as fast as doing a "normal"
-    # non-RBE build because an extra process is created for each compile step.
-    if offline:
-        # Tell reclient to do local compiles.
-        os.environ["RBE_remote_disabled"] = "1"
 
     # On macOS and most Linux distributions, the default limit of open file
     # descriptors is too low (256 and 1024, respectively).
@@ -466,7 +492,8 @@ def _main_inner(input_args, build_id, should_collect_logs=False):
         _print_cmd(ninja_args)
 
     with android_build_server_helper.build_server_context(
-            build_id, use_android_build_server=use_android_build_server):
+            build_id, output_dir,
+            use_android_build_server=use_android_build_server):
         if use_reclient and not t_specified:
             return reclient_helper.run_ninja(ninja_args, should_collect_logs)
         return ninja.main(ninja_args)
@@ -515,6 +542,7 @@ def main(args):
     # splitting ourselves. This means that arguments containing actual spaces
     # are not supported by autoninja, but that is not a real limitation.
     input_args = args
+    exit_code = 127
     if sys.platform.startswith("win") and len(args) == 2:
         input_args = args[:1] + args[1].split()
     try:

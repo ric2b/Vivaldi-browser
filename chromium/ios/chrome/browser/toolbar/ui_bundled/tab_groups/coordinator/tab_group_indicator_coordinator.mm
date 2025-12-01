@@ -193,8 +193,7 @@
   }
 
   feature_engagement::Tracker* tracker =
-      feature_engagement::TrackerFactory::GetForProfile(
-          self.browser->GetProfile());
+      feature_engagement::TrackerFactory::GetForProfile(self.profile);
   if (!tracker->WouldTriggerHelpUI(
           feature_engagement::kIPHiOSSharedTabGroupForeground)) {
     return;
@@ -207,13 +206,10 @@
       [[BubbleViewControllerPresenter alloc]
                initWithText:IPHTitle
                       title:nil
-                      image:nil
              arrowDirection:BubbleArrowDirectionUp
                   alignment:BubbleAlignmentCenter
                  bubbleType:BubbleViewTypeDefault
-          dismissalCallback:^(
-              IPHDismissalReasonType reason,
-              feature_engagement::Tracker::SnoozeAction action) {
+          dismissalCallback:^(IPHDismissalReasonType reason) {
             [weakSelf sharedTabGroupForegroundIPHDismissed];
           }];
   presenter.voiceOverAnnouncement = IPHTitle;
@@ -246,8 +242,9 @@
   std::unique_ptr<collaboration::CollaborationControllerDelegate> delegate =
       std::make_unique<collaboration::IOSCollaborationControllerDelegate>(
           browser, self.baseViewController);
-  collaborationService->StartShareOrManageFlow(std::move(delegate),
-                                               tabGroup->tab_group_id());
+  collaborationService->StartShareOrManageFlow(
+      std::move(delegate), tabGroup->tab_group_id(),
+      collaboration::CollaborationServiceShareOrManageEntryPoint::kUnknown);
 }
 
 #pragma mark - CreateOrEditTabGroupCoordinatorDelegate
@@ -268,8 +265,7 @@
 // shared tab group in foreground is dismissed.
 - (void)sharedTabGroupForegroundIPHDismissed {
   feature_engagement::Tracker* tracker =
-      feature_engagement::TrackerFactory::GetForProfile(
-          self.browser->GetProfile());
+      feature_engagement::TrackerFactory::GetForProfile(self.profile);
   tracker->Dismissed(feature_engagement::kIPHiOSSharedTabGroupForeground);
 }
 

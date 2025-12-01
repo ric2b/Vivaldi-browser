@@ -170,6 +170,7 @@
 <translation id="3838085852053358637">Qoşma yüklənə bilmədi</translation>
 <translation id="383891835335927981">Miqyası dəyişdirilən saytlar yoxdur</translation>
 <translation id="385051799172605136">Geriyə</translation>
+<translation id="3858860766373142691">Ad</translation>
 <translation id="3861977424605124250">Başlanğıcda göstərmək</translation>
 <translation id="3867944738977021751">Sertifikat sahələri</translation>
 <translation id="3905761538810670789">Tətbiqi bərpa etmək</translation>
@@ -415,6 +416,9 @@ Açar faylını təhlükəsiz yerdə saxlayın. Bu yeni versiya qoşma yaratmaq 
 <translation id="8004582292198964060">Veb-bələdçi</translation>
 <translation id="8018313076035239964">Veb saytların hansı məlumatları istiadə edə biləcəyini və sizə hansı məzmunu göstərə biləcəklərini idarə edin</translation>
 <translation id="8071432093239591881">Şəkil kimi çap edin</translation>
+<translation id="8118448640060360549">{EXTENSIONS_COUNT, plural,
+        =1 {# əlfəcin}
+        other {# əlfəcinlər}}</translation>
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" />KB</translation>
 <translation id="8212008074015601248">{NUM_DOWNLOAD, plural,
         =1 {Endirilir} other {Endirilir}}</translation>

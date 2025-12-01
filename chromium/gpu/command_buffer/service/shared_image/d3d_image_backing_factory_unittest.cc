@@ -19,6 +19,7 @@
 #include <utility>
 
 #include "base/bits.h"
+#include "base/containers/span.h"
 #include "base/functional/callback_helpers.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/memory/unsafe_shared_memory_region.h"
@@ -736,9 +737,10 @@ void D3DImageBackingFactoryTest::CheckDawnPixels(
   wgpu::Buffer buffer = device.CreateBuffer(&buffer_desc);
 
   wgpu::CommandEncoder encoder = device.CreateCommandEncoder();
-  auto src = wgpu::ImageCopyTexture{.texture = texture, .origin = {0, 0, 0}};
-  auto dst = wgpu::ImageCopyBuffer{.layout = {.bytesPerRow = buffer_stride},
-                                   .buffer = buffer};
+  auto src =
+      wgpu::TexelCopyTextureInfo{.texture = texture, .origin = {0, 0, 0}};
+  auto dst = wgpu::TexelCopyBufferInfo{.layout = {.bytesPerRow = buffer_stride},
+                                       .buffer = buffer};
   auto copy_size = wgpu::Extent3D{static_cast<uint32_t>(size.width()),
                                   static_cast<uint32_t>(size.height(), 1)};
   encoder.CopyTextureToBuffer(&src, &dst, &copy_size);
@@ -826,8 +828,8 @@ TEST_F(D3DImageBackingFactoryTest, Dawn_ConcurrentReads) {
   }
 
   // Find a Dawn D3D12 adapter
-  WGPUInstanceDescriptor instance_desc = {
-      .features =
+  wgpu::InstanceDescriptor instance_desc = {
+      .capabilities =
           {
               .timedWaitAnyEnable = true,
           },
@@ -1233,7 +1235,8 @@ void D3DImageBackingFactoryTest::RunCreateSharedImageFromHandleTest(
 
   auto backing = shared_image_factory_->CreateSharedImage(
       mailbox, format, size, color_space, surface_origin, alpha_type, usage,
-      "TestLabel", std::move(gpu_memory_buffer_handle));
+      "TestLabel", /*is_thread_safe=*/false,
+      std::move(gpu_memory_buffer_handle));
   ASSERT_NE(backing, nullptr);
 
   EXPECT_EQ(backing->format(), format);
@@ -1254,7 +1257,7 @@ void D3DImageBackingFactoryTest::RunCreateSharedImageFromHandleTest(
   auto dup_mailbox = Mailbox::Generate();
   auto dup_backing = shared_image_factory_->CreateSharedImage(
       dup_mailbox, format, size, color_space, surface_origin, alpha_type, usage,
-      "TestLabel", std::move(dup_handle));
+      "TestLabel", /*is_thread_safe=*/false, std::move(dup_handle));
   ASSERT_NE(dup_backing, nullptr);
 
   EXPECT_EQ(dup_backing->format(), format);
@@ -1554,7 +1557,7 @@ D3DImageBackingFactoryTest::CreateVideoImage(const gfx::Size& size,
     shared_image_backing = shared_image_factory_->CreateSharedImage(
         mailbox, viz::MultiPlaneFormat::kNV12, size, gfx::ColorSpace(),
         kTopLeft_GrSurfaceOrigin, kPremul_SkAlphaType, usage, "TestLabel",
-        std::move(gmb_handle));
+        /*is_thread_safe=*/false, std::move(gmb_handle));
     if (!shared_image_backing) {
       return {};
     }
@@ -1983,8 +1986,9 @@ void D3DImageBackingFactoryTest::RunCreateFromSharedMemoryMultiplanarTest(
     ASSERT_TRUE(overlay_image);
     EXPECT_EQ(overlay_image->type(), gl::DCLayerOverlayType::kShMemPixmap);
 
-    CheckNV12(overlay_image->shm_video_pixmap(), overlay_image->pixmap_stride(),
-              size, kYClearValue, kUClearValue, kVClearValue);
+    CheckNV12(overlay_image->shm_video_pixmap().data(),
+              overlay_image->pixmap_stride(), size, kYClearValue, kUClearValue,
+              kVClearValue);
   }
 }
 
@@ -2313,8 +2317,8 @@ class D3DImageBackingFactoryBufferTest : public D3DImageBackingFactoryTestBase {
 // Verifies that creating a shared image backed by a D3D12 buffer works and can
 // be imported into Dawn.
 TEST_F(D3DImageBackingFactoryBufferTest, CreateSharedImageImportToDawn) {
-  WGPUInstanceDescriptor instance_desc = {
-      .features =
+  wgpu::InstanceDescriptor instance_desc = {
+      .capabilities =
           {
               .timedWaitAnyEnable = true,
           },

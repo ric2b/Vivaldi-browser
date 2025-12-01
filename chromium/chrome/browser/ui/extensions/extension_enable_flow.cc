@@ -17,7 +17,9 @@
 #include "chrome/browser/ui/extensions/extension_enable_flow_delegate.h"
 #include "extensions/browser/api/management/management_api.h"
 #include "extensions/browser/extension_prefs.h"
+#include "extensions/browser/extension_registrar.h"
 #include "extensions/browser/extension_system.h"
+#include "ui/gfx/native_widget_types.h"
 
 #if !BUILDFLAG(IS_CHROMEOS)
 #include "chrome/browser/ui/profiles/profile_picker.h"
@@ -35,7 +37,7 @@ ExtensionEnableFlow::~ExtensionEnableFlow() = default;
 void ExtensionEnableFlow::StartForWebContents(
     content::WebContents* parent_contents) {
   parent_contents_ = parent_contents;
-  parent_window_ = nullptr;
+  parent_window_ = gfx::NativeWindow();
   Run();
 }
 
@@ -139,7 +141,8 @@ void ExtensionEnableFlow::CheckPermissionAndMaybePromptUser() {
     // This is a no-op if the extension was previously terminated.
     service->EnableExtension(extension_id_);
 
-    DCHECK(service->IsExtensionEnabled(extension_id_));
+    DCHECK(extensions::ExtensionRegistrar::Get(profile_)->IsExtensionEnabled(
+        extension_id_));
     delegate_->ExtensionEnableFlowFinished();  // |delegate_| may delete us.
     return;
   }
@@ -156,9 +159,9 @@ void ExtensionEnableFlow::CheckPermissionAndMaybePromptUser() {
 }
 
 void ExtensionEnableFlow::CreatePrompt() {
-  prompt_.reset(parent_contents_
-                    ? new ExtensionInstallPrompt(parent_contents_)
-                    : new ExtensionInstallPrompt(profile_, nullptr));
+  prompt_.reset(parent_contents_ ? new ExtensionInstallPrompt(parent_contents_)
+                                 : new ExtensionInstallPrompt(
+                                       profile_, gfx::NativeWindow()));
 }
 
 void ExtensionEnableFlow::OnExtensionApprovalDone(
@@ -225,8 +228,6 @@ void ExtensionEnableFlow::OnExtensionUninstalled(
 }
 
 void ExtensionEnableFlow::EnableExtension() {
-  extensions::ExtensionService* service =
-      extensions::ExtensionSystem::Get(profile_)->extension_service();
   extensions::ExtensionRegistry* registry =
       extensions::ExtensionRegistry::Get(profile_);
   // The extension can be uninstalled in another window while the UI was
@@ -252,9 +253,10 @@ void ExtensionEnableFlow::EnableExtension() {
     supervised_user_extensions_delegate->RecordExtensionEnablementUmaMetrics(
         /*enabled=*/true);
   }
-  service->GrantPermissionsAndEnableExtension(extension);
+  auto* registrar = extensions::ExtensionRegistrar::Get(profile_);
+  registrar->GrantPermissionsAndEnableExtension(*extension);
 
-  DCHECK(service->IsExtensionEnabled(extension_id_));
+  DCHECK(registrar->IsExtensionEnabled(extension_id_));
   delegate_->ExtensionEnableFlowFinished();  // |delegate_| may delete us.
 }
 

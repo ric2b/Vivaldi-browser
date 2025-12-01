@@ -35,7 +35,7 @@ class IndexCodec {
   // loads session code).
   bool Decode(Index_Node* items,
               const base::FilePath& directory,
-              const base::FilePath::StringPieceType& index_name);
+              const base::FilePath::StringViewType& index_name);
 
   // Decodes JSON into a Index_Model object. Returns true on success,
   // false otherwise.

@@ -59,7 +59,7 @@ const UIStrings = {
    *@description Icon title in Tabbed Editor Container of the Sources panel
    */
   changesToThisFileWereNotSavedTo: 'Changes to this file were not saved to file system.',
-};
+} as const;
 const str_ = i18n.i18n.registerUIStrings('panels/sources/TabbedEditorContainer.ts', UIStrings);
 const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
 export interface TabbedEditorContainerDelegate {
@@ -407,12 +407,12 @@ export class TabbedEditorContainer extends Common.ObjectWrapper.ObjectWrapper<Ev
   private canonicalUISourceCode(uiSourceCode: Workspace.UISourceCode.UISourceCode):
       Workspace.UISourceCode.UISourceCode {
     // Check if we have already a UISourceCode for this url
-    const existingSourceCode = this.idToUISourceCode.get(uiSourceCode.canononicalScriptId());
+    const existingSourceCode = this.idToUISourceCode.get(uiSourceCode.canonicalScriptId());
     if (existingSourceCode) {
       // Ignore incoming uiSourceCode, we already have this file.
       return existingSourceCode;
     }
-    this.idToUISourceCode.set(uiSourceCode.canononicalScriptId(), uiSourceCode);
+    this.idToUISourceCode.set(uiSourceCode.canonicalScriptId(), uiSourceCode);
     this.uriToUISourceCode.set(uiSourceCode.url(), uiSourceCode);
     return uiSourceCode;
   }
@@ -427,7 +427,7 @@ export class TabbedEditorContainer extends Common.ObjectWrapper.ObjectWrapper<Ev
       uiSourceCode.disableEdit();
     }
 
-    if (this.currentFileInternal?.canononicalScriptId() === uiSourceCode.canononicalScriptId()) {
+    if (this.currentFileInternal?.canonicalScriptId() === uiSourceCode.canonicalScriptId()) {
       return;
     }
 
@@ -472,8 +472,8 @@ export class TabbedEditorContainer extends Common.ObjectWrapper.ObjectWrapper<Ev
       if (this.uriToUISourceCode.get(uiSourceCode.url()) === uiSourceCode) {
         this.uriToUISourceCode.delete(uiSourceCode.url());
       }
-      if (this.idToUISourceCode.get(uiSourceCode.canononicalScriptId()) === uiSourceCode) {
-        this.idToUISourceCode.delete(uiSourceCode.canononicalScriptId());
+      if (this.idToUISourceCode.get(uiSourceCode.canonicalScriptId()) === uiSourceCode) {
+        this.idToUISourceCode.delete(uiSourceCode.canonicalScriptId());
       }
     }
     this.tabbedPane.closeTabs(tabIds);
@@ -549,9 +549,7 @@ export class TabbedEditorContainer extends Common.ObjectWrapper.ObjectWrapper<Ev
 
   private restoreEditorProperties(
       editorView: UI.Widget.Widget, selection?: TextUtils.TextRange.TextRange, firstLineNumber?: number): void {
-    const sourceFrame = editorView instanceof SourceFrame.SourceFrame.SourceFrameImpl ?
-        editorView as SourceFrame.SourceFrame.SourceFrameImpl :
-        null;
+    const sourceFrame = editorView instanceof SourceFrame.SourceFrame.SourceFrameImpl ? editorView : null;
     if (!sourceFrame) {
       return;
     }
@@ -567,7 +565,7 @@ export class TabbedEditorContainer extends Common.ObjectWrapper.ObjectWrapper<Ev
     const {tabId, isUserGesture} = event.data;
     const uiSourceCode = this.files.get(tabId);
     if (this.currentFileInternal &&
-        this.currentFileInternal.canononicalScriptId() === uiSourceCode?.canononicalScriptId()) {
+        this.currentFileInternal.canonicalScriptId() === uiSourceCode?.canonicalScriptId()) {
       this.removeViewListeners();
       this.currentView = null;
       this.currentFileInternal = null;
@@ -649,7 +647,7 @@ export class TabbedEditorContainer extends Common.ObjectWrapper.ObjectWrapper<Ev
     }
     // Remove from map under old id if it has changed.
     for (const [k, v] of this.idToUISourceCode) {
-      if (v === uiSourceCode && k !== v.canononicalScriptId()) {
+      if (v === uiSourceCode && k !== v.canonicalScriptId()) {
         this.idToUISourceCode.delete(k);
       }
     }
@@ -664,7 +662,7 @@ export class TabbedEditorContainer extends Common.ObjectWrapper.ObjectWrapper<Ev
   }
 
   private uiSourceCodeWorkingCopyCommitted(
-      event: Common.EventTarget.EventTargetEvent<Workspace.UISourceCode.WorkingCopyCommitedEvent>): void {
+      event: Common.EventTarget.EventTargetEvent<Workspace.UISourceCode.WorkingCopyCommittedEvent>): void {
     const uiSourceCode = event.data.uiSourceCode;
     this.updateFileTitle(uiSourceCode);
   }
@@ -851,8 +849,7 @@ export class History {
     return serializedHistoryItems;
   }
 
-  // eslint-disable-next-line rulesdir/prefer-readonly-keyword
-  keys(): ReadonlyArray<HistoryItemKey> {
+  keys(): HistoryItemKey[] {
     return this.items;
   }
 }

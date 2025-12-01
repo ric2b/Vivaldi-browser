@@ -15,6 +15,7 @@ import type * as Platform from '../../../core/platform/platform.js';
 import * as CrUXManager from '../../../models/crux-manager/crux-manager.js';
 import * as EmulationModel from '../../../models/emulation/emulation.js';
 import * as LiveMetrics from '../../../models/live-metrics/live-metrics.js';
+import * as Trace from '../../../models/trace/trace.js';
 import * as Buttons from '../../../ui/components/buttons/buttons.js';
 import * as ComponentHelpers from '../../../ui/components/helpers/helpers.js';
 import * as LegacyWrapper from '../../../ui/components/legacy_wrapper/legacy_wrapper.js';
@@ -34,11 +35,11 @@ import {CLS_THRESHOLDS, INP_THRESHOLDS, renderMetricValue} from './Utils.js';
 
 // TODO(crbug.com/391381439): Fully migrate off of constructed style sheets.
 const liveMetricsViewStyles = new CSSStyleSheet();
-liveMetricsViewStyles.replaceSync(liveMetricsViewStylesRaw.cssContent);
+liveMetricsViewStyles.replaceSync(liveMetricsViewStylesRaw.cssText);
 
 // TODO(crbug.com/391381439): Fully migrate off of constructed style sheets.
 const metricValueStyles = new CSSStyleSheet();
-metricValueStyles.replaceSync(metricValueStylesRaw.cssContent);
+metricValueStyles.replaceSync(metricValueStylesRaw.cssText);
 
 const {html, nothing} = Lit;
 
@@ -292,7 +293,7 @@ const UIStrings = {
    * @description Description of a view that can be used to analyze the performance of a Node process as a timeline. "Node" is a product name and should not be translated.
    */
   nodeClickToRecord: 'Record a performance timeline of the connected Node process.',
-};
+} as const;
 
 const str_ = i18n.i18n.registerUIStrings('panels/timeline/components/LiveMetricsView.ts', UIStrings);
 const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
@@ -300,7 +301,7 @@ const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
 export class LiveMetricsView extends LegacyWrapper.LegacyWrapper.WrappableComponent {
   readonly #shadow = this.attachShadow({mode: 'open'});
 
-  #isNode: boolean = false;
+  #isNode = false;
 
   #lcpValue?: LiveMetrics.LcpValue;
   #clsValue?: LiveMetrics.ClsValue;
@@ -427,10 +428,38 @@ export class LiveMetricsView extends LegacyWrapper.LegacyWrapper.WrappableCompon
         EmulationModel.DeviceModeModel.Events.UPDATED, this.#onEmulationChanged, this);
   }
 
+  #getLcpFieldPhases(): LiveMetrics.LcpValue['phases']|null {
+    const ttfb = this.#cruxManager.getSelectedFieldMetricData('largest_contentful_paint_image_time_to_first_byte')
+                     ?.percentiles?.p75;
+    const loadDelay =
+        this.#cruxManager.getSelectedFieldMetricData('largest_contentful_paint_image_resource_load_delay')
+            ?.percentiles?.p75;
+    const loadDuration =
+        this.#cruxManager.getSelectedFieldMetricData('largest_contentful_paint_image_resource_load_duration')
+            ?.percentiles?.p75;
+    const renderDelay =
+        this.#cruxManager.getSelectedFieldMetricData('largest_contentful_paint_image_element_render_delay')
+            ?.percentiles?.p75;
+
+    if (typeof ttfb !== 'number' || typeof loadDelay !== 'number' || typeof loadDuration !== 'number' ||
+        typeof renderDelay !== 'number') {
+      return null;
+    }
+
+    return {
+      timeToFirstByte: Trace.Types.Timing.Milli(ttfb),
+      resourceLoadDelay: Trace.Types.Timing.Milli(loadDelay),
+      resourceLoadTime: Trace.Types.Timing.Milli(loadDuration),
+      elementRenderDelay: Trace.Types.Timing.Milli(renderDelay),
+    };
+  }
+
   #renderLcpCard(): Lit.LitTemplate {
     const fieldData = this.#cruxManager.getSelectedFieldMetricData('largest_contentful_paint');
     const nodeLink = this.#lcpValue?.nodeRef?.link;
     const phases = this.#lcpValue?.phases;
+
+    const fieldPhases = this.#getLcpFieldPhases();
 
     // clang-format off
     return html`
@@ -442,10 +471,10 @@ export class LiveMetricsView extends LegacyWrapper.LegacyWrapper.WrappableCompon
         tooltipContainer: this.#tooltipContainerEl,
         warnings: this.#lcpValue?.warnings,
         phases: phases && [
-          [i18nString(UIStrings.timeToFirstByte), phases.timeToFirstByte],
-          [i18nString(UIStrings.resourceLoadDelay), phases.resourceLoadDelay],
-          [i18nString(UIStrings.resourceLoadDuration), phases.resourceLoadTime],
-          [i18nString(UIStrings.elementRenderDelay), phases.elementRenderDelay],
+          [i18nString(UIStrings.timeToFirstByte), phases.timeToFirstByte, fieldPhases?.timeToFirstByte],
+          [i18nString(UIStrings.resourceLoadDelay), phases.resourceLoadDelay, fieldPhases?.resourceLoadDelay],
+          [i18nString(UIStrings.resourceLoadDuration), phases.resourceLoadTime, fieldPhases?.resourceLoadTime],
+          [i18nString(UIStrings.elementRenderDelay), phases.elementRenderDelay, fieldPhases?.elementRenderDelay],
         ],
       } as MetricCardData}>
         ${nodeLink ? html`
@@ -711,7 +740,7 @@ export class LiveMetricsView extends LegacyWrapper.LegacyWrapper.WrappableCompon
   #getLabelForDeviceOption(deviceOption: DeviceOption): string {
     let baseLabel;
     if (deviceOption === 'AUTO') {
-      const deviceScope = this.#cruxManager.getSelectedDeviceScope();
+      const deviceScope = this.#cruxManager.resolveDeviceOptionToScope(deviceOption);
       const deviceScopeLabel = this.#getDeviceScopeDisplayName(deviceScope);
       baseLabel = i18nString(UIStrings.auto, {PH1: deviceScopeLabel});
     } else {

@@ -29,11 +29,11 @@
 #include "components/autofill/core/browser/data_manager/addresses/address_data_manager.h"
 #include "components/autofill/core/browser/data_manager/payments/payments_data_manager.h"
 #include "components/autofill/core/browser/data_manager/personal_data_manager.h"
-#include "components/autofill/core/browser/data_model/autofill_profile.h"
-#include "components/autofill/core/browser/data_model/autofill_structured_address_constants.h"
-#include "components/autofill/core/browser/data_model/bank_account.h"
-#include "components/autofill/core/browser/data_model/ewallet.h"
-#include "components/autofill/core/browser/data_model/payment_instrument.h"
+#include "components/autofill/core/browser/data_model/addresses/autofill_profile.h"
+#include "components/autofill/core/browser/data_model/addresses/autofill_structured_address_constants.h"
+#include "components/autofill/core/browser/data_model/payments/bank_account.h"
+#include "components/autofill/core/browser/data_model/payments/ewallet.h"
+#include "components/autofill/core/browser/data_model/payments/payment_instrument.h"
 #include "components/autofill/core/browser/data_quality/autofill_data_util.h"
 #include "components/autofill/core/browser/data_quality/validation.h"
 #include "components/autofill/core/browser/field_types.h"
@@ -41,6 +41,7 @@
 #include "components/autofill/core/browser/geo/autofill_country.h"
 #include "components/autofill/core/browser/geo/country_names.h"
 #include "components/autofill/core/browser/studies/autofill_experiments.h"
+#include "components/autofill/core/browser/suggestions/payments/payments_suggestion_generator.h"
 #include "components/autofill/core/browser/ui/autofill_resource_utils.h"
 #include "components/autofill/core/common/autofill_clock.h"
 #include "components/autofill/core/common/autofill_constants.h"
@@ -90,7 +91,7 @@ void RecordAlternativeNameSeparatorUsage(
       saved_alternative_name != existing_alternative_name) {
     const bool has_name_separator =
         re2::RE2::PartialMatch(base::UTF16ToUTF8(saved_alternative_name),
-                               autofill::kCjkNameSeperatorsRe);
+                               autofill::kCjkNameSeparatorsRe);
     base::UmaHistogramBoolean(
         "Autofill.Settings.EditedAlternativeNameContainsASeparator",
         has_name_separator);
@@ -344,7 +345,7 @@ PersonalDataManagerAndroid::GetCreditCardGUIDsForSettings(JNIEnv* env) {
 ScopedJavaLocalRef<jobjectArray>
 PersonalDataManagerAndroid::GetCreditCardGUIDsToSuggest(JNIEnv* env) {
   return GetCreditCardGUIDs(env,
-                            payments_data_manager().GetCreditCardsToSuggest());
+                            GetCreditCardsToSuggest(payments_data_manager()));
 }
 
 ScopedJavaLocalRef<jobject> PersonalDataManagerAndroid::GetCreditCardByGUID(
@@ -831,10 +832,6 @@ PersonalDataManagerAndroid::GetMaskedBankAccounts(JNIEnv* env) {
                                                   type.obj());
 }
 
-jboolean PersonalDataManagerAndroid::IsAutofillManaged(JNIEnv* env) {
-  return prefs::IsAutofillManaged(prefs_);
-}
-
 jboolean PersonalDataManagerAndroid::IsAutofillProfileManaged(JNIEnv* env) {
   return prefs::IsAutofillProfileManaged(prefs_);
 }
@@ -858,7 +855,7 @@ static std::string JNI_PersonalDataManager_GetBasicCardIssuerNetwork(
       .basic_card_issuer_network;
 }
 
-// Returns an ISO 3166-1-alpha-2 country code for a |country_name| using
+// Returns an ISO 3166-1-alpha-2 country code for a `country_name` using
 // the application locale, or an empty string.
 static std::string JNI_PersonalDataManager_ToCountryCode(
     JNIEnv* env,

@@ -195,7 +195,7 @@ void ContentSettingsPref::SetWebsiteSetting(
     const ContentSettingsPattern& primary_pattern,
     const ContentSettingsPattern& secondary_pattern,
     base::Value value,
-    const RuleMetaData& metadata,
+    RuleMetaData metadata,
     const PartitionKey& partition_key) {
   DCHECK(value.is_none() || IsValueAllowedForType(value, content_type_));
   DCHECK(thread_checker_.CalledOnValidThread());
@@ -212,8 +212,8 @@ void ContentSettingsPref::SetWebsiteSetting(
     base::AutoLock auto_lock(map_to_modify->GetLock());
     if (!value.is_none()) {
       if (!map_to_modify->SetValue(primary_pattern, secondary_pattern,
-                                   content_type_, value.Clone(), metadata,
-                                   partition_key)) {
+                                   content_type_, value.Clone(),
+                                   metadata.Clone(), partition_key)) {
         return;
       }
     } else {
@@ -225,8 +225,8 @@ void ContentSettingsPref::SetWebsiteSetting(
   }
   // Update the content settings preference.
   if (!off_the_record_ && !partition_key.in_memory()) {
-    UpdatePref(primary_pattern, secondary_pattern, std::move(value), metadata,
-               partition_key);
+    UpdatePref(primary_pattern, secondary_pattern, std::move(value),
+               std::move(metadata), partition_key);
   }
 
   notify_callback_.Run(primary_pattern, secondary_pattern, content_type_,
@@ -401,7 +401,11 @@ void ContentSettingsPref::ReadContentSettingsFromPrefForPartition(
 
     // Get settings dictionary for the current pattern string, and read
     // settings from the dictionary.
-    DCHECK(i.second.is_dict());
+    if(!i.second.is_dict()) {
+      LOG(ERROR) << "Invalid settings dictionary for pattern string: "
+                 << pattern_str << " with value: " << i.second.DebugString();
+      continue;
+    }
     const base::Value::Dict& settings_dictionary = i.second.GetDict();
 
     // Check to see if the setting is expired or not. This may be due to a past
@@ -448,7 +452,7 @@ void ContentSettingsPref::ReadContentSettingsFromPrefForPartition(
 
       value_map_.SetValue(std::move(pattern_pair.first),
                           std::move(pattern_pair.second), content_type_,
-                          value->Clone(), metadata, partition_key);
+                          value->Clone(), std::move(metadata), partition_key);
     }
   }
 

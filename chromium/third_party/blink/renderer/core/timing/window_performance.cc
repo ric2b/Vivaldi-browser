@@ -73,10 +73,12 @@
 #include "third_party/blink/renderer/core/page/chrome_client.h"
 #include "third_party/blink/renderer/core/page/page.h"
 #include "third_party/blink/renderer/core/page/page_hidden_state.h"
+#include "third_party/blink/renderer/core/paint/timing/container_timing.h"
 #include "third_party/blink/renderer/core/performance_entry_names.h"
 #include "third_party/blink/renderer/core/timing/animation_frame_timing_info.h"
 #include "third_party/blink/renderer/core/timing/largest_contentful_paint.h"
 #include "third_party/blink/renderer/core/timing/layout_shift.h"
+#include "third_party/blink/renderer/core/timing/performance_container_timing.h"
 #include "third_party/blink/renderer/core/timing/performance_element_timing.h"
 #include "third_party/blink/renderer/core/timing/performance_entry.h"
 #include "third_party/blink/renderer/core/timing/performance_event_timing.h"
@@ -1211,10 +1213,12 @@ void WindowPerformance::NotifyAndAddEventTimingBuffer(
     TRACE_EVENT_INSTANT("devtools.timeline", "EventCreation", track_id,
                         entry->GetEventTimingReportingInfo()->creation_time,
                         flow_id);
-    TRACE_EVENT_INSTANT(
-        "devtools.timeline", "EventEnqueuedToMainThread", track_id,
-        entry->GetEventTimingReportingInfo()->enqueued_to_main_thread_time,
-        flow_id);
+    auto enqueued_to_main_thread_time =
+        entry->GetEventTimingReportingInfo()->enqueued_to_main_thread_time;
+    if (!enqueued_to_main_thread_time.is_null()) {
+      TRACE_EVENT_INSTANT("devtools.timeline", "EventEnqueuedToMainThread",
+                          track_id, enqueued_to_main_thread_time, flow_id);
+    }
 
     TRACE_EVENT_BEGIN(
         "devtools.timeline", "EventProcessing", track_id,
@@ -1237,6 +1241,32 @@ void WindowPerformance::NotifyAndAddEventTimingBuffer(
     TRACE_EVENT_NESTABLE_ASYNC_END_WITH_TIMESTAMP0(
         "devtools.timeline", "EventTiming", hash, unsafe_end_time);
   }
+}
+
+void WindowPerformance::SetHasContainerTimingChanges() {
+  DCHECK(RuntimeEnabledFeatures::ContainerTimingEnabled());
+
+  has_container_timing_changes_ = true;
+  NotifyObserversOfContainerTiming();
+}
+
+void WindowPerformance::PopulateContainerTimingEntries() {
+  if (!has_container_timing_changes_) {
+    return;
+  }
+
+  DCHECK(RuntimeEnabledFeatures::ContainerTimingEnabled());
+
+  LocalDOMWindow* window = DomWindow();
+  if (!window) {
+    return;
+  }
+
+  ContainerTiming& container_timing = ContainerTiming::From(*window);
+
+  container_timing.EmitPerformanceEntries();
+
+  has_container_timing_changes_ = false;
 }
 
 bool WindowPerformance::SetInteractionIdAndRecordLatency(
@@ -1324,6 +1354,30 @@ void WindowPerformance::AddElementTiming(
   }
   if (!IsElementTimingBufferFull()) {
     AddToElementTimingBuffer(*entry);
+  }
+}
+
+void WindowPerformance::AddContainerTiming(
+    const DOMPaintTimingInfo& paint_timing_info,
+    const gfx::Rect& rect,
+    uint64_t size,
+    const AtomicString& identifier,
+    Element* last_painted_element,
+    const DOMPaintTimingInfo& first_paint_timing_info) {
+  DCHECK(RuntimeEnabledFeatures::ContainerTimingEnabled());
+  if (!DomWindow()) {
+    return;
+  }
+
+  PerformanceContainerTiming* entry = PerformanceContainerTiming::Create(
+      AtomicString("container-paints"), paint_timing_info.presentation_time,
+      rect, size, identifier, last_painted_element,
+      first_paint_timing_info.presentation_time, DomWindow());
+  TRACE_EVENT2("loading", "PerformanceContainerTiming", "data",
+               entry->ToTracedValue(), "frame",
+               GetFrameIdForTracing(DomWindow()->GetFrame()));
+  if (HasObserverFor(PerformanceEntry::kContainer)) {
+    NotifyObserversOfContainerEntry(*entry);
   }
 }
 

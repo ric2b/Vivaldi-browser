@@ -16,6 +16,7 @@
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "components/enterprise/common/proto/connectors.pb.h"
+#include "components/enterprise/connectors/core/reporting_utils.h"
 #include "components/prefs/pref_service.h"
 #include "components/safe_browsing/core/browser/referrer_chain_provider.h"
 #include "components/safe_browsing/core/browser/verdict_cache_manager.h"
@@ -46,7 +47,7 @@ const size_t kMaxBackOffResetDurationInSeconds = 30 * 60;  // 30 minutes.
 const size_t kURLLookupTimeoutDurationInSeconds = 3;
 
 // Represents the value stored in the |version| field of |RTLookupRequest|.
-const int kRTLookupRequestVersion = 3;
+const int kRTLookupRequestVersion = 4;
 
 // UMA helper functions.
 void RecordBooleanWithAndWithoutSuffix(const std::string& metric,
@@ -299,6 +300,7 @@ RealTimeUrlLookupServiceBase::GetCachedRealTimeUrlVerdict(const GURL& url) {
       base::TimeTicks::Now() - get_cache_start_time);
 
   if (verdict_type == RTLookupResponse::ThreatInfo::SAFE ||
+      verdict_type == RTLookupResponse::ThreatInfo::WARN ||
       verdict_type == RTLookupResponse::ThreatInfo::DANGEROUS) {
     auto cache_response = std::make_unique<RTLookupResponse>();
     RTLookupResponse::ThreatInfo* new_threat_info =
@@ -586,8 +588,16 @@ RealTimeUrlLookupServiceBase::GetResourceRequest() {
   resource_request->url = GetRealTimeLookupUrl();
   resource_request->load_flags = net::LOAD_DISABLE_CACHE;
   resource_request->method = "POST";
-  if (!ShouldIncludeCredentials())
+  // If we want to include cookies in the request when third-party cookie
+  // blocking is active, we must set the request's SiteForCookies to be
+  // first-party. This is a browser initiated request so there is no privacy
+  // concern in doing so.
+  if (ShouldIncludeCredentials()) {
+    resource_request->site_for_cookies =
+        net::SiteForCookies::FromUrl(resource_request->url);
+  } else {
     resource_request->credentials_mode = network::mojom::CredentialsMode::kOmit;
+  }
   return resource_request;
 }
 
@@ -604,15 +614,16 @@ std::unique_ptr<RTLookupRequest> RealTimeUrlLookupServiceBase::FillRequestProto(
   request->set_report_type(is_sampled_report ? RTLookupRequest::SAMPLED_REPORT
                                              : RTLookupRequest::FULL_REPORT);
   request->set_frame_type(RTLookupRequest::MAIN_FRAME);
-  if (referring_app_info) {
+  if (referring_app_info && pref_service_ &&
+      IsEnhancedProtectionEnabled(*pref_service_)) {
     safe_browsing::ReferringAppInfo referring_app_info_proto;
     referring_app_info_proto.set_referring_app_name(
         referring_app_info.value().referring_app_name);
     referring_app_info_proto.set_referring_app_source(
         referring_app_info.value().referring_app_source);
-    // TODO(chlily): Populate WebAPK fields.
     *request->mutable_referring_app_info() =
         std::move(referring_app_info_proto);
+    MaybeFillReferringWebApk(*referring_app_info, *request);
   }
   std::optional<std::string> dm_token_string = GetDMTokenString();
   if (dm_token_string.has_value()) {
@@ -628,6 +639,14 @@ std::unique_ptr<RTLookupRequest> RealTimeUrlLookupServiceBase::FillRequestProto(
     std::string profile_dm_token = GetProfileDMTokenString();
     if (!profile_dm_token.empty()) {
       request->set_profile_dm_token(std::move(profile_dm_token));
+    }
+
+    // The IP addresses are only needed for enterprise requests.
+    if (base::FeatureList::IsEnabled(safe_browsing::kLocalIpAddressInEvents)) {
+      for (const auto& ip_address :
+           enterprise_connectors::GetLocalIpAddresses()) {
+        request->add_local_ips(ip_address);
+      }
     }
   }
 

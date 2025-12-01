@@ -52,3 +52,10 @@ if (!is_ios && (vivaldi_build_tests || (is_win && target_cpu == "arm64"))) {
     }
   }
 }
+
+update_target("//chrome/browser/prefs:impl") {
+  sources += [
+    "//vivaldi/prefs/vivaldi_local_state_prefs.cc",
+    "//vivaldi/prefs/vivaldi_local_state_prefs.h"
+  ]
+}

@@ -10,6 +10,7 @@
 #include "include/gpu/graphite/Context.h"
 #include "include/gpu/graphite/Recorder.h"
 #include "src/gpu/SkBackingFit.h"
+#include "src/gpu/graphite/ContextPriv.h"
 #include "src/gpu/graphite/Device.h"
 #include "src/gpu/graphite/RecorderPriv.h"
 
@@ -18,7 +19,7 @@ using Mipmapped = skgpu::Mipmapped;
 
 // Tests to make sure the managing of back pointers between Recorder and Device all work properly.
 DEF_GRAPHITE_TEST_FOR_ALL_CONTEXTS(RecorderDevicePtrTest, reporter, context,
-                                   CtsEnforcement::kApiLevel_V) {
+                                   CtsEnforcement::kApiLevel_202404) {
     std::unique_ptr<Recorder> recorder = context->makeRecorder();
 
     SkImageInfo info = SkImageInfo::Make({16, 16}, kRGBA_8888_SkColorType, kPremul_SkAlphaType);
@@ -99,4 +100,47 @@ DEF_GRAPHITE_TEST_FOR_ALL_CONTEXTS(RecorderDevicePtrTest, reporter, context,
     // stack trace if something does go wrong.
     device1.reset();
     device3.reset();
+}
+
+// Tests to make sure the Recorders can override the ordering requirement.
+DEF_GRAPHITE_TEST_FOR_ALL_CONTEXTS(RecorderOrderingTest, reporter, context,
+                                   CtsEnforcement::kNever) {
+    std::unique_ptr<Recorder> orderedRecorder, unorderedRecorder;
+
+    if (context->priv().caps()->requireOrderedRecordings()) {
+        orderedRecorder = context->makeRecorder();
+        RecorderOptions opts;
+        opts.fRequireOrderedRecordings = false;
+        unorderedRecorder = context->makeRecorder(opts);
+    } else {
+        RecorderOptions opts;
+        opts.fRequireOrderedRecordings = true;
+        orderedRecorder = context->makeRecorder(opts);
+        unorderedRecorder = context->makeRecorder();
+    }
+
+    auto insert = [context](Recording* r) {
+        InsertRecordingInfo info;
+        info.fRecording = r;
+        return context->insertRecording(info);
+    };
+
+    std::unique_ptr<Recording> o1 = orderedRecorder->snap();
+    std::unique_ptr<Recording> o2 = orderedRecorder->snap();
+    std::unique_ptr<Recording> o3 = orderedRecorder->snap();
+
+    std::unique_ptr<Recording> u1 = unorderedRecorder->snap();
+    std::unique_ptr<Recording> u2 = unorderedRecorder->snap();
+
+    // Unordered insertion of an unordered Recorder succeeds.
+    // NOTE: These Recordings are all out-of-order with respect to orderedRecorder, which had been
+    // snapped multiple times before unorderedRecorder. That is always allowed.
+    REPORTER_ASSERT(reporter, insert(u2.get()));
+    REPORTER_ASSERT(reporter, insert(u1.get()));
+
+    // Unordered insertion of an ordered Recorder fails
+    REPORTER_ASSERT(reporter, insert(o1.get())); // succeeds (first insertion)
+    REPORTER_ASSERT(reporter, !insert(o3.get())); // fails for out of order
+    REPORTER_ASSERT(reporter, insert(o2.get())); // succeeds and recovers
+    REPORTER_ASSERT(reporter, insert(o3.get())); // now in order success
 }

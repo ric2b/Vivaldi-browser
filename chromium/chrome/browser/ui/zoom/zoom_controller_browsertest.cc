@@ -143,6 +143,8 @@ IN_PROC_BROWSER_TEST_F(ZoomControllerBrowserTest, ErrorPagesCanZoom) {
   EXPECT_EQ(
       content::PAGE_TYPE_ERROR,
       web_contents->GetController().GetLastCommittedEntry()->GetPageType());
+  EXPECT_EQ(GURL(content::kUnreachableWebDataURL),
+            content::HostZoomMap::GetURLForWebContents(web_contents));
 
   double old_zoom_level = zoom_controller->GetZoomLevel();
   double new_zoom_level = old_zoom_level + 0.5;
@@ -334,7 +336,6 @@ IN_PROC_BROWSER_TEST_F(ZoomControllerBrowserTest,
 }
 #endif  // !BUILDFLAG(IS_MAC)
 
-// TODO(crbug.com/40201807): Add support for Lacros.
 #if !BUILDFLAG(IS_CHROMEOS)
 // Regression test: crbug.com/438979.
 IN_PROC_BROWSER_TEST_F(ZoomControllerBrowserTest,

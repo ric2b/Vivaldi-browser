@@ -29,7 +29,4 @@
           ve "<ph name="NO_PREFETCH_DESCRIPTION" />" seçeneğinin işaretini kaldırın.
           Bu işlem sorunu çözmezse performansın iyileşmesi için bu seçeneği tekrar işaretlemenizi öneririz.</translation>
 <translation id="7496505986576158197">Vivaldi, <ph name="BEGIN_LINK_CHROMIUM" />Chromium<ph name="END_LINK_CHROMIUM" /> açık kaynak projesi ve diğer <ph name="BEGIN_LINK_OSS" />açık kaynak yazılımları<ph name="END_LINK_OSS" /> tarafından mümkün kılınmıştır.</translation>
-<translation id="8187289872471304532">Uygulamalar &gt; Sistem Tercihleri &gt; Ağ &gt; Gelişmiş &gt; Vekiller
-          ögesine gidin ve
-          seçilmiş olabilecek proxy'lerin seçimini kaldırın.</translation>
 </translationbundle>

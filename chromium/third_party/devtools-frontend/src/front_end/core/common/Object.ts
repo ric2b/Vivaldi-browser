@@ -85,7 +85,7 @@ export class ObjectWrapper<Events> implements EventTarget<Events> {
   }
 
   hasEventListeners(eventType: keyof Events): boolean {
-    return Boolean(this.listeners && this.listeners.has(eventType));
+    return Boolean(this.listeners?.has(eventType));
   }
 
   dispatchEventToListeners<T extends keyof Events>(
@@ -111,10 +111,9 @@ export class ObjectWrapper<Events> implements EventTarget<Events> {
   }
 }
 
-type Constructor = new (...args: any[]) => {};
-
 // eslint-disable-next-line @typescript-eslint/explicit-function-return-type
-export function eventMixin<Events, Base extends Constructor>(base: Base) {
+export function eventMixin<Events, Base extends Platform.Constructor.Constructor<object>>(base: Base) {
+  console.assert(base !== (HTMLElement as Platform.Constructor.Constructor<object>));
   return class EventHandling extends base implements EventTarget<Events> {
     #events = new ObjectWrapper<Events>();
 

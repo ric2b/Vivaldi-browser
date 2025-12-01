@@ -38,10 +38,12 @@ import android.content.Intent;
 import android.graphics.Color;
 
 import org.chromium.chrome.browser.ChromeApplicationImpl;
+import org.chromium.chrome.browser.profiles.ProfileManager;
+import org.chromium.chrome.browser.sync.SyncServiceFactory;
+import org.chromium.components.sync.SyncService;
 
 import org.vivaldi.browser.common.VivaldiUtils;
 import org.vivaldi.browser.sync.VivaldiSyncActivity;
-import org.vivaldi.browser.sync.VivaldiSyncService;
 import org.vivaldi.browser.vivaldi_account_manager.VivaldiAccountManager;
 
 /**
@@ -293,8 +295,15 @@ public class RecentTabsPage
             if (mRecentTabsManager.getVivaldiRecentTabsManager().onlyShowForeignSessions()) {
                 View view = mView.findViewById(R.id.sign_in_for_tabs);
                 if (view != null) {
+                    SyncService syncService = SyncServiceFactory.getForProfile(
+                            ProfileManager.getLastUsedRegularProfile());
+                    boolean needPassPhrase = syncService.isEngineInitialized()
+                            && (syncService.isPassphraseRequiredForPreferredDataTypes()
+                                    || !syncService.isUsingExplicitPassphrase());
+
                     if (VivaldiAccountManager.get().getSimplifiedState()
-                            != VivaldiAccountManager.SimplifiedState.LOGGED_IN) {
+                                    != VivaldiAccountManager.SimplifiedState.LOGGED_IN
+                            || needPassPhrase) {
                         view.setVisibility(View.VISIBLE);
                     } else
                         view.setVisibility(View.GONE);

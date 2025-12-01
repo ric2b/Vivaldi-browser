@@ -115,6 +115,7 @@ ToastView::ToastView(
       image_override_(image_override),
       render_toast_over_web_contents_(render_toast_over_web_contents),
       toast_close_callback_(std::move(toast_close_callback)) {
+  set_background_color(ui::kColorToastBackgroundProminent);
   SetPaintClientToLayer(true);
   SetShowCloseButton(false);
   DialogDelegate::SetButtons(static_cast<int>(ui::mojom::DialogButton::kNone));
@@ -175,7 +176,7 @@ void ToastView::Init() {
 
   label_ = AddChildView(
       std::make_unique<views::Label>(toast_text_, CONTEXT_TOAST_BODY_TEXT));
-  label_->SetEnabledColorId(ui::kColorToastForeground);
+  label_->SetEnabledColor(ui::kColorToastForeground);
   label_->SetMultiLine(false);
   label_->SetHorizontalAlignment(gfx::ALIGN_LEFT);
   label_->SetAllowCharacterBreak(false);
@@ -199,7 +200,7 @@ void ToastView::Init() {
             base::BindRepeating(&ToastView::Close, base::Unretained(this),
                                 ToastCloseReason::kActionButton)),
         action_button_text_));
-    action_button_->SetEnabledTextColorIds(ui::kColorToastButton);
+    action_button_->SetEnabledTextColors(ui::kColorToastButton);
     action_button_->SetBgColorIdOverride(ui::kColorToastBackgroundProminent);
     action_button_->SetStrokeColorIdOverride(ui::kColorToastButton);
     action_button_->SetPreferredSize(gfx::Size(
@@ -339,7 +340,7 @@ void ToastView::AnimateIn() {
       GetScaleTransformation(bubble_frame_view->bounds()));
   bubble_frame_view->layer()->SetOpacity(0);
   GetDialogClientView()->SetBackground(
-      views::CreateThemedSolidBackground(ui::kColorToastBackgroundProminent));
+      views::CreateSolidBackground(ui::kColorToastBackgroundProminent));
   GetDialogClientView()->layer()->SetOpacity(0);
   views::AnimationBuilder()
       .Once()
@@ -422,7 +423,6 @@ gfx::Rect ToastView::GetBubbleBounds() {
 void ToastView::OnThemeChanged() {
   BubbleDialogDelegateView::OnThemeChanged();
   const auto* color_provider = GetColorProvider();
-  set_color(color_provider->GetColor(ui::kColorToastBackgroundProminent));
   if (image_override_ != nullptr && IsCompatibleImageSize(image_override_)) {
     icon_view_->SetImage(*image_override_);
   } else {

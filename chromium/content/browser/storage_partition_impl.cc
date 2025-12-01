@@ -111,6 +111,7 @@
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/browsing_data_filter_builder.h"
 #include "content/public/browser/content_browser_client.h"
+#include "content/public/browser/cookie_access_details.h"
 #include "content/public/browser/dom_storage_context.h"
 #include "content/public/browser/login_delegate.h"
 #include "content/public/browser/network_service_instance.h"
@@ -158,11 +159,11 @@
 #include "storage/browser/quota/quota_manager_impl.h"
 #include "storage/browser/quota/quota_settings.h"
 #include "third_party/blink/public/common/features.h"
+#include "third_party/blink/public/common/navigation/preloading_headers.h"
 #include "third_party/blink/public/common/permissions/permission_utils.h"
 #include "third_party/blink/public/common/storage_key/storage_key.h"
 #include "third_party/blink/public/mojom/devtools/inspector_issue.mojom-shared.h"
 #include "third_party/blink/public/mojom/private_network_device/private_network_device.mojom.h"
-#include "third_party/blink/public/mojom/quota/quota_types.mojom.h"
 #include "url/scheme_host_port.h"
 
 #if BUILDFLAG(IS_ANDROID)
@@ -322,11 +323,10 @@ void OnQuotaManagedBucketDeleted(const storage::BucketLocator& bucket,
 
 void PerformQuotaManagerStorageCleanup(
     const scoped_refptr<storage::QuotaManager>& quota_manager,
-    blink::mojom::StorageType quota_storage_type,
     storage::QuotaClientTypes quota_client_types,
     base::OnceClosure callback) {
-  quota_manager->PerformStorageCleanup(
-      quota_storage_type, std::move(quota_client_types), std::move(callback));
+  quota_manager->PerformStorageCleanup(std::move(quota_client_types),
+                                       std::move(callback));
 }
 
 void ClearedGpuCache(base::OnceClosure callback) {
@@ -520,6 +520,11 @@ class LoginHandlerDelegate {
           *frame_tree_node->current_frame_host());
     }
 
+    // note(ondrej@vivaldi): VB-115787 workaround
+    if (request_id_.request_id == 0 && auth_info_.is_proxy) {
+      OnAuthCredentials(std::nullopt);
+      return;
+    }
     // WeakPtr is not strictly necessary here due to OnRequestCancelled.
     creating_login_delegate_ = true;
     login_delegate_ = GetContentClient()->browser()->CreateLoginDelegate(
@@ -863,7 +868,6 @@ class StoragePartitionImpl::QuotaManagedDataDeletionHelper {
       StoragePartition::StorageKeyPolicyMatcherFunction storage_key_matcher,
       bool perform_storage_cleanup,
       base::OnceClosure callback,
-      blink::mojom::StorageType quota_storage_type,
       const std::set<storage::BucketLocator>& buckets);
 
  private:
@@ -1020,7 +1024,9 @@ class StoragePartitionImpl::ServiceWorkerCookieAccessObserver
       for (GlobalRenderFrameHostId frame_id : GetRoutingIdsForOrigin(
                storage_partition_, url::Origin::Create(details->url))) {
         if (RenderFrameHostImpl* rfh = RenderFrameHostImpl::FromID(frame_id)) {
-          rfh->OnCookiesAccessed(mojo::Clone(details_vector));
+          rfh->NotifyCookiesAccessed(
+              mojo::Clone(details_vector),
+              CookieAccessDetails::Source::kNonNavigation);
         }
       }
     }
@@ -1506,7 +1512,7 @@ void StoragePartitionImpl::Initialize(
         this, path, special_storage_policy_);
   }
 
-  if (base::FeatureList::IsEnabled(blink::features::kInterestGroupStorage)) {
+  if (base::FeatureList::IsEnabled(network::features::kInterestGroupStorage)) {
     // Auction worklets on non-Android use dedicated processes; on Android due
     // to high cost of process launch they try to reuse renderers.
     interest_group_manager_ = std::make_unique<InterestGroupManagerImpl>(
@@ -1525,7 +1531,7 @@ void StoragePartitionImpl::Initialize(
 
   // The Topics API is not available in Incognito mode.
   if (!is_in_memory() &&
-      base::FeatureList::IsEnabled(blink::features::kBrowsingTopics)) {
+      base::FeatureList::IsEnabled(network::features::kBrowsingTopics)) {
     browsing_topics_site_data_manager_ =
         std::make_unique<BrowsingTopicsSiteDataManagerImpl>(path);
   }
@@ -1572,7 +1578,7 @@ void StoragePartitionImpl::Initialize(
   }
 #endif  // BUILDFLAG(ENABLE_LIBRARY_CDMS)
 
-  if (base::FeatureList::IsEnabled(blink::features::kSharedStorageAPI)) {
+  if (base::FeatureList::IsEnabled(network::features::kSharedStorageAPI)) {
     base::FilePath shared_storage_path =
         is_in_memory() ? base::FilePath()
                        : path.Append(storage::kSharedStoragePath);
@@ -2238,6 +2244,71 @@ void StoragePartitionImpl::OnPrivateNetworkAccessPermissionRequired(
                               std::move(callback));
 }
 
+void StoragePartitionImpl::OnLocalNetworkAccessPermissionRequired(
+    OnLocalNetworkAccessPermissionRequiredCallback callback) {
+  if (!base::FeatureList::IsEnabled(
+          network::features::kLocalNetworkAccessChecks) &&
+      !network::features::kLocalNetworkAccessChecksWarn.Get()) {
+    // If LNA checks are not enabled, just allow the request by default.
+    std::move(callback).Run(true);
+    return;
+  }
+
+  if (url_loader_network_observers_.empty()) {
+    std::move(callback).Run(false);
+    return;
+  }
+  const URLLoaderNetworkContext& context =
+      url_loader_network_observers_.current_context();
+
+  // Currently requesting the Local Network Access permission is restricted to
+  // document contexts (subresource requests).
+  // TODO(crbug.com/404887282): Add support for allowing requests from workers
+  // if the user has previously granted the permission.
+  // TODO(crbug.com/404887285): Add support for having subframe navigation
+  // requests query and trigger the permission prompt.
+  if (context.type() != ContextType::kRenderFrameHostContext ||
+      !context.navigation_or_document()) {
+    std::move(callback).Run(false);
+    return;
+  }
+  RenderFrameHost* rfh = context.navigation_or_document()->GetDocument();
+  if (!rfh) {
+    std::move(callback).Run(false);
+    return;
+  }
+
+  PermissionController* permission_controller =
+      browser_context_->GetPermissionController();
+  DCHECK(permission_controller);
+
+  auto status = permission_controller->GetPermissionStatusForCurrentDocument(
+      blink::PermissionType::LOCAL_NETWORK_ACCESS, rfh);
+  if (status == blink::mojom::PermissionStatus::GRANTED) {
+    std::move(callback).Run(true);
+    return;
+  } else if (status == blink::mojom::PermissionStatus::DENIED) {
+    std::move(callback).Run(false);
+    return;
+  } else {
+    // PermissionStatus is ASK, so request the permission. Converts the result
+    // into a boolean to pass back to `callback`, capturing whether the
+    // permission is granted or not.
+    permission_controller->RequestPermissionFromCurrentDocument(
+        rfh,
+        PermissionRequestDescription(
+            blink::PermissionType::LOCAL_NETWORK_ACCESS),
+        base::BindOnce(
+            [](OnLocalNetworkAccessPermissionRequiredCallback cb,
+               PermissionStatus status) {
+              std::move(cb).Run(status ==
+                                blink::mojom::PermissionStatus::GRANTED);
+            },
+            std::move(callback)));
+    return;
+  }
+}
+
 void StoragePartitionImpl::OnCertificateRequested(
     const std::optional<base::UnguessableToken>& window_id,
     const scoped_refptr<net::SSLCertRequestInfo>& cert_info,
@@ -2395,6 +2466,11 @@ void StoragePartitionImpl::OnSharedStorageHeaderReceived(
       request_origin, url_loader_network_observers_.current_context().type(),
       navigation_or_document, std::move(methods_with_options), with_lock,
       std::move(callback), mojo::GetBadMessageCallback(), /*can_defer=*/true);
+}
+
+void StoragePartitionImpl::OnAdAuctionEventRecordHeaderReceived(
+    network::AdAuctionEventRecord event_record) {
+  interest_group_manager_->RecordViewClick(std::move(event_record));
 }
 
 void StoragePartitionImpl::Clone(
@@ -2700,30 +2776,16 @@ void StoragePartitionImpl::QuotaManagedDataDeletionHelper::ClearDataOnIOThread(
       &QuotaManagedDataDeletionHelper::DecrementTaskCountOnIO,
       base::Unretained(this));
 
-  // Ask the QuotaManager for all buckets with temporary quota modified
-  // within the user-specified timeframe, and deal with the resulting set in
-  // ClearBucketsOnIOThread().
+  // Ask the QuotaManager for all buckets modified within the user-specified
+  // timeframe, and deal with the resulting set in ClearBucketsOnIOThread().
   if (quota_storage_remove_mask_ & QUOTA_MANAGED_STORAGE_MASK_TEMPORARY) {
     IncrementTaskCountOnIO();
     quota_manager->GetBucketsModifiedBetween(
-        blink::mojom::StorageType::kTemporary, begin, end,
+        begin, end,
         base::BindOnce(&QuotaManagedDataDeletionHelper::ClearBucketsOnIOThread,
                        base::Unretained(this), base::RetainedRef(quota_manager),
                        special_storage_policy, storage_key_matcher,
-                       perform_storage_cleanup, decrement_callback,
-                       blink::mojom::StorageType::kTemporary));
-  }
-
-  // Do the same for syncable quota.
-  if (quota_storage_remove_mask_ & QUOTA_MANAGED_STORAGE_MASK_SYNCABLE) {
-    IncrementTaskCountOnIO();
-    quota_manager->GetBucketsModifiedBetween(
-        blink::mojom::StorageType::kSyncable, begin, end,
-        base::BindOnce(&QuotaManagedDataDeletionHelper::ClearBucketsOnIOThread,
-                       base::Unretained(this), base::RetainedRef(quota_manager),
-                       special_storage_policy, std::move(storage_key_matcher),
-                       perform_storage_cleanup, decrement_callback,
-                       blink::mojom::StorageType::kSyncable));
+                       perform_storage_cleanup, decrement_callback));
   }
 
   DecrementTaskCountOnIO();
@@ -2737,7 +2799,6 @@ void StoragePartitionImpl::QuotaManagedDataDeletionHelper::
         StoragePartition::StorageKeyPolicyMatcherFunction storage_key_matcher,
         bool perform_storage_cleanup,
         base::OnceClosure callback,
-        blink::mojom::StorageType quota_storage_type,
         const std::set<storage::BucketLocator>& buckets) {
   // The QuotaManager manages all storage other than cookies, LocalStorage,
   // and SessionStorage. This loop wipes out most HTML5 storage for the given
@@ -2757,8 +2818,7 @@ void StoragePartitionImpl::QuotaManagedDataDeletionHelper::
       perform_storage_cleanup
           ? base::BindOnce(&PerformQuotaManagerStorageCleanup,
                            base::WrapRefCounted(quota_manager),
-                           quota_storage_type, quota_client_types,
-                           std::move(callback))
+                           quota_client_types, std::move(callback))
           : std::move(callback);
 
   size_t* deletion_task_count = new size_t(0u);
@@ -3077,7 +3137,7 @@ void StoragePartitionImpl::DataDeletionHelper::ClearDataOnUIThread(
             CreateTaskCompletionClosure(TracingDataType::kPrivateAggregation)));
   }
 
-  if (base::FeatureList::IsEnabled(blink::features::kSharedStorageAPI) &&
+  if (base::FeatureList::IsEnabled(network::features::kSharedStorageAPI) &&
       shared_storage_manager &&
       (remove_mask_ & REMOVE_DATA_MASK_SHARED_STORAGE)) {
     auto shared_storage_purge_callback = base::BindOnce(
@@ -3513,8 +3573,7 @@ void StoragePartitionImpl::InitNetworkContext() {
   // This mechanisms should be used only for legacy internal headers. You can
   // find a recommended alternative approach on URLRequest::cors_exempt_headers
   // at services/network/public/mojom/url_loader.mojom.
-  context_params->cors_exempt_header_list.push_back(
-      kCorsExemptPurposeHeaderName);
+  context_params->cors_exempt_header_list.push_back(blink::kPurposeHeaderName);
   context_params->cors_exempt_header_list.push_back(
       GetCorsExemptRequestedWithHeaderName());
   variations::UpdateCorsExemptHeaderForVariations(context_params.get());

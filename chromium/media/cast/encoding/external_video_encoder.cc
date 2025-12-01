@@ -20,6 +20,8 @@
 #include "base/functional/callback_helpers.h"
 #include "base/logging.h"
 #include "base/memory/read_only_shared_memory_region.h"
+#include "base/memory/ref_counted.h"
+#include "base/memory/scoped_refptr.h"
 #include "base/memory/shared_memory_mapping.h"
 #include "base/memory/unsafe_shared_memory_region.h"
 #include "base/metrics/histogram_macros.h"
@@ -121,6 +123,8 @@ class ExternalVideoEncoder::VEAClientImpl final
     : public VideoEncodeAccelerator::Client,
       public base::RefCountedThreadSafe<VEAClientImpl> {
  public:
+  REQUIRE_ADOPTION_FOR_REFCOUNTED_TYPE();
+
   using EncoderStatusChangeCallback =
       base::RepeatingCallback<void(media::EncoderStatus, OperationalStatus)>;
   VEAClientImpl(
@@ -166,8 +170,10 @@ class ExternalVideoEncoder::VEAClientImpl final
         media::VideoEncodeAccelerator::Config::StorageType::kShmem,
         media::VideoEncodeAccelerator::Config::ContentType::kDisplay);
     config.drop_frame_thresh_percentage = GetEncoderDropFrameThreshold();
-    encoder_active_ = video_encode_accelerator_->Initialize(
-        config, this, std::make_unique<media::NullMediaLog>());
+    encoder_active_ =
+        video_encode_accelerator_
+            ->Initialize(config, this, std::make_unique<media::NullMediaLog>())
+            .is_ok();
     next_frame_id_ = first_frame_id;
     codec_profile_ = codec_profile;
 
@@ -257,8 +263,26 @@ class ExternalVideoEncoder::VEAClientImpl final
       const int index = free_input_buffer_index_.back();
       auto& mapped_region = input_buffers_[index];
       DCHECK(mapped_region.IsValid());
+
+      // NOTE: the returned frame_coded_size_ from the VEA does not take into
+      // account where in the original frame the visible rect was located. Which
+      // is not an error.
+      //
+      // NOTE: I420CopyWithPadding requires that (1) the destination frame has a
+      // visible rect rooted at (0, 0) with the same size as the source rect,
+      // and (2) the coded_size of the destination frame is larger or equal to
+      // the visible size.
+      //
+      // TODO(issuetracker.google.com/394800925): while this fix is helpful,
+      // it has also exposed a larger problem where there is bizarre cropping
+      // of desktop capture on macOS. Figure out why we even ever have a visible
+      // rect not rooted at zero.
+      CHECK_GE(frame_coded_size_.height(),
+               video_frame->visible_rect().height());
+      CHECK_GE(frame_coded_size_.width(), video_frame->visible_rect().width());
       frame = VideoFrame::WrapExternalData(
-          video_frame->format(), frame_coded_size_, video_frame->visible_rect(),
+          video_frame->format(), frame_coded_size_,
+          gfx::Rect(video_frame->visible_rect().size()),
           video_frame->visible_rect().size(),
           static_cast<uint8_t*>(mapped_region.mapping.memory()),
           mapped_region.mapping.size(), video_frame->timestamp());
@@ -822,9 +846,9 @@ void ExternalVideoEncoder::OnCreateVideoEncodeAccelerator(
           weak_factory_.GetWeakPtr(), status_change_cb);
 
   DCHECK(!client_);
-  client_ = new VEAClientImpl(cast_environment_, encoder_task_runner,
-                              std::move(vea), video_config.max_frame_rate,
-                              std::move(wrapped_status_change_cb));
+  client_ = base::MakeRefCounted<VEAClientImpl>(
+      cast_environment_, encoder_task_runner, std::move(vea),
+      video_config.max_frame_rate, std::move(wrapped_status_change_cb));
   metrics_provider_->Initialize(codec_profile, frame_size_,
                                 /*is_hardware_encoder=*/true);
   client_->task_runner()->PostTask(

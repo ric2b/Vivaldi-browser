@@ -4,11 +4,14 @@
 
 #import "ios/chrome/browser/supervised_user/model/ios_web_content_handler_impl.h"
 
+#import <optional>
+
 #import "base/notreached.h"
 #import "base/task/sequenced_task_runner.h"
 #import "components/supervised_user/core/browser/supervised_user_settings_service.h"
 #import "components/supervised_user/core/browser/web_content_handler.h"
 #import "components/supervised_user/core/common/features.h"
+#import "components/supervised_user/core/common/supervised_user_constants.h"
 #import "ios/chrome/browser/shared/model/profile/profile_ios.h"
 #import "ios/chrome/browser/shared/public/commands/parent_access_commands.h"
 #import "ios/chrome/browser/supervised_user/model/supervised_user_settings_service_factory.h"
@@ -35,21 +38,25 @@ void IOSWebContentHandlerImpl::RequestLocalApproval(
     ApprovalRequestInitiatedCallback callback) {
   CHECK(base::FeatureList::IsEnabled(supervised_user::kLocalWebApprovals));
 
-  supervised_user::SupervisedUserSettingsService* settings_service =
-      SupervisedUserSettingsServiceFactory::GetForProfile(
-          ProfileIOS::FromBrowserState(web_state_->GetBrowserState()));
+  if (!url.has_host()) {
+    // A host must exist, because this is allow-listed at the end of the flow.
+    std::move(callback).Run(false);
+    return;
+  }
   GURL target_url = url_formatter.FormatUrl(url);
-  base::OnceCallback<void(supervised_user::LocalApprovalResult)>
+  base::OnceCallback<void(
+      supervised_user::LocalApprovalResult,
+      std::optional<supervised_user::LocalWebApprovalErrorType>)>
       completion_callback = base::BindOnce(
           &IOSWebContentHandlerImpl::OnLocalApprovalRequestCompleted,
-          weak_factory_.GetWeakPtr(), std::ref(*settings_service), target_url,
-          base::TimeTicks::Now());
+          weak_factory_.GetWeakPtr(), target_url, base::TimeTicks::Now());
 
-  // TODO(crbug.com/394051451): Pass the blocked url and blocking reason in the
-  // bottomshet. The command handler must stay alive after initialization.
+  // The command handler must stay alive after initialization.
   CHECK(commands_handler_);
   [commands_handler_
       showParentAccessBottomSheetForWebState:web_state_
+                                   targetURL:target_url
+                     filteringBehaviorReason:filtering_behavior_reason
                                   completion:base::CallbackToBlock(std::move(
                                                  completion_callback))];
   is_bottomsheet_shown_ = true;
@@ -104,16 +111,20 @@ void IOSWebContentHandlerImpl::Close() {
 }
 
 void IOSWebContentHandlerImpl::OnLocalApprovalRequestCompleted(
-    supervised_user::SupervisedUserSettingsService& settings_service,
     const GURL& url,
     base::TimeTicks start_time,
-    supervised_user::LocalApprovalResult approval_result) {
+    supervised_user::LocalApprovalResult approval_result,
+    std::optional<supervised_user::LocalWebApprovalErrorType> error_type) {
   // If the bottomsheet is closed before the asynchronous callback completion,
   // do nothing.
   if (!is_bottomsheet_shown_) {
     return;
   }
   is_bottomsheet_shown_ = false;
+
+  supervised_user::SupervisedUserSettingsService* settings_service =
+      SupervisedUserSettingsServiceFactory::GetForProfile(
+          ProfileIOS::FromBrowserState(web_state_->GetBrowserState()));
   WebContentHandler::OnLocalApprovalRequestCompleted(
-      settings_service, url, start_time, approval_result);
+      *settings_service, url, start_time, approval_result, error_type);
 }

@@ -139,7 +139,8 @@ namespace {
     }
 
     // compute the length of the buffer we'll need
-    int charcount = MultiByteToWideChar(CP_UTF8, 0, utf8.c_str(), -1, NULL, 0);
+    int charcount = MultiByteToWideChar(
+        CP_UTF8, 0, utf8.c_str(), -1, nullptr, 0);
 
     if (charcount == 0) {
       return wstring();
@@ -160,7 +161,7 @@ namespace {
 
     // compute the length of the buffer we'll need
     int charcount = WideCharToMultiByte(cp, 0, wide.c_str(), -1,
-        NULL, 0, NULL, NULL);
+        nullptr, 0, nullptr, nullptr);
     if (charcount == 0) {
       return string();
     }
@@ -168,7 +169,7 @@ namespace {
     // convert
     char *buf = new char[charcount];
     WideCharToMultiByte(cp, 0, wide.c_str(), -1, buf, charcount,
-        NULL, NULL);
+        nullptr, nullptr);
 
     string result(buf);
     delete[] buf;
@@ -279,7 +280,7 @@ namespace {
         static_cast<LPVOID>(&content_length),
         &content_length_size, 0)) {
       has_content_length_header = true;
-      claimed_size = wcstol(content_length, NULL, 10);
+      claimed_size = wcstol(content_length, nullptr, 10);
       response_body.reserve(claimed_size);
     } else {
       DWORD error = ::GetLastError();
@@ -361,8 +362,8 @@ namespace {
 
     AutoInternetHandle internet(InternetOpen(kUserAgent,
         INTERNET_OPEN_TYPE_PRECONFIG,
-        NULL,  // proxy name
-        NULL,  // proxy bypass
+        nullptr,  // proxy name
+        nullptr,  // proxy bypass
         0));   // flags
     if (!internet.get()) {
       LogError("InternetOpen", ::GetLastError());
@@ -372,8 +373,8 @@ namespace {
     AutoInternetHandle connection(InternetConnect(internet.get(),
         host,
         components.nPort,
-        NULL,    // user name
-        NULL,    // password
+        nullptr,    // user name
+        nullptr,    // password
         INTERNET_SERVICE_HTTP,
         0,       // flags
         0));  // context
@@ -387,9 +388,9 @@ namespace {
     AutoInternetHandle request(HttpOpenRequest(connection.get(),
         http_method.c_str(),
         path,
-        NULL,    // version
-        NULL,    // referer
-        NULL,    // agent type
+        nullptr,    // version
+        nullptr,    // referer
+        nullptr,    // agent type
         http_open_flags,
         0));  // context
     if (!request.get()) {
@@ -422,7 +423,7 @@ namespace {
       }
     }
 
-    if (!HttpSendRequest(request.get(), NULL, 0,
+    if (!HttpSendRequest(request.get(), nullptr, 0,
         const_cast<char*>(request_body.data()),
         static_cast<DWORD>(request_body.size()))) {
       LogError("HttpSendRequest", ::GetLastError());
@@ -439,7 +440,7 @@ namespace {
       return false;
     }
 
-    int http_response = wcstol(http_status, NULL, 10);
+    int http_response = wcstol(http_status, nullptr, 10);
     if (response_code) {
       *response_code = http_response;
     }

@@ -19,14 +19,12 @@ import static androidx.test.espresso.matcher.ViewMatchers.withTagValue;
 import static androidx.test.espresso.matcher.ViewMatchers.withText;
 
 import static org.hamcrest.Matchers.allOf;
-import static org.hamcrest.Matchers.instanceOf;
 import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.not;
 
 import android.app.Activity;
+import android.content.res.ColorStateList;
 import android.content.res.Resources;
-import android.graphics.drawable.Drawable;
-import android.graphics.drawable.LayerDrawable;
 import android.text.Spannable;
 import android.text.SpannableStringBuilder;
 import android.text.style.ForegroundColorSpan;
@@ -37,11 +35,11 @@ import android.view.ViewGroup;
 import android.widget.Button;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
+import android.widget.ProgressBar;
 import android.widget.RelativeLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
 
-import androidx.swiperefreshlayout.widget.CircularProgressDrawable;
 import androidx.test.espresso.action.ViewActions;
 import androidx.test.filters.MediumTest;
 
@@ -66,6 +64,9 @@ import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Feature;
 import org.chromium.components.browser_ui.modaldialog.test.R;
 import org.chromium.components.browser_ui.styles.SemanticColorUtils;
+import org.chromium.components.browser_ui.widget.DualControlLayout;
+import org.chromium.components.browser_ui.widget.ModalDialogViewUtils;
+import org.chromium.components.browser_ui.widget.SpinnerButtonWrapper;
 import org.chromium.ui.modaldialog.ModalDialogProperties;
 import org.chromium.ui.modaldialog.ModalDialogProperties.ModalDialogButtonSpec;
 import org.chromium.ui.modelutil.PropertyModel;
@@ -771,7 +772,7 @@ public class ModalDialogViewTest {
     @Test
     @MediumTest
     @Feature({"ModalDialog"})
-    public void testBlockActionAnimationOnPositiveButton() {
+    public void testModalDialogCustomPositiveSpinnerButtonWidget() {
         final var callbackHelper = new CallbackHelper();
         var controller =
                 new ModalDialogProperties.Controller() {
@@ -805,40 +806,60 @@ public class ModalDialogViewTest {
         onView(withId(R.id.negative_button))
                 .check(matches(allOf(isDisplayed(), isEnabled(), withText(R.string.cancel))));
 
-        Button positiveButton = mModalDialogView.findViewById(R.id.positive_button);
-        int baseWidth = positiveButton.getWidth();
+        Button primaryButton =
+                DualControlLayout.createButtonForLayout(
+                        sActivity,
+                        DualControlLayout.ButtonType.PRIMARY_FILLED,
+                        sResources.getString(R.string.ok),
+                        null);
+        Button secondaryButton =
+                DualControlLayout.createButtonForLayout(
+                        sActivity,
+                        DualControlLayout.ButtonType.SECONDARY_TEXT,
+                        sResources.getString(R.string.cancel),
+                        null);
+        SpinnerButtonWrapper spinnerButtonWrapperPositive =
+                SpinnerButtonWrapper.createSpinnerButtonWrapper(
+                        sActivity,
+                        primaryButton,
+                        R.string.ok,
+                        R.dimen.modal_dialog_spinner_size,
+                        SemanticColorUtils.getDefaultBgColor(sActivity),
+                        () -> {
+                            model.set(ModalDialogProperties.BLOCK_INPUTS, true);
+                        });
+        View customButtonBarView =
+                ModalDialogViewUtils.createCustomButtonBarView(
+                        sActivity, spinnerButtonWrapperPositive, secondaryButton);
 
-        // Enable button blocking action state by mocking a pending action for the positive button.
+        // Set up the custom button bar view with a positive button spinner and click
         ThreadUtils.runOnUiThreadBlocking(
                 () -> {
-                    model.set(ModalDialogProperties.POSITIVE_BUTTON_LOADING, true);
-                    model.set(ModalDialogProperties.BLOCK_INPUTS, true);
+                    model.set(ModalDialogProperties.CUSTOM_BUTTON_BAR_VIEW, customButtonBarView);
                 });
-        assertButtonBlockActionStateProperties(
-                /* shouldBlock= */ true, positiveButton, baseWidth, /* isButtonFilled= */ true);
+        Button positiveButton =
+                (Button) spinnerButtonWrapperPositive.findViewById(R.id.button_primary);
+        ProgressBar progressBar =
+                (ProgressBar) spinnerButtonWrapperPositive.findViewById(R.id.progress_bar);
+        Assert.assertEquals(View.GONE, progressBar.getVisibility());
+        onView(withId(R.id.spinner_button)).perform(click());
+
+        // Assert that the button properties are as expected
+        Assert.assertEquals(View.VISIBLE, progressBar.getVisibility());
+        Assert.assertEquals(0, positiveButton.getTextScaleX(), 0.0);
+        Assert.assertEquals(
+                ColorStateList.valueOf(SemanticColorUtils.getDefaultBgColor(sActivity)),
+                progressBar.getIndeterminateTintList());
 
         // Assert that clicks on the modal dialog are disabled
-        onView(withId(R.id.positive_button)).perform(click());
+        onView(withId(R.id.button_secondary)).perform(click());
         Assert.assertEquals(0, callbackHelper.getCallCount());
-
-        // Disable button blocking action state for the positive button.
-        ThreadUtils.runOnUiThreadBlocking(
-                () -> {
-                    model.set(ModalDialogProperties.POSITIVE_BUTTON_LOADING, false);
-                    model.set(ModalDialogProperties.BLOCK_INPUTS, false);
-                });
-        assertButtonBlockActionStateProperties(
-                /* shouldBlock= */ false, positiveButton, baseWidth, /* isButtonFilled= */ true);
-
-        // Assert that clicks on the modal dialog are not disabled
-        onView(withId(R.id.positive_button)).perform(click());
-        Assert.assertEquals(1, callbackHelper.getCallCount());
     }
 
     @Test
     @MediumTest
     @Feature({"ModalDialog"})
-    public void testBlockActionAnimationOnNegativeButton() {
+    public void testModalDialogCustomNegativeSpinnerButtonWidget() {
         final var callbackHelper = new CallbackHelper();
         var controller =
                 new ModalDialogProperties.Controller() {
@@ -872,59 +893,54 @@ public class ModalDialogViewTest {
         onView(withId(R.id.negative_button))
                 .check(matches(allOf(isDisplayed(), isEnabled(), withText(R.string.cancel))));
 
-        Button negativeButton = mModalDialogView.findViewById(R.id.negative_button);
-        int baseWidth = negativeButton.getWidth();
+        Button primaryButton =
+                DualControlLayout.createButtonForLayout(
+                        sActivity,
+                        DualControlLayout.ButtonType.PRIMARY_FILLED,
+                        sResources.getString(R.string.ok),
+                        null);
+        Button secondaryButton =
+                DualControlLayout.createButtonForLayout(
+                        sActivity,
+                        DualControlLayout.ButtonType.SECONDARY_TEXT,
+                        sResources.getString(R.string.cancel),
+                        null);
+        SpinnerButtonWrapper spinnerButtonWrapperNegative =
+                SpinnerButtonWrapper.createSpinnerButtonWrapper(
+                        sActivity,
+                        secondaryButton,
+                        R.string.cancel,
+                        R.dimen.modal_dialog_spinner_size,
+                        SemanticColorUtils.getDefaultIconColorAccent1(sActivity),
+                        () -> {
+                            model.set(ModalDialogProperties.BLOCK_INPUTS, true);
+                        });
+        View customButtonBarView =
+                ModalDialogViewUtils.createCustomButtonBarView(
+                        sActivity, primaryButton, spinnerButtonWrapperNegative);
 
-        // Enable button blocking action state by mocking a pending action for the negative button.
+        // Set up the custom button bar view with a negative button spinner and click
         ThreadUtils.runOnUiThreadBlocking(
                 () -> {
-                    model.set(ModalDialogProperties.NEGATIVE_BUTTON_LOADING, true);
-                    model.set(ModalDialogProperties.BLOCK_INPUTS, true);
+                    model.set(ModalDialogProperties.CUSTOM_BUTTON_BAR_VIEW, customButtonBarView);
                 });
-        assertButtonBlockActionStateProperties(
-                /* shouldBlock= */ true, negativeButton, baseWidth, /* isButtonFilled= */ false);
+        Button negativeButton =
+                (Button) spinnerButtonWrapperNegative.findViewById(R.id.button_secondary);
+        ProgressBar progressBar =
+                (ProgressBar) spinnerButtonWrapperNegative.findViewById(R.id.progress_bar);
+        Assert.assertEquals(View.GONE, progressBar.getVisibility());
+        onView(withId(R.id.spinner_button)).perform(click());
+
+        // Assert that the button properties are as expected
+        Assert.assertEquals(View.VISIBLE, progressBar.getVisibility());
+        Assert.assertEquals(0, negativeButton.getTextScaleX(), 0.0);
+        Assert.assertEquals(
+                ColorStateList.valueOf(SemanticColorUtils.getDefaultIconColorAccent1(sActivity)),
+                progressBar.getIndeterminateTintList());
 
         // Assert that clicks on the modal dialog are disabled
-        onView(withId(R.id.negative_button)).perform(click());
+        onView(withId(R.id.button_primary)).perform(click());
         Assert.assertEquals(0, callbackHelper.getCallCount());
-
-        // Disable button blocking action state for the negative button.
-        ThreadUtils.runOnUiThreadBlocking(
-                () -> {
-                    model.set(ModalDialogProperties.NEGATIVE_BUTTON_LOADING, false);
-                    model.set(ModalDialogProperties.BLOCK_INPUTS, false);
-                });
-        assertButtonBlockActionStateProperties(
-                /* shouldBlock= */ false, negativeButton, baseWidth, /* isButtonFilled= */ false);
-
-        // Assert that clicks on the modal dialog are not disabled
-        onView(withId(R.id.negative_button)).perform(click());
-        Assert.assertEquals(1, callbackHelper.getCallCount());
-    }
-
-    private void assertButtonBlockActionStateProperties(
-            boolean shouldBlock, Button button, int baseWidth, boolean isButtonFilled) {
-        if (shouldBlock) {
-            // Assert that the correct text and width states are present
-            Assert.assertEquals(baseWidth, button.getWidth());
-            Assert.assertEquals(0, button.getTextScaleX(), 0.0);
-
-            // Assert that the correct spinner properties are enabled
-            Assert.assertThat(button.getBackground(), instanceOf(LayerDrawable.class));
-            CircularProgressDrawable spinner =
-                    (CircularProgressDrawable)
-                            ((LayerDrawable) button.getBackground()).getDrawable(1);
-            int colorScheme =
-                    isButtonFilled
-                            ? SemanticColorUtils.getDefaultBgColor(sActivity)
-                            : SemanticColorUtils.getDefaultIconColorAccent1(sActivity);
-            Assert.assertEquals(colorScheme, spinner.getColorSchemeColors()[0]);
-        } else {
-            // Assert that all the original properties are restored
-            Assert.assertEquals(baseWidth, button.getWidth());
-            Assert.assertEquals(1, button.getTextScaleX(), 0.0);
-            Assert.assertThat(button.getBackground(), instanceOf(Drawable.class));
-        }
     }
 
     private static Matcher<View> touchFilterEnabled() {

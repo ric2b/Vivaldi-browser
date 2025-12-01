@@ -10,7 +10,6 @@
 #include "base/functional/bind.h"
 #include "base/logging.h"
 #include "build/build_config.h"
-#include "build/chromeos_buildflags.h"
 #include "media/base/limits.h"
 #include "media/base/media_switches.h"
 #include "media/base/platform_features.h"
@@ -120,8 +119,9 @@ VP9Decoder::VP9Decoder(std::unique_ptr<VP9Accelerator> accelerator,
 VP9Decoder::~VP9Decoder() = default;
 
 void VP9Decoder::SetStream(int32_t id, const DecoderBuffer& decoder_buffer) {
-  const uint8_t* ptr = decoder_buffer.data();
-  const size_t size = decoder_buffer.size();
+  auto decoder_buffer_span = base::span(decoder_buffer);
+  const uint8_t* ptr = decoder_buffer_span.data();
+  const size_t size = decoder_buffer_span.size();
   const DecryptConfig* decrypt_config = decoder_buffer.decrypt_config();
 
   DCHECK(ptr);

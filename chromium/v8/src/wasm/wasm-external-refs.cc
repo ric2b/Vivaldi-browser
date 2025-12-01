@@ -840,7 +840,7 @@ void array_copy_wrapper(Address raw_dst_array, uint32_t dst_index,
   if (element_type.is_reference()) {
     ObjectSlot dst_slot = dst_array->ElementSlot(dst_index);
     ObjectSlot src_slot = src_array->ElementSlot(src_index);
-    Heap* heap = dst_array->GetIsolate()->heap();
+    Heap* heap = Isolate::Current()->heap();
     if (overlapping_ranges) {
       heap->MoveRange(dst_array, dst_slot, src_slot, length,
                       UPDATE_WRITE_BARRIER);
@@ -947,7 +947,6 @@ void array_fill_wrapper(Address raw_array, uint32_t index, uint32_t length,
       DCHECK_EQ(base::ReadUnalignedValue<int64_t>(initial_value_addr), 0);
       std::memset(initial_element_address, 0, bytes_to_set);
       return;
-    case kRtt:
     case kVoid:
     case kTop:
     case kBottom:
@@ -970,7 +969,7 @@ void array_fill_wrapper(Address raw_array, uint32_t index, uint32_t length,
   if (emit_write_barrier) {
     DCHECK(type.is_reference());
     Tagged<WasmArray> array = Cast<WasmArray>(Tagged<Object>(raw_array));
-    Isolate* isolate = array->GetIsolate();
+    Isolate* isolate = Isolate::Current();
     ObjectSlot start(reinterpret_cast<Address>(initial_element_address));
     ObjectSlot end(
         reinterpret_cast<Address>(initial_element_address + bytes_to_set));
@@ -984,21 +983,25 @@ double flat_string_to_f64(Address string_address) {
                             std::numeric_limits<double>::quiet_NaN());
 }
 
-void sync_stack_limit(Isolate* isolate) {
+void switch_stacks(Isolate* isolate, Address old_continuation) {
   DisallowGarbageCollection no_gc;
-
-  isolate->SyncStackLimit();
+  Tagged<Object> active_continuation =
+      isolate->root(RootIndex::kActiveContinuation);
+  isolate->SwitchStacks(
+      Cast<WasmContinuationObject>(Tagged<Object>{old_continuation}),
+      Cast<WasmContinuationObject>(active_continuation));
 }
 
-void return_switch(Isolate* isolate, Address raw_continuation) {
+void return_switch(Isolate* isolate, Address raw_old_continuation) {
   DisallowGarbageCollection no_gc;
 
-  Tagged<WasmContinuationObject> continuation =
-      Cast<WasmContinuationObject>(Tagged<Object>{raw_continuation});
-  wasm::StackMemory* stack =
-      reinterpret_cast<StackMemory*>(continuation->stack());
-  isolate->RetireWasmStack(stack);
-  isolate->SyncStackLimit();
+  Tagged<WasmContinuationObject> old_continuation =
+      Cast<WasmContinuationObject>(Tagged<Object>{raw_old_continuation});
+  Tagged<Object> active_continuation =
+      isolate->root(RootIndex::kActiveContinuation);
+  isolate->SwitchStacks(old_continuation,
+                        Cast<WasmContinuationObject>(active_continuation));
+  isolate->RetireWasmStack(old_continuation);
 }
 
 intptr_t switch_to_the_central_stack(Isolate* isolate, uintptr_t current_sp) {

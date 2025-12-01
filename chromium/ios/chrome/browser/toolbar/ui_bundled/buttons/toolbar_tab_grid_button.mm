@@ -16,11 +16,20 @@
 #import "ios/chrome/grit/ios_strings.h"
 #import "ui/base/l10n/l10n_util.h"
 
+// Vivaldi
+#import "app/vivaldi_apptools.h"
+// End Vivaldi
+
 namespace {
 // Size of the tab count label.
 const CGFloat kLabelSize = 14;
+
 // Offset of the tab count label when in kTabGroup state.
+#if defined(VIVALDI_BUILD)
+const CGFloat kLabelOffset = 1;
+#else
 const CGFloat kLabelOffset = 3;
+#endif // End Vivaldi
 }  // namespace
 
 @interface ToolbarTabGridButton ()
@@ -173,6 +182,14 @@ const CGFloat kLabelOffset = 3;
 
 // Updates the tab count text label color based on the current tab group state.
 - (void)updateTabCountLabelTextColor {
+  if (vivaldi::IsVivaldiRunning()) {
+    if (self.iphHighlighted) {
+      self.tabCountLabel.textColor =
+          self.toolbarConfiguration.buttonsTintColorIPHHighlighted;
+    } else {
+      self.tabCountLabel.textColor = self.toolbarConfiguration.buttonsTintColor;
+    }
+  } else {
   switch (self.tabGroupState) {
     case ToolbarTabGroupState::kNormal:
       if (self.iphHighlighted) {
@@ -190,6 +207,7 @@ const CGFloat kLabelOffset = 3;
       self.tabCountLabel.textColor = self.toolbarConfiguration.backgroundColor;
       break;
   }
+  } // End Vivaldi
 }
 
 // Swaps the image loader based on the current tab group state.

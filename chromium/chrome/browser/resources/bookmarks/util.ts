@@ -80,8 +80,6 @@ export function normalizeNodes(rootNode: chrome.bookmarks.BookmarkTreeNode):
 
   // If the user has both local and account bookmarks bars, insert heading nodes
   // to distinguish them.
-  // TODO(crbug.com/393105828): prune empty local permanent folders if the user
-  // has account folders.
   const addHeadingNodes =
       hasBothLocalAndAccountBookmarksBar(rootNode.children!);
 
@@ -99,18 +97,18 @@ export function normalizeNodes(rootNode: chrome.bookmarks.BookmarkTreeNode):
       if (node.id === rootNode.id) {
         // Clear the children set on the root node, and add the heading nodes as
         // children.
-        nodeMap[node.id].children = [];
+        nodeMap[node.id]!.children = [];
         for (const headingNode
                  of [buildAccountHeadingNode(), buildLocalHeadingNode()]) {
           nodeMap[headingNode.id] = headingNode;
-          nodeMap[node.id].children!.push(headingNode.id);
+          nodeMap[node.id]!.children!.push(headingNode.id);
         }
       } else if (node.parentId === rootNode.id) {
         // Replace the parent with the appropriate heading nodes.
-        const headingNode = node.syncing ? nodeMap[ACCOUNT_HEADING_NODE_ID] :
-                                           nodeMap[LOCAL_HEADING_NODE_ID];
-        nodeMap[node.id].parentId = headingNode.id;
-        headingNode.children!.push(node.id);
+        const headingNode = node.syncing ? nodeMap[ACCOUNT_HEADING_NODE_ID]! :
+                                           nodeMap[LOCAL_HEADING_NODE_ID]!;
+        nodeMap[node.id]!.parentId = headingNode.id;
+        headingNode.children!.unshift(node.id);
       }
     }
   }
@@ -151,8 +149,8 @@ export function isShowingSearch(state: BookmarksPageState): boolean {
  */
 export function canEditNode(
     state: BookmarksPageState, itemId: string): boolean {
-  return !isRootOrChildOfRoot(state, itemId) &&
-      !state.nodes![itemId]!.unmodifiable && state.prefs.canEdit;
+  return !isRootOrChildOfRoot(state, itemId) && !!state.nodes[itemId] &&
+      !state.nodes[itemId].unmodifiable && state.prefs.canEdit;
 }
 
 /**
@@ -161,14 +159,18 @@ export function canEditNode(
  */
 export function canReorderChildren(
     state: BookmarksPageState, itemId: string): boolean {
-  return !isRootNode(itemId) && !state.nodes[itemId]!.unmodifiable &&
-      state.prefs.canEdit;
+  return !isRootNode(itemId) && !!state.nodes[itemId] &&
+      !state.nodes[itemId].unmodifiable && state.prefs.canEdit;
 }
 
 export function hasChildFolders(id: string, nodes: NodeMap): boolean {
-  const children = nodes[id]!.children!;
+  if (!nodes[id] || !nodes[id].children) {
+    return false;
+  }
+
+  const children = nodes[id].children;
   for (let i = 0; i < children.length; i++) {
-    if (nodes[children[i]!]!.children) {
+    if (nodes[children[i]!]?.children) {
       return true;
     }
   }
@@ -176,7 +178,7 @@ export function hasChildFolders(id: string, nodes: NodeMap): boolean {
 }
 
 export function getDescendants(nodes: NodeMap, baseId: string): Set<string> {
-  const descendants = new Set() as Set<string>;
+  const descendants = new Set<string>();
   const stack: string[] = [];
   stack.push(baseId);
 
@@ -190,11 +192,11 @@ export function getDescendants(nodes: NodeMap, baseId: string): Set<string> {
 
     descendants.add(id);
 
-    if (!node!.children) {
+    if (!node.children) {
       continue;
     }
 
-    node!.children.forEach(function(childId) {
+    node.children.forEach(function(childId) {
       stack.push(childId);
     });
   }

@@ -49,6 +49,9 @@ struct Configuration {
   // The directory path to export stats with a layout similar to
   // `corpus_database`.
   std::string stats_root;
+  // The root directory for Centipede workdirs, with a layout similar to
+  // `corpus_database`.
+  std::string workdir_root;
   // The identifier of the test binary in the corpus database (eg.,
   // relative/path/to/binary).
   std::string binary_identifier;
@@ -71,6 +74,8 @@ struct Configuration {
   bool replay_coverage_inputs = false;
   // If set, further steps are skipped after replaying.
   bool only_replay = false;
+  // If set, replay without spawning subprocesses.
+  bool replay_in_single_process = false;
   // If set, will be used when working on a corpus database to resume
   // the progress in case the execution got interrupted.
   std::optional<std::string> execution_id;

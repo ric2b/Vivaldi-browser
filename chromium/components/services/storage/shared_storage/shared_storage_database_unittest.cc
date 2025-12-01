@@ -25,6 +25,8 @@
 #include "components/services/storage/public/mojom/storage_usage_info.mojom.h"
 #include "components/services/storage/shared_storage/shared_storage_options.h"
 #include "components/services/storage/shared_storage/shared_storage_test_utils.h"
+#include "content/public/test/shared_storage_test_utils.h"
+#include "services/network/public/cpp/features.h"
 #include "sql/database.h"
 #include "storage/browser/quota/special_storage_policy.h"
 #include "storage/browser/test/mock_special_storage_policy.h"
@@ -48,6 +50,8 @@ using OperationResult = SharedStorageDatabase::OperationResult;
 using GetResult = SharedStorageDatabase::GetResult;
 using TimeResult = SharedStorageDatabase::TimeResult;
 using EntriesResult = SharedStorageDatabase::EntriesResult;
+using DataClearSource = SharedStorageDatabase::DataClearSource;
+using BatchUpdateResult = SharedStorageDatabase::BatchUpdateResult;
 
 const int kBudgetIntervalHours = 24;
 const int kStalenessThresholdDays = 1;
@@ -88,7 +92,8 @@ constexpr char kBytesUsedTotalHistogram[] =
     "Storage.SharedStorage.Database.FileBacked.BytesUsed.Total.KB";
 constexpr char kTimingOpenImplHistogram[] =
     "Storage.SharedStorage.Database.Timing.OpenImpl";
-
+constexpr char kDataDurationHistogram[] =
+    "Storage.SharedStorage.OnDataClearedForOrigin.DataDurationInDays";
 }  // namespace
 
 class SharedStorageDatabaseTest : public testing::Test {
@@ -152,7 +157,7 @@ TEST_F(SharedStorageDatabaseTest, OptionsCreatedFromFeatures) {
   base::test::ScopedFeatureList scoped_feature_list;
 
   scoped_feature_list.InitAndEnableFeatureWithParameters(
-      {blink::features::kSharedStorageAPI},
+      {network::features::kSharedStorageAPI},
       {{"MaxSharedStoragePageSize", "2048"},
        {"MaxSharedStorageCacheSize", "1024"},
        {"MaxSharedStorageInitTries", "5"},
@@ -504,6 +509,12 @@ TEST_F(SharedStorageDatabaseTest, DestroyTooNew) {
             db_->Append(kOrigin, u"key", u"value"));
   EXPECT_EQ(OperationResult::kInitFailure, db_->Delete(kOrigin, u"key"));
   EXPECT_EQ(OperationResult::kInitFailure, db_->Clear(kOrigin));
+
+  BatchUpdateResult batch_update_result =
+      db_->BatchUpdate(kOrigin, /*methods_with_options=*/{});
+  EXPECT_EQ(batch_update_result.overall_result, OperationResult::kInitFailure);
+  EXPECT_TRUE(batch_update_result.inner_method_results.empty());
+
   EXPECT_EQ(-1, db_->Length(kOrigin));
   EXPECT_EQ(OperationResult::kInitFailure,
             db_->PurgeMatchingOrigins(StorageKeyPolicyMatcherFunction(),
@@ -817,6 +828,154 @@ TEST_P(SharedStorageDatabaseParamTest, Append) {
   // The expired entry will be replaced instead of appended to.
   EXPECT_EQ(OperationResult::kSet, db_->Append(kOrigin1, u"key1", u"replaced"));
   EXPECT_EQ(db_->Get(kOrigin1, u"key1").data, u"replaced");
+}
+
+TEST_P(SharedStorageDatabaseParamTest, BatchUpdate_EmptyBatch) {
+  const url::Origin kOrigin1 =
+      url::Origin::Create(GURL("http://www.example1.test"));
+
+  BatchUpdateResult result =
+      db_->BatchUpdate(kOrigin1, /*methods_with_options=*/{});
+  EXPECT_EQ(result.overall_result, OperationResult::kSuccess);
+  EXPECT_TRUE(result.inner_method_results.empty());
+}
+
+TEST_P(SharedStorageDatabaseParamTest, BatchUpdate_OneMethod_Success) {
+  const url::Origin kOrigin1 =
+      url::Origin::Create(GURL("http://www.example1.test"));
+
+  std::vector<network::mojom::SharedStorageModifierMethodWithOptionsPtr>
+      methods_with_options;
+  methods_with_options.push_back(
+      content::MojomSetMethod(/*key=*/u"a", /*value=*/u"b",
+                              /*ignore_if_present=*/true));
+
+  BatchUpdateResult result = db_->BatchUpdate(kOrigin1, methods_with_options);
+  EXPECT_EQ(result.overall_result, OperationResult::kSuccess);
+  EXPECT_THAT(result.inner_method_results, ElementsAre(OperationResult::kSet));
+
+  EXPECT_EQ(db_->Get(kOrigin1, u"a").data, u"b");
+}
+
+TEST_P(SharedStorageDatabaseParamTest, BatchUpdate_OneMethod_Failure) {
+  const url::Origin kOrigin1 =
+      url::Origin::Create(GURL("http://www.example1.test"));
+
+  std::pair<std::u16string, std::u16string> key_value_pair_max_bytes(
+      std::u16string(25, u'a'), std::u16string(25, u'b'));
+
+  // Attempt to set a value that would exceed its storage limit.
+  std::vector<network::mojom::SharedStorageModifierMethodWithOptionsPtr>
+      methods_with_options;
+  methods_with_options.push_back(content::MojomSetMethod(
+      /*key=*/key_value_pair_max_bytes.first,
+      /*value=*/(key_value_pair_max_bytes.second + u"b"),
+      /*ignore_if_present=*/true));
+
+  BatchUpdateResult result = db_->BatchUpdate(kOrigin1, methods_with_options);
+  EXPECT_EQ(result.overall_result, OperationResult::kNoCapacity);
+  EXPECT_THAT(result.inner_method_results,
+              ElementsAre(OperationResult::kNoCapacity));
+
+  EXPECT_EQ(db_->Get(kOrigin1, u"a").result, OperationResult::kNotFound);
+}
+
+TEST_P(SharedStorageDatabaseParamTest, BatchUpdate_ThreeMethods_Success) {
+  const url::Origin kOrigin1 =
+      url::Origin::Create(GURL("http://www.example1.test"));
+
+  std::vector<network::mojom::SharedStorageModifierMethodWithOptionsPtr>
+      methods_with_options;
+  methods_with_options.push_back(
+      content::MojomSetMethod(/*key=*/u"a", /*value=*/u"b",
+                              /*ignore_if_present=*/true));
+  methods_with_options.push_back(
+      content::MojomAppendMethod(/*key=*/u"a", /*value=*/u"b"));
+  methods_with_options.push_back(content::MojomSetMethod(
+      /*key=*/u"c", /*value=*/u"d", /*ignore_if_present=*/true));
+
+  BatchUpdateResult result = db_->BatchUpdate(kOrigin1, methods_with_options);
+  EXPECT_EQ(result.overall_result, OperationResult::kSuccess);
+  EXPECT_THAT(result.inner_method_results,
+              ElementsAre(OperationResult::kSet, OperationResult::kSet,
+                          OperationResult::kSet));
+
+  EXPECT_EQ(db_->Get(kOrigin1, u"a").data, u"bb");
+  EXPECT_EQ(db_->Get(kOrigin1, u"c").data, u"d");
+}
+
+TEST_P(SharedStorageDatabaseParamTest,
+       BatchUpdate_ThreeMethods_SecondMethodFailure) {
+  const url::Origin kOrigin1 =
+      url::Origin::Create(GURL("http://www.example1.test"));
+
+  std::pair<std::u16string, std::u16string> key_value_pair_max_bytes(
+      std::u16string(25, u'a'), std::u16string(25, u'b'));
+
+  // For the second method, attempt to set a value that would exceed its storage
+  // limit. The expected outcome is that the entire batch fails due to the
+  // second method failure, and all changes are rolled back.
+  std::vector<network::mojom::SharedStorageModifierMethodWithOptionsPtr>
+      methods_with_options;
+  methods_with_options.push_back(
+      content::MojomSetMethod(/*key=*/u"a", /*value=*/u"b",
+                              /*ignore_if_present=*/true));
+  methods_with_options.push_back(
+      content::MojomSetMethod(/*key=*/key_value_pair_max_bytes.first,
+                              /*value=*/key_value_pair_max_bytes.second,
+                              /*ignore_if_present=*/true));
+  methods_with_options.push_back(content::MojomSetMethod(
+      /*key=*/u"c", /*value=*/u"d", /*ignore_if_present=*/true));
+
+  BatchUpdateResult result = db_->BatchUpdate(kOrigin1, methods_with_options);
+  EXPECT_EQ(result.overall_result, OperationResult::kNoCapacity);
+  EXPECT_THAT(result.inner_method_results,
+              ElementsAre(OperationResult::kSet, OperationResult::kNoCapacity));
+
+  EXPECT_EQ(db_->Get(kOrigin1, u"a").result, OperationResult::kNotFound);
+  EXPECT_EQ(db_->Get(kOrigin1, key_value_pair_max_bytes.first).result,
+            OperationResult::kNotFound);
+  EXPECT_EQ(db_->Get(kOrigin1, u"c").result, OperationResult::kNotFound);
+}
+
+// Tests 'delete' within BatchUpdate() after a 'set' on the same key.
+TEST_P(SharedStorageDatabaseParamTest, BatchUpdate_SetAndDelete) {
+  const url::Origin kOrigin1 =
+      url::Origin::Create(GURL("http://www.example1.test"));
+
+  std::vector<network::mojom::SharedStorageModifierMethodWithOptionsPtr>
+      methods_with_options;
+  methods_with_options.push_back(
+      content::MojomSetMethod(/*key=*/u"a", /*value=*/u"b",
+                              /*ignore_if_present=*/true));
+  methods_with_options.push_back(content::MojomDeleteMethod(/*key=*/u"a"));
+
+  BatchUpdateResult result = db_->BatchUpdate(kOrigin1, methods_with_options);
+  EXPECT_EQ(result.overall_result, OperationResult::kSuccess);
+  EXPECT_THAT(result.inner_method_results,
+              ElementsAre(OperationResult::kSet, OperationResult::kSuccess));
+
+  EXPECT_EQ(db_->Get(kOrigin1, u"a").result, OperationResult::kNotFound);
+}
+
+// Tests 'clear' within BatchUpdate() after a 'set'.
+TEST_P(SharedStorageDatabaseParamTest, BatchUpdate_SetAndClear) {
+  const url::Origin kOrigin1 =
+      url::Origin::Create(GURL("http://www.example1.test"));
+
+  std::vector<network::mojom::SharedStorageModifierMethodWithOptionsPtr>
+      methods_with_options;
+  methods_with_options.push_back(
+      content::MojomSetMethod(/*key=*/u"a", /*value=*/u"b",
+                              /*ignore_if_present=*/true));
+  methods_with_options.push_back(content::MojomClearMethod());
+
+  BatchUpdateResult result = db_->BatchUpdate(kOrigin1, methods_with_options);
+  EXPECT_EQ(result.overall_result, OperationResult::kSuccess);
+  EXPECT_THAT(result.inner_method_results,
+              ElementsAre(OperationResult::kSet, OperationResult::kSuccess));
+
+  EXPECT_EQ(db_->Get(kOrigin1, u"a").result, OperationResult::kNotFound);
 }
 
 TEST_P(SharedStorageDatabaseParamTest, Get_NonUpdatedKeyExpires) {
@@ -2769,6 +2928,156 @@ TEST_F(SharedStorageDatabaseTest, EightOrigins) {
                                        (10000 + 100100) / 2, 1);
   histogram_tester_.ExpectUniqueSample(kBytesUsedMaxHistogram, 1599000, 1);
   histogram_tester_.ExpectTotalCount(kTimingOpenImplHistogram, 1);
+}
+
+class SharedStorageDatabaseDataDurationHistogramTest
+    : public SharedStorageDatabaseTest {
+ public:
+  std::unique_ptr<SharedStorageDatabaseOptions> GetDatabaseOptions() override {
+    return std::make_unique<SharedStorageDatabaseOptions>(
+        /*max_page_size=*/4096,
+        /*max_cache_size=*/1024,
+        /*max_bytes_per_origin=*/kMaxBytesPerOrigin,
+        /*max_init_tries=*/1,
+        /*max_iterator_batch_size=*/100,
+        /*bit_budget=*/kBitBudget,
+        /*budget_interval=*/base::Hours(kBudgetIntervalHours),
+        /*staleness_threshold=*/base::Days(30));
+  }
+
+  void SetUp() override {
+    SharedStorageDatabaseTest::SetUp();
+
+    db_ = std::make_unique<SharedStorageDatabase>(
+        base::FilePath(), special_storage_policy_, GetDatabaseOptions());
+    db_->OverrideClockForTesting(&clock_);
+    clock_.SetNow(base::Time::Now());
+
+    ASSERT_TRUE(db_);
+  }
+};
+
+TEST_F(SharedStorageDatabaseDataDurationHistogramTest, ClearFromUI) {
+  const url::Origin kOrigin1 =
+      url::Origin::Create(GURL("http://www.example1.test"));
+  ASSERT_EQ(OperationResult::kSet, db_->Set(kOrigin1, u"k1", u"v1"));
+
+  clock_.Advance(base::Days(2));
+
+  ASSERT_EQ(OperationResult::kSuccess,
+            db_->Clear(kOrigin1, DataClearSource::kUI));
+
+  histogram_tester_.ExpectUniqueSample(kDataDurationHistogram, /*sample=*/2,
+                                       /*expected_bucket_count=*/1);
+}
+
+TEST_F(SharedStorageDatabaseDataDurationHistogramTest, ClearFromSite) {
+  const url::Origin kOrigin1 =
+      url::Origin::Create(GURL("http://www.example1.test"));
+  ASSERT_EQ(OperationResult::kSet, db_->Set(kOrigin1, u"k1", u"v1"));
+
+  clock_.Advance(base::Days(2));
+
+  ASSERT_EQ(OperationResult::kSuccess,
+            db_->Clear(kOrigin1, DataClearSource::kSite));
+
+  // No histogram recorded for site-initiated clears.
+  histogram_tester_.ExpectTotalCount(kDataDurationHistogram,
+                                     /*expected_count=*/0);
+}
+
+TEST_F(SharedStorageDatabaseDataDurationHistogramTest, PurgeStale) {
+  const url::Origin kOrigin1 =
+      url::Origin::Create(GURL("http://www.example1.test"));
+  const url::Origin kOrigin2 =
+      url::Origin::Create(GURL("http://www.example2.test"));
+  const url::Origin kOrigin3 =
+      url::Origin::Create(GURL("http://www.example3.test"));
+
+  ASSERT_EQ(OperationResult::kSet, db_->Set(kOrigin1, u"k1", u"v1"));
+  clock_.Advance(base::Days(10));
+  ASSERT_EQ(OperationResult::kSet, db_->Set(kOrigin2, u"k1", u"v1"));
+  clock_.Advance(base::Days(10));
+  ASSERT_EQ(OperationResult::kSet, db_->Set(kOrigin3, u"k1", u"v1"));
+  clock_.Advance(base::Days(25));
+
+  ASSERT_EQ(OperationResult::kSuccess, db_->PurgeStale());
+
+  histogram_tester_.ExpectTotalCount(kDataDurationHistogram,
+                                     /*expected_count=*/2);
+  histogram_tester_.ExpectBucketCount(kDataDurationHistogram, /*sample=*/45,
+                                      /*expected_count=*/1);
+  histogram_tester_.ExpectBucketCount(kDataDurationHistogram, /*sample=*/35,
+                                      /*expected_count=*/1);
+}
+
+TEST_F(SharedStorageDatabaseDataDurationHistogramTest, PurgeMatchingOrigins) {
+  const url::Origin kOrigin1 =
+      url::Origin::Create(GURL("http://www.example1.test"));
+  const url::Origin kOrigin2 =
+      url::Origin::Create(GURL("http://www.example2.test"));
+
+  ASSERT_EQ(OperationResult::kSet, db_->Set(kOrigin1, u"k1", u"v1"));
+  clock_.Advance(base::Days(1));
+  ASSERT_EQ(OperationResult::kSet, db_->Set(kOrigin2, u"k1", u"v1"));
+  clock_.Advance(base::Days(1));
+
+  ASSERT_EQ(
+      OperationResult::kSuccess,
+      db_->PurgeMatchingOrigins(
+          StorageKeyPolicyMatcherFunctionUtility::MakeMatcherFunction(
+              {kOrigin1}),
+          base::Time(), base::Time::Max(), /*perform_storage_cleanup=*/false));
+
+  histogram_tester_.ExpectUniqueSample(kDataDurationHistogram, /*sample=*/2,
+                                       /*expected_bucket_count=*/1);
+}
+
+TEST_F(SharedStorageDatabaseDataDurationHistogramTest,
+       ManualPurgeExpiredValuesOnSet) {
+  const url::Origin kOrigin1 =
+      url::Origin::Create(GURL("http://www.example1.test"));
+  const url::Origin kOrigin2 =
+      url::Origin::Create(GURL("http://www.example2.test"));
+  const url::Origin kOrigin3 =
+      url::Origin::Create(GURL("http://www.example3.test"));
+
+  ASSERT_EQ(OperationResult::kSet, db_->Set(kOrigin1, u"k1", u"v1"));
+  clock_.Advance(base::Days(10));
+  ASSERT_EQ(OperationResult::kSet, db_->Set(kOrigin2, u"k1", u"v1"));
+  clock_.Advance(base::Days(10));
+  ASSERT_EQ(OperationResult::kSet, db_->Set(kOrigin3, u"k1", u"v1"));
+  clock_.Advance(base::Days(25));
+
+  std::pair<std::u16string, std::u16string> key_value_pair_max_bytes(
+      std::u16string(25, u'a'), std::u16string(25, u'b'));
+
+  // Trigger manual purge for kOrigin2 by attempting to set a value that would
+  // exceed its storage limit. This forces the database to evaluate and remove
+  // expired entries for kOrigin2 before the new value is stored.
+  ASSERT_EQ(OperationResult::kSet,
+            db_->Set(kOrigin2, key_value_pair_max_bytes.first,
+                     key_value_pair_max_bytes.second));
+
+  histogram_tester_.ExpectUniqueSample(kDataDurationHistogram, /*sample=*/35,
+                                       /*expected_bucket_count=*/1);
+}
+
+TEST_F(SharedStorageDatabaseDataDurationHistogramTest,
+       RecordsDurationCappedAtMaximumValue) {
+  const url::Origin kOrigin1 =
+      url::Origin::Create(GURL("http://www.example1.test"));
+  ASSERT_EQ(OperationResult::kSet, db_->Set(kOrigin1, u"k1", u"v1"));
+
+  clock_.Advance(base::Days(100));
+
+  ASSERT_EQ(OperationResult::kSuccess,
+            db_->Clear(kOrigin1, DataClearSource::kUI));
+
+  // Data duration exceeding the maximum histogram value (60 days) is capped and
+  // recorded in the overflow bucket (61).
+  histogram_tester_.ExpectUniqueSample(kDataDurationHistogram, /*sample=*/61,
+                                       /*expected_bucket_count=*/1);
 }
 
 }  // namespace storage

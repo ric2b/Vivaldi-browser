@@ -20,6 +20,8 @@ static_library("importer") {
       "viv_importer.cpp",
       "viv_importer.h",
       "viv_importer_utils.h",
+      "firefox_import_tabs.cc",
+      "firefox_import_tabs.h",
     ]
     deps = [
       "//base:base",
@@ -35,6 +37,7 @@ static_library("importer") {
       "//printing/buildflags",
       "//sql",
       "//third_party/boringssl",
+      "//vivaldi/thirdparty:lz4_minimal",
       "//ui/base",
       "//url:url",
       "//vivaldi/app:resources",

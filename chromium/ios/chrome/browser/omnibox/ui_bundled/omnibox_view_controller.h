@@ -9,7 +9,6 @@
 
 #import "ios/chrome/browser/omnibox/ui_bundled/omnibox_consumer.h"
 #import "ios/chrome/browser/omnibox/ui_bundled/omnibox_text_field_ios.h"
-#import "ios/chrome/browser/omnibox/ui_bundled/omnibox_view_consumer.h"
 #import "ios/chrome/browser/orchestrator/ui_bundled/edit_view_animatee.h"
 #import "ios/chrome/browser/orchestrator/ui_bundled/location_bar_offset_provider.h"
 
@@ -18,10 +17,10 @@
 // End Vivaldi
 
 @class LayoutGuideCenter;
+@protocol OmniboxMutator;
 @protocol OmniboxKeyboardDelegate;
 @protocol OmniboxReturnDelegate;
 @class OmniboxViewController;
-class OmniboxTextChangeDelegate;
 @protocol TextFieldViewContaining;
 
 // Delegate for text input changes in OmniboxViewController.
@@ -58,8 +57,10 @@ class OmniboxTextChangeDelegate;
 
 @interface OmniboxViewController : UIViewController <EditViewAnimatee,
                                                      LocationBarOffsetProvider,
-                                                     OmniboxConsumer,
-                                                     OmniboxViewConsumer>
+                                                     OmniboxConsumer>
+
+/// Mutator of the omnibox.
+@property(nonatomic, weak) id<OmniboxMutator> mutator;
 
 /// Whether the UI is configured for search-only mode.
 @property(nonatomic, assign) BOOL isSearchOnlyUI;
@@ -99,8 +100,6 @@ class OmniboxTextChangeDelegate;
                          bundle:(NSBundle*)nibBundleOrNil NS_UNAVAILABLE;
 - (instancetype)initWithCoder:(NSCoder*)coder NS_UNAVAILABLE;
 - (instancetype)init NS_UNAVAILABLE;
-
-- (void)setTextChangeDelegate:(OmniboxTextChangeDelegate*)textChangeDelegate;
 
 // Hides extra chrome, i.e. attributed text, and clears.
 - (void)prepareOmniboxForScribble;

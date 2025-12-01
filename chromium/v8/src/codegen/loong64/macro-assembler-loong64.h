@@ -2,12 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifndef V8_CODEGEN_LOONG64_MACRO_ASSEMBLER_LOONG64_H_
+#define V8_CODEGEN_LOONG64_MACRO_ASSEMBLER_LOONG64_H_
+
 #ifndef INCLUDED_FROM_MACRO_ASSEMBLER_H
 #error This header must be included via macro-assembler.h
 #endif
-
-#ifndef V8_CODEGEN_LOONG64_MACRO_ASSEMBLER_LOONG64_H_
-#define V8_CODEGEN_LOONG64_MACRO_ASSEMBLER_LOONG64_H_
 
 #include <optional>
 
@@ -816,11 +816,9 @@ class V8_EXPORT_PRIVATE MacroAssembler : public MacroAssemblerBase {
   static int ActivationFrameAlignment();
 
   // Load Scaled Address instructions. Parameter sa (shift argument) must be
-  // between [1, 31] (inclusive). The scratch register may be clobbered.
-  void Alsl_w(Register rd, Register rj, Register rk, uint8_t sa,
-              Register scratch = t7);
-  void Alsl_d(Register rd, Register rj, Register rk, uint8_t sa,
-              Register scratch = t7);
+  // between [1, 31] (inclusive).
+  void Alsl_w(Register rd, Register rj, Register rk, uint8_t sa);
+  void Alsl_d(Register rd, Register rj, Register rk, uint8_t sa);
 
   // Compute the start of the generated instruction stream from the current PC.
   // This is an alternative to embedding the {CodeObject} handle as a reference.
@@ -932,6 +930,11 @@ class V8_EXPORT_PRIVATE MacroAssembler : public MacroAssemblerBase {
   void LoadCodeEntrypointViaCodePointer(Register destination,
                                         MemOperand field_operand,
                                         CodeEntrypointTag tag);
+
+  // Load the value of Code pointer table corresponding to
+  // IsolateGroup::current()->code_pointer_table_.
+  // Only available when the sandbox is enabled.
+  void LoadCodePointerTableBase(Register destination);
 #endif
 
 #ifdef V8_ENABLE_LEAPTIERING

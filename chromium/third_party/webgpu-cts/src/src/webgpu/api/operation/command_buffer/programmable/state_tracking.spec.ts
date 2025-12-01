@@ -5,12 +5,11 @@ times in different orders) for setBindGroup and setPipeline.
 
 import { makeTestGroup } from '../../../../../common/framework/test_group.js';
 import { GPUConst } from '../../../../constants.js';
-import { MaxLimitsTestMixin } from '../../../../gpu_test.js';
 import { kProgrammableEncoderTypes } from '../../../../util/command_buffer_maker.js';
 
 import { ProgrammableStateTest } from './programmable_state_test.js';
 
-export const g = makeTestGroup(MaxLimitsTestMixin(ProgrammableStateTest));
+export const g = makeTestGroup(ProgrammableStateTest);
 
 const kBufferUsage =
   GPUConst.BufferUsage.COPY_SRC |

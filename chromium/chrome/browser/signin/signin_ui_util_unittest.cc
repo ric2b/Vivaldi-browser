@@ -11,7 +11,6 @@
 #include "base/test/task_environment.h"
 #include "build/build_config.h"
 #include "build/buildflag.h"
-#include "build/chromeos_buildflags.h"
 #include "chrome/browser/profiles/profile_attributes_init_params.h"
 #include "chrome/browser/profiles/profile_attributes_storage.h"
 #include "chrome/browser/profiles/profile_manager.h"
@@ -49,9 +48,9 @@ namespace signin_ui_util {
 
 namespace {
 const char kMainEmail[] = "main_email@example.com";
-const char kMainGaiaID[] = "main_gaia_id";
+const GaiaId::Literal kMainGaiaID("main_gaia_id");
 const char kSecondaryEmail[] = "secondary_email@example.com";
-const char kSecondaryGaiaID[] = "secondary_gaia_id";
+const GaiaId::Literal kSecondaryGaiaID("secondary_gaia_id");
 }  // namespace
 
 using testing::_;
@@ -94,7 +93,8 @@ class MockSigninUiDelegate : public SigninUiDelegateImplDice {
                signin_metrics::PromoAction promo_action,
                const CoreAccountId& account_id,
                TurnSyncOnHelper::SigninAbortedMode signin_aborted_mode,
-               bool is_sync_promo),
+               bool is_sync_promo,
+               bool turn_sync_on_signed_profile),
               ());
 };
 
@@ -132,11 +132,12 @@ class SigninUiUtilTest : public BrowserWithTestWindowTest {
                         signin_metrics::PromoAction promo_action,
                         const CoreAccountId& account_id,
                         TurnSyncOnHelper::SigninAbortedMode signin_aborted_mode,
-                        bool is_sync_promo) {
-    EXPECT_CALL(
-        mock_delegate_,
-        ShowTurnSyncOnUI(profile(), access_point, promo_action, account_id,
-                         signin_aborted_mode, is_sync_promo));
+                        bool is_sync_promo,
+                        bool turn_sync_on_signed_profile) {
+    EXPECT_CALL(mock_delegate_,
+                ShowTurnSyncOnUI(profile(), access_point, promo_action,
+                                 account_id, signin_aborted_mode, is_sync_promo,
+                                 turn_sync_on_signed_profile));
   }
 
   void ExpectNoSigninStartedHistograms(
@@ -215,6 +216,30 @@ class SigninUiUtilTest : public BrowserWithTestWindowTest {
     }
   }
 
+  void TestEnableSyncPromoWithExistingWebOnlyAccount() {
+    CoreAccountId account_id =
+        GetIdentityManager()->GetAccountsMutator()->AddOrUpdateAccount(
+            GaiaId(kMainGaiaID), kMainEmail, "refresh_token", false,
+            signin_metrics::AccessPoint::kUnknown,
+            signin_metrics::SourceForRefreshTokenOperation::kUnknown);
+
+    // Verify that the primary account is not set before.
+    ASSERT_FALSE(
+        GetIdentityManager()->HasPrimaryAccount(signin::ConsentLevel::kSignin));
+
+    ExpectTurnSyncOn(
+        access_point_, signin_metrics::PromoAction::PROMO_ACTION_WITH_DEFAULT,
+        account_id, TurnSyncOnHelper::SigninAbortedMode::KEEP_ACCOUNT,
+        /*is_sync_promo=*/true, /*turn_sync_on_signed_profile=*/false);
+    EnableSync(
+        GetIdentityManager()->FindExtendedAccountInfoByAccountId(account_id),
+        /*is_default_promo_account=*/true);
+
+    // Verify that the primary account has been set.
+    EXPECT_TRUE(
+        GetIdentityManager()->HasPrimaryAccount(signin::ConsentLevel::kSignin));
+  }
+
   signin_metrics::AccessPoint access_point_ =
       signin_metrics::AccessPoint::kBookmarkBubble;
 
@@ -225,7 +250,7 @@ class SigninUiUtilTest : public BrowserWithTestWindowTest {
 TEST_F(SigninUiUtilTest, EnableSyncWithExistingAccount) {
   CoreAccountId account_id =
       GetIdentityManager()->GetAccountsMutator()->AddOrUpdateAccount(
-          GaiaId(kMainGaiaID), kMainEmail, "refresh_token", false,
+          kMainGaiaID, kMainEmail, "refresh_token", false,
           signin_metrics::AccessPoint::kUnknown,
           signin_metrics::SourceForRefreshTokenOperation::kUnknown);
   GetIdentityManager()->GetPrimaryAccountMutator()->SetPrimaryAccount(
@@ -244,10 +269,10 @@ TEST_F(SigninUiUtilTest, EnableSyncWithExistingAccount) {
         is_default_promo_account
             ? signin_metrics::PromoAction::PROMO_ACTION_WITH_DEFAULT
             : signin_metrics::PromoAction::PROMO_ACTION_NOT_DEFAULT;
-    ExpectTurnSyncOn(signin_metrics::AccessPoint::kBookmarkBubble,
-                     expected_promo_action, account_id,
-                     TurnSyncOnHelper::SigninAbortedMode::KEEP_ACCOUNT,
-                     /*is_sync_promo=*/false);
+    ExpectTurnSyncOn(
+        signin_metrics::AccessPoint::kBookmarkBubble, expected_promo_action,
+        account_id, TurnSyncOnHelper::SigninAbortedMode::KEEP_ACCOUNT,
+        /*is_sync_promo=*/false, /*turn_sync_on_signed_profile=*/true);
     EnableSync(
         GetIdentityManager()->FindExtendedAccountInfoByAccountId(account_id),
         is_default_promo_account);
@@ -262,7 +287,7 @@ TEST_F(SigninUiUtilTest, EnableSyncWithAccountThatNeedsReauth) {
   AddTab(browser(), GURL("http://example.com"));
   CoreAccountId account_id =
       GetIdentityManager()->GetAccountsMutator()->AddOrUpdateAccount(
-          GaiaId(kMainGaiaID), kMainEmail, "refresh_token", false,
+          kMainGaiaID, kMainEmail, "refresh_token", false,
           signin_metrics::AccessPoint::kUnknown,
           signin_metrics::SourceForRefreshTokenOperation::kUnknown);
 
@@ -335,7 +360,7 @@ TEST_F(SigninUiUtilTest, EnableSyncForNewAccountWithNoTabWithExisting) {
   base::UserActionTester user_action_tester;
 
   GetIdentityManager()->GetAccountsMutator()->AddOrUpdateAccount(
-      GaiaId(kMainGaiaID), kMainEmail, "refresh_token", false,
+      kMainGaiaID, kMainEmail, "refresh_token", false,
       signin_metrics::AccessPoint::kUnknown,
       signin_metrics::SourceForRefreshTokenOperation::kUnknown);
 
@@ -382,7 +407,7 @@ TEST_F(SigninUiUtilTest, SignInWithAlreadySignedInAccount) {
   AddTab(browser(), GURL("http://example.com"));
   CoreAccountId account_id =
       GetIdentityManager()->GetAccountsMutator()->AddOrUpdateAccount(
-          GaiaId(kMainGaiaID), kMainEmail, "refresh_token", false,
+          kMainGaiaID, kMainEmail, "refresh_token", false,
           signin_metrics::AccessPoint::kUnknown,
           signin_metrics::SourceForRefreshTokenOperation::kUnknown);
   GetIdentityManager()->GetPrimaryAccountMutator()->SetPrimaryAccount(
@@ -409,7 +434,7 @@ TEST_F(SigninUiUtilTest, SignInWithAccountThatNeedsReauth) {
   AddTab(browser(), GURL("http://example.com"));
   CoreAccountId account_id =
       GetIdentityManager()->GetAccountsMutator()->AddOrUpdateAccount(
-          GaiaId(kMainGaiaID), kMainEmail, "refresh_token", false,
+          kMainGaiaID, kMainEmail, "refresh_token", false,
           signin_metrics::AccessPoint::kUnknown,
           signin_metrics::SourceForRefreshTokenOperation::kUnknown);
 
@@ -611,11 +636,11 @@ TEST_F(SigninUiUtilTest,
 TEST_F(SigninUiUtilTest,
        ShouldShowAnimatedIdentityOnOpeningWindow_ReturnsTrueForMultiSignin) {
   GetIdentityManager()->GetAccountsMutator()->AddOrUpdateAccount(
-      GaiaId(kMainGaiaID), kMainEmail, "refresh_token", false,
+      kMainGaiaID, kMainEmail, "refresh_token", false,
       signin_metrics::AccessPoint::kUnknown,
       signin_metrics::SourceForRefreshTokenOperation::kUnknown);
   GetIdentityManager()->GetAccountsMutator()->AddOrUpdateAccount(
-      GaiaId(kSecondaryGaiaID), kSecondaryEmail, "refresh_token", false,
+      kSecondaryGaiaID, kSecondaryEmail, "refresh_token", false,
       signin_metrics::AccessPoint::kUnknown,
       signin_metrics::SourceForRefreshTokenOperation::kUnknown);
 
@@ -633,7 +658,7 @@ TEST_F(
     SigninUiUtilTest,
     ShouldShowAnimatedIdentityOnOpeningWindow_ReturnsFalseForSingleProfileSingleSignin) {
   GetIdentityManager()->GetAccountsMutator()->AddOrUpdateAccount(
-      GaiaId(kMainGaiaID), kMainEmail, "refresh_token", false,
+      kMainGaiaID, kMainEmail, "refresh_token", false,
       signin_metrics::AccessPoint::kUnknown,
       signin_metrics::SourceForRefreshTokenOperation::kUnknown);
 
@@ -673,12 +698,9 @@ TEST_F(SigninUiUtilTest, ShowExtensionSigninPrompt) {
   // With explicit signin, `sync_url` is used even though Sync is not going to
   // be enabled. This is because that web page displays additional text
   // explaining to the user that they are signing in to Chrome.
-  EXPECT_TRUE(
-      base::StartsWith(tab->GetVisibleURL().spec(),
-                       switches::IsExplicitBrowserSigninUIOnDesktopEnabled()
-                           ? sync_url.spec()
-                           : add_account_url.spec(),
-                       base::CompareCase::INSENSITIVE_ASCII));
+  EXPECT_TRUE(base::StartsWith(tab->GetVisibleURL().spec(), sync_url.spec(),
+                               base::CompareCase::INSENSITIVE_ASCII));
+  EXPECT_NE(tab->GetVisibleURL().query().find("flow=promo"), std::string::npos);
 }
 
 TEST_F(SigninUiUtilTest, ShowExtensionSigninPrompt_AsLockedProfile) {
@@ -766,16 +788,10 @@ TEST_F(SigninUiUtilTest, GetSignInTabWithAccessPoint) {
             sign_in_tab->GetVisibleURL());
 }
 
-class SigninUiUtilWithUnoDesktopTest : public SigninUiUtilTest {
- private:
-  base::test::ScopedFeatureList feature_list_{
-      switches::kExplicitBrowserSigninUIOnDesktop};
-};
-
-TEST_F(SigninUiUtilWithUnoDesktopTest, EnableSyncWithExistingWebOnlyAccount) {
+TEST_F(SigninUiUtilTest, EnableSyncWithExistingWebOnlyAccount) {
   CoreAccountId account_id =
       GetIdentityManager()->GetAccountsMutator()->AddOrUpdateAccount(
-          GaiaId(kMainGaiaID), kMainEmail, "refresh_token", false,
+          kMainGaiaID, kMainEmail, "refresh_token", false,
           signin_metrics::AccessPoint::kUnknown,
           signin_metrics::SourceForRefreshTokenOperation::kUnknown);
 
@@ -795,7 +811,7 @@ TEST_F(SigninUiUtilWithUnoDesktopTest, EnableSyncWithExistingWebOnlyAccount) {
         signin_metrics::AccessPoint::kBookmarkBubble, expected_promo_action,
         account_id,
         TurnSyncOnHelper::SigninAbortedMode::KEEP_ACCOUNT_ON_WEB_ONLY,
-        /*is_sync_promo=*/false);
+        /*is_sync_promo=*/false, /*turn_sync_on_signed_profile=*/false);
     EnableSync(
         GetIdentityManager()->FindExtendedAccountInfoByAccountId(account_id),
         is_default_promo_account);
@@ -806,35 +822,26 @@ TEST_F(SigninUiUtilWithUnoDesktopTest, EnableSyncWithExistingWebOnlyAccount) {
   }
 }
 
+TEST_F(SigninUiUtilTest,
+       EnableSyncPromoWithExistingWebOnlyAccountAvatarBubble) {
+  access_point_ = signin_metrics::AccessPoint::kAvatarBubbleSignInWithSyncPromo;
+
+  TestEnableSyncPromoWithExistingWebOnlyAccount();
+}
+
 // Checks that sync is treated as a promo for kSettings.
-TEST_F(SigninUiUtilWithUnoDesktopTest,
-       EnableSyncPromoWithExistingWebOnlyAccount) {
+TEST_F(SigninUiUtilTest, EnableSyncPromoWithExistingWebOnlyAccountSettings) {
   base::test::ScopedFeatureList feature_list{
       switches::kImprovedSettingsUIOnDesktop};
   access_point_ = signin_metrics::AccessPoint::kSettings;
 
-  CoreAccountId account_id =
-      GetIdentityManager()->GetAccountsMutator()->AddOrUpdateAccount(
-          GaiaId(kMainGaiaID), kMainEmail, "refresh_token", false,
-          signin_metrics::AccessPoint::kUnknown,
-          signin_metrics::SourceForRefreshTokenOperation::kUnknown);
-
-  ExpectTurnSyncOn(signin_metrics::AccessPoint::kSettings,
-                   signin_metrics::PromoAction::PROMO_ACTION_WITH_DEFAULT,
-                   account_id,
-                   // The account should be kept when cancelling.
-                   TurnSyncOnHelper::SigninAbortedMode::KEEP_ACCOUNT,
-                   // The button should be "No, thanks", and not "Cancel".
-                   /*is_sync_promo=*/true);
-  EnableSync(
-      GetIdentityManager()->FindExtendedAccountInfoByAccountId(account_id),
-      /*is_default_promo_account=*/true);
+  TestEnableSyncPromoWithExistingWebOnlyAccount();
 }
 
-TEST_F(SigninUiUtilWithUnoDesktopTest, SignInWithExistingWebOnlyAccount) {
+TEST_F(SigninUiUtilTest, SignInWithExistingWebOnlyAccount) {
   CoreAccountId account_id =
       GetIdentityManager()->GetAccountsMutator()->AddOrUpdateAccount(
-          GaiaId(kMainGaiaID), kMainEmail, "refresh_token", false,
+          kMainGaiaID, kMainEmail, "refresh_token", false,
           signin_metrics::AccessPoint::kUnknown,
           signin_metrics::SourceForRefreshTokenOperation::kUnknown);
 
@@ -849,30 +856,10 @@ TEST_F(SigninUiUtilWithUnoDesktopTest, SignInWithExistingWebOnlyAccount) {
       GetIdentityManager()->HasPrimaryAccount(signin::ConsentLevel::kSignin));
 }
 
-TEST_F(SigninUiUtilWithUnoDesktopTest, ShowExtensionSigninPrompt) {
-  Profile* profile = browser()->profile();
-  TabStripModel* tab_strip = browser()->tab_strip_model();
-  ShowExtensionSigninPrompt(profile, /*enable_sync=*/false,
-                            /*email_hint=*/std::string());
-  EXPECT_EQ(1, tab_strip->count());
-  // Calling the function again reuses the tab.
-  ShowExtensionSigninPrompt(profile, /*enable_sync=*/false,
-                            /*email_hint=*/std::string());
-  EXPECT_EQ(1, tab_strip->count());
-
-  content::WebContents* tab = tab_strip->GetWebContentsAt(0);
-  ASSERT_TRUE(tab);
-  EXPECT_TRUE(base::StartsWith(
-      tab->GetVisibleURL().spec(),
-      GaiaUrls::GetInstance()->signin_chrome_sync_dice().spec(),
-      base::CompareCase::INSENSITIVE_ASCII));
-  EXPECT_NE(tab->GetVisibleURL().query().find("flow=promo"), std::string::npos);
-}
-
-TEST_F(SigninUiUtilWithUnoDesktopTest, ShowExtensionSigninPromptReauth) {
+TEST_F(SigninUiUtilTest, ShowExtensionSigninPromptReauth) {
   CoreAccountId account_id =
       GetIdentityManager()->GetAccountsMutator()->AddOrUpdateAccount(
-          GaiaId(kMainGaiaID), kMainEmail, "refresh_token", false,
+          kMainGaiaID, kMainEmail, "refresh_token", false,
           signin_metrics::AccessPoint::kUnknown,
           signin_metrics::SourceForRefreshTokenOperation::kUnknown);
   GetIdentityManager()->GetPrimaryAccountMutator()->SetPrimaryAccount(
@@ -919,11 +906,11 @@ TEST(ShouldShowAnimatedIdentityOnOpeningWindow, ReturnsFalseForNewWindow) {
   signin::IdentityManager* identity_manager =
       IdentityManagerFactory::GetForProfile(profile);
   identity_manager->GetAccountsMutator()->AddOrUpdateAccount(
-      GaiaId(kMainGaiaID), kMainEmail, "refresh_token", false,
+      kMainGaiaID, kMainEmail, "refresh_token", false,
       signin_metrics::AccessPoint::kUnknown,
       signin_metrics::SourceForRefreshTokenOperation::kUnknown);
   identity_manager->GetAccountsMutator()->AddOrUpdateAccount(
-      GaiaId(kSecondaryGaiaID), kSecondaryEmail, "refresh_token", false,
+      kSecondaryGaiaID, kSecondaryEmail, "refresh_token", false,
       signin_metrics::AccessPoint::kUnknown,
       signin_metrics::SourceForRefreshTokenOperation::kUnknown);
   EXPECT_TRUE(ShouldShowAnimatedIdentityOnOpeningWindow(

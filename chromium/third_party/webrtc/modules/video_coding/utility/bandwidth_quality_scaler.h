@@ -58,12 +58,13 @@ class BandwidthQualityScaler {
                         uint32_t encoded_width,
                         uint32_t encoded_height);
 
-  // We prioritise to using the |resolution_bitrate_limits| provided by the
-  // current decoder. If not provided, we will use the default data by
+  // We prioritize the |resolution_bitrate_limits| provided by the
+  // current encoder. If not provided, we will use the default data by
   // GetDefaultResolutionBitrateLimits().
   void SetResolutionBitrateLimits(
       const std::vector<VideoEncoder::ResolutionBitrateLimits>&
-          resolution_bitrate_limits);
+          resolution_bitrate_limits,
+      VideoCodecType codec_type);
 
  private:
   enum class CheckBitrateResult {
@@ -85,7 +86,7 @@ class BandwidthQualityScaler {
   std::optional<int64_t> last_time_sent_in_ms_ RTC_GUARDED_BY(&task_checker_);
   RateStatistics encoded_bitrate_ RTC_GUARDED_BY(&task_checker_);
   std::optional<int> last_frame_size_pixels_ RTC_GUARDED_BY(&task_checker_);
-  rtc::WeakPtrFactory<BandwidthQualityScaler> weak_ptr_factory_;
+  WeakPtrFactory<BandwidthQualityScaler> weak_ptr_factory_;
 
   std::vector<VideoEncoder::ResolutionBitrateLimits> resolution_bitrate_limits_;
 };

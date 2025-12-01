@@ -139,7 +139,7 @@ using vivaldi::IsVivaldiRunning;
 
 - (void)start {
   [super start];
-  ProfileIOS* profile = self.browser->GetProfile()->GetOriginalProfile();
+  ProfileIOS* profile = self.profile->GetOriginalProfile();
 
   // Vivaldi
   _profile = profile;

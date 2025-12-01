@@ -29,10 +29,8 @@
 #include "base/test/metrics/histogram_tester.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
-#include "build/chromeos_buildflags.h"
 #include "cc/base/unique_notifier.h"
 #include "cc/paint/draw_image.h"
-#include "cc/raster/bitmap_raster_buffer_provider.h"
 #include "cc/raster/gpu_raster_buffer_provider.h"
 #include "cc/raster/one_copy_raster_buffer_provider.h"
 #include "cc/raster/raster_query_queue.h"
@@ -201,8 +199,9 @@ class RasterBufferProviderTest
         break;
       case RASTER_BUFFER_PROVIDER_TYPE_BITMAP:
         CreateSoftwareResourceProvider();
-        raster_buffer_provider_ = std::make_unique<BitmapRasterBufferProvider>(
-            layer_tree_frame_sink_.get());
+        raster_buffer_provider_ =
+            std::make_unique<ZeroCopyRasterBufferProvider>(
+                layer_tree_frame_sink_.get(), raster_caps);
         break;
     }
 
@@ -588,12 +587,12 @@ TEST_P(RasterBufferProviderTest, MeasureGpuRasterDuration) {
   EXPECT_FALSE(has_pending_queries);
   histogram_tester.ExpectTotalCount(duration_histogram, 9);
 
-  // Only in Chrome OS, we should be measuring raster scheduling delay (and only
+  // Only in ChromeOS, we should be measuring raster scheduling delay (and only
   // for tasks that don't depend on at-raster image decodes).
   base::HistogramBase::Count32 expected_delay_histogram_all_tiles_count = 0;
   base::HistogramBase::Count32 expected_delay_histogram_jpeg_tiles_count = 0;
   base::HistogramBase::Count32 expected_delay_histogram_webp_tiles_count = 0;
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
   if (GetParam() == RASTER_BUFFER_PROVIDER_TYPE_GPU) {
     expected_delay_histogram_all_tiles_count = 5;
     expected_delay_histogram_jpeg_tiles_count = 3;

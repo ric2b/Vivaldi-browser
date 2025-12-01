@@ -67,6 +67,8 @@ base::android::ScopedInputEvent GetInputEvent(jlong down_time_ms,
 struct TestInputStream {
   base::TimeTicks down_time_ms;
   std::vector<base::android::ScopedInputEvent> events;
+
+  size_t size() const { return events.size(); }
 };
 
 TestInputStream GenerateEventsForSequence(int num_moves,
@@ -125,8 +127,15 @@ class MockRenderInputRouterSupportAndroid
       this};
 };
 
+class MockAndroidStateTransferHandlerClient
+    : public AndroidStateTransferHandlerClient {
+ public:
+  MOCK_METHOD((bool), TransferInputBackToBrowser, (), (override));
+};
+
 class AndroidStateTransferHandlerTest : public testing::Test {
  public:
+  AndroidStateTransferHandlerTest() : handler_(mock_handler_client_) {}
   void SetUp() override {
     if (base::android::BuildInfo::GetInstance()->sdk_int() <
         base::android::SDK_VERSION_V) {
@@ -138,6 +147,7 @@ class AndroidStateTransferHandlerTest : public testing::Test {
 
  protected:
   MockRenderInputRouterSupportAndroid mock_rir_support_;
+  MockAndroidStateTransferHandlerClient mock_handler_client_;
   AndroidStateTransferHandler handler_;
 };
 
@@ -452,18 +462,33 @@ TEST_F(AndroidStateTransferHandlerTest, UsesDeviceScaleFactorFromState) {
   }
 }
 
+//  _______________________
+// | (sys_ui_offset)       |
+// |-----------------------|
+// | (web_contents_offset) |
+// |-----------------------|
+// |                       |
+// |                       |
+// |                       |
+// |                       |
+// |                       |
+// |                       |
+// |-----------------------|
+//
 TEST_F(AndroidStateTransferHandlerTest,
        UsesWebContentsOffsetForMotionEventCreation) {
-  const int android_raw_offset = -9;
+  int sys_ui_offset = -9;
+  const int web_contents_offset = -8;
   const int raw_y = 109;
   const int delta_x = 0;
   const int meta_state = 0;
+
   JNIEnv* env = base::android::AttachCurrentThread();
   base::android::ScopedJavaLocalRef<jobject> java_motion_event =
       JNI_MotionEvent::Java_MotionEvent_obtain(env, 0, 0, kAndroidActionDown, 0,
                                                raw_y, meta_state);
   JNI_MotionEvent::Java_MotionEvent_offsetLocation(env, java_motion_event,
-                                                   delta_x, android_raw_offset);
+                                                   delta_x, sys_ui_offset);
 
   const AInputEvent* native_event = nullptr;
   if (__builtin_available(android 31, *)) {
@@ -471,20 +496,118 @@ TEST_F(AndroidStateTransferHandlerTest,
   }
   CHECK(native_event);
 
-  const int web_contents_offset_pix = -8;
-  const int browser_y_offset_pix = android_raw_offset + web_contents_offset_pix;
-  const int expected_y = raw_y + browser_y_offset_pix;
-
   auto state = input::mojom::TouchTransferState::New();
   state->dip_scale = 1.f;
-  state->raw_y_offset = browser_y_offset_pix;
+  state->web_contents_y_offset_pix = web_contents_offset;
 
   handler_.StateOnTouchTransfer(std::move(state),
                                 mock_rir_support_.GetWeakPtr());
 
+  int expected_y = raw_y + sys_ui_offset + web_contents_offset;
   EXPECT_CALL(mock_rir_support_, OnTouchEvent(EqXYInPixels(0, expected_y), _));
   handler_.OnMotionEvent(base::android::ScopedInputEvent(native_event),
                          kRootCompositorFrameSinkId);
+
+  // Offset by an arbitrary value which is larger than absolute value of
+  // `web_contents_offset`.
+  sys_ui_offset -= 10;
+  base::android::ScopedJavaLocalRef<jobject>
+      motion_event_with_diff_sys_ui_offset =
+          JNI_MotionEvent::Java_MotionEvent_obtain(
+              env, 0, 0, kAndroidActionMove, 0, raw_y, meta_state);
+  JNI_MotionEvent::Java_MotionEvent_offsetLocation(
+      env, motion_event_with_diff_sys_ui_offset, delta_x, sys_ui_offset);
+
+  if (__builtin_available(android 31, *)) {
+    native_event =
+        AMotionEvent_fromJava(env, motion_event_with_diff_sys_ui_offset.obj());
+  }
+  CHECK(native_event);
+
+  expected_y = raw_y + sys_ui_offset + web_contents_offset;
+  EXPECT_CALL(mock_rir_support_, OnTouchEvent(EqXYInPixels(0, expected_y), _));
+  handler_.OnMotionEvent(base::android::ScopedInputEvent(native_event),
+                         kRootCompositorFrameSinkId);
+}
+
+// Sequence1: |-----|
+// Sequence2:        |-----|
+// If the touch end of Sequence1 didn't arrive on Browser in time, Browser would
+// assume it is a pointer down and transfer the Sequence 2 to Viz, while in some
+// cases it would have wanted to handle it.
+TEST_F(AndroidStateTransferHandlerTest,
+       ReturnBackSequenceThatBrowserWouldHaveHandled) {
+  TestInputStream event_stream_1 = GenerateEventsForSequence(
+      /*num_moves*/ 1,
+      /*include_touch_up*/ true);
+  auto state1 = input::mojom::TouchTransferState::New();
+  state1->down_time_ms = event_stream_1.down_time_ms;
+  state1->root_widget_frame_sink_id = kRootWidgetFrameSinkId;
+
+  TestInputStream event_stream_2 = GenerateEventsForSequence(
+      /*num_moves*/ 2,
+      /*include_touch_up*/ true);
+  auto state2 = input::mojom::TouchTransferState::New();
+  state2->down_time_ms = event_stream_2.down_time_ms;
+  state2->root_widget_frame_sink_id = kRootWidgetFrameSinkId;
+  state2->browser_would_have_handled = true;
+
+  handler_.StateOnTouchTransfer(std::move(state1),
+                                mock_rir_support_.GetWeakPtr());
+  handler_.StateOnTouchTransfer(std::move(state2),
+                                mock_rir_support_.GetWeakPtr());
+  EXPECT_CALL(mock_rir_support_, OnTouchEvent(_, _)).Times(3);
+  for (auto& event : event_stream_1.events) {
+    handler_.OnMotionEvent(std::move(event), kRootCompositorFrameSinkId);
+  }
+
+  EXPECT_CALL(mock_handler_client_, TransferInputBackToBrowser()).Times(1);
+  EXPECT_CALL(mock_rir_support_, OnTouchEvent(_, _)).Times(0);
+  for (auto& event : event_stream_2.events) {
+    handler_.OnMotionEvent(std::move(event), kRootCompositorFrameSinkId);
+  }
+}
+
+TEST_F(AndroidStateTransferHandlerTest, OlderStatesAreDropped) {
+  TestInputStream event_stream_1 = GenerateEventsForSequence(
+      /*num_moves*/ 2,
+      /*include_touch_up*/ true);
+
+  TestInputStream event_stream_2 = GenerateEventsForSequence(
+      /*num_moves*/ 2,
+      /*include_touch_up*/ false);
+
+  auto state1 = input::mojom::TouchTransferState::New();
+  state1->down_time_ms = event_stream_1.down_time_ms;
+  state1->root_widget_frame_sink_id = kRootWidgetFrameSinkId;
+  auto state1_pointer_down = input::mojom::TouchTransferState::New();
+  state1_pointer_down->down_time_ms =
+      event_stream_1.down_time_ms + base::Milliseconds(10);
+  state1_pointer_down->root_widget_frame_sink_id = kRootWidgetFrameSinkId;
+  auto state2 = input::mojom::TouchTransferState::New();
+  state2->down_time_ms = event_stream_2.down_time_ms;
+  state2->root_widget_frame_sink_id = kRootWidgetFrameSinkId;
+
+  handler_.StateOnTouchTransfer(std::move(state1),
+                                mock_rir_support_.GetWeakPtr());
+  handler_.StateOnTouchTransfer(std::move(state1_pointer_down),
+                                mock_rir_support_.GetWeakPtr());
+  handler_.StateOnTouchTransfer(std::move(state2),
+                                mock_rir_support_.GetWeakPtr());
+
+  EXPECT_EQ(handler_.GetPendingTransferredStatesSizeForTesting(), 3u);
+
+  EXPECT_CALL(mock_rir_support_, OnTouchEvent(_, _))
+      .Times(event_stream_1.size() + event_stream_2.size());
+
+  for (auto& event : event_stream_1.events) {
+    handler_.OnMotionEvent(std::move(event), kRootCompositorFrameSinkId);
+  }
+  for (auto& event : event_stream_2.events) {
+    handler_.OnMotionEvent(std::move(event), kRootCompositorFrameSinkId);
+  }
+  EXPECT_EQ(handler_.GetPendingTransferredStatesSizeForTesting(), 0u);
+  EXPECT_EQ(handler_.GetEventsBufferSizeForTesting(), 0u);
 }
 
 }  // namespace viz

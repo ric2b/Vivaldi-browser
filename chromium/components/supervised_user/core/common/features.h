@@ -14,13 +14,27 @@ namespace supervised_user {
 
 BASE_DECLARE_FEATURE(kLocalWebApprovals);
 
-#if BUILDFLAG(IS_IOS)
+// Whether supervised user can request local web approval from a blocked
+// subframe.
+BASE_DECLARE_FEATURE(kAllowSubframeLocalWebApprovals);
+
+#if BUILDFLAG(IS_IOS) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) || \
+    BUILDFLAG(IS_WIN)
 extern const base::FeatureParam<int> kLocalWebApprovalBottomSheetLoadTimeoutMs;
-#endif
+#endif  // BUILDFLAG(IS_IOS) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) ||
+        // BUILDFLAG(IS_WIN)
+
+#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_WIN)
+// Whether we show an error screen in case of failure of a local web approval.
+BASE_DECLARE_FEATURE(kEnableLocalWebApprovalErrorDialog);
+#endif  // BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_WIN)
 
 // Whether the Pacp widget can process a url payload as part of the local
 // approval request.
 BASE_DECLARE_FEATURE(kLocalWebApprovalsWidgetSupportsUrlPayload);
+
+// Whether supervised users see an updated URL filter interstitial.
+BASE_DECLARE_FEATURE(kSupervisedUserBlockInterstitialV3);
 
 // Applies the updated extension approval flow, which can skip parent-approvals
 // on extension installations.
@@ -48,19 +62,17 @@ BASE_DECLARE_FEATURE(kExposedParentalControlNeededForExtensionInstallation);
 bool IsSupervisedUserSkipParentApprovalToInstallExtensionsEnabled();
 #endif  // BUILDFLAG(ENABLE_EXTENSIONS)
 
+#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)
 // Enable different web sign in interception behaviour for supervised users:
 //
 // 1. Supervised user signs in to existing signed out Profile: show modal
 //    explaining that supervision features will apply.
 // 2. Supervised user signs in as secondary account in existing signed in
 //    Profile
-//
-// Only affects Linux/Mac/Windows platforms.
 BASE_DECLARE_FEATURE(kCustomProfileStringsForSupervisedUsers);
 
 // Displays a Family Link kite badge on the supervised user avatar in various
 // surfaces.
-#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)
 BASE_DECLARE_FEATURE(kShowKiteForSupervisedUsers);
 #endif
 
@@ -89,20 +101,16 @@ BASE_DECLARE_FEATURE(kUncredentialedFilteringFallbackForSupervisedUsers);
 // ClassifyUrl fetches.
 BASE_DECLARE_FEATURE(kWaitUntilAccessTokenAvailableForClassifyUrl);
 
-#if BUILDFLAG(IS_IOS)
-// Replaces usages of prefs::kSupervisedUserID with AccountInfo capabilities on
-// iOS.
-BASE_DECLARE_FEATURE(kReplaceSupervisionPrefsWithAccountCapabilitiesOnIOS);
-// Replaces usages of system capabilities with AccountInfo capabilities on iOS.
-BASE_DECLARE_FEATURE(
-    kReplaceSupervisionSystemCapabilitiesWithAccountCapabilitiesOnIOS);
-#endif
+// Returns whether the V3 version of the URL filter interstitial is
+// enabled.
+bool IsBlockInterstitialV3Enabled();
 
 // Returns whether local parent approvals on Family Link user's device are
 // enabled.
-// Local web approvals are only available when refreshed version of web
-// filter interstitial is enabled.
 bool IsLocalWebApprovalsEnabled();
+
+// Returns whether local parent approvals are enabled for subframe navigation.
+bool IsLocalWebApprovalsEnabledForSubframes();
 
 }  // namespace supervised_user
 

@@ -139,9 +139,9 @@ src="/developers/how-tos/getting-around-the-chrome-source-code/Content.png">](/d
                 top-level module. This should be merged with browser/net.
 *   **installer**: Source files and projects for making the installer
             (MSI package).
-*   ****renderer**: Chrome specific code that runs in the renderer
+*   **renderer**: Chrome specific code that runs in the renderer
             process. This adds Chrome features like autofill, translate etc to
-            the content module.**
+            the content module.
 *   **test**:
     *   **automation**: Used by tests to drive the browser UI, for
                 example, in `test/ui`, `test/startup`, etc. This communicates

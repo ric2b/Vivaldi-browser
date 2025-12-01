@@ -34,7 +34,9 @@ public class BackPressMetrics {
             "Android.BackPress.IncorrectEdgeSwipe";
     private static final String INCORRECT_EDGE_SWIPE_COUNT_CHAINED_HISTOGRAM =
             "Android.BackPress.IncorrectEdgeSwipe.CountChained";
-    private static final String BACK_FALSING_HISTOGRAM = "Android.BackPress.Backfalsing";
+    private static final String BACK_FALSING_HISTOGRAM = "Android.BackPress.Backfalsing2";
+    private static final String STRICT_BACK_FALSING_HISTOGRAM =
+            "Android.BackPress.StrictBackfalsing";
 
     @IntDef({
         PredictiveGestureNavPhase.ACTIVATED,
@@ -73,6 +75,8 @@ public class BackPressMetrics {
         int NUM_ENTRIES = 4;
     }
 
+    // These values are persisted to logs. Entries should not be renumbered and numeric values
+    // should never be reused.
     @IntDef({
         NavigationDirection.FORWARD,
         NavigationDirection.BACKWARD,
@@ -93,6 +97,16 @@ public class BackPressMetrics {
     public static void recordBackFalsing(@NavigationDirection int navigationDirection) {
         RecordHistogram.recordEnumeratedHistogram(
                 BACK_FALSING_HISTOGRAM, navigationDirection, NavigationDirection.NUM_ENTRIES);
+    }
+
+    /**
+     * @param navigationDirection The direction of the navigation.
+     */
+    public static void recordStrictBackFalsing(@NavigationDirection int navigationDirection) {
+        RecordHistogram.recordEnumeratedHistogram(
+                STRICT_BACK_FALSING_HISTOGRAM,
+                navigationDirection,
+                NavigationDirection.NUM_ENTRIES);
     }
 
     /**
@@ -238,6 +252,6 @@ public class BackPressMetrics {
                 ChromeFeatureList.getFieldTrialParamByFeatureAsInt(
                         ChromeFeatureList.BACK_FORWARD_TRANSITIONS,
                         "max_fallback_delay_ntp_smooth_transition",
-                        1000);
+                        1500);
     }
 }

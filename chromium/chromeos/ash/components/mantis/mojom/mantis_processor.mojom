@@ -34,6 +34,26 @@ enum SafetyClassifierVerdict {
   [Default] kFail,
   [MinVersion=3] kFailedText,
   [MinVersion=3] kFailedImage,
+  [MinVersion=4] kServiceNotAvailable,
+  [MinVersion=5] kNoInternetConnection,
+};
+
+// Struct that is used to represent a single point (x, y) in a
+// stroke for use in e.g. handwriting recognition. (x, y) are coordinates
+// in world space, with units in Density-Independent Pixels (DIP).
+// The event fields are defined in:
+// http://google3/third_party/sketchology/proto/scene_change.proto;l=123;rcl=693325121
+[Stable]
+struct TouchPoint {
+  float x@0;
+  float y@1;
+};
+
+// This enum type identifies the segmentation mode.
+[Stable, Extensible]
+enum SegmentationMode {
+  [Default] kScribble,
+  kLasso,
 };
 
 // Interface for processing images. The processor should already be initialized
@@ -68,4 +88,17 @@ interface MantisProcessor {
   [MinVersion=2]
   ClassifyImageSafety@3(array<uint8> image)
       => (SafetyClassifierVerdict verdict);
+
+  // Outpaints the image based on the mask and seed. Pass the same `seed` across
+  // method calls to get identical result. The `image`, `mask`, and `result` are
+  // byte arrays containing the encoded format of an image (e.g., PNG, JPEG).
+  [MinVersion=6]
+  Outpainting@4(array<uint8> image, array<uint8> mask, uint32 seed)
+      => (MantisResult result);
+
+  // Infers the segmentation mode (e.g., scribble or lasso) from a list of
+  // touch events.
+  [MinVersion=7]
+  InferSegmentationMode@5(array<TouchPoint> gesture)
+      => (SegmentationMode mode);
 };

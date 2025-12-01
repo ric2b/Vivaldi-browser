@@ -21,6 +21,8 @@
 #include "content/services/auction_worklet/bidder_lazy_filler.h"
 #include "content/services/auction_worklet/for_debugging_only_bindings.h"
 #include "content/services/auction_worklet/private_aggregation_bindings.h"
+#include "content/services/auction_worklet/private_model_training_bindings.h"
+#include "content/services/auction_worklet/public/cpp/auction_worklet_features.h"
 #include "content/services/auction_worklet/public/mojom/bidder_worklet.mojom.h"
 #include "content/services/auction_worklet/public/mojom/private_aggregation_request.mojom.h"
 #include "content/services/auction_worklet/public/mojom/real_time_reporting.mojom.h"
@@ -32,6 +34,7 @@
 #include "content/services/auction_worklet/seller_lazy_filler.h"
 #include "content/services/auction_worklet/set_bid_bindings.h"
 #include "content/services/auction_worklet/set_priority_bindings.h"
+#include "content/services/auction_worklet/text_conversion_helpers.h"
 #include "content/services/auction_worklet/worklet_test_util.h"
 #include "gin/converter.h"
 #include "gin/dictionary.h"
@@ -389,10 +392,6 @@ TEST_F(ContextRecyclerTest, Basic) {
 
 // Exercise ForDebuggingOnlyBindings, and make sure they reset properly.
 TEST_F(ContextRecyclerTest, ForDebuggingOnlyBindings) {
-  base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitAndEnableFeature(
-      blink::features::kBiddingAndScoringDebugReportingAPI);
-
   const char kScript[] = R"(
     function test() {
       forDebuggingOnly.reportAdAuctionLoss('https://example2.test/loss');
@@ -524,10 +523,6 @@ TEST_F(ContextRecyclerTest, ForDebuggingOnlyBindings) {
 
 // Exercise ForDebuggingOnlyBindings, and test invalid arguments.
 TEST_F(ContextRecyclerTest, ForDebuggingOnlyBindingsInvalidArguments) {
-  base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitAndEnableFeature(
-      blink::features::kBiddingAndScoringDebugReportingAPI);
-
   // reportAdAuctionWin() and reportAdAuctionLoss() have the same code path
   // handling their arguments, so will randomly use one of the two APIs to test
   // different cases.
@@ -1067,6 +1062,158 @@ TEST_F(ContextRecyclerPrivateModelTrainingEnabledTest,
   EXPECT_FALSE(context_recycler.report_bindings()
                    ->modeling_signals_config()
                    .has_value());
+}
+
+// Exercise PrivateModelTrainingBindings, and make sure they work properly.
+TEST_F(ContextRecyclerPrivateModelTrainingEnabledTest,
+       PrivateModelTrainingBindings) {
+  const char kScript[] = R"(
+    function sendEncryptedToOnce(payload) {
+      sendEncryptedTo(payload);
+    }
+  )";
+
+  v8::Local<v8::UnboundScript> script = Compile(kScript);
+  ASSERT_FALSE(script.IsEmpty());
+
+  ContextRecycler context_recycler(helper_.get());
+  {
+    ContextRecyclerScope scope(context_recycler);  // Initialize context
+    context_recycler.AddPrivateModelTrainingBindings();
+  }
+
+  // Test that the value we pass is equal to what we set within the binding.
+  {
+    ContextRecyclerScope scope(context_recycler);
+    std::vector<uint8_t> payload = {1, 2, 3};
+
+    v8::Local<v8::ArrayBuffer> buffer =
+        v8::ArrayBuffer::New(helper_->isolate(), payload.size());
+    uint8_t* dest = static_cast<uint8_t*>(buffer->GetBackingStore()->Data());
+
+    std::copy(payload.begin(), payload.end(), dest);
+
+    std::vector<std::string> error_msgs;
+    Run(scope, script, "sendEncryptedToOnce", error_msgs, buffer);
+    EXPECT_THAT(error_msgs, ElementsAre());
+    ASSERT_TRUE(context_recycler.private_model_training_bindings()
+                    ->payload()
+                    .has_value());
+
+    base::span<const uint8_t> payload_span = base::as_byte_span(payload);
+
+    EXPECT_EQ(context_recycler.private_model_training_bindings()
+                  ->payload()
+                  .value()
+                  .byte_span(),
+              payload_span);
+  }
+  ASSERT_FALSE(context_recycler.private_model_training_bindings()
+                   ->payload()
+                   .has_value());
+}
+
+TEST_F(ContextRecyclerPrivateModelTrainingEnabledTest,
+       PrivateModelTrainingBindingsErrors) {
+  const char kScript[] = R"(
+    function sendEncryptedToOnce(payload) {
+      sendEncryptedTo(payload);
+    }
+
+    function sendEncryptedToTwice(payload) {
+      sendEncryptedTo(payload);
+      sendEncryptedTo(payload);
+    }
+
+    // Passes a string instead of an ArrayBuffer.
+    function invalidPayload() {
+      sendEncryptedTo("not an ArrayBuffer");
+    }
+
+    // Passes a sharedArraybuffer instead of an ArrayBuffer.
+    function sharedBufferPayload() {
+      sendEncryptedTo(new SharedArrayBuffer(1024));
+    }
+
+    // Passes a resizable instead of an ArrayBuffer.
+    function resizableArrayBuffer() {
+    const buffer = new ArrayBuffer(8, { maxByteLength: 16 });
+      sendEncryptedTo(buffer);
+    }
+
+  )";
+
+  v8::Local<v8::UnboundScript> script = Compile(kScript);
+  ASSERT_FALSE(script.IsEmpty());
+
+  ContextRecycler context_recycler(helper_.get());
+  {
+    ContextRecyclerScope scope(context_recycler);  // Initialize context
+    context_recycler.AddPrivateModelTrainingBindings();
+  }
+  EXPECT_FALSE(context_recycler.private_model_training_bindings()
+                   ->payload()
+                   .has_value());
+
+  // Calling sendEncryptedTo() twice should result in an error.
+  {
+    ContextRecyclerScope scope(context_recycler);
+
+    std::vector<uint8_t> payload = {1, 2, 3};
+
+    v8::Local<v8::ArrayBuffer> buffer =
+        v8::ArrayBuffer::New(helper_->isolate(), payload.size());
+
+    uint8_t* dest = static_cast<uint8_t*>(buffer->GetBackingStore()->Data());
+
+    std::copy(payload.begin(), payload.end(), dest);
+
+    std::vector<std::string> error_msgs;
+    Run(scope, script, "sendEncryptedToTwice", error_msgs,
+        gin::ConvertToV8(helper_->isolate(), buffer));
+    EXPECT_THAT(
+        error_msgs,
+        ElementsAre("https://example.test/script.js:8 Uncaught TypeError: "
+                    "sendEncryptedTo() may be called at most once."));
+    EXPECT_FALSE(context_recycler.private_model_training_bindings()
+                     ->payload()
+                     .has_value());
+  }
+  EXPECT_FALSE(context_recycler.private_model_training_bindings()
+                   ->payload()
+                   .has_value());
+
+  // if payload is not an ArrayBuffer, it should result in an error.
+  {
+    ContextRecyclerScope scope(context_recycler);
+    std::vector<std::string> error_msgs;
+    Run(scope, script, "invalidPayload", error_msgs);
+    EXPECT_THAT(
+        error_msgs,
+        ElementsAre("https://example.test/script.js:13 Uncaught TypeError: "
+                    "sendEncryptedTo() may only take a ArrayBuffer."));
+  }
+
+  {
+    ContextRecyclerScope scope(context_recycler);
+    std::vector<std::string> error_msgs;
+    Run(scope, script, "sharedBufferPayload", error_msgs);
+    EXPECT_THAT(
+        error_msgs,
+        ElementsAre("https://example.test/script.js:18 Uncaught TypeError: "
+                    "sendEncryptedTo() may only take a ArrayBuffer."));
+  }
+
+  {
+    ContextRecyclerScope scope(context_recycler);
+    std::vector<std::string> error_msgs;
+    Run(scope, script, "resizableArrayBuffer", error_msgs);
+    EXPECT_THAT(
+        error_msgs,
+        ElementsAre(
+            "https://example.test/script.js:24 Uncaught TypeError: "
+            "sendEncryptedTo() may not be resizable by user JavaScript."));
+  }
 }
 
 class ContextRecyclerPrivateModelTrainingDisabledTest
@@ -5993,6 +6140,260 @@ TEST_F(ContextRecyclerTest, RegisterAdMacroBindings) {
     EXPECT_THAT(error_msgs, ElementsAre());
     EXPECT_THAT(context_recycler.register_ad_macro_bindings()->TakeAdMacroMap(),
                 ElementsAre(Pair("second_name", "second_value")));
+  }
+}
+
+TEST_F(ContextRecyclerTest, EncodeUtf8) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndEnableFeature(
+      features::kFledgeTextConversionHelpers);
+
+  const char kScript[] = R"(
+    function assertEq(l, r, label) {
+      if (l !== r)
+        throw 'Mismatch ' + label;
+    }
+
+    function assertByteArray(result, expect) {
+      if (!(result instanceof Uint8Array)) {
+        throw 'Not a Uint8Array!';
+      }
+      assertEq(result.length, expect.length, 'length');
+      for (var i = 0; i < result.length; ++i) {
+        assertEq(result[i], expect[i], i);
+      }
+    }
+
+    function test1() {
+      assertByteArray(protectedAudience.encodeUtf8('ABC'),
+                      [65, 66, 67]);
+    }
+
+    function test2() {
+      assertByteArray(protectedAudience.encodeUtf8('A \u0490'),
+                      [65, 32, 0xD2, 0x90]);
+    }
+
+    // Unmatched surrogate.
+    function test3() {
+      assertByteArray(protectedAudience.encodeUtf8('A\uD800C'),
+                      [65, 0xEF, 0xBF, 0xBD, 67]);
+    }
+
+    // Matched surrogate.
+    function test4() {
+      assertByteArray(protectedAudience.encodeUtf8('A\uD83D\uDE02C'),
+                      [65, 0xF0, 0x9F, 0x98, 0x82, 67]);
+    }
+
+    // Custom conversion.
+    function test5() {
+      let obj = {
+        toString: () => "ABC"
+      };
+      assertByteArray(protectedAudience.encodeUtf8(obj),
+                      [65, 66, 67]);
+    }
+  )";
+
+  v8::Local<v8::UnboundScript> script = Compile(kScript);
+  ASSERT_FALSE(script.IsEmpty());
+
+  ContextRecycler context_recycler(helper_.get());
+  {
+    ContextRecyclerScope scope(context_recycler);  // Initialize context
+    context_recycler.AddTextConversionHelpers();
+  }
+
+  for (const char* test : {"test1", "test2", "test3", "test4", "test5"}) {
+    SCOPED_TRACE(test);
+    ContextRecyclerScope scope(context_recycler);
+
+    std::vector<std::string> error_msgs;
+    Run(scope, script, test, error_msgs);
+    EXPECT_THAT(error_msgs, ElementsAre());
+  }
+}
+
+TEST_F(ContextRecyclerTest, EncodeUtf8Failure) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndEnableFeature(
+      features::kFledgeTextConversionHelpers);
+
+  const char kScript[] = R"(
+    // Not enough arguments.
+    function test1() {
+      protectedAudience.encodeUtf8();
+    }
+
+    // String conversion failure.
+    function test2() {
+      let obj = {
+        toString: () => { throw 'ouch' }
+      };
+      protectedAudience.encodeUtf8(obj);
+    }
+  )";
+
+  v8::Local<v8::UnboundScript> script = Compile(kScript);
+  ASSERT_FALSE(script.IsEmpty());
+
+  ContextRecycler context_recycler(helper_.get());
+  {
+    ContextRecyclerScope scope(context_recycler);  // Initialize context
+    context_recycler.AddTextConversionHelpers();
+  }
+
+  const struct TestCase {
+    const char* functionName;
+    const char* error;
+  } kTests[] = {
+      {"test1",
+       "https://example.test/script.js:4 Uncaught TypeError: encodeUtf8 at "
+       "least 1 argument(s) are required."},
+      {"test2", "https://example.test/script.js:12 Uncaught ouch."}};
+
+  for (const auto& test : kTests) {
+    SCOPED_TRACE(test.functionName);
+    ContextRecyclerScope scope(context_recycler);
+
+    std::vector<std::string> error_msgs;
+    Run(scope, script, test.functionName, error_msgs);
+    EXPECT_THAT(error_msgs, ElementsAre(test.error));
+  }
+}
+
+TEST_F(ContextRecyclerTest, DecodeUtf8) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndEnableFeature(
+      features::kFledgeTextConversionHelpers);
+
+  const char kScript[] = R"(
+    function assertEq(l, r, label) {
+      if (l !== r)
+        throw 'Mismatch ' + label + ' ' + l + ' vs ' + r;
+    }
+
+    function assertString(result, expect) {
+      if (typeof result !== 'string') {
+        throw 'Not a string';
+      }
+      assertEq(result.length, expect.length, 'length');
+      for (var i = 0; i < result.length; ++i) {
+        assertEq(result.charCodeAt(i), expect.charCodeAt(i), i);
+      }
+    }
+
+    function test1() {
+      assertString(protectedAudience.decodeUtf8(new Uint8Array([65, 66, 67])),
+                   'ABC');
+    }
+
+    function test2() {
+      assertString(protectedAudience.decodeUtf8(
+                       new Uint8Array([65, 32, 0xD2, 0x90])),
+                   'A \u0490');
+    }
+
+    // Broken utf-8 --- gets a replacement character.
+    function test3() {
+      assertString(protectedAudience.decodeUtf8(new Uint8Array([65, 32, 0xD2])),
+                   'A \uFFFD');
+    }
+
+    // Utf-8 for just a single surrogate. Every byte ended up replaced with a
+    // replacement character.
+    function test4() {
+      assertString(protectedAudience.decodeUtf8(new Uint8Array(
+                      [65, 32, 0xED, 0xA0, 0x80, 66])),
+                   'A \uFFFD\uFFFD\uFFFDB');
+    }
+
+    // Utf-8 for something that requires two Utf-16 characters.
+    function test5() {
+      assertString(protectedAudience.decodeUtf8(new Uint8Array(
+                      [65, 0xF0, 0x9F, 0x98, 0x82, 67])),
+                   'A\uD83D\uDE02C');
+    }
+
+    // Partial view into an ArrayBuffer.
+    function test6() {
+      let buffer = new ArrayBuffer(8);
+      let fullView = new Uint8Array(buffer);
+      for (let i = 0; i < fullView.length; ++i)
+        fullView[i] = 65 + i;
+      let partialView = new Uint8Array(buffer, 2, 3);
+      assertString(protectedAudience.decodeUtf8(fullView),
+                   'ABCDEFGH');
+      assertString(protectedAudience.decodeUtf8(partialView),
+                   'CDE');
+    }
+  )";
+
+  v8::Local<v8::UnboundScript> script = Compile(kScript);
+  ASSERT_FALSE(script.IsEmpty());
+
+  ContextRecycler context_recycler(helper_.get());
+  {
+    ContextRecyclerScope scope(context_recycler);  // Initialize context
+    context_recycler.AddTextConversionHelpers();
+  }
+
+  for (const char* test :
+       {"test1", "test2", "test3", "test4", "test5", "test6"}) {
+    SCOPED_TRACE(test);
+    ContextRecyclerScope scope(context_recycler);
+
+    std::vector<std::string> error_msgs;
+    Run(scope, script, test, error_msgs);
+    EXPECT_THAT(error_msgs, ElementsAre());
+  }
+}
+
+TEST_F(ContextRecyclerTest, DecodeUtf8Failure) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndEnableFeature(
+      features::kFledgeTextConversionHelpers);
+
+  const char kScript[] = R"(
+    // Not enough arguments.
+    function test1() {
+      protectedAudience.decodeUtf8();
+    }
+
+    // Wrong type.
+    function test2() {
+      protectedAudience.decodeUtf8([65,66]);
+    }
+  )";
+
+  v8::Local<v8::UnboundScript> script = Compile(kScript);
+  ASSERT_FALSE(script.IsEmpty());
+
+  ContextRecycler context_recycler(helper_.get());
+  {
+    ContextRecyclerScope scope(context_recycler);  // Initialize context
+    context_recycler.AddTextConversionHelpers();
+  }
+
+  const struct TestCase {
+    const char* functionName;
+    const char* error;
+  } kTests[] = {
+      {"test1",
+       "https://example.test/script.js:4 Uncaught TypeError: decodeUtf8 "
+       "expects a Uint8Array argument."},
+      {"test2",
+       "https://example.test/script.js:9 Uncaught TypeError: decodeUtf8 "
+       "expects a Uint8Array argument."}};
+
+  for (const auto& test : kTests) {
+    SCOPED_TRACE(test.functionName);
+    ContextRecyclerScope scope(context_recycler);
+
+    std::vector<std::string> error_msgs;
+    Run(scope, script, test.functionName, error_msgs);
+    EXPECT_THAT(error_msgs, ElementsAre(test.error));
   }
 }
 

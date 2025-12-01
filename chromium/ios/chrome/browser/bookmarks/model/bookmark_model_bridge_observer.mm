@@ -123,15 +123,6 @@ void BookmarkModelBridge::BookmarkAllUserNodesRemoved(
   [observer_ bookmarkModelRemovedAllNodes];
 }
 
-// Vivaldi
-void BookmarkModelBridge::BookmarkMetaInfoChanged(
-  const bookmarks::BookmarkNode* node) {
-  SEL selector = @selector(bookmarkMetaInfoChanged:);
-  if ([observer_ respondsToSelector:selector]) {
-    [observer_ bookmarkMetaInfoChanged:node];
-  }
-}
-
 void BookmarkModelBridge::ExtensiveBookmarkChangesBeginning() {
   SEL selector = @selector(extensiveBookmarkChangesBeginning);
   if ([observer_ respondsToSelector:selector]) {
@@ -145,4 +136,14 @@ void BookmarkModelBridge::ExtensiveBookmarkChangesEnded() {
     [observer_ extensiveBookmarkChangesEnded];
   }
 }
+
+// Vivaldi
+void BookmarkModelBridge::BookmarkMetaInfoChanged(
+  const bookmarks::BookmarkNode* node) {
+  SEL selector = @selector(bookmarkMetaInfoChanged:);
+  if ([observer_ respondsToSelector:selector]) {
+    [observer_ bookmarkMetaInfoChanged:node];
+  }
+}
+
 // End Vivaldi

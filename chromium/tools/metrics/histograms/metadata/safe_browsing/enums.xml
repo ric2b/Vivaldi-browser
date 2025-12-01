@@ -123,6 +123,11 @@ chromium-metrics-reviews@google.com.
   <int value="1" label="Managed Pref"/>
 </enum>
 
+<enum name="BooleanRepeatVisit">
+  <int value="0" label="Never visited before"/>
+  <int value="1" label="Visited before"/>
+</enum>
+
 <enum name="BooleanSafeBrowsingApiUnknownException">
   <int value="0" label="Known exception"/>
   <int value="1" label="Unknown exception"/>
@@ -191,6 +196,24 @@ chromium-metrics-reviews@google.com.
   <int value="25" label="dangerous download auto deleted"/>
   <int value="26" label="dangerous download canceled on profile closure"/>
 </enum>
+
+<!-- LINT.IfChange(DismissReason) -->
+
+<enum name="DismissReason">
+  <int value="0" label="UNKNOWN"/>
+  <int value="1" label="PRIMARY_ACTION"/>
+  <int value="2" label="SECONDARY_ACTION"/>
+  <int value="3" label="TIMER"/>
+  <int value="4" label="GESTURE"/>
+  <int value="5" label="TAB_SWITCHED"/>
+  <int value="6" label="TAB_DESTROYED"/>
+  <int value="7" label="ACTIVITY_DESTROYED"/>
+  <int value="8" label="SCOPE_DESTROYED"/>
+  <int value="9" label="DISMISSED_BY_FEATURE"/>
+  <int value="10" label="COUNT"/>
+</enum>
+
+<!-- LINT.ThenChange(//components/messages/android/message_enums.h) -->
 
 <enum name="DisplayPersistentNotificationEvents">
   <int value="0" label="Request to display persistent notification"/>
@@ -712,6 +735,17 @@ chromium-metrics-reviews@google.com.
   <int value="4" label="The trigger is in monitoring mode"/>
 </enum>
 
+<!-- LINT.IfChange(SyncedEsbOutcome) -->
+
+<enum name="SyncedEsbOutcome">
+  <int value="0" label="Shown"/>
+  <int value="1" label="AcceptedOk"/>
+  <int value="2" label="AcceptedTurnOn"/>
+  <int value="3" label="Dismissed"/>
+</enum>
+
+<!-- LINT.ThenChange(//chrome/browser/safe_browsing/tailored_security/consented_message_android.cc:SyncedEsbOutcome) -->
+
 <enum name="URTAndBackgroundHPRTResult">
   <int value="0" label="UrtSafeAndHprtUnfinished"/>
   <int value="1" label="UrtUnsafeAndHprtUnfinished"/>
@@ -720,6 +754,19 @@ chromium-metrics-reviews@google.com.
   <int value="4" label="UrtUnsafeAndHprtSafe"/>
   <int value="5" label="UrtUnsafeAndHprtUnsafe"/>
 </enum>
+
+<!-- LINT.IfChange(V4HashPrefixMapWriteError) -->
+
+<enum name="V4HashPrefixMapWriteError">
+  <int value="0" label="Error writing file to disk"/>
+  <int value="1" label="File size not a multiple of prefix size"/>
+  <int value="2" label="File not found"/>
+  <int value="3" label="File size does not match metadata"/>
+  <int value="4" label="Failed to memory map file"/>
+  <int value="5" label="Memory mapped region has wrong size"/>
+</enum>
+
+<!-- LINT.ThenChange(//components/safe_browsing/core/browser/db/hash_prefix_map.cc:WriteError) -->
 
 </enums>
 

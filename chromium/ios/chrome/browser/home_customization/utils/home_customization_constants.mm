@@ -4,6 +4,9 @@
 
 #import "ios/chrome/browser/home_customization/utils/home_customization_constants.h"
 
+CustomizationSection* const kCustomizationSectionBackground =
+    @"kCustomizationSectionBackground";
+
 CustomizationSection* const kCustomizationSectionMainToggles =
     @"kCustomizationSectionMainToggles";
 
@@ -36,6 +39,10 @@ NSString* const kCustomizationToggleTabResumptionIdentifier =
     @"kCustomizationToggleTabResumptionIdentifier";
 NSString* const kCustomizationToggleParcelTrackingIdentifier =
     @"kCustomizationToggleParcelTrackingIdentifier";
+NSString* const kCustomizationToggleShopCardPriceTrackingIdentifier =
+    @"kCustomizationToggleShopCardPriceTrackingIdentifier";
+NSString* const kCustomizationToggleShopCardReviewsIdentifier =
+    @"kCustomizationToggleShopCardReviewsIdentifier";
 NSString* const kCustomizationToggleTipsIdentifier =
     @"kCustomizationToggleTipsIdentifier";
 

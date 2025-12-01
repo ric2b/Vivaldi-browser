@@ -17,6 +17,7 @@
 #import "ios/chrome/browser/omnibox/ui_bundled/omnibox_constants.h"
 #import "ios/chrome/browser/omnibox/ui_bundled/omnibox_container_view.h"
 #import "ios/chrome/browser/omnibox/ui_bundled/omnibox_keyboard_delegate.h"
+#import "ios/chrome/browser/omnibox/ui_bundled/omnibox_mutator.h"
 #import "ios/chrome/browser/omnibox/ui_bundled/omnibox_text_change_delegate.h"
 #import "ios/chrome/browser/omnibox/ui_bundled/omnibox_text_field_delegate.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
@@ -40,10 +41,8 @@ using base::UserMetricsAction;
 
 @interface OmniboxViewController () <OmniboxTextFieldDelegate,
                                      OmniboxKeyboardDelegate,
-                                     UIScribbleInteractionDelegate> {
-  // Weak, acts as a delegate
-  raw_ptr<OmniboxTextChangeDelegate> _textChangeDelegate;
-
+                                     UIScribbleInteractionDelegate>
+{
   // Vivaldi
   // The search engine list to trigger search engine shortcut if matched
   std::vector<raw_ptr<TemplateURL, VectorExperimental>> _templateURLs;
@@ -91,13 +90,6 @@ using base::UserMetricsAction;
 // omnibox while it was focused. Used to count event "user focuses the omnibox
 // to view the complete URL and immediately defocuses it".
 @property(nonatomic, assign) BOOL omniboxInteractedWhileFocused;
-
-// Tracks editing status, because only the omnibox that is in edit mode can
-// get an edit menu.
-@property(nonatomic, assign) BOOL isTextfieldEditing;
-
-// Is YES while fixing display of edit menu (below omnibox).
-@property(nonatomic, assign) BOOL showingEditMenu;
 
 // Stores whether the clipboard currently stores copied content.
 @property(nonatomic, assign) BOOL hasCopiedContent;
@@ -248,17 +240,6 @@ using base::UserMetricsAction;
 
 #pragma mark - properties
 
-- (void)setTextChangeDelegate:(OmniboxTextChangeDelegate*)textChangeDelegate {
-  _textChangeDelegate = textChangeDelegate;
-}
-
-- (void)setIsTextfieldEditing:(BOOL)owns {
-  if (_isTextfieldEditing == owns) {
-    return;
-  }
-  _isTextfieldEditing = owns;
-}
-
 - (UIView<TextFieldViewContaining>*)viewContainingTextField {
   return self.view;
 }
@@ -270,13 +251,12 @@ using base::UserMetricsAction;
 }
 
 - (void)prepareOmniboxForScribble {
-  [self.textField exitPreEditState];
-  [self.textField setText:[[NSAttributedString alloc] initWithString:@""]
-           userTextLength:0];
+  [self.mutator prepareForScribble];
   self.textField.placeholder = nil;
 }
 
 - (void)cleanupOmniboxAfterScribble {
+  [self.mutator cleanupAfterScribble];
 
   if (IsVivaldiRunning()) {
     self.textField.placeholder =
@@ -289,18 +269,16 @@ using base::UserMetricsAction;
 
 #pragma mark - OmniboxTextFieldDelegate
 
+#pragma mark UITextFieldDelegate
+
 - (BOOL)textField:(UITextField*)textField
     shouldChangeCharactersInRange:(NSRange)range
                 replacementString:(NSString*)newText {
-  if (!_textChangeDelegate) {
-    // This can happen when the view controller is still alive but the model is
-    // already deconstructed on shutdown.
-    return YES;
-  }
-
   // Any change in the content of the omnibox should deselect thumbnail button.
   self.view.thumbnailButton.selected = NO;
-  self.processingUserEvent = _textChangeDelegate->OnWillChange(range, newText);
+  self.processingUserEvent =
+      [self.mutator shouldChangeCharactersInRange:range
+                                replacementString:newText];
 
   // Note: (prio@vivaldi.com) - Intercepts the omnibox input to check and
   // trigger search engine shortcut if input is matched with a keyword.
@@ -328,12 +306,7 @@ using base::UserMetricsAction;
   BOOL savedProcessingUserEvent = self.processingUserEvent;
   self.processingUserEvent = NO;
   self.forwardingOnDidChange = YES;
-  if (!_textChangeDelegate) {
-    // This can happen when the view controller is still alive but the model is
-    // already deconstructed on shutdown.
-    return;
-  }
-  _textChangeDelegate->OnDidChange(savedProcessingUserEvent);
+  [self.mutator textDidChangeWithUserEvent:savedProcessingUserEvent];
   self.forwardingOnDidChange = NO;
 }
 
@@ -342,6 +315,10 @@ using base::UserMetricsAction;
   if (!self.returnKeyDelegate) {
     // This can happen when the view controller is still alive but the model is
     // already deconstructed on shutdown.
+    return YES;
+  }
+  if ([self textFieldIsBlank]) {
+    // Do not proceed when input is blank.
     return YES;
   }
   [self.returnKeyDelegate omniboxReturnPressed:self];
@@ -364,22 +341,14 @@ using base::UserMetricsAction;
   }
 
   self.semanticContentAttribute = [self.textField bestSemanticContentAttribute];
-  self.isTextfieldEditing = YES;
 
   self.omniboxInteractedWhileFocused = NO;
-  if (!_textChangeDelegate) {
-    // This can happen when the view controller is still alive but the model is
-    // already deconstructed on shutdown.
-    return;
-  }
-  _textChangeDelegate->OnDidBeginEditing();
+  [self.mutator onDidBeginEditing];
 }
 
-// Record the metrics as needed.
+// Records the metrics as needed.
 - (void)textFieldDidEndEditing:(UITextField*)textField
                         reason:(UITextFieldDidEndEditingReason)reason {
-  self.isTextfieldEditing = NO;
-
   if (base::FeatureList::IsEnabled(kEnableLensOverlay)) {
     self.view.thumbnailButton.selected = NO;
   }
@@ -387,124 +356,6 @@ using base::UserMetricsAction;
   if (!self.omniboxInteractedWhileFocused) {
     RecordAction(
         UserMetricsAction("Mobile_FocusedDefocusedOmnibox_WithNoAction"));
-  }
-}
-
-- (BOOL)textFieldShouldClear:(UITextField*)textField {
-  if (!_textChangeDelegate) {
-    // This can happen when the view controller is still alive but the model is
-    // already deconstructed on shutdown.
-    return YES;
-  }
-  _textChangeDelegate->ClearText();
-  self.processingUserEvent = YES;
-  return YES;
-}
-
-- (void)onCopy {
-  self.omniboxInteractedWhileFocused = YES;
-  if (!_textChangeDelegate) {
-    // This can happen when the view controller is still alive but the model is
-    // already deconstructed on shutdown.
-    return;
-  }
-  _textChangeDelegate->OnCopy();
-}
-
-- (void)willPaste {
-  if (!_textChangeDelegate) {
-    // This can happen when the view controller is still alive but the model is
-    // already deconstructed on shutdown.
-    return;
-  }
-
-  if (IsVivaldiRunning()) {
-    _isInputFromPaste = YES;
-  } // End Vivaldi
-
-  _textChangeDelegate->WillPaste();
-}
-
-- (void)onDeleteBackward {
-  // If not in pre-edit, deleting when cursor is at the beginning interacts with
-  // the thumbnail.
-  if (OmniboxTextFieldIOS* textField = self.textField;
-      !textField.isPreEditing && textField.selectedTextRange.empty &&
-      [textField offsetFromPosition:textField.beginningOfDocument
-                         toPosition:textField.selectedTextRange.start] == 0) {
-    [self didTapThumbnailButton];
-  }
-  if (!_textChangeDelegate) {
-    // This can happen when the view controller is still alive but the model is
-    // already deconstructed on shutdown.
-    return;
-  }
-  _textChangeDelegate->OnDeleteBackward();
-
-  if (IsVivaldiRunning()) {
-    _isDeletingBackward = YES;
-
-    // (VIB-859): If last character from the omnibox is removed reset the
-    // search engine to default.
-    // This is for the case if user clears the omnibox input with X button
-    // and then press backspace.
-    if (self.textField.text.length == 0) {
-      _isDeletingBackward = NO;
-      [self resetOverriddenSearchEngine];
-      [self textFieldDidChange:self.textField];
-    }
-  } // End Vivaldi
-
-}
-
-- (void)textFieldDidAcceptAutocomplete:(OmniboxTextFieldIOS*)textField {
-  if (_textChangeDelegate) {
-    _textChangeDelegate->OnAcceptAutocomplete();
-  }
-}
-
-- (void)textFieldDidRemoveAdditionalText:(OmniboxTextFieldIOS*)textField {
-  base::RecordAction(UserMetricsAction("MobileOmniboxRichInlineRemoved"));
-  if (_textChangeDelegate) {
-    _textChangeDelegate->OnRemoveAdditionalText();
-  }
-}
-
-- (BOOL)canPasteItemProviders:(NSArray<NSItemProvider*>*)itemProviders {
-  for (NSItemProvider* itemProvider in itemProviders) {
-    if (((self.searchByImageEnabled || self.shouldUseLensInMenu) &&
-         [itemProvider canLoadObjectOfClass:[UIImage class]]) ||
-        [itemProvider canLoadObjectOfClass:[NSURL class]] ||
-        [itemProvider canLoadObjectOfClass:[NSString class]]) {
-      return YES;
-    }
-  }
-  return NO;
-}
-
-- (void)pasteItemProviders:(NSArray<NSItemProvider*>*)itemProviders {
-  // Interacted while focused.
-  self.omniboxInteractedWhileFocused = YES;
-
-  [self.pasteDelegate didTapPasteToSearchButton:itemProviders];
-}
-
-- (BOOL)canPerformKeyboardAction:(OmniboxKeyboardAction)keyboardAction {
-  return [self.popupKeyboardDelegate canPerformKeyboardAction:keyboardAction] ||
-         [self.textField canPerformKeyboardAction:keyboardAction];
-}
-
-- (void)performKeyboardAction:(OmniboxKeyboardAction)keyboardAction {
-  if ([self.popupKeyboardDelegate canPerformKeyboardAction:keyboardAction]) {
-    if (keyboardAction == OmniboxKeyboardActionUpArrow ||
-        keyboardAction == OmniboxKeyboardActionDownArrow) {
-      [self.textField exitPreEditState];
-    }
-    [self.popupKeyboardDelegate performKeyboardAction:keyboardAction];
-  } else if ([self.textField canPerformKeyboardAction:keyboardAction]) {
-    [self.textField performKeyboardAction:keyboardAction];
-  } else {
-    NOTREACHED() << "Check canPerformKeyboardAction before!";
   }
 }
 
@@ -560,6 +411,94 @@ using base::UserMetricsAction;
   return [UIMenu menuWithChildren:actions];
 }
 
+#pragma mark OmniboxTextFieldDelegate
+
+- (void)onCopy {
+  self.omniboxInteractedWhileFocused = YES;
+  [self.mutator onCopy];
+}
+
+- (void)willPaste {
+
+  if (IsVivaldiRunning()) {
+    _isInputFromPaste = YES;
+  } // End Vivaldi
+
+  [self.mutator willPaste];
+}
+
+- (void)onDeleteBackward {
+  // If not in pre-edit, deleting when cursor is at the beginning interacts with
+  // the thumbnail.
+  if (OmniboxTextFieldIOS* textField = self.textField;
+      !textField.isPreEditing && textField.selectedTextRange.empty &&
+      [textField offsetFromPosition:textField.beginningOfDocument
+                         toPosition:textField.selectedTextRange.start] == 0) {
+    [self didTapThumbnailButton];
+  }
+  [self.mutator onDeleteBackward];
+
+  if (IsVivaldiRunning()) {
+    _isDeletingBackward = YES;
+
+    // (VIB-859): If last character from the omnibox is removed reset the
+    // search engine to default.
+    // This is for the case if user clears the omnibox input with X button
+    // and then press backspace.
+    if (self.textField.text.length == 0) {
+      _isDeletingBackward = NO;
+      [self resetOverriddenSearchEngine];
+      [self textFieldDidChange:self.textField];
+    }
+  } // End Vivaldi
+
+}
+
+- (void)textFieldDidAcceptAutocomplete:(OmniboxTextFieldIOS*)textField {
+  [self.mutator onAcceptAutocomplete];
+}
+
+- (void)textFieldDidRemoveAdditionalText:(OmniboxTextFieldIOS*)textField {
+  base::RecordAction(UserMetricsAction("MobileOmniboxRichInlineRemoved"));
+  [self.mutator removeAdditionalText];
+}
+
+- (BOOL)canPasteItemProviders:(NSArray<NSItemProvider*>*)itemProviders {
+  for (NSItemProvider* itemProvider in itemProviders) {
+    if (((self.searchByImageEnabled || self.shouldUseLensInMenu) &&
+         [itemProvider canLoadObjectOfClass:[UIImage class]]) ||
+        [itemProvider canLoadObjectOfClass:[NSURL class]] ||
+        [itemProvider canLoadObjectOfClass:[NSString class]]) {
+      return YES;
+    }
+  }
+  return NO;
+}
+
+- (void)pasteItemProviders:(NSArray<NSItemProvider*>*)itemProviders {
+  // Interacted while focused.
+  self.omniboxInteractedWhileFocused = YES;
+
+  [self.pasteDelegate didTapPasteToSearchButton:itemProviders];
+}
+
+#pragma mark - OmniboxKeyboardDelegate
+
+- (BOOL)canPerformKeyboardAction:(OmniboxKeyboardAction)keyboardAction {
+  return [self.popupKeyboardDelegate canPerformKeyboardAction:keyboardAction] ||
+         [self.textField canPerformKeyboardAction:keyboardAction];
+}
+
+- (void)performKeyboardAction:(OmniboxKeyboardAction)keyboardAction {
+  if ([self.popupKeyboardDelegate canPerformKeyboardAction:keyboardAction]) {
+    [self.popupKeyboardDelegate performKeyboardAction:keyboardAction];
+  } else if ([self.textField canPerformKeyboardAction:keyboardAction]) {
+    [self.textField performKeyboardAction:keyboardAction];
+  } else {
+    NOTREACHED() << "Check canPerformKeyboardAction before!";
+  }
+}
+
 #pragma mark - OmniboxConsumer
 
 - (void)updateAutocompleteIcon:(UIImage*)icon
@@ -573,16 +512,6 @@ using base::UserMetricsAction;
 
 - (void)updateLensImageSupported:(BOOL)lensImageSupported {
   self.lensImageEnabled = lensImageSupported;
-}
-
-- (void)updateText:(NSAttributedString*)text {
-  [self.textField setText:text userTextLength:text.length];
-}
-
-#pragma mark - OmniboxViewConsumer
-
-- (void)updateAdditionalText:(NSString*)additionalText {
-  [self.view updateAdditionalText:additionalText];
 }
 
 - (void)setThumbnailImage:(UIImage*)image {
@@ -642,6 +571,13 @@ using base::UserMetricsAction;
   self.isUpdatingCachedClipboardState = NO;
 }
 
+- (BOOL)textFieldIsBlank {
+  NSString* trimmedText = [self.textField.text
+      stringByTrimmingCharactersInSet:[NSCharacterSet
+                                          whitespaceAndNewlineCharacterSet]];
+  return [trimmedText length] == 0;
+}
+
 #pragma mark notification callbacks
 
 // Called on UITextInputCurrentInputModeDidChangeNotification for self.textField
@@ -692,15 +628,9 @@ using base::UserMetricsAction;
 #pragma mark clear button
 
 - (void)clearButtonPressed {
-  // Emulate a system button clear callback.
-  BOOL shouldClear =
-      [self.textField.delegate textFieldShouldClear:self.textField];
-  if (shouldClear) {
-    [self.textField setText:@""];
-    // Calling setText: does not trigger UIControlEventEditingChanged, so update
-    // the clear button visibility manually.
-    [self.textField sendActionsForControlEvents:UIControlEventEditingChanged];
-  }
+  [self.mutator clearText];
+  [self updateClearButtonVisibility];
+  [self updateLeadingImage];
 }
 
 // Hides the clear button if the textfield is empty; shows it otherwise.
@@ -775,25 +705,12 @@ using base::UserMetricsAction;
 
 - (void)scribbleInteractionWillBeginWriting:
     (UIScribbleInteraction*)interaction {
-  if (self.textField.isPreEditing) {
-    [self.textField exitPreEditState];
-    [self.textField setText:[[NSAttributedString alloc] initWithString:@""]
-             userTextLength:0];
-  }
-
-  [self.textField clearAutocompleteText];
+  [self.mutator prepareForScribble];
 }
 
 - (void)scribbleInteractionDidFinishWriting:
     (UIScribbleInteraction*)interaction {
   [self cleanupOmniboxAfterScribble];
-
-  // Dismiss any inline autocomplete. The user expectation is to not have it.
-  [self.textField clearAutocompleteText];
-
-  if (_textChangeDelegate) {
-    _textChangeDelegate->OnRemoveAdditionalText();
-  }
 }
 
 /// Handles interaction with the thumbnail button. (tap or keyboard delete)
@@ -801,13 +718,11 @@ using base::UserMetricsAction;
   if (!self.view.thumbnailButton.selected) {
     self.view.thumbnailButton.selected = YES;
   } else {
-    if (_textChangeDelegate) {
-      _textChangeDelegate->RemoveThumbnail();
-      // Clear the selection once it's no longer needed. This prevents it from
-      // reappearing unexpectedly as the user navigates back through previous
-      // results.
-      self.view.thumbnailButton.selected = NO;
-    }
+    [self.mutator removeThumbnail];
+    // Clear the selection once it's no longer needed. This prevents it from
+    // reappearing unexpectedly as the user navigates back through previous
+    // results.
+    self.view.thumbnailButton.selected = NO;
   }
 }
 

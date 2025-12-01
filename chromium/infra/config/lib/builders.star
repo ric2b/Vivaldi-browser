@@ -88,7 +88,7 @@ os = struct(
     MAC_14 = os_enum(os_category.MAC, "Mac-14"),
     MAC_DEFAULT = os_enum(os_category.MAC, "Mac-14|Mac-15"),
     MAC_ANY = os_enum(os_category.MAC, "Mac"),
-    MAC_BETA = os_enum(os_category.MAC, "Mac-14|Mac-15"),
+    MAC_BETA = os_enum(os_category.MAC, "Mac-15"),
     WINDOWS_10 = os_enum(os_category.WINDOWS, "Windows-10"),
     # TODO(crbug.com/41492657): remove after slow compile issue resolved.
     WINDOWS_10_1909 = os_enum(os_category.WINDOWS, "Windows-10-18363"),
@@ -119,28 +119,40 @@ siso = struct(
     ),
 )
 
-def _rotation(name):
+def _rotation(name, console_name, tree_closer_console):
+    if not name:
+        fail("Rotations must be created with a name")
+    return struct(
+        name = name,
+        console_name = console_name,
+        tree_closer_console = tree_closer_console,
+    )
+
+def _main_rotation(name, console_name, tree_closer_console):
     return branches.value(
         branch_selector = branches.selector.MAIN,
-        value = [name],
+        value = _rotation(
+            name = name,
+            console_name = console_name,
+            tree_closer_console = tree_closer_console,
+        ),
     )
 
 # Gardener rotations that a builder can be added to (only takes effect on trunk)
 # New rotations can be added, but won't automatically show up in SoM without
 # changes to SoM code.
 gardener_rotations = struct(
-    ANDROID = _rotation("android"),
-    ANGLE = _rotation("angle"),
-    CHROMIUM = _rotation("chromium"),
-    CFT = _rotation("cft"),
-    DAWN = _rotation("dawn"),
-    FUCHSIA = _rotation("fuchsia"),
-    CHROMIUM_CLANG = _rotation("chromium.clang"),
-    CHROMIUM_GPU = _rotation("chromium.gpu"),
-    CHROMIUM_PERF = _rotation("chromium.perf"),
-    IOS = _rotation("ios"),
-    CHROMIUMOS = _rotation("chromiumos"),  # This group is not on SoM.
-    LACROS_SKYLAB = _rotation("lacros_skylab"),
+    ANDROID = _main_rotation("android", "android rotation", "android tree closers"),
+    ANGLE = _main_rotation("angle", "angle rotation", None),
+    CHROMIUM = _main_rotation("chromium", "chromium rotation", "chromium tree closers"),
+    CFT = _main_rotation("cft", "cft rotation", None),
+    DAWN = _main_rotation("dawn", "dawn rotation", None),
+    FUCHSIA = _main_rotation("fuchsia", "fuchsia rotation", None),
+    CHROMIUM_CLANG = _main_rotation("chromium.clang", "chromium.clang rotation", None),
+    CHROMIUM_GPU = _main_rotation("chromium.gpu", "chromium.gpu rotation", "chromium.gpu tree closers"),
+    IOS = _main_rotation("ios", "ios rotation", "ios tree closers"),
+    CHROMIUMOS = _main_rotation("chromiumos", "chromiumos rotation", "chromiumos tree closers"),  # This group is not on SoM.
+    CRONET = _main_rotation("cronet", "cronet rotation", None),
 )
 
 # Free disk space in a machine reserved for build tasks.
@@ -838,10 +850,11 @@ def builder(
         dimensions["pool"] = pool
 
     gardener_rotations = defaults.get_value("gardener_rotations", gardener_rotations, merge = args.MERGE_LIST)
+    gardener_rotation_names = [rotation.name for rotation in gardener_rotations]
     if gardener_rotations:
         # TODO(343503161): Remove gardener_rotations after SoM is updated.
-        properties["sheriff_rotations"] = gardener_rotations
-        properties["gardener_rotations"] = gardener_rotations
+        properties["sheriff_rotations"] = gardener_rotation_names
+        properties["gardener_rotations"] = gardener_rotation_names
 
     ssd = defaults.get_value("ssd", ssd)
     if ssd == args.COMPUTE:
@@ -1088,7 +1101,7 @@ def builder(
     if builder_group != None and bucket not in _BUILDER_GROUP_REUSE_BUCKET_ALLOWLIST:
         _BUILDER_GROUP_ID_NODE.add("{}:{}".format(builder_group, name))
 
-    register_gardener_builder(bucket, name, gardener_rotations)
+    register_gardener_builder(bucket, name, gardener_rotation_names)
 
     register_recipe_experiments_ref(bucket, name, executable)
 
@@ -1189,5 +1202,6 @@ builders = struct(
     defaults = defaults,
     os = os,
     gardener_rotations = gardener_rotations,
+    rotation = _rotation,
     free_space = free_space,
 )

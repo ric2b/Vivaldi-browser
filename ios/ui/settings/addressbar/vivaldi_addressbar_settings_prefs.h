@@ -16,9 +16,12 @@ class PrefService;
 @interface VivaldiAddressBarSettingsPrefs : NSObject
 /// Registers the syncable preferences.
 + (void)registerBrowserStatePrefs:(user_prefs::PrefRegistrySyncable*)registry;
+
 /// Registers the local preferences.
 + (void)registerLocalStatePrefs:(PrefRegistrySimple*)registry;
 
+/// Call for migrating the prefs.
++ (void)migratePrefsIfNeeded:(PrefService*)prefs;
 @end
 
 #endif  // IOS_UI_SETTINGS_ADDRESSBAR_VIVALDI_ADDRESSBAR_SETTINGS_PREFS_H_

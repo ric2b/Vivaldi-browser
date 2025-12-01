@@ -2,11 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
-#pragma allow_unsafe_buffers
-#endif
-
 #include "third_party/blink/renderer/modules/mediarecorder/media_recorder_handler.h"
 
 #include <algorithm>
@@ -974,7 +969,7 @@ void MediaRecorderHandler::OnEncodedVideo(
 
     // We don't use the output_chunk, we just pass the configuration
     // data as a codec_descriptions.
-    auto output_chunk = h26x_converter_->Convert(encoded_data->AsSpan());
+    auto output_chunk = h26x_converter_->Convert(*encoded_data);
     codec_description = h26x_converter_->GetCodecDescription();
     if (first_key_frame) {
       video_codec_profile_.level =

@@ -34,7 +34,7 @@ TEST(FXFontTest, AdobeNameFromUnicode) {
 
 TEST(FXFontTest, ReadFontNameFromMicrosoftEntries) {
   std::string test_data_dir;
-  PathService::GetTestDataDir(&test_data_dir);
+  ASSERT_TRUE(PathService::GetTestDataDir(&test_data_dir));
   DCHECK(!test_data_dir.empty());
 
   CFX_FontMapper font_mapper(nullptr);
@@ -48,7 +48,7 @@ TEST(FXFontTest, ReadFontNameFromMicrosoftEntries) {
 
     font_mapper.SetSystemFontInfo(
         CFX_GEModule::Get()->GetPlatform()->CreateDefaultSystemFontInfo());
-    ASSERT_TRUE(folder_font_info.EnumFontList(&font_mapper));
+    folder_font_info.EnumFontList(&font_mapper);
   }
 
   ASSERT_EQ(1u, font_mapper.GetFaceSize());

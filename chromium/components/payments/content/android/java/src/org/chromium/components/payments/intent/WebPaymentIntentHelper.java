@@ -35,6 +35,17 @@ public class WebPaymentIntentHelper {
     /** The action name for the Pay Intent. */
     public static final String ACTION_PAY = "org.chromium.intent.action.PAY";
 
+    /**
+     * The name of the intent for the service that updates the payment method, the shipping address,
+     * or the shipping option in response to user actions in the payment app.
+     */
+    public static final String ACTION_UPDATE_PAYMENT_DETAILS =
+            "org.chromium.intent.action.UPDATE_PAYMENT_DETAILS";
+
+    /** The name of the intent for the service to check whether an app is ready to pay. */
+    public static final String ACTION_IS_READY_TO_PAY =
+            "org.chromium.intent.action.IS_READY_TO_PAY";
+
     // Freshest parameters sent to the payment app.
     public static final String EXTRA_CERTIFICATE = "certificate";
     public static final String EXTRA_MERCHANT_NAME = "merchantName";
@@ -122,7 +133,7 @@ public class WebPaymentIntentHelper {
     public static void parsePaymentResponse(
             int resultCode,
             Intent data,
-            PaymentOptions requestedPaymentOptions,
+            @Nullable PaymentOptions requestedPaymentOptions,
             PaymentErrorCallback errorCallback,
             PaymentSuccessCallback successCallback) {
         if (data == null) {
@@ -305,6 +316,7 @@ public class WebPaymentIntentHelper {
         checkStringNotEmpty(packageName, "packageName");
         checkStringNotEmpty(serviceName, "serviceName");
         intent.setClassName(packageName, serviceName);
+        intent.setAction(ACTION_UPDATE_PAYMENT_DETAILS);
         return intent;
     }
 
@@ -343,6 +355,7 @@ public class WebPaymentIntentHelper {
         checkStringNotEmpty(serviceName, "serviceName");
         checkStringNotEmpty(packageName, "packageName");
         isReadyToPayIntent.setClassName(packageName, serviceName);
+        isReadyToPayIntent.setAction(ACTION_IS_READY_TO_PAY);
         Bundle extras = new Bundle();
         if (!clearIdFields) {
             addCommonExtrasWithIdentity(
@@ -405,12 +418,13 @@ public class WebPaymentIntentHelper {
                     EXTRA_MODIFIERS, PaymentDetailsModifier.serializeModifiers(modifiers.values()));
         }
 
-        // shippingOptions should not be null when shipping is requested.
-        if (paymentOptions != null && paymentOptions.requestShipping) {
-            if (shippingOptions == null || shippingOptions.isEmpty()) {
-                throw new IllegalArgumentException(
-                        "shippingOptions should not be null or empty when shipping is requested.");
-            }
+        // `shippingOptions` can be null when the payment app needs to send the shipping address to
+        // the merchant website in order to get the different shipping options available and their
+        // corresponding prices.
+        if (paymentOptions != null
+                && paymentOptions.requestShipping
+                && shippingOptions != null
+                && !shippingOptions.isEmpty()) {
             // ShippingOptions are populated only when shipping is requested.
             Parcelable[] serializedShippingOptionList =
                     PaymentShippingOption.buildPaymentShippingOptionList(shippingOptions);

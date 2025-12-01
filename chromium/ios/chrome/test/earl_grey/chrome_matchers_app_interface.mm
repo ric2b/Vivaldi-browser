@@ -12,7 +12,9 @@
 #import "ios/chrome/browser/authentication/ui_bundled/cells/signin_promo_view_constants.h"
 #import "ios/chrome/browser/autofill/model/form_suggestion_constants.h"
 #import "ios/chrome/browser/bookmarks/ui_bundled/bookmark_ui_constants.h"
-#import "ios/chrome/browser/download/ui_bundled/download_manager_constants.h"
+#import "ios/chrome/browser/content_suggestions/ui_bundled/content_suggestions_constants.h"
+#import "ios/chrome/browser/content_suggestions/ui_bundled/ntp_home_constant.h"
+#import "ios/chrome/browser/download/ui/download_manager_constants.h"
 #import "ios/chrome/browser/history/ui_bundled/history_ui_constants.h"
 #import "ios/chrome/browser/incognito_interstitial/ui_bundled/incognito_interstitial_constants.h"
 #import "ios/chrome/browser/location_bar/ui_bundled/location_bar_constants.h"
@@ -23,6 +25,7 @@
 #import "ios/chrome/browser/omnibox/ui_bundled/omnibox_constants.h"
 #import "ios/chrome/browser/omnibox/ui_bundled/omnibox_text_field_ios.h"
 #import "ios/chrome/browser/omnibox/ui_bundled/popup/omnibox_popup_accessibility_identifier_constants.h"
+#import "ios/chrome/browser/popup_menu/ui_bundled/popup_menu_constants.h"
 #import "ios/chrome/browser/recent_tabs/ui_bundled/recent_tabs_constants.h"
 #import "ios/chrome/browser/settings/ui_bundled/autofill/autofill_add_credit_card_view_controller.h"
 #import "ios/chrome/browser/settings/ui_bundled/autofill/autofill_credit_card_table_view_controller.h"
@@ -58,9 +61,6 @@
 #import "ios/chrome/browser/tab_switcher/ui_bundled/tab_strip/ui/swift_constants_for_objective_c.h"
 #import "ios/chrome/browser/toolbar/ui_bundled/primary_toolbar_view.h"
 #import "ios/chrome/browser/toolbar/ui_bundled/public/toolbar_constants.h"
-#import "ios/chrome/browser/ui/content_suggestions/content_suggestions_constants.h"
-#import "ios/chrome/browser/ui/content_suggestions/ntp_home_constant.h"
-#import "ios/chrome/browser/ui/popup_menu/popup_menu_constants.h"
 #import "ios/chrome/common/ui/confirmation_alert/constants.h"
 #import "ios/chrome/common/ui/promo_style/constants.h"
 #import "ios/chrome/grit/ios_branded_strings.h"
@@ -662,6 +662,20 @@ UIWindow* WindowWithAccessibilityIdentifier(NSString* accessibility_id) {
                     nil);
 }
 
++ (id<GREYMatcher>)managedProfileCreationNavigationBarBackButton {
+  UINavigationBar* navBar = base::apple::ObjCCastStrict<UINavigationBar>(
+      SubviewWithAccessibilityIdentifier(
+          kManagedProfileCreationNavigationBarAccessibilityIdentifier,
+          GetAnyKeyWindow()));
+  NSString* buttonTitle = navBar.backItem.title;
+  return grey_allOf(
+      grey_anyOf(grey_accessibilityLabel(buttonTitle),
+                 grey_accessibilityLabel(@"Back"), grey_buttonTitle(@"Back"),
+                 grey_descendant(grey_buttonTitle(buttonTitle)), nil),
+      grey_kindOfClassName(@"_UIButtonBarButton"),
+      grey_ancestor(grey_kindOfClass([UINavigationBar class])), nil);
+}
+
 + (id<GREYMatcher>)addAccountButton {
   return grey_accessibilityID(kSettingsAccountsTableViewAddAccountCellId);
 }
@@ -841,12 +855,6 @@ UIWindow* WindowWithAccessibilityIdentifier(NSString* accessibility_id) {
 + (id<GREYMatcher>)tabsSettingsButton {
   return [ChromeMatchersAppInterface
       buttonWithAccessibilityLabelID:(IDS_IOS_TABS_MANAGEMENT_SETTINGS)];
-}
-
-+ (id<GREYMatcher>)manageSyncSettingsButton {
-  return grey_allOf(grey_kindOfClass([UITableViewCell class]),
-                    grey_accessibilityID(kSettingsGoogleSyncAndServicesCellId),
-                    grey_sufficientlyVisible(), nil);
 }
 
 + (id<GREYMatcher>)googleServicesSettingsView {
@@ -1282,6 +1290,10 @@ UIWindow* WindowWithAccessibilityIdentifier(NSString* accessibility_id) {
   return grey_accessibilityID(kIncognitoTabGridIdentifier);
 }
 
++ (id<GREYMatcher>)inactiveTabGrid {
+  return grey_accessibilityID(kInactiveTabGridIdentifier);
+}
+
 + (id<GREYMatcher>)tabGridCloseButtonForCellAtIndex:(unsigned int)index {
   return grey_allOf(
       grey_ancestor(grey_accessibilityID(IdentifierForGridCellAtIndex(index))),
@@ -1477,19 +1489,6 @@ UIWindow* WindowWithAccessibilityIdentifier(NSString* accessibility_id) {
   return grey_accessibilityID(kToolsMenuSettingsActionId);
 }
 
-#pragma mark - Promo style view controller
-
-// Returns matcher for the primary action button.
-+ (id<GREYMatcher>)promoStylePrimaryActionButtonMatcher {
-  return grey_accessibilityID(kPromoStylePrimaryActionAccessibilityIdentifier);
-}
-
-// Returns matcher for the secondary action button.
-+ (id<GREYMatcher>)promoStyleSecondaryActionButtonMatcher {
-  return grey_accessibilityID(
-      kPromoStyleSecondaryActionAccessibilityIdentifier);
-}
-
 #pragma mark - Incognito Interstitial
 
 + (id<GREYMatcher>)incognitoInterstitial {
@@ -1504,7 +1503,7 @@ UIWindow* WindowWithAccessibilityIdentifier(NSString* accessibility_id) {
 
 + (id<GREYMatcher>)incognitoInterstitialOpenInChromeIncognitoButton {
   return grey_allOf(
-      [ChromeMatchersAppInterface promoStylePrimaryActionButtonMatcher],
+      [ChromeMatchersAppInterface promoScreenPrimaryButtonMatcher],
       grey_accessibilityLabel(l10n_util::GetNSString(
           IDS_IOS_INCOGNITO_INTERSTITIAL_OPEN_IN_CHROME_INCOGNITO)),
       nullptr);
@@ -1512,7 +1511,7 @@ UIWindow* WindowWithAccessibilityIdentifier(NSString* accessibility_id) {
 
 + (id<GREYMatcher>)incognitoInterstitialOpenInChromeButton {
   return grey_allOf(
-      [ChromeMatchersAppInterface promoStyleSecondaryActionButtonMatcher],
+      [ChromeMatchersAppInterface promoScreenSecondaryButtonMatcher],
       grey_accessibilityLabel(l10n_util::GetNSString(
           IDS_IOS_INCOGNITO_INTERSTITIAL_OPEN_IN_CHROME)),
       nullptr);
@@ -1764,6 +1763,13 @@ UIWindow* WindowWithAccessibilityIdentifier(NSString* accessibility_id) {
 + (id<GREYMatcher>)deleteSharedConfirmationButton {
   return grey_allOf(grey_accessibilityID([l10n_util::GetNSString(
                         IDS_IOS_CONTENT_CONTEXT_DELETESHAREDGROUP)
+                        stringByAppendingString:@"AlertAction"]),
+                    grey_interactable(), nil);
+}
+
++ (id<GREYMatcher>)keepSharedConfirmationButton {
+  return grey_allOf(grey_accessibilityID([l10n_util::GetNSString(
+                        IDS_IOS_CONTENT_CONTEXT_KEEPSHAREDGROUP)
                         stringByAppendingString:@"AlertAction"]),
                     grey_interactable(), nil);
 }

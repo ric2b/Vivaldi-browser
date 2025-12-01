@@ -935,7 +935,7 @@ static enum ssl_hs_wait_t do_send_client_certificate(SSL_HANDSHAKE *hs) {
   }
 
   Array<SSL_CREDENTIAL *> creds;
-  if (!ssl_get_credential_list(hs, &creds)) {
+  if (!ssl_get_full_credential_list(hs, &creds)) {
     return ssl_hs_error;
   }
 
@@ -1189,8 +1189,9 @@ UniquePtr<SSL_SESSION> tls13_create_session_with_ticket(SSL *ssl, CBS *body) {
   }
 
   SSLExtension early_data(TLSEXT_TYPE_early_data);
+  SSLExtension flags(TLSEXT_TYPE_tls_flags);
   uint8_t alert = SSL_AD_DECODE_ERROR;
-  if (!ssl_parse_extensions(&extensions, &alert, {&early_data},
+  if (!ssl_parse_extensions(&extensions, &alert, {&early_data, &flags},
                             /*ignore_unknown=*/true)) {
     ssl_send_alert(ssl, SSL3_AL_FATAL, alert);
     return nullptr;
@@ -1210,6 +1211,17 @@ UniquePtr<SSL_SESSION> tls13_create_session_with_ticket(SSL *ssl, CBS *body) {
       ssl_send_alert(ssl, SSL3_AL_FATAL, SSL_AD_ILLEGAL_PARAMETER);
       OPENSSL_PUT_ERROR(SSL, SSL_R_DECODE_ERROR);
       return nullptr;
+    }
+  }
+
+  if (flags.present) {
+    SSLFlags parsed;
+    if (!ssl_parse_flags_extension_request(&flags.data, &parsed, &alert)) {
+      ssl_send_alert(ssl, SSL3_AL_FATAL, alert);
+      return nullptr;
+    }
+    if (parsed & kSSLFlagResumptionAcrossNames) {
+      session->is_resumable_across_names = true;
     }
   }
 

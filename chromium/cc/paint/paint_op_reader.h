@@ -126,6 +126,9 @@ class CC_PAINT_EXPORT PaintOpReader {
   void Read(SkColorType* color_type) {
     ReadEnum<SkColorType, kLastEnum_SkColorType>(color_type);
   }
+  void Read(SkAlphaType* alpha_type) {
+    ReadEnum<SkAlphaType, kLastEnum_SkAlphaType>(alpha_type);
+  }
   void Read(PaintFlags::FilterQuality* quality) {
     ReadEnum<PaintFlags::FilterQuality, PaintFlags::FilterQuality::kLast>(
         quality);
@@ -162,6 +165,7 @@ class CC_PAINT_EXPORT PaintOpReader {
   }
 
   template <typename T>
+    requires(!std::is_const_v<T>)
   void Read(std::vector<T>& vec) {
     size_t size = 0;
     ReadSize(&size);
@@ -359,6 +363,7 @@ class CC_PAINT_EXPORT PaintOpReader {
   void DidRead(size_t bytes_read);
 
   template <typename T>
+    requires(!std::is_const_v<T>)
   void ReadVectorContent(size_t size, std::vector<T>& vec) {
     vec.resize(size);
     for (base::span span(vec); !span.empty();

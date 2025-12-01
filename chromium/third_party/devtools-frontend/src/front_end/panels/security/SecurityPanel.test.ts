@@ -5,7 +5,7 @@
 import * as Platform from '../../core/platform/platform.js';
 import * as SDK from '../../core/sdk/sdk.js';
 import * as Protocol from '../../generated/protocol.js';
-import {createTarget, getGetHostConfigStub} from '../../testing/EnvironmentHelpers.js';
+import {createTarget, updateHostConfig} from '../../testing/EnvironmentHelpers.js';
 import {describeWithMockConnection} from '../../testing/MockConnection.js';
 import {getMainFrame, navigate} from '../../testing/ResourceTreeHelpers.js';
 
@@ -16,25 +16,21 @@ const {urlString} = Platform.DevToolsPath;
 describeWithMockConnection('SecurityAndPrivacyPanel', () => {
   describe('viewMemory', () => {
     it('initially shows control view if privacy UI is enabled', () => {
-      const stub = getGetHostConfigStub({devToolsPrivacyUI: {enabled: true}});
+      updateHostConfig({devToolsPrivacyUI: {enabled: true}});
       const securityPanel = Security.SecurityPanel.SecurityPanel.instance({forceNew: true});
 
       assert.instanceOf(securityPanel.visibleView, Security.CookieControlsView.CookieControlsView);
-
-      stub.restore();
     });
 
     it('initially shows security main view if privacy UI is not enabled', () => {
-      const stub = getGetHostConfigStub({devToolsPrivacyUI: {enabled: false}});
+      updateHostConfig({devToolsPrivacyUI: {enabled: false}});
       const securityPanel = Security.SecurityPanel.SecurityPanel.instance({forceNew: true});
 
       assert.instanceOf(securityPanel.visibleView, Security.SecurityPanel.SecurityMainView);
-
-      stub.restore();
     });
 
     it('remembers last selected view when new panel is made', () => {
-      const stub = getGetHostConfigStub({devToolsPrivacyUI: {enabled: true}});
+      updateHostConfig({devToolsPrivacyUI: {enabled: true}});
       let securityPanel = Security.SecurityPanel.SecurityPanel.instance({forceNew: true});
 
       // Should initially be the controls view
@@ -47,8 +43,6 @@ describeWithMockConnection('SecurityAndPrivacyPanel', () => {
       // Create a new security panel. The last selected view memory should make the main view visible
       securityPanel = Security.SecurityPanel.SecurityPanel.instance({forceNew: true});
       assert.instanceOf(securityPanel.visibleView, Security.SecurityPanel.SecurityMainView);
-
-      stub.restore();
     });
   });
 

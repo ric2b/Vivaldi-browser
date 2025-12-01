@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include <csignal>
 #include <filesystem>  // NOLINT
+#include <memory>
 #include <string>
 #include <utility>
 #include <vector>
@@ -21,6 +21,7 @@
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include "absl/base/no_destructor.h"
+#include "absl/container/flat_hash_map.h"
 #include "absl/log/check.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
@@ -28,6 +29,7 @@
 #include "absl/strings/str_join.h"
 #include "absl/strings/string_view.h"
 #include "absl/time/time.h"
+#include "./common/temp_dir.h"
 #include "./e2e_tests/test_binary_util.h"
 #include "./fuzztest/internal/io.h"
 #include "./fuzztest/internal/logging.h"
@@ -59,6 +61,11 @@ enum class ExecutionModelParam {
   kWithCentipedeBinary,
 };
 
+struct UpdateCorpusDatabaseRun {
+  std::unique_ptr<TempDir> workspace;
+  std::string std_err;
+};
+
 class UpdateCorpusDatabaseTest
     : public ::testing::TestWithParam<ExecutionModelParam> {
  protected:
@@ -73,36 +80,33 @@ class UpdateCorpusDatabaseTest
     "Please run with --config=fuzztest-experimental.";
 #endif
 #endif
-    CHECK(temp_dir_ == nullptr);
   }
 
   static void RunUpdateCorpusDatabase() {
-    if (temp_dir_ != nullptr) return;
-    temp_dir_ = new TempDir();
+    if (run_map_->contains(GetParam())) return;
+    auto &run = (*run_map_)[GetParam()];
+    run.workspace = std::make_unique<TempDir>();
     RunOptions run_options;
     run_options.fuzztest_flags = {
         {"corpus_database", GetCorpusDatabasePath()},
         {"fuzz_for", "30s"},
         {"jobs", "2"},
     };
-    auto [status, std_out, std_err] = RunBinaryMaybeWithCentipede(
+    auto [status_unused, std_out_unused, std_err] = RunBinaryMaybeWithCentipede(
         GetCorpusDatabaseTestingBinaryPath(), run_options);
-    *update_corpus_database_std_err_ = std::move(std_err);
+    run.std_err = std::move(std_err);
   }
 
-  static void TearDownTestSuite() {
-    delete temp_dir_;
-    temp_dir_ = nullptr;
-  }
+  static void TearDownTestSuite() { run_map_->clear(); }
 
   static std::string GetCorpusDatabasePath() {
     RunUpdateCorpusDatabase();
-    return std::filesystem::path(temp_dir_->dirname()) / "corpus_database";
+    return (*run_map_)[GetParam()].workspace->path() / "corpus_database";
   }
 
   static absl::string_view GetUpdateCorpusDatabaseStdErr() {
     RunUpdateCorpusDatabase();
-    return *update_corpus_database_std_err_;
+    return (*run_map_)[GetParam()].std_err;
   }
 
   static RunResults RunBinaryMaybeWithCentipede(absl::string_view binary_path,
@@ -134,13 +138,14 @@ class UpdateCorpusDatabaseTest
   }
 
  private:
-  static TempDir *temp_dir_;
-  static absl::NoDestructor<std::string> update_corpus_database_std_err_;
+  static absl::NoDestructor<
+      absl::flat_hash_map<ExecutionModelParam, UpdateCorpusDatabaseRun>>
+      run_map_;
 };
 
-TempDir *UpdateCorpusDatabaseTest::temp_dir_ = nullptr;
-absl::NoDestructor<std::string>
-    UpdateCorpusDatabaseTest::update_corpus_database_std_err_{};
+absl::NoDestructor<
+    absl::flat_hash_map<ExecutionModelParam, UpdateCorpusDatabaseRun>>
+    UpdateCorpusDatabaseTest::run_map_{};
 
 TEST_P(UpdateCorpusDatabaseTest, RunsFuzzTests) {
   EXPECT_THAT(GetUpdateCorpusDatabaseStdErr(),
@@ -149,19 +154,23 @@ TEST_P(UpdateCorpusDatabaseTest, RunsFuzzTests) {
 }
 
 TEST_P(UpdateCorpusDatabaseTest, UsesMultipleShardsForFuzzingAndDistillation) {
+  const auto &std_err = GetUpdateCorpusDatabaseStdErr();
   EXPECT_THAT(
-      GetUpdateCorpusDatabaseStdErr(),
+      std_err,
       AllOf(HasSubstr("[S0.0] begin-fuzz"), HasSubstr("[S1.0] begin-fuzz"),
             HasSubstr("DISTILL[S.0]: Distilling to output shard 0"),
-            HasSubstr("DISTILL[S.1]: Distilling to output shard 1")));
+            HasSubstr("DISTILL[S.1]: Distilling to output shard 1")))
+      << std_err;
 }
 
 TEST_P(UpdateCorpusDatabaseTest, FindsAllCrashes) {
+  const auto &std_err = GetUpdateCorpusDatabaseStdErr();
   EXPECT_THAT(
-      GetUpdateCorpusDatabaseStdErr(),
+      std_err,
       AllOf(ContainsRegex(R"re(Failure\s*: GoogleTest assertion failure)re"),
             ContainsRegex(R"re(Failure\s*: heap-buffer-overflow)re"),
-            ContainsRegex(R"re(Failure\s*: stack-limit-exceeded)re")));
+            ContainsRegex(R"re(Failure\s*: stack-limit-exceeded)re")))
+      << std_err;
 }
 
 TEST_P(UpdateCorpusDatabaseTest, ResumedFuzzTestRunsForRemainingTime) {
@@ -170,7 +179,7 @@ TEST_P(UpdateCorpusDatabaseTest, ResumedFuzzTestRunsForRemainingTime) {
   // 1st run that gets interrupted.
   RunOptions fst_run_options;
   fst_run_options.fuzztest_flags = {
-      {"corpus_database", corpus_database.dirname()},
+      {"corpus_database", corpus_database.path()},
       {"fuzz_for", "300s"},
   };
   fst_run_options.timeout = absl::Seconds(10);
@@ -179,14 +188,14 @@ TEST_P(UpdateCorpusDatabaseTest, ResumedFuzzTestRunsForRemainingTime) {
 
   // Adjust the fuzzing time so that only 1s remains.
   const absl::StatusOr<std::string> fuzzing_time_file =
-      FindFile(corpus_database.dirname(), "fuzzing_time");
+      FindFile(corpus_database.path().c_str(), "fuzzing_time");
   ASSERT_TRUE(fuzzing_time_file.ok()) << fst_std_err;
   ASSERT_TRUE(WriteFile(*fuzzing_time_file, "299s"));
 
   // 2nd run that resumes the fuzzing.
   RunOptions snd_run_options;
   snd_run_options.fuzztest_flags = {
-      {"corpus_database", corpus_database.dirname()},
+      {"corpus_database", corpus_database.path()},
       {"fuzz_for", "300s"},
   };
   snd_run_options.timeout = absl::Seconds(10);
@@ -207,7 +216,7 @@ TEST_P(UpdateCorpusDatabaseTest,
   // 1st run that gets interrupted.
   RunOptions fst_run_options;
   fst_run_options.fuzztest_flags = {
-      {"corpus_database", corpus_database.dirname()},
+      {"corpus_database", corpus_database.path()},
       {"fuzz_for", "300s"},
       {"execution_id", "some_execution_id"},
   };
@@ -218,14 +227,14 @@ TEST_P(UpdateCorpusDatabaseTest,
 
   // Adjust the fuzzing time so that only 1s remains.
   const absl::StatusOr<std::string> fuzzing_time_file =
-      FindFile(corpus_database.dirname(), "fuzzing_time");
+      FindFile(corpus_database.path().c_str(), "fuzzing_time");
   ASSERT_TRUE(fuzzing_time_file.ok()) << fst_std_err;
   ASSERT_TRUE(WriteFile(*fuzzing_time_file, "299s"));
 
   // 2nd run that should resume due to the same execution ID.
   RunOptions snd_run_options;
   snd_run_options.fuzztest_flags = {
-      {"corpus_database", corpus_database.dirname()},
+      {"corpus_database", corpus_database.path()},
       {"fuzz_for", "300s"},
       {"execution_id", "some_execution_id"},
   };
@@ -246,7 +255,7 @@ TEST_P(UpdateCorpusDatabaseTest,
   // exeuction with the same ID.
   RunOptions thd_run_options;
   thd_run_options.fuzztest_flags = {
-      {"corpus_database", corpus_database.dirname()},
+      {"corpus_database", corpus_database.path()},
       {"fuzz_for", "300s"},
       {"execution_id", "some_execution_id"},
   };
@@ -268,7 +277,7 @@ TEST_P(UpdateCorpusDatabaseTest,
   // 1st run that gets interrupted.
   RunOptions fst_run_options;
   fst_run_options.fuzztest_flags = {
-      {"corpus_database", corpus_database.dirname()},
+      {"corpus_database", corpus_database.path()},
       {"fuzz_for", "300s"},
       {"execution_id", "some_execution_id_1"},
   };
@@ -281,7 +290,7 @@ TEST_P(UpdateCorpusDatabaseTest,
   // This run should complete within the timeout.
   RunOptions snd_run_options;
   snd_run_options.fuzztest_flags = {
-      {"corpus_database", corpus_database.dirname()},
+      {"corpus_database", corpus_database.path()},
       {"fuzz_for", "1s"},
       {"execution_id", "some_execution_id_2"},
   };
@@ -297,7 +306,7 @@ TEST_P(UpdateCorpusDatabaseTest,
   // 3rd run that should not skip the test due the different execution ID
   RunOptions thd_run_options;
   thd_run_options.fuzztest_flags = {
-      {"corpus_database", corpus_database.dirname()},
+      {"corpus_database", corpus_database.path()},
       {"fuzz_for", "300s"},
       {"execution_id", "some_execution_id_3"},
   };

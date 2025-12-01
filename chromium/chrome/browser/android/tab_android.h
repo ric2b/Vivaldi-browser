@@ -128,6 +128,15 @@ class TabAndroid : public TabAndroidDataProvider,
   // view.
   base::Time GetLastShownTimestamp() const;
 
+  // Returns launch type at creation. May be TabLaunchType::UNSET if unknown.
+  int GetTabLaunchTypeAtCreation() const;
+
+  // Returns the parent tab identifier for the tab.
+  int GetParentId() const;
+
+  // Returns the tab group ID of the Tab or null if not part of a group.
+  std::optional<base::Token> GetTabGroupId() const;
+
   // Delete navigation entries matching predicate from frozen state.
   void DeleteFrozenNavigationEntries(
       const WebContentsState::DeletionPredicate& predicate);
@@ -189,6 +198,8 @@ class TabAndroid : public TabAndroidDataProvider,
   void SetDevToolsAgentHost(scoped_refptr<content::DevToolsAgentHost> host);
 
   base::WeakPtr<TabAndroid> GetWeakPtr();
+
+  TabFeaturesAndroid* tab_features() { return tab_features_.get(); }
 
  private:
   JavaObjectWeakGlobalRef weak_java_tab_;

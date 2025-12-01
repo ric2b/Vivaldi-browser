@@ -12,6 +12,7 @@
 #include "components/sync/protocol/arc_package_specifics.pb.h"
 #include "components/sync/protocol/autofill_offer_specifics.pb.h"
 #include "components/sync/protocol/autofill_specifics.pb.h"
+#include "components/sync/protocol/autofill_valuable_specifics.pb.h"
 #include "components/sync/protocol/autofill_wallet_credential_specifics.pb.h"
 #include "components/sync/protocol/autofill_wallet_usage_specifics.pb.h"
 #include "components/sync/protocol/bookmark_specifics.pb.h"
@@ -132,7 +133,6 @@ VISIT_PROTO_FIELDS(const sync_pb::AppListSpecifics& proto) {
   VISIT(parent_id);
   VISIT(item_ordinal);
   VISIT(item_pin_ordinal);
-  VISIT(is_user_pinned);
   VISIT(promise_package_id);
 }
 
@@ -217,6 +217,8 @@ VISIT_PROTO_FIELDS(const sync_pb::AutofillProfileSpecifics& proto) {
   VISIT(profile_label);
   VISIT_REP(name_first);
   VISIT_REP(name_middle);
+  VISIT_REP(name_last_prefix);
+  VISIT_REP(name_last_core);
   VISIT_REP(name_last_first);
   VISIT_REP(name_last_conjunction);
   VISIT_REP(name_last_second);
@@ -225,6 +227,8 @@ VISIT_PROTO_FIELDS(const sync_pb::AutofillProfileSpecifics& proto) {
 
   VISIT_REP(name_first_status);
   VISIT_REP(name_middle_status);
+  VISIT_REP(name_last_prefix_status);
+  VISIT_REP(name_last_core_status);
   VISIT_REP(name_last_first_status);
   VISIT_REP(name_last_conjunction_status);
   VISIT_REP(name_last_second_status);
@@ -333,6 +337,11 @@ VISIT_PROTO_FIELDS(const sync_pb::AutofillWalletSpecifics& proto) {
   VISIT(payment_instrument_creation_option);
 }
 
+VISIT_PROTO_FIELDS(const sync_pb::BnplCreationOption& proto) {
+  VISIT(issuer_id);
+  VISIT_REP(eligible_price_range);
+}
+
 VISIT_PROTO_FIELDS(const sync_pb::BnplIssuerDetails& proto) {
   VISIT(issuer_id);
   VISIT_REP(eligible_price_range);
@@ -406,6 +415,8 @@ VISIT_PROTO_FIELDS(const sync_pb::ContactInfoSpecifics& proto) {
   VISIT(name_first);
   VISIT(name_middle);
   VISIT(name_last);
+  VISIT(name_last_prefix);
+  VISIT(name_last_core);
   VISIT(name_last_first);
   VISIT(name_last_conjunction);
   VISIT(name_last_second);
@@ -441,6 +452,7 @@ VISIT_PROTO_FIELDS(const sync_pb::ContactInfoSpecifics& proto) {
   VISIT(address_overflow_and_landmark);
   VISIT(address_street_location_and_locality);
   VISIT(address_thoroughfare_number_and_apt);
+  VISIT(invisible_in_autofill);
 }
 
 VISIT_PROTO_FIELDS(const sync_pb::ContactInfoSpecifics::Observation& proto) {
@@ -715,7 +727,7 @@ VISIT_PROTO_FIELDS(
 }
 
 VISIT_PROTO_FIELDS(const sync_pb::EntitySpecifics& proto) {
-  static_assert(53 + 1 /* notes */ == GetNumDataTypes(),
+  static_assert(55 + 1 /* notes */ == GetNumDataTypes(),
                 "When adding a new protocol type, you will likely need to add "
                 "it here as well.");
   VISIT(encrypted);
@@ -726,6 +738,7 @@ VISIT_PROTO_FIELDS(const sync_pb::EntitySpecifics& proto) {
   VISIT(autofill);
   VISIT(autofill_offer);
   VISIT(autofill_profile);
+  VISIT(autofill_valuable);
   VISIT(autofill_wallet);
   VISIT(autofill_wallet_credential);
   VISIT(autofill_wallet_usage);
@@ -760,6 +773,7 @@ VISIT_PROTO_FIELDS(const sync_pb::EntitySpecifics& proto) {
   VISIT(security_event);
   VISIT(send_tab_to_self);
   VISIT(session);
+  VISIT(shared_tab_group_account_data);
   VISIT(shared_tab_group_data);
   VISIT(sharing_message);
   VISIT(theme);
@@ -791,6 +805,7 @@ VISIT_PROTO_FIELDS(const sync_pb::ExtensionSpecifics& proto) {
   VISIT(remote_install);
   VISIT(all_urls_enabled);
   VISIT(disable_reasons);
+  VISIT_REP(disable_reasons_list);
 }
 
 VISIT_PROTO_FIELDS(const sync_pb::GetUpdateTriggers& proto) {
@@ -973,6 +988,7 @@ VISIT_PROTO_FIELDS(const sync_pb::WebauthnCredentialSpecifics& proto) {
   VISIT_SECRET(encrypted);
   VISIT(edited_by_user);
   VISIT(hidden);
+  VISIT(hidden_time);
 }
 
 VISIT_PROTO_FIELDS(const sync_pb::HistorySpecifics::PageTransition& proto) {
@@ -1370,7 +1386,6 @@ VISIT_PROTO_FIELDS(const sync_pb::SharedTabGroup& proto) {
 VISIT_PROTO_FIELDS(const sync_pb::SharedTab& proto) {
   VISIT(url);
   VISIT(title);
-  VISIT(favicon_url);
   VISIT(shared_tab_group_guid);
   VISIT(unique_position);
 }
@@ -1987,6 +2002,30 @@ VISIT_PROTO_FIELDS(
   VISIT(is_collapsed);
 }
 
+VISIT_PROTO_FIELDS(const sync_pb::AutofillValuableSpecifics& proto) {
+  VISIT(id);
+  VISIT(loyalty_card);
+}
+
+VISIT_PROTO_FIELDS(
+    const sync_pb::AutofillValuableSpecifics::LoyaltyCard& proto) {
+  VISIT(merchant_name);
+  VISIT(program_name);
+  VISIT(program_logo);
+  VISIT(loyalty_card_suffix);
+}
+
+VISIT_PROTO_FIELDS(const sync_pb::SharedTabDetails& proto) {
+  VISIT(shared_tab_group_guid);
+  VISIT(last_seen_timestamp_windows_epoch);
+}
+
+VISIT_PROTO_FIELDS(const sync_pb::SharedTabGroupAccountDataSpecifics& proto) {
+  VISIT(guid);
+  VISIT(collaboration_id);
+  VISIT(shared_tab_details);
+}
+
 // Vivaldi specific
 template <class V>
 void VisitProtoFields(V& visitor, const sync_pb::DeprecatedNoteAttachment& proto) {
@@ -2005,6 +2044,7 @@ void VisitProtoFields(V& visitor, const sync_pb::NotesSpecifics& proto) {
   VISIT(parent_guid);
   VISIT(unique_position);
 }
+// End Vivaldi
 
 }  // namespace syncer
 

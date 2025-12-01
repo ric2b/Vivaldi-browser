@@ -24,6 +24,7 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/trace_event/trace_event.h"
+#include "base/tracing/protos/chrome_track_event.pbzero.h"
 #include "build/build_config.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/pref_names.h"
@@ -103,7 +104,7 @@ static const char kLocked[] = "locked";
 static const char kNative[] = "native";
 static const char kPage[] = "page";
 static const char kPDFPrinting[] = "pdfPrinting";
-static const char kScreenReader[] = "screenreader";
+static const char kExtendedProperties[] = "extendedProperties";
 static const char kShowOrRefreshTree[] = "showOrRefreshTree";
 static const char kText[] = "text";
 static const char kWeb[] = "web";
@@ -194,26 +195,26 @@ void HandleAccessibilityRequestCallback(
   PrefService* pref = Profile::FromBrowserContext(current_context)->GetPrefs();
   ui::AXMode mode =
       content::BrowserAccessibilityState::GetInstance()->GetAccessibilityMode();
-  bool is_native_enabled = content::BrowserAccessibilityState::GetInstance()
-                               ->IsRendererAccessibilityEnabled();
+  bool is_a11y_allowed = content::BrowserAccessibilityState::GetInstance()
+                             ->IsAccessibilityAllowed();
   bool native = mode.has_mode(ui::AXMode::kNativeAPIs);
   bool web = mode.has_mode(ui::AXMode::kWebContents);
   bool text = mode.has_mode(ui::AXMode::kInlineTextBoxes);
-  bool screenreader = mode.has_mode(ui::AXMode::kScreenReader);
+  bool extendedProperties = mode.has_mode(ui::AXMode::kExtendedProperties);
   bool html = mode.has_mode(ui::AXMode::kHTML);
   bool pdf_printing = mode.has_mode(ui::AXMode::kPDFPrinting);
 
   // The "native" and "web" flags are disabled if
   // --disable-renderer-accessibility is set.
-  data.Set(kNative, is_native_enabled ? (native ? kOn : kOff) : kDisabled);
-  data.Set(kWeb, is_native_enabled ? (web ? kOn : kOff) : kDisabled);
+  data.Set(kNative, is_a11y_allowed ? (native ? kOn : kOff) : kDisabled);
+  data.Set(kWeb, is_a11y_allowed ? (web ? kOn : kOff) : kDisabled);
 
-  // The "text", "screenreader" and "html" flags are only
+  // The "text", "extendedProperties" and "html" flags are only
   // meaningful if "web" is enabled.
-  bool is_web_enabled = is_native_enabled && web;
+  bool is_web_enabled = is_a11y_allowed && web;
   data.Set(kText, is_web_enabled ? (text ? kOn : kOff) : kDisabled);
-  data.Set(kScreenReader,
-           is_web_enabled ? (screenreader ? kOn : kOff) : kDisabled);
+  data.Set(kExtendedProperties,
+           is_web_enabled ? (extendedProperties ? kOn : kOff) : kDisabled);
   data.Set(kHTML, is_web_enabled ? (html ? kOn : kOff) : kDisabled);
 
   // The "pdfPrinting" flag is independent of the others.
@@ -279,8 +280,8 @@ void HandleAccessibilityRequestCallback(
     }
 
     base::Value::Dict descriptor = BuildTargetDescriptor(rvh);
-    descriptor.Set(kNative, is_native_enabled);
-    descriptor.Set(kScreenReader, is_web_enabled && screenreader);
+    descriptor.Set(kNative, is_a11y_allowed);
+    descriptor.Set(kExtendedProperties, is_web_enabled && extendedProperties);
     descriptor.Set(kWeb, is_web_enabled);
     page_list.Append(std::move(descriptor));
   }
@@ -667,8 +668,8 @@ void AccessibilityUIMessageHandler::ToggleAccessibilityForWebContents(
     current_mode.set_mode(ui::AXMode::kInlineTextBoxes, true);
   }
 
-  if (mode & ui::AXMode::kScreenReader) {
-    current_mode.set_mode(ui::AXMode::kScreenReader, true);
+  if (mode & ui::AXMode::kExtendedProperties) {
+    current_mode.set_mode(ui::AXMode::kExtendedProperties, true);
   }
 
   if (mode & ui::AXMode::kHTML) {
@@ -715,8 +716,8 @@ void AccessibilityUIMessageHandler::SetGlobalFlag(
     new_mode = ui::AXMode::kWebContents;
   } else if (flag_name == kText) {
     new_mode = ui::AXMode::kInlineTextBoxes;
-  } else if (flag_name == kScreenReader) {
-    new_mode = ui::AXMode::kScreenReader;
+  } else if (flag_name == kExtendedProperties) {
+    new_mode = ui::AXMode::kExtendedProperties;
   } else if (flag_name == kHTML) {
     new_mode = ui::AXMode::kHTML;
   } else {
@@ -726,7 +727,7 @@ void AccessibilityUIMessageHandler::SetGlobalFlag(
   // It doesn't make sense to enable one of the flags that depends on
   // web contents without enabling web contents accessibility too.
   if (enabled && (new_mode.has_mode(ui::AXMode::kInlineTextBoxes) ||
-                  new_mode.has_mode(ui::AXMode::kScreenReader) ||
+                  new_mode.has_mode(ui::AXMode::kExtendedProperties) ||
                   new_mode.has_mode(ui::AXMode::kHTML))) {
     new_mode.set_mode(ui::AXMode::kWebContents, true);
   }
@@ -735,7 +736,7 @@ void AccessibilityUIMessageHandler::SetGlobalFlag(
   // flags that depend on it.
   if (!enabled && new_mode.has_mode(ui::AXMode::kWebContents)) {
     new_mode.set_mode(ui::AXMode::kInlineTextBoxes, true);
-    new_mode.set_mode(ui::AXMode::kScreenReader, true);
+    new_mode.set_mode(ui::AXMode::kExtendedProperties, true);
     new_mode.set_mode(ui::AXMode::kHTML, true);
   }
 

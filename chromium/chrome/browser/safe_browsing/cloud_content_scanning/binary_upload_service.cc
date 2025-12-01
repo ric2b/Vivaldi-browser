@@ -5,6 +5,7 @@
 #include "chrome/browser/safe_browsing/cloud_content_scanning/binary_upload_service.h"
 
 #include <algorithm>
+#include <variant>
 
 #include "base/command_line.h"
 #include "base/rand_util.h"
@@ -18,7 +19,6 @@
 #include "components/enterprise/connectors/core/analysis_settings.h"
 #include "components/safe_browsing/core/common/safebrowsing_switches.h"
 #include "net/base/url_util.h"
-#include "third_party/abseil-cpp/absl/types/variant.h"
 
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
 #include "chrome/browser/enterprise/connectors/analysis/local_binary_upload_service_factory.h"
@@ -131,10 +131,6 @@ void BinaryUploadService::Request::set_per_profile_request(
 
 bool BinaryUploadService::Request::per_profile_request() const {
   return per_profile_request_;
-}
-
-void BinaryUploadService::Request::set_fcm_token(const std::string& token) {
-  content_analysis_request_.set_fcm_notification_token(token);
 }
 
 void BinaryUploadService::Request::set_device_token(const std::string& token) {
@@ -266,6 +262,11 @@ void BinaryUploadService::Request::set_blocking(bool blocking) {
   content_analysis_request_.set_blocking(blocking);
 }
 
+void BinaryUploadService::Request::add_local_ips(
+    const std::string& ip_address) {
+  content_analysis_request_.add_local_ips(ip_address);
+}
+
 std::string BinaryUploadService::Request::SetRandomRequestToken() {
   DCHECK(request_token().empty());
   content_analysis_request_.set_request_token(
@@ -284,11 +285,6 @@ const std::string& BinaryUploadService::Request::device_token() const {
 
 const std::string& BinaryUploadService::Request::request_token() const {
   return content_analysis_request_.request_token();
-}
-
-const std::string& BinaryUploadService::Request::fcm_notification_token()
-    const {
-  return content_analysis_request_.fcm_notification_token();
 }
 
 const std::string& BinaryUploadService::Request::filename() const {
@@ -363,7 +359,7 @@ void BinaryUploadService::Request::SerializeToString(
 }
 
 GURL BinaryUploadService::Request::GetUrlWithParams() const {
-  DCHECK(absl::holds_alternative<enterprise_connectors::CloudAnalysisSettings>(
+  DCHECK(std::holds_alternative<enterprise_connectors::CloudAnalysisSettings>(
       cloud_or_local_settings_));
 
   GURL url = GetUrlOverride().value_or(cloud_or_local_settings_.analysis_url());

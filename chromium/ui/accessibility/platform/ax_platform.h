@@ -10,8 +10,10 @@
 #include "base/memory/raw_ref.h"
 #include "base/observer_list.h"
 #include "base/scoped_observation_traits.h"
+#include "base/threading/thread_checker.h"
 #include "build/build_config.h"
 #include "ui/accessibility/ax_mode.h"
+#include "ui/accessibility/platform/assistive_tech.h"
 
 namespace ui {
 
@@ -81,7 +83,7 @@ class COMPONENT_EXPORT(AX_PLATFORM) AXPlatform {
   ~AXPlatform();
 
   // Returns the process-wide accessibility mode.
-  AXMode GetMode() { return delegate_->GetProcessMode(); }
+  AXMode GetMode();
 
   void AddModeObserver(AXModeObserver* observer);
   void RemoveModeObserver(AXModeObserver* observer);
@@ -90,8 +92,26 @@ class COMPONENT_EXPORT(AX_PLATFORM) AXPlatform {
   // process-wide accessibility mode.
   void NotifyModeAdded(AXMode mode);
 
+  // Notify observers that an assistive technology was launched or exited.
+  // Note: in some cases we do not yet have a perfect signal when the user
+  // quits their assistive tech, so in that case the tool will continue to
+  // appear to be present.
+  // The only known assistive tech that this affects currently is JAWS.
+  // TODO(crbug.com/402069423) Improve JAWS exit detection.
+  void NotifyAssistiveTechChanged(AssistiveTech assistive_tech);
+
+  // The current active assistive tech, such as a screen reader, where a
+  // detection algorithm has been implemented.
+  AssistiveTech active_assistive_tech() const {
+    DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
+    return active_assistive_tech_;
+  }
+
+  // Is the current active assistive tech a screen reader.
+  bool IsScreenReaderActive();
+
   // Notifies the delegate that an accessibility API has been used.
-  void NotifyAccessibilityApiUsage() { delegate_->OnAccessibilityApiUsage(); }
+  void NotifyAccessibilityApiUsage();
 
   // Returns whether caret browsing is enabled. When caret browsing is enabled,
   // we need to ensure that we keep ATs aware of caret movement.
@@ -126,34 +146,35 @@ class COMPONENT_EXPORT(AX_PLATFORM) AXPlatform {
   void OnUiaProviderRequested(bool uia_provider_enabled);
 #endif
 
+  void DetachFromThreadForTesting();
+
  private:
   friend class ::ui::AXPlatformNode;
   FRIEND_TEST_ALL_PREFIXES(AXPlatformTest, Observer);
 
   // Sets the process-wide accessibility mode.
-  void SetMode(AXMode new_mode) { delegate_->SetProcessMode(new_mode); }
+  void SetMode(AXMode new_mode);
 
 #if BUILDFLAG(IS_WIN)
   // Retrieves the product name, version, and toolkit version from the delegate
   // if they have not already been retrieved.
-  void RetrieveProductStringsIfNeeded() const;
+  void RetrieveProductStringsIfNeeded() const
+      VALID_CONTEXT_REQUIRED(thread_checker_);
 #endif
 
-  // Keeps track of whether caret browsing is enabled.
-  bool caret_browsing_enabled_ = false;
-
   // The embedder's delegate.
-  const raw_ref<Delegate> delegate_;
+  const raw_ref<Delegate> delegate_ GUARDED_BY_CONTEXT(thread_checker_);
 
   base::ObserverList<AXModeObserver,
                      /*check_empty=*/true,
                      /*allow_reentrancy=*/false>
-      observers_;
+      observers_ GUARDED_BY_CONTEXT(thread_checker_);
 
 #if BUILDFLAG(IS_WIN)
   // See product_name() product_version(), and toolkit_version().
   // These are lazily cached upon first use. Mutable to allow caching.
-  mutable std::optional<ProductStrings> product_strings_;
+  mutable std::optional<ProductStrings> product_strings_
+      GUARDED_BY_CONTEXT(thread_checker_);
 
   enum class UiaProviderEnablement {
     // Enabled or disabled via Chrome Variations (base::FeatureList).
@@ -163,9 +184,18 @@ class COMPONENT_EXPORT(AX_PLATFORM) AXPlatform {
     // Explicitly disabled at runtime.
     kDisabled,
   };
-  UiaProviderEnablement uia_provider_enablement_ =
-      UiaProviderEnablement::kVariations;
-#endif
+  UiaProviderEnablement uia_provider_enablement_
+      GUARDED_BY_CONTEXT(thread_checker_) = UiaProviderEnablement::kVariations;
+#endif  // BUILDFLAG(IS_WIN)
+
+  // Keeps track of the active AssistiveTech.
+  AssistiveTech active_assistive_tech_ GUARDED_BY_CONTEXT(thread_checker_) =
+      AssistiveTech::kUnknown;
+
+  // Keeps track of whether caret browsing is enabled.
+  bool caret_browsing_enabled_ GUARDED_BY_CONTEXT(thread_checker_) = false;
+
+  THREAD_CHECKER(thread_checker_);
 };
 
 }  // namespace ui

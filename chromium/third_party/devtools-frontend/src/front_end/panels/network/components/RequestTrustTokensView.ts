@@ -17,7 +17,7 @@ import requestTrustTokensViewStylesRaw from './RequestTrustTokensView.css.js';
 
 // TODO(crbug.com/391381439): Fully migrate off of constructed style sheets.
 const requestTrustTokensViewStyles = new CSSStyleSheet();
-requestTrustTokensViewStyles.replaceSync(requestTrustTokensViewStylesRaw.cssContent);
+requestTrustTokensViewStyles.replaceSync(requestTrustTokensViewStylesRaw.cssText);
 
 const {html} = Lit;
 
@@ -101,7 +101,7 @@ const UIStrings = {
    *@description Text for an error status in the Network panel
    */
   perSiteLimit: 'Per-site issuer limit reached.',
-};
+} as const;
 const str_ = i18n.i18n.registerUIStrings('panels/network/components/RequestTrustTokensView.ts', UIStrings);
 const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
 

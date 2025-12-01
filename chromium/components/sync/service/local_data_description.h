@@ -27,11 +27,11 @@ struct LocalDataItemModel {
   // data types may have the same Id type.
   // The `DataId` is also used as key of map.
   using DataId = std::variant<
-      // BOOKMARKS
+      // BOOKMARKS.
       int64_t,  // bookmarks::BookmarkNode::id()
-      // CONTACT_INFO
+      // CONTACT_INFO, THEMES.
       std::string,
-      // PASSWORDS
+      // PASSWORDS.
       std::tuple<std::string,
                  GURL,
                  std::u16string,
@@ -59,7 +59,7 @@ struct LocalDataItemModel {
   struct FolderIcon {
     bool operator==(const FolderIcon& other) const = default;
   };
-  using Icon = absl::variant<NoIcon, PageUrlIcon, FolderIcon>;
+  using Icon = std::variant<NoIcon, PageUrlIcon, FolderIcon>;
 
   // This is default-constructed as the NoIcon variant.
   Icon icon;

@@ -35,6 +35,7 @@
 #include "third_party/blink/public/mojom/manifest/display_mode.mojom.h"
 #include "ui/base/models/image_model.h"
 #include "ui/gfx/image/image_skia.h"
+#include "ui/gfx/native_widget_types.h"
 #include "url/gurl.h"
 
 namespace extensions {
@@ -141,15 +142,7 @@ bool HostedAppBrowserController::IsUrlInAppScope(const GURL& url) const {
     return false;
   }
 
-  const std::vector<UrlHandlerInfo>* url_handlers =
-      UrlHandlers::GetUrlHandlers(extension);
-
-  // We don't have a scope, fall back to same origin check.
-  if (!url_handlers) {
-    return IsSameHostAndPort(GetAppStartUrl(), url);
-  }
-
-  return UrlHandlers::CanBookmarkAppHandleUrl(extension, url);
+  return IsSameHostAndPort(GetAppStartUrl(), url);
 }
 
 const Extension* HostedAppBrowserController::GetExtension() const {
@@ -194,7 +187,8 @@ void HostedAppBrowserController::Uninstall(
   DCHECK(!uninstall_dialog_);
   uninstall_dialog_ = ExtensionUninstallDialog::Create(
       browser()->profile(),
-      browser()->window() ? browser()->window()->GetNativeWindow() : nullptr,
+      browser()->window() ? browser()->window()->GetNativeWindow()
+                          : gfx::NativeWindow(),
       this);
 
   // The dialog can be closed by UI system whenever it likes, but

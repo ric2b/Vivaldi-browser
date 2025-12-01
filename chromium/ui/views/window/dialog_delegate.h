@@ -9,10 +9,14 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <utility>
+#include <variant>
 
+#include "base/gtest_prod_util.h"
 #include "base/observer_list.h"
 #include "base/time/time.h"
+#include "base/types/pass_key.h"
 #include "ui/accessibility/ax_enums.mojom-forward.h"
 #include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/base/mojom/dialog_button.mojom.h"
@@ -25,11 +29,191 @@
 #include "ui/views/widget/widget.h"
 #include "ui/views/widget/widget_delegate.h"
 
+class AppInfoDialogViewsTest;
+class AuthenticatorRequestDialogView;
+class AutoSigninFirstRunDialogView;
+class BatchUploadDialogView;
+class BluetoothDeviceCredentialsView;
+class BluetoothDevicePairConfirmView;
+class BookmarkEditorView;
+class BruschettaInstallerView;
+class CaretBrowsingDialogDelegate;
+class CertificateSelector;
+class ChooserDialogView;
+class ConfirmBubbleViews;
+class ConstrainedWindowTestDialog;
+class CreateChromeApplicationShortcutView;
+class CreateShortcutConfirmationView;
+class CredentialLeakDialogView;
+class CryptoModulePasswordDialogView;
+class DeprecatedAppsDialogView;
+class DesktopMediaPickerDialogView;
+class DownloadDangerPromptViews;
+class DownloadInProgressDialogView;
+class ExtensionPopupInteractiveUiTest;
+class ExternalProtocolDialog;
+class FirstRunDialog;
+class HungRendererDialogView;
+class ImportLockDialogView;
+class InteractiveBrowserTestDialog;
+class JavaScriptTabModalDialogViewViews;
+class NativeDialogContainer;
+class OneClickSigninDialogView;
+class ParentPermissionDialogView;
+class RelaunchRequiredDialogView;
+class RequestPinView;
+class SelectAudioOutputDialog;
+class ShareThisTabDialogView;
+class SigninViewControllerDelegateViews;
+class TabDragControllerTestDialog;
+class TestWebModalDialog;
+class UninstallView;
+class WebAppIdentityUpdateConfirmationView;
+class WebAppUninstallDialogDelegateView;
+FORWARD_DECLARE_TEST(ExtensionPopupInteractiveUiTest,
+                     ExtensionPopupClosesOnShowingWebDialog);
+
+namespace arc {
+class ArcAppDialogView;
+class DataRemovalConfirmationDialog;
+}  // namespace arc
+
+namespace ash {
+class AccessibilityConfirmationDialog;
+class AccessibilityFeatureDisableDialog;
+class CancelCastingDialog;
+class ChildModalDialogDelegate;
+class ConfirmSignoutDialog;
+class DisplayChangeDialog;
+class EchoDialogView;
+class IdleActionWarningDialogView;
+class LocalAuthenticationRequestView;
+class LogoutConfirmationDialog;
+class ManagementDisclosureDialog;
+class MultiprofilesIntroDialog;
+class PinRequestView;
+class PublicAccountMonitoringInfoDialog;
+class RequestSystemProxyCredentialsView;
+class SessionAbortedDialog;
+class ShutdownConfirmationDialog;
+class TeleportWarningDialog;
+FORWARD_DECLARE_TEST(SnapGroupDividerTest,
+                     DividerStackingOrderWithDialogTransientUndoStacking);
+FORWARD_DECLARE_TEST(SnapGroupDividerTest,
+                     DividerStackingWhenResizingWithDialogTransient);
+
+namespace enrollment {
+class EnrollmentDialogView;
+}
+
+namespace printing::oauth2 {
+class SigninDialog;
+}
+}  // namespace ash
+
+namespace autofill {
+class AutofillErrorDialogViewNativeViews;
+class AutofillProgressDialogViews;
+class BnplTosDialog;
+class CardUnmaskOtpInputDialogViews;
+class EditAddressProfileView;
+class SaveAndFillDialogViews;
+class WebauthnDialogView;
+
+namespace payments {
+class PaymentsWindowUserConsentDialogView;
+class SelectBnplIssuerDialog;
+}  // namespace payments
+}  // namespace autofill
+
+namespace borealis {
+class BorealisSplashScreenView;
+}
+
+namespace extensions {
+class SecurityDialogTrackerTest;
+}
+
+namespace glic {
+class GlicFreDialogView;
+}
+
+namespace payments {
+class PaymentRequestDialogView;
+class SecurePaymentConfirmationDialogView;
+class SecurePaymentConfirmationNoCredsDialogView;
+}  // namespace payments
+
+namespace policy {
+class EnterpriseStartupDialogView;
+class IdleDialogView;
+class PolicyDialogBase;
+}  // namespace policy
+
+namespace remoting {
+class MessageBoxCore;
+}
+
+namespace safe_browsing {
+class PasswordReuseModalWarningDialog;
+class PromptForScanningModalDialog;
+class TailoredSecurityUnconsentedModal;
+}  // namespace safe_browsing
+
+namespace task_manager {
+class TaskManagerView;
+}
+
+namespace web_app {
+class LaunchAppUserChoiceDialogView;
+}
+
+namespace webid {
+class AccountSelectionModalView;
+}
+
 namespace views {
 
 class BubbleFrameView;
 class DialogClientView;
+class DialogClientViewTestDelegate;
 class DialogObserver;
+class InitialFocusTestDialog;
+class MakeCloseSynchronousTest;
+class TestDialog;
+class TestDialogDelegateView;
+FORWARD_DECLARE_TEST(DesktopScreenPositionClientTest, PositionDialog);
+FORWARD_DECLARE_TEST(DialogDelegateCloseTest, AnyCallbackInhibitsDefaultClose);
+FORWARD_DECLARE_TEST(DialogDelegateCloseTest,
+                     CloseParentWidgetDoesNotInvokeCloseCallback);
+FORWARD_DECLARE_TEST(
+    DialogDelegateCloseTest,
+    RecursiveCloseFromAcceptCallbackDoesNotTriggerSecondCallback);
+FORWARD_DECLARE_TEST(DialogTest, AcceptCallbackWithCloseDoesClose);
+FORWARD_DECLARE_TEST(DialogTest, AcceptCallbackWithCloseDoesNotClose);
+FORWARD_DECLARE_TEST(DialogTest, CancelCallbackWithCloseDoesClose);
+FORWARD_DECLARE_TEST(DialogTest, CancelCallbackWithCloseDoesNotClose);
+FORWARD_DECLARE_TEST(DialogTest, ButtonEnableUpdatesState);
+FORWARD_DECLARE_TEST(DialogTest, UnfocusableInitialFocus);
+
+namespace examples {
+class ColoredDialog;
+template <class DialogType>
+class DialogExampleDelegate;
+class WidgetExample;
+}  // namespace examples
+
+namespace test {
+class NativeWidgetMacTest;
+class RootViewTestDialogDelegate;
+FORWARD_DECLARE_TEST(DesktopNativeWidgetAuraTest, WindowModalityActivationTest);
+FORWARD_DECLARE_TEST(DesktopNativeWidgetAuraTest, WindowMouseModalityTest);
+FORWARD_DECLARE_TEST(DesktopWidgetTestInteractive,
+                     DesktopNativeWidgetWithModalTransientChild);
+FORWARD_DECLARE_TEST(DesktopWidgetTestInteractive,
+                     WindowModalWindowDestroyedActivationTest);
+FORWARD_DECLARE_TEST(WidgetCaptureTest, SystemModalWindowReleasesCapture);
+}  // namespace test
 
 ///////////////////////////////////////////////////////////////////////////////
 //
@@ -277,7 +461,7 @@ class VIEWS_EXPORT DialogDelegate : public WidgetDelegate {
   void SetDefaultButton(int button);
   void SetButtons(int buttons);
   void SetButtonLabel(ui::mojom::DialogButton dialog_button,
-                      std::u16string label);
+                      std::u16string_view label);
   void SetButtonStyle(ui::mojom::DialogButton button,
                       std::optional<ui::ButtonStyle> style);
   void SetButtonEnabled(ui::mojom::DialogButton dialog_button, bool enabled);
@@ -397,6 +581,13 @@ class VIEWS_EXPORT DialogDelegate : public WidgetDelegate {
   // closing the Widget when Esc is pressed. Called by DialogClientView.
   bool EscShouldCancelDialog() const;
 
+  // Explicitly sets the behavior of `EscShouldCancelDialog()`.
+  // Useful if something other than the default logic is needed.
+  void set_esc_should_cancel_dialog_override(
+      std::optional<bool> esc_should_cancel_dialog_override) {
+    esc_should_cancel_dialog_override_ = esc_should_cancel_dialog_override;
+  }
+
   // Returns the corner radius that is used for this dialog.
   int GetCornerRadius() const;
 
@@ -414,7 +605,7 @@ class VIEWS_EXPORT DialogDelegate : public WidgetDelegate {
   // Runs a close callback, ensuring that at most one close callback is run
   // if `callback` is a OnceClosure or returns true.
   bool RunCloseCallback(
-      absl::variant<base::OnceClosure, base::RepeatingCallback<bool()>>&
+      std::variant<base::OnceClosure, base::RepeatingCallback<bool()>>&
           callback);
 
   // The margins between the content and the inside of the border.
@@ -440,9 +631,9 @@ class VIEWS_EXPORT DialogDelegate : public WidgetDelegate {
       observer_list_;
 
   // Callbacks for the dialog's actions:
-  absl::variant<base::OnceClosure, base::RepeatingCallback<bool()>>
+  std::variant<base::OnceClosure, base::RepeatingCallback<bool()>>
       accept_callback_;
-  absl::variant<base::OnceClosure, base::RepeatingCallback<bool()>>
+  std::variant<base::OnceClosure, base::RepeatingCallback<bool()>>
       cancel_callback_;
   base::OnceClosure close_callback_;
 
@@ -450,6 +641,10 @@ class VIEWS_EXPORT DialogDelegate : public WidgetDelegate {
   // returned true, *or* one of the Accept/Cancel methods have been called and
   // returned true.
   bool already_started_close_ = false;
+
+  // If set, changes the behavior of EscShouldCancelDialog() to return the
+  // specified value.
+  std::optional<bool> esc_should_cancel_dialog_override_;
 
   // Ownership of the views::Widget created by CreateDialogWidget().
   Widget::InitParams::Ownership ownership_of_new_widget_ =
@@ -461,16 +656,21 @@ class VIEWS_EXPORT DialogDelegate : public WidgetDelegate {
 // implementation is-a View. Note that DialogDelegateView is not owned by
 // view's hierarchy and is expected to be deleted on DeleteDelegate call.
 //
-// It is best not to add new uses of this class, and instead to subclass View
-// directly and have a DialogDelegate member that you configure - essentially,
-// to compose with DialogDelegate rather than inheriting from it.
-// DialogDelegateView has unusual lifetime semantics that you can avoid dealing
-// with, and your class will be smaller.
+// DEPRECATED: Using this class makes it more challenging to reason about object
+// ownership/lifetimes and promotes writing "fat" views that also contain
+// business logic. Instead, use DialogModel if possible; otherwise, use separate
+// subclasses of DialogDelegate and View to handle those interfaces' respective
+// concerns.
 class VIEWS_EXPORT DialogDelegateView : public DialogDelegate, public View {
   METADATA_HEADER(DialogDelegateView, View)
 
  public:
-  DialogDelegateView();
+  // Not named `PassKey` as `View::PassKey` already exists in this hierarchy.
+  using DdvPassKey = base::PassKey<DialogDelegateView>;
+
+  // For use with std::make_unique<>(). Callers still must be in the friend list
+  // below, just as with the private constructor.
+  explicit DialogDelegateView(DdvPassKey) {}
   DialogDelegateView(const DialogDelegateView&) = delete;
   DialogDelegateView& operator=(const DialogDelegateView&) = delete;
   ~DialogDelegateView() override;
@@ -479,6 +679,144 @@ class VIEWS_EXPORT DialogDelegateView : public DialogDelegate, public View {
   Widget* GetWidget() override;
   const Widget* GetWidget() const override;
   View* GetContentsView() override;
+
+ private:
+  // DO NOT ADD TO THIS LIST!
+  // These existing cases are "grandfathered in", but there shouldn't be more.
+  // See comments atop class.
+  friend class ::AppInfoDialogViewsTest;
+  friend class ::AuthenticatorRequestDialogView;
+  friend class ::AutoSigninFirstRunDialogView;
+  friend class ::BatchUploadDialogView;
+  friend class ::BluetoothDeviceCredentialsView;
+  friend class ::BluetoothDevicePairConfirmView;
+  friend class ::BookmarkEditorView;
+  friend class ::BruschettaInstallerView;
+  friend class ::CaretBrowsingDialogDelegate;
+  friend class ::CertificateSelector;
+  friend class ::ChooserDialogView;
+  friend class ::ConfirmBubbleViews;
+  friend class ::ConstrainedWindowTestDialog;
+  friend class ::CreateChromeApplicationShortcutView;
+  friend class ::CreateShortcutConfirmationView;
+  friend class ::CredentialLeakDialogView;
+  friend class ::CryptoModulePasswordDialogView;
+  friend class ::DeprecatedAppsDialogView;
+  friend class ::DesktopMediaPickerDialogView;
+  friend class ::DownloadDangerPromptViews;
+  friend class ::DownloadInProgressDialogView;
+  friend class ::ExtensionPopupInteractiveUiTest;
+  friend class ::ExternalProtocolDialog;
+  friend class ::FirstRunDialog;
+  friend class ::HungRendererDialogView;
+  friend class ::ImportLockDialogView;
+  friend class ::InteractiveBrowserTestDialog;
+  friend class ::JavaScriptTabModalDialogViewViews;
+  friend class ::NativeDialogContainer;
+  friend class ::OneClickSigninDialogView;
+  friend class ::ParentPermissionDialogView;
+  friend class ::RelaunchRequiredDialogView;
+  friend class ::RequestPinView;
+  friend class ::SelectAudioOutputDialog;
+  friend class ::ShareThisTabDialogView;
+  friend class ::SigninViewControllerDelegateViews;
+  friend class ::TabDragControllerTestDialog;
+  friend class ::TestWebModalDialog;
+  friend class ::UninstallView;
+  friend class ::WebAppIdentityUpdateConfirmationView;
+  friend class ::WebAppUninstallDialogDelegateView;
+  FRIEND_TEST_ALL_PREFIXES(::ExtensionPopupInteractiveUiTest,
+                           ExtensionPopupClosesOnShowingWebDialog);
+  friend class ::arc::ArcAppDialogView;
+  friend class ::arc::DataRemovalConfirmationDialog;
+  friend class ::ash::AccessibilityConfirmationDialog;
+  friend class ::ash::AccessibilityFeatureDisableDialog;
+  friend class ::ash::CancelCastingDialog;
+  friend class ::ash::ChildModalDialogDelegate;
+  friend class ::ash::ConfirmSignoutDialog;
+  friend class ::ash::DisplayChangeDialog;
+  friend class ::ash::EchoDialogView;
+  friend class ::ash::IdleActionWarningDialogView;
+  friend class ::ash::LocalAuthenticationRequestView;
+  friend class ::ash::LogoutConfirmationDialog;
+  friend class ::ash::ManagementDisclosureDialog;
+  friend class ::ash::MultiprofilesIntroDialog;
+  friend class ::ash::PinRequestView;
+  friend class ::ash::PublicAccountMonitoringInfoDialog;
+  friend class ::ash::RequestSystemProxyCredentialsView;
+  friend class ::ash::SessionAbortedDialog;
+  friend class ::ash::ShutdownConfirmationDialog;
+  friend class ::ash::TeleportWarningDialog;
+  FRIEND_TEST_ALL_PREFIXES(::ash::SnapGroupDividerTest,
+                           DividerStackingOrderWithDialogTransientUndoStacking);
+  FRIEND_TEST_ALL_PREFIXES(::ash::SnapGroupDividerTest,
+                           DividerStackingWhenResizingWithDialogTransient);
+  friend class ::ash::enrollment::EnrollmentDialogView;
+  friend class ::ash::printing::oauth2::SigninDialog;
+  friend class ::autofill::AutofillErrorDialogViewNativeViews;
+  friend class ::autofill::AutofillProgressDialogViews;
+  friend class ::autofill::BnplTosDialog;
+  friend class ::autofill::CardUnmaskOtpInputDialogViews;
+  friend class ::autofill::EditAddressProfileView;
+  friend class ::autofill::SaveAndFillDialogViews;
+  friend class ::autofill::WebauthnDialogView;
+  friend class ::autofill::payments::PaymentsWindowUserConsentDialogView;
+  friend class ::autofill::payments::SelectBnplIssuerDialog;
+  friend class ::borealis::BorealisSplashScreenView;
+  friend class ::extensions::SecurityDialogTrackerTest;
+  friend class ::glic::GlicFreDialogView;
+  friend class ::payments::PaymentRequestDialogView;
+  friend class ::payments::SecurePaymentConfirmationDialogView;
+  friend class ::payments::SecurePaymentConfirmationNoCredsDialogView;
+  friend class ::policy::EnterpriseStartupDialogView;
+  friend class ::policy::IdleDialogView;
+  friend class ::policy::PolicyDialogBase;
+  friend class ::remoting::MessageBoxCore;
+  friend class ::safe_browsing::PasswordReuseModalWarningDialog;
+  friend class ::safe_browsing::PromptForScanningModalDialog;
+  friend class ::safe_browsing::TailoredSecurityUnconsentedModal;
+  friend class ::task_manager::TaskManagerView;
+  friend class DialogClientViewTestDelegate;
+  friend class InitialFocusTestDialog;
+  friend class MakeCloseSynchronousTest;
+  friend class TestDialog;
+  friend class TestDialogDelegateView;
+  FRIEND_TEST_ALL_PREFIXES(DesktopScreenPositionClientTest, PositionDialog);
+  FRIEND_TEST_ALL_PREFIXES(DialogDelegateCloseTest,
+                           AnyCallbackInhibitsDefaultClose);
+  FRIEND_TEST_ALL_PREFIXES(DialogDelegateCloseTest,
+                           CloseParentWidgetDoesNotInvokeCloseCallback);
+  FRIEND_TEST_ALL_PREFIXES(
+      DialogDelegateCloseTest,
+      RecursiveCloseFromAcceptCallbackDoesNotTriggerSecondCallback);
+  FRIEND_TEST_ALL_PREFIXES(DialogTest, AcceptCallbackWithCloseDoesClose);
+  FRIEND_TEST_ALL_PREFIXES(DialogTest, AcceptCallbackWithCloseDoesNotClose);
+  FRIEND_TEST_ALL_PREFIXES(DialogTest, CancelCallbackWithCloseDoesClose);
+  FRIEND_TEST_ALL_PREFIXES(DialogTest, CancelCallbackWithCloseDoesNotClose);
+  FRIEND_TEST_ALL_PREFIXES(DialogTest, ButtonEnableUpdatesState);
+  FRIEND_TEST_ALL_PREFIXES(DialogTest, UnfocusableInitialFocus);
+  friend class examples::ColoredDialog;
+  friend class examples::DialogExampleDelegate<DialogDelegateView>;
+  friend class examples::WidgetExample;
+  friend class test::NativeWidgetMacTest;
+  friend class test::RootViewTestDialogDelegate;
+  FRIEND_TEST_ALL_PREFIXES(test::DesktopNativeWidgetAuraTest,
+                           WindowModalityActivationTest);
+  FRIEND_TEST_ALL_PREFIXES(test::DesktopNativeWidgetAuraTest,
+                           WindowMouseModalityTest);
+  FRIEND_TEST_ALL_PREFIXES(test::DesktopWidgetTestInteractive,
+                           DesktopNativeWidgetWithModalTransientChild);
+  FRIEND_TEST_ALL_PREFIXES(test::DesktopWidgetTestInteractive,
+                           WindowModalWindowDestroyedActivationTest);
+  FRIEND_TEST_ALL_PREFIXES(test::WidgetCaptureTest,
+                           SystemModalWindowReleasesCapture);
+  friend class ::web_app::LaunchAppUserChoiceDialogView;
+  friend class ::webid::AccountSelectionModalView;
+
+  DialogDelegateView();
+
+ protected:
+  static DdvPassKey CreatePassKey() { return DdvPassKey(); }
 };
 
 // Explicitly instantiate the following templates to ensure proper linking,

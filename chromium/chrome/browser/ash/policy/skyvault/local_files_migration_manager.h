@@ -74,6 +74,10 @@ class LocalFilesMigrationManager : public LocalUserFilesPolicyObserver,
   // Removes an observer.
   void RemoveObserver(Observer* observer);
 
+  // Returns the scheduled start time for local file migration or deletion.
+  // TODO(401176561): Remove if we'll switch to a pref instead.
+  base::Time GetMigrationStartTime() const;
+
   // Injects a mock MigrationNotificationManager for tests.
   void SetNotificationManagerForTesting(
       MigrationNotificationManager* notification_manager);
@@ -81,6 +85,10 @@ class LocalFilesMigrationManager : public LocalUserFilesPolicyObserver,
   // Injects a mock MigrationCoordinator for tests.
   void SetCoordinatorForTesting(
       std::unique_ptr<MigrationCoordinator> coordinator);
+
+  // Injects a mock FilesCleanupHandler for tests.
+  void SetCleanupHandlerForTesting(
+      base::WeakPtr<chromeos::FilesCleanupHandler> cleanup_handler);
 
  private:
   // policy::local_user_files::Observer overrides:
@@ -146,12 +154,16 @@ class LocalFilesMigrationManager : public LocalUserFilesPolicyObserver,
       std::optional<user_data_auth::SetUserDataStorageWriteEnabledReply> reply);
 
   // Stops the migration if currently ongoing.
-  void MaybeStopMigration(CloudProvider previous_provider,
+  void MaybeStopMigration(MigrationDestination previous_destination,
                           bool close_dialog = true,
                           MigrationStoppedCallback = base::DoNothing());
 
   // Sets and stores the state on the device.
   void SetState(State new_state);
+
+  // Resets all stored prefs, like the state and start time, in case migration
+  // is stopped.
+  void ResetMigrationPrefs();
 
   // Notifies the observers that migration succeeded.
   void NotifySuccess();
@@ -171,9 +183,10 @@ class LocalFilesMigrationManager : public LocalUserFilesPolicyObserver,
   // Whether local user files are allowed by policy.
   bool local_user_files_allowed_ = true;
 
-  // Cloud provider to which files are uploaded. If not specified, no migration
-  // happens.
-  CloudProvider cloud_provider_ = CloudProvider::kNotSpecified;
+  // Indicates how local files should be handled (upload to the cloud or
+  // delete). If not specified, no migration happens.
+  MigrationDestination migration_destination_ =
+      MigrationDestination::kNotSpecified;
 
   // The name of the device-unique upload root folder on Drive
   std::string upload_root_;
@@ -195,6 +208,9 @@ class LocalFilesMigrationManager : public LocalUserFilesPolicyObserver,
 
   // Number of times the entire upload failed and was retried.
   int current_retry_count_;
+
+  base::WeakPtr<chromeos::FilesCleanupHandler> cleanup_handler_for_testing_ =
+      nullptr;
 
   base::WeakPtrFactory<LocalFilesMigrationManager> weak_factory_{this};
 };

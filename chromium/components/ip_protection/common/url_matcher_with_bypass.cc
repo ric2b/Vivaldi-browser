@@ -4,7 +4,13 @@
 
 #include "components/ip_protection/common/url_matcher_with_bypass.h"
 
+#include <algorithm>
+#include <cstddef>
+#include <iterator>
+#include <map>
 #include <memory>
+#include <optional>
+#include <set>
 #include <string>
 #include <string_view>
 #include <unordered_set>
@@ -17,10 +23,13 @@
 #include "base/memory/raw_ptr.h"
 #include "base/notreached.h"
 #include "base/strings/strcat.h"
+#include "base/strings/to_string.h"
 #include "base/trace_event/memory_usage_estimator.h"
 #include "components/ip_protection/common/ip_protection_data_types.h"
 #include "components/privacy_sandbox/masked_domain_list/masked_domain_list.pb.h"
 #include "net/base/scheme_host_port_matcher.h"
+#include "net/base/scheme_host_port_matcher_result.h"
+#include "net/base/scheme_host_port_matcher_rule.h"
 #include "net/base/schemeful_site.h"
 #include "net/base/url_util.h"
 #include "url_matcher_with_bypass.h"
@@ -259,7 +268,7 @@ UrlMatcherWithBypassResult UrlMatcherWithBypass::Matches(
   auto vlog = [&](std::string_view message, bool matches) {
     VLOG(3) << "UrlMatcherWithBypass::Matches(" << request_url << ", "
             << top_frame_site.value() << ") - " << message
-            << " - matches: " << (matches ? "true" : "false");
+            << " - matches: " << base::ToString(matches);
   };
 
   if (!skip_bypass_check && !top_frame_site.has_value()) {

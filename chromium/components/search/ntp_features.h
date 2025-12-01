@@ -34,6 +34,7 @@ BASE_DECLARE_FEATURE(kNtpBackgroundImageErrorDetection);
 BASE_DECLARE_FEATURE(kNtpCalendarModule);
 BASE_DECLARE_FEATURE(kNtpChromeCartModule);
 BASE_DECLARE_FEATURE(kNtpDriveModule);
+BASE_DECLARE_FEATURE(kNtpDriveModuleNoSyncRequirement);
 BASE_DECLARE_FEATURE(kNtpDriveModuleSegmentation);
 BASE_DECLARE_FEATURE(kNtpDriveModuleShowSixFiles);
 #if !defined(OFFICIAL_BUILD)
@@ -62,12 +63,14 @@ enum class NtpSharepointModuleDataType {
   kNonInsights,
   kTrendingInsightsFakeData,
   kNonInsightsFakeData,
+  kCombinedSuggestions,
 };
 BASE_DECLARE_FEATURE(kNtpShortcuts);
 BASE_DECLARE_FEATURE(kNtpHandleMostVisitedNavigationExplicitly);
 BASE_DECLARE_FEATURE(kNtpMostRelevantTabResumptionModule);
 BASE_DECLARE_FEATURE(kNtpMostRelevantTabResumptionModuleDeviceIcon);
 BASE_DECLARE_FEATURE(kNtpMostRelevantTabResumptionUseIsKnownToSync);
+BASE_DECLARE_FEATURE(kNtpMostRelevantTabResumptionModuleFallbackToHost);
 BASE_DECLARE_FEATURE(kNtpTabResumptionModuleCategories);
 BASE_DECLARE_FEATURE(kNtpTabResumptionModuleTimeLimit);
 BASE_DECLARE_FEATURE(kNtpWallpaperSearchButton);
@@ -76,6 +79,7 @@ BASE_DECLARE_FEATURE(kNtpWallpaperSearchButtonAnimationShownThreshold);
 BASE_DECLARE_FEATURE(kNtpMobilePromo);
 BASE_DECLARE_FEATURE(kNtpMicrosoftAuthenticationModule);
 BASE_DECLARE_FEATURE(kNtpOneGoogleBarAsyncBarParts);
+BASE_DECLARE_FEATURE(kNtpFooter);
 
 // Parameter for controlling the luminosity difference for NTP elements on light
 // backgrounds.
@@ -208,6 +212,16 @@ extern const base::FeatureParam<NtpSharepointModuleDataType>
 // Parameter determining the max number of files to display on the Microsoft
 // files module.
 extern const base::FeatureParam<int> kNtpMicrosoftFilesModuleMaxFilesParam;
+// Parameter determining the max number of trending files to display on the
+// Microsoft files module. Used only for the
+// `NtpSharepointModuleDataType::kCombinedSuggestions` variation.
+extern const base::FeatureParam<int>
+    kNtpMicrosoftFilesModuleMaxTrendingFilesForCombinedParam;
+// Parameter determining the max number of used and shared files to display on
+// the Microsoft files module. Used only for the
+// `NtpSharepointModuleDataType::kCombinedSuggestions` variation.
+extern const base::FeatureParam<int>
+    kNtpMicrosoftFilesModuleMaxNonInsightsFilesForCombinedParam;
 // Parameter determining whether the tab resumption module should filter visits
 // that are associated with local tabs.
 extern const base::FeatureParam<bool>

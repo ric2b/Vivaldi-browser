@@ -10,8 +10,9 @@
 #include <string>
 #include <vector>
 
-#include "components/ad_blocker/adblock_types.h"
 #include "components/ad_blocker/adblock_rule_service.h"
+#include "components/ad_blocker/adblock_types.h"
+#include "components/request_filter/adblock_filter/adblock_tab_state_and_logs.h"
 #include "url/origin.h"
 
 namespace content {
@@ -25,12 +26,12 @@ class RuleServiceContent : public RuleService {
 
   // Check if a given document |url| is blocked to determine whether to show
   // an interstiatial in the given |frame|.
-  virtual bool IsDocumentBlocked(RuleGroup group,
-                                 content::RenderFrameHost* frame,
-                                 const GURL& url) const = 0;
+  virtual std::array<std::optional<TabStateAndLogs::RuleData>, kRuleGroupCount>
+  IsDocumentBlocked(content::RenderFrameHost* frame) const = 0;
 
-  // Helper method for setting up a new cosmetic filter with the needed indexes.
-  virtual void InitializeCosmeticFilter(CosmeticFilter* filter) = 0;
+  // Helper method for building a new cosmetic filter..
+  virtual std::unique_ptr<CosmeticFilter> MakeCosmeticFilter(
+      content::RenderFrameHost* frame) = 0;
 };
 
 }  // namespace adblock_filter

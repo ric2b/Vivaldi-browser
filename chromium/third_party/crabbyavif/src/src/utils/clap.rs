@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use crate::internal_utils::*;
-use crate::*;
+use crate::utils::*;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct CleanAperture {

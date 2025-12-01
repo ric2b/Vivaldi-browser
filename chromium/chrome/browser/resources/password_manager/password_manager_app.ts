@@ -146,6 +146,7 @@ export class PasswordManagerAppElement extends PasswordManagerAppElementBase {
     };
   }
 
+  private prefs_: {[key: string]: any};
   private selectedPage_: Page;
   private narrow_: boolean;
   private collapsed_: boolean;
@@ -329,7 +330,7 @@ export class PasswordManagerAppElement extends PasswordManagerAppElementBase {
     this.$.toast.show();
   }
 
-  private async onValueCopied_(event: ValueCopiedEvent) {
+  private onValueCopied_(event: ValueCopiedEvent) {
     this.showUndo_ = false;
     this.toastMessage_ = event.detail.toastMessage;
     this.$.toast.show();

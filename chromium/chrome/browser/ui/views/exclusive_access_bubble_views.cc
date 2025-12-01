@@ -31,7 +31,7 @@
 #include "ui/views/view.h"
 #include "ui/views/view_class_properties.h"
 #include "ui/views/widget/widget.h"
-#include "url/gurl.h"
+#include "url/origin.h"
 
 #if BUILDFLAG(IS_WIN)
 #include "ui/base/l10n/l10n_util_win.h"
@@ -148,7 +148,7 @@ void ExclusiveAccessBubbleViews::Update(
   DCHECK(EXCLUSIVE_ACCESS_BUBBLE_TYPE_NONE != params.type ||
          params.has_download);
   bool already_shown = IsShowing() || IsVisible();
-  if (params_.type == params.type && params_.url == params.url &&
+  if (params_.type == params.type && params_.origin == params.origin &&
       !params.force_update && already_shown) {
     return;
   }
@@ -172,7 +172,7 @@ void ExclusiveAccessBubbleViews::Update(
   const bool entering_tab_fullscreen =
       !IsTabFullscreenType(params_.type) && IsTabFullscreenType(params.type);
 
-  params_.url = params.url;
+  params_.origin = params.origin;
   // When a request to notify about a download is made, the bubble type
   // should be preserved from the old value, and not be updated.
   if (!params.has_download) {
@@ -255,7 +255,8 @@ void ExclusiveAccessBubbleViews::UpdateViewContent(
   // ('|'), which should be drawn graphically as a key, not displayed literally.
   // `accelerator` is the name of the key to exit fullscreen mode.
   view_->UpdateContent(exclusive_access_bubble::GetInstructionTextForType(
-      params_.type, accelerator, params_.has_download, notify_overridden_));
+      params_.type, accelerator, params_.origin, params_.has_download,
+      notify_overridden_));
 }
 
 bool ExclusiveAccessBubbleViews::IsVisible() const {
@@ -285,7 +286,8 @@ void ExclusiveAccessBubbleViews::AnimationProgressed(
 void ExclusiveAccessBubbleViews::AnimationEnded(
     const gfx::Animation* animation) {
   if (animation_->IsShowing()) {
-    GetView()->NotifyAccessibilityEvent(ax::mojom::Event::kAlert, true);
+    GetView()->NotifyAccessibilityEventDeprecated(ax::mojom::Event::kAlert,
+                                                  true);
   }
   AnimationProgressed(animation);
 }

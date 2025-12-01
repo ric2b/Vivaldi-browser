@@ -4,6 +4,7 @@
 
 #include "third_party/blink/renderer/core/scheduler/scripted_idle_task_controller.h"
 
+#include "base/debug/alias.h"
 #include "base/debug/crash_logging.h"
 #include "base/location.h"
 #include "base/metrics/histogram_macros.h"
@@ -38,7 +39,11 @@ struct CallbackCancellationTraits<
           controller,
       const blink::ScriptedIdleTaskController::CallbackId& id,
       const DecrementOnDelete&) {
-    return !controller || !controller->HasCallback(id);
+    if (!controller) {
+      return true;
+    }
+    controller->OnCheckSchedulerIdleTaskIsCancelled();
+    return !controller->HasCallback(id);
   }
 
   static bool MaybeValid(
@@ -120,14 +125,21 @@ void ScriptedIdleTaskController::Trace(Visitor* visitor) const {
 }
 
 int ScriptedIdleTaskController::NextCallbackId() {
+  CHECK(!IsValidCallbackId(0));
+  CHECK(!IsValidCallbackId(-1));
+
   while (true) {
     ++next_callback_id_;
 
-    if (!IsValidCallbackId(next_callback_id_))
+    if (!IsValidCallbackId(next_callback_id_)) {
+      CHECK_EQ(next_callback_id_, -1, base::NotFatalUntil::M138);
+      next_callback_id_wrapped_around_ = true;
       next_callback_id_ = 1;
+    }
 
-    if (!idle_tasks_.Contains(next_callback_id_))
+    if (!idle_tasks_.Contains(next_callback_id_)) {
       return next_callback_id_;
+    }
   }
 }
 
@@ -165,8 +177,7 @@ ScriptedIdleTaskController::DecrementOnDelete::DecrementOnDelete(
 
 ScriptedIdleTaskController::DecrementOnDelete::~DecrementOnDelete() {
   if (counter_) {
-    CHECK_GT(counter_->data, 0u, base::NotFatalUntil::M136);
-    --counter_->data;
+    DecrementNow();
   }
 }
 
@@ -175,6 +186,13 @@ ScriptedIdleTaskController::DecrementOnDelete::DecrementOnDelete(
 ScriptedIdleTaskController::DecrementOnDelete&
 ScriptedIdleTaskController::DecrementOnDelete::operator=(DecrementOnDelete&&) =
     default;
+
+void ScriptedIdleTaskController::DecrementOnDelete::DecrementNow() {
+  CHECK(counter_, base::NotFatalUntil::M136);
+  CHECK_GT(counter_->data, 0u, base::NotFatalUntil::M136);
+  --counter_->data;
+  counter_.reset();
+}
 
 void ScriptedIdleTaskController::PostSchedulerIdleAndTimeoutTasks(
     CallbackId id,
@@ -190,7 +208,6 @@ void ScriptedIdleTaskController::PostSchedulerIdleAndTimeoutTasks(
   // 2. `timeout_millis` is page-originated and doesn't have any reasonable
   //    limit. When a callback is processed, it's critical to remove the timeout
   //    task from the queue. Failure to do so is likely to result in OOM.
-  base::DelayedTaskHandle delayed_task_handle;
   if (timeout_millis > 0) {
     auto callback =
         WTF::BindOnce(&ScriptedIdleTaskController::SchedulerTimeoutTask,
@@ -203,7 +220,7 @@ void ScriptedIdleTaskController::PostSchedulerIdleAndTimeoutTasks(
                                         base::Milliseconds(timeout_millis));
   }
 
-  PostSchedulerIdleTask(id);
+  PostSchedulerIdleTask(it);
 }
 
 void ScriptedIdleTaskController::CancelCallback(CallbackId id) {
@@ -220,28 +237,27 @@ void ScriptedIdleTaskController::CancelCallback(CallbackId id) {
 
   RemoveIdleTask(id);
 
-  // Sweep the queue to remove cancelled idle tasks when 1000 are accumulated.
-  //
-  // Note: When tasks are in `idle_tasks_to_reschedule_`, it is possible for
-  // `num_scheduler_idle_tasks_` to be less than `idle_tasks_.size()`.
-  if (num_scheduler_idle_tasks_->data > idle_tasks_.size() &&
-      num_scheduler_idle_tasks_->data - idle_tasks_.size() > 1000 &&
-      base::FeatureList::IsEnabled(kRemoveCancelledScriptedIdleTasks)) {
-    scheduler_->RemoveCancelledIdleTasks();
-    CHECK_LE(num_scheduler_idle_tasks_->data, idle_tasks_.size(),
-             base::NotFatalUntil::M136);
-  }
+  // The delta between `IdleTask`s and "scheduler idle tasks" increased.
+  CleanupSchedulerIdleTasks();
 }
 
 bool ScriptedIdleTaskController::HasCallback(CallbackId id) const {
   return idle_tasks_.Contains(id);
 }
 
-void ScriptedIdleTaskController::PostSchedulerIdleTask(CallbackId id) {
+void ScriptedIdleTaskController::PostSchedulerIdleTask(
+    IdleTaskMap::iterator it) {
+  // Track that there is a "scheduler idle task" queued for the IdleTask.
+  CHECK(!it->value->has_scheduler_idle_task_, base::NotFatalUntil::M138);
+  it->value->has_scheduler_idle_task_ = true;
+
+  // Track the number of outstanding "scheduler idle tasks".
   ++num_scheduler_idle_tasks_->data;
+
+  // Post the scheduler idle task.
   scheduler_->PostIdleTask(
       FROM_HERE, WTF::BindOnce(&ScriptedIdleTaskController::SchedulerIdleTask,
-                               WrapWeakPersistent(this), id,
+                               WrapWeakPersistent(this), it->key,
                                DecrementOnDelete(num_scheduler_idle_tasks_)));
 }
 
@@ -251,9 +267,22 @@ void ScriptedIdleTaskController::SchedulerIdleTask(
     base::TimeTicks deadline) {
   CHECK_GT(num_scheduler_idle_tasks_->data, 0u, base::NotFatalUntil::M136);
 
-  if (!idle_tasks_.Contains(id)) {
+  // Consume `decrement_on_delete` before running the task, to maintain the
+  // invariant that `num_scheduler_idle_tasks_` <= `idle_tasks_.size()` after
+  // invoking `RemoveCancelledIdleTasks()` on the scheduler, even if the idle
+  // task cancels itself (without this, an idle task that cancels itself would
+  // be counted in `num_scheduler_idle_tasks_` while running, but not in
+  // `idle_tasks_.size()`.
+  decrement_on_delete.DecrementNow();
+
+  auto it = idle_tasks_.find(id);
+  if (it == idle_tasks_.end()) {
     return;
   }
+
+  // Track that there is no more "scheduler idle task" queued for this IdleTask.
+  CHECK(it->value->has_scheduler_idle_task_, base::NotFatalUntil::M138);
+  it->value->has_scheduler_idle_task_ = false;
 
   if (paused_) {
     // Reschedule when unpaused.
@@ -263,7 +292,7 @@ void ScriptedIdleTaskController::SchedulerIdleTask(
 
   // If we are going to yield immediately, reschedule the callback for later.
   if (ThreadScheduler::Current()->ShouldYieldForHighPriorityWork()) {
-    PostSchedulerIdleTask(id);
+    PostSchedulerIdleTask(it);
     return;
   }
 
@@ -275,6 +304,9 @@ void ScriptedIdleTaskController::SchedulerIdleTask(
 }
 
 void ScriptedIdleTaskController::SchedulerTimeoutTask(CallbackId id) {
+  // The timeout task is cancelled when the IdleTask is removed from
+  // `idle_tasks_`, so this should only run if the task is in `idle_tasks_`.
+  CHECK(idle_tasks_.Contains(id), base::NotFatalUntil::M138);
   if (!idle_tasks_.Contains(id)) {
     return;
   }
@@ -286,6 +318,10 @@ void ScriptedIdleTaskController::SchedulerTimeoutTask(CallbackId id) {
 
   RunIdleTask(id, /*deadline=*/base::TimeTicks::Now(),
               IdleDeadline::CallbackType::kCalledByTimeout);
+
+  // The delta between `IdleTask`s and "scheduler idle tasks" increased when
+  // RunIdleTask() above removed the `IdleTask` from `idle_tasks_`.
+  CleanupSchedulerIdleTasks();
 }
 
 void ScriptedIdleTaskController::RunIdleTask(
@@ -298,9 +334,7 @@ void ScriptedIdleTaskController::RunIdleTask(
   // TODO(https://crbug.com/796145): Remove this hack once on-stack objects
   // get supported by either of wrapper-tracing or unified GC.
   auto idle_task_iter = idle_tasks_.find(id);
-  CHECK_NE(idle_task_iter, idle_tasks_.end(), base::NotFatalUntil::M133);
-  if (idle_task_iter == idle_tasks_.end())
-    return;
+  CHECK_NE(idle_task_iter, idle_tasks_.end());
   IdleTask* idle_task = idle_task_iter->value;
   DCHECK(idle_task);
 
@@ -313,9 +347,8 @@ void ScriptedIdleTaskController::RunIdleTask(
                             AtomicString(), true);
 
   bool cross_origin_isolated_capability =
-      GetExecutionContext()
-          ? GetExecutionContext()->CrossOriginIsolatedCapability()
-          : false;
+      GetExecutionContext() &&
+      GetExecutionContext()->CrossOriginIsolatedCapability();
   DEVTOOLS_TIMELINE_TRACE_EVENT(
       "FireIdleCallback", inspector_idle_callback_fire_event::Data,
       GetExecutionContext(), id, allotted_time.InMillisecondsF(),
@@ -345,6 +378,9 @@ void ScriptedIdleTaskController::RemoveAllIdleTasks() {
     idle_task.value->delayed_task_handle_.CancelTask();
   }
   idle_tasks_.clear();
+
+  // The delta between `IdleTask`s and "scheduler idle tasks" increased.
+  CleanupSchedulerIdleTasks();
 }
 
 void ScriptedIdleTaskController::ContextDestroyed() {
@@ -357,6 +393,47 @@ void ScriptedIdleTaskController::ContextLifecycleStateChanged(
     ContextPaused();
   else
     ContextUnpaused();
+}
+
+void ScriptedIdleTaskController::OnCheckSchedulerIdleTaskIsCancelled() {
+  ++num_is_cancelled_checks_;
+}
+
+void ScriptedIdleTaskController::CleanupSchedulerIdleTasks() {
+  if (num_scheduler_idle_tasks_->data < idle_tasks_.size() ||
+      num_scheduler_idle_tasks_->data - idle_tasks_.size() <= 1000 ||
+      !base::FeatureList::IsEnabled(kRemoveCancelledScriptedIdleTasks)) {
+    return;
+  }
+
+  const uint64_t num_scheduler_idle_tasks_before =
+      num_scheduler_idle_tasks_->data;
+  const uint64_t num_is_cancelled_checks_before = num_is_cancelled_checks_;
+
+  scheduler_->RemoveCancelledIdleTasks();
+
+  // TODO(crbug.com/394266102): Remove after the bug is understood and fixed.
+  const uint64_t num_scheduler_idle_tasks_after =
+      num_scheduler_idle_tasks_->data;
+  const uint64_t num_is_cancelled_checks_after = num_is_cancelled_checks_;
+  const size_t num_idle_tasks = idle_tasks_.size();
+  base::debug::Alias(&num_scheduler_idle_tasks_before);
+  base::debug::Alias(&num_is_cancelled_checks_before);
+  base::debug::Alias(&num_scheduler_idle_tasks_after);
+  base::debug::Alias(&num_is_cancelled_checks_after);
+  base::debug::Alias(&num_idle_tasks);
+
+  // IsCancelled() should be called exactly once per "scheduler idle task".
+  // TODO(crbug.com/394266102): Remove after the bug is understood and fixed.
+  CHECK_EQ(num_is_cancelled_checks_ - num_is_cancelled_checks_before,
+           num_scheduler_idle_tasks_before, base::NotFatalUntil::M138);
+
+  // There should be at most one "scheduler idle task" per IdleTask.
+  // Note: When tasks are in `idle_tasks_to_reschedule_`, it is possible to
+  // have less "scheduler idle tasks" than IdleTasks.
+  CHECK_LE(num_scheduler_idle_tasks_->data, idle_tasks_.size(),
+           base::NotFatalUntil::M138)
+      << " Wrapped: " << next_callback_id_wrapped_around_;
 }
 
 void ScriptedIdleTaskController::ContextPaused() {
@@ -373,7 +450,7 @@ void ScriptedIdleTaskController::ContextUnpaused() {
     if (it == idle_tasks_.end()) {
       continue;
     }
-    PostSchedulerIdleTask(id);
+    PostSchedulerIdleTask(it);
   }
   idle_tasks_to_reschedule_.clear();
 }

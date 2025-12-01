@@ -6,7 +6,6 @@
 
 #include <utility>
 
-#include "ash/capture_mode/capture_mode_types.h"
 #include "ash/capture_mode/fake_video_source_provider.h"
 #include "ash/public/cpp/ash_web_view_factory.h"
 #include "ash/session/session_controller_impl.h"
@@ -16,6 +15,7 @@
 #include "base/threading/thread_restrictions.h"
 #include "chromeos/ash/services/recording/public/mojom/recording_service.mojom.h"
 #include "chromeos/ash/services/recording/recording_service_test_api.h"
+#include "services/network/test/test_shared_url_loader_factory.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 
@@ -240,6 +240,18 @@ std::unique_ptr<AshWebView> TestCaptureModeDelegate::CreateSearchResultsView()
   return AshWebViewFactory::Get()->Create(AshWebView::InitParams());
 }
 
+void TestCaptureModeDelegate::SendLensWebRegionSearch(
+    const gfx::Image& original_image,
+    const bool is_standalone_session,
+    ash::OnSearchUrlFetchedCallback search_callback,
+    ash::OnTextDetectionComplete text_callback,
+    base::OnceCallback<void()> error_callback) {
+  std::move(search_callback).Run(GURL("https://lens.google.com/"));
+  if (!lens_detected_text_.empty()) {
+    std::move(text_callback).Run(lens_detected_text_);
+  }
+}
+
 void TestCaptureModeDelegate::SendRegionSearch(
     const SkBitmap& image,
     const gfx::Rect& region,
@@ -264,6 +276,10 @@ void TestCaptureModeDelegate::DeleteRemoteFile(
     const base::FilePath& path,
     base::OnceCallback<void(bool)> callback) {
   std::move(callback).Run(true);
+}
+
+bool TestCaptureModeDelegate::ActiveUserDefaultSearchProviderIsGoogle() const {
+  return true;
 }
 
 }  // namespace ash

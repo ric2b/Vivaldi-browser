@@ -4,6 +4,7 @@
 
 #import "base/strings/sys_string_conversions.h"
 #import "components/policy/policy_constants.h"
+#import "components/regional_capabilities/regional_capabilities_switches.h"
 #import "components/search_engines/search_engine_choice/search_engine_choice_utils.h"
 #import "components/search_engines/search_engines_switches.h"
 #import "components/strings/grit/components_strings.h"
@@ -46,6 +47,8 @@
   config.additional_args.push_back("true");
   config.additional_args.push_back(
       "--disable-features=UpdatedFirstRunSequence");
+  config.additional_args.push_back(
+      "--disable-features=AnimatedDefaultBrowserPromoInFRE");
   return config;
 }
 
@@ -70,7 +73,7 @@
 - (void)testSearchEngineChoiceScreenSelectThenScroll {
   // Skip sign-in.
   [[self elementInteractionWithGreyMatcher:
-             chrome_test_util::PromoStyleSecondaryActionButtonMatcher()
+             chrome_test_util::PromoScreenSecondaryButtonMatcher()
                       scrollViewIdentifier:
                           kPromoStyleScrollViewAccessibilityIdentifier]
       performAction:grey_tap()];
@@ -101,7 +104,7 @@
       assertWithMatcher:grey_nil()];
 
   [SearchEngineChoiceEarlGreyUI confirmSearchEngineChoiceScreen];
-  [[self class] dismissDefaultBrowser];
+  [[self class] dismissDefaultBrowserAndRemainingScreens];
   [SearchEngineChoiceEarlGreyUI
       verifyDefaultSearchEngineSetting:searchEngineToSelect];
 }
@@ -112,7 +115,7 @@
 - (void)testSearchEngineChoiceScreenScrollThenSelect {
   // Skip sign-in.
   [[self elementInteractionWithGreyMatcher:
-             chrome_test_util::PromoStyleSecondaryActionButtonMatcher()
+             chrome_test_util::PromoScreenSecondaryButtonMatcher()
                       scrollViewIdentifier:
                           kPromoStyleScrollViewAccessibilityIdentifier]
       performAction:grey_tap()];
@@ -146,7 +149,7 @@
                               amount:300];
   [SearchEngineChoiceEarlGreyUI confirmSearchEngineChoiceScreen];
 
-  [[self class] dismissDefaultBrowser];
+  [[self class] dismissDefaultBrowserAndRemainingScreens];
   [SearchEngineChoiceEarlGreyUI
       verifyDefaultSearchEngineSetting:searchEngineToSelect];
 }
@@ -168,12 +171,12 @@
                                  policy::key::kDefaultSearchProviderEnabled);
   // Skip sign-in.
   [[self elementInteractionWithGreyMatcher:
-             chrome_test_util::PromoStyleSecondaryActionButtonMatcher()
+             chrome_test_util::PromoScreenSecondaryButtonMatcher()
                       scrollViewIdentifier:
                           kPromoStyleScrollViewAccessibilityIdentifier]
       performAction:grey_tap()];
   // Dismiss the default browser screen.
-  [[self class] dismissDefaultBrowser];
+  [[self class] dismissDefaultBrowserAndRemainingScreens];
   // Open the default search engine settings menu.
   [ChromeEarlGreyUI openSettingsMenu];
   // Verify that the correct search engine is selected. The enterprise search
@@ -204,7 +207,7 @@
   chrome_test_util::GREYAssertErrorNil(
       [MetricsAppInterface expectTotalCount:0 forHistogram:eventHistogram]);
   [[self elementInteractionWithGreyMatcher:
-             chrome_test_util::PromoStyleSecondaryActionButtonMatcher()
+             chrome_test_util::PromoScreenSecondaryButtonMatcher()
                       scrollViewIdentifier:
                           kPromoStyleScrollViewAccessibilityIdentifier]
       performAction:grey_tap()];
@@ -262,7 +265,7 @@
                        search_engines::SearchEngineChoiceScreenEvents::
                            kFreDefaultWasSet)
       forHistogram:eventHistogram]);
-  [[self class] dismissDefaultBrowser];
+  [[self class] dismissDefaultBrowserAndRemainingScreens];
 }
 
 // Tests that incognito can be forced through the FRE with search engine screen.

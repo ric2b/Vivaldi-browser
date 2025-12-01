@@ -21,6 +21,7 @@
 #import "ios/chrome/browser/share_kit/model/share_kit_manage_configuration.h"
 #import "ios/chrome/browser/share_kit/model/share_kit_service.h"
 #import "ios/chrome/browser/share_kit/model/share_kit_share_group_configuration.h"
+#import "ios/chrome/browser/share_kit/model/sharing_state.h"
 #import "ios/chrome/browser/shared/model/url/chrome_url_constants.h"
 #import "ios/chrome/browser/shared/model/web_state_list/tab_group.h"
 #import "ios/chrome/browser/shared/model/web_state_list/web_state_list.h"
@@ -36,14 +37,13 @@
 #import "ios/chrome/browser/url_loading/model/url_loading_params.h"
 #import "ios/web/public/web_state.h"
 
-using PeopleGroupActionOutcome =
-    data_sharing::DataSharingService::PeopleGroupActionOutcome;
 using ScopedTabGroupSyncObservation =
     base::ScopedObservation<tab_groups::TabGroupSyncService,
                             tab_groups::TabGroupSyncService::Observer>;
 using ScopedDataSharingSyncObservation =
     base::ScopedObservation<data_sharing::DataSharingService,
                             data_sharing::DataSharingService::Observer>;
+using tab_groups::SharingState;
 
 namespace {
 // The preferred size in points for the avatar icons.
@@ -172,10 +172,10 @@ constexpr CGFloat kFacePileAvatarSize = 20;
         HasTabGroupIndicatorVisible()) {
       [_consumer setTabGroupTitle:tabGroup->GetTitle()
                        groupColor:tabGroup->GetColor()];
-      [self updateTabGroupSharedState:tabGroup];
+      [self updateTabGroupSharingState:tabGroup];
     } else {
       [_consumer setTabGroupTitle:nil groupColor:nil];
-      [_consumer setShared:NO owner:NO];
+      [_consumer setSharingState:SharingState::kNotShared];
     }
     [self updateFacePileUI];
   }
@@ -311,7 +311,7 @@ constexpr CGFloat kFacePileAvatarSize = 20;
 
 - (void)tabGroupSyncServiceInitialized {
   [self presentForegroundIPHIfNeeded];
-  [self updateTabGroupSharedState:[self currentTabGroup]];
+  [self updateTabGroupSharingState:[self currentTabGroup]];
   [self updateFacePileUI];
 }
 
@@ -323,7 +323,7 @@ constexpr CGFloat kFacePileAvatarSize = 20;
   if (!tabGroup || newGroup.local_group_id() != tabGroup->tab_group_id()) {
     return;
   }
-  [self updateTabGroupSharedState:tabGroup];
+  [self updateTabGroupSharingState:tabGroup];
   [self updateFacePileUI];
 }
 
@@ -331,29 +331,29 @@ constexpr CGFloat kFacePileAvatarSize = 20;
 
 - (void)dataSharingServiceInitialized {
   [self presentForegroundIPHIfNeeded];
-  [self updateTabGroupSharedState:[self currentTabGroup]];
+  [self updateTabGroupSharingState:[self currentTabGroup]];
   [self updateFacePileUI];
 }
 
 - (void)dataSharingServiceDidAddGroup:(const data_sharing::GroupData&)groupData
-                               atTime:(const base::Time&)eventTime {
+                               atTime:(base::Time)eventTime {
   [self handleDataSharingUpdateForGroupId:groupData.group_token.group_id];
 }
 
 - (void)dataSharingServiceDidRemoveGroup:(const data_sharing::GroupId&)groupId
-                                  atTime:(const base::Time&)eventTime {
+                                  atTime:(base::Time)eventTime {
   [self handleDataSharingUpdateForGroupId:groupId];
 }
 
 - (void)dataSharingServiceDidAddMember:(const GaiaId&)memberId
                                toGroup:(const data_sharing::GroupId&)groupId
-                                atTime:(const base::Time&)eventTime {
+                                atTime:(base::Time)eventTime {
   [self handleDataSharingUpdateForGroupId:groupId];
 }
 
 - (void)dataSharingServiceDidRemoveMember:(const GaiaId&)memberId
                                   toGroup:(const data_sharing::GroupId&)groupId
-                                   atTime:(const base::Time&)eventTime {
+                                   atTime:(base::Time)eventTime {
   [self handleDataSharingUpdateForGroupId:groupId];
 }
 
@@ -382,27 +382,24 @@ constexpr CGFloat kFacePileAvatarSize = 20;
     return;
   }
 
-  [self updateTabGroupSharedState:tabGroup];
+  [self updateTabGroupSharingState:tabGroup];
   [self updateFacePileUI];
 }
 
 // Takes the corresponded action to `actionType` for the shared `group`.
-// Not handled TabGroupActionType: kUngroupTabGroup, kDeleteTabGroup.
+// TabGroupActionType must be kLeaveSharedTabGroup or kDeleteSharedTabGroup.
 - (void)takeActionForActionType:(TabGroupActionType)actionType
                  sharedTabGroup:(const TabGroup*)group {
-  CHECK(_dataSharingService);
+  CHECK(_collaborationService);
 
-  const base::Uuid savedGroupId =
-      _tabGroupSyncService->GetGroup(group->tab_group_id())->saved_guid();
   const tab_groups::CollaborationId collabId =
       tab_groups::utils::GetTabGroupCollabID(group, _tabGroupSyncService);
   CHECK(!collabId->empty());
   const data_sharing::GroupId groupId = data_sharing::GroupId(collabId.value());
 
   __weak TabGroupIndicatorMediator* weakSelf = self;
-  auto callback = base::BindOnce(^(PeopleGroupActionOutcome outcome) {
-    BOOL success = outcome == PeopleGroupActionOutcome::kSuccess;
-    [weakSelf handTakeActionForActionTypeOutcome:success];
+  auto callback = base::BindOnce(^(bool success) {
+    [weakSelf handleTakeActionForActionTypeOutcome:success];
   });
 
   // TODO(crbug.com/393073658): Block the screen.
@@ -410,10 +407,10 @@ constexpr CGFloat kFacePileAvatarSize = 20;
   // Asynchronously call on the server.
   switch (actionType) {
     case TabGroupActionType::kLeaveSharedTabGroup:
-      _dataSharingService->LeaveGroup(groupId, std::move(callback));
+      _collaborationService->LeaveGroup(groupId, std::move(callback));
       break;
     case TabGroupActionType::kDeleteSharedTabGroup:
-      _dataSharingService->DeleteGroup(groupId, std::move(callback));
+      _collaborationService->DeleteGroup(groupId, std::move(callback));
       break;
     case TabGroupActionType::kUngroupTabGroup:
     case TabGroupActionType::kDeleteTabGroup:
@@ -423,8 +420,9 @@ constexpr CGFloat kFacePileAvatarSize = 20;
   }
 }
 
-// Called when `performAction:forSharedTabGroup:` server's call returned.
-- (void)handTakeActionForActionTypeOutcome:(BOOL)success {
+// Called when `takeActionForActionType:forSharedTabGroup:` server's call
+// returned.
+- (void)handleTakeActionForActionTypeOutcome:(BOOL)success {
   // TODO(crbug.com/393073658):
   // - Unblock the screen.
   // - Show an error if needed.
@@ -434,8 +432,8 @@ constexpr CGFloat kFacePileAvatarSize = 20;
 // shared tab group visible.
 - (void)presentForegroundIPHIfNeeded {
   const TabGroup* tabGroup = [self currentTabGroup];
-  if (!tabGroup ||
-      !tab_groups::utils::IsTabGroupShared(tabGroup, _tabGroupSyncService)) {
+  if (!tabGroup || !tab_groups::utils::IsTabGroupShared(
+                       tabGroup, _tabGroupSyncService, _shareKitService)) {
     return;
   }
   if (_tracker->WouldTriggerHelpUI(
@@ -456,7 +454,7 @@ constexpr CGFloat kFacePileAvatarSize = 20;
   tab_groups::CollaborationId savedCollabID =
       tab_groups::utils::GetTabGroupCollabID(tabGroup, _tabGroupSyncService);
   BOOL isShared = !savedCollabID.value().empty();
-  [self updateTabGroupSharedState:tabGroup];
+  [self updateTabGroupSharingState:tabGroup];
 
   // Prevent the face pile from being set up for tab groups that are not shared.
   if (!isShared) {
@@ -498,14 +496,22 @@ constexpr CGFloat kFacePileAvatarSize = 20;
   return _webStateList->GetGroupOfWebStateAt(_webStateList->active_index());
 }
 
-// Updates the shared state of for the given `tabGroup`.
-- (void)updateTabGroupSharedState:(const TabGroup*)tabGroup {
-  BOOL shared =
-      tab_groups::utils::IsTabGroupShared(tabGroup, _tabGroupSyncService);
+// Updates the sharing state for the given `tabGroup`.
+- (void)updateTabGroupSharingState:(const TabGroup*)tabGroup {
+  BOOL shared = tab_groups::utils::IsTabGroupShared(
+      tabGroup, _tabGroupSyncService, _shareKitService);
+  if (!shared) {
+    [_consumer setSharingState:SharingState::kNotShared];
+    return;
+  }
+
   data_sharing::MemberRole userRole = tab_groups::utils::GetUserRoleForGroup(
       tabGroup, _tabGroupSyncService, _collaborationService);
-  [_consumer setShared:shared
-                 owner:userRole == data_sharing::MemberRole::kOwner];
+
+  SharingState state = userRole == data_sharing::MemberRole::kOwner
+                           ? SharingState::kSharedAndOwned
+                           : SharingState::kShared;
+  [_consumer setSharingState:state];
 }
 
 @end

@@ -17,7 +17,7 @@
 using namespace skgpu::graphite;
 
 DEF_GRAPHITE_TEST_FOR_ALL_CONTEXTS(Shader_FindOrCreateSnippetForRuntimeEffect, reporter, context,
-                                   CtsEnforcement::kApiLevel_V) {
+                                   CtsEnforcement::kApiLevel_202404) {
     ShaderCodeDictionary* dict = context->priv().shaderCodeDictionary();
 
     std::unique_ptr<SkRuntimeEffect> testEffect(SkMakeRuntimeEffect(SkRuntimeEffect::MakeForShader,
@@ -28,7 +28,7 @@ DEF_GRAPHITE_TEST_FOR_ALL_CONTEXTS(Shader_FindOrCreateSnippetForRuntimeEffect, r
 
     // Create a new runtime-effect snippet.
     int snippetID = dict->findOrCreateRuntimeEffectSnippet(testEffect.get());
-    REPORTER_ASSERT(reporter, snippetID >= SkKnownRuntimeEffects::kUnknownRuntimeEffectIDStart);
+    REPORTER_ASSERT(reporter, SkKnownRuntimeEffects::IsUserDefinedRuntimeEffect(snippetID));
 
     // Verify that it can be looked up and its name is 'RuntimeEffect'. (The name isn't meaningful,
     // but this is an easy way to verify that we didn't get an unrelated snippet.)
@@ -44,7 +44,7 @@ DEF_GRAPHITE_TEST_FOR_ALL_CONTEXTS(Shader_FindOrCreateSnippetForRuntimeEffect, r
 DEF_GRAPHITE_TEST_FOR_ALL_CONTEXTS(ColorFilter_FindOrCreateSnippetForRuntimeEffect,
                                    reporter,
                                    context,
-                                   CtsEnforcement::kApiLevel_V) {
+                                   CtsEnforcement::kApiLevel_202404) {
     ShaderCodeDictionary* dict = context->priv().shaderCodeDictionary();
 
     std::unique_ptr<SkRuntimeEffect> testEffect(SkMakeRuntimeEffect(
@@ -56,7 +56,7 @@ DEF_GRAPHITE_TEST_FOR_ALL_CONTEXTS(ColorFilter_FindOrCreateSnippetForRuntimeEffe
 
     // Create a new runtime-effect snippet.
     int snippetID = dict->findOrCreateRuntimeEffectSnippet(testEffect.get());
-    REPORTER_ASSERT(reporter, snippetID >= SkKnownRuntimeEffects::kUnknownRuntimeEffectIDStart);
+    REPORTER_ASSERT(reporter, SkKnownRuntimeEffects::IsUserDefinedRuntimeEffect(snippetID));
 
     // Verify that it can be looked up and its name is 'RuntimeEffect'. (The name isn't meaningful,
     // but this is an easy way to verify that we didn't get an unrelated snippet.)
@@ -70,7 +70,7 @@ DEF_GRAPHITE_TEST_FOR_ALL_CONTEXTS(ColorFilter_FindOrCreateSnippetForRuntimeEffe
 }
 
 DEF_GRAPHITE_TEST_FOR_ALL_CONTEXTS(ShaderUniforms_FindOrCreateSnippetForRuntimeEffect,
-                                   reporter, context, CtsEnforcement::kApiLevel_V) {
+                                   reporter, context, CtsEnforcement::kApiLevel_202404) {
     ShaderCodeDictionary* dict = context->priv().shaderCodeDictionary();
 
     std::unique_ptr<SkRuntimeEffect> testEffect(SkMakeRuntimeEffect(SkRuntimeEffect::MakeForShader,
@@ -84,7 +84,7 @@ DEF_GRAPHITE_TEST_FOR_ALL_CONTEXTS(ShaderUniforms_FindOrCreateSnippetForRuntimeE
 
     // Create a new runtime-effect snippet.
     int snippetID = dict->findOrCreateRuntimeEffectSnippet(testEffect.get());
-    REPORTER_ASSERT(reporter, snippetID >= SkKnownRuntimeEffects::kUnknownRuntimeEffectIDStart);
+    REPORTER_ASSERT(reporter, SkKnownRuntimeEffects::IsUserDefinedRuntimeEffect(snippetID));
 
     // Delete the test effect.
     testEffect = nullptr;
@@ -113,7 +113,7 @@ DEF_GRAPHITE_TEST_FOR_ALL_CONTEXTS(ShaderUniforms_FindOrCreateSnippetForRuntimeE
 }
 
 DEF_GRAPHITE_TEST_FOR_ALL_CONTEXTS(ColorFilterUniforms_FindOrCreateSnippetForRuntimeEffect,
-                                   reporter, context, CtsEnforcement::kApiLevel_V) {
+                                   reporter, context, CtsEnforcement::kApiLevel_202404) {
     ShaderCodeDictionary* dict = context->priv().shaderCodeDictionary();
 
     std::unique_ptr<SkRuntimeEffect> testEffect(SkMakeRuntimeEffect(
@@ -128,7 +128,7 @@ DEF_GRAPHITE_TEST_FOR_ALL_CONTEXTS(ColorFilterUniforms_FindOrCreateSnippetForRun
 
     // Create a new runtime-effect snippet.
     int snippetID = dict->findOrCreateRuntimeEffectSnippet(testEffect.get());
-    REPORTER_ASSERT(reporter, snippetID >= SkKnownRuntimeEffects::kUnknownRuntimeEffectIDStart);
+    REPORTER_ASSERT(reporter, SkKnownRuntimeEffects::IsUserDefinedRuntimeEffect(snippetID));
 
     // Delete the test effect.
     testEffect = nullptr;

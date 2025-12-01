@@ -10,9 +10,15 @@
 
 namespace data_sharing {
 
+namespace {
+constexpr base::TimeDelta kResetWebContentsAfterLastCallDuration =
+    base::Minutes(1);
+}
+
 DataSharingSDKDelegateDesktop::DataSharingSDKDelegateDesktop(
     content::BrowserContext* context)
-    : context_(context) {}
+    : context_(context),
+      reset_web_contents_timer_(std::make_unique<base::OneShotTimer>()) {}
 
 DataSharingSDKDelegateDesktop::~DataSharingSDKDelegateDesktop() = default;
 
@@ -153,6 +159,10 @@ void DataSharingSDKDelegateDesktop::MaybeLoadWebContents(
     data_sharing_ui->SetDelegate(this);
     callback_subscriptions_.emplace_back(callbacks_.Add(std::move(callback)));
   }
+
+  // For every API call, schedule a timer to clean up the WebContents after some
+  // time if there are no more calls coming after.
+  ScheduleResetWebContentsTimer();
 }
 
 void DataSharingSDKDelegateDesktop::ApiInitComplete() {
@@ -170,10 +180,23 @@ void DataSharingSDKDelegateDesktop::ShowErrorDialog(int status_code) {
   // No-op for this class.
 }
 
+void DataSharingSDKDelegateDesktop::OnShareLinkRequested(
+    const std::string& group_id,
+    const std::string& access_token,
+    base::OnceCallback<void(const std::optional<GURL>&)> callback) {
+  // No-op for this class.
+}
+
+void DataSharingSDKDelegateDesktop::OnGroupAction(
+    data_sharing::mojom::GroupAction action,
+    data_sharing::mojom::GroupActionProgress progress) {
+  // No-op for this class.
+}
+
 void DataSharingSDKDelegateDesktop::Shutdown() {
   // Since WebContents depends on BrowserContext, it needs to be destroyed
   // before the BrowserContext is destroyed.
-  web_contents_.reset();
+  ResetWebContents();
 }
 
 void DataSharingSDKDelegateDesktop::OnReadGroups(
@@ -192,6 +215,46 @@ void DataSharingSDKDelegateDesktop::OnReadGroups(
   std::move(callback).Run(result);
 }
 
+void DataSharingSDKDelegateDesktop::OnReadGroupWithToken(
+    ReadGroupWithTokenCallback callback,
+    data_sharing::mojom::ReadGroupWithTokenResultPtr mojom_result) {
+  if (mojom_result->status_code != 0) {
+    std::move(callback).Run(base::unexpected(
+        absl::Status(static_cast<absl::StatusCode>(mojom_result->status_code),
+                     "Read Groups with token failed")));
+    return;
+  }
+  data_sharing_pb::ReadGroupsResult result;
+  *result.add_group_data() = ConvertGroup(mojom_result->group);
+  std::move(callback).Run(result);
+}
+
+void DataSharingSDKDelegateDesktop::ReadGroupWithToken(
+    const data_sharing_pb::ReadGroupWithTokenParams& params,
+    base::OnceCallback<void(
+        const base::expected<data_sharing_pb::ReadGroupsResult, absl::Status>&)>
+        callback) {
+  MaybeLoadWebContents(base::BindOnce(
+      [](data_sharing_pb::ReadGroupWithTokenParams params,
+         ReadGroupWithTokenCallback callback,
+         DataSharingSDKDelegateDesktop* delegate,
+         content::WebContents* web_contents) {
+        DataSharingPageHandler* handler =
+            static_cast<DataSharingUI*>(
+                web_contents->GetWebUI()->GetController())
+                ->page_handler();
+        CHECK(handler);
+        auto mojom_param = data_sharing::mojom::ReadGroupWithTokenParam::New();
+        mojom_param->group_id = params.group_id();
+        mojom_param->access_token = params.access_token();
+        handler->ReadGroupWithToken(
+            std::move(mojom_param),
+            base::BindOnce(&DataSharingSDKDelegateDesktop::OnReadGroupWithToken,
+                           base::Unretained(delegate), std::move(callback)));
+      },
+      params, std::move(callback), this));
+}
+
 void DataSharingSDKDelegateDesktop::OnLeaveGroup(
     base::OnceCallback<void(const absl::Status&)> callback,
     int status_code) {
@@ -204,6 +267,17 @@ void DataSharingSDKDelegateDesktop::OnDeleteGroup(
     int status_code) {
   std::move(callback).Run(
       absl::Status(static_cast<absl::StatusCode>(status_code), "Delete Group"));
+}
+
+void DataSharingSDKDelegateDesktop::ScheduleResetWebContentsTimer() {
+  reset_web_contents_timer_->Start(
+      FROM_HERE, kResetWebContentsAfterLastCallDuration, this,
+      &DataSharingSDKDelegateDesktop::ResetWebContents);
+}
+
+void DataSharingSDKDelegateDesktop::ResetWebContents() {
+  callback_subscriptions_.clear();
+  web_contents_.reset();
 }
 
 }  // namespace data_sharing

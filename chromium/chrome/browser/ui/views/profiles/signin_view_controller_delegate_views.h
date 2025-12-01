@@ -70,7 +70,7 @@ class SigninViewControllerDelegateViews
   static std::unique_ptr<views::WebView> CreateSignoutConfirmationWebView(
       Browser* browser,
       ChromeSignoutConfirmationPromptVariant variant,
-      base::OnceCallback<void(ChromeSignoutConfirmationChoice)> callback);
+      SignoutConfirmationCallback callback);
 #endif  // BUILDFLAG(ENABLE_DICE_SUPPORT)
 
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
@@ -122,12 +122,15 @@ class SigninViewControllerDelegateViews
   // Creates and displays a constrained window containing |web_contents|. If
   // |wait_for_size| is true, the delegate will wait for ResizeNativeView() to
   // be called by the base class before displaying the constrained window.
+  // If |animate_on_resize| is true, then the view will smoothly transition
+  // between resizes.
   SigninViewControllerDelegateViews(
       std::unique_ptr<views::WebView> content_view,
       Browser* browser,
       ui::mojom::ModalType dialog_modal_type,
       bool wait_for_size,
       bool should_show_close_button,
+      bool animate_on_resize,
       bool delete_profile_on_cancel = false,
       base::ScopedClosureRunner on_closed_callback =
           base::ScopedClosureRunner());

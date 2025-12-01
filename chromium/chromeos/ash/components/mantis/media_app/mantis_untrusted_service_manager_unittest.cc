@@ -5,11 +5,14 @@
 #include "chromeos/ash/components/mantis/media_app/mantis_untrusted_service_manager.h"
 
 #include <memory>
+#include <optional>
 
+#include "ash/constants/ash_features.h"
 #include "ash/constants/ash_pref_names.h"
 #include "ash/webui/media_app_ui/media_app_ui_untrusted.mojom.h"
 #include "base/memory/raw_ptr.h"
 #include "base/test/gmock_callback_support.h"
+#include "base/test/scoped_feature_list.h"
 #include "base/test/task_environment.h"
 #include "base/test/test_future.h"
 #include "chromeos/ash/components/mantis/mojom/mantis_processor.mojom.h"
@@ -18,6 +21,8 @@
 #include "chromeos/ash/components/mojo_service_manager/fake_mojo_service_manager.h"
 #include "chromeos/ash/components/mojo_service_manager/mojom/mojo_service_manager.mojom.h"
 #include "chromeos/ash/components/specialized_features/feature_access_checker.h"
+#include "chromeos/services/machine_learning/public/cpp/fake_service_connection.h"
+#include "chromeos/services/machine_learning/public/mojom/text_classifier.mojom.h"
 #include "components/prefs/testing_pref_service.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
@@ -75,6 +80,8 @@ class MockMojoMantisService
       Initialize,
       (mojo::PendingRemote<mantis::mojom::PlatformModelProgressObserver>,
        mojo::PendingReceiver<mantis::mojom::MantisProcessor>,
+       const std::optional<base::Uuid>&,
+       mojo::PendingRemote<chromeos::machine_learning::mojom::TextClassifier>,
        InitializeCallback),
       (override));
 
@@ -123,6 +130,10 @@ class MantisUntrustedServiceManagerTest : public testing::Test {
         ash::prefs::kGenAIPhotoEditingSettings,
         static_cast<int>(GenAIPhotoEditingSettings::kAllowed));
 
+    chromeos::machine_learning::ServiceConnection::
+        UseFakeServiceConnectionForTesting(&fake_connection_);
+    chromeos::machine_learning::ServiceConnection::GetInstance()->Initialize();
+
     // Set Mantis is available by default in this test, so that we can check
     // each unavailable case one by one.
     ON_CALL(*access_checker_, Check)
@@ -136,6 +147,7 @@ class MantisUntrustedServiceManagerTest : public testing::Test {
   std::unique_ptr<NiceMock<MockMojoMantisService>> mock_mojo_service_;
   std::unique_ptr<NiceMock<MockFeatureAccessChecker>> access_checker_;
   TestingPrefServiceSimple pref_;
+  chromeos::machine_learning::FakeServiceConnectionImpl fake_connection_;
 };
 
 TEST_F(MantisUntrustedServiceManagerTest, IsAvailable) {
@@ -146,6 +158,18 @@ TEST_F(MantisUntrustedServiceManagerTest, IsAvailable) {
   manager.IsAvailable(&pref_, result_future.GetCallback());
 
   EXPECT_TRUE(result_future.Take());
+}
+
+TEST_F(MantisUntrustedServiceManagerTest, IsNotAvailableByFeatureFlag) {
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitWithFeatures({}, {features::kMediaAppImageMantisModel});
+
+  MantisUntrustedServiceManager manager(std::move(access_checker_));
+
+  TestFuture<bool> result_future;
+  manager.IsAvailable(&pref_, result_future.GetCallback());
+
+  EXPECT_FALSE(result_future.Take());
 }
 
 TEST_F(MantisUntrustedServiceManagerTest, IsNotAvailableByAccountCapabilities) {
@@ -200,7 +224,7 @@ TEST_F(MantisUntrustedServiceManagerTest, IsNotAvailableByMantisFeatureStatus) {
 TEST_F(MantisUntrustedServiceManagerTest, CreateSuccess) {
   constexpr double kProgress = 1.0;
   EXPECT_CALL(*mock_mojo_service_, Initialize)
-      .WillOnce(testing::WithArgs<0, 2>(
+      .WillOnce(testing::WithArgs<0, 4>(
           [](mojo::PendingRemote<PlatformModelProgressObserver>
                  pending_observer,
              base::OnceCallback<void(InitializeResult)> callback) {
@@ -216,7 +240,8 @@ TEST_F(MantisUntrustedServiceManagerTest, CreateSuccess) {
   MantisUntrustedServiceManager manager(std::move(access_checker_));
 
   TestFuture<MantisUntrustedServiceResultPtr> result_future;
-  manager.Create(page.BindNewPipeAndPassRemote(), result_future.GetCallback());
+  manager.Create(page.BindNewPipeAndPassRemote(), std::nullopt,
+                 result_future.GetCallback());
 
   MantisUntrustedServiceResultPtr result = result_future.Take();
   ASSERT_FALSE(result.is_null());
@@ -225,12 +250,13 @@ TEST_F(MantisUntrustedServiceManagerTest, CreateSuccess) {
 
 TEST_F(MantisUntrustedServiceManagerTest, CreateFailed) {
   EXPECT_CALL(*mock_mojo_service_, Initialize)
-      .WillOnce(RunOnceCallback<2>(InitializeResult::kFailedToLoadLibrary));
+      .WillOnce(RunOnceCallback<4>(InitializeResult::kFailedToLoadLibrary));
   MantisUntrustedServiceManager manager(std::move(access_checker_));
 
   MockMantisUntrustedPage page;
   TestFuture<MantisUntrustedServiceResultPtr> result_future;
-  manager.Create(page.BindNewPipeAndPassRemote(), result_future.GetCallback());
+  manager.Create(page.BindNewPipeAndPassRemote(), std::nullopt,
+                 result_future.GetCallback());
 
   MantisUntrustedServiceResultPtr result = result_future.Take();
   ASSERT_FALSE(result.is_null());

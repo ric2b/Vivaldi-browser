@@ -1,9 +1,17 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="pt-PT">
+<translation id="2277224997687551299">Editar nome do grupo</translation>
+<translation id="2330212241471632770">{TABS_COUNT,plural,
+            =1{Adic. separ. aos favoritos}
+            other{Adic. separ. aos favoritos}
+          }</translation>
 <translation id="2947471979790858922">A sua atividade nestes separadores privados será removida deste equipamento</translation>
 <translation id="3870643923290313246">{INCOGNITO_TABS_COUNT, plural,
         =1 {Pode encontrar os separadores que fechar nos Separadores recentes, no menu principal do Vivaldi. O seu separador privado não estará disponível.}
         other {Pode encontrar os separadores que fechar nos Separadores recentes, no menu principal do Vivaldi. Os seus # separadores privados não estarão disponíveis.}}</translation>
+<translation id="4460014764210899310">Desagrupar</translation>
 <translation id="4871187110787939393">Fechar todos os separadores privados?</translation>
+<translation id="5494920125229734069">Selecionar tudo</translation>
+<translation id="6744956528665271406">Editar cor do grupo</translation>
 </translationbundle>

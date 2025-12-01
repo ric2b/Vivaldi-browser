@@ -1112,7 +1112,7 @@ bool Setup::FillOtherConfig(const base::CommandLine& cmdline, Err* err) {
   if (!exec_script_allowlist_value) {
     // Check for this value as well, for backwards-compatibility.
     exec_script_allowlist_value =
-      dotfile_scope_.GetValue("exec_script_whitelist", true);
+        dotfile_scope_.GetValue("exec_script_whitelist", true);
   }
 
   if (exec_script_allowlist_value) {

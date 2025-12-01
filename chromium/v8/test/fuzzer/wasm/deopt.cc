@@ -121,6 +121,10 @@ std::vector<ExecutionResult> PerformReferenceRun(
     WasmEnabledFeatures enabled_features, bool valid, Isolate* isolate) {
   std::vector<ExecutionResult> results;
   FlagScope<bool> eager_compile(&v8_flags.wasm_lazy_compilation, false);
+  // Reference runs use extra compile settings (like non-determinism detection),
+  // which would be removed and replaced with a new liftoff function without
+  // these options.
+  FlagScope<bool> no_liftoff_code_flushing(&v8_flags.flush_liftoff_code, false);
   ErrorThrower thrower(isolate, "WasmFuzzerSyncCompileReference");
 
   int32_t max_steps = kDefaultMaxFuzzerExecutedInstructions;
@@ -131,7 +135,7 @@ std::vector<ExecutionResult> PerformReferenceRun(
   // with the kForDebugging liftoff option.
   EnterDebuggingScope debugging_scope(isolate);
 
-  Handle<WasmModuleObject> module_object =
+  DirectHandle<WasmModuleObject> module_object =
       CompileReferenceModule(isolate, wire_bytes.module_bytes(), &max_steps);
 
   thrower.Reset();
@@ -300,7 +304,7 @@ int FuzzIt(base::Vector<const uint8_t> data) {
   }
 
   ErrorThrower thrower(i_isolate, "WasmFuzzerSyncCompile");
-  MaybeHandle<WasmModuleObject> compiled = GetWasmEngine()->SyncCompile(
+  MaybeDirectHandle<WasmModuleObject> compiled = GetWasmEngine()->SyncCompile(
       i_isolate, enabled_features, CompileTimeImportsForFuzzing(), &thrower,
       base::OwnedCopyOf(buffer));
   if (!valid) {
@@ -318,7 +322,7 @@ int FuzzIt(base::Vector<const uint8_t> data) {
     return -1;
   }
 
-  Handle<WasmModuleObject> module_object = compiled.ToHandleChecked();
+  DirectHandle<WasmModuleObject> module_object = compiled.ToHandleChecked();
   DirectHandle<WasmInstanceObject> instance;
   if (!GetWasmEngine()
            ->SyncInstantiate(i_isolate, &thrower, module_object, {}, {})

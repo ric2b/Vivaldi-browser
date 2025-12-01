@@ -36,6 +36,7 @@ swift_source_set("reopen_with_swift") {
   deps = [
     "//base",
     "//ui/base",
+    "//vivaldi/app:vivaldi_ios_native_strings",
     "//vivaldi/ios/ui/helpers:helpers_swift",
   ]
 

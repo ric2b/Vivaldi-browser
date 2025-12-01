@@ -176,9 +176,36 @@ bool IsDeadNodeToSkip(Node* node) {
 
 }  // namespace
 
+void StraightForwardRegisterAllocator::ApplyPatches(BasicBlock* block) {
+  // TODO(verwaest): Perhaps don't actually merge these in but let the code
+  // generator pick up the gap moves from a separate list.
+  size_t diff = patches_.size();
+  if (diff == 0) return;
+  block->nodes().resize(block->nodes().size() + diff);
+  auto patches_it = patches_.end() - 1;
+  for (auto node_it = block->nodes().end() - 1 - diff;
+       node_it >= block->nodes().begin(); --node_it) {
+    *(node_it + diff) = *node_it;
+    for (; patches_it->diff == (node_it - block->nodes().begin());
+         --patches_it) {
+      --diff;
+      *(node_it + diff) = patches_it->new_node;
+      if (diff == 0) {
+        patches_.resize(0);
+        return;
+      }
+    }
+  }
+  UNREACHABLE();
+}
+
 StraightForwardRegisterAllocator::StraightForwardRegisterAllocator(
-    MaglevCompilationInfo* compilation_info, Graph* graph)
-    : compilation_info_(compilation_info), graph_(graph) {
+    MaglevCompilationInfo* compilation_info, Graph* graph,
+    RegallocInfo* regalloc_info)
+    : compilation_info_(compilation_info),
+      graph_(graph),
+      patches_(compilation_info_->zone()),
+      regalloc_info_(regalloc_info) {
   ComputePostDominatingHoles();
   AllocateRegisters();
   uint32_t tagged_stack_slots = tagged_.top;
@@ -559,8 +586,9 @@ void StraightForwardRegisterAllocator::AllocateRegisters() {
     VerifyRegisterState();
 
     node_it_ = block->nodes().begin();
-    for (; node_it_ != block->nodes().end();) {
+    for (; node_it_ != block->nodes().end(); ++node_it_) {
       Node* node = *node_it_;
+      if (node == nullptr) continue;
 
       if (IsDeadNodeToSkip(node)) {
         // We remove unused pure nodes.
@@ -582,14 +610,14 @@ void StraightForwardRegisterAllocator::AllocateRegisters() {
               });
         }
 
-        node_it_ = block->nodes().RemoveAt(node_it_);
+        *node_it_ = nullptr;
         continue;
       }
 
       AllocateNode(node);
-      ++node_it_;
     }
     AllocateControlNode(block->control_node(), block);
+    ApplyPatches(block);
   }
 }
 
@@ -643,29 +671,31 @@ void StraightForwardRegisterAllocator::UpdateUse(
 
 void StraightForwardRegisterAllocator::AllocateEagerDeopt(
     const EagerDeoptInfo& deopt_info) {
-  detail::DeepForEachInput(
-      &deopt_info, [&](ValueNode* node, InputLocation* input) {
-        DCHECK(!node->Is<Identity>());
-        // We might have dropped this node without spilling it. Spill it now.
-        if (!node->has_register() && !node->is_loadable()) {
-          Spill(node);
-        }
-        input->InjectLocation(node->allocation());
-        UpdateUse(node, input);
-      });
+  InputLocation* input = deopt_info.input_locations();
+  deopt_info.ForEachInput([&](ValueNode* node) {
+    DCHECK(!node->Is<Identity>());
+    // We might have dropped this node without spilling it. Spill it now.
+    if (!node->has_register() && !node->is_loadable()) {
+      Spill(node);
+    }
+    input->InjectLocation(node->allocation());
+    UpdateUse(node, input);
+    input++;
+  });
 }
 
 void StraightForwardRegisterAllocator::AllocateLazyDeopt(
     const LazyDeoptInfo& deopt_info) {
-  detail::DeepForEachInput(&deopt_info,
-                           [&](ValueNode* node, InputLocation* input) {
-                             DCHECK(!node->Is<Identity>());
-                             // Lazy deopts always need spilling, and should
-                             // always be loaded from their loadable slot.
-                             Spill(node);
-                             input->InjectLocation(node->loadable_slot());
-                             UpdateUse(node, input);
-                           });
+  InputLocation* input = deopt_info.input_locations();
+  deopt_info.ForEachInput([&](ValueNode* node) {
+    DCHECK(!node->Is<Identity>());
+    // Lazy deopts always need spilling, and should
+    // always be loaded from their loadable slot.
+    Spill(node);
+    input->InjectLocation(node->loadable_slot());
+    UpdateUse(node, input);
+    input++;
+  });
 }
 
 #ifdef DEBUG
@@ -730,7 +760,7 @@ void StraightForwardRegisterAllocator::AllocateNode(Node* node) {
       ExceptionHandlerInfo* info = node->exception_handler_info();
       if (info->HasExceptionHandler() && !info->ShouldLazyDeopt() &&
           !node->properties().is_call()) {
-        BasicBlock* block = info->catch_block.block_ptr();
+        BasicBlock* block = info->catch_block();
         auto spill = [&](auto reg, ValueNode* node) {
           if (node->live_range().end < block->first_id()) return;
           Spill(node);
@@ -1186,16 +1216,15 @@ void StraightForwardRegisterAllocator::AddMoveBeforeCurrentNode(
   if (compilation_info_->has_graph_labeller()) {
     graph_labeller()->RegisterNode(gap_move);
   }
-  if (*node_it_ == nullptr) {
+  BasicBlock* block = *block_it_;
+  if (node_it_ == block->nodes().end()) {
     DCHECK(current_node_->Is<ControlNode>());
     // We're at the control node, so append instead.
-    (*block_it_)->nodes().Add(gap_move);
-    node_it_ = (*block_it_)->nodes().end();
+    block->nodes().push_back(gap_move);
+    node_it_ = block->nodes().end();
   } else {
-    DCHECK_NE(node_it_, (*block_it_)->nodes().end());
     // We should not add any gap move before a GetSecondReturnedValue.
-    DCHECK_NE(node_it_->opcode(), Opcode::kGetSecondReturnedValue);
-    node_it_.InsertBefore(gap_move);
+    patches_.emplace_back(node_it_ - block->nodes().begin(), gap_move);
   }
 }
 
@@ -1543,6 +1572,7 @@ void StraightForwardRegisterAllocator::VerifyRegisterState() {
       }
     }
     for (Node* node : block->nodes()) {
+      if (node == nullptr) continue;
       if (ValueNode* value_node = node->TryCast<ValueNode>()) {
         if (node->Is<Identity>()) continue;
         ValidateValueNode(value_node);
@@ -1606,19 +1636,21 @@ void StraightForwardRegisterAllocator::SaveRegisterSnapshot(NodeBase* node) {
     // runtime call might not include the inputs into the eager deopt. Here, we
     // make sure that all the eager deopt registers are included in the
     // snapshot.
-    detail::DeepForEachInput(
-        node->eager_deopt_info(), [&](ValueNode* node, InputLocation* input) {
-          if (!input->IsAnyRegister()) return;
-          if (input->IsDoubleRegister()) {
-            snapshot.live_double_registers.set(input->AssignedDoubleRegister());
-          } else {
-            snapshot.live_registers.set(input->AssignedGeneralRegister());
-            if (node->is_tagged()) {
-              snapshot.live_tagged_registers.set(
-                  input->AssignedGeneralRegister());
-            }
+    InputLocation* input = node->eager_deopt_info()->input_locations();
+    node->eager_deopt_info()->ForEachInput([&](ValueNode* node) {
+      if (input->IsAnyRegister()) {
+        if (input->IsDoubleRegister()) {
+          snapshot.live_double_registers.set(input->AssignedDoubleRegister());
+        } else {
+          snapshot.live_registers.set(input->AssignedGeneralRegister());
+          if (node->is_tagged()) {
+            snapshot.live_tagged_registers.set(
+                input->AssignedGeneralRegister());
           }
-        });
+        }
+      }
+      input++;
+    });
   }
   node->set_register_snapshot(snapshot);
 }
@@ -2135,7 +2167,9 @@ bool StraightForwardRegisterAllocator::IsForwardReachable(
 template <typename RegisterT>
 void StraightForwardRegisterAllocator::HoistLoopReloads(
     BasicBlock* target, RegisterFrameState<RegisterT>& registers) {
-  for (ValueNode* node : target->reload_hints()) {
+  auto info = regalloc_info_->loop_info_.find(target->id());
+  if (info == regalloc_info_->loop_info_.end()) return;
+  for (ValueNode* node : info->second.reload_hints_) {
     DCHECK(general_registers_.blocked().is_empty());
     if (registers.free().is_empty()) break;
     if (node->has_register()) continue;
@@ -2163,7 +2197,9 @@ void StraightForwardRegisterAllocator::HoistLoopReloads(
 // first call and after the last call of the loop, keep it spilled in the merge
 // state to avoid an unnecessary reload + spill on every iteration.
 void StraightForwardRegisterAllocator::HoistLoopSpills(BasicBlock* target) {
-  for (ValueNode* node : target->spill_hints()) {
+  auto info = regalloc_info_->loop_info_.find(target->id());
+  if (info == regalloc_info_->loop_info_.end()) return;
+  for (ValueNode* node : info->second.spill_hints_) {
     if (!node->has_register()) continue;
     // Do not move to a different register, the goal is to keep the value
     // spilled on the back-edge.

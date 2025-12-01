@@ -54,8 +54,8 @@ class ChromeOmniboxClient final : public OmniboxClient {
   bool ShouldDefaultTypedNavigationsToHttps() const override;
   int GetHttpsPortForTesting() const override;
   bool IsUsingFakeHttpsForHttpsUpgradeTesting() const override;
-  gfx::Image GetIconIfExtensionMatch(
-      const AutocompleteMatch& match) const override;
+  gfx::Image GetExtensionIcon(const TemplateURL* template_url) const override;
+  gfx::Image GetSizedIcon(const SkBitmap* bitmap) const override;
   gfx::Image GetSizedIcon(const gfx::VectorIcon& vector_icon_type,
                           SkColor vector_icon_color) const override;
   gfx::Image GetSizedIcon(const gfx::Image& icon) const override;
@@ -74,6 +74,8 @@ class ChromeOmniboxClient final : public OmniboxClient {
   void OnInputStateChanged() override;
   void OnFocusChanged(OmniboxFocusState state,
                       OmniboxFocusChangeReason reason) override;
+  void MaybeShowOnFocusHatsSurvey(AutocompleteProviderClient* client) override;
+  void CheckConditionsAndLaunchSurvey();
   void OnResultChanged(const AutocompleteResult& result,
                        bool default_match_changed,
                        bool should_prerender,
@@ -118,6 +120,8 @@ class ChromeOmniboxClient final : public OmniboxClient {
   void OnPopupVisibilityChanged(bool popup_is_open) override;
   void OpenIphLink(GURL gurl) override;
   bool IsHistoryEmbeddingsEnabled() const override;
+  std::optional<lens::proto::LensOverlaySuggestInputs>
+  GetLensOverlaySuggestInputs() const override;
   base::WeakPtr<OmniboxClient> AsWeakPtr() override;
 
   // Update shortcuts when a navigation succeeds.

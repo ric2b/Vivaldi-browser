@@ -1865,6 +1865,14 @@ TEST_F(NinjaRustBinaryTargetWriterTest, TransitiveRustDepsThroughSourceSet) {
   sset.private_deps().push_back(LabelTargetPair(&rlib_priv));
   ASSERT_TRUE(sset.OnResolved(&err));
 
+  Target modules(setup.settings(), Label(SourceDir("//sset/"), "module"));
+  modules.set_output_type(Target::SOURCE_SET);
+  modules.visibility().SetPublic();
+  modules.sources().push_back(SourceFile("//sset/module.modulemap"));
+  modules.source_types_used().Set(SourceFile::SOURCE_MODULEMAP);
+  modules.SetToolchain(setup.toolchain());
+  ASSERT_TRUE(modules.OnResolved(&err));
+
   Target target(setup.settings(), Label(SourceDir("//linked/"), "exe"));
   target.set_output_type(Target::EXECUTABLE);
   target.visibility().SetPublic();
@@ -1874,6 +1882,7 @@ TEST_F(NinjaRustBinaryTargetWriterTest, TransitiveRustDepsThroughSourceSet) {
   target.rust_values().set_crate_root(main);
   target.rust_values().crate_name() = "exe";
   target.private_deps().push_back(LabelTargetPair(&sset));
+  target.private_deps().push_back(LabelTargetPair(&modules));
   target.SetToolchain(setup.toolchain());
   ASSERT_TRUE(target.OnResolved(&err));
 
@@ -1896,7 +1905,8 @@ TEST_F(NinjaRustBinaryTargetWriterTest, TransitiveRustDepsThroughSourceSet) {
         "\n"
         "build ./exe: rust_bin ../../linked/exe.rs | ../../linked/exe.rs "
         "obj/sset/bar.input1.o obj/public/libbehind_sourceset_public.rlib "
-        "obj/private/libbehind_sourceset_private.rlib || phony/sset/bar\n"
+        "obj/private/libbehind_sourceset_private.rlib || phony/sset/bar "
+        "phony/sset/module\n"
         "  source_file_part = exe.rs\n"
         "  source_name_part = exe\n"
         "  externs = --extern "

@@ -42,6 +42,9 @@ default_args.angle_enable_commit_id = false
 default_args.devtools_skip_typecheck = false
 default_args.use_dummy_lastchange = false
 default_args.enable_glic = false
+default_args.enable_dice_support = false
+default_args.enable_reporting = false # Reporting API
+default_args.optimize_webui = true
 
 # We don't need the Chrome field trials
 default_args.disable_fieldtrial_testing_config = true

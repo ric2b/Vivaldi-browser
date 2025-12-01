@@ -7,6 +7,10 @@ import("//build/config/features.gni")
 import("//build/config/ui.gni")
 import("//testing/libfuzzer/fuzzer_test.gni")
 
+if (is_ios) {
+  import("//build/config/apple/mobile_config.gni")  # For `target_platform`
+}
+
 component("clipboard_types") {
   output_name = "ui_base_clipboard_types"
   sources = [
@@ -89,6 +93,8 @@ component("clipboard") {
   sources = [
     "clipboard.cc",
     "clipboard.h",
+    "clipboard_change_notifier.cc",
+    "clipboard_change_notifier.h",
     "clipboard_metrics.cc",
     "clipboard_metrics.h",
     "clipboard_monitor.cc",
@@ -128,10 +134,14 @@ component("clipboard") {
   }
 
   if (is_ios) {
-    sources += [
-      "clipboard_ios.h",
-      "clipboard_ios.mm",
-    ]
+    if (target_platform == "tvos") {
+      sources += [ "clipboard_tvos.mm" ]
+    } else {
+      sources += [
+        "clipboard_ios.h",
+        "clipboard_ios.mm",
+      ]
+    }
   }
 
   if (is_win) {

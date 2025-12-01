@@ -33,6 +33,33 @@ source_set("invalidations") {
   }
 }
 
+static_library("factory") {
+  if (!is_ios) {
+    sources = [
+      "file_sync/file_store_factory.cc",
+      "file_sync/file_store_factory.h",
+      "note_sync_service_factory.cc",
+      "note_sync_service_factory.h",
+    ]
+    deps = [
+      "//components/keyed_service/core",
+      "//components/keyed_service/content",
+      "//vivaldi/sync/notes:sync_notes",
+    ]
+
+    if (is_android) {
+      sources += [
+        "file_sync/file_store_android.cc",
+        "file_sync/file_store_android.h",
+      ]
+
+      deps += [
+        "//chrome/android:chrome_jni_headers",
+      ]
+    }
+  }
+}
+
 source_set("browser") {
   sources = [
     "vivaldi_device_info_utils.cc",
@@ -45,6 +72,7 @@ source_set("browser") {
     "vivaldi_sync_service_impl.h",
   ]
   deps = [
+    ":factory",
     "//components/content_settings/core/browser",
     "//components/network_time",
     "//components/pref_registry",
@@ -87,8 +115,6 @@ source_set("browser") {
 
   if(!is_ios) {
     sources += [
-      "note_sync_service_factory.cc",
-      "note_sync_service_factory.h",
     ]
     deps += [
       ":invalidations",

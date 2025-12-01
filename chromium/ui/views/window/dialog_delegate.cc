@@ -5,6 +5,7 @@
 #include "ui/views/window/dialog_delegate.h"
 
 #include <utility>
+#include <variant>
 
 #include "base/debug/alias.h"
 #include "base/feature_list.h"
@@ -63,9 +64,9 @@ class DialogWidget : public Widget {
 };
 
 bool HasCallback(
-    const absl::variant<base::OnceClosure, base::RepeatingCallback<bool()>>&
+    const std::variant<base::OnceClosure, base::RepeatingCallback<bool()>>&
         callback) {
-  return absl::visit(
+  return std::visit(
       [](const auto& variant) { return static_cast<bool>(variant); }, callback);
 }
 
@@ -237,15 +238,22 @@ bool DialogDelegate::Accept() {
 }
 
 bool DialogDelegate::RunCloseCallback(
-    absl::variant<base::OnceClosure, base::RepeatingCallback<bool()>>&
+    std::variant<base::OnceClosure, base::RepeatingCallback<bool()>>&
         callback) {
   DCHECK(!already_started_close_);
-  if (absl::holds_alternative<base::OnceClosure>(callback)) {
+  if (std::holds_alternative<base::OnceClosure>(callback)) {
     already_started_close_ = true;
-    absl::get<base::OnceClosure>(std::move(callback)).Run();
+    std::get<base::OnceClosure>(std::move(callback)).Run();
   } else {
-    already_started_close_ =
-        absl::get<base::RepeatingCallback<bool()>>(callback).Run();
+    base::WeakPtr<Widget> weak_ptr = GetWidget()->GetWeakPtr();
+    bool already_started_close =
+        std::get<base::RepeatingCallback<bool()>>(callback).Run();
+    // Widget may get destroyed after the callback is run, this will detect
+    // that condition.
+    if (!weak_ptr) {
+      return false;
+    }
+    already_started_close_ = already_started_close;
   }
 
   return already_started_close_;
@@ -305,7 +313,7 @@ void DialogDelegate::WindowWillClose() {
     // `RunCloseCallback` takes a non-const reference to this variant to support
     // the accept and cancel callbacks. It doesn't make sense to be storing a
     // variant for close callbacks, so we construct the variant here instead.
-    absl::variant<base::OnceClosure, base::RepeatingCallback<bool()>>
+    std::variant<base::OnceClosure, base::RepeatingCallback<bool()>>
         close_callback_wrapped(std::move(close_callback_));
     RunCloseCallback(close_callback_wrapped);
   }
@@ -325,7 +333,8 @@ bool DialogDelegate::EscShouldCancelDialog() const {
   // Use cancel as the Esc action if there's no defined "close" action. If the
   // delegate has either specified a closing action or a close-x they can expect
   // it to be called on Esc.
-  return !close_callback_ && !ShouldShowCloseButton();
+  return esc_should_cancel_dialog_override_.value_or(!close_callback_ &&
+                                                     !ShouldShowCloseButton());
 }
 
 // static
@@ -452,11 +461,11 @@ void DialogDelegate::SetButtonEnabled(ui::mojom::DialogButton dialog_button,
 }
 
 void DialogDelegate::SetButtonLabel(ui::mojom::DialogButton button,
-                                    std::u16string label) {
+                                    std::u16string_view label) {
   if (params_.button_labels[static_cast<size_t>(button)] == label) {
     return;
   }
-  params_.button_labels[static_cast<size_t>(button)] = label;
+  params_.button_labels[static_cast<size_t>(button)] = std::u16string(label);
   DialogModelChanged();
 }
 
@@ -598,8 +607,6 @@ std::unique_ptr<View> DialogDelegate::DisownFootnoteView() {
 ////////////////////////////////////////////////////////////////////////////////
 // DialogDelegateView:
 
-DialogDelegateView::DialogDelegateView() = default;
-
 DialogDelegateView::~DialogDelegateView() = default;
 
 Widget* DialogDelegateView::GetWidget() {
@@ -613,6 +620,8 @@ const Widget* DialogDelegateView::GetWidget() const {
 View* DialogDelegateView::GetContentsView() {
   return this;
 }
+
+DialogDelegateView::DialogDelegateView() = default;
 
 BEGIN_METADATA(DialogDelegateView)
 END_METADATA

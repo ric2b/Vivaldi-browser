@@ -73,6 +73,17 @@ void CommandBuffer::setBindGroup(uint32_t groupIndex, wgpu::BindGroup bindGroup)
     setBindGroupCommand->bindGroup = GetReferencedObject(mReferencedBindGroups, bindGroup);
 }
 
+void CommandBuffer::setBlendConstant(float r, float g, float b, float a)
+{
+    SetBlendConstantCommand *setBlendConstantCommand = initCommand<CommandID::SetBlendConstant>();
+    setBlendConstantCommand->r                       = r;
+    setBlendConstantCommand->g                       = g;
+    setBlendConstantCommand->b                       = b;
+    setBlendConstantCommand->a                       = a;
+
+    mHasSetBlendConstantCommand = true;
+}
+
 void CommandBuffer::setPipeline(wgpu::RenderPipeline pipeline)
 {
     SetPipelineCommand *setPiplelineCommand = initCommand<CommandID::SetPipeline>();
@@ -120,11 +131,16 @@ void CommandBuffer::setIndexBuffer(wgpu::Buffer buffer,
     setIndexBufferCommand->size                  = size;
 }
 
-void CommandBuffer::setVertexBuffer(uint32_t slot, wgpu::Buffer buffer)
+void CommandBuffer::setVertexBuffer(uint32_t slot,
+                                    wgpu::Buffer buffer,
+                                    uint64_t offset,
+                                    uint64_t size)
 {
     SetVertexBufferCommand *setVertexBufferCommand = initCommand<CommandID::SetVertexBuffer>();
     setVertexBufferCommand->slot                   = slot;
     setVertexBufferCommand->buffer = GetReferencedObject(mReferencedBuffers, buffer);
+    setVertexBufferCommand->offset                 = offset;
+    setVertexBufferCommand->size                   = size;
 }
 
 void CommandBuffer::clear()
@@ -133,6 +149,7 @@ void CommandBuffer::clear()
 
     mHasSetScissorCommand  = false;
     mHasSetViewportCommand = false;
+    mHasSetBlendConstantCommand = false;
 
     if (!mCommandBlocks.empty())
     {
@@ -198,6 +215,16 @@ void CommandBuffer::recordCommands(wgpu::RenderPassEncoder encoder)
                     break;
                 }
 
+                case CommandID::SetBlendConstant:
+                {
+                    const SetBlendConstantCommand &setBlendConstantCommand =
+                        GetCommandAndIterate<CommandID::SetBlendConstant>(&currentCommand);
+                    wgpu::Color color{setBlendConstantCommand.r, setBlendConstantCommand.g,
+                                      setBlendConstantCommand.b, setBlendConstantCommand.a};
+                    encoder.SetBlendConstant(&color);
+                    break;
+                }
+
                 case CommandID::SetIndexBuffer:
                 {
                     const SetIndexBufferCommand &setIndexBufferCommand =
@@ -240,8 +267,9 @@ void CommandBuffer::recordCommands(wgpu::RenderPassEncoder encoder)
                 {
                     const SetVertexBufferCommand &setVertexBufferCommand =
                         GetCommandAndIterate<CommandID::SetVertexBuffer>(&currentCommand);
-                    encoder.SetVertexBuffer(setVertexBufferCommand.slot,
-                                            *setVertexBufferCommand.buffer);
+                    encoder.SetVertexBuffer(
+                        setVertexBufferCommand.slot, *setVertexBufferCommand.buffer,
+                        setVertexBufferCommand.offset, setVertexBufferCommand.size);
                     break;
                 }
 

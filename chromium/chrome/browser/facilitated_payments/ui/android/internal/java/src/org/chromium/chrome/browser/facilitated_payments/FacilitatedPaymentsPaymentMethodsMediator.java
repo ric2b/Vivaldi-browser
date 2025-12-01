@@ -5,10 +5,11 @@
 package org.chromium.chrome.browser.facilitated_payments;
 
 import static org.chromium.chrome.browser.facilitated_payments.FacilitatedPaymentsPaymentMethodsProperties.AdditionalInfoProperties.SHOW_PAYMENT_METHOD_SETTINGS_CALLBACK;
-import static org.chromium.chrome.browser.facilitated_payments.FacilitatedPaymentsPaymentMethodsProperties.BankAccountProperties.BANK_ACCOUNT_DRAWABLE_ID;
-import static org.chromium.chrome.browser.facilitated_payments.FacilitatedPaymentsPaymentMethodsProperties.BankAccountProperties.BANK_ACCOUNT_ICON_BITMAP;
-import static org.chromium.chrome.browser.facilitated_payments.FacilitatedPaymentsPaymentMethodsProperties.BankAccountProperties.BANK_ACCOUNT_SUMMARY;
+import static org.chromium.chrome.browser.facilitated_payments.FacilitatedPaymentsPaymentMethodsProperties.BankAccountProperties.BANK_ACCOUNT_ICON;
+import static org.chromium.chrome.browser.facilitated_payments.FacilitatedPaymentsPaymentMethodsProperties.BankAccountProperties.BANK_ACCOUNT_NUMBER;
+import static org.chromium.chrome.browser.facilitated_payments.FacilitatedPaymentsPaymentMethodsProperties.BankAccountProperties.BANK_ACCOUNT_PAYMENT_RAIL;
 import static org.chromium.chrome.browser.facilitated_payments.FacilitatedPaymentsPaymentMethodsProperties.BankAccountProperties.BANK_ACCOUNT_TRANSACTION_LIMIT;
+import static org.chromium.chrome.browser.facilitated_payments.FacilitatedPaymentsPaymentMethodsProperties.BankAccountProperties.BANK_ACCOUNT_TYPE;
 import static org.chromium.chrome.browser.facilitated_payments.FacilitatedPaymentsPaymentMethodsProperties.BankAccountProperties.BANK_NAME;
 import static org.chromium.chrome.browser.facilitated_payments.FacilitatedPaymentsPaymentMethodsProperties.BankAccountProperties.ON_BANK_ACCOUNT_CLICK_ACTION;
 import static org.chromium.chrome.browser.facilitated_payments.FacilitatedPaymentsPaymentMethodsProperties.ErrorScreenProperties.PRIMARY_BUTTON_CALLBACK;
@@ -45,6 +46,7 @@ import android.graphics.Bitmap;
 import androidx.annotation.VisibleForTesting;
 
 import org.chromium.base.metrics.RecordHistogram;
+import org.chromium.chrome.browser.autofill.AutofillImageFetcherFactory;
 import org.chromium.chrome.browser.autofill.AutofillUiUtils;
 import org.chromium.chrome.browser.autofill.PersonalDataManagerFactory;
 import org.chromium.chrome.browser.facilitated_payments.FacilitatedPaymentsPaymentMethodsComponent.Delegate;
@@ -58,7 +60,6 @@ import org.chromium.components.autofill.ImageSize;
 import org.chromium.components.autofill.payments.AccountType;
 import org.chromium.components.autofill.payments.BankAccount;
 import org.chromium.components.autofill.payments.Ewallet;
-import org.chromium.components.browser_ui.bottomsheet.BottomSheetController.StateChangeReason;
 import org.chromium.components.facilitated_payments.core.ui_utils.FopSelectorAction;
 import org.chromium.components.facilitated_payments.core.ui_utils.UiEvent;
 import org.chromium.components.payments.ui.InputProtector;
@@ -188,11 +189,6 @@ class FacilitatedPaymentsPaymentMethodsMediator {
     void dismiss() {
         mModel.set(SCREEN, UNINITIALIZED);
         mModel.set(VISIBLE_STATE, HIDDEN);
-    }
-
-    // TODO: b/350660307 - Remove reason parameter.
-    public void onDismissed(@StateChangeReason int reason) {
-        mDelegate.onDismissed();
     }
 
     public void onUiEvent(@UiEvent int uiEvent) {
@@ -334,33 +330,23 @@ class FacilitatedPaymentsPaymentMethodsMediator {
 
     @VisibleForTesting
     PropertyModel createBankAccountModel(Context context, BankAccount bankAccount) {
-        PropertyModel.Builder bankAccountModelBuilder =
-                new PropertyModel.Builder(BankAccountProperties.NON_TRANSFORMING_KEYS)
-                        .with(BANK_NAME, bankAccount.getBankName())
-                        .with(
-                                BANK_ACCOUNT_SUMMARY,
-                                getBankAccountSummaryString(context, bankAccount))
-                        .with(
-                                BANK_ACCOUNT_TRANSACTION_LIMIT,
-                                getBankAccountTransactionLimit(context))
-                        .with(
-                                ON_BANK_ACCOUNT_CLICK_ACTION,
-                                () -> this.onBankAccountSelected(bankAccount));
-        Optional<Bitmap> bankIconOptional = Optional.empty();
-        if (bankAccount.getDisplayIconUrl() != null && bankAccount.getDisplayIconUrl().isValid()) {
-            bankIconOptional =
-                    PersonalDataManagerFactory.getForProfile(mProfile)
-                            .getCustomImageForAutofillSuggestionIfAvailable(
-                                    bankAccount.getDisplayIconUrl(),
-                                    AutofillUiUtils.CardIconSpecs.create(
-                                            context, ImageSize.SQUARE));
-        }
-        if (bankIconOptional.isPresent()) {
-            bankAccountModelBuilder.with(BANK_ACCOUNT_ICON_BITMAP, bankIconOptional.get());
-        } else {
-            bankAccountModelBuilder.with(BANK_ACCOUNT_DRAWABLE_ID, R.drawable.ic_account_balance);
-        }
-        return bankAccountModelBuilder.build();
+        return new PropertyModel.Builder(BankAccountProperties.NON_TRANSFORMING_KEYS)
+                .with(BANK_NAME, bankAccount.getBankName())
+                .with(
+                        BANK_ACCOUNT_PAYMENT_RAIL,
+                        context.getString(R.string.settings_manage_other_financial_accounts_pix)
+                                + "  •")
+                .with(
+                        BANK_ACCOUNT_TYPE,
+                        getBankAccountTypeString(context, bankAccount.getAccountType()))
+                .with(BANK_ACCOUNT_NUMBER, bankAccount.getObfuscatedAccountNumber())
+                .with(BANK_ACCOUNT_TRANSACTION_LIMIT, getBankAccountTransactionLimit(context))
+                .with(ON_BANK_ACCOUNT_CLICK_ACTION, () -> this.onBankAccountSelected(bankAccount))
+                .with(
+                        BANK_ACCOUNT_ICON,
+                        AutofillImageFetcherFactory.getForProfile(mProfile)
+                                .getPixAccountIcon(context, bankAccount.getDisplayIconUrl()))
+                .build();
     }
 
     @VisibleForTesting
@@ -422,14 +408,6 @@ class FacilitatedPaymentsPaymentMethodsMediator {
             return EWALLET_FOP_SELECTOR_USER_ACTION_HISTOGRAM + "SingleUnboundEwallet";
         }
         return EWALLET_FOP_SELECTOR_USER_ACTION_HISTOGRAM + "MultipleEwallets";
-    }
-
-    @VisibleForTesting
-    static String getBankAccountSummaryString(Context context, BankAccount bankAccount) {
-        return context.getString(
-                R.string.settings_pix_bank_account_identifer,
-                getBankAccountTypeString(context, bankAccount.getAccountType()),
-                bankAccount.getAccountNumberSuffix());
     }
 
     static String getBankAccountTransactionLimit(Context context) {

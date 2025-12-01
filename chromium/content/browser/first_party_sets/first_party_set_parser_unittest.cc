@@ -8,6 +8,9 @@
 #include <sstream>
 
 #include "base/json/json_reader.h"
+#include "base/json/json_writer.h"
+#include "base/rand_util.h"
+#include "base/test/fuzztest_support.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/version.h"
 #include "content/public/browser/first_party_sets_handler.h"
@@ -19,6 +22,7 @@
 #include "net/first_party_sets/sets_mutation.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/fuzztest/src/fuzztest/fuzztest.h"
 #include "url/gurl.h"
 
 using ::testing::ElementsAre;
@@ -830,7 +834,7 @@ TEST(FirstPartySetParser_ParseSetsFromEnterprisePolicyTest,
   EXPECT_EQ(
       FirstPartySetParser::ParseSetsFromEnterprisePolicy(policy_value.GetDict())
           .first.value(),
-      FirstPartySetsOverridesPolicy(net::SetsMutation({}, {})));
+      FirstPartySetsOverridesPolicy(net::SetsMutation({}, {}, {})));
 }
 
 TEST(FirstPartySetParser_ParseSetsFromEnterprisePolicyTest,
@@ -845,7 +849,7 @@ TEST(FirstPartySetParser_ParseSetsFromEnterprisePolicyTest,
   EXPECT_EQ(
       FirstPartySetParser::ParseSetsFromEnterprisePolicy(policy_value.GetDict())
           .first.value(),
-      FirstPartySetsOverridesPolicy(net::SetsMutation({}, {})));
+      FirstPartySetsOverridesPolicy(net::SetsMutation({}, {}, {})));
 }
 
 TEST(FirstPartySetParser_ParseSetsFromEnterprisePolicyTest,
@@ -1067,7 +1071,8 @@ TEST(FirstPartySetParser_ParseSetsFromEnterprisePolicyTest,
                    net::FirstPartySetEntry(primary3, net::SiteType::kAssociated,
                                            std::nullopt)},
               },
-          })));
+          },
+          {})));
 }
 
 TEST(FirstPartySetParser_ParseSetsFromEnterprisePolicyTest,
@@ -1116,7 +1121,7 @@ TEST(FirstPartySetParser_ParseSetsFromEnterprisePolicyTest,
                                            std::nullopt)},
               },
           },
-          {})));
+          {}, {})));
 }
 
 TEST(FirstPartySetParser_ParseSetsFromEnterprisePolicyTest,
@@ -1154,7 +1159,7 @@ TEST(FirstPartySetParser_ParseSetsFromEnterprisePolicyTest,
                                            std::nullopt)},
               },
           },
-          {})));
+          {}, {})));
 }
 
 TEST(FirstPartySetParser_ParseSetsFromEnterprisePolicyTest,
@@ -1338,7 +1343,7 @@ TEST(FirstPartySetParser_ParseSetsFromEnterprisePolicyTest,
                 net::FirstPartySetEntry(primary2, net::SiteType::kAssociated,
                                         std::nullopt)},
            }},
-          {})));
+          {}, {})));
   EXPECT_THAT(
       FirstPartySetParser::ParseSetsFromEnterprisePolicy(policy_value.GetDict())
           .second,
@@ -1399,7 +1404,8 @@ TEST(FirstPartySetParser_ParseSetsFromEnterprisePolicyTest,
               {associatedSite3,
                net::FirstPartySetEntry(primary3, net::SiteType::kAssociated,
                                        std::nullopt)},
-          }})));
+          }},
+          {})));
   EXPECT_THAT(
       FirstPartySetParser::ParseSetsFromEnterprisePolicy(policy_value.GetDict())
           .second,
@@ -1416,6 +1422,8 @@ TEST(FirstPartySetParser_ParseSetsFromEnterprisePolicyTest,
   net::SchemefulSite associated3(GURL("https://associated3.test"));
 
   // The following sets are disjoint iff aaaa.test is on the Public Suffix List.
+  // If aaaa.test is not on the PSL, then two of the sets become singletons and
+  // should be deleted.
   base::Value policy_value = base::JSONReader::Read(R"(
                 {
                 "replacements": [
@@ -1429,7 +1437,6 @@ TEST(FirstPartySetParser_ParseSetsFromEnterprisePolicyTest,
                   {
                     "primary": "https://primary2.test",
                     "associatedSites": [
-                      "https://associated2.test",
                       "https://subdomain2.aaaa.test"
                     ]
                   }
@@ -1438,7 +1445,6 @@ TEST(FirstPartySetParser_ParseSetsFromEnterprisePolicyTest,
                   {
                     "primary": "https://primary3.test",
                     "associatedSites": [
-                      "https://associated3.test",
                       "https://subdomain3.aaaa.test"
                     ]
                   }
@@ -1451,26 +1457,13 @@ TEST(FirstPartySetParser_ParseSetsFromEnterprisePolicyTest,
           .first.value(),
       FirstPartySetsOverridesPolicy(net::SetsMutation(
           {{
-               {primary1, net::FirstPartySetEntry(
-                              primary1, net::SiteType::kPrimary, std::nullopt)},
-               {associated1,
-                net::FirstPartySetEntry(primary1, net::SiteType::kAssociated,
-                                        std::nullopt)},
-           },
-           {
-               {primary2, net::FirstPartySetEntry(
-                              primary2, net::SiteType::kPrimary, std::nullopt)},
-               {associated2,
-                net::FirstPartySetEntry(primary2, net::SiteType::kAssociated,
-                                        std::nullopt)},
-           }},
-          {{
-              {primary3, net::FirstPartySetEntry(
-                             primary3, net::SiteType::kPrimary, std::nullopt)},
-              {associated3,
-               net::FirstPartySetEntry(primary3, net::SiteType::kAssociated,
+              {primary1, net::FirstPartySetEntry(
+                             primary1, net::SiteType::kPrimary, std::nullopt)},
+              {associated1,
+               net::FirstPartySetEntry(primary1, net::SiteType::kAssociated,
                                        std::nullopt)},
-          }})));
+          }},
+          {}, {})));
   EXPECT_THAT(
       FirstPartySetParser::ParseSetsFromEnterprisePolicy(policy_value.GetDict())
           .second,
@@ -1486,6 +1479,9 @@ TEST(FirstPartySetParser_ParseSetsFromEnterprisePolicyTest,
   net::SchemefulSite primary2(GURL("https://primary2.test"));
   net::SchemefulSite primary2_cctld(GURL("https://primary2.cctld"));
   net::SchemefulSite associated_site2(GURL("https://associatedsite2.test"));
+  net::SchemefulSite primary3(GURL("https://primary3.test"));
+  net::SchemefulSite service3(GURL("https://service3.test"));
+  net::SchemefulSite service3_cctld(GURL("https://service3.cctld"));
 
   base::Value policy_value = base::JSONReader::Read(R"(
              {
@@ -1505,6 +1501,15 @@ TEST(FirstPartySetParser_ParseSetsFromEnterprisePolicyTest,
                       "https://primary2.test": ["https://primary2.cctld"]
                     }
                   }
+                ],
+                "additions": [
+                  {
+                    "primary": "https://primary3.test",
+                    "serviceSites": ["https://service3.test"],
+                    "ccTLDs": {
+                      "https://service3.test": ["https://service3.cctld"]
+                    }
+                  }
                 ]
               }
             )")
@@ -1513,6 +1518,7 @@ TEST(FirstPartySetParser_ParseSetsFromEnterprisePolicyTest,
       FirstPartySetParser::ParseSetsFromEnterprisePolicy(policy_value.GetDict())
           .first.value(),
       FirstPartySetsOverridesPolicy(net::SetsMutation(
+          /*replacement_sets=*/
           {{
                {primary1, net::FirstPartySetEntry(
                               primary1, net::SiteType::kPrimary, std::nullopt)},
@@ -1533,7 +1539,22 @@ TEST(FirstPartySetParser_ParseSetsFromEnterprisePolicyTest,
                 net::FirstPartySetEntry(primary2, net::SiteType::kAssociated,
                                         std::nullopt)},
            }},
-          {})));
+          /*addition_sets=*/
+          {{
+              {primary3, net::FirstPartySetEntry(
+                             primary3, net::SiteType::kPrimary, std::nullopt)},
+              {service3, net::FirstPartySetEntry(
+                             primary3, net::SiteType::kService, std::nullopt)},
+              {service3_cctld,
+               net::FirstPartySetEntry(primary3, net::SiteType::kService,
+                                       std::nullopt)},
+          }},
+          /*aliases=*/
+          {
+              {primary2_cctld, primary2},
+              {associated_site1_cctld, associated_site1},
+              {service3_cctld, service3},
+          })));
 
   EXPECT_THAT(
       FirstPartySetParser::ParseSetsFromEnterprisePolicy(policy_value.GetDict())
@@ -1716,7 +1737,7 @@ TEST(FirstPartySetParser, EnterprisePolicies_ExemptFromAssociatedSiteLimit) {
                net::FirstPartySetEntry(primary1, net::SiteType::kAssociated,
                                        std::nullopt)},
           }},
-          {})));
+          {}, {})));
 }
 
 TEST(FirstPartySetParser, ParseFromCommandLine_Invalid_MultipleSets) {
@@ -1755,19 +1776,66 @@ TEST(FirstPartySetParser,
           R"(})");
 
   EXPECT_THAT(
-      local_set.entries(),
-      UnorderedElementsAre(
-          Pair(primary, net::FirstPartySetEntry(
-                            primary, net::SiteType::kPrimary, std::nullopt)),
-          Pair(associated1,
-               net::FirstPartySetEntry(primary, net::SiteType::kAssociated, 0)),
-          Pair(associated2,
-               net::FirstPartySetEntry(primary, net::SiteType::kAssociated, 1)),
-          Pair(service, net::FirstPartySetEntry(
-                            primary, net::SiteType::kService, std::nullopt))));
-
-  EXPECT_THAT(local_set.aliases(),
-              UnorderedElementsAre(Pair(associated2_cctld, associated2)));
+      local_set.ComputeMutation(),
+      net::SetsMutation(
+          /*replacement_sets=*/
+          {
+              {
+                  {primary,
+                   net::FirstPartySetEntry(primary, net::SiteType::kPrimary,
+                                           std::nullopt)},
+                  {associated1, net::FirstPartySetEntry(
+                                    primary, net::SiteType::kAssociated, 0)},
+                  {associated2, net::FirstPartySetEntry(
+                                    primary, net::SiteType::kAssociated, 1)},
+                  {associated2_cctld,
+                   net::FirstPartySetEntry(primary, net::SiteType::kAssociated,
+                                           1)},
+                  {service,
+                   net::FirstPartySetEntry(primary, net::SiteType::kService,
+                                           std::nullopt)},
+              },
+          },
+          /*addition_sets=*/{},
+          /*aliases=*/{{associated2_cctld, associated2}}));
 }
 
+void ParsesSetsCorrectly(std::string input) {
+  std::istringstream stream(input);
+  FirstPartySetParser::ParseSetsFromStream(stream, base::Version("1.0"), false,
+                                           false);
+}
+
+auto JsonDomain() {
+  return fuzztest::ReversibleMap(
+      // The mapping function maps a base::Value to its JSON string
+      // representation.
+      [](base::Value value) {
+        std::string res;
+        base::JSONWriter::Write(std::move(value), &res);
+        return res;
+      },
+      // The inverse mapping function maps the JSON string representation to
+      // a tuple of base::Value. The return value is additionally wrapped in
+      // std::optional.
+      [](const std::string& value) -> std::optional<std::tuple<base::Value>> {
+        auto res = base::JSONReader::Read(value);
+        if (!res) {
+          return std::nullopt;
+        }
+        // We use a tuple because the FuzzTest API requires it, since the
+        // inverse mapping can map one input value to multiple output values.
+        return std::tuple{std::move(*res)};
+      },
+      fuzztest::Arbitrary<base::Value>());
+}
+
+FUZZ_TEST(FirstPartySetFuzzer, ParsesSetsCorrectly)
+    .WithDomains(fuzztest::OneOf(JsonDomain(),
+                                 fuzztest::Arbitrary<std::string>().WithSeeds(
+                                     []() -> std::vector<std::string> {
+                                       auto domain = JsonDomain();
+                                       return {domain.GetRandomValue(
+                                           base::RandomBitGenerator())};
+                                     })));
 }  // namespace content

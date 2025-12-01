@@ -14,6 +14,7 @@
 <translation id="1454726940098520109">不再显示确认信息</translation>
 <translation id="1462666970065907900">确认要关闭此窗口？</translation>
 <translation id="1480046233931937785">第三方开源软件</translation>
+<translation id="1490502035430975848">检查门户文档</translation>
 <translation id="1521774566618522728">今天激活</translation>
 <translation id="1526344461589023948">保存下载的更新文件时出错。请检查是否有足够的存储空间然后重试。</translation>
 <translation id="1635542496948266458">切换配置文件</translation>
@@ -34,9 +35,11 @@
 <translation id="2141974047387702305">下载更新文件时出现一个错误。请检查您的互联网连接并重试。</translation>
 <translation id="2226825946708954262">⚠ 放弃数据继续</translation>
 <translation id="2339641773402824483">检查更新...</translation>
+<translation id="2429571091666452569">来自清单：</translation>
 <translation id="2441056087170876076">怪兽 2</translation>
 <translation id="2444387452209867610">插入笔记</translation>
 <translation id="2486841023299517366">动物 4</translation>
+<translation id="2501278716633472235">返回</translation>
 <translation id="2612127540243995147">准备安装。Vivaldi 将被关闭，随后重新打开。</translation>
 <translation id="2613387515621326337">显示更新网站</translation>
 <translation id="2645477450146475243">很遗憾，当该浏览器运行时，您的 Opera 设置不可用。要将这些设置导入 Vivaldi，请保存您的工作并关闭所有 Opera 窗口，然后单击继续。</translation>
@@ -61,6 +64,7 @@
 <translation id="3259769196742189631">校验</translation>
 <translation id="3291915639428159043">已阻止自动播放</translation>
 <translation id="3302905971452834934">怪兽 1</translation>
+<translation id="3308738399950580893">广告</translation>
 <translation id="3334610655141903168">（无标题）</translation>
 <translation id="3372505110412186107">Vivaldi <ph name="VERSION" /> 为当前最新版。</translation>
 <translation id="3383198080133834965">当前已是最新版！</translation>
@@ -71,9 +75,11 @@
 <translation id="3521635864657970829">确认关闭这个窗口吗？</translation>
 <translation id="3540597690227428180">动物 9</translation>
 <translation id="3542768452570884558">在新窗口中打开链接</translation>
+<translation id="3586931643579894722">隐藏详情</translation>
 <translation id="3588820906588687999">在新标签页中打开图片</translation>
 <translation id="3601066750251199488">怪兽 3</translation>
 <translation id="3620979700683094848">网站可以自动播放视频</translation>
+<translation id="3650023731264842343">当加载下列页面时：</translation>
 <translation id="3658651522139217005">Opera GX</translation>
 <translation id="3680031241659195730">Vivaldi 新版本已发布！</translation>
 <translation id="3708982624815781692">下载被取消。</translation>
@@ -83,6 +89,7 @@
 <translation id="3795800845758778870">遗憾，无法在Brave浏览器运行期间导入它的设置。请保存当前工作并关闭所有Brave窗口，然后点击“继续”。</translation>
 <translation id="3822431842304177896">新增分隔线</translation>
 <translation id="3832132597516774400">风景 5</translation>
+<translation id="3894751534882749287">如果要查看此页面，可以通过在跟踪器阻止程序弹出窗口上点击允许按钮来更改跟踪保护级别</translation>
 <translation id="3914946330804881301">从 Opera 导入</translation>
 <translation id="3921292902397893431">怪兽 8</translation>
 <translation id="3943857333388298514">粘贴</translation>
@@ -107,6 +114,7 @@
 <translation id="4582480609585453144">在后台标签页中打开链接</translation>
 <translation id="4636708767492582204">使用邮件发送</translation>
 <translation id="4677434526832593569">动物 8</translation>
+<translation id="4736016046474602958">追踪拦截器</translation>
 <translation id="474217410105706308">使此页面静音</translation>
 <translation id="4861715717329665002">自动保存的会话</translation>
 <translation id="4881695831933465202">打开</translation>
@@ -133,9 +141,11 @@
 <translation id="588258955323874662">全屏</translation>
 <translation id="5916080360077521750">很遗憾，你的 Chrome 浏览器设置不能在浏览器运行时使用。要导入这些配置到 Vivaldi，你需要保存工作并关闭 Chrome 窗口然后点击继续。</translation>
 <translation id="6040143037577758943">关闭</translation>
+<translation id="6140948187512243695">显示详情</translation>
 <translation id="6229528619562190452">点击此处更新 Vivaldi。</translation>
 <translation id="6234173136417926046">使用图片作为起始页背景</translation>
 <translation id="6339818817272922368">本地账号</translation>
+<translation id="6376435169746695498">因触发 <ph name="BLOCKER_NAME" /> 规则，网页被禁止加载</translation>
 <translation id="6398710281890660037">保护我的个人资料</translation>
 <translation id="6438786710866753178">风景 4</translation>
 <translation id="6477028720702061455">选择 Opera 配置文件夹以导入</translation>
@@ -152,6 +162,7 @@
 <translation id="7086554968911045110">风景 7</translation>
 <translation id="7099506190679014195">安全密钥库升级</translation>
 <translation id="7111492742514999492">风景 9</translation>
+<translation id="7113310725918019676">不屏蔽来自 <ph name="DOMAIN" /> 的<ph name="BLOCKED_TYPE" /></translation>
 <translation id="7208252576848052204">很遗憾，当该浏览器运行时，您的 Arc 设置不可用。要将这些设置导入 Vivaldi，请保存您的工作并关闭所有 Arc 窗口。然后单击继续。</translation>
 <translation id="7321500017121629018">昨天激活</translation>
 <translation id="7337881442233988129">Chromium 浏览器</translation>
@@ -167,12 +178,13 @@
 <translation id="8027581147000338959">在新窗口中打开</translation>
 <translation id="8044382196220116469">不允许网站自动播放视频</translation>
 <translation id="8099620695029051217">复制页面地址</translation>
+<translation id="8119307142152921512">广告和追踪器</translation>
 <translation id="8197810018650377191">加入书签</translation>
 <translation id="8261506727792406068">删除</translation>
-<translation id="8263047843452521549">检查后台服务</translation>
 <translation id="8331671104904436324">在后台标签页中打开</translation>
 <translation id="8373293945112511707">风景 1</translation>
 <translation id="8388552048012645975">正在下载更新...</translation>
+<translation id="8392904568172593155">不带参数</translation>
 <translation id="8427094907586191051">风景 17</translation>
 <translation id="8439034818057146672">准备安装 Vivaldi 新版本。</translation>
 <translation id="8446668873108041390">已停用通过 AppleScript 运行 JavaScript。启用「设置 &gt; 隐私 &gt; Apple Events」选项以允许执行来自 Apple Events 的 JavaScript。</translation>
@@ -183,14 +195,15 @@
 <translation id="8651348004684669199">添加活动标签页</translation>
 <translation id="8669345741879513971">怪兽 10</translation>
 <translation id="867544375504146191">Yandex 浏览器</translation>
-<translation id="8689295374912158752">检查入口文档</translation>
 <translation id="875142999698251063">立即退出</translation>
 <translation id="8768970203213061953">风景 14</translation>
 <translation id="8773635261052182196">你将不会再收到通知，你可以在 vivaldi 设置中重新打开。</translation>
 <translation id="8774017153185436870">网站可能会自动播放视频</translation>
 <translation id="8813277370772331957">稍后提醒我</translation>
+<translation id="8837256239226739065">检查后台服务进程</translation>
 <translation id="8894900864683381599">添加链接到网页面板</translation>
 <translation id="8912720443398351457">确认退出Vivaldi吗？</translation>
+<translation id="8940028675168378100">被 <ph name="BLOCKER_NAME" /> 屏蔽</translation>
 <translation id="8947109330183116400">选择 HTML 书签文件</translation>
 <translation id="9017566390391482291">选择 Vivaldi 配置文件夹以导入</translation>
 <translation id="9048058608784130603">准备更新至 <ph name="VERSION" /></translation>
@@ -201,6 +214,7 @@
 <translation id="912022491595344261">以<ph name="USER" />身份打开图像</translation>
 <translation id="9157539936604258187">打开链接</translation>
 <translation id="9169060351863393881">Opera 12.x 浏览器</translation>
+<translation id="9180553614777056266">广告拦截器</translation>
 <translation id="939305735877869636">Brave浏览器</translation>
 <translation id="970294721402795299">风景 16</translation>
 </translationbundle>

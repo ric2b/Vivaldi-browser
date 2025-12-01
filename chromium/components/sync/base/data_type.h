@@ -168,6 +168,13 @@ enum DataType {
   // standard syncable prefs.
   PLUS_ADDRESS_SETTING,
 
+  // Valuables stored in the Google Wallet.
+  // Read-only on the client.
+  AUTOFILL_VALUABLE,
+
+  // Account-local metadata for shared tab groups.
+  SHARED_TAB_GROUP_ACCOUNT_DATA,
+
   // Notes items
   NOTES,
 
@@ -269,6 +276,8 @@ enum class DataTypeForHistograms {
   kProductComparison = 66,
   kCookies = 67,
   kPlusAddressSettings = 68,
+  kAutofillValuable = 69,
+  kSharedTabGroupAccountData = 70,
 
   // Vivaldi
   kNotes = 300,
@@ -400,17 +409,17 @@ constexpr DataTypeSet SharedTypes() {
 }
 
 // Types triggering a warning when the user signs out and the types have
-// unsynced data. The warning offers the user to either save the data locally or
-// abort sign-out, depending on the platform.
+// unsynced data. The warning offers the user to proceed with sign-out deleting
+// any pending account data or abort, depending on the platform.
 constexpr DataTypeSet TypesRequiringUnsyncedDataCheckOnSignout() {
   static_assert(
-      53 + 1 /* Notes */ == GetNumDataTypes(),
+      55 + 1 /* Notes */ == GetNumDataTypes(),
       "Add new types to `TypesRequiringUnsyncedDataCheckOnSignout()` if there "
       "should be a warning when the user signs out and the types have unsynced "
-      "data. The warning offers the user to either save the data locally or "
-      "abort sign-out, depending on the platform");
-  return {syncer::BOOKMARKS, syncer::CONTACT_INFO, syncer::PASSWORDS,
-          syncer::READING_LIST, syncer::SAVED_TAB_GROUP};
+      "data. The warning offers the user to either proceed with sign-out "
+      "deleting any pending account data or abort, depending on the platform");
+  return {syncer::BOOKMARKS,    syncer::CONTACT_INFO,    syncer::PASSWORDS,
+          syncer::READING_LIST, syncer::SAVED_TAB_GROUP, syncer::THEMES};
 }
 
 // User types that can be encrypted, which is a subset of UserTypes() and a

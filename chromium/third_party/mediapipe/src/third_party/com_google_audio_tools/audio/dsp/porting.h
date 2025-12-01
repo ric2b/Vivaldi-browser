@@ -20,6 +20,7 @@
 #include <cstdint>
 #include <iostream>
 #include <cmath>
+#include <limits>
 #include <string>
 
 using std::string;

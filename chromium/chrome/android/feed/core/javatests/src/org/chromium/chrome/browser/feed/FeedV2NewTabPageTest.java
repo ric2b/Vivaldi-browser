@@ -70,20 +70,19 @@ import org.chromium.base.test.util.DisableIf;
 import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.DoNotBatch;
 import org.chromium.base.test.util.Feature;
-import org.chromium.base.test.util.Features.DisableFeatures;
 import org.chromium.base.test.util.Restriction;
 import org.chromium.chrome.browser.ChromeTabbedActivity;
 import org.chromium.chrome.browser.feed.sections.SectionHeaderListProperties;
 import org.chromium.chrome.browser.feed.v2.FeedV2TestHelper;
 import org.chromium.chrome.browser.feed.v2.TestFeedServer;
 import org.chromium.chrome.browser.firstrun.FirstRunUtils;
-import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.ntp.NewTabPage;
 import org.chromium.chrome.browser.ntp.cards.SignInPromo;
 import org.chromium.chrome.browser.preferences.ChromePreferenceKeys;
 import org.chromium.chrome.browser.preferences.ChromeSharedPreferences;
 import org.chromium.chrome.browser.suggestions.SiteSuggestion;
+import org.chromium.chrome.browser.suggestions.tile.TilesLinearLayout;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.toolbar.top.ToolbarPhone;
 import org.chromium.chrome.test.ChromeJUnit4RunnerDelegate;
@@ -227,8 +226,8 @@ public class FeedV2NewTabPageTest {
         Assert.assertTrue(mTab.getNativePage() instanceof NewTabPage);
         mNtp = (NewTabPage) mTab.getNativePage();
 
-        ViewGroup mvTilesLayout = mNtp.getView().findViewById(R.id.mv_tiles_layout);
-        Assert.assertEquals(mSiteSuggestions.size(), mvTilesLayout.getChildCount());
+        TilesLinearLayout mvTilesLayout = mNtp.getView().findViewById(R.id.mv_tiles_layout);
+        Assert.assertEquals(mSiteSuggestions.size(), mvTilesLayout.getTileCount());
     }
 
     @Test
@@ -474,7 +473,6 @@ public class FeedV2NewTabPageTest {
     @MediumTest
     @Feature({"RenderTest"})
     @Restriction({DeviceFormFactor.PHONE})
-    @DisableFeatures({ChromeFeatureList.LOGO_POLISH})
     public void testLoadFeedContent_Landscape() throws IOException {
         ChromeTabbedActivity chromeActivity = mActivityTestRule.getActivity();
         chromeActivity.setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE);
@@ -500,7 +498,7 @@ public class FeedV2NewTabPageTest {
         RecyclerView recyclerView = getRecyclerView();
         FeedV2TestHelper.waitForRecyclerItems(MIN_ITEMS_AFTER_LOAD, recyclerView);
 
-        mRenderTestRule.render(recyclerView, "feedContent_landscape_with_scrollable_mvt_v2");
+        mRenderTestRule.render(recyclerView, "feedContent_landscape_with_scrollable_mvt_v3");
     }
 
     @Test

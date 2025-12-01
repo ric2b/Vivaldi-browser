@@ -10,7 +10,7 @@
             "builder_id": {
               "bucket": "ci",
               "builder": "Dawn Chromium Presubmit",
-              "project": "chromium-m134"
+              "project": "chromium-m136"
             },
             "builder_spec": {
               "builder_group": "chromium.dawn",
@@ -38,7 +38,7 @@
         {
           "bucket": "ci",
           "builder": "Dawn Chromium Presubmit",
-          "project": "chromium-m134"
+          "project": "chromium-m136"
         }
       ],
       "mirroring_builder_group_and_names": [
@@ -50,18 +50,15 @@
       "targets_spec_directory": "src/infra/config/generated/builders/ci/Dawn Chromium Presubmit/targets"
     }
   },
-  "$build/reclient": {
-    "instance": "rbe-chromium-trusted",
-    "metrics_project": "chromium-reclient-metrics",
-    "scandeps_server": true
-  },
   "$build/siso": {
     "configs": [
       "builder"
     ],
+    "enable_cloud_monitoring": true,
     "enable_cloud_profiler": true,
     "enable_cloud_trace": true,
     "experiments": [],
+    "metrics_project": "chromium-reclient-metrics",
     "project": "rbe-chromium-trusted",
     "remote_jobs": 250
   },
@@ -73,6 +70,7 @@
     ]
   },
   "builder_group": "chromium.dawn",
+  "dawn_ref": "refs/heads/chromium/7103",
   "gardener_rotations": [
     "chrome_browser_release"
   ],

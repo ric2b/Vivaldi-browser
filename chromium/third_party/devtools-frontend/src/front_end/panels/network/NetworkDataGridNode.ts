@@ -100,6 +100,10 @@ const UIStrings = {
    */
   origin: 'origin',
   /**
+   *@description Noun. Shown in a table cell as the reason why a network request failed. "integrity" here refers to the integrity of the network request itself in a cryptographic sense: signature verification might have failed, for instance.
+   */
+  integrity: 'integrity',
+  /**
    *@description Reason in Network Data Grid Node of the Network panel
    */
   devtools: 'devtools',
@@ -298,7 +302,7 @@ const UIStrings = {
    *@example {Low} PH2
    */
   initialPriorityToolTip: '{PH1}, Initial priority: {PH2}',
-};
+} as const;
 const str_ = i18n.i18n.registerUIStrings('panels/network/NetworkDataGridNode.ts', UIStrings);
 const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
 
@@ -427,7 +431,7 @@ export class NetworkNode extends DataGrid.SortableDataGrid.SortableDataGridNode<
   }
 
   updateBackgroundColor(): void {
-    const element = (this.existingElement() as HTMLElement | null);
+    const element = (this.existingElement());
     if (!element) {
       return;
     }
@@ -651,8 +655,8 @@ export class NetworkRequestNode extends NetworkNode {
       return !aHasInitiatorCell ? -1 : 1;
     }
     // `a` and `b` are guaranteed NetworkRequestNodes with present initiatorCell elements.
-    const networkRequestNodeA = (a as NetworkRequestNode);
-    const networkRequestNodeB = (b as NetworkRequestNode);
+    const networkRequestNodeA = (a);
+    const networkRequestNodeB = (b);
 
     const aText = networkRequestNodeA.linkifiedInitiatorAnchor ?
         networkRequestNodeA.linkifiedInitiatorAnchor.textContent || '' :
@@ -1057,27 +1061,13 @@ export class NetworkRequestNode extends NetworkNode {
     }
   }
 
-  private arrayLength(array: Array<unknown>|null): string {
+  private arrayLength(array: unknown[]|null): string {
     return array ? String(array.length) : '';
   }
 
   override select(supressSelectedEvent?: boolean): void {
     super.select(supressSelectedEvent);
     this.parentView().dispatchEventToListeners(Events.RequestSelected, this.requestInternal);
-  }
-
-  highlightMatchedSubstring(regexp: RegExp|null): Object[] {
-    if (!regexp || !this.nameCell || this.nameCell.textContent === null) {
-      return [];
-    }
-    // Ensure element is created.
-    this.element();
-    const domChanges: UI.UIUtils.HighlightChange[] = [];
-    const matchInfo = this.nameCell.textContent.match(regexp);
-    if (matchInfo) {
-      UI.UIUtils.highlightSearchResult(this.nameCell, matchInfo.index || 0, matchInfo[0].length, domChanges);
-    }
-    return domChanges;
   }
 
   private openInNewTab(): void {
@@ -1223,6 +1213,10 @@ export class NetworkRequestNode extends NetworkNode {
           displayShowHeadersLink = true;
           reason = i18n.i18n.lockedString('NotSameOriginAfterDefaultedToSameOriginByCoep');
           break;
+        case Protocol.Network.BlockedReason.SriMessageSignatureMismatch:
+          displayShowHeadersLink = true;
+          reason = i18nString(UIStrings.integrity);
+          break;
       }
       if (displayShowHeadersLink) {
         this.setTextAndTitleAsLink(
@@ -1312,7 +1306,7 @@ export class NetworkRequestNode extends NetworkNode {
     const initiator = Logs.NetworkLog.NetworkLog.instance().initiatorInfoForRequest(request);
 
     const timing = request.timing;
-    if (timing && timing.pushStart) {
+    if (timing?.pushStart) {
       cell.appendChild(document.createTextNode(i18nString(UIStrings.push)));
     }
     switch (initiator.type) {
@@ -1406,7 +1400,7 @@ export class NetworkRequestNode extends NetworkNode {
   }
 
   private renderSizeCell(cell: HTMLElement): void {
-    const resourceSize = i18n.ByteUtilities.bytesToString(this.requestInternal.resourceSize);
+    const resourceSize = i18n.ByteUtilities.formatBytesToKb(this.requestInternal.resourceSize);
 
     if (this.requestInternal.cachedInMemory()) {
       UI.UIUtils.createTextChild(cell, i18nString(UIStrings.memoryCache));
@@ -1419,7 +1413,7 @@ export class NetworkRequestNode extends NetworkNode {
       UI.UIUtils.createTextChild(cell, i18n.i18n.lockedString('(ServiceWorker router)'));
       let tooltipText;
       if (serviceWorkerRouterInfo.matchedSourceType === Protocol.Network.ServiceWorkerRouterSource.Network) {
-        const transferSize = i18n.ByteUtilities.bytesToString(this.requestInternal.transferSize);
+        const transferSize = i18n.ByteUtilities.formatBytesToKb(this.requestInternal.transferSize);
         tooltipText = i18nString(
             UIStrings.matchedToServiceWorkerRouterWithNetworkSource,
             {PH1: ruleIdMatched, PH2: transferSize, PH3: resourceSize});
@@ -1449,7 +1443,7 @@ export class NetworkRequestNode extends NetworkNode {
       UI.Tooltip.Tooltip.install(cell, i18nString(UIStrings.servedFromDiskCacheResourceSizeS, {PH1: resourceSize}));
       cell.classList.add('network-dim-cell');
     } else {
-      const transferSize = i18n.ByteUtilities.bytesToString(this.requestInternal.transferSize);
+      const transferSize = i18n.ByteUtilities.formatBytesToKb(this.requestInternal.transferSize);
       UI.UIUtils.createTextChild(cell, transferSize);
       UI.Tooltip.Tooltip.install(cell, `${transferSize} transferred over network, resource size: ${resourceSize}`);
     }

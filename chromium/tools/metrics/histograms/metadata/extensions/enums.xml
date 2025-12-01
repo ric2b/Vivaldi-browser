@@ -151,6 +151,8 @@ chromium-metrics-reviews@google.com.
   <int value="33554432" label="DISABLE_UNKNOWN"/>
 </enum>
 
+<!-- LINT.IfChange(ExtensionEvents) -->
+
 <enum name="ExtensionEvents">
 <!-- Generated from extensions/browser/extension_event_histogram_value.h.
 Called by update_extension_histograms.py.-->
@@ -766,7 +768,12 @@ Called by update_extension_histograms.py.-->
   <int value="562" label="TTS_ENGINE_ON_UNINSTALL_LANGUAGE_REQUEST"/>
   <int value="563" label="PDF_VIEWER_PRIVATE_ON_SHOULD_UPDATE_VIEWPORT"/>
   <int value="564" label="OMNIBOX_ON_ACTION_EXECUTED"/>
+  <int value="565" label="AUTOFILL_PRIVATE_ON_ENTITY_INSTANCES_CHANGED"/>
+  <int value="566"
+      label="ENTERPRISE_REPORTING_PRIVATE_ON_DATA_MASKING_RULES_TRIGGERED"/>
 </enum>
+
+<!-- LINT.ThenChange(//extensions/browser/extension_event_histogram_value.h:HistogramValue) -->
 
 <enum name="ExtensionForceInstalledPreInstalledDeprecatedSite">
   <int value="0" label="Gmail"/>
@@ -781,6 +788,8 @@ Called by update_extension_histograms.py.-->
   <int value="0" label="Non-webstore update URL"/>
   <int value="1" label="External install location"/>
 </enum>
+
+<!-- LINT.IfChange(ExtensionFunctions) -->
 
 <enum name="ExtensionFunctions">
 <!-- Generated from extensions/browser/extension_function_histogram_value.h.
@@ -1349,7 +1358,7 @@ Called by update_extension_histograms.py.-->
   <int value="555" label="SYNCFILESYSTEM_GETSERVICESTATUS"/>
   <int value="556" label="ECHOPRIVATE_SETOFFERINFO"/>
   <int value="557" label="ECHOPRIVATE_GETOFFERINFO"/>
-  <int value="558" label="DEVELOPERPRIVATE_ISPROFILEMANAGED"/>
+  <int value="558" label="DELETED_DEVELOPERPRIVATE_ISPROFILEMANAGED"/>
   <int value="559" label="DELETED_FILEMANAGERPRIVATE_INSTALLWEBSTOREITEM"/>
   <int value="560" label="FILEMANAGERPRIVATEINTERNAL_STARTCOPY"/>
   <int value="561" label="FILEMANAGERPRIVATE_CANCELCOPY"/>
@@ -2512,9 +2521,9 @@ Called by update_extension_histograms.py.-->
   <int value="1657" label="BOOKMARKMANAGERPRIVATE_OPENINNEWTAB"/>
   <int value="1658" label="BOOKMARKMANAGERPRIVATE_OPENINNEWWINDOW"/>
   <int value="1659" label="WMDESKSPRIVATE_REMOVEDESK"/>
-  <int value="1660" label="SHAREDSTORAGEPRIVATE_GET"/>
-  <int value="1661" label="SHAREDSTORAGEPRIVATE_SET"/>
-  <int value="1662" label="SHAREDSTORAGEPRIVATE_REMOVE"/>
+  <int value="1660" label="DELETED_SHAREDSTORAGEPRIVATE_GET"/>
+  <int value="1661" label="DELETED_SHAREDSTORAGEPRIVATE_SET"/>
+  <int value="1662" label="DELETED_SHAREDSTORAGEPRIVATE_REMOVE"/>
   <int value="1663" label="FILEMANAGERPRIVATEINTERNAL_GETDLPMETADATA"/>
   <int value="1664" label="WMDESKSPRIVATE_GETALLDESKS"/>
   <int value="1665" label="AUTOTESTPRIVATE_FORCEAUTOTHEMEMODE"/>
@@ -2750,7 +2759,7 @@ Called by update_extension_histograms.py.-->
   <int value="1881" label="USERSCRIPTS_GETWORLDCONFIGURATIONS"/>
   <int value="1882" label="USERSCRIPTS_RESETWORLDCONFIGURATION"/>
   <int value="1883" label="AUTOTESTPRIVATE_WAITFORLOGINANIMATIONEND"/>
-  <int value="1884" label="CHROMEOSINFOPRIVATE_ISRUNNINGONLACROS"/>
+  <int value="1884" label="DELETED_CHROMEOSINFOPRIVATE_ISRUNNINGONLACROS"/>
   <int value="1885" label="WEBSTOREPRIVATE_GETFULLCHROMEVERSION"/>
   <int value="1886"
       label="ODFSCONFIGPRIVATE_ISFILESYSTEMPROVIDERCONTENTCACHEENABLED"/>
@@ -2769,18 +2778,20 @@ Called by update_extension_histograms.py.-->
   <int value="1898" label="STORAGE_GETKEYS"/>
   <int value="1899" label="ACCESSIBILITY_PRIVATE_SENDGESTUREINFOTOSETTINGS"/>
   <int value="1900" label="ENTERPRISEREPORTINGPRIVATE_REPORTDATAMASKINGEVENT"/>
-  <int value="1901" label="AUTOFILLPRIVATE_GETUSERANNOTATIONSENTRIES"/>
-  <int value="1902" label="AUTOFILLPRIVATE_DELETEUSERANNOTATIONSENTRY"/>
-  <int value="1903" label="AUTOFILLPRIVATE_DELETEALLUSERANNOTATIONSENTRIES"/>
+  <int value="1901" label="DELETED_AUTOFILLPRIVATE_GETUSERANNOTATIONSENTRIES"/>
+  <int value="1902" label="DELETED_AUTOFILLPRIVATE_DELETEUSERANNOTATIONSENTRY"/>
+  <int value="1903"
+      label="DELETED_AUTOFILLPRIVATE_DELETEALLUSERANNOTATIONSENTRIES"/>
   <int value="1904" label="EXPERIMENTALAIDATA_PRIVATE_GETAIDATA"/>
   <int value="1905" label="AUTOTESTPRIVATE_GETDEVICEEVENTLOG"/>
   <int value="1906" label="ACCESSIBILITY_PRIVATE_UPDATEFACEGAZEBUBBLE"/>
-  <int value="1907" label="AUTOFILLPRIVATE_HASUSERANNOTATIONSENTRIES"/>
+  <int value="1907" label="DELETED_AUTOFILLPRIVATE_HASUSERANNOTATIONSENTRIES"/>
   <int value="1908"
-      label="AUTOFILLPRIVATE_ISUSERELIGIBLEFORAUTOFILLIMPROVEMENTS"/>
+      label="DELETED_AUTOFILLPRIVATE_ISUSERELIGIBLEFORAUTOFILLIMPROVEMENTS"/>
   <int value="1909"
-      label="AUTOFILLPRIVATE_PREDICTIONIMPROVEMENTSIPHFFEATUREUSED"/>
-  <int value="1910" label="AUTOFILLPRIVATE_TRIGGERANNOTATIONSBOOTSTRAPPING"/>
+      label="DELETED_AUTOFILLPRIVATE_PREDICTIONIMPROVEMENTSIPHFFEATUREUSED"/>
+  <int value="1910"
+      label="DELETED_AUTOFILLPRIVATE_TRIGGERANNOTATIONSBOOTSTRAPPING"/>
   <int value="1911" label="ACCESSIBILITY_PRIVATE_ENABLEDRAGEVENTREWRITER"/>
   <int value="1912" label="TTSENGINE_UPDATELANGUAGE"/>
   <int value="1913" label="ODFSCONFIGPRIVATE_OPENINOFFICEAPP"/>
@@ -2792,7 +2803,22 @@ Called by update_extension_histograms.py.-->
   <int value="1919" label="AUTOTESTPRIVATE_OVERRIDELOBSTERRESPONSE"/>
   <int value="1920" label="AUTOFILLPRIVATE_REMOVEADDRESS"/>
   <int value="1921" label="AUTOFILLPRIVATE_REMOVEPAYMENTSENTITY"/>
+  <int value="1922" label="PRINTING_GETJOBSTATUS"/>
+  <int value="1923" label="AUTOTESTPRIVATE_OVERRIDESCANNERRESPONSESFORTESTING"/>
+  <int value="1924" label="AUTOFILLPRIVATE_LOADENTITYINSTANCES"/>
+  <int value="1925" label="AUTOFILLPRIVATE_ADDORUPDATEENTITYINSTANCE"/>
+  <int value="1926" label="AUTOFILLPRIVATE_REMOVEENTITYINSTANCE"/>
+  <int value="1927" label="ACCESSIBILITY_PRIVATE_ENABLELIVECAPTION"/>
+  <int value="1928" label="AUTOFILLPRIVATE_GETALLENTITYTYPES"/>
+  <int value="1929"
+      label="AUTOFILLPRIVATE_GETALLATTRIBUTETYPESFORENTITYTYPENAME"/>
+  <int value="1930" label="AUTOFILLPRIVATE_GETENTITYINSTANCEBYGUID"/>
+  <int value="1931" label="AUTOFILLPRIVATE_GETPAYOVERTIMEISSUERLIST"/>
+  <int value="1932" label="AUTOFILLPRIVATE_SETAUTOFILLAIOPTINSTATUS"/>
+  <int value="1933" label="AUTOFILLPRIVATE_GETAUTOFILLAIOPTINSTATUS"/>
 </enum>
+
+<!-- LINT.ThenChange(//extensions/browser/extension_function_histogram_value.h:HistogramValue) -->
 
 <enum name="ExtensionInstallationCrxInstallError">
   <int value="0" label="NONE"/>
@@ -3038,7 +3064,7 @@ Called by update_extension_permission.py.-->
   <int value="121" label="kProxy"/>
   <int value="122" label="kImageWriterPrivate"/>
   <int value="123" label="kDeleted_ReadingListPrivate"/>
-  <int value="124" label="kRtcPrivate"/>
+  <int value="124" label="kDeleted_RtcPrivate"/>
   <int value="125" label="kSearchProvider"/>
   <int value="126" label="kSearchEnginesPrivate"/>
   <int value="127" label="kSerial"/>
@@ -3152,7 +3178,7 @@ Called by update_extension_permission.py.-->
   <int value="235" label="kSpeechRecognitionPrivate"/>
   <int value="236" label="kChromeOSDiagnostics"/>
   <int value="237" label="kChromeOSTelemetrySerialNumber"/>
-  <int value="238" label="kSharedStoragePrivate"/>
+  <int value="238" label="kDeleted_SharedStoragePrivate"/>
   <int value="239" label="kEnterpriseRemoteApps"/>
   <int value="240" label="kOffscreen"/>
   <int value="241" label="kSidePanel"/>
@@ -3356,15 +3382,16 @@ Called by update_extension_permission.py.-->
   <int value="13" label="Bad App Status"/>
 </enum>
 
-<enum name="ManifestVersion">
-  <int value="1" label="Manifest Version 1"/>
-  <int value="2" label="Manifest Version 2"/>
-  <int value="3" label="Manifest Version 3"/>
-  <int value="4" label="Manifest Version 4"/>
-  <int value="5" label="Manifest Version 5"/>
-  <int value="6" label="Manifest Version 6"/>
-  <int value="7" label="Manifest Version 7"/>
+<!-- LINT.IfChange(ManifestSettingsOverrideType) -->
+
+<enum name="ManifestSettingsOverrideType">
+  <int value="0" label="NoOverride"/>
+  <int value="1" label="SearchEngine"/>
+  <int value="2" label="NewTabPage"/>
+  <int value="3" label="SearchEngineAndNewTabPage"/>
 </enum>
+
+<!-- LINT.ThenChange(/chrome/browser/extensions/unpacked_installer.h:ManifestSettingsOverrideType) -->
 
 <enum name="ManifestVersionPopulationSplit">
   <int value="0" label="No extensions"/>

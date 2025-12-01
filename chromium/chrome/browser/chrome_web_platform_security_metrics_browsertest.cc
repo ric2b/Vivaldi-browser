@@ -146,9 +146,6 @@ class ChromeWebPlatformSecurityMetricsBrowserTest : public policy::PolicyTest {
         // SharedArrayBuffer is needed for these tests.
         features::kSharedArrayBuffer,
         // Some PNA worker feature relies on this.
-        // TODO(crbug.com/40263073): Remove this once PNA for workers
-        // metric logging doesn't rely on kPlzDedicatedWorker
-        blink::features::kPlzDedicatedWorker,
         blink::features::kPartitionedPopins,
     };
   }
@@ -162,6 +159,8 @@ class ChromeWebPlatformSecurityMetricsBrowserTest : public policy::PolicyTest {
         // Subsampling metrics recording makes the test observing the metrics
         // fail almost every time. Disable subsampling.
         blink::features::kSubSampleWindowProxyUsageMetrics,
+        // PNA metrics may not record correctly if LNA checks are enabled.
+        network::features::kLocalNetworkAccessChecks,
     };
   }
 

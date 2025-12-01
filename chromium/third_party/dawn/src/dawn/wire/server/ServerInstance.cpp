@@ -73,7 +73,7 @@ void Server::OnRequestAdapterCallback(RequestAdapterUserdata* data,
 
     // Assign the handle and allocated status if the adapter is created successfully.
     if (FillReservation(data->adapterObjectId, adapter) == WireResult::FatalError) {
-        cmd.status = WGPURequestAdapterStatus_InstanceDropped;
+        cmd.status = WGPURequestAdapterStatus_CallbackCancelled;
         cmd.message = ToOutputStringView("Destroyed before request was fulfilled.");
         SerializeCommand(cmd);
         return;
@@ -121,12 +121,21 @@ void Server::OnRequestAdapterCallback(RequestAdapterUserdata* data,
         propertiesChain = &(*propertiesChain)->next;
     }
 
+    // Query AdapterPropertiesSubgroupMatrixConfigs if the feature is supported.
+    FreeMembers<WGPUAdapterPropertiesSubgroupMatrixConfigs> subgroupMatrixConfigs(mProcs);
+    // WGPUAdapterPropertiesSubgroupMatrixConfigs subgroupMatrixConfigs{};
+    subgroupMatrixConfigs.chain.sType = WGPUSType_AdapterPropertiesSubgroupMatrixConfigs;
+    if (mProcs.adapterHasFeature(adapter, WGPUFeatureName_ChromiumExperimentalSubgroupMatrix)) {
+        *propertiesChain = &subgroupMatrixConfigs.chain;
+        propertiesChain = &(*propertiesChain)->next;
+    }
+
     mProcs.adapterGetInfo(adapter, &info);
     cmd.info = &info;
 
     // Query and report the adapter limits, including DawnExperimentalSubgroupLimits,
     // DawnExperimentalImmediateDataLimits, and DawnTexelCopyBufferRowAlignmentLimits.
-    WGPUSupportedLimits limits = {};
+    WGPULimits limits = {};
 
     // TODO(crbug.com/354751907) Remove this, as it is now in AdapterInfo.
     WGPUDawnExperimentalSubgroupLimits experimentalSubgroupLimits = {};

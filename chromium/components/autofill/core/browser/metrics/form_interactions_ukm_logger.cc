@@ -4,6 +4,8 @@
 
 #include "components/autofill/core/browser/metrics/form_interactions_ukm_logger.h"
 
+#include <variant>
+
 #include "base/check_deref.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/strings/utf_string_conversions.h"
@@ -250,17 +252,10 @@ void FormInteractionsUkmLogger::LogAutofillFieldInfoAtFormRemove(
   size_t rank_in_field_signature_group = 0;
 
   // Field types from local heuristics prediction.
-  // The field type from the active local heuristic pattern.
-  FieldType heuristic_type = UNKNOWN_TYPE;
-  // The type of the field predicted from patterns whose stability is above
-  // suspicion.
-  FieldType heuristic_legacy_type = UNKNOWN_TYPE;
-  // The type of the field predicted from the source of local heuristics on
-  // the client, which uses patterns applied for most users.
-  FieldType heuristic_default_type = UNKNOWN_TYPE;
-  // The type of the field predicted from the heuristics that uses experimental
-  // patterns.
-  FieldType heuristic_experimental_type = UNKNOWN_TYPE;
+  // The field type from the local heuristic pattern (regex).
+  std::optional<FieldType> heuristic_type;
+  // The type of the field predicted by the ML model.
+  std::optional<FieldType> mlmodel_type;
 
   // Field types from Autocomplete attribute.
   // Information of the HTML autocomplete attribute, see
@@ -289,7 +284,6 @@ void FormInteractionsUkmLogger::LogAutofillFieldInfoAtFormRemove(
   size_t section_id = 0;
   bool type_changed_by_rationalization = false;
 
-  bool had_heuristic_type = false;
   bool had_html_type = false;
   bool had_server_type = false;
   bool had_rationalization_event = false;
@@ -304,11 +298,11 @@ void FormInteractionsUkmLogger::LogAutofillFieldInfoAtFormRemove(
   };
 
   for (const auto& log_event : field_log_events) {
-    static_assert(absl::variant_size<AutofillField::FieldLogEventType>() == 10,
+    static_assert(std::variant_size<AutofillField::FieldLogEventType>() == 10,
                   "When adding new variants check that this function does not "
                   "need to be updated.");
     if (auto* event =
-            absl::get_if<AskForValuesToFillFieldLogEvent>(&log_event)) {
+            std::get_if<AskForValuesToFillFieldLogEvent>(&log_event)) {
       was_focused_by_tap_or_click = OptionalBoolean::kTrue;
       suggestion_was_available |= event->has_suggestion;
       suggestion_was_shown |= event->suggestion_is_shown;
@@ -320,7 +314,7 @@ void FormInteractionsUkmLogger::LogAutofillFieldInfoAtFormRemove(
       }
     }
 
-    if (auto* event = absl::get_if<TriggerFillFieldLogEvent>(&log_event)) {
+    if (auto* event = std::get_if<TriggerFillFieldLogEvent>(&log_event)) {
       // Ignore events which are not address or credit card fill events.
       if (event->data_type != FillDataType::kAutofillProfile &&
           event->data_type != FillDataType::kCreditCard) {
@@ -329,7 +323,7 @@ void FormInteractionsUkmLogger::LogAutofillFieldInfoAtFormRemove(
       suggestion_was_accepted = OptionalBoolean::kTrue;
     }
 
-    if (auto* event = absl::get_if<FillFieldLogEvent>(&log_event)) {
+    if (auto* event = std::get_if<FillFieldLogEvent>(&log_event)) {
       was_autofilled_before_security_policy |=
           event->was_autofilled_before_security_policy;
       had_value_before_filling |= event->had_value_before_filling;
@@ -353,7 +347,7 @@ void FormInteractionsUkmLogger::LogAutofillFieldInfoAtFormRemove(
       ++autofill_count;
     }
 
-    if (auto* event = absl::get_if<TypingFieldLogEvent>(&log_event)) {
+    if (auto* event = std::get_if<TypingFieldLogEvent>(&log_event)) {
       user_typed_into_field = OptionalBoolean::kTrue;
       if (was_autofilled_after_security_policy == OptionalBoolean::kTrue) {
         filled_value_was_modified = OptionalBoolean::kTrue;
@@ -362,44 +356,29 @@ void FormInteractionsUkmLogger::LogAutofillFieldInfoAtFormRemove(
     }
 
     if (auto* event =
-            absl::get_if<HeuristicPredictionFieldLogEvent>(&log_event)) {
+            std::get_if<HeuristicPredictionFieldLogEvent>(&log_event)) {
       switch (event->heuristic_source) {
-#if !BUILDFLAG(USE_INTERNAL_AUTOFILL_PATTERNS)
-        case HeuristicSource::kLegacyRegexes:
-          heuristic_legacy_type = event->field_type;
+        case HeuristicSource::kRegexes:
+          heuristic_type = event->field_type;
           break;
-#else
-        case HeuristicSource::kDefaultRegexes:
-          heuristic_default_type = event->field_type;
-          break;
-        case HeuristicSource::kExperimentalRegexes:
-          heuristic_experimental_type = event->field_type;
-          break;
-        case HeuristicSource::kAutofillAiRegexes:
-          // AutofillAi is currently ignored for Autofill based UKM logging.
-          break;
-#endif
         case HeuristicSource::kAutofillMachineLearning:
+          mlmodel_type = event->field_type;
+          break;
         case HeuristicSource::kPasswordManagerMachineLearning:
           NOTREACHED();
       }
-
-      if (event->is_active_heuristic_source) {
-        heuristic_type = event->field_type;
-      }
       rank_in_field_signature_group = event->rank_in_field_signature_group;
-      had_heuristic_type = true;
     }
 
     if (auto* event =
-            absl::get_if<AutocompleteAttributeFieldLogEvent>(&log_event)) {
+            std::get_if<AutocompleteAttributeFieldLogEvent>(&log_event)) {
       html_type = event->html_type;
       html_mode = event->html_mode;
       rank_in_field_signature_group = event->rank_in_field_signature_group;
       had_html_type = true;
     }
 
-    if (auto* event = absl::get_if<ServerPredictionFieldLogEvent>(&log_event)) {
+    if (auto* event = std::get_if<ServerPredictionFieldLogEvent>(&log_event)) {
       server_type1 = event->server_type1;
       prediction_source1 = event->prediction_source1;
       server_type2 = event->server_type2;
@@ -409,7 +388,7 @@ void FormInteractionsUkmLogger::LogAutofillFieldInfoAtFormRemove(
       had_server_type = true;
     }
 
-    if (auto* event = absl::get_if<RationalizationFieldLogEvent>(&log_event)) {
+    if (auto* event = std::get_if<RationalizationFieldLogEvent>(&log_event)) {
       overall_type = event->field_type;
       section_id = event->section_id;
       type_changed_by_rationalization = event->type_changed;
@@ -425,11 +404,8 @@ void FormInteractionsUkmLogger::LogAutofillFieldInfoAtFormRemove(
   }
 
   ukm::builders::Autofill2_FieldInfo builder(ukm_source_id);
-  builder
-      .SetFormSessionIdentifier(
-          AutofillMetrics::FormGlobalIdToHash64Bit(form.global_id()))
-      .SetFieldSessionIdentifier(
-          AutofillMetrics::FieldGlobalIdToHash64Bit(field.global_id()))
+  builder.SetFormSessionIdentifier(FormGlobalIdToHash64Bit(form.global_id()))
+      .SetFieldSessionIdentifier(FieldGlobalIdToHash64Bit(field.global_id()))
       .SetFieldSignature(HashFieldSignature(field.GetFieldSignature()))
       .SetFormControlType2(base::to_underlying(field.form_control_type()))
       .SetAutocompleteState(base::to_underlying(autocomplete_state))
@@ -494,11 +470,11 @@ void FormInteractionsUkmLogger::LogAutofillFieldInfoAtFormRemove(
         OptionalBooleanToBool(had_typed_or_filled_value_at_submission));
   }
 
-  if (had_heuristic_type) {
-    builder.SetHeuristicType(heuristic_type)
-        .SetHeuristicTypeLegacy(heuristic_legacy_type)
-        .SetHeuristicTypeDefault(heuristic_default_type)
-        .SetHeuristicTypeExperimental(heuristic_experimental_type);
+  if (heuristic_type.has_value()) {
+    builder.SetHeuristicType(*heuristic_type);
+  }
+  if (mlmodel_type.has_value()) {
+    builder.SetMlModelType(*mlmodel_type);
   }
 
   if (had_html_type) {
@@ -553,7 +529,7 @@ void FormInteractionsUkmLogger::LogAutofillFormSummaryAtFormRemove(
   ukm::builders::Autofill2_FormSummary builder(ukm_source_id);
   builder
       .SetFormSessionIdentifier(
-          AutofillMetrics::FormGlobalIdToHash64Bit(form_structure.global_id()))
+          FormGlobalIdToHash64Bit(form_structure.global_id()))
       .SetFormSignature(HashFormSignature(form_structure.form_signature()))
       .SetAutofillFormEvents(form_events.data()[0])
       .SetAutofillFormEvents2(form_events.data()[1])
@@ -638,7 +614,7 @@ void FormInteractionsUkmLogger::
         field->field_log_events();
 
     for (const AutofillField::FieldLogEventType& log_event : field_log_events) {
-      if (auto* event = absl::get_if<FillFieldLogEvent>(&log_event)) {
+      if (auto* event = std::get_if<FillFieldLogEvent>(&log_event)) {
         if (event->filling_prevented_by_iframe_security_policy ==
             OptionalBoolean::kFalse) {
           has_typed_or_filled_value_at_submission =
@@ -646,7 +622,7 @@ void FormInteractionsUkmLogger::
         }
       }
 
-      if (auto* event = absl::get_if<TypingFieldLogEvent>(&log_event)) {
+      if (auto* event = std::get_if<TypingFieldLogEvent>(&log_event)) {
         has_typed_or_filled_value_at_submission = event->has_value_after_typing;
       }
     }
@@ -664,8 +640,8 @@ void FormInteractionsUkmLogger::
     ukm::builders::Autofill2_SubmittedFormWithExperimentalFields builder(
         ukm_source_id);
     builder
-        .SetFormSessionIdentifier(AutofillMetrics::FormGlobalIdToHash64Bit(
-            form_structure.global_id()))
+        .SetFormSessionIdentifier(
+            FormGlobalIdToHash64Bit(form_structure.global_id()))
         .SetFormSignature(HashFormSignature(form_structure.form_signature()));
     if (num_experimental_fields[0]) {
       builder.SetNumberOfNonEmptyExperimentalFields0(
@@ -755,14 +731,14 @@ void FormInteractionsUkmLogger::LogFocusedComplexFormAtFormRemove(
     bool current_field_was_autofilled = false;
     for (const AutofillField::FieldLogEventType& log_event : field_log_events) {
       if (auto* event =
-              absl::get_if<AskForValuesToFillFieldLogEvent>(&log_event)) {
+              std::get_if<AskForValuesToFillFieldLogEvent>(&log_event)) {
         autofill_data_queried.insert(form_type);
         if (event->has_suggestion == OptionalBoolean::kTrue) {
           suggestions_available.insert(form_type);
         }
       }
 
-      if (auto* event = absl::get_if<FillFieldLogEvent>(&log_event)) {
+      if (auto* event = std::get_if<FillFieldLogEvent>(&log_event)) {
         if (event->filling_prevented_by_iframe_security_policy ==
             OptionalBoolean::kFalse) {
           user_modified.insert(form_type);
@@ -772,7 +748,7 @@ void FormInteractionsUkmLogger::LogFocusedComplexFormAtFormRemove(
         }
       }
 
-      if (auto* event = absl::get_if<TypingFieldLogEvent>(&log_event)) {
+      if (auto* event = std::get_if<TypingFieldLogEvent>(&log_event)) {
         user_modified.insert(form_type);
         if (current_field_was_autofilled) {
           edited_after_autofill.insert(form_type);
@@ -780,7 +756,7 @@ void FormInteractionsUkmLogger::LogFocusedComplexFormAtFormRemove(
         has_value_after_typing = event->has_value_after_typing;
       }
 
-      if (auto* event = absl::get_if<AblationFieldLogEvent>(&log_event)) {
+      if (auto* event = std::get_if<AblationFieldLogEvent>(&log_event)) {
         if (event->ablation_group == AblationGroup::kControl) {
           control_group_of_ablation.insert(form_type);
         } else if (event->ablation_group == AblationGroup::kAblation) {
@@ -815,7 +791,7 @@ void FormInteractionsUkmLogger::LogFocusedComplexFormAtFormRemove(
   ukm::builders::Autofill2_FocusedComplexForm builder(ukm_source_id);
   builder
       .SetFormSessionIdentifier(
-          AutofillMetrics::FormGlobalIdToHash64Bit(form_structure.global_id()))
+          FormGlobalIdToHash64Bit(form_structure.global_id()))
       .SetFormSignature(HashFormSignature(form_structure.form_signature()))
       .SetWasSubmitted(!form_submitted_timestamp.is_null())
       .SetAutofillDataQueried(autofill_data_queried.data()[0])

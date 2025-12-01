@@ -58,6 +58,7 @@
 #include "modules/video_coding/svc/scalable_video_controller_no_layering.h"
 #include "modules/video_coding/svc/svc_rate_allocator.h"
 #include "modules/video_coding/utility/framerate_controller_deprecated.h"
+#include "modules/video_coding/utility/simulcast_rate_allocator.h"
 #include "rtc_base/checks.h"
 #include "rtc_base/containers/flat_map.h"
 #include "rtc_base/experiments/field_trial_list.h"
@@ -128,7 +129,7 @@ std::unique_ptr<ScalableVideoController> CreateVp9ScalabilityStructure(
   }
 
   char name[20];
-  rtc::SimpleStringBuilder ss(name);
+  SimpleStringBuilder ss(name);
   if (codec.mode == VideoCodecMode::kScreensharing) {
     // TODO(bugs.webrtc.org/11999): Compose names of the structures when they
     // are implemented.
@@ -274,7 +275,6 @@ LibvpxVp9Encoder::LibvpxVp9Encoder(const Environment& env,
           "WebRTC-Vp9IssueKeyFrameOnLayerDeactivation")),
       is_svc_(false),
       inter_layer_pred_(InterLayerPredMode::kOn),
-      external_ref_control_(false),  // Set in InitEncode because of tests.
       trusted_rate_controller_(RateControlSettings(env.field_trials())
                                    .LibvpxVp9TrustedRateController()),
       first_frame_in_picture_(true),
@@ -285,8 +285,6 @@ LibvpxVp9Encoder::LibvpxVp9Encoder(const Environment& env,
       is_flexible_mode_(false),
       variable_framerate_controller_(variable_framerate_screenshare::kMinFps),
       quality_scaler_experiment_(ParseQualityScalerConfig(env.field_trials())),
-      external_ref_ctrl_(
-          !env.field_trials().IsDisabled("WebRTC-Vp9ExternalRefCtrl")),
       performance_flags_(ParsePerformanceFlagsFromTrials(env.field_trials())),
       num_steady_state_frames_(0),
       config_changed_(true),
@@ -556,9 +554,17 @@ int LibvpxVp9Encoder::InitEncode(const VideoCodec* inst,
       return WEBRTC_VIDEO_CODEC_ERR_SIMULCAST_PARAMETERS_NOT_SUPPORTED;
     }
     RTC_LOG(LS_INFO) << "Rewriting simulcast config to SVC.";
+    current_bitrate_allocation_ =
+        SimulcastRateAllocator(env_, codec_)
+            .Allocate(VideoBitrateAllocationParameters(
+                codec_.startBitrate * 1000, codec_.maxFramerate));
     simulcast_to_svc_converter_.emplace(codec_);
     codec_ = simulcast_to_svc_converter_->GetConfig();
   } else {
+    current_bitrate_allocation_ =
+        SvcRateAllocator(codec_, env_.field_trials())
+            .Allocate(VideoBitrateAllocationParameters(
+                codec_.startBitrate * 1000, codec_.maxFramerate));
     simulcast_to_svc_converter_ = std::nullopt;
   }
 
@@ -687,13 +693,6 @@ int LibvpxVp9Encoder::InitEncode(const VideoCodec* inst,
     return WEBRTC_VIDEO_CODEC_ERR_PARAMETER;
   }
 
-  // External reference control is required for different frame rate on spatial
-  // layers because libvpx generates rtp incompatible references in this case.
-  external_ref_control_ = external_ref_ctrl_ ||
-                          (num_spatial_layers_ > 1 &&
-                           codec_.mode == VideoCodecMode::kScreensharing) ||
-                          inter_layer_pred_ == InterLayerPredMode::kOn;
-
   if (num_temporal_layers_ == 1) {
     gof_.SetGofInfoVP9(kTemporalStructureMode1);
     config_->temporal_layering_mode = VP9E_TEMPORAL_LAYERING_MODE_NOLAYERING;
@@ -726,14 +725,12 @@ int LibvpxVp9Encoder::InitEncode(const VideoCodec* inst,
     return WEBRTC_VIDEO_CODEC_ERR_PARAMETER;
   }
 
-  if (external_ref_control_) {
-    config_->temporal_layering_mode = VP9E_TEMPORAL_LAYERING_MODE_BYPASS;
-    if (num_temporal_layers_ > 1 && num_spatial_layers_ > 1 &&
-        codec_.mode == VideoCodecMode::kScreensharing) {
-      // External reference control for several temporal layers with different
-      // frame rates on spatial layers is not implemented yet.
-      return WEBRTC_VIDEO_CODEC_ERR_PARAMETER;
-    }
+  config_->temporal_layering_mode = VP9E_TEMPORAL_LAYERING_MODE_BYPASS;
+  if (num_temporal_layers_ > 1 && num_spatial_layers_ > 1 &&
+      codec_.mode == VideoCodecMode::kScreensharing) {
+    // External reference control for several temporal layers with different
+    // frame rates on spatial layers is not implemented yet.
+    return WEBRTC_VIDEO_CODEC_ERR_PARAMETER;
   }
   ref_buf_ = {};
 
@@ -816,10 +813,8 @@ int LibvpxVp9Encoder::InitAndSetControlSettings() {
   RTC_DCHECK_EQ(performance_flags_by_spatial_index_.size(),
                 static_cast<size_t>(num_spatial_layers_));
 
-  SvcRateAllocator init_allocator(codec_, env_.field_trials());
-  current_bitrate_allocation_ =
-      init_allocator.Allocate(VideoBitrateAllocationParameters(
-          codec_.startBitrate * 1000, codec_.maxFramerate));
+  // `current_bitrate_allocation_` is set in InitEncode and may have used
+  // simulcast configuration.
   if (!SetSvcRates(current_bitrate_allocation_)) {
     return WEBRTC_VIDEO_CODEC_ERR_PARAMETER;
   }
@@ -1207,7 +1202,7 @@ int LibvpxVp9Encoder::Encode(const VideoFrame& input_image,
     vpx_svc_ref_frame_config_t ref_config = Vp9References(layer_frames_);
     libvpx_->codec_control(encoder_, VP9E_SET_SVC_REF_FRAME_CONFIG,
                            &ref_config);
-  } else if (external_ref_control_) {
+  } else {
     vpx_svc_ref_frame_config_t ref_config =
         SetReferences(force_key_frame_, layer_id.spatial_layer_id);
 
@@ -1838,8 +1833,8 @@ VideoEncoder::EncoderInfo LibvpxVp9Encoder::GetEncoderInfo() const {
             num_temporal_layers_ <= 1 ? 1 : config_->ts_rate_decimator[ti];
         RTC_DCHECK_GT(decimator, 0);
         info.fps_allocation[si].push_back(
-            rtc::saturated_cast<uint8_t>(EncoderInfo::kMaxFramerateFraction *
-                                         (sl_fps_fraction / decimator)));
+            saturated_cast<uint8_t>(EncoderInfo::kMaxFramerateFraction *
+                                    (sl_fps_fraction / decimator)));
       }
     }
     if (profile_ == VP9Profile::kProfile0) {

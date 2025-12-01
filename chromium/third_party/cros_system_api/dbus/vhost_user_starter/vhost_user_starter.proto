@@ -80,6 +80,9 @@ message StartVhostUserFsRequest {
 
   // virtio-fs config option for the device process
   VhostUserVirtioFsConfig cfg = 7;
+
+  // The tag used for syslog
+  string syslog_tag = 8;
 }
 
 message StartVhostUserFsResponse {}

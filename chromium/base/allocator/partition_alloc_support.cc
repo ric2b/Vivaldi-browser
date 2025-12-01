@@ -107,12 +107,9 @@ BootloaderOverride GetBootloaderOverride() {
 }
 #endif
 
-// When under this experiment avoid running periodic purging or reclaim for the
-// first minute after the first attempt. This is based on the insight that
-// processes often don't live paste this minute.
-static BASE_FEATURE(kDelayFirstPeriodicPAPurgeOrReclaim,
-                    "DelayFirstPeriodicPAPurgeOrReclaim",
-                    base::FEATURE_ENABLED_BY_DEFAULT);
+// Avoid running periodic purging or reclaim for the first minute after the
+// first attempt. This is based on the insight that processes often don't live
+// paste this minute.
 constexpr base::TimeDelta kFirstPAPurgeOrReclaimDelay = base::Minutes(1);
 
 // This is defined in content/public/common/content_switches.h, which is not
@@ -171,6 +168,8 @@ void MemoryReclaimerSupport::Start(scoped_refptr<TaskRunner> task_runner) {
     return;
   }
 
+  task_runner_ = task_runner;
+
   // The caller of the API fully controls where running the reclaim.
   // However there are a few reasons to recommend that the caller runs
   // it on the main thread:
@@ -186,13 +185,7 @@ void MemoryReclaimerSupport::Start(scoped_refptr<TaskRunner> task_runner) {
   // seconds is useful. Since this is meant to run during idle time only, it is
   // a reasonable starting point balancing effectivenes vs cost. See
   // crbug.com/942512 for details and experimental results.
-  TimeDelta delay;
-  if (base::FeatureList::IsEnabled(kDelayFirstPeriodicPAPurgeOrReclaim)) {
-    delay = std::max(delay, kFirstPAPurgeOrReclaimDelay);
-  }
-
-  task_runner_ = task_runner;
-  MaybeScheduleTask(delay);
+  MaybeScheduleTask(kFirstPAPurgeOrReclaimDelay);
 }
 
 void MemoryReclaimerSupport::SetForegrounded(bool in_foreground) {
@@ -253,12 +246,9 @@ void MemoryReclaimerSupport::MaybeScheduleTask(TimeDelta delay) {
 
 void StartThreadCachePeriodicPurge() {
   auto& instance = ::partition_alloc::ThreadCacheRegistry::Instance();
-  TimeDelta delay =
-      Microseconds(instance.GetPeriodicPurgeNextIntervalInMicroseconds());
-
-  if (base::FeatureList::IsEnabled(kDelayFirstPeriodicPAPurgeOrReclaim)) {
-    delay = std::max(delay, kFirstPAPurgeOrReclaimDelay);
-  }
+  TimeDelta delay = std::max(
+      Microseconds(instance.GetPeriodicPurgeNextIntervalInMicroseconds()),
+      kFirstPAPurgeOrReclaimDelay);
 
   SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
       FROM_HERE, BindOnce(RunThreadCachePeriodicPurge), delay);
@@ -648,7 +638,7 @@ void CheckDanglingRawPtrBufferEmpty() {
   g_stack_trace_buffer = DanglingRawPtrBuffer();
 #else
   bool errors = false;
-  for (auto entry : g_stack_trace_buffer) {
+  for (const auto& entry : g_stack_trace_buffer) {
     if (!entry) {
       continue;
     }
@@ -1013,18 +1003,17 @@ void PartitionAllocSupport::ReconfigureAfterFeatureListInit(
   if (ShouldEnableFeatureOnProcess(
           base::features::kBackupRefPtrEnabledProcessesParam.Get(),
           process_type)) {
-    base::RawPtrAsanService::GetInstance().Configure(
-        base::EnableDereferenceCheck(
-            base::features::kBackupRefPtrAsanEnableDereferenceCheckParam.Get()),
-        base::EnableExtractionCheck(
-            base::features::kBackupRefPtrAsanEnableExtractionCheckParam.Get()),
-        base::EnableInstantiationCheck(
-            base::features::kBackupRefPtrAsanEnableInstantiationCheckParam
-                .Get()));
+    RawPtrAsanService::GetInstance().Configure(
+        EnableDereferenceCheck(
+            FeatureList::IsEnabled(features::kAsanBrpDereferenceCheck)),
+        EnableExtractionCheck(
+            FeatureList::IsEnabled(features::kAsanBrpExtractionCheck)),
+        EnableInstantiationCheck(
+            FeatureList::IsEnabled(features::kAsanBrpInstantiationCheck)));
   } else {
-    base::RawPtrAsanService::GetInstance().Configure(
-        base::EnableDereferenceCheck(false), base::EnableExtractionCheck(false),
-        base::EnableInstantiationCheck(false));
+    RawPtrAsanService::GetInstance().Configure(EnableDereferenceCheck(false),
+                                               EnableExtractionCheck(false),
+                                               EnableInstantiationCheck(false));
   }
 #endif  // PA_BUILDFLAG(USE_ASAN_BACKUP_REF_PTR)
 
@@ -1053,13 +1042,6 @@ void PartitionAllocSupport::ReconfigureAfterFeatureListInit(
       base::features::kPartitionAllocEventuallyZeroFreedMemory);
   const bool fewer_memory_regions = base::FeatureList::IsEnabled(
       base::features::kPartitionAllocFewerMemoryRegions);
-
-#if PA_BUILDFLAG(USE_FREELIST_DISPATCHER)
-  const bool use_pool_offset_freelists =
-      base::FeatureList::IsEnabled(base::features::kUsePoolOffsetFreelists);
-#else
-  const bool use_pool_offset_freelists = false;
-#endif  // PA_BUILDFLAG(USE_FREELIST_DISPATCHER)
 
   bool enable_memory_tagging = false;
   partition_alloc::TagViolationReportingMode memory_tagging_reporting_mode =
@@ -1163,7 +1145,6 @@ void PartitionAllocSupport::ReconfigureAfterFeatureListInit(
       allocator_shim::ZappingByFreeFlags(zapping_by_free_flags),
       allocator_shim::EventuallyZeroFreedMemory(eventually_zero_freed_memory),
       allocator_shim::FewerMemoryRegions(fewer_memory_regions),
-      allocator_shim::UsePoolOffsetFreelists(use_pool_offset_freelists),
       use_small_single_slot_spans);
 
   const uint32_t extras_size = allocator_shim::GetMainPartitionRootExtrasSize();
@@ -1398,5 +1379,11 @@ std::string PartitionAllocSupport::ExtractDanglingPtrSignatureForTests(
   return ExtractDanglingPtrSignature(stacktrace);
 }
 #endif
+
+void CheckHeapIntegrity(const void* ptr) {
+#if PA_BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC)
+  partition_alloc::PartitionRoot::CheckMetadataIntegrity(ptr);
+#endif  // PA_BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC)
+}
 
 }  // namespace base::allocator

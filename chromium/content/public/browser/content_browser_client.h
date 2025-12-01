@@ -45,6 +45,7 @@
 #include "content/public/browser/generated_code_cache_settings.h"
 #include "content/public/browser/interest_group_api_operation.h"
 #include "content/public/browser/interest_group_manager.h"
+#include "content/public/browser/keep_alive_request_tracker.h"
 #include "content/public/browser/legacy_tech_cookie_issue_details.h"
 #include "content/public/browser/login_delegate.h"
 #include "content/public/browser/mojo_binder_policy_map.h"
@@ -55,6 +56,7 @@
 #include "content/public/common/page_visibility_state.h"
 #include "content/public/common/window_container_type.mojom-forward.h"
 #include "device/vr/buildflags/buildflags.h"
+#include "media/base/picture_in_picture_events_info.h"
 #include "media/mojo/mojom/media_service.mojom-forward.h"
 #include "media/mojo/mojom/remoting.mojom-forward.h"
 #include "mojo/public/cpp/bindings/binder_map.h"
@@ -68,6 +70,7 @@
 #include "services/cert_verifier/public/mojom/cert_verifier_service_factory.mojom-forward.h"
 #include "services/metrics/public/cpp/ukm_source_id.h"
 #include "services/network/public/cpp/cross_origin_embedder_policy.h"
+#include "services/network/public/cpp/permissions_policy/permissions_policy_declaration.h"
 #include "services/network/public/mojom/ip_address_space.mojom-forward.h"
 #include "services/network/public/mojom/network_context.mojom-forward.h"
 #include "services/network/public/mojom/proxy_config.mojom-forward.h"
@@ -79,7 +82,6 @@
 #include "services/video_effects/public/cpp/buildflags.h"
 #include "storage/browser/file_system/file_system_context.h"
 #include "third_party/blink/public/common/mediastream/media_devices.h"
-#include "third_party/blink/public/common/permissions_policy/permissions_policy.h"
 #include "third_party/blink/public/common/user_agent/user_agent_metadata.h"
 #include "third_party/blink/public/mojom/ai/ai_manager.mojom-forward.h"
 #include "third_party/blink/public/mojom/browsing_topics/browsing_topics.mojom-forward.h"
@@ -116,12 +118,6 @@ class IsolationInfo;
 }  // namespace net
 
 class GURL;
-
-// TODO(ellyjones): This synonym shouldn't need to exist - call sites should get
-// the definition from LoginDelegate directly. Migrate all users over, then
-// delete this.
-using LoginAuthRequiredCallback =
-    content::LoginDelegate::LoginAuthRequiredCallback;
 
 namespace base {
 class CommandLine;
@@ -275,6 +271,7 @@ class UsbDelegate;
 class VideoOverlayWindow;
 class VideoPictureInPictureWindowController;
 class VpnServiceProxy;
+class WebAuthenticationDelegate;
 class WebContents;
 class WebContentsViewDelegate;
 class WebUIBrowserInterfaceBrokerRegistry;
@@ -291,7 +288,6 @@ struct SocketPermissionRequest;
 class TtsEnvironmentAndroid;
 #else
 class AuthenticatorRequestClientDelegate;
-class WebAuthenticationDelegate;
 #endif  // BUILDFLAG(IS_ANDROID)
 
 #if BUILDFLAG(IS_CHROMEOS)
@@ -369,6 +365,13 @@ class CONTENT_EXPORT ContentBrowserClient {
   // basis; if you need to poll this function constantly, use the above
   // PostAfterStartupTask() API instead.
   virtual bool IsBrowserStartupComplete();
+
+  // Allows the embedder to control when to enable native ui task execution.
+  // This API is called at most once during browser process initialization when
+  // the BrowserTaskExecutor is created. It is not called if the ContentClient
+  // is not set at the time the BrowserTaskExecutor is created.
+  virtual void OnUiTaskRunnerReady(
+      base::OnceClosure enable_native_ui_task_execution_callback);
 
   // Allows the embedder to handle a request from unit tests running in the
   // content layer to consider startup complete (for the sake of
@@ -655,7 +658,7 @@ class CONTENT_EXPORT ContentBrowserClient {
   // Web App Manifest. The embedder might choose to return an std::nullopt in
   // specific cases -- then the default non-isolated permissions policy will be
   // applied.
-  virtual std::optional<blink::ParsedPermissionsPolicy>
+  virtual std::optional<network::ParsedPermissionsPolicy>
   GetPermissionsPolicyForIsolatedWebApp(WebContents* web_contents,
                                         const url::Origin& app_origin);
 
@@ -1299,6 +1302,18 @@ class CONTENT_EXPORT ContentBrowserClient {
   virtual std::string GetWebUIHostnameForCodeCacheMetrics(
       const GURL& webui_url) const;
 
+  // Returns true if WebUI bundled code caching is supported for
+  // `webui_lock_url`.
+  virtual bool IsWebUIBundledCodeCachingEnabled(
+      const GURL& webui_lock_url) const;
+
+  // Gets a mapping from the WebUI resource URL to its corresponding bundled
+  // bytecode cache resource ID. These mappings are used at load-time in
+  // renderers to get the appropriate bytecode cache during WebUI resource
+  // fetch. This mapping is propagated once to renderers once shortly after
+  // process-lock to ensure it's available for all subsequent resource fetches.
+  virtual base::flat_map<GURL, int> GetWebUIResourceUrlToCodeCacheMap() const;
+
   // Informs the embedder that a certificate error has occurred. If
   // |overridable| is true and if |strict_enforcement| is false, the user
   // can ignore the error and continue. The embedder can call the callback
@@ -1791,10 +1806,6 @@ class CONTENT_EXPORT ContentBrowserClient {
   // Returns true if the audio process should run with high priority. false
   // otherwise.
   virtual bool ShouldEnableAudioProcessHighPriority();
-
-  // Returns true if a site_url should launch a renderer that resolves
-  // fonts via the FontDataManager.
-  virtual bool ShouldUseFontDataManager(const GURL& site_url);
 #endif
 
   // Binds a new media remoter service to |receiver|, if supported by the
@@ -2263,6 +2274,22 @@ class CONTENT_EXPORT ContentBrowserClient {
                                         bool* ignore_navigation);
 #endif
 
+  // Returns true if navigation can synchronously continue if the frame being
+  // navigated (and all child frames) do not have beforeunload handlers.
+  //
+  // Synchronously continuing with navigation can lead to trying to start
+  // another navigation synchronously while the first navigation is still being
+  // processed on the stack. This results in re-entrancy which is unsafe and
+  // triggers a CHECK.
+  //
+  // If this returns false, PostTask() is used to instead asynchronously
+  // continue the navigation to avoid the re-entrancy issue.
+  //
+  // Embedders like Android WebView have to set this to false because they
+  // cannot guarantee that this would never occur - in particular, there are
+  // existing Android WebView apps that do the problematic sync navigation.
+  virtual bool SupportsAvoidUnnecessaryBeforeUnloadCheckSync();
+
   // Whether same-site RenderFrameHost swaps due to RenderDocument is allowed
   // for navigations from `rfh`. Embedders can choose to disallow this if there
   // are cases that are not correctly supported yet.
@@ -2295,10 +2322,8 @@ class CONTENT_EXPORT ContentBrowserClient {
       mojo::PendingReceiver<payments::mojom::SecurePaymentConfirmationService>
           receiver);
 
-#if !BUILDFLAG(IS_ANDROID)
   // Allows the embedder to provide an implementation of the Serial API.
   virtual SerialDelegate* GetSerialDelegate();
-#endif
 
   // Allows the embedder to provide an implementation of the WebHID API.
   virtual HidDelegate* GetHidDelegate();
@@ -2342,12 +2367,12 @@ class CONTENT_EXPORT ContentBrowserClient {
       content::RenderFrameHost* rfh,
       const url::Origin& caller_origin);
 
-#if !BUILDFLAG(IS_ANDROID)
   // Returns an embedder-provided subclass of WebAuthenticationDelegate. This
   // allows the embedder to customize the implementation of the Web
   // Authentication API.
   virtual WebAuthenticationDelegate* GetWebAuthenticationDelegate();
 
+#if !BUILDFLAG(IS_ANDROID)
   // Returns an AuthenticatorRequestClientDelegate subclass instance to provide
   // embedder-specific configuration for a single Web Authentication API request
   // being serviced in a given RenderFrame. The instance is guaranteed to be
@@ -2412,7 +2437,7 @@ class CONTENT_EXPORT ContentBrowserClient {
       scoped_refptr<net::HttpResponseHeaders> response_headers,
       bool first_auth_attempt,
       GuestPageHolder* guest_page_holder,
-      LoginAuthRequiredCallback auth_required_callback);
+      LoginDelegate::LoginAuthRequiredCallback auth_required_callback);
 
   // Launches the url for the given tab. Returns true if an attempt to handle
   // the url was made, e.g. by launching an app. Note that this does not
@@ -2457,6 +2482,11 @@ class CONTENT_EXPORT ContentBrowserClient {
   virtual std::unique_ptr<VideoOverlayWindow>
   CreateWindowForVideoPictureInPicture(
       VideoPictureInPictureWindowController* controller);
+
+  // Returns the reason for entering picture in picture automatically. This is
+  // recorded in metrics.
+  virtual media::PictureInPictureEventsInfo::AutoPipReason GetAutoPipReason(
+      const WebContents& web_contents) const;
 
   // Registers the watcher to observe updates in RendererPreferences.
   virtual void RegisterRendererPreferenceWatcher(
@@ -2998,6 +3028,11 @@ class CONTENT_EXPORT ContentBrowserClient {
   virtual bool IsBlobUrlPartitioningEnabled(
       content::BrowserContext* browser_context);
 
+  // Checks if the given BrowserContext allows to reduce Accept-Language in HTTP
+  // header and Javascript getter.
+  virtual bool ShouldReduceAcceptLanguage(
+      content::BrowserContext* browser_context);
+
   // Set whether the browser is running in minimal mode (where most subsystems
   // are left uninitialized).
   virtual void SetIsMinimalMode(bool minimal) {}
@@ -3213,6 +3248,34 @@ class CONTENT_EXPORT ContentBrowserClient {
   virtual std::optional<network::CrossOriginEmbedderPolicy>
   MaybeOverrideLocalURLCrossOriginEmbedderPolicy(
       content::NavigationHandle* navigation_handle);
+
+  // Returns true if subframe zoom should be enabled for one or more features in
+  // a higher layer.
+  virtual bool ShouldEnableSubframeZoom();
+
+  // Returns true if the given `url` should be prioritized for BFCache.
+  // Depending on the corresponding feature flag values, the prioritized page
+  // might be kept in BFCache even when it exceeds the entries limit.
+  virtual bool ShouldPrioritizeForBackForwardCache(
+      BrowserContext* browser_context,
+      const GURL& url);
+
+  // Returns a `KeepAliveRequestTracker` instance if `request` is eligible to
+  // be tracked.
+  //
+  // `ukm_source_id` is the UKM ID to associate with the events logged by the
+  // returned tracker.
+  // `is_attribution_request` tells if `request` is an attribution reporting
+  // eligible request.
+  // `is_context_detached_callback` tells if the context of `request` is
+  // detached at the time running the callback.
+  virtual std::unique_ptr<KeepAliveRequestTracker>
+  MaybeCreateKeepAliveRequestTracker(
+      const network::ResourceRequest& request,
+      std::optional<ukm::SourceId> ukm_source_id,
+      bool is_attribution_request,
+      KeepAliveRequestTracker::IsContextDetachedCallback
+          is_context_detached_callback);
 };
 
 }  // namespace content

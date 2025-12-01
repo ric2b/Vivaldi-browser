@@ -10,9 +10,9 @@
 #include <functional>
 #include <string>
 
-#include "xnnpack/common.h"
+#include "src/xnnpack/common.h"
 #include <benchmark/benchmark.h>
-#include "pthreadpool.h"
+#include <pthreadpool.h>
 
 #ifdef BENCHMARK_ARGS_BOTTLENECK
 #define XNN_BENCHMARK_MAIN()                            \
@@ -173,6 +173,14 @@ bool CheckNEONDOT(benchmark::State& state);
 // Check if ARM I8MM extension is supported.
 // If I8MM is unsupported, report error in benchmark state, and return false.
 bool CheckNEONI8MM(benchmark::State& state);
+
+// Check if ARM SME extension is supported.
+// If SME is unsupported, report error in benchmark state, and return false.
+bool CheckNEONSME(benchmark::State& state);
+
+// Check if ARM SME2 extension is supported.
+// If SME2 is unsupported, report error in benchmark state, and return false.
+bool CheckNEONSME2(benchmark::State& state);
 
 // Check if RISC-V V (vector) extension is supported.
 // If V is unsupported, report error in benchmark state, and return false.

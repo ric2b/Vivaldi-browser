@@ -77,6 +77,7 @@
 
 #include "app/vivaldi_apptools.h"
 #include "browser/vivaldi_browser_finder.h"
+#include "extensions/vivaldi_browser_component_wrapper.h"
 
 using storage::IsolatedContext;
 
@@ -170,7 +171,7 @@ bool GetFileTypesFromAcceptOption(
 // response to a chrome.fileSystem.chooseEntry() call.
 constexpr char kLastChooseEntryDirectory[] = "last_choose_file_directory";
 
-const auto kGraylistedPaths = std::to_array<int>({
+constexpr auto kGraylistedPaths = std::to_array<int>({
     base::DIR_HOME,
 #if BUILDFLAG(IS_WIN)
     base::DIR_PROGRAM_FILES,
@@ -205,8 +206,9 @@ content::WebContents* GetWebContentsForRenderFrameHost(
       content::WebContents::FromRenderFrameHost(render_frame_host);
   // Check if there is an app window associated with the web contents; if not,
   // return null.
-  return (vivaldi::IsVivaldiRunning() &&
-          vivaldi::FindBrowserForEmbedderWebContents(web_contents)) ||
+  return (::vivaldi::IsVivaldiRunning() &&
+          VivaldiBrowserComponentWrapper::GetInstance()
+              ->FindBrowserForEmbedderWebContents(web_contents)) ||
          AppWindowRegistry::Get(browser_context)
                  ->GetAppWindowForWebContents(web_contents)
              ? web_contents

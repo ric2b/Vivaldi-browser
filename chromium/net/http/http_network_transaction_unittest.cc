@@ -464,7 +464,7 @@ class HttpNetworkTransactionTestBase : public PlatformTest,
             /*ssl_client_context=*/nullptr,
             /*socket_performance_watcher_factory=*/nullptr,
             /*network_quality_estimator=*/nullptr,
-            /*net_log=*/nullptr,
+            /*net_log=*/NetLog::Get(),
             /*websocket_endpoint_lock_manager=*/nullptr,
             /*http_server_properties=*/nullptr,
             /*alpn_protos=*/nullptr,
@@ -777,6 +777,7 @@ class CaptureGroupIdTransportSocketPool : public TransportClientSocketPool {
       ClientSocketHandle* handle,
       CompletionOnceCallback callback,
       const ClientSocketPool::ProxyAuthCallback& proxy_auth_callback,
+      bool fail_if_alias_requires_proxy_override,
       const NetLogWithSource& net_log) override {
     last_group_id_ = group_id;
     socket_requested_ = true;
@@ -20869,7 +20870,7 @@ TEST_P(HttpNetworkTransactionTest, RetryWithoutConnectionPooling) {
 
   std::unique_ptr<HttpNetworkSession> session(CreateSession(&session_deps_));
 
-  // Two requests on the first connection.
+  // Two requests on the first H2 connection.
   spdy::SpdySerializedFrame req1(
       spdy_util_.ConstructSpdyGet("https://www.example.org", 1, LOWEST));
   spdy_util_.UpdateWithStreamDestruction(1);
@@ -20883,7 +20884,8 @@ TEST_P(HttpNetworkTransactionTest, RetryWithoutConnectionPooling) {
       CreateMockWrite(rst, 6),
   };
 
-  // The first one succeeds, the second gets error 421 Misdirected Request.
+  // The first request succeeds, the second request gets error 421 Misdirected
+  // Request. The first H2 connection remains available after getting 421.
   spdy::SpdySerializedFrame resp1(
       spdy_util_.ConstructSpdyGetReply(nullptr, 0, 1));
   spdy::SpdySerializedFrame body1(spdy_util_.ConstructSpdyDataFrame(1, true));
@@ -20891,8 +20893,10 @@ TEST_P(HttpNetworkTransactionTest, RetryWithoutConnectionPooling) {
   response_headers[spdy::kHttp2StatusHeader] = "421";
   spdy::SpdySerializedFrame resp2(
       spdy_util_.ConstructSpdyReply(3, std::move(response_headers)));
-  MockRead reads1[] = {CreateMockRead(resp1, 1), CreateMockRead(body1, 2),
-                       CreateMockRead(resp2, 4), MockRead(ASYNC, 0, 5)};
+  MockRead reads1[] = {
+      CreateMockRead(resp1, 1), CreateMockRead(body1, 2),
+      CreateMockRead(resp2, 4),
+      MockRead(SYNCHRONOUS, ERR_IO_PENDING, 5) /* stalls forever */};
 
   MockConnect connect1(ASYNC, OK, peer_addr);
   SequencedSocketData data1(connect1, reads1, writes1);
@@ -20900,7 +20904,7 @@ TEST_P(HttpNetworkTransactionTest, RetryWithoutConnectionPooling) {
 
   AddSSLSocketData();
 
-  // Retry the second request on a second connection.
+  // Retry the second request on the second H2 connection.
   SpdyTestUtil spdy_util2(/*use_priority_header=*/true);
   spdy::SpdySerializedFrame req3(
       spdy_util2.ConstructSpdyGet("https://mail.example.org", 1, LOWEST));
@@ -20935,7 +20939,8 @@ TEST_P(HttpNetworkTransactionTest, RetryWithoutConnectionPooling) {
   HttpNetworkTransaction trans1(DEFAULT_PRIORITY, session.get());
 
   TestCompletionCallback callback;
-  rv = trans1.Start(&request1, callback.callback(), NetLogWithSource());
+  rv = trans1.Start(&request1, callback.callback(),
+                    NetLogWithSource::Make(NetLogSourceType::URL_REQUEST));
   EXPECT_THAT(rv, IsError(ERR_IO_PENDING));
   rv = callback.WaitForResult();
   EXPECT_THAT(rv, IsOk());
@@ -20960,7 +20965,7 @@ TEST_P(HttpNetworkTransactionTest, RetryWithoutConnectionPooling) {
 
   RecordingNetLogObserver net_log_observer;
   rv = trans2.Start(&request2, callback.callback(),
-                    NetLogWithSource::Make(NetLogSourceType::NONE));
+                    NetLogWithSource::Make(NetLogSourceType::URL_REQUEST));
   EXPECT_THAT(rv, IsError(ERR_IO_PENDING));
   rv = callback.WaitForResult();
   EXPECT_THAT(rv, IsOk());
@@ -28075,6 +28080,103 @@ TEST_P(HttpNetworkTransactionPoolTest, SwitchToHttpStreamPool) {
   EXPECT_EQ(0u, out.connection_attempts.size());
 
   EXPECT_FALSE(out.remote_endpoint_after_start.address().empty());
+}
+
+TEST_P(HttpNetworkTransactionTest, EarlyHintsWithAltSvcHeader) {
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitWithFeatures(
+      // enabled features
+      {features::kEnableEarlyHintsOnHttp11},  // Enable Early Hints on HTTP/1.1
+      // disabled features
+      {});
+
+  // Enable QUIC
+  session_deps_.enable_quic = true;
+  session_deps_.enable_http2_alternative_service = true;
+
+  MockWrite data_writes[] = {
+      MockWrite("GET / HTTP/1.1\r\n"
+                "Host: www.example.org\r\n"
+                "Connection: keep-alive\r\n\r\n"),
+  };
+
+  MockRead data_reads[] = {
+      MockRead("HTTP/1.1 103 Early Hints\r\n"
+               "alt-svc: h3=\":443\"; ma=86400\r\n"
+               "\r\n"),
+      MockRead("HTTP/1.1 200 OK\r\n"
+               "Content-Type: text/html\r\n"
+               "Content-Length: 5\r\n"
+               "\r\n"
+               "Hello"),
+  };
+
+  StaticSocketDataProvider reads(data_reads, data_writes);
+  session_deps_.socket_factory->AddSocketDataProvider(&reads);
+
+  SSLSocketDataProvider ssl(ASYNC, OK);
+  // Add certificate to make SSL info valid
+  scoped_refptr<X509Certificate> cert(
+      ImportCertFromFile(GetTestCertsDirectory(), "ok_cert.pem"));
+  ASSERT_TRUE(cert);
+  ssl.ssl_info.cert = cert;
+  ssl.ssl_info.cert_status = 0;
+  session_deps_.socket_factory->AddSSLSocketDataProvider(&ssl);
+
+  std::unique_ptr<HttpNetworkSession> session(CreateSession(&session_deps_));
+
+  HttpRequestInfo request;
+  request.method = "GET";
+  request.url = GURL("https://www.example.org/");
+  request.traffic_annotation =
+      net::MutableNetworkTrafficAnnotationTag(TRAFFIC_ANNOTATION_FOR_TESTS);
+
+  std::unique_ptr<HttpNetworkTransaction> trans(
+      new HttpNetworkTransaction(DEFAULT_PRIORITY, session.get()));
+
+  // Add early response headers callback to ensure 103 response is processed
+  bool early_hints_received = false;
+  trans->SetEarlyResponseHeadersCallback(base::BindLambdaForTesting(
+      [&early_hints_received](
+          scoped_refptr<const HttpResponseHeaders> headers) {
+        EXPECT_EQ(103, headers->response_code());
+        early_hints_received = true;
+      }));
+
+  TestCompletionCallback callback;
+  int rv = trans->Start(&request, callback.callback(), NetLogWithSource());
+  EXPECT_THAT(rv, IsError(ERR_IO_PENDING));
+  rv = callback.WaitForResult();
+  EXPECT_THAT(rv, IsOk());
+
+  // Verify early hints were received
+  EXPECT_TRUE(early_hints_received);
+
+  // Verify final response
+  const HttpResponseInfo* response = trans->GetResponseInfo();
+  ASSERT_TRUE(response);
+  EXPECT_EQ(200, response->headers->response_code());
+  ASSERT_TRUE(response->ssl_info.is_valid());  // Verify SSL info is valid
+
+  std::string response_data;
+  rv = ReadTransaction(trans.get(), &response_data);
+  EXPECT_THAT(rv, IsOk());
+  EXPECT_EQ("Hello", response_data);
+
+  // Verify Alt-Svc was processed
+  HttpServerProperties* http_server_properties =
+      session->http_server_properties();
+  url::SchemeHostPort server(request.url);
+  const AlternativeServiceInfoVector alternative_service_info_vector =
+      http_server_properties->GetAlternativeServiceInfos(
+          server, NetworkAnonymizationKey());
+
+  ASSERT_EQ(1u, alternative_service_info_vector.size());
+  EXPECT_EQ(NextProto::kProtoQUIC,
+            alternative_service_info_vector[0].protocol());
+  EXPECT_EQ(443, alternative_service_info_vector[0].alternative_service().port);
+  EXPECT_EQ("www.example.org",
+            alternative_service_info_vector[0].alternative_service().host);
 }
 
 }  // namespace net

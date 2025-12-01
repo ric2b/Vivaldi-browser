@@ -81,6 +81,7 @@ namespace internal {
   T(CannotFreezeArrayBufferView,                                               \
     "Cannot freeze array buffer views with elements")                          \
   T(CannotSeal, "Cannot seal")                                                 \
+  T(CannotSealArrayBufferView, "Cannot seal array buffer views with elements") \
   T(CannotWrap, "Cannot wrap target callable (%)")                             \
   T(CircularStructure, "Converting circular structure to JSON%")               \
   T(ConstructAbstractClass, "Abstract class % not directly constructable")     \
@@ -505,6 +506,8 @@ namespace internal {
     "Invalid left-hand side expression in postfix operation")                  \
   T(InvalidLhsInPrefixOp,                                                      \
     "Invalid left-hand side expression in prefix operation")                   \
+  T(InvalidHexString,                                                          \
+    "Input string must contain hex characters in even length")                 \
   T(InvalidModuleExportName,                                                   \
     "Invalid module export name: contains unpaired surrogate")                 \
   T(InvalidRegExpFlags, "Invalid flags supplied to RegExp constructor '%'")    \

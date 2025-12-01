@@ -7,8 +7,10 @@
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "chrome/browser/download/bubble/download_bubble_prefs.h"
+#include "chrome/browser/ui/browser_actions.h"
 #include "chrome/browser/ui/browser_command_controller.h"
 #include "chrome/browser/ui/browser_content_setting_bubble_model_delegate.h"
+#include "chrome/browser/ui/tabs/public/tab_features.h"
 #include "chrome/browser/ui/ui_features.h"
 #include "chrome/browser/ui/view_ids.h"
 #include "chrome/browser/ui/views/extensions/extensions_toolbar_button.h"
@@ -16,8 +18,11 @@
 #include "chrome/browser/ui/views/extensions/extensions_toolbar_coordinator.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/frame/toolbar_button_provider.h"
+#include "chrome/browser/ui/views/page_action/action_ids.h"
 #include "chrome/browser/ui/views/page_action/page_action_icon_controller.h"
 #include "chrome/browser/ui/views/page_action/page_action_icon_params.h"
+#include "chrome/browser/ui/views/page_action/page_action_view_params.h"
+#include "chrome/browser/ui/views/toolbar/pinned_toolbar_actions_container.h"
 #include "chrome/browser/ui/views/web_apps/frame_toolbar/system_app_accessible_name.h"
 #include "chrome/browser/ui/views/web_apps/frame_toolbar/web_app_content_settings_container.h"
 #include "chrome/browser/ui/views/web_apps/frame_toolbar/web_app_frame_toolbar_utils.h"
@@ -127,15 +132,51 @@ WebAppToolbarButtonContainer::WebAppToolbarButtonContainer(
                                static_cast<int>(HTCLIENT));
   }
 
+  const int page_action_between_icon_spacing =
+      HorizontalPaddingBetweenPageActionsAndAppMenuButtons();
+
+  if (base::FeatureList::IsEnabled(::features::kPageActionsMigration)) {
+    std::vector<actions::ActionItem*> page_action_items = {};
+    actions::ActionItem* root_action_item =
+        browser_view_->browser()->browser_actions()->root_action_item();
+    for (actions::ActionId action_id :
+         app_controller->GetTitleBarPageActions()) {
+      if (actions::ActionItem* item = actions::ActionManager::Get().FindAction(
+              action_id, root_action_item)) {
+        page_action_items.emplace_back(item);
+      }
+    }
+
+    const int page_action_icon_size =
+        GetLayoutConstant(WEB_APP_PAGE_ACTION_ICON_SIZE);
+    const page_actions::PageActionViewParams page_action_params{
+        .icon_size = page_action_icon_size,
+        .icon_insets = PageActionIconInsetsFromSize(page_action_icon_size),
+        .between_icon_spacing = page_action_between_icon_spacing,
+        .icon_label_bubble_delegate = this,
+        // The toolbar button container already sets spacing between child
+        // views.
+        .should_bridge_containers = false,
+        // On space constraint, the page action should get hidden.
+        .hide_icon_on_space_constraint = true,
+    };
+    page_action_container_ =
+        AddChildView(std::make_unique<page_actions::PageActionContainerView>(
+            page_action_items, page_action_params));
+    views::SetHitTestComponent(page_action_container_,
+                               static_cast<int>(HTCLIENT));
+  }
+
+  // Note: the page action setup below is for the legacy page actions framework,
+  // which will eventually be removed altogether.
   // This is the point where we will be inserting page action icons.
   page_action_insertion_point_ = static_cast<int>(children().size());
 
   // Insert the default page action icons.
   PageActionIconParams params;
-  params.types_enabled = app_controller->GetTitleBarPageActions();
+  params.types_enabled = app_controller->GetTitleBarPageActionTypes();
   params.icon_color = gfx::kPlaceholderColor;
-  params.between_icon_spacing =
-      HorizontalPaddingBetweenPageActionsAndAppMenuButtons();
+  params.between_icon_spacing = page_action_between_icon_spacing;
   params.browser = browser_view_->browser();
   params.command_updater = browser_view_->browser()->command_controller();
   params.icon_label_bubble_delegate = this;
@@ -143,10 +184,12 @@ WebAppToolbarButtonContainer::WebAppToolbarButtonContainer(
   page_action_icon_controller_->Init(params, this);
 
   bool create_extensions_container = true;
-  auto display_mode =
-      base::FeatureList::IsEnabled(features::kDesktopPWAsElidedExtensionsMenu)
-          ? ExtensionsToolbarContainer::DisplayMode::kAutoHide
-          : ExtensionsToolbarContainer::DisplayMode::kCompact;
+  auto display_mode = (base::FeatureList::IsEnabled(
+                           features::kDesktopPWAsElidedExtensionsMenu) ||
+                       // Extensions are not supported inside Isolated Web Apps.
+                       app_controller->IsIsolatedWebApp())
+                          ? ExtensionsToolbarContainer::DisplayMode::kAutoHide
+                          : ExtensionsToolbarContainer::DisplayMode::kCompact;
 #if BUILDFLAG(IS_CHROMEOS)
   // Let the system web app decide if it needs to show the extensions container.
   // Use compact display mode because we do not render the app menu for system
@@ -182,12 +225,13 @@ WebAppToolbarButtonContainer::WebAppToolbarButtonContainer(
                                static_cast<int>(HTCLIENT));
   }
 
-  if (download::IsDownloadBubbleEnabled()) {
-    download_button_ = AddChildView(
-        std::make_unique<DownloadToolbarButtonView>(browser_view_));
-    views::SetHitTestComponent(download_button_, static_cast<int>(HTCLIENT));
-    ConfigureWebAppToolbarButton(download_button_, toolbar_button_provider_);
-  }
+  // Pinned buttons are not shown in web apps but buttons can be shown
+  // ephemerally in this container and should have the same flex behavior as
+  // other toolbar buttons.
+  pinned_toolbar_actions_container_ = AddChildView(
+      std::make_unique<PinnedToolbarActionsContainer>(browser_view_));
+  views::SetHitTestComponent(pinned_toolbar_actions_container_,
+                             static_cast<int>(HTCLIENT));
 
 #if !BUILDFLAG(IS_CHROMEOS)
   if (app_controller->HasProfileMenuButton()) {
@@ -226,6 +270,15 @@ void WebAppToolbarButtonContainer::UpdateStatusIconsVisibility() {
     content_settings_container_->UpdateContentSettingViewsVisibility();
   }
   page_action_icon_controller_->UpdateAll();
+
+  if (base::FeatureList::IsEnabled(::features::kPageActionsMigration)) {
+    page_actions::PageActionController* controller = nullptr;
+    if (tabs::TabInterface* active_tab =
+            browser_view_->browser()->GetActiveTabInterface()) {
+      controller = active_tab->GetTabFeatures()->page_action_controller();
+    }
+    page_action_container_->SetController(controller);
+  }
 }
 
 void WebAppToolbarButtonContainer::SetColors(SkColor foreground_color,
@@ -264,6 +317,11 @@ views::FlexRule WebAppToolbarButtonContainer::GetFlexRule() const {
       base::Unretained(toolbar_button_provider_), layout->GetDefaultFlexRule());
 }
 
+ToolbarButton* WebAppToolbarButtonContainer::GetDownloadButton() {
+    return pinned_toolbar_actions_container_->GetButtonFor(
+        kActionShowDownloads);
+}
+
 void WebAppToolbarButtonContainer::DisableAnimationForTesting(bool disable) {
   g_animation_disabled_for_testing = disable;
 }
@@ -287,6 +345,11 @@ gfx::Insets WebAppToolbarButtonContainer::GetPageActionIconInsets(
     return gfx::Insets();
   }
 
+  return PageActionIconInsetsFromSize(icon_size);
+}
+
+gfx::Insets WebAppToolbarButtonContainer::PageActionIconInsetsFromSize(
+    int icon_size) const {
   const int height = toolbar_button_provider_->GetToolbarButtonSize().height();
   const int inset_size = std::max(0, (height - icon_size) / 2);
   return gfx::Insets(inset_size);

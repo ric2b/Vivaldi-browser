@@ -181,9 +181,8 @@ void GetPipelineCacheData(ContextVk *contextVk,
 {
     ASSERT(pipelineCache.valid() || contextVk->getState().isGLES1() ||
            !contextVk->getFeatures().warmUpPipelineCacheAtLink.enabled ||
-           !contextVk->getFeatures().hasEffectivePipelineCacheSerialization.enabled);
-    if (!pipelineCache.valid() ||
-        !contextVk->getFeatures().hasEffectivePipelineCacheSerialization.enabled)
+           contextVk->getFeatures().skipPipelineCacheSerialization.enabled);
+    if (!pipelineCache.valid() || contextVk->getFeatures().skipPipelineCacheSerialization.enabled)
     {
         return;
     }
@@ -257,7 +256,6 @@ angle::Result UpdateFullTexturesDescriptorSet(vk::ErrorContext *context,
                                               const gl::SamplerBindingVector &samplers,
                                               VkDescriptorSet descriptorSet)
 {
-    vk::Renderer *renderer                                 = context->getRenderer();
     const std::vector<gl::SamplerBinding> &samplerBindings = executable.getSamplerBindings();
     const std::vector<GLuint> &samplerBoundTextureUnits = executable.getSamplerBoundTextureUnits();
     const std::vector<gl::LinkedUniform> &uniforms      = executable.getUniforms();
@@ -265,7 +263,7 @@ angle::Result UpdateFullTexturesDescriptorSet(vk::ErrorContext *context,
 
     // Allocate VkWriteDescriptorSet and initialize the data structure
     VkWriteDescriptorSet *writeDescriptorSets =
-        updateBuilder->allocWriteDescriptorSets(writeDescriptorDescs.size());
+        updateBuilder->allocWriteDescriptorSets(static_cast<uint32_t>(writeDescriptorDescs.size()));
     for (uint32_t writeIndex = 0; writeIndex < writeDescriptorDescs.size(); ++writeIndex)
     {
         ASSERT(writeDescriptorDescs[writeIndex].descriptorCount > 0);
@@ -343,7 +341,7 @@ angle::Result UpdateFullTexturesDescriptorSet(vk::ErrorContext *context,
 
                 VkDescriptorImageInfo *imageInfo = const_cast<VkDescriptorImageInfo *>(
                     &writeSet.pImageInfo[arrayElement + samplerUniform.getOuterArrayOffset()]);
-                imageInfo->imageLayout = ConvertImageLayoutToVkImageLayout(renderer, imageLayout);
+                imageInfo->imageLayout = ConvertImageLayoutToVkImageLayout(imageLayout);
                 imageInfo->imageView   = imageView.getHandle();
                 imageInfo->sampler     = samplerHelper.get().getHandle();
             }
@@ -1639,22 +1637,35 @@ angle::Result ProgramExecutableVk::createGraphicsPipeline(
     return angle::Result::Continue;
 }
 
-angle::Result ProgramExecutableVk::linkGraphicsPipelineLibraries(
+angle::Result ProgramExecutableVk::createLinkedGraphicsPipeline(
     ContextVk *contextVk,
     vk::PipelineCacheAccess *pipelineCache,
     const vk::GraphicsPipelineDesc &desc,
-    vk::PipelineHelper *vertexInputPipeline,
     vk::PipelineHelper *shadersPipeline,
-    vk::PipelineHelper *fragmentOutputPipeline,
     const vk::GraphicsPipelineDesc **descPtrOut,
     vk::PipelineHelper **pipelineOut)
 {
     ProgramTransformOptions transformOptions = getTransformOptions(contextVk, desc);
     const uint8_t programIndex               = transformOptions.permutationIndex;
 
-    ANGLE_TRY(mCompleteGraphicsPipelines[programIndex].linkLibraries(
-        contextVk, pipelineCache, desc, getPipelineLayout(), vertexInputPipeline, shadersPipeline,
-        fragmentOutputPipeline, descPtrOut, pipelineOut));
+    // When linking libraries, use the program's own pipeline cache if monolithic pipelines are not
+    // to be created, otherwise there is effectively a merge to global pipeline cache happening.
+    vk::PipelineCacheAccess programPipelineCache;
+    vk::PipelineCacheAccess *linkPipelineCache = pipelineCache;
+    if (!contextVk->getFeatures().preferMonolithicPipelinesOverLibraries.enabled)
+    {
+        // No synchronization necessary since mPipelineCache is internally synchronized.
+        programPipelineCache.init(&mPipelineCache, nullptr);
+        linkPipelineCache = &programPipelineCache;
+    }
+
+    // Pull in a compatible RenderPass.
+    const vk::RenderPass *compatibleRenderPass = nullptr;
+    ANGLE_TRY(contextVk->getCompatibleRenderPass(desc.getRenderPassDesc(), &compatibleRenderPass));
+
+    ANGLE_TRY(mCompleteGraphicsPipelines[programIndex].createPipeline(
+        contextVk, linkPipelineCache, *compatibleRenderPass, getPipelineLayout(), {shadersPipeline},
+        PipelineSource::DrawLinked, desc, descPtrOut, pipelineOut));
 
     // If monolithic pipelines are preferred over libraries, create a task so that it can be created
     // asynchronously.
@@ -1835,6 +1846,11 @@ void ProgramExecutableVk::resolvePrecisionMismatch(const gl::ProgramMergedVaryin
     for (const gl::ProgramVaryingRef &mergedVarying : mergedVaryings)
     {
         if (!mergedVarying.frontShader || !mergedVarying.backShader)
+        {
+            continue;
+        }
+
+        if (!mergedVarying.frontShader->active || !mergedVarying.backShader->active)
         {
             continue;
         }
@@ -2185,7 +2201,6 @@ angle::Result ProgramExecutableVk::updateUniforms(vk::Context *context,
                                                     &uniformsAndXfbDesc, &newSharedCacheKey));
         if (newSharedCacheKey)
         {
-            defaultUniformBuffer->getBufferBlock()->onNewDescriptorSet(newSharedCacheKey);
             if (mExecutable->hasTransformFeedbackOutput() &&
                 context->getFeatures().emulateTransformFeedback.enabled)
             {

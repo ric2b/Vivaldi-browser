@@ -198,6 +198,8 @@ constexpr int kFastElementsKindBits = 3;
 static_assert((1 << kFastElementsKindBits) > LAST_FAST_ELEMENTS_KIND);
 static_assert((1 << (kFastElementsKindBits - 1)) <= LAST_FAST_ELEMENTS_KIND);
 
+V8_EXPORT_PRIVATE std::ostream& operator<<(std::ostream& os, ElementsKind kind);
+
 const uint8_t* TypedArrayAndRabGsabTypedArrayElementsKindShifts();
 const uint8_t* TypedArrayAndRabGsabTypedArrayElementsKindSizes();
 inline constexpr int ElementsKindToShiftSize(ElementsKind elements_kind) {
@@ -311,7 +313,7 @@ inline bool IsBigIntTypedArrayElementsKind(ElementsKind kind) {
          kind == RAB_GSAB_BIGUINT64_ELEMENTS;
 }
 
-inline bool IsFloat16TypedArrayElementsKind(ElementsKind kind) {
+inline constexpr bool IsFloat16TypedArrayElementsKind(ElementsKind kind) {
   return kind == FLOAT16_ELEMENTS || kind == RAB_GSAB_FLOAT16_ELEMENTS;
 }
 
@@ -372,32 +374,20 @@ inline bool IsAnyNonextensibleElementsKindUnchecked(ElementsKind kind) {
 }
 
 inline bool IsAnyNonextensibleElementsKind(ElementsKind kind) {
-  DCHECK_IMPLIES(IsAnyNonextensibleElementsKindUnchecked(kind),
-                 v8_flags.enable_sealed_frozen_elements_kind);
   return IsAnyNonextensibleElementsKindUnchecked(kind);
 }
 
 inline bool IsNonextensibleElementsKind(ElementsKind kind) {
-  DCHECK_IMPLIES(base::IsInRange(kind, PACKED_NONEXTENSIBLE_ELEMENTS,
-                                 HOLEY_NONEXTENSIBLE_ELEMENTS),
-                 v8_flags.enable_sealed_frozen_elements_kind);
   return base::IsInRange(kind, PACKED_NONEXTENSIBLE_ELEMENTS,
                          HOLEY_NONEXTENSIBLE_ELEMENTS);
 }
 
 inline bool IsSealedElementsKind(ElementsKind kind) {
-  DCHECK_IMPLIES(
-      base::IsInRange(kind, PACKED_SEALED_ELEMENTS, HOLEY_SEALED_ELEMENTS) ||
-          IsSharedArrayElementsKind(kind),
-      v8_flags.enable_sealed_frozen_elements_kind);
   return IsSharedArrayElementsKind(kind) ||
          base::IsInRange(kind, PACKED_SEALED_ELEMENTS, HOLEY_SEALED_ELEMENTS);
 }
 
 inline bool IsFrozenElementsKind(ElementsKind kind) {
-  DCHECK_IMPLIES(
-      base::IsInRange(kind, PACKED_FROZEN_ELEMENTS, HOLEY_FROZEN_ELEMENTS),
-      v8_flags.enable_sealed_frozen_elements_kind);
   return base::IsInRange(kind, PACKED_FROZEN_ELEMENTS, HOLEY_FROZEN_ELEMENTS);
 }
 
@@ -427,10 +417,6 @@ constexpr bool IsObjectElementsKind(ElementsKind kind) {
 }
 
 inline bool IsAnyHoleyNonextensibleElementsKind(ElementsKind kind) {
-  DCHECK_IMPLIES(kind == HOLEY_NONEXTENSIBLE_ELEMENTS ||
-                     kind == HOLEY_SEALED_ELEMENTS ||
-                     kind == HOLEY_FROZEN_ELEMENTS,
-                 v8_flags.enable_sealed_frozen_elements_kind);
   return kind == HOLEY_NONEXTENSIBLE_ELEMENTS ||
          kind == HOLEY_SEALED_ELEMENTS || kind == HOLEY_FROZEN_ELEMENTS;
 }

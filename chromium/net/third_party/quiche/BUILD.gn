@@ -24,7 +24,6 @@
 #
 #             (*) only used on platforms where epoll tests are built
 
-import("//build/config/chromeos/ui_mode.gni")
 import("//net/third_party/quiche/src/build/source_list.gni")
 import("//testing/libfuzzer/fuzzer_test.gni")
 import("//third_party/protobuf/proto_library.gni")
@@ -60,12 +59,12 @@ component("quiche") {
               "overrides/quiche_platform_impl/quiche_server_stats_impl.h",
               "overrides/quiche_platform_impl/quiche_stack_trace_impl.cc",
               "overrides/quiche_platform_impl/quiche_stack_trace_impl.h",
-              "overrides/quiche_platform_impl/quiche_time_utils_impl.cc",
-              "overrides/quiche_platform_impl/quiche_time_utils_impl.h",
               "overrides/quiche_platform_impl/quiche_url_utils_impl.cc",
               "overrides/quiche_platform_impl/quiche_url_utils_impl.h",
               "src/quiche/common/platform/default/quiche_platform_impl/quiche_flags_impl.cc",
               "src/quiche/common/platform/default/quiche_platform_impl/quiche_flags_impl.h",
+              "src/quiche/common/platform/default/quiche_platform_impl/quiche_time_utils_impl.cc",
+              "src/quiche/common/platform/default/quiche_platform_impl/quiche_time_utils_impl.h",
               "src/quiche/http2/hpack/hpack_static_table_entries.inc",
             ] + quiche_core_hdrs + quiche_core_srcs + binary_http_srcs +
             binary_http_hdrs + oblivious_http_srcs + oblivious_http_hdrs
@@ -130,8 +129,8 @@ if (build_epoll_based_tools) {
   static_library("epoll_tool_support") {
     testonly = true
     sources = [
-                "overrides/quiche_platform_impl/quiche_udp_socket_platform_impl.h",
                 "src/quiche/common/platform/default/quiche_platform_impl/quiche_stream_buffer_allocator_impl.h",
+                "src/quiche/common/platform/default/quiche_platform_impl/quiche_udp_socket_platform_impl.h",
               ] + io_tool_support_srcs + io_tool_support_hdrs
 
     configs += [ ":quiche_internal_config" ]
@@ -212,6 +211,7 @@ if (build_epoll_based_tools) {
 
     deps = [
       ":epoll_tool_support",
+      ":masque_support",
       ":quiche_tool_support",
       "//net",
       "//third_party/boringssl",
@@ -222,6 +222,23 @@ if (build_epoll_based_tools) {
   executable("masque_server") {
     testonly = true
     sources = [ "src/quiche/quic/masque/masque_server_bin.cc" ]
+
+    configs += [ ":quiche_internal_config" ]
+    public_configs = [ ":quiche_config" ]
+
+    deps = [
+      ":epoll_tool_support",
+      ":masque_support",
+      ":quiche_tool_support",
+      "//net",
+      "//third_party/boringssl",
+      "//third_party/protobuf:protobuf_lite",
+    ]
+  }
+
+  static_library("masque_support") {
+    testonly = true
+    sources = masque_support_srcs + masque_support_hdrs
 
     configs += [ ":quiche_internal_config" ]
     public_configs = [ ":quiche_config" ]
@@ -444,6 +461,7 @@ source_set("quiche_tests") {
     "src/quiche/common/capsule_test.cc",
     "src/quiche/common/http/http_header_block_test.cc",
     "src/quiche/common/http/http_header_storage_test.cc",
+    "src/quiche/common/internet_checksum_test.cc",
     "src/quiche/common/masque/connect_ip_datagram_payload_test.cc",
     "src/quiche/common/masque/connect_udp_datagram_payload_test.cc",
     "src/quiche/common/platform/api/quiche_file_utils_test.cc",
@@ -466,6 +484,7 @@ source_set("quiche_tests") {
     "src/quiche/common/quiche_mem_slice_storage_test.cc",
     "src/quiche/common/quiche_random_test.cc",
     "src/quiche/common/quiche_simple_arena_test.cc",
+    "src/quiche/common/quiche_socket_address_test.cc",
     "src/quiche/common/quiche_text_utils_test.cc",
     "src/quiche/common/simple_buffer_allocator_test.cc",
     "src/quiche/common/structured_headers_generated_test.cc",
@@ -603,7 +622,6 @@ source_set("quiche_tests") {
     "src/quiche/quic/core/http/quic_spdy_stream_test.cc",
     "src/quiche/quic/core/http/spdy_utils_test.cc",
     "src/quiche/quic/core/http/web_transport_http3_test.cc",
-    "src/quiche/quic/core/internet_checksum_test.cc",
     "src/quiche/quic/core/legacy_quic_stream_id_manager_test.cc",
     "src/quiche/quic/core/packet_number_indexed_queue_test.cc",
     "src/quiche/quic/core/qpack/qpack_decoded_headers_accumulator_test.cc",
@@ -686,7 +704,6 @@ source_set("quiche_tests") {
     "src/quiche/quic/core/tls_server_handshaker_test.cc",
     "src/quiche/quic/core/uber_quic_stream_id_manager_test.cc",
     "src/quiche/quic/core/uber_received_packet_manager_test.cc",
-    "src/quiche/quic/platform/api/quic_socket_address_test.cc",
     "src/quiche/quic/test_tools/crypto_test_utils_test.cc",
     "src/quiche/quic/test_tools/quic_test_utils_test.cc",
     "src/quiche/quic/test_tools/simple_session_notifier_test.cc",

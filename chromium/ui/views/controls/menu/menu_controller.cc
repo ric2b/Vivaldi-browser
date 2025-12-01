@@ -9,6 +9,7 @@
 #include <utility>
 
 #include "base/callback_list.h"
+#include "base/check.h"
 #include "base/containers/flat_set.h"
 #include "base/functional/bind.h"
 #include "base/i18n/case_conversion.h"
@@ -138,6 +139,16 @@ bool ShouldIgnoreScreenBoundsForMenus() {
   return !ui::OzonePlatform::GetInstance()
               ->GetPlatformProperties()
               .supports_global_screen_coordinates;
+#else
+  return false;
+#endif
+}
+
+bool PlatformSetsParentForNonTopLevelWindows() {
+#if BUILDFLAG(IS_OZONE)
+  return ui::OzonePlatform::GetInstance()
+      ->GetPlatformProperties()
+      .set_parent_for_non_top_level_windows;
 #else
   return false;
 #endif
@@ -588,7 +599,7 @@ void MenuController::Run(Widget* parent,
                          const gfx::Rect& anchor_bounds,
                          MenuAnchorPosition position,
                          ui::mojom::MenuSourceType source_type,
-                         bool context_menu,
+                         MenuType menu_type,
                          bool is_nested_drag,
                          gfx::NativeView native_view_for_gestures) {
   exit_type_ = ExitType::kNone;
@@ -673,7 +684,7 @@ void MenuController::Run(Widget* parent,
   // Reset current state.
   pending_state_ = State();
   state_ = State();
-  UpdateInitialLocation(anchor_bounds, position, context_menu);
+  UpdateInitialLocation(anchor_bounds, position, menu_type);
 
   if (views::PlatformStyle::kAutoSelectFirstMenuItemFromKeyboard && to_select) {
     // If menu is opened via keyboard, set focus on first selectable menu item,
@@ -796,7 +807,8 @@ bool MenuController::IsReadonlyCombobox() const {
 }
 
 bool MenuController::IsContextMenu() const {
-  return state_.context_menu;
+  return state_.menu_type == MenuType::kContextMenu ||
+         state_.menu_type == MenuType::kMenuItemContextMenu;
 }
 
 void MenuController::SelectItemAndOpenSubmenu(MenuItemView* item) {
@@ -1525,7 +1537,12 @@ void MenuController::OnWidgetDestroying(Widget* widget) {
   DCHECK_EQ(owner_, widget);
   owner_->RemoveObserver(this);
   owner_ = nullptr;
-  native_view_for_gestures_ = nullptr;
+  native_view_for_gestures_ = gfx::NativeView();
+
+#if BUILDFLAG(IS_MAC)
+  menu_closure_animation_.reset();
+#endif
+
   // Exit menu to ensure that we are not holding on to resources when the
   // widget has been destroyed.
   ExitMenu();
@@ -1669,9 +1686,11 @@ void MenuController::SetSelection(MenuItemView* menu_item,
     // submenu.
     if (menu_item->GetParentMenuItem() &&
         menu_item->GetParentMenuItem()->GetSubmenu()) {
-      menu_item->GetParentMenuItem()->GetSubmenu()->NotifyAccessibilityEvent(
-          ax::mojom::Event::kSelectedChildrenChanged,
-          /*send_native_event=*/true);
+      menu_item->GetParentMenuItem()
+          ->GetSubmenu()
+          ->NotifyAccessibilityEventDeprecated(
+              ax::mojom::Event::kSelectedChildrenChanged,
+              /*send_native_event=*/true);
     }
   }
 }
@@ -2004,8 +2023,8 @@ bool MenuController::SendAcceleratorToHotTrackedView(int event_flags) {
 
 void MenuController::UpdateInitialLocation(const gfx::Rect& anchor_bounds,
                                            MenuAnchorPosition position,
-                                           bool context_menu) {
-  pending_state_.context_menu = context_menu;
+                                           MenuType menu_type) {
+  pending_state_.menu_type = menu_type;
   pending_state_.initial_bounds = anchor_bounds;
   pending_state_.anchor = AdjustAnchorPositionForRtl(position);
 
@@ -2173,7 +2192,7 @@ bool MenuController::ShowSiblingMenu(SubmenuView* source,
   if (vivaldi::IsVivaldiRunning()) {
     has_mnemonics = true;
     did_capture_ = false;
-    UpdateInitialLocation(vivaldi_rect, anchor, false);
+    UpdateInitialLocation(vivaldi_rect, anchor, state_.menu_type);
   } else {
   // If the delegate returns a menu, they must also return a button.
   CHECK(button);
@@ -2187,8 +2206,7 @@ bool MenuController::ShowSiblingMenu(SubmenuView* source,
 
   // It is currently not possible to show a submenu recursively in a bubble.
   DCHECK(!MenuItemView::IsBubble(anchor));
-  UpdateInitialLocation(button->GetBoundsInScreen(), anchor,
-                        state_.context_menu);
+  UpdateInitialLocation(button->GetBoundsInScreen(), anchor, state_.menu_type);
   } // Vivaldi
   alt_menu->PrepareForRun(
       has_mnemonics, source->GetMenuItem()->GetRootMenuItem()->show_mnemonics_);
@@ -2459,12 +2477,22 @@ void MenuController::OpenMenuImpl(MenuItemView* item, bool show) {
       // (crbug.com/1414232) The item to be open is a submenu. Make sure
       // params.context is set.
       DCHECK(params.context);
-    } else if (state_.context_menu) {
+    } else if (IsContextMenu()) {
       if (!menu_stack_.empty()) {
         auto* last_menu_item = menu_stack_.back().first.item.get();
-        if (last_menu_item->SubmenuIsShowing()) {
+        if (state_.menu_type == MenuType::kContextMenu &&
+            last_menu_item->SubmenuIsShowing()) {
           params.context = last_menu_item->GetSubmenu()->GetWidget();
         } else {
+          if (state_.menu_type == MenuType::kMenuItemContextMenu &&
+              PlatformSetsParentForNonTopLevelWindows() &&
+              last_menu_item->SubmenuIsShowing()) {
+            // Before showing the new menu, ensure submenu of the last menu item
+            // is hidden on platforms like Linux Wayland where destroyed popup
+            // needs to be topmost. Without this, clicking on an item in the new
+            // menu leads to a crash.
+            last_menu_item->GetSubmenu()->Hide();
+          }
           params.context = last_menu_item->GetWidget();
         }
       } else {
@@ -2539,7 +2567,9 @@ void MenuController::BuildPathsAndCalculateDiff(
     std::vector<MenuItemView*>* old_path,
     std::vector<MenuItemView*>* new_path,
     size_t* first_diff_at) {
-  DCHECK(old_path && new_path && first_diff_at);
+  DCHECK(old_path);
+  DCHECK(new_path);
+  DCHECK(first_diff_at);
   BuildMenuItemPath(old_item, old_path);
   BuildMenuItemPath(new_item, new_path);
 
@@ -2824,7 +2854,7 @@ gfx::Rect MenuController::CalculateBubbleMenuBounds(
     if (!monitor_bounds.IsEmpty()) {
       int max_width = monitor_bounds.width() + border_insets.width();
       int max_height = monitor_bounds.height() + border_insets.height();
-      if (!state_.context_menu) {
+      if (!IsContextMenu()) {
         // In case of bubbles, the maximum width is limited by the space
         // between the display corner and the target area + the tip size.
         const bool is_bubble_menu =
@@ -3688,7 +3718,8 @@ void MenuController::SetHotTrackedButton(Button* new_hot_button) {
   if (hot_button_) {
     hot_button_->GetViewAccessibility().SetPopupFocusOverride();
     hot_button_->SetHotTracked(true);
-    hot_button_->NotifyAccessibilityEvent(ax::mojom::Event::kSelection, true);
+    hot_button_->NotifyAccessibilityEventDeprecated(
+        ax::mojom::Event::kSelection, true);
   }
 }
 
@@ -3746,7 +3777,7 @@ void MenuController::SetAnchorParametersForItem(MenuItemView* item,
         ui::OwnedWindowConstraintAdjustment::kAdjustmentResizeX |
         ui::OwnedWindowConstraintAdjustment::kAdjustmentRezizeY;
   } else {
-    if (state_.context_menu) {
+    if (IsContextMenu()) {
       anchor->anchor_position = ui::OwnedWindowAnchorPosition::kBottomLeft;
       anchor->anchor_gravity = ui::OwnedWindowAnchorGravity::kBottomRight;
       anchor->constraint_adjustment =

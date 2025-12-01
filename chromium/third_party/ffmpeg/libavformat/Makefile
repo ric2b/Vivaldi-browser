@@ -310,6 +310,7 @@ OBJS-$(CONFIG_IMAGE_SGI_PIPE_DEMUXER)     += img2dec.o img2.o
 OBJS-$(CONFIG_IMAGE_SVG_PIPE_DEMUXER)     += img2dec.o img2.o
 OBJS-$(CONFIG_IMAGE_SUNRAST_PIPE_DEMUXER) += img2dec.o img2.o
 OBJS-$(CONFIG_IMAGE_TIFF_PIPE_DEMUXER)    += img2dec.o img2.o
+OBJS-$(CONFIG_IMAGE_VBN_PIPE_DEMUXER)     += img2dec.o img2.o
 OBJS-$(CONFIG_IMAGE_WEBP_PIPE_DEMUXER)    += img2dec.o img2.o
 OBJS-$(CONFIG_IMAGE_XBM_PIPE_DEMUXER)     += img2dec.o img2.o
 OBJS-$(CONFIG_IMAGE_XPM_PIPE_DEMUXER)     += img2dec.o img2.o
@@ -729,6 +730,7 @@ OBJS-$(CONFIG_LIBZMQ_PROTOCOL)           += libzmq.o
 # Objects duplicated from other libraries for shared builds
 SHLIBOBJS                                += log2_tab.o to_upper4.o
 SHLIBOBJS-$(CONFIG_ISO_MEDIA)            += mpegaudiotabs.o
+SHLIBOBJS-$(CONFIG_ISO_WRITER)           += golomb_tab.o
 SHLIBOBJS-$(CONFIG_FLV_MUXER)            += mpeg4audio_sample_rates.o
 SHLIBOBJS-$(CONFIG_HLS_DEMUXER)          += ac3_channel_layout_tab.o
 SHLIBOBJS-$(CONFIG_IMAGE_JPEGXL_PIPE_DEMUXER)    += jpegxl_parse.o

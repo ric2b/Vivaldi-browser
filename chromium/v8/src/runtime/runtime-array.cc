@@ -20,15 +20,7 @@ RUNTIME_FUNCTION(Runtime_TransitionElementsKind) {
   DirectHandle<JSObject> object = args.at<JSObject>(0);
   DirectHandle<Map> to_map = args.at<Map>(1);
   ElementsKind to_kind = to_map->elements_kind();
-  if (ElementsAccessor::ForKind(to_kind)
-          ->TransitionElementsKind(object, to_map)
-          .IsNothing()) {
-    // TODO(victorgomes): EffectControlLinearizer::LowerTransitionElementsKind
-    // does not handle exceptions.
-    FATAL(
-        "Fatal JavaScript invalid size error when transitioning elements kind");
-    UNREACHABLE();
-  }
+  ElementsAccessor::ForKind(to_kind)->TransitionElementsKind(object, to_map);
   return *object;
 }
 
@@ -262,26 +254,16 @@ RUNTIME_FUNCTION(Runtime_ArrayIncludes_Slow) {
   // produces the value 0.)
   int64_t index = 0;
   if (!IsUndefined(*from_index, isolate)) {
-    ASSIGN_RETURN_FAILURE_ON_EXCEPTION(isolate, from_index,
-                                       Object::ToInteger(isolate, from_index));
+    double start_from;
+    MAYBE_ASSIGN_RETURN_FAILURE_ON_EXCEPTION(
+        isolate, start_from, Object::IntegerValue(isolate, from_index));
 
-    if (V8_LIKELY(IsSmi(*from_index))) {
-      int start_from = Smi::ToInt(*from_index);
+    if (start_from >= len) return ReadOnlyRoots(isolate).false_value();
+    if (V8_LIKELY(std::isfinite(start_from))) {
       if (start_from < 0) {
-        index = std::max<int64_t>(len + start_from, 0);
+        index = static_cast<int64_t>(std::max<double>(start_from + len, 0));
       } else {
         index = start_from;
-      }
-    } else {
-      DCHECK(IsHeapNumber(*from_index));
-      double start_from = Object::NumberValue(*from_index);
-      if (start_from >= len) return ReadOnlyRoots(isolate).false_value();
-      if (V8_LIKELY(std::isfinite(start_from))) {
-        if (start_from < 0) {
-          index = static_cast<int64_t>(std::max<double>(start_from + len, 0));
-        } else {
-          index = start_from;
-        }
       }
     }
 
@@ -364,9 +346,9 @@ RUNTIME_FUNCTION(Runtime_ArrayIndexOf) {
   // produces the value 0.)
   int64_t start_from;
   {
-    ASSIGN_RETURN_FAILURE_ON_EXCEPTION(isolate, from_index,
-                                       Object::ToInteger(isolate, from_index));
-    double fp = Object::NumberValue(*from_index);
+    double fp;
+    MAYBE_ASSIGN_RETURN_FAILURE_ON_EXCEPTION(
+        isolate, fp, Object::IntegerValue(isolate, from_index));
     if (fp > len) return Smi::FromInt(-1);
     if (V8_LIKELY(fp >=
                   static_cast<double>(std::numeric_limits<int64_t>::min()))) {

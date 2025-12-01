@@ -37,7 +37,6 @@
 #include "third_party/blink/public/common/input/web_gesture_event.h"
 #include "third_party/blink/public/common/input/web_input_event.h"
 #include "third_party/blink/public/common/page/drag_operation.h"
-#include "third_party/blink/public/common/permissions_policy/permissions_policy_features.h"
 #include "third_party/blink/public/mojom/devtools/console_message.mojom-blink-forward.h"
 #include "third_party/blink/public/mojom/input/focus_type.mojom-blink-forward.h"
 #include "third_party/blink/public/mojom/input/input_handler.mojom-blink-forward.h"
@@ -140,6 +139,8 @@ class CORE_EXPORT ChromeClient : public GarbageCollected<ChromeClient> {
 
   virtual bool IsPopup() { return false; }
 
+  virtual Element* GetPopupClientOwnerElement() { return nullptr; }
+
   virtual void ChromeDestroyed() = 0;
 
   virtual void SetWindowRect(const gfx::Rect&, LocalFrame&) = 0;
@@ -160,10 +161,15 @@ class CORE_EXPORT ChromeClient : public GarbageCollected<ChromeClient> {
                                           const LocalFrameView*) const = 0;
 
   void ScheduleAnimation(const LocalFrameView* view) {
-    ScheduleAnimation(view, base::TimeDelta());
+    ScheduleAnimation(view, base::TimeDelta(), /*urgent=*/false);
   }
-  virtual void ScheduleAnimation(const LocalFrameView*,
-                                 base::TimeDelta delay) = 0;
+  void ScheduleAnimation(const LocalFrameView* view, base::TimeDelta delay) {
+    ScheduleAnimation(view, delay, /*urgent=*/false);
+  }
+
+  virtual void ScheduleAnimation(const LocalFrameView* local_frame_view,
+                                 base::TimeDelta delay,
+                                 bool urgent) = 0;
 
   // Tells the browser that another page has accessed the DOM of the initial
   // empty document of a main frame.
@@ -221,6 +227,8 @@ class CORE_EXPORT ChromeClient : public GarbageCollected<ChromeClient> {
                                      cc::PaintHoldingReason reason) = 0;
   virtual void StopDeferringCommits(LocalFrame& main_frame,
                                     cc::PaintHoldingCommitTrigger) = 0;
+  virtual void SetShouldThrottleFrameRate(bool flag,
+                                          LocalFrame& main_frame) = 0;
 
   virtual std::unique_ptr<cc::ScopedPauseRendering> PauseRendering(
       LocalFrame& main_frame) = 0;

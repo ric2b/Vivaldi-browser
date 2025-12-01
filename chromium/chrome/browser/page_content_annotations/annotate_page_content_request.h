@@ -6,6 +6,7 @@
 #define CHROME_BROWSER_PAGE_CONTENT_ANNOTATIONS_PAGE_CONTENT_ANNOTATIONS_ANNOTATE_PAGE_CONTENT_REQUEST_H_
 
 #include "chrome/browser/content_extraction/inner_text.h"
+#include "components/optimization_guide/content/browser/page_content_proto_provider.h"
 #include "components/optimization_guide/proto/features/common_quality_data.pb.h"
 #include "content/public/browser/web_contents.h"
 #include "pdf/buildflags.h"
@@ -39,14 +40,14 @@ class AnnotatedPageContentRequest {
  private:
   void ResetForNewNavigation();
 
-  void RequestContentIfReady();
+  void MaybeScheduleExtraction();
 
   void RequestAnnotatedPageContentSync();
 
-  bool Ready() const;
+  bool ShouldScheduleExtraction() const;
 
   void OnPageContentReceived(
-      std::optional<optimization_guide::proto::AnnotatedPageContent> proto);
+      std::optional<optimization_guide::AIPageContentResult> page_content);
 
   void OnInnerTextReceived(
       base::TimeTicks start_time,
@@ -64,8 +65,21 @@ class AnnotatedPageContentRequest {
   const base::TimeDelta delay_;
   const bool include_inner_text_;
 
-  // Set if a new page was committed and querying it's content is pending.
-  bool page_content_pending_ = false;
+  enum class Lifecycle {
+    // Indicates that a new navigation occurred and we need to schedule an
+    // extraction. This is async because we need to wait for the page to be
+    // ready.
+    kPending,
+
+    // The extraction has been scheduled and we are waiting on a response from
+    // the renderer. The IPC to request the content maybe delayed so the page
+    // has reached a stable state.
+    kScheduled,
+
+    // The content for the last committed navigation has been extracted.
+    kDone
+  };
+  Lifecycle lifecycle_ = Lifecycle::kDone;
 
   bool waiting_for_load_ = false;
   bool waiting_for_fcp_ = false;

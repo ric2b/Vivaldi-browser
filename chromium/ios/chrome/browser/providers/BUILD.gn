@@ -5,6 +5,7 @@
 group("chromium_providers") {
   deps = [
     # The individual API implementations.
+    "//ios/chrome/browser/providers/add_to_calendar:chromium_add_to_calendar",
     "//ios/chrome/browser/providers/additional_features:chromium_additional_features",
     "//ios/chrome/browser/providers/app_distribution:chromium_app_distribution",
     "//ios/chrome/browser/providers/app_utils:chromium_app_utils",
@@ -17,6 +18,7 @@ group("chromium_providers") {
     "//ios/chrome/browser/providers/follow:chromium_follow",
     "//ios/chrome/browser/providers/font:chromium_font",
     "//ios/chrome/browser/providers/fullscreen:chromium_fullscreen",
+    "//ios/chrome/browser/providers/glic:chromium_glic",
     "//ios/chrome/browser/providers/google_one:chromium_google_one",
     "//ios/chrome/browser/providers/keyboard:chromium_keyboard",
     "//ios/chrome/browser/providers/lens:chromium_lens",
@@ -25,7 +27,6 @@ group("chromium_providers") {
     "//ios/chrome/browser/providers/material:chromium_material_branding",
     "//ios/chrome/browser/providers/memory_experimenter:chromium_memory_experimenter",
     "//ios/chrome/browser/providers/mini_map:chromium_mini_map",
-    "//ios/chrome/browser/providers/modals:chromium_modals",
     "//ios/chrome/browser/providers/omaha:chromium_omaha",
     "//ios/chrome/browser/providers/overrides:chromium_overrides",
     "//ios/chrome/browser/providers/partial_translate:chromium_partial_translate",

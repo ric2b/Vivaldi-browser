@@ -170,6 +170,7 @@
 <translation id="3838085852053358637">Tillägget kunde inte läsas in</translation>
 <translation id="383891835335927981">Inga webbplatser har zoomats in eller ut</translation>
 <translation id="385051799172605136">Tillbaka</translation>
+<translation id="3858860766373142691">Namn</translation>
 <translation id="3861977424605124250">Visa vid uppstart</translation>
 <translation id="3867944738977021751">Certifikatfält</translation>
 <translation id="3905761538810670789">Reparera appen</translation>
@@ -415,6 +416,9 @@ Spara nyckelfilen på ett säkert ställe. Den behövs om du ska skapa nya versi
 <translation id="8004582292198964060">Webbläsare</translation>
 <translation id="8018313076035239964">Styr vilken information webbplatserna får ta del av och vilket slags innehåll som får visas på dem</translation>
 <translation id="8071432093239591881">Skriv ut som bild</translation>
+<translation id="8118448640060360549">{EXTENSIONS_COUNT, plural,
+        =1 {# bokmärke}
+        other {# bokmärken}}</translation>
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" /> kB</translation>
 <translation id="8212008074015601248">{NUM_DOWNLOAD, plural,
         =1 {Hämtning pågår} other {Hämtningar pågår}}</translation>

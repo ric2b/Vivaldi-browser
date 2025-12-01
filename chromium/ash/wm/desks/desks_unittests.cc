@@ -479,8 +479,7 @@ class DesksTest : public AshTestBase,
 
     scoped_feature_list_.InitWithFeatureStates(
         {{features::kFeatureManagement16Desks, GetParam().use_16_desks},
-         {features::kPerDeskShelf, GetParam().per_desk_shelf},
-         {chromeos::features::kOverviewSessionInitOptimizations, true}});
+         {features::kPerDeskShelf, GetParam().per_desk_shelf}});
 
     AshTestBase::SetUp();
     SetVirtualKeyboardEnabled(true);
@@ -509,10 +508,6 @@ class DesksTest : public AshTestBase,
     EXPECT_TRUE(expected_visibility
                     ? state == DeskIconButton::State::kExpanded
                     : state != DeskIconButton::State::kExpanded);
-  }
-
-  SkColor GetNewDeskButtonBackgroundColor(const DeskBarViewBase* bar_view) {
-    return bar_view->new_desk_button()->background()->get_color();
   }
 
   void TryScrollOverviewDeskBar(DeskBarScrollDirection scroll_direction,
@@ -1443,7 +1438,7 @@ TEST_P(DesksTest, RemoveInactiveDeskFromOverview) {
   TestDeskObserver desk_1_observer;
   desk_1->AddObserver(&desk_1_observer);
 
-  if (features::IsSavedDeskUiRevampEnabled()) {
+  if (features::IsForestFeatureEnabled()) {
     views::MenuItemView* menu_item =
         DesksTestApi::OpenDeskContextMenuAndGetMenuItem(
             Shell::GetPrimaryRootWindow(), DeskBarViewBase::Type::kOverview,
@@ -1549,7 +1544,7 @@ TEST_P(DesksTest, RemoveActiveDeskFromOverview) {
   TestDeskObserver desk_2_observer;
   desk_2->AddObserver(&desk_2_observer);
 
-  if (features::IsSavedDeskUiRevampEnabled()) {
+  if (features::IsForestFeatureEnabled()) {
     views::MenuItemView* menu_item =
         DesksTestApi::OpenDeskContextMenuAndGetMenuItem(
             Shell::GetPrimaryRootWindow(), DeskBarViewBase::Type::kOverview,
@@ -2438,14 +2433,21 @@ TEST_P(DesksTest, NewDeskButtonStateAndColor) {
   SkColor background_color =
       color_provider->GetColor(cros_tokens::kCrosSysPrimary);
 
+  auto get_background_color([](const views::View* view) {
+    return view->GetBackground()->color().ConvertToSkColor(
+        view->GetColorProvider());
+  });
+
   const SkColor disabled_background_color =
       ColorUtil::GetDisabledColor(background_color);
   EXPECT_TRUE(new_desk_button->GetEnabled());
-  EXPECT_EQ(background_color, GetNewDeskButtonBackgroundColor(desks_bar_view));
+  EXPECT_EQ(background_color,
+            get_background_color(desks_bar_view->new_desk_button()));
 
   LeftClickOn(new_desk_button);
   EXPECT_TRUE(new_desk_button->GetEnabled());
-  EXPECT_EQ(background_color, GetNewDeskButtonBackgroundColor(desks_bar_view));
+  EXPECT_EQ(background_color,
+            get_background_color(desks_bar_view->new_desk_button()));
 
   // Tests that adding desks until we reach the desks limit should change the
   // state and color of the new desk button.
@@ -2460,7 +2462,7 @@ TEST_P(DesksTest, NewDeskButtonStateAndColor) {
   }
   EXPECT_FALSE(new_desk_button->GetEnabled());
   EXPECT_EQ(disabled_background_color,
-            GetNewDeskButtonBackgroundColor(desks_bar_view));
+            get_background_color(desks_bar_view->new_desk_button()));
 }
 
 // Tests that the fullscreen state in shell is updated when switching between
@@ -4832,17 +4834,12 @@ class DesksMultiUserTest : public NoSessionAshTestBase,
   void SetUp() override {
     NoSessionAshTestBase::SetUp();
 
-    TestSessionControllerClient* session_controller =
-        GetSessionControllerClient();
-    session_controller->Reset();
-    session_controller->AddUserSession(kUser1Email,
-                                       user_manager::UserType::kRegular);
-    user_1_prefs_ = session_controller->GetUserPrefService(GetUser1AccountId());
-    CHECK(user_1_prefs_);
-    session_controller->AddUserSession(kUser2Email,
-                                       user_manager::UserType::kRegular);
-    user_2_prefs_ = session_controller->GetUserPrefService(GetUser2AccountId());
-    CHECK(user_1_prefs_);
+    owned_user_1_prefs_ =
+        ash::TestPrefServiceProvider::CreateUserPrefServiceSimple();
+    user_1_prefs_ = owned_user_1_prefs_.get();
+    owned_user_2_prefs_ =
+        ash::TestPrefServiceProvider::CreateUserPrefServiceSimple();
+    user_2_prefs_ = owned_user_2_prefs_.get();
   }
 
   void TearDown() override {
@@ -4859,16 +4856,28 @@ class DesksMultiUserTest : public NoSessionAshTestBase,
                                  bool teleported) override {}
   void OnTransitionUserShelfToNewAccount() override {}
 
+  void SimulateUser1Login() {
+    auto account_id = SimulateUserLogin({kUser1Email}, std::nullopt,
+                                        std::move(owned_user_1_prefs_));
+    multi_user_window_manager_ =
+        MultiUserWindowManager::Create(this, account_id);
+    MultiUserWindowManagerImpl::Get()->SetAnimationSpeedForTest(
+        MultiUserWindowManagerImpl::ANIMATION_SPEED_DISABLED);
+    GetSessionControllerClient()->SetSessionState(
+        session_manager::SessionState::ACTIVE);
+  }
+
+  void SimulateUser2Login() {
+    SimulateUserLogin({kUser2Email}, std::nullopt,
+                      std::move(owned_user_2_prefs_));
+  }
+
   AccountId GetUser1AccountId() const {
     return AccountId::FromUserEmail(kUser1Email);
   }
 
   AccountId GetUser2AccountId() const {
     return AccountId::FromUserEmail(kUser2Email);
-  }
-
-  void SwitchActiveUser(const AccountId& account_id) {
-    GetSessionControllerClient()->SwitchActiveUser(account_id);
   }
 
   // Initializes the given |prefs| with a desks restore data of 3 desks, with
@@ -4891,25 +4900,16 @@ class DesksMultiUserTest : public NoSessionAshTestBase,
     }
   }
 
-  void SimulateUserLogin(const AccountId& account_id) {
-    SwitchActiveUser(account_id);
-    multi_user_window_manager_ =
-        MultiUserWindowManager::Create(this, account_id);
-    MultiUserWindowManagerImpl::Get()->SetAnimationSpeedForTest(
-        MultiUserWindowManagerImpl::ANIMATION_SPEED_DISABLED);
-    GetSessionControllerClient()->SetSessionState(
-        session_manager::SessionState::ACTIVE);
-  }
-
  private:
   std::unique_ptr<MultiUserWindowManager> multi_user_window_manager_;
-
+  std::unique_ptr<PrefService> owned_user_1_prefs_;
+  std::unique_ptr<PrefService> owned_user_2_prefs_;
   raw_ptr<PrefService> user_1_prefs_ = nullptr;
   raw_ptr<PrefService> user_2_prefs_ = nullptr;
 };
 
 TEST_F(DesksMultiUserTest, SwitchUsersBackAndForth) {
-  SimulateUserLogin(GetUser1AccountId());
+  SimulateUser1Login();
   auto* controller = DesksController::Get();
   NewDesk();
   NewDesk();
@@ -4928,7 +4928,7 @@ TEST_F(DesksMultiUserTest, SwitchUsersBackAndForth) {
 
   // Switch to user_2 and expect no windows from user_1 is visible regardless of
   // the desk.
-  SwitchActiveUser(GetUser2AccountId());
+  SimulateUser2Login();
   EXPECT_FALSE(win0->IsVisible());
   EXPECT_FALSE(win1->IsVisible());
 
@@ -4966,7 +4966,7 @@ TEST_F(DesksMultiUserTest, SwitchUsersBackAndForth) {
 }
 
 TEST_F(DesksMultiUserTest, RemoveDesks) {
-  SimulateUserLogin(GetUser1AccountId());
+  SimulateUser1Login();
   // Create two desks with several windows with different app types that
   // belong to different users.
   auto* controller = DesksController::Get();
@@ -4994,7 +4994,7 @@ TEST_F(DesksMultiUserTest, RemoveDesks) {
 
   // Switch to user_2 and expect no windows from user_1 is visible regardless of
   // the desk.
-  SwitchActiveUser(GetUser2AccountId());
+  SimulateUser2Login();
   EXPECT_TRUE(desk_1->is_active());
   EXPECT_FALSE(win0->IsVisible());
   EXPECT_FALSE(win1->IsVisible());
@@ -5065,11 +5065,11 @@ TEST_F(DesksMultiUserTest, RemoveDesks) {
 }
 
 TEST_F(DesksMultiUserTest, SwitchingUsersEndsOverview) {
-  SimulateUserLogin(GetUser1AccountId());
+  SimulateUser1Login();
   OverviewController* overview_controller = OverviewController::Get();
   EXPECT_TRUE(EnterOverview());
   EXPECT_TRUE(overview_controller->InOverviewSession());
-  SwitchActiveUser(GetUser2AccountId());
+  SimulateUser2Login();
   EXPECT_FALSE(overview_controller->InOverviewSession());
 }
 
@@ -5083,7 +5083,7 @@ TEST_F(DesksRestoreMultiUserTest, DesksRestoredFromPrimaryUserPrefsOnly) {
   // Set the primary user1's active desk prefs to kUser1StoredActiveDesk.
   user_1_prefs()->SetInteger(prefs::kDesksActiveDesk, kUser1StoredActiveDesk);
 
-  SimulateUserLogin(GetUser1AccountId());
+  SimulateUser1Login();
   // User 1 is the first to login, hence the primary user.
   auto* controller = DesksController::Get();
   const auto& desks = controller->desks();
@@ -5107,7 +5107,7 @@ TEST_F(DesksRestoreMultiUserTest, DesksRestoredFromPrimaryUserPrefsOnly) {
 
   // Switching users should not change anything as restoring happens only at
   // the time when the first user signs in.
-  SwitchActiveUser(GetUser2AccountId());
+  SimulateUser2Login();
   verify_desks("After switching users");
   // The secondary user2 should start with a default active desk.
   EXPECT_EQ(desks[kDefaultActiveDesk]->container_id(),
@@ -5128,7 +5128,7 @@ TEST_F(DesksRestoreMultiUserTest, DesksRestoredFromPrimaryUserPrefsOnly) {
 TEST_F(DesksRestoreMultiUserTest,
        ChangesMadeBySecondaryUserAffectsOnlyPrimaryUserPrefs) {
   InitPrefsWithDesksRestoreData(user_1_prefs());
-  SimulateUserLogin(GetUser1AccountId());
+  SimulateUser1Login();
 
   auto* controller = DesksController::Get();
   const auto& desks = controller->desks();
@@ -5140,7 +5140,7 @@ TEST_F(DesksRestoreMultiUserTest,
 
   // Switch to user 2 (secondary) and make some desks changes. Those changes
   // should be persisted to user 1's prefs only.
-  SwitchActiveUser(GetUser2AccountId());
+  SimulateUser2Login();
 
   // Create a fourth desk.
   NewDesk();
@@ -5177,7 +5177,7 @@ TEST_F(DesksRestoreMultiUserTest,
   user_1_prefs()->SetInteger(prefs::kDesksActiveDesk, user_1_active_desk_index);
   InitPrefsWithDesksRestoreData(user_1_prefs(),
                                 std::vector<std::string>{"0", "1", "2", "3"});
-  SimulateUserLogin(GetUser1AccountId());
+  SimulateUser1Login();
   auto* controller = DesksController::Get();
   const auto& desks = controller->desks();
   ASSERT_EQ(4u, desks.size());
@@ -5187,7 +5187,7 @@ TEST_F(DesksRestoreMultiUserTest,
   EXPECT_EQ(desks[user_1_active_desk_index]->container_id(),
             desks_util::GetActiveDeskContainerId());
   int user_2_active_desk_index = 2;
-  SwitchActiveUser(GetUser2AccountId());
+  SimulateUser2Login();
   ActivateDesk(desks[user_2_active_desk_index].get());
   EXPECT_EQ(desks[user_2_active_desk_index]->container_id(),
             desks_util::GetActiveDeskContainerId());
@@ -6944,7 +6944,7 @@ TEST_P(DesksTest, ZeroStateDeskButtonText) {
 
   desks_bar_view = GetOverviewGridForRoot(root_window)->desks_bar_view();
   auto* default_desk_button = desks_bar_view->default_desk_button();
-  std::u16string desk_button_text = default_desk_button->GetText();
+  std::u16string_view desk_button_text = default_desk_button->GetText();
   std::u16string expected_desk_name(DeskTextfield::kMaxLength, L'a');
   // Zero state desk button should show the elided name as the DeskNameView.
   EXPECT_EQ(expected_desk_name,
@@ -8348,7 +8348,7 @@ TEST_P(DesksCloseAllTest, HideCombineDesksOptionWhenNoWindowsOnDesk) {
 
   DeskMiniView* mini_view = GetPrimaryRootDesksBarView()->mini_views()[0];
   auto* event_generator = GetEventGenerator();
-  if (!features::IsSavedDeskUiRevampEnabled()) {
+  if (!features::IsForestFeatureEnabled()) {
     // We need to hover over the desk preview to properly check the combine
     // desks button's visibility.
     event_generator->MoveMouseTo(
@@ -8374,7 +8374,7 @@ TEST_P(DesksCloseAllTest, HideCombineDesksOptionWhenNoWindowsOnDesk) {
   ASSERT_TRUE(OverviewController::Get()->InOverviewSession());
   mini_view = GetPrimaryRootDesksBarView()->mini_views()[0];
 
-  if (!features::IsSavedDeskUiRevampEnabled()) {
+  if (!features::IsForestFeatureEnabled()) {
     event_generator->MoveMouseTo(
         mini_view->desk_preview()->GetBoundsInScreen().CenterPoint());
     EXPECT_TRUE(
@@ -8382,7 +8382,7 @@ TEST_P(DesksCloseAllTest, HideCombineDesksOptionWhenNoWindowsOnDesk) {
   }
   OpenContextMenuForMiniView(0);
 
-  if (features::IsSavedDeskUiRevampEnabled()) {
+  if (features::IsForestFeatureEnabled()) {
     // The saved desk is part of the context menu with this feature on, although
     // it may be disabled.
     EXPECT_EQ(3u, DesksTestApi::GetContextMenuModelForDesk(
@@ -8581,7 +8581,7 @@ TEST_P(DesksCloseAllTest, DeskPreviewHighlightShowsWhenContextMenuIsOpen) {
 // Checks that the combine desks tooltip's validity is maintained whenever the
 // user adds a desk, closes a desk, moves a desk, or changes the name of a desk.
 TEST_P(DesksCloseAllTest, CombineDesksTooltipIsUpdatedOnUserActions) {
-  if (features::IsSavedDeskUiRevampEnabled()) {
+  if (features::IsForestFeatureEnabled()) {
     GTEST_SKIP()
         << "Save desk buttons have been moved to the desk context menu. The "
            "associated context menu item has text so it doesn't need a tooltip";
@@ -9383,7 +9383,7 @@ class DeskBarTest
   void CombineDeskWithMenu(size_t index,
                            aura::Window* root,
                            DeskBarViewBase::Type bar_type) {
-    CHECK(features::IsSavedDeskUiRevampEnabled());
+    CHECK(features::IsForestFeatureEnabled());
 
     // Get the menu option to save the desk as a template and click it.
     views::MenuItemView* menu_item =
@@ -9690,7 +9690,7 @@ TEST_P(DeskBarTest, HoverBasic) {
     event_generator->MoveMouseTo(
         mini_view->desk_preview()->GetBoundsInScreen().CenterPoint());
 
-    if (features::IsSavedDeskUiRevampEnabled()) {
+    if (features::IsForestFeatureEnabled()) {
       EXPECT_TRUE(mini_view->desk_action_view()->context_menu_button());
       EXPECT_TRUE(
           mini_view->desk_action_view()->context_menu_button()->GetVisible());
@@ -10219,7 +10219,7 @@ TEST_P(DeskBarTest, ForwardTabbing) {
     if (i == 0) {
       PressAndReleaseKey(ui::VKEY_TAB);
 
-      if (features::IsSavedDeskUiRevampEnabled()) {
+      if (features::IsForestFeatureEnabled()) {
         ASSERT_TRUE(mini_view->desk_action_view()->context_menu_button());
         ASSERT_TRUE(
             mini_view->desk_action_view()->context_menu_button()->HasFocus());
@@ -10305,7 +10305,7 @@ TEST_P(DeskBarTest, ReverseTabbing) {
     if (i == 0) {
       PressAndReleaseKey(ui::VKEY_TAB, ui::EF_SHIFT_DOWN);
 
-      if (features::IsSavedDeskUiRevampEnabled()) {
+      if (features::IsForestFeatureEnabled()) {
         ASSERT_TRUE(mini_view->desk_action_view()->context_menu_button());
         ASSERT_TRUE(
             mini_view->desk_action_view()->context_menu_button()->HasFocus());
@@ -10568,7 +10568,7 @@ TEST_P(DeskBarTest, DeskBarActionMetrics) {
 
   // Combine desks.
   auto* root_window = Shell::Get()->GetPrimaryRootWindow();
-  if (features::IsSavedDeskUiRevampEnabled()) {
+  if (features::IsForestFeatureEnabled()) {
     CombineDeskWithMenu(/*index=*/0, root_window, bar_type_);
   } else {
     CloseDeskWithButton(/*index=*/0, /*close_all=*/false, root_window,
@@ -10638,7 +10638,7 @@ TEST_P(DeskBarTest, DeskBarSwitchMetrics) {
   OpenDeskBar();
 
   // Combine desks.
-  if (features::IsSavedDeskUiRevampEnabled()) {
+  if (features::IsForestFeatureEnabled()) {
     CombineDeskWithMenu(/*index=*/0, root_window, bar_type_);
   } else {
     CloseDeskWithButton(/*index=*/0, /*close_all=*/false, root_window,
@@ -10686,13 +10686,13 @@ TEST_P(DeskBarTest, DeskCreationRemovalMetrics) {
 
   // Long press doesn't register if there have been touch events on the desk bar
   // prior to trying to long press. Close and reopen the desk bar.
-  if (features::IsSavedDeskUiRevampEnabled()) {
+  if (features::IsForestFeatureEnabled()) {
     CloseDeskBar();
   }
   OpenDeskBar();
 
   // Combine desks.
-  if (features::IsSavedDeskUiRevampEnabled()) {
+  if (features::IsForestFeatureEnabled()) {
     CombineDeskWithMenu(/*index=*/0, root_window, bar_type_);
   } else {
     CloseDeskWithButton(/*index=*/0, /*close_all=*/false, root_window,
@@ -10844,7 +10844,7 @@ TEST_P(DeskBarTest, DeskActionButtonTooltipForNewDesk) {
   views::test::RunScheduledLayout(desk_bar_view);
   auto* desk_action_view = desk_bar_view->mini_views()[1]->desk_action_view();
 
-  if (features::IsSavedDeskUiRevampEnabled()) {
+  if (features::IsForestFeatureEnabled()) {
     EXPECT_TRUE(desk_action_view->context_menu_button());
     EXPECT_THAT(desk_action_view->context_menu_button()->GetTooltipText(),
                 u"Open context menu");
@@ -10863,7 +10863,7 @@ TEST_P(DeskBarTest, DeskActionButtonTooltipForNewDesk) {
   PressAndReleaseKey(ui::VKEY_RETURN);
   views::test::RunScheduledLayout(desk_bar_view);
 
-  if (features::IsSavedDeskUiRevampEnabled()) {
+  if (features::IsForestFeatureEnabled()) {
     EXPECT_TRUE(desk_action_view->context_menu_button());
     EXPECT_THAT(desk_action_view->context_menu_button()->GetTooltipText(),
                 u"Open context menu");
@@ -11179,30 +11179,25 @@ TEST_P(DeskButtonTest, UpdateShelfAlignmentDuringTest) {
   // Verify desk names and color changes.
   ASSERT_EQ(bottom_at_start ? u"school" : u"s",
             desk_button->desk_name_label()->GetText());
-  auto* color_provider = desk_button->GetColorProvider();
-  ASSERT_EQ(color_provider->GetColor(bottom_at_start
-                                         ? cros_tokens::kCrosSysSystemOnBase1
-                                         : cros_tokens::kCrosSysSystemOnBase),
-            desk_button->GetBackground()->get_color());
+  ASSERT_EQ(bottom_at_start ? cros_tokens::kCrosSysSystemOnBase1
+                            : cros_tokens::kCrosSysSystemOnBase,
+            desk_button->GetBackground()->color());
 
   // Activate/Deactivate the desk button and verify color changes.
   ClickDeskButton();
-  ASSERT_EQ(
-      color_provider->GetColor(cros_tokens::kCrosSysSystemPrimaryContainer),
-      desk_button->GetBackground()->get_color());
+  ASSERT_EQ(cros_tokens::kCrosSysSystemPrimaryContainer,
+            desk_button->GetBackground()->color());
   ClickDeskButton();
-  ASSERT_EQ(color_provider->GetColor(bottom_at_start
-                                         ? cros_tokens::kCrosSysSystemOnBase1
-                                         : cros_tokens::kCrosSysSystemOnBase),
-            desk_button->GetBackground()->get_color());
+  ASSERT_EQ(bottom_at_start ? cros_tokens::kCrosSysSystemOnBase1
+                            : cros_tokens::kCrosSysSystemOnBase,
+            desk_button->GetBackground()->color());
 
   // Update shelf alignment and verify desk names and color changes.
   GetPrimaryShelf()->SetAlignment(bottom_at_start ? ShelfAlignment::kLeft
                                                   : ShelfAlignment::kBottom);
-  ASSERT_EQ(color_provider->GetColor(bottom_at_start
-                                         ? cros_tokens::kCrosSysSystemOnBase
-                                         : cros_tokens::kCrosSysSystemOnBase1),
-            desk_button->GetBackground()->get_color());
+  ASSERT_EQ(bottom_at_start ? cros_tokens::kCrosSysSystemOnBase
+                            : cros_tokens::kCrosSysSystemOnBase1,
+            desk_button->GetBackground()->color());
   EXPECT_EQ(bottom_at_start ? u"s" : u"school",
             desk_button->desk_name_label()->GetText());
 }

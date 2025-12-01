@@ -59,6 +59,7 @@ LINK_RESOURCE_ID(IDR_AUTOFILL_METADATA_CC_UNIONPAY,
                  R.drawable.unionpay_metadata_card)
 LINK_RESOURCE_ID(IDR_AUTOFILL_METADATA_CC_VERVE, R.drawable.verve_metadata_card)
 LINK_RESOURCE_ID(IDR_AUTOFILL_METADATA_CC_VISA, R.drawable.visa_metadata_card)
+LINK_RESOURCE_ID(IDR_AUTOFILL_IBAN_OLD, R.drawable.iban_icon)
 LINK_RESOURCE_ID(IDR_AUTOFILL_IBAN, R.drawable.iban_icon)
 
 // Use DECLARE_RESOURCE_ID here as these resources are used for android only.
@@ -80,3 +81,7 @@ DECLARE_RESOURCE_ID(IDR_AUTOFILL_PLUS_ADDRESS,
 // |VectorDrawableCompat|. We do not display these icons for autofill popup.
 DECLARE_RESOURCE_ID(IDR_ANDROID_AUTOFILL_SETTINGS, R.drawable.ic_settings_black)
 DECLARE_RESOURCE_ID(IDR_ANDROID_AUTOFILL_CREATE, R.drawable.ic_edit_24dp)
+
+// Home and work icons.
+DECLARE_RESOURCE_ID(IDR_ANDROID_AUTOFILL_HOME, R.drawable.home_logo)
+DECLARE_RESOURCE_ID(IDR_ANDROID_AUTOFILL_WORK, R.drawable.work_logo)

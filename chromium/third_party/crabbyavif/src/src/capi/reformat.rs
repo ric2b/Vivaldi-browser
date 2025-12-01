@@ -15,7 +15,6 @@
 use super::image::*;
 use super::types::*;
 
-use crate::decoder::Category;
 use crate::image::*;
 use crate::internal_utils::pixels::*;
 use crate::internal_utils::*;

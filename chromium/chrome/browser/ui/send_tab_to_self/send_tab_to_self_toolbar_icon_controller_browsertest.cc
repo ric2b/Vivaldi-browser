@@ -4,15 +4,13 @@
 
 #include "chrome/browser/ui/send_tab_to_self/send_tab_to_self_toolbar_icon_controller.h"
 
-#include "chrome/browser/send_tab_to_self/receiving_ui_handler_registry.h"
+#include "chrome/browser/send_tab_to_self/send_tab_to_self_client_service.h"
+#include "chrome/browser/send_tab_to_self/send_tab_to_self_client_service_factory.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_features.h"
-#include "chrome/browser/ui/send_tab_to_self/send_tab_to_self_toolbar_icon_controller_delegate.h"
-#include "chrome/browser/ui/ui_features.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/send_tab_to_self/send_tab_to_self_toolbar_bubble_controller.h"
-#include "chrome/browser/ui/views/send_tab_to_self/send_tab_to_self_toolbar_icon_view.h"
 #include "chrome/browser/ui/web_applications/test/web_app_browsertest_util.h"
 #include "chrome/browser/web_applications/test/os_integration_test_override_impl.h"
 #include "chrome/browser/web_applications/test/web_app_install_test_utils.h"
@@ -44,8 +42,9 @@ class SendTabToSelfToolbarIconControllerTest : public InProcessBrowserTest {
   }
 
   SendTabToSelfToolbarIconController* controller() {
-    return send_tab_to_self::ReceivingUiHandlerRegistry::GetInstance()
-        ->GetToolbarButtonControllerForProfile(browser()->profile());
+    return static_cast<SendTabToSelfToolbarIconController*>(
+        SendTabToSelfClientServiceFactory::GetForProfile(browser()->profile())
+            ->GetReceivingUiHandler());
   }
 
   SendTabToSelfToolbarBubbleController* bubble_controller() {
@@ -55,7 +54,6 @@ class SendTabToSelfToolbarIconControllerTest : public InProcessBrowserTest {
   }
 
  private:
-  base::test::ScopedFeatureList scoped_feature_list_{features::kToolbarPinning};
   web_app::OsIntegrationTestOverrideBlockingRegistration faked_os_integration_;
 };
 
@@ -68,6 +66,11 @@ IN_PROC_BROWSER_TEST_F(SendTabToSelfToolbarIconControllerTest,
 
   controller()->DisplayNewEntries({&entry});
   EXPECT_TRUE(bubble_controller()->IsBubbleShowing());
+}
+
+IN_PROC_BROWSER_TEST_F(SendTabToSelfToolbarIconControllerTest,
+                       ControllerExists) {
+  EXPECT_TRUE(controller());
 }
 
 // This test cannot work on Wayland because the platform does not allow clients

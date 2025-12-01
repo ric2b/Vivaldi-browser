@@ -27,4 +27,12 @@
 #import "ios/chrome/grit/ios_strings.h"
 #import "ui/base/l10n/l10n_util_mac_bridge.h"
 
+// Vivaldi
+#import "ios/chrome/browser/tab_switcher/ui_bundled/tab_strip/ui/vivaldi_tab_strip_tab_cell.h"
+#import "ios/chrome/browser/ui/tab_strip/vivaldi_tab_strip_constants.h"
+#import "ios/ui/helpers/vivaldi_global_helpers.h"
+#import "ios/ui/ntp/vivaldi_ntp_constants.h"
+#import "ios/ui/ntp/vivaldi_speed_dial_constants.h"
+// End Vivaldi
+
 #endif  // IOS_CHROME_BROWSER_TAB_SWITCHER_UI_BUNDLED_TAB_STRIP_UI_TAB_STRIP_UI_SWIFT_BRIDGE_H_

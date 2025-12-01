@@ -5,10 +5,12 @@
 #ifndef V8_HEAP_HEAP_ALLOCATOR_INL_H_
 #define V8_HEAP_HEAP_ALLOCATOR_INL_H_
 
+#include "src/heap/heap-allocator.h"
+// Include the non-inl header before the rest of the headers.
+
 #include "src/base/logging.h"
 #include "src/common/assert-scope.h"
 #include "src/common/globals.h"
-#include "src/heap/heap-allocator.h"
 #include "src/heap/large-spaces.h"
 #include "src/heap/local-heap.h"
 #include "src/heap/main-allocator-inl.h"
@@ -76,6 +78,8 @@ V8_WARN_UNUSED_RESULT V8_INLINE AllocationResult HeapAllocator::AllocateRaw(
   DCHECK(AllowHeapAllocation::IsAllowed());
   CHECK(AllowHeapAllocationInRelease::IsAllowed());
   DCHECK(local_heap_->IsRunning());
+  // We need to have entered the isolate before allocating.
+  DCHECK_EQ(heap_->isolate(), Isolate::TryGetCurrent());
 #if V8_ENABLE_WEBASSEMBLY
   if (!v8_flags.wasm_jitless) {
     trap_handler::AssertThreadNotInWasm();
@@ -239,6 +243,47 @@ HeapAllocator::AllocateRawWith(int size, AllocationType allocation,
     return object;
   }
   return HeapObject();
+}
+
+template <typename AllocateFunction, typename RetryFunction>
+V8_WARN_UNUSED_RESULT auto HeapAllocator::AllocateRawWithLightRetrySlowPath(
+    AllocateFunction&& Allocate, RetryFunction&& RetryAllocate,
+    AllocationType allocation) {
+  if (auto result = Allocate(allocation)) [[likely]] {
+    return result;
+  }
+
+  // Two GCs before returning failure.
+  CollectGarbage(allocation);
+  if (auto result = RetryAllocate(allocation)) {
+    return result;
+  }
+  CollectGarbage(allocation);
+  return RetryAllocate(allocation);
+}
+
+template <typename AllocateFunction, typename RetryFunction>
+auto HeapAllocator::AllocateRawWithRetryOrFailSlowPath(
+    AllocateFunction&& Allocate, RetryFunction&& RetryAllocate,
+    AllocationType allocation) {
+  if (auto result = AllocateRawWithLightRetrySlowPath(Allocate, RetryAllocate,
+                                                      allocation)) {
+    return result;
+  }
+
+  CollectAllAvailableGarbage(allocation);
+  if (auto result = RetryAllocate(allocation)) {
+    return result;
+  }
+
+  V8::FatalProcessOutOfMemory(heap_->isolate(), "CALL_AND_RETRY_LAST",
+                              V8::kHeapOOM);
+}
+
+template <typename Function>
+V8_WARN_UNUSED_RESULT auto HeapAllocator::CustomAllocateWithRetryOrFail(
+    Function&& Allocate, AllocationType allocation) {
+  return *AllocateRawWithRetryOrFailSlowPath(Allocate, Allocate, allocation);
 }
 
 }  // namespace internal

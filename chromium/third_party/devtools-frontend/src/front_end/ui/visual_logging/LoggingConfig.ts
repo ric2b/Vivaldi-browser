@@ -2,8 +2,10 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+import * as Host from '../../core/host/host.js';
 import * as Root from '../../core/root/root.js';
 
+import {DebugLoggingFormat} from './Debugging.js';
 import {knownContextValues} from './KnownContextValues.js';
 
 const LOGGING_ATTRIBUTE = 'jslog';
@@ -119,14 +121,15 @@ function resolveVe(ve: string): number {
   return VisualElements[ve as VisualElementName] ?? 0;
 }
 
-const reportedUnknownVeContext: Set<string> = new Set();
+const reportedUnknownVeContext = new Set<string>();
 
 function checkContextValue(context: string|number|undefined): void {
   if (typeof context !== 'string' || !context.length || knownContextValues.has(context) ||
       reportedUnknownVeContext.has(context)) {
     return;
   }
-  if (Root.Runtime.Runtime.queryParam('debugFrontend')) {
+  if (Root.Runtime.Runtime.queryParam('debugFrontend') || Host.InspectorFrontendHost.isUnderTest() ||
+      localStorage.getItem('veDebugLoggingEnabled') === DebugLoggingFormat.TEST) {
     const stack = (new Error().stack || '').split('\n').slice(3).join('\n');
     console.error(`Unknown VE context: ${context}${stack}`);
   }
@@ -143,7 +146,7 @@ export function parseJsLog(jslog: string): LoggingConfig {
   }
   const config: LoggingConfig = {ve};
   const context = getComponent('context:');
-  if (context && context.trim().length) {
+  if (context?.trim().length) {
     checkContextValue(context);
     config.context = context;
   }

@@ -6,6 +6,7 @@ from collections import OrderedDict
 import json
 import logging
 import os
+import plistlib
 import subprocess
 import time
 import typing
@@ -22,8 +23,6 @@ MAX_WAIT_TIME_TO_DELETE_RUNTIME = 45  # 45 seconds
 
 SIMULATOR_DEFAULT_PATH = os.path.expanduser(
     '~/Library/Developer/CoreSimulator/Devices')
-
-IOS18_SIM_RUNTIME_ID = 'com.apple.CoreSimulator.SimRuntime.iOS-18-0'
 
 # TODO(crbug.com/40910268): remove Legacy Download once iOS 15.5 is deprecated
 IOS_SIM_RUNTIME_BUILTIN_STATE = ['Legacy Download', 'Bundled with Xcode']
@@ -466,13 +465,13 @@ def delete_simulator_runtime(runtime_id, should_wait=False):
     # runtime takes a few seconds to delete
     time_waited = 0
     runtime_to_delete = get_simulator_runtime_info_by_id(runtime_id)
-    while (runtime_to_delete is not None):
+    while runtime_to_delete is not None:
       LOGGER.debug('Waiting for runtime to be deleted. Current state is %s' %
                    runtime_to_delete['state'])
       time.sleep(1)
       time_waited += 1
       if (time_waited > MAX_WAIT_TIME_TO_DELETE_RUNTIME):
-        raise test_runner_errors.SimRuntimeDeleteTimeoutError(ios_version)
+        raise test_runner_errors.SimRuntimeDeleteTimeoutError(runtime_id)
       runtime_to_delete = get_simulator_runtime_info_by_id(runtime_id)
     LOGGER.debug('Runtime successfully deleted!')
 
@@ -484,7 +483,7 @@ def delete_simulator_runtime_after_days(days):
 
 
 def delete_least_recently_used_simulator_runtimes(
-    max_to_keep=constants.MAX_RUNTIME_KETP_COUNT):
+    max_to_keep=constants.MAX_RUNTIME_KEPT_COUNT):
   """Delete least recently used simulator runtimes.
 
   Delete simulator runtimes that are least recently used, based
@@ -536,40 +535,19 @@ def disable_hardware_keyboard(udid: str) -> None:
   Args:
     udid: (str) UDID of the simulator to disable hw keyboard for.
   """
-
   path = os.path.expanduser(
       '~/Library/Preferences/com.apple.iphonesimulator.plist')
-
   try:
-    if not os.path.exists(path):
-      subprocess.check_call(['plutil', '-create', 'binary1', path])
-
-    plist, error = mac_util.plist_as_dict(path)
-    if error:
-      raise error
-
-    if 'DevicePreferences' not in plist:
-      subprocess.check_call(
-          ['plutil', '-insert', 'DevicePreferences', '-dictionary', path])
-      plist['DevicePreferences'] = {}
-
-    if 'DevicePreferences' in plist and udid not in plist['DevicePreferences']:
-      subprocess.check_call([
-          'plutil', '-insert', 'DevicePreferences.{}'.format(udid),
-          '-dictionary', path
-      ])
-      plist['DevicePreferences'][udid] = {}
-
-    subprocess.check_call([
-        'plutil', '-replace',
-        'DevicePreferences.{}.ConnectHardwareKeyboard'.format(udid), '-bool',
-        'NO', path
-    ])
-
-  except subprocess.CalledProcessError as e:
-    message = 'Unable to disable hardware keyboard. Error: %s' % e.stderr
-    LOGGER.error(message)
-  except json.JSONDecodeError as e:
+    plist = {}
+    if os.path.exists(path):
+      with open(path, 'rb') as f:
+        plist = plistlib.load(f, fmt=plistlib.FMT_BINARY)
+    prefs_val = plist.setdefault('DevicePreferences', {})
+    udid_val = prefs_val.setdefault(udid, {})
+    udid_val['ConnectHardwareKeyboard'] = False
+    with open(path, 'wb') as f:
+      plistlib.dump(plist, f, fmt=plistlib.FMT_BINARY)
+  except Exception as e:
     message = 'Unable to disable hardware keyboard. Error: %s' % e.msg
     LOGGER.error(message)
 

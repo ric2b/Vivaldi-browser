@@ -34,7 +34,6 @@
 #include "ui/color/color_provider.h"
 #include "ui/gfx/geometry/insets.h"
 #include "ui/gfx/geometry/size.h"
-#include "ui/gfx/paint_vector_icon.h"
 #include "ui/gfx/vector_icon_types.h"
 #include "ui/views/controls/button/image_button.h"
 #include "ui/views/controls/button/image_button_factory.h"
@@ -384,7 +383,7 @@ void ContentSettingBubbleContents::Init() {
     auto message_label = std::make_unique<views::Label>(
         bubble_content.message, views::style::CONTEXT_LABEL,
         views::style::STYLE_BODY_3);
-    message_label->SetEnabledColorId(kColorActivityIndicatorForeground);
+    message_label->SetEnabledColor(kColorActivityIndicatorForeground);
     message_label->SetMultiLine(true);
     message_label->SetHorizontalAlignment(gfx::ALIGN_LEFT);
     rows.push_back({std::move(message_label), LayoutRowType::DEFAULT});
@@ -412,7 +411,7 @@ void ContentSettingBubbleContents::Init() {
     for (const auto& radio_item : radio_group.radio_items) {
       auto radio = std::make_unique<views::RadioButton>(radio_item, 0);
       radio->SetLabelStyle(views::style::STYLE_BODY_4);
-      radio->SetEnabledTextColorIds(kColorActivityIndicatorSubtitleForeground);
+      radio->SetEnabledTextColors(kColorActivityIndicatorSubtitleForeground);
       radio->SetVisible(bubble_content.is_user_modifiable);
       radio->SetMultiLine(true);
       radio_group_.push_back(radio.get());

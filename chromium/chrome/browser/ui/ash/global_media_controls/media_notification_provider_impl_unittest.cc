@@ -134,7 +134,8 @@ class MediaNotificationProviderImplTest : public ChromeAshTestBase {
   void SetUp() override {
     auto shell_delegate = std::make_unique<MediaTestShellDelegate>();
     shell_delegate_ = shell_delegate.get();
-    ChromeAshTestBase::SetUp(std::move(shell_delegate));
+    set_shell_delegate(std::move(shell_delegate));
+    ChromeAshTestBase::SetUp();
 
     crosapi_environment_.SetUp();
     provider_ = static_cast<MediaNotificationProviderImpl*>(
@@ -148,7 +149,7 @@ class MediaNotificationProviderImplTest : public ChromeAshTestBase {
   void TearDown() override {
     observer_.reset();
     crosapi_environment_.TearDown();
-    AshTestBase::TearDown();
+    ChromeAshTestBase::TearDown();
   }
 
   void SimulateShowNotification(base::UnguessableToken id) {
@@ -265,8 +266,8 @@ class CastStartStopMediaNotificationProviderImplTest
     // starts the GPU service thread.
     MediaNotificationProviderImplTest::SetUp();
 
-    profile_ = crosapi_environment_.profile_manager()->CreateTestingProfile(
-        "Profile", /*is_main_profile=*/true);
+    profile_ =
+        crosapi_environment_.profile_manager()->CreateTestingProfile("Profile");
     InitProvider();
   }
 

@@ -10,6 +10,7 @@
 #include "chrome/browser/ui/views/desktop_capture/desktop_media_picker_views_test_api.h"
 
 #include <algorithm>
+#include <string_view>
 
 #include "chrome/browser/ui/views/desktop_capture/desktop_media_list_controller.h"
 #include "chrome/browser/ui/views/desktop_capture/desktop_media_list_view.h"
@@ -24,7 +25,7 @@
 namespace {
 
 bool IsDesktopMediaTabList(views::View* view) {
-  return !strcmp(view->GetClassName(), "DesktopMediaTabList");
+  return view->GetClassName() == "DesktopMediaTabList";
 }
 
 }  // namespace
@@ -146,7 +147,7 @@ bool DesktopMediaPickerViewsTestApi::HasAudioShareControl() const {
   return GetActivePane() && GetActivePane()->AudioOffered();
 }
 
-std::u16string DesktopMediaPickerViewsTestApi::GetAudioLabelText() const {
+std::u16string_view DesktopMediaPickerViewsTestApi::GetAudioLabelText() const {
   return GetActivePane()->GetAudioLabelText();
 }
 

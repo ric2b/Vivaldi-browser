@@ -62,7 +62,6 @@ class VivaldiUIRelay: public send_tab_to_self::ReceivingUiHandler {
   // ReceivingUiHandler
   void DisplayNewEntries(const std::vector<const send_tab_to_self::SendTabToSelfEntry*>& new_entries) override;
   void DismissEntries(const std::vector<std::string>& guids) override;
-  const Profile* profile() const override;
 
  private:
   Profile* profile_;
@@ -79,6 +78,7 @@ class VivaldiToolbarButtonProvider : public ToolbarButtonProvider {
  private:
   // ToolbarButtonProvider:
   ExtensionsToolbarContainer* GetExtensionsToolbarContainer() override;
+  PinnedToolbarActionsContainer* GetPinnedToolbarActionsContainer() override;
   gfx::Size GetToolbarButtonSize() const override;
   views::View* GetDefaultExtensionDialogAnchorView() override;
   PageActionIconView* GetPageActionIconView(PageActionIconType type) override;
@@ -95,7 +95,7 @@ class VivaldiToolbarButtonProvider : public ToolbarButtonProvider {
   ToolbarButton* GetBackButton() override;
   ReloadButton* GetReloadButton() override;
   IntentChipButton* GetIntentChipButton() override;
-  DownloadToolbarButtonView* GetDownloadButton() override;
+  ToolbarButton* GetDownloadButton() override;
   //SidePanelToolbarButton* GetSidePanelButton() override;
 
   raw_ptr<VivaldiBrowserWindow> window_ = nullptr;
@@ -104,8 +104,8 @@ class VivaldiToolbarButtonProvider : public ToolbarButtonProvider {
 struct VivaldiBrowserWindowParams {
   static constexpr int kUnspecifiedPosition = INT_MIN;
 
-  VivaldiBrowserWindowParams();
-  ~VivaldiBrowserWindowParams();
+  VivaldiBrowserWindowParams() = default;
+  ~VivaldiBrowserWindowParams() = default;
 
   VivaldiBrowserWindowParams(const VivaldiBrowserWindowParams&) = delete;
   VivaldiBrowserWindowParams& operator=(const VivaldiBrowserWindowParams&) =
@@ -327,7 +327,7 @@ class VivaldiBrowserWindow final : public BrowserWindow {
   bool IsActive() const override;
   void FlashFrame(bool flash) override {}
   gfx::NativeWindow GetNativeWindow() const override;
-  StatusBubble* GetStatusBubble() override;
+  std::vector<StatusBubble*> GetStatusBubbles() override;
   void UpdateTitleBar() override;
   void BookmarkBarStateChanged(
       BookmarkBar::AnimateChangeType change_type) override {}
@@ -370,6 +370,7 @@ class VivaldiBrowserWindow final : public BrowserWindow {
   void RotatePaneFocus(bool forwards) override {}
   void FocusWebContentsPane() override {}
   void ShowAppMenu() override {}
+  bool PreHandleMouseEvent(const blink::WebMouseEvent& event) override;
   content::KeyboardEventProcessingResult PreHandleKeyboardEvent(
       const input::NativeWebKeyboardEvent& event) override;
   bool HandleKeyboardEvent(const input::NativeWebKeyboardEvent& event) override;
@@ -411,6 +412,7 @@ class VivaldiBrowserWindow final : public BrowserWindow {
   bool IsDownloadShelfVisible() const override;
   DownloadShelf* GetDownloadShelf() override;
   views::View* GetTopContainer() override;
+  views::View* GetLensOverlayView() override;
   DownloadBubbleUIController* GetDownloadBubbleUIController() override;
   void ConfirmBrowserCloseWithPendingDownloads(
       int download_count,
@@ -475,6 +477,7 @@ class VivaldiBrowserWindow final : public BrowserWindow {
       tab_search::mojom::TabOrganizationFeature organization_feature) override {
   }
   void CloseTabSearchBubble() override {}
+  bool IsFeaturePromoQueued(const base::Feature& iph_feature) const override;
   bool IsFeaturePromoActive(
       const base::Feature& iph_feature) const override;
   user_education::FeaturePromoResult CanShowFeaturePromo(
@@ -503,7 +506,7 @@ class VivaldiBrowserWindow final : public BrowserWindow {
 
   // Notifies `BrowserView` about the resizable boolean having been set vith
   // `window.setResizable(bool)` API.
-  void OnCanResizeFromWebAPIChanged() override;
+  void OnWebApiWindowResizableChanged() override;
   bool GetCanResize() override;
   ui::mojom::WindowShowState GetWindowShowState() const override;
   views::WebView* GetContentsWebView() override;
@@ -537,7 +540,10 @@ class VivaldiBrowserWindow final : public BrowserWindow {
     return toolbar_button_provider_.get();
   }
 
-  void ShowToast(const ToastSpecification* spec, std::vector<std::u16string> body_string_replacement_params);
+  void ShowToast(const ToastSpecification* spec,
+                 std::vector<std::u16string> body_string_replacement_params);
+
+  void UninstallExtensionViaDialog(const extensions::Extension* extension);
 
  protected:
   user_education::FeaturePromoController* GetFeaturePromoControllerImpl()

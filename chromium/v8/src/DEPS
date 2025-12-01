@@ -45,6 +45,7 @@ include_rules = [
   "+src/heap/mutable-page-metadata-inl.h",
   "+src/heap/memory-chunk.h",
   "+src/heap/page-metadata-inl.h",
+  "+src/heap/page-pool.h",
   "+src/heap/paged-spaces-inl.h",
   "+src/heap/parked-scope-inl.h",
   "+src/heap/parked-scope.h",
@@ -87,11 +88,6 @@ include_rules = [
   "+builtins-generated",
   "+torque-generated",
   "+starboard",
-  # Using cppgc inside v8 is not (yet) allowed.
-  "-include/cppgc",
-  "+include/cppgc/common.h",
-  "+include/cppgc/platform.h",
-  "+include/cppgc/source-location.h",
 ]
 
 specific_include_rules = {

@@ -6,6 +6,8 @@
 
 #import <WebKit/WebKit.h>
 
+#import <string>
+
 #import "base/apple/foundation_util.h"
 #import "base/barrier_closure.h"
 #import "base/command_line.h"
@@ -13,7 +15,7 @@
 #import "base/files/file.h"
 #import "base/files/file_util.h"
 #import "base/ios/ios_util.h"
-#import "base/json/json_string_value_serializer.h"
+#import "base/json/json_writer.h"
 #import "base/strings/sys_string_conversions.h"
 #import "base/test/ios/wait_util.h"
 #import "base/test/scoped_feature_list.h"
@@ -24,6 +26,7 @@
 #import "components/browsing_data/core/pref_names.h"
 #import "components/content_settings/core/browser/host_content_settings_map.h"
 #import "components/metrics/demographics/demographic_metrics_provider.h"
+#import "components/metrics/dwa/dwa_recorder.h"
 #import "components/password_manager/core/common/password_manager_features.h"
 #import "components/prefs/pref_service.h"
 #import "components/safe_browsing/core/common/features.h"
@@ -46,6 +49,7 @@
 #import "ios/chrome/browser/first_run/ui_bundled/first_run_screen_provider.h"
 #import "ios/chrome/browser/first_run/ui_bundled/first_run_util.h"
 #import "ios/chrome/browser/ntp/ui_bundled/new_tab_page_feature.h"
+#import "ios/chrome/browser/popup_menu/ui_bundled/overflow_menu/feature_flags.h"
 #import "ios/chrome/browser/search_engines/model/search_engines_util.h"
 #import "ios/chrome/browser/search_engines/model/template_url_service_factory.h"
 #import "ios/chrome/browser/sessions/model/session_restoration_service.h"
@@ -65,7 +69,6 @@
 #import "ios/chrome/browser/shared/ui/util/rtl_geometry.h"
 #import "ios/chrome/browser/sync/model/sync_service_factory.h"
 #import "ios/chrome/browser/tips_notifications/model/utils.h"
-#import "ios/chrome/browser/ui/popup_menu/overflow_menu/feature_flags.h"
 #import "ios/chrome/browser/unified_consent/model/unified_consent_service_factory.h"
 #import "ios/chrome/browser/web/model/web_navigation_browser_agent.h"
 #import "ios/chrome/test/app/browsing_data_test_util.h"
@@ -116,10 +119,8 @@ NSString* SerializedPref(const PrefService::Preference* pref) {
   const base::Value* value = pref ? pref->GetValue() : &none_value;
   DCHECK(value);
 
-  std::string serialized_value;
-  JSONStringValueSerializer serializer(&serialized_value);
-  serializer.Serialize(*value);
-  return base::SysUTF8ToNSString(serialized_value);
+  return base::SysUTF8ToNSString(
+      base::WriteJson(*value).value_or(std::string()));
 }
 // Returns a JSON-encoded string representing the given `value`. If `value` is
 // nullptr, returns a string representing a base::Value of type NONE.
@@ -128,10 +129,8 @@ NSString* SerializedValue(const base::Value* value) {
   const base::Value* result = value ? value : &none_value;
   DCHECK(result);
 
-  std::string serialized_value;
-  JSONStringValueSerializer serializer(&serialized_value);
-  serializer.Serialize(*result);
-  return base::SysUTF8ToNSString(serialized_value);
+  return base::SysUTF8ToNSString(
+      base::WriteJson(*result).value_or(std::string()));
 }
 
 }  // namespace
@@ -894,6 +893,11 @@ NSString* SerializedValue(const base::Value* value) {
                                         visitTimestamp);
 }
 
++ (void)setHistoryServiceTitle:(NSString*)title forPage:(NSString*)URL {
+  chrome_test_util::SetPageTitle(GURL(base::SysNSStringToUTF8(URL)),
+                                 base::SysNSStringToUTF16(title));
+}
+
 + (void)deleteHistoryServiceTypedURL:(NSString*)URL {
   chrome_test_util::DeleteTypedUrlFromClient(
       GURL(base::SysNSStringToUTF8(URL)));
@@ -941,24 +945,6 @@ NSString* SerializedValue(const base::Value* value) {
 + (void)deleteAutofillProfileFromFakeSyncServerWithGUID:(NSString*)GUID {
   chrome_test_util::DeleteAutofillProfileFromFakeSyncServer(
       base::SysNSStringToUTF8(GUID));
-}
-
-+ (NSError*)waitForSyncFeatureEnabled:(BOOL)isEnabled
-                          syncTimeout:(base::TimeDelta)timeout {
-  bool success = WaitUntilConditionOrTimeout(timeout, ^{
-    ProfileIOS* profile = chrome_test_util::GetOriginalProfile();
-    DCHECK(profile);
-    syncer::SyncService* syncService =
-        SyncServiceFactory::GetForProfile(profile);
-    return syncService->IsSyncFeatureEnabled() == isEnabled;
-  });
-  if (!success) {
-    NSString* errorDescription =
-        [NSString stringWithFormat:@"Sync feature must be enabled: %@",
-                                   isEnabled ? @"YES" : @"NO"];
-    return testing::NSErrorWithLocalizedDescription(errorDescription);
-  }
-  return nil;
 }
 
 + (NSError*)waitForSyncTransportStateActiveWithTimeout:
@@ -1173,6 +1159,10 @@ NSString* SerializedValue(const base::Value* value) {
 
 + (BOOL)isUKMEnabled {
   return base::FeatureList::IsEnabled(ukm::kUkmFeature);
+}
+
++ (BOOL)isDWAEnabled {
+  return base::FeatureList::IsEnabled(metrics::dwa::kDwaFeature);
 }
 
 + (BOOL)isTestFeatureEnabled {
@@ -1570,7 +1560,7 @@ int watchRunNumber = 0;
 
   UNNotificationRequest* request = [UNNotificationRequest
       requestWithIdentifier:kTipsNotificationId
-                    content:ContentForTipsNotificationType(type)
+                    content:ContentForTipsNotificationType(type, false)
                     trigger:nil];
 
   [center addNotificationRequest:request withCompletionHandler:nil];

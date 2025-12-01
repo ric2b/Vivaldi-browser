@@ -46,7 +46,7 @@ namespace {
 
 class BrowserViewTest : public InProcessBrowserTest {
  public:
-  BrowserViewTest() : ax_observer_(views::AXEventManager::Get()) {}
+  BrowserViewTest() : ax_observer_(views::AXUpdateNotifier::Get()) {}
   ~BrowserViewTest() override = default;
   BrowserViewTest(const BrowserViewTest&) = delete;
   BrowserViewTest& operator=(const BrowserViewTest&) = delete;
@@ -134,8 +134,7 @@ IN_PROC_BROWSER_TEST_F(BrowserViewTest, BrowserFullscreenShowTopView) {
     // Move mouse to the upper border of the browser window and the toolbar
     // should become visible.
     ASSERT_TRUE(ui_test_utils::SendMouseMoveSync(
-        browser_view->GetBoundsInScreen().top_center(),
-        browser_view->GetWidget()->GetNativeWindow()));
+        browser_view->GetBoundsInScreen().top_center()));
     views::test::PropertyWaiter(
         base::BindRepeating(&BrowserView::GetTabStripVisible,
                             base::Unretained(browser_view)),
@@ -251,8 +250,7 @@ IN_PROC_BROWSER_TEST_F(BrowserViewTest, FullscreenShowBookmarkBar) {
   // Move to the center of the window so that the toolbar becomes hidden in
   // immersive mode.
   ASSERT_TRUE(ui_test_utils::SendMouseMoveSync(
-      browser_view->GetBoundsInScreen().CenterPoint(),
-      browser_view->GetWidget()->GetNativeWindow()));
+      browser_view->GetBoundsInScreen().CenterPoint()));
   views::test::PropertyWaiter(
       base::BindRepeating(&BrowserView::IsBookmarkBarVisible,
                           base::Unretained(browser_view)),
@@ -463,10 +461,10 @@ IN_PROC_BROWSER_TEST_F(BrowserViewLockedFullscreenTestChromeOS,
   PinWindow(browser()->window()->GetNativeWindow(), /*trusted=*/false);
   browser()->exclusive_access_manager()->context()->UpdateExclusiveAccessBubble(
       {
-          .url = GURL(
-              "http://www.example.com"),  // Should be non-empty to show bubble
+          .origin = url::Origin::Create(GURL(
+              "http://www.example.com")),  // Should be non-empty to show bubble
           .type = ExclusiveAccessBubbleType::
-              EXCLUSIVE_ACCESS_BUBBLE_TYPE_BROWSER_FULLSCREEN_EXIT_INSTRUCTION,
+              EXCLUSIVE_ACCESS_BUBBLE_TYPE_FULLSCREEN_EXIT_INSTRUCTION,
           .force_update = true,
       },
       base::NullCallback());
@@ -477,10 +475,10 @@ IN_PROC_BROWSER_TEST_F(BrowserViewLockedFullscreenTestChromeOS,
                        HideExclusiveAccessBubbleWhenLocked) {
   PinWindow(browser()->window()->GetNativeWindow(), /*trusted=*/true);
   browser()->exclusive_access_manager()->context()->UpdateExclusiveAccessBubble(
-      {.url = GURL(
-           "http://www.example.com"),  // Should be non-empty to show bubble
+      {.origin = url::Origin::Create(GURL(
+           "http://www.example.com")),  // Should be non-empty to show bubble
        .type = ExclusiveAccessBubbleType::
-           EXCLUSIVE_ACCESS_BUBBLE_TYPE_BROWSER_FULLSCREEN_EXIT_INSTRUCTION,
+           EXCLUSIVE_ACCESS_BUBBLE_TYPE_FULLSCREEN_EXIT_INSTRUCTION,
        .force_update = true},
       base::NullCallback());
   EXPECT_FALSE(browser_view()->IsExclusiveAccessBubbleDisplayed());

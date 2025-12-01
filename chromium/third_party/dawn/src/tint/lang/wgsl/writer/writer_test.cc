@@ -39,7 +39,6 @@
 #include "src/tint/lang/wgsl/writer/ir_to_program/ir_to_program.h"
 #include "src/tint/lang/wgsl/writer/ir_to_program/program_options.h"
 #include "src/tint/lang/wgsl/writer/raise/raise.h"
-#include "src/tint/utils/result/result.h"
 #include "src/tint/utils/text/string.h"
 
 using namespace tint::core::fluent_types;  // NOLINT
@@ -72,7 +71,7 @@ class WgslIRWriterTest : public core::ir::IRTestHelper {
         result.ir_pre_raise = core::ir::Disassembler(mod).Plain();
 
         if (auto res = tint::wgsl::writer::Raise(mod); res != Success) {
-            result.err = res.Failure().reason.Str();
+            result.err = res.Failure().reason;
             return result;
         }
 

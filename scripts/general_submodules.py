@@ -62,6 +62,12 @@ excluded_modules = [
   "third_party/speedometer/v2.1",
   "third_party/speedometer/v3.0",
   "third_party/webpagereplay",
+  "third_party/compiler-rt/src",
+  "chrome/test/data/perf/frame_rate/content",
+  "chromiumos/platform/minigbm",
+  "third_party/pyelftools",
+  "third_party/crossbench",
+
   ]
 
 def main():

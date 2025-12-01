@@ -179,7 +179,6 @@ class ChromeExtensionsBrowserClient : public ExtensionsBrowserClient {
   network::mojom::NetworkContext* GetSystemNetworkContext() override;
   UserScriptListener* GetUserScriptListener() override;
   void SignalContentScriptsLoaded(content::BrowserContext* context) override;
-  std::string GetUserAgent() const override;
   bool ShouldSchemeBypassNavigationChecks(
       const std::string& scheme) const override;
   base::FilePath GetSaveFilePath(content::BrowserContext* context) override;
@@ -257,6 +256,8 @@ class ChromeExtensionsBrowserClient : public ExtensionsBrowserClient {
       content::WebContents* web_contents) const override;
   media_device_salt::MediaDeviceSaltService* GetMediaDeviceSaltService(
       content::BrowserContext* context) override;
+  bool HasControlledFrameCapability(content::BrowserContext* context,
+                                    const GURL& url) override;
 
  private:
   friend struct base::LazyInstanceTraitsBase<ChromeExtensionsBrowserClient>;

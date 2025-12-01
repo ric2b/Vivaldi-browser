@@ -6,11 +6,11 @@
 
 #include <memory>
 
-#include "base/test/scoped_feature_list.h"
 #include "chrome/browser/extensions/extension_browsertest.h"
 #include "chrome/browser/extensions/extension_install_prompt.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/extensions/external_install_manager.h"
+#include "chrome/browser/extensions/external_provider_manager.h"
 #include "chrome/browser/extensions/webstore_data_fetcher.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/global_error/global_error_waiter.h"
@@ -20,7 +20,6 @@
 #include "extensions/browser/extension_registry.h"
 #include "extensions/browser/mock_external_provider.h"
 #include "extensions/browser/test_extension_registry_observer.h"
-#include "extensions/common/extension_features.h"
 #include "testing/gmock/include/gmock/gmock.h"
 
 namespace extensions {
@@ -48,10 +47,7 @@ std::unique_ptr<FetchItemSnippetResponse> CreateMockResponse(
 
 class ExternalInstallErrorTest : public ExtensionBrowserTest {
  public:
-  ExternalInstallErrorTest() {
-    scoped_feature_list_.InitAndDisableFeature(
-        extensions_features::kUseItemSnippetsAPI);
-  }
+  ExternalInstallErrorTest() = default;
 
  protected:
   void InstallExternalExtension(const char* provided_extension_id,
@@ -65,12 +61,14 @@ class ExternalInstallErrorTest : public ExtensionBrowserTest {
       test::GlobalErrorWaiter waiter(profile());
       TestExtensionRegistryObserver observer(registry);
 
+      ExternalProviderManager* external_provider_manager =
+          ExternalProviderManager::Get(profile());
       auto provider = std::make_unique<MockExternalProvider>(
-          extension_service(), mojom::ManifestLocation::kExternalPref);
+          external_provider_manager, mojom::ManifestLocation::kExternalPref);
       provider->UpdateOrAddExtension(provided_extension_id, version,
                                      test_data_dir_.AppendASCII(crx_path));
-      extension_service()->AddProviderForTesting(std::move(provider));
-      extension_service()->CheckForExternalUpdates();
+      external_provider_manager->AddProviderForTesting(std::move(provider));
+      external_provider_manager->CheckForExternalUpdates();
 
       auto extension = observer.WaitForExtensionInstalled();
       EXPECT_EQ(extension->id(), provided_extension_id);
@@ -88,48 +86,10 @@ class ExternalInstallErrorTest : public ExtensionBrowserTest {
                 testing::UnorderedElementsAre(
                     disable_reason::DISABLE_EXTERNAL_EXTENSION));
   }
-
- private:
-  base::test::ScopedFeatureList scoped_feature_list_;
 };
 
 // Test that global errors don't crash on shutdown. See crbug.com/720081.
-// TODO(crbug.com/325314721): Remove this test once we stop using the old item
-// JSON API to fetch webstore data.
-IN_PROC_BROWSER_TEST_F(ExternalInstallErrorTest, TestShutdown) {
-  // This relies on prompting for external extensions.
-  FeatureSwitch::ScopedOverride feature_override(
-      FeatureSwitch::prompt_for_external_extensions(), true);
-
-  const char kId[] = "akjooamlhcgeopfifcmlggaebeocgokj";
-  InstallExternalExtension(kId, "1", "update_from_webstore.crx");
-
-  // Verify the external error.
-  ExternalInstallManager* manager =
-      extension_service()->external_install_manager();
-  std::vector<ExternalInstallError*> errors = manager->GetErrorsForTesting();
-  ASSERT_EQ(1u, errors.size());
-  EXPECT_EQ(kId, errors[0]->extension_id());
-
-  // End the test and shutdown without removing the global error. This should
-  // not crash.
-}
-
-class ExternalInstallErrorItemSnippetsTest : public ExternalInstallErrorTest {
- public:
-  ExternalInstallErrorItemSnippetsTest() {
-    scoped_feature_list_.InitAndEnableFeature(
-        extensions_features::kUseItemSnippetsAPI);
-  }
-
- private:
-  base::test::ScopedFeatureList scoped_feature_list_;
-};
-
-// Similar to the ExternalInstallErrorTest version of this test except
-// webstore data is fetched from the item snippets API (API response is mocked)
-// for this test.
-IN_PROC_BROWSER_TEST_F(ExternalInstallErrorItemSnippetsTest,
+IN_PROC_BROWSER_TEST_F(ExternalInstallErrorTest,
                        TestShutdownWithWebstoreExtension) {
   // This relies on prompting for external extensions.
   FeatureSwitch::ScopedOverride feature_override(
@@ -142,9 +102,8 @@ IN_PROC_BROWSER_TEST_F(ExternalInstallErrorItemSnippetsTest,
   InstallExternalExtension(kId, "1", "update_from_webstore.crx");
 
   // Verify the external error.
-  ExternalInstallManager* manager =
-      extension_service()->external_install_manager();
-  std::vector<ExternalInstallError*> errors = manager->GetErrorsForTesting();
+  std::vector<ExternalInstallError*> errors =
+      ExternalInstallManager::Get(profile())->GetErrorsForTesting();
   ASSERT_EQ(1u, errors.size());
   EXPECT_EQ(kId, errors[0]->extension_id());
 
@@ -162,7 +121,7 @@ IN_PROC_BROWSER_TEST_F(ExternalInstallErrorItemSnippetsTest,
 
 // Same as the above test except the extension does not update from the
 // webstore, so the prompt should not display any webstore data.
-IN_PROC_BROWSER_TEST_F(ExternalInstallErrorItemSnippetsTest,
+IN_PROC_BROWSER_TEST_F(ExternalInstallErrorTest,
                        TestShutdownWithNonWebstoreExtension) {
   // This relies on prompting for external extensions.
   FeatureSwitch::ScopedOverride feature_override(
@@ -175,9 +134,8 @@ IN_PROC_BROWSER_TEST_F(ExternalInstallErrorItemSnippetsTest,
   InstallExternalExtension(kId, "1.0.0.0", "good.crx");
 
   // Verify the external error.
-  ExternalInstallManager* manager =
-      extension_service()->external_install_manager();
-  std::vector<ExternalInstallError*> errors = manager->GetErrorsForTesting();
+  std::vector<ExternalInstallError*> errors =
+      ExternalInstallManager::Get(profile())->GetErrorsForTesting();
   ASSERT_EQ(1u, errors.size());
   EXPECT_EQ(kId, errors[0]->extension_id());
 

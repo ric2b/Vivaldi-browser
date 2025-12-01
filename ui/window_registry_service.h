@@ -28,7 +28,7 @@ class WindowRegistryService : public KeyedService {
 
   void AddWindow(VivaldiBrowserWindow* window, std::string window_key);
   VivaldiBrowserWindow* RemoveWindow(std::string window_key);
-  VivaldiBrowserWindow* GetNamedWindow(std::string window_key);
+  virtual VivaldiBrowserWindow* GetNamedWindow(std::string window_key);
 
   static WindowRegistryService* Get(content::BrowserContext* context);
 

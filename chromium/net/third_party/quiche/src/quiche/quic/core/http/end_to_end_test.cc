@@ -95,7 +95,6 @@
 #include "quiche/common/test_tools/quiche_test_utils.h"
 
 using quiche::HttpHeaderBlock;
-using spdy::kV3LowestPriority;
 using spdy::SpdyFramer;
 using spdy::SpdySerializedFrame;
 using spdy::SpdySettingsIR;
@@ -5260,16 +5259,8 @@ TEST_P(EndToEndTest,
 
   client_.reset(CreateQuicClient(client_writer_));
   EXPECT_EQ("", client_->SendSynchronousRequest("/foo"));
-
-  if (GetQuicReloadableFlag(
-          quic_dispatcher_only_serialize_close_if_closed_by_self)) {
-    EXPECT_THAT(client_->connection_error(),
-                IsError(QUIC_HANDSHAKE_FAILED_SYNTHETIC_CONNECTION_CLOSE));
-  } else {
-    EXPECT_THAT(client_->connection_error(),
-                testing::AnyOf(IsError(QUIC_NETWORK_IDLE_TIMEOUT),
-                               IsError(QUIC_HANDSHAKE_TIMEOUT)));
-  }
+  EXPECT_THAT(client_->connection_error(),
+              IsError(QUIC_HANDSHAKE_FAILED_SYNTHETIC_CONNECTION_CLOSE));
 }
 
 // Regression test for b/116200989.
@@ -6710,7 +6701,6 @@ void EndToEndTest::TestMultiPacketChaosProtection(int num_packets,
     ASSERT_TRUE(Initialize());
     return;
   }
-  SetQuicReloadableFlag(quic_enable_chaos_protection_v2, true);
   // Setup test harness with a custom client writer.
   connect_to_server_on_initialize_ = false;
   int discard_length;
@@ -7909,7 +7899,6 @@ TEST_P(EndToEndTest, OriginalConnectionIdClearedFromMap) {
 }
 
 TEST_P(EndToEndTest, FlowLabelSend) {
-  SetQuicRestartFlag(quic_support_flow_label2, true);
   ASSERT_TRUE(Initialize());
 
   const uint32_t server_flow_label = 2;

@@ -179,6 +179,8 @@ message IntelligentScanInfo {
     // Client cannot infer the brand and intent because there is no text on the
     // page.
     EMPTY_TEXT = 1;
+    // Allowlisted by high confidence allowlist.
+    ALLOWLISTED = 2;
   }
   optional NoInfoReason no_info_reason = 3;
 }
@@ -323,6 +325,9 @@ enum IntelligentScanVerdict {
   INTELLIGENT_SCAN_VERDICT_UNSPECIFIED = 0;
   INTELLIGENT_SCAN_VERDICT_SAFE = 1;
   SCAM_EXPERIMENT_VERDICT_1 = 2;
+  SCAM_EXPERIMENT_VERDICT_2 = 3;
+  SCAM_EXPERIMENT_CATCH_ALL_ENFORCEMENT = 999;
+  SCAM_EXPERIMENT_CATCH_ALL_TELEMETRY = 1000;
 }
 
 message ClientPhishingResponse {
@@ -416,6 +421,13 @@ message ReferringAppInfo {
   optional ReferringAppSource referring_app_source = 1;
 
   optional string referring_app_name = 2;
+
+  // If Chrome was launched by a WebAPK, this field identifies that WebAPK.
+  // Note: This is not mutually exclusive with referring_app_{source,name}. If
+  // an external app launches a WebAPK which then launches Chrome,
+  // referring_app_{source,name} will refer to the original referring app while
+  // this referring_webapk field will refer to the WebAPK.
+  optional SafeBrowsingWebAppKey referring_webapk = 3;
 }
 
 // The message is used for client request to determine whether the provided URL
@@ -953,6 +965,10 @@ message ClientDownloadRequest {
 
   repeated ArchivedBinary archived_binary = 22;
 
+  // The Safety Net shared ID. Populated only for Android download protection.
+  // TODO(crbug.com/397407934): Add this field for real.
+  // optional string safety_net_id = 23;
+
   // Population that the reporting user is part of.
   optional ChromeUserPopulation population = 24;
 
@@ -1070,9 +1086,14 @@ message ClientDownloadRequest {
   // The token from previous requests related to this download, if any exists.
   optional bytes previous_token = 91;
 
-  // Fields 92-94 are reserved for server-side use and are never sent by the
+  // Fields 92-96 are reserved for server-side use and are never sent by the
   // client.
-  reserved 92 to 94;
+  reserved 92 to 96;
+
+  // Records the app that launched Chrome. Populated on Android only.
+  // This information may be spoofed so do not rely solely on its correctness
+  // for anti-abuse purposes.
+  optional ReferringAppInfo referring_app_info = 97;
 }
 
 message ReferrerChainOptions {
@@ -2244,6 +2265,9 @@ message ExtensionTelemetryReportRequest {
     // Bitmask of reason(s) the Chrome extension is disabled.
     // Bit positions are defined in extensions::disable_reason::DisableReason
     // (located in //extensions/browser/disable_reason.h)
+    //
+    // TODO(crbug.com/372186532): This field will be deprecated in favor of
+    // disable_reasons_list field below.
     optional uint32 disable_reasons = 13;
 
     // Manifest.json file associated with the extension. Only populated for
@@ -2267,7 +2291,12 @@ message ExtensionTelemetryReportRequest {
     // Installation policy for the extension determined by enterprise policy.
     optional InstallationPolicy installation_policy = 17;
 
-    // Next available tag number: 18.
+    // List of reasons for which the Chrome extension is disabled. The reason
+    // values are defined in extensions::disable_reason::DisableReason (located
+    // in //extensions/browser/disable_reason.h).
+    repeated uint32 disable_reasons_list = 18;
+
+    // Next available tag number: 19.
   }
 
   // Information about the various telemetry signals.

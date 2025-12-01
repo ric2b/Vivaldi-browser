@@ -24,7 +24,7 @@ import org.chromium.components.sync.SyncService;
 import org.chromium.ui.modelutil.PropertyModelChangeProcessor;
 
 /** Coordinator for the signin promo card. */
-public final class SigninPromoCoordinator {
+public class SigninPromoCoordinator {
     private static boolean sPromoDisabledForTesting;
     private final Context mContext;
     private final SigninPromoDelegate mDelegate;
@@ -49,8 +49,6 @@ public final class SigninPromoCoordinator {
     public SigninPromoCoordinator(Context context, Profile profile, SigninPromoDelegate delegate) {
         mContext = context;
         mDelegate = delegate;
-        // TODO(crbug.com/327387704): Observe the AccountManagerFacade so that the promo gets
-        // properly updated when the list of accounts changes.
         ProfileDataCache profileDataCache =
                 ProfileDataCache.createWithDefaultImageSizeAndNoBadge(mContext);
         IdentityManager identityManager =
@@ -101,17 +99,14 @@ public final class SigninPromoCoordinator {
         mPropertyModelChangeProcessor =
                 PropertyModelChangeProcessor.create(
                         mMediator.getModel(), promoView, SigninPromoViewBinder::bind);
-        mImpressionTracker = new ImpressionTracker(view);
+        mImpressionTracker = new ImpressionTracker(promoView);
         mImpressionTracker.setListener(mMediator::recordImpression);
-    }
-
-    public void increasePromoShowCount() {
-        // TODO(crbug.com/327387704): Implement this method
     }
 
     static int getLayoutResId(@SigninAccessPoint int accessPoint) {
         return switch (accessPoint) {
             case SigninAccessPoint.BOOKMARK_MANAGER -> R.layout.sync_promo_view_bookmarks;
+            case SigninAccessPoint.HISTORY_PAGE -> R.layout.sync_promo_view_history_page;
             case SigninAccessPoint.NTP_FEED_TOP_PROMO -> R.layout
                     .sync_promo_view_content_suggestions;
             case SigninAccessPoint.RECENT_TABS -> R.layout.sync_promo_view_recent_tabs;

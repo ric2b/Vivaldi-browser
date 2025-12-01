@@ -16,7 +16,6 @@
 #include "chrome/browser/apps/intent_helper/intent_chip_display_prefs.h"
 #include "chrome/browser/apps/link_capturing/apps_intent_picker_delegate.h"
 #include "chrome/browser/apps/link_capturing/intent_picker_info.h"
-#include "chrome/browser/apps/link_capturing/link_capturing_features.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/preloading/prefetch/no_state_prefetch/chrome_no_state_prefetch_contents_delegate.h"
 #include "chrome/browser/profiles/profile.h"
@@ -25,7 +24,11 @@
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/layout_constants.h"
 #include "chrome/browser/ui/page_action/page_action_icon_type.h"
+#include "chrome/browser/ui/tabs/public/tab_features.h"
+#include "chrome/browser/ui/ui_features.h"
+#include "chrome/browser/ui/views/intent_picker/intent_picker_view_page_action_controller.h"
 #include "chrome/browser/ui/web_applications/web_app_launch_utils.h"
+#include "chrome/browser/web_applications/link_capturing_features.h"
 #include "chrome/browser/web_applications/proto/web_app_install_state.pb.h"
 #include "chrome/browser/web_applications/web_app_provider.h"
 #include "chrome/browser/web_applications/web_app_utils.h"
@@ -143,7 +146,7 @@ void IntentPickerTabHelper::MaybeShowIntentPickerIcon() {
   }
 
   intent_picker_delegate_->FindAllAppsForUrl(
-      web_contents()->GetLastCommittedURL(), GetIntentPickerBubbleIconSize(),
+      web_contents()->GetLastCommittedURL(),
       base::BindOnce(&IntentPickerTabHelper::MaybeShowIconForApps,
                      per_navigation_weak_factory_.GetWeakPtr()));
 }
@@ -156,7 +159,7 @@ void IntentPickerTabHelper::ShowIntentPickerBubbleOrLaunchApp(const GURL& url) {
   }
 
   intent_picker_delegate_->FindAllAppsForUrl(
-      url, GetIntentPickerBubbleIconSize(),
+      url,
       base::BindOnce(&IntentPickerTabHelper::ShowIntentPickerOrLaunchAppImpl,
                      per_navigation_weak_factory_.GetWeakPtr(), url));
 }
@@ -247,8 +250,9 @@ IntentPickerTabHelper::IntentPickerTabHelper(content::WebContents* web_contents)
   intent_picker_delegate_ =
       std::make_unique<apps::ChromeOsAppsIntentPickerDelegate>(profile);
 #else
-  intent_picker_delegate_ =
-      std::make_unique<apps::WebAppsIntentPickerDelegate>(profile);
+  intent_picker_delegate_ = std::make_unique<apps::WebAppsIntentPickerDelegate>(
+      profile, std::vector<int>{GetLayoutConstant(LOCATION_BAR_ICON_SIZE),
+                                GetIntentPickerBubbleIconSize()});
 #endif  // BUILDFLAG(IS_CHROMEOS)
 }
 
@@ -341,7 +345,14 @@ void IntentPickerTabHelper::ShowOrHideIconInternal(bool should_show_icon) {
   if (!browser) {
     return;
   }
-  browser->window()->UpdatePageActionIcon(PageActionIconType::kIntentPicker);
+
+  if (IsPageActionMigrated(PageActionIconType::kIntentPicker)) {
+    tabs::TabInterface* tab_interface =
+        tabs::TabInterface::GetFromContents(&GetWebContents());
+    UpdatePageAction(tab_interface, should_show_icon);
+  } else {
+    browser->window()->UpdatePageActionIcon(PageActionIconType::kIntentPicker);
+  }
 
   icon_resolved_ = true;
   if (icon_update_closure_for_testing_) {
@@ -483,6 +494,16 @@ void IntentPickerTabHelper::OnWebAppWillBeUninstalled(
 
 void IntentPickerTabHelper::OnWebAppInstallManagerDestroyed() {
   install_manager_observation_.Reset();
+}
+
+void IntentPickerTabHelper::UpdatePageAction(tabs::TabInterface* tab_interface,
+                                             bool show_icon) {
+  if (auto* const tab_features = tab_interface->GetTabFeatures()) {
+    if (auto* controller =
+            tab_features->intent_picker_view_page_action_controller()) {
+      controller->UpdatePageActionVisibility(show_icon, app_icon());
+    }
+  }
 }
 
 WEB_CONTENTS_USER_DATA_KEY_IMPL(IntentPickerTabHelper);

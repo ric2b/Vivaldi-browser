@@ -32,6 +32,7 @@ class RecentTypedHistoryProvider : public AutocompleteProvider {
   explicit RecentTypedHistoryProvider(AutocompleteProviderClient* client);
 
   void Start(const AutocompleteInput& input, bool minimal_changes) override;
+  void DeleteMatch(const AutocompleteMatch& match) override;
 
  private:
   ~RecentTypedHistoryProvider() override;
@@ -40,9 +41,6 @@ class RecentTypedHistoryProvider : public AutocompleteProvider {
   void OnGetRecentTypedHistoryOrSearchDone(sql::Statement&& statement);
 
   const raw_ptr<AutocompleteProviderClient> client_;
-
-  // The maximum number of matches to return.
-  const size_t max_matches_;
 };
 
 #endif //RECENT_TYPED_HISTORY_PROVIDER_H_

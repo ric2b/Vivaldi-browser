@@ -30,9 +30,7 @@
 #include "components/history_embeddings/core/search_strings_update_listener.h"
 #include "components/history_embeddings/history_embeddings_features.h"
 #include "components/history_embeddings/mock_answerer.h"
-#include "components/history_embeddings/mock_embedder.h"
 #include "components/history_embeddings/mock_intent_classifier.h"
-#include "components/history_embeddings/scheduling_embedder.h"
 #include "components/history_embeddings/vector_database.h"
 #include "components/optimization_guide/core/test_model_info_builder.h"
 #include "components/optimization_guide/core/test_optimization_guide_decider.h"
@@ -40,11 +38,14 @@
 #include "components/os_crypt/async/browser/test_utils.h"
 #include "components/page_content_annotations/core/test_page_content_annotations_service.h"
 #include "components/page_content_annotations/core/test_page_content_annotator.h"
+#include "components/passage_embeddings/passage_embeddings_test_util.h"
+#include "components/passage_embeddings/passage_embeddings_types.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace history_embeddings {
 
 using passage_embeddings::ComputeEmbeddingsStatus;
+using passage_embeddings::Embedding;
 
 namespace {
 
@@ -65,14 +66,16 @@ class HistoryEmbeddingsServicePublic : public HistoryEmbeddingsService {
       page_content_annotations::PageContentAnnotationsService*
           page_content_annotations_service,
       optimization_guide::OptimizationGuideDecider* optimization_guide_decider,
-      std::unique_ptr<Embedder> embedder,
+      passage_embeddings::EmbedderMetadataProvider* embedder_metadata_provider,
+      passage_embeddings::Embedder* embedder,
       std::unique_ptr<Answerer> answerer,
       std::unique_ptr<IntentClassifier> intent_classfier)
       : HistoryEmbeddingsService(os_crypt_async,
                                  history_service,
                                  page_content_annotations_service,
                                  optimization_guide_decider,
-                                 std::move(embedder),
+                                 embedder_metadata_provider,
+                                 embedder,
                                  std::move(answerer),
                                  std::move(intent_classfier)) {}
 
@@ -84,7 +87,6 @@ class HistoryEmbeddingsServicePublic : public HistoryEmbeddingsService {
   using HistoryEmbeddingsService::RebuildAbsentEmbeddings;
 
   using HistoryEmbeddingsService::answerer_;
-  using HistoryEmbeddingsService::embedder_;
   using HistoryEmbeddingsService::embedder_metadata_;
   using HistoryEmbeddingsService::intent_classifier_;
   using HistoryEmbeddingsService::storage_;
@@ -101,10 +103,10 @@ class HistoryEmbeddingsServiceTest : public testing::Test {
     SetFeatureParametersForTesting(feature_parameters);
 
     CHECK(history_dir_.CreateUniqueTempDir());
-
     history_service_ =
         history::CreateHistoryService(history_dir_.GetPath(), true);
     CHECK(history_service_);
+
     os_crypt_ = os_crypt_async::GetTestOSCryptAsyncForTesting(
         /*is_sync_for_unittests=*/true);
 
@@ -120,8 +122,11 @@ class HistoryEmbeddingsServiceTest : public testing::Test {
         os_crypt_.get(), history_service_.get(),
         page_content_annotations_service_.get(),
         /*optimization_guide_decider=*/nullptr,
-        std::make_unique<MockEmbedder>(), std::make_unique<MockAnswerer>(),
+        passage_embeddings_test_env_.embedder_metadata_provider(),
+        passage_embeddings_test_env_.embedder(),
+        std::make_unique<MockAnswerer>(),
         std::make_unique<MockIntentClassifier>());
+    ASSERT_TRUE(service_->embedder_metadata_.IsValid());
 
     ASSERT_TRUE(listener()->filter_words_hashes().empty());
     listener()->OnSearchStringsUpdate(
@@ -185,15 +190,14 @@ class HistoryEmbeddingsServiceTest : public testing::Test {
     }
     service_->OnPassagesEmbeddingsComputed(
         std::move(url_passages), std::move(passages),
-        std::move(passages_embeddings), SchedulingEmbedder::kInvalidTaskId,
-        status);
+        std::move(passages_embeddings),
+        passage_embeddings::Embedder::kInvalidTaskId, status);
   }
 
   void SetMetadataScoreThreshold(double threshold) {
-    service_->embedder_metadata_->search_score_threshold = threshold;
+    service_->embedder_metadata_.search_score_threshold = threshold;
   }
 
-  SchedulingEmbedder* GetEmbedder() { return service_->embedder_.get(); }
   Answerer* GetAnswerer() { return service_->answerer_.get(); }
   IntentClassifier* GetIntentClassifier() {
     return service_->intent_classifier_.get();
@@ -223,6 +227,7 @@ class HistoryEmbeddingsServiceTest : public testing::Test {
       optimization_guide_decider_;
   std::unique_ptr<page_content_annotations::TestPageContentAnnotationsService>
       page_content_annotations_service_;
+  passage_embeddings::TestEnvironment passage_embeddings_test_env_;
   page_content_annotations::TestPageContentAnnotator page_content_annotator_;
   std::unique_ptr<HistoryEmbeddingsServicePublic> service_;
 };

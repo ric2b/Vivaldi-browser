@@ -143,7 +143,7 @@ void MaybeSetupBackgroundView(DeskBarViewBase* bar_view) {
       chromeos::features::IsSystemBlurEnabled()
           ? static_cast<ui::ColorId>(kColorAshShieldAndBase80)
           : cros_tokens::kCrosSysSystemBaseElevatedOpaque;
-  view->SetBackground(views::CreateThemedSolidBackground(background_color_id));
+  view->SetBackground(views::CreateSolidBackground(background_color_id));
 }
 
 }  // namespace
@@ -770,11 +770,7 @@ DeskBarViewBase::DeskBarViewBase(
 
   MaybeSetupBackgroundView(this);
 
-  if (chromeos::features::AreOverviewSessionInitOptimizationsEnabled()) {
-    contents_view_ = AddChildView(std::make_unique<views::View>());
-  } else {
-    InitScrolling();
-  }
+  contents_view_ = AddChildView(std::make_unique<views::View>());
 
   default_desk_button_ =
       contents_view_->AddChildView(std::make_unique<DefaultDeskButton>(this));
@@ -957,11 +953,6 @@ void DeskBarViewBase::Layout(PassKey) {
   // needed here.
   scroll_bounds.Inset(gfx::Insets::VH(0, horizontal_padding));
   GetTopLevelViewWithContents().SetBoundsRect(scroll_bounds);
-  if (!chromeos::features::AreOverviewSessionInitOptimizationsEnabled()) {
-    // When the bar reaches its max possible size, it's size does not change,
-    // but we still need to layout child UIs to their right positions.
-    GetTopLevelViewWithContents().DeprecatedLayoutImmediately();
-  }
 
   if (IsScrollingInitialized()) {
     UpdateScrollButtonsVisibility();
@@ -1153,10 +1144,7 @@ void DeskBarViewBase::UpdateLibraryButtonVisibility() {
     new_library_button_state = DeskIconButton::State::kExpanded;
   }
 
-  // Lazy initialization will be the default when
-  // `kOverviewSessionInitOptimizations` is launched.
-  if (!chromeos::features::AreOverviewSessionInitOptimizationsEnabled() ||
-      should_show_library_button) {
+  if (should_show_library_button) {
     GetOrCreateLibraryButton();
   }
 
@@ -1191,14 +1179,10 @@ void DeskBarViewBase::UpdateNewDeskButtonLabelVisibility(
     bool layout_if_changed) {
   const bool current_visibility =
       new_desk_button_label_ && new_desk_button_label_->GetVisible();
-  if (chromeos::features::AreOverviewSessionInitOptimizationsEnabled()) {
-    if (new_visibility) {
-      GetOrCreateNewDeskButtonLabel().SetVisible(true);
-    } else if (new_desk_button_label_) {
-      new_desk_button_label_->SetVisible(false);
-    }
-  } else {
-    GetOrCreateNewDeskButtonLabel().SetVisible(new_visibility);
+  if (new_visibility) {
+    GetOrCreateNewDeskButtonLabel().SetVisible(true);
+  } else if (new_desk_button_label_) {
+    new_desk_button_label_->SetVisible(false);
   }
 
   if (new_visibility != current_visibility && layout_if_changed) {
@@ -1574,7 +1558,7 @@ void DeskBarViewBase::OnDeskReordered(int old_index, int new_index) {
   // Update the order of child views.
   auto* reordered_view = mini_views_[new_index].get();
   reordered_view->parent()->ReorderChildView(reordered_view, new_index);
-  reordered_view->parent()->NotifyAccessibilityEvent(
+  reordered_view->parent()->NotifyAccessibilityEventDeprecated(
       ax::mojom::Event::kTreeChanged, true);
 
   // Update the desk indices in the shortcut views.
@@ -1950,7 +1934,7 @@ void DeskBarViewBase::MaybeUpdateDeskActionButtonTooltips() {
     // The combine desks button only exists if the feature is disabled. The
     // context menu button that would appear in its place does not need to
     // update its tooltip as it doesn't use a formatted string.
-    if (!features::IsSavedDeskUiRevampEnabled()) {
+    if (!features::IsForestFeatureEnabled()) {
       desk_action_view->combine_desks_button()->UpdateTooltip(
           combine_desk_tooltip);
     }

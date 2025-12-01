@@ -228,7 +228,7 @@ targets.legacy_basic_suite(
                     targets.cipd_package(
                         package = "infra/3pp/tools/cpython3/linux-amd64",
                         location = "vpython_dir_linux_amd64",
-                        revision = "version:2@3.8.10.chromium.34",
+                        revision = "version:3@3.11.9.chromium.36",
                     ),
                     targets.cipd_package(
                         package = "infra/tools/luci/vpython3/linux-amd64",
@@ -684,25 +684,8 @@ targets.legacy_basic_suite(
 targets.legacy_basic_suite(
     name = "gpu_gl_passthrough_ganesh_telemetry_tests",
     tests = {
-        "context_lost_gl_passthrough_ganesh_tests": targets.legacy_test_config(
-            mixins = [
-                "gpu_integration_test_common_args",
-            ],
-            args = [
-                "--extra-browser-args=--use-cmd-decoder=passthrough --use-gl=angle --use-angle=gl --disable-features=SkiaGraphite",
-            ],
-        ),
-        "expected_color_pixel_gl_passthrough_ganesh_test": targets.legacy_test_config(
-            mixins = [
-                "gpu_integration_test_common_args",
-            ],
-            args = [
-                "--dont-restore-color-profile-after-test",
-                "--test-machine-name",
-                "${buildername}",
-                "--extra-browser-args=--use-cmd-decoder=passthrough --use-gl=angle --use-angle=gl --disable-features=SkiaGraphite",
-            ],
-        ),
+        "context_lost_gl_passthrough_ganesh_tests": targets.legacy_test_config(),
+        "expected_color_pixel_gl_passthrough_ganesh_test": targets.legacy_test_config(),
         "gpu_process_launch_tests": targets.legacy_test_config(
             mixins = [
                 "gpu_integration_test_common_args",
@@ -713,26 +696,8 @@ targets.legacy_basic_suite(
                 "gpu_integration_test_common_args",
             ],
         ),
-        "pixel_skia_gold_gl_passthrough_ganesh_test": targets.legacy_test_config(
-            mixins = [
-                "gpu_integration_test_common_args",
-            ],
-            args = [
-                "--dont-restore-color-profile-after-test",
-                "--test-machine-name",
-                "${buildername}",
-                "--extra-browser-args=--use-cmd-decoder=passthrough --use-gl=angle --use-angle=gl --disable-features=SkiaGraphite",
-            ],
-        ),
-        "screenshot_sync_gl_passthrough_ganesh_tests": targets.legacy_test_config(
-            mixins = [
-                "gpu_integration_test_common_args",
-            ],
-            args = [
-                "--dont-restore-color-profile-after-test",
-                "--extra-browser-args=--use-cmd-decoder=passthrough --use-gl=angle --use-angle=gl --disable-features=SkiaGraphite",
-            ],
-        ),
+        "pixel_skia_gold_gl_passthrough_ganesh_test": targets.legacy_test_config(),
+        "screenshot_sync_gl_passthrough_ganesh_tests": targets.legacy_test_config(),
     },
 )
 
@@ -862,19 +827,7 @@ targets.legacy_basic_suite(
             ],
         ),
         "pixel_skia_gold_validating_test": targets.legacy_test_config(),
-        "screenshot_sync_validating_tests": targets.legacy_test_config(
-            mixins = [
-                "gpu_integration_test_common_args",
-            ],
-            args = [
-                "--dont-restore-color-profile-after-test",
-                "--extra-browser-args=--use-cmd-decoder=validating",
-            ],
-            android_args = [
-                # TODO(crbug.com/40134877): Remove this once we fix the tests.
-                "--extra-browser-args=--force-online-connection-state-for-indicator",
-            ],
-        ),
+        "screenshot_sync_validating_tests": targets.legacy_test_config(),
     },
 )
 
@@ -963,9 +916,6 @@ targets.legacy_basic_suite(
     name = "gpu_webgl2_conformance_metal_passthrough_graphite_telemetry_tests",
     tests = {
         "webgl2_conformance_metal_passthrough_graphite_tests": targets.legacy_test_config(
-            mixins = [
-                "gpu_integration_test_common_args",
-            ],
             swarming = targets.swarming(
                 shards = 20,
             ),
@@ -1034,22 +984,14 @@ targets.legacy_basic_suite(
 targets.legacy_basic_suite(
     name = "gpu_webgl_conformance_metal_passthrough_ganesh_telemetry_tests",
     tests = {
-        "webgl_conformance_metal_passthrough_ganesh_tests": targets.legacy_test_config(
-            mixins = [
-                "gpu_integration_test_common_args",
-            ],
-        ),
+        "webgl_conformance_metal_passthrough_ganesh_tests": targets.legacy_test_config(),
     },
 )
 
 targets.legacy_basic_suite(
     name = "gpu_webgl_conformance_metal_passthrough_graphite_telemetry_tests",
     tests = {
-        "webgl_conformance_metal_passthrough_graphite_tests": targets.legacy_test_config(
-            mixins = [
-                "gpu_integration_test_common_args",
-            ],
-        ),
+        "webgl_conformance_metal_passthrough_graphite_tests": targets.legacy_test_config(),
     },
 )
 
@@ -1057,12 +999,9 @@ targets.legacy_basic_suite(
     name = "gpu_webgl_conformance_swangle_passthrough_representative_telemetry_tests",
     tests = {
         "webgl_conformance_swangle_passthrough_tests": targets.legacy_test_config(
-            mixins = [
-                "gpu_integration_test_common_args",
-            ],
             args = [
                 # On dual-GPU devices we want the high-performance GPU to be active
-                "--extra-browser-args=--use-gl=angle --use-angle=swiftshader --use-cmd-decoder=passthrough --force_high_performance_gpu",
+                "--extra-browser-args=--force_high_performance_gpu",
                 # We are only interested in running a 'smoketest' to test swangle
                 # integration, not the full conformance suite.
                 "--test-filter=conformance/rendering/gl-drawelements.html",
@@ -1092,13 +1031,6 @@ targets.legacy_basic_suite(
     name = "gpu_webgl_conformance_vulkan_passthrough_telemetry_tests",
     tests = {
         "webgl_conformance_vulkan_passthrough_tests": targets.legacy_test_config(
-            mixins = [
-                "gpu_integration_test_common_args",
-            ],
-            args = [
-                # On dual-GPU devices we want the high-performance GPU to be active
-                "--extra-browser-args=--use-angle=vulkan --use-cmd-decoder=passthrough --force_high_performance_gpu",
-            ],
             swarming = targets.swarming(
                 shards = 2,
             ),
@@ -1143,6 +1075,11 @@ targets.legacy_basic_suite(
         "ui_chromeos_unittests": targets.legacy_test_config(),
         "usage_time_limit_unittests": targets.legacy_test_config(
             experiment_percentage = 100,
+        ),
+        "views_ax_chromeos_browser_tests": targets.legacy_test_config(
+            # TODO(crbug.com/325137417): Promote to non-experimental
+            # once we're sure we have the capacity.
+            experiment_percentage = 10,
         ),
         "wayland_client_perftests": targets.legacy_test_config(),
         "wayland_client_tests": targets.legacy_test_config(),
@@ -1426,6 +1363,19 @@ targets.legacy_basic_suite(
             ],
             linux_args = [
                 "-use-xvfb",
+            ],
+        ),
+    },
+)
+
+targets.legacy_basic_suite(
+    name = "translatekit_script_tests",
+    tests = {
+        "chrome_wpt_tests": targets.legacy_test_config(
+            args = [
+                "-t",
+                "Release",
+                "external/wpt/ai/translator",
             ],
         ),
     },

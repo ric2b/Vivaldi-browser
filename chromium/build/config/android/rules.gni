@@ -1678,6 +1678,8 @@ if (!is_robolectric && enable_java_templates) {
   #   direct_deps_only: Do not recurse on deps (optional, defaults false).
   #   jar_excluded_patterns: List of globs for paths to exclude (optional).
   #   jar_included_patterns: List of globs for paths to include (optional).
+  #   resource_excluded_patterns: Resource path glob list to exclude (optional)
+  #   resource_included_patterns: Resource path glob list to include (optional)
   #
   # Example
   #   dist_aar("my_aar") {
@@ -1775,6 +1777,11 @@ if (!is_robolectric && enable_java_templates) {
       if (defined(invoker.resource_included_patterns)) {
         args += [
           "--resource-included-globs=${invoker.resource_included_patterns}",
+        ]
+      }
+      if (defined(invoker.resource_excluded_patterns)) {
+        args += [
+          "--resource-excluded-globs=${invoker.resource_excluded_patterns}",
         ]
       }
     }
@@ -2617,31 +2624,44 @@ if (!is_robolectric && enable_java_templates) {
     }
     if (_generate_native_libraries_java) {
       write_native_libraries_java("${_template_name}__native_libraries") {
+        if (defined(_shared_library_list_file)) {
+          _use_secondary_abi = false
+        } else if (defined(_secondary_abi_shared_library_list_file)) {
+          _use_secondary_abi = true
+        }
+
         deps = [
           ":${_template_name}__shared_library_list",
         ]
 
-        # Do not add a dep on the generated_file target in order to avoid having
-        # to build the native libraries before this target. The dependency is
-        # instead captured via a depfile.
         if (_uses_static_library) {
+          if (defined(_use_secondary_abi)) {
+            # Use the library list in TrichromeWebView instead of TrichromeLibrary.
+            _from_static_library = false
+          } else {
+            _from_static_library = true
+            _use_secondary_abi =
+                defined(invoker.static_library_provider_use_secondary_abi) &&
+                invoker.static_library_provider_use_secondary_abi
+          }
+        } else {
+          _from_static_library = false
+        }
+        if (_from_static_library) {
           _prefix = get_label_info(invoker.static_library_provider,
                                    "target_gen_dir") + "/" +
                     get_label_info(invoker.static_library_provider, "name")
-          if (defined(invoker.static_library_provider_use_secondary_abi) &&
-              invoker.static_library_provider_use_secondary_abi) {
+          if (_use_secondary_abi) {
             native_libraries_list_file = "${_prefix}.secondary_abi_native_libs"
-            _use_secondary_abi = true
           } else {
             native_libraries_list_file = "${_prefix}.native_libs"
-            _use_secondary_abi = false
           }
-        } else if (_native_libs_deps != []) {
-          native_libraries_list_file = _shared_library_list_file
-          _use_secondary_abi = false
-        } else if (_secondary_abi_native_libs_deps != []) {
-          native_libraries_list_file = _secondary_abi_shared_library_list_file
-          _use_secondary_abi = true
+        } else if (defined(_use_secondary_abi)) {
+          if (_use_secondary_abi) {
+            native_libraries_list_file = _secondary_abi_shared_library_list_file
+          } else {
+            native_libraries_list_file = _shared_library_list_file
+          }
         }
 
         if (defined(_use_secondary_abi)) {
@@ -2654,6 +2674,10 @@ if (!is_robolectric && enable_java_templates) {
 
         enable_chromium_linker = _use_chromium_linker
         use_final_fields = true
+
+        # Do not add a dep on the generated_file target in order to avoid having
+        # to build the native libraries before this target. The dependency is
+        # instead captured via a depfile.
       }
       _srcjar_deps += [ ":${_template_name}__native_libraries" ]
     }
@@ -2667,7 +2691,7 @@ if (!is_robolectric && enable_java_templates) {
     if (_is_base_module && _native_libs_deps != [] && !_uses_static_library) {
       _sanitizer_loadable_modules += _sanitizer_runtimes
     }
-    if (is_asan && _is_base_module &&
+    if ((is_hwasan || is_asan) && _is_base_module &&
         (_uses_static_library || _native_libs_deps != [])) {
       _sanitizer_loadable_modules +=
           [ "$root_gen_dir/build/android/generate_wrap_sh/wrap.sh" ]
@@ -3663,16 +3687,7 @@ if (!is_robolectric && enable_java_templates) {
       apk_target = invoker.android_test_apk
       incremental_apk = _incremental_apk
 
-      public_deps = [
-        ":$_apk_operations_target_name",
-        apk_target,
-      ]
-      if (defined(invoker.apk_under_test)) {
-        public_deps += [ invoker.apk_under_test ]
-      }
-      if (defined(invoker.additional_apks)) {
-        public_deps += invoker.additional_apks
-      }
+      public_deps = [ ":$_apk_operations_target_name" ]
       if (use_rts) {
         if (!defined(data_deps)) {
           data_deps = []
@@ -4281,6 +4296,12 @@ if (!is_robolectric && enable_java_templates) {
            _scanned_files.native_libraries != [])
     assert(_scanned_files.has_classes_jar || _scanned_files.subjars == [])
 
+    if (_extract_native_libraries && defined(_scanned_files.prefab_headers)) {
+      _output_headers_paths = get_path_info(
+              rebase_path(_scanned_files.prefab_headers, "", _output_path),
+              "abspath")
+    }
+
     action_with_pydeps(_unpack_target_name) {
       script = "//build/android/gyp/aar.py"  # Unzips the AAR
       args = [
@@ -4318,6 +4339,9 @@ if (!is_robolectric && enable_java_templates) {
         outputs += get_path_info(
                 rebase_path(_scanned_files.native_libraries, "", _output_path),
                 "abspath")
+      }
+      if (defined(_output_headers_paths)) {
+        outputs += _output_headers_paths
       }
       if (_use_scanned_assets) {
         outputs +=
@@ -4454,6 +4478,22 @@ if (!is_robolectric && enable_java_templates) {
           }
         }
         public_target_label = _target_label
+      }
+    }
+
+    if (defined(_output_headers_paths)) {
+      _config_name = "${target_name}__include_dirs_config"
+      config(_config_name) {
+        include_dirs =
+            get_path_info(rebase_path(_scanned_files.prefab_include_dirs,
+                                      "",
+                                      _output_path),
+                          "abspath")
+      }
+      source_set("${target_name}_headers") {
+        sources = _output_headers_paths
+        public_configs = [ ":$_config_name" ]
+        deps = [ ":$_unpack_target_name" ]
       }
     }
 

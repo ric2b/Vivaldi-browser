@@ -4,11 +4,17 @@
 
 #include "components/omnibox/browser/remote_suggestions_service.h"
 
+#include <map>
 #include <memory>
+#include <optional>
+#include <string>
 #include <utility>
 
 #include "base/functional/bind.h"
 #include "base/metrics/histogram_functions.h"
+#include "base/strings/stringprintf.h"
+#include "base/time/time.h"
+#include "base/timer/elapsed_timer.h"
 #include "components/lens/proto/server/lens_overlay_response.pb.h"
 #include "components/omnibox/browser/base_search_provider.h"
 #include "components/omnibox/browser/document_suggestions_service.h"
@@ -27,8 +33,85 @@
 
 namespace {
 
-void LogSuggestRequestSent(RemoteRequestType request_type) {
+std::string RequestTypeToString(RemoteRequestType request_type) {
+  switch (request_type) {
+    case RemoteRequestType::kSearch:
+      return "Search";
+    case RemoteRequestType::kSearchWarmup:
+      return "SearchWarmup";
+    case RemoteRequestType::kImages:
+      return "Images";
+    case RemoteRequestType::kZeroSuggest:
+      return "ZeroSuggest";
+    case RemoteRequestType::kZeroSuggestPrefetch:
+      return "ZeroSuggestPrefetch";
+    case RemoteRequestType::kDocumentSuggest:
+      return "DocumentSuggest";
+    case RemoteRequestType::kDeletion:
+      return "Deletion";
+    case RemoteRequestType::kEnterpriseSearchAggregatorSuggest:
+      return "EnterpriseSearchAggregatorSuggest";
+  }
+}
+
+const char kResponseTimeHistogramName[] =
+    "Omnibox.SuggestRequestsSent.ResponseTime2.RequestState";
+
+std::string ResponseCodeToSuccessString(int response_code) {
+  return response_code == 200 ? "Successful" : "Failed";
+}
+
+void LogRequestSent(RemoteRequestType request_type) {
   base::UmaHistogramEnumeration("Omnibox.SuggestRequestsSent", request_type);
+}
+
+void LogResponseCode(RemoteRequestType request_type, int response_code) {
+  base::UmaHistogramSparse("Omnibox.SuggestRequestsSent.HttpResponseCode",
+                           response_code);
+  base::UmaHistogramSparse(
+      base::StringPrintf("Omnibox.SuggestRequestsSent.HttpResponseCode.%s",
+                         RequestTypeToString(request_type)),
+      response_code);
+}
+
+void LogResponseTimeAndCode(
+    metrics::OmniboxEventProto::PageClassification page_classification,
+    RemoteRequestType request_type,
+    base::TimeDelta response_time,
+    int response_code) {
+  base::UmaHistogramTimes("Omnibox.SuggestRequestsSent.ResponseTime",
+                          response_time);
+  base::UmaHistogramTimes(
+      base::StringPrintf("Omnibox.SuggestRequestsSent.ResponseTime.%s",
+                         RequestTypeToString(request_type)),
+      response_time);
+  base::UmaHistogramTimes(
+      base::StringPrintf("Omnibox.SuggestRequestsSent.ResponseTime.%s",
+                         ResponseCodeToSuccessString(response_code)),
+      response_time);
+  base::UmaHistogramTimes(
+      base::StringPrintf("Omnibox.SuggestRequestsSent.ResponseTime.%s.%s",
+                         RequestTypeToString(request_type),
+                         ResponseCodeToSuccessString(response_code)),
+      response_time);
+
+  // Don't slice by page classification for invalid page classifications.
+  if (page_classification == metrics::OmniboxEventProto::INVALID_SPEC) {
+    return;
+  }
+  const std::string page_context =
+      metrics::OmniboxEventProto::PageClassification_Name(page_classification);
+
+  base::UmaHistogramTimes(
+      base::StringPrintf("Omnibox.SuggestRequestsSent.ResponseTime.%s",
+                         page_context),
+      response_time);
+
+  base::UmaHistogramTimes(
+      base::StringPrintf("Omnibox.SuggestRequestsSent.ResponseTime.%s.%s.%s",
+                         page_context, RequestTypeToString(request_type),
+                         ResponseCodeToSuccessString(response_code)),
+      response_time);
 }
 
 void AddVariationHeaders(network::ResourceRequest* request,
@@ -128,6 +211,48 @@ RemoteSuggestionsService::RemoteSuggestionsService(
 
 RemoteSuggestionsService::~RemoteSuggestionsService() = default;
 
+// TODO(crbug.com/404591650): Create a struct to automate the lifecycle of
+//   `time_request_sent_`.
+void RemoteSuggestionsService::SetTimeRequestSent(
+    RemoteRequestType request_type,
+    base::TimeTicks time) {
+  time_request_sent_[request_type] = time;
+}
+
+void RemoteSuggestionsService::LogResponseTime(RemoteRequestType request_type,
+                                               bool interrupted) {
+  // Get time `request_type` was sent.
+  const auto time = time_request_sent_.find(request_type);
+  std::optional<base::TimeTicks> start_time =
+      time == time_request_sent_.end()
+          ? std::nullopt
+          : std::optional<base::TimeTicks>(time->second);
+
+  // `start_time` must be set for `request_type`
+  CHECK(start_time != std::nullopt);
+
+  const base::TimeDelta elapsed_time =
+      base::TimeTicks::Now() - start_time.value();
+  const std::string kEnterpriseRequestTypeString = RequestTypeToString(
+      RemoteRequestType::kEnterpriseSearchAggregatorSuggest);
+  if (interrupted) {
+    base::UmaHistogramTimes(
+        base::StringPrintf("%s.%s.Interrupted", kResponseTimeHistogramName,
+                           kEnterpriseRequestTypeString),
+        elapsed_time);
+  } else {
+    base::UmaHistogramTimes(
+        base::StringPrintf("%s.%s.Completed", kResponseTimeHistogramName,
+                           kEnterpriseRequestTypeString),
+        elapsed_time);
+  }
+  base::UmaHistogramTimes(
+      base::StringPrintf("%s.%s", kResponseTimeHistogramName,
+                         kEnterpriseRequestTypeString),
+      elapsed_time);
+  SetTimeRequestSent(request_type, base::TimeTicks());
+}
+
 // static
 GURL RemoteSuggestionsService::EndpointUrl(
     const TemplateURL* template_url,
@@ -226,12 +351,15 @@ RemoteSuggestionsService::StartSuggestionsRequest(
   OnRequestCreated(request_id, request.get());
 
   // Make loader and start download.
+  base::ElapsedTimer request_timer;
   std::unique_ptr<network::SimpleURLLoader> loader =
       network::SimpleURLLoader::Create(std::move(request), traffic_annotation);
   loader->DownloadToStringOfUnboundedSizeUntilCrashAndDie(
       url_loader_factory_.get(),
       base::BindOnce(&RemoteSuggestionsService::OnRequestCompleted,
-                     weak_ptr_factory_.GetWeakPtr(), request_id,
+                     weak_ptr_factory_.GetWeakPtr(), request_id, request_type,
+                     std::move(request_timer),
+                     search_terms_args.page_classification,
                      std::move(completion_callback), loader.get()));
 
   OnRequestStarted(request_id, request_type, loader.get(),
@@ -302,12 +430,15 @@ RemoteSuggestionsService::StartZeroPrefixSuggestionsRequest(
   OnRequestCreated(request_id, request.get());
 
   // Make loader and start download.
+  base::ElapsedTimer request_timer;
   std::unique_ptr<network::SimpleURLLoader> loader =
       network::SimpleURLLoader::Create(std::move(request), traffic_annotation);
   loader->DownloadToStringOfUnboundedSizeUntilCrashAndDie(
       url_loader_factory_.get(),
       base::BindOnce(&RemoteSuggestionsService::OnRequestCompleted,
-                     weak_ptr_factory_.GetWeakPtr(), request_id,
+                     weak_ptr_factory_.GetWeakPtr(), request_id, request_type,
+                     std::move(request_timer),
+                     search_terms_args.page_classification,
                      std::move(completion_callback), loader.get()));
 
   OnRequestStarted(request_id, request_type, loader.get(),
@@ -327,16 +458,20 @@ void RemoteSuggestionsService::CreateDocumentSuggestionsRequest(
   // Create a unique identifier for the request.
   const base::UnguessableToken request_id = base::UnguessableToken::Create();
 
+  base::ElapsedTimer request_timer;
   document_suggestions_service_->CreateDocumentSuggestionsRequest(
       query, is_off_the_record,
       base::BindOnce(&RemoteSuggestionsService::OnRequestCreated,
                      weak_ptr_factory_.GetWeakPtr(), request_id),
       base::BindOnce(&RemoteSuggestionsService::OnRequestStartedAsync,
                      weak_ptr_factory_.GetWeakPtr(), request_id,
-                     RemoteRequestType::kDocumentSuggest,
+                     /*request_type=*/RemoteRequestType::kDocumentSuggest,
                      std::move(start_callback)),
       base::BindOnce(&RemoteSuggestionsService::OnRequestCompleted,
                      weak_ptr_factory_.GetWeakPtr(), request_id,
+                     /*request_type=*/RemoteRequestType::kDocumentSuggest,
+                     std::move(request_timer),
+                     metrics::OmniboxEventProto::INVALID_SPEC,
                      std::move(completion_callback)));
 }
 
@@ -351,7 +486,8 @@ void RemoteSuggestionsService::
         const std::u16string& query,
         const GURL& suggest_url,
         StartCallback start_callback,
-        CompletionCallback completion_callback) {
+        CompletionCallback completion_callback,
+        bool in_keyword_mode) {
   if (!enterprise_search_aggregator_suggestions_service_) {
     return;
   }
@@ -359,6 +495,7 @@ void RemoteSuggestionsService::
   // Create a unique identifier for the request.
   const base::UnguessableToken request_id = base::UnguessableToken::Create();
 
+  base::ElapsedTimer request_timer;
   enterprise_search_aggregator_suggestions_service_
       ->CreateEnterpriseSearchAggregatorSuggestionsRequest(
           query, suggest_url,
@@ -366,11 +503,17 @@ void RemoteSuggestionsService::
                          weak_ptr_factory_.GetWeakPtr(), request_id),
           base::BindOnce(&RemoteSuggestionsService::OnRequestStartedAsync,
                          weak_ptr_factory_.GetWeakPtr(), request_id,
+                         /*request_type=*/
                          RemoteRequestType::kEnterpriseSearchAggregatorSuggest,
                          std::move(start_callback)),
           base::BindOnce(&RemoteSuggestionsService::OnRequestCompleted,
                          weak_ptr_factory_.GetWeakPtr(), request_id,
-                         std::move(completion_callback)));
+                         /*request_type=*/
+                         RemoteRequestType::kEnterpriseSearchAggregatorSuggest,
+                         std::move(request_timer),
+                         metrics::OmniboxEventProto::INVALID_SPEC,
+                         std::move(completion_callback)),
+          in_keyword_mode);
 }
 
 std::unique_ptr<network::SimpleURLLoader>
@@ -429,15 +572,20 @@ RemoteSuggestionsService::StartDeletionRequest(
   OnRequestCreated(request_id, request.get());
 
   // Make loader and start download.
+  base::ElapsedTimer request_timer;
   std::unique_ptr<network::SimpleURLLoader> loader =
       network::SimpleURLLoader::Create(std::move(request), traffic_annotation);
   loader->DownloadToStringOfUnboundedSizeUntilCrashAndDie(
       url_loader_factory_.get(),
       base::BindOnce(&RemoteSuggestionsService::OnRequestCompleted,
                      weak_ptr_factory_.GetWeakPtr(), request_id,
+                     /*request_type=*/RemoteRequestType::kDeletion,
+                     std::move(request_timer),
+                     metrics::OmniboxEventProto::INVALID_SPEC,
                      std::move(completion_callback), loader.get()));
 
-  OnRequestStarted(request_id, RemoteRequestType::kDeletion, loader.get(),
+  OnRequestStarted(request_id, /*request_type=*/RemoteRequestType::kDeletion,
+                   loader.get(),
                    /*request_body*/ "");
   return loader;
 }
@@ -463,9 +611,7 @@ void RemoteSuggestionsService::OnRequestCreated(
     const base::UnguessableToken& request_id,
     network::ResourceRequest* request) {
   // Notify the observers that request has been created.
-  for (Observer& observer : observers_) {
-    observer.OnRequestCreated(request_id, request);
-  }
+  observers_.Notify(&Observer::OnRequestCreated, request_id, request);
 }
 
 void RemoteSuggestionsService::OnRequestStarted(
@@ -474,10 +620,9 @@ void RemoteSuggestionsService::OnRequestStarted(
     network::SimpleURLLoader* loader,
     const std::string& request_body) {
   // Notify the observers that the transfer started.
-  for (Observer& observer : observers_) {
-    observer.OnRequestStarted(request_id, loader, request_body);
-  }
-  LogSuggestRequestSent(request_type);
+  observers_.Notify(&Observer::OnRequestStarted, request_id, loader,
+                    request_body);
+  LogRequestSent(request_type);
 }
 
 void RemoteSuggestionsService::OnRequestStartedAsync(
@@ -492,6 +637,9 @@ void RemoteSuggestionsService::OnRequestStartedAsync(
 
 void RemoteSuggestionsService::OnRequestCompleted(
     const base::UnguessableToken& request_id,
+    RemoteRequestType request_type,
+    base::ElapsedTimer request_timer,
+    metrics::OmniboxEventProto::PageClassification page_classification,
     CompletionCallback completion_callback,
     const network::SimpleURLLoader* source,
     std::unique_ptr<std::string> response_body) {
@@ -501,9 +649,11 @@ void RemoteSuggestionsService::OnRequestCompleted(
           : 0;
 
   // Notify the observers that the transfer is done.
-  for (Observer& observer : observers_) {
-    observer.OnRequestCompleted(request_id, response_code, response_body);
-  }
+  observers_.Notify(&Observer::OnRequestCompleted, request_id, response_code,
+                    response_body);
+  LogResponseCode(request_type, response_code);
+  LogResponseTimeAndCode(page_classification, request_type,
+                         request_timer.Elapsed(), response_code);
 
   // Call the completion callback or delegate it.
   if (delegate_) {

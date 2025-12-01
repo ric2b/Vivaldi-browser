@@ -80,6 +80,12 @@ class AwContentBrowserClient : public content::ContentBrowserClient {
           cert_verifier_creation_params) override;
   std::unique_ptr<content::BrowserMainParts> CreateBrowserMainParts(
       bool is_integration_test) override;
+  void PostAfterStartupTask(
+      const base::Location& from_here,
+      const scoped_refptr<base::SequencedTaskRunner>& task_runner,
+      base::OnceClosure task) override;
+  void OnUiTaskRunnerReady(
+      base::OnceClosure enable_native_task_execution_callback) override;
   std::unique_ptr<content::WebContentsViewDelegate> GetWebContentsViewDelegate(
       content::WebContents* web_contents) override;
   void RenderProcessWillLaunch(content::RenderProcessHost* host) override;
@@ -188,6 +194,7 @@ class AwContentBrowserClient : public content::ContentBrowserClient {
                                 bool is_prerendering,
                                 ui::PageTransition transition,
                                 bool* ignore_navigation) override;
+  bool SupportsAvoidUnnecessaryBeforeUnloadCheckSync() override;
   bool ShouldAllowSameSiteRenderFrameHostChange(
       const content::RenderFrameHost& rfh) override;
   std::unique_ptr<content::LoginDelegate> CreateLoginDelegate(
@@ -201,7 +208,8 @@ class AwContentBrowserClient : public content::ContentBrowserClient {
       scoped_refptr<net::HttpResponseHeaders> response_headers,
       bool first_auth_attempt,
       content::GuestPageHolder* guest,
-      LoginAuthRequiredCallback auth_required_callback) override;
+      content::LoginDelegate::LoginAuthRequiredCallback auth_required_callback)
+      override;
   bool HandleExternalProtocol(
       const GURL& url,
       content::WebContents::Getter web_contents_getter,
@@ -311,10 +319,26 @@ class AwContentBrowserClient : public content::ContentBrowserClient {
                                  const GURL& url,
                                  const blink::StorageKey& storage_key) override;
   bool AllowNonActivatedCrossOriginPaintHolding() override;
+  bool IsSharedStorageAllowed(
+      content::BrowserContext* browser_context,
+      content::RenderFrameHost* rfh,
+      const url::Origin& top_frame_origin,
+      const url::Origin& accessing_origin,
+      std::string* out_debug_message,
+      bool* out_block_is_site_setting_specific) override;
+
+  bool IsSharedStorageSelectURLAllowed(
+      content::BrowserContext* browser_context,
+      const url::Origin& top_frame_origin,
+      const url::Origin& accessing_origin,
+      std::string* out_debug_message,
+      bool* out_block_is_site_setting_specific) override;
 
   AwFeatureListCreator* aw_feature_list_creator() {
     return aw_feature_list_creator_;
   }
+
+  void OnStartupComplete();
 
  private:
   scoped_refptr<safe_browsing::UrlCheckerDelegate>
@@ -327,6 +351,27 @@ class AwContentBrowserClient : public content::ContentBrowserClient {
 
   // The AwFeatureListCreator is owned by AwMainDelegate.
   const raw_ptr<AwFeatureListCreator> aw_feature_list_creator_;
+
+  struct AfterStartupTask {
+    AfterStartupTask();
+    AfterStartupTask(AfterStartupTask&& other);
+    ~AfterStartupTask();
+
+    base::Location from_here;
+    scoped_refptr<base::SequencedTaskRunner> task_runner;
+    base::OnceClosure task;
+  };
+
+  struct StartupInfo {
+    StartupInfo();
+    ~StartupInfo();
+
+    bool startup_complete = false;
+    base::OnceClosure enable_native_task_execution_callback;
+    base::circular_deque<AfterStartupTask> after_startup_tasks;
+  };
+
+  StartupInfo startup_info_;
 };
 
 }  // namespace android_webview

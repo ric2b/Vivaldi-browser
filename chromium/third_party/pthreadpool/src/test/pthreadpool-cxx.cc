@@ -1595,6 +1595,148 @@ TEST(Parallelize4DTile2D, EachItemProcessedOnce) {
   }
 }
 
+TEST(Parallelize4DTile2DDynamic, ThreadPoolCompletes) {
+  auto_pthreadpool_t threadpool(pthreadpool_create(1), pthreadpool_destroy);
+  ASSERT_TRUE(threadpool.get());
+
+  pthreadpool_parallelize_4d_tile_2d(
+      threadpool.get(), [](size_t, size_t, size_t, size_t, size_t, size_t) {},
+      kParallelize4DTile2DRangeI, kParallelize4DTile2DRangeJ,
+      kParallelize4DTile2DRangeK, kParallelize4DTile2DRangeL,
+      kParallelize4DTile2DTileK, kParallelize4DTile2DTileL);
+}
+
+TEST(Parallelize4DTile2DDynamic, AllItemsInBounds) {
+  auto_pthreadpool_t threadpool(pthreadpool_create(1), pthreadpool_destroy);
+  ASSERT_TRUE(threadpool.get());
+
+  pthreadpool_parallelize_4d_tile_2d(
+      threadpool.get(),
+      [](size_t i, size_t j, size_t start_k, size_t start_l, size_t tile_k,
+         size_t tile_l) {
+        EXPECT_LT(i, kParallelize4DTile2DRangeI);
+        EXPECT_LT(j, kParallelize4DTile2DRangeJ);
+        EXPECT_LT(start_k, kParallelize4DTile2DRangeK);
+        EXPECT_LT(start_l, kParallelize4DTile2DRangeL);
+        EXPECT_LE(start_k + tile_k, kParallelize4DTile2DRangeK);
+        EXPECT_LE(start_l + tile_l, kParallelize4DTile2DRangeL);
+      },
+      kParallelize4DTile2DRangeI, kParallelize4DTile2DRangeJ,
+      kParallelize4DTile2DRangeK, kParallelize4DTile2DRangeL,
+      kParallelize4DTile2DTileK, kParallelize4DTile2DTileL);
+}
+
+TEST(Parallelize4DTile2DDynamic, UniformTiling) {
+  auto_pthreadpool_t threadpool(pthreadpool_create(1), pthreadpool_destroy);
+  ASSERT_TRUE(threadpool.get());
+
+  pthreadpool_parallelize_4d_tile_2d(
+      threadpool.get(),
+      [](size_t i, size_t j, size_t start_k, size_t start_l, size_t tile_k,
+         size_t tile_l) {
+        EXPECT_GT(tile_k, 0);
+        EXPECT_EQ(start_k % kParallelize4DTile2DTileK, 0);
+
+        EXPECT_GT(tile_l, 0);
+        EXPECT_EQ(start_l % kParallelize4DTile2DTileL, 0);
+      },
+      kParallelize4DTile2DRangeI, kParallelize4DTile2DRangeJ,
+      kParallelize4DTile2DRangeK, kParallelize4DTile2DRangeL,
+      kParallelize4DTile2DTileK, kParallelize4DTile2DTileL);
+}
+
+TEST(Parallelize4DTile2DDynamic, AllItemsProcessed) {
+  std::vector<std::atomic_bool> indicators(
+      kParallelize4DTile2DRangeI * kParallelize4DTile2DRangeJ *
+      kParallelize4DTile2DRangeK * kParallelize4DTile2DRangeL);
+
+  auto_pthreadpool_t threadpool(pthreadpool_create(1), pthreadpool_destroy);
+  ASSERT_TRUE(threadpool.get());
+
+  pthreadpool_parallelize_4d_tile_2d(
+      threadpool.get(),
+      [&indicators](size_t i, size_t j, size_t start_k, size_t start_l,
+                    size_t tile_k, size_t tile_l) {
+        for (size_t k = start_k; k < start_k + tile_k; k++) {
+          for (size_t l = start_l; l < start_l + tile_l; l++) {
+            const size_t linear_idx = ((i * kParallelize4DTile2DRangeJ + j) *
+                                           kParallelize4DTile2DRangeK +
+                                       k) *
+                                          kParallelize4DTile2DRangeL +
+                                      l;
+            indicators[linear_idx].store(true, std::memory_order_relaxed);
+          }
+        }
+      },
+      kParallelize4DTile2DRangeI, kParallelize4DTile2DRangeJ,
+      kParallelize4DTile2DRangeK, kParallelize4DTile2DRangeL,
+      kParallelize4DTile2DTileK, kParallelize4DTile2DTileL);
+
+  for (size_t i = 0; i < kParallelize4DTile2DRangeI; i++) {
+    for (size_t j = 0; j < kParallelize4DTile2DRangeJ; j++) {
+      for (size_t k = 0; k < kParallelize4DTile2DRangeK; k++) {
+        for (size_t l = 0; l < kParallelize4DTile2DRangeL; l++) {
+          const size_t linear_idx = ((i * kParallelize4DTile2DRangeJ + j) *
+                                         kParallelize4DTile2DRangeK +
+                                     k) *
+                                        kParallelize4DTile2DRangeL +
+                                    l;
+          EXPECT_TRUE(indicators[linear_idx].load(std::memory_order_relaxed))
+              << "Element (" << i << ", " << j << ", " << k << ", " << l
+              << ") not processed";
+        }
+      }
+    }
+  }
+}
+
+TEST(Parallelize4DTile2DDynamic, EachItemProcessedOnce) {
+  std::vector<std::atomic_int> counters(
+      kParallelize4DTile2DRangeI * kParallelize4DTile2DRangeJ *
+      kParallelize4DTile2DRangeK * kParallelize4DTile2DRangeL);
+
+  auto_pthreadpool_t threadpool(pthreadpool_create(1), pthreadpool_destroy);
+  ASSERT_TRUE(threadpool.get());
+
+  pthreadpool_parallelize_4d_tile_2d(
+      threadpool.get(),
+      [&counters](size_t i, size_t j, size_t start_k, size_t start_l,
+                  size_t tile_k, size_t tile_l) {
+        for (size_t k = start_k; k < start_k + tile_k; k++) {
+          for (size_t l = start_l; l < start_l + tile_l; l++) {
+            const size_t linear_idx = ((i * kParallelize4DTile2DRangeJ + j) *
+                                           kParallelize4DTile2DRangeK +
+                                       k) *
+                                          kParallelize4DTile2DRangeL +
+                                      l;
+            counters[linear_idx].fetch_add(1, std::memory_order_relaxed);
+          }
+        }
+      },
+      kParallelize4DTile2DRangeI, kParallelize4DTile2DRangeJ,
+      kParallelize4DTile2DRangeK, kParallelize4DTile2DRangeL,
+      kParallelize4DTile2DTileK, kParallelize4DTile2DTileL);
+
+  for (size_t i = 0; i < kParallelize4DTile2DRangeI; i++) {
+    for (size_t j = 0; j < kParallelize4DTile2DRangeJ; j++) {
+      for (size_t k = 0; k < kParallelize4DTile2DRangeK; k++) {
+        for (size_t l = 0; l < kParallelize4DTile2DRangeL; l++) {
+          const size_t linear_idx = ((i * kParallelize4DTile2DRangeJ + j) *
+                                         kParallelize4DTile2DRangeK +
+                                     k) *
+                                        kParallelize4DTile2DRangeL +
+                                    l;
+          EXPECT_EQ(counters[linear_idx].load(std::memory_order_relaxed), 1)
+              << "Element (" << i << ", " << j << ", " << k << ", " << l
+              << ") was processed "
+              << counters[linear_idx].load(std::memory_order_relaxed)
+              << " times (expected: 1)";
+        }
+      }
+    }
+  }
+}
+
 TEST(Parallelize5D, ThreadPoolCompletes) {
   auto_pthreadpool_t threadpool(pthreadpool_create(1), pthreadpool_destroy);
   ASSERT_TRUE(threadpool.get());

@@ -66,6 +66,10 @@ GskRenderNode* GetRenderNodeChild(GskRenderNode* node) {
       return gsk_blur_node_get_child(node);
     case GSK_DEBUG_NODE:
       return gsk_debug_node_get_child(node);
+    case GSK_MASK_NODE:
+      return gsk_mask_node_get_mask(node);
+    case GSK_SUBSURFACE_NODE:
+      return gsk_subsurface_node_get_child(node);
     default:
       return nullptr;
   }
@@ -227,11 +231,12 @@ aura::Window* GetAuraTransientParent(GtkWidget* dialog) {
 }
 
 void ClearAuraTransientParent(GtkWidget* dialog, aura::Window* parent) {
+  g_object_set_data(G_OBJECT(dialog), kAuraTransientParent, nullptr);
+
   if (!parent || !parent->GetHost()) {
     return;
   }
 
-  g_object_set_data(G_OBJECT(dialog), kAuraTransientParent, nullptr);
   gfx::AcceleratedWidget parent_id = parent->GetHost()->GetAcceleratedWidget();
   GtkUi::GetPlatform()->ClearTransientFor(parent_id);
 }
@@ -421,6 +426,7 @@ GtkCssContext AppendCssNodeToStyleContext(GtkCssContext context,
       {"disabled", GTK_STATE_FLAG_INSENSITIVE},
       {"indeterminate", GTK_STATE_FLAG_INCONSISTENT},
       {"focus", GTK_STATE_FLAG_FOCUSED},
+      {"focus-within", GTK_STATE_FLAG_FOCUS_WITHIN},
       {"backdrop", GTK_STATE_FLAG_BACKDROP},
       {"link", GTK_STATE_FLAG_LINK},
       {"visited", GTK_STATE_FLAG_VISITED},
@@ -471,7 +477,11 @@ GtkCssContext AppendCssNodeToStyleContext(GtkCssContext context,
               break;
             }
           }
-          state = static_cast<GtkStateFlags>(state | state_flag);
+          constexpr GtkStateFlags kLargestGtk3State =
+              GTK_STATE_FLAG_DROP_ACTIVE;
+          if (state_flag <= kLargestGtk3State || GtkCheckVersion(4)) {
+            state = static_cast<GtkStateFlags>(state | state_flag);
+          }
           break;
         }
         case CSS_NONE:
@@ -568,10 +578,6 @@ SkColor GetBorderColor(const std::string& css_selector) {
   CairoSurface surface(size);
   gtk_render_frame(context, surface.cairo(), 0, 0, size.width(), size.height());
   return surface.GetAveragePixelValue(true);
-}
-
-SkColor GetSelectionBgColor(const std::string& css_selector) {
-  return GetBgColorFromStyleContext(GetStyleContextFromCss(css_selector));
 }
 
 bool ContextHasClass(GtkCssContext context, const std::string& style_class) {
@@ -699,8 +705,7 @@ GdkEvent* GdkEventFromKeyEvent(const ui::KeyEvent& key_event) {
   int hw_code = GetKeyEventProperty(key_event, ui::kPropertyKeyboardHwKeyCode);
   int group = GetKeyEventProperty(key_event, ui::kPropertyKeyboardGroup);
 
-  // Get GdkKeymap
-  GdkKeymap* keymap = GtkUi::GetPlatform()->GetGdkKeymap();
+  GdkKeymap* keymap = gdk_keymap_get_for_display(gdk_display_get_default());
 
   // Get keyval and state
   GdkModifierType state = GetGdkKeyEventState(key_event);
@@ -768,8 +773,19 @@ GdkTexture* GetTextureFromRenderNode(GskRenderNode* node) {
     return nullptr;
   }
 
-  if (gsk_render_node_get_node_type(node) == GSK_TEXTURE_NODE) {
-    return gsk_texture_node_get_texture(node);
+  auto node_type = gsk_render_node_get_node_type(node);
+  if (node_type > GSK_RENDER_NODE_MAX_VALUE) {
+    LOG(ERROR) << "Unexpected node type: " << node_type;
+    return nullptr;
+  }
+
+  switch (node_type) {
+    case GSK_TEXTURE_NODE:
+      return gsk_texture_node_get_texture(node);
+    case GSK_TEXTURE_SCALE_NODE:
+      return gsk_texture_node_get_texture(node);
+    default:
+      break;
   }
 
   if (auto* texture = GetTextureFromRenderNode(GetRenderNodeChild(node))) {

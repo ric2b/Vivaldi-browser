@@ -82,6 +82,7 @@ Operation *DuplicateOp(TF::PartitionedCallOp call_op, PatternRewriter &rewriter,
   // get quantized.
   auto new_call_op = rewriter.create<TF::PartitionedCallOp>(
       call_op.getLoc(), call_op.getResultTypes(), call_op.getOperands(),
+      call_op.getArgAttrsAttr(), call_op.getResAttrsAttr(),
       FlatSymbolRefAttr::get(new_ref_func_name));
   return new_call_op;
 }
@@ -163,13 +164,14 @@ class AddDumpTensorOpPass
 };
 
 template <typename LiftedOpT>
-class AddDumpTensorOp : public OpRewritePattern<LiftedOpT> {
+class AddDumpTensorOp
+    : public OpRewritePattern<LiftedOpT>::SplitMatchAndRewrite {
  public:
   // Does not take ownership of context, which must refer to a valid value that
   // outlives this object.
   explicit AddDumpTensorOp(MLIRContext *context, DebuggerType debugger_type,
                            std::string log_dir_path)
-      : OpRewritePattern<LiftedOpT>(context),
+      : OpRewritePattern<LiftedOpT>::SplitMatchAndRewrite(context),
         debugger_type_(debugger_type),
         log_dir_path_(std::move(log_dir_path)) {}
 

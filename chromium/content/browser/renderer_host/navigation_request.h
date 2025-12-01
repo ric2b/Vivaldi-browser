@@ -29,6 +29,7 @@
 #include "content/browser/navigation_subresource_loader_params.h"
 #include "content/browser/renderer_host/browsing_context_group_swap.h"
 #include "content/browser/renderer_host/commit_deferring_condition_runner.h"
+#include "content/browser/renderer_host/cookie_access_observers.h"
 #include "content/browser/renderer_host/navigation_controller_impl.h"
 #include "content/browser/renderer_host/navigation_policy_container_builder.h"
 #include "content/browser/renderer_host/navigation_throttle_runner.h"
@@ -67,6 +68,7 @@
 #include "services/network/public/mojom/web_sandbox_flags.mojom-shared.h"
 #include "third_party/blink/public/common/runtime_feature_state/runtime_feature_state_context.h"
 #include "third_party/blink/public/common/tokens/tokens.h"
+#include "third_party/blink/public/mojom/confidence_level.mojom.h"
 #include "third_party/blink/public/mojom/lcp_critical_path_predictor/lcp_critical_path_predictor.mojom.h"
 #include "third_party/blink/public/mojom/loader/mixed_content.mojom-forward.h"
 #include "third_party/blink/public/mojom/navigation/navigation_initiator_activation_and_ad_status.mojom.h"
@@ -112,7 +114,6 @@ class CONTENT_EXPORT NavigationRequest
       public FencedFrameURLMapping::MappingResultObserver,
       public mojom::NavigationRendererCancellationListener,
       private RenderProcessHostObserver,
-      private network::mojom::CookieAccessObserver,
       private network::mojom::TrustTokenAccessObserver,
       private network::mojom::SharedDictionaryAccessObserver,
       public network::mojom::DeviceBoundSessionAccessObserver {
@@ -347,6 +348,7 @@ class CONTENT_EXPORT NavigationRequest
   bool IsInPrerenderedMainFrame() const override;
   bool IsPrerenderedPageActivation() const override;
   bool IsInFencedFrameTree() const override;
+  bool IsGuestViewMainFrame() const override;
   FrameType GetNavigatingFrameType() const override;
   bool IsRendererInitiated() override;
   blink::mojom::NavigationInitiatorActivationAndAdStatus
@@ -469,6 +471,11 @@ class CONTENT_EXPORT NavigationRequest
 
   void RegisterCommitDeferringConditionForTesting(
       std::unique_ptr<CommitDeferringCondition> condition);
+
+  // Used by tests that want to control the timing of cookie access
+  // notifications.
+  void SetCookieAccessObserversForTesting(
+      std::unique_ptr<CookieAccessObservers> cookie_access_observers);
 
   // Called on the UI thread by the Navigator to start the navigation.
   // The NavigationRequest can be deleted while BeginNavigation() is called.
@@ -598,6 +605,10 @@ class CONTENT_EXPORT NavigationRequest
   // generic navigation token that can be passed from renderer to the browser.
   const base::UnguessableToken& devtools_navigation_token() const {
     return devtools_navigation_token_;
+  }
+
+  blink::mojom::ConfidenceLevel navigation_confidence() const {
+    return confidence_level_;
   }
 
   // Called on same-document navigation requests that need to be restarted as
@@ -894,6 +905,10 @@ class CONTENT_EXPORT NavigationRequest
       mojo::PendingReceiver<network::mojom::CookieAccessObserver>>
   TakeCookieObservers();
 
+  void NotifyCookiesAccessed(
+      std::vector<network::mojom::CookieAccessDetailsPtr> details_vector,
+      CookieAccessDetails::Source source);
+
   // Take all Trust Token observers associated with this navigation.
   // Typically this is called when navigation commits to move these observers to
   // the committed document.
@@ -1149,6 +1164,11 @@ class CONTENT_EXPORT NavigationRequest
     keep_alive_url_loader_factory_context_ = factory_context;
   }
 
+  base::WeakPtr<KeepAliveURLLoaderService::FactoryContext>
+  fetch_later_loader_factory_context() {
+    return fetch_later_loader_factory_context_;
+  }
+
   void set_fetch_later_loader_factory_context(
       base::WeakPtr<KeepAliveURLLoaderService::FactoryContext>
           factory_context) {
@@ -1285,6 +1305,11 @@ class CONTENT_EXPORT NavigationRequest
   std::unique_ptr<RenderFrameHostImpl::CookieChangeListener>
   TakeCookieChangeListener() {
     return std::move(cookie_change_listener_);
+  }
+
+  std::unique_ptr<RenderFrameHostImpl::DeviceBoundSessionObserver>
+  TakeDeviceBoundSessionObserver() {
+    return std::move(device_bound_session_observer_);
   }
 
   // Returns true if there is a speculative RFH that has a pending commit
@@ -2050,12 +2075,6 @@ class CONTENT_EXPORT NavigationRequest
   mojo::PendingRemote<network::mojom::CookieAccessObserver>
   CreateCookieAccessObserver();
 
-  // network::mojom::CookieAccessObserver:
-  void OnCookiesAccessed(std::vector<network::mojom::CookieAccessDetailsPtr>
-                             details_vector) override;
-  void Clone(mojo::PendingReceiver<network::mojom::CookieAccessObserver>
-                 observer) override;
-
   mojo::PendingRemote<network::mojom::TrustTokenAccessObserver>
   CreateTrustTokenAccessObserver();
 
@@ -2253,6 +2272,10 @@ class CONTENT_EXPORT NavigationRequest
   // Returns if we should add/reset the `CookieChangeListener` for the current
   // navigation.
   bool ShouldAddCookieChangeListener();
+
+  // Returns if we should add/reset the `DeviceBoundSessionObserver` for
+  // the current navigation.
+  bool ShouldAddDeviceBoundSessionObserver();
 
   // Returns the `StoragePartition` based on the config from the `site_info_`.
   StoragePartition* GetStoragePartitionWithCurrentSiteInfo();
@@ -2788,8 +2811,8 @@ class CONTENT_EXPORT NavigationRequest
   bool did_receive_early_hints_before_cross_origin_redirect_ = false;
 
   // Observers listening to cookie access notifications for the network requests
-  // made by this navigation.
-  mojo::ReceiverSet<network::mojom::CookieAccessObserver> cookie_observers_;
+  // made by this navigation. unique_ptr so it can be replaced in tests.
+  std::unique_ptr<CookieAccessObservers> cookie_observers_;
 
   // Observers listening to Trust Token access notifications for the network
   // requests made by this navigation.
@@ -3099,6 +3122,17 @@ class CONTENT_EXPORT NavigationRequest
   std::unique_ptr<RenderFrameHostImpl::CookieChangeListener>
       cookie_change_listener_;
 
+  // The observer that receives device bound session events and
+  // maintains device bound session information for the domain of the
+  // URL that this `NavigationRequest` is navigating to. The observer
+  // will observe all device bound session changes starting from the
+  // navigation/redirection, and it will be moved to the
+  // `RenderFrameHostImpl` when the navigation is committed and
+  // continues observing until the destructoin of the document.
+  // See `RenderFrameHostImpl::DeviceBoundSessionObserver`.
+  std::unique_ptr<RenderFrameHostImpl::DeviceBoundSessionObserver>
+      device_bound_session_observer_;
+
   // LCP Critical Path Predictor managed hint data those were already available
   // at the time of navigation. The hint is passed along to the renderer process
   // on commit along with the other navigation params.
@@ -3177,6 +3211,11 @@ class CONTENT_EXPORT NavigationRequest
   // commit, and was restarted as a cross-document navigation. See
   // `blink::mojom::CommitResult::RestartCrossDocument`.
   bool was_reset_for_cross_document_restart_ = false;
+
+  // The confidence level captured at the time the navigation request was
+  // instantiated.
+  blink::mojom::ConfidenceLevel confidence_level_ =
+      blink::mojom::ConfidenceLevel::kHigh;
 
   base::WeakPtrFactory<NavigationRequest> weak_factory_{this};
 };

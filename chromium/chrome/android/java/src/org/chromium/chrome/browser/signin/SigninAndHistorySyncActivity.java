@@ -17,6 +17,7 @@ import android.view.Window;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.core.content.IntentCompat;
 
 import org.chromium.base.IntentUtils;
 import org.chromium.base.Promise;
@@ -24,7 +25,6 @@ import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.supplier.OneshotSupplier;
 import org.chromium.base.supplier.OneshotSupplierImpl;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.back_press.SecondaryActivityBackPressUma;
 import org.chromium.chrome.browser.device_lock.DeviceLockActivityLauncherImpl;
 import org.chromium.chrome.browser.firstrun.FirstRunActivityBase;
 import org.chromium.chrome.browser.init.ActivityProfileProvider;
@@ -104,15 +104,33 @@ public class SigninAndHistorySyncActivity extends FullscreenSigninAndHistorySync
         super.triggerLayoutInflation();
 
         Intent intent = getIntent();
-        int signinAccessPoint = intent.getIntExtra(ARGUMENT_ACCESS_POINT,
-                                                   SigninAccessPoint.MAX_VALUE);
-        assert signinAccessPoint <= SigninAccessPoint.MAX_VALUE :
-          "Cannot find SigninAccessPoint!";
+        // Workaround for https://crbug.com/172602571. (See https://crbug.com/394559360)
+        //
+        // This sets a classloader to use for parsing parcelable intents, to avoid
+        // ClassCastException caused by mismatching ClassLoader.
+        intent.setExtrasClassLoader(BottomSheetSigninAndHistorySyncConfig.class.getClassLoader());
+
+        int signinAccessPoint =
+                intent.getIntExtra(ARGUMENT_ACCESS_POINT, SigninAccessPoint.MAX_VALUE);
+        assert signinAccessPoint <= SigninAccessPoint.MAX_VALUE : "Cannot find SigninAccessPoint!";
 
         if (intent.getBooleanExtra(ARGUMENT_IS_FULLSCREEN_SIGNIN, false)) {
             updateSystemUiForFullscreenSignin();
+
+            // Workaround for https://crbug.com/172602571. (See https://crbug.com/394559360)
+            //
+            // This sets a classloader to use for parsing parcelable intents, to avoid
+            // ClassCastException caused by mismatching ClassLoader.
+            intent.setExtrasClassLoader(
+                    FullscreenSigninAndHistorySyncConfig.class.getClassLoader());
             FullscreenSigninAndHistorySyncConfig config =
-                    intent.getParcelableExtra(ARGUMENT_FULLSCREEN_SIGNIN_CONFIG);
+                    IntentCompat.getParcelableExtra(
+                            intent,
+                            ARGUMENT_FULLSCREEN_SIGNIN_CONFIG,
+                            FullscreenSigninAndHistorySyncConfig.class);
+            if (config == null) {
+                throw new IllegalArgumentException("Config object shouldn't be null.");
+            }
             mIsFullscreenPromo = true;
 
             RecordHistogram.recordTimesHistogram(
@@ -140,8 +158,15 @@ public class SigninAndHistorySyncActivity extends FullscreenSigninAndHistorySync
         }
 
         setStatusBarColor(Color.TRANSPARENT);
+
         BottomSheetSigninAndHistorySyncConfig config =
-                intent.getParcelableExtra(ARGUMENT_BOTTOM_SHEET_SIGNIN_CONFIG);
+                IntentCompat.getParcelableExtra(
+                        intent,
+                        ARGUMENT_BOTTOM_SHEET_SIGNIN_CONFIG,
+                        BottomSheetSigninAndHistorySyncConfig.class);
+        if (config == null) {
+            throw new IllegalStateException("Config object shouldn't be null.");
+        }
         mCoordinator =
                 new BottomSheetSigninAndHistorySyncCoordinator(
                         getWindowAndroid(),
@@ -179,7 +204,7 @@ public class SigninAndHistorySyncActivity extends FullscreenSigninAndHistorySync
                     @Nullable
                     @Override
                     protected OtrProfileId createOffTheRecordProfileId() {
-                        throw new IllegalStateException(
+                        throw new IllegalArgumentException(
                                 "Attempting to access incognito in the sign-in & history sync"
                                         + " opt-in flow");
                     }
@@ -240,7 +265,9 @@ public class SigninAndHistorySyncActivity extends FullscreenSigninAndHistorySync
     @Override
     public void setStatusBarColor(int statusBarColor) {
         StatusBarColorController.setStatusBarColor(
-                getEdgeToEdgeManager().getEdgeToEdgeSystemBarColorHelper(),
+                (getEdgeToEdgeManager() != null)
+                        ? getEdgeToEdgeManager().getEdgeToEdgeSystemBarColorHelper()
+                        : null,
                 getWindow(),
                 statusBarColor);
     }
@@ -285,11 +312,6 @@ public class SigninAndHistorySyncActivity extends FullscreenSigninAndHistorySync
     @Override
     public @BackPressResult int handleBackPress() {
         return mCoordinator.handleBackPress();
-    }
-
-    @Override
-    public @SecondaryActivityBackPressUma.SecondaryActivity int getSecondaryActivity() {
-        return SecondaryActivityBackPressUma.SecondaryActivity.SIGNIN_AND_HISTORY_SYNC;
     }
 
     public static @NonNull Intent createIntent(

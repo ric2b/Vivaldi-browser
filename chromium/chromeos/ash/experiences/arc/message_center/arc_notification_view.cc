@@ -101,7 +101,7 @@ ArcNotificationView::ArcNotificationView(
 
   item_->AddObserver(this);
 
-  AddChildView(content_view_.get());
+  AddChildViewRaw(content_view_.get());
 
   AddChildView(CreateCollapsedSummaryBuilder(notification)
                    .CopyAddressTo(&collapsed_summary_view_)
@@ -437,15 +437,6 @@ bool ArcNotificationView::HandleAccessibleAction(
     return true;
   }
   return false;
-}
-
-void ArcNotificationView::OnThemeChanged() {
-  message_center::MessageView::OnThemeChanged();
-
-  if (content_view_->background()) {
-    background()->SetNativeControlColor(
-        GetColorProvider()->GetColor(cros_tokens::kCrosSysSystemBaseElevated));
-  }
 }
 
 void ArcNotificationView::OnItemDestroying() {

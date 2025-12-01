@@ -21,9 +21,6 @@ public class ContentFeatureList {
     public static final String ACCESSIBILITY_INCLUDE_LONG_CLICK_ACTION =
             "AccessibilityIncludeLongClickAction";
 
-    public static final String ACCESSIBILITY_PAGE_ZOOM_ENHANCEMENTS =
-            "AccessibilityPageZoomEnhancements";
-
     public static final String ACCESSIBILITY_PAGE_ZOOM_V2 = "AccessibilityPageZoomV2";
 
     public static final String ACCESSIBILITY_UNIFIED_SNAPSHOTS = "AccessibilityUnifiedSnapshots";
@@ -37,9 +34,6 @@ public class ContentFeatureList {
     public static final String INPUT_ON_VIZ = "InputOnViz";
 
     public static final String ONE_TIME_PERMISSION = "OneTimePermission";
-
-    public static final String PROCESS_SHARING_WITH_STRICT_SITE_INSTANCES =
-            "ProcessSharingWithStrictSiteInstances";
 
     public static final String CONTINUE_GESTURE_ON_LOSING_FOCUS = "ContinueGestureOnLosingFocus";
 

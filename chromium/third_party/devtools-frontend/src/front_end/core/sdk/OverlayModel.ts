@@ -23,7 +23,7 @@ const UIStrings = {
    *@description Text in Overlay Model
    */
   pausedInDebugger: 'Paused in debugger',
-};
+} as const;
 const str_ = i18n.i18n.registerUIStrings('core/sdk/OverlayModel.ts', UIStrings);
 const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
 
@@ -73,8 +73,8 @@ export class OverlayModel extends SDKModel<EventTypes> implements ProtocolProxyA
   readonly #domModel: DOMModel;
   overlayAgent: ProtocolProxyApi.OverlayApi;
   readonly #debuggerModel: DebuggerModel|null;
-  #inspectModeEnabledInternal: boolean;
-  #hideHighlightTimeout: number|null;
+  #inspectModeEnabledInternal = false;
+  #hideHighlightTimeout: number|null = null;
   #defaultHighlighter: Highlighter;
   #highlighter: Highlighter;
   #showPaintRectsSetting: Common.Settings.Setting<boolean>;
@@ -83,11 +83,11 @@ export class OverlayModel extends SDKModel<EventTypes> implements ProtocolProxyA
   #showDebugBordersSetting: Common.Settings.Setting<boolean>;
   #showFPSCounterSetting: Common.Settings.Setting<boolean>;
   #showScrollBottleneckRectsSetting: Common.Settings.Setting<boolean>;
-  #registeredListeners: Common.EventTarget.EventDescriptor[];
-  #showViewportSizeOnResize: boolean;
+  #registeredListeners: Common.EventTarget.EventDescriptor[] = [];
+  #showViewportSizeOnResize = true;
   #persistentHighlighter: OverlayPersistentHighlighter|null;
   readonly #sourceOrderHighlighter: SourceOrderHighlighter;
-  #sourceOrderModeActiveInternal: boolean;
+  #sourceOrderModeActiveInternal = false;
   #windowControls: WindowControls;
 
   constructor(target: Target) {
@@ -111,9 +111,6 @@ export class OverlayModel extends SDKModel<EventTypes> implements ProtocolProxyA
           DebuggerModelEvents.GlobalObjectCleared, this.updatePausedInDebuggerMessage, this);
     }
 
-    this.#inspectModeEnabledInternal = false;
-
-    this.#hideHighlightTimeout = null;
     this.#defaultHighlighter = new DefaultHighlighter(this);
     this.#highlighter = this.#defaultHighlighter;
 
@@ -126,8 +123,6 @@ export class OverlayModel extends SDKModel<EventTypes> implements ProtocolProxyA
     this.#showScrollBottleneckRectsSetting =
         Common.Settings.Settings.instance().moduleSetting<boolean>('show-scroll-bottleneck-rects');
 
-    this.#registeredListeners = [];
-    this.#showViewportSizeOnResize = true;
     if (!target.suspended()) {
       void this.overlayAgent.invoke_enable();
       void this.wireAgentToSettings();
@@ -165,7 +160,6 @@ export class OverlayModel extends SDKModel<EventTypes> implements ProtocolProxyA
     });
 
     this.#sourceOrderHighlighter = new SourceOrderHighlighter(this);
-    this.#sourceOrderModeActiveInternal = false;
     this.#windowControls = new WindowControls(this.#domModel.cssModel());
   }
 
@@ -183,11 +177,11 @@ export class OverlayModel extends SDKModel<EventTypes> implements ProtocolProxyA
   }
 
   static async muteHighlight(): Promise<void[]> {
-    return Promise.all(TargetManager.instance().models(OverlayModel).map(model => model.suspendModel()));
+    return await Promise.all(TargetManager.instance().models(OverlayModel).map(model => model.suspendModel()));
   }
 
   static async unmuteHighlight(): Promise<void[]> {
-    return Promise.all(TargetManager.instance().models(OverlayModel).map(model => model.resumeModel()));
+    return await Promise.all(TargetManager.instance().models(OverlayModel).map(model => model.resumeModel()));
   }
 
   static highlightRect(rect: HighlightRect): void {
@@ -471,27 +465,6 @@ export class OverlayModel extends SDKModel<EventTypes> implements ProtocolProxyA
 
   sourceOrderModeActive(): boolean {
     return this.#sourceOrderModeActiveInternal;
-  }
-
-  highlightIsolatedElementInPersistentOverlay(nodeId: Protocol.DOM.NodeId): void {
-    if (!this.#persistentHighlighter) {
-      return;
-    }
-    this.#persistentHighlighter.highlightIsolatedElementInOverlay(nodeId);
-  }
-
-  hideIsolatedElementInPersistentOverlay(nodeId: Protocol.DOM.NodeId): void {
-    if (!this.#persistentHighlighter) {
-      return;
-    }
-    this.#persistentHighlighter.hideIsolatedElementInOverlay(nodeId);
-  }
-
-  isHighlightedIsolatedElementInPersistentOverlay(nodeId: Protocol.DOM.NodeId): boolean {
-    if (!this.#persistentHighlighter) {
-      return false;
-    }
-    return this.#persistentHighlighter.isIsolatedElementHighlighted(nodeId);
   }
 
   private delayedHideHighlight(delay: number): void {
@@ -808,7 +781,7 @@ export class OverlayModel extends SDKModel<EventTypes> implements ProtocolProxyA
   }
 
   async hasStyleSheetText(url: Platform.DevToolsPath.UrlString): Promise<boolean> {
-    return this.#windowControls.initializeStyleSheetText(url);
+    return await this.#windowControls.initializeStyleSheetText(url);
   }
 }
 

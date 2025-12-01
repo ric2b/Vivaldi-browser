@@ -38,6 +38,17 @@
 #import "net/base/apple/url_conversions.h"
 #import "url/gurl.h"
 
+namespace {
+
+// Different filter states for lens overlay.
+typedef NS_ENUM(NSUInteger, LensOverlayFilterState) {
+  LensOverlayFilterStateUnknown = 0,
+  LensOverlayFilterStateSelection,
+  LensOverlayFilterStateTranslate,
+};
+
+}  // namespace
+
 @interface LensOverlayMediator () <LensOverlayNavigationMutator,
                                    SearchEngineObserving>
 
@@ -52,6 +63,8 @@
 @implementation LensOverlayMediator {
   /// Whether the browser is off the record.
   BOOL _isIncognito;
+  /// The profile pref service.
+  raw_ptr<const PrefService> _profilePrefs;
   /// Search engine observer.
   std::unique_ptr<SearchEngineObserverBridge> _searchEngineObserver;
   /// Orchestrates the navigation in the bottom sheet of the lens result page.
@@ -60,11 +73,15 @@
   base::ElapsedTimer _lensStartSearchRequestTime;
   /// Whether the thumbnail/selection of the `currentLensResult` was removed.
   BOOL _thumbnailRemoved;
+  /// Tracks the Lens filter currently in use.
+  LensOverlayFilterState _currentFilterState;
 }
 
-- (instancetype)initWithIsIncognito:(BOOL)isIncognito {
+- (instancetype)initWithProfilePrefs:(const PrefService*)profilePrefs
+                         isIncognito:(BOOL)isIncognito {
   self = [super init];
   if (self) {
+    _profilePrefs = profilePrefs;
     _isIncognito = isIncognito;
     _navigationManager = std::make_unique<LensOverlayNavigationManager>(self);
   }
@@ -86,6 +103,7 @@
   _searchEngineObserver.reset();
   _navigationManager.reset();
   _currentLensResult = nil;
+  _currentFilterState = LensOverlayFilterStateUnknown;
 }
 
 #pragma mark - SearchEngineObserving
@@ -113,7 +131,7 @@
       _thumbnailRemoved || _currentLensResult.isTextSelection;
   if (isUnimodalTextQuery) {
     if (textClobbered) {
-      if (IsLensOverlaySameTabNavigationEnabled()) {
+      if (IsLensOverlaySameTabNavigationEnabled(_profilePrefs)) {
         __weak LensOverlayMediator* weakSelf = self;
         // Delay navigation until after omnibox defocus and toolbar button hide
         // animations complete. This ensures a smooth transition and avoids
@@ -195,6 +213,47 @@
   [self.resultConsumer handleSearchRequestStarted];
   _lensStartSearchRequestTime = base::ElapsedTimer();
   [self.toolbarConsumer setOmniboxEnabled:YES];
+
+  // If the filter is still unknown it means this is the first request, so
+  // nothing needs to be done, as the selection area in the zero state is
+  // correctly positioned.
+  if (_currentFilterState != LensOverlayFilterStateUnknown) {
+    BOOL isInTranslate = _currentFilterState == LensOverlayFilterStateTranslate;
+    BOOL willUseTranslate = self.lensHandler.translateFilterActive;
+
+    BOOL switchToTranslate = !isInTranslate && willUseTranslate;
+    BOOL switchToSelection = isInTranslate && !willUseTranslate;
+
+    BOOL hasUserSelection =
+        !CGRectEqualToRect(lensOverlay.selectionRect, CGRectZero);
+    BOOL noSelectionInTranslate = !hasUserSelection && willUseTranslate;
+
+    // Navigation in between modes are not supported. Reset the navigation
+    // stack.
+    if (switchToTranslate || switchToSelection) {
+      [self resetNavigation];
+    }
+
+    if (switchToTranslate) {
+      // The translation filter needs the selection area reset as well as the
+      // bottom sheet hidden, as no auto selection happens at this stage.
+      [self.lensHandler resetSelectionAreaToInitialPosition:^{
+      }];
+      [self.presentationDelegate hideBottomSheet];
+    } else if (noSelectionInTranslate) {
+      // A missing selection without a switch in modes indicates the user
+      // intended to dismiss the current selection.
+      [self.presentationDelegate hideBottomSheet];
+    } else if (switchToSelection || willUseTranslate) {
+      // When transitioning to selection the bottom sheet might be hidden. As
+      // auto selection might be on we need to restore it if hidden.
+      [self.presentationDelegate revealBottomSheetIfHidden];
+    }
+  }
+
+  _currentFilterState = self.lensHandler.translateFilterActive
+                            ? LensOverlayFilterStateTranslate
+                            : LensOverlayFilterStateSelection;
 }
 
 // The lens overlay search request produced an error.
@@ -221,7 +280,7 @@
 }
 
 - (void)lensOverlay:(id<ChromeLensOverlay>)lensOverlay
-    suggestSignalsAvailableOnResult:(id<ChromeLensOverlayResult>)result {
+    hasSuggestSignalsAvailableOnResult:(id<ChromeLensOverlayResult>)result {
   if (result != _currentLensResult) {
     return;
   }
@@ -277,13 +336,24 @@
   [self.toolbarConsumer setCanGoBack:canGoBack];
 }
 
-- (void)onSRPLoadWithOmniboxText:(NSString*)omniboxText {
-  if (![omniboxText isEqualToString:_currentLensResult.queryText]) {
-    if (!_currentLensResult.isTextSelection) {
+- (void)onSRPLoadWithOmniboxText:(NSString*)omniboxText
+                    isMultimodal:(BOOL)isMultimodal {
+  if (_currentLensResult.isTextSelection) {
+    // On text selection, hide the user selection on text change.
+    if (![omniboxText isEqualToString:_currentLensResult.queryText]) {
+      [self.lensHandler hideUserSelection];
+    }
+    // Multimodal query on a text selection are not handled. Thumbnail is not
+    // updated.
+    CHECK(!isMultimodal, kLensOverlayNotFatalUntil);
+  } else {
+    // On image selection, hide the thumbnail and user selection when loading an
+    // unimodal query.
+    if (!isMultimodal) {
       [self.omniboxCoordinator setThumbnailImage:nil];
       _thumbnailRemoved = YES;
+      [self.lensHandler hideUserSelection];
     }
-    [self.lensHandler hideUserSelection];
   }
   [self updateOmniboxText:omniboxText];
 }
@@ -311,11 +381,12 @@
   [self.delegate lensOverlayMediatorOpenURLInNewTabRequsted:URL];
 }
 
-- (void)respondToTabWillChange {
-  [self.delegate respondToTabWillChange];
-}
-
 #pragma mark - Private
+
+- (void)resetNavigation {
+  _navigationManager = std::make_unique<LensOverlayNavigationManager>(self);
+  [self.toolbarConsumer setCanGoBack:NO];
+}
 
 /// Updates the UI for lens `result`.
 - (void)updateForLensResult:(id<ChromeLensOverlayResult>)result {
@@ -327,6 +398,12 @@
     self.omniboxClient->SetLensResultHasThumbnail(!result.isTextSelection);
   }
   [self updateOmniboxText:result.queryText];
+
+  if (result.isGeneratedInTranslate) {
+    [self.presentationDelegate didLoadTranslateResult];
+  } else {
+    [self.presentationDelegate didLoadSelectionResult];
+  }
 }
 
 /// Updates the steady state omnibox text.

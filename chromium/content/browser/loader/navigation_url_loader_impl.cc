@@ -14,6 +14,7 @@
 #include "base/containers/contains.h"
 #include "base/debug/crash_logging.h"
 #include "base/debug/dump_without_crashing.h"
+#include "base/feature_list.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback_helpers.h"
 #include "base/memory/scoped_refptr.h"
@@ -38,6 +39,7 @@
 #include "content/browser/loader/subresource_proxying_url_loader_service.h"
 #include "content/browser/loader/url_loader_factory_utils.h"
 #include "content/browser/navigation_subresource_loader_params.h"
+#include "content/browser/preloading/prefetch/prefetch_features.h"
 #include "content/browser/preloading/prefetch/prefetch_url_loader_interceptor.h"
 #include "content/browser/renderer_host/frame_tree_node.h"
 #include "content/browser/renderer_host/navigation_request.h"
@@ -104,6 +106,7 @@
 #include "services/network/public/cpp/wrapper_shared_url_loader_factory.h"
 #include "services/network/public/mojom/network_context.mojom-forward.h"
 #include "services/network/public/mojom/network_service.mojom.h"
+#include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/common/loader/mime_sniffing_throttle.h"
 #include "third_party/blink/public/common/loader/record_load_histograms.h"
 #include "third_party/blink/public/common/loader/throttling_url_loader.h"
@@ -331,6 +334,15 @@ std::unique_ptr<network::ResourceRequest> CreateResourceRequest(
       request_info.shared_storage_writable_eligible;
   new_request->is_ad_tagged = request_info.is_ad_tagged;
 
+  // TODO(crbug.com/382291442): Remove feature guarding once launched.
+  if (base::FeatureList::IsEnabled(
+          network::features::kPopulatePermissionsPolicyOnRequest) &&
+      frame_tree_node && frame_tree_node->current_frame_host() &&
+      frame_tree_node->current_frame_host()->GetPermissionsPolicy()) {
+    new_request->permissions_policy =
+        *frame_tree_node->current_frame_host()->GetPermissionsPolicy();
+  }
+
   return new_request;
 }
 
@@ -532,16 +544,25 @@ std::unique_ptr<network::ResourceRequest> CreateResourceRequestForNavigation(
 
   new_request->priority = priority;
 
-  // When set, `update_first_party_url_on_redirect` will cause a
-  // server-redirect to update the URL used to determine if cookies are
-  // first-party. Since fenced frames are main frames in terms of cookie
-  // partitioning, this needs to be `is_main_frame` rather than
-  // `is_outermost_main_frame`.
   if (is_main_frame) {
+    // When set, `update_first_party_url_on_redirect` will cause a
+    // server-redirect to update the URL used to determine if cookies are
+    // first-party. Since fenced frames are main frames in terms of cookie
+    // partitioning, this needs to be `is_main_frame` rather than
+    // `is_outermost_main_frame`.
     new_request->update_first_party_url_on_redirect = true;
+
+    // Navigation responses for the top-level document are able to be used as
+    // compression dictionaries.
+    new_request->shared_dictionary_writer_enabled = true;
   }
 
   new_request->enable_load_timing = true;
+
+  if (base::FeatureList::IsEnabled(
+          network::features::kRendererSideContentDecoding)) {
+    new_request->client_side_content_decoding_enabled = true;
+  }
 
   return new_request;
 }
@@ -659,6 +680,18 @@ void NavigationURLLoaderImpl::CreateInterceptors() {
     // The interceptor may not be created in certain cases (e.g., the origin
     // is not secure).
     if (service_worker_interceptor) {
+      if (base::FeatureList::IsEnabled(features::kPrefetchServiceWorker)) {
+        // Set up an interceptor for ServiceWorker-controlled prefetches. This
+        // is needed before the ServiceWorkerMainResourceLoaderInterceptor which
+        // would also intercept the request for ServiceWorker-controlled URLs.
+        // See the design docs at https://crbug.com/40947546.
+        interceptors_.push_back(std::make_unique<PrefetchURLLoaderInterceptor>(
+            PrefetchServiceWorkerState::kControlled,
+            service_worker_handle_->AsWeakPtr(), frame_tree_node_id_,
+            request_info_->initiator_document_token,
+            request_info_->prefetch_serving_page_metrics_container));
+      }
+
       interceptors_.push_back(std::move(service_worker_interceptor));
     }
   }
@@ -671,8 +704,14 @@ void NavigationURLLoaderImpl::CreateInterceptors() {
   }
 
   // Set up an interceptor for prefetch.
+  // When `features::kPrefetchServiceWorker` is enabled, we intentionally add
+  // two `PrefetchURLLoaderInterceptor`s, one for ServiceWorker-controlled
+  // prefetches above, and one for non-ServiceWorker-controlled prefetches here.
+  // See the design docs at https://crbug.com/40947546.
   interceptors_.push_back(std::make_unique<PrefetchURLLoaderInterceptor>(
-      frame_tree_node_id_, request_info_->initiator_document_token,
+      PrefetchServiceWorkerState::kDisallowed,
+      /*service_worker_handle=*/nullptr, frame_tree_node_id_,
+      request_info_->initiator_document_token,
       request_info_->prefetch_serving_page_metrics_container));
 
   // See if embedders want to add interceptors.
@@ -831,26 +870,26 @@ void NavigationURLLoaderImpl::StartNonInterceptedRequest(
   CreateThrottlingLoaderAndStart(std::move(factory),
                                  /*additional_throttles=*/{});
 }
-void NavigationURLLoaderImpl::FallbackToNonInterceptedRequest(
-    ResponseHeadUpdateParams head_update_params) {
-  head_update_params_ = std::move(head_update_params);
-  scoped_refptr<network::SharedURLLoaderFactory> factory;
-  if (network::IsURLHandledByNetworkService(resource_request_->url)) {
-    factory = network_loader_factory_;
-    default_loader_used_ = true;
-  } else {
-    factory = GetOrCreateNonNetworkLoaderFactory();
-  }
-  uint32_t options =
-      GetURLLoaderOptions(resource_request_->is_outermost_main_frame);
 
-  // As `FallbackToNonInterceptedRequest()` is called only from ServiceWorker
-  // after initially setting `interceptor_result->single_request_factory`,
-  // `url_loader_` should be non-null and pointing to the
-  // service-worker-intercepting loader. Restart it with the non-interceptor
-  // factory.
-  CHECK(url_loader_);
-  url_loader_->RestartWithFactory(std::move(factory), options);
+network::mojom::URLLoaderFactory*
+NavigationURLLoaderImpl::FallbackToNonInterceptedRequest(
+    base::WeakPtr<NavigationURLLoaderImpl> self,
+    ResponseHeadUpdateParams head_update_params) {
+  if (!self) {
+    return nullptr;
+  }
+
+  self->head_update_params_ = std::move(head_update_params);
+  if (network::IsURLHandledByNetworkService(self->resource_request_->url)) {
+    // `NavigationURLLoaderImpl::default_loader_used_` is NOT set to true here,
+    // because the underlying URLLoaderFactory of
+    // `NavigationURLLoaderImpl::url_loader_` is still ServiceWorker-provided
+    // one (that finally delegates to `network_loader_factory_` though) and thus
+    // isn't e.g. unsafe to reuse after redirects.
+    return self->network_loader_factory_.get();
+  } else {
+    return self->GetOrCreateNonNetworkLoaderFactory().get();
+  }
 }
 
 scoped_refptr<network::SharedURLLoaderFactory>
@@ -1295,6 +1334,11 @@ void NavigationURLLoaderImpl::OnAcceptCHFrameReceived(
     const url::Origin& origin,
     const std::vector<network::mojom::WebClientHintsType>& accept_ch_frame,
     OnAcceptCHFrameReceivedCallback callback) {
+  LogQueueTimeHistogram("Navigation.QueueTime.OnAcceptCHFrameReceived",
+                        resource_request_->is_outermost_main_frame);
+  base::ScopedUmaHistogramTimer timer(
+      "Navigation.URLLoader.OnAcceptCHFrameReceived.ExecutionTime",
+      base::ScopedUmaHistogramTimer::ScopedHistogramTiming::kMicrosecondTimes);
   received_accept_ch_frame_ = true;
   if (!base::FeatureList::IsEnabled(network::features::kAcceptCHFrame)) {
     std::move(callback).Run(net::OK);
@@ -1498,6 +1542,10 @@ void NavigationURLLoaderImpl::ParseHeaders(
 
   // If the network service is running in process, skip unnecessary thread hops.
   if (IsInProcessNetworkService() && !head->parsed_headers) {
+    base::ScopedUmaHistogramTimer in_process(
+        "Navigation.URLLoader.ParseHeaders.InProcessTime",
+        base::ScopedUmaHistogramTimer::ScopedHistogramTiming::
+            kMicrosecondTimes);
     head->parsed_headers =
         network::PopulateParsedHeaders(head->headers.get(), url);
   }
@@ -1510,18 +1558,25 @@ void NavigationURLLoaderImpl::ParseHeaders(
   // - Network
   // - ServiceWorker
   // - WebUI
+  base::UmaHistogramBoolean("Navigation.URLLoader.InMainPath",
+                            static_cast<bool>(head->parsed_headers));
   if (head->parsed_headers) {
 #ifndef NDEBUG
     // In debug mode, force reparsing the headers and check that they match.
     auto check = [](base::OnceClosure continuation,
                     network::mojom::URLResponseHead* head, GURL url,
+                    base::TimeTicks call_time,
                     network::mojom::ParsedHeadersPtr parsed_headers) {
+      base::UmaHistogramMicrosecondsTimes(
+          "Navigation.URLLoader.ParseHeaders.RoundTripTimeForVerify",
+          base::TimeTicks::Now() - call_time);
       CheckParsedHeadersEquals(parsed_headers, head->parsed_headers, url);
       std::move(continuation).Run();
     };
     GetNetworkService()->ParseHeaders(
         url, head->headers,
-        base::BindOnce(check, std::move(continuation), head, url));
+        base::BindOnce(check, std::move(continuation), head, url,
+                       base::TimeTicks::Now()));
 #else   // NDEBUG
     std::move(continuation).Run();
 #endif  // NDEBUG
@@ -1530,14 +1585,19 @@ void NavigationURLLoaderImpl::ParseHeaders(
 
   auto assign = [](base::OnceClosure continuation,
                    network::mojom::URLResponseHead* head,
+                   base::TimeTicks call_time,
                    network::mojom::ParsedHeadersPtr parsed_headers) {
+    base::UmaHistogramMicrosecondsTimes(
+        "Navigation.URLLoader.ParseHeaders.RoundTripTimeForNonNetworkResponse",
+        base::TimeTicks::Now() - call_time);
     head->parsed_headers = std::move(parsed_headers);
     std::move(continuation).Run();
   };
 
   GetNetworkService()->ParseHeaders(
       url, head->headers,
-      base::BindOnce(assign, std::move(continuation), head));
+      base::BindOnce(assign, std::move(continuation), head,
+                     base::TimeTicks::Now()));
 }
 
 // TODO(crbug.com/40552600): pass `navigation_ui_data` along with the

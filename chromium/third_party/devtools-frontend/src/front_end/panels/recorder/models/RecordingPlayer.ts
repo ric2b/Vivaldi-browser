@@ -41,16 +41,14 @@ function isPageTarget(target: Protocol.Target.TargetInfo): boolean {
 }
 
 export class RecordingPlayer extends Common.ObjectWrapper.ObjectWrapper<EventTypes> {
-  #stopPromise: Promise<void>;
-  #resolveStopPromise?: Function;
   userFlow: UserFlow;
   speed: PlayRecordingSpeed;
   timeout: number;
   breakpointIndexes: Set<number>;
-  steppingOver: boolean = false;
+  steppingOver = false;
   aborted = false;
-  abortPromise: Promise<void>;
-  #abortResolveFn?: Function;
+  #stopPromise = Promise.withResolvers<void>();
+  #abortPromise = Promise.withResolvers<void>();
   #runner?: PuppeteerReplay.Runner;
 
   constructor(
@@ -68,20 +66,11 @@ export class RecordingPlayer extends Common.ObjectWrapper.ObjectWrapper<EventTyp
     this.speed = speed;
     this.timeout = userFlow.timeout || defaultTimeout;
     this.breakpointIndexes = breakpointIndexes;
-    this.#stopPromise = new Promise(resolve => {
-      this.#resolveStopPromise = resolve;
-    });
-
-    this.abortPromise = new Promise(resolve => {
-      this.#abortResolveFn = resolve;
-    });
   }
 
   #resolveAndRefreshStopPromise(): void {
-    this.#resolveStopPromise?.();
-    this.#stopPromise = new Promise(resolve => {
-      this.#resolveStopPromise = resolve;
-    });
+    this.#stopPromise.resolve();
+    this.#stopPromise = Promise.withResolvers();
   }
 
   static async connectPuppeteer(): Promise<{
@@ -191,18 +180,22 @@ export class RecordingPlayer extends Common.ObjectWrapper.ObjectWrapper<EventTyp
   }
 
   async stop(): Promise<void> {
-    await Promise.race([this.#stopPromise, this.abortPromise]);
+    await Promise.race([this.#stopPromise, this.#abortPromise]);
+  }
+
+  get abortPromise(): Promise<void> {
+    return this.#abortPromise.promise;
   }
 
   abort(): void {
     this.aborted = true;
-    this.#abortResolveFn?.();
+    this.#abortPromise.resolve();
     this.#runner?.abort();
   }
 
   disposeForTesting(): void {
-    this.#resolveStopPromise?.();
-    this.#abortResolveFn?.();
+    this.#stopPromise.resolve();
+    this.#abortPromise.resolve();
   }
 
   continue(): void {
@@ -275,6 +268,10 @@ export class RecordingPlayer extends Common.ObjectWrapper.ObjectWrapper<EventTyp
         if (Common.ParsedURL.schemeIs(page?.url() as Platform.DevToolsPath.UrlString, 'devtools:') &&
             (step.type === 'setViewport' || step.type === 'navigate')) {
           return;
+        }
+        if (step.type === 'navigate' &&
+            Common.ParsedURL.schemeIs(step.url as Platform.DevToolsPath.UrlString, 'chrome:')) {
+          throw new Error('Not allowed to replay on chrome:// URLs');
         }
         // Focus the target in case it's not focused.
         await this.page.bringToFront();

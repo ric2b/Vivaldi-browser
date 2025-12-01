@@ -124,7 +124,8 @@ class CORE_EXPORT WorkerOrWorkletGlobalScope
 
   // Returns true when we should reject a response without
   // cross-origin-embedder-policy: require-corp.
-  // TODO(crbug.com/1064920): Remove this once PlzDedicatedWorker ships.
+  // TODO(crbug.com/1064920): Remove this now that PlzDedicatedWorker has
+  // shipped.
   virtual RejectCoepUnsafeNone ShouldRejectCoepUnsafeNoneTopModuleScript()
       const {
     return RejectCoepUnsafeNone(false);
@@ -233,11 +234,6 @@ class CORE_EXPORT WorkerOrWorkletGlobalScope
   const Vector<network::mojom::blink::ContentSecurityPolicyPtr>&
   OutsideContentSecurityPolicies() const {
     return outside_content_security_policies_;
-  }
-
-  void SetIsOfflineMode(bool is_offline_mode) {
-    DCHECK(web_worker_fetch_context_);
-    web_worker_fetch_context_->SetIsOfflineMode(is_offline_mode);
   }
 
   WebWorkerFetchContext* web_worker_fetch_context() const {

@@ -7,19 +7,23 @@
             "builder_id": {
               "bucket": "ci",
               "builder": "Android FYI Release (Pixel 6)",
-              "project": "chromium-m134"
+              "project": "chromium-m136"
             },
             "builder_spec": {
               "builder_group": "chromium.gpu.fyi",
               "execution_mode": "TEST",
               "legacy_android_config": {
-                "config": "arm64_builder_rel_mb"
+                "config": "base_config"
               },
               "legacy_chromium_config": {
                 "apply_configs": [
+                  "mb",
                   "download_xr_test_apks"
                 ],
-                "config": "arm64_builder_rel_mb",
+                "build_config": "Release",
+                "config": "main_builder",
+                "target_arch": "arm",
+                "target_bits": 64,
                 "target_platform": "android"
               },
               "legacy_gclient_config": {
@@ -31,7 +35,7 @@
               "parent": {
                 "bucket": "ci",
                 "builder": "GPU FYI Android arm64 Builder",
-                "project": "chromium-m134"
+                "project": "chromium-m136"
               },
               "run_tests_serially": true
             }
@@ -40,19 +44,23 @@
             "builder_id": {
               "bucket": "ci",
               "builder": "GPU FYI Android arm64 Builder",
-              "project": "chromium-m134"
+              "project": "chromium-m136"
             },
             "builder_spec": {
               "builder_group": "chromium.gpu.fyi",
               "execution_mode": "COMPILE_AND_TEST",
               "legacy_android_config": {
-                "config": "arm64_builder_rel_mb"
+                "config": "base_config"
               },
               "legacy_chromium_config": {
                 "apply_configs": [
+                  "mb",
                   "download_xr_test_apks"
                 ],
-                "config": "arm64_builder_rel_mb",
+                "build_config": "Release",
+                "config": "main_builder",
+                "target_arch": "arm",
+                "target_bits": 64,
                 "target_platform": "android"
               },
               "legacy_gclient_config": {
@@ -69,7 +77,7 @@
         {
           "bucket": "ci",
           "builder": "Android FYI Release (Pixel 6)",
-          "project": "chromium-m134"
+          "project": "chromium-m136"
         }
       ],
       "mirroring_builder_group_and_names": [

@@ -30,10 +30,12 @@ class RealTimeReportingBindings;
 class RegisterAdBeaconBindings;
 class RegisterAdMacroBindings;
 class ReportBindings;
+class PrivateModelTrainingBindings;
 class SetBidBindings;
 class SetPriorityBindings;
 class SetPrioritySignalsOverrideBindings;
 class SharedStorageBindings;
+class TextConversionHelpers;
 class AuctionConfigLazyFiller;
 class BiddingBrowserSignalsLazyFiller;
 class InterestGroupLazyFiller;
@@ -119,6 +121,10 @@ class CONTENT_EXPORT ContextRecycler {
   void AddReportBindings(bool queue_report_aggregate_win_allowed);
   ReportBindings* report_bindings() { return report_bindings_.get(); }
 
+  void AddPrivateModelTrainingBindings();
+  PrivateModelTrainingBindings* private_model_training_bindings() {
+    return private_model_training_bindings_.get();
+  }
   void AddSetBidBindings();
   SetBidBindings* set_bid_bindings() { return set_bid_bindings_.get(); }
 
@@ -138,6 +144,11 @@ class CONTENT_EXPORT ContextRecycler {
       bool shared_storage_permissions_policy_allowed);
   SharedStorageBindings* shared_storage_bindings() {
     return shared_storage_bindings_.get();
+  }
+
+  void AddTextConversionHelpers();
+  TextConversionHelpers* text_conversion_helpers() {
+    return text_conversion_helpers_.get();
   }
 
   void AddInterestGroupLazyFiller();
@@ -192,11 +203,14 @@ class CONTENT_EXPORT ContextRecycler {
   std::unique_ptr<RegisterAdBeaconBindings> register_ad_beacon_bindings_;
   std::unique_ptr<RegisterAdMacroBindings> register_ad_macro_bindings_;
   std::unique_ptr<ReportBindings> report_bindings_;
+  std::unique_ptr<PrivateModelTrainingBindings>
+      private_model_training_bindings_;
   std::unique_ptr<SetBidBindings> set_bid_bindings_;
   std::unique_ptr<SetPriorityBindings> set_priority_bindings_;
   std::unique_ptr<SetPrioritySignalsOverrideBindings>
       set_priority_signals_override_bindings_;
   std::unique_ptr<SharedStorageBindings> shared_storage_bindings_;
+  std::unique_ptr<TextConversionHelpers> text_conversion_helpers_;
 
   // everything here is owned by one of the unique_ptr's above.
   std::vector<raw_ptr<Bindings, VectorExperimental>> bindings_list_;

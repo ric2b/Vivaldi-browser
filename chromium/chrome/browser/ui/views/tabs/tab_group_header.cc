@@ -5,6 +5,7 @@
 #include "chrome/browser/ui/views/tabs/tab_group_header.h"
 
 #include <memory>
+#include <string_view>
 #include <utility>
 
 #include "base/feature_list.h"
@@ -167,7 +168,7 @@ bool TabGroupHeader::OnKeyPressed(const ui::KeyEvent& event) {
       !editor_bubble_tracker_.is_open()) {
     tab_slot_controller_->ToggleTabGroupCollapsedState(
         group().value(), ToggleTabGroupCollapsedStateOrigin::kKeyboard);
-    NotifyAccessibilityEvent(ax::mojom::Event::kSelection, true);
+    NotifyAccessibilityEventDeprecated(ax::mojom::Event::kSelection, true);
     return true;
   }
 
@@ -297,7 +298,7 @@ void TabGroupHeader::UpdateTooltipText() {
 
   if (!title_->GetText().empty()) {
     SetTooltipText(l10n_util::GetStringFUTF16(
-        IDS_TAB_GROUPS_NAMED_GROUP_TOOLTIP, title_->GetText(),
+        IDS_TAB_GROUPS_NAMED_GROUP_TOOLTIP, std::u16string(title_->GetText()),
         tab_slot_controller_->GetGroupContentString(group().value())));
   } else {
     SetTooltipText(l10n_util::GetStringFUTF16(
@@ -323,7 +324,7 @@ TabSlotView::ViewType TabGroupHeader::GetTabSlotViewType() const {
 
 TabSizeInfo TabGroupHeader::GetTabSizeInfo() const {
   TabSizeInfo size_info;
-  // Group headers have a fixed width based on |title_|'s width.
+  // Group headers have a fixed width based on `title_`'s width.
   const int width = GetDesiredWidth();
   size_info.pinned_tab_width = width;
   size_info.min_active_width = width;
@@ -443,12 +444,12 @@ void TabGroupHeader::UpdateAccessibleName() {
     return;
   }
 
-  std::u16string title = tab_slot_controller_->GetGroupTitle(group().value());
+  std::u16string title(tab_slot_controller_->GetGroupTitle(group().value()));
   std::u16string contents =
       tab_slot_controller_->GetGroupContentString(group().value());
   std::u16string collapsed_state = std::u16string();
 
-// Windows screen reader properly announces the state set above in |node_data|
+// Windows screen reader properly announces the state set above in `node_data`
 // and will read out the state change when the header's collapsed state is
 // toggled. The state is added into the title for other platforms and the title
 // will be reread with the updated state when the header's collapsed state is
@@ -474,14 +475,12 @@ int TabGroupHeader::GetCollapsedHeaderWidth() const {
 }
 
 bool SupportsDataSharing() {
-  return base::FeatureList::IsEnabled(
-      data_sharing::features::kDataSharingFeature);
+  return data_sharing::features::IsDataSharingFunctionalityEnabled();
 }
 
 bool TabGroupHeader::ShouldShowHeaderIcon() const {
   const bool supports_shared_groups = SupportsDataSharing();
-  if (tab_groups::IsTabGroupsSaveV2Enabled() && !supports_shared_groups) {
-    // In V2, the sync icon was removed.
+  if (!supports_shared_groups) {
     return false;
   }
 
@@ -500,8 +499,8 @@ bool TabGroupHeader::ShouldShowHeaderIcon() const {
     return false;
   }
 
-  if (tab_groups::IsTabGroupsSaveV2Enabled() && supports_shared_groups) {
-    // V2 + DataSharing shows a share icon if the group is shared.
+  if (supports_shared_groups) {
+    // DataSharing shows a share icon if the group is shared.
     return saved_group->is_shared_tab_group();
   }
 
@@ -528,8 +527,7 @@ void TabGroupHeader::UpdateTitleView() {
 void TabGroupHeader::UpdateSyncIconView() {
   sync_icon_->SetVisible(should_show_header_icon_);
   if (should_show_header_icon_) {
-    bool use_share_icon =
-        tab_groups::IsTabGroupsSaveV2Enabled() && SupportsDataSharing();
+    bool use_share_icon = SupportsDataSharing();
     sync_icon_->SetImage(ui::ImageModel::FromVectorIcon(
         use_share_icon ? kPeopleGroupIcon : kTabGroupsSyncIcon,
         color_utils::GetColorWithMaxContrast(color_),
@@ -538,8 +536,7 @@ void TabGroupHeader::UpdateSyncIconView() {
 }
 
 void TabGroupHeader::UpdateAttentionIndicatorView() {
-  const bool supports_attention_indicator =
-      tab_groups::IsTabGroupsSaveV2Enabled() && SupportsDataSharing();
+  const bool supports_attention_indicator = SupportsDataSharing();
   if (!supports_attention_indicator) {
     attention_indicator_->SetVisible(false);
     return;
@@ -551,12 +548,11 @@ void TabGroupHeader::UpdateAttentionIndicatorView() {
     attention_indicator_->SetImage(ui::ImageModel::FromVectorIcon(
         kDefaultTouchFaviconMaskIcon,
         color_utils::GetColorWithMaxContrast(color_),
-        group_style_->GetAttentionIndicatorWidth(
-            should_show_attention_indicator)));
+        group_style_->GetAttentionIndicatorWidth()));
   }
 }
 
-std::u16string TabGroupHeader::GetTitleTextForTesting() const {
+std::u16string_view TabGroupHeader::GetTitleTextForTesting() const {
   CHECK(title_);
   return title_->GetText();
 }
@@ -571,16 +567,16 @@ void TabGroupHeader::CreateHeaderWithoutTitle() {
     const bool should_show_attention_indicator = GetShowingAttentionIndicator();
     if (should_show_attention_indicator) {
       const gfx::Insets title_chip_insets =
-          group_style_->GetInsetsForHeaderChip(should_show_header_icon_);
+          group_style_->GetInsetsForHeaderChip();
       const int title_chip_vertical_inset = 0;
       gfx::Rect title_chip_bounds = group_style_->GetEmptyTitleChipBounds(this);
       const int attention_indicator_width =
-          group_style_->GetAttentionIndicatorWidth(
-              should_show_attention_indicator);
+          group_style_->GetAttentionIndicatorWidth();
 
       // The total width of the title chip includes the horizontal
-      // insets, the sync icon, and the attention indicator.
+      // insets, the sync icon, and the attention indicator + its padding.
       title_chip_bounds.set_width(sync_icon_width + attention_indicator_width +
+                                  kSyncIconPaddingFromLabel +
                                   title_chip_insets.width());
       title_chip_->SetBoundsRect(title_chip_bounds);
 
@@ -620,7 +616,12 @@ void TabGroupHeader::CreateHeaderWithTitle() {
   const bool should_show_attention_indicator =
       should_show_header_icon_ && GetShowingAttentionIndicator();
   const int attention_indicator_width =
-      group_style_->GetAttentionIndicatorWidth(should_show_attention_indicator);
+      should_show_attention_indicator
+          ? group_style_->GetAttentionIndicatorWidth() +
+                kSyncIconPaddingFromLabel
+          : 0;
+  const int attention_indicator_padding =
+      should_show_attention_indicator ? kSyncIconPaddingFromLabel : 0;
 
   // The max width of the content should be half the standard tab width (not
   // counting overlap).
@@ -634,11 +635,10 @@ void TabGroupHeader::CreateHeaderWithTitle() {
       title_->GetPreferredSize(views::SizeBounds(title_->width(), {})).height();
 
   // Width of title chip should at least be the width of an empty title chip.
-  const int total_content_width = sync_icon_width +
-                                  padding_between_label_sync_icon + text_width +
-                                  attention_indicator_width;
-  const gfx::Insets title_chip_insets =
-      group_style_->GetInsetsForHeaderChip(should_show_header_icon_);
+  const int total_content_width =
+      sync_icon_width + padding_between_label_sync_icon + text_width +
+      attention_indicator_width + attention_indicator_padding;
+  const gfx::Insets title_chip_insets = group_style_->GetInsetsForHeaderChip();
   const int title_chip_width =
       std::max(group_style_->GetEmptyTitleChipBounds(this).width(),
                total_content_width + title_chip_insets.width());
@@ -687,8 +687,7 @@ bool TabGroupHeader::GetShowingAttentionIndicator() {
 }
 
 void TabGroupHeader::SetTabGroupNeedsAttention(bool needs_attention) {
-  const bool supports_attention_indicator =
-      tab_groups::IsTabGroupsSaveV2Enabled() && SupportsDataSharing();
+  const bool supports_attention_indicator = SupportsDataSharing();
   if (!supports_attention_indicator) {
     return;
   }
@@ -711,6 +710,7 @@ TabGroupHeader::EditorBubbleTracker::~EditorBubbleTracker() {
   if (is_open_ && widget_) {
     widget_->RemoveObserver(this);
     widget_->Close();
+    tab_slot_controller_->NotifyTabstripBubbleClosed();
   }
   CHECK(!IsInObserverList());
 }

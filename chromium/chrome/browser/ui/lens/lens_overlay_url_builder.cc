@@ -5,6 +5,7 @@
 #include "chrome/browser/ui/lens/lens_overlay_url_builder.h"
 
 #include "base/base64url.h"
+#include "base/notreached.h"
 #include "base/strings/escape.h"
 #include "chrome/browser/browser_process.h"
 #include "components/language/core/common/language_util.h"
@@ -45,6 +46,7 @@ inline constexpr char kToolbeltModeParameterKey[] = "tbm";
 inline constexpr char kShoppingModeParameterValue[] = "28";
 inline constexpr char kUnimodalModeParameterValue[] = "26";
 inline constexpr char kMultimodalModeParameterValue[] = "24";
+inline constexpr char kMGTModeParameterValue[] = "50";
 
 // Query parameter for the language code.
 inline constexpr char kLanguageCodeParameterKey[] = "hl";
@@ -95,6 +97,10 @@ inline constexpr char kDarkModeParameterDarkValue[] = "1";
 inline constexpr char kLensFootprintParameterKey[] = "lns_fp";
 inline constexpr char kLensFootprintParameterValue[] = "1";
 
+// Query parameter for the lens surface.
+inline constexpr char kLensSurfaceParameterKey[] = "lns_surface";
+inline constexpr char kLensSurfaceParameterLensOverlayValue[] = "42";
+
 // Url path for redirects from the results base URL.
 inline constexpr char kUrlRedirectPath[] = "/url";
 
@@ -131,6 +137,15 @@ std::string CompressAndEncode(const std::string& serialized_proto) {
                         base::Base64UrlEncodePolicy::OMIT_PADDING,
                         &stickiness_signal_value);
   return stickiness_signal_value;
+}
+
+std::string GetURLRefWithoutTextFragment(const GURL& url) {
+  std::string url_ref = url.ref();
+  auto fragment_start = url_ref.find_first_of(":~:");
+  if (fragment_start != std::string::npos) {
+    url_ref.resize(fragment_start);
+  }
+  return url_ref;
 }
 
 }  // namespace
@@ -229,6 +244,10 @@ GURL AppendInvocationSourceParamToURL(
     case lens::LensOverlayInvocationSource::kOmnibox:
       param_value = kInvocationSourceOmniboxIcon;
       break;
+    case lens::LensOverlayInvocationSource::kLVFShutterButton:
+    case lens::LensOverlayInvocationSource::kLVFGallery:
+    case lens::LensOverlayInvocationSource::kContextMenu:
+      NOTREACHED() << "Invocation source not supported.";
   }
   return net::AppendOrReplaceQueryParameter(
       url_to_modify, kInvocationSourceParameterKey, param_value);
@@ -264,6 +283,11 @@ GURL BuildTextOnlySearchURL(
     url_with_query_params = net::AppendOrReplaceQueryParameter(
         url_with_query_params, kLensModeParameterKey,
         kLensModeParameterTextValue);
+    if (lens::features::IsUpdatedClientContextEnabled()) {
+      url_with_query_params = net::AppendOrReplaceQueryParameter(
+          url_with_query_params, kLensSurfaceParameterKey,
+          kLensSurfaceParameterLensOverlayValue);
+    }
   }
   url_with_query_params =
       AppendCommonSearchParametersToURL(url_with_query_params, use_dark_mode);
@@ -310,6 +334,11 @@ GURL BuildLensSearchURL(
   url_with_query_params = net::AppendOrReplaceQueryParameter(
       url_with_query_params, kLensFootprintParameterKey,
       kLensFootprintParameterValue);
+  if (lens::features::IsUpdatedClientContextEnabled()) {
+    url_with_query_params = net::AppendOrReplaceQueryParameter(
+        url_with_query_params, kLensSurfaceParameterKey,
+        kLensSurfaceParameterLensOverlayValue);
+  }
 
   // The search url should use the search session id from the cluster info.
   url_with_query_params = net::AppendOrReplaceQueryParameter(
@@ -368,8 +397,11 @@ bool IsValidSearchResultsUrl(const GURL& url) {
 bool ShouldOpenSearchURLInNewTab(const GURL& url) {
   std::string param_value;
   net::GetValueForKeyInQuery(url, kModeParameterKey, &param_value);
+  const bool is_shopping_mode = param_value == kShoppingModeParameterValue;
+  const bool is_mgt_mode = param_value == kMGTModeParameterValue;
   return IsValidSearchResultsUrl(url) &&
-         param_value == kShoppingModeParameterValue;
+         (is_shopping_mode ||
+          (is_mgt_mode && !lens::features::ShouldShowMGTInSidePanel()));
 }
 
 GURL GetSearchResultsUrlFromRedirectUrl(const GURL& url) {
@@ -435,6 +467,16 @@ bool IsLensTextSelectionType(
          lens_selection_type == lens::SELECT_TRANSLATED_TEXT ||
          lens_selection_type == lens::TRANSLATE_CHIP ||
          lens_selection_type == lens::SYMBOLIC_MATH_OBJECT;
+}
+
+bool URLsMatchWithoutTextFragment(const GURL& first_url,
+                                  const GURL& second_url) {
+  return first_url.scheme() == second_url.scheme() &&
+         first_url.host() == second_url.host() &&
+         first_url.path() == second_url.path() &&
+         first_url.query() == second_url.query() &&
+         GetURLRefWithoutTextFragment(first_url) ==
+             GetURLRefWithoutTextFragment(second_url);
 }
 
 }  // namespace lens

@@ -42,11 +42,13 @@
 #include "content/renderer/render_thread_impl.h"
 #include "content/renderer/renderer_main_platform_delegate.h"
 #include "media/media_buildflags.h"
+#include "mojo/public/cpp/bindings/direct_receiver.h"
 #include "mojo/public/cpp/bindings/interface_endpoint_client.h"
 #include "mojo/public/cpp/bindings/mojo_buildflags.h"
 #include "ppapi/buildflags/buildflags.h"
 #include "sandbox/policy/switches.h"
 #include "services/tracing/public/cpp/trace_startup.h"
+#include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/public/platform/scheduler/web_thread_scheduler.h"
 #include "third_party/webrtc_overrides/init_webrtc.h"  // nogncheck
@@ -273,8 +275,14 @@ int RendererMain(MainFunctionParams parameters) {
     // Consider CrRendererMain a display critical thread. While some Javascript
     // running on the main thread might not be, experiments demonstrated that
     // overall this improves user-perceived performance.
-    base::PlatformThread::SetCurrentThreadType(
-        base::ThreadType::kDisplayCritical);
+    // If kInputScenarioPriorityBoost is enabled, the main thread will only be
+    // display critical when user input is detected.
+    base::ThreadType thread_type =
+        base::FeatureList::IsEnabled(
+            blink::features::kInputScenarioPriorityBoost)
+            ? base::ThreadType::kDefault
+            : base::ThreadType::kDisplayCritical;
+    base::PlatformThread::SetCurrentThreadType(thread_type);
 
     std::unique_ptr<RenderProcess> render_process = RenderProcessImpl::Create();
     // It's not a memory leak since RenderThread has the same lifetime
@@ -307,6 +315,16 @@ int RendererMain(MainFunctionParams parameters) {
       TRACE_EVENT_INSTANT1("startup", "RendererMain", TRACE_EVENT_SCOPE_THREAD,
                            "needs_startup_tracing_after_mojo_init", true);
     }
+
+#if BUILDFLAG(IS_WIN)
+    // Now that Mojo is initialized, but before the sandbox is enabled, set up
+    // DirectReceiver.
+    if (base::FeatureList::IsEnabled(
+            blink::features::kDirectCompositorThreadIpc)) {
+      // Pre-initialize a transport since a feature that will use it is enabled.
+      mojo::CreateDirectReceiverTransportBeforeSandbox();
+    }
+#endif  // BUILDFLAG(IS_WIN)
 
     if (need_sandbox) {
       should_run_loop = platform.EnableSandbox();

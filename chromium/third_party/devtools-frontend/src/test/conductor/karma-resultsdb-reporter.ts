@@ -55,7 +55,7 @@ export const ResultsDBReporter = function(
 
   this.USE_COLORS = true;
 
-  const capturedLog: {log: string, type: string}[] = [];
+  const capturedLog: Array<{log: string, type: string}> = [];
   this.onBrowserLog = (browser: any, log: string, type: string) => {
     capturedLog.push({log, type});
   };
@@ -65,9 +65,9 @@ export const ResultsDBReporter = function(
     const testId = ResultsDb.sanitizedTestId([...suite, description].join('/'));
     const expected = success || skipped;
     const status = skipped ? 'SKIP' : success ? 'PASS' : 'FAIL';
-    let duration = '1ms';
+    let duration = '.001s';
     if (startTime < endTime) {
-      duration = (endTime - startTime).toString() + 'ms';
+      duration = ((endTime - startTime) * .001).toFixed(3) + 's';
     }
 
     const consoleLog = capturedLog.map(({type, log}) => `${type.toUpperCase()}: ${log}`);

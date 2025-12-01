@@ -10,14 +10,15 @@
 #include <optional>
 #include <string>
 #include <utility>
+#include <variant>
 #include <vector>
 
 #include "base/check.h"
 #include "base/check_op.h"
-#include "base/debug/crash_logging.h"
 #include "base/feature_list.h"
 #include "base/memory/ptr_util.h"
 #include "base/notreached.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
 #include "chrome/app/vector_icons/vector_icons.h"
@@ -25,6 +26,7 @@
 #include "chrome/browser/ui/webauthn/user_actions.h"
 #include "chrome/browser/ui/webauthn/webauthn_ui_helpers.h"
 #include "chrome/browser/webauthn/authenticator_request_dialog_model.h"
+#include "chrome/browser/webauthn/local_authentication_token.h"
 #include "chrome/browser/webauthn/webauthn_metrics_util.h"
 #include "chrome/grit/browser_resources.h"
 #include "chrome/grit/generated_resources.h"
@@ -34,12 +36,10 @@
 #include "device/fido/fido_constants.h"
 #include "device/fido/fido_types.h"
 #include "device/fido/pin.h"
-#include "third_party/abseil-cpp/absl/types/variant.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
 
 #if BUILDFLAG(IS_MAC)
-#include "crypto/scoped_lacontext.h"
 #include "device/fido/mac/util.h"
 #endif
 
@@ -47,18 +47,20 @@ namespace {
 
 using CredentialMech = AuthenticatorRequestDialogModel::Mechanism::Credential;
 using EnclaveMech = AuthenticatorRequestDialogModel::Mechanism::Enclave;
+using PasswordMech = AuthenticatorRequestDialogModel::Mechanism::Password;
 using ICloudKeychainMech =
     AuthenticatorRequestDialogModel::Mechanism::ICloudKeychain;
 using Step = AuthenticatorRequestDialogModel::Step;
 
 constexpr int kGpmArbitraryPinMinLength = 4;
 
-bool IsLocalPasskeyOrEnclaveAuthenticator(
+bool IsLocalPasskeyOrEnclaveAuthenticatorOrPassword(
     const AuthenticatorRequestDialogModel::Mechanism& mech) {
-  return (absl::holds_alternative<CredentialMech>(mech.type) &&
-          absl::get<CredentialMech>(mech.type).value().source !=
+  return (std::holds_alternative<CredentialMech>(mech.type) &&
+          std::get<CredentialMech>(mech.type).value().source !=
               device::AuthenticatorType::kPhone) ||
-         absl::holds_alternative<EnclaveMech>(mech.type);
+         std::holds_alternative<EnclaveMech>(mech.type) ||
+         std::holds_alternative<PasswordMech>(mech.type);
 }
 
 // Possibly returns a resident key warning if the model indicates that it's
@@ -646,12 +648,12 @@ void AuthenticatorTouchIdSheetModel::OnAccept() {
 }
 
 void AuthenticatorTouchIdSheetModel::OnTouchIDSensorTapped(
-    std::optional<crypto::ScopedLAContext> lacontext) {
+    std::optional<webauthn::LocalAuthenticationToken> local_auth_token) {
   // Ignore Touch ID ceremony status after the user has completed the ceremony.
   if (touch_id_completed_) {
     return;
   }
-  if (!lacontext) {
+  if (!local_auth_token) {
     // Authentication failed. Update the button status and rebuild the sheet,
     // which will restart the Touch ID request if the sensor is not softlocked
     // or display a padlock icon if it is.
@@ -659,7 +661,7 @@ void AuthenticatorTouchIdSheetModel::OnTouchIDSensorTapped(
     return;
   }
   touch_id_completed_ = true;
-  dialog_model()->lacontext = std::move(lacontext);
+  dialog_model()->local_auth_token = std::move(local_auth_token);
   dialog_model()->OnTouchIDComplete(true);
 }
 
@@ -1180,64 +1182,6 @@ std::u16string AuthenticatorSelectAccountSheetModel::GetAcceptButtonLabel()
   return l10n_util::GetStringUTF16(IDS_WEBAUTHN_CONTINUE);
 }
 
-// AuthenticatorQRSheetModel --------------------------------------------------
-
-// No illustration since there already is the QR code.
-AuthenticatorQRSheetModel::AuthenticatorQRSheetModel(
-    AuthenticatorRequestDialogModel* dialog_model)
-    : AuthenticatorSheetModelBase(dialog_model,
-                                  OtherMechanismButtonVisibility::kVisible) {}
-
-AuthenticatorQRSheetModel::~AuthenticatorQRSheetModel() = default;
-
-std::u16string AuthenticatorQRSheetModel::GetStepTitle() const {
-  switch (dialog_model()->request_type) {
-    case device::FidoRequestType::kMakeCredential:
-      return l10n_util::GetStringUTF16(IDS_WEBAUTHN_CREATE_PASSKEY_QR_TITLE);
-    case device::FidoRequestType::kGetAssertion:
-      return l10n_util::GetStringUTF16(IDS_WEBAUTHN_USE_PASSKEY_QR_TITLE);
-  }
-}
-
-std::u16string AuthenticatorQRSheetModel::GetStepDescription() const {
-  switch (dialog_model()->request_type) {
-    case device::FidoRequestType::kMakeCredential:
-      return l10n_util::GetStringFUTF16(
-          IDS_WEBAUTHN_CREATE_PASSKEY_QR_BODY,
-          GetRelyingPartyIdString(dialog_model()));
-    case device::FidoRequestType::kGetAssertion:
-      return l10n_util::GetStringFUTF16(
-          IDS_WEBAUTHN_USE_PASSKEY_QR_BODY,
-          GetRelyingPartyIdString(dialog_model()));
-  }
-}
-
-std::vector<std::u16string> AuthenticatorQRSheetModel::GetSecurityKeyLabels()
-    const {
-  if (!dialog_model()->show_security_key_on_qr_sheet) {
-    return {};
-  }
-
-  switch (dialog_model()->request_type) {
-    case device::FidoRequestType::kMakeCredential: {
-      std::u16string body_text = l10n_util::GetStringFUTF16(
-          IDS_WEBAUTHN_QR_CREATE_PASSKEY_ON_SECURITY_KEY_LABEL,
-          GetRelyingPartyIdString(dialog_model()));
-      std::u16string attestation_warning =
-          PossibleAttestationWarning(dialog_model());
-      if (attestation_warning.empty()) {
-        return {body_text};
-      } else {
-        return {body_text, attestation_warning};
-      }
-    }
-    case device::FidoRequestType::kGetAssertion:
-      return {l10n_util::GetStringFUTF16(
-          IDS_WEBAUTHN_QR_USE_PASSKEY_ON_SECURITY_KEY_LABEL,
-          GetRelyingPartyIdString(dialog_model()))};
-  }
-}
-
 // AuthenticatorHybridAndSecurityKeySheetModel --------------------------------
 
 AuthenticatorHybridAndSecurityKeySheetModel::
@@ -1502,21 +1446,24 @@ AuthenticatorMultiSourcePickerSheetModel::
   webauthn::user_actions::RecordMultipleOptionsShown(
       dialog_model->mechanisms, dialog_model->request_type);
   if (std::ranges::any_of(dialog_model->mechanisms,
-                          &IsLocalPasskeyOrEnclaveAuthenticator)) {
+                          &IsLocalPasskeyOrEnclaveAuthenticatorOrPassword)) {
     primary_passkeys_label_ =
         l10n_util::GetStringUTF16(IDS_WEBAUTHN_THIS_DEVICE_LABEL);
     for (size_t i = 0; i < dialog_model->mechanisms.size(); ++i) {
       const AuthenticatorRequestDialogModel::Mechanism& mech =
           dialog_model->mechanisms[i];
-      if (IsLocalPasskeyOrEnclaveAuthenticator(mech) ||
+      if (IsLocalPasskeyOrEnclaveAuthenticatorOrPassword(mech) ||
           // iCloud Keychain appears in the primary list if present. This
           // happens when Chrome does not have permission to enumerate
           // credentials from iCloud Keychain. Thus this generic option is the
           // only way for the user to trigger it.
-          absl::holds_alternative<ICloudKeychainMech>(mech.type)) {
+          std::holds_alternative<ICloudKeychainMech>(mech.type)) {
         primary_passkey_indices_.push_back(i);
       } else {
         secondary_passkey_indices_.push_back(i);
+      }
+      if (std::holds_alternative<PasswordMech>(mech.type)) {
+        has_passwords_ = true;
       }
     }
     return;
@@ -1531,8 +1478,8 @@ AuthenticatorMultiSourcePickerSheetModel::
   for (size_t i = 0; i < dialog_model->mechanisms.size(); ++i) {
     const AuthenticatorRequestDialogModel::Mechanism& mech =
         dialog_model->mechanisms[i];
-    if (absl::holds_alternative<CredentialMech>(mech.type) &&
-        absl::get<CredentialMech>(mech.type).value().source ==
+    if (std::holds_alternative<CredentialMech>(mech.type) &&
+        std::get<CredentialMech>(mech.type).value().source ==
             device::AuthenticatorType::kPhone) {
       // There should not be any phone passkeys if the phone name is empty.
       CHECK(phone_name);
@@ -1553,9 +1500,9 @@ bool AuthenticatorMultiSourcePickerSheetModel::IsManageDevicesButtonVisible()
   // that goes to the settings page to manage them.
   return std::ranges::any_of(
       dialog_model()->mechanisms, [](const Mechanism& mech) {
-        return absl::holds_alternative<Mechanism::Phone>(mech.type) ||
-               (absl::holds_alternative<Mechanism::Credential>(mech.type) &&
-                absl::get<Mechanism::Credential>(mech.type).value().source ==
+        return std::holds_alternative<Mechanism::Phone>(mech.type) ||
+               (std::holds_alternative<Mechanism::Credential>(mech.type) &&
+                std::get<Mechanism::Credential>(mech.type).value().source ==
                     device::AuthenticatorType::kPhone);
       });
 }
@@ -1567,6 +1514,10 @@ void AuthenticatorMultiSourcePickerSheetModel::OnManageDevices() {
 }
 
 std::u16string AuthenticatorMultiSourcePickerSheetModel::GetStepTitle() const {
+  if (has_passwords_) {
+    return u"Use a saved credential for " +
+           GetRelyingPartyIdString(dialog_model()) + u" (UT)";
+  }
   return l10n_util::GetStringFUTF16(IDS_WEBAUTHN_CHOOSE_PASSKEY_FOR_RP_TITLE,
                                     GetRelyingPartyIdString(dialog_model()));
 }
@@ -2165,4 +2116,58 @@ std::u16string AuthenticatorGPMLockedPinSheetModel::GetAcceptButtonLabel()
 void AuthenticatorGPMLockedPinSheetModel::OnAccept() {
   webauthn::user_actions::RecordAcceptClick();
   dialog_model()->OnForgotGPMPinPressed();
+}
+
+// CombinedSelectorSheetModel
+
+CombinedSelectorSheetModel::CombinedSelectorSheetModel(
+    AuthenticatorRequestDialogModel* dialog_model)
+    : AuthenticatorSheetModelBase(dialog_model,
+                                  OtherMechanismButtonVisibility::kHidden) {}
+
+CombinedSelectorSheetModel::SelectionStatus
+CombinedSelectorSheetModel::GetSelectionStatus(size_t index) const {
+  if (dialog_model()->mechanisms.size() == 1) {
+    return SelectionStatus::kNone;
+  }
+  return selection_index_ == index ? SelectionStatus::kSelected
+                                   : SelectionStatus::kNotSelected;
+}
+
+size_t CombinedSelectorSheetModel::GetSelectionIndex() const {
+  return selection_index_;
+}
+
+void CombinedSelectorSheetModel::SetSelectionIndex(size_t index) {
+  selection_index_ = index;
+}
+
+std::u16string CombinedSelectorSheetModel::GetStepTitle() const {
+  return u"";
+}
+
+std::u16string CombinedSelectorSheetModel::GetStepDescription() const {
+  return u"";
+}
+
+bool CombinedSelectorSheetModel::IsAcceptButtonVisible() const {
+  return true;
+}
+
+bool CombinedSelectorSheetModel::IsCancelButtonVisible() const {
+  return true;
+}
+
+std::u16string CombinedSelectorSheetModel::GetCancelButtonLabel() const {
+  return l10n_util::GetStringUTF16(IDS_SIGNIN_ACCESSIBLE_CLOSE_BUTTON);
+}
+
+std::u16string CombinedSelectorSheetModel::GetAcceptButtonLabel() const {
+  return l10n_util::GetStringUTF16(
+      IDS_PASSWORD_MANAGER_ACCOUNT_CHOOSER_SIGN_IN);
+}
+
+void CombinedSelectorSheetModel::OnAccept() {
+  const auto& mech = dialog_model()->mechanisms.at(selection_index_);
+  mech.callback.Run();
 }

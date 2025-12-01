@@ -34,7 +34,10 @@ source_set("affiliations") {
     "affiliation_fetcher_factory.h",
     "affiliation_fetcher_factory_impl.cc",
     "affiliation_fetcher_factory_impl.h",
+    "affiliation_fetcher_interface.cc",
     "affiliation_fetcher_interface.h",
+    "affiliation_fetcher_manager.cc",
+    "affiliation_fetcher_manager.h",
     "affiliation_prefetcher.cc",
     "affiliation_prefetcher.h",
     "affiliation_service.h",
@@ -53,7 +56,6 @@ source_set("affiliations") {
   ]
   deps = [
     ":affiliation_proto",
-    ":features",
     "//base",
     "//components/affiliations/core/browser:sql_builder",
     "//components/keyed_service/core",
@@ -100,22 +102,13 @@ source_set("test_support") {
   ]
 }
 
-component("features") {
-  output_name = "affiliation_features"
-  defines = [ "IS_AFFILIATION_FEATURES_IMPL" ]
-  sources = [
-    "features.cc",
-    "features.h",
-  ]
-  public_deps = [ "//base" ]
-}
-
 source_set("unit_tests") {
   testonly = true
   sources = [
     "affiliation_backend_unittest.cc",
     "affiliation_database_unittest.cc",
     "affiliation_fetch_throttler_unittest.cc",
+    "affiliation_fetcher_manager_unittest.cc",
     "affiliation_prefetcher_unittest.cc",
     "affiliation_service_impl_unittest.cc",
     "affiliation_utils_unittest.cc",

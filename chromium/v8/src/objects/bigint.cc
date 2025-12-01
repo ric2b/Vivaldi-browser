@@ -993,12 +993,16 @@ typename HandleType<BigInt>::MaybeType BigInt::FromObject(
         constexpr uint32_t kMaxRenderedLength = 1000;
         if (str->length() > kMaxRenderedLength) {
           Factory* factory = isolate->factory();
-          Handle<String> prefix =
+          DirectHandle<String> prefix =
               factory->NewProperSubString(str, 0, kMaxRenderedLength);
-          Handle<SeqTwoByteString> ellipsis =
+          DirectHandle<SeqTwoByteString> ellipsis =
               factory->NewRawTwoByteString(1).ToHandleChecked();
           ellipsis->SeqTwoByteStringSet(0, 0x2026);
-          str = factory->NewConsString(prefix, ellipsis).ToHandleChecked();
+          // TODO(42203211): The cast below should not be necessary. Let's
+          // remove it, when NewConsString is not templatized by the handle
+          // type.
+          str = factory->NewConsString(prefix, Cast<String>(ellipsis))
+                    .ToHandleChecked();
         }
         THROW_NEW_ERROR(
             isolate, NewSyntaxError(MessageTemplate::kBigIntFromObject, str));
@@ -1244,7 +1248,7 @@ void BigInt::SerializeDigits(uint8_t* storage, size_t storage_length) {
 
 // The serialization format MUST NOT CHANGE without updating the format
 // version in value-serializer.cc!
-MaybeHandle<BigInt> BigInt::FromSerializedDigits(
+MaybeDirectHandle<BigInt> BigInt::FromSerializedDigits(
     Isolate* isolate, uint32_t bitfield,
     base::Vector<const uint8_t> digits_storage) {
   uint32_t bytelength = LengthBits::decode(bitfield);
@@ -1369,7 +1373,7 @@ MaybeDirectHandle<BigInt> BigInt::FromWords64(Isolate* isolate, int sign_bit,
   static_assert(kDigitBits == 64 || kDigitBits == 32);
   uint32_t length = (64 / kDigitBits) * words64_count;
   DCHECK_GT(length, 0);
-  if (kDigitBits == 32 && words[words64_count - 1] <= (1ULL << 32)) length--;
+  if (kDigitBits == 32 && words[words64_count - 1] < (1ULL << 32)) length--;
 
   Handle<MutableBigInt> result;
   if (!MutableBigInt::New(isolate, length).ToHandle(&result)) return {};

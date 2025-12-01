@@ -61,7 +61,6 @@
 #include "components/viz/common/frame_sinks/begin_frame_args.h"
 #include "components/viz/common/traced_value.h"
 #include "components/viz/common/view_transition_element_resource_id.h"
-#include "ui/gfx/geometry/box_f.h"
 #include "ui/gfx/geometry/point_conversions.h"
 #include "ui/gfx/geometry/rect_conversions.h"
 #include "ui/gfx/geometry/size_conversions.h"
@@ -253,13 +252,14 @@ void LayerTreeImpl::DidUpdateScrollOffset(
     CHECK_NE(scroll_node->transform_id, kInvalidPropertyNodeId);
     TransformTree& transform_tree = property_trees()->transform_tree_mutable();
     auto* transform_node = transform_tree.Node(scroll_node->transform_id);
-    if (transform_node->scroll_offset !=
+    if (transform_node->scroll_offset() !=
         scroll_tree.current_scroll_offset(id)) {
-      transform_node->scroll_offset = scroll_tree.current_scroll_offset(id);
+      transform_node->SetScrollOffset(scroll_tree.current_scroll_offset(id),
+                                      DamageReason::kCompositorScroll);
       transform_node->needs_local_transform_update = true;
       transform_tree.set_needs_update(true);
     }
-    transform_node->transform_changed = true;
+    transform_node->SetTransformChanged(DamageReason::kCompositorScroll);
     property_trees()->set_changed(true);
     set_needs_update_draw_properties();
   } else if (can_realize_on_pending_tree) {
@@ -1295,6 +1295,20 @@ void LayerTreeImpl::PushPageScaleFromMainThread(float page_scale_factor,
                                max_page_scale_factor);
 }
 
+void LayerTreeImpl::SetPageScaleFactorAndLimitsForDisplayTree(
+    float page_scale_factor,
+    float min_page_scale_factor,
+    float max_page_scale_factor) {
+  DCHECK(settings().is_display_tree);
+  bool changed_page_scale = page_scale_factor_->SetCurrent(page_scale_factor);
+  changed_page_scale |=
+      SetPageScaleFactorLimits(min_page_scale_factor, max_page_scale_factor);
+
+  if (changed_page_scale) {
+    DidUpdatePageScale();
+  }
+}
+
 void LayerTreeImpl::PushPageScaleFactorAndLimits(const float* page_scale_factor,
                                                  float min_page_scale_factor,
                                                  float max_page_scale_factor) {
@@ -1707,6 +1721,8 @@ bool LayerTreeImpl::UpdateDrawProperties(
             render_surface->EffectTreeIndex());
         draw_property_utils::ConcatInverseSurfaceContentsScale(effect_node,
                                                                &draw_transform);
+        draw_transform.PostTranslate(
+            occlusion_surface->pixel_alignment_offset());
       }
 
       Occlusion occlusion =
@@ -3021,6 +3037,9 @@ void LayerTreeImpl::AddViewTransitionRequest(
 
 std::vector<std::unique_ptr<ViewTransitionRequest>>
 LayerTreeImpl::TakeViewTransitionRequests() {
+  if (HasViewTransitionRequests()) {
+    set_needs_update_draw_properties();
+  }
   return std::move(view_transition_requests_);
 }
 
@@ -3034,8 +3053,33 @@ bool LayerTreeImpl::HasViewTransitionSaveRequest() const {
       return true;
     }
   }
-
   return false;
+}
+
+base::flat_set<blink::ViewTransitionToken>
+LayerTreeImpl::GetCaptureViewTransitionTokens() const {
+  base::flat_set<blink::ViewTransitionToken> result;
+  // This effectively disables the new mode, since none of the capture tokens
+  // will apply.
+  if (!base::FeatureList::IsEnabled(
+          features::kViewTransitionCaptureAndDisplay)) {
+    return result;
+  }
+
+  for (const auto& request : view_transition_requests_) {
+    // We need to gather all save directive tokens, with the exceptionm of
+    // subframe snapshot. For subframe snapshot, we actually want to display the
+    // capture frame via pseudo elements instead of the new frame (which can be
+    // blank in a lot of navigation cases. Since this is used for iframes only,
+    // there is no risk of unclipped/unfiltered contents leaking since the
+    // iframe itself will still participate in all those operations in its
+    // parent.
+    if (request->type() == ViewTransitionRequest::Type::kSave &&
+        !request->HasSubframeSnapshot()) {
+      result.insert(request->token());
+    }
+  }
+  return result;
 }
 
 void LayerTreeImpl::SetViewTransitionContentRect(

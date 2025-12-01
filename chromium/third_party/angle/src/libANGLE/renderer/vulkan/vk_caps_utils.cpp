@@ -415,9 +415,10 @@ void Renderer::ensureCapsInitialized() const
 
     // Enable EXT_multi_draw_indirect
     mNativeExtensions.multiDrawIndirectEXT = true;
+    mNativeLimitations.multidrawEmulated   = false;
 
     // Enable EXT_base_instance
-    mNativeExtensions.baseInstanceEXT = true;
+    mNativeExtensions.baseInstanceEXT       = true;
     mNativeLimitations.baseInstanceEmulated = false;
 
     // Enable ANGLE_base_vertex_base_instance
@@ -720,7 +721,8 @@ void Renderer::ensureCapsInitialized() const
         rx::LimitToInt(limitsVk.maxComputeWorkGroupInvocations);
     mNativeCaps.maxComputeSharedMemorySize = rx::LimitToInt(limitsVk.maxComputeSharedMemorySize);
 
-    GLuint maxUniformBlockSize = limitsVk.maxUniformBufferRange;
+    GLuint maxUniformBlockSize =
+        rx::LimitToIntAnd(limitsVk.maxUniformBufferRange, mMaxBufferMemorySizeLimit);
 
     // Clamp the maxUniformBlockSize to 64KB (majority of devices support up to this size
     // currently), on AMD the maxUniformBufferRange is near uint32_t max.
@@ -842,7 +844,8 @@ void Renderer::ensureCapsInitialized() const
     // Emulated as storage buffers, atomic counter buffers have the same size limit.  However, the
     // limit is a signed integer and values above int max will end up as a negative size.  The
     // storage buffer size is just capped to int unconditionally.
-    uint32_t maxStorageBufferRange = rx::LimitToInt(limitsVk.maxStorageBufferRange);
+    uint32_t maxStorageBufferRange =
+        rx::LimitToIntAnd(limitsVk.maxStorageBufferRange, mMaxBufferMemorySizeLimit);
     if (mFeatures.limitMaxStorageBufferSize.enabled)
     {
         constexpr uint32_t kStorageBufferLimit = 256 * 1024 * 1024;
@@ -1087,7 +1090,10 @@ void Renderer::ensureCapsInitialized() const
     //    GL_RGBA32UI                  Y                           Y
     mNativeExtensions.textureBufferOES = true;
     mNativeExtensions.textureBufferEXT = true;
-    mNativeCaps.maxTextureBufferSize   = rx::LimitToInt(limitsVk.maxTexelBufferElements);
+
+    mNativeCaps.maxTextureBufferSize =
+        rx::LimitToIntAnd(limitsVk.maxTexelBufferElements, mMaxBufferMemorySizeLimit);
+
     mNativeCaps.textureBufferOffsetAlignment =
         rx::LimitToInt(limitsVk.minTexelBufferOffsetAlignment);
 
@@ -1136,6 +1142,7 @@ void Renderer::ensureCapsInitialized() const
         bool tessellationShaderEnabled =
             mFeatures.supportsTransformFeedbackExtension.enabled &&
             (mFeatures.supportsPrimitivesGeneratedQuery.enabled ||
+             mFeatures.allowPipelineStatisticsForPrimitivesGeneratedQuery.enabled ||
              mFeatures.exposeNonConformantExtensionsAndVersions.enabled);
         mNativeExtensions.tessellationShaderEXT = tessellationShaderEnabled;
         mNativeExtensions.tessellationShaderOES = tessellationShaderEnabled;
@@ -1188,9 +1195,11 @@ void Renderer::ensureCapsInitialized() const
     // Geometry shaders are required for ES 3.2.
     if (mPhysicalDeviceFeatures.geometryShader)
     {
-        bool geometryShaderEnabled = mFeatures.supportsTransformFeedbackExtension.enabled &&
-                                     (mFeatures.supportsPrimitivesGeneratedQuery.enabled ||
-                                      mFeatures.exposeNonConformantExtensionsAndVersions.enabled);
+        bool geometryShaderEnabled =
+            mFeatures.supportsTransformFeedbackExtension.enabled &&
+            (mFeatures.supportsPrimitivesGeneratedQuery.enabled ||
+             mFeatures.allowPipelineStatisticsForPrimitivesGeneratedQuery.enabled ||
+             mFeatures.exposeNonConformantExtensionsAndVersions.enabled);
         mNativeExtensions.geometryShaderEXT = geometryShaderEnabled;
         mNativeExtensions.geometryShaderOES = geometryShaderEnabled;
         mNativeCaps.maxFramebufferLayers    = rx::LimitToInt(limitsVk.maxFramebufferLayers);
@@ -1323,28 +1332,39 @@ void Renderer::ensureCapsInitialized() const
     mNativeExtensions.textureFoveatedQCOM = mFeatures.supportsFoveatedRendering.enabled;
 
     // GL_ANGLE_shader_pixel_local_storage
-    mNativeExtensions.shaderPixelLocalStorageANGLE = true;
-    if (getFeatures().supportsShaderFramebufferFetch.enabled && mIsColorFramebufferFetchCoherent)
+    //
+    // NOTE:
+    //   * The Vulkan backend limits the ES version to 2.0 when drawBuffersIndexed is not supported.
+    //   * The frontend disables all ES 3.x extensions when the context version is too low for them.
+    //   * This means it is impossible on Vulkan to have pixel local storage without DBI.
+    if (mNativeExtensions.drawBuffersIndexedAny())
     {
-        mNativeExtensions.shaderPixelLocalStorageCoherentANGLE = true;
-        mNativePLSOptions.type             = ShPixelLocalStorageType::FramebufferFetch;
-        mNativePLSOptions.fragmentSyncType = ShFragmentSynchronizationType::Automatic;
-    }
-    else if (getFeatures().supportsFragmentShaderPixelInterlock.enabled)
-    {
-        // Use shader images with VK_EXT_fragment_shader_interlock, instead of attachments, if
-        // they're our only option to be coherent.
-        mNativeExtensions.shaderPixelLocalStorageCoherentANGLE = true;
-        mNativePLSOptions.type = ShPixelLocalStorageType::ImageLoadStore;
-        // GL_ARB_fragment_shader_interlock compiles to SPV_EXT_fragment_shader_interlock.
-        mNativePLSOptions.fragmentSyncType =
-            ShFragmentSynchronizationType::FragmentShaderInterlock_ARB_GL;
-        mNativePLSOptions.supportsNativeRGBA8ImageFormats = true;
-    }
-    else
-    {
-        mNativePLSOptions.type = ShPixelLocalStorageType::FramebufferFetch;
-        ASSERT(mNativePLSOptions.fragmentSyncType == ShFragmentSynchronizationType::NotSupported);
+        // With drawBuffersIndexed, we can always at least support non-coherent PLS with input
+        // attachments.
+        mNativeExtensions.shaderPixelLocalStorageANGLE = true;
+
+        if (!mIsColorFramebufferFetchCoherent &&
+            getFeatures().supportsFragmentShaderPixelInterlock.enabled)
+        {
+            // Use shader images with VK_EXT_fragment_shader_interlock, instead of input
+            // attachments, if they're our only option to be coherent.
+            mNativeExtensions.shaderPixelLocalStorageCoherentANGLE = true;
+            mNativePLSOptions.type = ShPixelLocalStorageType::ImageLoadStore;
+            // GL_ARB_fragment_shader_interlock compiles to SPV_EXT_fragment_shader_interlock.
+            mNativePLSOptions.fragmentSyncType =
+                ShFragmentSynchronizationType::FragmentShaderInterlock_ARB_GL;
+            mNativePLSOptions.supportsNativeRGBA8ImageFormats = true;
+        }
+        else
+        {
+            // Input attachments are the preferred implementation for PLS on Vulkan.
+            mNativeExtensions.shaderPixelLocalStorageCoherentANGLE =
+                mIsColorFramebufferFetchCoherent;
+            mNativePLSOptions.type             = ShPixelLocalStorageType::FramebufferFetch;
+            mNativePLSOptions.fragmentSyncType = mIsColorFramebufferFetchCoherent
+                                                     ? ShFragmentSynchronizationType::Automatic
+                                                     : ShFragmentSynchronizationType::NotSupported;
+        }
     }
 
     // If framebuffer fetch is to be enabled/used, cap maxColorAttachments/maxDrawBuffers to
@@ -1406,7 +1426,7 @@ void Renderer::ensureCapsInitialized() const
 
     mNativeExtensions.logicOpANGLE = mPhysicalDeviceFeatures.logicOp == VK_TRUE;
 
-    mNativeExtensions.YUVTargetEXT = mFeatures.supportsExternalFormatResolve.enabled;
+    mNativeExtensions.YUVTargetEXT = mFeatures.supportsYuvTarget.enabled;
 
     mNativeExtensions.textureStorageCompressionEXT =
         mFeatures.supportsImageCompressionControl.enabled;

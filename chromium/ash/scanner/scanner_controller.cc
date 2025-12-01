@@ -5,26 +5,28 @@
 #include "ash/scanner/scanner_controller.h"
 
 #include <cstddef>
+#include <functional>
 #include <limits>
 #include <memory>
 #include <optional>
 #include <string>
 #include <string_view>
 #include <utility>
-#include <vector>
 
+#include "ash/constants/ash_features.h"
 #include "ash/constants/ash_pref_names.h"
-#include "ash/constants/ash_switches.h"
+#include "ash/constants/notifier_catalogs.h"
 #include "ash/public/cpp/notification_utils.h"
 #include "ash/public/cpp/scanner/scanner_delegate.h"
-#include "ash/public/cpp/scanner/scanner_enums.h"
 #include "ash/public/cpp/scanner/scanner_feedback_info.h"
 #include "ash/public/cpp/scanner/scanner_profile_scoped_delegate.h"
 #include "ash/public/cpp/system/toast_data.h"
 #include "ash/public/cpp/system/toast_manager.h"
 #include "ash/resources/vector_icons/vector_icons.h"
 #include "ash/scanner/scanner_action_handler.h"
+#include "ash/scanner/scanner_action_view_model.h"
 #include "ash/scanner/scanner_command_delegate_impl.h"
+#include "ash/scanner/scanner_enterprise_policy.h"
 #include "ash/scanner/scanner_feedback.h"
 #include "ash/scanner/scanner_metrics.h"
 #include "ash/scanner/scanner_session.h"
@@ -32,11 +34,13 @@
 #include "ash/shell.h"
 #include "ash/shell_delegate.h"
 #include "ash/strings/grit/ash_strings.h"
+#include "ash/wm/screen_pinning_controller.h"
 #include "base/check.h"
 #include "base/check_is_test.h"
 #include "base/containers/span.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback.h"
+#include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
 #include "base/memory/ref_counted_memory.h"
 #include "base/memory/scoped_refptr.h"
@@ -46,12 +50,14 @@
 #include "base/strings/strcat.h"
 #include "base/time/time.h"
 #include "base/values.h"
+#include "chromeos/ash/components/specialized_features/feature_access_checker.h"
 #include "components/account_id/account_id.h"
 #include "components/feedback/feedback_constants.h"
 #include "components/manta/proto/scanner.pb.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/message_center/message_center.h"
 #include "ui/message_center/public/cpp/notification.h"
+#include "ui/message_center/public/cpp/notification_types.h"
 #include "ui/message_center/public/cpp/notifier_id.h"
 
 namespace ash {
@@ -69,6 +75,46 @@ constexpr char kScannerActionFailureToastId[] = "scanner_action_failure";
 constexpr size_t kUserFacingStringDepthLimit = 20;
 constexpr size_t kUserFacingStringOutputLimit =
     std::numeric_limits<size_t>::max();
+
+std::u16string GetTitleForActionProgressNotification(
+    manta::proto::ScannerAction::ActionCase action_case) {
+  switch (action_case) {
+    case manta::proto::ScannerAction::kNewEvent:
+      return l10n_util::GetStringUTF16(
+          IDS_ASH_SCANNER_ACTION_PROGRESS_TITLE_ADDING_EVENT);
+    case manta::proto::ScannerAction::kNewContact:
+    case manta::proto::ScannerAction::kNewGoogleDoc:
+    case manta::proto::ScannerAction::kNewGoogleSheet:
+      return l10n_util::GetStringUTF16(
+          IDS_ASH_SCANNER_ACTION_PROGRESS_TITLE_CREATING);
+    case manta::proto::ScannerAction::kCopyToClipboard:
+      return l10n_util::GetStringUTF16(
+          IDS_ASH_SCANNER_ACTION_PROGRESS_TITLE_COPYING);
+    case manta::proto::ScannerAction::ACTION_NOT_SET:
+      NOTREACHED();
+  }
+}
+
+std::u16string GetDisplaySourceForActionProgressNotification(
+    manta::proto::ScannerAction::ActionCase action_case) {
+  switch (action_case) {
+    case manta::proto::ScannerAction::kNewEvent:
+      return l10n_util::GetStringUTF16(IDS_ASH_SCANNER_ACTION_NEW_EVENT_SOURCE);
+    case manta::proto::ScannerAction::kNewContact:
+      return l10n_util::GetStringUTF16(
+          IDS_ASH_SCANNER_ACTION_NEW_CONTACT_SOURCE);
+    case manta::proto::ScannerAction::kNewGoogleDoc:
+      return l10n_util::GetStringUTF16(
+          IDS_ASH_SCANNER_ACTION_NEW_GOOGLE_DOC_SOURCE);
+    case manta::proto::ScannerAction::kNewGoogleSheet:
+      return l10n_util::GetStringUTF16(
+          IDS_ASH_SCANNER_ACTION_NEW_GOOGLE_SHEET_SOURCE);
+    case manta::proto::ScannerAction::kCopyToClipboard:
+      return l10n_util::GetStringUTF16(IDS_ASH_SCANNER_ACTION_COPY_TEXT_SOURCE);
+    case manta::proto::ScannerAction::ACTION_NOT_SET:
+      NOTREACHED();
+  }
+}
 
 std::u16string GetToastMessageForActionSuccess(
     manta::proto::ScannerAction::ActionCase action_case) {
@@ -116,32 +162,36 @@ std::u16string GetToastMessageForActionFailure(
   }
 }
 
-// Shows an action progress notification. Note that this will remove the
-// previous action notification if there is one.
+// Shows an action progress notification. The new notification will remove the
+// previous action notification if there was one.
 void ShowActionProgressNotification(
-    manta::proto::ScannerAction::ActionCase action_case) {
+    const ScannerActionViewModel& scanner_action) {
   message_center::RichNotificationData optional_fields;
   // Show an infinite loading progress bar.
   optional_fields.progress = -1;
   optional_fields.never_timeout = true;
+  optional_fields.pinned = true;
 
   auto* message_center = message_center::MessageCenter::Get();
   message_center->RemoveNotification(kScannerActionNotificationId,
                                      /*by_user=*/false);
-  // TODO: crbug.com/375967525 - Finalize the action notification strings and
-  // icon.
-  message_center->AddNotification(CreateSystemNotificationPtr(
-      message_center::NOTIFICATION_TYPE_PROGRESS, kScannerActionNotificationId,
-      action_case == manta::proto::ScannerAction::kCopyToClipboard
-          ? u"Copying text..."
-          : u"Creating...",
-      /*message=*/u"",
-      /*display_source=*/u"", GURL(),
-      message_center::NotifierId(message_center::NotifierType::SYSTEM_COMPONENT,
-                                 kScannerNotifierId,
-                                 NotificationCatalogName::kScannerAction),
-      optional_fields, /*delegate=*/nullptr, kCaptureModeIcon,
-      message_center::SystemNotificationWarningLevel::NORMAL));
+  manta::proto::ScannerAction::ActionCase action_case =
+      scanner_action.GetActionCase();
+  std::unique_ptr<message_center::Notification> notification =
+      CreateSystemNotificationPtr(
+          message_center::NOTIFICATION_TYPE_PROGRESS,
+          kScannerActionNotificationId,
+          /*title=*/GetTitleForActionProgressNotification(action_case),
+          /*message=*/u"",
+          /*display_source=*/
+          GetDisplaySourceForActionProgressNotification(action_case), GURL(),
+          message_center::NotifierId(
+              message_center::NotifierType::SYSTEM_COMPONENT,
+              kScannerNotifierId, NotificationCatalogName::kScannerAction),
+          optional_fields, /*delegate=*/nullptr, scanner_action.GetIcon(),
+          message_center::SystemNotificationWarningLevel::NORMAL);
+  notification->SetSystemPriority();
+  message_center->AddNotification(std::move(notification));
 }
 
 void RecordExecutePopulatedActionTimer(
@@ -300,6 +350,7 @@ void OnFeedbackFormSendButtonClicked(const AccountId& account_id,
                                      base::Value::Dict action_dict,
                                      ScannerFeedbackInfo feedback_info,
                                      const std::string& user_description) {
+  RecordScannerFeatureUserState(ScannerFeatureUserState::kFeedbackSent);
   std::optional<std::string> pretty_printed_action = base::WriteJsonWithOptions(
       action_dict, base::JsonOptions::OPTIONS_PRETTY_PRINT);
   // JSON serialisation should always succeed as the depth of the Dict is fixed,
@@ -318,17 +369,112 @@ void OnFeedbackFormSendButtonClicked(const AccountId& account_id,
       /*image_mime_type=*/"image/jpeg");
 }
 
+void SetStringIfPresent(const base::Value::Dict* dict,
+                        const std::string& key,
+                        auto* field) {
+  if (const std::string* value = dict->FindString(key)) {
+    *field = *value;
+  }
+}
+
+manta::proto::ScannerAction ScannerActionFromValue(
+    const base::Value::Dict& dict) {
+  manta::proto::ScannerAction action;
+
+  // The input dictionary dict is expected to contain exactly one of the
+  // following top-level keys, representing the type of action to perform.
+  if (const base::Value::Dict* new_event = dict.FindDict("new_event")) {
+    auto* event = action.mutable_new_event();
+    SetStringIfPresent(new_event, "title", event->mutable_title());
+    SetStringIfPresent(new_event, "dates", event->mutable_dates());
+    SetStringIfPresent(new_event, "description", event->mutable_description());
+    SetStringIfPresent(new_event, "location", event->mutable_location());
+  } else if (const base::Value::Dict* copy_action =
+                 dict.FindDict("copy_to_clipboard")) {
+    auto* clipboard = action.mutable_copy_to_clipboard();
+    SetStringIfPresent(copy_action, "plain_text",
+                       clipboard->mutable_plain_text());
+    SetStringIfPresent(copy_action, "html_text",
+                       clipboard->mutable_html_text());
+  } else {
+    LOG(ERROR) << "Unknown scanner action type in mock response: " << dict;
+  }
+
+  return action;
+}
+
+std::unique_ptr<manta::proto::ScannerOutput> CreateMockScannerOutput(
+    const std::vector<std::string> mock_responses) {
+  auto mock_output = std::make_unique<manta::proto::ScannerOutput>();
+  manta::proto::ScannerObject* object = mock_output->add_objects();
+
+  for (const std::string& json_string : mock_responses) {
+    std::optional<base::Value> parsed_json =
+        base::JSONReader::Read(json_string, base::JSON_ALLOW_TRAILING_COMMAS);
+
+    if (!parsed_json.has_value() || !parsed_json->is_dict()) {
+      LOG(ERROR) << "Invalid json string: " << json_string;
+      continue;
+    }
+
+    base::Value::Dict& action_dict = parsed_json->GetDict();
+    manta::proto::ScannerAction action = ScannerActionFromValue(action_dict);
+    if (action.action_case() != manta::proto::ScannerAction::ACTION_NOT_SET) {
+      *object->add_actions() = std::move(action);
+    }
+  }
+  return mock_output;
+}
 }  // namespace
 
-ScannerController::ScannerController(std::unique_ptr<ScannerDelegate> delegate,
-                                     SessionControllerImpl& session_controller)
-    : delegate_(std::move(delegate)), session_controller_(session_controller) {}
+ScannerController::ScannerController(
+    std::unique_ptr<ScannerDelegate> delegate,
+    SessionControllerImpl& session_controller,
+    const ScreenPinningController* screen_pinning_controller)
+    : delegate_(std::move(delegate)),
+      session_controller_(session_controller),
+      screen_pinning_controller_(screen_pinning_controller) {
+  if (screen_pinning_controller_ == nullptr) {
+    CHECK_IS_TEST();
+  }
+}
 
 ScannerController::~ScannerController() = default;
 
 // static
 void ScannerController::RegisterProfilePrefs(PrefRegistrySimple* registry) {
-  registry->RegisterBooleanPref(prefs::kScannerFeedbackEnabled, true);
+  registry->RegisterBooleanPref(prefs::kScannerEnabled, true);
+  registry->RegisterIntegerPref(
+      prefs::kScannerEnterprisePolicyAllowed,
+      static_cast<int>(ScannerEnterprisePolicy::kAllowedWithModelImprovement));
+
+  registry->RegisterBooleanPref(
+      prefs::kScannerEntryPointDisclaimerAckSmartActionsButton, false);
+  registry->RegisterBooleanPref(
+      prefs::kScannerEntryPointDisclaimerAckSunfishSession, false);
+}
+
+// static
+bool ScannerController::CanShowUiForShell() {
+  if (!Shell::HasInstance()) {
+    RecordScannerFeatureUserState(
+        ScannerFeatureUserState::kCanShowUiReturnedFalseDueToNoShellInstance);
+    RecordScannerFeatureUserState(
+        ScannerFeatureUserState::kCanShowUiReturnedFalse);
+    return false;
+  }
+
+  ScannerController* controller = Shell::Get()->scanner_controller();
+  if (!controller) {
+    RecordScannerFeatureUserState(
+        ScannerFeatureUserState::
+            kCanShowUiReturnedFalseDueToNoControllerOnShell);
+    RecordScannerFeatureUserState(
+        ScannerFeatureUserState::kCanShowUiReturnedFalse);
+    return false;
+  }
+
+  return controller->CanShowUi();
 }
 
 void ScannerController::OnActiveUserSessionChanged(
@@ -337,23 +483,132 @@ void ScannerController::OnActiveUserSessionChanged(
   command_delegate_ = nullptr;
 }
 
-bool ScannerController::CanShowConsentScreenEntryPoints() {
+bool ScannerController::CanShowUi() {
+  if (screen_pinning_controller_ == nullptr) {
+    CHECK_IS_TEST();
+  } else if (screen_pinning_controller_->IsPinned()) {
+    RecordScannerFeatureUserState(
+        ScannerFeatureUserState::kCanShowUiReturnedFalseDueToPinnedMode);
+    RecordScannerFeatureUserState(
+        ScannerFeatureUserState::kCanShowUiReturnedFalse);
+    return false;
+  }
+
+  // Check enterprise policy.
+  const AccountId& account_id = session_controller_->GetActiveAccountId();
+  PrefService* prefs =
+      session_controller_->GetUserPrefServiceForUser(account_id);
+  // We assume a default value of 1 (allowed without model improvement) if the
+  // value is invalid, or the pref service isn't valid.
+  if (prefs != nullptr &&
+      prefs->GetInteger(prefs::kScannerEnterprisePolicyAllowed) ==
+          static_cast<int>(ScannerEnterprisePolicy::kDisallowed)) {
+    RecordScannerFeatureUserState(
+        ScannerFeatureUserState::kCanShowUiReturnedFalseDueToEnterprisePolicy);
+    RecordScannerFeatureUserState(
+        ScannerFeatureUserState::kCanShowUiReturnedFalse);
+    return false;
+  }
+
   ScannerProfileScopedDelegate* profile_scoped_delegate =
       delegate_->GetProfileScopedDelegate();
 
   if (profile_scoped_delegate == nullptr) {
+    RecordScannerFeatureUserState(
+        ScannerFeatureUserState::
+            kCanShowUiReturnedFalseDueToNoProfileScopedDelegate);
+    RecordScannerFeatureUserState(
+        ScannerFeatureUserState::kCanShowUiReturnedFalse);
     return false;
   }
 
   specialized_features::FeatureAccessFailureSet checks =
       profile_scoped_delegate->CheckFeatureAccess();
 
-  checks.Remove(
-      specialized_features::FeatureAccessFailure::kConsentNotAccepted);
-  return checks.empty();
+  bool consent_accepted = true;
+  bool show_ui = true;
+
+  for (specialized_features::FeatureAccessFailure failure : checks) {
+    switch (failure) {
+      case specialized_features::FeatureAccessFailure::kConsentNotAccepted:
+        consent_accepted = false;
+        break;
+
+      case specialized_features::FeatureAccessFailure::kDisabledInSettings:
+        RecordScannerFeatureUserState(
+            ScannerFeatureUserState::
+                kCanShowUiReturnedFalseDueToSettingsToggle);
+        show_ui = false;
+        break;
+
+      case specialized_features::FeatureAccessFailure::kFeatureFlagDisabled:
+        RecordScannerFeatureUserState(
+            ScannerFeatureUserState::kCanShowUiReturnedFalseDueToFeatureFlag);
+        show_ui = false;
+        break;
+
+      case specialized_features::FeatureAccessFailure::
+          kFeatureManagementCheckFailed:
+        RecordScannerFeatureUserState(
+            ScannerFeatureUserState::
+                kCanShowUiReturnedFalseDueToFeatureManagement);
+        show_ui = false;
+        break;
+
+      case specialized_features::FeatureAccessFailure::kSecretKeyCheckFailed:
+        RecordScannerFeatureUserState(
+            ScannerFeatureUserState::kCanShowUiReturnedFalseDueToSecretKey);
+        show_ui = false;
+        break;
+
+      case specialized_features::FeatureAccessFailure::
+          kAccountCapabilitiesCheckFailed:
+        RecordScannerFeatureUserState(
+            ScannerFeatureUserState::
+                kCanShowUiReturnedFalseDueToAccountCapabilities);
+        show_ui = false;
+        break;
+
+      case specialized_features::FeatureAccessFailure::kCountryCheckFailed:
+        RecordScannerFeatureUserState(
+            ScannerFeatureUserState::kCanShowUiReturnedFalseDueToCountry);
+        show_ui = false;
+        break;
+
+      case specialized_features::FeatureAccessFailure::
+          kDisabledInKioskModeCheckFailed:
+        RecordScannerFeatureUserState(
+            ScannerFeatureUserState::kCanShowUiReturnedFalseDueToKioskMode);
+        show_ui = false;
+        break;
+    }
+  }
+
+  if (!show_ui) {
+    RecordScannerFeatureUserState(
+        ScannerFeatureUserState::kCanShowUiReturnedFalse);
+    return false;
+  }
+
+  if (!consent_accepted) {
+    RecordScannerFeatureUserState(
+        ScannerFeatureUserState::kCanShowUiReturnedTrueWithoutConsent);
+  } else {
+    RecordScannerFeatureUserState(
+        ScannerFeatureUserState::kCanShowUiReturnedTrueWithConsent);
+  }
+  return true;
 }
 
 bool ScannerController::CanShowFeatureSettingsToggle() {
+  if (screen_pinning_controller_ == nullptr) {
+    CHECK_IS_TEST();
+  } else if (screen_pinning_controller_->IsPinned()) {
+    return false;
+  }
+  // Intentionally ignore enterprise policy here, as we still want to show the
+  // settings toggle (as disabled).
+
   ScannerProfileScopedDelegate* profile_scoped_delegate =
       delegate_->GetProfileScopedDelegate();
 
@@ -375,6 +630,23 @@ bool ScannerController::CanShowFeatureSettingsToggle() {
 }
 
 bool ScannerController::CanStartSession() {
+  if (screen_pinning_controller_ == nullptr) {
+    CHECK_IS_TEST();
+  } else if (screen_pinning_controller_->IsPinned()) {
+    return false;
+  }
+  // Check enterprise policy.
+  const AccountId& account_id = session_controller_->GetActiveAccountId();
+  PrefService* prefs =
+      session_controller_->GetUserPrefServiceForUser(account_id);
+  // We assume a default value of 1 (allowed without model improvement) if the
+  // value is invalid, or the pref service isn't valid.
+  if (prefs != nullptr &&
+      prefs->GetInteger(prefs::kScannerEnterprisePolicyAllowed) ==
+          static_cast<int>(ScannerEnterprisePolicy::kDisallowed)) {
+    return false;
+  }
+
   ScannerProfileScopedDelegate* profile_scoped_delegate =
       delegate_->GetProfileScopedDelegate();
 
@@ -382,7 +654,11 @@ bool ScannerController::CanStartSession() {
     return false;
   }
 
-  return profile_scoped_delegate->CheckFeatureAccess().empty();
+  if (!profile_scoped_delegate->CheckFeatureAccess().empty()) {
+    return false;
+  }
+
+  return true;
 }
 
 ScannerSession* ScannerController::StartNewSession() {
@@ -397,14 +673,22 @@ ScannerSession* ScannerController::StartNewSession() {
   return scanner_session_.get();
 }
 
-void ScannerController::FetchActionsForImage(
+bool ScannerController::FetchActionsForImage(
     scoped_refptr<base::RefCountedMemory> jpeg_bytes,
     ScannerSession::FetchActionsCallback callback) {
   if (!scanner_session_) {
     std::move(callback).Run({});
-    return;
+    return false;
   }
+
+  if (!mock_scanner_responses_for_testing_.empty()) {
+    scanner_session_->SetMockScannerOutput(CreateMockScannerOutput(
+        std::move(mock_scanner_responses_for_testing_)));
+    mock_scanner_responses_for_testing_.clear();
+  }
+
   scanner_session_->FetchActionsForImage(jpeg_bytes, std::move(callback));
+  return true;
 }
 
 void ScannerController::OnSessionUIClosed() {
@@ -416,6 +700,13 @@ void ScannerController::ExecuteAction(
   if (!scanner_session_) {
     return;
   }
+
+  if (!mock_scanner_responses_for_testing_.empty()) {
+    scanner_session_->SetMockScannerOutput(CreateMockScannerOutput(
+        std::move(mock_scanner_responses_for_testing_)));
+    mock_scanner_responses_for_testing_.clear();
+  }
+
   // Keep the existing `command_delegate_` if there is one, to allow commands
   // from previous sessions to continue in the background if needed.
   if (!command_delegate_) {
@@ -432,13 +723,14 @@ void ScannerController::ExecuteAction(
                      base::BindOnce(&ScannerController::OnActionFinished,
                                     weak_ptr_factory_.GetWeakPtr(), action_case,
                                     scanner_action.downscaled_jpeg_bytes())));
-  ShowActionProgressNotification(action_case);
+  ShowActionProgressNotification(scanner_action);
 }
 
 void ScannerController::OpenFeedbackDialog(
     const AccountId& account_id,
     manta::proto::ScannerAction action,
     scoped_refptr<base::RefCountedMemory> screenshot) {
+  RecordScannerFeatureUserState(ScannerFeatureUserState::kFeedbackFormOpened);
   base::Value::Dict action_dict = ScannerActionToDict(std::move(action));
 
   std::optional<std::string> user_facing_string = ValueToUserFacingString(
@@ -478,31 +770,43 @@ void ScannerController::OnActionFinished(
       /*by_user=*/false);
 
   if (success) {
-    ToastData toast_data(kScannerActionSuccessToastId,
-                         ToastCatalogName::kScannerActionSuccess,
-                         GetToastMessageForActionSuccess(action_case));
+    if (features::IsScannerFeedbackToastEnabled()) {
+      ToastData toast_data(kScannerActionSuccessToastId,
+                           ToastCatalogName::kScannerActionSuccess,
+                           GetToastMessageForActionSuccess(action_case));
 
-    // TODO: b/367882164 - Pass in the account ID to this method to ensure that
-    // the feedback form is shown for the same account that performed the
-    // action.
-    const AccountId& account_id = session_controller_->GetActiveAccountId();
-    PrefService* prefs =
-        session_controller_->GetUserPrefServiceForUser(account_id);
+      // TODO: crbug.com/367882164 - Pass in the account ID to this method to
+      // ensure that the feedback form is shown for the same account that
+      // performed the action.
+      const AccountId& account_id = session_controller_->GetActiveAccountId();
+      PrefService* prefs =
+          session_controller_->GetUserPrefServiceForUser(account_id);
 
-    if (prefs && prefs->GetBoolean(prefs::kScannerFeedbackEnabled)) {
-      toast_data.button_type = ToastData::ButtonType::kIconButton;
-      toast_data.button_text = l10n_util::GetStringUTF16(
-          IDS_ASH_SCANNER_ACTION_TOAST_FEEDBACK_ICON_ACCESSIBLE_NAME);
-      toast_data.button_icon = &kFeedbackIcon;
-      // TODO: b/259100049 - Change this to be `BindOnce` once
-      // `ToastData::button_callback` is migrated to be a `OnceClosure`.
-      toast_data.button_callback = base::BindRepeating(
-          &ScannerController::OpenFeedbackDialog,
-          weak_ptr_factory_.GetWeakPtr(), account_id,
-          std::move(populated_action), std::move(downscaled_jpeg_bytes));
+      if (prefs &&
+          prefs->GetInteger(prefs::kScannerEnterprisePolicyAllowed) ==
+              static_cast<int>(
+                  ScannerEnterprisePolicy::kAllowedWithModelImprovement)) {
+        toast_data.button_type = ToastData::ButtonType::kIconButton;
+        toast_data.button_text = l10n_util::GetStringUTF16(
+            IDS_ASH_SCANNER_ACTION_TOAST_FEEDBACK_ICON_ACCESSIBLE_NAME);
+        toast_data.button_icon = &kFeedbackIcon;
+        // TODO: crbug.com/259100049 - Change this to be `BindOnce` once
+        // `ToastData::button_callback` is migrated to be a `OnceClosure`.
+        toast_data.button_callback = base::BindRepeating(
+            &ScannerController::OpenFeedbackDialog,
+            weak_ptr_factory_.GetWeakPtr(), account_id,
+            std::move(populated_action), std::move(downscaled_jpeg_bytes));
+      }
+
+      ToastManager::Get()->Show(std::move(toast_data));
+    } else if (action_case == manta::proto::ScannerAction::kCopyToClipboard) {
+      // If feedback is disabled, only show a success toast for the copy to
+      // clipboard action.
+      ToastData toast_data(kScannerActionSuccessToastId,
+                           ToastCatalogName::kScannerActionSuccess,
+                           GetToastMessageForActionSuccess(action_case));
+      ToastManager::Get()->Show(std::move(toast_data));
     }
-
-    ToastManager::Get()->Show(std::move(toast_data));
   } else {
     ToastManager::Get()->Show(ToastData(
         kScannerActionFailureToastId, ToastCatalogName::kScannerActionFailure,
@@ -513,6 +817,11 @@ void ScannerController::OnActionFinished(
     CHECK_IS_TEST();
     std::move(on_action_finished_for_testing_).Run(success);
   }
+}
+
+void ScannerController::SetScannerResponsesForTesting(
+    std::vector<std::string> responses) {
+  mock_scanner_responses_for_testing_ = std::move(responses);
 }
 
 }  // namespace ash

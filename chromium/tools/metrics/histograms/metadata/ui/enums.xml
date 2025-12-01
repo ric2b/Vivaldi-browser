@@ -97,18 +97,6 @@ chromium-metrics-reviews@google.com.
   <int value="3" label="Other Mode is Default"/>
 </enum>
 
-<enum name="DefaultWebClientState">
-  <int value="0" label="Not default">Chrome is not the default web client.</int>
-  <int value="1" label="Is default">Chrome is the default web client.</int>
-  <int value="2" label="Unknown default">
-    Chrome is in a unknown default state.
-  </int>
-  <int value="3" label="Other mode is default">
-    The current install of Chrome is not the default web client, yet another
-    side-by-side install of Chrome is.
-  </int>
-</enum>
-
 <enum name="OpenLinkAs">
   <int value="0" label="Open Link as Profile displayed."/>
   <int value="1" label="Open Link as Profile clicked."/>
@@ -717,6 +705,8 @@ chromium-metrics-reviews@google.com.
   <int value="-601472337" label="chrome://shimless-rma/"/>
   <int value="-566908909" label="chrome://suggestions/"/>
   <int value="-548156607" label="chrome://feedback/"/>
+  <int value="-543577801" label="chrome://history-side-panel.top-chrome/"/>
+  <int value="-532669066" label="chrome://traces/"/>
   <int value="-528306235" label="chrome://sync/"/>
   <int value="-525954994" label="chrome-untrusted://lens/"/>
   <int value="-516792794" label="chrome://downloads/"/>
@@ -760,6 +750,7 @@ chromium-metrics-reviews@google.com.
   <int value="48333657" label="chrome://about/"/>
   <int value="57900378" label="chrome://conch/"/>
   <int value="58807865" label="chrome://local-state/"/>
+  <int value="71502624" label="chrome://history-sync-optin/"/>
   <int value="84832110" label="chrome://fileicon/"/>
   <int value="104579118" label="chrome://boca-app/"/>
   <int value="110166858" label="chrome://saved-tab-groups-unsupported/"/>
@@ -816,6 +807,7 @@ chromium-metrics-reviews@google.com.
   <int value="762064551" label="chrome://graduation/"/>
   <int value="770641362" label="chrome://shortcut-customization/"/>
   <int value="784140714" label="chrome://predictors/"/>
+  <int value="807323521" label="chrome://glic-fre/"/>
   <int value="812624791" label="chrome://dom-distiller/"/>
   <int value="821023334" label="chrome://screenlock-icon/"/>
   <int value="858923205" label="chrome://cloud-upload/"/>
@@ -1033,6 +1025,7 @@ chromium-metrics-reviews@google.com.
   <int value="91" label="Open extension settings (Safety Hub)"/>
   <int value="92" label="Show customize chrome side panel"/>
   <int value="93" label="Show tab search declutter page"/>
+  <int value="94" label="Open glic"/>
 </enum>
 
 <!-- LINT.ThenChange(/chrome/browser/ui/toolbar/app_menu_model.h:AppMenuAction) -->

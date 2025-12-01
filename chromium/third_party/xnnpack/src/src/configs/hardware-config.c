@@ -9,7 +9,7 @@
 #include <cpuinfo.h>
 #endif  // XNN_ENABLE_CPUINFO
 
-#include "xnnpack/common.h"
+#include "src/xnnpack/common.h"
 
 #if _WIN32
   #include <windows.h>
@@ -48,9 +48,9 @@
 #include <wasm_simd128.h>
 #endif
 
-#include "xnnpack/hardware-config.h"
-#include "xnnpack/init-once.h"
-#include "xnnpack/log.h"
+#include "src/xnnpack/hardware-config.h"
+#include "src/xnnpack/init-once.h"
+#include "src/xnnpack/log.h"
 
 #if XNN_ARCH_X86_64 && defined(__linux__) && !defined(CHROMIUM)
 ssize_t xnn_syscall(size_t rax, size_t rdi, size_t rsi, size_t rdx) {
@@ -151,9 +151,14 @@ static void init_hardware_config(void) {
 #else
     hardware_config.use_x86_avx512fp16 = 0;
 #endif
-#if XNN_ENABLE_AVX512AMX
+#if XNN_ENABLE_AVX512BF16
+    hardware_config.use_x86_avx512bf16 = cpuinfo_has_x86_avx512bf16();
+#else
+    hardware_config.use_x86_avx512bf16 = 0;
+#endif
+#if XNN_ENABLE_AVX512AMX && XNN_ARCH_X86_64
     hardware_config.use_x86_avx512amx = hardware_config.use_x86_avx512vnnigfni && cpuinfo_has_x86_amx_int8();
-#if XNN_ARCH_X86_64 && defined(__linux__) && !defined(CHROMIUM)
+#if defined(__linux__) && !defined(CHROMIUM)
     if (hardware_config.use_x86_avx512amx) {
       size_t status = xnn_syscall(SYS_arch_prctl, ARCH_REQ_XCOMP_PERM, XFEATURE_XTILEDATA, 0);
       if (status) {
@@ -176,19 +181,19 @@ static void init_hardware_config(void) {
     hardware_config.use_x86_avxvnniint8 = 0;
 #endif
 #if XNN_ENABLE_AVX256SKX
-    // Using cpuinfo_has_x86_amx_int8 as placeholder for cpuinfo_has_x86_avx10
-    hardware_config.use_x86_avx256skx = hardware_config.use_x86_avx512skx || cpuinfo_has_x86_amx_int8();
+    // TODO: Enable for avx10 when Visual C has a way to avoid evex512
+    hardware_config.use_x86_avx256skx = hardware_config.use_x86_avx512skx;
 #else
     hardware_config.use_x86_avx256skx = 0;
 #endif
 #if XNN_ENABLE_AVX256VNNI
-    // Using cpuinfo_has_x86_amx_int8 as placeholder for cpuinfo_has_x86_avx10
-    hardware_config.use_x86_avx256vnni = (hardware_config.use_x86_avx512skx && cpuinfo_has_x86_avx512vnni()) || cpuinfo_has_x86_amx_int8();
+    // TODO: Enable for avx10 when Visual C has a way to avoid evex512
+    hardware_config.use_x86_avx256vnni = hardware_config.use_x86_avx512skx && cpuinfo_has_x86_avx512vnni();
 #else
     hardware_config.use_x86_avx256vnni = 0;
 #endif
 #if XNN_ENABLE_AVX256VNNIGFNI
-    // Using cpuinfo_has_x86_amx_int8 as placeholder for cpuinfo_has_x86_avx10
+    // TODO: Enable for avx10 when Visual C has a way to avoid evex512
     hardware_config.use_x86_avx256vnnigfni = hardware_config.use_x86_avx256vnni && cpuinfo_has_x86_gfni();
 #else
     hardware_config.use_x86_avx256vnnigfni = 0;
@@ -393,9 +398,9 @@ static void init_hardware_config(void) {
           hardware_config.l1_data_cache_associativity =
               l1_data_cache->associativity;
           hardware_config.l1_data_cache_num_sets = l1_data_cache->sets;
-          xnn_log_debug(
+          xnn_log_info(
               "l1_data_cache_bytes=%zu, l1_data_cache_line_size=%zu, "
-              "l1_data_cache_associativity=%zu, l1_data_cache_num_sets=%zu.\n",
+              "l1_data_cache_associativity=%zu, l1_data_cache_num_sets=%zu.",
               hardware_config.l1_data_cache_bytes,
               hardware_config.l1_data_cache_line_size,
               hardware_config.l1_data_cache_associativity,
@@ -412,9 +417,9 @@ static void init_hardware_config(void) {
           hardware_config.l2_data_cache_associativity =
               l2_data_cache->associativity;
           hardware_config.l2_data_cache_num_sets = l2_data_cache->sets;
-          xnn_log_debug(
+          xnn_log_info(
               "l2_data_cache_bytes=%zu, l2_data_cache_line_size=%zu, "
-              "l2_data_cache_associativity=%zu, l2_data_cache_num_sets=%zu.\n",
+              "l2_data_cache_associativity=%zu, l2_data_cache_num_sets=%zu.",
               hardware_config.l2_data_cache_bytes,
               hardware_config.l2_data_cache_line_size,
               hardware_config.l2_data_cache_associativity,
@@ -426,8 +431,16 @@ static void init_hardware_config(void) {
         xnn_log_warning("Unable to determine L1/L2 data cache properties.");
       }
     }
+
+#if XNN_MAX_UARCH_TYPES > 1
+    // Print what we think we know about the microarchs.
+    xnn_log_info("cpuinfo_get_uarchs_count: %u.", cpuinfo_get_uarchs_count());
+    for (int i = 0; i < cpuinfo_get_uarchs_count(); i++) {
+      xnn_log_info("cpu_get_uarch(%i): 0x%x", i, cpuinfo_get_uarch(i)->uarch);
+    }
+#endif  // XNN_MAX_UARCH_TYPES > 1
 #else
-    xnn_log_warning("Unable to determine L1/L2 data cache properties.");
+  xnn_log_warning("Unable to determine L1/L2 data cache properties.");
 #endif  // XNN_ENABLE_CPUINFO
 }
 

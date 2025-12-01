@@ -58,12 +58,10 @@ const std::vector<uint32_t> kStencilValues = {0, 1, 38, 255};
 
 class DepthStencilSamplingTest : public DawnTestWithParams<DepthStencilSamplingTestParams> {
   protected:
-    wgpu::RequiredLimits GetRequiredLimits(const wgpu::SupportedLimits& supported) override {
+    wgpu::Limits GetRequiredLimits(const wgpu::Limits& supported) override {
         // Just copy all the limits, though all we really care about is
         // maxStorageBuffersInFragmentStage
-        wgpu::RequiredLimits required = {};
-        required.limits = supported.limits;
-        return required;
+        return supported;
     }
 
     enum class TestAspectAndSamplerType {
@@ -648,11 +646,6 @@ class DepthStencilSamplingTest : public DawnTestWithParams<DepthStencilSamplingT
 
 // Repro test for crbug.com/dawn/1187 where sampling a depth texture returns values not in [0, 1]
 TEST_P(DepthStencilSamplingTest, CheckDepthTextureRange) {
-    // TODO(crbug.com/388318201): investigate
-    DAWN_SUPPRESS_TEST_IF(IsCompatibilityMode() &&
-                          HasToggleEnabled("gl_force_es_31_and_no_extensions") &&
-                          GetParam().mTextureFormat == wgpu::TextureFormat::Depth24PlusStencil8);
-
     // TODO(crbug.com/dawn/1187): The test fails on ANGLE D3D11, investigate why.
     DAWN_SUPPRESS_TEST_IF(IsANGLED3D11());
 
@@ -795,7 +788,7 @@ TEST_P(DepthStencilSamplingTest, CheckDepthTextureRange) {
 TEST_P(DepthStencilSamplingTest, SampleExtraComponents) {
     // TODO(crbug.com/dawn/2295): diagnose this failure on Pixel 6 OpenGLES
     DAWN_SUPPRESS_TEST_IF(IsOpenGLES() && IsAndroid() && IsARM());
-    DAWN_SUPPRESS_TEST_IF(GetSupportedLimits().limits.maxStorageBuffersInFragmentStage < 1);
+    DAWN_SUPPRESS_TEST_IF(GetSupportedLimits().maxStorageBuffersInFragmentStage < 1);
 
     wgpu::TextureFormat format = GetParam().mTextureFormat;
 
@@ -976,10 +969,6 @@ TEST_P(DepthSamplingTest, SampleDepthOnly) {
 
 // Test that sampling in a render pipeline with all of the compare functions works.
 TEST_P(DepthSamplingTest, CompareFunctionsRender) {
-    // TODO(crbug.com/388318201): investigate
-    DAWN_SUPPRESS_TEST_IF(IsCompatibilityMode() &&
-                          HasToggleEnabled("gl_force_es_31_and_no_extensions"));
-
     // Initialization via renderPass loadOp doesn't work on Mac Intel.
     DAWN_SUPPRESS_TEST_IF(IsMetal() && IsIntel());
 
@@ -1011,7 +1000,7 @@ class StencilSamplingTest : public DepthStencilSamplingTest {};
 TEST_P(StencilSamplingTest, SampleStencilOnly) {
     // TODO(crbug.com/dawn/2295): diagnose this failure on Pixel 6 OpenGLES
     DAWN_SUPPRESS_TEST_IF(IsOpenGLES() && IsAndroid() && IsARM());
-    DAWN_SUPPRESS_TEST_IF(GetSupportedLimits().limits.maxStorageBuffersInFragmentStage < 1);
+    DAWN_SUPPRESS_TEST_IF(GetSupportedLimits().maxStorageBuffersInFragmentStage < 1);
 
     wgpu::TextureFormat format = GetParam().mTextureFormat;
 

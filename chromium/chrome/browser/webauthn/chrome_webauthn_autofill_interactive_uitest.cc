@@ -50,8 +50,8 @@
 #include "content/public/browser/scoped_authenticator_environment_for_testing.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
+#include "crypto/scoped_fake_unexportable_key_provider.h"
 #include "crypto/scoped_fake_user_verifying_key_provider.h"
-#include "crypto/scoped_mock_unexportable_key_provider.h"
 #include "device/bluetooth/bluetooth_adapter_factory.h"
 #include "device/bluetooth/test/mock_bluetooth_adapter.h"
 #include "device/fido/cable/v2_handshake.h"
@@ -154,20 +154,6 @@ syncer::DeviceInfo CreateDeviceInfo() {
       /*sharing_info=*/std::nullopt, std::move(paask_info),
       /*fcm_registration_token=*/"fcm_token", syncer::DataTypeSet(),
       /*floating_workspace_last_signin_timestamp=*/base::Time::Now());
-}
-
-std::u16string ExpectedPasskeyLabel() {
-  if (device::kWebAuthnGpmPin.Get()) {
-    // In this case GPM should be enabled by default.
-    return l10n_util::GetStringUTF16(
-        IDS_PASSWORD_MANAGER_PASSKEY_FROM_GOOGLE_PASSWORD_MANAGER_NEW);
-  }
-  // Otherwise the label will mention the priority phone.
-  return l10n_util::GetStringFUTF16(
-      base::FeatureList::IsEnabled(device::kWebAuthnEnclaveAuthenticator)
-          ? IDS_PASSWORD_MANAGER_PASSKEY_FROM_PHONE_NEW
-          : IDS_PASSWORD_MANAGER_PASSKEY_FROM_PHONE,
-      kPhoneName);
 }
 
 // Autofill integration tests. This file contains end-to-end tests for
@@ -321,8 +307,8 @@ class WebAuthnAutofillIntegrationTest : public CertVerifierBrowserTest {
     ChromeAuthenticatorRequestDelegate::SetGlobalObserverForTesting(
         delegate_observer_.get());
 
-    mock_hw_provider_ =
-        std::make_unique<crypto::ScopedMockUnexportableKeyProvider>();
+    fake_hw_provider_ =
+        std::make_unique<crypto::ScopedFakeUnexportableKeyProvider>();
     fake_uv_provider_ =
         std::make_unique<crypto::ScopedFakeUserVerifyingKeyProvider>();
 
@@ -499,7 +485,7 @@ class WebAuthnAutofillIntegrationTest : public CertVerifierBrowserTest {
   std::unique_ptr<DelegateObserver> delegate_observer_;
   base::test::ScopedFeatureList scoped_feature_list_;
   logging::ScopedVmoduleSwitches scoped_vmodule_;
-  std::unique_ptr<crypto::ScopedMockUnexportableKeyProvider> mock_hw_provider_;
+  std::unique_ptr<crypto::ScopedFakeUnexportableKeyProvider> fake_hw_provider_;
   std::unique_ptr<crypto::ScopedFakeUserVerifyingKeyProvider> fake_uv_provider_;
 
 #if BUILDFLAG(IS_WIN)
@@ -577,8 +563,7 @@ IN_PROC_BROWSER_TEST_F(WebAuthnDevtoolsAutofillIntegrationTest,
 }
 
 // TODO(crbug.com/372493822): remove when hybrid linking flag is removed.
-IN_PROC_BROWSER_TEST_F(WebAuthnDevtoolsAutofillIntegrationTest,
-                       GPMPasskeys) {
+IN_PROC_BROWSER_TEST_F(WebAuthnDevtoolsAutofillIntegrationTest, GPMPasskeys) {
   // Have the virtual device masquerade as a phone.
   virtual_device_factory_->SetTransport(device::FidoTransportProtocol::kHybrid);
 
@@ -631,7 +616,9 @@ IN_PROC_BROWSER_TEST_F(WebAuthnDevtoolsAutofillIntegrationTest,
   ASSERT_EQ(webauthn_entry_count, 1u);
   ASSERT_LT(suggestion_index, suggestions.size()) << "WebAuthn entry not found";
   EXPECT_EQ(webauthn_entry.main_text.value, u"flandre");
-  EXPECT_EQ(webauthn_entry.labels.at(0).at(0).value, ExpectedPasskeyLabel());
+  EXPECT_EQ(webauthn_entry.labels.at(0).at(0).value,
+            l10n_util::GetStringUTF16(
+                IDS_PASSWORD_MANAGER_PASSKEY_FROM_GOOGLE_PASSWORD_MANAGER));
   EXPECT_EQ(webauthn_entry.icon, autofill::Suggestion::Icon::kGlobe);
 
   // Click the credential.
@@ -670,7 +657,8 @@ class WebAuthnWindowsAutofillIntegrationTest
                                                "Flandre Scarlet");
     device::PublicKeyCredentialRpEntity rp(kRpId);
     fake_webauthn_api_->InjectDiscoverableCredential(
-        kCredentialID1, std::move(rp), std::move(user));
+        kCredentialID1, std::move(rp), std::move(user),
+        /*provider_name=*/std::nullopt);
 
     win_webauthn_api_override_ =
         std::make_unique<device::WinWebAuthnApi::ScopedOverride>(
@@ -686,9 +674,7 @@ class WebAuthnWindowsAutofillIntegrationTest
 
   std::u16string GetDeviceString() override {
     return l10n_util::GetStringUTF16(
-        base::FeatureList::IsEnabled(device::kWebAuthnEnclaveAuthenticator)
-            ? IDS_PASSWORD_MANAGER_PASSKEY_FROM_WINDOWS_HELLO_NEW
-            : IDS_PASSWORD_MANAGER_PASSKEY_FROM_WINDOWS_HELLO);
+        IDS_PASSWORD_MANAGER_PASSKEY_FROM_WINDOWS_HELLO);
   }
 
  protected:
@@ -712,7 +698,8 @@ IN_PROC_BROWSER_TEST_F(WebAuthnWindowsAutofillIntegrationTest,
                                              "Sakuya Izayoi");
   device::PublicKeyCredentialRpEntity rp(kRpId);
   fake_webauthn_api_->InjectDiscoverableCredential(
-      kCredentialID2, std::move(rp), std::move(user));
+      kCredentialID2, std::move(rp), std::move(user),
+      /*provider_name=*/std::nullopt);
   RunSelectAccountTest(kConditionalUIRequestFiltered);
 }
 

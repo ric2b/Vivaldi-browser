@@ -170,6 +170,7 @@
 <translation id="3838085852053358637">No s'ha pogut carregar el complement</translation>
 <translation id="383891835335927981">No s'ha ampliat ni reduït cap lloc</translation>
 <translation id="385051799172605136">Enrere</translation>
+<translation id="3858860766373142691">Nom</translation>
 <translation id="3861977424605124250">Mostra a l'inici</translation>
 <translation id="3867944738977021751">Camps del certificat</translation>
 <translation id="3905761538810670789">Repara l'aplicació</translation>
@@ -415,6 +416,9 @@ Desa el fitxer de clau a una ubicació segura. El necessitaràs per crear versio
 <translation id="8004582292198964060">Navegador</translation>
 <translation id="8018313076035239964">Controla quina informació poden utilitzar i quin contingut et poden mostrar els llocs web</translation>
 <translation id="8071432093239591881">Imprimeix com a imatge</translation>
+<translation id="8118448640060360549">{EXTENSIONS_COUNT, plural,
+        =1 {# marcador}
+        other {# marcadors}}</translation>
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" />KB</translation>
 <translation id="8212008074015601248">{NUM_DOWNLOAD, plural,
         =1 {Baixada en curs} other {Baixades en curs}}</translation>

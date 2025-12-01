@@ -14592,6 +14592,36 @@ op {
   }
 }
 op {
+  name: "DecodeWebP"
+  input_arg {
+    name: "contents"
+    type: DT_STRING
+  }
+  output_arg {
+    name: "image"
+    type_attr: "dtype"
+  }
+  attr {
+    name: "channels"
+    type: "int"
+    default_value {
+      i: 0
+    }
+  }
+  attr {
+    name: "dtype"
+    type: "type"
+    default_value {
+      type: DT_UINT8
+    }
+    allowed_values {
+      list {
+        type: DT_UINT8
+      }
+    }
+  }
+}
+op {
   name: "DeepCopy"
   input_arg {
     name: "x"
@@ -60740,6 +60770,28 @@ op {
   is_stateful: true
 }
 op {
+  name: "TPUDummyInput"
+  output_arg {
+    name: "output"
+    type_attr: "dtype"
+  }
+  attr {
+    name: "dtype"
+    type: "type"
+    allowed_values {
+      list {
+        type: DT_FLOAT
+        type: DT_BFLOAT16
+      }
+    }
+  }
+  attr {
+    name: "shape"
+    type: "shape"
+  }
+  is_stateful: true
+}
+op {
   name: "TPUEmbeddingActivations"
   input_arg {
     name: "embedding_variable"
@@ -64745,6 +64797,7 @@ op {
     allowed_values {
       list {
         type: DT_QINT8
+        type: DT_QUINT8
         type: DT_QINT32
       }
     }
@@ -64807,6 +64860,7 @@ op {
     allowed_values {
       list {
         type: DT_QINT8
+        type: DT_QUINT8
         type: DT_QINT32
       }
     }

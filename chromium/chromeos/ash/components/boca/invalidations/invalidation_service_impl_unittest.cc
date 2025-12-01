@@ -49,6 +49,7 @@ class MockSessionManager : public BocaSessionManager {
  public:
   explicit MockSessionManager(SessionClientImpl* session_client_impl)
       : BocaSessionManager(session_client_impl,
+                           /*pref_service=*/nullptr,
                            AccountId::FromUserEmailGaiaId(kTestEmail, kGaiaId),
                            /*is_producer=*/false) {}
   MOCK_METHOD(void, LoadCurrentSession, (bool), (override));
@@ -140,7 +141,8 @@ class InvalidationServiceImplTest : public testing::Test {
     invalidation_service_impl_ = std::make_unique<InvalidationServiceImpl>(
         &fake_gcm_driver_, mock_instance_id_driver_.get(),
         AccountId::FromUserEmailGaiaId(kTestEmail, kGaiaId),
-        boca_session_manager_.get(), session_client_impl_.get());
+        boca_session_manager_.get(), session_client_impl_.get(),
+        "https://test");
   }
 
   base::test::SingleThreadTaskEnvironment task_environment_{

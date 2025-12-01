@@ -38,9 +38,9 @@ if (pdf_enable_fontations) {
     cxx_bindings = [ "//third_party/skia/src/ports/fontations/src/ffi.rs" ]
     deps = [
       ":path_bridge",
-      "//third_party/rust/font_types/v0_7:lib",
-      "//third_party/rust/read_fonts/v0_23:lib",
-      "//third_party/rust/skrifa/v0_24:lib",
+      "//third_party/rust/font_types/v0_8:lib",
+      "//third_party/rust/read_fonts/v0_27:lib",
+      "//third_party/rust/skrifa/v0_28:lib",
     ]
     configs -= [ "//build/config/compiler:chromium_code" ]
     configs += [
@@ -57,24 +57,8 @@ config("skia_config") {
   defines = [
     "SK_ENCODE_PNG",
     "SK_USER_CONFIG_HEADER=\"../../skia/config/SkPdfiumUserConfig.h\"",
-    "SK_DISABLE_LEGACY_SKSURFACE_METHODS",
-    "SK_DISABLE_LEGACY_GRAPHITE_IMAGE_FACTORIES",
-    "SK_DISABLE_LEGACY_GRAPHITE_IMAGE_METHODS",
-    "SK_DISABLE_LEGACY_SKSURFACE_FACTORIES",
-    "SK_DISABLE_LEGACY_SKSURFACE_FLUSH",
-    "SK_DISABLE_LEGACY_SKSURFACE_AS_IMAGE",
-    "SK_DISABLE_LEGACY_SKSURFACE_DISPLAYLIST",
-    "SK_DISABLE_LEGACY_IMAGE_SUBSET_METHODS",
-    "SK_DISABLE_LEGACY_IMAGE_COLORSPACE_METHODS",
-    "SK_DISABLE_LEGACY_IMAGE_RELEASE_PROCS",
-    "SK_DISABLE_LEGACY_GL_BACKEND_SURFACE",
     "SK_DISABLE_LEGACY_INIT_DECODERS",
-    "SK_DISABLE_LEGACY_GRDIRECTCONTEXT_FLUSH",
-    "SK_DISABLE_LEGACY_GRDIRECTCONTEXT_BOOLS",
-    "SK_DISABLE_LEGACY_GL_GRDIRECTCONTEXT_FACTORIES",
     "SK_DISABLE_LEGACY_PNG_WRITEBUFFER",
-    "SK_SLUG_DISABLE_LEGACY_DESERIALIZE",
-    "SK_DISABLE_LEGACY_VK_GRDIRECTCONTEXT_FACTORIES",
   ]
 
   if (is_win) {
@@ -187,20 +171,6 @@ config("skia_library_config") {
       # fairly small size. http://crbug.com/314387
       "SK_DEFAULT_FONT_CACHE_COUNT_LIMIT=256",
     ]
-
-    cflags = [
-      "/wd4244",  # conversion from 'type1( __int64)' to 'type2 (unsigned int)'
-      "/wd4341",  # signed value is out of range for enum constant.
-      "/wd4345",  # Object is default-initialized if initialization is omitted.
-      "/wd4390",  # ';'empty statement found in looping;is it what was intended?
-      "/wd4554",  # 'operator' : check operator precedence for possible error
-      "/wd4748",  # compiler will disable optimizations if a function has inline
-                  # assembly code contains flow control(jmp or jcc) statements.
-
-      "/wd4800",  # forcing value to bool 'true/false'(assigning int to bool).
-      "/wd5041",  # out-of-line definition for constexpr static data member is
-                  # not needed and is deprecated in C++17
-    ]
   }
 }
 
@@ -276,10 +246,7 @@ component("skia") {
   # FreeType is needed everywhere (except on iOS), on Linux and Android as main
   # font backend, on Windows and Mac as fallback backend for Variations.
   if (!is_ios) {
-    sources += [
-      "//third_party/skia/src/ports/SkFontHost_FreeType.cpp",
-      "//third_party/skia/src/ports/SkFontHost_FreeType_common.cpp",
-    ]
+    sources += skia_ports_freetype_sources
   }
 
   if (is_win) {
@@ -293,14 +260,7 @@ component("skia") {
   frameworks = []
   if (is_apple) {
     # See SK_TYPEFACE_FACTORY_CORETEXT
-    sources += [
-      "//third_party/skia/include/ports/SkFontMgr_mac_ct.h",
-      "//third_party/skia/src/ports/SkFontMgr_mac_ct.cpp",
-      "//third_party/skia/src/ports/SkScalerContext_mac_ct.cpp",
-      "//third_party/skia/src/ports/SkScalerContext_mac_ct.h",
-      "//third_party/skia/src/ports/SkTypeface_mac_ct.cpp",
-      "//third_party/skia/src/ports/SkTypeface_mac_ct.h",
-    ]
+    sources += skia_ports_fontmgr_coretext_sources
     frameworks += [
       "CoreFoundation.framework",
       "CoreGraphics.framework",
@@ -309,40 +269,27 @@ component("skia") {
   }
 
   if (is_linux || is_chromeos) {
-    sources += [
-      "//third_party/skia/src/ports/SkFontConfigInterface.cpp",
-      "//third_party/skia/src/ports/SkFontConfigInterface_direct.cpp",
-      "//third_party/skia/src/ports/SkFontConfigInterface_direct_factory.cpp",
-      "//third_party/skia/src/ports/SkFontMgr_FontConfigInterface.cpp",
-      "//third_party/skia/src/ports/SkFontMgr_custom.cpp",
-      "//third_party/skia/src/ports/SkFontMgr_custom_empty.cpp",
-    ]
+    sources += skia_ports_fci_sources
+    sources += skia_ports_fontmgr_custom_sources
+    sources += skia_ports_fontmgr_empty_sources
+    sources += skia_ports_typeface_proxy_sources
   }
 
   if (is_android) {
-    sources += [
-      # Unlike Chromium, standalone PDFium on Linux and Chrome OS does not
-      # require these files, since PDFium does not perform Android emulation.
-      # Note that this requires expat.
-      "//third_party/skia/src/ports/SkFontMgr_android.cpp",
-      "//third_party/skia/src/ports/SkFontMgr_android_factory.cpp",
-      "//third_party/skia/src/ports/SkFontMgr_android_parser.cpp",
-    ]
+    # Unlike Chromium, standalone PDFium on Linux and Chrome OS does not
+    # require these files, since PDFium does not perform Android emulation.
+    # Note that this requires expat.
+    sources += skia_ports_fontmgr_android_sources
   }
 
   if (is_win || (is_apple && use_blink)) {
-    sources += [
-      # Add the FreeType custom font manager as a fallback backend for variable fonts.
-      "//third_party/skia/src/ports/SkFontMgr_custom.cpp",
-      "//third_party/skia/src/ports/SkFontMgr_custom_empty.cpp",
-    ]
+    # Add the FreeType custom font manager as a fallback backend for variable fonts.
+    sources += skia_ports_fontmgr_custom_sources
+    sources += skia_ports_fontmgr_empty_sources
   }
 
   if (pdf_enable_fontations) {
-    sources += [
-      "//third_party/skia/src/ports/SkTypeface_fontations.cpp",
-      "//third_party/skia/src/ports/SkTypeface_fontations_priv.h",
-    ]
+    sources += skia_ports_typeface_fontations_sources
 
     # Fontations Rust/C++ bridge interfaces.
     deps += [
@@ -428,13 +375,6 @@ template("skia_source_set") {
       "//build/config/compiler:no_chromium_code",
     ]
     public_configs = [ ":skia_config" ]
-
-    if (is_win) {
-      cflags_cc = [
-        "/wd5041",  # out-of-line definition for constexpr static data member is
-                    # not needed and is deprecated in C++17
-      ]
-    }
   }
 }
 

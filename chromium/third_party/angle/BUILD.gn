@@ -243,10 +243,6 @@ config("internal_config") {
     defines += [ "ANGLE_PLATFORM_CHROMEOS" ]
   }
 
-  if (is_ggp) {
-    defines += [ "__ggp__" ]
-  }
-
   if (angle_use_vulkan_null_display) {
     defines += [ "ANGLE_USE_VULKAN_NULL_DISPLAY" ]
   } else if (angle_use_vulkan_display) {
@@ -305,10 +301,14 @@ config("internal_config") {
   if (angle_enable_cl) {
     defines += [ "ANGLE_ENABLE_CL" ]
   }
+
+  if (angle_trace_events_ignore_timestamp) {
+    defines += [ "ANGLE_TRACE_EVENTS_IGNORE_TIMESTAMP" ]
+  }
 }
 
 config("constructor_and_destructor_warnings") {
-  if (is_clang) {
+  if (is_clang && !angle_enable_global_mutex_load_time_allocate) {
     cflags = [
       "-Wexit-time-destructors",
       "-Wglobal-constructors",

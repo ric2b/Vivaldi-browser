@@ -181,6 +181,8 @@ class AutocompleteProvider
     TYPE_HISTORY_EMBEDDINGS = 1 << 21,
     TYPE_ENTERPRISE_SEARCH_AGGREGATOR = 1 << 22,
     TYPE_UNSCOPED_EXTENSION = 1 << 23,
+    TYPE_RECENTLY_CLOSED_TABS = 1 << 24,
+    TYPE_CONTEXTUAL_SEARCH = 1 << 25,
 
     // Vivaldi
     TYPE_BOOKMARK_NICKNAME = 1 << 29,
@@ -201,6 +203,15 @@ class AutocompleteProvider
 
   // Returns a string describing a particular AutocompleteProvider type.
   static const char* TypeToString(Type type);
+
+  // Returns a localized string date that is formatted based on whether
+  // `modified_time` is within the current day or year. For time within the
+  // current day, return the time of day. (Ex. '12:45 PM') For time within the
+  // current year, return the abbreviated date. (Ex. 'Jan 02') Otherwise, return
+  // the full date. (Ex. '10/7/24')
+  static const std::u16string LocalizedLastModifiedString(
+      base::Time now,
+      base::Time modified_time);
 
   // Used to communicate async matches to consumers (usually the
   // `AutocompleteController`). Consumers invoke `AddListener()` to register
@@ -309,6 +320,8 @@ class AutocompleteProvider
   // return.
   size_t provider_max_matches() const { return provider_max_matches_; }
 
+  void set_provider_max_matches(const size_t max) { provider_max_matches_ = max; }
+
   // Returns a suggested upper bound for how many matches this provider should
   // return while in keyword mode.
   size_t provider_max_matches_in_keyword_mode() const {
@@ -388,7 +401,7 @@ class AutocompleteProvider
   std::vector<raw_ptr<AutocompleteProviderListener, VectorExperimental>>
       listeners_;
 
-  const size_t provider_max_matches_;
+  size_t provider_max_matches_;
   const size_t provider_max_matches_in_keyword_mode_{7};
 
   ACMatches matches_;

@@ -1,4 +1,4 @@
-load("//xla:xla.bzl", "xla_cc_test")
+load("//xla:xla.default.bzl", "xla_cc_test")
 load("//xla/tsl:tsl.bzl", "internal_visibility")
 load("//xla/tsl:tsl.default.bzl", "get_compatible_with_portable")
 load("//xla/tsl/platform:rules_cc.bzl", "cc_library")
@@ -6,9 +6,9 @@ load("//xla/tsl/platform:rules_cc.bzl", "cc_library")
 package(
     # copybara:uncomment default_applicable_licenses = ["//tensorflow:license"],
     default_visibility = internal_visibility([
+        "//learning/brain/mlir:stablehlo_friends",
         "//third_party/golang/github_com/gomlx/gomlx:__subpackages__",
         "//xla:internal",
-        "//learning/infra/mira/experimental/orbax_model:__subpackages__",  # For ConvertPrimitiveTypeToMlirType
     ]),
     licenses = ["notice"],
 )
@@ -30,9 +30,10 @@ cc_library(
     ],
 )
 
-cc_test(
+xla_cc_test(
     name = "error_util_test",
     srcs = ["error_util_test.cc"],
+    linkstatic = 1,
     deps = [
         ":error_util",
         "//xla/tsl/lib/core:status_test_util",
@@ -40,7 +41,7 @@ cc_test(
         "//xla/tsl/platform:test_main",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/strings",
-        "@com_google_googletest//:gtest_main",
+        "@com_google_googletest//:gtest",
         "@llvm-project//llvm:Support",
         "@llvm-project//mlir:IR",
     ],
@@ -73,7 +74,6 @@ xla_cc_test(
         "//xla/tsl/platform:test_main",
         "@com_google_absl//absl/functional:function_ref",
         "@com_google_googletest//:gtest",
-        "@com_google_googletest//:gtest_main",
         "@llvm-project//llvm:Support",
         "@llvm-project//mlir:IR",
     ],

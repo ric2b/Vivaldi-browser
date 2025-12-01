@@ -57,6 +57,7 @@
 #include "ui/events/keycodes/dom/keycode_converter.h"
 #include "ui/events/platform/platform_event_source.h"
 #include "ui/gfx/mac/coordinate_conversion.h"
+#include "ui/gfx/native_widget_types.h"
 
 #include "app/vivaldi_apptools.h"
 #include "app/vivaldi_command_controller.h"
@@ -187,8 +188,6 @@ void ExtractUnderlines(NSAttributedString* string,
 @property(getter=isAutomaticDashSubstitutionEnabled)
     BOOL automaticDashSubstitutionEnabled;
 
-- (void)processedWheelEvent:(const blink::WebMouseWheelEvent&)event
-                   consumed:(BOOL)consumed;
 - (void)keyEvent:(NSEvent*)theEvent wasKeyEquivalent:(BOOL)equiv;
 - (void)windowDidChangeScreenOrBackingProperties:(NSNotification*)notification;
 - (void)windowChangedGlobalFrame:(NSNotification*)notification;
@@ -736,11 +735,6 @@ void ExtractUnderlines(NSAttributedString* string,
 - (void)resetCursorRects {
   if (_currentCursor)
     [self addCursorRect:[self visibleRect] cursor:_currentCursor];
-}
-
-- (void)processedWheelEvent:(const blink::WebMouseWheelEvent&)event
-                   consumed:(BOOL)consumed {
-  [_responderDelegate rendererHandledWheelEvent:event consumed:consumed];
 }
 
 - (void)processedGestureScrollEvent:(const blink::WebGestureEvent&)event
@@ -1803,7 +1797,7 @@ void ExtractUnderlines(NSAttributedString* string,
   auto* screen = display::Screen::GetScreen();
   const display::ScreenInfos newScreenInfos =
       screen->GetScreenInfosNearestDisplay(
-          screen->GetDisplayNearestView(self).id());
+          screen->GetDisplayNearestView(gfx::NativeView(self)).id());
   _host->OnScreenInfosChanged(newScreenInfos);
 }
 
@@ -2538,6 +2532,21 @@ extern NSString* NSTextInputReplacementRangeAttributeName;
     _textToBeInserted.append(base::SysNSStringToUTF16(imText));
     _shouldRequestTextSubstitutions = YES;
   } else {
+    // Fix the issue that Apple intelligence's writing tools not working. The
+    // writing tools bubble will grab the focus from browser after the user
+    // clicks replace button in the bubble which causes the replaced text can
+    // not be inserted into browser IME since the content's NSView loses focus.
+    // Please note that this is a workaround fix and should be removed after the
+    // issue is finally fixed by Apple which is tracked via FB16872510.
+    NSResponder* firstResponder = [self.window firstResponder];
+    if ([firstResponder isKindOfClass:NSClassFromString(@"NSRemoteView")]) {
+      NSView* firstResponderView = (NSView*)firstResponder;
+      NSView* superView = firstResponderView.superview;
+      if ([superView isKindOfClass:NSClassFromString(@"WTWritingToolsView")]) {
+        [self becomeFirstResponder];
+      }
+    }
+
     // The user uses mouse or touch bar to select a word on the IME.
     gfx::Range replacementGfxRange =
         gfx::Range::FromPossiblyInvalidNSRange(replacementRange);
@@ -2550,6 +2559,20 @@ extern NSString* NSTextInputReplacementRangeAttributeName;
     // This is required for macOS 10.12+, otherwise the predictive completions
     // of IMEs won't work. See crbug.com/710101.
     int insertEndpoint = _markedRange.location + [imText length];
+
+    if (vivaldi::IsVivaldiRunning() && insertEndpoint < 0) {
+      // NOTE(tomas@vivaldi): VB-109065 Crash when using an extension shortcut
+      // We end up here after calling appkit via interpretKeyEvents:
+      // in the function keyEvent:wasKeyEquivalent: above. It may be possible
+      // to block this path there by checking the equiv parameter, however a
+      // comment in that function states:
+      //    "web pages are allowed to hijack keyboard shortcuts and
+      //     apparently that's done through interpretKeyEvents"
+      // I think this is a safer fix for the crash since we might break website
+      // shortcuts otherwise.
+      return;
+    } // End Vivaldi
+
     _textSelectionRange = gfx::Range(insertEndpoint, insertEndpoint);
     // IMEs read |_availableText| preceding the insertion point as the context
     // for predictive completion. Unfortunately by the moment IME reads the
@@ -2682,23 +2705,21 @@ extern NSString* NSTextInputReplacementRangeAttributeName;
 
 - (id)validRequestorForSendType:(NSString*)sendType
                      returnType:(NSString*)returnType {
-  id requestor = nil;
-  BOOL sendTypeIsString = [sendType isEqualToString:NSPasteboardTypeString];
-  BOOL returnTypeIsString = [returnType isEqualToString:NSPasteboardTypeString];
-  BOOL hasText = !_textSelectionRange.is_empty();
-  BOOL takesText = _textInputType != ui::TEXT_INPUT_TYPE_NONE;
+  UTType* sendUTType = ui::UTTypeForServicesType(sendType);
+  UTType* acceptUTType = ui::UTTypeForServicesType(returnType);
 
-  if (sendTypeIsString && hasText && !returnType) {
-    requestor = self;
-  } else if (!sendType && returnTypeIsString && takesText) {
-    requestor = self;
-  } else if (sendTypeIsString && returnTypeIsString && hasText && takesText) {
-    requestor = self;
-  } else {
-    requestor =
-        [super validRequestorForSendType:sendType returnType:returnType];
+  const BOOL canSendText = [sendUTType isEqual:UTTypeUTF8PlainText] &&
+                           !_textSelectionRange.is_empty();
+  const BOOL canAcceptText = [acceptUTType isEqual:UTTypeUTF8PlainText] &&
+                             _textInputType != ui::TEXT_INPUT_TYPE_NONE;
+
+  // This is a valid requestor if the send/accept types can be fulfilled or if
+  // they are `nil` (and therefore not the wrong type).
+  if ((canSendText && !acceptUTType) || (!sendUTType && canAcceptText) ||
+      (canSendText && canAcceptText)) {
+    return self;
   }
-  return requestor;
+  return [super validRequestorForSendType:sendType returnType:returnType];
 }
 
 - (BOOL)shouldChangeCurrentCursor {
@@ -2794,25 +2815,11 @@ extern NSString* NSTextInputReplacementRangeAttributeName;
 @implementation RenderWidgetHostViewCocoa (NSServicesRequests)
 
 - (BOOL)writeSelectionToPasteboard:(NSPasteboard*)pboard types:(NSArray*)types {
-  // /!\ Compatibility hack!
-  //
-  // The NSServicesMenuRequestor protocol does not pass in the correct
-  // NSPasteboardType constants in the `types` array, verified through macOS 13
-  // (FB11838671). To keep the code below clean, if an obsolete type is passed
-  // in, rewrite the array.
-  //
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wdeprecated-declarations"
-  if ([types containsObject:NSStringPboardType] &&
-      ![types containsObject:NSPasteboardTypeString]) {
-    types = [types arrayByAddingObject:NSPasteboardTypeString];
-  }
-#pragma clang diagnostic pop
-  // /!\ End compatibility hack.
+  NSSet<UTType*>* typeSet = ui::UTTypesForServicesTypeArray(types);
 
   bool wasAbleToWriteAtLeastOneType = false;
 
-  if ([types containsObject:NSPasteboardTypeString] &&
+  if ([typeSet containsObject:UTTypeUTF8PlainText] &&
       !_textSelectionRange.is_empty()) {
     NSString* text = base::SysUTF16ToNSString([self selectedText]);
     wasAbleToWriteAtLeastOneType |= [pboard writeObjects:@[ text ]];

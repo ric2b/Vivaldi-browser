@@ -5,6 +5,7 @@
 import {assert} from 'chrome://resources/js/assert.js';
 import {EventTracker} from 'chrome://resources/js/event_tracker.js';
 import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
+import type {LoadTimeDataRaw} from 'chrome://resources/js/load_time_data.js';
 import {PromiseResolver} from 'chrome://resources/js/promise_resolver.js';
 import {CrLitElement} from 'chrome://resources/lit/v3_0/lit.rollup.js';
 
@@ -58,7 +59,7 @@ export abstract class PdfViewerBaseElement extends CrLitElement {
   protected pdfCr23Enabled: boolean = false;
   protected pdfOopifEnabled: boolean = false;
   showErrorDialog: boolean = false;
-  protected strings?: {[key: string]: string};
+  protected strings?: LoadTimeDataRaw;
   protected tracker: EventTracker = new EventTracker();
   private delayedScriptingMessages_: MessageEvent[] = [];
   private initialLoadComplete_: boolean = false;
@@ -152,7 +153,7 @@ export abstract class PdfViewerBaseElement extends CrLitElement {
       browserApi: BrowserApi, scroller: HTMLElement, sizer: HTMLElement,
       content: HTMLElement) {
     this.browserApi = browserApi;
-    this.originalUrl = this.browserApi!.getStreamInfo().originalUrl;
+    this.originalUrl = this.browserApi.getStreamInfo().originalUrl;
     this.pdfCr23Enabled =
         document.documentElement.hasAttribute('pdfCr23Enabled');
     this.pdfOopifEnabled =
@@ -162,21 +163,21 @@ export abstract class PdfViewerBaseElement extends CrLitElement {
 
     // Create the viewport.
     const defaultZoom =
-        this.browserApi!.getZoomBehavior() === ZoomBehavior.MANAGE ?
-        this.browserApi!.getDefaultZoom() :
+        this.browserApi.getZoomBehavior() === ZoomBehavior.MANAGE ?
+        this.browserApi.getDefaultZoom() :
         1.0;
 
     assert(!this.viewport_);
     this.viewport_ = new Viewport(
         scroller, sizer, content, getScrollbarWidth(), defaultZoom);
-    this.viewport_!.setViewportChangedCallback(() => this.viewportChanged_());
-    this.viewport_!.setBeforeZoomCallback(
+    this.viewport_.setViewportChangedCallback(() => this.viewportChanged_());
+    this.viewport_.setBeforeZoomCallback(
         () => this.currentController!.beforeZoom());
-    this.viewport_!.setAfterZoomCallback(() => {
+    this.viewport_.setAfterZoomCallback(() => {
       this.currentController!.afterZoom();
       this.afterZoom(this.viewport_!.getZoom());
     });
-    this.viewport_!.setUserInitiatedCallback(
+    this.viewport_.setUserInitiatedCallback(
         userInitiated => this.setUserInitiated_(userInitiated));
 
     // Handle scripting messages from outside the extension that wish to
@@ -222,11 +223,11 @@ export abstract class PdfViewerBaseElement extends CrLitElement {
 
     // Set up the ZoomManager.
     this.zoomManager_ = ZoomManager.create(
-        this.browserApi!.getZoomBehavior(), () => this.viewport_!.getZoom(),
+        this.browserApi.getZoomBehavior(), () => this.viewport_!.getZoom(),
         zoom => this.browserApi!.setZoom(zoom),
-        this.browserApi!.getInitialZoom());
-    this.viewport_!.setZoomManager(this.zoomManager_);
-    this.browserApi!.addZoomEventListener(
+        this.browserApi.getInitialZoom());
+    this.viewport_.setZoomManager(this.zoomManager_);
+    this.browserApi.addZoomEventListener(
         (zoom: number) => this.zoomManager_!.onBrowserZoomChange(zoom));
 
     // Request translated strings.
@@ -385,7 +386,7 @@ export abstract class PdfViewerBaseElement extends CrLitElement {
    *     initial load of the PDF.
    */
   get loaded(): Promise<void>|null {
-    return this.loaded_ ? this.loaded_!.promise : null;
+    return this.loaded_ ? this.loaded_.promise : null;
   }
 
   get viewport(): Viewport {
@@ -427,7 +428,7 @@ export abstract class PdfViewerBaseElement extends CrLitElement {
    * chrome.resourcesPrivate.
    * @param strings Dictionary of translated strings
    */
-  protected handleStrings(strings?: {[key: string]: string}) {
+  protected handleStrings(strings?: LoadTimeDataRaw) {
     if (!strings) {
       return;
     }
@@ -511,7 +512,7 @@ export abstract class PdfViewerBaseElement extends CrLitElement {
         targetOrigin = this.originalUrl;
       }
       try {
-        this.parentWindow_!.postMessage(message, targetOrigin);
+        this.parentWindow_.postMessage(message, targetOrigin);
       } catch (ok) {
         // TODO(crbug.com/40647731): targetOrigin probably was rejected, such as
         // a "data:" URL. This shouldn't cause this method to throw, though.

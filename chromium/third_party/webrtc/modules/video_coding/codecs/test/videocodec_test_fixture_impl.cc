@@ -84,7 +84,7 @@ void ConfigureSimulcast(VideoCodec* codec_settings) {
       codec_settings->numberOfSimulcastStreams);
   VideoEncoder::EncoderInfo encoder_info;
   auto stream_factory =
-      rtc::make_ref_counted<cricket::EncoderStreamFactory>(encoder_info);
+      rtc::make_ref_counted<EncoderStreamFactory>(encoder_info);
   const std::vector<VideoStream> streams = stream_factory->CreateEncoderStreams(
       trials, codec_settings->width, codec_settings->height, encoder_config);
 
@@ -120,7 +120,7 @@ void ConfigureSvc(VideoCodec* codec_settings) {
 
 std::string CodecSpecificToString(const VideoCodec& codec) {
   char buf[1024];
-  rtc::SimpleStringBuilder ss(buf);
+  SimpleStringBuilder ss(buf);
   switch (codec.codecType) {
     case kVideoCodecVP8:
       ss << "\nnum_temporal_layers: "
@@ -202,7 +202,7 @@ SdpVideoFormat CreateSdpVideoFormat(
 VideoCodecTestFixtureImpl::Config::Config() = default;
 
 void VideoCodecTestFixtureImpl::Config::SetCodecSettings(
-    std::string codec_name,
+    std::string codec_name_to_set,
     size_t num_simulcast_streams,
     size_t num_spatial_layers,
     size_t num_temporal_layers,
@@ -211,7 +211,7 @@ void VideoCodecTestFixtureImpl::Config::SetCodecSettings(
     bool spatial_resize_on,
     size_t width,
     size_t height) {
-  this->codec_name = codec_name;
+  codec_name = codec_name_to_set;
   VideoCodecType codec_type = PayloadStringToCodecType(codec_name);
   webrtc::test::CodecSettings(codec_type, &codec_settings);
 
@@ -309,7 +309,7 @@ size_t VideoCodecTestFixtureImpl::Config::NumberOfSimulcastStreams() const {
 
 std::string VideoCodecTestFixtureImpl::Config::ToString() const {
   std::string codec_type = CodecTypeToPayloadString(codec_settings.codecType);
-  rtc::StringBuilder ss;
+  StringBuilder ss;
   ss << "test_name: " << test_name;
   ss << "\nfilename: " << filename;
   ss << "\nnum_frames: " << num_frames;
@@ -520,7 +520,7 @@ void VideoCodecTestFixtureImpl::ProcessAllFrames(
     if (RunEncodeInRealTime(config_)) {
       // Roughly pace the frames.
       const int frame_duration_ms =
-          std::ceil(rtc::kNumMillisecsPerSec / rate_profile->input_fps);
+          std::ceil(kNumMillisecsPerSec / rate_profile->input_fps);
       SleepMs(frame_duration_ms);
     }
   }
@@ -532,7 +532,7 @@ void VideoCodecTestFixtureImpl::ProcessAllFrames(
 
   // Give the VideoProcessor pipeline some time to process the last frame,
   // and then release the codecs.
-  SleepMs(1 * rtc::kNumMillisecsPerSec);
+  SleepMs(1 * kNumMillisecsPerSec);
   cpu_process_time_->Stop();
 }
 
@@ -563,7 +563,7 @@ void VideoCodecTestFixtureImpl::AnalyzeAllFrames(
 
       // For perf dashboard.
       char modifier_buf[256];
-      rtc::SimpleStringBuilder modifier(modifier_buf);
+      SimpleStringBuilder modifier(modifier_buf);
       modifier << "_r" << rate_profile_idx << "_sl" << layer_stat.spatial_idx;
 
       auto PrintResultHelper = [&modifier, this](

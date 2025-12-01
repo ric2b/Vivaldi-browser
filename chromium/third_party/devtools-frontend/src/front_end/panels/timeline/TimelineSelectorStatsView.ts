@@ -6,7 +6,6 @@ import '../../ui/components/linkifier/linkifier.js';
 import '../../ui/legacy/components/data_grid/data_grid.js';
 
 import * as i18n from '../../core/i18n/i18n.js';
-import type * as Platform from '../../core/platform/platform.js';
 import * as SDK from '../../core/sdk/sdk.js';
 import type * as Protocol from '../../generated/protocol.js';
 import * as Trace from '../../models/trace/trace.js';
@@ -79,7 +78,7 @@ const UIStrings = {
    *@example {14} PH2
    */
   lineNumber: 'Line {PH1}:{PH2}',
-};
+} as const;
 const str_ = i18n.i18n.registerUIStrings('panels/timeline/TimelineSelectorStatsView.ts', UIStrings);
 const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
 
@@ -92,8 +91,7 @@ interface ViewInput {
   timings: SelectorTiming[];
   onContextMenu: (event: CustomEvent<{menu: UI.ContextMenu.ContextMenu, element: HTMLElement}>) => void;
 }
-interface ViewOutput {}
-type View = (input: ViewInput, output: ViewOutput, target: HTMLElement) => void;
+type View = (input: ViewInput, output: object, target: HTMLElement) => void;
 
 export class TimelineSelectorStatsView extends UI.Widget.VBox {
   #selectorLocations: Map<string, Protocol.CSS.SourceRange[]>;
@@ -110,7 +108,7 @@ export class TimelineSelectorStatsView extends UI.Widget.VBox {
   #view: View;
   #timings: SelectorTiming[] = [];
 
-  constructor(parsedTrace: Trace.Handlers.Types.ParsedTrace|null, view: View = (input, output, target) => {
+  constructor(parsedTrace: Trace.Handlers.Types.ParsedTrace|null, view: View = (input, _, target) => {
     render(
         html`
       <devtools-data-grid striped name=${i18nString(UIStrings.selectorStats)}
@@ -373,7 +371,7 @@ export class TimelineSelectorStatsView extends UI.Widget.VBox {
 
       const linkData = ranges.map(range => {
         return {
-          url: styleSheetHeader.resourceURL() as Platform.DevToolsPath.UrlString,
+          url: styleSheetHeader.resourceURL(),
           lineNumber: range.startLine,
           columnNumber: range.startColumn,
           linkText: i18nString(UIStrings.lineNumber, {PH1: range.startLine + 1, PH2: range.startColumn + 1}),

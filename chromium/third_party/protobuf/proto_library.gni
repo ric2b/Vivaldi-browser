@@ -91,6 +91,10 @@
 #       absolute paths, such as for third_party or generated .proto files.
 #       http://crbug.com/691451 tracks fixing this.
 #
+#   generator_visiblility (optional)
+#       This is added to visibility of code generation target so that other
+#       targets can depend on them to have generated codes as their inputs.
+#
 # Parameters for compiling the generated code:
 #
 #   force_source_set (Default=false)
@@ -367,15 +371,13 @@ template("proto_library") {
       ":$py_runtime_name",
       ":$source_set_name",
     ]
+    if (defined(invoker.generator_visibility)) {
+      visibility += invoker.generator_visibility
+    }
     script = "//tools/protoc_wrapper/protoc_wrapper.py"
     args = protos
 
-    sources =
-        proto_sources + [
-          # Add this here as there are some protos which import descriptor.proto
-          # directly or indirectly.
-          "//third_party/protobuf/src/google/protobuf/descriptor.proto",
-        ]
+    sources = proto_sources
 
     outputs =
         get_path_info(protogens + protogens_cc + protogens_js + protogens_py,
@@ -471,9 +473,21 @@ template("proto_library") {
       }
     }
 
-    # System protoc is not used so it's necessary to build a chromium one.
-    inputs = [ _protoc_path ]
+    inputs = [
+      # System protoc is not used so it's necessary to build a chromium one.
+      _protoc_path,
+
+      # Add this here as there are some protos which import descriptor.proto
+      # directly or indirectly.
+      "//third_party/protobuf/src/google/protobuf/descriptor.proto",
+    ]
     deps = [ _protoc_label ]
+    if (host_toolchain_is_msan) {
+      configs = [
+        "//third_party/instrumented_libs:msan_runtime_libs($host_toolchain)",
+      ]
+      deps += [ "//third_party/instrumented_libs:ld-linux($host_toolchain)" ]
+    }
 
     if (enable_js_protobuf) {
       inputs += [ _protoc_gen_js_path ]
@@ -583,10 +597,7 @@ template("proto_library") {
       configs += [ "//build/config/sanitizers:not_fuzzed" ]
     }
 
-    public_configs = [
-      "$_this_dir:using_proto",
-      "$_this_dir:allow_deprecated_proto_fields",
-    ]
+    public_configs = [ "$_this_dir:using_proto" ]
     public_deps = []
 
     if (generate_cc || generate_with_plugin) {
@@ -693,7 +704,7 @@ template("proto_library") {
 #     args = [
 #       "--encode=foo.FooMessage",
 #       "-I",
-#       rebase_path("//"),
+#       rebase_path("//", root_build_dir),
 #       "component/core/foo.proto",
 #     ]
 #   }

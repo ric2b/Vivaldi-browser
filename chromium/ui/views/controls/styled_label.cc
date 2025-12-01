@@ -10,15 +10,17 @@
 #include <limits>
 #include <optional>
 #include <utility>
+#include <variant>
 
+#include "base/functional/callback_helpers.h"
 #include "base/i18n/rtl.h"
 #include "base/memory/raw_ptr.h"
 #include "base/strings/string_util.h"
-#include "third_party/abseil-cpp/absl/types/variant.h"
 #include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/color/color_id.h"
 #include "ui/color/color_provider.h"
+#include "ui/events/event.h"
 #include "ui/gfx/font_list.h"
 #include "ui/gfx/text_constants.h"
 #include "ui/gfx/text_elider.h"
@@ -46,9 +48,7 @@ StyledLabel::RangeStyleInfo::~RangeStyleInfo() = default;
 StyledLabel::RangeStyleInfo StyledLabel::RangeStyleInfo::CreateForLink(
     base::RepeatingClosure callback) {
   // Adapt this closure to a Link::ClickedCallback by discarding the extra arg.
-  return CreateForLink(base::BindRepeating(
-      [](base::RepeatingClosure closure, const ui::Event&) { closure.Run(); },
-      std::move(callback)));
+  return CreateForLink(base::IgnoreArgs<const ui::Event&>(std::move(callback)));
 }
 
 // static
@@ -192,11 +192,12 @@ void StyledLabel::SetLineHeight(int line_height) {
   OnPropertyChanged(&line_height_, kPropertyEffectsPreferredSizeChanged);
 }
 
-StyledLabel::ColorVariant StyledLabel::GetDisplayedOnBackgroundColor() const {
+std::optional<ui::ColorVariant> StyledLabel::GetDisplayedOnBackgroundColor()
+    const {
   return displayed_on_background_color_;
 }
 
-void StyledLabel::SetDisplayedOnBackgroundColor(ColorVariant color) {
+void StyledLabel::SetDisplayedOnBackgroundColor(ui::ColorVariant color) {
   if (color == displayed_on_background_color_) {
     return;
   }
@@ -560,6 +561,7 @@ std::unique_ptr<Label> StyledLabel::CreateLabel(
     LinkFragment** previous_link_fragment) const {
   std::unique_ptr<Label> result;
   if (style_info.text_style == style::STYLE_LINK ||
+      style_info.text_style == style::STYLE_LINK_2 ||
       style_info.text_style == style::STYLE_LINK_3 ||
       style_info.text_style == style::STYLE_LINK_4 ||
       style_info.text_style == style::STYLE_LINK_5) {
@@ -586,11 +588,11 @@ std::unique_ptr<Label> StyledLabel::CreateLabel(
   }
 
   if (style_info.override_color_id) {
-    result->SetEnabledColorId(style_info.override_color_id.value());
+    result->SetEnabledColor(style_info.override_color_id.value());
   } else if (style_info.override_color) {
     result->SetEnabledColor(style_info.override_color.value());
   } else if (default_enabled_color_id_) {
-    result->SetEnabledColorId(default_enabled_color_id_);
+    result->SetEnabledColor(default_enabled_color_id_.value());
   }
   if (!style_info.tooltip.empty()) {
     result->SetCustomTooltipText(style_info.tooltip);
@@ -598,14 +600,10 @@ std::unique_ptr<Label> StyledLabel::CreateLabel(
   if (!style_info.accessible_name.empty()) {
     result->GetViewAccessibility().SetName(style_info.accessible_name);
   }
-  if (absl::holds_alternative<SkColor>(displayed_on_background_color_)) {
-    result->SetBackgroundColor(
-        absl::get<SkColor>(displayed_on_background_color_));
-  } else if (absl::holds_alternative<ui::ColorId>(
-                 displayed_on_background_color_)) {
-    result->SetBackgroundColorId(
-        absl::get<ui::ColorId>(displayed_on_background_color_));
+  if (displayed_on_background_color_) {
+    result->SetBackgroundColor(*displayed_on_background_color_);
   }
+
   result->SetAutoColorReadabilityEnabled(auto_color_readability_enabled_);
   result->SetSubpixelRenderingEnabled(subpixel_rendering_enabled_);
   return result;
@@ -613,19 +611,13 @@ std::unique_ptr<Label> StyledLabel::CreateLabel(
 
 void StyledLabel::UpdateLabelBackgroundColor() {
   for (View* child : children()) {
-    if (!child->GetProperty(kStyledLabelCustomViewKey)) {
+    if (!child->GetProperty(kStyledLabelCustomViewKey) &&
+        displayed_on_background_color_) {
       // TODO(kylixrd): Should updating the label background color even be
       // allowed if there are custom views?
       DCHECK(IsViewClass<Label>(child) || IsViewClass<LinkFragment>(child));
-      static_cast<Label*>(child)->SetBackgroundColorId(
-          absl::holds_alternative<ui::ColorId>(displayed_on_background_color_)
-              ? std::optional<ui::ColorId>(
-                    absl::get<ui::ColorId>(displayed_on_background_color_))
-              : std::nullopt);
-      if (absl::holds_alternative<SkColor>(displayed_on_background_color_)) {
-        static_cast<Label*>(child)->SetBackgroundColor(
-            absl::get<SkColor>(displayed_on_background_color_));
-      }
+      static_cast<Label*>(child)->SetBackgroundColor(
+          *displayed_on_background_color_);
     }
   }
 }
@@ -716,7 +708,8 @@ ADD_PROPERTY_METADATA(int, TextContext)
 ADD_PROPERTY_METADATA(int, DefaultTextStyle)
 ADD_PROPERTY_METADATA(int, LineHeight)
 ADD_PROPERTY_METADATA(bool, AutoColorReadabilityEnabled)
-ADD_PROPERTY_METADATA(StyledLabel::ColorVariant, DisplayedOnBackgroundColor)
+ADD_PROPERTY_METADATA(std::optional<ui::ColorVariant>,
+                      DisplayedOnBackgroundColor)
 ADD_PROPERTY_METADATA(std::optional<ui::ColorId>, DefaultEnabledColorId)
 END_METADATA
 

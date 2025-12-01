@@ -119,7 +119,7 @@ BrowserFrameViewWin::BrowserFrameViewWin(BrowserFrame* frame,
     window_title_->SetSubpixelRenderingEnabled(false);
     window_title_->SetHorizontalAlignment(gfx::ALIGN_LEFT);
     window_title_->SetID(VIEW_ID_WINDOW_TITLE);
-    AddChildView(window_title_.get());
+    AddChildViewRaw(window_title_.get());
   }
 
   caption_button_container_ =
@@ -402,13 +402,8 @@ int BrowserFrameViewWin::NonClientHitTest(const gfx::Point& point) {
     }
   }
 
-  if (window_component != HTNOWHERE) {
-    return window_component;
-  }
-
   // Fall back to the caption if no other component matches.
-  TabStripRegionView::ReportCaptionHitTestInReservedGrabHandleSpace(false);
-  return HTCAPTION;
+  return (window_component == HTNOWHERE) ? HTCAPTION : window_component;
 }
 
 void BrowserFrameViewWin::UpdateWindowIcon() {
@@ -503,8 +498,7 @@ int BrowserFrameViewWin::FrameTopBorderThickness(bool restored) const {
       // default. When maximized, the OS sizes the window such that the border
       // extends beyond the screen edges. In that case, we must return the
       // default value.
-      const int kTopResizeFrameArea = 0;
-      return kTopResizeFrameArea;
+      return 0;
     }
 
     // There is no top border in tablet mode when the window is "restored"
@@ -818,11 +812,16 @@ void BrowserFrameViewWin::LayoutCaptionButtons() {
           ? 0
           : width() - frame()->GetMinimizeButtonOffset();
 
+  const int height =
+      !browser_view()->GetWebAppFrameToolbarPreferredSize().IsEmpty()
+          ? (TitlebarHeight(false) - WindowTopY())
+          : GetFrameHeight();
+
   caption_button_container_->SetBounds(
       CaptionButtonsOnLeadingEdge()
           ? system_caption_buttons_width
           : width() - system_caption_buttons_width - preferred_size.width(),
-      WindowTopY(), preferred_size.width(), GetFrameHeight());
+      WindowTopY(), preferred_size.width(), height);
 }
 
 void BrowserFrameViewWin::LayoutClientView() {

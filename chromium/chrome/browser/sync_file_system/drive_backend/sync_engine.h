@@ -32,13 +32,12 @@ class SequencedTaskRunner;
 
 namespace drive {
 class DriveServiceInterface;
-class DriveNotificationManager;
 class DriveUploaderInterface;
 }
 
 namespace extensions {
+class ExtensionRegistrar;
 class ExtensionRegistry;
-class ExtensionServiceInterface;
 }
 
 namespace leveldb {
@@ -65,7 +64,6 @@ class SyncWorkerInterface;
 class SyncEngine
     : public RemoteFileSyncService,
       public LocalChangeProcessor,
-      public drive::DriveNotificationObserver,
       public drive::DriveServiceObserver,
       public signin::IdentityManager::Observer,
       public network::NetworkConnectionTracker::NetworkConnectionObserver {
@@ -133,12 +131,6 @@ class SyncEngine
                         const storage::FileSystemURL& url,
                         SyncStatusCallback callback) override;
 
-  // drive::DriveNotificationObserver overrides.
-  void OnNotificationReceived(
-      const std::map<std::string, int64_t>& invalidations) override;
-  void OnNotificationTimerFired() override;
-  void OnPushNotificationEnabled(bool enabled) override;
-
   // drive::DriveServiceObserver overrides.
   void OnReadyToSendRequests() override;
   void OnRefreshTokenInvalid() override;
@@ -162,8 +154,7 @@ class SyncEngine
              const scoped_refptr<base::SequencedTaskRunner>& drive_task_runner,
              const base::FilePath& sync_file_system_dir,
              TaskLogger* task_logger,
-             drive::DriveNotificationManager* notification_manager,
-             extensions::ExtensionServiceInterface* extension_service,
+             extensions::ExtensionRegistrar* extension_registrar,
              extensions::ExtensionRegistry* extension_registry,
              signin::IdentityManager* identity_manager,
              scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
@@ -193,10 +184,8 @@ class SyncEngine
   // The owner of the SyncEngine is responsible for their lifetime.
   // I.e. the owner should declare the dependency explicitly by calling
   // KeyedService::DependsOn().
-  raw_ptr<drive::DriveNotificationManager, DanglingUntriaged>
-      notification_manager_;
-  raw_ptr<extensions::ExtensionServiceInterface, DanglingUntriaged>
-      extension_service_;
+  raw_ptr<extensions::ExtensionRegistrar, DanglingUntriaged>
+      extension_registrar_;
   raw_ptr<extensions::ExtensionRegistry, DanglingUntriaged> extension_registry_;
   raw_ptr<signin::IdentityManager> identity_manager_;
 

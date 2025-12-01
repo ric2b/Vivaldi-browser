@@ -166,17 +166,17 @@ extern const char kFilterLabelsInclude[];
 extern const char kFilterLabelsInclude_HelpShort[];
 extern const char kFilterLabelsInclude_Help[];
 Value RunFilterLabelsInclude(Scope* scope,
-                      const FunctionCallNode* function,
-                      const std::vector<Value>& args,
-                      Err* err);
+                             const FunctionCallNode* function,
+                             const std::vector<Value>& args,
+                             Err* err);
 
 extern const char kFilterLabelsExclude[];
 extern const char kFilterLabelsExclude_HelpShort[];
 extern const char kFilterLabelsExclude_Help[];
 Value RunFilterLabelsExclude(Scope* scope,
-                      const FunctionCallNode* function,
-                      const std::vector<Value>& args,
-                      Err* err);
+                             const FunctionCallNode* function,
+                             const std::vector<Value>& args,
+                             Err* err);
 
 extern const char kForEach[];
 extern const char kForEach_HelpShort[];
@@ -276,6 +276,14 @@ Value RunNotNeeded(Scope* scope,
                    const FunctionCallNode* function,
                    const ListNode* args_list,
                    Err* err);
+
+extern const char kPathExists[];
+extern const char kPathExists_HelpShort[];
+extern const char kPathExists_Help[];
+Value RunPathExists(Scope* scope,
+                    const FunctionCallNode* function,
+                    const std::vector<Value>& args,
+                    Err* err);
 
 extern const char kPool[];
 extern const char kPool_HelpShort[];

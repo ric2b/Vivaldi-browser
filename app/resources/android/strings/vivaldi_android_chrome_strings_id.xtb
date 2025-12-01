@@ -1,7 +1,10 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="id">
+<translation id="1204037785786432551">Tautan unduh</translation>
+<translation id="1206892813135768548">Salin teks tautan</translation>
 <translation id="1397811292916898096">Telusuri dengan <ph name="PRODUCT_NAME" /></translation>
+<translation id="1435593198351412143">Buka PDF secara otomatis</translation>
 <translation id="1456207338570705181">Sentuh untuk Telusuri adalah fitur yang hanya tersedia saat Google diatur sebagai mesin telusur utama Vivaldi. Ia mengirim kata yang dipilih dan halaman terkini sebagai konteks ke Penelusuran Google. Anda dapat menonaktifkannya di <ph name="BEGIN_LINK" />Setelan<ph name="END_LINK" />.</translation>
 <translation id="1598449788754183301">Alihkan tab normal/pribadi</translation>
 <translation id="1644574205037202324">Riwayat</translation>
@@ -14,10 +17,14 @@
 <translation id="2433507940547922241">Tampilan</translation>
 <translation id="2501278716633472235">Kembali</translation>
 <translation id="2633278372998075009">Tab pribadi</translation>
+<translation id="2650751991977523696">Unduh berkas lagi?</translation>
 <translation id="265156376773362237">Pramuat standar</translation>
 <translation id="272026394418727548">Halaman beranda Vivaldi</translation>
+<translation id="2842985007712546952">Folder induk</translation>
 <translation id="2871733351037274014">Pramuat halaman</translation>
+<translation id="2904300462646366554">PDF hasil unduh akan otomatis dibuka dengan salah satu penampil PDF di perangkat Anda</translation>
 <translation id="2951071800649516099">Tambahkan halaman ke daftar bacaan untuk dibaca nanti</translation>
+<translation id="3029276696788198026">Tanpa pramuat</translation>
 <translation id="3060635849835183725">{BOOKMARKS_COUNT, plural,
           =1 {<ph name="BOOKMARKS_COUNT_ONE" /> penanda}
           other {<ph name="BOOKMARKS_COUNT_MANY" /> lain}}</translation>
@@ -34,6 +41,7 @@
 <translation id="3719826155360621982">Beranda</translation>
 <translation id="3738139272394829648">Sentuh untuk Telusuri</translation>
 <translation id="385051799172605136">Kembali</translation>
+<translation id="3987993985790029246">Salin tautan</translation>
 <translation id="399014816462153200">Baca Artikel:</translation>
 <translation id="4121750346708795461">Dengan menggunakan aplikasi ini, Anda menyetujui <ph name="BEGIN_LINK1" />Perjanjian Lisensi Pengguna Akhir<ph name="END_LINK1" /> dan <ph name="BEGIN_LINK2" />Kebijakan Privasi<ph name="END_LINK2" /> Vivaldi.</translation>
 <translation id="4137746084635924146">Bahasa perangkat saat ini</translation>
@@ -41,10 +49,13 @@
 <translation id="4195643157523330669">Buka di tab baru</translation>
 <translation id="4225895483398857530">Pintasan bilah tab</translation>
 <translation id="4243710787042215766">Buka di tab pribadi</translation>
+<translation id="4269820728363426813">Salin alamat tautan</translation>
 <translation id="4291407919474070700"><ph name="BEGIN_LINK" />Aktifkan kunci layar di pengaturan Android<ph name="END_LINK" /></translation>
 <translation id="4304713468139749426">Pengelola Sandi</translation>
 <translation id="451872707440238414">Telusuri penanda Anda</translation>
 <translation id="4526803704855831732">Tab Pribadi</translation>
+<translation id="4532845899244822526">Pilih folder</translation>
+<translation id="4699172675775169585">Gambar dan berkas dalam singgahan</translation>
 <translation id="4719086422742491124">Pelajari topik-topik di situs web tanpa meninggalkan halaman. Pilih satu atau lebih kata pada halaman untuk mencarinya.
 
 Sentuh untuk Telusuri adalah fitur yang hanya tersedia saat Google diatur sebagai mesin telusur utama Vivaldi.</translation>
@@ -55,20 +66,34 @@ Sentuh untuk Telusuri adalah fitur yang hanya tersedia saat Google diatur sebaga
 <translation id="49576331685473090">Pemblokir konten</translation>
 <translation id="5079259810715830221">Ketika situs Google meminta secara pribadi untuk pramuat tautan halaman mereka, Vivaldi mengenkripsi dan memuat halaman lewat server Google tanpa kuki. Cara ini dapat menyembunyikan identitas Anda dari situs yang dipramuat.</translation>
 <translation id="5118676864324397542">Penyimpanan <ph name="APP_NAME" /></translation>
+<translation id="5144385790872094440">Beberapa halaman yang Anda buka akan dipramuat. Halaman mungkin dipramuat melalui server Google saat ditautkan dari situs atau aplikasi Google.</translation>
 <translation id="5186185447130319458">Pribadi</translation>
+<translation id="5206168361184759344">{FILE_COUNT, plural,
+            =1 {Mengunduh berkas…}
+            other {Mengunduh # berkas…}}</translation>
 <translation id="5233638681132016545">Tab baru</translation>
 <translation id="5375131951310889874">Pelajari topik-topik di situs web tanpa meninggalkan halaman. Sentuh untuk Telusuri adalah fitur yang hanya tersedia saat Google diatur sebagai mesin telusur utama Vivaldi. Ia mengirim kata dan konteks ke Penelusuran Google, yang akan menampilkan definisi, gambar, hasil penelusuran, dan rincian lainnya.
 
 Untuk menyesuaikan term telusuran Anda, pencet lama untuk memilih. Untuk menyaring penelusuran Anda, geser panel ke atas lalu ketuk kotak telusur.</translation>
+<translation id="543338862236136125">Edit sandi</translation>
 <translation id="572328651809341494">Tab terakhir</translation>
+<translation id="5833984609253377421">Bagikan tautan</translation>
 <translation id="6150320133806434356">Penanda telah disimpan</translation>
+<translation id="6193448654517602979">Pilih tab</translation>
 <translation id="6336451774241870485">Tab pribadi baru</translation>
 <translation id="6337323516034698937">Untuk mengirim tab ini ke perangkat lain, masuk ke Sinkronisasi Vivaldi di kedua perangkat. Pastikan Anda memasukkan sandi enkripsi jika perlu.</translation>
+<translation id="6341580099087024258">Tanya lokasi menyimpan berkas</translation>
 <translation id="6404511346730675251">Edit penanda</translation>
+<translation id="650224091954855786">{FILE_COUNT, plural,
+          =1 {Berkas diunduh}
+          other {# unduhan selesai}}</translation>
 <translation id="6585139692466700358">Tawarkan untuk menerjemahkan bahasa ke bahasa lain dengan layanan terjemahan Vivaldi</translation>
 <translation id="6588043302623806746">Gunakan DNS aman</translation>
 <translation id="6593061639179217415">Situs desktop</translation>
 <translation id="6610147964972079463">Tutup tab pribadi</translation>
+<translation id="6627583120233659107">Edit folder</translation>
+<translation id="6865313869410766144">Data formulir isi otomatis</translation>
+<translation id="6909589135458168665">Pramuat Halaman</translation>
 <translation id="7029995644714925509">Ketika situs meminta secara pribadi untuk pramuat tautan di halaman mereka, Vivaldi mengenkripsi dan memuat halaman lewat server Google tanpa kuki. Cara ini menyembunyikan identitas Anda dari situs yang dipramuat.</translation>
 <translation id="706339621163631076">Kebijakan Privasi Peramban</translation>
 <translation id="732145680195464316">Penanda disimpan di <ph name="PRODUCT_NAME" /></translation>
@@ -79,10 +104,13 @@ Untuk menyesuaikan term telusuran Anda, pencet lama untuk memilih. Untuk menyari
 <translation id="7456774706094330779">Pramuat yang diperpanjang</translation>
 <translation id="7465104139234185284">Tutup semua tab pribadi</translation>
 <translation id="7481312909269577407">Maju</translation>
+<translation id="7764225426217299476">Tambahkan alamat</translation>
 <translation id="7968014550143838305">Ditambahkan ke daftar bacaan</translation>
 <translation id="804786196054284061">Perjanjian Lisensi Pengguna Akhir</translation>
 <translation id="8062594758852531064">Pramuat yang diperpanjang:</translation>
+<translation id="8073388330009372546">Buka gambar di tab baru</translation>
 <translation id="8127542551745560481">Edit halaman beranda</translation>
+<translation id="8266862848225348053">Lokasi unduhan</translation>
 <translation id="8348430946834215779">Gunakan HTTPS jika memungkinkan dan dapatkan peringatan sebelum memuat situs yang tidak mendukungnya</translation>
 <translation id="8560602726703398413">Temukan daftar bacaan Anda di Penanda</translation>
 <translation id="85991616550051997">Ke beranda</translation>

@@ -10,10 +10,14 @@
 #include "base/time/time.h"
 #include "chrome/browser/ui/autofill/autofill_bubble_controller_base.h"
 #include "chrome/browser/ui/autofill/payments/offer_notification_bubble_controller.h"
-#include "components/autofill/core/browser/data_model/autofill_offer_data.h"
-#include "components/autofill/core/browser/data_model/credit_card.h"
+#include "components/autofill/core/browser/data_model/payments/autofill_offer_data.h"
+#include "components/autofill/core/browser/data_model/payments/credit_card.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/browser/web_contents_user_data.h"
+
+namespace tabs {
+class TabInterface;
+}  // namespace tabs
 
 namespace autofill {
 
@@ -49,8 +53,6 @@ class OfferNotificationBubbleControllerImpl
   const CreditCard* GetLinkedCard() const override;
   const AutofillOfferData* GetOffer() const override;
   bool IsIconVisible() const override;
-  bool ShouldIconExpand() const override;
-  void OnIconExpanded() override;
   void OnBubbleClosed(PaymentsUiClosedReason closed_reason) override;
 
   // Displays an offer notification for the given `offer` on the current page.
@@ -96,6 +98,14 @@ class OfferNotificationBubbleControllerImpl
     observer_for_testing_ = observer;
   }
 
+  // This is a helper method for controlling the page action on the new
+  // page actions framework, if the migration is enabled.
+  // Currently, `AutofillBubbleControllerBase::UpdatePageActionIcon` only
+  // updates to the legacy icon.
+  // TODO(crbug.com/402820548): Move this to `AutofillBubbleControllerBase`
+  // once per-PageAction migration feature flags are added.
+  void UpdatePageAction();
+
   // The timestamp that the bubble has been shown. Used to check if the bubble
   // has been shown for longer than kAutofillBubbleSurviveNavigationTime.
   std::optional<base::Time> bubble_shown_timestamp_;
@@ -121,8 +131,7 @@ class OfferNotificationBubbleControllerImpl
 
   raw_ptr<ObserverForTest> observer_for_testing_ = nullptr;
 
-  // Denotes whether the icon should expand in the omnibox.
-  bool icon_should_expand_ = false;
+  const raw_ref<tabs::TabInterface> tab_interface_;
 
   WEB_CONTENTS_USER_DATA_KEY_DECL();
 };

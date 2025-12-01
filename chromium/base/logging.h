@@ -21,6 +21,8 @@
 #include "base/logging/log_severity.h"
 #include "base/strings/utf_ostream_operators.h"
 #include "build/build_config.h"
+// TODO(crbug.com/354842935): Remove this include once other files don't
+// accidentally (transitively) depend on it anymore.
 #include "build/chromeos_buildflags.h"
 
 #if BUILDFLAG(IS_CHROMEOS)
@@ -314,7 +316,15 @@ BASE_EXPORT int GetVlogLevelHelper(const char* file_start, size_t N);
 // Gets the current vlog level for the given file (usually taken from __FILE__).
 template <size_t N>
 int GetVlogLevel(const char (&file)[N]) {
+  // Disable runtime VLOG()s in official non-DCHECK builds. This saves ~135k on
+  // the android-binary-size bot in crrev.com/c/6344673. Parts of the code can,
+  // and do, override ENABLED_VLOG_LEVEL to collect logs in the wild. The rest
+  // is dead-code stripped.
+#if defined(OFFICIAL_BUILD) && !DCHECK_IS_ON() && BUILDFLAG(IS_ANDROID)
+  return -1;
+#else
   return GetVlogLevelHelper(file, N);
+#endif  // defined(OFFICIAL_BUILD) && !DCHECK_IS_ON() && BUILDFLAG(IS_ANDROID)
 }
 
 // Sets the common items you want to be prepended to each log message.
@@ -728,7 +738,7 @@ class BASE_EXPORT ErrnoLogMessageFatal final : public ErrnoLogMessage {
 //       after this call.
 BASE_EXPORT void CloseLogFile();
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
 // Returns a new file handle that will write to the same destination as the
 // currently open log file. Returns nullptr if logging to a file is disabled,
 // or if opening the file failed. This is intended to be used to initialize

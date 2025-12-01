@@ -170,6 +170,7 @@
 <translation id="3838085852053358637">Ошибка загрузки расширения</translation>
 <translation id="383891835335927981">Нет сайтов с изменённым масштабом</translation>
 <translation id="385051799172605136">Назад</translation>
+<translation id="3858860766373142691">Имя</translation>
 <translation id="3861977424605124250">Показывать при запуске</translation>
 <translation id="3867944738977021751">Поля сертификата</translation>
 <translation id="3905761538810670789">Восстановить приложение</translation>
@@ -229,7 +230,7 @@
 <translation id="4827904420700932487">Создать QR-код для этого изображения</translation>
 <translation id="4839303808932127586">&amp;Сохранить видео как...</translation>
 <translation id="4840096453115567876">Выйти из приватного режима?</translation>
-<translation id="488785315393301722">Показать настройки</translation>
+<translation id="488785315393301722">Показать детали</translation>
 <translation id="4895799941222633551">Создать &amp;ярлык...</translation>
 <translation id="4912643508233590958">Переходы в активный режим</translation>
 <translation id="49265687513387605">Не удается транслировать экран. Убедитесь, что вы открыли доступ к нему.</translation>
@@ -415,6 +416,10 @@
 <translation id="8004582292198964060">Браузер</translation>
 <translation id="8018313076035239964">Управляйте отправкой данных сайтам и отображением контента на веб-страницах</translation>
 <translation id="8071432093239591881">Печатать как картинку</translation>
+<translation id="8118448640060360549">{EXTENSIONS_COUNT, plural,
+        =1 {# заклакда}
+        few {# закладки}
+        other {# закладок}}</translation>
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" /> КБ</translation>
 <translation id="8212008074015601248">{NUM_DOWNLOAD, plural,
         =1 {Выполняется загрузка} other {Выполняется загрузка}}</translation>
@@ -454,7 +459,7 @@
 <translation id="8916476537757519021">Субфрейм в приватном режиме: <ph name="SUBFRAME_SITE" /></translation>
 <translation id="8929696694736010839">Только для текущего сеанса приватного режима</translation>
 <translation id="895944840846194039">Память JavaScript</translation>
-<translation id="8962083179518285172">Скрыть настройки</translation>
+<translation id="8962083179518285172">Скрыть детали</translation>
 <translation id="8973557916016709913">Сбросить масштаб</translation>
 <translation id="897939795688207351">На <ph name="ORIGIN" /></translation>
 <translation id="9003647077635673607">Разрешить на всех сайтах</translation>

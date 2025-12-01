@@ -409,11 +409,9 @@ void UnifiedSystemTrayController::InitFeatureTiles() {
   create_tile(VIEW_ID_FEATURE_TILE_HOTSPOT,
               std::make_unique<HotspotFeaturePodController>(this),
               feature_pod_controllers_, tiles);
-  if (features::IsFocusModeEnabled()) {
-    create_tile(VIEW_ID_FEATURE_TILE_FOCUS_MODE,
-                std::make_unique<FocusModeFeaturePodController>(this),
-                feature_pod_controllers_, tiles);
-  }
+  create_tile(VIEW_ID_FEATURE_TILE_FOCUS_MODE,
+              std::make_unique<FocusModeFeaturePodController>(this),
+              feature_pod_controllers_, tiles);
   create_tile(VIEW_ID_FEATURE_TILE_NEARBY_SHARE,
               std::make_unique<NearbyShareFeaturePodController>(this),
               feature_pod_controllers_, tiles);
@@ -467,7 +465,7 @@ void UnifiedSystemTrayController::ShowDetailedView(
   if (bubble_) {
     UpdateBubble();
     // Notify accessibility features that a new view is showing.
-    bubble_->NotifyAccessibilityEvent(ax::mojom::Event::kShow, true);
+    bubble_->NotifyAccessibilityEventDeprecated(ax::mojom::Event::kShow, true);
   }
 }
 

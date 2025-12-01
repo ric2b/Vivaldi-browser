@@ -27,31 +27,6 @@ namespace gpu {
 
 namespace {
 
-// Serves as killswitch for rolling out restriction of SCANOUT support to
-// Fuchsia.
-// TODO(crbug.com/330865436): Eliminate post safe-rollout.
-BASE_FEATURE(kRestrictExternalVkImageBackingScanoutSupportToFuchsia,
-             "RestrictExternalVkImageBackingScanoutSupportToFuchsia",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
-// Determines whether SCANOUT support can be restricted to Fuchsia.
-// TODO(crbug.com/330865436): Eliminate once killswitches checked within this
-// function roll out safely.
-bool RestrictScanoutSupportToFuchsia() {
-#if BUILDFLAG(IS_OZONE)
-  // On Ozone, this requires that we are computing SCANOUT support in
-  // SharedImageCapabilities by overlays being supported rather than the
-  // too-generous native pixmaps being supported.
-  if (!base::FeatureList::IsEnabled(
-          features::kSharedImageSupportScanoutOnOzoneOnlyIfOverlaysSupported)) {
-    return false;
-  }
-#endif
-
-  return base::FeatureList::IsEnabled(
-      kRestrictExternalVkImageBackingScanoutSupportToFuchsia);
-}
-
 VkImageUsageFlags GetMaximalImageUsageFlags(
     VkFormatFeatureFlags feature_flags) {
   VkImageUsageFlags usage_flags = 0;
@@ -182,13 +157,9 @@ SharedImageUsageSet SupportedUsage() {
       SHARED_IMAGE_USAGE_HIGH_PERFORMANCE_GPU | SHARED_IMAGE_USAGE_CPU_UPLOAD |
       SHARED_IMAGE_USAGE_CPU_WRITE_ONLY;
 
-  if (RestrictScanoutSupportToFuchsia()) {
 #if BUILDFLAG(IS_FUCHSIA)
-    supported_usage |= SHARED_IMAGE_USAGE_SCANOUT;
+  supported_usage |= SHARED_IMAGE_USAGE_SCANOUT;
 #endif
-  } else {
-    supported_usage |= SHARED_IMAGE_USAGE_SCANOUT;
-  }
 
   return supported_usage;
 }
@@ -264,7 +235,9 @@ ExternalVkImageBackingFactory::CreateSharedImage(
     SkAlphaType alpha_type,
     SharedImageUsageSet usage,
     std::string debug_label,
+    bool is_thread_safe,
     gfx::GpuMemoryBufferHandle handle) {
+  DCHECK(!is_thread_safe);
   CHECK(CanImportGpuMemoryBuffer(handle.type));
   return ExternalVkImageBacking::CreateFromGMB(
       context_state_, command_pool_.get(), mailbox, std::move(handle), format,

@@ -34,7 +34,8 @@ class JSFunctionOrBoundFunctionOrWrappedFunction
   static Maybe<bool> CopyNameAndLength(
       Isolate* isolate,
       DirectHandle<JSFunctionOrBoundFunctionOrWrappedFunction> function,
-      DirectHandle<JSReceiver> target, Handle<String> prefix, int arg_count);
+      DirectHandle<JSReceiver> target, DirectHandle<String> prefix,
+      int arg_count);
 
   static_assert(kHeaderSize == JSObject::kHeaderSize);
   TQ_OBJECT_CONSTRUCTORS(JSFunctionOrBoundFunctionOrWrappedFunction)
@@ -97,6 +98,8 @@ class JSFunction : public TorqueGeneratedJSFunction<
   DECL_RELEASE_ACQUIRE_ACCESSORS(prototype_or_initial_map,
                                  Tagged<UnionOf<JSPrototype, Map, Hole>>)
 
+  void TraceOptimizationStatus(const char* reason, ...);
+
   // [shared]: The information about the function that can be shared by
   // instances.
   DECL_ACCESSORS(shared, Tagged<SharedFunctionInfo>)
@@ -155,8 +158,9 @@ class JSFunction : public TorqueGeneratedJSFunction<
   inline Tagged<AbstractCode> abstract_code(IsolateT* isolate);
 
 #ifdef V8_ENABLE_LEAPTIERING
-  inline void AllocateDispatchHandle(
-      Isolate* isolate, uint16_t parameter_count, Tagged<Code> code,
+  static inline JSDispatchHandle AllocateDispatchHandle(
+      Handle<JSFunction> function, Isolate* isolate, uint16_t parameter_count,
+      DirectHandle<Code> code,
       WriteBarrierMode mode = WriteBarrierMode::UPDATE_WRITE_BARRIER);
   inline void clear_dispatch_handle();
   inline JSDispatchHandle dispatch_handle() const;
@@ -238,17 +242,19 @@ class JSFunction : public TorqueGeneratedJSFunction<
 
   inline bool IsLoggingRequested(Isolate* isolate) const;
   inline bool IsOptimizationRequested(Isolate* isolate) const;
+  inline bool IsMaglevRequested(Isolate* isolate) const;
+  inline bool IsTurbofanRequested(Isolate* isolate) const;
   V8_INLINE std::optional<CodeKind> GetRequestedOptimizationIfAny(
       Isolate* isolate,
       ConcurrencyMode mode = ConcurrencyMode::kConcurrent) const;
 
   inline bool tiering_in_progress() const;
   // NB: Tiering includes Optimization and Logging requests.
-  inline bool IsTieringRequestedOrInProgress(Isolate* isolate) const;
+  inline bool IsTieringRequestedOrInProgress() const;
 
   inline void SetTieringInProgress(
       bool in_progress, BytecodeOffset osr_offset = BytecodeOffset::None());
-  inline void ResetTieringRequests(Isolate* isolate);
+  inline void ResetTieringRequests();
 
   inline bool osr_tiering_in_progress();
 
@@ -309,7 +315,7 @@ class JSFunction : public TorqueGeneratedJSFunction<
   void ClearAllTypeFeedbackInfoForTesting();
 
   // Resets function to clear compiled data after bytecode has been flushed.
-  inline bool NeedsResetDueToFlushedBytecode(IsolateForSandbox isolate);
+  inline bool NeedsResetDueToFlushedBytecode(Isolate* isolate);
   inline void ResetIfCodeFlushed(
       Isolate* isolate,
       std::optional<
@@ -408,12 +414,12 @@ class JSFunction : public TorqueGeneratedJSFunction<
   // it should never fail, but in practice it will fail if the generated
   // function name's length exceeds String::kMaxLength.
   static V8_WARN_UNUSED_RESULT bool SetName(DirectHandle<JSFunction> function,
-                                            Handle<Name> name,
+                                            DirectHandle<Name> name,
                                             DirectHandle<String> prefix);
 
   // The function's name if it is configured, otherwise shared function info
   // debug name.
-  static Handle<String> GetDebugName(DirectHandle<JSFunction> function);
+  static DirectHandle<String> GetDebugName(DirectHandle<JSFunction> function);
 
   // The function's string representation implemented according to
   // ES6 section 19.2.3.5 Function.prototype.toString ( ).

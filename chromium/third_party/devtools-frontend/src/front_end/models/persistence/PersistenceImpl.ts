@@ -204,7 +204,7 @@ export class PersistenceImpl extends Common.ObjectWrapper.ObjectWrapper<EventTyp
   }
 
   private onWorkingCopyCommitted(
-      event: Common.EventTarget.EventTargetEvent<Workspace.UISourceCode.WorkingCopyCommitedEvent>): void {
+      event: Common.EventTarget.EventTargetEvent<Workspace.UISourceCode.WorkingCopyCommittedEvent>): void {
     const uiSourceCode = event.data.uiSourceCode;
     const newContent = event.data.content;
     this.syncContent(uiSourceCode, newContent, Boolean(event.data.encoded));
@@ -267,7 +267,7 @@ export class PersistenceImpl extends Common.ObjectWrapper.ObjectWrapper<EventTyp
         breakpointLocation => breakpointLocation.breakpoint);
     await Promise.all(breakpoints.map(async breakpoint => {
       await breakpoint.remove(false /* keepInStorage */);
-      return this.breakpointManager.setBreakpoint(
+      return await this.breakpointManager.setBreakpoint(
           to, breakpoint.lineNumber(), breakpoint.columnNumber(), breakpoint.condition(), breakpoint.enabled(),
           breakpoint.isLogpoint(), BreakpointManager.BreakpointManager.BreakpointOrigin.OTHER);
     }));

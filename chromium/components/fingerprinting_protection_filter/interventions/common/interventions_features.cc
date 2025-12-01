@@ -5,15 +5,29 @@
 #include "components/fingerprinting_protection_filter/interventions/common/interventions_features.h"
 
 #include "base/feature_list.h"
-#include "third_party/blink/public/common/features.h"
 
 namespace fingerprinting_protection_interventions::features {
 
-bool IsCanvasInterventionsFeatureEnabled() {
-  return base::FeatureList::IsEnabled(blink::features::kCanvasInterventions);
+// Whether the canvas interventions should be enabled that add noise to the
+// readback values.
+BASE_FEATURE(kCanvasNoise,
+             "CanvasNoise",
+             base::FeatureState::FEATURE_DISABLED_BY_DEFAULT);
+
+BASE_FEATURE_PARAM(bool,
+                   kCanvasNoiseInRegularMode,
+                   &kCanvasNoise,
+                   "enable_in_regular_mode",
+                   false);
+
+bool IsCanvasInterventionsEnabledForIncognitoState(bool is_incognito) {
+  if (is_incognito) {
+    return base::FeatureList::IsEnabled(kCanvasNoise);
+  }
+  return base::FeatureList::IsEnabled(kCanvasNoise) &&
+         kCanvasNoiseInRegularMode.Get();
 }
 
-// TODO(crbug.com/380458351): Add incognito-specific feature enabled accessor.
 // TODO(crbug.com/380463018): Add base::FeatureParams for signatures.
 
 }  // namespace fingerprinting_protection_interventions::features

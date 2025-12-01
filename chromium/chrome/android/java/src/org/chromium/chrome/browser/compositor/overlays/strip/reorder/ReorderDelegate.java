@@ -414,6 +414,11 @@ public class ReorderDelegate {
         mActiveStrategy = null;
     }
 
+    /** See {@link ReorderStrategy#getInteractingView()} */
+    public StripLayoutView getInteractingView() {
+        return mActiveStrategy != null ? mActiveStrategy.getInteractingView() : null;
+    }
+
     private float computeScrollOffsetDeltaForAutoScroll(
             long time, float stripWidth, float leftMargin, float rightMargin) {
         // 1. Track the delta time since the last auto scroll.
@@ -477,11 +482,11 @@ public class ReorderDelegate {
         mInReorderModeSupplier.removeObserver(observer);
     }
 
-    /** Update and animate views for external view drop on strip. */
-    public void handleTabDropForExternalView(
-            StripLayoutGroupTitle[] groupTitles, int draggedTabId, int dropIndex) {
+    /** Update and animate views for external tabs to drop on strip. */
+    public boolean handleDropForExternalView(
+            StripLayoutGroupTitle[] groupTitles, List<Integer> tabIds, int dropIndex) {
         assert mInitialized && mExternalViewDragDropReorderStrategy != null;
-        mExternalViewDragDropReorderStrategy.handleDrop(groupTitles, draggedTabId, dropIndex);
+        return mExternalViewDragDropReorderStrategy.handleDrop(groupTitles, tabIds, dropIndex);
     }
 
     // ============================================================================================
@@ -536,6 +541,8 @@ public class ReorderDelegate {
                 StripLayoutGroupTitle[] stripGroupTitles,
                 StripLayoutView interactingTab,
                 PointF startPoint) {
+            // TODO(crbug.com/394945056): Investigate moving to avoid re-emitting when dragging out,
+            //  then back onto the source tab strip.
             RecordUserAction.record("MobileToolbarStartReorderTab");
             mInteractingTab = (StripLayoutTab) interactingTab;
             interactingTab.setIsForegrounded(/* isForegrounded= */ true);
@@ -746,7 +753,7 @@ public class ReorderDelegate {
                 boolean towardEnd) {
             // Move the tab, then animate the adjacent group indicator sliding.
             int numTabsToSkip =
-                    mTabGroupModelFilter.getRelatedTabCountForRootId(groupTitle.getRootId());
+                    mTabGroupModelFilter.getTabCountForGroup(groupTitle.getTabGroupId());
             int destIndex = towardEnd ? curIndex + 1 + numTabsToSkip : curIndex - numTabsToSkip;
             mModel.moveTab(interactingTab.getTabId(), destIndex);
             animateViewSliding(groupTitle);
@@ -897,6 +904,10 @@ public class ReorderDelegate {
                 StripLayoutGroupTitle[] stripGroupTitles,
                 @NonNull StripLayoutView interactingView,
                 PointF startPoint) {
+            // TODO(crbug.com/394945056): Investigate moving to avoid re-emitting when dragging out,
+            //  then back onto the source tab strip.
+            RecordUserAction.record("MobileToolbarStartReorderGroup");
+
             // Store the relevant interacting views. We'll update their offsets as we drag.
             mInteractingGroupTitle = (StripLayoutGroupTitle) interactingView;
             mInteractingViews.add(mInteractingGroupTitle);

@@ -137,6 +137,21 @@ such as the auto update until date, first release, and more.
     <th>USB Gadget</th>
     <th>Closed Case Debugging</th>
   </tr>
+  <tr>
+    <td></td>
+    <td>FCCL</td>
+    <td><a href="https://www.fujitsu.com/jp/group/fccl/about/resources/news/press-releases/2024/1029.html">FMV Chromebook 11K</a></td>
+    <td>kyogre</td>
+    <td>corsola</td>
+    <td>corsola</td>
+    <td>arm</td>
+    <td>5.15</td>
+    <td>arm</td>
+    <td>MT8186</td>
+    <td>Convertible</td>
+    <td></td>
+    <td>Yes</td>
+  </tr>
    <tr>
     <td></td>
     <td>HP</td>
@@ -4021,10 +4036,10 @@ such as the auto update until date, first release, and more.
     <td></td>
     <td></td>
  </tr>
-<tr>
+ <tr>
     <td>2024-11-02</td>
     <td>Lenovo</td>
-    <td><a href="https://pcsupport.lenovo.com/us/en/products/chromebook-laptops/lenovo-chromebooks-series/lenovo-500e-chromebook-gen-4s?linkTrack=Caps%3ABody_SearchProduct&searchType=3&keyWordSearch=Lenovo%20500e%20Chromebook%20Gen%204s">Lenovo 500e Chromebook Gen 4s</a></td>
+    <td><a href="https://www.lenovo.com/content/dam/lenovo/pcsd/global/en/products/edu-devices/lenovo-chromebook-500e-gen4s/datasheet/LenovoEDU_500e-Chromebook_Gen4s_Datasheet.pdf?refId=d4be62ba-01e8-4a3c-a622-7860bacd0d30">Lenovo 500e Chromebook Gen 4s</a></td>
     <td>Pujjoga</td>
     <td>Nissa</td>
     <td>Nissa</td>
@@ -4036,5 +4051,34 @@ such as the auto update until date, first release, and more.
     <td>Yes</td>
     <td>Yes</td>
   </tr>
-
+  <tr>
+    <td>2025-28-02</td>
+    <td>Lenovo</td>
+    <td><a href="https://www.lenovo.com/content/dam/lenovo/pcsd/global/en/products/edu-devices/lenovo-chromebook-plus-2-in-1-14/smb/datasheet/LenovoEDU_ChromebookPLUS_2-in-1_SMB_Datasheet.pdf">Lenovo Chromebook Plus 2-in-1 (14", 10)</a></td>
+    <td>Lotso</td>
+    <td>Brox</td>
+    <td>Brox</td>
+    <td>x86_64</td>
+    <td>6.6</td>
+    <td>x86_64</td>
+    <td>RaptorLake-R</td>
+    <td>Chromebook</td>
+    <td>Yes</td>
+    <td>Yes</td>
+  </tr>
+  <tr>
+    <td>2025-03-09</td>
+    <td>Lenovo</td>
+    <td>Lenovo 500e Chromebook Gen 4s (Intel-TWL-N)</td>
+    <td>Pujjogatwin</td>
+    <td>Nirul</td>
+    <td>Nissa</td>
+    <td>x86_64</td>
+    <td>6.6</td>
+    <td>x86_64</td>
+    <td>Twinlake</td>
+    <td>Convertible</td>
+    <td>Yes</td>
+    <td>Yes</td>
+  </tr>
 </table>

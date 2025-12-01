@@ -18,7 +18,7 @@ import webBundleInfoViewStylesRaw from './WebBundleInfoView.css.js';
 
 // TODO(crbug.com/391381439): Fully migrate off of constructed style sheets.
 const webBundleInfoViewStyles = new CSSStyleSheet();
-webBundleInfoViewStyles.replaceSync(webBundleInfoViewStylesRaw.cssContent);
+webBundleInfoViewStyles.replaceSync(webBundleInfoViewStylesRaw.cssText);
 
 const {mimeFromURL, fromMimeTypeOverride, fromMimeType} = Common.ResourceType.ResourceType;
 const {iconDataForResourceType} = PanelUtils;
@@ -30,7 +30,7 @@ const UIStrings = {
    *@description Header for the column that contains URL of the resource in a web bundle.
    */
   bundledResource: 'Bundled resource',
-};
+} as const;
 const str_ = i18n.i18n.registerUIStrings('panels/network/components/WebBundleInfoView.ts', UIStrings);
 const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
 

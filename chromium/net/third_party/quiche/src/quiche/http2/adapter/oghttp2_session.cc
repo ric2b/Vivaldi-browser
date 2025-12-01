@@ -199,6 +199,20 @@ bool IsNonAckSettings(const spdy::SpdyFrameIR& frame) {
          !reinterpret_cast<const SpdySettingsIR&>(frame).is_ack();
 }
 
+spdy::SpdyFramer::CompressionOption TranslateCompressionOption(
+    OgHttp2Session::Options::CompressionOption option) {
+  using CompressionOption = OgHttp2Session::Options::CompressionOption;
+  switch (option) {
+    case CompressionOption::DISABLE_COMPRESSION:
+      return spdy::SpdyFramer::DISABLE_COMPRESSION;
+    case CompressionOption::DISABLE_HUFFMAN:
+      return spdy::SpdyFramer::DISABLE_HUFFMAN;
+    case CompressionOption::ENABLE_COMPRESSION:
+    default:
+      return spdy::SpdyFramer::ENABLE_COMPRESSION;
+  }
+}
+
 }  // namespace
 
 OgHttp2Session::PassthroughHeadersHandler::PassthroughHeadersHandler(
@@ -354,6 +368,7 @@ OgHttp2Session::OgHttp2Session(Http2VisitorInterface& visitor, Options options)
             return logging_enabled;
           },
           this),
+      framer_(TranslateCompressionOption(options.compression_option)),
       headers_handler_(*this, visitor),
       noop_headers_handler_(/*listener=*/nullptr),
       connection_window_manager_(
@@ -472,10 +487,10 @@ int OgHttp2Session::GetHpackDecoderSizeLimit() const {
 int64_t OgHttp2Session::ProcessBytes(absl::string_view bytes) {
   QUICHE_VLOG(3) << TracePerspectiveAsString(options_.perspective)
                  << " processing [" << absl::CEscape(bytes) << "]";
-  return absl::visit(ProcessBytesResultVisitor(), ProcessBytesImpl(bytes));
+  return std::visit(ProcessBytesResultVisitor(), ProcessBytesImpl(bytes));
 }
 
-absl::variant<int64_t, OgHttp2Session::ProcessBytesError>
+std::variant<int64_t, OgHttp2Session::ProcessBytesError>
 OgHttp2Session::ProcessBytesImpl(absl::string_view bytes) {
   if (processing_bytes_) {
     QUICHE_VLOG(2) << "Returning early; already processing bytes.";
@@ -1195,11 +1210,14 @@ void OgHttp2Session::OnStreamEnd(spdy::SpdyStreamId stream_id) {
   auto queued_frames_iter = queued_frames_.find(stream_id);
   const bool no_queued_frames = queued_frames_iter == queued_frames_.end() ||
                                 queued_frames_iter->second == 0;
-  if (iter != stream_map_.end() && iter->second.half_closed_local &&
-      !IsServerSession() && no_queued_frames) {
-    // From the client's perspective, the stream can be closed if it's already
-    // half_closed_local.
-    CloseStream(stream_id, Http2ErrorCode::HTTP2_NO_ERROR);
+  if (!IsServerSession() && no_queued_frames) {
+    // `iter` could have been invalidated by `visitor_.OnEndStream()`.
+    iter = stream_map_.find(stream_id);
+    if (iter != stream_map_.end() && iter->second.half_closed_local) {
+      // From the client's perspective, the stream can be closed if it's already
+      // half_closed_local.
+      CloseStream(stream_id, Http2ErrorCode::HTTP2_NO_ERROR);
+    }
   }
 }
 
@@ -1946,14 +1964,14 @@ void OgHttp2Session::LatchErrorAndNotify(Http2ErrorCode error_code,
       ConnectionErrorToString(error)));
 }
 
-void OgHttp2Session::CloseStreamIfReady(uint8_t frame_type,
+void OgHttp2Session::CloseStreamIfReady(uint8_t /*frame_type*/,
                                         uint32_t stream_id) {
   auto iter = stream_map_.find(stream_id);
   if (iter == stream_map_.end()) {
     return;
   }
   const StreamState& state = iter->second;
-  if (static_cast<FrameType>(frame_type) == FrameType::RST_STREAM ||
+  if (streams_reset_.find(stream_id) != streams_reset_.end() ||
       (state.half_closed_local && state.half_closed_remote)) {
     CloseStream(stream_id, Http2ErrorCode::HTTP2_NO_ERROR);
   }

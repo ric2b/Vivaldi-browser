@@ -71,19 +71,24 @@ class BluetoothPowerControllerImplTest : public testing::Test {
                       bool is_new_profile = false) {
     const user_manager::User* user;
     if (is_user_kiosk) {
-      user = user_manager::TestHelper(*fake_user_manager_)
+      user = user_manager::TestHelper(fake_user_manager_.Get())
                  .AddKioskAppUser(display_email);
     } else {
       user = fake_user_manager_->AddGaiaUser(
           AccountId::FromUserEmailGaiaId(display_email, gaia_id),
           user_manager::UserType::kRegular);
     }
-    fake_user_manager_->SetIsCurrentUserNew(is_new_profile);
 
     // Create a session in SessionManager. This will also login the user in
     // UserManager.
-    session_manager_->CreateSession(user->GetAccountId(), user->username_hash(),
-                                    /*is_child=*/false);
+    session_manager_->CreateSession(
+        user->GetAccountId(),
+        // TODO(crbug.com/278643115): Looks incorrect.
+        // User's username_hash should be set inside CreateSession via
+        // UserManager::UserLoggedIn().
+        user->username_hash(),
+        /*new_user=*/is_new_profile,
+        /*has_active_session=*/false);
     session_manager_->SessionStarted();
 
     // Logging in doesn't set the user in UserManager as the active user if

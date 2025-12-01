@@ -4,6 +4,36 @@ This folder contains the majority of the source code for the Performance panel i
 
 Some of the UI components are reused across other panels; those live in `front_end/ui/legacy/components/perf_ui`.
 
+## Working on the performance panel locally
+
+There are a few different ways to run the Performance Panel locally:
+
+#### Option 1: run real DevTools
+
+The first method is to run DevTools! Load up the Chrome for Testing version that comes within DevTools ([see the DevTools documentation here[(https://chromium.googlesource.com/devtools/devtools-frontend/+/main/docs/get_the_code.md#running-from-file-system)]).
+
+DevTools, navigate to the Performance Panel and record or import a trace. There are a number of trace files saved in `devtools-frontend/test/unittests/fixtures/traces` that you can use.
+
+#### Option 2: the components server
+
+You can also use the DevTools component server. This server runs standalone parts of DevTools in the browser. To do this, run `npm run components-server` in the terminal, which will run a server on `localhost:8090`.
+
+You can then navigate to the Performance Panel examples using the link on the index page. This runs the real Performance Panel code in isolation, and you can additionally preload a trace by appending `?trace=name-of-trace-file-from-fixtures`. This is a nicer development cycle because you do not have to manually import a trace after each change. Note though that some parts of the experience are stubbed, so you always should test your work in proper DevTools too.
+
+These examples can also be used to create screenshot tests, which are an important tool for the Performance Panel because it is the only way to test `<canvas>` output. We define these as interaction tests (`devtools-frontend/tests/interactions/panels/performance`).
+
+#### Option 3: bundled DevTools in the browser
+
+This option loads the DevTools frontend in a browser tab in Chrome, but requires a little more setup to easily load traces.
+
+1.  Head to `devtools-frontend/test/unittests/fixtures/traces` and run `npx statikk --cors`. [This is a tool built by @paulirish to serve local files on a server](https://github.com/paulirish/statikk).
+2.  Build and run the Chrome for Testing binary from devtools-frontend.
+3.  Visit `devtools://devtools/bundled/devtools_app.html` and let it load (you only need to do this the first time you load up the Chrome for Testing binary).
+4.  Update the URL by appending `?loadTimelineFromURL=http://localhost:1234/name-of-trace-file.json`. **Swap the port to the one `statikk` is using on your machine**.
+5.  When you make changes and rebuild DevTools, simply refresh the URL! **Make sure you disable network caching in your DevTools on DevTools instance.**
+
+Each one has its pros and cons, but typically **this option is preferred** for quick iteration because you don't have to manually record or import a trace every time you reload.
+
 ## Trace bounds and visible windows
 
 One slightly confusing aspect of the panel is how the zooming, panning and minimap interactions impact what time-range is shown in the timeline, and how these are tracked in code.
@@ -37,10 +67,11 @@ Because this component is used across multiple panels, it does not know about th
 The timeline minimap (which is only used in the Performance Panel) listens to the two OverviewPane events emitted.
 
 When an `OverviewPaneBreadcrumbAdded` event is emitted it will:
+
 1. Create a new breadcrumb and update the Breadcrumbs component.
 2. Update the `TraceBounds` service, updating it with:
-    1. `minimapBounds` which are set to the bounds of the breadcrumb
-    2. `timelineVisibleWindow` which are set to the bounds of the breadcrumb
+   1. `minimapBounds` which are set to the bounds of the breadcrumb
+   2. `timelineVisibleWindow` which are set to the bounds of the breadcrumb
 
 If a breadcrumb is removed (which is handled via a `RemoveBreadcrumb` event dispatched by the Breadcrumbs UI component), the minimap does the exact same as above.
 
@@ -69,7 +100,7 @@ This is used in:
 Serializing/Deserializing events allows for the creation of data (such as annotations) associated with events and enabling to save them to/load them from the trace file. Several classes handle the serialization and application of these serialized annotations:
 
 1. `SyntheticEventsManager` - stores all synthetic events based on a raw event. They are stored in an array indexed by the position the corresponding raw events have in the `Model::rawEvents` array. The `SyntheticEventsManager` needs to be called by handlers as synthetic events are created. To enforce this we make use of a branded type called `SyntheticEntry`, which the `SyntheticEventsManager` adds to trace-event-like objects.
-Having a single place where all synthetic events are stored allows us to easily map from a synthetic event key back to the event object.
+   Having a single place where all synthetic events are stored allows us to easily map from a synthetic event key back to the event object.
 
 2. `EventsSerializer` - is responsible for event serialization. It generates the string key saved into the trace file and maps the key back to the corresponding Event (after reading keys from the trace file). To perform this mapping, it retrieves the raw event array registered by `SyntheticEventsManager` at the id extracted from the key. For profile calls, a binary search is conducted on the complete profile call list to efficiently find a match based on the sample index and node id retrieved from the string key.
 
@@ -146,3 +177,38 @@ If you ever need to know how high the network canvas is, use `networkChartOffset
 |                                           |
 +-------------------------------------------+
 ```
+
+## Timeline tree views
+
+The `TimelineTreeView` base class provides the foundation for creating various tree-based views within the Performance panel (e.g., Summary, Bottom-Up, Call Tree, Event Log). It handles core functionality like:
+
+- Data grid creation
+- Filtering
+- Hover actions
+- Toolbar management
+- Event handling
+
+The data grid is the core UI element, with each `GridNode` representing a row containing a name and associated values.
+
+### Tree Data Sources
+
+The Summary (ThirdParty), Bottom-Up, Call Tree, and Event Log views primarily use `this.selectedEvents()` as their data source. This method returns the events currently selected and in view by the user in the main timeline view. For example, if a user clicks on a track other than the Main track, `this.selectedEvents()` will represent that.
+
+**Important Considerations:**
+
+- **Lazily built:** trees are lazily built - child nodes are not created until
+  they are needed. In most cases, trees are fully built when `.children()` is called from `refreshTree()`
+- **Single Track Focus:** `this.selectedEvents()` only captures events from a _single_ track at a time. Selecting the main track will not include what one would consider
+"relevant events" from other tracks (e.g. a Frame's track).
+- **No Synthetic Network Events:** Tree views do not consume `SyntheticNetworkEvents` due to their unique "overlapping" behavior, which differs from standard trace events.
+- **Filters:** Filters can be applied to determine which events are included when building the tree.
+
+### Event aggregation
+
+`AggregatedTimelineTreeView` allows grouping similar events into single nodes. The `TraceTree.ts` module handles this aggregation.
+
+**Aggregation Logic for BottomUp tree views:**
+
+1.  **Default Aggregation:** By default, aggregation is determined by the `generateEventID()` function, and optionally by `eventGroupIdCallback`.
+2.  **Pre-Grouping (`ungrouppedTopNodes`)**: Before explicit grouping, `ungrouppedTopNodes()` organizes events into a `ChildrenCache` map (`<string, Node>`). Even without explicit `GroupBy` grouping, `ungrouppedTopNodes()` aggregates nodes by event name using `generateEventID()`.
+3.  **Third Party Grouping (`forceGroupIdCallback`)**: In `ThirdPartyTreeView`, `forceGroupIdCallback` is used to ensure that `eventGroupIdCallback` is used to generate the node ID. This is crucial because events with the same name can belong to different third parties. Without this, the initial aggregation by event name would lead to incorrect third-party grouping.

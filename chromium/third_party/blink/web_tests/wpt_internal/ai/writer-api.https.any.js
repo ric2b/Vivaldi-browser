@@ -1,104 +1,144 @@
+// META: script=resources/utils.js
+
 promise_test(async () => {
-  assert_true(!!ai);
-  assert_true(!!ai.writer);
-  assert_equals(
-      Object.prototype.toString.call(ai.writer), '[object AIWriterFactory]');
-}, 'AIWriterFactory must be available.');
+  assert_true(!!Writer);
+}, 'Writer must be defined.');
 
 promise_test(async () => {
   // TODO(crbug.com/382596381): Test availability with various options.
-  assert_equals(await ai.writer.availability(), 'readily');
-  assert_equals(await ai.writer.availability({outputLanguage: 'en'}), 'readily');
-}, 'AIWriterFactory.availability');
+  assert_equals(await Writer.availability(), 'available');
+  assert_equals(await Writer.availability({ outputLanguage: 'en' }), 'available');
+}, 'Writer.availability');
 
 promise_test(async () => {
-  const writer = await ai.writer.create();
-  assert_equals(Object.prototype.toString.call(writer), '[object AIWriter]');
-}, 'AIWriterFactory.create() must be return a AIWriter.');
+  const writer = await Writer.create();
+  assert_equals(Object.prototype.toString.call(writer), '[object Writer]');
+}, 'Writer.create() must be return a Writer.');
+
+promise_test(async t => {
+  let createResult = undefined;
+  const progressEvents = [];
+  let options = {};
+  const downloadComplete = new Promise(resolve => {
+    options.monitor = (m) => {
+      m.addEventListener("downloadprogress", e => {
+        assert_equals(createResult, undefined);
+        assert_equals(e.total, 1);
+        progressEvents.push(e);
+        if (e.loaded == 1) { resolve(); }
+      });
+    };
+  });
+
+  createResult = await Writer.create(options);
+  await downloadComplete;
+  assert_greater_than_equal(progressEvents.length, 2);
+  assert_equals(progressEvents.at(0).loaded, 0);
+  assert_equals(progressEvents.at(-1).loaded, 1);
+}, 'Writer.create() notifies its monitor on downloadprogress');
 
 promise_test(async () => {
-  const writer = await ai.writer.create();
+  const writer = await Writer.create();
   assert_equals(writer.sharedContext, '');
   assert_equals(writer.tone, 'neutral');
   assert_equals(writer.format, 'plain-text');
   assert_equals(writer.length, 'medium');
-}, 'AIWriterFactory.create() default values.');
+}, 'Writer.create() default values.');
 
 promise_test(async (t) => {
   const controller = new AbortController();
   controller.abort();
-  const createPromise = ai.writer.create({signal: controller.signal});
+  const createPromise = Writer.create({signal: controller.signal});
   await promise_rejects_dom(t, 'AbortError', createPromise);
-}, 'AIWriterFactory.create() call with an aborted signal.');
+}, 'Writer.create() call with an aborted signal.');
 
 promise_test(async () => {
   const sharedContext = 'This is a shared context string';
-  const writer = await ai.writer.create({sharedContext: sharedContext});
+  const writer = await Writer.create({sharedContext: sharedContext});
   assert_equals(writer.sharedContext, sharedContext);
-}, 'AIWriter.sharedContext');
+}, 'Writer.sharedContext');
 
 promise_test(async () => {
-  const writer = await ai.writer.create({tone: 'formal'});
+  const writer = await Writer.create({tone: 'formal'});
   assert_equals(writer.tone, 'formal');
-}, 'Creating a AIWriter with "formal" tone');
+}, 'Creating a Writer with "formal" tone');
 
 promise_test(async () => {
-  const writer = await ai.writer.create({tone: 'casual'});
+  const writer = await Writer.create({tone: 'casual'});
   assert_equals(writer.tone, 'casual');
-}, 'Creating a AIWriter with "casual" tone');
+}, 'Creating a Writer with "casual" tone');
 
 promise_test(async () => {
-  const writer = await ai.writer.create({format: 'markdown'});
+  const writer = await Writer.create({format: 'markdown'});
   assert_equals(writer.format, 'markdown');
-}, 'Creating a AIWriter with "markdown" format');
+}, 'Creating a Writer with "markdown" format');
 
 promise_test(async () => {
-  const writer = await ai.writer.create({length: 'short'});
+  const writer = await Writer.create({length: 'short'});
   assert_equals(writer.length, 'short');
-}, 'Creating a AIWriter with "short" length');
+}, 'Creating a Writer with "short" length');
 
 promise_test(async () => {
-  const writer = await ai.writer.create({length: 'long'});
+  const writer = await Writer.create({length: 'long'});
   assert_equals(writer.length, 'long');
-}, 'Creating a AIWriter with "long" length');
+}, 'Creating a Writer with "long" length');
 
 promise_test(async () => {
-  const writer = await ai.writer.create({
+  const writer = await Writer.create({
     expectedInputLanguages: ['en']
   });
   assert_array_equals(writer.expectedInputLanguages, ['en']);
-}, 'Creating a AIWriter with expectedInputLanguages');
+}, 'Creating a Writer with expectedInputLanguages');
 
 promise_test(async () => {
-  const writer = await ai.writer.create({
+  const writer = await Writer.create({
     expectedContextLanguages: ['en']
   });
   assert_array_equals(writer.expectedContextLanguages, ['en']);
-}, 'Creating a AIWriter with expectedContextLanguages');
+}, 'Creating a Writer with expectedContextLanguages');
 
 promise_test(async () => {
-  const writer = await ai.writer.create({
+  const writer = await Writer.create({
     outputLanguage: 'en'
   });
   assert_equals(writer.outputLanguage, 'en');
-}, 'Creating a AIWriter with outputLanguage');
+}, 'Creating a Writer with outputLanguage');
 
 promise_test(async () => {
-  const writer = await ai.writer.create({});
+  const writer = await Writer.create({});
   assert_equals(writer.expectedInputLanguages, null);
   assert_equals(writer.expectedContextLanguages, null);
   assert_equals(writer.outputLanguage, null);
-}, 'Creating a AIWriter without optional attributes');
+}, 'Creating a Writer without optional attributes');
 
 promise_test(async (t) => {
-  const writer = await ai.writer.create();
+  const writer = await Writer.create();
+  let result = await writer.write('');
+  assert_equals(result, '');
+  result = await writer.write(' ');
+  assert_equals(result, '');
+}, 'Writer.write() with an empty input or whitespace returns an empty text');
+
+promise_test(async (t) => {
+  const writer = await Writer.create();
+  const result = await writer.write('hello', {context: ' '});
+  assert_not_equals(result, '');
+}, 'Writer.write() with a whitespace context returns a non-empty result');
+
+promise_test(async (t) => {
+  const writer = await Writer.create();
   writer.destroy();
   await promise_rejects_dom(t, 'InvalidStateError', writer.write('hello'));
-}, 'AIWriter.write() fails after destroyed');
+}, 'Writer.write() fails after destroyed');
 
 promise_test(async (t) => {
-  const writer = await ai.writer.create();
+  const writer = await Writer.create();
   writer.destroy();
   assert_throws_dom('InvalidStateError', () => writer.writeStreaming('hello'));
-}, 'AIWriter.writeStreaming() fails after destroyed');
+}, 'Writer.writeStreaming() fails after destroyed');
 
+promise_test(async () => {
+  const writer = await Writer.create();
+  const result = await writer.measureInputUsage(kTestPrompt);
+  assert_greater_than(result, 0);
+}, 'Writer.measureInputUsage() returns non-empty result');

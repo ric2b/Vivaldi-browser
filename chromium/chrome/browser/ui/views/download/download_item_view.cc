@@ -23,6 +23,7 @@
 #include "base/memory/raw_ptr.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/notreached.h"
+#include "base/strings/strcat.h"
 #include "base/task/single_thread_task_runner.h"
 #include "build/build_config.h"
 #include "build/buildflag.h"
@@ -37,8 +38,6 @@
 #include "chrome/browser/icon_manager.h"
 #include "chrome/browser/safe_browsing/advanced_protection_status_manager.h"
 #include "chrome/browser/safe_browsing/advanced_protection_status_manager_factory.h"
-#include "chrome/browser/safe_browsing/download_protection/download_protection_service.h"
-#include "chrome/browser/safe_browsing/safe_browsing_service.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/color/chrome_color_id.h"
 #include "chrome/browser/ui/tab_modal_confirm_dialog.h"
@@ -103,6 +102,11 @@
 #include "ui/views/widget/widget.h"
 #include "url/gurl.h"
 #include "url/url_constants.h"
+
+#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+#include "chrome/browser/safe_browsing/download_protection/download_protection_service.h"
+#include "chrome/browser/safe_browsing/safe_browsing_service.h"
+#endif
 
 namespace {
 
@@ -460,7 +464,7 @@ bool DownloadItemView::OnMouseDragged(const ui::MouseEvent& event) {
     const views::Widget* const widget = GetWidget();
     // TODO(shaktisahu): Make DragDownloadItem work with a model.
     DragDownloadItem(model_->GetDownloadItem(), file_icon,
-                     widget ? widget->GetNativeView() : nullptr);
+                     widget ? widget->GetNativeView() : gfx::NativeView());
     RecordDownloadShelfDragInfo(DownloadDragInfo::DRAG_STARTED);
   }
   return true;
@@ -828,11 +832,12 @@ void DownloadItemView::UpdateLabels() {
     warning_label_->SizeToFit(GetLabelWidth(*warning_label_));
   }
 
+#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
   deep_scanning_label_->SetVisible(mode_ ==
                                    download::DownloadItemMode::kDeepScanning);
   if (deep_scanning_label_->GetVisible()) {
     const int id = (model_->GetDownloadItem() &&
-                    safe_browsing::DeepScanningRequest::ShouldUploadBinary(
+                    safe_browsing::ShouldUploadBinaryForDeepScanning(
                         model_->GetDownloadItem()))
                        ? IDS_PROMPT_DEEP_SCANNING_DOWNLOAD
                        : IDS_PROMPT_DEEP_SCANNING_APP_DOWNLOAD;
@@ -843,6 +848,7 @@ void DownloadItemView::UpdateLabels() {
     StyleFilename(*deep_scanning_label_, filename_offset, filename.length());
     deep_scanning_label_->SizeToFit(GetLabelWidth(*deep_scanning_label_));
   }
+#endif
 }
 
 void DownloadItemView::UpdateButtons() {
@@ -981,7 +987,8 @@ std::u16string DownloadItemView::GetInProgressAccessibleAlertText() const {
 }
 
 void DownloadItemView::AnnounceAccessibleAlert() {
-  accessible_alert_->NotifyAccessibilityEvent(ax::mojom::Event::kAlert, true);
+  accessible_alert_->NotifyAccessibilityEventDeprecated(
+      ax::mojom::Event::kAlert, true);
   announce_accessible_alert_soon_ = false;
 }
 
@@ -1312,7 +1319,9 @@ void DownloadItemView::ShowContextMenuImpl(
 }
 
 void DownloadItemView::OpenDownloadDuringAsyncScanning() {
+#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
   model_->CompleteSafeBrowsingScan();
+#endif
   model_->SetOpenWhenComplete(true);
 }
 
@@ -1343,8 +1352,9 @@ void DownloadItemView::UpdateAccessibleName() {
 std::u16string DownloadItemView::CalculateAccessibleName() const {
   return has_warning_label(mode_)
              ? warning_label_->GetText()
-             : (status_label_->GetText() + u' ' +
-                model_->GetFileNameToReportUser().LossyDisplayName());
+             : base::StrCat(
+                   {status_label_->GetText(), u" ",
+                    model_->GetFileNameToReportUser().LossyDisplayName()});
 }
 
 std::array<raw_ptr<views::MdTextButton>, DownloadItemView::kButtonsCount>

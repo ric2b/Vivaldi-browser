@@ -35,7 +35,7 @@ class TH_Model : public KeyedService {
   TH_Model(const TH_Model&) = delete;
   TH_Model& operator=(const TH_Model&) = delete;
 
-  void Load();
+  virtual void Load();
   bool Save();
   void LoadFinished(std::unique_ptr<TH_LoadDetails> details);
 
@@ -44,8 +44,8 @@ class TH_Model : public KeyedService {
   bool session_only() const { return session_only_; }
   base::WeakPtr<TH_Model> AsWeakPtr() { return weak_factory_.GetWeakPtr(); }
 
-  void AddObserver(TH_ModelObserver* observer);
-  void RemoveObserver(TH_ModelObserver* observer);
+  virtual void AddObserver(TH_ModelObserver* observer);
+  virtual void RemoveObserver(TH_ModelObserver* observer);
 
   const TH_Node* GetByContent(TH_Node* candidate);
   int GetIndex(const std::string& id);

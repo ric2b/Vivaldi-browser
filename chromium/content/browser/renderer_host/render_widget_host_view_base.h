@@ -25,12 +25,14 @@
 #include "components/input/input_router_impl.h"
 #include "components/input/render_input_router.h"
 #include "components/input/render_widget_host_view_input.h"
+#include "components/viz/common/frame_sinks/copy_output_request.h"
 #include "components/viz/common/hit_test/hit_test_query.h"
 #include "components/viz/common/surfaces/scoped_surface_id_allocator.h"
 #include "components/viz/common/surfaces/surface_id.h"
 #include "content/browser/renderer_host/display_feature.h"
 #include "content/common/content_export.h"
 #include "content/public/browser/render_frame_metadata_provider.h"
+#include "content/public/browser/render_widget_host.h"
 #include "content/public/browser/render_widget_host_view.h"
 #include "content/public/common/page_visibility_state.h"
 #include "content/public/common/widget_type.h"
@@ -77,6 +79,8 @@ class TouchSelectionControllerInputObserver;
 class WebContentsAccessibility;
 class DelegatedFrameHost;
 class SyntheticGestureTarget;
+
+using CopyOutputIpcPriority = viz::CopyOutputRequest::IpcPriority;
 
 // Basic implementation shared by concrete RenderWidgetHostView subclasses.
 class CONTENT_EXPORT RenderWidgetHostViewBase
@@ -167,6 +171,14 @@ class CONTENT_EXPORT RenderWidgetHostViewBase
       const gfx::Size& output_size,
       base::OnceCallback<void(const SkBitmap&)> callback);
 
+#if BUILDFLAG(IS_ANDROID)
+  virtual void CopyFromExactSurfaceWithIpcPriority(
+      const gfx::Rect& src_rect,
+      const gfx::Size& output_size,
+      base::OnceCallback<void(const SkBitmap&)> callback,
+      CopyOutputIpcPriority ipc_priority);
+#endif
+
   // For HiDPI capture mode, allow applying a render scale multiplier
   // which modifies the effective device scale factor. Use a scale
   // of 1.0f (exactly) to disable the feature after it was used.
@@ -181,6 +193,7 @@ class CONTENT_EXPORT RenderWidgetHostViewBase
   ui::mojom::VirtualKeyboardMode GetVirtualKeyboardMode() override;
   void NotifyVirtualKeyboardOverlayRect(
       const gfx::Rect& keyboard_rect) override {}
+  void NotifyContextMenuInsetsObservers(const gfx::Rect&) override {}
   bool IsHTMLFormPopup() const override;
 
   // This only needs to be overridden by RenderWidgetHostViewBase subclasses
@@ -326,8 +339,7 @@ class CONTENT_EXPORT RenderWidgetHostViewBase
   // line bounds, or both.
   virtual void ImeCompositionRangeChanged(
       const gfx::Range& range,
-      const std::optional<std::vector<gfx::Rect>>& character_bounds,
-      const std::optional<std::vector<gfx::Rect>>& line_bounds);
+      const std::optional<std::vector<gfx::Rect>>& character_bounds);
 
   //----------------------------------------------------------------------------
   // The following pure virtual methods are implemented by derived classes.
@@ -429,7 +441,16 @@ class CONTENT_EXPORT RenderWidgetHostViewBase
   virtual TouchSelectionControllerInputObserver*
   GetTouchSelectionControllerInputObserver();
 
-  virtual void SetDisplayFeatureForTesting(
+  virtual RenderWidgetHost::InputEventObserver*
+  GetInputTransferHandlerObserver();
+
+  // Disable the DisplayFeature emulation (if used) and restore the
+  // DisplayFeature of the device (if there is).
+  virtual void DisableDisplayFeatureOverrideForEmulation() = 0;
+
+  // Override the DisplayFeature provided by the device (if there is) and
+  // replace it with the provided one.
+  virtual void OverrideDisplayFeatureForEmulation(
       const DisplayFeature* display_feature) = 0;
 
   DevicePosturePlatformProvider* GetDevicePosturePlatformProvider();

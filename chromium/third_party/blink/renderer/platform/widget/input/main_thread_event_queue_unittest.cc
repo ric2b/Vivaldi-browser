@@ -2,12 +2,14 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "base/feature_list.h"
+#include "base/test/scoped_feature_list.h"
+#include "cc/base/features.h"
+#include "third_party/blink/public/common/features.h"
 #ifdef UNSAFE_BUFFERS_BUILD
 // TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
 #pragma allow_unsafe_buffers
 #endif
-
-#include "third_party/blink/renderer/platform/widget/input/main_thread_event_queue.h"
 
 #include <stddef.h>
 
@@ -21,6 +23,7 @@
 #include "base/memory/raw_ref.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/strings/string_util.h"
+#include "base/test/scoped_feature_list.h"
 #include "base/test/test_simple_task_runner.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
@@ -31,6 +34,7 @@
 #include "third_party/blink/public/common/input/web_mouse_wheel_event.h"
 #include "third_party/blink/public/platform/scheduler/test/web_mock_thread_scheduler.h"
 #include "third_party/blink/renderer/platform/scheduler/test/fake_widget_scheduler.h"
+#include "third_party/blink/renderer/platform/widget/input/main_thread_event_queue.h"
 #include "third_party/blink/renderer/platform/wtf/vector.h"
 
 namespace blink {
@@ -247,6 +251,7 @@ class MainThreadEventQueueTest : public testing::Test,
     queue_ = base::MakeRefCounted<MainThreadEventQueue>(
         this, main_task_runner_, main_task_runner_, widget_scheduler_, true);
     queue_->ClearRafFallbackTimerForTesting();
+    ::features::SetIsEligibleForThrottleMainFrameTo60Hz(true);
   }
 
   void HandleEvent(const WebInputEvent& event,
@@ -276,7 +281,8 @@ class MainThreadEventQueueTest : public testing::Test,
   }
 
   bool needs_low_latency_until_pointer_up() {
-    return queue_->needs_low_latency_until_pointer_up_;
+    return queue_->needs_low_latency_until_pointer_up_.load(
+        std::memory_order_relaxed);
   }
 
   bool last_touch_start_forced_nonblocking_due_to_fling() {
@@ -288,6 +294,7 @@ class MainThreadEventQueueTest : public testing::Test,
     while (needs_main_frame_ || main_task_runner_->HasPendingTask()) {
       main_task_runner_->RunUntilIdle();
       needs_main_frame_ = false;
+      urgent_main_frame_ = false;
       frame_time_ += kFrameInterval;
       queue_->DispatchRafAlignedInput(frame_time_);
     }
@@ -296,6 +303,7 @@ class MainThreadEventQueueTest : public testing::Test,
   void RunSimulatedRafOnce() {
     if (needs_main_frame_) {
       needs_main_frame_ = false;
+      urgent_main_frame_ = false;
       frame_time_ += kFrameInterval;
       queue_->DispatchRafAlignedInput(frame_time_);
     }
@@ -325,7 +333,11 @@ class MainThreadEventQueueTest : public testing::Test,
     else
       non_raf_aligned_events_dispatched_ = true;
   }
-  void SetNeedsMainFrame() override { needs_main_frame_ = true; }
+  void SetNeedsMainFrame(bool urgent) override {
+    needs_main_frame_ = true;
+    urgent_main_frame_ = urgent;
+  }
+
   bool RequestedMainFramePending() override { return needs_main_frame_; }
 
   Vector<ReceivedCallback> GetAndResetCallbackResults() {
@@ -348,7 +360,9 @@ class MainThreadEventQueueTest : public testing::Test,
   Vector<std::unique_ptr<HandledTask>> handled_tasks_;
   std::unique_ptr<HandledEventCallbackTracker> handler_callback_;
 
+  bool requested_main_frames_are_urgent_ = false;
   bool needs_main_frame_ = false;
+  bool urgent_main_frame_ = false;
   bool handle_input_event_ = true;
   bool raf_aligned_events_dispatched_ = false;
   bool non_raf_aligned_events_dispatched_ = false;
@@ -819,6 +833,10 @@ TEST_F(MainThreadEventQueueTest, RafAlignedTouchInput) {
   for (SyntheticWebTouchEvent& event : kEvents)
     HandleEvent(event, blink::mojom::InputEventResultState::kSetNonBlocking);
 
+  EXPECT_TRUE(RequestedMainFramePending());
+  EXPECT_EQ(urgent_main_frame_, base::FeatureList::IsEnabled(
+                                    blink::features::kUrgentMainFrameForInput));
+
   EXPECT_EQ(3u, event_queue().size());
   EXPECT_TRUE(main_task_runner_->HasPendingTask());
   EXPECT_TRUE(needs_main_frame_);
@@ -828,6 +846,8 @@ TEST_F(MainThreadEventQueueTest, RafAlignedTouchInput) {
   EXPECT_THAT(GetAndResetCallbackResults(),
               testing::Each(ReceivedCallback(
                   CallbackReceivedState::kCalledWhileHandlingEvent, false, 0)));
+  EXPECT_FALSE(RequestedMainFramePending());
+  EXPECT_FALSE(urgent_main_frame_);
 
   // Simulate the rAF running before the PostTask occurs. The rAF
   // will consume everything.
@@ -878,6 +898,34 @@ TEST_F(MainThreadEventQueueTest, RafAlignedTouchInput) {
                            false, 4),
           ReceivedCallback(CallbackReceivedState::kCalledAfterHandleEvent,
                            false, 5)));
+}
+
+TEST_F(MainThreadEventQueueTest, RafAlignedTouchInputUrgentMainFrame) {
+  base::test::ScopedFeatureList feature_list{
+      blink::features::kUrgentMainFrameForInput};
+  SyntheticWebTouchEvent event;
+  event.MovePoint(0, 20, 20);
+
+  EXPECT_FALSE(main_task_runner_->HasPendingTask());
+  EXPECT_EQ(0u, event_queue().size());
+
+  EXPECT_CALL(*widget_scheduler_, DidHandleInputEventOnMainThread(
+                                      testing::_, testing::_, testing::_));
+
+  HandleEvent(event, blink::mojom::InputEventResultState::kNotConsumed);
+
+  // Main frame requests from a rAF-aligned input are urgent, and sent from the
+  // impl thread.
+  EXPECT_TRUE(RequestedMainFramePending());
+  EXPECT_TRUE(urgent_main_frame_);
+
+  EXPECT_EQ(1u, event_queue().size());
+  EXPECT_TRUE(needs_main_frame_);
+  main_task_runner_->RunUntilIdle();
+
+  RunPendingTasksWithSimulatedRaf();
+  EXPECT_FALSE(RequestedMainFramePending());
+  EXPECT_FALSE(urgent_main_frame_);
 }
 
 TEST_F(MainThreadEventQueueTest, RafAlignedTouchInputCoalescedMoves) {

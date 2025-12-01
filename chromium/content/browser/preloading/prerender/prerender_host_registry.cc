@@ -334,9 +334,8 @@ PreloadingEligibility ToEligibility(PrerenderFinalStatus status) {
       NOTREACHED();
     case PrerenderFinalStatus::kSlowNetwork:
       return PreloadingEligibility::kSlowNetwork;
-    case PrerenderFinalStatus::kV8OptimizerDisabled:
-      return PreloadingEligibility::kV8OptimizerDisabled;
     case PrerenderFinalStatus::kPrerenderFailedDuringPrefetch:
+    case PrerenderFinalStatus::kBrowsingDataRemoved:
       NOTREACHED();
   }
 
@@ -560,6 +559,9 @@ FrameTreeNodeId PrerenderHostRegistry::CreateAndStartHost(
 
   FrameTreeNodeId frame_tree_node_id;
 
+  std::optional<blink::mojom::SpeculationEagerness> eagerness =
+      attributes.GetEagerness();
+
   {
     RenderFrameHostImpl* initiator_rfh =
         attributes.IsBrowserInitiated()
@@ -707,17 +709,6 @@ FrameTreeNodeId PrerenderHostRegistry::CreateAndStartHost(
       return FrameTreeNodeId();
     }
 
-    // Don't start prerendering when the V8 optimizer is disabled by the site
-    // settings. This is because prerendering a page that has the COOP crashes
-    // when the V8 optimizer is disabled. See https://crbug.com/40076091 for
-    // details.
-    if (GetContentClient()->browser()->AreV8OptimizationsDisabledForSite(
-            web_contents()->GetBrowserContext(), attributes.prerendering_url)) {
-      builder.RejectAsNotEligible(attributes,
-                                  PrerenderFinalStatus::kV8OptimizerDisabled);
-      return FrameTreeNodeId();
-    }
-
     // Once all eligibility checks are completed, set the status to kEligible.
     if (attempt)
       attempt->SetEligibility(PreloadingEligibility::kEligible);
@@ -767,15 +758,14 @@ FrameTreeNodeId PrerenderHostRegistry::CreateAndStartHost(
     // when the number reaches the limit.
     if (!initiator_web_contents.GetPrerenderHostRegistry()
              ->IsAllowedToStartPrerenderingForTrigger(attributes.trigger_type,
-                                                      attributes.eagerness)) {
+                                                      eagerness)) {
       // The reason we don't consider limit exceeded as an ineligibility
       // reason is because we can't replicate the behavior in our other
       // experiment groups for analysis. To prevent this we set
       // TriggeringOutcome to kFailure and look into the failure reason to
       // learn more.
       PrerenderFinalStatus final_status;
-      switch (GetPrerenderLimitGroup(attributes.trigger_type,
-                                     attributes.eagerness)) {
+      switch (GetPrerenderLimitGroup(attributes.trigger_type, eagerness)) {
         case PrerenderLimitGroup::kSpeculationRulesEager:
           final_status =
               PrerenderFinalStatus::kMaxNumOfRunningEagerPrerendersExceeded;
@@ -801,7 +791,7 @@ FrameTreeNodeId PrerenderHostRegistry::CreateAndStartHost(
     prerender_host_by_frame_tree_node_id_[frame_tree_node_id] =
         std::move(prerender_host);
 
-    if (GetPrerenderLimitGroup(attributes.trigger_type, attributes.eagerness) ==
+    if (GetPrerenderLimitGroup(attributes.trigger_type, eagerness) ==
         PrerenderLimitGroup::kSpeculationRulesNonEager) {
       non_eager_prerender_host_id_by_arrival_order_.push_back(
           frame_tree_node_id);
@@ -876,7 +866,8 @@ FrameTreeNodeId PrerenderHostRegistry::CreateAndStartHostForNewTab(
   prerender_new_tab_handle_by_frame_tree_node_id_[prerender_host_id] =
       std::move(handle);
 
-  if (GetPrerenderLimitGroup(attributes.trigger_type, attributes.eagerness) ==
+  if (GetPrerenderLimitGroup(attributes.trigger_type,
+                             attributes.GetEagerness()) ==
       PrerenderLimitGroup::kSpeculationRulesNonEager) {
     non_eager_prerender_host_id_by_arrival_order_.push_back(prerender_host_id);
   }
@@ -1093,10 +1084,11 @@ bool PrerenderHostRegistry::CancelHostInternal(
   // that this new-tab host belongs to. This will eventually destroy `this`, so
   // it should be performed asynchronously.
   if (base::FeatureList::IsEnabled(blink::features::kPrerender2InNewTab)) {
-    CHECK(prerender_host->initiator_web_contents());
     WebContentsImpl* initiator_web_contents = static_cast<WebContentsImpl*>(
         prerender_host->initiator_web_contents().get());
-    if (web_contents() != initiator_web_contents &&
+    // The initiator WebContents may not be alive.
+    // See crrev.com/c/6286546/comment/1adfe28c_4f769aa7 for more details.
+    if (initiator_web_contents && web_contents() != initiator_web_contents &&
         !initiator_web_contents->IsBeingDestroyed()) {
       base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
           FROM_HERE,
@@ -1133,7 +1125,16 @@ bool PrerenderHostRegistry::CancelNewTabHostInternal(
   std::unique_ptr<PrerenderNewTabHandle> handle = std::move(iter->second);
   prerender_new_tab_handle_by_frame_tree_node_id_.erase(iter);
   NotifyCancel(frame_tree_node_id, reason);
-  handle->CancelPrerendering(reason);
+
+  if (reason.final_status() == PrerenderFinalStatus::kSpeculationRuleRemoved) {
+    auto& new_tab_registry = handle->GetPrerenderHostRegistry();
+    new_tab_registry.SchedulePendingDeletionPrerenderNewTabHandle(
+        std::move(handle));
+    new_tab_registry.CancelHost(frame_tree_node_id, reason);
+  } else {
+    handle->CancelPrerendering(reason);
+  }
+
   return true;
 }
 
@@ -1436,7 +1437,6 @@ void PrerenderHostRegistry::BackNavigationLikely(
                                            triggered_primary_page_source_id);
   PreloadingAttempt* attempt = preloading_data->AddPreloadingAttempt(
       predictor, PreloadingType::kPrerender, same_url_matcher,
-      /*planned_max_preloading_type=*/std::nullopt,
       triggered_primary_page_source_id);
 
   if (back_entry->GetMainFrameDocumentSequenceNumber() ==
@@ -1752,9 +1752,22 @@ bool PrerenderHostRegistry::CanNavigationActivateHost(
   return true;
 }
 
-void PrerenderHostRegistry::DeleteDelayedToBeDeletedHosts(
+void PrerenderHostRegistry::DeletePendingDeletionHosts(
     FrameTreeNodeId prerender_host_id) {
-  delayed_to_be_deleted_hosts_.erase(prerender_host_id);
+  pending_deletion_hosts_.erase(prerender_host_id);
+  if (pending_deletion_new_tab_prerender_handle_) {
+    // Delete the handle asynchronously to avoid delete `this`, as the handle
+    // owns the prerender WebContents, which indirectly owns this
+    // PrerenderHostRegistry.
+    base::SingleThreadTaskRunner::GetCurrentDefault()->DeleteSoon(
+        FROM_HERE, std::move(pending_deletion_new_tab_prerender_handle_));
+  }
+}
+
+void PrerenderHostRegistry::SchedulePendingDeletionPrerenderNewTabHandle(
+    std::unique_ptr<PrerenderNewTabHandle> handle) {
+  CHECK(!pending_deletion_new_tab_prerender_handle_);
+  pending_deletion_new_tab_prerender_handle_ = std::move(handle);
 }
 
 void PrerenderHostRegistry::ScheduleToDeleteAbandonedHost(
@@ -1770,11 +1783,10 @@ void PrerenderHostRegistry::ScheduleToDeleteAbandonedHost(
       // Fire unload related events upon intended prerender cancellation.
       RenderFrameHostImpl* rfhi = prerender_host->GetPrerenderedMainFrameHost();
       FrameTreeNodeId prerender_host_id = prerender_host->frame_tree_node_id();
-      delayed_to_be_deleted_hosts_[prerender_host_id] =
-          std::move(prerender_host);
+      pending_deletion_hosts_[prerender_host_id] = std::move(prerender_host);
       rfhi->ClosePage(RenderFrameHostImpl::ClosePageSource::kPrerenderDiscard,
                       base::BindRepeating(
-                          &PrerenderHostRegistry::DeleteDelayedToBeDeletedHosts,
+                          &PrerenderHostRegistry::DeletePendingDeletionHosts,
                           weak_factory_.GetWeakPtr(), prerender_host_id));
       return;
     }

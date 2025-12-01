@@ -12,7 +12,7 @@
 #include "include/v8config.h"
 #include "src/base/logging.h"
 #include "src/common/globals.h"
-#include "src/execution/isolate.h"
+#include "src/execution/isolate-inl.h"
 #include "src/flags/flags.h"
 #include "src/heap/base/cached-unordered-map.h"
 #include "src/heap/ephemeron-remembered-set.h"
@@ -246,10 +246,9 @@ class ConcurrentMarking::JobTaskMajor : public v8::JobTask {
 
   // v8::JobTask overrides.
   void Run(JobDelegate* delegate) override {
-    // In case multi-cage pointer compression mode is enabled ensure that
-    // current thread's cage base values are properly initialized.
-    PtrComprCageAccessScope ptr_compr_cage_access_scope(
-        concurrent_marking_->heap_->isolate());
+    // Set the current isolate such that trusted pointer tables etc are
+    // available and the cage base is set correctly for multi-cage mode.
+    SetCurrentIsolateScope isolate_scope(concurrent_marking_->heap_->isolate());
 
     if (delegate->IsJoiningThread()) {
       // TRACE_GC is not needed here because the caller opens the right scope.
@@ -295,10 +294,9 @@ class ConcurrentMarking::JobTaskMinor : public v8::JobTask {
 
   // v8::JobTask overrides.
   void Run(JobDelegate* delegate) override {
-    // In case multi-cage pointer compression mode is enabled ensure that
-    // current thread's cage base values are properly initialized.
-    PtrComprCageAccessScope ptr_compr_cage_access_scope(
-        concurrent_marking_->heap_->isolate());
+    // Set the current isolate such that trusted pointer tables etc are
+    // available and the cage base is set correctly for multi-cage mode.
+    SetCurrentIsolateScope isolate_scope(concurrent_marking_->heap_->isolate());
 
     if (delegate->IsJoiningThread()) {
       TRACE_GC_WITH_FLOW(concurrent_marking_->heap_->tracer(),
@@ -458,15 +456,6 @@ void ConcurrentMarking::RunMajor(JobDelegate* delegate,
       if (delegate->ShouldYield()) {
         TRACE_GC_NOTE("ConcurrentMarking::RunMajor Preempted");
         break;
-      }
-    }
-
-    if (done) {
-      Ephemeron ephemeron;
-      while (local_weak_objects.discovered_ephemerons_local.Pop(&ephemeron)) {
-        if (visitor.ProcessEphemeron(ephemeron.key, ephemeron.value)) {
-          another_ephemeron_iteration = true;
-        }
       }
     }
 
@@ -630,8 +619,7 @@ size_t ConcurrentMarking::GetMajorMaxConcurrency(size_t worker_count) {
     marking_items += worklist.worklist->Size();
   }
   const size_t work = std::max<size_t>(
-      {marking_items, weak_objects_->discovered_ephemerons.Size(),
-       weak_objects_->current_ephemerons.Size()});
+      {marking_items, weak_objects_->current_ephemerons.Size()});
   size_t jobs = worker_count + work;
   jobs = std::min<size_t>(task_state_.size() - 1, jobs);
   if (heap_->ShouldOptimizeForBattery()) {
@@ -742,8 +730,7 @@ bool ConcurrentMarking::IsWorkLeft() const {
   DCHECK(garbage_collector_.has_value());
   if (garbage_collector_ == GarbageCollector::MARK_COMPACTOR) {
     return !marking_worklists_->shared()->IsEmpty() ||
-           !weak_objects_->current_ephemerons.IsEmpty() ||
-           !weak_objects_->discovered_ephemerons.IsEmpty();
+           !weak_objects_->current_ephemerons.IsEmpty();
   }
   DCHECK_EQ(GarbageCollector::MINOR_MARK_SWEEPER, garbage_collector_);
   return !marking_worklists_->shared()->IsEmpty() ||

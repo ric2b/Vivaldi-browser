@@ -34,6 +34,7 @@
 #include <config.h>  // Must come first
 #endif
 
+#include <assert.h>
 #include <fcntl.h>
 #include <limits.h>
 #include <stdio.h>

@@ -11,6 +11,7 @@
 #include <utility>
 #include <vector>
 
+#include "base/check_op.h"
 #include "base/containers/adapters.h"
 #include "base/functional/bind.h"
 #include "base/i18n/rtl.h"
@@ -32,6 +33,7 @@
 #include "ui/base/layout.h"
 #include "ui/events/event_utils.h"
 #include "ui/views/accessibility/atomic_view_ax_tree_manager.h"
+#include "ui/views/accessibility/ax_virtual_view.h"
 #include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/accessibility/view_accessibility_utils.h"
 #include "ui/views/controls/native/native_view_host.h"
@@ -159,9 +161,15 @@ ViewAXPlatformNodeDelegate::~ViewAXPlatformNodeDelegate() {
       ax_platform_node_->GetNativeViewAccessible()) {
     ui::AXPlatformNode::SetPopupFocusOverride(nullptr);
   }
-  // Call ExtractAsDangling() first to clear the underlying pointer and return
-  // another raw_ptr instance that is allowed to dangle.
-  ax_platform_node_.ExtractAsDangling()->Destroy();
+}
+
+void ViewAXPlatformNodeDelegate::EnsureAtomicViewAXTreeManager() {
+  if (atomic_view_ax_tree_manager_) {
+    return;
+  }
+
+  atomic_view_ax_tree_manager_ =
+      views::AtomicViewAXTreeManager::Create(this, GetData());
 }
 
 bool ViewAXPlatformNodeDelegate::IsAccessibilityFocusable() const {
@@ -187,7 +195,7 @@ void ViewAXPlatformNodeDelegate::EndPopupFocusOverride() {
 
 void ViewAXPlatformNodeDelegate::FireFocusAfterMenuClose() {
   ui::AXPlatformNodeBase* focused_node =
-      static_cast<ui::AXPlatformNodeBase*>(ax_platform_node_);
+      static_cast<ui::AXPlatformNodeBase*>(ax_platform_node_.get());
   // Continue to drill down focused nodes to get to the "deepest" node that is
   // focused. This is not necessarily a view. It could be web content.
   while (focused_node) {
@@ -210,18 +218,21 @@ void ViewAXPlatformNodeDelegate::FireFocusAfterMenuClose() {
   }
 }
 
-bool ViewAXPlatformNodeDelegate::GetIsIgnored() const {
-  // TODO(accessibility): Make `ViewAccessibility::GetIsIgnored()` non-virtual
-  // and delete this method. For this to happen the logic relevant to
-  // `IsViewUnfocusableDescendantOfFocusableAncestor()` needs to be moved to be
-  // part of a "push" system rather than "pull".
-  // For more info: https://crbug.com/325137417
-  return GetData().IsIgnored();
-}
-
 gfx::NativeViewAccessible ViewAXPlatformNodeDelegate::GetNativeObject() const {
   DCHECK(ax_platform_node_);
   return ax_platform_node_->GetNativeViewAccessible();
+}
+
+void ViewAXPlatformNodeDelegate::OnWidgetUpdated(Widget* widget,
+                                                 Widget* old_widget) {
+  ViewAccessibility::OnWidgetUpdated(widget, old_widget);
+
+  // Initialize the AtomicViewAXTreeManager if necessary when the view gets
+  // added to the widget. We must wait for the widget to become available to
+  // get valid data our of GetData().
+  if (widget && needs_ax_tree_manager()) {
+    EnsureAtomicViewAXTreeManager();
+  }
 }
 
 void ViewAXPlatformNodeDelegate::FireNativeEvent(ax::mojom::Event event_type) {
@@ -329,13 +340,6 @@ const ui::AXNodeData& ViewAXPlatformNodeDelegate::GetData() const {
   }
 
   GetAccessibleNodeData(&data_);
-
-
-#if BUILDFLAG(IS_WIN)
-  if (view()->GetViewAccessibility().needs_ax_tree_manager()) {
-    view()->GetViewAccessibility().EnsureAtomicViewAXTreeManager();
-  }
-#endif  // BUILDFLAG(IS_WIN)
 
   return data_;
 }
@@ -650,7 +654,9 @@ gfx::Rect ViewAXPlatformNodeDelegate::GetInnerTextRangeBoundsRect(
 gfx::RectF ViewAXPlatformNodeDelegate::GetInlineTextRect(
     const int start_offset,
     const int end_offset) const {
-  DCHECK(start_offset >= 0 && end_offset >= 0 && start_offset <= end_offset);
+  DCHECK_GE(start_offset, 0);
+  DCHECK_GE(end_offset, 0);
+  DCHECK_LE(start_offset, end_offset);
   const std::vector<int32_t>& character_offsets =
       data_.GetIntListAttribute(ax::mojom::IntListAttribute::kCharacterOffsets);
   if (character_offsets.empty()) {
@@ -1043,8 +1049,8 @@ ViewAXPlatformNodeDelegate::GetChildWidgets() const {
     return ChildWidgetsResult();
   }
 
-  std::set<raw_ptr<Widget, SetExperimental>> owned_widgets;
-  Widget::GetAllOwnedWidgets(widget->GetNativeView(), &owned_widgets);
+  Widget::Widgets owned_widgets =
+      Widget::GetAllOwnedWidgets(widget->GetNativeView());
 
   std::vector<raw_ptr<Widget, VectorExperimental>> visible_widgets;
   std::ranges::copy_if(owned_widgets, std::back_inserter(visible_widgets),

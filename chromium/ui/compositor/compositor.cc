@@ -12,6 +12,7 @@
 #include <utility>
 #include <vector>
 
+#include "base/check.h"
 #include "base/command_line.h"
 #include "base/containers/contains.h"
 #include "base/feature_list.h"
@@ -74,19 +75,15 @@
 
 namespace ui {
 
-// Used to hold on to IssueExternalBeginFrame arguments if
-// |external_begin_frame_controller_| isn't ready yet.
-struct PendingBeginFrameArgs {
-  PendingBeginFrameArgs(
-      const viz::BeginFrameArgs& args,
-      bool force,
-      base::OnceCallback<void(const viz::BeginFrameAck&)> callback)
-      : args(args), force(force), callback(std::move(callback)) {}
+#if !BUILDFLAG(IS_IOS)
+Compositor::PendingBeginFrameArgs::PendingBeginFrameArgs(
+    const viz::BeginFrameArgs& args,
+    bool force,
+    base::OnceCallback<void(const viz::BeginFrameAck&)> callback)
+    : args(args), force(force), callback(std::move(callback)) {}
 
-  viz::BeginFrameArgs args;
-  bool force;
-  base::OnceCallback<void(const viz::BeginFrameAck&)> callback;
-};
+Compositor::PendingBeginFrameArgs::~PendingBeginFrameArgs() = default;
+#endif
 
 Compositor::Compositor(const viz::FrameSinkId& frame_sink_id,
                        ui::ContextFactory* context_factory,
@@ -248,10 +245,14 @@ Compositor::Compositor(const viz::FrameSinkId& frame_sink_id,
   if (uses_layer_lists_) {
     property_tree_delegate_ =
         std::make_unique<ui::CompositorPropertyTreeDelegate>();
+    property_tree_delegate_->set_compositor(this);
     params.property_tree_delegate = property_tree_delegate_.get();
   }
 
   host_ = cc::LayerTreeHost::CreateSingleThreaded(this, std::move(params));
+  if (uses_layer_lists_) {
+    property_trees_.emplace(*host_);
+  }
 
   const base::WeakPtr<cc::CompositorDelegateForInput>& compositor_delegate =
       host_->GetDelegateForInput();
@@ -307,6 +308,12 @@ Compositor::~Compositor() {
 
   if (animation_timeline_)
     animation_host_->RemoveAnimationTimeline(animation_timeline_.get());
+
+  if (uses_layer_lists_) {
+    // Delete references to the host_ before it is destroyed.
+    property_tree_delegate_->set_compositor(nullptr);
+    property_trees_.reset();
+  }
 
   // Stop all outstanding draws before telling the ContextFactory to tear
   // down any contexts that the |host_| may rely upon.
@@ -377,9 +384,14 @@ void Compositor::SetExternalBeginFrameController(
   DCHECK(use_external_begin_frame_control());
   external_begin_frame_controller_ = std::move(external_begin_frame_controller);
   if (pending_begin_frame_args_) {
+#if BUILDFLAG(IS_IOS)
+    external_begin_frame_controller_->IssueExternalBeginFrameNoAck(
+        *pending_begin_frame_args_);
+#else
     external_begin_frame_controller_->IssueExternalBeginFrame(
         pending_begin_frame_args_->args, pending_begin_frame_args_->force,
         std::move(pending_begin_frame_args_->callback));
+#endif
     pending_begin_frame_args_.reset();
   }
 }
@@ -715,6 +727,17 @@ bool Compositor::HasAnimationObserver(
   return animation_observer_list_.HasObserver(observer);
 }
 
+#if BUILDFLAG(IS_IOS)
+void Compositor::IssueExternalBeginFrameNoAck(const viz::BeginFrameArgs& args) {
+  if (!external_begin_frame_controller_) {
+    // It's ok to call this repeatedly until |external_begin_frame_controller_|
+    // is ready - we'll just update the |pending_begin_frame_args_|.
+    pending_begin_frame_args_.emplace(args);
+    return;
+  }
+  external_begin_frame_controller_->IssueExternalBeginFrameNoAck(args);
+}
+#else
 void Compositor::IssueExternalBeginFrame(
     const viz::BeginFrameArgs& args,
     bool force,
@@ -723,13 +746,13 @@ void Compositor::IssueExternalBeginFrame(
     // IssueExternalBeginFrame() shouldn't be called again before the previous
     // begin frame is acknowledged.
     DCHECK(!pending_begin_frame_args_);
-    pending_begin_frame_args_ = std::make_unique<PendingBeginFrameArgs>(
-        args, force, std::move(callback));
+    pending_begin_frame_args_.emplace(args, force, std::move(callback));
     return;
   }
   external_begin_frame_controller_->IssueExternalBeginFrame(
       args, force, std::move(callback));
 }
+#endif
 
 CompositorMetricsTracker Compositor::RequestNewCompositorMetricsTracker() {
   return CompositorMetricsTracker(next_compositor_metrics_tracker_id_++,
@@ -1058,6 +1081,12 @@ void Compositor::RemoveScopedKeepSurfaceAlive(
   CHECK(pending_surface_copies_.find(scoped_keep_surface_alive_id) !=
         pending_surface_copies_.end());
   pending_surface_copies_.erase(scoped_keep_surface_alive_id);
+}
+
+void Compositor::CheckPropertyTrees() const {
+  DCHECK(property_trees_.has_value());
+  // TODO(crbug.com/389771428): Make this work.
+  // DCHECK_EQ(property_trees_.value(), *host_->property_trees());
 }
 
 }  // namespace ui

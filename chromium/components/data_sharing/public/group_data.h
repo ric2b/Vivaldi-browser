@@ -18,7 +18,22 @@ using GroupId = base::StrongAlias<class GroupIdTag, std::string>;
 
 // GENERATED_JAVA_ENUM_PACKAGE: (
 //   org.chromium.components.data_sharing.member_role)
-enum class MemberRole { kUnknown = 0, kOwner = 1, kMember = 2, kInvitee = 3 };
+enum class MemberRole {
+  kUnknown = 0,
+  kOwner = 1,
+  kMember = 2,
+  kInvitee = 3,
+  kFormerMember = 4
+};
+
+// This tells if the group is enabled or not. This field is set by chrome client
+// after comparing the version info from ReadGroup request and comparing it with
+// hardcoded version info in Chrome client.
+enum class GroupEnabledStatus {
+  kUnknown = 0,
+  kEnabled = 1,
+  kDisabledChromeNeedsUpdate = 2,
+};
 
 struct GroupMember {
   GroupMember();
@@ -95,7 +110,9 @@ struct GroupData {
   GroupData(GroupId group_id,
             std::string display_name,
             std::vector<GroupMember> members,
-            std::string access_token);
+            std::vector<GroupMember> former_members,
+            std::string access_token,
+            GroupEnabledStatus enabled_status = GroupEnabledStatus::kUnknown);
 
   GroupData(const GroupData&);
   GroupData& operator=(const GroupData&);
@@ -108,6 +125,8 @@ struct GroupData {
   GroupToken group_token;
   std::string display_name;
   std::vector<GroupMember> members;
+  std::vector<GroupMember> former_members;
+  GroupEnabledStatus enabled_status = GroupEnabledStatus::kUnknown;
 };
 
 struct GroupEvent {

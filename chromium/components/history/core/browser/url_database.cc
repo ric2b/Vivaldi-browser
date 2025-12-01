@@ -57,7 +57,7 @@ URLDatabase::~URLDatabase() = default;
 bool URLDatabase::FillURLRow(sql::Statement& s, URLRow* i) {
   DCHECK(i);
 
-  GURL url(s.ColumnString(1));
+  GURL url(s.ColumnStringView(1));
   if (!url.is_valid()) {
     return false;
   }
@@ -216,7 +216,7 @@ bool URLDatabase::URLTableContainsAutoincrement() {
   if (!statement.Step())
     return false;
 
-  std::string urls_schema = statement.ColumnString(0);
+  std::string_view urls_schema = statement.ColumnStringView(0);
   // We check if the whole schema contains "AUTOINCREMENT", since
   // "AUTOINCREMENT" only can be used for "INTEGER PRIMARY KEY", so we assume no
   // other columns could contain "AUTOINCREMENT".
@@ -854,6 +854,29 @@ void URLDatabase::GetRecentTypedSearchItems(
   statement.BindInt64(0, keyword_id);
   statement.BindInt64(1, max_results);
   std::move(callback).Run(std::move(statement));
+}
+
+void URLDatabase::GetRecentTypedUrlItems(
+  base::OnceCallback<void(sql::Statement&&)> callback,
+  int max_results) {
+// Select u.url twice to attribute it to contents and url.
+sql::Statement statement(
+GetDB().GetCachedStatement(SQL_FROM_HERE,
+  R"(
+    SELECT
+      u.url as contents,
+      u.url
+    FROM
+      urls u
+    WHERE
+      u.typed_count > 0 AND
+      LENGTH(u.url) < 2048
+    ORDER BY u.last_visit_time DESC
+    LIMIT ?
+  )")
+);
+statement.BindInt64(0, max_results);
+std::move(callback).Run(std::move(statement));
 }
 
 }  // namespace history

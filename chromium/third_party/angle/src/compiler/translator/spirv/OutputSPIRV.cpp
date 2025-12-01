@@ -223,7 +223,7 @@ class OutputSPIRVTraverser : public TIntermTraverser
                                 spirv::LiteralInteger index,
                                 spirv::IdRef typeId) const;
     void accessChainPushSwizzle(NodeData *data,
-                                const TVector<int> &swizzle,
+                                const TVector<uint32_t> &swizzle,
                                 spirv::IdRef typeId,
                                 uint8_t componentCount) const;
     void accessChainPushDynamicComponent(NodeData *data, spirv::IdRef index, spirv::IdRef typeId);
@@ -826,7 +826,7 @@ void OutputSPIRVTraverser::accessChainPushLiteral(NodeData *data,
 }
 
 void OutputSPIRVTraverser::accessChainPushSwizzle(NodeData *data,
-                                                  const TVector<int> &swizzle,
+                                                  const TVector<uint32_t> &swizzle,
                                                   spirv::IdRef typeId,
                                                   uint8_t componentCount) const
 {
@@ -3589,6 +3589,8 @@ spirv::IdRef OutputSPIRVTraverser::createImageTextureBuiltIn(TIntermOperator *no
             break;
 
         case EOpTextureGather:
+        case EOpTextureGatherComp:
+        case EOpTextureGatherRef:
 
             // For shadow textures, refZ (same as Dref) is specified as the last argument.
             // Otherwise a component may be specified which defaults to 0 if not specified.
@@ -3606,9 +3608,11 @@ spirv::IdRef OutputSPIRVTraverser::createImageTextureBuiltIn(TIntermOperator *no
 
         case EOpTextureGatherOffset:
         case EOpTextureGatherOffsetComp:
+        case EOpTextureGatherOffsetRef:
 
         case EOpTextureGatherOffsets:
         case EOpTextureGatherOffsetsComp:
+        case EOpTextureGatherOffsetsRef:
 
             // textureGatherOffset and textureGatherOffsets have the following forms:
             //
@@ -3727,11 +3731,15 @@ spirv::IdRef OutputSPIRVTraverser::createImageTextureBuiltIn(TIntermOperator *no
         imageType.isSamplerBaseImage            = true;
         const spirv::IdRef extractedImageTypeId = mBuilder.getSpirvTypeData(imageType, nullptr).id;
 
-        // Use OpImage to get the image out of the sampled image.
-        const spirv::IdRef extractedImage = mBuilder.getNewId({});
-        spirv::WriteImage(mBuilder.getSpirvCurrentFunctionBlock(), extractedImageTypeId,
-                          extractedImage, image);
-        image = extractedImage;
+        // Use OpImage to get the image out of the sampled image.  Note that for sampler buffers,
+        // there is no sampled image type, and the image already has the non-sampled type.
+        if (!IsSamplerBuffer(samplerBasicType))
+        {
+            const spirv::IdRef extractedImage = mBuilder.getNewId({});
+            spirv::WriteImage(mBuilder.getSpirvCurrentFunctionBlock(), extractedImageTypeId,
+                              extractedImage, image);
+            image = extractedImage;
+        }
     }
 
     // Gather operands as necessary.
@@ -4865,7 +4873,7 @@ bool OutputSPIRVTraverser::visitSwizzle(Visit visit, TIntermSwizzle *node)
 
     const TType &vectorType            = node->getOperand()->getType();
     const uint8_t vectorComponentCount = static_cast<uint8_t>(vectorType.getNominalSize());
-    const TVector<int> &swizzle        = node->getSwizzleOffsets();
+    const TVector<uint32_t> &swizzle   = node->getSwizzleOffsets();
 
     // As an optimization, do nothing if the swizzle is selecting all the components of the vector
     // in order.
@@ -4970,7 +4978,12 @@ bool OutputSPIRVTraverser::visitBinary(Visit visit, TIntermBinary *node)
         }
         resultTypeSpec = mNodeData[mNodeData.size() - 2].accessChain.typeSpec;
     }
-    const spirv::IdRef resultTypeId = mBuilder.getTypeData(node->getType(), resultTypeSpec).id;
+    // Workaround bugs in the transformers that don't take operator comma into account; the type of
+    // operator comma can be wrong if the type of RHS is changed (such as when extracting samplers
+    // out of structs).  Fortunately, we don't need the type of the comma node at all.
+    const spirv::IdRef resultTypeId =
+        node->getOp() == EOpComma ? spirv::IdRef{}
+                                  : mBuilder.getTypeData(node->getType(), resultTypeSpec).id;
 
     // For EOpIndex* operations, push the right value as an index to the left value's access chain.
     // For the other operations, evaluate the expression.

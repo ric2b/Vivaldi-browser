@@ -26,6 +26,7 @@
 #import "components/password_manager/core/browser/password_ui_utils.h"
 #import "components/password_manager/core/common/password_manager_features.h"
 #import "components/password_manager/ios/account_select_fill_data.h"
+#import "components/password_manager/ios/features.h"
 #import "components/password_manager/ios/ios_password_manager_driver_factory.h"
 #import "components/password_manager/ios/test_helpers.h"
 #import "ios/web/public/test/fakes/fake_navigation_manager.h"
@@ -835,8 +836,11 @@ TEST_F(PasswordSuggestionHelperTest, RetrieveSuggestions_Empty) {
   ASSERT_EQ(0ul, [suggestions count]);
 }
 
-// Tests getting password fill data when available.
-TEST_F(PasswordSuggestionHelperTest, GetPasswordFillData) {
+// Tests getting password fill data when in stateless mode.
+TEST_F(PasswordSuggestionHelperTest, GetPasswordFillData_WhenStateless) {
+  base::test::ScopedFeatureList scoped_feature_list{
+      password_manager::features::kIOSStatelessFillDataFlow};
+
   FormSuggestionProviderQuery* query =
       BuildQuery(@"username1", kTextFieldType, NSFrameId(main_frame_));
   FormRendererId form1_renderer_id = query.formRendererID;
@@ -845,21 +849,26 @@ TEST_F(PasswordSuggestionHelperTest, GetPasswordFillData) {
 
   PasswordFormFillData form_fill_data = CreatePasswordFillData(
       form1_renderer_id, username1_renderer_id, password1_renderer_id);
+
+  // Process the form for fill data so there is fill data available for that
+  // form.
   [helper_ processWithPasswordFormFillData:form_fill_data
                                 forFrameId:main_frame_->GetFrameId()
                                isMainFrame:main_frame_->IsMainFrame()
                          forSecurityOrigin:main_frame_->GetSecurityOrigin()];
 
-  // Get suggestions first before getting the fill data for the selected
-  // suggestion because this is a mandatory step.
-  NSArray<FormSuggestion*>* suggestions =
-      [helper_ retrieveSuggestionsWithForm:query];
-
-  std::unique_ptr<password_manager::FillData> fill_data =
+  // Retrieves password form fill data for the corresponding `frameId`,
+  // `username`, and contextual information. There is no need to retrieve
+  // suggestions before calling this method when in stateless mode.
+  password_manager::FillDataRetrievalResult result =
       [helper_ passwordFillDataForUsername:SysUTF8ToNSString(kFillDataUsername)
-                                forFrameId:main_frame_->GetFrameId()];
-
-  ASSERT_EQ(1ul, [suggestions count]);
+                   likelyRealPasswordField:true
+                            formIdentifier:form1_renderer_id
+                           fieldIdentifier:password1_renderer_id
+                                   frameId:main_frame_->GetFrameId()];
+  ASSERT_TRUE(result.has_value());
+  const password_manager::FillData* fill_data = result.value().get();
+  ASSERT_TRUE(fill_data);
 
   EXPECT_EQ(GURL(kTestUrl), (*fill_data).origin);
   EXPECT_EQ(form1_renderer_id, (*fill_data).form_id);
@@ -869,6 +878,48 @@ TEST_F(PasswordSuggestionHelperTest, GetPasswordFillData) {
   EXPECT_EQ(password1_renderer_id, (*fill_data).password_element_id);
   EXPECT_EQ(UTF8ToUTF16(std::string("super!secret")),
             (*fill_data).password_value);
+
+  EXPECT_OCMOCK_VERIFY(delegate_);
+}
+
+// Tests getting password fill data when in stateless mode and there is no
+// FillData yet available for the frame.
+TEST_F(PasswordSuggestionHelperTest,
+       GetPasswordFillData_WhenStateless_NoFillDataForFrame) {
+  base::test::ScopedFeatureList scoped_feature_list{
+      password_manager::features::kIOSStatelessFillDataFlow};
+
+  // Retrieves password form fill data while the there isn't any fill data yet
+  // available for the frame.
+  password_manager::FillDataRetrievalResult result =
+      [helper_ passwordFillDataForUsername:SysUTF8ToNSString(kFillDataUsername)
+                   likelyRealPasswordField:true
+                            formIdentifier:autofill::test::MakeFormRendererId()
+                           fieldIdentifier:autofill::test::MakeFieldRendererId()
+                                   frameId:main_frame_->GetFrameId()];
+  EXPECT_FALSE(result.has_value());
+  EXPECT_EQ(password_manager::FillDataRetrievalStatus::kNoFrame,
+            result.error());
+
+  EXPECT_OCMOCK_VERIFY(delegate_);
+}
+
+// Tests getting password fill data when in stateful mode and there is no
+// FillData yet available for the frame.
+TEST_F(PasswordSuggestionHelperTest,
+       GetPasswordFillData_WhenStateful_NoFillDataForFrame) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndDisableFeature(
+      password_manager::features::kIOSStatelessFillDataFlow);
+
+  // Retrieves password form fill data while the there isn't any fill data yet
+  // available for the frame.
+  password_manager::FillDataRetrievalResult result =
+      [helper_ passwordFillDataForUsername:SysUTF8ToNSString(kFillDataUsername)
+                                forFrameId:main_frame_->GetFrameId()];
+  EXPECT_FALSE(result.has_value());
+  EXPECT_EQ(password_manager::FillDataRetrievalStatus::kNoFrame,
+            result.error());
 
   EXPECT_OCMOCK_VERIFY(delegate_);
 }
@@ -910,13 +961,13 @@ TEST_F(PasswordSuggestionHelperTest, ResetForNewPage) {
     // data.
     NSArray<FormSuggestion*>* suggestions =
         [helper_ retrieveSuggestionsWithForm:main_frame_query];
-    std::unique_ptr<password_manager::FillData> fill_data = [helper_
+    password_manager::FillDataRetrievalResult fill_data_result = [helper_
         passwordFillDataForUsername:SysUTF8ToNSString(kFillDataUsername)
                          forFrameId:main_frame_->GetFrameId()];
 
     // Check that there are suggestions for the main frame before the reset.
     ASSERT_EQ(1ul, [suggestions count]);
-    ASSERT_TRUE(fill_data);
+    ASSERT_TRUE(fill_data_result.has_value());
   }
   [helper_ resetForNewPage];
 

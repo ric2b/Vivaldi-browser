@@ -9,6 +9,7 @@
 
 #include <memory>
 #include <optional>
+#include <string_view>
 
 #include "ash/ash_export.h"
 #include "ash/login/ui/auth_factor_model.h"
@@ -118,9 +119,6 @@ class ASH_EXPORT LoginAuthUserView : public NonAccessibleView {
                                   // feature enabled.
     kPinWithToggleAutosubmitOff,  // PIN field with toggle, auto-submit feature
                                   // disabled.
-    // TODO(b/357606198): Separate password and PIN field.
-    kPasswordAndPin,  // Both password and PIN are set, PIN auto-submit feature
-                      // disabled.
   };
 
   // TestApi is used for tests to get internal implementation details.
@@ -144,11 +142,11 @@ class ASH_EXPORT LoginAuthUserView : public NonAccessibleView {
     AuthFactorModel* smart_lock_auth_factor_model() const;
     PinStatusMessageView* pin_status_message_view() const;
     bool HasAuthMethod(AuthMethods auth_method) const;
-    const std::u16string& GetDisabledAuthMessageContent() const;
+    std::u16string_view GetDisabledAuthMessageContent() const;
     void SetFingerprintState(FingerprintState state) const;
     void SetSmartLockState(SmartLockState state) const;
     void ShowDialog();
-    const std::u16string& GetPinStatusMessageContent() const;
+    std::u16string_view GetPinStatusMessageContent() const;
 
    private:
     const raw_ptr<LoginAuthUserView, DanglingUntriaged> view_;
@@ -254,7 +252,7 @@ class ASH_EXPORT LoginAuthUserView : public NonAccessibleView {
   class ChallengeResponseView;
 
   // Called when the user submits an auth method. Runs mojo call.
-  void OnAuthSubmit(const std::u16string& password);
+  void OnAuthSubmit(std::u16string_view password);
   // Called with the result of the request started in |OnAuthSubmit| or
   // |AttemptAuthenticateWithExternalBinary|.
   void OnAuthComplete(bool authenticated_by_pin,

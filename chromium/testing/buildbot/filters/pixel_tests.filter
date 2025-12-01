@@ -11,12 +11,14 @@ AddNewAddressProfileTest.*
 AppInfoDialogBrowserTest.*
 AppMenuBrowserTest*.InvokeUi_*
 AskGoogleForSuggestionsDialogTest.*
-AutofillBubbleSignInPromoInteractiveUITest.*
 BatchUploadDialogViewPixelTest.*
 BookmarkBubbleViewBrowserTest.*
 BookmarkEditorViewBrowserTest.*
+BookmarkEditorViewBrowserTestMoveDialog.*
+BookmarkEditorViewBrowserTestWithAccountBookmarks.*
 BrowserViewScrimPixelTest.*
 BubbleFrameViewBrowserTest.*
+BubbleSignInPromoInteractiveUITest.*
 ChromeLabs*UiTest.*
 ChromeSignoutConfirmationPromptPixelTest.*
 ConfirmBubbleTest.*
@@ -74,6 +76,10 @@ BookmarkAccountStorageMoveDialogPixelTest*
 NewTabPageTest.*
 OfferNotificationBubbleViewPixelBrowserTest.*
 OutdatedUpgradeBubbleTest.*
+PageActionPixelIconsHiddenTest.*
+PageActionPixelShowIconTest.*
+PageActionPixelShowChipTest.*
+PageActionPixelTestShowChipReduced.*
 PageInfoBubbleViewAboutThisSiteDialogBrowserTest.*
 PageInfoBubbleViewDialogBrowserTest.*
 PageInfoBubbleViewPrivacySandboxDialogBrowserTest.*
@@ -105,6 +111,7 @@ PlusAddressCreationDialogWithNoticeTest.ShowNoticeAndCancel
 *PopupViewViewsPlusAddressSuggestionBrowsertest*
 PrivacySandboxDialogViewBrowserTest.*
 PrivacySandboxDialogViewAdsApiUxEnhancementBrowserTest.*
+PrivacySandboxDialogViewAdsApiUxEnhancementsLearnMoreBrowserTest.*
 PrivacySandboxDialogViewPrivacyPolicyBrowserTest.*
 PrivacySandboxDialogViewAdsApiUxEnhancementPrivacyPolicyBrowserTest.*
 PrivacySandboxNoticeBubbleBrowserTest.*

@@ -633,7 +633,7 @@ static BMK_benchOutcome_t BMK_benchMemAdvancedNoAlloc(
                 }
 
                 {
-                    int const ratioAccuracy = (ratio < 10.) ? 3 : 2;
+                    int const ratioDigits = 1 + (ratio < 100.) + (ratio < 10.);
                     assert(cSize < UINT_MAX);
                     OUTPUTLEVEL(
                             2,
@@ -642,7 +642,7 @@ static BMK_benchOutcome_t BMK_benchMemAdvancedNoAlloc(
                             displayName,
                             (unsigned)srcSize,
                             (unsigned)cSize,
-                            ratioAccuracy,
+                            ratioDigits,
                             ratio,
                             benchResult.cSpeed < (10 * MB_UNIT) ? 2 : 1,
                             (double)benchResult.cSpeed / MB_UNIT);
@@ -669,7 +669,7 @@ static BMK_benchOutcome_t BMK_benchMemAdvancedNoAlloc(
                 }
 
                 {
-                    int const ratioAccuracy = (ratio < 10.) ? 3 : 2;
+                    int const ratioDigits = 1 + (ratio < 100.) + (ratio < 10.);
                     OUTPUTLEVEL(
                             2,
                             "%2s-%-17.17s :%10u ->%10u (x%5.*f), %6.*f MB/s, %6.1f MB/s\r",
@@ -677,7 +677,7 @@ static BMK_benchOutcome_t BMK_benchMemAdvancedNoAlloc(
                             displayName,
                             (unsigned)srcSize,
                             (unsigned)cSize,
-                            ratioAccuracy,
+                            ratioDigits,
                             ratio,
                             benchResult.cSpeed < (10 * MB_UNIT) ? 2 : 1,
                             (double)benchResult.cSpeed / MB_UNIT,

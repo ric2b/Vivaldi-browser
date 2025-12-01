@@ -111,17 +111,24 @@ class CONTENT_EXPORT WebAuthenticationDelegate {
       BrowserContext* browser_context,
       const url::Origin& caller_origin);
 
-  // DeletePasskey removes a passkey from the credential storage provider using
-  // the provided credential ID and relying party ID.
-  virtual void DeletePasskey(content::WebContents* web_contents,
-                             const std::vector<uint8_t>& passkey_credential_id,
-                             const std::string& relying_party_id);
+  // PasskeyUnrecognized is called when a relying party notifies Chrome that a
+  // passkey was not recognized. This may remove or hide a passkey from the
+  // storage provider.
+  virtual void PasskeyUnrecognized(
+      content::WebContents* web_contents,
+      const url::Origin& origin,
+      const std::vector<uint8_t>& passkey_credential_id,
+      const std::string& relying_party_id);
 
-  // DeleteUnacceptedPasskeys removes any non-appearing credential in the
+  // SignalAllAcceptedCredentials removes any non-appearing credential in the
   // all_accepted_credentials_ids list from the credential storage provider for
   // the given relying party ID and user ID.
-  virtual void DeleteUnacceptedPasskeys(
+  // If passkey hiding is enabled, non-appearing credentials are hidden instead.
+  // Credentials appearing in the list that have previously been hidden are
+  // restored.
+  virtual void SignalAllAcceptedCredentials(
       content::WebContents* web_contents,
+      const url::Origin& origin,
       const std::string& relying_party_id,
       const std::vector<uint8_t>& user_id,
       const std::vector<std::vector<uint8_t>>& all_accepted_credentials_ids);

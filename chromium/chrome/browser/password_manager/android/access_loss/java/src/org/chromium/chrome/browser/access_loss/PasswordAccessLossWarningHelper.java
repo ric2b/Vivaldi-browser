@@ -8,24 +8,25 @@ import static org.chromium.chrome.browser.access_loss.AccessLossWarningMetricsRe
 import static org.chromium.chrome.browser.access_loss.AccessLossWarningMetricsRecorder.PasswordAccessLossWarningUserAction.HELP_CENTER;
 import static org.chromium.chrome.browser.access_loss.AccessLossWarningMetricsRecorder.PasswordAccessLossWarningUserAction.MAIN_ACTION;
 import static org.chromium.chrome.browser.access_loss.AccessLossWarningMetricsRecorder.logAccessLossWarningSheetUserAction;
-import static org.chromium.chrome.browser.access_loss.HelpUrlLauncher.GOOGLE_PLAY_SUPPORTED_DEVICES_SUPPORT_URL;
-import static org.chromium.chrome.browser.access_loss.HelpUrlLauncher.KEEP_APPS_AND_DEVICES_WORKING_WITH_GMS_CORE_SUPPORT_URL;
 import static org.chromium.chrome.browser.bottom_sheet.SimpleNoticeSheetProperties.ALL_KEYS;
 import static org.chromium.chrome.browser.bottom_sheet.SimpleNoticeSheetProperties.BUTTON_ACTION;
 import static org.chromium.chrome.browser.bottom_sheet.SimpleNoticeSheetProperties.BUTTON_TITLE;
 import static org.chromium.chrome.browser.bottom_sheet.SimpleNoticeSheetProperties.SHEET_TEXT;
 import static org.chromium.chrome.browser.bottom_sheet.SimpleNoticeSheetProperties.SHEET_TITLE;
+import static org.chromium.chrome.browser.password_manager.HelpUrlLauncher.GOOGLE_PLAY_SUPPORTED_DEVICES_SUPPORT_URL;
+import static org.chromium.chrome.browser.password_manager.HelpUrlLauncher.KEEP_APPS_AND_DEVICES_WORKING_WITH_GMS_CORE_SUPPORT_URL;
 
 import android.app.Activity;
 import android.text.SpannableString;
 import android.view.View;
 
-import androidx.annotation.Nullable;
-
 import org.chromium.base.Callback;
+import org.chromium.build.annotations.NullMarked;
+import org.chromium.build.annotations.Nullable;
 import org.chromium.chrome.browser.bottom_sheet.SimpleNoticeSheetCoordinator;
 import org.chromium.chrome.browser.password_manager.CustomTabIntentHelper;
 import org.chromium.chrome.browser.password_manager.GmsUpdateLauncher;
+import org.chromium.chrome.browser.password_manager.HelpUrlLauncher;
 import org.chromium.chrome.browser.password_manager.PasswordExportLauncher;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetController;
@@ -37,6 +38,7 @@ import org.chromium.ui.text.ChromeClickableSpan;
 import org.chromium.ui.text.SpanApplier;
 
 /** Entry-point to the access loss warning UI surface. */
+@NullMarked
 public class PasswordAccessLossWarningHelper {
     final Activity mActivity;
     final BottomSheetController mBottomSheetController;
@@ -71,8 +73,7 @@ public class PasswordAccessLossWarningHelper {
     }
 
     /** Creates the model that has the text and functionality appropriate for the warning type. */
-    @Nullable
-    PropertyModel getModelForWarningType(@PasswordAccessLossWarningType int warningType) {
+    @Nullable PropertyModel getModelForWarningType(@PasswordAccessLossWarningType int warningType) {
         switch (warningType) {
             case PasswordAccessLossWarningType.NO_GMS_CORE:
                 return buildAccessLossWarningNoGms();

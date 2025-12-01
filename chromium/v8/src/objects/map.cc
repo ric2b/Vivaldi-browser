@@ -484,11 +484,11 @@ VisitorId Map::GetVisitorId(Tagged<Map> map) {
 }
 
 // static
-MaybeObjectHandle Map::WrapFieldType(Handle<FieldType> type) {
+MaybeObjectDirectHandle Map::WrapFieldType(DirectHandle<FieldType> type) {
   if (IsClass(*type)) {
-    return MaybeObjectHandle::Weak(FieldType::AsClass(type));
+    return MaybeObjectDirectHandle::Weak(FieldType::AsClass(type));
   }
-  return MaybeObjectHandle(type);
+  return MaybeObjectDirectHandle(type);
 }
 
 // static
@@ -503,7 +503,7 @@ Tagged<FieldType> Map::UnwrapFieldType(Tagged<MaybeObject> wrapped_type) {
 
 MaybeHandle<Map> Map::CopyWithField(Isolate* isolate, DirectHandle<Map> map,
                                     DirectHandle<Name> name,
-                                    Handle<FieldType> type,
+                                    DirectHandle<FieldType> type,
                                     PropertyAttributes attributes,
                                     PropertyConstness constness,
                                     Representation representation,
@@ -550,7 +550,7 @@ MaybeHandle<Map> Map::CopyWithConstant(Isolate* isolate, DirectHandle<Map> map,
 
   Representation representation =
       Object::OptimalRepresentation(*constant, isolate);
-  Handle<FieldType> type =
+  DirectHandle<FieldType> type =
       Object::OptimalType(*constant, isolate, representation);
   return CopyWithField(isolate, map, name, type, attributes,
                        PropertyConstness::kConst, representation, flag);
@@ -836,27 +836,16 @@ Tagged<Map> Map::TryReplayPropertyTransitions(Isolate* isolate,
 }
 
 // static
-template <template <typename> typename HandleType>
-  requires(std::is_convertible_v<HandleType<Map>, DirectHandle<Map>>)
-HandleType<Map> Map::Update(Isolate* isolate, HandleType<Map> map) {
+DirectHandle<Map> Map::Update(Isolate* isolate, DirectHandle<Map> map) {
   if (!map->is_deprecated()) return map;
   if (v8_flags.fast_map_update) {
     Tagged<Map> target_map = SearchMigrationTarget(isolate, *map);
     if (!target_map.is_null()) {
-      return HandleType<Map>(target_map, isolate);
+      return DirectHandle<Map>(target_map, isolate);
     }
   }
-  if constexpr (std::is_convertible_v<HandleType<Map>, Handle<Map>>) {
-    return MapUpdater{isolate, map}.Update();
-  } else {
-    return MapUpdater{isolate, indirect_handle(map, isolate)}.Update();
-  }
+  return MapUpdater{isolate, map}.Update();
 }
-
-template V8_EXPORT_PRIVATE DirectHandle<Map> Map::Update(Isolate* isolate,
-                                                         DirectHandle<Map> map);
-template V8_EXPORT_PRIVATE IndirectHandle<Map> Map::Update(
-    Isolate* isolate, IndirectHandle<Map> map);
 
 void Map::EnsureDescriptorSlack(Isolate* isolate, DirectHandle<Map> map,
                                 int slack) {
@@ -1076,10 +1065,15 @@ bool Map::IsMapInArrayPrototypeChain(Isolate* isolate) const {
   return false;
 }
 
-DirectHandle<Map> Map::TransitionElementsTo(Isolate* isolate, Handle<Map> map,
+DirectHandle<Map> Map::TransitionElementsTo(Isolate* isolate,
+                                            DirectHandle<Map> map,
                                             ElementsKind to_kind) {
   ElementsKind from_kind = map->elements_kind();
   if (from_kind == to_kind) return map;
+
+  // We should never be trying to go backwards in the elements kind manifold.
+  DCHECK_IMPLIES(IsHoleyElementsKind(from_kind),
+                 to_kind != GetPackedElementsKind(from_kind));
 
   Tagged<Context> native_context = isolate->context()->native_context();
   if (from_kind == FAST_SLOPPY_ARGUMENTS_ELEMENTS) {
@@ -1107,13 +1101,6 @@ DirectHandle<Map> Map::TransitionElementsTo(Isolate* isolate, Handle<Map> map,
   }
 
   DCHECK(!IsUndefined(*map, isolate));
-  // Check if we can go back in the elements kind transition chain.
-  if (IsHoleyElementsKind(from_kind) &&
-      to_kind == GetPackedElementsKind(from_kind) &&
-      IsMap(map->GetBackPointer()) &&
-      Cast<Map>(map->GetBackPointer())->elements_kind() == to_kind) {
-    return direct_handle(Cast<Map>(map->GetBackPointer()), isolate);
-  }
 
   bool allow_store_transition = IsTransitionElementsKind(from_kind);
   // Only store fast element maps in ascending generality.
@@ -1882,8 +1869,7 @@ Handle<Map> Map::CopyForPreventExtensions(
     ElementsKind new_kind = IsStringWrapperElementsKind(map->elements_kind())
                                 ? SLOW_STRING_WRAPPER_ELEMENTS
                                 : DICTIONARY_ELEMENTS;
-    if (v8_flags.enable_sealed_frozen_elements_kind &&
-        !old_map_is_dictionary_elements_kind) {
+    if (!old_map_is_dictionary_elements_kind) {
       switch (map->elements_kind()) {
         case PACKED_ELEMENTS:
           if (attrs_to_add == SEALED) {
@@ -1961,10 +1947,11 @@ bool CanHoldValue(Tagged<DescriptorArray> descriptors, InternalIndex descriptor,
   UNREACHABLE();
 }
 
-Handle<Map> UpdateDescriptorForValue(Isolate* isolate, Handle<Map> map,
-                                     InternalIndex descriptor,
-                                     PropertyConstness constness,
-                                     DirectHandle<Object> value) {
+DirectHandle<Map> UpdateDescriptorForValue(Isolate* isolate,
+                                           DirectHandle<Map> map,
+                                           InternalIndex descriptor,
+                                           PropertyConstness constness,
+                                           DirectHandle<Object> value) {
   if (CanHoldValue(map->instance_descriptors(isolate), descriptor, constness,
                    *value)) {
     return map;
@@ -1974,7 +1961,8 @@ Handle<Map> UpdateDescriptorForValue(Isolate* isolate, Handle<Map> map,
       map->instance_descriptors(isolate)->GetDetails(descriptor).attributes();
   Representation representation =
       Object::OptimalRepresentation(*value, isolate);
-  Handle<FieldType> type = Object::OptimalType(*value, isolate, representation);
+  DirectHandle<FieldType> type =
+      Object::OptimalType(*value, isolate, representation);
 
   MapUpdater mu(isolate, map);
   return mu.ReconfigureToDataField(descriptor, attributes, constness,
@@ -1984,10 +1972,11 @@ Handle<Map> UpdateDescriptorForValue(Isolate* isolate, Handle<Map> map,
 }  // namespace
 
 // static
-Handle<Map> Map::PrepareForDataProperty(Isolate* isolate, Handle<Map> map,
-                                        InternalIndex descriptor,
-                                        PropertyConstness constness,
-                                        DirectHandle<Object> value) {
+DirectHandle<Map> Map::PrepareForDataProperty(Isolate* isolate,
+                                              DirectHandle<Map> map,
+                                              InternalIndex descriptor,
+                                              PropertyConstness constness,
+                                              DirectHandle<Object> value) {
   // The map should already be fully updated before storing the property.
   DCHECK(!map->is_deprecated());
   // Dictionaries can store any property value.
@@ -2031,7 +2020,7 @@ DirectHandle<Map> Map::TransitionToDataProperty(
   if (!map->TooManyFastProperties(store_origin)) {
     Representation representation =
         Object::OptimalRepresentation(*value, isolate);
-    Handle<FieldType> type =
+    DirectHandle<FieldType> type =
         Object::OptimalType(*value, isolate, representation);
     maybe_map = Map::CopyWithField(isolate, map, name, type, attributes,
                                    constness, representation, flag);

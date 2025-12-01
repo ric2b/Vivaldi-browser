@@ -16,27 +16,16 @@
 #include "base/functional/bind.h"
 #include "base/logging.h"
 #include "base/run_loop.h"
-#include "base/strings/string_util.h"
 #include "base/task/single_thread_task_runner.h"
 #include "components/account_id/account_id.h"
 #include "components/prefs/pref_service.h"
 #include "components/prefs/testing_pref_service.h"
 #include "components/session_manager/session_manager_types.h"
 #include "components/user_manager/user_type.h"
+#include "google_apis/gaia/gaia_auth_util.h"
 #include "ui/views/widget/widget.h"
 
 namespace ash {
-
-namespace {
-
-// Returns the "canonicalized" email from a given |email| address. Note
-// production code should use gaia::CanonicalizeEmail. This is used in tests
-// without introducing dependency on google_api.
-std::string GetUserIdFromEmail(std::string_view email) {
-  return base::ToLowerASCII(email);
-}
-
-}  // namespace
 
 TestSessionControllerClient::TestSessionControllerClient(
     SessionControllerImpl* controller,
@@ -71,6 +60,8 @@ void TestSessionControllerClient::Reset() {
   session_info_.add_user_session_policy = AddUserSessionPolicy::ALLOWED;
   session_info_.state = session_manager::SessionState::LOGIN_PRIMARY;
   first_session_ready_fired_ = false;
+  // Emulate using the same pref service when re-login.
+  reuse_pref_service_ = true;
 
   controller_->ClearUserSessionsForTest();
   controller_->SetSessionInfo(session_info_);
@@ -111,80 +102,61 @@ void TestSessionControllerClient::SetIsDemoSession() {
   controller_->SetSessionInfo(session_info_);
 }
 
-void TestSessionControllerClient::AddUserSession(
-    std::string_view display_email,
-    user_manager::UserType user_type,
-    std::variant<bool, std::unique_ptr<PrefService>> provide_or_pref_service,
-    bool is_new_profile,
-    const std::string& given_name,
-    bool is_account_managed) {
-  auto account_id = AccountId::FromUserEmail(
-      use_lower_case_user_id_ ? GetUserIdFromEmail(display_email)
-                              : display_email);
-  AddUserSession(account_id, display_email, user_type,
-                 std::move(provide_or_pref_service), is_new_profile, given_name,
-                 is_account_managed);
-}
+AccountId TestSessionControllerClient::AddUserSession(
+    LoginInfo login_info,
+    std::optional<AccountId> opt_account_id,
+    std::unique_ptr<PrefService> pref_service) {
+  CHECK(opt_account_id || login_info.display_email);
 
-void TestSessionControllerClient::AddUserSession(
-    const AccountId& account_id,
-    std::string_view display_email,
-    user_manager::UserType user_type,
-    std::variant<bool, std::unique_ptr<PrefService>> provide_or_pref_service,
-    bool is_new_profile,
-    const std::string& given_name,
-    bool is_account_managed) {
+  std::string_view display_email = login_info.display_email.value_or(
+      opt_account_id ? opt_account_id->GetUserEmail() : std::string_view());
+
+  // value_or can't be used because user_email may be nullopt.
+  AccountId account_id = opt_account_id.value_or(
+      AccountId::FromUserEmail(gaia::CanonicalizeEmail(display_email)));
+
+  // When both `account_id` and `display_email` is specified, the account_id's
+  // user email must be same as cannonicalized display email.
+  CHECK_EQ(account_id.GetUserEmail(), gaia::CanonicalizeEmail(display_email));
+
   // Set is_ephemeral in user_info to true if the user type is guest or public
   // account.
-  bool is_ephemeral = user_type == user_manager::UserType::kGuest ||
-                      user_type == user_manager::UserType::kPublicAccount;
-
-  if (std::holds_alternative<bool>(provide_or_pref_service)) {
-    bool provide = std::get<bool>(provide_or_pref_service);
-    if (!default_provide_pref_service_) {
-      CHECK(GetUserPrefService(account_id));
-    } else if (provide && !controller_->GetUserPrefServiceForUser(account_id)) {
-      ProvidePrefServiceForUser(account_id, /*notify*=*/false);
-    }
-  } else {
-    CHECK(std::holds_alternative<std::unique_ptr<PrefService>>(
-        provide_or_pref_service));
-    auto& pref_service =
-        std::get<std::unique_ptr<PrefService>>(provide_or_pref_service);
-    CHECK(pref_service);
+  bool is_ephemeral =
+      login_info.user_type == user_manager::UserType::kGuest ||
+      login_info.user_type == user_manager::UserType::kPublicAccount ||
+      login_info.is_ephemeral;
+  if (pref_service_must_exist_) {
+    CHECK(!pref_service);
+    CHECK(GetUserPrefService(account_id));
+  } else if (pref_service) {
     CHECK(!controller_->GetUserPrefServiceForUser(account_id));
-
     prefs_provider_->SetUserPrefs(account_id, std::move(pref_service));
+  } else if (!GetUserPrefService(account_id)) {
+    prefs_provider_->SetUserPrefs(
+        account_id, TestPrefServiceProvider::CreateUserPrefServiceSimple());
+  } else {
+    CHECK(reuse_pref_service_);
+    CHECK(GetUserPrefService(account_id));
   }
 
   UserSession session;
   session.session_id = ++fake_session_id_;
-  session.user_info.type = user_type;
+  session.user_info.type = login_info.user_type;
   session.user_info.account_id = account_id;
-  session.user_info.display_name = "Über tray Über tray Über tray Über tray";
+  session.user_info.display_name = "über tray über tray über tray über tray";
   session.user_info.display_email = display_email;
   session.user_info.is_ephemeral = is_ephemeral;
-  session.user_info.is_new_profile = is_new_profile;
-  session.user_info.given_name = given_name;
+  session.user_info.is_new_profile = login_info.is_new_profile;
+  session.user_info.given_name =
+      login_info.given_name.value_or(std::string_view());
   session.user_info.has_gaia_account =
       account_id.GetAccountType() == AccountType::GOOGLE &&
       !account_id.GetGaiaId().empty();
-  session.user_info.is_managed = is_account_managed;
+  session.user_info.is_managed = login_info.is_account_managed;
   controller_->UpdateUserSession(std::move(session));
 
   MaybeNotifyFirstSessionReady();
-}
-
-PrefService* TestSessionControllerClient::ProvidePrefServiceForUser(
-    const AccountId& account_id,
-    bool notify) {
-  CHECK(!controller_->GetUserPrefServiceForUser(account_id));
-
-  prefs_provider_->CreateUserPrefs(account_id);
-  if (notify) {
-    NotifyUserPrefServiceInitialized(account_id);
-  }
-  return GetUserPrefService(account_id);
+  return account_id;
 }
 
 void TestSessionControllerClient::LockScreen() {
@@ -364,13 +336,6 @@ void TestSessionControllerClient::MaybeNotifyFirstSessionReady() {
     first_session_ready_fired_ = true;
     controller_->NotifyFirstSessionReady();
   }
-}
-
-void TestSessionControllerClient::NotifyUserPrefServiceInitialized(
-    const AccountId& account_id) {
-  CHECK(controller_->IsActiveUserSessionStarted());
-  controller_->OnProfilePrefServiceInitialized(
-      account_id, prefs_provider_->GetUserPrefs(account_id));
 }
 
 }  // namespace ash

@@ -36,6 +36,7 @@ limitations under the License.
 #include "xla/service/gpu/model/hlo_op_profile.pb.h"
 #include "xla/service/hlo_module_config.h"
 #include "xla/service/hlo_runner.h"
+#include "xla/service/hlo_runner_interface.h"
 #include "xla/service/hlo_verifier.h"
 #include "xla/shape.h"
 #include "xla/shape_util.h"
@@ -67,7 +68,7 @@ class CuptiKernelTracer : public HloOpProfiler::KernelTracer,
         // Not interested in API callbacks, but empty list enables them all.
         CUPTI_DRIVER_TRACE_CBID_cu64GLMapBufferObject);
     options.activities_selected.push_back(CUPTI_ACTIVITY_KIND_KERNEL);
-    cupti_tracer_->Enable(options, this);
+    cupti_tracer_->Enable(options, this).IgnoreError();
   }
 
   uint64_t getMedianKernelTimeNs() && override {
@@ -179,7 +180,7 @@ absl::StatusOr<absl::Duration> HloOpProfiler::MeasureOpChainDuration(
                                                       /*use_large_range=*/true)
                                         .value();
   const absl::Time t_compile_start = absl::Now();
-  TF_ASSIGN_OR_RETURN(std::unique_ptr<Executable> ex,
+  TF_ASSIGN_OR_RETURN(std::unique_ptr<OpaqueExecutable> ex,
                       runner_.CreateExecutable(std::move(module),
                                                /*run_hlo_passes=*/false));
   if (absl::Now() - t_compile_start > absl::Seconds(10)) {

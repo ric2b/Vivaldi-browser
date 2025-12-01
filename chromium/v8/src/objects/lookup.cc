@@ -372,7 +372,9 @@ void LookupIterator::InternalUpdateProtector(
     }
   } else if (*name == roots.length_string()) {
     if (!Protectors::IsTypedArrayLengthLookupChainIntact(isolate)) return;
-    if (IsJSTypedArrayPrototype(*receiver)) {
+    if (IsJSTypedArray(*receiver) || IsJSTypedArrayPrototype(*receiver) ||
+        isolate->IsInCreationContext(*receiver,
+                                     Context::TYPED_ARRAY_PROTOTYPE_INDEX)) {
       Protectors::InvalidateTypedArrayLengthLookupChain(isolate);
     }
   }
@@ -460,7 +462,7 @@ void LookupIterator::PrepareForDataProperty(DirectHandle<Object> value) {
   auto holder_obj = Cast<JSObject>(holder);
   Handle<Map> old_map(holder->map(isolate_), isolate_);
 
-  Handle<Map> new_map = Map::Update(isolate_, old_map);
+  DirectHandle<Map> new_map = Map::Update(isolate_, old_map);
   if (!new_map->is_dictionary_map()) {  // fast -> fast
     new_map = Map::PrepareForDataProperty(
         isolate(), new_map, descriptor_number(), new_constness, value);
@@ -528,10 +530,10 @@ void LookupIterator::ReconfigureDataProperty(DirectHandle<Object> value,
         holder_obj, elements, number_, value, attributes);
     ReloadPropertyInformation<true>();
   } else if (holder_obj->HasFastProperties(isolate_)) {
-    Handle<Map> old_map(holder_obj->map(isolate_), isolate_);
+    DirectHandle<Map> old_map(holder_obj->map(isolate_), isolate_);
     // Force mutable to avoid changing constant value by reconfiguring
     // kData -> kAccessor -> kData.
-    Handle<Map> new_map = MapUpdater::ReconfigureExistingProperty(
+    DirectHandle<Map> new_map = MapUpdater::ReconfigureExistingProperty(
         isolate_, old_map, descriptor_number(), i::PropertyKind::kData,
         attributes, PropertyConstness::kMutable);
     if (!new_map->is_dictionary_map()) {

@@ -77,8 +77,6 @@ namespace sql {
 
 namespace {
 
-bool enable_mmap_by_default_ = true;
-
 // The name of the main database associated with a sqlite3* connection.
 //
 // SQLite has the ability to ATTACH multiple databases to the same connection.
@@ -93,6 +91,12 @@ static constexpr char kSqliteOpenInMemoryPath[] = ":memory:";
 // up the database.
 // TODO(shess): Better story on this.  http://crbug.com/56559
 const int kBusyTimeoutSeconds = 1;
+
+#if defined(VIVALDI_BUILD)
+constexpr int kPrepareFlags = 0;
+#elif
+constexpr int kPrepareFlags = SQLITE_PREPARE_NO_VTAB;
+#endif
 
 // RAII-style wrapper that enables `writable_schema` until it goes out of scope.
 // No error checking on the PRAGMA statements because it is reasonable to just
@@ -219,6 +223,10 @@ void RecordOpenDatabaseFailureReason(const std::string& histogram_tag,
 }  // namespace
 
 DatabaseOptions::DatabaseOptions() = default;
+DatabaseOptions::DatabaseOptions(const DatabaseOptions&) = default;
+DatabaseOptions::DatabaseOptions(DatabaseOptions&&) = default;
+DatabaseOptions& DatabaseOptions::operator=(const DatabaseOptions&) = default;
+DatabaseOptions& DatabaseOptions::operator=(DatabaseOptions&&) = default;
 DatabaseOptions::~DatabaseOptions() = default;
 
 // static
@@ -351,7 +359,7 @@ Database::Database(Database::Tag tag) : Database(DatabaseOptions{}, tag) {}
 
 Database::Database(DatabaseOptions options, Database::Tag tag)
     : options_(options),
-      mmap_disabled_(!enable_mmap_by_default_),
+      mmap_disabled_(!options.mmap_enabled_),
       histogram_tag_(tag.value),
       tracing_track_name_(base::StrCat({"Database: ", histogram_tag_})) {
   DCHECK_GE(options.page_size_, 512);
@@ -371,11 +379,6 @@ Database::~Database() {
   Close();
 }
 
-// static
-void Database::DisableMmapByDefault() {
-  enable_mmap_by_default_ = false;
-}
-
 bool Database::Open(const base::FilePath& path) {
   std::string path_string = AsUTF8ForSQL(path);
   TRACE_EVENT1("sql", "Database::Open", "path", path_string);
@@ -384,6 +387,12 @@ bool Database::Open(const base::FilePath& path) {
   DCHECK(!path.empty());
   DCHECK_NE(path_string, kSqliteOpenInMemoryPath)
       << "Path conflicts with SQLite magic identifier";
+
+  // Preload the database before opening it to ensure it's working with the
+  // exclusive mode.
+  if (options_.preload_) {
+    PreloadInternal(path);
+  }
 
   {
     ScopedOpenErrorReporter reporter(this,
@@ -510,6 +519,9 @@ void Database::Close() {
 void Database::Preload() {
   TRACE_EVENT0("sql", "Database::Preload");
 
+  // The database should not have been preloaded.
+  CHECK(!options_.preload_);
+
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   if (!db_) {
     DCHECK(poisoned_) << "Cannot preload null db";
@@ -519,18 +531,7 @@ void Database::Preload() {
   CHECK(!options_.exclusive_database_file_lock_)
       << "Cannot preload an exclusively locked database.";
 
-  std::optional<base::ScopedBlockingCall> scoped_blocking_call;
-  InitScopedBlockingCall(FROM_HERE, &scoped_blocking_call);
-
-  // Maximum number of bytes that will be prefetched from the database.
-  //
-  // This limit is very aggressive. The main trade-off involved is that having
-  // SQLite block on reading from disk has a high impact on Chrome startup cost
-  // for the databases that are on the critical path to startup. So, the limit
-  // must exceed the expected sizes of databases on the critical path.
-  constexpr int kPreReadSize = 128 * 1024 * 1024;  // 128 MB
-  base::PreReadFile(DbPath(), /*is_executable=*/false, /*sequential=*/false,
-                    kPreReadSize);
+  PreloadInternal(DbPath());
 }
 
 // SQLite keeps unused pages associated with a database in a cache.  It asks
@@ -997,10 +998,6 @@ size_t Database::ComputeMmapSizeForOpen() {
   return mmap_ofs;
 }
 
-int Database::SqlitePrepareFlags() const {
-  return enable_virtual_tables_ ? 0 : SQLITE_PREPARE_NO_VTAB;
-}
-
 sqlite3_file* Database::GetSqliteVfsFile() {
   CHECK(db_) << "Database not opened";
 
@@ -1453,7 +1450,7 @@ SqliteResultCode Database::ExecuteAndReturnResultCode(
     sqlite3_stmt* sqlite_statement;
     const char* leftover_sql;
     sqlite_result_code = ToSqliteResultCode(
-        sqlite3_prepare_v3(db_, sql, /* nByte= */ -1, SqlitePrepareFlags(),
+        sqlite3_prepare_v3(db_, sql, /* nByte= */ -1, kPrepareFlags,
                            &sqlite_statement, &leftover_sql));
 
 #if DCHECK_IS_ON()
@@ -1575,7 +1572,7 @@ bool Database::ExecuteScriptForTesting(base::cstring_view sql_script) {
   while (*sql) {
     sqlite3_stmt* sqlite_statement;
     auto sqlite_result_code = ToSqliteResultCode(sqlite3_prepare_v3(
-        db_, sql, /*nByte=*/-1, SqlitePrepareFlags(), &sqlite_statement, &sql));
+        db_, sql, /*nByte=*/-1, kPrepareFlags, &sqlite_statement, &sql));
     if (sqlite_result_code != SqliteResultCode::kOk) {
       return false;
     }
@@ -1665,7 +1662,7 @@ scoped_refptr<Database::StatementRef> Database::GetStatementImpl(
   //               prepared with prepFlags set to SQLITE_PREPARE_PERSISTENT.
   sqlite3_stmt* sqlite_statement;
   auto sqlite_result_code = ToSqliteResultCode(sqlite3_prepare_v3(
-      db_, sql.c_str(), /* nByte= */ -1, SqlitePrepareFlags(),
+      db_, sql.c_str(), /* nByte= */ -1, kPrepareFlags,
       &sqlite_statement, unused_sql_ptr));
 
 #if DCHECK_IS_ON()
@@ -1723,13 +1720,13 @@ std::string Database::GetSchema() {
 
   std::string schema;
   while (statement.Step()) {
-    schema += statement.ColumnString(0);
+    schema += statement.ColumnStringView(0);
     schema += '|';
-    schema += statement.ColumnString(1);
+    schema += statement.ColumnStringView(1);
     schema += '|';
-    schema += statement.ColumnString(2);
+    schema += statement.ColumnStringView(2);
     schema += '|';
-    schema += statement.ColumnString(3);
+    schema += statement.ColumnStringView(3);
     schema += '\n';
   }
 
@@ -1755,7 +1752,7 @@ bool Database::IsSQLValid(base::cstring_view sql) {
 
   sqlite3_stmt* sqlite_statement = nullptr;
   auto sqlite_result_code = ToSqliteResultCode(sqlite3_prepare_v3(
-      db_, sql.c_str(), /* nByte= */ -1, SqlitePrepareFlags(),
+      db_, sql.c_str(), /* nByte= */ -1, kPrepareFlags,
       &sqlite_statement, unused_sql_ptr));
   if (sqlite_result_code != SqliteResultCode::kOk) {
     return false;
@@ -2274,6 +2271,29 @@ bool Database::OpenInternal(const std::string& db_file_path) {
   return true;
 }
 
+void Database::PreloadInternal(const base::FilePath& path) {
+  TRACE_EVENT0("sql", "Database::PreloadInternal");
+
+  // TODO(crbug.com/40904059): Consider moving this to a DCHECK after fixing
+  // or migrating callsites that call Preload(...) on in-memory databases.
+  if (!in_memory_) {
+    return;
+  }
+
+  base::ScopedBlockingCall scoped_blocking_call(FROM_HERE,
+                                                base::BlockingType::MAY_BLOCK);
+
+  // Maximum number of bytes that will be prefetched from the database.
+  //
+  // This limit is very aggressive. The main trade-off involved is that having
+  // SQLite block on reading from disk has a high impact on Chrome startup cost
+  // for the databases that are on the critical path to startup. So, the limit
+  // must exceed the expected sizes of databases on the critical path.
+  static constexpr int kPreReadSize = 128 * 1024 * 1024;  // 128 MB
+  base::PreReadFile(path, /*is_executable=*/false, /*sequential=*/false,
+                    kPreReadSize);
+}
+
 void Database::ConfigureSqliteDatabaseObject() {
   // The use of SQLite's non-standard string quoting is not allowed in Chrome.
   //
@@ -2293,14 +2313,10 @@ void Database::ConfigureSqliteDatabaseObject() {
   DCHECK_EQ(sqlite_result_code, SqliteResultCode::kOk)
       << "sqlite3_db_config(SQLITE_DBCONFIG_ENABLE_FKEY) should not fail";
 
-#if defined(VIVALDI_BUILD)
-  // Vivaldi. Needed for FTS5 mail search
-  // VB-108600 / https://issues.chromium.org/issues/340805983
-  enable_virtual_tables_ = true;
-#else
   // The use of triggers is discouraged for Chrome code. Thanks to this
   // configuration change, triggers are not executed. CREATE TRIGGER and DROP
   // TRIGGER still succeed.
+#if !defined(VIVALDI_BUILD)
   sqlite_result_code = ToSqliteResultCode(
       sqlite3_db_config(db_, SQLITE_DBCONFIG_ENABLE_TRIGGER, 0, nullptr));
   DCHECK_EQ(sqlite_result_code, SqliteResultCode::kOk)
@@ -2474,7 +2490,7 @@ bool Database::FullIntegrityCheck(std::vector<std::string>* messages) {
   constexpr char kIntegrityCheckSql[] = "PRAGMA integrity_check";
   const auto prepare_result_code = ToSqliteResultCode(
       sqlite3_prepare_v3(db_, kIntegrityCheckSql, sizeof(kIntegrityCheckSql),
-                         SqlitePrepareFlags(), &statement, /*pzTail=*/nullptr));
+                         kPrepareFlags, &statement, /*pzTail=*/nullptr));
   if (prepare_result_code != SqliteResultCode::kOk) {
     return false;
   }

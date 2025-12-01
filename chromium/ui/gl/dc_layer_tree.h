@@ -183,7 +183,7 @@ class GL_EXPORT DCLayerTree {
   // Present overlay layers, and perform a direct composition commit if
   // necessary. Returns true if presentation and commit succeeded.
   base::expected<void, CommitError> CommitAndClearPendingOverlays(
-      std::vector<std::unique_ptr<DCLayerOverlayParams>> overlays);
+      std::vector<DCLayerOverlayParams> overlays);
 
   // Called by SwapChainPresenter to initialize video processor that can handle
   // at least given input and output size.  The video processor is shared across
@@ -249,8 +249,6 @@ class GL_EXPORT DCLayerTree {
   bool GetAttachedToRootFromPreviousFrameForTesting(size_t index) const;
 #endif  // DCHECK_IS_ON()
 
-  void SetFrameRate(float frame_rate);
-
   const std::unique_ptr<HDRMetadataHelperWin>& GetHDRMetadataHelper() {
     return hdr_metadata_helper_;
   }
@@ -284,7 +282,7 @@ class GL_EXPORT DCLayerTree {
     // Given overlays, builds or updates this visual tree.
     // Returns true if commit succeeded.
     base::expected<void, CommitError> BuildTree(
-        const std::vector<std::unique_ptr<DCLayerOverlayParams>>& overlays);
+        const std::vector<DCLayerOverlayParams>& overlays);
 
     void GetSwapChainVisualInfoForTesting(size_t index,
                                           gfx::Transform* transform,
@@ -473,7 +471,7 @@ class GL_EXPORT DCLayerTree {
     //    previous frame subtree is matched to.
     // Returns populated visual subtree map.
     VisualSubtreeMap BuildMapAndAssignMatchingSubtrees(
-        const std::vector<std::unique_ptr<DCLayerOverlayParams>>& overlays,
+        const std::vector<DCLayerOverlayParams>& overlays,
         std::vector<std::unique_ptr<VisualSubtree>>& visual_subtrees,
         std::vector<std::optional<size_t>>& overlay_index_to_reused_subtree,
         std::vector<std::optional<size_t>>& subtree_index_to_overlay);
@@ -560,9 +558,6 @@ class GL_EXPORT DCLayerTree {
   // A tree that owns all DCOMP visuals for overlays along with attributes
   // required to build DCOMP tree. It's updated for each frame.
   std::unique_ptr<VisualTree> visual_tree_;
-
-  // Number of frames per second.
-  float frame_rate_ = 0.f;
 
   // dealing with hdr metadata
   std::unique_ptr<HDRMetadataHelperWin> hdr_metadata_helper_;

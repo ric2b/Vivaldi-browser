@@ -6,6 +6,7 @@
 
 #import "base/memory/raw_ptr.h"
 #import "base/strings/sys_string_conversions.h"
+#import "components/autofill/core/browser/country_type.h"
 #import "components/autofill/core/browser/data_manager/addresses/address_data_manager.h"
 #import "components/autofill/core/browser/data_manager/personal_data_manager.h"
 #import "components/autofill/core/browser/geo/alternative_state_name_map_updater.h"
@@ -13,6 +14,7 @@
 #import "components/autofill/core/browser/test_utils/autofill_test_utils.h"
 #import "components/autofill/core/browser/ui/country_combobox_model.h"
 #import "components/autofill/core/common/autofill_features.h"
+#import "components/variations/service/variations_service.h"
 #import "ios/chrome/browser/autofill/model/personal_data_manager_factory.h"
 #import "ios/chrome/browser/autofill/ui_bundled/address_editor/autofill_profile_edit_consumer.h"
 #import "ios/chrome/browser/autofill/ui_bundled/address_editor/autofill_profile_edit_mediator_delegate.h"
@@ -114,12 +116,13 @@ class AutofillProfileEditMediatorTest : public PlatformTest {
     fake_consumer_ = [[FakeAutofillProfileEditConsumer alloc] init];
   }
 
-  void InitializeMediator(bool is_migration_prompt) {
+  void InitializeMediator(bool is_migration_prompt, bool add_manual_address) {
     autofill_profile_edit_mediator_ = [[AutofillProfileEditMediator alloc]
            initWithDelegate:fake_autofill_profile_edit_mediator_delegate_
         personalDataManager:personal_data_manager_
             autofillProfile:profile_.get()
-          isMigrationPrompt:is_migration_prompt];
+          isMigrationPrompt:is_migration_prompt
+           addManualAddress:add_manual_address];
     autofill_profile_edit_mediator_.consumer = fake_consumer_;
   }
 
@@ -128,8 +131,12 @@ class AutofillProfileEditMediatorTest : public PlatformTest {
   }
 
   const autofill::CountryComboboxModel::CountryVector& CountriesList() {
+    const variations::VariationsService* variations_service =
+        GetApplicationContext()->GetVariationsService();
     country_model_.SetCountries(
-        personal_data_manager()->address_data_manager(),
+        GeoIpCountryCode(variations_service
+                             ? variations_service->GetLatestCountry()
+                             : std::string()),
         base::RepeatingCallback<bool(const std::string&)>(),
         GetApplicationContext()->GetApplicationLocale());
     return country_model_.countries();
@@ -156,7 +163,7 @@ class AutofillProfileEditMediatorTest : public PlatformTest {
 // Tests that the consumer is initialised and informed of the required fields on
 // initialisation.
 TEST_F(AutofillProfileEditMediatorTest, TestRequiredFieldsOnInitialisation) {
-  InitializeMediator(NO);
+  InitializeMediator(NO, NO);
   EXPECT_FALSE([autofill_profile_edit_mediator_
         fieldContainsValidValue:@"ADDRESS_HOME_LINE1"
                   hasEmptyValue:YES
@@ -178,7 +185,7 @@ TEST_F(AutofillProfileEditMediatorTest, TestRequiredFieldsOnInitialisation) {
 // Tests that the consumer is informed of the required fields on country
 // selection.
 TEST_F(AutofillProfileEditMediatorTest, TestRequiredFieldsOnCountrySelection) {
-  InitializeMediator(NO);
+  InitializeMediator(NO, NO);
   ASSERT_EQ(
       [autofill_profile_edit_mediator_ requiredFieldsWithEmptyValuesCount], 0);
   CountryItem* countryItem = [[CountryItem alloc] initWithType:ItemTypeCountry];
@@ -209,7 +216,7 @@ TEST_F(AutofillProfileEditMediatorTest, TestRequiredFieldsOnCountrySelection) {
 // Tests that the country list used for selecting countries is correctly
 // initialized.
 TEST_F(AutofillProfileEditMediatorTest, TestCountriesList) {
-  InitializeMediator(NO);
+  InitializeMediator(NO, NO);
   [autofill_profile_edit_mediator_
       willSelectCountryWithCurrentlySelectedCountry:@"US"];
   size_t countryCount =
@@ -238,7 +245,7 @@ TEST_F(AutofillProfileEditMediatorTest, TestCountriesList) {
 // sanctioned countries for the migration prompt.
 TEST_F(AutofillProfileEditMediatorTest,
        TestCountriesListExcludesSanctionedOnes) {
-  InitializeMediator(YES);
+  InitializeMediator(YES, NO);
   [autofill_profile_edit_mediator_
       willSelectCountryWithCurrentlySelectedCountry:@"US"];
   size_t countryCount =
@@ -253,6 +260,58 @@ TEST_F(AutofillProfileEditMediatorTest,
              ->address_data_manager()
              .IsCountryEligibleForAccountStorage(
                  countriesVector[i]->country_code())) {
+      continue;
+    }
+
+    EXPECT_EQ(
+        base::SysNSStringToUTF8(fake_autofill_profile_edit_mediator_delegate_
+                                    .allCountries[country_counter_in_mediator]
+                                    .countryCode),
+        countriesVector[i]->country_code());
+    country_counter_in_mediator++;
+  }
+
+  EXPECT_EQ(country_counter_in_mediator + 1, countryCount);
+}
+
+// Tests that the consumer is initialised and informed of the required fields on
+// initialisation while saving an address manually.
+// TODO(crbug.com/407748243): Use parameterized tests.
+TEST_F(AutofillProfileEditMediatorTest,
+       TestRequiredFieldsOnInitialisationManualAddress) {
+  InitializeMediator(NO, YES);
+  EXPECT_FALSE([autofill_profile_edit_mediator_
+        fieldContainsValidValue:@"ADDRESS_HOME_LINE1"
+                  hasEmptyValue:YES
+      moveToAccountFromSettings:NO]);
+  EXPECT_FALSE([autofill_profile_edit_mediator_
+        fieldContainsValidValue:@"ADDRESS_HOME_CITY"
+                  hasEmptyValue:YES
+      moveToAccountFromSettings:NO]);
+  EXPECT_FALSE([autofill_profile_edit_mediator_
+        fieldContainsValidValue:@"ADDRESS_HOME_STATE"
+                  hasEmptyValue:YES
+      moveToAccountFromSettings:NO]);
+  EXPECT_FALSE([autofill_profile_edit_mediator_
+        fieldContainsValidValue:@"ADDRESS_HOME_ZIP"
+                  hasEmptyValue:YES
+      moveToAccountFromSettings:NO]);
+}
+
+// Tests that the country list used for selecting countries is correctly
+// initialized.
+TEST_F(AutofillProfileEditMediatorTest, TestCountriesListManualAddress) {
+  InitializeMediator(NO, YES);
+  [autofill_profile_edit_mediator_
+      willSelectCountryWithCurrentlySelectedCountry:@"US"];
+  size_t countryCount =
+      [fake_autofill_profile_edit_mediator_delegate_.allCountries count];
+
+  const autofill::CountryComboboxModel::CountryVector& countriesVector =
+      CountriesList();
+  size_t country_counter_in_mediator = 0;
+  for (size_t i = 1; i < countriesVector.size() - 1; i++) {
+    if (!countriesVector[i].get()) {
       continue;
     }
 

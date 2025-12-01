@@ -17,9 +17,12 @@ import androidx.annotation.Nullable;
 import androidx.annotation.StyleRes;
 import androidx.core.content.ContextCompat;
 
+import com.google.android.material.color.MaterialColors;
+
 import org.chromium.components.browser_ui.styles.SemanticColorUtils;
 import org.chromium.ui.util.ColorUtils;
 import org.chromium.ui.util.ValueUtils;
+import org.chromium.ui.util.XrUtils;
 
 // Vivaldi
 import org.chromium.build.BuildConfig;
@@ -27,6 +30,7 @@ import org.chromium.components.browser_ui.styles.ChromeColors;
 
 /** Util class to handle various color operations shared between hub classes. */
 public final class HubColors {
+    private static final String TAG = "HubColors";
     private static final int[][] SELECTED_AND_NORMAL_STATES =
             new int[][] {new int[] {android.R.attr.state_selected}, new int[] {}};
     private static final int[][] DISABLED_AND_NORMAL_STATES =
@@ -42,6 +46,9 @@ public final class HubColors {
     /** Returns the background color generic surfaces should use per the given color scheme. */
     public static @ColorInt int getBackgroundColor(
             Context context, @HubColorScheme int colorScheme) {
+        // On an XRDevice in FSM the background color of the Hub view is set to transparent always.
+        if (XrUtils.getInstance().isFsmOnXrDevice()) return Color.TRANSPARENT;
+
         switch (colorScheme) {
             case HubColorScheme.DEFAULT:
                 return SemanticColorUtils.getDefaultBgColor(context);
@@ -220,9 +227,9 @@ public final class HubColors {
             Context context, @HubColorScheme int colorScheme) {
         switch (colorScheme) {
             case HubColorScheme.DEFAULT:
-                return SemanticColorUtils.getDefaultTextColor(context);
+                return MaterialColors.getColor(context, R.attr.colorOnSurfaceVariant, TAG);
             case HubColorScheme.INCOGNITO:
-                return ContextCompat.getColor(context, R.color.baseline_neutral_60);
+                return context.getColor(R.color.default_text_color_secondary_light);
             default:
                 assert false;
                 return Color.TRANSPARENT;

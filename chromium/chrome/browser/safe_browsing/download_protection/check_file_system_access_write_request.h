@@ -15,7 +15,9 @@
 #include "build/build_config.h"
 #include "chrome/browser/safe_browsing/download_protection/check_client_download_request_base.h"
 #include "chrome/browser/safe_browsing/download_protection/download_protection_util.h"
+#include "chrome/browser/safe_browsing/download_protection/file_system_access_metadata.h"
 #include "components/download/public/common/download_item.h"
+#include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/file_system_access_write_item.h"
 #include "url/gurl.h"
@@ -53,10 +55,12 @@ class CheckFileSystemAccessWriteRequest
       const std::string& token,
       const ClientDownloadResponse::Verdict& verdict,
       const ClientDownloadResponse::TailoredVerdict& tailored_verdict) override;
+#if !BUILDFLAG(IS_ANDROID)
   void MaybeBeginFeedbackForDownload(DownloadCheckResult result,
                                      bool upload_requested,
                                      const std::string& request_data,
                                      const std::string& response_body) override;
+#endif
   std::optional<enterprise_connectors::AnalysisSettings> ShouldUploadBinary(
       DownloadCheckResultReason reason) override;
   void UploadBinary(DownloadCheckResult result,
@@ -73,8 +77,15 @@ class CheckFileSystemAccessWriteRequest
   bool IsAllowlistedByPolicy() const override;
   void LogDeepScanningPrompt(bool did_prompt) const override;
 
-  const std::unique_ptr<content::FileSystemAccessWriteItem> item_;
   std::unique_ptr<ReferrerChainData> referrer_chain_data_;
+
+  // Provides abstraction layer over `FileSystemAccessWriteItem` for safe
+  // browsing deep scanning operations.
+  std::unique_ptr<FileSystemAccessMetadata> metadata_;
+
+  // Weak pointer to the metadata, used to access it after ownership has been
+  // transferred during deep scanning.
+  base::WeakPtr<FileSystemAccessMetadata> weak_metadata_;
 
   base::WeakPtrFactory<CheckFileSystemAccessWriteRequest> weakptr_factory_{
       this};

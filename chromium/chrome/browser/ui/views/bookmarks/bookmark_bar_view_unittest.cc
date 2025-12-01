@@ -16,13 +16,15 @@
 #include "base/uuid.h"
 #include "base/values.h"
 #include "build/build_config.h"
+#include "chrome/browser/bookmarks/bookmark_merged_surface_service.h"
 #include "chrome/browser/bookmarks/bookmark_merged_surface_service_factory.h"
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
+#include "chrome/browser/bookmarks/bookmark_test_helpers.h"
 #include "chrome/browser/bookmarks/managed_bookmark_service_factory.h"
 #include "chrome/browser/favicon/favicon_utils.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/search_engine_choice/search_engine_choice_service_factory.h"
 #include "chrome/browser/search_engines/template_url_service_factory.h"
+#include "chrome/browser/search_engines/template_url_service_test_util.h"
 #include "chrome/browser/ui/bookmarks/bookmark_utils.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/ui_features.h"
@@ -39,10 +41,9 @@
 #include "components/bookmarks/common/bookmark_pref_names.h"
 #include "components/bookmarks/test/bookmark_test_helpers.h"
 #include "components/prefs/pref_service.h"
-#include "components/search_engines/search_engine_choice/search_engine_choice_service.h"
-#include "components/search_engines/search_terms_data.h"
 #include "components/search_engines/template_url_service.h"
 #include "components/search_engines/template_url_service_client.h"
+#include "components/signin/public/base/signin_switches.h"
 #include "components/sync_preferences/testing_pref_service_syncable.h"
 #include "ui/base/dragdrop/drag_drop_types.h"
 #include "ui/base/dragdrop/mojom/drag_drop_types.mojom.h"
@@ -67,12 +68,8 @@ class BookmarkBarViewBaseTest : public ChromeViewsTestBase {
   BookmarkBarViewBaseTest() {
     TestingProfile::Builder profile_builder;
     profile_builder.AddTestingFactory(
-        search_engines::SearchEngineChoiceServiceFactory::GetInstance(),
-        search_engines::SearchEngineChoiceServiceFactory::GetDefaultFactory());
-    profile_builder.AddTestingFactory(
         TemplateURLServiceFactory::GetInstance(),
-        base::BindRepeating(
-            &BookmarkBarViewBaseTest::CreateTemplateURLService));
+        TemplateURLServiceTestUtil::GetTemplateURLServiceTestingFactory());
     profile_builder.AddTestingFactory(
         BookmarkModelFactory::GetInstance(),
         BookmarkModelFactory::GetDefaultFactory());
@@ -83,6 +80,9 @@ class BookmarkBarViewBaseTest : public ChromeViewsTestBase {
         BookmarkMergedSurfaceServiceFactory::GetInstance(),
         BookmarkMergedSurfaceServiceFactory::GetDefaultFactory());
     profile_ = profile_builder.Build();
+
+    BookmarkMergedSurfaceServiceFactory::GetForProfile(profile_.get())
+        ->LoadForTesting({});
 
     Browser::CreateParams params(profile(), true);
     params.window = &browser_window_;
@@ -149,6 +149,10 @@ class BookmarkBarViewBaseTest : public ChromeViewsTestBase {
     return BookmarkModelFactory::GetForBrowserContext(profile());
   }
 
+  BookmarkMergedSurfaceService* service() {
+    return BookmarkMergedSurfaceServiceFactory::GetForProfile(profile());
+  }
+
   void WaitForBookmarkModelToLoad() {
     bookmarks::test::WaitForBookmarkModelToLoad(model());
   }
@@ -158,6 +162,13 @@ class BookmarkBarViewBaseTest : public ChromeViewsTestBase {
   void AddNodesToBookmarkBarFromModelString(const std::string& string) {
     bookmarks::test::AddNodesFromModelString(
         model(), model()->bookmark_bar_node(), string);
+    views::test::RunScheduledLayout(bookmark_bar_view());
+  }
+
+  void AddNodesToAccountBookmarkBarFromModelString(const std::string& string) {
+    CHECK(model()->account_bookmark_bar_node());
+    bookmarks::test::AddNodesFromModelString(
+        model(), model()->account_bookmark_bar_node(), string);
     views::test::RunScheduledLayout(bookmark_bar_view());
   }
 
@@ -178,20 +189,6 @@ class BookmarkBarViewBaseTest : public ChromeViewsTestBase {
   TestBrowserWindow browser_window_;
   std::unique_ptr<Browser> browser_;
   std::unique_ptr<BookmarkBarViewTestHelper> test_helper_;
-
- private:
-  static std::unique_ptr<KeyedService> CreateTemplateURLService(
-      content::BrowserContext* context) {
-    Profile* profile = Profile::FromBrowserContext(context);
-    search_engines::SearchEngineChoiceService* search_engine_choice_service =
-        search_engines::SearchEngineChoiceServiceFactory::GetForProfile(
-            profile);
-    return std::make_unique<TemplateURLService>(
-        *profile->GetPrefs(), *search_engine_choice_service,
-        std::make_unique<SearchTermsData>(),
-        nullptr /* KeywordWebDataService */,
-        nullptr /* TemplateURLServiceClient */, base::RepeatingClosure());
-  }
 };
 
 class BookmarkBarViewTest : public BookmarkBarViewBaseTest {
@@ -219,6 +216,8 @@ class BookmarkBarViewTest : public BookmarkBarViewBaseTest {
   }
 
  private:
+  base::test::ScopedFeatureList features_{
+      switches::kSyncEnableBookmarksInTransportMode};
   std::unique_ptr<BookmarkBarView> bookmark_bar_view_;
 };
 
@@ -400,6 +399,69 @@ TEST_F(BookmarkBarViewTest, RemoveNode) {
                   bookmarks::metrics::BookmarkEditSource::kOther, FROM_HERE);
   views::test::RunScheduledLayout(bookmark_bar_view());
   ASSERT_EQ("c", GetStringForVisibleButtons());
+
+  model()->CreateAccountPermanentFolders();
+  AddNodesToAccountBookmarkBarFromModelString("1 2 3 ");
+
+  model()->Remove(model()->account_bookmark_bar_node()->children()[1].get(),
+                  bookmarks::metrics::BookmarkEditSource::kOther, FROM_HERE);
+  views::test::RunScheduledLayout(bookmark_bar_view());
+  EXPECT_EQ("1", GetStringForVisibleButtons());
+
+  // Remove first node, should force a new button (for the '3' node).
+  model()->Remove(model()->account_bookmark_bar_node()->children()[0].get(),
+                  bookmarks::metrics::BookmarkEditSource::kOther, FROM_HERE);
+  views::test::RunScheduledLayout(bookmark_bar_view());
+  ASSERT_EQ("3", GetStringForVisibleButtons());
+}
+
+TEST_F(BookmarkBarViewTest, RemoveAccountNodes) {
+  model()->CreateAccountPermanentFolders();
+  AddNodesToBookmarkBarFromModelString("a b c d e f ");
+  AddNodesToAccountBookmarkBarFromModelString("A1 A2 A3 A4 ");
+  EXPECT_EQ(0u, test_helper_->GetBookmarkButtonCount());
+  SizeUntilButtonsVisible(10);
+  EXPECT_EQ(10u, test_helper_->GetBookmarkButtonCount());
+  EXPECT_EQ("A1 A2 A3 A4 a b c d e f", GetStringForVisibleButtons());
+
+  // Remove the account nodes, local nodes should still be visible.
+  model()->RemoveAccountPermanentFolders();
+  views::test::RunScheduledLayout(bookmark_bar_view());
+  EXPECT_EQ("a b c d e f", GetStringForVisibleButtons());
+}
+
+TEST_F(BookmarkBarViewTest, RemoveAccountNodesCustomOrder) {
+  model()->CreateAccountPermanentFolders();
+  AddNodesToBookmarkBarFromModelString("a b c d e f ");
+  AddNodesToAccountBookmarkBarFromModelString("A1 A2 A3 A4 ");
+  EXPECT_EQ(0u, test_helper_->GetBookmarkButtonCount());
+  SizeUntilButtonsVisible(10);
+  EXPECT_EQ("A1 A2 A3 A4 a b c d e f", GetStringForVisibleButtons());
+
+  service()->Move(model()->account_bookmark_bar_node()->children()[1].get(),
+                  BookmarkParentFolder::BookmarkBarFolder(), 10u,
+                  /*browser=*/nullptr);
+  views::test::RunScheduledLayout(bookmark_bar_view());
+  EXPECT_EQ("A1 A3 A4 a b c d e f A2", GetStringForVisibleButtons());
+
+  // Remove the account nodes, local nodes should still be visible.
+  model()->RemoveAccountPermanentFolders();
+  views::test::RunScheduledLayout(bookmark_bar_view());
+  EXPECT_EQ("a b c d e f", GetStringForVisibleButtons());
+}
+
+TEST_F(BookmarkBarViewTest, RemoveAccountNodesNotAllAccountNodesVisible) {
+  model()->CreateAccountPermanentFolders();
+  AddNodesToBookmarkBarFromModelString("a b c d e f ");
+  AddNodesToAccountBookmarkBarFromModelString("1 2 3 4 ");
+  EXPECT_EQ(0u, test_helper_->GetBookmarkButtonCount());
+  SizeUntilButtonsVisible(2);
+  EXPECT_EQ("1 2", GetStringForVisibleButtons());
+
+  // Remove the account nodes, local nodes should still be visible.
+  model()->RemoveAccountPermanentFolders();
+  views::test::RunScheduledLayout(bookmark_bar_view());
+  EXPECT_EQ("a b", GetStringForVisibleButtons());
 }
 
 // Assertions for moving a node on the bookmark bar.

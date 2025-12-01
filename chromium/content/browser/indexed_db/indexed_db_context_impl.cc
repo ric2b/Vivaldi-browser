@@ -247,8 +247,7 @@ IndexedDBContextImpl::IndexedDBContextImpl(
       quota_client_remote.InitWithNewPipeAndPassReceiver();
   quota_manager_proxy_->RegisterClient(
       std::move(quota_client_remote),
-      storage::QuotaClientType::kIndexedDatabase,
-      {blink::mojom::StorageType::kTemporary});
+      storage::QuotaClientType::kIndexedDatabase);
   IDBTaskRunner()->PostTask(
       FROM_HERE, base::BindOnce(&IndexedDBContextImpl::BindPipesOnIDBSequence,
                                 weak_factory_.GetWeakPtr(),
@@ -801,8 +800,8 @@ void IndexedDBContextImpl::ShutdownOnIDBSequence(base::TimeTicks start_time) {
     if (!delete_bucket && bucket_locator.storage_key.IsThirdPartyContext()) {
       delete_bucket = std::ranges::any_of(
           origins_to_purge_on_shutdown_, [&](const url::Origin& origin) {
-            return net::SchemefulSite(origin) ==
-                   bucket_locator.storage_key.top_level_site();
+            return bucket_locator.storage_key.top_level_site().IsSameSiteWith(
+                origin);
           });
     }
 
@@ -1181,10 +1180,8 @@ void IndexedDBContextImpl::GetBucketUsage(const BucketLocator& bucket,
   }
 }
 
-void IndexedDBContextImpl::GetStorageKeysForType(
-    blink::mojom::StorageType type,
-    GetStorageKeysForTypeCallback callback) {
-  DCHECK_EQ(type, blink::mojom::StorageType::kTemporary);
+void IndexedDBContextImpl::GetDefaultStorageKeys(
+    GetDefaultStorageKeysCallback callback) {
   std::vector<StorageKey> storage_keys;
   storage_keys.reserve(bucket_set_.size());
   for (const BucketLocator& bucket_locator : bucket_set_) {
@@ -1194,9 +1191,7 @@ void IndexedDBContextImpl::GetStorageKeysForType(
 }
 
 void IndexedDBContextImpl::PerformStorageCleanup(
-    blink::mojom::StorageType type,
     PerformStorageCleanupCallback callback) {
-  DCHECK_EQ(type, blink::mojom::StorageType::kTemporary);
   std::move(callback).Run();
 }
 

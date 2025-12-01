@@ -10,11 +10,13 @@
 
 namespace adblock_filter {
 // Used in tests
-std::string CompileIosRulesToString(const ParseResult& parse_result,
+std::string CompileIosRulesToString(bool allow_strict_blocking,
+                                    const ParseResult& parse_result,
                                     const RuleSourceSettings& source_settings,
                                     bool pretty_print);
 
-bool CompileIosRules(const ParseResult& parse_result,
+bool CompileIosRules(bool allow_strict_blocking,
+                     const ParseResult& parse_result,
                      const RuleSourceSettings& source_settings,
                      const base::FilePath& output_path,
                      std::string& checksum);

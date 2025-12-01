@@ -10,6 +10,7 @@
 #include <map>
 #include <memory>
 #include <string>
+#include <variant>
 #include <vector>
 
 #include "base/memory/raw_ptr.h"
@@ -29,7 +30,6 @@
 #include "content/public/browser/render_widget_host.h"
 #include "content/public/browser/render_widget_host_observer.h"
 #include "content/public/common/javascript_dialog_type.h"
-#include "third_party/abseil-cpp/absl/types/variant.h"
 #include "third_party/blink/public/mojom/manifest/manifest.mojom-forward.h"
 #include "url/gurl.h"
 
@@ -62,12 +62,14 @@ class PageHandler : public DevToolsDomainHandler,
                     public RenderWidgetHostObserver,
                     public download::DownloadItem::Observer {
  public:
-  PageHandler(EmulationHandler* emulation_handler,
-              BrowserHandler* browser_handler,
-              bool allow_unsafe_operations,
-              bool is_trusted,
-              std::optional<url::Origin> navigation_initiator_origin,
-              bool may_read_local_files);
+  PageHandler(
+      EmulationHandler* emulation_handler,
+      BrowserHandler* browser_handler,
+      bool allow_unsafe_operations,
+      bool is_trusted,
+      std::optional<url::Origin> navigation_initiator_origin,
+      bool may_read_local_files,
+      base::RepeatingCallback<void(std::string)> prepare_for_reload_callback);
 
   PageHandler(const PageHandler&) = delete;
   PageHandler& operator=(const PageHandler&) = delete;
@@ -113,8 +115,10 @@ class PageHandler : public DevToolsDomainHandler,
       const BackForwardCacheCanStoreTreeResult* tree_result);
 
   void IsPrerenderingAllowed(bool& is_allowed);
+  void ReadyToCommitNavigation(NavigationRequest* navigation_request);
 
-  Response Enable() override;
+  Response Enable(
+      std::optional<bool> enable_file_chooser_opened_event) override;
   Response Disable() override;
 
   Response Crash() override;
@@ -225,7 +229,7 @@ class PageHandler : public DevToolsDomainHandler,
 
   // Returns WebContents only if `host_` is a top level frame. Otherwise, it
   // returns Response with an error.
-  using ResponseOrWebContents = absl::variant<Response, WebContentsImpl*>;
+  using ResponseOrWebContents = std::variant<Response, WebContentsImpl*>;
   ResponseOrWebContents GetWebContentsForTopLevelActiveFrame();
 
   const bool allow_unsafe_operations_;
@@ -269,6 +273,9 @@ class PageHandler : public DevToolsDomainHandler,
       pending_downloads_;
 
   bool is_prerendering_allowed_ = true;
+  base::RepeatingCallback<void(std::string)> prepare_for_reload_callback_;
+  bool have_pending_reload_ = false;
+  std::string pending_script_to_evaluate_on_load_;
 
   base::WeakPtrFactory<PageHandler> weak_factory_{this};
 };

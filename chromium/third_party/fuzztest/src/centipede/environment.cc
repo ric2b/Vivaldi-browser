@@ -33,6 +33,7 @@
 #include "absl/time/time.h"
 #include "./centipede/feature.h"
 #include "./centipede/knobs.h"
+#include "./centipede/util.h"
 #include "./common/defs.h"
 #include "./common/logging.h"
 #include "./common/remote_file.h"
@@ -238,6 +239,16 @@ void Environment::ReadKnobsFileIfSpecified() {
 
 void Environment::UpdateWithTargetConfig(
     const fuzztest::internal::Configuration &config) {
+  // Allow more crashes to be reported when running with FuzzTest. This allows
+  // more unique crashes to collected after deduplication. But we don't want to
+  // make the limit too large to stress the filesystem, so this is not a perfect
+  // solution. Currently we just increase the default to be seemingly large
+  // enough.
+  if (max_num_crash_reports == Default().max_num_crash_reports) {
+    max_num_crash_reports = 20;
+    LOG(INFO) << "Overriding the default max_num_crash_reports to "
+              << max_num_crash_reports << " for FuzzTest.";
+  }
   if (config.jobs != 0) {
     CHECK(j == Default().j || j == config.jobs)
         << "Value for --j is inconsistent with the value for jobs in the "
@@ -316,6 +327,12 @@ void Environment::UpdateTimeoutPerBatchIfEqualTo(size_t val) {
   timeout_per_batch = ComputeTimeoutPerBatch(timeout_per_input, batch_size);
   VLOG(1) << "--timeout_per_batch auto-computed: " << timeout_per_batch
           << " sec (see --help for details)";
+}
+
+void Environment::UpdateBinaryHashIfEmpty() {
+  if (binary_hash.empty()) {
+    binary_hash = HashOfFileContents(coverage_binary);
+  }
 }
 
 }  // namespace centipede

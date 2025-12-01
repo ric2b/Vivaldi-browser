@@ -2,12 +2,12 @@
 .\"     Title: git-rebase-update
 .\"    Author: [FIXME: author] [see http://www.docbook.org/tdg5/en/html/author]
 .\" Generator: DocBook XSL Stylesheets vsnapshot <http://docbook.sf.net/>
-.\"      Date: 08/26/2022
+.\"      Date: 02/20/2025
 .\"    Manual: Chromium depot_tools Manual
-.\"    Source: depot_tools 59e95c91
+.\"    Source: depot_tools 8a5ec2b9
 .\"  Language: English
 .\"
-.TH "GIT\-REBASE\-UPDATE" "1" "08/26/2022" "depot_tools 59e95c91" "Chromium depot_tools Manual"
+.TH "GIT\-REBASE\-UPDATE" "1" "02/20/2025" "depot_tools 8a5ec2b9" "Chromium depot_tools Manual"
 .\" -----------------------------------------------------------------
 .\" * Define some portability stuff
 .\" -----------------------------------------------------------------
@@ -32,7 +32,7 @@ git-rebase-update \- Updates all branches to have the latest changes from their 
 .SH "SYNOPSIS"
 .sp
 .nf
-\fIgit rebase\-update\fR [\-v | \-\-verbose] [\-n | \-\-no\-fetch] [\-k | \-\-keep\-going]
+\fIgit rebase\-update\fR [\-v | \-\-verbose] [\-n | \-\-no\-fetch] [\-k | \-\-keep\-going] [\-\-no\-squash]
 .fi
 .sp
 .SH "DESCRIPTION"
@@ -125,6 +125,11 @@ Skip the
 phase of rebase\-update\&.
 .RE
 .PP
+\-\-no\-squash
+.RS 4
+Skip the squash phase of rebase\-update if there are merge conflicts\&.
+.RE
+.PP
 \-v, \-\-verbose
 .RS 4
 More text than your terminal can handle\&.
@@ -133,6 +138,13 @@ More text than your terminal can handle\&.
 \-\-current
 .RS 4
 Only rebase the current branch\&.
+.RE
+.PP
+\-\-tree
+.RS 4
+Also rebase any branches downstream from the selected branches\&. Use with named branches or
+\fB\-\-current\fR
+to selectively rebase a branch tree\&.
 .RE
 .SH "CONFIGURATION VARIABLES"
 .SS "depot\-tools\&.rebase\-update\&.starting\-branch"

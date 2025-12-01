@@ -126,11 +126,18 @@
             "description": "True if the user should be prompted to switch search engines.",
             "type": "boolean"
           },
+          "promptType": {
+            "description": "Type of the dialog that should be displayed.",
+            "type": "string"
+          },
           "currentSearchEngine": {
             "$ref": "TemplateURL"
           },
-          "partnerSearchEngine": {
-            "$ref": "TemplateURL"
+          "partnerSearchEngines": {
+            "type": "array",
+            "items": {
+              "$ref": "TemplateURL"
+            }
           }
         }
       }
@@ -286,30 +293,6 @@
         "name": "getSearchRequest",
         "type": "function",
         "description": "Provides the request info to use for performing a search",
-        "parameters": [
-          {
-            "name": "guid",
-            "type": "string"
-          },
-          {
-            "name": "searchTerms",
-            "type": "string"
-          }
-        ],
-        "returns_async": {
-          "name": "callback",
-          "parameters": [
-            {
-              "name": "request",
-              "$ref": "SearchRequest"
-            }
-          ]
-        }
-      },
-      {
-        "name": "getSuggestRequest",
-        "type": "function",
-        "description": "Provides the request info to use for requesting suggestions",
         "parameters": [
           {
             "name": "guid",

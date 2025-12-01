@@ -47,6 +47,18 @@ class VariationsClient;
 
 namespace lens {
 
+// Data struct representing content data to be sent to the Lens server.
+struct PageContent {
+  PageContent();
+  PageContent(std::vector<uint8_t> bytes, lens::MimeType content_type);
+  PageContent(const PageContent& other);
+  ~PageContent();
+
+ public:
+  std::vector<uint8_t> bytes_;
+  lens::MimeType content_type_;
+};
+
 // Callback type alias for the lens overlay full image response.
 using LensOverlayFullImageResponseCallback =
     base::RepeatingCallback<void(std::vector<lens::mojom::OverlayObjectPtr>,
@@ -55,6 +67,9 @@ using LensOverlayFullImageResponseCallback =
 // Callback type alias for the lens overlay url response.
 using LensOverlayUrlResponseCallback =
     base::RepeatingCallback<void(lens::proto::LensOverlayUrlResponse)>;
+// Callback type alias for the lens overlay interaction response.
+using LensOverlayInteractionResponseCallback =
+    base::RepeatingCallback<void(lens::mojom::TextPtr)>;
 // Callback type alias for the lens overlay suggest inputs response.
 using LensOverlaySuggestInputsCallback =
     base::RepeatingCallback<void(lens::proto::LensOverlaySuggestInputs)>;
@@ -73,8 +88,10 @@ class LensOverlayQueryController {
   LensOverlayQueryController(
       LensOverlayFullImageResponseCallback full_image_callback,
       LensOverlayUrlResponseCallback url_callback,
+      LensOverlayInteractionResponseCallback interaction_callback,
       LensOverlaySuggestInputsCallback suggest_inputs_callback,
       LensOverlayThumbnailCreatedCallback thumbnail_created_callback,
+      UploadProgressCallback page_content_upload_progress_callback,
       variations::VariationsClient* variations_client,
       signin::IdentityManager* identity_manager,
       Profile* profile,
@@ -92,8 +109,9 @@ class LensOverlayQueryController {
       GURL page_url,
       std::optional<std::string> page_title,
       std::vector<lens::mojom::CenterRotatedBoxPtr> significant_region_boxes,
-      base::span<const uint8_t> underlying_content_bytes,
-      lens::MimeType underlying_content_type,
+      base::span<const PageContent> underlying_page_contents,
+      lens::MimeType primary_content_type,
+      std::optional<uint32_t> pdf_current_page,
       float ui_scale_factor,
       base::TimeTicks invocation_time);
 
@@ -117,11 +135,19 @@ class LensOverlayQueryController {
   // points to, to avoid dangling pointers.
   virtual void ResetPageContentData();
 
-  // Sends a request to the server to update the page content.
-  virtual void SendPageContentUpdateRequest(
-      base::span<const uint8_t> new_content_bytes,
-      lens::MimeType new_content_type,
-      GURL new_page_url);
+  // Sends requests to the server to update the page content and/or make a new
+  // full image request.
+  // The first content data is the most important and will be used for
+  // generating request types. `primary_content_type` is used for generating the
+  // request type and vit param.
+  virtual void SendUpdatedPageContent(
+      std::optional<base::span<const lens::PageContent>>
+          underlying_page_contents,
+      std::optional<lens::MimeType> primary_content_type,
+      std::optional<GURL> new_page_url,
+      std::optional<std::string> new_page_title,
+      std::optional<uint32_t> pdf_current_page,
+      const SkBitmap& screenshot);
 
   // Sends a request to the server with a portion of the page content.
   // `partial_content` should be a subset of the full page content. This request
@@ -167,6 +193,10 @@ class LensOverlayQueryController {
   virtual void SendSemanticEventGen204IfEnabled(
       lens::mojom::SemanticEvent event);
 
+  bool IsPageContentUploadInProgress() const {
+    return page_content_endpoint_fetcher_.get() != nullptr;
+  }
+
   uint64_t gen204_id() const { return gen204_id_; }
 
   // Testing method to reset the cluster info state.
@@ -185,9 +215,9 @@ class LensOverlayQueryController {
   // Returns the EndpointFetcher to use with the given params. Protected to
   // allow overriding in tests to mock server responses.
   virtual std::unique_ptr<EndpointFetcher> CreateEndpointFetcher(
-      lens::LensOverlayServerRequest* request,
+      std::string request_string,
       const GURL& fetch_url,
-      const std::string& http_method,
+      const HttpMethod& http_method,
       const base::TimeDelta& timeout,
       const std::vector<std::string>& request_headers,
       const std::vector<std::string>& cors_exempt_headers,
@@ -224,12 +254,18 @@ class LensOverlayQueryController {
   // and interaction retries.
   LensOverlayFullImageResponseCallback full_image_callback_;
 
+  // The callback for interaction requests, including text received.
+  LensOverlayInteractionResponseCallback interaction_response_callback_;
+
   // Suggest inputs callback, used for sending Lens suggest data to the
   // search box.
   LensOverlaySuggestInputsCallback suggest_inputs_callback_;
 
   // Callback for when a thumbnail image is created from a region selection.
   LensOverlayThumbnailCreatedCallback thumbnail_created_callback_;
+
+  // Callback for when the page content upload progress is updated.
+  UploadProgressCallback page_content_upload_progress_callback_;
 
  private:
   enum class QueryControllerState {
@@ -365,9 +401,32 @@ class LensOverlayQueryController {
   // then sends the request.
   void PrepareAndFetchPageContentRequest();
 
+  // Creates chunk upload requests for the given chunks.
+  void PrepareAndFetchUploadChunkRequests(lens::LensOverlayRequestId request_id,
+                                          std::vector<std::string> chunks);
+
+  // Performs the chunk upload requests.
+  void PrepareAndFetchUploadChunkRequestsPart2(
+      std::vector<std::string> headers);
+
+  // Performs the chunk upload request with the given index.
+  void FetchUploadChunkRequest(size_t chunk_request_index);
+
+  // Handles the endpoint fetch response for chunk upload requests. When a
+  // response is received for the last chunk, initiates the page content
+  // request.
+  void UploadChunkResponseHandler(lens::LensOverlayRequestId request_id,
+                                  size_t total_chunks,
+                                  bool is_last,
+                                  std::unique_ptr<EndpointResponse> response);
+
   // Creates the PageContentRequest that is sent to the server and performs the
   // request. Prefer to use PrepareAndFetchPageContentRequest() directly since
-  // it calls this method after doing the necessary preprocessing.
+  // it calls this method after doing the necessary preprocessing. By this
+  // point, the preprocessing should be complete and it is expected that the
+  // request will be sent. If a check needs to be done before sending the
+  // request, it myst be done in PrepareAndFetchPageContentRequest() instead of
+  // this method.
   void PrepareAndFetchPageContentRequestPart2(
       lens::LensOverlayRequestId request_id,
       lens::Payload payload);
@@ -380,6 +439,10 @@ class LensOverlayQueryController {
   // Handles the endpoint fetch response for the page content request.
   void PageContentResponseHandler(lens::LensOverlayRequestId request_id,
                                   std::unique_ptr<EndpointResponse> response);
+
+  // Sends a page content upload latency Gen204 ping if enabled.
+  void MaybeSendPageContentUploadLatencyGen204(
+      lens::LensOverlayRequestId request_id);
 
   // Handles the prgress of the page content upload request.
   void PageContentUploadProgressHandler(uint64_t position, uint64_t total);
@@ -484,10 +547,7 @@ class LensOverlayQueryController {
       std::string vit_query_param_value,
       std::optional<lens::LensOverlayRequestId> request_id);
 
-  // Creates an endpoint fetcher with the given request_headers to perform the
-  // given request. Calls fetcher_created_callback when the EndpointFetcher is
-  // created to keep it alive while the request is being made.
-  // response_received_callback is invoked once the request returns a response.
+  // Performs the given server request.
   void PerformFetchRequest(
       lens::LensOverlayServerRequest* request,
       std::vector<std::string>* request_headers,
@@ -497,6 +557,20 @@ class LensOverlayQueryController {
       EndpointFetcherCallback response_received_callback,
       const UploadProgressCallback upload_progress_callback =
           base::NullCallback());
+
+  // Creates an endpoint fetcher with the given request_headers to perform the
+  // given request. Calls fetcher_created_callback when the EndpointFetcher is
+  // created to keep it alive while the request is being made.
+  // response_received_callback is invoked once the request returns a response.
+  void PerformFetchRequest(
+      std::string request_string,
+      std::vector<std::string>* request_headers,
+      const base::TimeDelta& timeout,
+      base::OnceCallback<void(std::unique_ptr<EndpointFetcher>)>
+          fetcher_created_callback,
+      EndpointFetcherCallback response_received_callback,
+      const UploadProgressCallback upload_progress_callback,
+      GURL fetch_url);
 
   // Creates a client context proto to be attached to a server request.
   lens::LensOverlayClientContext CreateClientContext();
@@ -530,6 +604,10 @@ class LensOverlayQueryController {
   // if the parameter is not null.
   void RunSuggestInputsCallback();
 
+  // Callback for when the interaction response returned text that should be
+  // passed to the overlay.
+  void RunInteractionResponseTextReceivedCallback(lens::mojom::TextPtr text);
+
   // Callback for when the full image endpoint fetcher is created.
   void OnFullImageEndpointFetcherCreated(
       lens::LensOverlayRequestId request_id,
@@ -547,6 +625,11 @@ class LensOverlayQueryController {
 
   // Callback for when the interaction endpoint fetcher is created.
   void OnInteractionEndpointFetcherCreated(
+      lens::LensOverlayRequestId request_id,
+      std::unique_ptr<EndpointFetcher> endpoint_fetcher);
+
+  // Callback for when a chunk upload endpoint fetcher is created.
+  void OnChunkUploadEndpointFetcherCreated(
       lens::LensOverlayRequestId request_id,
       std::unique_ptr<EndpointFetcher> endpoint_fetcher);
 
@@ -575,6 +658,9 @@ class LensOverlayQueryController {
 
   // The page title, if it is allowed to be shared.
   std::optional<std::string> page_title_;
+
+  // The current page of the PDF document if page_content_type_ is kPdf.
+  std::optional<uint32_t> pdf_current_page_;
 
   // Options needed to send a translate request with the proper parameters.
   struct TranslateOptions {
@@ -630,6 +716,10 @@ class LensOverlayQueryController {
   std::unique_ptr<signin::PrimaryAccountAccessTokenFetcher>
       full_image_access_token_fetcher_;
 
+  // The access token fetcher used for getting OAuth for chunk upload requests.
+  std::unique_ptr<signin::PrimaryAccountAccessTokenFetcher>
+      chunk_upload_access_token_fetcher_;
+
   // The access token fetcher used for getting OAuth for page content requests.
   std::unique_ptr<signin::PrimaryAccountAccessTokenFetcher>
       page_content_access_token_fetcher_;
@@ -673,6 +763,9 @@ class LensOverlayQueryController {
   // earlier unfinished requests.
   std::unique_ptr<EndpointFetcher> interaction_endpoint_fetcher_;
 
+  // The endpoint fetchers used for the chunk upload requests.
+  std::vector<std::unique_ptr<EndpointFetcher>> chunk_upload_endpoint_fetchers_;
+
   // Task runner used to compress page content bytes on a separate thread.
   scoped_refptr<base::TaskRunner> compression_task_runner_;
 
@@ -687,6 +780,22 @@ class LensOverlayQueryController {
   // because it is assumed this request will finish, never need to be
   // cancelled, and all other tasks will wait on it if needed.
   std::unique_ptr<base::CancelableTaskTracker> encoding_task_tracker_;
+
+  // Upload chunk requests being sent.
+  std::vector<lens::LensOverlayUploadChunkRequest>
+      pending_upload_chunk_requests_;
+
+  // Headers to be sent with each upload chunk request.
+  std::vector<std::string> pending_upload_chunk_headers_;
+
+  // Number of upload chunk responses expected. Set to
+  // pending_upload_chunk_requests_.size() when starting to send requests, and
+  // decremented each time a request receives a response.
+  size_t remaining_upload_chunk_responses_;
+
+  // The sequence ID for the upload chunk requests that were last started. Used
+  // to verify that the responses received correspond to the latest upload.
+  int upload_chunk_sequence_id;
 
   // The current suggest inputs. The fields in this proto are updated
   // whenever new data is available (i.e. after an objects or interaction
@@ -703,14 +812,14 @@ class LensOverlayQueryController {
 
   const raw_ptr<Profile> profile_;
 
-  // The bytes of the content the user is viewing. Owned by
-  // LensOverlayController. Will be empty if no bytes to the underlying page
+  // The data of the content the user is viewing. Owned by
+  // LensOverlayController. Will be empty if no data to the underlying page
   // could be provided.
-  base::raw_span<const uint8_t> underlying_content_bytes_;
+  base::raw_span<const PageContent> underlying_page_contents_;
 
-  // The mime type of underlying_content_bytes. Will be kNone if
-  // underlying_content_bytes_ is empty.
-  lens::MimeType underlying_content_type_;
+  // The primary content type the underlying_page_contents_ is associated with.
+  // This MimeType is used for generating the request type and vit param.
+  lens::MimeType primary_content_type_;
 
   // A span of text that represents a part of the content held in underlying
   // content bytes.

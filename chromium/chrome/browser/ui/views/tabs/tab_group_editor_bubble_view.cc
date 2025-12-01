@@ -54,6 +54,8 @@
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/global_media_controls/media_item_ui_helper.h"
 #include "chrome/browser/ui/views/tabs/color_picker_view.h"
+#include "chrome/browser/ui/views/tabs/groups/avatar_container_view.h"
+#include "chrome/browser/ui/views/tabs/groups/manage_sharing_row.h"
 #include "chrome/browser/ui/views/tabs/recent_activity_bubble_dialog_view.h"
 #include "chrome/browser/ui/views/tabs/tab_strip.h"
 #include "chrome/browser/ui/views/toolbar/toolbar_ink_drop_util.h"
@@ -83,6 +85,7 @@
 #include "ui/base/mojom/menu_source_type.mojom-forward.h"
 #include "ui/base/mojom/ui_base_types.mojom-shared.h"
 #include "ui/base/pointer/touch_ui_controller.h"
+#include "ui/compositor/layer.h"
 #include "ui/events/types/event_type.h"
 #include "ui/gfx/color_palette.h"
 #include "ui/gfx/geometry/insets.h"
@@ -92,6 +95,8 @@
 #include "ui/gfx/text_constants.h"
 #include "ui/native_theme/native_theme.h"
 #include "ui/views/accessibility/view_accessibility.h"
+#include "ui/views/animation/ink_drop.h"
+#include "ui/views/animation/ink_drop_host.h"
 #include "ui/views/border.h"
 #include "ui/views/controls/button/button.h"
 #include "ui/views/controls/button/label_button.h"
@@ -133,7 +138,6 @@ gfx::Insets GetControlInsets() {
              : gfx::Insets::VH(vertical_spacing, horizontal_spacing);
 }
 
-constexpr base::TimeDelta kTemporaryBookmarkBarDuration = base::Seconds(15);
 constexpr int kDialogWidth = 240;
 static constexpr int kDefaultIconSize = 20;
 // The maximum number of times we will show the footer section with the learn
@@ -171,7 +175,7 @@ views::Widget* TabGroupEditorBubbleView::Show(
   feature_engagement::TrackerFactory::GetForBrowserContext(browser->profile())
       ->NotifyEvent("tab_group_editor_shown");
 
-  // If |header_view| is not null, use |header_view| as the |anchor_view|.
+  // If `header_view` is not null, use `header_view` as the `anchor_view`.
   TabGroupEditorBubbleView* tab_group_editor_bubble_view =
       new TabGroupEditorBubbleView(browser, group,
                                    header_view ? header_view : anchor_view,
@@ -192,8 +196,8 @@ views::View* TabGroupEditorBubbleView::GetInitiallyFocusedView() {
 
 gfx::Rect TabGroupEditorBubbleView::GetAnchorRect() const {
   // We want to avoid calling BubbleDialogDelegateView::GetAnchorRect() if
-  // |anchor_rect_| has been set. This is because the default behavior uses the
-  // anchor view's bounds and also updates |anchor_rect_| to the views bounds.
+  // `anchor_rect_` has been set. This is because the default behavior uses the
+  // anchor view's bounds and also updates `anchor_rect_` to the views bounds.
   // It does this so that the bubble does not jump when the anchoring view is
   // deleted.
   if (use_set_anchor_rect_) {
@@ -205,7 +209,7 @@ gfx::Rect TabGroupEditorBubbleView::GetAnchorRect() const {
 void TabGroupEditorBubbleView::AddedToWidget() {
   const auto* const color_provider = GetColorProvider();
 
-  for (views::LabelButton* menu_item : menu_items_) {
+  for (views::LabelButton* menu_item : simple_menu_items_) {
     const bool enabled = menu_item->GetEnabled();
     views::Button::ButtonState button_state =
         enabled ? views::Button::STATE_NORMAL : views::Button::STATE_DISABLED;
@@ -266,8 +270,8 @@ TabGroupEditorBubbleView::TabGroupEditorBubbleView(
   // This dialog should only show up if the browser supports tab groups.
   DCHECK(browser_->tab_strip_model()->SupportsTabGroups());
 
-  // |anchor_view| should always be defined as it will be used to source the
-  // |anchor_widget_|.
+  // `anchor_view` should always be defined as it will be used to source the
+  // `anchor_widget_`.
   DCHECK(anchor_view);
 
   // Initialize the bubble.
@@ -284,8 +288,7 @@ TabGroupEditorBubbleView::TabGroupEditorBubbleView(
   RebuildMenuContents();
 
   // Add a separator for the delete menu item and footer v2 enabled.
-  if (IsGroupSaved() && tab_groups::IsTabGroupsSaveV2Enabled() &&
-      ShouldShowSavedFooter()) {
+  if (IsGroupSaved() && ShouldShowSavedFooter()) {
     PrefService* pref_service = browser_->profile()->GetPrefs();
     saved_tab_group_prefs::IncrementLearnMoreFooterShownCountPref(pref_service);
   }
@@ -307,7 +310,7 @@ TabGroupEditorBubbleView::TabGroupEditorBubbleView(
 }
 
 void TabGroupEditorBubbleView::RebuildMenuContents() {
-  menu_items_.clear();
+  simple_menu_items_.clear();
   std::unique_ptr<TitleField> title_field;
   if (title_field_) {
     // Reuse title_field_ if one exists, but update with the latest title. This
@@ -317,6 +320,7 @@ void TabGroupEditorBubbleView::RebuildMenuContents() {
     title_field = RemoveChildViewT(title_field_);
     title_field->SetText(title_at_opening_);
   }
+  manage_shared_group_button_ = nullptr;
   color_selector_ = nullptr;
   save_group_toggle_ = nullptr;
   save_group_icon_ = nullptr;
@@ -331,50 +335,48 @@ void TabGroupEditorBubbleView::RebuildMenuContents() {
   AddChildView(BuildSeparator());
 
   if (!CanSaveGroups()) {
-    menu_items_.push_back(AddChildView(BuildNewTabInGroupButton()));
-    menu_items_.push_back(AddChildView(BuildMoveGroupToNewWindowButton()));
-    menu_items_.push_back(AddChildView(BuildUngroupButton()));
-    menu_items_.push_back(AddChildView(BuildHideGroupButton()));
-
-  } else if (tab_groups::IsTabGroupsSaveV2Enabled()) {
-    menu_items_.push_back(AddChildView(BuildNewTabInGroupButton()));
-    menu_items_.push_back(AddChildView(BuildMoveGroupToNewWindowButton()));
-
-    if (OwnsGroup()) {
-      menu_items_.push_back(AddChildView(BuildUngroupButton()));
-    }
+    simple_menu_items_.push_back(AddChildView(BuildNewTabInGroupButton()));
+    simple_menu_items_.push_back(
+        AddChildView(BuildMoveGroupToNewWindowButton()));
+    AddChildView(BuildSeparator());
+    simple_menu_items_.push_back(AddChildView(BuildUngroupButton()));
+    simple_menu_items_.push_back(AddChildView(BuildHideGroupButton()));
+  } else {
+    simple_menu_items_.push_back(AddChildView(BuildNewTabInGroupButton()));
+    simple_menu_items_.push_back(
+        AddChildView(BuildMoveGroupToNewWindowButton()));
 
     if (CanShareGroups()) {
-      menu_items_.push_back(AddChildView(BuildManageSharedGroupButton()));
-      menu_items_.push_back(AddChildView(BuildShareGroupButton()));
-      menu_items_.push_back(AddChildView(BuildRecentActivityButton()));
+      if (IsGroupShared()) {
+        manage_shared_group_button_ = AddChildView(BuildManageSharingButton());
+        manage_shared_group_button_->UpdateInsetsToMatchLabelButton(
+            simple_menu_items_[0]);
+        manage_shared_group_button_->SetProperty(
+            views::kElementIdentifierKey,
+            kTabGroupEditorBubbleManageSharedGroupButtonId);
+      }
+      if (IsAllowedToCreateSharedGroup()) {
+        simple_menu_items_.push_back(AddChildView(BuildShareGroupButton()));
+      }
+      simple_menu_items_.push_back(AddChildView(BuildRecentActivityButton()));
     }
 
-    menu_items_.push_back(AddChildView(BuildHideGroupButton()));
+    simple_menu_items_.push_back(AddChildView(BuildHideGroupButton()));
     AddChildView(BuildSeparator());
 
+    if (!IsGroupShared()) {
+      simple_menu_items_.push_back(AddChildView(BuildUngroupButton()));
+    }
+
     if (OwnsGroup()) {
-      menu_items_.push_back(AddChildView(BuildDeleteGroupButton()));
+      simple_menu_items_.push_back(AddChildView(BuildDeleteGroupButton()));
     } else {
-      menu_items_.push_back(AddChildView(BuildLeaveGroupButton()));
+      simple_menu_items_.push_back(AddChildView(BuildLeaveGroupButton()));
     }
 
     if (ShouldShowSavedFooter()) {
       footer_ = AddChildView(std::make_unique<Footer>(browser_));
     }
-
-  } else {  // !tab_groups::IsTabGroupsSaveV2Enabled()
-    // The saved group editor toggle needs access to any label button to help
-    // lay itself out (it wants to use a similar size to label buttons in this
-    // context).
-    std::unique_ptr<views::LabelButton> new_tab_in_group_button =
-        BuildNewTabInGroupButton();
-    CreateSavedTabGroupToggle(new_tab_in_group_button.get());
-    menu_items_.push_back(AddChildView((std::move(new_tab_in_group_button))));
-    menu_items_.push_back(AddChildView(BuildUngroupButton()));
-    menu_items_.push_back(AddChildView(BuildHideGroupButton()));
-    menu_items_.push_back(AddChildView(BuildDeleteGroupButton()));
-    menu_items_.push_back(AddChildView(BuildMoveGroupToNewWindowButton()));
   }
 
   UpdateMenuContentsVisibility();
@@ -382,12 +384,8 @@ void TabGroupEditorBubbleView::RebuildMenuContents() {
 
 void TabGroupEditorBubbleView::UpdateMenuContentsVisibility() {
   // iterate through the menu list setting the correct visibility.
-  for (views::LabelButton* button : menu_items_) {
+  for (views::LabelButton* button : simple_menu_items_) {
     switch (button->GetID()) {
-      case TAB_GROUP_HEADER_CXMENU_MANAGE_SHARING: {
-        button->SetVisible(IsGroupShared());
-        break;
-      }
       case TAB_GROUP_HEADER_CXMENU_SHARE: {
         button->SetVisible(CanShareGroups() && !IsGroupShared());
         break;
@@ -401,10 +399,13 @@ void TabGroupEditorBubbleView::UpdateMenuContentsVisibility() {
         break;
       }
       case TAB_GROUP_HEADER_CXMENU_RECENT_ACTIVITY: {
-        button->SetVisible(IsGroupShared() && HasRecentActivity());
+        button->SetVisible(IsGroupShared());
         break;
       }
     }
+  }
+  if (manage_shared_group_button_) {
+    manage_shared_group_button_->SetVisible(IsGroupShared());
   }
 }
 
@@ -556,19 +557,6 @@ TabGroupEditorBubbleView::BuildMoveGroupToNewWindowButton() {
 }
 
 std::unique_ptr<views::LabelButton>
-TabGroupEditorBubbleView::BuildManageSharedGroupButton() {
-  auto menu_item = CreateMenuItem(
-      TAB_GROUP_HEADER_CXMENU_MANAGE_SHARING,
-      l10n_util::GetStringUTF16(IDS_TAB_GROUP_HEADER_CXMENU_MANAGE_GROUP),
-      base::BindRepeating(&TabGroupEditorBubbleView::ShareOrManagePressed,
-                          base::Unretained(this)),
-      ui::ImageModel::FromVectorIcon(kTabGroupSharingIcon));
-  menu_item->SetProperty(views::kElementIdentifierKey,
-                         kTabGroupEditorBubbleManageSharedGroupButtonId);
-  return menu_item;
-}
-
-std::unique_ptr<views::LabelButton>
 TabGroupEditorBubbleView::BuildShareGroupButton() {
   auto menu_item = CreateMenuItem(
       TAB_GROUP_HEADER_CXMENU_SHARE,
@@ -614,24 +602,34 @@ tab_groups::TabGroupColorId TabGroupEditorBubbleView::InitColorSet() {
 
 // TabStripModelObserver:
 void TabGroupEditorBubbleView::OnTabGroupChanged(const TabGroupChange& change) {
-  if (change.type == TabGroupChange::kVisualsChanged) {
-    const tab_groups::TabGroupVisualData* new_visuals =
-        change.GetVisualsChange()->new_visuals;
-    const std::optional<int> selected_color =
-        color_selector_->GetSelectedElement();
-    const bool color_changed =
-        !selected_color.has_value() ||
-        colors_[selected_color.value()].first != new_visuals->color();
-    const bool text_changed = title_field_->GetText() != new_visuals->title();
-    if (color_changed) {
-      const std::optional<size_t> index = GetIndexOf(color_selector_);
-      CHECK(index.has_value());
-      RemoveChildViewT<ColorPickerView>(color_selector_);
-      color_selector_ = AddChildViewAt(BuildColorPicker(), index.value());
-    }
-    if (text_changed) {
-      title_field_->SetText(new_visuals->title());
-    }
+  if (change.group != group_ ||
+      change.type != TabGroupChange::kVisualsChanged ||
+      !change.GetVisualsChange()->new_visuals) {
+    return;
+  }
+
+  const tab_groups::TabGroupVisualData* new_visuals =
+      change.GetVisualsChange()->new_visuals;
+
+  const std::optional<int> selected_color =
+      color_selector_->GetSelectedElement();
+
+  const bool color_changed =
+      !selected_color.has_value() ||
+      static_cast<int>(colors_.size()) <= selected_color.value() ||
+      colors_[selected_color.value()].first != new_visuals->color();
+
+  if (color_changed) {
+    const std::optional<size_t> index = GetIndexOf(color_selector_);
+    CHECK(index.has_value());
+    RemoveChildViewT<ColorPickerView>(color_selector_);
+    color_selector_ = AddChildViewAt(BuildColorPicker(), index.value());
+  }
+
+  const bool text_changed = title_field_->GetText() != new_visuals->title();
+
+  if (text_changed) {
+    title_field_->SetText(new_visuals->title());
   }
 }
 
@@ -660,9 +658,9 @@ void TabGroupEditorBubbleView::UpdateGroup() {
     close_or_delete_button->SetText(GetTextForCloseButton());
   }
 
-  tab_groups::TabGroupVisualData new_data(title_field_->GetText(),
-                                          updated_color,
-                                          current_visual_data->is_collapsed());
+  tab_groups::TabGroupVisualData new_data(
+      std::u16string(title_field_->GetText()), updated_color,
+      current_visual_data->is_collapsed());
   tab_group->SetVisualData(new_data, tab_group->IsCustomized());
 }
 
@@ -676,15 +674,7 @@ const std::u16string TabGroupEditorBubbleView::GetTextForCloseButton() const {
 
   // The UI updates now just name this "Close group" instead of "Delete Group"
   // Since delete group is separate if the group is saved.
-  if (tab_groups::IsTabGroupsSaveV2Enabled()) {
-    return l10n_util::GetStringUTF16(IDS_TAB_GROUP_HEADER_CXMENU_CLOSE_GROUP);
-  } else {
-    return tab_group_service->GetGroup(group_).has_value()
-               ? l10n_util::GetStringUTF16(
-                     IDS_TAB_GROUP_HEADER_CXMENU_HIDE_GROUP)
-               : l10n_util::GetStringUTF16(
-                     IDS_TAB_GROUP_HEADER_CXMENU_CLOSE_GROUP);
-  }
+  return l10n_util::GetStringUTF16(IDS_TAB_GROUP_HEADER_CXMENU_CLOSE_GROUP);
 }
 
 const std::u16string TabGroupEditorBubbleView::GetSaveToggleAccessibleName()
@@ -701,9 +691,15 @@ bool TabGroupEditorBubbleView::CanSaveGroups() const {
 }
 
 bool TabGroupEditorBubbleView::CanShareGroups() const {
-  return CanSaveGroups() && tab_groups::IsTabGroupsSaveV2Enabled() &&
-         base::FeatureList::IsEnabled(
-             data_sharing::features::kDataSharingFeature);
+  return tab_groups::SavedTabGroupUtils::SupportsSharedTabGroups() &&
+         CanSaveGroups();
+}
+
+bool TabGroupEditorBubbleView::IsAllowedToCreateSharedGroup() const {
+  auto* collaboration_service =
+      collaboration::CollaborationServiceFactory::GetForProfile(
+          browser_->profile());
+  return collaboration_service->GetServiceStatus().IsAllowedToCreate();
 }
 
 bool TabGroupEditorBubbleView::OwnsGroup() const {
@@ -757,53 +753,11 @@ bool TabGroupEditorBubbleView::IsGroupShared() const {
   return maybe_saved_group.value().is_shared_tab_group();
 }
 
-bool TabGroupEditorBubbleView::HasRecentActivity() const {
-  return tab_groups::SavedTabGroupUtils::HasRecentActivity(browser_->profile(),
-                                                           group_);
-}
-
 bool TabGroupEditorBubbleView::ShouldShowSavedFooter() const {
   PrefService* pref_service = browser_->profile()->GetPrefs();
-  return (CanSaveGroups() && tab_groups::IsTabGroupsSaveV2Enabled() &&
-          pref_service &&
+  return (CanSaveGroups() && pref_service &&
           saved_tab_group_prefs::GetLearnMoreFooterShownCount(pref_service) <
               kFooterDisplayLimit);
-}
-
-void TabGroupEditorBubbleView::OnSaveTogglePressed() {
-  // TODO(crbug.com/356886508): When V2 launches remove this function as it will
-  // no longer be used.
-  tab_groups::TabGroupSyncService* tab_group_service =
-      tab_groups::SavedTabGroupUtils::GetServiceForProfile(browser_->profile());
-  CHECK(tab_group_service);
-
-  if (save_group_toggle_->GetIsOn()) {
-    base::RecordAction(
-        base::UserMetricsAction("TabGroups_TabGroupBubble_GroupSaved"));
-
-    tab_group_service->SaveGroup(
-        tab_groups::SavedTabGroupUtils::CreateSavedTabGroupFromLocalId(group_));
-
-    views::ElementTrackerViews::GetInstance()->NotifyCustomEvent(
-        kTabGroupSavedCustomEventId, save_group_toggle_);
-
-    auto* const service =
-        UserEducationServiceFactory::GetForBrowserContext(browser_->profile());
-    if (service && !service->tutorial_service().IsRunningTutorial(
-                       kSavedTabGroupTutorialId)) {
-      browser_->window()->TemporarilyShowBookmarkBar(
-          kTemporaryBookmarkBarDuration);
-    }
-  } else {
-    base::RecordAction(
-        base::UserMetricsAction("TabGroups_TabGroupBubble_GroupUnsaved"));
-    tab_group_service->UnsaveGroup(group_);
-  }
-
-  save_group_toggle_->GetViewAccessibility().SetName(
-      GetSaveToggleAccessibleName());
-  UpdateGroup();
-  UpdateMenuContentsVisibility();
 }
 
 void TabGroupEditorBubbleView::NewTabInGroupPressed() {
@@ -826,7 +780,7 @@ void TabGroupEditorBubbleView::UngroupPressed() {
   if (tab_group_service) {
     const std::optional<tab_groups::SavedTabGroup> saved_group =
         tab_group_service->GetGroup(group_);
-    if (tab_groups::IsTabGroupsSaveV2Enabled() && saved_group.has_value()) {
+    if (saved_group.has_value()) {
       tab_groups::SavedTabGroupUtils::UngroupSavedGroup(
           browser_, saved_group->saved_guid());
     } else {
@@ -844,7 +798,9 @@ void TabGroupEditorBubbleView::ShareOrManagePressed() {
           browser_->profile());
   auto delegate = std::make_unique<CollaborationControllerDelegateDesktop>(
       const_cast<Browser*>(browser_.get()));
-  service->StartShareOrManageFlow(std::move(delegate), group_);
+  service->StartShareOrManageFlow(
+      std::move(delegate), group_,
+      collaboration::CollaborationServiceShareOrManageEntryPoint::kUnknown);
 
   bool is_group_shared = IsGroupShared();
   if (!is_group_shared) {
@@ -916,21 +872,15 @@ void TabGroupEditorBubbleView::DeleteGroupPressed() {
     return HideGroupPressed();
   }
 
-  if (tab_groups::IsTabGroupsSaveV2Enabled()) {
-    bool is_group_shared = IsGroupShared();
-
-    tab_groups::SavedTabGroupUtils::DeleteSavedGroup(browser_,
-                                                     saved_group->saved_guid());
-    if (is_group_shared) {
-      shared_tab_group_metrics::RecordSharedTabGroupManageType(
-          shared_tab_group_metrics::SharedTabGroupManageTypeDesktop::
-              kDeleteGroup);
-    }
-  } else {
-    CHECK(saved_group->local_group_id().has_value());
-    tab_group_service->RemoveGroup(saved_group->local_group_id().value());
-    DeleteGroupFromTabstrip();
+  bool is_group_shared = saved_group->is_shared_tab_group();
+  tab_groups::SavedTabGroupUtils::DeleteSavedGroup(browser_,
+                                                   saved_group->saved_guid());
+  if (is_group_shared) {
+    shared_tab_group_metrics::RecordSharedTabGroupManageType(
+        shared_tab_group_metrics::SharedTabGroupManageTypeDesktop::
+            kDeleteGroup);
   }
+
   GetWidget()->Close();
 }
 
@@ -949,6 +899,7 @@ void TabGroupEditorBubbleView::LeaveGroupPressed() {
 
   tab_groups::SavedTabGroupUtils::LeaveSharedGroup(browser_,
                                                    saved_group->saved_guid());
+  GetWidget()->Close();
 }
 
 void TabGroupEditorBubbleView::DeleteGroupFromTabstrip() {
@@ -976,64 +927,19 @@ bool TabGroupEditorBubbleView::CanMoveGroupToNewWindow() {
                                                      ->tab_count();
 }
 
-views::View* TabGroupEditorBubbleView::CreateSavedTabGroupToggle(
-    views::LabelButton* layout_helper) {
-  views::View* save_group_row = AddChildView(std::make_unique<views::View>());
-
-  // The `save_group_icon_` is put in differently than the rest because it
-  // utilizes a different view (view::Label) that does not have an option to
-  // take in an image like the other line items do.
-  save_group_icon_ =
-      save_group_row->AddChildView(std::make_unique<views::ImageView>(
-          ui::ImageModel::FromVectorIcon(kSaveGroupRefreshIcon)));
-
-  save_group_label_ =
-      save_group_row->AddChildView(std::make_unique<views::Label>(
-          l10n_util::GetStringUTF16(IDS_TAB_GROUP_HEADER_CXMENU_SAVE_GROUP)));
-  save_group_label_->SetHorizontalAlignment(gfx::ALIGN_LEFT);
-  save_group_label_->SetTextStyle(views::style::STYLE_BODY_3_EMPHASIS);
-
-  save_group_toggle_ =
-      save_group_row->AddChildView(std::make_unique<views::ToggleButton>(
-          base::BindRepeating(&TabGroupEditorBubbleView::OnSaveTogglePressed,
-                              base::Unretained(this))));
-  save_group_toggle_->SetID(TAB_GROUP_HEADER_CXMENU_SAVE_GROUP);
-
+std::unique_ptr<ManageSharingRow>
+TabGroupEditorBubbleView::BuildManageSharingButton() {
   tab_groups::TabGroupSyncService* tab_group_service =
       tab_groups::SavedTabGroupUtils::GetServiceForProfile(browser_->profile());
-  CHECK(tab_group_service);
 
-  save_group_toggle_->SetIsOn(tab_group_service->GetGroup(group_).has_value());
-  save_group_toggle_->GetViewAccessibility().SetName(
-      GetSaveToggleAccessibleName());
-  save_group_toggle_->SetProperty(views::kElementIdentifierKey,
-                                  kTabGroupEditorBubbleSaveToggleId);
-
-  gfx::Insets save_group_margins = GetControlInsets();
-  const int label_height = layout_helper->GetPreferredSize().height();
-  const int control_height = std::max(
-      save_group_label_
-          ->GetPreferredSize(views::SizeBounds(save_group_label_->width(), {}))
-          .height(),
-      save_group_toggle_->GetPreferredSize().height());
-  save_group_margins.set_top((label_height - control_height) / 2);
-  save_group_margins.set_bottom(save_group_margins.top());
-
-  save_group_icon_->SetProperty(
-      views::kMarginsKey,
-      gfx::Insets::TLBR(0, 0, 0, layout_helper->GetImageLabelSpacing()));
-
-  save_group_row->SetLayoutManager(std::make_unique<views::FlexLayout>())
-      ->SetOrientation(views::LayoutOrientation::kHorizontal)
-      .SetCrossAxisAlignment(views::LayoutAlignment::kCenter)
-      .SetInteriorMargin(save_group_margins);
-
-  save_group_label_->SetProperty(
-      views::kFlexBehaviorKey,
-      views::FlexSpecification(views::MinimumFlexSizeRule::kPreferred,
-                               views::MaximumFlexSizeRule::kUnbounded));
-
-  return save_group_row;
+  std::optional<tab_groups::SavedTabGroup> saved_group =
+      tab_group_service->GetGroup(group_);
+  CHECK(saved_group.has_value());
+  CHECK(saved_group->collaboration_id().has_value());
+  return std::make_unique<ManageSharingRow>(
+      browser_->profile(), saved_group->collaboration_id().value(),
+      base::BindRepeating(&TabGroupEditorBubbleView::ShareOrManagePressed,
+                          base::Unretained(this)));
 }
 
 void TabGroupEditorBubbleView::OnBubbleClose() {
@@ -1113,8 +1019,7 @@ TabGroupEditorBubbleView::Footer::Footer(const Browser* browser) {
       .SetMainAxisAlignment(views::LayoutAlignment::kStart)
       .SetCollapseMargins(true);
 
-  SetBackground(
-      views::CreateThemedSolidBackground(ui::kColorBubbleFooterBackground));
+  SetBackground(views::CreateSolidBackground(ui::kColorBubbleFooterBackground));
 
   // Get the keyed service and check if saved.
   views::StyledLabel* footer_label =

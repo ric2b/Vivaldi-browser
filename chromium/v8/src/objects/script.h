@@ -157,6 +157,9 @@ class Script : public TorqueGeneratedScript<Script, Struct> {
   // If the script has a non-empty sourceURL comment.
   inline bool HasSourceURLComment() const;
 
+  // If the script has a non-empty sourceMappingURL comment.
+  inline bool HasSourceMappingURLComment() const;
+
   // Streaming compilation only attaches the source to the Script upon
   // finalization. This predicate returns true, if this script may still be
   // unfinalized.
@@ -235,6 +238,9 @@ class Script : public TorqueGeneratedScript<Script, Struct> {
   bool IsSubjectToDebugging() const;
 
   bool IsUserJavaScript() const;
+
+  void TraceScriptRundown();
+  void TraceScriptRundownSources();
 
   // Wrappers for GetPositionInfo
   static int GetColumnNumber(DirectHandle<Script> script, int code_offset);

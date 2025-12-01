@@ -96,6 +96,12 @@ BASE_FEATURE(kFocusTriggersWebAndSRPZeroSuggest,
              "OmniboxFocusTriggersWebAndSRPZeroSuggest",
              DISABLED);
 
+// If enabled, suggestion group headers in the Omnibox popup will be hidden
+// (e.g. in order to minimize visual clutter in the zero-prefix state).
+BASE_FEATURE(kHideSuggestionGroupHeaders,
+             "OmniboxHideSuggestionGroupHeaders",
+             DISABLED);
+
 // Enables local history zero-prefix suggestions in every context in which the
 // remote zero-prefix suggestions are enabled.
 BASE_FEATURE(kLocalHistoryZeroSuggestBeyondNTP,
@@ -129,6 +135,12 @@ BASE_FEATURE(kZeroSuggestPrefetchingOnSRP,
 // Web (i.e. non-NTP and non-SRP URLs).
 BASE_FEATURE(kZeroSuggestPrefetchingOnWeb,
              "ZeroSuggestPrefetchingOnWeb",
+             DISABLED);
+
+// Enables fullfillment of contextual zero-prefix suggestions by delegating the
+// logic to Lens.
+BASE_FEATURE(kContextualZeroSuggestLensFulfillment,
+             "ContextualZeroSuggestLensFulfillment",
              DISABLED);
 
 // Features to provide head and tail non personalized search suggestion from
@@ -311,7 +323,7 @@ BASE_FEATURE(kMergeSubtypes, "MergeSubtypes", ENABLED);
 // are enabled.
 BASE_FEATURE(kOmniboxTouchDownTriggerForPrefetch,
              "OmniboxTouchDownTriggerForPrefetch",
-             DISABLED);
+             enable_if(IS_ANDROID));
 
 // Enables additional site search providers for the Site search Starter Pack.
 BASE_FEATURE(kStarterPackExpansion,
@@ -321,6 +333,9 @@ BASE_FEATURE(kStarterPackExpansion,
 // Enables an informational IPH message at the bottom of the Omnibox directing
 // users to certain starter pack engines.
 BASE_FEATURE(kStarterPackIPH, "StarterPackIPH", DISABLED);
+
+// Enables the @page starter pack scope.
+BASE_FEATURE(kStarterPackPage, "StarterPackPage", DISABLED);
 
 // If enabled, |SearchProvider| will not function in Zero Suggest.
 BASE_FEATURE(kAblateSearchProviderWarmup,
@@ -344,6 +359,31 @@ BASE_FEATURE(kOmniboxShortcutsAndroid, "OmniboxShortcutsAndroid", ENABLED);
 // When enabled, it increases ipad's zps matches limit on web,srp and ntp.
 BASE_FEATURE(kIpadZeroSuggestMatches, "IpadZeroSuggestMatches", DISABLED);
 
+// The features below allow tuning number of suggestions offered to users in
+// specific contexts. These features are default enabled and are used to control
+// related fieldtrial parameters.
+BASE_FEATURE(kNumNtpZpsRecentSearches,
+             "OmniboxNumNtpZpsRecentSearches",
+             ENABLED);
+BASE_FEATURE(kNumNtpZpsTrendingSearches,
+             "OmniboxNumNtpZpsTrendingSearches",
+             ENABLED);
+BASE_FEATURE(kNumWebZpsRecentSearches,
+             "OmniboxNumWebZpsRecentSearches",
+             ENABLED);
+BASE_FEATURE(kNumWebZpsRelatedSearches,
+             "OmniboxNumWebZpsRelatedSearches",
+             ENABLED);
+BASE_FEATURE(kNumWebZpsMostVisitedUrls,
+             "OmniboxNumWebZpsMostVisitedUrls",
+             ENABLED);
+BASE_FEATURE(kNumSrpZpsRecentSearches,
+             "OmniboxNumSrpZpsRecentSearches",
+             ENABLED);
+BASE_FEATURE(kNumSrpZpsRelatedSearches,
+             "OmniboxNumSrpZpsRelatedSearches",
+             ENABLED);
+
 #if BUILDFLAG(IS_ANDROID)
 // Enable the Elegant Text Height attribute on the UrlBar.
 // This attribute increases line height by up to 60% to accommodate certain
@@ -356,7 +396,7 @@ BASE_FEATURE(kOmniboxElegantTextHeight, "OmniboxElegantTextHeight", ENABLED);
 // selected so as to allow for easy replacement by the user. Note that even with
 // this feature flag enabled, only large screen devices with an attached
 // keyboard and precision pointer will exhibit a change in behavior.
-BASE_FEATURE(kRetainOmniboxOnFocus, "RetainOmniboxOnFocus", ENABLED); // Vivaldi VAB-10175
+BASE_FEATURE(kRetainOmniboxOnFocus, "RetainOmniboxOnFocus", ENABLED);
 
 // Accelerates time from cold start to focused Omnibox on low-end devices,
 // prioritizing Omnibox focus and background initialization.
@@ -371,17 +411,19 @@ BASE_FEATURE(kSuppressIntermediateACUpdatesOnLowEndDevices,
              DISABLED);
 
 // (Android only) Show the search feature in the hub.
-BASE_FEATURE(kAndroidHubSearch,
-             "AndroidHubSearch",
-             base::FEATURE_ENABLED_BY_DEFAULT); // Vivaldi
+BASE_FEATURE(kAndroidHubSearch, "AndroidHubSearch", ENABLED);
 
 // When enabled, delay focusTab to prioritize navigation
 // (https://crbug.com/374852568).
 BASE_FEATURE(kPostDelayedTaskFocusTab, "PostDelayedTaskFocusTab", ENABLED);
 
+// Controls various Omnibox Diagnostics features.
+BASE_FEATURE(kDiagnostics, "OmniboxDiagnostics", DISABLED);
+
 namespace android {
 static jlong JNI_OmniboxFeatureMap_GetNativeMap(JNIEnv* env) {
   static const base::Feature* const kFeaturesExposedToJava[] = {
+      &kDiagnostics,
       &kOmniboxAnswerActions,
       &kAnimateSuggestionsListAppearance,
       &kOmniboxTouchDownTriggerForPrefetch,
@@ -406,6 +448,6 @@ static jlong JNI_OmniboxFeatureMap_GetNativeMap(JNIEnv* env) {
 // the Settings page.
 BASE_FEATURE(kEnableSearchAggregatorPolicy,
              "EnableSearchAggregatorPolicy",
-             DISABLED);
+             ENABLED);
 
 }  // namespace omnibox

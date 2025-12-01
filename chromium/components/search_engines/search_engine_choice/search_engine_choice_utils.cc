@@ -23,7 +23,6 @@
 #include "components/policy/core/common/policy_service.h"
 #include "components/policy/policy_constants.h"
 #include "components/prefs/pref_service.h"
-#include "components/regional_capabilities/regional_capabilities_utils.h"
 #include "components/search_engines/choice_made_location.h"
 #include "components/search_engines/search_engine_type.h"
 #include "components/search_engines/search_engines_pref_names.h"
@@ -40,6 +39,8 @@
 #include "components/grit/components_scaled_resources.h"  // nogncheck
 #include "ui/resources/grit/ui_resources.h"               // nogncheck
 #endif
+
+using ::country_codes::CountryId;
 
 namespace search_engines {
 
@@ -58,7 +59,7 @@ constexpr char kDisplayStateSelectedEngineIndexKey[] = "selected_engine_index";
 
 ChoiceScreenDisplayState::ChoiceScreenDisplayState(
     std::vector<SearchEngineType> search_engines,
-    int country_id,
+    CountryId country_id,
     std::optional<int> selected_engine_index)
     : search_engines(std::move(search_engines)),
       selected_engine_index(selected_engine_index),
@@ -72,7 +73,7 @@ ChoiceScreenDisplayState::~ChoiceScreenDisplayState() = default;
 base::Value::Dict ChoiceScreenDisplayState::ToDict() const {
   auto dict = base::Value::Dict();
 
-  dict.Set(kDisplayStateCountryIdKey, country_id);
+  dict.Set(kDisplayStateCountryIdKey, country_id.Serialize());
 
   base::Value::List* search_engines_array =
       dict.EnsureList(kDisplayStateSearchEnginesKey);
@@ -91,8 +92,12 @@ base::Value::Dict ChoiceScreenDisplayState::ToDict() const {
 // static
 std::optional<ChoiceScreenDisplayState> ChoiceScreenDisplayState::FromDict(
     const base::Value::Dict& dict) {
-  std::optional<int> parsed_country_id =
+  std::optional<int> parsed_country_code =
       dict.FindInt(kDisplayStateCountryIdKey);
+  std::optional<CountryId> parsed_country_id;
+  if (parsed_country_code.has_value()) {
+    parsed_country_id = CountryId::Deserialize(parsed_country_code.value());
+  }
   const base::Value::List* parsed_search_engines =
       dict.FindList(kDisplayStateSearchEnginesKey);
   std::optional<int> parsed_selected_engine_index =
@@ -126,7 +131,7 @@ std::optional<ChoiceScreenDisplayState> ChoiceScreenDisplayState::FromDict(
 
 ChoiceScreenData::ChoiceScreenData(
     TemplateURL::OwnedTemplateURLVector owned_template_urls,
-    int country_id,
+    CountryId country_id,
     const SearchTermsData& search_terms_data)
     : search_engines_(std::move(owned_template_urls)),
       display_state_(ChoiceScreenDisplayState(
@@ -138,10 +143,6 @@ ChoiceScreenData::ChoiceScreenData(
           country_id)) {}
 
 ChoiceScreenData::~ChoiceScreenData() = default;
-
-bool IsEeaChoiceCountry(int country_id) {
-  return regional_capabilities::IsEeaCountry(country_id);
-}
 
 void RecordChoiceScreenProfileInitCondition(
     SearchEngineChoiceScreenConditions condition) {
@@ -207,13 +208,8 @@ void RecordChoiceScreenPositions(
   }
 }
 
-void RecordUnexpectedSearchProvider(const TemplateURLData& data) {
-  base::UmaHistogramSparse(kSearchEngineChoiceUnexpectedIdHistogram,
-                           data.prepopulate_id);
-}
-
 void WipeSearchEngineChoicePrefs(PrefService& profile_prefs,
-                                 WipeSearchEngineChoiceReason reason) {
+                                 SearchEngineChoiceWipeReason reason) {
   base::UmaHistogramEnumeration(kSearchEngineChoiceWipeReasonHistogram, reason);
   profile_prefs.ClearPref(
       prefs::kDefaultSearchProviderChoiceScreenCompletionTimestamp);
@@ -226,6 +222,17 @@ void WipeSearchEngineChoicePrefs(PrefService& profile_prefs,
     profile_prefs.ClearPref(
         prefs::kDefaultSearchProviderChoiceScreenSkippedCount);
 #endif
+}
+
+std::optional<base::Time> GetChoiceScreenCompletionTimestamp(
+    PrefService& prefs) {
+  if (!prefs.HasPrefPath(
+          prefs::kDefaultSearchProviderChoiceScreenCompletionTimestamp)) {
+    return std::nullopt;
+  }
+
+  return base::Time::FromDeltaSinceWindowsEpoch(base::Seconds(prefs.GetInt64(
+      prefs::kDefaultSearchProviderChoiceScreenCompletionTimestamp)));
 }
 
 #if !BUILDFLAG(IS_ANDROID)
@@ -252,6 +259,6 @@ int GetIconResourceId(const std::u16string& engine_keyword) {
 }
 #endif // Vivaldi
 
-#endif
+#endif  // !BUILDFLAG(IS_ANDROID)
 
 }  // namespace search_engines

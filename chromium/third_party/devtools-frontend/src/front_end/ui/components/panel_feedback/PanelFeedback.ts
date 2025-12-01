@@ -14,7 +14,7 @@ import panelFeedbackStylesRaw from './panelFeedback.css.js';
 
 // TODO(crbug.com/391381439): Fully migrate off of constructed style sheets.
 const panelFeedbackStyles = new CSSStyleSheet();
-panelFeedbackStyles.replaceSync(panelFeedbackStylesRaw.cssContent);
+panelFeedbackStyles.replaceSync(panelFeedbackStylesRaw.cssText);
 
 const UIStrings = {
   /**
@@ -33,7 +33,7 @@ const UIStrings = {
    *@description Title of the section to the quick start video and documentation on experimental panels.
    */
   videoAndDocumentation: 'Video and documentation',
-};
+} as const;
 
 const str_ = i18n.i18n.registerUIStrings('ui/components/panel_feedback/PanelFeedback.ts', UIStrings);
 const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);

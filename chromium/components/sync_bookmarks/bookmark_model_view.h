@@ -102,7 +102,7 @@ class BookmarkModelView {
       const bookmarks::BookmarkNode::MetaInfoMap& meta_info_map);
 
   // Vivaldi
-  virtual const bookmarks::BookmarkNode* trash_node() const = 0;
+  virtual const bookmarks::BookmarkNode* trash_node() const { return nullptr; }
 
  protected:
   bookmarks::BookmarkModel* underlying_model() { return bookmark_model_.get(); }

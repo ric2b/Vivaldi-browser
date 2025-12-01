@@ -9,7 +9,6 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/thread_pool.h"
 #include "base/values.h"
-#include "browser/removed_partners_tracker.h"
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "components/bookmarks/common/bookmark_metrics.h"
 #include "components/bookmarks/vivaldi_bookmark_kit.h"
@@ -340,7 +339,7 @@ void BookmarkUpdater::SetDeletedPartners(PrefService* prefs) {
       prefs->GetList(vivaldiprefs::kBookmarksDeletedPartners);
   bool upgraded_old_ids = false;
   deleted_partner_uuids_ =
-      vivaldi_partners::RemovedPartnersTracker::ReadRemovedPartners(
+      ReadRemovedPartners(
           deleted_partners, upgraded_old_ids);
 }
 
@@ -833,4 +832,24 @@ void UpdatePartners(std::unique_ptr<UpdaterClient> client,
                      std::move(callback)));
 }
 
+std::set<base::Uuid> ReadRemovedPartners(
+    const base::Value::List& deleted_partners,
+    bool& upgraded_old_id) {
+  upgraded_old_id = false;
+  std::set<base::Uuid> removed_partners;
+
+  for (const base::Value& deleted_partner : deleted_partners) {
+    if (!deleted_partner.is_string())
+      continue;
+    base::Uuid migrated_removed_partner =
+        base::Uuid::ParseCaseInsensitive(deleted_partner.GetString());
+    if (migrated_removed_partner.is_valid()) {
+      // Upgrade from old, locale-based id to new id.
+      upgraded_old_id = upgraded_old_id || vivaldi_partners::MapLocaleIdToUuid(
+                                               migrated_removed_partner);
+      removed_partners.insert(migrated_removed_partner);
+    }
+  }
+  return removed_partners;
+}
 }  // namespace vivaldi_default_bookmarks

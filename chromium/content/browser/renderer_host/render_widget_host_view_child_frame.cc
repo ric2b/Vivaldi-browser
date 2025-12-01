@@ -181,6 +181,15 @@ void RenderWidgetHostViewChildFrame::SetFrameConnector(
     // Unlocks the mouse if this RenderWidgetHostView holds the lock.
     UnlockPointer();
     DetachFromTouchSelectionClientManagerIfNecessary();
+
+    auto* root_view = frame_connector_->GetRootRenderWidgetHostView();
+    if (root_view) {
+      auto* input_transfer_handler =
+          root_view->GetInputTransferHandlerObserver();
+      if (input_transfer_handler) {
+        host()->RemoveInputEventObserver(input_transfer_handler);
+      }
+    }
   }
   frame_connector_ = frame_connector;
   input_helper_->SetDelegate(frame_connector);
@@ -200,6 +209,10 @@ void RenderWidgetHostViewChildFrame::SetFrameConnector(
 
   auto* root_view = frame_connector_->GetRootRenderWidgetHostView();
   if (root_view) {
+    auto* input_transfer_handler = root_view->GetInputTransferHandlerObserver();
+    if (input_transfer_handler) {
+      host()->AddInputEventObserver(input_transfer_handler);
+    }
     auto* manager = root_view->GetTouchSelectionControllerClientManager();
     if (manager) {
       // We have managers in Aura and Android, as well as outside of content/.
@@ -426,7 +439,12 @@ RenderWidgetHostViewChildFrame::GetDisplayFeature() {
   NOTREACHED();
 }
 
-void RenderWidgetHostViewChildFrame::SetDisplayFeatureForTesting(
+void RenderWidgetHostViewChildFrame::
+    DisableDisplayFeatureOverrideForEmulation() {
+  NOTREACHED();
+}
+
+void RenderWidgetHostViewChildFrame::OverrideDisplayFeatureForEmulation(
     const DisplayFeature*) {
   NOTREACHED();
 }

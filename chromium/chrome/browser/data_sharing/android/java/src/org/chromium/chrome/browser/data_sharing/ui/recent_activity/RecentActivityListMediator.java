@@ -4,13 +4,15 @@
 
 package org.chromium.chrome.browser.data_sharing.ui.recent_activity;
 
+import static org.chromium.build.NullUtil.assumeNonNull;
+
 import android.content.Context;
 import android.view.View.OnClickListener;
 import android.widget.ImageView;
 
-import androidx.annotation.NonNull;
-
 import org.chromium.base.Callback;
+import org.chromium.build.annotations.NullMarked;
+import org.chromium.build.annotations.Nullable;
 import org.chromium.chrome.browser.data_sharing.ui.recent_activity.RecentActivityListCoordinator.AvatarProvider;
 import org.chromium.chrome.browser.data_sharing.ui.recent_activity.RecentActivityListCoordinator.FaviconProvider;
 import org.chromium.components.collaboration.messaging.ActivityLogItem;
@@ -30,6 +32,7 @@ import java.util.List;
  * Core business logic for the recent activity UI. Populates a {@link ModelList} from a list of
  * recent activities obtained from the messaging backend.
  */
+@NullMarked
 class RecentActivityListMediator {
     private final Context mContext;
     private final PropertyModel mPropertyModel;
@@ -53,9 +56,9 @@ class RecentActivityListMediator {
      * @param closeBottomSheetCallback Callback to invoke when bottom sheet is to be closed.
      */
     public RecentActivityListMediator(
-            @NonNull Context context,
-            @NonNull PropertyModel propertyModel,
-            @NonNull ModelList modelList,
+            Context context,
+            PropertyModel propertyModel,
+            ModelList modelList,
             MessagingBackendService messagingBackendService,
             FaviconProvider faviconProvider,
             AvatarProvider avatarProvider,
@@ -111,27 +114,29 @@ class RecentActivityListMediator {
                     RecentActivityListProperties.ON_CLICK_LISTENER,
                     createActivityLogItemOnClickListener(logItem));
 
-            DescriptionAndTimestamp descriptionAndTimestamp = new DescriptionAndTimestamp();
-            descriptionAndTimestamp.description = logItem.descriptionText;
-            descriptionAndTimestamp.timestamp = logItem.timeDeltaText;
-            descriptionAndTimestamp.separator =
-                    mContext.getString(R.string.data_sharing_recent_activity_separator);
-            descriptionAndTimestamp.descriptionFullTextResId =
-                    R.string.data_sharing_recent_activity_description_full;
+            DescriptionAndTimestamp descriptionAndTimestamp =
+                    new DescriptionAndTimestamp(
+                            /* description= */ logItem.descriptionText,
+                            /* separator= */ mContext.getString(
+                                    R.string.data_sharing_recent_activity_separator),
+                            /* timestamp= */ logItem.timeDeltaText,
+                            /* descriptionFullTextResId= */ R.string
+                                    .data_sharing_recent_activity_description_full);
 
             propertyModel.set(
                     RecentActivityListProperties.DESCRIPTION_AND_TIMESTAMP_TEXT,
                     descriptionAndTimestamp);
 
             // Set favicon provider if favicon should be shown.
+            Callback<ImageView> faviconCallback = null;
             if (logItem.showFavicon) {
                 GURL tabUrl = new GURL(getTabLastKnownUrl(logItem));
-                Callback<ImageView> faviconCallback =
+                faviconCallback =
                         faviconView -> {
                             mFaviconProvider.fetchFavicon(tabUrl, faviconView::setImageDrawable);
                         };
-                propertyModel.set(RecentActivityListProperties.FAVICON_PROVIDER, faviconCallback);
             }
+            propertyModel.set(RecentActivityListProperties.FAVICON_PROVIDER, faviconCallback);
 
             // Set avatar provider.
             Callback<ImageView> avatarCallback =
@@ -170,23 +175,22 @@ class RecentActivityListMediator {
         };
     }
 
-    private @NonNull TabMessageMetadata getTabMetadata(ActivityLogItem logItem) {
+    private TabMessageMetadata getTabMetadata(ActivityLogItem logItem) {
         assert logItem.activityMetadata != null : "ActivityMetadata is null";
         assert logItem.activityMetadata.tabMetadata != null : "TabMetadata is null";
         return logItem.activityMetadata.tabMetadata;
     }
 
-    private @NonNull String getTabLastKnownUrl(ActivityLogItem logItem) {
-        return getTabMetadata(logItem).lastKnownUrl;
+    private String getTabLastKnownUrl(ActivityLogItem logItem) {
+        return assumeNonNull(getTabMetadata(logItem).lastKnownUrl);
     }
 
-    private @NonNull GroupMember getUserToDisplay(ActivityLogItem logItem) {
+    private @Nullable GroupMember getUserToDisplay(ActivityLogItem logItem) {
         assert logItem.activityMetadata != null : "ActivityMetadata is null";
         GroupMember member = logItem.activityMetadata.triggeringUser;
         if (member == null) {
             member = logItem.activityMetadata.affectedUser;
         }
-        assert member != null : "The user is null";
         return member;
     }
 }

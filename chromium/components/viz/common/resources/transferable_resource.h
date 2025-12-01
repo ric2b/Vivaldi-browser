@@ -16,7 +16,6 @@
 #include "components/viz/common/viz_common_export.h"
 #include "gpu/command_buffer/common/mailbox_holder.h"
 #include "gpu/ipc/common/vulkan_ycbcr_info.h"
-#include "third_party/abseil-cpp/absl/types/variant.h"
 #include "third_party/skia/include/gpu/ganesh/GrTypes.h"
 #include "ui/gfx/buffer_types.h"
 #include "ui/gfx/color_space.h"
@@ -184,6 +183,9 @@ struct VIZ_COMMON_EXPORT TransferableResource {
   // true.
   bool is_overlay_candidate = false;
 
+  // Indicates if the resource uses low latency rendering.
+  bool is_low_latency_rendering = false;
+
   // This defines when the display compositor returns resources. Clients may use
   // different synchronization types based on their needs.
   SynchronizationType synchronization_type = SynchronizationType::kSyncToken;
@@ -192,16 +194,11 @@ struct VIZ_COMMON_EXPORT TransferableResource {
   std::optional<gpu::VulkanYCbCrInfo> ycbcr_info;
 
 #if BUILDFLAG(IS_ANDROID)
-  // Indicates whether this resource may not be overlaid on Android, since
-  // it's not backed by a SurfaceView.  This may be set in combination with
-  // |is_overlay_candidate|, to find out if switching the resource to a
-  // a SurfaceView would result in overlay promotion.  It's good to find this
+  // Indicates whether this resource may be overlaid on Android via legacy
+  // overlay flow, since it's backed by a SurfaceView. It's good to find this
   // out in advance, since one has no fallback path for displaying a
-  // SurfaceView except via promoting it to an overlay.  Ideally, one _could_
-  // promote SurfaceTexture via the overlay path, even if one ended up just
-  // drawing a quad in the compositor.  However, for now, we use this flag to
-  // refuse to promote so that the compositor will draw the quad.
-  bool is_backed_by_surface_texture = false;
+  // SurfaceView except via promoting it to an overlay.
+  bool is_backed_by_surface_view = false;
 #endif
 
 #if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_WIN)
@@ -228,7 +225,7 @@ struct VIZ_COMMON_EXPORT TransferableResource {
            color_space == o.color_space && hdr_metadata == o.hdr_metadata &&
            is_overlay_candidate == o.is_overlay_candidate &&
 #if BUILDFLAG(IS_ANDROID)
-           is_backed_by_surface_texture == o.is_backed_by_surface_texture &&
+           is_backed_by_surface_view == o.is_backed_by_surface_view &&
            wants_promotion_hint == o.wants_promotion_hint &&
 #elif BUILDFLAG(IS_WIN)
            wants_promotion_hint == o.wants_promotion_hint &&

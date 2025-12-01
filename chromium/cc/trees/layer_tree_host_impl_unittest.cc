@@ -34,6 +34,7 @@
 #include "cc/input/page_scale_animation.h"
 #include "cc/input/scroll_utils.h"
 #include "cc/input/scrollbar_controller.h"
+#include "cc/layers/append_quads_context.h"
 #include "cc/layers/append_quads_data.h"
 #include "cc/layers/layer_impl.h"
 #include "cc/layers/nine_patch_thumb_scrollbar_layer_impl.h"
@@ -1009,7 +1010,8 @@ class FluentOverlayScrollbarOpacityLayerTreeHostImplTest
     scrollbar->SetThumbThicknessScaleFactor(thickness);
     auto render_pass = viz::CompositorRenderPass::Create();
     AppendQuadsData append_quads_data;
-    scrollbar->AppendQuads(render_pass.get(), &append_quads_data);
+    scrollbar->AppendQuads(AppendQuadsContext{DRAW_MODE_HARDWARE, {}, false},
+                           render_pass.get(), &append_quads_data);
     if (expected_opacity == 0.f) {
       // If the opacity of the track is expected to be zero, the layer code
       // makes an early return and doesn't append the track's quads.
@@ -3726,7 +3728,8 @@ class IncompleteRecordingLayer : public LayerImpl {
   IncompleteRecordingLayer(LayerTreeImpl* layer_tree_impl, int id)
       : LayerImpl(layer_tree_impl, id) {}
 
-  void AppendQuads(viz::CompositorRenderPass* render_pass,
+  void AppendQuads(const AppendQuadsContext& context,
+                   viz::CompositorRenderPass* render_pass,
                    AppendQuadsData* append_quads_data) override {
     append_quads_data->checkerboarded_needs_record = true;
     append_quads_data->visible_layer_area += 200;
@@ -6508,10 +6511,11 @@ class DidDrawCheckLayer : public LayerImpl {
     return true;
   }
 
-  void AppendQuads(viz::CompositorRenderPass* render_pass,
+  void AppendQuads(const AppendQuadsContext& context,
+                   viz::CompositorRenderPass* render_pass,
                    AppendQuadsData* append_quads_data) override {
     append_quads_called_ = true;
-    LayerImpl::AppendQuads(render_pass, append_quads_data);
+    LayerImpl::AppendQuads(context, render_pass, append_quads_data);
   }
 
   void DidDraw(viz::ClientResourceProvider* provider) override {
@@ -6765,9 +6769,10 @@ class MissingTextureAnimatingLayer : public DidDrawCheckLayer {
         tree_impl, id, tile_missing, had_incomplete_tile, animating, timeline));
   }
 
-  void AppendQuads(viz::CompositorRenderPass* render_pass,
+  void AppendQuads(const AppendQuadsContext& context,
+                   viz::CompositorRenderPass* render_pass,
                    AppendQuadsData* append_quads_data) override {
-    LayerImpl::AppendQuads(render_pass, append_quads_data);
+    LayerImpl::AppendQuads(context, render_pass, append_quads_data);
     if (had_incomplete_tile_) {
       append_quads_data->checkerboarded_needs_raster = true;
     }
@@ -10690,7 +10695,8 @@ class BlendStateCheckLayer : public LayerImpl {
     resource_provider_->RemoveImportedResource(resource_id_);
   }
 
-  void AppendQuads(viz::CompositorRenderPass* render_pass,
+  void AppendQuads(const AppendQuadsContext& context,
+                   viz::CompositorRenderPass* render_pass,
                    AppendQuadsData* append_quads_data) override {
     quads_appended_ = true;
 
@@ -11378,7 +11384,8 @@ class FakeLayerWithQuads : public LayerImpl {
     return base::WrapUnique(new FakeLayerWithQuads(tree_impl, id));
   }
 
-  void AppendQuads(viz::CompositorRenderPass* render_pass,
+  void AppendQuads(const AppendQuadsContext& context,
+                   viz::CompositorRenderPass* render_pass,
                    AppendQuadsData* append_quads_data) override {
     viz::SharedQuadState* shared_quad_state =
         render_pass->CreateAndAppendSharedQuadState();
@@ -13094,7 +13101,8 @@ TEST_P(LayerTreeHostImplTest, OnMemoryPressure) {
       host_impl_->resource_pool()->GetTotalMemoryUsageForTesting();
   EXPECT_EQ(current_memory_usage, 0u);
 
-  resource.set_gpu_backing(std::make_unique<ResourcePool::GpuBacking>());
+  resource.set_backing(std::make_unique<ResourcePool::Backing>(
+      resource.size(), resource.format(), resource.color_space()));
 
   host_impl_->resource_pool()->ReleaseResource(std::move(resource));
 
@@ -18286,8 +18294,8 @@ void UnifiedScrollingTest::TestNonCompositedScrollingState(
     ASSERT_EQ(transform_node->element_id, ScrollerElementId());
     ASSERT_TRUE(transform_node->scrolls);
 
-    ASSERT_EQ(gfx::PointF(0, 0), transform_node->scroll_offset);
-    ASSERT_FALSE(transform_node->transform_changed);
+    ASSERT_EQ(gfx::PointF(0, 0), transform_node->scroll_offset());
+    ASSERT_FALSE(transform_node->transform_changed());
     ASSERT_FALSE(transform_node->needs_local_transform_update);
     ASSERT_FALSE(transform_tree.needs_update());
   }
@@ -18310,16 +18318,16 @@ void UnifiedScrollingTest::TestNonCompositedScrollingState(
     EXPECT_TRUE(did_request_commit_);
 
     // Ensure the transform tree was updated only if expected.
-    EXPECT_EQ(mutates_transform_tree, transform_node->transform_changed);
+    EXPECT_EQ(mutates_transform_tree, transform_node->transform_changed());
     EXPECT_EQ(mutates_transform_tree,
               transform_node->needs_local_transform_update);
     EXPECT_EQ(mutates_transform_tree, transform_tree.needs_update());
     if (mutates_transform_tree) {
-      EXPECT_EQ(gfx::PointF(0, 10), transform_node->scroll_offset);
+      EXPECT_EQ(gfx::PointF(0, 10), transform_node->scroll_offset());
       EXPECT_EQ(gfx::PointF(0, 10),
                 scroll_tree.GetScrollOffsetForScrollTimeline(*ScrollerNode()));
     } else {
-      EXPECT_EQ(gfx::PointF(0, 0), transform_node->scroll_offset);
+      EXPECT_EQ(gfx::PointF(0, 0), transform_node->scroll_offset());
       EXPECT_EQ(gfx::PointF(0, 0),
                 scroll_tree.GetScrollOffsetForScrollTimeline(*ScrollerNode()));
     }
@@ -18342,16 +18350,16 @@ void UnifiedScrollingTest::TestNonCompositedScrollingState(
     ASSERT_EQ(gfx::PointF(0, 20), ScrollerOffset());
     EXPECT_TRUE(did_request_commit_);
 
-    EXPECT_EQ(mutates_transform_tree, transform_node->transform_changed);
+    EXPECT_EQ(mutates_transform_tree, transform_node->transform_changed());
     EXPECT_EQ(mutates_transform_tree,
               transform_node->needs_local_transform_update);
     EXPECT_EQ(mutates_transform_tree, transform_tree.needs_update());
     if (mutates_transform_tree) {
-      EXPECT_EQ(gfx::PointF(0, 20), transform_node->scroll_offset);
+      EXPECT_EQ(gfx::PointF(0, 20), transform_node->scroll_offset());
       EXPECT_EQ(gfx::PointF(0, 20),
                 scroll_tree.GetScrollOffsetForScrollTimeline(*ScrollerNode()));
     } else {
-      EXPECT_EQ(gfx::PointF(0, 0), transform_node->scroll_offset);
+      EXPECT_EQ(gfx::PointF(0, 0), transform_node->scroll_offset());
       EXPECT_EQ(gfx::PointF(0, 0),
                 scroll_tree.GetScrollOffsetForScrollTimeline(*ScrollerNode()));
     }
@@ -18386,8 +18394,8 @@ TEST_P(UnifiedScrollingTest, MainThreadReasonsScrollDoesntAffectTransform) {
     ASSERT_EQ(gfx::PointF(0, 30), ScrollerOffset());
 
     // The transform node should now be updated by the scroll.
-    EXPECT_EQ(gfx::PointF(0, 30), transform_node->scroll_offset);
-    EXPECT_TRUE(transform_node->transform_changed);
+    EXPECT_EQ(gfx::PointF(0, 30), transform_node->scroll_offset());
+    EXPECT_TRUE(transform_node->transform_changed());
     EXPECT_TRUE(transform_node->needs_local_transform_update);
     EXPECT_TRUE(tree.needs_update());
   }
@@ -18417,8 +18425,8 @@ TEST_P(UnifiedScrollingTest, NonCompositedScrollerDoesntAffectTransform) {
     ASSERT_EQ(gfx::PointF(0, 30), ScrollerOffset());
 
     // The transform node should now be updated by the scroll.
-    EXPECT_EQ(gfx::PointF(0, 30), transform_node->scroll_offset);
-    EXPECT_TRUE(transform_node->transform_changed);
+    EXPECT_EQ(gfx::PointF(0, 30), transform_node->scroll_offset());
+    EXPECT_TRUE(transform_node->transform_changed());
     EXPECT_TRUE(transform_node->needs_local_transform_update);
     EXPECT_TRUE(tree.needs_update());
   }

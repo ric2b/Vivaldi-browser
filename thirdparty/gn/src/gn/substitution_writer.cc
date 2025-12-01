@@ -384,8 +384,10 @@ std::string SubstitutionWriter::GetSourceSubstitution(
   } else if (IsValidRustSubstitution(type)) {
     to_rebase = source.value();
   } else {
-    NOTREACHED() << "Unsupported substitution for this function: "
-                 << type->name;
+    // Do not add NOTREACHED() statement here, as Chromium
+    // nobuild_source_set() templates rely on passing {{cflags}}
+    // substitution expressions (and other C++ specific ones)
+    // to action_foreach(). See https://gn.issues.chromium.org/388100196.
     return std::string();
   }
 

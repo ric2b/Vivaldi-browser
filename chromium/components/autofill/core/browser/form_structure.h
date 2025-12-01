@@ -54,8 +54,6 @@ using FieldSuggestion = AutofillQueryResponse::FormSuggestion::FieldSuggestion;
 class FormData;
 struct FormDataPredictions;
 
-class RandomizedEncoder;
-
 // FormStructure stores a single HTML form together with the values entered
 // in the fields along with additional information needed by Autofill.
 class FormStructure {
@@ -72,6 +70,17 @@ class FormStructure {
   void DetermineHeuristicTypes(
       const GeoIpCountryCode& client_country,
       LogManager* log_manager);
+
+  // Runs rationalization and sectioning. This is to be run after the field
+  // types change.
+  //
+  // For historical reasons, the order of rationalization and sectioning is
+  // context-dependent: Usually, sectioning comes first. But for server
+  // predictions (or `legacy_order` is true), parts of the rationalization
+  // happens before sectioning.
+  // TODO(crbug.com/408497919): Make the order consistent.
+  void RationalizeAndAssignSections(LogManager* log_manager,
+                                    bool legacy_order = false);
 
   // Returns predictions using the details from the given |form_structures| and
   // their fields' predicted types.
@@ -111,12 +120,6 @@ class FormStructure {
   // defined by the given CreditCardFormCompleteness level.
   bool IsCompleteCreditCardForm(
       CreditCardFormCompleteness credit_card_form_completeness) const;
-
-  // Resets |autofill_count_| and counts the number of auto-fillable fields.
-  // This is used when we receive server data for form fields.  At that time,
-  // we may have more known fields than just the number of fields we matched
-  // heuristically.
-  void UpdateAutofillCount();
 
   // Returns true if this form matches the structural requirements for Autofill.
   [[nodiscard]] bool ShouldBeParsed(LogManager* log_manager = nullptr) const {
@@ -223,29 +226,6 @@ class FormStructure {
   void RetrieveFromCache(const FormStructure& cached_form,
                          RetrieveFromCacheReason reason);
 
-  void LogDetermineHeuristicTypesMetrics();
-
-  // Sets each field's `html_type` and `html_mode` based on the field's
-  // `parsed_autocomplete` member.
-  // Sets `has_author_specified_types_` to `true` iff the `parsed_autocomplete`
-  // is available for at least one field.
-  void SetFieldTypesFromAutocompleteAttribute();
-
-  // Resets each field's section and sets it based on the `parsed_autocomplete`
-  // member when available.
-  // Returns whether at least one field's `parsed_autocomplete` section is
-  // correctly defined by the web developer.
-  bool SetSectionsFromAutocompleteOrReset();
-
-  // Returns the values that can be filled into the form structure for the
-  // given type. For example, there's no way to fill in a value of "The Moon"
-  // into ADDRESS_HOME_STATE if the form only has a
-  // <select autocomplete="region"> with no "The Moon" option. Returns an
-  // empty set if the form doesn't reference the given type or if all inputs
-  // are accepted (e.g., <input type="text" autocomplete="region">).
-  // All returned values are standardized to upper case.
-  std::set<std::u16string> PossibleValues(FieldType type);
-
   // Rationalize phone number fields so that, in every section, only the first
   // complete phone number is filled automatically. This is useful for when a
   // form contains a first phone number and second phone number, which usually
@@ -272,13 +252,6 @@ class FormStructure {
   const AutofillField* GetFieldById(FieldGlobalId field_id) const;
   AutofillField* GetFieldById(FieldGlobalId field_id);
 
-  // Returns the number of fields that are part of the form signature and that
-  // are included in queries to the Autofill server.
-  size_t active_field_count() const;
-
-  // Returns the number of fields that are able to be autofilled.
-  size_t autofill_count() const { return autofill_count_; }
-
   // Used for iterating over the fields.
   std::vector<std::unique_ptr<AutofillField>>::const_iterator begin() const {
     return fields_.begin();
@@ -304,12 +277,6 @@ class FormStructure {
 
   const ButtonTitleList& button_titles() const { return button_titles_; }
 
-  bool has_author_specified_types() const {
-    return has_author_specified_types_;
-  }
-
-  bool has_password_field() const { return has_password_field_; }
-
   // Returns whether the form comes from an HTML form with a <form> tag.
   bool is_form_element() const;
 
@@ -332,7 +299,11 @@ class FormStructure {
     last_filling_timestamp_ = last_filling_timestamp;
   }
 
-  bool all_fields_are_passwords() const { return all_fields_are_passwords_; }
+  bool may_run_autofill_ai_model() const { return may_run_autofill_ai_model_; }
+
+  void set_may_run_autofill_ai_model(bool may_run_autofill_ai_model) {
+    may_run_autofill_ai_model_ = may_run_autofill_ai_model;
+  }
 
   FormSignature form_signature() const { return form_signature_; }
 
@@ -363,15 +334,6 @@ class FormStructure {
 
   int developer_engagement_metrics() const {
     return developer_engagement_metrics_;
-  }
-
-  void set_randomized_encoder(std::unique_ptr<RandomizedEncoder> encoder);
-
-  base::optional_ref<const RandomizedEncoder> randomized_encoder() const {
-    if (randomized_encoder_) {
-      return randomized_encoder_.get();
-    }
-    return std::nullopt;
   }
 
   const LanguageCode& current_page_language() const {
@@ -417,16 +379,6 @@ class FormStructure {
   // Sets the rank of each field in the form.
   void DetermineFieldRanks();
 
-  // Considers all `GetNonActiveHeuristicSources()` and computes predictions
-  // for the PatternSources among them. If some of them match the
-  // `active_predictions`, applying the regexes is skipped entirely.
-  // `active_predictions` is nullopt if the active HeuristicSource is not a
-  // PatternSource.
-  // Reuses the `context` used to compute the main predictions for caching.
-  void DetermineNonActiveHeuristicTypes(
-      std::optional<FieldCandidatesMap> active_predictions,
-      ParsingContext& context);
-
   // Classifies each field using the regular expressions. The classifications
   // are returned, but not assigned to the `fields_` yet. Use
   // `AssignBestFieldTypes()` to do so.
@@ -437,6 +389,12 @@ class FormStructure {
   // types of the corresponding fields for the `pattern_source`.
   void AssignBestFieldTypes(const FieldCandidatesMap& field_type_map,
                             HeuristicSource heuristic_source);
+
+  void LogDetermineHeuristicTypesMetrics();
+
+  // Sets each field's `html_type` and `html_mode` based on the field's
+  // `parsed_autocomplete` member.
+  void SetFieldTypesFromAutocompleteAttribute();
 
   // Production code only uses the default parameters.
   // Unit tests also test other parameters.
@@ -503,26 +461,12 @@ class FormStructure {
   // trees. For details, see RenderFrameHost::GetMainFrame().
   url::Origin main_frame_origin_;
 
-  // The number of fields able to be auto-filled.
-  size_t autofill_count_ = 0;
-
   // A vector of all the input fields in the form.
   // See FormFieldData::fields.
   std::vector<std::unique_ptr<AutofillField>> fields_;
 
-  // The number of fields that are part of the form signature and that are
-  // included in queries to the Autofill server.
-  size_t active_field_count_ = 0;
-
-  // Whether the form includes any field types explicitly specified by the site
-  // author, via the |autocompletetype| attribute.
-  bool has_author_specified_types_ = false;
-
-  // True if the form contains at least one password field.
-  bool has_password_field_ = false;
-
-  // True if all form fields are password fields.
-  bool all_fields_are_passwords_ = false;
+  // Indicates whether the client may run the AutofillAI model for this form.
+  bool may_run_autofill_ai_model_ = false;
 
   // The unique signature for this form, composed of the target url domain,
   // the form name, and the form field names in a 64-bit hash.
@@ -547,10 +491,6 @@ class FormStructure {
   int developer_engagement_metrics_ = 0;
 
   mojom::SubmissionSource submission_source_ = mojom::SubmissionSource::NONE;
-
-  // The randomized encoder to use to encode form metadata during upload.
-  // If this is nullptr, no randomized metadata will be sent.
-  std::unique_ptr<RandomizedEncoder> randomized_encoder_;
 
   // True iff queries encoded from this form structure should include rich
   // form/field metadata.

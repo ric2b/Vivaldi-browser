@@ -9,6 +9,7 @@ import android.graphics.Bitmap;
 import android.text.TextUtils;
 
 import androidx.annotation.Nullable;
+import androidx.annotation.VisibleForTesting;
 
 import org.jni_zero.CalledByNative;
 import org.jni_zero.JNINamespace;
@@ -967,15 +968,6 @@ public class PersonalDataManager implements Destroyable {
         PersonalDataManagerJni.get().recordAndLogCreditCardUse(mPersonalDataManagerAndroid, guid);
     }
 
-    protected void clearImageDataForTesting() {
-        if (mImageFetcher == null) {
-            return;
-        }
-
-        ThreadUtils.assertOnUiThread();
-        mImageFetcher.clearCachedImagesForTesting();
-    }
-
     /**
      * Determines whether the logged in user (if any) is eligible to store Autofill address profiles
      * to their account.
@@ -1128,13 +1120,6 @@ public class PersonalDataManager implements Destroyable {
     }
 
     /**
-     * @return Whether the Autofill feature is managed.
-     */
-    public boolean isAutofillManaged() {
-        return PersonalDataManagerJni.get().isAutofillManaged(mPersonalDataManagerAndroid);
-    }
-
-    /**
      * @return Whether the Autofill feature for Profiles (addresses) is managed.
      */
     public boolean isAutofillProfileManaged() {
@@ -1172,14 +1157,6 @@ public class PersonalDataManager implements Destroyable {
         return mImageFetcher.getImageIfAvailable(customImageUrl, cardIconSpecs);
     }
 
-    /**
-     * Returns the {@link AutofillImageFetcher} that is used to download and cache icons for payment
-     * methods.
-     */
-    public AutofillImageFetcher getImageFetcherForTesting() {
-        return mImageFetcher;
-    }
-
     public void setImageFetcherForTesting(ImageFetcher imageFetcher) {
         var oldValue = this.mImageFetcher;
         this.mImageFetcher = new AutofillImageFetcher(imageFetcher);
@@ -1207,7 +1184,8 @@ public class PersonalDataManager implements Destroyable {
     }
 
     @NativeMethods
-    interface Natives {
+    @VisibleForTesting(otherwise = VisibleForTesting.PACKAGE_PRIVATE)
+    public interface Natives {
         long init(PersonalDataManager caller, @JniType("Profile*") Profile profile);
 
         void destroy(long nativePersonalDataManagerAndroid);
@@ -1295,8 +1273,6 @@ public class PersonalDataManager implements Destroyable {
         boolean hasCreditCards(long nativePersonalDataManagerAndroid);
 
         boolean isFidoAuthenticationAvailable(long nativePersonalDataManagerAndroid);
-
-        boolean isAutofillManaged(long nativePersonalDataManagerAndroid);
 
         boolean isAutofillProfileManaged(long nativePersonalDataManagerAndroid);
 

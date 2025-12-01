@@ -15,6 +15,7 @@
 #include "base/component_export.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/raw_ptr_exclusion.h"
+#include "base/no_destructor.h"
 #include "base/strings/utf_offset_string_conversions.h"
 #include "ui/accessibility/ax_enums.mojom-forward.h"
 #include "ui/accessibility/platform/ax_platform_node_base.h"
@@ -27,16 +28,27 @@ struct AtkAttributeSetDeleter {
   }
 };
 
+// Internal replication of the Atk.Live enum
+// https://docs.gtk.org/atk/enum.Live.html
+// TODO(https://crbug.com/404172321): We replicated this due to build issues
+// likely due to the newness of this enum in the Atk library. Remove this in
+// favor of the Atk library enum when Atk headers are updated internally.
+enum AriaNotificationAtkLive {
+  kNone,
+  kPolite,
+  kAssertive,
+};
+
 using AtkAttributes = std::unique_ptr<AtkAttributeSet, AtkAttributeSetDeleter>;
 
 // Some ATK interfaces require returning a (const gchar*), use
 // this macro to make it safe to return a pointer to a temporary
 // string.
-#define ATK_AURALINUX_RETURN_STRING(str_expr) \
-  {                                           \
-    static std::string result;                \
-    result = (str_expr);                      \
-    return result.c_str();                    \
+#define ATK_AURALINUX_RETURN_STRING(str_expr)      \
+  {                                                \
+    static base::NoDestructor<std::string> result; \
+    *result = (str_expr);                          \
+    return result->c_str();                        \
   }
 
 namespace ui {
@@ -192,6 +204,9 @@ class COMPONENT_EXPORT(AX_PLATFORM) AXPlatformNodeAuraLinux
   void OnSortDirectionChanged();
   void OnInvalidStatusChanged();
   void OnAriaCurrentChanged();
+  void OnAriaNotificationPosted(
+      const std::string& announcement,
+      ax::mojom::AriaNotificationPriority priority_property);
   void OnDocumentTitleChanged();
   void OnSubtreeCreated();
   void OnSubtreeWillBeDeleted();
@@ -409,7 +424,7 @@ class COMPONENT_EXPORT(AX_PLATFORM) AXPlatformNodeAuraLinux
 
   bool window_activate_event_postponed_ = false;
 
-  friend AXPlatformNode* AXPlatformNode::Create(
+  friend AXPlatformNode::Pointer AXPlatformNode::Create(
       AXPlatformNodeDelegate* delegate);
 };
 

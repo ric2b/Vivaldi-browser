@@ -69,6 +69,7 @@
 #include "base/tracing/protos/chrome_track_event.pbzero.h"
 #include "build/build_config.h"
 #include "cc/base/switches.h"
+#include "components/embedder_support/switches.h"
 #include "components/input/utils.h"
 #include "components/metrics/histogram_controller.h"
 #include "components/metrics/single_sample_metrics.h"
@@ -187,6 +188,7 @@
 #include "services/device/public/mojom/power_monitor.mojom.h"
 #include "services/device/public/mojom/screen_orientation.mojom.h"
 #include "services/device/public/mojom/time_zone_monitor.mojom.h"
+#include "services/network/public/cpp/network_switches.h"
 #include "services/network/public/mojom/network_service.mojom.h"
 #include "services/resource_coordinator/public/mojom/memory_instrumentation/memory_instrumentation.mojom.h"
 #include "services/service_manager/public/cpp/interface_provider.h"
@@ -204,6 +206,7 @@
 #include "third_party/blink/public/mojom/origin_trials/origin_trials_settings.mojom.h"
 #include "third_party/blink/public/mojom/plugins/plugin_registry.mojom.h"
 #include "third_party/blink/public/public_buildflags.h"
+#include "third_party/perfetto/include/perfetto/tracing/traced_proto.h"
 #include "ui/accessibility/accessibility_switches.h"
 #include "ui/base/ui_base_features.h"
 #include "ui/base/ui_base_switches.h"
@@ -233,7 +236,7 @@
 #endif
 
 #if BUILDFLAG(ALLOW_OOP_VIDEO_DECODER)
-#include "content/public/browser/stable_video_decoder_factory.h"
+#include "content/public/browser/oop_video_decoder_factory.h"
 #endif
 
 #if BUILDFLAG(IS_APPLE)
@@ -661,6 +664,39 @@ const void* const kPendingSiteProcessCountTrackerKey =
     "PendingSiteProcessCountTrackerKey";
 const void* const kDelayedShutdownSiteProcessCountTrackerKey =
     "DelayedShutdownSiteProcessCountTrackerKey";
+
+// This tracker is used to implement empty process reuse for performance. By
+// tracking processes that have become empty (no frames attached), we can avoid
+// the overhead of creating new processes when a new SiteInstance needs a
+// renderer.
+//
+// New processes are explicitly not added to this tracker upon initial creation
+// when they are empty. This tracker is specifically for processes that have
+// been used, have become empty (lost all frames), and are then eligible for
+// reuse.
+//
+// TODO:(crbug.com/396105965): Unify DelayedShutdownSiteProcessCountTracker and
+// EmptySiteProcessCountTracker. It's worth noting that the
+// DelayedShutdownSiteProcessCountTracker similarly tracks processes that have
+// become empty. However, it specifically manages empty processes for subframes,
+// to support delayed shutdown scenarios. The reason for not unifying these two
+// trackers immediately is to first evaluate the effectiveness of this empty
+// process reuse experiment. Unification can be considered later if the
+// experiment proves to be beneficial.
+const void* const kEmptySiteProcessCountTrackerKey =
+    "EmptySiteProcessCountTrackerKey";
+
+// Returns true if empty renderer process reuse is allowed on the current
+// platform.
+//
+// This feature, controlled by the kTrackEmptyRendererProcessesForReuse feature
+// flag, enables the browser to track and reuse free and empty renderer
+// processes to optimize process creation and navigation performance.
+bool IsEmptyRendererProcessesReuseAllowed() {
+  return base::FeatureList::IsEnabled(
+      features::kTrackEmptyRendererProcessesForReuse);
+}
+
 class SiteProcessCountTracker : public base::SupportsUserData::Data,
                                 public RenderProcessHostObserver {
  public:
@@ -1142,28 +1178,26 @@ void LogDelayReasonForCleanup(
 }
 
 #if BUILDFLAG(ALLOW_OOP_VIDEO_DECODER)
-RenderProcessHostImpl::StableVideoDecoderFactoryCreationCB&
-GetStableVideoDecoderFactoryCreationCB() {
+RenderProcessHostImpl::VideoDecoderFactoryCreationCB&
+GetVideoDecoderFactoryCreationCB() {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   static base::NoDestructor<
-      RenderProcessHostImpl::StableVideoDecoderFactoryCreationCB>
+      RenderProcessHostImpl::VideoDecoderFactoryCreationCB>
       s_callback;
   return *s_callback;
 }
 
-RenderProcessHostImpl::StableVideoDecoderEventCB&
-GetStableVideoDecoderEventCB() {
+RenderProcessHostImpl::VideoDecoderEventCB& GetVideoDecoderEventCB() {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  static base::NoDestructor<RenderProcessHostImpl::StableVideoDecoderEventCB>
+  static base::NoDestructor<RenderProcessHostImpl::VideoDecoderEventCB>
       s_callback;
   return *s_callback;
 }
 
-void InvokeStableVideoDecoderEventCB(
-    RenderProcessHostImpl::StableVideoDecoderEvent event) {
+void InvokeVideoDecoderEventCB(RenderProcessHostImpl::VideoDecoderEvent event) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  RenderProcessHostImpl::StableVideoDecoderEventCB& callback =
-      GetStableVideoDecoderEventCB();
+  RenderProcessHostImpl::VideoDecoderEventCB& callback =
+      GetVideoDecoderEventCB();
   if (!callback.is_null()) {
     callback.Run(event);
   }
@@ -1238,6 +1272,35 @@ bool IsKeepAliveRefCountAllowed() {
              blink::features::kKeepAliveInBrowserMigration) ||
          !base::FeatureList::IsEnabled(
              blink::features::kAttributionReportingInBrowserMigration);
+}
+
+static RenderProcessHost* FindEmptyBackgroundHostForReuse(
+    BrowserContext* browser_context,
+    SiteInstanceImpl* site_instance) {
+  std::set<RenderProcessHost*> eligible_foreground_hosts;
+  std::set<RenderProcessHost*> eligible_background_hosts;
+
+  SiteProcessCountTracker* tracker = static_cast<SiteProcessCountTracker*>(
+      browser_context->GetUserData(kEmptySiteProcessCountTrackerKey));
+  if (!tracker) {
+    return nullptr;
+  }
+
+  tracker->FindRenderProcessesForSiteInstance(
+      site_instance, ProcessReusePolicy::DEFAULT, &eligible_foreground_hosts,
+      &eligible_background_hosts);
+
+  CHECK(eligible_foreground_hosts.empty());
+  if (!eligible_background_hosts.empty()) {
+    // Background hosts are prioritized for reuse due to lower risk. Foreground
+    // hosts should be empty here, because empty processes never contain any
+    // visible frames. However, even if foreground hosts were present, they
+    // would pose a higher risk of residual state or incomplete cleanup,
+    // increasing the potential for incorrect reuse.
+    return *eligible_background_hosts.begin();
+  }
+
+  return nullptr;
 }
 
 }  // namespace
@@ -1418,18 +1481,6 @@ RenderProcessHost* RenderProcessHostImpl::CreateRenderProcessHost(
       flags |= RenderProcessFlags::kV8OptimizationsDisabled;
     }
   }
-#if BUILDFLAG(IS_WIN)
-  // kControlWithoutSpareRenderer is a control bucket w/o spare renderer for the
-  // FontDataService experiment i.e. Both SpareRenderer and FontDataManager are
-  // not used.
-  if (site_instance &&
-      GetContentClient()->browser()->ShouldUseFontDataManager(
-          site_instance->GetSiteURL()) &&
-      features::kFontDataServiceTypefaceType.Get() !=
-          features::FontDataServiceTypefaceType::kControlWithoutSpareRenderer) {
-    flags |= RenderProcessFlags::kFontDataManager;
-  }
-#endif
 
   if (site_instance &&
       GetContentClient()->browser()->DisallowV8FeatureFlagOverridesForSite(
@@ -1451,11 +1502,13 @@ RenderProcessHostImpl::RenderProcessHostImpl(
     int flags)
     : priority_(!blink::kLaunchingProcessIsBackgrounded,
                 false /* has_media_stream */,
+                false /* has_immersive_xr_session */,
                 false /* has_foreground_service_worker */,
                 frame_depth_,
                 false /* intersects_viewport */,
                 true /* boost_for_pending_views */,
-                false /*boost_for_loading*/
+                false /*boost_for_loading*/,
+                false /*is_spare_renderer*/
 #if BUILDFLAG(IS_ANDROID)
                 ,
                 ChildProcessImportance::NORMAL
@@ -1485,9 +1538,9 @@ RenderProcessHostImpl::RenderProcessHostImpl(
                     ChromeTrackEvent::kRenderProcessHost, *this);
 
 #if BUILDFLAG(ALLOW_OOP_VIDEO_DECODER)
-  stable_video_decoder_trackers_.set_disconnect_handler(base::BindRepeating(
-      &RenderProcessHostImpl::OnStableVideoDecoderDisconnected,
-      instance_weak_factory_.GetWeakPtr()));
+  video_decoder_trackers_.set_disconnect_handler(
+      base::BindRepeating(&RenderProcessHostImpl::OnVideoDecoderDisconnected,
+                          instance_weak_factory_.GetWeakPtr()));
 #endif  // BUILDFLAG(ALLOW_OOP_VIDEO_DECODER)
 
   widget_helper_ = new RenderWidgetHelper();
@@ -2203,103 +2256,94 @@ void RenderProcessHostImpl::SetBatterySaverMode(
 }
 
 #if BUILDFLAG(ALLOW_OOP_VIDEO_DECODER)
-void RenderProcessHostImpl::CreateStableVideoDecoder(
-    mojo::PendingReceiver<media::stable::mojom::StableVideoDecoder> receiver) {
+void RenderProcessHostImpl::CreateOOPVideoDecoder(
+    mojo::PendingReceiver<media::mojom::VideoDecoder> receiver) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  if (!stable_video_decoder_factory_remote_.is_bound()) {
-    auto creation_cb = GetStableVideoDecoderFactoryCreationCB();
+  if (!video_decoder_factory_remote_.is_bound()) {
+    auto creation_cb = GetVideoDecoderFactoryCreationCB();
     if (creation_cb.is_null()) {
-      LaunchStableVideoDecoderFactory(
-          stable_video_decoder_factory_remote_.BindNewPipeAndPassReceiver());
+      LaunchOOPVideoDecoderFactory(
+          video_decoder_factory_remote_.BindNewPipeAndPassReceiver());
     } else {
       creation_cb.Run(
-          stable_video_decoder_factory_remote_.BindNewPipeAndPassReceiver());
+          video_decoder_factory_remote_.BindNewPipeAndPassReceiver());
     }
 
-    stable_video_decoder_factory_remote_.set_disconnect_handler(
-        base::BindOnce(&RenderProcessHostImpl::ResetStableVideoDecoderFactory,
+    video_decoder_factory_remote_.set_disconnect_handler(
+        base::BindOnce(&RenderProcessHostImpl::ResetVideoDecoderFactory,
                        instance_weak_factory_.GetWeakPtr()));
-
-    // Version 1 introduced the ability to pass a
-    // mojo::PendingRemote<StableVideoDecoderTracker> to
-    // CreateStableVideoDecoder().
-    stable_video_decoder_factory_remote_.RequireVersion(1u);
   }
 
-  CHECK(stable_video_decoder_factory_remote_.is_bound());
+  CHECK(video_decoder_factory_remote_.is_bound());
 
-  mojo::PendingRemote<media::stable::mojom::StableVideoDecoderTracker>
-      tracker_remote;
-  stable_video_decoder_trackers_.Add(
-      this, tracker_remote.InitWithNewPipeAndPassReceiver());
-  stable_video_decoder_factory_remote_->CreateStableVideoDecoder(
+  mojo::PendingRemote<media::mojom::VideoDecoderTracker> tracker_remote;
+  video_decoder_trackers_.Add(this,
+                              tracker_remote.InitWithNewPipeAndPassReceiver());
+  video_decoder_factory_remote_->CreateVideoDecoderWithTracker(
       std::move(receiver), std::move(tracker_remote));
-  if (stable_video_decoder_factory_reset_timer_.IsRunning()) {
-    // |stable_video_decoder_factory_reset_timer_| has been started to
-    // eventually reset() the |stable_video_decoder_factory_remote_|. Now that
-    // we got a request to create a StableVideoDecoder before the timer
-    // triggered, we can stop it so that the utility process associated with the
-    // |stable_video_decoder_factory_remote_| doesn't die.
-    stable_video_decoder_factory_reset_timer_.Stop();
-    InvokeStableVideoDecoderEventCB(
-        StableVideoDecoderEvent::kFactoryResetTimerStopped);
+  if (video_decoder_factory_reset_timer_.IsRunning()) {
+    // |video_decoder_factory_reset_timer_| has been started to eventually
+    // reset() the |video_decoder_factory_remote_|. Now that we got a request
+    // to create a VideoDecoder before the timer triggered, we can stop it so
+    // that the utility process associated with the
+    // |video_decoder_factory_remote_| doesn't die.
+    video_decoder_factory_reset_timer_.Stop();
+    InvokeVideoDecoderEventCB(VideoDecoderEvent::kFactoryResetTimerStopped);
   }
 }
 
-void RenderProcessHostImpl::OnStableVideoDecoderDisconnected() {
+void RenderProcessHostImpl::OnVideoDecoderDisconnected() {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
-  if (stable_video_decoder_trackers_.empty()) {
-    // All StableVideoDecoders have disconnected. Let's reset() the
-    // |stable_video_decoder_factory_remote_| so that the corresponding utility
-    // process gets terminated. Note that we don't reset() immediately. Instead,
-    // we wait a little bit in case a request to create another
-    // StableVideoDecoder comes in. That way, we don't unnecessarily tear down
-    // the video decoder process just to create another one almost immediately.
-    // We chose 3 seconds because it seemed "reasonable."
-    constexpr base::TimeDelta kTimeToResetStableVideoDecoderFactory =
+  if (video_decoder_trackers_.empty()) {
+    // All VideoDecoders have disconnected. Let's reset() the
+    // |video_decoder_factory_remote_| so that the corresponding utility process
+    // gets terminated. Note that we don't reset() immediately. Instead, we wait
+    // a little bit in case a request to create another VideoDecoder comes in.
+    // That way, we don't unnecessarily tear down the video decoder process just
+    // to create another one almost immediately. We chose 3 seconds because it
+    // seemed "reasonable."
+    constexpr base::TimeDelta kTimeToResetVideoDecoderFactory =
         base::Seconds(3);
-    stable_video_decoder_factory_reset_timer_.Start(
-        FROM_HERE, kTimeToResetStableVideoDecoderFactory,
-        base::BindOnce(&RenderProcessHostImpl::ResetStableVideoDecoderFactory,
+    video_decoder_factory_reset_timer_.Start(
+        FROM_HERE, kTimeToResetVideoDecoderFactory,
+        base::BindOnce(&RenderProcessHostImpl::ResetVideoDecoderFactory,
                        instance_weak_factory_.GetWeakPtr()));
-    InvokeStableVideoDecoderEventCB(
-        StableVideoDecoderEvent::kAllDecodersDisconnected);
+    InvokeVideoDecoderEventCB(VideoDecoderEvent::kAllDecodersDisconnected);
   }
 }
 
-void RenderProcessHostImpl::ResetStableVideoDecoderFactory() {
+void RenderProcessHostImpl::ResetVideoDecoderFactory() {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
-  stable_video_decoder_factory_remote_.reset();
+  video_decoder_factory_remote_.reset();
 
-  // Note that |stable_video_decoder_trackers_| should be empty if
-  // ResetStableVideoDecoderFactory() was called because
-  // |stable_video_decoder_factory_reset_timer_| fired. Otherwise, there's no
+  // Note that |video_decoder_trackers_| should be empty if
+  // ResetVideoDecoderFactory() was called because
+  // |video_decoder_factory_reset_timer_| fired. Otherwise, there's no
   // guarantee about its contents. For example, maybe
-  // ResetStableVideoDecoderFactory() got called because the video decoder
+  // ResetVideoDecoderFactory() got called because the video decoder
   // process crashed and we got the disconnection notification for
-  // |stable_video_decoder_factory_remote_| before the disconnection
-  // notification for any of the elements in |stable_video_decoder_trackers_|.
-  stable_video_decoder_trackers_.Clear();
+  // |video_decoder_factory_remote_| before the disconnection
+  // notification for any of the elements in |video_decoder_trackers_|.
+  video_decoder_trackers_.Clear();
 
-  if (stable_video_decoder_factory_reset_timer_.IsRunning()) {
-    stable_video_decoder_factory_reset_timer_.Stop();
-    InvokeStableVideoDecoderEventCB(
-        StableVideoDecoderEvent::kFactoryResetTimerStopped);
+  if (video_decoder_factory_reset_timer_.IsRunning()) {
+    video_decoder_factory_reset_timer_.Stop();
+    InvokeVideoDecoderEventCB(VideoDecoderEvent::kFactoryResetTimerStopped);
   }
 }
 
-void RenderProcessHostImpl::SetStableVideoDecoderFactoryCreationCBForTesting(
-    StableVideoDecoderFactoryCreationCB callback) {
+void RenderProcessHostImpl::SetVideoDecoderFactoryCreationCBForTesting(
+    VideoDecoderFactoryCreationCB callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  GetStableVideoDecoderFactoryCreationCB() = callback;
+  GetVideoDecoderFactoryCreationCB() = callback;
 }
 
-void RenderProcessHostImpl::SetStableVideoDecoderEventCBForTesting(
-    StableVideoDecoderEventCB callback) {
+void RenderProcessHostImpl::SetVideoDecoderEventCBForTesting(
+    VideoDecoderEventCB callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  GetStableVideoDecoderEventCB() = callback;
+  GetVideoDecoderEventCB() = callback;
 }
 #endif  // BUILDFLAG(ALLOW_OOP_VIDEO_DECODER)
 
@@ -3012,6 +3056,18 @@ void RenderProcessHostImpl::OnBoostForLoadingRemoved() {
   }
 }
 
+void RenderProcessHostImpl::OnImmersiveXrSessionStarted() {
+  // TODO(https://crbug.com/397907158): Evaluate upgrading to CHECK.
+  DUMP_WILL_BE_CHECK(!has_immersive_xr_session_);
+  has_immersive_xr_session_ = true;
+}
+
+void RenderProcessHostImpl::OnImmersiveXrSessionStopped() {
+  // TODO(https://crbug.com/397907158): Evaluate upgrading to CHECK.
+  DUMP_WILL_BE_CHECK(has_immersive_xr_session_);
+  has_immersive_xr_session_ = false;
+}
+
 // static
 void RenderProcessHostImpl::set_render_process_host_factory_for_testing(
     RenderProcessHostFactory* rph_factory) {
@@ -3032,14 +3088,23 @@ void RenderProcessHostImpl::AddFrameWithSite(
   if (!ShouldTrackProcessForSite(site_info))
     return;
 
-  SiteProcessCountTracker* tracker = SiteProcessCountTracker::GetInstance(
-      browser_context, kCommittedSiteProcessCountTrackerKey);
-  tracker->IncrementSiteProcessCount(site_info, render_process_host->GetID());
+  {
+    SiteProcessCountTracker* tracker = SiteProcessCountTracker::GetInstance(
+        browser_context, kCommittedSiteProcessCountTrackerKey);
+    tracker->IncrementSiteProcessCount(site_info, render_process_host->GetID());
+    MAYBEVLOG(2) << __func__ << "(" << site_info
+                 << "): Site added to process host "
+                 << render_process_host->GetID() << "." << std::endl
+                 << GetCurrentHostMapDebugString(tracker);
+  }
 
-  MAYBEVLOG(2) << __func__ << "(" << site_info
-               << "): Site added to process host "
-               << render_process_host->GetID() << "." << std::endl
-               << GetCurrentHostMapDebugString(tracker);
+  if (IsEmptyRendererProcessesReuseAllowed()) {
+    // Remove process from the tracker of empty processes since it's no longer
+    // empty.
+    SiteProcessCountTracker::GetInstance(browser_context,
+                                         kEmptySiteProcessCountTrackerKey)
+        ->ClearProcessForAllSites(render_process_host->GetID());
+  }
 }
 
 // static
@@ -3053,6 +3118,17 @@ void RenderProcessHostImpl::RemoveFrameWithSite(
   SiteProcessCountTracker* tracker = SiteProcessCountTracker::GetInstance(
       browser_context, kCommittedSiteProcessCountTrackerKey);
   tracker->DecrementSiteProcessCount(site_info, render_process_host->GetID());
+
+  if (IsEmptyRendererProcessesReuseAllowed()) {
+    // If the last frame is being removed from the process, add it to the
+    // tracker of empty processes.
+    CHECK_NE(render_process_host->GetRenderFrameHostCount(), 0);
+    if (render_process_host->GetRenderFrameHostCount() == 1) {
+      SiteProcessCountTracker::GetInstance(browser_context,
+                                           kEmptySiteProcessCountTrackerKey)
+          ->IncrementSiteProcessCount(site_info, render_process_host->GetID());
+    }
+  }
 }
 
 // static
@@ -3189,6 +3265,16 @@ void RenderProcessHostImpl::NotifyRendererOfLockedStateUpdate() {
       base::CommandLine::ForCurrentProcess()->HasSwitch(
           switches::kDisableWebSecurity));
 
+  if (GetContentClient()->browser()->IsWebUIBundledCodeCachingEnabled(
+          process_lock.lock_url())) {
+    auto url_to_code_cache_map =
+        GetContentClient()->browser()->GetWebUIResourceUrlToCodeCacheMap();
+    if (!url_to_code_cache_map.empty()) {
+      GetRendererInterface()->SetWebUIResourceUrlToCodeCacheMap(
+          std::move(url_to_code_cache_map));
+    }
+  }
+
   if (!process_lock.IsASiteOrOrigin())
     return;
 
@@ -3313,10 +3399,6 @@ void RenderProcessHostImpl::AppendRendererCommandLine(
   command_line->AppendSwitchASCII(
       switches::kDeviceScaleFactor,
       base::NumberToString(display::win::GetDPIScale()));
-
-  if (!!(flags_ & RenderProcessFlags::kFontDataManager)) {
-    command_line->AppendSwitch(switches::kUseFontDataManager);
-  }
 #endif
 
   AppendCompositorCommandLineFlags(command_line);
@@ -3371,7 +3453,6 @@ void RenderProcessHostImpl::PropagateBrowserCommandLineToRenderer(
       switches::kDisableBackgroundTimerThrottling,
       switches::kDisableBestEffortTasks,
       switches::kDisableBreakpad,
-      switches::kDisableDatabases,
       switches::kDisableFileSystem,
       switches::kDisableFrameRateLimit,
       switches::kDisableGpuMemoryBufferVideoFrames,
@@ -3452,7 +3533,7 @@ void RenderProcessHostImpl::PropagateBrowserCommandLineToRenderer(
       switches::kUseCmdDecoder,
       switches::kUseFakeCodecForPeerConnection,
       switches::kUseFakeUIForMediaStream,
-      switches::kUseMobileUserAgent,
+      embedder_support::kUseMobileUserAgent,
       switches::kVideoCaptureUseGpuMemoryBuffer,
       switches::kVideoThreads,
       switches::kWaitForDebuggerOnNavigation,
@@ -3466,7 +3547,6 @@ void RenderProcessHostImpl::PropagateBrowserCommandLineToRenderer(
       blink::switches::kDarkModeSettings,
       blink::switches::kDefaultTileWidth,
       blink::switches::kDefaultTileHeight,
-      blink::switches::kForcePermissionPolicyUnloadDefaultEnabled,
       blink::switches::kDisableImageAnimationResync,
       blink::switches::kDisableLowResTiling,
       blink::switches::kDisablePreferCompositingToLCDText,
@@ -3505,6 +3585,8 @@ void RenderProcessHostImpl::PropagateBrowserCommandLineToRenderer(
       switches::kBrowserControlsHideThreshold,
       switches::kBrowserControlsShowThreshold,
       switches::kRunAllCompositorStagesBeforeDraw,
+
+      network::switches::kForcePermissionPolicyUnloadDefaultEnabled,
 
 #if BUILDFLAG(ENABLE_PPAPI)
       switches::kEnablePepperTesting,
@@ -3546,12 +3628,6 @@ void RenderProcessHostImpl::PropagateBrowserCommandLineToRenderer(
   if (GaiaConfig::GetInstance()) {
     GaiaConfig::GetInstance()->SerializeContentsToCommandLineSwitch(
         renderer_cmd);
-  }
-
-  // Disable databases in incognito mode.
-  if (GetBrowserContext()->IsOffTheRecord() &&
-      !browser_cmd.HasSwitch(switches::kDisableDatabases)) {
-    renderer_cmd->AppendSwitch(switches::kDisableDatabases);
   }
 
 #if BUILDFLAG(IS_ANDROID)
@@ -4136,6 +4212,15 @@ void RenderProcessHostImpl::Cleanup() {
   // Remove this host from the delayed-shutdown tracker if present, as the
   // shutdown delay has now been cancelled.
   StopTrackingProcessForShutdownDelay();
+
+  if (IsEmptyRendererProcessesReuseAllowed()) {
+    // Remove this host from the tracker of empty processes. This is required
+    // to ensure that the process' id is not kept in the tracker if it's
+    // cleaned up while non-empty.
+    SiteProcessCountTracker::GetInstance(GetBrowserContext(),
+                                         kEmptySiteProcessCountTrackerKey)
+        ->ClearProcessForAllSites(GetID());
+  }
 
   // Use `DeleteSoon` to delete `this` RenderProcessHost *after* the tasks
   // that are *already* queued on the UI thread have been given a chance to run
@@ -4752,7 +4837,8 @@ void RenderProcessHostImpl::RegisterSoleProcessHostForSite(
 
 // static
 RenderProcessHost* RenderProcessHostImpl::GetProcessHostForSiteInstance(
-    SiteInstanceImpl* site_instance) {
+    SiteInstanceImpl* site_instance,
+    const ProcessAllocationContext& allocation_context) {
   const SiteInfo& site_info = site_instance->GetSiteInfo();
   ProcessReusePolicy process_reuse_policy =
       site_instance->process_reuse_policy();
@@ -4815,15 +4901,10 @@ RenderProcessHost* RenderProcessHostImpl::GetProcessHostForSiteInstance(
         UnmatchedServiceWorkerProcessTracker::MatchWithSite(site_instance);
   }
 
-  // If a process hasn't been selected yet, check whether there is a process
-  // tracked by the SiteInstanceGroupManager that could be reused by this
-  // SiteInstance.  This method is used to place all SiteInstances within a
-  // group into a single process. It also allows the SiteInstanceGroupManager to
-  // place SiteInstances with similar requirements in different groups, but
-  // still allow them to share a process (e.g. default process mode).
-  if (!render_process_host) {
+  if (!render_process_host && IsEmptyRendererProcessesReuseAllowed()) {
+    // If not (or if none found), see if an empty host can be used.
     render_process_host =
-        site_instance->GetSiteInstanceGroupProcessIfAvailable();
+        FindEmptyBackgroundHostForReuse(browser_context, site_instance);
   }
 
   if (render_process_host) {
@@ -4846,8 +4927,8 @@ RenderProcessHost* RenderProcessHostImpl::GetProcessHostForSiteInstance(
   auto& spare_process_manager = SpareRenderProcessHostManagerImpl::Get();
   bool spare_was_taken = false;
   if (!render_process_host) {
-    render_process_host =
-        spare_process_manager.MaybeTakeSpare(browser_context, site_instance);
+    render_process_host = spare_process_manager.MaybeTakeSpare(
+        browser_context, site_instance, allocation_context);
     if (render_process_host) {
       site_instance->set_process_assignment(
           SiteInstanceProcessAssignment::USED_SPARE_PROCESS);
@@ -5109,7 +5190,7 @@ void RenderProcessHostImpl::ResetIPC() {
   tracing_registration_.reset();
 
 #if BUILDFLAG(ALLOW_OOP_VIDEO_DECODER)
-  ResetStableVideoDecoderFactory();
+  ResetVideoDecoderFactory();
 #endif  // BUILDFLAG(ALLOW_OOP_VIDEO_DECODER)
 
   // Destroy all embedded CompositorFrameSinks.
@@ -5323,10 +5404,10 @@ void RenderProcessHostImpl::UpdateProcessPriority() {
   RenderProcessPriority priority(
       visible_clients_ > 0 || base::CommandLine::ForCurrentProcess()->HasSwitch(
                                   switches::kDisableRendererBackgrounding),
-      media_stream_count_ > 0, foreground_service_worker_count_ > 0,
-      frame_depth_, intersects_viewport_,
+      media_stream_count_ > 0, has_immersive_xr_session_,
+      foreground_service_worker_count_ > 0, frame_depth_, intersects_viewport_,
       pending_views_ > 0, /* boost_for_pending_views */
-      boost_for_loading_count_ > 0
+      boost_for_loading_count_ > 0, has_spare_renderer_priority_
 #if BUILDFLAG(IS_ANDROID)
       ,
       GetEffectiveImportance()
@@ -5783,6 +5864,14 @@ void RenderProcessHostImpl::GetBoundInterfacesForTesting(
   io_thread_host_impl_->AsyncCall(&IOThreadHostImpl::GetInterfacesForTesting)
       .WithArgs(std::ref(out));
   io_thread_host_impl_->FlushPostedTasksForTesting();  // IN-TEST
+}
+
+void RenderProcessHostImpl::SetHasSpareRendererPriority(
+    bool has_spare_renderer_priority) {
+  if (has_spare_renderer_priority_ != has_spare_renderer_priority) {
+    has_spare_renderer_priority_ = has_spare_renderer_priority;
+    UpdateProcessPriority();
+  }
 }
 
 }  // namespace content

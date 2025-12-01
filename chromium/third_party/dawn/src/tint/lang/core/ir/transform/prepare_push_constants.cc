@@ -53,7 +53,7 @@ struct State {
     /// The type manager.
     core::type::Manager& ty{ir.Types()};
 
-    Result<PushConstantLayout> Run() {
+    PushConstantLayout Run() {
         if (config.internal_constants.empty()) {
             return PushConstantLayout{};
         }

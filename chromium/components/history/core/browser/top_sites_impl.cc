@@ -232,6 +232,11 @@ void TopSitesImpl::ClearBlockedUrls() {
   NotifyTopSitesChanged(TopSitesObserver::ChangeReason::BLOCKED_URLS);
 }
 
+int TopSitesImpl::NumBlockedSites() const {
+  DCHECK(thread_checker_.CalledOnValidThread());
+  return pref_service_->GetDict(kBlockedUrlsPrefsKey).size();
+}
+
 bool TopSitesImpl::IsFull() {
   return loaded_ && top_sites_.size() >= kTopSitesNumber;
 }
@@ -416,7 +421,7 @@ void TopSitesImpl::SetTopSites(MostVisitedURLList top_sites,
 int TopSitesImpl::num_results_to_request_from_history() const {
   DCHECK(thread_checker_.CalledOnValidThread());
 
-  return kTopSitesNumber + pref_service_->GetDict(kBlockedUrlsPrefsKey).size();
+  return kTopSitesNumber + NumBlockedSites();
 }
 
 void TopSitesImpl::MoveStateToLoaded() {
@@ -617,15 +622,5 @@ void TopSitesImpl::OnHistoryDeletions(HistoryService* history_service,
   }
   StartQueryForMostVisited();
 }
-
-// Added by Vivaldi
-void TopSitesImpl::UpdateNow() {
-  StartQueryForMostVisited();
-}
-
-void TopSitesImpl::SetAggressiveUpdate() {
-  vivaldi_aggressive_update_ = true;
-}
-
 
 }  // namespace history

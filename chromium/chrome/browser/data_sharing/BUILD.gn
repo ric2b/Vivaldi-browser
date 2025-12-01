@@ -51,8 +51,6 @@ if (is_android) {
   android_resources("java_resources") {
     sources = [
       "android/java/res/drawable/round_image_filled.xml",
-      "android/java/res/layout/data_sharing_bottom_sheet.xml",
-      "android/java/res/layout/data_sharing_invitation_dialog_footer.xml",
       "android/java/res/layout/recent_activity_bottom_sheet.xml",
       "android/java/res/layout/recent_activity_log_item.xml",
       "android/java/res/layout/shared_image_tiles.xml",
@@ -148,6 +146,7 @@ if (is_android) {
     ]
 
     deps = [
+      ":java_resources",
       "//base:callback_java",
       "//base:supplier_java",
       "//base:tasks_java",
@@ -170,7 +169,9 @@ if (is_android) {
       ":java_resources",
       "//base:callback_java",
       "//chrome/browser/data_sharing:recent_activity_java",
+      "//components/browser_ui/styles/android:java",
       "//components/data_sharing/public:public_java",
+      "//third_party/androidx:androidx_annotation_annotation_java",
     ]
   }
 
@@ -191,6 +192,7 @@ if (is_android) {
       "//components/saved_tab_groups/public:java",
       "//third_party/android_deps:robolectric_all_java",
       "//third_party/androidx:androidx_annotation_annotation_java",
+      "//third_party/androidx:androidx_appcompat_appcompat_java",
       "//third_party/androidx:androidx_test_core_java",
       "//third_party/androidx:androidx_test_ext_junit_java",
       "//third_party/junit:junit",
@@ -206,7 +208,6 @@ if (is_android) {
     resources_package = "org.chromium.chrome.browser.data_sharing"
     sources = [
       "android/java/src/org/chromium/chrome/browser/data_sharing/DataSharingImplFactory.java",
-      "android/java/src/org/chromium/chrome/browser/data_sharing/MemberPickerListenerImpl.java",
       "android/java/src/org/chromium/chrome/browser/data_sharing/NoOpDataSharingSDKDelegateImpl.java",
     ]
 
@@ -231,11 +232,10 @@ if (is_android) {
     resources_package =
         "org.chromium.chrome.browser.data_sharing.ui.shared_image_tiles"
     sources = [
-      "android/java/src/org/chromium/chrome/browser/data_sharing/ui/shared_image_tiles/SharedImageTilesColor.java",
+      "android/java/src/org/chromium/chrome/browser/data_sharing/ui/shared_image_tiles/SharedImageTilesConfig.java",
       "android/java/src/org/chromium/chrome/browser/data_sharing/ui/shared_image_tiles/SharedImageTilesCoordinator.java",
       "android/java/src/org/chromium/chrome/browser/data_sharing/ui/shared_image_tiles/SharedImageTilesMediator.java",
       "android/java/src/org/chromium/chrome/browser/data_sharing/ui/shared_image_tiles/SharedImageTilesProperties.java",
-      "android/java/src/org/chromium/chrome/browser/data_sharing/ui/shared_image_tiles/SharedImageTilesType.java",
       "android/java/src/org/chromium/chrome/browser/data_sharing/ui/shared_image_tiles/SharedImageTilesView.java",
       "android/java/src/org/chromium/chrome/browser/data_sharing/ui/shared_image_tiles/SharedImageTilesViewBinder.java",
     ]
@@ -245,6 +245,7 @@ if (is_android) {
       "//base:callback_java",
       "//chrome/browser/ui/android/strings:ui_strings_grd",
       "//components/browser_ui/styles/android:java",
+      "//components/collaboration/public:core_java",
       "//components/data_sharing/public:public_java",
       "//third_party/androidx:androidx_annotation_annotation_java",
       "//ui/android:ui_no_recycler_view_java",
@@ -273,6 +274,7 @@ if (is_android) {
       "//chrome/browser/tab:java",
       "//chrome/browser/tabmodel:java",
       "//components/browser_ui/notifications/android:java",
+      "//components/browser_ui/styles/android:java",
       "//components/collaboration/public:java",
       "//components/data_sharing/public:public_java",
       "//components/embedder_support/android:util_java",
@@ -284,22 +286,6 @@ if (is_android) {
       "//third_party/jni_zero:jni_zero_java",
       "//ui/android:ui_java",
       "//url:url_java",
-    ]
-  }
-
-  android_library("invitation_dialog_java") {
-    resources_package =
-        "org.chromium.chrome.browser.data_sharing.ui.invitation_dialog"
-    sources = [
-      "android/java/src/org/chromium/chrome/browser/data_sharing/ui/invitation_dialog/DataSharingInvitationDialogCoordinator.java",
-      "android/java/src/org/chromium/chrome/browser/data_sharing/ui/invitation_dialog/DataSharingInvitationDialogMediator.java",
-    ]
-
-    deps = [
-      ":java_resources",
-      "//chrome/browser/ui/android/strings:ui_strings_grd",
-      "//third_party/androidx:androidx_annotation_annotation_java",
-      "//ui/android:ui_no_recycler_view_java",
     ]
   }
 
@@ -389,7 +375,6 @@ if (is_android) {
 
     sources = [
       "android/java/src/org/chromium/chrome/browser/data_sharing/DataSharingServiceFactoryTest.java",
-      "android/java/src/org/chromium/chrome/browser/data_sharing/ui/invitation_dialog/DataSharingInvitationDialogTest.java",
     ]
     deps = [
       ":factory_java",

@@ -24,6 +24,7 @@ class BookmarkNode;
 @property(nonatomic, assign) GURL url;
 @property(nonatomic, assign) BOOL isFolder;
 @property(nonatomic, assign) BOOL isSpeedDial;
+@property(nonatomic, assign) BOOL isMoveOutAble;
 @property(nonatomic, assign) BOOL isFrequentlyVisited;
 @property(nonatomic, assign) BOOL isThumbnailRefreshing;
 

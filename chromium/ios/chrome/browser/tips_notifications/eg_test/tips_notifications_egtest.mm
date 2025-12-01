@@ -7,14 +7,14 @@
 #import "base/threading/platform_thread.h"
 #import "ios/chrome/browser/authentication/ui_bundled/signin/signin_constants.h"
 #import "ios/chrome/browser/authentication/ui_bundled/signin_earl_grey.h"
+#import "ios/chrome/browser/content_suggestions/ui_bundled/new_tab_page_app_interface.h"
+#import "ios/chrome/browser/content_suggestions/ui_bundled/set_up_list/constants.h"
 #import "ios/chrome/browser/first_run/ui_bundled/first_run_constants.h"
 #import "ios/chrome/browser/push_notification/ui_bundled/scoped_notification_auth_swizzler.h"
 #import "ios/chrome/browser/shared/model/prefs/pref_names.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/signin/model/fake_system_identity.h"
 #import "ios/chrome/browser/tips_notifications/model/utils.h"
-#import "ios/chrome/browser/ui/content_suggestions/new_tab_page_app_interface.h"
-#import "ios/chrome/browser/ui/content_suggestions/set_up_list/constants.h"
 #import "ios/chrome/common/ui/confirmation_alert/constants.h"
 #import "ios/chrome/test/earl_grey/chrome_actions.h"
 #import "ios/chrome/test/earl_grey/chrome_earl_grey.h"
@@ -241,8 +241,8 @@ void MaybeDismissNotification() {
     [ChromeEarlGrey waitForUIElementToAppearWithMatcher:omniboxPositionView];
 
     // Dismiss the Omnibox Position view.
-    [[EarlGrey selectElementWithMatcher:
-                   chrome_test_util::PromoStyleSecondaryActionButtonMatcher()]
+    [[EarlGrey selectElementWithMatcher:chrome_test_util::
+                                            PromoScreenSecondaryButtonMatcher()]
         performAction:grey_tap()];
   }
 
@@ -305,8 +305,8 @@ void MaybeDismissNotification() {
   [ChromeEarlGrey waitForUIElementToAppearWithMatcher:grey_accessibilityID(
                                                           @"kLensPromoAXID")];
   // Tap "Show me how".
-  [[EarlGrey selectElementWithMatcher:
-                 chrome_test_util::PromoStyleSecondaryActionButtonMatcher()]
+  [[EarlGrey selectElementWithMatcher:chrome_test_util::
+                                          PromoScreenSecondaryButtonMatcher()]
       performAction:grey_tap()];
   id<GREYMatcher> instructions =
       grey_accessibilityID(@"kLensPromoInstructionsAXID");
@@ -323,8 +323,8 @@ void MaybeDismissNotification() {
   [ChromeEarlGrey waitForUIElementToAppearWithMatcher:grey_accessibilityID(
                                                           @"kLensPromoAXID")];
   // Tap "Show me how" again.
-  [[EarlGrey selectElementWithMatcher:
-                 chrome_test_util::PromoStyleSecondaryActionButtonMatcher()]
+  [[EarlGrey selectElementWithMatcher:chrome_test_util::
+                                          PromoScreenSecondaryButtonMatcher()]
       performAction:grey_tap()];
   // Tap "Go To Lens".
   [[EarlGrey selectElementWithMatcher:
@@ -348,8 +348,8 @@ void MaybeDismissNotification() {
   [ChromeEarlGrey waitForUIElementToAppearWithMatcher:
                       grey_accessibilityID(@"kEnhancedSafeBrowsingPromoAXID")];
   // Tap "Show me how".
-  [[EarlGrey selectElementWithMatcher:
-                 chrome_test_util::PromoStyleSecondaryActionButtonMatcher()]
+  [[EarlGrey selectElementWithMatcher:chrome_test_util::
+                                          PromoScreenSecondaryButtonMatcher()]
       performAction:grey_tap()];
   id<GREYMatcher> instructions =
       grey_accessibilityID(@"kEnhancedSafeBrowsingPromoInstructionsAXID");
@@ -357,8 +357,8 @@ void MaybeDismissNotification() {
   [[EarlGrey selectElementWithMatcher:instructions]
       performAction:grey_swipeFastInDirection(kGREYDirectionDown)];
   // Tap "Show me how" again.
-  [[EarlGrey selectElementWithMatcher:
-                 chrome_test_util::PromoStyleSecondaryActionButtonMatcher()]
+  [[EarlGrey selectElementWithMatcher:chrome_test_util::
+                                          PromoScreenSecondaryButtonMatcher()]
       performAction:grey_tap()];
   // Tap "Go To Settings".
   [[EarlGrey selectElementWithMatcher:

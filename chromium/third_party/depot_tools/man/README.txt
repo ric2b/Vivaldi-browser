@@ -13,5 +13,5 @@ directory to generate html and man pages.
 
 == Deploy
 
-Run `./push_to_gs.sh` from this directory. If you not have access, ask someone
-from chrome infra to deploy it for you.
+This is fully automated. After you submit your CL, the tutorial will be deployed
+within 24 hours. See [https://ci.chromium.org/ui/p/infra-internal/builders/prod/depot_tools%20zip%20uploader].

@@ -5,11 +5,13 @@
 #ifndef V8_SANDBOX_JS_DISPATCH_TABLE_INL_H_
 #define V8_SANDBOX_JS_DISPATCH_TABLE_INL_H_
 
+#include "src/sandbox/js-dispatch-table.h"
+// Include the non-inl header before the rest of the headers.
+
 #include "src/builtins/builtins-inl.h"
 #include "src/common/code-memory-access-inl.h"
 #include "src/objects/objects-inl.h"
 #include "src/sandbox/external-entity-table-inl.h"
-#include "src/sandbox/js-dispatch-table.h"
 #include "src/snapshot/embedded/embedded-data.h"
 
 #ifdef V8_ENABLE_LEAPTIERING
@@ -134,8 +136,7 @@ bool JSDispatchTable::IsTieringRequested(JSDispatchHandle handle,
                            static_cast<Builtin>(builtin));
 }
 
-void JSDispatchTable::ResetTieringRequest(JSDispatchHandle handle,
-                                          Isolate* isolate) {
+void JSDispatchTable::ResetTieringRequest(JSDispatchHandle handle) {
   uint32_t index = HandleToIndex(handle);
   DCHECK_GE(index, kEndOfInternalReadOnlySegment);
   CFIMetadataWriteScope write_scope("JSDispatchTable update");
@@ -143,21 +144,26 @@ void JSDispatchTable::ResetTieringRequest(JSDispatchHandle handle,
 }
 
 JSDispatchHandle JSDispatchTable::AllocateAndInitializeEntry(
-    Space* space, uint16_t parameter_count) {
-  DCHECK(space->BelongsTo(this));
-  uint32_t index = AllocateEntry(space);
-  CFIMetadataWriteScope write_scope("JSDispatchTable initialize");
-  at(index).MakeJSDispatchEntry(kNullAddress, kNullAddress, parameter_count,
-                                space->allocate_black());
-  return IndexToHandle(index);
+    Space* space, uint16_t parameter_count, Tagged<Code> new_code) {
+  if (auto res =
+          TryAllocateAndInitializeEntry(space, parameter_count, new_code)) {
+    return *res;
+  }
+  V8::FatalProcessOutOfMemory(nullptr,
+                              "JSDispatchTable::AllocateAndInitializeEntry");
 }
 
-JSDispatchHandle JSDispatchTable::AllocateAndInitializeEntry(
+std::optional<JSDispatchHandle> JSDispatchTable::TryAllocateAndInitializeEntry(
     Space* space, uint16_t parameter_count, Tagged<Code> new_code) {
   DCHECK(space->BelongsTo(this));
   SBXCHECK(IsCompatibleCode(new_code, parameter_count));
 
-  uint32_t index = AllocateEntry(space);
+  uint32_t index;
+  if (auto maybe_index = TryAllocateEntry(space)) {
+    index = *maybe_index;
+  } else {
+    return {};
+  }
   JSDispatchEntry& entry = at(index);
   CFIMetadataWriteScope write_scope("JSDispatchTable initialize");
   entry.MakeJSDispatchEntry(new_code.address(), new_code->instruction_start(),

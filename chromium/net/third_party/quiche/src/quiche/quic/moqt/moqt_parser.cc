@@ -218,6 +218,9 @@ size_t MoqtControlParser::ProcessMessage(absl::string_view data) {
     case MoqtMessageType::kFetchError:
       bytes_read = ProcessFetchError(reader);
       break;
+    case MoqtMessageType::kSubscribesBlocked:
+      bytes_read = ProcessSubscribesBlocked(reader);
+      break;
     case moqt::MoqtMessageType::kObjectAck:
       bytes_read = ProcessObjectAck(reader);
       break;
@@ -376,9 +379,6 @@ size_t MoqtControlParser::ProcessSubscribe(quic::QuicDataReader& reader) {
   }
   MoqtFilterType filter_type = static_cast<MoqtFilterType>(filter);
   switch (filter_type) {
-    case MoqtFilterType::kLatestGroup:
-      subscribe_request.start_object = 0;
-      break;
     case MoqtFilterType::kLatestObject:
       break;
     case MoqtFilterType::kAbsoluteStart:
@@ -386,28 +386,17 @@ size_t MoqtControlParser::ProcessSubscribe(quic::QuicDataReader& reader) {
       if (!reader.ReadVarInt62(&group) || !reader.ReadVarInt62(&object)) {
         return 0;
       }
-      subscribe_request.start_group = group;
-      subscribe_request.start_object = object;
+      subscribe_request.start = FullSequence(group, object);
       if (filter_type == MoqtFilterType::kAbsoluteStart) {
         break;
       }
-      if (!reader.ReadVarInt62(&group) || !reader.ReadVarInt62(&object)) {
+      if (!reader.ReadVarInt62(&group)) {
         return 0;
       }
       subscribe_request.end_group = group;
-      if (subscribe_request.end_group < subscribe_request.start_group) {
+      if (*subscribe_request.end_group < subscribe_request.start->group) {
         ParseError("End group is less than start group");
         return 0;
-      }
-      if (object == 0) {
-        subscribe_request.end_object = std::nullopt;
-      } else {
-        subscribe_request.end_object = object - 1;
-        if (subscribe_request.start_group == subscribe_request.end_group &&
-            subscribe_request.end_object < subscribe_request.start_object) {
-          ParseError("End object comes before start object");
-          return 0;
-        }
       }
       break;
     default:
@@ -484,66 +473,37 @@ size_t MoqtControlParser::ProcessUnsubscribe(quic::QuicDataReader& reader) {
 
 size_t MoqtControlParser::ProcessSubscribeDone(quic::QuicDataReader& reader) {
   MoqtSubscribeDone subscribe_done;
-  uint8_t content_exists;
   uint64_t value;
   if (!reader.ReadVarInt62(&subscribe_done.subscribe_id) ||
       !reader.ReadVarInt62(&value) ||
-      !reader.ReadStringVarInt62(subscribe_done.reason_phrase) ||
-      !reader.ReadUInt8(&content_exists)) {
+      !reader.ReadVarInt62(&subscribe_done.stream_count) ||
+      !reader.ReadStringVarInt62(subscribe_done.reason_phrase)) {
     return 0;
   }
   subscribe_done.status_code = static_cast<SubscribeDoneCode>(value);
-  if (content_exists > 1) {
-    ParseError("SUBSCRIBE_DONE ContentExists has invalid value");
-    return 0;
-  }
-  if (content_exists == 1) {
-    subscribe_done.final_id = FullSequence();
-    if (!reader.ReadVarInt62(&subscribe_done.final_id->group) ||
-        !reader.ReadVarInt62(&subscribe_done.final_id->object)) {
-      return 0;
-    }
-  }
   visitor_.OnSubscribeDoneMessage(subscribe_done);
   return reader.PreviouslyReadPayload().length();
 }
 
 size_t MoqtControlParser::ProcessSubscribeUpdate(quic::QuicDataReader& reader) {
   MoqtSubscribeUpdate subscribe_update;
-  uint64_t end_group, end_object;
+  uint64_t start_group, start_object, end_group;
   if (!reader.ReadVarInt62(&subscribe_update.subscribe_id) ||
-      !reader.ReadVarInt62(&subscribe_update.start_group) ||
-      !reader.ReadVarInt62(&subscribe_update.start_object) ||
-      !reader.ReadVarInt62(&end_group) || !reader.ReadVarInt62(&end_object) ||
+      !reader.ReadVarInt62(&start_group) ||
+      !reader.ReadVarInt62(&start_object) || !reader.ReadVarInt62(&end_group) ||
       !reader.ReadUInt8(&subscribe_update.subscriber_priority)) {
     return 0;
   }
   if (!ReadSubscribeParameters(reader, subscribe_update.parameters)) {
     return 0;
   }
-  if (end_group == 0) {
-    // end_group remains nullopt.
-    if (end_object > 0) {
-      ParseError("SUBSCRIBE_UPDATE has end_object but no end_group");
-      return 0;
-    }
-  } else {
+  subscribe_update.start = FullSequence(start_group, start_object);
+  if (end_group > 0) {
     subscribe_update.end_group = end_group - 1;
-    if (subscribe_update.end_group < subscribe_update.start_group) {
+    if (subscribe_update.end_group < start_group) {
       ParseError("End group is less than start group");
       return 0;
     }
-  }
-  if (end_object > 0) {
-    subscribe_update.end_object = end_object - 1;
-    if (subscribe_update.end_object.has_value() &&
-        subscribe_update.start_group == *subscribe_update.end_group &&
-        *subscribe_update.end_object < subscribe_update.start_object) {
-      ParseError("End object comes before start object");
-      return 0;
-    }
-  } else {
-    subscribe_update.end_object = std::nullopt;
   }
   if (subscribe_update.parameters.authorization_info.has_value()) {
     ParseError("SUBSCRIBE_UPDATE has authorization info");
@@ -588,7 +548,7 @@ size_t MoqtControlParser::ProcessAnnounceError(quic::QuicDataReader& reader) {
       !reader.ReadStringVarInt62(announce_error.reason_phrase)) {
     return 0;
   }
-  announce_error.error_code = static_cast<MoqtAnnounceErrorCode>(error_code);
+  announce_error.error_code = static_cast<SubscribeErrorCode>(error_code);
   visitor_.OnAnnounceErrorMessage(announce_error);
   return reader.PreviouslyReadPayload().length();
 }
@@ -603,7 +563,7 @@ size_t MoqtControlParser::ProcessAnnounceCancel(quic::QuicDataReader& reader) {
       !reader.ReadStringVarInt62(announce_cancel.reason_phrase)) {
     return 0;
   }
-  announce_cancel.error_code = static_cast<MoqtAnnounceErrorCode>(error_code);
+  announce_cancel.error_code = static_cast<SubscribeErrorCode>(error_code);
   visitor_.OnAnnounceCancelMessage(announce_cancel);
   return reader.PreviouslyReadPayload().length();
 }
@@ -724,31 +684,56 @@ size_t MoqtControlParser::ProcessFetch(quic::QuicDataReader& reader) {
   absl::string_view track_name;
   uint8_t group_order;
   uint64_t end_object;
-  if (!reader.ReadVarInt62(&fetch.subscribe_id) ||
-      !ReadTrackNamespace(reader, fetch.full_track_name) ||
-      !reader.ReadStringPieceVarInt62(&track_name) ||
+  uint64_t type;
+  if (!reader.ReadVarInt62(&fetch.fetch_id) ||
       !reader.ReadUInt8(&fetch.subscriber_priority) ||
-      !reader.ReadUInt8(&group_order) ||
-      !reader.ReadVarInt62(&fetch.start_object.group) ||
-      !reader.ReadVarInt62(&fetch.start_object.object) ||
-      !reader.ReadVarInt62(&fetch.end_group) ||
-      !reader.ReadVarInt62(&end_object) ||
-      !ReadSubscribeParameters(reader, fetch.parameters)) {
+      !reader.ReadUInt8(&group_order) || !reader.ReadVarInt62(&type)) {
     return 0;
   }
-  // Elements that have to be translated from the literal value.
-  fetch.full_track_name.AddElement(track_name);
   if (!ParseDeliveryOrder(group_order, fetch.group_order)) {
     ParseError("Invalid group order value in FETCH message");
     return 0;
   }
-  fetch.end_object =
-      end_object == 0 ? std::optional<uint64_t>() : (end_object - 1);
-  if (fetch.end_group < fetch.start_object.group ||
-      (fetch.end_group == fetch.start_object.group &&
-       fetch.end_object.has_value() &&
-       *fetch.end_object < fetch.start_object.object)) {
-    ParseError("End object comes before start object in FETCH");
+  switch (static_cast<FetchType>(type)) {
+    case FetchType::kJoining: {
+      uint64_t joining_subscribe_id;
+      uint64_t preceding_group_offset;
+      if (!reader.ReadVarInt62(&joining_subscribe_id) ||
+          !reader.ReadVarInt62(&preceding_group_offset)) {
+        return 0;
+      }
+      fetch.joining_fetch =
+          JoiningFetch{joining_subscribe_id, preceding_group_offset};
+      break;
+    }
+    case FetchType::kStandalone: {
+      fetch.joining_fetch = std::nullopt;
+      if (!ReadTrackNamespace(reader, fetch.full_track_name) ||
+          !reader.ReadStringPieceVarInt62(&track_name) ||
+          !reader.ReadVarInt62(&fetch.start_object.group) ||
+          !reader.ReadVarInt62(&fetch.start_object.object) ||
+          !reader.ReadVarInt62(&fetch.end_group) ||
+          !reader.ReadVarInt62(&end_object)) {
+        return 0;
+      }
+      // Elements that have to be translated from the literal value.
+      fetch.full_track_name.AddElement(track_name);
+      fetch.end_object =
+          end_object == 0 ? std::optional<uint64_t>() : (end_object - 1);
+      if (fetch.end_group < fetch.start_object.group ||
+          (fetch.end_group == fetch.start_object.group &&
+           fetch.end_object.has_value() &&
+           *fetch.end_object < fetch.start_object.object)) {
+        ParseError("End object comes before start object in FETCH");
+        return 0;
+      }
+      break;
+    }
+    default:
+      ParseError("Invalid FETCH type");
+      return 0;
+  }
+  if (!ReadSubscribeParameters(reader, fetch.parameters)) {
     return 0;
   }
   visitor_.OnFetchMessage(fetch);
@@ -793,6 +778,16 @@ size_t MoqtControlParser::ProcessFetchError(quic::QuicDataReader& reader) {
   }
   fetch_error.error_code = static_cast<SubscribeErrorCode>(error_code);
   visitor_.OnFetchErrorMessage(fetch_error);
+  return reader.PreviouslyReadPayload().length();
+}
+
+size_t MoqtControlParser::ProcessSubscribesBlocked(
+    quic::QuicDataReader& reader) {
+  MoqtSubscribesBlocked subscribes_blocked;
+  if (!reader.ReadVarInt62(&subscribes_blocked.max_subscribe_id)) {
+    return 0;
+  }
+  visitor_.OnSubscribesBlockedMessage(subscribes_blocked);
   return reader.PreviouslyReadPayload().length();
 }
 
@@ -963,32 +958,34 @@ void MoqtDataParser::ParseError(absl::string_view reason) {
 std::optional<absl::string_view> ParseDatagram(absl::string_view data,
                                                MoqtObject& object_metadata) {
   uint64_t type_raw, object_status_raw;
+  absl::string_view extensions;
   quic::QuicDataReader reader(data);
   if (!reader.ReadVarInt62(&type_raw) ||
-      type_raw != static_cast<uint64_t>(MoqtDataStreamType::kObjectDatagram) ||
       !reader.ReadVarInt62(&object_metadata.track_alias) ||
       !reader.ReadVarInt62(&object_metadata.group_id) ||
       !reader.ReadVarInt62(&object_metadata.object_id) ||
       !reader.ReadUInt8(&object_metadata.publisher_priority) ||
-      !reader.ReadVarInt62(&object_metadata.payload_length)) {
+      !reader.ReadStringPieceVarInt62(&extensions)) {
     return std::nullopt;
   }
-  if (object_metadata.payload_length > 0) {
-    object_metadata.object_status = MoqtObjectStatus::kNormal;
-  } else {
+  object_metadata.extension_headers = std::string(extensions);
+  if (static_cast<MoqtDatagramType>(type_raw) ==
+      MoqtDatagramType::kObjectStatus) {
+    object_metadata.payload_length = 0;
     if (!reader.ReadVarInt62(&object_status_raw)) {
       return std::nullopt;
     }
     object_metadata.object_status = IntegerToObjectStatus(object_status_raw);
-    if (object_metadata.object_status ==
-        MoqtObjectStatus::kInvalidObjectStatus) {
-      return std::nullopt;
-    }
+    return "";
   }
-  if (reader.PeekRemainingPayload().size() != object_metadata.payload_length) {
+
+  absl::string_view payload;
+  if (!reader.ReadStringPieceVarInt62(&payload)) {
     return std::nullopt;
   }
-  return reader.PeekRemainingPayload();
+  object_metadata.object_status = MoqtObjectStatus::kNormal;
+  object_metadata.payload_length = payload.length();
+  return payload;
 }
 
 void MoqtDataParser::ReadDataUntil(StopCondition stop_condition) {
@@ -1088,16 +1085,21 @@ void MoqtDataParser::AdvanceParserState() {
       next_input_ = is_fetch ? kObjectId : kPublisherPriority;
       break;
     case kPublisherPriority:
-      next_input_ = is_fetch ? kObjectPayloadLength : kObjectId;
+      next_input_ = is_fetch ? kExtensionSize : kObjectId;
       break;
     case kObjectId:
-      next_input_ = is_fetch ? kPublisherPriority : kObjectPayloadLength;
+      next_input_ = is_fetch ? kPublisherPriority : kExtensionSize;
+      break;
+    case kExtensionBody:
+      next_input_ = kObjectPayloadLength;
       break;
     case kStatus:
     case kData:
       next_input_ = is_fetch ? kGroupId : kObjectId;
       break;
 
+    case kExtensionSize:        // Either kExtensionBody or
+                                // kObjectPayloadLength.
     case kObjectPayloadLength:  // Either kStatus or kData depending on length.
     case kPadding:              // Handled separately.
     case kFailed:               // Should cause parsing to cease.
@@ -1127,9 +1129,6 @@ void MoqtDataParser::ParseNextItemFromStream() {
           case MoqtDataStreamType::kPadding:
             next_input_ = kPadding;
             break;
-          case MoqtDataStreamType::kObjectDatagram:
-            QUICHE_BUG(ParseDataFromStream_kStreamType_unexpected);
-            return;
         }
       }
       return;
@@ -1180,6 +1179,16 @@ void MoqtDataParser::ParseNextItemFromStream() {
       return;
     }
 
+    case kExtensionSize: {
+      std::optional<uint64_t> value_read = ReadVarInt62NoFin();
+      if (value_read.has_value()) {
+        metadata_.extension_headers.clear();
+        payload_length_remaining_ = *value_read;
+        next_input_ = (value_read == 0) ? kObjectPayloadLength : kExtensionBody;
+      }
+      return;
+    }
+
     case kObjectPayloadLength: {
       std::optional<uint64_t> value_read = ReadVarInt62NoFin();
       if (value_read.has_value()) {
@@ -1216,6 +1225,7 @@ void MoqtDataParser::ParseNextItemFromStream() {
       return;
     }
 
+    case kExtensionBody:
     case kData: {
       while (payload_length_remaining_ > 0) {
         quiche::ReadStream::PeekResult peek_result =
@@ -1232,13 +1242,25 @@ void MoqtDataParser::ParseNextItemFromStream() {
             std::min(payload_length_remaining_, peek_result.peeked_data.size());
         payload_length_remaining_ -= chunk_size;
         bool done = payload_length_remaining_ == 0;
-        visitor_.OnObjectMessage(
-            metadata_, peek_result.peeked_data.substr(0, chunk_size), done);
-        const bool fin = stream_.SkipBytes(chunk_size);
-        if (done) {
-          ++num_objects_read_;
-          no_more_data_ |= fin;
-          AdvanceParserState();
+        if (next_input_ == kData) {
+          visitor_.OnObjectMessage(
+              metadata_, peek_result.peeked_data.substr(0, chunk_size), done);
+          const bool fin = stream_.SkipBytes(chunk_size);
+          if (done) {
+            ++num_objects_read_;
+            no_more_data_ |= fin;
+            AdvanceParserState();
+          }
+        } else {
+          absl::StrAppend(&metadata_.extension_headers,
+                          peek_result.peeked_data.substr(0, chunk_size));
+          if (stream_.SkipBytes(chunk_size)) {
+            ParseError("FIN received at an unexpected point in the stream");
+            return;
+          }
+          if (done) {
+            AdvanceParserState();
+          }
         }
       }
       return;

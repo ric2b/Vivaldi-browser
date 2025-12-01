@@ -5,13 +5,15 @@
 #ifndef V8_OBJECTS_FEEDBACK_VECTOR_INL_H_
 #define V8_OBJECTS_FEEDBACK_VECTOR_INL_H_
 
+#include "src/objects/feedback-vector.h"
+// Include the non-inl header before the rest of the headers.
+
 #include <optional>
 
 #include "src/common/globals.h"
 #include "src/heap/heap-write-barrier-inl.h"
 #include "src/objects/code-inl.h"
 #include "src/objects/feedback-cell-inl.h"
-#include "src/objects/feedback-vector.h"
 #include "src/objects/maybe-object-inl.h"
 #include "src/objects/shared-function-info.h"
 #include "src/objects/smi.h"
@@ -228,7 +230,7 @@ void FeedbackVector::set_log_next_execution(bool value) {
 }
 
 Tagged<Code> FeedbackVector::optimized_code(IsolateForSandbox isolate) const {
-  Tagged<MaybeObject> slot = maybe_optimized_code();
+  Tagged<MaybeWeak<HeapObject>> slot = maybe_optimized_code();
   DCHECK(slot.IsWeakOrCleared());
   Tagged<HeapObject> heap_object;
   Tagged<Code> code;
@@ -377,6 +379,8 @@ BinaryOperationHint BinaryOperationHintFromFeedback(int type_feedback) {
       return BinaryOperationHint::kSignedSmall;
     case BinaryOperationFeedback::kSignedSmallInputs:
       return BinaryOperationHint::kSignedSmallInputs;
+    case BinaryOperationFeedback::kAdditiveSafeInteger:
+      return BinaryOperationHint::kAdditiveSafeInteger;
     case BinaryOperationFeedback::kNumber:
       return BinaryOperationHint::kNumber;
     case BinaryOperationFeedback::kNumberOrOddball:

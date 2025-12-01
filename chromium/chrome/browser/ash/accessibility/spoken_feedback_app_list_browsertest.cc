@@ -285,7 +285,7 @@ class SpokenFeedbackAppListBaseTest : public LoggedInSpokenFeedbackTest {
   void ReadWindowTitle() {
     extensions::browsertest_util::ExecuteScriptInBackgroundPageNoWait(
         browser()->profile(), extension_misc::kChromeVoxExtensionId,
-        "import('/chromevox/background/input/"
+        "import('/chromevox/mv2/background/input/"
         "command_handler_interface.js').then(module => "
         "module.CommandHandlerInterface.instance.onCommand('readCurrentTitle'))"
         ";");
@@ -1035,7 +1035,7 @@ IN_PROC_BROWSER_TEST_P(SpokenFeedbackAppListSearchTest, SearchCategoryFilter) {
   sm_.Call([this]() { SendKeyPress(ui::VKEY_DOWN); });
   sm_.ExpectSpeech("Images");
   sm_.ExpectSpeech("Checked");
-  sm_.ExpectSpeech("Search for text within images and see image previews");
+  sm_.ExpectSpeech("Image search by content and image previews");
 
   sm_.Call([this]() { SendKeyPress(ui::VKEY_DOWN); });
   sm_.ExpectSpeech("Websites");

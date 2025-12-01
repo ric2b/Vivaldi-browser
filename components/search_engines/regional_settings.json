@@ -1,0 +1,880 @@
+// Copyright 2025 The Chromium Authors
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+{
+  "elements": {
+    "AE": {  // United Arab Emirates
+      "search_engines": {
+        "top": [
+        ]
+      }
+    },
+    "AL": {  // Albania
+      "search_engines": {
+        "top": [
+        ]
+      }
+    },
+    "AR": {  // Armenia
+      "search_engines": {
+        "top": [
+        ]
+      }
+    },
+    "AT": {  // Austria
+      "search_engines": {
+        "top": [
+        ],
+        "remaining": [
+        ]
+      }
+    },
+    "AU": {  // Australia
+      "search_engines": {
+        "top": [
+        ]
+      }
+    },
+    "BA": {  // Bosnia and Herzegovina
+      "search_engines": {
+        "top": [
+        ]
+      }
+    },
+    "BE": {  // Belgium
+      "search_engines": {
+        "top": [
+        ],
+        "remaining": [
+        ]
+      }
+    },
+    "BG": {  // Bulgaria
+      "search_engines": {
+        "top": [
+        ],
+        "remaining": [
+        ]
+      }
+    },
+    "BH": {  // Bahrain
+      "search_engines": {
+        "top": [
+        ]
+      }
+    },
+    "BI": {  // Burundi
+      "search_engines": {
+        "top": [
+        ]
+      }
+    },
+    "BN": {  // Brunei
+      "search_engines": {
+        "top": [
+        ]
+      }
+    },
+    "BO": {  // Bolivia
+      "search_engines": {
+        "top": [
+        ]
+      }
+    },
+    "BR": {  // Brazil
+      "search_engines": {
+        "top": [
+        ]
+      }
+    },
+    "BY": {  // Belarus
+      "search_engines": {
+        "top": [
+        ]
+      }
+    },
+    "BZ": {  // Belize
+      "search_engines": {
+        "top": [
+        ]
+      }
+    },
+    "CA": {  // Canada
+      "search_engines": {
+        "top": [
+        ]
+      }
+    },
+    "CH": {  // Switzerland
+      "search_engines": {
+        "top": [
+        ]
+      }
+    },
+    "CL": {  // Chile
+      "search_engines": {
+        "top": [
+        ]
+      }
+    },
+    "CN": {  // China
+      "search_engines": {
+        "top": [
+        ]
+      }
+    },
+    "CO": {  // Colombia
+      "search_engines": {
+        "top": [
+        ]
+      }
+    },
+    "CR": {  // Costa Rica
+      "search_engines": {
+        "top": [
+        ]
+      }
+    },
+    "CY": {  // Republic of Cyprus
+      "search_engines": {
+        "top": [
+        ],
+        "remaining": [
+        ]
+      }
+    },
+    "CZ": {  // Czechia
+      "search_engines": {
+        "top": [
+        ],
+        "remaining": [
+        ]
+      }
+    },
+    "DE": {  // Germany
+      "search_engines": {
+        "top": [
+        ],
+        "remaining": [
+        ]
+      }
+    },
+    "DK": {  // Denmark
+      "search_engines": {
+        "top": [
+        ],
+        "remaining": [
+        ]
+      }
+    },
+    "DO": {  // Dominican Republic
+      "search_engines": {
+        "top": [
+        ]
+      }
+    },
+    "DZ": {  // Algeria
+      "search_engines": {
+        "top": [
+        ]
+      }
+    },
+    "EC": {  // Ecuador
+      "search_engines": {
+        "top": [
+        ]
+      }
+    },
+    "EE": {  // Estonia
+      "search_engines": {
+        "top": [
+        ],
+        "remaining": [
+        ]
+      }
+    },
+    "EG": {  // Egypt
+      "search_engines": {
+        "top": [
+        ]
+      }
+    },
+    "ES": {  // Spain
+      "search_engines": {
+        "top": [
+        ],
+        "remaining": [
+        ]
+      }
+    },
+    "FI": {  // Finland
+      "search_engines": {
+        "top": [
+        ],
+        "remaining": [
+        ]
+      }
+    },
+    "FO": {  // Faroe Islands
+      "search_engines": {
+        "top": [
+        ]
+      }
+    },
+    "FR": {  // France
+      "search_engines": {
+        "top": [
+        ],
+        "remaining": [
+        ]
+      }
+    },
+    "GB": {  // United Kingdom
+      "search_engines": {
+        "top": [
+        ]
+      }
+    },
+    "GR": {  // Greece
+      "search_engines": {
+        "top": [
+        ],
+        "remaining": [
+        ]
+      }
+    },
+    "GT": {  // Guatemala
+      "search_engines": {
+        "top": [
+        ]
+      }
+    },
+    "HK": {  // Hong Kong
+      "search_engines": {
+        "top": [
+        ]
+      }
+    },
+    "HN": {  // Honduras
+      "search_engines": {
+        "top": [
+        ]
+      }
+    },
+    "HR": {  // Croatia
+      "search_engines": {
+        "top": [
+        ],
+        "remaining": [
+        ]
+      }
+    },
+    "HU": {  // Hungary
+      "search_engines": {
+        "top": [
+        ],
+        "remaining": [
+        ]
+      }
+    },
+    "ID": {  // Indonesia
+      "search_engines": {
+        "top": [
+        ]
+      }
+    },
+    "IE": {  // Ireland
+      "search_engines": {
+        "top": [
+        ],
+        "remaining": [
+        ]
+      }
+    },
+    "IL": {  // Israel
+      "search_engines": {
+        "top": [
+        ]
+      }
+    },
+    "IN": {  // India
+      "search_engines": {
+        "top": [
+        ]
+      }
+    },
+    "IQ": {  // Iraq
+      "search_engines": {
+        "top": [
+        ]
+      }
+    },
+    "IR": {  // Iran
+      "search_engines": {
+        "top": [
+        ]
+      }
+    },
+    "IS": {  // Iceland
+      "search_engines": {
+        "top": [
+        ],
+        "remaining": [
+        ]
+      }
+    },
+    "IT": {  // Italy
+      "search_engines": {
+        "top": [
+        ],
+        "remaining": [
+        ]
+      }
+    },
+    "JM": {  // Jamaica
+      "search_engines": {
+        "top": [
+        ]
+      }
+    },
+    "JO": {  // Jordan
+      "search_engines": {
+        "top": [
+        ]
+      }
+    },
+    "JP": {  // Japan
+      "search_engines": {
+        "top": [
+        ]
+      }
+    },
+    "KE": {  // Kenya
+      "search_engines": {
+        "top": [
+        ]
+      }
+    },
+    "KR": {  // South Korea
+      "search_engines": {
+        "top": [
+        ]
+      }
+    },
+    "KW": {  // Kuwait
+      "search_engines": {
+        "top": [
+        ]
+      }
+    },
+    "KZ": {  // Kazakhstan
+      "search_engines": {
+        "top": [
+        ]
+      }
+    },
+    "LB": {  // Lebanon
+      "search_engines": {
+        "top": [
+        ]
+      }
+    },
+    "LI": {  // Lichtenstein
+      "search_engines": {
+        "top": [
+          "&ecosia"
+        ],
+        "remaining": [
+        ]
+      }
+    },
+    "LT": {  // Lithuania
+      "search_engines": {
+        "top": [
+        ],
+        "remaining": [
+        ]
+      }
+    },
+    "LU": {  // Luxembourg
+      "search_engines": {
+        "top": [
+          "&ecosia"
+        ],
+        "remaining": [
+        ]
+      }
+    },
+    "LV": {  // Latvia
+      "search_engines": {
+        "top": [
+        ],
+        "remaining": [
+        ]
+      }
+    },
+    "LY": {  // Libya
+      "search_engines": {
+        "top": [
+        ]
+      }
+    },
+    "MA": {  // Morocco
+      "search_engines": {
+        "top": [
+        ]
+      }
+    },
+    "MC": {  // Monaco
+      "search_engines": {
+        "top": [
+        ]
+      }
+    },
+    "MD": {  // Moldova
+      "search_engines": {
+        "top": [
+        ]
+      }
+    },
+    "ME": {  // Montenegro
+      "search_engines": {
+        "top": [
+        ]
+      }
+    },
+    "MK": {  // Macedonia
+      "search_engines": {
+        "top": [
+        ]
+      }
+    },
+    "MT": {  // Malta
+      "search_engines": {
+        "top": [
+        ],
+        "remaining": [
+        ]
+      }
+    },
+    "MX": {  // Mexico
+      "search_engines": {
+        "top": [
+        ]
+      }
+    },
+    "MY": {  // Malaysia
+      "search_engines": {
+        "top": [
+        ]
+      }
+    },
+    "NI": {  // Nicaragua
+      "search_engines": {
+        "top": [
+        ]
+      }
+    },
+    "NL": {  // Netherlands
+      "search_engines": {
+        "top": [
+        ],
+        "remaining": [
+        ]
+      }
+    },
+    "NO": {  // Norway
+      "search_engines": {
+        "top": [
+        ],
+        "remaining": [
+        ]
+      }
+    },
+    "NZ": {  // New Zealand
+      "search_engines": {
+        "top": [
+        ]
+      }
+    },
+    "OM": {  // Oman
+      "search_engines": {
+        "top": [
+        ]
+      }
+    },
+    "PA": {  // Panama
+      "search_engines": {
+        "top": [
+        ]
+      }
+    },
+    "PE": {  // Peru
+      "search_engines": {
+        "top": [
+        ]
+      }
+    },
+    "PH": {  // Philippines
+      "search_engines": {
+        "top": [
+        ]
+      }
+    },
+    "PK": {  // Pakistan
+      "search_engines": {
+        "top": [
+        ]
+      }
+    },
+    "PL": {  // Poland
+      "search_engines": {
+        "top": [
+        ],
+        "remaining": [
+        ]
+      }
+    },
+    "PR": {  // Puerto Rico
+      "search_engines": {
+        "top": [
+        ]
+      }
+    },
+    "PT": {  // Portugal
+      "search_engines": {
+        "top": [
+        ],
+        "remaining": [
+        ]
+      }
+    },
+    "PY": {  // Paraguay
+      "search_engines": {
+        "top": [
+        ]
+      }
+    },
+    "QA": {  // Quatar
+      "search_engines": {
+        "top": [
+        ]
+      }
+    },
+    "RO": {  // Romania
+      "search_engines": {
+        "top": [
+        ],
+        "remaining": [
+        ]
+      }
+    },
+    "RS": {  // Serbia
+      "search_engines": {
+        "top": [
+        ]
+      }
+    },
+    "RU": {  // Russia
+      "search_engines": {
+        "top": [
+        ]
+      }
+    },
+    "RW": {  // Rwanda
+      "search_engines": {
+        "top": [
+        ]
+      }
+    },
+    "SA": {  // Saudi Arabia
+      "search_engines": {
+        "top": [
+        ]
+      }
+    },
+    "SE": {  // Sweden
+      "search_engines": {
+        "top": [
+        ],
+        "remaining": [
+        ]
+      }
+    },
+    "SG": {  // Singapore
+      "search_engines": {
+        "top": [
+        ]
+      }
+    },
+    "SI": {  // Slovenia
+      "search_engines": {
+        "top": [
+        ],
+        "remaining": [
+        ]
+      }
+    },
+    "SK": {  // Slovakia
+      "search_engines": {
+        "top": [
+        ],
+        "remaining": [
+        ]
+      }
+    },
+    "SV": {  // El Salvador
+      "search_engines": {
+        "top": [
+        ]
+      }
+    },
+    "SY": {  // Syria
+      "search_engines": {
+        "top": [
+        ]
+      }
+    },
+    "TH": {  // Thailand
+      "search_engines": {
+        "top": [
+        ]
+      }
+    },
+    "TN": {  // Tunisia
+      "search_engines": {
+        "top": [
+        ]
+      }
+    },
+    "TR": {  // Turkey
+      "search_engines": {
+        "top": [
+        ]
+      }
+    },
+    "TT": {  // Trinidad and Tobago
+      "search_engines": {
+        "top": [
+        ]
+      }
+    },
+    "TW": {  // Taiwan
+      "search_engines": {
+        "top": [
+        ]
+      }
+    },
+    "TZ": {  // Tanzania
+      "search_engines": {
+        "top": [
+        ]
+      }
+    },
+    "UA": {  // Ukraine
+      "search_engines": {
+        "top": [
+        ]
+      }
+    },
+    "US": {  // United States
+      "search_engines": {
+        "top": [
+        ]
+      }
+    },
+    "UY": {  // Uruguay
+      "search_engines": {
+        "top": [
+        ]
+      }
+    },
+    "VE": {  // Venezuela
+      "search_engines": {
+        "top": [
+        ]
+      }
+    },
+    "VN": {  // Vietnam
+      "search_engines": {
+        "top": [
+        ]
+      }
+    },
+    "YE": {  // Yemen
+      "search_engines": {
+        "top": [
+        ]
+      }
+    },
+    "ZA": {  // South Africa
+      "search_engines": {
+        "top": [
+        ]
+      }
+    },
+    "ZW": {  // Zimbabwe
+      "search_engines": {
+        "top": [
+        ]
+      }
+    },
+    // Fallback / default country. Occupies a user-assignable alpha-2 code,
+    // representing unknown or invalid territory.
+    // See https://en.wikipedia.org/wiki/ISO_3166-1_alpha-2#ZZ
+    "ZZ": {  // Default
+      "search_engines": {
+        "top": [
+        ]
+      }
+    }
+  },
+  "aggregation": {
+    "type": "map",
+    "name": "kRegionalSettings",
+    "export_items": false,
+    "map_key_type": "country_codes::CountryId",
+    "map_aliases": {
+      "AD": "ES",  // Andorra
+      "AF": "ZZ",  // Afghanistan
+      "AG": "ZZ",  // Antigua and Barbuda
+      "AI": "ZZ",  // Anguilla
+      "AM": "RU",  // Armenia
+      "AN": "NL",  // Netherlands Antilles
+      "AO": "ZZ",  // Angola
+      "AQ": "ZZ",  // Antarctica
+      "AS": "US",  // American Samoa
+      "AW": "NL",  // Aruba
+      "AX": "FI",  // Aland Islands
+      "AZ": "RU",  // Azerbaijan
+      "BB": "ZZ",  // Barbados
+      "BD": "ZZ",  // Bangladesh
+      "BF": "FR",  // Burkina Faso
+      "BJ": "FR",  // Benin
+      "BL": "FR",  // St. Barth�lemy
+      "BM": "GB",  // Bermuda
+      "BS": "ZZ",  // Bahamas
+      "BT": "ZZ",  // Bhutan
+      "BV": "NO",  // Bouvet Island
+      "BW": "ZZ",  // Botswana
+      "CC": "AU",  // Cocos Islands
+      "CD": "FR",  // Congo - Kinshasa
+      "CF": "FR",  // Central African Republic
+      "CG": "FR",  // Congo - Brazzaville
+      "CI": "FR",  // Ivory Coast
+      "CK": "NZ",  // Cook Islands
+      "CM": "FR",  // Cameroon
+      "CQ": "GB",  // Sark
+      "CU": "ZZ",  // Cuba
+      "CV": "PT",  // Cape Verde
+      "CX": "AU",  // Christmas Islands
+      "DJ": "FR",  // Djibouti
+      "DM": "ZZ",  // Dominica
+      "EA": "ES",  // Ceuta and Melila (not in ISO3166-1)
+      "EH": "MA",  // Western Sahara
+      "ER": "ZZ",  // Eritrea
+      "ET": "ZZ",  // Ethiopia
+      "FJ": "ZZ",  // Fiji
+      "FK": "GB",  // Falkland Islands
+      "FM": "ZZ",  // Micronesia
+      "GA": "FR",  // Gabon
+      "GD": "ZZ",  // Grenada
+      "GE": "ZZ",  // Georgia
+      "GF": "FR",  // French Guiana
+      "GG": "GB",  // Gernsey
+      "GH": "ZZ",  // Ghana
+      "GI": "GB",  // Gibraltar
+      "GL": "DK",  // Greenland
+      "GM": "ZZ",  // Gambia
+      "GN": "FR",  // Guinea
+      "GP": "FR",  // Guadeloupe
+      "GQ": "ZZ",  // Equatorial Guinea
+      "GS": "GB",  // South Georgia and the South Sandwich Islands
+      "GU": "US",  // Guam
+      "GW": "PT",  // Guinea-Bissau
+      "GY": "ZZ",  // Guyana
+      "HM": "AU",  // Heard Island and McDonald Islands
+      "HT": "FR",  // Haiti
+      "IC": "ES",  // Canary Islands (not in ISO3166-1)
+      "IM": "GB",  // Isle of Man
+      "IO": "GB",  // British Indian Ocean Territory
+      "JE": "GB",  // Jersey
+      "KG": "RU",  // Kyrgyzstan
+      "KH": "ZZ",  // Cambodia
+      "KI": "ZZ",  // Kiribati
+      "KM": "ZZ",  // Comoros
+      "KN": "ZZ",  // Saint Kitts and Nevis
+      "KP": "ZZ",  // North Korea
+      "KY": "GB",  // Cayman Islands
+      "LA": "ZZ",  // Laos
+      "LC": "ZZ",  // Saint Lucia
+      "LK": "ZZ",  // Sri Lanka
+      "LR": "ZZ",  // Liberia
+      "LS": "ZZ",  // Lesotho
+      "MF": "FR",  // Saint Martin
+      "MG": "ZZ",  // Madagascar
+      "MH": "ZZ",  // Marshall Islands
+      "ML": "FR",  // Mali
+      "MM": "ZZ",  // Myanmar
+      "MN": "ZZ",  // Mongolia
+      "MO": "CN",  // Macao
+      "MP": "US",  // Northern Mariana Islands
+      "MQ": "FR",  // Martinique
+      "MR": "SA",  // Mauritania
+      "MS": "GB",  // Montserrat
+      "MU": "ZZ",  // Mauritius
+      "MV": "ZZ",  // Maldives
+      "MW": "ZZ",  // Malawi
+      "MZ": "PT",  // Mozambique
+      "NA": "ZZ",  // Namibia
+      "NC": "FR",  // New Caledonia
+      "NE": "FR",  // Niger
+      "NF": "AU",  // Norfolk Island
+      "NG": "ZZ",  // Nigeria
+      "NP": "ZZ",  // Nepal
+      "NR": "ZZ",  // Nauru
+      "NU": "NZ",  // Niue
+      "PF": "FR",  // French Polynesia
+      "PG": "ZZ",  // Papua New Guinea
+      "PM": "FR",  // Saint Pierre and Miquelon
+      "PN": "GB",  // Pitcairn Islands
+      "PS": "SA",  // Palestinian Territory
+      "PW": "ZZ",  // Palau
+      "RE": "FR",  // Reunion
+      "SB": "ZZ",  // Solomon Islands
+      "SC": "ZZ",  // Seychelles
+      "SD": "SA",  // Sudan
+      "SH": "GB",  // Saint Helena, Ascension Island, Tristan da Cunha
+      "SJ": "NO",  // Svalbard and Jan Mayen
+      "SL": "ZZ",  // Sierra Leone
+      "SM": "IT",  // San Marino
+      "SN": "FR",  // Senegal
+      "SO": "ZZ",  // Somalia
+      "SR": "ZZ",  // Suriname
+      "ST": "PT",  // Sao Tome and Principe
+      "SZ": "ZZ",  // Swaziland
+      "TC": "GB",  // Turks and Caicos Islands
+      "TD": "FR",  // Chad
+      "TF": "FR",  // French Southern Territories
+      "TG": "FR",  // Togo
+      "TJ": "RU",  // Tajikistan
+      "TK": "NZ",  // Tokelau
+      "TL": "PT",  // Timor-Leste
+      "TM": "RU",  // Turkmenistan
+      "TO": "ZZ",  // Tonga
+      "TV": "ZZ",  // Tuvalu
+      "UG": "ZZ",  // Uganda
+      "UM": "US",  // U.S. Minor Outlying Islands
+      "UZ": "RU",  // Uzbekistan
+      "VA": "IT",  // Vatican
+      "VC": "ZZ",  // Saint Vincent and the Grenadines
+      "VG": "GB",  // British Virgin Islands
+      "VI": "US",  // U.S. Virgin Islands
+      "VU": "ZZ",  // Vanuatu
+      "WF": "FR",  // Wallis and Futuna
+      "WS": "ZZ",  // Samoa
+      "YT": "FR",  // Mayotte
+      "ZM": "ZZ"   // Zambia
+    }
+  }
+}

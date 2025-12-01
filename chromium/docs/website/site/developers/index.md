@@ -118,7 +118,6 @@ See also: All [How-tos](/developers/how-tos).
                 HOWTO](/developers/testing/flakiness-dashboard)
     *   [Frame Rate Test](/developers/testing/frame-rate-test)
     *   [GPU Testing](/developers/testing/gpu-testing)
-    *   [GPU Recipe](/system/errors/NodeNotFound)
     *   [WebGL Conformance
                 Tests](/developers/testing/webgl-conformance-tests)
     *   [Blink, Testing, and the W3C](/blink/blink-testing-and-the-w3c)
@@ -129,8 +128,6 @@ See also: All [How-tos](/developers/how-tos).
             test](/developers/tree-sheriffs/handling-a-failing-test)
 *   [Running Chrome
             tests](http://code.google.com/p/chromium/wiki/RunningChromeUITests)
-*   [Reliability Tests](/system/errors/NodeNotFound)
-*   [Using Valgrind](/system/errors/NodeNotFound)
 *   [Page Heap for Chrome](/developers/testing/page-heap-for-chrome)
 *   [Establishing Blame for Memory usage via
             Memory_Watcher](/developers/memory_watcher)
@@ -201,9 +198,8 @@ See also: All [How-tos](/developers/how-tos).
         *   [Web Development Style
                     Guide](/developers/web-development-style-guide)
         *   [Java](/developers/coding-style/java)
-        *   [Jinja](/developers/jinja)
     *   [Becoming a Committer](/getting-involved/become-a-committer)
-    *   [Gerrit Guide (Googler/Non-Googler)](/developers/gerrit-guide)
+    *   [Gerrit Guide (Googler/Non-Googler)](https://chromium.googlesource.com/chromium/src/+/HEAD/docs/gerrit_guide.md)
     *   [Create experimental branches to work
                 on](/developers/experimental-branches)
     *   [Committer's
@@ -224,7 +220,6 @@ See also: All [How-tos](/developers/how-tos).
             triage](/developers/design-documents/network-stack/network-bug-triage)
 *   [GPU bug
             triage](https://docs.google.com/document/d/1Sr1rUl2a5_RBCkLtxfx4qE-xUIJfYraISdSz_I6Ft38/edit#heading=h.vo10gbuchnj4)
-*   [Ticket milestone punting](/system/errors/NodeNotFound)
 *   [Tree Sheriffs](/developers/tree-sheriffs)
 *   [Useful extensions for developers](/developers/useful-extensions)
 *   [Adding 3rd-party libraries](/developers/adding-3rd-party-libraries)

@@ -42,6 +42,7 @@ class DecorationIconTitle : public DecorationTitle {
   void setBounds(const gfx::Size& bounds) override;
   void setOpacity(float opacity) override;
   const gfx::Size& size() { return size_; }
+  const gfx::Size& icon_size() { return icon_size_; } // Vivaldi
 
  protected:
   void handleIconResource(ui::AndroidResourceType resource_type);

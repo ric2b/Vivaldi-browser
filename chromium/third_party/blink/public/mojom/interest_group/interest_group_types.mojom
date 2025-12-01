@@ -179,6 +179,9 @@ struct InterestGroup {
   // An optional field for matching the encryption key, and indicating which
   // version of the key-value server this interest group uses.
   url.mojom.Origin? trusted_bidding_signals_coordinator;
+  // Stores the set of origins that are allowed to provide view and click
+  // counts to this interest group's generateBid() function.
+  array<url.mojom.Origin>? view_and_click_counts_providers;
   // Opaque JSON data, persisted, then passed as object to auction worklet.
   string? user_bidding_signals;
   array<InterestGroupAd>? ads;
@@ -218,6 +221,42 @@ struct PreviousWin {
   string ad_json;
 };
 
+// Used by ClickAndViewCounts -- both view and click counts share the same time
+// bucketing scheme.
+//
+// There can be some imprecison due to the fact that counts older than one hour
+// get compacted by DB maintenance to the nearest hour, to save storage.
+//
+// Note that the longer time intervals include all events in the shorter time
+// intervals. For example, every event in the past hour is also an event in the
+// past day, etc.
+struct ViewOrClickCounts {
+  // Views or clicks within the past hour.
+  int32 past_hour = 0;
+
+  // Views or clicks within the past day.
+  int32 past_day = 0;
+
+  // Views or clicks within the past week.
+  int32 past_week = 0;
+
+  // Views or clicks within the past 30 days.
+  int32 past_30_days = 0;
+
+  // Views or clicks within the past 90 days.
+  int32 past_90_days = 0;
+};
+
+// A part of BiddingBrowserSignals that provides counts of views and clicks for
+// the given buyer origin (the "eligible origin") over various time buckets.
+struct ViewAndClickCounts {
+  // Counts for view events for the given buyer origin.
+  ViewOrClickCounts view_counts;
+
+  // Counts for click events for the given buyer origin.
+  ViewOrClickCounts click_counts;
+};
+
 // Browser signals passed to the BidderWorklet's generateBid() method that are
 // stored on disk and updated by the browser, as opposed to coming from the
 // frame running the auction, or from the definition of the InterestGroup taking
@@ -236,6 +275,10 @@ struct BiddingBrowserSignals {
   // Whether the browser is under lockout or the buyer's origin is under
   // cooldown for sending forDebuggingOnly reports.
   bool for_debugging_only_in_cooldown_or_lockout;
+
+  // Loaded time-bucketed view and click counts aggregated across the
+  // `view_and_click_counts_providers` for this interest group.
+  ViewAndClickCounts view_and_click_counts;
 };
 
 // Represents an interest group with associated metadata. This struct is
@@ -469,15 +512,26 @@ struct AuctionAdConfigNonSharedParams {
   // call to worklet.
   AuctionAdConfigMaybePromiseJson auction_signals;
 
-  // Opaque JSON data, passed as object to the seller worklet.  At time of call
+  // Opaque JSON data, passed as object to the seller worklet. At time of call
   // to browser, it may also be a promise, but it should be resolved at time of
   // call to worklet.
   AuctionAdConfigMaybePromiseJson seller_signals;
+
+  // Seller signals of contextual data which are sent with trusted KVv2 signals
+  // to TKV servers. Values are Opaque JSON data. At time of call to browser,
+  // it may also be a promise, but it should be resolved at time of call to
+  // worklet.
+  AuctionAdConfigMaybePromiseJson seller_tkv_signals;
 
   // The value restricts the runtime of the seller's scoreAd() script.
   mojo_base.mojom.TimeDelta? seller_timeout;
 
   AuctionAdConfigMaybePromisePerBuyerSignals per_buyer_signals;
+
+  // Per buyer signals of contextual data are sent with trusted KVv2 signals to
+  // TKV servers. The keys represent buyer HTTPS origins, while the values contain
+  // opaque JSON data.
+  map<url.mojom.Origin, string> per_buyer_tkv_signals;
 
   // Timeouts for individual interest group worklet Javascript execution.
   AuctionAdConfigMaybePromiseBuyerTimeouts buyer_timeouts;
@@ -676,6 +730,8 @@ struct AuctionDataBuyerConfig {
 };
 
 // Configuration to pass to GetInterestGroupAdAuctionData().
+// The behavior of `request_size` and `per_buyer_configs` is described in
+// https://github.com/WICG/turtledove/blob/main/FLEDGE_browser_bidding_and_auction_API.md#buyer-controls
 struct AuctionDataConfig {
   // A specific list of buyers to include in the encrypted request and any
   // specific options for them.

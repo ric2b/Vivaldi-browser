@@ -81,8 +81,6 @@ limitations under the License.
 #include "xla/pjrt/gpu/gpu_helpers.h"
 #include "xla/pjrt/gpu/se_gpu_pjrt_client.h"
 #include "xla/pjrt/pjrt_client.h"
-#include "xla/pjrt/pjrt_stream_executor_client.h"
-#include "xla/stream_executor/integrations/device_host_allocator.h"
 #endif  // TF_GPU_USE_PJRT
 #include "tensorflow/core/framework/log_memory.h"
 #include "tensorflow/core/platform/fingerprint.h"
@@ -1221,7 +1219,7 @@ Status SingleVirtualDeviceMemoryLimit(const GPUOptions& gpu_options,
       se->GetDeviceDescription().cuda_compute_capability();
   if ((per_process_gpu_memory_fraction > 1.0 ||
        gpu_options.experimental().use_unified_memory()) &&
-      !cc.IsAtLeast(se::CudaComputeCapability::PASCAL_)) {
+      !cc.IsAtLeast(se::CudaComputeCapability::kPascal)) {
     return errors::Internal(
         "Unified memory on GPUs with compute capability lower than 6.0 "
         "(pre-Pascal class GPUs) does not support oversubscription.");
@@ -1720,10 +1718,10 @@ Status BaseGPUDeviceFactory::CreateDevices(
                                   : std::make_optional(allowed_devices)));
 
   bool should_create_new_pjrt_client = true;
-  xla::PjRtStreamExecutorClient* pjrt_se_client = nullptr;
+  xla::StreamExecutorGpuClient* pjrt_se_client = nullptr;
   auto obtained_pjrt_client = GetPjRtClient(DeviceType(DEVICE_GPU));
   if (obtained_pjrt_client.ok()) {
-    pjrt_se_client = tensorflow::down_cast<xla::PjRtStreamExecutorClient*>(
+    pjrt_se_client = tensorflow::down_cast<xla::StreamExecutorGpuClient*>(
         *obtained_pjrt_client);
     // TODO(b/291943099): This check may not be enough because the virtual
     // device options can change while the device count remains the same.
@@ -1826,7 +1824,7 @@ Status BaseGPUDeviceFactory::CreateDevices(
               << should_create_new_pjrt_client << " for device ordinal " << di
               << ". Re-using local_device_state";
       auto* pjrt_se_client =
-          tensorflow::down_cast<xla::PjRtStreamExecutorClient*>(
+          tensorflow::down_cast<xla::StreamExecutorGpuClient*>(
               *obtained_pjrt_client);
       local_device_state = &(pjrt_se_client->device_state(di));
     }

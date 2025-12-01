@@ -22,7 +22,7 @@ const UIStrings = {
    *@description Placeholder text in Soft Drop Down
    */
   noItemSelected: '(no item selected)',
-};
+} as const;
 const str_ = i18n.i18n.registerUIStrings('ui/legacy/SoftDropDown.ts', UIStrings);
 const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
 
@@ -113,7 +113,7 @@ export class SoftDropDown<T> implements ListDelegate<T> {
       return;
     }
     this.glassPane.setContentAnchorBox(this.element.boxInWindow());
-    this.glassPane.show((this.element.ownerDocument as Document));
+    this.glassPane.show((this.element.ownerDocument));
     this.list.element.focus();
     ARIAUtils.setExpanded(this.element, true);
     this.updateGlasspaneSize();
@@ -305,7 +305,7 @@ export class SoftDropDown<T> implements ListDelegate<T> {
 
     ARIAUtils.setActiveDescendant(this.list.element, toElement);
     this.delegate.highlightedItemChanged(
-        from, to, fromElement && fromElement.firstElementChild, toElement && toElement.firstElementChild);
+        from, to, fromElement?.firstElementChild ?? null, toElement?.firstElementChild ?? null);
   }
 
   updateSelectedItemARIA(_fromElement: Element|null, _toElement: Element|null): boolean {

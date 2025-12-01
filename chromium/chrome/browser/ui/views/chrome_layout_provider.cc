@@ -82,9 +82,7 @@ gfx::Insets ChromeLayoutProvider::GetInsetsMetric(int metric) const {
       return gfx::Insets::VH(insets.height(), horizontal_padding);
     }
     case INSETS_RECENT_ACTIVITY_IMAGE_MARGIN:
-      return gfx::Insets::TLBR(0, 0, 0, 10);
-    case INSETS_RECENT_ACTIVITY_ROW_MARGIN:
-      return gfx::Insets::TLBR(10, 5, 5, 5);
+      return gfx::Insets::TLBR(0, 12, 0, 16);
     case INSETS_TASK_MANAGER:
       return gfx::Insets::TLBR(4, 20, 20, 20);
     case INSETS_PAGE_INFO_FOOTER_BUTTON:
@@ -147,8 +145,6 @@ int ChromeLayoutProvider::GetDistanceMetric(int metric) const {
       return 20;
     case DISTANCE_STANDALONE_BUBBLE_PREFERRED_WIDTH:
       return kMediumDialogWidth;
-    case DISTANCE_LARGE_MODAL_DIALOG_PREFERRED_WIDTH:
-      return kLargeDialogWidth;
     case DISTANCE_BETWEEN_PRIMARY_AND_SECONDARY_LABELS_HORIZONTAL:
       return 24;
     case DISTANCE_OMNIBOX_CELL_VERTICAL_PADDING:
@@ -211,6 +207,8 @@ int ChromeLayoutProvider::GetDistanceMetric(int metric) const {
       return 16;
     case DISTANCE_RECENT_ACTIVITY_AVATAR_SIZE:
       return 32;
+    case DISTANCE_RECENT_ACTIVITY_AVATAR_FALLBACK_SIZE:
+      return 24;
     case DISTANCE_RECENT_ACTIVITY_FAVICON_CONTAINER_RADIUS:
       return 9;
     case DISTANCE_RECENT_ACTIVITY_FAVICON_CONTAINER_BORDER_WIDTH:
@@ -219,6 +217,22 @@ int ChromeLayoutProvider::GetDistanceMetric(int metric) const {
       return 4;
     case DISTANCE_RECENT_ACTIVITY_FAVICON_CONTAINER_OFFSET_FROM_AVATAR:
       return 2;
+    case DISTANCE_RECENT_ACTIVITY_CONTAINER_RADIUS:
+      return 8;
+    case DISTANCE_RECENT_ACTIVITY_CONTAINER_VERTICAL_MARGIN:
+      return 10;
+    case DISTANCE_RECENT_ACTIVITY_CONTAINER_VERTICAL_PADDING:
+      return 6;
+    case DISTANCE_RECENT_ACTIVITY_ROW_VERTICAL_PADDING:
+      return 6;
+    case DISTANCE_ACCOUNT_INFO_ROW_AVATAR_EMAIL:
+      return 8;
+    case DISTANCE_COLLABORATION_MESSAGING_AVATAR_FALLBACK_ICON_PADDING:
+      return 2;
+    case DISTANCE_COLLABORATION_MESSAGING_AVATAR_FALLBACK_ICON_BORDER_SIZE:
+      return 1;
+    case DISTANCE_TEXTFIELD_ACCOUNT_CARD_VERTICAL:
+      return 4;
   }
   NOTREACHED();
 }

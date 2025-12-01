@@ -8,6 +8,7 @@ source_set("cast") {
   sources = [
     "cast_contextual_menu.h",
     "cast_toolbar_button_controller.h",
+    "cast_toolbar_button_util.h",
   ]
   public_deps = [
     "//base",
@@ -24,6 +25,7 @@ source_set("impl") {
   sources = [
     "cast_contextual_menu.cc",
     "cast_toolbar_button_controller.cc",
+    "cast_toolbar_button_util.cc",
   ]
   deps = [
     ":cast",
@@ -35,6 +37,7 @@ source_set("impl") {
     "//chrome/browser/media/router:media_router_feature",
     "//chrome/browser/profiles:profile",
     "//chrome/browser/ui:ui_features",
+    "//chrome/browser/ui/actions:actions_headers",
     "//chrome/browser/ui/browser_window:browser_window",
     "//chrome/browser/ui/views/toolbar",
     "//chrome/common",
@@ -45,7 +48,6 @@ source_set("impl") {
     "//components/vector_icons",
     "//content/public/browser",
     "//extensions/common:common_constants",
-    "//ui/actions:actions_headers",
     "//ui/gfx",
     "//ui/gfx:color_utils",
   ]

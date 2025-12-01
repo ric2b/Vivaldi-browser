@@ -222,16 +222,104 @@ TEST_F(MerchantTrustServiceTest, SampleData) {
             ASSERT_TRUE(info.has_value());
             ASSERT_EQ(info->page_url,
                       GURL("https://customerreviews.google.com/v/"
-                           "merchant?q=amazon.com&c=AE&v=19"));
+                           "merchant?q=amazon.com&c=US&gl=US"));
             run_loop->Quit();
           },
           &run_loop));
   run_loop.Run();
 }
 
+// Tests that if the proto is empty, no data is returned.
+TEST_F(MerchantTrustServiceTest, NoResult) {
+  base::HistogramTester t;
+  OptimizationMetadata metadata;
+  metadata.set_any_metadata({});
+  SetResponse(GURL("https://foo.com"), OptimizationGuideDecision::kTrue,
+              metadata);
+
+  base::RunLoop run_loop;
+  service()->GetMerchantTrustInfo(
+      GURL("https://foo.com"),
+      base::BindOnce(
+          [](base::RunLoop* run_loop, const GURL& url,
+             std::optional<page_info::MerchantData> info) {
+            ASSERT_FALSE(info.has_value());
+            run_loop->Quit();
+          },
+          &run_loop));
+  run_loop.Run();
+  t.ExpectUniqueSample("Security.PageInfo.MerchantTrustStatus",
+                       MerchantTrustStatus::kNoResult, 1);
+}
+
 // Tests that status is recorded as not valid when a proto is missing a field
 // and no data is returned.
 TEST_F(MerchantTrustServiceTest, InvalidProto) {
+  base::HistogramTester t;
+
+  commerce::MerchantTrustSignalsV2 proto = CreateValidProto();
+  proto.clear_merchant_details_page_url();
+  OptimizationMetadata metadata;
+  metadata.set_any_metadata(AnyWrapProto(proto));
+
+  SetResponse(GURL("https://foo.com"), OptimizationGuideDecision::kTrue,
+              metadata);
+
+  base::RunLoop run_loop;
+  service()->GetMerchantTrustInfo(
+      GURL("https://foo.com"),
+      base::BindOnce(
+          [](base::RunLoop* run_loop, const GURL& url,
+             std::optional<page_info::MerchantData> info) {
+            ASSERT_FALSE(info.has_value());
+            run_loop->Quit();
+          },
+          &run_loop));
+  run_loop.Run();
+  t.ExpectUniqueSample("Security.PageInfo.MerchantTrustStatus",
+                       MerchantTrustStatus::kMissingReviewsPageUrl, 1);
+}
+
+// Tests that status is recorded as valid with missing reviews summary when a
+// proto is missing the reviews summary field and the feature param is enabled.
+TEST_F(MerchantTrustServiceTest, ValidProtoMissingReviewsSummary) {
+  base::test::ScopedFeatureList features;
+  features.InitAndEnableFeatureWithParameters(
+      kMerchantTrust, {{kMerchantTrustWithoutSummaryName, "true"}});
+  base::HistogramTester t;
+
+  commerce::MerchantTrustSignalsV2 proto = CreateValidProto();
+  proto.clear_shopper_voice_summary();
+  OptimizationMetadata metadata;
+  metadata.set_any_metadata(AnyWrapProto(proto));
+
+  SetResponse(GURL("https://foo.com"), OptimizationGuideDecision::kTrue,
+              metadata);
+
+  base::RunLoop run_loop;
+  service()->GetMerchantTrustInfo(
+      GURL("https://foo.com"),
+      base::BindOnce(
+          [](base::RunLoop* run_loop, const GURL& url,
+             std::optional<page_info::MerchantData> info) {
+            ASSERT_TRUE(info.has_value());
+            ASSERT_EQ(info->page_url, GURL("https://page_url.com"));
+            ASSERT_EQ(info->reviews_summary, "");
+            run_loop->Quit();
+          },
+          &run_loop));
+  run_loop.Run();
+  t.ExpectUniqueSample("Security.PageInfo.MerchantTrustStatus",
+                       MerchantTrustStatus::kValidWithMissingReviewsSummary, 1);
+}
+
+// Tests that status is recorded as valid with missing reviews summary but not
+// returning any data when a proto is missing the reviews summary field and the
+// feature param is disabled.
+TEST_F(MerchantTrustServiceTest, ValidProtoMissingReviewsSummaryNoData) {
+  base::test::ScopedFeatureList features;
+  features.InitAndEnableFeatureWithParameters(
+      kMerchantTrust, {{kMerchantTrustWithoutSummaryName, "false"}});
   base::HistogramTester t;
 
   commerce::MerchantTrustSignalsV2 proto = CreateValidProto();
@@ -254,9 +342,8 @@ TEST_F(MerchantTrustServiceTest, InvalidProto) {
           &run_loop));
   run_loop.Run();
   t.ExpectUniqueSample("Security.PageInfo.MerchantTrustStatus",
-                       MerchantTrustStatus::kMissingReviewsSummary, 1);
+                       MerchantTrustStatus::kValidWithMissingReviewsSummary, 1);
 }
-
 // Tests for control evaluation survey.
 TEST_F(MerchantTrustServiceTest, ControlSurvey) {
   base::test::ScopedFeatureList feature_list;

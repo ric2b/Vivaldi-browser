@@ -788,10 +788,11 @@ Reduction TypedOptimization::ReduceTypedArrayLength(Node* node) {
     JSTypedArrayRef typed_array = m.Ref(broker()).AsJSTypedArray();
     size_t byte_length = typed_array.byte_length();
     ElementsKind elements_kind = typed_array.elements_kind(broker());
-    CHECK(!IsRabGsabTypedArrayElementsKind(elements_kind));
-    Node* value = jsgraph()->ConstantNoHole(
-        byte_length >> ElementsKindToShiftSize(elements_kind));
-    return Replace(value);
+    if (!IsRabGsabTypedArrayElementsKind(elements_kind)) {
+      Node* value = jsgraph()->ConstantNoHole(
+          byte_length >> ElementsKindToShiftSize(elements_kind));
+      return Replace(value);
+    }
   }
   return NoChange();
 }
@@ -989,7 +990,7 @@ Factory* TypedOptimization::factory() const {
   return jsgraph()->isolate()->factory();
 }
 
-Graph* TypedOptimization::graph() const { return jsgraph()->graph(); }
+TFGraph* TypedOptimization::graph() const { return jsgraph()->graph(); }
 
 SimplifiedOperatorBuilder* TypedOptimization::simplified() const {
   return jsgraph()->simplified();

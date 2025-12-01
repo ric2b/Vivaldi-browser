@@ -532,6 +532,8 @@ Called by update_bad_message_reasons.py.-->
   <int value="32" label="LEGACY_IPC_MISMATCH"/>
   <int value="33" label="ER_SW_INVALID_LAZY_BACKGROUND_PARAM"/>
   <int value="34" label="SWH_BAD_WORKER_THREAD_ID"/>
+  <int value="35" label="ER_INVALID_EXTENSION_ID_FOR_PROCESS"/>
+  <int value="36" label="CEFH_INVALID_EXTENSION_ID_FOR_SCRIPT_INJECT_REQUEST"/>
 </enum>
 
 <enum name="BadMessageReasonGuestView">
@@ -574,6 +576,7 @@ Called by update_bad_message_reasons.py.-->
   <int value="13"
       label="CPMD_BAD_ORIGIN_GENERATION_AVAILABLE_FOR_FORM_OBSOLETE"/>
   <int value="14" label="CPMD_BAD_ORIGIN_PRERENDERING"/>
+  <int value="15" label="CPMD_BAD_ORIGIN_NO_GENERATED_PASSWORD_TO_EDIT"/>
 </enum>
 
 <enum name="BooleanHasPossibleExplanation">

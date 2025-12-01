@@ -37,6 +37,7 @@
 #include "third_party/blink/renderer/core/css/resolver/scoped_style_resolver.h"
 #include "third_party/blink/renderer/core/css/resolver/style_resolver.h"
 #include "third_party/blink/renderer/core/css/resolver/style_resolver_stats.h"
+#include "third_party/blink/renderer/core/css/style_change_reason.h"
 #include "third_party/blink/renderer/core/css/style_scope_frame.h"
 #include "third_party/blink/renderer/core/css/style_sheet_contents.h"
 #include "third_party/blink/renderer/core/dom/document.h"
@@ -155,6 +156,10 @@ class StyleEngineTest : public PageTestBase {
     holder->GetDocument().documentElement()->setInnerHTML(html);
     holder->GetDocument().View()->UpdateAllLifecyclePhasesForTest();
     return holder;
+  }
+
+  wtf_size_t FunctionalMediaQueryResultsSize() {
+    return GetStyleEngine().functional_media_query_results_.size();
   }
 };
 
@@ -1330,36 +1335,6 @@ TEST_F(StyleEngineTest, StyleSheetsForStyleSheetList_ShadowRoot) {
       GetStyleEngine().StyleSheetsForStyleSheetList(shadow_root);
   EXPECT_EQ(2u, second_sheet_list.size());
   EXPECT_TRUE(GetStyleEngine().NeedsActiveStyleUpdate());
-}
-
-TEST_F(StyleEngineTest, ViewportDescription) {
-  ScopedTestingPlatformSupport<TestingPlatformSupport> platform;
-  frame_test_helpers::WebViewHelper web_view_helper;
-  WebViewImpl* web_view_impl = web_view_helper.Initialize();
-  web_view_impl->MainFrameWidget()->SetDeviceScaleFactorForTesting(1.f);
-  web_view_impl->MainFrameWidget()->UpdateAllLifecyclePhases(
-      DocumentUpdateReason::kTest);
-
-  Document* document =
-      To<LocalFrame>(web_view_impl->GetPage()->MainFrame())->GetDocument();
-
-  auto desc = document->GetViewportData().GetViewportDescription();
-  float min_width = desc.min_width.GetFloatValue();
-  float max_width = desc.max_width.GetFloatValue();
-  float min_height = desc.min_height.GetFloatValue();
-  float max_height = desc.max_height.GetFloatValue();
-
-  const float device_scale = 3.5f;
-  web_view_impl->MainFrameWidget()->SetDeviceScaleFactorForTesting(
-      device_scale);
-  web_view_impl->MainFrameWidget()->UpdateAllLifecyclePhases(
-      DocumentUpdateReason::kTest);
-
-  desc = document->GetViewportData().GetViewportDescription();
-  EXPECT_FLOAT_EQ(device_scale * min_width, desc.min_width.GetFloatValue());
-  EXPECT_FLOAT_EQ(device_scale * max_width, desc.max_width.GetFloatValue());
-  EXPECT_FLOAT_EQ(device_scale * min_height, desc.min_height.GetFloatValue());
-  EXPECT_FLOAT_EQ(device_scale * max_height, desc.max_height.GetFloatValue());
 }
 
 TEST_F(StyleEngineTest, MediaQueryAffectingValueChanged_StyleElementNoMedia) {
@@ -3493,6 +3468,213 @@ TEST_F(StyleEngineTest,
       div->GetComputedStyle()->VisitedDependentColor(GetCSSPropertyColor()));
 }
 
+TEST_F(StyleEngineTest, FunctionalMediaTargetedRecalcNoChange) {
+  GetDocument().documentElement()->setInnerHTML(R"HTML(
+    <style>
+      @function --a() {
+        result: 1;
+      }
+      @function --b() {
+        result: 2;
+        @media (width > 1000px) {
+          result: 3;
+        }
+      }
+      #a { z-index: --a(); }
+      #b { z-index: --b(); }
+    </style>
+    <div id=a></div>
+    <div id=b></div>
+    <div id=c></div>
+  )HTML");
+
+  UpdateAllLifecyclePhasesForTest();
+
+  Element* a = GetDocument().getElementById(AtomicString("a"));
+  Element* b = GetDocument().getElementById(AtomicString("b"));
+  ASSERT_TRUE(a);
+  ASSERT_TRUE(b);
+
+  EXPECT_EQ(1u, a->ComputedStyleRef().ZIndex());
+  EXPECT_EQ(2u, b->ComputedStyleRef().ZIndex());
+
+  wtf_size_t initial_count = GetStyleEngine().StyleForElementCount();
+  GetDocument().View()->SetLayoutSizeFixedToFrameSize(false);
+  GetDocument().View()->SetLayoutSize(gfx::Size(900, 600));
+  UpdateAllLifecyclePhasesForTest();
+
+  EXPECT_EQ(0u, GetStyleEngine().StyleForElementCount() - initial_count);
+}
+
+TEST_F(StyleEngineTest, FunctionalMediaTargetedRecalcChange) {
+  GetDocument().documentElement()->setInnerHTML(R"HTML(
+    <style>
+      @function --a() {
+        result: 1;
+      }
+      @function --b() {
+        result: 2;
+        @media (width > 1000px) {
+          result: 3;
+        }
+      }
+      #a { z-index: --a(); }
+      #b { z-index: --b(); }
+    </style>
+    <div id=a></div>
+    <div id=b></div>
+    <div></div>
+  )HTML");
+
+  UpdateAllLifecyclePhasesForTest();
+
+  Element* a = GetDocument().getElementById(AtomicString("a"));
+  Element* b = GetDocument().getElementById(AtomicString("b"));
+  ASSERT_TRUE(a);
+  ASSERT_TRUE(b);
+
+  EXPECT_EQ(1u, a->ComputedStyleRef().ZIndex());
+  EXPECT_EQ(2u, b->ComputedStyleRef().ZIndex());
+
+  wtf_size_t initial_count = GetStyleEngine().StyleForElementCount();
+  GetDocument().View()->SetLayoutSizeFixedToFrameSize(false);
+  GetDocument().View()->SetLayoutSize(gfx::Size(1200, 600));
+  UpdateAllLifecyclePhasesForTest();
+
+  EXPECT_EQ(1u, GetStyleEngine().StyleForElementCount() - initial_count);
+  EXPECT_EQ(1u, a->ComputedStyleRef().ZIndex());
+  EXPECT_EQ(3u, b->ComputedStyleRef().ZIndex());
+}
+
+TEST_F(StyleEngineTest, FunctionalMediaSharedInvalidationData) {
+  GetDocument().documentElement()->setInnerHTML(R"HTML(
+    <style>
+      @function --z-index() {
+        result: 1;
+        @media (width > 1000px) {
+          result: 2;
+        }
+      }
+      div { z-index: --z-index(); }
+    </style>
+    <div id=a></div>
+    <div id=b></div>
+    <div id=c></div>
+    <div id=d></div>
+  )HTML");
+
+  UpdateAllLifecyclePhasesForTest();
+
+  Element* a = GetDocument().getElementById(AtomicString("a"));
+  Element* b = GetDocument().getElementById(AtomicString("b"));
+  Element* c = GetDocument().getElementById(AtomicString("c"));
+  Element* d = GetDocument().getElementById(AtomicString("d"));
+  ASSERT_TRUE(a);
+  ASSERT_TRUE(b);
+  ASSERT_TRUE(c);
+  ASSERT_TRUE(d);
+
+  EXPECT_EQ(1u, a->ComputedStyleRef().ZIndex());
+  EXPECT_EQ(1u, b->ComputedStyleRef().ZIndex());
+  EXPECT_EQ(1u, c->ComputedStyleRef().ZIndex());
+  EXPECT_EQ(1u, d->ComputedStyleRef().ZIndex());
+
+  // Even though multiple elements perform the same evaluation,
+  // there is only one entry in `StyleEngine::functional_media_query_results_`.
+  EXPECT_EQ(1u, FunctionalMediaQueryResultsSize());
+
+  GetDocument().View()->SetLayoutSizeFixedToFrameSize(false);
+  GetDocument().View()->SetLayoutSize(gfx::Size(1200, 600));
+  UpdateAllLifecyclePhasesForTest();
+  EXPECT_EQ(2u, a->ComputedStyleRef().ZIndex());
+  EXPECT_EQ(2u, b->ComputedStyleRef().ZIndex());
+  EXPECT_EQ(2u, c->ComputedStyleRef().ZIndex());
+  EXPECT_EQ(2u, d->ComputedStyleRef().ZIndex());
+}
+
+TEST_F(StyleEngineTest, FunctionalMediaSharedInvalidationData_Prelude) {
+  GetDocument().documentElement()->setInnerHTML(R"HTML(
+    <style>
+      @function --z-index-1() {
+        result: 1;
+        @media (width > 1000px) {
+          result: 2;
+        }
+      }
+      @function --z-index-2() {
+        result: 3;
+        @media (width > 1000px) { /* Identical to the other prelude */
+          result: 4;
+        }
+      }
+      #a, #b { z-index: --z-index-1(); }
+      #c, #d { z-index: --z-index-2(); }
+    </style>
+    <div id=a></div>
+    <div id=b></div>
+    <div id=c></div>
+    <div id=d></div>
+  )HTML");
+
+  UpdateAllLifecyclePhasesForTest();
+
+  Element* a = GetDocument().getElementById(AtomicString("a"));
+  Element* b = GetDocument().getElementById(AtomicString("b"));
+  Element* c = GetDocument().getElementById(AtomicString("c"));
+  Element* d = GetDocument().getElementById(AtomicString("d"));
+  ASSERT_TRUE(a);
+  ASSERT_TRUE(b);
+  ASSERT_TRUE(c);
+  ASSERT_TRUE(d);
+
+  EXPECT_EQ(1u, a->ComputedStyleRef().ZIndex());
+  EXPECT_EQ(1u, b->ComputedStyleRef().ZIndex());
+  EXPECT_EQ(3u, c->ComputedStyleRef().ZIndex());
+  EXPECT_EQ(3u, d->ComputedStyleRef().ZIndex());
+
+  // @media preludes that are identical should collapse into one.
+  EXPECT_EQ(1u, FunctionalMediaQueryResultsSize());
+
+  GetDocument().View()->SetLayoutSizeFixedToFrameSize(false);
+  GetDocument().View()->SetLayoutSize(gfx::Size(1200, 600));
+  UpdateAllLifecyclePhasesForTest();
+  EXPECT_EQ(2u, a->ComputedStyleRef().ZIndex());
+  EXPECT_EQ(2u, b->ComputedStyleRef().ZIndex());
+  EXPECT_EQ(4u, c->ComputedStyleRef().ZIndex());
+  EXPECT_EQ(4u, d->ComputedStyleRef().ZIndex());
+}
+
+TEST_F(StyleEngineTest, FunctionalMediaInvalidationDataClearedOnFullRecalc) {
+  GetDocument().documentElement()->setInnerHTML(R"HTML(
+    <style>
+      @function --z-index() {
+        result: 0;
+        @media (width > 100px) { result: 1; }
+        @media (width > 200px) { result: 2; }
+        @media (width > 300px) { result: 3; }
+        @media (width > 400px) { result: 4; }
+        @media (width > 500px) { result: 5; }
+        @media (width > 600px) { result: 6; }
+        @media (width > 700px) { result: 7; }
+        @media (width > 800px) { result: 8; }
+        @media (width > 900px) { result: 9; }
+      }
+      div { z-index: --z-index(); }
+    </style>
+    <div id=a></div>
+  )HTML");
+
+  UpdateAllLifecyclePhasesForTest();
+
+  Element* a = GetDocument().getElementById(AtomicString("a"));
+  ASSERT_TRUE(a);
+  EXPECT_EQ(9u, FunctionalMediaQueryResultsSize());
+
+  GetStyleEngine().MarkAllElementsForStyleRecalc(
+      StyleChangeReasonForTracing::Create("test"));
+  EXPECT_EQ(0u, FunctionalMediaQueryResultsSize());
+}
+
 TEST_F(StyleEngineTest, RevertUseCount) {
   GetDocument().body()->setInnerHTML(
       "<style>div { display: unset; }</style><div></div>");
@@ -3997,37 +4179,6 @@ TEST_F(StyleEngineTest, DynamicViewportUnitsInMediaQuery) {
     document.DynamicViewportUnitsChanged();
     EXPECT_TRUE(document.GetStyleEngine().NeedsActiveStyleUpdate());
   }
-}
-
-TEST_F(StyleEngineTest, ViewportUnitVariantsUseCounter) {
-  EXPECT_FALSE(IsWebDXFeatureCounted(WebDXFeature::kViewportUnitVariants));
-
-  GetDocument().body()->setInnerHTML("<style> body { top: 10vh; } </style>");
-  UpdateAllLifecyclePhases();
-  EXPECT_FALSE(IsWebDXFeatureCounted(WebDXFeature::kViewportUnitVariants));
-
-  GetDocument().body()->setInnerHTML("<style> body { top: 10vi; } </style>");
-  UpdateAllLifecyclePhases();
-  EXPECT_FALSE(IsWebDXFeatureCounted(WebDXFeature::kViewportUnitVariants));
-
-  GetDocument().body()->setInnerHTML("<style> body { top: 10vmax; } </style>");
-  UpdateAllLifecyclePhases();
-  EXPECT_FALSE(IsWebDXFeatureCounted(WebDXFeature::kViewportUnitVariants));
-
-  GetDocument().body()->setInnerHTML("<style> body { top: 10svh; } </style>");
-  UpdateAllLifecyclePhases();
-  EXPECT_TRUE(IsWebDXFeatureCounted(WebDXFeature::kViewportUnitVariants));
-  ClearWebDXFeatureCounter(WebDXFeature::kViewportUnitVariants);
-
-  GetDocument().body()->setInnerHTML("<style> body { top: 10lvi; } </style>");
-  UpdateAllLifecyclePhases();
-  EXPECT_TRUE(IsWebDXFeatureCounted(WebDXFeature::kViewportUnitVariants));
-  ClearWebDXFeatureCounter(WebDXFeature::kViewportUnitVariants);
-
-  GetDocument().body()->setInnerHTML("<style> body { top: 10dvmax; } </style>");
-  UpdateAllLifecyclePhases();
-  EXPECT_TRUE(IsWebDXFeatureCounted(WebDXFeature::kViewportUnitVariants));
-  ClearWebDXFeatureCounter(WebDXFeature::kViewportUnitVariants);
 }
 
 TEST_F(StyleEngineTest, MediaQueriesChangeDisplayState) {
@@ -7069,6 +7220,7 @@ TEST_F(StyleEngineTest, CreateUnconnectedRuleSet) {
 
   RuleSet* rule_set = GetStyleEngine().CreateUnconnectedRuleSet(*sheet);
   ASSERT_TRUE(rule_set);
+  rule_set->AssertCompacted();
   EXPECT_EQ(2u, rule_set->ClassRules(AtomicString("a")).size());
 
   // As the above RuleSet is unconnected, it should not have affected
@@ -7201,6 +7353,143 @@ TEST_F(StyleEngineTest, HasComplexSafaAreaConstraintsNestedBottom) {
   )HTML");
   UpdateAllLifecyclePhases();
   EXPECT_TRUE(GetStyleEngine().HasComplexSafaAreaConstraints());
+}
+
+TEST_F(StyleEngineTest, ScrollStateUseCounter) {
+  EXPECT_FALSE(
+      IsWebDXFeatureCounted(WebDXFeature::kContainerScrollStateQueries));
+
+  GetDocument().body()->setInnerHTML(
+      "<style> @container scroll-state(stuck) { * { color: pink } } </style>");
+  UpdateAllLifecyclePhases();
+  EXPECT_FALSE(
+      IsWebDXFeatureCounted(WebDXFeature::kContainerScrollStateQueries));
+
+  GetDocument().body()->setInnerHTML(
+      "<style> @container not scroll-state(stuck) { * { color: pink } } "
+      "</style>");
+  UpdateAllLifecyclePhases();
+  EXPECT_FALSE(
+      IsWebDXFeatureCounted(WebDXFeature::kContainerScrollStateQueries));
+
+  GetDocument().body()->setInnerHTML(
+      "<style> #notfound { container-type: scroll-state } </style>");
+  UpdateAllLifecyclePhases();
+  EXPECT_TRUE(
+      IsWebDXFeatureCounted(WebDXFeature::kContainerScrollStateQueries));
+  ClearWebDXFeatureCounter(WebDXFeature::kContainerScrollStateQueries);
+}
+
+TEST_F(StyleEngineTest, CSSVarFallbackCycleCounter) {
+  // No fallback.
+  ClearUseCounter(WebFeature::kCSSVarFallbackCycle);
+  GetDocument().body()->setInnerHTML(R"HTML(
+    <style>
+      div {
+        --x: var(--invalid);
+      }
+    </style>
+    <div></div>
+  )HTML");
+  UpdateAllLifecyclePhasesForTest();
+  EXPECT_FALSE(IsUseCounted(WebFeature::kCSSVarFallbackCycle));
+
+  // Invalid var() in a fallback that's used.
+  ClearUseCounter(WebFeature::kCSSVarFallbackCycle);
+  GetDocument().body()->setInnerHTML(R"HTML(
+    <style>
+      div {
+        --x: var(--invalid, var(--invalid2));
+      }
+    </style>
+    <div></div>
+  )HTML");
+  UpdateAllLifecyclePhasesForTest();
+  EXPECT_FALSE(IsUseCounted(WebFeature::kCSSVarFallbackCycle));
+
+  // Cycle in used fallback.
+  ClearUseCounter(WebFeature::kCSSVarFallbackCycle);
+  GetDocument().body()->setInnerHTML(R"HTML(
+    <style>
+      div {
+        --x: var(--invalid, var(--x));
+      }
+    </style>
+    <div></div>
+  )HTML");
+  UpdateAllLifecyclePhasesForTest();
+  EXPECT_FALSE(IsUseCounted(WebFeature::kCSSVarFallbackCycle));
+
+  // Cycle in unused fallback.
+  ClearUseCounter(WebFeature::kCSSVarFallbackCycle);
+  GetDocument().body()->setInnerHTML(R"HTML(
+    <style>
+      div {
+        --x: var(--y, var(--x));
+        --y: 10px;
+      }
+    </style>
+    <div></div>
+  )HTML");
+  UpdateAllLifecyclePhasesForTest();
+  EXPECT_TRUE(IsUseCounted(WebFeature::kCSSVarFallbackCycle));
+}
+
+TEST_F(StyleEngineTest, CSSAttrFallbackCycleCounter) {
+  // No fallback.
+  ClearUseCounter(WebFeature::kCSSAttrFallbackCycle);
+  GetDocument().body()->setInnerHTML(R"HTML(
+    <style>
+      div {
+        --x: attr(data-foo type(*));
+      }
+    </style>
+    <div data-foo="attr(data-invalid type(*))"></div>
+  )HTML");
+  UpdateAllLifecyclePhasesForTest();
+  EXPECT_FALSE(IsUseCounted(WebFeature::kCSSAttrFallbackCycle));
+
+  // Invalid var() in a fallback that's used.
+  ClearUseCounter(WebFeature::kCSSAttrFallbackCycle);
+  GetDocument().body()->setInnerHTML(R"HTML(
+    <style>
+      div {
+        --x: attr(data-foo type(*));
+      }
+    </style>
+    <div
+      data-foo="attr(data-invalid type(*), attr(data-invalid2 type(*)))"></div>
+  )HTML");
+  UpdateAllLifecyclePhasesForTest();
+  EXPECT_FALSE(IsUseCounted(WebFeature::kCSSAttrFallbackCycle));
+
+  // Cycle in used fallback.
+  ClearUseCounter(WebFeature::kCSSAttrFallbackCycle);
+  GetDocument().body()->setInnerHTML(R"HTML(
+    <style>
+      div {
+        --x: attr(data-foo type(*));
+      }
+    </style>
+    <div data-foo="attr(data-invalid type(*), attr(data-foo type(*)))"></div>
+  )HTML");
+  UpdateAllLifecyclePhasesForTest();
+  EXPECT_FALSE(IsUseCounted(WebFeature::kCSSAttrFallbackCycle));
+
+  // Cycle in unused fallback.
+  ClearUseCounter(WebFeature::kCSSAttrFallbackCycle);
+  GetDocument().body()->setInnerHTML(R"HTML(
+    <style>
+      div {
+        --x: attr(data-foo type(*));
+      }
+    </style>
+    <div
+      data-foo="attr(data-bar type(*), attr(data-foo type(*)))"
+      data-bar="10px"></div>
+  )HTML");
+  UpdateAllLifecyclePhasesForTest();
+  EXPECT_TRUE(IsUseCounted(WebFeature::kCSSAttrFallbackCycle));
 }
 
 }  // namespace blink

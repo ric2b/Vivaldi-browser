@@ -354,5 +354,55 @@ void av1_pick_filter_level(const YV12_BUFFER_CONFIG *sd, AV1_COMP *cpi,
           search_filter_level(sd, cpi, method == LPF_PICK_FROM_SUBIMAGE,
                               last_frame_filter_level, 2, 0);
     }
+
+    lf->backup_filter_level[0] = lf->filter_level[0];
+    lf->backup_filter_level[1] = lf->filter_level[1];
+    lf->backup_filter_level_u = lf->filter_level_u;
+    lf->backup_filter_level_v = lf->filter_level_v;
+
+    if (cpi->sf.lpf_sf.adaptive_luma_loop_filter_skip >= 1) {
+      int32_t min_ref_filter_level[2] = { MAX_LOOP_FILTER, MAX_LOOP_FILTER };
+      // Find the minimum luma filter levels across all reference frames.
+      for (int ref = LAST_FRAME; ref <= ALTREF_FRAME; ++ref) {
+        const RefCntBuffer *const buf = get_ref_frame_buf(cm, ref);
+        if (buf == NULL) continue;
+
+        if (buf->filter_level[0] != -1)
+          min_ref_filter_level[0] =
+              AOMMIN(min_ref_filter_level[0], buf->filter_level[0]);
+        if (buf->filter_level[1] != -1)
+          min_ref_filter_level[1] =
+              AOMMIN(min_ref_filter_level[1], buf->filter_level[1]);
+      }
+
+      // Reset luma filter levels to zero based on minimum filter levels of
+      // reference frames and current frame's pyramid level.
+      unsigned int pyramid_level = cm->current_frame.pyramid_level;
+      if (pyramid_level > 1) {
+        int filter_threshold;
+        if (pyramid_level >= 5)
+          filter_threshold = 32;
+        else if (pyramid_level >= 4)
+          filter_threshold = 16;
+        else
+          filter_threshold = 8;
+
+        const bool reset_filter_level_y =
+            lf->filter_level[0] < filter_threshold &&
+            lf->filter_level[1] < filter_threshold &&
+            lf->filter_level_u < filter_threshold &&
+            lf->filter_level_v < filter_threshold &&
+            min_ref_filter_level[0] == 0 && min_ref_filter_level[1] == 0;
+        if (reset_filter_level_y) {
+          lf->filter_level[0] = 0;
+          lf->filter_level[1] = 0;
+        }
+      }
+
+      // Store the current frame's filter levels to be referenced
+      // while determining the minimum filter level from reference frames.
+      cm->cur_frame->filter_level[0] = lf->filter_level[0];
+      cm->cur_frame->filter_level[1] = lf->filter_level[1];
+    }
   }
 }

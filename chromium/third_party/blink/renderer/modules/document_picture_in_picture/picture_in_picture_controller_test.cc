@@ -138,6 +138,9 @@ class MockPictureInPictureSession
                const viz::SurfaceId&,
                const gfx::Size&,
                bool));
+  MOCK_METHOD(void,
+              UpdateMediaPosition,
+              (media_session::mojom::blink::MediaPositionPtr));
 
  private:
   mojo::Receiver<mojom::blink::PictureInPictureSession> receiver_;
@@ -663,6 +666,43 @@ TEST_F(PictureInPictureControllerTestWithWidget,
   EXPECT_TRUE(pip);
 }
 
+TEST_F(PictureInPictureControllerTestWithWidget,
+       EnterPictureInPicture_DisplayTypeVideoPipSetCorrectly) {
+  EXPECT_EQ(nullptr, PictureInPictureControllerImpl::From(GetDocument())
+                         .PictureInPictureElement());
+
+  WebMediaPlayer* player = Video()->GetWebMediaPlayer();
+  EXPECT_CALL(Service(), StartSession(player->GetPlayerId(), _, TestSurfaceId(),
+                                      player->NaturalSize(), true, _, _, _));
+
+  PictureInPictureControllerImpl::From(GetDocument())
+      .EnterPictureInPicture(Video(), /*promise=*/nullptr);
+
+  MakeGarbageCollected<WaitForEvent>(Video(),
+                                     event_type_names::kEnterpictureinpicture);
+
+  EXPECT_NE(nullptr, PictureInPictureControllerImpl::From(GetDocument())
+                         .PictureInPictureElement());
+  EXPECT_EQ(DisplayType::kVideoPictureInPicture, Video()->GetDisplayType());
+}
+
+TEST_F(PictureInPictureControllerTestWithWidget,
+       EnterPictureInPicture_DisplayTypeDocumentPipSetCorrectly) {
+  V8TestingScope v8_scope;
+  ScriptState* script_state =
+      ToScriptStateForMainWorld(GetDocument().GetFrame());
+  ScriptState::Scope entered_context_scope(script_state);
+  LocalFrame::NotifyUserActivation(
+      &GetFrame(), mojom::UserActivationNotificationType::kTest);
+  auto* pip = OpenDocumentPictureInPictureWindow(v8_scope, GetDocument(),
+                                                 KURL("file://my/file.html"));
+  EXPECT_TRUE(pip);
+  EXPECT_EQ(DisplayType::kInline, Video()->GetDisplayType());
+
+  pip->document()->body()->AppendChild(Video());
+  EXPECT_EQ(DisplayType::kDocumentPictureInPicture, Video()->GetDisplayType());
+}
+
 class PictureInPictureControllerChromeClient
     : public RenderingTestChromeClient {
  public:
@@ -753,8 +793,10 @@ TEST_F(PictureInPictureControllerTestWithChromeClient,
     EXPECT_CALL(GetPipChromeClient(), SetWindowRect(_, _));
     LocalFrame::NotifyUserActivation(
         document->GetFrame(), mojom::UserActivationNotificationType::kTest);
-    document->domWindow()->resizeTo(10, 10, IGNORE_EXCEPTION);
-    document->domWindow()->resizeTo(20, 20, IGNORE_EXCEPTION);
+    document->domWindow()->resizeTo(10, 10,
+                                    IgnoreException(v8_scope.GetIsolate()));
+    document->domWindow()->resizeTo(20, 20,
+                                    IgnoreException(v8_scope.GetIsolate()));
     testing::Mock::VerifyAndClearExpectations(&GetPipChromeClient());
   }
 
@@ -764,8 +806,10 @@ TEST_F(PictureInPictureControllerTestWithChromeClient,
     EXPECT_CALL(GetPipChromeClient(), SetWindowRect(_, _));
     LocalFrame::NotifyUserActivation(
         document->GetFrame(), mojom::UserActivationNotificationType::kTest);
-    document->domWindow()->resizeBy(10, 10, IGNORE_EXCEPTION);
-    document->domWindow()->resizeBy(20, 20, IGNORE_EXCEPTION);
+    document->domWindow()->resizeBy(10, 10,
+                                    IgnoreException(v8_scope.GetIsolate()));
+    document->domWindow()->resizeBy(20, 20,
+                                    IgnoreException(v8_scope.GetIsolate()));
     testing::Mock::VerifyAndClearExpectations(&GetPipChromeClient());
   }
 

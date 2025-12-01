@@ -4,6 +4,8 @@
 #include "ui/base/ui_base_types.h"
 #include "components/content_settings/core/common/content_settings_types.h"
 
+class Browser;
+
 namespace extensions {
 class DevtoolsConnectorItem;
 }

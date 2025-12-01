@@ -11,6 +11,7 @@
 
 #include "base/functional/callback.h"
 #include "base/trace_event/trace_event.h"
+#include "chrome/browser/preloading/prefetch/search_prefetch/field_trial_settings.h"
 #include "chrome/browser/preloading/prefetch/search_prefetch/search_prefetch_service.h"
 #include "chrome/browser/preloading/prefetch/search_prefetch/search_prefetch_service_factory.h"
 #include "chrome/browser/preloading/prefetch/search_prefetch/search_prefetch_url_loader.h"
@@ -118,9 +119,6 @@ SearchPrefetchURLLoaderInterceptor::MaybeCreateLoaderForRequest(
   }
 
   if (is_prerender_main_frame_navigation) {
-    if (!prerender_utils::IsSearchSuggestionPrerenderEnabled()) {
-      return {};
-    }
     return service->MaybeCreateResponseReader(tentative_resource_request);
   }
 
@@ -129,6 +127,9 @@ SearchPrefetchURLLoaderInterceptor::MaybeCreateLoaderForRequest(
       service->TakePrefetchResponseFromMemoryCache(tentative_resource_request);
   if (handler) {
     return handler;
+  }
+  if (IsNoVarySearchDiskCacheEnabled()) {
+    return {};
   }
   if (tentative_resource_request.load_flags & net::LOAD_SKIP_CACHE_VALIDATION) {
     return service->TakePrefetchResponseFromDiskCache(

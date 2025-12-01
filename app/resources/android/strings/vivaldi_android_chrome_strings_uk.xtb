@@ -1,7 +1,10 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="uk">
+<translation id="1204037785786432551">Завантажити дані за посиланням</translation>
+<translation id="1206892813135768548">Копіювати текст посилання</translation>
 <translation id="1397811292916898096">Шукати в <ph name="PRODUCT_NAME" /></translation>
+<translation id="1435593198351412143">Відкривати файли PDF автоматично</translation>
 <translation id="1456207338570705181">Швидкий пошук доступний тільки якщо Google встановлено типовим пошуком у Vivaldi. Ця функція направляє виділене слово та слова поруч як контекст до пошуку Google. Ви можете вимкнути її у <ph name="BEGIN_LINK" />Налаштуваннях<ph name="END_LINK" />.</translation>
 <translation id="1598449788754183301">Звичайні/приватні вкладки</translation>
 <translation id="1644574205037202324">Історія</translation>
@@ -14,10 +17,14 @@
 <translation id="2433507940547922241">Зовнішній вигляд</translation>
 <translation id="2501278716633472235">Перейти назад</translation>
 <translation id="2633278372998075009">Приватні вкладки</translation>
+<translation id="2650751991977523696">Завантажити файл ще раз?</translation>
 <translation id="265156376773362237">Стандартне передзавантаження</translation>
 <translation id="272026394418727548">Головна сторінка Vivaldi</translation>
+<translation id="2842985007712546952">Батьківська тека</translation>
 <translation id="2871733351037274014">Передзавантаження сторінок</translation>
+<translation id="2904300462646366554">Завантажені файли PDF автоматично відкриватимуться за допомогою засобу перегляду PDF на пристрої</translation>
 <translation id="2951071800649516099">Додавайте сторінки в список читання, щоб переглядати їх пізніше</translation>
+<translation id="3029276696788198026">Без попереднього завантаження</translation>
 <translation id="3060635849835183725">{BOOKMARKS_COUNT, plural,
           =1 {<ph name="BOOKMARKS_COUNT_ONE" /> закладка}
           other {<ph name="BOOKMARKS_COUNT_MANY" /> закладок}}</translation>
@@ -34,6 +41,7 @@
 <translation id="3719826155360621982">Домашня сторінка</translation>
 <translation id="3738139272394829648">Пошук дотиком</translation>
 <translation id="385051799172605136">Назад</translation>
+<translation id="3987993985790029246">Копіювати посилання</translation>
 <translation id="399014816462153200">Прочитані статті:</translation>
 <translation id="4121750346708795461">Користуючись цим додатком, ви приймаєте <ph name="BEGIN_LINK1" />Умови використання<ph name="END_LINK1" /> та <ph name="BEGIN_LINK2" />Політику конфіденційності<ph name="END_LINK2" /> Vivaldi.</translation>
 <translation id="4137746084635924146">Поточна мова пристрою</translation>
@@ -41,10 +49,13 @@
 <translation id="4195643157523330669">Відкрити в новій вкладці</translation>
 <translation id="4225895483398857530">Кнопка панелі інструментів</translation>
 <translation id="4243710787042215766">Відкрити у приватній вкладці</translation>
+<translation id="4269820728363426813">Копіювати адресу посилання</translation>
 <translation id="4291407919474070700"><ph name="BEGIN_LINK" />Увімкніть блокування екрана в налаштуваннях Android<ph name="END_LINK" /></translation>
 <translation id="4304713468139749426">Менеджер паролів</translation>
 <translation id="451872707440238414">Шукати у закладках</translation>
 <translation id="4526803704855831732">Приватні вкладки</translation>
+<translation id="4532845899244822526">Вибрати папку</translation>
+<translation id="4699172675775169585">Кешовані зображення й файли</translation>
 <translation id="4719086422742491124">Отримуйте інформацію одразу на сторінці. Виберіть одне або декілька слів на сторінці для пошуку.
 
 Швидкий пошук доступний тільки якщо Google вибраний типовою пошуковою системою у Vivaldi.</translation>
@@ -55,20 +66,34 @@
 <translation id="49576331685473090">Блокування вмісту</translation>
 <translation id="5079259810715830221">Коли сайт Google просить приватно попередньо завантажити посилання на свою сторінку, Vivaldi шифрує та попередньо завантажує сторінки через сервери Google без файлів cookie. Це приховує вашу особистість із попередньо завантаженого сайту.</translation>
 <translation id="5118676864324397542">Сховище <ph name="APP_NAME" /></translation>
+<translation id="5144385790872094440">Деякі сторінки, які ви відвідуєте, попередньо завантажені. Сторінки можуть попередньо завантажуватися через сервери Google, коли вони зв’язані через сайт або додаток Google.</translation>
 <translation id="5186185447130319458">Приватний режим</translation>
+<translation id="5206168361184759344">{FILE_COUNT, plural,
+            =1 {Завантажується файл…}
+            other {Завантажується # файлів…}}</translation>
 <translation id="5233638681132016545">Нова вкладка</translation>
 <translation id="5375131951310889874">Отримуйте більше інформації прямо на сторінці. Швидкий пошук доступний, тільки якщо ви вибрали Google типовим пошуком у Vivaldi. Ця функція надсилає слово та його контекст до пошуку Google і повертає визначення, зображення, результати пошуку та інші деталі.
 
 Для налаштування пошуку викорисовуйте довге натискання. Щоб уточнити запит, прокрутіть панель вгору до упору та натисніть на полі пошуку.</translation>
+<translation id="543338862236136125">Змінити пароль</translation>
 <translation id="572328651809341494">Останні вкладки</translation>
+<translation id="5833984609253377421">Поділитися посиланням</translation>
 <translation id="6150320133806434356">Закладку збережено</translation>
+<translation id="6193448654517602979">Вибрати вкладки</translation>
 <translation id="6336451774241870485">Приватна вкладка</translation>
 <translation id="6337323516034698937">Щоб надіслати цю вкладку на інший пристрій, увімкніть синхронізацію Vivaldi на обох пристроях. Переконайтеся, що ви ввели пароль шифрування, якщо це необхідно.</translation>
+<translation id="6341580099087024258">Запитувати, де зберігати файли</translation>
 <translation id="6404511346730675251">Редагувати закладку</translation>
+<translation id="650224091954855786">{FILE_COUNT, plural,
+          =1 {Файл завантажено}
+          other {# файлів завантажено}}</translation>
 <translation id="6585139692466700358">Пропонувати перекладати сторінки за допомогою сервісу перекладу Vivaldi</translation>
 <translation id="6588043302623806746">Використовувати захищений DNS</translation>
 <translation id="6593061639179217415">Версія для ПК</translation>
 <translation id="6610147964972079463">Закрити всі приватні вкладки</translation>
+<translation id="6627583120233659107">Редагувати папку</translation>
+<translation id="6865313869410766144">Дані для автозаповнення</translation>
+<translation id="6909589135458168665">Попередньо завантажувати сторінки</translation>
 <translation id="7029995644714925509">Коли сайт просить приватно попередньо завантажити посилання на свою сторінку, Vivaldi шифрує та попередньо завантажує сторінки через сервери Google без файлів cookie. Це приховує вашу особистість із попередньо завантаженого сайту.</translation>
 <translation id="706339621163631076">Політика конфіденційності Vivaldi</translation>
 <translation id="732145680195464316">Закладку збережено у <ph name="PRODUCT_NAME" /></translation>
@@ -79,10 +104,13 @@
 <translation id="7456774706094330779">Розширене передзавантаження</translation>
 <translation id="7465104139234185284">Закрити всі приватні вкладки</translation>
 <translation id="7481312909269577407">Вперед</translation>
+<translation id="7764225426217299476">Додати адресу</translation>
 <translation id="7968014550143838305">Додано в список читання</translation>
 <translation id="804786196054284061">Умови використання Vivaldi</translation>
 <translation id="8062594758852531064">Розширене передзавантаження:</translation>
+<translation id="8073388330009372546">Відкрити зображення в новій вкладці</translation>
 <translation id="8127542551745560481">Редагувати головну сторінку</translation>
+<translation id="8266862848225348053">Папка для завантажень</translation>
 <translation id="8348430946834215779">За можливості використовуйте HTTPS і отримуйте попередження перед завантаженням сайтів, які не підтримують цей протокол</translation>
 <translation id="8560602726703398413">Знайдіть свій список читання в закладках</translation>
 <translation id="85991616550051997">Перехід на домашню сторінку</translation>

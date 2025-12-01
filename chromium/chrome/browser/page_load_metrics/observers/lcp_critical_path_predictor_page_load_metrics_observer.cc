@@ -47,38 +47,38 @@ const char kHistogramLCPPSubresourceCountType[] =
     HISTOGRAM_PREFIX "Subresource.Count.Type";
 
 const char kHistogramLCPPImageLoadingPriorityFrequencyOfActualPositive[] =
-    HISTOGRAM_PREFIX "ImageLoadingPriority.FrequencyOfActualPositive";
+    HISTOGRAM_PREFIX "ImageLoadingPriority.FrequencyOfActualPositive.2";
 const char kHistogramLCPPImageLoadingPriorityFrequencyOfActualNegative[] =
-    HISTOGRAM_PREFIX "ImageLoadingPriority.FrequencyOfActualNegative";
+    HISTOGRAM_PREFIX "ImageLoadingPriority.FrequencyOfActualNegative.2";
 const char kHistogramLCPPImageLoadingPriorityConfidenceOfActualPositive[] =
-    HISTOGRAM_PREFIX "ImageLoadingPriority.ConfidenceOfActualPositive";
+    HISTOGRAM_PREFIX "ImageLoadingPriority.ConfidenceOfActualPositive.2";
 const char kHistogramLCPPImageLoadingPriorityConfidenceOfActualNegative[] =
-    HISTOGRAM_PREFIX "ImageLoadingPriority.ConfidenceOfActualNegative";
+    HISTOGRAM_PREFIX "ImageLoadingPriority.ConfidenceOfActualNegative.2";
 
 const char kHistogramLCPPSubresourceFrequencyOfActualPositive[] =
-    HISTOGRAM_PREFIX "Subresource.FrequencyOfActualPositive";
+    HISTOGRAM_PREFIX "Subresource.FrequencyOfActualPositive.2";
 const char kHistogramLCPPSubresourceFrequencyOfActualNegative[] =
-    HISTOGRAM_PREFIX "Subresource.FrequencyOfActualNegative";
+    HISTOGRAM_PREFIX "Subresource.FrequencyOfActualNegative.2";
 const char kHistogramLCPPSubresourceConfidenceOfActualPositive[] =
-    HISTOGRAM_PREFIX "Subresource.ConfidenceOfActualPositive";
+    HISTOGRAM_PREFIX "Subresource.ConfidenceOfActualPositive.2";
 const char kHistogramLCPPSubresourceConfidenceOfActualNegative[] =
-    HISTOGRAM_PREFIX "Subresource.ConfidenceOfActualNegative";
+    HISTOGRAM_PREFIX "Subresource.ConfidenceOfActualNegative.2";
 const char kHistogramLCPPSubresourceFrequencyOfActualPositiveSameSite[] =
-    HISTOGRAM_PREFIX "Subresource.FrequencyOfActualPositive.SameSite";
+    HISTOGRAM_PREFIX "Subresource.FrequencyOfActualPositive.SameSite.2";
 const char kHistogramLCPPSubresourceFrequencyOfActualNegativeSameSite[] =
-    HISTOGRAM_PREFIX "Subresource.FrequencyOfActualNegative.SameSite";
+    HISTOGRAM_PREFIX "Subresource.FrequencyOfActualNegative.SameSite.2";
 const char kHistogramLCPPSubresourceConfidenceOfActualPositiveSameSite[] =
-    HISTOGRAM_PREFIX "Subresource.ConfidenceOfActualPositive.SameSite";
+    HISTOGRAM_PREFIX "Subresource.ConfidenceOfActualPositive.SameSite.2";
 const char kHistogramLCPPSubresourceConfidenceOfActualNegativeSameSite[] =
-    HISTOGRAM_PREFIX "Subresource.ConfidenceOfActualNegative.SameSite";
+    HISTOGRAM_PREFIX "Subresource.ConfidenceOfActualNegative.SameSite.2";
 const char kHistogramLCPPSubresourceFrequencyOfActualPositiveCrossSite[] =
-    HISTOGRAM_PREFIX "Subresource.FrequencyOfActualPositive.CrossSite";
+    HISTOGRAM_PREFIX "Subresource.FrequencyOfActualPositive.CrossSite.2";
 const char kHistogramLCPPSubresourceFrequencyOfActualNegativeCrossSite[] =
-    HISTOGRAM_PREFIX "Subresource.FrequencyOfActualNegative.CrossSite";
+    HISTOGRAM_PREFIX "Subresource.FrequencyOfActualNegative.CrossSite.2";
 const char kHistogramLCPPSubresourceConfidenceOfActualPositiveCrossSite[] =
-    HISTOGRAM_PREFIX "Subresource.ConfidenceOfActualPositive.CrossSite";
+    HISTOGRAM_PREFIX "Subresource.ConfidenceOfActualPositive.CrossSite.2";
 const char kHistogramLCPPSubresourceConfidenceOfActualNegativeCrossSite[] =
-    HISTOGRAM_PREFIX "Subresource.ConfidenceOfActualNegative.CrossSite";
+    HISTOGRAM_PREFIX "Subresource.ConfidenceOfActualNegative.CrossSite.2";
 
 }  // namespace internal
 
@@ -181,30 +181,47 @@ const char* ConvertConfidenceToSuffix(double confidence) {
   }
 }
 
+int NormalizeConfidence(double confidence) {
+  return static_cast<int>(std::floor(std::clamp(10.0 * confidence, 0.0, 9.9)));
+}
+
+int NormalizeTotalFrequency(double total_frequency) {
+  return static_cast<int>(
+      std::floor(std::clamp(total_frequency / 10.0, 0.0, 9.9)));
+}
+
 int CalculateScoreFromConfidenceAndTotalFrequency(double confidence,
                                                   double total_frequency) {
-  int normalized_confidence_0_to_9 =
-      static_cast<int>(std::floor(std::clamp(10.0 * confidence, 0.0, 9.9)));
-  int normalized_total_frequency_0_to_9 = static_cast<int>(
-      std::floor(std::clamp(total_frequency / 10.0, 0.0, 9.9)));
+  int normalized_confidence_0_to_9 = NormalizeConfidence(confidence);
+  int normalized_total_frequency_0_to_9 =
+      NormalizeTotalFrequency(total_frequency);
   return 10 * normalized_confidence_0_to_9 + normalized_total_frequency_0_to_9;
+}
+
+int CalculateScoreFromTotalFrequencyAndConfidence(double confidence,
+                                                  double total_frequency) {
+  int normalized_confidence_0_to_9 = NormalizeConfidence(confidence);
+  int normalized_total_frequency_0_to_9 =
+      NormalizeTotalFrequency(total_frequency);
+  return 10 * normalized_total_frequency_0_to_9 + normalized_confidence_0_to_9;
 }
 
 void MaybeReportConfidenceUMAs(
     const GURL& commit_url,
     const std::optional<predictors::LcppStat>& lcpp_stat_prelearn,
     const predictors::LcppDataInputs& lcpp_data_inputs) {
-  if (!lcpp_stat_prelearn) {
-    return;
-  }
+  // Even when the LCPP database doesn't provide any data, we want to record
+  // metrics.
+  const predictors::LcppStat& prelearn =
+      lcpp_stat_prelearn ? *lcpp_stat_prelearn : predictors::LcppStat();
 
   const std::string& actual_lcp_element_locator =
       lcpp_data_inputs.lcp_element_locator;
-  if (!actual_lcp_element_locator.empty() &&
-      lcpp_stat_prelearn->has_lcp_element_locator_stat()) {
+  if (!actual_lcp_element_locator.empty()) {
     const auto record_frequency_of_actual_positives = [](double frequency) {
-      // The maximum count is defined by `lcpp_histogram_sliding_window_size`.
-      // The default value is 1000.
+      // The maximum count is defined by
+      // `kLCPCriticalPathPredictorHistogramSlidingWindowSize`. The default
+      // value is 1000.
       base::UmaHistogramCounts1000(
           internal::kHistogramLCPPImageLoadingPriorityFrequencyOfActualPositive,
           frequency);
@@ -236,15 +253,23 @@ void MaybeReportConfidenceUMAs(
               base::StrCat({HISTOGRAM_PREFIX "ImageLoadingPriority"
                                              ".TotalFrequencyOfActualPositive"
                                              ".WithConfidence",
-                            ConvertConfidenceToSuffix(confidence)}),
+                            ConvertConfidenceToSuffix(confidence), ".2"}),
               total_frequency);
           base::UmaHistogramPercentage(
               HISTOGRAM_PREFIX
               "ImageLoadingPriority"
               ".TotalFrequencyOfActualPositive"
               ".PerConfidence"
-              ".2",
+              ".3",
               CalculateScoreFromConfidenceAndTotalFrequency(confidence,
+                                                            total_frequency));
+          base::UmaHistogramPercentage(
+              HISTOGRAM_PREFIX
+              "ImageLoadingPriority"
+              ".ConfidenceOfActualPositive"
+              ".PerTotalFrequency"
+              ".2",
+              CalculateScoreFromTotalFrequencyAndConfidence(confidence,
                                                             total_frequency));
         };
 
@@ -254,23 +279,31 @@ void MaybeReportConfidenceUMAs(
               base::StrCat({HISTOGRAM_PREFIX "ImageLoadingPriority"
                                              ".TotalFrequencyOfActualNegative"
                                              ".WithConfidence",
-                            ConvertConfidenceToSuffix(confidence)}),
+                            ConvertConfidenceToSuffix(confidence), ".2"}),
               total_frequency);
           base::UmaHistogramPercentage(
               HISTOGRAM_PREFIX
               "ImageLoadingPriority"
               ".TotalFrequencyOfActualNegative"
               ".PerConfidence"
-              ".2",
+              ".3",
               CalculateScoreFromConfidenceAndTotalFrequency(confidence,
+                                                            total_frequency));
+          base::UmaHistogramPercentage(
+              HISTOGRAM_PREFIX
+              "ImageLoadingPriority"
+              ".ConfidenceOfActualNegative"
+              ".PerTotalFrequency"
+              ".2",
+              CalculateScoreFromTotalFrequencyAndConfidence(confidence,
                                                             total_frequency));
         };
 
     double total_frequency =
-        lcpp_stat_prelearn->lcp_element_locator_stat().other_bucket_frequency();
+        prelearn.lcp_element_locator_stat().other_bucket_frequency();
     bool actual_positive_was_predicted = false;
-    for (const auto& bucket : lcpp_stat_prelearn->lcp_element_locator_stat()
-                                  .lcp_element_locator_buckets()) {
+    for (const auto& bucket :
+         prelearn.lcp_element_locator_stat().lcp_element_locator_buckets()) {
       total_frequency += bucket.frequency();
       if (bucket.lcp_element_locator() == actual_lcp_element_locator) {
         actual_positive_was_predicted = true;
@@ -282,7 +315,7 @@ void MaybeReportConfidenceUMAs(
 
     for (auto& [confidence, lcp_element_locator] :
          predictors::ConvertLcpElementLocatorStatToConfidenceStringPairs(
-             lcpp_stat_prelearn->lcp_element_locator_stat())) {
+             prelearn.lcp_element_locator_stat())) {
       if (lcp_element_locator == actual_lcp_element_locator) {
         record_confidence_of_actual_positives(confidence);
         record_total_frequency_of_actual_positives(confidence, total_frequency);
@@ -306,7 +339,7 @@ void MaybeReportConfidenceUMAs(
   // At this moment, we know the ground truth data `lcpp_data_inputs` that came
   // from the recent actual navigation result. We also know the
   // {confidence, frequency} values from the intermediate result of prediction
-  // that comes from `lcpp_stat_prelearn`. From these information, we can obtain
+  // that comes from `prelearn`. From these information, we can obtain
   // the following information.
   //
   // - Actual positive samples. These are the same as `actual_urls`. Actual
@@ -316,13 +349,12 @@ void MaybeReportConfidenceUMAs(
   //   positives.
   //
   // Unfortunately, in our case, we don't have true negatives.
-  const auto& actual_urls = lcpp_data_inputs.subresource_urls;
-  if (!actual_urls.empty() &&
-      lcpp_stat_prelearn->has_fetched_subresource_url_stat()) {
+  {
     const auto record_frequency_of_actual_positives = [](double frequency,
                                                          bool is_same_site) {
-      // The maximum count is defined by `lcpp_histogram_sliding_window_size`.
-      // The default value is 1000.
+      // The maximum count is defined by
+      // `kLCPCriticalPathPredictorHistogramSlidingWindowSize`. The default
+      // value is 1000.
       base::UmaHistogramCounts1000(
           internal::kHistogramLCPPSubresourceFrequencyOfActualPositive,
           frequency);
@@ -395,73 +427,111 @@ void MaybeReportConfidenceUMAs(
 
     const auto record_total_frequency_of_actual_positives =
         [](double confidence, double total_frequency, bool is_same_site) {
+          const char* same_site_or_cross_site =
+              is_same_site ? ".SameSite" : ".CrossSite";
           base::UmaHistogramCounts1000(
               base::StrCat({HISTOGRAM_PREFIX "Subresource"
                                              ".TotalFrequencyOfActualPositive"
                                              ".WithConfidence",
-                            ConvertConfidenceToSuffix(confidence)}),
+                            ConvertConfidenceToSuffix(confidence), ".2"}),
               total_frequency);
           base::UmaHistogramCounts1000(
               base::StrCat({HISTOGRAM_PREFIX "Subresource"
                                              ".TotalFrequencyOfActualPositive"
                                              ".WithConfidence",
                             ConvertConfidenceToSuffix(confidence),
-                            is_same_site ? ".SameSite" : ".CrossSite"}),
+                            same_site_or_cross_site, ".2"}),
               total_frequency);
           base::UmaHistogramPercentage(
               HISTOGRAM_PREFIX
               "Subresource"
               ".TotalFrequencyOfActualPositive"
               ".PerConfidence"
-              ".2",
+              ".3",
               CalculateScoreFromConfidenceAndTotalFrequency(confidence,
                                                             total_frequency));
           base::UmaHistogramPercentage(
               base::StrCat({HISTOGRAM_PREFIX "Subresource"
                                              ".TotalFrequencyOfActualPositive"
                                              ".PerConfidence",
-                            is_same_site ? ".SameSite" : ".CrossSite", ".2"}),
+                            same_site_or_cross_site, ".3"}),
               CalculateScoreFromConfidenceAndTotalFrequency(confidence,
+                                                            total_frequency));
+          base::UmaHistogramPercentage(
+              HISTOGRAM_PREFIX
+              "Subresource"
+              ".ConfidenceOfActualPositive"
+              ".PerTotalFrequency"
+              ".3",
+              CalculateScoreFromTotalFrequencyAndConfidence(confidence,
+                                                            total_frequency));
+          base::UmaHistogramPercentage(
+              base::StrCat({HISTOGRAM_PREFIX "Subresource"
+                                             ".ConfidenceOfActualPositive"
+                                             ".PerTotalFrequency",
+                            same_site_or_cross_site, ".3"}),
+              CalculateScoreFromTotalFrequencyAndConfidence(confidence,
                                                             total_frequency));
         };
 
     const auto record_total_frequency_of_actual_negatives =
         [](double confidence, double total_frequency, bool is_same_site) {
+          const char* same_site_or_cross_site =
+              is_same_site ? ".SameSite" : ".CrossSite";
           base::UmaHistogramCounts1000(
               base::StrCat({HISTOGRAM_PREFIX "Subresource"
                                              ".TotalFrequencyOfActualNegative"
                                              ".WithConfidence",
-                            ConvertConfidenceToSuffix(confidence)}),
+                            ConvertConfidenceToSuffix(confidence), ".2"}),
               total_frequency);
           base::UmaHistogramCounts1000(
-              base::StrCat({HISTOGRAM_PREFIX "Subresource"
-                                             ".TotalFrequencyOfActualNegative"
-                                             ".WithConfidence",
-                            ConvertConfidenceToSuffix(confidence),
-                            is_same_site ? ".SameSite" : ".CrossSite"}),
+              base::StrCat({
+                  HISTOGRAM_PREFIX "Subresource"
+                                   ".TotalFrequencyOfActualNegative"
+                                   ".WithConfidence",
+                  ConvertConfidenceToSuffix(confidence),
+                  same_site_or_cross_site,
+                  ".2",
+              }),
               total_frequency);
           base::UmaHistogramPercentage(
               HISTOGRAM_PREFIX
               "Subresource"
               ".TotalFrequencyOfActualNegative"
               ".PerConfidence"
-              ".2",
+              ".3",
               CalculateScoreFromConfidenceAndTotalFrequency(confidence,
                                                             total_frequency));
           base::UmaHistogramPercentage(
               base::StrCat({HISTOGRAM_PREFIX "Subresource"
                                              ".TotalFrequencyOfActualNegative"
                                              ".PerConfidence",
-                            is_same_site ? ".SameSite" : ".CrossSite", ".2"}),
+                            same_site_or_cross_site, ".3"}),
               CalculateScoreFromConfidenceAndTotalFrequency(confidence,
+                                                            total_frequency));
+          base::UmaHistogramPercentage(
+              HISTOGRAM_PREFIX
+              "Subresource"
+              ".ConfidenceOfActualNegative"
+              ".PerTotalFrequency"
+              ".3",
+              CalculateScoreFromTotalFrequencyAndConfidence(confidence,
+                                                            total_frequency));
+          base::UmaHistogramPercentage(
+              base::StrCat({HISTOGRAM_PREFIX "Subresource"
+                                             ".ConfidenceOfActualNegative"
+                                             ".PerTotalFrequency",
+                            same_site_or_cross_site, ".3"}),
+              CalculateScoreFromTotalFrequencyAndConfidence(confidence,
                                                             total_frequency));
         };
 
-    double total_frequency = lcpp_stat_prelearn->fetched_subresource_url_stat()
-                                 .other_bucket_frequency();
+    const auto& actual_urls = lcpp_data_inputs.subresource_urls;
+    double total_frequency =
+        prelearn.fetched_subresource_url_stat().other_bucket_frequency();
     std::set<GURL> predicted_urls;
     for (const auto& [predicted_url_string, frequency] :
-         lcpp_stat_prelearn->fetched_subresource_url_stat().main_buckets()) {
+         prelearn.fetched_subresource_url_stat().main_buckets()) {
       total_frequency += frequency;
       const GURL predicted_url(predicted_url_string);
       predicted_urls.insert(predicted_url);
@@ -475,7 +545,7 @@ void MaybeReportConfidenceUMAs(
 
     for (auto& [confidence, predicted_url_string] :
          predictors::ConvertLcppStringFrequencyStatDataToConfidenceStringPairs(
-             lcpp_stat_prelearn->fetched_subresource_url_stat())) {
+             prelearn.fetched_subresource_url_stat())) {
       GURL predicted_url(predicted_url_string);
       bool is_same_site = IsSameSite(commit_url, predicted_url);
       if (actual_urls.contains(GURL(predicted_url))) {

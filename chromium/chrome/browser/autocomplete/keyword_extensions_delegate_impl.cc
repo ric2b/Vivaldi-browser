@@ -142,8 +142,11 @@ void KeywordExtensionsDelegateImpl::OnOmniboxSuggestionsReady(
     const std::string& extension_id) {
   DCHECK(suggestions);
 
-  if (suggestions->request_id != current_input_id_)
-    return;  // This is an old result. Just ignore.
+  // Ignore result if it's old or if the provider is done. Checking if the
+  // provider is done prevents the extension from sending multiple sets of
+  // suggestions for the same request.
+  if (suggestions->request_id != current_input_id_ || provider_->done())
+    return;
 
   TemplateURLService* model = provider_->GetTemplateURLService();
   DCHECK(model);
@@ -162,14 +165,6 @@ void KeywordExtensionsDelegateImpl::OnOmniboxSuggestionsReady(
   const TemplateURL* template_url = model->GetTemplateURLForKeyword(keyword);
   DCHECK_EQ(extension_id, template_url->GetExtensionId());
 
-  const auto supports_replacement =
-      template_url->url_ref().SupportsReplacement(model->search_terms_data());
-  DCHECK(supports_replacement)
-      << "Support for non-substituting keywords has been deprecated.";
-  if (!supports_replacement) {
-    return;
-  }
-
   for (size_t i = 0; i < suggestions->suggest_results.size(); ++i) {
     const omnibox_api::SuggestResult& suggestion =
         suggestions->suggest_results[i];
@@ -180,7 +175,7 @@ void KeywordExtensionsDelegateImpl::OnOmniboxSuggestionsReady(
     // is true, because we wouldn't get results from the extension unless
     // the full keyword had been typed.
     int first_relevance = KeywordProvider::CalculateRelevance(
-        input.type(), true, input.prefer_keyword(),
+        input.type(), true, true, input.prefer_keyword(),
         input.allow_exact_keyword_match());
     // Because these matches are async, we should never let them become the
     // default match, lest we introduce race conditions in the omnibox user

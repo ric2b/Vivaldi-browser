@@ -147,8 +147,7 @@ void Centipede::CorpusToFiles(const Environment &env, std::string_view dir) {
 }
 
 void Centipede::CorpusFromFiles(const Environment &env, std::string_view dir) {
-  WorkDir wd{env};
-  // Shard the file paths in `dir` based on hashes of filenames.
+  // Shard the file paths in the source `dir` based on hashes of filenames.
   // Such partition is stable: a given file always goes to a specific shard.
   std::vector<std::vector<std::string>> sharded_paths(env.total_shards);
   std::vector<std::string> paths;
@@ -160,7 +159,14 @@ void Centipede::CorpusFromFiles(const Environment &env, std::string_view dir) {
     sharded_paths[filename_hash % env.total_shards].push_back(path);
     ++total_paths;
   }
-  // Iterate over all shards.
+
+  // If the destination `workdir` is specified (note that empty means "use the
+  // current directory"), we might need to create it.
+  if (!env.workdir.empty()) {
+    CHECK_OK(RemoteMkdir(env.workdir));
+  }
+
+  // Iterate over all shards, adding inputs to the current shard.
   size_t inputs_added = 0;
   size_t inputs_ignored = 0;
   const auto corpus_file_paths = WorkDir{env}.CorpusFilePaths();
@@ -221,57 +227,58 @@ void Centipede::UpdateAndMaybeLogStats(std::string_view log_type,
 
   stats_.store(Stats{
       StatsMeta{
-          .timestamp_unix_micros =
-              static_cast<uint64_t>(absl::ToUnixMicros(absl::Now())),
+          /*timestamp_unix_micros=*/
+          static_cast<uint64_t>(absl::ToUnixMicros(absl::Now())),
       },
       ExecStats{
-          .fuzz_time_sec = static_cast<uint64_t>(std::ceil(fuzz_time_secs)),
-          .num_executions = num_runs_,
-          .num_target_crashes = static_cast<uint64_t>(num_crashes_),
+          /*fuzz_time_sec=*/static_cast<uint64_t>(std::ceil(fuzz_time_secs)),
+          /*num_executions*/ num_runs_,
+          /*num_target_crashes*/ static_cast<uint64_t>(num_crashes_),
       },
       CovStats{
-          .num_covered_pcs = fs_.CountFeatures(fd::kPCs),
-          .num_8bit_counter_features = fs_.CountFeatures(fd::k8bitCounters),
-          .num_data_flow_features = fs_.CountFeatures(fd::kDataFlow),
-          .num_cmp_features = fs_.CountFeatures(fd::kCMPDomains),
-          .num_call_stack_features = fs_.CountFeatures(fd::kCallStack),
-          .num_bounded_path_features = fs_.CountFeatures(fd::kBoundedPath),
-          .num_pc_pair_features = fs_.CountFeatures(fd::kPCPair),
-          .num_user_features = fs_.CountFeatures(fd::kUserDomains),
-          .num_user0_features = fs_.CountFeatures(fd::kUserDomains[0]),
-          .num_user1_features = fs_.CountFeatures(fd::kUserDomains[1]),
-          .num_user2_features = fs_.CountFeatures(fd::kUserDomains[2]),
-          .num_user3_features = fs_.CountFeatures(fd::kUserDomains[3]),
-          .num_user4_features = fs_.CountFeatures(fd::kUserDomains[4]),
-          .num_user5_features = fs_.CountFeatures(fd::kUserDomains[5]),
-          .num_user6_features = fs_.CountFeatures(fd::kUserDomains[6]),
-          .num_user7_features = fs_.CountFeatures(fd::kUserDomains[7]),
-          .num_user8_features = fs_.CountFeatures(fd::kUserDomains[8]),
-          .num_user9_features = fs_.CountFeatures(fd::kUserDomains[9]),
-          .num_user10_features = fs_.CountFeatures(fd::kUserDomains[10]),
-          .num_user11_features = fs_.CountFeatures(fd::kUserDomains[11]),
-          .num_user12_features = fs_.CountFeatures(fd::kUserDomains[12]),
-          .num_user13_features = fs_.CountFeatures(fd::kUserDomains[13]),
-          .num_user14_features = fs_.CountFeatures(fd::kUserDomains[14]),
-          .num_user15_features = fs_.CountFeatures(fd::kUserDomains[15]),
-          .num_unknown_features = fs_.CountFeatures(fd::kUnknown),
-          .num_funcs_in_frontier = coverage_frontier_.NumFunctionsInFrontier(),
+          /*num_covered_pcs=*/fs_.CountFeatures(fd::kPCs),
+          /*num_8bit_counter_features=*/fs_.CountFeatures(fd::k8bitCounters),
+          /*num_data_flow_features=*/fs_.CountFeatures(fd::kDataFlow),
+          /*num_cmp_features=*/fs_.CountFeatures(fd::kCMPDomains),
+          /*num_call_stack_features=*/fs_.CountFeatures(fd::kCallStack),
+          /*num_bounded_path_features=*/fs_.CountFeatures(fd::kBoundedPath),
+          /*num_pc_pair_features=*/fs_.CountFeatures(fd::kPCPair),
+          /*num_user_features=*/fs_.CountFeatures(fd::kUserDomains),
+          /*num_user0_features=*/fs_.CountFeatures(fd::kUserDomains[0]),
+          /*num_user1_features=*/fs_.CountFeatures(fd::kUserDomains[1]),
+          /*num_user2_features=*/fs_.CountFeatures(fd::kUserDomains[2]),
+          /*num_user3_features=*/fs_.CountFeatures(fd::kUserDomains[3]),
+          /*num_user4_features=*/fs_.CountFeatures(fd::kUserDomains[4]),
+          /*num_user5_features=*/fs_.CountFeatures(fd::kUserDomains[5]),
+          /*num_user6_features=*/fs_.CountFeatures(fd::kUserDomains[6]),
+          /*num_user7_features=*/fs_.CountFeatures(fd::kUserDomains[7]),
+          /*num_user8_features=*/fs_.CountFeatures(fd::kUserDomains[8]),
+          /*num_user9_features=*/fs_.CountFeatures(fd::kUserDomains[9]),
+          /*num_user10_features=*/fs_.CountFeatures(fd::kUserDomains[10]),
+          /*num_user11_features=*/fs_.CountFeatures(fd::kUserDomains[11]),
+          /*num_user12_features=*/fs_.CountFeatures(fd::kUserDomains[12]),
+          /*num_user13_features=*/fs_.CountFeatures(fd::kUserDomains[13]),
+          /*num_user14_features=*/fs_.CountFeatures(fd::kUserDomains[14]),
+          /*num_user15_features=*/fs_.CountFeatures(fd::kUserDomains[15]),
+          /*num_unknown_features=*/fs_.CountFeatures(fd::kUnknown),
+          /*num_funcs_in_frontier=*/coverage_frontier_.NumFunctionsInFrontier(),
       },
       CorpusStats{
-          .active_corpus_size = corpus_.NumActive(),
-          .total_corpus_size = corpus_.NumTotal(),
-          .max_corpus_element_size = max_corpus_size,
-          .avg_corpus_element_size = avg_corpus_size,
+          /*active_corpus_size=*/corpus_.NumActive(),
+          /*total_corpus_size=*/corpus_.NumTotal(),
+          /*max_corpus_element_size=*/max_corpus_size,
+          /*avg_corpus_element_size=*/avg_corpus_size,
       },
       RusageStats{
-          .engine_rusage_avg_millicores = static_cast<uint64_t>(
+          /*engine_rusage_avg_millicores=*/static_cast<uint64_t>(
               std::lround(rusage_timing.cpu_hyper_cores * 1000)),
-          .engine_rusage_cpu_percent = static_cast<uint64_t>(
+          /*engine_rusage_cpu_percent=*/
+          static_cast<uint64_t>(
               std::lround(rusage_timing.cpu_utilization * 100)),
-          .engine_rusage_rss_mb =
-              static_cast<uint64_t>(rusage_memory.mem_rss >> 20),
-          .engine_rusage_vsize_mb =
-              static_cast<uint64_t>(rusage_memory.mem_vsize >> 20),
+          /*engine_rusage_rss_mb=*/
+          static_cast<uint64_t>(rusage_memory.mem_rss >> 20),
+          /*engine_rusage_vsize_mb=*/
+          static_cast<uint64_t>(rusage_memory.mem_vsize >> 20),
       },
   });
 
@@ -762,7 +769,6 @@ void Centipede::FuzzingLoop() {
     auto remaining_runs = env_.num_runs - new_runs;
     auto batch_size = std::min(env_.batch_size, remaining_runs);
     std::vector<MutationInputRef> mutation_inputs;
-    std::vector<ByteArray> mutants;
     mutation_inputs.reserve(env_.mutate_batch_size);
     for (size_t i = 0; i < env_.mutate_batch_size; i++) {
       const auto &corpus_record = env_.use_corpus_weights
@@ -772,7 +778,8 @@ void Centipede::FuzzingLoop() {
           MutationInputRef{corpus_record.data, &corpus_record.metadata});
     }
 
-    user_callbacks_.Mutate(mutation_inputs, batch_size, mutants);
+    const std::vector<ByteArray> mutants =
+        user_callbacks_.Mutate(mutation_inputs, batch_size);
     bool gained_new_coverage =
         RunBatch(mutants, corpus_file.get(), features_file.get(), nullptr);
     new_runs += mutants.size();
@@ -818,31 +825,43 @@ void Centipede::ReportCrash(std::string_view binary,
                             const std::vector<ByteArray> &input_vec,
                             const BatchResult &batch_result) {
   CHECK_EQ(input_vec.size(), batch_result.results().size());
+
+  const size_t suspect_input_idx = std::clamp<size_t>(
+      batch_result.num_outputs_read(), 0, input_vec.size() - 1);
+  auto log_execution_failure = [&](std::string_view log_prefix) {
+    LOG(INFO) << log_prefix << "Batch execution failed:"
+              << "\nBinary               : " << binary
+              << "\nExit code            : " << batch_result.exit_code()
+              << "\nFailure              : "
+              << batch_result.failure_description()
+              << "\nNumber of inputs     : " << input_vec.size()
+              << "\nNumber of inputs read: " << batch_result.num_outputs_read()
+              << (batch_result.IsSetupFailure()
+                      ? ""
+                      : absl::StrCat("\nSuspect input index  : ",
+                                     suspect_input_idx))
+              << "\nCrash log            :\n\n";
+    for (const auto &log_line :
+         absl::StrSplit(absl::StripAsciiWhitespace(batch_result.log()), '\n')) {
+      LOG(INFO).NoPrefix() << "CRASH LOG: " << log_line;
+    }
+    LOG(INFO).NoPrefix() << "\n";
+  };
+
+  if (batch_result.IsSetupFailure()) {
+    log_execution_failure("Test Setup Failure: ");
+    LOG(FATAL) << "Terminating Centipede due to setup failure in the test.";
+  }
+
   // Skip reporting only if RequestEarlyStop is called with a failure exit code.
   // Still report if time runs out.
   if (ShouldStop() && ExitCode() != 0) return;
 
   if (++num_crashes_ > env_.max_num_crash_reports) return;
 
-  const size_t suspect_input_idx = std::clamp<size_t>(
-      batch_result.num_outputs_read(), 0, input_vec.size() - 1);
-
   const std::string log_prefix =
       absl::StrCat("ReportCrash[", num_crashes_, "]: ");
-
-  LOG(INFO) << log_prefix << "Batch execution failed:"
-            << "\nBinary               : " << binary
-            << "\nExit code            : " << batch_result.exit_code()
-            << "\nFailure              : " << batch_result.failure_description()
-            << "\nNumber of inputs     : " << input_vec.size()
-            << "\nNumber of inputs read: " << batch_result.num_outputs_read()
-            << "\nSuspect input index  : " << suspect_input_idx
-            << "\nCrash log            :\n\n";
-  for (const auto &log_line :
-       absl::StrSplit(absl::StripAsciiWhitespace(batch_result.log()), '\n')) {
-    LOG(INFO).NoPrefix() << "CRASH LOG: " << log_line;
-  }
-  LOG(INFO).NoPrefix() << "\n";
+  log_execution_failure(log_prefix);
 
   LOG_IF(INFO, num_crashes_ == env_.max_num_crash_reports)
       << log_prefix

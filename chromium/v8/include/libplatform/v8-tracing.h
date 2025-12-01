@@ -6,7 +6,6 @@
 #define V8_LIBPLATFORM_V8_TRACING_H_
 
 #include <atomic>
-#include <fstream>
 #include <memory>
 #include <unordered_set>
 #include <vector>
@@ -24,7 +23,7 @@ class TracingSession;
 namespace v8 {
 
 namespace base {
-class SpinningMutex;
+class Mutex;
 }  // namespace base
 
 namespace platform {
@@ -304,7 +303,7 @@ class V8_PLATFORM_EXPORT TracingController
   void UpdateCategoryGroupEnabledFlags();
 #endif  // !defined(V8_USE_PERFETTO)
 
-  std::unique_ptr<base::SpinningMutex> mutex_;
+  std::unique_ptr<base::Mutex> mutex_;
   std::unique_ptr<TraceConfig> trace_config_;
   std::atomic_bool recording_{false};
 

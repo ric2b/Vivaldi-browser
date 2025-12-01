@@ -17,7 +17,6 @@ import androidx.annotation.DrawableRes;
 
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
-import org.chromium.chrome.browser.toolbar.ToolbarFeatures;
 import org.chromium.ui.base.ViewUtils;
 import org.chromium.ui.interpolators.Interpolators;
 
@@ -97,10 +96,14 @@ class CustomTabToolbarAnimationDelegate {
         mAnimationEndRunnable = animationEndRunnable;
     }
 
+    void setSecurityButton(ImageButton securityButton) {
+        mSecurityButtonAnimationDelegate.setSecurityButton(securityButton);
+    }
+
     /**
      * Sets the width of the security button to properly offset the url bar. This should be set once
      * we know whether the security icon is nested or not. Currently, this is only called if the
-     * security icon is nested.
+     * security icon is nested or the omnibox is enabled.
      *
      * @param width The width of the security button in pixels.
      */
@@ -212,10 +215,7 @@ class CustomTabToolbarAnimationDelegate {
         if (mUseRotationTransition) {
             mBrandingAnimationDelegate.updateDrawableResource(securityIconResource);
         } else {
-            boolean isActualResourceChange = true;
-            if (ToolbarFeatures.shouldSuppressCaptures()) {
-                isActualResourceChange = securityIconResource != mSecurityIconRes;
-            }
+            boolean isActualResourceChange = securityIconResource != mSecurityIconRes;
             mSecurityButtonAnimationDelegate.updateSecurityButton(
                     securityIconResource, /* animate= */ true, isActualResourceChange);
         }

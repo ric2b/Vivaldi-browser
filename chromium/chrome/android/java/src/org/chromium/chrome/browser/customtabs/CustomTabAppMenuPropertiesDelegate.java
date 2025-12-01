@@ -260,12 +260,13 @@ public class CustomTabAppMenuPropertiesDelegate extends AppMenuPropertiesDelegat
                             || currentTab.isNativePage();
             boolean isFileScheme = url.getScheme().equals(UrlConstants.FILE_SCHEME);
             boolean isContentScheme = url.getScheme().equals(UrlConstants.CONTENT_SCHEME);
-            // TODO(crbug.com/380936306): Hide open in Chrome for blob url. Revisit once we
-            // understand when the URL can be blob. Flag guard to make it safe to merge.
+            // TODO(crbug.com/384992232): Hide open in Chrome for blob and data url until such view
+            //  intent can be handled.
             if ((ContentFeatureMap.isEnabled(ContentFeatureList.ANDROID_OPEN_PDF_INLINE)
                             || ChromeFeatureList.isEnabled(
                                     ChromeFeatureList.ANDROID_OPEN_PDF_INLINE_BACKPORT))
-                    && url.getScheme().equals(UrlConstants.BLOB_SCHEME)) {
+                    && (url.getScheme().equals(UrlConstants.BLOB_SCHEME)
+                            || url.getScheme().equals(UrlConstants.DATA_SCHEME))) {
                 openInChromeItemVisible = false;
             }
             if (isNativePage || isFileScheme || isContentScheme || url.isEmpty()) {
@@ -308,6 +309,14 @@ public class CustomTabAppMenuPropertiesDelegate extends AppMenuPropertiesDelegat
 
             MenuItem openInChromeItem = menu.findItem(R.id.open_in_browser_id);
             if (openInChromeItemVisible) {
+                // Vivaldi
+                if (BuildConfig.IS_VIVALDI) {
+                    String appName = ContextUtils.getApplicationContext()
+                            .getString(R.string.app_name);
+                    String title = ContextUtils.getApplicationContext()
+                            .getString(R.string.cct_open_in_vivaldi_template, appName);
+                    openInChromeItem.setTitle(title);
+                } else {
                 String title =
                         mIsOffTheRecord
                                 ? ContextUtils.getApplicationContext()
@@ -316,6 +325,7 @@ public class CustomTabAppMenuPropertiesDelegate extends AppMenuPropertiesDelegat
                                         mIsOpenedByChrome);
 
                 openInChromeItem.setTitle(title);
+                } // Vivaldi
             } else {
                 openInChromeItem.setVisible(false);
             }

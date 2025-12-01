@@ -2,11 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/40284755): Remove this and spanify to fix the errors.
-#pragma allow_unsafe_buffers
-#endif
-
 #include "base/process/process_metrics.h"
 
 #include <dirent.h>
@@ -24,6 +19,7 @@
 #include <string_view>
 #include <utility>
 
+#include "base/compiler_specific.h"
 #include "base/containers/span.h"
 #include "base/cpu.h"
 #include "base/files/dir_reader_posix.h"
@@ -224,7 +220,8 @@ int ProcessMetrics::GetOpenFdCount() const {
   int total_count = 0;
   for (; dir_reader.Next();) {
     const char* name = dir_reader.name();
-    if (strcmp(name, ".") != 0 && strcmp(name, "..") != 0) {
+    if (UNSAFE_TODO(strcmp(name, ".")) != 0 &&
+        UNSAFE_TODO(strcmp(name, "..")) != 0) {
       ++total_count;
     }
   }
@@ -308,7 +305,7 @@ int ParseProcStatCPU(std::string_view input) {
     if (--num_spaces_remaining == 0) {
       int utime = 0;
       int stime = 0;
-      if (sscanf(&input.data()[i], "%d %d", &utime, &stime) != 2) {
+      if (UNSAFE_TODO(sscanf(&input.data()[i], "%d %d", &utime, &stime)) != 2) {
         return -1;
       }
 
@@ -947,7 +944,8 @@ void GetFdInfoFromPid(pid_t pid,
   for (; dir_reader.Next();) {
     const char* name = dir_reader.name();
 
-    if (strcmp(name, ".") == 0 || strcmp(name, "..") == 0) {
+    if (UNSAFE_TODO(strcmp(name, ".")) == 0 ||
+        UNSAFE_TODO(strcmp(name, "..")) == 0) {
       continue;
     }
 
@@ -1031,7 +1029,7 @@ bool GetGraphicsMemoryInfoFdInfo(GraphicsMemoryInfoKB* gpu_meminfo) {
   std::string line;
   while (std::getline(clients_stream, line)) {
     pid_t pid;
-    int num_res = sscanf(&line.c_str()[21], "%5d", &pid);
+    int num_res = UNSAFE_TODO(sscanf(&line.c_str()[21], "%5d", &pid));
     if (num_res == 1) {
       GetFdInfoFromPid(pid, fdinfo_table);
     }
@@ -1080,8 +1078,9 @@ bool GetGraphicsMemoryInfo(GraphicsMemoryInfoKB* gpu_meminfo) {
   if (ReadFileToStringNonBlocking(geminfo_path, &geminfo_data)) {
     int gpu_objects = -1;
     int64_t gpu_memory_size = -1;
-    int num_res = sscanf(geminfo_data.c_str(), "%d objects, %" SCNd64 " bytes",
-                         &gpu_objects, &gpu_memory_size);
+    int num_res = UNSAFE_TODO(sscanf(geminfo_data.c_str(),
+                                     "%d objects, %" SCNd64 " bytes",
+                                     &gpu_objects, &gpu_memory_size));
     if (num_res == 2) {
       gpu_meminfo->gpu_objects = gpu_objects;
       gpu_meminfo->gpu_memory_size = gpu_memory_size;

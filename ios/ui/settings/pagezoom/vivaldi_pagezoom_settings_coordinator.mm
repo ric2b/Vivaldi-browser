@@ -4,6 +4,7 @@
 
 #import "ios/chrome/browser/shared/model/browser/browser.h"
 #import "ios/chrome/browser/shared/model/profile/profile_ios.h"
+#import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
 #import "ios/ui/settings/pagezoom/vivaldi_pagezoom_settings_mediator.h"
 #import "ios/ui/settings/pagezoom/vivaldi_pagezoom_settings_swift.h"
 #import "ui/base/l10n/l10n_util_mac.h"
@@ -31,8 +32,6 @@
   return self;
 }
 
-#pragma mark - ChromeCoordinator
-
 - (void)start {
   self.viewProvider = [[VivaldiPageZoomSettingsViewProvider alloc] init];
   self.viewController =
@@ -57,8 +56,38 @@
                          target:self
                          action:@selector(handleDoneButtonTap)];
   self.viewController.navigationItem.rightBarButtonItem = doneItem;
-  [self.baseNavigationController pushViewController:self.viewController
-                                           animated:YES];
+
+  if (self.isFromDialog) {
+    // Create a new navigation controller because the page zoom
+    // dialoge is presenting from a different view hireacrchy
+    UINavigationController* navigationController =
+      [[UINavigationController alloc]
+        initWithRootViewController:self.viewController];
+    navigationController.modalPresentationStyle = UIModalPresentationPageSheet;
+
+    // Configure sheet presentation
+    UISheetPresentationController* sheetPc =
+      navigationController.sheetPresentationController;
+    if (sheetPc) {
+      // When iPad full screen or 2/3 SplitView support only large detent
+      // because medium detent cuts the contents makes
+      // the dialog small and off centered.
+      if (IsSplitToolbarMode(self.baseViewController)) {
+        sheetPc.detents = @[UISheetPresentationControllerDetent.mediumDetent,
+                            UISheetPresentationControllerDetent.largeDetent];
+      } else {
+        sheetPc.detents = @[UISheetPresentationControllerDetent.largeDetent];
+      }
+      sheetPc.prefersScrollingExpandsWhenScrolledToEdge = NO;
+      sheetPc.widthFollowsPreferredContentSizeWhenEdgeAttached = YES;
+    }
+    [self.baseViewController presentViewController:navigationController
+                                          animated:YES
+                                        completion:nil];
+  } else {
+    [self.baseNavigationController pushViewController:self.viewController
+                                             animated:YES];
+  };
 }
 
 - (void)stop {
@@ -72,9 +101,14 @@
 #pragma mark - Private
 
 - (void)handleDoneButtonTap {
+  if (self.isFromDialog) {
+    [self.baseViewController dismissViewControllerAnimated:YES
+                                                completion:nil];
+  } else {
+    [self.baseNavigationController dismissViewControllerAnimated:YES
+                                                      completion:nil];
+  }
   [self stop];
-  [self.baseNavigationController dismissViewControllerAnimated:YES
-                                                    completion:nil];
 }
 
 - (void)observeResetDomainSettingsButtonTapEvent {

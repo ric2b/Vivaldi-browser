@@ -35,9 +35,31 @@ def append_rule_kwargs(rule_kwargs, **append):
         append_to += v
         rule_kwargs[k] = append_to
 
+def absolute_label(label, package_name = None):
+    """Get the absolute label for a given label.
+
+    Args:
+      label: The label to convert to absolute.
+      package_name: The package name to use if the label is relative.
+
+    Returns:
+      The absolute label.
+    """
+    if label.startswith("//"):
+        if ":" in label:
+            return label
+        return "%s:%s" % (label, label.rsplit("/", 1)[-1])
+    if not package_name:
+        package_name = native.package_name()
+    if label.startswith(":"):
+        return "//%s%s" % (package_name, label)
+    if ":" in label:
+        return "//%s/%s" % (package_name, label)
+    return "//%s:%s" % (package_name, label)
+
 # Private
 
-def _valild_shared_lib_name(name):
+def _valid_shared_lib_name(name):
     return name.endswith(_SHARED_LIB_SUFFIX)
 
 def _valid_so_name(name):
@@ -66,6 +88,16 @@ _EXPORT_LRT_ONLY_SCRIPT_DARWIN = "//tensorflow/lite/experimental/litert/build_co
 _EXPORT_LRT_ONLY_LINKOPT_LINUX = make_linkopt("--version-script=$(location {})".format(_EXPORT_LRT_ONLY_SCRIPT_LINUX))
 _EXPORT_LRT_ONLY_LINKOPT_DARWIN = make_linkopt("-exported_symbols_list,$(location {})".format(_EXPORT_LRT_ONLY_SCRIPT_DARWIN))
 
+def symbol_opts():
+    """Defines linker flags whether to include symbols or not."""
+    return select({
+        "//tensorflow:debug": [],
+        "//conditions:default": [
+            # Omit symbol table, for all non debug builds
+            "-Wl,-s",
+        ],
+    })
+
 def export_lrt_only_script():
     return select({
         "//tensorflow:linux_x86_64": [_EXPORT_LRT_ONLY_SCRIPT_LINUX],
@@ -82,12 +114,19 @@ def export_lrt_only_linkopt():
         "//tensorflow:macos": [_EXPORT_LRT_ONLY_LINKOPT_DARWIN],
         "//tensorflow:ios": [_EXPORT_LRT_ONLY_LINKOPT_DARWIN],
         "//conditions:default": [],
-    })
+    }) + symbol_opts()
 
 _EXPORT_LRT_RUNTIME_ONLY_SCRIPT_LINUX = "//tensorflow/lite/experimental/litert/build_common:export_litert_runtime_only_linux.lds"
 _EXPORT_LRT_RUNTIME_ONLY_SCRIPT_DARWIN = "//tensorflow/lite/experimental/litert/build_common:export_litert_runtime_only_darwin.lds"
 _EXPORT_LRT_RUNTIME_ONLY_LINKOPT_LINUX = make_linkopt("--version-script=$(location {})".format(_EXPORT_LRT_RUNTIME_ONLY_SCRIPT_LINUX))
 _EXPORT_LRT_RUNTIME_ONLY_LINKOPT_DARWIN = make_linkopt("-exported_symbols_list,$(location {})".format(_EXPORT_LRT_RUNTIME_ONLY_SCRIPT_DARWIN))
+
+# TODO b/391390553: Add "-Wl,--no-undefined" to make sure all symbols are defined.
+_EXPORT_LRT_COMMON_LINKOPTS_LINUX = [
+    "-Wl,--no-export-dynamic",  # Only inc syms referenced by dynamic obj.
+    "-Wl,--gc-sections",  # Eliminate unused code and data.
+    "-Wl,--as-needed",  # Don't link unused libs.a
+]
 
 def export_lrt_runtime_only_script():
     return select({
@@ -100,12 +139,15 @@ def export_lrt_runtime_only_script():
 
 def export_lrt_runtime_only_linkopt():
     return select({
-        "//tensorflow:linux_x86_64": [_EXPORT_LRT_RUNTIME_ONLY_LINKOPT_LINUX],
-        "//tensorflow:android": [_EXPORT_LRT_RUNTIME_ONLY_LINKOPT_LINUX],
+        "//tensorflow:linux_x86_64": _EXPORT_LRT_COMMON_LINKOPTS_LINUX + [_EXPORT_LRT_RUNTIME_ONLY_LINKOPT_LINUX],
+        "//tensorflow:android": _EXPORT_LRT_COMMON_LINKOPTS_LINUX + [
+            "-Wl,-z,max-page-size=16384",
+            _EXPORT_LRT_RUNTIME_ONLY_LINKOPT_LINUX,
+        ],
         "//tensorflow:macos": [_EXPORT_LRT_RUNTIME_ONLY_LINKOPT_DARWIN],
         "//tensorflow:ios": [_EXPORT_LRT_RUNTIME_ONLY_LINKOPT_DARWIN],
         "//conditions:default": [],
-    })
+    }) + symbol_opts()
 
 ####################################################################################################
 # Macros
@@ -222,7 +264,7 @@ def litert_dynamic_lib(
       ungrte: Whether to link against system libraries ("ungrte").
       **cc_lib_kwargs: Keyword arguments to pass to the underlying rule.
     """
-    if not _valild_shared_lib_name(shared_lib_name):
+    if not _valid_shared_lib_name(shared_lib_name):
         fail("\"shared_lib_name\" must end with \"_so\"")
     if not _valid_so_name(so_name):
         fail("\"so_name\" must be \"libLiteRt*.so\"")
@@ -257,3 +299,23 @@ def litert_dynamic_lib(
         visibility = vis,
         deps = [lib_target_ref],
     )
+
+def copy_file(name, src, target, visibility = None):
+    input_path = "$(location %s)" % src
+    output_path = "$(@D)/" + target
+
+    native.genrule(
+        name = name,
+        srcs = [src],
+        outs = [target],
+        visibility = visibility,
+        cmd = "cp %s %s" % (input_path, output_path),
+    )
+
+def gtest_main_no_heapcheck_deps():
+    # copybara:uncomment_begin(google-only)
+    # return ["//testing/base/public:gunit_main_no_heapcheck"]
+    # copybara:uncomment_end
+    # copybara:comment_begin(oss-only)
+    return ["@com_google_googletest//:gtest_main"]
+    # copybara:comment_end

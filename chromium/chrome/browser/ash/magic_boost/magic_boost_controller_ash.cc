@@ -91,7 +91,6 @@ void MagicBoostControllerAsh::OnDisclaimerAcceptButtonPressed(
   }
   magic_boost_state->AsyncWriteConsentStatus(
       chromeos::HMRConsentStatus::kApproved);
-  magic_boost_state->AsyncWriteHMREnabled(/*enabled=*/true);
 
   switch (action) {
     case TransitionAction::kDoNothing:
@@ -122,6 +121,7 @@ void MagicBoostControllerAsh::OnDisclaimerDeclineButtonPressed() {
   auto* magic_boost_state = chromeos::MagicBoostState::Get();
   if (opt_in_features_ == OptInFeatures::kOrcaAndHmr) {
     magic_boost_state->DisableOrcaFeature();
+    magic_boost_state->DisableLobsterSettings();
   }
   magic_boost_state->AsyncWriteConsentStatus(
       chromeos::HMRConsentStatus::kDeclined);

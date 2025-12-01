@@ -1,4 +1,360 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="pa">
+<translation id="1017280919048282932">&amp;ਸ਼ਬਦਕੋਸ਼ ਵਿੱਚ ਜੋੜੋ</translation>
+<translation id="1029317248976101138">ਜ਼ੂਮ</translation>
+<translation id="1031362278801463162">ਝਲਕ ਲੋਡ ਹੋ ਰਹੀ ਹੈ</translation>
+<translation id="1047431265488717055">ਕੜੀ ਦਾ ਪਾਠ ਕਾਪੀ ਕਰੋ</translation>
+<translation id="1049795001945932310">&amp;ਭਾਸ਼ਾ ਦੀਆਂ ਸੈਟਿੰਗਾਂ</translation>
+<translation id="1054153489933238809">ਅਸਲ ਤਸਵੀਰ ਨੂੰ ਨਵੇਂ ਟੈਬ ਵਿੱਚ ਖੋਲ੍ਹੋ</translation>
+<translation id="1056898198331236512">ਚੇਤਾਵਨੀ</translation>
+<translation id="1084824384139382525">ਕੜੀ ਦਾ ਪਤਾ ਕਾਪੀ ਕਰੋ</translation>
+<translation id="1163931534039071049">ਫਰੇਮ ਦਾ ਸਰੋਤ ਦੇਖੋ</translation>
+<translation id="1165039591588034296">ਸਮੱਸਿਆ</translation>
+<translation id="1181037720776840403">ਹਟਾਓ</translation>
+<translation id="1187722533808055681">ਸੁਸਤੀ ਤੋਂ ਜਾਗ</translation>
+<translation id="1221825588892235038">ਸਿਰਫ ਚੋਣ</translation>
+<translation id="1244303850296295656">ਵਾਧੜੇ ਦੀ ਸਮੱਸਿਆ</translation>
+<translation id="125220115284141797">ਮੂਲ</translation>
+<translation id="1297175357211070620">ਮੰਜ਼ਲ</translation>
+<translation id="1303101771013849280">ਬੁੱਕਮਾਰਕਾਂ ਵਾਲੀ HTML ਫਾਈਲ</translation>
+<translation id="1430915738399379752">ਪ੍ਰਿੰਟ ਕਰੋ</translation>
+<translation id="1451375123200651445">ਵੈੱਬਪੰਨਾ, ਇਕਹਿਰੀ ਫਾਈਲ</translation>
+<translation id="1465176863081977902">ਆਡੀਓ ਦਾ ਪਤਾ ਕਾਪੀ ਕਰੋ</translation>
+<translation id="1476607407192946488">&amp;ਭਾਸ਼ਾ ਦੀਆਂ ਸੈਟਿੰਗਾਂ</translation>
+<translation id="1546280085599573572">ਇਸ ਵਾਧੜੇ ਨੇ ਉਹ ਪੰਨਾ ਬਦਲ ਦਿੱਤਾ ਹੈ ਜੋ ਕਿ ਘਰ ਬਟਨ 'ਤੇ ਕਲਿੱਕ ਕਰਨ 'ਤੇ ਖੁੱਲ੍ਹਦਾ ਹੈ।</translation>
+<translation id="15662109988763471">ਚੁਣਿਆ ਪ੍ਰਿੰਟਰ ਉਪਲਬਧ ਨਹੀਂ ਹੈ ਜਾਂ ਫਿਰ ਸਹੀ ਤਰ੍ਹਾਂ ਸਥਾਪਤ ਨਹੀਂ ਕੀਤਾ ਹੋਇਆ। ਆਪਣੇ ਪ੍ਰਿੰਟਰ ਦੀ ਜਾਂਚ ਕਰੋ ਜਾਂ ਹੋਰ ਪ੍ਰਿੰਟਰ ਵਰਤਕੇ ਦੇਖੋ।</translation>
+<translation id="1588438908519853928">ਆਮ</translation>
+<translation id="1588870296199743671">ਕੜੀ ਨੂੰ ਇਸ ਨਾਲ ਖੋਲ੍ਹੋ...</translation>
+<translation id="159359590073980872">ਤਸਵੀਰ ਦੀ ਕੈਸ਼</translation>
+<translation id="1601560923496285236">ਲਾਗੂ ਕਰੋ</translation>
+<translation id="1603914832182249871">(ਗੁਮਨਾਮ)</translation>
+<translation id="1627276047960621195">ਫਾਈਲ ਡਿਸਕਰਿਪਟਰ</translation>
+<translation id="1682548588986054654">ਨਵੀਂ ਗੁਮਨਾਮ ਵਿੰਡੋ</translation>
+<translation id="1708338024780164500">(ਬੇ-ਸਰਗਰਮ)</translation>
+<translation id="1723824996674794290">&amp;ਨਵੀਂ ਵਿੰਡੋ</translation>
+<translation id="1729533290416704613">ਇਹ ਉਸਨੂੰ ਵੀ ਕੰਟਰੋਲ ਕਰਦਾ ਹੈ ਕਿ ਤੁਹਾਡੇ ਵੱਲੋਂ ਆਮਨੀਬਾਕਸ 'ਤੇ ਖੋਜ ਕਰਨ 'ਤੇ ਕਿਹੜਾ ਪੰਨਾ ਦਿਖਾਇਆ ਜਾਵੇ।</translation>
+<translation id="174123615272205933">ਕਸਟਮ</translation>
+<translation id="1744108098763830590">ਬੈਕਗਰਾਉਂਡ ਪੰਨਾ</translation>
+<translation id="176587472219019965">&amp;ਨਵੀਂ ਵਿੰਡੋ</translation>
+<translation id="1769104665586091481">ਕੜੀ ਨੂੰ ਨਵੀਂ ਵਿੰਡੋ ਵਿੱਚ ਖੋਲ੍ਹੋ</translation>
+<translation id="1779468444204342338">ਘੱਟੋ-ਘੱਟ</translation>
+<translation id="1815083418640426271">ਸਾਦੇ ਪਾਠ ਵਜੋਂ ਪੇਸਟ ਕਰੋ</translation>
+<translation id="1828901632669367785">ਸਿਸਟਮ ਸੰਵਾਦ ਰਾਹੀਂ ਪ੍ਰਿੰਟ ਕਰੋ...</translation>
+<translation id="1850508293116537636">ਘੜੀ ਦੇ ਰੁਖ ਘੁੰਮਾਓ</translation>
+<translation id="1886996562706621347">ਸਾਇਟਾਂ ਦਾ ਪ੍ਰੋਟੋਕਾਲ ਦੇ ਮੂਲ ਪ੍ਰਬੰਧਕ ਬਣਨ ਬਾਰੇ ਪੁੱਛਣਾ ਪ੍ਰਵਾਨ ਕਰੋ (ਸੁਝਾਇਆ ਜਾਂਦਾ ਹੈ)</translation>
+<translation id="1901303067676059328">ਸਭ ਚੁਣੋ</translation>
+<translation id="1921584744613111023"><ph name="DPI" /> dpi</translation>
+<translation id="1936931585862840749">ਜਿੰਨੀਆਂ ਕਾਪੀਆਂ ਪ੍ਰਿੰਟ ਕਰਵਾਉਣੀਆਂ ਉਹਨਾਂ ਦੀ ਗਿਣਤੀ ਦੱਸੋ (1 ਤੋਂ <ph name="MAX_COPIES" /> ਤੱਕ)।</translation>
+<translation id="2019718679933488176">&amp;ਆਡੀਓ ਨੂੰ ਨਵੇਂ ਟੈਬ ਵਿੱਚ ਖੋਲ੍ਹੋ</translation>
+<translation id="2050339315714019657">ਲੰਮਾ</translation>
+<translation id="2076269580855484719">ਇਸ ਪਲੱਗਇਨ ਨੂੰ ਲੁਕਾਓ</translation>
+<translation id="2087822576218954668">ਪ੍ਰਿੰਟ: <ph name="PRINT_NAME" /></translation>
+<translation id="2114326799768592691">ਫਰੇਮ ਨੂੰ ਮੁੜ-ਲੋਡ ਕਰੋ</translation>
+<translation id="2142328300403846845">ਕੜੀ ਨੂੰ ਇਸ ਵਜੋਂ ਖੋਲ੍ਹੋ</translation>
+<translation id="2148892889047469596">ਟੈਬ ਦਾ ਪ੍ਰਸਾਰਨ ਕਰੋ</translation>
+<translation id="2150139952286079145">ਮੰਜ਼ਲਾਂ ਦੀ ਖੋਜ ਕਰੋ</translation>
+<translation id="215753907730220065">ਪੂਰੀ ਸਕਰੀਨ ਵਿੱਚੋਂ ਬਾਹਰ ਨਿਕਲੋ</translation>
+<translation id="2177950615300672361">ਗੁਮਨਾਮ ਟੈਬ: <ph name="TAB_NAME" /></translation>
+<translation id="219008588003277019">ਮੌਲਿਕ ਗਾਹਕ ਮਾਡੀਊਲ: <ph name="NEXE_NAME" /></translation>
+<translation id="2218515861914035131">ਸਾਦੇ ਪਾਠ ਵਜੋਂ ਪੇਸਟ ਕਰੋ</translation>
+<translation id="2249605167705922988">ਜਿਵੇਂ 1-5, 8, 11-13</translation>
+<translation id="2280486287150724112">ਸੱਜਾ ਹਾਸ਼ੀਆ</translation>
+<translation id="2282146716419988068">GPU ਕਾਰਜ</translation>
+<translation id="2301382460326681002">ਵਾਧੜਾ ਦੀ ਰੂਟ ਡਾਇਰੈਕਟਰੀ ਨਜਾਇਜ਼ ਹੈ।</translation>
+<translation id="2318143611928805047">ਕਾਗਜ਼ ਦਾ ਅਕਾਰ</translation>
+<translation id="2322193970951063277">ਹੈਡਰ ਅਤੇ ਫੁੱਟਰ</translation>
+<translation id="2326931316514688470">ਐਪ ਨੂੰ ਮੁੜ-ਲੋਡ ਕਰੋ</translation>
+<translation id="2327492829706409234">ਐਪ ਨੂੰ ਚਾਲੂ ਕਰੋ</translation>
+<translation id="2348176352564285430">ਐਪ: <ph name="ARC_PROCESS_NAME" /></translation>
+<translation id="2378982052244864789">ਵਾਧੜੇ ਦੀ ਡਾਇਰੈਕਟਰੀ ਚੁਣੋ।</translation>
+<translation id="2379281330731083556">ਸਿਸਟਮ ਦੇ ਸੰਵਾਦ ਰਾਹੀਂ ਪ੍ਰਿੰਟ ਕਰੋ... <ph name="SHORTCUT_KEY" /></translation>
+<translation id="241082044617551207">ਅਣਜਾਣ ਪਲੱਗਇਨ</translation>
+<translation id="2423578206845792524">ਤਸਵੀਰ ਨੂੰ ਇਸ ਵਜੋਂ ਸਾਂਭੋ…</translation>
+<translation id="2439110203301358333">ਤੁਹਾਡੇ ਕੰਪਿਊਟਰ 'ਤੇ ਕਿਸੇ ਹੋਰ ਪ੍ਰੋਗਰਾਮ ਨੇ ਵਾਧੜਾ ਜੋੜਿਆ ਹੈ ਜੋ ਕਿ ਵਿਵਾਲਡੀ ਦੀ ਕੰਮ ਕਰਨ ਦੇ ਢੰਗ ਨੂੰ ਬਦਲ ਸਕਦਾ ਹੈ।</translation>
+<translation id="2445081178310039857">ਵਾਧੜਾ ਦੀ ਡਾਇਰੈਕਟਰੀ ਲੋੜੀਂਦੀ ਹੈ।</translation>
+<translation id="2498539833203011245">ਘੱਟੋ-ਘੱਟ ਕਰੋ</translation>
+<translation id="2509495747794740764">ਮਾਪ ਦਾ ਮੁੱਲ 10 ਅਤੇ 200 ਦਰਮਿਆਨ ਨੰਬਰ ਹੋਣਾ ਚਾਹੀਦਾ ਹੈੈ।</translation>
+<translation id="253557089021624350">Keepalive ਦੀ ਗਿਣਤੀ</translation>
+<translation id="2550212893339833758">ਸਵੈਪ ਕੀਤੀ ਮੈਮਰੀ</translation>
+<translation id="2553440850688409052">ਇਸ ਪਲੱਗਇਨ ਨੂੰ ਲੁਕਾਓ</translation>
+<translation id="26224892172169984">ਕਿਸੇ ਵੀ ਸਾਇਟ ਨੂੰ ਮਸੌਦਿਆਂ ਦਾ ਪ੍ਰਬੰਧ ਕਰਨ ਦੀ ਪ੍ਰਵਾਨਗੀ ਨਾ ਦਿਉ</translation>
+<translation id="2662876636500006917">ਕਰੋਮ ਵੈੱਬ ਸਟੋਰ</translation>
+<translation id="2678063897982469759">ਮੁੜ-ਚਾਲੂ ਕਰੋ</translation>
+<translation id="2721037002783622288">ਤਸਵੀਰ ਦੀ <ph name="SEARCH_ENGINE" /> ਵਿੱਚ ਖੋਜ ਕਰੋ</translation>
+<translation id="2785873697295365461">ਫਾਈਲ ਡਿਸਕਰਿਪਟਰ</translation>
+<translation id="2850541429955027218">ਥੀਮ ਜੋੜੋ</translation>
+<translation id="2861941300086904918">ਮੌਲਿਕ ਗਾਹਕ ਸੁਰੱਖਿਆ ਸੰਚਾਲਕ</translation>
+<translation id="2881076733170862447">ਜਦੋਂ ਤੁਸੀਂ ਵਾਧੜੇ 'ਤੇ ਕਲਿੱਕ ਕਰਦੇ ਹੋ</translation>
+<translation id="2889064240420137087">ਕੜੀ ਨੂੰ ਇਸ ਨਾਲ ਖੋਲ੍ਹੋ...</translation>
+<translation id="2902127500170292085"><ph name="EXTENSION_NAME" /> ਇਸ ਪ੍ਰਿੰਟਰ ਨਾਲ ਸੰਚਾਰ ਨਹੀਂ ਕਰ ਸਕਿਆ। ਇਹ ਦੇਖੋ ਕਿ ਪ੍ਰਿੰਟਰ ਦਾ ਪਲੱਗ ਲੱਗਿਆ ਹੋਇਆ ਹੈ ਅਤੇ ਦੁਬਾਰਾ ਕੋਸ਼ਿਸ਼ ਕਰੋ।</translation>
+<translation id="2931157624143513983">ਪ੍ਰਿੰਟਯੋਗ ਖੇਤਰ ਵਿੱਚ ਫਿੱਟ ਕਰੋ</translation>
+<translation id="2932085390869194046">ਪਾਸਵਰਡ ਸੁਝਾਓ...</translation>
+<translation id="2932883381142163287">ਦੁਰਵਰਤੋਂ ਦੀ ਰਿਪੋਰਟ ਕਰੋ</translation>
+<translation id="2941112035454246133">ਘੱਟ</translation>
+<translation id="3003623123441819449">CSS ਕੈਸ਼</translation>
+<translation id="3012631534724231212">(iframe)</translation>
+<translation id="3021678814754966447">ਫਰੇਮ ਦਾ ਸਰੋਤ ਦੇਖੋ</translation>
+<translation id="3036546437875325427">ਫ਼ਲੈਸ਼ ਨੂੰ ਚਾਲੂ ਕਰੋ</translation>
+<translation id="3046910703532196514">ਵੈੱਬਪੰਨਾ, ਸਾਰਾ</translation>
+<translation id="3067198360141518313">ਇਸ ਪਲੱਗਇਨ ਨੂੰ ਚਲਾਓ</translation>
+<translation id="3080207940057008665">ਤੁਹਾਡੇ ਕੰਪਿਊਟਰ 'ਤੇ ਕਿਸੇ ਹੋਰ ਪ੍ਰੋਗਰਾਮ ਨੇ ਇੱਕ ਥੀਮ ਜੋੜੀ ਹੈ ਜੋ ਕਿ ਵਿਵਾਲਡੀ ਦੀ ਕੰਮ ਕਰਨ ਦੇ ਢੰਗ ਨੂੰ ਬਦਲ ਸਕਦੀ ਹੈ।</translation>
+<translation id="3084548735795614657">ਸਥਾਪਤ ਕਰਨ ਲਈ ਚੁੱਕ ਕੇ ਇੱਥੇ ਰੱਖੋ</translation>
+<translation id="3122464029669770682">CPU</translation>
+<translation id="3124111068741548686">USER ਹੈਂਡਲ</translation>
+<translation id="3129173833825111527">ਖੱਬਾ ਹਾਸ਼ੀਆ</translation>
+<translation id="3144647712221361880">ਕੜੀ ਨੂੰ ਇਸ ਵਜੋਂ ਖੋਲ੍ਹੋ</translation>
+<translation id="3222066309010235055">ਪ੍ਰੀਰੈਂਡਰ: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
+<translation id="3241680850019875542">ਵਾਧੜੇ ਨੂੰ ਪੈਕ ਕਰਨ ਲਈ ਜੜ੍ਹੀ ਡਾਇਰੈਕਟਰੀ ਚੁਣੋ। ਵਾਧੜੇ ਨੂੰ ਅੱਪਡੇਟ ਕਰਨ ਲਈ, ਮੁੜ-ਵਰਤੋ ਲਈ ਨਿੱਜੀ ਕੁੰਜੀ ਵਾਲੀ ਫਾਈਲ ਵੀ ਚੁਣ ਲਵੋ।</translation>
+<translation id="3280237271814976245">ਇਸ ਵਜੋਂ ਸਾਂਭੋ…</translation>
+<translation id="3285322247471302225">ਨਵਾਂ ਟੈਬ</translation>
+<translation id="329838636886466101">ਮੁਰੰਮਤ ਕਰੋ</translation>
+<translation id="33022249435934718">GDI ਹੈਂਡਲ</translation>
+<translation id="3303818374450886607">ਕਾਪੀਆਂ</translation>
+<translation id="3305661444342691068">PDF ਨੂੰ ਝਲਕ ਵਿੱਚ ਖੋਲ੍ਹੋ</translation>
+<translation id="3317459757438853210">ਦੋਵੇਂ ਪਾਸਿਆਂ 'ਤੇ</translation>
+<translation id="3341703758641437857">ਫਾਈਲਾਂ ਦੀ URL ਤੱਕ ਪਹੁੰਚ ਪ੍ਰਵਾਨ ਕਰੋ</translation>
+<translation id="3347086966102161372">ਤਸਵੀਰ ਦਾ ਪਤਾ ਕਾਪੀ ਕਰੋ</translation>
+<translation id="3360297538363969800">ਪ੍ਰਿੰਟ ਕਰਨਾ ਅਸਫਲ ਰਿਹਾ। ਆਪਣੇ ਪ੍ਰਿੰਟਰ ਦੀ ਜਾਂਚ ਕਰਕੇ ਦੁਬਾਰਾ ਕੋਸ਼ਿਸ਼ ਕਰੋ ਜੀ।</translation>
+<translation id="3378572629723696641">ਇਹ ਵਾਧੜਾ ਸ਼ਾਇਦ ਖਰਾਬ ਹੋ ਚੁੱਕਿਆ ਹੈ।</translation>
+<translation id="3387614642886316601">ਤੀਬਰ ਸ਼ਬਦਜੋੜ ਜਾਂਚ ਵਰਤੋ</translation>
+<translation id="345693547134384690">ਤਸਵੀਰ ਨੂੰ ਨਵੇਂ ਟੈਬ ਵਿੱਚ ਖੋਲ੍ਹੋ</translation>
+<translation id="3511307672085573050">ਕੜੀ ਦਾ ਪਤਾ ਕਾਪੀ ਕਰੋ</translation>
+<translation id="354068948465830244">ਇਹ ਸਾਇਟ ਦਾ ਡਾਟਾ ਪੜ੍ਹ ਅਤੇ ਬਦਲ ਸਕਦਾ ਹੈ</translation>
+<translation id="3560034655160545939">ਸ਼ਬਦਜੋੜਾਂ ਦੀ ਜਾਂਚ</translation>
+<translation id="3587482841069643663">ਸਾਰੇ</translation>
+<translation id="3627588569887975815">ਕੜੀ ਨੂੰ ਗੁਮਨਾਮ ਵਿੰਡੋ ਵਿੱਚ ਖੋਲ੍ਹੋ</translation>
+<translation id="3678156199662914018">ਵਾਧੜਾ: <ph name="EXTENSION_NAME" /></translation>
+<translation id="3683524264665795342"><ph name="APP_NAME" /> ਸਕਰੀਨ ਸਾਂਝੀ ਕਰਨ ਦੀ ਬੇਨਤੀ</translation>
+<translation id="3711931198657368127">ਪੇਸਟ ਕਰਕੇ <ph name="URL" /> 'ਤੇ ਜਾਓ</translation>
+<translation id="3727187387656390258">ਉਛਲਫੁੱਟ ਦਾ ਨਿਰੀਖਣ ਕਰੋ</translation>
+<translation id="3760460896538743390">ਬੈਕਗਰਾਉਂਡ ਪੰਨੇ ਦਾ ਨਿਰੀਖਣ ਕਰੋ</translation>
+<translation id="3810973564298564668">ਪ੍ਰਬੰਧ ਕਰੋ</translation>
+<translation id="3838085852053358637">ਵਾਧੜਾ ਲੋਡ ਕਰਨ ਵਿੱਚ ਅਸਫਲ ਰਹੇ</translation>
+<translation id="383891835335927981">ਕੋਈ ਵੀ ਸਾਇਟ ਜ਼ੂਮ ਵੱਧ ਜਾਂ ਘੱਟ ਨਹੀਂ ਕੀਤੀ ਗਈ</translation>
+<translation id="385051799172605136">ਪਿੱਛੇ ਜਾਓ</translation>
+<translation id="3905761538810670789">ਐਪ ਦੀ ਮੁਰੰਮਤ ਕਰੋ</translation>
+<translation id="3908501907586732282">ਵਾਧੜੇ ਨੂੰ ਚਾਲੂ ਕਰੋ</translation>
+<translation id="3927932062596804919">ਅਪ੍ਰਵਾਨ ਕਰੋ</translation>
+<translation id="3936390757709632190">ਆਡੀਓ ਨੂੰ ਨਵੇਂ ਟੈਬ ਵਿੱਚ ਖੋਲ੍ਹੋ</translation>
+<translation id="3948116654032448504">ਤਸਵੀਰ ਦੀ <ph name="SEARCH_ENGINE" /> ਵਿੱਚ ਖੋਜ ਕਰੋ</translation>
+<translation id="3979395879372752341">ਨਵਾਂ ਵਾਧੜਾ ਜੋੜਿਆ ਗਿਆ (<ph name="EXTENSION_NAME" />)</translation>
+<translation id="4021279097213088397">–</translation>
+<translation id="4022426551683927403">&amp;ਸ਼ਬਦਕੋਸ਼ ਵਿੱਚ ਜੋੜੋ</translation>
+<translation id="407520071244661467">ਮਾਪ</translation>
+<translation id="4079140982534148664">ਤੀਬਰ ਸ਼ਬਦਜੋੜ ਜਾਂਚ ਵਰਤੋ</translation>
+<translation id="4087089424473531098">ਵਾਧੜਾ ਬਣਾਇਆ ਗਿਆ:
+
+<ph name="EXTENSION_FILE" /></translation>
+<translation id="4100839878934973028">ਤੁਹਾਡੇ ਕੰਪਿਊਟਰ 'ਤੇ ਕਿਸੇ ਹੋਰ ਪ੍ਰੋਗਰਾਮ ਨੇ ਐਪ ਜੋੜੀ ਹੈ ਜੋ ਕਿ ਵਿਵਾਲਡੀ ਦੀ ਕੰਮ ਕਰਨ ਦੇ ਢੰਗ ਨੂੰ ਬਦਲ ਸਕਦੀ ਹੈ।</translation>
+<translation id="4109898769411476438">ਆਯਾਤ ਕਰਨ ਤੋਂ ਪਹਿਲਾਂ ਬਰਾਉਜ਼ਰ ਨੂੰ ਬੰਦ ਕਰੋ</translation>
+<translation id="4131410914670010031">ਕਾਲਾ ਤੇ ਚਿੱਟਾ</translation>
+<translation id="4176463684765177261">ਬੰਦ ਹੈ</translation>
+<translation id="4200983522494130825">ਨਵਾਂ ਟੈਬ</translation>
+<translation id="4225397296022057997">ਸਾਰੀਆਂ ਸਾਇਟਾਂ 'ਤੇ</translation>
+<translation id="4256316378292851214">ਵੀਡੀਓ ਨੂੰ ਇਸ ਵਜੋਂ ਸਾਂਭੋ…</translation>
+<translation id="4309420042698375243"><ph name="NUM_KILOBYTES" />K (<ph name="NUM_KILOBYTES_LIVE" />K ਲਾਇਵ)</translation>
+<translation id="4345587454538109430">ਰੂਪ-ਰੇਖਾ ਤੈਅ ਕਰੋ...</translation>
+<translation id="4348766275249686434">ਸਮੱਸਿਆਵਾਂ ਇਕੱਠੀਆਂ ਕਰੋ</translation>
+<translation id="4384652540891215547">ਵਾਧੜੇ ਨੂੰ ਸਰਗਰਮ ਕਰੋ</translation>
+<translation id="4409697491990005945">ਹਾਸ਼ੀਏ</translation>
+<translation id="4423376891418188461">ਸੈਟਿੰਗਾਂ ਬਹਾਲ ਕਰੋ</translation>
+<translation id="4478664379124702289">ਕੜੀ ਨੂੰ ਇਸ ਵਜੋਂ ਸਾਂਭੋ…</translation>
+<translation id="4595560905247879544">ਐਪਾਂ ਤੇ ਵਾਧੜਿਆਂ ਨੂੰ ਸਿਰਫ ਸੰਚਾਲਕ (<ph name="CUSTODIAN_NAME" />) ਵੱਲੋਂ ਹੀ ਸੋਧਿਆ ਜਾ ਸਕਦਾ ਹੈ।</translation>
+<translation id="4613271546271159013">ਕਿਸੇ ਵਾਧੜੇ ਨੇ ਤੁਹਾਡੇ ਵੱਲੋਂ ਨਵਾਂ ਟੈਬ ਖੋਲ੍ਹਣ 'ਤੇ ਦਿਖਾਇਆ ਜਾਣ ਵਾਲਾ ਪੰਨਾ ਬਦਲ ਦਿੱਤਾ ਹੈ।</translation>
+<translation id="4643612240819915418">&amp;ਵੀਡੀਓ ਨੂੰ ਨਵੇਂ ਟੈਬ ਵਿੱਚ ਖੋਲ੍ਹੋ</translation>
+<translation id="4677772697204437347">GPU ਮੈਮਰੀ</translation>
+<translation id="4681930562518940301">ਅਸਲ ਤਸਵੀਰ ਨੂੰ ਨਵੇਂ ਟੈਬ ਵਿੱਚ ਖੋਲ੍ਹੋ</translation>
+<translation id="4711638718396952945">ਸੈਟਿੰਗਾਂ ਬਹਾਲ ਕਰੋ</translation>
+<translation id="4726710629007580002">ਇਸ ਵਾਧੜੇ ਨੂੰ ਸਥਾਪਤ ਕਰਨ ਸਮੇਂ ਕੁਝ ਚੇਤਾਵਨੀਆਂ ਆਈਆਂ ਸਨ:</translation>
+<translation id="479536056609751218">ਵੈੱਬਪੰਨਾ, ਸਿਰਫ HTML</translation>
+<translation id="4839303808932127586">ਵੀਡੀਓ ਨੂੰ ਇਸ ਵਜੋਂ ਸਾਂਭੋ…</translation>
+<translation id="488785315393301722">ਵੇਰਵਾ ਦਿਖਾਓ</translation>
+<translation id="4912643508233590958">ਸੁਸਤੀ ਤੋਂ ਜਾਗ</translation>
+<translation id="4927753642311223124">ਇੱਥੇ ਦੇਖਣ ਲਈ ਕੁਝ ਵੀ ਨਹੀਂ ਹੈ, ਅੱਗੇ ਵਧੋ।</translation>
+<translation id="4930714375720679147">ਚਾਲੂ ਕਰੋ</translation>
+<translation id="4988526792673242964">ਪੰਨੇ</translation>
+<translation id="49896407730300355">ਘੜੀ ਤੋਂ ਉਲਟ ਰੁਖ ਘੁੰਮਾਓ</translation>
+<translation id="4989966318180235467">ਬੈਕਗਰਾਉਂਡ ਪੰਨੇ ਦਾ ਨਿਰੀਖਣ ਕਰੋ</translation>
+<translation id="5027562294707732951">ਵਾਧੜਾ ਜੋੜੋ</translation>
+<translation id="5039804452771397117">ਪ੍ਰਵਾਨ ਕਰੋ</translation>
+<translation id="5057110919553308744">ਜਦੋਂ ਤੁਸੀਂ ਵਾਧੜੇ 'ਤੇ ਕਲਿੱਕ ਕਰਦੇ ਹੋ</translation>
+<translation id="5063480226653192405">ਵਰਤੋਂ</translation>
+<translation id="5116628073786783676">ਆਡੀਓ ਨੂੰ ਇਸ ਵਜੋਂ ਸਾਂਭੋ…</translation>
+<translation id="5143374789336132547">"<ph name="EXTENSION_NAME" />" ਵਾਧੜੇ ਨੇ ਉਹ ਪੰਨਾ ਬਦਲ ਦਿੱਤਾ ਹੈ ਜੋ ਕਿ ਘਰ ਬਟਨ 'ਤੇ ਕਲਿੱਕ ਕਰਨ 'ਤੇ ਖੁੱਲ੍ਹਦਾ ਹੈ।</translation>
+<translation id="5154108062446123722"><ph name="PRINTING_DESTINATION" /> ਲਈ ਉੱਨਤ ਸੈਟਿੰਗਾਂ</translation>
+<translation id="5171343362375269016">ਸਵੈਪ ਕੀਤੀ ਮੈਮਰੀ</translation>
+<translation id="5233019165164992427">NaCl ਡੀਬੱਗ ਪੋਰਟ</translation>
+<translation id="5233231016133573565">ਕਾਰਜ ਦੀ ID</translation>
+<translation id="5233736638227740678">ਪੇਸਟ ਕਰੋ</translation>
+<translation id="5256861893479663409">ਸਾਰੀਆਂ ਸਾਇਟਾਂ 'ਤੇ</translation>
+<translation id="5269977353971873915">ਪ੍ਰਿੰਟ ਕਰਨਾ ਅਸਫਲ ਰਿਹਾ</translation>
+<translation id="5284445933715251131">ਡਾਉਨਲੋਡ ਕਰਨਾ ਜਾਰੀ ਰੱਖੋ</translation>
+<translation id="52912272896845572">ਨਿੱਜੀ ਕੁੰਜੀ ਵਾਲੀ ਫਾਈਲ ਨਜਾਇਜ਼ ਹੈ।</translation>
+<translation id="5317780077021120954">ਸਾਂਭੋ</translation>
+<translation id="5334142896108694079">ਸਕਰਿਪਟ ਦੀ ਕੈਸ਼</translation>
+<translation id="5362741141255528695">ਨਿੱਜੀ ਕੁੰਜੀ ਵਾਲੀ ਫਾਈਲ ਚੁਣੋ।</translation>
+<translation id="536638840841140142">ਕੋਈ ਵੀ ਨਹੀਂ</translation>
+<translation id="5398572795982417028">ਪੰਨੇ ਦਾ ਹਵਾਲਾ ਸੀਮਾ ਤੋਂ ਬਾਹਰ ਹੈ, ਸੀਮਾ <ph name="MAXIMUM_PAGE" /> ਤੱਕ ਹੈ</translation>
+<translation id="5425042808445046667">ਡਾਉਨਲੋਡ ਕਰਨਾ ਜਾਰੀ ਰੱਖੋ</translation>
+<translation id="5427459444770871191">ਘੜੀ ਦੇ ਰੁਖ ਘੁੰਮਾਓ</translation>
+<translation id="5431318178759467895">ਰੰਗ</translation>
+<translation id="5485102783864353244">ਐਪ ਜੋੜੋ</translation>
+<translation id="5486561344817861625">ਬਰਾਉਜ਼ਰ ਮੁੜ-ਸ਼ੁਰੂ ਕਰਨ ਨੂੰ ਸਿਮੂਲੇਟ (ਰੀਸ) ਕਰੋ</translation>
+<translation id="5509693895992845810">ਇਸ ਵਜੋਂ ਸਾਂਭੋ…</translation>
+<translation id="5521078259930077036">ਕੀ ਇਹ ਉਹੀ ਮੁੱਖ ਪੰਨਾ ਹੈ ਜਿਸਦੀ ਤੁਸੀਂ ਉਮੀਦ ਕਰ ਰਹੇ ਸੀ?</translation>
+<translation id="5542132724887566711">ਪ੍ਰੋਫਾਈਲ</translation>
+<translation id="5556459405103347317">ਮੁੜ-ਲੋਡ ਕਰੋ</translation>
+<translation id="5575473780076478375">ਗੁਮਨਾਮ ਵਾਧੜਾ: <ph name="EXTENSION_NAME" /></translation>
+<translation id="5614553682702429503">ਪਾਸਵਰਡ ਸਾਂਭਣਾ ਹੈ?</translation>
+<translation id="5623842676595125836">ਚਿੱਠਾ</translation>
+<translation id="5677928146339483299">ਰੋਕ ਲਾਈ</translation>
+<translation id="5707185214361380026">ਇਸ ਤੋਂ ਵਾਧੜਾ ਲੋਡ ਕਰਨ ਵਿੱਚ ਅਸਫਲ ਰਹੇ:</translation>
+<translation id="5715711091495208045">ਪਲੱਗਇਨ ਬਰੋਕਰ: <ph name="PLUGIN_NAME" /></translation>
+<translation id="5746169159649715125">PDF ਵਜੋਂ ਸਾਂਭੋ</translation>
+<translation id="5747809636523347288">ਪੇਸਟ ਕਰਕੇ <ph name="URL" /> 'ਤੇ ਜਾਓ</translation>
+<translation id="5759728514498647443">ਜਿਹੜੇ ਦਸਤਾਵੇਜਾਂ ਨੂੰ ਤੁਸੀਂ <ph name="APP_NAME" /> ਰਾਹੀਂ ਪ੍ਰਿੰਟ ਲਈ ਭੇਜਦੇ ਹੋ ਉਹਨਾਂ ਨੂੰ <ph name="APP_NAME" /> ਵੱਲੋਂ ਪੜ੍ਹਿਆ ਜਾ ਸਕਦਾ ਹੈ।</translation>
+<translation id="5764483294734785780">ਆਡੀਓ ਨੂੰ ਇਸ ਵਜੋਂ ਸਾਂਭੋ…</translation>
+<translation id="5780973441651030252">ਕਾਰਜ ਦੀ ਤਰਜੀਹ</translation>
+<translation id="5804241973901381774">ਇਜਾਜ਼ਤਾਂ</translation>
+<translation id="5828633471261496623">ਪ੍ਰਿੰਟ ਕੱਢਿਆ ਜਾ ਰਿਹਾ ਹੈ...</translation>
+<translation id="583281660410589416">ਅਣਜਾਣ</translation>
+<translation id="5860491529813859533">ਚਾਲੂ ਕਰੋ</translation>
+<translation id="5910363049092958439">ਤਸਵੀਰ ਨੂੰ ਇਸ ਵਜੋਂ ਸਾਂਭੋ…</translation>
+<translation id="5963453369025043595"><ph name="NUM_HANDLES" /> (<ph name="NUM_KILOBYTES_LIVE" /> ਸਿਖਰ)</translation>
+<translation id="5978277834170881274">ਮੁੱਢਲੀ ਸ਼ਬਦਜੋੜ ਜਾਂਚ ਵਰਤੋ</translation>
+<translation id="6042308850641462728">ਹੋਰ</translation>
+<translation id="6086846494333236931">ਤੁਹਾਡੇ ਪ੍ਰਸ਼ਾਸਕ ਵੱਲੋਂ ਸਥਾਪਤ ਕੀਤਾ ਗਿਆ ਹੈ</translation>
+<translation id="6101226222197207147">ਨਵੀਂ ਐਪ ਜੋੜੀ ਗਈ (<ph name="EXTENSION_NAME" />)</translation>
+<translation id="6147020289383635445">ਪ੍ਰਿੰਟ ਦੀ ਝਲਕ ਅਸਫਲ ਰਹੀ।</translation>
+<translation id="6156863943908443225">ਸਕਰਿਪਟ ਦੀ ਕੈਸ਼</translation>
+<translation id="6196854373336333322">"<ph name="EXTENSION_NAME" />" ਵਾਧੜੇ ਨੇ ਤੁਹਾਡੀ ਮੁਖਤਿਆਰੀ ਦੀਆਂ ਸੈਟਿੰਗਾਂ ਦਾ ਕੰਟਰੋਲ ਆਪਣੇ ਹੱਥੀਂ ਲੈ ਲਿਆ ਹੈ, ਜਿਸਦਾ ਮਤਲਬ ਹੈ ਕਿ ਇਹ ਤੁਹਾਡੇ ਵੱਲੋਂ ਆਨਲਾਇਨ ਕੀਤੇ ਜਾਣ ਵਾਲੀ ਕਿਸੇ ਵੀ ਗਤੀਵਿਧੀ ਨੂੰ ਬਦਲ, ਖਰਾਬ ਕਰ, ਜਾਂ ਫਿਰ ਉਸਦੀਆਂ ਕਨਸੋਆਂ ਲੈ ਸਕਦਾ ਹੈ। ਜੇ ਤੁਹਾਨੂੰ ਇਹ ਸਪਸ਼ਟ ਨਹੀਂ ਕਿ ਇਹ ਤਬਦੀਲੀ ਕਿਉਂ ਹੋਈ, ਤਾਂ ਸ਼ਾਇਦ ਤੁਹਾਨੂੰ ਇਸਦੀ ਜ਼ਰੂਰਤ ਨਹੀਂ ਹੈ।</translation>
+<translation id="6206311232642889873">ਤਸਵੀਰ ਕਾਪੀ ਕਰੋ</translation>
+<translation id="6239558157302047471">ਫਰੇਮ ਨੂੰ ਮੁੜ-ਲੋਡ ਕਰੋ</translation>
+<translation id="6247802389331535091">ਸਿਸਟਮ: <ph name="ARC_PROCESS_NAME" /></translation>
+<translation id="6248988683584659830">ਸੈਟਿੰਗਾਂ ਖੋਜੋ</translation>
+<translation id="6251870443722440887">GDI ਹੈਂਡਲ</translation>
+<translation id="6264365405983206840">ਸਭ ਚੁਣੋ</translation>
+<translation id="6268252012308737255"><ph name="APP" /> ਨਾਲ ਖੋਲ੍ਹੋ</translation>
+<translation id="6273677812470008672">ਗੁਣਵੱਤਾ</translation>
+<translation id="6295158916970320988">ਸਾਰੀਆਂ ਸਾਇਟਾਂ</translation>
+<translation id="6295855836753816081">ਸਾਂਭਿਆ ਜਾ ਰਿਹਾ ਹੈ…</translation>
+<translation id="6308937455967653460">ਕੜੀ ਨੂੰ ਇਸ ਵਜੋਂ ਸਾਂਭੋ…</translation>
+<translation id="6315493146179903667">ਸਭ ਨੂੰ ਅੱਗੇ ਲਿਆਓ</translation>
+<translation id="6326855256003666642">Keepalive ਦੀ ਗਿਣਤੀ</translation>
+<translation id="6374469231428023295">ਦੁਬਾਰਾ ਕੋਸ਼ਿਸ਼ ਕਰੋ</translation>
+<translation id="6398765197997659313">ਪੂਰੀ ਸਕਰੀਨ ਵਿੱਚੋਂ ਬਾਹਰ ਨਿਕਲੋ</translation>
+<translation id="6406303162637086258">ਬਰਾਉਜ਼ਰ ਮੁੜ-ਸ਼ੁਰੂ ਕਰਨ ਨੂੰ ਸਿਮੂਲੇਟ (ਰੀਸ) ਕਰੋ</translation>
+<translation id="6445450263907939268">ਜੇ ਤੁਸੀਂ ਇਹ ਸੈਟਿੰਗਾਂ ਨਹੀਂ ਚਾਹੁੰਦੇ, ਤਾਂ ਤੁਸੀਂ ਪਿਛਲੀਆਂ ਸੈਟਿੰਗਾਂ ਬਹਾਲ ਕਰ ਸਕਦੇ ਹੋ।</translation>
+<translation id="6447842834002726250">ਕੁਕੀਆਂ</translation>
+<translation id="6498249116389603658">&amp;ਤੁਹਾਡੀਆਂ ਸਾਰੀਆਂ ਭਾਸ਼ਾਵਾਂ</translation>
+<translation id="6503077044568424649">ਸਭ ਤੋਂ ਵੱਧ ਦੇਖੇ ਗਏ</translation>
+<translation id="6508261954199872201">ਐਪ: <ph name="APP_NAME" /></translation>
+<translation id="6518014396551869914">ਤਸਵੀਰ ਕਾਪੀ ਕਰੋ</translation>
+<translation id="6550675742724504774">ਵਿਕਲਪ</translation>
+<translation id="6639554308659482635">SQLite ਮੈਮਰੀ</translation>
+<translation id="6686817083349815241">ਆਪਣਾ ਪਾਸਵਰਡ ਸਾਂਭੋ</translation>
+<translation id="6798954102094737107">ਪਲੱਗਇਨ: <ph name="PLUGIN_NAME" /></translation>
+<translation id="6812841287760418429">ਤਬਦੀਲੀਆਂ ਬਰਕਰਾਰ ਰੱਖੋ</translation>
+<translation id="6824564591481349393">ਈਮੇਲ ਪਤਾ ਕਾਪੀ ਕਰੋ</translation>
+<translation id="6840155290835956714">ਭੇਜਣ ਤੋਂ ਪਹਿਲਾਂ ਪੁੱਛੋ</translation>
+<translation id="6878862640969460273">ਭੂ-ਦ੍ਰਿਸ਼</translation>
+<translation id="6886871292305414135">ਕੜੀ ਨੂੰ ਨਵੇਂ ਟੈਬ ਵਿੱਚ ਖੋਲ੍ਹੋ</translation>
+<translation id="6892812721183419409">ਕੜੀ ਨੂੰ <ph name="USER" /> ਵਜੋਂ ਖੋਲ੍ਹੋ</translation>
+<translation id="6900284862687837908">ਪਿੱਛੇ ਚੱਲਣ ਵਾਲੀ ਐਪ: <ph name="BACKGROUND_APP_URL" /></translation>
+<translation id="6945221475159498467">ਚੁਣੋ</translation>
+<translation id="6955446738988643816">ਉਛਲਫੁੱਟ ਦਾ ਨਿਰੀਖਣ ਕਰੋ</translation>
+<translation id="6970856801391541997">ਨਿਰਧਾਰਤ ਪੰਨੇ ਪ੍ਰਿੰਟ ਕਰੋ</translation>
+<translation id="6991665348624301627">ਮੰਜ਼ਲ ਚੁਣੋ</translation>
+<translation id="7005848115657603926">ਪੰਨੇ ਦਾ ਦਾਇਰਾ ਨਜਾਇਜ਼ ਹੈ, <ph name="EXAMPLE_PAGE_RANGE" /> ਵਰਤੋ</translation>
+<translation id="7006634003215061422">ਹੇਠਲਾ ਹਾਸ਼ੀਆ</translation>
+<translation id="7053983685419859001">ਰੋਕ ਲਾਈਆਂ</translation>
+<translation id="7070484045139057854">ਇਹ ਸਾਇਟ ਦਾ ਡਾਟਾ ਪੜ੍ਹ ਅਤੇ ਬਦਲ ਸਕਦਾ ਹੈ</translation>
+<translation id="708060913198414444">ਆਡੀਓ ਦਾ ਪਤਾ ਕਾਪੀ ਕਰੋ</translation>
+<translation id="7175353351958621980">ਇੱਥੋਂ ਲੋਡ ਹੋਇਆ:</translation>
+<translation id="7287143125007575591">ਪਹੁੰਚ ਅਸਵੀਕਾਰੀ ਗਈ।</translation>
+<translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" />x<ph name="VERTICAL_DPI" /> dpi</translation>
+<translation id="7385854874724088939">ਪ੍ਰਿੰਟ ਕਰਦੇ ਸਮੇਂ ਕੁਝ ਗਲਤ ਹੋਇਆ ਸੀ.  ਆਪਣੇ ਪ੍ਰਿੰਟਰ ਦੀ ਜਾਂਚ ਕਰਕੇ ਦੁਬਾਰਾ ਕੋਸ਼ਿਸ਼ ਕਰੋ ਜੀ।</translation>
+<translation id="7412226954991670867">GPU ਮੈਮਰੀ</translation>
+<translation id="7421925624202799674">ਪੰਨੇ ਦਾ ਸਰੋਤ ਦੇਖੋ</translation>
+<translation id="7427348830195639090">ਪਿੱਛੇ ਚੱਲਣ ਵਾਲਾ ਪੰਨਾ: <ph name="BACKGROUND_PAGE_URL" /></translation>
+<translation id="7453008956351770337">ਇਸ ਪ੍ਰਿੰਟਰ ਦੀ ਚੋਣ ਕਰਕੇ, ਤੁਸੀਂ ਹੇਠਾਂ ਦਿੱਤੇ ਵਾਧੜੇ ਨੂੰ ਤੁਹਾਡੇ ਪ੍ਰਿੰਟਰ ਨੂੰ ਵਰਤਣ ਦੀ ਇਜਾਜ਼ਤ ਦੇ ਰਹੇ ਹੋ:</translation>
+<translation id="7564847347806291057">ਕਾਰਜ ਬੰਦ ਕਰੋ</translation>
+<translation id="7576690715254076113">ਜਿਲਦ ਬੰਨ੍ਹੋ</translation>
+<translation id="7629827748548208700">ਟੈਬ: <ph name="TAB_NAME" /></translation>
+<translation id="7661259717474717992">ਸਾਇਟਾਂ ਦਾ ਕੁਕੀ ਡਾਟਾ ਸਾਂਭਣਾ ਤੇ ਪੜ੍ਹਨਾ ਪ੍ਰਵਾਨ ਕਰੋ</translation>
+<translation id="7663719505383602579">ਰਿਸੀਵਰ: <ph name="ARC_PROCESS_NAME" /></translation>
+<translation id="7684212569183643648">ਤੁਹਾਡੇ ਪ੍ਰਸ਼ਾਸਕ ਵੱਲੋਂ ਸਥਾਪਤ ਕੀਤਾ ਗਿਆ ਹੈ</translation>
+<translation id="7685049629764448582">ਜਾਵਾਸਕਰਿਪਟ ਮੈਮਰੀ</translation>
+<translation id="7701869757853594372">USER ਹੈਂਡਲ</translation>
+<translation id="7704305437604973648">ਕਾਰਜ</translation>
+<translation id="7710568461918838723">&amp;ਪ੍ਰਸਾਰ ਕਰੋ...</translation>
+<translation id="7750228210027921155">ਤਸਵੀਰ ਵਿੱਚ ਤਸਵੀਰ</translation>
+<translation id="7771452384635174008">ਖਾਕਾ</translation>
+<translation id="7782102568078991263">ਗੂਗਲ ਵੱਲੋਂ ਕੋਈ ਹੋਰ ਸੁਝਾਅ ਨਹੀਂ ਹੈ</translation>
+<translation id="7786889348652477777">ਐਪ ਨੂੰ ਮੁੜ-ਲੋਡ ਕਰੋ</translation>
+<translation id="7800518121066352902">ਘੜੀ ਤੋਂ ਉਲਟ ਰੁਖ ਘੁੰਮਾਓ</translation>
+<translation id="7818135753970109980">ਨਵੀਂ ਥੀਮ ਜੋੜੀ ਗਈ (<ph name="EXTENSION_NAME" />)</translation>
+<translation id="782057141565633384">ਵੀਡੀਓ ਦਾ ਪਤਾ ਕਾਪੀ ਕਰੋ</translation>
+<translation id="7849264908733290972">ਤਸਵੀਰ ਨੂੰ ਨਵੇਂ ਟੈਬ ਵਿੱਚ ਖੋਲ੍ਹੋ</translation>
+<translation id="786073089922909430">ਸੇਵਾ: <ph name="ARC_PROCESS_NAME" /></translation>
+<translation id="7903925330883316394">ਸਹੂਲਤ: <ph name="UTILITY_TYPE" /></translation>
+<translation id="7947962633355574091">ਵੀਡੀਓ ਦਾ ਪਤਾ ਕਾਪੀ ਕਰੋ</translation>
+<translation id="7966241909927244760">ਤਸਵੀਰ ਦਾ ਪਤਾ ਕਾਪੀ ਕਰੋ</translation>
+<translation id="7978412674231730200">ਨਿੱਜੀ ਕੁੰਜੀ</translation>
+<translation id="7982789257301363584">ਨੈੱਟਵਰਕ</translation>
+<translation id="7997826902155442747">ਕਾਰਜ ਦੀ ਤਰਜੀਹ</translation>
+<translation id="7999229196265990314">ਹੇਠਾਂ ਦਿੱਤੀਆਂ ਫਾਈਲਾਂ ਬਣਾਈਆਂ ਗਈਆਂ:
+
+ਵਾਧੜਾ: <ph name="EXTENSION_FILE" />
+ਪ੍ਰਮੁੱਖ ਫਾਈਲ: <ph name="KEY_FILE" />
+
+ਆਪਣੀ ਪ੍ਰਮੁੱਖ ਫਾਈਲ ਨੂੰ ਕਿਸੇ ਸੁਰੱਖਿਅਤ ਜਗ੍ਹਾ 'ਤੇ ਰੱਖੋ। ਤੁਹਾਨੂੰ ਆਪਣੇ ਵਾਧੜੇ ਦਾ ਨਵਾਂ ਸੰਸਕਰਨ ਬਣਾਉਣ ਲਈ ਇਸਦੀ ਲੋੜ ਪਵੇਗੀ।</translation>
+<translation id="8004582292198964060">ਬਰਾਉਜ਼ਰ</translation>
+<translation id="8018313076035239964">ਇਹ ਕੰਟਰੋਲ ਕਿ ਵੈੱਬਸਾਇਟਾਂ ਕਿਹੜੀ ਜਾਣਕਾਰੀ ਨੂੰ ਵਰਤ ਸਕਦੀਆਂ ਹਨ ਅਤੇ ਤੁਹਾਨੂੰ ਕਿਹੜੀ ਸਮੱਗਰੀ ਦਿਖਾ ਸਕਦੀਆਂ ਹਨ</translation>
+<translation id="8071432093239591881">ਤਸਵੀਰ ਵਜੋਂ ਪ੍ਰਿੰਟ ਕਰੋ</translation>
+<translation id="8135557862853121765"><ph name="NUM_KILOBYTES" />K</translation>
+<translation id="8212008074015601248">{NUM_DOWNLOAD, plural,
+        =1 {ਡਾਉਨਲੋਡ ਹੋ ਰਿਹਾ ਹੈ} other {ਡਾਉਨਲੋਡ ਹੋ ਰਹੇ ਹਨ}}</translation>
+<translation id="8230134520748321204"><ph name="ORIGIN" /> ਦਾ ਪਾਸਵਰਡ ਸਾਂਭਣਾ ਹੈ?</translation>
+<translation id="8261378640211443080">ਇਹ ਵਾਧੜਾ <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> ਵਿੱਚ ਸੂਚੀਬੱਧ ਨਹੀਂ ਹੈ ਅਤੇ ਸ਼ਾਇਦ ਤੁਹਾਡੀ ਜਾਣਕਾਰੀ ਤੋਂ ਬਗੈਰ ਜੋੜਿਆ ਗਿਆ ਹੈ।</translation>
+<translation id="8351419472474436977">ਇਸ ਵਾਧੜੇ ਨੇ ਤੁਹਾਡੀ ਮੁਖਤਿਆਰੀ ਦੀਆਂ ਸੈਟਿੰਗਾਂ ਦਾ ਕੰਟਰੋਲ ਆਪਣੇ ਹੱਥੀਂ ਲੈ ਲਿਆ ਹੈ, ਜਿਸਦਾ ਮਤਲਬ ਹੈ ਕਿ ਇਹ ਤੁਹਾਡੇ ਵੱਲੋਂ ਆਨਲਾਇਨ ਕੀਤੇ ਜਾਣ ਵਾਲੀ ਕਿਸੇ ਵੀ ਗਤੀਵਿਧੀ ਨੂੰ ਬਦਲ, ਖਰਾਬ ਕਰ, ਜਾਂ ਫਿਰ ਉਸਦੀਆਂ ਕਨਸੋਆਂ ਲੈ ਸਕਦਾ ਹੈ। ਜੇ ਤੁਹਾਨੂੰ ਇਹ ਸਪਸ਼ਟ ਨਹੀਂ ਕਿ ਇਹ ਤਬਦੀਲੀ ਕਿਉਂ ਹੋਈ, ਤਾਂ ਸ਼ਾਇਦ ਤੁਹਾਨੂੰ ਇਸਦੀ ਜ਼ਰੂਰਤ ਨਹੀਂ ਹੈ।</translation>
+<translation id="8382913212082956454">ਈਮੇਲ ਪਤਾ ਕਾਪੀ ਕਰੋ</translation>
+<translation id="8434480141477525001">NaCl ਡੀਬੱਗ ਪੋਰਟ</translation>
+<translation id="8449008133205184768">ਪੇਸਟ ਕਰੋ ਤੇ ਸ਼ੈਲੀ ਮਿਲਾਓ</translation>
+<translation id="8496717697661868878">ਇਸ ਪਲੱਗਇਨ ਨੂੰ ਚਲਾਓ</translation>
+<translation id="8512476990829870887">ਕਾਰਜ ਬੰਦ ਕਰੋ</translation>
+<translation id="8523493869875972733">ਤਬਦੀਲੀਆਂ ਬਰਕਰਾਰ ਰੱਖੋ</translation>
+<translation id="8546306075665861288">ਤਸਵੀਰ ਦੀ ਕੈਸ਼</translation>
+<translation id="8569682776816196752">ਕੋਈ ਮੰਜ਼ਲ ਨਹੀਂ ਲੱਭੀ</translation>
+<translation id="8584280235376696778">ਵੀਡੀਓ ਨੂੰ ਨਵੇਂ ਟੈਬ ਵਿੱਚ ਖੋਲ੍ਹੋ</translation>
+<translation id="8605428685123651449">SQLite ਮੈਮਰੀ</translation>
+<translation id="8615618338313291042">ਗੁਮਨਾਮ ਐਪ: <ph name="APP_NAME" /></translation>
+<translation id="862750493060684461">CSS ਕੈਸ਼</translation>
+<translation id="8661290697478713397">ਕੜੀ ਨੂੰ ਗੁਮਨਾਮ ਵਿੰਡੋ ਵਿੱਚ ਖੋਲ੍ਹੋ</translation>
+<translation id="8664389313780386848">ਪੰਨੇ ਦਾ ਸਰੋਤ ਦੇਖੋ</translation>
+<translation id="8708000541097332489">ਬਾਹਰ ਨਿਕਲਣ ਸਮੇਂ ਸਾਫ ਕਰੋ</translation>
+<translation id="8714838604780058252">ਬੈਕਗਰਾਉਂਡ ਗਰਾਫਿਕ</translation>
+<translation id="8725066075913043281">ਦੁਬਾਰਾ ਕੋਸ਼ਿਸ਼ ਕਰੋ</translation>
+<translation id="8774934320277480003">ਉੱਪਰੀ ਹਾਸ਼ੀਆ</translation>
+<translation id="8798099450830957504">ਮੂਲ</translation>
+<translation id="8808478386290700967">ਵੈੱਬ ਸਟੋਰ</translation>
+<translation id="8823514049557262177">ਕੜੀ ਦਾ ਪਾਠ ਕਾਪੀ ਕਰੋ</translation>
+<translation id="8823704566850948458">ਪਾਸਵਰਡ ਸੁਝਾਓ...</translation>
+<translation id="8859174528519900719">ਉਪ-ਫਰੇਮ: <ph name="SUBFRAME_SITE" /></translation>
+<translation id="8899851313684471736">ਕੜੀ ਨੂੰ ਨਵੀਂ ਵਿੰਡੋ ਵਿੱਚ ਖੋਲ੍ਹੋ</translation>
+<translation id="8915370057835397490">ਸੁਝਾਅ ਲੋਡ ਹੋ ਰਿਹਾ ਹੈ</translation>
+<translation id="8916476537757519021">ਗੁਮਨਾਮ ਉਪ-ਫਰੇਮ: <ph name="SUBFRAME_SITE" /></translation>
+<translation id="895944840846194039">ਜਾਵਾਸਕਰਿਪਟ ਮੈਮਰੀ</translation>
+<translation id="8962083179518285172">ਵੇਰਵਾ ਲੁਕਾਓ</translation>
+<translation id="8973557916016709913">ਜ਼ੂਮ ਪੱਧਰ ਹਟਾਓ</translation>
+<translation id="9003647077635673607">ਸਾਰੀਆਂ ਵੈੱਬਸਾਇਟਾਂ 'ਤੇ ਪ੍ਰਵਾਨ ਕਰੋ</translation>
+<translation id="9027459031423301635">ਕੜੀ ਨੂੰ ਨਵੇਂ ਟੈਬ ਵਿੱਚ ਖੋਲ੍ਹੋ</translation>
+<translation id="9056810968620647706">ਕੋਈ ਮੇਲ ਖਾਂਦਾ ਨਹੀਂ ਮਿਲਿਆ।</translation>
+<translation id="9137916601698928395">ਕੜੀ ਨੂੰ <ph name="USER" /> ਵਜੋਂ ਖੋਲ੍ਹੋ</translation>
+<translation id="916607977885256133">ਤਸਵੀਰ ਵਿੱਚ ਤਸਵੀਰ</translation>
+<translation id="9215293857209265904">"<ph name="EXTENSION_NAME" />" ਜੋੜਿਆ ਗਿਆ</translation>
+<translation id="9218430445555521422">ਮੂਲ ਬਣਾਓ</translation>
+<translation id="93766956588638423">ਵਾਧੜੇ ਦੀ ਮੁਰੰਮਤ ਕਰੋ</translation>
+<translation id="998747458861718449">ਨਿਰੀਖਣ ਕਰੋ</translation>
 </translationbundle>

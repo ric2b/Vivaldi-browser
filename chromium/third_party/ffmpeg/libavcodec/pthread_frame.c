@@ -34,7 +34,7 @@
 #include "internal.h"
 #include "packet_internal.h"
 #include "pthread_internal.h"
-#include "refstruct.h"
+#include "libavutil/refstruct.h"
 #include "thread.h"
 #include "threadframe.h"
 #include "version_major.h"
@@ -365,7 +365,11 @@ static int update_context_from_thread(AVCodecContext *dst, const AVCodecContext 
 
         dst->has_b_frames = src->has_b_frames;
         dst->idct_algo    = src->idct_algo;
+#if FF_API_CODEC_PROPS
+FF_DISABLE_DEPRECATION_WARNINGS
         dst->properties   = src->properties;
+FF_ENABLE_DEPRECATION_WARNINGS
+#endif
 
         dst->bits_per_coded_sample = src->bits_per_coded_sample;
         dst->sample_aspect_ratio   = src->sample_aspect_ratio;
@@ -405,7 +409,7 @@ FF_ENABLE_DEPRECATION_WARNINGS
 
         dst->hwaccel_flags = src->hwaccel_flags;
 
-        ff_refstruct_replace(&dst->internal->pool, src->internal->pool);
+        av_refstruct_replace(&dst->internal->pool, src->internal->pool);
         ff_decode_internal_sync(dst, src);
     }
 
@@ -780,7 +784,7 @@ void ff_frame_thread_free(AVCodecContext *avctx, int thread_count)
                 av_freep(&ctx->priv_data);
             }
 
-            ff_refstruct_unref(&ctx->internal->pool);
+            av_refstruct_unref(&ctx->internal->pool);
             av_packet_free(&ctx->internal->in_pkt);
             av_packet_free(&ctx->internal->last_pkt_props);
             ff_decode_internal_uninit(ctx);
@@ -1062,7 +1066,7 @@ int ff_thread_get_ext_buffer(AVCodecContext *avctx, ThreadFrame *f, int flags)
     if (!(avctx->active_thread_type & FF_THREAD_FRAME))
         return ff_get_buffer(avctx, f->f, flags);
 
-    f->progress = ff_refstruct_allocz(sizeof(*f->progress));
+    f->progress = av_refstruct_allocz(sizeof(*f->progress));
     if (!f->progress)
         return AVERROR(ENOMEM);
 
@@ -1071,13 +1075,13 @@ int ff_thread_get_ext_buffer(AVCodecContext *avctx, ThreadFrame *f, int flags)
 
     ret = ff_thread_get_buffer(avctx, f->f, flags);
     if (ret)
-        ff_refstruct_unref(&f->progress);
+        av_refstruct_unref(&f->progress);
     return ret;
 }
 
 void ff_thread_release_ext_buffer(ThreadFrame *f)
 {
-    ff_refstruct_unref(&f->progress);
+    av_refstruct_unref(&f->progress);
     f->owner[0] = f->owner[1] = NULL;
     if (f->f)
         av_frame_unref(f->f);
@@ -1098,7 +1102,7 @@ enum ThreadingStatus ff_thread_sync_ref(AVCodecContext *avctx, size_t offset)
 
     memcpy(&ref, (const char*)p->parent->threads[0].avctx->priv_data + offset, sizeof(ref));
     av_assert1(ref);
-    ff_refstruct_replace((char*)avctx->priv_data + offset, ref);
+    av_refstruct_replace((char*)avctx->priv_data + offset, ref);
 
     return FF_THREAD_IS_COPY;
 }

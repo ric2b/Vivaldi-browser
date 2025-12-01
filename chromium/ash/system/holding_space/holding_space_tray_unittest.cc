@@ -27,6 +27,7 @@
 #include "ash/public/cpp/test/shell_test_api.h"
 #include "ash/resources/vector_icons/vector_icons.h"
 #include "ash/session/session_controller_impl.h"
+#include "ash/session/test_pref_service_provider.h"
 #include "ash/shelf/shelf.h"
 #include "ash/shelf/shelf_widget.h"
 #include "ash/shell.h"
@@ -355,24 +356,26 @@ class ScopedTransformRecordingLayerDelegate : public ui::LayerDelegate {
 
 // HoldingSpaceTrayTestBase ----------------------------------------------------
 
-class HoldingSpaceTrayTestBase : public AshTestBase {
+class HoldingSpaceTrayTestBase : public NoSessionAshTestBase {
  public:
   // AshTestBase:
   void SetUp() override {
-    AshTestBase::SetUp();
-
+    NoSessionAshTestBase::SetUp();
     test_api_ = std::make_unique<HoldingSpaceTestApi>();
+
+    auto pref_service = TestPrefServiceProvider::CreateUserPrefServiceSimple();
+    holding_space_prefs::MarkTimeOfFirstAvailability(pref_service.get());
+
     AccountId user_account = AccountId::FromUserEmail(kTestUser);
     HoldingSpaceController::Get()->RegisterClientAndModelForUser(
         user_account, client(), model());
-    GetSessionControllerClient()->AddUserSession(kTestUser);
-    holding_space_prefs::MarkTimeOfFirstAvailability(
-        GetSessionControllerClient()->GetUserPrefService(user_account));
+
+    SimulateUserLogin({}, user_account, std::move(pref_service));
   }
 
   void TearDown() override {
     test_api_.reset();
-    AshTestBase::TearDown();
+    NoSessionAshTestBase::TearDown();
   }
 
   HoldingSpaceItem* AddItem(
@@ -453,19 +456,15 @@ class HoldingSpaceTrayTestBase : public AshTestBase {
   void SwitchToSecondaryUser(const std::string& user_id,
                              HoldingSpaceClient* client,
                              HoldingSpaceModel* model) {
+    auto pref_service = TestPrefServiceProvider::CreateUserPrefServiceSimple();
+    holding_space_prefs::MarkTimeOfFirstAvailability(pref_service.get());
+    holding_space_prefs::MarkTimeOfFirstAdd(pref_service.get());
+    holding_space_prefs::MarkTimeOfFirstPin(pref_service.get());
+
     AccountId user_account = AccountId::FromUserEmail(user_id);
     HoldingSpaceController::Get()->RegisterClientAndModelForUser(user_account,
                                                                  client, model);
-    GetSessionControllerClient()->AddUserSession(user_id);
-
-    holding_space_prefs::MarkTimeOfFirstAvailability(
-        GetSessionControllerClient()->GetUserPrefService(user_account));
-    holding_space_prefs::MarkTimeOfFirstAdd(
-        GetSessionControllerClient()->GetUserPrefService(user_account));
-    holding_space_prefs::MarkTimeOfFirstPin(
-        GetSessionControllerClient()->GetUserPrefService(user_account));
-
-    GetSessionControllerClient()->SwitchActiveUser(user_account);
+    SimulateUserLogin({user_id}, std::nullopt, std::move(pref_service));
   }
 
   void UnregisterModelForUser(const std::string& user_id) {
@@ -2016,8 +2015,7 @@ TEST_F(HoldingSpaceTrayTest, EnterAndExitAnimations) {
   transform_recorder.Reset();
 
   // Lock the screen. The tray should animate out.
-  auto* session_controller =
-      ash_test_helper()->test_session_controller_client();
+  auto* session_controller = GetSessionControllerClient();
   session_controller->SetSessionState(session_manager::SessionState::LOCKED);
   ViewVisibilityChangedWaiter().Wait(tray);
   EXPECT_FALSE(test_api()->IsShowingInShelf());

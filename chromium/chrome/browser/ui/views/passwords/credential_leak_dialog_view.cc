@@ -13,11 +13,11 @@
 #include "chrome/browser/ui/passwords/password_dialog_prompts.h"
 #include "chrome/browser/ui/tabs/public/tab_dialog_manager.h"
 #include "chrome/browser/ui/tabs/public/tab_features.h"
-#include "chrome/browser/ui/tabs/public/tab_interface.h"
 #include "chrome/browser/ui/views/accessibility/theme_tracking_non_accessible_image_view.h"
 #include "chrome/browser/ui/views/chrome_layout_provider.h"
 #include "chrome/grit/theme_resources.h"
 #include "components/password_manager/core/browser/leak_detection_dialog_utils.h"
+#include "components/tab_collections/public/tab_interface.h"
 #include "content/public/browser/web_contents.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/base/mojom/dialog_button.mojom.h"
@@ -163,7 +163,7 @@ void CredentialLeakDialogView::AddedToWidget() {
   auto image_view = std::make_unique<ThemeTrackingNonAccessibleImageView>(
       *bundle.GetImageSkiaNamed(IDR_PASSWORD_CHECK),
       *bundle.GetImageSkiaNamed(IDR_PASSWORD_CHECK_DARK),
-      base::BindRepeating(&views::BubbleFrameView::GetBackgroundColor,
+      base::BindRepeating(&views::BubbleFrameView::background_color,
                           base::Unretained(GetBubbleFrameView())));
 
   gfx::Size preferred_size = image_view->GetPreferredSize();

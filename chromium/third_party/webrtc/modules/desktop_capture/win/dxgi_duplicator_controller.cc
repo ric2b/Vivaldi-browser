@@ -189,12 +189,12 @@ DxgiDuplicatorController::Result DxgiDuplicatorController::DoDuplicate(
     return Result::INITIALIZATION_FAILED;
   }
 
-  if (!frame->Prepare(SelectedDesktopSize(monitor_id), monitor_id,
-                      GetDeviceScaleFactor(monitor_id))) {
+  if (!frame->Prepare(SelectedDesktopSize(monitor_id), monitor_id)) {
     return Result::FRAME_PREPARE_FAILED;
   }
 
   frame->frame()->mutable_updated_region()->Clear();
+  frame->frame()->set_device_scale_factor(GetDeviceScaleFactor(monitor_id));
 
   if (DoDuplicateUnlocked(frame->context(), monitor_id, frame->frame())) {
     succeeded_duplications_++;
@@ -384,8 +384,18 @@ bool DxgiDuplicatorController::DoDuplicateOne(Context* context,
 
 int64_t DxgiDuplicatorController::GetNumFramesCaptured(int monitor_id) const {
   int64_t min = INT64_MAX;
+  if (monitor_id < 0) {
+    for (const auto& duplicator : duplicators_) {
+      min = std::min(min, duplicator.GetNumFramesCaptured(monitor_id));
+    }
+    return min;
+  }
   for (const auto& duplicator : duplicators_) {
-    min = std::min(min, duplicator.GetNumFramesCaptured(monitor_id));
+    if (monitor_id >= duplicator.screen_count()) {
+      monitor_id -= duplicator.screen_count();
+    } else {
+      return duplicator.GetNumFramesCaptured(monitor_id);
+    }
   }
   return min;
 }
@@ -394,7 +404,7 @@ DesktopSize DxgiDuplicatorController::desktop_size() const {
   return desktop_rect_.size();
 }
 
-std::optional<int32_t> DxgiDuplicatorController::GetDeviceScaleFactor(
+std::optional<float> DxgiDuplicatorController::GetDeviceScaleFactor(
     int monitor_id) const {
   if (monitor_id < 0) {
     return std::nullopt;

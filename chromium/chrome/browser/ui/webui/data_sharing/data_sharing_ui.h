@@ -38,6 +38,15 @@ class DataSharingUI : public UntrustedTopChromeWebUIController,
 
     // Called to show the error dialog when an error is occurred.
     virtual void ShowErrorDialog(int status_code) = 0;
+
+    virtual void OnShareLinkRequested(
+        const std::string& group_id,
+        const std::string& access_token,
+        base::OnceCallback<void(const std::optional<GURL>&)> callback) = 0;
+
+    virtual void OnGroupAction(
+        data_sharing::mojom::GroupAction action,
+        data_sharing::mojom::GroupActionProgress progress) = 0;
   };
   explicit DataSharingUI(content::WebUI* web_ui);
   ~DataSharingUI() override;
@@ -49,6 +58,14 @@ class DataSharingUI : public UntrustedTopChromeWebUIController,
       mojo::PendingReceiver<data_sharing::mojom::PageHandlerFactory> receiver);
 
   void ApiInitComplete();
+
+  void OnShareLinkRequested(
+      const std::string& group_id,
+      const std::string& access_token,
+      base::OnceCallback<void(const std::optional<GURL>&)> callback);
+
+  void OnGroupAction(data_sharing::mojom::GroupAction action,
+                     data_sharing::mojom::GroupActionProgress progress);
 
   void ShowErrorDialog(int status_code);
 

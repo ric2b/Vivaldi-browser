@@ -101,7 +101,7 @@ class StackwalkerAddressListTest : public testing::Test {
   void SetModuleSymbols(MockCodeModule* module, const string& info) {
     size_t buffer_size;
     char* buffer = supplier.CopySymbolDataAndOwnTheCopy(info, &buffer_size);
-    EXPECT_CALL(supplier, GetCStringSymbolData(module, NULL, _, _, _))
+    EXPECT_CALL(supplier, GetCStringSymbolData(module, nullptr, _, _, _))
       .WillRepeatedly(DoAll(SetArgumentPointee<3>(buffer),
                             SetArgumentPointee<4>(buffer_size),
                             Return(MockSymbolSupplier::FOUND)));

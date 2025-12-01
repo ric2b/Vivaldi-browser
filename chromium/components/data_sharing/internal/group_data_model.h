@@ -13,7 +13,6 @@
 #include "base/time/time.h"
 #include "components/data_sharing/internal/collaboration_group_sync_bridge.h"
 #include "components/data_sharing/internal/group_data_store.h"
-#include "components/data_sharing/internal/partial_failure_sdk_delegate_wrapper.h"
 #include "components/data_sharing/public/data_sharing_sdk_delegate.h"
 #include "components/data_sharing/public/group_data.h"
 #include "components/data_sharing/public/protocol/data_sharing_sdk.pb.h"
@@ -111,11 +110,13 @@ class GroupDataModel : public CollaborationGroupSyncBridge::Observer {
 
   // Asynchronously fetches data from the SDK.
   void FetchGroupsFromSDK(const std::vector<GroupId>& added_or_updated_groups);
-  void OnGroupsFetchedFromSDK(
+  void OnBatchOfGroupsFetchedFromSDK(
       const std::map<GroupId, VersionToken>& requested_groups_and_versions,
       const base::Time& requested_at_timestamp,
       const base::expected<data_sharing_pb::ReadGroupsResult, absl::Status>&
           read_groups_result);
+  void FetchBatchOfGroupsFromSDK(const std::vector<GroupId>& batch);
+  void HandleBatchCompletion();
 
   void NotifyObserversAboutChangedMembers(const GroupData& old_group_data,
                                           const GroupData& new_group_data);
@@ -134,10 +135,13 @@ class GroupDataModel : public CollaborationGroupSyncBridge::Observer {
   bool has_ongoing_group_fetch_ = false;
   bool has_pending_changes_ = false;
 
+  // Keeps track of the number of ReadGroups requests are currently in-flight.
+  int outstanding_batches_ = 0;
+
   std::vector<GroupEvent> group_events_since_startup_;
 
   raw_ptr<CollaborationGroupSyncBridge> collaboration_group_sync_bridge_;
-  PartialFailureSDKDelegateWrapper sdk_delegate_;
+  raw_ptr<DataSharingSDKDelegate> sdk_delegate_;
 
   // Used only for tests to notify that GroupDataStore has been loaded (either
   // successfully or unsuccessfully).

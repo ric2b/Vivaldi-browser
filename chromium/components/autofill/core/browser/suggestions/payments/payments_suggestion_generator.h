@@ -5,6 +5,7 @@
 #ifndef COMPONENTS_AUTOFILL_CORE_BROWSER_SUGGESTIONS_PAYMENTS_PAYMENTS_SUGGESTION_GENERATOR_H_
 #define COMPONENTS_AUTOFILL_CORE_BROWSER_SUGGESTIONS_PAYMENTS_PAYMENTS_SUGGESTION_GENERATOR_H_
 
+#include <cstdint>
 #include <optional>
 #include <string>
 #include <vector>
@@ -14,7 +15,7 @@
 #include "base/memory/raw_ptr.h"
 #include "base/types/optional_ref.h"
 #include "components/autofill/core/browser/data_manager/payments/payments_data_manager.h"
-#include "components/autofill/core/browser/data_model/autofill_wallet_usage_data.h"
+#include "components/autofill/core/browser/data_model/payments/autofill_wallet_usage_data.h"
 #include "components/autofill/core/browser/field_types.h"
 #include "components/autofill/core/browser/metrics/log_event.h"
 #include "components/autofill/core/browser/metrics/payments/card_metadata_metrics.h"
@@ -66,6 +67,14 @@ struct BnplSuggestionUpdateResult {
   bool is_bnpl_suggestion_added = false;
 };
 
+// Returns the credit cards to suggest to the user. Those have been deduped
+// and ordered by frecency with the expired cards put at the end of the
+// vector. `should_use_legacy_algorithm` indicates if we should rank credit
+// cards using the legacy ranking algorithm.
+std::vector<const CreditCard*> GetCreditCardsToSuggest(
+    const PaymentsDataManager& payments_data_manager,
+    bool should_use_legacy_algorithm = false);
+
 // Generates suggestions for all available credit cards based on the
 // `trigger_field_type`, `trigger_field` and `four_digit_combinations_in_dom`.
 // `summary` contains metadata about the returned suggestions.
@@ -82,7 +91,6 @@ std::vector<Suggestion> GetSuggestionsForCreditCards(
     CreditCardSuggestionSummary& summary,
     bool is_complete_form,
     bool should_show_scan_credit_card,
-    bool should_show_cards_from_account,
     const std::vector<std::string>& four_digit_combinations_in_dom,
     const std::u16string& autofilled_last_four_digits_in_form_for_filtering);
 
@@ -100,7 +108,6 @@ std::vector<Suggestion> GetCreditCardOrCvcFieldSuggestions(
     const std::u16string& autofilled_last_four_digits_in_form_for_filtering,
     FieldType trigger_field_type,
     bool should_show_scan_credit_card,
-    bool should_show_cards_from_account,
     CreditCardSuggestionSummary& summary);
 
 // Generates suggestions for standalone CVC fields. These only apply to
@@ -119,12 +126,15 @@ std::vector<CreditCard> GetTouchToFillCardsToSuggest(
     const FormFieldData& trigger_field,
     FieldType trigger_field_type);
 
-// Returns a suggestion list with a BNPL suggestion added at the end (but
-// before footer items) of the given suggestion list `current_suggestions`,
-// and true if a BNPL suggestion is inserted successfully.
+// Returns a suggestion list with a BNPL suggestion, initialized with
+// `bnpl_issuers` and the BNPL amount `extracted_amount_in_micros`, added at the
+// end (but before footer items) of the given suggestion list
+// `current_suggestions`. `BnplSuggestionUpdateResult::is_bnpl_suggestion_added`
+// is true if a BNPL suggestion is inserted successfully.
 BnplSuggestionUpdateResult MaybeUpdateSuggestionsWithBnpl(
     const base::span<const Suggestion>& current_suggestions,
-    const std::vector<BnplIssuer>& bnpl_issuers);
+    const std::vector<BnplIssuer>& bnpl_issuers,
+    uint64_t extracted_amount_in_micros);
 
 // Generates touch-to-fill suggestions for all available credit cards to be
 // used in the bottom sheet. Benefits information, containing instrument IDs and
@@ -208,7 +218,6 @@ Suggestion CreateCreditCardSuggestionForTest(
 // Exposes `GetCreditCardFooterSuggestions` in tests.
 std::vector<Suggestion> GetCreditCardFooterSuggestionsForTest(
     bool should_show_scan_credit_card,
-    bool should_show_cards_from_account,
     bool is_autofilled,
     bool with_gpay_logo);
 

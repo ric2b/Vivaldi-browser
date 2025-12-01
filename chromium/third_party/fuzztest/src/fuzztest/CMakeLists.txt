@@ -62,8 +62,25 @@ fuzztest_cc_library(
     "fuzztest_macros.cc"
   DEPS
     fuzztest::io
+    fuzztest::logging
     fuzztest::registration
     fuzztest::registry
+)
+
+fuzztest_cc_test(
+  NAME
+    fuzztest_macros_test
+  HDRS
+    "fuzztest_macros_test.h"
+  SRCS
+    "fuzztest_macros_test.cc"
+  DEPS
+    GTest::gmock_main
+    absl::log
+    absl::status
+    absl::strings
+    fuzztest::fuzztest_macros
+    fuzztest::temp_dir
 )
 
 fuzztest_cc_library(
@@ -288,6 +305,7 @@ fuzztest_cc_library(
     absl::status
     absl::statusor
     absl::strings
+    absl::str_format
     absl::synchronization
     absl::span
 )
@@ -448,6 +466,7 @@ fuzztest_cc_test(
   DEPS
     fuzztest::blob_file
     fuzztest::defs
+    fuzztest::temp_dir
     fuzztest::fuzztest_core
     fuzztest::io
     absl::check
@@ -559,6 +578,7 @@ fuzztest_cc_library(
     fuzztest::seed_seq
     fuzztest::serialization
     fuzztest::status
+    absl::core_headers
     absl::any_invocable
     absl::bind_front
     absl::function_ref
@@ -572,6 +592,8 @@ fuzztest_cc_library(
     absl::str_format
     absl::time
     absl::span
+  LINKOPTS
+    pthread
 )
 
 fuzztest_cc_test(

@@ -39,6 +39,7 @@
 #include "api/transport/network_control.h"
 #include "api/video_codecs/video_decoder_factory.h"
 #include "api/video_codecs/video_encoder_factory.h"
+#include "p2p/base/port_allocator.h"
 #include "rtc_base/checks.h"
 #include "rtc_base/rtc_certificate_generator.h"
 #include "rtc_base/ssl_certificate.h"
@@ -46,12 +47,11 @@
 namespace webrtc {
 namespace webrtc_pc_e2e {
 
-PeerConfigurer::PeerConfigurer(
-    const PeerNetworkDependencies& network_dependencies)
+PeerConfigurer::PeerConfigurer(PeerNetworkDependencies& network)
     : components_(std::make_unique<InjectableComponents>(
-          network_dependencies.network_thread,
-          network_dependencies.network_manager,
-          network_dependencies.packet_socket_factory)),
+          network.network_thread(),
+          network.ReleaseNetworkManager(),
+          network.socket_factory())),
       params_(std::make_unique<Params>()),
       configurable_params_(std::make_unique<ConfigurableParams>()) {}
 
@@ -109,7 +109,7 @@ PeerConfigurer* PeerConfigurer::SetAsyncDnsResolverFactory(
   return this;
 }
 PeerConfigurer* PeerConfigurer::SetRTCCertificateGenerator(
-    std::unique_ptr<rtc::RTCCertificateGeneratorInterface> cert_generator) {
+    std::unique_ptr<RTCCertificateGeneratorInterface> cert_generator) {
   components_->pc_dependencies->cert_generator = std::move(cert_generator);
   return this;
 }
@@ -240,9 +240,8 @@ PeerConfigurer* PeerConfigurer::SetFieldTrials(
 
 PeerConfigurer* PeerConfigurer::SetPortAllocatorExtraFlags(
     uint32_t extra_flags) {
-  params_->port_allocator_flags = cricket::kDefaultPortAllocatorFlags |
-                                  cricket::PORTALLOCATOR_DISABLE_TCP |
-                                  extra_flags;
+  params_->port_allocator_flags =
+      kDefaultPortAllocatorFlags | PORTALLOCATOR_DISABLE_TCP | extra_flags;
   return this;
 }
 

@@ -1628,6 +1628,23 @@ static void handle_D_option(char *z){
   *z = 0;
 }
 
+/* This routine is called with the argument to each -U command-line option.
+** Omit a previously defined macro.
+*/
+static void handle_U_option(char *z){
+  int i;
+  for(i=0; i<nDefine; i++){
+    if( strcmp(azDefine[i],z)==0 ){
+      nDefine--;
+      if( i<nDefine ){
+        azDefine[i] = azDefine[nDefine];
+        bDefineUsed[i] = bDefineUsed[nDefine];
+      }
+      break;
+    }
+  }
+}
+
 /* Rember the name of the output directory 
 */
 static char *outputDir = NULL;
@@ -1709,6 +1726,15 @@ static void stats_line(const char *zLabel, int iValue){
          iValue);
 }
 
+/*
+** Comparison function used by qsort() to sort the azDefine[] array.
+*/
+static int defineCmp(const void *pA, const void *pB){
+  const char *zA = *(const char**)pA;
+  const char *zB = *(const char**)pB;
+  return strcmp(zA,zB);
+}
+
 /* The main program.  Parse the command line and do it... */
 int main(int argc, char **argv){
   static int version = 0;
@@ -1745,6 +1771,7 @@ int main(int argc, char **argv){
                     "Generate the *.sql file describing the parser tables."},
     {OPT_FLAG, "x", (char*)&version, "Print the version number."},
     {OPT_FSTR, "T", (char*)handle_T_option, "Specify a template file."},
+    {OPT_FSTR, "U", (char*)handle_U_option, "Undefine a macro."},
     {OPT_FSTR, "W", 0, "Ignored.  (Placeholder for '-W' compiler options.)"},
     {OPT_FLAG,0,0,0}
   };
@@ -1764,6 +1791,7 @@ int main(int argc, char **argv){
   }
   memset(&lem, 0, sizeof(lem));
   lem.errorcnt = 0;
+  qsort(azDefine, nDefine, sizeof(azDefine[0]), defineCmp);
 
   /* Initialize the machine */
   Strsafe_init();

@@ -139,6 +139,10 @@ public final class EventConstants {
     public static final String ADAPTIVE_TOOLBAR_CUSTOMIZATION_NEW_TAB_OPENED =
             "adaptive_toolbar_customization_new_tab_opened";
 
+    /** AdaptiveButtonInTopToolbarCustomization open in browser events. */
+    public static final String ADAPTIVE_TOOLBAR_CUSTOMIZATION_OPEN_IN_BROWSER_OPENED =
+            "adaptive_toolbar_customization_open_in_browser_opened";
+
     /** AdaptiveButtonInTopToolbarCustomization share events. */
     public static final String ADAPTIVE_TOOLBAR_CUSTOMIZATION_SHARE_OPENED =
             "adaptive_toolbar_customization_share_opened";
@@ -218,6 +222,9 @@ public final class EventConstants {
 
     /** IPH dialog of RTL gesture navigation dialog is shown. */
     public static final String RTL_GESTURE_NAVIGATION_DIALOG_SHOW = "rtl_gesture_iph_show";
+
+    /** An app menu pdf page download event. */
+    public static final String APP_MENU_PDF_PAGE_DOWNLOADED = "app_menu_pdf_page_downloaded";
 
     /** Do not instantiate. */
     private EventConstants() {}

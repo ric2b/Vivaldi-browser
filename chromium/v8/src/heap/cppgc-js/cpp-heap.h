@@ -142,10 +142,14 @@ class V8_EXPORT_PRIVATE CppHeap final
 
   void InitializeMarking(
       CollectionType,
+      std::shared_ptr<::heap::base::IncrementalMarkingSchedule> schedule = {},
       GarbageCollectionFlags = GarbageCollectionFlagValues::kNoFlags);
   void StartMarking();
-  bool AdvanceTracing(v8::base::TimeDelta max_duration);
-  bool IsTracingDone() const;
+  bool AdvanceMarking(v8::base::TimeDelta max_duration,
+                      size_t marked_bytes_limit);
+  bool IsMarkingDone() const;
+  size_t last_bytes_marked() const;
+  void ProcessCrossThreadWeakness();
   void FinishMarkingAndProcessWeakness();
   void CompactAndSweep();
   void EnterFinalPause(cppgc::EmbedderStackState stack_state);
@@ -276,9 +280,7 @@ class V8_EXPORT_PRIVATE CppHeap final
 #endif  // V8_ENABLE_ALLOCATION_TIMEOUT
 
   bool already_terminated_ = false;
-#if DEBUG
   bool is_detached_ = true;
-#endif  // DEBUG
 
   friend class MetricRecorderAdapter;
 };

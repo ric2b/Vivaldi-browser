@@ -36,7 +36,7 @@ limitations under the License.
 #include "xla/service/llvm_ir/ir_array.h"
 #include "xla/service/llvm_ir/llvm_util.h"
 #include "xla/shape.h"
-#include "tsl/platform/logging.h"
+#include "xla/tsl/platform/logging.h"
 
 namespace xla {
 namespace llvm_ir {
@@ -244,7 +244,7 @@ std::unique_ptr<ForLoop> ForLoopNest::AddLoop(int64_t start_index,
 
 IrArray::Index ForLoopNest::AddLoopsForShape(const Shape& shape,
                                              absl::string_view suffix) {
-  std::vector<int64_t> dimensions(shape.rank());
+  std::vector<int64_t> dimensions(shape.dimensions_size());
   std::iota(dimensions.begin(), dimensions.end(), 0);
   return IrArray::Index(AddLoopsForShapeOnDimensions(shape, dimensions, suffix),
                         shape, index_type_);

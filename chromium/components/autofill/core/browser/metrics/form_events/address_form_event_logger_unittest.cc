@@ -5,7 +5,7 @@
 
 #include "base/test/metrics/histogram_tester.h"
 #include "components/autofill/core/browser/data_manager/addresses/address_data_manager.h"
-#include "components/autofill/core/browser/data_model/autofill_profile.h"
+#include "components/autofill/core/browser/data_model/addresses/autofill_profile.h"
 #include "components/autofill/core/browser/field_types.h"
 #include "components/autofill/core/browser/metrics/autofill_metrics_test_base.h"
 #include "components/autofill/core/browser/metrics/autofill_metrics_utils.h"
@@ -273,15 +273,16 @@ TEST_F(AutofillAddressOnTypingMetricsTest, EmitMetrics) {
 
   // Simulate that the autofill manager has seen this form on page load.
   SeeForm(form);
-  static constexpr DenseSet<SuggestionType> kShownSuggestionTypes = {
-      SuggestionType::kAddressEntryOnTyping, SuggestionType::kSeparator,
-      SuggestionType::kManageAddress};
+  std::vector<Suggestion> shown_suggestions = {
+      Suggestion(SuggestionType::kAddressEntryOnTyping),
+      Suggestion(SuggestionType::kSeparator),
+      Suggestion(SuggestionType::kManageAddress)};
 
   // See, accept and do not correct the first suggestion.
   autofill_client().SetAutofillSuggestions(BuildAutofillOnTypingSuggestions(
       {NAME_FULL}, /*profile_guid=*/profile.guid()));
-  autofill_manager().DidShowSuggestions(kShownSuggestionTypes, form,
-                                        form.fields()[0].global_id());
+  autofill_manager().DidShowSuggestions(shown_suggestions, form,
+                                        form.fields()[0].global_id(), {});
   const std::u16string filled_value = u"Jon snow";
   autofill_manager().OnDidFillAddressOnTypingSuggestion(
       form.fields()[0].global_id(), filled_value, NAME_FULL, profile.guid());
@@ -294,20 +295,20 @@ TEST_F(AutofillAddressOnTypingMetricsTest, EmitMetrics) {
   // Only see second suggestion.
   autofill_client().SetAutofillSuggestions(
       BuildAutofillOnTypingSuggestions({NAME_FIRST}, profile.guid()));
-  autofill_manager().DidShowSuggestions(kShownSuggestionTypes, form,
-                                        form.fields()[1].global_id());
+  autofill_manager().DidShowSuggestions(shown_suggestions, form,
+                                        form.fields()[1].global_id(), {});
 
   // See, accept and edit the third suggestion.
   autofill_client().SetAutofillSuggestions(
       BuildAutofillOnTypingSuggestions({NAME_FULL}, profile.guid()));
-  autofill_manager().DidShowSuggestions(kShownSuggestionTypes, form,
-                                        form.fields()[2].global_id());
+  autofill_manager().DidShowSuggestions(shown_suggestions, form,
+                                        form.fields()[2].global_id(), {});
   autofill_manager().OnDidFillAddressOnTypingSuggestion(
       form.fields()[2].global_id(), filled_value, NAME_FULL, profile.guid());
   form_fields = form.ExtractFields();
   // Set the third field value as something different from what was autofilled,
   // simulating a correction.
-  form_fields[2].set_value(u"Sansa Stark");
+  form_fields[2].set_value(u"Jon snowy");
   form.set_fields(std::move(form_fields));
 
   SubmitForm(form);
@@ -327,6 +328,17 @@ TEST_F(AutofillAddressOnTypingMetricsTest, EmitMetrics) {
   EXPECT_THAT(histogram_tester_.GetAllSamples(
                   "Autofill.EditedAutofilledFieldAtSubmission.AddressOnTyping"),
               BucketsAre(base::Bucket(false, 1), base::Bucket(true, 1)));
+  // One field was accepted without correction (first bucket), another field was
+  // edited to a string that has 1 character distance. "Jon snow" vs "Jon snowy"
+  EXPECT_THAT(
+      histogram_tester_.GetAllSamples(
+          "Autofill.EditedDistanceAutofilledFieldAtSubmission.AddressOnTyping"),
+      BucketsAre(base::Bucket(0, 1), base::Bucket(1, 1)));
+  // Similar to the method above, however measuring percentage values.
+  EXPECT_THAT(histogram_tester_.GetAllSamples(
+                  "Autofill.EditedPercentageAutofilledFieldAtSubmission."
+                  "AddressOnTyping"),
+              BucketsAre(base::Bucket(0, 1), base::Bucket(12, 1)));
   histogram_tester_.ExpectUniqueSample(
       "Autofill.AddressSuggestionOnTypingShown.DaysSinceLastUse.Profile",
       kProfileLastUsedInDays, 1);

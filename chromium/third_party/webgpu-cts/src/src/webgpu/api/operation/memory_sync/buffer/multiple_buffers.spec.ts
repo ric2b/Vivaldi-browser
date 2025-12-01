@@ -16,7 +16,6 @@ TODO: Tests with more than one buffer to try to stress implementations a little 
 `;
 
 import { makeTestGroup } from '../../../../../common/framework/test_group.js';
-import { MaxLimitsTestMixin } from '../../../../gpu_test.js';
 import {
   kOperationBoundaries,
   kBoundaryInfo,
@@ -35,7 +34,7 @@ const kSrcValue = 0;
 // The op value is what the read/write operation write into the target buffer.
 const kOpValue = 1;
 
-export const g = makeTestGroup(MaxLimitsTestMixin(BufferSyncTest));
+export const g = makeTestGroup(BufferSyncTest);
 
 g.test('rw')
   .desc(

@@ -64,7 +64,8 @@ export class IFaceWithTypemapRemote implements IFaceWithTypemapInterface {
         IFaceWithTypemap_Echo_ResponseParamsSpec.$,
         [
           param
-        ]);
+        ],
+        false);
   }
 };
 
@@ -93,7 +94,8 @@ export class IFaceWithTypemapReceiver {
         0,
         IFaceWithTypemap_Echo_ParamsSpec.$,
         IFaceWithTypemap_Echo_ResponseParamsSpec.$,
-        impl.echo.bind(impl));
+        impl.echo.bind(impl),
+        false);
     this.onConnectionError = this.helper_internal_.getConnectionErrorEventRouter();
   }
 }
@@ -145,7 +147,8 @@ export class IFaceWithTypemapCallbackRouter {
         0,
         IFaceWithTypemap_Echo_ParamsSpec.$,
         IFaceWithTypemap_Echo_ResponseParamsSpec.$,
-        this.echo.createReceiverHandler(true /* expectsResponse */));
+        this.echo.createReceiverHandler(true /* expectsResponse */),
+        false);
     this.onConnectionError = this.helper_internal_.getConnectionErrorEventRouter();
   }
 
@@ -172,6 +175,8 @@ export const IFaceWithTypemap_Echo_ResponseParamsSpec: { $: mojo.internal.MojomT
 
 export interface TypemappedMojoType {
   field: number;
+  optional: (number | null);
+  optionalContainer: Array<(boolean | null)>;
 }
 
 export type Typemapped = number;
@@ -179,15 +184,11 @@ export type Typemapped = number;
 const converterForTypemapped: TypemappedTypeMapper<number>
     = new Converter();
 
-const adapterForTypemapped = new mojo.internal.TypemapAdapter(
-  (mojoType: TypemappedMojoType) =>
-      converterForTypemapped.convert(new TypemappedDataView(mojoType)),
-);
-
 mojo.internal.TypemappedStruct<number, TypemappedMojoType> (
     TypemappedSpec.$,
     'Typemapped',
-    adapterForTypemapped,
+    TypemappedDataView,
+    converterForTypemapped,
     [
       mojo.internal.StructField<number, number>(
         'field', 0,
@@ -199,8 +200,46 @@ mojo.internal.TypemappedStruct<number, TypemappedMojoType> (
         undefined,
         ((value: number) => converterForTypemapped.field(value)),
     ),
+      mojo.internal.StructField<number, boolean>(
+        'optional_$flag', 1,
+        0,
+        mojo.internal.Bool,
+        false,
+        false /* nullable */,
+        0,
+        {
+          isPrimary: true,
+          linkedValueFieldName: "optional_$value",
+          originalFieldName: "optional",
+        },
+        ((value: number) => converterForTypemapped.optional(value) !== null),
+    ),
+      mojo.internal.StructField<number, number>(
+        'optional_$value', 4,
+        0,
+        mojo.internal.Int32,
+        0,
+        false /* nullable */,
+        0,
+        {
+          isPrimary: false,
+          originalFieldName: "optional",
+        },
+
+        ((value: number) => converterForTypemapped.optional(value)),
+    ),
+      mojo.internal.StructField<number, Array<(boolean | null)>>(
+        'optionalContainer', 8,
+        0,
+        mojo.internal.Array(mojo.internal.Bool, true),
+        null,
+        false /* nullable */,
+        0,
+        undefined,
+        ((value: number) => converterForTypemapped.optionalContainer(value)),
+    ),
     ],
-    [[0, 16],]);
+    [[0, 24],]);
 
 
 

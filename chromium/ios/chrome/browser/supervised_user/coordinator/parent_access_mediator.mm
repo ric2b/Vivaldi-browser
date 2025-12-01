@@ -7,11 +7,11 @@
 #import <memory>
 
 #import "base/timer/timer.h"
-#import "components/supervised_user/core/browser/supervised_user_utils.h"
 #import "components/supervised_user/core/common/features.h"
-#import "ios/chrome/browser/shared/model/application_context/application_context.h"
 #import "ios/chrome/browser/supervised_user/coordinator/parent_access_mediator_delegate.h"
 #import "ios/chrome/browser/supervised_user/ui/parent_access_consumer.h"
+#import "ios/components/ui_util/dynamic_type_util.h"
+#import "ios/public/provider/chrome/browser/text_zoom/text_zoom_api.h"
 #import "ios/web/public/navigation/navigation_manager.h"
 #import "ios/web/public/web_state_observer_bridge.h"
 #import "url/gurl.h"
@@ -20,6 +20,8 @@
 @end
 
 @implementation ParentAccessMediator {
+  // URL for the PACP widget.
+  GURL _parentAccessURL;
   // WebState to load the PACP widget.
   std::unique_ptr<web::WebState> _webState;
   // Observer for the WebState.
@@ -29,8 +31,10 @@
   base::OneShotTimer _initialLoadTimer;
 }
 
-- (instancetype)initWithWebState:(std::unique_ptr<web::WebState>)webState {
+- (instancetype)initWithWebState:(std::unique_ptr<web::WebState>)webState
+                 parentAccessURL:(const GURL&)parentAccessURL {
   if ((self = [super init])) {
+    _parentAccessURL = parentAccessURL;
     CHECK(webState);
     _webState = std::move(webState);
     _webStateObserverBridge =
@@ -45,9 +49,7 @@
 
   _webState->SetWebUsageEnabled(true);
   web::NavigationManager::WebLoadParams webParams =
-      web::NavigationManager::WebLoadParams(
-          supervised_user::GetParentAccessURLForIOS(
-              GetApplicationContext()->GetApplicationLocale()));
+      web::NavigationManager::WebLoadParams(_parentAccessURL);
   _webState->GetNavigationManager()->LoadURLWithParams(webParams);
   // TODO(crbug.com/41407753): For a newly created WebState, the session
   // will not be restored until LoadIfNecessary call. Remove when fixed.
@@ -80,6 +82,14 @@
 - (void)webState:(web::WebState*)webState didLoadPageWithSuccess:(BOOL)success {
   // Stop the timer that would dismiss the unresponsive bottom sheet.
   _initialLoadTimer.Stop();
+
+  // Adjust text zoom for the PACP web state to respect the system font size
+  // preference. The multiplier is converted to a percentage (e.g., 1.5x becomes
+  // 150%).
+  CHECK(webState->ContentIsHTML());
+  ios::provider::SetTextZoomForWebState(
+      webState, 100. * ui_util::SystemSuggestedFontSizeMultiplier());
+
   // Unhide the WebView as it should be loaded with correct styling.
   [_consumer setWebViewHidden:NO];
 }

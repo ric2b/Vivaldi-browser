@@ -37,6 +37,7 @@
 #include "chrome/browser/web_applications/preinstalled_web_apps/google_calendar.h"
 #include "chrome/browser/web_applications/preinstalled_web_apps/google_meet.h"
 #include "chrome/browser/web_applications/preinstalled_web_apps/messages_dogfood.h"
+#include "chrome/browser/web_applications/preinstalled_web_apps/notebook_lm.h"
 #include "chrome/common/extensions/extension_constants.h"
 #include "extensions/common/constants.h"
 #include "google_apis/gaia/gaia_auth_util.h"
@@ -98,9 +99,10 @@ std::vector<ExternalInstallOptions> GetChromeBrandedApps(
 #if BUILDFLAG(IS_CHROMEOS)
       GetConfigForCalculator(),
       GetConfigForGemini(device_info),
+      GetConfigForNotebookLm(),
       GetConfigForGoogleCalendar(),
       GetConfigForGoogleChat(/*is_standalone=*/true,
-                             /*only_for_new_users=*/true),
+                             /*only_for_new_users=*/false),
       GetConfigForGoogleMeet(),
 #endif  // BUILDFLAG(IS_CHROMEOS)
   };
@@ -190,8 +192,8 @@ std::vector<PreinstalledWebAppMigration> GetPreinstalledWebAppMigrations(
     if (options.uninstall_and_replace.size() != 1)
       continue;
 
-    if (options.gate_on_feature && !IsPreinstalledAppInstallFeatureEnabled(
-                                       *options.gate_on_feature, profile)) {
+    if (options.gate_on_feature &&
+        !IsPreinstalledAppInstallFeatureEnabled(*options.gate_on_feature)) {
       continue;
     }
 

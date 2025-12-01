@@ -54,7 +54,7 @@ ShortcutSubManager::~ShortcutSubManager() = default;
 
 void ShortcutSubManager::Configure(
     const webapps::AppId& app_id,
-    proto::WebAppOsIntegrationState& desired_state,
+    proto::os_state::WebAppOsIntegration& desired_state,
     base::OnceClosure configure_done) {
   DCHECK(!desired_state.has_shortcut());
 
@@ -79,8 +79,8 @@ void ShortcutSubManager::Configure(
 void ShortcutSubManager::Execute(
     const webapps::AppId& app_id,
     const std::optional<SynchronizeOsOptions>& synchronize_options,
-    const proto::WebAppOsIntegrationState& desired_state,
-    const proto::WebAppOsIntegrationState& current_state,
+    const proto::os_state::WebAppOsIntegration& desired_state,
+    const proto::os_state::WebAppOsIntegration& current_state,
     base::OnceClosure callback) {
   base::FilePath shortcut_data_dir = GetOsIntegrationResourcesDirectoryForApp(
       profile_->GetPath(), app_id,
@@ -299,7 +299,14 @@ void ShortcutSubManager::UpdateShortcut(
         synchronize_options->add_shortcut_to_desktop;
     creation_locations.in_quick_launch_bar =
         synchronize_options->add_to_quick_launch_bar;
-    locations = creation_locations;
+    // Leaving `locations` as null if there are no creation locations will avoid
+    // creating duplicates of existing shortcuts because the creation locations
+    // don't match the existing locations (e.g., UpdatePlatformShortcuts in
+    // web_app_shortcut_win.cc).
+    if (creation_locations.in_quick_launch_bar ||
+        creation_locations.on_desktop) {
+      locations = creation_locations;
+    }
   }
 
   base::FilePath shortcut_data_dir =
@@ -341,7 +348,7 @@ void ShortcutSubManager::OnShortcutsDeleted(const webapps::AppId& app_id,
 }
 
 void ShortcutSubManager::StoreIconDataFromDisk(
-    proto::ShortcutDescription* shortcut,
+    proto::os_state::ShortcutDescription* shortcut,
     base::flat_map<SquareSizePx, base::Time> time_map) {
   for (const auto& [size, time] : time_map) {
     auto* shortcut_icon_data = shortcut->add_icon_data_any();

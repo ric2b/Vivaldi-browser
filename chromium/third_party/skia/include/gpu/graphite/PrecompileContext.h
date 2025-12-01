@@ -14,6 +14,8 @@
 #include <chrono>
 #include <memory>
 
+class SkData;
+
 namespace skgpu::graphite {
 
 class SharedContext;
@@ -31,6 +33,28 @@ public:
      * @param msNotUsed   Pipelines not used in these last milliseconds will be cleaned up.
      */
     void purgePipelinesNotUsedInMs(std::chrono::milliseconds msNotUsed);
+
+    /**
+     * Emit histograms (using the SK_HISTOGRAM* macros) for Skia's Pipeline usage.
+     */
+    void reportPipelineStats();
+
+    /**
+     * Precompile one specific Pipeline that has been previously serialized. Serialized pipeline
+     * keys can be acquired via the ContextOptions::PipelineCallback.
+     *
+     * @param serializedPipelineKey   serialized Pipeline key.
+     * @return                        true if a Pipeline was created from the key; false otherwise
+     */
+    bool precompile(sk_sp<SkData> serializedPipelineKey);
+
+    /**
+     * Get a human-readable version of a serialized pipeline key.
+     *
+     * @param serializedPipelineKey   serialized Pipeline key.
+     * @return                        A human-readable version of the provided key; "" on failure.
+     */
+    std::string getPipelineLabel(sk_sp<SkData> serializedPipelineKey);
 
     // Provides access to functions that aren't part of the public API.
     PrecompileContextPriv priv();

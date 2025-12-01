@@ -12,6 +12,7 @@
 #include <vector>
 
 #include "base/command_line.h"
+#include "base/compiler_specific.h"
 #include "base/files/file_path.h"
 #include "base/logging.h"
 #include "base/numerics/safe_conversions.h"
@@ -80,7 +81,9 @@ HRESULT Elevator::EncryptData(ProtectionLevel protection_level,
 
   std::string plaintext_str(reinterpret_cast<char*>(plaintext), length);
 #if BUILDFLAG(GOOGLE_CHROME_BRANDING)
-  auto pre_process_result = PreProcessData(plaintext_str);
+  InternalFlags pre_process_flags{.use_latest_encryption =
+                                      flags.use_latest_key};
+  auto pre_process_result = PreProcessData(plaintext_str, &pre_process_flags);
   if (!pre_process_result.has_value()) {
     return pre_process_result.error();
   }
@@ -251,7 +254,7 @@ std::string Elevator::PopFromStringFront(std::string& str) {
     return std::string();
   auto it = str.begin();
   // Obtain the size.
-  memcpy(&size, str.c_str(), sizeof(size));
+  UNSAFE_TODO(memcpy(&size, str.c_str(), sizeof(size)));
   // Skip over the size field.
   std::string value;
   if (size) {

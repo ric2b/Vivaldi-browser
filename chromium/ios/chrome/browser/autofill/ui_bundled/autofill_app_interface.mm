@@ -13,7 +13,7 @@
 #import "components/autofill/core/browser/data_manager/addresses/address_data_manager.h"
 #import "components/autofill/core/browser/data_manager/payments/payments_data_manager.h"
 #import "components/autofill/core/browser/data_manager/personal_data_manager.h"
-#import "components/autofill/core/browser/data_model/autofill_profile_test_api.h"
+#import "components/autofill/core/browser/data_model/addresses/autofill_profile_test_api.h"
 #import "components/autofill/core/browser/form_import/form_data_importer.h"
 #import "components/autofill/core/browser/foundations/autofill_client.h"
 #import "components/autofill/core/browser/foundations/browser_autofill_manager_test_api.h"
@@ -392,6 +392,16 @@ static std::unique_ptr<ScopedAutofillPaymentReauthModuleOverride>
   autofill::PersonalDataManager* personalDataManager =
       [self personalDataManager];
   return personalDataManager->address_data_manager().GetProfiles().size();
+}
+
++ (BOOL)isAccountProfileAtIndex:(NSInteger)index {
+  CHECK_LT(index, self.profilesCount);
+
+  autofill::PersonalDataManager* personalDataManager =
+      [self personalDataManager];
+  return personalDataManager->address_data_manager()
+      .GetProfiles()[index]
+      ->IsAccountProfile();
 }
 
 + (void)clearProfilesStore {

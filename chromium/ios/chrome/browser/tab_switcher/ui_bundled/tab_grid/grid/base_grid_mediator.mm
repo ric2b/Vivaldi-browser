@@ -19,12 +19,12 @@
 #import "base/strings/stringprintf.h"
 #import "base/strings/sys_string_conversions.h"
 #import "components/bookmarks/common/bookmark_pref_names.h"
-#import "components/data_sharing/public/data_sharing_service.h"
+#import "components/collaboration/public/collaboration_service.h"
 #import "components/prefs/pref_service.h"
 #import "components/saved_tab_groups/public/tab_group_sync_service.h"
 #import "components/tab_groups/tab_group_visual_data.h"
+#import "ios/chrome/browser/collaboration/model/collaboration_service_factory.h"
 #import "ios/chrome/browser/commerce/model/shopping_persisted_data_tab_helper.h"
-#import "ios/chrome/browser/data_sharing/model/data_sharing_service_factory.h"
 #import "ios/chrome/browser/default_browser/model/utils.h"
 #import "ios/chrome/browser/drag_and_drop/model/drag_item_util.h"
 #import "ios/chrome/browser/iph_for_new_chrome_user/model/tab_based_iph_browser_agent.h"
@@ -79,7 +79,6 @@
 #import "ios/chrome/browser/tab_switcher/ui_bundled/tab_group_item.h"
 #import "ios/chrome/browser/tab_switcher/ui_bundled/tab_utils.h"
 #import "ios/chrome/browser/tab_switcher/ui_bundled/web_state_tab_switcher_item.h"
-#import "ios/chrome/browser/tabs/model/inactive_tabs/features.h"
 #import "ios/chrome/browser/tabs_search/model/tabs_search_service.h"
 #import "ios/chrome/browser/tabs_search/model/tabs_search_service_factory.h"
 #import "ios/chrome/browser/url_loading/model/url_loading_browser_agent.h"
@@ -97,8 +96,6 @@
 using vivaldi::IsVivaldiRunning;
 // End Vivaldi
 
-using PeopleGroupActionOutcome =
-    data_sharing::DataSharingService::PeopleGroupActionOutcome;
 using PinnedState = WebStateSearchCriteria::PinnedState;
 
 namespace {
@@ -487,6 +484,8 @@ void LogPriceDropMetrics(web::WebState* web_state) {
                      selectedItemIdentifier:nil];
   }
 
+  const WebStateList::ScopedBatchOperation batch =
+      groupWebStateList->StartBatchOperation();
   groupWebStateList->DeleteGroup(group);
 }
 
@@ -1562,7 +1561,7 @@ void LogPriceDropMetrics(web::WebState* web_state) {
 
   NSArray<URLWithTitle*>* URLs = [self urlsWithTitleFromItemIDs:itemIDs];
 
-  [bookmarkHandler bookmarkWithFolderChooser:URLs];
+  [bookmarkHandler addBookmarksAndShowFolderChooser:URLs];
 }
 
 - (NSArray<URLWithTitle*>*)urlsWithTitleFromItemIDs:
@@ -1734,30 +1733,27 @@ void LogPriceDropMetrics(web::WebState* web_state) {
 }
 
 // Takes the corresponded action to `actionType` for the shared `group`.
-// Not handled TabGroupActionType: kUngroupTabGroup, kDeleteTabGroup.
+// TabGroupActionType must be kLeaveSharedTabGroup or kDeleteSharedTabGroup.
 - (void)takeActionForActionType:(TabGroupActionType)actionType
                  sharedTabGroup:(const TabGroup*)group {
   [self.tabGridIdleStatusHandler
       tabGridDidPerformAction:TabGridActionType::kInPageAction];
 
-  data_sharing::DataSharingService* dataSharingService =
-      data_sharing::DataSharingServiceFactory::GetForProfile(self.profile);
+  collaboration::CollaborationService* collaborationService =
+      collaboration::CollaborationServiceFactory::GetForProfile(_profile);
   tab_groups::TabGroupSyncService* tabGroupSyncService =
       tab_groups::TabGroupSyncServiceFactory::GetForProfile(self.profile);
-  CHECK(dataSharingService);
+  CHECK(collaborationService);
   CHECK(tabGroupSyncService);
 
-  const base::Uuid savedGroupId =
-      tabGroupSyncService->GetGroup(group->tab_group_id())->saved_guid();
   const tab_groups::CollaborationId collabId =
       tab_groups::utils::GetTabGroupCollabID(group, tabGroupSyncService);
   CHECK(!collabId->empty());
   const data_sharing::GroupId groupId = data_sharing::GroupId(collabId.value());
 
   __weak BaseGridMediator* weakSelf = self;
-  auto callback = base::BindOnce(^(PeopleGroupActionOutcome outcome) {
-    BOOL success = outcome == PeopleGroupActionOutcome::kSuccess;
-    [weakSelf handTakeActionForActionTypeOutcome:success];
+  auto callback = base::BindOnce(^(bool success) {
+    [weakSelf handleTakeActionForActionTypeOutcome:success];
   });
 
   // TODO(crbug.com/393073658): Block the screen.
@@ -1765,10 +1761,10 @@ void LogPriceDropMetrics(web::WebState* web_state) {
   // Asynchronously call on the server.
   switch (actionType) {
     case TabGroupActionType::kLeaveSharedTabGroup:
-      dataSharingService->LeaveGroup(groupId, std::move(callback));
+      collaborationService->LeaveGroup(groupId, std::move(callback));
       break;
     case TabGroupActionType::kDeleteSharedTabGroup:
-      dataSharingService->DeleteGroup(groupId, std::move(callback));
+      collaborationService->DeleteGroup(groupId, std::move(callback));
       break;
     case TabGroupActionType::kUngroupTabGroup:
     case TabGroupActionType::kDeleteTabGroup:
@@ -1778,8 +1774,9 @@ void LogPriceDropMetrics(web::WebState* web_state) {
   }
 }
 
-// Called when `performAction:forSharedTabGroup:` server's call returned.
-- (void)handTakeActionForActionTypeOutcome:(BOOL)success {
+// Called when `takeActionForActionType:forSharedTabGroup:` server's call
+// returned.
+- (void)handleTakeActionForActionTypeOutcome:(BOOL)success {
   // TODO(crbug.com/393073658):
   // - Unblock the screen.
   // - Show an error if needed.

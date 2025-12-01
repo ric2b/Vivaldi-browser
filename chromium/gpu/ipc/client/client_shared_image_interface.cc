@@ -88,18 +88,6 @@ void ClientSharedImageInterface::WaitSyncToken(
   proxy_->WaitSyncToken(sync_token);
 }
 
-void ClientSharedImageInterface::Flush() {
-  // |proxy_| might not be needed and is not setup in the tests.
-  if (proxy_) {
-    proxy_->Flush();
-  }
-}
-
-scoped_refptr<gfx::NativePixmap> ClientSharedImageInterface::GetNativePixmap(
-    const gpu::Mailbox& mailbox) {
-  return proxy_->GetNativePixmap(mailbox);
-}
-
 scoped_refptr<ClientSharedImage> ClientSharedImageInterface::CreateSharedImage(
     const SharedImageInfo& si_info,
     gpu::SurfaceHandle surface_handle,
@@ -314,18 +302,16 @@ void ClientSharedImageInterface::DestroySharedImage(
 }
 
 scoped_refptr<ClientSharedImage> ClientSharedImageInterface::ImportSharedImage(
-    const ExportedSharedImage& exported_shared_image) {
+    ExportedSharedImage exported_shared_image) {
   const auto& mailbox = exported_shared_image.mailbox_;
-  const auto& metadata = exported_shared_image.metadata_;
   const auto& sync_token = exported_shared_image.creation_sync_token_;
-  uint32_t texture_target = exported_shared_image.texture_target_;
 
   DCHECK(!mailbox.IsZero());
   AddMailbox(mailbox);
   proxy_->AddReferenceToSharedImage(sync_token, mailbox);
 
-  return base::WrapRefCounted<ClientSharedImage>(new ClientSharedImage(
-      mailbox, metadata, sync_token, holder_, texture_target));
+  return base::WrapRefCounted<ClientSharedImage>(
+      new ClientSharedImage(std::move(exported_shared_image), holder_));
 }
 
 scoped_refptr<ClientSharedImage> ClientSharedImageInterface::NotifyMailboxAdded(
@@ -358,11 +344,10 @@ scoped_refptr<ClientSharedImage> ClientSharedImageInterface::NotifyMailboxAdded(
   AddMailbox(mailbox);
   proxy_->NotifyMailboxAdded(mailbox, usage);
 
+  SharedImageMetadata metadata(format, size, color_space, surface_origin,
+                               alpha_type, usage);
   return base::WrapRefCounted<ClientSharedImage>(new ClientSharedImage(
-      mailbox,
-      SharedImageMetadata(format, size, color_space, surface_origin, alpha_type,
-                          usage),
-      GenUnverifiedSyncToken(), holder_, texture_target));
+      mailbox, metadata, GenUnverifiedSyncToken(), holder_, texture_target));
 }
 
 Mailbox ClientSharedImageInterface::AddMailbox(const gpu::Mailbox& mailbox) {

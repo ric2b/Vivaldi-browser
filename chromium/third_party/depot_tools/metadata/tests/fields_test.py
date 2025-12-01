@@ -123,6 +123,7 @@ class FieldValidationTest(unittest.TestCase):
                 "MIT",
                 "APSL-2.0, MIT",
                 "APSL-2.0 ,MIT",
+                "Refer to additional_readme_paths.json"
             ],
             error_values=[
                 "",
@@ -136,6 +137,7 @@ class FieldValidationTest(unittest.TestCase):
             warning_values=[
                 "Custom license",
                 "Custom, MIT",
+                "Refer to any_other_readme_paths.json",
             ],
         )
 
@@ -174,7 +176,7 @@ class FieldValidationTest(unittest.TestCase):
             source_file_dir=os.path.join(_THIS_DIR, "data"),
             repo_root_dir=_THIS_DIR,
         )
-        self.assertIsInstance(result, vr.ValidationError)
+        self.assertIsInstance(result, vr.ValidationWarning)
 
         # Check deprecated NOT_SHIPPED.
         result = known_fields.LICENSE_FILE.validate_on_disk(

@@ -166,6 +166,33 @@ void RecordAsyncCheckTriggerForceRequestResult(
       result);
 }
 
+bool ShouldShowWarning(bool is_phishing,
+                       std::optional<IntelligentScanVerdict> verdict) {
+  if (is_phishing) {
+    return true;
+  }
+
+  if (!verdict.has_value() ||
+      *verdict ==
+          IntelligentScanVerdict::INTELLIGENT_SCAN_VERDICT_UNSPECIFIED ||
+      *verdict == IntelligentScanVerdict::INTELLIGENT_SCAN_VERDICT_SAFE) {
+    return false;
+  }
+
+  return (base::FeatureList::IsEnabled(
+              kClientSideDetectionShowScamVerdictWarning) &&
+          *verdict == IntelligentScanVerdict::SCAM_EXPERIMENT_VERDICT_1) ||
+         (base::FeatureList::IsEnabled(
+              kClientSideDetectionShowLlamaScamVerdictWarning) &&
+          *verdict == IntelligentScanVerdict::SCAM_EXPERIMENT_VERDICT_2) ||
+         ((base::FeatureList::IsEnabled(
+               kClientSideDetectionShowScamVerdictWarning) ||
+           base::FeatureList::IsEnabled(
+               kClientSideDetectionShowLlamaScamVerdictWarning)) &&
+          *verdict ==
+              IntelligentScanVerdict::SCAM_EXPERIMENT_CATCH_ALL_ENFORCEMENT);
+}
+
 }  // namespace
 
 typedef base::OnceCallback<void(bool, bool, std::optional<bool>)>
@@ -671,6 +698,10 @@ void ClientSideDetectionHost::MaybeStartPreClassification(
   if (classification_request_.get()) {
     classification_request_->Cancel();
   }
+
+  // Cancel any ongoing on device sessions.
+  csd_service_->ResetOnDeviceSession();
+
   // If we navigate away and there currently is a pending phishing report
   // request we have to cancel it to make sure we don't display an interstitial
   // for the wrong page.  Note that this won't cancel the server ping back but
@@ -1156,7 +1187,21 @@ void ClientSideDetectionHost::MaybeInquireOnDeviceForScamDetection(
       verdict->llama_forced_trigger_info().intelligent_scan();
 
   if (IsEnhancedProtectionEnabled(*delegate_->GetPrefs()) &&
+      csd_service_->IsOnDeviceModelAvailable() &&
       (is_keyboard_lock_requested || is_intelligent_scan_requested)) {
+    if (is_keyboard_lock_requested &&
+        did_match_high_confidence_allowlist.has_value() &&
+        did_match_high_confidence_allowlist.value()) {
+      IntelligentScanInfo intelligent_scan_info;
+      intelligent_scan_info.set_no_info_reason(
+          IntelligentScanInfo::ALLOWLISTED);
+      *verdict->mutable_intelligent_scan_info() =
+          std::move(intelligent_scan_info);
+      MaybeGetAccessToken(std::move(verdict),
+                          did_match_high_confidence_allowlist);
+      return;
+    }
+
     delegate_->GetInnerText(
         base::BindOnce(&ClientSideDetectionHost::OnInnerTextComplete,
                        weak_factory_.GetWeakPtr(), std::move(verdict),
@@ -1263,18 +1308,11 @@ void ClientSideDetectionHost::MaybeShowPhishingWarning(
                                   IntelligentScanVerdict_MAX + 1);
   }
 
-  bool should_show_warning =
-      base::FeatureList::IsEnabled(kClientSideDetectionShowScamVerdictWarning)
-          ? (is_phishing ||
-             (intelligent_scan_verdict.has_value() &&
-              intelligent_scan_verdict !=
-                  IntelligentScanVerdict::
-                      INTELLIGENT_SCAN_VERDICT_UNSPECIFIED &&
-              intelligent_scan_verdict !=
-                  IntelligentScanVerdict::INTELLIGENT_SCAN_VERDICT_SAFE))
-          : is_phishing;
-
-  if (should_show_warning) {
+  // We will only show the warning if |is_phishing| is true, or while the
+  // feature is enabled, the intelligent scan verdict matches the corresponding
+  // feature. When a feature is cleaned up, remove the feature enabled check
+  // alongside the corresponding IntelligentScanVerdict.
+  if (ShouldShowWarning(is_phishing, intelligent_scan_verdict)) {
     if (!is_from_cache && did_match_high_confidence_allowlist.has_value()) {
       base::UmaHistogramBoolean(
           "SBClientPhishing.HighConfidenceAllowlistMatchOnServerVerdictPhishy",

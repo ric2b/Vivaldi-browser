@@ -50,6 +50,9 @@ using vivaldi::IsVivaldiRunning;
   // Configures the responder following the receiver in the responder chain.
   UIResponder* _followingNextResponder;
   UIView* _scrolledToBottomBackgroundView;
+
+  // TODO(crbug.com/398183785): Remove once we got feedback.
+  UIBarButtonItem* _sendFeedbackGroupButton;
 }
 
 - (instancetype)initWithFrame:(CGRect)frame {
@@ -254,6 +257,12 @@ using vivaldi::IsVivaldiRunning;
   _editButton.hidden = hidden;
 }
 
+#pragma mark - Send feedback
+
+- (void)setTabGroupFeedbackVisible:(BOOL)visible {
+  _sendFeedbackGroupButton.hidden = !visible;
+}
+
 #pragma mark - Private
 
 - (void)setupViews {
@@ -339,6 +348,15 @@ using vivaldi::IsVivaldiRunning;
   _closeTabsButton.accessibilityIdentifier =
       kTabGridEditCloseTabsButtonIdentifier;
   [self updateCloseTabsButtonTitle];
+
+  _sendFeedbackGroupButton = [[UIBarButtonItem alloc] init];
+  _sendFeedbackGroupButton.target = self;
+  _sendFeedbackGroupButton.action = @selector(sendFeedback:);
+  _sendFeedbackGroupButton.tintColor =
+      UIColorFromRGB(kTabGridToolbarTextButtonColor);
+  _sendFeedbackGroupButton.title =
+      l10n_util::GetNSString(IDS_IOS_CONTENT_NOTIFICATIONS_SEND_FEEDBACK);
+  _sendFeedbackGroupButton.hidden = YES;
 
   // Vivaldi
   // Setting up button tint colors
@@ -440,7 +458,8 @@ using vivaldi::IsVivaldiRunning;
       [_toolbar setItems:@[ _spaceItem, trailingButton ]];
     } else {
       [_toolbar setItems:@[
-        leadingButton, _spaceItem, _newTabButtonItem, _spaceItem, trailingButton
+        leadingButton, _spaceItem, _newTabButtonItem, _spaceItem,
+        trailingButton, _sendFeedbackGroupButton
       ]];
     }
 
@@ -607,6 +626,11 @@ using vivaldi::IsVivaldiRunning;
   if (_shareButton.enabled) {
     [self.buttonsDelegate shareSelectedTabs:sender];
   }
+}
+
+// TODO(crbug.com/398183785): Remove once we got feedback.
+- (void)sendFeedback:(id)sender {
+  [self.buttonsDelegate sendFeedbackGroupTapped:sender];
 }
 
 #pragma mark - Setters

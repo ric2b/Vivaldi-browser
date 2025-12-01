@@ -36,6 +36,7 @@
 #include "ui/base/owned_window_anchor.h"
 #include "ui/base/ui_base_features.h"
 #include "ui/base/ui_base_types.h"
+#include "ui/color/color_id.h"
 #include "ui/color/color_provider_key.h"
 #include "ui/compositor/compositor.h"
 #include "ui/compositor/layer.h"
@@ -434,7 +435,8 @@ void DesktopNativeWidgetAura::NotifyAccessibilityEvent(
   if (!GetWidget() || !GetWidget()->GetRootView()) {
     return;
   }
-  GetWidget()->GetRootView()->NotifyAccessibilityEvent(event_type, true);
+  GetWidget()->GetRootView()->NotifyAccessibilityEventDeprecated(event_type,
+                                                                 true);
 }
 
 void DesktopNativeWidgetAura::HandleActivationChanged(bool active) {
@@ -546,7 +548,9 @@ void DesktopNativeWidgetAura::UpdateWindowTransparency() {
 
   auto* window_tree_host = desktop_window_tree_host_->AsWindowTreeHost();
   window_tree_host->compositor()->SetBackgroundColor(
-      transparent ? SK_ColorTRANSPARENT : SK_ColorWHITE);
+      transparent
+          ? SK_ColorTRANSPARENT
+          : GetWidget()->GetColorProvider()->GetColor(ui::kColorFrameActive));
   window_tree_host->window()->SetTransparent(transparent);
 
   content_window_->SetTransparent(transparent);
@@ -1060,6 +1064,12 @@ bool DesktopNativeWidgetAura::IsMinimized() const {
 void DesktopNativeWidgetAura::Restore() {
   if (desktop_window_tree_host_) {
     desktop_window_tree_host_->Restore();
+  }
+}
+
+void DesktopNativeWidgetAura::ShowWindowControlsMenu(const gfx::Point& point) {
+  if (desktop_window_tree_host_) {
+    desktop_window_tree_host_->ShowWindowControlsMenu(point);
   }
 }
 

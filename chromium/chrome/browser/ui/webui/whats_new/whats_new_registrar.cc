@@ -7,6 +7,8 @@
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/ui/ui_features.h"
 #include "chrome/browser/ui/webui/whats_new/whats_new_storage_service_impl.h"
+#include "chrome/common/buildflags.h"
+#include "chrome/common/chrome_features.h"
 #include "components/lens/lens_features.h"
 #include "components/performance_manager/public/features.h"
 #include "components/user_education/webui/whats_new_registry.h"
@@ -22,10 +24,7 @@ namespace whats_new {
 using BrowserCommand = browser_command::mojom::Command;
 
 namespace features {
-BASE_FEATURE(kSafetyAwareness,
-             "SafetyAwareness",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-BASE_FEATURE(kSpark, "Spark", base::FEATURE_DISABLED_BY_DEFAULT);
+// Define local features here.
 }  // namespace features
 
 void RegisterWhatsNewModules(whats_new::WhatsNewRegistry* registry) {
@@ -46,26 +45,16 @@ void RegisterWhatsNewModules(whats_new::WhatsNewRegistry* registry) {
 #endif
 
   registry->RegisterModule(
-      WhatsNewModule(::features::kToolbarPinning, "corising@google.com",
-                     BrowserCommand::kShowCustomizeChromeToolbar));
-
-  registry->RegisterModule(
-      WhatsNewModule(performance_manager::features::kPerformanceInterventionUI,
-                     "agale@google.com"));
-
-  registry->RegisterModule(
       WhatsNewModule(::features::kReadAnythingReadAloud, "trewin@google.com"));
 }
 
 void RegisterWhatsNewEditions(whats_new::WhatsNewRegistry* registry) {
   // Register editions here.
-  // 130
-  registry->RegisterEdition(
-      WhatsNewEdition(features::kSafetyAwareness, "mickeyburks@google.com"));
-
-  // 131
-  registry->RegisterEdition(
-      WhatsNewEdition(features::kSpark, "mickeyburks@google.com"));
+#if BUILDFLAG(ENABLE_GLIC)
+  registry->RegisterEdition(WhatsNewEdition(
+      ::features::kGlic, "tommasin@chromium.org",
+      std::vector<BrowserCommand>{BrowserCommand::kOpenGlic}));
+#endif  // BUILDFLAG(ENABLE_GLIC)
 }
 
 std::unique_ptr<WhatsNewRegistry> CreateWhatsNewRegistry() {

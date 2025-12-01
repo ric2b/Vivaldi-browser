@@ -207,21 +207,6 @@
 #  pragma warning(disable : 4324)        /* disable: C4324: padded structure */
 #endif
 
-/* Like DYNAMIC_BMI2 but for compile time determination of BMI2 support */
-#ifndef STATIC_BMI2
-#  if defined(_MSC_VER)
-#    ifdef __AVX2__  /* MSVC does not have a BMI2 specific flag, but every CPU that supports AVX2 also supports BMI2 */
-#       define STATIC_BMI2 1
-#    endif
-#  elif defined(__BMI2__)
-#    define STATIC_BMI2 1
-#  endif
-#endif
-
-#ifndef STATIC_BMI2
-#  define STATIC_BMI2 0
-#endif
-
 /* compile time determination of SIMD support */
 #if !defined(ZSTD_NO_INTRINSICS)
 #  if defined(__AVX2__)
@@ -317,10 +302,10 @@ MEM_STATIC int ZSTD_isPower2(size_t u) {
 
 #ifndef ZSTD_ALIGNED
 /* C90-compatible alignment macro (GCC/Clang). Adjust for other compilers if needed. */
-# if defined(__GNUC__)
+# if defined(__GNUC__) || defined(__clang__)
 #  define ZSTD_ALIGNED(a) __attribute__((aligned(a)))
 # elif defined(__STDC_VERSION__) && (__STDC_VERSION__ >= 201112L) /* C11 */
-#  define ZSTD_ALIGNED(a) alignas(a)
+#  define ZSTD_ALIGNED(a) _Alignas(a)
 #elif defined(_MSC_VER)
 #  define ZSTD_ALIGNED(n) __declspec(align(n))
 # else

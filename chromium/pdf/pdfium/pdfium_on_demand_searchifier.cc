@@ -156,13 +156,9 @@ void PDFiumOnDemandSearchifier::SearchifyNextImage() {
   }
 
   // Report metric only once for each page.
-  bool not_reported =
-      searchify_added_text_metric_reported_.insert(current_page_->index())
-          .second;
-  if (not_reported) {
-    base::UmaHistogramBoolean("PDF.SearchifyAddedText",
-                              !current_page_ocr_results_.empty());
-  }
+  CHECK(!current_page_->IsPageSearchified());
+  base::UmaHistogramBoolean("PDF.SearchifyAddedText",
+                            !current_page_ocr_results_.empty());
 
   CommitResultsToPage();
 }
@@ -185,17 +181,12 @@ void PDFiumOnDemandSearchifier::CommitResultsToPage() {
     bool added_text = false;
     for (auto& result : current_page_ocr_results_) {
       FPDF_PAGEOBJECT image = FPDFPage_GetObject(page, result.image_index);
-      std::vector<FPDF_PAGEOBJECT> added_text_objects =
+      added_text |=
           AddTextOnImage(engine_->doc(), page, font_.get(), image,
                          std::move(result.annotation), result.image_size);
-      current_page_->OnSearchifyGotOcrResult(added_text_objects);
-      added_text |= !added_text_objects.empty();
-    }
-    if (added_text) {
-      engine_->OnHasSearchifyText();
     }
     current_page_ocr_results_.clear();
-
+    current_page_->OnSearchifyGotOcrResult(added_text);
     current_page_->ReloadTextPage();
     if (!FPDFPage_GenerateContent(page)) {
       LOG(ERROR) << "Failed to generate content";

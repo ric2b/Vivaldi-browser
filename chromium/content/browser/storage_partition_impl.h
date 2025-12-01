@@ -380,6 +380,8 @@ class CONTENT_EXPORT StoragePartitionImpl
       const std::optional<std::string>& private_network_device_id,
       const std::optional<std::string>& private_network_device_name,
       OnPrivateNetworkAccessPermissionRequiredCallback callback) override;
+  void OnLocalNetworkAccessPermissionRequired(
+      OnLocalNetworkAccessPermissionRequiredCallback callback) override;
   void OnClearSiteData(
       const GURL& url,
       const std::string& header_value,
@@ -398,6 +400,8 @@ class CONTENT_EXPORT StoragePartitionImpl
           methods_with_options,
       const std::optional<std::string>& with_lock,
       OnSharedStorageHeaderReceivedCallback callback) override;
+  void OnAdAuctionEventRecordHeaderReceived(
+      network::AdAuctionEventRecord event_record) override;
 
   SharedStorageHeaderObserver* shared_storage_header_observer() {
     return shared_storage_header_observer_.get();

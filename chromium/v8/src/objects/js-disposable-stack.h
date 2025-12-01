@@ -79,13 +79,13 @@ class JSDisposableStackBase
       Isolate* isolate, DirectHandle<JSAny> value, DisposeMethodHint hint);
   static MaybeDirectHandle<Object> DisposeResources(
       Isolate* isolate, DirectHandle<JSDisposableStackBase> disposable_stack,
-      MaybeHandle<Object> maybe_continuation_error,
       DisposableStackResourcesType resources_type);
   static MaybeDirectHandle<JSReceiver> ResolveAPromiseWithValueAndReturnIt(
       Isolate* isolate, DirectHandle<Object> value);
   static void HandleErrorInDisposal(
       Isolate* isolate, DirectHandle<JSDisposableStackBase> disposable_stack,
-      Handle<Object> current_error, DirectHandle<Object> current_error_message);
+      DirectHandle<Object> current_error,
+      DirectHandle<Object> current_error_message);
 
   TQ_OBJECT_CONSTRUCTORS(JSDisposableStackBase)
 };

@@ -3,6 +3,13 @@
 # found in the LICENSE file.
 
 import("//build/config/features.gni")
+import("//mojo/public/tools/bindings/mojom.gni")
+import("//testing/test.gni")
+
+mojom("privacy_sandbox_notice_mojom") {
+  sources = [ "privacy_sandbox_notice.mojom" ]
+  webui_module_path = "/"
+}
 
 static_library("privacy_sandbox_prefs") {
   sources = [
@@ -118,7 +125,9 @@ source_set("privacy_sandbox_notice_storage") {
   ]
 
   deps = [
+    ":features",
     ":privacy_sandbox_notice_constants",
+    "//base",
     "//base/version_info:version_info",
     "//components/pref_registry:pref_registry",
     "//components/prefs",
@@ -188,6 +197,8 @@ if (use_blink) {
       "//components/content_settings/core/browser:cookie_settings",
       "//components/content_settings/core/common",
       "//components/keyed_service/core:core",
+      "//components/metrics/dwa:dwa",
+      "//components/metrics/dwa:dwa_builders",
       "//components/pref_registry:pref_registry",
       "//components/prefs",
       "//components/privacy_sandbox/privacy_sandbox_attestations",
@@ -221,17 +232,35 @@ if (use_blink) {
       "//components/content_settings/core/browser:browser",
       "//components/content_settings/core/common:common",
       "//components/content_settings/core/test:test_support",
+      "//components/metrics/dwa:dwa",
+      "//components/metrics/dwa:dwa_builders",
       "//components/prefs:test_support",
       "//components/privacy_sandbox/privacy_sandbox_attestations",
       "//components/privacy_sandbox/privacy_sandbox_attestations:test_support",
       "//components/sync_preferences:test_support",
       "//content/test:test_support",
+      "//net",
       "//testing/gmock",
       "//testing/gtest:gtest",
       "//ui/base:base",
       "//url:url",
     ]
   }
+}
+
+test("fuzz_tests") {
+  sources = [ "privacy_sandbox_notice_storage_fuzztest.cc" ]
+
+  fuzztests = [
+    "PrivacySandboxNoticeStorageFuzzTest.CheckConvertsV1SchemaSuccessfully",
+  ]
+
+  deps = [
+    ":privacy_sandbox_notice_storage",
+    "//testing/gmock",
+    "//testing/gtest",
+    "//third_party/fuzztest:fuzztest_gtest_main",
+  ]
 }
 
 source_set("unit_tests") {

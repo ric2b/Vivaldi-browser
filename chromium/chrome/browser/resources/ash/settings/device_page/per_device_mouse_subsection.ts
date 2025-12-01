@@ -8,7 +8,6 @@
  * subsection settings in system settings.
  */
 
-import '../icons.html.js';
 import '../settings_shared.css.js';
 import 'chrome://resources/ash/common/bluetooth/bluetooth_battery_icon_percentage.js';
 import 'chrome://resources/ash/common/cr_elements/localized_link/localized_link.js';
@@ -231,7 +230,7 @@ export class SettingsPerDeviceMouseSubsectionElement extends
     ];
   }
 
-  override async currentRouteChanged(route: Route): Promise<void> {
+  override currentRouteChanged(route: Route) {
     // Avoid override currentMouseChanged when on the customization subpage.
     if (route === routes.CUSTOMIZE_MOUSE_BUTTONS) {
       return;

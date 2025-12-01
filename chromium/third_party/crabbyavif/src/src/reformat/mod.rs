@@ -26,7 +26,6 @@ pub mod rgb_impl;
 // without it.
 #[cfg(not(feature = "libyuv"))]
 pub mod libyuv {
-    use crate::decoder::Category;
     use crate::reformat::*;
     use crate::*;
 

@@ -10,12 +10,14 @@ found in the LICENSE file.
     <dimen name="action_bar_shadow_height">10dp</dimen>
     <dimen name="bottom_sheet_corner_radius">16dp</dimen>
     <dimen name="card_padding">16dp</dimen>
-    <dimen name="clear_text_button_end_padding">10dp</dimen>
+    <dimen name="clear_text_button_horizontal_padding">16dp</dimen>
     <dimen name="default_rounded_corner_radius">8dp</dimen>
     <dimen name="card_rounded_corner_radius">16dp</dimen>
     <dimen name="card_rounded_corner_small_radius">4dp</dimen>
     <dimen name="dialog_corner_radius">24dp</dimen>
-    <dimen name="sheet_background_elev">@dimen/default_elevation_0</dimen>
+    <dimen name="large_icon_background_size">40dp</dimen>
+    <dimen name="small_icon_background_size">32dp</dimen>
+    <dimen name="focused_icon_background_stroke_width">2dp</dimen>
 
     <!-- DualControlLayout -->
     <dimen name="dual_control_margin_between_items">8dp</dimen>
@@ -79,6 +81,9 @@ found in the LICENSE file.
          location bar on tablets. -->
     <dimen name="modern_toolbar_background_vertical_offset">4dp</dimen>
     <dimen name="toolbar_text_box_elevation">@dimen/default_elevation_2</dimen>
+    <dimen name="search_box_icon_background_width">40dp</dimen>
+    <dimen name="search_box_icon_background_height">32dp</dimen>
+    <dimen name="search_box_nav_button_background_inset">12dp</dimen>
 
     <!-- Promo cards dimensions -->
     <dimen name="promo_image_size">24dp</dimen>
@@ -193,19 +198,13 @@ found in the LICENSE file.
     <dimen name="app_menu_shadow_length">@dimen/default_shadow_length_elev_2</dimen>
     <dimen name="app_menu_elevation">@dimen/default_elevation_2</dimen>
 
-    <!-- Surface color elevations -->
-    <dimen name="menu_bg_color_elev">@dimen/default_elevation_0</dimen>
-    <dimen name="dialog_elevation">@dimen/default_elevation_0</dimen>
-
     <!-- Empty view layout dimensions -->
     <dimen name="empty_state_text_width">341dp</dimen>
     <dimen name="empty_state_heading_padding_top">18dp</dimen>
     <dimen name="empty_state_subheading_padding_top">8dp</dimen>
 
     <!-- New Tab Page -->
-    <dimen name="home_surface_background_color_elevation">@dimen/default_elevation_2</dimen>
     <item name="home_surface_search_box_background_alpha" format="float" type="dimen">0.15</item>
-    <dimen name="home_surface_ui_background_color_elevation">@dimen/default_elevation_0</dimen>
     <dimen name="home_surface_ui_background_radius">24dp</dimen>
     <dimen name="home_surface_search_box_background_radius">100dp</dimen>
 
@@ -223,13 +222,11 @@ found in the LICENSE file.
     <dimen name="switch_pre_scale_min_height">60dp</dimen>
     <dimen name="switch_with_text_min_height">@dimen/min_touch_target_size</dimen>
 
-    <!-- Default values for GradientParagraphLoadingIndicator. -->
-    <item type="integer" name="loading_text_line_count">3</item>
-    <dimen name="loading_text_line_height">14dp</dimen>
-    <dimen name="loading_text_line_spacing">6dp</dimen>
-    <item type="fraction" format="fraction" name="loading_text_last_line_width_fraction">50%</item>
-
     <!-- Price change indicator dimens -->
     <dimen name="price_change_indicator_card_radius">8dp</dimen>
     <dimen name="price_change_indicator_card_height">24dp</dimen>
+
+    <!-- Loading Fullscreen dimens -->
+    <dimen name="left_right_padding">16dp</dimen>
+    <dimen name="top_bottom_padding">18dp</dimen>
 </resources>

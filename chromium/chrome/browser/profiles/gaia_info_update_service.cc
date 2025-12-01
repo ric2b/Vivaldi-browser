@@ -29,7 +29,6 @@
 #include "components/signin/public/identity_manager/accounts_in_cookie_jar_info.h"
 #include "components/signin/public/identity_manager/identity_manager.h"
 #include "components/signin/public/identity_manager/identity_utils.h"
-#include "components/signin/public/identity_manager/tribool.h"
 #include "content/public/browser/storage_partition.h"
 #include "google_apis/gaia/gaia_id.h"
 #include "third_party/skia/include/core/SkBitmap.h"
@@ -80,11 +79,13 @@ void UpdateAccountsPrefs(
 }  // namespace
 
 GAIAInfoUpdateService::GAIAInfoUpdateService(
+    Profile* profile,
     signin::IdentityManager* identity_manager,
     ProfileAttributesStorage* profile_attributes_storage,
     PrefService& pref_service,
     const base::FilePath& profile_path)
-    : identity_manager_(identity_manager),
+    : profile_(profile),
+      identity_manager_(identity_manager),
       profile_attributes_storage_(profile_attributes_storage),
       pref_service_(pref_service),
       profile_path_(profile_path) {
@@ -144,16 +145,12 @@ void GAIAInfoUpdateService::UpdatePrimaryAccount(const AccountInfo& info) {
     entry->SetGAIAPicture(info.last_downloaded_image_url_with_size,
                           info.account_image);
   }
-
-  // Treat `signin::Tribool::kUnknown` as ineligible.
-  entry->SetIsGlicEligible(
-      info.capabilities.can_use_model_execution_features() ==
-      signin::Tribool::kTrue);
 }
 
 void GAIAInfoUpdateService::UpdateAnyAccount(const AccountInfo& info) {
-  if (!info.IsValid())
+  if (!info.IsValid()) {
     return;
+  }
 
   ProfileAttributesEntry* entry =
       profile_attributes_storage_->GetProfileAttributesWithPath(profile_path_);

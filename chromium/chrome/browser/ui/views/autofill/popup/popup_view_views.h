@@ -8,7 +8,9 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <utility>
+#include <variant>
 #include <vector>
 
 #include "base/functional/callback_forward.h"
@@ -22,8 +24,8 @@
 #include "chrome/browser/ui/views/autofill/popup/popup_search_bar_view.h"
 #include "components/autofill/core/common/aliases.h"
 #include "components/input/native_web_keyboard_event.h"
-#include "third_party/abseil-cpp/absl/types/variant.h"
 #include "ui/accessibility/ax_action_data.h"
+#include "ui/base/interaction/element_identifier.h"
 #include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/events/event.h"
 #include "ui/views/widget/widget.h"
@@ -32,10 +34,6 @@ namespace views {
 class BoxLayoutView;
 class ScrollView;
 }  // namespace views
-
-namespace autofill_ai {
-class AutofillAiLoadingStateView;
-}
 
 namespace autofill {
 
@@ -69,11 +67,21 @@ class PopupViewViews : public PopupBaseView,
   METADATA_HEADER(PopupViewViews, PopupBaseView)
 
  public:
-  using RowPointer = absl::variant<PopupRowView*,
-                                   PopupSeparatorView*,
-                                   PopupTitleView*,
-                                   PopupWarningView*,
-                                   autofill_ai::AutofillAiLoadingStateView*>;
+  DECLARE_CLASS_ELEMENT_IDENTIFIER_VALUE(
+      kAutofillBnplAffirmOrZipSuggestionElementId);
+  DECLARE_CLASS_ELEMENT_IDENTIFIER_VALUE(kAutofillCreditCardBenefitElementId);
+  DECLARE_CLASS_ELEMENT_IDENTIFIER_VALUE(
+      kAutofillCreditCardSuggestionEntryElementId);
+  DECLARE_CLASS_ELEMENT_IDENTIFIER_VALUE(kAutofillAiOptInIphElementId);
+  DECLARE_CLASS_ELEMENT_IDENTIFIER_VALUE(
+      kAutofillStandaloneCvcSuggestionElementId);
+  DECLARE_CLASS_ELEMENT_IDENTIFIER_VALUE(kAutofillSuggestionElementId);
+  DECLARE_CLASS_ELEMENT_IDENTIFIER_VALUE(kAutofillHomeWorkSuggestionElementId);
+
+  using RowPointer = std::variant<PopupRowView*,
+                                  PopupSeparatorView*,
+                                  PopupTitleView*,
+                                  PopupWarningView*>;
 
   // The time it takes for a selected cell to open a sub-popup if it has one.
   static constexpr base::TimeDelta kMouseOpenSubPopupDelay =
@@ -132,7 +140,7 @@ class PopupViewViews : public PopupBaseView,
   void OnWidgetVisibilityChanged(views::Widget* widget, bool visible) override;
 
   // PopupSearchBarView::Delegate:
-  void SearchBarOnInputChanged(const std::u16string& text) override;
+  void SearchBarOnInputChanged(std::u16string_view text) override;
   void SearchBarOnFocusLost() override;
   bool SearchBarHandleKeyPressed(const ui::KeyEvent& event) override;
 
@@ -155,14 +163,20 @@ class PopupViewViews : public PopupBaseView,
                        AutoselectFirstSuggestion autoselect_first_suggestion,
                        bool suppress_popup = false);
 
+  // Shows any available in-product-help (IPH) promos associated with the
+  // current suggestions. This function iterates through the suggestions and
+  // displays a feature promo bubble if the suggestion has associated IPH
+  // metadata.
+  void ShowIPHFeaturePromos();
+
   // Returns the `PopupRowView` at line number `index`. Assumes that there is
   // such a view at that line number - otherwise the underlying variant will
   // check false.
   PopupRowView& GetPopupRowViewAt(size_t index) {
-    return *absl::get<PopupRowView*>(rows_[index]);
+    return *std::get<PopupRowView*>(rows_[index]);
   }
   const PopupRowView& GetPopupRowViewAt(size_t index) const {
-    return *absl::get<PopupRowView*>(rows_[index]);
+    return *std::get<PopupRowView*>(rows_[index]);
   }
 
   void UpdateAccessibleStates() const;
@@ -250,8 +264,8 @@ class PopupViewViews : public PopupBaseView,
   // to select, e.g. when the suggestions are loading. It has only one
   // suggestion with a special type in this case. This method makes sure
   // the suggestion's message is being announced to the user by focusing the row
-  // view (which must be selectable). Currently, `PopupWarningView` and
-  // `AutofillAiLoadingStateView` are supported.
+  // view (which must be selectable). Currently, only `PopupWarningView` is
+  // supported.
   void MaybeA11yFocusInformationalSuggestion();
 
   // Controller for this view.

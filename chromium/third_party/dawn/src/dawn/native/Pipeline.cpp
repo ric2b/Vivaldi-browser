@@ -35,18 +35,12 @@
 #include "dawn/common/Enumerator.h"
 #include "dawn/native/BindGroupLayout.h"
 #include "dawn/native/Device.h"
+#include "dawn/native/ImmediateConstantsLayout.h"
 #include "dawn/native/ObjectBase.h"
 #include "dawn/native/ObjectContentHasher.h"
 #include "dawn/native/PipelineLayout.h"
 #include "dawn/native/ShaderModule.h"
-
-namespace {
-bool IsDoubleValueRepresentableAsF16(double value) {
-    constexpr double kLowestF16 = -65504.0;
-    constexpr double kMaxF16 = 65504.0;
-    return kLowestF16 <= value && value <= kMaxF16;
-}
-}  // namespace
+#include "src/utils/numeric.h"
 
 namespace dawn::native {
 ResultOrError<ShaderModuleEntryPoint> ValidateProgrammableStage(DeviceBase* device,
@@ -291,8 +285,8 @@ wgpu::ShaderStage PipelineBase::GetStageMask() const {
     return mStageMask;
 }
 
-const ImmediateConstantMask& PipelineBase::GetPipelineMask() const {
-    return mPipelineMask;
+const ImmediateConstantMask& PipelineBase::GetImmediateMask() const {
+    return mImmediateMask;
 }
 
 MaybeError PipelineBase::ValidateGetBindGroupLayout(BindGroupIndex groupIndex) {
@@ -302,10 +296,6 @@ MaybeError PipelineBase::ValidateGetBindGroupLayout(BindGroupIndex groupIndex) {
     DAWN_INVALID_IF(groupIndex >= kMaxBindGroupsTyped,
                     "Bind group layout index (%u) exceeds the maximum number of bind groups (%u).",
                     groupIndex, kMaxBindGroups);
-    DAWN_INVALID_IF(
-        static_cast<uint32_t>(groupIndex) >= mLayout->GetExplicitBindGroupLayoutsCount(),
-        "Bind group layout index (%u) doesn't correspond to a bind group for this pipeline.",
-        groupIndex);
     return {};
 }
 
@@ -383,12 +373,23 @@ MaybeError PipelineBase::Initialize(std::optional<ScopedUseShaderPrograms> scope
     if (!scopedUsePrograms) {
         scopedUsePrograms = UseShaderPrograms();
     }
+
+    // Set immediate constant status. userConstants is the first element in both
+    // RenderImmediateConstants and ComputeImmediateConstants.
+    ImmediateConstantMask userConstantsBits =
+        GetImmediateConstantBlockBits(0, GetLayout()->GetImmediateDataRangeByteSize());
+    mImmediateMask |= userConstantsBits;
+
     DAWN_TRY_CONTEXT(InitializeImpl(), "initializing %s", this);
     return {};
 }
 
-void PipelineBase::SetPipelineMaskForTesting(ImmediateConstantMask immediateConstantMask) {
-    mPipelineMask = immediateConstantMask;
+void PipelineBase::SetImmediateMaskForTesting(ImmediateConstantMask immediateConstantMask) {
+    mImmediateMask = immediateConstantMask;
+}
+
+uint32_t PipelineBase::GetImmediateConstantSize() const {
+    return static_cast<uint32_t>(mImmediateMask.count());
 }
 
 }  // namespace dawn::native

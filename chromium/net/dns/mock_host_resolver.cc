@@ -11,6 +11,7 @@
 #include <string>
 #include <string_view>
 #include <utility>
+#include <variant>
 #include <vector>
 
 #include "base/check_op.h"
@@ -36,6 +37,7 @@
 #include "build/build_config.h"
 #include "net/base/address_family.h"
 #include "net/base/address_list.h"
+#include "net/base/features.h"
 #include "net/base/host_port_pair.h"
 #include "net/base/ip_address.h"
 #include "net/base/ip_endpoint.h"
@@ -60,7 +62,6 @@
 #include "net/dns/public/secure_dns_policy.h"
 #include "net/log/net_log_with_source.h"
 #include "net/url_request/url_request_context.h"
-#include "third_party/abseil-cpp/absl/types/variant.h"
 #include "url/scheme_host_port.h"
 
 #if BUILDFLAG(IS_WIN)
@@ -76,7 +77,7 @@ const unsigned kMaxCacheEntries = 100;
 // TTL for the successful resolutions. Failures are not cached.
 const unsigned kCacheEntryTTLSeconds = 60;
 
-absl::variant<url::SchemeHostPort, std::string> GetCacheHost(
+std::variant<url::SchemeHostPort, std::string> GetCacheHost(
     const HostResolver::Host& endpoint) {
   if (endpoint.HasScheme()) {
     return endpoint.AsSchemeHostPort();
@@ -649,7 +650,7 @@ MockHostResolverBase::RuleResolver::Resolve(
     const RuleKey& key = rule.first;
     const RuleResultOrError& result = rule.second;
 
-    if (absl::holds_alternative<RuleKey::NoScheme>(key.scheme) &&
+    if (std::holds_alternative<RuleKey::NoScheme>(key.scheme) &&
         request_endpoint.HasScheme()) {
       continue;
     }
@@ -671,10 +672,10 @@ MockHostResolverBase::RuleResolver::Resolve(
       continue;
     }
 
-    if (absl::holds_alternative<RuleKey::Scheme>(key.scheme) &&
+    if (std::holds_alternative<RuleKey::Scheme>(key.scheme) &&
         (!request_endpoint.HasScheme() ||
          request_endpoint.GetScheme() !=
-             absl::get<RuleKey::Scheme>(key.scheme))) {
+             std::get<RuleKey::Scheme>(key.scheme))) {
       continue;
     }
 
@@ -890,8 +891,12 @@ HostCache* MockHostResolverBase::GetHostCache() {
   return cache_.get();
 }
 
+bool MockHostResolverBase::IsHappyEyeballsV3Enabled() const {
+  return base::FeatureList::IsEnabled(features::kHappyEyeballsV3);
+}
+
 int MockHostResolverBase::LoadIntoCache(
-    absl::variant<url::SchemeHostPort, HostPortPair> endpoint,
+    std::variant<url::SchemeHostPort, HostPortPair> endpoint,
     const NetworkAnonymizationKey& network_anonymization_key,
     const std::optional<ResolveHostParameters>& optional_parameters) {
   return LoadIntoCache(Host(std::move(endpoint)), network_anonymization_key,
@@ -1206,8 +1211,8 @@ int MockHostResolverBase::DoSynchronousResolution(RequestBase& request) {
 
   int error = ERR_UNEXPECTED;
   std::optional<HostCache::Entry> cache_entry;
-  if (absl::holds_alternative<RuleResolver::RuleResult>(result)) {
-    const auto& rule_result = absl::get<RuleResolver::RuleResult>(result);
+  if (std::holds_alternative<RuleResolver::RuleResult>(result)) {
+    const auto& rule_result = std::get<RuleResolver::RuleResult>(result);
     const auto& endpoint_results = rule_result.endpoints;
     const auto& aliases = rule_result.aliases;
     request.SetEndpointResults(endpoint_results, aliases,
@@ -1219,8 +1224,8 @@ int MockHostResolverBase::DoSynchronousResolution(RequestBase& request) {
                                      endpoint_results, aliases);
     }
   } else {
-    DCHECK(absl::holds_alternative<RuleResolver::ErrorResult>(result));
-    error = absl::get<RuleResolver::ErrorResult>(result);
+    DCHECK(std::holds_alternative<RuleResolver::ErrorResult>(result));
+    error = std::get<RuleResolver::ErrorResult>(result);
     request.SetError(error);
     if (cache_.get()) {
       cache_entry.emplace(error, HostCache::Entry::SOURCE_UNKNOWN);
@@ -1265,7 +1270,8 @@ MockHostResolverFactory::~MockHostResolverFactory() = default;
 std::unique_ptr<HostResolver> MockHostResolverFactory::CreateResolver(
     HostResolverManager* manager,
     std::string_view host_mapping_rules,
-    bool enable_caching) {
+    bool enable_caching,
+    bool enable_stale) {
   DCHECK(host_mapping_rules.empty());
 
   // Explicit new to access private constructor.
@@ -1278,8 +1284,10 @@ std::unique_ptr<HostResolver> MockHostResolverFactory::CreateStandaloneResolver(
     NetLog* net_log,
     const HostResolver::ManagerOptions& options,
     std::string_view host_mapping_rules,
-    bool enable_caching) {
-  return CreateResolver(nullptr, host_mapping_rules, enable_caching);
+    bool enable_caching,
+    bool enable_stale) {
+  return CreateResolver(nullptr, host_mapping_rules, enable_caching,
+                        enable_stale);
 }
 
 //-----------------------------------------------------------------------------
@@ -1679,6 +1687,10 @@ HangingHostResolver::CreateDohProbeRequest() {
 
 void HangingHostResolver::SetRequestContext(
     URLRequestContext* url_request_context) {}
+
+bool HangingHostResolver::IsHappyEyeballsV3Enabled() const {
+  return base::FeatureList::IsEnabled(features::kHappyEyeballsV3);
+}
 
 //-----------------------------------------------------------------------------
 

@@ -581,12 +581,9 @@ class MockMediaPermission : public media::MediaPermission {
 
 class MediaDevicesTest : public PageTestBase {
  public:
-  using MediaDeviceInfos = HeapVector<Member<MediaDeviceInfo>>;
-
   MediaDevicesTest()
       : platform_(std::make_unique<MockMediaPermission>()),
-        dispatcher_host_(std::make_unique<MockMediaDevicesDispatcherHost>()),
-        device_infos_(MakeGarbageCollected<MediaDeviceInfos>()) {}
+        dispatcher_host_(std::make_unique<MockMediaDevicesDispatcherHost>()) {}
 
   MediaDevices* GetMediaDevices(LocalDOMWindow& window) {
     if (!media_devices_) {
@@ -679,7 +676,6 @@ class MediaDevicesTest : public PageTestBase {
                                std::unique_ptr<media::MediaPermission>>
       platform_;
   std::unique_ptr<MockMediaDevicesDispatcherHost> dispatcher_host_;
-  Persistent<MediaDeviceInfos> device_infos_;
   bool listener_connection_error_ = false;
   Persistent<MediaDevices> media_devices_;
   base::HistogramTester histogram_tester_;
@@ -774,9 +770,6 @@ TEST_F(MediaDevicesTest, SetCaptureHandleConfigAfterConnectionError) {
 }
 
 TEST_F(MediaDevicesTest, ObserveDeviceChangeEvent) {
-  if (!RuntimeEnabledFeatures::OnDeviceChangeEnabled()) {
-    return;
-  }
   EXPECT_FALSE(dispatcher_host().listener());
 
   // Subscribe to the devicechange event.
@@ -836,9 +829,6 @@ TEST_F(MediaDevicesTest, ObserveDeviceChangeEvent) {
 }
 
 TEST_F(MediaDevicesTest, RemoveDeviceFiresDeviceChange) {
-  if (!RuntimeEnabledFeatures::OnDeviceChangeEnabled()) {
-    return;
-  }
   StrictMock<MockDeviceChangeEventListener>* event_listener =
       MakeGarbageCollected<StrictMock<MockDeviceChangeEventListener>>();
   AddDeviceChangeListener(event_listener);
@@ -849,9 +839,6 @@ TEST_F(MediaDevicesTest, RemoveDeviceFiresDeviceChange) {
 }
 
 TEST_F(MediaDevicesTest, RenameDeviceIDFiresDeviceChange) {
-  if (!RuntimeEnabledFeatures::OnDeviceChangeEnabled()) {
-    return;
-  }
   StrictMock<MockDeviceChangeEventListener>* event_listener =
       MakeGarbageCollected<StrictMock<MockDeviceChangeEventListener>>();
   AddDeviceChangeListener(event_listener);
@@ -862,9 +849,6 @@ TEST_F(MediaDevicesTest, RenameDeviceIDFiresDeviceChange) {
 }
 
 TEST_F(MediaDevicesTest, RenameLabelFiresDeviceChange) {
-  if (!RuntimeEnabledFeatures::OnDeviceChangeEnabled()) {
-    return;
-  }
   StrictMock<MockDeviceChangeEventListener>* event_listener =
       MakeGarbageCollected<StrictMock<MockDeviceChangeEventListener>>();
   AddDeviceChangeListener(event_listener);
@@ -875,9 +859,6 @@ TEST_F(MediaDevicesTest, RenameLabelFiresDeviceChange) {
 }
 
 TEST_F(MediaDevicesTest, ObserveDeviceChangeEventPermissions) {
-  if (!RuntimeEnabledFeatures::OnDeviceChangeEnabled()) {
-    return;
-  }
   StrictMock<MockDeviceChangeEventListener>* event_listener =
       MakeGarbageCollected<StrictMock<MockDeviceChangeEventListener>>();
   AddDeviceChangeListener(event_listener);
@@ -1165,10 +1146,6 @@ TEST_F(MediaDevicesTest, SetPreferredSinkTimeout) {
 // resolve without crashing the renderer.
 TEST_F(MediaDevicesTest,
        DeviceChangeEventsDoNotCrashWhenExecutionContextDestroyed) {
-  if (!RuntimeEnabledFeatures::OnDeviceChangeEnabled()) {
-    return;
-  }
-
   // Simulate resolution of a `MaybeFireDeviceChangeEvent()` task.
   MediaDevices* media_devices = GetMediaDevices(*GetDocument().domWindow());
   media_devices->MaybeFireDeviceChangeEvent(true);

@@ -14,6 +14,8 @@
 #include "pdf/pdf_ink_constants.h"
 #include "pdf/pdf_ink_conversions.h"
 #include "pdf/pdf_ink_transform.h"
+#include "pdf/pdf_transform.h"
+#include "pdf/pdfium/pdfium_rotation.h"
 #include "third_party/ink/src/ink/brush/brush_coat.h"
 #include "third_party/ink/src/ink/brush/brush_tip.h"
 #include "third_party/ink/src/ink/geometry/mesh.h"
@@ -22,8 +24,8 @@
 #include "third_party/ink/src/ink/strokes/stroke.h"
 #include "third_party/pdfium/public/cpp/fpdf_scopers.h"
 #include "third_party/pdfium/public/fpdf_edit.h"
-#include "ui/gfx/geometry/axis_transform2d.h"
 #include "ui/gfx/geometry/point_f.h"
+#include "ui/gfx/geometry/transform.h"
 
 namespace chrome_pdf {
 
@@ -85,7 +87,7 @@ ScopedFPDFPageObject CreatePathFromOutlineData(
     FPDF_PAGE page,
     const ink::PartitionedMesh& shape,
     const ModeledShapeOutlinesIterator::OutlineData& outline_data,
-    const gfx::AxisTransform2d& transform) {
+    const gfx::Transform& transform) {
   CHECK(page);
 
   base::span<const ink::Mesh> meshes =
@@ -123,8 +125,16 @@ std::vector<ScopedFPDFPageObject> WriteShapeToNewPathsOnPage(
     FPDF_PAGE page) {
   CHECK(page);
 
-  const gfx::AxisTransform2d transform =
-      GetCanonicalToPdfTransform(FPDF_GetPageHeightF(page));
+  // Get the intersection between the page's MediaBox and CropBox, to find
+  // the translation offset for the shape's transform.
+  FS_RECTF bounding_box;
+  auto result = FPDF_GetPageBoundingBox(page, &bounding_box);
+  CHECK(result);
+  const gfx::Vector2dF offset(bounding_box.left, bounding_box.bottom);
+
+  const gfx::Transform transform = GetCanonicalToPdfTransform(
+      {FPDF_GetPageWidthF(page), FPDF_GetPageHeightF(page)},
+      GetPageRotation(page).value_or(PageRotation::kRotate0), offset);
 
   std::vector<ScopedFPDFPageObject> results;
   ModeledShapeOutlinesIterator it(shape);
@@ -144,15 +154,14 @@ void SetBrushPropertiesForPath(const ink::Brush& brush, FPDF_PAGEOBJECT path) {
 
   CHECK_EQ(brush.CoatCount(), 1u);
   const ink::BrushCoat& coat = brush.GetCoats()[0];
-  CHECK_EQ(coat.tips.size(), 1u);
   // third_party/ink/src/ink/brush/brush_tip.h says this can have a value up to
   // 2.0f, but that should never be the case, as //pdf code never sets it that
   // high.
-  CHECK_LE(coat.tips[0].opacity_multiplier, 1.0f);
+  CHECK_LE(coat.tip.opacity_multiplier, 1.0f);
 
   bool result = FPDFPageObj_SetFillColor(path, SkColorGetR(color),
                                          SkColorGetG(color), SkColorGetB(color),
-                                         coat.tips[0].opacity_multiplier * 255);
+                                         coat.tip.opacity_multiplier * 255);
   CHECK(result);
 }
 

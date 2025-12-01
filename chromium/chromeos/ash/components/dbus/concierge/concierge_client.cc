@@ -303,6 +303,26 @@ class ConciergeClientImpl : public ConciergeClient {
                std::move(callback));
   }
 
+  void MuteVmAudio(
+      const vm_tools::concierge::MuteVmAudioRequest& request,
+      chromeos::DBusMethodCallback<vm_tools::concierge::SuccessFailureResponse>
+          callback) override {
+    CallMethod(concierge::kMuteVmAudioMethod, request, std::move(callback));
+  }
+
+  void SetUpVmUser(
+      const vm_tools::concierge::SetUpVmUserRequest& request,
+      chromeos::DBusMethodCallback<vm_tools::concierge::SetUpVmUserResponse>
+          callback) override {
+    CallMethod(concierge::kSetUpVmUserMethod, request, std::move(callback));
+  }
+
+  void GetBaguetteImageUrl(
+      chromeos::DBusMethodCallback<
+          vm_tools::concierge::GetBaguetteImageUrlResponse> callback) override {
+    CallMethod(concierge::kGetBaguetteImageUrlMethod, std::move(callback));
+  }
+
   void Init(dbus::Bus* bus) override {
     concierge_proxy_ = bus->GetObjectProxy(
         concierge::kVmConciergeServiceName,
@@ -413,6 +433,17 @@ class ConciergeClientImpl : public ConciergeClient {
           FROM_HERE, base::BindOnce(std::move(callback), std::nullopt));
       return;
     }
+
+    concierge_proxy_->CallMethod(
+        &method_call, kConciergeDBusTimeoutMs,
+        base::BindOnce(&ConciergeClientImpl::OnDBusProtoResponse<ResponseProto>,
+                       weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
+  }
+
+  template <typename ResponseProto>
+  void CallMethod(const std::string& method_name,
+                  chromeos::DBusMethodCallback<ResponseProto> callback) {
+    dbus::MethodCall method_call(concierge::kVmConciergeInterface, method_name);
 
     concierge_proxy_->CallMethod(
         &method_call, kConciergeDBusTimeoutMs,

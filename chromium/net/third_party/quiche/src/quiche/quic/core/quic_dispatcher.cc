@@ -792,56 +792,26 @@ void QuicDispatcher::CleanUpSession(QuicConnectionId server_connection_id,
     termination_packets = connection->ConsumeTerminationPackets();
     action = QuicTimeWaitListManager::SEND_CONNECTION_CLOSE_PACKETS;
   } else {
-    if (GetQuicReloadableFlag(
-            quic_dispatcher_only_serialize_close_if_closed_by_self)) {
-      QUIC_RELOADABLE_FLAG_COUNT_N(
-          quic_dispatcher_only_serialize_close_if_closed_by_self, 1, 2);
-      if (!connection->IsHandshakeComplete() &&
-          source == ConnectionCloseSource::FROM_SELF) {
-        // This counter used to be called
-        // `quic_v44_add_to_time_wait_list_with_handshake_failed`.
-        QUIC_CODE_COUNT(quic_add_to_time_wait_list_with_handshake_failed);
-        if (connection->sent_packet_manager()
-                .GetLargestSentPacket()
-                .IsInitialized()) {
-          QUIC_RELOADABLE_FLAG_COUNT_N(
-              quic_dispatcher_only_serialize_close_if_closed_by_self, 2, 2);
-        }
-        // This serializes a connection close termination packet and adds the
-        // connection to the time wait list.
-        StatelessConnectionTerminator terminator(
-            server_connection_id,
-            connection->GetOriginalDestinationConnectionId(),
-            connection->version(),
-            connection->sent_packet_manager().GetLargestSentPacket(),
-            helper_.get(), time_wait_list_manager_.get());
-        terminator.CloseConnection(
-            QUIC_HANDSHAKE_FAILED_SYNTHETIC_CONNECTION_CLOSE,
-            "Connection is closed by server before handshake confirmed",
-            /*ietf_quic=*/true, connection->GetActiveServerConnectionIds());
-        return;
-      }
-    } else {
-      if (!connection->IsHandshakeComplete()) {
-        // TODO(fayang): Do not serialize connection close packet if the
-        // connection is closed by the client.
-        QUIC_CODE_COUNT(quic_v44_add_to_time_wait_list_with_handshake_failed);
-        // This serializes a connection close termination packet and adds the
-        // connection to the time wait list.
-        // TODO(b/359200165): Fix |last_sent_packet_number|.
-        StatelessConnectionTerminator terminator(
-            server_connection_id,
-            connection->GetOriginalDestinationConnectionId(),
-            connection->version(),
-            /*last_sent_packet_number=*/QuicPacketNumber(), helper_.get(),
-            time_wait_list_manager_.get());
-        terminator.CloseConnection(
-            QUIC_HANDSHAKE_FAILED_SYNTHETIC_CONNECTION_CLOSE,
-            "Connection is closed by server before handshake confirmed",
-            /*ietf_quic=*/true, connection->GetActiveServerConnectionIds());
-        return;
-      }
+    if (!connection->IsHandshakeComplete() &&
+        source == ConnectionCloseSource::FROM_SELF) {
+      // This counter used to be called
+      // `quic_v44_add_to_time_wait_list_with_handshake_failed`.
+      QUIC_CODE_COUNT(quic_add_to_time_wait_list_with_handshake_failed);
+      // This serializes a connection close termination packet and adds the
+      // connection to the time wait list.
+      StatelessConnectionTerminator terminator(
+          server_connection_id,
+          connection->GetOriginalDestinationConnectionId(),
+          connection->version(),
+          connection->sent_packet_manager().GetLargestSentPacket(),
+          helper_.get(), time_wait_list_manager_.get());
+      terminator.CloseConnection(
+          QUIC_HANDSHAKE_FAILED_SYNTHETIC_CONNECTION_CLOSE,
+          "Connection is closed by server before handshake confirmed",
+          /*ietf_quic=*/true, connection->GetActiveServerConnectionIds());
+      return;
     }
+
     QUIC_CODE_COUNT(quic_v44_add_to_time_wait_list_with_stateless_reset);
   }
 
@@ -1548,10 +1518,8 @@ void QuicDispatcher::MaybeResetPacketsWithNoVersion(
 
 void QuicDispatcher::MaybeSendVersionNegotiationPacket(
     const ReceivedPacketInfo& packet_info) {
-  if (GetQuicReloadableFlag(quic_no_vn_in_response_to_vn) &&
-      packet_info.form == IETF_QUIC_LONG_HEADER_PACKET &&
+  if (packet_info.form == IETF_QUIC_LONG_HEADER_PACKET &&
       packet_info.long_packet_type == VERSION_NEGOTIATION) {
-    QUIC_RELOADABLE_FLAG_COUNT(quic_no_vn_in_response_to_vn);
     return;
   }
   if (crypto_config()->validate_chlo_size() &&

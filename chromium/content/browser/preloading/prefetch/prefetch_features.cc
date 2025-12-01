@@ -13,16 +13,16 @@ BASE_FEATURE(kPrefetchUseContentRefactor,
 
 BASE_FEATURE(kPrefetchReusable,
              "PrefetchReusable",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+#if BUILDFLAG(IS_ANDROID)
+             base::FEATURE_DISABLED_BY_DEFAULT
+#else
+             base::FEATURE_ENABLED_BY_DEFAULT
+#endif
+);
 
+// 4MiB, 2**20 * 4.
 const base::FeatureParam<int> kPrefetchReusableBodySizeLimit{
-    &kPrefetchReusable, "prefetch_reusable_body_size_limit", 65536};
-
-BASE_FEATURE_PARAM(bool,
-                   kPrefetchReusableUseNewWaitLoop,
-                   &kPrefetchReusable,
-                   "PrefetchReusableUseNewWaitLoop",
-                   false);
+    &kPrefetchReusable, "prefetch_reusable_body_size_limit", 4194304};
 
 BASE_FEATURE(kPrefetchNIKScope,
              "PrefetchNIKScope",
@@ -62,12 +62,40 @@ BASE_FEATURE(kPrefetchNewLimits,
              "PrefetchNewLimits",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
-BASE_FEATURE(kPrefetchNewWaitLoop,
-             "PrefetchNewWaitLoop",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
 BASE_FEATURE(kPrefetchServiceWorkerNoFetchHandlerFix,
              "PrefetchServiceWorkerNoFetchHandlerFix",
              base::FEATURE_DISABLED_BY_DEFAULT);
+
+BASE_FEATURE(kPrefetchNetworkPriorityForEmbedders,
+             "PrefetchNetworkPriorityForEmbedders",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+
+BASE_FEATURE(kPrefetchBumpNetworkPriorityAfterBeingServed,
+             "PrefetchBumpNetworkPriorityAfterBeingServed",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+
+BASE_FEATURE(kPrefetchServiceWorker,
+             "PrefetchServiceWorker",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+BASE_FEATURE(kPrefetchBrowsingDataRemoval,
+             "PrefetchBrowsingDataRemoval",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+
+BASE_FEATURE(kPrefetchScheduler,
+             "PrefetchScheduler",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+BASE_FEATURE(kPrefetchSchedulerTesting,
+             "PrefetchSchedulerTesting",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+const base::FeatureParam<size_t>
+    kPrefetchSchedulerTestingActiveSetSizeLimitForBase{
+        &kPrefetchSchedulerTesting,
+        "kPrefetchSchedulerTestingActiveSetSizeLimitForBase", 1};
+const base::FeatureParam<size_t>
+    kPrefetchSchedulerTestingActiveSetSizeLimitForBurst{
+        &kPrefetchSchedulerTesting,
+        "kPrefetchSchedulerTestingActiveSetSizeLimitForBurst", 1};
 
 }  // namespace features

@@ -21,28 +21,28 @@ const debugInfoAsJsonString: Promise<string> =
         response => response.result);
 
 const iwaDevProxyInstallButton =
-    getRequiredElement('iwa-dev-install-proxy-button') as HTMLButtonElement;
+    getRequiredElement<HTMLButtonElement>('iwa-dev-install-proxy-button');
 
 const iwaDevProxyInstallUrl =
-    getRequiredElement('iwa-dev-install-proxy-url') as HTMLInputElement;
+    getRequiredElement<HTMLInputElement>('iwa-dev-install-proxy-url');
 
 const iwaDevUpdateManifestUrl =
-    getRequiredElement('iwa-dev-update-manifest-url') as HTMLInputElement;
+    getRequiredElement<HTMLInputElement>('iwa-dev-update-manifest-url');
 
 const iwaDevUpdateManifestDialog =
-    getRequiredElement('iwa-update-manifest-dialog') as HTMLDialogElement;
+    getRequiredElement<HTMLDialogElement>('iwa-update-manifest-dialog');
 
 const iwaSwitchChannelDialog =
-    getRequiredElement('iwa-switch-channel-input-dialog') as HTMLDialogElement;
+    getRequiredElement<HTMLDialogElement>('iwa-switch-channel-input-dialog');
 
 const switchChannelButton =
-    getRequiredElement('iwa-switch-channel-dialog-switch') as HTMLButtonElement;
+    getRequiredElement<HTMLButtonElement>('iwa-switch-channel-dialog-switch');
 
 const closeSwitchChannelDialogButton =
-    getRequiredElement('iwa-switch-channel-dialog-close') as HTMLButtonElement;
+    getRequiredElement<HTMLButtonElement>('iwa-switch-channel-dialog-close');
 
 const iwaPinnedVersionDialog =
-    getRequiredElement('iwa-pinned-version-input-dialog') as HTMLDialogElement;
+    getRequiredElement<HTMLDialogElement>('iwa-pinned-version-input-dialog');
 
 /**
  * Converts a mojo origin into a user-readable string, omitting default ports.
@@ -105,7 +105,7 @@ function updateDevProxyInstallButtonState() {
   iwaDevProxyInstallButton.disabled = iwaDevProxyInstallUrl.value.length === 0;
 }
 
-async function setDevInstallMessageText(
+function setDevInstallMessageText(
     message: string,
 ) {
   setTimeout(() => {
@@ -221,8 +221,8 @@ async function iwaDevFetchUpdateManifest() {
   const manifest: UpdateManifest = result.updateManifest!;
   const versions: VersionEntry[] = manifest.versions;
 
-  const select = getRequiredElement('iwa-update-manifest-version-select') as
-      HTMLSelectElement;
+  const select = getRequiredElement<HTMLSelectElement>(
+      'iwa-update-manifest-version-select');
   select.replaceChildren();
 
   for (const versionEntry of versions) {
@@ -232,9 +232,8 @@ async function iwaDevFetchUpdateManifest() {
     select.appendChild(option);
   }
 
-  const installButton =
-      getRequiredElement('iwa-update-manifest-dialog-install') as
-      HTMLButtonElement;
+  const installButton = getRequiredElement<HTMLButtonElement>(
+      'iwa-update-manifest-dialog-install');
 
   const installEventListener = async () => {
     installButton.removeEventListener('click', installEventListener);
@@ -283,10 +282,10 @@ async function iwaDevFetchUpdateManifest() {
 }
 
 // Logic for handling the channel switching dialog for IWAs.
-async function showSwitchChannelDialog(appId: string, name: string) {
+function showSwitchChannelDialog(appId: string, name: string) {
   switchChannelButton.addEventListener('click', async () => {
     const updateChannel =
-        getRequiredElement('iwa-update-channel') as HTMLInputElement;
+        getRequiredElement<HTMLInputElement>('iwa-update-channel');
 
     iwaSwitchChannelDialog.close();
 
@@ -327,14 +326,14 @@ closeSwitchChannelDialogButton.addEventListener('click', () => {
 });
 
 // Logic for handling the version pinning for IWAs.
-async function showPinnedVersionDialog(appId: string, name: string) {
+function showPinnedVersionDialog(appId: string, name: string) {
   const pinButton =
-      getRequiredElement('iwa-pinned-version-dialog-pin') as HTMLButtonElement;
-  const unpinButton = getRequiredElement('iwa-pinned-version-dialog-unpin') as
-      HTMLButtonElement;
+      getRequiredElement<HTMLButtonElement>('iwa-pinned-version-dialog-pin');
+  const unpinButton =
+      getRequiredElement<HTMLButtonElement>('iwa-pinned-version-dialog-unpin');
 
   const pinnedVersion =
-      getRequiredElement('iwa-pinned-version') as HTMLInputElement;
+      getRequiredElement<HTMLInputElement>('iwa-pinned-version');
 
   pinButton.addEventListener('click', () => {
     const version = pinnedVersion.value;
@@ -401,13 +400,13 @@ getRequiredElement('iwa-updates-search-button')
     });
 
 const iwaRotateKeyButton =
-    getRequiredElement('iwa-rotate-key-button') as HTMLButtonElement;
+    getRequiredElement<HTMLButtonElement>('iwa-rotate-key-button');
 
-iwaRotateKeyButton.addEventListener('click', async () => {
+iwaRotateKeyButton.addEventListener('click', () => {
   const webBundleId =
-      getRequiredElement('iwa-kr-web-bundle-id') as HTMLInputElement;
+      getRequiredElement<HTMLInputElement>('iwa-kr-web-bundle-id');
   const publicKeyBase64 =
-      getRequiredElement('iwa-kr-public-key-b64') as HTMLInputElement;
+      getRequiredElement<HTMLInputElement>('iwa-kr-public-key-b64');
 
   const keyRotationMessageDiv = getRequiredElement('iwa-kr-message');
   keyRotationMessageDiv.innerText = '';
@@ -593,7 +592,7 @@ function prepareAppButtons(
   return {updateMsg, buttonsSection};
 }
 
-document.addEventListener('DOMContentLoaded', async () => {
+document.addEventListener('DOMContentLoaded', () => {
   if (loadTimeData.getBoolean('isIwaPolicyInstallEnabled')) {
     showIwaSection('iwa-updates-container');
   }

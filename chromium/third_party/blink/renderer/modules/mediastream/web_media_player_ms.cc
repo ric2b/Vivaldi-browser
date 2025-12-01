@@ -839,11 +839,13 @@ void WebMediaPlayerMS::Play() {
   paused_ = false;
 }
 
-void WebMediaPlayerMS::Pause() {
+void WebMediaPlayerMS::Pause(PauseReason pause_reason) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   SendLogMessage(String::Format("%s()", __func__));
 
-  should_play_upon_shown_ = false;
+  if (pause_reason != PauseReason::kPageHidden) {
+    should_play_upon_shown_ = false;
+  }
   media_log_->AddEvent<media::MediaLogEvent::kPause>();
   if (paused_)
     return;
@@ -1147,7 +1149,7 @@ void WebMediaPlayerMS::OnPageHidden() {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
 
   bool in_picture_in_picture =
-      client_->GetDisplayType() == DisplayType::kPictureInPicture;
+      client_->GetDisplayType() == DisplayType::kVideoPictureInPicture;
 
   if (watch_time_reporter_ && !in_picture_in_picture)
     watch_time_reporter_->OnHidden();
@@ -1182,8 +1184,8 @@ void WebMediaPlayerMS::SuspendForFrameClosed() {
 // On Android, pause the video completely for this time period.
 #if BUILDFLAG(IS_ANDROID)
   if (!paused_) {
-    Pause();
     should_play_upon_shown_ = true;
+    Pause(PauseReason::kPageHidden);
   }
 
   delegate_->PlayerGone(delegate_id_);
@@ -1273,7 +1275,7 @@ void WebMediaPlayerMS::ActivateSurfaceLayerForVideo(
   // TODO(872056): the surface should be activated but for some reason, it
   // does not. It is possible that this will no longer be needed after 872056
   // is fixed.
-  if (client_->GetDisplayType() == DisplayType::kPictureInPicture) {
+  if (client_->GetDisplayType() == DisplayType::kVideoPictureInPicture) {
     OnSurfaceIdUpdated(bridge_->GetSurfaceId());
   }
 }
@@ -1331,7 +1333,7 @@ void WebMediaPlayerMS::OnTransformChanged(
 bool WebMediaPlayerMS::IsInPictureInPicture() const {
   DCHECK(client_);
   return (!client_->IsInAutoPIP() &&
-          client_->GetDisplayType() == DisplayType::kPictureInPicture);
+          client_->GetDisplayType() == DisplayType::kVideoPictureInPicture);
 }
 
 void WebMediaPlayerMS::RepaintInternal() {
@@ -1396,7 +1398,7 @@ void WebMediaPlayerMS::OnDisplayTypeChanged(DisplayType display_type) {
       *compositor_task_runner_, FROM_HERE,
       CrossThreadBindOnce(&WebMediaPlayerMSCompositor::SetForceSubmit,
                           CrossThreadUnretained(compositor_.get()),
-                          display_type == DisplayType::kPictureInPicture));
+                          display_type == DisplayType::kVideoPictureInPicture));
 
   if (!watch_time_reporter_)
     return;
@@ -1408,8 +1410,12 @@ void WebMediaPlayerMS::OnDisplayTypeChanged(DisplayType display_type) {
     case DisplayType::kFullscreen:
       watch_time_reporter_->OnDisplayTypeFullscreen();
       break;
-    case DisplayType::kPictureInPicture:
-      watch_time_reporter_->OnDisplayTypePictureInPicture();
+    case DisplayType::kVideoPictureInPicture:
+      watch_time_reporter_->OnDisplayTypeVideoPictureInPicture();
+      break;
+    case DisplayType::kDocumentPictureInPicture:
+      watch_time_reporter_->OnDisplayTypeDocumentPictureInPicture();
+      break;
   }
 }
 
@@ -1529,8 +1535,11 @@ void WebMediaPlayerMS::MaybeCreateWatchTimeReporter() {
       case DisplayType::kFullscreen:
         watch_time_reporter_->OnDisplayTypeFullscreen();
         break;
-      case DisplayType::kPictureInPicture:
-        watch_time_reporter_->OnDisplayTypePictureInPicture();
+      case DisplayType::kVideoPictureInPicture:
+        watch_time_reporter_->OnDisplayTypeVideoPictureInPicture();
+        break;
+      case DisplayType::kDocumentPictureInPicture:
+        watch_time_reporter_->OnDisplayTypeDocumentPictureInPicture();
         break;
     }
   }

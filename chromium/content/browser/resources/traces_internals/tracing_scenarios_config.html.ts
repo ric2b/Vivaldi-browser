@@ -52,14 +52,14 @@ function getSystemTracingHtml(this: TracingScenariosConfigElement) {
 
   return html`
     <h2>System Tracing</h2>
-    <div id="system-tracing">
-      <div id="system-tracing-description">
+    <div class="config-toggle-container">
+      <div class="config-toggle-description">
         <em>Enable system tracing</em>
         <span>When on, traces include system-wide events. You must have
           administrative rights on your computer to modify this setting.</span>
       </div>
       <cr-toggle
-          id="system-tracing-toggle"
+          class="config-toggle"
           ?checked="${this.tracingServiceRegistered_}"
           @change="${this.onSystemTracingChange_}">
       </cr-toggle>
@@ -75,6 +75,23 @@ function getSystemTracingHtml(this: TracingScenariosConfigElement) {
   // clang-format on
 }
 
+function getPrivacyFilterHtml(this: TracingScenariosConfigElement) {
+  return html`
+    <h2>Privacy Filters</h2>
+    <div class="config-toggle-container">
+      <div class="config-toggle-description">
+        <em>Enable privacy filters</em>
+        <span>Remove untyped and sensitive data like URLs from local scenarios.
+        Needs restart to take effect.</span>
+      </div>
+      <cr-toggle
+          class="config-toggle"
+          ?checked="${this.privacyFilterEnabled_}"
+          @change="${this.privacyFilterDidChange_}">
+      </cr-toggle>
+    </div>`;
+}
+
 export function getHtml(this: TracingScenariosConfigElement) {
   // clang-format off
   return html`
@@ -83,18 +100,22 @@ export function getHtml(this: TracingScenariosConfigElement) {
     This configuration is designed for local trace collection, enabling you to
     capture detailed information about application execution on your machine.
   </h3>
+  <h2>Scenarios Config</h2>
+  <h3>
+    You can select a proto (.pb) or base64 encoded (.txt) file that contains
+    scenarios config. For details, see
+    <a href="http://go/how-do-i-chrometto#how-do-i-test-background-tracing-setup-locally.">
+      how-do-i-chrometto
+    </a>
+  </h3>
+  <input type="file" class="action-button" name="Choose File"
+      @change="${this.onAddConfig_}">
+  </input>
   ${this.isLoading_ ? html`<div class="spinner"></div>` : html`
   ${getFieldConfigHtml.bind(this)()}
   <h2>Local Scenarios</h2>
   <div class="config-container">
     ${getPresetConfigHtml.bind(this)()}
-    <cr-checkbox ?checked="${this.privacyFilterEnabled_}"
-        @checked-changed="${this.privacyFilterDidChange_}">
-      <div class="label">
-        Remove untyped and sensitive data like URLs from local scenarios (needs
-        restart to take effect).
-      </div>
-    </cr-checkbox>
   </div>
   <div class="action-panel">
     <cr-button class="cancel-button" ?disabled="${!this.isEdited_}"
@@ -110,6 +131,7 @@ export function getHtml(this: TracingScenariosConfigElement) {
       Confirm
     </cr-button>
   </div>
+  ${getPrivacyFilterHtml.bind(this)()}
   ${getSystemTracingHtml.bind(this)()}`
   }
   <cr-toast id="toast" duration="5000">${this.toastMessage_}</cr-toast>

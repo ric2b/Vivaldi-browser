@@ -24,7 +24,6 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
 #include "build/build_config.h"
-#include "build/chromeos_buildflags.h"
 #include "chrome/browser/ash/accessibility/accessibility_manager.h"
 #include "chrome/browser/ash/accessibility/magnification_manager.h"
 #include "chrome/browser/ash/arc/accessibility/arc_accessibility_helper_bridge.h"
@@ -221,6 +220,15 @@ AccessibilityPrivateEnableMouseEventsFunction::Run() {
   EXTENSION_FUNCTION_VALIDATE(args()[0].is_bool());
   bool enabled = args()[0].GetBool();
   ash::EventRewriterController::Get()->SetSendMouseEvents(enabled);
+  return RespondNow(NoArguments());
+}
+
+ExtensionFunction::ResponseAction
+AccessibilityPrivateEnableLiveCaptionFunction::Run() {
+  std::optional<accessibility_private::EnableLiveCaption::Params> params =
+      accessibility_private::EnableLiveCaption::Params::Create(args());
+  EXTENSION_FUNCTION_VALIDATE(params);
+  AccessibilityManager::Get()->EnableLiveCaption(params->enabled);
   return RespondNow(NoArguments());
 }
 
@@ -481,6 +489,9 @@ AccessibilityPrivateIsFeatureEnabledFunction::Run() {
       break;
     case accessibility_private::AccessibilityFeature::kFaceGaze:
       enabled = ::features::IsAccessibilityFaceGazeEnabled();
+      break;
+    case accessibility_private::AccessibilityFeature::kCaptionsOnBrailleDisplay:
+      enabled = ::features::IsAccessibilityCaptionsOnBrailleDisplayEnabled();
       break;
     case accessibility_private::AccessibilityFeature::kNone:
       return RespondNow(Error("Unrecognized feature"));
@@ -931,15 +942,23 @@ AccessibilityPrivateSetKeyboardListenerFunction::Run() {
   return RespondNow(NoArguments());
 }
 
+AccessibilityPrivateSetNativeAccessibilityEnabledFunction::
+    AccessibilityPrivateSetNativeAccessibilityEnabledFunction() = default;
+
+AccessibilityPrivateSetNativeAccessibilityEnabledFunction::
+    ~AccessibilityPrivateSetNativeAccessibilityEnabledFunction() = default;
+
 ExtensionFunction::ResponseAction
 AccessibilityPrivateSetNativeAccessibilityEnabledFunction::Run() {
   EXTENSION_FUNCTION_VALIDATE(args().size() >= 1);
   EXTENSION_FUNCTION_VALIDATE(args()[0].is_bool());
   bool enabled = args()[0].GetBool();
   if (enabled) {
-    content::BrowserAccessibilityState::GetInstance()->EnableAccessibility();
+    scoped_accessibility_mode_ =
+        content::BrowserAccessibilityState::GetInstance()
+            ->CreateScopedModeForProcess(ui::kAXModeComplete);
   } else {
-    content::BrowserAccessibilityState::GetInstance()->DisableAccessibility();
+    scoped_accessibility_mode_.reset();
   }
   return RespondNow(NoArguments());
 }

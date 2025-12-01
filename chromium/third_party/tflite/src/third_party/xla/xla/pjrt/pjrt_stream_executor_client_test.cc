@@ -90,7 +90,7 @@ absl::StatusOr<std::unique_ptr<PjRtLoadedExecutable>> ToyExecutable(
   TF_ASSIGN_OR_RETURN(auto computation,
                       builder.Build(/*remove_dynamic_dimensions=*/true));
   TF_ASSIGN_OR_RETURN(auto executable,
-                      client.Compile(computation, compile_options));
+                      client.CompileAndLoad(computation, compile_options));
   return executable;
 }
 
@@ -141,7 +141,7 @@ TEST(PjRtStreamExecutorClientTest, DonateWithControlDependency) {
   auto literal = LiteralUtil::CreateR2({{1, 2, 3}, {4, 5, 6}});
   TF_ASSERT_OK_AND_ASSIGN(
       std::unique_ptr<PjRtBuffer> buffer,
-      client->BufferFromHostLiteral(literal, client->addressable_devices()[0]));
+      client->BufferFromHostLiteral(literal, client->memory_spaces()[0]));
 
   PjRtFuture<>::Promise promise = PjRtFuture<>::CreatePromise();
   PjRtFuture<> future(promise);

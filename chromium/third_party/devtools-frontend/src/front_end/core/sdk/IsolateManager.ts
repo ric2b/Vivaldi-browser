@@ -12,19 +12,18 @@ let isolateManagerInstance: IsolateManager;
 
 export class IsolateManager extends Common.ObjectWrapper.ObjectWrapper<EventTypes> implements
     SDKModelObserver<RuntimeModel> {
-  readonly #isolatesInternal: Map<string, Isolate>;
-  #isolateIdByModel: Map<RuntimeModel, string|null>;
-  #observers: Set<Observer>;
-  #pollId: number;
+  readonly #isolatesInternal = new Map<string, Isolate>();
+  /**
+   * Contains null while the isolateId is being retrieved.
+   */
+  #isolateIdByModel = new Map<RuntimeModel, string|null>();
+  #observers = new Set<Observer>();
+  #pollId = 0;
 
   constructor() {
     super();
-    this.#isolatesInternal = new Map();
-    // #isolateIdByModel contains null while the isolateId is being retrieved.
-    this.#isolateIdByModel = new Map();
-    this.#observers = new Set();
+
     TargetManager.instance().observeModels(RuntimeModel, this);
-    this.#pollId = 0;
   }
 
   static instance({forceNew}: {
@@ -48,13 +47,6 @@ export class IsolateManager extends Common.ObjectWrapper.ObjectWrapper<EventType
     for (const isolate of this.#isolatesInternal.values()) {
       observer.isolateAdded(isolate);
     }
-  }
-
-  unobserveIsolates(observer: Observer): void {
-    this.#observers.delete(observer);
-    if (!this.#observers.size) {
-      ++this.#pollId;
-    }  // Stops the current polling loop.
   }
 
   modelAdded(model: RuntimeModel): void {
@@ -176,7 +168,7 @@ export class Isolate {
 
   heapProfilerModel(): HeapProfilerModel|null {
     const runtimeModel = this.runtimeModel();
-    return runtimeModel && runtimeModel.heapProfilerModel();
+    return runtimeModel?.heapProfilerModel() ?? null;
   }
 
   async update(): Promise<void> {
@@ -185,7 +177,7 @@ export class Isolate {
     if (!usage) {
       return;
     }
-    this.#usedHeapSizeInternal = usage.usedSize;
+    this.#usedHeapSizeInternal = usage.usedSize + (usage.embedderHeapUsedSize ?? 0) + (usage.backingStorageSize ?? 0);
     this.#memoryTrend.add(this.#usedHeapSizeInternal);
     IsolateManager.instance().dispatchEventToListeners(Events.MEMORY_CHANGED, this);
   }

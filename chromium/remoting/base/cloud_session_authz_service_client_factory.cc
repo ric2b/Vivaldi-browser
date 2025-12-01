@@ -7,10 +7,13 @@
 #include <limits.h>
 
 #include <memory>
+#include <string>
+#include <string_view>
 #include <utility>
 
 #include "base/memory/weak_ptr.h"
 #include "remoting/base/cloud_service_client.h"
+#include "remoting/base/instance_identity_token_getter.h"
 #include "remoting/base/oauth_token_getter_impl.h"
 #include "remoting/base/session_policies.h"
 #include "remoting/proto/google/internal/remoting/cloud/v1alpha/duration.pb.h"
@@ -38,6 +41,7 @@ class CloudSessionAuthzServiceClient : public SessionAuthzServiceClient {
  public:
   CloudSessionAuthzServiceClient(
       OAuthTokenGetter* oauth_token_getter,
+      InstanceIdentityTokenGetter* instance_identity_token_getter,
       scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory);
 
   CloudSessionAuthzServiceClient(const CloudSessionAuthzServiceClient&) =
@@ -56,43 +60,79 @@ class CloudSessionAuthzServiceClient : public SessionAuthzServiceClient {
                        ReauthorizeHostCallback callback) override;
 
  private:
+  // Overloads used to create callbacks for |instance_identity_token_getter_|.
+  void GenerateHostTokenWithIdToken(GenerateHostTokenCallback callback,
+                                    std::string_view instance_identity_token);
+  void VerifySessionTokenWithIdToken(std::string session_token,
+                                     VerifySessionTokenCallback callback,
+                                     std::string_view instance_identity_token);
+  void ReauthorizeHostWithIdToken(std::string session_reauth_token,
+                                  std::string session_id,
+                                  ReauthorizeHostCallback callback,
+                                  std::string_view instance_identity_token);
+
   void OnGenerateHostTokenResponse(
       GenerateHostTokenCallback callback,
-      const ProtobufHttpStatus& status,
+      const HttpStatus& status,
       std::unique_ptr<GenerateHostTokenResponse> response);
   void OnVerifySessionTokenResponse(
       VerifySessionTokenCallback callback,
-      const ProtobufHttpStatus& status,
+      const HttpStatus& status,
       std::unique_ptr<VerifySessionTokenResponse> response);
   void OnReauthorizeHostResponse(
       ReauthorizeHostCallback callback,
-      const ProtobufHttpStatus& status,
+      const HttpStatus& status,
       std::unique_ptr<ReauthorizeHostResponse> response);
 
-  CloudServiceClient client_;
+  std::unique_ptr<CloudServiceClient> client_;
+  const raw_ptr<InstanceIdentityTokenGetter> instance_identity_token_getter_;
 
   base::WeakPtrFactory<CloudSessionAuthzServiceClient> weak_factory_{this};
 };
 
 CloudSessionAuthzServiceClient::CloudSessionAuthzServiceClient(
     OAuthTokenGetter* oauth_token_getter,
+    InstanceIdentityTokenGetter* instance_identity_token_getter,
     scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory)
-    : client_(oauth_token_getter, url_loader_factory) {}
+    : client_(CloudServiceClient::CreateForChromotingRobotAccount(
+          oauth_token_getter,
+          url_loader_factory)),
+      instance_identity_token_getter_(instance_identity_token_getter) {}
 
 CloudSessionAuthzServiceClient::~CloudSessionAuthzServiceClient() = default;
 
 void CloudSessionAuthzServiceClient::GenerateHostToken(
     GenerateHostTokenCallback callback) {
-  client_.GenerateHostToken(base::BindOnce(
-      &CloudSessionAuthzServiceClient::OnGenerateHostTokenResponse,
+  instance_identity_token_getter_->RetrieveToken(base::BindOnce(
+      &CloudSessionAuthzServiceClient::GenerateHostTokenWithIdToken,
       weak_factory_.GetWeakPtr(), std::move(callback)));
+}
+
+void CloudSessionAuthzServiceClient::GenerateHostTokenWithIdToken(
+    GenerateHostTokenCallback callback,
+    std::string_view instance_identity_token) {
+  client_->GenerateHostToken(
+      instance_identity_token,
+      base::BindOnce(
+          &CloudSessionAuthzServiceClient::OnGenerateHostTokenResponse,
+          weak_factory_.GetWeakPtr(), std::move(callback)));
 }
 
 void CloudSessionAuthzServiceClient::VerifySessionToken(
     std::string_view session_token,
     VerifySessionTokenCallback callback) {
-  client_.VerifySessionToken(
-      std::string(session_token),
+  instance_identity_token_getter_->RetrieveToken(base::BindOnce(
+      &CloudSessionAuthzServiceClient::VerifySessionTokenWithIdToken,
+      weak_factory_.GetWeakPtr(), std::string(session_token),
+      std::move(callback)));
+}
+
+void CloudSessionAuthzServiceClient::VerifySessionTokenWithIdToken(
+    std::string session_token,
+    VerifySessionTokenCallback callback,
+    std::string_view instance_identity_token) {
+  client_->VerifySessionToken(
+      session_token, instance_identity_token,
       base::BindOnce(
           &CloudSessionAuthzServiceClient::OnVerifySessionTokenResponse,
           weak_factory_.GetWeakPtr(), std::move(callback)));
@@ -102,15 +142,26 @@ void CloudSessionAuthzServiceClient::ReauthorizeHost(
     std::string_view session_reauth_token,
     std::string_view session_id,
     ReauthorizeHostCallback callback) {
-  client_.ReauthorizeHost(
-      std::string(session_reauth_token), std::string(session_id),
+  instance_identity_token_getter_->RetrieveToken(base::BindOnce(
+      &CloudSessionAuthzServiceClient::ReauthorizeHostWithIdToken,
+      weak_factory_.GetWeakPtr(), std::string(session_reauth_token),
+      std::string(session_id), std::move(callback)));
+}
+
+void CloudSessionAuthzServiceClient::ReauthorizeHostWithIdToken(
+    std::string session_reauth_token,
+    std::string session_id,
+    ReauthorizeHostCallback callback,
+    std::string_view instance_identity_token) {
+  client_->ReauthorizeHost(
+      session_reauth_token, session_id, instance_identity_token,
       base::BindOnce(&CloudSessionAuthzServiceClient::OnReauthorizeHostResponse,
                      weak_factory_.GetWeakPtr(), std::move(callback)));
 }
 
 void CloudSessionAuthzServiceClient::OnGenerateHostTokenResponse(
     GenerateHostTokenCallback callback,
-    const ProtobufHttpStatus& status,
+    const HttpStatus& status,
     std::unique_ptr<GenerateHostTokenResponse> response) {
   auto response_struct =
       std::make_unique<internal::GenerateHostTokenResponseStruct>();
@@ -121,7 +172,7 @@ void CloudSessionAuthzServiceClient::OnGenerateHostTokenResponse(
 
 void CloudSessionAuthzServiceClient::OnVerifySessionTokenResponse(
     VerifySessionTokenCallback callback,
-    const ProtobufHttpStatus& status,
+    const HttpStatus& status,
     std::unique_ptr<VerifySessionTokenResponse> response) {
   auto response_struct =
       std::make_unique<internal::VerifySessionTokenResponseStruct>();
@@ -180,7 +231,7 @@ void CloudSessionAuthzServiceClient::OnVerifySessionTokenResponse(
 
 void CloudSessionAuthzServiceClient::OnReauthorizeHostResponse(
     ReauthorizeHostCallback callback,
-    const ProtobufHttpStatus& status,
+    const HttpStatus& status,
     std::unique_ptr<ReauthorizeHostResponse> response) {
   auto response_struct =
       std::make_unique<internal::ReauthorizeHostResponseStruct>();
@@ -194,8 +245,10 @@ void CloudSessionAuthzServiceClient::OnReauthorizeHostResponse(
 
 CloudSessionAuthzServiceClientFactory::CloudSessionAuthzServiceClientFactory(
     OAuthTokenGetter* oauth_token_getter,
+    InstanceIdentityTokenGetter* instance_identity_token_getter,
     scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory)
     : oauth_token_getter_(oauth_token_getter),
+      instance_identity_token_getter_(instance_identity_token_getter),
       url_loader_factory_(url_loader_factory) {}
 
 CloudSessionAuthzServiceClientFactory::
@@ -203,8 +256,9 @@ CloudSessionAuthzServiceClientFactory::
 
 std::unique_ptr<SessionAuthzServiceClient>
 CloudSessionAuthzServiceClientFactory::Create() {
-  return std::make_unique<CloudSessionAuthzServiceClient>(oauth_token_getter_,
-                                                          url_loader_factory_);
+  return std::make_unique<CloudSessionAuthzServiceClient>(
+      oauth_token_getter_, instance_identity_token_getter_,
+      url_loader_factory_);
 }
 
 AuthenticationMethod CloudSessionAuthzServiceClientFactory::method() {

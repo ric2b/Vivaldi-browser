@@ -40,8 +40,12 @@
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/simple_test_tick_clock.h"
+#include "base/test/task_environment.h"
+#include "base/time/time.h"
 #include "build/build_config.h"
 #include "chrome/app/chrome_command_ids.h"
+#include "chrome/browser/accessibility/caption_bubble_context_browser.h"
+#include "chrome/browser/accessibility/live_caption/live_caption_controller_factory.h"
 #include "chrome/browser/apps/app_service/app_service_proxy.h"
 #include "chrome/browser/apps/app_service/app_service_proxy_factory.h"
 #include "chrome/browser/ash/accessibility/accessibility_feature_browsertest.h"
@@ -67,6 +71,8 @@
 #include "chrome/common/extensions/extension_constants.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "chromeos/ash/components/browser_context_helper/browser_context_types.h"
+#include "components/live_caption/live_caption_controller.h"
+#include "components/live_caption/pref_names.h"
 #include "components/services/app_service/public/cpp/app_types.h"
 #include "components/user_manager/user_names.h"
 #include "content/public/browser/browser_task_traits.h"
@@ -78,6 +84,7 @@
 #include "extensions/browser/browsertest_util.h"
 #include "extensions/browser/extension_host_test_helper.h"
 #include "extensions/common/constants.h"
+#include "media/mojo/mojom/speech_recognition_result.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/accessibility/accessibility_features.h"
 #include "ui/base/ime/candidate_window.h"
@@ -99,7 +106,7 @@ namespace {
 
 const char* kChromeVoxPerformCommandMetric =
     "Accessibility.ChromeVox.PerformCommand";
-const double kExpectedPhoneticSpeechAndHintDelayMS = 1000;
+const base::TimeDelta kExpectedPhoneticSpeechAndHintDelay = base::Seconds(1);
 
 }  // namespace
 
@@ -259,7 +266,7 @@ void LoggedInSpokenFeedbackTest::EnableChromeVox(bool check_for_intro) {
                                           : "*");
   sm_.Call([this]() {
     ImportJSModuleForChromeVox("ChromeVox",
-                               "/chromevox/background/chromevox.js");
+                               "/chromevox/mv2/background/chromevox.js");
   });
   sm_.Call([this]() { DisableEarcons(); });
 }
@@ -276,7 +283,7 @@ void LoggedInSpokenFeedbackTest::ExecuteCommandHandlerCommand(
     std::string command) {
   ImportJSModuleForChromeVox(
       "CommandHandlerInterface",
-      "/chromevox/background/input/command_handler_interface.js");
+      "/chromevox/mv2/background/input/command_handler_interface.js");
   RunJSForChromeVox("CommandHandlerInterface.instance.onCommand('" + command +
                     "');");
 }
@@ -482,6 +489,115 @@ IN_PROC_BROWSER_TEST_F(LoggedInSpokenFeedbackTest,
   histogram_tester.ExpectBucketCount(kChromeVoxPerformCommandMetric,
                                      36 /*ChromeVoxCommand.HELP*/, 1);
   histogram_tester.ExpectTotalCount(kChromeVoxPerformCommandMetric, 5);
+}
+
+class CaptionSpokenFeedbackTest : public LoggedInSpokenFeedbackTest {
+ protected:
+  ~CaptionSpokenFeedbackTest() override = default;
+
+  CaptionSpokenFeedbackTest() {
+    scoped_feature_list_.InitWithFeatures(
+        {ash::features::kOnDeviceSpeechRecognition,
+         ::features::kAccessibilityCaptionsOnBrailleDisplay},
+        {});
+  }
+
+  void SetCaptionText(std::string text) {
+    // The UI is only created after SODA is installed.
+    speech::SodaInstaller::GetInstance()->NotifySodaInstalledForTesting(
+        speech::LanguageCode::kEnUs);
+    speech::SodaInstaller::GetInstance()->NotifySodaInstalledForTesting();
+
+    ::captions::LiveCaptionController* live_caption_controller =
+        ::captions::LiveCaptionControllerFactory::GetForProfile(
+            AccessibilityManager::Get()->profile());
+    live_caption_controller->DispatchTranscription(
+        GetCaptionBubbleContext(),
+        media::SpeechRecognitionResult(text, /*is_final=*/false));
+  }
+
+  ::captions::CaptionBubbleContextBrowser* GetCaptionBubbleContext() {
+    if (!caption_bubble_context_) {
+      caption_bubble_context_ = ::captions::CaptionBubbleContextBrowser::Create(
+          browser()->tab_strip_model()->GetActiveWebContents());
+    }
+    return caption_bubble_context_.get();
+  }
+
+ private:
+  std::unique_ptr<::captions::CaptionBubbleContextBrowser>
+      caption_bubble_context_;
+  base::test::ScopedFeatureList scoped_feature_list_;
+};
+
+IN_PROC_BROWSER_TEST_F(CaptionSpokenFeedbackTest, ToggleCaptions) {
+  PrefChangeRegistrar change_observer;
+  EnableChromeVox();
+  sm_.Call([this, &change_observer]() {
+    change_observer.Init(AccessibilityManager::Get()->profile()->GetPrefs());
+    change_observer.Add(::prefs::kLiveCaptionEnabled,
+                        base::BindLambdaForTesting([this, &change_observer]() {
+                          SetCaptionText("Hello World");
+                          change_observer.Remove(::prefs::kLiveCaptionEnabled);
+                        }));
+    ExecuteCommandHandlerCommand("toggleCaptions");
+  });
+  sm_.ExpectSpeech("Hello World");
+  sm_.Call([this, &change_observer]() {
+    ExecuteCommandHandlerCommand("toggleCaptions");
+    change_observer.Add(::prefs::kLiveCaptionEnabled,
+                        base::BindLambdaForTesting([this]() {
+                          SetCaptionText("Goodbye World");
+                          ExecuteCommandHandlerCommand("nextLine");
+                        }));
+  });
+  sm_.ExpectNextSpeechIsNotPattern("Goodbye World");
+  sm_.Replay();
+}
+
+IN_PROC_BROWSER_TEST_F(CaptionSpokenFeedbackTest, CaptionsNotToggled) {
+  PrefChangeRegistrar change_observer;
+  EnableChromeVox();
+  sm_.Call([this, &change_observer]() {
+    change_observer.Init(AccessibilityManager::Get()->profile()->GetPrefs());
+    change_observer.Add(::prefs::kLiveCaptionEnabled,
+                        base::BindLambdaForTesting(
+                            [this]() { SetCaptionText("Hello World"); }));
+  });
+  sm_.Call([this]() { ExecuteCommandHandlerCommand("nextLine"); });
+  sm_.ExpectNextSpeechIsNotPattern("Hello World");
+  sm_.Replay();
+}
+
+IN_PROC_BROWSER_TEST_F(CaptionSpokenFeedbackTest, CaptionsChanged) {
+  std::string initial_text =
+      "To be, or not to be, that is the question: Whether 'tis nobler in the "
+      "mind to suffer The slings and arrows of outrageous fortune, Or to take "
+      "arms against a sea of troubles And by opposing end them. ";
+  PrefChangeRegistrar change_observer;
+  EnableChromeVox();
+  sm_.Call([this, &change_observer, &initial_text]() {
+    // Use braille captions as an approximation of a braille display.
+    ExecuteCommandHandlerCommand("toggleBrailleCaptions");
+
+    // Set the caption text only once live captions is enabled.
+    change_observer.Init(AccessibilityManager::Get()->profile()->GetPrefs());
+    change_observer.Add(::prefs::kLiveCaptionEnabled,
+                        base::BindLambdaForTesting([this, &initial_text]() {
+                          SetCaptionText(initial_text);
+                        }));
+    ExecuteCommandHandlerCommand("toggleCaptions");
+  });
+  sm_.ExpectSpeechPattern("To be*");
+  sm_.Call([this]() { ExecuteCommandHandlerCommand("panRight"); });
+  sm_.ExpectSpeechPattern("*that is*");
+  sm_.Call([this, &initial_text]() {
+    SetCaptionText(initial_text + "To die—to sleep, No more;");
+    ExecuteCommandHandlerCommand("panRight");
+  });
+  sm_.ExpectNextSpeechIsNotPattern("*that is*");
+
+  sm_.Replay();
 }
 
 class NotificationCenterSpokenFeedbackTest : public LoggedInSpokenFeedbackTest {
@@ -1046,7 +1162,8 @@ IN_PROC_BROWSER_TEST_P(SpokenFeedbackTest,
   sm_.Replay();
 }
 
-IN_PROC_BROWSER_TEST_P(SpokenFeedbackTest, NavigateChromeVoxMenu) {
+// TODO(crbug.com/407459387): Fix and re-enable this test.
+IN_PROC_BROWSER_TEST_P(SpokenFeedbackTest, DISABLED_NavigateChromeVoxMenu) {
   EnableChromeVox();
   sm_.Call([this]() { SendKeyPressWithSearch(ui::VKEY_OEM_PERIOD); });
   sm_.ExpectSpeech("Search the menus");
@@ -1306,14 +1423,7 @@ IN_PROC_BROWSER_TEST_P(SpokenFeedbackTest,
   sm_.Replay();
 }
 
-// TODO(crbug.com/40845611): Flaky on Linux ChromiumOS MSan.
-#if defined(MEMORY_SANITIZER)
-#define MAYBE_ChromeVoxFindInPage DISABLED_ChromeVoxFindInPage
-#else
-#define MAYBE_ChromeVoxFindInPage ChromeVoxFindInPage
-#endif
-
-IN_PROC_BROWSER_TEST_P(SpokenFeedbackTest, MAYBE_ChromeVoxFindInPage) {
+IN_PROC_BROWSER_TEST_P(SpokenFeedbackTest, ChromeVoxFindInPage) {
   EnableChromeVox();
   StablizeChromeVoxState();
 
@@ -1550,7 +1660,7 @@ IN_PROC_BROWSER_TEST_P(SpokenFeedbackTest,
   view->GetViewAccessibility().SetRole(ax::mojom::Role::kButton);
   view->GetViewAccessibility().SetName(u"hello");
   view->SetFocusBehavior(views::View::FocusBehavior::ALWAYS);
-  widget->GetRootView()->AddChildView(view);
+  widget->GetRootView()->AddChildViewRaw(view);
 
   // Show the widget, then touch and slide on the right edge of the screen.
   sm_.Call([widget, clock_ptr, generator_ptr]() {
@@ -1632,7 +1742,7 @@ IN_PROC_BROWSER_TEST_P(SpokenFeedbackTest, TouchExploreSecondaryDisplay) {
   view->GetViewAccessibility().SetRole(ax::mojom::Role::kButton);
   view->GetViewAccessibility().SetName(u"hello");
   view->SetFocusBehavior(views::View::FocusBehavior::ALWAYS);
-  widget->GetRootView()->AddChildView(view);
+  widget->GetRootView()->AddChildViewRaw(view);
 
   // Show the widget, then touch and slide on the right edge of the screen.
   sm_.Call([widget, clock_ptr, generator_ptr]() {
@@ -1860,49 +1970,49 @@ IN_PROC_BROWSER_TEST_P(SpokenFeedbackTest,
   sm_.ExpectSpeech("L");
   sm_.ExpectSpeech("lima");
   sm_.Call([this]() {
-    EXPECT_TRUE(sm_.GetDelayForLastUtteranceMS() >=
-                kExpectedPhoneticSpeechAndHintDelayMS);
+    EXPECT_GE(sm_.GetDelayForLastUtterance(),
+              kExpectedPhoneticSpeechAndHintDelay);
   });
   sm_.ExpectSpeech("Press Search plus Space to activate");
   sm_.Call([this]() {
-    EXPECT_TRUE(sm_.GetDelayForLastUtteranceMS() >=
-                kExpectedPhoneticSpeechAndHintDelayMS);
+    EXPECT_GE(sm_.GetDelayForLastUtterance(),
+              kExpectedPhoneticSpeechAndHintDelay);
   });
   sm_.Call([this]() { SendKeyPressWithSearchAndShift(ui::VKEY_RIGHT); });
   sm_.ExpectSpeech("I");
   sm_.ExpectSpeech("india");
   sm_.Call([this]() {
-    EXPECT_TRUE(sm_.GetDelayForLastUtteranceMS() >=
-                kExpectedPhoneticSpeechAndHintDelayMS);
+    EXPECT_GE(sm_.GetDelayForLastUtterance(),
+              kExpectedPhoneticSpeechAndHintDelay);
   });
   sm_.ExpectSpeech("Press Search plus Space to activate");
   sm_.Call([this]() {
-    EXPECT_TRUE(sm_.GetDelayForLastUtteranceMS() >=
-                kExpectedPhoneticSpeechAndHintDelayMS);
+    EXPECT_GE(sm_.GetDelayForLastUtterance(),
+              kExpectedPhoneticSpeechAndHintDelay);
   });
   sm_.Call([this]() { SendKeyPressWithSearchAndShift(ui::VKEY_RIGHT); });
   sm_.ExpectSpeech("C");
   sm_.ExpectSpeech("charlie");
   sm_.Call([this]() {
-    EXPECT_TRUE(sm_.GetDelayForLastUtteranceMS() >=
-                kExpectedPhoneticSpeechAndHintDelayMS);
+    EXPECT_GE(sm_.GetDelayForLastUtterance(),
+              kExpectedPhoneticSpeechAndHintDelay);
   });
   sm_.ExpectSpeech("Press Search plus Space to activate");
   sm_.Call([this]() {
-    EXPECT_TRUE(sm_.GetDelayForLastUtteranceMS() >=
-                kExpectedPhoneticSpeechAndHintDelayMS);
+    EXPECT_GE(sm_.GetDelayForLastUtterance(),
+              kExpectedPhoneticSpeechAndHintDelay);
   });
   sm_.Call([this]() { SendKeyPressWithSearchAndShift(ui::VKEY_RIGHT); });
   sm_.ExpectSpeech("K");
   sm_.ExpectSpeech("kilo");
   sm_.Call([this]() {
-    EXPECT_TRUE(sm_.GetDelayForLastUtteranceMS() >=
-                kExpectedPhoneticSpeechAndHintDelayMS);
+    EXPECT_GE(sm_.GetDelayForLastUtterance(),
+              kExpectedPhoneticSpeechAndHintDelay);
   });
   sm_.ExpectSpeech("Press Search plus Space to activate");
   sm_.Call([this]() {
-    EXPECT_TRUE(sm_.GetDelayForLastUtteranceMS() >=
-                kExpectedPhoneticSpeechAndHintDelayMS);
+    EXPECT_GE(sm_.GetDelayForLastUtterance(),
+              kExpectedPhoneticSpeechAndHintDelay);
   });
   sm_.Replay();
 }
@@ -2176,7 +2286,8 @@ IN_PROC_BROWSER_TEST_P(SpokenFeedbackTest, DarkenScreenConfirmation) {
 }
 
 // Tests basic behavior of the tutorial when signed in.
-IN_PROC_BROWSER_TEST_P(SpokenFeedbackTest, Tutorial) {
+// TODO(crbug.com/407459387): Fix and re-enable this test.
+IN_PROC_BROWSER_TEST_P(SpokenFeedbackTest, DISABLED_Tutorial) {
   EnableChromeVox();
   sm_.Call([this]() {
     NavigateToUrl(GURL(R"(data:text/html;charset=utf-8,

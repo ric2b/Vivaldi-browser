@@ -36,16 +36,17 @@ import * as Common from '../../core/common/common.js';
 import * as i18n from '../../core/i18n/i18n.js';
 import * as Root from '../../core/root/root.js';
 import * as SDK from '../../core/sdk/sdk.js';
-import * as Protocol from '../../generated/protocol.js';
 import * as IssuesManager from '../../models/issues_manager/issues_manager.js';
 import * as Adorners from '../../ui/components/adorners/adorners.js';
 import * as CodeHighlighter from '../../ui/components/code_highlighter/code_highlighter.js';
 import * as IconButton from '../../ui/components/icon_button/icon_button.js';
 import * as IssueCounter from '../../ui/components/issue_counter/issue_counter.js';
 import * as UI from '../../ui/legacy/legacy.js';
+import {html, nothing, render} from '../../ui/lit/lit.js';
 import * as VisualLogging from '../../ui/visual_logging/visual_logging.js';
 
 import * as ElementsComponents from './components/components.js';
+import {getElementIssueDetails} from './ElementIssueUtils.js';
 import {ElementsPanel} from './ElementsPanel.js';
 import {ElementsTreeElement, InitialChildrenLimit, isOpeningTag} from './ElementsTreeElement.js';
 import elementsTreeOutlineStyles from './elementsTreeOutline.css.js';
@@ -71,7 +72,11 @@ const UIStrings = {
    *@description Link text content in Elements Tree Outline of the Elements panel
    */
   reveal: 'reveal',
-};
+  /**
+   * @description Text for popover that directs to Issues panel
+   */
+  viewIssue: 'View Issue:',
+} as const;
 const str_ = i18n.i18n.registerUIStrings('panels/elements/ElementsTreeOutline.ts', UIStrings);
 const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
 const elementsTreeOutlineByDOMModel = new WeakMap<SDK.DOMModel.DOMModel, ElementsTreeOutline>();
@@ -98,29 +103,22 @@ export class ElementsTreeOutline extends
   private visibleWidthInternal?: number;
   private clipboardNodeData?: ClipboardData;
   private isXMLMimeTypeInternal?: boolean|null;
-  suppressRevealAndSelect: boolean = false;
+  suppressRevealAndSelect = false;
   private previousHoveredElement?: UI.TreeOutline.TreeElement;
   private treeElementBeingDragged?: ElementsTreeElement;
   private dragOverTreeElement?: ElementsTreeElement;
   private updateModifiedNodesTimeout?: number;
-  #genericIssues: Array<IssuesManager.GenericIssue.GenericIssue> = [];
-  #topLayerContainerByParent: Map<UI.TreeOutline.TreeElement, TopLayerContainer> = new Map();
+  #topLayerContainerByParent = new Map<UI.TreeOutline.TreeElement, TopLayerContainer>();
   #issuesManager?: IssuesManager.IssuesManager.IssuesManager;
   #popupHelper?: UI.PopoverHelper.PopoverHelper;
-  #nodeElementToIssue: Map<Element, IssuesManager.GenericIssue.GenericIssue> = new Map();
+  #nodeElementToIssues = new Map<Element, IssuesManager.Issue.Issue[]>();
 
   constructor(omitRootDOMNode?: boolean, selectEnabled?: boolean, hideGutter?: boolean) {
     super();
 
     if (Root.Runtime.experiments.isEnabled(Root.Runtime.ExperimentName.HIGHLIGHT_ERRORS_ELEMENTS_PANEL)) {
       this.#issuesManager = IssuesManager.IssuesManager.IssuesManager.instance();
-      this.#issuesManager.addEventListener(
-          IssuesManager.IssuesManager.Events.ISSUE_ADDED, this.#onIssueEventReceived, this);
-      for (const issue of this.#issuesManager.issues()) {
-        if (issue instanceof IssuesManager.GenericIssue.GenericIssue) {
-          this.#onIssueAdded(issue);
-        }
-      }
+      this.#issuesManager.addEventListener(IssuesManager.IssuesManager.Events.ISSUE_ADDED, this.#onIssueAdded, this);
     }
 
     this.treeElementByNode = new WeakMap();
@@ -194,78 +192,46 @@ export class ElementsTreeOutline extends
     this.showHTMLCommentsSetting.addChangeListener(this.onShowHTMLCommentsChange.bind(this));
     this.setUseLightSelectionColor(true);
     if (Root.Runtime.experiments.isEnabled(Root.Runtime.ExperimentName.HIGHLIGHT_ERRORS_ELEMENTS_PANEL)) {
+      // TODO(changhaohan): refactor the popover to use tooltip component.
       this.#popupHelper = new UI.PopoverHelper.PopoverHelper(this.elementInternal, event => {
         const hoveredNode = event.composedPath()[0] as Element;
-        if (!hoveredNode || !hoveredNode.matches('.violating-element')) {
+        if (!hoveredNode?.matches('.violating-element')) {
           return null;
         }
 
-        const issue = this.#nodeElementToIssue.get(hoveredNode);
-        if (!issue) {
+        const issues = this.#nodeElementToIssues.get(hoveredNode);
+        if (!issues) {
           return null;
         }
-        const issueDetails = issue.details();
-
-        const tooltipTitle = this.#issueCodeToTooltipTitle(issueDetails.errorType);
-        const issueKindIcon = new IconButton.Icon.Icon();
-        issueKindIcon.data = IssueCounter.IssueCounter.getIssueKindIconData(issue.getKind());
-        issueKindIcon.style.cursor = 'pointer';
-        const viewIssueElement = document.createElement('a');
-        viewIssueElement.href = '#';
-        viewIssueElement.textContent = 'View issue:';
-
-        const issueTitle = document.createElement('span');
-        issueTitle.textContent = tooltipTitle;
-
-        const element = document.createElement('div');
-        element.appendChild(issueKindIcon);
-        element.appendChild(viewIssueElement);
-        element.appendChild(issueTitle);
-        element.style.display = 'flex';
-        element.style.alignItems = 'center';
-        element.style.gap = '5px';
 
         return {
           box: hoveredNode.boxInWindow(),
           show: async (popover: UI.GlassPane.GlassPane) => {
             popover.setIgnoreLeftMargin(true);
-            const openIssueEvent = (): Promise<void> => Common.Revealer.reveal(issue);
-            viewIssueElement.addEventListener('click', () => openIssueEvent());
-            issueKindIcon.addEventListener('click', () => openIssueEvent());
-            popover.contentElement.appendChild(element);
+            // clang-format off
+            render(html`
+              <div class="squiggles-content">
+                ${issues.map(issue => {
+                  const elementIssueDetails = getElementIssueDetails(issue);
+                  if (!elementIssueDetails) {
+                    // This shouldn't happen, but add this if check to pass ts check.
+                    return nothing;
+                  }
+                  const issueKindIconData = IssueCounter.IssueCounter.getIssueKindIconData(issue.getKind());
+                  const openIssueEvent = (): Promise<void> => Common.Revealer.reveal(issue);
+                  return html`
+                    <div class="squiggles-content-item">
+                    <devtools-icon .data=${issueKindIconData} @click=${openIssueEvent}></devtools-icon>
+                    <x-link class="link" @click=${openIssueEvent}>${i18nString(UIStrings.viewIssue)}</x-link>
+                    <span>${elementIssueDetails.tooltip}</span>
+                    </div>`;})}
+              </div>`, popover.contentElement);
+            // clang-format on
             return true;
           },
         };
       }, 'elements.issue');
       this.#popupHelper.setTimeout(300);
-      this.#popupHelper.setHasPadding(true);
-    }
-  }
-
-  #issueCodeToTooltipTitle(errorType: Protocol.Audits.GenericIssueErrorType): string {
-    switch (errorType) {
-      case Protocol.Audits.GenericIssueErrorType.FormLabelForNameError:
-        return 'Incorrect use of <label for=FORM_ELEMENT>';
-      case Protocol.Audits.GenericIssueErrorType.FormDuplicateIdForInputError:
-        return 'Duplicate form field id in the same form';
-      case Protocol.Audits.GenericIssueErrorType.FormInputWithNoLabelError:
-        return 'Form field without valid aria-labelledby attribute or associated label';
-      case Protocol.Audits.GenericIssueErrorType.FormAutocompleteAttributeEmptyError:
-        return 'Incorrect use of autocomplete attribute';
-      case Protocol.Audits.GenericIssueErrorType.FormEmptyIdAndNameAttributesForInputError:
-        return 'A form field element should have an id or name attribute';
-      case Protocol.Audits.GenericIssueErrorType.FormAriaLabelledByToNonExistingId:
-        return 'An aria-labelledby attribute doesn\'t match any element id';
-      case Protocol.Audits.GenericIssueErrorType.FormInputAssignedAutocompleteValueToIdOrNameAttributeError:
-        return 'An element doesn\'t have an autocomplete attribute';
-      case Protocol.Audits.GenericIssueErrorType.FormLabelHasNeitherForNorNestedInput:
-        return 'No label associated with a form field';
-      case Protocol.Audits.GenericIssueErrorType.FormLabelForMatchesNonExistingIdError:
-        return 'Incorrect use of <label for=FORM_ELEMENT>';
-      case Protocol.Audits.GenericIssueErrorType.FormInputHasWrongButWellIntendedAutocompleteValueError:
-        return 'Non-standard autocomplete attribute value';
-      default:
-        return '';
     }
   }
 
@@ -273,36 +239,29 @@ export class ElementsTreeOutline extends
     return elementsTreeOutlineByDOMModel.get(domModel) || null;
   }
 
-  async #onIssueEventReceived(event: Common.EventTarget.EventTargetEvent<IssuesManager.IssuesManager.IssueAddedEvent>):
-      Promise<void> {
-    if (event.data.issue instanceof IssuesManager.GenericIssue.GenericIssue) {
-      this.#onIssueAdded(event.data.issue);
-      await this.#addTreeElementIssue(event.data.issue);
-    }
-  }
-
-  #onIssueAdded(issue: IssuesManager.GenericIssue.GenericIssue): void {
-    this.#genericIssues.push(issue);
+  #onIssueAdded(event: Common.EventTarget.EventTargetEvent<IssuesManager.IssuesManager.IssueAddedEvent>): void {
+    void this.#addTreeElementIssue(event.data.issue);
   }
 
   #addAllElementIssues(): void {
-    for (const issue of this.#genericIssues) {
+    if (!this.#issuesManager) {
+      return;
+    }
+    for (const issue of this.#issuesManager.issues()) {
       void this.#addTreeElementIssue(issue);
     }
   }
 
-  async #addTreeElementIssue(issue: IssuesManager.GenericIssue.GenericIssue): Promise<void> {
-    const issueDetails = issue.details();
-
-    const tooltipTitle = this.#issueCodeToTooltipTitle(issueDetails.errorType);
-    if (!tooltipTitle) {
+  async #addTreeElementIssue(issue: IssuesManager.Issue.Issue): Promise<void> {
+    const elementIssueDetails = getElementIssueDetails(issue);
+    if (!elementIssueDetails) {
       return;
     }
-    if (!this.rootDOMNode || !issueDetails.violatingNodeId) {
+    const {nodeId} = elementIssueDetails;
+    if (!this.rootDOMNode || !nodeId) {
       return;
     }
-    const deferredDOMNode =
-        new SDK.DOMModel.DeferredDOMNode(this.rootDOMNode.domModel().target(), issueDetails.violatingNodeId);
+    const deferredDOMNode = new SDK.DOMModel.DeferredDOMNode(this.rootDOMNode.domModel().target(), nodeId);
     const node = await deferredDOMNode.resolvePromise();
 
     if (!node) {
@@ -315,7 +274,7 @@ export class ElementsTreeOutline extends
       const treeElementNodeElementsToIssue = treeElement.issuesByNodeElement;
       // This element could be the treeElement tags name or an attribute.
       for (const [element, issue] of treeElementNodeElementsToIssue) {
-        this.#nodeElementToIssue.set(element, issue);
+        this.#nodeElementToIssues.set(element, issue);
       }
     }
   }
@@ -377,10 +336,10 @@ export class ElementsTreeOutline extends
 
   private onCopyOrCut(isCut: boolean, event: Event): void {
     this.setClipboardData(null);
-    // @ts-ignore this bound in the main entry point
+    // @ts-expect-error this bound in the main entry point
     const originalEvent = event['original'];
 
-    if (!originalEvent || !originalEvent.target) {
+    if (!originalEvent?.target) {
       return;
     }
 
@@ -528,7 +487,7 @@ export class ElementsTreeOutline extends
 
     this.rootDOMNodeInternal = x;
 
-    this.isXMLMimeTypeInternal = x && x.isXMLNode();
+    this.isXMLMimeTypeInternal = x?.isXMLNode();
 
     this.update();
   }
@@ -839,7 +798,7 @@ export class ElementsTreeOutline extends
     if (!(treeElement instanceof ElementsTreeElement)) {
       return null;
     }
-    const elementsTreeElement = (treeElement as ElementsTreeElement);
+    const elementsTreeElement = (treeElement);
 
     const node = elementsTreeElement.node();
     if (!node.parentNode || node.parentNode.nodeType() !== Node.ELEMENT_NODE) {
@@ -918,7 +877,7 @@ export class ElementsTreeOutline extends
       return;
     }
     let textNode: Element|null = node.enclosingNodeOrSelfWithClass('webkit-html-text-node');
-    if (textNode && textNode.classList.contains('bogus')) {
+    if (textNode?.classList.contains('bogus')) {
       textNode = null;
     }
     const commentNode = node.enclosingNodeOrSelfWithClass('webkit-html-comment');
@@ -983,7 +942,7 @@ export class ElementsTreeOutline extends
 
   toggleEditAsHTML(node: SDK.DOMModel.DOMNode, startEditing?: boolean, callback?: (() => void)): void {
     const treeElement = this.treeElementByNode.get(node);
-    if (!treeElement || !treeElement.hasEditableNode()) {
+    if (!treeElement?.hasEditableNode()) {
       return;
     }
 
@@ -1012,7 +971,7 @@ export class ElementsTreeOutline extends
         return;
       }
 
-      const children = parentNode && parentNode.children();
+      const children = parentNode?.children();
       const newNode = children ? children[index] || parentNode : parentNode;
       if (!newNode) {
         return;
@@ -1262,15 +1221,15 @@ export class ElementsTreeOutline extends
       this.elementInternal.classList.add('hidden');
     }
     const rootNodeUpdateRecords = this.rootDOMNodeInternal && this.updateRecords.get(this.rootDOMNodeInternal);
-    if (rootNodeUpdateRecords && rootNodeUpdateRecords.hasChangedChildren()) {
+    if (rootNodeUpdateRecords?.hasChangedChildren()) {
       // Document's children have changed, perform total update.
       this.update();
     } else {
       for (const [node, record] of this.updateRecords) {
         if (record.hasChangedChildren()) {
-          this.updateModifiedParentNode((node as SDK.DOMModel.DOMNode));
+          this.updateModifiedParentNode((node));
         } else {
-          this.updateModifiedNode((node as SDK.DOMModel.DOMNode));
+          this.updateModifiedNode((node));
         }
       }
     }
@@ -1476,7 +1435,7 @@ export class ElementsTreeOutline extends
         return;
       }
       const selectedTreeElement = treeElement.treeOutline.selectedTreeElement;
-      if (selectedTreeElement && selectedTreeElement.hasAncestor(treeElement)) {
+      if (selectedTreeElement?.hasAncestor(treeElement)) {
         treeElement.select(true);
       }
       treeElement.removeChildren();
@@ -1534,7 +1493,7 @@ export class ElementsTreeOutline extends
         treeElement.removeChildAtIndex(i);
         continue;
       }
-      const elementsTreeElement = (existingTreeElement as ElementsTreeElement);
+      const elementsTreeElement = (existingTreeElement);
       const existingNode = elementsTreeElement.node();
 
       if (visibleChildrenSet.has(existingNode)) {
@@ -1674,21 +1633,21 @@ export class UpdateRecord {
   private charDataModifiedInternal?: boolean;
 
   attributeModified(attrName: string): void {
-    if (this.removedAttributes && this.removedAttributes.has(attrName)) {
+    if (this.removedAttributes?.has(attrName)) {
       this.removedAttributes.delete(attrName);
     }
     if (!this.modifiedAttributes) {
-      this.modifiedAttributes = (new Set() as Set<string>);
+      this.modifiedAttributes = (new Set());
     }
     this.modifiedAttributes.add(attrName);
   }
 
   attributeRemoved(attrName: string): void {
-    if (this.modifiedAttributes && this.modifiedAttributes.has(attrName)) {
+    if (this.modifiedAttributes?.has(attrName)) {
       this.modifiedAttributes.delete(attrName);
     }
     if (!this.removedAttributes) {
-      this.removedAttributes = (new Set() as Set<string>);
+      this.removedAttributes = (new Set());
     }
     this.removedAttributes.add(attrName);
   }
@@ -1711,8 +1670,7 @@ export class UpdateRecord {
   }
 
   isAttributeModified(attributeName: string): boolean {
-    return this.modifiedAttributes !== null && this.modifiedAttributes !== undefined &&
-        this.modifiedAttributes.has(attributeName);
+    return this.modifiedAttributes?.has(attributeName) ?? false;
   }
 
   hasRemovedAttributes(): boolean {
@@ -1753,9 +1711,9 @@ export class Renderer implements UI.UIUtils.Renderer {
     let node: SDK.DOMModel.DOMNode|(SDK.DOMModel.DOMNode | null)|null = null;
 
     if (object instanceof SDK.DOMModel.DOMNode) {
-      node = (object as SDK.DOMModel.DOMNode);
+      node = (object);
     } else if (object instanceof SDK.DOMModel.DeferredDOMNode) {
-      node = await (object as SDK.DOMModel.DeferredDOMNode).resolvePromise();
+      node = await (object).resolvePromise();
     }
 
     if (!node) {
@@ -1771,7 +1729,7 @@ export class Renderer implements UI.UIUtils.Renderer {
       treeOutline.element.classList.add('single-node');
     }
     treeOutline.setVisible(true);
-    // @ts-ignore used in console_test_runner
+    // @ts-expect-error used in console_test_runner
     treeOutline.element.treeElementForTest = firstChild;
     treeOutline.setShowSelectionOnKeyboardFocus(/* show: */ true, /* preventTabOrder: */ true);
     return {node: treeOutline.element, tree: treeOutline};

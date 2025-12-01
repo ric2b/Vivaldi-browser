@@ -7,6 +7,7 @@
 
 #include <atomic>
 
+#include "src/base/platform/mutex.h"
 #include "src/base/platform/platform.h"
 
 namespace v8 {
@@ -33,8 +34,8 @@ class LockedQueue final {
  private:
   struct Node;
 
-  mutable base::SpinningMutex head_mutex_;
-  base::SpinningMutex tail_mutex_;
+  mutable base::Mutex head_mutex_;
+  base::Mutex tail_mutex_;
   Node* head_;
   Node* tail_;
   std::atomic<size_t> size_;

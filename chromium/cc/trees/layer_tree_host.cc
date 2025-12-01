@@ -48,6 +48,7 @@
 #include "cc/layers/heads_up_display_layer_impl.h"
 #include "cc/layers/layer.h"
 #include "cc/layers/painted_scrollbar_layer.h"
+#include "cc/metrics/ukm_dropped_frames_data.h"
 #include "cc/metrics/ukm_manager.h"
 #include "cc/metrics/ukm_smoothness_data.h"
 #include "cc/paint/paint_worklet_layer_painter.h"
@@ -735,10 +736,14 @@ void LayerTreeHost::OnDeferCommitsChanged(
   client_->OnDeferCommitsChanged(defer_status, reason, trigger);
 }
 
+void LayerTreeHost::SetShouldThrottleFrameRate(bool flag) {
+  proxy_->SetShouldThrottleFrameRate(flag);
+}
+
 DISABLE_CFI_PERF
-void LayerTreeHost::SetNeedsAnimate() {
+void LayerTreeHost::SetNeedsAnimate(bool urgent) {
   DCHECK(IsMainThread());
-  proxy_->SetNeedsAnimate();
+  proxy_->SetNeedsAnimate(urgent);
   swap_promise_manager_.NotifyLatencyInfoSwapPromiseMonitors();
   events_metrics_manager_.SaveActiveEventMetrics();
 }
@@ -1684,6 +1689,7 @@ bool LayerTreeHost::PaintContent(const LayerList& update_layer_list) {
 }
 
 void LayerTreeHost::AddSurfaceRange(const viz::SurfaceRange& surface_range) {
+  CHECK(surface_range.IsValid());
   if (++pending_commit_state()->surface_ranges[surface_range] == 1) {
     pending_commit_state()->needs_surface_ranges_sync = true;
     SetNeedsCommit();
@@ -1854,29 +1860,8 @@ void LayerTreeHost::SetElementTransformMutated(
   if (list_type != ElementListType::ACTIVE)
     return;
 
-  if (IsUsingLayerLists()) {
-    property_trees()->transform_tree_mutable().OnTransformAnimated(element_id,
-                                                                   transform);
-    return;
-  }
-
-  Layer* layer = LayerByElementId(element_id);
-  DCHECK(layer);
-  layer->OnTransformAnimated(transform);
-
-  if (layer->has_transform_node()) {
-    TransformNode* node = property_trees()->transform_tree_mutable().Node(
-        layer->transform_tree_index());
-    if (node->local == transform)
-      return;
-
-    node->local = transform;
-    node->needs_local_transform_update = true;
-    node->has_potential_animation = true;
-    property_trees()->transform_tree_mutable().set_needs_update(true);
-  }
-
-  SetNeedsUpdateLayers();
+  property_tree_delegate_->OnElementTransformMutated(element_id, list_type,
+                                                     transform);
 }
 
 void LayerTreeHost::SetElementScrollOffsetMutated(
@@ -2005,6 +1990,20 @@ LayerTreeHost::CreateSharedMemoryForSmoothnessUkm() {
   proxy_->SetUkmSmoothnessDestination(
       std::move(ukm_smoothness_mapping.mapping));
   return std::move(ukm_smoothness_mapping.region);
+}
+
+base::ReadOnlySharedMemoryRegion
+LayerTreeHost::CreateSharedMemoryForDroppedFramesUkm() {
+  DCHECK(IsMainThread());
+  const auto size = sizeof(UkmDroppedFramesDataShared);
+  auto ukm_dropped_frames_mapping =
+      base::ReadOnlySharedMemoryRegion::Create(size);
+  if (!ukm_dropped_frames_mapping.IsValid()) {
+    return {};
+  }
+  proxy_->SetUkmDroppedFramesDestination(
+      std::move(ukm_dropped_frames_mapping.mapping));
+  return std::move(ukm_dropped_frames_mapping.region);
 }
 
 void LayerTreeHost::SetRenderFrameObserver(

@@ -39,6 +39,7 @@ BASE_DECLARE_FEATURE(kDisambiguateTabMatchingForEntitySuggestions);
 // Local history zero-prefix (aka zero-suggest) and prefix suggestions.
 BASE_DECLARE_FEATURE(kAdjustLocalHistoryZeroSuggestRelevanceScore);
 BASE_DECLARE_FEATURE(kFocusTriggersWebAndSRPZeroSuggest);
+BASE_DECLARE_FEATURE(kHideSuggestionGroupHeaders);
 BASE_DECLARE_FEATURE(kLocalHistoryZeroSuggestBeyondNTP);
 BASE_DECLARE_FEATURE(kZeroSuggestInMemoryCaching);
 BASE_DECLARE_FEATURE(kZeroSuggestPrefetchDebouncing);
@@ -46,6 +47,12 @@ BASE_DECLARE_FEATURE(kZeroSuggestPrefetching);
 BASE_DECLARE_FEATURE(kZeroSuggestPrefetchingOnSRP);
 BASE_DECLARE_FEATURE(kZeroSuggestPrefetchingOnWeb);
 // Related, kMaxZeroSuggestMatches.
+
+// Contextual zero-prefix (aka zero-suggest). There are suggestions based on the
+// user's current URL. Fullfillment of these suggestions is delegated to Lens
+// since Lens provides additional logic for contextualizing the results to the
+// current page, by using more than the URL, i.e. the page content.
+BASE_DECLARE_FEATURE(kContextualZeroSuggestLensFulfillment);
 
 // On Device Suggest.
 BASE_DECLARE_FEATURE(kOnDeviceHeadProviderIncognito);
@@ -115,6 +122,7 @@ BASE_DECLARE_FEATURE(kOmniboxTouchDownTriggerForPrefetch);
 // Site search/Keyword mode related features.
 BASE_DECLARE_FEATURE(kStarterPackExpansion);
 BASE_DECLARE_FEATURE(kStarterPackIPH);
+BASE_DECLARE_FEATURE(kStarterPackPage);
 
 // Search and Suggest requests and params.
 BASE_DECLARE_FEATURE(kAblateSearchProviderWarmup);
@@ -123,7 +131,17 @@ BASE_DECLARE_FEATURE(kReportApplicationLanguageInSearchRequest);
 BASE_DECLARE_FEATURE(kOmniboxAsyncViewInflation);
 BASE_DECLARE_FEATURE(kUseFusedLocationProvider);
 
+// Omnibox suggestions tuning
+BASE_DECLARE_FEATURE(kNumNtpZpsRecentSearches);
+BASE_DECLARE_FEATURE(kNumNtpZpsTrendingSearches);
+BASE_DECLARE_FEATURE(kNumWebZpsRecentSearches);
+BASE_DECLARE_FEATURE(kNumWebZpsRelatedSearches);
+BASE_DECLARE_FEATURE(kNumWebZpsMostVisitedUrls);
+BASE_DECLARE_FEATURE(kNumSrpZpsRecentSearches);
+BASE_DECLARE_FEATURE(kNumSrpZpsRelatedSearches);
+
 #if BUILDFLAG(IS_ANDROID)
+BASE_DECLARE_FEATURE(kDiagnostics);
 BASE_DECLARE_FEATURE(kRetainOmniboxOnFocus);
 BASE_DECLARE_FEATURE(kJumpStartOmnibox);
 BASE_DECLARE_FEATURE(kSuppressIntermediateACUpdatesOnLowEndDevices);

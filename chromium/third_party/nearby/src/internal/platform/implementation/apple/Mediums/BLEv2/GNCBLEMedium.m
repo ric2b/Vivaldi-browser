@@ -22,6 +22,7 @@
 #import "internal/platform/implementation/apple/Mediums/BLEv2/GNCBLEGATTServer.h"
 #import "internal/platform/implementation/apple/Mediums/BLEv2/GNCCentralManager.h"
 #import "internal/platform/implementation/apple/Mediums/BLEv2/GNCPeripheral.h"
+#import "internal/platform/implementation/apple/Mediums/BLEv2/NSData+GNCBase85.h"
 #import "internal/platform/implementation/apple/Mediums/BLEv2/NSData+GNCWebSafeBase64.h"
 
 NS_ASSUME_NONNULL_BEGIN
@@ -42,8 +43,8 @@ static NSError *AlreadyScanningError() {
   // The active GATT server, or @nil if one hasn't been started yet.
   GNCBLEGATTServer *_server;
 
-  // The service that is being actively scanned for, or @c nil if not currently scanning.
-  CBUUID *_serviceUUID;
+  // The services that is being actively scanned for.
+  NSMutableArray<CBUUID *> *_scanningServiceUUIDs;
 
   // The handler called when an advertisement for the service represented by @c _serviceUUID has
   // been discovered. This will be called continuously, until the peripheral disappears.
@@ -79,6 +80,7 @@ static NSError *AlreadyScanningError() {
     _centralManager.centralDelegate = self;
     _connectionCompletionHandlers = [NSMutableDictionary dictionary];
     _disconnectionHandlers = [NSMutableDictionary dictionary];
+    _scanningServiceUUIDs = [NSMutableArray array];
   }
   return self;
 }
@@ -117,15 +119,24 @@ static NSError *AlreadyScanningError() {
 - (void)startScanningForService:(CBUUID *)serviceUUID
       advertisementFoundHandler:(GNCAdvertisementFoundHandler)advertisementFoundHandler
               completionHandler:(nullable GNCStartScanningCompletionHandler)completionHandler {
+  [self startScanningForMultipleServices:@[ serviceUUID ]
+               advertisementFoundHandler:advertisementFoundHandler
+                       completionHandler:completionHandler];
+}
+
+- (void)startScanningForMultipleServices:(NSArray<CBUUID *> *)serviceUUIDs
+               advertisementFoundHandler:(GNCAdvertisementFoundHandler)advertisementFoundHandler
+                       completionHandler:
+                           (nullable GNCStartScanningCompletionHandler)completionHandler {
   dispatch_async(_queue, ^{
-    if (_serviceUUID) {
+    if (_scanningServiceUUIDs.count > 0) {
       if (completionHandler) {
         completionHandler(AlreadyScanningError());
       }
       return;
     }
 
-    _serviceUUID = serviceUUID;
+    [_scanningServiceUUIDs addObjectsFromArray:serviceUUIDs];
     _advertisementFoundHandler = advertisementFoundHandler;
 
     [self internalStartScanningIfPoweredOn];
@@ -138,7 +149,7 @@ static NSError *AlreadyScanningError() {
 - (void)stopScanningWithCompletionHandler:
     (nullable GNCStopScanningCompletionHandler)completionHandler {
   dispatch_async(_queue, ^{
-    _serviceUUID = nil;
+    [_scanningServiceUUIDs removeAllObjects];
     _advertisementFoundHandler = nil;
     [_centralManager stopScan];
     if (completionHandler) {
@@ -178,11 +189,11 @@ static NSError *AlreadyScanningError() {
   // then back on. This will be called anytime the central manager's state changes, so
   // @c scanForPeripheralsWithServices:options: will be called anytime state transitions back to
   // powered on.
-  if (_centralManager.state == CBManagerStatePoweredOn && _serviceUUID != nil) {
+  if (_centralManager.state == CBManagerStatePoweredOn && _scanningServiceUUIDs.count > 0) {
     // Stop scanning just in case something outside of this class is already scanning.
     [_centralManager stopScan];
     [_centralManager
-        scanForPeripheralsWithServices:@[ _serviceUUID ]
+        scanForPeripheralsWithServices:_scanningServiceUUIDs
                                // Nearby relies on the existence of an advertisement for endpoint
                                // discovery/lost events, so we must set this key to keep the stream
                                // of duplicate delegate events flowing. This has adverse effect on
@@ -209,7 +220,11 @@ static NSError *AlreadyScanningError() {
   if (!localName) {
     return @{};
   }
+#if defined(NC_IOS_SDK)
+  NSData *data = [[NSData alloc] initWithBase85EncodedString:localName];
+#else
   NSData *data = [[NSData alloc] initWithWebSafeBase64EncodedString:localName];
+#endif  // defined(NC_IOS_SDK)
 
   // A Nearby Apple advertisement should only have a single service, so simply grab the first one if
   // it exists.

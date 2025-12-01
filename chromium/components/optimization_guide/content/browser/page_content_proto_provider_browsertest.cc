@@ -7,6 +7,8 @@
 #include "base/run_loop.h"
 #include "base/test/test_future.h"
 #include "components/network_session_configurator/common/network_switches.h"
+#include "components/optimization_guide/core/optimization_guide_features.h"
+#include "components/ukm/test_ukm_recorder.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/test/browser_test.h"
@@ -17,6 +19,7 @@
 #include "content/shell/browser/shell.h"
 #include "net/dns/mock_host_resolver.h"
 #include "net/test/embedded_test_server/request_handler_util.h"
+#include "services/metrics/public/cpp/ukm_builders.h"
 #include "ui/display/display_switches.h"
 
 namespace optimization_guide {
@@ -56,11 +59,18 @@ void AssertRectsEqual(const optimization_guide::proto::BoundingRect& a,
   EXPECT_EQ(a.y(), b.y());
 }
 
-void AssertValidURL(std::string url, std::string host) {
-  GURL gurl(url);
-  EXPECT_TRUE(gurl.is_valid());
-  EXPECT_TRUE(gurl.SchemeIsHTTPOrHTTPS());
-  EXPECT_EQ(gurl.host(), host);
+void AssertValidOrigin(
+    const optimization_guide::proto::SecurityOrigin& proto_origin,
+    const url::Origin& expected) {
+  EXPECT_EQ(proto_origin.opaque(), expected.opaque());
+
+  if (expected.opaque()) {
+    EXPECT_EQ(proto_origin.value(), expected.GetNonceForTesting()->ToString());
+  } else {
+    url::Origin actual = url::Origin::Create(GURL(proto_origin.value()));
+    EXPECT_TRUE(actual.IsSameOriginWith(expected))
+        << "actual: " << actual << ", expected: " << expected;
+  }
 }
 
 class PageContentProtoProviderBrowserTest : public content::ContentBrowserTest {
@@ -98,12 +108,19 @@ class PageContentProtoProviderBrowserTest : public content::ContentBrowserTest {
   }
 
   void SetPageContent(base::OnceClosure quit_closure,
-                      std::optional<proto::AnnotatedPageContent> page_content) {
-    page_content_ = std::move(page_content);
+                      std::optional<AIPageContentResult> page_content) {
+    page_content_ = std::move(page_content->proto);
+    metadata_ = std::move(page_content->metadata);
+    document_identifiers_ = std::move(page_content->document_identifiers);
     std::move(quit_closure).Run();
   }
 
   const proto::AnnotatedPageContent& page_content() { return *page_content_; }
+  const AIPageContentMetadata& metadata() { return *metadata_; }
+  const base::flat_map<std::string, content::WeakDocumentPtr>&
+  document_identifiers() {
+    return document_identifiers_;
+  }
 
   void LoadData(blink::mojom::AIPageContentOptionsPtr request =
                     DefaultAIPageContentOptions()) {
@@ -133,19 +150,31 @@ class PageContentProtoProviderBrowserTest : public content::ContentBrowserTest {
     }
   }
 
+  void SelectTextInBody(content::RenderFrameHost* rfh) {
+    const std::string kSelectText =
+        "window.getSelection().selectAllChildren(document.body);";
+    ASSERT_TRUE(content::ExecJs(rfh, kSelectText));
+  }
+
   net::EmbeddedTestServer* https_server() { return https_server_.get(); }
 
  private:
   std::unique_ptr<net::EmbeddedTestServer> https_server_;
   std::optional<proto::AnnotatedPageContent> page_content_;
+  std::optional<AIPageContentMetadata> metadata_;
+  base::flat_map<std::string, content::WeakDocumentPtr> document_identifiers_;
 };
 
 IN_PROC_BROWSER_TEST_F(PageContentProtoProviderBrowserTest, AIPageContent) {
   const gfx::Size window_bounds(web_contents()->GetSize());
   LoadPage(https_server()->GetURL("/simple.html"));
 
+  EXPECT_EQ(page_content().version(),
+            optimization_guide::proto::ANNOTATED_PAGE_CONTENT_VERSION_1_0);
   EXPECT_EQ(page_content().root_node().children_nodes().size(), 1);
   AssertHasText(page_content().root_node(), "Non empty simple page\n\n");
+  EXPECT_FALSE(
+      page_content().root_node().content_attributes().has_interaction_info());
 
   const auto& root_geometry =
       page_content().root_node().content_attributes().geometry();
@@ -161,6 +190,66 @@ IN_PROC_BROWSER_TEST_F(PageContentProtoProviderBrowserTest, AIPageContent) {
             window_bounds.width());
   EXPECT_EQ(root_geometry.visible_bounding_box().height(),
             window_bounds.height());
+
+  EXPECT_EQ(page_content().viewport_geometry().x(), 0);
+  EXPECT_EQ(page_content().viewport_geometry().y(), 0);
+  EXPECT_EQ(page_content().viewport_geometry().width(), window_bounds.width());
+  EXPECT_EQ(page_content().viewport_geometry().height(),
+            window_bounds.height());
+}
+
+IN_PROC_BROWSER_TEST_F(PageContentProtoProviderBrowserTest, Selection) {
+  LoadPage(https_server()->GetURL("/simple.html"), false);
+  SelectTextInBody(web_contents()->GetPrimaryMainFrame());
+  LoadData();
+
+  const auto& selection =
+      page_content().main_frame_data().frame_interaction_info().selection();
+  EXPECT_NE(selection.start_node_id(), 0);
+  EXPECT_NE(selection.end_node_id(), 0);
+  EXPECT_EQ(selection.selected_text(), "Non empty simple page");
+}
+
+IN_PROC_BROWSER_TEST_F(PageContentProtoProviderBrowserTest,
+                       RelativePathOnIframe) {
+  LoadPage(https_server()->GetURL("a.com", "/relative_path.html"));
+
+  const auto& main_frame_origin =
+      page_content().main_frame_data().security_origin();
+  const auto& iframe_origin = page_content()
+                                  .root_node()
+                                  .children_nodes()[0]
+                                  .content_attributes()
+                                  .iframe_data()
+                                  .frame_data()
+                                  .security_origin();
+  AssertValidOrigin(
+      main_frame_origin,
+      web_contents()->GetPrimaryMainFrame()->GetLastCommittedOrigin());
+  EXPECT_EQ(main_frame_origin.opaque(), iframe_origin.opaque());
+  EXPECT_EQ(main_frame_origin.value(), iframe_origin.value());
+}
+
+class PageContentProtoProviderBrowserTestActionableElements
+    : public PageContentProtoProviderBrowserTest {
+ public:
+  PageContentProtoProviderBrowserTestActionableElements()
+      : features_(features::kAnnotatedPageContentWithActionableElements) {}
+
+ private:
+  base::test::ScopedFeatureList features_;
+};
+
+IN_PROC_BROWSER_TEST_F(PageContentProtoProviderBrowserTestActionableElements,
+                       AIPageContent) {
+  LoadPage(https_server()->GetURL("/simple.html"));
+  EXPECT_EQ(page_content().version(),
+            optimization_guide::proto::
+                ANNOTATED_PAGE_CONTENT_VERSION_ONLY_ACTIONABLE_ELEMENTS_1_0);
+  EXPECT_EQ(page_content().root_node().children_nodes().size(), 1);
+  AssertHasText(page_content().root_node(), "Non empty simple page\n\n");
+  EXPECT_TRUE(
+      page_content().root_node().content_attributes().has_interaction_info());
 }
 
 IN_PROC_BROWSER_TEST_F(PageContentProtoProviderBrowserTest,
@@ -202,7 +291,7 @@ IN_PROC_BROWSER_TEST_F(PageContentProtoProviderBrowserTest,
   const auto& image_data = image_node.content_attributes().image_data();
   // TODO(crbug.com/382558422): Propagate image source URLs, this should be
   // a.com.
-  EXPECT_TRUE(image_data.source_url().empty());
+  EXPECT_TRUE(image_data.security_origin().value().empty());
 }
 
 namespace {
@@ -237,7 +326,7 @@ IN_PROC_BROWSER_TEST_F(PageContentProtoProviderBrowserTest,
   const auto& image_data = image_node.content_attributes().image_data();
   // TODO(crbug.com/382558422): Propagate image source URLs, this should be
   // b.com.
-  EXPECT_TRUE(image_data.source_url().empty());
+  EXPECT_TRUE(image_data.security_origin().value().empty());
 }
 
 IN_PROC_BROWSER_TEST_F(PageContentProtoProviderBrowserTest,
@@ -250,7 +339,9 @@ IN_PROC_BROWSER_TEST_F(PageContentProtoProviderBrowserTest,
   EXPECT_EQ(iframe.content_attributes().attribute_type(),
             optimization_guide::proto::CONTENT_ATTRIBUTE_IFRAME);
   const auto& iframe_data = iframe.content_attributes().iframe_data();
-  EXPECT_TRUE(iframe_data.url().empty());
+  AssertValidOrigin(iframe_data.frame_data().security_origin(),
+                    ChildFrameAt(web_contents()->GetPrimaryMainFrame(), 0)
+                        ->GetLastCommittedOrigin());
   EXPECT_FALSE(iframe_data.likely_ad_frame());
 
   EXPECT_EQ(iframe.children_nodes().size(), 1);
@@ -266,7 +357,9 @@ IN_PROC_BROWSER_TEST_F(PageContentProtoProviderBrowserTest,
   EXPECT_EQ(iframe.content_attributes().attribute_type(),
             optimization_guide::proto::CONTENT_ATTRIBUTE_IFRAME);
   const auto& iframe_data = iframe.content_attributes().iframe_data();
-  EXPECT_TRUE(iframe_data.url().empty());
+  AssertValidOrigin(iframe_data.frame_data().security_origin(),
+                    ChildFrameAt(web_contents()->GetPrimaryMainFrame(), 0)
+                        ->GetLastCommittedOrigin());
   EXPECT_FALSE(iframe_data.likely_ad_frame());
 
   EXPECT_EQ(iframe.children_nodes().size(), 1);
@@ -437,6 +530,28 @@ IN_PROC_BROWSER_TEST_P(
 #endif
 }
 
+IN_PROC_BROWSER_TEST_P(PageContentProtoProviderBrowserTestSiteIsolation,
+                       Selection) {
+  LoadPage(https_server()->GetURL(
+               "a.com", base::StringPrintf(
+                            "/paragraph_iframe_partially_offscreen.html%s",
+                            QueryParam())),
+           false);
+
+  SelectTextInBody(ChildFrameAt(web_contents()->GetPrimaryMainFrame(), 0));
+  LoadData();
+
+  const auto& iframe = page_content().root_node().children_nodes()[0];
+  const auto& selection = iframe.content_attributes()
+                              .iframe_data()
+                              .frame_data()
+                              .frame_interaction_info()
+                              .selection();
+  EXPECT_NE(selection.start_node_id(), 0);
+  EXPECT_NE(selection.end_node_id(), 0);
+  EXPECT_EQ(selection.selected_text(), "text");
+}
+
 INSTANTIATE_TEST_SUITE_P(All,
                          PageContentProtoProviderBrowserTestSiteIsolation,
                          testing::Bool());
@@ -475,7 +590,9 @@ IN_PROC_BROWSER_TEST_P(PageContentProtoProviderBrowserTestMultiProcess,
   EXPECT_EQ(b_frame.content_attributes().attribute_type(),
             optimization_guide::proto::CONTENT_ATTRIBUTE_IFRAME);
   const auto& b_frame_data = b_frame.content_attributes().iframe_data();
-  AssertValidURL(b_frame_data.url(), "b.com");
+  AssertValidOrigin(b_frame_data.frame_data().security_origin(),
+                    ChildFrameAt(web_contents()->GetPrimaryMainFrame(), 0)
+                        ->GetLastCommittedOrigin());
   EXPECT_FALSE(b_frame_data.likely_ad_frame());
 
   EXPECT_EQ(b_frame.children_nodes().size(), 1);
@@ -488,7 +605,9 @@ IN_PROC_BROWSER_TEST_P(PageContentProtoProviderBrowserTestMultiProcess,
   EXPECT_EQ(c_frame.content_attributes().attribute_type(),
             optimization_guide::proto::CONTENT_ATTRIBUTE_IFRAME);
   const auto& c_frame_data = c_frame.content_attributes().iframe_data();
-  AssertValidURL(c_frame_data.url(), "c.com");
+  AssertValidOrigin(c_frame_data.frame_data().security_origin(),
+                    ChildFrameAt(web_contents()->GetPrimaryMainFrame(), 1)
+                        ->GetLastCommittedOrigin());
   EXPECT_FALSE(c_frame_data.likely_ad_frame());
   EXPECT_EQ(b_frame.children_nodes().size(), 1);
   AssertHasText(c_frame.children_nodes()[0], "This page has no title.\n\n");
@@ -534,13 +653,162 @@ IN_PROC_BROWSER_TEST_F(PageContentProtoProviderBrowserTestFencedFrame,
   EXPECT_EQ(b_frame.content_attributes().attribute_type(),
             optimization_guide::proto::CONTENT_ATTRIBUTE_IFRAME);
   const auto& b_frame_data = b_frame.content_attributes().iframe_data();
-  AssertValidURL(b_frame_data.url(), "b.com");
+  AssertValidOrigin(b_frame_data.frame_data().security_origin(),
+                    fenced_frame_rfh->GetLastCommittedOrigin());
   EXPECT_FALSE(b_frame_data.likely_ad_frame());
   EXPECT_EQ(b_frame.children_nodes().size(), 1);
   AssertHasText(b_frame.children_nodes()[0], "Non empty simple page\n\n");
   const auto& b_geometry = b_frame.content_attributes().geometry();
   AssertRectsEqual(b_geometry.outer_bounding_box(),
                    b_geometry.visible_bounding_box());
+}
+
+IN_PROC_BROWSER_TEST_P(PageContentProtoProviderBrowserTestMultiProcess,
+                       AIPageContentMetadata) {
+  // TODO(crbug.com/403325367) When remote frames are supported, this same test
+  // should also work with cross-site iframes ("/iframe_cross_site.html").
+  LoadPage(https_server()->GetURL("a.com", "/iframe_same_site.html"),
+           /* with_page_content = */ false);
+
+  auto options = blink::mojom::AIPageContentOptions::New();
+  options->max_meta_elements = 32;
+  LoadData(std::move(options));
+
+  EXPECT_EQ(metadata().frame_metadata.size(), 3u);
+
+  const auto& main_frame_metadata = metadata().frame_metadata[0];
+  EXPECT_EQ(main_frame_metadata.url.host(), "a.com");
+  EXPECT_EQ(main_frame_metadata.meta_tags.size(), 1u);
+  EXPECT_EQ(main_frame_metadata.meta_tags[0].name, "author");
+  EXPECT_EQ(main_frame_metadata.meta_tags[0].content, "George");
+
+  const auto& child_frame_metadata1 = metadata().frame_metadata[1];
+  EXPECT_EQ(child_frame_metadata1.url.host(), "a.com");
+  EXPECT_EQ(child_frame_metadata1.meta_tags.size(), 1u);
+  EXPECT_EQ(child_frame_metadata1.meta_tags[0].name, "author");
+  EXPECT_EQ(child_frame_metadata1.meta_tags[0].content, "Gary");
+
+  const auto& child_frame_metadata2 = metadata().frame_metadata[2];
+  EXPECT_EQ(child_frame_metadata2.url.host(), "a.com");
+  EXPECT_EQ(child_frame_metadata2.meta_tags.size(), 1u);
+  EXPECT_EQ(child_frame_metadata2.meta_tags[0].name, "author");
+  EXPECT_EQ(child_frame_metadata2.meta_tags[0].content, "Gary");
+}
+
+IN_PROC_BROWSER_TEST_P(PageContentProtoProviderBrowserTestMultiProcess,
+                       AIPageContentFrameIdentifiersTheSame) {
+  LoadPage(https_server()->GetURL("a.com", "/fenced_frame/basic.html"),
+           /* with_page_content = */ false);
+
+  const GURL fenced_frame_url =
+      https_server()->GetURL("b.com", "/fenced_frame/simple.html");
+  auto* fenced_frame_rfh = fenced_frame_helper_.CreateFencedFrame(
+      web_contents()->GetPrimaryMainFrame(), fenced_frame_url);
+  ASSERT_NE(nullptr, fenced_frame_rfh);
+  LoadData();
+  auto document_identifiers_1 = document_identifiers();
+  LoadData();
+  auto document_identifiers_2 = document_identifiers();
+  EXPECT_EQ(2u, document_identifiers_1.size());
+  EXPECT_EQ(2u, document_identifiers_2.size());
+  for (const auto& [document_identifier_key, doc_ptr] :
+       document_identifiers_1) {
+    EXPECT_NE(document_identifiers_2.end(),
+              document_identifiers_2.find(document_identifier_key));
+    EXPECT_NE(nullptr, doc_ptr.AsRenderFrameHostIfValid());
+    EXPECT_EQ(doc_ptr.AsRenderFrameHostIfValid(),
+              document_identifiers_2[document_identifier_key]
+                  .AsRenderFrameHostIfValid());
+  }
+}
+
+int TreeDepth(const optimization_guide::proto::ContentNode& node) {
+  int depth = 0;
+  for (const auto& child : node.children_nodes()) {
+    depth = std::max(depth, TreeDepth(child));
+  }
+  return depth + 1;
+}
+
+IN_PROC_BROWSER_TEST_P(PageContentProtoProviderBrowserTestMultiProcess,
+                       DeepTree) {
+  // Listen for ukm metrics.
+  base::test::TestFuture<void> future;
+  ukm::TestAutoSetUkmRecorder ukm_recorder;
+  ukm_recorder.SetOnAddEntryCallback(
+      ukm::builders::OptimizationGuide_AIPageContentAgent::kEntryName,
+      future.GetRepeatingCallback());
+
+  LoadPage(https_server()->GetURL("/deep.html"));
+
+  // deep.html has a tree depth of 202.  Expect mojo encoding to trim to less
+  // than mojo's kMaxRecursionDepth of 200.
+  EXPECT_LT(TreeDepth(page_content().root_node()), 200);
+
+  // Ensure a ukm metric was recorded.
+  auto entries = ukm_recorder.GetEntriesByName(
+      ukm::builders::OptimizationGuide_AIPageContentAgent::kEntryName);
+  EXPECT_EQ(1u, entries.size());
+  auto* entry = entries[0].get();
+  EXPECT_EQ(1, *ukm_recorder.GetEntryMetric(
+                   entry, ukm::builders::OptimizationGuide_AIPageContentAgent::
+                              kNodeDepthLimitExceededName));
+}
+
+IN_PROC_BROWSER_TEST_P(PageContentProtoProviderBrowserTestMultiProcess,
+                       DeepSparseTree) {
+  // Listen for ukm metrics.
+  base::test::TestFuture<void> future;
+  ukm::TestAutoSetUkmRecorder ukm_recorder;
+  ukm_recorder.SetOnAddEntryCallback(
+      ukm::builders::OptimizationGuide_AIPageContentAgent::kEntryName,
+      future.GetRepeatingCallback());
+
+  LoadPage(https_server()->GetURL("/deep_sparse.html"));
+
+  // deep_sparse.html has a dom tree depth of 202. Every other DIV is one that
+  // will be skipped and not included in the mojo encoding.  If depth counting
+  // is working properly, the limit should not be reached and the encoded depth
+  // should be 103 (one for each unskipped div plus root and attributes).
+  EXPECT_EQ(TreeDepth(page_content().root_node()), 103);
+
+  // Ensure that no ukm metric was recorded.
+  auto entries = ukm_recorder.GetEntriesByName(
+      ukm::builders::OptimizationGuide_AIPageContentAgent::kEntryName);
+  EXPECT_EQ(0u, entries.size());
+}
+
+class ScaledPageContentProtoProviderBrowserTest
+    : public PageContentProtoProviderBrowserTest {
+ public:
+  void SetUpCommandLine(base::CommandLine* command_line) override {
+    content::ContentBrowserTest::SetUpCommandLine(command_line);
+
+    // HTTPS server only serves a valid cert for localhost, so this is needed
+    // to load pages from other hosts without an error.
+    command_line->AppendSwitch(switches::kIgnoreCertificateErrors);
+
+    command_line->AppendSwitchASCII(switches::kForceDeviceScaleFactor, "2.0");
+  }
+};
+
+IN_PROC_BROWSER_TEST_F(ScaledPageContentProtoProviderBrowserTest, ScaleSizes) {
+  const gfx::Size window_bounds(web_contents()->GetSize());
+  LoadPage(https_server()->GetURL("/simple.html"));
+
+  EXPECT_EQ(page_content().version(),
+            optimization_guide::proto::ANNOTATED_PAGE_CONTENT_VERSION_1_0);
+  EXPECT_EQ(page_content().root_node().children_nodes().size(), 1);
+  AssertHasText(page_content().root_node(), "Non empty simple page\n\n");
+  EXPECT_FALSE(
+      page_content().root_node().content_attributes().has_interaction_info());
+
+  // The viewport geometry should be scaled by the device scale factor.
+  EXPECT_EQ(page_content().viewport_geometry().x(), 0);
+  EXPECT_EQ(page_content().viewport_geometry().y(), 0);
+  EXPECT_EQ(page_content().viewport_geometry().width(), window_bounds.width());
+  EXPECT_EQ(page_content().viewport_geometry().height(),
+            window_bounds.height());
 }
 
 }  // namespace

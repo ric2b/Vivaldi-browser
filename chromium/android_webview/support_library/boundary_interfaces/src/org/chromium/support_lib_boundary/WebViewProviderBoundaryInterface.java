@@ -5,6 +5,7 @@
 package org.chromium.support_lib_boundary;
 
 import android.net.Uri;
+import android.os.Bundle;
 import android.os.CancellationSignal;
 import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
@@ -19,6 +20,11 @@ import java.util.concurrent.Executor;
 /** */
 @NullMarked
 public interface WebViewProviderBoundaryInterface {
+    void setAsyncInterceptRequestCallback(
+            /* AsyncShouldInterceptRequestCallback */ InvocationHandler callback);
+
+    void clearAsyncInterceptRequestCallback();
+
     void insertVisualStateCallback(
             long requestId, /* VisualStateCallback */ InvocationHandler callback);
 
@@ -69,4 +75,11 @@ public interface WebViewProviderBoundaryInterface {
             /* SpeculativeLoadingParameters */ InvocationHandler speculativeLoadingParameters,
             ValueCallback<Void> activationCallback,
             ValueCallback<Throwable> errorCallback);
+
+    void saveState(Bundle outState, int maxSize, boolean includeForwardState);
+
+    /* WebViewNavigationClient */ @Nullable InvocationHandler getWebViewNavigationClient();
+
+    void setWebViewNavigationClient(
+            /* WebViewNavigationClient */ @Nullable InvocationHandler webViewNavigationClient);
 }

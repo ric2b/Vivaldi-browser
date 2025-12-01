@@ -2,12 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifndef V8_WASM_MODULE_COMPILER_H_
+#define V8_WASM_MODULE_COMPILER_H_
+
 #if !V8_ENABLE_WEBASSEMBLY
 #error This header should only be included if WebAssembly is enabled.
 #endif  // !V8_ENABLE_WEBASSEMBLY
-
-#ifndef V8_WASM_MODULE_COMPILER_H_
-#define V8_WASM_MODULE_COMPILER_H_
 
 #include <atomic>
 #include <functional>
@@ -183,7 +183,7 @@ class AsyncCompileJob {
 
   void Failed();
 
-  void AsyncCompileSucceeded(Handle<WasmModuleObject> result);
+  void AsyncCompileSucceeded(DirectHandle<WasmModuleObject> result);
 
   void FinishSuccessfully();
 
@@ -224,7 +224,6 @@ class AsyncCompileJob {
   const WasmEnabledFeatures enabled_features_;
   WasmDetectedFeatures detected_features_;
   CompileTimeImports compile_imports_;
-  const DynamicTiering dynamic_tiering_;
   base::TimeTicks start_time_;
   // Copy of the module wire bytes, moved into the {native_module_} on its
   // creation.

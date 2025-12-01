@@ -35,7 +35,9 @@
 
 namespace blink {
 
+class DOMPointInit;
 class Path;
+class PathBuilder;
 class SVGAnimatedNumber;
 class SVGPointTearOff;
 
@@ -44,8 +46,10 @@ class SVGGeometryElement : public SVGGraphicsElement {
 
  public:
   virtual Path AsPath() const = 0;
-  bool isPointInFill(SVGPointTearOff*) const;
-  bool isPointInStroke(SVGPointTearOff*) const;
+  virtual PathBuilder AsMutablePath() const = 0;
+
+  bool isPointInFill(const DOMPointInit*) const;
+  bool isPointInStroke(const DOMPointInit*) const;
 
   Path ToClipPath() const;
 

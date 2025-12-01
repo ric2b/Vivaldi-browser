@@ -33,6 +33,12 @@ BASE_FEATURE(kWebUsbBlocklist,
              "WebUSBBlocklist",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
+// When enabled, accessing the navigator.hid attribute does not prevent the
+// frame from entering the back forward cache.
+BASE_FEATURE(kWebHidAttributeAllowsBackForwardCache,
+             "WebHidAttributeAllowsBackForwardCache",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+
 #if BUILDFLAG(IS_WIN)
 // Enable integration with the Windows system-level location permission.
 BASE_FEATURE(kWinSystemLocationPermission,
@@ -52,9 +58,15 @@ BASE_FEATURE(kHidGetFeatureReportFix,
 const base::FeatureParam<int> kWinSystemLocationPermissionPollingParam{
     &kWinSystemLocationPermission, "polling_interval_in_ms", 500};
 #endif  // BUILDFLAG(IS_WIN)
+
 // Enables usage of the location provider manager to select between
 // the operating system's location API or our network-based provider
 // as the source of location data for Geolocation API.
+#if BUILDFLAG(IS_MAC)
+BASE_FEATURE(kLocationProviderManager,
+             "LocationProviderManager",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+#else
 BASE_FEATURE(kLocationProviderManager,
              "LocationProviderManager",
 #if defined(VIVALDI_BUILD)
@@ -63,6 +75,7 @@ BASE_FEATURE(kLocationProviderManager,
              base::FEATURE_DISABLED_BY_DEFAULT
 #endif  // defined(VIVALDI_BUILD)
              );
+#endif  // BUILDFLAG(IS_MAC)
 
 #if BUILDFLAG(IS_CHROMEOS)
 // Enables crash key logging for USB device open operations on ChromeOS. See
@@ -101,11 +114,19 @@ const base::FeatureParam<device::mojom::LocationProviderManagerMode>::Option
          "HybridPlatform2"},
 };
 
+#if BUILDFLAG(IS_MAC)
+const base::FeatureParam<device::mojom::LocationProviderManagerMode>
+    kLocationProviderManagerParam{
+        &kLocationProviderManager, "LocationProviderManagerMode",
+        device::mojom::LocationProviderManagerMode::kHybridPlatform,
+        &location_provider_manager_mode_options};
+#else
 const base::FeatureParam<device::mojom::LocationProviderManagerMode>
     kLocationProviderManagerParam{
         &kLocationProviderManager, "LocationProviderManagerMode",
         device::mojom::LocationProviderManagerMode::kPlatformOnly,
         &location_provider_manager_mode_options};
+#endif  // BUILDFLAG(IS_MAC)
 
 bool IsOsLevelGeolocationPermissionSupportEnabled() {
 #if BUILDFLAG(IS_WIN)

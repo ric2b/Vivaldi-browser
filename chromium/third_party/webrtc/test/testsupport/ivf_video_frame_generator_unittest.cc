@@ -95,7 +95,7 @@ class IvfFileWriterEncodedCallback : public EncodedImageCallback {
 
   Mutex lock_;
   int received_frames_count_ RTC_GUARDED_BY(lock_) = 0;
-  rtc::Event expected_frames_count_received_;
+  Event expected_frames_count_received_;
 };
 
 class IvfVideoFrameGeneratorTest : public ::testing::Test {
@@ -220,6 +220,18 @@ TEST_F(IvfVideoFrameGeneratorTest, H264) {
   }
 }
 #endif
+
+TEST_F(IvfVideoFrameGeneratorTest, ScalesResolution) {
+  CreateTestVideoFile(VideoCodecType::kVideoCodecVP8, CreateVp8Encoder(env_));
+  IvfVideoFrameGenerator generator(env_, file_name_, /*fps_hint=*/123);
+  generator.ChangeResolution(kWidth * 2, kHeight / 2);
+  rtc::scoped_refptr<VideoFrameBuffer> frame_buffer =
+      generator.NextFrame().buffer;
+  frame_buffer = generator.NextFrame().buffer;
+  ASSERT_TRUE(frame_buffer);
+  EXPECT_EQ(frame_buffer->width(), kWidth * 2);
+  EXPECT_EQ(frame_buffer->height(), kHeight / 2);
+}
 
 }  // namespace test
 }  // namespace webrtc

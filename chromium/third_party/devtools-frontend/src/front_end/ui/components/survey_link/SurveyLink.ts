@@ -24,7 +24,7 @@ const UIStrings = {
    *@description Text displayed instead of the survey link after the survey link is clicked, if the survey was not shown successfully
    */
   anErrorOccurredWithTheSurvey: 'An error occurred with the survey',
-};
+} as const;
 const str_ = i18n.i18n.registerUIStrings('ui/components/survey_link/SurveyLink.ts', UIStrings);
 const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
 
@@ -118,7 +118,7 @@ export class SurveyLink extends HTMLElement {
     // clang-format off
 
     const output = html`
-      <style>${surveyLinkStyles.cssContent}</style>
+      <style>${surveyLinkStyles.cssText}</style>
       <button class="link ${linkState}" tabindex=${ariaDisabled ? '-1' : '0'} .disabled=${ariaDisabled} aria-disabled=${ariaDisabled} @click=${this.#sendSurvey}>
         <devtools-icon class="link-icon" .data=${{iconName: 'review', color: 'var(--sys-color-primary)', width: 'var(--issue-link-icon-size, 16px)', height: 'var(--issue-link-icon-size, 16px)'}}></devtools-icon><!--
       -->${linkText}

@@ -11,6 +11,7 @@
 <translation id="1084824384139382525">Navnîşana girêdanê jê bigire</translation>
 <translation id="1163931534039071049">&amp;Çavkaniya tarikê nîşan bide</translation>
 <translation id="1165039591588034296">Çewtî</translation>
+<translation id="1175364870820465910">&amp;Çap bike...</translation>
 <translation id="1181037720776840403">Rake</translation>
 <translation id="1187722533808055681">Ji bêkêrî radibe</translation>
 <translation id="1221825588892235038">Tenê hilbijartin</translation>
@@ -85,6 +86,7 @@
 <translation id="2553440850688409052">Vê pêvekê veşêre</translation>
 <translation id="26224892172169984">Mafê nede tu malperan ên ku dixwazin protokolan bi rê ve bibin</translation>
 <translation id="2653275834716714682">Guhertina nivîsê</translation>
+<translation id="265390580714150011">Nirxa qadê</translation>
 <translation id="2662876636500006917">Marketa Tevnê ya Chromeê</translation>
 <translation id="2678063897982469759">Ji nû ve çalak bike</translation>
 <translation id="2721037002783622288"><ph name="SEARCH_ENGINE" /> &amp;li nav wêneyan bigere</translation>
@@ -94,10 +96,12 @@
 <translation id="2881076733170862447">Dema tu li pêvekê bitikînî</translation>
 <translation id="2889064240420137087">Girêdanê veke bi...</translation>
 <translation id="2902127500170292085"><ph name="EXTENSION_NAME" /> nikare bi vê çapkerê re girê bide. Piştrast bike ku çapker girêdayî ye û careke din biceribîne.</translation>
+<translation id="2916745397441987255">Pêvekan bigere</translation>
 <translation id="2931157624143513983">Li devera çapkirinê bi cih bike</translation>
 <translation id="2932085390869194046">Pêborîneke pêşniyaz bike...</translation>
 <translation id="2932883381142163287">Xerabkariyê ragihîne</translation>
 <translation id="2941112035454246133">Nizm</translation>
+<translation id="2972581237482394796">&amp;Vegerîne</translation>
 <translation id="2993517869960930405">Zanyariyên sepanê</translation>
 <translation id="3003623123441819449">Pêşbîra CSS-ê</translation>
 <translation id="3012631534724231212">(iframe)</translation>
@@ -130,6 +134,7 @@
 <translation id="3387614642886316601">Kontrolkirina rastnivîsê ya baştirkirî bi kar bîne</translation>
 <translation id="3390013585654699824">Hûrgiliyên sepanê</translation>
 <translation id="345693547134384690">Wêneyê di rûgerekê nû de veke</translation>
+<translation id="3493881266323043047">Derbasbarî</translation>
 <translation id="3511307672085573050">Navnîşana girêdanê jê bigire</translation>
 <translation id="354068948465830244">Ev dikare daneyên malperê bixwîne û biguherîne</translation>
 <translation id="3560034655160545939">&amp;Venêrîna rastnivîsê</translation>
@@ -141,15 +146,20 @@
 <translation id="3711931198657368127">Pêve bike û biçe <ph name="URL" /></translation>
 <translation id="3727187387656390258">Hilpekokê vekole</translation>
 <translation id="3760460896538743390">Li rûpela paşrûyê &amp;vekole</translation>
+<translation id="3797900183766075808"><ph name="SEARCH_ENGINE" /> bigere ji bo “<ph name="SEARCH_TERMS" />”</translation>
+<translation id="3798449238516105146">Guherto</translation>
 <translation id="3810973564298564668">Bi rê ve bibe</translation>
 <translation id="3838085852053358637">Barkirina pêvekê biserneket</translation>
 <translation id="383891835335927981">Tu malper nehatine nêzîkkirin an jî dûrxistin</translation>
 <translation id="385051799172605136">Vegere</translation>
+<translation id="3858860766373142691">Nav</translation>
 <translation id="3905761538810670789">Sepanê çê bike</translation>
 <translation id="3908501907586732282">Pêvekê çalak bike</translation>
 <translation id="3909701002594999354">Hemû &amp;kontrolan nîşan</translation>
+<translation id="3909791450649380159">&amp;Jê bike</translation>
 <translation id="3927932062596804919">Guh nede</translation>
 <translation id="3936390757709632190">&amp;Di rûgera nû de deng veke</translation>
+<translation id="3943582379552582368">&amp;Vegere</translation>
 <translation id="3948116654032448504"><ph name="SEARCH_ENGINE" /> &amp;li nav wêneyan bigere</translation>
 <translation id="3979395879372752341">Pêveka nû hat tevlîkirin (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="398477389655464998">Navnîşana girêdanê jê bigire</translation>
@@ -161,6 +171,7 @@
 
 <ph name="EXTENSION_FILE" /></translation>
 <translation id="4100839878934973028">Bernameyeke din li ser kombersa te sepanek tevlî kir, belkî bi vî awayî xebata Vivaldiyê biguherîne.</translation>
+<translation id="4104163789986725820">&amp;Derxe…</translation>
 <translation id="4109898769411476438">Gerokê bigire berî têxistinê</translation>
 <translation id="4131410914670010031">Reş û spî</translation>
 <translation id="4165986682804962316">Sazkariyên malperê</translation>
@@ -168,13 +179,17 @@
 <translation id="4200983522494130825">&amp;Rûgera nû</translation>
 <translation id="4225397296022057997">Li ser tevahiya malperan</translation>
 <translation id="4256316378292851214">Vîdyoyê tomar bike wekî...</translation>
+<translation id="4278390842282768270">Mafdayî</translation>
 <translation id="4309420042698375243"><ph name="NUM_KILOBYTES" />K (<ph name="NUM_KILOBYTES_LIVE" />K zindî)</translation>
+<translation id="431076611119798497">&amp;Hûrgilî</translation>
 <translation id="4345587454538109430">Pevsaz bike...</translation>
 <translation id="4348766275249686434">Çewtiyan berhev bike</translation>
 <translation id="4384652540891215547">Pêvekê çalak bike</translation>
+<translation id="4394049700291259645">Neçalak bike</translation>
 <translation id="4409697491990005945">Qerax</translation>
 <translation id="4423376891418188461">Sazkariyan vegerîne</translation>
 <translation id="4478664379124702289">Girêdanê tomar bike wekî...</translation>
+<translation id="4593021220803146968">&amp;Biçe <ph name="URL" /></translation>
 <translation id="4595560905247879544">Sepan û pêvek tenê ji aliyê rêberê ve têne guhertin (<ph name="CUSTODIAN_NAME" />).</translation>
 <translation id="4613271546271159013">Pêvek guhertinekê pêk anî. Dê di rûgera nû de êdî rûpela wê vebe.</translation>
 <translation id="4616405296204756919">Tu dikarî pêboriyên tomarkirî li ser tevahiya amûran bi kar bînî. Ew li <ph name="VIVALDI_PASSWORD_MANAGER" /> hatine tomarkirin.</translation>
@@ -188,6 +203,7 @@
 <translation id="4839303808932127586">Vîdyoyê tomar bike wekî ...</translation>
 <translation id="4840096453115567876">Tu dixwazî moda veşartî rawestînî bi her awayî?</translation>
 <translation id="488785315393301722">Hûrguliyan nîşan bide</translation>
+<translation id="4895799941222633551">&amp;Kurterê biafrîne…</translation>
 <translation id="4912643508233590958">Ji bêkêrî radibe</translation>
 <translation id="49265687513387605">Wêşana dîmenderê nayê pêkanîn. Kontrol bike ku te mafê parvekirina dîmenerê pejirandiye an na.</translation>
 <translation id="4927753642311223124">Li vir tiştek nayê dîtin, bidome.</translation>
@@ -197,13 +213,14 @@
 <translation id="49896407730300355">Bizivirîne ber berevajiya aliyê demjimêrê ve</translation>
 <translation id="4989966318180235467">Li rûpela paşrûyê &amp;vekole</translation>
 <translation id="5027562294707732951">Pêvek tevlî bike</translation>
-<translation id="5039804452771397117">Maf bide</translation>
+<translation id="5039804452771397117">Mafê bide</translation>
 <translation id="5057110919553308744">Dema tu li pêvekê bitikînî</translation>
 <translation id="5059526285558225588">Tiştên tu dixwazî parve bikî hilbijêre</translation>
 <translation id="5063480226653192405">Bikaranîn</translation>
 <translation id="5116628073786783676">Deng tomar bike wekî...</translation>
 <translation id="5143374789336132547">Pêveka "<ph name="EXTENSION_NAME" />" malperê guherand ya ku li bişkoka malê hatiye bicihkirin.</translation>
 <translation id="5154108062446123722">Sazkariyên pêşketî bo <ph name="PRINTING_DESTINATION" />-ê</translation>
+<translation id="5154702632169343078">Mijar</translation>
 <translation id="5171343362375269016">Bîrgeha alegorkirî</translation>
 <translation id="5233019165164992427">Deriyê pirsgirêkan a rajegira xwecihî</translation>
 <translation id="5233231016133573565">Nasnameya pêvajoyê</translation>
@@ -219,7 +236,9 @@
 <translation id="5360150013186312835">Di alavbendê de nîşan bide</translation>
 <translation id="5362741141255528695">Pelê kilîda taybet hilbijêre.</translation>
 <translation id="536638840841140142">Ne yek</translation>
+<translation id="5370819323174483825">&amp;Ji nû ve bar bike</translation>
 <translation id="5398572795982417028">Derveyî refransa rûpelê ye, sînor ev e <ph name="MAXIMUM_PAGE" /></translation>
+<translation id="5423753908060469325">&amp;Kurterê biafrîne…</translation>
 <translation id="5425042808445046667">Daxistinê bidomîne</translation>
 <translation id="5427459444770871191">Bizivirîne ber bi aliyê demjmêrê ve</translation>
 <translation id="5431318178759467895">Reng</translation>
@@ -248,6 +267,7 @@
 <translation id="5910363049092958439">Wêneyê tomar bike wekî...</translation>
 <translation id="5963453369025043595"><ph name="NUM_HANDLES" /> (herî bilind <ph name="NUM_KILOBYTES_LIVE" />)</translation>
 <translation id="5978277834170881274">&amp;Venêrîna rastnivîsê ya bingehîn bi kar bîne</translation>
+<translation id="5979421442488174909">&amp;Wergerîne bo <ph name="LANGUAGE" /></translation>
 <translation id="6042308850641462728">Bêhtir</translation>
 <translation id="6086846494333236931">Ji hêla rêbera te ve hatî sazkirin</translation>
 <translation id="6101226222197207147">Sepana nû hat tevlîkirin (<ph name="EXTENSION_NAME" />)</translation>
@@ -280,8 +300,12 @@
 <translation id="6550675742724504774">Vebijêrk</translation>
 <translation id="6579369886355986318">Hemû &amp;kontrolan nîşan bide</translation>
 <translation id="6639554308659482635">Bîrgeha SQLite-ê</translation>
+<translation id="6655190889273724601">Awayê pêşvebir</translation>
 <translation id="666731172850799929">Di <ph name="APP_NAME" /> de veke</translation>
 <translation id="6686817083349815241">Pêborîna xwe tomar bike</translation>
+<translation id="6691936601825168937">&amp;Pêş</translation>
+<translation id="6786747875388722282">Pêvek</translation>
+<translation id="6787839852456839824">Kurteriyên kilîtdankê</translation>
 <translation id="6798954102094737107">Pevek: <ph name="PLUGIN_NAME" /></translation>
 <translation id="6812841287760418429">Guhertinan biparêze</translation>
 <translation id="6824564591481349393">Navnîşana e-nameyê jê bigire</translation>
@@ -290,6 +314,7 @@
 <translation id="6886871292305414135">Girêdanê di rûgerekê nû de veke</translation>
 <translation id="6892812721183419409">Girêdanê veke wekî <ph name="USER" /></translation>
 <translation id="6900284862687837908">Sepana paşrûyê: <ph name="BACKGROUND_APP_URL" /></translation>
+<translation id="6916590542764765824">Pêvekan bi rê ve bibe</translation>
 <translation id="6945221475159498467">Hilbijêre</translation>
 <translation id="6955446738988643816">Hilpekokê vekole</translation>
 <translation id="6970856801391541997">Rûpelên diyarkirî çap bike</translation>
@@ -300,6 +325,7 @@
 <translation id="7070484045139057854">Ev dikare daneyên malperê bixwîne û biguherîne</translation>
 <translation id="708060913198414444">Navnîşana dengê j&amp;ê bigire</translation>
 <translation id="7121728544325372695">Xêzikên jîr</translation>
+<translation id="7144856456372460176"><ph name="APP" /> saz bike...</translation>
 <translation id="7175353351958621980">Cihê hat barkirin:</translation>
 <translation id="7186088072322679094">Di alavbendê de bihêle</translation>
 <translation id="7287143125007575591">Têketin hat redkirin.</translation>
@@ -325,6 +351,7 @@
 <translation id="7782102568078991263">Ji Google-ê pêşniyazeke din tune ye</translation>
 <translation id="7786889348652477777">&amp;Sepanê ji nû ve bar bike</translation>
 <translation id="7800518121066352902">Bizivirîne ber berevajiya aliyê demjimêrê ve</translation>
+<translation id="7814458197256864873">&amp;Jê bigire</translation>
 <translation id="7818135753970109980">Rûkara nû hat tevlîkirin (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="782057141565633384">Navnîşana vîdyoyê j&amp;ê bigire</translation>
 <translation id="7849264908733290972">Wêneyê di rûgerekê nû de veke</translation>
@@ -348,11 +375,14 @@ Pelê xwe yê kilîdê li cihekî ewle biparêze. Ji bo afirandina gohertoyekê 
 <translation id="8212008074015601248">{NUM_DOWNLOAD, plural
         =1 {Tê daxistin} other {Tên daxistin}</translation>
 <translation id="8230134520748321204">Bila pêborîna te were tomarkirin bo<ph name="ORIGIN" />?</translation>
+<translation id="8248050856337841185">&amp;Pêve bike</translation>
 <translation id="8261378640211443080">Ev pêvek di <ph name="IDS_EXTENSION_WEB_STORE_TITLE" />ê de ne rêzokkirî ye û dibe ku bêyî zanîna te tevlî bûye.</translation>
 <translation id="8351419472474436977">Ev pêvek kontrola sazkariyên te yên nûnerê girtiye, ev tê vê wateyê ku ew dikare li ser her tiştê ku tu li ser înternetê dikî biguherîne, wan bişikênîne, an jî guhdarî bike. Heke tu ne bawer bî ka çima ev guhertin pêk hat, dê xuya be ku tu wê naxwazî.</translation>
 <translation id="8382913212082956454">Navnîşana e-nameyê jê bigire</translation>
 <translation id="8434480141477525001">Deriyê pirsgirêkan a rajegira xwecihî</translation>
 <translation id="8449008133205184768">Pêve bike û awayê wan bike wekhev</translation>
+<translation id="8477178913400731244">Dane jê bibe</translation>
+<translation id="8477384620836102176">&amp;Giştî</translation>
 <translation id="8496717697661868878">Vê pêvekê bixebitîne</translation>
 <translation id="8512476990829870887">Pêvajoyê biqedîne</translation>
 <translation id="8523493869875972733">Guhertinan biparêze</translation>
@@ -383,13 +413,16 @@ Pelê xwe yê kilîdê li cihekî ewle biparêze. Ji bo afirandina gohertoyekê 
 <translation id="8973557916016709913">Asta mezinahiyê rake</translation>
 <translation id="9003647077635673607">Mafê bide tevahiya malperan</translation>
 <translation id="9027459031423301635">Girêdanê di rûgereke nû de veke</translation>
+<translation id="9033857511263905942">&amp;Pêve bike</translation>
 <translation id="9056810968620647706">Tu girêdan nehat dîtin.</translation>
 <translation id="9084064520949870008">Wekî çarçove veke</translation>
 <translation id="9137916601698928395">Girêdanê veke wekî <ph name="USER" /></translation>
 <translation id="916607977885256133">Wêne di wêneyê de</translation>
+<translation id="9170848237812810038">&amp;Vegerîne</translation>
 <translation id="9215293857209265904">"<ph name="EXTENSION_NAME" />" tevlî bû</translation>
 <translation id="9218430445555521422">Wekî berdest saz bike</translation>
 <translation id="93766956588638423">Pêvekê çê bike</translation>
 <translation id="961012016278832836">Piştgiriya Microsoft Edge</translation>
+<translation id="994289308992179865">&amp;Gilover</translation>
 <translation id="998747458861718449">L&amp;ê vekole</translation>
 </translationbundle>

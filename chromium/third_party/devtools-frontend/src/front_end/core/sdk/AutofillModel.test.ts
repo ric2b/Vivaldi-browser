@@ -2,7 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import * as Root from '../../core/root/root.js';
 import * as Protocol from '../../generated/protocol.js';
 import {createTarget} from '../../testing/EnvironmentHelpers.js';
 import {describeWithMockConnection} from '../../testing/MockConnection.js';
@@ -12,7 +11,6 @@ import * as SDK from './sdk.js';
 
 describeWithMockConnection('AutofillModel', () => {
   beforeEach(() => {
-    Root.Runtime.experiments.enableForTest(Root.Runtime.ExperimentName.AUTOFILL_VIEW);
     Common.Settings.Settings.instance().createLocalSetting('show-test-addresses-in-autofill-menu-on-event', true);
   });
 
@@ -51,7 +49,7 @@ describeWithMockConnection('AutofillModel', () => {
     const target = createTarget();
     const autofillModel = target.model(SDK.AutofillModel.AutofillModel);
 
-    const dispatchedEvents: Array<SDK.AutofillModel.AddressFormFilledEvent> = [];
+    const dispatchedEvents: SDK.AutofillModel.AddressFormFilledEvent[] = [];
     autofillModel!.addEventListener(SDK.AutofillModel.Events.ADDRESS_FORM_FILLED, e => dispatchedEvents.push(e.data));
 
     const addressFormFilledEvent: Protocol.Autofill.AddressFormFilledEvent = {

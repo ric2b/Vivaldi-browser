@@ -12,6 +12,9 @@
 
 
 #include "absl/status/status.h"
+#include "quiche/quic/core/quic_alarm.h"
+#include "quiche/quic/core/quic_alarm_factory.h"
+#include "quiche/quic/core/quic_time.h"
 #include "quiche/quic/moqt/moqt_messages.h"
 #include "quiche/quic/moqt/moqt_parser.h"
 #include "quiche/quic/moqt/moqt_priority.h"
@@ -100,14 +103,28 @@ class MoqtSessionPeer {
     subscribe.full_track_name = publisher->GetTrackName();
     subscribe.track_alias = track_alias;
     subscribe.subscribe_id = subscribe_id;
-    subscribe.start_group = start_group;
-    subscribe.start_object = start_object;
+    subscribe.start = FullSequence(start_group, start_object);
     subscribe.subscriber_priority = 0x80;
     session->published_subscriptions_.emplace(
         subscribe_id, std::make_unique<MoqtSession::PublishedSubscription>(
                           session, std::move(publisher), subscribe,
                           /*monitoring_interface=*/nullptr));
     return session->published_subscriptions_[subscribe_id].get();
+  }
+
+  static bool InSubscriptionWindow(MoqtObjectListener* subscription,
+                                   FullSequence sequence) {
+    return static_cast<MoqtSession::PublishedSubscription*>(subscription)
+        ->InWindow(sequence);
+  }
+
+  static MoqtObjectListener* GetSubscription(MoqtSession* session,
+                                             uint64_t subscribe_id) {
+    auto it = session->published_subscriptions_.find(subscribe_id);
+    if (it == session->published_subscriptions_.end()) {
+      return nullptr;
+    }
+    return it->second.get();
   }
 
   static void DeleteSubscription(MoqtSession* session, uint64_t subscribe_id) {
@@ -168,9 +185,10 @@ class MoqtSessionPeer {
       MoqtSession* session, webtransport::Stream* stream) {
     MoqtFetch fetch_message = {
         0,
-        FullTrackName{"foo", "bar"},
         128,
         std::nullopt,
+        std::nullopt,
+        FullTrackName{"foo", "bar"},
         FullSequence{0, 0},
         4,
         std::nullopt,
@@ -187,7 +205,7 @@ class MoqtSessionPeer {
     // Initialize the fetch task
     fetch->OnFetchResult(
         FullSequence{4, 10}, absl::OkStatus(),
-        [=, session_ptr = session, fetch_id = fetch_message.subscribe_id]() {
+        [=, session_ptr = session, fetch_id = fetch_message.fetch_id]() {
           session_ptr->CancelFetch(fetch_id);
         });
     ;
@@ -198,6 +216,47 @@ class MoqtSessionPeer {
         .WillOnce(testing::Return(nullptr));
     session->OnIncomingUnidirectionalStreamAvailable();
     return task;
+  }
+
+  static quic::QuicAlarmFactory* GetAlarmFactory(MoqtSession* session) {
+    return session->alarm_factory_.get();
+  }
+
+  static quic::QuicTime Now(MoqtSession* session) {
+    return session->callbacks_.clock->ApproximateNow();
+  }
+
+  static quic::QuicAlarm* GetAlarm(webtransport::StreamVisitor* visitor) {
+    return static_cast<MoqtSession::OutgoingDataStream*>(visitor)
+        ->delivery_timeout_alarm_.get();
+  }
+
+  static quic::QuicAlarm* GetSubscribeDoneAlarm(
+      SubscribeRemoteTrack* subscription) {
+    return subscription->subscribe_done_alarm_.get();
+  }
+
+  static quic::QuicAlarm* GetGoAwayTimeoutAlarm(MoqtSession* session) {
+    return session->goaway_timeout_alarm_.get();
+  }
+
+  static quic::QuicTimeDelta GetDeliveryTimeout(
+      MoqtObjectListener* subscription) {
+    return static_cast<MoqtSession::PublishedSubscription*>(subscription)
+        ->delivery_timeout();
+  }
+  static void SetDeliveryTimeout(MoqtObjectListener* subscription,
+                                 quic::QuicTimeDelta timeout) {
+    static_cast<MoqtSession::PublishedSubscription*>(subscription)
+        ->set_delivery_timeout(timeout);
+  }
+
+  static bool SubgroupHasBeenReset(MoqtObjectListener* subscription,
+                                   FullSequence sequence) {
+    sequence.object = 0;
+    return static_cast<MoqtSession::PublishedSubscription*>(subscription)
+        ->reset_subgroups()
+        .contains(sequence);
   }
 };
 

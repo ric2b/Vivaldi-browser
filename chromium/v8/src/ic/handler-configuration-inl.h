@@ -5,10 +5,12 @@
 #ifndef V8_IC_HANDLER_CONFIGURATION_INL_H_
 #define V8_IC_HANDLER_CONFIGURATION_INL_H_
 
+#include "src/ic/handler-configuration.h"
+// Include the non-inl header before the rest of the headers.
+
 #include "src/builtins/builtins.h"
 #include "src/execution/isolate.h"
 #include "src/handles/handles-inl.h"
-#include "src/ic/handler-configuration.h"
 #include "src/objects/data-handler-inl.h"
 #include "src/objects/field-index-inl.h"
 #include "src/objects/objects-inl.h"
@@ -86,11 +88,8 @@ Handle<Smi> LoadHandler::LoadNativeDataProperty(Isolate* isolate,
   return handle(Smi::FromInt(config), isolate);
 }
 
-Handle<Smi> LoadHandler::LoadApiGetter(Isolate* isolate,
-                                       bool holder_is_receiver) {
-  int config =
-      KindBits::encode(holder_is_receiver ? Kind::kApiGetter
-                                          : Kind::kApiGetterHolderIsPrototype);
+Handle<Smi> LoadHandler::LoadApiGetter(Isolate* isolate) {
+  int config = KindBits::encode(Kind::kApiGetter);
   return handle(Smi::FromInt(config), isolate);
 }
 
@@ -267,11 +266,8 @@ DirectHandle<Smi> StoreHandler::StoreAccessorFromPrototype(Isolate* isolate) {
   return direct_handle(Smi::FromInt(config), isolate);
 }
 
-DirectHandle<Smi> StoreHandler::StoreApiSetter(Isolate* isolate,
-                                               bool holder_is_receiver) {
-  int config =
-      KindBits::encode(holder_is_receiver ? Kind::kApiSetter
-                                          : Kind::kApiSetterHolderIsPrototype);
+DirectHandle<Smi> StoreHandler::StoreApiSetter(Isolate* isolate) {
+  int config = KindBits::encode(Kind::kApiSetter);
   return direct_handle(Smi::FromInt(config), isolate);
 }
 

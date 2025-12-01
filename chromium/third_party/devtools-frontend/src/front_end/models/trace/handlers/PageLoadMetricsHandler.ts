@@ -20,14 +20,16 @@ import * as Types from '../types/types.js';
 import {data as metaHandlerData} from './MetaHandler.js';
 import type {HandlerName} from './types.js';
 
+// Small helpers to make the below type easier to read.
+type FrameId = string;
+type NavigationId = string;
 /**
  * This represents the metric scores for all navigations, for all frames in a trace.
  * Given a frame id, the map points to another map from navigation id to metric scores.
  * The metric scores include the event related to the metric as well as the data regarding
  * the score itself.
  */
-const metricScoresByFrameId =
-    new Map</* Frame id */ string, Map</* navigation id */ string, Map<MetricName, MetricScore>>>();
+const metricScoresByFrameId = new Map<FrameId, Map<NavigationId, Map<MetricName, MetricScore>>>();
 
 /**
  * Page load events with no associated duration that happened in the
@@ -352,7 +354,7 @@ function gatherFinalLCPEvents(): Types.Events.PageLoadEvent[] {
   for (let i = 0; i < dataForAllNavigations.length; i++) {
     const navigationData = dataForAllNavigations[i];
     const lcpInNavigation = navigationData.get(MetricName.LCP);
-    if (!lcpInNavigation || !lcpInNavigation.event) {
+    if (!lcpInNavigation?.event) {
       continue;
     }
 
@@ -442,8 +444,17 @@ export interface MetricScore {
   metricName: MetricName;
   classification: ScoreClassification;
   event?: Types.Events.PageLoadEvent;
-  // The last navigation that occured before this metric score.
+  // The last navigation that occurred before this metric score.
   navigation?: Types.Events.NavigationStart;
   estimated?: boolean;
   timing: Types.Timing.Micro;
+}
+
+export type LCPMetricScore = MetricScore&{
+  event: Types.Events.LargestContentfulPaintCandidate,
+  metricName: MetricName.LCP,
+};
+
+export function metricIsLCP(metric: MetricScore): metric is LCPMetricScore {
+  return metric.metricName === MetricName.LCP;
 }

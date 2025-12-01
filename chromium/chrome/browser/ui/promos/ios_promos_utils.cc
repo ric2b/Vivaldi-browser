@@ -12,6 +12,7 @@
 #include "chrome/browser/sync/sync_service_factory.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_window.h"
+#include "chrome/browser/ui/actions/chrome_action_id.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/frame/toolbar_button_provider.h"
 #include "chrome/browser/ui/views/promos/ios_promo_bubble.h"
@@ -112,8 +113,7 @@ void VerifyIOSPromoEligibilityCriteriaAsync(
     auto input_context =
         base::MakeRefCounted<segmentation_platform::InputContext>();
     input_context->metadata_args.emplace(
-        "active_days_limit",
-        promos_utils::kiOSDesktopPromoLookbackWindow.InDays());
+        "active_days_limit", promos_utils::kiOSDesktopPromoLookbackWindow);
     input_context->metadata_args.emplace(
         "wait_for_device_info_in_seconds",
         segmentation_platform::processing::ProcessedValue(0));

@@ -104,14 +104,9 @@
   if (account_manager) {
     account_manager->Logout();
   }
-  [self handleDoneButtonTap];
-  [self stop];
-}
-
-- (void)handleDoneButtonTap {
-  [self stop];
   [self.viewController dismissViewControllerAnimated:YES
                                           completion:nil];
+  [self stop];
 }
 
 #pragma mark - VivaldiSyncCoordinatorDelegate

@@ -24,6 +24,8 @@ import org.chromium.chrome.browser.tab.TabLoadIfNeededCaller;
 import org.chromium.chrome.browser.tab.TabSelectionType;
 import org.chromium.chrome.browser.tab_ui.TabContentManager;
 import org.chromium.chrome.browser.tabmodel.NextTabPolicy.NextTabPolicySupplier;
+import org.chromium.chrome.browser.tabmodel.TabCreator.NeedsTabModel;
+import org.chromium.chrome.browser.tabmodel.TabCreator.NeedsTabModelOrderController;
 import org.chromium.ui.base.WindowAndroid;
 import org.chromium.ui.modaldialog.ModalDialogManager;
 import org.chromium.url.GURL;
@@ -59,6 +61,7 @@ public class TabModelSelectorImpl extends TabModelSelectorBase implements TabMod
     private TabContentManager mTabContentManager;
     private RecentlyClosedBridge mRecentlyClosedBridge;
     private Tab mVisibleTab;
+    private @Nullable TabModelSelectorTabObserver mTabModelSelectorTabObserver;
 
     /**
      * Builds a {@link TabModelSelectorImpl} instance.
@@ -121,10 +124,8 @@ public class TabModelSelectorImpl extends TabModelSelectorBase implements TabMod
         ProfileProvider profileProvider = mProfileProviderSupplier.get();
         assert profileProvider != null;
 
-        ChromeTabCreator regularTabCreator =
-                (ChromeTabCreator) getTabCreatorManager().getTabCreator(false);
-        ChromeTabCreator incognitoTabCreator =
-                (ChromeTabCreator) getTabCreatorManager().getTabCreator(true);
+        TabCreator regularTabCreator = getTabCreatorManager().getTabCreator(false);
+        TabCreator incognitoTabCreator = getTabCreatorManager().getTabCreator(true);
         mRecentlyClosedBridge =
                 new RecentlyClosedBridge(profileProvider.getOriginalProfile(), this);
         Supplier<TabGroupModelFilter> regularTabGroupModelFilterSupplier =
@@ -150,7 +151,13 @@ public class TabModelSelectorImpl extends TabModelSelectorBase implements TabMod
                         regularTabRemover,
                         mIsUndoSupported,
                         /* isArchivedTabModel= */ false);
-        regularTabCreator.setTabModel(normalModel, mOrderController);
+        if (regularTabCreator instanceof NeedsTabModel needsTabModel) {
+            needsTabModel.setTabModel(normalModel);
+        }
+        if (regularTabCreator
+                instanceof NeedsTabModelOrderController needsTabModelOrderController) {
+            needsTabModelOrderController.setTabModelOrderController(mOrderController);
+        }
 
         TabRemover incognitoTabRemover =
                 new PassthroughTabRemover(
@@ -170,7 +177,13 @@ public class TabModelSelectorImpl extends TabModelSelectorBase implements TabMod
                                 mActivityType,
                                 this,
                                 incognitoTabRemover));
-        incognitoTabCreator.setTabModel(incognitoModel, mOrderController);
+        if (incognitoTabCreator instanceof NeedsTabModel needsTabModel) {
+            needsTabModel.setTabModel(incognitoModel);
+        }
+        if (incognitoTabCreator
+                instanceof NeedsTabModelOrderController needsTabModelOrderController) {
+            needsTabModelOrderController.setTabModelOrderController(mOrderController);
+        }
         onNativeLibraryReadyInternal(tabContentProvider, normalModel, incognitoModel);
     }
 
@@ -200,53 +213,58 @@ public class TabModelSelectorImpl extends TabModelSelectorBase implements TabMod
                     }
                 });
 
-        new TabModelSelectorTabObserver(this) {
-            @Override
-            public void onUrlUpdated(Tab tab) {
-                TabModel model = getModelForTabId(tab.getId());
-                if (model == getCurrentModel()) {
-                    mTabContentManager.invalidateIfChanged(tab.getId(), tab.getUrl());
-                }
-            }
-
-            @Override
-            public void onPageLoadStarted(Tab tab, GURL url) {
-                mTabContentManager.invalidateIfChanged(tab.getId(), tab.getUrl());
-            }
-
-            @Override
-            public void onCrash(Tab tab) {
-                if (SadTab.isShowing(tab)) mTabContentManager.removeTabThumbnail(tab.getId());
-            }
-
-            @Override
-            public void onActivityAttachmentChanged(Tab tab, @Nullable WindowAndroid window) {
-                if (window == null && !isReparentingInProgress()) {
-                    TabModel tabModel = getModel(tab.isIncognito());
-
-                    // Do not currently support moving grouped tabs.
-                    TabGroupModelFilter filter =
-                            getTabGroupModelFilterProvider()
-                                    .getTabGroupModelFilter(tab.isIncognito());
-                    if (filter.isTabInTabGroup(tab)) {
-                        filter.getTabUngrouper()
-                                .ungroupTabs(
-                                        Collections.singletonList(tab),
-                                        /* trailing= */ true,
-                                        /* allowDialog= */ false);
+        assert mTabModelSelectorTabObserver == null;
+        mTabModelSelectorTabObserver =
+                new TabModelSelectorTabObserver(this) {
+                    @Override
+                    public void onUrlUpdated(Tab tab) {
+                        TabModel model = getModelForTabId(tab.getId());
+                        if (model == getCurrentModel()) {
+                            mTabContentManager.invalidateIfChanged(tab.getId(), tab.getUrl());
+                        }
                     }
 
-                    tabModel.getTabRemover().removeTab(tab, /* allowDialog= */ false);
-                }
-            }
+                    @Override
+                    public void onPageLoadStarted(Tab tab, GURL url) {
+                        mTabContentManager.invalidateIfChanged(tab.getId(), tab.getUrl());
+                    }
 
-            @Override
-            public void onCloseContents(Tab tab) {
-                tryCloseTab(
-                        TabClosureParams.closeTab(tab).allowUndo(false).build(),
-                        /* allowDialog= */ false);
-            }
-        };
+                    @Override
+                    public void onCrash(Tab tab) {
+                        if (SadTab.isShowing(tab)) {
+                            mTabContentManager.removeTabThumbnail(tab.getId());
+                        }
+                    }
+
+                    @Override
+                    public void onActivityAttachmentChanged(
+                            Tab tab, @Nullable WindowAndroid window) {
+                        if (window == null && !isReparentingInProgress()) {
+                            TabModel tabModel = getModel(tab.isIncognito());
+
+                            // Do not currently support moving grouped tabs.
+                            TabGroupModelFilter filter =
+                                    getTabGroupModelFilterProvider()
+                                            .getTabGroupModelFilter(tab.isIncognito());
+                            if (filter.isTabInTabGroup(tab)) {
+                                filter.getTabUngrouper()
+                                        .ungroupTabs(
+                                                Collections.singletonList(tab),
+                                                /* trailing= */ true,
+                                                /* allowDialog= */ false);
+                            }
+
+                            tabModel.getTabRemover().removeTab(tab, /* allowDialog= */ false);
+                        }
+                    }
+
+                    @Override
+                    public void onCloseContents(Tab tab) {
+                        tryCloseTab(
+                                TabClosureParams.closeTab(tab).allowUndo(false).build(),
+                                /* allowDialog= */ false);
+                    }
+                };
     }
 
     @Override
@@ -260,6 +278,7 @@ public class TabModelSelectorImpl extends TabModelSelectorBase implements TabMod
     public void destroy() {
         super.destroy();
         if (mRecentlyClosedBridge != null) mRecentlyClosedBridge.destroy();
+        if (mTabModelSelectorTabObserver != null) mTabModelSelectorTabObserver.destroy();
     }
 
     /**

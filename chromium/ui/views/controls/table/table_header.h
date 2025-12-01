@@ -31,6 +31,8 @@ class VIEWS_EXPORT TableHeader : public View {
   void ResizeColumnViaKeyboard(size_t index,
                                TableView::AdvanceDirection direction);
 
+  void InstallFocusRing();
+
   // Call to update TableHeader objects that rely on the focus state of its
   // corresponding virtual accessibility views.
   void UpdateFocusState();
@@ -45,6 +47,7 @@ class VIEWS_EXPORT TableHeader : public View {
   ui::ColorId GetBackgroundColorId() const;
   int GetSortIndicatorWidth() const;
   gfx::Font::Weight GetFontWeight() const;
+  float GetFocusRingUpperRadius() const;
 
   // views::View overrides.
   void OnPaint(gfx::Canvas* canvas) override;
@@ -86,6 +89,9 @@ class VIEWS_EXPORT TableHeader : public View {
 
   // Returns true if one of the TableHeader's cells has a focus indicator.
   bool HasFocusIndicator() const;
+
+  // Calculates the default radius, accounting for the focus ring thickness.
+  float GetDefaultFocusRingRadius() const;
 
   // If not already resizing and |event| is over a resizable column starts
   // resizing.

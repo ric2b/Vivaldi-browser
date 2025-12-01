@@ -42,7 +42,7 @@ namespace {
 
 std::string GetIndexedOutputWavFilename(absl::string_view wav_name,
                                         int counter) {
-  rtc::StringBuilder ss;
+  StringBuilder ss;
   ss << wav_name.substr(0, wav_name.size() - 4) << "_" << counter
      << wav_name.substr(wav_name.size() - 4);
   return ss.Release();
@@ -71,12 +71,12 @@ class ScopedTimer {
  public:
   ScopedTimer(ApiCallStatistics* api_call_statistics,
               ApiCallStatistics::CallType call_type)
-      : start_time_(rtc::TimeNanos()),
+      : start_time_(TimeNanos()),
         call_type_(call_type),
         api_call_statistics_(api_call_statistics) {}
 
   ~ScopedTimer() {
-    api_call_statistics_->Add(rtc::TimeNanos() - start_time_, call_type_);
+    api_call_statistics_->Add(TimeNanos() - start_time_, call_type_);
   }
 
  private:

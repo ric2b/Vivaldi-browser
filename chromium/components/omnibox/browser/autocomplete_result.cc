@@ -8,6 +8,7 @@
 #include <functional>
 #include <iterator>
 #include <optional>
+#include <ostream>
 #include <sstream>
 #include <string>
 #include <unordered_set>
@@ -29,6 +30,7 @@
 #include "base/trace_event/memory_usage_estimator.h"
 #include "base/trace_event/typed_macros.h"
 #include "build/build_config.h"
+#include "components/omnibox/browser/actions/contextual_search_action.h"
 #include "components/omnibox/browser/actions/omnibox_action_concepts.h"
 #include "components/omnibox/browser/actions/omnibox_pedal.h"
 #include "components/omnibox/browser/actions/omnibox_pedal_provider.h"
@@ -50,6 +52,7 @@
 #include "components/search_engines/template_url_service.h"
 #include "components/strings/grit/components_strings.h"
 #include "components/url_formatter/url_fixer.h"
+#include "extensions/buildflags/buildflags.h"
 #include "omnibox_triggered_feature_service.h"
 #include "third_party/metrics_proto/omnibox_event.pb.h"
 #include "third_party/metrics_proto/omnibox_focus_type.pb.h"
@@ -57,6 +60,13 @@
 #include "third_party/omnibox_proto/groups.pb.h"
 #include "ui/base/device_form_factor.h"
 #include "ui/base/l10n/l10n_util.h"
+
+#if BUILDFLAG(ENABLE_EXTENSIONS)
+#include "extensions/common/extension_features.h"  // nogncheck
+#endif
+
+// Vivaldi
+#include "vivaldi/prefs/vivaldi_gen_prefs.h"
 
 using metrics::OmniboxEventProto;
 
@@ -91,12 +101,22 @@ constexpr size_t kMaxPedalMatchIndex =
 // static
 size_t AutocompleteResult::GetMaxMatches(
     bool is_zero_suggest,
-    AutocompleteInput::FeaturedKeywordMode featured_keyword_mode) {
+    AutocompleteInput::FeaturedKeywordMode featured_keyword_mode,
+    AutocompleteProviderClient* client) {
+#if defined(VIVALDI_BUILD)
+  size_t desktop_max_matches =
+      client ? client->GetPrefs()->GetInteger(
+                   vivaldiprefs::kAddressBarOmniboxDropdownSize)
+             : VIVALDI_DESKTOP_DEFAULT_MAX_MATCHES;
+  size_t vivaldi_max_matches =
+      is_android ? 10 : (is_ios ? 10 : desktop_max_matches);
+  size_t vivaldi_zero_suggest_max_matches =
+      is_android ? 15 : (is_ios ? 20 : desktop_max_matches);
+#endif
   constexpr size_t kDefaultMaxAutocompleteMatches =
-      is_android ? 10 : (is_ios ? 10 : VIVALDI_DESKTOP_MAX_MATCHES);
+      is_android ? 10 : (is_ios ? 6 : 8);
   constexpr size_t kDefaultMaxZeroSuggestMatches =
-      is_android ? 15
-                 : (is_ios ? 20 : VIVALDI_DESKTOP_ZERO_SUGGEST_MAX_MATCHES);
+      is_android ? 15 : (is_ios ? 20 : 8);
 #if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
   constexpr size_t kMaxFeaturedKeywordAutocompleteMatches = 9;
 #endif
@@ -148,10 +168,14 @@ size_t AutocompleteResult::GetMaxMatches(
   // If we're interested in the zero suggest match limit, and one has been
   // specified, return it.
   if (is_zero_suggest) {
+#if defined(VIVALDI_BUILD)
+    size_t field_trial_value = vivaldi_zero_suggest_max_matches;
+#else
     size_t field_trial_value = base::GetFieldTrialParamByFeatureAsInt(
         omnibox::kMaxZeroSuggestMatches,
         OmniboxFieldTrial::kMaxZeroSuggestMatchesParam,
         kDefaultMaxZeroSuggestMatches);
+#endif
 #if BUILDFLAG(IS_IOS)
     if (ui::GetDeviceFormFactor() == ui::DEVICE_FORM_FACTOR_TABLET) {
       field_trial_value =
@@ -162,12 +186,16 @@ size_t AutocompleteResult::GetMaxMatches(
     return field_trial_value;
   }
 
+#if defined(VIVALDI_BUILD)
+  size_t field_trial_value = vivaldi_max_matches;
+#else
   // Otherwise, i.e. if no zero suggest specific limit has been specified or the
   // input is not from omnibox focus, return the general max matches limit.
   size_t field_trial_value = base::GetFieldTrialParamByFeatureAsInt(
       omnibox::kUIExperimentMaxAutocompleteMatches,
       OmniboxFieldTrial::kUIMaxAutocompleteMatchesParam,
       kDefaultMaxAutocompleteMatches);
+#endif
   DCHECK(kMaxAutocompletePositionValue > field_trial_value);
 #if BUILDFLAG(IS_IOS)
   if (ui::GetDeviceFormFactor() == ui::DEVICE_FORM_FACTOR_TABLET) {
@@ -179,15 +207,20 @@ size_t AutocompleteResult::GetMaxMatches(
 }
 
 // static
-size_t AutocompleteResult::GetDynamicMaxMatches() {
-  constexpr const int kDynamicMaxMatchesLimit =
-      is_android ? 15 : (is_ios ? 10 : VIVALDI_DESKTOP_MAX_MATCHES);
+size_t AutocompleteResult::GetDynamicMaxMatches(
+    AutocompleteProviderClient* client) {
+#if defined(VIVALDI_BUILD)
+  return AutocompleteResult::GetMaxMatches(
+      false, AutocompleteInput::FeaturedKeywordMode::kFalse, client);
+#else
+  constexpr const int kDynamicMaxMatchesLimit = is_android ? 15 : 10;
   if (!base::FeatureList::IsEnabled(omnibox::kDynamicMaxAutocomplete))
     return AutocompleteResult::GetMaxMatches();
   return base::GetFieldTrialParamByFeatureAsInt(
       omnibox::kDynamicMaxAutocomplete,
       OmniboxFieldTrial::kDynamicMaxAutocompleteIncreasedLimitParam,
       kDynamicMaxMatchesLimit);
+#endif
 }
 
 AutocompleteResult::AutocompleteResult() {
@@ -385,7 +418,8 @@ void AutocompleteResult::SortAndCull(
     const AutocompleteInput& input,
     TemplateURLService* template_url_service,
     OmniboxTriggeredFeatureService* triggered_feature_service,
-    std::optional<AutocompleteMatch> default_match_to_preserve) {
+    std::optional<AutocompleteMatch> default_match_to_preserve,
+    AutocompleteProviderClient* client) {
   SCOPED_UMA_HISTOGRAM_TIMER_MICROS(
       "Omnibox.AutocompletionTime.UpdateResult.SortAndCull");
   Sort(input, template_url_service, default_match_to_preserve);
@@ -394,11 +428,19 @@ void AutocompleteResult::SortAndCull(
   CompareWithDemoteByType<AutocompleteMatch> comparing_object(
       page_classification);
 
-  const bool is_zero_suggest = input.IsZeroSuggest();
+  bool is_zero_suggest = input.IsZeroSuggest();
   const bool use_grouping_for_non_zps =
       base::FeatureList::IsEnabled(omnibox::kGroupingFrameworkForNonZPS) &&
       !is_zero_suggest;
-  const bool use_grouping = is_zero_suggest || use_grouping_for_non_zps;
+  bool use_grouping = is_zero_suggest || use_grouping_for_non_zps;
+
+  if (is_zero_suggest && OmniboxFieldTrial::IsStarterPackPageEnabled()) {
+    // Keep the the '@page' featured search suggestion showing in zero suggest.
+    // TODO(crbug.com/400812940): Replace this with a more permanent solution if
+    //  we decide to surface such a dedicated suggestion as an entry-point.
+    is_zero_suggest = false;
+    use_grouping = false;
+  }
 
   MergeSuggestionGroupsMap(omnibox::BuildDefaultGroupsForInput(input));
   // Grouping requires all matches have a group ID. To keep providers 'dumb',
@@ -419,6 +461,26 @@ void AutocompleteResult::SortAndCull(
     std::erase_if(matches_,
                   [&](const auto& match) { return match.relevance == 0; });
   }
+
+  // Used to determine how many search / url suggestions should appear in zps
+  // if kOmniboxUrlSuggestionsOnFocus is enabled.
+  auto url_suggestions_on_focus_config =
+      omnibox_feature_configs::OmniboxUrlSuggestionsOnFocus::Get();
+  size_t max_search_suggestions = 8u;
+  size_t max_url_suggestions = 0u;
+  size_t max_suggestions = 8u;
+  if (url_suggestions_on_focus_config.enabled) {
+    max_search_suggestions =
+        url_suggestions_on_focus_config.max_search_suggestions;
+    max_url_suggestions = url_suggestions_on_focus_config.max_url_suggestions;
+    max_suggestions = url_suggestions_on_focus_config.max_suggestions;
+  }
+
+#if defined(VIVALDI_BUILD) && !BUILDFLAG(IS_IOS) && !BUILDFLAG(IS_ANDROID)
+  // Suggest maximum 42 items for zero-suggest dropdown. This is desktop only.
+  max_search_suggestions = 42u;
+  max_suggestions = 42u;
+#endif
 
   // If at zero suggest or `kGroupingFrameworkForNonZPS` is enabled and the
   // current input & platform are supported, delegate to the framework.
@@ -463,10 +525,19 @@ void AutocompleteResult::SortAndCull(
         bool add_iph_section =
             page_classification != OmniboxEventProto::NTP_REALBOX &&
             has_iph_match;
-        // Vivaldi: Increase from 8 to 20 to get more results
+        // Vivaldi: Increase from 8 to 42 to get more results
         // when showing RECENT_TYPED_HISTORY.
         sections.push_back(std::make_unique<DesktopNTPZpsSection>(
-            suggestion_groups_map_, add_iph_section ? 7u : 20u));
+            suggestion_groups_map_, add_iph_section ? 7u : 42u));
+#if BUILDFLAG(ENABLE_EXTENSIONS)
+        // Show unscoped extension suggestions on NTP except in the realbox.
+        if (base::FeatureList::IsEnabled(
+                extensions_features::kExperimentalOmniboxLabs)) {
+          sections.push_back(
+              std::make_unique<DesktopZpsUnscopedExtensionSection>(
+                  suggestion_groups_map_));
+        }
+#endif
         if (add_iph_section) {
           sections.push_back(std::make_unique<DesktopNTPZpsIPHSection>(
               suggestion_groups_map_));
@@ -492,11 +563,29 @@ void AutocompleteResult::SortAndCull(
           }
         }
       } else if (omnibox::IsSearchResultsPage(page_classification)) {
-        sections.push_back(
-            std::make_unique<DesktopSRPZpsSection>(suggestion_groups_map_));
+        sections.push_back(std::make_unique<DesktopSRPZpsSection>(
+            suggestion_groups_map_, max_suggestions, max_search_suggestions,
+            max_url_suggestions));
+#if BUILDFLAG(ENABLE_EXTENSIONS)
+        if (base::FeatureList::IsEnabled(
+                extensions_features::kExperimentalOmniboxLabs)) {
+          sections.push_back(
+              std::make_unique<DesktopZpsUnscopedExtensionSection>(
+                  suggestion_groups_map_));
+        }
+#endif
       } else {
-        sections.push_back(
-            std::make_unique<DesktopWebZpsSection>(suggestion_groups_map_));
+        sections.push_back(std::make_unique<DesktopWebZpsSection>(
+            suggestion_groups_map_, max_suggestions, max_search_suggestions,
+            max_url_suggestions));
+#if BUILDFLAG(ENABLE_EXTENSIONS)
+        if (base::FeatureList::IsEnabled(
+                extensions_features::kExperimentalOmniboxLabs)) {
+          sections.push_back(
+              std::make_unique<DesktopZpsUnscopedExtensionSection>(
+                  suggestion_groups_map_));
+        }
+#endif
       }
     } else if constexpr (is_ios) {
       if (ui::GetDeviceFormFactor() == ui::DEVICE_FORM_FACTOR_TABLET) {
@@ -580,8 +669,10 @@ void AutocompleteResult::SortAndCull(
             AutocompleteInput::FeaturedKeywordMode::kExact &&
         OmniboxFieldTrial::IsMaxURLMatchesFeatureEnabled() &&
         (max_url_count = OmniboxFieldTrial::GetMaxURLMatches()) != 0) {
-      LimitNumberOfURLsShown(GetMaxMatches(is_zero_suggest), max_url_count,
-                             comparing_object);
+      LimitNumberOfURLsShown(
+          GetMaxMatches(is_zero_suggest,
+                        AutocompleteInput::FeaturedKeywordMode::kFalse, client),
+          max_url_count, comparing_object);
     }
 
     // Limit total matches accounting for suggestions score <= 0, sub matches,
@@ -589,24 +680,30 @@ void AutocompleteResult::SortAndCull(
     // OmniboxMaxZeroSuggestMatches, and OmniboxDynamicMaxAutocomplete.
     const size_t num_matches =
         CalculateNumMatches(is_zero_suggest, input.GetFeaturedKeywordMode(),
-                            matches_, comparing_object);
+                            matches_, comparing_object, client);
 
     // Group and trim suggestions to the given limit.
-    if (!is_zero_suggest) {
-      // Typed suggestions are trimmed then grouped.
-      matches_.resize(num_matches);
+    matches_.resize(num_matches);
 
-      // Group search suggestions above URL suggestions.
-      if (matches_.size() > 2 && is_desktop) {
-        GroupSuggestionsBySearchVsURL(std::next(matches_.begin()),
-                                      matches_.end());
-      }
-      GroupAndDemoteMatchesInGroups();
-    } else {
-      // Zero-prefix suggestions are grouped then trimmed.
-      GroupAndDemoteMatchesInGroups();
-      matches_.resize(num_matches);
+    // Group search suggestions above URL suggestions.
+    if (matches_.size() > 2 && is_desktop) {
+      GroupSuggestionsBySearchVsURL(std::next(matches_.begin()),
+                                    matches_.end());
     }
+    #if defined(VIVALDI_BUILD)
+          // Limit the number of search history items to 5.
+          int nb_search_history_item = 0;
+          for (auto it = matches_.rbegin(); it != matches_.rend();) {
+            if (it->type == AutocompleteMatchType::SEARCH_HISTORY) {
+              nb_search_history_item++;
+              if (nb_search_history_item > 5) {
+                matches_.erase(std::next(it).base());
+              }
+            }
+            ++it;
+          }
+    #endif
+    GroupAndDemoteMatchesInGroups();
   }
 
 // Vivaldi
@@ -842,6 +939,17 @@ void AutocompleteResult::AttachPedalsToMatches(
       if (result.second) {
         match.actions.push_back(pedal);
       }
+    }
+  }
+}
+
+void AutocompleteResult::AttachContextualSearchFulfillmentActionToMatches() {
+  for (AutocompleteMatch& match : matches_) {
+    if (match.subtypes.contains(omnibox::SUBTYPE_CONTEXTUAL_SEARCH)) {
+      match.takeover_action =
+          base::MakeRefCounted<ContextualSearchFulfillmentAction>(
+              match.destination_url, match.type,
+              match.subtypes.contains(omnibox::SUBTYPE_ZERO_PREFIX));
     }
   }
 }
@@ -1089,12 +1197,13 @@ size_t AutocompleteResult::CalculateNumMatches(
     bool is_zero_suggest,
     AutocompleteInput::FeaturedKeywordMode featured_keyword_mode,
     const ACMatches& matches,
-    const CompareWithDemoteByType<AutocompleteMatch>& comparing_object) {
+    const CompareWithDemoteByType<AutocompleteMatch>& comparing_object,
+    AutocompleteProviderClient* client) {
   // Use alternative CalculateNumMatchesPerUrlCount if applicable.
   if (!is_zero_suggest &&
       featured_keyword_mode != AutocompleteInput::FeaturedKeywordMode::kExact &&
       base::FeatureList::IsEnabled(omnibox::kDynamicMaxAutocomplete)) {
-    return CalculateNumMatchesPerUrlCount(matches, comparing_object);
+    return CalculateNumMatchesPerUrlCount(matches, comparing_object, client);
   }
 
   // In the process of trimming, drop all matches with a demoted relevance
@@ -1115,9 +1224,11 @@ size_t AutocompleteResult::CalculateNumMatches(
 // static
 size_t AutocompleteResult::CalculateNumMatchesPerUrlCount(
     const ACMatches& matches,
-    const CompareWithDemoteByType<AutocompleteMatch>& comparing_object) {
-  size_t base_limit = GetMaxMatches();
-  size_t increased_limit = GetDynamicMaxMatches();
+    const CompareWithDemoteByType<AutocompleteMatch>& comparing_object,
+    AutocompleteProviderClient* client) {
+  size_t base_limit = GetMaxMatches(
+      false, AutocompleteInput::FeaturedKeywordMode::kFalse, client);
+  size_t increased_limit = GetDynamicMaxMatches(client);
   size_t url_cutoff = base::GetFieldTrialParamByFeatureAsInt(
       omnibox::kDynamicMaxAutocomplete,
       OmniboxFieldTrial::kDynamicMaxAutocompleteUrlCutoffParam, 0);
@@ -1168,6 +1279,10 @@ AutocompleteResult::SessionData::~SessionData() = default;
 void AutocompleteResult::SessionData::Reset() {
   zero_prefix_enabled_ = false;
   num_zero_prefix_suggestions_shown_ = 0u;
+  zero_prefix_search_suggestions_shown_in_session_ = false;
+  zero_prefix_url_suggestions_shown_in_session_ = false;
+  typed_search_suggestions_shown_in_session_ = false;
+  typed_url_suggestions_shown_in_session_ = false;
   gws_event_id_hashes_.clear();
 }
 
@@ -1193,12 +1308,15 @@ void AutocompleteResult::CopyMatchesFrom(const AutocompleteResult& other) {
 #endif
 }
 
+// Vivaldi
+#if !BUILDFLAG(IS_ANDROID)
 #if DCHECK_IS_ON()
 void AutocompleteResult::Validate() const {
   for (const auto& i : *this)
     i.Validate();
 }
 #endif  // DCHECK_IS_ON()
+#endif  // !IS_ANDROID
 
 // static
 GURL AutocompleteResult::ComputeAlternateNavUrl(
@@ -1599,4 +1717,15 @@ void AutocompleteResult::GroupSuggestionsBySearchVsURL(iterator begin,
 
   std::ranges::stable_sort(begin, end, {},
                            [](const auto& m) { return m.GetSortingOrder(); });
+}
+
+std::ostream& operator<<(std::ostream& os, const AutocompleteResult& result) {
+  os << "AutocompleteResult {" << std::endl;
+  for (size_t i = 0; i < result.matches_.size(); i++) {
+    const AutocompleteMatch& match = result.matches_[i];
+    os << "  - " << i << ": `" << match.contents << "`"
+       << (match.allowed_to_be_default_match ? '*' : ' ') << std::endl;
+  }
+  os << "}" << std::endl;
+  return os;
 }

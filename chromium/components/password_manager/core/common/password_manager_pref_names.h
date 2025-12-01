@@ -12,6 +12,15 @@ namespace password_manager::prefs {
 // Alphabetical list of preference names specific to the PasswordManager
 // component.
 
+// Boolean controlling whether websites and apps can automatically upgrade
+// existing accounts to use passkeys when available.
+//
+// This pref doesn't have a policy mapped to it directly. Passkey creation in
+// general can be disabled using `kCredentialsEnableService` and
+// `kCredentialsEnablePasskeys`, in which case this pref's value is ignored.
+inline constexpr char kAutomaticPasskeyUpgrades[] =
+    "credentials_enable_automatic_passkey_upgrades";
+
 // Boolean controlling whether the password manager allows automatic signing in
 // through Credential Management API.
 //
@@ -189,17 +198,6 @@ inline constexpr char kLocalPasswordHashDataList[] =
     "local.password_hash_data_list";
 
 #if BUILDFLAG(IS_ANDROID)
-// The timestamp at which the last UPM local passwords migration warning was
-// shown to the user in microseconds since Windows epoch. This is needed to
-// ensure that the UI is prompted only once per given time interval (currently
-// one month).
-inline constexpr char kLocalPasswordsMigrationWarningShownTimestamp[] =
-    "local_passwords_migration_warning_shown_timestamp";
-
-// Whether the local password migration warning was already shown at startup.
-inline constexpr char kLocalPasswordMigrationWarningShownAtStartup[] =
-    "local_passwords_migration_warning_shown_at_startup";
-
 // The version of the password migration warning prefs.
 inline constexpr char kLocalPasswordMigrationWarningPrefsVersion[] =
     "local_passwords_migration_warning_reset_count";
@@ -212,6 +210,12 @@ inline constexpr char kPasswordGenerationBottomSheetDismissCount[] =
 // Whether the post password migration sheet should be shown at startup.
 inline constexpr char kShouldShowPostPasswordMigrationSheetAtStartup[] =
     "should_show_post_password_migration_sheet_at_startup";
+
+// Whether the auto-exported CSV should be deleted. Normally, it's deleted
+// immediately after export, but if that fails, this pref is used as a signal
+// that deletion should be retried.
+inline constexpr char kUpmAutoExportCsvNeedsDeletion[] =
+    "profile.upm_auto_export_csv_needs_deletion";
 
 // Whether the passwords who couldn't be migrated to UPM have been
 // saved as a CSV. The user can then choose to export the CSV out of Chrome
@@ -345,13 +349,6 @@ inline constexpr char kAutofillableCredentialsProfileStoreLoginDatabase[] =
 // A cache of whether the account LoginDatabase has autofillable credentials.
 inline constexpr char kAutofillableCredentialsAccountStoreLoginDatabase[] =
     "password_manager.autofillable_credentials_account_store_login_database";
-#endif
-
-#if !BUILDFLAG(IS_IOS)
-// Boolean pref indicating whether the user has accepted the privacy notice
-// agreement for starting the password change flow.
-inline constexpr char kPasswordChangeFlowNoticeAgreement[] =
-    "password_manager.password_change_flow_notice_agreement";
 #endif
 
 // Boolean pref indicating whether password sharing is enabled. Enables both

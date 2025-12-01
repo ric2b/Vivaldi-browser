@@ -21,6 +21,7 @@ android_library("java") {
     "android/java/src/org/chromium/chrome/browser/hub/FadeHubLayoutAnimationFactory.java",
     "android/java/src/org/chromium/chrome/browser/hub/FadeHubLayoutAnimationFactoryImpl.java",
     "android/java/src/org/chromium/chrome/browser/hub/HubColorBlendAnimatorSetHelper.java",
+    "android/java/src/org/chromium/chrome/browser/hub/HubColorMixerImpl.java",
     "android/java/src/org/chromium/chrome/browser/hub/HubColorSchemeUpdate.java",
     "android/java/src/org/chromium/chrome/browser/hub/HubColors.java",
     "android/java/src/org/chromium/chrome/browser/hub/HubCoordinator.java",
@@ -41,7 +42,6 @@ android_library("java") {
     "android/java/src/org/chromium/chrome/browser/hub/HubToolbarProperties.java",
     "android/java/src/org/chromium/chrome/browser/hub/HubToolbarView.java",
     "android/java/src/org/chromium/chrome/browser/hub/HubToolbarViewBinder.java",
-    "android/java/src/org/chromium/chrome/browser/hub/HubViewColorBlend.java",
     "android/java/src/org/chromium/chrome/browser/hub/PaneBackStackHandler.java",
     "android/java/src/org/chromium/chrome/browser/hub/PaneManagerImpl.java",
     "android/java/src/org/chromium/chrome/browser/hub/PaneTransitionHelper.java",
@@ -93,6 +93,8 @@ android_resources("java_resources") {
     "android/res/layout/hub_layout.xml",
     "android/res/layout/hub_pane_host_layout.xml",
     "android/res/layout/hub_toolbar_layout.xml",
+    "android/res/layout/hub_xr_layout.xml",
+    "android/res/layout/hub_xr_toolbar_layout.xml",
     "android/res/values/dimens.xml",
   ]
 }
@@ -105,6 +107,7 @@ android_library("unit_device_javatests") {
     ":java",
     ":java_resources",
     "//base:base_java_test_support",
+    "//base:supplier_java",
     "//base:tasks_java",
     "//chrome/browser/back_press/android:java",
     "//chrome/browser/flags:java",

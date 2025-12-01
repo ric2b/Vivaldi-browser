@@ -6,6 +6,7 @@
 
 #include <memory>
 
+#include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/time/time.h"
 #include "base/types/pass_key.h"
@@ -117,15 +118,17 @@ void TabSearchContainer::TabOrganizationAnimationSession::Show() {
   flat_edge_animation_.SetTweenType(gfx::Tween::Type::LINEAR);
 
   expansion_animation_.SetSlideDuration(
-      GetAnimationDuration(kExpansionInDuration));
+      gfx::Animation::RichAnimationDuration(kExpansionInDuration));
   flat_edge_animation_.SetSlideDuration(
-      GetAnimationDuration(kFlatEdgeInDuration));
-  opacity_animation_.SetSlideDuration(GetAnimationDuration(kOpacityInDuration));
+      gfx::Animation::RichAnimationDuration(kFlatEdgeInDuration));
+  opacity_animation_.SetSlideDuration(
+      gfx::Animation::RichAnimationDuration(kOpacityInDuration));
 
   expansion_animation_.Show();
   flat_edge_animation_.Show();
 
-  const base::TimeDelta delay = GetAnimationDuration(kOpacityDelay);
+  const base::TimeDelta delay =
+      gfx::Animation::RichAnimationDuration(kOpacityDelay);
   opacity_animation_delay_timer_.Start(
       FROM_HERE, delay, this,
       &TabSearchContainer::TabOrganizationAnimationSession::
@@ -147,24 +150,17 @@ void TabSearchContainer::TabOrganizationAnimationSession::Hide() {
   flat_edge_animation_.SetTweenType(gfx::Tween::Type::ACCEL_20_DECEL_100);
 
   expansion_animation_.SetSlideDuration(
-      GetAnimationDuration(kExpansionOutDuration));
+      gfx::Animation::RichAnimationDuration(kExpansionOutDuration));
 
   flat_edge_animation_.SetSlideDuration(
-      GetAnimationDuration(kFlatEdgeOutDuration));
+      gfx::Animation::RichAnimationDuration(kFlatEdgeOutDuration));
 
   opacity_animation_.SetSlideDuration(
-      GetAnimationDuration(kOpacityOutDuration));
+      gfx::Animation::RichAnimationDuration(kOpacityOutDuration));
 
   expansion_animation_.Hide();
   flat_edge_animation_.Hide();
   opacity_animation_.Hide();
-}
-
-base::TimeDelta
-TabSearchContainer::TabOrganizationAnimationSession::GetAnimationDuration(
-    base::TimeDelta duration) {
-  return gfx::Animation::ShouldRenderRichAnimation() ? duration
-                                                     : base::TimeDelta();
 }
 
 void TabSearchContainer::TabOrganizationAnimationSession::
@@ -210,7 +206,6 @@ TabSearchContainer::TabSearchContainer(
     View* locked_expansion_view,
     BrowserWindowInterface* browser_window_interface,
     tabs::TabDeclutterController* tab_declutter_controller,
-    views::View* anchor_view,
     TabStrip* tab_strip)
     : AnimationDelegateViews(this),
       locked_expansion_view_(locked_expansion_view),
@@ -232,8 +227,7 @@ TabSearchContainer::TabSearchContainer(
   std::unique_ptr<TabSearchButton> tab_search_button =
       std::make_unique<TabSearchButton>(
           tab_strip_controller, browser_window_interface, Edge::kNone,
-          GetFlatEdge(true, tab_search_before_chips),
-          anchor_view ? anchor_view : this, tab_strip);
+          GetFlatEdge(true, tab_search_before_chips), tab_strip);
   tab_search_button->SetProperty(views::kCrossAxisAlignmentKey,
                                  views::LayoutAlignment::kCenter);
   tab_search_button_ = AddChildView(std::move(tab_search_button));
@@ -522,8 +516,8 @@ void TabSearchContainer::OnTabDeclutterButtonClicked() {
   base::UmaHistogramEnumeration(kDeclutterTriggerOutcomeName,
                                 TriggerOutcome::kAccepted);
   LogDeclutterTriggerBucket(true);
-  tab_search_button_->tab_search_bubble_host()->ShowTabSearchBubble(
-      false, tab_search::mojom::TabSearchSection::kOrganize,
+  browser_->window()->CreateTabSearchBubble(
+      tab_search::mojom::TabSearchSection::kOrganize,
       tab_search::mojom::TabOrganizationFeature::kDeclutter);
 
   // Force hide the button when pressed, bypassing locked expansion mode.

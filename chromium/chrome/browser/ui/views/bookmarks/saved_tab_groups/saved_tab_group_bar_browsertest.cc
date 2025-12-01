@@ -3,8 +3,10 @@
 // found in the LICENSE file.
 
 #include <algorithm>
+#include <iterator>
 #include <memory>
 #include <optional>
+#include <vector>
 
 #include "base/task/single_thread_task_runner.h"
 #include "base/test/bind.h"
@@ -43,17 +45,14 @@ class SavedTabGroupBarBrowserTest : public InProcessBrowserTest,
   SavedTabGroupBarBrowserTest() {
     if (GetParam()) {
       features_.InitWithFeatures(
-          {tab_groups::kTabGroupSyncServiceDesktopMigration,
-           tab_groups::kTabGroupsSaveV2},
-          {});
+          {tab_groups::kTabGroupSyncServiceDesktopMigration}, {});
     } else {
       features_.InitWithFeatures(
-          {}, {tab_groups::kTabGroupSyncServiceDesktopMigration,
-               tab_groups::kTabGroupsSaveV2});
+          {}, {tab_groups::kTabGroupSyncServiceDesktopMigration});
     }
   }
 
-  bool IsV2UIMigrationEnabled() const { return GetParam(); }
+  bool IsMigrationEnabled() const { return GetParam(); }
 
  private:
   base::test::ScopedFeatureList features_;
@@ -91,7 +90,7 @@ struct ScopedAddObservation : public TabGroupSyncService::Observer {
 // it is already open, we will find that group and focus it.
 IN_PROC_BROWSER_TEST_P(SavedTabGroupBarBrowserTest,
                        ValidGroupIsOpenedInTabstripOnce) {
-  if (IsV2UIMigrationEnabled()) {
+  if (IsMigrationEnabled()) {
     TabGroupSyncService* service =
         TabGroupSyncServiceFactory::GetForProfile(browser()->profile());
     TabStripModel* model = browser()->tab_strip_model();
@@ -103,14 +102,12 @@ IN_PROC_BROWSER_TEST_P(SavedTabGroupBarBrowserTest,
 
     const int original_model_count = model->GetTabCount();
     const base::Uuid guid = group->saved_guid();
-    service->OpenTabGroup(guid,
-                          std::make_unique<TabGroupActionContextDesktop>(
-                              browser(), OpeningSource::kOpenedFromRevisitUi));
+    std::optional<LocalTabGroupID> group_id = service->OpenTabGroup(
+        guid, std::make_unique<TabGroupActionContextDesktop>(
+                  browser(), OpeningSource::kOpenedFromRevisitUi));
 
-    group = service->GetGroup(guid);
-    EXPECT_TRUE(group->local_group_id());
-    EXPECT_TRUE(model->group_model()->ContainsTabGroup(
-        group->local_group_id().value()));
+    EXPECT_TRUE(group_id.has_value());
+    EXPECT_TRUE(model->group_model()->ContainsTabGroup(group_id.value()));
     EXPECT_EQ(model->count(), original_model_count);
   } else {
     SavedTabGroupKeyedService* saved_tab_group_service =
@@ -156,7 +153,7 @@ IN_PROC_BROWSER_TEST_P(SavedTabGroupBarBrowserTest,
 
 IN_PROC_BROWSER_TEST_P(SavedTabGroupBarBrowserTest,
                        DeletedSavedTabGroupDoesNotOpen) {
-  if (IsV2UIMigrationEnabled()) {
+  if (IsMigrationEnabled()) {
     TabGroupSyncService* service =
         TabGroupSyncServiceFactory::GetForProfile(browser()->profile());
     TabStripModel* model = browser()->tab_strip_model();
@@ -173,12 +170,11 @@ IN_PROC_BROWSER_TEST_P(SavedTabGroupBarBrowserTest,
     service->RemoveGroup(guid);
 
     // Attempt to reopen, it should not open.
-    service->OpenTabGroup(guid,
-                          std::make_unique<TabGroupActionContextDesktop>(
-                              browser(), OpeningSource::kOpenedFromRevisitUi));
+    std::optional<LocalTabGroupID> group_id = service->OpenTabGroup(
+        guid, std::make_unique<TabGroupActionContextDesktop>(
+                  browser(), OpeningSource::kOpenedFromRevisitUi));
 
-    group = service->GetGroup(guid);
-    EXPECT_FALSE(group);
+    EXPECT_FALSE(group_id);
     EXPECT_FALSE(model->group_model()->ContainsTabGroup(id));
   } else {
     SavedTabGroupKeyedService* saved_tab_group_service =
@@ -224,7 +220,7 @@ IN_PROC_BROWSER_TEST_P(SavedTabGroupBarBrowserTest,
 
 IN_PROC_BROWSER_TEST_P(SavedTabGroupBarBrowserTest,
                        SavedTabGroupLoadStoredEntriesV1) {
-  if (IsV2UIMigrationEnabled()) {
+  if (IsMigrationEnabled()) {
     GTEST_SKIP() << "N/A for V2";
   }
 
@@ -253,7 +249,7 @@ IN_PROC_BROWSER_TEST_P(SavedTabGroupBarBrowserTest,
 
 IN_PROC_BROWSER_TEST_P(SavedTabGroupBarBrowserTest,
                        SavedTabGroupAddedFromSyncV2) {
-  if (!IsV2UIMigrationEnabled()) {
+  if (!IsMigrationEnabled()) {
     GTEST_SKIP() << "N/A for V1";
   }
   ASSERT_TRUE(SavedTabGroupUtils::IsEnabledForProfile(browser()->profile()));
@@ -262,7 +258,7 @@ IN_PROC_BROWSER_TEST_P(SavedTabGroupBarBrowserTest,
   TabGroupSyncServiceImpl* service_impl =
       static_cast<TabGroupSyncServiceImpl*>(service);
   service_impl->SetIsInitializedForTesting(true);
-  SavedTabGroupModel* model = service_impl->GetModelForTesting();
+  SavedTabGroupModel* model = service_impl->GetModel();
 
   {  // Create 1 pinned group
     ScopedAddObservation observer(service);
@@ -306,7 +302,7 @@ IN_PROC_BROWSER_TEST_P(SavedTabGroupBarBrowserTest,
 
 IN_PROC_BROWSER_TEST_P(SavedTabGroupBarBrowserTest,
                        EmptySavedTabGroupDoesntDisplayV1) {
-  if (IsV2UIMigrationEnabled()) {
+  if (IsMigrationEnabled()) {
     GTEST_SKIP() << "N/A for V2";
   }
 
@@ -333,7 +329,7 @@ IN_PROC_BROWSER_TEST_P(SavedTabGroupBarBrowserTest,
 
 IN_PROC_BROWSER_TEST_P(SavedTabGroupBarBrowserTest,
                        EmptySavedTabGroupDoesntDisplayV2) {
-  if (!IsV2UIMigrationEnabled()) {
+  if (!IsMigrationEnabled()) {
     GTEST_SKIP() << "N/A for V1";
   }
   ASSERT_TRUE(SavedTabGroupUtils::IsEnabledForProfile(browser()->profile()));
@@ -349,7 +345,7 @@ IN_PROC_BROWSER_TEST_P(SavedTabGroupBarBrowserTest,
     SavedTabGroup group{
         u"group_title", TabGroupColorId::kGrey, {}, 0, group_guid};
 
-    SavedTabGroupModel* model = service_impl->GetModelForTesting();
+    SavedTabGroupModel* model = service_impl->GetModel();
     model->AddedFromSync(std::move(group));
     observer.Wait();
 
@@ -365,6 +361,58 @@ IN_PROC_BROWSER_TEST_P(SavedTabGroupBarBrowserTest,
   EXPECT_EQ(0, saved_tab_group_bar->GetNumberOfVisibleGroups());
 }
 
+// Disabled since it does not work for trybots but helps test performance
+// issues.
+IN_PROC_BROWSER_TEST_P(SavedTabGroupBarBrowserTest,
+                       DISABLED_LargeNumberOfSavedTabGroups) {
+  constexpr int kLargeGroupCount = 1000;
+  constexpr int kLargeTabInGroupCount = 1000;
+
+  if (IsMigrationEnabled()) {
+    TabGroupSyncService* service =
+        SavedTabGroupUtils::GetServiceForProfile(browser()->profile());
+    auto* service_impl = static_cast<TabGroupSyncServiceImpl*>(service);
+    SavedTabGroupModel* model = service_impl->GetModel();
+    for (int i = 0; i < kLargeGroupCount; i++) {
+      base::Uuid group_guid = base::Uuid::GenerateRandomV4();
+      SavedTabGroup group(u"Group Title", TabGroupColorId::kGrey, {}, 0,
+                          group_guid);
+      for (int j = 0; j < kLargeTabInGroupCount; j++) {
+        GURL url("https://www.example.com");
+        SavedTabGroupTab tab(url, u"Tab Title", group_guid, j);
+        tab.SetFavicon(favicon::GetDefaultFavicon());
+        group.AddTabFromSync(std::move(tab));
+      }
+      model->AddedFromSync(std::move(group));
+      service_impl->SetIsInitializedForTesting(true);
+    }
+  } else {
+    SavedTabGroupKeyedService* service =
+        SavedTabGroupServiceFactory::GetForProfile(browser()->profile());
+    SavedTabGroupModel* model = service->model();
+    std::vector<SavedTabGroup> groups;
+    for (int i = 0; i < 100; i++) {
+      base::Uuid group_guid = base::Uuid::GenerateRandomV4();
+      SavedTabGroup group(u"Group Title", TabGroupColorId::kGrey, {}, 0,
+                          group_guid);
+      for (int j = 0; j < 100; j++) {
+        GURL url("https://www.example.com");
+        SavedTabGroupTab tab(url, u"Tab Title", group_guid, j);
+        tab.SetFavicon(favicon::GetDefaultFavicon());
+        group.AddTabFromSync(std::move(tab));
+      }
+      groups.push_back(std::move(group));
+    }
+    model->LoadStoredEntries(std::move(groups),
+                             std::vector<SavedTabGroupTab>());
+  }
+
+  BrowserView* browser_view = BrowserView::GetBrowserViewForBrowser(browser());
+  auto* bookmark_bar = browser_view->bookmark_bar();
+  const SavedTabGroupBar* saved_tab_group_bar =
+      bookmark_bar->saved_tab_group_bar();
+  EXPECT_EQ(100, saved_tab_group_bar->GetNumberOfVisibleGroups());
+}
 INSTANTIATE_TEST_SUITE_P(SavedTabGroupBar,
                          SavedTabGroupBarBrowserTest,
                          testing::Bool());

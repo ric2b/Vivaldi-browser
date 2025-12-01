@@ -5,15 +5,16 @@
 #include "chrome/browser/ui/views/side_panel/side_panel_registry.h"
 
 #include <algorithm>
+#include <variant>
 
 #include "base/auto_reset.h"
 #include "base/containers/unique_ptr_adapters.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_features.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
 #include "chrome/browser/ui/tabs/public/tab_features.h"
-#include "chrome/browser/ui/tabs/public/tab_interface.h"
 #include "chrome/browser/ui/views/side_panel/side_panel_coordinator.h"
 #include "chrome/browser/ui/views/side_panel/side_panel_entry.h"
+#include "components/tab_collections/public/tab_interface.h"
 #include "content/public/browser/web_contents.h"
 #include "extensions/common/extension_id.h"
 

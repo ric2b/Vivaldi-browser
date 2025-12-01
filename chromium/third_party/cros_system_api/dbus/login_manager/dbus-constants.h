@@ -36,14 +36,7 @@ const char kSessionManagerRetrievePrimarySession[] = "RetrievePrimarySession";
 const char kSessionManagerStartTPMFirmwareUpdate[] = "StartTPMFirmwareUpdate";
 const char kSessionManagerStartDeviceWipe[] = "StartDeviceWipe";
 const char kSessionManagerStartRemoteDeviceWipe[] = "StartRemoteDeviceWipe";
-const char kSessionManagerClearForcedReEnrollmentVpd[] =
-    "ClearForcedReEnrollmentVpd";
-const char kSessionManagerUnblockDevModeForEnrollment[] =
-    "UnblockDevModeForEnrollment";
-const char kSessionManagerUnblockDevModeForInitialStateDetermination[] =
-    "UnblockDevModeForInitialStateDetermination";
-const char kSessionManagerUnblockDevModeForCarrierLock[] =
-    "UnblockDevModeForCarrierLock";
+const char kSessionManagerClearBlockDevmodeVpd[] = "ClearBlockDevmodeVpd";
 const char kSessionManagerLockScreen[] = "LockScreen";
 const char kSessionManagerHandleLockScreenShown[] = "HandleLockScreenShown";
 const char kSessionManagerHandleLockScreenDismissed[] =

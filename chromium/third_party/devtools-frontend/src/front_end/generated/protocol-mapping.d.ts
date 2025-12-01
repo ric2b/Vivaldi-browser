@@ -271,6 +271,22 @@ export namespace ProtocolMapping {
      */
     'Network.webTransportClosed': [Protocol.Network.WebTransportClosedEvent];
     /**
+     * Fired upon direct_socket.TCPSocket creation.
+     */
+    'Network.directTCPSocketCreated': [Protocol.Network.DirectTCPSocketCreatedEvent];
+    /**
+     * Fired when direct_socket.TCPSocket connection is opened.
+     */
+    'Network.directTCPSocketOpened': [Protocol.Network.DirectTCPSocketOpenedEvent];
+    /**
+     * Fired when direct_socket.TCPSocket is aborted.
+     */
+    'Network.directTCPSocketAborted': [Protocol.Network.DirectTCPSocketAbortedEvent];
+    /**
+     * Fired when direct_socket.TCPSocket is closed.
+     */
+    'Network.directTCPSocketClosed': [Protocol.Network.DirectTCPSocketClosedEvent];
+    /**
      * Fired when additional information about a requestWillBeSent event is available from the
      * network stack. Not every requestWillBeSent event will have an additional
      * requestWillBeSentExtraInfo fired for it, and there is no guarantee whether requestWillBeSent
@@ -723,6 +739,11 @@ export namespace ProtocolMapping {
      */
     'FedCm.dialogClosed': [Protocol.FedCm.DialogClosedEvent];
     /**
+     * Event for when a GATT operation of |type| to the peripheral with |address|
+     * happened.
+     */
+    'BluetoothEmulation.gattOperationReceived': [Protocol.BluetoothEmulation.GattOperationReceivedEvent];
+    /**
      * Fired when breakpoint is resolved to an actual script and location.
      * Deprecated in favor of `resolvedBreakpoints` in the `scriptParsed` event.
      */
@@ -990,6 +1011,15 @@ export namespace ProtocolMapping {
       returnType: Protocol.Extensions.LoadUnpackedResponse;
     };
     /**
+     * Uninstalls an unpacked extension (others not supported) from the profile.
+     * Available if the client is connected using the --remote-debugging-pipe flag
+     * and the --enable-unsafe-extension-debugging.
+     */
+    'Extensions.uninstall': {
+      paramsType: [Protocol.Extensions.UninstallRequest];
+      returnType: void;
+    };
+    /**
      * Gets data from extension storage in the given `storageArea`. If `keys` is
      * specified, these are used to filter the result.
      */
@@ -1202,6 +1232,16 @@ export namespace ProtocolMapping {
      */
     'Browser.addPrivacySandboxEnrollmentOverride': {
       paramsType: [Protocol.Browser.AddPrivacySandboxEnrollmentOverrideRequest];
+      returnType: void;
+    };
+    /**
+     * Configures encryption keys used with a given privacy sandbox API to talk
+     * to a trusted coordinator.  Since this is intended for test automation only,
+     * coordinatorOrigin must be a .test domain. No existing coordinator
+     * configuration for the origin may exist.
+     */
+    'Browser.addPrivacySandboxCoordinatorKeyConfig': {
+      paramsType: [Protocol.Browser.AddPrivacySandboxCoordinatorKeyConfigRequest];
       returnType: void;
     };
     /**
@@ -2176,6 +2216,14 @@ export namespace ProtocolMapping {
       returnType: void;
     };
     /**
+     * Overrides the values for env(safe-area-inset-*) and env(safe-area-max-inset-*). Unset values will cause the
+     * respective variables to be undefined, even if previously overridden.
+     */
+    'Emulation.setSafeAreaInsetsOverride': {
+      paramsType: [Protocol.Emulation.SetSafeAreaInsetsOverrideRequest];
+      returnType: void;
+    };
+    /**
      * Overrides the values of device screen dimensions (window.screen.width, window.screen.height,
      * window.innerWidth, window.innerHeight, and "device-width"/"device-height"-related CSS media
      * query results).
@@ -2199,6 +2247,24 @@ export namespace ProtocolMapping {
      * Does nothing if no override is set.
      */
     'Emulation.clearDevicePostureOverride': {
+      paramsType: [];
+      returnType: void;
+    };
+    /**
+     * Start using the given display features to pupulate the Viewport Segments API.
+     * This override can also be set in setDeviceMetricsOverride().
+     */
+    'Emulation.setDisplayFeaturesOverride': {
+      paramsType: [Protocol.Emulation.SetDisplayFeaturesOverrideRequest];
+      returnType: void;
+    };
+    /**
+     * Clears the display features override set with either setDeviceMetricsOverride()
+     * or setDisplayFeaturesOverride() and starts using display features from the
+     * platform again.
+     * Does nothing if no override is set.
+     */
+    'Emulation.clearDisplayFeaturesOverride': {
       paramsType: [];
       returnType: void;
     };
@@ -3312,7 +3378,7 @@ export namespace ProtocolMapping {
      * Enables page domain notifications.
      */
     'Page.enable': {
-      paramsType: [];
+      paramsType: [Protocol.Page.EnableRequest?];
       returnType: void;
     };
     /**
@@ -4639,6 +4705,13 @@ export namespace ProtocolMapping {
       returnType: void;
     };
     /**
+     * Set the state of the simulated central.
+     */
+    'BluetoothEmulation.setSimulatedCentralState': {
+      paramsType: [Protocol.BluetoothEmulation.SetSimulatedCentralStateRequest];
+      returnType: void;
+    };
+    /**
      * Disable the BluetoothEmulation domain.
      */
     'BluetoothEmulation.disable': {
@@ -4659,6 +4732,46 @@ export namespace ProtocolMapping {
      */
     'BluetoothEmulation.simulateAdvertisement': {
       paramsType: [Protocol.BluetoothEmulation.SimulateAdvertisementRequest];
+      returnType: void;
+    };
+    /**
+     * Simulates the response code from the peripheral with |address| for a
+     * GATT operation of |type|. The |code| value follows the HCI Error Codes from
+     * Bluetooth Core Specification Vol 2 Part D 1.3 List Of Error Codes.
+     */
+    'BluetoothEmulation.simulateGATTOperationResponse': {
+      paramsType: [Protocol.BluetoothEmulation.SimulateGATTOperationResponseRequest];
+      returnType: void;
+    };
+    /**
+     * Adds a service with |serviceUuid| to the peripheral with |address|.
+     */
+    'BluetoothEmulation.addService': {
+      paramsType: [Protocol.BluetoothEmulation.AddServiceRequest];
+      returnType: Protocol.BluetoothEmulation.AddServiceResponse;
+    };
+    /**
+     * Removes the service respresented by |serviceId| from the peripheral with
+     * |address|.
+     */
+    'BluetoothEmulation.removeService': {
+      paramsType: [Protocol.BluetoothEmulation.RemoveServiceRequest];
+      returnType: void;
+    };
+    /**
+     * Adds a characteristic with |characteristicUuid| and |properties| to the
+     * service represented by |serviceId| in the peripheral with |address|.
+     */
+    'BluetoothEmulation.addCharacteristic': {
+      paramsType: [Protocol.BluetoothEmulation.AddCharacteristicRequest];
+      returnType: Protocol.BluetoothEmulation.AddCharacteristicResponse;
+    };
+    /**
+     * Removes the characteristic respresented by |characteristicId| from the
+     * service respresented by |serviceId| in the peripheral with |address|.
+     */
+    'BluetoothEmulation.removeCharacteristic': {
+      paramsType: [Protocol.BluetoothEmulation.RemoveCharacteristicRequest];
       returnType: void;
     };
     /**

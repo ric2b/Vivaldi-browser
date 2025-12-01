@@ -26,35 +26,34 @@
 namespace optimization_guide {
 
 OnDeviceModelFeatureAdapter::OnDeviceModelFeatureAdapter(
-    proto::OnDeviceModelExecutionFeatureConfig&& config)
-    : config_(config),
-      redactor_(Redactor::FromProto(config.output_config().redact_rules())),
-      response_streaming_mode_(
-          config.output_config().response_streaming_mode()),
+    proto::OnDeviceModelExecutionFeatureConfig config)
+    : config_(std::move(config)),
+      redactor_(Redactor::FromProto(config_.output_config().redact_rules())),
       parser_(
           ResponseParserRegistry::Get().CreateParser(config_.output_config())) {
   // Set limits values in `token_limits_`.
   auto& input_config = config_.input_config();
   auto& output_config = config_.output_config();
-  token_limits_.max_tokens = features::GetOnDeviceModelMaxTokens();
+  uint32_t max_tokens = features::GetOnDeviceModelMaxTokens();
+  token_limits_.max_tokens = max_tokens;
   token_limits_.min_context_tokens =
       input_config.has_min_context_tokens()
-          ? input_config.min_context_tokens()
+          ? std::min(input_config.min_context_tokens(), max_tokens)
           : static_cast<uint32_t>(
                 features::GetOnDeviceModelMinTokensForContext());
   token_limits_.max_context_tokens =
       input_config.has_max_context_tokens()
-          ? input_config.max_context_tokens()
+          ? std::min(input_config.max_context_tokens(), max_tokens)
           : static_cast<uint32_t>(
                 features::GetOnDeviceModelMaxTokensForContext());
   token_limits_.max_execute_tokens =
       input_config.has_max_execute_tokens()
-          ? input_config.max_execute_tokens()
+          ? std::min(input_config.max_execute_tokens(), max_tokens)
           : static_cast<uint32_t>(
                 features::GetOnDeviceModelMaxTokensForExecute());
   token_limits_.max_output_tokens =
       output_config.has_max_output_tokens()
-          ? output_config.max_output_tokens()
+          ? std::min(output_config.max_output_tokens(), max_tokens)
           : static_cast<uint32_t>(
                 features::GetOnDeviceModelMaxTokensForOutput());
 }
@@ -107,8 +106,10 @@ RedactResult OnDeviceModelFeatureAdapter::Redact(
 
 bool OnDeviceModelFeatureAdapter::ShouldParseResponse(
     ResponseCompleteness completeness) const {
+  // Streaming responses are incompatible with redaction.
   return completeness == ResponseCompleteness::kComplete ||
-         !parser_->SuppressParsingIncompleteResponse();
+         (!parser_->SuppressParsingIncompleteResponse() &&
+          config_.output_config().redact_rules().rules().empty());
 }
 
 void OnDeviceModelFeatureAdapter::ParseResponse(
@@ -128,20 +129,8 @@ void OnDeviceModelFeatureAdapter::ParseResponse(
     return;
   }
 
-  switch (response_streaming_mode_) {
-    case proto::ResponseStreamingMode::STREAMING_MODE_CURRENT_RESPONSE: {
-      parser_->ParseAsync(redacted_response, std::move(callback));
-      break;
-    }
-
-    case proto::ResponseStreamingMode::STREAMING_MODE_CHUNK_BY_CHUNK: {
-      // The `redacted_response` is actually not redacted here because the
-      // redactor config and chunk-by-chunk mode are mutual exclusive.
-      parser_->ParseAsync(redacted_response.substr(previous_response_pos),
-                          std::move(callback));
-      break;
-    }
-  }
+  parser_->ParseAsync(redacted_response.substr(previous_response_pos),
+                      std::move(callback));
 }
 
 std::optional<proto::TextSafetyRequest>

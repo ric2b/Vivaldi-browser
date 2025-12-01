@@ -10,6 +10,7 @@
 #include <memory>
 #include <optional>
 #include <utility>
+#include <variant>
 
 #include "base/check.h"
 #include "base/compiler_specific.h"
@@ -382,11 +383,10 @@ void TaskQueueImpl::PostTask(PostedTask task) {
 
 #if DCHECK_IS_ON()
   TimeDelta delay = GetTaskDelayAdjustment(current_thread);
-  if (absl::holds_alternative<base::TimeTicks>(
-          task.delay_or_delayed_run_time)) {
-    absl::get<base::TimeTicks>(task.delay_or_delayed_run_time) += delay;
+  if (std::holds_alternative<base::TimeTicks>(task.delay_or_delayed_run_time)) {
+    std::get<base::TimeTicks>(task.delay_or_delayed_run_time) += delay;
   } else {
-    absl::get<base::TimeDelta>(task.delay_or_delayed_run_time) += delay;
+    std::get<base::TimeDelta>(task.delay_or_delayed_run_time) += delay;
   }
 #endif  // DCHECK_IS_ON()
 
@@ -1110,12 +1110,12 @@ Task TaskQueueImpl::MakeDelayedTask(PostedTask delayed_task,
   const bool explicit_high_resolution_timer_win =
       g_explicit_high_resolution_timer_win.load(std::memory_order_relaxed);
 #endif  // BUILDFLAG(IS_WIN)
-  if (absl::holds_alternative<base::TimeDelta>(
+  if (std::holds_alternative<base::TimeDelta>(
           delayed_task.delay_or_delayed_run_time)) {
-    delay = absl::get<base::TimeDelta>(delayed_task.delay_or_delayed_run_time);
+    delay = std::get<base::TimeDelta>(delayed_task.delay_or_delayed_run_time);
     delayed_task.delay_or_delayed_run_time = lazy_now->Now() + delay;
   } else {
-    delay = absl::get<base::TimeTicks>(delayed_task.delay_or_delayed_run_time) -
+    delay = std::get<base::TimeTicks>(delayed_task.delay_or_delayed_run_time) -
             lazy_now->Now();
   }
 #if BUILDFLAG(IS_WIN)
@@ -1579,24 +1579,21 @@ void TaskQueueImpl::RemoveCancelledTasks() {
   // move cancelled callbacks into a temporary container before deleting them.
   // This prevents lock reentrancy or modifying a container while traversing it.
   absl::InlinedVector<base::OnceClosure, 8> tasks_to_delete;
-
-  auto remove_canceled_tasks_from_queue = [&tasks_to_delete](TaskDeque& queue) {
-    for (auto& task : queue) {
+  {
+    base::internal::CheckedAutoLock lock(any_thread_lock_);
+    for (auto& task : any_thread_.immediate_incoming_queue) {
       if (task.task.IsCancelled()) {
         tasks_to_delete.push_back(std::move(task.task));
       }
     }
-    std::erase_if(queue, [](const Task& task) { return task.task.is_null(); });
-  };
-
-  {
-    base::internal::CheckedAutoLock lock(any_thread_lock_);
-    remove_canceled_tasks_from_queue(any_thread_.immediate_incoming_queue);
+    std::erase_if(any_thread_.immediate_incoming_queue,
+                  [](const Task& task) { return task.task.is_null(); });
   }
-  remove_canceled_tasks_from_queue(
-      main_thread_only_.immediate_work_queue->tasks_);
-  remove_canceled_tasks_from_queue(
-      main_thread_only_.delayed_work_queue->tasks_);
+
+  main_thread_only_.immediate_work_queue->RemoveCancelledTasks(
+      WorkQueue::RemoveCancelledTasksPolicy::kAll);
+  main_thread_only_.delayed_work_queue->RemoveCancelledTasks(
+      WorkQueue::RemoveCancelledTasksPolicy::kAll);
 }
 
 void TaskQueueImpl::AddQueueEnabledVoter(bool voter_is_enabled,

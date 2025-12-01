@@ -90,6 +90,8 @@
 #include "net/test/embedded_test_server/http_response.h"
 #include "net/traffic_annotation/network_traffic_annotation_test_helper.h"
 #include "ppapi/buildflags/buildflags.h"
+#include "services/network/public/cpp/content_decoding_interceptor.h"
+#include "services/network/public/cpp/features.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/public/common/features.h"
@@ -1522,6 +1524,10 @@ class DownloadFencedFrameTest : public DownloadContentTest {
  public:
   DownloadFencedFrameTest() {
     fenced_frame_helper_ = std::make_unique<test::FencedFrameTestHelper>();
+
+    // Fenced frame requires a secure context to disable untrusted network.
+    embedded_https_test_server().SetSSLConfig(
+        net::EmbeddedTestServer::CERT_TEST_NAMES);
   }
 
   ~DownloadFencedFrameTest() override = default;
@@ -1561,6 +1567,10 @@ class DownloadFencedFrameTest : public DownloadContentTest {
 
     EXPECT_FALSE(target_node->current_frame_host()->IsErrorDocument());
     return target_node->current_frame_host();
+  }
+
+  test::FencedFrameTestHelper* fenced_frame_helper() {
+    return fenced_frame_helper_.get();
   }
 
  private:
@@ -4411,6 +4421,72 @@ IN_PROC_BROWSER_TEST_F(DownloadContentTest, DuplicateContentDisposition) {
             downloads[0]->GetTargetFilePath().BaseName().value());
 }
 
+IN_PROC_BROWSER_TEST_F(DownloadContentTest,
+                       CompressedResponseWithContentDisposition) {
+  // gzip-content-with-content-disposition.gz is served with Content-Disposition
+  // headers, and `Content-Encoding: gzip`.
+  NavigateToURLAndWaitForDownload(
+      shell(),
+      embedded_test_server()->GetURL(
+          "/download/gzip-content-with-content-disposition.gz"),
+      download::DownloadItem::COMPLETE);
+
+  std::vector<raw_ptr<download::DownloadItem, VectorExperimental>> downloads;
+  DownloadManagerForShell(shell())->GetAllDownloads(&downloads);
+  ASSERT_EQ(1u, downloads.size());
+
+  EXPECT_EQ(FILE_PATH_LITERAL("hello.txt"),
+            downloads[0]->GetTargetFilePath().BaseName().value());
+
+  // Verify the file is downloaded correctly.
+  {
+    base::ScopedAllowBlockingForTesting allow_blocking;
+    std::string downloaded_content;
+    ASSERT_TRUE(base::ReadFileToString(downloads[0]->GetTargetFilePath(),
+                                       &downloaded_content));
+    EXPECT_EQ(downloaded_content, "Hello World!\n");
+  }
+}
+
+// Test fixture for forcing RendererSideContentDecoding feature.
+class DownloadContentRendererSideContentDecodingTest
+    : public DownloadContentTest {
+ public:
+  DownloadContentRendererSideContentDecodingTest() = default;
+  ~DownloadContentRendererSideContentDecodingTest() override = default;
+
+ private:
+  base::test::ScopedFeatureList features_ = base::test::ScopedFeatureList(
+      {network::features::kRendererSideContentDecoding});
+};
+
+IN_PROC_BROWSER_TEST_F(
+    DownloadContentRendererSideContentDecodingTest,
+    CompressedResponseWithContentDispositionInsufficientResources) {
+  // Forces the ContentDecodingInterceptor to simulate a failure when attempting
+  // to create its internal Mojo data pipe.
+  network::ContentDecodingInterceptor::
+      SetForceMojoCreateDataPipeFailureForTesting(true);
+
+  auto observer = std::make_unique<DownloadCreateObserver>(
+      DownloadManagerForShell(shell()));
+  // gzip-content-with-content-disposition.gz is served with Content-Disposition
+  // headers, and `Content-Encoding: gzip`.
+  EXPECT_TRUE(NavigateToURLAndExpectNoCommit(
+      shell(), embedded_test_server()->GetURL(
+                   "/download/gzip-content-with-content-disposition.gz")));
+  download::DownloadItem* download = observer->WaitForFinished();
+  WaitForInterrupt(download);
+
+  // Verify that the download interruption reason is NETWORK_FAILED.
+  EXPECT_EQ(download->GetLastReason(),
+            download::DOWNLOAD_INTERRUPT_REASON_NETWORK_FAILED);
+
+  // Reset the test hook to false to ensure it doesn't affect subsequent tests.
+  network::ContentDecodingInterceptor::
+      SetForceMojoCreateDataPipeFailureForTesting(false);
+}
+
 // Test that the network isolation key is populated for:
 // (1) <a download> triggered download request that doesn't go through the
 // navigation path
@@ -5331,6 +5407,66 @@ IN_PROC_BROWSER_TEST_F(DownloadFencedFrameTest, DiscardNonNavigationDownload) {
   std::vector<raw_ptr<download::DownloadItem, VectorExperimental>> downloads;
   download_manager->GetAllDownloads(&downloads);
   EXPECT_TRUE(downloads.empty());
+}
+
+// An interrupted download will be created if fenced frame has revoked its
+// untrusted network access.
+// NOTE: Normally a download cannot be initiated from a network revoked fenced
+// frame. In case there are download entry points that are not properly
+// disabled, the network status check during the creation of download should
+// catch these and create an interrupted download.
+IN_PROC_BROWSER_TEST_F(DownloadFencedFrameTest,
+                       CreateInterruptedDownloadIfNetworkRevoked) {
+  ASSERT_TRUE(embedded_https_test_server().Start());
+
+  const GURL kInitialUrl = embedded_https_test_server().GetURL(
+      "a.test", "/cross_site_iframe_factory.html?a.test(a.test{fenced})");
+  const GURL kDownloadUrl =
+      embedded_https_test_server().GetURL("/download/download-test.lib");
+
+  // Create the fenced frame.
+  EXPECT_TRUE(NavigateToURL(shell(), kInitialUrl));
+  std::vector<content::RenderFrameHost*> child_frames =
+      fenced_frame_helper()->GetChildFencedFrameHosts(
+          shell()->web_contents()->GetPrimaryMainFrame());
+  EXPECT_EQ(child_frames.size(), 1u);
+  content::RenderFrameHost* fenced_frame_host = child_frames[0];
+
+  // Create a download with the fenced frame untrusted network revoked. An
+  // interrupted download should be created.
+  auto* download_manager =
+      fenced_frame_host->GetBrowserContext()->GetDownloadManager();
+  MockDownloadManagerObserver dm_observer(download_manager);
+  EXPECT_CALL(dm_observer, OnDownloadCreated(_, _)).Times(1);
+  EXPECT_CALL(dm_observer, OnDownloadDropped(_)).Times(0);
+
+  auto params = blink::mojom::DownloadURLParams::New();
+  // Set this to be a context menu save so that it is not considered as content
+  // initiated. Otherwise no download item will be created.
+  params->is_context_menu_save = true;
+  params->url = kDownloadUrl;
+
+  std::unique_ptr<DownloadTestObserverInterrupted> observer =
+      std::make_unique<DownloadTestObserverInterrupted>(
+          download_manager, 1,
+          DownloadTestObserver::ON_DANGEROUS_DOWNLOAD_FAIL);
+
+  content::test::RevokeFencedFrameUntrustedNetwork(fenced_frame_host);
+
+  // Download the URL.
+  static_cast<RenderFrameHostImpl*>(fenced_frame_host)
+      ->DownloadURL(std::move(params));
+
+  // Verify that an interrupted download has been created.
+  observer->WaitForFinished();
+  std::vector<raw_ptr<download::DownloadItem, VectorExperimental>> downloads;
+  DownloadManagerForShell(shell())->GetAllDownloads(&downloads);
+  EXPECT_EQ(1u, downloads.size());
+  download::DownloadItem* download = downloads[0];
+
+  ASSERT_EQ(download->GetState(), download::DownloadItem::INTERRUPTED);
+  EXPECT_EQ(download->GetLastReason(),
+            download::DOWNLOAD_INTERRUPT_REASON_NETWORK_FAILED);
 }
 
 // A download triggered by clicking on a link with a |download| attribute should

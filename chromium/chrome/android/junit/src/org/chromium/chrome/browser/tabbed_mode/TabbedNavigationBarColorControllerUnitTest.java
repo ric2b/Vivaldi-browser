@@ -7,7 +7,9 @@ package org.chromium.chrome.browser.tabbed_mode;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -24,6 +26,7 @@ import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.Mockito;
 import org.mockito.junit.MockitoJUnit;
@@ -35,6 +38,7 @@ import org.robolectric.shadows.ShadowLooper;
 
 import org.chromium.base.supplier.ObservableSupplierImpl;
 import org.chromium.base.test.BaseRobolectricTestRunner;
+import org.chromium.base.test.util.Features.DisableFeatures;
 import org.chromium.base.test.util.Features.EnableFeatures;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
@@ -49,6 +53,9 @@ import org.chromium.chrome.browser.ui.edge_to_edge.NavigationBarColorProvider;
 import org.chromium.components.browser_ui.edge_to_edge.EdgeToEdgeSystemBarColorHelper;
 import org.chromium.components.browser_ui.styles.SemanticColorUtils;
 import org.chromium.ui.util.ColorUtils;
+
+import java.util.HashSet;
+import java.util.List;
 
 @RunWith(BaseRobolectricTestRunner.class)
 @Config(
@@ -68,6 +75,7 @@ public class TabbedNavigationBarColorControllerUnitTest {
     }
 
     private static final int NAV_DIVIDER_COLOR = Color.LTGRAY;
+    private static final int NUM_UNIQUE_ANIMATION_COLORS = 5;
 
     private TabbedNavigationBarColorController mNavColorController;
     private Context mContext;
@@ -281,34 +289,114 @@ public class TabbedNavigationBarColorControllerUnitTest {
     }
 
     @Test
-    @EnableFeatures({ChromeFeatureList.EDGE_TO_EDGE_BOTTOM_CHIN})
-    public void testOnScrimOverlapChanged() {
-        when(mTab.getBackgroundColor()).thenReturn(Color.LTGRAY);
+    @EnableFeatures({
+        ChromeFeatureList.NAV_BAR_COLOR_ANIMATION,
+        ChromeFeatureList.EDGE_TO_EDGE_EVERYWHERE
+    })
+    @DisableFeatures({ChromeFeatureList.EDGE_TO_EDGE_BOTTOM_CHIN})
+    @Config(sdk = 30) // Min version needed for e2e everywhere
+    public void testNavBarColorAnimationsEdgeToEdgeEverywhere() {
+        when(mTab.getBackgroundColor()).thenReturn(Color.BLUE);
         when(mLayoutManager.getActiveLayoutType()).thenReturn(LayoutType.BROWSING);
-
-        // Verify the nav bar color.
-        mNavColorController.onBottomAttachedColorChanged(Color.LTGRAY, false, false);
-        runColorUpdateAnimation();
-        verify(mEdgeToEdgeSystemBarColorHelper).setNavigationBarColor(eq(Color.LTGRAY));
-
-        // Apply a scrim to the nav bar via onScrimOverlapChanged.
-        @ColorInt int fullScrimColor = ColorUtils.applyAlphaFloat(Color.RED, .5f);
-        mNavColorController.onScrimOverlapChanged(fullScrimColor);
-
-        @ColorInt
-        int expectedColorWithScrim = ColorUtils.overlayColor(Color.LTGRAY, fullScrimColor);
-
-        // Verify that the scrim was properly applied to the nav bar.
-        verify(mEdgeToEdgeSystemBarColorHelper).setNavigationBarColor(eq(expectedColorWithScrim));
 
         mNavColorController.updateActiveTabForTesting();
         runColorUpdateAnimation();
+        // Verify that our starting nav bar color is blue.
+        verify(mEdgeToEdgeSystemBarColorHelper).setNavigationBarColor(eq(Color.BLUE));
 
-        // Verify that a subsequent call to updateNavigationBarColor doesn't remove the scrim
-        // effect. setNavigationBarColor(expectedColorWithScrim) is called once via
-        // onScrimOverlapChanged and once via updateActiveTabForTesting.
-        verify(mEdgeToEdgeSystemBarColorHelper, times(2))
-                .setNavigationBarColor(eq(expectedColorWithScrim));
+        Mockito.clearInvocations(mEdgeToEdgeSystemBarColorHelper);
+        // Change nav bar color to red with animations enabled.
+        mNavColorController.onBottomAttachedColorChanged(Color.RED, false, false);
+        runColorUpdateAnimation();
+        // Capture all of the animation colors.
+        ArgumentCaptor<Integer> colorsArgumentCaptor = ArgumentCaptor.forClass(Integer.class);
+        verify(mEdgeToEdgeSystemBarColorHelper, atLeastOnce())
+                .setNavigationBarColor(colorsArgumentCaptor.capture());
+
+        verifyColorAnimationSteps(colorsArgumentCaptor.getAllValues());
+    }
+
+    @Test
+    @EnableFeatures({
+        ChromeFeatureList.NAV_BAR_COLOR_ANIMATION,
+        ChromeFeatureList.EDGE_TO_EDGE_BOTTOM_CHIN
+    })
+    @DisableFeatures({ChromeFeatureList.EDGE_TO_EDGE_EVERYWHERE})
+    public void testNavBarColorAnimationsEdgeToEdgeBottomChin() {
+        when(mTab.getBackgroundColor()).thenReturn(Color.BLUE);
+        when(mLayoutManager.getActiveLayoutType()).thenReturn(LayoutType.BROWSING);
+
+        mNavColorController.updateActiveTabForTesting();
+        runColorUpdateAnimation();
+        // Verify that our starting nav bar color is blue.
+        verify(mEdgeToEdgeSystemBarColorHelper).setNavigationBarColor(eq(Color.BLUE));
+
+        Mockito.clearInvocations(mEdgeToEdgeSystemBarColorHelper);
+        // Change nav bar color to red with animations enabled.
+        mNavColorController.onBottomAttachedColorChanged(Color.RED, false, false);
+        runColorUpdateAnimation();
+        // Capture all of the animation colors.
+        ArgumentCaptor<Integer> colorsArgumentCaptor = ArgumentCaptor.forClass(Integer.class);
+        verify(mEdgeToEdgeSystemBarColorHelper, atLeastOnce())
+                .setNavigationBarColor(colorsArgumentCaptor.capture());
+
+        verifyColorAnimationSteps(colorsArgumentCaptor.getAllValues());
+    }
+
+    // Disable the dedicated feature flag.
+    @Test
+    @EnableFeatures({
+        ChromeFeatureList.EDGE_TO_EDGE_BOTTOM_CHIN,
+        ChromeFeatureList.EDGE_TO_EDGE_EVERYWHERE
+    })
+    @DisableFeatures({ChromeFeatureList.NAV_BAR_COLOR_ANIMATION})
+    @Config(sdk = 30) // Min version needed for e2e everywhere
+    public void testNavBarColorAnimationsDisabled() {
+        when(mTab.getBackgroundColor()).thenReturn(Color.BLUE);
+        when(mLayoutManager.getActiveLayoutType()).thenReturn(LayoutType.BROWSING);
+
+        mNavColorController.updateActiveTabForTesting();
+        runColorUpdateAnimation();
+        // Verify that our starting nav bar color is blue.
+        verify(mEdgeToEdgeSystemBarColorHelper).setNavigationBarColor(eq(Color.BLUE));
+
+        Mockito.clearInvocations(mEdgeToEdgeSystemBarColorHelper);
+        // Change nav bar color to red.
+        mNavColorController.onBottomAttachedColorChanged(Color.RED, false, false);
+        runColorUpdateAnimation();
+
+        // After clearing invocations and changing the nav bar color, verify that
+        // setNavigationBarColor is called exactly once with Color.RED since animations are
+        // disabled.
+        verify(mEdgeToEdgeSystemBarColorHelper, times(1)).setNavigationBarColor(eq(Color.RED));
+        verify(mEdgeToEdgeSystemBarColorHelper, times(1)).setNavigationBarColor(anyInt());
+    }
+
+    // Disable the two cached params.
+    @Test
+    @EnableFeatures({
+        ChromeFeatureList.NAV_BAR_COLOR_ANIMATION
+                + ":disable_bottom_chin_color_animation/true/disable_edge_to_edge_layout_color_animation/true"
+    })
+    public void testNavBarColorAnimationsCachedParamsDisabled() {
+        when(mTab.getBackgroundColor()).thenReturn(Color.BLUE);
+        when(mLayoutManager.getActiveLayoutType()).thenReturn(LayoutType.BROWSING);
+
+        mNavColorController.updateActiveTabForTesting();
+        runColorUpdateAnimation();
+        // Verify that our starting nav bar color is blue.
+        verify(mEdgeToEdgeSystemBarColorHelper).setNavigationBarColor(eq(Color.BLUE));
+
+        Mockito.clearInvocations(mEdgeToEdgeSystemBarColorHelper);
+        // Change nav bar color to red.
+        mNavColorController.onBottomAttachedColorChanged(Color.RED, false, false);
+        runColorUpdateAnimation();
+
+        // After clearing invocations and changing the nav bar color, verify that
+        // setNavigationBarColor is called exactly once with Color.RED since animations are
+        // disabled.
+        verify(mEdgeToEdgeSystemBarColorHelper, times(1)).setNavigationBarColor(eq(Color.RED));
+        verify(mEdgeToEdgeSystemBarColorHelper, times(1)).setNavigationBarColor(anyInt());
     }
 
     @Test
@@ -342,5 +430,20 @@ public class TabbedNavigationBarColorControllerUnitTest {
     private void runColorUpdateAnimation() {
         // Run the color  transition animation so color is applied to the window.
         ShadowLooper.idleMainLooper();
+    }
+
+    private void verifyColorAnimationSteps(List<Integer> capturedColors) {
+        assertTrue(
+                "There should be at least five unique animation colors: the start color, the end"
+                        + " color, and at least three in-between.",
+                new HashSet<>(capturedColors).size() >= NUM_UNIQUE_ANIMATION_COLORS);
+        assertEquals(
+                "The first animation color should be blue.",
+                Color.BLUE,
+                (int) capturedColors.get(0));
+        assertEquals(
+                "The last animation color should be red.",
+                Color.RED,
+                (int) capturedColors.get(capturedColors.size() - 1));
     }
 }

@@ -35,11 +35,11 @@
 #include "content/public/browser/dom_storage_context.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/storage_partition.h"
-#include "extensions/api/tabs/tabs_private_api.h"
 #include "ui/lazy_load_service.h"
 #include "ui/vivaldi_browser_window.h"
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
+#include "components/tabs/tab_helpers.h"
 #include "chrome/browser/extensions/extension_tab_util.h"
 #include "chrome/browser/extensions/tab_helper.h"
 #endif
@@ -574,8 +574,19 @@ int VivaldiSessionService::Load(const base::FilePath& path,
       commands.push_back(std::move(item));
     }
 
+    // Starting with ch 136, data will be assigned to the platform_session_id
+    // pointer should a kCommandSetPlatformSessionId be encountered while
+    // parsing. We currently do not use it.
+    std::string platform_session_id;
     sessions::RestoreSessionFromCommands(commands, &valid_windows,
-                                         &active_window_id);
+                                         &active_window_id,
+                                         &platform_session_id);
+    if (!platform_session_id.empty()) {
+      // Since we do not use it, report if it is set.
+      DVLOG(1) << "Session Load. Platform id set, but ignored "
+               << platform_session_id;
+    }
+
     RemoveUnusedRestoreWindows(&valid_windows);
     std::vector<SessionRestoreDelegate::RestoredTab> created_contents;
     ProcessSessionWindows(&valid_windows, active_window_id, &created_contents);
@@ -721,8 +732,7 @@ content::WebContents* VivaldiSessionService::RestoreTab(
     return nullptr;
   }
 
-  if (!opts_.withWorkspace_ &&
-      extensions::IsTabInAWorkspace(tab.viv_ext_data)) {
+  if (!opts_.withWorkspace_ && ::vivaldi::IsTabInAWorkspace(tab.viv_ext_data)) {
     return nullptr;
   }
 
@@ -891,7 +901,7 @@ bool VivaldiSessionService::HasTabs(const sessions::SessionWindow& window) {
       continue;
     }
     if (!opts_.withWorkspace_ &&
-      extensions::IsTabInAWorkspace(tab.viv_ext_data)) {
+        ::vivaldi::IsTabInAWorkspace(tab.viv_ext_data)) {
       continue;
     }
 

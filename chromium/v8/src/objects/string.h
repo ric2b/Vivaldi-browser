@@ -21,6 +21,7 @@
 #include "src/objects/tagged.h"
 #include "src/sandbox/external-pointer.h"
 #include "src/strings/unicode-decoder.h"
+#include "third_party/simdutf/simdutf.h"
 
 // Has to be the last include (doesn't have include guards):
 #include "src/objects/object-macros.h"
@@ -30,6 +31,7 @@ namespace v8::internal {
 namespace maglev {
 class CheckedInternalizedString;
 class BuiltinStringFromCharCode;
+class MaglevGraphBuilder;
 }  // namespace maglev
 
 namespace wasm {
@@ -354,9 +356,9 @@ V8_OBJECT class String : public Name {
   // by GetSubstitution.
   class Match {
    public:
-    virtual Handle<String> GetMatch() = 0;
-    virtual Handle<String> GetPrefix() = 0;
-    virtual Handle<String> GetSuffix() = 0;
+    virtual DirectHandle<String> GetMatch() = 0;
+    virtual DirectHandle<String> GetPrefix() = 0;
+    virtual DirectHandle<String> GetSuffix() = 0;
 
     // A named capture can be unmatched (either not specified in the pattern,
     // or specified but unmatched in the current string), or matched.
@@ -364,9 +366,10 @@ V8_OBJECT class String : public Name {
 
     virtual int CaptureCount() = 0;
     virtual bool HasNamedCaptures() = 0;
-    virtual MaybeHandle<String> GetCapture(int i, bool* capture_exists) = 0;
-    virtual MaybeHandle<String> GetNamedCapture(DirectHandle<String> name,
-                                                CaptureState* state) = 0;
+    virtual MaybeDirectHandle<String> GetCapture(int i,
+                                                 bool* capture_exists) = 0;
+    virtual MaybeDirectHandle<String> GetNamedCapture(DirectHandle<String> name,
+                                                      CaptureState* state) = 0;
 
     virtual ~Match() = default;
   };
@@ -378,7 +381,7 @@ V8_OBJECT class String : public Name {
   // A {start_index} can be passed to specify where to start scanning the
   // replacement string.
   V8_WARN_UNUSED_RESULT static MaybeDirectHandle<String> GetSubstitution(
-      Isolate* isolate, Match* match, Handle<String> replacement,
+      Isolate* isolate, Match* match, DirectHandle<String> replacement,
       uint32_t start_index = 0);
 
   // String equality operations.
@@ -562,18 +565,20 @@ V8_OBJECT class String : public Name {
   using Utf8EncodingFlags = base::Flags<Utf8EncodingFlag>;
   static size_t WriteUtf8(Isolate* isolate, DirectHandle<String> string,
                           char* buffer, size_t capacity,
-                          Utf8EncodingFlags flags);
+                          Utf8EncodingFlags flags,
+                          size_t* processed_characters_return = nullptr);
 
   // Returns true if this string has no unpaired surrogates and false otherwise.
   static inline bool IsWellFormedUnicode(Isolate* isolate,
                                          DirectHandle<String> string);
 
   static inline bool IsAscii(const char* chars, uint32_t length) {
-    return IsAscii(reinterpret_cast<const uint8_t*>(chars), length);
+    return simdutf::validate_ascii(chars, length);
   }
 
   static inline bool IsAscii(const uint8_t* chars, uint32_t length) {
-    return NonAsciiStart(chars, length) >= length;
+    return simdutf::validate_ascii(reinterpret_cast<const char*>(chars),
+                                   length);
   }
 
   static inline uint32_t NonOneByteStart(const base::uc16* chars,
@@ -689,6 +694,7 @@ V8_OBJECT class String : public Name {
   friend class Accessors;
   friend class StringBuiltinsAssembler;
   friend class maglev::MaglevAssembler;
+  friend class maglev::MaglevGraphBuilder;
   friend class compiler::AccessBuilder;
   friend class wasm::baseline::LiftoffCompiler;
   friend class TorqueGeneratedStringAsserts;
@@ -1033,6 +1039,7 @@ V8_OBJECT class ConsString : public String {
   friend class StringBuiltinsAssembler;
   friend class SandboxTesting;
   friend class maglev::MaglevAssembler;
+  friend class maglev::MaglevGraphBuilder;
   friend class compiler::AccessBuilder;
   friend class TorqueGeneratedConsStringAsserts;
 

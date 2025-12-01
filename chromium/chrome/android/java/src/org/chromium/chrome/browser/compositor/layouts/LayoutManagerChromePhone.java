@@ -9,6 +9,7 @@ import android.view.ViewGroup;
 
 import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.base.supplier.Supplier;
+import org.chromium.chrome.browser.compositor.CompositorViewHolder;
 import org.chromium.chrome.browser.compositor.layouts.phone.NewTabAnimationLayout;
 import org.chromium.chrome.browser.compositor.layouts.phone.SimpleAnimationLayout;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
@@ -21,13 +22,13 @@ import org.chromium.chrome.browser.tabmodel.TabCreatorManager;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.theme.TopUiThemeColorProvider;
 import org.chromium.chrome.browser.toolbar.ControlContainer;
+import org.chromium.chrome.browser.toolbar.ToolbarManager;
 import org.chromium.ui.resources.dynamics.DynamicResourceLoader;
 
 // Vivaldi
 import android.content.SharedPreferences;
 import android.view.View;
 import android.view.ViewStub;
-
 import androidx.annotation.NonNull;
 
 import org.chromium.base.supplier.ObservableSupplierImpl;
@@ -39,8 +40,10 @@ import org.chromium.chrome.browser.data_sharing.DataSharingTabManager;
 import org.chromium.chrome.browser.device.DeviceClassManager;
 import org.chromium.chrome.browser.lifecycle.ActivityLifecycleDispatcher;
 import org.chromium.chrome.browser.multiwindow.MultiInstanceManager;
+import org.chromium.chrome.browser.share.ShareDelegate;
 import org.chromium.chrome.browser.tasks.tab_management.ActionConfirmationManager;
 import org.chromium.chrome.browser.toolbar.ToolbarManager;
+import org.chromium.components.browser_ui.bottomsheet.BottomSheetController;
 import org.chromium.components.browser_ui.desktop_windowing.DesktopWindowStateManager;
 import org.chromium.ui.dragdrop.DragAndDropDelegate;
 import org.chromium.ui.modaldialog.ModalDialogManager;
@@ -56,6 +59,10 @@ import java.util.List;
 public class LayoutManagerChromePhone extends LayoutManagerChrome {
     // TODO(crbug.com/40282469): Rename SimpleAnimationLayout to NewTabAnimationLayout once it is
     // rolled out.
+    private final ObservableSupplier<CompositorViewHolder> mCompositorViewHolderSupplier;
+    private final ToolbarManager mToolbarManager;
+    private final ObservableSupplier<Boolean> mScrimVisibilitySupplier;
+    private final ViewGroup mContentView;
     private Layout mSimpleAnimationLayout;
 
     // Vivaldi
@@ -76,6 +83,10 @@ public class LayoutManagerChromePhone extends LayoutManagerChrome {
      * @param tabContentManagerSupplier Supplier of the {@link TabContentManager} instance.
      * @param topUiThemeColorProvider {@link ThemeColorProvider} for top UI.
      * @param hubLayoutDependencyHolder The dependency holder for creating {@link HubLayout}.
+     * @param compositorViewHolderSupplier Supplier of the {@link CompositorViewHolder} instance.
+     * @param contentView The base content view.
+     * @param toolbarManager The {@link ToolbarManager} instance.
+     * @param scrimVisibilitySupplier Supplier for the Scrim visibility.
      */
     public LayoutManagerChromePhone(
             LayoutManagerHost host,
@@ -85,6 +96,10 @@ public class LayoutManagerChromePhone extends LayoutManagerChrome {
             ObservableSupplier<TabContentManager> tabContentManagerSupplier,
             Supplier<TopUiThemeColorProvider> topUiThemeColorProvider,
             HubLayoutDependencyHolder hubLayoutDependencyHolder,
+            ObservableSupplier<CompositorViewHolder> compositorViewHolderSupplier,
+            ViewGroup contentView,
+            ToolbarManager toolbarManager,
+            ObservableSupplier<Boolean> scrimVisibilitySupplier,
             @NonNull ViewStub tabStripTooltipViewStub, // Vivaldi
             ObservableSupplier<StripLayoutHelperManager.TabModelStartupInfo>  // Vivaldi
                     tabModelStartupInfoSupplier,  // Vivaldi
@@ -95,12 +110,13 @@ public class LayoutManagerChromePhone extends LayoutManagerChrome {
             ViewStub tabHoverCardViewStub, // Vivaldi
             ViewStub tabHoverCardViewStubStack, // Vivaldi
             WindowAndroid windowAndroid, // Vivaldi
-            ToolbarManager toolbarManager,
             DesktopWindowStateManager desktopWindowStateManager,
             ActionConfirmationManager actionConfirmationManager,
             BrowserControlsStateProvider browserControlsStateProvider,
             ModalDialogManager modalDialogManager, // Vivaldi
-            DataSharingTabManager dataSharingTabManager) { //Vivaldi
+            DataSharingTabManager dataSharingTabManager, // Vivaldi
+            BottomSheetController bottomSheetController, // Vivaldi
+            Supplier<ShareDelegate> shareDelegateSupplier) { //Vivaldi
         super(
                 host,
                 contentContainer,
@@ -109,6 +125,10 @@ public class LayoutManagerChromePhone extends LayoutManagerChrome {
                 tabContentManagerSupplier,
                 topUiThemeColorProvider,
                 hubLayoutDependencyHolder);
+        mCompositorViewHolderSupplier = compositorViewHolderSupplier;
+        mContentView = contentView;
+        mToolbarManager = toolbarManager;
+        mScrimVisibilitySupplier = scrimVisibilitySupplier;
 
         // Note(david@vivaldi.com): We create two tab strips here. The first one is the main strip.
         // The second one is the stack strip.
@@ -121,7 +141,7 @@ public class LayoutManagerChromePhone extends LayoutManagerChrome {
                     tabStripTooltipViewStub, tabContentManagerSupplier,
                     browserControlsStateProvider, windowAndroid, toolbarManager,
                     desktopWindowStateManager, actionConfirmationManager, modalDialogManager,
-                    dataSharingTabManager));
+                    dataSharingTabManager, bottomSheetController, shareDelegateSupplier));
             mTabStrips.get(i).setIsStackStrip(i != 0);
             addObserver(mTabStrips.get(i).getTabSwitcherObserver());
         }
@@ -154,7 +174,16 @@ public class LayoutManagerChromePhone extends LayoutManagerChrome {
             // TODO(crbug.com/40282469): Change from getContentContainer() as it is z-indexed behind
             // the NTP.
             mSimpleAnimationLayout =
-                    new NewTabAnimationLayout(context, this, renderHost, getContentContainer());
+                    new NewTabAnimationLayout(
+                            context,
+                            this,
+                            renderHost,
+                            getContentContainer(),
+                            mCompositorViewHolderSupplier,
+                            mContentView,
+                            mToolbarManager,
+                            getBrowserControlsManager(),
+                            mScrimVisibilitySupplier);
         } else {
             mSimpleAnimationLayout =
                     new SimpleAnimationLayout(context, this, renderHost, getContentContainer());

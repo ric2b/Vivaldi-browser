@@ -40,7 +40,6 @@
 #include "components/autofill/core/browser/test_utils/autofill_test_utils.h"
 #include "components/autofill/core/common/form_data.h"
 #include "components/autofill/core/common/form_data_test_api.h"
-#include "components/autofill_ai/core/browser/autofill_ai_features.h"
 #include "components/keyed_service/content/browser_context_dependency_manager.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "components/keyed_service/core/service_access_type.h"
@@ -88,21 +87,6 @@ MATCHER(ContainsAnyPlusAddressFallbackEntries, "") {
         arg->GetLabelAt(i) ==
             l10n_util::GetStringUTF16(
                 IDS_PLUS_ADDRESS_FALLBACK_LABEL_CONTEXT_MENU)) {
-      return true;
-    }
-  }
-  return false;
-}
-
-// Checks if the context menu model contains the prediction improvement
-// entry with correct UI strings. `arg` must be of type `ui::SimpleMenuModel`.
-MATCHER(ContainsAutofillAiEntry, "") {
-  for (size_t i = 0; i < arg->GetItemCount(); i++) {
-    if (arg->GetCommandIdAt(i) ==
-            IDC_CONTENT_CONTEXT_AUTOFILL_PREDICTION_IMPROVEMENTS &&
-        arg->GetLabelAt(i) ==
-            l10n_util::GetStringUTF16(
-                IDS_CONTENT_CONTEXT_AUTOFILL_PREDICTION_IMPROVEMENTS)) {
       return true;
     }
   }
@@ -366,87 +350,6 @@ class BaseAutofillContextMenuManagerTest : public InProcessBrowserTest {
   std::unique_ptr<ui::SimpleMenuModel> menu_model_;
   std::unique_ptr<AutofillContextMenuManager> autofill_context_menu_manager_;
 };
-
-// Tests if the prediction improvements entry is not added based on
-// `IsEligibleForAutofillAi()` returning `false`.
-class AutofillAiDisabledTest : public BaseAutofillContextMenuManagerTest {
- public:
-  void SetUpOnMainThread() override {
-    BaseAutofillContextMenuManagerTest::SetUpOnMainThread();
-    ON_CALL(*autofill_client()->GetAutofillAiDelegate(),
-            IsEligibleForAutofillAi)
-        .WillByDefault(::testing::Return(false));
-  }
-};
-
-// Tests that when triggering the context menu on any form field, the improved
-// predictions fallback is not added when the feature is disabled.
-IN_PROC_BROWSER_TEST_F(AutofillAiDisabledTest, AutofillAiEntryNotAdded) {
-  FormData form = CreateAndAttachUnclassifiedForm();
-  autofill_context_menu_manager()->set_params_for_testing(
-      CreateContextMenuParams(form.renderer_id(),
-                              form.fields()[0].renderer_id()));
-  autofill_context_menu_manager()->AppendItems();
-  EXPECT_THAT(menu_model(), Not(ContainsAutofillAiEntry()));
-}
-
-// Tests if the prediction improvements entry is added based on
-// `IsEligibleForAutofillAi()` returning `true`.
-class AutofillAiEnabledTest : public BaseAutofillContextMenuManagerTest {
- public:
-  void SetUpOnMainThread() override {
-    BaseAutofillContextMenuManagerTest::SetUpOnMainThread();
-    ON_CALL(*autofill_client()->GetAutofillAiDelegate(),
-            IsEligibleForAutofillAi)
-        .WillByDefault(::testing::Return(true));
-  }
-};
-
-// Tests that when triggering the context menu on any form field, the improved
-// prediction entry point is added.
-// TODO(crbug.com/372158654): Implement suitable criteria or remove the entry.
-IN_PROC_BROWSER_TEST_F(AutofillAiEnabledTest, AutofillAiEntryAdded) {
-  FormData form = CreateAndAttachUnclassifiedForm();
-  autofill_context_menu_manager()->set_params_for_testing(
-      CreateContextMenuParams(form.renderer_id(),
-                              form.fields()[0].renderer_id()));
-  autofill_context_menu_manager()->AppendItems();
-  EXPECT_THAT(menu_model(), Not(ContainsAutofillAiEntry()));
-}
-
-// Tests that when triggering the context menu on a text area, the improved
-// prediction entry point is added.
-// TODO(crbug.com/372158654): Implement suitable criteria or remove the entry.
-IN_PROC_BROWSER_TEST_F(AutofillAiEnabledTest,
-                       TriggeredOnTextArea_AutofillAiEntryAdded) {
-  FormData form = CreateAndAttachUnclassifiedForm();
-  autofill_context_menu_manager()->set_params_for_testing(
-      CreateContextMenuParams(form.renderer_id(),
-                              form.fields()[0].renderer_id(),
-                              blink::mojom::FormControlType::kTextArea));
-
-  autofill_context_menu_manager()->AppendItems();
-  EXPECT_THAT(menu_model(), Not(ContainsAutofillAiEntry()));
-}
-
-// Tests that selecting the improved predictions triggers the right command.
-IN_PROC_BROWSER_TEST_F(AutofillAiEnabledTest, ActionTriggersSuggestions) {
-  FormData form = CreateAndAttachUnclassifiedForm();
-  autofill_context_menu_manager()->set_params_for_testing(
-      CreateContextMenuParams(form.renderer_id(),
-                              form.fields()[0].renderer_id()));
-  autofill_context_menu_manager()->AppendItems();
-
-  EXPECT_CALL(
-      *driver(),
-      RendererShouldTriggerSuggestions(
-          FieldGlobalId{LocalFrameToken(main_rfh()->GetFrameToken().value()),
-                        form.fields()[0].renderer_id()},
-          AutofillSuggestionTriggerSource::kAutofillAi));
-
-  autofill_context_menu_manager()->ExecuteCommand(
-      IDC_CONTENT_CONTEXT_AUTOFILL_PREDICTION_IMPROVEMENTS);
-}
 
 class PasswordsFallbackTestBase : public BaseAutofillContextMenuManagerTest {
  public:

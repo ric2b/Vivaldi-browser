@@ -10,6 +10,7 @@ import("../scripts/build/typescript/typescript.gni")
 
 group("front_end") {
   public_deps = [
+    ":devtools_json",
     ":embedder-scripts",
     ":html_entrypoints",
     ":integration_test_runner",
@@ -47,6 +48,19 @@ group("integration_test_runner") {
   metadata = {
     grd_files = get_target_outputs(":integration_test_runner-gen")
   }
+}
+
+node_action("devtools_json") {
+  inputs = []
+
+  script = "scripts/build/generate_devtools_json.js"
+
+  args = [ rebase_path(
+          "$target_gen_dir/.well-known/appspecific/com.chrome.devtools.json",
+          root_build_dir) ]
+
+  outputs =
+      [ "$target_gen_dir/.well-known/appspecific/com.chrome.devtools.json" ]
 }
 
 node_action("html_entrypoints") {
@@ -117,6 +131,7 @@ group("unittests") {
     "entrypoints/inspector_main:unittests",
     "entrypoints/main:unittests",
     "entrypoints/wasmparser_worker:unittests",
+    "models/ai_assistance:unittests",
     "models/autofill_manager:unittests",
     "models/bindings:unittests",
     "models/breakpoints:unittests",
@@ -131,6 +146,7 @@ group("unittests") {
     "models/javascript_metadata:unittests",
     "models/logs:unittests",
     "models/persistence:unittests",
+    "models/project_settings:unittests",
     "models/source_map_scopes:unittests",
     "models/text_utils:unittests",
     "models/trace:unittests",
@@ -142,7 +158,6 @@ group("unittests") {
     "models/trace/lantern/graph:unittests",
     "models/trace/lantern/metrics:unittests",
     "models/trace/lantern/simulation:unittests",
-    "models/trace/root-causes:unittests",
     "models/trace/types:unittests",
     "models/workspace:unittests",
     "models/workspace_diff:unittests",
@@ -163,6 +178,7 @@ group("unittests") {
     "panels/developer_resources:unittests",
     "panels/elements:unittests",
     "panels/emulation:unittests",
+    "panels/event_listeners:unittests",
     "panels/explain:unittests",
     "panels/issues:unittests",
     "panels/layer_viewer:unittests",
@@ -175,6 +191,7 @@ group("unittests") {
     "panels/network:unittests",
     "panels/network/components:unittests",
     "panels/performance_monitor:unittests",
+    "panels/profiler:unittests",
     "panels/protocol_monitor:unittests",
     "panels/recorder:unittests",
     "panels/recorder/components:unittests",
@@ -230,11 +247,11 @@ group("unittests") {
     "ui/components/report_view:unittests",
     "ui/components/request_link_icon:unittests",
     "ui/components/settings:unittests",
-    "ui/components/split_view:unittests",
     "ui/components/survey_link:unittests",
     "ui/components/switch:unittests",
     "ui/components/text_editor:unittests",
     "ui/components/text_prompt:unittests",
+    "ui/components/tooltips:unittests",
     "ui/components/tree_outline:unittests",
     "ui/legacy:copy_stylesheets_for_server",
     "ui/legacy:unittests",

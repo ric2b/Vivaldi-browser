@@ -12,13 +12,14 @@
 #include <string>
 #include <vector>
 
-#include "base/files/file_path.h"
 #include "base/functional/callback.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/ref_counted.h"
 #include "base/time/time.h"
 #include "components/signin/public/identity_manager/account_info.h"
+#include "components/trusted_vault/local_recovery_factor.h"
 #include "components/trusted_vault/proto/local_trusted_vault.pb.h"
+#include "components/trusted_vault/standalone_trusted_vault_storage.h"
 #include "components/trusted_vault/trusted_vault_connection.h"
 #include "components/trusted_vault/trusted_vault_degraded_recoverability_handler.h"
 #include "components/trusted_vault/trusted_vault_histograms.h"
@@ -75,7 +76,7 @@ class StandaloneTrustedVaultBackend
   // downloading, etc.) will be disabled.
   StandaloneTrustedVaultBackend(
       SecurityDomainId security_domain_id,
-      const base::FilePath& file_path,
+      std::unique_ptr<StandaloneTrustedVaultStorage> storage,
       std::unique_ptr<Delegate> delegate,
       std::unique_ptr<TrustedVaultConnection> connection);
   StandaloneTrustedVaultBackend(const StandaloneTrustedVaultBackend& other) =
@@ -89,8 +90,7 @@ class StandaloneTrustedVaultBackend
           degraded_recoverability_state) override;
   void OnDegradedRecoverabilityChanged() override;
 
-  // Restores state saved in |file_path_|, should be called before using the
-  // object.
+  // Restores state saved on disk, should be called before using the object.
   void ReadDataFromDisk();
 
   // Populates vault keys corresponding to |account_info| into |callback|. If
@@ -101,7 +101,7 @@ class StandaloneTrustedVaultBackend
   void FetchKeys(const CoreAccountInfo& account_info,
                  FetchKeysCallback callback);
 
-  // Replaces keys for given |gaia_id| both in memory and in |file_path_|.
+  // Replaces keys for given |gaia_id| both in memory and on disk.
   void StoreKeys(const GaiaId& gaia_id,
                  const std::vector<std::vector<uint8_t>>& keys,
                  int last_key_version);
@@ -167,10 +167,8 @@ class StandaloneTrustedVaultBackend
 
   ~StandaloneTrustedVaultBackend() override;
 
-  // Finds the per-user vault in |data_| for |gaia_id|. Returns null if not
-  // found.
-  trusted_vault_pb::LocalTrustedVaultPerUser* FindUserVault(
-      const GaiaId& gaia_id);
+  // Initializes |local_recovery_factors_| with the current |primary_account_|.
+  void ResetLocalRecoveryFactors();
 
   // Attempts to register device in case it's not yet registered and currently
   // available local data is sufficient to do it. For the cases where
@@ -185,14 +183,18 @@ class StandaloneTrustedVaultBackend
   void MaybeProcessPendingTrustedRecoveryMethod();
 
   // Called when device registration for |gaia_id| is completed (either
-  // successfully or not). |data_| must contain LocalTrustedVaultPerUser for
+  // successfully or not). |storage_| must contain LocalTrustedVaultPerUser for
   // given |gaia_id|.
   void OnDeviceRegistered(TrustedVaultRegistrationStatus status,
-                          int key_version_unused);
-  void OnDeviceRegisteredWithoutKeys(TrustedVaultRegistrationStatus status,
-                                     int key_version);
+                          int key_version,
+                          bool had_local_keys);
 
-  void OnKeysDownloaded(TrustedVaultDownloadKeysStatus status,
+  void AttemptRecoveryFactor(size_t local_recovery_factor);
+  void AttemptNextRecoveryFactor(
+      size_t current_local_recovery_factor,
+      std::optional<TrustedVaultDownloadKeysStatusForUMA> status_for_uma);
+  void OnKeysDownloaded(size_t current_local_recovery_factor,
+                        TrustedVaultDownloadKeysStatus status,
                         const std::vector<std::vector<uint8_t>>& new_vault_keys,
                         int last_vault_key_version);
 
@@ -223,11 +225,11 @@ class StandaloneTrustedVaultBackend
   // for deletion due to accounts in cookie jar changes.
   void RemoveNonPrimaryAccountKeysIfMarkedForDeletion();
 
-  void WriteDataToDisk();
+  void WriteDataToDiskAndNotify();
 
   const SecurityDomainId security_domain_id_;
 
-  const base::FilePath file_path_;
+  const std::unique_ptr<StandaloneTrustedVaultStorage> storage_;
 
   const std::unique_ptr<Delegate> delegate_;
 
@@ -239,11 +241,14 @@ class StandaloneTrustedVaultBackend
   // even in this case and clean up related logic.
   const std::unique_ptr<TrustedVaultConnection> connection_;
 
-  trusted_vault_pb::LocalTrustedVault data_;
-
   // Only current |primary_account_| can be used for communication with trusted
   // vault server.
   std::optional<CoreAccountInfo> primary_account_;
+
+  // All known local recovery factors that can be used to attempt key recovery.
+  // Note: |local_recovery_factors_| depends on |storage_|, thus it must be
+  // destroyed before |storage_| (i.e. the order of the fields matters).
+  std::vector<std::unique_ptr<LocalRecoveryFactor>> local_recovery_factors_;
 
   // Error state of refresh token for |primary_account_|.
   RefreshTokenErrorState refresh_token_error_state_ =
@@ -283,13 +288,8 @@ class StandaloneTrustedVaultBackend
 
     GaiaId gaia_id;
     std::vector<FetchKeysCallback> callbacks;
-    std::unique_ptr<TrustedVaultConnection::Request> request;
   };
   std::optional<OngoingFetchKeys> ongoing_fetch_keys_;
-
-  // Destroying this will cancel the ongoing request.
-  std::unique_ptr<TrustedVaultConnection::Request>
-      ongoing_device_registration_request_;
 
   // Same as above, but specifically used for recoverability-related requests.
   // TODO(crbug.com/40178774): Move elsewhere.

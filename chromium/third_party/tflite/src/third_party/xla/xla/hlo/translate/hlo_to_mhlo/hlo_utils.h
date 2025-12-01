@@ -41,9 +41,9 @@ limitations under the License.
 #include "xla/literal.h"
 #include "xla/mlir/utils/type_util.h"
 #include "xla/mlir_hlo/mhlo/IR/hlo_ops.h"
+#include "xla/tsl/platform/statusor.h"
 #include "xla/util.h"
 #include "xla/xla_data.pb.h"
-#include "tsl/platform/statusor.h"
 
 namespace xla {
 
@@ -65,7 +65,7 @@ static absl::StatusOr<TypeT> ConvertTensorShapeToType(const Shape& xla_ty,
   if (!element_type_or.ok()) return element_type_or.status();
 
   bool is_bounded_dynamic = false;
-  int64_t rank = xla_ty.rank();
+  int64_t rank = xla_ty.dimensions_size();
   llvm::SmallVector<int64_t, 4> shape(rank, mlir::ShapedType::kDynamic);
   llvm::SmallVector<int64_t, 4> bounds(rank, mlir::ShapedType::kDynamic);
   for (int64_t dim = 0; dim < rank; ++dim) {
@@ -251,6 +251,10 @@ static bool HasCustomLayout(const Shape& shape) {
   }
   return shape.has_layout() && !shape.layout().minor_to_major().empty() &&
          shape.layout() != LayoutUtil::GetDefaultLayoutForShape(shape);
+}
+
+inline llvm::StringRef ToStringRef(absl::string_view str) {
+  return llvm::StringRef(str.data(), str.size());
 }
 
 }  // namespace xla

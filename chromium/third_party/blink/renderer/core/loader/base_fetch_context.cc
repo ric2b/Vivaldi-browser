@@ -27,6 +27,7 @@
 #include "third_party/blink/renderer/platform/loader/fetch/resource_load_priority.h"
 #include "third_party/blink/renderer/platform/loader/fetch/resource_loading_log.h"
 #include "third_party/blink/renderer/platform/network/network_state_notifier.h"
+#include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 #include "third_party/blink/renderer/platform/weborigin/scheme_registry.h"
 #include "third_party/blink/renderer/platform/weborigin/security_policy.h"
 
@@ -40,11 +41,13 @@ std::optional<ResourceRequestBlockedReason> BaseFetchContext::CanRequest(
     const KURL& url,
     const ResourceLoaderOptions& options,
     ReportingDisposition reporting_disposition,
-    base::optional_ref<const ResourceRequest::RedirectInfo> redirect_info)
-    const {
+    base::optional_ref<const ResourceRequest::RedirectInfo> redirect_info,
+    FetchParameters::HasPreloadedResponseCandidate
+        has_preloaded_response_candidate) const {
   std::optional<ResourceRequestBlockedReason> blocked_reason =
       CanRequestInternal(type, resource_request, url, options,
-                         reporting_disposition, redirect_info);
+                         reporting_disposition, redirect_info,
+                         has_preloaded_response_candidate);
   if (blocked_reason &&
       reporting_disposition == ReportingDisposition::kReport) {
     DispatchDidBlockRequest(resource_request, options, blocked_reason.value(),
@@ -118,14 +121,15 @@ std::optional<ResourceRequestBlockedReason>
 BaseFetchContext::CheckCSPForRequest(
     mojom::blink::RequestContextType request_context,
     network::mojom::RequestDestination request_destination,
+    network::mojom::RequestMode request_mode,
     const KURL& url,
     const ResourceLoaderOptions& options,
     ReportingDisposition reporting_disposition,
     const KURL& url_before_redirects,
     ResourceRequest::RedirectStatus redirect_status) const {
   return CheckCSPForRequestInternal(
-      request_context, request_destination, url, options, reporting_disposition,
-      url_before_redirects, redirect_status,
+      request_context, request_destination, request_mode, url, options,
+      reporting_disposition, url_before_redirects, redirect_status,
       ContentSecurityPolicy::CheckHeaderType::kCheckReportOnly);
 }
 
@@ -133,14 +137,15 @@ std::optional<ResourceRequestBlockedReason>
 BaseFetchContext::CheckAndEnforceCSPForRequest(
     mojom::blink::RequestContextType request_context,
     network::mojom::RequestDestination request_destination,
+    network::mojom::RequestMode request_mode,
     const KURL& url,
     const ResourceLoaderOptions& options,
     ReportingDisposition reporting_disposition,
     const KURL& url_before_redirects,
     ResourceRequest::RedirectStatus redirect_status) const {
   return CheckCSPForRequestInternal(
-      request_context, request_destination, url, options, reporting_disposition,
-      url_before_redirects, redirect_status,
+      request_context, request_destination, request_mode, url, options,
+      reporting_disposition, url_before_redirects, redirect_status,
       ContentSecurityPolicy::CheckHeaderType::kCheckAll);
 }
 
@@ -148,6 +153,7 @@ std::optional<ResourceRequestBlockedReason>
 BaseFetchContext::CheckCSPForRequestInternal(
     mojom::blink::RequestContextType request_context,
     network::mojom::RequestDestination request_destination,
+    network::mojom::RequestMode request_mode,
     const KURL& url,
     const ResourceLoaderOptions& options,
     ReportingDisposition reporting_disposition,
@@ -162,8 +168,8 @@ BaseFetchContext::CheckCSPForRequestInternal(
   ContentSecurityPolicy* csp =
       GetContentSecurityPolicyForWorld(options.world_for_csp.Get());
   if (csp &&
-      !csp->AllowRequest(request_context, request_destination, url,
-                         options.content_security_policy_nonce,
+      !csp->AllowRequest(request_context, request_destination, request_mode,
+                         url, options.content_security_policy_nonce,
                          options.integrity_metadata, options.parser_disposition,
                          url_before_redirects, redirect_status,
                          reporting_disposition, check_header_type)) {
@@ -179,8 +185,9 @@ BaseFetchContext::CanRequestInternal(
     const KURL& url,
     const ResourceLoaderOptions& options,
     ReportingDisposition reporting_disposition,
-    base::optional_ref<const ResourceRequest::RedirectInfo> redirect_info)
-    const {
+    base::optional_ref<const ResourceRequest::RedirectInfo> redirect_info,
+    FetchParameters::HasPreloadedResponseCandidate
+        has_preloaded_response_candidate) const {
   if (GetResourceFetcherProperties().IsDetached()) {
     if (!resource_request.GetKeepalive() || !redirect_info.has_value()) {
       return ResourceRequestBlockedReason::kOther;
@@ -191,46 +198,55 @@ BaseFetchContext::CanRequestInternal(
     return ResourceRequestBlockedReason::kInspector;
   }
 
-  scoped_refptr<const SecurityOrigin> origin =
-      resource_request.RequestorOrigin();
-
+  mojom::blink::RequestContextType request_context =
+      resource_request.GetRequestContext();
+  network::mojom::RequestDestination request_destination =
+      resource_request.GetRequestDestination();
   const auto request_mode = resource_request.GetMode();
-  // On navigation cases, Context().GetSecurityOrigin() may return nullptr, so
-  // the request's origin may be nullptr.
-  // TODO(yhirano): Figure out if it's actually fine.
-  DCHECK(request_mode == network::mojom::RequestMode::kNavigate || origin);
-  // VB-24745 VB-44251 Render Mail in Webview: Allow HTML messages to request
-  // inline attachments as blob-URL. TODO: remove this when the webview will be
-  // "self-contained" and the blobs will be created within the webview.
-  if (!url.GetString().StartsWith("blob:chrome-extension://" VIVALDI_APP_ID "/"))
-  if (request_mode != network::mojom::RequestMode::kNavigate &&
-      !resource_request.CanDisplay(url)) {
-    if (reporting_disposition == ReportingDisposition::kReport) {
-      console_logger_->AddConsoleMessage(MakeGarbageCollected<ConsoleMessage>(
-          mojom::ConsoleMessageSource::kJavaScript,
-          mojom::ConsoleMessageLevel::kError,
-          "Not allowed to load local resource: " + url.GetString()));
+
+  if (!RuntimeEnabledFeatures::PreloadLinkRelDataUrlsEnabled() ||
+      !has_preloaded_response_candidate) {
+    scoped_refptr<const SecurityOrigin> origin =
+        resource_request.RequestorOrigin();
+
+    // On navigation cases, Context().GetSecurityOrigin() may return nullptr, so
+    // the request's origin may be nullptr.
+    // TODO(yhirano): Figure out if it's actually fine.
+    CHECK(request_mode == network::mojom::RequestMode::kNavigate || origin);
+    // VB-24745 VB-44251 Render Mail in Webview: Allow HTML messages to request
+    // inline attachments as blob-URL. TODO: remove this when the webview will be
+    // "self-contained" and the blobs will be created within the webview.
+    if (!url.GetString().StartsWith("blob:chrome-extension://" VIVALDI_APP_ID "/"))
+    if (request_mode != network::mojom::RequestMode::kNavigate &&
+        !resource_request.CanDisplay(url)) {
+      if (reporting_disposition == ReportingDisposition::kReport) {
+        console_logger_->AddConsoleMessage(MakeGarbageCollected<ConsoleMessage>(
+            mojom::ConsoleMessageSource::kJavaScript,
+            mojom::ConsoleMessageLevel::kError,
+            "Not allowed to load local resource: " + url.GetString()));
+      }
+      RESOURCE_LOADING_DVLOG(1)
+          << "ResourceFetcher::requestResource URL was not "
+             "allowed by SecurityOrigin::CanDisplay";
+      return ResourceRequestBlockedReason::kOther;
     }
-    RESOURCE_LOADING_DVLOG(1) << "ResourceFetcher::requestResource URL was not "
-                                 "allowed by SecurityOrigin::CanDisplay";
-    return ResourceRequestBlockedReason::kOther;
+
+    if (!(base::FeatureList::IsEnabled(features::kOptimizeLoadingDataUrls) &&
+          url.ProtocolIsData())) {
+      // CORS is defined only for HTTP(S) requests. See
+      // https://fetch.spec.whatwg.org/#http-extensions.
+      if (request_mode == network::mojom::RequestMode::kSameOrigin &&
+          cors::CalculateCorsFlag(url, origin.get(),
+                                  resource_request.IsolatedWorldOrigin().get(),
+                                  request_mode)) {
+        PrintAccessDeniedMessage(url);
+        return ResourceRequestBlockedReason::kOrigin;
+      }
+    }
   }
 
-  if (!(base::FeatureList::IsEnabled(features::kOptimizeLoadingDataUrls) &&
-        url.ProtocolIsData())) {
-    // CORS is defined only for HTTP(S) requests. See
-    // https://fetch.spec.whatwg.org/#http-extensions.
-    if (request_mode == network::mojom::RequestMode::kSameOrigin &&
-        cors::CalculateCorsFlag(url, origin.get(),
-                                resource_request.IsolatedWorldOrigin().get(),
-                                request_mode)) {
-      PrintAccessDeniedMessage(url);
-      return ResourceRequestBlockedReason::kOrigin;
-    }
-  }
-
-  // User Agent CSS stylesheets should only support loading images and should be
-  // restricted to data urls.
+  // User Agent CSS stylesheets should only support loading images and should
+  // be restricted to data urls.
   if (options.initiator_info.name == fetch_initiator_type_names::kUacss) {
     if (type == ResourceType::kImage && url.ProtocolIsData()) {
       return std::nullopt;
@@ -238,26 +254,25 @@ BaseFetchContext::CanRequestInternal(
     return ResourceRequestBlockedReason::kOther;
   }
 
-  mojom::blink::RequestContextType request_context =
-      resource_request.GetRequestContext();
-  network::mojom::RequestDestination request_destination =
-      resource_request.GetRequestDestination();
-
-  const KURL& url_before_redirects =
-      redirect_info.has_value() ? redirect_info->original_url : url;
-  const ResourceRequestHead::RedirectStatus redirect_status =
-      redirect_info.has_value()
-          ? ResourceRequestHead::RedirectStatus::kFollowedRedirect
-          : ResourceRequestHead::RedirectStatus::kNoRedirect;
-  // We check the 'report-only' headers before upgrading the request (in
-  // populateResourceRequest). We check the enforced headers here to ensure we
-  // block things we ought to block.
-  if (CheckCSPForRequestInternal(
-          request_context, request_destination, url, options,
-          reporting_disposition, url_before_redirects, redirect_status,
-          ContentSecurityPolicy::CheckHeaderType::kCheckEnforce) ==
-      ResourceRequestBlockedReason::kCSP) {
-    return ResourceRequestBlockedReason::kCSP;
+  if (!has_preloaded_response_candidate ||
+      !RuntimeEnabledFeatures::BypassCSPForPreloadsEnabled() ||
+      !RuntimeEnabledFeatures::PreloadLinkRelDataUrlsEnabled()) {
+    const KURL& url_before_redirects =
+        redirect_info.has_value() ? redirect_info->original_url : url;
+    const ResourceRequestHead::RedirectStatus redirect_status =
+        redirect_info.has_value()
+            ? ResourceRequestHead::RedirectStatus::kFollowedRedirect
+            : ResourceRequestHead::RedirectStatus::kNoRedirect;
+    // We check the 'report-only' headers before upgrading the request (in
+    // populateResourceRequest). We check the enforced headers here to ensure
+    // we block things we ought to block.
+    if (CheckCSPForRequestInternal(
+            request_context, request_destination, request_mode, url, options,
+            reporting_disposition, url_before_redirects, redirect_status,
+            ContentSecurityPolicy::CheckHeaderType::kCheckEnforce) ==
+        ResourceRequestBlockedReason::kCSP) {
+      return ResourceRequestBlockedReason::kCSP;
+    }
   }
 
   if (type == ResourceType::kScript) {

@@ -11,6 +11,7 @@ load("//lib/builders.star", "builders", "gardener_rotations", "os", "siso")
 load("//lib/ci.star", "ci")
 load("//lib/consoles.star", "consoles")
 load("//lib/gn_args.star", "gn_args")
+load("//lib/html.star", "linkify")
 load("//lib/targets.star", "targets")
 
 ci.defaults.set(
@@ -24,10 +25,12 @@ ci.defaults.set(
     os = os.LINUX_DEFAULT,
     gardener_rotations = gardener_rotations.CHROMIUM,
     tree_closing = True,
+    tree_closing_notifiers = ci.DEFAULT_TREE_CLOSING_NOTIFIERS,
     main_console_view = "main",
     execution_timeout = ci.DEFAULT_EXECUTION_TIMEOUT,
     health_spec = health_spec.DEFAULT,
     notifies = ["chromium.linux"],
+    reclient_enabled = False,
     service_account = ci.DEFAULT_SERVICE_ACCOUNT,
     shadow_service_account = ci.DEFAULT_SHADOW_SERVICE_ACCOUNT,
     siso_enabled = True,
@@ -241,17 +244,16 @@ ci.builder(
     ),
     ssd = True,
     free_space = builders.free_space.high,
-    # Set tree_closing to false to disable the defaualt tree closer, which
-    # filters by step name, and instead enable tree closing for any step
-    # failure.
-    tree_closing = False,
+    # Don't use the default tree closer, which filters by step name, and instead
+    # enable tree closing for any step failure.
+    tree_closing_notifiers = args.ignore_default(["close-on-any-step-failure"]),
     console_view_entry = consoles.console_view_entry(
         category = "release",
         short_name = "det",
     ),
     contact_team_email = "chrome-build-team@google.com",
     execution_timeout = 6 * time.hour,
-    notifies = ["Deterministic Linux", "close-on-any-step-failure"],
+    notifies = ["Deterministic Linux"],
     siso_remote_jobs = siso.remote_jobs.DEFAULT,
 )
 
@@ -422,6 +424,7 @@ ci.builder(
         gclient_config = builder_config.gclient_config(
             config = "chromium",
             apply_configs = [
+                "checkout_mutter",
                 "use_clang_coverage",
             ],
         ),
@@ -485,6 +488,7 @@ ci.thin_tester(
         targets = [
             "chromium_linux_gtests",
             "chromium_linux_rel_isolated_scripts_once",
+            "gtests_once",
         ],
         mixins = [
             "isolate_profile_data",
@@ -596,8 +600,16 @@ ci.thin_tester(
                 # crbug.com/1066161
                 # crbug.com/1459645
                 # crbug.com/1508286
+                # crbug.com/404871436
                 swarming = targets.swarming(
-                    shards = 32,
+                    shards = 48,
+                ),
+            ),
+            "content_browsertests": targets.mixin(
+                # crbug.com/1508286
+                # crbug.com/404871436
+                swarming = targets.swarming(
+                    shards = 12,
                 ),
             ),
             "interactive_ui_tests": targets.mixin(
@@ -738,6 +750,82 @@ ci.thin_tester(
     contact_team_email = "chrome-linux-engprod@google.com",
 )
 
+ci.thin_tester(
+    # TODO(crbug.com/401284929): Put common config with "Linux Tests (Wayland)" in shared bundle.
+    name = "linux-wayland-mutter-rel-tests",
+    # TODO(crbug.com/401284929): Uncomment when enabling gardener_rotations and tree_closing.
+    # branch_selector = branches.selector.LINUX_BRANCHES,
+    description_html =
+        "Runs Wayland tests on Mutter. See the {} for details.".format(
+            linkify(
+                "https://chromium.googlesource.com/chromium/src/+/main/docs/ozone_overview.md#wayland",
+                "ozone wayland doc",
+            ),
+        ),
+    triggered_by = ["ci/Linux Builder (Wayland)"],
+    builder_spec = builder_config.builder_spec(
+        execution_mode = builder_config.execution_mode.TEST,
+        gclient_config = builder_config.gclient_config(
+            config = "chromium",
+            apply_configs = [
+                "use_clang_coverage",
+            ],
+        ),
+        chromium_config = builder_config.chromium_config(
+            config = "chromium",
+            apply_configs = [
+                "mb",
+            ],
+            build_config = builder_config.build_config.RELEASE,
+            target_bits = 64,
+            target_platform = builder_config.target_platform.LINUX,
+        ),
+        build_gs_bucket = "chromium-linux-archive",
+    ),
+    targets = targets.bundle(
+        targets = [
+            "chromium_gtests_for_linux_wayland_mutter",
+        ],
+        mixins = [
+            targets.mixin(
+                args = [
+                    "--no-xvfb",
+                    "--use-mutter",
+                    "--ozone-platform=wayland",
+                ],
+            ),
+            "linux-noble",
+            "isolate_profile_data",
+        ],
+        per_test_modifications = {
+            "interactive_ui_tests": targets.mixin(
+                # https://crbug.com/1192997
+                args = [
+                    "--test-launcher-filter-file=../../testing/buildbot/filters/ozone-linux.interactive_ui_tests_mutter.filter",
+                ],
+                swarming = targets.swarming(
+                    shards = 5,
+                ),
+            ),
+        },
+    ),
+
+    ############################################################################
+    # TODO(crbug.com/401284929) Remove this section once mutter tests are stable
+    ############################################################################
+    gardener_rotations = args.ignore_default(None),
+    tree_closing = False,
+    console_view_entry = consoles.console_view_entry(
+        console_view = "chromium.fyi",
+        category = "linux",
+        short_name = "tst-mt",
+    ),
+    main_console_view = None,
+    ############################################################################
+    cq_mirrors_console_view = "mirrors",
+    contact_team_email = "chrome-linux-engprod@google.com",
+)
+
 # For documentation, see //services/network/README.md.
 ci.builder(
     name = "Network Service Linux",
@@ -822,7 +910,7 @@ ci.builder(
         per_test_modifications = {
             "browser_tests": targets.mixin(
                 args = [
-                    "--enable-feature=OriginKeyedProcessesByDefault",
+                    "--enable-features=OriginKeyedProcessesByDefault",
                 ],
                 swarming = targets.swarming(
                     shards = 33,
@@ -830,13 +918,13 @@ ci.builder(
             ),
             "unit_tests": targets.mixin(
                 args = [
-                    "--enable-feature=OriginKeyedProcessesByDefault",
+                    "--enable-features=OriginKeyedProcessesByDefault",
                 ],
                 # Default shards = 1 should be ok here.
             ),
             "content_browsertests": targets.mixin(
                 args = [
-                    "--enable-feature=OriginKeyedProcessesByDefault",
+                    "--enable-features=OriginKeyedProcessesByDefault",
                 ],
                 swarming = targets.swarming(
                     shards = 8,
@@ -844,13 +932,13 @@ ci.builder(
             ),
             "content_unittests": targets.mixin(
                 args = [
-                    "--enable-feature=OriginKeyedProcessesByDefault",
+                    "--enable-features=OriginKeyedProcessesByDefault",
                 ],
                 # Default shards = 1 should be ok here.
             ),
             "blink_web_tests": targets.mixin(
                 args = [
-                    "--additional-driver-flag=--enable-feature=OriginKeyedProcessesByDefault",
+                    "--additional-driver-flag=--enable-features=OriginKeyedProcessesByDefault",
                 ],
                 swarming = targets.swarming(
                     shards = 9,
@@ -858,7 +946,7 @@ ci.builder(
             ),
             "blink_wpt_tests": targets.mixin(
                 args = [
-                    "--additional-driver-flag=--enable-feature=OriginKeyedProcessesByDefault",
+                    "--additional-driver-flag=--enable-features=OriginKeyedProcessesByDefault",
                 ],
                 swarming = targets.swarming(
                     shards = 2,
@@ -866,7 +954,7 @@ ci.builder(
             ),
             "chrome_wpt_tests": targets.mixin(
                 args = [
-                    "--additional-driver-flag=--enable-feature=OriginKeyedProcessesByDefault",
+                    "--additional-driver-flag=--enable-features=OriginKeyedProcessesByDefault",
                 ],
                 # Default shards = 1 should be ok here.
             ),
@@ -1035,8 +1123,8 @@ ci.builder(
         configs = [
             "libcxx_modules",
             "linux",
-            "no_siso",
             "release_builder",
+            "remoteexec",
             "x64",
         ],
     ),

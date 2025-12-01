@@ -39,11 +39,14 @@ import org.chromium.chrome.browser.history.AppFilterCoordinator.AppInfo;
 import org.chromium.chrome.browser.preferences.Pref;
 import org.chromium.chrome.browser.preferences.PrefServiceUtil;
 import org.chromium.chrome.browser.profiles.Profile;
+import org.chromium.chrome.browser.signin.SigninAndHistorySyncActivityLauncherImpl;
 import org.chromium.chrome.browser.signin.services.IdentityServicesProvider;
 import org.chromium.chrome.browser.signin.services.SigninManager.SignInStateObserver;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabLaunchType;
 import org.chromium.chrome.browser.tabmodel.document.ChromeAsyncTabLauncher;
+import org.chromium.chrome.browser.ui.signin.signin_promo.HistoryPageSigninPromoDelegate;
+import org.chromium.chrome.browser.ui.signin.signin_promo.SigninPromoCoordinator;
 import org.chromium.chrome.browser.util.ChromeAccessibilityUtil;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetController;
 import org.chromium.components.browser_ui.util.ConversionUtils;
@@ -53,6 +56,8 @@ import org.chromium.components.embedder_support.util.UrlConstants;
 import org.chromium.components.favicon.LargeIconBridge;
 import org.chromium.components.prefs.PrefChangeRegistrar;
 import org.chromium.components.prefs.PrefChangeRegistrar.PrefObserver;
+import org.chromium.components.signin.SigninFeatureMap;
+import org.chromium.components.signin.SigninFeatures;
 import org.chromium.components.user_prefs.UserPrefs;
 import org.chromium.content_public.browser.LoadUrlParams;
 import org.chromium.ui.UiUtils;
@@ -131,6 +136,8 @@ public class HistoryContentManager implements SignInStateObserver, PrefObserver 
     private final Supplier<Tab> mTabSupplier;
     private final AppInfoCache mAppInfoCache;
     private final @Nullable Runnable mOpenHistoryItemCallback;
+    // TODO(crbug.com/388201374): Remove the nullability once the feature is launched.
+    private @Nullable final SigninPromoCoordinator mHistorySyncPromoCoordinator;
     private HistoryAdapter mHistoryAdapter;
     private RecyclerView mRecyclerView;
     private LargeIconBridge mLargeIconBridge;
@@ -225,15 +232,33 @@ public class HistoryContentManager implements SignInStateObserver, PrefObserver 
                         };
         mTabSupplier = tabSupplier;
 
+        if (SigninFeatureMap.isEnabled(SigninFeatures.HISTORY_OPT_IN_ENTRY_POINTS)) {
+            mHistorySyncPromoCoordinator =
+                    new SigninPromoCoordinator(
+                            mActivity,
+                            profile,
+                            new HistoryPageSigninPromoDelegate(
+                                    mActivity,
+                                    profile,
+                                    SigninAndHistorySyncActivityLauncherImpl.get(),
+                                    this::updateHistorySyncPromoVisibility,
+                                    /* isCreatedInCct= */ launchedForApp));
+        } else {
+            mHistorySyncPromoCoordinator = null;
+        }
+
         // History service is not keyed for Incognito profiles and {@link HistoryServiceFactory}
         // explicitly redirects to use regular profile for Incognito case.
         mHistoryAdapter =
                 new HistoryAdapter(
-                        this, sProviderForTests != null ? sProviderForTests : historyProvider);
+                        this,
+                        sProviderForTests != null ? sProviderForTests : historyProvider,
+                        mHistorySyncPromoCoordinator);
 
         // Create a recycler view.
         mRecyclerView =
                 new RecyclerView(new ContextThemeWrapper(mActivity, R.style.VerticalRecyclerView));
+        mRecyclerView.setId(R.id.history_page_recycler_view);
         mRecyclerView.setLayoutManager(new LinearLayoutManager(mActivity));
         mRecyclerView.setAdapter(mHistoryAdapter);
         mRecyclerView.setHasFixedSize(true);
@@ -357,6 +382,9 @@ public class HistoryContentManager implements SignInStateObserver, PrefObserver 
         mLargeIconBridge = null;
         IdentityServicesProvider.get().getSigninManager(mProfile).removeSignInStateObserver(this);
         mPrefChangeRegistrar.destroy();
+        if (mHistorySyncPromoCoordinator != null) {
+            mHistorySyncPromoCoordinator.destroy();
+        }
     }
 
     /**
@@ -574,18 +602,13 @@ public class HistoryContentManager implements SignInStateObserver, PrefObserver 
 
     /**
      * Called after a user removes this HistoryItem.
+     *
      * @param item The item that has been removed.
      */
     public void onItemRemoved(HistoryItem item) {
         mHistoryAdapter.markItemForRemoval(item);
         mHistoryAdapter.removeItems();
-        announceItemRemoved(item);
         mObserver.onItemRemoved(item);
-    }
-
-    void announceItemRemoved(HistoryItem item) {
-        mRecyclerView.announceForAccessibility(
-                mActivity.getString(R.string.delete_message, item.getTitle()));
     }
 
     void maybeResetAppFilterChip() {
@@ -681,6 +704,10 @@ public class HistoryContentManager implements SignInStateObserver, PrefObserver 
     public void onPreferenceChange() {
         mObserver.onUserAccountStateChanged();
         mHistoryAdapter.onSignInStateChange();
+    }
+
+    private void updateHistorySyncPromoVisibility() {
+        mHistoryAdapter.updateHistorySyncPromoVisibility();
     }
 
     /**

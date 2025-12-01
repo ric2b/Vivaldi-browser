@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <string>
 #include <utility>
+#include <variant>
 
 #include "base/base64url.h"
 #include "base/containers/span.h"
@@ -137,7 +138,7 @@ trusted_vault_pb::SecurityDomainMember CreateSecurityDomainMember(
   // only to compute member name.
   member.set_public_key(public_key_string);
 
-  absl::visit(
+  std::visit(
       base::Overloaded{
           [&member](const LocalPhysicalDevice&) {
             member.set_member_type(trusted_vault_pb::SecurityDomainMember::
@@ -165,7 +166,8 @@ trusted_vault_pb::SecurityDomainMember CreateSecurityDomainMember(
             auto* member_metadata = member.mutable_member_metadata();
             auto* pin_metadata =
                 member_metadata->mutable_google_password_manager_pin_metadata();
-            pin_metadata->set_encrypted_pin_hash(gpm_pin_metadata.wrapped_pin);
+            pin_metadata->set_encrypted_pin_hash(
+                gpm_pin_metadata.usable_pin_metadata->wrapped_pin);
           },
           [&member](const ICloudKeychain&) {
             member.set_member_type(trusted_vault_pb::SecurityDomainMember::
@@ -179,7 +181,7 @@ void AddSharedMemberKeysFromSource(
     trusted_vault_pb::JoinSecurityDomainsRequest* request,
     const SecureBoxPublicKey& public_key,
     const MemberKeysSource& member_keys_source) {
-  absl::visit(
+  std::visit(
       base::Overloaded{
           [request, &public_key](
               const std::vector<TrustedVaultKeyAndVersion>& key_and_versions) {
@@ -207,12 +209,11 @@ trusted_vault_pb::JoinSecurityDomainsRequest CreateJoinSecurityDomainsRequest(
   *request.mutable_security_domain_member() =
       CreateSecurityDomainMember(public_key, authentication_factor_type);
   AddSharedMemberKeysFromSource(&request, public_key, member_keys_source);
-  if (auto* unspecified_type =
-          absl::get_if<UnspecifiedAuthenticationFactorType>(
-              &authentication_factor_type)) {
+  if (auto* unspecified_type = std::get_if<UnspecifiedAuthenticationFactorType>(
+          &authentication_factor_type)) {
     request.set_member_type_hint(unspecified_type->value());
   } else if (auto* gpm_pin_metadata =
-                 absl::get_if<GpmPinMetadata>(&authentication_factor_type)) {
+                 std::get_if<GpmPinMetadata>(&authentication_factor_type)) {
     if (gpm_pin_metadata->public_key) {
       request.set_current_public_key_to_replace(*gpm_pin_metadata->public_key);
     }
@@ -442,13 +443,23 @@ class DownloadAuthenticationFactorsRegistrationStateRequest
       }
 
       if (member.member_type() == trusted_vault_pb::SecurityDomainMember::
-                                      MEMBER_TYPE_GOOGLE_PASSWORD_MANAGER_PIN &&
-          member.member_metadata().has_google_password_manager_pin_metadata()) {
-        const auto& pin_metadata =
-            member.member_metadata().google_password_manager_pin_metadata();
-        result_.gpm_pin_metadata.emplace(
-            member.public_key(), pin_metadata.encrypted_pin_hash(),
-            ToTime(pin_metadata.expiration_time()));
+                                      MEMBER_TYPE_GOOGLE_PASSWORD_MANAGER_PIN) {
+        if (member.member_metadata()
+                .has_google_password_manager_pin_metadata()) {
+          pin_status_ = TrustedVaultListSecurityDomainMembersPinStatus::
+              kPinPresentAndUsableForRecovery;
+          const auto& pin_metadata =
+              member.member_metadata().google_password_manager_pin_metadata();
+          result_.gpm_pin_metadata = GpmPinMetadata(
+              member.public_key(), UsableRecoveryPinMetadata(
+                                       pin_metadata.encrypted_pin_hash(),
+                                       ToTime(pin_metadata.expiration_time())));
+        } else {
+          result_.gpm_pin_metadata = GpmPinMetadata(
+              member.public_key(), /*pin_metadata=*/std::nullopt);
+          pin_status_ = TrustedVaultListSecurityDomainMembersPinStatus::
+              kPinPresentButUnusableForRecovery;
+        }
       } else if (member.member_type() ==
                  trusted_vault_pb::SecurityDomainMember::
                      MEMBER_TYPE_ICLOUD_KEYCHAIN) {
@@ -502,6 +513,8 @@ class DownloadAuthenticationFactorsRegistrationStateRequest
         "TrustedVault.DownloadAuthenticationFactorsRegistrationState." +
             GetSecurityDomainNameForUma(security_domain_),
         result_.state);
+    RecordTrustedVaultListSecurityDomainMembersPinStatus(security_domain_,
+                                                         pin_status_);
     std::move(callback_).Run(std::move(result_));
   }
 
@@ -515,12 +528,14 @@ class DownloadAuthenticationFactorsRegistrationStateRequest
   base::RepeatingClosure keep_alive_callback_;
   std::unique_ptr<TrustedVaultRequest> request_;
   DownloadAuthenticationFactorsRegistrationStateResult result_;
+  TrustedVaultListSecurityDomainMembersPinStatus pin_status_ =
+      TrustedVaultListSecurityDomainMembersPinStatus::kNoPinPresent;
 };
 
 TrustedVaultURLFetchReasonForUMA
 GetURLFetchReasonForUMAForJoinSecurityDomainsRequest(
     AuthenticationFactorType authentication_factor_type) {
-  return absl::visit(
+  return std::visit(
       base::Overloaded{
           [](const LocalPhysicalDevice&) {
             return TrustedVaultURLFetchReasonForUMA::kRegisterDevice;

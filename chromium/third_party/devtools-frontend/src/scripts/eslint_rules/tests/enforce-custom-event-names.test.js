@@ -3,18 +3,11 @@
 // found in the LICENSE file.
 'use strict';
 
-const tsParser = require('@typescript-eslint/parser');
-
 const rule = require('../lib/enforce-custom-event-names.js');
-const ruleTester = new (require('eslint').RuleTester)({
-  languageOptions: {
-    ecmaVersion: 'latest',
-    sourceType: 'module',
-    parser: tsParser,
-  },
-});
 
-ruleTester.run('enforce-custom-event-names', rule, {
+const {RuleTester} = require('./utils/utils.js');
+
+new RuleTester().run('enforce-custom-event-names', rule, {
   valid: [
     {
       code: `export class NodeSelectedEvent extends Event {

@@ -33,7 +33,7 @@ sessions::IdToSessionTab ChromiumSessionImporter::GetOpenTabs(
   auto commands = sessions::VivaldiFilterImportedTabsSessionCommands(
       unfiltered_cmds, importer_type == importer::TYPE_VIVALDI);
 
-  sessions::TokenToSessionTabGroup tab_groups;
+  sessions::GroupIdToSessionTabGroup tab_groups;
   sessions::VivaldiCreateTabsAndWindows(commands, &content.tabs, &tab_groups,
                                         &content.windows,
                                         &content.active_window_id);

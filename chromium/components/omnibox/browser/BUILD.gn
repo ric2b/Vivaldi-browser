@@ -132,6 +132,8 @@ static_library("vector_icons") {
 
 static_library("browser") {
   sources = [
+    "actions/contextual_search_action.cc",
+    "actions/contextual_search_action.h",
     "actions/omnibox_action.cc",
     "actions/omnibox_action.h",
     "actions/omnibox_action_concepts.h",
@@ -191,6 +193,8 @@ static_library("browser") {
     "calculator_provider.h",
     "clipboard_provider.cc",
     "clipboard_provider.h",
+    "contextual_search_provider.cc",
+    "contextual_search_provider.h",
     "document_provider.cc",
     "document_provider.h",
     "document_suggestions_service.cc",
@@ -273,6 +277,8 @@ static_library("browser") {
     "page_classification_functions.h",
     "provider_state_service.cc",
     "provider_state_service.h",
+    "recently_closed_tabs_provider.cc",
+    "recently_closed_tabs_provider.h",
     "remote_suggestions_service.cc",
     "remote_suggestions_service.h",
     "scored_history_match.cc",
@@ -337,6 +343,7 @@ static_library("browser") {
     "//components/omnibox/common",
     "//components/omnibox/resources:omnibox_pedal_synonyms",
     "//components/security_state/core",
+    "//services/data_decoder/public/cpp",
     "//third_party/metrics_proto",
     "//third_party/omnibox_proto",
     "//url",
@@ -707,6 +714,8 @@ static_library("test_support") {
     "mock_autocomplete_provider_client.h",
     "mock_tab_matcher.cc",
     "mock_tab_matcher.h",
+    "mock_unscoped_extension_provider_delegate.cc",
+    "mock_unscoped_extension_provider_delegate.h",
     "shortcuts_provider_test_util.cc",
     "shortcuts_provider_test_util.h",
     "test_location_bar_model.cc",
@@ -715,6 +724,8 @@ static_library("test_support") {
     "test_omnibox_client.h",
     "test_omnibox_edit_model.cc",
     "test_omnibox_edit_model.h",
+    "test_omnibox_popup_view.cc",
+    "test_omnibox_popup_view.h",
     "test_omnibox_view.cc",
     "test_omnibox_view.h",
     "test_scheme_classifier.cc",
@@ -830,6 +841,7 @@ source_set("unit_tests") {
     "keyword_provider_unittest.cc",
     "local_history_zero_suggest_provider_unittest.cc",
     "location_bar_model_impl_unittest.cc",
+    "most_visited_sites_provider_unittest.cc",
     "omnibox_controller_unittest.cc",
     "omnibox_edit_model_unittest.cc",
     "omnibox_field_trial_unittest.cc",
@@ -861,10 +873,6 @@ source_set("unit_tests") {
     "zero_suggest_provider_unittest.cc",
     "zero_suggest_verbatim_match_provider_unittest.cc",
   ]
-
-  if (is_android || is_ios) {
-    sources += [ "most_visited_sites_provider_unittest.cc" ]
-  }
 
   if ((!is_android || enable_vr) && !is_ios) {
     sources += [ "location_bar_model_util_unittest.cc" ]
@@ -900,6 +908,8 @@ source_set("unit_tests") {
     "//components/optimization_guide/core:test_support",
     "//components/optimization_guide/proto:optimization_guide_proto",
     "//components/os_crypt/async/browser",
+    "//components/passage_embeddings:passage_embeddings",
+    "//components/passage_embeddings:test_support",
     "//components/prefs:test_support",
     "//components/query_parser:query_parser",
     "//components/safe_browsing/core/common:common",
@@ -945,6 +955,10 @@ source_set("unit_tests") {
 
   if (is_chromeos) {
     deps += [ "//chromeos/constants:constants" ]
+  }
+
+  if (enable_extensions) {
+    deps += [ "//extensions/common:extension_features" ]
   }
 
   if (use_blink) {

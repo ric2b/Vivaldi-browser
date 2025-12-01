@@ -12,6 +12,7 @@
 #include "ash/public/cpp/test/test_saved_desk_delegate.h"
 #include "ash/public/cpp/window_properties.h"
 #include "ash/shell.h"
+#include "ash/strings/grit/ash_strings.h"
 #include "ash/system/toast/toast_manager_impl.h"
 #include "ash/test/ash_test_base.h"
 #include "ash/test/ash_test_helper.h"
@@ -288,6 +289,69 @@ TEST_F(CoralControllerTest, NoCrashOnRemovingChipByUser) {
   BirchBarController::Get()->OnItemHiddenByUser(coral_chip->GetItem());
 }
 
+// Tests that the grouping request contains the initial tab and app entities
+// restored on the desk.
+TEST_F(CoralControllerTest, RestoreSuppressionContext) {
+  std::vector<coral::mojom::GroupPtr> test_groups;
+  test_groups.push_back(
+      CreateTestGroup({{"Google", GURL("https://google.com/")},
+                       {"Youtube", GURL("https://youtube.com/")}},
+                      "Coral desk"));
+  OverrideTestResponse(std::move(test_groups), CoralSource::kPostLogin);
+
+  // Enter overview and click on the chip to restore the items to the active
+  // desk.
+  Shell::Get()->overview_controller()->StartOverview(
+      OverviewStartAction::kTests);
+  ClickFirstCoralButton();
+
+  // Re-enter Overview, the request should contains the restored items.
+  Shell::Get()->overview_controller()->StartOverview(
+      OverviewStartAction::kTests);
+
+  // Manually send an in-session request.
+  BirchCoralProvider::Get()->HandleInSessionDataRequest();
+
+  const auto& request = BirchCoralProvider::Get()->GetCoralRequestForTest();
+  EXPECT_EQ(request.suppression_context().size(), 2u);
+  EXPECT_EQ(request.suppression_context()[0]->get_tab()->url,
+            GURL("https://google.com/"));
+  EXPECT_EQ(request.suppression_context()[1]->get_tab()->url,
+            GURL("https://youtube.com/"));
+}
+
+// Tests that the grouping request contains the initial tab and app entities
+// used to create the desk.
+TEST_F(CoralControllerTest, InSessionSuppressionContext) {
+  std::vector<coral::mojom::GroupPtr> test_groups;
+  test_groups.push_back(
+      CreateTestGroup({{"Google", GURL("https://google.com/")},
+                       {"Youtube", GURL("https://youtube.com/")}},
+                      "Coral desk"));
+  OverrideTestResponse(std::move(test_groups), CoralSource::kInSession);
+
+  // Enter overview and click on the chip to restore the items to the active
+  // desk.
+  Shell::Get()->overview_controller()->StartOverview(
+      OverviewStartAction::kTests);
+  ClickFirstCoralButton();
+
+  // End and re-enter Overview, the request should contains the restored items.
+  Shell::Get()->overview_controller()->EndOverview(OverviewEndAction::kTests);
+  Shell::Get()->overview_controller()->StartOverview(
+      OverviewStartAction::kTests);
+
+  // Manually send an in-session request.
+  BirchCoralProvider::Get()->HandleInSessionDataRequest();
+
+  const auto& request = BirchCoralProvider::Get()->GetCoralRequestForTest();
+  EXPECT_EQ(request.suppression_context().size(), 2u);
+  EXPECT_EQ(request.suppression_context()[0]->get_tab()->url,
+            GURL("https://google.com/"));
+  EXPECT_EQ(request.suppression_context()[1]->get_tab()->url,
+            GURL("https://youtube.com/"));
+}
+
 class CoralSavedGroupTest : public CoralControllerTest {
  public:
   desks_storage::DeskModel* desk_model() {
@@ -315,6 +379,13 @@ class CoralSavedGroupTest : public CoralControllerTest {
       return nullptr;
     }
     return save_as_group_item;
+  }
+
+  void EnterOverviewAndSaveGroupAsTemplate() {
+    Shell::Get()->overview_controller()->StartOverview(
+        OverviewStartAction::kTests);
+    views::MenuItemView* save_as_group_item = GetSaveAsGroupMenuItem();
+    LeftClickOn(save_as_group_item);
   }
 
   void SetUp() override {
@@ -349,18 +420,14 @@ TEST_F(CoralSavedGroupTest, SaveBrowserInGroup) {
                       "Coral desk"));
   OverrideTestResponse(std::move(test_groups));
 
-  // Enter overview and click on the save as group menu item.
-  Shell::Get()->overview_controller()->StartOverview(
-      OverviewStartAction::kTests);
-  views::MenuItemView* save_as_group_item = GetSaveAsGroupMenuItem();
-  LeftClickOn(save_as_group_item);
+  EnterOverviewAndSaveGroupAsTemplate();
 
   // Verify the desk model entry name and type.
   const desks_storage::DeskModel::GetAllEntriesResult& result =
       desk_model()->GetAllEntries();
   ASSERT_EQ(result.entries.size(), 1u);
   const DeskTemplate* coral_template = result.entries[0];
-  EXPECT_EQ(coral_template->template_name(), u"saved group");
+  EXPECT_EQ(coral_template->template_name(), u"Coral desk");
   EXPECT_EQ(coral_template->type(), DeskTemplateType::kCoral);
 
   // Verify that the desk model entry browser info matches our fake coral
@@ -377,6 +444,50 @@ TEST_F(CoralSavedGroupTest, SaveBrowserInGroup) {
   EXPECT_THAT(browser_extra_info.urls,
               testing::ElementsAre(GURL("https://google.com/"),
                                    GURL("https://youtube.com/")));
+}
+
+// Tests saving a group with an empty (invalid) title.
+TEST_F(CoralSavedGroupTest, SaveEmptyTitleGroup) {
+  // Prepare a coral group with an empty title.
+  std::vector<coral::mojom::GroupPtr> test_groups;
+  test_groups.push_back(
+      CreateTestGroup({{"Google", GURL("https://google.com/")},
+                       {"Youtube", GURL("https://youtube.com/")}},
+                      ""));
+  OverrideTestResponse(std::move(test_groups));
+
+  EnterOverviewAndSaveGroupAsTemplate();
+
+  // Verify the desk model entry name and type.
+  const desks_storage::DeskModel::GetAllEntriesResult& result =
+      desk_model()->GetAllEntries();
+  ASSERT_EQ(result.entries.size(), 1u);
+  const DeskTemplate* coral_template = result.entries[0];
+  EXPECT_EQ(coral_template->template_name(),
+            l10n_util::GetStringUTF16(IDS_ASH_BIRCH_CORAL_SUGGESTION_NAME));
+  EXPECT_EQ(coral_template->type(), DeskTemplateType::kCoral);
+}
+
+// Tests saving a group with title in generation.
+TEST_F(CoralSavedGroupTest, SaveNullTitleGroup) {
+  // Prepare a null titled group.
+  std::vector<coral::mojom::GroupPtr> test_groups;
+  test_groups.push_back(
+      CreateTestGroup({{"Google", GURL("https://google.com/")},
+                       {"Youtube", GURL("https://youtube.com/")}},
+                      std::nullopt));
+  OverrideTestResponse(std::move(test_groups));
+
+  EnterOverviewAndSaveGroupAsTemplate();
+
+  // Verify the desk model entry name and type.
+  const desks_storage::DeskModel::GetAllEntriesResult& result =
+      desk_model()->GetAllEntries();
+  ASSERT_EQ(result.entries.size(), 1u);
+  const DeskTemplate* coral_template = result.entries[0];
+  EXPECT_EQ(coral_template->template_name(),
+            l10n_util::GetStringUTF16(IDS_ASH_BIRCH_CORAL_SUGGESTION_NAME));
+  EXPECT_EQ(coral_template->type(), DeskTemplateType::kCoral);
 }
 
 // Tests saving a group that has a couple apps in it.
@@ -398,23 +509,17 @@ TEST_F(CoralSavedGroupTest, SaveAppsInGroup) {
   std::vector<coral::mojom::GroupPtr> test_groups;
   test_groups.push_back(CreateTestGroup(
       {{"Window1", "window1_app_id"}, {"Window2", "window2_app_id"}},
-      "saved group"));
+      "Coral desk"));
   OverrideTestResponse(std::move(test_groups));
 
-  // Enter overview and click on the save as group menu item.
-  Shell::Get()->overview_controller()->StartOverview(
-      OverviewStartAction::kTests);
-  views::MenuItemView* save_as_group_item = GetSaveAsGroupMenuItem();
-  LeftClickOn(save_as_group_item);
+  EnterOverviewAndSaveGroupAsTemplate();
 
   // Verify the desk model entry name and type.
   const desks_storage::DeskModel::GetAllEntriesResult& result =
       desk_model()->GetAllEntries();
   ASSERT_EQ(result.entries.size(), 1u);
   const DeskTemplate* coral_template = result.entries[0];
-  // TODO(crbug.com/365839564): This should be the name of the group, not the
-  // desk.
-  EXPECT_EQ(coral_template->template_name(), u"Desk 1");
+  EXPECT_EQ(coral_template->template_name(), u"Coral desk");
   EXPECT_EQ(coral_template->type(), DeskTemplateType::kCoral);
 
   // Verify that the desk model entry browser info matches our fake coral
@@ -437,11 +542,7 @@ TEST_F(CoralSavedGroupTest, ShowSavedDeskLibrary) {
       CreateTestGroup({{"Google", GURL("https://google.com/")}}, "Coral desk"));
   OverrideTestResponse(std::move(test_groups));
 
-  // Enter overview and click on the save as group menu item.
-  Shell::Get()->overview_controller()->StartOverview(
-      OverviewStartAction::kTests);
-  views::MenuItemView* save_as_group_item = GetSaveAsGroupMenuItem();
-  LeftClickOn(save_as_group_item);
+  EnterOverviewAndSaveGroupAsTemplate();
 
   // Tests that the saved desk library is shown.
   EXPECT_TRUE(base::test::RunUntil([]() {
@@ -515,6 +616,67 @@ TEST_F(CoralSavedGroupTest, CheckGridItems) {
   const SavedDeskGridView* coral_grid_view =
       SavedDeskLibraryViewTestApi(library_view).coral_grid_view();
   EXPECT_EQ(coral_grid_view->grid_items().size(), 2u);
+}
+
+// Tests that the suppression context will be saved in the desk template.
+TEST_F(CoralSavedGroupTest, SaveSuppressionContext) {
+  // Create some windows with app ids.
+  auto window1 = CreateAppWindow();
+  auto window2 = CreateAppWindow();
+  window1->SetProperty(kAppIDKey, std::string("window1_app_id"));
+  window2->SetProperty(kAppIDKey, std::string("window2_app_id"));
+
+  // Simulate having app launch info for these windows.
+  static_cast<TestSavedDeskDelegate*>(Shell::Get()->saved_desk_delegate())
+      ->set_app_ids_with_app_launch_info({"window1_app_id", "window2_app_id"});
+
+  // Prepare a coral response.
+  std::vector<coral::mojom::GroupPtr> test_groups;
+  test_groups.push_back(
+      CreateTestGroup({{"Google", GURL("https://google.com/")},
+                       {"Youtube", GURL("https://youtube.com/")},
+                       {"Window1", "window1_app_id"},
+                       {"Window2", "window2_app_id"}},
+                      "Coral desk"));
+  OverrideTestResponse(std::move(test_groups));
+
+  EnterOverviewAndSaveGroupAsTemplate();
+
+  // Tests that the saved desk library is shown.
+  EXPECT_TRUE(base::test::RunUntil([]() {
+    OverviewSession* session = OverviewController::Get()->overview_session();
+    return session && session->IsShowingSavedDeskLibrary();
+  }));
+
+  // Click on the only saved desk entry.
+  const views::Button* saved_group_launch_button =
+      GetSavedDeskItemButton(/*index=*/0);
+  LeftClickOn(saved_group_launch_button);
+
+  // We create a new desk of type coral.
+  auto* desks_controller = DesksController::Get();
+  ASSERT_EQ(desks_controller->GetNumberOfDesks(), 2);
+  ASSERT_EQ(desks_controller->desks().back()->type(), Desk::Type::kCoral);
+
+  // End and activate the coral desk.
+  Shell::Get()->overview_controller()->EndOverview(OverviewEndAction::kTests);
+  ActivateDesk(desks_controller->desks().back().get());
+
+  // Re-enter Overview, the request should contains the restored items.
+  Shell::Get()->overview_controller()->StartOverview(
+      OverviewStartAction::kTests);
+
+  // Manually send an in-session request.
+  BirchCoralProvider::Get()->HandleInSessionDataRequest();
+
+  const auto& request = BirchCoralProvider::Get()->GetCoralRequestForTest();
+  ASSERT_EQ(request.suppression_context().size(), 4u);
+  EXPECT_EQ(request.suppression_context()[0]->get_tab()->url,
+            GURL("https://google.com/"));
+  EXPECT_EQ(request.suppression_context()[1]->get_tab()->url,
+            GURL("https://youtube.com/"));
+  EXPECT_EQ(request.suppression_context()[2]->get_app()->id, "window1_app_id");
+  EXPECT_EQ(request.suppression_context()[3]->get_app()->id, "window2_app_id");
 }
 
 }  // namespace ash

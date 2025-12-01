@@ -2,11 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
-#pragma allow_unsafe_buffers
-#endif
-
 #include "third_party/blink/renderer/modules/peerconnection/rtc_peer_connection_handler.h"
 
 #include <string.h>
@@ -18,6 +13,7 @@
 #include <utility>
 #include <vector>
 
+#include "base/compiler_specific.h"
 #include "base/containers/contains.h"
 #include "base/functional/bind.h"
 #include "base/location.h"
@@ -1407,12 +1403,12 @@ RTCPeerConnectionHandler::AddTransceiverWithKind(
     const String& kind,
     const webrtc::RtpTransceiverInit& init) {
   DCHECK(task_runner_->RunsTasksInCurrentSequence());
-  cricket::MediaType media_type;
+  webrtc::MediaType media_type;
   if (kind == webrtc::MediaStreamTrackInterface::kAudioKind) {
-    media_type = cricket::MEDIA_TYPE_AUDIO;
+    media_type = webrtc::MediaType::AUDIO;
   } else {
     DCHECK_EQ(kind, webrtc::MediaStreamTrackInterface::kVideoKind);
-    media_type = cricket::MEDIA_TYPE_VIDEO;
+    media_type = webrtc::MediaType::VIDEO;
   }
   blink::TransceiverStateSurfacer transceiver_state_surfacer(
       task_runner_, signaling_thread());
@@ -1448,7 +1444,7 @@ RTCPeerConnectionHandler::AddTransceiverWithKind(
 }
 
 void RTCPeerConnectionHandler::AddTransceiverWithMediaTypeOnSignalingThread(
-    cricket::MediaType media_type,
+    webrtc::MediaType media_type,
     webrtc::RtpTransceiverInit init,
     blink::TransceiverStateSurfacer* transceiver_state_surfacer,
     webrtc::RTCErrorOr<rtc::scoped_refptr<webrtc::RtpTransceiverInterface>>*
@@ -1959,13 +1955,9 @@ void RTCPeerConnectionHandler::OnIceCandidate(const String& sdp,
     return;
   }
   TRACE_EVENT0("webrtc", "RTCPeerConnectionHandler::OnIceCandidateImpl");
-  std::optional<String> url_or_null;
-  if (!url.empty()) {
-    url_or_null = url;
-  }
   // This line can cause garbage collection.
   auto* platform_candidate = MakeGarbageCollected<RTCIceCandidatePlatform>(
-      sdp, sdp_mid, sdp_mline_index, usernameFragment, url_or_null);
+      sdp, sdp_mid, sdp_mline_index, usernameFragment, url);
   if (peer_connection_tracker_) {
     peer_connection_tracker_->TrackAddIceCandidate(
         this, platform_candidate, PeerConnectionTracker::kSourceLocal, true);
@@ -2006,8 +1998,8 @@ RTCPeerConnectionHandler::FirstSessionDescription::FirstSessionDescription(
   for (const auto& content : sdesc->description()->contents()) {
     if (content.type == cricket::MediaProtocolType::kRtp) {
       const auto* mdesc = content.media_description();
-      audio = audio || (mdesc->type() == cricket::MEDIA_TYPE_AUDIO);
-      video = video || (mdesc->type() == cricket::MEDIA_TYPE_VIDEO);
+      audio = audio || (mdesc->type() == webrtc::MediaType::AUDIO);
+      video = video || (mdesc->type() == webrtc::MediaType::VIDEO);
       rtcp_mux = rtcp_mux || mdesc->rtcp_mux();
     }
   }
@@ -2110,9 +2102,12 @@ RTCPeerConnectionHandler::signaling_thread() const {
 void RTCPeerConnectionHandler::ReportICEState(
     webrtc::PeerConnectionInterface::IceConnectionState new_state) {
   DCHECK(task_runner_->RunsTasksInCurrentSequence());
-  if (ice_state_seen_[new_state])
-    return;
-  ice_state_seen_[new_state] = true;
+  UNSAFE_TODO({
+    if (ice_state_seen_[new_state]) {
+      return;
+    }
+    ice_state_seen_[new_state] = true;
+  });
   UMA_HISTOGRAM_ENUMERATION("WebRTC.PeerConnection.ConnectionState", new_state,
                             webrtc::PeerConnectionInterface::kIceConnectionMax);
 }

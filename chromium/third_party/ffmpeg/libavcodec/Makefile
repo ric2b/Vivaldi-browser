@@ -57,7 +57,6 @@ OBJS = ac3_parser.o                                                     \
        profiles.o                                                       \
        qsv_api.o                                                        \
        raw.o                                                            \
-       refstruct.o                                                      \
        threadprogress.o                                                 \
        utils.o                                                          \
        version.o                                                        \
@@ -443,11 +442,11 @@ OBJS-$(CONFIG_HCA_DECODER)             += hcadec.o
 OBJS-$(CONFIG_HCOM_DECODER)            += hcom.o
 OBJS-$(CONFIG_HDR_DECODER)             += hdrdec.o
 OBJS-$(CONFIG_HDR_ENCODER)             += hdrenc.o
-OBJS-$(CONFIG_HEVC_DECODER)            += aom_film_grain.o h274.o container_fifo.o
+OBJS-$(CONFIG_HEVC_DECODER)            += aom_film_grain.o h274.o
 OBJS-$(CONFIG_HEVC_AMF_ENCODER)        += amfenc_hevc.o
 OBJS-$(CONFIG_HEVC_CUVID_DECODER)      += cuviddec.o
 OBJS-$(CONFIG_HEVC_D3D12VA_ENCODER)    += d3d12va_encode_hevc.o h265_profile_level.o \
-                                          h2645data.o
+                                          h2645data.o hw_base_encode_h265.o
 OBJS-$(CONFIG_HEVC_MEDIACODEC_DECODER) += mediacodecdec.o
 OBJS-$(CONFIG_HEVC_MEDIACODEC_ENCODER) += mediacodecenc.o
 OBJS-$(CONFIG_HEVC_MF_ENCODER)         += mfenc.o mf_utils.o
@@ -978,6 +977,7 @@ OBJS-$(CONFIG_ADPCM_IMA_WAV_DECODER)      += adpcm.o adpcm_data.o
 OBJS-$(CONFIG_ADPCM_IMA_WAV_ENCODER)      += adpcmenc.o adpcm_data.o
 OBJS-$(CONFIG_ADPCM_IMA_WS_DECODER)       += adpcm.o adpcm_data.o
 OBJS-$(CONFIG_ADPCM_IMA_WS_ENCODER)       += adpcmenc.o adpcm_data.o
+OBJS-$(CONFIG_ADPCM_IMA_XBOX_DECODER)     += adpcm.o adpcm_data.o
 OBJS-$(CONFIG_ADPCM_MS_DECODER)           += adpcm.o adpcm_data.o
 OBJS-$(CONFIG_ADPCM_MS_ENCODER)           += adpcmenc.o adpcm_data.o
 OBJS-$(CONFIG_ADPCM_MTAF_DECODER)         += adpcm.o adpcm_data.o

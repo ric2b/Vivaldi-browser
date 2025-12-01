@@ -1,0 +1,16 @@
+# Copyright (c) 2025 Vivaldi Technologies AS. All rights reserved
+
+import("//extensions/buildflags/buildflags.gni")
+
+source_set("capture_page") {
+  sources = [
+    "capture_page.cc",
+    "capture_page.h",
+  ]
+
+  deps = [
+    "//base",
+    "//skia:skia",
+    "//content/public/browser:browser",
+  ]
+}

@@ -244,6 +244,33 @@ class OwnersClientTest(unittest.TestCase):
             self.client.BatchListOwners(
                 ['bar/everyone/foo.txt', 'bar/everyone/bar.txt', 'bar/foo/']))
 
+    def testSuggestMinimalOwners(self):
+        self.client.owners_by_path = {
+            'bar/everyone/foo.txt': [alice, bob, emily],
+            'bar/everyone/bar.txt': [bob, emily],
+            'bar/foo/': [bob, chris, emily],
+            'baz/baz/baz': [chris, dave, emily]
+        }
+
+        self.assertEqual([bob],
+                         self.client.SuggestMinimalOwners([
+                             'bar/everyone/foo.txt', 'bar/everyone/bar.txt',
+                             'bar/foo/'
+                         ]))
+
+        self.assertEqual([chris],
+                         self.client.SuggestMinimalOwners(
+                             ['bar/foo/', 'baz/baz/baz']))
+
+        # If no common owner exists, fallback to returning multiple owners
+        self.assertEqual([alice, bob, chris],
+                         self.client.SuggestMinimalOwners([
+                             'bar/everyone/foo.txt', 'bar/everyone/bar.txt',
+                             'bar/foo/', 'baz/baz/baz'
+                         ],
+                                                          exclude=[emily]))
+
+
 
 class GetCodeOwnersClientTest(unittest.TestCase):
     def setUp(self):

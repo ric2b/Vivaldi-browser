@@ -36,6 +36,7 @@
 <translation id="2441056087170876076">Пачварка 2</translation>
 <translation id="2444387452209867610">Уставіць нататку</translation>
 <translation id="2486841023299517366">Жывёліна 4</translation>
+<translation id="2501278716633472235">Назад</translation>
 <translation id="2612127540243995147">Гатова да ўсталёўкі. Праграма будзе закрытая і перазапушчаная.</translation>
 <translation id="2613387515621326337">Перайсці на сайт</translation>
 <translation id="2645477450146475243">Нажаль, налады Opera недаступныя для імпарту падчас працы браўзера. Каб імпартаваць налады ў Vivaldi, закрыйце ўсе вокны Opera 15+ і націсніце "Працягнуць".</translation>
@@ -60,6 +61,7 @@
 <translation id="3259769196742189631">Праверка</translation>
 <translation id="3291915639428159043">Аўтаматычнае прайграванне заблакавана</translation>
 <translation id="3302905971452834934">Пачварка 1</translation>
+<translation id="3308738399950580893">рэклама</translation>
 <translation id="3334610655141903168">(без назвы)</translation>
 <translation id="3372505110412186107">Vivaldi <ph name="VERSION" /> - найноўшая даступная версія.</translation>
 <translation id="3383198080133834965">У вас найноўшая версія!</translation>
@@ -82,6 +84,7 @@
 <translation id="3795800845758778870">Нажаль, налады Brave недаступныя для імпарту падчас працы браўзера. Каб імпартаваць налады ў Vivaldi, закрыйце ўсе вокны Brave і націсніце "Працягнуць".</translation>
 <translation id="3822431842304177896">Новы падзяляльнік</translation>
 <translation id="3832132597516774400">Краявід 5</translation>
+<translation id="3894751534882749287">Калі вы ўсё ж хочаце праглядзець гэтую старонку, змяніце налады блакавання адсочвання і націсніце кнопку "Дазволіць"</translation>
 <translation id="3914946330804881301">Інпартавана з Opera</translation>
 <translation id="3921292902397893431">Пачварка 8</translation>
 <translation id="3943857333388298514">Уставіць</translation>
@@ -106,6 +109,7 @@
 <translation id="4582480609585453144">Адкрыць спасылку ў фонавай укладцы</translation>
 <translation id="4636708767492582204">Адправіць па электроннай пошце</translation>
 <translation id="4677434526832593569">Жывёліна 8</translation>
+<translation id="4736016046474602958">Блакаванне адсочвання</translation>
 <translation id="474217410105706308">Адключыць гук на ўкладцы</translation>
 <translation id="4861715717329665002">Аўтаматычна захаваныя сеансы</translation>
 <translation id="4881695831933465202">Адкрыць</translation>
@@ -150,6 +154,7 @@
 <translation id="7086554968911045110">Краявід 7</translation>
 <translation id="7099506190679014195">Бяспечнае абнаўленне сховішча ключоў</translation>
 <translation id="7111492742514999492">Краявід 9</translation>
+<translation id="7113310725918019676">Дазволіць <ph name="BLOCKED_TYPE" /> з <ph name="DOMAIN" /></translation>
 <translation id="7208252576848052204">На жаль, вашы налады Arc недаступныя, калі гэты браўзер працуе. Каб імпартаваць гэтыя налады ў Vivaldi, закрыйце ўсе вокны Arc. Затым націсніце "Працягнуць".</translation>
 <translation id="7321500017121629018">Актыўна ўчора</translation>
 <translation id="7337881442233988129">Chromium</translation>
@@ -165,9 +170,9 @@
 <translation id="8027581147000338959">Адкрыць у новым акне</translation>
 <translation id="8044382196220116469">Не дазваляць сайтам аўтаматычна прайграваць відэа</translation>
 <translation id="8099620695029051217">Скапіяваць адрас старонкі</translation>
+<translation id="8119307142152921512">адсочванне і рэклама</translation>
 <translation id="8197810018650377191">Дадаць старонку ў закладкі</translation>
 <translation id="8261506727792406068">Выдаліць</translation>
-<translation id="8263047843452521549">Правяраць фонавыя службы</translation>
 <translation id="8331671104904436324">Адкрыць у фонавай укладцы</translation>
 <translation id="8373293945112511707">Краявід 1</translation>
 <translation id="8388552048012645975">Спампоўванне абнаўлення…</translation>
@@ -181,7 +186,6 @@
 <translation id="8651348004684669199">Дадаць актыўную ўкладку</translation>
 <translation id="8669345741879513971">Пачварка 10</translation>
 <translation id="867544375504146191">Yandex</translation>
-<translation id="8689295374912158752">Правяраць дакументы</translation>
 <translation id="875142999698251063">Выйсці зараз</translation>
 <translation id="8768970203213061953">Краявід 14</translation>
 <translation id="8773635261052182196">Вы больш не будзеце атрымліваць апавяшчэнні. Вы можаце ўключыць іх ў наладах Vivaldi.</translation>
@@ -189,6 +193,7 @@
 <translation id="8813277370772331957">Нагадаць пазней</translation>
 <translation id="8894900864683381599">Дадаць спасылку на вэб-панэль</translation>
 <translation id="8912720443398351457">Сапраўды хочаце выйсці з Vivaldi?</translation>
+<translation id="8940028675168378100">Заблакавана <ph name="BLOCKER_NAME" /></translation>
 <translation id="8947109330183116400">Абраць файл HTML з закладкамі</translation>
 <translation id="9017566390391482291">Абярыце каталог профілю Vivaldi для імпарту</translation>
 <translation id="9048058608784130603">Гатова абнаўленне <ph name="VERSION" /></translation>
@@ -199,6 +204,7 @@
 <translation id="912022491595344261">Адкрыць выяву як <ph name="USER" /></translation>
 <translation id="9157539936604258187">Адкрыць спасылку</translation>
 <translation id="9169060351863393881">Opera 12.x</translation>
+<translation id="9180553614777056266">Блакаванне рэкламы</translation>
 <translation id="939305735877869636">Brave</translation>
 <translation id="970294721402795299">Краявід 16</translation>
 </translationbundle>

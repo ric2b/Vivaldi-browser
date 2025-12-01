@@ -8,6 +8,7 @@
 #include "include/v8-platform.h"
 #include "src/base/base-export.h"
 #include "src/base/compiler-specific.h"
+#include "src/base/platform/mutex.h"
 #include "src/base/platform/platform.h"
 #include "src/base/region-allocator.h"
 
@@ -152,7 +153,7 @@ class V8_BASE_EXPORT VirtualAddressSubspace : public VirtualAddressSpaceBase {
 
   // Mutex guarding the non-threadsafe RegionAllocator and
   // RandomNumberGenerator.
-  SpinningMutex mutex_;
+  Mutex mutex_;
 
   // RegionAllocator to manage the virtual address reservation and divide it
   // into further regions as necessary.

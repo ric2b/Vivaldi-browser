@@ -170,6 +170,7 @@
 <translation id="3838085852053358637">Échec du chargement de l’extension</translation>
 <translation id="383891835335927981">Vous n’avez fait de zoom avant ou arrière sur aucun site</translation>
 <translation id="385051799172605136">Retour</translation>
+<translation id="3858860766373142691">Nom</translation>
 <translation id="3861977424605124250">Afficher au démarrage</translation>
 <translation id="3867944738977021751">Champs de certificat</translation>
 <translation id="3905761538810670789">Réparer l’application</translation>
@@ -415,6 +416,9 @@ Conservez votre fichier de clé en lieu sûr. Vous en aurez besoin lors de la cr
 <translation id="8004582292198964060">Navigateur</translation>
 <translation id="8018313076035239964">Contrôler les informations que les sites Web peuvent utiliser et le contenu qu’ils peuvent afficher</translation>
 <translation id="8071432093239591881">Imprimer en tant qu'image</translation>
+<translation id="8118448640060360549">{EXTENSIONS_COUNT,plural,
+        =1 {# favori}
+        other {# favoris}}</translation>
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" /> Kio</translation>
 <translation id="8212008074015601248">{NUM_DOWNLOAD,plural,
      =1{Téléchargement en cours} other {Téléchargements en cours}}</translation>

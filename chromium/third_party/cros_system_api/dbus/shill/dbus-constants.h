@@ -179,6 +179,7 @@ constexpr char kIsConnectedProperty[] = "IsConnected";
 constexpr char kLinkMonitorDisableProperty[] = "LinkMonitorDisable";
 constexpr char kManagedCredentialsProperty[] = "ManagedCredentials";
 constexpr char kMeteredProperty[] = "Metered";
+constexpr char kLogNameProperty[] = "LogName";
 constexpr char kNameProperty[] = "Name";  // Also used for Device and Profile.
 constexpr char kPassphraseRequiredProperty[] = "PassphraseRequired";
 constexpr char kPreviousErrorProperty[] = "PreviousError";
@@ -218,6 +219,7 @@ constexpr char kNetworkConfigSearchDomainsProperty[] = "SearchDomains";
 constexpr char kNetworkConfigMTUProperty[] = "MTU";
 constexpr char kNetworkConfigIncludedRoutesProperty[] = "IncludedRoutes";
 constexpr char kNetworkConfigExcludedRoutesProperty[] = "ExcludedRoutes";
+constexpr char kNetworkConfigPref64Property[] = "Pref64";
 
 // Cellular Service property names.
 constexpr char kActivationStateProperty[] = "Cellular.ActivationState";

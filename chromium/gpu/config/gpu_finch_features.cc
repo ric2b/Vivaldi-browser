@@ -7,7 +7,6 @@
 #include "base/command_line.h"
 #include "base/feature_list.h"
 #include "build/build_config.h"
-#include "build/chromeos_buildflags.h"
 #include "gpu/config/gpu_switches.h"
 #include "ui/gl/gl_features.h"
 #include "ui/gl/gl_surface_egl.h"
@@ -162,13 +161,6 @@ BASE_FEATURE(kDefaultEnableGpuRasterization,
              base::FEATURE_DISABLED_BY_DEFAULT
 #endif
 );
-
-#if !BUILDFLAG(IS_ANDROID)
-// Enables the use of out of process rasterization for canvas.
-BASE_FEATURE(kCanvasOopRasterization,
-             "CanvasOopRasterization",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-#endif
 
 // Enables the use of MSAA in skia on Ice Lake and later intel architectures.
 BASE_FEATURE(kEnableMSAAOnNewIntelGPUs,
@@ -336,17 +328,6 @@ const base::FeatureParam<std::string> kDrDcBlockListByAndroidBuildFP{
     &kEnableDrDc, "BlockListByAndroidBuildFP", ""};
 #endif  // BUILDFLAG(IS_ANDROID)
 
-#if BUILDFLAG(IS_OZONE)
-// On Ozone, compute SharedImage scanout support based on overlays being
-// supported rather than native pixmaps being supported.
-// TODO(crbug.com/330865436): It turns out that `supports_overlays` is
-// currently set only in the browser process; we need to ensure that it is set
-// in the GPU process before we can re-enable this feature.
-BASE_FEATURE(kSharedImageSupportScanoutOnOzoneOnlyIfOverlaysSupported,
-             "SharedImageSupportScanoutOnOzoneOnlyIfOverlaysSupported",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-#endif
-
 // Enable Skia Graphite. This will use the Dawn backend by default, but can be
 // overridden with command line flags for testing on non-official developer
 // builds. See --skia-graphite-backend flag in gpu_switches.h.
@@ -401,29 +382,6 @@ BASE_FEATURE(kSkiaGraphiteDawnUseD3D12,
              "SkiaGraphiteDawnUseD3D12",
              base::FEATURE_DISABLED_BY_DEFAULT);
 #endif
-
-// If enabled, SharedImages created for the impacted clients have SCANOUT usage
-// added only if SharedImageCapabilities indicates that there is support. Serve
-// as killswitches for these rollouts. Live in //gpu as backings that are
-// rolling out restrictions on supporting SCANOUT usage must check the value of
-// these base::Features.
-// TODO(crbug.com/330865436): Remove post-safe rollout.
-BASE_FEATURE(kExoBufferAddScanoutUsageOnlyIfSupportedBySharedImage,
-             "ExoBufferAddScanoutUsageOnlyIfSupportedBySharedImage",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-BASE_FEATURE(
-    kCameraVideoFrameHandlerAddScanoutUsageOnlyIfSupportedBySharedImage,
-    "CameraVideoFrameHandlerAddScanoutUsageOnlyIfSupportedBySharedImage",
-    base::FEATURE_ENABLED_BY_DEFAULT);
-BASE_FEATURE(kFastInkHostAddScanoutUsageOnlyIfSupportedBySharedImage,
-             "FastInkHostAddScanoutUsageOnlyIfSupportedBySharedImage",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-BASE_FEATURE(kRoundedDisplayAddScanoutUsageOnlyIfSupportedBySharedImage,
-             "RoundedDisplayAddScanoutUsageOnlyIfSupportedBySharedImage",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-BASE_FEATURE(kViewTreeHostAddScanoutUsageOnlyIfSupportedBySharedImage,
-             "ViewTreeHostAddScanoutUsageOnlyIfSupportedBySharedImage",
-             base::FEATURE_ENABLED_BY_DEFAULT);
 
 // Enable persistent storage of VkPipelineCache data.
 BASE_FEATURE(kEnableVkPipelineCache,
@@ -687,10 +645,24 @@ bool IsSkiaGraphiteSupportedByDevice(const base::CommandLine* command_line) {
   }
 #endif  // BUILDFLAG(IS_MAC)
   return true;
-#elif BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_CHROMEOS)
-  // Graphite on Android and ChromeOS uses the Dawn Vulkan backend. Only enable
-  // Graphite if device would already be using Ganesh/Vulkan.
+#elif BUILDFLAG(IS_ANDROID)
+  // Desktop Android isn't ready to pick up the fieldtrial_testing_config.json
+  // change that enables graphite. However, it's the same platform as regular
+  // Android and does. Skip enabling the feature there for now.
+  if (base::android::BuildInfo::GetInstance()->is_desktop()) {
+    return false;
+  }
+
+  // Graphite on Android uses the Dawn Vulkan backend. Only enable Graphite if
+  // device would already be using Ganesh/Vulkan.
   return IsUsingVulkan();
+#elif BUILDFLAG(IS_CHROMEOS)
+  // Graphite on ChromeOS uses the Dawn Vulkan backend. Only enable Graphite if
+  // device would already be using Ganesh/Vulkan.
+  return IsUsingVulkan();
+#elif BUILDFLAG(IS_WIN) && defined(ARCH_CPU_ARM64)
+  // Graphite on Windows ARM requires further research.
+  return false;
 #elif BUILDFLAG(IS_WIN)
   return true;
 #else
@@ -755,14 +727,6 @@ bool EnablePurgeGpuImageDecodeCache() {
 }
 bool EnablePruneOldTransferCacheEntries() {
   return base::FeatureList::IsEnabled(kPruneOldTransferCacheEntries);
-}
-
-bool IsCanvasOopRasterizationEnabled() {
-#if BUILDFLAG(IS_ANDROID)
-  return true;
-#else
-  return base::FeatureList::IsEnabled(kCanvasOopRasterization);
-#endif
 }
 
 #if BUILDFLAG(IS_ANDROID)
@@ -886,5 +850,11 @@ bool IsSyncPointGraphValidationEnabled() {
 BASE_FEATURE(kANGLEPerContextBlobCache,
              "ANGLEPerContextBlobCache",
              base::FEATURE_DISABLED_BY_DEFAULT);
+
+#if BUILDFLAG(IS_APPLE)
+BASE_FEATURE(kIOSurfaceMultiThreading,
+             "IOSurfaceMultiThreading",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+#endif
 
 }  // namespace features

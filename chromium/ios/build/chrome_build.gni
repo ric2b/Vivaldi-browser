@@ -8,7 +8,6 @@ import("//build/config/chrome_build.gni")
 import("//build/config/features.gni")
 import("//build/config/ios/config.gni")
 import("//build/config/ios/ios_sdk.gni")
-import("//components/sync/base/features.gni")
 
 if (defined(is_vivaldi) && is_vivaldi) {
   import("//vivaldi/gn/config/product.gni")
@@ -31,13 +30,14 @@ declare_args() {
   # Enable share extension.
   ios_enable_share_extension = true
 
+  # Disable the new share extension UI and entry points.
+  ios_enable_extended_share_extension = false
+
   # Enable open in extension.
   ios_enable_open_extension = true
 
   # Enable credential provider extension.
-  # TODO(crbug.com/356196908): The iOS for Blink should be built without
-  # //components/keyed_service/core dependency.
-  ios_enable_credential_provider_extension = !use_blink
+  ios_enable_credential_provider_extension = true
 
   # Enable intents extension.
   ios_enable_intents_extension = true
@@ -67,6 +67,9 @@ declare_args() {
   # Label of the target providing implementation for the PushNotificationServiceExtension.
   # Overridden when using the Google-internal repository to build Chrome on iOS.
   ios_push_notification_service_extension_target = "//ios/chrome/push_notification_service_extension:push_notification_service_extension_implementation"
+
+  # Enable passkey capabilities in the Credential Provider Extension (CPE).
+  ios_cpe_enable_passkey_capabilities = true
 
   # The API key to query Google services in the Credential Provider Extension.
   ios_credential_provider_extension_api_key = ""

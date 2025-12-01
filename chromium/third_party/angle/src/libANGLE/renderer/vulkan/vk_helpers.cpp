@@ -117,7 +117,7 @@ constexpr ImageLayoutToMemoryBarrierDataMap kImageMemoryBarrierData = {
             VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
             ResourceAccess::ReadWrite,
             PipelineStage::ColorAttachmentOutput,
-            EventStage::ColorAttachmentOutput,
+            EventStage::Attachment,
             PipelineStageGroup::FragmentOnly,
         },
     },
@@ -134,7 +134,7 @@ constexpr ImageLayoutToMemoryBarrierDataMap kImageMemoryBarrierData = {
             VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
             ResourceAccess::ReadWrite,
             PipelineStage::ColorAttachmentOutput,
-            EventStage::ColorAttachmentOutput,
+            EventStage::Attachment,
             PipelineStageGroup::FragmentOnly,
         },
     },
@@ -151,7 +151,7 @@ constexpr ImageLayoutToMemoryBarrierDataMap kImageMemoryBarrierData = {
             VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
             ResourceAccess::ReadWrite,
             PipelineStage::FragmentShader,
-            EventStage::ColorAttachmentOutputAndFragmentShader,
+            EventStage::AttachmentAndFragmentShader,
             PipelineStageGroup::FragmentOnly,
         },
     },
@@ -168,7 +168,7 @@ constexpr ImageLayoutToMemoryBarrierDataMap kImageMemoryBarrierData = {
             VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
             ResourceAccess::ReadWrite,
             PipelineStage::EarlyFragmentTest,
-            EventStage::AllFragmentTest,
+            EventStage::Attachment,
             PipelineStageGroup::FragmentOnly,
         },
     },
@@ -185,7 +185,7 @@ constexpr ImageLayoutToMemoryBarrierDataMap kImageMemoryBarrierData = {
             VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
             ResourceAccess::ReadWrite,
             PipelineStage::EarlyFragmentTest,
-            EventStage::AllFragmentTest,
+            EventStage::Attachment,
             PipelineStageGroup::FragmentOnly,
         },
     },
@@ -202,7 +202,7 @@ constexpr ImageLayoutToMemoryBarrierDataMap kImageMemoryBarrierData = {
             VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
             ResourceAccess::ReadWrite,
             PipelineStage::EarlyFragmentTest,
-            EventStage::AllFragmentTest,
+            EventStage::Attachment,
             PipelineStageGroup::FragmentOnly,
         },
     },
@@ -219,7 +219,7 @@ constexpr ImageLayoutToMemoryBarrierDataMap kImageMemoryBarrierData = {
             VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
             ResourceAccess::ReadWrite,
             PipelineStage::EarlyFragmentTest,
-            EventStage::AllFragmentTestAndFragmentShader,
+            EventStage::AttachmentAndFragmentShader,
             PipelineStageGroup::FragmentOnly,
         },
     },
@@ -236,7 +236,7 @@ constexpr ImageLayoutToMemoryBarrierDataMap kImageMemoryBarrierData = {
             VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
             ResourceAccess::ReadWrite,
             PipelineStage::VertexShader,
-            EventStage::AllFragmentTestAndAllShaders,
+            EventStage::AttachmentAndAllShaders,
             PipelineStageGroup::Other,
         },
     },
@@ -253,7 +253,7 @@ constexpr ImageLayoutToMemoryBarrierDataMap kImageMemoryBarrierData = {
             VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
             ResourceAccess::ReadWrite,
             PipelineStage::EarlyFragmentTest,
-            EventStage::AllFragmentTest,
+            EventStage::Attachment,
             PipelineStageGroup::FragmentOnly,
         },
     },
@@ -270,7 +270,7 @@ constexpr ImageLayoutToMemoryBarrierDataMap kImageMemoryBarrierData = {
             VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
             ResourceAccess::ReadWrite,
             PipelineStage::EarlyFragmentTest,
-            EventStage::AllFragmentTestAndFragmentShader,
+            EventStage::AttachmentAndFragmentShader,
             PipelineStageGroup::FragmentOnly,
         },
     },
@@ -287,7 +287,7 @@ constexpr ImageLayoutToMemoryBarrierDataMap kImageMemoryBarrierData = {
             VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
             ResourceAccess::ReadWrite,
             PipelineStage::VertexShader,
-            EventStage::AllFragmentTestAndAllShaders,
+            EventStage::AttachmentAndAllShaders,
             PipelineStageGroup::Other,
         },
     },
@@ -304,7 +304,7 @@ constexpr ImageLayoutToMemoryBarrierDataMap kImageMemoryBarrierData = {
             0,
             ResourceAccess::ReadOnly,
             PipelineStage::EarlyFragmentTest,
-            EventStage::AllFragmentTest,
+            EventStage::Attachment,
             PipelineStageGroup::FragmentOnly,
         },
     },
@@ -322,7 +322,7 @@ constexpr ImageLayoutToMemoryBarrierDataMap kImageMemoryBarrierData = {
             0,
             ResourceAccess::ReadOnly,
             PipelineStage::EarlyFragmentTest,
-            EventStage::AllFragmentTestAndFragmentShader,
+            EventStage::AttachmentAndFragmentShader,
             PipelineStageGroup::FragmentOnly,
         },
     },
@@ -339,7 +339,7 @@ constexpr ImageLayoutToMemoryBarrierDataMap kImageMemoryBarrierData = {
             0,
             ResourceAccess::ReadOnly,
             PipelineStage::VertexShader,
-            EventStage::AllFragmentTestAndAllShaders,
+            EventStage::AttachmentAndAllShaders,
             PipelineStageGroup::Other,
         },
     },
@@ -356,7 +356,7 @@ constexpr ImageLayoutToMemoryBarrierDataMap kImageMemoryBarrierData = {
             VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
             ResourceAccess::ReadWrite,
             PipelineStage::FragmentShader,
-            EventStage::ColorAttachmentOutputAndFragmentShader,
+            EventStage::AttachmentAndFragmentShader,
             PipelineStageGroup::FragmentOnly,
         },
     },
@@ -374,7 +374,7 @@ constexpr ImageLayoutToMemoryBarrierDataMap kImageMemoryBarrierData = {
             ResourceAccess::ReadWrite,
             // In case of multiple destination stages, We barrier the earliest stage
             PipelineStage::VertexShader,
-            EventStage::ColorAttachmentOutputAndAllShaders,
+            EventStage::AttachmentAndAllShaders,
             PipelineStageGroup::Other,
         },
     },
@@ -391,7 +391,7 @@ constexpr ImageLayoutToMemoryBarrierDataMap kImageMemoryBarrierData = {
             VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
             ResourceAccess::ReadWrite,
             PipelineStage::FragmentShader,
-            EventStage::AllFragmentTestAndFragmentShader,
+            EventStage::AttachmentAndFragmentShader,
             PipelineStageGroup::FragmentOnly,
         },
     },
@@ -409,7 +409,7 @@ constexpr ImageLayoutToMemoryBarrierDataMap kImageMemoryBarrierData = {
             ResourceAccess::ReadWrite,
             // In case of multiple destination stages, We barrier the earliest stage
             PipelineStage::VertexShader,
-            EventStage::AllFragmentTestAndAllShaders,
+            EventStage::AttachmentAndAllShaders,
             PipelineStageGroup::Other,
         },
     },
@@ -427,7 +427,7 @@ constexpr ImageLayoutToMemoryBarrierDataMap kImageMemoryBarrierData = {
             VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
             ResourceAccess::ReadWrite,
             PipelineStage::ColorAttachmentOutput,
-            EventStage::ColorAttachmentOutput,
+            EventStage::Attachment,
             PipelineStageGroup::FragmentOnly,
         },
     },
@@ -445,7 +445,7 @@ constexpr ImageLayoutToMemoryBarrierDataMap kImageMemoryBarrierData = {
             VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
             ResourceAccess::ReadWrite,
             PipelineStage::FragmentShader,
-            EventStage::ColorAttachmentOutputAndFragmentShader,
+            EventStage::AttachmentAndFragmentShader,
             PipelineStageGroup::FragmentOnly,
         },
     },
@@ -491,7 +491,7 @@ constexpr ImageLayoutToMemoryBarrierDataMap kImageMemoryBarrierData = {
             VK_ACCESS_MEMORY_WRITE_BIT,
             ResourceAccess::ReadWrite,
             PipelineStage::BottomOfPipe,
-            EventStage::ColorAttachmentOutputAndFragmentShaderAndTransfer,
+            EventStage::AttachmentAndFragmentShaderAndTransfer,
             PipelineStageGroup::Other,
         },
     },
@@ -1082,9 +1082,7 @@ void ExtendRenderPassInvalidateArea(const gl::Rectangle &invalidateArea, gl::Rec
 
 bool CanCopyWithTransferForCopyImage(Renderer *renderer,
                                      ImageHelper *srcImage,
-                                     VkImageTiling srcTilingMode,
-                                     ImageHelper *dstImage,
-                                     VkImageTiling dstTilingMode)
+                                     ImageHelper *dstImage)
 {
     // Neither source nor destination formats can be emulated for copy image through transfer,
     // unless they are emulated with the same format!
@@ -1097,8 +1095,8 @@ bool CanCopyWithTransferForCopyImage(Renderer *renderer,
            srcImage->getActualFormat().pixelBytes == dstImage->getActualFormat().pixelBytes);
 
     return isFormatCompatible &&
-           CanCopyWithTransfer(renderer, srcImage->getActualFormatID(), srcTilingMode,
-                               dstImage->getActualFormatID(), dstTilingMode);
+           CanCopyWithTransfer(renderer, srcImage->getUsage(), dstImage->getActualFormatID(),
+                               dstImage->getTilingMode());
 }
 
 void ReleaseBufferListToRenderer(Context *context, BufferHelperQueue *buffers)
@@ -1170,6 +1168,7 @@ angle::Result InitDynamicDescriptorPool(ErrorContext *context,
     std::vector<VkDescriptorPoolSize> descriptorPoolSizes;
     DescriptorSetLayoutBindingVector bindingVector;
     descriptorSetLayoutDesc.unpackBindings(&bindingVector);
+    descriptorPoolSizes.reserve(bindingVector.size());
 
     for (const VkDescriptorSetLayoutBinding &binding : bindingVector)
     {
@@ -1303,6 +1302,31 @@ VkPipelineStageFlags ConvertShaderBitSetToVkPipelineStageFlags(
     }
     return pipelineStageFlags;
 }
+
+// Temporarily updating an image's chromaFilter and restore it at the end.
+class [[nodiscard]] ScopedOverrideYCbCrFilter final
+{
+  public:
+    ScopedOverrideYCbCrFilter(Renderer *renderer, ImageHelper *img, const VkFilter &filter)
+        : mRenderer(renderer),
+          mImage(img),
+          mOriginalFilter(img->getYcbcrConversionDesc().getChromaFilter())
+    {
+        img->updateChromaFilter(renderer, filter);
+    }
+
+    ~ScopedOverrideYCbCrFilter()
+    {
+        mImage->updateChromaFilter(mRenderer, mOriginalFilter);
+        mRenderer = nullptr;
+        mImage    = nullptr;
+    }
+
+  private:
+    Renderer *mRenderer;
+    ImageHelper *mImage;
+    VkFilter mOriginalFilter;
+};
 }  // anonymous namespace
 
 // This is an arbitrary max. We can change this later if necessary.
@@ -1311,8 +1335,6 @@ uint32_t DynamicDescriptorPool::mMaxSetsPerPoolMultiplier = 2;
 
 ImageLayout GetImageLayoutFromGLImageLayout(ErrorContext *context, GLenum layout)
 {
-    const bool supportsMixedReadWriteDepthStencilLayouts =
-        context->getFeatures().supportsMixedReadWriteDepthStencilLayouts.enabled;
     switch (layout)
     {
         case GL_NONE:
@@ -1326,11 +1348,9 @@ ImageLayout GetImageLayoutFromGLImageLayout(ErrorContext *context, GLenum layout
         case GL_LAYOUT_DEPTH_STENCIL_READ_ONLY_EXT:
             return ImageLayout::DepthReadStencilRead;
         case GL_LAYOUT_DEPTH_READ_ONLY_STENCIL_ATTACHMENT_EXT:
-            return supportsMixedReadWriteDepthStencilLayouts ? ImageLayout::DepthReadStencilWrite
-                                                             : ImageLayout::DepthWriteStencilWrite;
+            return ImageLayout::DepthReadStencilWrite;
         case GL_LAYOUT_DEPTH_ATTACHMENT_STENCIL_READ_ONLY_EXT:
-            return supportsMixedReadWriteDepthStencilLayouts ? ImageLayout::DepthWriteStencilRead
-                                                             : ImageLayout::DepthWriteStencilWrite;
+            return ImageLayout::DepthWriteStencilRead;
         case GL_LAYOUT_SHADER_READ_ONLY_EXT:
             return ImageLayout::ExternalShadersReadOnly;
         case GL_LAYOUT_TRANSFER_SRC_EXT:
@@ -1374,32 +1394,9 @@ GLenum ConvertImageLayoutToGLImageLayout(ImageLayout layout)
     return GL_NONE;
 }
 
-VkImageLayout ConvertImageLayoutToVkImageLayout(Renderer *renderer, ImageLayout imageLayout)
+VkImageLayout ConvertImageLayoutToVkImageLayout(ImageLayout imageLayout)
 {
-    const ImageMemoryBarrierData &transition = renderer->getImageMemoryBarrierData(imageLayout);
-    VkImageLayout layout                     = transition.layout;
-
-    if (ANGLE_LIKELY(renderer->getFeatures().supportsMixedReadWriteDepthStencilLayouts.enabled))
-    {
-        return layout;
-    }
-
-    // If the layouts are not supported, substitute them with what's available.  This may be
-    // less optimal and/or introduce synchronization hazards.
-    if (layout == VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_STENCIL_READ_ONLY_OPTIMAL ||
-        layout == VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_STENCIL_ATTACHMENT_OPTIMAL)
-    {
-        layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-
-        // If the replacement layout causes a feedback loop, use the GENERAL layout
-        if ((transition.dstStageMask &
-             (VK_PIPELINE_STAGE_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT)) != 0)
-        {
-            layout = VK_IMAGE_LAYOUT_GENERAL;
-        }
-    }
-
-    return layout;
+    return kImageMemoryBarrierData[imageLayout].layout;
 }
 
 PipelineStageGroup GetPipelineStageGroupFromStageFlags(VkPipelineStageFlags dstStageMask)
@@ -1444,19 +1441,16 @@ bool FormatHasNecessaryFeature(Renderer *renderer,
 }
 
 bool CanCopyWithTransfer(Renderer *renderer,
-                         angle::FormatID srcFormatID,
-                         VkImageTiling srcTilingMode,
+                         VkImageUsageFlags srcUsage,
                          angle::FormatID dstFormatID,
                          VkImageTiling dstTilingMode)
 {
-    // Checks that the formats in the copy transfer have the appropriate tiling and transfer bits
-    bool isTilingCompatible           = srcTilingMode == dstTilingMode;
-    bool srcFormatHasNecessaryFeature = FormatHasNecessaryFeature(
-        renderer, srcFormatID, srcTilingMode, VK_FORMAT_FEATURE_TRANSFER_SRC_BIT);
+    // Checks that the formats in the copy transfer have the appropriate transfer bits
+    bool srcFormatHasNecessaryFeature = (srcUsage & VK_IMAGE_USAGE_TRANSFER_SRC_BIT) != 0;
     bool dstFormatHasNecessaryFeature = FormatHasNecessaryFeature(
         renderer, dstFormatID, dstTilingMode, VK_FORMAT_FEATURE_TRANSFER_DST_BIT);
 
-    return isTilingCompatible && srcFormatHasNecessaryFeature && dstFormatHasNecessaryFeature;
+    return srcFormatHasNecessaryFeature && dstFormatHasNecessaryFeature;
 }
 
 void InitializeEventStageToVkPipelineStageFlagsMap(
@@ -1480,10 +1474,7 @@ void InitializeEventStageToVkPipelineStageFlagsMap(
         const EventStage eventStage = imageBarrierData.eventStage;
         if (eventStage != EventStage::InvalidEnum)
         {
-            ASSERT((*map)[eventStage] == 0 ||
-                   (*map)[eventStage] ==
-                       (imageBarrierData.dstStageMask & supportedVulkanPipelineStageMask));
-            (*map)[eventStage] = imageBarrierData.dstStageMask & supportedVulkanPipelineStageMask;
+            (*map)[eventStage] |= imageBarrierData.dstStageMask & supportedVulkanPipelineStageMask;
         }
     }
 }
@@ -1959,10 +1950,13 @@ void CommandBufferHelperCommon::bufferRead(Context *context,
                                            const gl::ShaderBitSet &readShaderStages,
                                            BufferHelper *buffer)
 {
-    VkPipelineStageFlags readPipelineStageFlags =
-        ConvertShaderBitSetToVkPipelineStageFlags(readShaderStages);
-    PipelineStage firstReadStage = GetPipelineStage(readShaderStages.first());
-    bufferReadImpl(context, readAccessType, readPipelineStageFlags, firstReadStage, buffer);
+    for (const gl::ShaderType shaderType : readShaderStages)
+    {
+        PipelineStage readStage = GetPipelineStage(shaderType);
+        VkPipelineStageFlags readPipelineStageFlags =
+            kBufferMemoryBarrierData[readStage].pipelineStageFlags;
+        bufferReadImpl(context, readAccessType, readPipelineStageFlags, readStage, buffer);
+    }
 }
 
 void CommandBufferHelperCommon::bufferWriteImpl(Context *context,
@@ -1983,14 +1977,8 @@ void CommandBufferHelperCommon::bufferWriteImpl(Context *context,
         mIsAnyHostVisibleBufferWritten = true;
     }
 
-    if (context->getFeatures().useVkEventForBufferBarrier.enabled)
-    {
-        buffer->setCurrentWriteEvent(context, writeAccessType, writePipelineStageFlags, writeStage,
-                                     kBufferMemoryBarrierData[writeStage].eventStage,
-                                     &mRefCountedEvents);
-    }
-
-    buffer->setWriteQueueSerial(mQueueSerial);
+    buffer->recordWriteEvent(context, writeAccessType, writePipelineStageFlags, mQueueSerial,
+                             writeStage, &mRefCountedEvents);
 }
 
 void CommandBufferHelperCommon::bufferReadImpl(Context *context,
@@ -2003,26 +1991,9 @@ void CommandBufferHelperCommon::bufferReadImpl(Context *context,
                               &mPipelineBarriers, &mEventBarriers, &mRefCountedEventCollector);
     ASSERT(!usesBufferForWrite(*buffer));
 
-    if (context->getFeatures().useVkEventForBufferBarrier.enabled)
-    {
-        buffer->setCurrentReadEvent(context, readAccessType, readPipelineStageFlags,
-                                    kBufferMemoryBarrierData[readStage].eventStage,
-                                    &mRefCountedEvents);
-    }
-
-    if (buffer->getResourceUse() >= mQueueSerial)
-    {
-        // We should not run into situation that RP is writing to it while we are reading it here
-        ASSERT(!(buffer->getWriteResourceUse() >= mQueueSerial));
-        // A buffer could have read accessed by both renderPassCommands and
-        // outsideRenderPassCommands and there is no need to endRP or flush. In this case, the
-        // renderPassCommands' read will override the outsideRenderPassCommands' read, since its
-        // queueSerial must be greater than outsideRP.
-    }
-    else
-    {
-        buffer->setQueueSerial(mQueueSerial);
-    }
+    buffer->recordReadEvent(context, readAccessType, readPipelineStageFlags, readStage,
+                            mQueueSerial, kBufferMemoryBarrierData[readStage].eventStage,
+                            &mRefCountedEvents);
 }
 
 void CommandBufferHelperCommon::imageReadImpl(Context *context,
@@ -2702,6 +2673,10 @@ void RenderPassCommandBufferHelper::finalizeColorImageLayout(
     {
         mAttachmentOps.setLayouts(packedAttachmentIndex, imageLayout, imageLayout);
     }
+    else
+    {
+        SetBitField(mAttachmentOps[packedAttachmentIndex].finalResolveLayout, imageLayout);
+    }
 
     // Dynamic rendering does not have implicit layout transitions at render pass boundaries.  This
     // optimization is instead done by recording the necessary transition after the render pass
@@ -2711,6 +2686,8 @@ void RenderPassCommandBufferHelper::finalizeColorImageLayout(
         ASSERT(isDefault());
         ASSERT(context->getFeatures().supportsPresentation.enabled);
         ASSERT(packedAttachmentIndex == kAttachmentIndexZero);
+        // Shared present mode must not change layout
+        ASSERT(imageLayout != ImageLayout::SharedPresent);
 
         // Use finalLayout instead of extra barrier for layout change to present.  For dynamic
         // rendering, this is not possible and is done when the render pass is flushed.  However,
@@ -4045,6 +4022,7 @@ void BufferPool::initWithFlags(Renderer *renderer,
         mSize = renderer->getPreferedBufferBlockSize(memoryTypeIndex);
     }
     mHostVisible = ((memoryPropertyFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) != 0);
+    mBufferBlocks.reserve(32);
 }
 
 BufferPool::~BufferPool()
@@ -4055,10 +4033,10 @@ BufferPool::~BufferPool()
 
 void BufferPool::pruneEmptyBuffers(Renderer *renderer)
 {
-    // First try to walk through mBuffers and move empty buffers to mEmptyBuffer and remove null
+    // Walk through mBuffers and move empty buffers to mEmptyBuffer and remove null
     // pointers for allocation performance.
-    // The expectation is that we will find none needs to be compacted in most calls.
     bool needsCompact = false;
+    size_t nonEmptyBufferCount = 0;
     for (std::unique_ptr<BufferBlock> &block : mBufferBlocks)
     {
         if (block->isEmpty())
@@ -4078,20 +4056,19 @@ void BufferPool::pruneEmptyBuffers(Renderer *renderer)
             }
             needsCompact = true;
         }
+        else
+        {
+            if (needsCompact)
+            {
+                mBufferBlocks[nonEmptyBufferCount] = std::move(block);
+            }
+            nonEmptyBufferCount++;
+        }
     }
 
-    // Now remove the null pointers that left by empty buffers all at once, if any.
     if (needsCompact)
     {
-        BufferBlockPointerVector compactedBlocks;
-        for (std::unique_ptr<BufferBlock> &block : mBufferBlocks)
-        {
-            if (block)
-            {
-                compactedBlocks.push_back(std::move(block));
-            }
-        }
-        mBufferBlocks = std::move(compactedBlocks);
+        mBufferBlocks.resize(nonEmptyBufferCount);
     }
 
     // Decide how many empty buffers to keep around and trim down the excessive empty buffers. We
@@ -4524,7 +4501,10 @@ void DescriptorPoolHelper::destroyGarbage()
 }
 
 // DynamicDescriptorPool implementation.
-DynamicDescriptorPool::DynamicDescriptorPool() : mCachedDescriptorSetLayout(VK_NULL_HANDLE) {}
+DynamicDescriptorPool::DynamicDescriptorPool() : mCachedDescriptorSetLayout(VK_NULL_HANDLE)
+{
+    mDescriptorPools.reserve(32);
+}
 
 DynamicDescriptorPool::~DynamicDescriptorPool()
 {
@@ -4558,7 +4538,7 @@ angle::Result DynamicDescriptorPool::init(ErrorContext *context,
     ASSERT(setSizeCount);
     ASSERT(mDescriptorPools.empty());
     ASSERT(mCachedDescriptorSetLayout == VK_NULL_HANDLE);
-
+    mPoolSizes.reserve(setSizeCount);
     mPoolSizes.assign(setSizes, setSizes + setSizeCount);
     mCachedDescriptorSetLayout = descriptorSetLayout.getHandle();
 
@@ -4653,6 +4633,9 @@ bool DynamicDescriptorPool::evictStaleDescriptorSets(Renderer *renderer,
             // Evict it from the cache and remove it from LRU list.
             bool removed = mDescriptorSetCache.eraseDescriptorSet(it->sharedCacheKey->getDesc());
             ASSERT(removed);
+            // Invalidate the sharedCacheKey so that they could be reused.
+            it->sharedCacheKey->destroy(renderer->getDevice());
+            ASSERT(!it->sharedCacheKey->valid());
 
             // Note that erase it from LRU list will "destroy" descriptorSet. Since we
             // never actually destroy descriptorSet, it will just add to the garbage list. Here we
@@ -4901,6 +4884,13 @@ void DynamicDescriptorPool::checkAndDestroyUnusedPool(Renderer *renderer)
     }
 }
 
+// For ASSERT only
+bool DynamicDescriptorPool::hasCachedDescriptorSet(const DescriptorSetDesc &desc) const
+{
+    DescriptorSetLRUListIterator listIterator;
+    return mDescriptorSetCache.getDescriptorSet(desc, &listIterator);
+}
+
 // For testing only!
 uint32_t DynamicDescriptorPool::GetMaxSetsPerPoolForTesting()
 {
@@ -4929,7 +4919,9 @@ void DynamicDescriptorPool::SetMaxSetsPerPoolMultiplierForTesting(uint32_t maxSe
 template <typename Pool>
 DynamicallyGrowingPool<Pool>::DynamicallyGrowingPool()
     : mPoolSize(0), mCurrentPool(0), mCurrentFreeEntry(0)
-{}
+{
+    mPools.reserve(64);
+}
 
 template <typename Pool>
 DynamicallyGrowingPool<Pool>::~DynamicallyGrowingPool() = default;
@@ -5736,7 +5728,7 @@ angle::Result BufferHelper::initializeNonZeroMemory(ErrorContext *context,
         memset(mapPointer, kNonZeroInitValue, static_cast<size_t>(getSize()));
         if (!isCoherent())
         {
-            mSuballocation.flush(renderer->getDevice());
+            mSuballocation.flush(renderer);
         }
     }
 
@@ -5807,6 +5799,7 @@ void BufferHelper::destroy(Renderer *renderer)
 {
     mCurrentWriteEvent.release(renderer);
     mCurrentReadEvents.release(renderer);
+    ASSERT(mDescriptorSetCacheManager.allValidEntriesAreCached(nullptr));
     mDescriptorSetCacheManager.destroyKeys(renderer);
     unmap(renderer);
     mBufferWithUserSize.destroy(renderer->getDevice());
@@ -5839,12 +5832,6 @@ void BufferHelper::releaseImpl(Renderer *renderer)
 
     if (mSuballocation.valid())
     {
-        if (!mSuballocation.isSuballocated())
-        {
-            // Destroy cacheKeys now to avoid getting into situation that having to destroy
-            // descriptorSet from garbage collection thread.
-            mSuballocation.getBufferBlock()->releaseAllCachedDescriptorSetCacheKeys(renderer);
-        }
         renderer->collectSuballocationGarbage(mUse, std::move(mSuballocation),
                                               std::move(mBufferWithUserSize));
     }
@@ -5859,9 +5846,11 @@ void BufferHelper::releaseImpl(Renderer *renderer)
     }
 }
 
-void BufferHelper::releaseBufferAndDescriptorSetCache(Context *context)
+void BufferHelper::releaseBufferAndDescriptorSetCache(ContextVk *contextVk)
 {
-    Renderer *renderer = context->getRenderer();
+    Renderer *renderer = contextVk->getRenderer();
+
+    ASSERT(mDescriptorSetCacheManager.allValidEntriesAreCached(contextVk));
     if (renderer->hasResourceUseFinished(getResourceUse()))
     {
         mDescriptorSetCacheManager.destroyKeys(renderer);
@@ -5871,7 +5860,7 @@ void BufferHelper::releaseBufferAndDescriptorSetCache(Context *context)
         mDescriptorSetCacheManager.releaseKeys(renderer);
     }
 
-    release(context);
+    release(contextVk);
 }
 
 angle::Result BufferHelper::map(ErrorContext *context, uint8_t **ptrOut)
@@ -5894,7 +5883,7 @@ angle::Result BufferHelper::mapWithOffset(ErrorContext *context, uint8_t **ptrOu
 
 angle::Result BufferHelper::flush(Renderer *renderer, VkDeviceSize offset, VkDeviceSize size)
 {
-    mSuballocation.flush(renderer->getDevice());
+    mSuballocation.flush(renderer);
     return angle::Result::Continue;
 }
 angle::Result BufferHelper::flush(Renderer *renderer)
@@ -5904,7 +5893,7 @@ angle::Result BufferHelper::flush(Renderer *renderer)
 
 angle::Result BufferHelper::invalidate(Renderer *renderer, VkDeviceSize offset, VkDeviceSize size)
 {
-    mSuballocation.invalidate(renderer->getDevice());
+    mSuballocation.invalidate(renderer);
     return angle::Result::Continue;
 }
 angle::Result BufferHelper::invalidate(Renderer *renderer)
@@ -5954,76 +5943,94 @@ void BufferHelper::releaseToExternal(DeviceQueueIndex externalQueueIndex,
 
 void BufferHelper::recordReadBarrier(Context *context,
                                      VkAccessFlags readAccessType,
-                                     VkPipelineStageFlags readStage,
+                                     VkPipelineStageFlags readPipelineStageFlags,
                                      PipelineStage stageIndex,
                                      PipelineBarrierArray *pipelineBarriers,
                                      EventBarrierArray *eventBarriers,
                                      RefCountedEventCollector *eventCollector)
 {
-    Renderer *renderer = context->getRenderer();
-
-    // If there was a prior write and we are making a read that is either a new access type or
-    // from a new stage, we need a barrier
-    if (mCurrentWriteAccess != 0 && (((mCurrentReadAccess & readAccessType) != readAccessType) ||
-                                     ((mCurrentReadStages & readStage) != readStage)))
+    // If the type of read already tracked by mCurrentReadEvents, it means we must already inserted
+    // the barrier when mCurrentReadEvents is set. No new barrier is needed.
+    EventStage eventStage = kBufferMemoryBarrierData[stageIndex].eventStage;
+    if (mCurrentReadEvents.hasEventAndAccess(eventStage, readAccessType))
     {
-        VkPipelineStageFlags writeStages = mCurrentWriteStages;
-        // First wait for write events if any
-        if (mCurrentWriteEvent.valid())
-        {
-            const VkPipelineStageFlags srcStageFlags =
-                renderer->getPipelineStageMask(mCurrentWriteEvent.getEventStage());
-            eventBarriers->addEventMemoryBarrier(renderer, mCurrentWriteEvent, mCurrentWriteAccess,
-                                                 readStage, readAccessType);
-            writeStages &= ~srcStageFlags;
-        }
-
-        // Now wait for extra write that aren't captured by mCurrentWriteEvent
-        if (writeStages != 0)
-        {
-            pipelineBarriers->mergeMemoryBarrier(stageIndex, writeStages, readStage,
-                                                 mCurrentWriteAccess, readAccessType);
-        }
+        ASSERT((context->getRenderer()->getPipelineStageMask(eventStage) &
+                readPipelineStageFlags) == readPipelineStageFlags);
+        ASSERT((mCurrentReadEvents.getAccessFlags(eventStage) & readAccessType) == readAccessType);
+        return;
     }
 
-    // Accumulate new read usage.
-    mCurrentReadAccess |= readAccessType;
-    mCurrentReadStages |= readStage;
+    // If the type of read already tracked by mCurrentReadAccess, it means we must already inserted
+    // the barrier when mCurrentReadAccess is set. No new barrier is needed.
+    if ((mCurrentReadAccess & readAccessType) == readAccessType &&
+        (mCurrentReadStages & readPipelineStageFlags) == readPipelineStageFlags)
+    {
+        return;
+    }
+
+    // Barrier against prior write VkEvent.
+    if (mCurrentWriteEvent.valid())
+    {
+        eventBarriers->addEventMemoryBarrier(context->getRenderer(), mCurrentWriteEvent.getEvent(),
+                                             mCurrentWriteEvent.getAccessFlags(),
+                                             readPipelineStageFlags, readAccessType);
+    }
+
+    // Barrier against prior access that not tracked by VkEvent using pipelineBarrier.
+    if (mCurrentWriteAccess != 0)
+    {
+        pipelineBarriers->mergeMemoryBarrier(stageIndex, mCurrentWriteStages,
+                                             readPipelineStageFlags, mCurrentWriteAccess,
+                                             readAccessType);
+    }
 }
 
-void BufferHelper::setCurrentReadEvent(Context *context,
-                                       VkAccessFlags readAccessType,
-                                       VkPipelineStageFlags readPipelineStageFlags,
-                                       EventStage eventStage,
-                                       RefCountedEventArray *refCountedEventArray)
+void BufferHelper::recordReadEvent(Context *context,
+                                   VkAccessFlags readAccessType,
+                                   VkPipelineStageFlags readPipelineStageFlags,
+                                   PipelineStage readStage,
+                                   const QueueSerial &queueSerial,
+                                   EventStage eventStage,
+                                   RefCountedEventArray *refCountedEventArray)
 {
-    ASSERT(context->getFeatures().useVkEventForBufferBarrier.enabled);
-
-    // VkCmdSetEvent can remove the unnecessary GPU pipeline bubble that comes from false dependency
-    // between fragment and vertex/transfer/compute stages. But it also comes with higher overhead.
-    // In order to strike the balance, right now we only track it with VkEvent if it ever written by
-    // transform feedback.
-    if (mTransformFeedbackWriteHeuristicBits.none())
+    bool useVkEvent = false;
+    if (context->getFeatures().useVkEventForBufferBarrier.enabled &&
+        eventStage != EventStage::InvalidEnum)
     {
-        return;
+        // VkCmdSetEvent can remove the unnecessary GPU pipeline bubble that comes from false
+        // dependency between fragment and vertex/transfer/compute stages. But it also comes with
+        // higher overhead. In order to strike the balance, right now we only track it with VkEvent
+        // if it ever written by transform feedback.
+        useVkEvent = mTransformFeedbackWriteHeuristicBits.any();
     }
 
-    // Limit to pipeline stages that transform feedback buffer likely will be used.
-    if (eventStage == EventStage::InvalidEnum)
+    if (useVkEvent && refCountedEventArray->initEventAtStage(context, eventStage))
     {
-        return;
+        // Replace the mCurrentReadEvents so that it tracks the current read so that we can
+        // waitEvent later.
+        mCurrentReadEvents.replaceEventAtStage(
+            context, eventStage, refCountedEventArray->getEvent(eventStage), readAccessType);
+    }
+    else
+    {
+        // Accumulate new read usage to be used in pipelineBarrier.
+        mCurrentReadAccess |= readAccessType;
+        mCurrentReadStages |= readPipelineStageFlags;
     }
 
-    if (!refCountedEventArray->getEvent(eventStage).valid() &&
-        !refCountedEventArray->initEventAtStage(context, eventStage))
+    if (getResourceUse() >= queueSerial)
     {
-        // If VkEvent creation fail, we fallback to pipelineBarrier
-        return;
+        // We should not run into situation that RP is writing to it while we are reading it here
+        ASSERT(!(getWriteResourceUse() >= queueSerial));
+        // A buffer could have read accessed by both renderPassCommands and
+        // outsideRenderPassCommands and there is no need to endRP or flush. In this case, the
+        // renderPassCommands' read will override the outsideRenderPassCommands' read, since its
+        // queueSerial must be greater than outsideRP.
     }
-
-    // Replace the mCurrentReadEvents so that it tracks the current read.
-    mCurrentReadEvents.replaceEventAtStage(
-        context, eventStage, refCountedEventArray->getEvent(eventStage), readAccessType);
+    else
+    {
+        setQueueSerial(queueSerial);
+    }
 }
 
 void BufferHelper::recordWriteBarrier(Context *context,
@@ -6037,32 +6044,39 @@ void BufferHelper::recordWriteBarrier(Context *context,
 {
     Renderer *renderer = context->getRenderer();
 
-    // We don't need to check mCurrentReadStages here since if it is not zero,
-    // mCurrentReadAccess must not be zero as well. stage is finer grain than accessType.
-    ASSERT((!mCurrentReadStages && !mCurrentReadAccess) ||
-           (mCurrentReadStages && mCurrentReadAccess));
-
-    if (mCurrentReadAccess != 0 || mCurrentWriteAccess != 0)
+    // Barrier against prior read VkEvents.
+    if (!mCurrentReadEvents.empty())
     {
-        // First process event waits.
-        if (!mCurrentReadEvents.empty())
+        // If we already have a event in the same command buffer, fall back to pipeline. Otherwise
+        // you may run into wait an event that has not been set. This may be can be removed once we
+        // fix https://issuetracker.google.com/392968868
+        if (usedByCommandBuffer(queueSerial))
+        {
+            for (EventStage eventStage : mCurrentReadEvents.getBitMask())
+            {
+                mCurrentReadStages |= renderer->getPipelineStageMask(eventStage);
+                mCurrentReadAccess |= mCurrentReadEvents.getAccessFlags(eventStage);
+            }
+        }
+        else
         {
             for (EventStage eventStage : mCurrentReadEvents.getBitMask())
             {
                 const RefCountedEvent &waitEvent = mCurrentReadEvents.getEvent(eventStage);
                 const VkAccessFlags srcAccess    = mCurrentReadEvents.getAccessFlags(eventStage);
-                const VkPipelineStageFlags srcStageFlags =
-                    renderer->getPipelineStageMask(eventStage);
                 eventBarriers->addEventMemoryBarrier(renderer, waitEvent, srcAccess, writeStage,
                                                      writeAccessType);
-                // Note that VkPipelineStageFlags are finer grain than VkAccessFlags. Dont remove
-                // mCurrentReadAccess bits here in case we still need it for pipelineBarriers for
-                // some other stages.
-                mCurrentReadStages &= ~srcStageFlags;
             }
-            // Garbage collect the event, which tracks GPU completion automatically.
-            mCurrentReadEvents.releaseToEventCollector(eventCollector);
         }
+        // Garbage collect the event, which tracks GPU completion automatically.
+        mCurrentReadEvents.releaseToEventCollector(eventCollector);
+    }
+
+    // Barrier against prior write VkEvent.
+    if (mCurrentWriteEvent.valid())
+    {
+        const VkPipelineStageFlags srcStageFlags =
+            renderer->getPipelineStageMask(mCurrentWriteEvent.getEventStage());
 
         // If we already have a write event in the same command buffer, fall back to pipeline
         // barrier. Using VkEvent to track multiple writes either requires tracking multiple write
@@ -6070,23 +6084,29 @@ void BufferHelper::recordWriteBarrier(Context *context,
         // stage bits. Both are a bit complex. Without evidence showing we are hitting performance
         // issue in real world situation, this will just use pipeline barriers to track extra stages
         // that not captured by mCurrentWriteEvent.
-        if (mCurrentWriteEvent.valid() && writtenByCommandBuffer(queueSerial))
+        if (writtenByCommandBuffer(queueSerial))
         {
-            eventCollector->emplace_back(std::move(mCurrentWriteEvent));
+            mCurrentWriteStages |= srcStageFlags;
+            mCurrentWriteAccess |= mCurrentWriteEvent.getAccessFlags();
         }
-
-        if (mCurrentWriteEvent.valid())
+        else
         {
-            const VkPipelineStageFlags srcStageFlags =
-                renderer->getPipelineStageMask(mCurrentWriteEvent.getEventStage());
-            eventBarriers->addEventMemoryBarrier(context->getRenderer(), mCurrentWriteEvent,
-                                                 mCurrentWriteAccess, writeStage, writeAccessType);
-            // Garbage collect the event, which tracks GPU completion automatically.
-            eventCollector->emplace_back(std::move(mCurrentWriteEvent));
-            mCurrentWriteStages &= ~srcStageFlags;
-            mCurrentWriteAccess = 0;
+            eventBarriers->addEventMemoryBarrier(
+                context->getRenderer(), mCurrentWriteEvent.getEvent(),
+                mCurrentWriteEvent.getAccessFlags(), writeStage, writeAccessType);
         }
+        // Garbage collect the event, which tracks GPU completion automatically.
+        mCurrentWriteEvent.releaseToEventCollector(eventCollector);
+    }
 
+    // We don't need to check mCurrentReadStages here since if it is not zero,
+    // mCurrentReadAccess must not be zero as well. stage is finer grain than accessType.
+    ASSERT((!mCurrentReadStages && !mCurrentReadAccess) ||
+           (mCurrentReadStages && mCurrentReadAccess));
+
+    // Barrier against prior access that not tracked by VkEvent using pipelineBarrier.
+    if (mCurrentReadAccess != 0 || mCurrentWriteAccess != 0)
+    {
         // If there are more pipeline stage bits not captured by eventBarrier, use pipelineBarrier.
         VkPipelineStageFlags srcStageMask = mCurrentWriteStages | mCurrentReadStages;
         if (srcStageMask)
@@ -6094,60 +6114,60 @@ void BufferHelper::recordWriteBarrier(Context *context,
             pipelineBarriers->mergeMemoryBarrier(stageIndex, srcStageMask, writeStage,
                                                  mCurrentWriteAccess, writeAccessType);
         }
-        mCurrentReadStages = 0;
-        mCurrentReadAccess = 0;
-    }
 
-    // Reset usages on the new write.
-    mCurrentWriteAccess = writeAccessType;
-    mCurrentWriteStages = writeStage;
+        mCurrentReadStages  = 0;
+        mCurrentReadAccess  = 0;
+        mCurrentWriteStages = 0;
+        mCurrentWriteAccess = 0;
+    }
 }
 
-void BufferHelper::setCurrentWriteEvent(Context *context,
-                                        VkAccessFlags writeAccessType,
-                                        VkPipelineStageFlags writePipelineStageFlags,
-                                        PipelineStage writeStage,
-                                        EventStage eventStage,
-                                        RefCountedEventArray *refCountedEventArray)
+void BufferHelper::recordWriteEvent(Context *context,
+                                    VkAccessFlags writeAccessType,
+                                    VkPipelineStageFlags writePipelineStageFlags,
+                                    const QueueSerial &writeQueueSerial,
+                                    PipelineStage writeStage,
+                                    RefCountedEventArray *refCountedEventArray)
 {
-    ASSERT(context->getFeatures().useVkEventForBufferBarrier.enabled);
-    ASSERT(mCurrentReadEvents.empty());
+    EventStage eventStage = kBufferMemoryBarrierData[writeStage].eventStage;
+    bool useVkEvent       = false;
 
-    updatePipelineStageWriteHistory(writeStage);
-
-    // VkCmdSetEvent can remove the unnecessary GPU pipeline bubble that comes from false dependency
-    // between fragment and vertex/transfer/compute stages. But it also comes with higher overhead.
-    // In order to strike the balance, right now we only track it with VkEvent if it ever written by
-    // transform feedback.
-    if (mTransformFeedbackWriteHeuristicBits.none())
+    if (context->getFeatures().useVkEventForBufferBarrier.enabled &&
+        eventStage != EventStage::InvalidEnum)
     {
-        return;
+        ASSERT(mCurrentReadEvents.empty());
+        updatePipelineStageWriteHistory(writeStage);
+
+        // VkCmdSetEvent can remove the unnecessary GPU pipeline bubble that comes from false
+        // dependency between fragment and vertex/transfer/compute stages. But it also comes with
+        // higher overhead. In order to strike the balance, right now we only track it with VkEvent
+        // if it ever written by transform feedback.
+        useVkEvent = mTransformFeedbackWriteHeuristicBits.any();
+
+        // We only track one write event. In case of multiple writes like write from different
+        // shader stages in the same render pass, only the first write is tracked by event,
+        // additional writes will still be tracked by pipelineBarriers.
+        if (mCurrentWriteEvent.valid())
+        {
+            useVkEvent = false;
+        }
     }
 
-    // Limit to pipeline stages that transform feedback buffer likely will be used.
-    if (eventStage == EventStage::InvalidEnum)
+    if (useVkEvent && refCountedEventArray->initEventAtStage(context, eventStage))
     {
-        return;
+        // Copy the event to mCurrentEvent so that we can wait for it in future. This will add extra
+        // refcount to the underlying VkEvent.
+        mCurrentWriteEvent.setEventAndAccessFlags(refCountedEventArray->getEvent(eventStage),
+                                                  writeAccessType);
+    }
+    else
+    {
+        // Reset usages on the new write to be used by pipelineBarrier later.
+        mCurrentWriteAccess = writeAccessType;
+        mCurrentWriteStages = writePipelineStageFlags;
     }
 
-    // We only track one write event. In case of multiple writes like write from different shader
-    // stages in the same render pass, only the first write is tracked by event, additional writes
-    // will still be tracked by pipelineBarriers.
-    if (mCurrentWriteEvent.valid())
-    {
-        return;
-    }
-
-    if (!refCountedEventArray->getEvent(eventStage).valid() &&
-        !refCountedEventArray->initEventAtStage(context, eventStage))
-    {
-        // If VkEvent creation fail, we fallback to pipelineBarrier
-        return;
-    }
-
-    // Copy the event to mCurrentEvent so that we can wait for it in future. This will add extra
-    // refcount to the underlying VkEvent.
-    mCurrentWriteEvent = refCountedEventArray->getEvent(eventStage);
+    setWriteQueueSerial(writeQueueSerial);
 }
 
 void BufferHelper::fillWithColor(const angle::Color<uint8_t> &color,
@@ -6251,6 +6271,8 @@ angle::Result InitMappableDeviceMemory(ErrorContext *context,
 ImageHelper::ImageHelper()
 {
     resetCachedProperties();
+    // Reserve reasonable amount of space to avoid storage reallocation.
+    mSubresourceUpdates.reserve(12);
 }
 
 ImageHelper::~ImageHelper()
@@ -6499,7 +6521,7 @@ angle::Result ImageHelper::copyToBufferOneOff(ErrorContext *context,
                             renderer->getQueueFamilyIndex(), &commandBuffer,
                             &acquireNextImageSemaphore);
     commandBuffer.copyBufferToImage(stagingBuffer->getBuffer().getHandle(), getImage(),
-                                    getCurrentLayout(renderer), 1, &copyRegion);
+                                    getCurrentLayout(), 1, &copyRegion);
     ANGLE_VK_TRY(context, commandBuffer.end());
 
     QueueSerial submitQueueSerial;
@@ -6515,7 +6537,8 @@ angle::Result ImageHelper::initMSAASwapchain(ErrorContext *context,
                                              gl::TextureType textureType,
                                              const VkExtent3D &extents,
                                              bool rotatedAspectRatio,
-                                             const Format &format,
+                                             angle::FormatID intendedFormatID,
+                                             angle::FormatID actualFormatID,
                                              GLint samples,
                                              VkImageUsageFlags usage,
                                              gl::LevelIndex firstLevel,
@@ -6524,11 +6547,10 @@ angle::Result ImageHelper::initMSAASwapchain(ErrorContext *context,
                                              bool isRobustResourceInitEnabled,
                                              bool hasProtectedContent)
 {
-    ANGLE_TRY(initExternal(context, textureType, extents, format.getIntendedFormatID(),
-                           format.getActualRenderableImageFormatID(), samples, usage,
-                           kVkImageCreateFlagsNone, ImageLayout::Undefined, nullptr, firstLevel,
-                           mipLevels, layerCount, isRobustResourceInitEnabled, hasProtectedContent,
-                           YcbcrConversionDesc{}, nullptr));
+    ANGLE_TRY(initExternal(context, textureType, extents, intendedFormatID, actualFormatID, samples,
+                           usage, kVkImageCreateFlagsNone, ImageLayout::Undefined, nullptr,
+                           firstLevel, mipLevels, layerCount, isRobustResourceInitEnabled,
+                           hasProtectedContent, YcbcrConversionDesc{}, nullptr));
     if (rotatedAspectRatio)
     {
         std::swap(mExtents.width, mExtents.height);
@@ -6649,7 +6671,7 @@ angle::Result ImageHelper::initExternal(ErrorContext *context,
     imageInfo.sharingMode           = VK_SHARING_MODE_EXCLUSIVE;
     imageInfo.queueFamilyIndexCount = 0;
     imageInfo.pQueueFamilyIndices   = nullptr;
-    imageInfo.initialLayout         = ConvertImageLayoutToVkImageLayout(renderer, initialLayout);
+    imageInfo.initialLayout         = ConvertImageLayoutToVkImageLayout(initialLayout);
 
     mCurrentLayout               = initialLayout;
     mCurrentDeviceQueueIndex     = kInvalidDeviceQueueIndex;
@@ -6812,21 +6834,36 @@ void ImageHelper::deriveExternalImageTiling(const void *createInfoChain)
 
 void ImageHelper::releaseImage(Renderer *renderer)
 {
-    // mDeviceMemory and mVmaAllocation should not be valid at the same time.
-    ASSERT(!mDeviceMemory.valid() || !mVmaAllocation.valid());
-    if (mDeviceMemory.valid())
+    if (mImage.valid())
     {
-        renderer->onMemoryDealloc(mMemoryAllocationType, mAllocationSize, mMemoryTypeIndex,
-                                  mDeviceMemory.getHandle());
+        GarbageObjects garbageObjects;
+        garbageObjects.reserve(2);
+        garbageObjects.emplace_back(GarbageObject::Get(&mImage));
+
+        // mDeviceMemory and mVmaAllocation should not be valid at the same time.
+        ASSERT(!mDeviceMemory.valid() || !mVmaAllocation.valid());
+        if (mDeviceMemory.valid())
+        {
+            renderer->onMemoryDealloc(mMemoryAllocationType, mAllocationSize, mMemoryTypeIndex,
+                                      mDeviceMemory.getHandle());
+            garbageObjects.emplace_back(GarbageObject::Get(&mDeviceMemory));
+        }
+        if (mVmaAllocation.valid())
+        {
+            renderer->onMemoryDealloc(mMemoryAllocationType, mAllocationSize, mMemoryTypeIndex,
+                                      mVmaAllocation.getHandle());
+            garbageObjects.emplace_back(GarbageObject::Get(&mVmaAllocation));
+        }
+        renderer->collectGarbage(mUse, std::move(garbageObjects));
     }
-    if (mVmaAllocation.valid())
+    else
     {
-        renderer->onMemoryDealloc(mMemoryAllocationType, mAllocationSize, mMemoryTypeIndex,
-                                  mVmaAllocation.getHandle());
+        ASSERT(!mDeviceMemory.valid());
+        ASSERT(!mVmaAllocation.valid());
     }
+
     mCurrentEvent.release(renderer);
     mLastNonShaderReadOnlyEvent.release(renderer);
-    renderer->collectGarbage(mUse, &mImage, &mDeviceMemory, &mVmaAllocation);
     mViewFormats.clear();
     mUse.reset();
     mImageSerial          = kInvalidImageSerial;
@@ -6861,11 +6898,12 @@ void ImageHelper::releaseStagedUpdates(Renderer *renderer)
     ASSERT(validateSubresourceUpdateRefCountsConsistent());
 
     // Remove updates that never made it to the texture.
-    for (std::vector<SubresourceUpdate> &levelUpdates : mSubresourceUpdates)
+    for (SubresourceUpdates &levelUpdates : mSubresourceUpdates)
     {
-        for (SubresourceUpdate &update : levelUpdates)
+        while (!levelUpdates.empty())
         {
-            update.release(renderer);
+            levelUpdates.front().release(renderer);
+            levelUpdates.pop_front();
         }
     }
 
@@ -7002,8 +7040,7 @@ angle::Result ImageHelper::initializeNonZeroMemory(ErrorContext *context,
             clearValue.uint32[2] = kInitValue;
             clearValue.uint32[3] = kInitValue;
 
-            commandBuffer.clearColorImage(mImage, getCurrentLayout(renderer), clearValue, 1,
-                                          &subresource);
+            commandBuffer.clearColorImage(mImage, getCurrentLayout(), clearValue, 1, &subresource);
         }
         else
         {
@@ -7011,7 +7048,7 @@ angle::Result ImageHelper::initializeNonZeroMemory(ErrorContext *context,
             clearValue.depth   = kInitValueFloat;
             clearValue.stencil = kInitValue;
 
-            commandBuffer.clearDepthStencilImage(mImage, getCurrentLayout(renderer), clearValue, 1,
+            commandBuffer.clearDepthStencilImage(mImage, getCurrentLayout(), clearValue, 1,
                                                  &subresource);
         }
     }
@@ -7439,7 +7476,7 @@ angle::Result ImageHelper::initStaging(ErrorContext *context,
     imageInfo.sharingMode           = VK_SHARING_MODE_EXCLUSIVE;
     imageInfo.queueFamilyIndexCount = 0;
     imageInfo.pQueueFamilyIndices   = nullptr;
-    imageInfo.initialLayout         = getCurrentLayout(context->getRenderer());
+    imageInfo.initialLayout         = getCurrentLayout();
 
     ANGLE_VK_TRY(context, mImage.init(context->getDevice(), imageInfo));
 
@@ -7564,9 +7601,9 @@ void ImageHelper::setCurrentImageLayout(Renderer *renderer, ImageLayout newLayou
     mCurrentLayout = newLayout;
 }
 
-VkImageLayout ImageHelper::getCurrentLayout(Renderer *renderer) const
+VkImageLayout ImageHelper::getCurrentLayout() const
 {
-    return ConvertImageLayoutToVkImageLayout(renderer, mCurrentLayout);
+    return ConvertImageLayoutToVkImageLayout(mCurrentLayout);
 }
 
 gl::Extents ImageHelper::getLevelExtents(LevelIndex levelVk) const
@@ -7630,6 +7667,11 @@ void ImageHelper::resetRenderPassUsageFlags()
 bool ImageHelper::hasRenderPassUsageFlag(RenderPassUsage flag) const
 {
     return mRenderPassUsageFlags.test(flag);
+}
+
+bool ImageHelper::hasAnyRenderPassUsageFlags() const
+{
+    return mRenderPassUsageFlags.any();
 }
 
 bool ImageHelper::usedByCurrentRenderPassAsAttachmentAndSampler(
@@ -7842,8 +7884,8 @@ ANGLE_INLINE void ImageHelper::initImageMemoryBarrierStruct(
     imageMemoryBarrier->sType         = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
     imageMemoryBarrier->srcAccessMask = transitionFrom.srcAccessMask;
     imageMemoryBarrier->dstAccessMask = transitionTo.dstAccessMask;
-    imageMemoryBarrier->oldLayout     = ConvertImageLayoutToVkImageLayout(renderer, mCurrentLayout);
-    imageMemoryBarrier->newLayout     = ConvertImageLayoutToVkImageLayout(renderer, newLayout);
+    imageMemoryBarrier->oldLayout           = ConvertImageLayoutToVkImageLayout(mCurrentLayout);
+    imageMemoryBarrier->newLayout           = ConvertImageLayoutToVkImageLayout(newLayout);
     imageMemoryBarrier->srcQueueFamilyIndex = mCurrentDeviceQueueIndex.familyIndex();
     imageMemoryBarrier->dstQueueFamilyIndex = newQueueFamilyIndex;
     imageMemoryBarrier->image               = mImage.getHandle();
@@ -8159,9 +8201,6 @@ void ImageHelper::updateLayoutAndBarrier(Context *context,
         // No layout change, only memory barrier is required
         if (barrierType == BarrierType::Event)
         {
-            // This should come down as WAW without layout change, dstStageMask should be the same
-            // as event's stageMask. Otherwise you should get into addEventImageBarrier.
-            ASSERT(mCurrentEvent.getPipelineStageMask(renderer) == layoutData.dstStageMask);
             eventBarriers->addEventMemoryBarrier(renderer, mCurrentEvent, layoutData.dstAccessMask,
                                                  layoutData.dstStageMask, layoutData.dstAccessMask);
             // Garbage collect the event, which tracks GPU completion automatically.
@@ -8405,7 +8444,7 @@ void ImageHelper::clearColor(Renderer *renderer,
         range.layerCount = 1;
     }
 
-    commandBuffer->clearColorImage(mImage, getCurrentLayout(renderer), color, 1, &range);
+    commandBuffer->clearColorImage(mImage, getCurrentLayout(), color, 1, &range);
 }
 
 void ImageHelper::clearDepthStencil(Renderer *renderer,
@@ -8436,8 +8475,7 @@ void ImageHelper::clearDepthStencil(Renderer *renderer,
         range.layerCount = 1;
     }
 
-    commandBuffer->clearDepthStencilImage(mImage, getCurrentLayout(renderer), depthStencil, 1,
-                                          &range);
+    commandBuffer->clearDepthStencilImage(mImage, getCurrentLayout(), depthStencil, 1, &range);
 }
 
 void ImageHelper::clear(Renderer *renderer,
@@ -8509,8 +8547,8 @@ void ImageHelper::Copy(Renderer *renderer,
 {
     ASSERT(commandBuffer->valid() && srcImage->valid() && dstImage->valid());
 
-    ASSERT(srcImage->getCurrentLayout(renderer) == VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
-    ASSERT(dstImage->getCurrentLayout(renderer) == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+    ASSERT(srcImage->getCurrentLayout() == VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
+    ASSERT(dstImage->getCurrentLayout() == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
 
     VkImageCopy region    = {};
     region.srcSubresource = srcSubresource;
@@ -8525,9 +8563,8 @@ void ImageHelper::Copy(Renderer *renderer,
     region.extent.height  = copySize.height;
     region.extent.depth   = copySize.depth;
 
-    commandBuffer->copyImage(srcImage->getImage(), srcImage->getCurrentLayout(renderer),
-                             dstImage->getImage(), dstImage->getCurrentLayout(renderer), 1,
-                             &region);
+    commandBuffer->copyImage(srcImage->getImage(), srcImage->getCurrentLayout(),
+                             dstImage->getImage(), dstImage->getCurrentLayout(), 1, &region);
 }
 
 // static
@@ -8549,14 +8586,10 @@ angle::Result ImageHelper::CopyImageSubData(const gl::Context *context,
     ContextVk *contextVk = GetImpl(context);
     Renderer *renderer   = contextVk->getRenderer();
 
-    VkImageTiling srcTilingMode  = srcImage->getTilingMode();
-    VkImageTiling destTilingMode = dstImage->getTilingMode();
-
     const gl::LevelIndex srcLevelGL = gl::LevelIndex(srcLevel);
     const gl::LevelIndex dstLevelGL = gl::LevelIndex(dstLevel);
 
-    if (CanCopyWithTransferForCopyImage(renderer, srcImage, srcTilingMode, dstImage,
-                                        destTilingMode))
+    if (CanCopyWithTransferForCopyImage(renderer, srcImage, dstImage))
     {
         bool isSrc3D                         = srcImage->getType() == VK_IMAGE_TYPE_3D;
         bool isDst3D                         = dstImage->getType() == VK_IMAGE_TYPE_3D;
@@ -8605,14 +8638,13 @@ angle::Result ImageHelper::CopyImageSubData(const gl::Context *context,
         ANGLE_TRY(contextVk->getOutsideRenderPassCommandBuffer(access, &commandBuffer));
 
         ASSERT(srcImage->valid() && dstImage->valid());
-        ASSERT(srcImage->getCurrentLayout(renderer) == VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL ||
-               srcImage->getCurrentLayout(renderer) == VK_IMAGE_LAYOUT_GENERAL);
-        ASSERT(dstImage->getCurrentLayout(renderer) == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL ||
-               dstImage->getCurrentLayout(renderer) == VK_IMAGE_LAYOUT_GENERAL);
+        ASSERT(srcImage->getCurrentLayout() == VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL ||
+               srcImage->getCurrentLayout() == VK_IMAGE_LAYOUT_GENERAL);
+        ASSERT(dstImage->getCurrentLayout() == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL ||
+               dstImage->getCurrentLayout() == VK_IMAGE_LAYOUT_GENERAL);
 
-        commandBuffer->copyImage(srcImage->getImage(), srcImage->getCurrentLayout(renderer),
-                                 dstImage->getImage(), dstImage->getCurrentLayout(renderer), 1,
-                                 &region);
+        commandBuffer->copyImage(srcImage->getImage(), srcImage->getCurrentLayout(),
+                                 dstImage->getImage(), dstImage->getCurrentLayout(), 1, &region);
     }
     else if (!srcImage->getIntendedFormat().isBlock && !dstImage->getIntendedFormat().isBlock)
     {
@@ -8688,7 +8720,7 @@ angle::Result ImageHelper::generateMipmapsWithBlit(ContextVk *contextVk,
         if (mipLevel > baseLevel && mipLevel <= maxLevel)
         {
             barrier.subresourceRange.baseMipLevel = mipLevel.get() - 1;
-            barrier.oldLayout                     = getCurrentLayout(renderer);
+            barrier.oldLayout                     = getCurrentLayout();
             barrier.newLayout                     = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
             barrier.srcAccessMask                 = VK_ACCESS_TRANSFER_WRITE_BIT;
             barrier.dstAccessMask                 = VK_ACCESS_TRANSFER_READ_BIT;
@@ -8776,7 +8808,7 @@ void ImageHelper::removeSingleSubresourceStagedUpdates(ContextVk *contextVk,
     mCurrentSingleClearValue.reset();
 
     // Find any staged updates for this index and remove them from the pending list.
-    std::vector<SubresourceUpdate> *levelUpdates = getLevelUpdates(levelIndexGL);
+    SubresourceUpdates *levelUpdates = getLevelUpdates(levelIndexGL);
     if (levelUpdates == nullptr)
     {
         return;
@@ -8809,7 +8841,7 @@ void ImageHelper::removeSingleStagedClearAfterInvalidate(gl::LevelIndex levelInd
     // ClearAfterInvalidate update pending to this subresource, and that's a color clear due to
     // emulated channels after invalidate.  This function removes that update.
 
-    std::vector<SubresourceUpdate> *levelUpdates = getLevelUpdates(levelIndexGL);
+    SubresourceUpdates *levelUpdates = getLevelUpdates(levelIndexGL);
     if (levelUpdates == nullptr)
     {
         return;
@@ -8838,7 +8870,7 @@ void ImageHelper::removeStagedUpdates(ErrorContext *context,
     // Remove all updates to levels [start, end].
     for (gl::LevelIndex level = levelGLStart; level <= levelGLEnd; ++level)
     {
-        std::vector<SubresourceUpdate> *levelUpdates = getLevelUpdates(level);
+        SubresourceUpdates *levelUpdates = getLevelUpdates(level);
         if (levelUpdates == nullptr)
         {
             ASSERT(static_cast<size_t>(level.get()) >= mSubresourceUpdates.size());
@@ -9218,7 +9250,7 @@ angle::Result ImageHelper::updateSubresourceOnHost(ErrorContext *context,
         mCurrentLayout = ImageLayout::HostCopy;
     }
     else if (mCurrentLayout != ImageLayout::HostCopy &&
-             !IsAnyLayout(getCurrentLayout(renderer), hostImageCopyProperties.pCopyDstLayouts,
+             !IsAnyLayout(getCurrentLayout(), hostImageCopyProperties.pCopyDstLayouts,
                           hostImageCopyProperties.copyDstLayoutCount))
     {
         return angle::Result::Continue;
@@ -9238,8 +9270,7 @@ angle::Result ImageHelper::updateSubresourceOnHost(ErrorContext *context,
     // copy is done.
     auto doCopy = [context, image = mImage.getHandle(), source, memoryRowLength, memoryImageHeight,
                    aspectMask, levelVk = toVkLevel(updateLevelGL), isArray, baseArrayLayer,
-                   layerCount, offset, glExtents,
-                   layout = getCurrentLayout(renderer)](void *resultOut) {
+                   layerCount, offset, glExtents, layout = getCurrentLayout()](void *resultOut) {
         ANGLE_TRACE_EVENT0("gpu.angle", "Upload image data on host");
         ANGLE_UNUSED_VARIABLE(resultOut);
 
@@ -9308,7 +9339,7 @@ angle::Result ImageHelper::reformatStagedBufferUpdates(ContextVk *contextVk,
     const gl::InternalFormat &dstFormatInfo =
         gl::GetSizedInternalFormatInfo(dstFormat.glInternalFormat);
 
-    for (std::vector<SubresourceUpdate> &levelUpdates : mSubresourceUpdates)
+    for (SubresourceUpdates &levelUpdates : mSubresourceUpdates)
     {
         for (SubresourceUpdate &update : levelUpdates)
         {
@@ -9443,6 +9474,8 @@ void ImageHelper::onWrite(gl::LevelIndex levelStart,
 
     // Mark contents of the given subresource as defined.
     setContentDefined(toVkLevel(levelStart), levelCount, layerStart, layerCount, aspectFlags);
+
+    setSubresourcesWrittenSinceBarrier(levelStart, levelCount, layerStart, layerCount);
 }
 
 bool ImageHelper::hasSubresourceDefinedContent(gl::LevelIndex level,
@@ -9476,16 +9509,41 @@ bool ImageHelper::hasSubresourceDefinedStencilContent(gl::LevelIndex level,
         .any();
 }
 
+void ImageHelper::invalidateEntireLevelContent(vk::ErrorContext *context, gl::LevelIndex level)
+{
+    invalidateSubresourceContentImpl(
+        context, level, 0, mLayerCount,
+        static_cast<VkImageAspectFlagBits>(getAspectFlags() & ~VK_IMAGE_ASPECT_STENCIL_BIT),
+        &getLevelContentDefined(toVkLevel(level)), nullptr, nullptr);
+}
+
 void ImageHelper::invalidateSubresourceContent(ContextVk *contextVk,
                                                gl::LevelIndex level,
                                                uint32_t layerIndex,
                                                uint32_t layerCount,
                                                bool *preferToKeepContentsDefinedOut)
 {
-    invalidateSubresourceContentImpl(
-        contextVk, level, layerIndex, layerCount,
-        static_cast<VkImageAspectFlagBits>(getAspectFlags() & ~VK_IMAGE_ASPECT_STENCIL_BIT),
-        &getLevelContentDefined(toVkLevel(level)), preferToKeepContentsDefinedOut);
+    const VkImageAspectFlagBits aspect =
+        static_cast<VkImageAspectFlagBits>(getAspectFlags() & ~VK_IMAGE_ASPECT_STENCIL_BIT);
+    bool layerLimitReached = false;
+    invalidateSubresourceContentImpl(contextVk, level, layerIndex, layerCount, aspect,
+                                     &getLevelContentDefined(toVkLevel(level)),
+                                     preferToKeepContentsDefinedOut, &layerLimitReached);
+    if (layerLimitReached)
+    {
+        const char *aspectName = (aspect == VK_IMAGE_ASPECT_DEPTH_BIT ? "depth" : "color");
+        ANGLE_VK_PERF_WARNING(
+            contextVk, GL_DEBUG_SEVERITY_LOW,
+            "glInvalidateFramebuffer (%s) ineffective on attachments with layer >= 8", aspectName);
+    }
+}
+
+void ImageHelper::invalidateEntireLevelStencilContent(vk::ErrorContext *context,
+                                                      gl::LevelIndex level)
+{
+    invalidateSubresourceContentImpl(context, level, 0, mLayerCount, VK_IMAGE_ASPECT_STENCIL_BIT,
+                                     &getLevelStencilContentDefined(toVkLevel(level)), nullptr,
+                                     nullptr);
 }
 
 void ImageHelper::invalidateSubresourceStencilContent(ContextVk *contextVk,
@@ -9494,18 +9552,27 @@ void ImageHelper::invalidateSubresourceStencilContent(ContextVk *contextVk,
                                                       uint32_t layerCount,
                                                       bool *preferToKeepContentsDefinedOut)
 {
-    invalidateSubresourceContentImpl(
-        contextVk, level, layerIndex, layerCount, VK_IMAGE_ASPECT_STENCIL_BIT,
-        &getLevelStencilContentDefined(toVkLevel(level)), preferToKeepContentsDefinedOut);
+    bool layerLimitReached = false;
+    invalidateSubresourceContentImpl(contextVk, level, layerIndex, layerCount,
+                                     VK_IMAGE_ASPECT_STENCIL_BIT,
+                                     &getLevelStencilContentDefined(toVkLevel(level)),
+                                     preferToKeepContentsDefinedOut, &layerLimitReached);
+    if (layerLimitReached)
+    {
+        ANGLE_VK_PERF_WARNING(
+            contextVk, GL_DEBUG_SEVERITY_LOW,
+            "glInvalidateFramebuffer (stencil) ineffective on attachments with layer >= 8");
+    }
 }
 
-void ImageHelper::invalidateSubresourceContentImpl(ContextVk *contextVk,
+void ImageHelper::invalidateSubresourceContentImpl(vk::ErrorContext *context,
                                                    gl::LevelIndex level,
                                                    uint32_t layerIndex,
                                                    uint32_t layerCount,
                                                    VkImageAspectFlagBits aspect,
                                                    LevelContentDefinedMask *contentDefinedMask,
-                                                   bool *preferToKeepContentsDefinedOut)
+                                                   bool *preferToKeepContentsDefinedOut,
+                                                   bool *layerLimitReachedOut)
 {
     // If the aspect being invalidated doesn't exist, skip invalidation altogether.
     if ((getAspectFlags() & aspect) == 0)
@@ -9536,7 +9603,7 @@ void ImageHelper::invalidateSubresourceContentImpl(ContextVk *contextVk,
             break;
         case VK_IMAGE_ASPECT_COLOR_BIT:
             skip = hasEmulatedChannels &&
-                   contextVk->getFeatures().preferSkippingInvalidateForEmulatedFormats.enabled;
+                   context->getFeatures().preferSkippingInvalidateForEmulatedFormats.enabled;
             break;
         default:
             UNREACHABLE();
@@ -9554,18 +9621,8 @@ void ImageHelper::invalidateSubresourceContentImpl(ContextVk *contextVk,
 
     if (layerIndex >= kMaxContentDefinedLayerCount)
     {
-        const char *aspectName = "color";
-        if (aspect == VK_IMAGE_ASPECT_DEPTH_BIT)
-        {
-            aspectName = "depth";
-        }
-        else if (aspect == VK_IMAGE_ASPECT_STENCIL_BIT)
-        {
-            aspectName = "stencil";
-        }
-        ANGLE_VK_PERF_WARNING(
-            contextVk, GL_DEBUG_SEVERITY_LOW,
-            "glInvalidateFramebuffer (%s) ineffective on attachments with layer >= 8", aspectName);
+        ASSERT(layerLimitReachedOut != nullptr);
+        *layerLimitReachedOut = true;
         return;
     }
 
@@ -10139,8 +10196,7 @@ void ImageHelper::stageClearIfEmulatedFormat(bool isRobustResourceInitEnabled, b
     }
 }
 
-bool ImageHelper::verifyEmulatedClearsAreBeforeOtherUpdates(
-    const std::vector<SubresourceUpdate> &updates)
+bool ImageHelper::verifyEmulatedClearsAreBeforeOtherUpdates(const SubresourceUpdates &updates)
 {
     bool isIteratingEmulatedClears = true;
 
@@ -10271,7 +10327,7 @@ angle::Result ImageHelper::flushSingleSubresourceStagedUpdates(ContextVk *contex
                                                                ClearValuesArray *deferredClears,
                                                                uint32_t deferredClearIndex)
 {
-    std::vector<SubresourceUpdate> *levelUpdates = getLevelUpdates(levelGL);
+    SubresourceUpdates *levelUpdates = getLevelUpdates(levelGL);
     if (levelUpdates == nullptr || levelUpdates->empty())
     {
         return angle::Result::Continue;
@@ -10338,7 +10394,7 @@ angle::Result ImageHelper::flushStagedClearEmulatedChannelsUpdates(ContextVk *co
     {
         // It is expected that the checked mip levels in this loop do not surpass the size of
         // mSubresourceUpdates.
-        std::vector<SubresourceUpdate> *levelUpdates = getLevelUpdates(updateMipLevelGL);
+        SubresourceUpdates *levelUpdates = getLevelUpdates(updateMipLevelGL);
         ASSERT(levelUpdates != nullptr);
 
         // The levels with no updates should be skipped.
@@ -10351,7 +10407,7 @@ angle::Result ImageHelper::flushStagedClearEmulatedChannelsUpdates(ContextVk *co
         // than one such update type, we can process the first update and move on if there is
         // another update type in the list.
         ASSERT(verifyEmulatedClearsAreBeforeOtherUpdates(*levelUpdates));
-        std::vector<SubresourceUpdate>::iterator update = (*levelUpdates).begin();
+        SubresourceUpdate *update = &(*levelUpdates).front();
 
         if (update->updateSource != UpdateSource::ClearEmulatedChannelsOnly)
         {
@@ -10375,7 +10431,7 @@ angle::Result ImageHelper::flushStagedClearEmulatedChannelsUpdates(ContextVk *co
         // superseded by Clears, |mCurrentSingleClearValue| is irrelevant and can't have a value.
         ASSERT(!mCurrentSingleClearValue.valid());
 
-        levelUpdates->erase(update);
+        levelUpdates->pop_front();
         if (!levelUpdates->empty())
         {
             ASSERT(levelUpdates->begin()->updateSource != UpdateSource::ClearEmulatedChannelsOnly);
@@ -10436,8 +10492,8 @@ angle::Result ImageHelper::flushStagedUpdatesImpl(ContextVk *contextVk,
 
         // It is expected that the checked mip levels in this loop do not surpass the size of
         // mSubresourceUpdates.
-        std::vector<SubresourceUpdate> *levelUpdates = getLevelUpdates(updateMipLevelGL);
-        std::vector<SubresourceUpdate> updatesToKeep;
+        SubresourceUpdates *levelUpdates = getLevelUpdates(updateMipLevelGL);
+        SubresourceUpdates updatesToKeep;
         ASSERT(levelUpdates != nullptr);
 
         // Because updates may have overlapping layer ranges, we must first figure out the actual
@@ -10639,8 +10695,8 @@ angle::Result ImageHelper::flushStagedUpdatesImpl(ContextVk *contextVk,
                         ANGLE_TRY(contextVk->getOutsideRenderPassCommandBufferHelper(
                             bufferAccess, &commandBuffer));
                         commandBuffer->getCommandBuffer().copyBufferToImage(
-                            currentBuffer->getBuffer().getHandle(), mImage,
-                            getCurrentLayout(renderer), 1, copyRegion);
+                            currentBuffer->getBuffer().getHandle(), mImage, getCurrentLayout(), 1,
+                            copyRegion);
                     }
                     bool commandBufferWasFlushed = false;
                     ANGLE_TRY(contextVk->onCopyUpdate(currentBuffer->getSize(),
@@ -10668,8 +10724,8 @@ angle::Result ImageHelper::flushStagedUpdatesImpl(ContextVk *contextVk,
                     VkImageCopy *copyRegion = &update.data.image.copyRegion;
                     commandBuffer->getCommandBuffer().copyImage(
                         update.refCounted.image->get().getImage(),
-                        update.refCounted.image->get().getCurrentLayout(renderer), mImage,
-                        getCurrentLayout(renderer), 1, copyRegion);
+                        update.refCounted.image->get().getCurrentLayout(), mImage,
+                        getCurrentLayout(), 1, copyRegion);
                     onWrite(updateMipLevelGL, 1, updateBaseLayer, updateLayerCount,
                             copyRegion->dstSubresource.aspectMask);
                     break;
@@ -10721,7 +10777,7 @@ angle::Result ImageHelper::flushStagedUpdates(ContextVk *contextVk,
     // the clear.
     if (mCurrentSingleClearValue.valid())
     {
-        std::vector<SubresourceUpdate> *levelUpdates =
+        SubresourceUpdates *levelUpdates =
             getLevelUpdates(gl::LevelIndex(mCurrentSingleClearValue.value().levelIndex));
         if (levelUpdates && levelUpdates->size() == 1)
         {
@@ -10794,7 +10850,7 @@ bool ImageHelper::hasStagedUpdatesForSubresource(gl::LevelIndex levelGL,
 {
     // Check to see if any updates are staged for the given level and layer
 
-    const std::vector<SubresourceUpdate> *levelUpdates = getLevelUpdates(levelGL);
+    const SubresourceUpdates *levelUpdates = getLevelUpdates(levelGL);
     if (levelUpdates == nullptr || levelUpdates->empty())
     {
         return false;
@@ -10822,7 +10878,7 @@ bool ImageHelper::hasStagedUpdatesForSubresource(gl::LevelIndex levelGL,
 bool ImageHelper::removeStagedClearUpdatesAndReturnColor(gl::LevelIndex levelGL,
                                                          const VkClearColorValue **color)
 {
-    std::vector<SubresourceUpdate> *levelUpdates = getLevelUpdates(levelGL);
+    SubresourceUpdates *levelUpdates = getLevelUpdates(levelGL);
     if (levelUpdates == nullptr || levelUpdates->empty())
     {
         return false;
@@ -10847,7 +10903,7 @@ bool ImageHelper::removeStagedClearUpdatesAndReturnColor(gl::LevelIndex levelGL,
     return result;
 }
 
-void ImageHelper::adjustLayerRange(const std::vector<SubresourceUpdate> &levelUpdates,
+void ImageHelper::adjustLayerRange(const SubresourceUpdates &levelUpdates,
                                    uint32_t *layerStart,
                                    uint32_t *layerEnd)
 {
@@ -10884,7 +10940,7 @@ bool ImageHelper::hasStagedUpdatesInLevels(gl::LevelIndex levelStart, gl::LevelI
 {
     for (gl::LevelIndex level = levelStart; level < levelEnd; ++level)
     {
-        const std::vector<SubresourceUpdate> *levelUpdates = getLevelUpdates(level);
+        const SubresourceUpdates *levelUpdates = getLevelUpdates(level);
         if (levelUpdates == nullptr)
         {
             ASSERT(static_cast<size_t>(level.get()) >= mSubresourceUpdates.size());
@@ -10905,7 +10961,7 @@ bool ImageHelper::hasStagedImageUpdatesWithMismatchedFormat(gl::LevelIndex level
 {
     for (gl::LevelIndex level = levelStart; level < levelEnd; ++level)
     {
-        const std::vector<SubresourceUpdate> *levelUpdates = getLevelUpdates(level);
+        const SubresourceUpdates *levelUpdates = getLevelUpdates(level);
         if (levelUpdates == nullptr)
         {
             continue;
@@ -10927,7 +10983,7 @@ bool ImageHelper::hasBufferSourcedStagedUpdatesInAllLevels() const
 {
     for (gl::LevelIndex level = mFirstAllocatedLevel; level <= getLastAllocatedLevel(); ++level)
     {
-        const std::vector<SubresourceUpdate> *levelUpdates = getLevelUpdates(level);
+        const SubresourceUpdates *levelUpdates = getLevelUpdates(level);
         if (levelUpdates == nullptr || levelUpdates->empty())
         {
             return false;
@@ -10961,7 +11017,7 @@ bool ImageHelper::validateSubresourceUpdateBufferRefConsistent(
 
     uint32_t refs = 0;
 
-    for (const std::vector<SubresourceUpdate> &levelUpdates : mSubresourceUpdates)
+    for (const SubresourceUpdates &levelUpdates : mSubresourceUpdates)
     {
         for (const SubresourceUpdate &update : levelUpdates)
         {
@@ -10984,7 +11040,7 @@ bool ImageHelper::validateSubresourceUpdateImageRefConsistent(RefCounted<ImageHe
 
     uint32_t refs = 0;
 
-    for (const std::vector<SubresourceUpdate> &levelUpdates : mSubresourceUpdates)
+    for (const SubresourceUpdates &levelUpdates : mSubresourceUpdates)
     {
         for (const SubresourceUpdate &update : levelUpdates)
         {
@@ -11000,7 +11056,7 @@ bool ImageHelper::validateSubresourceUpdateImageRefConsistent(RefCounted<ImageHe
 
 bool ImageHelper::validateSubresourceUpdateRefCountsConsistent() const
 {
-    for (const std::vector<SubresourceUpdate> &levelUpdates : mSubresourceUpdates)
+    for (const SubresourceUpdates &levelUpdates : mSubresourceUpdates)
     {
         for (const SubresourceUpdate &update : levelUpdates)
         {
@@ -11030,7 +11086,7 @@ void ImageHelper::pruneSupersededUpdatesForLevel(ContextVk *contextVk,
 {
     constexpr VkDeviceSize kSubresourceUpdateSizeBeforePruning = 16 * 1024 * 1024;  // 16 MB
     constexpr int kUpdateCountThreshold                        = 1024;
-    std::vector<ImageHelper::SubresourceUpdate> *levelUpdates  = getLevelUpdates(level);
+    SubresourceUpdates *levelUpdates                           = getLevelUpdates(level);
 
     // If we are below pruning threshold, nothing to do.
     const int updateCount      = static_cast<int>(levelUpdates->size());
@@ -11142,7 +11198,7 @@ void ImageHelper::removeSupersededUpdates(ContextVk *contextVk,
     for (LevelIndex levelVk(0); levelVk < LevelIndex(mLevelCount); ++levelVk)
     {
         gl::LevelIndex levelGL                       = toGLLevel(levelVk);
-        std::vector<SubresourceUpdate> *levelUpdates = getLevelUpdates(levelGL);
+        SubresourceUpdates *levelUpdates             = getLevelUpdates(levelGL);
         if (levelUpdates == nullptr || levelUpdates->size() == 0 ||
             skipLevelsAllFaces.test(levelGL.get()))
         {
@@ -11169,8 +11225,6 @@ angle::Result ImageHelper::copyImageDataToBuffer(ContextVk *contextVk,
                                                  uint8_t **outDataPtr)
 {
     ANGLE_TRACE_EVENT0("gpu.angle", "ImageHelper::copyImageDataToBuffer");
-    Renderer *renderer = contextVk->getRenderer();
-
     const angle::Format &imageFormat = getActualFormat();
 
     // As noted in the OpenGL ES 3.2 specs, table 8.13, CopyTexImage cannot
@@ -11220,7 +11274,7 @@ angle::Result ImageHelper::copyImageDataToBuffer(ContextVk *contextVk,
     OutsideRenderPassCommandBuffer *commandBuffer;
     ANGLE_TRY(contextVk->getOutsideRenderPassCommandBuffer(access, &commandBuffer));
 
-    commandBuffer->copyImageToBuffer(mImage, getCurrentLayout(renderer), bufferHandle, regionCount,
+    commandBuffer->copyImageToBuffer(mImage, getCurrentLayout(), bufferHandle, regionCount,
                                      &regions);
 
     return angle::Result::Continue;
@@ -11261,7 +11315,7 @@ angle::Result ImageHelper::copySurfaceImageToBuffer(DisplayVk *displayVk,
     recordBarrierOneOffImpl(renderer, getAspectFlags(), ImageLayout::TransferSrc,
                             displayVk->getDeviceQueueIndex(), &primaryCommandBuffer,
                             &acquireNextImageSemaphore);
-    primaryCommandBuffer.copyImageToBuffer(mImage, getCurrentLayout(renderer),
+    primaryCommandBuffer.copyImageToBuffer(mImage, getCurrentLayout(),
                                            bufferHelper->getBuffer().getHandle(), 1, &region);
 
     ANGLE_VK_TRY(displayVk, primaryCommandBuffer.end());
@@ -11311,7 +11365,7 @@ angle::Result ImageHelper::copyBufferToSurfaceImage(DisplayVk *displayVk,
                             displayVk->getDeviceQueueIndex(), &commandBuffer,
                             &acquireNextImageSemaphore);
     commandBuffer.copyBufferToImage(bufferHelper->getBuffer().getHandle(), mImage,
-                                    getCurrentLayout(renderer), 1, &region);
+                                    getCurrentLayout(), 1, &region);
 
     ANGLE_VK_TRY(displayVk, commandBuffer.end());
 
@@ -11745,13 +11799,18 @@ angle::Result ImageHelper::readPixelsImpl(ContextVk *contextVk,
 
     if (isExternalFormat)
     {
+        // Make sure the render pass is closed, per UtilsVk::copyImage's requirements.
+        ANGLE_TRY(
+            contextVk->flushCommandsAndEndRenderPass(RenderPassClosureReason::PrepareForImageCopy));
+
         CommandBufferAccess access;
-        access.onImageTransferRead(layoutChangeAspectFlags, this);
         OutsideRenderPassCommandBuffer *commandBuffer;
         ANGLE_TRY(contextVk->getOutsideRenderPassCommandBuffer(access, &commandBuffer));
 
         // Create some temp views because copyImage works in terms of them
         gl::TextureType textureType = Get2DTextureType(1, resolvedImage.get().getSamples());
+
+        ScopedOverrideYCbCrFilter scopedOverrideYCbCrFilter(renderer, src, VK_FILTER_NEAREST);
 
         // Surely we have a view of this already!
         vk::ImageView srcView;
@@ -11850,7 +11909,7 @@ angle::Result ImageHelper::readPixelsImpl(ContextVk *contextVk,
             region.imageOffset       = srcOffset;
             region.imageSubresource  = srcSubresource;
 
-            copyCommandBuffer->copyImageToBuffer(src->getImage(), src->getCurrentLayout(renderer),
+            copyCommandBuffer->copyImageToBuffer(src->getImage(), src->getCurrentLayout(),
                                                  packBuffer.getBuffer().getHandle(), 1, &region);
             return angle::Result::Continue;
         }
@@ -11902,8 +11961,8 @@ angle::Result ImageHelper::readPixelsImpl(ContextVk *contextVk,
     OutsideRenderPassCommandBuffer *readbackCommandBuffer;
     ANGLE_TRY(contextVk->getOutsideRenderPassCommandBuffer(readbackAccess, &readbackCommandBuffer));
 
-    readbackCommandBuffer->copyImageToBuffer(src->getImage(), src->getCurrentLayout(renderer),
-                                             bufferHandle, 1, &region);
+    readbackCommandBuffer->copyImageToBuffer(src->getImage(), src->getCurrentLayout(), bufferHandle,
+                                             1, &region);
 
     ANGLE_VK_PERF_WARNING(contextVk, GL_DEBUG_SEVERITY_HIGH, "GPU stall due to ReadPixels");
 
@@ -12064,6 +12123,33 @@ ImageHelper::SubresourceUpdate::SubresourceUpdate(VkColorComponentFlags colorMas
     data.clear.layerCount =
         imageIndex.hasLayer() ? imageIndex.getLayerCount() : VK_REMAINING_ARRAY_LAYERS;
     data.clear.colorMaskFlags = colorMaskFlags;
+}
+
+ImageHelper::SubresourceUpdate::SubresourceUpdate(const SubresourceUpdate &other)
+    : updateSource(other.updateSource)
+{
+    switch (updateSource)
+    {
+        case UpdateSource::Clear:
+        case UpdateSource::ClearEmulatedChannelsOnly:
+        case UpdateSource::ClearAfterInvalidate:
+            data.clear        = other.data.clear;
+            refCounted.buffer = nullptr;
+            break;
+        case UpdateSource::ClearPartial:
+            data.clearPartial = other.data.clearPartial;
+            break;
+        case UpdateSource::Buffer:
+            data.buffer       = other.data.buffer;
+            refCounted.buffer = other.refCounted.buffer;
+            break;
+        case UpdateSource::Image:
+            data.image       = other.data.image;
+            refCounted.image = other.refCounted.image;
+            break;
+        default:
+            UNREACHABLE();
+    }
 }
 
 ImageHelper::SubresourceUpdate::SubresourceUpdate(SubresourceUpdate &&other)
@@ -12237,15 +12323,14 @@ void ImageHelper::clipLevelToUpdateListUpperLimit(gl::LevelIndex *level) const
     *level = std::min(*level, levelLimit);
 }
 
-std::vector<ImageHelper::SubresourceUpdate> *ImageHelper::getLevelUpdates(gl::LevelIndex level)
+ImageHelper::SubresourceUpdates *ImageHelper::getLevelUpdates(gl::LevelIndex level)
 {
     return static_cast<size_t>(level.get()) < mSubresourceUpdates.size()
                ? &mSubresourceUpdates[level.get()]
                : nullptr;
 }
 
-const std::vector<ImageHelper::SubresourceUpdate> *ImageHelper::getLevelUpdates(
-    gl::LevelIndex level) const
+const ImageHelper::SubresourceUpdates *ImageHelper::getLevelUpdates(gl::LevelIndex level) const
 {
     return static_cast<size_t>(level.get()) < mSubresourceUpdates.size()
                ? &mSubresourceUpdates[level.get()]
@@ -12277,8 +12362,7 @@ void ImageHelper::prependSubresourceUpdate(gl::LevelIndex level, SubresourceUpda
     mTotalStagedBufferUpdateSize += update.updateSource == UpdateSource::Buffer
                                         ? update.data.buffer.bufferHelper->getSize()
                                         : 0;
-    mSubresourceUpdates[level.get()].insert(mSubresourceUpdates[level.get()].begin(),
-                                            std::move(update));
+    mSubresourceUpdates[level.get()].emplace_front(std::move(update));
     onStateChange(angle::SubjectMessage::SubjectChanged);
 }
 
@@ -12352,39 +12436,6 @@ VkColorComponentFlags ImageHelper::getEmulatedChannelsMask() const
            (textureFmt.redBits != 0));
 
     return emulatedChannelsMask;
-}
-
-bool ImageHelper::getCompressionFixedRate(VkImageCompressionControlEXT *compressionInfo,
-                                          VkImageCompressionFixedRateFlagsEXT *compressionRates,
-                                          GLenum glCompressionRate) const
-{
-    bool rtn = true;
-    ASSERT(compressionInfo->sType == VK_STRUCTURE_TYPE_IMAGE_COMPRESSION_CONTROL_EXT);
-    compressionInfo->compressionControlPlaneCount = 1;
-
-    if (glCompressionRate == GL_SURFACE_COMPRESSION_FIXED_RATE_NONE_EXT)
-    {
-        compressionInfo->flags = VK_IMAGE_COMPRESSION_DISABLED_EXT;
-    }
-    else if (glCompressionRate == GL_SURFACE_COMPRESSION_FIXED_RATE_DEFAULT_EXT)
-    {
-        compressionInfo->flags = VK_IMAGE_COMPRESSION_FIXED_RATE_DEFAULT_EXT;
-    }
-    else if (glCompressionRate >= GL_SURFACE_COMPRESSION_FIXED_RATE_1BPC_EXT &&
-             glCompressionRate <= GL_SURFACE_COMPRESSION_FIXED_RATE_12BPC_EXT)
-    {
-        int offset             = glCompressionRate - GL_SURFACE_COMPRESSION_FIXED_RATE_1BPC_EXT;
-        compressionInfo->flags = VK_IMAGE_COMPRESSION_FIXED_RATE_EXPLICIT_EXT;
-        *compressionRates      = 1u << offset;
-        compressionInfo->pFixedRateFlags = compressionRates;
-    }
-    else
-    {
-        // Invalid value
-        rtn = false;
-    }
-
-    return rtn;
 }
 
 LayerMode GetLayerMode(const vk::ImageHelper &image, uint32_t layerCount)
@@ -12471,7 +12522,10 @@ void ImageViewHelper::release(Renderer *renderer, const ResourceUse &use)
     mIsCopyImageViewShared = false;
     mColorspaceState.reset();
 
-    std::vector<vk::GarbageObject> garbage;
+    GarbageObjects garbage;
+    // Reserve reasonable amount of storage
+    garbage.reserve(4);
+
     // Release the read views
     ReleaseImageViews(&mPerLevelRangeLinearReadImageViews, &garbage);
     ReleaseImageViews(&mPerLevelRangeSRGBReadImageViews, &garbage);

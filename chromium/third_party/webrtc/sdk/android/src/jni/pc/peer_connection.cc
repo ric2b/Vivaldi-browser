@@ -181,9 +181,8 @@ void JavaToNativeRTCConfiguration(
   rtc_config->rtcp_mux_policy =
       JavaToNativeRtcpMuxPolicy(jni, j_rtcp_mux_policy);
   if (!j_rtc_certificate.is_null()) {
-    rtc::scoped_refptr<rtc::RTCCertificate> certificate =
-        rtc::RTCCertificate::FromPEM(
-            JavaToNativeRTCCertificatePEM(jni, j_rtc_certificate));
+    rtc::scoped_refptr<RTCCertificate> certificate = RTCCertificate::FromPEM(
+        JavaToNativeRTCCertificatePEM(jni, j_rtc_certificate));
     RTC_CHECK(certificate != nullptr) << "supplied certificate is malformed.";
     rtc_config->certificates.push_back(certificate);
   }
@@ -329,7 +328,7 @@ void PeerConnectionObserverJni::OnIceCandidateError(
 }
 
 void PeerConnectionObserverJni::OnIceCandidatesRemoved(
-    const std::vector<cricket::Candidate>& candidates) {
+    const std::vector<Candidate>& candidates) {
   JNIEnv* env = AttachCurrentThreadIfNeeded();
   Java_Observer_onIceCandidatesRemoved(
       env, j_observer_global_, NativeToJavaCandidateArray(env, candidates));
@@ -560,8 +559,7 @@ static jni_zero::ScopedJavaLocalRef<jobject> JNI_PeerConnection_GetCertificate(
     const jni_zero::JavaParamRef<jobject>& j_pc) {
   const PeerConnectionInterface::RTCConfiguration rtc_config =
       ExtractNativePC(jni, j_pc)->GetConfiguration();
-  rtc::scoped_refptr<rtc::RTCCertificate> certificate =
-      rtc_config.certificates[0];
+  rtc::scoped_refptr<RTCCertificate> certificate = rtc_config.certificates[0];
   return NativeToJavaRTCCertificatePEM(jni, certificate->ToPEM());
 }
 
@@ -712,9 +710,8 @@ static jboolean JNI_PeerConnection_RemoveIceCandidates(
     JNIEnv* jni,
     const jni_zero::JavaParamRef<jobject>& j_pc,
     const jni_zero::JavaParamRef<jobjectArray>& j_candidates) {
-  std::vector<cricket::Candidate> candidates =
-      JavaToNativeVector<cricket::Candidate>(jni, j_candidates,
-                                             &JavaToNativeCandidate);
+  std::vector<Candidate> candidates =
+      JavaToNativeVector<Candidate>(jni, j_candidates, &JavaToNativeCandidate);
   return ExtractNativePC(jni, j_pc)->RemoveIceCandidates(candidates);
 }
 
@@ -903,7 +900,7 @@ static jboolean JNI_PeerConnection_StartRtcEventLog(
   // TODO(eladalon): It would be better to not allow negative values into PC.
   const size_t max_size = (max_size_bytes < 0)
                               ? RtcEventLog::kUnlimitedOutput
-                              : rtc::saturated_cast<size_t>(max_size_bytes);
+                              : saturated_cast<size_t>(max_size_bytes);
   FILE* f = fdopen(file_descriptor, "wb");
   if (!f) {
     close(file_descriptor);

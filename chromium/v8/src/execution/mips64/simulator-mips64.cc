@@ -35,6 +35,11 @@ DEFINE_LAZY_LEAKY_OBJECT_GETTER(Simulator::GlobalMonitor,
 // Util functions.
 inline bool HaveSameSign(int64_t a, int64_t b) { return ((a ^ b) >= 0); }
 
+// TODO(mips): Currently defaults to true, indicating that MIPS supports
+// unaligned access by default. This can be changed based on the actual
+// environment or platform configuration.
+bool isMipsSupportUnalignedAccess = true;
+
 uint32_t get_fcsr_condition_bit(uint32_t cc) {
   if (cc == 0) {
     return 23;
@@ -815,7 +820,7 @@ Simulator::Simulator(Isolate* isolate) : isolate_(isolate) {
   // The sp is initialized to point to the bottom (high address) of the
   // allocated stack area. To be safe in potential stack underflows we leave
   // some buffer below.
-  registers_[sp] = stack_ + stack_size - kStackProtectionSize;
+  registers_[sp] = StackBase();
   // The ra and pc are initialized to a known bad value that will cause an
   // access violation if the simulator ever tries to execute it.
   registers_[pc] = bad_ra;
@@ -1860,7 +1865,8 @@ int32_t Simulator::ReadW(int64_t addr, Instruction* instr, TraceType t) {
            addr, reinterpret_cast<intptr_t>(instr));
     DieOrDebug();
   }
-  if ((addr & 0x3) == 0 || kArchVariant == kMips64r6) {
+  if ((addr & 0x3) == 0 || kArchVariant == kMips64r6 ||
+      isMipsSupportUnalignedAccess) {
     local_monitor_.NotifyLoad();
     int32_t* ptr = reinterpret_cast<int32_t*>(addr);
     TraceMemRd(addr, static_cast<int64_t>(*ptr), t);
@@ -1952,7 +1958,8 @@ int64_t Simulator::Read2W(int64_t addr, Instruction* instr) {
            addr, reinterpret_cast<intptr_t>(instr));
     DieOrDebug();
   }
-  if ((addr & kPointerAlignmentMask) == 0 || kArchVariant == kMips64r6) {
+  if ((addr & kPointerAlignmentMask) == 0 || kArchVariant == kMips64r6 ||
+      isMipsSupportUnalignedAccess) {
     local_monitor_.NotifyLoad();
     int64_t* ptr = reinterpret_cast<int64_t*>(addr);
     TraceMemRd(addr, *ptr);
@@ -2182,6 +2189,10 @@ uintptr_t Simulator::StackLimit(uintptr_t c_limit) const {
   return stack_limit_ + kAdditionalStackMargin;
 }
 
+uintptr_t Simulator::StackBase() const {
+  return reinterpret_cast<uintptr_t>(stack_) + UsableStackSize();
+}
+
 base::Vector<uint8_t> Simulator::GetCentralStackView() const {
   // We do not add an additional safety margin as above in
   // Simulator::StackLimit, as users of this method are expected to add their
@@ -2189,6 +2200,24 @@ base::Vector<uint8_t> Simulator::GetCentralStackView() const {
   return base::VectorOf(
       reinterpret_cast<uint8_t*>(stack_) + kStackProtectionSize,
       UsableStackSize());
+}
+
+// We touch the stack, which may or may not have been initialized properly. Msan
+// reports here are not interesting.
+DISABLE_MSAN void Simulator::IterateRegistersAndStack(
+    ::heap::base::StackVisitor* visitor) {
+  for (int i = 0; i < kNumSimuRegisters; ++i) {
+    visitor->VisitPointer(reinterpret_cast<const void*>(get_register(i)));
+  }
+  for (const void* const* current =
+           reinterpret_cast<const void* const*>(get_sp());
+       current < reinterpret_cast<const void* const*>(StackBase()); ++current) {
+    const void* address = *current;
+    if (address == nullptr) {
+      continue;
+    }
+    visitor->VisitPointer(address);
+  }
 }
 
 // Unsupported instructions use Format to print an error and stop execution.

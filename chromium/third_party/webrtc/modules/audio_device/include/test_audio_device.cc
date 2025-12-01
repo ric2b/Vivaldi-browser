@@ -43,7 +43,7 @@ namespace webrtc {
 namespace {
 
 constexpr int kFrameLengthUs = 10000;
-constexpr int kFramesPerSecond = rtc::kNumMicrosecsPerSec / kFrameLengthUs;
+constexpr int kFramesPerSecond = kNumMicrosecsPerSec / kFrameLengthUs;
 
 class TestAudioDeviceModuleImpl : public AudioDeviceModuleImpl {
  public:
@@ -501,7 +501,7 @@ TestAudioDeviceModule::CreateWavFileReader(absl::string_view filename,
                                            bool repeat) {
   WavReader reader(filename);
   int sampling_frequency_in_hz = reader.sample_rate();
-  int num_channels = rtc::checked_cast<int>(reader.num_channels());
+  int num_channels = checked_cast<int>(reader.num_channels());
   return std::make_unique<WavFileReader>(filename, sampling_frequency_in_hz,
                                          num_channels, repeat);
 }

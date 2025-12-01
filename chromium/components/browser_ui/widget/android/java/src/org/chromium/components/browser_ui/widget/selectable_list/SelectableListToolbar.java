@@ -10,6 +10,7 @@ import android.content.res.ColorStateList;
 import android.content.res.Resources;
 import android.graphics.Color;
 import android.graphics.drawable.Drawable;
+import android.graphics.drawable.LayerDrawable;
 import android.text.TextUtils;
 import android.util.AttributeSet;
 import android.view.KeyEvent;
@@ -36,12 +37,14 @@ import androidx.annotation.VisibleForTesting;
 import androidx.appcompat.content.res.AppCompatResources;
 import androidx.appcompat.widget.Toolbar;
 import androidx.core.graphics.drawable.DrawableCompat;
+import androidx.core.view.ViewCompat;
 
 import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.base.supplier.ObservableSupplierImpl;
 import org.chromium.build.annotations.NullMarked;
 import org.chromium.build.annotations.Nullable;
 import org.chromium.components.browser_ui.styles.SemanticColorUtils;
+import org.chromium.components.browser_ui.util.KeyboardNavigationListener;
 import org.chromium.components.browser_ui.widget.NumberRollView;
 import org.chromium.components.browser_ui.widget.R;
 import org.chromium.components.browser_ui.widget.TintedDrawable;
@@ -56,7 +59,9 @@ import org.chromium.ui.util.ColorUtils;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 // Vivaldi
 import android.content.res.Resources;
@@ -67,9 +72,9 @@ import org.chromium.build.BuildConfig;
 // End Vivaldi
 
 /**
- * A toolbar that changes its view depending on whether a selection is established. The toolbar
- * also optionally shows a search view depending on whether {@link #initializeSearchView()} has
- * been called.
+ * A toolbar that changes its view depending on whether a selection is established. The toolbar also
+ * optionally shows a search view depending on whether {@link #initializeSearchView()} has been
+ * called.
  *
  * @param <E> The type of the selectable items this toolbar interacts with.
  */
@@ -113,7 +118,12 @@ public class SelectableListToolbar<E> extends Toolbar
         int NORMAL_VIEW_BACK = 3;
     }
 
+    // These are used to track whether there is actually a change in selection state, so that we can
+    // correctly make a11y announcements.
     protected boolean mIsSelectionEnabled;
+    // When we assign mSelectedItems, make sure we copy the contents so that we can properly track
+    // whether the content actually changed.
+    @Nullable private Set<E> mSelectedItems;
 
     @SuppressWarnings("NullAway.Init")
     protected SelectionDelegate<E> mSelectionDelegate;
@@ -238,6 +248,14 @@ public class SelectableListToolbar<E> extends Toolbar
 
         mSelectionDelegate = delegate;
         mSelectionDelegate.addObserver(this);
+        // Initialize the selection state so that if selection is already enabled,
+        // mIsSelectionEnabled correctly tracks that instead of defaulting to false.
+        mIsSelectionEnabled = mSelectionDelegate.isSelectionEnabled();
+        mSelectedItems = new HashSet<>(mSelectionDelegate.getSelectedItems());
+        // If we're already in selection mode, show the selection mode.
+        if (mIsSelectionEnabled) {
+            showSelectionView(mSelectionDelegate.getSelectedItemsAsList(), mIsSelectionEnabled);
+        }
 
         mModernNavButtonStartOffsetPx =
                 getResources()
@@ -338,6 +356,37 @@ public class SelectableListToolbar<E> extends Toolbar
         mNumberRollView = findViewById(R.id.selection_mode_number);
         mNumberRollView.setString(R.plurals.selected_items);
         mNumberRollView.setStringForZero(R.string.select_items);
+
+        // Set listener to be able to move focus out of toolbar view to adjacent views.
+        setOnKeyListener(
+                new KeyboardNavigationListener() {
+                    @Override
+                    protected boolean handleEnterKeyPress() {
+                        return SelectableListToolbar.this.handleEnterKeyPress();
+                    }
+
+                    @Override
+                    public @Nullable View getNextFocusBackward() {
+                        return SelectableListToolbar.this.getNextFocusBackward();
+                    }
+
+                    @Override
+                    public @Nullable View getNextFocusForward() {
+                        return SelectableListToolbar.this.getNextFocusForward();
+                    }
+                });
+    }
+
+    protected @Nullable View getNextFocusBackward() {
+        return null;
+    }
+
+    protected @Nullable View getNextFocusForward() {
+        return null;
+    }
+
+    protected boolean handleEnterKeyPress() {
+        return false;
     }
 
     @Override
@@ -345,6 +394,8 @@ public class SelectableListToolbar<E> extends Toolbar
     public void onSelectionStateChange(List<E> selectedItems) {
         boolean wasSelectionEnabled = mIsSelectionEnabled;
         mIsSelectionEnabled = mSelectionDelegate.isSelectionEnabled();
+        Set<E> previouslySelectedItems = mSelectedItems;
+        mSelectedItems = new HashSet<>(selectedItems);
 
         // If onSelectionStateChange() gets called before onFinishInflate(), mNumberRollView
         // will be uninitialized. See crbug.com/637948.
@@ -360,14 +411,24 @@ public class SelectableListToolbar<E> extends Toolbar
             showNormalView();
         }
 
+        // Handle a11y announcements
+        if (wasSelectionEnabled == mIsSelectionEnabled
+                && mSelectedItems.equals(previouslySelectedItems)) {
+            // If there's no actual change in selection state, don't announce anything.
+            return;
+        }
+        // Otherwise, make an appropriate announcement.
         if (mIsSelectionEnabled) {
             @StringRes
             int resId =
                     wasSelectionEnabled
                             ? R.string.accessibility_toolbar_multi_select
                             : R.string.accessibility_toolbar_screen_position;
-            announceForAccessibility(
-                    getContext().getString(resId, Integer.toString(selectedItems.size())));
+            ViewCompat.setAccessibilityPaneTitle(
+                    this, getContext().getString(resId, Integer.toString(selectedItems.size())));
+        } else {
+            ViewCompat.setAccessibilityPaneTitle(
+                    this, getContext().getString(R.string.accessibility_toolbar_exit_select));
         }
     }
 
@@ -415,6 +476,7 @@ public class SelectableListToolbar<E> extends Toolbar
      */
     protected void setNavigationButton(@NavigationButton int navigationButton) {
         @StringRes int contentDescriptionId = Resources.ID_NULL;
+        Drawable navigationButtonDrawable = mNavigationIconDrawable;
 
         mNavigationButton = navigationButton;
         setNavigationOnClickListener(this);
@@ -423,6 +485,23 @@ public class SelectableListToolbar<E> extends Toolbar
             case NavigationButton.NONE:
                 break;
             case NavigationButton.SEARCH_BACK:
+                // Create a LayerDrawable to hold the search box icon highlight background as well
+                // as the navigation icon drawable.
+                var navigationBackgroundDrawable =
+                        AppCompatResources.getDrawable(
+                                getContext(), R.drawable.search_box_icon_background);
+                var navigationLayerDrawable =
+                        new LayerDrawable(
+                                new Drawable[] {
+                                    navigationBackgroundDrawable, mNavigationIconDrawable
+                                });
+                int inset =
+                        getResources()
+                                .getDimensionPixelSize(
+                                        R.dimen.search_box_nav_button_background_inset);
+                navigationLayerDrawable.setLayerInset(1, inset, inset, inset, inset);
+                navigationButtonDrawable = navigationLayerDrawable;
+
                 DrawableCompat.setTintList(mNavigationIconDrawable, mIconColorList);
                 contentDescriptionId = R.string.accessibility_toolbar_btn_back;
                 if (BuildConfig.IS_VIVALDI) {
@@ -456,7 +535,7 @@ public class SelectableListToolbar<E> extends Toolbar
         }
 
         setNavigationIcon(
-                contentDescriptionId == Resources.ID_NULL ? null : mNavigationIconDrawable);
+                contentDescriptionId == Resources.ID_NULL ? null : navigationButtonDrawable);
         setNavigationContentDescription(contentDescriptionId);
 
         updateDisplayStyleIfNecessary();

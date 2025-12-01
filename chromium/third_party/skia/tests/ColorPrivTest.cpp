@@ -6,9 +6,9 @@
  */
 
 #include "include/core/SkColor.h"
-#include "include/core/SkColorPriv.h"
 #include "include/core/SkTypes.h"
-#include "include/private/SkColorData.h"
+#include "src/core/SkColorData.h"
+#include "src/core/SkColorPriv.h"
 #include "tests/Test.h"
 
 #include <cstdint>
@@ -50,5 +50,32 @@ DEF_TEST(FourByteInterp, r) {
         ASSERT(deltaR == 0 || deltaR == 1);
         ASSERT(deltaG == 0 || deltaG == 1);
         ASSERT(deltaB == 0 || deltaB == 1);
+    }
+}
+
+DEF_TEST(SkBlendARGB32_SameOpaqueSrcAndDstWithAnyAlpha_ProducesSameColor, r) {
+    SkColor colors[] = {
+            SK_ColorWHITE, SK_ColorBLACK, SK_ColorGRAY,
+            SK_ColorRED, SK_ColorGREEN, SK_ColorBLUE,
+            SK_ColorYELLOW, SK_ColorCYAN, SK_ColorMAGENTA,
+            SkColorSetARGB(255, 255 / 4, 255 / 3, 255 / 2),
+             // https://bugzilla.mozilla.org/show_bug.cgi?id=1200684 and https://codereview.chromium.org/2097883002
+            0xFF2E3338,
+    };
+
+    for (SkColor c: colors) {
+        SkASSERTF(SkColorGetA(c) == 0xFF, "this is only true for opaque colors");
+
+        const SkPMColor srcAndDst = SkPreMultiplyColor(c);
+
+        for (unsigned scale = 0; scale < 256; scale++) {
+            U8CPU alpha = static_cast<U8CPU>(scale);
+
+            SkPMColor output = SkBlendARGB32(srcAndDst, srcAndDst, alpha);
+            REPORTER_ASSERT(r,
+                            srcAndDst == output,
+                            "SkBlendARGB32(0x%08x, 0x%08x, %02x) = %08x instead of the original",
+                            srcAndDst, srcAndDst, alpha, output);
+        }
     }
 }

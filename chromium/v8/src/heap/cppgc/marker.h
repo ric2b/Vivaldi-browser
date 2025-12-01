@@ -98,6 +98,10 @@ class V8_EXPORT_PRIVATE MarkerBase {
       v8::base::TimeDelta = kMaximumIncrementalStepDuration,
       size_t marked_bytes_limit = 0);
 
+  // Returns the size of the bytes marked in the last invocation of
+  // `AdvanceMarkingWithLimits()`.
+  size_t last_bytes_marked() const { return last_bytes_marked_; }
+
   // Signals leaving the atomic marking pause. This method expects no more
   // objects to be marked and merely updates marking states if needed.
   void LeaveAtomicPause();
@@ -114,6 +118,7 @@ class V8_EXPORT_PRIVATE MarkerBase {
   // - LeaveAtomicPause()
   void FinishMarking(StackState);
 
+  void ProcessCrossThreadWeaknessIfNeeded();
   void ProcessWeakness();
 
   bool JoinConcurrentMarkingIfNeeded();
@@ -127,9 +132,6 @@ class V8_EXPORT_PRIVATE MarkerBase {
   cppgc::Visitor& Visitor() { return visitor(); }
 
   bool IsMarking() const { return is_marking_; }
-
-  // Returns whether marking is considered ahead of schedule.
-  bool IsAheadOfSchedule() const;
 
   void SetMainThreadMarkingDisabledForTesting(bool);
   void WaitForConcurrentMarkingForTesting();
@@ -166,6 +168,8 @@ class V8_EXPORT_PRIVATE MarkerBase {
   virtual cppgc::Visitor& visitor() = 0;
   virtual ConservativeTracingVisitor& conservative_visitor() = 0;
   virtual heap::base::StackVisitor& stack_visitor() = 0;
+  virtual ConcurrentMarkerBase& concurrent_marker() = 0;
+  virtual heap::base::IncrementalMarkingSchedule& schedule() = 0;
 
   // Processes the worklists with given deadlines. The deadlines are only
   // checked every few objects.
@@ -174,38 +178,36 @@ class V8_EXPORT_PRIVATE MarkerBase {
   // - `time_deadline`: Time deadline that is always respected.
   bool ProcessWorklistsWithDeadline(size_t marked_bytes_deadline,
                                     v8::base::TimeTicks time_deadline);
+  void AdvanceMarkingWithLimitsEpilogue();
 
   void VisitLocalRoots(StackState);
   void VisitCrossThreadRoots();
 
   void MarkNotFullyConstructedObjects();
 
-  void ScheduleIncrementalMarkingTask();
+  virtual void ScheduleIncrementalMarkingTask();
 
   bool IncrementalMarkingStep(StackState);
 
   void AdvanceMarkingOnAllocation();
+  virtual void AdvanceMarkingOnAllocationImpl();
 
   void HandleNotFullyConstructedObjects();
+  void MarkStrongCrossThreadRoots();
 
   HeapBase& heap_;
   MarkingConfig config_ = MarkingConfig::Default();
-
   cppgc::Platform* platform_;
   std::shared_ptr<cppgc::TaskRunner> foreground_task_runner_;
   IncrementalMarkingTaskHandle incremental_marking_handle_;
-  std::unique_ptr<IncrementalMarkingAllocationObserver>
-      incremental_marking_allocation_observer_;
-
+  IncrementalMarkingAllocationObserver incremental_marking_allocation_observer_;
   MarkingWorklists marking_worklists_;
   MutatorMarkingState mutator_marking_state_;
+  size_t last_bytes_marked_ = 0;
   bool is_marking_{false};
-
-  std::unique_ptr<heap::base::IncrementalMarkingSchedule> schedule_;
-  std::unique_ptr<ConcurrentMarkerBase> concurrent_marker_{nullptr};
-
   bool main_marking_disabled_for_testing_{false};
   bool visited_cross_thread_persistents_in_atomic_pause_{false};
+  bool processed_cross_thread_weakness_{false};
 };
 
 class V8_EXPORT_PRIVATE Marker final : public MarkerBase {
@@ -214,16 +216,26 @@ class V8_EXPORT_PRIVATE Marker final : public MarkerBase {
 
  protected:
   cppgc::Visitor& visitor() final { return marking_visitor_; }
+
   ConservativeTracingVisitor& conservative_visitor() final {
     return conservative_marking_visitor_;
   }
+
   heap::base::StackVisitor& stack_visitor() final {
     return conservative_marking_visitor_;
+  }
+
+  ConcurrentMarkerBase& concurrent_marker() final { return concurrent_marker_; }
+
+  heap::base::IncrementalMarkingSchedule& schedule() final {
+    return *schedule_.get();
   }
 
  private:
   MutatorMarkingVisitor marking_visitor_;
   ConservativeMarkingVisitor conservative_marking_visitor_;
+  std::unique_ptr<heap::base::IncrementalMarkingSchedule> schedule_;
+  ConcurrentMarker concurrent_marker_;
 };
 
 template <MarkerBase::WriteBarrierType type>

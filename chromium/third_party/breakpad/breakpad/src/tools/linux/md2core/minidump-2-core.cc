@@ -147,7 +147,7 @@ static void
 SetupOptions(int argc, const char* argv[], Options* options) {
   extern int optind;
   int ch;
-  const char* output_file = NULL;
+  const char* output_file = nullptr;
 
   // Initialize the options struct as needed.
   options->verbose = false;
@@ -187,7 +187,7 @@ SetupOptions(int argc, const char* argv[], Options* options) {
     exit(1);
   }
 
-  if (output_file == NULL || !strcmp(output_file, "-")) {
+  if (output_file == nullptr || !strcmp(output_file, "-")) {
     options->out_fd = STDOUT_FILENO;
   } else {
     options->out_fd = open(output_file, O_WRONLY|O_CREAT|O_TRUNC, 0664);
@@ -283,7 +283,7 @@ typedef struct prpsinfo {       /* Information about process                 */
 struct CrashedProcess {
   CrashedProcess()
       : exception{-1},
-        auxv(NULL),
+        auxv(nullptr),
         auxv_length(0) {
     memset(&prps, 0, sizeof(prps));
     prps.pr_sname = 'R';
@@ -830,8 +830,8 @@ ParseMaps(const Options& options, CrashedProcess* crashinfo,
                 eol ? eol - ptr : range.data() + range.length() - ptr);
     ptr = eol ? eol + 1 : range.data() + range.length();
     unsigned long long start, stop, offset;
-    char* permissions = NULL;
-    char* filename = NULL;
+    char* permissions = nullptr;
+    char* filename = nullptr;
     sscanf(line.c_str(), "%llx-%llx %m[-rwxp] %llx %*[:0-9a-f] %*d %ms",
            &start, &stop, &permissions, &offset, &filename);
     if (filename && *filename == '/') {

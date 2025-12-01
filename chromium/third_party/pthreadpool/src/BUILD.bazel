@@ -64,6 +64,9 @@ cc_library(
         ":tvos_x86_64": ARCH_SPECIFIC_SRCS,
         "//conditions:default": [],
     }),
+    hdrs = [
+        "include/pthreadpool.h",
+    ],
     copts = [
         "-std=c11",
     ] + select({
@@ -120,9 +123,6 @@ cc_library(
         ":tvos_x86_64": ["-DPTHREADPOOL_USE_FASTPATH=1"],
         "//conditions:default": ["-DPTHREADPOOL_USE_FASTPATH=0"],
     }),
-    hdrs = [
-        "include/pthreadpool.h",
-    ],
     defines = [
         "PTHREADPOOL_NO_DEPRECATED_API",
     ],
@@ -137,6 +137,7 @@ cc_library(
         "//conditions:default": [],
     }),
     strip_include_prefix = "include",
+    visibility = ["//visibility:public"],
     deps = [
         "@FXdiv",
     ] + select({
@@ -149,7 +150,6 @@ cc_library(
         ":android_arm64": ["@cpuinfo"],
         "//conditions:default": [],
     }),
-    visibility = ["//visibility:public"],
 )
 
 ################################## Unit tests ##################################
@@ -349,7 +349,6 @@ config_setting(
 config_setting(
     name = "ios",
     values = {
-        "crosstool_top": "@bazel_tools//tools/cpp:toolchain",
         "apple_platform_type": "ios",
     },
 )
@@ -373,7 +372,6 @@ config_setting(
 config_setting(
     name = "watchos",
     values = {
-        "crosstool_top": "@bazel_tools//tools/cpp:toolchain",
         "apple_platform_type": "watchos",
     },
 )
@@ -397,7 +395,6 @@ config_setting(
 config_setting(
     name = "tvos",
     values = {
-        "crosstool_top": "@bazel_tools//tools/cpp:toolchain",
         "apple_platform_type": "tvos",
     },
 )
@@ -428,7 +425,7 @@ config_setting(
     name = "emscripten",
     values = {
         "crosstool_top": "//toolchain:emscripten",
-    }
+    },
 )
 
 config_setting(
@@ -436,5 +433,5 @@ config_setting(
     values = {
         "crosstool_top": "//toolchain:emscripten",
         "copt": "-pthread",
-    }
+    },
 )

@@ -39,6 +39,7 @@
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "components/favicon/core/favicon_backend.h"
+#include "components/favicon/core/favicon_types.h"
 #include "components/favicon_base/favicon_usage_data.h"
 #include "components/history/core/browser/features.h"
 #include "components/history/core/browser/history_backend_client.h"
@@ -834,12 +835,14 @@ TEST_F(HistoryBackendTest, DeleteAll) {
   row1.set_visit_count(2);
   row1.set_typed_count(1);
   row1.set_last_visit(base::Time::Now());
-  favicon_db()->AddIconMapping(row1.url(), favicon1);
+  favicon_db()->AddIconMapping(row1.url(), favicon1,
+                               favicon::PageUrlType::kRegular);
 
   URLRow row2(GURL("http://news.google.com/"));
   row2.set_visit_count(1);
   row2.set_last_visit(base::Time::Now());
-  favicon_db()->AddIconMapping(row2.url(), favicon2);
+  favicon_db()->AddIconMapping(row2.url(), favicon2,
+                               favicon::PageUrlType::kRegular);
 
   URLRows rows;
   rows.push_back(row2);  // Reversed order for the same reason as favicons.
@@ -957,7 +960,8 @@ TEST_F(HistoryBackendTest, DeleteAllURLPreviouslyDeleted) {
   favicon_base::FaviconID favicon = favicon_db()->AddFavicon(
       kFaviconURL, IconType::kFavicon, new base::RefCountedBytes(data),
       FaviconBitmapType::ON_VISIT, base::Time::Now(), kSmallSize);
-  favicon_db()->AddIconMapping(row.url(), favicon);
+  favicon_db()->AddIconMapping(row.url(), favicon,
+                               favicon::PageUrlType::kRegular);
 
   history_client_.AddBookmark(kPageURL);
 
@@ -1065,12 +1069,14 @@ TEST_F(HistoryBackendTest, URLsNoLongerBookmarked) {
   row1.set_visit_count(2);
   row1.set_typed_count(1);
   row1.set_last_visit(base::Time::Now());
-  EXPECT_TRUE(favicon_db()->AddIconMapping(row1.url(), favicon1));
+  EXPECT_TRUE(favicon_db()->AddIconMapping(row1.url(), favicon1,
+                                           favicon::PageUrlType::kRegular));
 
   URLRow row2(GURL("http://news.google.com/"));
   row2.set_visit_count(1);
   row2.set_last_visit(base::Time::Now());
-  EXPECT_TRUE(favicon_db()->AddIconMapping(row2.url(), favicon2));
+  EXPECT_TRUE(favicon_db()->AddIconMapping(row2.url(), favicon2,
+                                           favicon::PageUrlType::kRegular));
 
   URLRows rows;
   rows.push_back(row2);  // Reversed order for the same reason as favicons.
@@ -1418,7 +1424,8 @@ TEST_F(HistoryBackendTest, ImportedFaviconsTest) {
   URLRow row1(GURL("http://www.google.com/"));
   row1.set_visit_count(1);
   row1.set_last_visit(base::Time::Now());
-  EXPECT_TRUE(favicon_db()->AddIconMapping(row1.url(), favicon1));
+  EXPECT_TRUE(favicon_db()->AddIconMapping(row1.url(), favicon1,
+                                           favicon::PageUrlType::kRegular));
 
   URLRow row2(GURL("http://news.google.com/"));
   row2.set_visit_count(1);
@@ -3745,6 +3752,8 @@ TEST_F(InMemoryHistoryBackendTest, OnURLsDeletedWithSearchTerms) {
 }
 
 TEST_F(HistoryBackendTest, QueryMostVisitedURLs) {
+  base::HistogramTester histogram_tester;
+
   ASSERT_TRUE(backend_.get());
 
   // Pairs from page transitions to consider_for_ntp_most_visited.
@@ -3765,6 +3774,7 @@ TEST_F(HistoryBackendTest, QueryMostVisitedURLs) {
   }
 
   MostVisitedURLList most_visited = backend_->QueryMostVisitedURLs(100);
+  histogram_tester.ExpectTotalCount("History.QueryMostVisitedURLsTime", 1);
 
   const std::u16string kSomeTitle;  // Ignored by equality operator.
   EXPECT_THAT(
@@ -3774,6 +3784,8 @@ TEST_F(HistoryBackendTest, QueryMostVisitedURLs) {
 }
 
 TEST_F(HistoryBackendTest, ExpireSegmentData) {
+  base::HistogramTester histogram_tester;
+
   ASSERT_TRUE(backend_.get());
 
   {
@@ -3799,6 +3811,7 @@ TEST_F(HistoryBackendTest, ExpireSegmentData) {
   EXPECT_THAT(backend_->QueryMostVisitedURLs(100),
               ElementsAre(MostVisitedURL(GURL("http://example2.com"),
                                          std::u16string())));
+  histogram_tester.ExpectTotalCount("History.QueryMostVisitedURLsTime", 2);
 }
 
 TEST_F(HistoryBackendTest, QueryMostRepeatedQueriesForKeyword) {
@@ -5639,56 +5652,6 @@ TEST_F(HistoryBackendTest, InternalAndExternalReferrer) {
   }
 }
 
-TEST_F(HistoryBackendTest, QueryURLs) {
-  ASSERT_TRUE(backend_.get());
-
-  GURL url("http://www.testquery.com");
-
-  // Clear all history.
-  backend_->DeleteAllHistory();
-
-  // Visit the url after typing it.
-  backend_->AddPageVisit(url, base::Time::Now(), /*referring_visit=*/0,
-                         /*external_referrer_url=*/GURL(),
-                         ui::PAGE_TRANSITION_TYPED, false, SOURCE_BROWSED, true,
-                         false, true);
-
-  std::vector<QueryURLResult> results = backend_->QueryURLs({url}, true);
-
-  EXPECT_EQ(1U, results.size());
-  ASSERT_TRUE(results[0].success);
-  EXPECT_EQ(url, results[0].row.url());
-}
-
-TEST_F(HistoryBackendTest, GetMostRecentVisitForEachURL) {
-  ASSERT_TRUE(backend_.get());
-
-  GURL url("http://www.testquery.com");
-
-  // Clear all history.
-  backend_->DeleteAllHistory();
-
-  // Visit the url after typing it with a past date.
-  backend_->AddPageVisit(
-      url, base::Time::Now() - base::Days(1), /*referring_visit=*/0,
-      /*external_referrer_url=*/GURL(), ui::PAGE_TRANSITION_TYPED, false,
-      SOURCE_BROWSED, true, false, true);
-
-  base::Time curr_time = base::Time::Now();
-
-  // Visit the url after typing it.
-  backend_->AddPageVisit(url, curr_time, /*referring_visit=*/0,
-                         /*external_referrer_url=*/GURL(),
-                         ui::PAGE_TRANSITION_TYPED, false, SOURCE_BROWSED, true,
-                         false, true);
-
-  std::map<GURL, VisitRow> visits =
-      backend_->GetMostRecentVisitForEachURL({url});
-
-  EXPECT_EQ(1U, visits.size());
-  EXPECT_EQ(curr_time, visits[url].visit_time);
-}
-
 // We want to test with the VisitedLinkDatabase enabled and disabled.
 enum TestMode {
   kPopulateVisitedLinkDatabaseDisabled,
@@ -5758,7 +5721,6 @@ class HistoryBackendTestForVisitedLinks
                        /*consider_for_ntp_most_visited=*/true, is_ephemeral,
                        /*local_navigation_id=*/std::nullopt,
                        /*title=*/std::nullopt, top_level_url, frame_url,
-                       /*opener_url=*/std::nullopt,
                        /*app_id=*/std::nullopt,
                        /*visit_duration=*/std::nullopt,
                        /*originator_cache_guid=*/std::nullopt,

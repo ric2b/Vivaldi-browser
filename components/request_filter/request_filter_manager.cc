@@ -163,29 +163,18 @@ bool RequestFilterManager::ProxyURLLoaderFactory(
   return true;
 }
 
-/*static*/
-void RequestFilterManager::ProxiedProxyWebSocket(
-    content::BrowserContext* context,
+content::ContentBrowserClient::WebSocketFactory
+RequestFilterManager::ForwardProxyWebSocket(
     int process_id,
     int frame_id,
     const url::Origin& frame_origin,
     content::ContentBrowserClient::WebSocketFactory factory,
     const net::SiteForCookies& site_for_cookies,
-    const std::optional<std::string>& user_agent,
-    const GURL& url,
-    std::vector<network::mojom::HttpHeaderPtr> additional_headers,
-    mojo::PendingRemote<network::mojom::WebSocketHandshakeClient>
-        handshake_client,
-    mojo::PendingRemote<network::mojom::WebSocketAuthenticationHandler>
-        authentication_handler,
-    mojo::PendingRemote<network::mojom::TrustedHeaderClient> header_client) {
-  auto* request_filter_manager =
-      vivaldi::RequestFilterManagerFactory::GetForBrowserContext(context);
-  request_filter_manager->ProxyWebSocket(
-      process_id, frame_id, frame_origin, std::move(factory), site_for_cookies,
-      user_agent, url, std::move(additional_headers),
-      std::move(handshake_client), std::move(authentication_handler),
-      std::move(header_client));
+    const std::optional<std::string>& user_agent) {
+  return base::BindOnce(&RequestFilterManager::ProxyWebSocket,
+                        weak_factory_.GetWeakPtr(), process_id, frame_id,
+                        frame_origin, std::move(factory), site_for_cookies,
+                        user_agent);
 }
 
 void RequestFilterManager::ProxyWebSocket(
@@ -215,32 +204,39 @@ void RequestFilterManager::ProxyWebSocket(
       &request_handler_, frame_origin, browser_context_, proxies_.get());
 }
 
-/*static*/
-void RequestFilterManager::ProxiedProxyWebTransport(
+content::ContentBrowserClient::WillCreateWebTransportCallback
+RequestFilterManager::ForwardProxyWebTransport(
     int process_id,
     int frame_routing_id,
     const GURL& url,
     const url::Origin& initiator_origin,
-    content::ContentBrowserClient::WillCreateWebTransportCallback callback,
-    mojo::PendingRemote<network::mojom::WebTransportHandshakeClient>
-        handshake_client,
-    std::optional<network::mojom::WebTransportErrorPtr> error) {
-  if (error) {
-    std::move(callback).Run(std::move(handshake_client), std::move(error));
-    return;
-  }
-  auto* render_process_host = content::RenderProcessHost::FromID(process_id);
-  if (!render_process_host) {
-    std::move(callback).Run(std::move(handshake_client), std::nullopt);
-    return;
-  }
-  auto* request_filter_manager =
-      vivaldi::RequestFilterManagerFactory::GetForBrowserContext(
-          render_process_host->GetBrowserContext());
+    content::ContentBrowserClient::WillCreateWebTransportCallback callback) {
+  return base::BindOnce(
+      [](base::WeakPtr<RequestFilterManager> request_fitler_manager,
+         int process_id, int frame_routing_id, const GURL& url,
+         const url::Origin& initiator_origin,
+         content::ContentBrowserClient::WillCreateWebTransportCallback callback,
+         mojo::PendingRemote<network::mojom::WebTransportHandshakeClient>
+             handshake_client,
+         std::optional<network::mojom::WebTransportErrorPtr> error) {
+        if (error) {
+          std::move(callback).Run(std::move(handshake_client),
+                                  std::move(error));
+          return;
+        }
+        auto* render_process_host =
+            content::RenderProcessHost::FromID(process_id);
+        if (!render_process_host || !request_fitler_manager) {
+          std::move(callback).Run(std::move(handshake_client), std::nullopt);
+          return;
+        }
 
-  request_filter_manager->ProxyWebTransport(
-      *render_process_host, frame_routing_id, url, initiator_origin,
-      std::move(callback), std::move(handshake_client));
+        request_fitler_manager->ProxyWebTransport(
+            *render_process_host, frame_routing_id, url, initiator_origin,
+            std::move(callback), std::move(handshake_client));
+      },
+      weak_factory_.GetWeakPtr(), process_id, frame_routing_id, url,
+      initiator_origin, std::move(callback));
 }
 
 void RequestFilterManager::ProxyWebTransport(

@@ -3,7 +3,11 @@ include_rules = [
   "+chromeos/ash/components/scalable_iph",
   "+content/public/browser",
 
-  # TODO(crbug.com/386148857): Fix the dependency.
-  # //chromeos/ash/components should not depend on chromeos/ash/experiences.
+  # TODO(crbug.com/402346171): Components should not have dependencies to //ash.
+  # Resolve it.
+  "+ash/webui/mall/app_id.h",
+
+  # TODO(crbug.com/402346171): Components should not have dependencies to
+  # //chromeos/ash/experiences. Resolve it.
   "+chromeos/ash/experiences/arc/app",
 ]

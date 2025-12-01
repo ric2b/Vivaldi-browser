@@ -10,6 +10,7 @@
 #include "ash/birch/coral_util.h"
 #include "ash/constants/ash_features.h"
 #include "ash/constants/ash_pref_names.h"
+#include "ash/constants/ash_switches.h"
 #include "ash/session/session_controller_impl.h"
 #include "ash/shell.h"
 #include "ash/webui/system_apps/public/system_web_app_type.h"
@@ -45,6 +46,11 @@ class BirchCoralProviderTest : public extensions::PlatformAppBrowserTest {
         ->InstallSystemAppsForTesting();
 
     extensions::PlatformAppBrowserTest::SetUpOnMainThread();
+  }
+
+  void SetUpCommandLine(base::CommandLine* command_line) override {
+    extensions::PlatformAppBrowserTest::SetUpCommandLine(command_line);
+    command_line->AppendSwitch(switches::kForceBirchFakeCoralBackend);
   }
 
  protected:
@@ -105,56 +111,11 @@ IN_PROC_BROWSER_TEST_F(BirchCoralProviderTest, CollectInSessionData) {
   // Comparing the collected app data with the expected app data in mru order.
   EXPECT_THAT(tabs_and_apps.apps,
               testing::UnorderedElementsAre(
-                  AppEq("Gmail", "gdkbjbkdgeggmfkjbfohmimchmkikbid"),
-                  AppEq("YouTube", "adnlfjpnmidfimlkaohpidplnoimahfh"),
+                  // URL will be used when app tab title is empty, which happens
+                  // in this test setup.
+                  AppEq("www.gmail.com", "gdkbjbkdgeggmfkjbfohmimchmkikbid"),
+                  AppEq("www.youtube.com", "adnlfjpnmidfimlkaohpidplnoimahfh"),
                   AppEq("Explore", "nbljnnecbjbmifnoehiemkgefbnpoeak"),
-                  AppEq("Settings", "odknhmnlageboeamepcngndbggdpaobj"),
-                  AppEq("Files", "fkiggjmkendpmbegkagpmagjepfkpmeb")));
-}
-
-// Tests that the coral provider filters out duplicated tab and app data.
-IN_PROC_BROWSER_TEST_F(BirchCoralProviderTest, NoDupInSessionData) {
-  // Close existing browser windows.
-  CloseAllBrowsers();
-
-  // Create two browsers with duplicated urls.
-  test::CreateAndShowBrowser(
-      profile(), {GURL("https://examples1.com"), GURL("https://examples2.com"),
-                  GURL("https://examples2.com")});
-  test::CreateAndShowBrowser(profile(), {GURL("https://examples1.com"),
-                                         GURL("https://examples3.com")});
-
-  // Open some SWA windows with duplicated apps.
-  test::CreateSystemWebApp(profile(), SystemWebAppType::FILE_MANAGER);
-  test::CreateSystemWebApp(profile(), SystemWebAppType::FILE_MANAGER);
-  test::CreateSystemWebApp(profile(), SystemWebAppType::SETTINGS);
-
-  // Open some PWA windows with duplicated apps.
-  test::InstallAndLaunchPWA(profile(), GURL("https://www.youtube.com/"),
-                            /*launch_in_browser=*/false,
-                            /*app_title=*/u"YouTube");
-  test::InstallAndLaunchPWA(profile(), GURL("https://www.youtube.com/"),
-                            /*launch_in_browser=*/false,
-                            /*app_title=*/u"Youtube");
-
-  ash::ToggleOverview();
-  ash::WaitForOverviewEnterAnimation();
-
-  // Check if the collected data as expected.
-  const coral_util::TabsAndApps tabs_and_apps = coral_util::SplitContentData(
-      GetCoralProvider()->GetCoralRequestForTest().content());
-
-  // Comparing the collected tab data with the expected tab data.
-  EXPECT_THAT(tabs_and_apps.tabs,
-              testing::UnorderedElementsAre(
-                  TabEq("examples1.com", GURL("https://examples1.com/")),
-                  TabEq("examples2.com", GURL("https://examples2.com/")),
-                  TabEq("examples3.com", GURL("https://examples3.com/"))));
-
-  // Comparing the collected app data with the expected app data in mru order.
-  EXPECT_THAT(tabs_and_apps.apps,
-              testing::UnorderedElementsAre(
-                  AppEq("YouTube", "adnlfjpnmidfimlkaohpidplnoimahfh"),
                   AppEq("Settings", "odknhmnlageboeamepcngndbggdpaobj"),
                   AppEq("Files", "fkiggjmkendpmbegkagpmagjepfkpmeb")));
 }
@@ -194,8 +155,8 @@ IN_PROC_BROWSER_TEST_F(BirchCoralProviderTest, CollectPostLoginData) {
   // Comparing the collected tab data with the expected tab data.
   EXPECT_THAT(tabs_and_apps.tabs,
               testing::UnorderedElementsAre(
-                  TabEq("", GURL("https://examples1.com/")),
-                  TabEq("", GURL("https://examples2.com/")),
+                  TabEq("examples1.com", GURL("https://examples1.com/")),
+                  TabEq("examples2.com", GURL("https://examples2.com/")),
                   TabEq("bookmarks", GURL(chrome::kChromeUIBookmarksURL)),
                   TabEq("chrome-urls", GURL(chrome::kChromeUIChromeURLsURL)),
                   TabEq("crashes", GURL(chrome::kChromeUICrashesUrl)),

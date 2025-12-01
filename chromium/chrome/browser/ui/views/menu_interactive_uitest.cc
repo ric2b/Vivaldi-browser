@@ -149,7 +149,7 @@ IN_PROC_BROWSER_TEST_F(MenuControllerUITest, DISABLED_TestMouseOverShownMenu) {
   // Create a focused test button, used to assert that it has accessibility
   // focus before and after menu item is active, but not during.
   TestButton button;
-  widget->GetContentsView()->AddChildView(&button);
+  widget->GetContentsView()->AddChildViewRaw(&button);
   FocusManager* focus_manager = widget->GetFocusManager();
   focus_manager->SetFocusedView(&button);
   EXPECT_TRUE(button.HasFocus());
@@ -157,7 +157,7 @@ IN_PROC_BROWSER_TEST_F(MenuControllerUITest, DISABLED_TestMouseOverShownMenu) {
 
   // SetupMenu leaves the mouse position where the first menu item will be
   // when we run the menu.
-  AXEventCounter ax_counter(views::AXEventManager::Get());
+  AXEventCounter ax_counter(views::AXUpdateNotifier::Get());
   EXPECT_EQ(ax_counter.GetCount(ax::mojom::Event::kMenuStart), 0);
   EXPECT_EQ(ax_counter.GetCount(ax::mojom::Event::kMenuPopupStart), 0);
   EXPECT_EQ(ax_counter.GetCount(ax::mojom::Event::kMenuPopupEnd), 0);
@@ -236,7 +236,7 @@ IN_PROC_BROWSER_TEST_F(MenuControllerUITest, FocusOnOrphanMenu) {
   MenuDelegate menu_delegate;
   auto menu_item_owning = std::make_unique<MenuItemView>(&menu_delegate);
   MenuItemView* menu_item = menu_item_owning.get();
-  AXEventCounter ax_counter(views::AXEventManager::Get());
+  AXEventCounter ax_counter(views::AXUpdateNotifier::Get());
   EXPECT_EQ(ax_counter.GetCount(ax::mojom::Event::kMenuStart), 0);
   EXPECT_EQ(ax_counter.GetCount(ax::mojom::Event::kMenuPopupStart), 0);
   EXPECT_EQ(ax_counter.GetCount(ax::mojom::Event::kMenuPopupEnd), 0);

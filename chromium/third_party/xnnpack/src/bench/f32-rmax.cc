@@ -6,16 +6,17 @@
 #include <algorithm>
 #include <cmath>
 #include <functional>
+#include <limits>
 #include <random>
 #include <vector>
 
-#include "utils.h"
-#include "xnnpack.h"
-#include "xnnpack/common.h"
-#include "xnnpack/microfnptr.h"
-#include "xnnpack/microparams-init.h"
-#include "xnnpack/reduce.h"
-#include "xnnpack/buffer.h"
+#include "bench/utils.h"
+#include "include/xnnpack.h"
+#include "src/xnnpack/common.h"
+#include "src/xnnpack/microfnptr.h"
+#include "src/xnnpack/microparams-init.h"
+#include "src/xnnpack/reduce.h"
+#include "src/xnnpack/buffer.h"
 #include <benchmark/benchmark.h>
 
 static void f32_rmax(
@@ -42,8 +43,8 @@ static void f32_rmax(
     init_params(&params);
   }
 
-  float output;
   for (auto _ : state) {
+    float output = -std::numeric_limits<float>::infinity();
     rmax(elements * sizeof(float), input.data(), &output, &params);
   }
 

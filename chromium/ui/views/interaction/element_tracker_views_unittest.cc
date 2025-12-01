@@ -10,6 +10,7 @@
 #include <utility>
 
 #include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/memory/raw_ptr.h"
 #include "base/test/bind.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -1253,6 +1254,8 @@ class ElementTrackerTwoWidgetTest : public ElementTrackerViewsTest {
 
   void TearDown() override {
     widget2_.reset();
+    // Reset the context override callback so it doesn't affect future tests.
+    ElementTrackerViews::SetContextOverrideCallback(base::NullCallback());
     ElementTrackerViewsTest::TearDown();
   }
 
@@ -1284,7 +1287,7 @@ TEST_F(ElementTrackerTwoWidgetTest, ViewMovedToDifferentWidgetGeneratesEvents) {
   EXPECT_EQ(0, shown2.event_count());
   EXPECT_EQ(0, hidden2.event_count());
   // Move to second widget.
-  view2->AddChildView(button);
+  view2->AddChildViewRaw(button);
   EXPECT_EQ(1, shown.event_count());
   EXPECT_EQ(1, hidden.event_count());
   EXPECT_EQ(1, shown2.event_count());
@@ -1433,7 +1436,7 @@ TEST_F(ElementTrackerTwoWidgetTest, OverrideContextCallbackCollapsesContexts) {
   EXPECT_EQ(1, shown.event_count());
   EXPECT_EQ(0, hidden.event_count());
   // Move to second widget.
-  view2->AddChildView(button);
+  view2->AddChildViewRaw(button);
   EXPECT_EQ(2, shown.event_count());
   EXPECT_EQ(1, hidden.event_count());
   // Destroy the second widget.
@@ -1467,7 +1470,7 @@ TEST_F(ElementTrackerTwoWidgetTest,
   EXPECT_EQ(0, shown2.event_count());
   EXPECT_EQ(0, hidden2.event_count());
   // Move to second widget.
-  view2->AddChildView(button);
+  view2->AddChildViewRaw(button);
   EXPECT_EQ(1, shown.event_count());
   EXPECT_EQ(1, hidden.event_count());
   EXPECT_EQ(1, shown2.event_count());

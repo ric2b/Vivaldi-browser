@@ -22,7 +22,6 @@
 #include "content/browser/bad_message.h"
 #include "content/browser/renderer_host/back_forward_cache_metrics.h"
 #include "content/browser/renderer_host/navigation_type.h"
-#include "content/browser/renderer_host/render_frame_host_impl.h"
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "content/public/browser/javascript_dialog_manager.h"
 #include "content/public/browser/web_contents_delegate.h"
@@ -832,6 +831,49 @@ void WaitForCopyableViewInFrame(RenderFrameHost* render_frame_host);
 // redirect the second request to `url` provided in the query param. This should
 // be called before starting `server`.
 void AddRedirectOnSecondNavigationHandler(net::EmbeddedTestServer* server);
+
+// Forwards DidStartLoading calls to the provided callback.
+class LoadingStartObserver : public WebContentsObserver {
+ public:
+  using Callback = base::RepeatingCallback<void()>;
+
+  LoadingStartObserver(WebContents* web_contents, Callback callback);
+  ~LoadingStartObserver() override;
+
+ private:
+  void DidStartLoading() override;
+
+  Callback callback_;
+};
+
+// Forwards DidStopLoading calls to the provided callback.
+class LoadingStopObserver : public WebContentsObserver {
+ public:
+  using Callback = base::RepeatingCallback<void()>;
+
+  LoadingStopObserver(WebContents* web_contents, Callback callback);
+  ~LoadingStopObserver() override;
+
+ private:
+  void DidStopLoading() override;
+
+  Callback callback_;
+};
+
+// Forwards DidFinishLoad calls to the provided callback.
+class LoadFinishObserver : public WebContentsObserver {
+ public:
+  using Callback = base::RepeatingCallback<void(RenderFrameHost*, const GURL&)>;
+
+  LoadFinishObserver(WebContents* web_contents, Callback callback);
+  ~LoadFinishObserver() override;
+
+ private:
+  void DidFinishLoad(RenderFrameHost* render_frame_host,
+                     const GURL& validated_url) override;
+
+  Callback callback_;
+};
 
 }  // namespace content
 

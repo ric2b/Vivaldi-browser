@@ -30,18 +30,20 @@ TestSharedStorageRuntimeManager::CreateWorkletHostHelper(
     SharedStorageDocumentServiceImpl& document_service,
     const url::Origin& frame_origin,
     const url::Origin& data_origin,
+    blink::mojom::SharedStorageDataOriginType data_origin_type,
     const GURL& script_source_url,
     network::mojom::CredentialsMode credentials_mode,
     blink::mojom::SharedStorageWorkletCreationMethod creation_method,
+    int worklet_id,
     const std::vector<blink::mojom::OriginTrialFeature>& origin_trial_features,
     mojo::PendingAssociatedReceiver<blink::mojom::SharedStorageWorkletHost>
         worklet_host,
     blink::mojom::SharedStorageDocumentService::CreateWorkletCallback
         callback) {
   return std::make_unique<TestSharedStorageWorkletHost>(
-      document_service, frame_origin, data_origin, script_source_url,
-      credentials_mode, creation_method, origin_trial_features,
-      std::move(worklet_host), std::move(callback),
+      document_service, frame_origin, data_origin, data_origin_type,
+      script_source_url, credentials_mode, creation_method, worklet_id,
+      origin_trial_features, std::move(worklet_host), std::move(callback),
       should_defer_worklet_messages_);
 }
 
@@ -84,6 +86,26 @@ TestSharedStorageRuntimeManager::GetAttachedWorkletHostForFrame(
 
   DCHECK_EQ(worklet_hosts.size(), 1u);
   return worklet_hosts[0];
+}
+
+TestSharedStorageWorkletHost* TestSharedStorageRuntimeManager::
+    GetLastAttachedWorkletHostForFrameWithScriptSrc(
+        RenderFrameHost* frame,
+        const GURL& script_src_url) {
+  std::vector<TestSharedStorageWorkletHost*> worklet_hosts =
+      GetAttachedWorkletHostsForFrame(frame);
+
+  if (worklet_hosts.empty()) {
+    return nullptr;
+  }
+
+  for (size_t i = worklet_hosts.size(); i > 0; --i) {
+    auto* host = worklet_hosts[i - 1];
+    if (host->script_source_url() == script_src_url) {
+      return host;
+    }
+  }
+  return nullptr;
 }
 
 std::vector<TestSharedStorageWorkletHost*>

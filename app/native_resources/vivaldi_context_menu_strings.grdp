@@ -128,10 +128,10 @@
         Delete
     </message>
     <message name="IDS_VIV_INSPECT_SERVICE_WORKER" desc="Open developertools inspecting the serviceworker used by Vivaldi">
-        Inspect background service-worker
+        Inspect Background Service Worker
     </message>
     <message name="IDS_VIV_INSPECT_PORTAL_DOCUMENT" desc="Open developertools inspecting the document holding portals">
-        Inspect portal-document
+        Inspect Portal Document
     </message>
     <message name="IDS_VIV_DEVICE_ACTIVE_TODAY" desc="Remote device we can sent links to has been active today">
         Active today

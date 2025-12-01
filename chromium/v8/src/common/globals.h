@@ -123,6 +123,12 @@ namespace internal {
 #define V8_CAN_CREATE_SHARED_HEAP_BOOL false
 #endif
 
+#ifdef V8_LOWER_LIMITS_MODE
+#define V8_LOWER_LIMITS_MODE_BOOL true
+#else
+#define V8_LOWER_LIMITS_MODE_BOOL false
+#endif
+
 #ifdef V8_STATIC_ROOTS_GENERATION
 #define V8_STATIC_ROOTS_GENERATION_BOOL true
 #else
@@ -161,13 +167,9 @@ static_assert(V8_ENABLE_LEAPTIERING_BOOL);
 #define ENABLE_CONTROL_FLOW_INTEGRITY_BOOL false
 #endif
 
-#if V8_TARGET_ARCH_ARM || V8_TARGET_ARCH_ARM64
-// Set stack limit lower for ARM and ARM64 than for other architectures because:
-//  - on Arm stack allocating MacroAssembler takes 120K bytes.
-//    See issue crbug.com/405338
-//  - on Arm64 when running in single-process mode for Android WebView, when
-//    initializing V8 we already have a large stack and so have to set the
-//    limit lower. See issue crbug.com/v8/10575
+#if V8_TARGET_ARCH_ARM
+// Set stack limit lower for ARM than for other architectures because stack
+// allocating MacroAssembler takes 120K bytes.  See issue crbug.com/405338
 #define V8_DEFAULT_STACK_SIZE_KB 864
 #elif V8_TARGET_ARCH_IA32
 // In mid-2022, we're observing an increase in stack overflow crashes on
@@ -562,14 +564,15 @@ constexpr int kJSDispatchTableEntrySizeLog2 = 4;
 // The size of the virtual memory reservation for the JSDispatchTable.
 // As with the other tables, a maximum table size in combination with shifted
 // indices allows omitting bounds checks.
-constexpr size_t kJSDispatchTableReservationSize = 128 * MB;
+constexpr size_t kJSDispatchTableReservationSize =
+    (V8_LOWER_LIMITS_MODE_BOOL ? 16 : 256) * MB;
 // The maximum number of entries in a JSDispatchTable.
 constexpr size_t kMaxJSDispatchEntries =
     kJSDispatchTableReservationSize / kJSDispatchTableEntrySize;
 
 #ifdef V8_TARGET_ARCH_64_BIT
 
-constexpr uint32_t kJSDispatchHandleShift = 9;
+constexpr uint32_t kJSDispatchHandleShift = V8_LOWER_LIMITS_MODE_BOOL ? 12 : 8;
 static_assert((1 << (32 - kJSDispatchHandleShift)) == kMaxJSDispatchEntries,
               "kJSDispatchTableReservationSize and kJSDispatchEntryHandleShift "
               "don't match");
@@ -1185,6 +1188,8 @@ using JSPrimitive =
 // or a FixedArray.
 using JSAny = Union<Smi, HeapNumber, BigInt, String, Symbol, Boolean, Null,
                     Undefined, JSReceiver>;
+using JSAnyNotSmi = Union<HeapNumber, BigInt, String, Symbol, Boolean, Null,
+                          Undefined, JSReceiver>;
 using JSAnyNotNumeric =
     Union<String, Symbol, Boolean, Null, Undefined, JSReceiver>;
 using JSAnyNotNumber =
@@ -1450,6 +1455,7 @@ enum class GarbageCollectionReason : int {
   kFinalizeConcurrentMinorMS = 26,
   kCppHeapAllocationFailure = 27,
   kFrozen = 28,
+  kIdleContextDisposal = 29,
 
   NUM_REASONS,
 };
@@ -1518,6 +1524,8 @@ constexpr const char* ToString(GarbageCollectionReason reason) {
       return "CppHeap allocation failure";
     case GarbageCollectionReason::kFrozen:
       return "frozen";
+    case GarbageCollectionReason::kIdleContextDisposal:
+      return "idle context disposal";
     case GarbageCollectionReason::NUM_REASONS:
       UNREACHABLE();
   }
@@ -1591,7 +1599,7 @@ enum class PageSize { kRegular, kLarge };
 enum class CodeFlushMode {
   kFlushBytecode,
   kFlushBaselineCode,
-  kStressFlushCode,
+  kForceFlush,
 };
 
 enum class ExternalBackingStoreType {
@@ -1613,8 +1621,8 @@ bool inline IsByteCodeFlushingEnabled(base::EnumSet<CodeFlushMode> mode) {
   return mode.contains(CodeFlushMode::kFlushBytecode);
 }
 
-bool inline IsStressFlushingEnabled(base::EnumSet<CodeFlushMode> mode) {
-  return mode.contains(CodeFlushMode::kStressFlushCode);
+bool inline IsForceFlushingEnabled(base::EnumSet<CodeFlushMode> mode) {
+  return mode.contains(CodeFlushMode::kForceFlush);
 }
 
 bool inline IsFlushingDisabled(base::EnumSet<CodeFlushMode> mode) {
@@ -1980,6 +1988,21 @@ constexpr double kMinSafeInteger = -kMaxSafeInteger;
 
 constexpr double kMaxUInt32Double = double{kMaxUInt32};
 
+constexpr int64_t kMaxAdditiveSafeInteger = 4503599627370495;  // 2^52 - 1
+static_assert(kMaxAdditiveSafeInteger == (int64_t{1} << 52) - 1);
+constexpr int64_t kMinAdditiveSafeInteger = -4503599627370496;  // - 2^52
+static_assert(kMinAdditiveSafeInteger == -(int64_t{1} << 52));
+constexpr int kAdditiveSafeIntegerBitLength = 53;
+// Number of bits to shift left before addition to detect potential overflow.
+constexpr int kAdditiveSafeIntegerShift = 64 - kAdditiveSafeIntegerBitLength;
+
+static_assert(kMaxAdditiveSafeInteger + kMaxAdditiveSafeInteger <=
+              kMaxSafeInteger);
+// kMinAdditiveSafeInteger + kMinAdditiveSafeInteger would overflow the integer
+// safe addition.
+static_assert(kMinAdditiveSafeInteger + (kMinAdditiveSafeInteger + 1) >=
+              kMinSafeInteger);
+
 // The order of this enum has to be kept in sync with the predicates below.
 enum class VariableMode : uint8_t {
   // User declared variables:
@@ -2030,6 +2053,7 @@ enum class VariableMode : uint8_t {
   kPrivateGetterAndSetter,  // Does not coexist with any other variable with the
                             // same name in the same scope.
 
+  kFirstImmutableLexicalVariableMode = kConst,
   kLastLexicalVariableMode = kAwaitUsing,
 };
 
@@ -2067,6 +2091,19 @@ inline const char* VariableMode2String(VariableMode mode) {
   UNREACHABLE();
 }
 #endif
+
+inline const char* ImmutableLexicalVariableModeToString(VariableMode mode) {
+  switch (mode) {
+    case VariableMode::kConst:
+      return "const";
+    case VariableMode::kUsing:
+      return "using";
+    case VariableMode::kAwaitUsing:
+      return "await using";
+    default:
+      UNREACHABLE();
+  }
+}
 
 enum VariableKind : uint8_t {
   NORMAL_VARIABLE,
@@ -2106,8 +2143,8 @@ inline bool IsSerializableVariableMode(VariableMode mode) {
 }
 
 inline bool IsImmutableLexicalVariableMode(VariableMode mode) {
-  return mode == VariableMode::kConst || mode == VariableMode::kUsing ||
-         mode == VariableMode::kAwaitUsing;
+  return mode >= VariableMode::kFirstImmutableLexicalVariableMode &&
+         mode <= VariableMode::kLastLexicalVariableMode;
 }
 
 inline bool IsImmutableLexicalOrPrivateVariableMode(VariableMode mode) {
@@ -2226,7 +2263,8 @@ inline uint32_t ObjectHash(Address address) {
 // at different points by performing an 'OR' operation. Type feedback moves
 // to a more generic type when we combine feedback.
 //
-//   kSignedSmall -> kSignedSmallInputs -> kNumber  -> kNumberOrOddball -> kAny
+//   kSignedSmall -> kSignedSmallInputs -> kAdditiveSafeInteger
+//                                      -> kNumber ->  kNumberOrOddball -> kAny
 //                                                     kString          -> kAny
 //                                        kBigInt64 -> kBigInt          -> kAny
 //
@@ -2242,14 +2280,15 @@ class BinaryOperationFeedback {
     kNone = 0x0,
     kSignedSmall = 0x1,
     kSignedSmallInputs = 0x3,
-    kNumber = 0x7,
-    kNumberOrOddball = 0xF,
-    kString = 0x10,
+    kAdditiveSafeInteger = 0x7,
+    kNumber = 0xF,
+    kNumberOrOddball = 0x1F,
     kBigInt64 = 0x20,
     kBigInt = 0x60,
-    kStringWrapper = 0x80,
-    kStringOrStringWrapper = 0x90,
-    kAny = 0x7F
+    kString = 0x80,
+    kStringWrapper = 0x100,
+    kStringOrStringWrapper = 0x180,
+    kAny = 0x1FF
   };
 };
 

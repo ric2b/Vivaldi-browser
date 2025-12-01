@@ -40,7 +40,7 @@
 #include "src/gpu/graphite/geom/Geometry.h"
 #include "src/gpu/graphite/geom/IntersectionTree.h"
 #include "src/gpu/graphite/geom/Shape.h"
-#include "src/gpu/graphite/geom/Transform_graphite.h"
+#include "src/gpu/graphite/geom/Transform.h"
 #include "src/gpu/graphite/text/TextAtlasManager.h"
 
 #include "include/core/SkColorSpace.h"
@@ -898,7 +898,7 @@ void Device::drawArc(const SkArc& arc, const SkPaint& paint) {
          (paint.getStyle() == SkPaint::kStroke_Style &&
           // square caps can stick out from the shape so we can't do this with an rrect draw
           paint.getStrokeCap() != SkPaint::kSquare_Cap &&
-          // non-wedge cases with strokes will draw lines to the center
+          // wedge cases with strokes will draw lines to the center
           !arc.isWedge()))) {
         this->drawRRect(SkRRect::MakeOval(arc.oval()), paint);
     } else {
@@ -940,6 +940,14 @@ void Device::drawPath(const SkPath& path, const SkPaint& paint, bool pathIsMutab
     // Alternatively, we could move this analysis to SkCanvas. Also, we could consider applying the
     // path effect, being careful about starting point and direction.
     if (!paint.getPathEffect() && !path.isInverseFillType()) {
+        SkPoint linePts[2];
+        if (path.isLine(linePts)) {
+            // A line has zero area, so stroke and stroke-and-fill are equivalent
+            if (paint.getStyle() != SkPaint::kFill_Style) {
+                this->drawPoints(SkCanvas::kLines_PointMode, 2, linePts, paint);
+            } // and if it's fill, nothing is drawn
+            return;
+        }
         if (SkRect oval; path.isOval(&oval)) {
             this->drawOval(oval, paint);
             return;
@@ -1810,7 +1818,7 @@ void Device::internalFlush() {
     fCurrentDepth = DrawOrder::kClearDepth;
 
      // Any cleanup in the AtlasProvider
-    fRecorder->priv().atlasProvider()->compact(/*forceCompact=*/false);
+    fRecorder->priv().atlasProvider()->compact();
 }
 
 bool Device::needsFlushBeforeDraw(int numNewRenderSteps, DstReadStrategy dstReadStrategy) const {
@@ -1881,21 +1889,11 @@ void Device::drawCoverageMask(const SkSpecialImage* mask,
     // the texture is consumed by the RenderStep and not part of the PaintParams.
     static_cast<Image_Base*>(mask->asImage().get())->notifyInUse(fRecorder, fDC.get());
 
-    // 'mask' logically has 0 coverage outside of its pixels, which is equivalent to kDecal tiling.
-    // However, since we draw geometry tightly fitting 'mask', we can use the better-supported
-    // kClamp tiling and behave effectively the same way.
-    TextureDataBlock::SampledTexture sampledMask{maskProxyView.refProxy(),
-                                                 {SkFilterMode::kLinear, SkTileMode::kClamp}};
-    // Ensure this is kept alive; normally textures are kept alive by the PipelineDataGatherer for
-    // image shaders, or by the PathAtlas. This is a unique circumstance.
-    // NOTE: CoverageMaskRenderStep controls the final sampling options; this texture data block
-    // serves only to keep the mask alive so the sampling passed to add() doesn't matter.
-    fRecorder->priv().textureDataCache()->insert(TextureDataBlock(sampledMask));
-
     // CoverageMaskShape() wraps a Shape when it's used as a PathAtlas, but in this case the
     // original shape has been long lost, so just use a Rect that bounds the image.
     CoverageMaskShape maskShape{Shape{Rect::WH((float)mask->width(), (float)mask->height())},
-                                maskProxyView.proxy(),
+                                // We store a ref to the textureProxy to keep it alive.
+                                maskProxyView.refProxy(),
                                 // Use the active local-to-device transform for this since it
                                 // determines the local coords for evaluating the skpaint, whereas
                                 // the provided 'localToDevice' just places the coverage mask.
@@ -1907,14 +1905,6 @@ void Device::drawCoverageMask(const SkSpecialImage* mask,
                        paint,
                        DefaultFillStyle(),
                        DrawFlags::kIgnorePathEffect);
-}
-
-sk_sp<SkSpecialImage> Device::makeSpecial(const SkBitmap&) {
-    return nullptr;
-}
-
-sk_sp<SkSpecialImage> Device::makeSpecial(const SkImage*) {
-    return nullptr;
 }
 
 sk_sp<SkSpecialImage> Device::snapSpecial(const SkIRect& subset, bool forceCopy) {

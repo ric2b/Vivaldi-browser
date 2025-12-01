@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <deque>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -32,6 +33,7 @@
 #include "components/autofill/core/common/autofill_util.h"
 #include "components/autofill/core/common/form_field_data.h"
 #include "components/autofill/core/common/logging/log_buffer.h"
+#include "components/autofill/core/common/signatures.h"
 #include "components/version_info/version_info.h"
 
 namespace autofill {
@@ -95,11 +97,12 @@ std::deque<FieldSuggestion> MergeManualAndServerOverrides(
     std::deque<FieldSuggestion> server_overrides) {
   std::deque<FieldSuggestion> result;
   while (!manual_overrides.empty() && !server_overrides.empty()) {
-    // If the manual override has a no type specified, it means that the
-    // server prediction should be used.
-    result.push_back(manual_overrides.front().predictions().empty()
-                         ? server_overrides.front()
-                         : manual_overrides.front());
+    // If the manual override has a no type or format string specified, it means
+    // that the server prediction should be used.
+    result.push_back(!manual_overrides.front().predictions().empty() ||
+                             manual_overrides.front().has_format_string()
+                         ? manual_overrides.front()
+                         : server_overrides.front());
 
     manual_overrides.pop_front();
     // Generally consume the first element of each override source. However,
@@ -308,6 +311,11 @@ void PopulateRandomizedFieldMetadata(
                  field.autocomplete_attribute(),
                  metadata->mutable_autocomplete());
   }
+  if (!field.pattern().empty()) {
+    encode_value(RandomizedEncoder::kFieldPattern, field.pattern(),
+
+                 metadata->mutable_pattern());
+  }
   // 0 is the default value for fields that do not allow free input, while
   // `kDefaultMaxLength` is the default value for fields that allow free input.
   if (field.max_length() != 0 &&
@@ -349,9 +357,13 @@ void PopulateRandomizedFieldMetadata(
 
 // Encodes the fields of `upload_fields` in the in-out parameter `upload`.
 // Helper function for EncodeUploadRequest().
-void EncodeFormFieldsForUpload(const FormStructure& form,
-                               base::span<AutofillField*> upload_fields,
-                               AutofillUploadContents* upload) {
+void EncodeFormFieldsForUpload(
+    const FormStructure& form,
+    base::optional_ref<RandomizedEncoder> encoder,
+    const std::map<FieldGlobalId, base::flat_set<std::u16string>>&
+        format_strings,
+    base::span<AutofillField*> upload_fields,
+    AutofillUploadContents* upload) {
   DCHECK(!IsMalformed(form));
 
   for (AutofillField* field : upload_fields) {
@@ -389,15 +401,27 @@ void EncodeFormFieldsForUpload(const FormStructure& form,
           field->initial_value_changed().value());
     }
 
+    if (auto it = format_strings.find(field->global_id());
+        it != format_strings.end()) {
+      for (const std::u16string& format_string : it->second) {
+        DCHECK(data_util::IsValidDateFormat(format_string));
+        auto* added_format_string = added_field->add_format_string();
+        added_format_string->set_type(
+            AutofillUploadContents_Field_FormatString_Type_DATE);
+        added_format_string->set_format_string(
+            base::UTF16ToUTF8(format_string));
+      }
+    }
+
     added_field->set_signature(field->GetFieldSignature().value());
 
     if (field->properties_mask()) {
       added_field->set_properties_mask(field->properties_mask());
     }
 
-    if (form.randomized_encoder().has_value()) {
+    if (encoder.has_value()) {
       PopulateRandomizedFieldMetadata(
-          *form.randomized_encoder(), form, *field,
+          *encoder, form, *field,
           added_field->mutable_randomized_field_metadata());
     }
 
@@ -405,6 +429,7 @@ void EncodeFormFieldsForUpload(const FormStructure& form,
       added_field->set_single_username_vote_type(
           field->single_username_vote_type().value());
     }
+
     switch (field->is_most_recent_single_username_candidate()) {
       case IsMostRecentSingleUsernameCandidate::kNotPartOfUsernameFirstFlow:
         added_field->clear_is_most_recent_single_username_candidate();
@@ -625,29 +650,49 @@ GetSuggestionsMapFromResponse(
 #if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
   if (base::FeatureList::IsEnabled(
           features::test::kAutofillOverridePredictions)) {
-    auto maybe_insert_overrides =
-        [&fields_suggestions](const base::FeatureParam<std::string>& param) {
-          if (std::string param_value = param.Get(); !param_value.empty()) {
-            InsertParsedOverrides(ParseServerPredictionOverrides(param_value),
-                                  fields_suggestions);
-          }
-        };
-    maybe_insert_overrides(
-        features::test::kAutofillOverridePredictionsSpecification);
-    maybe_insert_overrides(
-        features::test::
-            kAutofillOverridePredictionsForAlternativeFormSignaturesSpecification);
+    if (std::string param =
+            features::test::kAutofillOverridePredictionsSpecification.Get();
+        !param.empty()) {
+      InsertParsedOverrides(
+          ParseServerPredictionOverrides(param, OverrideFormat::kSpec),
+          fields_suggestions);
+    }
+    if (std::string param =
+            features::test::kAutofillOverridePredictionsJson.Get();
+        !param.empty()) {
+      InsertParsedOverrides(
+          ParseServerPredictionOverrides(param, OverrideFormat::kJson),
+          fields_suggestions);
+    }
   }
 #endif
   return fields_suggestions;
+}
+
+base::flat_set<FormSignature> GetFormsForWhichToRunAiModel(
+    const AutofillQueryResponse& response,
+    const std::vector<FormSignature>& queried_form_signatures) {
+  std::vector<FormSignature> forms;
+  const int num_of_forms =
+      std::min(response.form_suggestions_size(),
+               base::checked_cast<int>(queried_form_signatures.size()));
+  for (int i = 0; i < num_of_forms; ++i) {
+    if (response.form_suggestions(i).run_autofill_ai_model()) {
+      forms.push_back(queried_form_signatures[i]);
+    }
+  }
+  return base::MakeFlatSet<FormSignature>(std::move(forms));
 }
 
 }  // namespace
 
 std::vector<AutofillUploadContents> EncodeUploadRequest(
     const FormStructure& form,
+    base::optional_ref<RandomizedEncoder> encoder,
+    const std::map<FieldGlobalId, base::flat_set<std::u16string>>&
+        format_strings,
     const FieldTypeSet& available_field_types,
-    std::string_view login_form_signature,
+    std::optional<FormSignature> login_form_signature,
     bool observed_submission) {
   DCHECK_EQ(FirstNonCapturedType(form, available_field_types),
             MAX_VALID_FIELD_TYPE);
@@ -662,8 +707,7 @@ std::vector<AutofillUploadContents> EncodeUploadRequest(
   upload.set_autofill_used(false);
   upload.set_data_present(data_present);
   upload.set_has_form_tag(form.is_form_element());
-  if (!form.current_page_language()->empty() &&
-      form.randomized_encoder().has_value()) {
+  if (!form.current_page_language()->empty() && encoder.has_value()) {
     upload.set_language(form.current_page_language().value());
   }
 
@@ -690,26 +734,24 @@ std::vector<AutofillUploadContents> EncodeUploadRequest(
       static_cast<AutofillUploadContents_SubmissionIndicatorEvent>(
           triggering_event));
 
-  if (!login_form_signature.empty()) {
-    uint64_t login_sig;
-    if (base::StringToUint64(login_form_signature, &login_sig)) {
-      upload.set_login_form_signature(login_sig);
-    }
+  if (login_form_signature.has_value()) {
+    upload.set_login_form_signature(login_form_signature->value());
   }
 
   if (IsMalformed(form)) {
     return {};  // Malformed form, skip it.
   }
 
-  if (form.randomized_encoder().has_value()) {
-    PopulateRandomizedFormMetadata(*form.randomized_encoder(), form,
+  if (encoder.has_value()) {
+    PopulateRandomizedFormMetadata(*encoder, form,
                                    upload.mutable_randomized_form_metadata());
   }
 
   std::vector<AutofillField*> upload_fields(form.fields().size());
   std::ranges::transform(form.fields(), upload_fields.begin(),
                          &std::unique_ptr<AutofillField>::get);
-  EncodeFormFieldsForUpload(form, upload_fields, &upload);
+  EncodeFormFieldsForUpload(form, encoder, format_strings, upload_fields,
+                            &upload);
   std::vector<AutofillUploadContents> uploads = {std::move(upload)};
 
   // Build AutofillUploadContents for the renderer forms that have been
@@ -741,8 +783,9 @@ std::vector<AutofillUploadContents> EncodeUploadRequest(
                               (*subform_begin)->renderer_form_id();
                      });
     // SAFETY: The iterators are from the same container.
-    EncodeFormFieldsForUpload(
-        form, UNSAFE_BUFFERS({subform_begin, subform_end}), &uploads.back());
+    EncodeFormFieldsForUpload(form, encoder, format_strings,
+                              UNSAFE_BUFFERS({subform_begin, subform_end}),
+                              &uploads.back());
     subform_begin = subform_end;
   }
   return uploads;
@@ -790,7 +833,7 @@ void ParseServerPredictionsQueryResponse(
 
   std::string decoded_payload;
   if (!base::Base64Decode(payload, &decoded_payload)) {
-    VLOG(1) << "Could not decode payload from base64 to bytes";
+    DVLOG(1) << "Could not decode payload from base64 to bytes";
     return;
   }
 
@@ -800,8 +843,8 @@ void ParseServerPredictionsQueryResponse(
     return;
   }
 
-  VLOG(1) << "Autofill query response from API was successfully parsed: "
-          << response;
+  DVLOG(1) << "Autofill query response from API was successfully parsed: "
+           << response;
 
   ProcessServerPredictionsQueryResponse(response, forms,
                                         queried_form_signatures, log_manager);
@@ -823,8 +866,14 @@ void ProcessServerPredictionsQueryResponse(
       fields_suggestions =
           GetSuggestionsMapFromResponse(response, queried_form_signatures);
 
+  const base::flat_set<FormSignature> forms_for_which_to_run_ai_model =
+      GetFormsForWhichToRunAiModel(response, queried_form_signatures);
+
   // Copy the field types into the actual form.
   for (FormStructure* form : forms) {
+    form->set_may_run_autofill_ai_model(
+        forms_for_which_to_run_ai_model.contains(form->form_signature()));
+
     // Fields can share the same field signature. This map records for each
     // signature how many fields with the same signature have been observed.
     std::map<FieldSignature, size_t> field_rank_map;
@@ -850,6 +899,11 @@ void ProcessServerPredictionsQueryResponse(
       if (field_suggestion->has_password_requirements()) {
         field->SetPasswordRequirements(
             field_suggestion->password_requirements());
+      }
+      if (field_suggestion->has_format_string()) {
+        field->set_format_string_unless_overruled(
+            base::UTF8ToUTF16(field_suggestion->format_string()),
+            AutofillField::FormatStringSource::kServer);
       }
       ++field_rank_map[field->GetFieldSignature()];
 
@@ -883,33 +937,6 @@ void ProcessServerPredictionsQueryResponse(
     AutofillMetrics::LogServerResponseHasDataForForm(std::ranges::any_of(
         form->fields(), [](FieldType t) { return t != NO_SERVER_DATA; },
         &AutofillField::server_type));
-
-    form->UpdateAutofillCount();
-    form->RationalizeFormStructure(log_manager);
-
-    AssignSections(form->fields());
-
-    // Since this step requires the sections to be available, it is done after
-    // the sectioning logic is ran. Note that since this step doesn't change the
-    // types of the individual field, this should not break any assumption that
-    // was made to compute the sections.
-    form->RationalizePhoneNumberFieldsForFilling();
-
-    // Log the field type predicted by rationalization.
-    // The sections are mapped to consecutive natural numbers starting at 1.
-    std::map<Section, size_t> section_id_map;
-    for (const auto& field : form->fields()) {
-      if (!base::Contains(section_id_map, field->section())) {
-        size_t next_section_id = section_id_map.size() + 1;
-        section_id_map[field->section()] = next_section_id;
-      }
-      field->AppendLogEventIfNotRepeated(RationalizationFieldLogEvent{
-          .field_type = field->Type().GetStorableType(),
-          .section_id = section_id_map[field->section()],
-          .type_changed = field->Type().GetStorableType() !=
-                          field->ComputedType().GetStorableType(),
-      });
-    }
   }
 
   AutofillMetrics::ServerQueryMetric metric;

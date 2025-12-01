@@ -35,7 +35,7 @@ class Typer::Decorator final : public GraphDecorator {
   Typer* const typer_;
 };
 
-Typer::Typer(JSHeapBroker* broker, Flags flags, Graph* graph,
+Typer::Typer(JSHeapBroker* broker, Flags flags, TFGraph* graph,
              TickCounter* tick_counter)
     : flags_(flags),
       graph_(graph),
@@ -308,7 +308,7 @@ class Typer::Visitor : public Reducer {
   Type Weaken(Node* node, Type current_type, Type previous_type);
 
   Zone* zone() { return typer_->zone(); }
-  Graph* graph() { return typer_->graph(); }
+  TFGraph* graph() { return typer_->graph(); }
   JSHeapBroker* broker() { return typer_->broker(); }
 
   void SetWeakened(NodeId node_id) { weakened_nodes_.insert(node_id); }
@@ -721,7 +721,8 @@ Type Typer::Visitor::ToString(Type type, Typer* t) {
 Type Typer::Visitor::ObjectIsArrayBufferView(Type type, Typer* t) {
   // TODO(turbofan): Introduce a Type::ArrayBufferView?
   CHECK(!type.IsNone());
-  if (!type.Maybe(Type::OtherObject())) return t->singleton_false_;
+  if (type.Is(Type::TypedArray())) return t->singleton_true_;
+  if (!type.Maybe(Type::TypedArray())) return t->singleton_false_;
   return Type::Boolean();
 }
 
@@ -1118,8 +1119,10 @@ bool Typer::Visitor::InductionVariablePhiTypeIsPrefixedPoint(
       CASE(NumberSubtract)
       CASE(SpeculativeNumberAdd)
       CASE(SpeculativeNumberSubtract)
-      CASE(SpeculativeSafeIntegerAdd)
-      CASE(SpeculativeSafeIntegerSubtract)
+      CASE(SpeculativeAdditiveSafeIntegerAdd)
+      CASE(SpeculativeAdditiveSafeIntegerSubtract)
+      CASE(SpeculativeSmallIntegerAdd)
+      CASE(SpeculativeSmallIntegerSubtract)
 #undef CASE
       default:
         UNREACHABLE();
@@ -1543,7 +1546,7 @@ Type Typer::Visitor::TypeJSCreatePromise(Node* node) {
 }
 
 Type Typer::Visitor::TypeJSCreateTypedArray(Node* node) {
-  return Type::OtherObject();
+  return Type::TypedArray();
 }
 
 Type Typer::Visitor::TypeJSCreateLiteralArray(Node* node) {

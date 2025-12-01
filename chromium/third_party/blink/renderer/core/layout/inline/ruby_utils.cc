@@ -29,7 +29,7 @@ std::tuple<LayoutUnit, LayoutUnit> AdjustTextOverUnderOffsetsForEmHeight(
     const ComputedStyle& style,
     const ShapeResultView& shape_view) {
   DCHECK_LE(over, under);
-  const SimpleFontData* primary_font_data = style.GetFont().PrimaryFont();
+  const SimpleFontData* primary_font_data = style.GetFont()->PrimaryFont();
   if (!primary_font_data)
     return std::make_pair(over, under);
   const auto font_baseline = style.GetFontBaseline();
@@ -75,7 +75,7 @@ std::tuple<LayoutUnit, LayoutUnit> AdjustTextOverUnderOffsetsForEmHeight(
 FontHeight ComputeEmHeight(const LogicalLineItem& line_item) {
   if (const auto& shape_result_view = line_item.shape_result) {
     const ComputedStyle* style = line_item.Style();
-    const SimpleFontData* primary_font_data = style->GetFont().PrimaryFont();
+    const SimpleFontData* primary_font_data = style->GetFont()->PrimaryFont();
     if (!primary_font_data) {
       return FontHeight();
     }
@@ -126,14 +126,14 @@ FontHeight ComputeEmHeight(const LogicalLineItem& line_item) {
 
 }  // anonymous namespace
 
-RubyItemIndexes ParseRubyInInlineItems(const HeapVector<InlineItem>& items,
+RubyItemIndexes ParseRubyInInlineItems(const InlineItems& items,
                                        wtf_size_t start_item_index) {
   CHECK_LT(start_item_index, items.size());
-  CHECK_EQ(items[start_item_index].Type(), InlineItem::kOpenRubyColumn);
+  CHECK_EQ(items[start_item_index]->Type(), InlineItem::kOpenRubyColumn);
   RubyItemIndexes indexes = {start_item_index, WTF::kNotFound, WTF::kNotFound,
                              WTF::kNotFound};
   for (wtf_size_t i = start_item_index + 1; i < items.size(); ++i) {
-    const InlineItem& item = items[i];
+    const InlineItem& item = *items[i];
     if (item.Type() == InlineItem::kCloseRubyColumn) {
       if (indexes.base_end == WTF::kNotFound) {
         DCHECK_EQ(indexes.annotation_start, WTF::kNotFound);

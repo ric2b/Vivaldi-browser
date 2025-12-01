@@ -5,6 +5,11 @@ import("//build/config/ios/rules.gni")
 bundle_data_xcassets("vivaldi_autofill_assets") {
   catalog = "VivaldiAutofillAssets.xcassets"
   sources = [
+    # vivaldi_autofill_vivaldi_logo
+    "VivaldiAutofillAssets.xcassets/vivaldi_autofill_vivaldi_logo.imageset/Contents.json",
+    "VivaldiAutofillAssets.xcassets/vivaldi_autofill_vivaldi_logo.imageset/vivaldi_autofill_vivaldi_logo.pdf",
+    "VivaldiAutofillAssets.xcassets/vivaldi_autofill_vivaldi_logo.imageset/vivaldi_autofill_vivaldi_logo_dark.pdf",
+
     # vivaldi_autofill_passwords
     "VivaldiAutofillAssets.xcassets/vivaldi_autofill_passwords.imageset/Contents.json",
     "VivaldiAutofillAssets.xcassets/vivaldi_autofill_passwords.imageset/vivaldi_autofill_passwords.pdf",

@@ -17,6 +17,7 @@
 #include "components/search_engines/search_engine_choice/search_engine_choice_service.h"
 #include "components/search_engines/search_terms_data.h"
 #include "components/search_engines/template_url_prepopulate_data.h"
+#include "components/search_engines/template_url_prepopulate_data_resolver.h"
 #include "components/search_engines/template_url_service.h"
 #include "components/search_engines/template_url_service_client.h"
 #include "components/webdata/common/web_database_service.h"
@@ -82,13 +83,16 @@ void TemplateURLServiceUnitTestBase::SetUp() {
   regional_capabilities_service_ =
       regional_capabilities::CreateServiceWithFakeClient(pref_service_);
 
+  prepopulate_data_resolver_ =
+      std::make_unique<TemplateURLPrepopulateData::Resolver>(
+          pref_service_, *regional_capabilities_service_.get());
+
   search_engine_choice_service_ =
       std::make_unique<search_engines::SearchEngineChoiceService>(
           pref_service_, &local_state_, *regional_capabilities_service_,
-#if !BUILDFLAG(IS_IOS) && !BUILDFLAG(IS_ANDROID)
+          *prepopulate_data_resolver_,
           /*is_profile_eligible_for_dse_guest_propagation=*/false,
-#endif
-          country_codes::kCountryIDUnknown);
+          country_codes::CountryId());
 
   template_url_service_ = CreateService();
 }
@@ -97,7 +101,8 @@ std::unique_ptr<TemplateURLService>
 TemplateURLServiceUnitTestBase::CreateService() {
   return std::make_unique<TemplateURLService>(
       pref_service_, *search_engine_choice_service_,
-      std::make_unique<SearchTermsData>(), nullptr /* KeywordWebDataService */,
+      *prepopulate_data_resolver_.get(), std::make_unique<SearchTermsData>(),
+      nullptr /* KeywordWebDataService */,
       nullptr /* TemplateURLServiceClient */, base::RepeatingClosure());
 }
 
@@ -128,8 +133,9 @@ LoadedTemplateURLServiceUnitTestBase::CreateService() {
 
   auto template_url_service = std::make_unique<TemplateURLService>(
       pref_service(), search_engine_choice_service(),
-      std::make_unique<SearchTermsData>(), keyword_data_service_,
-      nullptr /* TemplateURLServiceClient */, base::RepeatingClosure());
+      prepopulate_data_resolver(), std::make_unique<SearchTermsData>(),
+      keyword_data_service_, nullptr /* TemplateURLServiceClient */,
+      base::RepeatingClosure());
 
   return template_url_service;
 }

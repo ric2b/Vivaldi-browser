@@ -5,9 +5,11 @@
 #ifndef V8_OBJECTS_JS_FUNCTION_INL_H_
 #define V8_OBJECTS_JS_FUNCTION_INL_H_
 
+#include "src/objects/js-function.h"
+// Include the non-inl header before the rest of the headers.
+
 #include <optional>
 
-#include "src/objects/js-function.h"
 
 // Include other inline headers *after* including js-function.h, such that e.g.
 // the definition of JSFunction is available (and this comment prevents
@@ -186,13 +188,16 @@ Tagged<Object> JSFunction::raw_code(IsolateForSandbox isolate,
 }
 
 #ifdef V8_ENABLE_LEAPTIERING
-void JSFunction::AllocateDispatchHandle(Isolate* isolate,
-                                        uint16_t parameter_count,
-                                        Tagged<Code> code,
-                                        WriteBarrierMode mode) {
-  DCHECK_EQ(raw_feedback_cell()->dispatch_handle(), kNullJSDispatchHandle);
-  AllocateAndInstallJSDispatchHandle(kDispatchHandleOffset, isolate,
-                                     parameter_count, code, mode);
+// static
+JSDispatchHandle JSFunction::AllocateDispatchHandle(Handle<JSFunction> function,
+                                                    Isolate* isolate,
+                                                    uint16_t parameter_count,
+                                                    DirectHandle<Code> code,
+                                                    WriteBarrierMode mode) {
+  DCHECK_EQ(function->raw_feedback_cell()->dispatch_handle(),
+            kNullJSDispatchHandle);
+  return AllocateAndInstallJSDispatchHandle(
+      function, kDispatchHandleOffset, isolate, parameter_count, code, mode);
 }
 
 void JSFunction::clear_dispatch_handle() {
@@ -263,7 +268,7 @@ bool JSFunction::tiering_in_progress() const {
 #endif
 }
 
-bool JSFunction::IsTieringRequestedOrInProgress(Isolate* isolate) const {
+bool JSFunction::IsTieringRequestedOrInProgress() const {
 #ifdef V8_ENABLE_LEAPTIERING
   if (!has_feedback_vector()) return false;
   return tiering_in_progress() ||
@@ -283,7 +288,7 @@ bool JSFunction::IsLoggingRequested(Isolate* isolate) const {
 #endif
 }
 
-bool JSFunction::IsOptimizationRequested(Isolate* isolate) const {
+bool JSFunction::IsMaglevRequested(Isolate* isolate) const {
 #ifdef V8_ENABLE_LEAPTIERING
   JSDispatchTable* jdt = IsolateGroup::current()->js_dispatch_table();
   Address entrypoint = jdt->GetEntrypoint(dispatch_handle());
@@ -295,12 +300,36 @@ bool JSFunction::IsOptimizationRequested(Isolate* isolate) const {
     return TieringBuiltin::k##name !=                                          \
            TieringBuiltin::kFunctionLogNextExecution;                          \
   }
-  BUILTIN_LIST_BASE_TIERING(CASE)
+  BUILTIN_LIST_BASE_TIERING_MAGLEV(CASE)
 #undef CASE
   return {};
 #else
-  return IsRequestMaglev(tiering_state()) || IsRequestTurbofan(tiering_state());
+  return IsRequestMaglev(tiering_state());
 #endif
+}
+
+bool JSFunction::IsTurbofanRequested(Isolate* isolate) const {
+#ifdef V8_ENABLE_LEAPTIERING
+  JSDispatchTable* jdt = IsolateGroup::current()->js_dispatch_table();
+  Address entrypoint = jdt->GetEntrypoint(dispatch_handle());
+  const EmbeddedData& embedded_data = EmbeddedData::FromBlob(isolate);
+#define CASE(name, ...)                                                        \
+  if (entrypoint == embedded_data.InstructionStartOf(Builtin::k##name)) {      \
+    DCHECK(jdt->IsTieringRequested(dispatch_handle(), TieringBuiltin::k##name, \
+                                   isolate));                                  \
+    return TieringBuiltin::k##name !=                                          \
+           TieringBuiltin::kFunctionLogNextExecution;                          \
+  }
+  BUILTIN_LIST_BASE_TIERING_TURBOFAN(CASE)
+#undef CASE
+  return {};
+#else
+  return IsRequestTurbofan(tiering_state());
+#endif
+}
+
+bool JSFunction::IsOptimizationRequested(Isolate* isolate) const {
+  return IsMaglevRequested(isolate) || IsTurbofanRequested(isolate);
 }
 
 std::optional<CodeKind> JSFunction::GetRequestedOptimizationIfAny(
@@ -363,10 +392,10 @@ std::optional<CodeKind> JSFunction::GetRequestedOptimizationIfAny(
   return {};
 }
 
-void JSFunction::ResetTieringRequests(Isolate* isolate) {
+void JSFunction::ResetTieringRequests() {
 #ifdef V8_ENABLE_LEAPTIERING
   IsolateGroup::current()->js_dispatch_table()->ResetTieringRequest(
-      dispatch_handle(), isolate);
+      dispatch_handle());
 #else
   if (has_feedback_vector() && !tiering_in_progress()) {
     feedback_vector()->reset_tiering_state();
@@ -379,12 +408,17 @@ void JSFunction::SetTieringInProgress(bool in_progress,
   if (!has_feedback_vector()) return;
   if (osr_offset.IsNone()) {
 #ifdef V8_ENABLE_LEAPTIERING
+    bool was_in_progress = tiering_in_progress();
     feedback_vector()->set_tiering_in_progress(in_progress);
+    if (!in_progress && was_in_progress) {
+      SetInterruptBudget(GetIsolate(), BudgetModification::kReduce);
+    }
 #else
     if (in_progress) {
       feedback_vector()->set_tiering_state(TieringState::kInProgress);
     } else if (tiering_in_progress()) {
       feedback_vector()->reset_tiering_state();
+      SetInterruptBudget(GetIsolate(), BudgetModification::kReduce);
     }
 #endif  // V8_ENABLE_LEAPTIERING
   } else {
@@ -510,7 +544,7 @@ bool JSFunction::is_compiled(IsolateForSandbox isolate) const {
          shared()->is_compiled();
 }
 
-bool JSFunction::NeedsResetDueToFlushedBytecode(IsolateForSandbox isolate) {
+bool JSFunction::NeedsResetDueToFlushedBytecode(Isolate* isolate) {
   // Do a raw read for shared and code fields here since this function may be
   // called on a concurrent thread. JSFunction itself should be fully
   // initialized here but the SharedFunctionInfo, Code objects may not be
@@ -527,7 +561,11 @@ bool JSFunction::NeedsResetDueToFlushedBytecode(IsolateForSandbox isolate) {
   Tagged<Code> code = Cast<Code>(maybe_code);
 
   Tagged<SharedFunctionInfo> shared = Cast<SharedFunctionInfo>(maybe_shared);
-  return !shared->is_compiled() && code->builtin_id() != Builtin::kCompileLazy;
+  return !shared->is_compiled() &&
+         (code->builtin_id() != Builtin::kCompileLazy ||
+          // With leaptiering we can have CompileLazy as the code object but
+          // still an optimization trampoline installed.
+          (V8_ENABLE_LEAPTIERING_BOOL && IsOptimizationRequested(isolate)));
 }
 
 bool JSFunction::NeedsResetDueToFlushedBaselineCode(IsolateForSandbox isolate) {
@@ -550,7 +588,7 @@ void JSFunction::ResetIfCodeFlushed(
   if (kBytecodeCanFlush && NeedsResetDueToFlushedBytecode(isolate)) {
     // Bytecode was flushed and function is now uncompiled, reset JSFunction
     // by setting code to CompileLazy and clearing the feedback vector.
-    ResetTieringRequests(isolate);
+    ResetTieringRequests();
     UpdateCode(*BUILTIN_CODE(isolate, CompileLazy));
     raw_feedback_cell()->reset_feedback_vector(gc_notify_updated_slot);
     return;
@@ -560,7 +598,7 @@ void JSFunction::ResetIfCodeFlushed(
                  kBaselineCodeCanFlush);
   if (kBaselineCodeCanFlush && NeedsResetDueToFlushedBaselineCode(isolate)) {
     // Flush baseline code from the closure if required
-    ResetTieringRequests(isolate);
+    ResetTieringRequests();
     UpdateCode(*BUILTIN_CODE(isolate, InterpreterEntryTrampoline));
   }
 }

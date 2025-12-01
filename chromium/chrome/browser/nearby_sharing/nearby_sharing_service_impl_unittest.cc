@@ -307,7 +307,7 @@ namespace NearbySharingServiceUnitTests {
 constexpr base::TimeDelta kDelta = base::Milliseconds(100);
 
 constexpr char kProfileName[] = "profile_name@test";
-constexpr char kFakeGaia[] = "fakegaia";
+constexpr GaiaId::Literal kFakeGaia("fakegaia");
 constexpr char kServiceId[] = "NearbySharing";
 constexpr char kDeviceName[] = "test_device_name";
 constexpr nearby_share::mojom::ShareTargetType kDeviceType =
@@ -621,14 +621,12 @@ class NearbySharingServiceImplTestBase : public testing::Test {
 
     // Simulate user log-in.
     auto* user = fake_user_manager_->AddGaiaUser(
-        AccountId::FromUserEmailGaiaId(kProfileName, GaiaId(kFakeGaia)),
+        AccountId::FromUserEmailGaiaId(kProfileName, kFakeGaia),
         user_manager::UserType::kRegular);
     fake_user_manager_->UserLoggedIn(
         user->GetAccountId(),
         user_manager::FakeUserManager::GetFakeUsernameHash(
-            user->GetAccountId()),
-        /*browser_restart=*/false,
-        /*is_child=*/false);
+            user->GetAccountId()));
     profile_ = profile_manager_->CreateTestingProfile(kProfileName);
     profile_->GetPrefs()->SetBoolean(prefs::kNearbySharingEnabledPrefName,
                                      true);

@@ -3,11 +3,11 @@
 #include "extensions/api/page_actions/page_actions_api.h"
 
 #include "base/lazy_instance.h"
-#include "chrome/browser/extensions/extension_tab_util.h"
 #include "components/page_actions/page_actions_service_factory.h"
 #include "components/page_actions/page_actions_tab_helper.h"
 #include "extensions/schema/page_actions.h"
 #include "extensions/tools/vivaldi_tools.h"
+#include "extensions/vivaldi_browser_component_wrapper.h"
 
 namespace extensions {
 
@@ -49,7 +49,8 @@ void PageActionsEventRouter::OnScriptOverridesChanged(
   ::vivaldi::BroadcastEvent(
       vivaldi::page_actions::OnOverridesChanged::kEventName,
       vivaldi::page_actions::OnOverridesChanged::Create(
-          ExtensionTabUtil::GetTabId(tab_contents)),
+          VivaldiBrowserComponentWrapper::GetInstance()
+              ->ExtensionTabUtilGetTabId(tab_contents)),
       browser_context_);
 }
 
@@ -143,8 +144,8 @@ PageActionsSetScriptOverrideForTabFunction::RunWithService(
 
   bool result = false;
   content::WebContents* tab_contents;
-  if (ExtensionTabUtil::GetTabById(params->tab_id, browser_context(), true,
-                                   &tab_contents) &&
+  if (VivaldiBrowserComponentWrapper::GetInstance()->ExtensionTabUtilGetTabById(
+          params->tab_id, browser_context(), true, &tab_contents) &&
       tab_contents) {
     result = service->SetScriptOverrideForTab(
         tab_contents, base::FilePath::FromUTF8Unsafe(params->script),
@@ -165,8 +166,8 @@ PageActionsGetScriptOverridesForTabFunction::RunWithService(
 
   std::vector<vivaldi::page_actions::OverridenScript> result;
   content::WebContents* tab_contents;
-  if (ExtensionTabUtil::GetTabById(params->tab_id, browser_context(), true,
-                                   &tab_contents) &&
+  if (VivaldiBrowserComponentWrapper::GetInstance()->ExtensionTabUtilGetTabById(
+          params->tab_id, browser_context(), true, &tab_contents) &&
       tab_contents) {
     auto* page_actions_helper =
         page_actions::TabHelper::FromWebContents(tab_contents);

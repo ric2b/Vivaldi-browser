@@ -52,8 +52,6 @@ import org.chromium.components.browser_ui.util.TraceEventVectorDrawableCompat;
 import org.chromium.components.content_settings.CookieControlsMode;
 import org.chromium.components.signin.identitymanager.ConsentLevel;
 import org.chromium.components.user_prefs.UserPrefs;
-import org.chromium.device.DeviceFeatureList;
-import org.chromium.device.DeviceFeatureMap;
 import org.chromium.ui.text.SpanApplier;
 
 // Vivaldi
@@ -81,7 +79,6 @@ public class PrivacySettings extends ChromeBaseSettingsFragment
     private static final String PREF_PRIVACY_GUIDE = "privacy_guide";
     private static final String PREF_INCOGNITO_LOCK = "incognito_lock";
     private static final String PREF_JAVASCRIPT_OPTIMIZER = "javascript_optimizer";
-    private static final String PREF_PHONE_AS_A_SECURITY_KEY = "phone_as_a_security_key";
     @VisibleForTesting static final String PREF_DO_NOT_TRACK = "do_not_track";
     @VisibleForTesting static final String PREF_FP_PROTECTION = "fp_protection";
     @VisibleForTesting static final String PREF_IP_PROTECTION = "ip_protection";
@@ -272,10 +269,6 @@ public class PrivacySettings extends ChromeBaseSettingsFragment
                 getActivity().setTitle(R.string.prefs_privacy_security);
                 getPreferenceScreen().removePreference(prefSafeBrowsing);
             }
-            Preference phoneAsASecurityKeyPreference = findPreference(PREF_PHONE_AS_A_SECURITY_KEY);
-            if (phoneAsASecurityKeyPreference != null)
-                getPreferenceScreen().removePreference(phoneAsASecurityKeyPreference);
-
         } else {
         Preference syncAndServicesLink = findPreference(PREF_SYNC_AND_SERVICES_LINK);
         syncAndServicesLink.setSummary(buildFooterString());
@@ -309,12 +302,6 @@ public class PrivacySettings extends ChromeBaseSettingsFragment
                         SingleCategorySettings.EXTRA_TITLE,
                         javascriptOptimizerPref.getTitle().toString());
         } // Vivaldi
-
-        Preference phoneAsASecurityKey = findPreference(PREF_PHONE_AS_A_SECURITY_KEY);
-        // Vivaldi
-        if (phoneAsASecurityKey != null)
-        phoneAsASecurityKey.setVisible(
-                DeviceFeatureMap.isEnabled(DeviceFeatureList.WEBAUTHN_ENABLE_PAASK_SETTING));
 
         // Vivaldi
         ChromeSwitchPreference webRtcBroadcastIpPref =

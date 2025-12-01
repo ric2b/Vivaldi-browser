@@ -18,6 +18,7 @@
 #include "base/synchronization/lock.h"
 #include "base/win/windows_version.h"
 #include "ui/gfx/geometry/rect.h"
+#include "ui/gfx/win/d3d_shared_fence.h"
 #include "ui/gl/gl_features.h"
 #include "ui/gl/gl_switches.h"
 #include "ui/gl/gl_utils.h"
@@ -40,6 +41,12 @@ bool g_disable_decode_swap_chain = false;
 bool g_force_nv12_overlay_support = false;
 // Whether software overlays have been disabled.
 bool g_disable_sw_overlays = false;
+
+// AMD HDR HW offload related info.
+bool g_amd_hdr_hw_offload_suppported = false;
+bool g_amd_platform_detected = false;
+INT32 g_amd_hdr_hw_max_width = 0;
+INT32 g_amd_hdr_hw_max_height = 0;
 
 // The lock to guard g_overlay_caps_valid and g_supports_overlays.
 base::Lock& GetOverlayLock() {
@@ -75,6 +82,17 @@ void SetSupportsHardwareOverlays(bool support) {
 void SetSupportsVideoProcessorAutoHDR(bool support) {
   base::AutoLock auto_lock(GetOverlayLock());
   g_supports_vp_auto_hdr = support;
+}
+
+void SetSupportsAMDHwOffloadHDRCaps(bool amd_hdr_hw_offload_supported,
+                                    bool amd_platform_detected,
+                                    INT32 amd_hdr_hw_offload_max_width,
+                                    INT32 amd_hdr_hw_offload_max_height) {
+  base::AutoLock auto_lock(GetOverlayLock());
+  g_amd_hdr_hw_offload_suppported = amd_hdr_hw_offload_supported;
+  g_amd_platform_detected = amd_platform_detected;
+  g_amd_hdr_hw_max_width = amd_hdr_hw_offload_max_width;
+  g_amd_hdr_hw_max_height = amd_hdr_hw_offload_max_height;
 }
 
 bool SupportsSoftwareOverlays() {
@@ -479,81 +497,68 @@ void UpdateMonitorInfo() {
   UMA_HISTOGRAM_BOOLEAN("GPU.Output.HDR", g_system_hdr_enabled);
 }
 
-// Update video processor auto HDR feature support status.
-// Note that NVIDIA GPU is the only one that supports Auto HDR feature
-// currently.
-// Must be called on GpuMain thread.
-void UpdateVideoProcessorAutoHDRSupport() {
-  if (GetGlWorkarounds().disable_vp_auto_hdr) {
-    SetSupportsVideoProcessorAutoHDR(false);
-    return;
-  }
-
-  if (!base::FeatureList::IsEnabled(features::kNvidiaVpTrueHDR)) {
-    SetSupportsVideoProcessorAutoHDR(false);
-    return;
-  }
+// Update video processor AMD HDR offload and NVIDIA Auto HDR feature support
+// status. Must be called on GpuMain thread.
+void QueryVideoProcessorCustomExtForHDR() {
+  // Initialize default values.
+  SetSupportsAMDHwOffloadHDRCaps(/*amd_hdr_hw_offload_supported=*/false,
+                                 /*amd_platform_detected=*/false,
+                                 /*amd_hdr_hw_offload_max_width=*/0,
+                                 /*amd_hdr_hw_offload_max_height=*/0);
+  SetSupportsVideoProcessorAutoHDR(/*support=*/false);
 
   Microsoft::WRL::ComPtr<ID3D11Device> d3d11_device = g_d3d11_device;
   if (!d3d11_device) {
     LOG(ERROR) << __func__ << ": Failed to retrieve D3D11 device";
-    SetSupportsVideoProcessorAutoHDR(false);
     return;
   }
 
   Microsoft::WRL::ComPtr<IDXGIDevice> dxgi_device;
   if (FAILED(d3d11_device.As(&dxgi_device))) {
     DLOG(ERROR) << "Failed to retrieve DXGI device";
-    SetSupportsVideoProcessorAutoHDR(false);
     return;
   }
 
   Microsoft::WRL::ComPtr<IDXGIAdapter> dxgi_adapter;
   if (FAILED(dxgi_device->GetAdapter(&dxgi_adapter))) {
     DLOG(ERROR) << "Failed to retrieve DXGI adapter";
-    SetSupportsVideoProcessorAutoHDR(false);
     return;
   }
 
   DXGI_ADAPTER_DESC adapter_desc;
   if (FAILED(dxgi_adapter->GetDesc(&adapter_desc))) {
     DLOG(ERROR) << "Failed to get adapter desc";
-    SetSupportsVideoProcessorAutoHDR(false);
     return;
   }
 
-  // Check the vendor ID to make sure it's NVIDIA.
-  if (adapter_desc.VendorId != 0x10de) {
-    SetSupportsVideoProcessorAutoHDR(false);
+  // Check the vendor ID to make sure it's NVIDIA or AMD.
+  if (adapter_desc.VendorId != 0x10de && adapter_desc.VendorId != 0x1002) {
     return;
   }
 
-  Microsoft::WRL::ComPtr<ID3D11DeviceContext> d3d11_context;
   // D3D11 immediate context isn't allowed to be accessed simultaneously on two
   // threads, and all other callers are using this on the GpuMain thread, so
   // this function must be called on GpuMain thread.
+  Microsoft::WRL::ComPtr<ID3D11DeviceContext> d3d11_context;
   d3d11_device->GetImmediateContext(&d3d11_context);
   if (!d3d11_context) {
     LOG(ERROR) << __func__ << ": Failed to get immediate context";
-    SetSupportsVideoProcessorAutoHDR(false);
     return;
   }
 
   Microsoft::WRL::ComPtr<ID3D11VideoContext> d3d11_video_context;
   if (FAILED(d3d11_context.As(&d3d11_video_context))) {
     LOG(ERROR) << __func__ << ": Failed to retrieve video context";
-    SetSupportsVideoProcessorAutoHDR(false);
     return;
   }
 
   Microsoft::WRL::ComPtr<ID3D11VideoDevice> d3d11_video_device;
   if (FAILED(d3d11_device.As(&d3d11_video_device))) {
     LOG(ERROR) << __func__ << ": Failed to retrieve video device";
-    SetSupportsVideoProcessorAutoHDR(false);
     return;
   }
 
-  D3D11_VIDEO_PROCESSOR_CONTENT_DESC desc;
+  D3D11_VIDEO_PROCESSOR_CONTENT_DESC desc = {};
   desc.InputFrameFormat = D3D11_VIDEO_FRAME_FORMAT_PROGRESSIVE;
   desc.InputFrameRate.Numerator = 60;
   desc.InputFrameRate.Denominator = 1;
@@ -565,15 +570,12 @@ void UpdateVideoProcessorAutoHDRSupport() {
   desc.OutputHeight = 1080;
   desc.Usage = D3D11_VIDEO_USAGE_PLAYBACK_NORMAL;
 
-  HRESULT hr = S_OK;
-
   Microsoft::WRL::ComPtr<ID3D11VideoProcessorEnumerator> d3d11_video_enumerator;
-  hr = d3d11_video_device->CreateVideoProcessorEnumerator(
+  HRESULT hr = d3d11_video_device->CreateVideoProcessorEnumerator(
       &desc, &d3d11_video_enumerator);
   if (FAILED(hr)) {
     LOG(ERROR) << "CreateVideoProcessorEnumerator failed: "
                << logging::SystemErrorCodeToString(hr);
-    SetSupportsVideoProcessorAutoHDR(false);
     return;
   }
 
@@ -583,35 +585,69 @@ void UpdateVideoProcessorAutoHDRSupport() {
   if (FAILED(hr)) {
     LOG(ERROR) << "CreateVideoProcessor failed: "
                << logging::SystemErrorCodeToString(hr);
-    SetSupportsVideoProcessorAutoHDR(false);
     return;
   }
 
-  constexpr GUID kNvidiaTrueHDRInterfaceGUID = {
-      0xfdd62bb4,
-      0x620b,
-      0x4fd7,
-      {0x9a, 0xb3, 0x1e, 0x59, 0xd0, 0xd5, 0x44, 0xb3}};
+  // Check for AMD HDR offload support.
+  if (adapter_desc.VendorId == 0x1002) {
+    constexpr GUID kAMDHDROffloadInterfaceGUID = {
+        0x2594977c,
+        0x1e7b,
+        0x49e6,
+        {0xb1, 0x8a, 0xc2, 0x9b, 0x2d, 0x29, 0xc4, 0xa5}};
 
-  UINT driver_supports_true_hdr = 0;
-  hr = d3d11_video_context->VideoProcessorGetStreamExtension(
-      d3d11_video_processor.Get(), 0, &kNvidiaTrueHDRInterfaceGUID,
-      sizeof(driver_supports_true_hdr), &driver_supports_true_hdr);
-  if (FAILED(hr)) {
-    LOG(ERROR) << "VideoProcessorGetStreamExtension failed: "
-               << logging::SystemErrorCodeToString(hr);
-    SetSupportsVideoProcessorAutoHDR(false);
-    return;
+    struct HDRHWOffloadCaps {
+      bool supported;
+      int32_t maxWidth;
+      int32_t maxHeight;
+    };
+    HDRHWOffloadCaps caps = {};
+
+    hr = d3d11_video_context->VideoProcessorGetOutputExtension(
+        d3d11_video_processor.Get(), &kAMDHDROffloadInterfaceGUID, sizeof(caps),
+        &caps);
+
+    if (SUCCEEDED(hr)) {
+      SetSupportsAMDHwOffloadHDRCaps(caps.supported,
+                                     /*amd_platform_detected=*/true,
+                                     caps.maxWidth, caps.maxHeight);
+    } else {
+      LOG(ERROR) << "AMD VideoProcessorGetOutputExtension failed: "
+                 << logging::SystemErrorCodeToString(hr);
+    }
   }
 
+  // Check for NVIDIA Auto HDR support.
+  if (adapter_desc.VendorId == 0x10de) {
+    if (!GetGlWorkarounds().disable_vp_auto_hdr &&
+        base::FeatureList::IsEnabled(features::kNvidiaVpTrueHDR)) {
+      constexpr GUID kNvidiaTrueHDRInterfaceGUID = {
+          0xfdd62bb4,
+          0x620b,
+          0x4fd7,
+          {0x9a, 0xb3, 0x1e, 0x59, 0xd0, 0xd5, 0x44, 0xb3}};
+
+      UINT driver_supports_true_hdr = 0;
+      hr = d3d11_video_context->VideoProcessorGetStreamExtension(
+          d3d11_video_processor.Get(), 0, &kNvidiaTrueHDRInterfaceGUID,
+          sizeof(driver_supports_true_hdr), &driver_supports_true_hdr);
+
+      if (SUCCEEDED(hr)) {
+        SetSupportsVideoProcessorAutoHDR(driver_supports_true_hdr == 1);
+      } else {
+        LOG(ERROR) << "NVIDIA VideoProcessorGetStreamExtension failed: "
+                   << logging::SystemErrorCodeToString(hr);
+      }
+    }
+  }
+
+  // Cleanup.
   d3d11_video_processor.Reset();
   d3d11_video_enumerator.Reset();
   d3d11_video_context.Reset();
   d3d11_video_device.Reset();
   d3d11_context.Reset();
   d3d11_device.Reset();
-
-  SetSupportsVideoProcessorAutoHDR(driver_supports_true_hdr == 1);
 }
 
 }  // namespace
@@ -664,8 +700,13 @@ HRESULT DCompositionGetStatistics(COMPOSITION_FRAME_ID frameId,
 
 void InitializeDirectComposition(
     Microsoft::WRL::ComPtr<ID3D11Device> d3d11_device) {
-  DCHECK(!g_dcomp_device);
-  if (GetGlWorkarounds().disable_direct_composition) {
+  CHECK(!g_dcomp_device);
+  if (!d3d11_device) {
+    return;
+  }
+
+  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
+          switches::kDisableDirectComposition)) {
     return;
   }
 
@@ -735,7 +776,7 @@ void InitializeDirectComposition(
     CHECK(g_wait_for_compositor_clock_function);
   }
 
-  UpdateVideoProcessorAutoHDRSupport();
+  QueryVideoProcessorCustomExtForHDR();
 }
 
 void ShutdownDirectComposition() {
@@ -938,6 +979,23 @@ UINT GetDirectCompositionOverlaySupportFlags(DXGI_FORMAT format) {
   return support_flag;
 }
 
+void GetDirectCompositionMaxAMDHDRHwOffloadResolution(
+    bool* amd_hdr_hw_offload_supported,
+    bool* amd_platform_detected,
+    int* amd_hdr_hw_offload_max_width,
+    int* amd_hdr_hw_offload_max_height) {
+  DCHECK(amd_hdr_hw_offload_supported);
+  DCHECK(amd_platform_detected);
+  DCHECK(amd_hdr_hw_offload_max_width);
+  DCHECK(amd_hdr_hw_offload_max_height);
+
+  base::AutoLock auto_lock(GetOverlayLock());
+  *amd_hdr_hw_offload_supported = g_amd_hdr_hw_offload_suppported;
+  *amd_platform_detected = g_amd_platform_detected;
+  *amd_hdr_hw_offload_max_width = g_amd_hdr_hw_max_width;
+  *amd_hdr_hw_offload_max_height = g_amd_hdr_hw_max_height;
+}
+
 gfx::Size GetDirectCompositionPrimaryMonitorSize() {
   if (g_primary_monitor_size.IsEmpty())
     UpdateMonitorInfo();
@@ -967,6 +1025,16 @@ bool DirectCompositionMonitorHDREnabled(HWND window) {
 
 DXGI_FORMAT GetDirectCompositionSDROverlayFormat() {
   return g_overlay_format_used;
+}
+
+void SetSupportsAMDHwOffloadHDRCapsForTesting(
+    bool amd_hdr_hw_offload_supported,
+    bool amd_platform_detected,
+    INT32 amd_hdr_hw_offload_max_width,
+    INT32 amd_hdr_hw_offload_max_height) {
+  SetSupportsAMDHwOffloadHDRCaps(
+      amd_hdr_hw_offload_supported, amd_platform_detected,
+      amd_hdr_hw_offload_max_width, amd_hdr_hw_offload_max_height);
 }
 
 void SetDirectCompositionScaledOverlaysSupportedForTesting(bool supported) {
@@ -1115,12 +1183,17 @@ bool DirectCompositionTextureSupported() {
   // |InitializeDirectComposition|.
   g_direct_composition_texture_supported = false;
 
+  if (!gfx::D3DSharedFence::IsSupported(d3d11_device.Get())) {
+    LOG(WARNING) << "IDCompositionTexture is not supported without fences.";
+    return false;
+  }
+
   Microsoft::WRL::ComPtr<IDCompositionDevice4> dcomp_device4;
   HRESULT hr = dcomp_device.As(&dcomp_device4);
   if (FAILED(hr)) {
     // Not a recent enough Windows system
-    LOG(ERROR) << "QueryInterface to IDCompositionDevice4 failed: "
-               << logging::SystemErrorCodeToString(hr);
+    LOG(WARNING) << "QueryInterface to IDCompositionDevice4 failed: "
+                 << logging::SystemErrorCodeToString(hr);
     return false;
   }
 
@@ -1134,7 +1207,7 @@ bool DirectCompositionTextureSupported() {
   }
 
   if (supports_composition_textures == FALSE) {
-    LOG(ERROR) << "CheckCompositionTextureSupport reported unsupported";
+    LOG(WARNING) << "CheckCompositionTextureSupport reported unsupported";
     return false;
   }
 
@@ -1192,7 +1265,7 @@ void DirectCompositionOverlayCapsMonitor::OnGpuSwitched(
 void DirectCompositionOverlayCapsMonitor::OnDisplayAdded() {
   SetOverlayCapsValid(false);
   UpdateOverlaySupport();
-  UpdateVideoProcessorAutoHDRSupport();
+  QueryVideoProcessorCustomExtForHDR();
   UpdateMonitorInfo();
 
   NotifyOverlayCapsChanged();
@@ -1202,7 +1275,7 @@ void DirectCompositionOverlayCapsMonitor::OnDisplayAdded() {
 void DirectCompositionOverlayCapsMonitor::OnDisplayRemoved() {
   SetOverlayCapsValid(false);
   UpdateOverlaySupport();
-  UpdateVideoProcessorAutoHDRSupport();
+  QueryVideoProcessorCustomExtForHDR();
   UpdateMonitorInfo();
 
   NotifyOverlayCapsChanged();

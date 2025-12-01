@@ -7,8 +7,17 @@
 #include "base/feature_list.h"
 #include "base/metrics/field_trial_params.h"
 #include "build/build_config.h"
+#include "components/data_sharing/public/features.h"
 
 namespace tab_groups {
+
+// The default time interval to clean up a hidden tab group.
+const int kDefaultGroupCleanUpTimeInternalInSeconds = 60 * 60;
+
+// Finch parameter key value for the group clean up time interval in seconds.
+constexpr char kGroupCleanUpTimeIntervalInSecondsFinchKey[] =
+    "group_clean_up_time_internal_seconds";
+
 // Core feature flag for tab group sync on Android.
 // Controls registration with the sync service and tab model hookup UI layer.
 // TabGroupSyncService is eanbled when either this flag or kTabGroupPaneAndroid
@@ -28,13 +37,6 @@ BASE_FEATURE(kTabGroupSyncDisableNetworkLayer,
              "TabGroupSyncDisableNetworkLayer",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
-// Builds off of the original TabGroupsSave feature by making some UI tweaks and
-// adjustments. This flag controls the v2 update of sync, restore, dialog
-// triggering, extension support etc. b/325123353
-BASE_FEATURE(kTabGroupsSaveV2,
-             "TabGroupsSaveV2",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
 // Feature flag specific to Desktop platforms. When enabled, desktop platforms
 // will use the TabGroupSyncService. When disabled, desktop platforms will
 // continue to use SavedTabGroupKeyedService.
@@ -42,12 +44,11 @@ BASE_FEATURE(kTabGroupSyncServiceDesktopMigration,
              "TabGroupSyncServiceDesktopMigration",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
-// Feature flag specific to Desktop platforms. When enabled, desktop platforms
-// will defer remote navigations in a tab group when the tab is in a
-// backgrounded state.
-BASE_FEATURE(kTabGroupsDeferRemoteNavigations,
-             "TabGroupDeferRemoteNavigations",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+// Feature flag for Java controller layer migration to use TabGroupSyncDelegate.
+// Noop when disabled.
+BASE_FEATURE(kTabGroupSyncDelegateAndroid,
+             "TabGroupSyncDelegateAndroid",
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 // Feature flag to disable auto-open of saved tab groups. Note that the
 // settings page for auto open will still be visible, and when user is allowed
@@ -63,11 +64,6 @@ BASE_FEATURE(kRestrictDownloadOnSyncedTabs,
              "RestrictDownloadOnSyncedTabs",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
-// Feature flag to defer media load on background tab.
-BASE_FEATURE(kDeferMediaLoadInBackgroundTab,
-             "DeferMediaLoadInBackgroundTab",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
 // Feature flag to determine whether an alternate illustration should be used on
 // the history sync consent screen. This feature should be used independent of
 // any other features in this file.
@@ -81,26 +77,23 @@ BASE_FEATURE(kForceRemoveClosedTabGroupsOnStartup,
              "ForceRemoveClosedTabGroupsOnStartup",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
-// Enables sanitization of the tab title.
-BASE_FEATURE(kEnableTabTitleSanitization,
-             "EnableTabTitleSanitization",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
 // Enables checking for URLs before syncing them to remote devices.
 BASE_FEATURE(kEnableUrlRestriction,
              "EnableUrlRestriction",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
-bool IsTabGroupsSaveV2Enabled() {
-  return base::FeatureList::IsEnabled(kTabGroupsSaveV2);
-}
+// Enables clean up of hidden groups.
+BASE_FEATURE(kEnableOriginatingSavedGroupCleanUp,
+             "EnableOriginatingSavedGroupCleanUp",
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 bool IsTabGroupSyncServiceDesktopMigrationEnabled() {
-  return base::FeatureList::IsEnabled(kTabGroupSyncServiceDesktopMigration);
+  return (base::FeatureList::IsEnabled(kTabGroupSyncServiceDesktopMigration) ||
+          data_sharing::features::IsDataSharingFunctionalityEnabled());
 }
 
-bool IsTabGroupsDeferringRemoteNavigations() {
-  return base::FeatureList::IsEnabled(kTabGroupsDeferRemoteNavigations);
+bool IsTabGroupSyncDelegateAndroidEnabled() {
+  return base::FeatureList::IsEnabled(kTabGroupSyncDelegateAndroid);
 }
 
 bool IsTabGroupSyncCoordinatorEnabled() {
@@ -116,7 +109,7 @@ bool RestrictDownloadOnSyncedTabs() {
 }
 
 bool DeferMediaLoadInBackgroundTab() {
-  return base::FeatureList::IsEnabled(kDeferMediaLoadInBackgroundTab);
+  return data_sharing::features::IsDataSharingFunctionalityEnabled();
 }
 
 bool ShouldForceRemoveClosedTabGroupsOnStartup() {
@@ -128,11 +121,23 @@ bool ShouldForceRemoveClosedTabGroupsOnStartup() {
 }
 
 bool IsTabTitleSanitizationEnabled() {
-  return base::FeatureList::IsEnabled(kEnableTabTitleSanitization);
+  return data_sharing::features::IsDataSharingFunctionalityEnabled();
 }
 
 bool IsUrlRestrictionEnabled() {
   return base::FeatureList::IsEnabled(kEnableUrlRestriction);
+}
+
+bool IsOriginatingSavedGroupCleanUpEnabled() {
+  return base::FeatureList::IsEnabled(kEnableOriginatingSavedGroupCleanUp);
+}
+
+base::TimeDelta GetOriginatingSavedGroupCleanUpTimeInterval() {
+  int time_in_seconds = base::GetFieldTrialParamByFeatureAsInt(
+      kEnableOriginatingSavedGroupCleanUp,
+      kGroupCleanUpTimeIntervalInSecondsFinchKey,
+      kDefaultGroupCleanUpTimeInternalInSeconds);
+  return base::Seconds(time_in_seconds);
 }
 
 }  // namespace tab_groups

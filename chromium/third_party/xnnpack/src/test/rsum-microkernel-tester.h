@@ -17,13 +17,13 @@
 #include <vector>
 
 #include <gtest/gtest.h>
-#include "xnnpack.h"
-#include "xnnpack/buffer.h"
-#include "xnnpack/math.h"
-#include "xnnpack/microfnptr.h"
-#include "xnnpack/microparams.h"
-#include "xnnpack/requantization.h"
-#include "replicable_random_device.h"
+#include "include/xnnpack.h"
+#include "src/xnnpack/buffer.h"
+#include "src/xnnpack/math.h"
+#include "src/xnnpack/microfnptr.h"
+#include "src/xnnpack/microparams.h"
+#include "src/xnnpack/requantization.h"
+#include "test/replicable_random_device.h"
 
 class RSumMicrokernelTester {
  public:
@@ -193,7 +193,7 @@ class RSumMicrokernelTester {
       rsum(batch_size() * sizeof(xnn_float16), input.data(), &output, &params);
 
       // Verify results.
-      EXPECT_NEAR(output, output_ref, std::abs(output_ref) * 4.0e-3f)
+      ASSERT_NEAR(output, output_ref, std::abs(output_ref) * 4.0e-3f)
         << "with batch " << batch_size() << ", scale " << scale();
     }
   }
@@ -222,7 +222,7 @@ class RSumMicrokernelTester {
       rsum(batch_size() * sizeof(xnn_float16), input.data(), &output, &params);
 
       // Verify results.
-      EXPECT_NEAR(output, output_ref, std::abs(output_ref) * 1.0e-5f)
+      ASSERT_NEAR(output, output_ref, std::abs(output_ref) * 1.0e-5f)
         << "with batch " << batch_size() << ", scale " << scale();
     }
   }
@@ -249,7 +249,7 @@ class RSumMicrokernelTester {
       rsum(batch_size() * sizeof(float), input.data(), &output, &params);
 
       // Verify results.
-      EXPECT_NEAR(output, output_ref, std::abs(output_ref) * 1.0e-6f)
+      ASSERT_NEAR(output, output_ref, std::abs(output_ref) * 1.0e-6f)
         << "with batch " << batch_size() << ", scale " << scale();
     }
   }

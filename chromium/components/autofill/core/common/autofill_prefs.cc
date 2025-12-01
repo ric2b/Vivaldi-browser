@@ -15,117 +15,107 @@
 #include "base/android/build_info.h"
 #endif
 
-namespace autofill {
-namespace prefs {
+namespace autofill::prefs {
+
+namespace {
+// To simplify the rollout of AutofillSilentlyRemoveQuasiDuplicates,
+// deduplication can be run a second time per milestone for users enrolled in
+// the experiment. This pref tracks whether deduplication was run a second time.
+// TODO(crbug.com/325450676): Remove after the rollout finished.
+constexpr char kAutofillRanQuasiDuplicateExtraDeduplication[] =
+    "autofill.ran_quasi_duplicate_extra_deduplication";
+}  // namespace
 
 void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
   // Synced prefs. Used for cross-device choices, e.g., credit card Autofill.
   registry->RegisterBooleanPref(
-      prefs::kAutofillProfileEnabled, true,
+      kAutofillProfileEnabled, true,
       user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
   registry->RegisterIntegerPref(
-      prefs::kAutofillLastVersionDeduped, 0,
+      kAutofillLastVersionDeduped, 0,
       user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
   registry->RegisterBooleanPref(
-      prefs::kAutofillHasSeenIban, false,
+      kAutofillHasSeenIban, false,
       user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
   registry->RegisterBooleanPref(
-      prefs::kAutofillCreditCardEnabled, true,
+      kAutofillCreditCardEnabled, true,
       user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
   registry->RegisterBooleanPref(
-      prefs::kAutofillPaymentCvcStorage, true,
+      kAutofillPaymentCvcStorage, true,
       user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
   registry->RegisterBooleanPref(
       kAutofillPaymentCardBenefits, true,
       user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
 
   // Non-synced prefs. Used for per-device choices, e.g., signin promo.
-  registry->RegisterBooleanPref(prefs::kAutofillCreditCardFidoAuthEnabled,
-                                false);
+  registry->RegisterDictionaryPref(kAutofillAiOptInStatus);
+  registry->RegisterBooleanPref(kAutofillCreditCardFidoAuthEnabled, false);
 #if BUILDFLAG(IS_ANDROID)
-  registry->RegisterBooleanPref(
-      prefs::kAutofillCreditCardFidoAuthOfferCheckboxState, true);
+  registry->RegisterBooleanPref(kAutofillCreditCardFidoAuthOfferCheckboxState,
+                                true);
 #endif
-  registry->RegisterIntegerPref(prefs::kAutocompleteLastVersionRetentionPolicy,
-                                0);
-  registry->RegisterStringPref(prefs::kAutofillUploadEncodingSeed, "");
-  registry->RegisterDictionaryPref(prefs::kAutofillVoteUploadEvents);
-  registry->RegisterDictionaryPref(prefs::kAutofillMetadataUploadEvents);
-  registry->RegisterTimePref(prefs::kAutofillUploadEventsLastResetTimestamp,
-                             base::Time());
-  registry->RegisterDictionaryPref(prefs::kAutofillSyncTransportOptIn);
+  registry->RegisterIntegerPref(kAutocompleteLastVersionRetentionPolicy, 0);
+  registry->RegisterStringPref(kAutofillUploadEncodingSeed, "");
+  registry->RegisterDictionaryPref(kAutofillVoteUploadEvents);
+  registry->RegisterDictionaryPref(kAutofillMetadataUploadEvents);
+  registry->RegisterTimePref(kAutofillUploadEventsLastResetTimestamp, {});
+  registry->RegisterDictionaryPref(kAutofillSyncTransportOptIn);
 #if BUILDFLAG(IS_ANDROID)
   // Automotive devices require stricter data protection for user privacy, so
   // mandatory reauth for autofill payment methods should always be enabled.
   if (base::android::BuildInfo::GetInstance()->is_automotive()) {
-    registry->RegisterBooleanPref(prefs::kAutofillPaymentMethodsMandatoryReauth,
-                                  true);
+    registry->RegisterBooleanPref(kAutofillPaymentMethodsMandatoryReauth, true);
   } else {
-    registry->RegisterBooleanPref(prefs::kAutofillPaymentMethodsMandatoryReauth,
+    registry->RegisterBooleanPref(kAutofillPaymentMethodsMandatoryReauth,
                                   false);
   }
   registry->RegisterIntegerPref(
-      prefs::kAutofillPaymentMethodsMandatoryReauthPromoShownCounter, 0);
+      kAutofillPaymentMethodsMandatoryReauthPromoShownCounter, 0);
 #elif BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)
-  registry->RegisterBooleanPref(prefs::kAutofillPaymentMethodsMandatoryReauth,
-                                false);
+  registry->RegisterBooleanPref(kAutofillPaymentMethodsMandatoryReauth, false);
   registry->RegisterIntegerPref(
-      prefs::kAutofillPaymentMethodsMandatoryReauthPromoShownCounter, 0);
+      kAutofillPaymentMethodsMandatoryReauthPromoShownCounter, 0);
 #elif BUILDFLAG(IS_IOS)
-  registry->RegisterBooleanPref(prefs::kAutofillPaymentMethodsMandatoryReauth,
-                                true);
+  registry->RegisterBooleanPref(kAutofillPaymentMethodsMandatoryReauth, true);
 #endif
 
   // Deprecated prefs registered for migration.
-  registry->RegisterBooleanPref(prefs::kAutofillEnabledDeprecated, true);
-  registry->RegisterBooleanPref(prefs::kAutofillOrphanRowsRemoved, false);
-  registry->RegisterBooleanPref(prefs::kAutofillIbanEnabled, true);
-  registry->RegisterIntegerPref(
-      prefs::kAutofillLastVersionDisusedAddressesDeleted, 0);
-  registry->RegisterIntegerPref(
-      prefs::kAutofillLastVersionDisusedCreditCardsDeleted, 0);
+  registry->RegisterBooleanPref(kAutofillEnabledDeprecated, true);
   registry->RegisterStringPref(kAutofillAblationSeedPref, "");
-  registry->RegisterBooleanPref(
-      prefs::kAutofillRanQuasiDuplicateExtraDeduplication, false);
+  registry->RegisterBooleanPref(kAutofillRanQuasiDuplicateExtraDeduplication,
+                                false);
 
 #if BUILDFLAG(IS_ANDROID)
-  registry->RegisterBooleanPref(prefs::kAutofillUsingVirtualViewStructure,
-                                false);
+  registry->RegisterBooleanPref(kAutofillUsingVirtualViewStructure, false);
+  registry->RegisterBooleanPref(kAutofillThirdPartyPasswordManagersAllowed,
+                                true);
   registry->RegisterBooleanPref(
-      prefs::kAutofillThirdPartyPasswordManagersAllowed, true);
-  registry->RegisterBooleanPref(
-      prefs::kFacilitatedPaymentsPix, /*default_value=*/true,
+      kFacilitatedPaymentsPix, /*default_value=*/true,
       user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
   registry->RegisterBooleanPref(
-      prefs::kFacilitatedPaymentsEwallet, /*default_value=*/true,
+      kFacilitatedPaymentsEwallet, /*default_value=*/true,
       user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
 #endif
 
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) || \
     BUILDFLAG(IS_CHROMEOS)
-  registry->RegisterBooleanPref(prefs::kAutofillPredictionImprovementsEnabled,
-                                false);
   registry->RegisterBooleanPref(
-      prefs::kAutofillBnplEnabled, true,
+      kAutofillBnplEnabled, true,
+      user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
+  registry->RegisterBooleanPref(
+      kAutofillHasSeenBnpl, false,
       user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
 #endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) ||
         // BUILDFLAG(IS_CHROMEOS)
 }
 
 void MigrateDeprecatedAutofillPrefs(PrefService* pref_service) {
-  // Added 09/2022.
-  pref_service->ClearPref(prefs::kAutofillEnabledDeprecated);
-  // Added 05/2023.
-  pref_service->ClearPref(prefs::kAutofillOrphanRowsRemoved);
-  // Added 09/2023.
-  pref_service->ClearPref(prefs::kAutofillIbanEnabled);
-  // Added 10/2023
-  pref_service->ClearPref(prefs::kAutofillLastVersionDisusedAddressesDeleted);
-  pref_service->ClearPref(prefs::kAutofillLastVersionDisusedCreditCardsDeleted);
   // Added 07/2024 (moved from profile pref to local state)
-  pref_service->ClearPref(prefs::kAutofillAblationSeedPref);
+  pref_service->ClearPref(kAutofillAblationSeedPref);
   // Added 10/2024
-  pref_service->ClearPref(prefs::kAutofillRanQuasiDuplicateExtraDeduplication);
+  pref_service->ClearPref(kAutofillRanQuasiDuplicateExtraDeduplication);
+  // Added 03/2025
+  pref_service->ClearPref(kAutofillEnabledDeprecated);
 }
 
 void RegisterLocalStatePrefs(PrefRegistrySimple* registry) {
@@ -160,10 +150,6 @@ bool HasSeenIban(const PrefService* prefs) {
 // user around forever.
 void SetAutofillHasSeenIban(PrefService* prefs) {
   prefs->SetBoolean(kAutofillHasSeenIban, true);
-}
-
-bool IsAutofillManaged(const PrefService* prefs) {
-  return prefs->IsManagedPreference(kAutofillEnabledDeprecated);
 }
 
 bool IsAutofillProfileManaged(const PrefService* prefs) {
@@ -259,11 +245,8 @@ void SetPaymentCardBenefits(PrefService* prefs, bool value) {
 }
 
 void ClearSyncTransportOptIns(PrefService* prefs) {
-  prefs->SetDict(prefs::kAutofillSyncTransportOptIn, base::Value::Dict());
+  prefs->SetDict(kAutofillSyncTransportOptIn, base::Value::Dict());
 }
-
-// UsesVirtualViewStructureForAutofill is defined in
-// //chrome/browser/ui/autofill/autofill_client_provider.cc
 
 void SetFacilitatedPaymentsPix(PrefService* prefs, bool value) {
 #if BUILDFLAG(IS_ANDROID)
@@ -311,5 +294,18 @@ bool IsAutofillBnplEnabled(const PrefService* prefs) {
         // BUILDFLAG(IS_CHROMEOS)
 }
 
-}  // namespace prefs
-}  // namespace autofill
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) || \
+    BUILDFLAG(IS_CHROMEOS)
+// If called, always sets the pref to true, and once true, it will follow the
+// user around forever.
+void SetAutofillHasSeenBnpl(PrefService* prefs) {
+  prefs->SetBoolean(kAutofillHasSeenBnpl, true);
+}
+
+bool HasSeenBnpl(const PrefService* prefs) {
+  return prefs->GetBoolean(kAutofillHasSeenBnpl);
+}
+#endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) ||
+        // BUILDFLAG(IS_CHROMEOS)
+
+}  // namespace autofill::prefs

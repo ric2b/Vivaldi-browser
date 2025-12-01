@@ -12,6 +12,7 @@
 #include "components/omnibox/browser/autocomplete_provider_client.h"
 #include "components/omnibox/browser/autocomplete_provider_listener.h"
 #include "components/omnibox/browser/unscoped_extension_provider_delegate.h"
+#include "components/omnibox/browser/zero_suggest_provider.h"
 #include "components/search_engines/template_url_service.h"
 
 UnscopedExtensionProvider::UnscopedExtensionProvider(
@@ -35,14 +36,25 @@ void UnscopedExtensionProvider::Start(const AutocompleteInput& input,
   Stop(/*clear_cached_results=*/!minimal_changes,
        /*due_to_user_inactivity=*/false);
 
+  // Unscoped mode input should not be redirected to an extension in incognito.
+  if (client_->IsOffTheRecord()) {
+    return;
+  }
+
   // Extension suggestions are not allowed in keyword mode.
   if (input.InKeywordMode()) {
     return;
   }
 
-  // Extension suggestions are not allowed for zero-suggest or empty inputs.
-  if (input.IsZeroSuggest() ||
-      input.type() == metrics::OmniboxInputType::EMPTY) {
+  // See if zero suggest provider is eligible for zero suggest suggestions.
+  // This prevents only unscoped extension suggestions from appearing when
+  // other zps suggestions are not available.
+  auto [_, eligible] =
+      ZeroSuggestProvider::GetResultTypeAndEligibility(client_, input);
+
+  if ((input.IsZeroSuggest() ||
+       input.type() == metrics::OmniboxInputType::EMPTY) &&
+      !eligible) {
     return;
   }
 
@@ -52,8 +64,9 @@ void UnscopedExtensionProvider::Start(const AutocompleteInput& input,
   }
 
   // Do not forward the input to the extensions delegate if the changes to the
-  // input are minimal.
-  if (minimal_changes) {
+  // input are minimal. If eligible for zero suggest (checked above), ignore
+  // the minimal changes check.
+  if (minimal_changes && !input.IsZeroSuggest()) {
     return;
   }
 
@@ -89,7 +102,6 @@ void UnscopedExtensionProvider::DeleteMatch(const AutocompleteMatch& match) {
   const TemplateURL* const template_url =
       GetTemplateURLService()->GetTemplateURLForKeyword(match.keyword);
 
-  // TODO(393578172):check if the extension is enabled.
   if ((template_url->type() == TemplateURL::OMNIBOX_API_EXTENSION) &&
       delegate_) {
     delegate_->DeleteSuggestion(template_url, suggestion_text);

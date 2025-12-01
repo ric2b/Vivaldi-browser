@@ -7,8 +7,10 @@
 #include <stdint.h>
 
 #include <algorithm>
+#include <iterator>
 #include <optional>
 #include <utility>
+#include <variant>
 #include <vector>
 
 #include "base/check.h"
@@ -672,9 +674,14 @@ bool AttributionSrcLoader::DoRegistration(
       local_frame_->GetRemoteNavigationAssociatedInterfaces()->GetInterface(
           &conversion_host);
 
-      conversion_host->RegisterDataHost(data_host.BindNewPipeAndPassReceiver(),
-                                        eligibility,
-                                        /*is_for_background_requests=*/true);
+      WTF::Vector<scoped_refptr<const blink::SecurityOrigin>> reporting_origins;
+      std::ranges::transform(
+          urls, std::back_inserter(reporting_origins),
+          [](const KURL& url) { return SecurityOrigin::Create(url); });
+
+      conversion_host->RegisterDataHost(
+          data_host.BindNewPipeAndPassReceiver(), eligibility,
+          /*is_for_background_requests=*/true, std::move(reporting_origins));
     }
   }
 
@@ -904,9 +911,11 @@ void AttributionSrcLoader::RegisterAttributionHeaders(
       &conversion_host);
 
   mojo::SharedRemote<attribution_reporting::mojom::blink::DataHost> data_host;
-  conversion_host->RegisterDataHost(data_host.BindNewPipeAndPassReceiver(),
-                                    registration_eligibility,
-                                    /*is_for_background_requests=*/false);
+  conversion_host->RegisterDataHost(
+      data_host.BindNewPipeAndPassReceiver(), registration_eligibility,
+      /*is_for_background_requests=*/false,
+      /*reporting_origins=*/
+      {blink::SecurityOrigin::CreateFromUrlOrigin(reporting_origin)});
 
   // Create a client to mimic processing of attributionsrc requests. Note we do
   // not share `DataHosts` for redirects chains.
@@ -1239,7 +1248,7 @@ void AttributionSrcLoader::ResourceClient::
         attribution_reporting::SuitableOrigin reporting_origin) {
   AtomicString header;
 
-  AttributionReportingIssueType issue_type = absl::visit(
+  AttributionReportingIssueType issue_type = std::visit(
       base::Overloaded{
           [&](attribution_reporting::mojom::SourceRegistrationError) {
             header = headers.web_source;

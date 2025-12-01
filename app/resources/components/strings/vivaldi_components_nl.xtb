@@ -20,6 +20,7 @@
           &gt;
           <ph name="PROXIES_TITLE" />
           en zorg ervoor dat de configuratie is ingesteld op 'geen proxy' of 'direct'.</translation>
+<translation id="4949828774841497663">Ga naar Apps &gt; Systeeminstellingen &gt; Netwerk en selecteer het actieve netwerk. Klik op de knop Details en vink alle proxy's uit die misschien zijn geselecteerd.</translation>
 <translation id="5248344925342018662">Je bekijkt een beveiligde Vivaldi-pagina</translation>
 <translation id="6690242244468452299">Deze pagina toont informatie over recente crashes als crashrapportage is ingeschakeld.</translation>
 <translation id="7023871570427738255">Ga naar
@@ -31,7 +32,4 @@
           Als het probleem aanhoudt, adviseren we deze optie weer aan te vinken
           voor betere prestaties.</translation>
 <translation id="7496505986576158197">Vivaldi is mogelijk gemaakt door het <ph name="BEGIN_LINK_CHROMIUM" />Chromium<ph name="END_LINK_CHROMIUM" /> open source project en andere <ph name="BEGIN_LINK_OSS" />open source software<ph name="END_LINK_OSS" />.</translation>
-<translation id="8187289872471304532">Ga naar
-          Vivaldi-menu &gt; Instellingen &gt; Netwerk &gt; Proxyinstellingen
-          en schakel het proxyprotocol uit.</translation>
 </translationbundle>

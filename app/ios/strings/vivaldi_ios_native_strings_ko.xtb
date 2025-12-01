@@ -9,7 +9,6 @@
 <translation id="1116694919640316211">정보</translation>
 <translation id="1123707809902612118">트래커 및 광고 차단</translation>
 <translation id="1134179431044204911">제스처나 탐색 기능을 사용하기가 어려워요</translation>
-<translation id="1149336474099429879">주소 표시줄에서 직접 특정 웹사이트에 빠르게 액세스할 수 있어 검색 엔진을 거치는 것보다 클릭 횟수가 줄어듭니다. [완전 일치]에 대해 자세히 알아보세요</translation>
 <translation id="1151972924205500581">비밀번호 필수</translation>
 <translation id="1166425484559430538">동기화 데이터는 암호화됩니다. 데이터를 해독하려면 암호화 비밀번호를 입력해주세요.</translation>
 <translation id="1173894706177603556">이름 바꾸기</translation>
@@ -55,6 +54,7 @@
 <translation id="1655816024544228768">스포츠</translation>
 <translation id="1659112017960130179">한국어 (<ph name="ORIGIN" />)</translation>
 <translation id="1689333818294560261">닉네임</translation>
+<translation id="1700701458278093377">링크 업데이트</translation>
 <translation id="1711184756728070210"><ph name="BEGIN_LINK" />이용약관 ➔<ph name="END_LINK" />     <ph name="BEGIN_LINK2" />개인정보 처리방침 ➔<ph name="END_LINK2" /></translation>
 <translation id="1717473843091433383">모든 웹사이트에서 다크 테마 강제</translation>
 <translation id="1721265415699013829">구체적으로 설명해주세요</translation>
@@ -72,6 +72,7 @@
 <translation id="1813686536470127172">다른 폴더</translation>
 <translation id="1828800626900562968">하단의 플러스 아이콘을 눌러서 새 탭을 생성합니다.</translation>
 <translation id="1861262398884155592">폴더가 비어있음</translation>
+<translation id="1871058849247304245"><ph name="HOST" /> 배율 설정</translation>
 <translation id="1921508034244765766">Vivaldi가 느리거나, 충돌하거나, 장치가 뜨거워지는 경우</translation>
 <translation id="1929299157575856072">기본 차단 수준</translation>
 <translation id="1968240832686794952">이미지를 백그라운드 탭에서 열기</translation>
@@ -91,6 +92,7 @@
 <translation id="2273327106802955778">추가 메뉴</translation>
 <translation id="2283599456633275070">여행</translation>
 <translation id="2324160330092901720">인증 코드가 <ph name="EMAIL_ID" />에 전송됨</translation>
+<translation id="2324257568471626606">새로운 검색 엔진</translation>
 <translation id="2330644510603114741">탭 동작</translation>
 <translation id="2336309953058658733">휴지통 비우기</translation>
 <translation id="2359808026110333948">계속</translation>
@@ -105,12 +107,12 @@
 <translation id="2478478121390627077">현재 선택된 색상</translation>
 <translation id="2496616243169085015">사진</translation>
 <translation id="2536780277491102902">예외</translation>
-<translation id="2538889169193998601">자동 완성 제안에서 직접 일치의 우선순위를 지정하세요.</translation>
 <translation id="2558801801411970131">트래커 차단</translation>
 <translation id="2562040727226360285">방해되는 요소 제거, 사이트에 오류가 있을 수 있음 (<ph name="ORIGIN" />)</translation>
 <translation id="2563886993995570961">최대 열</translation>
 <translation id="257674075312929031">그룹</translation>
 <translation id="2577446409661931381">새 메모</translation>
+<translation id="2578190116190373975"><ph name="OLD_SEARCH_ENGINE" /> 계속 사용하기</translation>
 <translation id="2590350610957954839">마지막으로 방문한 그룹</translation>
 <translation id="261264557609353020">시작 페이지</translation>
 <translation id="2619628557366098325">포르투갈어 (<ph name="ORIGIN" />)</translation>
@@ -120,9 +122,10 @@
 <translation id="2677862276555105603">광고
 차단됨</translation>
 <translation id="2678542925523700624">에스토니아어 (<ph name="ORIGIN" />)</translation>
+<translation id="2697254781659515880">Vivaldi의 개발을 지원하기 위해 <ph name="NEW_SEARCH_ENGINE" />와 제휴를 맺고 새로운 기본 검색 엔진으로 설정했습니다.</translation>
+<translation id="2701366016894985129">검색 결과의 광고</translation>
 <translation id="2702801445560668637">읽기 목록</translation>
 <translation id="2709516037105925701">자동 채우기</translation>
-<translation id="271033894570825754">신규</translation>
 <translation id="2712076950889800659">계속하면 Vivaldi의 <ph name="BEGIN_LINK" />최종 사용자 라이선스 계약<ph name="END_LINK" /> 및 <ph name="BEGIN_LINK" />개인정보 처리방침<ph name="END_LINK" />에 동의합니다</translation>
 <translation id="2725892265692641195">새 <ph name="ITEM_TYPE" /></translation>
 <translation id="2745324713975967671">암호화 비밀번호</translation>
@@ -135,7 +138,7 @@
 <translation id="2843343418360315034">헝가리어 (<ph name="ORIGIN" />)</translation>
 <translation id="2850144663494818309">동기화 준비 중...</translation>
 <translation id="2862504765180635001">안타깝습니다!</translation>
-<translation id="2874111661876416905">Vivaldi 검색</translation>
+<translation id="2878511608894704031">모두 삭제</translation>
 <translation id="2884735088411646852">정렬</translation>
 <translation id="2898963176829412617">새 폴더…</translation>
 <translation id="2918704853620385162">마지막 탭을 닫으면 새 탭 열기</translation>
@@ -162,6 +165,7 @@
 <translation id="3236835587712044564">Vivaldi에 만족하시나요? 기본 브라우저로 설정해주세요.</translation>
 <translation id="3270894089048358271">Vivaldi를 기본으로 설정</translation>
 <translation id="3270930591809084274">동기화된 탭</translation>
+<translation id="3285898158753554866">번역본 복사</translation>
 <translation id="3335772982573114336">새 메모</translation>
 <translation id="33451081266695216">서버가 연결을 거부했어요.</translation>
 <translation id="3346386541263128307">이메일 주소가 일치하지 않습니다.</translation>
@@ -196,6 +200,7 @@
 <translation id="373855430416507951">페이지에서 찾기</translation>
 <translation id="3745190878148784130">배율 텍스트 숨기기</translation>
 <translation id="3766350025418769949">Vivaldi 비밀번호 관리자에 저장한 비밀번호를 iPad의 다른 앱에 사용할 수 있습니다.</translation>
+<translation id="3782426324365706059"><ph name="NEW_SEARCH_ENGINE" /> 사용하기</translation>
 <translation id="3815158430926662417">Vivaldi 동기화 계정에 로그인할 수 없음</translation>
 <translation id="3817539520771282781">유형순</translation>
 <translation id="383723620494271391">추가하고 싶으신 것이 있으신가요?</translation>
@@ -209,11 +214,13 @@
 <translation id="3897092660631435901">메뉴</translation>
 <translation id="3920366244737784074"><ph name="ITEM_TYPE" /> 추가</translation>
 <translation id="3921585859122905677">주소표시줄 위치</translation>
+<translation id="3925725503020335904">Vivaldi의 개발을 지원하기 위해 <ph name="NEW_SEARCH_ENGINE_1" />와 제휴를 맺고 이를 새로운 기본 검색 엔진으로 설정했습니다. <ph name="NEW_SEARCH_ENGINE_2" />는 우리가 좋아하는 비공개 검색 엔진이므로 여러분도 마음에 드셨으면 좋겠습니다.</translation>
 <translation id="3953599441418463312">일본어 (<ph name="ORIGIN" />)</translation>
 <translation id="395506590020066151">추적기 차단됨</translation>
 <translation id="3958433364221339259"><ph name="SEARCH_ENGINE" /> 검색</translation>
 <translation id="3960532956440723967">텍스트 크기가 너무 작거나 커요</translation>
 <translation id="3972953605944268742">UI가 혼란스럽거나 복잡해요</translation>
+<translation id="3981442865425348629">링크 제거</translation>
 <translation id="3989040793235713489">더 많거나 더 나은 테마 옵션을 원해요</translation>
 <translation id="3997823869212225788">6자리 코드 입력</translation>
 <translation id="4002066346123236978">제목</translation>
@@ -223,6 +230,7 @@
 <translation id="4072876042695422377">번역 보기 닫기</translation>
 <translation id="4073968054795398875">동기화 서버에 문제가 있습니다. 곧 동기화를 다시 시도합니다.</translation>
 <translation id="4084682180776658562">북마크</translation>
+<translation id="408984524719804241">광고가 표시되는 이유</translation>
 <translation id="4096707694175478403">패널</translation>
 <translation id="4118801221225128605">번역된 텍스트</translation>
 <translation id="4134597009271720826">앱 평가</translation>
@@ -233,6 +241,7 @@
 <translation id="4152011295694446843">여기에서 북마크 찾기</translation>
 <translation id="4152623049003960417">추적기 정보</translation>
 <translation id="4176463684765177261">비활성화됨</translation>
+<translation id="4184746246941929945">Vivaldi는 이 페이지의 광고를 차단하지 않기 위해 <ph name="PARTNER_NAME" />와 파트너십을 맺었습니다. 이 광고는 비발디의 발전에 자금을 지원하는 데 도움이 됩니다.</translation>
 <translation id="4193549853510262477">자동 감지</translation>
 <translation id="4209092469652827314">크게</translation>
 <translation id="4219175188138757774">체코어 및 슬로바키아어 (<ph name="ORIGIN" />)</translation>
@@ -269,6 +278,7 @@
 <translation id="4553717494760925411">뒤로 이동</translation>
 <translation id="4563480492836333884">허용되지 않는 이메일이에요. 다른 이메일을 사용해주세요.</translation>
 <translation id="457386861538956877">더보기...</translation>
+<translation id="4591413025758301858"><ph name="SOURCE_LANGUAGE" />에서 <ph name="DESTINATION_LANGUAGE" />로 번역</translation>
 <translation id="460370326897402035">비밀번호가 유효하지 않습니다.</translation>
 <translation id="4619615317237390068">다른 기기의 탭</translation>
 <translation id="462860218383788109">수정된 날짜</translation>
@@ -277,8 +287,8 @@
 <translation id="4654578955713250802">광고 및 트래커 차단</translation>
 <translation id="4655510151391078468">입력한 코드가 일치하지 않습니다.
         <ph name="ATTEMPTS" />회의 기회가 남았습니다.</translation>
-<translation id="46613249405673440">배경화면으로 설정</translation>
 <translation id="466494460776294423">인증 코드 필요</translation>
+<translation id="4700341416469973823">선택 삭제</translation>
 <translation id="4714431804859029826">기본값 복구</translation>
 <translation id="4727698999970341158">아이슬란드어 (<ph name="ORIGIN" />)</translation>
 <translation id="473775607612524610">업데이트</translation>
@@ -310,7 +320,6 @@
 <translation id="4993477362660748586">동기화</translation>
 <translation id="5037761343305489956">노트에 복사됨</translation>
 <translation id="504986598654589766">시크릿 탭에서 브라우징하면 방문한 사이트, 쿠키 및 임시파일이 Vivaldi에 저장되지 않습니다. 암호화되거나 연결을 변경하지는 않습니다.</translation>
-<translation id="5052190740258132773">북마크 우선순위 지정</translation>
 <translation id="505774819758747674">도구표시줄 및 선택한 강조 색상 미리보기</translation>
 <translation id="5094183365876568934">특정 웹사이트는 사용자가 설정한 색상 값을 사용합니다. 사이트에서 사용할 색상 값을 선택해주세요.</translation>
 <translation id="5094376253685335202">동기화 활성화</translation>
@@ -329,6 +338,7 @@
 <translation id="5349678548463426691">설명</translation>
 <translation id="5350737901534958404">파트너 광고 허용 (Vivaldi 지원)</translation>
 <translation id="5351912500249789547">Vivaldi.net이 거부했습니다: 오류 코드 <ph name="ERROR_CODE" /></translation>
+<translation id="535312628536375213">당사는 본 사이트와 제휴를 맺고 있으며 검색결과의 광고가 기본적으로 차단되지 않도록 면제하고 있습니다. 이러한 광고는 귀하와 상호작용할 경우 Vivaldi의 수익을 창출합니다.</translation>
 <translation id="5378841821586202982">휴지통 폴더</translation>
 <translation id="5398772614898833570">광고 차단됨</translation>
 <translation id="5421638721143596928">정보 복호화에 실패했습니다. 다시 로그인해주세요.</translation>
@@ -336,6 +346,7 @@
 <translation id="5439835075346716808">이 IP를 통한 가입이 일시적으로 비활성화되었습니다. 나중에 다시 시도해주세요.</translation>
 <translation id="5475116651001049780">모바일 사이트 숨기기</translation>
 <translation id="5486261815000869482">비밀번호 확인</translation>
+<translation id="5493100027274177356">소스 텍스트는 <ph name="SOURCE_TEXT" />이며 번역된 텍스트는 <ph name="TRANSLATED_TEXT" />입니다</translation>
 <translation id="5494016731375030300">최근에 닫은 탭</translation>
 <translation id="5517833250460609673">동영상이나 음악이 제대로 재생되지 않아요</translation>
 <translation id="5519187824830275200">추가하기 숨기기...</translation>
@@ -343,14 +354,13 @@
 <translation id="5564687523685713029">그룹만 표시</translation>
 <translation id="5577770221789895760">홈 버튼을 탭할 때 열리는 페이지를 선택합니다.</translation>
 <translation id="5600792731098584229">스피드 다이얼 크기</translation>
-<translation id="5607445917275004427">주소표시줄에서 전체 주소를 표시하면 도메인 외 주소가 표시됩니다.</translation>
 <translation id="5639137028584114536">귀하의 조직에서 시크릿 브라우징을 요구합니다. 시크릿 모드에서는 탭이 저장되지 않습니다.
         <ph name="BEGIN_LINK" />자세히 알아보기<ph name="END_LINK" /></translation>
+<translation id="5669616832972782345">삭제 제안</translation>
 <translation id="5684277895745049190">목록</translation>
 <translation id="5710478562694930157">오름차순</translation>
 <translation id="574392208103952083">중간</translation>
 <translation id="5756451123057329358">다음으로 시작 페이지 다시 열기</translation>
-<translation id="5775233583238650955">주소표시줄에서 검색 제안 허용</translation>
 <translation id="5787420647064736989">기기명</translation>
 <translation id="5801825598531634872">비활성된 날짜</translation>
 <translation id="5822336771053074270">노트 추가</translation>
@@ -365,6 +375,8 @@
 <translation id="5907851754429991366">App Store에 대한 여러분의 피드백을 듣고 싶습니다.</translation>
 <translation id="5914847543920496660">투명성을 위해 오픈 소스 소프트웨어를 선호해요</translation>
 <translation id="591684450784861763">다음에 페이지 추가...</translation>
+<translation id="5922915428124940994">(수정됨)</translation>
+<translation id="5939518447894949180">초기화</translation>
 <translation id="6005497458542935062">폴더 밖으로 이동</translation>
 <translation id="603230602684548091">출발 언어 선택</translation>
 <translation id="6040304352785030331">브라우저 확장/추가 기능을 사용하고 싶어요</translation>
@@ -407,6 +419,7 @@
 <translation id="6657585470893396449">비밀번호</translation>
 <translation id="6659376785721135061">입력 필드 지우기</translation>
 <translation id="6690955457036363013">사이트별 차단 수준 관리</translation>
+<translation id="6700868474099335777">페이지 배율</translation>
 <translation id="6703516503311038964">Vivaldi 뉴스레터를 수신받고 싶습니다</translation>
 <translation id="6709133671862442373">뉴스</translation>
 <translation id="6724024423419410528">색상</translation>
@@ -422,7 +435,6 @@
 <translation id="6875510405870945573">원하는 차단 수준을 선택해주세요.</translation>
 <translation id="6878199227380123461">번역 패널 선호</translation>
 <translation id="6887143077297974801">동기화 시작에 실패했습니다.</translation>
-<translation id="6887865947291302490">주소 표시줄에 입력하면 검색 제안을 위해 입력 내용이 검색 공급자에게 전송됩니다. 시크립 창에서는 꺼집니다.</translation>
 <translation id="6896758677409633944">복사</translation>
 <translation id="691132463664340655">테마 탐색</translation>
 <translation id="6918338082370824763">특정 페이지</translation>
@@ -446,6 +458,7 @@
 <translation id="7120229714826964836">페이지 공유</translation>
 <translation id="713792263829536729">스트리밍 장치가 정상적으로 작동하지 않아요</translation>
 <translation id="7158507293261405349">새 그룹 추가</translation>
+<translation id="7173114856073700355">설정 열기</translation>
 <translation id="718052827125696482">화면이 제대로 회전하지 않아요</translation>
 <translation id="7180919683305939836">AI 기능이 필요해요 (요약, 대화 등)</translation>
 <translation id="7182884564543065232">일부 웹사이트가 열리지 않아요</translation>
@@ -485,6 +498,7 @@
 <translation id="7587132259180664054">성공적으로 이메일을 전송함</translation>
 <translation id="7587287726969638956">웹사이트 모양</translation>
 <translation id="7593546601395782810">노트 숨기기</translation>
+<translation id="7600840048521751013">번역 기록</translation>
 <translation id="7602336701644200880">이메일 전송 실패. 다시 시도해주세요.</translation>
 <translation id="7606108789437688910">시크릿 탭으로 모든 메모 주소 열기</translation>
 <translation id="7616284412875773842">실망함</translation>
@@ -508,6 +522,7 @@
 <translation id="7931102520806266819">시크릿 탭에서 열기</translation>
 <translation id="7961270736686975887">언어 전환</translation>
 <translation id="7967161908152532036">웹사이트 주소</translation>
+<translation id="7979036127916589816">동기화 오류</translation>
 <translation id="8008214489230610096">복구 이메일 확인</translation>
 <translation id="8038592796033755028"><ph name="USERNAME" />의 기기</translation>
 <translation id="8041093619605951337">행복함</translation>
@@ -548,6 +563,7 @@
 <translation id="8423076545503792640">오류로 요청할 수 없습니다. 나중에 다시 시도해주세요.</translation>
 <translation id="8428213095426709021">설정</translation>
 <translation id="8458397775385147834">1 항목 삭제됨</translation>
+<translation id="846569642435104154">모든 페이지에 대해 선택한 배율이 설정됩니다</translation>
 <translation id="8466547766474747336">원하는 기능이 없어요</translation>
 <translation id="8500459200727969761">내장 목록 복구</translation>
 <translation id="8503813439785031346">아이디</translation>
@@ -556,12 +572,15 @@
 <translation id="8546963963006468833">Vivaldi를 사용하면 다른 앱에서 링크를 원활하게 열고, 위젯에서 검색하고, 비밀번호를 자동 입력할 수 있습니다.</translation>
 <translation id="8546995005405883065">선호하는 언어는 호환되는 웹사이트에서 지정된 순서대로 허용됩니다.</translation>
 <translation id="8562452229998620586">저장된 비밀번호가 여기에 표시됩니다.</translation>
+<translation id="856439694359429369">한 번 눌러서 더 많은 옵션을 사용하거나 두 번 눌러서 여세요.</translation>
 <translation id="8591818185775466306"><ph name="ITEM_TYPE" /> 삭제</translation>
 <translation id="8605953154325672921">아이디 필수</translation>
 <translation id="8675578805254882416">불러오는 중</translation>
 <translation id="8677007239430848917">아래의 더하기 아이콘을 눌러서 첫번째 노트를 추가해주세요</translation>
 <translation id="8684294196284714094">Vivlaidi를 기본 브라우저로 설정할 준비가 되셨나요?</translation>
+<translation id="8687583747694652488">원본 복사</translation>
 <translation id="8696653005998192569">웹사이트의 이미지나 비디오가 로드되지 않아요</translation>
+<translation id="8730621377337864115">완료</translation>
 <translation id="8733945742171960420">탐색을 시작하면 상위 사이트가 이곳에 표시됩니다.</translation>
 <translation id="8740815429790728127"><ph name="NUMBER_OF_SELECTED_NOTES" /> 항목 삭제됨</translation>
 <translation id="8763006697839582351">Vivaldi 시크릿 탭으로 열기</translation>
@@ -572,7 +591,6 @@
 <translation id="8819841443522803117">기본 브라우저를 바꾸실 때가 되셨나요? Vivaldi를 선택해보세요.</translation>
 <translation id="8820817407110198400">북마크</translation>
 <translation id="8855707633300847215">탭 표시줄 표시</translation>
-<translation id="8866638710644054825">북마크 닉네임 우선순위 지정</translation>
 <translation id="8892354889971902600">최근에 닫은 탭이 여기에 표시됩니다.</translation>
 <translation id="89390081013973080">준비 완료! 이제 기기 간에 어떤 데이터를 동기화하실건지 선택해주세요.</translation>
 <translation id="8964449607824577665">현재 암호화 비밀번호가 없다면 데이터를 해독할 수 없습니다. 비밀번호를 초기화하면 Vivaldi 서버에 있는 모든 동기화 데이터가 삭제됩니다.</translation>
@@ -591,16 +609,20 @@
 <translation id="9097127519290088802">암호화 비밀번호 필요</translation>
 <translation id="9139318394846604261">쇼핑</translation>
 <translation id="9152984048904392513">모두 백그라운드에서 열기</translation>
+<translation id="9157459516617966251">링크 수정</translation>
+<translation id="9157539936604258187">링크 열기</translation>
 <translation id="9195659219948942754">Vivaldi 계정으로 데이터를 동기화 상태로 유지하세요</translation>
+<translation id="9195802773917252923">북마크 별칭 활성화</translation>
 <translation id="9212737146310746733">페르시아어 (<ph name="ORIGIN" />)</translation>
 <translation id="9218693288527810093">트래커 차단</translation>
-<translation id="924053859552461110">시작 페이지 수정</translation>
 <translation id="925891113183098411">여러 기기에서 데이터를 동기화하는 데 문제가 있어요</translation>
 <translation id="932327136139879170">홈</translation>
 <translation id="937440209447114831">광고 또는 추적기가 차단되지 않습니다.</translation>
+<translation id="941088499334202542">링크를 변경, 제거하거나 새 탭에서 열 수 있습니다.</translation>
 <translation id="958688202859970851">최근에 닫은 탭이 여기에 표시됨</translation>
 <translation id="984650419570014454">활성화 코드는 6자리에요.</translation>
 <translation id="987264212798334818">일반</translation>
 <translation id="992440609313570947">Vivaldi가 처음이신가요? <ph name="BEGIN_LINK" />계정 만들기 ➔<ph name="END_LINK" /></translation>
+<translation id="994333983174240900">모두 복사</translation>
 <translation id="998988732385109770">북마크를 사용 및 관리하기 어렵습니다</translation>
 </translationbundle>

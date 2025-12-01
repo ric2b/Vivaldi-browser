@@ -66,15 +66,6 @@ using ::testing::Invoke;
 
 namespace webrtc {
 
-namespace {
-const int kSampleRateHz = 16000;
-const int kNumSamples10ms = kSampleRateHz / 100;
-const int kFrameSizeMs = 10;  // Multiple of 10.
-const int kFrameSizeSamples = kFrameSizeMs / 10 * kNumSamples10ms;
-const int kPayloadSizeBytes = kFrameSizeSamples * sizeof(int16_t);
-const uint8_t kPayloadType = 111;
-}  // namespace
-
 class RtpData {
  public:
   RtpData(int samples_per_packet, uint8_t payload_type)
@@ -131,7 +122,7 @@ class PacketizationCallbackStubOldApi : public AudioPacketizationCallback {
 
   int last_payload_len_bytes() const {
     MutexLock lock(&mutex_);
-    return rtc::checked_cast<int>(last_payload_vec_.size());
+    return checked_cast<int>(last_payload_vec_.size());
   }
 
   AudioFrameType last_frame_type() const {
@@ -165,6 +156,13 @@ class PacketizationCallbackStubOldApi : public AudioPacketizationCallback {
 
 class AudioCodingModuleTestOldApi : public ::testing::Test {
  protected:
+  static constexpr int kSampleRateHz = 16000;
+  static constexpr int kNumSamples10ms = kSampleRateHz / 100;
+  static constexpr int kFrameSizeMs = 10;  // Multiple of 10.
+  static constexpr int kFrameSizeSamples = kFrameSizeMs / 10 * kNumSamples10ms;
+  static constexpr int kPayloadSizeBytes = kFrameSizeSamples * sizeof(int16_t);
+  static constexpr uint8_t kPayloadType = 111;
+
   AudioCodingModuleTestOldApi()
       : env_(CreateEnvironment()),
         rtp_utility_(new RtpData(kFrameSizeSamples, kPayloadType)) {}
@@ -383,22 +381,22 @@ class AudioCodingModuleMtTestOldApi : public AudioCodingModuleTestOldApi {
     quit_.store(false);
 
     const auto attributes =
-        rtc::ThreadAttributes().SetPriority(rtc::ThreadPriority::kRealtime);
-    send_thread_ = rtc::PlatformThread::SpawnJoinable(
+        ThreadAttributes().SetPriority(ThreadPriority::kRealtime);
+    send_thread_ = PlatformThread::SpawnJoinable(
         [this] {
           while (!quit_.load()) {
             CbSendImpl();
           }
         },
         "send", attributes);
-    insert_packet_thread_ = rtc::PlatformThread::SpawnJoinable(
+    insert_packet_thread_ = PlatformThread::SpawnJoinable(
         [this] {
           while (!quit_.load()) {
             CbInsertPacketImpl();
           }
         },
         "insert_packet", attributes);
-    pull_audio_thread_ = rtc::PlatformThread::SpawnJoinable(
+    pull_audio_thread_ = PlatformThread::SpawnJoinable(
         [this] {
           while (!quit_.load()) {
             CbPullAudioImpl();
@@ -472,13 +470,13 @@ class AudioCodingModuleMtTestOldApi : public AudioCodingModuleTestOldApi {
     fake_clock_->AdvanceTimeMilliseconds(10);
   }
 
-  rtc::PlatformThread send_thread_;
-  rtc::PlatformThread insert_packet_thread_;
-  rtc::PlatformThread pull_audio_thread_;
+  PlatformThread send_thread_;
+  PlatformThread insert_packet_thread_;
+  PlatformThread pull_audio_thread_;
   // Used to force worker threads to stop looping.
   std::atomic<bool> quit_;
 
-  rtc::Event test_complete_;
+  Event test_complete_;
   int send_count_;
   int insert_packet_count_;
   int pull_audio_count_ RTC_GUARDED_BY(mutex_);
@@ -677,7 +675,7 @@ class AcmSenderBitExactnessOldApi : public ::testing::Test,
       std::unique_ptr<AudioEncoder> external_speech_encoder,
       int payload_type) {
     payload_type_ = payload_type;
-    frame_size_rtp_timestamps_ = rtc::checked_cast<uint32_t>(
+    frame_size_rtp_timestamps_ = checked_cast<uint32_t>(
         external_speech_encoder->Num10MsFramesInNextPacket() *
         external_speech_encoder->RtpTimestampRateHz() / 100);
     send_test_->RegisterExternalCodec(std::move(external_speech_encoder));
@@ -1069,7 +1067,7 @@ class AcmSetBitRateTest : public ::testing::Test {
     int nr_bytes = 0;
     while (std::unique_ptr<test::Packet> next_packet =
                send_test_->NextPacket()) {
-      nr_bytes += rtc::checked_cast<int>(next_packet->payload_length_bytes());
+      nr_bytes += checked_cast<int>(next_packet->payload_length_bytes());
     }
     EXPECT_LE(min_expected_total_bits, nr_bytes * 8);
     EXPECT_GE(max_expected_total_bits, nr_bytes * 8);

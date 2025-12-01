@@ -95,42 +95,14 @@ cargo_crate("lib") {
   cargo_pkg_name = "regex-automata"
   cargo_pkg_description =
       "Automata construction and matching using regular expressions."
+  library_configs -= [ "//build/config/coverage:default_coverage" ]
   library_configs -= [ "//build/config/compiler:chromium_code" ]
   library_configs += [ "//build/config/compiler:no_chromium_code" ]
   executable_configs -= [ "//build/config/compiler:chromium_code" ]
   executable_configs += [ "//build/config/compiler:no_chromium_code" ]
   proc_macro_configs -= [ "//build/config/compiler:chromium_code" ]
   proc_macro_configs += [ "//build/config/compiler:no_chromium_code" ]
-  deps = [
-    "//third_party/rust/aho_corasick/v1:lib",
-    "//third_party/rust/memchr/v2:lib",
-    "//third_party/rust/regex_syntax/v0_8:lib",
-  ]
-  features = [
-    "alloc",
-    "dfa-onepass",
-    "dfa-search",
-    "hybrid",
-    "meta",
-    "nfa-backtrack",
-    "nfa-pikevm",
-    "nfa-thompson",
-    "perf-inline",
-    "perf-literal",
-    "perf-literal-multisubstring",
-    "perf-literal-substring",
-    "std",
-    "syntax",
-    "unicode",
-    "unicode-age",
-    "unicode-bool",
-    "unicode-case",
-    "unicode-gencat",
-    "unicode-perl",
-    "unicode-script",
-    "unicode-segment",
-    "unicode-word-boundary",
-  ]
+  features = [ "dfa-search" ]
   rustflags = [
     "--cap-lints=allow",  # Suppress all warnings in crates.io crates
   ]

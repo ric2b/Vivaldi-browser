@@ -41,7 +41,7 @@
 #include "third_party/blink/renderer/bindings/core/v8/v8_offscreen_canvas.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_readable_stream.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_string_resource.h"
-#include "third_party/blink/renderer/bindings/core/v8/v8_union_float32array_uint16array_uint8clampedarray.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_union_float16array_float32array_uint8clampedarray.h"
 #include "third_party/blink/renderer/core/context_features/context_feature_settings.h"
 #include "third_party/blink/renderer/core/dom/dom_exception.h"
 #include "third_party/blink/renderer/core/fileapi/blob.h"
@@ -108,13 +108,14 @@ v8::Local<v8::Value> RoundTrip(v8::Local<v8::Value> value,
   if (!serialized_script_value)
     return v8::Local<v8::Value>();
   // If there are message ports, make new ones and entangle them.
-  MessagePortArray* transferred_message_ports = MessagePort::EntanglePorts(
+  GCedMessagePortArray* transferred_message_ports = MessagePort::EntanglePorts(
       *scope.GetExecutionContext(), std::move(channels));
+  MessagePortArray message_ports(*transferred_message_ports);
 
   UnpackedSerializedScriptValue* unpacked =
       SerializedScriptValue::Unpack(std::move(serialized_script_value));
   V8ScriptValueDeserializer::Options deserialize_options;
-  deserialize_options.message_ports = transferred_message_ports;
+  deserialize_options.message_ports = &message_ports;
   deserialize_options.blob_info = blob_info;
   V8ScriptValueDeserializer deserializer(script_state, unpacked,
                                          deserialize_options);
@@ -849,12 +850,12 @@ TEST(V8ScriptValueSerializerTest, RoundTripImageDataWithColorSpaceInfo) {
   V8TestingScope scope;
   ImageDataSettings* image_data_settings = ImageDataSettings::Create();
   image_data_settings->setColorSpace("display-p3");
-  image_data_settings->setStorageFormat("float32");
+  image_data_settings->setPixelFormat("rgba-float16");
   ImageData* image_data = ImageData::ValidateAndCreate(
       2, 1, std::nullopt, image_data_settings,
       ImageData::ValidateAndCreateParams(), ASSERT_NO_EXCEPTION);
   SkPixmap pm = image_data->GetSkPixmap();
-  EXPECT_EQ(kRGBA_F32_SkColorType, pm.info().colorType());
+  EXPECT_EQ(kRGBA_F16_SkColorType, pm.info().colorType());
   static_cast<float*>(pm.writable_addr(0, 0))[0] = 200.f;
 
   v8::Local<v8::Value> wrapper =
@@ -868,9 +869,9 @@ TEST(V8ScriptValueSerializerTest, RoundTripImageDataWithColorSpaceInfo) {
   EXPECT_EQ(image_data->Size(), new_image_data->Size());
   ImageDataSettings* new_image_data_settings = new_image_data->getSettings();
   EXPECT_EQ("display-p3", new_image_data_settings->colorSpace());
-  EXPECT_EQ("float32", new_image_data_settings->storageFormat());
+  EXPECT_EQ("rgba-float16", new_image_data_settings->pixelFormat());
   SkPixmap new_pm = new_image_data->GetSkPixmap();
-  EXPECT_EQ(kRGBA_F32_SkColorType, new_pm.info().colorType());
+  EXPECT_EQ(kRGBA_F16_SkColorType, new_pm.info().colorType());
   EXPECT_EQ(200.f, reinterpret_cast<const float*>(new_pm.addr(0, 0))[0]);
 }
 
@@ -931,7 +932,7 @@ TEST(V8ScriptValueSerializerTest, DecodeImageDataV18) {
   EXPECT_EQ(gfx::Size(2, 1), new_image_data->Size());
   ImageDataSettings* new_image_data_settings = new_image_data->getSettings();
   EXPECT_EQ("display-p3", new_image_data_settings->colorSpace());
-  EXPECT_EQ("float32", new_image_data_settings->storageFormat());
+  EXPECT_EQ("rgba-float32", new_image_data_settings->pixelFormat());
   SkPixmap new_pm = new_image_data->GetSkPixmap();
   EXPECT_EQ(kRGBA_F32_SkColorType, new_pm.info().colorType());
   EXPECT_EQ(200u, static_cast<const uint8_t*>(new_pm.addr(0, 0))[0]);
@@ -1035,20 +1036,23 @@ TEST(V8ScriptValueSerializerTest, OutOfRangeMessagePortIndex) {
   }
   {
     V8ScriptValueDeserializer::Options options;
-    options.message_ports = MakeGarbageCollected<MessagePortArray>();
+    MessagePortArray message_ports;
+    options.message_ports = &message_ports;
     V8ScriptValueDeserializer deserializer(script_state, input, options);
     ASSERT_TRUE(deserializer.Deserialize()->IsNull());
   }
   {
     V8ScriptValueDeserializer::Options options;
-    options.message_ports = MakeGarbageCollected<MessagePortArray>();
+    MessagePortArray message_ports;
+    options.message_ports = &message_ports;
     options.message_ports->push_back(port1);
     V8ScriptValueDeserializer deserializer(script_state, input, options);
     ASSERT_TRUE(deserializer.Deserialize()->IsNull());
   }
   {
     V8ScriptValueDeserializer::Options options;
-    options.message_ports = MakeGarbageCollected<MessagePortArray>();
+    MessagePortArray message_ports;
+    options.message_ports = &message_ports;
     options.message_ports->push_back(port1);
     options.message_ports->push_back(port2);
     V8ScriptValueDeserializer deserializer(script_state, input, options);
@@ -1536,7 +1540,7 @@ TEST(V8ScriptValueSerializerTest, InvalidImageBitmapDecodeV18) {
         V8ScriptValueDeserializer(script_state, input).Deserialize()->IsNull());
   }
   {
-    // Nonsense image serialization tag (kImageDataStorageFormatTag).
+    // Nonsense image serialization tag (kImageDataPixelFormatTag).
     scoped_refptr<SerializedScriptValue> input =
         SerializedValue({0xff, 0x12, 0xff, 0x0d, 0x5c, 0x67, 0x03, 0x00, 0x00,
                          0x01, 0x01, 0x04, 0x00, 0x00, 0x00, 0x00});
@@ -2145,13 +2149,14 @@ TEST(V8ScriptValueSerializerTest, TransformStreamIntegerOverflow) {
       std::move(serialized_script_value->GetStreams());
 
   // Entangle the message ports.
-  MessagePortArray* transferred_message_ports = MessagePort::EntanglePorts(
+  GCedMessagePortArray* transferred_message_ports = MessagePort::EntanglePorts(
       *scope.GetExecutionContext(), std::move(channels));
+  MessagePortArray message_ports(*transferred_message_ports);
 
   UnpackedSerializedScriptValue* unpacked = SerializedScriptValue::Unpack(
       std::move(corrupted_serialized_script_value));
   V8ScriptValueDeserializer::Options deserialize_options;
-  deserialize_options.message_ports = transferred_message_ports;
+  deserialize_options.message_ports = &message_ports;
   V8ScriptValueDeserializer deserializer(script_state, unpacked,
                                          deserialize_options);
   // If this doesn't crash then the test succeeded.

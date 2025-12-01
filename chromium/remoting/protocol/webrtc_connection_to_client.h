@@ -45,7 +45,9 @@ class WebrtcConnectionToClient : public ConnectionToClient,
   void SetEventHandler(
       ConnectionToClient::EventHandler* event_handler) override;
   Session* session() override;
-  void Disconnect(ErrorCode error) override;
+  void Disconnect(ErrorCode error,
+                  std::string_view error_details,
+                  const SourceLocation& error_location) override;
   std::unique_ptr<VideoStream> StartVideoStream(
       webrtc::ScreenId screen_id,
       std::unique_ptr<DesktopCapturer> desktop_capturer) override;
@@ -66,7 +68,9 @@ class WebrtcConnectionToClient : public ConnectionToClient,
   // WebrtcTransport::EventHandler interface
   void OnWebrtcTransportConnecting() override;
   void OnWebrtcTransportConnected() override;
-  void OnWebrtcTransportError(ErrorCode error) override;
+  void OnWebrtcTransportError(ErrorCode error,
+                              std::string_view error_details,
+                              const base::Location& error_location) override;
   void OnWebrtcTransportProtocolChanged() override;
   void OnWebrtcTransportIncomingDataChannel(
       const std::string& name,

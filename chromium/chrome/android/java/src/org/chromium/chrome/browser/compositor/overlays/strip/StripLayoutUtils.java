@@ -24,6 +24,7 @@ import org.chromium.ui.base.LocalizationUtils;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 
 public class StripLayoutUtils {
     // Position Constants.
@@ -58,7 +59,7 @@ public class StripLayoutUtils {
      */
     public static boolean notRelatedAndEitherTabInGroup(
             TabGroupModelFilter modelFilter, @NonNull Tab tab1, @NonNull Tab tab2) {
-        return tab1.getRootId() != tab2.getRootId()
+        return !Objects.equals(tab1.getTabGroupId(), tab2.getTabGroupId())
                 && (modelFilter.isTabInTabGroup(tab1) || modelFilter.isTabInTabGroup(tab2));
     }
 
@@ -73,7 +74,7 @@ public class StripLayoutUtils {
             return false;
         }
         return modelFilter.isTabInTabGroup(tab)
-                && modelFilter.getRelatedTabCountForRootId(tab.getRootId()) == 1;
+                && modelFilter.getTabCountForGroup(tab.getTabGroupId()) == 1;
     }
 
     /**
@@ -86,7 +87,7 @@ public class StripLayoutUtils {
         if (stripLayoutGroupTitle == null) {
             return 0;
         }
-        return modelFilter.getRelatedTabCountForRootId(stripLayoutGroupTitle.getRootId());
+        return modelFilter.getTabCountForGroup(stripLayoutGroupTitle.getTabGroupId());
     }
 
     /**
@@ -251,6 +252,26 @@ public class StripLayoutUtils {
         }
 
         return null;
+    }
+
+    /**
+     * @param views The list of {@link StripLayoutView}.
+     * @return An array of the views that have not been dragged off the strip.
+     */
+    public static StripLayoutView[] getViewsOnStrip(StripLayoutView[] views) {
+        int numViewsOnStrip = views.length;
+        for (int i = 0; i < views.length; ++i) {
+            if (views[i].isDraggedOffStrip()) --numViewsOnStrip;
+        }
+
+        int index = 0;
+        StripLayoutView[] viewsOnStrip = new StripLayoutView[numViewsOnStrip];
+        for (int i = 0; i < views.length; ++i) {
+            final StripLayoutView view = views[i];
+            if (!view.isDraggedOffStrip()) viewsOnStrip[index++] = view;
+        }
+
+        return viewsOnStrip;
     }
 
     // ============================================================================================

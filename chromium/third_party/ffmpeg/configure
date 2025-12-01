@@ -363,6 +363,7 @@ External library support:
   --disable-vdpau          disable Nvidia Video Decode and Presentation API for Unix code [autodetect]
   --disable-videotoolbox   disable VideoToolbox code [autodetect]
   --disable-vulkan         disable Vulkan code [autodetect]
+  --enable-vulkan-static   statically link to libvulkan [no]
 
 Toolchain options:
   --arch=ARCH              select architecture [$arch]
@@ -1521,7 +1522,7 @@ test_pkg_config(){
     funcs="$4"
     shift 4
     disable $name
-    test_cmd $pkg_config --exists --print-errors $pkg_version || return
+    test_cmd $pkg_config --exists --print-errors "$pkg_version" || return
     pkg_cflags=$($pkg_config --cflags $pkg_config_flags $pkg)
     pkg_libs=$($pkg_config --libs $pkg_config_flags $pkg)
     pkg_incdir=$($pkg_config --variable=includedir $pkg_config_flags $pkg)
@@ -1541,7 +1542,7 @@ test_pkg_config_cpp(){
     cond="$4"
     shift 4
     disable $name
-    test_cmd $pkg_config --exists --print-errors $pkg_version || return
+    test_cmd $pkg_config --exists --print-errors "$pkg_version" || return
     pkg_cflags=$($pkg_config --cflags $pkg_config_flags $pkg)
     pkg_incdir=$($pkg_config --variable=includedir $pkg_config_flags $pkg)
     pkg_incflags=$($pkg_config --cflags-only-I $pkg_config_flags $pkg)
@@ -1987,6 +1988,7 @@ EXTERNAL_LIBRARY_LIST="
     openssl
     pocketsphinx
     vapoursynth
+    vulkan_static
 "
 
 HWACCEL_AUTODETECT_LIBRARY_LIST="
@@ -2880,6 +2882,7 @@ h264parse_select="golomb"
 h264_sei_select="atsc_a53 golomb"
 hevcparse_select="golomb"
 hevc_sei_select="atsc_a53 golomb"
+iso_writer_select="golomb"
 frame_thread_encoder_deps="encoders threads"
 iamfdec_deps="iamf"
 iamfdec_select="iso_media mpeg4audio"
@@ -3004,7 +3007,7 @@ ipu_decoder_select="mpegvideodec"
 jpegls_decoder_select="mjpeg_decoder"
 jv_decoder_select="blockdsp"
 lagarith_decoder_select="llviddsp"
-lead_decoder_select="idctdsp jpegtables"
+lead_decoder_select="blockdsp idctdsp jpegtables"
 ljpeg_encoder_select="jpegtables"
 lscr_decoder_select="inflate_wrapper"
 magicyuv_decoder_select="llviddsp"
@@ -3558,6 +3561,8 @@ libgsm_ms_decoder_deps="libgsm"
 libgsm_ms_encoder_deps="libgsm"
 libilbc_decoder_deps="libilbc"
 libilbc_encoder_deps="libilbc"
+libjxl_anim_decoder_deps="libjxl libjxl_threads"
+libjxl_anim_encoder_deps="libjxl libjxl_threads"
 libjxl_decoder_deps="libjxl libjxl_threads"
 libjxl_encoder_deps="libjxl libjxl_threads"
 libkvazaar_encoder_deps="libkvazaar"
@@ -4257,7 +4262,7 @@ find_things_extern(){
 
 find_filters_extern(){
     file=$source_path/$1
-    sed -n 's/^extern const AVFilter ff_[avfsinkrc]\{2,5\}_\([[:alnum:]_]\{1,\}\);/\1_filter/p' $file
+    sed -n 's/^extern const FFFilter ff_[avfsinkrc]\{2,5\}_\([[:alnum:]_]\{1,\}\);/\1_filter/p' $file
 }
 
 FILTER_LIST=$(find_filters_extern libavfilter/allfilters.c)
@@ -7389,7 +7394,10 @@ enabled vdpau &&
 enabled vdpau &&
     check_lib vdpau_x11 "vdpau/vdpau.h vdpau/vdpau_x11.h" vdp_device_create_x11 -lvdpau -lX11
 
-if enabled vulkan; then
+if enabled_all vulkan vulkan_static; then
+    check_pkg_config vulkan "vulkan >= 1.3.277" "vulkan/vulkan.h" "defined VK_VERSION_1_3" ||
+        check_lib vulkan "vulkan/vulkan.h" vkGetInstanceProcAddr -lvulkan
+elif enabled vulkan; then
     check_pkg_config_header_only vulkan "vulkan >= 1.3.277" "vulkan/vulkan.h" "defined VK_VERSION_1_3" ||
         check_cpp_condition vulkan "vulkan/vulkan.h" "defined(VK_VERSION_1_4) || (defined(VK_VERSION_1_3) && VK_HEADER_VERSION >= 277)"
 fi
@@ -7438,7 +7446,7 @@ fi
 
 enabled amf &&
     check_cpp_condition amf "AMF/core/Version.h" \
-        "(AMF_VERSION_MAJOR << 48 | AMF_VERSION_MINOR << 32 | AMF_VERSION_RELEASE << 16 | AMF_VERSION_BUILD_NUM) >= 0x0001000400210000"
+        "(AMF_VERSION_MAJOR << 48 | AMF_VERSION_MINOR << 32 | AMF_VERSION_RELEASE << 16 | AMF_VERSION_BUILD_NUM) >= 0x0001000400230000"
 
 # Funny iconv installations are not unusual, so check it after all flags have been set
 if enabled libc_iconv; then
@@ -8235,7 +8243,7 @@ cat > $TMPH <<EOF
 #define FFMPEG_CONFIG_H
 #define FFMPEG_CONFIGURATION "$(c_escape $FFMPEG_CONFIGURATION)"
 #define FFMPEG_LICENSE "$(c_escape $license)"
-#define CONFIG_THIS_YEAR 2024
+#define CONFIG_THIS_YEAR 2025
 #define FFMPEG_DATADIR "$(eval c_escape $datadir)"
 #define AVCONV_DATADIR "$(eval c_escape $datadir)"
 #define CC_IDENT "$(c_escape ${cc_ident:-Unknown compiler})"
@@ -8314,7 +8322,7 @@ cp_if_changed $TMPH libavutil/avconfig.h
 # full_filter_name_foo=vf_foo
 # full_filter_name_bar=asrc_bar
 # ...
-eval "$(sed -n "s/^extern const AVFilter ff_\([avfsinkrc]\{2,5\}\)_\(.*\);/full_filter_name_\2=\1_\2/p" $source_path/libavfilter/allfilters.c)"
+eval "$(sed -n "s/^extern const FFFilter ff_\([avfsinkrc]\{2,5\}\)_\(.*\);/full_filter_name_\2=\1_\2/p" $source_path/libavfilter/allfilters.c)"
 
 # generate the lists of enabled components
 print_enabled_components(){
@@ -8348,7 +8356,7 @@ print_enabled_components(){
     cp_if_changed $TMPH $file
 }
 
-print_enabled_components libavfilter/filter_list.c AVFilter filter_list $FILTER_LIST
+print_enabled_components libavfilter/filter_list.c FFFilter filter_list $FILTER_LIST
 print_enabled_components libavcodec/codec_list.c FFCodec codec_list $CODEC_LIST
 print_enabled_components libavcodec/parser_list.c AVCodecParser parser_list $PARSER_LIST
 print_enabled_components libavcodec/bsf_list.c FFBitStreamFilter bitstream_filters $BSF_LIST

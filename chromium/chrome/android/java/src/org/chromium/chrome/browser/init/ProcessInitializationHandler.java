@@ -49,8 +49,8 @@ import org.chromium.chrome.browser.app.flags.ChromeCachedFlags;
 import org.chromium.chrome.browser.app.usb.UsbNotificationService;
 import org.chromium.chrome.browser.backup.ChromeBackupAgentImpl;
 import org.chromium.chrome.browser.bluetooth.BluetoothNotificationManager;
+import org.chromium.chrome.browser.bookmarks.BookmarkModel;
 import org.chromium.chrome.browser.bookmarkswidget.BookmarkWidgetProvider;
-import org.chromium.chrome.browser.browserservices.ClearDataDialogResultRecorder;
 import org.chromium.chrome.browser.contacts_picker.ChromePickerAdapter;
 import org.chromium.chrome.browser.content_capture.ContentCaptureHistoryDeletionObserver;
 import org.chromium.chrome.browser.crash.CrashUploadCountStore;
@@ -105,6 +105,7 @@ import org.chromium.chrome.browser.webapps.WebappRegistry;
 import org.chromium.components.background_task_scheduler.BackgroundTaskSchedulerFactory;
 import org.chromium.components.browser_ui.accessibility.PageZoomUtils;
 import org.chromium.components.browser_ui.contacts_picker.ContactsPickerDialog;
+import org.chromium.components.browser_ui.edge_to_edge.EdgeToEdgeStateProvider;
 import org.chromium.components.browser_ui.photo_picker.DecoderServiceHost;
 import org.chromium.components.browser_ui.photo_picker.PhotoPickerDelegateBase;
 import org.chromium.components.browser_ui.photo_picker.PhotoPickerDialog;
@@ -389,7 +390,8 @@ public class ProcessInitializationHandler {
                                         windowAndroid.getContext().get().getContentResolver(),
                                         listener,
                                         allowMultiple,
-                                        mimeTypes);
+                                        mimeTypes,
+                                        shouldDialogPadForContent(windowAndroid));
                         dialog.getWindow().getAttributes().windowAnimations =
                                 R.style.PickerDialogAnimation;
                         dialog.show();
@@ -421,7 +423,8 @@ public class ProcessInitializationHandler {
                                     includeTel,
                                     includeAddresses,
                                     includeIcons,
-                                    formattedOrigin);
+                                    formattedOrigin,
+                                    shouldDialogPadForContent(windowAndroid));
                     dialog.getWindow().getAttributes().windowAnimations =
                             R.style.PickerDialogAnimation;
                     dialog.show();
@@ -437,6 +440,11 @@ public class ProcessInitializationHandler {
 
         PrivacyPreferencesManagerImpl.getInstance().onNativeInitialized();
         setProcessStateSummaryForAnrs(true);
+
+        // Give BookmarkModel a provider of PartnerBookmark.BookmarkIterator so that
+        // PartnerBookmarksShim can be loaded lazily when BookmarkModel is needed.
+        BookmarkModel.setPartnerBookmarkIteratorProvider(
+                AppHooks.get()::requestPartnerBookmarkIterator);
 
         List<Profile> profiles = ProfileManager.getLoadedProfiles();
         assert !profiles.isEmpty()
@@ -691,7 +699,6 @@ public class ProcessInitializationHandler {
 
         tasks.add(MediaViewerUtils::updateMediaLauncherActivityEnabled);
 
-        tasks.add(ClearDataDialogResultRecorder::makeDeferredRecordings);
         tasks.add(WebApkUninstallTracker::runDeferredTasks);
 
         tasks.add(OfflineContentAvailabilityStatusProvider::getInstance);
@@ -965,5 +972,9 @@ public class ProcessInitializationHandler {
             }
         }
         RecordHistogram.recordCount1MHistogram("InputMethod.ActiveCount", uniqueLanguages.size());
+    }
+
+    private static boolean shouldDialogPadForContent(WindowAndroid windowAndroid) {
+        return EdgeToEdgeStateProvider.isEdgeToEdgeEnabledForWindow(windowAndroid);
     }
 }

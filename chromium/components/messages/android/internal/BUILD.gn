@@ -7,7 +7,6 @@ import("//build/config/android/rules.gni")
 android_library("java") {
   sources = [
     "java/src/org/chromium/components/messages/MessageAnimationCoordinator.java",
-    "java/src/org/chromium/components/messages/MessageAutoDismissTimer.java",
     "java/src/org/chromium/components/messages/MessageBannerCoordinator.java",
     "java/src/org/chromium/components/messages/MessageBannerMediator.java",
     "java/src/org/chromium/components/messages/MessageBannerView.java",
@@ -50,7 +49,6 @@ robolectric_library("junit") {
   resources_package = "org.chromium.components.messages"
   sources = [
     "java/src/org/chromium/components/messages/MessageAnimationCoordinatorUnitTest.java",
-    "java/src/org/chromium/components/messages/MessageAutoDismissTimerTest.java",
     "java/src/org/chromium/components/messages/MessageBannerCoordinatorUnitTest.java",
     "java/src/org/chromium/components/messages/MessageBannerMediatorUnitTest.java",
     "java/src/org/chromium/components/messages/MessageDispatcherUnitTest.java",
@@ -109,10 +107,11 @@ android_library("unit_device_javatests") {
 
 android_resources("java_resources") {
   sources = [
+    "java/res/color-night/message_bg_color.xml",
+    "java/res/color/message_bg_color.xml",
     "java/res/drawable-v23/message_bg_tinted.xml",
     "java/res/drawable-v31/message_bg_tinted.xml",
     "java/res/layout/message_banner_view.xml",
-    "java/res/values-night/dimens.xml",
     "java/res/values/dimens.xml",
   ]
   deps = [

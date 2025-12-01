@@ -32,6 +32,9 @@ ERRORPRONE_WARNINGS_TO_DISABLE = [
     'AlreadyChecked',
     'DirectInvocationOnMock',
     'MockNotUsedInProduction',
+    'PatternMatchingInstanceof',
+    'AssignmentExpression',
+    'RuleNotRun',
     # High priority to enable in non-tests:
     'JdkObsolete',
     'ReturnValueIgnored',
@@ -109,9 +112,13 @@ ERRORPRONE_WARNINGS_TO_DISABLE = [
     # Nice to have.
     'StringCharset',
     # Nice to have.
+    'StringConcatToTextBlock',
+    # Nice to have.
     'StringCaseLocaleUsage',
     # Low priority.
     'RedundantControlFlow',
+    # Low priority.
+    'StatementSwitchToExpressionSwitch',
 ]
 
 # Full list of checks: https://errorprone.info/bugpatterns
@@ -204,6 +211,7 @@ def main():
         'android.content.ContentProvider.attachInfo',
         'android.content.ContentProvider.onCreate',
         'android.content.ContextWrapper.attachBaseContext',
+        'androidx.preference.PreferenceFragmentCompat.onCreatePreferences',
     ]
     errorprone_flags += [
         '-XepOpt:NullAway:KnownInitializers=' + ','.join(init_methods)

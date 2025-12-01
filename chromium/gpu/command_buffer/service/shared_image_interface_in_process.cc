@@ -657,16 +657,6 @@ void SharedImageInterfaceInProcess::WaitSyncToken(const SyncToken& sync_token) {
                   MakeSyncToken(next_fence_sync_release_++));
 }
 
-void SharedImageInterfaceInProcess::Flush() {
-  // No need to flush in this implementation.
-}
-
-scoped_refptr<gfx::NativePixmap> SharedImageInterfaceInProcess::GetNativePixmap(
-    const gpu::Mailbox& mailbox) {
-  DCHECK(shared_image_manager_->is_thread_safe());
-  return shared_image_manager_->GetNativePixmap(mailbox);
-}
-
 void SharedImageInterfaceInProcess::ScheduleGpuTask(
     base::OnceClosure task,
     std::vector<SyncToken> sync_token_fences,
@@ -677,7 +667,7 @@ void SharedImageInterfaceInProcess::ScheduleGpuTask(
 
 scoped_refptr<ClientSharedImage>
 SharedImageInterfaceInProcess::ImportSharedImage(
-    const ExportedSharedImage& exported_shared_image) {
+    ExportedSharedImage exported_shared_image) {
   // Secondary references are required only by client processes, so it shouldn't
   // be reachable here.
   NOTREACHED();

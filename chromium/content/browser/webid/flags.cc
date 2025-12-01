@@ -79,4 +79,20 @@ bool IsFedCmShowFilteredAccountsEnabled() {
   return base::FeatureList::IsEnabled(features::kFedCmShowFilteredAccounts);
 }
 
+bool IsFedCmLightweightModeEnabled() {
+  return base::FeatureList::IsEnabled(features::kFedCmLightweightMode);
+}
+
+bool IsFedCmAlternativeIdentifiersEnabled() {
+  return base::FeatureList::IsEnabled(features::kFedCmAlternativeIdentifiers);
+}
+
+bool IsFedCmCooldownOnIgnoreEnabled() {
+  return base::FeatureList::IsEnabled(features::kFedCmCooldownOnIgnore);
+}
+
+bool IsFedCmUseOtherAccountAndLabelsNewSyntaxEnabled() {
+  return base::FeatureList::IsEnabled(
+      features::kFedCmUseOtherAccountAndLabelsNewSyntax);
+}
 }  // namespace content

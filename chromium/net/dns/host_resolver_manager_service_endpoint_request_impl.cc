@@ -70,6 +70,10 @@ HostResolverManager::ServiceEndpointRequestImpl::~ServiceEndpointRequestImpl() {
   delegate_ = nullptr;
 
   job_.value()->CancelServiceEndpointRequest(this);
+  // TODO(crbug.com/397597592): Remove the following CHECKs after we identified
+  // the cause of the bug.
+  CHECK(previous() == nullptr);
+  CHECK(next() == nullptr);
 }
 
 int HostResolverManager::ServiceEndpointRequestImpl::Start(Delegate* delegate) {
@@ -97,8 +101,8 @@ HostResolverManager::ServiceEndpointRequestImpl::GetStaleInfo() const {
 bool HostResolverManager::ServiceEndpointRequestImpl::IsStaleWhileRefresing()
     const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  return parameters_.cache_usage ==
-             ResolveHostParameters::CacheUsage::ALLOWED &&
+  return parameters_.cache_usage == ResolveHostParameters::CacheUsage::
+                                        STALE_ALLOWED_WHILE_REFRESHING &&
          stale_info_.has_value() && stale_info_.value().is_stale();
 }
 
@@ -302,14 +306,21 @@ int HostResolverManager::ServiceEndpointRequestImpl::DoResolveLocally() {
   manager_->InitializeJobKeyAndIPAddress(
       network_anonymization_key_, parameters_, net_log_, *job_key_, ip_address);
 
-  // Use STALE_ALLOWED when the parameter's cache usage is ALLOWED and the
-  // source is not LOCAL_ONLY, to provide stale results as intermediate results.
-  ResolveHostParameters::CacheUsage cache_usage = parameters_.cache_usage;
-  if (parameters_.cache_usage == ResolveHostParameters::CacheUsage::ALLOWED &&
-      parameters_.source != HostResolverSource::LOCAL_ONLY) {
-    cache_usage = ResolveHostParameters::CacheUsage::STALE_ALLOWED;
-  }
   const bool only_ipv6_reachable = false;
+  const bool stale_allowed_while_refreshing =
+      parameters_.cache_usage ==
+      ResolveHostParameters::CacheUsage::STALE_ALLOWED_WHILE_REFRESHING;
+
+  // HostResolverManager doesn't recognize STALE_ALLOWED_WHILE_REFRESHING. This
+  // class implements stale-while-refreshing logic (see the following comments).
+  // Use ALLOWED when the parameter's the source is LOCAL_ONLY. Otherwise, use
+  // STALE_ALLOWED to provide stale results as intermediate results.
+  ResolveHostParameters::CacheUsage cache_usage = parameters_.cache_usage;
+  if (stale_allowed_while_refreshing) {
+    cache_usage = parameters_.source == HostResolverSource::LOCAL_ONLY
+                      ? ResolveHostParameters::CacheUsage::ALLOWED
+                      : ResolveHostParameters::CacheUsage::STALE_ALLOWED;
+  }
 
   HostCache::Entry results = manager_->ResolveLocally(
       only_ipv6_reachable, *job_key_, ip_address, cache_usage,
@@ -318,8 +329,7 @@ int HostResolverManager::ServiceEndpointRequestImpl::DoResolveLocally() {
   bool is_stale = results.error() == OK && stale_info_.has_value() &&
                   stale_info_->is_stale();
 
-  if (is_stale &&
-      parameters_.cache_usage == ResolveHostParameters::CacheUsage::ALLOWED) {
+  if (is_stale && stale_allowed_while_refreshing) {
     // When a stale result is found, ResolveLocally() returns the stale result
     // without executing the remaining tasks, including local tasks such as
     // INSECURE_CACHE_LOOKUP and HOSTS. These tasks may be able to provide a
@@ -346,9 +356,14 @@ int HostResolverManager::ServiceEndpointRequestImpl::DoResolveLocally() {
     CHECK(parameters_.source != HostResolverSource::LOCAL_ONLY);
   }
 
-  if (parameters_.cache_usage == ResolveHostParameters::CacheUsage::ALLOWED &&
-      is_stale) {
-    stale_endpoints_ = results.ConvertToServiceEndpoints(host_.GetPort());
+  if (is_stale && stale_allowed_while_refreshing) {
+    // Allow using stale results only when there is no network change.
+    // TODO(crbug.com/383174960): This also exclude results that are obtained
+    // from the same network but the device got disconnected/connected events.
+    // Ideally we should be able to use such results.
+    if (results.network_changes() == host_cache()->network_changes()) {
+      stale_endpoints_ = results.ConvertToServiceEndpoints(host_.GetPort());
+    }
     if (!stale_endpoints_.empty()) {
       net_log_.AddEvent(
           NetLogEventType::HOST_RESOLVER_SERVICE_ENDPOINTS_STALE_RESULTS, [&] {
@@ -404,7 +419,8 @@ void HostResolverManager::ServiceEndpointRequestImpl::
 }
 
 void HostResolverManager::ServiceEndpointRequestImpl::MaybeClearStaleResults() {
-  if (parameters_.cache_usage == ResolveHostParameters::CacheUsage::ALLOWED &&
+  if (parameters_.cache_usage ==
+          ResolveHostParameters::CacheUsage::STALE_ALLOWED_WHILE_REFRESHING &&
       stale_info_.has_value()) {
     stale_endpoints_.clear();
     stale_info_.reset();

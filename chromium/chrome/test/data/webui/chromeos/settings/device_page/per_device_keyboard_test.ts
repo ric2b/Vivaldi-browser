@@ -81,7 +81,7 @@ suite('<settings-per-device-keyboard>', () => {
   });
 
   test(
-      'Display correct name used for internal/external keyboards', async () => {
+      'Display correct name used for internal/external keyboards', () => {
         const subsections = perDeviceKeyboardPage.shadowRoot!.querySelectorAll(
             'settings-per-device-keyboard-subsection');
         for (let i = 0; i < subsections.length; i++) {
@@ -108,12 +108,12 @@ suite('<settings-per-device-keyboard>', () => {
     assertEquals(
         500,
         perDeviceKeyboardPage.shadowRoot!
-            .querySelector<SettingsSliderElement>('#delaySlider')!.pref!.value);
+            .querySelector<SettingsSliderElement>('#delaySlider')!.pref.value);
     assertEquals(
         500,
         perDeviceKeyboardPage.shadowRoot!
             .querySelector<SettingsSliderElement>(
-                '#repeatRateSlider')!.pref!.value);
+                '#repeatRateSlider')!.pref.value);
 
     // Test interaction with the settings-slider's underlying cr-slider.
     pressAndReleaseKeyOn(
@@ -142,7 +142,7 @@ suite('<settings-per-device-keyboard>', () => {
     assertEquals(
         1500,
         perDeviceKeyboardPage.shadowRoot!
-            .querySelector<SettingsSliderElement>('#delaySlider')!.pref!.value);
+            .querySelector<SettingsSliderElement>('#delaySlider')!.pref.value);
     perDeviceKeyboardPage.set(
         'prefs.settings.language.xkb_auto_repeat_interval_r2.value', 2000);
     await flushTasks();
@@ -150,7 +150,7 @@ suite('<settings-per-device-keyboard>', () => {
         2000,
         perDeviceKeyboardPage.shadowRoot!
             .querySelector<SettingsSliderElement>(
-                '#repeatRateSlider')!.pref!.value);
+                '#repeatRateSlider')!.pref.value);
 
     // Test sliders round to nearest value when prefs change.
     perDeviceKeyboardPage.set(
@@ -159,7 +159,7 @@ suite('<settings-per-device-keyboard>', () => {
     assertEquals(
         500,
         perDeviceKeyboardPage.shadowRoot!
-            .querySelector<SettingsSliderElement>('#delaySlider')!.pref!.value);
+            .querySelector<SettingsSliderElement>('#delaySlider')!.pref.value);
     perDeviceKeyboardPage.set(
         'prefs.settings.language.xkb_auto_repeat_interval_r2.value', 45);
     await flushTasks();
@@ -167,21 +167,21 @@ suite('<settings-per-device-keyboard>', () => {
         50,
         perDeviceKeyboardPage.shadowRoot!
             .querySelector<SettingsSliderElement>(
-                '#repeatRateSlider')!.pref!.value);
+                '#repeatRateSlider')!.pref.value);
 
     perDeviceKeyboardPage.set(
         'prefs.settings.language.xkb_auto_repeat_enabled_r2.value', false);
     assertFalse(collapse.opened);
   });
 
-  test('Open keyboard shortcut viewer', async () => {
+  test('Open keyboard shortcut viewer', () => {
     perDeviceKeyboardPage.shadowRoot!
         .querySelector<CrLinkRowElement>('#shortcutCustomizationApp')!.click();
     assertEquals(
         1, devicePageBrowserProxy.getCallCount('showShortcutCustomizationApp'));
   });
 
-  test('Navigate to input tab', async () => {
+  test('Navigate to input tab', () => {
     perDeviceKeyboardPage.shadowRoot!
         .querySelector<CrLinkRowElement>('#inputRow')!.click();
     assertEquals(routes.OS_LANGUAGES_INPUT, Router.getInstance().currentRoute);
@@ -199,7 +199,7 @@ suite('<settings-per-device-keyboard>', () => {
                 '#noKeyboardsConnectedMessage')!.innerText.trim());
   });
 
-  test('Navigate to a11y keyboard settings subpage', async () => {
+  test('Navigate to a11y keyboard settings subpage', () => {
     perDeviceKeyboardPage.shadowRoot!
         .querySelector<CrLinkRowElement>('#a11yKeyboardRow')!.click();
     assertEquals(

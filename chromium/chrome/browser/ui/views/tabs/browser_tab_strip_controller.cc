@@ -12,6 +12,7 @@
 #include "base/feature_list.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback.h"
+#include "base/functional/callback_forward.h"
 #include "base/memory/raw_ptr.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
@@ -82,6 +83,10 @@
 #include "chromeos/ash/experiences/system_web_apps/types/system_web_app_delegate.h"
 #endif  // BUILDFLAG(IS_CHROMEOS)
 
+#if defined(USE_AURA)
+#include "ui/aura/window.h"
+#endif
+
 using base::UserMetricsAction;
 using content::WebContents;
 
@@ -99,6 +104,24 @@ BrowserView* GetSourceBrowserViewInTabDragging() {
     }
   }
   return nullptr;
+}
+
+void DialogTimingToSource(
+    base::OnceCallback<void(CloseTabSource)> callback,
+    CloseTabSource source,
+    tab_groups::DeletionDialogController::DeletionDialogTiming timing) {
+  switch (timing) {
+    case tab_groups::DeletionDialogController::DeletionDialogTiming::
+        Synchronous: {
+      std::move(callback).Run(source);
+      return;
+    }
+    case tab_groups::DeletionDialogController::DeletionDialogTiming::
+        Asynchronous: {
+      std::move(callback).Run(CloseTabSource::kFromNonUIEvent);
+      return;
+    }
+  }
 }
 
 }  // namespace
@@ -166,8 +189,8 @@ class BrowserTabStripController::TabContextMenuContents
                                                                accelerator);
   }
   void ExecuteCommand(int command_id, int event_flags) override {
-    // Executing the command destroys |this|, and can also end up destroying
-    // |controller_|. So stop the highlights before executing the command.
+    // Executing the command destroys `this`, and can also end up destroying
+    // `controller_`. So stop the highlights before executing the command.
     controller_->ExecuteCommandForTab(
         static_cast<TabStripModel::ContextMenuCommand>(command_id), tab_);
   }
@@ -227,9 +250,11 @@ void BrowserTabStripController::InitFromModel(TabStrip* tabstrip) {
 
   // Walk the model, calling our insertion observer method for each item within
   // it.
+  std::vector<std::pair<WebContents*, int>> tabs_to_add;
   for (int i = 0; i < model_->count(); ++i) {
-    AddTab(model_->GetWebContentsAt(i), i);
+    tabs_to_add.emplace_back(model_->GetWebContentsAt(i), i);
   }
+  AddTabs(tabs_to_add);
 }
 
 bool BrowserTabStripController::IsCommandEnabledForTab(
@@ -320,7 +345,7 @@ void BrowserTabStripController::SelectTab(int model_index,
           [](std::unique_ptr<viz::PeakGpuMemoryTracker> tracker,
              const viz::FrameTimingDetails& frame_timing_details) {
             // This callback will be ran once the ui::Compositor presents the
-            // next frame for the |tabstrip_|. The destruction of |tracker| will
+            // next frame for the `tabstrip_`. The destruction of `tracker` will
             // get the peak GPU memory and record a histogram.
           },
           std::move(tracker)));
@@ -372,7 +397,7 @@ void BrowserTabStripController::AddSelectionFromAnchorTo(int model_index) {
 void BrowserTabStripController::OnCloseTab(
     int model_index,
     CloseTabSource source,
-    base::OnceCallback<void()> callback) {
+    base::OnceCallback<void(CloseTabSource)> callback) {
   if (!web_app::IsTabClosable(model_, model_index)) {
     return;
   }
@@ -392,13 +417,14 @@ void BrowserTabStripController::OnCloseTab(
     // to prompt the user before the browser is allowed to close.
     const Browser::WarnBeforeClosingResult result =
         browser_view_->browser()->MaybeWarnBeforeClosing(base::BindOnce(
-            [](TabStrip* tab_strip, int model_index, CloseTabSource source,
+            [](TabStrip* tab_strip, int model_index,
                Browser::WarnBeforeClosingResult result) {
               if (result == Browser::WarnBeforeClosingResult::kOkToClose) {
-                tab_strip->CloseTab(tab_strip->tab_at(model_index), source);
+                tab_strip->CloseTab(tab_strip->tab_at(model_index),
+                                    CloseTabSource::kFromNonUIEvent);
               }
             },
-            base::Unretained(tabstrip_), model_index, source));
+            base::Unretained(tabstrip_), model_index));
 
     if (result != Browser::WarnBeforeClosingResult::kOkToClose) {
       return;
@@ -409,17 +435,20 @@ void BrowserTabStripController::OnCloseTab(
   std::vector<tab_groups::TabGroupId> groups_to_delete =
       model_->GetGroupsDestroyedFromRemovingIndices({model_index});
 
-  if (!tab_groups::IsTabGroupsSaveV2Enabled() || groups_to_delete.empty()) {
-    std::move(callback).Run();
+  if (groups_to_delete.empty()) {
+    std::move(callback).Run(source);
     return;
   }
+
+  auto timing_mapped_callback =
+      base::BindOnce(&DialogTimingToSource, std::move(callback), source);
 
   // If the user is destroying the last tab in a saved or shared group via the
   // tabstrip, a dialog is shown that will decide whether to destroy the tab or
   // not. It will first ungroup the tab, then close the tab.
   tab_groups::SavedTabGroupUtils::MaybeShowSavedTabGroupDeletionDialog(
       browser_view_->browser(), tab_groups::GroupDeletionReason::ClosedLastTab,
-      groups_to_delete, std::move(callback));
+      groups_to_delete, std::move(timing_mapped_callback));
 }
 
 void BrowserTabStripController::CloseTab(int model_index) {
@@ -728,10 +757,12 @@ void BrowserTabStripController::OnTabStripModelChanged(
     const TabStripSelectionChange& selection) {
   switch (change.type()) {
     case TabStripModelChange::kInserted: {
+      std::vector<std::pair<WebContents*, int>> tabs_to_add;
       for (const auto& contents : change.GetInsert()->contents) {
         DCHECK(model_->ContainsIndex(contents.index));
-        AddTab(contents.contents, contents.index);
+        tabs_to_add.emplace_back(contents.contents, contents.index);
       }
+      AddTabs(tabs_to_add);
       break;
     }
     case TabStripModelChange::kRemoved: {
@@ -768,7 +799,7 @@ void BrowserTabStripController::OnTabStripModelChanged(
   }
 
   if (selection.active_tab_changed()) {
-    // It's possible for |new_contents| to be null when the final tab in a tab
+    // It's possible for `new_contents` to be null when the final tab in a tab
     // strip is closed.
     content::WebContents* new_contents = selection.new_contents;
     std::optional<size_t> index = selection.new_model.active();
@@ -799,14 +830,24 @@ void BrowserTabStripController::OnTabGroupChanged(
   switch (change.type) {
     case TabGroupChange::kCreated: {
       tabstrip_->OnGroupCreated(change.group);
+      // Add tabs to the correct group if the group if re-inserted from a
+      // different tabstrip as it is not an empty tab group.
+      if (change.GetCreateChange()->reason() ==
+          TabGroupChange::TabGroupCreationReason::
+              kInsertedFromAnotherTabstrip) {
+        const gfx::Range tabs_in_group =
+            change.model->group_model()->GetTabGroup(change.group)->ListTabs();
+
+        for (int i = static_cast<int>(tabs_in_group.start());
+             i < static_cast<int>(tabs_in_group.end()); i++) {
+          tabstrip_->AddTabToGroup(change.group, i);
+        }
+        tabstrip_->OnGroupContentsChanged(change.group);
+      }
       break;
     }
     case TabGroupChange::kEditorOpened: {
       tabstrip_->OnGroupEditorOpened(change.group);
-      break;
-    }
-    case TabGroupChange::kContentsChanged: {
-      tabstrip_->OnGroupContentsChanged(change.group);
       break;
     }
     case TabGroupChange::kVisualsChanged: {
@@ -866,10 +907,20 @@ void BrowserTabStripController::TabBlockedStateChanged(WebContents* contents,
 }
 
 void BrowserTabStripController::TabGroupedStateChanged(
-    std::optional<tab_groups::TabGroupId> group,
+    TabStripModel* tab_strip_model,
+    std::optional<tab_groups::TabGroupId> old_group,
+    std::optional<tab_groups::TabGroupId> new_group,
     tabs::TabInterface* tab,
     int index) {
-  tabstrip_->AddTabToGroup(std::move(group), index);
+  tabstrip_->AddTabToGroup(new_group, index);
+
+  if (old_group.has_value()) {
+    tabstrip_->OnGroupContentsChanged(old_group.value());
+  }
+
+  if (new_group.has_value()) {
+    tabstrip_->OnGroupContentsChanged(new_group.value());
+  }
 }
 
 void BrowserTabStripController::SetTabNeedsAttentionAt(int index,
@@ -883,6 +934,27 @@ bool BrowserTabStripController::IsFrameButtonsRightAligned() const {
 #else
   return true;
 #endif  // BUILDFLAG(IS_MAC)
+}
+
+void BrowserTabStripController::OnSplitTabCreated(
+    std::vector<std::pair<tabs::TabInterface*, int>> tabs,
+    split_tabs::SplitTabId split_id,
+    TabStripModelObserver::SplitTabAddReason reason,
+    tabs::SplitTabLayout tab_layout) {
+  for (const auto& tab_pair : tabs) {
+    int index = tab_pair.second;
+    tabstrip_->SetSplit(index, split_id);
+  }
+}
+
+void BrowserTabStripController::OnSplitTabRemoved(
+    std::vector<std::pair<tabs::TabInterface*, int>> tabs,
+    split_tabs::SplitTabId split_id,
+    SplitTabRemoveReason reason) {
+  for (const auto& tab_pair : tabs) {
+    int index = tab_pair.second;
+    tabstrip_->SetSplit(index, std::nullopt);
+  }
 }
 
 BrowserNonClientFrameView* BrowserTabStripController::GetFrameView() {
@@ -900,14 +972,23 @@ void BrowserTabStripController::SetTabDataAt(content::WebContents* web_contents,
                         TabRendererData::FromTabInModel(model_, model_index));
 }
 
-void BrowserTabStripController::AddTab(WebContents* contents, int index) {
+void BrowserTabStripController::AddTabs(
+    std::vector<std::pair<WebContents*, int>> contents_list) {
   // Cancel any pending tab transition.
   hover_tab_selector_.CancelTabTransition();
 
-  tabstrip_->AddTabAt(index, TabRendererData::FromTabInModel(model_, index));
+  std::vector<std::pair<int, TabRendererData>> tabs_data;
+  for (const auto& [contents, index] : contents_list) {
+    tabs_data.emplace_back(index,
+                           TabRendererData::FromTabInModel(model_, index));
+  }
 
-  tabstrip_->tab_at(index)->SetShouldShowDiscardIndicator(
-      should_show_discard_indicator_);
+  tabstrip_->AddTabsAt(std::move(tabs_data));
+
+  for (const auto& [contents, index] : contents_list) {
+    tabstrip_->tab_at(index)->SetShouldShowDiscardIndicator(
+        should_show_discard_indicator_);
+  }
 
   // Try to show tab search IPH if needed.
   constexpr int kTabSearchIPHTriggerThreshold = 8;

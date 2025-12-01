@@ -9,10 +9,13 @@
 #include <memory>
 
 #include "base/memory/raw_ptr.h"
+#include "base/scoped_observation.h"
+#include "base/timer/timer.h"
 #include "base/uuid.h"
 #include "chrome/browser/ui/tabs/saved_tab_groups/saved_tab_group_model_listener.h"
 #include "components/saved_tab_groups/delegate/tab_group_sync_delegate.h"
 #include "components/saved_tab_groups/public/saved_tab_group.h"
+#include "components/saved_tab_groups/public/tab_group_sync_service.h"
 #include "components/saved_tab_groups/public/types.h"
 
 class Browser;
@@ -24,17 +27,17 @@ class TabInterface;
 }
 
 namespace tab_groups {
-class TabGroupSyncService;
 
 // Desktop implementation of TabGroupSyncDelegate.
-class TabGroupSyncDelegateDesktop : public TabGroupSyncDelegate {
+class TabGroupSyncDelegateDesktop : public TabGroupSyncDelegate,
+                                    TabGroupSyncService::Observer {
  public:
   explicit TabGroupSyncDelegateDesktop(TabGroupSyncService* service,
                                        Profile* profile);
   ~TabGroupSyncDelegateDesktop() override;
 
   // TabGroupSyncDelegate implementation.
-  void HandleOpenTabGroupRequest(
+  std::optional<LocalTabGroupID> HandleOpenTabGroupRequest(
       const base::Uuid& sync_tab_group_id,
       std::unique_ptr<TabGroupActionContext> context) override;
   void CreateLocalTabGroup(const SavedTabGroup& tab_group) override;
@@ -45,10 +48,19 @@ class TabGroupSyncDelegateDesktop : public TabGroupSyncDelegate {
   std::vector<LocalTabGroupID> GetLocalTabGroupIds() override;
   std::vector<LocalTabID> GetLocalTabIdsForTabGroup(
       const LocalTabGroupID& local_tab_group_id) override;
+  std::set<LocalTabID> GetSelectedTabs() override;
+  std::u16string GetTabTitle(const LocalTabID& local_tab_id) override;
   std::unique_ptr<SavedTabGroup> CreateSavedTabGroupFromLocalGroup(
       const LocalTabGroupID& local_tab_group_id) override;
   std::unique_ptr<ScopedLocalObservationPauser>
   CreateScopedLocalObserverPauser() override;
+
+  // TabGroupSyncService::Observer
+  void OnInitialized() override;
+  void OnWillBeDestroyed() override;
+
+  void StartRecordingHourlyMetrics();
+  void RecordHourlyMetrics();
 
  private:
   // Opens the tabs in `saved_group` in `browser`. These tabs are not grouped.
@@ -64,12 +76,22 @@ class TabGroupSyncDelegateDesktop : public TabGroupSyncDelegate {
           opened_web_contents_to_uuid,
       const SavedTabGroup& saved_group);
 
+  // The profile used to create this delegate.
+  raw_ptr<Profile> profile_ = nullptr;
+
   // The service used to query and manage SavedTabGroups.
   raw_ptr<TabGroupSyncService> service_ = nullptr;
 
   // Listener layer which observes and manages the state of open SavedTabGroups
   // across browsers.
   std::unique_ptr<SavedTabGroupModelListener> listener_;
+
+  // Logs a collection of metrics every hour to mirror
+  // SavedTabGroupKeyedService.
+  base::RepeatingTimer hourly_metrics_timer_;
+
+  base::ScopedObservation<TabGroupSyncService, TabGroupSyncService::Observer>
+      service_observation_{this};
 };
 
 }  // namespace tab_groups

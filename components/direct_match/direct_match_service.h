@@ -27,7 +27,9 @@ class SharedURLLoaderFactory;
 class SimpleURLLoader;
 }  // namespace network
 
+
 namespace direct_match {
+
 constexpr float kNeighborWeight = 0.7;
 constexpr size_t kInvalidCategory = static_cast<size_t>(-1);
 
@@ -158,6 +160,7 @@ class DirectMatchService : public KeyedService {
 
   base::ObserverList<Observer> observers_;
   raw_ptr<PrefService> prefs_;
+  base::WeakPtrFactory<DirectMatchService> weak_ptr_factory_;
 };
 
 }  // namespace direct_match

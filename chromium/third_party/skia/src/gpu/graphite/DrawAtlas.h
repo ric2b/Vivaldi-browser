@@ -13,7 +13,6 @@
 #include <string_view>
 #include <vector>
 
-#include "src/core/SkIPoint16.h"
 #include "src/core/SkTHash.h"
 #include "src/gpu/AtlasTypes.h"
 
@@ -160,11 +159,15 @@ public:
         }
     }
 
-    void compact(AtlasToken startTokenForNextFlush, bool forceCompact);
+    void compact(AtlasToken startTokenForNextFlush);
 
     // Mark all plots with any content as full. Used only with Vello because it can't do
     // new renders to a texture without a clear.
     void markUsedPlotsAsFull();
+
+    // Will try to clear out any GPU resources that aren't needed for any pending uploads or draws.
+    // TODO: Delete backing data for Plots that don't have pending uploads.
+    void freeGpuResources(AtlasToken token);
 
     void evictAllPlots();
 
@@ -215,11 +218,7 @@ private:
     bool activateNewPage(Recorder*);
     void deactivateLastPage();
 
-    void processEviction(PlotLocator);
-    inline void processEvictionAndResetRects(Plot* plot) {
-        this->processEviction(plot->plotLocator());
-        plot->resetRects();
-    }
+    void processEvictionAndResetRects(Plot* plot);
 
     SkColorType           fColorType;
     size_t                fBytesPerPixel;

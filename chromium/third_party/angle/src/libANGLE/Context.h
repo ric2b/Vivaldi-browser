@@ -799,6 +799,7 @@ class Context final : public egl::LabeledObject, angle::NonCopyable, public angl
     egl::Error acquireExternalContext(egl::Surface *drawAndReadSurface);
     egl::Error releaseExternalContext();
 
+    bool noopDrawProgram() const;
     bool noopDraw(PrimitiveMode mode, GLsizei count) const;
     bool noopDrawInstanced(PrimitiveMode mode, GLsizei count, GLsizei instanceCount) const;
     bool noopMultiDraw(GLsizei drawcount) const;
@@ -843,6 +844,9 @@ class Context final : public egl::LabeledObject, angle::NonCopyable, public angl
 
     size_t getMemoryUsage() const;
 
+    // Only used by vulkan backend.
+    void onSwapChainImageChanged() const { mDefaultFramebuffer->onSwapChainImageChanged(); }
+
   private:
     void initializeDefaultResources();
     void releaseSharedObjects();
@@ -854,7 +858,6 @@ class Context final : public egl::LabeledObject, angle::NonCopyable, public angl
                             const state::ExtendedDirtyBits extendedBitMask,
                             const state::DirtyObjects &objectMask,
                             Command command);
-    angle::Result syncAllDirtyBits(Command command);
     angle::Result syncDirtyBits(const state::DirtyBits bitMask,
                                 const state::ExtendedDirtyBits extendedBitMask,
                                 Command command);

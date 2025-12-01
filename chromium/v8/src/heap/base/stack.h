@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "src/base/macros.h"
+#include "src/base/platform/mutex.h"
 #include "src/base/platform/platform.h"
 
 namespace heap::base {
@@ -18,6 +19,8 @@ class StackVisitor {
   virtual ~StackVisitor() = default;
   virtual void VisitPointer(const void* address) = 0;
 };
+
+using StackVisitorCallback = void (*)(StackVisitor*);
 
 // Abstraction over the stack. Supports handling of:
 // - native stack;
@@ -99,7 +102,7 @@ class V8_EXPORT_PRIVATE Stack final {
 
   bool IsMarkerSet() const { return current_segment_.top != nullptr; }
   bool IsMarkerSetForBackgroundThread(ThreadId thread) const {
-    v8::base::SpinningMutexGuard guard(&lock_);
+    v8::base::MutexGuard guard(&lock_);
     auto it = background_stacks_.find(thread);
     if (it == background_stacks_.end()) return false;
     DCHECK_NOT_NULL(it->second.top);
@@ -109,6 +112,10 @@ class V8_EXPORT_PRIVATE Stack final {
   // This method is only safe to use in a safepoint, as it does not take the
   // mutex for background_stacks_.
   bool HasBackgroundStacks() const { return !background_stacks_.empty(); }
+
+  void SetScanSimulatorCallback(StackVisitorCallback callback) {
+    scan_simulator_callback_ = callback;
+  }
 
   // Stack segments that may contain pointers and should be scanned.
   struct Segment {
@@ -177,7 +184,7 @@ class V8_EXPORT_PRIVATE Stack final {
     auto& background_stacks = stack->background_stacks_;
     Segment previous_segment;
     {
-      v8::base::SpinningMutexGuard guard(&stack->lock_);
+      v8::base::MutexGuard guard(&stack->lock_);
       if (auto it = background_stacks.find(thread);
           it != background_stacks.end()) {
         previous_segment = it->second;
@@ -194,7 +201,7 @@ class V8_EXPORT_PRIVATE Stack final {
     }
     (*callback)();
     {
-      v8::base::SpinningMutexGuard guard(&stack->lock_);
+      v8::base::MutexGuard guard(&stack->lock_);
       if (previous_segment.top)
         background_stacks[thread] = previous_segment;
       else
@@ -204,8 +211,10 @@ class V8_EXPORT_PRIVATE Stack final {
 
   Segment current_segment_;
 
-  mutable v8::base::SpinningMutex lock_;
+  mutable v8::base::Mutex lock_;
   std::map<ThreadId, Segment> background_stacks_;
+
+  StackVisitorCallback scan_simulator_callback_ = nullptr;
 };
 
 }  // namespace heap::base

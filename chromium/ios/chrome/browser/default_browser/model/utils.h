@@ -72,6 +72,21 @@ enum class IOSDefaultBrowserBannerPromoPromoSessionEndedReason {
 };
 // LINT.ThenChange(//tools/metrics/histograms/metadata/ios/enums.xml:IOSDefaultBrowserBannerPromoPromoSessionEndedReason)
 
+// The reason why a non modal promo was triggered.
+enum class NonModalDefaultBrowserPromoReason {
+  // Indicates that no specific promo reason is applicable.
+  PromoReasonNone = 0,
+
+  // The promo reason used when a user pastes a URL in the omnibox.
+  PromoReasonOmniboxPaste = 1,
+
+  // The promo reason used when a user opens Chrome from a first-party app.
+  PromoReasonAppSwitcher = 2,
+
+  // The promo reason used when a user shares Chrome via the share feature.
+  PromoReasonShare = 3,
+};
+
 // Visible for testing
 
 // Key in storage containing an NSDate corresponding to the last time
@@ -329,6 +344,25 @@ void LogDefaultBrowserPromoHistogramForAction(
 // Returns string representation of the enum value.
 const std::string IOSDefaultBrowserPromoActionToString(
     IOSDefaultBrowserPromoAction action);
+
+// Returns the feature associated with a given promo reason.
+//
+// The promo reason (`promo_reason`) represents the event or condition
+// that triggered a non-modal default browser promotion. This function
+// maps the promo reason to its corresponding feature.
+//
+const base::Feature& GetFeatureForPromoReason(
+    NonModalDefaultBrowserPromoReason promo_reason);
+
+// Returns the feature engagement event name associated with a given promo
+// reason.
+//
+// The promo reason (`promo_reason`) represents the event or condition
+// that triggered a non-modal default browser promotion. This function
+// maps the promo reason to its corresponding feature engagement event name.
+//
+const std::string GetFeatureEventNameForPromoReason(
+    NonModalDefaultBrowserPromoReason promo_reason);
 
 // Returns PromoStatistics object with all properties calculated.
 PromoStatistics* CalculatePromoStatistics();

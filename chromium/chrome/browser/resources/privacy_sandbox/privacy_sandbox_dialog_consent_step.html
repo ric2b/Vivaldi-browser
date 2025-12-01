@@ -32,14 +32,8 @@
             <li>$i18nRaw{m1ConsentLearnMoreBullet2}</li>
             <li>$i18nRaw{m1ConsentLearnMoreBullet3}</li>
           </ul>
-          <template is="dom-if" if="[[!isPrivacyPolicyLinkEnabled_]]">
-            <div id="learnMoreDiv" class="cr-secondary-text">
-              $i18nRaw{m1ConsentLearnMoreLink}</div>
-          </template>
-          <template is="dom-if" if="[[isPrivacyPolicyLinkEnabled_]]">
             <div id="privacyPolicyDiv" class="cr-secondary-text">
               $i18nRaw{m1ConsentLearnMorePrivacyPolicyLink}</div>
-          </template>
         </privacy-sandbox-dialog-learn-more>
         <div class="section cr-secondary-text" id="lastTextElement">
           $i18n{m1ConsentDescription4}
@@ -48,8 +42,8 @@
     </template>
     <template is="dom-if" if="[[shouldShowV2()]]">
       <div id="consentContentV2">
-        <div class="section cr-secondary-text">
-          $i18n{m1ConsentDescription2V2}
+        <div id="consentContentV2FirstDescription" class="section cr-secondary-text">
+          [[consentContentV2FirstDescription_]]
         </div>
         <div class="banner">
           <img class="topics-banner" alt="">
@@ -63,14 +57,14 @@
           <ul class="cr-secondary-text">
             <li>$i18nRaw{m1ConsentLearnmoreBullet1V2}</li>
             <li>$i18nRaw{m1ConsentLearnmoreBullet2V2}</li>
-            <template is="dom-if" if="[[isPrivacyPolicyLinkEnabled_]]">
-              <div class="learn-more-bullet-description">
+            <template is="dom-if" if="[[!shouldShowAdTopicsContentParity_]]">
+              <div id="learnMoreBulletDescription" class="learn-more-bullet-description">
                 $i18nRaw{m1ConsentLearnmoreBullet2Description}
               </div>
             </template>
-            <template is="dom-if" if="[[!isPrivacyPolicyLinkEnabled_]]">
-              <div class="learn-more-bullet-description">
-                $i18n{m1ConsentLearnmoreBullet2DescriptionNoLink}
+            <template is="dom-if" if="[[shouldShowAdTopicsContentParity_]]">
+              <div id="learnMoreBulletDescriptionContentParity" class="learn-more-bullet-description">
+                $i18nRaw{m1ConsentLearnMoreBullet2DescriptionContentParity}
               </div>
             </template>
             <li>$i18nRaw{m1ConsentLearnmoreBullet3V2}</li>
@@ -100,10 +94,8 @@
     </cr-button>
   </div>
 </div>
-<template is="dom-if" if="[[isPrivacyPolicyLinkEnabled_]]">
-  <privacy-sandbox-privacy-policy-dialog
-      id="privacyPolicyDialog"
-      should-show="[[hideConsentNoticePage_]]"
-      on-back-button-clicked="onBackButtonClicked_">
-  </privacy-sandbox-privacy-policy-dialog>
-</template>
+<privacy-sandbox-privacy-policy-dialog
+    id="privacyPolicyDialog"
+    should-show="[[hideConsentNoticePage_]]"
+    on-back-button-clicked="onBackButtonClicked_">
+</privacy-sandbox-privacy-policy-dialog>

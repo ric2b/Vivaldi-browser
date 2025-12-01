@@ -228,12 +228,12 @@ class AnimationCompositorAnimationsTest : public PaintTestConfigurations,
       const Element& element,
       const Animation* animation,
       const EffectModel& effect_model,
-      PropertyHandleSet* unsupported_properties = nullptr) {
+      PropertyHandleSet* unsupported_properties_for_tracing = nullptr) {
     const PaintArtifactCompositor* paint_artifact_compositor =
         GetDocument().View()->GetPaintArtifactCompositor();
     return CompositorAnimations::CheckCanStartEffectOnCompositor(
         timing, NormalizedTiming(timing), element, animation, effect_model,
-        paint_artifact_compositor, 1, unsupported_properties);
+        paint_artifact_compositor, 1, unsupported_properties_for_tracing);
   }
 
   CompositorAnimations::FailureReasons CheckCanStartElementOnCompositor(
@@ -1399,11 +1399,12 @@ TEST_P(AnimationCompositorAnimationsTest,
                                                      nullptr);
 
   // Make sure supported properties do not register a failure
-  PropertyHandleSet unsupported_properties1;
-  EXPECT_EQ(CheckCanStartEffectOnCompositor(timing_, *inline_.Get(), animation1,
-                                            *effect1, &unsupported_properties1),
+  PropertyHandleSet unsupported_properties_for_tracing1;
+  EXPECT_EQ(CheckCanStartEffectOnCompositor(
+                timing_, *inline_.Get(), animation1, *effect1,
+                &unsupported_properties_for_tracing1),
             CompositorAnimations::kNoFailure);
-  EXPECT_TRUE(unsupported_properties1.empty());
+  EXPECT_TRUE(unsupported_properties_for_tracing1.empty());
 
   StringKeyframeEffectModel* effect2 = CreateKeyframeEffectModel(
       CreateReplaceOpKeyframe(CSSPropertyID::kHeight, "100px", 0),
@@ -1417,15 +1418,16 @@ TEST_P(AnimationCompositorAnimationsTest,
                                                      nullptr);
 
   // Make sure unsupported properties are reported
-  PropertyHandleSet unsupported_properties2;
-  EXPECT_TRUE(CheckCanStartEffectOnCompositor(timing_, *inline_.Get(),
-                                              animation2, *effect2,
-                                              &unsupported_properties2) &
+  PropertyHandleSet unsupported_properties_for_tracing2;
+  EXPECT_TRUE(CheckCanStartEffectOnCompositor(
+                  timing_, *inline_.Get(), animation2, *effect2,
+                  &unsupported_properties_for_tracing2) &
               CompositorAnimations::kUnsupportedCSSProperty);
-  EXPECT_EQ(unsupported_properties2.size(), 1U);
-  EXPECT_EQ(
-      unsupported_properties2.begin()->GetCSSPropertyName().ToAtomicString(),
-      "height");
+  EXPECT_EQ(unsupported_properties_for_tracing2.size(), 1U);
+  EXPECT_EQ(unsupported_properties_for_tracing2.begin()
+                ->GetCSSPropertyName()
+                .ToAtomicString(),
+            "height");
 
   StringKeyframeEffectModel* effect3 =
       MakeGarbageCollected<StringKeyframeEffectModel>(StringKeyframeVector({
@@ -1449,15 +1451,16 @@ TEST_P(AnimationCompositorAnimationsTest,
                                                      nullptr);
 
   // Make sure only the unsupported properties are reported
-  PropertyHandleSet unsupported_properties3;
-  EXPECT_TRUE(CheckCanStartEffectOnCompositor(timing_, *inline_.Get(),
-                                              animation3, *effect3,
-                                              &unsupported_properties3) &
+  PropertyHandleSet unsupported_properties_for_tracing3;
+  EXPECT_TRUE(CheckCanStartEffectOnCompositor(
+                  timing_, *inline_.Get(), animation3, *effect3,
+                  &unsupported_properties_for_tracing3) &
               CompositorAnimations::kUnsupportedCSSProperty);
-  EXPECT_EQ(unsupported_properties3.size(), 1U);
-  EXPECT_EQ(
-      unsupported_properties3.begin()->GetCSSPropertyName().ToAtomicString(),
-      "height");
+  EXPECT_EQ(unsupported_properties_for_tracing3.size(), 1U);
+  EXPECT_EQ(unsupported_properties_for_tracing3.begin()
+                ->GetCSSPropertyName()
+                .ToAtomicString(),
+            "height");
 }
 
 TEST_P(AnimationCompositorAnimationsTest,
@@ -2992,9 +2995,7 @@ TEST_P(AnimationCompositorAnimationsTest, BackgroundShorthand) {
   EXPECT_TRUE(IsUseCounted(WebFeature::kStaticPropertyInAnimation));
 }
 
-// TODO(crbug.com/403708813): Adding support for native paint worklets with non-
-// monotonic timelines, introduced a regression. Feature currently disabled.
-TEST_P(AnimationCompositorAnimationsTest, DISABLED_ClipPathWithViewTimeline) {
+TEST_P(AnimationCompositorAnimationsTest, ClipPathWithViewTimeline) {
   std::unique_ptr<ScopedCompositeClipPathAnimationForTest>
       scoped_composite_clip_path_animation =
           std::make_unique<ScopedCompositeClipPathAnimationForTest>(true);
@@ -3038,20 +3039,20 @@ TEST_P(AnimationCompositorAnimationsTest, DISABLED_ClipPathWithViewTimeline) {
   Element* element = GetElementById("target");
   EXPECT_TRUE(element->GetElementAnimations());
   EXPECT_EQ(element->GetElementAnimations()->Animations().size(), 1u);
-  // A scroll-driven animation that is outside the active phase is forced onto
-  // the main thread. No need to tick even on the compositor until scrolled.
+  // TODO(crbug.com/403708813): Native paint worklets do not presently support
+  // non-monotonic timelines. Once fixed, we may get fresh compositing decisions
+  // when entering and leaving the active phase. For now, the compositing
+  // decision remains kNotComposited.
   EXPECT_EQ(element->GetElementAnimations()->CompositedClipPathStatus(),
             ElementAnimations::CompositedPaintStatus::kNotComposited);
   Animation* animation =
       element->GetElementAnimations()->Animations().begin()->key;
   EXPECT_FALSE(animation->HasActiveAnimationsOnCompositor());
-  EXPECT_EQ(CompositorAnimations::kInvalidAnimationOrEffect,
+  EXPECT_EQ(CompositorAnimations::kUnsupportedCSSProperty,
             animation->CheckCanStartAnimationOnCompositor(
                 GetDocument().View()->GetPaintArtifactCompositor()) &
-                CompositorAnimations::kInvalidAnimationOrEffect);
+                CompositorAnimations::kUnsupportedCSSProperty);
 
-  // Shrinking the top spacer places the animated element onscreen and the
-  // animation enters the active phase. A new compositing decision is made.
   GetElementById("adjustable-spacer")
       ->classList()
       .add({"thin"}, ASSERT_NO_EXCEPTION);
@@ -3065,11 +3066,9 @@ TEST_P(AnimationCompositorAnimationsTest, DISABLED_ClipPathWithViewTimeline) {
   UpdateAllLifecyclePhasesForTest();
 
   EXPECT_EQ(element->GetElementAnimations()->CompositedClipPathStatus(),
-            ElementAnimations::CompositedPaintStatus::kComposited);
-  EXPECT_TRUE(animation->HasActiveAnimationsOnCompositor());
+            ElementAnimations::CompositedPaintStatus::kNotComposited);
+  EXPECT_FALSE(animation->HasActiveAnimationsOnCompositor());
 
-  // Expanding the top spacer places the animated element off-screen and the
-  // animation enters the before phase. A new compositing decision is made.
   GetElementById("adjustable-spacer")
       ->classList()
       .remove({"thin"}, ASSERT_NO_EXCEPTION);

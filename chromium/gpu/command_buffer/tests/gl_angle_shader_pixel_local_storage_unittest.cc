@@ -61,9 +61,6 @@ TEST_F(ANGLEShaderPixelLocalStorageTest, GetIntegerv) {
   }
 
   EXPECT_GT(gl_get_integer(GL_MAX_PIXEL_LOCAL_STORAGE_PLANES_ANGLE), 4);
-  EXPECT_GT(gl_get_integer(
-                GL_MAX_COLOR_ATTACHMENTS_WITH_ACTIVE_PIXEL_LOCAL_STORAGE_ANGLE),
-            0);
   EXPECT_GT(
       gl_get_integer(
           GL_MAX_COMBINED_DRAW_BUFFERS_AND_PIXEL_LOCAL_STORAGE_PLANES_ANGLE),
@@ -113,6 +110,7 @@ TEST_F(ANGLEShaderPixelLocalStorageTest, GetIntegerv) {
 // Verifies that glGetFramebufferPixelLocalStorageParameter{f,i}vANGLE is
 // marshalled properly over the command buffer. Thorough testing of these
 // commands is done in angle_end2end_tests.
+
 TEST_F(ANGLEShaderPixelLocalStorageTest,
        GetFramebufferPixelLocalStorageParameter) {
   if (!gl_.IsInitialized() ||

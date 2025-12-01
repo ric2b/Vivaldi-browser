@@ -57,12 +57,7 @@ LensPreselectionBubble::LensPreselectionBubble(
     base::OnceClosure on_cancel_callback)
     : BubbleDialogDelegateView(anchor_view,
                                views::BubbleBorder::NONE,
-// TODO(crbug.com/399737950): Remove this once the bug is fixed at head.
-#if BUILDFLAG(IS_WIN)
-                               views::BubbleBorder::DIALOG_SHADOW),
-#else
                                views::BubbleBorder::NO_SHADOW),
-#endif
       lens_overlay_controller_(lens_overlay_controller),
       offline_(offline),
       exit_clicked_callback_(std::move(exit_clicked_callback)) {
@@ -70,6 +65,7 @@ LensPreselectionBubble::LensPreselectionBubble(
   set_close_on_deactivate(false);
   DialogDelegate::SetButtons(static_cast<int>(ui::mojom::DialogButton::kNone));
   set_corner_radius(48);
+  set_background_color(kColorLensOverlayToastBackground);
   SetProperty(views::kElementIdentifierKey, kLensPreselectionBubbleElementId);
   SetAccessibleWindowRole(ax::mojom::Role::kAlertDialog);
   SetCancelCallback(std::move(on_cancel_callback));
@@ -85,11 +81,15 @@ void LensPreselectionBubble::Init() {
            : set_margins(gfx::Insets::TLBR(12, 16, 12, 16));
 
   // Set bubble icon and text
-  const std::u16string toast_text =
-      offline_
+  const std::u16string online_toast_text =
+      lens::features::IsSimplifiedSelectionEnabled()
           ? l10n_util::GetStringUTF16(
-                IDS_LENS_OVERLAY_INITIAL_TOAST_ERROR_MESSAGE)
+                IDS_LENS_OVERLAY_INITIAL_TOAST_MESSAGE_SIMPLIFIED)
           : l10n_util::GetStringUTF16(IDS_LENS_OVERLAY_INITIAL_TOAST_MESSAGE);
+  const std::u16string toast_text =
+      offline_ ? l10n_util::GetStringUTF16(
+                     IDS_LENS_OVERLAY_INITIAL_TOAST_ERROR_MESSAGE)
+               : online_toast_text;
   SetAccessibleTitle(toast_text);
   icon_view_ = AddChildView(std::make_unique<views::ImageView>());
   label_ = AddChildView(std::make_unique<views::Label>(toast_text));
@@ -131,7 +131,7 @@ void LensPreselectionBubble::Init() {
     exit_button_->SetProperty(views::kElementIdentifierKey,
                               kLensPreselectionBubbleExitButtonElementId);
   }
-  NotifyAccessibilityEvent(ax::mojom::Event::kAlert, true);
+  NotifyAccessibilityEventDeprecated(ax::mojom::Event::kAlert, true);
 }
 
 void LensPreselectionBubble::SetLabelText(int string_id) {
@@ -148,31 +148,34 @@ void LensPreselectionBubble::SetLabelText(int string_id) {
 
 gfx::Rect LensPreselectionBubble::GetBubbleBounds() {
   views::View* anchor_view = GetAnchorView();
-  if (anchor_view) {
-    const gfx::Size bubble_size =
-        GetWidget()->GetContentsView()->GetPreferredSize();
-    const gfx::Rect anchor_bounds = anchor_view->GetBoundsInScreen();
-    const int x =
-        anchor_bounds.x() + (anchor_bounds.width() - bubble_size.width()) / 2;
-    // Take bubble out of its original bounds to cross "line of death". However,
-    // if there is no line of death, we set the bubble to below the top of the
-    // screen. On Mac, the |bottom| of |anchor_bounds| can be negative so set
-    // the appropriate minY based on whether the top container is showing (has a
-    // height > 0).
-    const int minY = anchor_bounds.height() > 0
-                         ? anchor_bounds.bottom() - bubble_size.height() / 2
-                         : kPreselectionBubbleMinY;
-    const int y =
-        std::max(minY, anchor_bounds.bottom() - bubble_size.height() / 2);
-    return gfx::Rect(x, y, bubble_size.width(), bubble_size.height());
+  if (!anchor_view) {
+    return gfx::Rect();
   }
-  return gfx::Rect();
+
+  const bool is_tab_strip_visible = lens_overlay_controller_->GetTabInterface()
+                                        ->GetBrowserWindowInterface()
+                                        ->IsTabStripVisible();
+  const gfx::Size bubble_size =
+      GetWidget()->GetContentsView()->GetPreferredSize();
+  const gfx::Rect anchor_bounds = anchor_view->GetBoundsInScreen();
+
+  const int x =
+      anchor_bounds.x() + (anchor_bounds.width() - bubble_size.width()) / 2;
+  // Take bubble out of its original bounds to cross "line of death". Since, the
+  // preselection bubble is anchored to the overlay, the line of death is above
+  // the top of the anchor bounds. However, if not tab strip is visible, and
+  // therefore there is no line of death to cross, we instead want to set the
+  // preselection bubble to be kPreselectionBubbleMinY from the top of the
+  // overlay.
+  const int y = is_tab_strip_visible
+                    ? anchor_bounds.y() - bubble_size.height() / 2
+                    : anchor_bounds.y() + kPreselectionBubbleMinY;
+  return gfx::Rect(x, y, bubble_size.width(), bubble_size.height());
 }
 
 void LensPreselectionBubble::OnThemeChanged() {
   BubbleDialogDelegateView::OnThemeChanged();
   const auto* color_provider = GetColorProvider();
-  set_color(color_provider->GetColor(kColorLensOverlayToastBackground));
   icon_view_->SetImage(ui::ImageModel::FromVectorIcon(
 #if BUILDFLAG(GOOGLE_CHROME_BRANDING)
       offline_ ? vector_icons::kErrorOutlineIcon

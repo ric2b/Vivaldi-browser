@@ -46,7 +46,7 @@ bool AskShouldAllowInsecureAccess() {
   // A reasonable sizing for the messagebox.
   config.size = gfx::Size(700, 250);
 
-  auto result = VivaldiMessageBoxDialog::Show(nullptr, config);
+  auto result = VivaldiMessageBoxDialog::Show(gfx::NativeWindow(), config);
 
   return result == chrome::MESSAGE_BOX_RESULT_YES;
 }
@@ -200,7 +200,7 @@ bool InitOSCrypt(PrefService *local_state, bool *should_exit) {
         u""};
     // This makes the dialog safer and changes the type to warning.
     config.cancel_default = true;
-    auto result = VivaldiMessageBoxDialog::Show(nullptr, config);
+    auto result = VivaldiMessageBoxDialog::Show(gfx::NativeWindow(), config);
 
     // User requested browser exit. We set the flag and return init failed.
     if (!result) {

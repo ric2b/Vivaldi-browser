@@ -401,7 +401,7 @@ void PDBSourceLineWriter::Lines::AddLine(const Line& line) {
 }
 
 PDBSourceLineWriter::PDBSourceLineWriter(bool handle_inline)
-    : output_(NULL), handle_inline_(handle_inline) {}
+    : output_(nullptr), handle_inline_(handle_inline) {}
 
 PDBSourceLineWriter::~PDBSourceLineWriter() {
   Close();
@@ -421,7 +421,7 @@ bool PDBSourceLineWriter::Open(const wstring& file, FileFormat format) {
   Close();
   code_file_.clear();
 
-  if (FAILED(CoInitialize(NULL))) {
+  if (FAILED(CoInitialize(nullptr))) {
     fprintf(stderr, "CoInitialize failed\n");
     return false;
   }
@@ -448,7 +448,7 @@ bool PDBSourceLineWriter::Open(const wstring& file, FileFormat format) {
       }
       break;
     case EXE_FILE:
-      for_exe_result = data_source->loadDataForExe(file_name, NULL, NULL);
+      for_exe_result = data_source->loadDataForExe(file_name, nullptr, nullptr);
       if (FAILED(for_exe_result)) {
         PrintOpenError(for_exe_result, "loadDataForExe", file_name);
         return false;
@@ -458,7 +458,8 @@ bool PDBSourceLineWriter::Open(const wstring& file, FileFormat format) {
     case ANY_FILE:
       from_pdb_result = data_source->loadDataFromPdb(file_name);
       if (FAILED(from_pdb_result)) {
-        for_exe_result = data_source->loadDataForExe(file_name, NULL, NULL);
+        for_exe_result = data_source->loadDataForExe(
+            file_name, nullptr, nullptr);
         if (FAILED(for_exe_result)) {
           PrintOpenError(from_pdb_result, "loadDataFromPdb", file_name);
           PrintOpenError(for_exe_result, "loadDataForExe", file_name);
@@ -631,7 +632,7 @@ bool PDBSourceLineWriter::PrintSourceFiles() {
   }
 
   CComPtr<IDiaEnumSymbols> compilands;
-  if (FAILED(global->findChildren(SymTagCompiland, NULL,
+  if (FAILED(global->findChildren(SymTagCompiland, nullptr,
                                   nsNone, &compilands))) {
     fprintf(stderr, "findChildren failed\n");
     return false;
@@ -645,7 +646,7 @@ bool PDBSourceLineWriter::PrintSourceFiles() {
   ULONG count;
   while (SUCCEEDED(compilands->Next(1, &compiland, &count)) && count == 1) {
     CComPtr<IDiaEnumSourceFiles> source_files;
-    if (FAILED(session_->findFile(compiland, NULL, nsNone, &source_files))) {
+    if (FAILED(session_->findFile(compiland, nullptr, nsNone, &source_files))) {
       return false;
     }
     CComPtr<IDiaSourceFile> file;
@@ -688,14 +689,14 @@ bool PDBSourceLineWriter::PrintFunctions() {
     return false;
   }
 
-  CComPtr<IDiaEnumSymbols> symbols = NULL;
+  CComPtr<IDiaEnumSymbols> symbols = nullptr;
 
   // Find all function symbols first.
   SymbolMap rva_symbol;
-  hr = global->findChildren(SymTagFunction, NULL, nsNone, &symbols);
+  hr = global->findChildren(SymTagFunction, nullptr, nsNone, &symbols);
 
   if (SUCCEEDED(hr)) {
-    CComPtr<IDiaSymbol> symbol = NULL;
+    CComPtr<IDiaSymbol> symbol = nullptr;
 
     while (SUCCEEDED(symbols->Next(1, &symbol, &count)) && count == 1) {
       if (SUCCEEDED(symbol->get_relativeVirtualAddress(&rva))) {
@@ -714,10 +715,10 @@ bool PDBSourceLineWriter::PrintFunctions() {
 
   // Find all public symbols and record public symbols that are not also private
   // symbols.
-  hr = global->findChildren(SymTagPublicSymbol, NULL, nsNone, &symbols);
+  hr = global->findChildren(SymTagPublicSymbol, nullptr, nsNone, &symbols);
 
   if (SUCCEEDED(hr)) {
-    CComPtr<IDiaSymbol> symbol = NULL;
+    CComPtr<IDiaSymbol> symbol = nullptr;
 
     while (SUCCEEDED(symbols->Next(1, &symbol, &count)) && count == 1) {
       if (SUCCEEDED(symbol->get_relativeVirtualAddress(&rva))) {
@@ -756,7 +757,7 @@ bool PDBSourceLineWriter::PrintFunctions() {
   // of those blocks and print out an extra FUNC line for blocks
   // that are not contained in their parent functions.
   CComPtr<IDiaEnumSymbols> compilands;
-  if (FAILED(global->findChildren(SymTagCompiland, NULL,
+  if (FAILED(global->findChildren(SymTagCompiland, nullptr,
                                   nsNone, &compilands))) {
     fprintf(stderr, "findChildren failed on the global\n");
     return false;
@@ -765,7 +766,7 @@ bool PDBSourceLineWriter::PrintFunctions() {
   CComPtr<IDiaSymbol> compiland;
   while (SUCCEEDED(compilands->Next(1, &compiland, &count)) && count == 1) {
     CComPtr<IDiaEnumSymbols> blocks;
-    if (FAILED(compiland->findChildren(SymTagBlock, NULL,
+    if (FAILED(compiland->findChildren(SymTagBlock, nullptr,
                                        nsNone, &blocks))) {
       fprintf(stderr, "findChildren failed on a compiland\n");
       return false;
@@ -1100,7 +1101,7 @@ bool PDBSourceLineWriter::PrintCodePublicSymbol(IDiaSymbol* symbol,
     if (rva == 0)
       break;
 
-    CComPtr<IDiaSymbol> next_sym = NULL;
+    CComPtr<IDiaSymbol> next_sym = nullptr;
     LONG displacement;
     if (FAILED(session_->findSymbolByRVAEx(rva, SymTagPublicSymbol, &next_sym,
                                            &displacement))) {
@@ -1309,7 +1310,7 @@ int PDBSourceLineWriter::GetFunctionStackParamSize(IDiaSymbol* function) {
 
   // Gather the symbols corresponding to data.
   CComPtr<IDiaEnumSymbols> data_children;
-  if (FAILED(function->findChildren(SymTagData, NULL, nsNone,
+  if (FAILED(function->findChildren(SymTagData, nullptr, nsNone,
                                     &data_children))) {
     return 0;
   }
@@ -1435,7 +1436,7 @@ bool PDBSourceLineWriter::WriteSymbols(FILE* symbol_file) {
   ret = ret && PrintSourceFiles() && PrintFunctions() && PrintFrameData();
   PrintInlineOrigins();
 
-  output_ = NULL;
+  output_ = nullptr;
   return ret;
 }
 

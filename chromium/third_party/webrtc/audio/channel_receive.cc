@@ -252,7 +252,7 @@ class ChannelReceive : public ChannelReceiveInterface,
   // only access. We don't necessarily own and control these threads, so thread
   // checkers cannot be used. E.g. Chromium may transfer "ownership" from one
   // audio thread to another, but access is still sequential.
-  rtc::RaceChecker audio_thread_race_checker_;
+  RaceChecker audio_thread_race_checker_;
   Mutex callback_mutex_;
   Mutex volume_settings_mutex_;
   mutable Mutex call_stats_mutex_;
@@ -667,7 +667,7 @@ void ChannelReceive::SetReceiveCodecs(
 
 void ChannelReceive::OnRtpPacket(const RtpPacketReceived& packet) {
   RTC_DCHECK_RUN_ON(&worker_thread_checker_);
-  int64_t now_ms = rtc::TimeMillis();
+  int64_t now_ms = TimeMillis();
 
   last_received_rtp_timestamp_ = packet.Timestamp();
   last_received_rtp_system_time_ms_ = now_ms;
@@ -694,7 +694,7 @@ void ChannelReceive::OnRtpPacket(const RtpPacketReceived& packet) {
           AbsoluteCaptureTimeInterpolator::GetSource(header.ssrc,
                                                      header.arrOfCSRCs),
           header.timestamp,
-          rtc::saturated_cast<uint32_t>(packet_copy.payload_type_frequency()),
+          saturated_cast<uint32_t>(packet_copy.payload_type_frequency()),
           header.extension.absolute_capture_time);
 
   ReceivePacket(packet_copy.data(), packet_copy.size(), header,
@@ -716,14 +716,14 @@ void ChannelReceive::ReceivePacket(const uint8_t* packet,
   rtc::Buffer decrypted_audio_payload;
   if (frame_decryptor_ != nullptr) {
     const size_t max_plaintext_size = frame_decryptor_->GetMaxPlaintextByteSize(
-        cricket::MEDIA_TYPE_AUDIO, payload_length);
+        webrtc::MediaType::AUDIO, payload_length);
     decrypted_audio_payload.SetSize(max_plaintext_size);
 
     const std::vector<uint32_t> csrcs(header.arrOfCSRCs,
                                       header.arrOfCSRCs + header.numCSRCs);
     const FrameDecryptorInterface::Result decrypt_result =
         frame_decryptor_->Decrypt(
-            cricket::MEDIA_TYPE_AUDIO, csrcs,
+            webrtc::MediaType::AUDIO, csrcs,
             /*additional_data=*/
             nullptr,
             rtc::ArrayView<const uint8_t>(payload, payload_data_length),
@@ -749,9 +749,9 @@ void ChannelReceive::ReceivePacket(const uint8_t* packet,
     // Asynchronously transform the received payload. After the payload is
     // transformed, the delegate will call OnReceivedPayloadData to handle it.
     char buf[1024];
-    rtc::SimpleStringBuilder mime_type(buf);
+    SimpleStringBuilder mime_type(buf);
     auto it = payload_type_map_.find(header.payloadType);
-    mime_type << MediaTypeToString(cricket::MEDIA_TYPE_AUDIO) << "/"
+    mime_type << webrtc::MediaTypeToString(webrtc::MediaType::AUDIO) << "/"
               << (it != payload_type_map_.end() ? it->second.name
                                                 : "x-unknown");
     frame_transformer_delegate_->Transform(payload_data, header, remote_ssrc_,
@@ -765,7 +765,7 @@ void ChannelReceive::ReceivedRTCPPacket(const uint8_t* data, size_t length) {
   RTC_DCHECK_RUN_ON(&worker_thread_checker_);
 
   // Store playout timestamp for the received RTCP packet
-  UpdatePlayoutTimestamp(true, rtc::TimeMillis());
+  UpdatePlayoutTimestamp(true, TimeMillis());
 
   // Deliver RTCP packet to RTP/RTCP module for parsing
   rtp_rtcp_->IncomingRtcpPacket(rtc::MakeArrayView(data, length));
@@ -1058,8 +1058,8 @@ bool ChannelReceive::SetMinimumPlayoutDelay(int delay_ms) {
   RTC_DCHECK_RUN_ON(&worker_thread_checker_);
   // Limit to range accepted by both VoE and ACM, so we're at least getting as
   // close as possible, instead of failing.
-  delay_ms = rtc::SafeClamp(delay_ms, kVoiceEngineMinMinPlayoutDelayMs,
-                            kVoiceEngineMaxMinPlayoutDelayMs);
+  delay_ms = SafeClamp(delay_ms, kVoiceEngineMinMinPlayoutDelayMs,
+                       kVoiceEngineMaxMinPlayoutDelayMs);
   if (!neteq_->SetMinimumDelay(delay_ms)) {
     RTC_DLOG(LS_ERROR)
         << "SetMinimumPlayoutDelay() failed to set min playout delay "

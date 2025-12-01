@@ -51,7 +51,7 @@
 
    Its global-scope symbol is intended only to provide an easy way to
    make it available to 3rd-party scripts and "should" be deleted
-   after calling it. That symbols is _not_ used within the library.
+   after calling it. That symbol is _not_ used within the library.
 
    Forewarning: this API explicitly targets only browser
    environments. If a given non-browser environment has the
@@ -69,7 +69,8 @@
    - WASM-exported "indirect function table" access and
      manipulation. e.g.  creating new WASM-side functions using JS
      functions, analog to Emscripten's addFunction() and
-     uninstallFunction() but slightly different.
+     uninstallFunction() but slightly different and with more useful
+     lifetime semantics.
 
    - Get/set specific heap memory values, analog to Emscripten's
      getValue() and setValue().
@@ -156,8 +157,7 @@
 
    - 'dealloc()` must behave like C's `free()`, accepting either a
      pointer returned from its allocation counterpart or the values
-     null/0 (for which it must be a no-op). allocating N bytes of
-     memory and returning its pointer. In Emscripten this is
+     null/0 (for which it must be a no-op). In Emscripten this is
      conventionally made available via `Module['_free']`.
 
    APIs which require allocation routines are explicitly documented as
@@ -166,11 +166,11 @@
    This code is developed and maintained in conjunction with the
    Jaccwabyt project:
 
-   https://fossil.wanderinghorse.net/r/jaccwabbyt
+   https://fossil.wanderinghorse.net/r/jaccwabyt
 
    More specifically:
 
-   https://fossil.wanderinghorse.net/r/jaccwabbyt/file/common/whwasmutil.js
+   https://fossil.wanderinghorse.net/r/jaccwabyt/file/common/whwasmutil.js
 */
 globalThis.WhWasmUtilInstaller = function(target){
   'use strict';
@@ -730,22 +730,23 @@ globalThis.WhWasmUtilInstaller = function(target){
   };
 
   /**
-     The counterpart of peek(), this sets a numeric value at
-     the given WASM heap address, using the type to define how many
-     bytes are written. Throws if given an invalid type. See
-     peek() for details about the type argument. If the 3rd
-     argument ends with `*` then it is treated as a pointer type and
-     this function behaves as if the 3rd argument were `i32`.
+     The counterpart of peek(), this sets a numeric value at the given
+     WASM heap address, using the 3rd argument to define how many
+     bytes are written. Throws if given an invalid type. See peek()
+     for details about the `type` argument. If the 3rd argument ends
+     with `*` then it is treated as a pointer type and this function
+     behaves as if the 3rd argument were `i32`.
 
      If the first argument is an array, it is treated like a list
      of pointers and the given value is written to each one.
 
-     Returns `this`. (Prior to 2022-12-09 it returns this function.)
+     Returns `this`. (Prior to 2022-12-09 it returned this function.)
 
-     ACHTUNG: calling this often, e.g. in a loop, can have a noticably
-     painful impact on performance. Rather than doing so, use
-     heapForSize() to fetch the heap object and assign directly to it
-     or use the heap's set() method.
+     ACHTUNG: calling this often, e.g. in a loop to populate a large
+     chunk of memory, can have a noticably painful impact on
+     performance. Rather than doing so, use heapForSize() to fetch the
+     heap object and assign directly to it or use the heap's set()
+     method.
   */
   target.poke = function(ptr, value, type='i8'){
     if (type.endsWith('*')) type = ptrIR;
@@ -1627,7 +1628,7 @@ globalThis.WhWasmUtilInstaller = function(target){
        need a level of hand-written wrappers around them, depending on
        how they're used, in order to provide the client with JS
        strings. Alternately, clients will need to perform such conversions
-       on their own, e.g. using cstrtojs(). Or maybe we can find a way
+       on their own, e.g. using cstrToJs(). Or maybe we can find a way
        to perform such conversions here, via addition of an xWrap()-style
        function signature to the options argument.
   */
@@ -2055,7 +2056,7 @@ globalThis.WhWasmUtilInstaller = function(target){
       if(1===argc) return xcvPart.get(typeName);
       else if(2===argc){
         if(!adapter){
-          delete xcvPart.get(typeName);
+          xcvPart.delete(typeName);
           return func;
         }else if(!(adapter instanceof Function)){
           toss(modeName,"requires a function argument.");

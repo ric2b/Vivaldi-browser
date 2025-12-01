@@ -1033,7 +1033,8 @@ VectorOf<Node> Node::ConvertNodeUnionsIntoNodes(
     Document& document,
     const char* property_name,
     ExceptionState& exception_state) {
-  bool needs_check = IsA<HTMLScriptElement>(parent) &&
+  bool needs_check = !RuntimeEnabledFeatures::TrustedTypesHTMLEnabled() &&
+                     IsA<HTMLScriptElement>(parent) &&
                      document.GetExecutionContext() &&
                      document.GetExecutionContext()->RequireTrustedTypes();
   VectorOf<Node> nodes;
@@ -1580,13 +1581,17 @@ void Node::SetNeedsStyleRecalc(StyleChangeType change_type,
     // Since the dirty bits from the originating element (root element) are not
     // propagated to these pseudo elements during the default walk, we need to
     // invalidate style for these elements here.
-    if (this_element->IsDocumentElement()) {
+    bool mark_transition_pseudos =
+        RuntimeEnabledFeatures::ScopedViewTransitionsEnabled()
+            ? this_element->GetPseudoElement(kPseudoIdViewTransition) != nullptr
+            : this_element->IsDocumentElement();
+    if (mark_transition_pseudos) {
       auto update_style_change = [](PseudoElement* pseudo_element) {
         pseudo_element->SetNeedsStyleRecalc(
             kLocalStyleChange, StyleChangeReasonForTracing::Create(
                                    style_change_reason::kViewTransition));
       };
-      ViewTransitionUtils::ForEachTransitionPseudo(GetDocument(),
+      ViewTransitionUtils::ForEachTransitionPseudo(*this_element,
                                                    update_style_change);
     }
   }
@@ -1730,7 +1735,7 @@ bool Node::IsShadowIncludingAncestorOf(const Node& node) const {
     return false;
 
   auto* this_node = DynamicTo<ContainerNode>(this);
-  bool has_children = this_node ? this_node->HasChildren() : false;
+  bool has_children = this_node && this_node->HasChildren();
   bool has_shadow = IsShadowHost(this);
   if (!has_children && !has_shadow)
     return false;
@@ -1930,7 +1935,7 @@ bool Node::CanStartSelection() const {
       return true;
   }
   ContainerNode* parent = FlatTreeTraversal::Parent(*this);
-  return parent ? parent->CanStartSelection() : true;
+  return !parent || parent->CanStartSelection();
 }
 
 bool Node::IsRichlyEditableForAccessibility() const {
@@ -1956,6 +1961,15 @@ void Node::NotifyPriorityScrollAnchorStatusChanged() {
 
 bool Node::IsActiveSlot() const {
   return ToHTMLSlotElementIfSupportsAssignmentOrNull(*this);
+}
+
+bool Node::HasContainerTiming() const {
+  if (IsElementNode()) {
+    return To<Element>(*this).FastHasAttribute(
+        html_names::kContainertimingAttr);
+  } else {
+    return false;
+  }
 }
 
 AtomicString Node::SlotName() const {
@@ -2313,11 +2327,16 @@ void Node::setTextContent(const String& text) {
       auto* container = To<ContainerNode>(this);
 
       // Note: This is an intentional optimization.
-      // See crbug.com/352836 also.
-      // No need to do anything if the text is identical.
+      // See crbug.com/41095015, crbug.com/40553863, and crbug.com/391394132.
+      // No need to do anything if the text is identical *and* there are no
+      // mutation observer listeners attached.
       if (container->HasOneTextChild() &&
-          To<Text>(container->firstChild())->data() == text && !text.empty())
+          To<Text>(container->firstChild())->data() == text && !text.empty() &&
+          (!RuntimeEnabledFeatures::
+               SameValueTextContentFiresMutationObserversEnabled() ||
+           !GetDocument().HasMutationObservers())) {
         return;
+      }
 
       ChildListMutationScope mutation(*this);
       // Note: This API will not insert empty text nodes:
@@ -3544,8 +3563,7 @@ void Node::CheckSlotChange(SlotChangeType slot_change_type) {
 }
 
 bool Node::IsEffectiveRootScroller() const {
-  return GetLayoutObject() ? GetLayoutObject()->IsEffectiveRootScroller()
-                           : false;
+  return GetLayoutObject() && GetLayoutObject()->IsEffectiveRootScroller();
 }
 
 LayoutBox* Node::AutoscrollBox() {

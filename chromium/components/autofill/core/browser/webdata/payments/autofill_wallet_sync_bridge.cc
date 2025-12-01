@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <utility>
+#include <variant>
 
 #include "base/base64.h"
 #include "base/containers/contains.h"
@@ -13,10 +14,10 @@
 #include "base/functional/callback_helpers.h"
 #include "base/logging.h"
 #include "base/strings/strcat.h"
-#include "components/autofill/core/browser/data_model/bank_account.h"
-#include "components/autofill/core/browser/data_model/credit_card.h"
-#include "components/autofill/core/browser/data_model/credit_card_cloud_token_data.h"
-#include "components/autofill/core/browser/data_model/iban.h"
+#include "components/autofill/core/browser/data_model/payments/bank_account.h"
+#include "components/autofill/core/browser/data_model/payments/credit_card.h"
+#include "components/autofill/core/browser/data_model/payments/credit_card_cloud_token_data.h"
+#include "components/autofill/core/browser/data_model/payments/iban.h"
 #include "components/autofill/core/browser/metrics/autofill_metrics.h"
 #include "components/autofill/core/browser/payments/payments_customer_data.h"
 #include "components/autofill/core/browser/webdata/autofill_sync_metadata_table.h"
@@ -30,6 +31,7 @@
 #include "components/sync/model/mutable_data_batch.h"
 #include "components/sync/model/sync_metadata_store_change_list.h"
 #include "components/sync/protocol/entity_data.h"
+#include "components/webdata/common/web_database.h"
 
 using sync_pb::AutofillWalletSpecifics;
 using syncer::EntityData;
@@ -371,7 +373,7 @@ std::unique_ptr<syncer::DataBatch> AutofillWalletSyncBridge::GetAllDataImpl(
       return nullptr;
     }
     for (const CreditCardBenefit& benefit : benefits) {
-      CHECK(*absl::visit(
+      CHECK(*std::visit(
                 [](const auto& a) { return a.linked_card_instrument_id(); },
                 benefit) == entry->instrument_id());
       SetEntityDataFromBenefit(benefit, enforce_utf8, *card_data);
@@ -431,6 +433,8 @@ void AutofillWalletSyncBridge::SetSyncData(
     bool notify_webdata_backend) {
   bool wallet_data_changed = false;
 
+  auto transaction = web_data_backend_->GetDatabase()->AcquireTransaction();
+
   // Extract the Autofill types from the sync |entity_data|.
   std::vector<CreditCard> wallet_cards;
   std::vector<Iban> wallet_ibans;
@@ -469,12 +473,20 @@ void AutofillWalletSyncBridge::SetSyncData(
   if (wallet_card_data_changed) {
     ReconcileServerCvcForWalletCards();
   }
+
   // Commit the transaction to make sure the data and the metadata with the
   // new progress marker is written down (especially on Android where we
   // cannot rely on committing transactions on shutdown). We need to commit
   // even if the wallet data has not changed because the data type state incl.
   // the progress marker always changes.
+
+  // Commits changes through CommitChanges(...) or through the scoped
+  // sql::Transaction `transaction` depending on the
+  // 'SqlScopedTransactionWebDatabase' Finch experiment.
   web_data_backend_->CommitChanges();
+  if (transaction) {
+    transaction->Commit();
+  }
 
   if (web_data_backend_ && wallet_data_changed)
     web_data_backend_->NotifyOnAutofillChangedBySync(

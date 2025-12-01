@@ -20,6 +20,7 @@ ci.defaults.set(
     execution_timeout = ci.DEFAULT_EXECUTION_TIMEOUT,
     health_spec = health_spec.DEFAULT,
     priority = ci.DEFAULT_FYI_PRIORITY,
+    reclient_enabled = False,
     service_account = ci.DEFAULT_SERVICE_ACCOUNT,
     shadow_service_account = ci.DEFAULT_SHADOW_SERVICE_ACCOUNT,
     siso_enabled = True,
@@ -46,13 +47,14 @@ ci.builder(
             apply_configs = ["android"],
         ),
         chromium_config = builder_config.chromium_config(
-            config = "x86_builder",
+            config = "main_builder",
             apply_configs = ["mb"],
             build_config = builder_config.build_config.RELEASE,
+            target_arch = builder_config.target_arch.INTEL,
             target_bits = 32,
             target_platform = builder_config.target_platform.ANDROID,
         ),
-        android_config = builder_config.android_config(config = "x86_builder"),
+        android_config = builder_config.android_config(config = "base_config"),
         build_gs_bucket = "chromium-android-archive",
     ),
     gn_args = gn_args.config(
@@ -107,13 +109,15 @@ ci.builder(
             apply_configs = ["android"],
         ),
         chromium_config = builder_config.chromium_config(
-            config = "x64_builder_mb",
+            config = "main_builder",
+            apply_configs = ["mb"],
             build_config = builder_config.build_config.RELEASE,
+            target_arch = builder_config.target_arch.INTEL,
             target_bits = 64,
             target_platform = builder_config.target_platform.ANDROID,
         ),
         android_config = builder_config.android_config(
-            config = "x64_builder_mb",
+            config = "base_config",
         ),
         build_gs_bucket = "chromium-android-archive",
     ),
@@ -126,7 +130,6 @@ ci.builder(
             "x64",
             "strip_debug_info",
             "android_fastbuild",
-            "no_secondary_abi",
         ],
     ),
     targets = targets.bundle(
@@ -160,13 +163,15 @@ ci.builder(
             apply_configs = ["android"],
         ),
         chromium_config = builder_config.chromium_config(
-            config = "x64_builder_mb",
+            config = "main_builder",
+            apply_configs = ["mb"],
             build_config = builder_config.build_config.RELEASE,
+            target_arch = builder_config.target_arch.INTEL,
             target_bits = 64,
             target_platform = builder_config.target_platform.ANDROID,
         ),
         android_config = builder_config.android_config(
-            config = "x64_builder_mb",
+            config = "base_config",
         ),
         build_gs_bucket = "chromium-android-archive",
     ),
@@ -180,7 +185,6 @@ ci.builder(
             "strip_debug_info",
             "android_fastbuild",
             "webview_trichrome",
-            "no_secondary_abi",
             "webview_shell",
         ],
     ),
@@ -214,13 +218,14 @@ ci.builder(
             apply_configs = ["android"],
         ),
         chromium_config = builder_config.chromium_config(
-            config = "x86_builder",
+            config = "main_builder",
             apply_configs = ["mb"],
             build_config = builder_config.build_config.RELEASE,
+            target_arch = builder_config.target_arch.INTEL,
             target_bits = 32,
             target_platform = builder_config.target_platform.ANDROID,
         ),
-        android_config = builder_config.android_config(config = "x86_builder"),
+        android_config = builder_config.android_config(config = "base_config"),
         build_gs_bucket = "chromium-android-archive",
     ),
     gn_args = gn_args.config(
@@ -284,13 +289,14 @@ ci.builder(
             ],
         ),
         chromium_config = builder_config.chromium_config(
-            config = "x86_builder",
+            config = "main_builder",
             apply_configs = ["mb"],
             build_config = builder_config.build_config.RELEASE,
+            target_arch = builder_config.target_arch.INTEL,
             target_bits = 32,
             target_platform = builder_config.target_platform.ANDROID,
         ),
-        android_config = builder_config.android_config(config = "x86_builder"),
+        android_config = builder_config.android_config(config = "base_config"),
         build_gs_bucket = "chromium-android-archive",
     ),
     gn_args = gn_args.config(
@@ -400,7 +406,7 @@ ci.builder(
             ),
             "gl_tests_validating": targets.mixin(
                 args = [
-                    "--test-launcher-filter-file=../../testing/buildbot/filters/android.emulator_o_p_10.gl_tests.filter",
+                    "--test-launcher-filter-file=../../testing/buildbot/filters/android.emulator_o_p.gl_tests.filter",
                 ],
             ),
             "net_unittests": targets.mixin(
@@ -468,12 +474,14 @@ ci.builder(
             ],
         ),
         chromium_config = builder_config.chromium_config(
-            config = "x86_builder_mb",
+            config = "main_builder",
+            apply_configs = ["mb"],
             build_config = builder_config.build_config.RELEASE,
+            target_arch = builder_config.target_arch.INTEL,
             target_bits = 32,
             target_platform = builder_config.target_platform.ANDROID,
         ),
-        android_config = builder_config.android_config(config = "x86_builder_mb"),
+        android_config = builder_config.android_config(config = "base_config"),
         build_gs_bucket = "chromium-android-archive",
     ),
     gn_args = gn_args.config(
@@ -540,23 +548,73 @@ ci.builder(
 # Remove these once the bugs are closed
 ci.builder(
     name = "android-11-x86-fyi-rel",
-    # Set to an empty list to avoid chromium-gitiles-trigger triggering new
-    # builds. Also we don't set any `schedule` since this builder is for
-    # reference only and should not run any new builds.
-    triggered_by = [],
     builder_spec = builder_config.builder_spec(
         gclient_config = builder_config.gclient_config(
             config = "chromium",
             apply_configs = ["android"],
         ),
         chromium_config = builder_config.chromium_config(
-            config = "x86_builder_mb",
+            config = "main_builder",
+            apply_configs = ["mb"],
             build_config = builder_config.build_config.RELEASE,
+            target_arch = builder_config.target_arch.INTEL,
             target_bits = 32,
             target_platform = builder_config.target_platform.ANDROID,
         ),
-        android_config = builder_config.android_config(config = "x86_builder_mb"),
+        android_config = builder_config.android_config(config = "base_config"),
         build_gs_bucket = "chromium-android-archive",
+    ),
+    gn_args = gn_args.config(
+        configs = [
+            "android_builder",
+            "release_builder",
+            "remoteexec",
+            "minimal_symbols",
+            "x86",
+            "strip_debug_info",
+            "android_fastbuild",
+            "webview_trichrome",
+            "webview_shell",
+        ],
+    ),
+    targets = targets.bundle(
+        targets = [
+            "android_11_emulator_fyi_gtests",
+        ],
+        mixins = [
+            "11-x86-emulator",
+            "emulator-4-cores",
+            "has_native_resultdb_integration",
+            "linux-jammy",
+            "x86-64",
+        ],
+        per_test_modifications = {
+            "chrome_public_test_apk": targets.mixin(
+                args = [
+                    "--test-launcher-filter-file=../../testing/buildbot/filters/android.emulator_11.chrome_public_test_apk.filter",
+                    "--timeout-scale=2.0",
+                ],
+                # TODO(crbug.com/40210655) Move to CI builder once stable
+                swarming = targets.swarming(
+                    dimensions = {
+                        "cores": "8",
+                    },
+                ),
+            ),
+            "content_browsertests": targets.mixin(
+                # TODO(crbug.com/40210655) Move to CI builder once stable
+                swarming = targets.swarming(
+                    dimensions = {
+                        # use 8-core to shorten runtime
+                        "cores": "8",
+                    },
+                    shards = 30,
+                ),
+            ),
+        },
+    ),
+    targets_settings = targets.settings(
+        os_type = targets.os_type.ANDROID,
     ),
     console_view_entry = consoles.console_view_entry(
         category = "emulator|x86|rel",
@@ -576,16 +634,17 @@ ci.builder(
             ],
         ),
         chromium_config = builder_config.chromium_config(
-            config = "x64_builder",
+            config = "main_builder",
             apply_configs = [
                 "mb",
             ],
             build_config = builder_config.build_config.RELEASE,
+            target_arch = builder_config.target_arch.INTEL,
             target_bits = 64,
             target_platform = builder_config.target_platform.ANDROID,
         ),
         android_config = builder_config.android_config(
-            config = "x64_builder",
+            config = "base_config",
         ),
         build_gs_bucket = "chromium-android-archive",
     ),
@@ -625,16 +684,18 @@ ci.builder(
             ],
         ),
         chromium_config = builder_config.chromium_config(
-            config = "x64_builder_mb",
+            config = "main_builder",
             apply_configs = [
+                "mb",
                 "download_xr_test_apks",
             ],
             build_config = builder_config.build_config.DEBUG,
+            target_arch = builder_config.target_arch.INTEL,
             target_bits = 64,
             target_platform = builder_config.target_platform.ANDROID,
         ),
         android_config = builder_config.android_config(
-            config = "x64_builder_mb",
+            config = "base_config",
         ),
         build_gs_bucket = "chromium-android-archive",
     ),
@@ -753,13 +814,15 @@ ci.builder(
             ],
         ),
         chromium_config = builder_config.chromium_config(
-            config = "x64_builder_mb",
+            config = "main_builder",
+            apply_configs = ["mb"],
             build_config = builder_config.build_config.RELEASE,
+            target_arch = builder_config.target_arch.INTEL,
             target_bits = 64,
             target_platform = builder_config.target_platform.ANDROID,
         ),
         android_config = builder_config.android_config(
-            config = "x64_builder_mb",
+            config = "base_config",
         ),
         build_gs_bucket = "chromium-android-archive",
     ),
@@ -773,7 +836,6 @@ ci.builder(
             "strip_debug_info",
             "android_fastbuild",
             "webview_trichrome",
-            "no_secondary_abi",
             "webview_shell",
         ],
     ),
@@ -901,16 +963,17 @@ ci.builder(
             ],
         ),
         chromium_config = builder_config.chromium_config(
-            config = "x64_builder",
+            config = "main_builder",
             apply_configs = [
                 "mb",
             ],
             build_config = builder_config.build_config.RELEASE,
+            target_arch = builder_config.target_arch.INTEL,
             target_bits = 64,
             target_platform = builder_config.target_platform.ANDROID,
         ),
         android_config = builder_config.android_config(
-            config = "x64_builder",
+            config = "base_config",
         ),
         build_gs_bucket = "chromium-android-archive",
     ),
@@ -924,7 +987,6 @@ ci.builder(
             "strip_debug_info",
             "android_fastbuild",
             "webview_trichrome",
-            "no_secondary_abi",
             "webview_shell",
         ],
     ),
@@ -1079,13 +1141,15 @@ ci.builder(
             ],
         ),
         chromium_config = builder_config.chromium_config(
-            config = "main_builder_mb",
+            config = "main_builder",
+            apply_configs = ["mb"],
             build_config = builder_config.build_config.RELEASE,
+            target_arch = builder_config.target_arch.ARM,
             target_bits = 64,
             target_platform = builder_config.target_platform.ANDROID,
         ),
         android_config = builder_config.android_config(
-            config = "main_builder_mb",
+            config = "base_config",
         ),
         build_gs_bucket = "chromium-android-archive",
     ),
@@ -1132,13 +1196,15 @@ ci.builder(
             ],
         ),
         chromium_config = builder_config.chromium_config(
-            config = "x64_builder_mb",
+            config = "main_builder",
+            apply_configs = ["mb"],
             build_config = builder_config.build_config.RELEASE,
+            target_arch = builder_config.target_arch.INTEL,
             target_bits = 64,
             target_platform = builder_config.target_platform.ANDROID,
         ),
         android_config = builder_config.android_config(
-            config = "x64_builder_mb",
+            config = "base_config",
         ),
         build_gs_bucket = "chromium-android-archive",
     ),
@@ -1152,7 +1218,6 @@ ci.builder(
             "strip_debug_info",
             "android_fastbuild",
             "webview_trichrome",
-            "no_secondary_abi",
             "webview_shell",
         ],
     ),
@@ -1197,13 +1262,15 @@ ci.builder(
             ],
         ),
         chromium_config = builder_config.chromium_config(
-            config = "x64_builder_mb",
+            config = "main_builder",
+            apply_configs = ["mb"],
             build_config = builder_config.build_config.RELEASE,
+            target_arch = builder_config.target_arch.INTEL,
             target_bits = 64,
             target_platform = builder_config.target_platform.ANDROID,
         ),
         android_config = builder_config.android_config(
-            config = "x64_builder_mb",
+            config = "base_config",
         ),
         build_gs_bucket = "chromium-android-archive",
     ),
@@ -1217,7 +1284,6 @@ ci.builder(
             "strip_debug_info",
             "android_fastbuild",
             "webview_trichrome",
-            "no_secondary_abi",
             "webview_shell",
         ],
     ),
@@ -1308,10 +1374,11 @@ ci.builder(
             config = "main_builder",
             apply_configs = ["mb"],
             build_config = builder_config.build_config.RELEASE,
+            target_arch = builder_config.target_arch.ARM,
             target_bits = 64,
             target_platform = builder_config.target_platform.ANDROID,
         ),
-        android_config = builder_config.android_config(config = "main_builder"),
+        android_config = builder_config.android_config(config = "base_config"),
         build_gs_bucket = "chromium-android-archive",
     ),
     gn_args = gn_args.config(
@@ -1353,13 +1420,15 @@ ci.thin_tester(
             ],
         ),
         chromium_config = builder_config.chromium_config(
-            config = "x64_builder_mb",
+            config = "main_builder",
+            apply_configs = ["mb"],
             build_config = builder_config.build_config.DEBUG,
+            target_arch = builder_config.target_arch.INTEL,
             target_bits = 64,
             target_platform = builder_config.target_platform.ANDROID,
         ),
         android_config = builder_config.android_config(
-            config = "x64_builder_mb",
+            config = "base_config",
         ),
         build_gs_bucket = "chromium-android-archive",
     ),
@@ -1396,13 +1465,15 @@ ci.thin_tester(
             ],
         ),
         chromium_config = builder_config.chromium_config(
-            config = "x64_builder_mb",
+            config = "main_builder",
+            apply_configs = ["mb"],
             build_config = builder_config.build_config.DEBUG,
+            target_arch = builder_config.target_arch.INTEL,
             target_bits = 64,
             target_platform = builder_config.target_platform.ANDROID,
         ),
         android_config = builder_config.android_config(
-            config = "x64_builder_mb",
+            config = "base_config",
         ),
         build_gs_bucket = "chromium-android-archive",
     ),
@@ -1442,13 +1513,15 @@ ci.thin_tester(
             ],
         ),
         chromium_config = builder_config.chromium_config(
-            config = "x64_builder_mb",
+            config = "main_builder",
+            apply_configs = ["mb"],
             build_config = builder_config.build_config.DEBUG,
+            target_arch = builder_config.target_arch.INTEL,
             target_bits = 64,
             target_platform = builder_config.target_platform.ANDROID,
         ),
         android_config = builder_config.android_config(
-            config = "x64_builder_mb",
+            config = "base_config",
         ),
         build_gs_bucket = "chromium-android-archive",
     ),
@@ -1482,17 +1555,18 @@ ci.builder(
             apply_configs = ["android"],
         ),
         chromium_config = builder_config.chromium_config(
-            config = "x86_builder",
+            config = "main_builder",
             apply_configs = [
                 "cronet_builder",
                 "mb",
             ],
             build_config = builder_config.build_config.RELEASE,
+            target_arch = builder_config.target_arch.INTEL,
             target_bits = 32,
             target_platform = builder_config.target_platform.ANDROID,
         ),
         android_config = builder_config.android_config(
-            config = "x86_builder",
+            config = "base_config",
         ),
     ),
     gn_args = gn_args.config(

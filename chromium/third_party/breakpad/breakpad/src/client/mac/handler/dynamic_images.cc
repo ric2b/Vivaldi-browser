@@ -532,7 +532,7 @@ DynamicImage* DynamicImages::GetExecutableImage() {
     return GetImage(executable_index);
   }
 
-  return NULL;
+  return nullptr;
 }
 
 //==============================================================================

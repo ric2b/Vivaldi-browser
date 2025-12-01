@@ -16,7 +16,7 @@
 #include "components/unexportable_keys/unexportable_key_service.h"
 #include "components/unexportable_keys/unexportable_key_service_impl.h"
 #include "components/unexportable_keys/unexportable_key_task_manager.h"
-#include "crypto/scoped_mock_unexportable_key_provider.h"
+#include "crypto/scoped_fake_unexportable_key_provider.h"
 #include "crypto/unexportable_key.h"
 #include "net/base/schemeful_site.h"
 #include "net/device_bound_sessions/proto/storage.pb.h"
@@ -67,18 +67,19 @@ std::unique_ptr<Session> CreateSessionHelper(
     unexportable_keys::UnexportableKeyService& key_service,
     const std::string& url_string,
     const std::string& session_id,
-    const std::string& origin = "foo.test") {
+    const std::string& origin = "https://foo.test") {
   SessionParams::Scope scope;
   scope.origin = origin;
   std::string cookie_attr = "Secure; Domain=" + GURL(url_string).host();
   std::vector<SessionParams::Credential> cookie_credentials(
       {SessionParams::Credential{"test_cookie", cookie_attr}});
-  SessionParams params{session_id, url_string, std::move(scope),
-                       std::move(cookie_credentials)};
-  std::unique_ptr<Session> session =
-      Session::CreateIfValid(params, GURL(url_string));
-  session->set_unexportable_key_id(GenerateNewKey(key_service));
-  return session;
+  SessionParams params{session_id,
+                       GURL(url_string),
+                       url_string,
+                       std::move(scope),
+                       std::move(cookie_credentials),
+                       GenerateNewKey(key_service)};
+  return *Session::CreateIfValid(params);
 }
 
 proto::Session CreateSessionProto(
@@ -200,7 +201,7 @@ class SessionStoreImplTest : public testing::Test {
  private:
   base::test::TaskEnvironment task_environment_;
   base::ScopedTempDir temp_dir_;
-  crypto::ScopedMockUnexportableKeyProvider scoped_key_provider_;
+  crypto::ScopedFakeUnexportableKeyProvider scoped_key_provider_;
   unexportable_keys::UnexportableKeyTaskManager unexportable_key_task_manager_{
       crypto::UnexportableKeyProvider::Config()};
   unexportable_keys::UnexportableKeyServiceImpl unexportable_key_service_;
@@ -253,11 +254,11 @@ TEST_F(SessionStoreImplTest, SaveNewSessions) {
   CreateStoreAndLoadSessions();
   SessionCfgList cfgs = {
       {"https://a.foo.test/index.html", "session0",
-       "foo.test"},  // schemeful site 1
+       "https://foo.test"},  // schemeful site 1
       {"https://b.foo.test/index.html", "session1",
-       "foo.test"},  // schemeful site 1
+       "https://foo.test"},  // schemeful site 1
       {"https://c.bar.test/index.html", "session2",
-       "bar.test"},  // schemeful site 2
+       "https://bar.test"},  // schemeful site 2
   };
   SessionStore::SessionsMap expected_sessions =
       CreateAndSaveSessions(cfgs, unexportable_key_service(), store());
@@ -353,11 +354,11 @@ TEST_F(SessionStoreImplTest, DeleteSessions) {
   // Create and save some sessions.
   SessionCfgList cfgs = {
       {"https://a.foo.test/index.html", "session0",
-       "foo.test"},  // schemeful site 1
+       "https://foo.test"},  // schemeful site 1
       {"https://b.foo.test/index.html", "session1",
-       "foo.test"},  // schemeful site 1
+       "https://foo.test"},  // schemeful site 1
       {"https://c.bar.test/index.html", "session2",
-       "bar.test"},  // schemeful site 2
+       "https://bar.test"},  // schemeful site 2
   };
   SessionStore::SessionsMap expected_sessions =
       CreateAndSaveSessions(cfgs, unexportable_key_service(), store());
@@ -389,9 +390,9 @@ TEST_F(SessionStoreImplTest, DeleteSessions) {
 TEST_F(SessionStoreImplTest, LoadSavedSessions) {
   CreateStoreAndLoadSessions();
   SessionCfgList cfgs = {
-      {"https://a.foo.test/index.html", "session0", "foo.test"},
-      {"https://b.foo.test/index.html", "session1", "foo.test"},
-      {"https://c.bar.test/index.html", "session2", "bar.test"},
+      {"https://a.foo.test/index.html", "session0", "https://foo.test"},
+      {"https://b.foo.test/index.html", "session1", "https://foo.test"},
+      {"https://c.bar.test/index.html", "session2", "https://bar.test"},
   };
 
   SessionStore::SessionsMap saved_sessions =
@@ -410,14 +411,16 @@ TEST_F(SessionStoreImplTest, LoadSavedSessions) {
 
 TEST_F(SessionStoreImplTest, PruneLoadedEntryWithInvalidSite) {
   // Create an entry with an invalid site.
-  proto::Session sproto = CreateSessionProto(
-      unexportable_key_service(), "https://foo.test", "session_id", "foo.test");
+  proto::Session sproto =
+      CreateSessionProto(unexportable_key_service(), "https://foo.test",
+                         "session_id", "https://foo.test");
   proto::SiteSessions site_proto;
   (*site_proto.mutable_sessions())["session_id"] = std::move(sproto);
 
   // Create an entry with a valid site.
-  proto::Session sproto2 = CreateSessionProto(
-      unexportable_key_service(), "https://bar.test", "session_id", "bar.test");
+  proto::Session sproto2 =
+      CreateSessionProto(unexportable_key_service(), "https://bar.test",
+                         "session_id", "https://bar.test");
   proto::SiteSessions site2_proto;
   (*site2_proto.mutable_sessions())["session_id"] = std::move(sproto2);
   auto site2 = net::SchemefulSite(GURL("https://bar.test)"));
@@ -451,11 +454,11 @@ TEST_F(SessionStoreImplTest, PruneLoadedEntryWithInvalidSession) {
   // Create an entry with 1 valid and 1 invalid session.
   proto::Session sproto1 =
       CreateSessionProto(unexportable_key_service(), "https://foo.example.test",
-                         "session_1", "foo.example.test");
+                         "session_1", "https://foo.example.test");
   // Create an invalid session.
   proto::Session sproto2 =
       CreateSessionProto(unexportable_key_service(), "https://bar.example.test",
-                         "session_2", "bar.example.test");
+                         "session_2", "https://bar.example.test");
   sproto2.set_refresh_url("invalid_url");
 
   // Create a site proto (proto table's value field) consisting of the above 2
@@ -486,7 +489,7 @@ TEST_F(SessionStoreImplTest, PruneLoadedEntryWithSessionMissingWrappedKey) {
   // Create a Session proto with missing wrapped key field.
   proto::Session sproto =
       CreateSessionProto(unexportable_key_service(), "https://foo.example.test",
-                         "session_id", "foo.example.test");
+                         "session_id", "https://foo.example.test");
   sproto.clear_wrapped_key();
 
   // Create a single entry table with the above session data.

@@ -7,7 +7,9 @@
 #include <cmath>
 #include <cstddef>
 #include <initializer_list>
+#include <limits>
 #include <memory>
+#include <optional>
 #include <utility>
 
 #include "base/notreached.h"
@@ -44,6 +46,7 @@
 #include "third_party/blink/renderer/core/css/css_palette_mix_value.h"
 #include "third_party/blink/renderer/core/css/css_path_value.h"
 #include "third_party/blink/renderer/core/css/css_primitive_value.h"
+#include "third_party/blink/renderer/core/css/css_progress_value.h"
 #include "third_party/blink/renderer/core/css/css_property_names.h"
 #include "third_party/blink/renderer/core/css/css_property_value.h"
 #include "third_party/blink/renderer/core/css/css_ratio_value.h"
@@ -56,6 +59,7 @@
 #include "third_party/blink/renderer/core/css/css_shadow_value.h"
 #include "third_party/blink/renderer/core/css/css_shape_value.h"
 #include "third_party/blink/renderer/core/css/css_string_value.h"
+#include "third_party/blink/renderer/core/css/css_superellipse_value.h"
 #include "third_party/blink/renderer/core/css/css_timing_function_value.h"
 #include "third_party/blink/renderer/core/css/css_unset_value.h"
 #include "third_party/blink/renderer/core/css/css_uri_value.h"
@@ -185,20 +189,33 @@ std::optional<cssvalue::CSSLinearStop> ConsumeLinearStop(
     if (stream.Peek().GetType() == kCommaToken) {
       break;
     }
+    // linear() functions do not handle element-dependent calc() expressions
+    // because the spec says sorting of stops happen before computed value time,
+    // which is why we currently make stops invalid when containing
+    // sibling-index() and font- and container-relative units in sign() below..
     CSSPrimitiveValue* value =
         ConsumeNumber(stream, context, CSSPrimitiveValue::ValueRange::kAll);
     if (!number.has_value() && value && value->IsNumber()) {
-      number = value->GetDoubleValue();
-      continue;
+      number = value->GetValueIfKnown();
+      if (number.has_value()) {
+        continue;
+      }
+      return {};
     }
     value =
         ConsumePercent(stream, context, CSSPrimitiveValue::ValueRange::kAll);
     if (!length_a.has_value() && value && value->IsPercentage()) {
-      length_a = value->GetDoubleValue();
+      length_a = value->GetValueIfKnown();
+      if (!length_a.has_value()) {
+        return {};
+      }
       value =
           ConsumePercent(stream, context, CSSPrimitiveValue::ValueRange::kAll);
       if (value && value->IsPercentage()) {
-        length_b = value->GetDoubleValue();
+        length_b = value->GetValueIfKnown();
+        if (!length_b.has_value()) {
+          return {};
+        }
       }
       continue;
     }
@@ -364,10 +381,12 @@ CSSValue* ConsumeSteps(CSSParserTokenStream& stream,
       return nullptr;
     }
 
-    // Steps(n, jump-none) requires n >= 2.
-    if (position == StepsTimingFunction::StepPosition::JUMP_NONE &&
-        steps->GetIntValue() < 2) {
-      return nullptr;
+    if (position == StepsTimingFunction::StepPosition::JUMP_NONE) {
+      std::optional<double> steps_number = steps->GetValueIfKnown();
+      if (steps_number.has_value() && steps_number.value() < 2) {
+        // Steps(n, jump-none) requires n >= 2.
+        return nullptr;
+      }
     }
 
     guard.Release();
@@ -381,30 +400,33 @@ CSSValue* ConsumeSteps(CSSParserTokenStream& stream,
 CSSValue* ConsumeCubicBezier(CSSParserTokenStream& stream,
                              const CSSParserContext& context) {
   DCHECK_EQ(stream.Peek().FunctionId(), CSSValueID::kCubicBezier);
-  CSSValue* result = nullptr;
-  {
-    CSSParserTokenStream::RestoringBlockGuard guard(stream);
-    stream.ConsumeWhitespace();
+  std::array<double, 4> args;
+  CSSParserTokenStream::RestoringBlockGuard guard(stream);
+  stream.ConsumeWhitespace();
 
-    double x1, y1, x2, y2;
-    if (ConsumeNumberRaw(stream, context, x1) && x1 >= 0 && x1 <= 1 &&
-        ConsumeCommaIncludingWhitespace(stream) &&
-        ConsumeNumberRaw(stream, context, y1) &&
-        ConsumeCommaIncludingWhitespace(stream) &&
-        ConsumeNumberRaw(stream, context, x2) && x2 >= 0 && x2 <= 1 &&
-        ConsumeCommaIncludingWhitespace(stream) &&
-        ConsumeNumberRaw(stream, context, y2) && stream.AtEnd()) {
-      guard.Release();
-      result =
-          MakeGarbageCollected<cssvalue::CSSCubicBezierTimingFunctionValue>(
-              x1, y1, x2, y2);
+  for (size_t i = 0; i < 4; i++) {
+    CSSPrimitiveValue* number_value =
+        ConsumeNumber(stream, context, CSSPrimitiveValue::ValueRange::kAll);
+    bool consumed_trail =
+        i < 3 ? ConsumeCommaIncludingWhitespace(stream) : stream.AtEnd();
+    if (!number_value || !consumed_trail) {
+      return nullptr;
     }
+    // TODO(crbug.com/407420298): Support element-dependent calc() expressions
+    // as numeric arguments.
+    std::optional<double> number = number_value->GetValueIfKnown();
+    if (!number.has_value()) {
+      return nullptr;
+    }
+    args[i] = number.value();
   }
-  if (result) {
-    stream.ConsumeWhitespace();
+  if (args[0] < 0 || args[0] > 1 || args[2] < 0 || args[2] > 1) {
+    return nullptr;
   }
-
-  return result;
+  guard.Release();
+  stream.ConsumeWhitespace();
+  return MakeGarbageCollected<cssvalue::CSSCubicBezierTimingFunctionValue>(
+      args[0], args[1], args[2], args[3]);
 }
 
 CSSIdentifierValue* ConsumeBorderImageRepeatKeyword(
@@ -679,13 +701,15 @@ bool ConsumePerspective(CSSParserTokenStream& stream,
     parsed_value = ConsumeIdent<CSSValueID::kNone>(stream);
   }
   if (!parsed_value && use_legacy_parsing) {
-    double perspective;
-    if (!ConsumeNumberRaw(stream, context, perspective) || perspective < 0) {
-      return false;
+    if (const CSSPrimitiveValue* number_value = ConsumeNumber(
+            stream, context, CSSPrimitiveValue::ValueRange::kNonNegative)) {
+      std::optional<double> number = number_value->GetValueIfKnown();
+      if (number.has_value()) {
+        context.Count(WebFeature::kUnitlessPerspectiveInTransformProperty);
+        parsed_value = CSSNumericLiteralValue::Create(
+            number.value(), CSSPrimitiveValue::UnitType::kPixels);
+      }
     }
-    context.Count(WebFeature::kUnitlessPerspectiveInTransformProperty);
-    parsed_value = CSSNumericLiteralValue::Create(
-        perspective, CSSPrimitiveValue::UnitType::kPixels);
   }
   if (!parsed_value) {
     return false;
@@ -772,15 +796,13 @@ CSSFunctionValue* ConsumeFilterFunction(CSSParserTokenStream& stream,
         // and will be clamped in
         // FilterOperationResolver::ResolveNumericArgumentForFunction() instead,
         // when we can resolve e.g. length units.
-        if (parsed_value &&
-            !To<CSSPrimitiveValue>(parsed_value)->IsCalculated() &&
-            filter_type != CSSValueID::kSaturate &&
+        if (auto* literal_value =
+                DynamicTo<CSSNumericLiteralValue>(parsed_value);
+            literal_value && filter_type != CSSValueID::kSaturate &&
             filter_type != CSSValueID::kContrast) {
-          bool is_percentage =
-              To<CSSPrimitiveValue>(parsed_value)->IsPercentage();
+          bool is_percentage = literal_value->IsPercentage();
           double max_allowed = is_percentage ? 100.0 : 1.0;
-          if (To<CSSPrimitiveValue>(parsed_value)->GetDoubleValue() >
-              max_allowed) {
+          if (literal_value->GetDoubleValue() > max_allowed) {
             parsed_value = CSSNumericLiteralValue::Create(
                 max_allowed, is_percentage
                                  ? CSSPrimitiveValue::UnitType::kPercentage
@@ -1004,8 +1026,10 @@ class MathFunctionParser {
     return result;
   }
 
+  // TODO: Remove this method once ConsumeNumberRaw_DO_NOT_USE is removed.
   bool ConsumeNumberRaw(double& result) {
-    if (!calc_value_ || calc_value_->Category() != kCalcNumber) {
+    if (!calc_value_ || calc_value_->Category() != kCalcNumber ||
+        !calc_value_->ExpressionNode()->IsNumericLiteral()) {
       return false;
     }
     DCHECK(!has_consumed_);  // Cannot consume twice.
@@ -1123,9 +1147,9 @@ CSSPrimitiveValue* ConsumePositiveInteger(CSSParserTokenStream& stream,
   return ConsumeInteger(stream, context, 1);
 }
 
-bool ConsumeNumberRaw(CSSParserTokenStream& stream,
-                      const CSSParserContext& context,
-                      double& result) {
+bool ConsumeNumberRaw_DO_NOT_USE(CSSParserTokenStream& stream,
+                                 const CSSParserContext& context,
+                                 double& result) {
   if (stream.Peek().GetType() == kNumberToken) {
     result = stream.ConsumeIncludingWhitespace().NumericValue();
     return true;
@@ -1729,77 +1753,128 @@ cssvalue::CSSURIValue* ConsumeUrl(CSSParserTokenStream& stream,
       CollectUrlData(url.Value(), context));
 }
 
-static bool ConsumeColorInterpolationSpace(
-    CSSParserTokenStream& stream,
-    Color::ColorSpace& color_space,
-    Color::HueInterpolationMethod& hue_interpolation) {
+struct ColorInterpolationSpace {
+  Color::ColorSpace color_space = Color::ColorSpace::kNone;
+  Color::HueInterpolationMethod hue_interpolation =
+      Color::HueInterpolationMethod::kShorter;
+  // For web feature counting purpose and to distinguish between explicit and
+  // implicit use of color interpolation space (expect comma or not for later
+  // parsing process).
+  bool user_specified = false;
+};
+
+// If the result have value, it's always valid.
+// If the result is empty, it's invalid.
+static std::optional<ColorInterpolationSpace> ConsumeColorInterpolationSpace(
+    CSSParserTokenStream& stream) {
+  // <color-interpolation-method> = in [ <rectangular-color-space> |
+  // <polar-color-space> <hue-interpolation-method>? ]
+  // ref: https://www.w3.org/TR/css-color-4/#color-interpolation-method
+
+  ColorInterpolationSpace result{};
   if (!ConsumeIdent<CSSValueID::kIn>(stream)) {
-    return false;
+    // return defaults
+    return result;
   }
 
-  std::optional<Color::ColorSpace> read_color_space;
-  if (ConsumeIdent<CSSValueID::kXyz>(stream)) {
-    read_color_space = Color::ColorSpace::kXYZD65;
-  } else if (ConsumeIdent<CSSValueID::kXyzD50>(stream)) {
-    read_color_space = Color::ColorSpace::kXYZD50;
-  } else if (ConsumeIdent<CSSValueID::kXyzD65>(stream)) {
-    read_color_space = Color::ColorSpace::kXYZD65;
-  } else if (ConsumeIdent<CSSValueID::kSRGBLinear>(stream)) {
-    read_color_space = Color::ColorSpace::kSRGBLinear;
-  } else if (ConsumeIdent<CSSValueID::kDisplayP3>(stream)) {
-    read_color_space = Color::ColorSpace::kDisplayP3;
-  } else if (ConsumeIdent<CSSValueID::kA98Rgb>(stream)) {
-    read_color_space = Color::ColorSpace::kA98RGB;
-  } else if (ConsumeIdent<CSSValueID::kProphotoRgb>(stream)) {
-    read_color_space = Color::ColorSpace::kProPhotoRGB;
-  } else if (ConsumeIdent<CSSValueID::kRec2020>(stream)) {
-    read_color_space = Color::ColorSpace::kRec2020;
-  } else if (ConsumeIdent<CSSValueID::kLab>(stream)) {
-    read_color_space = Color::ColorSpace::kLab;
-  } else if (ConsumeIdent<CSSValueID::kOklab>(stream)) {
-    read_color_space = Color::ColorSpace::kOklab;
-  } else if (ConsumeIdent<CSSValueID::kLch>(stream)) {
-    read_color_space = Color::ColorSpace::kLch;
-  } else if (ConsumeIdent<CSSValueID::kOklch>(stream)) {
-    read_color_space = Color::ColorSpace::kOklch;
-  } else if (ConsumeIdent<CSSValueID::kSRGB>(stream)) {
-    read_color_space = Color::ColorSpace::kSRGB;
-  } else if (ConsumeIdent<CSSValueID::kHsl>(stream)) {
-    read_color_space = Color::ColorSpace::kHSL;
-  } else if (ConsumeIdent<CSSValueID::kHwb>(stream)) {
-    read_color_space = Color::ColorSpace::kHWB;
+  std::optional<Color::ColorSpace> read_color_space{};
+  switch (stream.Peek().Id()) {
+    case CSSValueID::kXyz:
+      read_color_space = Color::ColorSpace::kXYZD65;
+      break;
+    case CSSValueID::kXyzD50:
+      read_color_space = Color::ColorSpace::kXYZD50;
+      break;
+    case CSSValueID::kXyzD65:
+      read_color_space = Color::ColorSpace::kXYZD65;
+      break;
+    case CSSValueID::kSRGBLinear:
+      read_color_space = Color::ColorSpace::kSRGBLinear;
+      break;
+    case CSSValueID::kDisplayP3:
+      read_color_space = Color::ColorSpace::kDisplayP3;
+      break;
+    case CSSValueID::kA98Rgb:
+      read_color_space = Color::ColorSpace::kA98RGB;
+      break;
+    case CSSValueID::kProphotoRgb:
+      read_color_space = Color::ColorSpace::kProPhotoRGB;
+      break;
+    case CSSValueID::kRec2020:
+      read_color_space = Color::ColorSpace::kRec2020;
+      break;
+    case CSSValueID::kLab:
+      read_color_space = Color::ColorSpace::kLab;
+      break;
+    case CSSValueID::kOklab:
+      read_color_space = Color::ColorSpace::kOklab;
+      break;
+    case CSSValueID::kLch:
+      read_color_space = Color::ColorSpace::kLch;
+      break;
+    case CSSValueID::kOklch:
+      read_color_space = Color::ColorSpace::kOklch;
+      break;
+    case CSSValueID::kSRGB:
+      read_color_space = Color::ColorSpace::kSRGB;
+      break;
+    case CSSValueID::kHsl:
+      read_color_space = Color::ColorSpace::kHSL;
+      break;
+    case CSSValueID::kHwb:
+      read_color_space = Color::ColorSpace::kHWB;
+      break;
+    default:
+      break;
   }
 
   if (read_color_space) {
-    color_space = read_color_space.value();
-    std::optional<Color::HueInterpolationMethod> read_hue;
+    // eat the color space only if we got a valid one.
+    ConsumeIdent(stream);
+    auto& color_space = read_color_space.value();
+    std::optional<Color::HueInterpolationMethod> read_hue{};
     if (color_space == Color::ColorSpace::kHSL ||
         color_space == Color::ColorSpace::kHWB ||
         color_space == Color::ColorSpace::kLch ||
         color_space == Color::ColorSpace::kOklch) {
-      if (ConsumeIdent<CSSValueID::kShorter>(stream)) {
-        read_hue = Color::HueInterpolationMethod::kShorter;
-      } else if (ConsumeIdent<CSSValueID::kLonger>(stream)) {
-        read_hue = Color::HueInterpolationMethod::kLonger;
-      } else if (ConsumeIdent<CSSValueID::kDecreasing>(stream)) {
-        read_hue = Color::HueInterpolationMethod::kDecreasing;
-      } else if (ConsumeIdent<CSSValueID::kIncreasing>(stream)) {
-        read_hue = Color::HueInterpolationMethod::kIncreasing;
+      switch (stream.Peek().Id()) {
+        case CSSValueID::kShorter:
+          read_hue = Color::HueInterpolationMethod::kShorter;
+          break;
+        case CSSValueID::kLonger:
+          read_hue = Color::HueInterpolationMethod::kLonger;
+          break;
+        case CSSValueID::kDecreasing:
+          read_hue = Color::HueInterpolationMethod::kDecreasing;
+          break;
+        case CSSValueID::kIncreasing:
+          read_hue = Color::HueInterpolationMethod::kIncreasing;
+          break;
+        default:
+          break;
       }
+
       if (read_hue) {
+        // eat the hue interpolation method only if we got a valid one.
+        ConsumeIdent(stream);
         if (!ConsumeIdent<CSSValueID::kHue>(stream)) {
-          return false;
+          // If there's no "hue" keyword after the hue interpolation method,
+          // it's invalid, reject!
+          return std::nullopt;
         }
-        hue_interpolation = read_hue.value();
-      } else {
-        // Shorter is the default method for hue interpolation.
-        hue_interpolation = Color::HueInterpolationMethod::kShorter;
       }
     }
-    return true;
+    result.color_space = color_space;
+    // If there's no hue interpolation method specified, it's shorter by default
+    result.hue_interpolation =
+        read_hue.value_or(Color::HueInterpolationMethod::kShorter);
+    result.user_specified = true;
+    return result;
   }
 
-  return false;
+  // If there's `in` keyword but no color space specified,
+  // it's invalid, reject!
+  return std::nullopt;
 }
 
 namespace {
@@ -1819,17 +1894,20 @@ static CSSValue* ConsumeColorMixFunction(CSSParserTokenStream& stream,
   context.Count(WebFeature::kCSSColorMixFunction);
 
   cssvalue::CSSColorMixValue* result;
+  std::optional<ColorInterpolationSpace>
+      consume_color_interpolation_space_result{};
   {
     CSSParserTokenStream::RestoringBlockGuard guard(stream);
     stream.ConsumeWhitespace();
     // First argument is the colorspace
-    Color::ColorSpace color_space;
-    Color::HueInterpolationMethod hue_interpolation_method =
-        Color::HueInterpolationMethod::kShorter;
-    if (!ConsumeColorInterpolationSpace(stream, color_space,
-                                        hue_interpolation_method)) {
+    consume_color_interpolation_space_result =
+        ConsumeColorInterpolationSpace(stream);
+    if (!consume_color_interpolation_space_result) {
       return nullptr;
     }
+    auto& [color_space, hue_interpolation_method, user_specified] =
+        *consume_color_interpolation_space_result;
+    (void)user_specified;  // unused
 
     if (!ConsumeCommaIncludingWhitespace(stream)) {
       return nullptr;
@@ -2008,7 +2086,6 @@ CSSValue* ConsumeColorContrast(CSSParserTokenStream& stream,
 
     std::optional<double> target_contrast;
     if (ConsumeIdent<CSSValueID::kTo>(stream)) {
-      double target_contrast_temp;
       if (ConsumeIdent<CSSValueID::kAA>(stream)) {
         target_contrast = 4.5;
       } else if (ConsumeIdent<CSSValueID::kAALarge>(stream)) {
@@ -2017,8 +2094,15 @@ CSSValue* ConsumeColorContrast(CSSParserTokenStream& stream,
         target_contrast = 7;
       } else if (ConsumeIdent<CSSValueID::kAAALarge>(stream)) {
         target_contrast = 4.5;
-      } else if (ConsumeNumberRaw(stream, context, target_contrast_temp)) {
-        target_contrast = target_contrast_temp;
+      } else if (const CSSPrimitiveValue* target_contrast_value = ConsumeNumber(
+                     stream, context, CSSPrimitiveValue::ValueRange::kAll)) {
+        target_contrast = target_contrast_value->GetValueIfKnown();
+        if (!target_contrast.has_value()) {
+          // TODO(crbug.com/40142548): Some calc() expressions can only be
+          // evaluated to a number at computed value time, such as
+          // sibling-index() and sign(1em - 20px).
+          return nullptr;
+        }
       } else {
         return nullptr;
       }
@@ -2711,8 +2795,8 @@ static bool ConsumeGradientColorStops(CSSParserTokenStream& stream,
     return false;
   }
 
-  // Must have 2 or more stops to be valid.
-  return gradient->StopCount() >= 2;
+  // Must have 1 or more stops to be valid.
+  return gradient->StopCount() >= 1;
 }
 
 static CSSValue* ConsumeDeprecatedRadialGradient(
@@ -2768,22 +2852,23 @@ static CSSValue* ConsumeDeprecatedRadialGradient(
 static CSSValue* ConsumeRadialGradient(CSSParserTokenStream& stream,
                                        const CSSParserContext& context,
                                        cssvalue::CSSGradientRepeat repeating) {
+  // radial-gradient() = radial-gradient(
+  // [ [ [ <rg-ending-shape> || <rg-size> ]? [ at <position> ]? ] ||
+  //  <color-interpolation-method>]? ,
+  //  <color-stop-list>
+  // )
+  // ref: https://www.w3.org/TR/css-images-4/#radial-gradients
+
   const CSSIdentifierValue* shape = nullptr;
   const CSSIdentifierValue* size_keyword = nullptr;
   const CSSPrimitiveValue* horizontal_size = nullptr;
   const CSSPrimitiveValue* vertical_size = nullptr;
 
-  // First part of grammar, the size/shape/color space clause:
-  // [ in <color-space>? &&
-  // [[ circle || <length> ] |
-  // [ ellipse || [ <length> | <percentage> ]{2} ] |
-  // [ [ circle | ellipse] || <size-keyword> ]] ]
-
-  Color::ColorSpace color_space;
-  Color::HueInterpolationMethod hue_interpolation_method =
-      Color::HueInterpolationMethod::kShorter;
-  bool has_color_space = ConsumeColorInterpolationSpace(
-      stream, color_space, hue_interpolation_method);
+  auto consume_color_interpolation_space_result =
+      ConsumeColorInterpolationSpace(stream);
+  if (!consume_color_interpolation_space_result) {
+    return nullptr;
+  }
 
   for (int i = 0; i < 3; ++i) {
     if (stream.Peek().GetType() == kIdentToken) {
@@ -2857,13 +2942,19 @@ static CSSValue* ConsumeRadialGradient(CSSParserTokenStream& stream,
     // Right now, CSS radial gradients have the same start and end centers.
   }
 
-  if (!has_color_space) {
-    has_color_space = ConsumeColorInterpolationSpace(stream, color_space,
-                                                     hue_interpolation_method);
+  if (!consume_color_interpolation_space_result->user_specified) {
+    consume_color_interpolation_space_result =
+        ConsumeColorInterpolationSpace(stream);
+    if (!consume_color_interpolation_space_result) {
+      return nullptr;
+    }
   }
 
+  auto& [color_space, hue_interpolation_method, user_specified] =
+      *consume_color_interpolation_space_result;
+
   if ((shape || size_keyword || horizontal_size || center_x || center_y ||
-       has_color_space) &&
+       user_specified) &&
       !ConsumeCommaIncludingWhitespace(stream)) {
     return nullptr;
   }
@@ -2873,9 +2964,9 @@ static CSSValue* ConsumeRadialGradient(CSSParserTokenStream& stream,
           center_x, center_y, shape, size_keyword, horizontal_size,
           vertical_size, repeating, cssvalue::kCSSRadialGradient);
 
-  if (has_color_space) {
-    result->SetColorInterpolationSpace(color_space, hue_interpolation_method);
+  if (user_specified) {
     context.Count(WebFeature::kCSSColorGradientColorSpace);
+    result->SetColorInterpolationSpace(color_space, hue_interpolation_method);
   }
 
   return ConsumeGradientColorStops(stream, context, result,
@@ -2889,14 +2980,17 @@ static CSSValue* ConsumeLinearGradient(
     const CSSParserContext& context,
     cssvalue::CSSGradientRepeat repeating,
     cssvalue::CSSGradientType gradient_type) {
-  // First part of grammar, the size/shape/color space clause:
-  // [ in <color-space>? || [ <angle> | to <side-or-corner> ]?]
+  // linear-gradient() = linear-gradient(
+  //    [ [ <angle> | to <side-or-corner> ] || <color-interpolation-method> ]? ,
+  //    <color-stop-list>
+  // )
+  // ref: https://www.w3.org/TR/css-images-4/#linear-gradients
   bool expect_comma = true;
-  Color::ColorSpace color_space;
-  Color::HueInterpolationMethod hue_interpolation_method =
-      Color::HueInterpolationMethod::kShorter;
-  bool has_color_space = ConsumeColorInterpolationSpace(
-      stream, color_space, hue_interpolation_method);
+  auto consume_color_interpolation_space_result =
+      ConsumeColorInterpolationSpace(stream);
+  if (!consume_color_interpolation_space_result) {
+    return nullptr;
+  }
 
   const CSSPrimitiveValue* angle =
       ConsumeAngle(stream, context, WebFeature::kUnitlessZeroAngleGradient);
@@ -2924,12 +3018,18 @@ static CSSValue* ConsumeLinearGradient(
   }
   // It's possible that the <color-space> comes after the [ <angle> |
   // <side-or-corner> ]
-  if (!has_color_space) {
-    has_color_space = ConsumeColorInterpolationSpace(stream, color_space,
-                                                     hue_interpolation_method);
+  if (!consume_color_interpolation_space_result->user_specified) {
+    consume_color_interpolation_space_result =
+        ConsumeColorInterpolationSpace(stream);
+    if (!consume_color_interpolation_space_result) {
+      return nullptr;
+    }
   }
 
-  if (has_color_space) {
+  auto [color_space, hue_interpolation_method, user_specified] =
+      *consume_color_interpolation_space_result;
+
+  if (user_specified) {
     expect_comma = true;
   }
 
@@ -2941,9 +3041,9 @@ static CSSValue* ConsumeLinearGradient(
       MakeGarbageCollected<cssvalue::CSSLinearGradientValue>(
           end_x, end_y, nullptr, nullptr, angle, repeating, gradient_type);
 
-  if (has_color_space) {
-    result->SetColorInterpolationSpace(color_space, hue_interpolation_method);
+  if (user_specified) {
     context.Count(WebFeature::kCSSColorGradientColorSpace);
+    result->SetColorInterpolationSpace(color_space, hue_interpolation_method);
   }
 
   return ConsumeGradientColorStops(stream, context, result,
@@ -2955,11 +3055,16 @@ static CSSValue* ConsumeLinearGradient(
 static CSSValue* ConsumeConicGradient(CSSParserTokenStream& stream,
                                       const CSSParserContext& context,
                                       cssvalue::CSSGradientRepeat repeating) {
-  Color::ColorSpace color_space;
-  Color::HueInterpolationMethod hue_interpolation_method =
-      Color::HueInterpolationMethod::kShorter;
-  bool has_color_space = ConsumeColorInterpolationSpace(
-      stream, color_space, hue_interpolation_method);
+  // conic-gradient() = conic-gradient(
+  //   [ [ [ from <angle> ]? [ at <position> ]? ] ||
+  //   <color-interpolation-method> ]? , <angular-color-stop-list>
+  // )
+  // ref: https://www.w3.org/TR/css-images-4/#conic-gradients
+  auto consume_color_interpolation_space_result =
+      ConsumeColorInterpolationSpace(stream);
+  if (!consume_color_interpolation_space_result) {
+    return nullptr;
+  }
 
   const CSSPrimitiveValue* from_angle = nullptr;
   if (ConsumeIdent<CSSValueID::kFrom>(stream)) {
@@ -2978,14 +3083,20 @@ static CSSValue* ConsumeConicGradient(CSSParserTokenStream& stream,
     }
   }
 
-  if (!has_color_space) {
-    has_color_space = ConsumeColorInterpolationSpace(stream, color_space,
-                                                     hue_interpolation_method);
+  if (!consume_color_interpolation_space_result->user_specified) {
+    consume_color_interpolation_space_result =
+        ConsumeColorInterpolationSpace(stream);
+    if (!consume_color_interpolation_space_result) {
+      return nullptr;
+    }
   }
+
+  auto& [color_space, hue_interpolation_method, user_specified] =
+      *consume_color_interpolation_space_result;
 
   // Comma separator required when fromAngle, position or color_space is
   // present.
-  if ((from_angle || center_x || center_y || has_color_space) &&
+  if ((from_angle || center_x || center_y || user_specified) &&
       !ConsumeCommaIncludingWhitespace(stream)) {
     return nullptr;
   }
@@ -2993,9 +3104,9 @@ static CSSValue* ConsumeConicGradient(CSSParserTokenStream& stream,
   auto* result = MakeGarbageCollected<cssvalue::CSSConicGradientValue>(
       center_x, center_y, from_angle, repeating);
 
-  if (has_color_space) {
-    result->SetColorInterpolationSpace(color_space, hue_interpolation_method);
+  if (user_specified) {
     context.Count(WebFeature::kCSSColorGradientColorSpace);
+    result->SetColorInterpolationSpace(color_space, hue_interpolation_method);
   }
 
   return ConsumeGradientColorStops(stream, context, result,
@@ -5086,6 +5197,39 @@ CSSValue* ParseBorderRadiusCorner(CSSParserTokenStream& stream,
                                             CSSValuePair::kDropIdenticalValues);
 }
 
+CSSValue* ConsumeCornerShape(CSSParserTokenStream& stream,
+                             const CSSParserContext& context) {
+  if (auto* ident =
+          ConsumeIdent<CSSValueID::kBevel, CSSValueID::kNotch,
+                       CSSValueID::kRound, CSSValueID::kScoop,
+                       CSSValueID::kSquircle, CSSValueID::kStraight>(stream)) {
+    return ident;
+  }
+
+  if (stream.Peek().FunctionId() != CSSValueID::kSuperellipse) {
+    return nullptr;
+  }
+
+  CSSParserTokenStream::RestoringBlockGuard guard(stream);
+  stream.ConsumeWhitespace();
+  const CSSPrimitiveValue* param = nullptr;
+  if (stream.Peek().Id() == CSSValueID::kInfinity) {
+    param =
+        CSSNumericLiteralValue::Create(std::numeric_limits<double>::infinity(),
+                                       CSSPrimitiveValue::UnitType::kNumber);
+    stream.ConsumeIncludingWhitespace();
+  } else {
+    param = ConsumeNumber(stream, context,
+                          CSSPrimitiveValue::ValueRange::kNonNegative);
+  }
+  if (!param) {
+    return nullptr;
+  }
+  guard.Release();
+  stream.ConsumeWhitespace();
+  return MakeGarbageCollected<cssvalue::CSSSuperellipseValue>(*param);
+}
+
 CSSValue* ParseBorderWidthSide(CSSParserTokenStream& stream,
                                const CSSParserContext& context,
                                const CSSParserLocalContext& local_context) {
@@ -5302,20 +5446,20 @@ CSSValue* ConsumeColumnCount(CSSParserTokenStream& stream,
   return ConsumePositiveInteger(stream, context);
 }
 
-CSSValue* ConsumeColumnWidth(CSSParserTokenStream& stream,
-                             const CSSParserContext& context) {
+CSSValue* ConsumeColumnLength(CSSParserTokenStream& stream,
+                              const CSSParserContext& context) {
   if (stream.Peek().Id() == CSSValueID::kAuto) {
     return ConsumeIdent(stream);
   }
   // Always parse lengths in strict mode here, since it would be ambiguous
   // otherwise when used in the 'columns' shorthand property.
   CSSParserContext::ParserModeOverridingScope scope(context, kHTMLStandardMode);
-  CSSPrimitiveValue* column_width = ConsumeLength(
+  CSSPrimitiveValue* column_length = ConsumeLength(
       stream, context, CSSPrimitiveValue::ValueRange::kNonNegative);
-  if (!column_width) {
+  if (!column_length) {
     return nullptr;
   }
-  return column_width;
+  return column_length;
 }
 
 bool ConsumeColumnWidthOrCount(CSSParserTokenStream& stream,
@@ -5327,7 +5471,7 @@ bool ConsumeColumnWidthOrCount(CSSParserTokenStream& stream,
     return true;
   }
   if (!column_width) {
-    column_width = ConsumeColumnWidth(stream, context);
+    column_width = ConsumeColumnLength(stream, context);
     if (column_width) {
       return true;
     }
@@ -5446,9 +5590,8 @@ CSSValue* ConsumePaletteMixFunction(CSSParserTokenStream& stream,
     return nullptr;
   }
 
-  Color::HueInterpolationMethod hue_interpolation_method =
-      Color::HueInterpolationMethod::kShorter;
-  Color::ColorSpace color_space;
+  std::optional<ColorInterpolationSpace>
+      consume_color_interpolation_space_result{};
   CSSValue* palette1;
   CSSValue* palette2;
   CSSPrimitiveValue* percentage1;
@@ -5456,8 +5599,9 @@ CSSValue* ConsumePaletteMixFunction(CSSParserTokenStream& stream,
   {
     CSSParserTokenStream::RestoringBlockGuard guard(stream);
     stream.ConsumeWhitespace();
-    if (!ConsumeColorInterpolationSpace(stream, color_space,
-                                        hue_interpolation_method)) {
+    consume_color_interpolation_space_result =
+        ConsumeColorInterpolationSpace(stream);
+    if (!consume_color_interpolation_space_result) {
       return nullptr;
     }
 
@@ -5516,6 +5660,11 @@ CSSValue* ConsumePaletteMixFunction(CSSParserTokenStream& stream,
   }
   stream.ConsumeWhitespace();
 
+  auto& [color_space, hue_interpolation_method, user_specified] =
+      *consume_color_interpolation_space_result;
+
+  // this feature is not counted in the WebFeatures
+  (void)user_specified;
   return MakeGarbageCollected<cssvalue::CSSPaletteMixValue>(
       palette1, palette2, percentage1, percentage2, color_space,
       hue_interpolation_method);
@@ -5890,7 +6039,6 @@ bool IsSupportedKeywordTech(CSSValueID keyword) {
     default:
       return false;
   }
-  NOTREACHED();
 }
 
 bool IsSupportedKeywordFormat(CSSValueID keyword) {
@@ -7495,6 +7643,23 @@ bool ConsumeRadii(std::array<CSSValue*, 4>& horizontal_radii,
   return true;
 }
 
+bool ConsumeCornerShapes(std::array<CSSValue*, 4>& shapes,
+                         CSSParserTokenStream& stream,
+                         const CSSParserContext& context) {
+  for (unsigned value_count = 0; value_count < 4; ++value_count) {
+    shapes[value_count] = ConsumeCornerShape(stream, context);
+    if (!shapes[value_count]) {
+      if (!value_count) {
+        return false;
+      }
+      break;
+    }
+  }
+
+  Complete4Sides(shapes);
+  return true;
+}
+
 CSSValue* ConsumeBasicShape(CSSParserTokenStream& stream,
                             const CSSParserContext& context,
                             AllowPathValue allow_path,
@@ -7941,7 +8106,8 @@ CSSValue* ConsumeContainerName(CSSParserTokenStream& stream,
   return list->length() ? list : nullptr;
 }
 
-CSSValue* ConsumeContainerType(CSSParserTokenStream& stream) {
+CSSValue* ConsumeContainerType(CSSParserTokenStream& stream,
+                               const CSSParserContext& context) {
   // container-type: normal | [ [ size | inline-size ] || scroll-state ]
   if (CSSValue* value = ConsumeIdent<CSSValueID::kNormal>(stream)) {
     return value;
@@ -7962,6 +8128,7 @@ CSSValue* ConsumeContainerType(CSSParserTokenStream& stream) {
         RuntimeEnabledFeatures::CSSScrollStateContainerQueriesEnabled()) {
       scroll_state_value = ConsumeIdent<CSSValueID::kScrollState>(stream);
       if (scroll_state_value) {
+        context.Count(WebDXFeature::kContainerScrollStateQueries);
         continue;
       }
     }
@@ -8451,6 +8618,108 @@ bool MaybeConsumeImportant(CSSParserTokenStream& stream,
 
   savepoint.Release();
   return true;
+}
+
+// https://drafts.csswg.org/css-values-5/#progress-type
+// <progress> = [ <percentage-token> | <number> | <'animation-timeline'> ] && [
+// by <easing-function> ]?
+CSSValue* ConsumeProgressType(CSSParserTokenStream& stream,
+                              const CSSParserContext& context) {
+  CSSValue* progress = ConsumeNumberOrPercent(
+      stream, context, CSSPrimitiveValue::ValueRange::kAll);
+  if (auto* progress_function = DynamicTo<CSSMathFunctionValue>(progress)) {
+    // This only allows literal percentages.
+    if (progress_function->IsPercentage()) {
+      return nullptr;
+    }
+  }
+
+  if (!progress) {
+    if (!(progress = ConsumeAnimationTimeline(stream, context))) {
+      return nullptr;
+    }
+    // The values none and auto are invalid.
+    if (progress->IsIdentifierValue()) {
+      return nullptr;
+    }
+  }
+
+  CSSValue* easing_function = nullptr;
+  if (ConsumeIdent<CSSValueID::kBy>(stream)) {
+    if (!(easing_function = ConsumeAnimationTimingFunction(stream, context))) {
+      return nullptr;
+    }
+  }
+
+  return MakeGarbageCollected<cssvalue::CSSProgressValue>(*progress,
+                                                          easing_function);
+}
+
+bool ContainsSafeAreaInsetBottom(CSSParserTokenStream& stream) {
+  while (!stream.AtEnd()) {
+    if (stream.Peek().GetBlockType() == CSSParserToken::kBlockStart) {
+      // Check env("safe-area-inset-bottom")
+      if (stream.Peek().FunctionId() == CSSValueID::kEnv) {
+        CSSParserTokenStream::RestoringBlockGuard guard(stream);
+        stream.ConsumeWhitespace();
+        if (stream.Peek().GetType() == kIdentToken &&
+            stream.Peek().Value() == "safe-area-inset-bottom") {
+          return true;
+        }
+      }
+
+      CSSParserTokenStream::BlockGuard guard(stream);
+      if (ContainsSafeAreaInsetBottom(stream)) {
+        return true;
+      }
+      continue;
+    }
+    stream.Consume();
+  }
+
+  return false;
+}
+
+bool ContainsSafeAreaInsetBottom(StringView string) {
+  CSSParserTokenStream stream(string);
+  return ContainsSafeAreaInsetBottom(stream);
+}
+
+bool IsSimpleSum(CSSParserTokenStream& stream) {
+  while (!stream.AtEnd()) {
+    CSSParserTokenType type = stream.Peek().GetType();
+    if (type == kDelimiterToken) {
+      UChar delimiter = stream.Peek().Delimiter();
+      if (delimiter != '+' && delimiter != '-') {
+        break;
+      }
+      // Consume' '+' or '-'.
+      stream.ConsumeIncludingWhitespace();
+    } else if (type == kDimensionToken) {
+      // Consume literals.
+      stream.ConsumeIncludingWhitespace();
+    } else {
+      break;
+    }
+  }
+
+  return stream.AtEnd();
+}
+
+bool IsSimpleSum(StringView string) {
+  CSSParserTokenStream stream(string);
+  if (stream.Peek().GetBlockType() == CSSParserToken::kBlockStart) {
+    // Handle e.g. calc(1px + 2em - 3ch ... etc)
+    if (stream.Peek().FunctionId() != CSSValueID::kCalc) {
+      return false;
+    }
+    CSSParserTokenStream::BlockGuard guard(stream);
+    stream.ConsumeWhitespace();
+    return IsSimpleSum(stream);
+  } else {
+    // Handle 1px + 2em - 3ch ... etc
+    return IsSimpleSum(stream);
+  }
 }
 
 }  // namespace css_parsing_utils

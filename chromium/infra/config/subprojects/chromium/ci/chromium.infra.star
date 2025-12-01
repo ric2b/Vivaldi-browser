@@ -180,27 +180,15 @@ packager_builder(
                 "tools/android/avd/proto_creation/android_30_google_apis_x86.textpb",
                 "tools/android/avd/proto_creation/android_31_google_apis_x64.textpb",
                 "tools/android/avd/proto_creation/android_32_google_apis_x64_foldable.textpb",
-                "tools/android/avd/proto_creation/android_32_google_apis_x64_foldable_landscape.textpb",
                 "tools/android/avd/proto_creation/android_33_google_apis_x64.textpb",
                 "tools/android/avd/proto_creation/android_34_google_apis_x64.textpb",
                 "tools/android/avd/proto_creation/android_35_google_apis_x64.textpb",
+                "tools/android/avd/proto_creation/android_36_google_apis_x64.textpb",
 
-                # google_atd system images
-                "tools/android/avd/proto_creation/android_30_google_atd_x86.textpb",
-                "tools/android/avd/proto_creation/android_30_google_atd_x64.textpb",
-                "tools/android/avd/proto_creation/android_31_google_atd_x64.textpb",
-                "tools/android/avd/proto_creation/android_32_google_atd_x64_foldable.textpb",
-                "tools/android/avd/proto_creation/android_33_google_atd_x64.textpb",
-
-                # Desktop system images
-                "tools/android/avd/proto_creation/android_34_desktop_x64.textpb",
+                # google_apis_tablet system images
+                "tools/android/avd/proto_creation/android_35_google_apis_tablet_x64.textpb",
 
                 # TODO(hypan): Using more specific names for the configs below.
-                "tools/android/avd/proto_creation/generic_android19.textpb",
-                "tools/android/avd/proto_creation/generic_android22.textpb",
-                "tools/android/avd/proto_creation/generic_android23.textpb",
-                "tools/android/avd/proto_creation/generic_android24.textpb",
-                "tools/android/avd/proto_creation/generic_android25.textpb",
                 "tools/android/avd/proto_creation/generic_android26.textpb",
                 "tools/android/avd/proto_creation/generic_android27.textpb",
             ],
@@ -230,6 +218,10 @@ packager_builder(
                 "cipd_yaml": "third_party/android_sdk/cipd/build-tools/35.0.0.yaml",
             },
             {
+                "sdk_package_name": "build-tools;36.0.0",
+                "cipd_yaml": "third_party/android_sdk/cipd/build-tools/36.0.0.yaml",
+            },
+            {
                 "sdk_package_name": "cmdline-tools;latest",
                 "cipd_yaml": "third_party/android_sdk/cipd/cmdline-tools.yaml",
             },
@@ -254,6 +246,10 @@ packager_builder(
             {
                 "sdk_package_name": "platforms;android-35",
                 "cipd_yaml": "third_party/android_sdk/cipd/platforms/android-35.yaml",
+            },
+            {
+                "sdk_package_name": "platforms;android-36",
+                "cipd_yaml": "third_party/android_sdk/cipd/platforms/android-36.yaml",
             },
             {
                 "sdk_package_name": "platform-tools",
@@ -337,10 +333,6 @@ packager_builder(
                 "cipd_yaml": "third_party/android_sdk/cipd/system_images/android-33/google_atd/x86_64.yaml",
             },
             {
-                "sdk_package_name": "system-images;android-34;android-desktop;x86_64",
-                "cipd_yaml": "third_party/android_sdk/cipd/system_images/android-34/android-desktop/x86_64.yaml",
-            },
-            {
                 "sdk_package_name": "system-images;android-34;google_apis;x86_64",
                 "cipd_yaml": "third_party/android_sdk/cipd/system_images/android-34/google_apis/x86_64.yaml",
             },
@@ -351,11 +343,10 @@ packager_builder(
             {
                 "sdk_package_name": "system-images;android-35;google_apis_tablet;x86_64",
                 "cipd_yaml": "third_party/android_sdk/cipd/system_images/android-35/google_apis_tablet/x86_64.yaml",
-                "sdk_channel": "CANARY",
             },
             {
-                "sdk_package_name": "system-images;android-Baklava;google_apis;x86_64",
-                "cipd_yaml": "third_party/android_sdk/cipd/system_images/android-Baklava/google_apis/x86_64.yaml",
+                "sdk_package_name": "system-images;android-36;google_apis;x86_64",
+                "cipd_yaml": "third_party/android_sdk/cipd/system_images/android-36/google_apis/x86_64.yaml",
             },
         ],
     },

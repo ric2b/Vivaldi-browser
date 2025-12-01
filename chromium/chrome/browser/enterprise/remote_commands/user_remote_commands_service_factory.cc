@@ -14,7 +14,7 @@
 namespace enterprise_commands {
 
 BASE_FEATURE(kUserRemoteCommands,
-             "kUserRemoteCommands",
+             "UserRemoteCommands",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 // static
@@ -38,9 +38,8 @@ UserRemoteCommandsServiceFactory::BuildServiceInstanceForBrowserContext(
   }
 
   Profile* profile = Profile::FromBrowserContext(context);
-  // UserCloudPolicyManager doesn't exist for Lacros main profile or in some
-  // test environments. In those cases, we skip the creation of KeyedService
-  // here.
+  // UserCloudPolicyManager doesn't exist in some test environments. In those
+  // cases, we skip the creation of KeyedService here.
   if (!profile->GetUserCloudPolicyManager()) {
     return nullptr;
   }

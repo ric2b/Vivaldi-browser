@@ -16,14 +16,14 @@
 
 #include <gtest/gtest.h>
 
-#include "next_prime.h"
-#include "replicable_random_device.h"
-#include "xnnpack.h"
-#include "xnnpack/buffer.h"
-#include "xnnpack/math.h"
-#include "xnnpack/microfnptr.h"
-#include "xnnpack/microparams.h"
-#include "xnnpack/pack.h"
+#include "test/next_prime.h"
+#include "test/replicable_random_device.h"
+#include "include/xnnpack.h"
+#include "src/xnnpack/buffer.h"
+#include "src/xnnpack/math.h"
+#include "src/xnnpack/microfnptr.h"
+#include "src/xnnpack/microparams.h"
+#include "src/xnnpack/pack.h"
 
 class VMulCAddCMicrokernelTester {
 public:
@@ -164,7 +164,7 @@ public:
       // Verify results.
       for (size_t i = 0; i < rows(); i++) {
         for (size_t j = 0; j < channels(); j++) {
-          EXPECT_NEAR(
+          ASSERT_NEAR(
             y[i * output_stride() + j], y_ref[i * channels() + j],
             std::max(1.0e-4f, std::abs(y_ref[i * channels() + j]) * 1.0e-2f))
             << "at pixel " << i << " / " << rows() << ", channel = " << j << " / " << channels();
@@ -227,7 +227,7 @@ public:
       // Verify results.
       for (size_t i = 0; i < rows(); i++) {
         for (size_t j = 0; j < channels(); j++) {
-          EXPECT_NEAR(
+          ASSERT_NEAR(
             y[i * output_stride() + j], y_ref[i * channels() + j], std::abs(y_ref[i * channels() + j]) * 1.0e-6f)
             << "at pixel " << i << " / " << rows() << ", channel = " << j << " / " << channels();
         }

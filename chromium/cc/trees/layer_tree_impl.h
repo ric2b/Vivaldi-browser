@@ -10,12 +10,10 @@
 #include <set>
 #include <string>
 #include <unordered_map>
-#include <unordered_set>
 #include <utility>
 #include <vector>
 
 #include "base/containers/flat_set.h"
-#include "base/containers/span.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/raw_ptr_exclusion.h"
 #include "base/time/time.h"
@@ -33,6 +31,7 @@
 #include "cc/trees/property_tree.h"
 #include "cc/trees/swap_promise.h"
 #include "components/viz/common/frame_sinks/begin_frame_args.h"
+#include "third_party/blink/public/common/tokens/tokens.h"
 #include "ui/gfx/overlay_transform.h"
 
 namespace base {
@@ -803,6 +802,11 @@ class CC_EXPORT LayerTreeImpl {
   // output of the current frame.
   bool HasViewTransitionSaveRequest() const;
 
+  // Returns a set of all view transition tokens that are currently in the
+  // capture phase.
+  base::flat_set<blink::ViewTransitionToken> GetCaptureViewTransitionTokens()
+      const;
+
   void UpdateAllScrollbarGeometriesForTesting() {
     UpdateAllScrollbarGeometries();
   }
@@ -811,6 +815,10 @@ class CC_EXPORT LayerTreeImpl {
                                     const gfx::RectF&);
 
   void AddLayerNeedingUpdateDiscardableImageMap(PictureLayerImpl* layer);
+
+  void SetPageScaleFactorAndLimitsForDisplayTree(float page_scale_factor,
+                                                 float min_page_scale_factor,
+                                                 float max_page_scale_factor);
 
   class CC_EXPORT DiscardableImageMapUpdater {
     STACK_ALLOCATED();

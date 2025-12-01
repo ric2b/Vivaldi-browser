@@ -310,6 +310,7 @@
 -AutofillAcrossIframesTest.FillMultiFrameForm_SingleField
 -AutofillAcrossIframesTest.FillSingleFrameForm
 -AutofillAcrossIframesTest.SubmitMultiFrameForm
+-AutofillAcrossIframesTest.SubmitMultiFrameForm_XHR
 -AutofillAcrossIframesTest.TextChangeOnMultiFrameForm
 -AutofillAcrossIframesTest.UpdateOnFrameDeletion
 
@@ -388,26 +389,21 @@
 
 # TODO(crbug.com/388135869): This test has been failing since
 # https://crrev.com/c/6143155.
--LocalStorageImplStaleDeletionTest.StaleStorageAreaDeletion/0
--LocalStorageImplStaleDeletionTest.StaleStorageAreaDeletion/0
--LocalStorageImplStaleDeletionTest.StaleStorageAreaDeletion/1
--LocalStorageImplStaleDeletionTest.StaleStorageAreaDeletion/1
--LocalStorageImplStaleDeletionTest.StaleStorageAreaDeletion/2
--LocalStorageImplStaleDeletionTest.StaleStorageAreaDeletion/3
--LocalStorageImplStaleDeletionTest.StaleStorageAreaDeletion/3
+-LocalStorageImplStaleDeletionTest.StaleStorageAreaDeletion
 -LocalStorageImplTest.Basic
--LocalStorageImplTest.Basic
--LocalStorageImplTest.DeleteStorageNotifiesWrapper
 -LocalStorageImplTest.DeleteStorageNotifiesWrapper
 -LocalStorageImplTest.DeleteStorageWithPendingWrites
 -LocalStorageImplTest.DeleteStorageWithoutConnection
 -LocalStorageImplTest.GetStorageUsage_Data
--LocalStorageImplTest.GetStorageUsage_Data
 -LocalStorageImplTest.MetaDataClearedOnDelete
--LocalStorageImplTest.OpeningWrappersPurgesInactiveWrappers
 -LocalStorageImplTest.OpeningWrappersPurgesInactiveWrappers
 -LocalStorageImplTest.ShutdownClearsData
 -LocalStorageImplTest.StorageKeysAreIndependent
--LocalStorageImplTest.StorageKeysAreIndependent
 -LocalStorageImplTest.WrapperOutlivesMojoConnection
 -LocalStorageImplTest.MetaDataClearedOnDeleteAll
+
+# TODO(crbug.com/395384787): This test has been failing since
+# https://crrev.com/c/6185554.
+-MlEmbedderTest.EmbedderRunningStatus
+-MlEmbedderTest.ReturnsEmbeddings
+-MlEmbedderTest.ReturnsExecutionFailure

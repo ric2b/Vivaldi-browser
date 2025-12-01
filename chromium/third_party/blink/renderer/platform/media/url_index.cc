@@ -9,13 +9,13 @@
 #include <utility>
 
 #include "base/feature_list.h"
-#include "base/functional/bind.h"
 #include "base/location.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/time/time.h"
 #include "media/base/media_switches.h"
 #include "third_party/blink/renderer/platform/media/resource_multi_buffer_data_provider.h"
 #include "third_party/blink/renderer/platform/weborigin/security_origin.h"
+#include "third_party/blink/renderer/platform/wtf/functional.h"
 
 namespace blink {
 
@@ -256,18 +256,18 @@ UrlIndex::UrlIndex(ResourceFetchContext* fetch_context,
       lru_(base::MakeRefCounted<MultiBuffer::GlobalLRU>(task_runner)),
       block_shift_(block_shift),
       memory_pressure_listener_(FROM_HERE,
-                                base::BindRepeating(&UrlIndex::OnMemoryPressure,
-                                                    base::Unretained(this))),
+                                WTF::BindRepeating(&UrlIndex::OnMemoryPressure,
+                                                   WTF::Unretained(this))),
       task_runner_(std::move(task_runner)) {}
 
 UrlIndex::~UrlIndex() {
-#if DCHECK_IS_ON()
-  // Verify that only |this| holds reference to UrlData instances.
-  auto dcheck_has_one_ref = [](const UrlDataMap::value_type& entry) {
+  auto stop_url_data = [](const UrlDataMap::value_type& entry) {
+    // Verify that only |this| holds reference to UrlData instances.
     DCHECK(entry.value->HasOneRef());
+
+    entry.value->StopWriters();
   };
-  std::ranges::for_each(indexed_data_, dcheck_has_one_ref);
-#endif
+  std::ranges::for_each(indexed_data_, stop_url_data);
 }
 
 void UrlIndex::RemoveUrlData(const scoped_refptr<UrlData>& url_data) {

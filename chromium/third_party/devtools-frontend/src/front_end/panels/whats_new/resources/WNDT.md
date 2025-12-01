@@ -1,6 +1,6 @@
-### [Privacy and security panel](privacy-and-security)
-Test how a website behaves with limited third-party cookies and find relevant issues in the new 'Privacy' section of the evolved 'Privacy and security' panel.
-### [Calibrated CPU throttling presets](calibrated-cpu-throttling)
-Based on your users' experience, automatically calibrate and use more accurate CPU throttling presets for low- and mid-tier mobile devices.
-### [First- and third-party highlighting in Performance](perf-third-party)
-Reduce the noise of third-party data and hover over entries in a new table in Summary to distinguish between first- and third-party data in performance traces.
+### [New performance insights](perf-insights)
+The Performance > Insights tab gets new insights: duplicated JavaScript, modern HTTP, and use efficient cache lifetimes.
+### [Click events to keep them highlighted in Performance](click-to-highlight)
+Click items in Summary, Bottom-up, Call tree, and Event log tables to keep the corresponding events highlighted in the trace and dim the rest.
+### [Filter cookies in Privacy and security](cookies-filter)
+The cookies table in the 'Privacy and security' panel gets a filter, so you can quickly find the cookie you want to inspect.

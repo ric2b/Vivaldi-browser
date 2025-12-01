@@ -160,7 +160,10 @@ typedef struct ScaleContext {
 
     int in_color_matrix;
     int out_color_matrix;
-
+    int in_primaries;
+    int out_primaries;
+    int in_transfer;
+    int out_transfer;
     int in_range;
     int out_range;
 
@@ -178,7 +181,8 @@ typedef struct ScaleContext {
 
 } ScaleContext;
 
-const AVFilter ff_vf_scale2ref;
+const FFFilter ff_vf_scale2ref;
+#define IS_SCALE2REF(ctx) ((ctx)->filter == &ff_vf_scale2ref.p)
 
 static int config_props(AVFilterLink *outlink);
 
@@ -226,7 +230,7 @@ static int check_exprs(AVFilterContext *ctx)
         scale->uses_ref = 1;
     }
 
-    if (ctx->filter != &ff_vf_scale2ref &&
+    if (!IS_SCALE2REF(ctx) &&
         (vars_w[VAR_S2R_MAIN_W]    || vars_h[VAR_S2R_MAIN_W]    ||
          vars_w[VAR_S2R_MAIN_H]    || vars_h[VAR_S2R_MAIN_H]    ||
          vars_w[VAR_S2R_MAIN_A]    || vars_h[VAR_S2R_MAIN_A]    ||
@@ -242,7 +246,7 @@ static int check_exprs(AVFilterContext *ctx)
         return AVERROR(EINVAL);
     }
 
-    if (ctx->filter != &ff_vf_scale2ref &&
+    if (!IS_SCALE2REF(ctx) &&
         (vars_w[VAR_S2R_MAIN_W]    || vars_h[VAR_S2R_MAIN_W]    ||
          vars_w[VAR_S2R_MAIN_H]    || vars_h[VAR_S2R_MAIN_H]    ||
          vars_w[VAR_S2R_MAIN_A]    || vars_h[VAR_S2R_MAIN_A]    ||
@@ -350,7 +354,7 @@ static av_cold int init(AVFilterContext *ctx)
     ScaleContext *scale = ctx->priv;
     int ret;
 
-    if (ctx->filter == &ff_vf_scale2ref)
+    if (IS_SCALE2REF(ctx))
         av_log(ctx, AV_LOG_WARNING, "scale2ref is deprecated, use scale=rw:rh instead\n");
 
     if (scale->size_str && (scale->w_expr || scale->h_expr)) {
@@ -387,6 +391,30 @@ static av_cold int init(AVFilterContext *ctx)
     if (ret < 0)
         return ret;
 
+    if (scale->in_primaries != -1 && !sws_test_primaries(scale->in_primaries, 0)) {
+        av_log(ctx, AV_LOG_ERROR, "Unsupported input primaries '%s'\n",
+               av_color_primaries_name(scale->in_primaries));
+        return AVERROR(EINVAL);
+    }
+
+    if (scale->out_primaries != -1 && !sws_test_primaries(scale->out_primaries, 1)) {
+        av_log(ctx, AV_LOG_ERROR, "Unsupported output primaries '%s'\n",
+               av_color_primaries_name(scale->out_primaries));
+        return AVERROR(EINVAL);
+    }
+
+    if (scale->in_transfer != -1 && !sws_test_transfer(scale->in_transfer, 0)) {
+        av_log(ctx, AV_LOG_ERROR, "Unsupported input transfer '%s'\n",
+               av_color_transfer_name(scale->in_transfer));
+        return AVERROR(EINVAL);
+    }
+
+    if (scale->out_transfer != -1 && !sws_test_transfer(scale->out_transfer, 1)) {
+        av_log(ctx, AV_LOG_ERROR, "Unsupported output transfer '%s'\n",
+               av_color_transfer_name(scale->out_transfer));
+        return AVERROR(EINVAL);
+    }
+
     if (scale->in_color_matrix != -1 && !sws_test_colorspace(scale->in_color_matrix, 0)) {
         av_log(ctx, AV_LOG_ERROR, "Unsupported input color matrix '%s'\n",
                av_color_space_name(scale->in_color_matrix));
@@ -421,7 +449,7 @@ static av_cold int init(AVFilterContext *ctx)
     if (!scale->sws->threads)
         scale->sws->threads = ff_filter_get_nb_threads(ctx);
 
-    if (ctx->filter != &ff_vf_scale2ref && scale->uses_ref) {
+    if (!IS_SCALE2REF(ctx) && scale->uses_ref) {
         AVFilterPad pad = {
             .name = "ref",
             .type = AVMEDIA_TYPE_VIDEO,
@@ -522,7 +550,7 @@ static int query_formats(const AVFilterContext *ctx,
 static int scale_eval_dimensions(AVFilterContext *ctx)
 {
     ScaleContext *scale = ctx->priv;
-    const char scale2ref = ctx->filter == &ff_vf_scale2ref;
+    const char scale2ref = IS_SCALE2REF(ctx);
     const AVFilterLink *inlink = scale2ref ? ctx->inputs[1] : ctx->inputs[0];
     const AVFilterLink *outlink = ctx->outputs[0];
     const AVPixFmtDescriptor *desc = av_pix_fmt_desc_get(inlink->format);
@@ -612,7 +640,7 @@ static int config_props(AVFilterLink *outlink)
 {
     AVFilterContext *ctx = outlink->src;
     AVFilterLink *inlink0 = outlink->src->inputs[0];
-    AVFilterLink *inlink  = ctx->filter == &ff_vf_scale2ref ?
+    AVFilterLink *inlink  = IS_SCALE2REF(ctx) ?
                             outlink->src->inputs[1] :
                             outlink->src->inputs[0];
     ScaleContext *scale = ctx->priv;
@@ -656,7 +684,7 @@ static int config_props(AVFilterLink *outlink)
            flags_val);
     av_freep(&flags_val);
 
-    if (ctx->filter != &ff_vf_scale2ref) {
+    if (!IS_SCALE2REF(ctx)) {
         ff_framesync_uninit(&scale->fs);
         ret = ff_framesync_init(&scale->fs, ctx, ctx->nb_inputs);
         if (ret < 0)
@@ -743,7 +771,7 @@ static int scale_frame(AVFilterLink *link, AVFrame **frame_in,
 
         if (scale->eval_mode == EVAL_MODE_FRAME &&
             !frame_changed &&
-            ctx->filter != &ff_vf_scale2ref &&
+            !IS_SCALE2REF(ctx) &&
             !(vars_w[VAR_N] || vars_w[VAR_T]
 #if FF_API_FRAME_PKT
               || vars_w[VAR_POS]
@@ -772,7 +800,7 @@ static int scale_frame(AVFilterLink *link, AVFrame **frame_in,
                 goto err;
         }
 
-        if (ctx->filter == &ff_vf_scale2ref) {
+        if (IS_SCALE2REF(ctx)) {
             scale->var_values[VAR_S2R_MAIN_N] = inl->frame_count_out;
             scale->var_values[VAR_S2R_MAIN_T] = TS2T(in->pts, link->time_base);
 #if FF_API_FRAME_PKT
@@ -815,6 +843,10 @@ scale:
 
     if (scale->in_color_matrix != -1)
         in->colorspace = scale->in_color_matrix;
+    if (scale->in_primaries != -1)
+        in->color_primaries = scale->in_primaries;
+    if (scale->in_transfer != -1)
+        in->color_trc = scale->in_transfer;
     if (scale->in_range != AVCOL_RANGE_UNSPECIFIED)
         in->color_range = scale->in_range;
     in->chroma_location = scale->in_chroma_loc;
@@ -832,6 +864,20 @@ scale:
     out->colorspace = outlink->colorspace;
     if (scale->out_chroma_loc != AVCHROMA_LOC_UNSPECIFIED)
         out->chroma_location = scale->out_chroma_loc;
+    if (scale->out_primaries != -1)
+        out->color_primaries = scale->out_primaries;
+    if (scale->out_transfer != -1)
+        out->color_trc = scale->out_transfer;
+
+    if (out->width != in->width || out->height != in->height) {
+        av_frame_side_data_remove_by_props(&out->side_data, &out->nb_side_data,
+                                           AV_SIDE_DATA_PROP_SIZE_DEPENDENT);
+    }
+
+    if (in->color_primaries != out->color_primaries || in->color_trc != out->color_trc) {
+        av_frame_side_data_remove_by_props(&out->side_data, &out->nb_side_data,
+                                           AV_SIDE_DATA_PROP_COLOR_DEPENDENT);
+    }
 
     av_reduce(&out->sample_aspect_ratio.num, &out->sample_aspect_ratio.den,
               (int64_t)in->sample_aspect_ratio.num * outlink->h * link->w,
@@ -1056,34 +1102,70 @@ static const AVOption scale_options[] = {
     { "s",      "set video size",          OFFSET(size_str), AV_OPT_TYPE_STRING, {.str = NULL}, 0, .flags = FLAGS },
     {  "in_color_matrix", "set input YCbCr type",   OFFSET(in_color_matrix),  AV_OPT_TYPE_INT, { .i64 = -1 }, -1, AVCOL_SPC_NB-1, .flags = FLAGS, .unit = "color" },
     { "out_color_matrix", "set output YCbCr type",  OFFSET(out_color_matrix), AV_OPT_TYPE_INT, { .i64 = AVCOL_SPC_UNSPECIFIED }, 0, AVCOL_SPC_NB-1, .flags = FLAGS, .unit = "color"},
-        { "auto",        NULL, 0, AV_OPT_TYPE_CONST, { .i64 = -1 },                     0, 0, FLAGS, .unit = "color" },
-        { "bt601",       NULL, 0, AV_OPT_TYPE_CONST, { .i64 = AVCOL_SPC_BT470BG },      0, 0, FLAGS, .unit = "color" },
-        { "bt470",       NULL, 0, AV_OPT_TYPE_CONST, { .i64 = AVCOL_SPC_BT470BG },      0, 0, FLAGS, .unit = "color" },
-        { "smpte170m",   NULL, 0, AV_OPT_TYPE_CONST, { .i64 = AVCOL_SPC_BT470BG },      0, 0, FLAGS, .unit = "color" },
-        { "bt709",       NULL, 0, AV_OPT_TYPE_CONST, { .i64 = AVCOL_SPC_BT709 },        0, 0, FLAGS, .unit = "color" },
-        { "fcc",         NULL, 0, AV_OPT_TYPE_CONST, { .i64 = AVCOL_SPC_FCC },          0, 0, FLAGS, .unit = "color" },
-        { "smpte240m",   NULL, 0, AV_OPT_TYPE_CONST, { .i64 = AVCOL_SPC_SMPTE240M },    0, 0, FLAGS, .unit = "color" },
-        { "bt2020",      NULL, 0, AV_OPT_TYPE_CONST, { .i64 = AVCOL_SPC_BT2020_NCL },   0, 0, FLAGS, .unit = "color" },
+        { "auto",        NULL, 0, AV_OPT_TYPE_CONST, {.i64=-1},                       0, 0, FLAGS, .unit = "color" },
+        { "bt601",       NULL, 0, AV_OPT_TYPE_CONST, {.i64=AVCOL_SPC_BT470BG},        0, 0, FLAGS, .unit = "color" },
+        { "bt470",       NULL, 0, AV_OPT_TYPE_CONST, {.i64=AVCOL_SPC_BT470BG},        0, 0, FLAGS, .unit = "color" },
+        { "smpte170m",   NULL, 0, AV_OPT_TYPE_CONST, {.i64=AVCOL_SPC_BT470BG},        0, 0, FLAGS, .unit = "color" },
+        { "bt709",       NULL, 0, AV_OPT_TYPE_CONST, {.i64=AVCOL_SPC_BT709},          0, 0, FLAGS, .unit = "color" },
+        { "fcc",         NULL, 0, AV_OPT_TYPE_CONST, {.i64=AVCOL_SPC_FCC},            0, 0, FLAGS, .unit = "color" },
+        { "smpte240m",   NULL, 0, AV_OPT_TYPE_CONST, {.i64=AVCOL_SPC_SMPTE240M},      0, 0, FLAGS, .unit = "color" },
+        { "bt2020",      NULL, 0, AV_OPT_TYPE_CONST, {.i64=AVCOL_SPC_BT2020_NCL},     0, 0, FLAGS, .unit = "color" },
     {  "in_range", "set input color range",  OFFSET( in_range), AV_OPT_TYPE_INT, {.i64 = AVCOL_RANGE_UNSPECIFIED }, 0, 2, FLAGS, .unit = "range" },
     { "out_range", "set output color range", OFFSET(out_range), AV_OPT_TYPE_INT, {.i64 = AVCOL_RANGE_UNSPECIFIED }, 0, 2, FLAGS, .unit = "range" },
-    { "auto",   NULL, 0, AV_OPT_TYPE_CONST, {.i64 = AVCOL_RANGE_UNSPECIFIED }, 0, 0, FLAGS, .unit = "range" },
-    { "unknown", NULL, 0, AV_OPT_TYPE_CONST, {.i64 = AVCOL_RANGE_UNSPECIFIED }, 0, 0, FLAGS, .unit = "range" },
-    { "full",   NULL, 0, AV_OPT_TYPE_CONST, {.i64 = AVCOL_RANGE_JPEG}, 0, 0, FLAGS, .unit = "range" },
-    { "limited",NULL, 0, AV_OPT_TYPE_CONST, {.i64 = AVCOL_RANGE_MPEG}, 0, 0, FLAGS, .unit = "range" },
-    { "jpeg",   NULL, 0, AV_OPT_TYPE_CONST, {.i64 = AVCOL_RANGE_JPEG}, 0, 0, FLAGS, .unit = "range" },
-    { "mpeg",   NULL, 0, AV_OPT_TYPE_CONST, {.i64 = AVCOL_RANGE_MPEG}, 0, 0, FLAGS, .unit = "range" },
-    { "tv",     NULL, 0, AV_OPT_TYPE_CONST, {.i64 = AVCOL_RANGE_MPEG}, 0, 0, FLAGS, .unit = "range" },
-    { "pc",     NULL, 0, AV_OPT_TYPE_CONST, {.i64 = AVCOL_RANGE_JPEG}, 0, 0, FLAGS, .unit = "range" },
+        { "auto",        NULL, 0, AV_OPT_TYPE_CONST, {.i64=AVCOL_RANGE_UNSPECIFIED }, 0, 0, FLAGS, .unit = "range" },
+        { "unknown",     NULL, 0, AV_OPT_TYPE_CONST, {.i64=AVCOL_RANGE_UNSPECIFIED }, 0, 0, FLAGS, .unit = "range" },
+        { "full",        NULL, 0, AV_OPT_TYPE_CONST, {.i64=AVCOL_RANGE_JPEG},         0, 0, FLAGS, .unit = "range" },
+        { "limited",     NULL, 0, AV_OPT_TYPE_CONST, {.i64=AVCOL_RANGE_MPEG},         0, 0, FLAGS, .unit = "range" },
+        { "jpeg",        NULL, 0, AV_OPT_TYPE_CONST, {.i64=AVCOL_RANGE_JPEG},         0, 0, FLAGS, .unit = "range" },
+        { "mpeg",        NULL, 0, AV_OPT_TYPE_CONST, {.i64=AVCOL_RANGE_MPEG},         0, 0, FLAGS, .unit = "range" },
+        { "tv",          NULL, 0, AV_OPT_TYPE_CONST, {.i64=AVCOL_RANGE_MPEG},         0, 0, FLAGS, .unit = "range" },
+        { "pc",          NULL, 0, AV_OPT_TYPE_CONST, {.i64=AVCOL_RANGE_JPEG},         0, 0, FLAGS, .unit = "range" },
     { "in_chroma_loc",  "set input chroma sample location",  OFFSET(in_chroma_loc),  AV_OPT_TYPE_INT, { .i64 = AVCHROMA_LOC_UNSPECIFIED }, 0, AVCHROMA_LOC_NB-1, .flags = FLAGS, .unit = "chroma_loc" },
     { "out_chroma_loc", "set output chroma sample location", OFFSET(out_chroma_loc), AV_OPT_TYPE_INT, { .i64 = AVCHROMA_LOC_UNSPECIFIED }, 0, AVCHROMA_LOC_NB-1, .flags = FLAGS, .unit = "chroma_loc" },
-        {"auto",          NULL, 0, AV_OPT_TYPE_CONST, {.i64=AVCHROMA_LOC_UNSPECIFIED}, 0, 0, FLAGS, .unit = "chroma_loc"},
-        {"unknown",       NULL, 0, AV_OPT_TYPE_CONST, {.i64=AVCHROMA_LOC_UNSPECIFIED}, 0, 0, FLAGS, .unit = "chroma_loc"},
-        {"left",          NULL, 0, AV_OPT_TYPE_CONST, {.i64=AVCHROMA_LOC_LEFT},        0, 0, FLAGS, .unit = "chroma_loc"},
-        {"center",        NULL, 0, AV_OPT_TYPE_CONST, {.i64=AVCHROMA_LOC_CENTER},      0, 0, FLAGS, .unit = "chroma_loc"},
-        {"topleft",       NULL, 0, AV_OPT_TYPE_CONST, {.i64=AVCHROMA_LOC_TOPLEFT},     0, 0, FLAGS, .unit = "chroma_loc"},
-        {"top",           NULL, 0, AV_OPT_TYPE_CONST, {.i64=AVCHROMA_LOC_TOP},         0, 0, FLAGS, .unit = "chroma_loc"},
-        {"bottomleft",    NULL, 0, AV_OPT_TYPE_CONST, {.i64=AVCHROMA_LOC_BOTTOMLEFT},  0, 0, FLAGS, .unit = "chroma_loc"},
-        {"bottom",        NULL, 0, AV_OPT_TYPE_CONST, {.i64=AVCHROMA_LOC_BOTTOM},      0, 0, FLAGS, .unit = "chroma_loc"},
+        {"auto",         NULL, 0, AV_OPT_TYPE_CONST, {.i64=AVCHROMA_LOC_UNSPECIFIED}, 0, 0, FLAGS, .unit = "chroma_loc"},
+        {"unknown",      NULL, 0, AV_OPT_TYPE_CONST, {.i64=AVCHROMA_LOC_UNSPECIFIED}, 0, 0, FLAGS, .unit = "chroma_loc"},
+        {"left",         NULL, 0, AV_OPT_TYPE_CONST, {.i64=AVCHROMA_LOC_LEFT},        0, 0, FLAGS, .unit = "chroma_loc"},
+        {"center",       NULL, 0, AV_OPT_TYPE_CONST, {.i64=AVCHROMA_LOC_CENTER},      0, 0, FLAGS, .unit = "chroma_loc"},
+        {"topleft",      NULL, 0, AV_OPT_TYPE_CONST, {.i64=AVCHROMA_LOC_TOPLEFT},     0, 0, FLAGS, .unit = "chroma_loc"},
+        {"top",          NULL, 0, AV_OPT_TYPE_CONST, {.i64=AVCHROMA_LOC_TOP},         0, 0, FLAGS, .unit = "chroma_loc"},
+        {"bottomleft",   NULL, 0, AV_OPT_TYPE_CONST, {.i64=AVCHROMA_LOC_BOTTOMLEFT},  0, 0, FLAGS, .unit = "chroma_loc"},
+        {"bottom",       NULL, 0, AV_OPT_TYPE_CONST, {.i64=AVCHROMA_LOC_BOTTOM},      0, 0, FLAGS, .unit = "chroma_loc"},
+    {  "in_primaries", "set input primaries",   OFFSET(in_primaries),  AV_OPT_TYPE_INT, { .i64 = -1 }, -1, AVCOL_PRI_NB-1, .flags = FLAGS, .unit = "primaries" },
+    { "out_primaries", "set output primaries",  OFFSET(out_primaries), AV_OPT_TYPE_INT, { .i64 = -1 }, -1, AVCOL_PRI_NB-1, .flags = FLAGS, .unit = "primaries"},
+        {"auto",         NULL,  0, AV_OPT_TYPE_CONST, {.i64=-1},                      0, 0, FLAGS, .unit = "primaries"},
+        {"bt709",        NULL,  0, AV_OPT_TYPE_CONST, {.i64=AVCOL_PRI_BT709},         0, 0, FLAGS, .unit = "primaries"},
+        {"bt470m",       NULL,  0, AV_OPT_TYPE_CONST, {.i64=AVCOL_PRI_BT470M},        0, 0, FLAGS, .unit = "primaries"},
+        {"bt470bg",      NULL,  0, AV_OPT_TYPE_CONST, {.i64=AVCOL_PRI_BT470BG},       0, 0, FLAGS, .unit = "primaries"},
+        {"smpte170m",    NULL,  0, AV_OPT_TYPE_CONST, {.i64=AVCOL_PRI_SMPTE170M},     0, 0, FLAGS, .unit = "primaries"},
+        {"smpte240m",    NULL,  0, AV_OPT_TYPE_CONST, {.i64=AVCOL_PRI_SMPTE240M},     0, 0, FLAGS, .unit = "primaries"},
+        {"film",         NULL,  0, AV_OPT_TYPE_CONST, {.i64=AVCOL_PRI_FILM},          0, 0, FLAGS, .unit = "primaries"},
+        {"bt2020",       NULL,  0, AV_OPT_TYPE_CONST, {.i64=AVCOL_PRI_BT2020},        0, 0, FLAGS, .unit = "primaries"},
+        {"smpte428",     NULL,  0, AV_OPT_TYPE_CONST, {.i64=AVCOL_PRI_SMPTE428},      0, 0, FLAGS, .unit = "primaries"},
+        {"smpte431",     NULL,  0, AV_OPT_TYPE_CONST, {.i64=AVCOL_PRI_SMPTE431},      0, 0, FLAGS, .unit = "primaries"},
+        {"smpte432",     NULL,  0, AV_OPT_TYPE_CONST, {.i64=AVCOL_PRI_SMPTE432},      0, 0, FLAGS, .unit = "primaries"},
+        {"jedec-p22",    NULL,  0, AV_OPT_TYPE_CONST, {.i64=AVCOL_PRI_JEDEC_P22},     0, 0, FLAGS, .unit = "primaries"},
+        {"ebu3213",      NULL,  0, AV_OPT_TYPE_CONST, {.i64=AVCOL_PRI_EBU3213},       0, 0, FLAGS, .unit = "primaries"},
+    { "in_transfer", "set output color transfer", OFFSET(in_transfer),  AV_OPT_TYPE_INT, { .i64 = -1 }, -1, AVCOL_TRC_NB-1, .flags = FLAGS, .unit = "transfer"},
+    {"out_transfer", "set output color transfer", OFFSET(out_transfer), AV_OPT_TYPE_INT, { .i64 = -1 }, -1, AVCOL_TRC_NB-1, .flags = FLAGS, .unit = "transfer"},
+        {"auto",         NULL,  0, AV_OPT_TYPE_CONST, {.i64=-1},                      0, 0, FLAGS, .unit = "transfer"},
+        {"bt709",        NULL,  0, AV_OPT_TYPE_CONST, {.i64=AVCOL_TRC_BT709},         0, 0, FLAGS, .unit = "transfer"},
+        {"bt470m",       NULL,  0, AV_OPT_TYPE_CONST, {.i64=AVCOL_TRC_GAMMA22},       0, 0, FLAGS, .unit = "transfer"},
+        {"gamma22",      NULL,  0, AV_OPT_TYPE_CONST, {.i64=AVCOL_TRC_GAMMA22},       0, 0, FLAGS, .unit = "transfer"},
+        {"bt470bg",      NULL,  0, AV_OPT_TYPE_CONST, {.i64=AVCOL_TRC_GAMMA28},       0, 0, FLAGS, .unit = "transfer"},
+        {"gamma28",      NULL,  0, AV_OPT_TYPE_CONST, {.i64=AVCOL_TRC_GAMMA28},       0, 0, FLAGS, .unit = "transfer"},
+        {"smpte170m",    NULL,  0, AV_OPT_TYPE_CONST, {.i64=AVCOL_TRC_SMPTE170M},     0, 0, FLAGS, .unit = "transfer"},
+        {"smpte240m",    NULL,  0, AV_OPT_TYPE_CONST, {.i64=AVCOL_TRC_SMPTE240M},     0, 0, FLAGS, .unit = "transfer"},
+        {"linear",       NULL,  0, AV_OPT_TYPE_CONST, {.i64=AVCOL_TRC_LINEAR},        0, 0, FLAGS, .unit = "transfer"},
+        {"iec61966-2-1", NULL,  0, AV_OPT_TYPE_CONST, {.i64=AVCOL_TRC_IEC61966_2_1},  0, 0, FLAGS, .unit = "transfer"},
+        {"srgb",         NULL,  0, AV_OPT_TYPE_CONST, {.i64=AVCOL_TRC_IEC61966_2_1},  0, 0, FLAGS, .unit = "transfer"},
+        {"iec61966-2-4", NULL,  0, AV_OPT_TYPE_CONST, {.i64=AVCOL_TRC_IEC61966_2_4},  0, 0, FLAGS, .unit = "transfer"},
+        {"xvycc",        NULL,  0, AV_OPT_TYPE_CONST, {.i64=AVCOL_TRC_IEC61966_2_4},  0, 0, FLAGS, .unit = "transfer"},
+        {"bt1361e",      NULL,  0, AV_OPT_TYPE_CONST, {.i64=AVCOL_TRC_BT1361_ECG},    0, 0, FLAGS, .unit = "transfer"},
+        {"bt2020-10",    NULL,  0, AV_OPT_TYPE_CONST, {.i64=AVCOL_TRC_BT2020_10},     0, 0, FLAGS, .unit = "transfer"},
+        {"bt2020-12",    NULL,  0, AV_OPT_TYPE_CONST, {.i64=AVCOL_TRC_BT2020_12},     0, 0, FLAGS, .unit = "transfer"},
+        {"smpte2084",    NULL,  0, AV_OPT_TYPE_CONST, {.i64=AVCOL_TRC_SMPTE2084},     0, 0, FLAGS, .unit = "transfer"},
+        {"smpte428",     NULL,  0, AV_OPT_TYPE_CONST, {.i64=AVCOL_TRC_SMPTE428},      0, 0, FLAGS, .unit = "transfer"},
+        {"arib-std-b67", NULL,  0, AV_OPT_TYPE_CONST, {.i64=AVCOL_TRC_ARIB_STD_B67},  0, 0, FLAGS, .unit = "transfer"},
     { "in_v_chr_pos",   "input vertical chroma position in luma grid/256"  ,   OFFSET(in_v_chr_pos),  AV_OPT_TYPE_INT, { .i64 = -513}, -513, 512, FLAGS },
     { "in_h_chr_pos",   "input horizontal chroma position in luma grid/256",   OFFSET(in_h_chr_pos),  AV_OPT_TYPE_INT, { .i64 = -513}, -513, 512, FLAGS },
     { "out_v_chr_pos",   "output vertical chroma position in luma grid/256"  , OFFSET(out_v_chr_pos), AV_OPT_TYPE_INT, { .i64 = -513}, -513, 512, FLAGS },
@@ -1126,20 +1208,20 @@ static const AVFilterPad avfilter_vf_scale_outputs[] = {
     },
 };
 
-const AVFilter ff_vf_scale = {
-    .name            = "scale",
-    .description     = NULL_IF_CONFIG_SMALL("Scale the input video size and/or convert the image format."),
+const FFFilter ff_vf_scale = {
+    .p.name          = "scale",
+    .p.description   = NULL_IF_CONFIG_SMALL("Scale the input video size and/or convert the image format."),
+    .p.priv_class    = &scale_class,
+    .p.flags         = AVFILTER_FLAG_DYNAMIC_INPUTS,
     .preinit         = preinit,
     .init            = init,
     .uninit          = uninit,
     .priv_size       = sizeof(ScaleContext),
-    .priv_class      = &scale_class,
     FILTER_INPUTS(avfilter_vf_scale_inputs),
     FILTER_OUTPUTS(avfilter_vf_scale_outputs),
     FILTER_QUERY_FUNC2(query_formats),
     .activate        = activate,
     .process_command = process_command,
-    .flags           = AVFILTER_FLAG_DYNAMIC_INPUTS,
 };
 
 static const AVClass *scale2ref_child_class_iterate(void **iter)
@@ -1195,14 +1277,14 @@ static const AVFilterPad avfilter_vf_scale2ref_outputs[] = {
     },
 };
 
-const AVFilter ff_vf_scale2ref = {
-    .name            = "scale2ref",
-    .description     = NULL_IF_CONFIG_SMALL("Scale the input video size and/or convert the image format to the given reference."),
+const FFFilter ff_vf_scale2ref = {
+    .p.name          = "scale2ref",
+    .p.description   = NULL_IF_CONFIG_SMALL("Scale the input video size and/or convert the image format to the given reference."),
+    .p.priv_class    = &scale2ref_class,
     .preinit         = preinit,
     .init            = init,
     .uninit          = uninit,
     .priv_size       = sizeof(ScaleContext),
-    .priv_class      = &scale2ref_class,
     FILTER_INPUTS(avfilter_vf_scale2ref_inputs),
     FILTER_OUTPUTS(avfilter_vf_scale2ref_outputs),
     FILTER_QUERY_FUNC2(query_formats),

@@ -3,12 +3,12 @@
 #include "extensions/helper/vivaldi_frame_observer.h"
 
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/renderer_preferences_util.h"
 #include "content/public/browser/host_zoom_map.h"
 #include "content/public/browser/render_view_host.h"
-#include "ui/content/vivaldi_tab_check.h"
 #include "extensions/browser/extension_web_contents_observer.h"
 #include "extensions/helper/vivaldi_panel_helper.h"
+#include "extensions/vivaldi_browser_component_wrapper.h"
+#include "ui/content/vivaldi_tab_check.h"
 
 namespace vivaldi {
 
@@ -32,10 +32,9 @@ void VivaldiFrameObserver::RenderFrameHostChanged(
 
   host_zoom_map_ = new_host_zoom_map;
 
-  Profile* profile_ =
-      Profile::FromBrowserContext(web_contents()->GetBrowserContext());
-  blink::RendererPreferences* prefs = web_contents()->GetMutableRendererPrefs();
-  renderer_preferences_util::UpdateFromSystemSettings(prefs, profile_);
+  VivaldiBrowserComponentWrapper::GetInstance()->UpdateFromSystemSettings(
+      web_contents());
+
   web_contents()->SyncRendererPrefs();
 }
 

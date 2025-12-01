@@ -12,7 +12,9 @@ namespace external_intents {
 BASE_DECLARE_FEATURE(kExternalNavigationDebugLogs);
 BASE_DECLARE_FEATURE(kBlockFrameRenavigations);
 BASE_DECLARE_FEATURE(kBlockIntentsToSelf);
-BASE_DECLARE_FEATURE(kTrustedClientGestureBypass);
+
+// When enabled, forces intent schemes to be lower case.
+BASE_DECLARE_FEATURE(kLowerCaseIntentSchemes);
 
 }  // namespace external_intents
 

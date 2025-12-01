@@ -1,9 +1,17 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="it">
+<translation id="2277224997687551299">Modifica nome gruppo</translation>
+<translation id="2330212241471632770">{TABS_COUNT, plural,
+          =1 {Aggiungi scheda nei segnalibri}
+          other {Aggiungi schede nei segnalibri}
+        }</translation>
 <translation id="2947471979790858922">La tua attività in queste schede private sarà rimossa da questo dispositivo</translation>
 <translation id="3870643923290313246">{INCOGNITO_TABS_COUNT, plural,
         =1 {Puoi trovare le schede chiuse in Schede recenti nel menu principale di Vivaldi. La tua scheda privata non sarà disponibile.}
         other {Puoi trovare le schede chiuse in Schede recenti nel menu principale di Vivaldi. Le tue # schede private non saranno disponibili.}}</translation>
+<translation id="4460014764210899310">Separa</translation>
 <translation id="4871187110787939393">Chiudere tutte le schede private?</translation>
+<translation id="5494920125229734069">Seleziona tutto</translation>
+<translation id="6744956528665271406">Modifica colore del gruppo</translation>
 </translationbundle>

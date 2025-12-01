@@ -10,14 +10,14 @@ import pieChartStylesRaw from './pieChart.css.js';
 
 // TODO(crbug.com/391381439): Fully migrate off of constructed style sheets.
 const pieChartStyles = new CSSStyleSheet();
-pieChartStyles.replaceSync(pieChartStylesRaw.cssContent);
+pieChartStyles.replaceSync(pieChartStylesRaw.cssText);
 
 const UIStrings = {
   /**
    *@description Text for sum
    */
   total: 'Total',
-};
+} as const;
 const str_ = i18n.i18n.registerUIStrings('ui/legacy/components/perf_ui/PieChart.ts', UIStrings);
 const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
 

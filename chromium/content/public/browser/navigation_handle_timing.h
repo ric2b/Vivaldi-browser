@@ -124,6 +124,10 @@ struct CONTENT_EXPORT NavigationHandleTiming {
   // process.
   base::TimeTicks navigation_commit_received_time;
 
+  // The time at which the renderer responded to the browser's CommitNavigation
+  // IPC.
+  base::TimeTicks navigation_commit_reply_sent_time;
+
   // The time the DidCommit navigation message was received in the browser
   // process.
   base::TimeTicks navigation_did_commit_time;
@@ -137,6 +141,9 @@ struct CONTENT_EXPORT NavigationHandleTiming {
   base::TimeDelta final_request_domain_lookup_delay;
   base::TimeDelta final_request_connect_delay;
   base::TimeDelta final_request_ssl_delay;
+
+  // InitializeStream related delay information.
+  base::TimeDelta initialize_stream_delay;
 };
 
 }  // namespace content

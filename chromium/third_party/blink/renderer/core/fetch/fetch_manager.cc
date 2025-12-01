@@ -496,7 +496,8 @@ class FetchManager::Loader final
       // metadata, or an `Unencoded-Digest` header.
       DCHECK(!integrity_metadata.empty() ||
              (unencoded_digest.has_value() &&
-              RuntimeEnabledFeatures::UnencodedDigestEnabled()));
+              RuntimeEnabledFeatures::UnencodedDigestEnabled(
+                  loader_->GetExecutionContext())));
       body_->SetClient(this);
 
       OnStateChange();
@@ -522,18 +523,23 @@ class FetchManager::Loader final
           return;
       }
 
+      String error_message;
       finished_ = true;
       if (result == Result::kDone) {
         bool integrity_failed = false;
         if (unencoded_digest_.has_value() &&
             !unencoded_digest_->DoesMatch(&buffer_)) {
           integrity_failed = true;
+          error_message =
+              "The resource's `unencoded-digest` header asserted "
+              "a digest which does not match the resource's body.";
         }
         if (!integrity_failed && !integrity_metadata_.empty()) {
           IntegrityReport integrity_report;
           IntegrityMetadataSet metadata_set;
           SubresourceIntegrity::ParseIntegrityAttribute(
-              integrity_metadata_, metadata_set, &integrity_report);
+              integrity_metadata_, metadata_set, loader_->GetExecutionContext(),
+              &integrity_report);
 
           const FetchResponseData* data = response_->GetResponse();
           String raw_headers = data->InternalHeaderList()->GetAsRawString(
@@ -542,8 +548,9 @@ class FetchManager::Loader final
               !updater_ ? FetchResponseType::kError : data->GetType();
           integrity_failed = !SubresourceIntegrity::CheckSubresourceIntegrity(
               metadata_set, &buffer_, url_, type, raw_headers,
-              integrity_report);
+              loader_->GetExecutionContext(), integrity_report);
           integrity_report.SendReports(loader_->GetExecutionContext());
+          error_message = "SRI's integrity checks failed.";
         }
         if (!integrity_failed) {
           updater_->Update(
@@ -553,8 +560,6 @@ class FetchManager::Loader final
           return;
         }
       }
-      String error_message =
-          "Unknown error occurred while trying to verify integrity.";
       if (updater_) {
         updater_->Update(
             BytesConsumer::CreateErrored(BytesConsumer::Error(error_message)));
@@ -776,7 +781,8 @@ void FetchManager::Loader::DidReceiveResponse(
   Response* r = Response::Create(response_resolver_->GetExecutionContext(),
                                  tainted_response);
   r->headers()->SetGuard(Headers::kImmutableGuard);
-  std::optional<UnencodedDigest> unencoded_digest = response.UnencodedDigest();
+  std::optional<UnencodedDigest> unencoded_digest =
+      response.UnencodedDigest(GetExecutionContext());
   if (GetFetchRequestData()->Integrity().empty() &&
       !unencoded_digest.has_value()) {
     response_resolver_->Resolve(r);
@@ -1131,7 +1137,8 @@ void FetchLoaderBase::PerformHTTPFetch(ExceptionState& exception_state) {
   }
   request.SetCacheMode(fetch_request_data_->CacheMode());
   request.SetRedirectMode(fetch_request_data_->Redirect());
-  request.SetFetchIntegrity(fetch_request_data_->Integrity());
+  request.SetFetchIntegrity(fetch_request_data_->Integrity(),
+                            execution_context_);
   request.SetFetchPriorityHint(fetch_request_data_->FetchPriorityHint());
   request.SetPriority(fetch_request_data_->Priority());
   request.SetUseStreamOnResponse(true);
@@ -1858,25 +1865,15 @@ FetchLaterManager::PrepareNetworkRequest(
       fetcher->GetProperties().GetFetchClientSettingsObject();
 
   FetchManagerResourceRequestContext resource_request_context;
-  if (!RuntimeEnabledFeatures::
-          MinimimalResourceRequestPrepBeforeCacheLookupEnabled()) {
-    if (PrepareResourceRequest(
-            kFetchLaterResourceType, fetch_client_settings_object, params,
-            fetcher->Context(), unused_virtual_time_pauser,
-            resource_request_context, KURL()) != std::nullopt) {
-      return nullptr;
-    }
-  } else {
-    if (PrepareResourceRequestForCacheAccess(
-            kFetchLaterResourceType, fetch_client_settings_object, KURL(),
-            resource_request_context, fetcher->Context(),
-            params) != std::nullopt) {
-      return nullptr;
-    }
-    UpgradeResourceRequestForLoaderNew(
-        kFetchLaterResourceType, params, fetcher->Context(),
-        resource_request_context, unused_virtual_time_pauser);
+  if (PrepareResourceRequestForCacheAccess(
+          kFetchLaterResourceType, fetch_client_settings_object, KURL(),
+          resource_request_context, fetcher->Context(),
+          params) != std::nullopt) {
+    return nullptr;
   }
+  UpgradeResourceRequestForLoader(kFetchLaterResourceType, params,
+                                  fetcher->Context(), resource_request_context,
+                                  unused_virtual_time_pauser);
 
   // From `ResourceFetcher::StartLoad()`:
   ScriptForbiddenScope script_forbidden_scope;
@@ -1884,6 +1881,8 @@ FetchLaterManager::PrepareNetworkRequest(
   PopulateResourceRequest(
       params.GetResourceRequest(),
       std::move(params.MutableResourceRequest().MutableBody()),
+      network_resource_request.get());
+  fetcher->PopulateResourceRequestPermissionsPolicy(
       network_resource_request.get());
   return network_resource_request;
 }

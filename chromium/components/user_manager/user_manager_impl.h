@@ -103,9 +103,6 @@ class USER_MANAGER_EXPORT UserManagerImpl : public UserManager {
     // Overrides the home directory path for the `primary_user`.
     virtual void OverrideDirHome(const User& primary_user) = 0;
 
-    // Returns whether user session restore is in progress.
-    virtual bool IsUserSessionRestoreInProgress() = 0;
-
     // Returns UserType for the DeviceLocalAccount of the given `email`.
     virtual std::optional<UserType> GetDeviceLocalAccountUserType(
         std::string_view email) = 0;
@@ -142,7 +139,7 @@ class USER_MANAGER_EXPORT UserManagerImpl : public UserManager {
 
   // UserManager implementation:
   void Shutdown() override;
-  const UserList& GetUsers() const override;
+  const UserList& GetPersistedUsers() const override;
   UserList GetUsersAllowedForMultiUserSignIn() const override;
   UserList FindLoginAllowedUsersFrom(const UserList& users) const final;
   const UserList& GetLoggedInUsers() const override;
@@ -154,9 +151,10 @@ class USER_MANAGER_EXPORT UserManagerImpl : public UserManager {
 
   const AccountId& GetLastSessionActiveAccountId() const override;
   void UserLoggedIn(const AccountId& account_id,
-                    const std::string& user_id_hash,
-                    bool browser_restart,
-                    bool is_child) override;
+                    const std::string& user_id_hash) override;
+  bool EnsureUser(const AccountId& account_id,
+                  UserType user_type,
+                  bool is_ephemeral) override;
   bool OnUserProfileCreated(const AccountId& account_id,
                             PrefService* prefs) override;
   void OnUserProfileWillBeDestroyed(const AccountId& account_id) override;
@@ -348,9 +346,6 @@ class USER_MANAGER_EXPORT UserManagerImpl : public UserManager {
   virtual void ResetOwnerId();
   void SetOwnerId(const AccountId& owner_account_id) override;
 
-  // If there's pending user switch, processes it.
-  void ProcessPendingUserSwitchId();
-
   // TODO(b/278643115): Move to private, once we migrate fake implementation
   // closer enough to the production behavior.
   void RegularUserLoggedInAsEphemeral(const AccountId& account_id,
@@ -376,7 +371,7 @@ class USER_MANAGER_EXPORT UserManagerImpl : public UserManager {
   // List of all known users. User instances are owned by |this|. Regular users
   // are removed by |RemoveUserFromList|, device local accounts by
   // |UpdateAndCleanUpDeviceLocalAccounts|.
-  UserList users_;
+  UserList persisted_users_;
 
   // List of all users that are logged in current session. These point to User
   // instances in |users_|. Only one of them could be marked as active.
@@ -500,10 +495,6 @@ class USER_MANAGER_EXPORT UserManagerImpl : public UserManager {
 
   // Time at which this object was created.
   base::TimeTicks manager_creation_time_ = base::TimeTicks::Now();
-
-  // ID of the user just added to the session that needs to be activated
-  // as soon as user's profile is loaded.
-  AccountId pending_user_switch_ = EmptyAccountId();
 
   // ID of the user that was active in the previous session.
   // Preference value is stored here before first user signs in

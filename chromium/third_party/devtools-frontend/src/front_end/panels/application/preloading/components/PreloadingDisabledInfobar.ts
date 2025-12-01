@@ -10,18 +10,13 @@ import type * as Protocol from '../../../../generated/protocol.js';
 import * as Buttons from '../../../../ui/components/buttons/buttons.js';
 import * as ChromeLink from '../../../../ui/components/chrome_link/chrome_link.js';
 import * as Dialogs from '../../../../ui/components/dialogs/dialogs.js';
-import * as IconButton from '../../../../ui/components/icon_button/icon_button.js';
 import * as LegacyWrapper from '../../../../ui/components/legacy_wrapper/legacy_wrapper.js';
 import * as RenderCoordinator from '../../../../ui/components/render_coordinator/render_coordinator.js';
 import * as UI from '../../../../ui/legacy/legacy.js';
 import * as Lit from '../../../../ui/lit/lit.js';
 import * as VisualLogging from '../../../../ui/visual_logging/visual_logging.js';
 
-import preloadingDisabledInfobarStylesRaw from './preloadingDisabledInfobar.css.js';
-
-// TODO(crbug.com/391381439): Fully migrate off of constructed style sheets.
-const preloadingDisabledInfobarStyles = new CSSStyleSheet();
-preloadingDisabledInfobarStyles.replaceSync(preloadingDisabledInfobarStylesRaw.cssContent);
+import preloadingDisabledInfobarStyles from './preloadingDisabledInfobar.css.js';
 
 const {html} = Lit;
 
@@ -96,7 +91,7 @@ const UIStrings = {
    *@description Footer link for more details
    */
   footerLearnMore: 'Learn more',
-};
+} as const;
 const str_ =
     i18n.i18n.registerUIStrings('panels/application/preloading/components/PreloadingDisabledInfobar.ts', UIStrings);
 const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
@@ -113,7 +108,6 @@ export class PreloadingDisabledInfobar extends LegacyWrapper.LegacyWrapper.Wrapp
   };
 
   connectedCallback(): void {
-    this.#shadow.adoptedStyleSheets = [preloadingDisabledInfobarStyles];
     void this.#render();
   }
 
@@ -146,6 +140,7 @@ export class PreloadingDisabledInfobar extends LegacyWrapper.LegacyWrapper.Wrapp
     // Disabled until https://crbug.com/1079231 is fixed.
     // clang-format off
     return html`
+      <style>${preloadingDisabledInfobarStyles.cssText}</style>
       <div id='container'>
         <span id='header'>
           ${header}
@@ -179,10 +174,6 @@ export class PreloadingDisabledInfobar extends LegacyWrapper.LegacyWrapper.Wrapp
     const iconLink = UI.Fragment.html`
       <x-link class="icon-link devtools-link" tabindex="0" href="${LINK}"></x-link>
     ` as UI.XLink.XLink;
-    const iconLinkIcon = new IconButton.Icon.Icon();
-    iconLinkIcon
-        .data = {iconName: 'open-externally', color: 'var(--icon-default-hover)', width: '16px', height: '16px'};
-    iconLink.append(iconLinkIcon);
 
     return html`
       <div id='contents'>

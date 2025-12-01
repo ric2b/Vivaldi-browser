@@ -23,7 +23,8 @@
 #include "third_party/blink/renderer/core/svg/svg_animated_length.h"
 #include "third_party/blink/renderer/core/svg/svg_length.h"
 #include "third_party/blink/renderer/core/svg/svg_length_context.h"
-#include "third_party/blink/renderer/platform/graphics/path.h"
+#include "third_party/blink/renderer/platform/geometry/path.h"
+#include "third_party/blink/renderer/platform/geometry/path_builder.h"
 #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
 
 namespace blink {
@@ -60,17 +61,21 @@ void SVGLineElement::Trace(Visitor* visitor) const {
 }
 
 Path SVGLineElement::AsPath() const {
-  Path path;
+  return AsMutablePath().Finalize();
+}
+
+PathBuilder SVGLineElement::AsMutablePath() const {
+  PathBuilder builder;
 
   SVGLengthContext length_context(this);
   DCHECK(GetComputedStyle());
 
-  path.MoveTo(gfx::PointF(x1()->CurrentValue()->Value(length_context),
-                          y1()->CurrentValue()->Value(length_context)));
-  path.AddLineTo(gfx::PointF(x2()->CurrentValue()->Value(length_context),
+  builder.MoveTo(gfx::PointF(x1()->CurrentValue()->Value(length_context),
+                             y1()->CurrentValue()->Value(length_context)));
+  builder.LineTo(gfx::PointF(x2()->CurrentValue()->Value(length_context),
                              y2()->CurrentValue()->Value(length_context)));
 
-  return path;
+  return builder;
 }
 
 void SVGLineElement::SvgAttributeChanged(
@@ -78,7 +83,6 @@ void SVGLineElement::SvgAttributeChanged(
   const QualifiedName& attr_name = params.name;
   if (attr_name == svg_names::kX1Attr || attr_name == svg_names::kY1Attr ||
       attr_name == svg_names::kX2Attr || attr_name == svg_names::kY2Attr) {
-    UpdateRelativeLengthsInformation();
     GeometryAttributeChanged();
     return;
   }

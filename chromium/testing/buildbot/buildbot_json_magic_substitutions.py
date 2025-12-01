@@ -44,8 +44,7 @@ DEVICE_SUBSTITUTIONS = {
 ANDROID_VULKAN_DEVICES = {
     # Pixel 6 phones map to multiple GPU models.
     'oriole': GpuDevice('13b5', '92020010,92020000'),
-    'dm1q': GpuDevice('5143', '43050a01'),
-    'a23': GpuDevice('5143', '6010001'),
+    'a23xq': GpuDevice('5143', '6010901'),
 }
 
 def ChromeOSTelemetryRemote(test_config, _, tester_config):
@@ -313,6 +312,15 @@ def GPUParallelJobs(test_config, tester_name, tester_config):
       if gpu.startswith('10de'):
         return ['--jobs=1']
 
+  # trace_test flakily hangs Win NVIDIA GTX 1660 machines crbug.com/406454932.
+  # Speculatively disable parallelism to check if it is related.
+  is_trace_test = (test_name == 'trace_test'
+                   or test_config.get('telemetry_test_name') == 'trace_test')
+  if os_type == 'win' and is_trace_test:
+    for gpu in _GetGpusFromTestConfig(test_config):
+      if gpu.startswith('10de:2184'):
+        return ['--jobs=1']
+
   if os_type in ['lacros', 'linux', 'mac', 'win']:
     return ['--jobs=4']
   return ['--jobs=1']
@@ -336,6 +344,7 @@ def GPUTelemetryNoRootForUnrootedDevices(test_config, _, tester_config):
       'a13',
       'a13ve',
       'a23',
+      'a23xq',
       'dm1q',  # Samsung S23.
       'devonn',  # Motorola Moto G Power 5G.
   }

@@ -181,6 +181,9 @@ int InterruptBudgetFor(Isolate* isolate, std::optional<CodeKind> code_kind,
                        Tagged<JSFunction> function,
                        CachedTieringDecision cached_tiering_decision,
                        int bytecode_length) {
+  // Avoid interrupts while we're already tiering.
+  if (function->tiering_in_progress()) return INT_MAX / 2;
+
   const std::optional<CodeKind> existing_request =
       function->GetRequestedOptimizationIfAny(isolate);
   if (existing_request == CodeKind::TURBOFAN_JS ||
@@ -190,8 +193,9 @@ int InterruptBudgetFor(Isolate* isolate, std::optional<CodeKind> code_kind,
   if (maglev::IsMaglevOsrEnabled() && existing_request == CodeKind::MAGLEV) {
     return v8_flags.invocation_count_for_maglev_osr * bytecode_length;
   }
+
   if (TiersUpToMaglev(code_kind) &&
-      !function->IsTieringRequestedOrInProgress(isolate)) {
+      !function->IsTieringRequestedOrInProgress()) {
     if (v8_flags.profile_guided_optimization) {
       switch (cached_tiering_decision) {
         case CachedTieringDecision::kDelayMaglev:

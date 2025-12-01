@@ -41,7 +41,6 @@
 #include "base/time/time.h"
 #include "base/uuid.h"
 #include "build/build_config.h"
-#include "build/chromeos_buildflags.h"
 #include "chrome/browser/autocomplete/zero_suggest_cache_service_factory.h"
 #include "chrome/browser/autofill/personal_data_manager_factory.h"
 #include "chrome/browser/autofill/strike_database_factory.h"
@@ -84,7 +83,6 @@
 #include "chrome/browser/tpcd/metadata/manager_factory.h"
 #include "chrome/browser/translate/chrome_translate_client.h"
 #include "chrome/browser/trusted_vault/trusted_vault_service_factory.h"
-#include "chrome/browser/user_annotations/user_annotations_service_factory.h"
 #include "chrome/browser/webdata_services/web_data_service_factory.h"
 #include "chrome/browser/webid/federated_identity_permission_context.h"
 #include "chrome/common/chrome_constants.h"
@@ -100,8 +98,8 @@
 #include "components/autofill/core/browser/data_manager/payments/payments_data_manager.h"
 #include "components/autofill/core/browser/data_manager/personal_data_manager.h"
 #include "components/autofill/core/browser/data_manager/personal_data_manager_test_utils.h"
-#include "components/autofill/core/browser/data_model/autofill_profile.h"
-#include "components/autofill/core/browser/data_model/credit_card.h"
+#include "components/autofill/core/browser/data_model/addresses/autofill_profile.h"
+#include "components/autofill/core/browser/data_model/payments/credit_card.h"
 #include "components/autofill/core/browser/strike_databases/strike_database.h"
 #include "components/autofill/core/browser/test_utils/autofill_test_utils.h"
 #include "components/autofill/core/browser/test_utils/test_autofill_clock.h"
@@ -167,7 +165,6 @@
 #include "components/tpcd/metadata/browser/prefs.h"
 #include "components/tpcd/metadata/browser/test_support.h"
 #include "components/ukm/test_ukm_recorder.h"
-#include "components/user_annotations/test_user_annotations_service.h"
 #include "content/public/browser/background_tracing_manager.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
@@ -238,7 +235,7 @@
 #include "third_party/blink/public/mojom/dom_storage/storage_area.mojom.h"
 #endif  // BUILDFLAG(IS_ANDROID)
 
-#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_CHROMEOS_LACROS)
+#if !BUILDFLAG(IS_ANDROID)
 #include "base/test/test_future.h"
 #include "chrome/browser/ui/web_applications/test/isolated_web_app_test_utils.h"
 #include "chrome/browser/web_applications/isolated_web_apps/commands/get_controlled_frame_partition_command.h"
@@ -250,15 +247,16 @@
 #include "chrome/browser/web_applications/web_app.h"
 #include "chrome/browser/web_applications/web_app_command_scheduler.h"
 #include "chrome/browser/web_applications/web_app_sync_bridge.h"
-#endif  // !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_CHROMEOS_LACROS)
+#endif  // !BUILDFLAG(IS_ANDROID)
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
 #include "chrome/browser/ash/login/users/fake_chrome_user_manager.h"
 #include "chromeos/ash/components/dbus/attestation/fake_attestation_client.h"
-#include "chromeos/dbus/tpm_manager/fake_tpm_manager_client.h"  // nogncheck
+#include "chromeos/dbus/tpm_manager/fake_tpm_manager_client.h"
 #include "components/account_id/account_id.h"
 #include "components/user_manager/scoped_user_manager.h"
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+#include "components/user_manager/test_helper.h"
+#endif  // BUILDFLAG(IS_CHROMEOS)
 
 #if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
 #include "components/crash/core/app/crashpad.h"
@@ -491,7 +489,7 @@ class RemoveHistoryTester {
     base::RunLoop run_loop;
     base::CancelableTaskTracker tracker;
     history_service_->QueryURL(
-        url, true,
+        url, /*want_visits=*/false,
         base::BindLambdaForTesting([&](history::QueryURLResult result) {
           contains_url = result.success;
           run_loop.Quit();
@@ -922,6 +920,7 @@ class RemoveDownloadsTester {
   raw_ptr<ChromeDownloadManagerDelegate> chrome_download_manager_delegate_;
 };
 
+#if BUILDFLAG(ENABLE_REPORTING)
 base::RepeatingCallback<bool(const GURL&)> CreateUrlFilterFromOriginFilter(
     const base::RepeatingCallback<bool(const url::Origin&)>& origin_filter) {
   if (origin_filter.is_null()) {
@@ -931,6 +930,7 @@ base::RepeatingCallback<bool(const GURL&)> CreateUrlFilterFromOriginFilter(
     return origin_filter.Run(url::Origin::Create(url));
   });
 }
+#endif
 
 class RemoveAutofillTester {
  public:
@@ -1207,9 +1207,9 @@ class ChromeBrowsingDataRemoverDelegateTest : public testing::Test {
     nacl_browser_delegate_.Init(profile_manager_->profile_manager());
 #endif  // BUILDFLAG(ENABLE_NACL)
 
-#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_CHROMEOS_LACROS)
+#if !BUILDFLAG(IS_ANDROID)
     web_app::test::AwaitStartWebAppProviderAndSubsystems(profile_.get());
-#endif  // !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_CHROMEOS_LACROS)
+#endif  // !BUILDFLAG(IS_ANDROID)
 
     remover_ = profile_->GetBrowsingDataRemover();
 
@@ -1236,9 +1236,9 @@ class ChromeBrowsingDataRemoverDelegateTest : public testing::Test {
             std::make_unique<TestWebappRegistry>());
 #endif
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
     chromeos::TpmManagerClient::InitializeFake();
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+#endif  // BUILDFLAG(IS_CHROMEOS)
   }
 
   void TearDown() override {
@@ -1667,7 +1667,7 @@ TEST_F(ChromeBrowsingDataRemoverDelegateTest,
   EXPECT_FALSE(tester.ContainsCookie());
 }
 
-#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_CHROMEOS_LACROS)
+#if !BUILDFLAG(IS_ANDROID)
 TEST_F(ChromeBrowsingDataRemoverDelegateTest, ClearWebAppData) {
   auto* provider = web_app::FakeWebAppProvider::Get(GetProfile());
   ASSERT_TRUE(provider);
@@ -1907,7 +1907,7 @@ TEST_F(IsolatedWebAppChromeBrowsingDataRemoverDelegateTest,
                       iwa_url_info.storage_partition_config(GetProfile())},
           RemovalInfo{DATA_TYPE_INDEXED_DB, controlled_frame_partition}));
 }
-#endif  // !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_CHROMEOS_LACROS)
+#endif  // !BUILDFLAG(IS_ANDROID)
 
 TEST_F(ChromeBrowsingDataRemoverDelegateTest, RemoveHistoryForever) {
   RemoveHistoryTester tester;
@@ -2527,51 +2527,6 @@ TEST_F(ChromeBrowsingDataRemoverDelegateTest,
   ASSERT_FALSE(tester.HasProfileAndCard());
 }
 
-#if !BUILDFLAG(IS_ANDROID)
-class ChromeBrowsingDataRemoverDelegateUserAnnotationsTest
-    : public ChromeBrowsingDataRemoverDelegateTest {
- public:
-  static std::unique_ptr<KeyedService> CreateUserAnnotationsServiceFactory(
-      content::BrowserContext* context) {
-    return std::make_unique<user_annotations::TestUserAnnotationsService>();
-  }
-
-  void SetUp() override { ChromeBrowsingDataRemoverDelegateTest::SetUp(); }
-
-  TestingProfile::TestingFactories GetTestingFactories() override {
-    TestingProfile::TestingFactories factories =
-        ChromeBrowsingDataRemoverDelegateTest::GetTestingFactories();
-    factories.emplace_back(
-        UserAnnotationsServiceFactory::GetInstance(),
-        base::BindRepeating(&CreateUserAnnotationsServiceFactory));
-    return factories;
-  }
-
-  user_annotations::TestUserAnnotationsService* service() {
-    // Overridden in GetTestingFactories().
-    return static_cast<user_annotations::TestUserAnnotationsService*>(
-        UserAnnotationsServiceFactory::GetForProfile(GetProfile()));
-  }
-};
-
-TEST_F(ChromeBrowsingDataRemoverDelegateUserAnnotationsTest,
-       UserAnnotationsOnAutofillRemoveRange) {
-  auto time_now = base::Time::Now();
-  BlockUntilBrowsingDataRemoved(time_now, time_now + base::Hours(1),
-                                constants::DATA_TYPE_FORM_DATA, false);
-
-  // UserAnnotations should be empty when DATA_TYPE_FORM_DATA browsing data
-  // gets deleted.
-  EXPECT_EQ(constants::DATA_TYPE_FORM_DATA, GetRemovalMask());
-  EXPECT_EQ(content::BrowsingDataRemover::ORIGIN_TYPE_UNPROTECTED_WEB,
-            GetOriginTypeMask());
-
-  EXPECT_THAT(service()->last_received_remove_annotations_in_range(),
-              testing::Pair(testing::Eq(time_now),
-                            testing::Eq(time_now + base::Hours(1))));
-}
-#endif
-
 TEST_F(ChromeBrowsingDataRemoverDelegateTest, ZeroSuggestPrefsBasedCacheClear) {
   // Disable in-memory ZPS caching.
   base::test::ScopedFeatureList features;
@@ -2650,14 +2605,15 @@ TEST_F(ChromeBrowsingDataRemoverDelegateTest, ZeroSuggestInMemoryCacheClear) {
 }
 #endif  // !BUILDFLAG(IS_ANDROID)
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
 TEST_F(ChromeBrowsingDataRemoverDelegateTest,
        ContentProtectionPlatformKeysRemoval) {
   auto user_manager = std::make_unique<ash::FakeChromeUserManager>();
   auto* user =
       user_manager->AddUser(AccountId::FromUserEmail("test@example.com"));
-  user_manager->UserLoggedIn(user->GetAccountId(), user->username_hash(),
-                             /*browser_restart=*/false, /*is_child=*/false);
+  user_manager->UserLoggedIn(
+      user->GetAccountId(),
+      user_manager::TestHelper::GetFakeUsernameHash(user->GetAccountId()));
   user_manager::ScopedUserManager user_manager_enabler(std::move(user_manager));
 
   ash::AttestationClient::InitializeFake();

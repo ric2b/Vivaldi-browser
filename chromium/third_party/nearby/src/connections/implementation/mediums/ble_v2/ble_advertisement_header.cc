@@ -14,8 +14,6 @@
 
 #include "connections/implementation/mediums/ble_v2/ble_advertisement_header.h"
 
-#include <inttypes.h>
-
 #include <string>
 #include <utility>
 
@@ -23,9 +21,9 @@
 #include "connections/implementation/flags/nearby_connections_feature_flags.h"
 #include "internal/flags/nearby_flags.h"
 #include "internal/platform/base64_utils.h"
-#include "internal/platform/base_input_stream.h"
 #include "internal/platform/byte_array.h"
 #include "internal/platform/logging.h"
+#include "internal/platform/stream_reader.h"
 
 namespace nearby {
 namespace connections {
@@ -75,38 +73,40 @@ BleAdvertisementHeader::BleAdvertisementHeader(
         return;
       }
     } else {
-      NEARBY_LOGS(ERROR) << "Cannot deserialize BLEAdvertisementHeader: failed "
-                            "Base64 decoding";
+      LOG(INFO) << "Cannot deserialize BLEAdvertisementHeader: failed "
+                   "Base64 decoding";
       return;
     }
   }
 
   if (advertisement_header_bytes.size() < kMinAdvertisementHeaderLength) {
-    NEARBY_LOGS(ERROR)
-        << "Cannot deserialize BleAdvertisementHeader: expecting min "
-        << kMinAdvertisementHeaderLength << "raw bytes, got "
-        << advertisement_header_bytes.size();
+    LOG(INFO) << "Cannot deserialize BleAdvertisementHeader: expecting min "
+              << kMinAdvertisementHeaderLength << "raw bytes, got "
+              << advertisement_header_bytes.size();
     return;
   }
 
-  BaseInputStream base_input_stream(advertisement_header_bytes);
+  StreamReader stream_reader(advertisement_header_bytes);
   // The first 1 byte is supposed to be the version and number of slots.
-  auto version_and_num_slots_byte =
-      static_cast<char>(base_input_stream.ReadUint8());
+  auto version_and_num_slots_byte = stream_reader.ReadUint8();
+  if (!version_and_num_slots_byte.has_value()) {
+    LOG(INFO) << "Cannot deserialize BleAdvertisementHeader: version_and_num.";
+    return;
+  }
   // The upper 3 bits are supposed to be the version.
-  version_ =
-      static_cast<Version>((version_and_num_slots_byte & kVersionBitmask) >> 5);
+  version_ = static_cast<Version>(
+      (*version_and_num_slots_byte & kVersionBitmask) >> 5);
   if (version_ != Version::kV2) {
-    NEARBY_LOGS(ERROR)
+    LOG(INFO)
         << "Cannot deserialize BleAdvertisementHeader: unsupported Version "
         << static_cast<int>(version_);
     return;
   }
   // The next 1 bit is supposed to be the extended advertisement flag.
   support_extended_advertisement_ =
-      ((version_and_num_slots_byte & kExtendedAdvertismentBitMask) >> 4) == 1;
+      ((*version_and_num_slots_byte & kExtendedAdvertismentBitMask) >> 4) == 1;
   // The lower 4 bits are supposed to be the number of slots.
-  num_slots_ = static_cast<int>(version_and_num_slots_byte & kNumSlotsBitmask);
+  num_slots_ = static_cast<int>(*version_and_num_slots_byte & kNumSlotsBitmask);
   if (num_slots_ < 0) {
     version_ = Version::kUndefined;
     return;
@@ -114,15 +114,16 @@ BleAdvertisementHeader::BleAdvertisementHeader(
 
   // The next 10 bytes are supposed to be the service_id_bloom_filter.
   service_id_bloom_filter_ =
-      base_input_stream.ReadBytes(kServiceIdBloomFilterByteLength);
+      stream_reader.ReadBytes(kServiceIdBloomFilterByteLength)
+          .value_or(ByteArray());
 
   // The next 4 bytes are supposed to be the advertisement_hash.
-  advertisement_hash_ =
-      base_input_stream.ReadBytes(kAdvertisementHashByteLength);
+  advertisement_hash_ = stream_reader.ReadBytes(kAdvertisementHashByteLength)
+                            .value_or(ByteArray());
 
   // The next 2 bytes are PSM value.
-  if (base_input_stream.IsAvailable(kPsmValueByteLength)) {
-    psm_ = static_cast<int>(base_input_stream.ReadUint16());
+  if (stream_reader.IsAvailable(kPsmValueByteLength)) {
+    psm_ = stream_reader.ReadInt16().value_or(0);
   }
 }
 
@@ -145,7 +146,7 @@ BleAdvertisementHeader::operator ByteArray() const {
   // Convert psm_ value to 2-bytes.
   ByteArray psm_bytes{kPsmValueByteLength};
   char *data = psm_bytes.data();
-  data[0] = psm_ & 0xFF00;
+  data[0] = (psm_ & 0xFF00) >> 8;
   data[1] = psm_ & 0x00FF;
 
   // clang-format off

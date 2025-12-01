@@ -91,9 +91,13 @@ bool HasProcessHistogramName(ProcessType process_type) {
 // Returns the full name of a histogram to record by appending the
 // ProfiledProcess variant name for `process_type` (defined in
 // tools/metrics/histograms/metadata/memory/histograms.xml) to `base_name`.
+// Returns `base_name` unchanged if `process_type` is nullopt.
 std::string ProcessHistogramName(std::string_view base_name,
-                                 ProcessType process_type) {
-  switch (process_type) {
+                                 std::optional<ProcessType> process_type) {
+  if (!process_type.has_value()) {
+    return std::string(base_name);
+  }
+  switch (process_type.value()) {
     case ProcessType::kBrowser:
       return base::StrCat({base_name, ".Browser"});
     case ProcessType::kRenderer:
@@ -164,6 +168,59 @@ std::pair<bool, std::optional<std::string>> DecideIfCollectionIsEnabled(
     return {false, "Control"};
   }
   return {false, "Default"};
+}
+
+// Logs statistics about the sampling profiler.
+void LogProfilerStats(std::optional<ProcessType> process_type,
+                      const base::PoissonAllocationSamplerStats& profiler_stats,
+                      size_t num_samples) {
+  const double hit_rate =
+      profiler_stats.address_cache_hits
+          ? (static_cast<double>(profiler_stats.address_cache_hits) /
+             (profiler_stats.address_cache_hits +
+              profiler_stats.address_cache_misses))
+          : 0.0;
+  base::UmaHistogramCounts100000(
+      ProcessHistogramName("HeapProfiling.InProcess.SamplesPerSnapshot",
+                           process_type),
+      num_samples);
+  base::UmaHistogramCounts1M(
+      ProcessHistogramName(
+          "HeapProfiling.InProcess.SampledAddressCacheHitCount", process_type),
+      profiler_stats.address_cache_hits);
+  base::UmaHistogramCounts10000(
+      ProcessHistogramName("HeapProfiling.InProcess.SampledAddressCacheHitRate",
+                           process_type),
+      hit_rate * 10000);
+  base::UmaHistogramCounts1M(
+      ProcessHistogramName("HeapProfiling.InProcess.SampledAddressCacheMaxSize",
+                           process_type),
+      profiler_stats.address_cache_max_size);
+  base::UmaHistogramPercentage(
+      ProcessHistogramName(
+          "HeapProfiling.InProcess.SampledAddressCacheMaxLoadFactor",
+          process_type),
+      100 * profiler_stats.address_cache_max_load_factor);
+  for (size_t bucket_length : profiler_stats.address_cache_bucket_lengths) {
+    base::UmaHistogramCounts100(
+        ProcessHistogramName(
+            "HeapProfiling.InProcess.SampledAddressCacheBucketLengths",
+            process_type),
+        bucket_length);
+  }
+}
+
+// Retrieves a snapshot from the SamplingHeapProfiler and logs metrics about
+// profiler performance.
+std::vector<base::SamplingHeapProfiler::Sample> RetrieveAndLogSnapshot(
+    ProcessType process_type) {
+  auto samples = base::SamplingHeapProfiler::Get()->GetSamples(0);
+  const base::PoissonAllocationSamplerStats profiler_stats =
+      base::PoissonAllocationSampler::Get()->GetAndResetStats();
+  LogProfilerStats(process_type, profiler_stats, samples.size());
+  // Also summarize over all process types.
+  LogProfilerStats(std::nullopt, profiler_stats, samples.size());
+  return samples;
 }
 
 }  // namespace
@@ -268,6 +325,12 @@ bool HeapProfilerController::StartIfEnabled() {
   if (sampling_rate_bytes > 0) {
     base::SamplingHeapProfiler::Get()->SetSamplingInterval(sampling_rate_bytes);
   }
+  const float hash_set_load_factor =
+      GetHashSetLoadFactorForProcess(process_type_);
+  if (hash_set_load_factor > 0) {
+    base::PoissonAllocationSampler::Get()->SetTargetHashSetLoadFactor(
+        hash_set_load_factor);
+  }
   base::SamplingHeapProfiler::Get()->Start();
 
   if (process_type_ != ProcessType::kBrowser) {
@@ -352,6 +415,22 @@ void HeapProfilerController::TakeSnapshotInChildProcess(
                      SnapshotParams(stopped_, process_type_, creation_time_,
                                     process_probability_pct, process_index,
                                     std::move(on_first_snapshot_callback_))));
+}
+
+void HeapProfilerController::LogMetricsWithoutSnapshotInChildProcess(
+    base::PassKey<ChildProcessSnapshotController>) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  CHECK_NE(process_type_, ProcessType::kBrowser);
+  snapshot_task_runner_->PostTask(
+      FROM_HERE,
+      base::BindOnce(
+          [](ProcessType process_type, scoped_refptr<StoppedFlag> stopped) {
+            if (!stopped->data.IsSet()) {
+              // Log metrics about the snapshot, but don't upload it to UMA.
+              RetrieveAndLogSnapshot(process_type);
+            }
+          },
+          process_type_, stopped_));
 }
 
 // static
@@ -446,62 +525,7 @@ void HeapProfilerController::RetrieveAndSendSnapshot(
         "HeapProfiling.InProcess.TotalSampledMemory", scaled_sampled_memory);
   };
 
-  std::vector<Sample> samples =
-      base::SamplingHeapProfiler::Get()->GetSamples(0);
-
-  // Log statistics about the sampling profiler.
-  const base::PoissonAllocationSamplerStats profiler_stats =
-      base::PoissonAllocationSampler::Get()->GetAndResetStats();
-  const double hit_rate =
-      static_cast<double>(profiler_stats.address_cache_hits) /
-      (profiler_stats.address_cache_hits + profiler_stats.address_cache_misses);
-  base::UmaHistogramCounts100000(
-      ProcessHistogramName("HeapProfiling.InProcess.SamplesPerSnapshot",
-                           process_type),
-      samples.size());
-  base::UmaHistogramCounts1M(
-      ProcessHistogramName(
-          "HeapProfiling.InProcess.SampledAddressCacheHitCount", process_type),
-      profiler_stats.address_cache_hits);
-  base::UmaHistogramCounts10000(
-      ProcessHistogramName("HeapProfiling.InProcess.SampledAddressCacheHitRate",
-                           process_type),
-      hit_rate * 10000);
-  base::UmaHistogramCounts1M(
-      ProcessHistogramName("HeapProfiling.InProcess.SampledAddressCacheMaxSize",
-                           process_type),
-      profiler_stats.address_cache_max_size);
-  base::UmaHistogramPercentage(
-      ProcessHistogramName(
-          "HeapProfiling.InProcess.SampledAddressCacheMaxLoadFactor",
-          process_type),
-      100 * profiler_stats.address_cache_max_load_factor);
-  for (size_t bucket_length : profiler_stats.address_cache_bucket_lengths) {
-    base::UmaHistogramCounts100(
-        ProcessHistogramName(
-            "HeapProfiling.InProcess.SampledAddressCacheBucketLengths",
-            process_type),
-        bucket_length);
-  }
-  // Also summarize over all process types.
-  base::UmaHistogramCounts100000("HeapProfiling.InProcess.SamplesPerSnapshot",
-                                 samples.size());
-  base::UmaHistogramCounts1M(
-      "HeapProfiling.InProcess.SampledAddressCacheHitCount",
-      profiler_stats.address_cache_hits);
-  base::UmaHistogramCounts10000(
-      "HeapProfiling.InProcess.SampledAddressCacheHitRate", hit_rate * 10000);
-  base::UmaHistogramCounts1M(
-      "HeapProfiling.InProcess.SampledAddressCacheMaxSize",
-      profiler_stats.address_cache_max_size);
-  base::UmaHistogramPercentage(
-      "HeapProfiling.InProcess.SampledAddressCacheMaxLoadFactor",
-      100 * profiler_stats.address_cache_max_load_factor);
-  for (size_t bucket_length : profiler_stats.address_cache_bucket_lengths) {
-    base::UmaHistogramCounts100(
-        "HeapProfiling.InProcess.SampledAddressCacheBucketLengths",
-        bucket_length);
-  }
+  std::vector<Sample> samples = RetrieveAndLogSnapshot(process_type);
 
   base::ModuleCache module_cache;
   sampling_profiler::CallStackProfileParams params(

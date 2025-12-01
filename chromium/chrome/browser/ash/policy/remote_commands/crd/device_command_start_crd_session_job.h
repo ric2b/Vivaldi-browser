@@ -45,8 +45,8 @@ class DeviceCommandStartCrdSessionJob : public RemoteCommandJob {
   void TerminateImpl() override;
 
  private:
-  void CheckManagedNetworkASync(base::OnceClosure on_success);
-  void StartCrdHostAndGetCode();
+  void CheckManagedNetworkASync(base::OnceCallback<void(bool)> on_success);
+  void StartCrdHostAndGetCode(bool is_in_managed_environment);
   void FinishWithSuccess(const std::string& access_code);
   // Finishes command with error code and optional message.
   void FinishWithError(ExtendedStartCrdSessionResultCode result_code,
@@ -56,6 +56,8 @@ class DeviceCommandStartCrdSessionJob : public RemoteCommandJob {
   bool UserTypeSupportsCrd() const;
   CrdSessionType GetCrdSessionType() const;
   bool IsDeviceIdle() const;
+  bool IsRemoteSupportSession() const;
+  bool IsRemoteAccessSession() const;
 
   bool ShouldShowConfirmationDialog() const;
   bool ShouldTerminateUponInput() const;
@@ -63,6 +65,7 @@ class DeviceCommandStartCrdSessionJob : public RemoteCommandJob {
   bool ShouldAllowTroubleshootingTools() const;
   bool ShouldShowTroubleshootingTools() const;
   bool ShouldAllowFileTransfer() const;
+  bool ShouldAutoAcceptSession(bool is_in_managed_environment) const;
 
   Delegate::ErrorCallback GetErrorCallback();
 

@@ -45,17 +45,17 @@ def _tf_repositories():
     # LINT.IfChange
     tf_http_archive(
         name = "XNNPACK",
-        sha256 = "3306f4178c8594b689165d385e644f03a3154c3be044f6ae36dd170fbf182cf5",
-        strip_prefix = "XNNPACK-983d013300f19fd3f4e33220b6401408e97a8d12",
-        urls = tf_mirror_urls("https://github.com/google/XNNPACK/archive/983d013300f19fd3f4e33220b6401408e97a8d12.zip"),
+        sha256 = "9e290e7b094134bdda0cad4ef4b89625fbde3c4b8e8f5dc84044c0f2e55b875a",
+        strip_prefix = "XNNPACK-5b4978cae19292232a27bdf0f495819bf5297167",
+        urls = tf_mirror_urls("https://github.com/google/XNNPACK/archive/5b4978cae19292232a27bdf0f495819bf5297167.zip"),
     )
     # LINT.ThenChange(//tensorflow/lite/tools/cmake/modules/xnnpack.cmake)
 
     tf_http_archive(
         name = "KleidiAI",
-        sha256 = "ad37707084a6d4ff41be10cbe8540c75bea057ba79d0de6c367c1bfac6ba0852",
-        strip_prefix = "kleidiai-40a926833857fb64786e02f97703e42b1537cb57",
-        urls = tf_mirror_urls("https://gitlab.arm.com/kleidi/kleidiai/-/archive/40a926833857fb64786e02f97703e42b1537cb57/kleidiai-40a926833857fb64786e02f97703e42b1537cb57.zip"),
+        sha256 = "f3ea4fce53f3b31076958dbff229f0048dae15bf454929673c78292a56279d52",
+        strip_prefix = "kleidiai-847ebd19d0192528659b0a0fa2c6057eed674c6a",
+        urls = tf_mirror_urls("https://gitlab.arm.com/kleidi/kleidiai/-/archive/847ebd19d0192528659b0a0fa2c6057eed674c6a/kleidiai-40a926833857fb64786e02f97703e42b1537cb57.zip"),
     )
 
     tf_http_archive(
@@ -74,9 +74,9 @@ def _tf_repositories():
 
     tf_http_archive(
         name = "pthreadpool",
-        sha256 = "a4cf06de57bfdf8d7b537c61f1c3071bce74e57524fe053e0bbd2332feca7f95",
-        strip_prefix = "pthreadpool-4fe0e1e183925bf8cfa6aae24237e724a96479b8",
-        urls = tf_mirror_urls("https://github.com/Maratyszcza/pthreadpool/archive/4fe0e1e183925bf8cfa6aae24237e724a96479b8.zip"),
+        sha256 = "215724985c4845cdcadcb5f26a2a8777943927bb5a172a00e7716fe16a6f3c1b",
+        strip_prefix = "pthreadpool-b1aee199d54003fb557076a201bcac3398af580b",
+        urls = tf_mirror_urls("https://github.com/google/pthreadpool/archive/b1aee199d54003fb557076a201bcac3398af580b.zip"),
     )
 
     tf_http_archive(

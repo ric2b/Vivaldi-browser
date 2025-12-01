@@ -116,6 +116,41 @@ class OwnersClient(object):
 
         return selected
 
+    def SuggestMinimalOwners(self,
+                             paths: list[str],
+                             exclude: list[str] = None) -> list[str]:
+        """
+        Suggest a set of owners for the given paths. Never return an owner in
+        the |exclude| list.
+
+        Aims to provide only one, but will provide more if it's unable to
+        find a common owner.
+        """
+        exclude = exclude or []
+
+        owners_by_path = self.BatchListOwners(paths)
+        if not owners_by_path:
+            return []
+
+        common_owners = set(owners_by_path.popitem()[1]) - set(exclude)
+        for _, owners in owners_by_path.items():
+            common_owners = common_owners.intersection(set(owners))
+
+        if not common_owners:
+            # This likely means some of the files had `noparent` set.
+            # Fall back to the default suggestion algorithm, which accounts
+            # for noparent but is liable to return many different owners
+            return self.SuggestOwners(paths, exclude)
+
+        # Return an arbitrary common owner, preferring those with a good score
+        sorted_common_owners = [
+            owner for owner in self.ScoreOwners(paths, exclude=exclude)
+            if owner in common_owners
+        ]
+
+        # Return a singleton list so this function has a consistent return type
+        return sorted_common_owners[:1]
+
 
 class GerritClient(OwnersClient):
     """Implement OwnersClient using OWNERS REST API."""

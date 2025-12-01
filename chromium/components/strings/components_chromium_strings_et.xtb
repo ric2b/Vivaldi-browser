@@ -21,6 +21,9 @@
 <translation id="4622039161600275920">Chromium blokeeris selle lehe</translation>
 <translation id="48558539577516920">Lubage Chromiumi juurdepääs võrgule tulemüüri või viirusetõrje
          seadetes.</translation>
+<translation id="4949828774841497663">Avage Applications &gt; System Settings &gt; Network, valige
+          aktiivne võrk, klõpsake nupul Details... ja tühistage mis tahes puhverserverite valikud,
+          mis võisid olla valitud.</translation>
 <translation id="580822234363523061">Minge
           Chromiumi menüüsse &gt;
           <ph name="SETTINGS_TITLE" />
@@ -42,9 +45,6 @@
         ja tühistage valik „<ph name="NO_PREFETCH_DESCRIPTION" />”.
         Kui see probleemi ei lahenda, soovitame selle valiku
         toimivuse parandamiseks uuesti teha.</translation>
-<translation id="8187289872471304532">Tehke valikud
-          Rakendused &gt; Süsteemieelised &gt; Võrk &gt; Täpsem &gt; Puhverserverid
-          ja tühjendage kõigi valitud puhverserverite märkeruudud.</translation>
 <translation id="8597726643333341451">Vaatate turvalist brauseri Chrome for Testing lehte</translation>
 <translation id="8684913864886094367">Chromium ei sulgunud õigesti.</translation>
 </translationbundle>

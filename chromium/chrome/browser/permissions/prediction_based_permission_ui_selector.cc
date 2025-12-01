@@ -8,11 +8,12 @@
 #include "base/feature_list.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/rand_util.h"
+#include "base/strings/strcat.h"
 #include "base/time/default_clock.h"
 #include "chrome/browser/optimization_guide/optimization_guide_keyed_service.h"
 #include "chrome/browser/optimization_guide/optimization_guide_keyed_service_factory.h"
-#include "chrome/browser/permissions/genai_model_handler.h"
 #include "chrome/browser/permissions/permission_actions_history_factory.h"
+#include "chrome/browser/permissions/permissions_ai_handler.h"
 #include "chrome/browser/permissions/prediction_model_handler_provider.h"
 #include "chrome/browser/permissions/prediction_service_factory.h"
 #include "chrome/browser/permissions/prediction_service_request.h"
@@ -44,8 +45,8 @@
 
 namespace {
 
-using ::permissions::GenAiModelHandler;
 using ::permissions::PermissionRequest;
+using ::permissions::PermissionsAiHandler;
 using ::permissions::PredictionModelHandlerProvider;
 using ::permissions::PredictionRequestFeatures;
 using QuietUiReason = PredictionBasedPermissionUiSelector::QuietUiReason;
@@ -99,6 +100,20 @@ bool ShouldPredictionTriggerQuietUi(
   return likelihood == VeryUnlikely;
 }
 
+void LogModelInquireTime(base::TimeTicks model_inquire_start_time,
+                         bool is_on_device) {
+  using permissions::PredictionModelType;
+
+  std::string histogram_name =
+      base::StrCat({"Permissions.",
+                    permissions::PermissionUmaUtil::GetPredictionModelString(
+                        is_on_device ? PredictionModelType::kTfLiteOnDevice
+                                     : PredictionModelType::kServerSide),
+                    ".InquiryDuration"});
+  base::UmaHistogramMediumTimes(
+      histogram_name, base::TimeTicks::Now() - model_inquire_start_time);
+}
+
 }  // namespace
 
 PredictionBasedPermissionUiSelector::PredictionBasedPermissionUiSelector(
@@ -133,10 +148,12 @@ void PredictionBasedPermissionUiSelector::InquireServerModel(
   }
 
   request_ = std::make_unique<PredictionServiceRequest>(
-      service, std::move(features),
+      service, features,
       base::BindOnce(
           &PredictionBasedPermissionUiSelector::LookupResponseReceived,
-          base::Unretained(this), /*is_on_device=*/false, request_type));
+          base::Unretained(this),
+          /*model_inquire_start_time=*/base::TimeTicks::Now(),
+          /*is_on_device=*/false, request_type));
 }
 
 void PredictionBasedPermissionUiSelector::InquireTfliteOnDeviceModelIfAvailable(
@@ -160,10 +177,14 @@ void PredictionBasedPermissionUiSelector::InquireTfliteOnDeviceModelIfAvailable(
     permissions::PermissionUmaUtil::RecordPermissionPredictionSource(
         permissions::PermissionPredictionSource::ON_DEVICE_TFLITE);
     auto proto_request = GetPredictionRequestProto(features);
+    tflite_model_holdback_probability_ =
+        prediction_model_handler->HoldBackProbability();
     prediction_model_handler->ExecuteModelWithMetadata(
         base::BindOnce(
             &PredictionBasedPermissionUiSelector::LookupResponseReceived,
-            weak_ptr_factory_.GetWeakPtr(), /*is_on_device=*/true, request_type,
+            weak_ptr_factory_.GetWeakPtr(),
+            /*model_inquire_start_time=*/base::TimeTicks::Now(),
+            /*is_on_device=*/true, request_type,
             /*lookup_succesful=*/true, /*response_from_cache=*/false),
         std::move(proto_request));
     return;
@@ -174,7 +195,7 @@ void PredictionBasedPermissionUiSelector::InquireTfliteOnDeviceModelIfAvailable(
 }
 
 void PredictionBasedPermissionUiSelector::
-    InquireGenAiOnDeviceAndServerModelIfAvailable(
+    InquireAiOnDeviceAndServerModelIfAvailable(
         content::RenderFrameHost* rfh,
         PredictionRequestFeatures features,
         permissions::RequestType request_type) {
@@ -191,8 +212,9 @@ void PredictionBasedPermissionUiSelector::SelectUiToUse(
     DecisionMadeCallback callback) {
   VLOG(1) << "[CPSS] Selector activated";
   callback_ = std::move(callback);
-  last_request_grant_likelihood_ = std::nullopt;
   last_permission_request_relevance_ = std::nullopt;
+  last_request_grant_likelihood_ = std::nullopt;
+  tflite_model_holdback_probability_ = std::nullopt;
   was_decision_held_back_ = std::nullopt;
 
   const PredictionSource prediction_source =
@@ -204,9 +226,7 @@ void PredictionBasedPermissionUiSelector::SelectUiToUse(
   }
 
   PredictionRequestFeatures features = BuildPredictionRequestFeatures(request);
-  if (!base::FeatureList::IsEnabled(
-          permissions::features::kPermissionPredictionsV3) ||
-      prediction_source == PredictionSource::USE_ONDEVICE_TFLITE) {
+  if (prediction_source == PredictionSource::USE_ONDEVICE_TFLITE) {
     if (features.requested_permission_counts.total() <
         kRequestedPermissionMinimumHistoricalActions) {
       VLOG(1) << "[CPSS] Historic prompt count ("
@@ -235,8 +255,8 @@ void PredictionBasedPermissionUiSelector::SelectUiToUse(
   DCHECK(!request_);
 
   switch (prediction_source) {
-    case PredictionSource::USE_ONDEVICE_GENAI_AND_SERVER_SIDE:
-      InquireGenAiOnDeviceAndServerModelIfAvailable(
+    case PredictionSource::USE_ONDEVICE_AI_AND_SERVER_SIDE:
+      InquireAiOnDeviceAndServerModelIfAvailable(
           web_contents->GetPrimaryMainFrame(), std::move(features),
           request->request_type());
       return;
@@ -255,7 +275,7 @@ void PredictionBasedPermissionUiSelector::OnGetInnerTextForOnDeviceModel(
     PredictionRequestFeatures features,
     permissions::RequestType request_type,
     std::unique_ptr<content_extraction::InnerTextResult> result) {
-  VLOG(1) << "[PermissionsAIv1] On device genAI prediction requested";
+  VLOG(1) << "[PermissionsAIv1] On device AI prediction requested";
   if (result && result->inner_text.size() > kPageContentMinLength) {
     std::string inner_text = std::move(result->inner_text);
 
@@ -265,19 +285,19 @@ void PredictionBasedPermissionUiSelector::OnGetInnerTextForOnDeviceModel(
     if (PredictionModelHandlerProvider* prediction_model_handler_provider =
             PredictionModelHandlerProviderFactory::GetForBrowserContext(
                 profile_)) {
-      if (GenAiModelHandler* gen_ai_model_handler =
-              prediction_model_handler_provider->GetGenAiModelHandler()) {
+      if (PermissionsAiHandler* gen_ai_model_handler =
+              prediction_model_handler_provider->GetPermissionsAiHandler()) {
         VLOG(1) << "[PermissionsAIv1] Inquire model.";
-        gen_ai_model_handler->InquireGenAiOnDeviceModel(
+        gen_ai_model_handler->InquireAiOnDeviceModel(
             std::move(inner_text), request_type,
             base::BindRepeating(&PredictionBasedPermissionUiSelector::
-                                    GenAIModelExecutionCallback,
+                                    AiOnDeviceModelExecutionCallback,
                                 weak_ptr_factory_.GetWeakPtr(),
                                 std::move(features), request_type));
         return;
       }
     }
-    VLOG(1) << "[PermissionsAIv1] On device genAI model session unavailable";
+    VLOG(1) << "[PermissionsAIv1] On device AI model session unavailable";
   } else {
     VLOG(1) << "[PermissionsAIv1] The page's contnet too short or empty";
   }
@@ -328,17 +348,14 @@ PredictionBasedPermissionUiSelector::BuildPredictionRequestFeatures(
   }
 #endif
 
-  features.experiment_id = base::FeatureList::IsEnabled(
-                               permissions::features::kPermissionPredictionsV3)
-                               ? 1
-                               : 0;
+  features.experiment_id = 0;
 
-  last_permission_request_relevance_ =
-      base::FeatureList::IsEnabled(permissions::features::kPermissionsAIv1)
-          ? permissions::PermissionRequestRelevance::kVeryLow
-          : permissions::PermissionRequestRelevance::kUnspecified;
-
-  features.permission_relevance = last_permission_request_relevance_.value();
+  if (base::FeatureList::IsEnabled(permissions::features::kPermissionsAIv1)) {
+    // Init `permission_relevance` here to avoid a crash during
+    // `ConvertToProtoRelevance` execution.
+    features.permission_relevance =
+        permissions::PermissionRequestRelevance::kUnspecified;
+  }
 
   base::Time cutoff = base::Time::Now() - kPermissionActionCutoffAge;
 
@@ -360,11 +377,11 @@ PredictionBasedPermissionUiSelector::BuildPredictionRequestFeatures(
   return features;
 }
 
-void PredictionBasedPermissionUiSelector::GenAIModelExecutionCallback(
+void PredictionBasedPermissionUiSelector::AiOnDeviceModelExecutionCallback(
     PredictionRequestFeatures features,
     permissions::RequestType request_type,
     std::optional<PermissionsAiResponse> response) {
-  VLOG(1) << "[PermissionsAIv1]: GenAI model execution callback called "
+  VLOG(1) << "[PermissionsAIv1]: AI model execution callback called "
           << (response.has_value() ? "with value" : "without value");
   if (response.has_value()) {
     last_permission_request_relevance_ =
@@ -375,23 +392,27 @@ void PredictionBasedPermissionUiSelector::GenAIModelExecutionCallback(
             << (response.value().is_permission_relevant() ? "relevant"
                                                           : "not relevant");
     permissions::PermissionUmaUtil::RecordPermissionPredictionSource(
-        permissions::PermissionPredictionSource::
-            SERVER_SIDE_AND_ON_DEVICE_GENAI);
+        permissions::PermissionPredictionSource::ONDEVICE_AI_AND_SERVER_SIDE);
   } else {
     last_permission_request_relevance_ =
         permissions::PermissionRequestRelevance::kUnspecified;
   }
   features.permission_relevance = last_permission_request_relevance_.value();
+  permissions::PermissionUmaUtil::RecordPermissionRequestRelevance(
+      features.permission_relevance);
   InquireServerModel(features, request_type,
                      /*record_source=*/!response.has_value());
 }
 
 void PredictionBasedPermissionUiSelector::LookupResponseReceived(
+    base::TimeTicks model_inquire_start_time,
     bool is_on_device,
     permissions::RequestType request_type,
     bool lookup_successful,
     bool response_from_cache,
     const std::optional<permissions::GeneratePredictionsResponse>& response) {
+  LogModelInquireTime(model_inquire_start_time, is_on_device);
+
   request_.reset();
   if (!callback_) {
     VLOG(1) << "[CPSS] Prediction service response ignored as the request is "
@@ -436,31 +457,18 @@ bool PredictionBasedPermissionUiSelector::ShouldHoldBack(
     permissions::RequestType request_type) {
   DCHECK(request_type == permissions::RequestType::kNotifications ||
          request_type == permissions::RequestType::kGeolocation);
-  // Different holdback threshold for the different experiments.
-  const double on_device_geolocation_holdback_threshold =
-      permissions::feature_params::
-          kPermissionOnDeviceGeolocationPredictionsHoldbackChance.Get();
-  const double on_device_notification_holdback_threshold =
-      permissions::feature_params::
-          kPermissionOnDeviceNotificationPredictionsHoldbackChance.Get();
-  const double server_side_holdback_threshold =
-      permissions::feature_params::kPermissionPredictionsV2HoldbackChance.Get();
 
   // Holdback probability for this request.
   const double holdback_chance = base::RandDouble();
   bool should_holdback = false;
   if (is_on_device) {
-    if (request_type == permissions::RequestType::kNotifications) {
-      should_holdback =
-          holdback_chance < on_device_notification_holdback_threshold;
-    } else if (request_type == permissions::RequestType::kGeolocation) {
-      should_holdback =
-          holdback_chance < on_device_geolocation_holdback_threshold;
-    } else {
-      NOTREACHED();
-    }
+    DCHECK(tflite_model_holdback_probability_.has_value());
+    should_holdback = holdback_chance < *tflite_model_holdback_probability_;
   } else {
-    should_holdback = holdback_chance < server_side_holdback_threshold;
+    should_holdback =
+        holdback_chance <
+        permissions::feature_params::kPermissionPredictionsV2HoldbackChance
+            .Get();
   }
   permissions::PermissionUmaUtil::RecordPermissionPredictionServiceHoldback(
       request_type, is_on_device, should_holdback);
@@ -500,7 +508,7 @@ PredictionSource PredictionBasedPermissionUiSelector::GetPredictionTypeToUse(
   }
   if (use_server_side) {
     if (base::FeatureList::IsEnabled(permissions::features::kPermissionsAIv1)) {
-      return PredictionSource::USE_ONDEVICE_GENAI_AND_SERVER_SIDE;
+      return PredictionSource::USE_ONDEVICE_AI_AND_SERVER_SIDE;
     }
     return PredictionSource::USE_SERVER_SIDE;
   }

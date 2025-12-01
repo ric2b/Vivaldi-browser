@@ -6,6 +6,7 @@
 
 #include <optional>
 #include <string>
+#include <utility>
 
 #include "base/base_paths.h"
 #include "base/command_line.h"
@@ -52,8 +53,7 @@ FilePath GetXDGDirectory(Environment* env,
                          const char* env_name,
                          const char* fallback_dir) {
   FilePath path;
-  std::string env_value;
-  if (env->GetVar(env_name, &env_value) && !env_value.empty()) {
+  if (auto env_value = env->GetVar(env_name).value_or(""); !env_value.empty()) {
     path = FilePath(env_value);
   } else {
     PathService::Get(DIR_HOME, &path);
@@ -85,8 +85,8 @@ std::vector<FilePath> GetXDGDataSearchLocations(Environment* env) {
   std::vector<FilePath> search_paths;
   search_paths.push_back(GetXDGDataWriteLocation(env));
 
-  std::string xdg_data_dirs;
-  if (env->GetVar("XDG_DATA_DIRS", &xdg_data_dirs) && !xdg_data_dirs.empty()) {
+  if (auto xdg_data_dirs = env->GetVar("XDG_DATA_DIRS").value_or("");
+      !xdg_data_dirs.empty()) {
     StringTokenizer tokenizer(xdg_data_dirs, ":");
     while (tokenizer.GetNext()) {
       search_paths.emplace_back(tokenizer.token_piece());
@@ -101,17 +101,18 @@ std::vector<FilePath> GetXDGDataSearchLocations(Environment* env) {
 
 DesktopEnvironment GetDesktopEnvironment(Environment* env) {
   // kXdgCurrentDesktopEnvVar is the newest standard circa 2012.
-  std::string xdg_current_desktop;
-  if (env->GetVar(kXdgCurrentDesktopEnvVar, &xdg_current_desktop)) {
+  if (std::optional<std::string> maybe_xdg_current_desktop =
+          env->GetVar(kXdgCurrentDesktopEnvVar)) {
+    const std::string& xdg_current_desktop = maybe_xdg_current_desktop.value();
     // It could have multiple values separated by colon in priority order.
     for (const auto& value : SplitStringPiece(
              xdg_current_desktop, ":", TRIM_WHITESPACE, SPLIT_WANT_NONEMPTY)) {
       if (value == "Unity") {
         // gnome-fallback sessions set kXdgCurrentDesktopEnvVar to Unity
         // DESKTOP_SESSION can be gnome-fallback or gnome-fallback-compiz
-        std::string desktop_session;
-        if (env->GetVar("DESKTOP_SESSION", &desktop_session) &&
-            desktop_session.find("gnome-fallback") != std::string::npos) {
+        std::string desktop_session =
+            env->GetVar("DESKTOP_SESSION").value_or("");
+        if (desktop_session.find("gnome-fallback") != std::string::npos) {
           return DESKTOP_ENVIRONMENT_GNOME;
         }
         return DESKTOP_ENVIRONMENT_UNITY;
@@ -126,15 +127,15 @@ DesktopEnvironment GetDesktopEnvironment(Environment* env) {
         return DESKTOP_ENVIRONMENT_CINNAMON;
       }
       if (value == "KDE") {
-        std::string kde_session;
-        if (env->GetVar(kKDESessionEnvVar, &kde_session)) {
-          if (kde_session == "5") {
-            return DESKTOP_ENVIRONMENT_KDE5;
-          }
+        std::optional<std::string> kde_session =
+            env->GetVar(kKDESessionEnvVar).value_or("");
+        if (kde_session == "5") {
+          return DESKTOP_ENVIRONMENT_KDE5;
+        }
           if (kde_session == "6") {
             return DESKTOP_ENVIRONMENT_KDE6;
           }
-        }
+
         return DESKTOP_ENVIRONMENT_KDE4;
       }
       if (value == "Pantheon") {
@@ -153,31 +154,29 @@ DesktopEnvironment GetDesktopEnvironment(Environment* env) {
   }
 
   // DESKTOP_SESSION was what everyone used in 2010.
-  std::string desktop_session;
-  if (env->GetVar("DESKTOP_SESSION", &desktop_session)) {
-    if (desktop_session == "deepin") {
-      return DESKTOP_ENVIRONMENT_DEEPIN;
-    }
-    if (desktop_session == "gnome" || desktop_session == "mate") {
-      return DESKTOP_ENVIRONMENT_GNOME;
-    }
-    if (desktop_session == "kde4" || desktop_session == "kde-plasma") {
+  std::string desktop_session = env->GetVar("DESKTOP_SESSION").value_or("");
+  if (desktop_session == "deepin") {
+    return DESKTOP_ENVIRONMENT_DEEPIN;
+  }
+  if (desktop_session == "gnome" || desktop_session == "mate") {
+    return DESKTOP_ENVIRONMENT_GNOME;
+  }
+  if (desktop_session == "kde4" || desktop_session == "kde-plasma") {
+    return DESKTOP_ENVIRONMENT_KDE4;
+  }
+  if (desktop_session == "kde") {
+    // This may mean KDE4 on newer systems, so we have to check.
+    if (env->HasVar(kKDESessionEnvVar)) {
       return DESKTOP_ENVIRONMENT_KDE4;
     }
-    if (desktop_session == "kde") {
-      // This may mean KDE4 on newer systems, so we have to check.
-      if (env->HasVar(kKDESessionEnvVar)) {
-        return DESKTOP_ENVIRONMENT_KDE4;
-      }
-      return DESKTOP_ENVIRONMENT_KDE3;
-    }
-    if (desktop_session.find("xfce") != std::string::npos ||
-        desktop_session == "xubuntu") {
-      return DESKTOP_ENVIRONMENT_XFCE;
-    }
-    if (desktop_session == "ukui") {
-      return DESKTOP_ENVIRONMENT_UKUI;
-    }
+    return DESKTOP_ENVIRONMENT_KDE3;
+  }
+  if (desktop_session.find("xfce") != std::string::npos ||
+      desktop_session == "xubuntu") {
+    return DESKTOP_ENVIRONMENT_XFCE;
+  }
+  if (desktop_session == "ukui") {
+    return DESKTOP_ENVIRONMENT_UKUI;
   }
 
   // Fall back on some older environment variables.
@@ -232,11 +231,13 @@ const char* GetDesktopEnvironmentName(Environment* env) {
 }
 
 SessionType GetSessionType(Environment& env) {
-  std::string xdg_session_type;
-  if (!env.GetVar(kXdgSessionTypeEnvVar, &xdg_session_type)) {
+  std::optional<std::string> maybe_xdg_session_type =
+      env.GetVar(kXdgSessionTypeEnvVar);
+  if (!maybe_xdg_session_type.has_value()) {
     return SessionType::kUnset;
   }
 
+  std::string& xdg_session_type = maybe_xdg_session_type.value();
   TrimWhitespaceASCII(ToLowerASCII(xdg_session_type), TrimPositions::TRIM_ALL,
                       &xdg_session_type);
 
@@ -265,8 +266,8 @@ SessionType GetSessionType(Environment& env) {
 }
 
 std::optional<std::string> ExtractXdgActivationTokenFromEnv(Environment& env) {
-  std::string token;
-  if (env.GetVar(kXdgActivationTokenEnvVar, &token) && !token.empty()) {
+  if (auto token = env.GetVar(kXdgActivationTokenEnvVar).value_or("");
+      !token.empty()) {
     GetXdgActivationToken() = std::move(token);
     env.UnSetVar(kXdgActivationTokenEnvVar);
   }

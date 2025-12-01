@@ -21,10 +21,9 @@
 #include <vector>
 
 #include <openssl/base.h>
+#include <openssl/pki/ocsp.h>
 
 #include "input.h"
-#include "ocsp_revocation_status.h"
-#include "ocsp_verify_result.h"
 #include "parse_values.h"
 #include "parser.h"
 #include "signature_algorithm.h"
@@ -270,28 +269,6 @@ OPENSSL_EXPORT bool ParseOCSPResponseData(der::Input raw_tlv,
 // On failure |out| has an undefined state. Some of its fields may have been
 // updated during parsing, whereas others may not have been changed.
 OPENSSL_EXPORT bool ParseOCSPResponse(der::Input raw_tlv, OCSPResponse *out);
-
-// Checks the revocation status of the certificate |certificate_der| by using
-// the DER-encoded |raw_response|.
-//
-// Returns GOOD if the OCSP response indicates the certificate is not revoked,
-// REVOKED if it indicates it is revoked, or UNKNOWN for all other cases.
-//
-//  * |raw_response|: A DER encoded OCSPResponse.
-//  * |certificate_der|: The certificate being checked for revocation.
-//  * |issuer_certificate_der|: The certificate that signed |certificate_der|.
-//        The caller must have already performed path verification.
-//  * |verify_time_epoch_seconds|: The time as the difference in seconds from
-//        the POSIX epoch to use when checking revocation status.
-//  * |max_age_seconds|: The maximum age in seconds for a CRL, implemented as
-//        time since the |thisUpdate| field in the CRL TBSCertList. Responses
-//        older than |max_age_seconds| will be considered invalid.
-//  * |response_details|: Additional details about failures.
-[[nodiscard]] OPENSSL_EXPORT OCSPRevocationStatus CheckOCSP(
-    std::string_view raw_response, std::string_view certificate_der,
-    std::string_view issuer_certificate_der, int64_t verify_time_epoch_seconds,
-    std::optional<int64_t> max_age_seconds,
-    OCSPVerifyResult::ResponseStatus *response_details);
 
 // Checks the revocation status of |certificate| by using the DER-encoded
 // |raw_response|.

@@ -677,19 +677,15 @@ void MenuManager::ExecuteCommand(content::BrowserContext* context,
   // event or extensions will break. So this must always be nullptr.
   WebViewGuest* webview_guest =
       (vivaldi::IsVivaldiRunning() ? nullptr :
-       WebViewGuest::FromRenderFrameHost(render_frame_host));
-  if (webview_guest) {
-    // This is used in web_view_internalcustom_bindings.js.
-    // The property is not exposed to developer API.
-    properties.Set("webviewInstanceId", webview_guest->view_instance_id());
-  }
+      WebViewGuest::FromRenderFrameHost(render_frame_host));
 
   base::Value::List args;
   args.Append(std::move(properties));
 
   // Add the tab info to the argument list.
   // No tab info in a platform app.
-  if (!extension || !extension->is_platform_app()) {
+  // Do not add tab info if not extension (i.e. Controlled Frame).
+  if (extension && !extension->is_platform_app()) {
     // Note: web_contents are null in unit tests :(
     if (web_contents) {
       int frame_id = ExtensionApiFrameIdMap::GetFrameId(render_frame_host);
@@ -735,6 +731,14 @@ void MenuManager::ExecuteCommand(content::BrowserContext* context,
   {
     // Dispatch to menu item's .onclick handler (this is the legacy API, from
     // before chrome.contextMenus.onClicked existed).
+    auto args_cloned = args.Clone();
+    if (webview_guest) {
+      // This is used in
+      // extensions/renderer/resources/context_menus_handlers.js.
+      // The property is not exposed to developer API.
+      args_cloned[0].GetDict().Set("webviewInstanceId",
+                                   webview_guest->view_instance_id());
+    }
     auto event = std::make_unique<Event>(
         webview_guest ? events::WEB_VIEW_INTERNAL_CONTEXT_MENUS
                       : events::CONTEXT_MENUS,
@@ -742,8 +746,8 @@ void MenuManager::ExecuteCommand(content::BrowserContext* context,
                              ? "controlledFrameInternal.contextMenus"
                              : kOnWebviewContextMenus)
                       : kOnContextMenus,
-        args.Clone(), context);
-    event->user_gesture = EventRouter::USER_GESTURE_ENABLED;
+        std::move(args_cloned), context);
+    event->user_gesture = EventRouter::UserGestureState::kEnabled;
     if (webview_guest) {
       event->filter_info->has_instance_id = true;
       event->filter_info->instance_id = webview_guest->view_instance_id();
@@ -768,7 +772,7 @@ void MenuManager::ExecuteCommand(content::BrowserContext* context,
         webview_guest ? api::chrome_web_view_internal::OnClicked::kEventName
                       : api::context_menus::OnClicked::kEventName,
         std::move(args), context);
-    event->user_gesture = EventRouter::USER_GESTURE_ENABLED;
+    event->user_gesture = EventRouter::UserGestureState::kEnabled;
     if (webview_guest) {
       event->filter_info->has_instance_id = true;
       event->filter_info->instance_id = webview_guest->view_instance_id();

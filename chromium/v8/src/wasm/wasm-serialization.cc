@@ -658,12 +658,12 @@ class DeserializationQueue {
  public:
   void Add(std::vector<DeserializationUnit> batch) {
     DCHECK(!batch.empty());
-    base::SpinningMutexGuard guard(&mutex_);
+    base::MutexGuard guard(&mutex_);
     queue_.emplace(std::move(batch));
   }
 
   std::vector<DeserializationUnit> Pop() {
-    base::SpinningMutexGuard guard(&mutex_);
+    base::MutexGuard guard(&mutex_);
     if (queue_.empty()) return {};
     auto batch = std::move(queue_.front());
     queue_.pop();
@@ -671,7 +671,7 @@ class DeserializationQueue {
   }
 
   std::vector<DeserializationUnit> PopAll() {
-    base::SpinningMutexGuard guard(&mutex_);
+    base::MutexGuard guard(&mutex_);
     if (queue_.empty()) return {};
     auto units = std::move(queue_.front());
     queue_.pop();
@@ -684,12 +684,12 @@ class DeserializationQueue {
   }
 
   size_t NumBatches() const {
-    base::SpinningMutexGuard guard(&mutex_);
+    base::MutexGuard guard(&mutex_);
     return queue_.size();
   }
 
  private:
-  mutable base::SpinningMutex mutex_;
+  mutable base::Mutex mutex_;
   std::queue<std::vector<DeserializationUnit>> queue_;
 };
 
@@ -1085,7 +1085,7 @@ bool IsSupportedVersion(base::Vector<const uint8_t> header,
          0;
 }
 
-MaybeHandle<WasmModuleObject> DeserializeNativeModule(
+MaybeDirectHandle<WasmModuleObject> DeserializeNativeModule(
     Isolate* isolate, base::Vector<const uint8_t> data,
     base::Vector<const uint8_t> wire_bytes_vec,
     const CompileTimeImports& compile_imports,
@@ -1114,11 +1114,8 @@ MaybeHandle<WasmModuleObject> DeserializeNativeModule(
   auto shared_native_module = wasm_engine->MaybeGetNativeModule(
       module->origin, owned_wire_bytes.as_vector(), compile_imports, isolate);
   if (shared_native_module == nullptr) {
-    const bool dynamic_tiering = v8_flags.wasm_dynamic_tiering;
-    const bool include_liftoff = !dynamic_tiering;
     size_t code_size_estimate =
-        wasm::WasmCodeManager::EstimateNativeModuleCodeSize(
-            module.get(), include_liftoff, DynamicTiering{dynamic_tiering});
+        wasm::WasmCodeManager::EstimateNativeModuleCodeSize(module.get());
     shared_native_module = wasm_engine->NewNativeModule(
         isolate, enabled_features, detected_features, compile_imports,
         std::move(module), code_size_estimate);
@@ -1150,7 +1147,7 @@ MaybeHandle<WasmModuleObject> DeserializeNativeModule(
 
   DirectHandle<Script> script =
       wasm_engine->GetOrCreateScript(isolate, shared_native_module, source_url);
-  Handle<WasmModuleObject> module_object =
+  DirectHandle<WasmModuleObject> module_object =
       WasmModuleObject::New(isolate, shared_native_module, script);
 
   // Finish the Wasm script now and make it public to the debugger.

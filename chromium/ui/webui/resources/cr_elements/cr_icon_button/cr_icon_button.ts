@@ -103,9 +103,9 @@ export class CrIconButtonElement extends CrIconbuttonElementBase {
     };
   }
 
-  disabled: boolean = false;
-  ironIcon?: string;
-  protected multipleIcons_: boolean = false;
+  accessor disabled: boolean = false;
+  accessor ironIcon: string|undefined;
+  protected accessor multipleIcons_: boolean = false;
 
   /**
    * It is possible to activate a tab when the space key is pressed down. When
@@ -178,7 +178,7 @@ export class CrIconButtonElement extends CrIconbuttonElementBase {
     }
   }
 
-  private async onIronIconChanged_() {
+  private onIronIconChanged_() {
     this.shadowRoot.querySelectorAll('cr-icon').forEach(el => el.remove());
     if (!this.ironIcon) {
       return;
@@ -189,7 +189,7 @@ export class CrIconButtonElement extends CrIconbuttonElementBase {
       crIcon.icon = icon;
       this.$.icon.appendChild(crIcon);
       await crIcon.updateComplete;
-      crIcon.shadowRoot!.querySelectorAll('svg, img')
+      crIcon.shadowRoot.querySelectorAll('svg, img')
           .forEach(child => child.setAttribute('role', 'none'));
     });
   }

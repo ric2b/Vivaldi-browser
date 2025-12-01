@@ -25,7 +25,7 @@ export class SwatchPopoverHelper extends Common.ObjectWrapper.ObjectWrapper<Even
     super();
     this.popover = new UI.GlassPane.GlassPane();
     this.popover.setSizeBehavior(UI.GlassPane.SizeBehavior.MEASURE_CONTENT);
-    this.popover.setMarginBehavior(UI.GlassPane.MarginBehavior.ARROW);
+    this.popover.setMarginBehavior(UI.GlassPane.MarginBehavior.DEFAULT_MARGIN);
     this.popover.element.addEventListener('mousedown', e => e.consume(), false);
 
     this.hideProxy = this.hide.bind(this, true);
@@ -91,7 +91,7 @@ export class SwatchPopoverHelper extends Common.ObjectWrapper.ObjectWrapper<Even
     if (this.anchorElement) {
       let anchorBox = this.anchorElement.boxInWindow();
       if (ColorSwatch.isColorSwatch(this.anchorElement)) {
-        const swatch = (this.anchorElement as ColorSwatch);
+        const swatch = (this.anchorElement);
         if (!swatch.anchorBox) {
           return;
         }
@@ -99,7 +99,7 @@ export class SwatchPopoverHelper extends Common.ObjectWrapper.ObjectWrapper<Even
       }
 
       this.popover.setContentAnchorBox(anchorBox);
-      this.popover.show((this.anchorElement.ownerDocument as Document));
+      this.popover.show((this.anchorElement.ownerDocument));
     }
     this.view.contentElement.addEventListener('focusout', this.boundFocusOut, false);
     if (!this.focusRestorer) {

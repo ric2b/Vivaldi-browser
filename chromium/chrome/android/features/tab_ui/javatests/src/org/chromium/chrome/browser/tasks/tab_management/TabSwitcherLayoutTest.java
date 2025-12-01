@@ -6,7 +6,6 @@ package org.chromium.chrome.browser.tasks.tab_management;
 
 import static androidx.test.espresso.Espresso.onView;
 import static androidx.test.espresso.action.ViewActions.click;
-import static androidx.test.espresso.action.ViewActions.longClick;
 import static androidx.test.espresso.action.ViewActions.pressImeActionButton;
 import static androidx.test.espresso.action.ViewActions.replaceText;
 import static androidx.test.espresso.assertion.ViewAssertions.doesNotExist;
@@ -23,7 +22,6 @@ import static androidx.test.espresso.matcher.ViewMatchers.withText;
 
 import static org.hamcrest.core.AllOf.allOf;
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
@@ -398,8 +396,7 @@ public class TabSwitcherLayoutTest {
                     hasAtLeastOneValidViewHolder = true;
                     ViewLookupCachingFrameLayout tabView =
                             (ViewLookupCachingFrameLayout) viewHolder.itemView;
-                    TabThumbnailView thumbnail =
-                            (TabThumbnailView) tabView.fastFindViewById(R.id.tab_thumbnail);
+                    TabThumbnailView thumbnail = tabView.fastFindViewById(R.id.tab_thumbnail);
 
                     double thumbnailViewRatio = thumbnail.getWidth() * 1.0 / thumbnail.getHeight();
                     int pixelDelta =
@@ -467,6 +464,7 @@ public class TabSwitcherLayoutTest {
 
     @Test
     @MediumTest
+    @DisabledTest(message = "crbug.com/397901349")
     public void testUndoClosure_AccessibilityMode() {
         ThreadUtils.runOnUiThreadBlocking(
                 () -> ChromeAccessibilityUtil.get().setAccessibilityEnabledForTesting(true));
@@ -490,7 +488,6 @@ public class TabSwitcherLayoutTest {
 
     @Test
     @MediumTest
-    @DisableFeatures(ChromeFeatureList.TAB_GROUP_CREATION_DIALOG_ANDROID)
     public void testUndoGroupClosureInTabSwitcher() {
         final ChromeTabbedActivity cta = mActivityTestRule.getActivity();
         SnackbarManager snackbarManager = mActivityTestRule.getActivity().getSnackbarManager();
@@ -498,9 +495,12 @@ public class TabSwitcherLayoutTest {
         enterTabSwitcher(cta);
         verifyTabSwitcherCardCount(cta, 2);
         // Create a tab group.
-        mergeAllNormalTabsToAGroup(cta);
+        TabModel normalTabModel = cta.getTabModelSelector().getModel(false);
+        List<Tab> tabGroup =
+                new ArrayList<>(
+                        Arrays.asList(normalTabModel.getTabAt(0), normalTabModel.getTabAt(1)));
+        createTabGroup(cta, false, tabGroup);
         verifyTabSwitcherCardCount(cta, 1);
-        assertNotNull(snackbarManager.getCurrentSnackbarForTesting());
 
         // Verify close this tab group and undo in tab switcher.
         closeFirstTabGroupInTabSwitcher(cta);
@@ -935,7 +935,6 @@ public class TabSwitcherLayoutTest {
     @MediumTest
     @EnableFeatures({
         ChromeFeatureList.TAB_GROUP_PANE_ANDROID,
-        ChromeFeatureList.TAB_GROUP_CREATION_DIALOG_ANDROID,
     })
     @DisableFeatures({
         ChromeFeatureList.TAB_GROUP_SYNC_ANDROID,
@@ -948,33 +947,6 @@ public class TabSwitcherLayoutTest {
         // Create a tab group.
         mergeNormalTabsToGroupWithDialog(cta, 1);
         verifyGroupVisualDataDialogOpenedAndDismiss(cta);
-        verifyTabSwitcherCardCount(cta, 1);
-    }
-
-    @Test
-    @MediumTest
-    @EnableFeatures({ChromeFeatureList.TAB_GROUP_PANE_ANDROID})
-    @DisableFeatures({
-        ChromeFeatureList.TAB_GROUP_SYNC_ANDROID,
-        ChromeFeatureList.TAB_GROUP_CREATION_DIALOG_ANDROID,
-    })
-    public void testNoTabGroupDialogSingleTab() {
-        final ChromeTabbedActivity cta = mActivityTestRule.getActivity();
-        SnackbarManager snackbarManager = mActivityTestRule.getActivity().getSnackbarManager();
-        createTabs(cta, false, 1);
-        enterTabSwitcher(cta);
-        verifyTabSwitcherCardCount(cta, 1);
-        // Create a tab group.
-        mergeNormalTabsToGroupWithDialog(cta, 1);
-        // Verify the undo group merge snackbar is showing.
-        assertTrue(
-                snackbarManager.getCurrentSnackbarForTesting().getController()
-                        instanceof UndoGroupSnackbarController);
-        // Verify that no modal dialog was shown.
-        CriteriaHelper.pollUiThread(
-                () -> {
-                    Criteria.checkThat(mModalDialogManager.isShowing(), Matchers.is(false));
-                });
         verifyTabSwitcherCardCount(cta, 1);
     }
 
@@ -1000,78 +972,6 @@ public class TabSwitcherLayoutTest {
         onView(withId(R.id.action_button)).perform(click());
         onView(allOf(withText(deleteButtonText), withId(R.id.menu_item_text)))
                 .check(doesNotExist());
-    }
-
-    @Test
-    @MediumTest
-    public void testLongPressTab_entryInTabSwitcher_verifyNoSelectionOccurs() {
-        TabUiFeatureUtilities.setTabListEditorLongPressEntryEnabledForTesting(true);
-
-        final ChromeTabbedActivity cta = mActivityTestRule.getActivity();
-        createTabs(cta, false, 2);
-        enterTabSwitcher(cta);
-        verifyTabSwitcherCardCount(cta, 2);
-
-        // LongPress entry to TabListEditor.
-        onView(tabSwitcherViewMatcher())
-                .perform(RecyclerViewActions.actionOnItemAtPosition(0, longClick()));
-
-        TabListEditorTestingRobot mSelectionEditorRobot = new TabListEditorTestingRobot();
-        mSelectionEditorRobot.resultRobot.verifyTabListEditorIsVisible();
-
-        // Verify no selection action occurred to switch the selected tab in the tab model
-        Criteria.checkThat(
-                mActivityTestRule.getActivity().getCurrentTabModel().index(), Matchers.is(1));
-    }
-
-    @Test
-    @MediumTest
-    public void testLongPressTabGroup_entryInTabSwitcher() {
-        TabUiFeatureUtilities.setTabListEditorLongPressEntryEnabledForTesting(true);
-
-        final ChromeTabbedActivity cta = mActivityTestRule.getActivity();
-        createTabs(cta, false, 2);
-        enterTabSwitcher(cta);
-        verifyTabSwitcherCardCount(cta, 2);
-
-        // Create a tab group.
-        mergeAllNormalTabsToAGroup(cta);
-        verifyTabSwitcherCardCount(cta, 1);
-
-        // LongPress entry to TabListEditor.
-        onView(tabSwitcherViewMatcher())
-                .perform(RecyclerViewActions.actionOnItemAtPosition(0, longClick()));
-
-        TabListEditorTestingRobot mSelectionEditorRobot = new TabListEditorTestingRobot();
-        mSelectionEditorRobot.resultRobot.verifyTabListEditorIsVisible();
-    }
-
-    @Test
-    @MediumTest
-    public void testLongPressTab_verifyPostLongPressClickNoSelectionEditor() {
-        TabUiFeatureUtilities.setTabListEditorLongPressEntryEnabledForTesting(true);
-
-        final ChromeTabbedActivity cta = mActivityTestRule.getActivity();
-        createTabs(cta, false, 2);
-        enterTabSwitcher(cta);
-        verifyTabSwitcherCardCount(cta, 2);
-
-        // LongPress entry to TabListEditor.
-        onView(tabSwitcherViewMatcher())
-                .perform(RecyclerViewActions.actionOnItemAtPosition(0, longClick()));
-
-        TabListEditorTestingRobot mSelectionEditorRobot = new TabListEditorTestingRobot();
-        mSelectionEditorRobot.resultRobot.verifyTabListEditorIsVisible();
-        mSelectionEditorRobot.actionRobot.clickItemAtAdapterPosition(0);
-        mSelectionEditorRobot.resultRobot.verifyItemSelectedAtAdapterPosition(0);
-        Espresso.pressBack();
-
-        onView(tabSwitcherViewMatcher())
-                .perform(RecyclerViewActions.actionOnItemAtPosition(0, click()));
-        // Check the selected tab in the tab model switches from the second tab to the first to
-        // verify clicking the tab worked.
-        Criteria.checkThat(
-                mActivityTestRule.getActivity().getCurrentTabModel().index(), Matchers.is(0));
     }
 
     @Test

@@ -4,8 +4,7 @@
  * found in the LICENSE file.
  */
 .ignore-list-setting-content {
-  padding: 0 var(--sys-size-8);
-  width: 280px;
+  max-width: var(--sys-size-30);
 }
 
 .ignore-list-setting-description {
@@ -55,14 +54,5 @@
     &:not(.error-input, :invalid):hover:not(:focus) {
       background: var(--sys-color-state-hover-on-subtle);
     }
-  }
-}
-
-.input-validation {
-  /* 24px is the size of the checkbox, add this margin-left so the text can align with the input */
-  margin: 5px 0 5px 24px;
-
-  &.input-validation-error {
-    color: var(--sys-color-error);
   }
 }

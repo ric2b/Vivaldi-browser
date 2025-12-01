@@ -25,6 +25,7 @@
 #include "base/test/metrics/user_action_tester.h"
 #include "base/test/protobuf_matchers.h"
 #include "base/test/run_until.h"
+#include "base/test/scoped_feature_list.h"
 #include "base/test/with_feature_override.h"
 #include "base/threading/thread_restrictions.h"
 #include "build/build_config.h"
@@ -61,15 +62,16 @@
 #include "chrome/browser/ui/lens/lens_overlay_colors.h"
 #include "chrome/browser/ui/lens/lens_overlay_entry_point_controller.h"
 #include "chrome/browser/ui/lens/lens_overlay_gen204_controller.h"
+#include "chrome/browser/ui/lens/lens_overlay_query_controller.h"
 #include "chrome/browser/ui/lens/lens_overlay_side_panel_coordinator.h"
 #include "chrome/browser/ui/lens/lens_overlay_untrusted_ui.h"
 #include "chrome/browser/ui/lens/lens_overlay_url_builder.h"
 #include "chrome/browser/ui/lens/lens_permission_bubble_controller.h"
+#include "chrome/browser/ui/lens/lens_search_controller.h"
 #include "chrome/browser/ui/lens/lens_side_panel_untrusted_ui.h"
 #include "chrome/browser/ui/lens/test_lens_overlay_query_controller.h"
 #include "chrome/browser/ui/location_bar/location_bar.h"
 #include "chrome/browser/ui/tabs/public/tab_features.h"
-#include "chrome/browser/ui/tabs/public/tab_interface.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/location_bar/location_bar_view.h"
@@ -97,6 +99,7 @@
 #include "components/permissions/test/permission_request_observer.h"
 #include "components/prefs/pref_service.h"
 #include "components/sessions/content/session_tab_helper.h"
+#include "components/tab_collections/public/tab_interface.h"
 #include "components/ukm/test_ukm_recorder.h"
 #include "content/public/browser/context_menu_params.h"
 #include "content/public/browser/navigation_controller.h"
@@ -232,6 +235,14 @@ constexpr char kCheckSidePanelThumbnailShownScript[] =
     "const imageSrc = thumbnailRoot.getElementById('image').src;"
     "return window.getComputedStyle(thumbContainer).display !== 'none' && "
     "       imageSrc.startsWith('data:image/jpeg');})();";
+
+constexpr char kCheckSidePanelToastShownScript[] =
+    "(function() {const appRoot = "
+    "document.getElementsByTagName('lens-side-panel-app')[0].shadowRoot;"
+    "const toast = appRoot.getElementById('toast');"
+    "const toastStyle = window.getComputedStyle(toast);"
+    "return toastStyle.visibility !== 'hidden' && "
+    "        toastStyle.opacity !== 0;})();";
 
 constexpr char kHistoryStateScript[] =
     "(function() {history.replaceState({'test':1}, 'test'); "
@@ -417,6 +428,8 @@ class LensOverlayPageFake : public lens::mojom::LensPage {
     last_received_should_show_contextual_searchbox_ = should_show;
   }
 
+  void NotifyHandshakeComplete() override {}
+
   void NotifyResultsPanelOpened() override {
     did_notify_results_opened_ = true;
   }
@@ -449,7 +462,7 @@ class LensOverlayPageFake : public lens::mojom::LensPage {
     did_clear_text_selection_ = true;
   }
 
-  void TriggerCopyText() override { did_trigger_copy = true; }
+  void OnCopyCommand() override { did_trigger_copy = true; }
 
   void SuppressGhostLoader() override {}
 
@@ -500,8 +513,7 @@ class LensOverlayControllerFake : public LensOverlayController {
                             signin::IdentityManager* identity_manager,
                             PrefService* pref_service,
                             syncer::SyncService* sync_service,
-                            ThemeService* theme_service,
-                            Profile* profile)
+                            ThemeService* theme_service)
       : LensOverlayController(tab,
                               variations_client,
                               identity_manager,
@@ -512,8 +524,10 @@ class LensOverlayControllerFake : public LensOverlayController {
   std::unique_ptr<lens::LensOverlayQueryController> CreateLensQueryController(
       lens::LensOverlayFullImageResponseCallback full_image_callback,
       lens::LensOverlayUrlResponseCallback url_callback,
+      lens::LensOverlayInteractionResponseCallback interaction_callback,
       lens::LensOverlaySuggestInputsCallback suggest_inputs_callback,
       lens::LensOverlayThumbnailCreatedCallback thumbnail_created_callback,
+      lens::UploadProgressCallback upload_progress_callback,
       variations::VariationsClient* variations_client,
       signin::IdentityManager* identity_manager,
       Profile* profile,
@@ -527,7 +541,8 @@ class LensOverlayControllerFake : public LensOverlayController {
             base::BindRepeating(
                 &LensOverlayControllerFake::RecordUrlResponseCallback,
                 base::Unretained(this)),
-            suggest_inputs_callback, thumbnail_created_callback,
+            interaction_callback, suggest_inputs_callback,
+            thumbnail_created_callback, upload_progress_callback,
             variations_client, identity_manager, profile, invocation_source,
             use_dark_mode, gen204_controller);
     // Set up the fake responses for the query controller.
@@ -608,22 +623,37 @@ class LensOverlayControllerFake : public LensOverlayController {
       &fake_overlay_page_};
 };
 
+class LensSearchControllerFake : public LensSearchController {
+ public:
+  explicit LensSearchControllerFake(tabs::TabInterface* tab)
+      : LensSearchController(tab) {}
+
+ protected:
+  std::unique_ptr<LensOverlayController> CreateLensOverlayController(
+      tabs::TabInterface* tab,
+      variations::VariationsClient* variations_client,
+      signin::IdentityManager* identity_manager,
+      PrefService* pref_service,
+      syncer::SyncService* sync_service,
+      ThemeService* theme_service) override {
+    // Set browser color scheme to light mode for consistency.
+    theme_service->SetBrowserColorScheme(
+        ThemeService::BrowserColorScheme::kLight);
+
+    return std::make_unique<LensOverlayControllerFake>(
+        tab, variations_client, identity_manager, pref_service, sync_service,
+        theme_service);
+  }
+};
+
 class TabFeaturesFake : public tabs::TabFeatures {
  public:
   TabFeaturesFake() = default;
 
  protected:
-  std::unique_ptr<LensOverlayController> CreateLensController(
-      tabs::TabInterface* tab,
-      Profile* profile) override {
-    auto* theme_service = ThemeServiceFactory::GetForProfile(profile);
-    // Set browser color scheme to light mode for consistency.
-    theme_service->SetBrowserColorScheme(
-        ThemeService::BrowserColorScheme::kLight);
-    return std::make_unique<LensOverlayControllerFake>(
-        tab, profile->GetVariationsClient(),
-        IdentityManagerFactory::GetForProfile(profile), profile->GetPrefs(),
-        SyncServiceFactory::GetForProfile(profile), theme_service, profile);
+  std::unique_ptr<LensSearchController> CreateLensController(
+      tabs::TabInterface* tab) override {
+    return std::make_unique<LensSearchControllerFake>(tab);
   }
 };
 
@@ -685,11 +715,13 @@ class LensOverlayControllerBrowserTest : public InProcessBrowserTest {
           {
               {"send-page-url-for-contextualization", "true"},
               {"use-inner-text-as-context", "true"},
-              {"use-inner-html-as-context", "true"},
+              {"use-inner-html-as-context", "false"},
+              {"update-viewport-each-query", "true"},
           }},
          {lens::features::kLensOverlaySurvey, {}},
          {lens::features::kLensOverlaySidePanelOpenInNewTab, {}}},
-        /*disabled_features=*/{});
+        /*disabled_features=*/{
+            lens::features::kLensOverlaySimplifiedSelection});
   }
 
   const SkBitmap CreateNonEmptyBitmap(int width, int height) {
@@ -875,6 +907,8 @@ class LensOverlayControllerBrowserTest : public InProcessBrowserTest {
   std::vector<std::string> ocr_response_words_;
 };
 
+}  // namespace
+
 IN_PROC_BROWSER_TEST_F(LensOverlayControllerBrowserTest,
                        PermissionBubbleAccept_ScreenshotAndCSBPrefDisabled) {
   WaitForPaint();
@@ -931,7 +965,9 @@ IN_PROC_BROWSER_TEST_F(LensOverlayControllerBrowserTest,
       [&]() { return controller->state() == State::kOverlay; }));
 
   // Verify screenshot was captured and stored.
-  auto screenshot_bitmap = controller->current_screenshot();
+  auto screenshot_bitmap = controller->initial_screenshot();
+  EXPECT_FALSE(screenshot_bitmap.empty());
+  screenshot_bitmap = controller->updated_screenshot();
   EXPECT_FALSE(screenshot_bitmap.empty());
 }
 
@@ -992,7 +1028,9 @@ IN_PROC_BROWSER_TEST_F(
       [&]() { return controller->state() == State::kOverlay; }));
 
   // Verify screenshot was captured and stored.
-  auto screenshot_bitmap = controller->current_screenshot();
+  auto screenshot_bitmap = controller->initial_screenshot();
+  EXPECT_FALSE(screenshot_bitmap.empty());
+  screenshot_bitmap = controller->updated_screenshot();
   EXPECT_FALSE(screenshot_bitmap.empty());
 }
 
@@ -1083,7 +1121,9 @@ IN_PROC_BROWSER_TEST_F(LensOverlayControllerBrowserTest, CaptureScreenshot) {
       [&]() { return controller->state() == State::kOverlay; }));
 
   // Verify screenshot was captured and stored.
-  auto screenshot_bitmap = controller->current_screenshot();
+  auto screenshot_bitmap = controller->initial_screenshot();
+  EXPECT_FALSE(screenshot_bitmap.empty());
+  screenshot_bitmap = controller->updated_screenshot();
   EXPECT_FALSE(screenshot_bitmap.empty());
 
   // Verify screenshot was encoded and passed to WebUI.
@@ -1144,8 +1184,6 @@ IN_PROC_BROWSER_TEST_F(LensOverlayControllerBrowserTest, ShowSidePanel) {
   EXPECT_TRUE(fake_controller->fake_overlay_page_.did_notify_results_opened_);
 }
 
-namespace {
-
 class TestWebModalDialog : public views::DialogDelegateView {
  public:
   TestWebModalDialog() {
@@ -1165,6 +1203,8 @@ class TestWebModalDialog : public views::DialogDelegateView {
 
   views::View* GetInitiallyFocusedView() override { return this; }
 };
+
+namespace {
 
 // Show a web modal dialog hosted by `host_contents`.
 views::Widget* ShowTestWebModalDialog(content::WebContents* host_contents) {
@@ -1213,11 +1253,6 @@ IN_PROC_BROWSER_TEST_F(LensOverlayControllerBrowserTest, SidePanelModalDialog) {
 
   // Close the lens overlay.
   controller->CloseUISync(lens::LensOverlayDismissalSource::kPageChanged);
-
-  // The side panel will not be closed immediately because the animation is in
-  // progress.
-  ASSERT_NE(side_panel->state(), SidePanel::State::kClosed);
-  ASSERT_TRUE(modal_widget->IsVisible());
 
   // Overlay should eventually close.
   ASSERT_TRUE(base::test::RunUntil(
@@ -1805,6 +1840,10 @@ IN_PROC_BROWSER_TEST_F(LensOverlayControllerBrowserTest,
 
 IN_PROC_BROWSER_TEST_F(LensOverlayControllerBrowserTest,
                        HandleStartQueryResponse) {
+  // TODO(crbug.com/398040980): After launching simplified selection, this can
+  // be removed as it will be replaced with the
+  // `HandleStartQueryResponse` test in the
+  // `LensOverlayControllerBrowserSimplifiedSelection` suite.
   WaitForPaint();
 
   // State should start in off.
@@ -2032,6 +2071,9 @@ IN_PROC_BROWSER_TEST_F(LensOverlayControllerBrowserTest,
       [&]() { return controller->state() == State::kOverlay; }));
   ASSERT_TRUE(content::WaitForLoadStop(GetOverlayWebContents()));
   EXPECT_TRUE(controller->GetOverlayViewForTesting()->GetVisible());
+  EXPECT_TRUE(controller->GetOverlayWebViewForTesting()->GetVisible());
+  EXPECT_TRUE(controller->GetOverlayViewForTesting()->Contains(
+      controller->GetOverlayWebViewForTesting()));
   // Tab contents web view should be disabled.
   ASSERT_FALSE(browser()->GetWebView()->GetEnabled());
 
@@ -2056,7 +2098,9 @@ IN_PROC_BROWSER_TEST_F(LensOverlayControllerBrowserTest,
                    ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP);
   EXPECT_TRUE(base::test::RunUntil(
       [&]() { return controller->state() == State::kBackground; }));
+  // Overlay view should never be invisible since it is used across tabs.
   EXPECT_FALSE(controller->GetOverlayViewForTesting()->GetVisible());
+  EXPECT_FALSE(controller->GetOverlayWebViewForTesting()->GetVisible());
   EXPECT_TRUE(base::test::RunUntil(
       [&]() { return !coordinator->IsSidePanelShowing(); }));
   // Tab contents web view should be enabled.
@@ -2067,6 +2111,9 @@ IN_PROC_BROWSER_TEST_F(LensOverlayControllerBrowserTest,
   EXPECT_TRUE(base::test::RunUntil(
       [&]() { return controller->state() == State::kOverlayAndResults; }));
   EXPECT_TRUE(controller->GetOverlayViewForTesting()->GetVisible());
+  EXPECT_TRUE(controller->GetOverlayWebViewForTesting()->GetVisible());
+  EXPECT_TRUE(controller->GetOverlayViewForTesting()->Contains(
+      controller->GetOverlayWebViewForTesting()));
   // Side panel should come back when returning to previous tab.
   EXPECT_TRUE(base::test::RunUntil(
       [&]() { return coordinator->IsSidePanelShowing(); }));
@@ -2439,7 +2486,7 @@ IN_PROC_BROWSER_TEST_F(LensOverlayControllerBrowserTest,
 }
 
 IN_PROC_BROWSER_TEST_F(LensOverlayControllerBrowserTest,
-                       SidePanel_SameTabSameOriginLinkClick_WithTextDirective) {
+                       SidePanel_SearchURLClickWithTextDirective) {
   WaitForPaint();
 
   // State should start in off.
@@ -2505,9 +2552,8 @@ IN_PROC_BROWSER_TEST_F(LensOverlayControllerBrowserTest,
   EXPECT_EQ(fake_controller->is_side_panel_loading_set_to_false_, 0);
 }
 
-IN_PROC_BROWSER_TEST_F(
-    LensOverlayControllerBrowserTest,
-    SidePanel_SameTabCrossOriginLinkClick_WithTextDirective) {
+IN_PROC_BROWSER_TEST_F(LensOverlayControllerBrowserTest,
+                       SidePanel_LinkClickWithTextDirective_TextIsPresent) {
   WaitForPaint();
 
   // State should start in off.
@@ -2590,10 +2636,191 @@ IN_PROC_BROWSER_TEST_F(
   // It should not open a new tab as this only renders text highlights.
   EXPECT_EQ(tabs, browser()->tab_strip_model()->count());
   EXPECT_TRUE(manager);
+  EXPECT_FALSE(manager->get_text_highlighters_for_testing().empty());
   for (const auto& highlighter : manager->get_text_highlighters_for_testing()) {
     EXPECT_TRUE(highlighter->GetTextDirective() == "select" ||
                 highlighter->GetTextDirective() == "element");
   }
+}
+
+// TODO(crbug.com/399899383): Disabled due to flakiness on Mac.
+#if BUILDFLAG(IS_MAC)
+#define MAYBE_SidePanel_LinkClickWithTextDirective_TextIsMissing \
+  DISABLED_SidePanel_LinkClickWithTextDirective_TextIsMissing
+#else
+#define MAYBE_SidePanel_LinkClickWithTextDirective_TextIsMissing \
+  SidePanel_LinkClickWithTextDirective_TextIsMissing
+#endif
+IN_PROC_BROWSER_TEST_F(
+    LensOverlayControllerBrowserTest,
+    MAYBE_SidePanel_LinkClickWithTextDirective_TextIsMissing) {
+  WaitForPaint();
+
+  // State should start in off.
+  auto* controller = GetLensOverlayController();
+  EXPECT_EQ(controller->state(), State::kOff);
+
+  // Showing UI should change the state to screenshot and eventually to overlay.
+  controller->ShowUI(LensOverlayInvocationSource::kAppMenu);
+  ASSERT_EQ(controller->state(), State::kScreenshot);
+  EXPECT_TRUE(base::test::RunUntil(
+      [&]() { return controller->state() == State::kOverlay; }));
+  EXPECT_TRUE(content::WaitForLoadStop(GetOverlayWebContents()));
+  EXPECT_TRUE(controller->GetOverlayViewForTesting()->GetVisible());
+  int tabs = browser()->tab_strip_model()->count();
+
+  controller->IssueSearchBoxRequestForTesting(
+      "green", AutocompleteMatchType::Type::SEARCH_WHAT_YOU_TYPED,
+      /*is_zero_prefix_suggestion=*/false,
+      std::map<std::string, std::string>());
+
+  // Issuing a searchbox request when the controller is in kOverlay state
+  // should result in the state being kLivePageAndResults. This shouldn't
+  // change the CONTEXTUAL_SEARCHBOX page classification.
+  ASSERT_TRUE(base::test::RunUntil(
+      [&]() { return controller->state() == State::kLivePageAndResults; }));
+  EXPECT_EQ(controller->GetPageClassificationForTesting(),
+            metrics::OmniboxEventProto::CONTEXTUAL_SEARCHBOX);
+
+  // Expect the Lens Overlay results panel to open.
+  auto* coordinator = browser()->GetFeatures().side_panel_coordinator();
+  EXPECT_TRUE(coordinator->IsSidePanelShowing());
+  EXPECT_EQ(coordinator->GetCurrentEntryId(),
+            SidePanelEntry::Id::kLensOverlayResults);
+  EXPECT_TRUE(content::WaitForLoadStop(
+      controller->GetSidePanelWebContentsForTesting()));
+
+  // The results frame should be the only child frame of the side panel web
+  // contents.
+  content::RenderFrameHost* results_frame = content::ChildFrameAt(
+      controller->GetSidePanelWebContentsForTesting()->GetPrimaryMainFrame(),
+      0);
+  EXPECT_TRUE(results_frame);
+
+  // Verify the fake controller exists and reset any loading that was done
+  // before as part of setup.
+  auto* fake_controller = static_cast<LensOverlayControllerFake*>(controller);
+  ASSERT_TRUE(fake_controller);
+  fake_controller->ResetSidePanelTracking();
+
+  std::string relative_url =
+      std::string(kDocumentWithNamedElement) + "#:~:text=javascript";
+  const GURL nav_url = embedded_test_server()->GetURL(relative_url);
+
+  // Simulate a cross-origin navigation on the results frame.
+  EXPECT_TRUE(content::ExecJs(
+      results_frame, content::JsReplace(kSameTabLinkClickScript, nav_url),
+      content::EvalJsOptions::EXECUTE_SCRIPT_NO_RESOLVE_PROMISES));
+
+  // There should be no text highlighter manager for the main web contents at
+  // this point.
+  companion::TextHighlighterManager* manager =
+      companion::TextHighlighterManager::GetForPage(browser()
+                                                        ->tab_strip_model()
+                                                        ->GetActiveTab()
+                                                        ->GetContents()
+                                                        ->GetPrimaryPage());
+  EXPECT_FALSE(manager);
+
+  // It should not open a new tab as this URL matched exactly what is loaded on
+  // the page.
+  EXPECT_EQ(tabs, browser()->tab_strip_model()->count());
+  // Verify that the side panel searchbox displays a toast.
+  EXPECT_TRUE(base::test::RunUntil([&]() {
+    return content::EvalJs(controller->GetSidePanelWebContentsForTesting(),
+                           kCheckSidePanelToastShownScript)
+        .ExtractBool();
+  }));
+}
+
+// TODO(crbug.com/399899383): Disabled due to flakiness on Mac.
+#if BUILDFLAG(IS_MAC)
+#define MAYBE_SidePanel_LinkClickWithTextDirective_TextIsIncomplete \
+  DISABLED_SidePanel_LinkClickWithTextDirective_TextIsIncomplete
+#else
+#define MAYBE_SidePanel_LinkClickWithTextDirective_TextIsIncomplete \
+  SidePanel_LinkClickWithTextDirective_TextIsIncomplete
+#endif
+IN_PROC_BROWSER_TEST_F(
+    LensOverlayControllerBrowserTest,
+    MAYBE_SidePanel_LinkClickWithTextDirective_TextIsIncomplete) {
+  WaitForPaint();
+
+  // State should start in off.
+  auto* controller = GetLensOverlayController();
+  EXPECT_EQ(controller->state(), State::kOff);
+
+  // Showing UI should change the state to screenshot and eventually to overlay.
+  controller->ShowUI(LensOverlayInvocationSource::kAppMenu);
+  ASSERT_EQ(controller->state(), State::kScreenshot);
+  EXPECT_TRUE(base::test::RunUntil(
+      [&]() { return controller->state() == State::kOverlay; }));
+  EXPECT_TRUE(content::WaitForLoadStop(GetOverlayWebContents()));
+  EXPECT_TRUE(controller->GetOverlayViewForTesting()->GetVisible());
+  int tabs = browser()->tab_strip_model()->count();
+
+  controller->IssueSearchBoxRequestForTesting(
+      "green", AutocompleteMatchType::Type::SEARCH_WHAT_YOU_TYPED,
+      /*is_zero_prefix_suggestion=*/false,
+      std::map<std::string, std::string>());
+
+  // Issuing a searchbox request when the controller is in kOverlay state
+  // should result in the state being kLivePageAndResults. This shouldn't
+  // change the CONTEXTUAL_SEARCHBOX page classification.
+  ASSERT_TRUE(base::test::RunUntil(
+      [&]() { return controller->state() == State::kLivePageAndResults; }));
+  EXPECT_EQ(controller->GetPageClassificationForTesting(),
+            metrics::OmniboxEventProto::CONTEXTUAL_SEARCHBOX);
+
+  // Expect the Lens Overlay results panel to open.
+  auto* coordinator = browser()->GetFeatures().side_panel_coordinator();
+  EXPECT_TRUE(coordinator->IsSidePanelShowing());
+  EXPECT_EQ(coordinator->GetCurrentEntryId(),
+            SidePanelEntry::Id::kLensOverlayResults);
+  EXPECT_TRUE(content::WaitForLoadStop(
+      controller->GetSidePanelWebContentsForTesting()));
+
+  // The results frame should be the only child frame of the side panel web
+  // contents.
+  content::RenderFrameHost* results_frame = content::ChildFrameAt(
+      controller->GetSidePanelWebContentsForTesting()->GetPrimaryMainFrame(),
+      0);
+  EXPECT_TRUE(results_frame);
+
+  // Verify the fake controller exists and reset any loading that was done
+  // before as part of setup.
+  auto* fake_controller = static_cast<LensOverlayControllerFake*>(controller);
+  ASSERT_TRUE(fake_controller);
+  fake_controller->ResetSidePanelTracking();
+
+  std::string relative_url = std::string(kDocumentWithNamedElement) +
+                             "#:~:text=select&text=element&text=javascript";
+  const GURL nav_url = embedded_test_server()->GetURL(relative_url);
+
+  // Simulate a cross-origin navigation on the results frame.
+  EXPECT_TRUE(content::ExecJs(
+      results_frame, content::JsReplace(kSameTabLinkClickScript, nav_url),
+      content::EvalJsOptions::EXECUTE_SCRIPT_NO_RESOLVE_PROMISES));
+
+  // There should be no text highlighter manager for the main web contents at
+  // this point.
+  companion::TextHighlighterManager* manager =
+      companion::TextHighlighterManager::GetForPage(browser()
+                                                        ->tab_strip_model()
+                                                        ->GetActiveTab()
+                                                        ->GetContents()
+                                                        ->GetPrimaryPage());
+  EXPECT_FALSE(manager);
+
+  // It should not open a new tab as this URL matched exactly what is loaded on
+  // the page.
+  EXPECT_EQ(tabs, browser()->tab_strip_model()->count());
+  // Verify that the side panel searchbox displays a toast.
+  EXPECT_TRUE(base::test::RunUntil([&]() {
+    return content::EvalJs(controller->GetSidePanelWebContentsForTesting(),
+                           kCheckSidePanelToastShownScript)
+        .ExtractBool();
+  }));
 }
 
 IN_PROC_BROWSER_TEST_F(LensOverlayControllerBrowserTest,
@@ -3573,8 +3800,10 @@ IN_PROC_BROWSER_TEST_F(LensOverlayControllerBrowserTest,
                             first_search_url);
 }
 
-IN_PROC_BROWSER_TEST_F(LensOverlayControllerBrowserTest,
-                       PopAndLoadQueryFromHistoryWithMultimodalRequest) {
+// TODO(https://crbug.com/397600510): Disabled due to excessive flakiness.
+IN_PROC_BROWSER_TEST_F(
+    LensOverlayControllerBrowserTest,
+    DISABLED_PopAndLoadQueryFromHistoryWithMultimodalRequest) {
   WaitForPaint();
 
   // State should start in off.
@@ -4378,7 +4607,7 @@ IN_PROC_BROWSER_TEST_F(LensOverlayControllerBrowserTest,
       [&]() { return controller->state() == State::kOverlay; }));
   ASSERT_TRUE(content::WaitForLoadStop(GetOverlayWebContents()));
 
-  // Before showing the results panel, there should be no TriggerCopy sent to
+  // Before showing the results panel, there should be no OnCopyCommand sent to
   // the overlay.
   auto* fake_controller = static_cast<LensOverlayControllerFake*>(controller);
   ASSERT_TRUE(fake_controller);
@@ -4388,7 +4617,7 @@ IN_PROC_BROWSER_TEST_F(LensOverlayControllerBrowserTest,
   SimulateCtrlCKeyPress(GetOverlayWebContents());
   fake_controller->FlushForTesting();
 
-  // Verify that TriggerCopyText was sent.
+  // Verify that OnCopyCommand was sent.
   ASSERT_TRUE(base::test::RunUntil(
       [&]() { return fake_controller->fake_overlay_page_.did_trigger_copy; }));
 
@@ -4406,7 +4635,7 @@ IN_PROC_BROWSER_TEST_F(LensOverlayControllerBrowserTest,
   SimulateCtrlCKeyPress(controller->GetSidePanelWebContentsForTesting());
   fake_controller->FlushForTesting();
 
-  // Verify that TriggerCopyText was sent.
+  // Verify that OnCopyCommand was sent.
   ASSERT_TRUE(base::test::RunUntil(
       [&]() { return fake_controller->fake_overlay_page_.did_trigger_copy; }));
 }
@@ -4734,7 +4963,7 @@ class LensOverlayControllerBrowserStartQueryFlowOptimization
          {lens::features::kLensOverlayContextualSearchbox,
           {
               {"use-inner-text-as-context", "true"},
-              {"use-inner-html-as-context", "true"},
+              {"use-inner-html-as-context", "false"},
               {"use-webpage-vit-param", "true"},
           }},
          {lens::features::kLensOverlaySurvey, {}},
@@ -5172,6 +5401,33 @@ IN_PROC_BROWSER_TEST_P(LensOverlayControllerBrowserPDFContextualizationTest,
 }
 
 IN_PROC_BROWSER_TEST_P(LensOverlayControllerBrowserPDFContextualizationTest,
+                       CurrentPageIncludedInRequest) {
+  // Open the PDF document and wait for it to finish loading.
+  const GURL url = embedded_test_server()->GetURL(kPdfDocument);
+  content::RenderFrameHost* extension_host = LoadPdfGetExtensionHost(url);
+  ASSERT_TRUE(extension_host);
+
+  // State should start in off.
+  auto* controller = GetLensOverlayController();
+  ASSERT_TRUE(controller);
+  ASSERT_EQ(controller->state(), State::kOff);
+
+  // Open the overlay.
+  controller->ShowUI(LensOverlayInvocationSource::kAppMenu);
+  ASSERT_EQ(controller->state(), State::kScreenshot);
+  ASSERT_TRUE(base::test::RunUntil(
+      [&]() { return controller->state() == State::kOverlay; }));
+
+  // Verify PDF page number was included in the query.
+  auto* fake_query_controller =
+      static_cast<lens::TestLensOverlayQueryController*>(
+          controller->get_lens_overlay_query_controller_for_testing());
+  ASSERT_EQ(0, fake_query_controller->sent_full_image_objects_request()
+                   .viewport_request_context()
+                   .pdf_page_number());
+}
+
+IN_PROC_BROWSER_TEST_P(LensOverlayControllerBrowserPDFContextualizationTest,
                        PdfBytesInFollowUpRequest) {
   base::HistogramTester histogram_tester;
 
@@ -5208,6 +5464,9 @@ IN_PROC_BROWSER_TEST_P(LensOverlayControllerBrowserPDFContextualizationTest,
   const GURL new_url = embedded_test_server()->GetURL(kPdfDocumentWithForm);
   LoadPdfGetExtensionHost(new_url);
 
+  // Focus the searchbox.
+  controller->OnFocusChangedForTesting(true);
+
   // Issue a new searchbox query.
   controller->IssueSearchBoxRequestForTesting(
       "oranges", AutocompleteMatchType::SEARCH_SUGGEST,
@@ -5223,7 +5482,7 @@ IN_PROC_BROWSER_TEST_P(LensOverlayControllerBrowserPDFContextualizationTest,
 
   // Verify the histogram recorded the new byte size.
   histogram_tester.ExpectTotalCount(
-      "Lens.Overlay.ByPageContentType.Pdf.DocumentSize",
+      "Lens.Overlay.ByPageContentType.Pdf.DocumentSize2",
       /*expected_count=*/2);
   // Verify the histogram two documents of one page.
   histogram_tester.ExpectBucketCount(
@@ -5328,14 +5587,6 @@ IN_PROC_BROWSER_TEST_P(LensOverlayControllerBrowserPDFContextualizationTest,
   // Focus the searchbox.
   controller->OnFocusChangedForTesting(true);
 
-  // Verify a new full image and page content request was sent. Both requests
-  // happen async, so need to wait for both to be sent before continuing to
-  // prevent flakiness.
-  ASSERT_TRUE(base::test::RunUntil([&]() {
-    return fake_query_controller->num_full_image_requests_sent() == 2 &&
-           fake_query_controller->num_page_content_update_requests_sent() == 2;
-  }));
-
   // Issue a query.
   controller->IssueSearchBoxRequestForTesting(
       "red", AutocompleteMatchType::Type::SEARCH_SUGGEST,
@@ -5359,8 +5610,8 @@ IN_PROC_BROWSER_TEST_P(LensOverlayControllerBrowserPDFContextualizationTest,
   // state. Both requests happen async, so need to wait for both to be sent
   // before continuing to prevent flakiness.
   ASSERT_TRUE(base::test::RunUntil([&]() {
-    return fake_query_controller->num_full_image_requests_sent() == 3 &&
-           fake_query_controller->num_page_content_update_requests_sent() == 3;
+    return fake_query_controller->num_full_image_requests_sent() == 2 &&
+           fake_query_controller->num_page_content_update_requests_sent() == 2;
   }));
 }
 
@@ -5413,7 +5664,7 @@ IN_PROC_BROWSER_TEST_P(LensOverlayControllerBrowserPDFContextualizationTest,
       /*sample*/ true,
       /*expected_bucket_count=*/1);
   histogram_tester.ExpectTotalCount(
-      "Lens.Overlay.ByPageContentType.Pdf.DocumentSize",
+      "Lens.Overlay.ByPageContentType.Pdf.DocumentSize2",
       /*expected_count=*/1);
   histogram_tester.ExpectUniqueSample(
       "Lens.Overlay.ByPageContentType.Pdf.PageCount", /*sample*/ 1,
@@ -5541,18 +5792,24 @@ IN_PROC_BROWSER_TEST_P(LensOverlayControllerBrowserPDFContextualizationTest,
   const GURL pdf_url = embedded_test_server()->GetURL(kPdfDocumentWithForm);
   LoadPdfGetExtensionHost(pdf_url);
 
+  // Focus the searchbox.
+  controller->OnFocusChangedForTesting(true);
+
   // Issue a new searchbox query.
   controller->IssueSearchBoxRequestForTesting(
       "oranges", AutocompleteMatchType::SEARCH_SUGGEST,
       /*is_zero_prefix_suggestion=*/false,
       /*additional_query_params=*/{});
 
+  // Verify transitions to live page.
+  ASSERT_TRUE(base::test::RunUntil(
+      [&]() { return controller->state() == State::kLivePageAndResults; }));
+
   ASSERT_TRUE(base::test::RunUntil([&]() {
     return !fake_query_controller->last_sent_underlying_content_bytes().empty();
   }));
   ASSERT_EQ(lens::MimeType::kPdf,
             fake_query_controller->last_sent_underlying_content_type());
-  controller->OnFocusChangedForTesting(true);
 
   CloseOverlayAndWaitForOff(controller,
                             LensOverlayDismissalSource::kOverlayCloseButton);
@@ -5638,6 +5895,62 @@ IN_PROC_BROWSER_TEST_P(LensOverlayControllerBrowserPDFContextualizationTest,
   EXPECT_EQ(tab_count, browser()->tab_strip_model()->count());
 }
 
+class LensOverlayControllerBrowserPDFUpdatedContentFieldsTest
+    : public LensOverlayControllerBrowserPDFContextualizationTest {
+ public:
+  std::vector<base::test::FeatureRefAndParams> GetEnabledFeatures()
+      const override {
+    auto enabled = PDFExtensionTestBase::GetEnabledFeatures();
+    enabled.push_back({lens::features::kLensOverlayContextualSearchbox,
+                       {{"send-page-url-for-contextualization", "true"},
+                        {"characters-per-page-heuristic", "1"},
+                        {"use-pdfs-as-context", "true"},
+                        {"use-inner-html-as-context", "true"},
+                        {"file-upload-limit-bytes",
+                         base::NumberToString(kFileSizeLimitBytes)},
+                        {"use-updated-content-fields", "true"}}});
+    return enabled;
+  }
+
+  std::vector<base::test::FeatureRef> GetDisabledFeatures() const override {
+    return {};
+  }
+
+ protected:
+  static constexpr uint32_t kFileSizeLimitBytes = 10000;
+};
+
+IN_PROC_BROWSER_TEST_P(LensOverlayControllerBrowserPDFUpdatedContentFieldsTest,
+                       PartialPdfIncludedInRequest) {
+  // Open the PDF document and wait for it to finish loading.
+  const GURL url = embedded_test_server()->GetURL(kPdfDocument);
+  content::RenderFrameHost* extension_host = LoadPdfGetExtensionHost(url);
+  ASSERT_TRUE(extension_host);
+
+  // State should start in off.
+  auto* controller = GetLensOverlayController();
+  ASSERT_TRUE(controller);
+  ASSERT_EQ(controller->state(), State::kOff);
+
+  // Open the overlay.
+  controller->ShowUI(LensOverlayInvocationSource::kAppMenu);
+  ASSERT_EQ(controller->state(), State::kScreenshot);
+  ASSERT_TRUE(base::test::RunUntil(
+      [&] { return controller->state() == State::kOverlay; }));
+
+  // Verify pdf content was included in the query.
+  auto* fake_query_controller =
+      static_cast<lens::TestLensOverlayQueryController*>(
+          controller->get_lens_overlay_query_controller_for_testing());
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return fake_query_controller->last_sent_partial_content().pages_size() == 1;
+  }));
+  ASSERT_EQ(
+      "this is some text\r\nsome more text",
+      fake_query_controller->last_sent_partial_content().pages(0).text_segments(
+          0));
+}
+
 class LensOverlayControllerBrowserPDFIncreaseLimitTest
     : public LensOverlayControllerBrowserPDFContextualizationTest {
  public:
@@ -5704,6 +6017,8 @@ INSTANTIATE_FEATURE_OVERRIDE_TEST_SUITE(LensOverlayControllerBrowserPDFTest);
 INSTANTIATE_FEATURE_OVERRIDE_TEST_SUITE(
     LensOverlayControllerBrowserPDFContextualizationTest);
 INSTANTIATE_FEATURE_OVERRIDE_TEST_SUITE(
+    LensOverlayControllerBrowserPDFUpdatedContentFieldsTest);
+INSTANTIATE_FEATURE_OVERRIDE_TEST_SUITE(
     LensOverlayControllerBrowserPDFIncreaseLimitTest);
 
 // Test with --enable-pixel-output-in-tests enabled, required to actually grab
@@ -5744,7 +6059,9 @@ IN_PROC_BROWSER_TEST_F(LensOverlayControllerBrowserWithPixelsTest,
       [&]() { return controller->state() == State::kOverlay; }));
 
   // Verify screenshot was captured and stored.
-  auto screenshot_bitmap = controller->current_screenshot();
+  auto screenshot_bitmap = controller->initial_screenshot();
+  EXPECT_TRUE(IsNotEmptyAndNotTransparentBlack(screenshot_bitmap));
+  screenshot_bitmap = controller->updated_screenshot();
   EXPECT_TRUE(IsNotEmptyAndNotTransparentBlack(screenshot_bitmap));
 
   // Verify screenshot was encoded and passed to WebUI.
@@ -5799,7 +6116,9 @@ IN_PROC_BROWSER_TEST_F(LensOverlayControllerBrowserWithPixelsTest,
       [&]() { return controller->state() == State::kOverlay; }));
 
   // Verify screenshot was captured and stored.
-  auto screenshot_bitmap = controller->current_screenshot();
+  auto screenshot_bitmap = controller->initial_screenshot();
+  EXPECT_TRUE(IsNotEmptyAndNotTransparentBlack(screenshot_bitmap));
+  screenshot_bitmap = controller->updated_screenshot();
   EXPECT_TRUE(IsNotEmptyAndNotTransparentBlack(screenshot_bitmap));
 
   // Verify screenshot was encoded and passed to WebUI.
@@ -5838,7 +6157,7 @@ IN_PROC_BROWSER_TEST_F(LensOverlayControllerBrowserWithPixelsTest,
       [&]() { return controller->state() == State::kOverlay; }));
 
   // Verify screenshot was captured and stored.
-  auto screenshot_bitmap = controller->current_screenshot();
+  auto screenshot_bitmap = controller->initial_screenshot();
   EXPECT_TRUE(IsNotEmptyAndNotTransparentBlack(screenshot_bitmap));
 
   auto* fake_query_controller =
@@ -6041,6 +6360,9 @@ IN_PROC_BROWSER_TEST_F(LensOverlayControllerBrowserTest,
   // Change page.
   WaitForPaint(kDocumentWithNamedElement);
 
+  // Focus the searchbox.
+  controller->OnFocusChangedForTesting(true);
+
   // Issue a new searchbox query.
   controller->IssueSearchBoxRequestForTesting(
       "oranges", AutocompleteMatchType::SEARCH_SUGGEST,
@@ -6062,15 +6384,15 @@ IN_PROC_BROWSER_TEST_F(LensOverlayControllerBrowserTest,
   // testing on is so small it rounds to 0 KB.
   ASSERT_TRUE(base::test::RunUntil([&]() {
     return histogram_tester.GetBucketCount(
-               "Lens.Overlay.ByPageContentType.Html.DocumentSize", 0) == 2;
+               "Lens.Overlay.ByPageContentType.Html.DocumentSize2", 0) == 2;
   }));
 
   // Verify the size histograms recorded the new bytes.
   histogram_tester.ExpectTotalCount(
-      "Lens.Overlay.ByPageContentType.PlainText.DocumentSize",
+      "Lens.Overlay.ByPageContentType.PlainText.DocumentSize2",
       /*expected_count=*/2);
   histogram_tester.ExpectTotalCount(
-      "Lens.Overlay.ByPageContentType.Html.DocumentSize",
+      "Lens.Overlay.ByPageContentType.Html.DocumentSize2",
       /*expected_count=*/2);
   histogram_tester.ExpectTotalCount(
       "Lens.Overlay.ContextualSearchBox.ByPageContentType.PlainText."
@@ -6087,6 +6409,62 @@ IN_PROC_BROWSER_TEST_F(LensOverlayControllerBrowserTest,
   }));
   // Verify the similarity score was only recorded once for the session.
   histogram_tester.ExpectTotalCount("Lens.Overlay.OcrDomSimilarity", 1);
+}
+
+IN_PROC_BROWSER_TEST_F(LensOverlayControllerBrowserTest,
+                       UpdateScreenshotOnSearchboxFocus) {
+  base::HistogramTester histogram_tester;
+  WaitForPaint(kDocumentWithNonAsciiCharacters);
+
+  // State should start in off.
+  auto* controller = GetLensOverlayController();
+  ASSERT_EQ(controller->state(), State::kOff);
+
+  // Open the overlay.
+  controller->ShowUI(LensOverlayInvocationSource::kAppMenu);
+  ASSERT_EQ(controller->state(), State::kScreenshot);
+  ASSERT_TRUE(base::test::RunUntil(
+      [&]() { return controller->state() == State::kOverlay; }));
+
+  // Make a searchbox query.
+  controller->IssueSearchBoxRequestForTesting(
+      "oranges", AutocompleteMatchType::SEARCH_SUGGEST,
+      /*is_zero_prefix_suggestion=*/false,
+      /*additional_query_params=*/{});
+
+  // Verify transitions to live page.
+  ASSERT_TRUE(base::test::RunUntil(
+      [&]() { return controller->state() == State::kLivePageAndResults; }));
+
+  // Reset mock query controller so we can verify the new request.
+  auto* fake_query_controller =
+      static_cast<lens::TestLensOverlayQueryController*>(
+          controller->get_lens_overlay_query_controller_for_testing());
+  fake_query_controller->ResetTestingState();
+
+  // Change page.
+  WaitForPaint(kDocumentWithNamedElement);
+
+  // Focus the searchbox.
+  auto* fake_controller = static_cast<LensOverlayControllerFake*>(controller);
+  ASSERT_TRUE(fake_controller);
+  fake_controller->OnFocusChangedForTesting(/*focused=*/true);
+
+  // Verify a new full image and page content request was sent in the live page
+  // state. Both requests happen async, so need to wait for both to be sent
+  // before continuing to prevent flakiness.
+  ASSERT_TRUE(base::test::RunUntil([&]() {
+    return fake_query_controller->num_full_image_requests_sent() == 2 &&
+           fake_query_controller->num_page_content_update_requests_sent() == 2;
+  }));
+
+  ASSERT_TRUE(base::test::RunUntil([&]() {
+    return !fake_query_controller->last_sent_underlying_content_bytes().empty();
+  }));
+  ASSERT_EQ(lens::MimeType::kPlainText,
+            fake_query_controller->last_sent_underlying_content_type());
+  ASSERT_TRUE(fake_query_controller->sent_full_image_objects_request()
+                  .has_image_data());
 }
 
 IN_PROC_BROWSER_TEST_F(LensOverlayControllerBrowserTest,
@@ -6135,10 +6513,10 @@ IN_PROC_BROWSER_TEST_F(LensOverlayControllerBrowserTest,
       /*sample*/ true,
       /*expected_bucket_count=*/1);
   histogram_tester.ExpectTotalCount(
-      "Lens.Overlay.ByPageContentType.PlainText.DocumentSize",
+      "Lens.Overlay.ByPageContentType.PlainText.DocumentSize2",
       /*expected_count=*/1);
   histogram_tester.ExpectTotalCount(
-      "Lens.Overlay.ByPageContentType.Html.DocumentSize",
+      "Lens.Overlay.ByPageContentType.Html.DocumentSize2",
       /*expected_count=*/1);
 
   // Verify UKM metrics were recorded.
@@ -6617,8 +6995,16 @@ IN_PROC_BROWSER_TEST_F(LensOverlayControllerBrowserTest,
       static_cast<int64_t>(lens::MimeType::kPlainText));
 }
 
-IN_PROC_BROWSER_TEST_F(LensOverlayControllerBrowserTest,
-                       RecordQueryIssuesBeforeZpsShownInSessionHistograms) {
+#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
+#define MAYBE_RecordQueryIssuesBeforeZpsShownInSessionHistograms \
+  DISABLED_RecordQueryIssuesBeforeZpsShownInSessionHistograms
+#else
+#define MAYBE_RecordQueryIssuesBeforeZpsShownInSessionHistograms \
+  RecordQueryIssuesBeforeZpsShownInSessionHistograms
+#endif
+IN_PROC_BROWSER_TEST_F(
+    LensOverlayControllerBrowserTest,
+    MAYBE_RecordQueryIssuesBeforeZpsShownInSessionHistograms) {
   base::HistogramTester histogram_tester;
   ukm::TestAutoSetUkmRecorder test_ukm_recorder;
   WaitForPaint(kDocumentWithNonAsciiCharacters);
@@ -6890,6 +7276,9 @@ IN_PROC_BROWSER_TEST_F(LensOverlayControllerBrowserTest,
   // Change page.
   WaitForPaint(kDocumentWithNamedElement);
 
+  // Focus the searchbox.
+  controller->OnFocusChangedForTesting(true);
+
   // Issue a new searchbox query.
   controller->IssueSearchBoxRequestForTesting(
       "oranges", AutocompleteMatchType::SEARCH_SUGGEST,
@@ -6969,6 +7358,7 @@ class LensOverlayControllerInnerTextEnabledSmallByteLimitTest
         lens::features::kLensOverlayContextualSearchbox,
         {
             {"use-inner-text-as-context", "true"},
+            {"use-inner-html-as-context", "false"},
             {"file-upload-limit-bytes", "10"},
         });
   }
@@ -7390,6 +7780,98 @@ IN_PROC_BROWSER_TEST_F(LensOverlayControllerInnerHtmlEnabledTest,
       /*expected_count=*/2);
 }
 
+class LensOverlayControllerInnerHtmlWithInnerTextAndApc
+    : public LensOverlayControllerBrowserTest {
+ protected:
+  void SetupFeatureList() override {
+    feature_list_.InitAndEnableFeatureWithParameters(
+        lens::features::kLensOverlayContextualSearchbox,
+        {
+            {"send-page-url-for-contextualization", "true"},
+            {"use-inner-text-as-context", "true"},
+            {"use-inner-html-as-context", "true"},
+            {"use-apc-as-context", "true"},
+            {"use-updated-content-fields", "true"},
+        });
+  }
+};
+
+IN_PROC_BROWSER_TEST_F(LensOverlayControllerInnerHtmlWithInnerTextAndApc,
+                       AllBytesInRequest) {
+  WaitForPaint(kDocumentWithNonAsciiCharacters);
+
+  // State should start in off.
+  auto* controller = GetLensOverlayController();
+  ASSERT_EQ(controller->state(), State::kOff);
+
+  // Open the overlay.
+  controller->ShowUI(LensOverlayInvocationSource::kAppMenu);
+  ASSERT_EQ(controller->state(), State::kScreenshot);
+  ASSERT_TRUE(base::test::RunUntil(
+      [&]() { return controller->state() == State::kOverlay; }));
+
+  // Verify inner HTML was included as bytes in the the query.
+  auto* fake_query_controller =
+      static_cast<lens::TestLensOverlayQueryController*>(
+          controller->get_lens_overlay_query_controller_for_testing());
+
+  // Expect the old content data fields to be empty.
+  EXPECT_TRUE(fake_query_controller->last_sent_page_content_payload()
+                  .content_data()
+                  .empty());
+  EXPECT_TRUE(fake_query_controller->last_sent_page_content_payload()
+                  .content_type()
+                  .empty());
+
+  // There should be 3 fields of content data.
+  const auto last_sent_content =
+      fake_query_controller->last_sent_page_content_payload().content();
+  ASSERT_EQ(last_sent_content.content_data().size(), 3);
+
+  // Verify innerHtml is what we expect it to be.
+  EXPECT_EQ(lens::ContentData::CONTENT_TYPE_INNER_HTML,
+            last_sent_content.content_data(0).content_type());
+  const auto last_sent_html_bytes = last_sent_content.content_data(0).data();
+  ASSERT_EQ(
+      "<body>\n  <h1>The below are non-ascii characters.</h1>\n  <p>こんにちは "
+      "thêrē 🐶 ©</p>\n\n</body>",
+      std::string(last_sent_html_bytes.begin(), last_sent_html_bytes.end()));
+
+  // Verify innerText is what we expect it to be.
+  EXPECT_EQ(lens::ContentData::CONTENT_TYPE_INNER_TEXT,
+            last_sent_content.content_data(1).content_type());
+  const auto last_sent_text_bytes = last_sent_content.content_data(1).data();
+  ASSERT_EQ(
+      "The below are non-ascii characters.\n\nこんにちは thêrē 🐶 ©",
+      std::string(last_sent_text_bytes.begin(), last_sent_text_bytes.end()));
+
+  // Verify APC is what we expect it to be.
+  EXPECT_EQ(lens::ContentData::CONTENT_TYPE_ANNOTATED_PAGE_CONTENT,
+            last_sent_content.content_data(2).content_type());
+  const auto last_sent_apc_bytes = last_sent_content.content_data(2).data();
+  optimization_guide::proto::AnnotatedPageContent apc;
+  ASSERT_TRUE(apc.ParseFromString(
+      std::string(last_sent_apc_bytes.begin(), last_sent_apc_bytes.end())));
+  EXPECT_EQ("The below are non-ascii characters.", apc.root_node()
+                                                       .children_nodes(0)
+                                                       .children_nodes(0)
+                                                       .content_attributes()
+                                                       .text_data()
+                                                       .text_content());
+  EXPECT_EQ("こんにちは thêrē 🐶 ©", apc.root_node()
+                                         .children_nodes(1)
+                                         .children_nodes(0)
+                                         .content_attributes()
+                                         .text_data()
+                                         .text_content());
+
+  // Verify the searchbox was shown.
+  auto* fake_controller = static_cast<LensOverlayControllerFake*>(controller);
+  ASSERT_TRUE(fake_controller);
+  EXPECT_TRUE(fake_controller->fake_overlay_page_
+                  .last_received_should_show_contextual_searchbox_);
+}
+
 class LensOverlayControllerContextualFeaturesDisabledTest
     : public LensOverlayControllerBrowserTest {
  protected:
@@ -7583,7 +8065,9 @@ IN_PROC_BROWSER_TEST_F(LensOverlayControllerContextualFeaturesDisabledTest,
       [&]() { return controller->state() == State::kOverlay; }));
 
   // Verify screenshot was captured and stored.
-  auto screenshot_bitmap = controller->current_screenshot();
+  auto screenshot_bitmap = controller->initial_screenshot();
+  EXPECT_FALSE(screenshot_bitmap.empty());
+  screenshot_bitmap = controller->updated_screenshot();
   EXPECT_FALSE(screenshot_bitmap.empty());
 }
 
@@ -7683,7 +8167,9 @@ IN_PROC_BROWSER_TEST_F(LensOverlayControllerContextualFeaturesDisabledTest,
       [&]() { return controller->state() == State::kOverlay; }));
 
   // Verify screenshot was captured and stored.
-  auto screenshot_bitmap = controller->current_screenshot();
+  auto screenshot_bitmap = controller->initial_screenshot();
+  EXPECT_FALSE(screenshot_bitmap.empty());
+  screenshot_bitmap = controller->updated_screenshot();
   EXPECT_FALSE(screenshot_bitmap.empty());
 }
 
@@ -7698,11 +8184,10 @@ class LensOverlayControllerOverlaySearchbox
   }
 
   void VerifyContextualSearchQueryParameters(const GURL& url_to_process) {
-    EXPECT_THAT(
-        url_to_process.spec(),
-        testing::MatchesRegex(
-            std::string(kResultsSearchBaseUrl) +
-            ".*source=chrome.cr.menu.*&q=.*&gsc=2&hl=.*&biw=\\d+&bih=\\d+"));
+    EXPECT_THAT(url_to_process.spec(),
+                testing::MatchesRegex(std::string(kResultsSearchBaseUrl) +
+                                      ".*source=chrome.cr.menu.*&vit=.*&gsc=2&"
+                                      "hl=.*&q=.*&biw=\\d+&bih=\\d+"));
   }
 };
 
@@ -7759,6 +8244,12 @@ IN_PROC_BROWSER_TEST_F(LensOverlayControllerOverlaySearchbox,
       /*is_zero_prefix_suggestion=*/false,
       std::map<std::string, std::string>());
 
+  // Wait for the side panel to open.
+  ASSERT_TRUE(base::test::RunUntil(
+      [&]() { return controller->state() == State::kLivePageAndResults; }));
+  EXPECT_EQ(controller->GetPageClassificationForTesting(),
+            metrics::OmniboxEventProto::CONTEXTUAL_SEARCHBOX);
+
   // Wait for URL to load in side panel.
   EXPECT_TRUE(content::WaitForLoadStop(
       controller->GetSidePanelWebContentsForTesting()));
@@ -7805,4 +8296,125 @@ IN_PROC_BROWSER_TEST_F(LensOverlayControllerIPHBrowserTest,
   EXPECT_FALSE(controller->IsUrlEligibleForTutorialIPHForTesting(
       GURL("https://www.d.com/path")));
 }
-}  // namespace
+
+class LensOverlayControllerIPHWithPathMatchBrowserTest
+    : public LensOverlayControllerBrowserTest {
+ protected:
+  void SetupFeatureList() override {
+    feature_list_.InitWithFeaturesAndParameters(
+        {{lens::features::kLensOverlay, {}},
+         {feature_engagement::kIPHLensOverlayFeature,
+          {
+              {"x_url_allow_filters", "[\"*\"]"},
+              {"x_url_block_filters", "[\"a.com/login\",\"d.com\"]"},
+              {"x_url_path_match_allow_patterns",
+               "[\"assignment\",\"homework\"]"},
+              {"x_url_path_match_block_patterns", "[\"tutor\"]"},
+          }}},
+        /*disabled_features=*/{});
+  }
+};
+
+IN_PROC_BROWSER_TEST_F(LensOverlayControllerIPHWithPathMatchBrowserTest,
+                       IsUrlEligibleForTutorialIPH) {
+  WaitForPaint();
+
+  auto* controller = GetLensOverlayController();
+  // Path must match.
+  EXPECT_FALSE(controller->IsUrlEligibleForTutorialIPHForTesting(
+      GURL("https://www.a.com/")));
+  EXPECT_TRUE(controller->IsUrlEligibleForTutorialIPHForTesting(
+      GURL("https://www.a.com/assignment")));
+  EXPECT_TRUE(controller->IsUrlEligibleForTutorialIPHForTesting(
+      GURL("https://www.a.com/homework")));
+  // Match can be in any part of path.
+  EXPECT_TRUE(controller->IsUrlEligibleForTutorialIPHForTesting(
+      GURL("https://www.b.com/1/anassignmentpage/2")));
+  EXPECT_TRUE(controller->IsUrlEligibleForTutorialIPHForTesting(
+      GURL("https://www.c.com/your-homework-problem")));
+  // Match is on path, not on domain.
+  EXPECT_FALSE(controller->IsUrlEligibleForTutorialIPHForTesting(
+      GURL("https://www.homework.com/")));
+  // Match is on path, not on query.
+  EXPECT_FALSE(controller->IsUrlEligibleForTutorialIPHForTesting(
+      GURL("https://www.c.com/path?assignment=1")));
+  EXPECT_FALSE(controller->IsUrlEligibleForTutorialIPHForTesting(
+      GURL("https://www.c.com/path?query=homework")));
+  // Match is on path, not on fragment.
+  EXPECT_FALSE(controller->IsUrlEligibleForTutorialIPHForTesting(
+      GURL("https://www.c.com/path#assignment1")));
+  // Block patterns take precedence over allow patterns.
+  EXPECT_FALSE(controller->IsUrlEligibleForTutorialIPHForTesting(
+      GURL("https://www.a.com/tutor/assignment")));
+  // x_url_block_filters takes precedence over path matches.
+  EXPECT_FALSE(controller->IsUrlEligibleForTutorialIPHForTesting(
+      GURL("https://www.a.com/login/assignments")));
+  EXPECT_FALSE(controller->IsUrlEligibleForTutorialIPHForTesting(
+      GURL("https://www.d.com/homework")));
+}
+
+class LensOverlayControllerBrowserSimplifiedSelectionTest
+    : public LensOverlayControllerBrowserTest {
+ protected:
+  void SetupFeatureList() override {
+    feature_list_.InitWithFeaturesAndParameters(
+        {{lens::features::kLensOverlay,
+          {{"results-search-url", kResultsSearchBaseUrl},
+           {"use-dynamic-theme", "true"},
+           {"use-dynamic-theme-min-population-pct", "0.002"},
+           {"use-dynamic-theme-min-chroma", "3.0"}}},
+         {lens::features::kLensOverlayContextualSearchbox,
+          {
+              {"send-page-url-for-contextualization", "true"},
+              {"use-inner-text-as-context", "true"},
+              {"use-inner-html-as-context", "false"},
+          }},
+         {lens::features::kLensOverlaySurvey, {}},
+         {lens::features::kLensOverlaySidePanelOpenInNewTab, {}},
+         {lens::features::kLensOverlaySimplifiedSelection, {}}},
+        /*disabled_features=*/{});
+  }
+};
+
+IN_PROC_BROWSER_TEST_F(LensOverlayControllerBrowserSimplifiedSelectionTest,
+                       HandleStartQueryResponse) {
+  WaitForPaint();
+
+  // State should start in off.
+  auto* controller = GetLensOverlayController();
+  ASSERT_EQ(controller->state(), State::kOff);
+
+  // Before showing the UI, there should be no set objects or text as
+  // no query flow has started.
+  auto* fake_controller = static_cast<LensOverlayControllerFake*>(controller);
+  ASSERT_TRUE(fake_controller);
+  EXPECT_TRUE(
+      fake_controller->fake_overlay_page_.last_received_objects_.empty());
+  EXPECT_FALSE(fake_controller->fake_overlay_page_.last_received_text_);
+
+  // Showing UI should change the state to screenshot and eventually to overlay.
+  // When the overlay is bound, it should start the query flow which returns a
+  // response for the full image callback.
+  controller->ShowUI(LensOverlayInvocationSource::kAppMenu);
+  ASSERT_EQ(controller->state(), State::kScreenshot);
+  ASSERT_TRUE(base::test::RunUntil(
+      [&]() { return controller->state() == State::kOverlay; }));
+  ASSERT_TRUE(content::WaitForLoadStop(GetOverlayWebContents()));
+
+  // Prevent flakiness by flushing the tasks.
+  fake_controller->FlushForTesting();
+
+  // After flushing the mojo calls, the data should be present.
+  EXPECT_FALSE(
+      fake_controller->fake_overlay_page_.last_received_objects_.empty());
+
+  // Only objects should have been sent to the overlay from the full image
+  // response.
+  auto* object =
+      fake_controller->fake_overlay_page_.last_received_objects_[0].get();
+  auto* text = fake_controller->fake_overlay_page_.last_received_text_.get();
+  EXPECT_TRUE(object);
+  EXPECT_TRUE(text);
+  EXPECT_TRUE(kTestOverlayObject->Equals(*object));
+  EXPECT_EQ(kTestText->content_language, text->content_language);
+}

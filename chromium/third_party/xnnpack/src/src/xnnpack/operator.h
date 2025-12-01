@@ -6,19 +6,21 @@
 // This source code is licensed under the BSD-style license found in the
 // LICENSE file in the root directory of this source tree.
 
-#pragma once
+#ifndef THIRD_PARTY_XNNPACK_SRC_XNNPACK_OPERATOR_H_
+#define THIRD_PARTY_XNNPACK_SRC_XNNPACK_OPERATOR_H_
 
 #include <stddef.h>
 #include <stdint.h>
 
-#include "xnnpack.h"
-#include "xnnpack/common.h"
-#include "xnnpack/compute.h"
-#include "xnnpack/microfnptr.h"
-#include "xnnpack/microkernel-type.h"
-#include "xnnpack/microparams.h"
-#include "xnnpack/operator-type.h"
-#include "pthreadpool.h"
+#include "include/xnnpack.h"
+#include "src/xnnpack/common.h"
+#include "src/xnnpack/compute.h"
+#include "src/xnnpack/config-types.h"
+#include "src/xnnpack/microfnptr.h"
+#include "src/xnnpack/microkernel-type.h"
+#include "src/xnnpack/microparams.h"
+#include "src/xnnpack/operator-type.h"
+#include <pthreadpool.h>
 
 // Maximum number of pthreadpool parallelization invocations per operator.
 #define XNN_MAX_COMPUTE_INVOCATIONS 3
@@ -37,16 +39,9 @@ struct xnn_ukernel_conv2d {
 };
 
 struct xnn_ukernel_dwconv {
-  union {
-    xnn_dwconv_unipass_ukernel_fn unipass_fn;
-    xnn_dwconv_multipass_ukernel_fn multipass_fn;
-  };
+  xnn_dwconv_ukernel_fn ukernel;
+  uint32_t channel_tile;
   uint8_t primary_tile;
-  uint8_t middle_tile;
-  uint8_t last_tile;
-  // For unipass, tile_size == primary_tile, otherwise it is calculated based on
-  // how many pass the middle_tile runs.
-  size_t tile_size;
 };
 
 // Direct 2D Depthwise Convolution
@@ -87,6 +82,7 @@ struct xnn_ukernel_spmm {
 struct xnn_ukernel_vmulcaddc {
   xnn_vmulcaddc_ukernel_fn function;
   uint8_t mr;
+  uint8_t channel_tile;
 };
 
 struct xnn_ukernel_vbinary {
@@ -187,7 +183,6 @@ struct xnn_operator {
 
   float input_scale;
   float output_scale;
-  int32_t input_zero_point;
 
   size_t valid_batch_size;
   size_t last_input_height;
@@ -212,10 +207,13 @@ struct xnn_operator {
   union {
     struct {
       uint32_t log2_element_size;
+      enum xnn_binary_operator op_type;
     } binary_elementwise;
     struct {
-      uint32_t log2_input_size;
-      uint32_t log2_output_size;
+      uint8_t num_nonbatch_dims;
+      uint8_t log2_input_size;
+      uint8_t log2_output_size;
+      enum xnn_unary_operator op_type;
     } unary_elementwise;
     struct {
       uint32_t log2_data_element_size;
@@ -228,24 +226,19 @@ struct xnn_operator {
     union xnn_unary_uparams unary;
     struct xnn_f16_default_params f16_default;
     struct xnn_f32_default_params f32_default;
-    union xnn_f16_minmax_params f16_minmax;
+    struct xnn_f16_minmax_params f16_minmax;
     struct xnn_f16_scaleminmax_params f16_scaleminmax;
     struct xnn_reduce_params reduce;
-    // Pixelwise Average Pooling normally use f32_minmax_params, but also initialize
-    // f32_scaleminmax_params in case it needs to switch to Global Average Pooling operation.
-    struct {
-      union xnn_f32_minmax_params f32_minmax;
-      struct xnn_f32_scaleminmax_params f32_scaleminmax;
-    };
+    struct xnn_f32_minmax_params f32_minmax;
+    struct xnn_f32_scaleminmax_params f32_scaleminmax;
     struct xnn_f32_scale_params f32_scale;
-    union xnn_f16_minmax_params f16_chw;
-    union xnn_f32_minmax_params f32_chw;
+    struct xnn_f16_minmax_params f16_chw;
+    struct xnn_f32_minmax_params f32_chw;
     struct xnn_f32_qb4w_minmax_params f32_qb4w_minmax;
     struct xnn_f32_qc4w_minmax_params f32_qc4w_minmax;
     union xnn_qs8_conv_minmax_params qs8_conv_minmax;
     union xnn_qs8_qc8w_conv_minmax_params qs8_qc8w_conv_minmax;
     union xnn_qu8_conv_minmax_params qu8_conv_minmax;
-    struct xnn_qu8_avgpool_minmax_params qu8_avgpool;
     struct xnn_s8_minmax_params s8_minmax;
     struct xnn_s32_default_params s32_default;
     struct xnn_u8_minmax_params u8_minmax;
@@ -258,7 +251,7 @@ struct xnn_operator {
     union xnn_binary_uparams binary;
     union xnn_unary_uparams unary;
     struct xnn_f16_default_params f16_default;
-    union xnn_f32_minmax_params f32_minmax;
+    struct xnn_f32_minmax_params f32_minmax;
     struct xnn_f32_default_params f32_default;
     struct xnn_s8_minmax_params s8_minmax;
     struct xnn_u8_minmax_params u8_minmax;
@@ -279,7 +272,6 @@ struct xnn_operator {
     const struct xnn_argmaxpool_config* argmaxpool_config;
     struct {
       const struct xnn_avgpool_config* avgpool_config;
-      const struct xnn_pavgpool_config* pavgpool_config;
       const struct xnn_reduce_config* rdsum_config;
       const struct xnn_reduce_config* rsum_config;
       const struct xnn_unary_elementwise_config* cvt_config;
@@ -357,7 +349,6 @@ struct xnn_operator {
     struct lut_strided_context lut_strided;
     struct max_pooling_context max_pooling;
     struct pad_context pad;
-    struct pixelwise_average_pooling_context pixelwise_average_pooling;
     struct reduce_context reduce;
     struct {
       struct resize_bilinear_context resize_bilinear;
@@ -393,8 +384,11 @@ XNN_INTERNAL enum xnn_status xnn_run_operator_with_index(
   size_t operator_object_index,
   pthreadpool_t threadpool);
 
-XNN_INTERNAL enum xnn_operator_type xnn_reduce_operator_to_operator_type(enum xnn_reduce_operator op);
+XNN_INTERNAL enum xnn_operator_type xnn_reduce_operator_to_operator_type(
+    enum xnn_reduce_operator type);
 
 #ifdef __cplusplus
 }  // extern "C"
 #endif
+
+#endif  // THIRD_PARTY_XNNPACK_SRC_XNNPACK_OPERATOR_H_

@@ -623,6 +623,28 @@ Document* StyleSheetContents::SingleOwnerDocument() const {
   return root->ClientSingleOwnerDocument();
 }
 
+CSSStyleSheet* StyleSheetContents::ClientInTreeScope(
+    TreeScope& tree_scope) const {
+  auto is_in_tree_scope = [&](CSSStyleSheet* sheet,
+                              TreeScope& tree_scope) -> bool {
+    return sheet->IsAdoptedByTreeScope(tree_scope) ||
+           sheet->ownerNode()->GetTreeScope() == tree_scope;
+  };
+
+  StyleSheetContents* root = RootStyleSheet();
+  for (CSSStyleSheet* sheet : root->completed_clients_) {
+    if (is_in_tree_scope(sheet, tree_scope)) {
+      return sheet;
+    }
+  }
+  for (CSSStyleSheet* sheet : root->loading_clients_) {
+    if (is_in_tree_scope(sheet, tree_scope)) {
+      return sheet;
+    }
+  }
+  return nullptr;
+}
+
 Document* StyleSheetContents::AnyOwnerDocument() const {
   return RootStyleSheet()->ClientAnyOwnerDocument();
 }
@@ -806,6 +828,7 @@ RuleSet* StyleSheetContents::CreateUnconnectedRuleSet(
     const MediaQueryEvaluator& medium) const {
   auto* rule_set = MakeGarbageCollected<RuleSet>();
   rule_set->AddRulesFromSheet(this, medium);
+  rule_set->CompactRulesIfNeeded();
   return rule_set;
 }
 

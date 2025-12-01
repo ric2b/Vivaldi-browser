@@ -40,6 +40,7 @@
 #include "base/memory/scoped_refptr.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/observer_list.h"
+#include "base/task/common/task_annotator.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "cc/layers/picture_layer.h"
@@ -47,6 +48,7 @@
 #include "media/base/media_switches.h"
 #include "third_party/blink/public/common/associated_interfaces/associated_interface_provider.h"
 #include "third_party/blink/public/common/features.h"
+#include "third_party/blink/public/common/fingerprinting_protection/canvas_noise_token.h"
 #include "third_party/blink/public/common/history/session_history_constants.h"
 #include "third_party/blink/public/common/input/web_input_event.h"
 #include "third_party/blink/public/common/input/web_menu_source_type.h"
@@ -205,8 +207,6 @@
 // Get rid of WTF's pow define so we can use std::pow.
 #undef pow
 #include <cmath>  // for std::pow
-
-#include "build/chromeos_buildflags.h"
 
 // The following constants control parameters for automated scaling of webpages
 // (such as due to a double tap gesture or find in page etc.). These are
@@ -1597,12 +1597,6 @@ void WebView::ApplyWebPreferences(const web_pref::WebPreferences& prefs,
   settings->SetHyperlinkAuditingEnabled(prefs.hyperlink_auditing_enabled);
   settings->SetCookieEnabled(prefs.cookie_enabled);
 
-  // By default, allow Android WebView to enable WebSQL. Rollout for disabling
-  // will happen via Finch.
-  if (base::FeatureList::IsEnabled(blink::features::kWebSQLWebViewAccess)) {
-    RuntimeEnabledFeatures::SetDatabaseEnabled(prefs.databases_enabled);
-  }
-
   // By default, allow_universal_access_from_file_urls is set to false and thus
   // we mitigate attacks from local HTML files by not granting file:// URLs
   // universal access. Only test shell will enable this.
@@ -1845,6 +1839,7 @@ void WebView::ApplyWebPreferences(const web_pref::WebPreferences& prefs,
   settings->SetPictureInPictureEnabled(prefs.picture_in_picture_enabled &&
                                        ::features::UseSurfaceLayerForVideo());
 
+  settings->SetRootScrollbarThemeColor(prefs.root_scrollbar_theme_color);
   settings->SetLazyLoadEnabled(prefs.lazy_load_enabled);
   settings->SetInForcedColors(prefs.in_forced_colors);
   settings->SetIsForcedColorsDisabled(prefs.is_forced_colors_disabled);
@@ -1905,6 +1900,9 @@ void WebView::ApplyWebPreferences(const web_pref::WebPreferences& prefs,
   if (!prefs.strict_mime_type_check_for_worker_scripts_enabled) {
     RuntimeEnabledFeatures::SetStrictMimeTypesForWorkersEnabled(false);
   }
+
+  RuntimeEnabledFeatures::SetPaymentRequestEnabled(
+      prefs.payment_request_enabled);
 }
 
 void WebViewImpl::ThemeChanged() {
@@ -2957,9 +2955,7 @@ void WebViewImpl::UpdatePageDefinedViewportConstraints(
 
   UpdateMainFrameLayoutSize();
 
-  if (RuntimeEnabledFeatures::ViewportChangesUpdateTextAutosizingEnabled()) {
-    TextAutosizer::UpdatePageInfoInAllFrames(GetPage()->MainFrame());
-  }
+  TextAutosizer::UpdatePageInfoInAllFrames(GetPage()->MainFrame());
 }
 
 void WebViewImpl::UpdateMainFrameLayoutSize() {
@@ -3097,11 +3093,6 @@ void WebViewImpl::Show(const LocalFrameToken& opener_frame_token,
       opener_frame_token, NavigationPolicyToDisposition(policy),
       std::move(window_features), opened_by_user_gesture,
       WTF::BindOnce(&WebViewImpl::DidShowCreatedWindow, WTF::Unretained(this)));
-
-  if (auto* dev_tools_agent =
-          MainFrameImpl()->DevToolsAgentImpl(/*create_if_necessary=*/false)) {
-    dev_tools_agent->DidShowNewWindow();
-  }
 }
 
 void WebViewImpl::DidShowCreatedWindow() {
@@ -3577,6 +3568,8 @@ void WebViewImpl::UpdateRendererPreferences(
   }
 #endif
 
+  CanvasNoiseToken::Set(renderer_preferences_.canvas_noise_token);
+
   MaybePreloadSystemFonts(GetPage());
 
   // Vivaldi specific.
@@ -3683,7 +3676,7 @@ void WebViewImpl::SetIsActive(bool active) {
 }
 
 bool WebViewImpl::IsActive() const {
-  return GetPage() ? GetPage()->GetFocusController().IsActive() : false;
+  return GetPage() && GetPage()->GetFocusController().IsActive();
 }
 
 void WebViewImpl::SetWindowFeatures(const WebWindowFeatures& features) {

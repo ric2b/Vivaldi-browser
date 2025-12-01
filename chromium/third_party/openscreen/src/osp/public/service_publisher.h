@@ -103,7 +103,7 @@ class ServicePublisher final {
   ServicePublisher& operator=(const ServicePublisher&) = delete;
   ServicePublisher(ServicePublisher&&) noexcept = delete;
   ServicePublisher& operator=(ServicePublisher&&) noexcept = delete;
-  virtual ~ServicePublisher();
+  ~ServicePublisher();
 
   // Sets the service configuration for this publisher.
   void SetConfig(const Config& config);

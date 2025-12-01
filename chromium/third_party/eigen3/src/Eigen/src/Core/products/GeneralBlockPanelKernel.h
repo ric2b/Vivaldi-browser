@@ -305,7 +305,8 @@ inline bool useSpecificBlockingSizes(Index& k, Index& m, Index& n) {
  * \param[in,out] k Input: the third dimension of the product. Output: the blocking size along the same dimension.
  * \param[in,out] m Input: the number of rows of the left hand side. Output: the blocking size along the same dimension.
  * \param[in,out] n Input: the number of columns of the right hand side. Output: the blocking size along the same
- * dimension.
+ *                         dimension.
+ * \param[in] num_threads Input: the number of threads used for the computation.
  *
  * Given a m x k times k x n matrix product of scalar types \c LhsScalar and \c RhsScalar,
  * this function computes the blocking size parameters along the respective dimensions

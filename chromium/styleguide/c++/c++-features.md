@@ -9,11 +9,13 @@ subprojects can choose to be more restrictive if necessary for toolchain
 support._
 
 The C++ language has in recent years received an updated standard every three
-years (C++11, C++14, etc.). For various reasons, Chromium does not immediately
-allow new features on the publication of such a standard. Instead, once
-Chromium supports the toolchain to a certain extent (e.g., build support is
-ready), a standard is declared "_initially supported_", with new
-language/library features banned pending discussion but not yet allowed.
+years (C++11, C++14, etc.).
+[For various reasons](https://chromium.googlesource.com/chromium/src/+/main/docs/process/c++_version_upgrades.md),
+Chromium does not immediately allow new features on the publication of such a
+standard. Instead, once Chromium supports the toolchain to a certain extent
+(e.g., build support is ready), a standard is declared "_initially supported_",
+with new language/library features banned pending discussion but not yet
+allowed.
 
 You can propose changing the status of a feature by sending an email to
 [cxx@chromium.org](https://groups.google.com/a/chromium.org/forum/#!forum/cxx).
@@ -585,29 +587,6 @@ Overlaps with utilities in `base/strings/string_number_conversions.h`, which are
 easier to use correctly.
 ***
 
-### std::in_place{_type,_index}[_t] <sup>[banned]</sup>
-
-```c++
-std::variant<int, float> v{std::in_place_type<int>, 1.4};
-```
-
-**Description:** `std::in_place_type` and `std::in_place_index` are
-disambiguation tags for `std::variant` and `std::any` to indicate that the
-object should be constructed in-place.
-
-**Documentation:**
-[`std::in_place_type`](https://en.cppreference.com/w/cpp/utility/in_place)
-
-**Notes:**
-*** promo
-Banned for now because `std::variant` and `std::any` are banned. Because
-`absl::variant` is used instead, and it requires `absl::in_place_type`, use
-`absl::in_place_type` for non-Abseil Chromium
-code.
-
-[Discussion thread](https://groups.google.com/a/chromium.org/g/cxx/c/ZspmuJPpv6s)
-***
-
 ### std::{pmr::memory_resource,polymorphic_allocator} <sup>[banned]</sup>
 
 ```c++
@@ -660,24 +639,6 @@ int count = std::uncaught_exceptions();
 **Notes:**
 *** promo
 Banned because exceptions are banned.
-***
-
-### std::variant <sup>[banned]</sup>
-
-```c++
-std::variant<int, double> v = 12;
-```
-
-**Description:** The class template `std::variant` represents a type-safe
-`union`. An instance of `std::variant` at any given time holds a value of one of
-its alternative types (it's also possible for it to be valueless).
-
-**Documentation:**
-[`std::variant`](https://en.cppreference.com/w/cpp/utility/variant)
-
-**Notes:**
-*** promo
-[Will be allowed soon](https://crbug.com/1373620); for now, use `absl::variant`.
 ***
 
 ### Transparent std::owner_less <sup>[banned]</sup>
@@ -1717,8 +1678,6 @@ callbacks.
 **Notes:**
 *** promo
 Requires significant support code and planning around API and migration.
-
-[Prototyping bug](https://crbug.com/1403840)
 ***
 
 ## C++20 TBD Library Features {#library-review-20}
@@ -2206,4 +2165,56 @@ absolute time and civil time.
 **Notes:**
 *** promo
 Overlaps with `base/time/`.
+***
+
+### Variant <sup>[banned]</sup>
+
+```c++
+absl::bad_variant_access;
+absl::get;
+absl::get_if;
+absl::holds_alternative;
+absl::monostate;
+absl::variant;
+absl::variant_alternative;
+absl::variant_alternative_t;
+absl::variant_npos;
+absl::variant_size;
+absl::variant_size_v;
+absl::visit;
+```
+
+**Description:** A backport of C++17's std::variant type-safe union and related utilities.
+
+**Notes:**
+*** promo
+These are just aliases to the std counterparts these days. Use std instead.
+***
+
+### Utility library <sup>[banned]</sup>
+
+```c++
+absl::apply;
+absl::exchange;
+absl::forward;
+absl::in_place;
+absl::in_place_index;
+absl::in_place_index_t;
+absl::in_place_t;
+absl::in_place_type;
+absl::in_place_type_t;
+absl::index_sequence;
+absl::index_sequence_for;
+absl::integer_sequence;
+absl::make_from_tuple;
+absl::make_index_sequence;
+absl::make_integer_sequence;
+absl::move;
+```
+
+**Description:** Backports of various C++17 template utilities.
+
+**Notes:**
+*** promo
+These are just aliases to the std counterparts these days. Use std instead.
 ***

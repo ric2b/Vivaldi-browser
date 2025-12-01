@@ -454,9 +454,9 @@ std::unique_ptr<DrawPass> DrawPass::Make(Recorder* recorder,
     GraphicsPipelineCache pipelineCache;
 
     // Geometry uniforms are currently always UBO-backed.
-    const bool useStorageBuffers = recorder->priv().caps()->storageBufferSupport();
-    const ResourceBindingRequirements& bindingReqs =
-            recorder->priv().caps()->resourceBindingRequirements();
+    const Caps* caps = recorder->priv().caps();
+    const bool useStorageBuffers = caps->storageBufferSupport();
+    const ResourceBindingRequirements& bindingReqs = caps->resourceBindingRequirements();
     Layout uniformLayout =
             useStorageBuffers ? bindingReqs.fStorageBufferLayout : bindingReqs.fUniformBufferLayout;
 
@@ -510,7 +510,7 @@ std::unique_ptr<DrawPass> DrawPass::Make(Recorder* recorder,
 
             GraphicsPipelineCache::Index pipelineIndex = pipelineCache.insert(
                     { step->renderStepID(),
-                      performsShading ? shaderID : UniquePaintParamsID::InvalidID() });
+                      performsShading ? shaderID : UniquePaintParamsID::Invalid() });
 
             gatherer.resetWithNewLayout(uniformLayout);
             step->writeUniformsAndTextures(draw.fDrawParams, &gatherer);
@@ -566,14 +566,22 @@ std::unique_ptr<DrawPass> DrawPass::Make(Recorder* recorder,
     UniformTracker geometryUniformTracker(useStorageBuffers);
     UniformTracker shadingUniformTracker(useStorageBuffers);
 
+    // Some decisions depend upon the dst read strategy used by backends to read dst texture info.
+    DstReadStrategy dstReadStrategy = caps->getDstReadStrategy(target->textureInfo());
+    const bool drawsReadDstAsInput = dstReadStrategy == DstReadStrategy::kReadFromInput;
     // TODO(b/372953722): Remove this forced binding command behavior once dst copies are always
     // bound separately from the rest of the textures.
-    const bool rebindTexturesOnPipelineChange =
-            recorder->priv().caps()->getDstReadStrategy() == DstReadStrategy::kTextureCopy;
+    const bool rebindTexturesOnPipelineChange = dstReadStrategy == DstReadStrategy::kTextureCopy;
 
     for (const SortKey& key : keys) {
         const DrawList::Draw& draw = key.draw();
         const RenderStep& renderStep = key.renderStep();
+
+        // If reading from the dst texture as an input attachment, append a DrawCommand to signal to
+        // backend command buffers to add the appropriate barrier type.
+        if (drawsReadDstAsInput && draw.readsFromDst()) {
+            drawPass->fCommandList.addBarrier(BarrierType::kReadDstFromInput);
+        }
 
         const bool pipelineChange = key.pipelineIndex() != lastPipeline;
 
@@ -595,6 +603,11 @@ std::unique_ptr<DrawPass> DrawPass::Make(Recorder* recorder,
                  key.textureBindingIndex() != TextureBindingCache::kInvalidIndex);
         const SkIRect* newScissor        = draw.fDrawParams.clip().scissor() != lastScissor ?
                 &draw.fDrawParams.clip().scissor() : nullptr;
+
+        // TODO(b/393382700): Check whether a draw uses an advanced noncoherent blend mode. If so,
+        // that draw must not be grouped with draws that read from the dst texture since those
+        // requirements are mutually exclusive. We would also need to issue append an addBarrier
+        // command to the command list with BarrierType::kAdvancedNoncoherentBlend.
 
         const bool stateChange = geomBindingChange ||
                                  shadingBindingChange ||
@@ -679,17 +692,22 @@ bool DrawPass::prepareResources(ResourceProvider* resourceProvider,
     // once we've created pipelines, so we drop the storage for them here.
     fPipelineDescs.clear();
 
-#if defined(SK_DEBUG)
     for (int i = 0; i < fSampledTextures.size(); ++i) {
         // It should not have been possible to draw an Image that has an invalid texture info
         SkASSERT(fSampledTextures[i]->textureInfo().isValid());
         // Tasks should have been ordered to instantiate any scratch textures already, or any
-        // client-owned image will have been instantiated at creation.
-        SkASSERTF(fSampledTextures[i]->isInstantiated() ||
-                  fSampledTextures[i]->isLazy(),
-                  "proxy label = %s", fSampledTextures[i]->label());
+        // client-owned image will have been instantiated at creation. However, if a TextureProxy
+        // was cached for reuse across Recordings, it's possible that the initializing Recording
+        // failed, leaving the TextureProxy in a bad state (and currently with no way to reconstruct
+        // the tasks required to initialize it).
+        // TODO(b/409888039): Once TextureProxies track their dependendent tasks to include in all
+        // Recordings, this "should" be able to changed to asserts.
+        if (!fSampledTextures[i]->isInstantiated() && !fSampledTextures[i]->isLazy()) {
+            SKGPU_LOG_W("Cannot sample from an uninstantiated TextureProxy, label %s",
+                        fSampledTextures[i]->label());
+            return false;
+        }
     }
-#endif
 
     fSamplers.reserve(fSamplers.size() + fSamplerDescs.size());
     for (int i = 0; i < fSamplerDescs.size(); ++i) {

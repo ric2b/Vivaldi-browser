@@ -11,7 +11,6 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/system/sys_info.h"
 #include "build/build_config.h"
-#include "chrome/browser/ash/crosapi/browser_util.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/browser_process_platform_part.h"
 #include "chrome/browser/ui/chrome_pages.h"
@@ -194,14 +193,6 @@ void AddSharedSyncPageStrings(content::WebUIDataSource* html_source) {
       {"sync", IDS_SETTINGS_SYNC},
       {"manageSyncedDataTitle",
        IDS_SETTINGS_NEW_MANAGE_SYNCED_DATA_TITLE_UNIFIED_CONSENT},
-#if BUILDFLAG(IS_CHROMEOS)
-      {"manageSyncedDataSubtitle",
-       IDS_SETTINGS_NEW_MANAGE_SYNCED_DATA_SUBTITLE_UNIFIED_CONSENT},
-#endif
-      {"manageBrowserSyncedDataTitle",
-       IDS_SETTINGS_NEW_MANAGE_BROWSER_SYNCED_DATA_TITLE},
-      {"syncAdvancedDevicePageTitle",
-       IDS_SETTINGS_NEW_SYNC_ADVANCED_DEVICE_PAGE_TITLE},
       {"syncAdvancedBrowserPageTitle",
        IDS_SETTINGS_NEW_SYNC_ADVANCED_BROWSER_PAGE_TITLE},
       {"enterPassphraseLabel", IDS_SYNC_ENTER_PASSPHRASE_BODY},
@@ -243,12 +234,6 @@ void AddSharedSyncPageStrings(content::WebUIDataSource* html_source) {
           GetHelpUrlWithBoard(chrome::kSyncEncryptionHelpURL)));
 #else
           chrome::kSyncEncryptionHelpURL));
-#endif
-#if BUILDFLAG(IS_CHROMEOS)
-  html_source->AddBoolean(
-      "showSyncSettingsRevamp",
-      base::FeatureList::IsEnabled(syncer::kSyncChromeOSAppsToggleSharing) &&
-          crosapi::browser_util::IsLacrosEnabled());
 #endif
 
   html_source->AddString("syncErrorsHelpUrl", chrome::kSyncErrorsHelpURL);

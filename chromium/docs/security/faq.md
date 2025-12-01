@@ -509,7 +509,7 @@ served (e.g. no document.cookie).
 ### Are PDF files static content in Chromium?
 
 No. PDF files have some powerful capabilities including invoking printing or
-posting form data. To mitigate abuse of these capabiliies, such as beaconing
+posting form data. To mitigate abuse of these capabilities, such as beaconing
 upon document open, we require interaction with the document (a "user gesture")
 before allowing their use.
 
@@ -1079,6 +1079,11 @@ See our dedicated [Extensions Security FAQ](https://chromium.googlesource.com/ch
 ### What's the security model for Chrome Custom Tabs?
 
 See our [Chrome Custom Tabs security FAQ](custom-tabs-faq.md).
+
+<a name="TOC-What-is-the-security-story-for-Fullscreen-"></a>
+### What is the security story for Fullscreen?
+
+See our dedicated [Fullscreen Security FAQ](https://chromium.googlesource.com/chromium/src/+/main/docs/security/fullscreen.md).
 
 <a name="TOC-How-is-security-different-in-Chrome-for-iOS--"></a>
 ### How is security different in Chrome for iOS?

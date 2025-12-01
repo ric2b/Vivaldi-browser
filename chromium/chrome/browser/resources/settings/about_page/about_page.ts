@@ -136,6 +136,7 @@ export class SettingsAboutPageElement extends SettingsAboutPageElementBase {
 
   private currentUpdateStatusEvent_: UpdateStatusChangedEvent|null;
   private isManaged_: boolean;
+  private managedByIcon_: string;
 
   // <if expr="_google_chrome and is_macosx">
   private promoteUpdaterStatus_: PromoteUpdaterStatus;
@@ -184,7 +185,7 @@ export class SettingsAboutPageElement extends SettingsAboutPageElementBase {
   }
 
   private onUpdateStatusChanged_(event: UpdateStatusChangedEvent) {
-    this.currentUpdateStatusEvent_! = event;
+    this.currentUpdateStatusEvent_ = event;
   }
   // </if>
 
@@ -259,7 +260,7 @@ export class SettingsAboutPageElement extends SettingsAboutPageElementBase {
         assert(typeof this.currentUpdateStatusEvent_!.progress === 'number');
         const progressPercent = this.currentUpdateStatusEvent_!.progress + '%';
 
-        if (this.currentUpdateStatusEvent_!.progress! > 0) {
+        if (this.currentUpdateStatusEvent_!.progress > 0) {
           // NOTE(dbeam): some platforms (i.e. Mac) always send 0% while
           // updating (they don't support incremental upgrade progress). Though
           // it's certainly quite possible to validly end up here with 0% on

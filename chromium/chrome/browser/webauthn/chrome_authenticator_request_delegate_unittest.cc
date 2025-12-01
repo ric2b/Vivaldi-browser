@@ -11,11 +11,14 @@
 #include <optional>
 #include <string>
 #include <utility>
+#include <variant>
 #include <vector>
 
 #include "base/containers/span.h"
 #include "base/functional/bind.h"
+#include "base/functional/callback_forward.h"
 #include "base/memory/raw_ptr.h"
+#include "base/test/mock_callback.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/test_future.h"
 #include "build/build_config.h"
@@ -25,6 +28,9 @@
 #include "chrome/browser/webauthn/authenticator_request_dialog_model.h"
 #include "chrome/browser/webauthn/chrome_web_authentication_delegate.h"
 #include "chrome/browser/webauthn/passkey_model_factory.h"
+#include "chrome/browser/webauthn/password_credential_controller.h"
+#include "chrome/browser/webauthn/webauthn_pref_names.h"
+#include "chrome/browser/webauthn/webauthn_switches.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/test/base/chrome_render_view_host_test_harness.h"
 #include "components/keyed_service/core/keyed_service.h"
@@ -39,7 +45,7 @@
 #include "content/public/browser/authenticator_request_client_delegate.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/test/web_contents_tester.h"
-#include "crypto/scoped_mock_unexportable_key_provider.h"
+#include "crypto/scoped_fake_unexportable_key_provider.h"
 #include "device/fido/cable/cable_discovery_data.h"
 #include "device/fido/cable/v2_constants.h"
 #include "device/fido/discoverable_credential_metadata.h"
@@ -48,10 +54,12 @@
 #include "device/fido/fido_discovery_factory.h"
 #include "device/fido/fido_request_handler_base.h"
 #include "device/fido/fido_types.h"
+#include "device/fido/public_key_credential_user_entity.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/common/permissions/permissions_data.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/blink/public/mojom/credentialmanagement/credential_type_flags.mojom.h"
 #include "url/gurl.h"
 #include "url/origin.h"
 
@@ -64,6 +72,12 @@ namespace {
 static constexpr char kUserName1[] = "hmiku";
 static constexpr char kUserDisplayName1[] = "Hatsune Miku";
 static constexpr char kRpId[] = "example.com";
+static constexpr char kOrigin[] = "https://example.com";
+
+constexpr int kRequestPassword =
+    static_cast<int>(blink::mojom::CredentialTypeFlags::kPassword);
+constexpr int kRequestPublicKey =
+    static_cast<int>(blink::mojom::CredentialTypeFlags::kPublicKey);
 
 using TransportAvailabilityInfo =
     device::FidoRequestHandlerBase::TransportAvailabilityInfo;
@@ -94,6 +108,26 @@ class Observer : public testing::NiceMock<
               CableV2ExtensionSeen,
               (base::span<const uint8_t> server_link_data),
               (override));
+};
+
+class MockPasswordCredentialController : public PasswordCredentialController {
+ public:
+  MockPasswordCredentialController(
+      content::GlobalRenderFrameHostId render_frame_host_id,
+      AuthenticatorRequestDialogModel* model)
+      : PasswordCredentialController(render_frame_host_id, model) {}
+
+  MOCK_METHOD(
+      void,
+      FetchPasswords,
+      (const GURL&,
+       PasswordCredentialController::PasswordCredentialsReceivedCallback),
+      (override));
+  MOCK_METHOD(
+      void,
+      SetPasswordSelectedCallback,
+      (content::AuthenticatorRequestClientDelegate::PasswordSelectedCallback),
+      (override));
 };
 
 class MockCableDiscoveryFactory : public device::FidoDiscoveryFactory {
@@ -161,7 +195,6 @@ class TestAuthenticatorModelObserver final
   raw_ptr<AuthenticatorRequestDialogModel> model_;
   AuthenticatorRequestDialogModel::Step last_step_;
 };
-
 
 TEST_F(ChromeAuthenticatorRequestDelegateTest, CableConfiguration) {
   const std::array<uint8_t, 16> eid = {1, 2, 3, 4};
@@ -268,70 +301,67 @@ TEST_F(ChromeAuthenticatorRequestDelegateTest, CableConfiguration) {
       },
   };
 
-    unsigned test_case = 0;
-    for (const auto& test : kTests) {
-      SCOPED_TRACE(test_case);
-      test_case++;
+  unsigned test_case = 0;
+  for (const auto& test : kTests) {
+    SCOPED_TRACE(test_case);
+    test_case++;
 
-      MockCableDiscoveryFactory discovery_factory;
-      ChromeAuthenticatorRequestDelegate delegate(main_rfh());
-      delegate.SetRelyingPartyId(/*rp_id=*/"example.com");
-      delegate.ConfigureDiscoveries(
-          url::Origin::Create(GURL(test.origin)), test.origin,
-          content::AuthenticatorRequestClientDelegate::RequestSource::
-              kWebAuthentication,
-          test.request_type, test.resident_key_requirement,
-          device::UserVerificationRequirement::kRequired,
-          /*user_name=*/std::nullopt, test.extensions,
-          /*is_enclave_authenticator_available=*/false, &discovery_factory);
+    MockCableDiscoveryFactory discovery_factory;
+    ChromeAuthenticatorRequestDelegate delegate(main_rfh());
+    delegate.SetRelyingPartyId(kRpId);
+    delegate.ConfigureDiscoveries(
+        url::Origin::Create(GURL(test.origin)), test.origin,
+        content::AuthenticatorRequestClientDelegate::RequestSource::
+            kWebAuthentication,
+        test.request_type, test.resident_key_requirement,
+        device::UserVerificationRequirement::kRequired,
+        /*user_name=*/std::nullopt, test.extensions,
+        /*is_enclave_authenticator_available=*/false, &discovery_factory);
 
-      switch (test.expected_result) {
-        case Result::kNone:
-          EXPECT_FALSE(discovery_factory.qr_key.has_value());
-          EXPECT_TRUE(discovery_factory.cable_data.empty());
-          break;
+    switch (test.expected_result) {
+      case Result::kNone:
+        EXPECT_FALSE(discovery_factory.qr_key.has_value());
+        EXPECT_TRUE(discovery_factory.cable_data.empty());
+        break;
 
-        case Result::kV1:
-          EXPECT_FALSE(discovery_factory.qr_key.has_value());
-          EXPECT_FALSE(discovery_factory.cable_data.empty());
-          EXPECT_EQ(delegate.dialog_model()->cable_ui_type,
-                    AuthenticatorRequestDialogModel::CableUIType::CABLE_V1);
-          break;
+      case Result::kV1:
+        EXPECT_FALSE(discovery_factory.qr_key.has_value());
+        EXPECT_FALSE(discovery_factory.cable_data.empty());
+        EXPECT_EQ(delegate.dialog_model()->cable_ui_type,
+                  AuthenticatorRequestDialogModel::CableUIType::CABLE_V1);
+        break;
 
-        case Result::kServerLink:
-          EXPECT_TRUE(discovery_factory.qr_key.has_value());
-          EXPECT_FALSE(discovery_factory.cable_data.empty());
-          EXPECT_EQ(delegate.dialog_model()->cable_ui_type,
-                    AuthenticatorRequestDialogModel::CableUIType::
-                        CABLE_V2_SERVER_LINK);
-          break;
+      case Result::kServerLink:
+        EXPECT_TRUE(discovery_factory.qr_key.has_value());
+        EXPECT_FALSE(discovery_factory.cable_data.empty());
+        EXPECT_EQ(
+            delegate.dialog_model()->cable_ui_type,
+            AuthenticatorRequestDialogModel::CableUIType::CABLE_V2_SERVER_LINK);
+        break;
 
-        case Result::k3rdParty:
-          EXPECT_TRUE(discovery_factory.qr_key.has_value());
-          EXPECT_TRUE(discovery_factory.cable_data.empty());
-          EXPECT_EQ(delegate.dialog_model()->cable_ui_type,
-                    AuthenticatorRequestDialogModel::CableUIType::
-                        CABLE_V2_2ND_FACTOR);
-          break;
-      }
+      case Result::k3rdParty:
+        EXPECT_TRUE(discovery_factory.qr_key.has_value());
+        EXPECT_TRUE(discovery_factory.cable_data.empty());
+        EXPECT_EQ(
+            delegate.dialog_model()->cable_ui_type,
+            AuthenticatorRequestDialogModel::CableUIType::CABLE_V2_2ND_FACTOR);
+        break;
     }
+  }
 }
 
 TEST_F(ChromeAuthenticatorRequestDelegateTest, NoExtraDiscoveriesWithoutUI) {
-  const std::string rp_id = "https://example.com";
-  const std::string origin = "https://" + rp_id;
-
   for (const bool disable_ui : {false, true}) {
     SCOPED_TRACE(disable_ui);
 
     ChromeAuthenticatorRequestDelegate delegate(main_rfh());
-    delegate.SetRelyingPartyId(rp_id);
+    delegate.SetRelyingPartyId(kRpId);
     if (disable_ui) {
       delegate.SetUIPresentation(UIPresentation::kDisabled);
     }
     MockCableDiscoveryFactory discovery_factory;
     delegate.ConfigureDiscoveries(
-        url::Origin::Create(GURL(origin)), origin,
+        url::Origin::Create(GURL(kOrigin)), kOrigin,
         content::AuthenticatorRequestClientDelegate::RequestSource::
             kWebAuthentication,
         device::FidoRequestType::kMakeCredential,
@@ -362,7 +392,7 @@ TEST_F(ChromeAuthenticatorRequestDelegateTest, ConditionalUI) {
     ChromeAuthenticatorRequestDelegate delegate(main_rfh());
     delegate.SetUIPresentation(conditional_ui ? UIPresentation::kAutofill
                                               : UIPresentation::kModal);
-    delegate.SetRelyingPartyId(/*rp_id=*/"example.com");
+    delegate.SetRelyingPartyId(kRpId);
     AuthenticatorRequestDialogModel* model = delegate.dialog_model();
     TestAuthenticatorModelObserver observer(model);
     model->observers.AddObserver(&observer);
@@ -629,7 +659,8 @@ TEST_F(ChromeAuthenticatorRequestDelegateTest, FilterGoogleComPasskeys) {
           device::AuthenticatorType::kOther, test.rp_id,
           std::vector<uint8_t>{0},
           device::PublicKeyCredentialUserEntity(
-              std::vector<uint8_t>(user_id.begin(), user_id.end())));
+              std::vector<uint8_t>(user_id.begin(), user_id.end())),
+          /*provider_name=*/std::nullopt);
     }
     data.has_platform_authenticator_credential = test.recognized_credential;
 
@@ -637,13 +668,15 @@ TEST_F(ChromeAuthenticatorRequestDelegateTest, FilterGoogleComPasskeys) {
     // affect setting the recognized credentials flag.
     data.recognized_credentials.emplace_back(
         device::AuthenticatorType::kICloudKeychain, test.rp_id,
-        std::vector<uint8_t>{0}, device::PublicKeyCredentialUserEntity({1}));
+        std::vector<uint8_t>{0}, device::PublicKeyCredentialUserEntity({1}),
+        /*provider_name=*/std::nullopt);
     data.has_icloud_keychain_credential = device::FidoRequestHandlerBase::
         RecognizedCredential::kHasRecognizedCredential;
 
     ChromeAuthenticatorRequestDelegate delegate(main_rfh());
     delegate.SetRelyingPartyId(test.rp_id);
     delegate.RegisterActionCallbacks(base::DoNothing(), base::DoNothing(),
+                                     base::DoNothing(), base::DoNothing(),
                                      base::DoNothing(), base::DoNothing(),
                                      base::DoNothing(), base::DoNothing());
     delegate.OnTransportAvailabilityEnumerated(std::move(data));
@@ -685,13 +718,15 @@ TEST_F(ChromeAuthenticatorRequestDelegateTest,
   data.recognized_credentials.emplace_back(
       device::AuthenticatorType::kOther, kGoogleRpId, std::vector<uint8_t>{0},
       device::PublicKeyCredentialUserEntity(
-          std::vector<uint8_t>(user_id.begin(), user_id.end())));
+          std::vector<uint8_t>(user_id.begin(), user_id.end())),
+      /*provider_name=*/std::nullopt);
   data.has_platform_authenticator_credential = device::FidoRequestHandlerBase::
       RecognizedCredential::kHasRecognizedCredential;
 
   ChromeAuthenticatorRequestDelegate delegate(main_rfh());
   delegate.SetRelyingPartyId(kGoogleRpId);
   delegate.RegisterActionCallbacks(base::DoNothing(), base::DoNothing(),
+                                   base::DoNothing(), base::DoNothing(),
                                    base::DoNothing(), base::DoNothing(),
                                    base::DoNothing(), base::DoNothing());
   delegate.OnTransportAvailabilityEnumerated(std::move(data));
@@ -727,40 +762,33 @@ TEST_F(EnclaveAuthenticatorRequestDelegateTest,
   signin::MakePrimaryAccountAvailable(identity_manager, "hikari@example.com",
                                       signin::ConsentLevel::kSignin);
   struct {
-    bool is_flag_enabled;
     bool is_syncing_passwords;
     bool has_unexportable_keys;
     bool expected_passkeys_available;
   } kTestCases[] = {
-      // flag sync  unexp result
-      {true, true, true, true},
-      {false, true, true, false},
-      {true, false, true, false},
-      {true, true, false, false},
+      // sync unexp result
+      {true, true, true},
+      {false, true, false},
+      {true, false, false},
   };
   for (const auto& test : kTestCases) {
-    SCOPED_TRACE(testing::Message()
-                 << "is_flag_enabled=" << test.is_flag_enabled);
     SCOPED_TRACE(testing::Message()
                  << "is_syncing_passwords=" << test.is_syncing_passwords);
     SCOPED_TRACE(testing::Message()
                  << "has_unexportable_keys=" << test.has_unexportable_keys);
     ChromeWebAuthenticationDelegate delegate;
-    base::test::ScopedFeatureList scoped_feature_list_;
-    scoped_feature_list_.InitWithFeatureState(
-        device::kWebAuthnEnclaveAuthenticator, test.is_flag_enabled);
 
     auto* test_sync_service = static_cast<syncer::TestSyncService*>(
         SyncServiceFactory::GetInstance()->GetForProfile(profile()));
     test_sync_service->GetUserSettings()->SetSelectedType(
         syncer::UserSelectableType::kPasswords, test.is_syncing_passwords);
 
-    absl::variant<crypto::ScopedNullUnexportableKeyProvider,
-                  crypto::ScopedMockUnexportableKeyProvider>
+    std::variant<crypto::ScopedNullUnexportableKeyProvider,
+                 crypto::ScopedFakeUnexportableKeyProvider>
         unexportable_key_provider;
     if (test.has_unexportable_keys) {
       unexportable_key_provider
-          .emplace<crypto::ScopedMockUnexportableKeyProvider>();
+          .emplace<crypto::ScopedFakeUnexportableKeyProvider>();
     }
 
     base::test::TestFuture<bool> future;
@@ -781,7 +809,7 @@ TEST_F(EnclaveAuthenticatorRequestDelegateTest,
       SyncServiceFactory::GetInstance()->GetForProfile(profile()));
   test_sync_service->GetUserSettings()->SetSelectedType(
       syncer::UserSelectableType::kPasswords, true);
-  crypto::ScopedMockUnexportableKeyProvider unexportable_key_provider;
+  crypto::ScopedFakeUnexportableKeyProvider unexportable_key_provider;
 
   {
     base::test::TestFuture<bool> future;
@@ -821,7 +849,7 @@ TEST_F(EnclaveAuthenticatorRequestDelegateTest,
   test_sync_service->SetSignedIn(signin::ConsentLevel::kSignin);
   test_sync_service->GetUserSettings()->SetSelectedType(
       syncer::UserSelectableType::kPasswords, true);
-  crypto::ScopedMockUnexportableKeyProvider unexportable_key_provider;
+  crypto::ScopedFakeUnexportableKeyProvider unexportable_key_provider;
 
   base::test::TestFuture<bool> future;
   ChromeWebAuthenticationDelegate delegate;
@@ -869,6 +897,127 @@ TEST_F(ChromeAuthenticatorRequestDelegateTest,
 }
 
 #endif  // BUILDFLAG(IS_MAC)
+
+TEST_F(ChromeAuthenticatorRequestDelegateTest, DiscoverPasswords) {
+  for (const auto enable_password : {false, true}) {
+    ChromeAuthenticatorRequestDelegate delegate(main_rfh());
+    auto password_controller =
+        std::make_unique<testing::NiceMock<MockPasswordCredentialController>>(
+            main_rfh()->GetGlobalId(), delegate.dialog_model());
+    auto raw_password_controller = password_controller.get();
+    delegate.SetPasswordControllerForTesting(std::move(password_controller));
+    delegate.SetUIPresentation(enable_password ? UIPresentation::kModalImmediate
+                                               : UIPresentation::kModal);
+    delegate.SetCredentialTypes((enable_password
+                                     ? (kRequestPassword | kRequestPublicKey)
+                                     : (kRequestPublicKey)));
+    delegate.SetRelyingPartyId(kRpId);
+    MockCableDiscoveryFactory discovery_factory;
+
+    EXPECT_CALL(*raw_password_controller, FetchPasswords)
+        .Times(enable_password);
+    delegate.ConfigureDiscoveries(
+        url::Origin::Create(GURL(kOrigin)), kOrigin,
+        content::AuthenticatorRequestClientDelegate::RequestSource::
+            kWebAuthentication,
+        device::FidoRequestType::kGetAssertion,
+        device::ResidentKeyRequirement::kPreferred,
+        device::UserVerificationRequirement::kRequired,
+        /*user_name=*/std::nullopt, {},
+        /*is_enclave_authenticator_available=*/false, &discovery_factory);
+  }
+}
+
+TEST_F(ChromeAuthenticatorRequestDelegateTest,
+       TryToShowUiNoImmediateCredentials) {
+  ChromeAuthenticatorRequestDelegate delegate(main_rfh());
+  auto password_controller =
+      std::make_unique<testing::NiceMock<MockPasswordCredentialController>>(
+          main_rfh()->GetGlobalId(), delegate.dialog_model());
+  auto raw_password_controller = password_controller.get();
+  delegate.SetPasswordControllerForTesting(std::move(password_controller));
+  base::MockCallback<base::OnceClosure> mock_closure;
+  delegate.RegisterActionCallbacks(base::DoNothing(), mock_closure.Get(),
+                                   base::DoNothing(), base::DoNothing(),
+                                   base::DoNothing(), base::DoNothing(),
+                                   base::DoNothing(), base::DoNothing());
+  delegate.SetUIPresentation(UIPresentation::kModalImmediate);
+  delegate.SetCredentialTypes(kRequestPassword | kRequestPublicKey);
+  delegate.SetRelyingPartyId(kRpId);
+  MockCableDiscoveryFactory discovery_factory;
+  PasswordCredentialController::PasswordCredentialsReceivedCallback callback;
+  EXPECT_CALL(*raw_password_controller, FetchPasswords)
+      .WillOnce([&callback](auto _, auto receive_callback) {
+        callback = std::move(receive_callback);
+      });
+  delegate.ConfigureDiscoveries(url::Origin::Create(GURL(kOrigin)), kOrigin,
+                                content::AuthenticatorRequestClientDelegate::
+                                    RequestSource::kWebAuthentication,
+                                device::FidoRequestType::kGetAssertion,
+                                device::ResidentKeyRequirement::kPreferred,
+                                device::UserVerificationRequirement::kRequired,
+                                /*user_name=*/std::nullopt, {},
+                                /*is_enclave_authenticator_available=*/false,
+                                &discovery_factory);
+  TransportAvailabilityInfo transports_info;
+  transports_info.request_type = device::FidoRequestType::kGetAssertion;
+
+  // still waiting for passwords.
+  EXPECT_CALL(mock_closure, Run).Times(0);
+  delegate.OnTransportAvailabilityEnumerated(std::move(transports_info));
+
+  EXPECT_CALL(mock_closure, Run).Times(1);
+  std::move(callback).Run({});
+}
+
+TEST_F(ChromeAuthenticatorRequestDelegateTest,
+       TryToShowUiHasImmediateCredentials) {
+  ChromeAuthenticatorRequestDelegate delegate(main_rfh());
+  auto password_controller =
+      std::make_unique<testing::NiceMock<MockPasswordCredentialController>>(
+          main_rfh()->GetGlobalId(), delegate.dialog_model());
+  auto raw_password_controller = password_controller.get();
+  delegate.SetPasswordControllerForTesting(std::move(password_controller));
+  base::MockCallback<base::OnceClosure> mock_closure;
+  delegate.RegisterActionCallbacks(base::DoNothing(), mock_closure.Get(),
+                                   base::DoNothing(), base::DoNothing(),
+                                   base::DoNothing(), base::DoNothing(),
+                                   base::DoNothing(), base::DoNothing());
+  delegate.SetUIPresentation(UIPresentation::kModalImmediate);
+  delegate.SetCredentialTypes(kRequestPassword | kRequestPublicKey);
+  delegate.SetRelyingPartyId(kRpId);
+  MockCableDiscoveryFactory discovery_factory;
+  PasswordCredentialController::PasswordCredentialsReceivedCallback callback;
+  EXPECT_CALL(*raw_password_controller, FetchPasswords)
+      .WillOnce([&callback](auto _, auto receive_callback) {
+        callback = std::move(receive_callback);
+      });
+  delegate.ConfigureDiscoveries(url::Origin::Create(GURL(kOrigin)), kOrigin,
+                                content::AuthenticatorRequestClientDelegate::
+                                    RequestSource::kWebAuthentication,
+                                device::FidoRequestType::kGetAssertion,
+                                device::ResidentKeyRequirement::kPreferred,
+                                device::UserVerificationRequirement::kRequired,
+                                /*user_name=*/std::nullopt, {},
+                                /*is_enclave_authenticator_available=*/false,
+                                &discovery_factory);
+  TransportAvailabilityInfo transports_info;
+  transports_info.request_type = device::FidoRequestType::kGetAssertion;
+  transports_info.recognized_credentials = {
+      device::DiscoverableCredentialMetadata(
+          device::AuthenticatorType::kEnclave, kRpId, {},
+          device::PublicKeyCredentialUserEntity(),
+          /*provider_name=*/std::nullopt)};
+
+  // still waiting for passwords.
+  EXPECT_CALL(mock_closure, Run).Times(0);
+  EXPECT_CALL(observer_, OnTransportAvailabilityEnumerated).Times(0);
+  delegate.OnTransportAvailabilityEnumerated(std::move(transports_info));
+
+  EXPECT_CALL(mock_closure, Run).Times(0);
+  EXPECT_CALL(observer_, OnTransportAvailabilityEnumerated).Times(1);
+  std::move(callback).Run({});
+}
 
 }  // namespace
 

@@ -8,11 +8,11 @@ version = "2.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
-name = "aho-corasick"
-version = "1.1.3"
+name = "android_system_properties"
+version = "0.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
- "memchr",
+ "libc",
 ]
 
 [[package]]
@@ -22,7 +22,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
 name = "anyhow"
-version = "1.0.95"
+version = "1.0.97"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+
+[[package]]
+name = "arrayvec"
+version = "0.7.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
@@ -32,31 +37,22 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
 name = "base64"
-version = "0.13.1"
+version = "0.22.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
 name = "bitflags"
-version = "1.3.2"
+version = "2.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
-name = "bitflags"
-version = "2.8.0"
+name = "bumpalo"
+version = "3.17.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-
-[[package]]
-name = "bstr"
-version = "1.11.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-dependencies = [
- "memchr",
- "serde",
-]
 
 [[package]]
 name = "bytemuck"
-version = "1.21.0"
+version = "1.22.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "bytemuck_derive",
@@ -64,7 +60,7 @@ dependencies = [
 
 [[package]]
 name = "bytemuck_derive"
-version = "1.8.1"
+version = "1.9.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "proc-macro2",
@@ -73,18 +69,13 @@ dependencies = [
 ]
 
 [[package]]
-name = "byteorder"
-version = "1.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-
-[[package]]
 name = "bytes"
-version = "1.9.0"
+version = "1.10.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
 name = "calendrical_calculations"
-version = "0.1.2"
+version = "0.1.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "core_maths",
@@ -93,7 +84,7 @@ dependencies = [
 
 [[package]]
 name = "cc"
-version = "1.2.10"
+version = "1.2.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "shlex",
@@ -108,10 +99,8 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 name = "chromium"
 version = "0.1.0"
 dependencies = [
- "anyhow",
  "base64",
- "bitflags 2.8.0",
- "bstr",
+ "bitflags",
  "bytemuck",
  "bytes",
  "cfg-if",
@@ -121,44 +110,34 @@ dependencies = [
  "fend-core",
  "font-types",
  "hex",
- "hex-literal",
  "icu_capi",
- "itertools",
  "lazy_static",
  "libc",
  "log",
- "nom",
  "png",
  "proc-macro2",
  "prost",
  "qr_code",
  "quote",
  "rand",
+ "rand_core 0.9.3",
  "rand_pcg",
  "read-fonts",
- "regex",
- "rstest",
- "rstest_reuse",
  "rustc-demangle-capi",
- "rustversion",
- "serde",
- "serde_json",
  "serde_json_lenient",
+ "sfv",
  "skrifa",
  "small_ctor",
  "static_assertions",
- "strum",
- "strum_macros",
+ "subtle",
  "syn",
+ "temporal_capi",
  "tinyvec",
- "unicode-linebreak",
- "wycheproof",
- "zerocopy",
 ]
 
 [[package]]
 name = "clap"
-version = "4.5.27"
+version = "4.5.32"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "clap_builder",
@@ -166,7 +145,7 @@ dependencies = [
 
 [[package]]
 name = "clap_builder"
-version = "4.5.27"
+version = "4.5.32"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "anstyle",
@@ -181,12 +160,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
 name = "codespan-reporting"
-version = "0.11.1"
+version = "0.12.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
+ "serde",
  "termcolor",
  "unicode-width",
 ]
+
+[[package]]
+name = "core-foundation-sys"
+version = "0.8.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
 name = "core_maths"
@@ -206,7 +191,7 @@ dependencies = [
 
 [[package]]
 name = "cxx"
-version = "1.0.137"
+version = "1.0.150"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "cc",
@@ -219,7 +204,7 @@ dependencies = [
 
 [[package]]
 name = "cxxbridge-cmd"
-version = "1.0.137"
+version = "1.0.150"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "clap",
@@ -231,12 +216,12 @@ dependencies = [
 
 [[package]]
 name = "cxxbridge-flags"
-version = "1.0.137"
+version = "1.0.150"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
 name = "cxxbridge-macro"
-version = "1.0.137"
+version = "1.0.150"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "proc-macro2",
@@ -247,7 +232,7 @@ dependencies = [
 
 [[package]]
 name = "diplomat"
-version = "0.9.0"
+version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "diplomat_core",
@@ -258,12 +243,12 @@ dependencies = [
 
 [[package]]
 name = "diplomat-runtime"
-version = "0.9.0"
+version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
 name = "diplomat_core"
-version = "0.9.0"
+version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "proc-macro2",
@@ -286,7 +271,12 @@ dependencies = [
 
 [[package]]
 name = "either"
-version = "1.13.0"
+version = "1.15.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+
+[[package]]
+name = "equivalent"
+version = "1.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
@@ -299,12 +289,12 @@ dependencies = [
 
 [[package]]
 name = "fend-core"
-version = "1.5.5"
+version = "1.5.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
 name = "fixed_decimal"
-version = "0.6.0"
+version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "displaydoc",
@@ -314,7 +304,7 @@ dependencies = [
 
 [[package]]
 name = "flate2"
-version = "1.0.35"
+version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "crc32fast",
@@ -323,12 +313,12 @@ dependencies = [
 
 [[package]]
 name = "foldhash"
-version = "0.1.4"
+version = "0.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
 name = "font-types"
-version = "0.8.2"
+version = "0.8.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "bytemuck",
@@ -345,13 +335,8 @@ dependencies = [
 ]
 
 [[package]]
-name = "glob"
-version = "0.3.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-
-[[package]]
-name = "heck"
-version = "0.4.1"
+name = "hashbrown"
+version = "0.15.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
@@ -360,13 +345,30 @@ version = "0.4.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
-name = "hex-literal"
-version = "0.4.1"
+name = "iana-time-zone"
+version = "0.1.62"
 source = "registry+https://github.com/rust-lang/crates.io-index"
+dependencies = [
+ "android_system_properties",
+ "core-foundation-sys",
+ "iana-time-zone-haiku",
+ "js-sys",
+ "log",
+ "wasm-bindgen",
+ "windows-core",
+]
+
+[[package]]
+name = "iana-time-zone-haiku"
+version = "0.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+dependencies = [
+ "cc",
+]
 
 [[package]]
 name = "icu_calendar"
-version = "2.0.0-beta1"
+version = "2.0.0-beta2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "calendrical_calculations",
@@ -382,7 +384,7 @@ dependencies = [
 
 [[package]]
 name = "icu_calendar_data"
-version = "2.0.0-beta1"
+version = "2.0.0-beta2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "icu_locale",
@@ -391,7 +393,7 @@ dependencies = [
 
 [[package]]
 name = "icu_capi"
-version = "2.0.0-beta1"
+version = "2.0.0-beta2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "diplomat",
@@ -411,7 +413,7 @@ dependencies = [
  "icu_provider",
  "icu_provider_adapters",
  "icu_segmenter",
- "icu_timezone",
+ "icu_time",
  "potential_utf",
  "tinystr",
  "writeable",
@@ -420,7 +422,7 @@ dependencies = [
 
 [[package]]
 name = "icu_casemap"
-version = "2.0.0-beta1"
+version = "2.0.0-beta2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "displaydoc",
@@ -436,7 +438,7 @@ dependencies = [
 
 [[package]]
 name = "icu_casemap_data"
-version = "2.0.0-beta1"
+version = "2.0.0-beta2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "icu_provider_baked",
@@ -444,7 +446,7 @@ dependencies = [
 
 [[package]]
 name = "icu_collator"
-version = "2.0.0-beta1"
+version = "2.0.0-beta2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "displaydoc",
@@ -462,7 +464,7 @@ dependencies = [
 
 [[package]]
 name = "icu_collator_data"
-version = "2.0.0-beta1"
+version = "2.0.0-beta2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "icu_locale",
@@ -471,7 +473,7 @@ dependencies = [
 
 [[package]]
 name = "icu_collections"
-version = "2.0.0-beta1"
+version = "2.0.0-beta2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "displaydoc",
@@ -483,7 +485,7 @@ dependencies = [
 
 [[package]]
 name = "icu_datetime"
-version = "2.0.0-beta1"
+version = "2.0.0-beta2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "displaydoc",
@@ -496,7 +498,7 @@ dependencies = [
  "icu_pattern",
  "icu_plurals",
  "icu_provider",
- "icu_timezone",
+ "icu_time",
  "potential_utf",
  "smallvec",
  "tinystr",
@@ -506,7 +508,7 @@ dependencies = [
 
 [[package]]
 name = "icu_datetime_data"
-version = "2.0.0-beta1"
+version = "2.0.0-beta2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "icu_locale",
@@ -515,12 +517,13 @@ dependencies = [
 
 [[package]]
 name = "icu_decimal"
-version = "2.0.0-beta1"
+version = "2.0.0-beta2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "displaydoc",
  "fixed_decimal",
  "icu_decimal_data",
+ "icu_locale_core",
  "icu_provider",
  "tinystr",
  "writeable",
@@ -529,7 +532,7 @@ dependencies = [
 
 [[package]]
 name = "icu_decimal_data"
-version = "2.0.0-beta1"
+version = "2.0.0-beta2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "icu_locale",
@@ -538,7 +541,7 @@ dependencies = [
 
 [[package]]
 name = "icu_experimental"
-version = "0.2.0"
+version = "0.3.0-beta2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "displaydoc",
@@ -570,7 +573,7 @@ dependencies = [
 
 [[package]]
 name = "icu_experimental_data"
-version = "0.2.0-dev"
+version = "0.3.0-beta2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "icu_locale",
@@ -579,7 +582,7 @@ dependencies = [
 
 [[package]]
 name = "icu_list"
-version = "2.0.0-beta1"
+version = "2.0.0-beta2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "displaydoc",
@@ -587,11 +590,12 @@ dependencies = [
  "icu_provider",
  "regex-automata",
  "writeable",
+ "zerovec",
 ]
 
 [[package]]
 name = "icu_list_data"
-version = "2.0.0-beta1"
+version = "2.0.0-beta2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "icu_locale",
@@ -600,7 +604,7 @@ dependencies = [
 
 [[package]]
 name = "icu_locale"
-version = "2.0.0-beta1"
+version = "2.0.0-beta2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "displaydoc",
@@ -615,7 +619,7 @@ dependencies = [
 
 [[package]]
 name = "icu_locale_core"
-version = "2.0.0-beta1"
+version = "2.0.0-beta2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "displaydoc",
@@ -627,7 +631,7 @@ dependencies = [
 
 [[package]]
 name = "icu_locale_data"
-version = "2.0.0-beta1"
+version = "2.0.0-beta2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "icu_provider_baked",
@@ -635,7 +639,7 @@ dependencies = [
 
 [[package]]
 name = "icu_normalizer"
-version = "2.0.0-beta1"
+version = "2.0.0-beta2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "displaydoc",
@@ -644,15 +648,12 @@ dependencies = [
  "icu_properties",
  "icu_provider",
  "smallvec",
- "utf16_iter",
- "utf8_iter",
- "write16",
  "zerovec",
 ]
 
 [[package]]
 name = "icu_normalizer_data"
-version = "2.0.0-beta1"
+version = "2.0.0-beta2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "icu_provider_baked",
@@ -660,7 +661,7 @@ dependencies = [
 
 [[package]]
 name = "icu_pattern"
-version = "0.3.0"
+version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "displaydoc",
@@ -672,7 +673,7 @@ dependencies = [
 
 [[package]]
 name = "icu_plurals"
-version = "2.0.0-beta1"
+version = "2.0.0-beta2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "displaydoc",
@@ -684,7 +685,7 @@ dependencies = [
 
 [[package]]
 name = "icu_plurals_data"
-version = "2.0.0-beta1"
+version = "2.0.0-beta2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "icu_locale",
@@ -693,7 +694,7 @@ dependencies = [
 
 [[package]]
 name = "icu_properties"
-version = "2.0.0-beta1"
+version = "2.0.0-beta2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "displaydoc",
@@ -709,7 +710,7 @@ dependencies = [
 
 [[package]]
 name = "icu_properties_data"
-version = "2.0.0-beta1"
+version = "2.0.0-beta2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "icu_provider_baked",
@@ -717,12 +718,11 @@ dependencies = [
 
 [[package]]
 name = "icu_provider"
-version = "2.0.0-beta1"
+version = "2.0.0-beta2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "displaydoc",
  "icu_locale_core",
- "icu_provider_macros",
  "stable_deref_trait",
  "tinystr",
  "writeable",
@@ -733,7 +733,7 @@ dependencies = [
 
 [[package]]
 name = "icu_provider_adapters"
-version = "2.0.0-beta1"
+version = "2.0.0-beta2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "icu_locale",
@@ -744,27 +744,18 @@ dependencies = [
 
 [[package]]
 name = "icu_provider_baked"
-version = "2.0.0-beta1"
+version = "2.0.0-beta2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "icu_provider",
  "writeable",
  "zerotrie",
-]
-
-[[package]]
-name = "icu_provider_macros"
-version = "2.0.0-beta1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn",
+ "zerovec",
 ]
 
 [[package]]
 name = "icu_segmenter"
-version = "2.0.0-beta1"
+version = "2.0.0-beta2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "core_maths",
@@ -780,7 +771,7 @@ dependencies = [
 
 [[package]]
 name = "icu_segmenter_data"
-version = "2.0.0-beta1"
+version = "2.0.0-beta2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "icu_locale",
@@ -788,26 +779,38 @@ dependencies = [
 ]
 
 [[package]]
-name = "icu_timezone"
-version = "2.0.0-beta1"
+name = "icu_time"
+version = "2.0.0-beta2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "calendrical_calculations",
  "displaydoc",
  "icu_calendar",
  "icu_provider",
- "icu_timezone_data",
+ "icu_time_data",
+ "ixdtf",
+ "serde",
  "tinystr",
+ "writeable",
  "zerotrie",
  "zerovec",
 ]
 
 [[package]]
-name = "icu_timezone_data"
-version = "2.0.0-beta1"
+name = "icu_time_data"
+version = "2.0.0-beta2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "icu_provider_baked",
+]
+
+[[package]]
+name = "indexmap"
+version = "2.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+dependencies = [
+ "equivalent",
+ "hashbrown",
 ]
 
 [[package]]
@@ -820,16 +823,25 @@ dependencies = [
 
 [[package]]
 name = "itoa"
-version = "1.0.14"
+version = "1.0.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
 name = "ixdtf"
-version = "0.3.0"
+version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "displaydoc",
  "utf8_iter",
+]
+
+[[package]]
+name = "js-sys"
+version = "0.3.77"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+dependencies = [
+ "once_cell",
+ "wasm-bindgen",
 ]
 
 [[package]]
@@ -839,7 +851,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
 name = "libc"
-version = "0.2.169"
+version = "0.2.171"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
@@ -849,7 +861,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
 name = "link-cplusplus"
-version = "1.0.9"
+version = "1.0.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "cc",
@@ -857,12 +869,12 @@ dependencies = [
 
 [[package]]
 name = "litemap"
-version = "0.7.4"
+version = "0.7.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
 name = "log"
-version = "0.4.25"
+version = "0.4.27"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
@@ -871,26 +883,12 @@ version = "2.7.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
-name = "minimal-lexical"
-version = "0.2.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-
-[[package]]
 name = "miniz_oxide"
-version = "0.8.3"
+version = "0.8.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "adler2",
  "simd-adler32",
-]
-
-[[package]]
-name = "nom"
-version = "7.1.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-dependencies = [
- "memchr",
- "minimal-lexical",
 ]
 
 [[package]]
@@ -929,11 +927,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "once_cell"
+version = "1.21.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+
+[[package]]
 name = "png"
-version = "0.17.16"
+version = "0.18.0-rc"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
- "bitflags 1.3.2",
+ "bitflags",
  "crc32fast",
  "fdeflate",
  "flate2",
@@ -942,7 +945,7 @@ dependencies = [
 
 [[package]]
 name = "potential_utf"
-version = "0.1.0"
+version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "serde",
@@ -952,7 +955,7 @@ dependencies = [
 
 [[package]]
 name = "ppv-lite86"
-version = "0.2.20"
+version = "0.2.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "zerocopy",
@@ -960,7 +963,7 @@ dependencies = [
 
 [[package]]
 name = "proc-macro2"
-version = "1.0.93"
+version = "1.0.94"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "unicode-ident",
@@ -968,7 +971,7 @@ dependencies = [
 
 [[package]]
 name = "prost"
-version = "0.13.4"
+version = "0.13.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "bytes",
@@ -977,7 +980,7 @@ dependencies = [
 
 [[package]]
 name = "prost-derive"
-version = "0.13.4"
+version = "0.13.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "anyhow",
@@ -994,7 +997,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
 name = "quote"
-version = "1.0.38"
+version = "1.0.40"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "proc-macro2",
@@ -1007,7 +1010,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "libc",
  "rand_chacha",
- "rand_core",
+ "rand_core 0.6.4",
 ]
 
 [[package]]
@@ -1016,7 +1019,7 @@ version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "ppv-lite86",
- "rand_core",
+ "rand_core 0.6.4",
 ]
 
 [[package]]
@@ -1028,16 +1031,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "rand_core"
+version = "0.9.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+
+[[package]]
 name = "rand_pcg"
 version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
- "rand_core",
+ "rand_core 0.6.4",
 ]
 
 [[package]]
 name = "read-fonts"
-version = "0.25.3"
+version = "0.27.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "bytemuck",
@@ -1045,69 +1053,17 @@ dependencies = [
 ]
 
 [[package]]
-name = "regex"
-version = "1.11.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-dependencies = [
- "aho-corasick",
- "memchr",
- "regex-automata",
- "regex-syntax",
-]
-
-[[package]]
 name = "regex-automata"
 version = "0.4.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-dependencies = [
- "aho-corasick",
- "memchr",
- "regex-syntax",
-]
 
 [[package]]
-name = "regex-syntax"
-version = "0.8.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-
-[[package]]
-name = "relative-path"
-version = "1.9.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-
-[[package]]
-name = "rstest"
-version = "0.22.0"
+name = "rust_decimal"
+version = "1.37.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
- "rstest_macros",
- "rustc_version",
-]
-
-[[package]]
-name = "rstest_macros"
-version = "0.22.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-dependencies = [
- "cfg-if",
- "glob",
- "proc-macro2",
- "quote",
- "regex",
- "relative-path",
- "rustc_version",
- "syn",
- "unicode-ident",
-]
-
-[[package]]
-name = "rstest_reuse"
-version = "0.7.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-dependencies = [
- "quote",
- "rand",
- "syn",
+ "arrayvec",
+ "num-traits",
 ]
 
 [[package]]
@@ -1124,31 +1080,18 @@ dependencies = [
 ]
 
 [[package]]
-name = "rustc_version"
-version = "0.4.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-dependencies = [
- "semver",
-]
-
-[[package]]
 name = "rustversion"
-version = "1.0.19"
+version = "1.0.20"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
 name = "ryu"
-version = "1.0.18"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-
-[[package]]
-name = "semver"
-version = "1.0.25"
+version = "1.0.20"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
 name = "serde"
-version = "1.0.217"
+version = "1.0.219"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "serde_derive",
@@ -1156,23 +1099,12 @@ dependencies = [
 
 [[package]]
 name = "serde_derive"
-version = "1.0.217"
+version = "1.0.219"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "proc-macro2",
  "quote",
  "syn",
-]
-
-[[package]]
-name = "serde_json"
-version = "1.0.137"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-dependencies = [
- "itoa",
- "memchr",
- "ryu",
- "serde",
 ]
 
 [[package]]
@@ -1187,6 +1119,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "sfv"
+version = "0.10.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+dependencies = [
+ "base64",
+ "indexmap",
+ "rust_decimal",
+]
+
+[[package]]
 name = "shlex"
 version = "1.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1198,7 +1140,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
 name = "skrifa"
-version = "0.26.6"
+version = "0.29.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "bytemuck",
@@ -1212,7 +1154,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
 name = "smallvec"
-version = "1.13.2"
+version = "1.14.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
@@ -1239,25 +1181,13 @@ version = "0.11.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
-name = "strum"
-version = "0.25.0"
+name = "subtle"
+version = "2.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-
-[[package]]
-name = "strum_macros"
-version = "0.25.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-dependencies = [
- "heck",
- "proc-macro2",
- "quote",
- "rustversion",
- "syn",
-]
 
 [[package]]
 name = "syn"
-version = "2.0.96"
+version = "2.0.100"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "proc-macro2",
@@ -1276,6 +1206,30 @@ dependencies = [
 ]
 
 [[package]]
+name = "temporal_capi"
+version = "0.0.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+dependencies = [
+ "diplomat",
+ "diplomat-runtime",
+ "icu_calendar",
+ "temporal_rs",
+]
+
+[[package]]
+name = "temporal_rs"
+version = "0.0.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+dependencies = [
+ "iana-time-zone",
+ "icu_calendar",
+ "ixdtf",
+ "num-traits",
+ "tinystr",
+ "writeable",
+]
+
+[[package]]
 name = "termcolor"
 version = "1.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1285,7 +1239,7 @@ dependencies = [
 
 [[package]]
 name = "tinystr"
-version = "0.8.0"
+version = "0.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "displaydoc",
@@ -1294,7 +1248,7 @@ dependencies = [
 
 [[package]]
 name = "tinyvec"
-version = "1.8.1"
+version = "1.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
@@ -1304,12 +1258,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
 name = "unicode-ident"
-version = "1.0.15"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-
-[[package]]
-name = "unicode-linebreak"
-version = "0.1.5"
+version = "1.0.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
@@ -1333,11 +1282,72 @@ version = "0.11.0+wasi-snapshot-preview1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
+name = "wasm-bindgen"
+version = "0.2.100"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+dependencies = [
+ "cfg-if",
+ "once_cell",
+ "rustversion",
+ "wasm-bindgen-macro",
+]
+
+[[package]]
+name = "wasm-bindgen-backend"
+version = "0.2.100"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+dependencies = [
+ "bumpalo",
+ "log",
+ "proc-macro2",
+ "quote",
+ "syn",
+ "wasm-bindgen-shared",
+]
+
+[[package]]
+name = "wasm-bindgen-macro"
+version = "0.2.100"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+dependencies = [
+ "quote",
+ "wasm-bindgen-macro-support",
+]
+
+[[package]]
+name = "wasm-bindgen-macro-support"
+version = "0.2.100"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+ "wasm-bindgen-backend",
+ "wasm-bindgen-shared",
+]
+
+[[package]]
+name = "wasm-bindgen-shared"
+version = "0.2.100"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+dependencies = [
+ "unicode-ident",
+]
+
+[[package]]
 name = "winapi-util"
 version = "0.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "windows-sys",
+]
+
+[[package]]
+name = "windows-core"
+version = "0.52.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+dependencies = [
+ "windows-targets",
 ]
 
 [[package]]
@@ -1404,32 +1414,16 @@ version = "0.52.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
-name = "write16"
-version = "1.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-
-[[package]]
 name = "writeable"
-version = "0.6.0"
+version = "0.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "either",
 ]
 
 [[package]]
-name = "wycheproof"
-version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-dependencies = [
- "base64",
- "hex",
- "serde",
- "serde_json",
-]
-
-[[package]]
 name = "yoke"
-version = "0.7.5"
+version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "serde",
@@ -1440,7 +1434,7 @@ dependencies = [
 
 [[package]]
 name = "yoke-derive"
-version = "0.7.5"
+version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "proc-macro2",
@@ -1451,16 +1445,15 @@ dependencies = [
 
 [[package]]
 name = "zerocopy"
-version = "0.7.35"
+version = "0.8.24"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
- "byteorder",
  "zerocopy-derive",
 ]
 
 [[package]]
 name = "zerocopy-derive"
-version = "0.7.35"
+version = "0.8.24"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "proc-macro2",
@@ -1470,7 +1463,7 @@ dependencies = [
 
 [[package]]
 name = "zerofrom"
-version = "0.1.5"
+version = "0.1.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "zerofrom-derive",
@@ -1478,7 +1471,7 @@ dependencies = [
 
 [[package]]
 name = "zerofrom-derive"
-version = "0.1.5"
+version = "0.1.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "proc-macro2",
@@ -1489,7 +1482,7 @@ dependencies = [
 
 [[package]]
 name = "zerotrie"
-version = "0.2.0"
+version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "displaydoc",
@@ -1499,7 +1492,7 @@ dependencies = [
 
 [[package]]
 name = "zerovec"
-version = "0.11.0"
+version = "0.11.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "yoke",
@@ -1509,7 +1502,7 @@ dependencies = [
 
 [[package]]
 name = "zerovec-derive"
-version = "0.11.0"
+version = "0.11.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "proc-macro2",

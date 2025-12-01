@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <string>
 #include <utility>
+#include <variant>
 
 #include "base/check.h"
 #include "base/containers/contains.h"
@@ -24,6 +25,7 @@
 #include "components/input/utils.h"
 #include "components/viz/common/constants.h"
 #include "components/viz/common/features.h"
+#include "components/viz/common/frame_sinks/begin_frame_args.h"
 #include "components/viz/common/frame_sinks/begin_frame_source.h"
 #include "components/viz/common/quads/compositor_frame.h"
 #include "components/viz/common/quads/compositor_frame_metadata.h"
@@ -625,7 +627,7 @@ void CompositorFrameSinkSupport::SetThreads(
   }
   base::flat_set<base::PlatformThreadId> thread_ids;
   for (const auto& thread : unverified_threads) {
-    thread_ids.insert(thread.id);
+    thread_ids.insert(base::PlatformThreadId(thread.id));
   }
   frame_sink_manager_->VerifySandboxedThreadIds(
       thread_ids,
@@ -708,34 +710,6 @@ void CompositorFrameSinkSupport::SubmitCompositorFrame(
       submit_time,
       mojom::CompositorFrameSink::SubmitCompositorFrameSyncCallback());
   DCHECK_EQ(result, SubmitResult::ACCEPTED);
-}
-
-void CompositorFrameSinkSupport::SubmitCompositorFrameLocally(
-    const SurfaceId& surface_id,
-    CompositorFrame frame,
-    const RendererSettings& settings) {
-  CHECK_EQ(surface_id, last_created_surface_id_);
-
-  pending_frames_.push_back(FrameData{.local_frame = true});
-  Surface* surface = surface_manager_->GetSurfaceForId(surface_id);
-
-  auto frame_rejected_callback =
-      base::ScopedClosureRunner(base::BindOnce([] { NOTREACHED(); }));
-  auto frame_index = ++last_frame_index_;
-  Surface::QueueFrameResult result = surface->QueueFrame(
-      std::move(frame), frame_index, std::move(frame_rejected_callback));
-  // Currently, frames are only queued on Android, and we don't need to use
-  // `SubmitCompositorFrameLocally` for evicting resources on Android.
-  CHECK_EQ(result, Surface::QueueFrameResult::ACCEPTED_ACTIVE);
-
-  // Make sure this surface will be stretched to match the display size. If
-  // `auto_resize_output_surface` is false, then swap will not occur meaning
-  // that the content of this compositor frame will not be presented. If it is
-  // not, then we won't properly push out existing resources. A mismatch between
-  // root surface size and display size can happen. For example, there is a race
-  // condition if `Display` is resized after it is set not visible but before
-  // any compositor frame with that new size is submitted.
-  CHECK(settings.auto_resize_output_surface);
 }
 
 SubmitResult CompositorFrameSinkSupport::MaybeSubmitCompositorFrame(
@@ -1169,13 +1143,29 @@ void CompositorFrameSinkSupport::OnBeginFrame(const BeginFrameArgs& args) {
   int64_t trace_id = base::trace_event::GetNextGlobalTraceId();
   TRACE_EVENT(
       "viz,benchmark,graphics.pipeline", "Graphics.Pipeline",
-      perfetto::Flow::Global(trace_id), [trace_id](perfetto::EventContext ctx) {
+      perfetto::Flow::Global(trace_id),
+      [trace_id, &args](perfetto::EventContext ctx) {
         base::TaskAnnotator::EmitTaskTimingDetails(ctx);
         auto* event = ctx.event<perfetto::protos::pbzero::ChromeTrackEvent>();
         auto* data = event->set_chrome_graphics_pipeline();
         data->set_step(perfetto::protos::pbzero::ChromeGraphicsPipeline::
                            StepName::STEP_ISSUE_BEGIN_FRAME);
         data->set_surface_frame_trace_id(trace_id);
+        auto* possible_deadlines = data->set_possible_deadlines();
+        possible_deadlines->set_frame_time_us(
+            args.frame_time.since_origin().InMicroseconds());
+        if (args.possible_deadlines.has_value()) {
+          for (const PossibleDeadline& deadline :
+               args.possible_deadlines->deadlines) {
+            auto* timeline = possible_deadlines->add_frame_timeline();
+            timeline->set_vsync_id(deadline.vsync_id);
+            timeline->set_latch_delta_us(deadline.latch_delta.InMicroseconds());
+            timeline->set_present_delta_us(
+                deadline.present_delta.InMicroseconds());
+          }
+          possible_deadlines->set_preferred_frame_timeline_index(
+              args.possible_deadlines->preferred_index);
+        }
       });
 
   if (compositor_frame_callback_) {
@@ -1200,7 +1190,8 @@ void CompositorFrameSinkSupport::OnBeginFrame(const BeginFrameArgs& args) {
   }
   SetLastKnownVsync(args.interval);
   const bool should_send_begin_frame =
-      ShouldSendBeginFrame(adjusted_args.frame_time, args.interval) &&
+      ShouldSendBeginFrame(args.frame_id, adjusted_args.frame_time,
+                           args.interval) &&
       (client_ || layer_context_);
   if (should_send_begin_frame) {
     if (last_activated_surface_id_.is_valid())
@@ -1420,7 +1411,7 @@ CompositorFrameSinkSupport::GetRequestRegionProperties(
   // render pass.
   if (IsRegionCapture(sub_target)) {
     const auto it = current_capture_bounds_.bounds().find(
-        absl::get<RegionCaptureCropId>(sub_target));
+        std::get<RegionCaptureCropId>(sub_target));
     if (it != current_capture_bounds_.bounds().end() && !it->second.IsEmpty() &&
         gfx::Rect(out.root_render_pass_size).Contains(it->second)) {
       out.render_pass_subrect = it->second;
@@ -1434,7 +1425,7 @@ CompositorFrameSinkSupport::GetRequestRegionProperties(
   // Else, we have a subtree capture ID and should capture a subsection of a
   // child render pass.
   CHECK(IsSubtreeCapture(sub_target));
-  const SubtreeCaptureId& id = absl::get<SubtreeCaptureId>(sub_target);
+  const SubtreeCaptureId& id = std::get<SubtreeCaptureId>(sub_target);
   for (const auto& render_pass : frame.render_pass_list) {
     if (render_pass->subtree_capture_id == id) {
       out.transform_to_root = render_pass->transform_to_root_target;
@@ -1508,8 +1499,17 @@ const char* CompositorFrameSinkSupport::GetSubmitResultAsString(
 }
 
 bool CompositorFrameSinkSupport::ShouldSendBeginFrame(
+    BeginFrameId frame_id,
     base::TimeTicks frame_time,
     base::TimeDelta vsync_interval) {
+  // Don't send the same BeginFrameId to a client twice. This could otherwise
+  // happen if the client removes and then immediately re-adds a
+  // BeginFrameObserver before the next BeginFrame arrives. See
+  // https://crbug.com/40286473.
+  if (frame_id == last_begin_frame_args_.frame_id) {
+    return RecordShouldSendBeginFrame("DuplicateFrameId", false);
+  }
+
   // We should throttle OnBeginFrame() if it has been less than
   // |begin_frame_interval_| since the last one was sent because clients have
   // requested to update at such rate.
@@ -1566,7 +1566,8 @@ bool CompositorFrameSinkSupport::ShouldSendBeginFrame(
     return RecordShouldSendBeginFrame("SendFrameAck", true);
   }
 
-  if (!client_needs_begin_frame_ && !layer_context_wants_begin_frames_) {
+  if (!client_needs_begin_frame_ && !layer_context_wants_begin_frames_ &&
+      frame_timing_details_.empty()) {
     return RecordShouldSendBeginFrame("StopNotRequested", false);
   }
 

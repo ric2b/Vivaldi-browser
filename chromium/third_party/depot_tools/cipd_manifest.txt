@@ -34,10 +34,10 @@ $VerifiedPlatform windows-arm64
 infra/tools/luci/vpython3/${platform} git_revision:ad0c4b622c7d4cee870f57eed8170c059ca42ed3
 
 # LUCI editor
-infra/tools/luci/led/${platform} git_revision:26a4eddc87d48a9d8901396e3ce027f090b5108e
+infra/tools/luci/led/${platform} git_revision:372f149ec007edd1a02c7c6ce1a6e6c75cc52597
 
 # LUCI config generator
-infra/tools/luci/lucicfg/${platform} git_revision:edacaa9ffe572276dd37ce20ae76ab388e77a032
+infra/tools/luci/lucicfg/${platform} git_revision:213ef147e1b45f6eac6df03fef3022f6fd22b922
 
 # Mac toolchain installer
 infra/tools/mac_toolchain/${os=mac}-${arch} git_revision:59b5b4b5a506dc23eae31ef0f5b168281c6521da

@@ -1,9 +1,17 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="el">
+<translation id="2277224997687551299">Επεξεργασία ονόματος ομάδας</translation>
+<translation id="2330212241471632770">{TABS_COUNT, plural,
+          =1 {Αποθ. Καρτέλας στους Σελιδ.}
+          other {Αποθ. Καρτελών στους Σελιδ.}
+        }</translation>
 <translation id="2947471979790858922">Η δραστηριότητά σας σε αυτές τις ιδιωτικές καρτέλες θα αφαιρεθεί από αυτή τη συσκευή</translation>
 <translation id="3870643923290313246">{INCOGNITO_TABS_COUNT, plural,
         =1 {Μπορείτε να βρείτε τις κλειστές καρτέλες σας στην ενότητα Πρόσφατες Καρτέλες στο κύριο μενού του Vivaldi. Η ιδιωτική σας καρτέλα δεν θα είναι διαθέσιμη.}
         other {Μπορείτε να βρείτε τις κλειστές καρτέλες σας στην ενότητα Πρόσφατες καρτέλες στο κύριο μενού του Vivaldi. Οι # ιδιωτικές καρτέλες σας δεν θα είναι διαθέσιμες.}}</translation>
+<translation id="4460014764210899310">Κατάργηση ομαδοποίησης</translation>
 <translation id="4871187110787939393">Κλείσιμο όλων των ιδιωτικών καρτελών;</translation>
+<translation id="5494920125229734069">Επιλογή όλων</translation>
+<translation id="6744956528665271406">Επεξεργασία χρώματος ομάδας</translation>
 </translationbundle>

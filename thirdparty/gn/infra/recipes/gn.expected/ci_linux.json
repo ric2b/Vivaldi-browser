@@ -399,7 +399,8 @@
       "--disable-shared",
       "--enable-static",
       "--disable-syscall",
-      "--disable-stats"
+      "--disable-stats",
+      "--with-lg-page=16"
     ],
     "cwd": "[START_DIR]/jemalloc/build-linux-arm64",
     "env": {

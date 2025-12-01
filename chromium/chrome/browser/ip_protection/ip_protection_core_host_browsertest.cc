@@ -7,7 +7,6 @@
 #include <string>
 #include <vector>
 
-#include "base/callback_list.h"
 #include "base/strings/to_string.h"
 #include "base/test/bind.h"
 #include "base/test/scoped_feature_list.h"
@@ -51,9 +50,11 @@
 #include "components/signin/public/identity_manager/primary_account_change_event.h"
 #endif
 
-#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) || \
+    BUILDFLAG(IS_CHROMEOS)
 #include "chrome/common/chrome_features.h"
-#endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
+#endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) ||
+        // BUILDFLAG(IS_CHROMEOS)
 
 using ::ip_protection::BlindSignedAuthToken;
 using ::ip_protection::GeoHint;
@@ -68,7 +69,8 @@ class ScopedIpProtectionFeatureList {
          {{net::features::kIpPrivacyOnlyInIncognito.name,
            base::ToString(incognito_mode)}}});
     features_and_params.push_back({network::features::kMaskedDomainList, {}});
-#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) || \
+    BUILDFLAG(IS_CHROMEOS)
     // Use of IpProtectionCoreHostFactory::GetInstance() in the test
     // constructor means that the KeyedService Factory instances get
     // created before feature overrides in
@@ -80,7 +82,8 @@ class ScopedIpProtectionFeatureList {
     // See http://g/chrome-secure-web-and-net/Qre0HqS0hgA for more info.
     features_and_params.push_back(
         {::features::kEnableCertManagementUIV2Write, {}});
-#endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
+#endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) ||
+        // BUILDFLAG(IS_CHROMEOS)
     feature_list_.InitWithFeaturesAndParameters(features_and_params, {});
   }
 
@@ -461,13 +464,13 @@ IN_PROC_BROWSER_TEST_F(IpProtectionBrowserTestIncognitoOnlyModeEnabled,
 class IpProtectionCoreHostIdentityBrowserTest
     : public IpProtectionCoreHostBrowserTest {
  public:
-  IpProtectionCoreHostIdentityBrowserTest() {
-    create_services_subscription_ =
-        BrowserContextDependencyManager::GetInstance()
-            ->RegisterCreateServicesCallbackForTesting(
-                base::BindRepeating(&IpProtectionCoreHostIdentityBrowserTest::
-                                        OnWillCreateBrowserContextServices,
-                                    base::Unretained(this)));
+  IpProtectionCoreHostIdentityBrowserTest() = default;
+
+  void SetUpBrowserContextKeyedServices(
+      content::BrowserContext* context) override {
+    IpProtectionCoreHostBrowserTest::SetUpBrowserContextKeyedServices(context);
+    IdentityTestEnvironmentProfileAdaptor::
+        SetIdentityTestEnvironmentFactoriesOnBrowserContext(context);
   }
 
   void SetUpOnMainThread() override {
@@ -502,16 +505,9 @@ class IpProtectionCoreHostIdentityBrowserTest
         ->ClearPrimaryAccount();
   }
 
- protected:
-  void OnWillCreateBrowserContextServices(content::BrowserContext* context) {
-    IdentityTestEnvironmentProfileAdaptor::
-        SetIdentityTestEnvironmentFactoriesOnBrowserContext(context);
-  }
-
  private:
   std::unique_ptr<IdentityTestEnvironmentProfileAdaptor>
       identity_test_environment_adaptor_;
-  base::CallbackListSubscription create_services_subscription_;
 };
 
 IN_PROC_BROWSER_TEST_F(IpProtectionCoreHostIdentityBrowserTest,
@@ -627,7 +623,7 @@ class IpProtectionCoreHostUserSettingBrowserTest
     : public IpProtectionCoreHostBrowserTest {
  public:
   IpProtectionCoreHostUserSettingBrowserTest() {
-    scoped_feature_list_.InitAndEnableFeature(privacy_sandbox::kIpProtectionV1);
+    scoped_feature_list_.InitAndEnableFeature(privacy_sandbox::kIpProtectionUx);
   }
 
  private:

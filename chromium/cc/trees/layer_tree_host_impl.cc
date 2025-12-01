@@ -61,6 +61,7 @@
 #include "cc/input/browser_controls_offset_tag_modifications.h"
 #include "cc/input/page_scale_animation.h"
 #include "cc/input/scrollbar_animation_controller.h"
+#include "cc/layers/append_quads_context.h"
 #include "cc/layers/append_quads_data.h"
 #include "cc/layers/effect_tree_layer_list_iterator.h"
 #include "cc/layers/heads_up_display_layer_impl.h"
@@ -72,13 +73,14 @@
 #include "cc/metrics/compositor_frame_reporting_controller.h"
 #include "cc/metrics/custom_metrics_recorder.h"
 #include "cc/metrics/frame_sequence_metrics.h"
+#include "cc/metrics/frame_sequence_tracker.h"
 #include "cc/metrics/lcd_text_metrics_reporter.h"
 #include "cc/metrics/submit_info.h"
+#include "cc/metrics/ukm_dropped_frames_data.h"
 #include "cc/metrics/ukm_smoothness_data.h"
 #include "cc/paint/display_item_list.h"
 #include "cc/paint/paint_worklet_job.h"
 #include "cc/paint/paint_worklet_layer_painter.h"
-#include "cc/raster/bitmap_raster_buffer_provider.h"
 #include "cc/raster/gpu_raster_buffer_provider.h"
 #include "cc/raster/one_copy_raster_buffer_provider.h"
 #include "cc/raster/raster_buffer_provider.h"
@@ -455,10 +457,8 @@ LayerTreeHostImpl::LayerTreeHostImpl(
       use_layer_context_for_display_(settings_.UseLayerContextForDisplay()),
       use_layer_context_for_animations_(
           settings_.UseLayerContextForAnimations()),
-      is_synchronous_single_threaded_(
-          !task_runner_provider->HasImplThread() &&
-          !settings_.single_thread_proxy_scheduler &&
-          !use_layer_context_for_display_),
+      is_synchronous_single_threaded_(!task_runner_provider->HasImplThread() &&
+                                      !settings_.single_thread_proxy_scheduler),
       cached_managed_memory_policy_(settings.memory_policy),
       // Must be initialized after is_synchronous_single_threaded_ and
       // task_runner_provider_.
@@ -1364,7 +1364,13 @@ DrawResult LayerTreeHostImpl::CalculateRenderPasses(FrameData* frame) {
   // crbug.com/805673.
   active_tree_->ResetHandleVisibilityChanged();
 
+  frame->has_view_transition_save_directive =
+      active_tree_->HasViewTransitionSaveRequest();
+
   base::flat_set<viz::ViewTransitionElementResourceId> known_resource_ids;
+  base::flat_set<blink::ViewTransitionToken> capture_view_transition_tokens =
+      active_tree()->GetCaptureViewTransitionTokens();
+
   // Create the render passes in dependency order.
   size_t render_surface_list_size = frame->render_surface_list->size();
   for (size_t i = 0; i < render_surface_list_size; ++i) {
@@ -1377,17 +1383,24 @@ DrawResult LayerTreeHostImpl::CalculateRenderPasses(FrameData* frame) {
     const bool should_draw_into_render_pass =
         is_root_surface || render_surface->contributes_to_drawn_surface() ||
         render_surface->CopyOfOutputRequired();
-    if (should_draw_into_render_pass)
-      frame->render_passes.push_back(render_surface->CreateRenderPass());
-    if (render_surface->OwningEffectNode()
-            ->view_transition_element_resource_id.IsValid()) {
-      known_resource_ids.insert(render_surface->OwningEffectNode()
-                                    ->view_transition_element_resource_id);
+    const auto& view_transition_element_resource_id =
+        render_surface->ViewTransitionElementResourceId();
+    if (should_draw_into_render_pass) {
+      // Create a capture render pass if we're in the capture phase for this
+      // render surface.
+      if (render_surface->has_view_transition_capture_contributions()) {
+        frame->render_passes.push_back(
+            render_surface->CreateViewTransitionCaptureRenderPass(
+                capture_view_transition_tokens));
+      }
+
+      frame->render_passes.push_back(
+          render_surface->CreateRenderPass(capture_view_transition_tokens));
+    }
+    if (view_transition_element_resource_id.IsValid()) {
+      known_resource_ids.insert(view_transition_element_resource_id);
     }
   }
-
-  frame->has_view_transition_save_directive =
-      active_tree_->HasViewTransitionSaveRequest();
 
   // When we are displaying the HUD, change the root damage rect to cover the
   // entire root surface. This will disable partial-swap/scissor optimizations
@@ -1415,8 +1428,6 @@ DrawResult LayerTreeHostImpl::CalculateRenderPasses(FrameData* frame) {
   // texture suddenly appearing in the future.
   DrawResult draw_result = DrawResult::kSuccess;
 
-  const DrawMode draw_mode = GetDrawMode();
-
   int num_missing_tiles = 0;
   CHECK(!frame->checkerboarded_needs_raster);
   CHECK(!frame->checkerboarded_needs_record);
@@ -1434,11 +1445,27 @@ DrawResult LayerTreeHostImpl::CalculateRenderPasses(FrameData* frame) {
     throttle_decider_.Prepare();
 
   if (!use_layer_context_for_display_) {
+    const auto& context = AppendQuadsContext{
+        GetDrawMode(), std::move(capture_view_transition_tokens),
+        /* for_view_transition_capture= */ false};
+    const auto& view_transition_capture_context = AppendQuadsContext{
+        context.draw_mode, context.capture_view_transition_tokens,
+        /* for_view_transition_capture= */ true};
+
     for (EffectTreeLayerListIterator it(active_tree());
          it.state() != EffectTreeLayerListIterator::State::kEnd; ++it) {
-      auto target_render_pass_id = it.target_render_surface()->render_pass_id();
-      viz::CompositorRenderPass* target_render_pass =
-          FindRenderPassById(frame->render_passes, target_render_pass_id);
+      RenderSurfaceImpl* target_render_surface = it.target_render_surface();
+
+      viz::CompositorRenderPass* target_render_pass = FindRenderPassById(
+          frame->render_passes, target_render_surface->render_pass_id());
+
+      viz::CompositorRenderPass* view_transition_capture_render_pass =
+          target_render_surface->has_view_transition_capture_contributions()
+              ? FindRenderPassById(
+                    frame->render_passes,
+                    it.target_render_surface()
+                        ->view_transition_capture_render_pass_id())
+              : nullptr;
 
       AppendQuadsData append_quads_data;
 
@@ -1460,12 +1487,18 @@ DrawResult LayerTreeHostImpl::CalculateRenderPasses(FrameData* frame) {
                  EffectTreeLayerListIterator::State::kContributingSurface) {
         RenderSurfaceImpl* render_surface = it.current_render_surface();
         if (render_surface->contributes_to_drawn_surface()) {
-          render_surface->AppendQuads(draw_mode, target_render_pass,
+          render_surface->AppendQuads(context, target_render_pass,
                                       &append_quads_data);
+          if (view_transition_capture_render_pass) {
+            AppendQuadsData data;
+            render_surface->AppendQuads(view_transition_capture_context,
+                                        view_transition_capture_render_pass,
+                                        &data);
+          }
         }
       } else if (it.state() == EffectTreeLayerListIterator::State::kLayer) {
         LayerImpl* layer = it.current_layer();
-        if (layer->WillDraw(draw_mode, resource_provider_.get())) {
+        if (layer->WillDraw(context.draw_mode, resource_provider_.get())) {
           DCHECK_EQ(active_tree_.get(), layer->layer_tree_impl());
 
           frame->will_draw_layers.push_back(layer);
@@ -1484,7 +1517,12 @@ DrawResult LayerTreeHostImpl::CalculateRenderPasses(FrameData* frame) {
             }
           }
           layer->NotifyKnownResourceIdsBeforeAppendQuads(known_resource_ids);
-          layer->AppendQuads(target_render_pass, &append_quads_data);
+          layer->AppendQuads(context, target_render_pass, &append_quads_data);
+          if (view_transition_capture_render_pass) {
+            AppendQuadsData data;
+            layer->AppendQuads(view_transition_capture_context,
+                               view_transition_capture_render_pass, &data);
+          }
         } else {
           if (settings_.enable_compositing_based_throttling) {
             throttle_decider_.ProcessLayerNotToDraw(layer);
@@ -2155,9 +2193,12 @@ void LayerTreeHostImpl::NotifyTileStateChanged(const Tile* tile) {
 
   layer_impl->NotifyTileStateChanged(tile);
 
-  if (settings_.UseLayerContextForDisplay() && !is_pending_tree) {
-    // Pending tree tile updates are pushed to the display tree after
-    // activation. For active tree tile updates we push immediately.
+  if (settings_.UseLayerContextForDisplay() && !is_pending_tree &&
+      !CommitsToActiveTree()) {
+    // Tiles for the tree currently being committed to (Pending or Active)
+    // are pushed to the display during UpdateDisplayTree. For active tree,
+    // if we're not committing to Active, tiles are pushed immediately via
+    // UpdateDisplayTile.
     layer_context_->UpdateDisplayTile(
         static_cast<PictureLayerImpl&>(*layer_impl), *tile,
         *resource_provider(), *layer_tree_frame_sink_->context_provider());
@@ -2397,7 +2438,6 @@ void LayerTreeHostImpl::OnDraw(const gfx::Transform& transform,
 
 void LayerTreeHostImpl::OnCompositorFrameTransitionDirectiveProcessed(
     uint32_t sequence_id) {
-  // See ViewTransitionOverflowRectFromSurface
   // We cache the computed content rect for each view-transition capture
   // surface. This rect is then used to map the generated render pass or texture
   // to the target coordinate space.
@@ -2559,39 +2599,38 @@ viz::CompositorFrameMetadata LayerTreeHostImpl::MakeCompositorFrameMetadata() {
         gfx::Vector2dF offset2d(0.0f, -std::round(offset));
         metadata.offset_tag_values.emplace_back(content_offset_tag, offset2d);
       }
-
-      if (features::IsBcivBottomControlsEnabled() &&
-          browser_controls_offset_manager_->BottomControlsHeight() > 0) {
-        const viz::OffsetTag& bottom_controls_offset_tag =
-            browser_controls_offset_manager_->BottomControlsOffsetTag();
-        if (bottom_controls_offset_tag) {
-          CHECK(!content_offset_tag.IsEmpty());
-
-          float bottom_controls_visible_height =
-              browser_controls_offset_manager_->BottomControlsHeight() *
-              browser_controls_offset_manager_->BottomControlsShownRatio();
-          float offset =
-              browser_controls_offset_manager_->BottomControlsHeight() -
-              bottom_controls_visible_height;
-          if (bottom_controls_visible_height == 0) {
-            // Similar to the top toolbar hairline, there are visual effects
-            // on the top most bottom controls that are still shown after being
-            // completely scrolled off screen. Shift the bottom controls a bit
-            // more so that these visual effects disappear.
-            offset += browser_controls_offset_manager_
-                          ->BottomControlsAdditionalHeight();
-          }
-
-          // ViewAndroid::OnTopControlsChanged() also rounds the offset before
-          // handing it off to Android.
-          gfx::Vector2dF offset2d(0.0f, std::round(offset));
-          metadata.offset_tag_values.emplace_back(bottom_controls_offset_tag,
-                                                  offset2d);
-        }
-      }
     }
 #endif
   }
+
+#if BUILDFLAG(IS_ANDROID)
+  if (browser_controls_offset_manager_->BottomControlsHeight() > 0 &&
+      features::IsBcivBottomControlsEnabled()) {
+    const viz::OffsetTag& bottom_controls_offset_tag =
+        browser_controls_offset_manager_->BottomControlsOffsetTag();
+    if (bottom_controls_offset_tag) {
+      float bottom_controls_visible_height =
+          browser_controls_offset_manager_->BottomControlsHeight() *
+          browser_controls_offset_manager_->BottomControlsShownRatio();
+      float offset = browser_controls_offset_manager_->BottomControlsHeight() -
+                     bottom_controls_visible_height;
+      if (bottom_controls_visible_height == 0) {
+        // Similar to the top toolbar hairline, there are visual effects
+        // on the top most bottom controls that are still shown after being
+        // completely scrolled off screen. Shift the bottom controls a bit
+        // more so that these visual effects disappear.
+        offset +=
+            browser_controls_offset_manager_->BottomControlsAdditionalHeight();
+      }
+
+      // ViewAndroid::OnTopControlsChanged() also rounds the offset before
+      // handing it off to Android.
+      gfx::Vector2dF offset2d(0.0f, std::round(offset));
+      metadata.offset_tag_values.emplace_back(bottom_controls_offset_tag,
+                                              offset2d);
+    }
+  }
+#endif
 
   if (InnerViewportScrollNode()) {
     // TODO(miletus) : Change the metadata to hold ScrollOffset.
@@ -3031,6 +3070,8 @@ viz::CompositorFrame LayerTreeHostImpl::GenerateCompositorFrame(
   viz::CompositorFrameMetadata metadata = MakeCompositorFrameMetadata();
 
   ViewTransitionRequest::ViewTransitionElementMap view_transition_element_map;
+  const auto& capture_view_transition_tokens =
+      active_tree_->GetCaptureViewTransitionTokens();
   for (RenderSurfaceImpl* render_surface : *frame->render_surface_list) {
     const auto& view_transition_element_resource_id =
         render_surface->OwningEffectNode()->view_transition_element_resource_id;
@@ -3047,8 +3088,14 @@ viz::CompositorFrame LayerTreeHostImpl::GenerateCompositorFrame(
         << view_transition_element_map[view_transition_element_resource_id]
                .GetUnsafeValue();
 
-    view_transition_element_map[view_transition_element_resource_id] =
-        render_surface->render_pass_id();
+    if (view_transition_element_resource_id.MatchesToken(
+            capture_view_transition_tokens)) {
+      view_transition_element_map[view_transition_element_resource_id] =
+          render_surface->view_transition_capture_render_pass_id();
+    } else {
+      view_transition_element_map[view_transition_element_resource_id] =
+          render_surface->render_pass_id();
+    }
   }
 
   auto display_color_spaces = GetDisplayColorSpaces();
@@ -3206,9 +3253,6 @@ viz::CompositorFrame LayerTreeHostImpl::GenerateCompositorFrame(
   CHECK(!settings_.single_thread_proxy_scheduler ||
         active_tree()->local_surface_id_from_parent().is_valid());
 
-  if (settings_.is_display_tree) {
-    UpdateChildLocalSurfaceId();
-  }
   layer_tree_frame_sink_->SetLocalSurfaceId(
       child_local_surface_id_allocator_.GetCurrentLocalSurfaceId());
 
@@ -3246,7 +3290,7 @@ void LayerTreeHostImpl::UpdateDisplayTree(FrameData& frame) {
 
   layer_context_->UpdateDisplayTreeFrom(
       *active_tree(), *resource_provider(),
-      *layer_tree_frame_sink_->context_provider());
+      *layer_tree_frame_sink_->context_provider(), viewport_damage_rect_);
 }
 
 int LayerTreeHostImpl::RequestedMSAASampleCount() const {
@@ -4146,7 +4190,8 @@ LayerTreeHostImpl::CreateRasterBufferProvider() {
       layer_tree_frame_sink_->context_provider();
 
   if (!compositor_context_provider) {
-    return std::make_unique<BitmapRasterBufferProvider>(layer_tree_frame_sink_);
+    return std::make_unique<ZeroCopyRasterBufferProvider>(
+        layer_tree_frame_sink_, raster_caps_);
   }
 
   const gpu::Capabilities& caps =
@@ -4676,6 +4721,108 @@ void LayerTreeHostImpl::SetMayThrottleIfUndrawnFrames(
 
 ScrollTree& LayerTreeHostImpl::GetScrollTree() const {
   return active_tree_->property_trees()->scroll_tree_mutable();
+}
+
+void LayerTreeHostImpl::ScrollAnimationAbort(ElementId element_id) const {
+  return mutator_host_->ScrollAnimationAbort(element_id);
+}
+
+float LayerTreeHostImpl::GetBrowserControlsTopOffset() const {
+  return browser_controls_offset_manager_->ControlsTopOffset();
+}
+
+void LayerTreeHostImpl::ScrollBegin() const {
+  return browser_controls_offset_manager_->ScrollBegin();
+}
+
+void LayerTreeHostImpl::ScrollEnd() const {
+  return browser_controls_offset_manager_->ScrollEnd();
+}
+
+void LayerTreeHostImpl::StartScrollSequence(
+    FrameSequenceTrackerType type,
+    FrameInfo::SmoothEffectDrivingThread scrolling_thread) {
+  frame_trackers_.StartScrollSequence(type, scrolling_thread);
+}
+
+void LayerTreeHostImpl::StopSequence(FrameSequenceTrackerType type) {
+  return frame_trackers_.StopSequence(type);
+}
+
+void LayerTreeHostImpl::PinchBegin() const {
+  return browser_controls_offset_manager_->PinchBegin();
+}
+
+void LayerTreeHostImpl::PinchEnd() const {
+  return browser_controls_offset_manager_->PinchEnd();
+}
+
+void LayerTreeHostImpl::ScrollbarAnimationMouseLeave(
+    ElementId element_id) const {
+  ScrollbarAnimationController* animation_controller =
+      ScrollbarAnimationControllerForElementId(element_id);
+  if (animation_controller) {
+    animation_controller->DidMouseLeave();
+  }
+}
+
+void LayerTreeHostImpl::ScrollbarAnimationMouseMove(
+    ElementId element_id,
+    gfx::PointF device_viewport_point) const {
+  ScrollbarAnimationController* animation_controller =
+      ScrollbarAnimationControllerForElementId(element_id);
+  if (animation_controller) {
+    animation_controller->DidMouseMove(device_viewport_point);
+  }
+}
+
+bool LayerTreeHostImpl::ScrollbarAnimationMouseDown(
+    ElementId element_id) const {
+  ScrollbarAnimationController* animation_controller =
+      ScrollbarAnimationControllerForElementId(element_id);
+  if (animation_controller) {
+    animation_controller->DidMouseDown();
+    return true;
+  }
+  return false;
+}
+
+bool LayerTreeHostImpl::ScrollbarAnimationMouseUp(ElementId element_id) const {
+  ScrollbarAnimationController* animation_controller =
+      ScrollbarAnimationControllerForElementId(element_id);
+  if (animation_controller) {
+    animation_controller->DidMouseUp();
+    return true;
+  }
+  return false;
+}
+
+void LayerTreeHostImpl::TickScrollAnimations() const {
+  return mutator_host_->TickScrollAnimations(CurrentBeginFrameArgs().frame_time,
+                                             GetScrollTree());
+}
+
+double LayerTreeHostImpl::PredictViewportBoundsDelta(
+    double current_bounds_delta,
+    gfx::Vector2dF scroll_distance) const {
+  return browser_controls_offset_manager_->PredictViewportBoundsDelta(
+      current_bounds_delta, scroll_distance);
+}
+
+bool LayerTreeHostImpl::ElementHasImplOnlyScrollAnimation(
+    ElementId element_id) const {
+  return mutator_host_->ElementHasImplOnlyScrollAnimation(element_id);
+}
+
+std::optional<gfx::PointF>
+LayerTreeHostImpl::UpdateImplAnimationScrollTargetWithDelta(
+    gfx::Vector2dF adjusted_delta,
+    int scroll_node_id,
+    base::TimeDelta delayed_by,
+    ElementId element_id) const {
+  return mutator_host_->ImplOnlyScrollAnimationUpdateTarget(
+      adjusted_delta, GetScrollTree().MaxScrollOffset(scroll_node_id),
+      CurrentBeginFrameArgs().frame_time, delayed_by, element_id);
 }
 
 bool LayerTreeHostImpl::HasAnimatedScrollbars() const {
@@ -5723,6 +5870,13 @@ void LayerTreeHostImpl::SetUkmSmoothnessDestination(
   dropped_frame_counter_.SetUkmSmoothnessDestination(
       ukm_smoothness_data.GetMemoryAs<UkmSmoothnessDataShared>());
   ukm_smoothness_mapping_ = std::move(ukm_smoothness_data);
+}
+
+void LayerTreeHostImpl::SetUkmDroppedFramesDestination(
+    base::WritableSharedMemoryMapping ukm_dropped_frames_data) {
+  frame_trackers_.SetUkmDroppedFramesDestination(
+      ukm_dropped_frames_data.GetMemoryAs<UkmDroppedFramesDataShared>());
+  ukm_dropped_frames_mapping_ = std::move(ukm_dropped_frames_data);
 }
 
 void LayerTreeHostImpl::NotifyDidPresentCompositorFrameOnImplThread(

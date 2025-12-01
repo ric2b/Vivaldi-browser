@@ -3,9 +3,11 @@
   "int_variables": {
     // The lowest version of search_engines.json,
     // which defines the expected default search engines for the dialog.
-    "kSearchEnginesDataVersionRequired": 10000164,
+    "kSearchEnginesDataVersionRequired": 10000171,
     // Update the version each time the data is changed.
-    "kVersion": 2
+    "kVersion": 2,
+    // Type of the UI dialog to show.
+    "kType": "MULTICHOICE_PROMPT"
   },
   // Add only types that exist in
   // chromium/components/search_engines/search_engine_type.h

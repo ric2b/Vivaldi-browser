@@ -36,6 +36,7 @@ import {I18nMixin} from 'chrome://resources/ash/common/cr_elements/i18n_mixin.js
 import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
 
 import {RouteOriginMixin} from '../common/route_origin_mixin.js';
+import type {PrefsState} from '../common/types.js';
 import type {Route} from '../router.js';
 import {Router, routes} from '../router.js';
 
@@ -161,17 +162,6 @@ export class OsSettingsSyncSubpageElement extends
         computed: 'computeExistingPassphraseLabel_(syncPrefs.encryptAllData,' +
             'syncPrefs.explicitPassphraseTime)',
       },
-
-      /**
-       * Whether to show the new UI for OS Sync Settings
-       * which include sublabel and Apps toggle
-       * shared between Ash and Lacros.
-       */
-      showSyncSettingsRevamp_: {
-        type: Boolean,
-        value: loadTimeData.getBoolean('showSyncSettingsRevamp'),
-        readOnly: true,
-      },
     };
   }
 
@@ -181,7 +171,7 @@ export class OsSettingsSyncSubpageElement extends
     ];
   }
 
-  prefs: {[key: string]: any};
+  prefs: PrefsState;
   private pageStatus_: PageStatus;
   syncPrefs?: SyncPrefs;
   syncStatus: SyncStatus;
@@ -189,7 +179,7 @@ export class OsSettingsSyncSubpageElement extends
   private encryptionExpanded_: boolean;
   forceEncryptionExpanded: boolean;
   private existingPassphrase_: string;
-  private showSyncSettingsRevamp_: boolean;
+  private showExistingPassphraseBelowAccount_: boolean;
   private signedIn_: boolean;
   private syncDisabledByAdmin_: boolean;
   private syncSectionDisabled_: boolean;
@@ -405,24 +395,6 @@ export class OsSettingsSyncSubpageElement extends
   private handleSyncPrefsChanged_(syncPrefs: SyncPrefs): void {
     this.syncPrefs = syncPrefs;
     this.pageStatus_ = PageStatus.CONFIGURE;
-  }
-
-  private onManageChromeBrowserSyncClick_(): void {
-    chrome.send('OpenBrowserSyncSettings');
-  }
-
-  private getManageSyncedDataSubtitle_(): string {
-    if (this.showSyncSettingsRevamp_) {
-      return this.i18n('manageSyncedDataSubtitle');
-    }
-    return '';
-  }
-
-  private getSyncAdvancedTitle_(): string {
-    if (this.showSyncSettingsRevamp_) {
-      return this.i18n('syncAdvancedDevicePageTitle');
-    }
-    return this.i18n('syncAdvancedPageTitle');
   }
 
   private onSyncDashboardLinkClick_(): void {

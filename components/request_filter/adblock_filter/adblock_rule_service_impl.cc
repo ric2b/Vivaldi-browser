@@ -9,18 +9,22 @@
 
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
+#include "base/time/time.h"
 #include "components/ad_blocker/adblock_known_sources_handler.h"
 #include "components/ad_blocker/adblock_rule_manager_impl.h"
 #include "components/ad_blocker/adblock_rule_source_handler.h"
+#include "components/ad_blocker/adblock_stats_data.h"
+#include "components/ad_blocker/adblock_stats_store_impl.h"
+#include "components/ad_blocker/adblock_types.h"
 #include "components/prefs/pref_service.h"
 #include "components/request_filter/adblock_filter/adblock_cosmetic_filter.h"
 #include "components/request_filter/adblock_filter/adblock_request_filter.h"
 #include "components/request_filter/adblock_filter/adblock_rules_index.h"
 #include "components/request_filter/adblock_filter/adblock_rules_index_manager.h"
 #include "components/request_filter/adblock_filter/adblock_tab_state_and_logs.h"
-#include "components/request_filter/request_filter_manager.h"
-#include "components/request_filter/request_filter_manager_factory.h"
+#include "components/request_filter/request_filter_registry.h"
 #include "content/public/browser/browser_context.h"
+#include "content/public/browser/render_process_host.h"
 #include "content/public/browser/storage_partition.h"
 
 #include "vivaldi/prefs/vivaldi_gen_prefs.h"
@@ -29,10 +33,12 @@ namespace adblock_filter {
 RuleServiceImpl::RuleServiceImpl(
     content::BrowserContext* context,
     PrefService* prefs,
+    vivaldi::RequestFilterRegistry* request_filter_registry,
     RuleSourceHandler::RulesCompiler rules_compiler,
     std::string locale)
     : context_(context),
       prefs_(prefs),
+      request_filter_registry_(request_filter_registry),
       rules_compiler_(std::move(rules_compiler)),
       locale_(std::move(locale)) {
   pref_change_registrar_.Init(prefs_);
@@ -62,19 +68,32 @@ void RuleServiceImpl::Load() {
 
   state_store_.emplace(context_->GetPath(), this, file_task_runner_);
 
+  stats_store_ = std::make_unique<StatsStoreImpl>(context_->GetPath());
   // Unretained is safe because we own the sources store
   state_store_->Load(
       base::BindOnce(&RuleServiceImpl::OnStateLoaded, base::Unretained(this)));
 }
 
 RulesIndex* RuleServiceImpl::GetRuleIndex(RuleGroup group) {
-  std::optional<RulesIndexManager>& index_manager = index_managers_[static_cast<size_t>(group)];
+  std::optional<RulesIndexManager>& index_manager =
+      index_managers_[static_cast<size_t>(group)];
 
   if (!index_manager) {
     return nullptr;
   }
 
   return index_manager->rules_index();
+}
+
+StateAndLogsImpl& RuleServiceImpl::GetStateAndLogsImpl() {
+  CHECK(is_loaded_);
+  CHECK(state_and_logs_);
+  return *state_and_logs_;
+}
+
+Resources& RuleServiceImpl::GetResources() {
+  CHECK(resources_);
+  return *resources_;
 }
 
 bool RuleServiceImpl::IsLoaded() const {
@@ -89,12 +108,10 @@ void RuleServiceImpl::Shutdown() {
 }
 
 void RuleServiceImpl::AddRequestFilter(RuleGroup group) {
-  auto request_filter = std::make_unique<AdBlockRequestFilter>(
-      index_managers_[static_cast<size_t>(group)]->AsWeakPtr(),
-      state_and_logs_->AsWeakPtr(), resources_->AsWeakPtr());
+  auto request_filter =
+      std::make_unique<AdBlockRequestFilter>(weak_factory_.GetWeakPtr(), group);
   request_filters_[static_cast<size_t>(group)] = request_filter.get();
-  vivaldi::RequestFilterManagerFactory::GetForBrowserContext(context_)
-      ->AddFilter(std::move(request_filter));
+  request_filter_registry_->AddFilter(std::move(request_filter));
   request_filters_[static_cast<size_t>(group)]->set_allow_blocking_documents(
       prefs_->GetBoolean(
           vivaldiprefs::kPrivacyAdBlockerEnableDocumentBlocking));
@@ -110,8 +127,8 @@ void RuleServiceImpl::SetRuleGroupEnabled(RuleGroup group, bool enabled) {
     return;
 
   if (!enabled) {
-    vivaldi::RequestFilterManagerFactory::GetForBrowserContext(context_)
-        ->RemoveFilter(request_filters_[static_cast<size_t>(group)]);
+    request_filter_registry_->RemoveFilter(
+        request_filters_[static_cast<size_t>(group)]);
     request_filters_[static_cast<size_t>(group)] = nullptr;
   } else {
     AddRequestFilter(group);
@@ -135,16 +152,13 @@ RuleServiceImpl::IndexBuildResult RuleServiceImpl::GetRulesIndexBuildResult(
 
 void RuleServiceImpl::OnStateLoaded(
     RuleServiceStorage::LoadResult load_result) {
+  MigrateOldStatsData(&load_result);
   // All cases of base::Unretained here are safe. We are generally passing
   // callbacks to objects that we own, calling to either this or other objects
   // that we own.
   state_and_logs_.emplace(
-      load_result.blocked_reporting_start,
-      std::move(load_result.blocked_domains_counters),
-      std::move(load_result.blocked_for_origin_counters),
-      this,
-      base::BindRepeating(&RuleServiceStorage::ScheduleSave,
-                          base::Unretained(&state_store_.value())));
+      this, base::BindRepeating(&RuleServiceStorage::ScheduleSave,
+                                base::Unretained(&state_store_.value())));
 
   rule_manager_.emplace(
       file_task_runner_, context_->GetPath(),
@@ -177,8 +191,7 @@ void RuleServiceImpl::OnStateLoaded(
     }
   }
 
-  content_injection_provider_.emplace(context_, this,
-                                      &(resources_.value()));
+  content_injection_provider_.emplace(context_, this, &(resources_.value()));
 
   known_sources_handler_.emplace(
       this, load_result.storage_version, locale_, load_result.known_sources,
@@ -191,18 +204,54 @@ void RuleServiceImpl::OnStateLoaded(
     observer.OnRuleServiceStateLoaded(this);
 }
 
-bool RuleServiceImpl::IsDocumentBlocked(RuleGroup group,
-                                        content::RenderFrameHost* frame,
-                                        const GURL& url) const {
-  DCHECK(is_loaded_);
-  if (!url.SchemeIs(url::kFtpScheme) && !url.SchemeIsHTTPOrHTTPS())
-    return false;
+void RuleServiceImpl::MigrateOldStatsData(
+    const RuleServiceStorage::LoadResult* load_result) {
+  StatsData data;
+
+  const auto add_entries_from_counter_group =
+      [&data](const auto& counters, StatsData::EntryType type) {
+        const std::map<std::string, int> tracker_map =
+            counters[static_cast<int>(RuleGroup::kTrackingRules)];
+        const std::map<std::string, int> ad_map =
+            counters[static_cast<int>(RuleGroup::kAdBlockingRules)];
+
+        for (const auto& [domain, tracker_count] : tracker_map) {
+          const int ad_count = ad_map.contains(domain) ? ad_map.at(domain) : 0;
+          StatsData::Entry entry{domain, ad_count, tracker_count};
+          data.AddEntry(entry, type);
+        }
+
+        for (const auto& [domain, ad_count] : ad_map) {
+          if (!tracker_map.contains(domain)) {
+            StatsData::Entry entry{domain, ad_count, 0};
+            data.AddEntry(entry, type);
+          }
+        }
+      };
+
+  add_entries_from_counter_group(load_result->blocked_domains_counters,
+                                 StatsData::EntryType::TRACKER_AND_ADS);
+  add_entries_from_counter_group(load_result->blocked_for_origin_counters,
+                                 StatsData::EntryType::WEBSITE);
+
+  if (data.TotalAdsBlocked() > 0 || data.TotalTrackersBlocked() > 0) {
+    // This function is run on every startup, but we're migrating only when we
+    // have some values.
+    data.SetReportingStart(load_result->blocked_reporting_start);
+    stats_store_->ImportData(std::move(data));
+  }
+}
+
+std::array<std::optional<TabStateAndLogs::RuleData>, kRuleGroupCount>
+RuleServiceImpl::IsDocumentBlocked(content::RenderFrameHost* frame) const {
+  CHECK(is_loaded_);
+  CHECK(frame);
 
   if (!state_and_logs_) {
-    return false;
+    return {std::nullopt, std::nullopt};
   }
 
-  return state_and_logs_->WasFrameBlocked(group, frame);
+  return state_and_logs_->WasFrameBlocked(frame);
 }
 
 RuleManager* RuleServiceImpl::GetRuleManager() {
@@ -220,11 +269,15 @@ StateAndLogs* RuleServiceImpl::GetStateAndLogs() {
   return &state_and_logs_.value();
 }
 
+StatsStore* RuleServiceImpl::GetStatsStore() {
+  DCHECK(stats_store_);
+  return stats_store_.get();
+}
+
 void RuleServiceImpl::OnExceptionListChanged(RuleGroup group,
                                              RuleManager::ExceptionsList list) {
   if (request_filters_[static_cast<size_t>(group)]) {
-    vivaldi::RequestFilterManagerFactory::GetForBrowserContext(context_)
-        ->ClearCacheOnNavigation();
+    request_filter_registry_->ClearCacheOnNavigation();
   }
 }
 
@@ -238,8 +291,7 @@ void RuleServiceImpl::OnRulesIndexChanged(RuleGroup group) {
 
 void RuleServiceImpl::OnRulesIndexLoaded(RuleGroup group) {
   if (request_filters_[static_cast<size_t>(group)]) {
-    vivaldi::RequestFilterManagerFactory::GetForBrowserContext(context_)
-        ->ClearCacheOnNavigation();
+    request_filter_registry_->ClearCacheOnNavigation();
   }
 }
 
@@ -253,16 +305,11 @@ void RuleServiceImpl::OnEnableDocumentBlockingChanged() {
   }
 }
 
-void RuleServiceImpl::InitializeCosmeticFilter(CosmeticFilter* filter) {
-  std::array<base::WeakPtr<RulesIndexManager>, kRuleGroupCount>
-      weak_index_managers;
-
-  for (size_t i = 0; i < kRuleGroupCount; i++) {
-    if (index_managers_[i])
-      weak_index_managers[i] = index_managers_[i]->AsWeakPtr();
-  }
-
-  filter->Initialize(weak_index_managers);
+std::unique_ptr<CosmeticFilter> RuleServiceImpl::MakeCosmeticFilter(
+    content::RenderFrameHost* frame) {
+  return std::make_unique<CosmeticFilter>(weak_factory_.GetWeakPtr(),
+                                          frame->GetProcess()->GetID(),
+                                          frame->GetRoutingID());
 }
 
 bool RuleServiceImpl::IsApplyingIosRules(RuleGroup group) {

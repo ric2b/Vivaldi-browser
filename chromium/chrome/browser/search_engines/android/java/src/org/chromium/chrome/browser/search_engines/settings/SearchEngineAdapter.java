@@ -55,6 +55,7 @@ import android.annotation.SuppressLint;
 import java.net.MalformedURLException;
 import java.net.URL;
 
+import org.chromium.base.Log;
 import org.chromium.build.BuildConfig;
 
 /** A custom adapter for listing search engines. */
@@ -153,6 +154,9 @@ public class SearchEngineAdapter extends BaseAdapter
 
     @Nullable private Runnable mDisableAutoSwitchRunnable;
 
+    // Vivaldi
+    long mCurrentDefaultSearchEngine;
+
     /**
      * Construct a SearchEngineAdapter.
      *
@@ -216,6 +220,7 @@ public class SearchEngineAdapter extends BaseAdapter
                 RegionalCapabilitiesServiceFactory.getForProfile(mProfile);
         List<TemplateUrl> templateUrls = templateUrlService.getTemplateUrls();
         TemplateUrl defaultSearchEngineTemplateUrl;
+        // Vivaldi
         if (mProfile.isOffTheRecord()) {
             defaultSearchEngineTemplateUrl =
                     templateUrlService.vivaldiGetDefaultSearchEngine(
@@ -223,6 +228,11 @@ public class SearchEngineAdapter extends BaseAdapter
         } else {
             defaultSearchEngineTemplateUrl =
                 templateUrlService.getDefaultSearchEngineTemplateUrl();
+        }
+        boolean defaultSearchEngineChanged = false;
+        if (mCurrentDefaultSearchEngine != defaultSearchEngineTemplateUrl.getNativePtr()) {
+            mCurrentDefaultSearchEngine = defaultSearchEngineTemplateUrl.getNativePtr();
+            defaultSearchEngineChanged = true;
         }
         // In Vivaldi, we get everything sorted on the native side.
         if (!BuildConfig.IS_VIVALDI)
@@ -232,7 +242,8 @@ public class SearchEngineAdapter extends BaseAdapter
                 regionalCapabilities.isInEeaCountry());
         boolean forceRefresh = mIsLocationPermissionChanged;
         mIsLocationPermissionChanged = false;
-        if (!didSearchEnginesChange(templateUrls)) {
+        // Vivaldi
+        if (!defaultSearchEngineChanged && !didSearchEnginesChange(templateUrls)) {
             if (forceRefresh) notifyDataSetChanged();
             return;
         }
@@ -241,6 +252,11 @@ public class SearchEngineAdapter extends BaseAdapter
         mRecentSearchEngines = new ArrayList<>();
 
         for (int i = 0; i < templateUrls.size(); i++) {
+            // Vivaldi NOTE(jarle@vivaldi.com): Vivaldi for desktop does not have the concept of
+            // recent search engines, so don't populate the mRecentSearchEngines list.
+            if (BuildConfig.IS_VIVALDI)
+                mPrepopulatedSearchEngines.add(templateUrls.get(i));
+            else {
             TemplateUrl templateUrl = templateUrls.get(i);
             if (getSearchEngineSourceType(templateUrl, defaultSearchEngineTemplateUrl)
                     == TemplateUrlSourceType.RECENT) {
@@ -248,6 +264,7 @@ public class SearchEngineAdapter extends BaseAdapter
             } else {
                 mPrepopulatedSearchEngines.add(templateUrl);
             }
+            } // Vivaldi
         }
 
         // Convert the TemplateUrl index into an index of mSearchEngines.
@@ -266,6 +283,12 @@ public class SearchEngineAdapter extends BaseAdapter
         }
 
         if (mSelectedSearchEnginePosition == -1) {
+            // Vivaldi NOTE(jarle@vivaldi.com): This is not so serious for Vivaldi,
+            // we allow editing the template URLs. No need to throw an exception.
+            if (BuildConfig.IS_VIVALDI)
+                Log.w("SearchEngineAdapter",
+                        "Default search engine is not found in available search engines");
+            else
             throw new IllegalStateException(
                     String.format(
                             "Default search engine is not found in available search engines:"

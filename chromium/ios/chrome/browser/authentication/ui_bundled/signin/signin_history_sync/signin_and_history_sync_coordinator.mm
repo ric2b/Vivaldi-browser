@@ -48,7 +48,7 @@ enum class SignInHistorySyncStep {
 
 @implementation SignInAndHistorySyncCoordinator {
   // Sign-in or history sync coordinator, according to `_currentStep`.
-  InterruptibleChromeCoordinator* _childCoordinator;
+  ChromeCoordinator<InterruptibleChromeCoordinator>* _childCoordinator;
   // The current step.
   SignInHistorySyncStep _currentStep;
   // Promo button used to trigger the sign-in.
@@ -82,15 +82,15 @@ enum class SignInHistorySyncStep {
 
 - (void)start {
   [super start];
-  ProfileIOS* profile = self.browser->GetProfile();
-  _authenticationService = AuthenticationServiceFactory::GetForProfile(profile);
-  _syncService = SyncServiceFactory::GetForProfile(profile);
+  _authenticationService =
+      AuthenticationServiceFactory::GetForProfile(self.profile);
+  _syncService = SyncServiceFactory::GetForProfile(self.profile);
   [self presentNextStepWithPreviousResult:SigninCoordinatorResultSuccess];
 }
 
 - (void)stop {
   if (_currentStep != SignInHistorySyncStep::kCompleted) {
-    [self interruptWithAction:SynchronousStopAction() completion:nil];
+    [self interruptAnimated:NO];
   }
 
   _syncService = nullptr;
@@ -98,16 +98,15 @@ enum class SignInHistorySyncStep {
   [super stop];
 }
 
-#pragma mark - SigninCoordinator
+#pragma mark - InterruptibleChromeCoordinator
 
-- (void)interruptWithAction:(SigninCoordinatorInterrupt)action
-                 completion:(ProceduralBlock)completion {
+- (void)interruptAnimated:(BOOL)animated {
   // TODO(crbug.com/40929259): Turn into CHECK.
   DUMP_WILL_BE_CHECK(_childCoordinator)
       << base::SysNSStringToUTF8([self description]);
   // Interrupt `_childCoordinator` which will trigger the end of this
   // coordinator. Its callback will triggered.
-  [_childCoordinator interruptWithAction:action completion:completion];
+  [_childCoordinator interruptAnimated:animated];
 }
 
 #pragma mark - HistorySyncPopupCoordinatorDelegate
@@ -133,6 +132,9 @@ enum class SignInHistorySyncStep {
     case SigninCoordinatorResultDisabled:
       _currentStep = [self nextStep];
       break;
+    case SigninCoordinatorProfileSwitch:
+      // TODO(crbug.com/375605572): Open the history sync dialog after the
+      // continuation.
     case SigninCoordinatorResultInterrupted:
     case SigninCoordinatorResultCanceledByUser:
       _currentStep = SignInHistorySyncStep::kCompleted;
@@ -150,7 +152,7 @@ enum class SignInHistorySyncStep {
   // If there are no steps remaining, call delegate to stop presenting
   // coordinators.
   AuthenticationService* authService =
-      AuthenticationServiceFactory::GetForProfile(self.browser->GetProfile());
+      AuthenticationServiceFactory::GetForProfile(self.profile);
   id<SystemIdentity> identity =
       authService->GetPrimaryIdentity(signin::ConsentLevel::kSignin);
   SigninCoordinatorResult result;
@@ -170,7 +172,8 @@ enum class SignInHistorySyncStep {
 }
 
 // Creates the current step coordinator according to `_currentStep`.
-- (InterruptibleChromeCoordinator*)createPresentStepChildCoordinator {
+- (ChromeCoordinator<InterruptibleChromeCoordinator>*)
+    createPresentStepChildCoordinator {
   switch (_currentStep) {
     case SignInHistorySyncStep::kBottomSheetSignin: {
       SigninCoordinator* coordinator =
@@ -201,7 +204,7 @@ enum class SignInHistorySyncStep {
     }
     case SignInHistorySyncStep::kHistorySync: {
       if (history_sync::GetSkipReason(_syncService, _authenticationService,
-                                      self.browser->GetProfile()->GetPrefs(),
+                                      self.profile->GetPrefs(),
                                       _optionalHistorySync) !=
           history_sync::HistorySyncSkipReason::kNone) {
         [self
@@ -243,12 +246,11 @@ enum class SignInHistorySyncStep {
       bool hasIdentitiesOnDevice = false;
       if (IsUseAccountListFromIdentityManagerEnabled()) {
         signin::IdentityManager* identityManager =
-            IdentityManagerFactory::GetForProfile(self.browser->GetProfile());
+            IdentityManagerFactory::GetForProfile(self.profile);
         hasIdentitiesOnDevice = !identityManager->GetAccountsOnDevice().empty();
       } else {
         ChromeAccountManagerService* accountManagerService =
-            ChromeAccountManagerServiceFactory::GetForProfile(
-                self.browser->GetProfile());
+            ChromeAccountManagerServiceFactory::GetForProfile(self.profile);
         hasIdentitiesOnDevice = accountManagerService->HasIdentities();
       }
       if (hasIdentitiesOnDevice) {

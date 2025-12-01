@@ -16,6 +16,7 @@
 #include "base/functional/callback_forward.h"
 #include "base/logging.h"
 #include "base/memory/raw_ptr.h"
+#include "base/memory/scoped_refptr.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/no_destructor.h"
 #include "base/strings/strcat.h"
@@ -44,11 +45,13 @@
 #include "media/base/audio_capturer_source.h"
 #include "media/base/audio_codecs.h"
 #include "media/base/audio_parameters.h"
+#include "media/base/media_switches.h"
 #include "media/base/video_codecs.h"
 #include "media/capture/video_capture_types.h"
 #include "media/cast/common/openscreen_conversion_helpers.h"
 #include "media/cast/common/packet.h"
 #include "media/cast/encoding/encoding_support.h"
+#include "media/cast/encoding/video_encoder.h"
 #include "media/cast/openscreen/config_conversions.h"
 #include "media/cast/sender/audio_sender.h"
 #include "media/cast/sender/video_sender.h"
@@ -460,27 +463,31 @@ void OpenscreenSessionHost::OnNegotiated(
         metrics_provider_pending_remote.InitWithNewPipeAndPassReceiver());
 
     media::GpuVideoAcceleratorFactories* gpu_factories = nullptr;
-    if (video_config->use_hardware_encoder) {
+    if (base::FeatureList::IsEnabled(media::kCastStreamingMediaVideoEncoder) &&
+        video_config->use_hardware_encoder) {
       gpu_factories_factory_ = std::make_unique<MirroringGpuFactoriesFactory>(
           cast_environment_, *gpu_,
-          base::BindRepeating(
-              &OpenscreenSessionHost::OnVideoEncoderStatus,
-              weak_factory_.GetWeakPtr(), *video_config,
-              media::cast::OperationalStatus::STATUS_CODEC_RUNTIME_ERROR));
+          base::BindRepeating(&OpenscreenSessionHost::OnGpuFactoryContextLost,
+                              weak_factory_.GetWeakPtr(), *video_config));
       gpu_factories = &gpu_factories_factory_->GetInstance();
     }
-    auto video_sender = std::make_unique<media::cast::VideoSender>(
+
+    auto video_encoder = media::cast::VideoEncoder::Create(
         cast_environment_, *video_config,
+        base::MakeRefCounted<media::MojoVideoEncoderMetricsProviderFactory>(
+            media::mojom::VideoEncoderUseCase::kCastMirroring,
+            std::move(metrics_provider_pending_remote))
+            ->CreateVideoEncoderMetricsProvider(),
         base::BindRepeating(&OpenscreenSessionHost::OnVideoEncoderStatus,
                             weak_factory_.GetWeakPtr(), *video_config),
         base::BindRepeating(
             &OpenscreenSessionHost::CreateVideoEncodeAccelerator,
             weak_factory_.GetWeakPtr()),
+        gpu_factories);
+
+    auto video_sender = std::make_unique<media::cast::VideoSender>(
+        std::move(video_encoder), cast_environment_, *video_config,
         std::move(senders.video_sender),
-        base::MakeRefCounted<media::MojoVideoEncoderMetricsProviderFactory>(
-            media::mojom::VideoEncoderUseCase::kCastMirroring,
-            std::move(metrics_provider_pending_remote))
-            ->CreateVideoEncoderMetricsProvider(),
         base::BindRepeating(&OpenscreenSessionHost::SetTargetPlayoutDelay,
                             weak_factory_.GetWeakPtr()),
         base::BindRepeating(&OpenscreenSessionHost::ProcessFeedback,
@@ -488,8 +495,7 @@ void OpenscreenSessionHost::OnNegotiated(
         // This is safe since it is only called synchronously and we own
         // the video sender instance.
         base::BindRepeating(&OpenscreenSessionHost::GetVideoNetworkBandwidth,
-                            base::Unretained(this)),
-        gpu_factories);
+                            base::Unretained(this)));
     video_stream_ = std::make_unique<VideoRtpStream>(
         std::move(video_sender), weak_factory_.GetWeakPtr(),
         mirror_settings_.refresh_interval());
@@ -500,7 +506,12 @@ void OpenscreenSessionHost::OnNegotiated(
             mirror_settings_.refresh_interval().InMilliseconds())));
 
     if (video_capture_client_ && video_stream_) {
-      ResumeCapturingVideo();
+      // NOTE: it is possible that we may renegotiate without pausing video
+      // capture, in which case we don't need to change the video capture client
+      // state.
+      if (is_video_capture_paused_) {
+        ResumeCapturingVideo();
+      }
     } else {
       StartCapturingVideo();
     }
@@ -905,23 +916,32 @@ void OpenscreenSessionHost::OnVideoEncoderStatus(
       // If we used a hardware encoder and it failed, denylist it for the rest
       // of the browsing session and try renegotiating.
       if (config.use_hardware_encoder) {
-        PauseCapturingVideo();
         CHECK_EQ(state_, State::kMirroring);
-
-        media::cast::encoding_support::DenyListHardwareCodec(
-            config.video_codec());
-        StopStreaming();
-        Negotiate();
-
-        base::UmaHistogramEnumeration(
-            "MediaRouter.MirroringService.DisabledHardwareCodecAndRenegotiated",
-            config.video_codec());
+        MaybeDenylistHardwareCodecAndRenegotiate(config.video_codec());
         return;
       }
 
       ReportAndLogError(SessionError::ENCODING_ERROR, AsErrorMessage(status));
       break;
   }
+}
+
+void OpenscreenSessionHost::OnGpuFactoryContextLost(
+    const media::cast::FrameSenderConfig& config) {
+  // If we used a hardware encoder and it failed, denylist it for the rest
+  // of the browsing session and try renegotiating.
+  CHECK(config.use_hardware_encoder);
+  CHECK_EQ(state_, State::kMirroring);
+
+  // The factory's instance is no longer valid.
+  // TODO(crbug.com/402802379): instead of deleting the factory, we could just
+  // call GetInstance again and do a partial re-setup of the video stream stack.
+  gpu_factories_factory_.reset();
+  base::UmaHistogramEnumeration(
+      "MediaRouter.MirroringService.GpuFactoryContextLost",
+      config.video_codec());
+
+  MaybeDenylistHardwareCodecAndRenegotiate(config.video_codec());
 }
 
 void OpenscreenSessionHost::SetTargetPlayoutDelay(
@@ -1111,7 +1131,7 @@ void OpenscreenSessionHost::StartCapturingAudio() {
           SessionError::AUDIO_CAPTURE_ERROR)),
       observer_);
 
-  audio_input_device_ = new media::AudioInputDevice(
+  audio_input_device_ = base::MakeRefCounted<media::AudioInputDevice>(
       std::make_unique<CapturedAudioInput>(
           base::BindRepeating(&OpenscreenSessionHost::CreateAudioStream,
                               base::Unretained(this)),
@@ -1183,6 +1203,20 @@ base::Value::Dict OpenscreenSessionHost::GetMirroringStats() const {
 void OpenscreenSessionHost::SetSenderStatsForTest(
     const openscreen::cast::SenderStats& test_stats) {
   stats_client_->OnStatisticsUpdated(test_stats);
+}
+
+void OpenscreenSessionHost::MaybeDenylistHardwareCodecAndRenegotiate(
+    media::VideoCodec codec) {
+  // Only denylist and restart negotiation for this hardware codec once.
+  if (!media::cast::encoding_support::IsHardwareDenyListed(codec)) {
+    media::cast::encoding_support::DenyListHardwareCodec(codec);
+    StopStreaming();
+    Negotiate();
+    base::UmaHistogramEnumeration(
+        "MediaRouter.MirroringService."
+        "DisabledHardwareCodecAndRenegotiated",
+        codec);
+  }
 }
 
 }  // namespace mirroring

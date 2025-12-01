@@ -30,6 +30,7 @@ class UIBindingsDelegate : public DevToolsUIBindings::Delegate {
   int tab_id() { return tab_id_; }
 
   // DevToolsUIBindings::Delegate implementation
+  content::WebContents* GetInspectedWebContents() override;
   void ActivateWindow() override;
   void CloseWindow() override;
   void Inspect(scoped_refptr<content::DevToolsAgentHost> host) override;

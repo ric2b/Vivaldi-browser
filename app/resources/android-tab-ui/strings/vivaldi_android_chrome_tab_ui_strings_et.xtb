@@ -1,9 +1,17 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="et">
+<translation id="2277224997687551299">Muuda rühma nime</translation>
+<translation id="2330212241471632770">{TABS_COUNT, plural,
+          =1 {Lisa kaart järjehoidjatesse}
+          other {Lisa kaardid järjehoidjatesse}
+        }</translation>
 <translation id="2947471979790858922">Sellest seadmest eemaldatakse nende privaatsete kaartidega seotud toimingud</translation>
 <translation id="3870643923290313246">{INCOGNITO_TABS_COUNT, plural,
         =1 {Suletud kaartide leidmiseks vali Vivaldi põhimenüüst „Viimatised kaardid”. Sinu privaatset kaarti seal ei näidata.}
         other {Suletud kaartide leidmiseks vali Vivaldi põhimenüüst „Viimatised kaardid”. Sinu # privaatset kaarti seal ei näidata.}}</translation>
+<translation id="4460014764210899310">Lammuta rühm</translation>
 <translation id="4871187110787939393">Kas sulgeda kõik privaatsed kaardid?</translation>
+<translation id="5494920125229734069">Vali kõik</translation>
+<translation id="6744956528665271406">Muuda rühma värvi</translation>
 </translationbundle>

@@ -12,8 +12,8 @@
 
 #include "base/memory/raw_ptr.h"
 #include "base/scoped_observation.h"
-#include "chrome/browser/ui/tabs/public/tab_interface.h"
 #include "chrome/browser/ui/toolbar/pinned_toolbar/pinned_toolbar_actions_model.h"
+#include "components/tab_collections/public/tab_interface.h"
 #include "ui/actions/action_id.h"
 
 namespace actions {
@@ -24,11 +24,21 @@ namespace base {
 class CallbackListSubscription;
 }
 
+namespace ui {
+class ImageModel;
+}
+
 namespace page_actions {
 
 class PageActionModelFactory;
 class PageActionModelInterface;
 class PageActionModelObserver;
+
+// Configuration for a page action's suggestion chip.
+struct SuggestionChipConfig {
+  // Whether the chip should have expand/collapse animations.
+  bool should_animate = true;
+};
 
 // `PageActionController` controls the state of all page actions, scoped to a
 // single tab. Each page action has a corresponding `PageActionModel` that will
@@ -45,8 +55,17 @@ class PageActionController : public PinnedToolbarActionsModel::Observer {
   void Initialize(tabs::TabInterface& tab_interface,
                   const std::vector<actions::ActionId>& action_ids);
 
-  void Hide(actions::ActionId action_id);
+  // Request that the page action be shown or hidden.
   void Show(actions::ActionId action_id);
+  void Hide(actions::ActionId action_id);
+
+  // Request that the page action's chip state shown or hidden. Note that a
+  // request to show the chip does not guarantee it will be shown (for example,
+  // the framework may choose to display only one chip at a time, despite
+  // requests from multiple features).
+  void ShowSuggestionChip(actions::ActionId action_id,
+                          SuggestionChipConfig config = SuggestionChipConfig());
+  void HideSuggestionChip(actions::ActionId action_id);
 
   // By default, in suggestion chip mode, the ActionItem text will be used as
   // the control label. However, features can provide a custom text to use
@@ -55,6 +74,22 @@ class PageActionController : public PinnedToolbarActionsModel::Observer {
   void OverrideText(actions::ActionId action_id,
                     const std::u16string& override_text);
   void ClearOverrideText(actions::ActionId action_id);
+
+  // By default, the page action will have an image which can be shared in the
+  // other places that rely on the same action item. However, features can
+  // provide a custom image to use for the page action for a specific context
+  // (tab).
+  void OverrideImage(actions::ActionId action_id,
+                     const ui::ImageModel& override_image);
+  void ClearOverrideImage(actions::ActionId action_id);
+
+  // By default, the page action will have an tooltip which can be shared in the
+  // other places that rely on the same action item. However, features can
+  // provide a custom tooltip to use for the page action for a specific context
+  // (tab).
+  void OverrideTooltip(actions::ActionId action_id,
+                       const std::u16string& override_tooltip);
+  void ClearOverrideTooltip(actions::ActionId action_id);
 
   // Manages observers for the page action's underlying `PageActionModel`.
   void AddObserver(
@@ -68,12 +103,12 @@ class PageActionController : public PinnedToolbarActionsModel::Observer {
   base::CallbackListSubscription CreateActionItemSubscription(
       actions::ActionItem* action_item);
 
+  // Forces all page actions managed by this controller to be hidden, regardless
+  // of whether they would otherwise be visible. Setting it to `false` reverts
+  // back to each page action's normal visibility logic.
+  void SetShouldHidePageActions(bool should_hide_page_actions);
+
   // PinnedToolbarActionsModel::Observer
-  void OnActionAddedLocally(const actions::ActionId& id) override;
-  void OnActionRemovedLocally(const actions::ActionId& id) override;
-  void OnActionMovedLocally(const actions::ActionId& id,
-                            int from_index,
-                            int to_index) override;
   void OnActionsChanged() override;
 
   static base::PassKey<PageActionController> PassKeyForTesting() {

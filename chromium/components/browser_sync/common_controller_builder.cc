@@ -29,10 +29,13 @@
 #include "components/autofill/core/browser/webdata/payments/autofill_wallet_offer_sync_bridge.h"
 #include "components/autofill/core/browser/webdata/payments/autofill_wallet_sync_bridge.h"
 #include "components/autofill/core/browser/webdata/payments/autofill_wallet_usage_data_sync_bridge.h"
+#include "components/autofill/core/browser/webdata/valuables/valuable_data_type_controller.h"
+#include "components/autofill/core/browser/webdata/valuables/valuable_sync_bridge.h"
 #include "components/commerce/core/commerce_feature_list.h"
 #include "components/commerce/core/product_specifications/product_specifications_service.h"
 #include "components/consent_auditor/consent_auditor.h"
 #include "components/data_sharing/public/data_sharing_service.h"
+#include "components/data_sharing/public/data_type_controller/collaboration_group_data_type_controller.h"
 #include "components/data_sharing/public/features.h"
 #include "components/history/core/browser/sync/history_data_type_controller.h"
 #include "components/history/core/browser/sync/history_delete_directives_data_type_controller.h"
@@ -51,12 +54,16 @@
 #include "components/prefs/pref_service.h"
 #include "components/reading_list/core/dual_reading_list_model.h"
 #include "components/reading_list/core/reading_list_local_data_batch_uploader.h"
+#include "components/saved_tab_groups/public/shared_tab_group_account_data_type_controller.h"
+#include "components/saved_tab_groups/public/shared_tab_group_data_type_controller.h"
 #include "components/saved_tab_groups/public/tab_group_sync_service.h"
 #include "components/search_engines/template_url_service.h"
 #include "components/send_tab_to_self/send_tab_to_self_data_type_controller.h"
 #include "components/send_tab_to_self/send_tab_to_self_sync_service.h"
 #include "components/sharing_message/sharing_message_bridge.h"
 #include "components/sharing_message/sharing_message_data_type_controller.h"
+#include "components/signin/public/base/signin_switches.h"
+#include "components/sync/base/data_type.h"
 #include "components/sync/base/features.h"
 #include "components/sync/base/report_unrecoverable_error.h"
 #include "components/sync/model/forwarding_data_type_controller_delegate.h"
@@ -105,6 +112,16 @@ AutocompleteDelegateFromDataService(autofill::AutofillWebDataService* service) {
       ->GetControllerDelegate();
 }
 
+#if !BUILDFLAG(IS_IOS)
+base::WeakPtr<syncer::DataTypeControllerDelegate>
+AutofillLoyaltyCardDelegateFromDataService(
+    autofill::AutofillWebDataService* service) {
+  return autofill::ValuableSyncBridge::FromWebDataService(service)
+      ->change_processor()
+      ->GetControllerDelegate();
+}
+#endif
+
 base::WeakPtr<syncer::DataTypeControllerDelegate>
 AutofillProfileDelegateFromDataService(
     autofill::AutofillWebDataService* service) {
@@ -146,6 +163,7 @@ AutofillWalletOfferDelegateFromDataService(
       ->GetControllerDelegate();
 }
 
+#if !BUILDFLAG(IS_IOS)
 base::WeakPtr<syncer::DataTypeControllerDelegate>
 AutofillWalletUsageDataDelegateFromDataService(
     autofill::AutofillWebDataService* service) {
@@ -154,6 +172,7 @@ AutofillWalletUsageDataDelegateFromDataService(
       ->change_processor()
       ->GetControllerDelegate();
 }
+#endif
 
 base::WeakPtr<syncer::DataTypeControllerDelegate>
 ContactInfoDelegateFromDataService(autofill::AutofillWebDataService* service) {
@@ -240,6 +259,19 @@ void LogPaymentsAccountStorageOnDbSequence(
           signed_in_explicitly, has_sync_consent,
           account_autofill_web_data_service->UsesInMemoryDatabaseForMetrics()));
 #endif  // !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
+}
+
+bool ArePreferencesAllowedInTransportMode() {
+  if (!base::FeatureList::IsEnabled(
+          switches::kEnablePreferencesAccountStorage)) {
+    return false;
+  }
+#if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_IOS)
+  return base::FeatureList::IsEnabled(
+      syncer::kReplaceSyncPromosWithSignInPromos);
+#else
+  return true;
+#endif
 }
 
 }  // namespace
@@ -516,14 +548,15 @@ CommonControllerBuilder::Build(syncer::DataTypeSet disabled_types,
     }
 
     // Wallet usage data sync depends on Wallet data sync.
-    if (base::FeatureList::IsEnabled(syncer::kSyncAutofillWalletUsageData) &&
-        !disabled_types.Has(syncer::AUTOFILL_WALLET_DATA) &&
+#if !BUILDFLAG(IS_IOS)
+    if (!disabled_types.Has(syncer::AUTOFILL_WALLET_DATA) &&
         !disabled_types.Has(syncer::AUTOFILL_WALLET_USAGE)) {
       controllers.push_back(CreateWalletDataTypeController(
           syncer::AUTOFILL_WALLET_USAGE,
           base::BindRepeating(&AutofillWalletUsageDataDelegateFromDataService),
           sync_service, /*with_transport_mode_support=*/true));
     }
+#endif
 
     // Wallet credential data sync depends on Wallet data sync.
     if (base::FeatureList::IsEnabled(
@@ -706,10 +739,6 @@ CommonControllerBuilder::Build(syncer::DataTypeSet disabled_types,
   }
 
   if (!disabled_types.Has(syncer::PREFERENCES)) {
-    bool allow_transport_mode =
-        base::FeatureList::IsEnabled(
-            syncer::kReplaceSyncPromosWithSignInPromos) &&
-        base::FeatureList::IsEnabled(syncer::kEnablePreferencesAccountStorage);
     controllers.push_back(
         std::make_unique<SyncableServiceBasedDataTypeController>(
             syncer::PREFERENCES,
@@ -717,7 +746,7 @@ CommonControllerBuilder::Build(syncer::DataTypeSet disabled_types,
             SyncableServiceForPrefs(pref_service_syncable_.value(),
                                     syncer::PREFERENCES),
             dump_stack,
-            allow_transport_mode
+            ArePreferencesAllowedInTransportMode()
                 ? SyncableServiceBasedDataTypeController::DelegateMode::
                       kTransportModeWithSingleModel
                 : SyncableServiceBasedDataTypeController::DelegateMode::
@@ -725,10 +754,6 @@ CommonControllerBuilder::Build(syncer::DataTypeSet disabled_types,
   }
 
   if (!disabled_types.Has(syncer::PRIORITY_PREFERENCES)) {
-    bool allow_transport_mode =
-        base::FeatureList::IsEnabled(
-            syncer::kReplaceSyncPromosWithSignInPromos) &&
-        base::FeatureList::IsEnabled(syncer::kEnablePreferencesAccountStorage);
     controllers.push_back(
         std::make_unique<SyncableServiceBasedDataTypeController>(
             syncer::PRIORITY_PREFERENCES,
@@ -736,7 +761,7 @@ CommonControllerBuilder::Build(syncer::DataTypeSet disabled_types,
             SyncableServiceForPrefs(pref_service_syncable_.value(),
                                     syncer::PRIORITY_PREFERENCES),
             dump_stack,
-            allow_transport_mode
+            ArePreferencesAllowedInTransportMode()
                 ? SyncableServiceBasedDataTypeController::DelegateMode::
                       kTransportModeWithSingleModel
                 : SyncableServiceBasedDataTypeController::DelegateMode::
@@ -760,13 +785,8 @@ CommonControllerBuilder::Build(syncer::DataTypeSet disabled_types,
             delegate)));
   }
 
-  // TODO(crbug.com/381505059): Check if the collab service status should be
-  // used.
   bool data_sharing_enabled =
-      base::FeatureList::IsEnabled(
-          data_sharing::features::kDataSharingFeature) ||
-      base::FeatureList::IsEnabled(
-          data_sharing::features::kDataSharingJoinOnly);
+      data_sharing::features::IsDataSharingFunctionalityEnabled();
   if (!disabled_types.Has(syncer::SHARED_TAB_GROUP_DATA) &&
       tab_group_sync_service_.value() && data_sharing_enabled) {
     syncer::DataTypeControllerDelegate* delegate =
@@ -774,14 +794,15 @@ CommonControllerBuilder::Build(syncer::DataTypeSet disabled_types,
             ->GetSharedTabGroupControllerDelegate()
             .get();
 
-    controllers.push_back(std::make_unique<syncer::DataTypeController>(
-        syncer::SHARED_TAB_GROUP_DATA,
-        /*delegate_for_full_sync_mode=*/
-        std::make_unique<syncer::ForwardingDataTypeControllerDelegate>(
-            delegate),
-        /*delegate_for_transport_mode=*/
-        std::make_unique<syncer::ForwardingDataTypeControllerDelegate>(
-            delegate)));
+    controllers.push_back(
+        std::make_unique<tab_groups::SharedTabGroupDataTypeController>(
+            /*delegate_for_full_sync_mode=*/
+            std::make_unique<syncer::ForwardingDataTypeControllerDelegate>(
+                delegate),
+            /*delegate_for_transport_mode=*/
+            std::make_unique<syncer::ForwardingDataTypeControllerDelegate>(
+                delegate),
+            sync_service, identity_manager_.value()));
   }
 
   if (!disabled_types.Has(syncer::SHARING_MESSAGE) &&
@@ -828,8 +849,12 @@ CommonControllerBuilder::Build(syncer::DataTypeSet disabled_types,
             syncer::SEARCH_ENGINES,
             data_type_store_service_.value()->GetStoreFactory(),
             template_url_service_.value()->AsWeakPtr(), dump_stack,
-            syncer::SyncableServiceBasedDataTypeController::DelegateMode::
-                kLegacyFullSyncModeOnly));
+            base::FeatureList::IsEnabled(
+                syncer::kSeparateLocalAndAccountSearchEngines)
+                ? syncer::SyncableServiceBasedDataTypeController::DelegateMode::
+                      kTransportModeWithSingleModel
+                : syncer::SyncableServiceBasedDataTypeController::DelegateMode::
+                      kLegacyFullSyncModeOnly));
   }
 
   if (!disabled_types.Has(syncer::USER_EVENTS)) {
@@ -878,12 +903,48 @@ CommonControllerBuilder::Build(syncer::DataTypeSet disabled_types,
             delegate)));
   }
 
+#if !BUILDFLAG(IS_IOS)
+  if (!disabled_types.Has(syncer::AUTOFILL_VALUABLE) &&
+      base::FeatureList::IsEnabled(syncer::kSyncAutofillLoyaltyCard)) {
+    controllers.push_back(
+        std::make_unique<autofill::AutofillValuableDataTypeController>(
+            syncer::AUTOFILL_VALUABLE,
+            std::make_unique<syncer::ProxyDataTypeControllerDelegate>(
+                account_autofill_web_data_service_.value()->GetDBTaskRunner(),
+                base::BindRepeating(
+                    &AutofillLoyaltyCardDelegateFromDataService,
+                    base::RetainedRef(
+                        account_autofill_web_data_service_.value()))),
+            std::make_unique<syncer::ProxyDataTypeControllerDelegate>(
+                account_autofill_web_data_service_.value()->GetDBTaskRunner(),
+                base::BindRepeating(
+                    &AutofillLoyaltyCardDelegateFromDataService,
+                    base::RetainedRef(
+                        account_autofill_web_data_service_.value())))));
+  }
+#endif
+
+  if (!disabled_types.Has(syncer::SHARED_TAB_GROUP_ACCOUNT_DATA) &&
+      base::FeatureList::IsEnabled(syncer::kSyncSharedTabGroupAccountData) &&
+      tab_group_sync_service_.value() && data_sharing_enabled) {
+    syncer::DataTypeControllerDelegate* delegate =
+        tab_group_sync_service_.value()
+            ->GetSharedTabGroupAccountControllerDelegate()
+            .get();
+
+    controllers.push_back(
+        std::make_unique<tab_groups::SharedTabGroupAccountDataTypeController>(
+            /*delegate_for_full_sync_mode=*/
+            std::make_unique<syncer::ForwardingDataTypeControllerDelegate>(
+                delegate),
+            /*delegate_for_transport_mode=*/
+            std::make_unique<syncer::ForwardingDataTypeControllerDelegate>(
+                delegate),
+            sync_service, identity_manager_.value()));
+  }
+
 #if !BUILDFLAG(IS_ANDROID)
-  if (!disabled_types.Has(syncer::WEBAUTHN_CREDENTIAL)
-#if BUILDFLAG(IS_IOS)
-      && syncer::IsWebauthnCredentialSyncEnabled()
-#endif  // BUILDFLAG(IS_IOS)
-  ) {
+  if (!disabled_types.Has(syncer::WEBAUTHN_CREDENTIAL)) {
     syncer::DataTypeControllerDelegate* delegate =
         passkey_model_.value()->GetDataTypeControllerDelegate().get();
 
@@ -916,14 +977,15 @@ CommonControllerBuilder::Build(syncer::DataTypeSet disabled_types,
             ->GetCollaborationGroupControllerDelegate()
             .get();
 
-    controllers.push_back(std::make_unique<DataTypeController>(
-        syncer::COLLABORATION_GROUP,
-        /*delegate_for_full_sync_mode=*/
-        std::make_unique<syncer::ForwardingDataTypeControllerDelegate>(
-            delegate),
-        /*delegate_for_transport_mode=*/
-        std::make_unique<syncer::ForwardingDataTypeControllerDelegate>(
-            delegate)));
+    controllers.push_back(
+        std::make_unique<data_sharing::CollaborationGroupDataTypeController>(
+            /*delegate_for_full_sync_mode=*/
+            std::make_unique<syncer::ForwardingDataTypeControllerDelegate>(
+                delegate),
+            /*delegate_for_transport_mode=*/
+            std::make_unique<syncer::ForwardingDataTypeControllerDelegate>(
+                delegate),
+            sync_service, identity_manager_.value()));
   }
 
   return controllers;

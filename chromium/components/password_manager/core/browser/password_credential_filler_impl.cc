@@ -45,14 +45,10 @@ bool CalculateTriggerSubmission(SubmissionReadinessState submission_readiness) {
 // password_autofill_agent.cc. Remove the logic in the agent when
 // PasswordSuggestionBottomSheetV2 is launched.
 SubmissionReadinessState CalculateSubmissionReadiness(
-    const password_manager::PasswordFillingParams& params) {
-  if (!base::FeatureList::IsEnabled(
-          password_manager::features::kPasswordSuggestionBottomSheetV2)) {
-    return params.submission_readiness;
-  }
-  const autofill::FormData& form_data = params.form;
-  uint64_t username_index = params.username_field_index;
-  uint64_t password_index = params.password_field_index;
+    const autofill::PasswordSuggestionRequest& request) {
+  const autofill::FormData& form_data = request.form_data;
+  uint64_t username_index = request.username_field_index;
+  uint64_t password_index = request.password_field_index;
   size_t number_of_elements = form_data.fields().size();
   CHECK(username_index <= number_of_elements &&
         password_index <= number_of_elements);
@@ -125,10 +121,9 @@ namespace password_manager {
 
 PasswordCredentialFillerImpl::PasswordCredentialFillerImpl(
     base::WeakPtr<PasswordManagerDriver> driver,
-    const PasswordFillingParams& password_filling_params)
+    const autofill::PasswordSuggestionRequest& request)
     : driver_(driver),
-      submission_readiness_(
-          CalculateSubmissionReadiness(password_filling_params)),
+      submission_readiness_(CalculateSubmissionReadiness(request)),
       trigger_submission_(CalculateTriggerSubmission(submission_readiness_)) {}
 
 PasswordCredentialFillerImpl::~PasswordCredentialFillerImpl() = default;
@@ -150,22 +145,11 @@ void PasswordCredentialFillerImpl::FillUsernameAndPassword(
     return;
   }
 
-  if (!base::FeatureList::IsEnabled(
-          features::kPasswordSuggestionBottomSheetV2)) {
-    driver_->KeyboardReplacingSurfaceClosed(ToShowVirtualKeyboard(false));
-  }
-  if (base::FeatureList::IsEnabled(
-          features::kPasswordSuggestionBottomSheetV2)) {
-    driver_->FillSuggestion(
-        username, password,
-        base::BindOnce(&PasswordCredentialFillerImpl::TryTriggerSubmission,
-                       weak_ptr_factory_.GetWeakPtr(), std::move(callback),
-                       username));
-  } else {
-    driver_->FillSuggestion(username, password, base::DoNothing());
-    TryTriggerSubmission(std::move(callback), username,
-                         /*was_filling_successful=*/true);
-  }
+  driver_->FillSuggestion(
+      username, password,
+      base::BindOnce(&PasswordCredentialFillerImpl::TryTriggerSubmission,
+                     weak_ptr_factory_.GetWeakPtr(), std::move(callback),
+                     username));
 }
 
 void PasswordCredentialFillerImpl::TryTriggerSubmission(
@@ -199,17 +183,6 @@ PasswordCredentialFillerImpl::GetSubmissionReadinessState() const {
 
 GURL PasswordCredentialFillerImpl::GetFrameUrl() const {
   return driver_ ? driver_->GetLastCommittedURL() : GURL();
-}
-
-void PasswordCredentialFillerImpl::Dismiss(ToShowVirtualKeyboard should_show) {
-  // TODO(crbug.com/40274966): Remove this function once the feature is enabled.
-  if (base::FeatureList::IsEnabled(
-          features::kPasswordSuggestionBottomSheetV2) ||
-      !driver_) {
-    return;
-  }
-  // TODO(crbug.com/40264656): Avoid using KeyboardReplacingSurfaceClosed.
-  driver_->KeyboardReplacingSurfaceClosed(should_show);
 }
 
 base::WeakPtr<PasswordCredentialFiller>

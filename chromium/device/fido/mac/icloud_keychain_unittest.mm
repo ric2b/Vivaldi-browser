@@ -148,7 +148,7 @@ class iCloudKeychainTest : public testing::Test, FidoDiscoveryBase::Observer {
       fake_ = base::MakeRefCounted<FakeSystemInterface>();
       SetSystemInterfaceForTesting(fake_);
 
-      discovery_ = NewDiscovery(kFakeNSWindowForTesting);
+      discovery_ = NewDiscovery(base::apple::WeakNSWindow());
       discovery_->set_observer(this);
       discovery_->Start();
       task_environment_.RunUntilIdle();
@@ -511,7 +511,8 @@ TEST_F(iCloudKeychainTest, FetchCredentialMetadata) {
         {AuthenticatorType::kICloudKeychain,
          "example.com",
          {1, 2, 3, 4},
-         {{4, 3, 2, 1}, "name", std::nullopt}}};
+         {{4, 3, 2, 1}, "name", std::nullopt},
+         "Example provider"}};
     fake_->SetCredentials(creds);
     base::test::TestFuture<std::vector<DiscoverableCredentialMetadata>,
                            FidoRequestHandlerBase::RecognizedCredential>
@@ -538,11 +539,13 @@ TEST_F(iCloudKeychainTest, FetchCredentialMetadataWithAllowlist) {
         {AuthenticatorType::kICloudKeychain,
          "example.com",
          {1, 2, 3, 4},
-         {{4, 3, 2, 1}, "name", std::nullopt}},
+         {{4, 3, 2, 1}, "name", std::nullopt},
+         "Example provider"},
         {AuthenticatorType::kICloudKeychain,
          "example.com",
          {1, 2, 3, 5},
-         {{4, 3, 2, 2}, "name", std::nullopt}},
+         {{4, 3, 2, 2}, "name", std::nullopt},
+         "Example provider"},
     };
     fake_->SetCredentials(creds);
     base::test::TestFuture<std::vector<DiscoverableCredentialMetadata>,

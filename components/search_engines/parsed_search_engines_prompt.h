@@ -31,7 +31,8 @@ class ParsedSearchEnginesPrompt {
   std::set<SearchEngineType> exclude_if_type() const {
     return exclude_if_type_;
   }
-  int version() const { return version_; }
+  int current_data_version() const { return version_; }
+  std::string type() const { return type_; }
   int search_engines_data_version_required() const {
     return search_engines_data_version_required_;
   }
@@ -42,6 +43,7 @@ class ParsedSearchEnginesPrompt {
                             std::vector<std::string> exclude_if_domain,
                             std::set<SearchEngineType> exclude_if_type,
                             int version,
+                            std::string type,
                             int search_engines_data_version_required);
 
   const std::vector<std::string> prompt_if_domain_;
@@ -49,6 +51,7 @@ class ParsedSearchEnginesPrompt {
   const std::vector<std::string> exclude_if_domain_;
   const std::set<SearchEngineType> exclude_if_type_;
   const int version_;
+  const std::string type_;
   const int search_engines_data_version_required_;
 };
 

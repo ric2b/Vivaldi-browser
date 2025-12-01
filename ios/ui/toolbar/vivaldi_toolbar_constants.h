@@ -48,6 +48,7 @@ extern NSString* vToolbarHomeButtonIcon;
 extern NSString* vToolbarForwardButtonIcon;
 extern NSString* vToolbarBackButtonIcon;
 extern NSString* vToolbarTabSwitcherButtonIcon;
+extern NSString* vToolbarTabSwitcherStackButtonIcon;
 extern NSString* vToolbarMoreButtonIcon;
 extern NSString* vToolbarNTPButtonIcon;
 extern NSString* vToolbarTabSwitcherOveflowButtonIcon;

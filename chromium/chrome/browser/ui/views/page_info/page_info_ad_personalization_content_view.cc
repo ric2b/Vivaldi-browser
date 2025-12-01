@@ -89,8 +89,10 @@ void PageInfoAdPersonalizationContentView::SetAdPersonalizationInfo(
           l10n_util::GetStringUTF16(message_id), views::style::CONTEXT_LABEL,
           views::style::STYLE_BODY_3));
   description_label->SetMultiLine(true);
-  description_label->SetEnabledColorId(kColorPageInfoForeground);
+  description_label->SetEnabledColor(kColorPageInfoForeground);
   description_label->SetHorizontalAlignment(gfx::ALIGN_LEFT);
+  description_label->SetID(
+      PageInfoViewFactory::VIEW_ID_PAGE_INFO_AD_PERSONALIZATION_LABEL);
   // TODO(crbug.com/40244046): Figure out why without additional horizontal
   // margin the size is being calculated incorrectly and the topics labels are
   // being cut off.
@@ -110,7 +112,7 @@ void PageInfoAdPersonalizationContentView::SetAdPersonalizationInfo(
               topic.GetLocalizedRepresentation(), views::style::CONTEXT_LABEL,
               views::style::STYLE_BODY_4));
       topic_label->SetHorizontalAlignment(gfx::ALIGN_LEFT);
-      topic_label->SetEnabledColorId(kColorPageInfoSubtitleForeground);
+      topic_label->SetEnabledColor(kColorPageInfoSubtitleForeground);
     }
   }
 

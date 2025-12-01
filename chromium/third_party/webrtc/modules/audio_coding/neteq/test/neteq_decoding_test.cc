@@ -39,10 +39,6 @@ void LoadDecoders(webrtc::NetEq* neteq) {
             neteq->RegisterPayloadType(0, SdpAudioFormat("pcmu", 8000, 1)));
   ASSERT_EQ(true,
             neteq->RegisterPayloadType(8, SdpAudioFormat("pcma", 8000, 1)));
-#ifdef WEBRTC_CODEC_ILBC
-  ASSERT_EQ(true,
-            neteq->RegisterPayloadType(102, SdpAudioFormat("ilbc", 8000, 1)));
-#endif
 #if defined(WEBRTC_CODEC_ISAC) || defined(WEBRTC_CODEC_ISACFX)
   ASSERT_EQ(true,
             neteq->RegisterPayloadType(103, SdpAudioFormat("isac", 16000, 1)));
@@ -154,7 +150,7 @@ void NetEqDecodingTest::DecodeAndCompare(
   uint64_t last_concealed_samples = 0;
   uint64_t last_total_samples_received = 0;
   while (packet_) {
-    rtc::StringBuilder ss;
+    StringBuilder ss;
     ss << "Lap number " << i++ << " in DecodeAndCompare while loop";
     SCOPED_TRACE(ss.str());  // Print out the parameter values on failure.
     ASSERT_NO_FATAL_FAILURE(Process());

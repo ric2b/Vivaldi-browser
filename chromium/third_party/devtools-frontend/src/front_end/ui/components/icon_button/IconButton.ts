@@ -32,9 +32,9 @@ export class IconButton extends HTMLElement {
   readonly #shadow = this.attachShadow({mode: 'open'});
   #clickHandler: undefined|(() => void) = undefined;
   #groups: IconWithTextData[] = [];
-  #compact: boolean = false;
-  #leadingText: string = '';
-  #trailingText: string = '';
+  #compact = false;
+  #leadingText = '';
+  #trailingText = '';
   #accessibleName: string|undefined;
 
   set data(data: IconButtonData) {
@@ -76,7 +76,7 @@ export class IconButton extends HTMLElement {
     // Disabled until https://crbug.com/1079231 is fixed.
     // clang-format off
     Lit.render(html`
-      <style>${iconButtonStyles.cssContent}</style>
+      <style>${iconButtonStyles.cssText}</style>
       <button class=${buttonClasses} @click=${this.#onClickHandler} aria-label=${Lit.Directives.ifDefined(this.#accessibleName)}>
       ${(!this.#compact && this.#leadingText) ? html`<span class="icon-button-title">${this.#leadingText}</span>` : Lit.nothing}
       ${filteredGroups.map(counter =>

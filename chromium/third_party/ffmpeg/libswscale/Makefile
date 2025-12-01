@@ -6,12 +6,15 @@ HEADERS = swscale.h                                                     \
           version_major.h                                               \
 
 OBJS = alphablend.o                                     \
+       cms.o                                            \
+       csputils.o                                       \
        hscale.o                                         \
        hscale_fast_bilinear.o                           \
        gamma.o                                          \
        graph.o                                          \
        half2float.o                                     \
        input.o                                          \
+       lut3d.o                                          \
        options.o                                        \
        output.o                                         \
        rgb2rgb.o                                        \

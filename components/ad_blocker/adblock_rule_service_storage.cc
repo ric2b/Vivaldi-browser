@@ -37,6 +37,7 @@ const char kAllowAbpSnippets[] = "allow-abp-snippets";
 const char kNakedHostnameIsPureHost[] = "naked-hostname-is-pure-host";
 const char kUseWholeDocumentAllow[] = "use-whole-document-allow";
 const char kAllowAttributionTrackerRules[] = "allow-attribution-tracker-rules";
+const char kPureHostIsDocumentBlock[] = "pure-host-is-document-block";
 const char kRulesListChecksumKey[] = "rules-list-checksum";
 const char kLastUpdateKey[] = "last-upate";
 const char kNextFetchKey[] = "next-fetch";
@@ -58,7 +59,7 @@ const char kBlockedReportingStartKey[] = "blocked-reporting-start";
 
 const char kPresetIdKey[] = "preset-id";
 
-const int kCurrentStorageVersion = 10;
+const int kCurrentStorageVersion = 11;
 
 const base::FilePath::CharType kSourcesFileName[] =
     FILE_PATH_LITERAL("AdBlockState");
@@ -128,6 +129,12 @@ std::optional<RuleSourceCore> LoadRuleSourceCore(
   settings.allow_attribution_tracker_rules =
       allow_attribution_tracker_rules &&
       allow_attribution_tracker_rules.value();
+
+  std::optional<bool> pure_host_is_document_block =
+      source_dict.FindBool(kPureHostIsDocumentBlock);
+  // Enabled by default.
+  settings.pure_host_is_document_block =
+      !pure_host_is_document_block || pure_host_is_document_block.value();
 
   core->set_settings(settings);
 
@@ -371,14 +378,6 @@ RuleServiceStorage::LoadResult DoLoad(const base::FilePath& path) {
   return load_result;
 }
 
-base::Value SerializeCounters(const std::map<std::string, int>& counters) {
-  base::Value::Dict buffer;
-  for (const auto& [counter, value] : counters) {
-    buffer.Set(counter, value);
-  }
-  return base::Value(std::move(buffer));
-}
-
 base::Value::Dict SerializeRuleCore(const RuleSourceCore& core) {
   base::Value::Dict core_dict;
 
@@ -394,6 +393,8 @@ base::Value::Dict SerializeRuleCore(const RuleSourceCore& core) {
                 core.settings().use_whole_document_allow);
   core_dict.Set(kAllowAttributionTrackerRules,
                 core.settings().allow_attribution_tracker_rules);
+  core_dict.Set(kPureHostIsDocumentBlock,
+                core.settings().pure_host_is_document_block);
 
   return core_dict;
 }
@@ -494,20 +495,6 @@ base::Value::Dict SerializeRuleGroup(RuleService* service, RuleGroup group) {
           service->GetKnownSourcesHandler()->GetDeletedPresets(group)));
   rule_group.Set(kIndexChecksum, service->GetRulesIndexChecksum(group));
 
-  if (service->GetStateAndLogs()) {
-    rule_group.Set(
-        kBlockedDomainsCountersKey,
-        SerializeCounters(
-            service->GetStateAndLogs()
-                ->GetBlockedDomainCounters()[static_cast<size_t>(group)]));
-
-    rule_group.Set(
-        kBlockedForOriginCountersKey,
-        SerializeCounters(
-            service->GetStateAndLogs()
-                ->GetBlockedForOriginCounters()[static_cast<size_t>(group)]));
-  }
-
   return rule_group;
 }
 
@@ -567,11 +554,6 @@ std::optional<std::string> RuleServiceStorage::SerializeData() {
            SerializeRuleGroup(rule_service_, RuleGroup::kTrackingRules));
   root.Set(kAdBlockingRulesKey,
            SerializeRuleGroup(rule_service_, RuleGroup::kAdBlockingRules));
-  if (rule_service_->GetStateAndLogs()) {
-    root.Set(kBlockedReportingStartKey,
-             base::TimeToValue(
-                 rule_service_->GetStateAndLogs()->GetBlockedCountersStart()));
-  }
   root.Set(kVersionKey, kCurrentStorageVersion);
 
   std::string output;

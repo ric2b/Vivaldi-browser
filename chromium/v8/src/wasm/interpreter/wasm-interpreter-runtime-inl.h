@@ -2,17 +2,19 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifndef V8_WASM_INTERPRETER_WASM_INTERPRETER_RUNTIME_INL_H_
+#define V8_WASM_INTERPRETER_WASM_INTERPRETER_RUNTIME_INL_H_
+
 #if !V8_ENABLE_WEBASSEMBLY
 #error This header should only be included if WebAssembly is enabled.
 #endif  // !V8_ENABLE_WEBASSEMBLY
 
-#ifndef V8_WASM_INTERPRETER_WASM_INTERPRETER_RUNTIME_INL_H_
-#define V8_WASM_INTERPRETER_WASM_INTERPRETER_RUNTIME_INL_H_
+#include "src/wasm/interpreter/wasm-interpreter-runtime.h"
+// Include the non-inl header before the rest of the headers.
 
 #include "src/execution/arguments-inl.h"
 #include "src/objects/objects-inl.h"
 #include "src/wasm/interpreter/wasm-interpreter-inl.h"
-#include "src/wasm/interpreter/wasm-interpreter-runtime.h"
 #include "src/wasm/wasm-objects.h"
 
 namespace v8 {
@@ -20,7 +22,8 @@ namespace internal {
 namespace wasm {
 
 inline Address WasmInterpreterRuntime::EffectiveAddress(uint64_t index) const {
-  Handle<WasmTrustedInstanceData> trusted_data = wasm_trusted_instance_data();
+  DirectHandle<WasmTrustedInstanceData> trusted_data =
+      wasm_trusted_instance_data();
   DCHECK_GE(std::numeric_limits<uintptr_t>::max(),
             trusted_data->memory0_size());
   DCHECK_GE(trusted_data->memory0_size(), index);
@@ -31,7 +34,8 @@ inline Address WasmInterpreterRuntime::EffectiveAddress(uint64_t index) const {
 
 inline bool WasmInterpreterRuntime::BoundsCheckMemRange(
     uint64_t index, uint64_t* size, Address* out_address) const {
-  Handle<WasmTrustedInstanceData> trusted_data = wasm_trusted_instance_data();
+  DirectHandle<WasmTrustedInstanceData> trusted_data =
+      wasm_trusted_instance_data();
   DCHECK_GE(std::numeric_limits<uintptr_t>::max(),
             trusted_data->memory0_size());
   if (!base::ClampToBounds<uint64_t>(index, size,
@@ -47,7 +51,7 @@ inline uint8_t* WasmInterpreterRuntime::GetGlobalAddress(uint32_t index) {
   return global_addresses_[index];
 }
 
-inline Handle<Object> WasmInterpreterRuntime::GetGlobalRef(
+inline DirectHandle<Object> WasmInterpreterRuntime::GetGlobalRef(
     uint32_t index) const {
   // This function assumes that it is executed in a HandleScope.
   const wasm::WasmGlobal& global = module_->globals[index];
@@ -56,11 +60,11 @@ inline Handle<Object> WasmInterpreterRuntime::GetGlobalRef(
   uint32_t global_index = 0;         // The index into the buffer.
   std::tie(global_buffer, global_index) =
       wasm_trusted_instance_data()->GetGlobalBufferAndIndex(global);
-  return Handle<Object>(global_buffer->get(global_index), isolate_);
+  return DirectHandle<Object>(global_buffer->get(global_index), isolate_);
 }
 
-inline void WasmInterpreterRuntime::SetGlobalRef(uint32_t index,
-                                                 Handle<Object> ref) const {
+inline void WasmInterpreterRuntime::SetGlobalRef(
+    uint32_t index, DirectHandle<Object> ref) const {
   // This function assumes that it is executed in a HandleScope.
   const wasm::WasmGlobal& global = module_->globals[index];
   DCHECK(global.type.is_reference());
@@ -126,12 +130,13 @@ inline bool WasmInterpreterRuntime::IsNull(Isolate* isolate, const WasmRef obj,
   }
 }
 
-inline bool WasmInterpreterRuntime::IsRefNull(Handle<Object> object) const {
+inline bool WasmInterpreterRuntime::IsRefNull(
+    DirectHandle<Object> object) const {
   // This function assumes that it is executed in a HandleScope.
   return i::IsNull(*object, isolate_) || IsWasmNull(*object, isolate_);
 }
 
-inline Handle<Object> WasmInterpreterRuntime::GetFunctionRef(
+inline DirectHandle<Object> WasmInterpreterRuntime::GetFunctionRef(
     uint32_t index) const {
   // This function assumes that it is executed in a HandleScope.
   return WasmTrustedInstanceData::GetOrCreateFuncRef(
@@ -143,7 +148,7 @@ inline const ArrayType* WasmInterpreterRuntime::GetArrayType(
   return module_->array_type(ModuleTypeIndex{array_index});
 }
 
-inline WasmRef WasmInterpreterRuntime::GetWasmArrayRefElement(
+inline DirectHandle<Object> WasmInterpreterRuntime::GetWasmArrayRefElement(
     Tagged<WasmArray> array, uint32_t index) const {
   return WasmArray::GetElement(isolate_, handle(array, isolate_), index);
 }
@@ -189,9 +194,9 @@ inline bool WasmInterpreterRuntime::WasmStackCheck(
   return true;
 }
 
-inline Handle<WasmTrustedInstanceData>
+inline DirectHandle<WasmTrustedInstanceData>
 WasmInterpreterRuntime::wasm_trusted_instance_data() const {
-  return handle(instance_object_->trusted_data(isolate_), isolate_);
+  return direct_handle(instance_object_->trusted_data(isolate_), isolate_);
 }
 
 inline WasmInterpreterThread::State InterpreterHandle::ContinueExecution(

@@ -16,6 +16,7 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
+#include "base/strings/to_string.h"
 #include "base/strings/utf_string_conversions.h"
 #include "ui/accessibility/ax_enum_util.h"
 #include "ui/accessibility/ax_enums.mojom-shared.h"
@@ -262,7 +263,7 @@ AXNodeData::AXNodeData(AXNodeData&& other) {
   stringlist_attributes.swap(other.stringlist_attributes);
   html_attributes.swap(other.html_attributes);
   child_ids.swap(other.child_ids);
-  relative_bounds = other.relative_bounds;
+  relative_bounds = std::move(other.relative_bounds);
 
   other.id = kInvalidAXNodeID;
   other.role = ax::mojom::Role::kUnknown;
@@ -1737,7 +1738,7 @@ std::string AXNodeData::ToString(bool verbose) const {
 
   for (const std::pair<ax::mojom::BoolAttribute, bool>& bool_attribute :
        bool_attributes) {
-    std::string value = bool_attribute.second ? "true" : "false";
+    std::string value = base::ToString(bool_attribute.second);
     switch (bool_attribute.first) {
       case ax::mojom::BoolAttribute::kNonAtomicTextFieldRoot:
         result += " non_atomic_text_field_root=" + value;
@@ -1964,8 +1965,8 @@ std::string AXNodeData::ToString(bool verbose) const {
         result +=
             " aria_notification_announcements=" + base::JoinString(values, ",");
         break;
-      case ax::mojom::StringListAttribute::kAriaNotificationIds:
-        result += " aria_notification_ids=" + base::JoinString(values, ",");
+      case ax::mojom::StringListAttribute::kAriaNotificationTypes:
+        result += " aria_notification_types=" + base::JoinString(values, ",");
         break;
       case ax::mojom::StringListAttribute::kCustomActionDescriptions:
         result +=

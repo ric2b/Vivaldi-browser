@@ -599,10 +599,8 @@ TEST_P(HeuristicClassificationTests, EndToEnd) {
              "--run-internal-tests --test-launcher-timeout 100000 "
              "to execute these tests.";
     }
-#if !BUILDFLAG(USE_INTERNAL_AUTOFILL_PATTERNS)
-    ASSERT_NE(GetActiveHeuristicSource(), HeuristicSource::kLegacyRegexes)
+    ASSERT_TRUE(BUILDFLAG(USE_INTERNAL_AUTOFILL_PATTERNS))
         << "Internal tests are only supported with internal parsing patterns";
-#endif
     ASSERT_GE(TestTimeouts::test_launcher_timeout().InSeconds(), 100)
         << "This is a long-running test; you must specify "
            "--test-launcher-timeout to have a value of at least 100000.";
@@ -633,19 +631,19 @@ TEST_P(HeuristicClassificationTests, EndToEnd) {
 
   std::vector<base::test::FeatureRef> enabled_features = {
       // Support for new field types.
-      features::kAutofillUseAUAddressModel,
-      features::kAutofillUseCAAddressModel,
-      features::kAutofillUseDEAddressModel,
       features::kAutofillUseFRAddressModel,
       features::kAutofillUseITAddressModel,
       features::kAutofillUseNLAddressModel,
       features::kAutofillUsePLAddressModel,
+      features::kAutofillUseINAddressModel,
       features::kAutofillSupportPhoneticNameForJP,
       features::kAutofillEnableExpirationDateImprovements,
       features::kAutofillSupportLastNamePrefix,
+      features::kAutofillEnableLoyaltyCardsFilling,
       // Other improvements.
       features::kAutofillEnableCacheForRegexMatching,
       features::kAutofillEnableSupportForParsingWithSharedLabels,
+      features::kAutofillImproveCityFieldClassification,
       features::kAutofillUseNegativePatternForAllAttributes,
   };
   std::vector<base::test::FeatureRef> disabled_features = {
@@ -661,14 +659,6 @@ TEST_P(HeuristicClassificationTests, EndToEnd) {
       disabled_features.push_back(feature);
     }
   };
-
-  // If you start the test with
-  // `--enable-features=AutofillEnableAddressFieldParserNG` the new autofill
-  // parser is used.
-  const bool kEnableAddressFieldParserNG = base::FeatureList::IsEnabled(
-      features::kAutofillEnableAddressFieldParserNG);
-  init_feature_to_value(features::kAutofillUseINAddressModel,
-                        kEnableAddressFieldParserNG);
 
   std::vector<std::string> structured_fields_disable_address_lines = {
       "BR", "MX", "IN"};

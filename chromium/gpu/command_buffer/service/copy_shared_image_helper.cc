@@ -545,6 +545,110 @@ base::expected<void, GLError> CopySharedImageHelper::CopySharedImageToGLTexture(
   return result;
 }
 
+namespace {
+
+// Graphite only supports asynchronous reads, and the asynchronous reads require
+// that the src rect is contained within the image. This function automatically
+// adjusts the parameters to match the permissiveness of Ganesh's
+// SkImage::readPixels and makes it synchronous.
+bool GraphiteImageReadPixels(skgpu::graphite::Context* graphite_context,
+                             sk_sp<SkImage> sk_image,
+                             GrSurfaceOrigin src_surface_origin,
+                             int src_x,
+                             int src_y,
+                             const SkImageInfo& dst_info,
+                             void* pixel_address,
+                             size_t row_bytes) {
+  gfx::Rect src_rect(src_x, src_y, dst_info.width(), dst_info.height());
+  gfx::Rect src_image_bounds(sk_image->width(), sk_image->height());
+
+  // TODO(crbug.com/40942998): Once all src rects are required to be contained
+  // in the image, the !Contains branch can be removed.
+  if (!src_image_bounds.Contains(src_rect)) {
+    src_rect.Intersect(src_image_bounds);
+    if (src_rect.IsEmpty()) {
+      // NOTE: This is consistent with SkImage::readPixels on a Ganesh image,
+      // which permits src_rect to not be fully contained, but can't be disjoint
+      return false;
+    }
+
+    // Adjust the pixel address to account for any intersection, so that the
+    // available content remains aligned with the intended dst pixel data.
+    // When `src_rect` was originally contained in the src image bounds, this
+    // is equal to the original `pixel_address`.
+    uint8_t* subset_pixel_addr =
+        static_cast<uint8_t*>(pixel_address) +
+        (src_rect.y() - src_y) * row_bytes +
+        (src_rect.x() - src_x) * dst_info.bytesPerPixel();
+    SkImageInfo subset_dst_info =
+        dst_info.makeWH(src_rect.width(), src_rect.height());
+
+    // src_rect.Intersect(src_image_bounds) should ensure this call skips the
+    // !Contains branch and actually reads the pixels. Check here to prevent
+    // infinite recursion.
+    CHECK(src_image_bounds.Contains(src_rect));
+    return GraphiteImageReadPixels(
+        graphite_context, std::move(sk_image), src_surface_origin, src_rect.x(),
+        src_rect.y(), subset_dst_info, subset_pixel_addr, row_bytes);
+  }
+
+  // Now that `src_rect` meets the requirements of the asyncRead API, call the
+  // async function, then submit and block until it's completed.
+  CHECK(graphite_context);
+  ReadPixelsContext context;
+
+#if !defined(SK_GRAPHITE_READ_PIXELS_SUPPORTS_BOTTOM_LEFT)
+  // Make the `src_rect` relative to the bottom left origin if needed. This
+  // works around lack of support for bottom-left origin data during readback in
+  // Graphite. Graphite correctly handles bottom-left origins when rendering, so
+  // if asyncRescaleAndReadPixels() were to render `sk_image` for any reason,
+  // this adjustment won't work. But this call isn't scaling and is presumably
+  // for a shared image that has copy-src usage, so it shouldn't happen. This is
+  // also a no-op when the src rect is the entire image, regardless of origin.
+  if (src_surface_origin == kBottomLeft_GrSurfaceOrigin) {
+    src_y = src_image_bounds.height() - src_rect.y() - src_rect.height();
+    src_rect = gfx::Rect(
+        src_rect.x(), src_y, src_rect.width(), src_rect.height());
+    // This adjustment should not change the fact that src_rect is still valid
+    CHECK(src_image_bounds.Contains(src_rect));
+  }
+#endif
+
+  graphite_context->asyncRescaleAndReadPixels(
+      sk_image.get(), dst_info, RectToSkIRect(src_rect),
+      SkImage::RescaleGamma::kSrc, SkImage::RescaleMode::kRepeatedLinear,
+      &OnReadPixelsDone, &context);
+  // We don't need to insert a recording since asyncRescaleAndReadPixels is a
+  // context operation that inserts its own recording internally.
+  graphite_context->submit(skgpu::graphite::SyncToCpu::kYes);
+  CHECK(context.finished);
+  if (!context.async_result) {
+    return false;
+  }
+
+#if !defined(SK_GRAPHITE_READ_PIXELS_SUPPORTS_BOTTOM_LEFT)
+  // Use CopyPlane to flip as Graphite doesn't support bottom left origin
+  // images. Using a negative height causes CopyPlane to flip while copying.
+  // TODO(crbug.com/40269891): Remove this if Graphite performs the flip
+  // once it supports bottom left origin images.
+  const int height = src_surface_origin == kTopLeft_GrSurfaceOrigin
+                         ? dst_info.height()
+                         : -dst_info.height();
+#else
+  // Must copy the async results (often a GPU-mapped buffer) to the CPU
+  // pixel_address.
+  const int height = dst_info.height();
+#endif
+  libyuv::CopyPlane(static_cast<const uint8_t*>(context.async_result->data(0)),
+                    context.async_result->rowBytes(0),
+                    static_cast<uint8_t*>(pixel_address), row_bytes,
+                    dst_info.width() * dst_info.bytesPerPixel(), height);
+
+  return true;
+}
+
+}  // anonymous namespace
+
 base::expected<void, GLError> CopySharedImageHelper::ReadPixels(
     GLint src_x,
     GLint src_y,
@@ -606,35 +710,10 @@ base::expected<void, GLError> CopySharedImageHelper::ReadPixels(
         std::move(end_semaphores), /*need_graphite_context_submit==*/false);
   } else {
     auto* graphite_context = shared_context_state_->graphite_context();
-    CHECK(graphite_context);
-    ReadPixelsContext context;
-    gfx::Rect src_rect(src_x, src_y, dst_info.width(), dst_info.height());
-    graphite_context->asyncRescaleAndReadPixels(
-        sk_image.get(), dst_info, RectToSkIRect(src_rect),
-        SkImage::RescaleGamma::kSrc, SkImage::RescaleMode::kRepeatedLinear,
-        &OnReadPixelsDone, &context);
-    // We don't need to insert a recording since asyncRescaleAndReadPixels is a
-    // context operation that inserts its own recording internally.
-    graphite_context->submit(skgpu::graphite::SyncToCpu::kYes);
-    CHECK(context.finished);
-    if (context.async_result) {
-      success = true;
-      // Use CopyPlane to flip as Graphite doesn't support bottom left origin
-      // images. Using a negative height causes CopyPlane to flip while copying.
-      // TODO(crbug.com/40269891): Remove this if Graphite performs the flip
-      // once it supports bottom left origin images.
-      const int height =
-          source_shared_image->surface_origin() == kTopLeft_GrSurfaceOrigin
-              ? dst_info.height()
-              : -dst_info.height();
-      libyuv::CopyPlane(
-          static_cast<const uint8_t*>(context.async_result->data(0)),
-          context.async_result->rowBytes(0),
-          static_cast<uint8_t*>(pixel_address), row_bytes,
-          dst_info.width() * dst_info.bytesPerPixel(), height);
-    } else {
-      success = false;
-    }
+    success =
+        GraphiteImageReadPixels(graphite_context, std::move(sk_image),
+                                source_shared_image->surface_origin(), src_x,
+                                src_y, dst_info, pixel_address, row_bytes);
   }
   if (!success) {
     return base::unexpected(GLError(GL_INVALID_OPERATION,
@@ -658,6 +737,8 @@ base::expected<void, GLError> CopySharedImageHelper::WritePixelsYUV(
   absl::Cleanup cleanup = [&]() { dest_scoped_access.reset(); };
   viz::SharedImageFormat dest_format = dest_shared_image->format();
   auto* gr_context = shared_context_state_->gr_context();
+  const bool need_graphite_submit =
+      dest_scoped_access->NeedGraphiteContextSubmit();
   for (int plane = 0; plane < dest_format.NumberOfPlanes(); plane++) {
     bool written = false;
     if (gr_context) {
@@ -667,16 +748,22 @@ base::expected<void, GLError> CopySharedImageHelper::WritePixelsYUV(
           /*finishedProc=*/nullptr, /*finishedContext=*/nullptr);
     } else {
       CHECK(shared_context_state_->graphite_context());
-      written =
-          shared_context_state_->gpu_main_graphite_recorder()
-              ->updateBackendTexture(
-                  dest_scoped_access->graphite_texture(plane), &pixmaps[plane],
-                  /*numLevels=*/1);
+      auto graphite_texture_ref =
+          dest_scoped_access->graphite_texture_holder(plane);
+      auto* graphite_texture_ptr = graphite_texture_ref.release();
+      using graphite_texture_ptr_type = decltype(graphite_texture_ptr);
+      auto release_proc = [](void* context, skgpu::CallbackResult) {
+        static_cast<graphite_texture_ptr_type>(context)->Release();
+      };
+      written = shared_context_state_->gpu_main_graphite_recorder()
+                    ->updateBackendTexture(
+                        graphite_texture_ptr->texture(), &pixmaps[plane],
+                        /*numLevels=*/1, release_proc, graphite_texture_ptr);
     }
     if (!written) {
       dest_scoped_access->ApplyBackendSurfaceEndState();
       shared_context_state_->SubmitIfNecessary(std::move(end_semaphores),
-                                               /*need_graphite_submit=*/true);
+                                               need_graphite_submit);
       return base::unexpected(
           GLError(GL_INVALID_OPERATION, "glWritePixelsYUV",
                   "Failed to upload pixels to dest shared image"));
@@ -685,7 +772,7 @@ base::expected<void, GLError> CopySharedImageHelper::WritePixelsYUV(
 
   shared_context_state_->FlushWriteAccess(dest_scoped_access.get());
   shared_context_state_->SubmitIfNecessary(std::move(end_semaphores),
-                                           /*need_graphite_submit=*/true);
+                                           need_graphite_submit);
 
   if (!dest_shared_image->IsCleared()) {
     dest_shared_image->SetClearedRect(gfx::Rect(src_width, src_height));

@@ -85,6 +85,30 @@ class OmniboxPrivateStartOmniboxFunction : public ExtensionFunction {
                  vivaldi::omnibox_private::PageClassification name);
 };
 
+class OmniboxPrivateAddOrUpdateShortcutFunction : public ExtensionFunction {
+  public:
+   DECLARE_EXTENSION_FUNCTION("omniboxPrivate.addOrUpdateShortcut",
+                              OMNIBOX_PRIVATE_ADD_OR_UDATE_SHORTCUT)
+
+  private:
+   ~OmniboxPrivateAddOrUpdateShortcutFunction() override {}
+   ExtensionFunction::ResponseAction Run() override;
+   metrics::OmniboxEventProto::PageClassification GetPageClassification(
+                  vivaldi::omnibox_private::PageClassification name);
+ };
+
+ class OmniboxPrivateDeleteShortcutFunction : public ExtensionFunction {
+  public:
+   DECLARE_EXTENSION_FUNCTION("omniboxPrivate.deleteShortcut",
+                              OMNIBOX_PRIVATE_DELETE_SHORTCUT)
+
+  private:
+   ~OmniboxPrivateDeleteShortcutFunction() override {}
+   ExtensionFunction::ResponseAction Run() override;
+   metrics::OmniboxEventProto::PageClassification GetPageClassification(
+       vivaldi::omnibox_private::PageClassification name);
+ };
+
 }  // namespace extensions
 
 #endif  // EXTENSIONS_API_OMNIBOX_OMNIBOX_PRIVATE_API_H_

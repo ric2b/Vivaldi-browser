@@ -14,29 +14,26 @@ class RenderFrameHost;
 }
 
 namespace adblock_filter {
-class RulesIndexManager;
+class RuleServiceImpl;
 
 class CosmeticFilter : public mojom::CosmeticFilter {
  public:
-  static void Create(content::RenderFrameHost* frame,
-                     mojo::PendingReceiver<mojom::CosmeticFilter> receiver);
-  ~CosmeticFilter() override;
+  CosmeticFilter(base::WeakPtr<RuleServiceImpl> rule_service,
+                 content::ChildProcessId process_id,
+                 int frame_id);
+  CosmeticFilter(const CosmeticFilter&) = delete;
+  CosmeticFilter& operator=(const CosmeticFilter&) = delete;
 
-  void Initialize(std::array<base::WeakPtr<RulesIndexManager>, kRuleGroupCount>
-                      index_managers);
+  ~CosmeticFilter() override;
 
   void ShouldAllowWebRTC(const ::GURL& document_url,
                          const std::vector<::GURL>& ice_servers,
                          ShouldAllowWebRTCCallback callback) override;
 
  private:
-  CosmeticFilter(content::ChildProcessId process_id, int frame_id);
-  CosmeticFilter(const CosmeticFilter&) = delete;
-  CosmeticFilter& operator=(const CosmeticFilter&) = delete;
-
+  base::WeakPtr<RuleServiceImpl> rule_service_;
   content::ChildProcessId process_id_;
   int frame_id_;
-  std::array<base::WeakPtr<RulesIndexManager>, kRuleGroupCount> index_managers_;
 };
 
 }  // namespace adblock_filter

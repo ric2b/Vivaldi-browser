@@ -7,7 +7,6 @@
 #include <cinttypes>
 
 #include "base/strings/stringprintf.h"
-#include "chrome/common/read_anything/read_anything_constants.h"
 #include "services/strings/grit/services_strings.h"
 #include "ui/accessibility/ax_enum_util.h"
 #include "ui/accessibility/ax_role_properties.h"
@@ -18,46 +17,6 @@ namespace a11y {
 bool IsSuperscript(ui::AXNode* ax_node) {
   return ax_node->data().GetTextPosition() ==
          ax::mojom::TextPosition::kSuperscript;
-}
-
-bool IsNodeIgnoredForReadAnything(ui::AXNode* ax_node, bool is_pdf) {
-  // If the node is not in the active tree (this could happen when RM is still
-  // loading), ignore it.
-  if (!ax_node) {
-    return true;
-  }
-  ax::mojom::Role role = ax_node->GetRole();
-
-  // PDFs processed with OCR have additional nodes that mark the start and end
-  // of a page. The start of a page is indicated with a kBanner node that has a
-  // child static text node. Ignore both. The end of a page is indicated with a
-  // kContentInfo node that has a child static text node. Ignore the static text
-  // node but keep the kContentInfo so a line break can be inserted in between
-  // pages in GetHtmlTagForPDF.
-  if (is_pdf) {
-    // The text content of the aforementioned kBanner or kContentInfo nodes is
-    // the same as the text content of its child static text node.
-    std::string text = ax_node->GetTextContentUTF8();
-    ui::AXNode* parent = ax_node->GetParent();
-
-    std::string pdf_begin_message =
-        l10n_util::GetStringUTF8(IDS_PDF_OCR_RESULT_BEGIN);
-    std::string pdf_end_message =
-        l10n_util::GetStringUTF8(IDS_PDF_OCR_RESULT_END);
-
-    bool is_start_or_end_static_text_node =
-        parent && ((parent->GetRole() == ax::mojom::Role::kBanner &&
-                    text == pdf_begin_message) ||
-                   (parent->GetRole() == ax::mojom::Role::kContentInfo &&
-                    text == pdf_end_message));
-    if ((role == ax::mojom::Role::kBanner && text == pdf_begin_message) ||
-        is_start_or_end_static_text_node) {
-      return true;
-    }
-  }
-
-  // Ignore interactive elements, except for text fields.
-  return (ui::IsControl(role) && !ui::IsTextField(role)) || ui::IsSelect(role);
 }
 
 bool IsTextForReadAnything(ui::AXNode* node, bool is_pdf, bool is_docs) {
@@ -149,7 +108,10 @@ std::string GetHtmlTagForPDF(ui::AXNode* ax_node, const std::string& html_tag) {
 std::string GetHeadingHtmlTagForPDF(ui::AXNode* ax_node,
                                     const std::string& html_tag) {
   // Sometimes whole paragraphs can be formatted as a heading. If the text is
-  // longer than 2 lines, assume it was meant to be a paragragh,
+  // longer than 2 lines, assume it was meant to be a paragragh.
+  // LINT.IfChange(MaxLineWidth)
+  static constexpr int kMaxLineWidth = 60;
+  // LINT.ThenChange(//chrome/browser/resources/side_panel/read_anything/app.css:MaxLineWidth)
   if (ax_node->GetTextContentLengthUTF8() > (2 * kMaxLineWidth)) {
     return "p";
   }
@@ -177,29 +139,6 @@ std::string GetHeadingHtmlTagForPDF(ui::AXNode* ax_node,
   return html_tag;
 }
 
-ui::AXNode* GetParentForSelection(ui::AXNode* ax_node) {
-  ui::AXNode* parent = ax_node->GetUnignoredParentCrossingTreeBoundary();
-  // For most nodes, the parent is the same as the most direct parent. However,
-  // to handle special types of text formatting such as links and custom spans,
-  // another parent may be needed. e.g. when a link is highlighted, the start
-  // node has an "inline" display but the parent we want would have a "block"
-  // display role, so in order to get the common parent of
-  // all sibling nodes, the grandparent should be used.
-  // Displays of type "list-item" is an exception to the "inline" display rule
-  // so that all siblings in a list can be shown correctly to avoid
-  // misnumbering.
-  while (parent && parent->GetUnignoredParentCrossingTreeBoundary() &&
-         parent->HasStringAttribute(ax::mojom::StringAttribute::kDisplay) &&
-         ((parent->GetStringAttribute(ax::mojom::StringAttribute::kDisplay)
-               .find("inline") != std::string::npos) ||
-          (parent->GetStringAttribute(ax::mojom::StringAttribute::kDisplay)
-               .find("list-item") != std::string::npos))) {
-    parent = parent->GetUnignoredParentCrossingTreeBoundary();
-  }
-
-  return parent;
-}
-
 std::string GetAltText(ui::AXNode* ax_node) {
   std::string alt_text =
       ax_node->GetStringAttribute(ax::mojom::StringAttribute::kName);
@@ -212,7 +151,7 @@ std::string GetImageDataUrl(ui::AXNode* ax_node) {
   return url;
 }
 
-std::u16string GetTextContent(ui::AXNode* ax_node, bool is_docs) {
+std::u16string GetTextContent(ui::AXNode* ax_node, bool is_docs, bool is_pdf) {
   // For Google Docs, because the content is rendered in canvas, we distill
   // text from the "Annotated Canvas"
   // (https://sites.google.com/corp/google.com/docs-canvas-migration/home)
@@ -239,6 +178,32 @@ std::u16string GetTextContent(ui::AXNode* ax_node, bool is_docs) {
       }
     }
   }
+
+  // TODO(crbug.com//40927698): Investigate how we can remove this. Possibly by
+  // improving distillation for pdfs.
+  if (is_pdf) {
+    std::u16string filtered_string(ax_node->GetTextContentUTF16());
+    // When we receive text from a pdf node, there are return characters at each
+    // visual line break in the page. If these aren't filtered, one of two
+    // things could happen:
+    // 1) part of the same sentence will be read as separate segments, causing
+    //    choppy speech (e.g. without filtering, 'This is a long sentence with
+    //    \n\r a line break.' will read and highlight "This is a long sentence
+    //    with" and "a line break" separately.
+    // 2) parts of the sentence are not highlighted at all because GetNextWord
+    //    using accessible text boundaries continues returning the line break
+    //    infinitely (and we thus break out of the infinite loop and instead
+    //    highlight nothing).
+    if (is_pdf && filtered_string.size() > 0) {
+      size_t pos = filtered_string.find_first_of(u"\n\r");
+      while (pos != std::string::npos && pos < filtered_string.size() - 2) {
+        filtered_string.replace(pos, 1, u" ");
+        pos = filtered_string.find_first_of(u"\n\r");
+      }
+    }
+    return filtered_string;
+  }
+
   return ax_node->GetTextContentUTF16();
 }
 

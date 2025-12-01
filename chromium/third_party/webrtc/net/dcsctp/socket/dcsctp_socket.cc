@@ -316,7 +316,7 @@ void DcSctpSocket::Connect() {
         callbacks_.GetRandomInt(kMinVerificationTag, kMaxVerificationTag));
     RTC_DLOG(LS_INFO)
         << log_prefix()
-        << rtc::StringFormat(
+        << webrtc::StringFormat(
                "Connecting. my_verification_tag=%08x, my_initial_tsn=%u",
                *connect_params_.verification_tag, *connect_params_.initial_tsn);
     SendInit();
@@ -715,7 +715,7 @@ bool DcSctpSocket::ValidatePacket(const SctpPacket& packet) {
     }
     callbacks_.OnError(
         ErrorKind::kParseFailed,
-        rtc::StringFormat(
+        webrtc::StringFormat(
             "Packet has invalid verification tag: %08x, expected %08x",
             *header.verification_tag, *connect_params_.verification_tag));
     return false;
@@ -760,7 +760,7 @@ bool DcSctpSocket::ValidatePacket(const SctpPacket& packet) {
 
   callbacks_.OnError(
       ErrorKind::kParseFailed,
-      rtc::StringFormat(
+      webrtc::StringFormat(
           "Packet has invalid verification tag: %08x, expected %08x",
           *header.verification_tag, *my_verification_tag));
   return false;
@@ -906,7 +906,7 @@ bool DcSctpSocket::HandleUnrecognizedChunk(
   RTC_DLOG(LS_VERBOSE) << log_prefix() << "Received unknown chunk: "
                        << static_cast<int>(descriptor.type);
   if (report_as_error) {
-    rtc::StringBuilder sb;
+    webrtc::StringBuilder sb;
     sb << "Received unknown chunk of type: "
        << static_cast<int>(descriptor.type) << " with report-error bit set";
     callbacks_.OnError(ErrorKind::kParseFailed, sb.str());
@@ -1037,7 +1037,7 @@ bool DcSctpSocket::ValidateHasTCB() {
 }
 
 void DcSctpSocket::ReportFailedToParseChunk(int chunk_type) {
-  rtc::StringBuilder sb;
+  webrtc::StringBuilder sb;
   sb << "Failed to parse chunk of type: " << chunk_type;
   callbacks_.OnError(ErrorKind::kParseFailed, sb.str());
 }
@@ -1215,7 +1215,7 @@ void DcSctpSocket::HandleInit(const CommonHeader& /* header */,
 
   RTC_DLOG(LS_VERBOSE)
       << log_prefix()
-      << rtc::StringFormat(
+      << webrtc::StringFormat(
              "Proceeding with connection. my_verification_tag=%08x, "
              "my_initial_tsn=%u, peer_verification_tag=%08x, "
              "peer_initial_tsn=%u",
@@ -1327,7 +1327,7 @@ void DcSctpSocket::HandleCookieEcho(
     if (header.verification_tag != cookie->my_tag()) {
       callbacks_.OnError(
           ErrorKind::kParseFailed,
-          rtc::StringFormat(
+          webrtc::StringFormat(
               "Received CookieEcho with invalid verification tag: %08x, "
               "expected %08x",
               *header.verification_tag, *cookie->my_tag()));
@@ -1735,7 +1735,7 @@ void DcSctpSocket::HandleForwardTsnCommon(const AnyForwardTsnChunk& chunk) {
 }
 
 void DcSctpSocket::MaybeSendShutdownOrAck() {
-  if (tcb_->retransmission_queue().unacked_bytes() != 0) {
+  if (tcb_->retransmission_queue().unacked_items() != 0) {
     return;
   }
 

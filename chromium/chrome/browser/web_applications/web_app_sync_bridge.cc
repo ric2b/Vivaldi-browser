@@ -28,7 +28,7 @@
 #include "base/strings/to_string.h"
 #include "base/types/expected.h"
 #include "base/types/pass_key.h"
-#include "build/chromeos_buildflags.h"
+#include "build/build_config.h"
 #include "chrome/browser/web_applications/mojom/user_display_mode.mojom.h"
 #include "chrome/browser/web_applications/proto/web_app_install_state.pb.h"
 #include "chrome/browser/web_applications/user_display_mode.h"
@@ -921,13 +921,6 @@ std::optional<syncer::ModelError> WebAppSyncBridge::ApplyIncrementalSyncChanges(
 
 void WebAppSyncBridge::ApplyDisableSyncChanges(
     std::unique_ptr<syncer::MetadataChangeList> delete_metadata_change_list) {
-  if (!base::FeatureList::IsEnabled(
-          features::kWebAppDontAddExistingAppsToSync)) {
-    syncer::DataTypeSyncBridge::ApplyDisableSyncChanges(
-        std::move(delete_metadata_change_list));
-    return;
-  }
-
   auto update_local_data = std::make_unique<RegistryUpdateData>();
 
   for (const WebApp& web_app : registrar_->GetAppsIncludingStubs()) {

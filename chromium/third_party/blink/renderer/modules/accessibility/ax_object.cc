@@ -35,7 +35,6 @@
 #include "base/numerics/safe_conversions.h"
 #include "base/strings/string_util.h"
 #include "build/build_config.h"
-#include "build/chromeos_buildflags.h"
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/common/input/web_keyboard_event.h"
 #include "third_party/blink/public/common/input/web_menu_source_type.h"
@@ -120,6 +119,7 @@
 #include "third_party/blink/renderer/modules/accessibility/ax_debug_utils.h"
 #endif
 #include "third_party/blink/renderer/bindings/core/v8/v8_highlight_type.h"
+#include "third_party/blink/renderer/core/page/page_popup_client.h"
 #include "third_party/blink/renderer/modules/accessibility/ax_image_map_link.h"
 #include "third_party/blink/renderer/modules/accessibility/ax_inline_text_box.h"
 #include "third_party/blink/renderer/modules/accessibility/ax_object_cache_impl.h"
@@ -211,40 +211,6 @@ String GetIgnoredReasonsDebugString(AXObject::IgnoredReasons& reasons) {
 }
 
 #endif
-
-String GetNodeString(Node* node) {
-  if (node->IsTextNode()) {
-    String string_builder = "\"";
-    string_builder = string_builder + node->nodeValue();
-    string_builder = string_builder + "\"";
-    return string_builder;
-  }
-
-  Element* element = DynamicTo<Element>(node);
-  if (!element) {
-    return To<Document>(node)->IsLoadCompleted() ? "#document"
-                                                 : "#document (loading)";
-  }
-
-  String string_builder = "<";
-
-  string_builder = string_builder + element->tagName().LowerASCII();
-  // Cannot safely get @class from SVG elements.
-  if (!element->IsSVGElement() &&
-      element->FastHasAttribute(html_names::kClassAttr)) {
-    string_builder = string_builder + "." +
-                     element->FastGetAttribute(html_names::kClassAttr);
-  }
-  if (element->FastHasAttribute(html_names::kIdAttr)) {
-    string_builder =
-        string_builder + "#" + element->FastGetAttribute(html_names::kIdAttr);
-  }
-  if (element->FastHasAttribute(html_names::kSlotAttr)) {
-    string_builder = string_builder + " slot=" +
-                     element->FastGetAttribute(html_names::kSlotAttr);
-  }
-  return string_builder + ">";
-}
 
 #if DCHECK_IS_ON()
 bool IsValidRole(ax::mojom::blink::Role role) {
@@ -633,7 +599,6 @@ AXObject::AXObject(AXObjectCacheImpl& ax_object_cache)
     : id_(0),
       parent_(nullptr),
       role_(ax::mojom::blink::Role::kUnknown),
-      explicit_container_id_(0),
       cached_live_region_root_(nullptr),
       ax_object_cache_(&ax_object_cache) {
   ++number_of_live_ax_objects_;
@@ -763,6 +728,10 @@ void AXObject::Init(AXObject* parent) {
   // Set the parent again, this time via SetParent(), so that all related checks
   // and calls occur now that we have the role and updated cached values.
   SetParent(parent_);
+
+#if DCHECK_IS_ON()
+  is_initialized_ = true;
+#endif
 }
 
 void AXObject::Detach() {
@@ -801,10 +770,10 @@ void AXObject::Detach() {
   }
 
   parent_ = nullptr;
+  SetCachedValuesNeedUpdate(false);
   ax_object_cache_ = nullptr;
   children_dirty_ = false;
   child_cached_values_need_update_ = false;
-  cached_values_need_update_ = false;
   has_dirty_descendants_ = false;
   id_ = 0;
 }
@@ -979,26 +948,6 @@ Node* AXObject::GetParentNodeForComputeParent(AXObjectCacheImpl& cache,
 
   Node* parent = nullptr;
 
-  // Select elements have a complex architecture with two different slot
-  // elements which `node` may be slotted into. `node` might also not be slotted
-  // into anything at all (which is why we are doing this before using
-  // LayoutTreeBuilderTraversal). Despite this, we always want to expose a
-  // consistent structure for the select element with a MenuList and
-  // MenuListPopup with all the children exposed in the MenuListPopup. For
-  // consistency, we will use the select's PopoverForAppearanceBase element as
-  // the MenuListPopup and make it the parent of all the nodes inside the
-  // select.
-  if (RuntimeEnabledFeatures::CustomizableSelectEnabled()) {
-    if (auto* select = DynamicTo<HTMLSelectElement>(node->parentNode())) {
-      if (select->UsesMenuList()) {
-        if (node == select->SlottedButton()) {
-          return select;
-        }
-        parent = select->PopoverForAppearanceBase();
-      }
-    }
-  }
-
   // Use LayoutTreeBuilderTraversal::Parent(), which handles pseudo content.
   // This can return nullptr for a node that is never visited by
   // LayoutTreeBuilderTraversal's child traversal. For example, while an element
@@ -1113,17 +1062,9 @@ bool AXObject::CanHaveChildren(Element& element) {
   // For consistency with the past, options with a single text child are leaves.
   // However, options can now sometimes have interesting children, for
   // a <select> menulist that uses appearance:base-select.
-  // This code looks at IsAppearanceBaseButton instead of IsAppearanceBasePicker
-  // in order to have the same result whether the picker is open or closed.
-  // Ideally we would check to see if the picker is opted in to base appearance,
-  // but without a style update that would change based on whether the picker is
-  // open or not. When the button is opted in then the user will likely be able
-  // to see the child node structure of the option element in the button, so we
-  // can use that as a signal to allow options to have children.
   if (auto* option = DynamicTo<HTMLOptionElement>(element)) {
     return option->OwnerSelectElement() &&
-           option->OwnerSelectElement()->IsAppearanceBaseButton(
-               HTMLSelectElement::StyleUpdateBehavior::kDontUpdateStyle) &&
+           option->OwnerSelectElement()->IsAppearanceBasePicker() &&
            !option->HasOneTextChild();
   }
 
@@ -1330,6 +1271,21 @@ const AtomicString& AXObject::GetInternalsAttribute(
   return internals->FastGetAttribute(attribute);
 }
 
+void AXObject::SetCachedValuesNeedUpdate(
+    bool cached_values_need_update,
+    std::optional<TreeUpdateReason> reason) {
+  cached_values_need_update_ = cached_values_need_update;
+#if AX_FAIL_FAST_BUILD()
+  CHECK(ax_object_cache_);
+  if (cached_values_need_update) {
+    CHECK(reason);
+    AXObjectCache().AddNodeRequiringCacheUpdate(AXObjectID(), reason.value());
+  } else {
+    AXObjectCache().RemoveNodeRequiringCacheUpdate(AXObjectID());
+  }
+#endif
+}
+
 namespace {
 
 void SerializeAriaNotificationAttributes(const AriaNotifications& notifications,
@@ -1343,37 +1299,42 @@ void SerializeAriaNotificationAttributes(const AriaNotifications& notifications,
   }
 
   std::vector<std::string> announcements;
-  std::vector<std::string> notification_ids;
-  std::vector<int32_t> interrupt_properties;
   std::vector<int32_t> priority_properties;
+  std::vector<int32_t> interrupt_properties;
+  std::vector<std::string> notification_types;
 
   announcements.reserve(size);
-  notification_ids.reserve(size);
-  interrupt_properties.reserve(size);
   priority_properties.reserve(size);
+  interrupt_properties.reserve(size);
+  notification_types.reserve(size);
 
   for (const auto& notification : notifications) {
     announcements.emplace_back(TruncateString(notification.Announcement()));
-    notification_ids.emplace_back(
-        TruncateString(notification.NotificationId()));
-    interrupt_properties.emplace_back(
-        static_cast<int32_t>(notification.Interrupt()));
     priority_properties.emplace_back(
         static_cast<int32_t>(notification.Priority()));
+    if (RuntimeEnabledFeatures::AriaNotifyV2Enabled()) {
+      notification_types.emplace_back(TruncateString(notification.Type()));
+      interrupt_properties.emplace_back(
+          static_cast<int32_t>(notification.Interrupt()));
+    } else {
+      notification_types.emplace_back();
+      interrupt_properties.emplace_back(static_cast<int32_t>(
+          ax::mojom::blink::AriaNotificationInterrupt::kNone));
+    }
   }
 
   node_data->AddStringListAttribute(
       ax::mojom::blink::StringListAttribute::kAriaNotificationAnnouncements,
       announcements);
-  node_data->AddStringListAttribute(
-      ax::mojom::blink::StringListAttribute::kAriaNotificationIds,
-      notification_ids);
-  node_data->AddIntListAttribute(
-      ax::mojom::blink::IntListAttribute::kAriaNotificationInterruptProperties,
-      interrupt_properties);
   node_data->AddIntListAttribute(
       ax::mojom::blink::IntListAttribute::kAriaNotificationPriorityProperties,
       priority_properties);
+  node_data->AddIntListAttribute(
+      ax::mojom::blink::IntListAttribute::kAriaNotificationInterruptProperties,
+      interrupt_properties);
+  node_data->AddStringListAttribute(
+      ax::mojom::blink::StringListAttribute::kAriaNotificationTypes,
+      notification_types);
 }
 
 }  // namespace
@@ -1431,16 +1392,17 @@ void AXObject::Serialize(ui::AXNodeData* node_data,
     SerializeBoundingBoxAttributes(*node_data);
   }
 
-  if (accessibility_mode.has_mode(ui::AXMode::kScreenReader)) {
+  if (accessibility_mode.has_mode(ui::AXMode::kExtendedProperties)) {
     // TODO(accessibility) We serialize these even on ignored nodes, in order
     // for the browser side to compute inherited colors for descendants, but we
     // do not ensure that elements that change foreground/background color are
     // included in the tree. Could this lead to errors?
     // See All/DumpAccess*.AccessibilityCSSBackgroundColorTransparent/blink.
+
     SerializeColorAttributes(node_data);  // Blends using all nodes' values.
   }
 
-  if (accessibility_mode.has_mode(ui::AXMode::kScreenReader) ||
+  if (accessibility_mode.has_mode(ui::AXMode::kExtendedProperties) ||
       accessibility_mode.has_mode(ui::AXMode::kPDFPrinting)) {
     SerializeLangAttribute(node_data);  // Propagates using all nodes' values.
   }
@@ -1465,7 +1427,7 @@ void AXObject::Serialize(ui::AXNodeData* node_data,
 
   SerializeUnignoredAttributes(node_data, accessibility_mode, is_snapshot);
 
-  if (!accessibility_mode.has_mode(ui::AXMode::kScreenReader)) {
+  if (!accessibility_mode.has_mode(ui::AXMode::kExtendedProperties)) {
     // Return early. None of the following attributes are needed outside of
     // screen reader mode.
     return;
@@ -1561,8 +1523,9 @@ void AXObject::SerializeChildTreeID(ui::AXNodeData* node_data) const {
   // If a child tree has explicitly been stitched at this object via the
   // `ax::mojom::blink::Action::kStitchChildTree`, then override any child trees
   // coming from HTML.
-  if (child_tree_id_) {
-    node_data->AddChildTreeId(*child_tree_id_);
+  if (auto child_tree_id =
+          AXObjectCache().GetAXObjectChildAXTreeID(AXObjectID())) {
+    node_data->AddChildTreeId(*child_tree_id);
     return;
   }
 
@@ -1978,8 +1941,9 @@ void AXObject::SerializeNameAndDescriptionAttributes(
   TruncateAndAddStringAttribute(
       node_data, ax::mojom::blink::StringAttribute::kTooltip, title);
 
-  if (!accessibility_mode.has_mode(ui::AXMode::kScreenReader))
+  if (!accessibility_mode.has_mode(ui::AXMode::kExtendedProperties)) {
     return;
+  }
 
   String placeholder = Placeholder(name_from);
   TruncateAndAddStringAttribute(
@@ -2413,11 +2377,12 @@ void AXObject::SerializeUnignoredAttributes(ui::AXNodeData* node_data,
                                             bool is_snapshot) const {
   SerializeNameAndDescriptionAttributes(accessibility_mode, node_data);
 
-  if (accessibility_mode.has_mode(ui::AXMode::kScreenReader)) {
+  if (accessibility_mode.has_mode(ui::AXMode::kExtendedProperties)) {
     SerializeMarkerAttributes(node_data);
 #if BUILDFLAG(IS_ANDROID)
-    // On Android, style attributes are only serialized for snapshots.
-    if (is_snapshot) {
+    // On Android, style attributes are only serialized for snapshots, or, when
+    // the experimental feature flag for text formatting data is enabled.
+    if (is_snapshot || ::features::IsAccessibilityTextFormattingEnabled()) {
       SerializeStyleAttributes(node_data);
     }
 #else
@@ -2499,7 +2464,7 @@ void AXObject::SerializeUnignoredAttributes(ui::AXNodeData* node_data,
   else if (Orientation() == blink::kAccessibilityOrientationHorizontal)
     node_data->AddState(ax::mojom::blink::State::kHorizontal);
 
-  if (accessibility_mode.has_mode(ui::AXMode::kScreenReader) ||
+  if (accessibility_mode.has_mode(ui::AXMode::kExtendedProperties) ||
       accessibility_mode.has_mode(ui::AXMode::kPDFPrinting)) {
     // Heading level.
     if (ui::IsHeading(role) && HeadingLevel()) {
@@ -2693,6 +2658,15 @@ void AXObject::SerializeComputedDetailsRelation(
     }
   }
 
+  // Add aria-details for a command invoker.
+  if (AXObject* command_for = GetCommandForElement()) {
+    node_data->AddIntListAttribute(
+        ax::mojom::blink::IntListAttribute::kDetailsIds,
+        {static_cast<int32_t>(command_for->AXObjectID())});
+    node_data->SetDetailsFrom(ax::mojom::blink::DetailsFrom::kCommandfor);
+    return;
+  }
+
   // Add aria-details for a popover invoker.
   if (AXObject* popover = GetPopoverTargetForInvoker()) {
     node_data->AddIntListAttribute(
@@ -2742,6 +2716,9 @@ AXObject* AXObject::GetPopoverTargetForInvoker() const {
     return nullptr;
   }
 
+  // Hint popovers that represent plain text content should not estbablish a details
+  // relation - as they are used to derive the text alternative - as if they are a
+  // tooltip. See the TextAlternativeFromTooltip function for more on this.
   AXObject* ax_popover = AXObjectCache().Get(popover);
   if (popover->PopoverType() == PopoverValueType::kHint &&
       ax_popover->IsPlainContent()) {
@@ -2759,15 +2736,77 @@ AXObject* AXObject::GetPopoverTargetForInvoker() const {
   return ax_popover;
 }
 
+// Buttons with the CommandFor attribute should have details relationships with
+// their target element, when: a) the element is valid, and the command
+// attribute is a valid command b) not the next element in the DOM (depth first
+// search order), and c) either not a hint or a rich hint.
+AXObject* AXObject::GetCommandForElement() const {
+  if (!RuntimeEnabledFeatures::HTMLCommandAttributesEnabled()) {
+    return nullptr;
+  }
+
+  auto* button_element = DynamicTo<HTMLButtonElement>(GetElement());
+  if (!button_element) {
+    return nullptr;
+  }
+
+  auto* command_for =
+      DynamicTo<HTMLElement>(button_element->commandForElement());
+  if (!command_for) {
+    return nullptr;
+  }
+
+  const AtomicString& action = button_element->FastGetAttribute(html_names::kCommandAttr);
+  CommandEventType type = button_element->GetCommandEventType(action);
+
+  if (command_for->popoverOpen()) {
+    // A button with commandfor might point to an open popover, but the command
+    // might be unrelated - for example `show-modal`. Commands that aren't related
+    // to the showing or hiding of popovers should not establish a details relation
+    // in these cases.
+    if (!command_for->IsValidBuiltinPopoverCommand(*button_element, type)) {
+      return nullptr;
+    }
+
+    // The next element is already the popover.
+    if (ElementTraversal::NextSkippingChildren(*button_element) ==
+        command_for) {
+      return nullptr;
+    }
+
+    // Hint popovers that represent plain text content should not estbablish a details
+    // relation - as they are used to derive the text alternative - as if they are a
+    // tooltip. See the TextAlternativeFromTooltip function for more on this.
+    AXObject* ax_popover = AXObjectCache().Get(command_for);
+    if (command_for->PopoverType() == PopoverValueType::kHint &&
+        ax_popover->IsPlainContent()) {
+      return nullptr;
+    }
+
+    // Only expose a details relationship if the trigger isn't
+    // contained within the popover itself (shadow-including). E.g. a close
+    // button within the popover should not get a details relationship back
+    // to the containing popover.
+    if (button_element->IsDescendantOrShadowDescendantOf(command_for)) {
+      return nullptr;
+    }
+
+    return ax_popover;
+  }
+
+  return nullptr;
+}
+
 // Interest target invoking elements should have details relationships with
 // their interest target, when that interest target is a) visible, b) is rich,
 // and c) not the next element in the DOM (depth first search order).
 AXObject* AXObject::GetInterestTargetForInvoker() const {
-  if (!RuntimeEnabledFeatures::HTMLInterestTargetAttributeEnabled()) {
+  if (!GetElement()) {
     return nullptr;
   }
 
-  if (!GetElement()) {
+  if (!RuntimeEnabledFeatures::HTMLInterestTargetAttributeEnabled(
+          GetElement()->GetDocument().GetExecutionContext())) {
     return nullptr;
   }
 
@@ -3129,9 +3168,7 @@ ax::mojom::blink::Role AXObject::ComputeFinalRoleForSerialization() const {
       RuntimeEnabledFeatures::CustomizableSelectEnabled()) {
     if (auto* parent = ParentObject()) {
       if (auto* select = DynamicTo<HTMLSelectElement>(parent->GetNode())) {
-        if (select->IsAppearanceBaseButton(
-                HTMLSelectElement::StyleUpdateBehavior::kDontUpdateStyle) &&
-            select->IsInDialogMode()) {
+        if (select->IsAppearanceBasePicker() && select->IsInDialogMode()) {
           return ax::mojom::blink::Role::kDialog;
         }
       }
@@ -3479,6 +3516,10 @@ bool AXObject::IsMultiSelectable() const {
   return false;
 }
 
+bool AXObject::ComputeIsOffScreen() const {
+  return false;
+}
+
 bool AXObject::IsRequired() const {
   return false;
 }
@@ -3556,7 +3597,7 @@ void AXObject::CheckCanAccessCachedValues() const {
   }
 }
 
-void AXObject::InvalidateCachedValues() {
+void AXObject::InvalidateCachedValues(TreeUpdateReason reason) {
   CHECK(AXObjectCache().lifecycle().StateAllowsAXObjectsToBeDirtied())
       << AXObjectCache();
 #if DCHECK_IS_ON()
@@ -3564,7 +3605,7 @@ void AXObject::InvalidateCachedValues() {
       << "Should not invalidate cached values while updating them.";
 #endif
 
-  cached_values_need_update_ = true;
+  SetCachedValuesNeedUpdate(true, reason);
 }
 
 void AXObject::UpdateCachedAttributeValuesIfNeeded(
@@ -3579,7 +3620,7 @@ void AXObject::UpdateCachedAttributeValuesIfNeeded(
     return;
   }
 
-  cached_values_need_update_ = false;
+  SetCachedValuesNeedUpdate(false);
 
   // TODO(almaher): This should never happen and should be updated back to a
   // CHECK once the root cause of the related crashes is better understood.
@@ -4200,7 +4241,7 @@ bool AXObject::IsExcludedByFormControlsFilter() const {
   const ui::AXMode& mode = cache.GetAXMode();
 
   bool filter_to_form_controls =
-      mode.HasExperimentalFlags(ui::AXMode::kExperimentalFormControls);
+      mode.HasFilterFlags(ui::AXMode::kFormsAndLabelsOnly);
 
   if (!filter_to_form_controls) {
     return false;
@@ -4208,7 +4249,7 @@ bool AXObject::IsExcludedByFormControlsFilter() const {
 
   // Nodes at which another tree has been stitched should always remain in the
   // tree so that browser code can traverse through them to the child tree.
-  if (child_tree_id_) {
+  if (AXObjectCache().GetAXObjectChildAXTreeID(AXObjectID())) {
     return false;
   }
 
@@ -4655,9 +4696,17 @@ bool AXObject::ComputeCanSetFocusAttribute() {
       << "\n* Element: " << elem << "\n* Object: " << this
       << "\n* LayoutObject: " << GetLayoutObject();
 
-  // Focusable: element supports focus.
-  return elem->SupportsFocus(Element::UpdateBehavior::kNoneForAccessibility) !=
-         FocusableState::kNotFocusable;
+  // Focusable: an element is focusable if it is either mouse or keyboard
+  // focusable. An element is only mouse focusable if it has negative tabindex.
+  // An element is only keyboard focusable if it a scroller without tabindex and
+  // no focusable child. In the case of a scroll element without tabindex and
+  // with focusable child, this should return false.
+  // Calling Element::SupportsFocus() is not enough because scroll elements
+  // support focus, but are not always focusable.
+  return elem->IsMouseFocusable(
+             Element::UpdateBehavior::kNoneForAccessibility) ||
+         elem->IsKeyboardFocusableSlow(
+             Element::UpdateBehavior::kNoneForAccessibility);
 }
 
 bool AXObject::CanSetSelectedAttribute() const {
@@ -6054,7 +6103,7 @@ bool AXObject::ContainerLiveRegionBusy() const {
 
 AXObject* AXObject::ElementAccessibilityHitTest(const gfx::Point& point) const {
   PhysicalOffset physical_point(point);
-  if (child_tree_id_ &&
+  if (AXObjectCache().GetAXObjectChildAXTreeID(AXObjectID()) &&
       GetBoundsInFrameCoordinates().Contains(physical_point)) {
     // The children of this object are hidden by a stitched child tree, so
     // return early.
@@ -6699,11 +6748,13 @@ void AXObject::SetChildTree(const ui::AXTreeID& child_tree_id) {
            DocumentLifecycle::kLayoutClean)
       << "Stitching a child tree is an action, and all actions should be "
          "performed when the layout is clean.";
+  const auto current_child_tree_id =
+      AXObjectCache().GetAXObjectChildAXTreeID(AXObjectID());
   if (child_tree_id == ui::AXTreeIDUnknown() ||
-      child_tree_id_ == child_tree_id) {
+      current_child_tree_id == child_tree_id) {
     return;
   }
-  child_tree_id_ = child_tree_id;
+  AXObjectCache().SetAXObjectChildTreeID(AXObjectID(), child_tree_id);
   // A node with a child tree is automatically considered a leaf, and
   // CanHaveChildren() will return false for it.
   AXObjectCache().MarkAXObjectDirtyWithCleanLayout(this);
@@ -7183,10 +7234,11 @@ void AXObject::GetRelativeBounds(AXObject** out_container,
   // to a canvas path. When explicit coordinates are provided, the ID of the
   // explicit container element that the coordinates are relative to must be
   // provided too.
-  if (!explicit_element_rect_.IsEmpty()) {
-    *out_container = AXObjectCache().ObjectFromAXID(explicit_container_id_);
+  if (auto canvas_bounds =
+          AXObjectCache().GetCanvasElementBounds(this->AXObjectID())) {
+    *out_container = AXObjectCache().ObjectFromAXID(canvas_bounds->second);
     if (*out_container) {
-      out_bounds_in_container = gfx::RectF(explicit_element_rect_);
+      out_bounds_in_container = gfx::RectF(canvas_bounds->first);
       return;
     }
   }
@@ -7213,12 +7265,26 @@ void AXObject::GetRelativeBounds(AXObject** out_container,
       out_bounds_in_container.set_size(gfx::SizeF(view->Size()));
 
       // If it's a popup, account for the popup window's offset.
-      if (view->GetPage()->GetChromeClient().IsPopup()) {
+      auto& chrome_client = view->GetPage()->GetChromeClient();
+      if (chrome_client.IsPopup()) {
         gfx::Rect frame_rect = view->FrameToScreen(view->FrameRect());
         LocalFrameView* root_view =
             AXObjectCache().GetDocument().GetFrame()->View();
         gfx::Rect root_frame_rect =
             root_view->FrameToScreen(root_view->FrameRect());
+        // If a color picker popup is found inside of an iframe, account for the
+        // distance from the current frame to the parent frame.
+        auto* owner_element = chrome_client.GetPopupClientOwnerElement();
+        if (auto* input_element = DynamicTo<HTMLInputElement>(owner_element)) {
+          if (input_element->FormControlType() ==
+              FormControlType::kInputColor) {
+            gfx::Point origin(root_frame_rect.origin());
+            owner_element->GetDocument()
+                .GetFrame()
+                ->AdjustOffsetByAncestorFrames(&origin);
+            root_frame_rect.set_origin(origin);
+          }
+        }
 
         // Screen coordinates are in DIP without device scale factor applied.
         // Accessibility expects device scale factor applied here which is
@@ -7594,10 +7660,14 @@ bool AXObject::OnNativeKeyboardAction(const ax::mojom::Action action) {
 }
 
 bool AXObject::InternalSetAccessibilityFocusAction() {
+  AXObjectCacheImpl& cache = AXObjectCache();
+  cache.UpdateAccessibilityFocus(AXObjectID());
   return false;
 }
 
 bool AXObject::InternalClearAccessibilityFocusAction() {
+  AXObjectCacheImpl& cache = AXObjectCache();
+  cache.UpdateAccessibilityFocus(ui::AXNodeData::kInvalidAXID);
   return false;
 }
 
@@ -7676,12 +7746,19 @@ bool AXObject::OnNativeScrollToMakeVisibleWithSubFocusAction(
     const gfx::Rect& rect,
     blink::mojom::blink::ScrollAlignment horizontal_scroll_alignment,
     blink::mojom::blink::ScrollAlignment vertical_scroll_alignment) const {
-  LayoutObject* layout_object = GetLayoutObjectForNativeScrollAction();
+  const LayoutObject* layout_object = GetLayoutObjectForNativeScrollAction();
   if (!layout_object)
     return false;
 
   PhysicalRect target_rect =
       layout_object->LocalToAbsoluteRect(PhysicalRect(rect));
+  // To scroll an element into view, we don't scroll the element itself
+  // unless it is the document scrolling element.
+  // TODO(crbug.com/401443093): Consider moving this logic further down
+  // affecting focus and scrollIntoView calls as well.
+  if (const LayoutObject* container = layout_object->Container()) {
+    layout_object = container;
+  }
   scroll_into_view_util::ScrollRectToVisible(
       *layout_object, target_rect,
       scroll_into_view_util::CreateScrollIntoViewParams(
@@ -8328,7 +8405,50 @@ void AXObject::PreSerializationConsistencyCheck() const{
 #endif
 }
 
+// static
+String AXObject::GetNodeString(Node* node) {
+  if (node->IsTextNode()) {
+    String string_builder = "\"";
+    string_builder = string_builder + node->nodeValue();
+    string_builder = string_builder + "\"";
+    return string_builder;
+  }
+
+  Element* element = DynamicTo<Element>(node);
+  if (!element) {
+    return To<Document>(node)->IsLoadCompleted() ? "#document"
+                                                 : "#document (loading)";
+  }
+
+  String string_builder = "<";
+
+  string_builder = string_builder + element->tagName().LowerASCII();
+  // Cannot safely get @class from SVG elements.
+  if (!element->IsSVGElement() &&
+      element->FastHasAttribute(html_names::kClassAttr)) {
+    string_builder = string_builder + "." +
+                     element->FastGetAttribute(html_names::kClassAttr);
+  }
+  if (element->FastHasAttribute(html_names::kIdAttr)) {
+    string_builder =
+        string_builder + "#" + element->FastGetAttribute(html_names::kIdAttr);
+  }
+  if (element->FastHasAttribute(html_names::kSlotAttr)) {
+    string_builder = string_builder + " slot=" +
+                     element->FastGetAttribute(html_names::kSlotAttr);
+  }
+  return string_builder + ">";
+}
+
 String AXObject::ToString(bool verbose) const {
+#if DCHECK_IS_ON()
+  CHECK(is_initialized_) << "Init() must be called before ToString().";
+#endif
+
+  CHECK(!(parent_ == nullptr && role_ == ax::mojom::blink::Role::kUnknown &&
+          id_ == 0))
+      << "Calling ToString() on an AxObject before Init() is not allowed.";
+
   // Build a friendly name for debugging the object.
   // If verbose, build a longer name name in the form of:
   // CheckBox axid#28 <input.someClass#cbox1> name="checkbox"

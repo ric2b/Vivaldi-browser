@@ -151,6 +151,8 @@ void BrowserFrame::InitBrowserFrame() {
 #if BUILDFLAG(IS_OZONE)
   params.inhibit_keyboard_shortcuts =
       browser->is_type_app() || browser->is_type_app_popup();
+
+  params.session_data = browser->platform_session_data();
 #endif
 
   if (native_browser_frame_->ShouldRestorePreviousBrowserWidgetState()) {
@@ -296,8 +298,7 @@ void BrowserFrame::UserChangedTheme(BrowserThemeChangeType theme_change_type) {
     // the other Widgets in the frame's hierarchy may inherit this new theme
     // information in their ColorProviderKeys and thus should also be forwarded
     // theme change notifications.
-    Widget::Widgets widgets;
-    GetAllOwnedWidgets(GetNativeView(), &widgets);
+    Widget::Widgets widgets = GetAllOwnedWidgets(GetNativeView());
     for (Widget* widget : widgets) {
       widget->ThemeChanged();
     }

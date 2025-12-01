@@ -2,11 +2,13 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="pl">
 <translation id="1038842779957582377">nieznana nazwa</translation>
+<translation id="1068672505746868501">Nigdy nie tłumacz stron na <ph name="SOURCE_LANGUAGE" /></translation>
 <translation id="1089439967362294234">Zmień hasło</translation>
 <translation id="1110994991967754504">Wybierz uprawnienia dla <ph name="PERMISSION_NAME" /></translation>
 <translation id="1158211211994409885">Serwer <ph name="HOST_NAME" /> nieoczekiwanie zakończył połączenie.</translation>
 <translation id="1161325031994447685">Ponownie połącz się z siecią Wi-Fi</translation>
 <translation id="1175364870820465910">&amp;Drukuj...</translation>
+<translation id="1285320974508926690">Nigdy nie tłumacz tej strony</translation>
 <translation id="1375198122581997741">Wersja Vivaldi – informacje</translation>
 <translation id="139305205187523129">Serwer <ph name="HOST_NAME" /> nie wysłał żadnych danych.</translation>
 <translation id="1555191101192706055">Osoby przeprowadzające atak na stronę, którą próbujesz odwiedzić, mogą podstępem nakłonić Cię do zainstalowania szkodliwego oprogramowania wpływającego na sposób korzystania z internetu. Na przykład może ono zmienić stronę główną lub wyświetlać na odwiedzanych stronach dodatkowe reklamy.</translation>
@@ -20,6 +22,7 @@
 <translation id="1768211456781949159"><ph name="BEGIN_LINK" />Spróbuj przeprowadzić diagnostykę sieci systemu Windows<ph name="END_LINK" />.</translation>
 <translation id="1974060860693918893">Zaawansowane</translation>
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />Sprawdź serwer proxy i zaporę sieciową<ph name="END_LINK" /></translation>
+<translation id="2048261947532620704">Tłumaczenie strony</translation>
 <translation id="2119505898009119320">Wystawiony dla: <ph name="ORGANIZATION" /> [<ph name="JURISDICTION" />]</translation>
 <translation id="2166378884831602661">Ta witryna nie umożliwia bezpiecznego połączenia</translation>
 <translation id="2178904466768126352">Osoby przeprowadzające atak na stronę, którą próbujesz otworzyć, mogą zainstalować szkodliwe oprogramowanie, które kradnie lub usuwa takie dane jak hasła, zdjęcia, wiadomości czy numery kart kredytowych.</translation>
@@ -35,7 +38,6 @@
 <translation id="2388886110302389394">Otwórz stronę w nowym oknie prywatnym (Ctrl-Shift-N)</translation>
 <translation id="2467694685043708798">Spróbuj przeprowadzić <ph name="BEGIN_LINK" />diagnostykę sieci<ph name="END_LINK" /></translation>
 <translation id="2491414235131909199">Ta strona została zablokowana przez rozszerzenie</translation>
-<translation id="2501278716633472235">Przejdź wstecz</translation>
 <translation id="2539524384386349900">Wykrywaj</translation>
 <translation id="255002559098805027">Serwer <ph name="HOST_NAME" /> wysłał nieprawidłową odpowiedź.</translation>
 <translation id="2634124572758952069">Nie udało się znaleźć adresu IP serwera ze stroną <ph name="HOST_NAME" />.</translation>
@@ -45,6 +47,7 @@
 <translation id="2730326759066348565"><ph name="BEGIN_LINK" />Uruchomienie diagnostyki połączeń<ph name="END_LINK" /></translation>
 <translation id="2784949926578158345">Połączenie zostało zresetowane.</translation>
 <translation id="2826760142808435982">Połączenie jest szyfrowane i uwierzytelniane algorytmem <ph name="CIPHER" /> a mechanizm wymiany kluczy to <ph name="KX" />.</translation>
+<translation id="290376772003165898">Język tej strony to nie <ph name="LANGUAGE" />?</translation>
 <translation id="2909946352844186028">Wykryto zmianę sieci.</translation>
 <translation id="2948083400971632585">Możesz wyłączyć serwery proxy skonfigurowane dla połączenia w ustawieniach przeglądarki.</translation>
 <translation id="2954624054936281172">Tabela zapisanych form płatności</translation>
@@ -62,7 +65,6 @@
       <ph name="PLATFORM_TEXT" /></translation>
 <translation id="3226128629678568754">Naciśnij przycisk odświeżenia strony, by ponownie przesłać dane wymagane do jej wczytania.</translation>
 <translation id="3234666976984236645">Zawsze wykrywaj ważną treść na tej stronie</translation>
-<translation id="3308738399950580893">reklamy</translation>
 <translation id="3384522979010096022">Twoja organizacja nie zezwala na wyświetlanie tej strony</translation>
 <translation id="3422472998109090673">Strona <ph name="HOST_NAME" /> jest obecnie nieosiągalna.</translation>
 <translation id="3427092606871434483">Zezwalaj (domyślnie)</translation>
@@ -80,7 +82,7 @@
 <translation id="3681007416295224113">Informacje o certyfikacie</translation>
 <translation id="3717027428350673159"><ph name="BEGIN_LINK" />Sprawdź serwer proxy, zaporę sieciową i konfigurację DNS<ph name="END_LINK" /></translation>
 <translation id="382518646247711829">Jeśli używasz serwera proxy...</translation>
-<translation id="3894751534882749287">Jeśli mimo wszystko chcesz wyświetlić stronę, możesz zmienić jej poziom ochrony przed śledzeniem w wyskakującym okienku blokowania zawartości lub klikając przycisk "Zezwól"</translation>
+<translation id="3861977424605124250">Pokazuj po uruchomieniu</translation>
 <translation id="3950820424414687140">Zaloguj się</translation>
 <translation id="3973234410852337861">Strona <ph name="HOST_NAME" /> jest zablokowana</translation>
 <translation id="3987940399970879459">Mniej niż 1 MB</translation>
@@ -108,7 +110,6 @@
 <translation id="4701488924964507374"><ph name="SENTENCE1" /> <ph name="SENTENCE2" /></translation>
 <translation id="4708268264240856090">Połączenie zostało przerwane</translation>
 <translation id="4722547256916164131"><ph name="BEGIN_LINK" />Spróbuj przeprowadzić diagnostykę sieci systemu Windows<ph name="END_LINK" /></translation>
-<translation id="4736016046474602958">Blokowanie trackerów</translation>
 <translation id="4744603770635761495">Ścieżka pliku wykonywalnego</translation>
 <translation id="4750917950439032686">Informacje, które wysyłasz tej witrynie (na przykład hasła lub numery kart kredytowych) pozostają prywatne.</translation>
 <translation id="4764776831041365478">Strona internetowa pod adresem <ph name="URL" /> może być tymczasowo niedostępna lub została na stałe przeniesiona pod nowy adres.</translation>
@@ -153,27 +154,30 @@
 <translation id="6328639280570009161">Spróbuj wyłączyć przewidywanie działań sieciowych</translation>
 <translation id="6348220984832452017">Aktywne warianty</translation>
 <translation id="6358450015545214790">Co to oznacza?</translation>
+<translation id="6404511346730675251">Edytuj zakładkę</translation>
 <translation id="6433595998831338502">Serwer <ph name="HOST_NAME" /> odrzucił połączenie.</translation>
 <translation id="6447842834002726250">Ciasteczka</translation>
 <translation id="6451458296329894277">Potwierdź ponowne przesłanie formularza</translation>
 <translation id="6569060085658103619">Przeglądasz stronę rozszerzenia</translation>
+<translation id="6653655836861174026">Dzięki profilom Vivaldi wszystkie swoje dane z tej przeglądarki możesz przechowywać osobno. Utwórz profile dla znajomych i rodziny albo oddziel pracę od rozrywki.</translation>
 <translation id="6657585470893396449">Hasło</translation>
 <translation id="6711464428925977395">Serwer proxy działa nieprawidłowo albo adres jest błędny.</translation>
 <translation id="6757797048963528358">Twój komputer przeszedł w stan uśpienia.</translation>
 <translation id="6890956352250146925">Opcje ciasteczek i danych stron</translation>
 <translation id="6897140037006041989">User agent (id przeglądarki)</translation>
+<translation id="6935179587384421592"><ph name="SIZE" />. Podczas następnej wizyty niektóre strony mogą ładować się wolniej.</translation>
 <translation id="6957624206566198865">Otwórz stronę w trybie prywatnym</translation>
 <translation id="7053983685419859001">Blokuj</translation>
+<translation id="7066262000446496119">Kto używa przeglądarki Vivaldi?</translation>
 <translation id="7096937462164235847">Tożsamość tej strony nie została zweryfikowana.</translation>
 <translation id="7108819624672055576">Dozwolone przez rozszerzenie</translation>
 <translation id="7111012039238467737">(Ważny)</translation>
-<translation id="7113310725918019676">Zezwalaj na <ph name="BLOCKED_TYPE" /> z <ph name="DOMAIN" /></translation>
 <translation id="7126644664682723998">Wklej i wyszukaj</translation>
 <translation id="7210863904660874423">Serwer <ph name="HOST_NAME" /> nie spełnia norm bezpieczeństwa.</translation>
 <translation id="7219179957768738017">Połączenie z szyfrowaniem <ph name="SSL_VERSION" />.</translation>
 <translation id="7221855153210829124">Pokazywać powiadomienia</translation>
+<translation id="7283555985781738399">Tryb gościa</translation>
 <translation id="7353601530677266744">Wiersz poleceń</translation>
-<translation id="7364115444476960850">Strona, którą próbujesz odwiedzić została zablokowana przez <ph name="BLOCKER_NAME" /> przeglądarki Vivaldi</translation>
 <translation id="7419106976560586862">Ścieżka profilu</translation>
 <translation id="7455133967321480974">Użyj globalnego ustawienia domyślnego (Blokuj)</translation>
 <translation id="7518003948725431193">Nie znaleziono strony internetowej pod adresem <ph name="URL" /></translation>
@@ -184,6 +188,7 @@
 <translation id="7714464543167945231">Certyfikat</translation>
 <translation id="7716147886133743102">Zablokowane przez administratora</translation>
 <translation id="7716424297397655342">Tej strony nie można załadować z pamięci podręcznej</translation>
+<translation id="773466115871691567">Zawsze tłumacz strony na <ph name="SOURCE_LANGUAGE" /></translation>
 <translation id="7758069387465995638">Połączenie mogło zostać zablokowane przez zaporę sieciową lub program antywirusowy.</translation>
 <translation id="7800304661137206267">Przesyłane dane są szyfrowane za pomocą algorytmu <ph name="CIPHER" />. Metoda uwierzytelniania komunikatów to <ph name="MAC" /> a mechanizm wymiany kluczy to <ph name="KX" />.</translation>
 <translation id="7834399512844817676"><ph name="SITE" /> zazwyczaj używa szyfrowania do ochrony Twoich informacji. Gdy tym razem przeglądarka Vivaldi próbowała połączyć się ze stroną <ph name="SITE" />, odesłała ona nietypowe i nieprawidłowe dane logowania. Może się tak zdarzyć, gdy pod stronę <ph name="SITE" /> podszywa się osoba atakująca albo gdy ekran logowania do sieci Wi-Fi przerwie połączenie. Twoje informacje są nadal bezpieczne, bo połączenie w Vivaldi zakończyło się przed wymianą jakichkolwiek danych.</translation>
@@ -193,7 +198,6 @@
 <translation id="8037357227543935929">Pytaj (domyślnie)</translation>
 <translation id="8041940743680923270">Użyj globalnego ustawienia domyślnego (Pytaj)</translation>
 <translation id="808894953321890993">Zmień hasło</translation>
-<translation id="8119307142152921512">trackery i reklamy</translation>
 <translation id="8149426793427495338">Twój komputer przeszedł w stan uśpienia.</translation>
 <translation id="8150722005171944719">Nie można odczytać pliku <ph name="URL" />. Być może został usunięty, przeniesiony lub uprawnienia dostępu uniemożliwiają jego odczyt.</translation>
 <translation id="8184538546369750125">Użyj globalnego ustawienia domyślnego (Zezwalaj)</translation>
@@ -210,7 +214,6 @@
 <translation id="8703575177326907206">Połączenie z witryną <ph name="DOMAIN" /> nie jest szyfrowane.</translation>
 <translation id="8740359287975076522">Nie znaleziono &lt;abbr id="dnsDefinition"&gt;adresu DNS&lt;/abbr&gt; serwera <ph name="HOST_NAME" />. Trwa diagnozowanie problemu.</translation>
 <translation id="8820817407110198400">Zakładki</translation>
-<translation id="8940028675168378100">Zablokowano przez <ph name="BLOCKER_NAME" /></translation>
 <translation id="8963117664422609631">Przejdź do ustawień strony</translation>
 <translation id="8975012916872825179">Obejmuje numery telefonów, adresy e-mail i adresy dostawy</translation>
 <translation id="9001074447101275817">Serwer proxy <ph name="DOMAIN" /> wymaga nazwy użytkownika i hasła.</translation>
@@ -222,7 +225,6 @@
 <translation id="9073799351042754113">Ostrzeżenia dotyczące zabezpieczeń tej strony zostały wyłączone.</translation>
 <translation id="9168814207360376865">Zezwalaj stronom internetowym na sprawdzanie, czy masz zapisane formy płatności</translation>
 <translation id="9169664750068251925">Zawsze blokuj na tej stronie</translation>
-<translation id="9180553614777056266">Blokowanie reklam</translation>
 <translation id="9183425211371246419">Serwer <ph name="HOST_NAME" /> używa nieobsługiwanego protokołu.</translation>
 <translation id="936602727769022409">Możesz stracić dostęp do swojego konta Vivaldi. Zalecamy natychmiastową zmianę hasła. Zobaczysz prośbę o ponowne zalogowanie się.</translation>
 <translation id="969892804517981540">Wydanie oficjalne</translation>

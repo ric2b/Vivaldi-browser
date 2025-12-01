@@ -135,12 +135,13 @@
   # reenable this test.
   'test-torque/TestLoadEliminationVariable': [SKIP],
 
-  # TODO(nicohartmann): Currently broken with Turboshaft backend. Needs to be
-  # ported.
+  # TODO(391750831, nicohartmann): Currently broken with Turboshaft backend.
+  # Needs to be ported.
   'test-basic-block-profiler/*': [SKIP],
   'test-run-load-store/*': [SKIP],
   'test-run-machops/*': [SKIP],
   'test-select-combine/*': [SKIP],
+  'test-instruction-scheduler/*': [SKIP],
 }],  # ALWAYS
 
 ##############################################################################
@@ -795,7 +796,7 @@
 ##############################################################################
 # Behavioural differences between Maglev and Turbofan when the former is used
 # for OptimizeFunctionOnNextCall or as a frontend for Turboshaft.
-['variant in (stress_maglev, stress_maglev_future, stress_maglev_no_turbofan, maglev_no_turbofan, turbolev)', {
+['variant in (stress_maglev, stress_maglev_non_eager_inlining, stress_maglev_future, stress_maglev_no_turbofan, maglev_no_turbofan, turbolev)', {
   # Maglev doesn't support compiler::NodeObserver machinery.
   'test-js-to-wasm/TestFastJSWasmCall_I32Arg': [FAIL],
   'test-js-to-wasm/TestFastJSWasmCall_Nop': [FAIL],
@@ -838,7 +839,7 @@
   'test-api/FastApiCallRecursionWithException': [FAIL],
   'test-api/FastApiCallWithThrowInReentrantCode': [FAIL],
   'test-api/FastApiCallsString': [FAIL],
-}],  # variant in (stress_maglev, stress_maglev_future, stress_maglev_no_turbofan, maglev_no_turbofan, turbolev)
+}],  # variant in (stress_maglev, stress_maglev_non_eager_inlining, stress_maglev_future, stress_maglev_no_turbofan, maglev_no_turbofan, turbolev)
 
 # Maglev is still missing some optimizations compared to Turbofan, which means
 # that some old Turbofan tests don't pass when using Maglev as a frontend for
@@ -871,9 +872,9 @@
 
 ##############################################################################
 
-['variant == stress_pinning_scavenger', {
+['variant == conservative_pinning', {
   'test-run-wasm-64/RunWasmLiftoff_I64WasmRunner': [SLOW],
   'test-run-wasm-64/RunWasmTurbofan_I64WasmRunner': [SLOW],
   'test-strings/Traverse': [SLOW],
-}],  # variant == stress_pinning_scavenger
+}],  # variant == conservative_pinning
 ]

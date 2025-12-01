@@ -129,7 +129,7 @@ class ReceiveStatisticsProxy : public VideoStreamBufferControllerStatsObserver,
 
  private:
   struct QpCounters {
-    rtc::SampleCounter vp8;
+    SampleCounter vp8;
   };
 
   struct ContentSpecificStats {
@@ -138,15 +138,15 @@ class ReceiveStatisticsProxy : public VideoStreamBufferControllerStatsObserver,
 
     void Add(const ContentSpecificStats& other);
 
-    rtc::SampleCounter e2e_delay_counter;
-    rtc::SampleCounter interframe_delay_counter;
+    SampleCounter e2e_delay_counter;
+    SampleCounter interframe_delay_counter;
     int64_t flow_duration_ms = 0;
     int64_t total_media_bytes = 0;
-    rtc::SampleCounter received_width;
-    rtc::SampleCounter received_height;
-    rtc::SampleCounter qp_counter;
+    SampleCounter received_width;
+    SampleCounter received_height;
+    SampleCounter qp_counter;
     FrameCounts frame_counts;
-    rtc::HistogramPercentileCounter interframe_delay_percentiles;
+    HistogramPercentileCounter interframe_delay_percentiles;
     webrtc_impl::RunningStatistics<double> corruption_score;
   };
 
@@ -168,15 +168,15 @@ class ReceiveStatisticsProxy : public VideoStreamBufferControllerStatsObserver,
   RateStatistics renders_fps_estimator_ RTC_GUARDED_BY(main_thread_);
   rtc::RateTracker render_fps_tracker_ RTC_GUARDED_BY(main_thread_);
   rtc::RateTracker render_pixel_tracker_ RTC_GUARDED_BY(main_thread_);
-  rtc::SampleCounter sync_offset_counter_ RTC_GUARDED_BY(main_thread_);
-  rtc::SampleCounter decode_time_counter_ RTC_GUARDED_BY(main_thread_);
-  rtc::SampleCounter jitter_delay_counter_ RTC_GUARDED_BY(main_thread_);
-  rtc::SampleCounter target_delay_counter_ RTC_GUARDED_BY(main_thread_);
-  rtc::SampleCounter current_delay_counter_ RTC_GUARDED_BY(main_thread_);
-  rtc::SampleCounter oneway_delay_counter_ RTC_GUARDED_BY(main_thread_);
+  SampleCounter sync_offset_counter_ RTC_GUARDED_BY(main_thread_);
+  SampleCounter decode_time_counter_ RTC_GUARDED_BY(main_thread_);
+  SampleCounter jitter_delay_counter_ RTC_GUARDED_BY(main_thread_);
+  SampleCounter target_delay_counter_ RTC_GUARDED_BY(main_thread_);
+  SampleCounter current_delay_counter_ RTC_GUARDED_BY(main_thread_);
+  SampleCounter oneway_delay_counter_ RTC_GUARDED_BY(main_thread_);
   std::unique_ptr<VideoQualityObserver> video_quality_observer_
       RTC_GUARDED_BY(main_thread_);
-  mutable rtc::MovingMaxCounter<int> interframe_delay_max_moving_
+  mutable MovingMaxCounter<int> interframe_delay_max_moving_
       RTC_GUARDED_BY(main_thread_);
   std::map<VideoContentType, ContentSpecificStats> content_specific_stats_
       RTC_GUARDED_BY(main_thread_);
@@ -196,7 +196,7 @@ class ReceiveStatisticsProxy : public VideoStreamBufferControllerStatsObserver,
   int64_t sum_missed_render_deadline_ms_ RTC_GUARDED_BY(main_thread_);
   // Mutable because calling Max() on MovingMaxCounter is not const. Yet it is
   // called from const GetStats().
-  mutable rtc::MovingMaxCounter<TimingFrameInfo> timing_frame_info_counter_
+  mutable MovingMaxCounter<TimingFrameInfo> timing_frame_info_counter_
       RTC_GUARDED_BY(main_thread_);
   std::optional<int> num_unique_frames_ RTC_GUARDED_BY(main_thread_);
   std::optional<int64_t> last_estimated_playout_ntp_timestamp_ms_

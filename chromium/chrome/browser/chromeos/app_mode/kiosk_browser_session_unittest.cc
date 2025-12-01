@@ -28,7 +28,6 @@
 #include "base/memory/weak_ptr.h"
 #include "base/test/bind.h"
 #include "base/test/metrics/histogram_tester.h"
-#include "base/test/scoped_feature_list.h"
 #include "base/test/task_environment.h"
 #include "base/test/test_future.h"
 #include "base/time/time.h"
@@ -171,7 +170,7 @@ class FullscreenTestBrowserWindow : public TestBrowserWindow,
   // TestBrowserWindow:
   bool ShouldHideUIForFullscreen() const override { return fullscreen_; }
   bool IsFullscreen() const override { return fullscreen_; }
-  void EnterFullscreen(const GURL& url,
+  void EnterFullscreen(const url::Origin& origin,
                        ExclusiveAccessBubbleType type,
                        int64_t display_id) override {
     fullscreen_ = true;

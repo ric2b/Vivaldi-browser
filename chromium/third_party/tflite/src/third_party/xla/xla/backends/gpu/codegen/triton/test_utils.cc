@@ -61,7 +61,7 @@ namespace xla::gpu {
 bool SupportsBF16(const stream_executor::GpuComputeCapability& cc) {
   if (std::holds_alternative<stream_executor::CudaComputeCapability>(cc)) {
     return std::get<stream_executor::CudaComputeCapability>(cc).IsAtLeast(
-        se::CudaComputeCapability::AMPERE);
+        se::CudaComputeCapability::kAmpere);
   } else if (std::holds_alternative<stream_executor::RocmComputeCapability>(
                  cc)) {
     return std::get<stream_executor::RocmComputeCapability>(cc)
@@ -77,7 +77,8 @@ absl::Status CreateTritonIrAndFileCheck(HloTestBase* test,
   TF_ASSIGN_OR_RETURN(std::unique_ptr<VerifiedHloModule> verified_module,
                       test->ParseAndReturnVerifiedModule(hlo_text));
   auto* comp = verified_module->GetComputationWithName(triton_fusion_name);
-  TF_RET_CHECK(comp != nullptr);
+  TF_RET_CHECK(comp != nullptr) << absl::StrCat(
+      "Computation '", triton_fusion_name, "' is not found in the module");
   auto fusion_backend_config = comp->FusionInstruction()
                                    ->backend_config<GpuBackendConfig>()
                                    ->fusion_backend_config();
@@ -196,13 +197,19 @@ std::string TritonSupportTestTypeToString(
   return primitive_util::LowercasePrimitiveTypeName(data.param);
 }
 
+std::string TritonSupportTestDeviceToString(
+    const ::testing::TestParamInfo<se::GpuComputeCapability>& data) {
+  return ComputeCapabilityToString(data.param);
+}
+
 namespace {
 
 // This function does nothing if the input module already has an entry
 // computation whose root is a fusion. Otherwise, creates a new entry
 // computation whose root is a fusion instruction that calls the original entry
 // computation. The new fusion instruction uses the generic Triton backend kind.
-absl::Status ConvertEntryToTritonFusion(HloModule* module) {
+absl::Status ConvertEntryToTritonFusion(HloModule* module,
+                                        bool use_nested_gemm_fusions) {
   if (module->entry_computation()->root_instruction()->opcode() ==
       HloOpcode::kFusion) {
     return absl::OkStatus();
@@ -224,8 +231,13 @@ absl::Status ConvertEntryToTritonFusion(HloModule* module) {
       module->entry_computation()));
 
   gpu::GpuBackendConfig gpu_config;
-  gpu_config.mutable_fusion_backend_config()->set_kind(
-      std::string(kTritonFusionKind));
+  if (use_nested_gemm_fusions) {
+    gpu_config.mutable_fusion_backend_config()->set_kind(
+        std::string(kTritonNestedGemmFusionKind));
+  } else {
+    gpu_config.mutable_fusion_backend_config()->set_kind(
+        std::string(kTritonFusionKind));
+  }
   TF_RETURN_IF_ERROR(fusion->set_backend_config(gpu_config));
 
   auto new_entry =
@@ -248,13 +260,14 @@ DebugOptions TritonSupportTestBase::GetDebugOptionsForTest() const {
 absl::StatusOr<TritonSupportTestBase::TestedInstruction>
 TritonSupportTestBase::ParseTemplateAndGetInstruction(
     absl::string_view hlo_template, xla::PrimitiveType data_type,
-    xla::HloOpcode opcode) {
+    xla::HloOpcode opcode, bool use_nested_gemm_fusions) {
   const std::string hlo_text = absl::Substitute(
       hlo_template, primitive_util::LowercasePrimitiveTypeName(data_type),
       HloOpcodeString(opcode));
   TF_ASSIGN_OR_RETURN(std::unique_ptr<HloModule> module,
                       ParseAndReturnVerifiedModule(hlo_text));
-  TF_RETURN_IF_ERROR(ConvertEntryToTritonFusion(module.get()));
+  TF_RETURN_IF_ERROR(
+      ConvertEntryToTritonFusion(module.get(), use_nested_gemm_fusions));
   const HloComputation* computation =
       module->GetComputationWithName("triton_computation");
   if (computation == module->entry_computation()) {

@@ -295,6 +295,7 @@
 <translation id="2867808975387772810">فهرست منابع</translation>
 <translation id="2873259058405069099">رفتن به ابتدای جدول</translation>
 <translation id="287383510823843610">نارنجی تیره</translation>
+<translation id="2876760662374103627">«کنترل چهره» فعال است</translation>
 <translation id="2879867157561757640">تند کشیدن سه انگشت به پایین</translation>
 <translation id="288178314850623291">‏برای رد شدن و رفتن به انواع عناصر، از فرمان‌های پرش استفاه کنید. برای پرش به جلو بین عناوین، «جستجو» + H یا برای پرش به عقب «جستجو» + Shift + H را فشار دهید.</translation>
 <translation id="2885764457467528513">{COUNT,plural, =1{دقیقه}one{دقیقه}other{دقیقه}}</translation>
@@ -767,7 +768,7 @@
 <translation id="5847883414085148048">تقدیم‌نامه</translation>
 <translation id="5850707923114094062">حرکت به عقب</translation>
 <translation id="5851548754964597211">فهرست برگه</translation>
-<translation id="5866042630553435010">علامت‌گذاری نیمه</translation>
+<translation id="5866042630553435010">ناقص علامت زده‌شده</translation>
 <translation id="5866210856231860256">برای مرور کردن درس‌های این عنوان، کلید «جستجو» + «پیکان روبه‌راست» یا «جستجو» + «پیکان روبه‌چپ» را فشار دهید</translation>
 <translation id="5867591286054666064">در طول این آموزش گام‌به‌گام، برای شنیدن نام هر کلید روی آن فشار دهید.</translation>
 <translation id="5869546221129391014">جدولی</translation>
@@ -1115,6 +1116,7 @@
 <translation id="8316881042119029234">بژ روشن</translation>
 <translation id="8326783648485765113">سبز چمنی</translation>
 <translation id="8345569862449483843">{COUNT,plural, =1{پوند}one{# علامت پوند}other{# علامت پوند}}</translation>
+<translation id="8351821207686449674">روشن/خاموش کردن زیرنویس ناشنوایان</translation>
 <translation id="8378855320830505539">منطقه</translation>
 <translation id="8382679411218029383">تکمیل خودکار به‌خط و فهرست</translation>
 <translation id="8394908167088220973">پخش/مکث رسانه</translation>
@@ -1185,7 +1187,7 @@
 <translation id="8937112856099038376">intlnk</translation>
 <translation id="8940925288729953902">کلیدهای توصیف‌گر</translation>
 <translation id="8943282376843390568">لیمویی</translation>
-<translation id="8944511129464116546">برخی علامت‌گذاری شده است</translation>
+<translation id="8944511129464116546">ناقص علامت زده‌شده</translation>
 <translation id="8946628535652548639">ر<ph name="TABLECELLROWINDEX" />س<ph name="TABLECELLCOLUMNINDEX" /></translation>
 <translation id="8952400011684167587">دکمه رادیویی قبلی وجود ندارد</translation>
 <translation id="8970172509886453271">بخش قبلی وجود ندارد</translation>

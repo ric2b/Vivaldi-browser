@@ -44,10 +44,10 @@ namespace dawn::native {
 
 class BufferBase;
 
-struct UploadHandle {
-    raw_ptr<uint8_t> mappedBuffer = nullptr;
-    uint64_t startOffset = 0;
-    raw_ptr<BufferBase> stagingBuffer = nullptr;
+struct UploadReservation {
+    void* mappedPointer = nullptr;
+    uint64_t offsetInBuffer = 0;
+    Ref<BufferBase> buffer;
 };
 
 class DynamicUploader {
@@ -55,9 +55,14 @@ class DynamicUploader {
     explicit DynamicUploader(DeviceBase* device);
     ~DynamicUploader() = default;
 
-    ResultOrError<UploadHandle> Allocate(uint64_t allocationSize,
-                                         ExecutionSerial serial,
-                                         uint64_t offsetAlignment);
+    // Transiently makes a reservation for an upload area for the functor passed in argument.
+    template <typename F>
+    MaybeError WithUploadReservation(uint64_t size, uint64_t offsetAlignment, F&& f) {
+        UploadReservation reservation;
+        DAWN_TRY_ASSIGN(reservation, Reserve(size, offsetAlignment));
+        return f(reservation);
+    }
+
     void Deallocate(ExecutionSerial lastCompletedSerial, bool freeAll = false);
 
     bool ShouldFlush() const;
@@ -71,14 +76,9 @@ class DynamicUploader {
         RingBufferAllocator mAllocator;
     };
 
-    ResultOrError<UploadHandle> AllocateInternal(uint64_t allocationSize,
-                                                 ExecutionSerial serial,
-                                                 uint64_t offsetAlignment);
-
-    void ReleaseStagingBuffer(Ref<BufferBase> stagingBuffer);
+    ResultOrError<UploadReservation> Reserve(uint64_t size, uint64_t offsetAlignment);
 
     std::vector<std::unique_ptr<RingBuffer>> mRingBuffers;
-    SerialQueue<ExecutionSerial, Ref<BufferBase>> mReleasedStagingBuffers;
     raw_ptr<DeviceBase> mDevice;
 };
 }  // namespace dawn::native

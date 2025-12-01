@@ -30,6 +30,7 @@ swift_source_set("top_toolbar_swift") {
   deps = [
     "//base",
     "//ui/base",
+    "//vivaldi/app:vivaldi_ios_native_strings",
   ]
 
   frameworks = [

@@ -10,11 +10,14 @@
 
 const path = require('path');
 
+const db = require('./db.js');
 const corpus = require('./corpus.js');
 const random = require('./random.js');
+const sourceHelpers = require('./source_helpers.js');
 
 // Maximum number of test inputs to use for one fuzz test.
 const MAX_TEST_INPUTS_PER_TEST = 10;
+const MAX_WASM_TEST_INPUTS_PER_TEST = 5;
 
 /**
  * Returns an array of maxium `count` parsed input sources, randomly
@@ -107,7 +110,40 @@ class RandomCorpusRunnerWithFuzzilli extends RandomCorpusRunner {
   constructor(inputDir, primary, numFiles,
               maxTestInputs=MAX_TEST_INPUTS_PER_TEST) {
     super(inputDir, primary, numFiles, maxTestInputs);
-    this.corpora['fuzzilli'] = corpus.create(inputDir, 'fuzzilli');
+    this.corpora['fuzzilli'] = corpus.create(
+        inputDir, 'fuzzilli', false, this.corpora['v8']);
+  }
+}
+
+/**
+ * Runner that randomly selects Wasm cases from V8 and Fuzzilli.
+ */
+class RandomWasmCorpusRunner extends Runner {
+  constructor(inputDir, engine, numFiles,
+              maxTestInputs=MAX_WASM_TEST_INPUTS_PER_TEST) {
+    super();
+    this.numFiles = numFiles;
+    this.maxTestInputs = maxTestInputs;
+
+    // Bias a bit towards the V8 corpus.
+    const v8Corpus = corpus.create(inputDir, 'v8_wasm');
+    const fuzzilliCorpus = corpus.create(
+        inputDir, 'fuzzilli_wasm', false, v8Corpus);
+    this.corpora = [v8Corpus, v8Corpus, fuzzilliCorpus];
+  }
+
+  *inputGen() {
+    for (let i = 0; i < this.numFiles; i++) {
+      const count = random.randInt(1, this.maxTestInputs);
+      const inputs = [];
+      for (let j= 0; j < count; j++) {
+        inputs.push(...random.single(this.corpora).getRandomTestcases(1));
+      }
+
+      if (inputs.length > 0) {
+        yield inputs;
+      }
+    }
   }
 }
 
@@ -128,8 +164,74 @@ class SingleCorpusRunner extends Runner {
   }
 }
 
+/**
+ * Runner that enumerates random cases from the Fuzzilli corpus without
+ * repeats and without cases from the crashes directory.
+ */
+class RandomFuzzilliNoCrashCorpusRunner extends Runner {
+  constructor(inputDir, engine, numFiles) {
+    super();
+    this.numFiles = numFiles;
+
+    // We need a V8 corpus placeholder only to cross-load dependencies
+    // from there, e.g. the wasm module builder.
+    const v8Corpus = corpus.create(inputDir, 'v8');
+    this.corpus = corpus.create(
+      inputDir, 'fuzzilli_no_crash', false, v8Corpus);
+  }
+
+  *inputGen() {
+    // The 'permittedFiles' are already shuffled. Just using the first x
+    // files is random enough.
+    for (const relPath of this.corpus.permittedFiles.slice(0, this.numFiles)) {
+      const source = this.corpus.loadTestcase(relPath, false, 'sloppy');
+      if (source) {
+        yield [source];
+      }
+    }
+  }
+}
+
+/**
+ * Runner that enumerates a fixture case combined with a snippet from the DB
+ * for validation.
+ */
+class FixtureRunner extends Runner {
+  constructor(inputDir, engine, numFiles) {
+    // This runner ignores the usual inputs and always iterates over all
+    // snippets from the DB.
+    super();
+    this.dbPath = path.join(process.cwd(), 'db');
+  }
+
+  *inputGen() {
+    const mutateDb = new db.MutateDb(this.dbPath);
+    for (const expression of mutateDb.iterateStatements()) {
+      let templates;
+      if (expression.needsSuper) {
+        // One template for an insertion in a constructor and one in a method.
+        templates = ['cross_over_template_2.js', 'cross_over_template_3.js'];
+      } else {
+        templates = ['cross_over_template_1.js'];
+      }
+
+      for (const tmplName of templates) {
+        const tmpl = sourceHelpers.loadSource(
+          sourceHelpers.BASE_CORPUS, path.join('resources', tmplName));
+        // We glue the expression to the source. It's otherwise rather hard to
+        // pass this through into the mutation phases.
+        tmpl.__expression = expression;
+        yield [tmpl];
+      }
+    }
+  }
+}
+
 module.exports = {
+  FixtureRunner: FixtureRunner,
   RandomCorpusRunner: RandomCorpusRunner,
   RandomCorpusRunnerWithFuzzilli: RandomCorpusRunnerWithFuzzilli,
+  RandomFuzzilliNoCrashCorpusRunner: RandomFuzzilliNoCrashCorpusRunner,
+  RandomWasmCorpusRunner: RandomWasmCorpusRunner,
   SingleCorpusRunner: SingleCorpusRunner,
 };

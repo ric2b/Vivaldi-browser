@@ -433,12 +433,6 @@
       <message name="IDS_MAHI_SUMMARIZE_INDICATOR_LABEL" desc="The text label that indicates the result is a summary">
         Summary
       </message>
-      <message name="IDS_MAHI_SUMMARIZE_BUTTON_TOOL_TIP" desc="The tooltip of summary button.">
-        Click to summarize the webpage/PDF file
-      </message>
-      <message name="IDS_MAHI_SUMMARIZE_BUTTON_TOOL_TIP_FOR_SELECTION" desc="The tooltip of summary button for selected text.">
-        Click to summarize the selected text
-      </message>
       <message name="IDS_MAHI_SUMMARIZE_BUTTON_TOOL_TIP_FOR_SELECTION_TOO_SHORT" desc="The tooltip of summary button when selected text is too short.">
         Not enough words to summarize
       </message>
@@ -447,9 +441,6 @@
       </message>
       <message name="IDS_MAHI_SIMPLIFY_INDICATOR_LABEL" desc="The text label that indicates the result is a simplication">
         Simplified text
-      </message>
-      <message name="IDS_MAHI_SIMPLIFY_BUTTON_TOOL_TIP_ENABLED" desc="The tooltip of the simplify button when it's enabled">
-        Click to simplify the selected text
       </message>
       <message name="IDS_MAHI_SIMPLIFY_BUTTON_TOOL_TIP_DISABLED_SELECTION_EMPTY" desc="The tooltip of the simplify button when it's disabled because of no selected text">
         Select some text to simplify
@@ -538,6 +529,17 @@
       </message>
       <message name="IDS_MAKO_FEEDBACK_SEND" desc="Button label for sending feedback on the Mako feedback form">
         Send
+      </message>
+
+      <!-- Lobster -->
+      <message name="IDS_LOBSTER_EDITOR_MENU_CARD_TAB_LABEL" desc="The label for Image Generation tab in the Editor menu card.">
+        Create image
+      </message>
+      <message name="IDS_LOBSTER_EDITOR_MENU_CARD_CHIP_LABEL" desc="The label for Image Generation chip in the Editor menu card.">
+        Create image
+      </message>
+      <message name="IDS_LOBSTER_EDITOR_MENU_CARD_FREEFORM_PLACEHOLDER" desc="Placeholder text in the freeform textfield of the Editor Menu Card when the Image Generation tab is selected.">
+        Enter a prompt like "draw a misty forest"
       </message>
 
       <!-- Multitask Menu -->
@@ -2551,6 +2553,12 @@
         <message name="IDS_PERSONALIZATION_APP_WALLPAPER_DESCRIPTION_DIALOG_OPEN" desc="Label for the button to open wallpaper description dialog">
           About the art
         </message>
+        <message name="IDS_PERSONALIZATION_APP_WALLPAPER_DESCRIPTION_LEARN_MORE" desc="Label for the link to learn more about the currently selected wallpaper.">
+          Learn more
+        </message>
+        <message name="IDS_PERSONALIZATION_APP_WALLPAPER_DESCRIPTION_LEARN_MORE_ARIA_LABEL" desc="Aria label for the link to learn more about the currently selected wallpaper.">
+          Learn more about the selected wallpaper
+        </message>
         <message name="IDS_PERSONALIZATION_APP_WALLPAPER_DESCRIPTION_DIALOG_CLOSE" desc="Label for the close button on wallpaper description dialog">
           Close
         </message>
@@ -3013,6 +3021,9 @@
         </message>
         <message name="IDS_PERSONALIZATION_APP_TIME_OF_DAY_VIDEO_NEW_MEXICO_ALBUM_TITLE" desc="Title for the new mexico video in the ambient section of the hub.">
           Earth Flow
+        </message>
+        <message name="IDS_PERSONALIZATION_APP_TIME_OF_DAY_VIDEO_JUPITER_ALBUM_TITLE" desc="Title for the jupiter video in the ambient section of the hub.">
+          Jupiter
         </message>
         <message name="IDS_PERSONALIZATION_APP_TIME_OF_DAY_VIDEO_ALBUM_DESCRIPTION" desc="Common description all videos in the ambient section of the hub.">
           Exclusive to <ph name="PRODUCT_NAME">$1<ex>Chromebook</ex></ph>
@@ -3538,14 +3549,10 @@
         All created images will automatically appear here.
         </message>
         <message name="IDS_SEA_PEN_INTRODUCTION_DIALOG_TITLE" desc="The title of the introduction dialog displayed on the first time the user enters Sea Pen subpage.">
-          How to create with AI and a few things to keep in mind
-        </message>
-        <message name="IDS_SEA_PEN_INTRODUCTION_DIALOG_FIRST_PARAGRAPH" desc="Option to fill in the SEA_PEN_INTRO_FIRST_PARAGRAPH of the IDS_SEA_PEN_INTRODUCTION_DIALOG_CONTENT.">
-          Choose a theme and then select the underlined words to personalize your AI images.
+          A few things to keep in mind
         </message>
         <message name="IDS_SEA_PEN_INTRODUCTION_DIALOG_CONTENT" desc="The content of the introduction dialog.">
-          <ph name="SEA_PEN_INTRO_FIRST_PARAGRAPH">$1<ex>Choose a theme and then select the underlined words to personalize your AI images.</ex></ph>
-          <ph name="LINE_BREAK">&lt;br&gt;</ph>
+          Choose a theme and then select the underlined words to personalize your AI images.<ph name="LINE_BREAK">&lt;br&gt;</ph>
           <ph name="LINE_BREAK">&lt;br&gt;</ph>
           Select "Inspire me" to get more unique and varied AI images options.
           <ph name="LINE_BREAK">&lt;br&gt;</ph>
@@ -3555,13 +3562,31 @@
           <ph name="LINE_BREAK">&lt;br&gt;</ph>
           Generative AI is experimental, in early development, and currently has limited availability.
         </message>
+        <message name="IDS_SEA_PEN_FREEFORM_INTRODUCTION_DIALOG_CONTENT" desc="The content of the introduction dialog when freeform is enabled.">
+          When you select "Create your own," you can write a custom prompt. You can also select "Choose a theme" and then select the underlined words to personalize your AI wallpaper.
+          <ph name="LINE_BREAK">&lt;br&gt;</ph>
+          <ph name="LINE_BREAK">&lt;br&gt;</ph>
+          Select "Inspire me" to get more unique and varied AI images options.
+          <ph name="LINE_BREAK">&lt;br&gt;</ph>
+          <ph name="LINE_BREAK">&lt;br&gt;</ph>
+          When you create your own wallpaper, the prompt is sent to Google servers to generate images and improve the product, subject to <ph name="BEGIN_LINK_GOOGLE_PRIVACY_POLICY">&lt;a target="_blank" href="https://policies.google.com/privacy"&gt;</ph>Google's Terms of Service and Privacy Policy<ph name="END_LINK_GOOGLE_PRIVACY_POLICY">&lt;/a&gt;</ph>. Don't include anything personal, sensitive, or confidential.
+          <ph name="LINE_BREAK">&lt;br&gt;</ph>
+          <ph name="LINE_BREAK">&lt;br&gt;</ph>
+          Generative AI can make mistakes, including about people, so double-check it. <ph name="BEGIN_LINK_CREATE_YOUR_OWN_WALLPAPER">&lt;a target="_blank" href="https://support.google.com/chromebook?p=octocorallia"&gt;</ph>Learn more<ph name="END_LINK_GOOGLE_PRIVACY_POLICY">&lt;/a&gt;</ph>
+        </message>
         <message name="IDS_SEA_PEN_INTRODUCTION_DIALOG_CLOSE_BUTTON" desc="The button to close the introduction dialog.">
           Got it
         </message>
+        <message name="IDS_SEA_PEN_ARIA_DESCRIPTION_GENERATED_IMAGE" desc="Informational text presented to screen readers to inform users that an image is generated">
+          Generated image
+        </message>
 
         <!-- Freeform prompts -->
-        <message name="IDS_SEA_PEN_FREEFORM_WALLPAPER_TEMPLATES_LABEL" desc="Label for the Wallpaper AI templates feature.">
-          AI Wallpapers
+        <message name="IDS_SEA_PEN_FREEFORM_WALLPAPER_LABEL" desc="Label for the Wallpaper AI freeform feature.">
+          Create your own
+        </message>
+        <message name="IDS_SEA_PEN_TEMPLATES_WALLPAPER_LABEL" desc="Label for the Wallpaper AI templates feature.">
+          Choose a theme
         </message>
         <message name="IDS_SEA_PEN_FREEFORM_SAMPLE_PROMPTS_LABEL" desc="Label for a list of sample prompts, used to help users write prompts to generate AI images.">
           Sample prompts
@@ -3588,7 +3613,7 @@
           This language isn't supported at this time
         </message>
         <message name="IDS_SEA_PEN_FREEFORM_ERROR_BLOCKED_OUTPUTS" desc="Error message displayed when the search results were blocked.">
-          Can't create images of this. Try another prompt.
+            Can’t create images of this right now. Try rephrasing your description. Keep in mind you can't create images of people, harmful, or explicit content. <ph name="BEGIN_LINK_LEARN_MORE">&lt;a target="_blank" href="https://policies.google.com/terms/generative-ai/use-policy"&gt;</ph>Learn more<ph name="END_LINK_LEARN_MORE">&lt;/a&gt;</ph>
         </message>
         <message name="IDS_SEA_PEN_FREEFORM_PREVIOUS_PROMPTS" desc="Section heading that shows previously-generated wallpapers.">
           Previous prompts
@@ -3597,13 +3622,10 @@
           Your 3 most recent prompts and outputs. You can only access these while you're using Wallpaper &amp; style.
         </message>
         <message name="IDS_SEA_PEN_FREEFORM_PROMPTING_GUIDE" desc="A link to a guide with instructions on how to write a prompt to generate AI images.">
-          Select prompt to create or see the <ph name="BEGIN_LINK_PROMPTING_GUIDE">&lt;a target="_blank" href="https://cloud.google.com/vertex-ai/generative-ai/docs/image/img-gen-prompt-guide"&gt;</ph>prompt guide<ph name="END_LINK_PROMPTING_GUIDE">&lt;/a&gt;</ph>
+          Select prompt to create or see the <ph name="BEGIN_LINK_PROMPTING_GUIDE">&lt;a target="_blank" href="https://support.google.com/chromebook?p=octocorallia"&gt;</ph>prompt guide<ph name="END_LINK_PROMPTING_GUIDE">&lt;/a&gt;</ph>
         </message>
         <message name="IDS_SEA_PEN_FREEFORM_NAVIGATION_DESCRIPTION" desc="Description shown in each template page to help users navigate to freeform page.">
           You can also <ph name="BEGIN_LINK_FREEFORM_SUBPAGE">&lt;a href="chrome://personalization/wallpaper/sea-pen/freeform"&gt;</ph>write your own prompt<ph name="END_LINK_FREEFORM_SUBPAGE">&lt;/a&gt;</ph>
-        </message>
-        <message name="IDS_SEA_PEN_FREEFORM_INTRODUCTION_DIALOG_FIRST_PARAGRAPH" desc="Option to fill in the SEA_PEN_INTRO_FIRST_PARAGRAPH of the IDS_SEA_PEN_INTRODUCTION_DIALOG_CONTENT.">
-          When you select “Create with AI,” write a custom prompt. Or you can select “AI wallpapers,” to choose a theme and then select the underlined words to personalize your AI wallpaper.
         </message>
         <message name="IDS_SEA_PEN_FREEFORM_ARIA_LABEL_SAMPLE_PROMPTS" desc="Aria label for a list of sample text prompts to be used to generate AI images (IDS_SEA_PEN_FREEFORM_SAMPLE_PROMPTS_LABEL)">
           Sample prompts
@@ -3613,6 +3635,12 @@
         </message>
         <message name="IDS_SEA_PEN_FREEFORM_ARIA_LABEL_SHUFFLE_SUGGESTIONS" desc="Aria label for a button that shuffles a list of suggestions (IDS_SEA_PEN_FREEFORM_ARIA_LABEL_SUGGESTIONS)">
           Shuffle suggestions
+        </message>
+        <message name="IDS_SEA_PEN_ARIA_ANNOUNCE_SAMPLE_PROMPTS_SHUFFLED" desc="Text read out by the screen reader after the sample prompts are shuffled.">
+          Sample prompts shuffled
+        </message>
+        <message name="IDS_SEA_PEN_ARIA_ANNOUNCE_SUGGESTIONS_SHUFFLED" desc="Text read out by the screen reader after the prompt suggestions are shuffled.">
+          Suggestions shuffled
         </message>
 
         <!-- Sea Pen Templates (AUTOGENERATED - contact assistive-eng@google.com before editing) -->
@@ -6546,6 +6574,9 @@
         <message name="IDS_SHORTCUT_CUSTOMIZATION_ICON_LABEL_DO_NOT_DISTURB" desc="The text read aloud by the screen reader describing the keyboard icon 'do not disturb'.">
           do not disturb
         </message>
+        <message name="IDS_SHORTCUT_CUSTOMIZATION_ICON_LABEL_CAMERA_ACCESS_TOGGLE" desc="The text read aloud by the screen reader describing the keyboard icon 'camera access toggle'.">
+          toggle camera access
+        </message>
 
         <!-- End of Shortcut Customization -->
 
@@ -6992,6 +7023,9 @@
       <message name="IDS_ON_TASK_NOTIFICATION_TITLE" desc="School Tools title for OnTask notifications">
         School Tools
       </message>
+      <message name="IDS_ON_TASK_ENTER_LOCKED_MODE_COUNTDOWN_NOTIFICATION_MESSAGE" desc="Message signaling the countdown before the teachers lock students' screen.">
+        Your teacher will lock your screen in <ph name="NUM_SECONDS">$1<ex>5</ex></ph> seconds
+      </message>
       <message name="IDS_ON_TASK_ENTER_LOCKED_MODE_NOTIFICATION_MESSAGE" desc="Notification message telling students that their teachers have locked their screen.">
         Your teacher has locked your screen
       </message>
@@ -7008,6 +7042,32 @@
         Your teacher has removed content in School Tools
       </message>
 
+      <!-- Strings for the OnTask pod -->
+      <message name="IDS_ON_TASK_POD_ACCESSIBLE_NAME" desc="Accessible name for the OnTask pod widget.">
+        OnTask Pod
+      </message>
+      <message name="IDS_ON_TASK_POD_NAVIGATE_BACK_ACCESSIBLE_NAME" desc="Accessible name for the Navigate back button in the OnTask pod.">
+        Click to go back
+      </message>
+      <message name="IDS_ON_TASK_POD_NAVIGATE_FORWARD_ACCESSIBLE_NAME" desc="Accessible name for the Navigate forward button in the OnTask pod.">
+        Click to go forward
+      </message>
+      <message name="IDS_ON_TASK_POD_RELOAD_ACCESSIBLE_NAME" desc="Accessible name for the Reload tab button in the OnTask pod.">
+        Reload tab
+      </message>
+      <message name="IDS_ON_TASK_POD_PIN_TAP_STRIP_ACCESSIBLE_NAME" desc="Accessible name for the show tab strip button in the OnTask pod.">
+        Show tabs
+      </message>
+      <message name="IDS_ON_TASK_POD_UNPIN_TAP_STRIP_ACCESSIBLE_NAME" desc="Accessible name for the hide tab strip button in the OnTask pod.">
+        Hide tabs
+      </message>
+      <message name="IDS_ON_TASK_MOVE_POD_TOP_LEFT_ACCESSIBLE_NAME" desc="Accessible name for the move pod to top left button in the OnTask pod.">
+        Move to top left
+      </message>
+      <message name="IDS_ON_TASK_MOVE_POD_TOP_RIGHT_ACCESSIBLE_NAME" desc="Accessible name for the move pod to top right button in the OnTask pod.">
+        Move to top right
+      </message>
+
       <!-- Strings for School Tools -->
       <message name="IDS_SCHOOL_TOOLS_TITLE" desc="Title of the School Tools App">
         School Tools
@@ -7017,14 +7077,17 @@
       <message name="IDS_BOCA_CONNECTED_TO_CLASS_NOTIFICATION_MESSAGE" desc="Message of the notification telling users that they're currently connected to a school tools session.">
         School Tools is connected to students
       </message>
-            <message name="IDS_BOCA_CONNECTED_TO_CLASS_BUTTON_TEXT" desc="Text for the button to open school tools app.">
+      <message name="IDS_BOCA_CONNECTED_TO_CLASS_BUTTON_TEXT" desc="Text for the button to open school tools app.">
         Open app
       </message>
       <message name="IDS_BOCA_MICROPHONE_IN_USE_NOTIFICATION_MESSAGE" desc="Message of the notification telling users that school tools is currently using their microphone.">
         School Tools is using your microphone
       </message>
-       <message name="IDS_BOCA_NOTIFICATION_TITLE" desc="Title of the school tools notification">
+      <message name="IDS_BOCA_NOTIFICATION_TITLE" desc="Title of the school tools notification">
         School Tools
+      </message>
+      <message name="IDS_BOCA_SPOTLIGHT_NOTIFICATION_MESSAGE" desc="Message signaling the countdown before the start of a Spotlight session in the Boca app.">
+        Your teacher will view your screen in <ph name="NUM_SECONDS">$1<ex>3</ex></ph> seconds
       </message>
     </messages>
   </release>

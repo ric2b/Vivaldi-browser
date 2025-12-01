@@ -5,14 +5,18 @@
 #include "chrome/browser/smart_card/smart_card_permission_context.h"
 
 #include <algorithm>
+#include <iterator>
 #include <vector>
 
 #include "base/check.h"
 #include "base/containers/to_vector.h"
+#include "base/functional/bind.h"
+#include "base/location.h"
 #include "base/power_monitor/power_monitor.h"
 #include "base/power_monitor/power_observer.h"
 #include "base/scoped_observation.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/task/sequenced_task_runner.h"
 #include "base/values.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/permissions/one_time_permissions_tracker.h"
@@ -23,6 +27,7 @@
 #include "chrome/browser/smart_card/smart_card_reader_tracker_factory.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/content_settings/core/common/content_settings_types.h"
+#include "components/permissions/features.h"
 #include "components/permissions/permission_request_manager.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents.h"
@@ -148,7 +153,9 @@ SmartCardPermissionContext::SmartCardPermissionContext(Profile* profile)
           HostContentSettingsMapFactory::GetForProfile(profile)),
       reader_observer_(std::make_unique<ReaderObserver>(*this)),
       profile_(*profile),
-      weak_ptr_factory_(this) {}
+      weak_ptr_factory_(this) {
+  permission_observation_.Observe(this);
+}
 
 SmartCardPermissionContext::~SmartCardPermissionContext() = default;
 
@@ -175,7 +182,7 @@ bool SmartCardPermissionContext::HasReaderPermission(
     return IsAllowlistedByPolicy(origin);
   }
 
-  return ephemeral_grants_[origin].contains(reader_name) ||
+  return ephemeral_grants_with_expiry_[origin].contains(reader_name) ||
          HasPersistentReaderPermission(origin, reader_name);
 }
 
@@ -218,7 +225,10 @@ void SmartCardPermissionContext::GrantEphemeralReaderPermission(
     const url::Origin& origin,
     const std::string& reader_name) {
   CHECK(!HasReaderPermission(origin, reader_name));
-  ephemeral_grants_[origin].insert(reader_name);
+  ephemeral_grants_with_expiry_[origin].emplace(
+      reader_name,
+      base::Time::Now() +
+          permissions::feature_params::kOneTimePermissionLongTimeout.Get());
 
   if (!power_suspend_observer_) {
     power_suspend_observer_ = std::make_unique<PowerSuspendObserver>(*this);
@@ -232,6 +242,12 @@ void SmartCardPermissionContext::GrantEphemeralReaderPermission(
       reader_observer_.get(),
       base::BindOnce(&SmartCardPermissionContext::OnTrackingStarted,
                      weak_ptr_factory_.GetWeakPtr()));
+  base::SequencedTaskRunner::GetCurrentDefault()->PostDelayedTask(
+      FROM_HERE,
+      base::BindOnce(&SmartCardPermissionContext::
+                         RevokeEphemeralPermissionIfLongTimeoutOccured,
+                     weak_ptr_factory_.GetWeakPtr(), origin, reader_name),
+      permissions::feature_params::kOneTimePermissionLongTimeout.Get());
 }
 
 void SmartCardPermissionContext::GrantPersistentReaderPermission(
@@ -279,39 +295,51 @@ bool SmartCardPermissionContext::HasPersistentReaderPermission(
 
 void SmartCardPermissionContext::RevokeEphemeralPermissionsForReader(
     const std::string& reader_name) {
-  for (auto it = ephemeral_grants_.begin(); it != ephemeral_grants_.end();) {
-    std::set<std::string>& reader_set = it->second;
+  for (auto it = ephemeral_grants_with_expiry_.begin();
+       it != ephemeral_grants_with_expiry_.end();) {
+    auto& [origin, reader_map] = *it;
 
-    reader_set.erase(reader_name);
+    if (reader_map.erase(reader_name)) {
+      NotifyPermissionRevoked(origin);
+    }
 
-    if (reader_set.empty()) {
-      it = ephemeral_grants_.erase(it);
+    if (reader_map.empty()) {
+      it = ephemeral_grants_with_expiry_.erase(it);
     } else {
       ++it;
     }
   }
 
-  if (ephemeral_grants_.empty()) {
+  if (ephemeral_grants_with_expiry_.empty()) {
     StopObserving();
   }
 }
 
 void SmartCardPermissionContext::RevokeEphemeralPermissionsForOrigin(
     const url::Origin& origin) {
-  ephemeral_grants_.erase(origin);
+  ephemeral_grants_with_expiry_.erase(origin);
 
-  if (ephemeral_grants_.empty()) {
+  if (ephemeral_grants_with_expiry_.empty()) {
     StopObserving();
   }
+  NotifyPermissionRevoked(origin);
 }
 
 void SmartCardPermissionContext::RevokeEphemeralPermissions() {
-  if (ephemeral_grants_.empty()) {
+  if (ephemeral_grants_with_expiry_.empty()) {
     return;
   }
+  std::set<url::Origin> revoked_origins;
 
-  ephemeral_grants_.clear();
+  std::ranges::transform(ephemeral_grants_with_expiry_,
+                         std::inserter(revoked_origins, revoked_origins.end()),
+                         [](const auto& pair) { return pair.first; });
+
+  ephemeral_grants_with_expiry_.clear();
   StopObserving();
+  for (const auto& origin : revoked_origins) {
+    NotifyPermissionRevoked(origin);
+  }
 }
 
 void SmartCardPermissionContext::RevokeAllPermissions() {
@@ -440,4 +468,42 @@ SmartCardPermissionContext::GetGrantedObjects(const url::Origin& origin) {
         content_settings::SettingSource::kPolicy, IsOffTheRecord()));
   }
   return objects;
+}
+
+void SmartCardPermissionContext::OnPermissionRevoked(
+    const url::Origin& origin) {
+  permission_observers_.Notify(
+      &content::SmartCardDelegate::PermissionObserver::OnPermissionRevoked,
+      origin);
+}
+
+void SmartCardPermissionContext::AddObserver(
+    content::SmartCardDelegate::PermissionObserver* observer) {
+  permission_observers_.AddObserver(observer);
+}
+
+void SmartCardPermissionContext::RemoveObserver(
+    content::SmartCardDelegate::PermissionObserver* observer) {
+  permission_observers_.RemoveObserver(observer);
+}
+void SmartCardPermissionContext::RevokeEphemeralPermissionIfLongTimeoutOccured(
+    const url::Origin& origin,
+    const std::string& reader_name) {
+  auto it_origin = ephemeral_grants_with_expiry_.find(origin);
+  if (it_origin == ephemeral_grants_with_expiry_.end()) {
+    return;
+  }
+  auto& reader_map = it_origin->second;
+  auto it_reader = reader_map.find(reader_name);
+  if (it_reader == reader_map.end()) {
+    return;
+  }
+
+  if (base::Time::Now() >= it_reader->second) {
+    reader_map.erase(it_reader);
+    if (reader_map.empty()) {
+      ephemeral_grants_with_expiry_.erase(it_origin);
+    }
+    NotifyPermissionRevoked(origin);
+  }
 }

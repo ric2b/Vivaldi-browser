@@ -18,7 +18,7 @@
 #include "components/unexportable_keys/unexportable_key_loader.h"
 #include "components/unexportable_keys/unexportable_key_service_impl.h"
 #include "components/unexportable_keys/unexportable_key_task_manager.h"
-#include "crypto/scoped_mock_unexportable_key_provider.h"
+#include "crypto/scoped_fake_unexportable_key_provider.h"
 #include "crypto/signature_verifier.h"
 #include "crypto/unexportable_key.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -68,7 +68,7 @@ class SessionBindingHelperTest : public testing::Test {
 
  private:
   base::test::TaskEnvironment task_environment_;
-  crypto::ScopedMockUnexportableKeyProvider scoped_key_provider_;
+  crypto::ScopedFakeUnexportableKeyProvider scoped_key_provider_;
   unexportable_keys::UnexportableKeyTaskManager unexportable_key_task_manager_{
       crypto::UnexportableKeyProvider::Config()};
   unexportable_keys::UnexportableKeyServiceImpl unexportable_key_service_;
@@ -166,7 +166,8 @@ TEST_F(SessionBindingHelperTest, ReloadKeyAfterFailure) {
     EXPECT_CALL(mock_unexportable_key_service,
                 FromWrappedSigningKeySlowlyAsync(base::span(wrapped_key), _, _))
         .WillOnce(RunOnceCallback<2>(key_id));
-    EXPECT_CALL(mock_unexportable_key_service, SignSlowlyAsync(key_id, _, _, _))
+    EXPECT_CALL(mock_unexportable_key_service,
+                SignSlowlyAsync(key_id, _, _, _, _))
         .WillOnce(Invoke(
             &unexportable_key_service(),
             &unexportable_keys::UnexportableKeyService::SignSlowlyAsync));

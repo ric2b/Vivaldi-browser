@@ -33,6 +33,8 @@ export const enum LearnMoreUrlType {
   DESCRIPTION_INVITE = 2,
   DESCRIPTION_JOIN = 3,
   BLOCK = 4,
+  SAVE_CHANGES_DIALOG = 5,
+  GLOBAL_ACCESS = 6,
 }
 export const enum ShareAction {
   COPY_LINK,
@@ -72,9 +74,10 @@ export declare interface DisplayedUserData {
 export declare interface DynamicMessageParams {
   displayedUser?: DisplayedUserData;
   group: {
-    name: string; members: Array<{name: string; email: string; role: string}>;
+    name: string;
+    members: Array<{name: string; email: string; role: DataSharingMemberRole}>;
   };
-  loggedInUser: {name: string; email: string; role: string;};
+  loggedInUser: {name: string; email: string; role: DataSharingMemberRole;};
   payload: {title: string; description: string; mediaCount: number;};
 }
 export const enum StaticMessageKey {
@@ -126,6 +129,13 @@ export const enum StaticMessageKey {
   GROUP_FULL_CONTENT,
   YOUR_GROUP_IS_FULL_DESCRIPTION,
   ACTIVITY_LOGS,
+
+  CLOSE_FLOW_HEADER,
+  KEEP_GROUP,
+  DELETE_GROUP,
+
+  DELETE_FLOW_HEADER,
+  DELETE,
 }
 export const enum DynamicMessageKey {
 
@@ -147,6 +157,11 @@ export const enum DynamicMessageKey {
   GET_BLOCK_DIALOG_TITLE,
   GET_BLOCK_DIALOG_CONTENT,
   GET_BLOCK_AND_LEAVE_DIALOG_CONTENT,
+
+  GET_CLOSE_FLOW_DESCRIPTION_FIRST_PARAGRAPH,
+  GET_CLOSE_FLOW_DESCRIPTION_SECOND_PARAGRAPH,
+
+  GET_DELETE_FLOW_DESCRIPTION_CONTENT,
 }
 export declare interface TranslationMap {
   static: {[key in StaticMessageKey]: string};
@@ -156,17 +171,19 @@ export declare interface TranslationMap {
 export declare interface DataSharingSdkGroupData {
   groupId: string;
   members: DataSharingSdkGroupMember[];
+  formerMembers: DataSharingSdkGroupMember[];
   displayName?: string;
   accessToken?: string;
   consistencyToken?: string;
 }
 export declare type DataSharingMemberRole =
-    | 'unknown' | 'member' | 'owner' | 'invitee';
+    | 'unknown' | 'member' | 'owner' | 'invitee' | 'former_member';
 export const enum DataSharingMemberRoleEnum {
   UNKNOWN = 'unknown',
   MEMBER = 'member',
   OWNER = 'owner',
   INVITEE = 'invitee',
+  FORMER_MEMBER = 'former_member',
 }
 export declare interface DataSharingSdkGroupMember {
   focusObfuscatedGaiaId: string;
@@ -185,6 +202,12 @@ export declare interface CreateGroupResult {
 export declare interface ReadGroupParams {
   groupId: string;
   consistencyToken?: string;
+}
+export declare interface ReadGroupOptions {
+  accessToken?: string;
+}
+export declare interface ReadGroupResult {
+  groupData: DataSharingSdkGroupData;
 }
 export declare interface ReadGroupsParams {
   params: ReadGroupParams[];
@@ -224,9 +247,19 @@ export const enum LoggingIntent {
   OPEN_LEARN_MORE_URL = 12,
   ACCEPT_JOIN_AND_OPEN = 13,
   ABANDON_JOIN = 14,
+  KEEP_GROUP = 15,
+  DELETE_GROUP = 16,
+}
+export const enum Progress {
+  UNKNOWN = 0,
+  STARTED = 1,
+  FAILED = 2,
+  SUCCEEDED = 3,
 }
 export declare interface LoggingEvent {
   intentType: LoggingIntent;
+
+  progress: Progress;
 }
 export declare interface Logger {
   onEvent(event: LoggingEvent): void;
@@ -255,11 +288,26 @@ export declare interface RunManageFlowParams extends DataSharingSdkGroupId {
   learnMoreUrlMap: {[type in LearnMoreUrlType]?: () => string};
   activityLogCallback?: () => void;
   logger?: Logger;
+  showLeaveDialogAtStartup?: boolean;
+}
+export declare interface RunCloseFlowParams extends DataSharingSdkGroupId {
+  parent: HTMLElement;
+  translatedMessages: TranslationMap;
+  logger?: Logger;
+}
+export declare interface RunDeleteFlowParams extends DataSharingSdkGroupId {
+  parent: HTMLElement;
+  translatedMessages: TranslationMap;
+  logger?: Logger;
 }
 export declare interface DataSharingSdk {
   createGroup(
       params: CreateGroupParams,
       ): Promise<{result?: CreateGroupResult; status: Code}>;
+  readGroup(
+      params: ReadGroupParams,
+      options?: ReadGroupOptions,
+      ): Promise<{result?: ReadGroupResult; status: Code}>;
   readGroups(
       params: ReadGroupsParams,
       ): Promise<{result?: ReadGroupsResult; status: Code}>;
@@ -272,6 +320,8 @@ export declare interface DataSharingSdk {
   runJoinFlow(params: RunJoinFlowParams): Promise<DataSharingSdkResponse>;
   runInviteFlow(params: RunInviteFlowParams): Promise<DataSharingSdkResponse>;
   runManageFlow(params: RunManageFlowParams): Promise<DataSharingSdkResponse>;
+  runCloseFlow(params: RunCloseFlowParams): Promise<DataSharingSdkResponse>;
+  runDeleteFlow(params: RunDeleteFlowParams): Promise<DataSharingSdkResponse>;
   setOauthAccessToken(params: {accessToken: string}): void;
   updateClearcut(params: {enabled: boolean}): void;
 }

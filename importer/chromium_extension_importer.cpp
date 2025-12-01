@@ -126,7 +126,7 @@ void ChromiumExtensionsImporter::AddExtensions(
 
     scoped_refptr<vivaldi::SilentWebstoreInstaller> installer =
         new vivaldi::SilentWebstoreInstaller(
-            extension, profile_, nullptr,
+            extension, profile_, gfx::NativeWindow(),
             base::BindOnce(&ChromiumExtensionsImporter::OnExtensionAdded,
                            weak_ptr_factory_.GetWeakPtr()));
     installer->BeginInstall();

@@ -25,7 +25,6 @@
 #ifndef THIRD_PARTY_BLINK_RENDERER_CORE_DOM_CONTAINER_NODE_H_
 #define THIRD_PARTY_BLINK_RENDERER_CORE_DOM_CONTAINER_NODE_H_
 
-#include "base/functional/function_ref.h"
 #include "third_party/blink/public/mojom/input/focus_type.mojom-blink-forward.h"
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/css/css_value.h"
@@ -41,7 +40,6 @@ namespace blink {
 class Element;
 class ExceptionState;
 class GetHTMLOptions;
-class GetInnerHTMLOptions;
 class HTMLCollection;
 class RadioNodeList;
 class StyleRecalcContext;
@@ -121,10 +119,6 @@ class CORE_EXPORT ContainerNode : public Node {
     return HasOneChild() && first_child_->IsTextNode();
   }
 
-  // Returns true if all children are text nodes and at least one of them is not
-  // empty. Ignores comments.
-  bool HasOnlyText() const;
-
   Element* QuerySelector(const AtomicString& selectors, ExceptionState&);
   Element* QuerySelector(const AtomicString& selectors);
   StaticElementList* QuerySelectorAll(const AtomicString& selectors,
@@ -160,14 +154,6 @@ class CORE_EXPORT ContainerNode : public Node {
   HTMLCollection* getElementsByClassName(const AtomicString& class_names);
   RadioNodeList* GetRadioNodeList(const AtomicString&,
                                   bool only_match_img_elements = false);
-
-  // Returns the contents of the first descendant that is either (1) an element
-  // containing only text or (2) a readonly text input, whose text contains the
-  // given substring, if the validity checker returns true for it. Ignores ASCII
-  // case in the substring search.
-  String FindTextInElementWith(
-      const AtomicString& substring,
-      base::FunctionRef<bool(const String&)> validity_checker) const;
 
   // Returns all Text nodes where `regex` would match for the text inside of
   // the node, case-insensitive. This function does not normalize adjacent Text
@@ -478,12 +464,16 @@ class CORE_EXPORT ContainerNode : public Node {
     return EnsureCachedCollection<HTMLCollection>(kPopoverInvokers);
   }
 
+  HTMLCollection* CommandInvokers() {
+    DCHECK(IsTreeScope());
+    return EnsureCachedCollection<HTMLCollection>(kCommandInvokers);
+  }
+
   void ReplaceChildren(const VectorOf<Node>& nodes,
                        ExceptionState& exception_state);
 
-  // Common implementation of getHTML and getInnerHTML. These are exposed (via
-  // IDL) on Element and ShadowRoot only.
-  String getInnerHTML(const GetInnerHTMLOptions* options) const;
+  // IDL implementation of getHTML. This is exposed on Element and ShadowRoot
+  // only.
   String getHTML(const GetHTMLOptions*, ExceptionState&) const;
 
   // DocumentOrElementEventHandlers:

@@ -14,6 +14,8 @@
 #include "base/functional/bind.h"
 #include "base/threading/thread_restrictions.h"
 #include "chrome/browser/extensions/load_error_reporter.h"
+#include "chrome/browser/extensions/permissions/permissions_updater.h"
+#include "chrome/browser/profiles/profile.h"
 #include "components/keyed_service/content/browser_context_dependency_manager.h"
 #include "components/value_store/value_store_factory_impl.h"
 #include "content/public/browser/browser_context.h"
@@ -134,6 +136,9 @@ class DesktopAndroidExtensionRegistrarDelegate
   bool ShouldBlockExtension(const Extension* extension) override {
     return false;
   }
+  void GrantActivePermissions(const Extension* extension) override {
+    PermissionsUpdater(browser_context_).GrantActivePermissions(extension);
+  }
 
  private:
   raw_ptr<content::BrowserContext> browser_context_;  // Not owned.
@@ -162,32 +167,30 @@ void DesktopAndroidExtensionSystem::Shutdown() {}
 bool DesktopAndroidExtensionSystem::AddExtension(
     scoped_refptr<Extension> extension,
     std::string& error) {
-  // This code is normally handled as part of the UnpackedInstaller, which is
-  // not (yet) included in desktop android builds.
-  base::expected<base::Value::Dict, std::string> index_result =
-      declarative_net_request::InstallIndexHelper::
-          IndexAndPersistRulesOnInstall(*extension);
-  if (!index_result.has_value()) {
-    error = std::move(index_result.error());
-    return false;
+  base::expected<base::Value::Dict, std::string> index_result;
+  if (Manifest::IsUnpackedLocation(extension->location())) {
+    // This code is normally handled as part of the UnpackedInstaller, which is
+    // not (yet) included in desktop android builds.
+    // TODO(crbug.com/398299722): Remove this when UnpackedInstaller works on
+    // desktop android.
+    index_result = declarative_net_request::InstallIndexHelper::
+        IndexAndPersistRulesOnInstall(*extension);
+    if (!index_result.has_value()) {
+      error = std::move(index_result.error());
+      return false;
+    }
   }
 
   // This is normally handled by ExtensionService, and should likely be moved
   // to ExtensionRegistrar.
   ExtensionPrefs::Get(browser_context_)
-      ->OnExtensionInstalled(extension.get(), Extension::ENABLED,
+      ->OnExtensionInstalled(extension.get(), /*disable_reasons=*/{},
                              syncer::StringOrdinal(),
                              kInstallFlagInstallImmediately, std::string(),
                              std::move(index_result.value()));
 
   registrar_->AddExtension(std::move(extension));
   return true;
-}
-
-void DesktopAndroidExtensionSystem::DisableExtension(
-    const std::string& extension_id,
-    int disable_reasons) {
-  registrar_->DisableExtension(extension_id, disable_reasons);
 }
 
 void DesktopAndroidExtensionSystem::ReloadExtension(
@@ -231,8 +234,11 @@ void DesktopAndroidExtensionSystem::InitForRegularProfile(
   registrar_delegate_ =
       std::make_unique<DesktopAndroidExtensionRegistrarDelegate>(
           browser_context_);
-  registrar_ = std::make_unique<ExtensionRegistrar>(browser_context_,
-                                                    registrar_delegate_.get());
+  registrar_ = ExtensionRegistrar::Get(browser_context_);
+  registrar_->Init(
+      registrar_delegate_.get(), extensions_enabled,
+      browser_context_->GetPath().AppendASCII(kInstallDirectoryName),
+      browser_context_->GetPath().AppendASCII(kUnpackedInstallDirectoryName));
 
   service_worker_manager_ =
       std::make_unique<ServiceWorkerManager>(browser_context_);

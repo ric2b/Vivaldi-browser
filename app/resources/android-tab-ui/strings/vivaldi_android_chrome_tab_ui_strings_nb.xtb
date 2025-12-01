@@ -1,9 +1,14 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="no">
+<translation id="2277224997687551299">Endre gruppenavnet</translation>
+<translation id="2330212241471632770">{TABS_COUNT,plural, =1{Sett fanen som bokmerke}other{Sett fanene som bokmerker}}</translation>
 <translation id="2947471979790858922">Din aktivitet i disse privatfanene blir fjernet fra denne enheten</translation>
 <translation id="3870643923290313246">{INCOGNITO_TABS_COUNT, plural,
         =1 {Du kan finne dine lukkede faner under Nylige faner i Vivadi-menyen. Din privatfane vil ikke være tilgjengelig.}
         other {Du kan finne dine lukkede faner under Nylige faner i Vivadi-menyen. Dine privatfaner vil ikke være tilgjengelige.}}</translation>
+<translation id="4460014764210899310">Fjern gruppering</translation>
 <translation id="4871187110787939393">Lukke alle privatfaner?</translation>
+<translation id="5494920125229734069">Velg alle</translation>
+<translation id="6744956528665271406">Endre gruppefargen</translation>
 </translationbundle>

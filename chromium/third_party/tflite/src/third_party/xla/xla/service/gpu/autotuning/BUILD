@@ -5,7 +5,7 @@ load(
     "@local_config_rocm//rocm:build_defs.bzl",
     "if_rocm_is_configured",
 )
-load("//xla:xla.bzl", "xla_cc_test")
+load("//xla:xla.default.bzl", "xla_cc_test")
 load("//xla/tests:build_defs.bzl", "xla_test")
 load("//xla/tsl:tsl.default.bzl", "get_compatible_with_portable")
 load(
@@ -51,6 +51,7 @@ cc_library(
         "//xla/service:algorithm_util",
         "//xla/service:executable",
         "//xla/service:shaped_buffer",
+        "//xla/service/gpu:backend_configs_cc",
         "//xla/service/gpu:ir_emission_utils",
         "//xla/service/gpu:matmul_utils",
         "//xla/service/gpu:stream_executor_util",
@@ -196,7 +197,7 @@ xla_test(
     backends = [
         "gpu_a100",
         "gpu_h100",
-        "gpu_b100",
+        "gpu_b200",
     ],
     tags = [
         "cuda-only",
@@ -206,6 +207,7 @@ xla_test(
         ":autotuner_compile_util",
         ":autotuner_util",
         ":gemm_fusion_autotuner",
+        "//xla:autotune_results_proto_cc",
         "//xla:autotuning_proto_cc",
         "//xla:error_spec",
         "//xla:xla_data_proto_cc",
@@ -230,6 +232,7 @@ xla_test(
         "//xla/stream_executor:device_description_proto_cc",
         "//xla/stream_executor:semantic_version",
         "//xla/stream_executor:stream_executor_h",
+        "//xla/stream_executor/cuda:cuda_compute_capability",
         "//xla/tests:hlo_test_base",
         "//xla/tests:test_utils",
         "//xla/tests:xla_internal_test_main",  # fixdeps: keep
@@ -240,10 +243,13 @@ xla_test(
         "//xla/tsl/platform:status_matchers",
         "//xla/tsl/platform:statusor",
         "//xla/tsl/platform:test",
+        "@com_google_absl//absl/container:flat_hash_map",
         "@com_google_absl//absl/log",
         "@com_google_absl//absl/log:check",
+        "@com_google_absl//absl/status",
         "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/time",
         "@com_google_googletest//:gtest",
         "@local_tsl//tsl/platform:path",
         "@local_tsl//tsl/platform:platform_port",
@@ -429,7 +435,7 @@ xla_test(
         "//xla/tsl/protobuf:dnn_proto_cc",
         "@com_google_absl//absl/log",
         "@com_google_absl//absl/strings:string_view",
-        "@com_google_googletest//:gtest_main",
+        "@com_google_googletest//:gtest",
     ],
 )
 
@@ -534,7 +540,7 @@ xla_test(
         "//xla/tsl/platform:test",
         "//xla/tsl/platform:test_main",
         "@com_google_absl//absl/strings:string_view",
-        "@com_google_googletest//:gtest_main",
+        "@com_google_googletest//:gtest",
     ],
 )
 
@@ -644,9 +650,11 @@ xla_cc_test(
         "//xla/tsl/platform:statusor",
         "//xla/tsl/platform:test",
         "@com_google_absl//absl/container:flat_hash_set",
+        "@com_google_absl//absl/hash:hash_testing",
         "@com_google_absl//absl/log:check",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/strings:str_format",
         "@com_google_googletest//:gtest",
         "@local_tsl//tsl/platform:path",
         "@local_tsl//tsl/platform:protobuf",

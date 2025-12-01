@@ -19,7 +19,7 @@
 #include "base/timer/elapsed_timer.h"
 #include "components/unexportable_keys/unexportable_key_service_impl.h"
 #include "components/unexportable_keys/unexportable_key_task_manager.h"
-#include "crypto/scoped_mock_unexportable_key_provider.h"
+#include "crypto/scoped_fake_unexportable_key_provider.h"
 #include "crypto/unexportable_key.h"
 #include "net/base/schemeful_site.h"
 #include "net/base/test_completion_callback.h"
@@ -108,13 +108,16 @@ class DBSCSessionStorePerfTest : public testing::Test {
     SessionParams::Scope scope;
     std::vector<SessionParams::Credential> cookie_credentials(
         {SessionParams::Credential{cookie_name, cookie_attr}});
-    SessionParams params{session_str, refresh_url, std::move(scope),
-                         std::move(cookie_credentials)};
-    std::unique_ptr<Session> session =
-        Session::CreateIfValid(params, GURL(url_str));
+    SessionParams params{session_str,
+                         GURL(url_str),
+                         refresh_url,
+                         std::move(scope),
+                         std::move(cookie_credentials),
+                         GenerateNewKey()};
+    auto session_or_error = Session::CreateIfValid(params);
+    ASSERT_TRUE(session_or_error.has_value());
+    std::unique_ptr<Session> session = std::move(*session_or_error);
     ASSERT_TRUE(session);
-
-    session->set_unexportable_key_id(GenerateNewKey());
 
     store_->SaveSession(SchemefulSite(GURL(url_str)), *session);
   }
@@ -161,7 +164,7 @@ class DBSCSessionStorePerfTest : public testing::Test {
   base::test::TaskEnvironment task_environment_;
   base::ScopedTempDir temp_dir_;
   std::unique_ptr<SessionStoreImpl> store_;
-  crypto::ScopedMockUnexportableKeyProvider scoped_key_provider_;
+  crypto::ScopedFakeUnexportableKeyProvider scoped_key_provider_;
   unexportable_keys::UnexportableKeyTaskManager task_manager_{
       crypto::UnexportableKeyProvider::Config()};
   unexportable_keys::UnexportableKeyServiceImpl key_service_;

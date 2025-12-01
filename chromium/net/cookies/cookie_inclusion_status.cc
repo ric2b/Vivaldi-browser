@@ -261,6 +261,7 @@ std::string CookieInclusionStatus::GetDebugString() const {
       {ExclusionReason::EXCLUDE_THIRD_PARTY_PHASEOUT,
        "EXCLUDE_THIRD_PARTY_PHASEOUT"},
       {ExclusionReason::EXCLUDE_NO_COOKIE_CONTENT, "EXCLUDE_NO_COOKIE_CONTENT"},
+      {ExclusionReason::EXCLUDE_ANONYMOUS_CONTEXT, "EXCLUDE_ANONYMOUS_CONTEXT"},
   };
   static_assert(
       std::size(exclusion_reasons) == ExclusionReasonBitset::kValueCount,
@@ -324,13 +325,11 @@ std::string CookieInclusionStatus::GetDebugString() const {
   }
 
   // Add exemption reason
-  if (exemption_reason() == CookieInclusionStatus::ExemptionReason::kNone) {
-    base::StrAppend(&out, {"NO_EXEMPTION"});
-    return out;
-  }
-
   std::string_view reason;
   switch (exemption_reason()) {
+    case ExemptionReason::kNone:
+      reason = "NO_EXEMPTION";
+      break;
     case ExemptionReason::kUserSetting:
       reason = "ExemptionUserSetting";
       break;
@@ -361,8 +360,6 @@ std::string CookieInclusionStatus::GetDebugString() const {
     case ExemptionReason::kSameSiteNoneCookiesInSandbox:
       reason = "ExemptionSameSiteNoneCookiesInSandbox";
       break;
-    case ExemptionReason::kNone:
-      NOTREACHED();
   }
   base::StrAppend(&out, {reason});
 

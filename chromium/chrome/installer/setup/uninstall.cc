@@ -157,7 +157,7 @@ bool RemoveInstallerFiles(const base::FilePath& installer_directory) {
 class ProcessPathPrefixFilter : public base::ProcessFilter {
  public:
   explicit ProcessPathPrefixFilter(
-      const base::FilePath::StringPieceType& process_path_prefix)
+      base::FilePath::StringViewType process_path_prefix)
       : process_path_prefix_(process_path_prefix) {}
 
   // base::ProcessFilter:
@@ -182,7 +182,7 @@ class ProcessPathPrefixFilter : public base::ProcessFilter {
   }
 
  private:
-  const base::FilePath::StringPieceType process_path_prefix_;
+  const base::FilePath::StringViewType process_path_prefix_;
 };
 
 // Kills all Chrome processes in |target_path|, immediately.
@@ -378,13 +378,15 @@ InstallStatus IsChromeActiveOrUserCancelled(
   if (LaunchChromeAndWait(installer_state.target_path(), options, &exit_code)) {
     VLOG(1) << "chrome.exe launched for uninstall confirmation returned: "
             << exit_code;
-    if ((exit_code == chrome::RESULT_CODE_UNINSTALL_CHROME_ALIVE) ||
-        (exit_code == chrome::RESULT_CODE_UNINSTALL_USER_CANCEL) ||
-        (exit_code == content::RESULT_CODE_HUNG))
+    if ((exit_code == CHROME_RESULT_CODE_UNINSTALL_CHROME_ALIVE) ||
+        (exit_code == CHROME_RESULT_CODE_UNINSTALL_USER_CANCEL) ||
+        (exit_code == content::RESULT_CODE_HUNG)) {
       return installer::UNINSTALL_CANCELLED;
+    }
 
-    if (exit_code == chrome::RESULT_CODE_UNINSTALL_DELETE_PROFILE)
+    if (exit_code == CHROME_RESULT_CODE_UNINSTALL_DELETE_PROFILE) {
       return installer::UNINSTALL_DELETE_PROFILE;
+    }
   } else {
     PLOG(ERROR) << "Failed to launch chrome.exe for uninstall confirmation.";
   }

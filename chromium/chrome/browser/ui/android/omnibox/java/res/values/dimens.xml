@@ -105,15 +105,13 @@ found in the LICENSE file.
     <dimen name="omnibox_suggestion_action_button_width">48dp</dimen>
     <dimen name="omnibox_suggestion_end_padding">@dimen/omnibox_suggestion_dropdown_side_spacing</dimen>
 
-    <dimen name="omnibox_suggestion_bg_elevation">@dimen/default_elevation_0</dimen>
-    <dimen name="omnibox_suggestion_bg_hover_elevation">@dimen/default_elevation_2</dimen>
     <dimen name="omnibox_suggestion_bg_round_corner_radius">16dp</dimen>
     <dimen name="omnibox_suggestion_side_spacing_smallest">8dp</dimen>
     <dimen name="omnibox_suggestion_dropdown_side_spacing">0dp</dimen>
     <dimen name="omnibox_suggestion_dropdown_round_corner_radius">0dp</dimen>
     <dimen name="omnibox_min_space_above_window_bottom">0dp</dimen>
 
-    <dimen name="omnibox_suggestion_dropdown_bg_elevation">@dimen/default_elevation_1</dimen>
+    <item name="omnibox_suggestion_bg_hover_overlay_fraction" type="fraction">8%</item>
 
     <!-- Adding search engine logo to the omnibox. -->
     <!-- Max size which will fit completely in the composed/rounded bg. -->
@@ -121,10 +119,6 @@ found in the LICENSE file.
     <dimen name="omnibox_search_engine_logo_composed_size">24dp</dimen>
 
     <!-- Button highlight dimensions. -->
-    <dimen name="toolbar_button_highlight_size">40dp</dimen>
-    <dimen name="omnibox_button_highlight_width">40dp</dimen>
-    <dimen name="omnibox_button_highlight_height">32dp</dimen>
-    <dimen name="status_view_highlight_size">32dp</dimen>
     <dimen name="status_view_verbose_highlight_width">94dp</dimen>
     <dimen name="status_view_verbose_highlight_height">40dp</dimen>
     <dimen name="location_bar_status_icon_area_size">32dp</dimen>

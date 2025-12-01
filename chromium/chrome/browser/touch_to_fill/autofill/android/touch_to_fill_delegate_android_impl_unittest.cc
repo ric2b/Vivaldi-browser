@@ -8,15 +8,17 @@
 #include "base/test/scoped_feature_list.h"
 #include "base/test/task_environment.h"
 #include "components/autofill/core/browser/data_manager/payments/payments_data_manager.h"
-#include "components/autofill/core/browser/data_model/credit_card.h"
+#include "components/autofill/core/browser/data_model/payments/credit_card.h"
 #include "components/autofill/core/browser/form_structure.h"
 #include "components/autofill/core/browser/foundations/test_autofill_client.h"
 #include "components/autofill/core/browser/foundations/test_autofill_driver.h"
 #include "components/autofill/core/browser/foundations/test_browser_autofill_manager.h"
 #include "components/autofill/core/browser/payments/payments_autofill_client.h"
+#include "components/autofill/core/browser/suggestions/payments/payments_suggestion_generator.h"
 #include "components/autofill/core/browser/suggestions/suggestion.h"
 #include "components/autofill/core/browser/suggestions/suggestion_type.h"
 #include "components/autofill/core/browser/test_utils/autofill_test_utils.h"
+#include "components/autofill/core/browser/ui/autofill_external_delegate.h"
 #include "components/autofill/core/common/autofill_clock.h"
 #include "components/autofill/core/common/autofill_constants.h"
 #include "components/autofill/core/common/autofill_test_utils.h"
@@ -31,6 +33,7 @@ namespace {
 
 using test::CreateTestCreditCardFormData;
 using ::testing::_;
+using ::testing::AllOf;
 using ::testing::ElementsAre;
 using ::testing::ElementsAreArray;
 using ::testing::Field;
@@ -48,8 +51,8 @@ Matcher<Suggestion> EqualsSuggestionFields(const std::u16string& main_text,
   return AllOf(
       Field(&Suggestion::main_text,
             Suggestion::Text(main_text, Suggestion::Text::IsPrimary(false))),
-      Field(&Suggestion::minor_text,
-            Suggestion::Text(minor_text, Suggestion::Text::IsPrimary(false))),
+      Field(&Suggestion::minor_texts,
+            std::vector<Suggestion::Text>{Suggestion::Text(minor_text)}),
       Property(&Suggestion::HasDeactivatedStyle, has_deactivated_style));
 }
 
@@ -144,9 +147,11 @@ class MockBrowserAutofillManager : public TestBrowserAutofillManager {
               (override));
   MOCK_METHOD(void,
               DidShowSuggestions,
-              (DenseSet<SuggestionType> shown_suggestion_types,
+              (base::span<const Suggestion> suggestions,
                const FormData& form,
-               const FieldGlobalId& field_id),
+               const FieldGlobalId& field_id,
+               AutofillExternalDelegate::UpdateSuggestionsCallback
+                   update_suggestions_callback),
               (override));
   MOCK_METHOD(bool, CanShowAutofillUi, (), (const, override));
   MOCK_METHOD(AutofillField*,
@@ -712,10 +717,8 @@ TEST_F(TouchToFillDelegateAndroidImplCreditCardUnitTest,
   autofill_client_.GetPersonalDataManager()
       .payments_data_manager()
       .AddCreditCard(expired_card);
-  std::vector<const CreditCard*> credit_cards =
-      autofill_client_.GetPersonalDataManager()
-          .payments_data_manager()
-          .GetCreditCardsToSuggest();
+  std::vector<const CreditCard*> credit_cards = GetCreditCardsToSuggest(
+      autofill_client_.GetPersonalDataManager().payments_data_manager());
 
   ASSERT_FALSE(touch_to_fill_delegate_->IsShowingTouchToFill());
   EXPECT_CALL(
@@ -868,10 +871,8 @@ TEST_F(TouchToFillDelegateAndroidImplCreditCardUnitTest,
   autofill_client_.GetPersonalDataManager()
       .payments_data_manager()
       .AddCreditCard(credit_card2);
-  std::vector<const CreditCard*> credit_cards =
-      autofill_client_.GetPersonalDataManager()
-          .payments_data_manager()
-          .GetCreditCardsToSuggest();
+  std::vector<const CreditCard*> credit_cards = GetCreditCardsToSuggest(
+      autofill_client_.GetPersonalDataManager().payments_data_manager());
 
   EXPECT_CALL(
       payments_autofill_client(),

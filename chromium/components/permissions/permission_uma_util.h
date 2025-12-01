@@ -48,6 +48,17 @@ enum class ActivityIndicatorState {
   kMaxValue = kBlockedOnSystemLevel,
 };
 
+// Used for UMA histograms to record model execution stats for the different
+// models we use for a permission prediction.
+// When updating, you also need to update the PredictionModels variant in
+//      tools/metrics/histograms/metadata/permissions/histograms.xml.
+enum class PredictionModelType {
+  kUnknown = 0,
+  kServerSide = 1,      // url based cpss v2
+  kTfLiteOnDevice = 2,  // on device cpss v1
+  kGenAiOnDevice = 3,   // on device genAI v1
+};
+
 // Used for UMA to record the types of permission prompts shown.
 // When updating, you also need to update:
 //   1) The PermissionRequestType enum in
@@ -104,6 +115,7 @@ enum class RequestTypeForUma {
   MULTIPLE_KEYBOARD_AND_POINTER_LOCK = 39,
   PERMISSION_HAND_TRACKING = 40,
   PERMISSION_WEB_APP_INSTALLATION = 41,
+  PERMISSION_LOCAL_NETWORK_ACCESS = 42,
   // NUM must be the last value in the enum.
   NUM,
 };
@@ -252,8 +264,7 @@ enum class PermissionPromptDisposition {
   // automatically shows a bubble.
   LOCATION_BAR_LEFT_CHIP_AUTO_BUBBLE = 12,
 
-  // Only used on desktop, a bubble shown near the embedded permission element,
-  // after the user clicks on the element.
+  // A prompt shown as a result of the user clicking the permission element.
   ELEMENT_ANCHORED_BUBBLE = 13,
 
   // Only used on macOS, a native OS provided permission prompt.
@@ -292,46 +303,52 @@ enum class AdaptiveTriggers {
   THREE_CONSECUTIVE_DENIES = 0x01,
 };
 
+// LINT.IfChange(DismissedReason)
 enum class DismissedReason {
   // The prompt was dismissed through the [x] button.
-  DISMISSED_X_BUTTON = 0,
+  kDismissedXButton = 0,
 
   // The prompt was dismissed through the user clicking on the scrim (area
   // around the prompt).
-  DISMISSED_SCRIM = 1,
+  kDismissedScrim = 1,
 
-  kMaxValue = DISMISSED_SCRIM,
+  kMaxValue = kDismissedScrim,
 };
+// LINT.ThenChange(//tools/metrics/histograms/metadata/permissions/enums.xml:DismissedReason)
 
+// LINT.IfChange(OsScreen)
 enum class OsScreen {
   // Informs the user that Chrome needs permission from the OS level.
-  OS_PROMPT = 0,
+  kOsPrompt = 0,
 
   // Informs the user that they need to go to OS system settings.
-  OS_SYSTEM_SETTINGS = 1,
+  kOsSystemSettings = 1,
 
-  kMaxValue = OS_SYSTEM_SETTINGS,
+  kMaxValue = kOsSystemSettings,
 };
+// LINT.ThenChange(//tools/metrics/histograms/metadata/permissions/histograms.xml:OsScreen)
 
+// LINT.IfChange(OsScreenAction)
 enum class OsScreenAction {
   // User clicks on "Go to System settings"
-  SYSTEM_SETTINGS = 0,
+  kSystemSettings = 0,
 
   // The prompt was dismissed through the [x] button.
-  DISMISSED_X_BUTTON = 1,
+  kDismissedXButton = 1,
 
   // The prompt was dismissed through the user clicking on the scrim (area
   // around the prompt).
-  DISMISSED_SCRIM = 2,
+  kDismissedScrim = 2,
 
   // Os prompt denied.
-  OS_PROMPT_DENIED = 3,
+  kOsPromptDenied = 3,
 
   // Os prompt allowed.
-  OS_PROMPT_ALLOWED = 4,
+  kOsPromptAllowed = 4,
 
-  kMaxValue = OS_PROMPT_ALLOWED,
+  kMaxValue = kOsPromptAllowed,
 };
+// LINT.ThenChange(//tools/metrics/histograms/metadata/permissions/histograms.xml:OsScreenAction)
 
 // These values are logged to UMA. Entries should not be renumbered and
 // numeric values should never be reused. Please keep in sync with
@@ -361,6 +378,7 @@ enum class OneTimePermissionEvent {
   kMaxValue = EXPIRED_ON_SUSPEND,
 };
 
+// LINT.IfChange(ElementAnchoredBubbleVariant)
 // Prompt views shown after the user clicks on the embedded permission prompt.
 // The values represent the priority of each variant, higher number means
 // higher priority.
@@ -368,29 +386,30 @@ enum class OneTimePermissionEvent {
 // numeric values should never be reused.
 enum class ElementAnchoredBubbleVariant {
   // Default when conditions are not met to show any of the permission views.
-  UNINITIALIZED = 0,
+  kUninitialized = 0,
   // Informs the user that the permission was allowed by their administrator.
-  ADMINISTRATOR_GRANTED = 1,
+  kAdministratorGranted = 1,
   // Permission prompt that informs the user they already granted permission.
   // Offers additional options to modify the permission decision.
-  PREVIOUSLY_GRANTED = 2,
+  kPreviouslyGranted = 2,
   // Informs the user that they need to go to OS system settings to grant
   // access to Chrome.
-  OS_SYSTEM_SETTINGS = 3,
+  kOsSystemSettings = 3,
   // Informs the user that Chrome needs permission from the OS level, in order
   // for the site to be able to access a permission.
-  OS_PROMPT = 4,
+  kOsPrompt = 4,
   // Permission prompt that asks the user for site-level permission.
-  ASK = 5,
+  kAsk = 5,
   // Permission prompt that additionally informs the user that they have
   // previously denied permission to the site. May offer different options
   // (buttons) to the site-level prompt |kAsk|.
-  PREVIOUSLY_DENIED = 6,
+  kPreviouslyDenied = 6,
   // Informs the user that the permission was denied by their administrator.
-  ADMINISTRATOR_DENIED = 7,
+  kAdministratorDenied = 7,
 
-  kMaxValue = ADMINISTRATOR_DENIED,
+  kMaxValue = kAdministratorDenied,
 };
+// LINT.ThenChange(//tools/metrics/histograms/enums.xml:ElementAnchoredBubbleVariant)
 
 enum class PermissionAutoRevocationHistory {
   // Permission has not been automatically revoked.
@@ -431,17 +450,23 @@ enum class AutoDSEPermissionRevertTransition {
   kMaxValue = INVALID_END_STATE,
 };
 
+// LINT.IfChange(PermissionPredictionSource)
+
 // This enum backs up the 'PermissionPredictionSource` histogram enum. It
 // indicates whether the permission prediction was done by the local on device
-// model or by the server side model.
+// model or by the server side model (or both).
+// These values are persisted to logs. Entries should not be renumbered and
+// numeric values should never be reused.
 enum class PermissionPredictionSource {
   ON_DEVICE_TFLITE = 0,
   SERVER_SIDE = 1,
-  SERVER_SIDE_AND_ON_DEVICE_GENAI = 2,
+  ONDEVICE_AI_AND_SERVER_SIDE = 2,
 
   // Always keep at the end.
-  kMaxValue = SERVER_SIDE_AND_ON_DEVICE_GENAI,
+  kMaxValue = ONDEVICE_AI_AND_SERVER_SIDE,
 };
+
+// LINT.ThenChange(//tools/metrics/histograms/metadata/permissions/enums.xml:PermissionPredictionSource)
 
 // This enum backs up the 'PageInfoDialogAccessType' histogram enum.
 // It is used for collecting page info access type metrics in the context of
@@ -501,7 +526,7 @@ enum class PermissionChangeAction {
   kMaxValue = REMEMBER_CHECKBOX_TOGGLED,
 };
 
-// This enum backs up the 'ElementAnchoredBubbleAction' histograms enum.
+// LINT.IfChange(ElementAnchoredBubbleAction)
 enum class ElementAnchoredBubbleAction {
   // Site level permission was granted.
   kGranted = 0,
@@ -528,6 +553,7 @@ enum class ElementAnchoredBubbleAction {
   // Always keep at the end.
   kMaxValue = kSystemSettings,
 };
+// LINT.ThenChange(//tools/metrics/histograms/enums.xml:ElementAnchoredBubbleAction)
 
 // The reason the permission action `PermissionAction::IGNORED` was triggered.
 enum class PermissionIgnoredReason {
@@ -674,11 +700,12 @@ class PermissionUmaUtil {
       bool show_infobar,
       bool page_reload);
 
-  // Recorded when a permission prompt creation is in progress.
+  // This gets recorded during the creation process of a prompt, but only for
+  // prompts that aren't labeled as abusive or disruptive.
   static void RecordPermissionPromptAttempt(
       const std::vector<raw_ptr<PermissionRequest, VectorExperimental>>&
           requests,
-      bool IsLocationBarEditingOrEmpty);
+      bool can_display_prompt);
 
   // UMA specifically for when permission prompts are shown. This should be
   // roughly equivalent to the metrics above, however it is
@@ -799,6 +826,8 @@ class PermissionUmaUtil {
   static std::string GetPermissionActionString(
       PermissionAction permission_action);
 
+  static std::string GetPredictionModelString(PredictionModelType model_type);
+
   static std::string GetPromptDispositionString(
       PermissionPromptDisposition ui_disposition);
 
@@ -868,6 +897,9 @@ class PermissionUmaUtil {
   static void RecordPermissionIndicatorElapsedTimeSinceLastUsage(
       RequestTypeForUma request_type,
       base::TimeDelta time_delta);
+
+  static void RecordPermissionRequestRelevance(
+      PermissionRequestRelevance permission_request_relevance);
 
   // A scoped class that will check the current resolved content setting on
   // construction and report a revocation metric accordingly if the revocation

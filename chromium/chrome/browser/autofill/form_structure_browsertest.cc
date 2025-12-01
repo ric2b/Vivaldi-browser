@@ -222,7 +222,11 @@ FormStructureBrowserTest::FormStructureBrowserTest()
       {// TODO(crbug.com/320965828): This feature is not supported on the iOS
        // renderer side and disabled to avoid too many differences between
        // the expectations.
-       features::kAutofillBetterLocalHeuristicPlaceholderSupport});
+       features::kAutofillBetterLocalHeuristicPlaceholderSupport,
+       // TODO(crbug.com/40285735): Remove when launched.
+       features::kAutofillEnableEmailHeuristicOutsideForms,
+       // TODO(crbug.com/395831853): Remove once launched.
+       features::kAutofillEnableLoyaltyCardsFilling});
 }
 
 FormStructureBrowserTest::~FormStructureBrowserTest() = default;
@@ -255,7 +259,7 @@ void FormStructureBrowserTest::GenerateResults(const std::string& input,
   html_content_.clear();
   html_content_.reserve(input.length());
   for (const char c : input) {
-    // Strip `\n`, `\t`, `\r` from |html| to match old `data:` URL behavior.
+    // Strip `\n`, `\t`, `\r` from `html` to match old `data:` URL behavior.
     // TODO(crbug.com/40317270): the tests expect weird concatenation behavior
     // based
     //   legacy data URL behavior. Fix this so the the tests better represent

@@ -22,21 +22,26 @@ LiveTab* LiveTabContext::AddRestoredTab(
     const tab_restore::Tab& tab,
     int tab_index,
     bool select,
+    bool is_restoring_group_or_window,
     tab_restore::Type original_session_type) {
   const std::map<std::string, bool> dummy_page_action_overrides;
   const std::string dummy_ext_data;
-  return AddRestoredTab(tab, tab_index, select, original_session_type,
-                        dummy_page_action_overrides, dummy_ext_data);
+  return AddRestoredTab(
+      tab, tab_index, select, is_restoring_group_or_window,
+      original_session_type, dummy_page_action_overrides, dummy_ext_data);
 }
 
 LiveTab* LiveTabContext::AddRestoredTab(
     const tab_restore::Tab& tab,
     int tab_index,
     bool select,
+    bool is_restoring_group_or_window,
     tab_restore::Type original_session_type,
     const std::map<std::string, bool> viv_page_action_overrides,
     const std::string& viv_ext_data) {
-  return AddRestoredTab(tab, tab_index, select, original_session_type);
+  return AddRestoredTab(tab, tab_index, select,
+                        is_restoring_group_or_window,
+                        original_session_type);
 }
 
 LiveTab* LiveTabContext::ReplaceRestoredTab(const tab_restore::Tab& tab) {

@@ -13,18 +13,22 @@ import androidx.annotation.VisibleForTesting;
 
 import org.chromium.base.supplier.Supplier;
 import org.chromium.build.annotations.MockedInTests;
+import org.chromium.build.annotations.NullMarked;
+import org.chromium.build.annotations.Nullable;
 import org.chromium.components.messages.MessageStateHandler.Position;
 import org.chromium.ui.listmenu.ListMenuHost.PopupMenuShownListener;
 import org.chromium.ui.modelutil.PropertyModel;
 import org.chromium.ui.modelutil.PropertyModelChangeProcessor;
+import org.chromium.ui.util.RunnableTimer;
 
 /** Coordinator responsible for creating a message banner. */
 @MockedInTests
+@NullMarked
 class MessageBannerCoordinator {
     private final MessageBannerMediator mMediator;
     private final MessageBannerView mView;
     private final PropertyModel mModel;
-    private final MessageAutoDismissTimer mTimer;
+    private final RunnableTimer mTimer;
     private final Supplier<Long> mAutodismissDurationMs;
     private final Runnable mOnTimeUp;
 
@@ -68,7 +72,7 @@ class MessageBannerCoordinator {
                         messageDismissed,
                         swipeAnimationHandler);
         mAutodismissDurationMs = autodismissDurationMs;
-        mTimer = new MessageAutoDismissTimer();
+        mTimer = new RunnableTimer();
         mOnTimeUp = onTimeUp;
         view.setSwipeHandler(mMediator);
         view.setPopupMenuShownListener(
@@ -78,14 +82,14 @@ class MessageBannerCoordinator {
     /**
      * Creates a {@link PopupMenuShownListener} to handle secondary button popup menu events on the
      * message banner.
-     * @param timer The {@link MessageAutoDismissTimer} controlling the message banner dismiss
-     *         duration.
+     *
+     * @param timer The {@link RunnableTimer} controlling the message banner dismiss duration.
      * @param duration The auto dismiss duration for the message banner.
      * @param onTimeUp A {@link Runnable} that will run if and when the auto dismiss timer is up.
      */
     @VisibleForTesting
     PopupMenuShownListener createPopupMenuShownListener(
-            MessageAutoDismissTimer timer, long duration, Runnable onTimeUp) {
+            RunnableTimer timer, long duration, Runnable onTimeUp) {
         return new PopupMenuShownListener() {
             @Override
             public void onPopupMenuShown() {
@@ -161,13 +165,14 @@ class MessageBannerCoordinator {
 
     /**
      * Hides the message banner.
+     *
      * @param fromIndex The initial position.
      * @param toIndex The target position the message is moving to.
      * @param animate Whether to hide with an animation.
      * @param messageHidden The {@link Runnable} that will run once the message banner is hidden.
      * @return The animator which hides the message view.
      */
-    Animator hide(
+    @Nullable Animator hide(
             @Position int fromIndex,
             @Position int toIndex,
             boolean animate,
@@ -202,7 +207,7 @@ class MessageBannerCoordinator {
         mTimer.startTimer(mAutodismissDurationMs.get(), mOnTimeUp);
     }
 
-    void setOnTouchRunnable(Runnable runnable) {
+    void setOnTouchRunnable(@Nullable Runnable runnable) {
         mMediator.setOnTouchRunnable(runnable);
     }
 
@@ -219,7 +224,7 @@ class MessageBannerCoordinator {
         mView.announceForAccessibility(msg);
     }
 
-    private void setOnTitleChanged(Runnable runnable) {
+    private void setOnTitleChanged(@Nullable Runnable runnable) {
         mView.setOnTitleChanged(runnable);
     }
 }

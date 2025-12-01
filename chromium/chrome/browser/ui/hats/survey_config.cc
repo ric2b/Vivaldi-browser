@@ -14,6 +14,7 @@
 #include "chrome/common/chrome_features.h"
 #include "components/autofill/core/common/autofill_features.h"
 #include "components/lens/lens_features.h"
+#include "components/omnibox/common/omnibox_feature_configs.h"
 #include "components/page_info/core/features.h"
 #include "components/permissions/features.h"
 #include "components/permissions/permission_hats_trigger_helper.h"
@@ -68,6 +69,7 @@ constexpr char kHatsSurveyTriggerNtpPhotosModuleOptOut[] =
     "ntp-photos-module-opt-out";
 constexpr char kHatsSurveyTriggerPerformanceControlsPerformance[] =
     "performance-general";
+constexpr char kHatsSurveyTriggerPerformanceControlsPPM[] = "performance-ppm";
 constexpr char kHatsSurveyTriggerPerformanceControlsBatteryPerformance[] =
     "performance-battery";
 constexpr char kHatsSurveyTriggerPerformanceControlsMemorySaverOptOut[] =
@@ -168,6 +170,10 @@ constexpr char kHatsSurveyTriggerMerchantTrustEvaluationExperimentSurvey[] =
     "merchant-trust-evaluation-experiment-survey";
 constexpr char kHatsSurveyTriggerMerchantTrustLearnSurvey[] =
     "merchant-trust-learn-survey";
+constexpr char kHatsSurveyTriggerOnFocusZpsSuggestionsHappiness[] =
+    "omnibox-on-focus-happiness";
+constexpr char kHatsSurveyTriggerOnFocusZpsSuggestionsUtility[] =
+    "omnibox-on-focus-utility";
 
 namespace {
 
@@ -476,14 +482,29 @@ std::vector<hats::SurveyConfig> GetAllSurveyConfigs() {
       &performance_manager::features::kPerformanceControlsPerformanceSurvey,
       kHatsSurveyTriggerPerformanceControlsPerformance,
       /*presupplied_trigger_id=*/std::nullopt,
-      std::vector<std::string>{"high_efficiency_mode", "battery_saver_mode"},
+      std::vector<std::string>{"Memory Saver Mode Enabled",
+                               "Battery Saver Mode Enabled"},
       std::vector<std::string>{});
+  survey_configs.emplace_back(
+      &performance_manager::features::kPerformanceControlsPPMSurvey,
+      kHatsSurveyTriggerPerformanceControlsPPM,
+      /*presupplied_trigger_id=*/std::nullopt,
+      std::vector<std::string>{"Memory Saver Mode Enabled",
+                               "Battery Saver Mode Enabled",
+                               "Selected for Uniform Sample"},
+      std::vector<std::string>{
+          "Channel",
+          // Note memory is reported as a range, eg. "Windows, 4 to 8 GB".
+          "Performance Characteristics (OS and Total Memory)"},
+      /*log_responses_to_uma=*/true,
+      /*log_responses_to_ukm=*/true);
   survey_configs.emplace_back(
       &performance_manager::features::
           kPerformanceControlsBatteryPerformanceSurvey,
       kHatsSurveyTriggerPerformanceControlsBatteryPerformance,
       /*presupplied_trigger_id=*/std::nullopt,
-      std::vector<std::string>{"high_efficiency_mode", "battery_saver_mode"},
+      std::vector<std::string>{"Memory Saver Mode Enabled",
+                               "Battery Saver Mode Enabled"},
       std::vector<std::string>{});
   survey_configs.emplace_back(
       &performance_manager::features::
@@ -776,6 +797,24 @@ std::vector<hats::SurveyConfig> GetAllSurveyConfigs() {
                          kPlusAddressFilledPlusAddressViaManualFallbackSurvey,
                      plus_addresses::hats::kCooldownOverrideDays, 0)
                      .Get()));
+
+  survey_configs.emplace_back(
+      &omnibox_feature_configs::HappinessTrackingSurveyForOmniboxOnFocusZps::
+          kHappinessTrackingSurveyForOmniboxOnFocusZps,
+      kHatsSurveyTriggerOnFocusZpsSuggestionsHappiness,
+      /*presupplied_trigger_id=*/"DzFWc1ACp0ugnJ3q1cK0RPxBRdLT",
+      /*product_specific_bits_data_fields=*/std::vector<std::string>{},
+      /*product_specific_string_data_fields=*/
+      std::vector<std::string>{"page classification", "channel"});
+
+  survey_configs.emplace_back(
+      &omnibox_feature_configs::HappinessTrackingSurveyForOmniboxOnFocusZps::
+          kHappinessTrackingSurveyForOmniboxOnFocusZps,
+      kHatsSurveyTriggerOnFocusZpsSuggestionsUtility,
+      /*presupplied_trigger_id=*/"7USxn1X280ugnJ3q1cK0P67JEQ7Y",
+      /*product_specific_bits_data_fields=*/std::vector<std::string>{},
+      /*product_specific_string_data_fields=*/
+      std::vector<std::string>{"page classification", "channel"});
 
   return survey_configs;
 }

@@ -11,6 +11,7 @@
 
 #include "base/containers/span.h"
 #include "base/files/file_path.h"
+#include "base/time/time.h"
 #include "build/chromeos_buildflags.h"
 #include "extensions/common/extensions_export.h"
 
@@ -100,8 +101,8 @@ inline constexpr base::FilePath::CharType kExtensionFileExtension[] =
 inline constexpr base::FilePath::CharType kExtensionKeyFileExtension[] =
     FILE_PATH_LITERAL(".pem");
 
-// Default frequency for auto updates, if turned on (5 hours).
-inline constexpr int kDefaultUpdateFrequencySeconds = 60 * 60 * 5;
+// Default frequency for auto updates, if turned on.
+inline constexpr base::TimeDelta kDefaultUpdateFrequency = base::Hours(5);
 
 // The name of the directory inside the profile where per-app local settings
 // are stored.
@@ -460,6 +461,10 @@ EXTENSIONS_EXPORT bool IsPreinstalledAppId(std::string_view app_id);
 // Error message when enterprise policy blocks scripting of webpage.
 inline constexpr char kPolicyBlockedScripting[] =
     "This page cannot be scripted due to an ExtensionsSettings policy.";
+
+// Error message when extension tries to allow 3PCs in incognito.
+inline constexpr char kCookiesAllowedIncognitoErrorMessage[] =
+    "Third-party cookies are blocked in incognito and cannot be re-allowed.";
 
 // Error message when access to incognito preferences is denied.
 inline constexpr char kIncognitoErrorMessage[] =

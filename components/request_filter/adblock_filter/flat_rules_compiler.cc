@@ -218,6 +218,9 @@ void AddRuleToBuffer(
   FlatStringListOffset modifier_value_offset =
       SerializeStringList(builder, rule.modifier_values, string_offset_map);
 
+  FlatStringOffset original_rule_text =
+      builder->CreateSharedString(rule.original_rule_text);
+
   rules_offsets->push_back(flat::CreateRequestFilterRule(
       *builder, DecisionFromRequestFilterRule(rule),
       OptionsFromRequestFilterRule(rule),
@@ -227,7 +230,8 @@ void AddRuleToBuffer(
       AnchorTypeFromRequestFilterRule(rule), host_offset,
       ad_domains_and_query_triggers, domains_included_offset,
       domains_excluded_offset, ModifierFromRequestFilterModifier(rule),
-      modifier_value_offset, pattern_offset, ngram_search_string_offset));
+      modifier_value_offset, pattern_offset, ngram_search_string_offset,
+      original_rule_text));
 }
 
 FlatOffset<flat::ContentInjectionRuleCore> AddContentInjectionRuleCoreToBuffer(

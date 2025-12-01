@@ -74,6 +74,9 @@ export class CertificateListV2Element extends CertificateListV2ElementBase {
       // non-collapsible.
       hideHeader: Boolean,
 
+      // True if the cert metadata is editable
+      certMetadataEditable: Boolean,
+
       inSubpage: Boolean,
       expanded_: Boolean,
       certificates_: Array,
@@ -90,6 +93,7 @@ export class CertificateListV2Element extends CertificateListV2ElementBase {
 
   certSource: CertificateSource;
   headerText: string;
+  certMetadataEditable: boolean = false;
   showImport: boolean = false;
   showImportAndBind: boolean = false;
   hideExport: boolean = false;
@@ -98,6 +102,7 @@ export class CertificateListV2Element extends CertificateListV2ElementBase {
   noCollapse: boolean = false;
   hideIfEmpty: boolean = false;
   private expanded_: boolean = true;
+  private hideEverything_: boolean;
   private certificates_: SummaryCertInfo[] = [];
   private hasCerts_: boolean;
 

@@ -32,6 +32,10 @@
 #include "src/tracing/code-trace-context.h"
 #include "src/tracing/perfetto-utils.h"
 
+#if V8_ENABLE_WEBASSEMBLY
+#include "src/wasm/wasm-code-manager.h"
+#endif  // V8_ENABLE_WEBASSEMBLY
+
 namespace v8 {
 namespace internal {
 namespace {
@@ -250,7 +254,7 @@ PerfettoLogger::PerfettoLogger(Isolate* isolate) : isolate_(*isolate) {}
 PerfettoLogger::~PerfettoLogger() {}
 
 void PerfettoLogger::CodeCreateEvent(CodeTag tag,
-                                     Handle<AbstractCode> abstract_code,
+                                     DirectHandle<AbstractCode> abstract_code,
                                      const char* name) {
   DisallowGarbageCollection no_gc;
   if (!IsCode(*abstract_code)) return;
@@ -259,7 +263,7 @@ void PerfettoLogger::CodeCreateEvent(CodeTag tag,
   V8InternalCode::Type type = V8InternalCode::TYPE_UNKNOWN;
   switch (code->kind()) {
     case CodeKind::REGEXP:
-      RegExpCodeCreateEvent(abstract_code, Handle<String>(), {});
+      RegExpCodeCreateEvent(abstract_code, DirectHandle<String>(), {});
       break;
     case CodeKind::BYTECODE_HANDLER:
       type = V8InternalCode::TYPE_BYTECODE_HANDLER;
@@ -315,24 +319,24 @@ void PerfettoLogger::CodeCreateEvent(CodeTag tag,
 }
 
 void PerfettoLogger::CodeCreateEvent(CodeTag tag,
-                                     Handle<AbstractCode> abstract_code,
-                                     Handle<Name> name) {
+                                     DirectHandle<AbstractCode> abstract_code,
+                                     DirectHandle<Name> name) {
   DisallowGarbageCollection no_gc;
   if (!IsString(*name)) return;
   CodeCreateEvent(tag, abstract_code, Cast<String>(*name)->ToCString().get());
 }
 
 void PerfettoLogger::CodeCreateEvent(CodeTag tag,
-                                     Handle<AbstractCode> abstract_code,
-                                     Handle<SharedFunctionInfo> info,
-                                     Handle<Name> script_name) {
+                                     DirectHandle<AbstractCode> abstract_code,
+                                     DirectHandle<SharedFunctionInfo> info,
+                                     DirectHandle<Name> script_name) {
   CodeCreateEvent(tag, abstract_code, info, script_name, 0, 0);
 }
 
 void PerfettoLogger::CodeCreateEvent(CodeTag tag,
-                                     Handle<AbstractCode> abstract_code,
-                                     Handle<SharedFunctionInfo> info,
-                                     Handle<Name> script_name, int line,
+                                     DirectHandle<AbstractCode> abstract_code,
+                                     DirectHandle<SharedFunctionInfo> info,
+                                     DirectHandle<Name> script_name, int line,
                                      int column) {
   DisallowGarbageCollection no_gc;
   DCHECK(IsScript(info->script()));
@@ -360,11 +364,10 @@ void PerfettoLogger::CodeCreateEvent(CodeTag tag, const wasm::WasmCode* code,
   CodeDataSource::Trace(
       [&](v8::internal::CodeDataSource::TraceContext trace_context) {
         CodeTraceContext ctx = NewCodeTraceContext(trace_context);
-
         auto* code_proto = ctx.set_v8_wasm_code();
         code_proto->set_v8_isolate_iid(ctx.InternIsolate(isolate_));
-        code_proto->set_v8_wasm_script_iid(
-            ctx.InternWasmScript(isolate_, script_id, source_url));
+        code_proto->set_v8_wasm_script_iid(ctx.InternWasmScript(
+            isolate_, script_id, source_url, code->native_module()));
         code_proto->set_function_name(name.begin(), name.size());
         // TODO(carlscab): Set tier
         code_proto->set_instruction_start(code->instruction_start());
@@ -378,14 +381,15 @@ void PerfettoLogger::CodeCreateEvent(CodeTag tag, const wasm::WasmCode* code,
 }
 #endif  // V8_ENABLE_WEBASSEMBLY
 
-void PerfettoLogger::CallbackEvent(Handle<Name> name, Address entry_point) {}
-void PerfettoLogger::GetterCallbackEvent(Handle<Name> name,
+void PerfettoLogger::CallbackEvent(DirectHandle<Name> name,
+                                   Address entry_point) {}
+void PerfettoLogger::GetterCallbackEvent(DirectHandle<Name> name,
                                          Address entry_point) {}
-void PerfettoLogger::SetterCallbackEvent(Handle<Name> name,
+void PerfettoLogger::SetterCallbackEvent(DirectHandle<Name> name,
                                          Address entry_point) {}
-void PerfettoLogger::RegExpCodeCreateEvent(Handle<AbstractCode> abstract_code,
-                                           Handle<String> pattern,
-                                           RegExpFlags flags) {
+void PerfettoLogger::RegExpCodeCreateEvent(
+    DirectHandle<AbstractCode> abstract_code, DirectHandle<String> pattern,
+    RegExpFlags flags) {
   DisallowGarbageCollection no_gc;
   DCHECK(IsCode(*abstract_code));
   Tagged<Code> code = abstract_code->GetCode();
@@ -453,12 +457,14 @@ void PerfettoLogger::BytecodeMoveEvent(Tagged<BytecodeArray> from,
 void PerfettoLogger::SharedFunctionInfoMoveEvent(Address from, Address to) {}
 void PerfettoLogger::NativeContextMoveEvent(Address from, Address to) {}
 void PerfettoLogger::CodeMovingGCEvent() {}
-void PerfettoLogger::CodeDisableOptEvent(Handle<AbstractCode> code,
-                                         Handle<SharedFunctionInfo> shared) {}
-void PerfettoLogger::CodeDeoptEvent(Handle<Code> code, DeoptimizeKind kind,
-                                    Address pc, int fp_to_sp_delta) {}
+void PerfettoLogger::CodeDisableOptEvent(
+    DirectHandle<AbstractCode> code, DirectHandle<SharedFunctionInfo> shared) {}
+void PerfettoLogger::CodeDeoptEvent(DirectHandle<Code> code,
+                                    DeoptimizeKind kind, Address pc,
+                                    int fp_to_sp_delta) {}
 void PerfettoLogger::CodeDependencyChangeEvent(
-    Handle<Code> code, Handle<SharedFunctionInfo> shared, const char* reason) {}
+    DirectHandle<Code> code, DirectHandle<SharedFunctionInfo> shared,
+    const char* reason) {}
 void PerfettoLogger::WeakCodeClearEvent() {}
 
 bool PerfettoLogger::is_listening_to_code_events() { return true; }

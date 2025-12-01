@@ -32,6 +32,7 @@ import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
 import org.chromium.chrome.test.batch.BlankCTATabInitialStateRule;
 import org.chromium.chrome.test.util.browser.signin.SigninTestRule;
+import org.chromium.components.signin.test.util.TestAccounts;
 import org.chromium.content_public.browser.test.util.JavaScriptUtils;
 import org.chromium.net.test.EmbeddedTestServer;
 import org.chromium.ui.test.util.GmsCoreVersionRestriction;
@@ -62,6 +63,14 @@ public class BrowsingDataTest {
             new BlankCTATabInitialStateRule(sActivityTestRule, false);
 
     @Rule public SigninTestRule mSigninTestRule = new SigninTestRule();
+
+    public BrowsingDataTest() {
+        // This test suite relies on the real password store. However, that can only store
+        // passwords if the device it runs on has the required min GMS Core version.
+        // To ensure the tests don't depend on the device configuration, set up a fake GMS
+        // Core version instead.
+        PasswordManagerTestHelper.setUpPwmRequiredMinGmsVersion();
+    }
 
     @Before
     public void setUp() throws Exception {
@@ -199,8 +208,8 @@ public class BrowsingDataTest {
     @RequiresRestart("crbug.com/358427311")
     public void testLocalAndAccountPasswordsDeleted() throws Exception {
         // Set up a syncing user with one password in each store.
-        mSigninTestRule.addTestAccountThenSigninAndEnableSync();
-        PasswordManagerTestHelper.setAccountForPasswordStore(SigninTestRule.TEST_ACCOUNT_EMAIL);
+        mSigninTestRule.addAccountThenSignin(TestAccounts.ACCOUNT1);
+        PasswordManagerTestHelper.setAccountForPasswordStore(TestAccounts.ACCOUNT1.getEmail());
         PasswordStoreBridge bridge =
                 ThreadUtils.runOnUiThreadBlocking(
                         () -> new PasswordStoreBridge(sActivityTestRule.getProfile(false)));

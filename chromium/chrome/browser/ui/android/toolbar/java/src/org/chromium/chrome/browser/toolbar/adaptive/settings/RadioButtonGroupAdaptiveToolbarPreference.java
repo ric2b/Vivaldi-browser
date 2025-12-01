@@ -17,9 +17,11 @@ import androidx.preference.Preference;
 import androidx.preference.PreferenceViewHolder;
 
 import org.chromium.base.metrics.RecordUserAction;
+import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.toolbar.R;
 import org.chromium.chrome.browser.toolbar.adaptive.AdaptiveToolbarButtonVariant;
 import org.chromium.chrome.browser.toolbar.adaptive.AdaptiveToolbarStatePredictor;
+import org.chromium.chrome.browser.toolbar.adaptive.AdaptiveToolbarStatePredictor.UiState;
 import org.chromium.chrome.browser.toolbar.adaptive.AdaptiveToolbarStats;
 import org.chromium.components.browser_ui.widget.RadioButtonWithDescription;
 import org.chromium.components.browser_ui.widget.RadioButtonWithDescriptionLayout;
@@ -40,11 +42,15 @@ public class RadioButtonGroupAdaptiveToolbarPreference extends Preference
     private @NonNull RadioButtonWithDescription mAddToBookmarksButton;
     private @NonNull RadioButtonWithDescription mReadAloudButton;
     private @NonNull RadioButtonWithDescription mPageSummaryButton;
+    private @NonNull RadioButtonWithDescription mOpenInBrowserButton;
     private @AdaptiveToolbarButtonVariant int mSelected;
+    private @AdaptiveToolbarButtonVariant int mAutoButtonCaption;
     private @Nullable AdaptiveToolbarStatePredictor mStatePredictor;
     private boolean mCanUseVoiceSearch = true;
     private boolean mCanUseReadAloud;
     private boolean mCanUsePageSummary;
+    private boolean mButtonsInitialized;
+    private Runnable mInitRadioButtonRunnable = this::initializeRadioButtonSelection;
 
     public RadioButtonGroupAdaptiveToolbarPreference(Context context, AttributeSet attrs) {
         super(context, attrs);
@@ -75,20 +81,26 @@ public class RadioButtonGroupAdaptiveToolbarPreference extends Preference
                 (RadioButtonWithDescription) holder.findViewById(R.id.adaptive_option_read_aloud);
         mPageSummaryButton =
                 (RadioButtonWithDescription) holder.findViewById(R.id.adaptive_option_page_summary);
+        mOpenInBrowserButton =
+                (RadioButtonWithDescription)
+                        holder.findViewById(R.id.adaptive_option_open_in_browser);
 
         // Vivaldi
         mAutoButton.setVisibility(View.GONE);
+        mPageSummaryButton.setDescriptionText(""); // Vivaldi ref. VAB-11144
         // For tablets the add bookmarks and new tab toolbar buttons are already there.
         boolean isTablet = DeviceFormFactor.isNonMultiDisplayContextOnTablet(getContext());
         if (isTablet) {
             mAddToBookmarksButton.setVisibility(View.GONE);
+            if (!BuildConfig.IS_VIVALDI) // Vivaldi VAB-11026
             mNewTabButton.setVisibility(View.GONE);
         }
         if (BuildConfig.IS_OEM_AUTOMOTIVE_BUILD)
             // Share feature unavailable on automotive.
             mShareButton.setVisibility(View.GONE);
+        // End Vivaldi
 
-        initializeRadioButtonSelection();
+        mInitRadioButtonRunnable.run();
         RecordUserAction.record("Mobile.AdaptiveToolbarButton.SettingsPage.Opened");
     }
 
@@ -100,38 +112,67 @@ public class RadioButtonGroupAdaptiveToolbarPreference extends Preference
     public void setStatePredictor(AdaptiveToolbarStatePredictor statePredictor) {
         assert mStatePredictor == null;
         mStatePredictor = statePredictor;
-        initializeRadioButtonSelection();
+        mInitRadioButtonRunnable.run();
     }
 
     private void initializeRadioButtonSelection() {
-        if (mStatePredictor == null || mGroup == null) return;
+        if (mStatePredictor == null || mGroup == null || mButtonsInitialized) return;
+
         mStatePredictor.recomputeUiState(
                 uiState -> {
-                    mSelected = uiState.preferenceSelection;
-                    assert mSelected != AdaptiveToolbarButtonVariant.VOICE || mCanUseVoiceSearch
-                            : "voice search selected when not available";
-                    RadioButtonWithDescription selectedButton = getButton(mSelected);
-                    if (selectedButton != null) selectedButton.setChecked(true);
-                    mAutoButton.setDescriptionText(
-                            getContext()
-                                    .getString(
-                                            R.string
-                                                    .adaptive_toolbar_button_preference_based_on_your_usage_description,
-                                            getButtonString(uiState.autoButtonCaption)));
-                    // Description to indicate these buttons only appear on small windows,
-                    // as large windows (tablets) show them elsewhere on UI (strip, omnibox).
-                    String basedOnWindowDesc =
-                            getContext()
-                                    .getString(
-                                            R.string
-                                                    .adaptive_toolbar_button_preference_based_on_window_width_description);
-                    mNewTabButton.setDescriptionText(basedOnWindowDesc);
-                    mAddToBookmarksButton.setDescriptionText(basedOnWindowDesc);
-                    updateVoiceButtonVisibility();
-                    updateReadAloudButtonVisibility();
-                    updatePageSummaryButtonVisibility();
+                    initButtonsFromUiState(uiState);
+                    AdaptiveToolbarStats.recordRadioButtonStateAsync(
+                            buildUiStateForStats(), /* onStartup= */ true);
                 });
-        AdaptiveToolbarStats.recordRadioButtonStateAsync(mStatePredictor, /* onStartup= */ true);
+    }
+
+    private UiState buildUiStateForStats() {
+        // Only the last 2 fields |preferenceSelection| |autoButtonCaption| are used.
+        return new UiState(
+                /* canShowUi= */ true,
+                AdaptiveToolbarButtonVariant.UNKNOWN,
+                mSelected,
+                mAutoButtonCaption);
+    }
+
+    /**
+     * Initialize toolbar buttons from a given {@link UiState} object. This method may be called by
+     * {@link AdaptiveToolbarSettingsFragment} if the settings UI is invoked via a long press on a
+     * toolbar button(for BrApp/CCT), by {@code mStatePredictor#recomputeUiState()} running inside
+     * this class if invoked from main settings UI (for BrApp only).
+     *
+     * @param uiState {@link UiState} to initialize buttons with.
+     */
+    public void initButtonsFromUiState(UiState uiState) {
+        if (mGroup == null) {
+            // View bindings are not ready yet. Try this again after the completion.
+            mInitRadioButtonRunnable = () -> initButtonsFromUiState(uiState);
+            return;
+        }
+        mAutoButtonCaption = uiState.autoButtonCaption;
+        mSelected = uiState.preferenceSelection;
+        assert mSelected != AdaptiveToolbarButtonVariant.VOICE || mCanUseVoiceSearch
+                : "voice search selected when not available";
+        RadioButtonWithDescription selectedButton = getButton(mSelected);
+        if (selectedButton != null) selectedButton.setChecked(true);
+
+        int resId = R.string.adaptive_toolbar_button_preference_based_on_your_usage_description;
+        mAutoButton.setDescriptionText(
+                getContext().getString(resId, getButtonString(uiState.autoButtonCaption)));
+
+        // Description to indicate these buttons only appear on small windows,
+        // as large windows (tablets) show them elsewhere on UI (strip, omnibox).
+        resId = R.string.adaptive_toolbar_button_preference_based_on_window_width_description;
+        String basedOnWindowDesc = getContext().getString(resId);
+        if (!BuildConfig.IS_VIVALDI) // Vivaldi VAB-11026
+        mNewTabButton.setDescriptionText(basedOnWindowDesc);
+        mAddToBookmarksButton.setDescriptionText(basedOnWindowDesc);
+
+        updateVoiceButtonVisibility();
+        updateReadAloudButtonVisibility();
+        updatePageSummaryButtonVisibility();
+        updateOpenInBrowserButtonVisibility();
+        mButtonsInitialized = true;
     }
 
     @Override
@@ -153,13 +194,15 @@ public class RadioButtonGroupAdaptiveToolbarPreference extends Preference
             mSelected = AdaptiveToolbarButtonVariant.READ_ALOUD;
         } else if (mPageSummaryButton.isChecked()) {
             mSelected = AdaptiveToolbarButtonVariant.PAGE_SUMMARY;
+        } else if (mOpenInBrowserButton.isChecked()) {
+            mSelected = AdaptiveToolbarButtonVariant.OPEN_IN_BROWSER;
         } else {
             assert false : "No matching setting found.";
         }
         callChangeListener(mSelected);
         if (previousSelection != mSelected && mStatePredictor != null) {
             AdaptiveToolbarStats.recordRadioButtonStateAsync(
-                    mStatePredictor, /* onStartup= */ false);
+                    buildUiStateForStats(), /* onStartup= */ false);
         }
     }
 
@@ -193,6 +236,8 @@ public class RadioButtonGroupAdaptiveToolbarPreference extends Preference
                 return mReadAloudButton;
             case AdaptiveToolbarButtonVariant.PAGE_SUMMARY:
                 return mPageSummaryButton;
+            case AdaptiveToolbarButtonVariant.OPEN_IN_BROWSER:
+                return mOpenInBrowserButton;
         }
         return null;
     }
@@ -220,6 +265,9 @@ public class RadioButtonGroupAdaptiveToolbarPreference extends Preference
                 break;
             case AdaptiveToolbarButtonVariant.PAGE_SUMMARY:
                 stringRes = R.string.adaptive_toolbar_button_preference_page_summary;
+                break;
+            case AdaptiveToolbarButtonVariant.OPEN_IN_BROWSER:
+                stringRes = R.string.menu_open_in_product_default;
                 break;
             default:
                 assert false : "Unknown variant " + variant;
@@ -252,6 +300,11 @@ public class RadioButtonGroupAdaptiveToolbarPreference extends Preference
 
     private void updatePageSummaryButtonVisibility() {
         updateButtonVisibility(mPageSummaryButton, mCanUsePageSummary);
+    }
+
+    private void updateOpenInBrowserButtonVisibility() {
+        boolean show = ChromeFeatureList.sCctAdaptiveButtonEnableOpenInBrowser.getValue();
+        updateButtonVisibility(mOpenInBrowserButton, show);
     }
 
     /**

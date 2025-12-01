@@ -308,9 +308,7 @@ void OrganizedRulesManager::OnOrganizedRulesLoaded(
 
 bool OrganizedRulesManager::CheckOrganizedRules(
     base::Value* non_ios_rules_and_metadata) {
-
-  if (!non_ios_rules_and_metadata ||
-      !non_ios_rules_and_metadata->is_dict()) {
+  if (!non_ios_rules_and_metadata || !non_ios_rules_and_metadata->is_dict()) {
     return false;
   }
 

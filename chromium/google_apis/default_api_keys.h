@@ -5,9 +5,7 @@
 #ifndef GOOGLE_APIS_DEFAULT_API_KEYS_H_
 #define GOOGLE_APIS_DEFAULT_API_KEYS_H_
 
-#include "build/branding_buildflags.h"
 #include "build/build_config.h"
-#include "build/chromeos_buildflags.h"
 
 namespace google_apis {
 
@@ -31,11 +29,13 @@ struct DefaultApiKeys {
 #endif  // BUILDFLAG(IS_ANDROID)
   const char* google_api_key_remoting;
   const char* google_api_key_soda;
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
   const char* google_api_key_sharing;
   const char* google_api_key_read_aloud;
   const char* google_api_key_fresnel;
   const char* google_api_key_boca;
+  const char* google_api_key_cros_system_geo_;
+  const char* google_api_key_cros_chrome_geo_;
 #endif
 
   const char* google_client_id_main;

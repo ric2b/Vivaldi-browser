@@ -27,6 +27,7 @@
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/color/color_id.h"
 #include "ui/gfx/color_palette.h"
+#include "ui/gfx/native_widget_types.h"
 #include "ui/gfx/paint_vector_icon.h"
 #include "ui/native_theme/native_theme.h"
 #include "ui/views/background.h"
@@ -83,11 +84,10 @@ class LogoView : public views::ImageView {
 
   void OnThemeChanged() override {
     ImageView::OnThemeChanged();
-    SetImage(ui::ResourceBundle::GetSharedInstance()
-                 .GetImageNamed((GetNativeTheme()->ShouldUseDarkColors())
-                                    ? IDR_PRODUCT_LOGO_ENTERPRISE_WHITE
-                                    : IDR_PRODUCT_LOGO_ENTERPRISE)
-                 .AsImageSkia());
+    SetImage(
+        ui::ImageModel::FromResourceId((GetNativeTheme()->ShouldUseDarkColors())
+                                           ? IDR_PRODUCT_LOGO_ENTERPRISE_WHITE
+                                           : IDR_PRODUCT_LOGO_ENTERPRISE));
     const gfx::Rect logo_bounds = GetImageBounds();
     SetImageSize(gfx::Size(
         logo_bounds.width() * kLogoHeight / logo_bounds.height(), kLogoHeight));
@@ -178,7 +178,7 @@ EnterpriseStartupDialogView::EnterpriseStartupDialogView(
       base::BindOnce(&EnterpriseStartupDialogView::RunDialogCallback,
                      base::Unretained(this), false));
   SetBorder(views::CreateEmptyBorder(GetDialogInsets()));
-  CreateDialogWidget(this, nullptr, nullptr)->Show();
+  CreateDialogWidget(this, gfx::NativeWindow(), gfx::NativeView())->Show();
 #if BUILDFLAG(IS_MAC)
   base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE, base::BindOnce(&EnterpriseStartupDialogView::StartModalDialog,

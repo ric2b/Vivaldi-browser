@@ -5,12 +5,18 @@
 package org.chromium.chrome.browser.autofill;
 
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
+import android.content.Context;
 import android.graphics.Bitmap;
+import android.graphics.Canvas;
+import android.graphics.drawable.BitmapDrawable;
+import android.graphics.drawable.Drawable;
 
+import androidx.annotation.Nullable;
 import androidx.annotation.Px;
+import androidx.appcompat.content.res.AppCompatResources;
 import androidx.test.filters.SmallTest;
 
 import org.junit.After;
@@ -20,10 +26,8 @@ import org.junit.runner.RunWith;
 
 import org.chromium.base.ContextUtils;
 import org.chromium.base.test.BaseRobolectricTestRunner;
-import org.chromium.base.test.util.Features;
 import org.chromium.base.test.util.HistogramWatcher;
 import org.chromium.chrome.browser.autofill.AutofillUiUtils.CardIconSpecs;
-import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.components.autofill.ImageSize;
 import org.chromium.components.image_fetcher.test.TestImageFetcher;
 import org.chromium.url.GURL;
@@ -32,7 +36,6 @@ import java.util.Map;
 
 /** Unit tests for {@link AutofillImageFetcher}. */
 @RunWith(BaseRobolectricTestRunner.class)
-@Features.EnableFeatures(ChromeFeatureList.AUTOFILL_ENABLE_NEW_CARD_ART_AND_NETWORK_IMAGES)
 public class AutofillImageFetcherTest {
     private static final Bitmap TEST_CARD_ART_IMAGE =
             Bitmap.createBitmap(100, 200, Bitmap.Config.ARGB_8888);
@@ -115,6 +118,17 @@ public class AutofillImageFetcherTest {
 
     @Test
     @SmallTest
+    public void testPrefetchImages_capitalOneStaticImageUrl_notFetched() {
+        GURL capitalOneStaticImageUrl = new GURL(AutofillUiUtils.CAPITAL_ONE_ICON_URL);
+
+        mImageFetcher.prefetchImages(
+                new GURL[] {capitalOneStaticImageUrl}, new int[] {ImageSize.SMALL});
+
+        assertTrue(mImageFetcher.getCachedImagesForTesting().isEmpty());
+    }
+
+    @Test
+    @SmallTest
     public void testPrefetchPixAccountImages_validUrl_successfulImageFetch() {
         GURL validUrl1 = new GURL("https://www.google.com/valid-image-url-1");
         GURL validUrl2 = new GURL("https://www.google.com/valid-image-url-2");
@@ -147,10 +161,7 @@ public class AutofillImageFetcherTest {
     @SmallTest
     public void testPrefetchPixAccountImages_imageInCache_imageNotFetched() {
         GURL validUrl = new GURL("https://www.google.com/valid-image-url");
-        @Px
-        int logoSize = AutofillImageFetcherUtils.getPixelSize(R.dimen.square_card_icon_side_length);
-        GURL cachedValidUrl =
-                AutofillUiUtils.getCreditCardIconUrlWithParams(validUrl, logoSize, logoSize);
+        GURL cachedValidUrl = AutofillImageFetcherUtils.getPixAccountImageUrlWithParams(validUrl);
         mImageFetcher.addImageToCacheForTesting(cachedValidUrl, TEST_CARD_ART_IMAGE);
         // No histogram should be logged since no image fetching is done.
         HistogramWatcher expectedHistogram =
@@ -210,24 +221,51 @@ public class AutofillImageFetcherTest {
 
     @Test
     @SmallTest
-    public void testGetImagesIfAvailable() {
-        GURL cardArtUrl = new GURL("https://www.google.com/card-art-url");
-        CardIconSpecs cardIconSpecs =
-                CardIconSpecs.create(ContextUtils.getApplicationContext(), ImageSize.LARGE);
-        Bitmap treatedImage =
-                AutofillUiUtils.resizeAndAddRoundedCornersAndGreyBorder(
-                        TEST_CARD_ART_IMAGE, cardIconSpecs, true);
+    public void testGetPixAccountIcon_imageInCache() {
+        GURL validUrl = new GURL("https://www.google.com/valid-image-url");
+        mImageFetcher.addImageToCacheForTesting(
+                AutofillImageFetcherUtils.getPixAccountImageUrlWithParams(validUrl),
+                TEST_CARD_ART_IMAGE);
 
-        // The card art image is not present in the image cache, so a call is made to fetch the
-        // image, and nothing is returned.
-        assertFalse(mImageFetcher.getImageIfAvailable(cardArtUrl, cardIconSpecs).isPresent());
+        Drawable pixAccountIcon =
+                mImageFetcher.getPixAccountIcon(ContextUtils.getApplicationContext(), validUrl);
 
-        // The card art image is fetched and cached from the previous call, so the cached image is
-        // returned.
+        assertTrue(TEST_CARD_ART_IMAGE.sameAs(drawableToBitmap(pixAccountIcon)));
+    }
+
+    @Test
+    @SmallTest
+    public void testGetPixAccountIcon_imageNotInCache() {
+        GURL validUrl = new GURL("https://www.google.com/valid-image-url");
+        Context context = ContextUtils.getApplicationContext();
+
+        Drawable genericBankAccountIcon =
+                AppCompatResources.getDrawable(context, R.drawable.ic_account_balance);
+        Drawable pixAccountIcon = mImageFetcher.getPixAccountIcon(context, validUrl);
+
+        assertNotNull(pixAccountIcon);
         assertTrue(
-                mImageFetcher
-                        .getImageIfAvailable(cardArtUrl, cardIconSpecs)
-                        .get()
-                        .sameAs(treatedImage));
+                drawableToBitmap(genericBankAccountIcon).sameAs(drawableToBitmap(pixAccountIcon)));
+    }
+
+    private @Nullable Bitmap drawableToBitmap(Drawable drawable) {
+        if (drawable == null) {
+            return null;
+        }
+
+        if (drawable instanceof BitmapDrawable) {
+            return ((BitmapDrawable) drawable).getBitmap();
+        }
+
+        // Create a copy of the drawable in bitmap format.
+        Bitmap bitmap =
+                Bitmap.createBitmap(
+                        drawable.getIntrinsicWidth(),
+                        drawable.getIntrinsicHeight(),
+                        Bitmap.Config.ARGB_8888);
+        Canvas canvas = new Canvas(bitmap);
+        drawable.setBounds(0, 0, canvas.getWidth(), canvas.getHeight());
+        drawable.draw(canvas);
+        return bitmap;
     }
 }

@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+import * as i18n from '../../../../core/i18n/i18n.js';
 import type * as Trace from '../../../../models/trace/trace.js';
 import * as ComponentHelpers from '../../../../ui/components/helpers/helpers.js';
 import * as UI from '../../../../ui/legacy/legacy.js';
@@ -12,13 +13,24 @@ import type * as BaseInsightComponent from './BaseInsightComponent.js';
 import {EventReferenceClick} from './EventRef.js';
 import tableStylesRaw from './table.css.js';
 
+const UIStrings = {
+  /**
+   * @description Table row value representing the remaining items not shown in the table due to size constraints. This row will always represent at least 2 items.
+   * @example {5} PH1
+   */
+  others: '{PH1} others',
+} as const;
+
+const str_ = i18n.i18n.registerUIStrings('panels/timeline/components/insights/Table.ts', UIStrings);
+export const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
+
 // TODO(crbug.com/391381439): Fully migrate off of constructed style sheets.
 const tableStyles = new CSSStyleSheet();
-tableStyles.replaceSync(tableStylesRaw.cssContent);
+tableStyles.replaceSync(tableStylesRaw.cssText);
 
 const {html} = Lit;
 
-type BaseInsightComponent = BaseInsightComponent.BaseInsightComponent<Trace.Insights.Types.InsightModel<{}>>;
+type BaseInsightComponent = BaseInsightComponent.BaseInsightComponent<Trace.Insights.Types.InsightModel>;
 
 /**
  * @fileoverview An interactive table component.
@@ -50,17 +62,54 @@ export interface TableData {
 export interface TableDataRow {
   values: Array<number|string|Lit.LitTemplate>;
   overlays?: Overlays.Overlays.TimelineOverlay[];
+  subRows?: TableDataRow[];
+}
+
+export function renderOthersLabel(numOthers: number): string {
+  return i18nString(UIStrings.others, {PH1: numOthers});
+}
+
+export interface RowLimitAggregator<T> {
+  mapToRow: (item: T) => TableDataRow;
+  createAggregatedTableRow: (remaining: T[]) => TableDataRow;
+}
+
+/**
+ * Maps `arr` to a list of `TableDataRow`s  using `aggregator.mapToRow`, but limits the number of `TableDataRow`s to `limit`.
+ * If the length of `arr` is larger than `limit`, any excess rows will be aggregated into the final `TableDataRow` using `aggregator.createAggregatedTableRow`.
+ *
+ * Useful for creating a "N others" row in a data table.
+ *
+ * Example: `arr` is a list of 15 items & `limit` is 10. The first 9 items in `arr` would be mapped to `TableDataRow`s using `aggregator.mapToRow` and
+ * the 10th `TableDataRow` would be created by using `aggregator.createAggregatedTableRow` on the 6 items that were not sent through `aggregator.mapToRow`.
+ */
+export function createLimitedRows<T>(arr: T[], aggregator: RowLimitAggregator<T>, limit = 10): TableDataRow[] {
+  if (arr.length === 0 || limit === 0) {
+    return [];
+  }
+
+  const aggregateStartIndex = limit - 1;
+  const items = arr.slice(0, aggregateStartIndex).map(aggregator.mapToRow.bind(aggregator));
+  if (arr.length > limit) {
+    items.push(aggregator.createAggregatedTableRow(arr.slice(aggregateStartIndex)));
+  } else if (arr.length === limit) {
+    items.push(aggregator.mapToRow(arr[aggregateStartIndex]));
+  }
+
+  return items;
 }
 
 export class Table extends HTMLElement {
-
   readonly #shadow = this.attachShadow({mode: 'open'});
   readonly #boundRender = this.#render.bind(this);
   #insight?: BaseInsightComponent;
   #state?: TableState;
   #headers?: string[];
+  /** The rows as given as by the user, which may include recursive rows via subRows. */
   #rows?: TableDataRow[];
-  #interactive: boolean = false;
+  /** All rows/subRows, in the order that they appear visually. This is the result of traversing `#rows` and any subRows found. */
+  #flattenedRows?: TableDataRow[];
+  #interactive = false;
   #currentHoverIndex: number|null = null;
 
   set data(data: TableData) {
@@ -86,7 +135,7 @@ export class Table extends HTMLElement {
     }
 
     const rowEl = e.target.closest('tr');
-    if (!rowEl || !rowEl.parentElement) {
+    if (!rowEl?.parentElement) {
       return;
     }
 
@@ -106,7 +155,7 @@ export class Table extends HTMLElement {
     }
 
     const rowEl = e.target.closest('tr');
-    if (!rowEl || !rowEl.parentElement) {
+    if (!rowEl?.parentElement) {
       return;
     }
 
@@ -117,7 +166,7 @@ export class Table extends HTMLElement {
 
     // If the desired overlays consist of just a single ENTRY_OUTLINE, then
     // it is more intuitive to just select the target event.
-    const overlays = this.#rows?.[index]?.overlays;
+    const overlays = this.#flattenedRows?.[index]?.overlays;
     if (overlays?.length === 1 && overlays[0].type === 'ENTRY_OUTLINE') {
       this.dispatchEvent(new EventReferenceClick(overlays[0].entry));
       return;
@@ -137,7 +186,7 @@ export class Table extends HTMLElement {
     sticky?: boolean,
     isHover?: boolean,
   } = {}): void {
-    if (!this.#rows || !this.#state || !this.#insight) {
+    if (!this.#flattenedRows || !this.#state || !this.#insight) {
       return;
     }
 
@@ -152,7 +201,7 @@ export class Table extends HTMLElement {
     }
 
     if (rowEl && rowIndex !== null) {
-      const overlays = this.#rows[rowIndex].overlays;
+      const overlays = this.#flattenedRows[rowIndex].overlays;
       if (overlays) {
         this.#insight.toggleTemporaryOverlays(overlays, {updateTraceWindow: !opts.isHover});
       }
@@ -171,6 +220,38 @@ export class Table extends HTMLElement {
       return;
     }
 
+    const numColumns = this.#headers.length;
+    const flattenedRows: TableDataRow[] = [];
+    const rowEls: Lit.TemplateResult[] = [];
+    function traverse(row: TableDataRow, depth = 0): void {
+      const thStyles = Lit.Directives.styleMap({
+        paddingLeft: `calc(${depth} * var(--sys-size-5))`,
+        borderLeft: depth ? 'var(--sys-size-1) solid var(--sys-color-divider)' : '',
+      });
+      const trStyles = Lit.Directives.styleMap({
+        color: depth ? 'var(--sys-color-on-surface-subtle)' : '',
+      });
+      const columnEls = row.values.map(
+          (value, i) => i === 0 ? html`<th
+                scope="row"
+                colspan=${i === row.values.length - 1 ? numColumns - i : 1}
+                style=${thStyles}>${value}
+              </th>` :
+                                  html`<td>${value}</td>`);
+      rowEls.push(html`<tr style=${trStyles}>${columnEls}</tr>`);
+
+      flattenedRows.push(row);
+
+      for (const subRow of row.subRows ?? []) {
+        traverse(subRow, depth + 1);
+      }
+    }
+    for (const row of this.#rows) {
+      traverse(row);
+    }
+
+    this.#flattenedRows = flattenedRows;
+
     Lit.render(
         html`<table
           class=${Lit.Directives.classMap({
@@ -185,13 +266,7 @@ export class Table extends HTMLElement {
         <tbody
           @mouseover=${this.#interactive ? this.#onHoverRow : null}
           @click=${this.#interactive ? this.#onClickRow : null}
-        >
-          ${this.#rows.map(row => {
-          const rowsEls =
-              row.values.map((value, i) => i === 0 ? html`<th scope="row">${value}</th>` : html`<td>${value}</td>`);
-          return html`<tr>${rowsEls}</tr>`;
-        })}
-        </tbody>
+        >${rowEls}</tbody>
       </table>`,
         this.#shadow, {host: this});
   }

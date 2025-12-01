@@ -11,7 +11,6 @@
 #include "base/location.h"
 #include "base/run_loop.h"
 #include "build/build_config.h"
-#include "build/chromeos_buildflags.h"
 #include "chrome/browser/net/system_network_context_manager.h"
 #include "chrome/browser/profiles/profile_destroyer.h"
 #include "chrome/browser/ui/browser.h"
@@ -36,15 +35,10 @@
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "components/constrained_window/constrained_window_views.h"
 #include "ui/views/test/views_test_utils.h"
-
-#if BUILDFLAG(IS_CHROMEOS_ASH)
-#include "content/public/browser/context_factory.h"
-#endif
 #endif
 
 #if BUILDFLAG(IS_CHROMEOS)
 #include "chrome/browser/ash/crosapi/crosapi_manager.h"
-#include "chrome/browser/ash/crosapi/idle_service_ash.h"
 #include "chrome/browser/ash/profiles/profile_helper.h"
 #include "chrome/browser/browser_process.h"
 #include "chromeos/ash/components/browser_context_helper/annotated_account_id.h"
@@ -53,7 +47,9 @@
 #include "chromeos/ash/components/disks/fake_disk_mount_manager.h"
 #include "components/user_manager/fake_user_manager.h"
 #include "components/user_manager/scoped_user_manager.h"
+#include "components/user_manager/test_helper.h"
 #include "components/user_manager/user_manager.h"
+#include "content/public/browser/context_factory.h"
 #include "google_apis/gaia/gaia_auth_util.h"
 #include "google_apis/gaia/gaia_id.h"
 #endif
@@ -108,7 +104,6 @@ void BrowserWithTestWindowTest::SetUp() {
       profile_manager_->local_state()->Get());
 
 #if BUILDFLAG(IS_CHROMEOS)
-  crosapi::IdleServiceAsh::DisableForTesting();
   manager_ = std::make_unique<crosapi::CrosapiManager>();
   kiosk_chrome_app_manager_ = std::make_unique<ash::KioskChromeAppManager>();
 #endif
@@ -167,10 +162,6 @@ void BrowserWithTestWindowTest::TearDown() {
   // they're still holding a ScopedProfileKeepAlive.
   profile_ = nullptr;
   profile_manager_.reset();
-
-#if BUILDFLAG(IS_CHROMEOS_LACROS)
-  lacros_service_test_helper_.reset();
-#endif
 
 #if BUILDFLAG(IS_CHROMEOS)
   test_views_delegate_.reset();
@@ -319,10 +310,7 @@ void BrowserWithTestWindowTest::LogIn(std::string_view email,
   const AccountId account_id = AccountId::FromUserEmailGaiaId(email, gaia_id);
   user_manager_->AddGaiaUser(account_id, user_manager::UserType::kRegular);
   user_manager_->UserLoggedIn(
-      account_id,
-      user_manager::FakeUserManager::GetFakeUsernameHash(account_id),
-      /*browser_restart=*/false,
-      /*is_child=*/false);
+      account_id, user_manager::TestHelper::GetFakeUsernameHash(account_id));
 }
 
 void BrowserWithTestWindowTest::OnUserProfileCreated(const std::string& email,
@@ -337,9 +325,8 @@ void BrowserWithTestWindowTest::OnUserProfileCreated(const std::string& email,
   // may be injected.
   auto* user_manager = user_manager::UserManager::Get();
   user_manager->OnUserProfileCreated(account_id, profile->GetPrefs());
-  ash_test_helper()
-      ->test_session_controller_client()
-      ->SetUnownedUserPrefService(account_id, profile->GetPrefs());
+  GetSessionControllerClient()->SetUnownedUserPrefService(account_id,
+                                                          profile->GetPrefs());
   auto observation =
       std::make_unique<base::ScopedObservation<Profile, ProfileObserver>>(this);
   observation->Observe(profile);
@@ -347,9 +334,9 @@ void BrowserWithTestWindowTest::OnUserProfileCreated(const std::string& email,
 }
 
 void BrowserWithTestWindowTest::SwitchActiveUser(const std::string& email) {
-  ash_test_helper()->test_session_controller_client()->SwitchActiveUser(
+  GetSessionControllerClient()->SwitchActiveUser(
       AccountId::FromUserEmail(email));
-  ash_test_helper()->test_session_controller_client()->SetSessionState(
+  GetSessionControllerClient()->SetSessionState(
       session_manager::SessionState::ACTIVE);
 }
 
@@ -374,6 +361,12 @@ ash::StubInstallAttributes* BrowserWithTestWindowTest::GetInstallAttributes() {
   return GetCrosSettingsHelper()->InstallAttributes();
 }
 
+ash::TestSessionControllerClient*
+BrowserWithTestWindowTest::GetSessionControllerClient() {
+  return ash_test_helper()->test_session_controller_client(
+      base::PassKey<BrowserWithTestWindowTest>());
+}
+
 void BrowserWithTestWindowTest::PostUserProfileCreation(
     const std::string& email,
     Profile* profile) {
@@ -385,8 +378,7 @@ void BrowserWithTestWindowTest::PostUserProfileCreation(
       AccountId::FromUserEmail(email));
   if (user) {
     OnUserProfileCreated(email, profile);
-    ash_test_helper()->test_session_controller_client()->AddUserSession(
-        email, user->GetType());
+    GetSessionControllerClient()->AddUserSession({email, user->GetType()});
   }
 }
 

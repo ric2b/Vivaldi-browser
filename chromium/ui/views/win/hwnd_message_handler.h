@@ -39,6 +39,7 @@
 #include "ui/views/views_export.h"
 #include "ui/views/win/pen_event_processor.h"
 #include "ui/views/win/scoped_enable_unadjusted_mouse_events_win.h"
+#include "ui/views/win/user_resize_detector.h"
 
 namespace gfx {
 class ImageSkia;
@@ -93,8 +94,7 @@ class VIEWS_EXPORT HWNDMessageHandler : public gfx::WindowImpl,
   // See WindowImpl for details on |debugging_id|.
   static std::unique_ptr<HWNDMessageHandler> Create(
       HWNDMessageHandlerDelegate* delegate,
-      const std::string& debugging_id,
-      bool headless_mode);
+      const std::string& debugging_id);
 
   HWNDMessageHandler(const HWNDMessageHandler&) = delete;
   HWNDMessageHandler& operator=(const HWNDMessageHandler&) = delete;
@@ -210,6 +210,12 @@ class VIEWS_EXPORT HWNDMessageHandler : public gfx::WindowImpl,
   virtual void set_is_translucent(bool is_translucent);
   virtual bool is_translucent() const;
 
+  // Sets whether to use rounded corners. This uses DWMWCP_ROUND and is not
+  // effective on Windows 10.
+  void set_use_rounded_corner(bool use_rounded_corner) {
+    use_rounded_corner_ = use_rounded_corner;
+  }
+
   virtual std::unique_ptr<aura::ScopedEnableUnadjustedMouseEvents>
   RegisterUnadjustedMouseEvent();
 
@@ -292,7 +298,6 @@ class VIEWS_EXPORT HWNDMessageHandler : public gfx::WindowImpl,
                                  WPARAM w_param,
                                  LPARAM l_param,
                                  bool* handled) override;
-  void HandleParentChanged() override;
   void ApplyPinchZoomScale(float scale) override;
   void ApplyPinchZoomBegin() override;
   void ApplyPinchZoomEnd() override;
@@ -691,9 +696,6 @@ class VIEWS_EXPORT HWNDMessageHandler : public gfx::WindowImpl,
   // area. We need this so we can correctly show the context menu on mouse-up.
   bool is_right_mouse_pressed_on_caption_;
 
-  // The set of touch devices currently down.
-  TouchIDs touch_ids_;
-
   // ScopedRedrawLock ----------------------------------------------------------
 
   // Represents the number of ScopedRedrawLocks active against this widget.
@@ -713,7 +715,8 @@ class VIEWS_EXPORT HWNDMessageHandler : public gfx::WindowImpl,
   // The last-seen monitor containing us, and its rect and work area.  These are
   // used to catch updates to the rect and work area and react accordingly.
   HMONITOR last_monitor_;
-  gfx::Rect last_monitor_rect_, last_work_area_;
+  gfx::Rect last_monitor_rect_;
+  gfx::Rect last_work_area_;
 
   // True the first time nccalc is called on a sizable widget
   bool is_first_nccalc_;
@@ -728,6 +731,8 @@ class VIEWS_EXPORT HWNDMessageHandler : public gfx::WindowImpl,
   ui::SequentialIDGenerator id_generator_;
 
   PenEventProcessor pen_processor_;
+
+  UserResizeDetector user_resize_detector_;
 
   // Stores a pointer to the WindowEventTarget interface implemented by this
   // class. Allows callers to retrieve the interface pointer.
@@ -814,9 +819,9 @@ class VIEWS_EXPORT HWNDMessageHandler : public gfx::WindowImpl,
   // partially or fully transparent.
   bool is_translucent_ = false;
 
-  // True if the window should process WM_POINTER for touch events and
-  // not WM_TOUCH events.
-  bool pointer_events_for_touch_;
+  // True if the window uses rounded corners. This uses DWMWCP_ROUND style on
+  // Windows 11. Not effective on Windows 10.
+  bool use_rounded_corner_ = false;
 
   // True if DWM frame should be cleared on next WM_ERASEBKGND message.  This is
   // necessary to avoid white flashing in the titlebar area around the

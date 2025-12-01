@@ -11,6 +11,7 @@
 #import "base/test/scoped_feature_list.h"
 #import "components/lens/lens_overlay_permission_utils.h"
 #import "components/variations/scoped_variations_ids_provider.h"
+#import "ios/chrome/app/profile/profile_state.h"
 #import "ios/chrome/browser/fullscreen/ui_bundled/fullscreen_controller.h"
 #import "ios/chrome/browser/lens_overlay/model/lens_overlay_tab_helper.h"
 #import "ios/chrome/browser/lens_overlay/ui/lens_overlay_consent_view_controller.h"
@@ -23,6 +24,7 @@
 #import "ios/chrome/browser/shared/model/profile/test/test_profile_manager_ios.h"
 #import "ios/chrome/browser/shared/model/web_state_list/web_state_list.h"
 #import "ios/chrome/browser/shared/public/commands/application_commands.h"
+#import "ios/chrome/browser/shared/public/commands/browser_coordinator_commands.h"
 #import "ios/chrome/browser/shared/public/commands/command_dispatcher.h"
 #import "ios/chrome/browser/shared/public/commands/lens_commands.h"
 #import "ios/chrome/browser/shared/public/commands/lens_overlay_commands.h"
@@ -84,10 +86,13 @@ class LensOverlayCoordinatorTest : public PlatformTest {
     UIWindow* window =
         [[UIWindow alloc] initWithFrame:CGRectMake(0, 0, 320, 520)];
     OCMStub([mock_scene_state window]).andReturn(window);
+    profile_state_ = [[ProfileState alloc] initWithAppState:nil];
+    profile_state_.profile = profile_.get();
+    OCMStub([mock_scene_state profileState]).andReturn(profile_state_);
     browser_ = std::make_unique<TestBrowser>(profile_, mock_scene_state);
     dispatcher_ = [[CommandDispatcher alloc] init];
 
-    GetApplicationContext()->GetLocalState()->SetInteger(
+    profile_->GetPrefs()->SetInteger(
         lens::prefs::kLensOverlaySettings,
         static_cast<int>(
             lens::prefs::LensOverlaySettingsPolicyValue::kEnabled));
@@ -119,15 +124,24 @@ class LensOverlayCoordinatorTest : public PlatformTest {
         startDispatchingToTarget:load_query_handler_
                      forProtocol:@protocol(LoadQueryCommands)];
 
+    browser_coordinator_commands_handler_ =
+        OCMProtocolMock(@protocol(BrowserCoordinatorCommands));
+
+    [browser_->GetCommandDispatcher()
+        startDispatchingToTarget:browser_coordinator_commands_handler_
+                     forProtocol:@protocol(BrowserCoordinatorCommands)];
+
     // Tab helper
-    web_state_ = std::make_unique<web::FakeWebState>();
-    LensOverlayTabHelper::CreateForWebState(web_state_.get());
-    SnapshotTabHelper::CreateForWebState(web_state_.get());
-    tab_helper_ = LensOverlayTabHelper::FromWebState(web_state_.get());
+    std::unique_ptr<web::FakeWebState> web_state =
+        std::make_unique<web::FakeWebState>();
+    web_state->SetBrowserState(profile_.get());
+    LensOverlayTabHelper::CreateForWebState(web_state.get());
+    SnapshotTabHelper::CreateForWebState(web_state.get());
+    tab_helper_ = LensOverlayTabHelper::FromWebState(web_state.get());
 
     // Attach SnapshotTabHelper to allow snapshot generation.
     delegate_ = [[FakeSnapshotGeneratorDelegate alloc] init];
-    SnapshotTabHelper::FromWebState(web_state_.get())->SetDelegate(delegate_);
+    SnapshotTabHelper::FromWebState(web_state.get())->SetDelegate(delegate_);
 
     // Add a fake view to the delgate, which will be used to capture snapshots.
     CGRect frame = {CGPointZero, CGSizeMake(300, 400)};
@@ -135,7 +149,7 @@ class LensOverlayCoordinatorTest : public PlatformTest {
     delegate_.view.backgroundColor = [UIColor blueColor];
 
     // Mark the only web state as active.
-    browser_.get()->GetWebStateList()->InsertWebState(std::move(web_state_));
+    browser_.get()->GetWebStateList()->InsertWebState(std::move(web_state));
     browser_.get()->GetWebStateList()->ActivateWebStateAt(0);
 
     // Increment the fullscreen disabled counter.
@@ -192,8 +206,8 @@ class LensOverlayCoordinatorTest : public PlatformTest {
   TestProfileManagerIOS profile_manager_;
   LensOverlayCoordinator* coordinator_;
   raw_ptr<TestProfileIOS> profile_;
+  ProfileState* profile_state_;
   std::unique_ptr<TestBrowser> browser_;
-  std::unique_ptr<web::WebState> web_state_;
   UIViewController* base_view_controller_;
   base::test::ScopedFeatureList feature_list_;
   ScopedKeyWindow scoped_window_;
@@ -203,6 +217,7 @@ class LensOverlayCoordinatorTest : public PlatformTest {
   id<ApplicationCommands> application_handler_;
   id<LoadQueryCommands> load_query_handler_;
   id<LensCommands> lens_commands_handler_;
+  id<BrowserCoordinatorCommands> browser_coordinator_commands_handler_;
   variations::ScopedVariationsIdsProvider scoped_variations_ids_provider_{
       variations::VariationsIdsProvider::Mode::kUseSignedInState};
 

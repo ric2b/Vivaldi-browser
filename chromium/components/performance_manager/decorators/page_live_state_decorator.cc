@@ -6,13 +6,16 @@
 
 #include <utility>
 
+#include "base/check.h"
 #include "base/functional/bind.h"
 #include "base/memory/raw_ptr.h"
 #include "base/not_fatal_until.h"
 #include "base/observer_list.h"
 #include "base/sequence_checker.h"
+#include "base/thread_annotations.h"
 #include "components/performance_manager/decorators/decorators_utils.h"
 #include "components/performance_manager/graph/page_node_impl.h"
+#include "components/performance_manager/public/graph/graph.h"
 #include "components/performance_manager/public/graph/node_attached_data.h"
 #include "components/performance_manager/public/graph/node_data_describer_registry.h"
 #include "components/performance_manager/public/performance_manager.h"
@@ -74,13 +77,13 @@ class PageLiveStateDataImpl
     DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
     return is_capturing_display_;
   }
+  bool IsDiscarded() const override {
+    DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+    return is_discarded_;
+  }
   bool IsAutoDiscardable() const override {
     DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
     return is_auto_discardable_;
-  }
-  bool WasDiscarded() const override {
-    DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-    return was_discarded_;
   }
   bool IsActiveTab() const override {
     DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
@@ -126,11 +129,11 @@ class PageLiveStateDataImpl
   void SetIsCapturingDisplayForTesting(bool value) override {
     set_is_capturing_display(value);
   }
+  void SetIsDiscardedForTesting(bool value) override {
+    set_is_discarded(value);
+  }
   void SetIsAutoDiscardableForTesting(bool value) override {
     set_is_auto_discardable(value);
-  }
-  void SetWasDiscardedForTesting(bool value) override {
-    set_was_discarded(value);
   }
   void SetIsActiveTabForTesting(bool value) override {
     set_is_active_tab(value);
@@ -222,6 +225,10 @@ class PageLiveStateDataImpl
     for (auto& obs : observers_)
       obs.OnIsCapturingDisplayChanged(page_node_);
   }
+  void set_is_discarded(bool is_discarded) {
+    DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+    is_discarded_ = is_discarded;
+  }
   void set_is_auto_discardable(bool is_auto_discardable) {
     DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
     if (is_auto_discardable_ == is_auto_discardable)
@@ -229,12 +236,6 @@ class PageLiveStateDataImpl
     is_auto_discardable_ = is_auto_discardable;
     for (auto& obs : observers_)
       obs.OnIsAutoDiscardableChanged(page_node_);
-  }
-  void set_was_discarded(bool was_discarded) {
-    DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-    if (was_discarded_ == was_discarded)
-      return;
-    was_discarded_ = was_discarded;
   }
   void set_is_active_tab(bool is_active_tab) {
     DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
@@ -283,8 +284,8 @@ class PageLiveStateDataImpl
   bool is_being_mirrored_ GUARDED_BY_CONTEXT(sequence_checker_) = false;
   bool is_capturing_window_ GUARDED_BY_CONTEXT(sequence_checker_) = false;
   bool is_capturing_display_ GUARDED_BY_CONTEXT(sequence_checker_) = false;
+  bool is_discarded_ GUARDED_BY_CONTEXT(sequence_checker_) = false;
   bool is_auto_discardable_ GUARDED_BY_CONTEXT(sequence_checker_) = true;
-  bool was_discarded_ GUARDED_BY_CONTEXT(sequence_checker_) = false;
   bool is_active_tab_ GUARDED_BY_CONTEXT(sequence_checker_) = false;
   bool is_pinned_tab_ GUARDED_BY_CONTEXT(sequence_checker_) = false;
   bool is_dev_tools_open_ GUARDED_BY_CONTEXT(sequence_checker_) = false;
@@ -300,6 +301,56 @@ const char kDescriberName[] = "PageLiveStateDecorator";
 
 PageLiveStateDecorator::PageLiveStateDecorator() = default;
 PageLiveStateDecorator::~PageLiveStateDecorator() = default;
+
+// static
+void PageLiveStateDecorator::AddAllPageObserver(
+    PageLiveStateObserver* observer) {
+  // Must not be called before PerformanceManager is available, or observations
+  // will be lost.
+  CHECK(PerformanceManager::IsAvailable());
+  auto* graph = PerformanceManager::GetGraph();
+  PageLiveStateDecorator::GetFromGraph(graph)->all_page_observers_.AddObserver(
+      observer);
+  for (const PageNode* page_node : graph->GetAllPageNodes()) {
+    PageLiveStateDataImpl::GetOrCreate(PageNodeImpl::FromNode(page_node))
+        ->AddObserver(observer);
+  }
+}
+
+// static
+void PageLiveStateDecorator::RemoveAllPageObserver(
+    PageLiveStateObserver* observer) {
+  if (!PerformanceManager::IsAvailable()) {
+    // Observer list was already cleared when PageLiveStateDecorator was
+    // destroyed.
+    return;
+  }
+  auto* graph = PerformanceManager::GetGraph();
+  for (const PageNode* page_node : graph->GetAllPageNodes()) {
+    auto* data = PageLiveStateDataImpl::Get(PageNodeImpl::FromNode(page_node));
+    // `data` might be null if AddAllPageObserver was never called (which is
+    // possible because, by the semantics of ObserverList, it's legal to remove
+    // an observer that was never added), or if RemoveAllPageObserver is being
+    // called from an OnPageNodeAdded implementation that happens to be called
+    // before PageLiveStateDecorator::OnPageNodeAdded.
+    if (data) {
+      data->RemoveObserver(observer);
+    }
+  }
+  PageLiveStateDecorator::GetFromGraph(graph)
+      ->all_page_observers_.RemoveObserver(observer);
+}
+
+// static
+bool PageLiveStateDecorator::HasAllPageObserver(
+    PageLiveStateObserver* observer) {
+  if (!PerformanceManager::IsAvailable()) {
+    // Observer list was cleared when PageLiveStateDecorator was destroyed.
+    return false;
+  }
+  return PageLiveStateDecorator::GetFromGraph(PerformanceManager::GetGraph())
+      ->all_page_observers_.HasObserver(observer);
+}
 
 // static
 void PageLiveStateDecorator::OnCapabilityTypesChanged(
@@ -380,24 +431,19 @@ void PageLiveStateDecorator::OnIsCapturingDisplayChanged(
 }
 
 // static
+void PageLiveStateDecorator::SetIsDiscarded(content::WebContents* contents,
+                                            bool is_discarded) {
+  SetPropertyForWebContentsPageNode(
+      contents, &PageLiveStateDataImpl::set_is_discarded, is_discarded);
+}
+
+// static
 void PageLiveStateDecorator::SetIsAutoDiscardable(
     content::WebContents* contents,
     bool is_auto_discardable) {
   SetPropertyForWebContentsPageNode(
       contents, &PageLiveStateDataImpl::set_is_auto_discardable,
       is_auto_discardable);
-}
-
-// static
-void PageLiveStateDecorator::SetWasDiscarded(content::WebContents* contents,
-                                             bool was_discarded) {
-  // TODO(crbug.com/391179510): This check validates the assumption that the
-  // WasDiscarded() property is not set correctly. If that assumption holds,
-  // remove all code that depends on it as discussed on the bug.
-  CHECK(!was_discarded, base::NotFatalUntil::M136);
-
-  SetPropertyForWebContentsPageNode(
-      contents, &PageLiveStateDataImpl::set_was_discarded, was_discarded);
 }
 
 // static
@@ -420,6 +466,102 @@ void PageLiveStateDecorator::SetIsDevToolsOpen(content::WebContents* contents,
   SetPropertyForWebContentsPageNode(
       contents, &PageLiveStateDataImpl::set_is_dev_tools_open,
       is_dev_tools_open);
+}
+
+// static
+bool PageLiveStateDecorator::IsConnectedToUSBDevice(
+    content::WebContents* contents) {
+  return GetPropertyForWebContentsPageNode<bool>(
+      contents, &PageLiveStateDataImpl::IsConnectedToUSBDevice);
+}
+
+// static
+bool PageLiveStateDecorator::IsConnectedToBluetoothDevice(
+    content::WebContents* contents) {
+  return GetPropertyForWebContentsPageNode<bool>(
+      contents, &PageLiveStateDataImpl::IsConnectedToBluetoothDevice);
+}
+
+// static
+bool PageLiveStateDecorator::IsConnectedToHidDevice(
+    content::WebContents* contents) {
+  return GetPropertyForWebContentsPageNode<bool>(
+      contents, &PageLiveStateDataImpl::IsConnectedToHidDevice);
+}
+
+// static
+bool PageLiveStateDecorator::IsConnectedToSerialPort(
+    content::WebContents* contents) {
+  return GetPropertyForWebContentsPageNode<bool>(
+      contents, &PageLiveStateDataImpl::IsConnectedToSerialPort);
+}
+
+// static
+bool PageLiveStateDecorator::IsCapturingVideo(content::WebContents* contents) {
+  return GetPropertyForWebContentsPageNode<bool>(
+      contents, &PageLiveStateDataImpl::IsCapturingVideo);
+}
+
+// static
+bool PageLiveStateDecorator::IsCapturingAudio(content::WebContents* contents) {
+  return GetPropertyForWebContentsPageNode<bool>(
+      contents, &PageLiveStateDataImpl::IsCapturingAudio);
+}
+
+// static
+bool PageLiveStateDecorator::IsBeingMirrored(content::WebContents* contents) {
+  return GetPropertyForWebContentsPageNode<bool>(
+      contents, &PageLiveStateDataImpl::IsBeingMirrored);
+}
+
+// static
+bool PageLiveStateDecorator::IsCapturingWindow(content::WebContents* contents) {
+  return GetPropertyForWebContentsPageNode<bool>(
+      contents, &PageLiveStateDataImpl::IsCapturingWindow);
+}
+
+// static
+bool PageLiveStateDecorator::IsCapturingDisplay(
+    content::WebContents* contents) {
+  return GetPropertyForWebContentsPageNode<bool>(
+      contents, &PageLiveStateDataImpl::IsCapturingDisplay);
+}
+
+// static
+bool PageLiveStateDecorator::IsDiscarded(content::WebContents* contents) {
+  return GetPropertyForWebContentsPageNode<bool>(
+      contents, &PageLiveStateDataImpl::IsDiscarded);
+}
+
+// static
+bool PageLiveStateDecorator::IsAutoDiscardable(content::WebContents* contents) {
+  return GetPropertyForWebContentsPageNode<bool>(
+      contents, &PageLiveStateDataImpl::IsAutoDiscardable);
+}
+
+// static
+bool PageLiveStateDecorator::IsActiveTab(content::WebContents* contents) {
+  return GetPropertyForWebContentsPageNode<bool>(
+      contents, &PageLiveStateDataImpl::IsActiveTab);
+}
+
+// static
+bool PageLiveStateDecorator::IsPinnedTab(content::WebContents* contents) {
+  return GetPropertyForWebContentsPageNode<bool>(
+      contents, &PageLiveStateDataImpl::IsPinnedTab);
+}
+
+// static
+bool PageLiveStateDecorator::IsDevToolsOpen(content::WebContents* contents) {
+  return GetPropertyForWebContentsPageNode<bool>(
+      contents, &PageLiveStateDataImpl::IsDevToolsOpen);
+}
+
+// static
+bool PageLiveStateDecorator::UpdatedTitleOrFaviconInBackground(
+    content::WebContents* contents) {
+  return GetPropertyForWebContentsPageNode<bool>(
+      contents, &PageLiveStateDataImpl::UpdatedTitleOrFaviconInBackground);
 }
 
 void PageLiveStateDecorator::OnPassedToGraph(Graph* graph) {
@@ -449,8 +591,8 @@ base::Value::Dict PageLiveStateDecorator::DescribePageNodeData(
   ret.Set("IsBeingMirrored", data->IsBeingMirrored());
   ret.Set("IsCapturingWindow", data->IsCapturingWindow());
   ret.Set("IsCapturingDisplay", data->IsCapturingDisplay());
+  ret.Set("IsDiscarded", data->IsDiscarded());
   ret.Set("IsAutoDiscardable", data->IsAutoDiscardable());
-  ret.Set("WasDiscarded", data->WasDiscarded());
   ret.Set("IsActiveTab", data->IsActiveTab());
   ret.Set("IsPinnedTab", data->IsPinnedTab());
   ret.Set("IsDevToolsOpen", data->IsDevToolsOpen());
@@ -458,6 +600,31 @@ base::Value::Dict PageLiveStateDecorator::DescribePageNodeData(
           data->UpdatedTitleOrFaviconInBackground());
 
   return ret;
+}
+
+void PageLiveStateDecorator::OnPageNodeAdded(const PageNode* page_node) {
+  if (all_page_observers_.empty()) {
+    return;
+  }
+  auto* data =
+      PageLiveStateDataImpl::GetOrCreate(PageNodeImpl::FromNode(page_node));
+  for (PageLiveStateObserver& observer : all_page_observers_) {
+    data->AddObserver(&observer);
+  }
+}
+
+void PageLiveStateDecorator::OnBeforePageNodeRemoved(
+    const PageNode* page_node) {
+  if (all_page_observers_.empty()) {
+    return;
+  }
+  auto* data = PageLiveStateDataImpl::Get(PageNodeImpl::FromNode(page_node));
+  // Since an observer exists, AddAllPageObservers was called. So `data` was
+  // created either there or in OnPageNodeAdded.
+  CHECK(data);
+  for (PageLiveStateObserver& observer : all_page_observers_) {
+    data->RemoveObserver(&observer);
+  }
 }
 
 void PageLiveStateDecorator::OnTitleUpdated(const PageNode* page_node) {
@@ -471,6 +638,17 @@ void PageLiveStateDecorator::OnFaviconUpdated(const PageNode* page_node) {
   if (!page_node->IsVisible()) {
     PageLiveStateDataImpl::GetOrCreate(PageNodeImpl::FromNode(page_node))
         ->set_updated_title_or_favicon_in_background(true);
+  }
+}
+
+void PageLiveStateDecorator::OnAboutToBeDiscarded(
+    const PageNode* page_node,
+    const PageNode* new_page_node) {
+  if (const auto* data =
+          PageLiveStateDataImpl::Get(PageNodeImpl::FromNode(page_node))) {
+    // IsAutoDiscardable is a tab property so applies to the new PageNode too.
+    PageLiveStateDataImpl::GetOrCreate(PageNodeImpl::FromNode(new_page_node))
+        ->set_is_auto_discardable(data->IsAutoDiscardable());
   }
 }
 

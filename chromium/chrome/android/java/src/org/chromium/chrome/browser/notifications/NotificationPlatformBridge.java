@@ -15,7 +15,8 @@ import android.content.Intent;
 import android.content.res.Resources;
 import android.graphics.Bitmap;
 import android.net.Uri;
-import android.os.Build;
+import android.os.Build.VERSION;
+import android.os.Build.VERSION_CODES;
 import android.os.Bundle;
 import android.os.SystemClock;
 import android.text.Spannable;
@@ -42,6 +43,7 @@ import org.chromium.chrome.R;
 import org.chromium.chrome.browser.browserservices.TrustedWebActivityClient;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.init.ChromeBrowserInitializer;
+import org.chromium.chrome.browser.notifications.NotificationUmaTracker.SystemNotificationType;
 import org.chromium.chrome.browser.notifications.SuspiciousNotificationWarningUtils.SuspiciousNotificationWarningInteractions;
 import org.chromium.chrome.browser.notifications.channels.SiteChannelsManager;
 import org.chromium.chrome.browser.profiles.Profile;
@@ -158,6 +160,7 @@ public class NotificationPlatformBridge {
         public final String profileId;
         public final boolean incognito;
         public final String webApkPackage;
+        public final String channelId;
 
         public NotificationIdentifyingAttributes(
                 String notificationId,
@@ -166,7 +169,8 @@ public class NotificationPlatformBridge {
                 String scopeUrl,
                 String profileId,
                 boolean incognito,
-                String webApkPackage) {
+                String webApkPackage,
+                String channelId) {
             this.notificationId = notificationId;
             this.notificationType = notificationType;
             this.origin = origin;
@@ -174,6 +178,7 @@ public class NotificationPlatformBridge {
             this.profileId = profileId;
             this.incognito = incognito;
             this.webApkPackage = webApkPackage;
+            this.channelId = channelId;
         }
 
         /** Extracts a notification's identifying attributes from `intent` extras. */
@@ -197,7 +202,9 @@ public class NotificationPlatformBridge {
                     /* webApkPackage= */ Objects.requireNonNullElse(
                             intent.getStringExtra(
                                     NotificationConstants.EXTRA_NOTIFICATION_INFO_WEBAPK_PACKAGE),
-                            ""));
+                            ""),
+                    /* channelId= */ intent.getStringExtra(
+                            NotificationConstants.EXTRA_NOTIFICATION_INFO_CHANNEL_ID));
         }
     }
 
@@ -522,6 +529,8 @@ public class NotificationPlatformBridge {
         intent.putExtra(
                 NotificationConstants.EXTRA_NOTIFICATION_INFO_WEBAPK_PACKAGE,
                 attributes.webApkPackage);
+        intent.putExtra(
+                NotificationConstants.EXTRA_NOTIFICATION_INFO_CHANNEL_ID, attributes.channelId);
         intent.putExtra(NotificationConstants.EXTRA_NOTIFICATION_INFO_ACTION_INDEX, actionIndex);
 
         // This flag ensures the broadcast is delivered with foreground priority. It also means the
@@ -710,6 +719,7 @@ public class NotificationPlatformBridge {
                 UserPrefs.get(ProfileManager.getLastUsedRegularProfile())
                         .getBoolean(NOTIFICATIONS_VIBRATE_ENABLED);
         final boolean incognito = profile.isOffTheRecord();
+        final String channelId = SiteChannelsManager.getInstance().getChannelIdForOrigin(origin);
         // TODO(peter): by-pass this check for non-Web Notification types.
         getWebApkPackage(scopeUrl)
                 .then(
@@ -723,7 +733,8 @@ public class NotificationPlatformBridge {
                                                         scopeUrl,
                                                         profileId,
                                                         incognito,
-                                                        webApkPackage),
+                                                        webApkPackage,
+                                                        channelId),
                                                 profile,
                                                 vibrateEnabled,
                                                 title,
@@ -778,6 +789,12 @@ public class NotificationPlatformBridge {
                         identifyingAttributes.webApkPackage);
         // Record whether it's known whether notifications can be shown to the user at all.
         NotificationSystemStatusUtil.recordAppNotificationStatusHistogram();
+
+        if (image != null) {
+            RecordHistogram.recordCount100000Histogram(
+                    "Notifications.Android.ImageMemorySizeInKB",
+                    image.getAllocationByteCount() / 1000);
+        }
 
         NotificationBuilderBase notificationBuilder =
                 prepareNotificationBuilder(
@@ -838,7 +855,7 @@ public class NotificationPlatformBridge {
                         && ChromeFeatureList.isEnabled(
                                 ChromeFeatureList.SHOW_WARNINGS_FOR_SUSPICIOUS_NOTIFICATIONS);
         if (ChromeFeatureList.isEnabled(ChromeFeatureList.NOTIFICATION_ONE_TAP_UNSUBSCRIBE)
-                && Build.VERSION.SDK_INT >= Build.VERSION_CODES.P
+                && VERSION.SDK_INT >= VERSION_CODES.P
                 && identifyingAttributes.notificationType == NotificationType.WEB_PERSISTENT
                 && !skipUAButtons
                 && !shouldTreatNotificationAsSuspicious) {
@@ -886,7 +903,7 @@ public class NotificationPlatformBridge {
                                 }
                                 NotificationUmaTracker.getInstance()
                                         .onNotificationShown(
-                                                NotificationUmaTracker.SystemNotificationType.SITES,
+                                                SystemNotificationType.SITES,
                                                 notification.getNotification());
                             } catch (RuntimeException e) {
                                 Log.e(
@@ -969,8 +986,7 @@ public class NotificationPlatformBridge {
         if (shouldSetChannelId(forWebApk)) {
             // TODO(crbug.com/40544272): Channel ID should be retrieved from cache in native and
             // passed through to here with other notification parameters.
-            String channelId = SiteChannelsManager.getInstance().getChannelIdForOrigin(origin);
-            notificationBuilder.setChannelId(channelId);
+            notificationBuilder.setChannelId(identifyingAttributes.channelId);
         }
 
         for (int actionIndex = 0; actionIndex < actions.length; actionIndex++) {
@@ -1043,10 +1059,7 @@ public class NotificationPlatformBridge {
                         /* actions= */ new ActionInfo[] {});
 
         if (shouldSetChannelId(/* forWebApk= */ false)) {
-            String channelId =
-                    SiteChannelsManager.getInstance()
-                            .getChannelIdForOrigin(identifyingAttributes.origin);
-            notificationBuilder.setChannelId(channelId);
+            notificationBuilder.setChannelId(identifyingAttributes.channelId);
         }
 
         // TODO(crbug.com/41494407): We are setting quite a few uncommon attributes here, consider
@@ -1869,8 +1882,7 @@ public class NotificationPlatformBridge {
         if (shouldSetChannelId(forWebApk)) {
             // TODO(crbug.com/40544272): Channel ID should be retrieved from cache in native and
             // passed through to here with other notification parameters.
-            String channelId = SiteChannelsManager.getInstance().getChannelIdForOrigin(origin);
-            notificationBuilder.setChannelId(channelId);
+            notificationBuilder.setChannelId(identifyingAttributes.channelId);
         }
 
         // The Android framework applies a fallback vibration pattern for the sound when the device

@@ -140,3 +140,12 @@ if (is_ios) {
     deps = [ ":unzip_lottie_framework" ]
   }
 }
+
+if (!is_android) {
+  static_library("lz4_minimal") {
+    sources = [
+      "lz4/lz4.c",
+      "lz4/lz4.h",
+    ]
+  }
+}

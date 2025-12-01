@@ -58,6 +58,13 @@ export const SAFETY_HUB_EXTENSION_SHOWN_HISTOGRAM_NAME =
 // `SafetyCheckWarningReason` defined in the `enums.xml` file.
 export const SAFETY_HUB_WARNING_REASON_MAX_SIZE = 7;
 
+// Histogram names for logging when an extension is uploaded to the user's
+// account.
+export const UPLOAD_EXTENSION_TO_ACCOUNT_ITEMS_LIST_PAGE_HISTOGRAM_NAME =
+    `Extensions.UploadExtensionToAccount.ItemsListPage`;
+export const UPLOAD_EXTENSION_TO_ACCOUNT_DETAILS_VIEW_PAGE_HISTOGRAM_NAME =
+    `Extensions.UploadExtensionToAccount.DetailsViewPage`;
+
 /**
  * Returns true if the extension is enabled, including terminated
  * extensions.
@@ -323,10 +330,13 @@ export function createDummyExtensionInfo():
     },
     errorCollection: {isEnabled: false, isActive: false},
     fileAccess: {isEnabled: false, isActive: false},
+    fileAccessPendingChange: false,
     homePage: {url: '', specified: false},
     iconUrl: '',
     id: '',
     incognitoAccess: {isEnabled: false, isActive: false},
+    userScriptsAccess: {isEnabled: false, isActive: false},
+    incognitoAccessPendingChange: false,
     installWarnings: [],
     location: chrome.developerPrivate.Location.UNKNOWN,
     manifestErrors: [],

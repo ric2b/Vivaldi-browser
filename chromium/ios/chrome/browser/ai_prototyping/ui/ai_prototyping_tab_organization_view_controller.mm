@@ -56,8 +56,8 @@ using optimization_guide::proto::
   [super viewDidLoad];
 
   self.sheetPresentationController.detents = @[
-    UISheetPresentationControllerDetent.mediumDetent,
-    UISheetPresentationControllerDetent.largeDetent,
+    [UISheetPresentationControllerDetent mediumDetent],
+    [UISheetPresentationControllerDetent largeDetent],
   ];
 
   UILabel* label = [[UILabel alloc] init];
@@ -101,6 +101,8 @@ using optimization_guide::proto::
   _responseContainer.layer.borderColor = [primaryColor CGColor];
   _responseContainer.layer.borderWidth = kBorderWidth;
   _responseContainer.textContainer.lineBreakMode = NSLineBreakByWordWrapping;
+  _responseContainer.text =
+      l10n_util::GetNSString(IDS_IOS_AI_PROTOTYPING_RESULT_PLACEHOLDER);
 
   UIStackView* stackView = [[UIStackView alloc] initWithArrangedSubviews:@[
     label, _groupingStrategyButton, _groupTabsButton, _responseContainer
@@ -126,6 +128,7 @@ using optimization_guide::proto::
 
 - (void)onGroupTabsButtonPressed:(UIButton*)button {
   [self disableSubmitButton];
+  [self updateResponseField:@""];
   [self.mutator executeGroupTabsWithStrategy:self.groupingStrategy];
 }
 
@@ -133,9 +136,11 @@ using optimization_guide::proto::
 
 - (void)updateResponseField:(NSString*)response {
   _responseContainer.text = response;
+}
 
-  // Re-enable the submit button as the query has resolved.
-  [self enableSubmitButton];
+- (void)enableSubmitButtons {
+  _groupTabsButton.enabled = YES;
+  _groupTabsButton.backgroundColor = [UIColor colorNamed:kBlueColor];
 }
 
 #pragma mark - Private
@@ -237,12 +242,6 @@ using optimization_guide::proto::
     default:
       NOTREACHED();
   }
-}
-
-// Enable submit button, and style the accordingly.
-- (void)enableSubmitButton {
-  _groupTabsButton.enabled = YES;
-  _groupTabsButton.backgroundColor = [UIColor colorNamed:kBlueColor];
 }
 
 // Disable submit button, and style the accordingly.

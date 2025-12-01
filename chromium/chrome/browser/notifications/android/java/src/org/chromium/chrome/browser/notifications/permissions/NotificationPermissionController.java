@@ -9,7 +9,6 @@ import android.content.pm.PackageManager;
 import android.os.Build;
 
 import androidx.annotation.IntDef;
-import androidx.annotation.Nullable;
 
 import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.BuildInfo;
@@ -18,6 +17,8 @@ import org.chromium.base.TimeUtils;
 import org.chromium.base.UnownedUserData;
 import org.chromium.base.UnownedUserDataKey;
 import org.chromium.base.supplier.Supplier;
+import org.chromium.build.annotations.NullMarked;
+import org.chromium.build.annotations.Nullable;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.notifications.NotificationUmaTracker;
 import org.chromium.chrome.browser.notifications.NotificationUmaTracker.NotificationPermissionState;
@@ -39,6 +40,7 @@ import org.chromium.build.BuildConfig;
  * Central class containing the logic for when to trigger notification permission request optionally
  * with a rationale.
  */
+@NullMarked
 public class NotificationPermissionController implements UnownedUserData {
     /** Field trial param controlling rationale behavior. */
     public static final String FIELD_TRIAL_ALWAYS_SHOW_RATIONALE_BEFORE_REQUESTING_PERMISSION =

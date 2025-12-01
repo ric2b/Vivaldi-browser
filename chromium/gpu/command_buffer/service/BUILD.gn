@@ -189,6 +189,8 @@ target(link_target_type, "gles2_sources") {
     "graphite_cache_controller.h",
     "graphite_image_provider.cc",
     "graphite_image_provider.h",
+    "graphite_precompile.cc",
+    "graphite_precompile.h",
     "graphite_utils.cc",
     "graphite_utils.h",
     "id_manager.cc",
@@ -372,7 +374,6 @@ target(link_target_type, "gles2_sources") {
     ":service",
     "//base",
     "//build:chromecast_buildflags",
-    "//build:chromeos_buildflags",
     "//components/crash/core/common",
     "//components/viz/common:shared_image_format",
     "//gpu/command_buffer/client",
@@ -526,8 +527,8 @@ target(link_target_type, "gles2_sources") {
     sources += [
       "dawn_context_provider.cc",
       "dawn_context_provider.h",
-      "shared_image/dawn_shared_texture_holder.cc",
-      "shared_image/dawn_shared_texture_holder.h",
+      "shared_image/dawn_shared_texture_cache.cc",
+      "shared_image/dawn_shared_texture_cache.h",
       "shared_image/skia_graphite_dawn_image_representation.cc",
       "shared_image/skia_graphite_dawn_image_representation.h",
     ]

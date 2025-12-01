@@ -22,11 +22,10 @@ namespace skgpu::graphite {
 
 namespace {
 
-std::string get_uniform_header(int bufferID, const char* name) {
+std::string get_uniform_header(int set, int bufferID, const char* name) {
     std::string result;
-
-    SkSL::String::appendf(&result, "layout (binding=%d) uniform %sUniforms {\n", bufferID, name);
-
+    SkSL::String::appendf(
+            &result, "layout (set=%d, binding=%d) uniform %sUniforms {\n", set, bufferID, name);
     return result;
 }
 
@@ -89,8 +88,10 @@ std::string get_node_uniforms(UniformOffsetCalculator* offsetter,
                                   node->entry()->fUniformStructName,
                                   node->keyIndex());
         } else {
+#if defined(SK_DEBUG)
             SkSL::String::appendf(&result, "// %d - %s uniforms\n",
                                   node->keyIndex(), node->entry()->fName);
+#endif
             result += get_uniforms(offsetter, uniforms, node->keyIndex(), wrotePaintColor);
         }
     }
@@ -112,7 +113,9 @@ std::string get_ssbo_fields(SkSpan<const Uniform> uniforms,
 
         if (u.isPaintColor() && wrotePaintColor) {
             if (*wrotePaintColor) {
+#if defined(SK_DEBUG)
                 SkSL::String::appendf(&result, "    // deduplicated %s\n", u.name());
+#endif
                 continue;
             }
 
@@ -143,9 +146,10 @@ std::string get_node_ssbo_fields(const ShaderNode* node, bool* wrotePaintColor) 
             SkSL::String::appendf(&result, "%s node_%d;",
                                   node->entry()->fUniformStructName, node->keyIndex());
         } else {
+#if defined(SK_DEBUG)
             SkSL::String::appendf(&result, "// %d - %s uniforms\n",
                                   node->keyIndex(), node->entry()->fName);
-
+#endif
             result += get_ssbo_fields(uniforms, node->keyIndex(), wrotePaintColor);
         }
     }
@@ -163,7 +167,9 @@ std::string emit_intrinsic_constants(const ResourceBindingRequirements& bindingR
     if (bindingReqs.fUseVulkanPushConstantsForIntrinsicConstants) {
         result = "layout (vulkan, push_constant) uniform IntrinsicUniforms {\n";
     } else {
-        result = get_uniform_header(bindingReqs.fIntrinsicBufferBinding, "Intrinsic");
+        result = get_uniform_header(bindingReqs.fUniformsSetIdx,
+                                    bindingReqs.fIntrinsicBufferBinding,
+                                    "Intrinsic");
     }
     result += get_uniforms(&offsetter, kIntrinsicUniforms, -1, /* wrotePaintColor= */ nullptr);
     result.append("};\n\n");
@@ -173,14 +179,15 @@ std::string emit_intrinsic_constants(const ResourceBindingRequirements& bindingR
     return result;
 }
 
-std::string emit_paint_params_uniforms(int bufferID,
+std::string emit_paint_params_uniforms(int set,
+                                       int bufferID,
                                        const Layout layout,
                                        SkSpan<const ShaderNode*> nodes,
                                        bool* hasUniforms,
                                        bool* wrotePaintColor) {
     auto offsetter = UniformOffsetCalculator::ForTopLevel(layout);
 
-    std::string result = get_uniform_header(bufferID, "FS");
+    std::string result = get_uniform_header(set, bufferID, "FS");
     for (const ShaderNode* n : nodes) {
         result += get_node_uniforms(&offsetter, n, wrotePaintColor);
     }
@@ -195,19 +202,21 @@ std::string emit_paint_params_uniforms(int bufferID,
     return result;
 }
 
-std::string emit_render_step_uniforms(int bufferID,
+std::string emit_render_step_uniforms(int set,
+                                      int bufferID,
                                       const Layout layout,
                                       SkSpan<const Uniform> uniforms) {
     auto offsetter = UniformOffsetCalculator::ForTopLevel(layout);
 
-    std::string result = get_uniform_header(bufferID, "Step");
+    std::string result = get_uniform_header(set, bufferID, "Step");
     result += get_uniforms(&offsetter, uniforms, -1, /* wrotePaintColor= */ nullptr);
     result.append("};\n\n");
 
     return result;
 }
 
-std::string emit_paint_params_storage_buffer(int bufferID,
+std::string emit_paint_params_storage_buffer(int set,
+                                             int bufferID,
                                              SkSpan<const ShaderNode*> nodes,
                                              bool* hasUniforms,
                                              bool* wrotePaintColor) {
@@ -229,24 +238,26 @@ std::string emit_paint_params_storage_buffer(int bufferID,
             "struct FSUniformData {\n"
                 "%s\n"
             "};\n\n"
-            "layout (binding=%d) readonly buffer FSUniforms {\n"
+            "layout (set=%d, binding=%d) readonly buffer FSUniforms {\n"
                 "FSUniformData fsUniformData[];\n"
             "};\n",
             fields.c_str(),
+            set,
             bufferID);
 }
 
-std::string emit_render_step_storage_buffer(int bufferID, SkSpan<const Uniform> uniforms) {
+std::string emit_render_step_storage_buffer(int set, int bufferID, SkSpan<const Uniform> uniforms) {
     SkASSERT(!uniforms.empty());
     std::string fields = get_ssbo_fields(uniforms, -1, /*wrotePaintColor=*/nullptr);
     return SkSL::String::printf(
             "struct StepUniformData {\n"
             "%s\n"
             "};\n\n"
-            "layout (binding=%d) readonly buffer StepUniforms {\n"
+            "layout (set=%d, binding=%d) readonly buffer StepUniforms {\n"
             "    StepUniformData stepUniformData[];\n"
             "};\n",
             fields.c_str(),
+            set,
             bufferID);
 }
 
@@ -304,8 +315,10 @@ std::string get_node_texture_samplers(const ResourceBindingRequirements& binding
     SkSpan<const TextureAndSampler> samplers = node->entry()->fTexturesAndSamplers;
 
     if (!samplers.empty()) {
+#if defined(SK_DEBUG)
         SkSL::String::appendf(&result, "// %d - %s samplers\n",
                               node->keyIndex(), node->entry()->fName);
+#endif
 
         // Determine whether we need to analyze & interpret a ShaderNode's data as immutable
         // SamplerDescs based upon whether:
@@ -320,6 +333,7 @@ std::string get_node_texture_samplers(const ResourceBindingRequirements& binding
             // snippet requirement flag that we can check here to decrease fragility.
             if (!node->data().empty() &&
                 (snippetId == static_cast<int32_t>(BuiltInCodeSnippetID::kImageShader) ||
+                 snippetId == static_cast<int32_t>(BuiltInCodeSnippetID::kImageShaderClamp) ||
                  snippetId == static_cast<int32_t>(BuiltInCodeSnippetID::kCubicImageShader) ||
                  snippetId == static_cast<int32_t>(BuiltInCodeSnippetID::kHWImageShader))) {
                 append_sampler_descs(node->data(), *outDescs);
@@ -483,17 +497,26 @@ std::unique_ptr<ShaderInfo> ShaderInfo::Make(const Caps* caps,
                                              UniquePaintParamsID paintID,
                                              bool useStorageBuffers,
                                              skgpu::Swizzle writeSwizzle,
+                                             DstReadStrategy dstReadStrategyIfRequired,
                                              skia_private::TArray<SamplerDesc>* outDescs) {
     const char* shadingSsboIndex =
             useStorageBuffers && step->performsShading() ? "shadingSsboIndex" : nullptr;
-    std::unique_ptr<ShaderInfo> result =
-            std::unique_ptr<ShaderInfo>(new ShaderInfo(rteDict, shadingSsboIndex));
+
+    // If paintID is not valid this is a depth-only draw and there's no fragment shader to compile.
+    const bool hasFragShader = paintID.isValid();
+
+    // Each ShaderInfo is responsible for determining whether or not a dst read is required. This
+    // generally occurs while generating the frag shader, but if we do not use one, then we know we
+    // do not need to read the dst texture and can assign the DstReadStrategy to kNoneRequired.
+    auto result = std::unique_ptr<ShaderInfo>(
+            new ShaderInfo(dict, rteDict,
+                           shadingSsboIndex,
+                           hasFragShader ? dstReadStrategyIfRequired
+                                         : DstReadStrategy::kNoneRequired));
 
     // The fragment shader must be generated before the vertex shader, because we determine
     // properties of the entire program while generating the fragment shader.
-
-    // If paintID is not valid this is a depth-only draw and there's no fragment shader to compile.
-    if (paintID.isValid()) {
+    if (hasFragShader) {
         result->generateFragmentSkSL(caps,
                                      dict,
                                      step,
@@ -510,8 +533,34 @@ std::unique_ptr<ShaderInfo> ShaderInfo::Make(const Caps* caps,
     return result;
 }
 
-ShaderInfo::ShaderInfo(const RuntimeEffectDictionary* rteDict, const char* ssboIndex)
-        : fRuntimeEffectDictionary(rteDict), fSsboIndex(ssboIndex) {}
+ShaderInfo::ShaderInfo(const ShaderCodeDictionary* shaderCodeDictionary,
+                       const RuntimeEffectDictionary* rteDict,
+                       const char* ssboIndex,
+                       DstReadStrategy dstReadStrategy)
+        : fShaderCodeDictionary(shaderCodeDictionary)
+        , fRuntimeEffectDictionary(rteDict)
+        , fSsboIndex(ssboIndex)
+        , fDstReadStrategy(dstReadStrategy) {}
+
+namespace {
+std::string dst_read_strategy_to_str(DstReadStrategy strategy) {
+    switch (strategy) {
+        case DstReadStrategy::kNoneRequired:
+            return "NoneRequired";
+        case DstReadStrategy::kTextureCopy:
+            return "TextureCopy";
+        case DstReadStrategy::kTextureSample:
+            return "TextureSample";
+        case DstReadStrategy::kReadFromInput:
+            return "ReadFromInput";
+        case DstReadStrategy::kFramebufferFetch:
+            return "FramebufferFetch";
+        default:
+            SkUNREACHABLE;
+    }
+    return "";
+}
+} // anonymous
 
 // The current, incomplete, model for shader construction is:
 //   - Static code snippets (which can have an arbitrary signature) live in the Graphite
@@ -602,11 +651,13 @@ void ShaderInfo::generateFragmentSkSL(const Caps* caps,
         }
     }
 
+    // The passed-in dstReadStrategy should only be used iff it is determined one is needed. If not,
+    // then manually assign fDstReadStrategy to kNoneRequired. ShaderInfo's dst read strategy
+    // informs the pipeline's via PipelineInfo created w/ shader info.
     bool dstReadRequired = IsDstReadRequired(caps, finalBlendMode, finalCoverage);
-    // TODO(b/390457657): Consult a DstReadStrategy attribute rather than querying Caps. The method
-    // used to do so will eventually require target texture information which is not accessible here
-    fDstReadStrategy =
-            dstReadRequired ? caps->getDstReadStrategy() : DstReadStrategy::kNoneRequired;
+    if (!dstReadRequired) {
+        fDstReadStrategy = DstReadStrategy::kNoneRequired;
+    }
 
     // TODO(b/372912880): Release assert debugging for illegal instruction occurring in the wild.
     SkASSERTF_RELEASE(finalBlendMode.has_value() || dstReadRequired,
@@ -641,10 +692,12 @@ void ShaderInfo::generateFragmentSkSL(const Caps* caps,
     preamble += emit_intrinsic_constants(bindingReqs);
     if (hasStepUniforms) {
         if (useStepStorageBuffer) {
-            preamble += emit_render_step_storage_buffer(bindingReqs.fRenderStepBufferBinding,
+            preamble += emit_render_step_storage_buffer(bindingReqs.fUniformsSetIdx,
+                                                        bindingReqs.fRenderStepBufferBinding,
                                                         step->uniforms());
         } else {
-            preamble += emit_render_step_uniforms(bindingReqs.fRenderStepBufferBinding,
+            preamble += emit_render_step_uniforms(bindingReqs.fUniformsSetIdx,
+                                                  bindingReqs.fRenderStepBufferBinding,
                                                   bindingReqs.fUniformBufferLayout,
                                                   step->uniforms());
         }
@@ -652,13 +705,15 @@ void ShaderInfo::generateFragmentSkSL(const Caps* caps,
 
     bool wrotePaintColor = false;
     if (useShadingStorageBuffer) {
-        preamble += emit_paint_params_storage_buffer(bindingReqs.fPaintParamsBufferBinding,
+        preamble += emit_paint_params_storage_buffer(bindingReqs.fUniformsSetIdx,
+                                                     bindingReqs.fPaintParamsBufferBinding,
                                                      fRootNodes,
                                                      &fHasPaintUniforms,
                                                      &wrotePaintColor);
         SkSL::String::appendf(&preamble, "uint %s;\n", this->ssboIndex());
     } else {
-        preamble += emit_paint_params_uniforms(bindingReqs.fPaintParamsBufferBinding,
+        preamble += emit_paint_params_uniforms(bindingReqs.fUniformsSetIdx,
+                                               bindingReqs.fPaintParamsBufferBinding,
                                                bindingReqs.fUniformBufferLayout,
                                                fRootNodes,
                                                &fHasPaintUniforms,
@@ -667,9 +722,10 @@ void ShaderInfo::generateFragmentSkSL(const Caps* caps,
 
     if (useGradientStorageBuffer) {
         SkSL::String::appendf(&preamble,
-                              "layout (binding=%d) readonly buffer FSGradientBuffer {\n"
+                              "layout (set=%d, binding=%d) readonly buffer FSGradientBuffer {\n"
                               "    float %s[];\n"
                               "};\n",
+                              bindingReqs.fUniformsSetIdx,
                               bindingReqs.fGradientBufferBinding,
                               ShaderInfo::kGradientBufferName);
         fHasGradientBuffer = true;
@@ -885,6 +941,11 @@ void ShaderInfo::generateFragmentSkSL(const Caps* caps,
     fFSLabel = step->name();
     fFSLabel += " + ";
     fFSLabel += label;
+    if (fDstReadStrategy != DstReadStrategy::kNoneRequired) {
+        fFSLabel += " + Dst Read (";
+        fFSLabel += dst_read_strategy_to_str(fDstReadStrategy);
+        fFSLabel += ")";
+    }
 }
 
 void ShaderInfo::generateVertexSkSL(const Caps* caps,
@@ -909,11 +970,15 @@ void ShaderInfo::generateVertexSkSL(const Caps* caps,
             }
         };
         if (step->numVertexAttributes() > 0) {
+#if defined(SK_DEBUG)
             sksl.append("// vertex attrs\n");
+#endif
             add_attrs(step->vertexAttributes());
         }
         if (step->numInstanceAttributes() > 0) {
+#if defined(SK_DEBUG)
             sksl.append("// instance attrs\n");
+#endif
             add_attrs(step->instanceAttributes());
         }
     }
@@ -922,10 +987,12 @@ void ShaderInfo::generateVertexSkSL(const Caps* caps,
     // The uniforms are mangled by having their index in 'fEntries' as a suffix (i.e., "_%d")
     if (hasStepUniforms) {
         if (useStepStorageBuffer) {
-            sksl += emit_render_step_storage_buffer(bindingReqs.fRenderStepBufferBinding,
+            sksl += emit_render_step_storage_buffer(bindingReqs.fUniformsSetIdx,
+                                                    bindingReqs.fRenderStepBufferBinding,
                                                     step->uniforms());
         } else {
-            sksl += emit_render_step_uniforms(bindingReqs.fRenderStepBufferBinding,
+            sksl += emit_render_step_uniforms(bindingReqs.fUniformsSetIdx,
+                                              bindingReqs.fRenderStepBufferBinding,
                                               bindingReqs.fUniformBufferLayout,
                                               step->uniforms());
         }

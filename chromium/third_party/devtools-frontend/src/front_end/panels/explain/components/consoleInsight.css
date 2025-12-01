@@ -19,7 +19,6 @@
 .wrapper {
   background-color: var(--sys-color-cdt-base-container);
   border-radius: 16px;
-  /* stylelint-disable-next-line property-no-unknown */
   container-type: inline-size;
   display: grid;
   animation: expand var(--sys-motion-duration-medium2) var(--sys-motion-easing-emphasized) forwards;
@@ -177,7 +176,6 @@ footer {
   gap: 32px;
 }
 
-/* stylelint-disable-next-line at-rule-no-unknown */
 @container (max-width: 600px) {
   footer {
     gap: 8px;
@@ -279,7 +277,6 @@ details {
   margin-top: 10px;
 }
 
-/* stylelint-disable-next-line selector-pseudo-element-no-unknown */
 ::details-content {
   height: 0;
   transition:
@@ -287,7 +284,6 @@ details {
     content-visibility var(--sys-motion-duration-short4) var(--sys-motion-easing-emphasized) allow-discrete;
 }
 
-/* stylelint-disable-next-line selector-pseudo-element-no-unknown */
 [open]::details-content {
   height: auto;
 }
@@ -295,12 +291,12 @@ details {
 details.references {
   /* This transition is only added because there is no `transitionend` event in
      JS for the `::details-content` transition. */
-  transition: margin-top var(--sys-motion-duration-short4) var(--sys-motion-easing-emphasized);
+  transition: margin-bottom var(--sys-motion-duration-short4) var(--sys-motion-easing-emphasized);
 }
 
 details.references[open] {
-  /* This transition does not affect the actual UI. */
-  margin-top: 11px;
+  /* This transition does not affect the actual UI because of collapsing margins. */
+  margin-bottom: var(--sys-size-1);
 }
 
 h2 {
@@ -364,8 +360,18 @@ h2:focus-visible {
   display: table-cell;
 }
 
-.sources-list x-link.highlighted { /* stylelint-disable-line selector-type-no-unknown */
-  background-color: var(--sys-color-yellow-container);
+.sources-list x-link.highlighted {
+  animation: highlight-fadeout 2s;
+}
+
+@keyframes highlight-fadeout {
+  from {
+    background-color: var(--sys-color-yellow-container);
+  }
+
+  to {
+    background-color: transparent;
+  }
 }
 
 .references-list {

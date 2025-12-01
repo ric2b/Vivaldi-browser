@@ -127,7 +127,7 @@ struct simpl_chol_helper {
   // Adapted from:
   // Joseph W. Liu. (1986).
   // A compact row storage scheme for Cholesky factors using elimination trees.
-  // ACM Trans. Math. Softw. 12, 2 (June 1986), 127–148. https://doi.org/10.1145/6497.6499
+  // ACM Trans. Math. Softw. 12, 2 (June 1986), 127-148. https://doi.org/10.1145/6497.6499
 
   // Computes the elimination forest of the lower adjacency matrix, a compact representation of the sparse L factor.
   // The L factor may contain multiple elimination trees if a column contains only its diagonal element.
@@ -197,7 +197,7 @@ struct simpl_chol_helper {
   // Adapted from:
   // Gilbert, J. R., Ng, E., & Peyton, B. W. (1994).
   // An efficient algorithm to compute row and column counts for sparse Cholesky factorization.
-  // SIAM Journal on Matrix Analysis and Applications, 15(4), 1075–1091.
+  // SIAM Journal on Matrix Analysis and Applications, 15(4), 1075-1091.
 
   // Computes the non-zero pattern of the L factor.
   static void calc_colcount(const StorageIndex size, const StorageIndex* hadjOuter, const StorageIndex* hadjInner,

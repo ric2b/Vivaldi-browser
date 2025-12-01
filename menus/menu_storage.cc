@@ -125,7 +125,7 @@ bool HasVersionStepped(const std::string& bundled_version,
 }
 
 void OnLoad(const base::FilePath& profile_file,
-            const base::FilePath::StringPieceType& filename,
+            const base::FilePath::StringViewType& filename,
             const base::WeakPtr<menus::MenuStorage> storage,
             std::unique_ptr<MenuLoadDetails> details) {
   bool exists;

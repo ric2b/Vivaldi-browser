@@ -191,6 +191,18 @@ SPECIAL_CASES = {
         "License": "CC BY 4.0",
         "License File": ["/../scripts/licenses/geonames_license.txt"],
     },
+    join('..', 'thirdparty', 'lz4'): {
+        "Name": "LZ4",
+        "URL": "https://github.com/lz4/lz4",
+        "License": "BSD-2-Clause",
+        "License File": ["/../thirdparty/lz4/LICENSE"],
+    },
+    join('..', 'ios', 'background_audio', 'resources'): {
+        "Name": "Brave Media Backgrounding",
+        "URL": "https://vivaldi.com/source/",
+        "License": "MPL-2.0",
+        "License File": ["/../ios/background_audio/resources/LICENSE.txt"],
+    },
 }
 
 ADDITIONAL_PATHS = tuple(SPECIAL_CASES.keys())

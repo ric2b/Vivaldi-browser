@@ -52,6 +52,15 @@ class VIZ_COMMON_EXPORT CopyOutputRequest {
   // results will still be returned via ResultDestination::kSystemMemory.
   using ResultDestination = CopyOutputResult::Destination;
 
+  // This setting might influence the thread priority to use when sending the
+  // result over IPC. Currently only implemented for Android.
+  enum class IpcPriority {
+    // Use existing priority.
+    kDefault,
+    // Reduce the priority to background.
+    kBackground
+  };
+
   using CopyOutputRequestCallback =
       base::OnceCallback<void(std::unique_ptr<CopyOutputResult> result)>;
 
@@ -71,9 +80,14 @@ class VIZ_COMMON_EXPORT CopyOutputRequest {
   // Returns the requested result destination.
   ResultDestination result_destination() const { return result_destination_; }
 
+  IpcPriority ipc_priority() const { return ipc_priority_; }
+  // Optionally set the thread priority to use when sending the result over IPC.
+  // Currently only affects Android.
+  void set_ipc_priority(IpcPriority p) { ipc_priority_ = p; }
+
   // Requests that the result callback be run as a task posted to the given
-  // |task_runner|. If this is not set, the result callback could be run from
-  // any context.
+  // |task_runner|. If this is not set, the result callback will be run on the
+  // thread that the `CopyOutputRequest` was created on.
   void set_result_task_runner(
       scoped_refptr<base::SequencedTaskRunner> task_runner) {
     result_task_runner_ = std::move(task_runner);
@@ -167,6 +181,7 @@ class VIZ_COMMON_EXPORT CopyOutputRequest {
 
   const ResultFormat result_format_;
   const ResultDestination result_destination_;
+  IpcPriority ipc_priority_ = IpcPriority::kDefault;
   CopyOutputRequestCallback result_callback_;
   scoped_refptr<base::SequencedTaskRunner> result_task_runner_;
   gfx::Vector2d scale_from_;

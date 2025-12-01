@@ -169,15 +169,20 @@ Then reboot. Your rootfs will be mounted read/write.
 
 ## Specifying Command Line Flags for Chrome
 
-*   [Enable developer mode.](#dev-mode)
-*   [Disable rootfs verification.](#disable-verity)
-*   [Access a shell.](#shell)
+*   [Enable developer mode.](#Enable-Developer-Mode)
+*   [Disable rootfs verification.](#making-changes-to-the-filesystem)
+*   [Access a shell.](#getting-to-a-command-prompt)
 *   Modify `/etc/chrome_dev.conf` (read the comments in the file for more
-    details). Be sure to use sudo while opening your editor.
+    details). Be sure to use sudo while opening your editor, e.g.:
+
+    ```bash
+    $ sudo vi /etc/chrome_dev.conf
+    ```
+
 *   Restart the UI with:
 
     ```bash
-    (dut) $ sudo restart ui
+    $ sudo restart ui
     ```
 
 ## Booting from USB or SD card

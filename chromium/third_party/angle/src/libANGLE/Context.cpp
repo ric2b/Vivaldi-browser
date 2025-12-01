@@ -527,6 +527,53 @@ bool CanSupportAEP(const gl::Version &version, const gl::Extensions &extensions)
 
     return result;
 }
+
+// Temporarily turns off draw buffers being used for pixel local storage, and only if the PLS
+// implementation is framebuffer fetch.
+//
+// NOTE: This is a little nonstandard because the glDrawBuffers entrypoint is supposed to disable
+// PLS, but since we only call it when the implementation is
+// ShPixelLocalStorageType::FramebufferFetch, it's not a problem.
+class ScopedPLSFramebufferFetchDrawBuffersDisable
+{
+  public:
+    ScopedPLSFramebufferFetchDrawBuffersDisable(Context *context) : mContext(context)
+    {
+        GLsizei nonPLSDrawBufferCount;
+        if (mContext->getImplementation()->getNativePixelLocalStorageOptions().type ==
+                ShPixelLocalStorageType::FramebufferFetch &&
+            mContext->getPrivateState().hasActivelyOverriddenPLSDrawBuffers(&nonPLSDrawBufferCount))
+        {
+            // Turn off the PLS draw buffers.
+            mHasPLSDrawBuffersWithFramebufferFetch = true;
+            Framebuffer *drawFramebuffer           = mContext->getState().getDrawFramebuffer();
+            // PLS isn't supported on the default framebuffer.
+            ASSERT(!drawFramebuffer->isDefault());
+            const DrawBuffersVector<GLenum> &drawBuffers = drawFramebuffer->getDrawBufferStates();
+            ASSERT(drawBuffers.size() <= std::size(mOriginalDrawBufferState));
+            std::copy(drawBuffers.begin(), drawBuffers.end(), mOriginalDrawBufferState.data());
+            mOriginalDrawBufferCount = static_cast<GLsizei>(drawBuffers.size());
+            // Turn off all non-PLS draw buffers.
+            mContext->drawBuffers(std::min(mOriginalDrawBufferCount, nonPLSDrawBufferCount),
+                                  mOriginalDrawBufferState.data());
+        }
+    }
+
+    ~ScopedPLSFramebufferFetchDrawBuffersDisable()
+    {
+        if (mHasPLSDrawBuffersWithFramebufferFetch)
+        {
+            // Restore the PLS draw buffers.
+            mContext->drawBuffers(mOriginalDrawBufferCount, mOriginalDrawBufferState.data());
+        }
+    }
+
+  private:
+    Context *const mContext;
+    bool mHasPLSDrawBuffersWithFramebufferFetch = false;
+    std::array<GLenum, IMPLEMENTATION_MAX_DRAW_BUFFERS> mOriginalDrawBufferState;
+    GLsizei mOriginalDrawBufferCount;
+};
 }  // anonymous namespace
 
 #if defined(ANGLE_PLATFORM_APPLE)
@@ -1175,26 +1222,13 @@ void Context::deleteProgram(ShaderProgramID program)
 
 void Context::deleteTexture(TextureID textureID)
 {
-    // If a texture object is deleted while its image is bound to a pixel local storage plane on the
-    // currently bound draw framebuffer, and pixel local storage is active, then it is as if
-    // EndPixelLocalStorageANGLE() had been called with <n>=PIXEL_LOCAL_STORAGE_ACTIVE_PLANES_ANGLE
-    // and <storeops> of STORE_OP_STORE_ANGLE.
-    if (mState.getPixelLocalStorageActivePlanes() != 0)
+    if (mState.isTextureBoundToActivePLS(textureID))
     {
-        PixelLocalStorage *pls = mState.getDrawFramebuffer()->peekPixelLocalStorage();
-        // Even though there is a nonzero number of active PLS planes, peekPixelLocalStorage() may
-        // still return null if we are in the middle of deleting the active framebuffer.
-        if (pls != nullptr)
-        {
-            for (GLuint i = 0; i < mState.getCaps().maxPixelLocalStoragePlanes; ++i)
-            {
-                if (pls->getPlane(i).getTextureID() == textureID)
-                {
-                    endPixelLocalStorageImplicit();
-                    break;
-                }
-            }
-        }
+        // If a texture object is deleted while its image is bound to a pixel local storage plane on
+        // the currently bound draw framebuffer, and pixel local storage is active, then it is as if
+        // EndPixelLocalStorageANGLE() had been called with
+        // <n>=PIXEL_LOCAL_STORAGE_ACTIVE_PLANES_ANGLE and <storeops> of STORE_OP_STORE_ANGLE.
+        endPixelLocalStorageImplicit();
     }
 
     Texture *texture = mState.mTextureManager->getTexture(textureID);
@@ -2397,9 +2431,6 @@ void Context::getIntegervImpl(GLenum pname, GLint *params) const
         case GL_MAX_PIXEL_LOCAL_STORAGE_PLANES_ANGLE:
             *params = mState.getCaps().maxPixelLocalStoragePlanes;
             break;
-        case GL_MAX_COLOR_ATTACHMENTS_WITH_ACTIVE_PIXEL_LOCAL_STORAGE_ANGLE:
-            *params = mState.getCaps().maxColorAttachmentsWithActivePixelLocalStorage;
-            break;
         case GL_MAX_COMBINED_DRAW_BUFFERS_AND_PIXEL_LOCAL_STORAGE_PLANES_ANGLE:
             *params = mState.getCaps().maxCombinedDrawBuffersAndPixelLocalStoragePlanes;
             break;
@@ -2929,6 +2960,12 @@ void Context::drawRangeElementsBaseVertex(PrimitiveMode mode,
 
 void Context::drawArraysIndirect(PrimitiveMode mode, const void *indirect)
 {
+    if (noopDrawProgram())
+    {
+        ANGLE_CONTEXT_TRY(mImplementation->handleNoopDrawEvent());
+        return;
+    }
+
     ANGLE_CONTEXT_TRY(prepareForDraw(mode));
     ANGLE_CONTEXT_TRY(mImplementation->drawArraysIndirect(this, mode, indirect));
     MarkShaderStorageUsage(this);
@@ -2936,6 +2973,12 @@ void Context::drawArraysIndirect(PrimitiveMode mode, const void *indirect)
 
 void Context::drawElementsIndirect(PrimitiveMode mode, DrawElementsType type, const void *indirect)
 {
+    if (noopDrawProgram())
+    {
+        ANGLE_CONTEXT_TRY(mImplementation->handleNoopDrawEvent());
+        return;
+    }
+
     ANGLE_CONTEXT_TRY(prepareForDraw(mode));
     ANGLE_CONTEXT_TRY(mImplementation->drawElementsIndirect(this, mode, type, indirect));
     MarkShaderStorageUsage(this);
@@ -3873,12 +3916,6 @@ Extensions Context::generateSupportedExtensions() const
         supportedExtensions.renderabilityValidationANGLE = true;
     }
 
-    if (getFrontendFeatures().disableDrawBuffersIndexed.enabled)
-    {
-        supportedExtensions.drawBuffersIndexedEXT = false;
-        supportedExtensions.drawBuffersIndexedOES = false;
-    }
-
     if (getFrontendFeatures().disableAnisotropicFiltering.enabled)
     {
         supportedExtensions.textureFilterAnisotropicEXT = false;
@@ -4013,6 +4050,9 @@ void Context::initCaps()
     Caps *caps = mState.getMutableCaps();
     *caps      = mImplementation->getNativeCaps();
 
+    // Update limitations before evaluating extension support
+    *mState.getMutableLimitations() = mImplementation->getNativeLimitations();
+
     // TODO (http://anglebug.com/42264543): mSupportedExtensions should not be modified here
     mSupportedExtensions = generateSupportedExtensions();
 
@@ -4052,8 +4092,6 @@ void Context::initCaps()
 
     Extensions *extensions = mState.getMutableExtensions();
     *extensions            = mSupportedExtensions;
-
-    *mState.getMutableLimitations() = mImplementation->getNativeLimitations();
 
     // GLES1 emulation: Initialize caps (Table 6.20 / 6.22 in the ES 1.1 spec)
     if (getClientVersion() < Version(2, 0))
@@ -4410,7 +4448,6 @@ void Context::initCaps()
                     caps->maxShaderImageUniforms[ShaderType::Fragment];
                 ANGLE_LIMIT_CAP(caps->maxPixelLocalStoragePlanes,
                                 IMPLEMENTATION_MAX_PIXEL_LOCAL_STORAGE_PLANES);
-                caps->maxColorAttachmentsWithActivePixelLocalStorage = caps->maxColorAttachments;
                 caps->maxCombinedDrawBuffersAndPixelLocalStoragePlanes =
                     std::min<GLint>(caps->maxPixelLocalStoragePlanes +
                                         std::min(caps->maxDrawBuffers, caps->maxColorAttachments),
@@ -4418,23 +4455,13 @@ void Context::initCaps()
                 break;
 
             case ShPixelLocalStorageType::FramebufferFetch:
+                // When pixel local storage is implemented as framebuffer attachments, we need
+                // draw_buffers_indexed in order to control the blend & color mask state
+                // on the PLS planes independently.
+                ASSERT(mSupportedExtensions.drawBuffersIndexedAny());
                 caps->maxPixelLocalStoragePlanes = maxDrawableAttachments;
                 ANGLE_LIMIT_CAP(caps->maxPixelLocalStoragePlanes,
                                 IMPLEMENTATION_MAX_PIXEL_LOCAL_STORAGE_PLANES);
-                if (!mSupportedExtensions.drawBuffersIndexedAny())
-                {
-                    // When pixel local storage is implemented as framebuffer attachments, we need
-                    // to disable color masks and blending to its attachments. If the backend
-                    // context doesn't have indexed blend and color mask support, then we will have
-                    // have to disable them globally. This also means the application can't have its
-                    // own draw buffers while PLS is active.
-                    caps->maxColorAttachmentsWithActivePixelLocalStorage = 0;
-                }
-                else
-                {
-                    caps->maxColorAttachmentsWithActivePixelLocalStorage =
-                        maxDrawableAttachments - 1;
-                }
                 caps->maxCombinedDrawBuffersAndPixelLocalStoragePlanes = maxDrawableAttachments;
                 break;
 
@@ -4618,11 +4645,6 @@ void Context::updateCaps()
     mStateCache.initialize(this);
 }
 
-bool Context::noopDrawInstanced(PrimitiveMode mode, GLsizei count, GLsizei instanceCount) const
-{
-    return (instanceCount == 0) || noopDraw(mode, count);
-}
-
 angle::Result Context::prepareForClear(GLbitfield mask)
 {
     // Sync the draw framebuffer manually after the clear attachments.
@@ -4780,6 +4802,10 @@ void Context::clear(GLbitfield mask)
     {
         return;
     }
+
+    // If we have active PLS using framebuffer fetch, disable those draw buffers so we don't clear
+    // the pixel local store.
+    ScopedPLSFramebufferFetchDrawBuffersDisable scopedPLSFramebufferFetchDrawBuffersDisable(this);
 
     // Remove clear bits that are ineffective. An effective clear changes at least one fragment. If
     // color/depth/stencil masks make the clear ineffective we skip it altogether.
@@ -5179,12 +5205,6 @@ void Context::framebufferTexture2D(GLenum target,
     Framebuffer *framebuffer = mState.getTargetFramebuffer(target);
     ASSERT(framebuffer);
 
-    if (mState.getPixelLocalStorageActivePlanes() != 0 &&
-        framebuffer == mState.getDrawFramebuffer())
-    {
-        endPixelLocalStorageImplicit();
-    }
-
     if (texture.value != 0)
     {
         Texture *textureObj = getTexture(texture);
@@ -5209,12 +5229,6 @@ void Context::framebufferTexture3D(GLenum target,
     Framebuffer *framebuffer = mState.getTargetFramebuffer(target);
     ASSERT(framebuffer);
 
-    if (mState.getPixelLocalStorageActivePlanes() != 0 &&
-        framebuffer == mState.getDrawFramebuffer())
-    {
-        endPixelLocalStorageImplicit();
-    }
-
     if (texture.value != 0)
     {
         Texture *textureObj = getTexture(texture);
@@ -5236,12 +5250,6 @@ void Context::framebufferRenderbuffer(GLenum target,
 {
     Framebuffer *framebuffer = mState.getTargetFramebuffer(target);
     ASSERT(framebuffer);
-
-    if (mState.getPixelLocalStorageActivePlanes() != 0 &&
-        framebuffer == mState.getDrawFramebuffer())
-    {
-        endPixelLocalStorageImplicit();
-    }
 
     if (renderbuffer.value != 0)
     {
@@ -5268,12 +5276,6 @@ void Context::framebufferTextureLayer(GLenum target,
     Framebuffer *framebuffer = mState.getTargetFramebuffer(target);
     ASSERT(framebuffer);
 
-    if (mState.getPixelLocalStorageActivePlanes() != 0 &&
-        framebuffer == mState.getDrawFramebuffer())
-    {
-        endPixelLocalStorageImplicit();
-    }
-
     if (texture.value != 0)
     {
         Texture *textureObject = getTexture(texture);
@@ -5297,12 +5299,6 @@ void Context::framebufferTextureMultiview(GLenum target,
 {
     Framebuffer *framebuffer = mState.getTargetFramebuffer(target);
     ASSERT(framebuffer);
-
-    if (mState.getPixelLocalStorageActivePlanes() != 0 &&
-        framebuffer == mState.getDrawFramebuffer())
-    {
-        endPixelLocalStorageImplicit();
-    }
 
     if (texture.value != 0)
     {
@@ -5335,12 +5331,6 @@ void Context::framebufferTexture(GLenum target, GLenum attachment, TextureID tex
     Framebuffer *framebuffer = mState.getTargetFramebuffer(target);
     ASSERT(framebuffer);
 
-    if (mState.getPixelLocalStorageActivePlanes() != 0 &&
-        framebuffer == mState.getDrawFramebuffer())
-    {
-        endPixelLocalStorageImplicit();
-    }
-
     if (texture.value != 0)
     {
         Texture *textureObj = getTexture(texture);
@@ -5361,10 +5351,6 @@ void Context::drawBuffers(GLsizei n, const GLenum *bufs)
 {
     Framebuffer *framebuffer = mState.getDrawFramebuffer();
     ASSERT(framebuffer);
-    if (mState.getPixelLocalStorageActivePlanes() != 0)
-    {
-        endPixelLocalStorageImplicit();
-    }
     framebuffer->setDrawBuffers(n, bufs);
     mState.setDrawFramebufferDirty();
     mStateCache.onDrawFramebufferChange(this);
@@ -6180,6 +6166,13 @@ void Context::debugMessageInsert(GLenum source,
                                  GLsizei length,
                                  const GLchar *buf)
 {
+    if (!mState.getDebug().isOutputEnabled())
+    {
+        // If the DEBUG_OUTPUT state is disabled calls to DebugMessageInsert are discarded and do
+        // not generate an error.
+        return;
+    }
+
     std::string msg(buf, (length > 0) ? static_cast<size_t>(length) : strlen(buf));
     mState.getDebug().insertMessage(source, type, id, severity, std::move(msg), gl::LOG_INFO,
                                     angle::EntryPoint::GLDebugMessageInsert);
@@ -6502,12 +6495,6 @@ void Context::framebufferTexture2DMultisample(GLenum target,
     Framebuffer *framebuffer = mState.getTargetFramebuffer(target);
     ASSERT(framebuffer);
 
-    if (mState.getPixelLocalStorageActivePlanes() != 0 &&
-        framebuffer == mState.getDrawFramebuffer())
-    {
-        endPixelLocalStorageImplicit();
-    }
-
     if (texture.value != 0)
     {
         Texture *textureObj = getTexture(texture);
@@ -6556,11 +6543,6 @@ void Context::getFramebufferParameterivRobust(GLenum target,
 void Context::framebufferParameteri(GLenum target, GLenum pname, GLint param)
 {
     Framebuffer *framebuffer = mState.getTargetFramebuffer(target);
-    if (mState.getPixelLocalStorageActivePlanes() != 0 &&
-        framebuffer == mState.getDrawFramebuffer())
-    {
-        endPixelLocalStorageImplicit();
-    }
     SetFramebufferParameteri(this, framebuffer, pname, param);
 }
 
@@ -7141,7 +7123,8 @@ void Context::getProgramPipelineiv(ProgramPipelineID pipeline, GLenum pname, GLi
     ProgramPipeline *programPipeline = nullptr;
     if (!isContextLost())
     {
-        programPipeline = getProgramPipeline(pipeline);
+        programPipeline = mState.mProgramPipelineManager->checkProgramPipelineAllocation(
+            mImplementation.get(), pipeline);
     }
     QueryProgramPipelineiv(this, programPipeline, pname, params);
 }
@@ -7178,8 +7161,14 @@ void Context::getProgramPipelineInfoLog(ProgramPipelineID pipeline,
     }
     else
     {
-        *length  = 0;
-        *infoLog = '\0';
+        if (length)
+        {
+            *length = 0;
+        }
+        if (infoLog)
+        {
+            *infoLog = '\0';
+        }
     }
 }
 
@@ -7468,120 +7457,10 @@ Program *Context::getActiveLinkedProgramPPO() const
     return nullptr;
 }
 
-void Context::uniform1f(UniformLocation location, GLfloat x)
-{
-    Program *program = getActiveLinkedProgram();
-    program->getExecutable().setUniform1fv(location, 1, &x);
-}
-
-void Context::uniform1fv(UniformLocation location, GLsizei count, const GLfloat *v)
-{
-    Program *program = getActiveLinkedProgram();
-    program->getExecutable().setUniform1fv(location, count, v);
-}
-
-void Context::setUniform1iImpl(Program *program,
-                               UniformLocation location,
-                               GLsizei count,
-                               const GLint *v)
-{
-    program->getExecutable().setUniform1iv(this, location, count, v);
-}
-
 void Context::onSamplerUniformChange(size_t textureUnitIndex)
 {
     mState.onActiveTextureChange(this, textureUnitIndex);
     mStateCache.onActiveTextureChange(this);
-}
-
-void Context::uniform1i(UniformLocation location, GLint x)
-{
-    Program *program = getActiveLinkedProgram();
-    setUniform1iImpl(program, location, 1, &x);
-}
-
-void Context::uniform1iv(UniformLocation location, GLsizei count, const GLint *v)
-{
-    Program *program = getActiveLinkedProgram();
-    setUniform1iImpl(program, location, count, v);
-}
-
-void Context::uniform2f(UniformLocation location, GLfloat x, GLfloat y)
-{
-    GLfloat xy[2]    = {x, y};
-    Program *program = getActiveLinkedProgram();
-    program->getExecutable().setUniform2fv(location, 1, xy);
-}
-
-void Context::uniform2fv(UniformLocation location, GLsizei count, const GLfloat *v)
-{
-    Program *program = getActiveLinkedProgram();
-    program->getExecutable().setUniform2fv(location, count, v);
-}
-
-void Context::uniform2i(UniformLocation location, GLint x, GLint y)
-{
-    GLint xy[2]      = {x, y};
-    Program *program = getActiveLinkedProgram();
-    program->getExecutable().setUniform2iv(location, 1, xy);
-}
-
-void Context::uniform2iv(UniformLocation location, GLsizei count, const GLint *v)
-{
-    Program *program = getActiveLinkedProgram();
-    program->getExecutable().setUniform2iv(location, count, v);
-}
-
-void Context::uniform3f(UniformLocation location, GLfloat x, GLfloat y, GLfloat z)
-{
-    GLfloat xyz[3]   = {x, y, z};
-    Program *program = getActiveLinkedProgram();
-    program->getExecutable().setUniform3fv(location, 1, xyz);
-}
-
-void Context::uniform3fv(UniformLocation location, GLsizei count, const GLfloat *v)
-{
-    Program *program = getActiveLinkedProgram();
-    program->getExecutable().setUniform3fv(location, count, v);
-}
-
-void Context::uniform3i(UniformLocation location, GLint x, GLint y, GLint z)
-{
-    GLint xyz[3]     = {x, y, z};
-    Program *program = getActiveLinkedProgram();
-    program->getExecutable().setUniform3iv(location, 1, xyz);
-}
-
-void Context::uniform3iv(UniformLocation location, GLsizei count, const GLint *v)
-{
-    Program *program = getActiveLinkedProgram();
-    program->getExecutable().setUniform3iv(location, count, v);
-}
-
-void Context::uniform4f(UniformLocation location, GLfloat x, GLfloat y, GLfloat z, GLfloat w)
-{
-    GLfloat xyzw[4]  = {x, y, z, w};
-    Program *program = getActiveLinkedProgram();
-    program->getExecutable().setUniform4fv(location, 1, xyzw);
-}
-
-void Context::uniform4fv(UniformLocation location, GLsizei count, const GLfloat *v)
-{
-    Program *program = getActiveLinkedProgram();
-    program->getExecutable().setUniform4fv(location, count, v);
-}
-
-void Context::uniform4i(UniformLocation location, GLint x, GLint y, GLint z, GLint w)
-{
-    GLint xyzw[4]    = {x, y, z, w};
-    Program *program = getActiveLinkedProgram();
-    program->getExecutable().setUniform4iv(location, 1, xyzw);
-}
-
-void Context::uniform4iv(UniformLocation location, GLsizei count, const GLint *v)
-{
-    Program *program = getActiveLinkedProgram();
-    program->getExecutable().setUniform4iv(location, count, v);
 }
 
 void Context::uniformMatrix2fv(UniformLocation location,
@@ -7630,14 +7509,6 @@ void Context::validateProgramPipeline(ProgramPipelineID pipeline)
     // pipeline is the program pipeline object name. The resulting program pipeline
     // object is a new state vector, comprising all the state and with the same initial values
     // listed in table 21.20.
-    //
-    // If we do not have a pipeline object that's been created with glBindProgramPipeline, we leave
-    // VALIDATE_STATUS at it's default false value without generating a pipeline object.
-    if (!getProgramPipeline(pipeline))
-    {
-        return;
-    }
-
     ProgramPipeline *programPipeline =
         mState.mProgramPipelineManager->checkProgramPipelineAllocation(mImplementation.get(),
                                                                        pipeline);
@@ -7667,56 +7538,6 @@ void Context::programBinary(ShaderProgramID program,
     ASSERT(programObject != nullptr);
 
     ANGLE_CONTEXT_TRY(programObject->setBinary(this, binaryFormat, binary, length));
-}
-
-void Context::uniform1ui(UniformLocation location, GLuint v0)
-{
-    Program *program = getActiveLinkedProgram();
-    program->getExecutable().setUniform1uiv(location, 1, &v0);
-}
-
-void Context::uniform2ui(UniformLocation location, GLuint v0, GLuint v1)
-{
-    Program *program  = getActiveLinkedProgram();
-    const GLuint xy[] = {v0, v1};
-    program->getExecutable().setUniform2uiv(location, 1, xy);
-}
-
-void Context::uniform3ui(UniformLocation location, GLuint v0, GLuint v1, GLuint v2)
-{
-    Program *program   = getActiveLinkedProgram();
-    const GLuint xyz[] = {v0, v1, v2};
-    program->getExecutable().setUniform3uiv(location, 1, xyz);
-}
-
-void Context::uniform4ui(UniformLocation location, GLuint v0, GLuint v1, GLuint v2, GLuint v3)
-{
-    Program *program    = getActiveLinkedProgram();
-    const GLuint xyzw[] = {v0, v1, v2, v3};
-    program->getExecutable().setUniform4uiv(location, 1, xyzw);
-}
-
-void Context::uniform1uiv(UniformLocation location, GLsizei count, const GLuint *value)
-{
-    Program *program = getActiveLinkedProgram();
-    program->getExecutable().setUniform1uiv(location, count, value);
-}
-void Context::uniform2uiv(UniformLocation location, GLsizei count, const GLuint *value)
-{
-    Program *program = getActiveLinkedProgram();
-    program->getExecutable().setUniform2uiv(location, count, value);
-}
-
-void Context::uniform3uiv(UniformLocation location, GLsizei count, const GLuint *value)
-{
-    Program *program = getActiveLinkedProgram();
-    program->getExecutable().setUniform3uiv(location, count, value);
-}
-
-void Context::uniform4uiv(UniformLocation location, GLsizei count, const GLuint *value)
-{
-    Program *program = getActiveLinkedProgram();
-    program->getExecutable().setUniform4uiv(location, count, value);
 }
 
 void Context::genQueries(GLsizei n, QueryID *ids)
@@ -7755,60 +7576,6 @@ bool Context::isQueryGenerated(QueryID query) const
 GLboolean Context::isQuery(QueryID id) const
 {
     return ConvertToGLBoolean(getQuery(id) != nullptr);
-}
-
-void Context::uniformMatrix2x3fv(UniformLocation location,
-                                 GLsizei count,
-                                 GLboolean transpose,
-                                 const GLfloat *value)
-{
-    Program *program = getActiveLinkedProgram();
-    program->getExecutable().setUniformMatrix2x3fv(location, count, transpose, value);
-}
-
-void Context::uniformMatrix3x2fv(UniformLocation location,
-                                 GLsizei count,
-                                 GLboolean transpose,
-                                 const GLfloat *value)
-{
-    Program *program = getActiveLinkedProgram();
-    program->getExecutable().setUniformMatrix3x2fv(location, count, transpose, value);
-}
-
-void Context::uniformMatrix2x4fv(UniformLocation location,
-                                 GLsizei count,
-                                 GLboolean transpose,
-                                 const GLfloat *value)
-{
-    Program *program = getActiveLinkedProgram();
-    program->getExecutable().setUniformMatrix2x4fv(location, count, transpose, value);
-}
-
-void Context::uniformMatrix4x2fv(UniformLocation location,
-                                 GLsizei count,
-                                 GLboolean transpose,
-                                 const GLfloat *value)
-{
-    Program *program = getActiveLinkedProgram();
-    program->getExecutable().setUniformMatrix4x2fv(location, count, transpose, value);
-}
-
-void Context::uniformMatrix3x4fv(UniformLocation location,
-                                 GLsizei count,
-                                 GLboolean transpose,
-                                 const GLfloat *value)
-{
-    Program *program = getActiveLinkedProgram();
-    program->getExecutable().setUniformMatrix3x4fv(location, count, transpose, value);
-}
-
-void Context::uniformMatrix4x3fv(UniformLocation location,
-                                 GLsizei count,
-                                 GLboolean transpose,
-                                 const GLfloat *value)
-{
-    Program *program = getActiveLinkedProgram();
-    program->getExecutable().setUniformMatrix4x3fv(location, count, transpose, value);
 }
 
 void Context::deleteVertexArrays(GLsizei n, const VertexArrayID *arrays)
@@ -9014,11 +8781,6 @@ void Context::framebufferMemorylessPixelLocalStorage(GLint plane, GLenum interna
     Framebuffer *framebuffer = mState.getDrawFramebuffer();
     ASSERT(framebuffer);
 
-    if (mState.getPixelLocalStorageActivePlanes() != 0)
-    {
-        endPixelLocalStorageImplicit();
-    }
-
     PixelLocalStorage &pls = framebuffer->getPixelLocalStorage(this);
 
     if (internalformat == GL_NONE)
@@ -9038,11 +8800,6 @@ void Context::framebufferTexturePixelLocalStorage(GLint plane,
 {
     Framebuffer *framebuffer = mState.getDrawFramebuffer();
     ASSERT(framebuffer);
-
-    if (mState.getPixelLocalStorageActivePlanes() != 0)
-    {
-        endPixelLocalStorageImplicit();
-    }
 
     PixelLocalStorage &pls = framebuffer->getPixelLocalStorage(this);
 
@@ -9089,7 +8846,7 @@ void Context::beginPixelLocalStorage(GLsizei n, const GLenum loadops[])
     PixelLocalStorage &pls = framebuffer->getPixelLocalStorage(this);
 
     pls.begin(this, n, loadops);
-    mState.setPixelLocalStorageActivePlanes(n);
+    getMutablePrivateState()->setPixelLocalStorageActivePlanes(n);
 }
 
 void Context::endPixelLocalStorage(GLsizei n, const GLenum storeops[])
@@ -9099,7 +8856,7 @@ void Context::endPixelLocalStorage(GLsizei n, const GLenum storeops[])
     PixelLocalStorage &pls = framebuffer->getPixelLocalStorage(this);
 
     ASSERT(n == mState.getPixelLocalStorageActivePlanes());
-    mState.setPixelLocalStorageActivePlanes(0);
+    getMutablePrivateState()->setPixelLocalStorageActivePlanes(0);
     pls.end(this, n, storeops);
 }
 

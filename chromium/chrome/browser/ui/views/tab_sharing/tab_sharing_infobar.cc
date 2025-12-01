@@ -15,6 +15,8 @@
 #include "chrome/grit/generated_resources.h"
 #include "components/infobars/content/content_infobar_manager.h"
 #include "components/vector_icons/vector_icons.h"
+#include "extensions/common/constants.h"
+#include "media/capture/capture_switches.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/ui_base_features.h"
 #include "ui/base/window_open_disposition.h"
@@ -27,90 +29,34 @@
 #include "ui/views/view_class_properties.h"
 
 namespace {
-using TabRole = ::TabSharingInfoBarDelegate::TabRole;
-
 constexpr auto kCapturedSurfaceControlIndicatorButtonInsets =
     gfx::Insets::VH(4, 8);
 
-std::u16string GetMessageTextCastingNoSinkName(
-    bool shared_tab,
-    const std::u16string& shared_tab_name) {
-  if (shared_tab) {
-    return l10n_util::GetStringUTF16(
-        IDS_TAB_CASTING_INFOBAR_CASTING_CURRENT_TAB_NO_DEVICE_NAME_LABEL);
-  }
-  return shared_tab_name.empty()
-             ? l10n_util::GetStringUTF16(
-                   IDS_TAB_CASTING_INFOBAR_CASTING_ANOTHER_UNTITLED_TAB_NO_DEVICE_NAME_LABEL)
-             : l10n_util::GetStringFUTF16(
-                   IDS_TAB_CASTING_INFOBAR_CASTING_ANOTHER_TAB_NO_DEVICE_NAME_LABEL,
-                   shared_tab_name);
-}
-
-std::u16string GetMessageTextCasting(bool shared_tab,
-                                     const std::u16string& shared_tab_name,
-                                     const std::u16string& sink_name) {
-  if (sink_name.empty()) {
-    return GetMessageTextCastingNoSinkName(shared_tab, shared_tab_name);
+url::Origin GetOriginFromId(content::GlobalRenderFrameHostId rfh_id) {
+  content::RenderFrameHost* rfh = content::RenderFrameHost::FromID(rfh_id);
+  if (!rfh) {
+    return {};
   }
 
-  if (shared_tab) {
-    return l10n_util::GetStringFUTF16(
-        IDS_TAB_CASTING_INFOBAR_CASTING_CURRENT_TAB_LABEL, sink_name);
-  }
-  return shared_tab_name.empty()
-             ? l10n_util::GetStringFUTF16(
-                   IDS_TAB_CASTING_INFOBAR_CASTING_ANOTHER_UNTITLED_TAB_LABEL,
-                   sink_name)
-             : l10n_util::GetStringFUTF16(
-                   IDS_TAB_CASTING_INFOBAR_CASTING_ANOTHER_TAB_LABEL,
-                   shared_tab_name, sink_name);
-}
-
-std::u16string GetMessageTextCapturing(bool shared_tab,
-                                       const std::u16string& shared_tab_name,
-                                       const std::u16string& app_name) {
-  if (shared_tab) {
-    return l10n_util::GetStringFUTF16(
-        IDS_TAB_SHARING_INFOBAR_SHARING_CURRENT_TAB_LABEL, app_name);
-  }
-  return !shared_tab_name.empty()
-             ? l10n_util::GetStringFUTF16(
-                   IDS_TAB_SHARING_INFOBAR_SHARING_ANOTHER_TAB_LABEL,
-                   shared_tab_name, app_name)
-             : l10n_util::GetStringFUTF16(
-                   IDS_TAB_SHARING_INFOBAR_SHARING_ANOTHER_UNTITLED_TAB_LABEL,
-                   app_name);
-}
-
-bool IsCapturedTab(TabRole role) {
-  switch (role) {
-    case TabRole::kCapturingTab:
-    case TabRole::kOtherTab:
-      return false;
-    case TabRole::kCapturedTab:
-    case TabRole::kSelfCapturingTab:
-      return true;
-  }
-  NOTREACHED();
+  return rfh->GetLastCommittedOrigin();
 }
 
 }  // namespace
 
 TabSharingInfoBar::TabSharingInfoBar(
     std::unique_ptr<TabSharingInfoBarDelegate> delegate,
+    content::GlobalRenderFrameHostId shared_tab_id,
+    content::GlobalRenderFrameHostId capturer_id,
     const std::u16string& shared_tab_name,
     const std::u16string& capturer_name,
     TabSharingInfoBarDelegate::TabRole role,
     TabSharingInfoBarDelegate::TabShareType capture_type)
-    : InfoBarView(std::move(delegate)),
-      shared_tab_name_(std::move(shared_tab_name)),
-      capturer_name_(std::move(capturer_name)),
-      role_(role),
-      capture_type_(capture_type) {
+    : InfoBarView(std::move(delegate)) {
   auto* delegate_ptr = GetDelegate();
-  label_ = AddChildView(CreateLabel(GetMessageText()));
-  label_->SetElideBehavior(gfx::ELIDE_TAIL);
+
+  status_message_view_ = AddChildView(
+      CreateStatusMessageView(shared_tab_id, capturer_id, shared_tab_name,
+                              capturer_name, role, capture_type));
 
   const int buttons = delegate_ptr->GetButtons();
   const auto create_button =
@@ -151,7 +97,8 @@ TabSharingInfoBar::TabSharingInfoBar(
                       &TabSharingInfoBar::ShareThisTabInsteadButtonPressed);
   }
 
-  if (buttons & TabSharingInfoBarDelegate::kQuickNav) {
+  if (buttons & TabSharingInfoBarDelegate::kQuickNav &&
+      !base::FeatureList::IsEnabled(features::kTabCaptureInfobarLinks)) {
     quick_nav_button_ =
         create_button(TabSharingInfoBarDelegate::kQuickNav,
                       &TabSharingInfoBar::QuickNavButtonPressed);
@@ -167,7 +114,7 @@ TabSharingInfoBar::TabSharingInfoBar(
         GetLayoutConstant(TOOLBAR_CORNER_RADIUS));
     csc_indicator_button_->SetCustomPadding(
         kCapturedSurfaceControlIndicatorButtonInsets);
-    csc_indicator_button_->SetTextColorId(
+    csc_indicator_button_->SetTextColor(
         views::Button::ButtonState::STATE_NORMAL, ui::kColorSysOnSurface);
   }
 
@@ -199,18 +146,17 @@ void TabSharingInfoBar::Layout(PassKey) {
 
   int x = GetStartX();
   Views views;
-  views.push_back(label_.get());
+  views.push_back(status_message_view_.get());
   views.push_back(link_.get());
   AssignWidths(&views, std::max(0, GetEndX() - x - NonLabelWidth()));
 
   ChromeLayoutProvider* layout_provider = ChromeLayoutProvider::Get();
 
-  label_->SetPosition(gfx::Point(x, OffsetY(label_)));
-  if (!label_->GetText().empty()) {
-    x = label_->bounds().right() +
-        layout_provider->GetDistanceMetric(
-            DISTANCE_INFOBAR_HORIZONTAL_ICON_LABEL_PADDING);
-  }
+  status_message_view_->SetPosition(
+      gfx::Point(x, OffsetY(status_message_view_)));
+  x = status_message_view_->bounds().right() +
+      layout_provider->GetDistanceMetric(
+          DISTANCE_INFOBAR_HORIZONTAL_ICON_LABEL_PADDING);
 
   // Add buttons into a vector to be displayed in an ordered row.
   // Depending on the PlatformStyle, reverse the vector so the stop button will
@@ -271,25 +217,48 @@ void TabSharingInfoBar::OnCapturedSurfaceControlActivityIndicatorPressed() {
   GetDelegate()->OnCapturedSurfaceControlActivityIndicatorPressed();
 }
 
+std::unique_ptr<views::View> TabSharingInfoBar::CreateStatusMessageView(
+    content::GlobalRenderFrameHostId shared_tab_id,
+    content::GlobalRenderFrameHostId capturer_id,
+    const std::u16string& shared_tab_name,
+    const std::u16string& capturer_name,
+    TabSharingInfoBarDelegate::TabRole role,
+    TabSharingInfoBarDelegate::TabShareType capture_type) const {
+  TabSharingStatusMessageView::EndpointInfo shared_tab_info(shared_tab_name,
+                                                            shared_tab_id);
+  TabSharingStatusMessageView::EndpointInfo capturer_info(capturer_name,
+                                                          capturer_id);
+  if (base::FeatureList::IsEnabled(features::kTabCaptureInfobarLinks) &&
+      GetOriginFromId(capturer_id).scheme() != extensions::kExtensionScheme) {
+    return TabSharingStatusMessageView::Create(capturer_id, shared_tab_info,
+                                               capturer_info, capturer_name,
+                                               role, capture_type);
+  } else {
+    return CreateStatusMessageLabel(shared_tab_info, capturer_info,
+                                    capturer_name, role, capture_type);
+  }
+}
+
+std::unique_ptr<views::Label> TabSharingInfoBar::CreateStatusMessageLabel(
+    const TabSharingStatusMessageView::EndpointInfo& shared_tab_info,
+    const TabSharingStatusMessageView::EndpointInfo& capturer_info,
+    const std::u16string& capturer_name,
+    TabSharingInfoBarDelegate::TabRole role,
+    TabSharingInfoBarDelegate::TabShareType capture_type) const {
+  std::unique_ptr<views::Label> label =
+      CreateLabel(TabSharingStatusMessageView::GetMessageText(
+          shared_tab_info, capturer_info, capturer_name, role, capture_type));
+  label->SetElideBehavior(gfx::ELIDE_TAIL);
+  return label;
+}
+
 TabSharingInfoBarDelegate* TabSharingInfoBar::GetDelegate() {
   return static_cast<TabSharingInfoBarDelegate*>(delegate());
 }
 
-std::u16string TabSharingInfoBar::GetMessageText() const {
-  switch (capture_type_) {
-    case TabSharingInfoBarDelegate::TabShareType::CAST:
-      return GetMessageTextCasting(IsCapturedTab(role_), shared_tab_name_,
-                                   capturer_name_);
-    case TabSharingInfoBarDelegate::TabShareType::CAPTURE:
-      return GetMessageTextCapturing(IsCapturedTab(role_), shared_tab_name_,
-                                     capturer_name_);
-  }
-  NOTREACHED();
-}
-
 int TabSharingInfoBar::GetContentMinimumWidth() const {
-  return label_->GetMinimumSize().width() + link_->GetMinimumSize().width() +
-         NonLabelWidth();
+  return status_message_view_->GetMinimumSize().width() +
+         link_->GetMinimumSize().width() + NonLabelWidth();
 }
 
 int TabSharingInfoBar::NonLabelWidth() const {
@@ -304,8 +273,7 @@ int TabSharingInfoBar::NonLabelWidth() const {
       (stop_button_ ? 1 : 0) + (share_this_tab_instead_button_ ? 1 : 0) +
       (quick_nav_button_ ? 1 : 0) + (csc_indicator_button_ ? 1 : 0);
 
-  int width =
-      (label_->GetText().empty() || button_count == 0) ? 0 : label_spacing;
+  int width = (button_count == 0) ? 0 : label_spacing;
 
   width += std::max(0, button_spacing * (button_count - 1));
 
@@ -321,10 +289,13 @@ int TabSharingInfoBar::NonLabelWidth() const {
 
 std::unique_ptr<infobars::InfoBar> CreateTabSharingInfoBar(
     std::unique_ptr<TabSharingInfoBarDelegate> delegate,
+    content::GlobalRenderFrameHostId shared_tab_id,
+    content::GlobalRenderFrameHostId capturer_id,
     const std::u16string& shared_tab_name,
     const std::u16string& capturer_name,
     TabSharingInfoBarDelegate::TabRole role,
     TabSharingInfoBarDelegate::TabShareType capture_type) {
-  return std::make_unique<TabSharingInfoBar>(
-      std::move(delegate), shared_tab_name, capturer_name, role, capture_type);
+  return std::make_unique<TabSharingInfoBar>(std::move(delegate), shared_tab_id,
+                                             capturer_id, shared_tab_name,
+                                             capturer_name, role, capture_type);
 }

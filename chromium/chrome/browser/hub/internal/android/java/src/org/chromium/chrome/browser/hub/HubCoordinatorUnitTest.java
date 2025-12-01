@@ -23,7 +23,6 @@ import android.view.ViewGroup;
 import android.widget.FrameLayout;
 
 import androidx.test.ext.junit.rules.ActivityScenarioRule;
-import androidx.test.filters.SmallTest;
 
 import org.junit.After;
 import org.junit.Before;
@@ -35,12 +34,15 @@ import org.mockito.Captor;
 import org.mockito.Mock;
 import org.mockito.junit.MockitoJUnit;
 import org.mockito.junit.MockitoRule;
+import org.robolectric.ParameterizedRobolectricTestRunner;
+import org.robolectric.ParameterizedRobolectricTestRunner.Parameter;
+import org.robolectric.ParameterizedRobolectricTestRunner.Parameters;
 import org.robolectric.shadows.ShadowLooper;
 
 import org.chromium.base.supplier.LazyOneshotSupplier;
 import org.chromium.base.supplier.ObservableSupplierImpl;
 import org.chromium.base.supplier.OneshotSupplierImpl;
-import org.chromium.base.test.BaseRobolectricTestRunner;
+import org.chromium.base.test.BaseRobolectricTestRule;
 import org.chromium.base.test.util.Features.DisableFeatures;
 import org.chromium.base.test.util.Features.EnableFeatures;
 import org.chromium.chrome.browser.feature_engagement.TrackerFactory;
@@ -53,15 +55,26 @@ import org.chromium.chrome.browser.ui.searchactivityutils.SearchActivityClient;
 import org.chromium.components.browser_ui.edge_to_edge.EdgeToEdgePadAdjuster;
 import org.chromium.components.browser_ui.widget.gesture.BackPressHandler.BackPressResult;
 import org.chromium.components.feature_engagement.Tracker;
-import org.chromium.components.omnibox.OmniboxFeatureList;
 import org.chromium.ui.base.TestActivity;
+import org.chromium.ui.util.XrUtils;
+
+import java.util.Arrays;
+import java.util.Collection;
 
 /** Tests for {@link HubCoordinator}. */
-@RunWith(BaseRobolectricTestRunner.class)
-// TabSwitcherSearchTest provides the test coverage for the code
-// when OmniboxFeatureList.ANDROID_HUB_SEARCH is enabled
-@DisableFeatures(OmniboxFeatureList.ANDROID_HUB_SEARCH)
+@RunWith(ParameterizedRobolectricTestRunner.class)
 public class HubCoordinatorUnitTest {
+    // All the tests in this file will run twice, once for isXrDevice=true and once for
+    // isXrDevice=false. Expect all the tests with the same results on XR devices too.
+    // The setup ensures the correct environment is configured for each run.
+    @Parameters
+    public static Collection<Object[]> data() {
+        return Arrays.asList(new Object[][] {{true}, {false}});
+    }
+
+    @Parameter(0)
+    public boolean mIsXrDevice;
+
     private static final int TAB_ID = 7;
     private static final int INCOGNITO_TAB_ID = 9;
 
@@ -70,6 +83,8 @@ public class HubCoordinatorUnitTest {
             new ActivityScenarioRule<>(TestActivity.class);
 
     @Rule public MockitoRule mMockitoRule = MockitoJUnit.rule();
+
+    @Rule public BaseRobolectricTestRule mBaseRule = new BaseRobolectricTestRule();
 
     @Mock private Tab mTab;
     @Mock private Tab mIncognitoTab;
@@ -82,6 +97,7 @@ public class HubCoordinatorUnitTest {
     @Mock private Tracker mTracker;
     @Mock private SearchActivityClient mSearchActivityClient;
     @Mock private EdgeToEdgeController mEdgeToEdgeController;
+    @Mock private HubColorMixer mHubColorMixer;
     @Captor private ArgumentCaptor<EdgeToEdgePadAdjuster> mEdgeToEdgePadAdjusterArgumentCaptor;
     private final ObservableSupplierImpl<Integer> mColorOverviewSupplier =
             new ObservableSupplierImpl<>();
@@ -95,6 +111,10 @@ public class HubCoordinatorUnitTest {
             new ObservableSupplierImpl<>();
     private ObservableSupplierImpl<DisplayButtonData> mReferenceButtonDataSupplier =
             new ObservableSupplierImpl<>();
+    private ObservableSupplierImpl<Boolean> mRegularHubSearchEnabledStateSupplier =
+            new ObservableSupplierImpl<>();
+    private ObservableSupplierImpl<Boolean> mIncognitoHubSearchEnabledStateSupplier =
+            new ObservableSupplierImpl<>();
     private OneshotSupplierImpl<ProfileProvider> mProfileProviderSupplier =
             new OneshotSupplierImpl<>();
     private ObservableSupplierImpl<EdgeToEdgeController> mEdgeToEdgeSupplier =
@@ -105,6 +125,8 @@ public class HubCoordinatorUnitTest {
 
     @Before
     public void setUp() {
+        XrUtils.setXrDeviceForTesting(mIsXrDevice);
+
         TrackerFactory.setTrackerForTests(mTracker);
         mReferenceButtonDataSupplier.set(mReferenceButtonData);
         mProfileProviderSupplier.set(mProfileProvider);
@@ -116,6 +138,8 @@ public class HubCoordinatorUnitTest {
                 .thenReturn(new ObservableSupplierImpl<>());
         when(mTabSwitcherPane.getReferenceButtonDataSupplier())
                 .thenReturn(mReferenceButtonDataSupplier);
+        when(mTabSwitcherPane.getHubSearchEnabledStateSupplier())
+                .thenReturn(mRegularHubSearchEnabledStateSupplier);
         when(mIncognitoTabSwitcherPane.getPaneId()).thenReturn(PaneId.INCOGNITO_TAB_SWITCHER);
         when(mIncognitoTabSwitcherPane.getColorScheme()).thenReturn(HubColorScheme.INCOGNITO);
         when(mIncognitoTabSwitcherPane.getHandleBackPressChangedSupplier())
@@ -124,6 +148,8 @@ public class HubCoordinatorUnitTest {
                 .thenReturn(new ObservableSupplierImpl<>());
         when(mIncognitoTabSwitcherPane.getReferenceButtonDataSupplier())
                 .thenReturn(mReferenceButtonDataSupplier);
+        when(mIncognitoTabSwitcherPane.getHubSearchEnabledStateSupplier())
+                .thenReturn(mIncognitoHubSearchEnabledStateSupplier);
         when(mTab.getId()).thenReturn(TAB_ID);
         when(mTab.isIncognito()).thenReturn(false);
         when(mIncognitoTab.getId()).thenReturn(INCOGNITO_TAB_ID);
@@ -161,7 +187,7 @@ public class HubCoordinatorUnitTest {
                         mMenuButtonCoordinator,
                         mSearchActivityClient,
                         mEdgeToEdgeSupplier,
-                        mColorOverviewSupplier);
+                        mHubColorMixer);
         ShadowLooper.runUiThreadTasks();
         mRootView.getChildCount();
         assertNotEquals(0, mRootView.getChildCount());
@@ -175,10 +201,10 @@ public class HubCoordinatorUnitTest {
         assertFalse(mPreviousLayoutTypeSupplier.hasObservers());
         assertFalse(mIncognitoTabSwitcherBackPressSupplier.hasObservers());
         assertFalse(mTabSupplier.hasObservers());
+        XrUtils.resetXrDeviceForTesting();
     }
 
     @Test
-    @SmallTest
     public void testFocusedPaneBackPress() {
         assertFalse(mHubCoordinator.getHandleBackPressChangedSupplier().get());
 
@@ -200,7 +226,6 @@ public class HubCoordinatorUnitTest {
     }
 
     @Test
-    @SmallTest
     public void testChangePaneBackPress() {
         assertFalse(mHubCoordinator.getHandleBackPressChangedSupplier().get());
 
@@ -236,7 +261,6 @@ public class HubCoordinatorUnitTest {
     }
 
     @Test
-    @SmallTest
     public void testBackNavigationBetweenPanes() {
         assertFalse(mHubCoordinator.getHandleBackPressChangedSupplier().get());
 
@@ -250,7 +274,6 @@ public class HubCoordinatorUnitTest {
     }
 
     @Test
-    @SmallTest
     public void testBackNavigationWithNullTab() {
         assertFalse(mHubCoordinator.getHandleBackPressChangedSupplier().get());
         assertEquals(BackPressResult.FAILURE, mHubCoordinator.handleBackPress());
@@ -264,7 +287,6 @@ public class HubCoordinatorUnitTest {
     }
 
     @Test
-    @SmallTest
     public void testBackNavigationWithTab() {
         assertFalse(mHubCoordinator.getHandleBackPressChangedSupplier().get());
         assertEquals(BackPressResult.FAILURE, mHubCoordinator.handleBackPress());
@@ -277,7 +299,6 @@ public class HubCoordinatorUnitTest {
     }
 
     @Test
-    @SmallTest
     public void testFocusPane() {
         reset(mPaneManager);
         mHubCoordinator.focusPane(PaneId.TAB_SWITCHER);
@@ -285,7 +306,6 @@ public class HubCoordinatorUnitTest {
     }
 
     @Test
-    @SmallTest
     public void testSelectTabAndHideHub() {
         int tabId = 5;
         mHubCoordinator.selectTabAndHideHub(tabId);
@@ -293,7 +313,6 @@ public class HubCoordinatorUnitTest {
     }
 
     @Test
-    @SmallTest
     @EnableFeatures({
         ChromeFeatureList.FLOATING_SNACKBAR,
         ChromeFeatureList.DRAW_KEY_NATIVE_EDGE_TO_EDGE,
@@ -321,7 +340,6 @@ public class HubCoordinatorUnitTest {
     }
 
     @Test
-    @SmallTest
     @DisableFeatures({
         ChromeFeatureList.FLOATING_SNACKBAR,
         ChromeFeatureList.DRAW_KEY_NATIVE_EDGE_TO_EDGE,

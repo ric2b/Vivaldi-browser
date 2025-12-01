@@ -21,4 +21,14 @@
   // Whether this is showing a notification dot on the cell.
   // Show a blue dot on a tab strip cell and a dot with the same color as the text on a tab group cell.
   @objc public var hasNotificationDot: Bool = false
+
+  // Vivaldi
+  // Whether this is a pinned tab. Default is false.
+  @objc public var isPinned: Bool = false
+
+  // Whether this is a tab in a group.
+  // If this item is not a tab or does not belong to a group, then this should be false.
+  @objc public var isTabInGroup: Bool = false
+  // End Vivaldi
+
 }

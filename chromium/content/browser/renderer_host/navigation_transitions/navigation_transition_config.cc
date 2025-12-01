@@ -25,6 +25,10 @@ const base::FeatureParam<base::TimeDelta> kInvisibleCacheCleanupDelay{
     &blink::features::kBackForwardTransitions, "invisible-cache-cleanup-delay",
     base::Minutes(7)};
 
+const base::FeatureParam<bool> kTransferScreenshotInBackgroundPriority{
+    &blink::features::kBackForwardTransitions,
+    "transfer-screenshot-in-background-priority", false};
+
 size_t GetMaxCacheSizeInBytes() {
   constexpr int kLowEndMax = 32 * 1024 * 1024;  // 32MB
   constexpr int kOtherMax = 128 * 1024 * 1024;  // 128MB
@@ -46,10 +50,13 @@ bool NavigationTransitionConfig::AreBackForwardTransitionsEnabled() {
 size_t NavigationTransitionConfig::ComputeCacheSizeInBytes() {
   // Assume 4 bytes per pixel. This value estimates the max number of bytes of
   // the physical screen's uncompressed bitmap.
-  const size_t display_size_in_bytes = 4 * display::Screen::GetScreen()
-                                               ->GetPrimaryDisplay()
-                                               .GetSizeInPixel()
-                                               .Area64();
+  size_t display_size_in_bytes = 0;
+  for (const auto& display : display::Screen::GetScreen()->GetAllDisplays()) {
+    display_size_in_bytes =
+        std::max(display_size_in_bytes,
+                 static_cast<size_t>(4 * display.GetSizeInPixel().Area64()));
+  }
+
   size_t memory_required_for_max_screenshots =
       display_size_in_bytes * kMaxScreenshotCount.Get();
 
@@ -72,6 +79,12 @@ size_t NavigationTransitionConfig::ComputeCacheSizeInBytes() {
 base::TimeDelta
 NavigationTransitionConfig::GetCleanupDelayForInvisibleCaches() {
   return kInvisibleCacheCleanupDelay.Get();
+}
+
+// static
+bool NavigationTransitionConfig::
+    ShouldTransferScreenshotInBackgroundPriority() {
+  return kTransferScreenshotInBackgroundPriority.Get();
 }
 
 }  // namespace content

@@ -11,11 +11,23 @@ import("//ios/build/chrome_build.gni")
 import("//ios/chrome/features.gni")
 import("//ios/features.gni")
 
+if (defined(is_vivaldi) && is_vivaldi) {
+  import("//vivaldi/gn/config/product.gni")
+} # End Vivaldi
+
 # Template used to create a Chrome-like app bundle that depends on
 # EarlyMallocZoneRegistration.
 #
 template("chrome_app") {
   _target_name = target_name
+
+  if (defined(is_vivaldi) && is_vivaldi) {
+    xcasset_compiler_flags = [
+      "--compress-pngs",
+      "--app-icon", ios_primary_app_icon_name,
+      "--include-all-app-icons"
+    ]
+  } # End Vivaldi
 
   if (use_blink) {
     assert(ios_partition_alloc_enabled)
@@ -86,14 +98,16 @@ template("chrome_app") {
         output_name = target_name
         transparent = true
 
-        configs += [ "//build/config/ios:ios_extension_executable_flags" ]
-
         deps = [
           ":${_outer_target}_framework+link",
           "//content/app/ios/appex:${_process_target}",
         ]
 
-        ldflags = [
+        if (!defined(ldflags)) {
+          ldflags = []
+        }
+
+        ldflags += [
           "-Wl,--ignore-auto-link-option=CoreAudioTypes",
           "-Wl,-no_application_extension",
           "-Wl,-rpath,@executable_path/../../Frameworks",
@@ -105,19 +119,23 @@ template("chrome_app") {
       }
     }
 
+    set_defaults("browserkit_extension") {
+      configs = [ "//build/config/ios:ios_extension_executable_flags" ]
+    }
+
     browserkit_extension("gpu_process") {
       forward_variables_from(invoker, TESTONLY_AND_VISIBILITY)
-      bundle_identifier = "$ios_chromium_bundle_id.GPUProcess"
+      bundle_identifier = "$ios_chromium_bundle_id.GPUProcessExtension"
     }
 
     browserkit_extension("network_process") {
       forward_variables_from(invoker, TESTONLY_AND_VISIBILITY)
-      bundle_identifier = "$ios_chromium_bundle_id.NetworkProcess"
+      bundle_identifier = "$ios_chromium_bundle_id.NetworkProcessExtension"
     }
 
     browserkit_extension("content_process") {
       forward_variables_from(invoker, TESTONLY_AND_VISIBILITY)
-      bundle_identifier = "$ios_chromium_bundle_id.ContentProcess"
+      bundle_identifier = "$ios_chromium_bundle_id.ContentProcessExtension"
     }
 
     ios_app_bundle(_target_name) {

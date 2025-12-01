@@ -15,13 +15,12 @@ class WebContents;
 }
 
 namespace autofill_ai {
-class SaveAutofillAiDataController;
+class SaveOrUpdateAutofillAiDataController;
 }
 
 namespace autofill {
 class AutofillProfile;
 class AutofillBubbleBase;
-class LocalCardMigrationBubbleController;
 class OfferNotificationBubbleController;
 class SaveAddressBubbleController;
 class UpdateAddressBubbleController;
@@ -53,11 +52,6 @@ class AutofillBubbleHandler {
       SaveCardBubbleController* controller,
       bool is_user_gesture) = 0;
 
-  virtual AutofillBubbleBase* ShowLocalCardMigrationBubble(
-      content::WebContents* web_contents,
-      LocalCardMigrationBubbleController* controller,
-      bool is_user_gesture) = 0;
-
   virtual AutofillBubbleBase* ShowIbanBubble(content::WebContents* web_contents,
                                              IbanBubbleController* controller,
                                              bool is_user_gesture,
@@ -70,7 +64,7 @@ class AutofillBubbleHandler {
 
   virtual AutofillBubbleBase* ShowSaveAutofillAiDataBubble(
       content::WebContents* web_contents,
-      autofill_ai::SaveAutofillAiDataController* controller) = 0;
+      autofill_ai::SaveOrUpdateAutofillAiDataController* controller) = 0;
 
   // Opens a save address bubble. The bubble's lifecycle is controlled by its
   // widget, and the controller must handle the widget closing to invalidate

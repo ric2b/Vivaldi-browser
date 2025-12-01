@@ -39,6 +39,9 @@ source_set("impl") {
     ":search_engine_choice",
     "//chrome/browser:browser_process",
     "//chrome/browser/regional_capabilities",
+    "//chrome/browser/search_engines",
+    "//components/regional_capabilities",
+    "//components/regional_capabilities:country_access_reason",
     "//components/search_engines",
     "//components/variations/service",
   ]
@@ -125,6 +128,7 @@ if (!is_android) {
           "//chrome/browser/ui:browser_element_identifiers",
           "//chrome/test:test_support_ui",
           "//components/country_codes",
+          "//components/regional_capabilities",
           "//components/search_engines",
           "//components/variations",
           "//content/test:test_support",

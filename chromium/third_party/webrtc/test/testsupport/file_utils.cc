@@ -42,8 +42,11 @@
 #include <stdlib.h>
 
 #include <memory>
+#include <optional>
+#include <string>
 #include <type_traits>
 #include <utility>
+#include <vector>
 
 #if defined(WEBRTC_IOS)
 #include "test/testsupport/ios_file_utils.h"
@@ -96,7 +99,7 @@ std::string OutputPath() {
 
 std::string OutputPathWithRandomDirectory() {
   std::string path = webrtc::test::internal::OutputPath();
-  std::string rand_dir = path + rtc::CreateRandomUuid();
+  std::string rand_dir = path + CreateRandomUuid();
   RTC_CHECK(CreateDir(rand_dir)) << "Failed to create dir: " << rand_dir;
   return rand_dir + std::string(kPathDelimiter);
 }
@@ -116,7 +119,7 @@ std::string TempFilename(absl::string_view dir, absl::string_view prefix) {
   RTC_DCHECK_NOTREACHED();
   return "";
 #else
-  rtc::StringBuilder os;
+  StringBuilder os;
   os << dir << "/" << prefix << "XXXXXX";
   std::string tempname = os.Release();
 
@@ -221,6 +224,26 @@ bool RemoveDir(absl::string_view directory_name) {
 #endif
 }
 
+bool RemoveNonEmptyDir(absl::string_view directory_name) {
+  std::optional<std::vector<std::string>> dir_content =
+      ReadDirectory(directory_name);
+  if (dir_content.has_value()) {
+    for (const std::string& entry : *dir_content) {
+      if (DirExists(entry)) {
+        if (!RemoveNonEmptyDir(entry)) {
+          return false;
+        }
+      } else if (FileExists(entry)) {
+        if (!RemoveFile(entry)) {
+          return false;
+        }
+      }
+    }
+  }
+  // Directory should be emptied.
+  return RemoveDir(directory_name);
+}
+
 bool RemoveFile(absl::string_view file_name) {
 #ifdef WIN32
   return DeleteFileA(std::string(file_name).c_str()) != FALSE;
@@ -235,7 +258,7 @@ std::string ResourcePath(absl::string_view name, absl::string_view extension) {
 
 std::string JoinFilename(absl::string_view dir, absl::string_view name) {
   RTC_CHECK(!dir.empty()) << "Special cases not implemented.";
-  rtc::StringBuilder os;
+  StringBuilder os;
   os << dir;
   // If the directory path already ends with a path delimiter don't append it
   if (dir.back() != kPathDelimiter.back()) {

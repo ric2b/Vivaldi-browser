@@ -25,6 +25,10 @@ bundle_data_xcassets("vivaldi_toolbar_assets") {
     "VivaldiToolbarAssets.xcassets/toolbar_switcher.imageset/vivaldi_toolbar_switcher.pdf",
     "VivaldiToolbarAssets.xcassets/toolbar_switcher.imageset/vivaldi_toolbar_switcher_dark.pdf",
 
+    # toolbar_switcher_stack
+    "VivaldiToolbarAssets.xcassets/toolbar_switcher_stack.imageset/Contents.json",
+    "VivaldiToolbarAssets.xcassets/toolbar_switcher_stack.imageset/toolbar_switcher_stack.pdf",
+
     # toolbar_switcher_overflow
     "VivaldiToolbarAssets.xcassets/toolbar_switcher_overflow.imageset/Contents.json",
     "VivaldiToolbarAssets.xcassets/toolbar_switcher_overflow.imageset/vivaldi_toolbar_switcher_overflow.pdf",

@@ -19,12 +19,12 @@
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_features.h"
 #include "chrome/browser/ui/tabs/glic_nudge_controller.h"
-#include "chrome/browser/ui/tabs/public/tab_interface.h"
 #include "components/optimization_guide/core/hints_processing_util.h"
 #include "components/optimization_guide/core/model_execution/model_execution_features_controller.h"
 #include "components/optimization_guide/core/optimization_guide_decider.h"
 #include "components/optimization_guide/core/optimization_metadata.h"
 #include "components/optimization_guide/proto/contextual_cueing_metadata.pb.h"
+#include "components/tab_collections/public/tab_interface.h"
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/web_contents.h"
 #include "services/metrics/public/cpp/ukm_builders.h"
@@ -34,6 +34,7 @@
 
 #if BUILDFLAG(ENABLE_GLIC)
 #include "chrome/browser/glic/glic_enabling.h"
+#include "chrome/browser/glic/glic_keyed_service_factory.h"
 #endif
 
 namespace contextual_cueing {
@@ -45,7 +46,6 @@ class ScopedNudgeDecisionRecorder {
       ukm::SourceId source_id)
       : optimization_type_(optimization_type), source_id_(source_id) {}
   ~ScopedNudgeDecisionRecorder() {
-    CHECK_NE(nudge_decision_, NudgeDecision::kUnknown);
     base::UmaHistogramEnumeration(
         "ContextualCueing.NudgeDecision." +
             optimization_guide::GetStringNameForOptimizationType(
@@ -109,14 +109,16 @@ void ContextualCueingHelper::DidFinishNavigation(
   contextual_cueing_service_->ReportPageLoad();
   auto* glic_nudge_controller = GetGlicNudgeController();
   if (glic_nudge_controller) {
-    glic_nudge_controller->UpdateNudgeLabel(web_contents(), std::string(),
-                                            base::DoNothing());
+    glic_nudge_controller->UpdateNudgeLabel(
+        web_contents(), std::string(),
+        tabs::GlicNudgeActivity::kNudgeIgnoredNavigation, base::DoNothing());
   }
 }
 
 void ContextualCueingHelper::PrimaryMainDocumentElementAvailable() {
   auto* glic_nudge_controller = GetGlicNudgeController();
-  if (!glic_nudge_controller) {
+  if (!glic_nudge_controller ||
+      !web_contents()->GetLastCommittedURL().SchemeIsHTTPOrHTTPS()) {
     return;
   }
   // Determine if server data indicates a nudge should be shown.
@@ -124,16 +126,18 @@ void ContextualCueingHelper::PrimaryMainDocumentElementAvailable() {
       web_contents()->GetLastCommittedURL(),
       optimization_guide::proto::GLIC_CONTEXTUAL_CUEING,
       base::BindOnce(&ContextualCueingHelper::OnOptimizationGuideCueingMetadata,
-                     weak_ptr_factory_.GetWeakPtr()));
+                     weak_ptr_factory_.GetWeakPtr(), base::TimeTicks::Now()));
 }
 
 void ContextualCueingHelper::OnOptimizationGuideCueingMetadata(
+    base::TimeTicks document_available_time,
     optimization_guide::OptimizationGuideDecision decision,
     const optimization_guide::OptimizationMetadata& metadata) {
   std::unique_ptr<ScopedNudgeDecisionRecorder> recorder =
       std::make_unique<ScopedNudgeDecisionRecorder>(
           optimization_guide::proto::GLIC_CONTEXTUAL_CUEING,
           web_contents()->GetPrimaryMainFrame()->GetPageUkmSourceId());
+
   if (decision != optimization_guide::OptimizationGuideDecision::kTrue ||
       metadata.empty()) {
     recorder->set_nudge_decision(NudgeDecision::kServerDataUnavailable);
@@ -149,7 +153,8 @@ void ContextualCueingHelper::OnOptimizationGuideCueingMetadata(
   ContextualCueingPageData::CreateForPage(
       web_contents()->GetPrimaryPage(), std::move(*parsed),
       base::BindOnce(&ContextualCueingHelper::OnCueingDecision,
-                     weak_ptr_factory_.GetWeakPtr(), std::move(recorder)));
+                     weak_ptr_factory_.GetWeakPtr(), std::move(recorder),
+                     document_available_time));
 }
 
 bool ContextualCueingHelper::IsBrowserBlockingNudges(
@@ -181,23 +186,36 @@ bool ContextualCueingHelper::IsBrowserBlockingNudges(
     return true;
   }
 
+#if BUILDFLAG(ENABLE_GLIC)
+  Profile* profile =
+      Profile::FromBrowserContext(web_contents()->GetBrowserContext());
+  auto* glic_service =
+      glic::GlicKeyedServiceFactory::GetGlicKeyedService(profile);
+
+  if (glic_service->IsWindowShowing()) {
+    recorder->set_nudge_decision(NudgeDecision::kNudgeNotShownWindowShowing);
+    return true;
+  }
+#endif  // BUILDFLAG(ENABLE_GLIC)
+
   return false;
 }
 
 void ContextualCueingHelper::OnCueingDecision(
     std::unique_ptr<ScopedNudgeDecisionRecorder> decision_recorder,
-    std::string cue_label) {
+    base::TimeTicks document_available_time,
+    base::expected<std::string, NudgeDecision> decision_result) {
   CHECK_EQ(NudgeDecision::kUnknown, decision_recorder->nudge_decision());
   if (ContextualCueingPageData::GetForPage(web_contents()->GetPrimaryPage())) {
     ContextualCueingPageData::DeleteForPage(web_contents()->GetPrimaryPage());
   }
 
-  if (cue_label.empty()) {
-    decision_recorder->set_nudge_decision(
-        NudgeDecision::kClientConditionsUnmet);
+  if (!decision_result.has_value()) {
+    decision_recorder->set_nudge_decision(decision_result.error());
     return;
   }
 
+  std::string cue_label = decision_result.value();
   if (IsBrowserBlockingNudges(decision_recorder.get())) {
     return;
   }
@@ -210,11 +228,10 @@ void ContextualCueingHelper::OnCueingDecision(
   }
 
   GetGlicNudgeController()->UpdateNudgeLabel(
-      web_contents(), cue_label,
-      base::BindRepeating(
-          &ContextualCueingService::OnNudgeActivity,
-          contextual_cueing_service_->GetWeakPtr(), url,
-          web_contents()->GetPrimaryMainFrame()->GetPageUkmSourceId()));
+      web_contents(), cue_label, /*activity=*/std::nullopt,
+      base::BindRepeating(&ContextualCueingService::OnNudgeActivity,
+                          contextual_cueing_service_->GetWeakPtr(),
+                          web_contents(), document_available_time));
 }
 
 // static
@@ -227,14 +244,14 @@ void ContextualCueingHelper::MaybeCreateForWebContents(
 #if BUILDFLAG(ENABLE_GLIC)
   Profile* profile =
       Profile::FromBrowserContext(web_contents->GetBrowserContext());
-  if (!GlicEnabling::IsProfileEligible(profile)) {
+  if (!glic::GlicEnabling::IsEnabledForProfile(profile)) {
     return;
   }
 
   auto* optimization_guide_keyed_service =
       OptimizationGuideKeyedServiceFactory::GetForProfile(profile);
   if (!optimization_guide_keyed_service ||
-      !optimization_guide_keyed_service->GetModelExecutionFeaturesController()
+      !optimization_guide_keyed_service
            ->ShouldModelExecutionBeAllowedForUser()) {
     return;
   }

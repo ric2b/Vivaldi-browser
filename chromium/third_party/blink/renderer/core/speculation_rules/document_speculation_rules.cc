@@ -32,11 +32,13 @@
 #include "third_party/blink/renderer/core/speculation_rules/document_rule_predicate.h"
 #include "third_party/blink/renderer/core/speculation_rules/speculation_candidate.h"
 #include "third_party/blink/renderer/core/speculation_rules/speculation_rules_metrics.h"
+#include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 #include "third_party/blink/renderer/platform/scheduler/public/event_loop.h"
 #include "third_party/blink/renderer/platform/weborigin/referrer.h"
 #include "third_party/blink/renderer/platform/weborigin/security_origin.h"
 #include "third_party/blink/renderer/platform/weborigin/security_policy.h"
 #include "third_party/blink/renderer/platform/wtf/std_lib_extras.h"
+#include "third_party/blink/renderer/platform/wtf/text/atomic_string.h"
 #include "third_party/blink/renderer/platform/wtf/vector.h"
 
 namespace blink {
@@ -643,7 +645,7 @@ void DocumentSpeculationRules::UpdateSpeculationCandidates() {
   }
 
   HeapVector<Member<SpeculationCandidate>> candidates;
-  auto push_candidates = [&candidates, &document](
+  auto push_candidates = [&candidates, &document, this](
                              mojom::blink::SpeculationAction action,
                              SpeculationRuleSet* rule_set,
                              const HeapVector<Member<SpeculationRule>>& rules) {
@@ -660,13 +662,34 @@ void DocumentSpeculationRules::UpdateSpeculationCandidates() {
         CHECK(!rule->requires_anonymous_client_ip_when_cross_origin() ||
               action == mojom::blink::SpeculationAction::kPrefetch);
 
+        Vector<WTF::String> tags;
+        if (RuntimeEnabledFeatures::SpeculationRulesTagEnabled(
+                document.domWindow())) {
+          if (rule->rule_tag()) {
+            tags.push_back(rule->rule_tag());
+          }
+          if (rule->ruleset_tag()) {
+            tags.push_back(rule->ruleset_tag());
+          }
+
+          // Put the default value.
+          if (tags.empty()) {
+            tags.push_back(g_null_atom);
+          } else {
+            // Record that the valid tag is specified by the page.
+            UseCounter::Count(GetSupplementable(),
+                              WebFeature::kSpeculationRulesTags);
+          }
+        }
+
         candidates.push_back(MakeGarbageCollected<SpeculationCandidate>(
             url, action, referrer.value(),
             rule->requires_anonymous_client_ip_when_cross_origin(),
             rule->target_browsing_context_name_hint().value_or(
                 mojom::blink::SpeculationTargetHint::kNoHint),
             rule->eagerness(), rule->no_vary_search_hint().Clone(),
-            rule->injection_type(), rule_set, /*anchor=*/nullptr));
+            rule->injection_type(), std::move(tags), rule_set,
+            /*anchor=*/nullptr));
       }
     }
   };
@@ -726,8 +749,10 @@ void DocumentSpeculationRules::UpdateSpeculationCandidates() {
   Vector<mojom::blink::SpeculationCandidatePtr> mojom_candidates;
   mojom_candidates.ReserveInitialCapacity(candidates.size());
   for (SpeculationCandidate* candidate : candidates) {
+    auto mojom_candidate = candidate->ToMojom();
     eagerness_set.Put(candidate->eagerness());
-    mojom_candidates.push_back(candidate->ToMojom());
+
+    mojom_candidates.push_back(std::move(mojom_candidate));
   }
 
   host->UpdateSpeculationCandidates(std::move(mojom_candidates));
@@ -765,7 +790,7 @@ void DocumentSpeculationRules::AddLinkBasedSpeculationCandidates(
     CHECK(execution_context);
 
     const auto push_link_candidates =
-        [&link, &link_candidates, &document, this](
+        [&link, &link_candidates, &document, &execution_context, this](
             mojom::blink::SpeculationAction action,
             SpeculationRuleSet* rule_set,
             const HeapVector<Member<SpeculationRule>>& speculation_rules) {
@@ -803,7 +828,9 @@ void DocumentSpeculationRules::AddLinkBasedSpeculationCandidates(
 
             mojom::blink::SpeculationTargetHint target_hint =
                 mojom::blink::SpeculationTargetHint::kNoHint;
-            if (action == mojom::blink::SpeculationAction::kPrerender) {
+            if (RuntimeEnabledFeatures::SpeculationRulesTargetHintEnabled(
+                    execution_context) &&
+                action == mojom::blink::SpeculationAction::kPrerender) {
               if (rule->target_browsing_context_name_hint()) {
                 target_hint = rule->target_browsing_context_name_hint().value();
               } else {
@@ -814,13 +841,26 @@ void DocumentSpeculationRules::AddLinkBasedSpeculationCandidates(
               }
             }
 
+            Vector<WTF::String> tags;
+            if (rule->rule_tag()) {
+              tags.push_back(rule->rule_tag());
+            }
+            if (rule->ruleset_tag()) {
+              tags.push_back(rule->ruleset_tag());
+            }
+
+            // Put the default value.
+            if (tags.empty()) {
+              tags.push_back(g_null_atom);
+            }
+
             SpeculationCandidate* candidate =
                 MakeGarbageCollected<SpeculationCandidate>(
                     link->HrefURL(), action, referrer.value(),
                     rule->requires_anonymous_client_ip_when_cross_origin(),
                     target_hint, rule->eagerness(),
                     rule->no_vary_search_hint().Clone(), rule->injection_type(),
-                    rule_set, link);
+                    std::move(tags), rule_set, link);
             link_candidates->push_back(std::move(candidate));
           }
         };

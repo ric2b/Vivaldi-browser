@@ -5,8 +5,12 @@
 #ifndef V8_OBJECTS_STRING_INL_H_
 #define V8_OBJECTS_STRING_INL_H_
 
+#include "src/objects/string.h"
+// Include the non-inl header before the rest of the headers.
+
 #include <optional>
 #include <type_traits>
+
 
 #include "src/common/assert-scope.h"
 #include "src/common/globals.h"
@@ -16,12 +20,12 @@
 #include "src/heap/heap-layout-inl.h"
 #include "src/numbers/hash-seed-inl.h"
 #include "src/objects/heap-object.h"
+#include "src/objects/instance-type-checker.h"
 #include "src/objects/instance-type-inl.h"
 #include "src/objects/name-inl.h"
 #include "src/objects/objects-body-descriptors.h"
 #include "src/objects/smi-inl.h"
 #include "src/objects/string-table-inl.h"
-#include "src/objects/string.h"
 #include "src/sandbox/external-pointer-inl.h"
 #include "src/sandbox/external-pointer.h"
 #include "src/sandbox/isolate.h"
@@ -38,11 +42,11 @@ namespace v8::internal {
 
 class V8_NODISCARD SharedStringAccessGuardIfNeeded {
  public:
-  // Creates no SpinningMutexGuard for the string access since it was
+  // Creates no MutexGuard for the string access since it was
   // called from the main thread.
   explicit SharedStringAccessGuardIfNeeded(Isolate* isolate) {}
 
-  // Creates a SpinningMutexGuard for the string access if it was called
+  // Creates a MutexGuard for the string access if it was called
   // from a background thread.
   explicit SharedStringAccessGuardIfNeeded(LocalIsolate* local_isolate) {
     if (IsNeeded(local_isolate)) {
@@ -117,7 +121,7 @@ class V8_NODISCARD SharedStringAccessGuardIfNeeded {
     return isolate;
   }
 
-  std::optional<base::SpinningMutexGuard> mutex_guard;
+  std::optional<base::MutexGuard> mutex_guard;
 };
 
 uint32_t String::length() const { return length_; }

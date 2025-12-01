@@ -10,7 +10,7 @@
 #include <vector>
 
 #include "base/memory/raw_ref.h"
-#include "components/autofill/core/browser/data_model/credit_card.h"
+#include "components/autofill/core/browser/data_model/payments/credit_card.h"
 #include "components/autofill/core/browser/payments/autofill_error_dialog_context.h"
 #include "components/autofill/core/browser/payments/payments_autofill_client.h"
 #include "components/autofill/core/browser/suggestions/suggestion.h"
@@ -24,8 +24,6 @@
 #include "chrome/browser/touch_to_fill/autofill/android/touch_to_fill_payment_method_controller.h"
 #include "components/autofill/core/browser/ui/payments/card_expiration_date_fix_flow_controller_impl.h"
 #include "components/autofill/core/browser/ui/payments/card_name_fix_flow_controller_impl.h"
-#else  // !BUILDFLAG(IS_ANDROID)
-#include "chrome/browser/ui/autofill/payments/manage_migration_ui_controller.h"
 #endif  // BUILDFLAG(IS_ANDROID)
 
 class GURL;
@@ -49,6 +47,7 @@ class AutofillOfferManager;
 class AutofillSaveCardBottomSheetBridge;
 class AutofillSaveIbanBottomSheetBridge;
 class BnplTosControllerImpl;
+struct BnplTosModel;
 class CardUnmaskAuthenticationSelectionDialogControllerImpl;
 struct CardUnmaskChallengeOption;
 class CardUnmaskOtpInputDialogControllerImpl;
@@ -108,18 +107,6 @@ class ChromePaymentsAutofillClient : public PaymentsAutofillClient,
       base::OnceCallback<void(const std::u16string&, const std::u16string&)>
           callback) override;
 #else   // !BUILDFLAG(IS_ANDROID)
-  void ShowLocalCardMigrationDialog(
-      base::OnceClosure show_migration_dialog_closure) override;
-  void ConfirmMigrateLocalCardToCloud(
-      const LegalMessageLines& legal_message_lines,
-      const std::string& user_email,
-      const std::vector<MigratableCreditCard>& migratable_credit_cards,
-      LocalCardMigrationCallback start_migrating_cards_callback) override;
-  void ShowLocalCardMigrationResults(
-      bool has_server_error,
-      const std::u16string& tip_message,
-      const std::vector<MigratableCreditCard>& migratable_credit_cards,
-      MigrationDeleteCardCallback delete_local_card_callback) override;
   void ShowWebauthnOfferDialog(
       WebauthnDialogCallback offer_dialog_callback) override;
   void ShowWebauthnVerifyPendingDialog(
@@ -182,7 +169,10 @@ class ChromePaymentsAutofillClient : public PaymentsAutofillClient,
       base::OnceClosure cancel_unmasking_closure) override;
   void DismissUnmaskAuthenticatorSelectionDialog(bool server_success) override;
   void OnUnmaskVerificationResult(PaymentsRpcResult result) override;
-  void ShowBnplTos() override;
+  void ShowBnplTos(BnplTosModel bnpl_tos_model,
+                   base::OnceClosure accept_callback,
+                   base::OnceClosure cancel_callback) override;
+  void CloseBnplTos() override;
   VirtualCardEnrollmentManager* GetVirtualCardEnrollmentManager() override;
   CreditCardCvcAuthenticator& GetCvcAuthenticator() override;
   CreditCardOtpAuthenticator* GetOtpAuthenticator() override;
@@ -214,7 +204,7 @@ class ChromePaymentsAutofillClient : public PaymentsAutofillClient,
   payments::MandatoryReauthManager* GetOrCreatePaymentsMandatoryReauthManager()
       override;
   payments::BnplManager* GetPaymentsBnplManager() override;
-  const PaymentsDataManager& GetPaymentsDataManager() const override;
+  PaymentsDataManager& GetPaymentsDataManager() final;
   void ShowCreditCardSaveAndFillDialog() override;
 
 #if BUILDFLAG(IS_ANDROID)

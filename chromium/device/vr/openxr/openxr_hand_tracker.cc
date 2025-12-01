@@ -8,9 +8,11 @@
 #include <vector>
 
 #include "base/command_line.h"
+#include "base/compiler_specific.h"
 #include "base/containers/flat_set.h"
 #include "base/no_destructor.h"
 #include "base/strings/string_util.h"
+#include "base/trace_event/trace_event.h"
 #include "device/vr/openxr/openxr_extension_helper.h"
 #include "device/vr/openxr/openxr_hand_utils.h"
 #include "device/vr/openxr/openxr_interaction_profiles.h"
@@ -134,6 +136,7 @@ mojom::XRHandTrackingDataPtr OpenXrHandTracker::GetHandTrackingData() const {
       !mesh_scale_enabled_) {
     return nullptr;
   }
+  TRACE_EVENT1("xr", "GetHandTrackingData", "XrHandedness", type_);
 
   mojom::XRHandTrackingDataPtr hand_tracking_data =
       device::mojom::XRHandTrackingData::New();
@@ -228,8 +231,9 @@ bool OpenXrHandTrackerFactory::IsEnabled(
          std::ranges::any_of(
              GetRequestedExtensions(),
              [&extension_enum](std::string_view extension) {
-               return strcmp(extension.data(),
-                             XR_EXT_HAND_TRACKING_EXTENSION_NAME) != 0 &&
+               return UNSAFE_TODO(
+                          strcmp(extension.data(),
+                                 XR_EXT_HAND_TRACKING_EXTENSION_NAME)) != 0 &&
                       extension_enum->ExtensionSupported(extension.data());
              });
 }

@@ -82,16 +82,18 @@ class ChromePageInfoUiDelegate : public PageInfoUiDelegate {
   bool IsBlockAutoPlayEnabled() override;
   bool IsMultipleTabsOpen() override;
   void OpenSiteSettingsFileSystem() override;
+
+  void OpenMerchantTrustSidePanel(const GURL& url);
 #endif  // !BUILDFLAG(IS_ANDROID)
   content::PermissionResult GetPermissionResult(
       blink::PermissionType permission) override;
   std::optional<content::PermissionResult> GetEmbargoResult(
       ContentSettingsType type) override;
 
-  bool IsTrackingProtection3pcdEnabled() override;
   void GetMerchantTrustInfo(page_info::MerchantDataCallback callback) override;
   void RecordPageInfoWithMerchantTrustOpenTime();
   void RecordMerchantTrustButtonShown();
+  void RecordMerchantTrustSidePanelOpened();
 
  private:
   Profile* GetProfile() const;

@@ -32,6 +32,7 @@
 #include "src/objects/swiss-name-dictionary-inl.h"
 #include "src/objects/template-objects-inl.h"
 #include "src/roots/roots.h"
+#include "src/sandbox/check.h"
 
 namespace v8 {
 namespace internal {
@@ -93,6 +94,8 @@ Handle<Code> FactoryBase<Impl>::NewCode(const NewCodeOptions& options) {
   code->set_metadata_size(options.metadata_size);
   code->set_inlined_bytecode_size(options.inlined_bytecode_size);
   code->set_osr_offset(options.osr_offset);
+  SBXCHECK_IMPLIES(options.deoptimization_data.is_null(),
+                   options.osr_offset.IsNone());
   code->set_handler_table_offset(options.handler_table_offset);
   code->set_constant_pool_offset(options.constant_pool_offset);
   code->set_code_comments_offset(options.code_comments_offset);
@@ -443,8 +446,8 @@ FactoryBase<Impl>::NewSloppyArgumentsElements(
 }
 
 template <typename Impl>
-Handle<ArrayList> FactoryBase<Impl>::NewArrayList(int size,
-                                                  AllocationType allocation) {
+DirectHandle<ArrayList> FactoryBase<Impl>::NewArrayList(
+    int size, AllocationType allocation) {
   return ArrayList::New(isolate(), size, allocation);
 }
 
@@ -861,13 +864,16 @@ MaybeHandle<SeqTwoByteString> FactoryBase<Impl>::NewRawSharedTwoByteString(
 }
 
 template <typename Impl>
-MaybeHandle<String> FactoryBase<Impl>::NewConsString(
-    Handle<String> left, Handle<String> right, AllocationType allocation) {
+template <template <typename> typename HandleType>
+  requires(std::is_convertible_v<HandleType<String>, DirectHandle<String>>)
+HandleType<String>::MaybeType FactoryBase<Impl>::NewConsString(
+    HandleType<String> left, HandleType<String> right,
+    AllocationType allocation) {
   if (IsThinString(*left)) {
-    left = handle(Cast<ThinString>(*left)->actual(), isolate());
+    left = HandleType<String>(Cast<ThinString>(*left)->actual(), isolate());
   }
   if (IsThinString(*right)) {
-    right = handle(Cast<ThinString>(*right)->actual(), isolate());
+    right = HandleType<String>(Cast<ThinString>(*right)->actual(), isolate());
   }
   uint32_t left_length = left->length();
   if (left_length == 0) return right;
@@ -901,7 +907,7 @@ MaybeHandle<String> FactoryBase<Impl>::NewConsString(
 
     static_assert(ConsString::kMinLength <= String::kMaxLength);
     if (is_one_byte) {
-      Handle<SeqOneByteString> result =
+      HandleType<SeqOneByteString> result =
           NewRawOneByteString(length, allocation).ToHandleChecked();
       DisallowGarbageCollection no_gc;
       SharedStringAccessGuardIfNeeded access_guard(isolate());
@@ -921,7 +927,7 @@ MaybeHandle<String> FactoryBase<Impl>::NewConsString(
       return result;
     }
 
-    Handle<SeqTwoByteString> result =
+    HandleType<SeqTwoByteString> result =
         NewRawTwoByteString(length, allocation).ToHandleChecked();
 
     DisallowGarbageCollection no_gc;
@@ -964,11 +970,9 @@ Handle<String> FactoryBase<Impl>::NewConsString(DirectHandle<String> left,
 template <typename Impl>
 Handle<String> FactoryBase<Impl>::LookupSingleCharacterStringFromCode(
     uint16_t code) {
-  if (code <= unibrow::Latin1::kMaxChar) {
-    DisallowGarbageCollection no_gc;
-    Tagged<Object> value = single_character_string_table()->get(code);
-    DCHECK_NE(value, *undefined_value());
-    return handle(Cast<String>(value), isolate());
+  if (code <= String::kMaxOneByteCharCode) {
+    return Cast<String>(
+        isolate()->root_handle(RootsTable::SingleCharacterStringIndex(code)));
   }
   uint16_t buffer[] = {code};
   return InternalizeString(base::Vector<const uint16_t>(buffer, 1));
@@ -1391,10 +1395,43 @@ FactoryBase<Impl>::RefineAllocationTypeForInPlaceInternalizableString(
   return impl()->AllocationTypeForInPlaceInternalizableString();
 }
 
+#ifdef V8_ENABLE_LEAPTIERING
+template <typename Impl>
+JSDispatchHandle FactoryBase<Impl>::NewJSDispatchHandle(
+    uint16_t parameter_count, DirectHandle<Code> code,
+    JSDispatchTable::Space* space) {
+  JSDispatchTable* jdt = isolate()->isolate_group()->js_dispatch_table();
+  auto Allocate = [&](AllocationType _) {
+    return jdt->TryAllocateAndInitializeEntry(space, parameter_count, *code);
+  };
+  // Dispatch entries are only freed on major GCs.
+  AllocationType type = AllocationType::kOld;
+  auto allocator = isolate()->heap()->allocator();
+  return allocator->CustomAllocateWithRetryOrFail(Allocate, type);
+}
+#endif  // V8_ENABLE_LEAPTIERING
+
 // Instantiate FactoryBase for the two variants we want.
 template class EXPORT_TEMPLATE_DEFINE(V8_EXPORT_PRIVATE) FactoryBase<Factory>;
 template class EXPORT_TEMPLATE_DEFINE(V8_EXPORT_PRIVATE)
     FactoryBase<LocalFactory>;
+
+template V8_EXPORT_PRIVATE MaybeIndirectHandle<String>
+FactoryBase<Factory>::NewConsString(IndirectHandle<String> left,
+                                    IndirectHandle<String> right,
+                                    AllocationType allocation);
+template V8_EXPORT_PRIVATE MaybeDirectHandle<String>
+FactoryBase<Factory>::NewConsString(DirectHandle<String> left,
+                                    DirectHandle<String> right,
+                                    AllocationType allocation);
+template V8_EXPORT_PRIVATE MaybeIndirectHandle<String>
+FactoryBase<LocalFactory>::NewConsString(IndirectHandle<String> left,
+                                         IndirectHandle<String> right,
+                                         AllocationType allocation);
+template V8_EXPORT_PRIVATE MaybeDirectHandle<String>
+FactoryBase<LocalFactory>::NewConsString(DirectHandle<String> left,
+                                         DirectHandle<String> right,
+                                         AllocationType allocation);
 
 }  // namespace internal
 }  // namespace v8

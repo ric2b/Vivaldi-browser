@@ -53,10 +53,6 @@ std::optional<std::string> ComputeConsoleMessageForHttpResponseCode(
 bool IsEndpointSameOrigin(const GURL& identity_provider_config_url,
                           const GURL& endpoint_url);
 
-// Returns whether the two origins are considered same-site (same eTLD+1). Also
-// ensures that the scheme is the same.
-bool IsSameSite(const url::Origin& origin1, const url::Origin& origin2);
-
 // Returns whether FedCM should fail/skip the accounts endpoint request because
 // the user is not signed-in to the IdP.
 bool ShouldFailAccountsEndpointRequestBecauseNotSignedInWithIdp(
@@ -103,7 +99,7 @@ bool HasSharingPermissionOrIdpHasThirdPartyCookiesAccess(
     FederatedIdentityPermissionContextDelegate* sharing_permission_delegate,
     FederatedIdentityApiPermissionContextDelegate* api_permission_delegate);
 
-bool IsFedCmAuthzEnabled(RenderFrameHost& host, const url::Origin& idp_origin);
+bool IsFedCmAuthzEnabled();
 
 FederatedAuthRequestPageData* GetPageData(Page& page);
 

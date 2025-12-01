@@ -10,11 +10,11 @@ import android.app.role.RoleManager;
 import android.content.Context;
 import android.os.Build;
 
-import androidx.annotation.IntDef;
-
 import org.chromium.base.CommandLine;
 import org.chromium.base.ObserverList;
 import org.chromium.base.ResettersForTesting;
+import org.chromium.build.annotations.NullMarked;
+import org.chromium.build.annotations.Nullable;
 import org.chromium.chrome.browser.feature_engagement.TrackerFactory;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
@@ -27,30 +27,9 @@ import org.chromium.components.messages.MessageDispatcher;
 import org.chromium.components.messages.MessageDispatcherProvider;
 import org.chromium.ui.base.WindowAndroid;
 
-import java.lang.annotation.Retention;
-import java.lang.annotation.RetentionPolicy;
-
 /** A utility class providing information regarding states of default browser. */
+@NullMarked
 public class DefaultBrowserPromoUtils {
-    @IntDef({
-        DefaultBrowserState.CHROME_DEFAULT,
-        DefaultBrowserState.NO_DEFAULT,
-        DefaultBrowserState.OTHER_DEFAULT
-    })
-    @Retention(RetentionPolicy.SOURCE)
-    public @interface DefaultBrowserState {
-        int NO_DEFAULT = 0;
-        int OTHER_DEFAULT = 1;
-
-        /**
-         * CHROME_DEFAULT means the currently running Chrome as opposed to
-         * #isCurrentDefaultBrowserChrome() which looks for any Chrome.
-         */
-        int CHROME_DEFAULT = 2;
-
-        int NUM_ENTRIES = 3;
-    }
-
     /**
      * An interface for receiving updates related to the trigger state of the default browser promo.
      */
@@ -62,7 +41,7 @@ public class DefaultBrowserPromoUtils {
     private final DefaultBrowserPromoImpressionCounter mImpressionCounter;
     private final DefaultBrowserStateProvider mStateProvider;
 
-    private static DefaultBrowserPromoUtils sInstance;
+    private static @Nullable DefaultBrowserPromoUtils sInstance;
 
     private final ObserverList<DefaultBrowserPromoTriggerStateListener>
             mDefaultBrowserPromoTriggerStateListeners;

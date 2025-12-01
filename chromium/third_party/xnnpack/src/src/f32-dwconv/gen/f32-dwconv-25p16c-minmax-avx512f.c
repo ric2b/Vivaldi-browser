@@ -1,3 +1,4 @@
+// clang-format off
 // Auto-generated file. Do not edit!
 //   Template: src/f32-dwconv/unipass-avx512.c.in
 //   Generator: tools/xngen
@@ -11,8 +12,8 @@
 
 #include <immintrin.h>
 
-#include "xnnpack/dwconv.h"
-#include "xnnpack/intrinsics-polyfill.h"
+#include "src/xnnpack/dwconv.h"
+#include "src/xnnpack/intrinsics-polyfill.h"
 
 
 void xnn_f32_dwconv_minmax_ukernel_25p16c__avx512f(
@@ -25,7 +26,7 @@ void xnn_f32_dwconv_minmax_ukernel_25p16c__avx512f(
     size_t output_increment,
     size_t input_offset,
     const float* zero,
-    const union xnn_f32_minmax_params params[restrict XNN_MIN_ELEMENTS(1)])
+    const struct xnn_f32_minmax_params params[restrict XNN_MIN_ELEMENTS(1)])
 {
   assert(channels != 0);
   assert(output_width != 0);

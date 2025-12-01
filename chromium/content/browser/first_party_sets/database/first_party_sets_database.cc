@@ -434,11 +434,11 @@ std::optional<net::GlobalFirstPartySets> FirstPartySetsDatabase::GetGlobalSets(
     while (statement.Step()) {
       std::optional<net::SchemefulSite> site =
           FirstPartySetParser::CanonicalizeRegisteredDomain(
-              statement.ColumnString(0), /*emit_errors=*/false);
+              statement.ColumnStringView(0), /*emit_errors=*/false);
 
       std::optional<net::SchemefulSite> primary =
           FirstPartySetParser::CanonicalizeRegisteredDomain(
-              statement.ColumnString(1), /*emit_errors=*/false);
+              statement.ColumnStringView(1), /*emit_errors=*/false);
 
       std::optional<net::SiteType> site_type =
           net::FirstPartySetEntry::DeserializeSiteType(statement.ColumnInt(2));
@@ -462,7 +462,7 @@ std::optional<net::GlobalFirstPartySets> FirstPartySetsDatabase::GetGlobalSets(
       base::EraseIf(
           sets, [&validator](const std::pair<net::SchemefulSite,
                                              net::FirstPartySetEntry>& pair) {
-            return !validator.IsSitePrimaryValid(pair.second.primary());
+            return !validator.IsSiteValid(pair.first);
           });
     }
 
@@ -558,7 +558,7 @@ FirstPartySetsDatabase::FetchSitesToClear(
   while (statement.Step()) {
     std::optional<net::SchemefulSite> site =
         FirstPartySetParser::CanonicalizeRegisteredDomain(
-            statement.ColumnString(0), /*emit_errors=*/false);
+            statement.ColumnStringView(0), /*emit_errors=*/false);
     // TODO(crbug.com/40221249): Invalid sites should be rare case but possible.
     // Consider deleting them from DB.
     if (site.has_value()) {
@@ -593,7 +593,7 @@ FirstPartySetsDatabase::FetchAllSitesToClearFilter(
   while (statement.Step()) {
     std::optional<net::SchemefulSite> site =
         FirstPartySetParser::CanonicalizeRegisteredDomain(
-            statement.ColumnString(0), /*emit_errors=*/false);
+            statement.ColumnStringView(0), /*emit_errors=*/false);
     // TODO(crbug.com/40221249): Invalid sites should be rare case but possible.
     // Consider deleting them from DB.
     if (site.has_value()) {
@@ -629,10 +629,10 @@ FirstPartySetsDatabase::FetchPolicyConfigurations(
   while (statement.Step()) {
     std::optional<net::SchemefulSite> site =
         FirstPartySetParser::CanonicalizeRegisteredDomain(
-            statement.ColumnString(0), /*emit_errors=*/false);
+            statement.ColumnStringView(0), /*emit_errors=*/false);
 
     std::optional<net::SchemefulSite> maybe_primary_site;
-    if (std::string primary_site = statement.ColumnString(1);
+    if (std::string_view primary_site = statement.ColumnStringView(1);
         !primary_site.empty()) {
       maybe_primary_site = FirstPartySetParser::CanonicalizeRegisteredDomain(
           primary_site, /*emit_errors=*/false);
@@ -659,7 +659,7 @@ FirstPartySetsDatabase::FetchPolicyConfigurations(
     return std::nullopt;
   }
 
-  return net::FirstPartySetsContextConfig(std::move(results));
+  return net::FirstPartySetsContextConfig::Create(std::move(results));
 }
 
 bool FirstPartySetsDatabase::HasEntryInBrowserContextsClearedForTesting(
@@ -703,13 +703,13 @@ FirstPartySetsDatabase::FetchManualConfiguration(
   while (statement.Step()) {
     std::optional<net::SchemefulSite> site =
         FirstPartySetParser::CanonicalizeRegisteredDomain(
-            statement.ColumnString(0), /*emit_errors=*/false);
+            statement.ColumnStringView(0), /*emit_errors=*/false);
 
     std::optional<net::SchemefulSite> maybe_primary_site;
     std::optional<net::SiteType> maybe_site_type;
     // DB entry for "deleted"  site will have null `primary_site` and
     // `site_type`.
-    if (std::string primary_site = statement.ColumnString(1);
+    if (std::string_view primary_site = statement.ColumnStringView(1);
         !primary_site.empty()) {
       maybe_primary_site = FirstPartySetParser::CanonicalizeRegisteredDomain(
           primary_site, /*emit_errors=*/false);
@@ -739,7 +739,7 @@ FirstPartySetsDatabase::FetchManualConfiguration(
     return std::nullopt;
   }
 
-  return net::FirstPartySetsContextConfig(std::move(results));
+  return net::FirstPartySetsContextConfig::Create(std::move(results));
 }
 
 bool FirstPartySetsDatabase::LazyInit() {
@@ -750,7 +750,8 @@ bool FirstPartySetsDatabase::LazyInit() {
 
   CHECK_EQ(db_.get(), nullptr);
   db_ = std::make_unique<sql::Database>(
-      sql::DatabaseOptions().set_page_size(4096).set_cache_size(32),
+      sql::DatabaseOptions().set_page_size(4096).set_cache_size(32).set_preload(
+          base::FeatureList::IsEnabled(sql::features::kPreOpenPreloadDatabase)),
       sql::Database::Tag("FirstPartySets"));
   // base::Unretained is safe here because this FirstPartySetsDatabase owns
   // the sql::Database instance that stores and uses the callback. So,
@@ -773,7 +774,9 @@ bool FirstPartySetsDatabase::LazyInit() {
 bool FirstPartySetsDatabase::OpenDatabase() {
   CHECK(db_);
   if (db_->is_open() || db_->Open(db_path_)) {
-    db_->Preload();
+    if (!base::FeatureList::IsEnabled(sql::features::kPreOpenPreloadDatabase)) {
+      db_->Preload();
+    }
     return true;
   }
   return false;

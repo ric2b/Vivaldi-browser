@@ -44,7 +44,6 @@
 #include "cc/layers/picture_layer.h"
 #include "cc/trees/layer_tree_host.h"
 #include "gpu/command_buffer/client/gles2_interface.h"
-#include "third_party/abseil-cpp/absl/utility/utility.h"
 #include "third_party/blink/public/common/widget/device_emulation_params.h"
 #include "third_party/blink/public/mojom/devtools/inspector_issue.mojom-blink.h"
 #include "third_party/blink/public/mojom/favicon/favicon_url.mojom-blink.h"
@@ -214,6 +213,7 @@
 #include "ui/base/ui_base_features.h"
 #include "ui/gfx/geometry/point_conversions.h"
 #include "ui/gfx/geometry/rect.h"
+#include "ui/gfx/image/canvas_image_source.h"
 #include "v8/include/v8.h"
 
 namespace blink {
@@ -3307,7 +3307,7 @@ int Internals::selectPopupItemStyleFontHeight(Node* node, int item_index) {
       select->ItemComputedStyle(*select->GetListItems()[item_index]);
 
   if (item_style) {
-    const SimpleFontData* font_data = item_style->GetFont().PrimaryFont();
+    const SimpleFontData* font_data = item_style->GetFont()->PrimaryFont();
     DCHECK(font_data);
     return font_data ? font_data->GetFontMetrics().Height() : 0;
   }
@@ -3505,6 +3505,11 @@ void Internals::disableCanvasAcceleration(HTMLCanvasElement* canvas) {
   canvas->DisableAcceleration();
 }
 
+bool Internals::isCanvasImageSourceAccelerated(
+    const CanvasImageSource* image_source) const {
+  return image_source->IsAccelerated();
+}
+
 String Internals::selectedHTMLForClipboard() {
   if (!GetFrame())
     return String();
@@ -3660,11 +3665,6 @@ bool Internals::setScrollbarVisibilityInScrollableArea(Node* node,
                                                        bool visible) {
   if (ScrollableArea* scrollable_area = ScrollableAreaForNode(node)) {
     scrollable_area->SetScrollbarsHiddenForTesting(!visible);
-
-    if (MacScrollbarAnimator* scrollbar_animator =
-            scrollable_area->GetMacScrollbarAnimator()) {
-      scrollbar_animator->SetScrollbarsVisibleForTesting(visible);
-    }
 
     return scrollable_area->GetPageScrollbarTheme().UsesOverlayScrollbars();
   }

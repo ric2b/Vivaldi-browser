@@ -400,7 +400,7 @@ HloAsyncStartInstruction::HloAsyncStartInstruction(
     HloComputation* async_computation, absl::string_view async_execution_thread)
     : HloAsyncInstruction(opcode, shape, operands,
                           async_computation->root_instruction()->opcode()) {
-  CHECK(!async_computation->IsCustomCallComputation());
+  CHECK(async_computation->caller_instructions(HloOpcode::kCustomCall).empty());
   CHECK(!async_computation->IsFusionComputation());
   CHECK(!async_computation->IsAsyncComputation());
   AppendComputation(async_computation);
@@ -920,15 +920,6 @@ HloCollectiveInstruction::HloCollectiveInstruction(
   }
 }
 
-HloCollectiveInstruction::HloCollectiveInstruction(
-    HloOpcode opcode, const Shape& shape,
-    absl::Span<HloInstruction* const> operands,
-    absl::Span<const ReplicaGroup> replica_groups, bool constrain_layout,
-    const std::optional<int64_t>& channel_id)
-    : HloCollectiveInstruction(opcode, shape, operands,
-                               CollectiveDeviceList(replica_groups),
-                               constrain_layout, channel_id) {}
-
 HloInstructionProto HloCollectiveInstruction::ToProto() const {
   HloInstructionProto proto = HloChannelInstruction::ToProto();
   *proto.mutable_collective_device_list() = device_list_.ToProto();
@@ -1039,17 +1030,6 @@ HloAllReduceInstructionBase::HloAllReduceInstructionBase(
   AppendComputation(reduce_computation);
   reduce_computation->SetCollectiveCallInstruction(this);
 }
-
-HloAllReduceInstructionBase::HloAllReduceInstructionBase(
-    HloOpcode opcode, const Shape& shape,
-    absl::Span<HloInstruction* const> operands,
-    HloComputation* reduce_computation,
-    absl::Span<const ReplicaGroup> replica_groups, bool constrain_layout,
-    const std::optional<int64_t>& channel_id, bool use_global_device_ids)
-    : HloAllReduceInstructionBase(opcode, shape, operands, reduce_computation,
-                                  CollectiveDeviceList(replica_groups),
-                                  constrain_layout, channel_id,
-                                  use_global_device_ids) {}
 
 HloInstructionProto HloAllReduceInstructionBase::ToProto() const {
   HloInstructionProto proto = HloCollectiveInstruction::ToProto();
@@ -1639,7 +1619,7 @@ HloMapInstruction::HloMapInstruction(const Shape& shape,
   AppendComputation(map_computation);
   // TODO(b/65689298) Remove code below once Map is generalized to accept
   // arbitrary map dimensions.
-  dimensions_.resize(shape.rank());
+  dimensions_.resize(shape.dimensions_size());
   std::iota(dimensions_.begin(), dimensions_.end(), 0);
 }
 
@@ -1847,7 +1827,7 @@ void HloConstantInstruction::PrintOperandsWithCanonicalNameMap(
       printer->Append("1");
       return;
     }
-    if (shape().IsInteger()) {
+    if (shape().AreAllLeavesIntegers()) {
       // The following prevents high compilation latencies caused by serializing
       // large constant tensors; for example: b/265669625. The limit of 500k was
       // chosen empirically to make sure that serialization of the `literal_` is
@@ -1996,8 +1976,8 @@ HloCallableInstruction::CloneAndAppendInstructionIntoCalledComputation(
     CHECK(!add_output);
     auto builder = HloComputation::Builder(default_called_computation_name());
     builder.AddInstruction(instruction_to_append->Clone(/*suffix=*/""));
-    auto* new_computation =
-        CHECK_NOTNULL(GetModule())->AddEmbeddedComputation(builder.Build());
+    auto* new_computation = CHECK_NOTNULL(instruction_to_append->GetModule())
+                                ->AddEmbeddedComputation(builder.Build());
     AppendComputation(new_computation);
     if (opcode() == HloOpcode::kFusion) {
       new_computation->SetFusionInstruction(this);
@@ -2218,13 +2198,8 @@ HloFusionInstruction::HloFusionInstruction(const Shape& shape,
   CHECK(fused_root != nullptr);
   SetAndSanitizeName(absl::StrCat(prefix, HloOpcodeString(opcode())));
 
-  set_parent(fused_root->parent());
   set_metadata(fused_root->metadata());
   set_frontend_attributes(fused_root->frontend_attributes());
-  // This simplifies some use cases for the original value that involve fusions.
-  if (auto original_value = fused_root->original_value()) {
-    set_original_value(original_value);
-  }
   CHECK(fused_root->IsFusible()) << fused_root->ToString();
   CloneAndAppendInstructionIntoCalledComputation(fused_root);
 }
@@ -2633,7 +2608,6 @@ HloCallInstruction::HloCallInstruction(const Shape& shape,
     : HloCallableInstruction(HloOpcode::kCall, shape) {
   CHECK(called_computation_root != nullptr);
   SetAndSanitizeName(HloOpcodeString(opcode()));
-  set_parent(called_computation_root->parent());
   set_metadata(called_computation_root->metadata());
   CloneAndAppendInstructionIntoCalledComputation(called_computation_root);
 }
@@ -2663,7 +2637,6 @@ HloCallInstruction::HloCallInstruction(const Shape& shape,
 
   add_frontend_attributes(frontend_attributes);
   set_is_composite(true);
-  set_parent(decomposition_root->parent());
   set_metadata(decomposition_root->metadata());
   CloneAndAppendInstructionIntoCalledComputation(decomposition_root);
 }
@@ -3203,7 +3176,6 @@ HloCustomCallInstruction::HloCustomCallInstruction(
       custom_call_schedule_(CustomCallSchedule::SCHEDULE_NONE),
       api_version_(api_version) {
   set_raw_backend_config_string(std::move(opaque));
-  to_apply->SetCustomCallInstruction(this);
 }
 
 HloCustomCallInstruction::HloCustomCallInstruction(
@@ -3222,9 +3194,6 @@ HloCustomCallInstruction::HloCustomCallInstruction(
       custom_call_schedule_(CustomCallSchedule::SCHEDULE_NONE),
       api_version_(api_version) {
   set_raw_backend_config_string(std::move(opaque));
-  for (auto comp : called_computations) {
-    comp->SetCustomCallInstruction(this);
-  }
 }
 
 HloCustomCallInstruction::HloCustomCallInstruction(
@@ -3597,7 +3566,8 @@ std::unique_ptr<HloInstruction>
 HloDynamicSliceInstruction::CloneWithNewOperandsImpl(
     const Shape& shape, absl::Span<HloInstruction* const> new_operands,
     HloCloneContext* context) const {
-  if (new_operands.size() == 2 && new_operands[1]->shape().rank() == 1) {
+  if (new_operands.size() == 2 &&
+      new_operands[1]->shape().dimensions_size() == 1) {
     // TODO(b/118437727): Old form, remove this path.
     return std::make_unique<HloDynamicSliceInstruction>(
         shape, new_operands[0], new_operands[1], dynamic_slice_sizes_);

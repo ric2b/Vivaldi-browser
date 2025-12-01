@@ -13,7 +13,7 @@ import BucketEvents = SDK.StorageBucketsModel.Events;
 
 class StorageBucketModelListener {
   #model: SDK.StorageBucketsModel.StorageBucketsModel;
-  #bucketEvents = new Map<BucketEvents, Array<SDK.StorageBucketsModel.BucketEvent>>();
+  #bucketEvents = new Map<BucketEvents, SDK.StorageBucketsModel.BucketEvent[]>();
 
   constructor(model: SDK.StorageBucketsModel.StorageBucketsModel) {
     this.#model = model;
@@ -26,7 +26,7 @@ class StorageBucketModelListener {
   events(eventType: BucketEvents) {
     let bucketEvents = this.#bucketEvents.get(eventType);
     if (!bucketEvents) {
-      bucketEvents = new Array<SDK.StorageBucketsModel.BucketEvent>();
+      bucketEvents = [];
       this.#bucketEvents.set(eventType, bucketEvents);
     }
     return bucketEvents;

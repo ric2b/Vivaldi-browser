@@ -19,6 +19,7 @@
 #include "base/thread_annotations.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
+#include "chromeos/ash/components/boca/on_task/notification_constants.h"
 #include "chromeos/ash/components/boca/on_task/on_task_notification_blocker.h"
 #include "ui/message_center/public/cpp/notifier_id.h"
 
@@ -57,10 +58,15 @@ class OnTaskNotificationsManager {
 
   // Encapsulation of params needed for creating notifications.
   struct NotificationCreateParams {
-    NotificationCreateParams(std::string id,
-                             std::u16string title,
-                             std::u16string message,
-                             message_center::NotifierId notifier_id);
+    NotificationCreateParams(
+        std::string id,
+        std::u16string title,
+        int message_id,
+        message_center::NotifierId notifier_id,
+        base::RepeatingClosure completion_callback = base::DoNothing(),
+        base::TimeDelta countdown_period =
+            kDefaultOnTaskNotificationCountdownDuration,
+        bool is_counting_down = false);
     NotificationCreateParams(const NotificationCreateParams& other);
     NotificationCreateParams& operator=(const NotificationCreateParams& other);
     NotificationCreateParams(NotificationCreateParams&& other);
@@ -69,8 +75,11 @@ class OnTaskNotificationsManager {
 
     std::string id;
     std::u16string title;
-    std::u16string message;
+    int message_id;
     message_center::NotifierId notifier_id;
+    base::RepeatingClosure completion_callback;
+    base::TimeDelta countdown_period;
+    bool is_counting_down;
   };
 
   // Delegate implementation that can be overridden by tests to stub toast
@@ -114,6 +123,9 @@ class OnTaskNotificationsManager {
   // notification has been processed or when there is an override.
   void StopProcessingNotification(const std::string& notification_id);
 
+  // Clears the notification with the specified id, if it exists.
+  void ClearNotification(const std::string& notification_id);
+
   // Prepare notification manager for the specified locked mode. Includes
   // setting up the notification blocker to prevent surfacing notifications that
   // possibly allow users to exit this mode.
@@ -128,6 +140,11 @@ class OnTaskNotificationsManager {
   // Internal helper used by the timer to surface toast notifications
   // periodically.
   void CreateToastInternal(ToastCreateParams& params);
+
+  // Internal helper used by the timer to surface system notifications
+  // periodically.
+  void CreateNotificationInternal(NotificationCreateParams& params,
+                                  const base::TimeTicks end_time);
 
   SEQUENCE_CHECKER(sequence_checker_);
   const std::unique_ptr<Delegate> delegate_;

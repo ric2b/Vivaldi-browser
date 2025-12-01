@@ -13,7 +13,6 @@
 #include "base/time/time.h"
 #include "build/blink_buildflags.h"
 #include "build/build_config.h"
-#include "build/chromeos_buildflags.h"
 
 #if BUILDFLAG(IS_WIN)
 #include "base/win/scoped_handle.h"
@@ -222,7 +221,8 @@ class BASE_EXPORT Process {
     kMaxValue = kUserBlocking,
   };
 
-#if BUILDFLAG(IS_MAC) || (BUILDFLAG(IS_IOS) && BUILDFLAG(USE_BLINK))
+#if (BUILDFLAG(IS_MAC) || (BUILDFLAG(IS_IOS) && BUILDFLAG(USE_BLINK))) && \
+    !BUILDFLAG(IS_IOS_TVOS)
   // The Mac needs a Mach port in order to manipulate a process's priority,
   // and there's no good way to get that from base given the pid. These Mac
   // variants of the `GetPriority()` and `SetPriority()` API take a port
@@ -250,7 +250,7 @@ class BASE_EXPORT Process {
   // of this value is OS dependent.
   int GetOSPriority() const;
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
   // Get the PID in its PID namespace.
   // If the process is not in a PID namespace or /proc/<pid>/status does not
   // report NSpid, kNullProcessId is returned.

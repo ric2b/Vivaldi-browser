@@ -322,7 +322,7 @@ void ClickView(const views::View* view) {
 // If `wait_for_ui` is true, wait for the callback from the model to update the
 // UI.
 void ClickSaveDeskAsTemplateButton(bool wait_for_ui) {
-  if (ash::features::IsSavedDeskUiRevampEnabled()) {
+  if (ash::features::IsForestFeatureEnabled()) {
     // Get the menu option to save the desk as a template and click it.
     views::MenuItemView* menu_item =
         ash::DesksTestApi::OpenDeskContextMenuAndGetMenuItem(
@@ -514,8 +514,7 @@ class DesksClientTest : public extensions::PlatformAppBrowserTest {
  public:
   DesksClientTest() {
     std::vector<base::test::FeatureRef> enabled_features = {
-        ash::features::kDesksTemplates,
-        chromeos::features::kOverviewSessionInitOptimizations};
+        ash::features::kDesksTemplates};
     std::vector<base::test::FeatureRef> disabled_features = {
         ash::features::kDeskTemplateSync};
     scoped_feature_list_.InitWithFeatures(enabled_features, disabled_features);
@@ -1485,7 +1484,7 @@ IN_PROC_BROWSER_TEST_F(DesksClientTest, SystemUIBasic) {
   // Note that this button needs at least one window to show up. Browser tests
   // have an existing browser window, so no new window needs to be created.
   // TODO(http://b/350771229): Remove `if` when Forest is enabled.
-  if (ash::features::IsSavedDeskUiRevampEnabled()) {
+  if (ash::features::IsForestFeatureEnabled()) {
     ClickSaveDeskAsTemplateButton();
   } else {
     const views::Button* save_desk_as_template_button =
@@ -1731,8 +1730,7 @@ IN_PROC_BROWSER_TEST_F(DesksClientTest, SystemUICaptureIncognitoBrowserTest) {
       ash::GetSavedDeskDialogAcceptButton();
   ASSERT_TRUE(dialog_accept_button);
   // MaterialNext uses PillButton instead of dialog buttons.
-  if (std::string_view(dialog_accept_button->GetClassName()) ==
-      std::string_view(ash::PillButton::kViewClassName)) {
+  if (dialog_accept_button->GetClassName() == ash::PillButton::kViewClassName) {
     ClickView(dialog_accept_button);
   } else {
     // Use a key press to accept the dialog instead of a click as
@@ -2891,6 +2889,24 @@ IN_PROC_BROWSER_TEST_F(DesksClientTest, FloatingWorkspaceOnSavedDesksUI) {
   EXPECT_FALSE(library_button && library_button->GetVisible());
 }
 
+// Tests that an empty desk can be captured as a floating workspace template.
+IN_PROC_BROWSER_TEST_F(DesksClientTest, CaptureEmptyFloatingWorkspaceDesk) {
+  // Close the browser.
+  CloseBrowserSynchronously(browser());
+  ASSERT_EQ(0u, chrome::GetTotalBrowserCount());
+  // Now capture the desk and verify that we get a valid template with no apps
+  // to restore.
+  std::unique_ptr<ash::DeskTemplate> desk_template =
+      CaptureActiveDeskAndSaveTemplate(
+          ash::DeskTemplateType::kFloatingWorkspace);
+  EXPECT_TRUE(desk_template->uuid().is_valid());
+  EXPECT_EQ(desk_template->type(), ash::DeskTemplateType::kFloatingWorkspace);
+  const app_restore::RestoreData* restore_data =
+      desk_template->desk_restore_data();
+  const auto& app_id_to_launch_list = restore_data->app_id_to_launch_list();
+  EXPECT_EQ(0u, app_id_to_launch_list.size());
+}
+
 IN_PROC_BROWSER_TEST_F(DesksClientTest,
                        DisplaysAppUnavailableToastForUnavailableBrowserApp) {
   // Build a saved desk with an unsupoorted browser app.
@@ -2990,7 +3006,7 @@ IN_PROC_BROWSER_TEST_F(SaveAndRecallBrowserTest,
   // TODO(http://b/350771229): This test tests clicking the "Save desk for
   // later" button that will not be shown if the feature is enabled. This test
   // will be fixed before the button change is no longer hidden behind the flag.
-  if (ash::features::IsSavedDeskUiRevampEnabled()) {
+  if (ash::features::IsForestFeatureEnabled()) {
     GTEST_SKIP() << "Skipping test body for saved desk revamp feature.";
   }
 
@@ -3029,7 +3045,7 @@ IN_PROC_BROWSER_TEST_F(SaveAndRecallBrowserTest,
   // TODO(http://b/350771229): This test tests clicking the "Save desk for
   // later" button that will not be shown if the feature is enabled. This test
   // will be fixed before the button change is no longer hidden behind the flag.
-  if (ash::features::IsSavedDeskUiRevampEnabled()) {
+  if (ash::features::IsForestFeatureEnabled()) {
     GTEST_SKIP() << "Skipping test body for saved desk revamp feature.";
   }
 

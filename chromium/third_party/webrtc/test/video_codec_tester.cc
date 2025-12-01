@@ -175,7 +175,7 @@ class Pacer {
       : settings_(settings), delay_(TimeDelta::Zero()) {}
 
   Timestamp Schedule(Timestamp timestamp) {
-    Timestamp now = Timestamp::Micros(rtc::TimeMicros());
+    Timestamp now = Timestamp::Micros(TimeMicros());
     if (settings_.mode == PacingMode::kNoPacing) {
       return now;
     }
@@ -234,7 +234,7 @@ class LimitedTaskQueue {
 
     ++queue_size_;
     task_queue_.PostTask([this, task = std::move(task), scheduled]() mutable {
-      Timestamp now = Timestamp::Millis(rtc::TimeMillis());
+      Timestamp now = Timestamp::Millis(TimeMillis());
       int64_t wait_ms = (scheduled - now).ms();
       if (wait_ms > 0) {
         RTC_CHECK_LT(wait_ms, 10000) << "Too high wait_ms " << wait_ms;
@@ -247,7 +247,7 @@ class LimitedTaskQueue {
   }
 
   void PostTask(absl::AnyInvocable<void() &&> task) {
-    Timestamp now = Timestamp::Millis(rtc::TimeMillis());
+    Timestamp now = Timestamp::Millis(TimeMillis());
     PostScheduledTask(std::move(task), now);
   }
 
@@ -263,7 +263,7 @@ class LimitedTaskQueue {
  private:
   TaskQueueForTest task_queue_;
   std::atomic_int queue_size_;
-  rtc::Event task_executed_;
+  Event task_executed_;
   Mutex mutex_;
 };
 
@@ -369,7 +369,7 @@ class VideoCodecAnalyzer : public VideoCodecTester::VideoCodecStats {
  public:
   void StartEncode(const VideoFrame& video_frame,
                    const EncodingSettings& encoding_settings) {
-    int64_t encode_start_us = rtc::TimeMicros();
+    int64_t encode_start_us = TimeMicros();
     task_queue_.PostTask([this, timestamp_rtp = video_frame.rtp_timestamp(),
                           encoding_settings, encode_start_us]() {
       RTC_CHECK(frames_.find(timestamp_rtp) == frames_.end())
@@ -386,7 +386,7 @@ class VideoCodecAnalyzer : public VideoCodecTester::VideoCodecStats {
   }
 
   void FinishEncode(const EncodedImage& encoded_frame) {
-    int64_t encode_finished_us = rtc::TimeMicros();
+    int64_t encode_finished_us = TimeMicros();
     task_queue_.PostTask(
         [this, timestamp_rtp = encoded_frame.RtpTimestamp(),
          spatial_idx = encoded_frame.SpatialIndex().value_or(
@@ -421,7 +421,7 @@ class VideoCodecAnalyzer : public VideoCodecTester::VideoCodecStats {
   }
 
   void StartDecode(const EncodedImage& encoded_frame) {
-    int64_t decode_start_us = rtc::TimeMicros();
+    int64_t decode_start_us = TimeMicros();
     task_queue_.PostTask(
         [this, timestamp_rtp = encoded_frame.RtpTimestamp(),
          spatial_idx = encoded_frame.SpatialIndex().value_or(
@@ -458,7 +458,7 @@ class VideoCodecAnalyzer : public VideoCodecTester::VideoCodecStats {
   void FinishDecode(const VideoFrame& decoded_frame,
                     int spatial_idx,
                     std::optional<VideoFrame> ref_frame = std::nullopt) {
-    int64_t decode_finished_us = rtc::TimeMicros();
+    int64_t decode_finished_us = TimeMicros();
     task_queue_.PostTask([this, timestamp_rtp = decoded_frame.rtp_timestamp(),
                           spatial_idx, width = decoded_frame.width(),
                           height = decoded_frame.height(),
@@ -668,7 +668,7 @@ class VideoCodecAnalyzer : public VideoCodecTester::VideoCodecStats {
     RTC_LOG(LS_INFO) << "Write metrics to " << csv_path;
     FILE* csv_file = fopen(csv_path.data(), "w");
     const std::string delimiter = ";";
-    rtc::StringBuilder header;
+    StringBuilder header;
     header
         << "timestamp_rtp;spatial_idx;temporal_idx;width;height;frame_size_"
            "bytes;keyframe;qp;encode_time_us;decode_time_us;psnr_y_db;psnr_u_"
@@ -679,7 +679,7 @@ class VideoCodecAnalyzer : public VideoCodecTester::VideoCodecStats {
     fwrite(header.str().c_str(), 1, header.size(), csv_file);
 
     for (const Frame& f : frames) {
-      rtc::StringBuilder row;
+      StringBuilder row;
       row << "\n" << f.timestamp_rtp;
       row << ";" << f.layer_id.spatial_idx;
       row << ";" << f.layer_id.temporal_idx;
@@ -1148,7 +1148,7 @@ class Encoder : public EncodedImageCallback {
             LayerId{.spatial_idx = sidx, .temporal_idx = 0});
         auto tlx_settings = es.layers_settings.find(LayerId{
             .spatial_idx = sidx, .temporal_idx = num_temporal_layers - 1});
-        DataRate total_bitrate = std::accumulate(
+        DataRate total_layer_bitrate = std::accumulate(
             tl0_settings, tlx_settings, DataRate::Zero(),
             [](DataRate acc,
                const std::pair<const LayerId, LayerSettings> layer) {
@@ -1158,8 +1158,8 @@ class Encoder : public EncodedImageCallback {
         ss.width = tl0_settings->second.resolution.width;
         ss.height = tl0_settings->second.resolution.height;
         ss.numberOfTemporalLayers = num_temporal_layers;
-        ss.maxBitrate = total_bitrate.kbps();
-        ss.targetBitrate = total_bitrate.kbps();
+        ss.maxBitrate = total_layer_bitrate.kbps();
+        ss.targetBitrate = total_layer_bitrate.kbps();
         ss.minBitrate = 0;
         ss.maxFramerate = vc.maxFramerate;
         ss.qpMax = vc.qpMax;
@@ -1297,7 +1297,7 @@ void ConfigureSimulcast(const FieldTrialsView& field_trials, VideoCodec* vc) {
   encoder_config.simulcast_layers.resize(num_spatial_layers);
   VideoEncoder::EncoderInfo encoder_info;
   auto stream_factory =
-      rtc::make_ref_counted<cricket::EncoderStreamFactory>(encoder_info);
+      rtc::make_ref_counted<EncoderStreamFactory>(encoder_info);
   const std::vector<VideoStream> streams = stream_factory->CreateEncoderStreams(
       field_trials, vc->width, vc->height, encoder_config);
   vc->numberOfSimulcastStreams = streams.size();
@@ -1655,17 +1655,18 @@ VideoCodecTester::RunEncodeDecodeTest(
   VideoSource video_source(source_settings);
   std::unique_ptr<VideoCodecAnalyzer> analyzer =
       std::make_unique<VideoCodecAnalyzer>();
-  const EncodingSettings& frame_settings = encoding_settings.begin()->second;
+  const EncodingSettings& first_frame_settings =
+      encoding_settings.begin()->second;
   Encoder encoder(env, encoder_factory, encoder_settings, analyzer.get());
-  encoder.Initialize(frame_settings);
+  encoder.Initialize(first_frame_settings);
 
   int num_spatial_layers =
-      ScalabilityModeToNumSpatialLayers(frame_settings.scalability_mode);
+      ScalabilityModeToNumSpatialLayers(first_frame_settings.scalability_mode);
   std::vector<std::unique_ptr<Decoder>> decoders;
   for (int sidx = 0; sidx < num_spatial_layers; ++sidx) {
     auto decoder = std::make_unique<Decoder>(env, decoder_factory,
                                              decoder_settings, analyzer.get());
-    decoder->Initialize(frame_settings.sdp_video_format);
+    decoder->Initialize(first_frame_settings.sdp_video_format);
     decoders.push_back(std::move(decoder));
   }
 

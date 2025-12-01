@@ -22,7 +22,7 @@
 #include "base/numerics/checked_math.h"
 #include "base/strings/stringprintf.h"
 #include "base/types/to_address.h"
-#include "chrome/browser/accessibility/accessibility_state_utils.h"
+#include "chrome/browser/ash/accessibility/accessibility_manager.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/screen_ai/public/optical_character_recognizer.h"
 #include "chrome/browser/ui/browser.h"
@@ -89,17 +89,11 @@ AXMediaAppUntrustedService::AXMediaAppUntrustedService(
     : browser_context_(context),
       native_window_(native_window),
       media_app_page_(std::move(page)) {
-#if BUILDFLAG(IS_CHROMEOS_ASH)
-  if (auto* accessibility_manager = ash::AccessibilityManager::Get()) {
-    // Unretained is safe because `this` owns the subscription.
-    accessibility_status_subscription_ =
-        accessibility_manager->RegisterCallback(base::BindRepeating(
-            &AXMediaAppUntrustedService::OnAshAccessibilityModeChanged,
-            base::Unretained(this)));
-  }
-#elif BUILDFLAG(IS_CHROMEOS_LACROS)
-  ax_mode_observation_.Observe(&ui::AXPlatform::GetInstance());
-#endif
+  // Unretained is safe because `this` owns the subscription.
+  accessibility_status_subscription_ =
+      ash::AccessibilityManager::Get()->RegisterCallback(base::BindRepeating(
+          &AXMediaAppUntrustedService::OnAshAccessibilityModeChanged,
+          base::Unretained(this)));
   if (IsAccessibilityEnabled()) {
     ToggleAccessibilityState();
   }
@@ -156,11 +150,12 @@ void AXMediaAppUntrustedService::OnOCRServiceInitialized(bool is_successful) {
 }
 
 bool AXMediaAppUntrustedService::IsAccessibilityEnabled() const {
-  return accessibility_state_utils::IsScreenReaderEnabled() ||
-         accessibility_state_utils::IsSelectToSpeakEnabled();
+  // This class is only supported for ChromeOS, and only needs to be aware of
+  // ChromeOS assistive technologies.
+  return ash::AccessibilityManager::Get()->IsSpokenFeedbackEnabled() ||
+         ash::AccessibilityManager::Get()->IsSelectToSpeakEnabled();
 }
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
 void AXMediaAppUntrustedService::OnAshAccessibilityModeChanged(
     const ash::AccessibilityStatusEventDetails& details) {
   if (details.notification_type ==
@@ -175,19 +170,6 @@ void AXMediaAppUntrustedService::OnAshAccessibilityModeChanged(
     media_app_->AccessibilityEnabledChanged(IsAccessibilityEnabled());
   }
 }
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
-
-#if BUILDFLAG(IS_CHROMEOS_LACROS)
-void AXMediaAppUntrustedService::OnAXModeAdded(ui::AXMode mode) {
-  ToggleAccessibilityState();
-  if (media_app_) [[unlikely]] {
-    // `media_app_` is only used for testing.
-    CHECK_IS_TEST();
-    media_app_->AccessibilityEnabledChanged(IsAccessibilityEnabled());
-    return;
-  }
-}
-#endif  // BUILDFLAG(IS_CHROMEOS_LACROS)
 
 void AXMediaAppUntrustedService::PerformAction(
     const ui::AXActionData& action_data) {

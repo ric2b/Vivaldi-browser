@@ -126,8 +126,8 @@
 }
 
 - (void)updateToolbarForSideSwipeSnapshot:(web::WebState*)webState {
-  BOOL isNonIncognitoNTP = !self.browser->GetProfile()->IsOffTheRecord() &&
-                           IsVisibleURLNewTabPage(webState);
+  BOOL isNonIncognitoNTP =
+      !self.profile->IsOffTheRecord() && IsVisibleURLNewTabPage(webState);
 
   [self.mediator updateConsumerForWebState:webState];
   [self.viewController updateForSideSwipeSnapshot:isNonIncognitoNTP];
@@ -145,10 +145,10 @@
 
 #pragma mark - AdaptiveToolbarViewControllerDelegate
 
-- (void)exitFullscreen {
+- (void)exitFullscreen:(FullscreenExitReason)FullscreenExitReason {
   FullscreenController* fullscreenController =
       FullscreenController::FromBrowser(self.browser);
-  fullscreenController->ExitFullscreen();
+  fullscreenController->ExitFullscreen(FullscreenExitReason);
 
   web::WebState* webState =
       self.browser->GetWebStateList()->GetActiveWebState();
@@ -190,7 +190,7 @@
 #pragma mark - Protected
 
 - (ToolbarButtonFactory*)buttonFactoryWithType:(ToolbarType)type {
-  BOOL isIncognito = self.browser->GetProfile()->IsOffTheRecord();
+  BOOL isIncognito = self.profile->IsOffTheRecord();
   ToolbarStyle style =
       isIncognito ? ToolbarStyle::kIncognito : ToolbarStyle::kNormal;
 

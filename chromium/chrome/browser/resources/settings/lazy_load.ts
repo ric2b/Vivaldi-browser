@@ -13,7 +13,12 @@ import './autofill_page/autofill_section.js';
 import './autofill_page/passkeys_subpage.js';
 // </if>
 import './autofill_page/payments_section.js';
+// <if expr="not is_chromeos">
+import './clear_browsing_data_dialog/clear_browsing_data_account_indicator.js';
+// </if>
 import './clear_browsing_data_dialog/clear_browsing_data_dialog.js';
+import './clear_browsing_data_dialog/clear_browsing_data_dialog_v2.js';
+import './clear_browsing_data_dialog/clear_browsing_data_time_picker.js';
 import './search_engines_page/search_engines_page.js';
 import './simple_confirmation_dialog.js';
 import './privacy_page/anti_abuse_page.js';
@@ -89,6 +94,7 @@ export {CaptionsBrowserProxy, CaptionsBrowserProxyImpl, LiveCaptionLanguageList}
 
 export {FontsBrowserProxy, FontsBrowserProxyImpl, FontsData} from '/shared/settings/appearance_page/fonts_browser_proxy.js';
 export {CrShortcutInputElement} from 'chrome://resources/cr_components/cr_shortcut_input/cr_shortcut_input.js';
+export {CrButtonElement} from 'chrome://resources/cr_elements/cr_button/cr_button.js';
 export {CrCheckboxElement} from 'chrome://resources/cr_elements/cr_checkbox/cr_checkbox.js';
 export {CrCollapseElement} from 'chrome://resources/cr_elements/cr_collapse/cr_collapse.js';
 export {CrDialogElement} from 'chrome://resources/cr_elements/cr_dialog/cr_dialog.js';
@@ -118,25 +124,34 @@ export {AiEnterpriseFeaturePrefName, AiPageActions, FeatureOptInState, SettingsA
 export {SettingsHistorySearchPageElement} from './ai_page/history_search_page.js';
 export {COMPOSE_PROACTIVE_NUDGE_DISABLED_SITES_PREF, COMPOSE_PROACTIVE_NUDGE_PREF, SettingsOfferWritingHelpPageElement} from './ai_page/offer_writing_help_page.js';
 export {SettingsAppearanceFontsPageElement} from './appearance_page/appearance_fonts_page.js';
-export {CountryDetailManager, CountryDetailManagerImpl, SettingsAddressEditDialogElement} from './autofill_page/address_edit_dialog.js';
+export {SettingsAddressEditDialogElement} from './autofill_page/address_edit_dialog.js';
 export {SettingsAddressRemoveConfirmationDialogElement} from './autofill_page/address_remove_confirmation_dialog.js';
+export {SettingsAutofillAiAddOrEditDialogElement} from './autofill_page/autofill_ai_add_or_edit_dialog.js';
 export {SettingsAutofillAiSectionElement} from './autofill_page/autofill_ai_section.js';
 export {AutofillManagerImpl, AutofillManagerProxy, PersonalDataChangedListener} from './autofill_page/autofill_manager_proxy.js';
 export {SettingsAutofillSectionElement} from './autofill_page/autofill_section.js';
+export {CountryDetailManagerProxy, CountryDetailManagerProxyImpl} from './autofill_page/country_detail_manager_proxy.js';
 export {SettingsCreditCardEditDialogElement} from './autofill_page/credit_card_edit_dialog.js';
 export {SettingsCreditCardListEntryElement} from './autofill_page/credit_card_list_entry.js';
+export {EntityDataManagerProxy, EntityDataManagerProxyImpl, EntityInstancesChangedListener} from './autofill_page/entity_data_manager_proxy.js';
 export {SettingsIbanEditDialogElement} from './autofill_page/iban_edit_dialog.js';
 export {SettingsIbanListEntryElement} from './autofill_page/iban_list_entry.js';
 // <if expr="is_win or is_macosx">
 export {Passkey, PasskeysBrowserProxy, PasskeysBrowserProxyImpl} from './autofill_page/passkeys_browser_proxy.js';
 export {SettingsPasskeysSubpageElement} from './autofill_page/passkeys_subpage.js';
 // </if>
+export {SettingsPayOverTimeIssuerListEntryElement} from './autofill_page/pay_over_time_issuer_list_entry.js';
+export {SettingsPaymentsListElement} from './autofill_page/payments_list.js';
 export {PaymentsManagerImpl, PaymentsManagerProxy} from './autofill_page/payments_manager_proxy.js';
-export {GOOGLE_PAY_HELP_URL, SettingsPaymentsSectionElement} from './autofill_page/payments_section.js';
-export {UserAnnotationsManagerProxy, UserAnnotationsManagerProxyImpl} from './autofill_page/user_annotations_manager_proxy.js';
+export {SettingsPaymentsSectionElement} from './autofill_page/payments_section.js';
 export {SettingsVirtualCardUnenrollDialogElement} from './autofill_page/virtual_card_unenroll_dialog.js';
+// <if expr="not is_chromeos">
+export {SettingsClearBrowsingDataAccountIndicator} from './clear_browsing_data_dialog/clear_browsing_data_account_indicator.js';
+// </if>
 export {ClearBrowsingDataBrowserProxy, ClearBrowsingDataBrowserProxyImpl, ClearBrowsingDataResult, TimePeriod, UpdateSyncStateEvent} from './clear_browsing_data_dialog/clear_browsing_data_browser_proxy.js';
 export {SettingsClearBrowsingDataDialogElement} from './clear_browsing_data_dialog/clear_browsing_data_dialog.js';
+export {SettingsClearBrowsingDataDialogV2Element} from './clear_browsing_data_dialog/clear_browsing_data_dialog_v2.js';
+export {getTimePeriodString, SettingsClearBrowsingDataTimePicker} from './clear_browsing_data_dialog/clear_browsing_data_time_picker.js';
 export {SettingsHistoryDeletionDialogElement} from './clear_browsing_data_dialog/history_deletion_dialog.js';
 export {SettingsPasswordsDeletionDialogElement} from './clear_browsing_data_dialog/passwords_deletion_dialog.js';
 export {ControlledButtonElement} from './controls/controlled_button.js';

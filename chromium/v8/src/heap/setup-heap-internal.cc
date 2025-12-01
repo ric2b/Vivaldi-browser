@@ -76,6 +76,8 @@ DirectHandle<SharedFunctionInfo> CreateSharedFunctionInfo(
 
 #ifdef DEBUG
 bool IsMutableMap(InstanceType instance_type, ElementsKind elements_kind) {
+  bool is_maybe_read_only_js_object =
+      InstanceTypeChecker::IsMaybeReadOnlyJSObject(instance_type);
   bool is_js_object = InstanceTypeChecker::IsJSObject(instance_type);
   bool is_always_shared_space_js_object =
       InstanceTypeChecker::IsAlwaysSharedSpaceJSObject(instance_type);
@@ -88,23 +90,26 @@ bool IsMutableMap(InstanceType instance_type, ElementsKind elements_kind) {
                      !Map::CanHaveFastTransitionableElementsKind(instance_type),
                  IsDictionaryElementsKind(elements_kind) ||
                      IsTerminalElementsKind(elements_kind) ||
+                     is_maybe_read_only_js_object ||
                      (is_always_shared_space_js_object &&
                       elements_kind == SHARED_ARRAY_ELEMENTS));
   // JSObjects have maps with a mutable prototype_validity_cell, so they cannot
   // go in RO_SPACE. Maps for managed Wasm objects have mutable subtype lists.
-  return (is_js_object && !is_always_shared_space_js_object) || is_wasm_object;
+  return (is_js_object && !is_maybe_read_only_js_object &&
+          !is_always_shared_space_js_object) ||
+         is_wasm_object;
 }
 #endif
 
 struct ConstantStringInit {
-  const char* contents;
+  base::Vector<const char> contents;
   RootIndex index;
 };
 
 constexpr std::initializer_list<ConstantStringInit>
-#define CONSTANT_STRING_ELEMENT(_, name, contents) \
-  {contents, RootIndex::k##name},
     kImportantConstantStringTable{
+#define CONSTANT_STRING_ELEMENT(_, name, contents) \
+  {{contents, arraysize(contents) - 1}, RootIndex::k##name},
         EXTRA_IMPORTANT_INTERNALIZED_STRING_LIST_GENERATOR(
             CONSTANT_STRING_ELEMENT, /* not used */)
             IMPORTANT_INTERNALIZED_STRING_LIST_GENERATOR(
@@ -113,9 +118,9 @@ constexpr std::initializer_list<ConstantStringInit>
     };
 
 constexpr std::initializer_list<ConstantStringInit>
-#define CONSTANT_STRING_ELEMENT(_, name, contents) \
-  {contents, RootIndex::k##name},
     kNotImportantConstantStringTable{
+#define CONSTANT_STRING_ELEMENT(_, name, contents) \
+  {{contents, arraysize(contents) - 1}, RootIndex::k##name},
         NOT_IMPORTANT_INTERNALIZED_STRING_LIST_GENERATOR(
             CONSTANT_STRING_ELEMENT, /* not used */)
 #undef CONSTANT_STRING_ELEMENT
@@ -209,31 +214,13 @@ bool Heap::CreateReadOnlyHeapObjects() {
        pos <= RootIndex::kLastReadOnlyRoot; ++pos) {
     DCHECK(roots.is_initialized(pos));
   }
+  roots.VerifyTypes();
 #endif
   return true;
 }
 
 bool Heap::CreateMutableHeapObjects() {
   ReadOnlyRoots roots(this);
-
-#define ALLOCATE_MAP(instance_type, size, field_name)                       \
-  {                                                                         \
-    Tagged<Map> map;                                                        \
-    if (!AllocateMap(AllocationType::kMap, (instance_type), size).To(&map)) \
-      return false;                                                         \
-    set_##field_name##_map(map);                                            \
-  }
-
-  {  // Map allocation
-    ALLOCATE_MAP(JS_MESSAGE_OBJECT_TYPE, JSMessageObject::kHeaderSize,
-                 message_object)
-    message_object_map()->set_is_extensible(false);
-
-    ALLOCATE_MAP(JS_EXTERNAL_OBJECT_TYPE, JSExternalObject::kHeaderSize,
-                 external)
-    external_map()->set_is_extensible(false);
-  }
-#undef ALLOCATE_MAP
 
   // Ensure that all young generation pages are iterable. It must be after heap
   // setup, so that the maps have been created.
@@ -823,6 +810,22 @@ bool Heap::CreateLateReadOnlyJSReceiverMaps() {
   Factory* factory = isolate()->factory();
   ReadOnlyRoots roots(this);
 
+  {
+    // JSMessageObject and JSExternalObject types are wrappers around a set
+    // of primitive values and exist only for the purpose of passing the data
+    // across V8 Api. They are not supposed to be leaked to user JS code
+    // except from d8 tests and they are not proper JSReceivers.
+    ALLOCATE_MAP(JS_MESSAGE_OBJECT_TYPE, JSMessageObject::kHeaderSize,
+                 message_object)
+    roots.message_object_map()->SetEnumLength(0);
+    roots.message_object_map()->set_is_extensible(false);
+
+    ALLOCATE_MAP(JS_EXTERNAL_OBJECT_TYPE, JSExternalObject::kHeaderSize,
+                 external)
+    roots.external_map()->SetEnumLength(0);
+    roots.external_map()->set_is_extensible(false);
+  }
+
   // Shared space object maps are immutable and can be in RO space.
   {
     Tagged<Map> shared_array_map;
@@ -900,7 +903,7 @@ bool Heap::CreateImportantReadOnlyObjects() {
       // the initial section.
       isolate()->string_table()->InsertEmptyStringForBootstrapping(isolate());
     } else {
-      DirectHandle<String> str = factory->InternalizeUtf8String(entry.contents);
+      DirectHandle<String> str = factory->InternalizeString(entry.contents);
       roots_table()[entry.index] = str->ptr();
     }
   }
@@ -912,8 +915,9 @@ bool Heap::CreateImportantReadOnlyObjects() {
         isolate()->factory()->NewPrivateSymbol(AllocationType::kReadOnly)); \
     roots_table()[RootIndex::k##name] = symbol->ptr();                      \
   }
-      IMPORTANT_PRIVATE_SYMBOL_LIST_GENERATOR(SYMBOL_INIT, /* not used */)}
-  // SYMBOL_INIT used again later.
+      IMPORTANT_PRIVATE_SYMBOL_LIST_GENERATOR(SYMBOL_INIT, /* not used */)
+      // SYMBOL_INIT used again later.
+  }
 
   // Empty elements
   DirectHandle<NameDictionary>
@@ -1071,21 +1075,27 @@ bool Heap::CreateReadOnlyObjects() {
   roots.bigint_map()->SetConstructorFunctionIndex(
       Context::BIGINT_FUNCTION_INDEX);
 
+  for (const ConstantStringInit& entry : kNotImportantConstantStringTable) {
+    DirectHandle<String> str = factory->InternalizeString(entry.contents);
+    roots_table()[entry.index] = str->ptr();
+  }
+
+#define ENSURE_SINGLE_CHAR_STRINGS_ARE_SINGLE_CHAR(_, name, contents) \
+  static_assert(arraysize(contents) - 1 == 1);
+  SINGLE_CHARACTER_INTERNALIZED_STRING_LIST_GENERATOR(
+      ENSURE_SINGLE_CHAR_STRINGS_ARE_SINGLE_CHAR,
+      /* not used */)
+#undef ENSURE_SINGLE_CHAR_STRINGS_ARE_SINGLE_CHAR
+
   // Allocate and initialize table for single character one byte strings.
   int table_size = String::kMaxOneByteCharCode + 1;
   set_single_character_string_table(
       *factory->NewFixedArray(table_size, AllocationType::kReadOnly));
   for (int i = 0; i < table_size; ++i) {
-    uint8_t code = static_cast<uint8_t>(i);
-    DirectHandle<String> str =
-        factory->InternalizeString(base::Vector<const uint8_t>(&code, 1));
+    DirectHandle<String> str = Cast<String>(
+        roots_table().handle_at(RootsTable::SingleCharacterStringIndex(i)));
     DCHECK(ReadOnlyHeap::Contains(*str));
     single_character_string_table()->set(i, *str);
-  }
-
-  for (const ConstantStringInit& entry : kNotImportantConstantStringTable) {
-    DirectHandle<String> str = factory->InternalizeUtf8String(entry.contents);
-    roots_table()[entry.index] = str->ptr();
   }
 
   // Finish initializing oddballs after creating the string table.
@@ -1375,7 +1385,8 @@ void Heap::CreateInitialMutableObjects() {
   set_last_script_id(Smi::FromInt(v8::UnboundScript::kNoScriptId));
   set_last_debugging_id(Smi::FromInt(DebugInfo::kNoDebuggingId));
   set_last_stack_trace_id(Smi::zero());
-  set_next_template_serial_number(Smi::zero());
+  set_next_template_serial_number(
+      Smi::FromInt(TemplateInfo::kUninitializedSerialNumber));
 
   // Allocate the empty script.
   DirectHandle<Script> script = factory->NewScript(factory->empty_string());
@@ -1425,17 +1436,21 @@ void Heap::CreateInitialMutableObjects() {
   // Initialize compilation cache.
   isolate_->compilation_cache()->Clear();
 
-  // Error.stack accessor callbacks:
+  // Error.stack accessor callbacks and their SharedFunctionInfos:
   {
     DirectHandle<FunctionTemplateInfo> function_template;
     function_template = ApiNatives::CreateAccessorFunctionTemplateInfo(
         isolate_, Accessors::ErrorStackGetter, 0,
         SideEffectType::kHasSideEffect);
+    FunctionTemplateInfo::SealAndPrepareForPromotionToReadOnly(
+        isolate_, function_template);
     set_error_stack_getter_fun_template(*function_template);
 
     function_template = ApiNatives::CreateAccessorFunctionTemplateInfo(
         isolate_, Accessors::ErrorStackSetter, 1,
         SideEffectType::kHasSideEffectToReceiver);
+    FunctionTemplateInfo::SealAndPrepareForPromotionToReadOnly(
+        isolate_, function_template);
     set_error_stack_setter_fun_template(*function_template);
   }
 

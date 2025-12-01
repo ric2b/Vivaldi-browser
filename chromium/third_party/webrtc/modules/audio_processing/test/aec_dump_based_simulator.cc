@@ -19,6 +19,7 @@
 #include <iostream>
 #include <memory>
 #include <optional>
+#include <sstream>  // no-presubmit-check TODO(webrtc:8982)
 #include <string>
 #include <utility>
 
@@ -50,7 +51,7 @@ bool VerifyFixedBitExactness(const webrtc::audioproc::Stream& msg,
     return false;
   } else {
     const int16_t* frame_data = frame.data.data();
-    for (int k = 0; k < frame.num_channels * frame.samples_per_channel; ++k) {
+    for (int k = 0; k < frame.num_channels_ * frame.samples_per_channel_; ++k) {
       if (msg.output_data().data()[k] != frame_data[k]) {
         return false;
       }
@@ -142,7 +143,7 @@ void AecDumpBasedSimulator::PrepareProcessStreamCall(
       if (msg.has_input_data()) {
         int16_t* fwd_frame_data = fwd_frame_.data.data();
         for (size_t k = 0; k < in_buf_->num_frames(); ++k) {
-          fwd_frame_data[k] = rtc::saturated_cast<int16_t>(
+          fwd_frame_data[k] = saturated_cast<int16_t>(
               fwd_frame_data[k] +
               static_cast<int16_t>(32767 *
                                    artificial_nearend_buf_->channels()[0][k]));

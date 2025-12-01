@@ -37,6 +37,7 @@ import org.chromium.chrome.browser.usb.UsbNotificationManager;
 import org.chromium.content_public.browser.GlobalRenderFrameHostId;
 import org.chromium.content_public.browser.LifecycleState;
 import org.chromium.content_public.browser.NavigationHandle;
+import org.chromium.content_public.browser.Page;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.content_public.browser.WebContentsObserver;
 import org.chromium.net.NetError;
@@ -217,6 +218,7 @@ public class TabWebContentsObserver extends TabWebContentsUserData {
 
         @Override
         public void didFinishLoadInPrimaryMainFrame(
+                Page page,
                 GlobalRenderFrameHostId frameId,
                 GURL url,
                 boolean isKnownValid,

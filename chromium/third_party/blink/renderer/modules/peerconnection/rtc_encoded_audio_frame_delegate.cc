@@ -4,8 +4,10 @@
 
 #include "third_party/blink/renderer/modules/peerconnection/rtc_encoded_audio_frame_delegate.h"
 
+#include <optional>
 #include <utility>
 
+#include "base/time/time.h"
 #include "third_party/blink/renderer/core/typed_arrays/dom_array_buffer.h"
 #include "third_party/blink/renderer/platform/bindings/exception_code.h"
 #include "third_party/blink/renderer/platform/bindings/exception_state.h"
@@ -113,10 +115,29 @@ std::optional<uint64_t> RTCEncodedAudioFrameDelegate::AbsCaptureTime() const {
 std::optional<base::TimeTicks> RTCEncodedAudioFrameDelegate::ReceiveTime()
     const {
   base::AutoLock lock(lock_);
-  return webrtc_frame_ && webrtc_frame_->ReceiveTime()
-             ? std::make_optional(
-                   ConvertToBaseTimeTicks(*webrtc_frame_->ReceiveTime()))
-             : std::nullopt;
+  if (!webrtc_frame_) {
+    return std::nullopt;
+  }
+  return ConvertToOptionalTimeTicks(webrtc_frame_->ReceiveTime());
+}
+
+std::optional<base::TimeTicks> RTCEncodedAudioFrameDelegate::CaptureTime()
+    const {
+  base::AutoLock lock(lock_);
+  if (!webrtc_frame_) {
+    return std::nullopt;
+  }
+  return ConvertToOptionalTimeTicks(webrtc_frame_->CaptureTime(),
+                                    WebRTCFrameNtpEpoch());
+}
+
+std::optional<base::TimeDelta>
+RTCEncodedAudioFrameDelegate::SenderCaptureTimeOffset() const {
+  base::AutoLock lock(lock_);
+  if (!webrtc_frame_) {
+    return std::nullopt;
+  }
+  return ConvertToOptionalTimeDelta(webrtc_frame_->SenderCaptureTimeOffset());
 }
 
 std::unique_ptr<webrtc::TransformableAudioFrameInterface>

@@ -512,16 +512,17 @@ PropertyAccessInfo AccessInfoFactory::ComputeDataFieldAccessInfo(
           descriptors_field_type_ref.value()));
 
   PropertyConstness constness =
-      dependencies()->DependOnFieldConstness(map, field_owner_map, descriptor);
-
+      map.GetPropertyDetails(broker_, descriptor).constness();
   switch (constness) {
     case PropertyConstness::kMutable:
       return PropertyAccessInfo::DataField(
           broker(), zone(), receiver_map, std::move(unrecorded_dependencies),
           field_index, details_representation, field_type, field_owner_map,
           field_map, holder, {});
-
     case PropertyConstness::kConst:
+      auto constness_dep = dependencies()->FieldConstnessDependencyOffTheRecord(
+          map, field_owner_map, descriptor);
+      unrecorded_dependencies.push_back(constness_dep);
       return PropertyAccessInfo::FastDataConstant(
           zone(), receiver_map, std::move(unrecorded_dependencies), field_index,
           details_representation, field_type, field_owner_map, field_map,
@@ -1099,7 +1100,11 @@ PropertyAccessInfo AccessInfoFactory::LookupSpecialFieldAccessor(
       !IsRabGsabTypedArrayElementsKind(map.elements_kind()) &&
       Name::Equals(isolate(), name.object(),
                    isolate()->factory()->length_string()) &&
-      broker_->dependencies()->DependOnTypedArrayLengthProtector()) {
+      broker_->dependencies()->DependOnTypedArrayLengthProtector() &&
+      broker_->dependencies()->DependOnArrayBufferDetachingProtector()) {
+    // TODO(388844115): If we cannot depend on the detaching protector, add a
+    // different kind of TypedArrayLength operator which checks for detached
+    // before reading the byte_length.
     return PropertyAccessInfo::TypedArrayLength(zone(), map);
   }
   // Check for special JSObject field accessors.
@@ -1218,14 +1223,19 @@ PropertyAccessInfo AccessInfoFactory::LookupTransition(
   // Transitioning stores *may* store to const fields. The resulting
   // DataConstant access infos can be distinguished from later, i.e. redundant,
   // stores to the same constant field by the presence of a transition map.
-  switch (dependencies()->DependOnFieldConstness(transition_map, transition_map,
-                                                 number)) {
+
+  PropertyConstness constness =
+      transition_map.GetPropertyDetails(broker_, number).constness();
+  switch (constness) {
     case PropertyConstness::kMutable:
       return PropertyAccessInfo::DataField(
           broker(), zone(), map, std::move(unrecorded_dependencies),
           field_index, details_representation, field_type, transition_map,
           field_map, holder, transition_map);
     case PropertyConstness::kConst:
+      auto constness_dep = dependencies()->FieldConstnessDependencyOffTheRecord(
+          transition_map, transition_map, number);
+      unrecorded_dependencies.push_back(constness_dep);
       return PropertyAccessInfo::FastDataConstant(
           zone(), map, std::move(unrecorded_dependencies), field_index,
           details_representation, field_type, transition_map, field_map, holder,

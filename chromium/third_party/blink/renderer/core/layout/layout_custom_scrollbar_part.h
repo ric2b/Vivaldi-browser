@@ -73,7 +73,7 @@ class CORE_EXPORT LayoutCustomScrollbarPart final : public LayoutReplaced {
   // Update the overridden size.
   void SetOverriddenSize(const PhysicalSize& size);
   // This should not be called.
-  LayoutPoint LocationInternal() const override;
+  DeprecatedLayoutPoint LocationInternal() const override;
   // Rerturn the overridden size set by SetOverriddenSize();
   PhysicalSize Size() const override;
 
@@ -101,9 +101,9 @@ class CORE_EXPORT LayoutCustomScrollbarPart final : public LayoutReplaced {
   void StyleDidChange(StyleDifference, const ComputedStyle* old_style) override;
   void ImageChanged(WrappedImagePtr, CanDeferInvalidation) override;
 
-  // A scrollbar part's Location() and PhysicalLocation() are relative to the
-  // scrollbar (instead of relative to any LayoutBox ancestor), and both are
-  // in physical coordinates.
+  // A scrollbar part's PhysicalLocation() is relative to the scrollbar
+  // (instead of relative to any LayoutBox ancestor), so it doesn't have a
+  // meaningful location container as a LayoutBox.
   LayoutBox* LocationContainer() const override {
     NOT_DESTROYED();
     return nullptr;

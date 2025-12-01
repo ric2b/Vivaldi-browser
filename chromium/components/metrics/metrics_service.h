@@ -44,6 +44,10 @@ FORWARD_DECLARE_TEST(ChromeMetricsServiceClientTest,
 FORWARD_DECLARE_TEST(IOSChromeMetricsServiceClientTest,
                      TestRegisterMetricsServiceProviders);
 
+namespace first_run {
+class FirstRunCoordinatorMetricsHelper;
+}
+
 namespace variations {
 class SyntheticTrialRegistry;
 }
@@ -100,6 +104,29 @@ class MetricsService {
   // any uploading.
   void EnableReporting();
   void DisableReporting();
+
+  // A passkey for owner-approved classes to access
+  // StartOutOfBandUploadIfPossible() - see
+  // </docs/patterns/passkey.md>.
+  class OutOfBandUploadPasskey {
+   private:
+    OutOfBandUploadPasskey() = default;
+    ~OutOfBandUploadPasskey() = default;
+    friend class first_run::FirstRunCoordinatorMetricsHelper;
+
+    FRIEND_TEST_ALL_PREFIXES(MetricsServiceTest, OutOfBandLogUpload);
+  };
+
+  // Starts the process of uploading metrics data outside of the uploads
+  // scheduled by the MetricsRotationScheduler. Upload attempt is silently
+  // dropped (never retried) and function returns false if:
+  // 1) the MetricsService has not uploaded the first ongoing log OR
+  // 2) recording is disabled OR
+  // 3) reporting is off and the first ongoing log hasn't been created.
+  //
+  // This function is currently only used within the iOS FRE screens and should
+  // be used very sparingly.
+  bool StartOutOfBandUploadIfPossible(OutOfBandUploadPasskey passkey);
 
   // Returns the client ID for this client, or the empty string if metrics
   // recording is not currently running.
@@ -277,6 +304,13 @@ class MetricsService {
   std::unique_ptr<MetricsLog> CreateLogForTesting(
       MetricsLog::LogType log_type) {
     return CreateLog(log_type);
+  }
+
+  // Used to test observers of the logs_event_manager_.
+  void NotifyLogsEventManagerForTesting(MetricsLogsEventManager::LogEvent event,
+                                        std::string_view log_hash,
+                                        std::string_view message) {
+    logs_event_manager_.NotifyLogEvent(event, log_hash, message);
   }
 
  protected:

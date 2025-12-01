@@ -18,6 +18,7 @@
 #include "third_party/blink/renderer/platform/graphics/gpu/dawn_control_client_holder.h"
 #include "third_party/blink/renderer/platform/graphics/gpu/webgpu_mailbox_texture.h"
 #include "third_party/blink/renderer/platform/graphics/graphics_types_3d.h"
+#include "third_party/blink/renderer/platform/graphics/predefined_color_space.h"
 #include "third_party/blink/renderer/platform/graphics/web_graphics_context_3d_video_frame_pool.h"
 #include "third_party/blink/renderer/platform/platform_export.h"
 #include "third_party/blink/renderer/platform/wtf/functional.h"
@@ -56,6 +57,7 @@ class PLATFORM_EXPORT WebGPUSwapBufferProvider
   ~WebGPUSwapBufferProvider() override;
 
   viz::SharedImageFormat Format() const;
+  wgpu::TextureFormat TextureFormat() const { return format_; }
   gfx::Size Size() const;
   cc::Layer* CcLayer();
   void Neuter();
@@ -106,6 +108,10 @@ class PLATFORM_EXPORT WebGPUSwapBufferProvider
 
   // Returns the SharedImage of the current swapbuffer.
   scoped_refptr<gpu::ClientSharedImage> GetCurrentSharedImage();
+
+  // Returns the SharedImage (if any) in the front buffer
+  scoped_refptr<gpu::ClientSharedImage> GetFrontBufferSharedImage();
+  gpu::SyncToken GetFrontBufferSyncToken();
 
   gfx::HDRMetadata GetHDRMetadata() { return hdr_metadata_; }
 
@@ -166,6 +172,9 @@ class PLATFORM_EXPORT WebGPUSwapBufferProvider
   std::unique_ptr<gpu::SharedImagePool<SwapBuffer>> swap_buffer_pool_;
   scoped_refptr<SwapBuffer> last_swap_buffer_;
   scoped_refptr<SwapBuffer> current_swap_buffer_;
+
+  scoped_refptr<gpu::ClientSharedImage> front_buffer_shared_image_;
+  gpu::SyncToken front_buffer_sync_token_;
 };
 
 }  // namespace blink

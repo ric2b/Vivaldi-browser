@@ -31,6 +31,7 @@
 <translation id="2441056087170876076">Monster 2</translation>
 <translation id="2444387452209867610">Sett inn notat</translation>
 <translation id="2486841023299517366">Dyr 4</translation>
+<translation id="2501278716633472235">Gå attende</translation>
 <translation id="2612127540243995147">Klar til å installera. Vivaldi vil verta lukka og starta om att.</translation>
 <translation id="2613387515621326337">Syn oppdateringsnettsida</translation>
 <translation id="2647368062414805334">Dessverre er dine Edge-innstillingar ikkje tilgjengelege medan den nettlesaren køyrer. For å importere desse innstillingane til Vivaldi, lagre arbeidet ditt og lukk alle Edge-vindauge. Klikk så fortsett.</translation>
@@ -51,6 +52,7 @@
 <translation id="3259769196742189631">Valider</translation>
 <translation id="3291915639428159043">Auto-avspeling er blokkert</translation>
 <translation id="3302905971452834934">Monster 1</translation>
+<translation id="3308738399950580893">annonsar</translation>
 <translation id="3334610655141903168">(ingen tittel)</translation>
 <translation id="3372505110412186107">Vivaldi <ph name="VERSION" /> er den nyaste tilgjengelege versjonen.</translation>
 <translation id="3383198080133834965">Du har den siste utgåva!</translation>
@@ -72,6 +74,7 @@
 <translation id="3795800845758778870">Dessverre er dine Brave-innstillingar ikkje tilgjengelege medan den nettlesaren køyrer. For å importere desse innstillingane til Vivaldi, lagre arbeidet ditt og lukk alle Brave-vindauge. Klikk så fortsett.</translation>
 <translation id="3822431842304177896">Nytt skilje</translation>
 <translation id="3832132597516774400">Landskap 5</translation>
+<translation id="3894751534882749287">Visss du ønskjer å visa sida likevel, kan du endre sporingsvernnivået i menyen for sporingsblokkering, eller ved å trykkja på Tillat-knappen</translation>
 <translation id="3914946330804881301">Importert frå Opera</translation>
 <translation id="3921292902397893431">Monster 8</translation>
 <translation id="3943857333388298514">Lim inn</translation>
@@ -90,6 +93,7 @@
 <translation id="4582480609585453144">Opna lenkja i bakgrunnsfane</translation>
 <translation id="4636708767492582204">Send som e-post</translation>
 <translation id="4677434526832593569">Dyr 8</translation>
+<translation id="4736016046474602958">Sporingsblokkering</translation>
 <translation id="474217410105706308">Slå av lyden for fana</translation>
 <translation id="4881695831933465202">Opna</translation>
 <translation id="498766871928286903"><ph name="DOWNLOADED" /> av <ph name="TOTAL_SIZE_TO_DOWNLOAD" /></translation>
@@ -128,6 +132,7 @@
 <translation id="6896758677409633944">Kopier</translation>
 <translation id="7086554968911045110">Landskap 7</translation>
 <translation id="7111492742514999492">Landskap 9</translation>
+<translation id="7113310725918019676">Tillat <ph name="BLOCKED_TYPE" /> frå <ph name="DOMAIN" /></translation>
 <translation id="7337881442233988129">Chromium</translation>
 <translation id="7581266044164103589">Klarte ikkje å starta oppdateringsprogrammet. Sjå til at datamaskina har nok minne eller lagringsplass og prøv igjen.</translation>
 <translation id="7658239707568436148">Avbryt</translation>
@@ -141,9 +146,9 @@
 <translation id="8027581147000338959">Opna i eit nytt vindauge</translation>
 <translation id="8044382196220116469">Tillat ikkje at nettstadar automatisk kan spela av video</translation>
 <translation id="8099620695029051217">Kopier sideadressa</translation>
+<translation id="8119307142152921512">sporing og annonsar</translation>
 <translation id="8197810018650377191">Lag bokmerke av sida</translation>
 <translation id="8261506727792406068">Slett</translation>
-<translation id="8263047843452521549">Inspiser bakgrunnstenesta</translation>
 <translation id="8331671104904436324">Opna i bakgrunnsfane</translation>
 <translation id="8373293945112511707">Landskap 1</translation>
 <translation id="8388552048012645975">Lastar ned oppdateringa …</translation>
@@ -157,13 +162,13 @@
 <translation id="8651348004684669199">Legg til aktiv fane</translation>
 <translation id="8669345741879513971">Monster 10</translation>
 <translation id="867544375504146191">Yandex</translation>
-<translation id="8689295374912158752">Inspiser portaldokument</translation>
 <translation id="8768970203213061953">Landskap 14</translation>
 <translation id="8773635261052182196">Du vil ikkje lenger sjå desse varsla. Du kan slå dei på att frå Vivaldi- innstillingane.</translation>
 <translation id="8774017153185436870">Nettstadar vil kanskje automatisk spela av video</translation>
 <translation id="8813277370772331957">Varsla meg seinare</translation>
 <translation id="8894900864683381599">Lagra lenkja som eit nettpanel</translation>
 <translation id="8912720443398351457">Vil du verkeleg avslutta Vivaldi?</translation>
+<translation id="8940028675168378100">Blokkert av <ph name="BLOCKER_NAME" /></translation>
 <translation id="8947109330183116400">Vel HTML-bokmerkefil</translation>
 <translation id="9017566390391482291">Vel Vivaldi-profilmappa som skal importerast</translation>
 <translation id="9048058608784130603">Ventande oppdatering <ph name="VERSION" /></translation>
@@ -173,6 +178,7 @@
 <translation id="912022491595344261">Opna biletet som <ph name="USER" /></translation>
 <translation id="9157539936604258187">Opna lenkja</translation>
 <translation id="9169060351863393881">Opera 12.x</translation>
+<translation id="9180553614777056266">Annonseblokkering</translation>
 <translation id="939305735877869636">Brave</translation>
 <translation id="970294721402795299">Landskap 16</translation>
 </translationbundle>

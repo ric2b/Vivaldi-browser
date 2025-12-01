@@ -129,15 +129,15 @@ class Converter {
 
     [[nodiscard]] bool Convert(wgpu::TextureAspect& out, const interop::GPUTextureAspect& in);
 
-    [[nodiscard]] bool Convert(wgpu::ImageCopyTexture& out,
+    [[nodiscard]] bool Convert(wgpu::TexelCopyTextureInfo& out,
                                const interop::GPUTexelCopyTextureInfo& in);
 
-    [[nodiscard]] bool Convert(wgpu::ImageCopyBuffer& out,
+    [[nodiscard]] bool Convert(wgpu::TexelCopyBufferInfo& out,
                                const interop::GPUTexelCopyBufferInfo& in);
 
     [[nodiscard]] bool Convert(BufferSource& out, interop::BufferSource in);
 
-    [[nodiscard]] bool Convert(wgpu::TextureDataLayout& out,
+    [[nodiscard]] bool Convert(wgpu::TexelCopyBufferLayout& out,
                                const interop::GPUTexelCopyBufferLayout& in);
 
     [[nodiscard]] bool Convert(wgpu::TextureFormat& out, const interop::GPUTextureFormat& in);
@@ -214,10 +214,10 @@ class Converter {
     [[nodiscard]] bool Convert(wgpu::RenderPassDepthStencilAttachment& out,
                                const interop::GPURenderPassDepthStencilAttachment& in);
 
-    [[nodiscard]] bool Convert(wgpu::RenderPassTimestampWrites& out,
+    [[nodiscard]] bool Convert(wgpu::PassTimestampWrites& out,
                                const interop::GPURenderPassTimestampWrites& in);
 
-    [[nodiscard]] bool Convert(wgpu::ComputePassTimestampWrites& out,
+    [[nodiscard]] bool Convert(wgpu::PassTimestampWrites& out,
                                const interop::GPUComputePassTimestampWrites& in);
 
     [[nodiscard]] bool Convert(wgpu::LoadOp& out, const interop::GPULoadOp& in);

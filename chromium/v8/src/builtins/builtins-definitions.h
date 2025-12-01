@@ -86,12 +86,18 @@ namespace internal {
  * name (see tools/callstats_groups.py).
  *
  * */
+#define BUILTIN_LIST_BASE_TIERING_TURBOFAN(TFC) \
+  TFC(StartTurbofanOptimizeJob, JSTrampoline)   \
+  TFC(OptimizeTurbofanEager, JSTrampoline)
+
+#define BUILTIN_LIST_BASE_TIERING_MAGLEV(TFC) \
+  TFC(StartMaglevOptimizeJob, JSTrampoline)   \
+  TFC(OptimizeMaglevEager, JSTrampoline)
+
 #define BUILTIN_LIST_BASE_TIERING(TFC)             \
+  BUILTIN_LIST_BASE_TIERING_MAGLEV(TFC)            \
+  BUILTIN_LIST_BASE_TIERING_TURBOFAN(TFC)          \
   TFC(FunctionLogNextExecution, JSTrampoline)      \
-  TFC(StartMaglevOptimizeJob, JSTrampoline)        \
-  TFC(StartTurbofanOptimizeJob, JSTrampoline)      \
-  TFC(OptimizeMaglevEager, JSTrampoline)           \
-  TFC(OptimizeTurbofanEager, JSTrampoline)         \
   TFC(MarkReoptimizeLazyDeoptimized, JSTrampoline) \
   TFC(MarkLazyDeoptimized, JSTrampoline)
 
@@ -982,6 +988,8 @@ namespace internal {
       kFlags)                                                                  \
   CPP(RegExpPrototypeToString, kDontAdaptArgumentsSentinel)                    \
   CPP(RegExpRightContextGetter, JSParameterCount(0))                           \
+  /* ES #sec-regexp.escape */                                                  \
+  CPP(RegExpEscape, JSParameterCount(1))                                       \
                                                                                \
   /* RegExp helpers */                                                         \
   TFS(RegExpExecAtom, NeedsContext::kYes, kRegExp, kString, kLastIndex,        \
@@ -1099,8 +1107,12 @@ namespace internal {
   TFJ(TypedArrayPrototypeMap, kDontAdaptArgumentsSentinel)                     \
   /* proposal-arraybuffer-base64 #sec-uint8array.frombase64 */                 \
   CPP(Uint8ArrayFromBase64, kDontAdaptArgumentsSentinel)                       \
+  /* proposal-arraybuffer-base64 #sec-uint8array.fromhex */                    \
+  CPP(Uint8ArrayFromHex, kDontAdaptArgumentsSentinel)                          \
   /* proposal-arraybuffer-base64 #sec-uint8array.prototype.tobase64 */         \
-  CPP(Uint8ArrayToBase64, kDontAdaptArgumentsSentinel)                         \
+  CPP(Uint8ArrayPrototypeToBase64, kDontAdaptArgumentsSentinel)                \
+  /* proposal-arraybuffer-base64 #sec-uint8array.prototype.tohex */            \
+  CPP(Uint8ArrayPrototypeToHex, kDontAdaptArgumentsSentinel)                   \
                                                                                \
   /* Wasm */                                                                   \
   IF_WASM_DRUMBRAKE(ASM, WasmInterpreterEntry, WasmDummy)                      \

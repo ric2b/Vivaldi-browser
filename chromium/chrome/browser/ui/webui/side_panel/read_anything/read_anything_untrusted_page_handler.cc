@@ -14,6 +14,7 @@
 #include "base/containers/flat_map.h"
 #include "base/functional/bind.h"
 #include "base/metrics/histogram_functions.h"
+#include "base/types/cxx23_to_underlying.h"
 #include "base/values.h"
 #include "chrome/browser/accessibility/phrase_segmentation/dependency_parser_model_loader.h"
 #include "chrome/browser/accessibility/phrase_segmentation/dependency_parser_model_loader_factory.h"
@@ -30,6 +31,7 @@
 #include "chrome/browser/ui/webui/side_panel/read_anything/read_anything_prefs.h"
 #include "chrome/common/read_anything/read_anything.mojom-forward.h"
 #include "chrome/common/read_anything/read_anything.mojom.h"
+#include "chrome/common/read_anything/read_anything_util.h"
 #include "components/language/core/browser/language_model.h"
 #include "components/language/core/browser/language_model_manager.h"
 #include "components/language/core/common/locale_util.h"
@@ -73,7 +75,10 @@
 using ash::language_packs::LanguagePackManager;
 using ash::language_packs::PackResult;
 #else
+#include "chrome/browser/browser_process.h"
+#include "chrome/browser/component_updater/wasm_tts_engine_component_installer.h"
 #include "chrome/common/extensions/extension_constants.h"
+#include "components/update_client/crx_update_item.h"
 #endif
 
 using content::TtsController;
@@ -87,7 +92,7 @@ namespace {
 
 // All AXMode flags of kAXModeWebContentsOnly are needed. |ui::AXMode::kHTML| is
 // needed for retrieveing the `aria-expanded` attribute.
-// |ui::AXMode::kScreenReader| is needed for HTML tag, and heading level
+// |ui::AXMode::kExtendedProperties| is needed for HTML tag, and heading level
 // information. |ui::AXMode::kInlineTextBoxes| is needed for complete screen2x
 // output -- if excluded, some nodes from the tree will not be identified as
 // content nodes.
@@ -95,13 +100,6 @@ namespace {
 // HTML attributes into the accessibility tree. It should be removed ASAP.
 constexpr ui::AXMode kReadAnythingAXMode =
     ui::kAXModeWebContentsOnly | ui::AXMode::kHTML;
-
-int GetNormalizedFontScale(double font_scale) {
-  DCHECK(font_scale >= kReadAnythingMinimumFontScale &&
-         font_scale <= kReadAnythingMaximumFontScale);
-  return (font_scale - kReadAnythingMinimumFontScale) *
-         (1 / kReadAnythingFontScaleIncrement);
-}
 
 #if BUILDFLAG(IS_CHROMEOS)
 
@@ -181,6 +179,8 @@ void OnInstallPackResponse(
 }
 
 #else
+constexpr char kReadingModeName[] = "Reading mode";
+
 InstallationState GetInstallationStateFromStatusCode(
     const content::LanguageInstallStatus status_code) {
   switch (status_code) {
@@ -315,7 +315,14 @@ ReadAnythingUntrustedPageHandler::ReadAnythingUntrustedPageHandler(
 
 #if !BUILDFLAG(IS_CHROMEOS)
   content::TtsController::GetInstance()->AddUpdateLanguageStatusDelegate(this);
-  extensions::ExtensionRegistry::Get(profile_)->AddObserver(this);
+
+  if (features::IsWasmTtsComponentUpdaterEnabled()) {
+    component_updater_observation_.Observe(
+        g_browser_process->component_updater());
+  } else {
+    extensions::ExtensionRegistry::Get(profile_)->AddObserver(this);
+  }
+
 #endif
   side_panel_controller_ = ReadAnythingSidePanelControllerGlue::FromWebContents(
                                web_ui_->GetWebContents())
@@ -323,11 +330,11 @@ ReadAnythingUntrustedPageHandler::ReadAnythingUntrustedPageHandler(
   side_panel_controller_->AddPageHandlerAsObserver(weak_factory_.GetWeakPtr());
 
   PrefService* prefs = profile_->GetPrefs();
-  double speechRate =
+  double speech_rate =
       features::IsReadAnythingReadAloudEnabled()
           ? prefs->GetDouble(prefs::kAccessibilityReadAnythingSpeechRate)
-          : kReadAnythingDefaultSpeechRate;
-  read_anything::mojom::HighlightGranularity highlightGranularity =
+          : 1.0;
+  read_anything::mojom::HighlightGranularity highlight_granularity =
       features::IsReadAnythingReadAloudEnabled()
           ? static_cast<read_anything::mojom::HighlightGranularity>(
                 prefs->GetDouble(
@@ -349,12 +356,12 @@ ReadAnythingUntrustedPageHandler::ReadAnythingUntrustedPageHandler(
       prefs->GetBoolean(prefs::kAccessibilityReadAnythingImagesEnabled),
       static_cast<read_anything::mojom::Colors>(
           prefs->GetInteger(prefs::kAccessibilityReadAnythingColorInfo)),
-      speechRate, std::move(voices),
+      speech_rate, std::move(voices),
       features::IsReadAnythingReadAloudEnabled()
           ? prefs->GetList(prefs::kAccessibilityReadAnythingLanguagesEnabled)
                 .Clone()
           : base::Value::List(),
-      highlightGranularity);
+      highlight_granularity);
 
   // Get user's default language to check for compatible fonts.
   language::LanguageModel* language_model =
@@ -510,6 +517,21 @@ void ReadAnythingUntrustedPageHandler::OnExtensionReady(
   }
   page_->OnTtsEngineInstalled();
 }
+
+// component_updater::ServiceObserver:
+void ReadAnythingUntrustedPageHandler::OnEvent(
+    const update_client::CrxUpdateItem& item) {
+  if (item.id !=
+      component_updater::WasmTtsEngineComponentInstallerPolicy::GetId()) {
+    return;
+  }
+
+  // Once the component has been updated, send a signal so reading mode
+  // can check for new voices.
+  if (item.state == update_client::ComponentState::kUpdated) {
+    page_->OnTtsEngineInstalled();
+  }
+}
 #endif
 
 void ReadAnythingUntrustedPageHandler::OnGetVoicePackInfo(
@@ -528,7 +550,7 @@ void ReadAnythingUntrustedPageHandler::GetVoicePackInfo(
                          weak_factory_.GetWeakPtr())));
 #else
   TtsController::GetInstance()->LanguageStatusRequest(
-      profile_, language, string_constants::kReadingModeName,
+      profile_, language, kReadingModeName,
       static_cast<int>(tts_engine_events::TtsClientSource::CHROMEFEATURE));
 #endif
 }
@@ -544,7 +566,7 @@ void ReadAnythingUntrustedPageHandler::InstallVoicePack(
                          weak_factory_.GetWeakPtr())));
 #else
   TtsController::GetInstance()->InstallLanguageRequest(
-      profile_, language, string_constants::kReadingModeName,
+      profile_, language, kReadingModeName,
       static_cast<int>(tts_engine_events::TtsClientSource::CHROMEFEATURE));
 #endif
 }
@@ -553,7 +575,7 @@ void ReadAnythingUntrustedPageHandler::UninstallVoice(
     const std::string& language) {
 #if !BUILDFLAG(IS_CHROMEOS)
   TtsController::GetInstance()->UninstallLanguageRequest(
-      profile_, language, string_constants::kReadingModeName,
+      profile_, language, kReadingModeName,
       static_cast<int>(tts_engine_events::TtsClientSource::CHROMEFEATURE),
       /*uninstall_immediately=*/false);
 #endif
@@ -568,14 +590,14 @@ void ReadAnythingUntrustedPageHandler::OnCopy() {
 void ReadAnythingUntrustedPageHandler::OnLineSpaceChange(
     read_anything::mojom::LineSpacing line_spacing) {
   profile_->GetPrefs()->SetInteger(prefs::kAccessibilityReadAnythingLineSpacing,
-                                   static_cast<size_t>(line_spacing));
+                                   base::to_underlying(line_spacing));
 }
 
 void ReadAnythingUntrustedPageHandler::OnLetterSpaceChange(
     read_anything::mojom::LetterSpacing letter_spacing) {
   profile_->GetPrefs()->SetInteger(
       prefs::kAccessibilityReadAnythingLetterSpacing,
-      static_cast<size_t>(letter_spacing));
+      base::to_underlying(letter_spacing));
 }
 void ReadAnythingUntrustedPageHandler::OnFontChange(const std::string& font) {
   profile_->GetPrefs()->SetString(prefs::kAccessibilityReadAnythingFontName,
@@ -583,9 +605,8 @@ void ReadAnythingUntrustedPageHandler::OnFontChange(const std::string& font) {
 }
 
 void ReadAnythingUntrustedPageHandler::OnFontSizeChange(double font_size) {
-  double saved_font_size = std::min(font_size, kReadAnythingMaximumFontScale);
   profile_->GetPrefs()->SetDouble(prefs::kAccessibilityReadAnythingFontScale,
-                                  saved_font_size);
+                                  AdjustFontScale(font_size, 0));
 }
 
 void ReadAnythingUntrustedPageHandler::OnLinksEnabledChanged(bool enabled) {
@@ -601,7 +622,7 @@ void ReadAnythingUntrustedPageHandler::OnImagesEnabledChanged(bool enabled) {
 void ReadAnythingUntrustedPageHandler::OnColorChange(
     read_anything::mojom::Colors color) {
   profile_->GetPrefs()->SetInteger(prefs::kAccessibilityReadAnythingColorInfo,
-                                   static_cast<size_t>(color));
+                                   base::to_underlying(color));
 }
 
 void ReadAnythingUntrustedPageHandler::OnSpeechRateChange(double rate) {
@@ -767,10 +788,27 @@ void ReadAnythingUntrustedPageHandler::SetDefaultLanguageCode(
 
 void ReadAnythingUntrustedPageHandler::Activate(bool active) {
   active_ = active;
+  if (features::IsReadAnythingReadAloudEnabled() && !active &&
+      side_panel_controller_->tab()->IsActivated() && !tab_will_detach_) {
+    page_->OnReadingModeHidden();
+  }
 }
 
 void ReadAnythingUntrustedPageHandler::OnSidePanelControllerDestroyed() {
   side_panel_controller_ = nullptr;
+}
+
+void ReadAnythingUntrustedPageHandler::OnTabWillDetach() {
+  if (!features::IsReadAnythingReadAloudEnabled()) {
+    return;
+  }
+
+  // When multiple tabs are open, we receive this call multiple times, so only
+  // inform once.
+  if (!tab_will_detach_) {
+    tab_will_detach_ = true;
+    page_->OnTabWillDetach();
+  }
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -902,33 +940,21 @@ void ReadAnythingUntrustedPageHandler::LogTextStyle() {
   // This is called when the side panel closes, so retrieving the values from
   // preferences won't happen very often.
   PrefService* prefs = profile_->GetPrefs();
-  int maximum_font_scale_logging =
-      GetNormalizedFontScale(kReadAnythingMaximumFontScale);
-  double font_scale =
-      prefs->GetDouble(prefs::kAccessibilityReadAnythingFontScale);
-  base::UmaHistogramExactLinear(string_constants::kFontScaleHistogramName,
-                                GetNormalizedFontScale(font_scale),
-                                maximum_font_scale_logging + 1);
-  std::string font_name =
-      prefs->GetString(prefs::kAccessibilityReadAnythingFontName);
-  if (fonts::kFontInfos.contains(font_name)) {
-    base::UmaHistogramEnumeration(
-        string_constants::kFontNameHistogramName,
-        fonts::kFontInfos.at(font_name).logging_value);
-  }
+  LogFontScale(prefs->GetDouble(prefs::kAccessibilityReadAnythingFontScale));
+  LogFontName(prefs->GetString(prefs::kAccessibilityReadAnythingFontName));
   read_anything::mojom::Colors color =
       static_cast<read_anything::mojom::Colors>(
           prefs->GetInteger(prefs::kAccessibilityReadAnythingColorInfo));
-  base::UmaHistogramEnumeration(string_constants::kColorHistogramName, color);
+  base::UmaHistogramEnumeration("Accessibility.ReadAnything.Color", color);
   read_anything::mojom::LineSpacing line_spacing =
       static_cast<read_anything::mojom::LineSpacing>(
           prefs->GetInteger(prefs::kAccessibilityReadAnythingLineSpacing));
-  base::UmaHistogramEnumeration(string_constants::kLineSpacingHistogramName,
+  base::UmaHistogramEnumeration("Accessibility.ReadAnything.LineSpacing",
                                 line_spacing);
   read_anything::mojom::LetterSpacing letter_spacing =
       static_cast<read_anything::mojom::LetterSpacing>(
           prefs->GetInteger(prefs::kAccessibilityReadAnythingLetterSpacing));
-  base::UmaHistogramEnumeration(string_constants::kLetterSpacingHistogramName,
+  base::UmaHistogramEnumeration("Accessibility.ReadAnything.LetterSpacing",
                                 letter_spacing);
 }
 

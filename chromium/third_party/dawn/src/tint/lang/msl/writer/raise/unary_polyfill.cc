@@ -27,8 +27,6 @@
 
 #include "src/tint/lang/msl/writer/raise/unary_polyfill.h"
 
-#include <utility>
-
 #include "src/tint/lang/core/ir/builder.h"
 #include "src/tint/lang/core/ir/validator.h"
 
@@ -93,6 +91,7 @@ Result<SuccessType> UnaryPolyfill(core::ir::Module& ir) {
                                 core::ir::Capabilities{
                                     core::ir::Capability::kAllowPointersAndHandlesInStructures,
                                     core::ir::Capability::kAllowPrivateVarsInFunctions,
+                                    core::ir::Capability::kAllowAnyLetType,
                                 });
     if (result != Success) {
         return result.Failure();

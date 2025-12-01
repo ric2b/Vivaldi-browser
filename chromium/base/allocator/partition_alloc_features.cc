@@ -12,7 +12,6 @@
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "build/chromecast_buildflags.h"
-#include "build/chromeos_buildflags.h"
 #include "partition_alloc/buildflags.h"
 #include "partition_alloc/partition_alloc_base/time/time.h"
 #include "partition_alloc/partition_alloc_constants.h"
@@ -274,16 +273,15 @@ BASE_FEATURE(kPartitionAllocPermissiveMte,
 #endif
 );
 
-// Note: Do not use the prepared macro to implement following FeatureParams
-// as of no need for a local cache.
-constinit const FeatureParam<bool> kBackupRefPtrAsanEnableDereferenceCheckParam{
-    &kPartitionAllocBackupRefPtr, "asan-enable-dereference-check", true};
-constinit const FeatureParam<bool> kBackupRefPtrAsanEnableExtractionCheckParam{
-    &kPartitionAllocBackupRefPtr, "asan-enable-extraction-check",
-    false};  // Not much noise at the moment to enable by default.
-constinit const FeatureParam<bool>
-    kBackupRefPtrAsanEnableInstantiationCheckParam{
-        &kPartitionAllocBackupRefPtr, "asan-enable-instantiation-check", true};
+BASE_FEATURE(kAsanBrpDereferenceCheck,
+             "AsanBrpDereferenceCheck",
+             FEATURE_ENABLED_BY_DEFAULT);
+BASE_FEATURE(kAsanBrpExtractionCheck,
+             "AsanBrpExtractionCheck",      // Not much noise at the moment to
+             FEATURE_DISABLED_BY_DEFAULT);  // enable by default.
+BASE_FEATURE(kAsanBrpInstantiationCheck,
+             "AsanBrpInstantiationCheck",
+             FEATURE_ENABLED_BY_DEFAULT);
 
 // If enabled, switches the bucket distribution to a denser one.
 //
@@ -467,12 +465,6 @@ MIRACLE_PARAMETER_FOR_INT(
 BASE_FEATURE(kPartitionAllocDisableBRPInBufferPartition,
              "PartitionAllocDisableBRPInBufferPartition",
              FEATURE_DISABLED_BY_DEFAULT);
-
-#if PA_BUILDFLAG(USE_FREELIST_DISPATCHER)
-BASE_FEATURE(kUsePoolOffsetFreelists,
-             "PartitionAllocUsePoolOffsetFreelists",
-             FEATURE_ENABLED_BY_DEFAULT);
-#endif
 
 BASE_FEATURE(kPartitionAllocAdjustSizeWhenInForeground,
              "PartitionAllocAdjustSizeWhenInForeground",

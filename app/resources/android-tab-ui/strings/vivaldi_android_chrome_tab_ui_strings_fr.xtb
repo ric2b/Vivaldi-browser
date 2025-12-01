@@ -1,9 +1,16 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="fr">
+<translation id="2277224997687551299">Modifier le nom du groupe</translation>
+<translation id="2330212241471632770">{TABS_COUNT,plural,
+          =1 {Onglet de signets}
+          other {Onglets de signets}}</translation>
 <translation id="2947471979790858922">Toutes les activités réalisées dans ces onglets privés seront supprimées sur cet appareil</translation>
 <translation id="3870643923290313246">{INCOGNITO_TABS_COUNT, plural,
         =1 {Vous pouvez retrouver votre onglet fermé via l'entrée Onglets récents du menu principal de Vivaldi. Aucun onglet privé n'y figurera.}
         other {Vous pouvez retrouver vos onglets fermés via l'entrée Onglets récents du menu principal de Vivaldi. Vos # onglets privés n'y figureront pas.}}</translation>
+<translation id="4460014764210899310">Dégrouper</translation>
 <translation id="4871187110787939393">Fermer tous les onglets privés ?</translation>
+<translation id="5494920125229734069">Tout sélectionner</translation>
+<translation id="6744956528665271406">Modifier la couleur du groupe</translation>
 </translationbundle>

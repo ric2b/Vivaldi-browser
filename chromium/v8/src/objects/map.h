@@ -144,8 +144,8 @@ enum class ObjectFields {
 };
 
 using MapHandles =
-    base::SmallVector<Handle<Map>, DEFAULT_MAX_POLYMORPHIC_MAP_COUNT>;
-using MapHandlesSpan = v8::MemorySpan<Handle<Map>>;
+    DirectHandleSmallVector<Map, DEFAULT_MAX_POLYMORPHIC_MAP_COUNT>;
+using MapHandlesSpan = v8::MemorySpan<DirectHandle<Map>>;
 
 #include "torque-generated/src/objects/map-tq.inc"
 
@@ -218,8 +218,9 @@ using MapHandlesSpan = v8::MemorySpan<Handle<Map>>;
 // +---------------+-------------------------------------------------+
 // | TaggedPointer | [constructor_or_back_pointer_or_native_context] |
 // +---------------+-------------------------------------------------+
-// | TaggedPointer | [instance_descriptors]                          |
-// +*****************************************************************+
+// | TaggedPointer | [instance_descriptors] (if JS object)           |
+// |               | [custom_descriptor]    (if WasmStruct)          |
+// +---------------+-------------------------------------------------+
 // | TaggedPointer | [dependent_code]                                |
 // +---------------+-------------------------------------------------+
 // | TaggedPointer | [prototype_validity_cell]                       |
@@ -566,11 +567,12 @@ class Map : public TorqueGeneratedMap<Map, HeapObject> {
   // fields with HeapObject representation and "Any" type back to "Class" type.
   static inline void GeneralizeIfCanHaveTransitionableFastElementsKind(
       Isolate* isolate, InstanceType instance_type,
-      Representation* representation, Handle<FieldType>* field_type);
+      Representation* representation, DirectHandle<FieldType>* field_type);
 
-  V8_EXPORT_PRIVATE static Handle<Map> PrepareForDataProperty(
-      Isolate* isolate, Handle<Map> old_map, InternalIndex descriptor_number,
-      PropertyConstness constness, DirectHandle<Object> value);
+  V8_EXPORT_PRIVATE static DirectHandle<Map> PrepareForDataProperty(
+      Isolate* isolate, DirectHandle<Map> old_map,
+      InternalIndex descriptor_number, PropertyConstness constness,
+      DirectHandle<Object> value);
 
   V8_EXPORT_PRIVATE static Handle<Map> Normalize(
       Isolate* isolate, DirectHandle<Map> map, ElementsKind new_elements_kind,
@@ -668,6 +670,11 @@ class Map : public TorqueGeneratedMap<Map, HeapObject> {
       int number_of_own_descriptors,
       WriteBarrierMode barrier_mode = UPDATE_WRITE_BARRIER);
 
+#if V8_ENABLE_WEBASSEMBLY
+  // Only for WasmStructs: custom descriptor instead of instance_descriptors.
+  DECL_ACCESSORS(custom_descriptor, Tagged<WasmStruct>)
+#endif  // V8_ENABLE_WEBASSEMBLY
+
   inline void UpdateDescriptors(Isolate* isolate,
                                 Tagged<DescriptorArray> descriptors,
                                 int number_of_own_descriptors);
@@ -752,10 +759,8 @@ class Map : public TorqueGeneratedMap<Map, HeapObject> {
   // Returns a non-deprecated version of the input. This method may deprecate
   // existing maps along the way if encodings conflict. Not for use while
   // gathering type feedback. Use TryUpdate in those cases instead.
-  template <template <typename> typename HandleType>
-    requires(std::is_convertible_v<HandleType<Map>, DirectHandle<Map>>)
-  EXPORT_TEMPLATE_DECLARE(V8_EXPORT_PRIVATE) static HandleType<Map> Update(
-      Isolate* isolate, HandleType<Map> map);
+  V8_EXPORT_PRIVATE static DirectHandle<Map> Update(Isolate* isolate,
+                                                    DirectHandle<Map> map);
 
   static inline Handle<Map> CopyInitialMap(Isolate* isolate,
                                            DirectHandle<Map> map);
@@ -771,13 +776,13 @@ class Map : public TorqueGeneratedMap<Map, HeapObject> {
       Isolate* isolate, DirectHandle<Map> map, Descriptor* descriptor,
       TransitionFlag flag);
 
-  static MaybeObjectHandle WrapFieldType(Handle<FieldType> type);
+  static MaybeObjectDirectHandle WrapFieldType(DirectHandle<FieldType> type);
   V8_EXPORT_PRIVATE static Tagged<FieldType> UnwrapFieldType(
       Tagged<MaybeObject> wrapped_type);
 
   V8_EXPORT_PRIVATE V8_WARN_UNUSED_RESULT static MaybeHandle<Map> CopyWithField(
       Isolate* isolate, DirectHandle<Map> map, DirectHandle<Name> name,
-      Handle<FieldType> type, PropertyAttributes attributes,
+      DirectHandle<FieldType> type, PropertyAttributes attributes,
       PropertyConstness constness, Representation representation,
       TransitionFlag flag);
 
@@ -789,7 +794,7 @@ class Map : public TorqueGeneratedMap<Map, HeapObject> {
   // Returns a new map with all transitions dropped from the given map and
   // the ElementsKind set.
   static DirectHandle<Map> TransitionElementsTo(Isolate* isolate,
-                                                Handle<Map> map,
+                                                DirectHandle<Map> map,
                                                 ElementsKind to_kind);
 
   static std::optional<Tagged<Map>> TryAsElementsKind(Isolate* isolate,
@@ -1108,17 +1113,6 @@ inline bool IsNullOrUndefinedMap(Tagged<Map> map);
 inline bool IsPrimitiveMap(Tagged<Map> map);
 inline bool IsSpecialReceiverMap(Tagged<Map> map);
 inline bool IsCustomElementsReceiverMap(Tagged<Map> map);
-
-InstanceType Map::instance_type() const {
-  // TODO(solanes, v8:7790, v8:11353, v8:11945): Make this and the setter
-  // non-atomic when TSAN sees the map's store synchronization.
-  return static_cast<InstanceType>(
-      RELAXED_READ_UINT16_FIELD(*this, kInstanceTypeOffset));
-}
-
-void Map::set_instance_type(InstanceType value) {
-  RELAXED_WRITE_UINT16_FIELD(*this, kInstanceTypeOffset, value);
-}
 
 }  // namespace v8::internal
 

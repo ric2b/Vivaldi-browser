@@ -22,9 +22,9 @@ exports_files(["LICENSE.txt"])
 
 NCCL_MAJOR = 2
 
-NCCL_MINOR = 23
+NCCL_MINOR = 25
 
-NCCL_PATCH = 4
+NCCL_PATCH = 1
 
 NCCL_VERSION = NCCL_MAJOR * 10000 + NCCL_MINOR * 100 + NCCL_PATCH  # e.g., 21605
 
@@ -93,7 +93,8 @@ genrule(
     cmd = """
     mkdir -p src/device/generated
     $(location :generate) src/device/generated
-    tar -cf $@ src
+    # Retry the tar command three times to avoid flakiness.
+    (r=3;while ! tar --warning=no-file-changed -cf $@ src ; do ((--r))||exit;sleep 1;done)
     """,
     tools = [":generate"],
 )
@@ -192,6 +193,10 @@ cc_library(
             "src/transport/coll_net.cc",
             "src/transport/net.cc",
             "src/enqueue.cc",
+            # RAS is a health-checking system (starting from NCCL 2.24:
+            # https://docs.nvidia.com/deeplearning/nccl/user-guide/docs/troubleshooting/ras.html
+            # It's not reqired for NCCL to work.
+            "src/ras/client.cc",
         ],
     ) + [
         # Required for header inclusion checking (see
@@ -200,6 +205,7 @@ cc_library(
         # from the virtual includes directory.
         "src/include/collectives.h",
         "src/nccl.h",
+        "src/ras/ras_internal.h",
     ],
     hdrs = ["src/nccl.h"],
     include_prefix = "third_party/nccl",

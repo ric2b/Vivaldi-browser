@@ -7,8 +7,10 @@
 
 #import <UIKit/UIKit.h>
 
+#import "base/functional/callback_forward.h"
 #import "base/ios/block_types.h"
 #import "components/signin/public/identity_manager/tribool.h"
+#import "components/sync/base/data_type.h"
 #import "ios/chrome/browser/authentication/ui_bundled/signin/signin_constants.h"
 #import "ios/chrome/browser/signin/model/capabilities_types.h"
 #import "ios/chrome/browser/signin/model/system_identity.h"
@@ -27,9 +29,16 @@ class TimeDelta;
 class Version;
 }  // namespace base
 
+namespace syncer {
+class SyncService;
+}
+
 namespace signin {
 
 class IdentityManager;
+
+using UnsyncedDataForSignoutOrProfileSwitchingCallback =
+    base::OnceCallback<void(syncer::DataTypeSet data_type_set)>;
 
 // Returns the maximum allowed waiting time for the Account Capabilities API.
 base::TimeDelta GetWaitThresholdForCapabilities();
@@ -52,9 +61,6 @@ void RecordUpgradePromoSigninStarted(
     signin::IdentityManager* identity_manager,
     ChromeAccountManagerService* account_manager_service,
     const base::Version& current_version);
-
-// Returns the current sign-in state of primary identity.
-IdentitySigninState GetPrimaryIdentitySigninState(ProfileIOS* profile);
 
 // Converts a SystemIdentityCapabilityResult to a Tribool.
 Tribool TriboolFromCapabilityResult(SystemIdentityCapabilityResult result);
@@ -82,7 +88,29 @@ void MultiProfileSignOut(Browser* browser,
                          signin_metrics::ProfileSignout signout_source,
                          bool force_snackbar_over_toolbar,
                          MDCSnackbarMessage* snackbar_message,
-                         ProceduralBlock signout_completion);
+                         ProceduralBlock signout_completion,
+                         bool should_record_metrics = true);
+
+// Similar to `MultiProfileSignOut`, but switches to personal profile in all
+// windows and not just one. This also skips recording metrics for single
+// profile signout as policies have their own metrics for signout.
+void MultiProfileSignOutForProfile(
+    ProfileIOS* profile,
+    signin_metrics::ProfileSignout signout_source,
+    base::OnceClosure signout_completion_closure);
+
+// Returns whether the sign-in fullscreen promo migration is done.
+bool IsFullscreenSigninPromoManagerMigrationDone();
+
+// Log to UserDefaults when the sign-in fullscreen promo impressions migration
+// is done.
+void LogFullscreenSigninPromoManagerMigrationDone();
+
+// Fetches asynchronously the unsynced data types for a sign-out or a profile
+// switching. And calls `callback`.
+void FetchUnsyncedDataForSignOutOrProfileSwitching(
+    syncer::SyncService* sync_service,
+    UnsyncedDataForSignoutOrProfileSwitchingCallback callback);
 
 }  // namespace signin
 

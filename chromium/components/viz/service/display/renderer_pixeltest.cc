@@ -61,11 +61,11 @@
 #include "media/base/video_types.h"
 #include "media/renderers/video_resource_updater.h"
 #include "third_party/skia/include/core/SkColor.h"
-#include "third_party/skia/include/core/SkColorPriv.h"
 #include "third_party/skia/include/core/SkMatrix.h"
 #include "third_party/skia/include/core/SkRefCnt.h"
 #include "third_party/skia/include/core/SkSurface.h"
 #include "third_party/skia/include/effects/SkColorMatrixFilter.h"
+#include "third_party/skia/include/private/chromium/SkPMColor.h"
 #include "ui/gfx/color_transform.h"
 #include "ui/gfx/geometry/mask_filter_info.h"
 #include "ui/gfx/geometry/skia_conversions.h"
@@ -273,13 +273,15 @@ void CreateTestTwoColoredTextureDrawQuad(
   SkPMColor pixel_color_one =
       premultiplied_alpha
           ? SkPreMultiplyColor(texel_color_one.toSkColor())
-          : SkPackARGB32(255 * texel_color_one.fA, 255 * texel_color_one.fR,
-                         255 * texel_color_one.fG, 255 * texel_color_one.fB);
+          : SkPMColorSetARGB(255 * texel_color_one.fA, 255 * texel_color_one.fR,
+                             255 * texel_color_one.fG,
+                             255 * texel_color_one.fB);
   SkPMColor pixel_color_two =
       premultiplied_alpha
           ? SkPreMultiplyColor(texel_color_two.toSkColor())
-          : SkPackARGB32(255 * texel_color_two.fA, 255 * texel_color_two.fR,
-                         255 * texel_color_two.fG, 255 * texel_color_two.fB);
+          : SkPMColorSetARGB(255 * texel_color_two.fA, 255 * texel_color_two.fR,
+                             255 * texel_color_two.fG,
+                             255 * texel_color_two.fB);
   // The default color is texel_color_one
   std::vector<uint32_t> pixels(rect.size().GetArea(), pixel_color_one);
   if (half_and_half) {
@@ -367,8 +369,8 @@ void CreateTestTextureDrawQuad(
   SkPMColor pixel_color =
       premultiplied_alpha
           ? SkPreMultiplyColor(texel_color.toSkColor())
-          : SkPackARGB32(texel_color.fA * 255, texel_color.fR * 255,
-                         texel_color.fG * 255, texel_color.fB * 255);
+          : SkPMColorSetARGB(texel_color.fA * 255, texel_color.fR * 255,
+                             texel_color.fG * 255, texel_color.fB * 255);
   size_t num_pixels = static_cast<size_t>(rect.width()) * rect.height();
   std::vector<uint32_t> pixels(num_pixels, pixel_color);
 
@@ -517,50 +519,7 @@ void CreateTestY16TextureDrawQuad_TwoColor(
       child_resource_provider, child_context_provider);
 }
 
-// Upshift video frame to 10 bit.
-scoped_refptr<media::VideoFrame> CreateHighbitVideoFrame(
-    media::VideoFrame* video_frame) {
-  media::VideoPixelFormat format;
-  switch (video_frame->format()) {
-    case media::PIXEL_FORMAT_I420:
-      format = media::PIXEL_FORMAT_YUV420P10;
-      break;
-    case media::PIXEL_FORMAT_I422:
-      format = media::PIXEL_FORMAT_YUV422P10;
-      break;
-    case media::PIXEL_FORMAT_I444:
-      format = media::PIXEL_FORMAT_YUV444P10;
-      break;
-
-    default:
-      NOTREACHED();
-  }
-  scoped_refptr<media::VideoFrame> ret = media::VideoFrame::CreateFrame(
-      format, video_frame->coded_size(), video_frame->visible_rect(),
-      video_frame->natural_size(), video_frame->timestamp());
-
-  // Copy all metadata.
-  ret->metadata().MergeMetadataFrom(video_frame->metadata());
-
-  for (int plane = media::VideoFrame::Plane::kY;
-       plane <= media::VideoFrame::Plane::kV; ++plane) {
-    int width = video_frame->row_bytes(plane);
-    const uint8_t* src = video_frame->data(plane);
-    uint16_t* dst = reinterpret_cast<uint16_t*>(ret->writable_data(plane));
-    for (int row = 0; row < video_frame->rows(plane); row++) {
-      for (int x = 0; x < width; x++) {
-        // Replicate the top bits into the lower bits, this way
-        // 0xFF becomes 0x3FF.
-        dst[x] = (src[x] << 2) | (src[x] >> 6);
-      }
-      src += video_frame->stride(plane);
-      dst += ret->stride(plane) / 2;
-    }
-  }
-  return ret;
-}
-
-void CreateTestMultiplanarVideoDrawQuad_FromVideoFrame(
+void CreateTestMultiplanarVideoDrawQuad(
     scoped_refptr<media::VideoFrame> video_frame,
     uint8_t alpha_value,
     gfx::Transform transform,
@@ -574,7 +533,7 @@ void CreateTestMultiplanarVideoDrawQuad_FromVideoFrame(
     ClientResourceProvider* child_resource_provider,
     RasterContextProvider* child_context_provider) {
   DCHECK(video_frame->ColorSpace().IsValid());
-  bool contents_opaque = false;
+
   float draw_opacity = 1.0f;
   const bool with_alpha = (video_frame->format() == media::PIXEL_FORMAT_I420A);
   if (with_alpha) {
@@ -582,6 +541,8 @@ void CreateTestMultiplanarVideoDrawQuad_FromVideoFrame(
            alpha_value,
            video_frame->stride(media::VideoFrame::Plane::kA) *
                video_frame->rows(media::VideoFrame::Plane::kA));
+  } else {
+    EXPECT_EQ(alpha_value, 255);
   }
 
   // Obtain frame resources and perform AppendQuads which chooses the correct
@@ -589,7 +550,7 @@ void CreateTestMultiplanarVideoDrawQuad_FromVideoFrame(
   video_resource_updater->ObtainFrameResource(video_frame);
   video_resource_updater->AppendQuad(
       render_pass, video_frame, transform, rect, visible_rect, mask_filter_info,
-      /*clip_rect=*/std::nullopt, contents_opaque, draw_opacity,
+      /*clip_rect=*/std::nullopt, /*context_opaque=*/with_alpha, draw_opacity,
       sorting_context_id);
 
   // Get the appended quad and map resource ids for transfer.
@@ -605,213 +566,144 @@ void CreateTestMultiplanarVideoDrawQuad_FromVideoFrame(
   quad->resource_id = resource_map[quad->resource_id];
 }
 
-void CreateTestMultiplanarVideoDrawQuad_Striped(
-    media::VideoPixelFormat format,
-    gfx::ColorSpace color_space,
-    bool is_transparent,
-    bool highbit,
-    const gfx::RectF& tex_coord_rect,
-    CompositorRenderPass* render_pass,
-    media::VideoResourceUpdater* video_resource_updater,
-    const gfx::Rect& rect,
-    const gfx::Rect& visible_rect,
-    DisplayResourceProvider* resource_provider,
-    ClientResourceProvider* child_resource_provider,
-    RasterContextProvider* child_context_provider) {
-  const gfx::Size coded_size = rect.size();
-  const gfx::Rect video_visible_rect = gfx::ToNearestRect(
-      gfx::RectF(tex_coord_rect.x() * coded_size.width(),
-                 tex_coord_rect.y() * coded_size.height(),
-                 tex_coord_rect.width() * coded_size.width(),
-                 tex_coord_rect.height() * coded_size.height()));
-  // Pass `visible_rect.size()` for natural_size except for videos with
-  // non-square pixels where it is `visible_rect.size()` scaled by aspect of the
-  // pixel.
-  scoped_refptr<media::VideoFrame> video_frame =
-      media::VideoFrame::CreateFrame(format, coded_size, video_visible_rect,
-                                     visible_rect.size(), base::TimeDelta());
+// A unit square at the origin to indicate full tex coordinate coverage.
+constexpr gfx::RectF kUnitSquare(0.f, 0.f, 1.f, 1.f);
 
-  // YUV values representing a striped pattern, for validating texture
-  // coordinates for sampling.
-  uint8_t y_value = 0;
-  uint8_t u_value = 0;
-  uint8_t v_value = 0;
-  for (int i = 0; i < video_frame->rows(media::VideoFrame::Plane::kY); ++i) {
-    uint8_t* y_row = video_frame->writable_data(media::VideoFrame::Plane::kY) +
-                     video_frame->stride(media::VideoFrame::Plane::kY) * i;
-    for (int j = 0; j < video_frame->row_bytes(media::VideoFrame::Plane::kY);
-         ++j) {
-      y_row[j] = (y_value += 1);
-    }
-  }
-  for (int i = 0; i < video_frame->rows(media::VideoFrame::Plane::kU); ++i) {
-    uint8_t* u_row = video_frame->writable_data(media::VideoFrame::Plane::kU) +
-                     video_frame->stride(media::VideoFrame::Plane::kU) * i;
-    uint8_t* v_row = video_frame->writable_data(media::VideoFrame::Plane::kV) +
-                     video_frame->stride(media::VideoFrame::Plane::kV) * i;
-    for (int j = 0; j < video_frame->row_bytes(media::VideoFrame::Plane::kU);
-         ++j) {
-      u_row[j] = (u_value += 3);
-      v_row[j] = (v_value += 5);
-    }
-  }
-  uint8_t alpha_value = is_transparent ? 0 : 128;
+class TestVideoFrameBuilder {
+ public:
+  TestVideoFrameBuilder() = delete;
 
-  if (highbit) {
-    video_frame = CreateHighbitVideoFrame(video_frame.get());
-  }
-  video_frame->set_color_space(color_space);
-
-  CreateTestMultiplanarVideoDrawQuad_FromVideoFrame(
-      video_frame, alpha_value, gfx::Transform(), gfx::MaskFilterInfo(),
-      /*sorting_context_id=*/0, render_pass, video_resource_updater, rect,
-      visible_rect, resource_provider, child_resource_provider,
-      child_context_provider);
-}
-
-// Creates a video frame of size background_size filled with yuv_background,
-// and then draws a foreground rectangle in a different color on top of
-// that. The foreground rectangle must have coordinates that are divisible
-// by 2 because YUV is a block format.
-void CreateTestMultiplanarVideoDrawQuad_TwoColor(
-    media::VideoPixelFormat format,
-    gfx::ColorSpace color_space,
-    gfx::Transform transform,
-    int sorting_context_id,
-    const gfx::RectF& tex_coord_rect,
-    const gfx::Size& background_size,
-    const gfx::Rect& visible_rect,
-    uint8_t y_background,
-    uint8_t u_background,
-    uint8_t v_background,
-    const gfx::Rect& foreground_rect,
-    uint8_t y_foreground,
-    uint8_t u_foreground,
-    uint8_t v_foreground,
-    CompositorRenderPass* render_pass,
-    media::VideoResourceUpdater* video_resource_updater,
-    DisplayResourceProvider* resource_provider,
-    ClientResourceProvider* child_resource_provider,
-    RasterContextProvider* child_context_provider) {
-  const gfx::Rect rect(background_size);
-  const gfx::Size coded_size = background_size;
-  const gfx::Rect video_visible_rect = gfx::ToNearestRect(
-      gfx::RectF(tex_coord_rect.x() * coded_size.width(),
-                 tex_coord_rect.y() * coded_size.height(),
-                 tex_coord_rect.width() * coded_size.width(),
-                 tex_coord_rect.height() * coded_size.height()));
-  // Pass `visible_rect.size()` for natural_size except for videos with
-  // non-square pixels where it is `visible_rect.size()` scaled by aspect of the
-  // pixel.
-  scoped_refptr<media::VideoFrame> video_frame =
-      media::VideoFrame::CreateFrame(format, coded_size, video_visible_rect,
-                                     visible_rect.size(), base::TimeDelta());
-  video_frame->set_color_space(color_space);
-
-  int planes[] = {media::VideoFrame::Plane::kY, media::VideoFrame::Plane::kU,
-                  media::VideoFrame::Plane::kV};
-  uint8_t yuv_background[] = {y_background, u_background, v_background};
-  uint8_t yuv_foreground[] = {y_foreground, u_foreground, v_foreground};
-  int sample_size[] = {1, 2, 2};
-
-  for (int i = 0; i < 3; ++i) {
-    memset(video_frame->writable_data(planes[i]), yuv_background[i],
-           video_frame->stride(planes[i]) * video_frame->rows(planes[i]));
+  // Create an empty video frame with common parameters.
+  TestVideoFrameBuilder(media::VideoPixelFormat format,
+                        const gfx::ColorSpace& color_space,
+                        const gfx::RectF& tex_coord_rect,
+                        const gfx::Size& coded_size,
+                        const gfx::Size& natural_size) {
+    const gfx::Rect video_visible_rect = gfx::ToNearestRect(
+        gfx::RectF(tex_coord_rect.x() * coded_size.width(),
+                   tex_coord_rect.y() * coded_size.height(),
+                   tex_coord_rect.width() * coded_size.width(),
+                   tex_coord_rect.height() * coded_size.height()));
+    video_frame_ =
+        media::VideoFrame::CreateFrame(format, coded_size, video_visible_rect,
+                                       natural_size, base::TimeDelta());
+    video_frame_->set_color_space(color_space);
   }
 
-  for (int i = 0; i < 3; ++i) {
-    // Since yuv encoding uses block encoding, widths have to be divisible
-    // by the sample size in order for this function to behave properly.
-    DCHECK_EQ(foreground_rect.x() % sample_size[i], 0);
-    DCHECK_EQ(foreground_rect.y() % sample_size[i], 0);
-    DCHECK_EQ(foreground_rect.width() % sample_size[i], 0);
-    DCHECK_EQ(foreground_rect.height() % sample_size[i], 0);
-
-    gfx::Rect sample_rect(foreground_rect.x() / sample_size[i],
-                          foreground_rect.y() / sample_size[i],
-                          foreground_rect.width() / sample_size[i],
-                          foreground_rect.height() / sample_size[i]);
-    for (int y = sample_rect.y(); y < sample_rect.bottom(); ++y) {
-      for (int x = sample_rect.x(); x < sample_rect.right(); ++x) {
-        size_t offset = y * video_frame->stride(planes[i]) + x;
-        video_frame->writable_data(planes[i])[offset] = yuv_foreground[i];
+  scoped_refptr<media::VideoFrame> DrawStriped() {
+    // YUV values representing a striped pattern, for validating texture
+    // coordinates for sampling.
+    uint8_t y_value = 0;
+    uint8_t u_value = 0;
+    uint8_t v_value = 0;
+    for (int i = 0; i < video_frame_->rows(media::VideoFrame::Plane::kY); ++i) {
+      uint8_t* y_row =
+          video_frame_->writable_data(media::VideoFrame::Plane::kY) +
+          video_frame_->stride(media::VideoFrame::Plane::kY) * i;
+      for (int j = 0; j < video_frame_->row_bytes(media::VideoFrame::Plane::kY);
+           ++j) {
+        y_row[j] = (y_value += 1);
       }
     }
-  }
-
-  uint8_t alpha_value = 255;
-  CreateTestMultiplanarVideoDrawQuad_FromVideoFrame(
-      video_frame, alpha_value, transform, gfx::MaskFilterInfo(),
-      sorting_context_id, render_pass, video_resource_updater, rect,
-      visible_rect, resource_provider, child_resource_provider,
-      child_context_provider);
-}
-
-void CreateTestMultiplanarVideoDrawQuad_Solid(
-    media::VideoPixelFormat format,
-    const gfx::ColorSpace& color_space,
-    bool is_transparent,
-    const gfx::RectF& tex_coord_rect,
-    uint8_t y,
-    uint8_t u,
-    uint8_t v,
-    CompositorRenderPass* render_pass,
-    media::VideoResourceUpdater* video_resource_updater,
-    const gfx::Rect& rect,
-    const gfx::Rect& visible_rect,
-    DisplayResourceProvider* resource_provider,
-    ClientResourceProvider* child_resource_provider,
-    RasterContextProvider* child_context_provider) {
-  const gfx::Size coded_size = rect.size();
-  const gfx::Rect video_visible_rect = gfx::ToNearestRect(
-      gfx::RectF(tex_coord_rect.x() * coded_size.width(),
-                 tex_coord_rect.y() * coded_size.height(),
-                 tex_coord_rect.width() * coded_size.width(),
-                 tex_coord_rect.height() * coded_size.height()));
-  // Pass `visible_rect.size()` for natural_size except for videos with
-  // non-square pixels where it is `visible_rect.size()` scaled by aspect of the
-  // pixel.
-  scoped_refptr<media::VideoFrame> video_frame =
-      media::VideoFrame::CreateFrame(format, coded_size, video_visible_rect,
-                                     visible_rect.size(), base::TimeDelta());
-  video_frame->set_color_space(color_space);
-
-  // YUV values of a solid, constant, color. Useful for testing that color
-  // space/color range are being handled properly.
-  memset(video_frame->writable_data(media::VideoFrame::Plane::kY), y,
-         video_frame->stride(media::VideoFrame::Plane::kY) *
-             video_frame->rows(media::VideoFrame::Plane::kY));
-  if (format == media::PIXEL_FORMAT_NV12) {
-    const int stride_uv = video_frame->stride(media::VideoFrame::Plane::kUV);
-    const int half_height = (coded_size.height() + 1) / 2;
-    uint8_t* uv_plane =
-        video_frame->writable_data(media::VideoFrame::Plane::kUV);
-    // Set U and V.
-    for (int row = 0; row < half_height; ++row) {
-      for (int col = 0; col < stride_uv; col++) {
-        *uv_plane = col % 2 == 0 ? u : v;
-        uv_plane++;
+    for (int i = 0; i < video_frame_->rows(media::VideoFrame::Plane::kU); ++i) {
+      uint8_t* u_row =
+          video_frame_->writable_data(media::VideoFrame::Plane::kU) +
+          video_frame_->stride(media::VideoFrame::Plane::kU) * i;
+      uint8_t* v_row =
+          video_frame_->writable_data(media::VideoFrame::Plane::kV) +
+          video_frame_->stride(media::VideoFrame::Plane::kV) * i;
+      for (int j = 0; j < video_frame_->row_bytes(media::VideoFrame::Plane::kU);
+           ++j) {
+        u_row[j] = (u_value += 3);
+        v_row[j] = (v_value += 5);
       }
     }
-  } else {
-    // Only NV12, YV12 and I420 formats are used for testing here.
-    CHECK(format == media::PIXEL_FORMAT_I420 ||
-          format == media::PIXEL_FORMAT_YV12);
-    memset(video_frame->writable_data(media::VideoFrame::Plane::kU), u,
-           video_frame->stride(media::VideoFrame::Plane::kU) *
-               video_frame->rows(media::VideoFrame::Plane::kU));
-    memset(video_frame->writable_data(media::VideoFrame::Plane::kV), v,
-           video_frame->stride(media::VideoFrame::Plane::kV) *
-               video_frame->rows(media::VideoFrame::Plane::kV));
+
+    return std::move(video_frame_);
   }
 
-  uint8_t alpha_value = is_transparent ? 0 : 128;
-  CreateTestMultiplanarVideoDrawQuad_FromVideoFrame(
-      video_frame, alpha_value, gfx::Transform(), gfx::MaskFilterInfo(),
-      /*sorting_context_id=*/0, render_pass, video_resource_updater, rect,
-      visible_rect, resource_provider, child_resource_provider,
-      child_context_provider);
-}
+  // Creates a video frame of size background_size filled with yuv_background,
+  // and then draws a foreground rectangle in a different color on top of
+  // that. The foreground rectangle must have coordinates that are divisible
+  // by 2 because YUV is a block format.
+  scoped_refptr<media::VideoFrame> DrawTwoColor(
+      uint8_t y_background,
+      uint8_t u_background,
+      uint8_t v_background,
+      const gfx::Rect& foreground_rect,
+      uint8_t y_foreground,
+      uint8_t u_foreground,
+      uint8_t v_foreground) {
+    int planes[] = {media::VideoFrame::Plane::kY, media::VideoFrame::Plane::kU,
+                    media::VideoFrame::Plane::kV};
+    uint8_t yuv_background[] = {y_background, u_background, v_background};
+    uint8_t yuv_foreground[] = {y_foreground, u_foreground, v_foreground};
+    int sample_size[] = {1, 2, 2};
+
+    for (int i = 0; i < 3; ++i) {
+      memset(video_frame_->writable_data(planes[i]), yuv_background[i],
+             video_frame_->stride(planes[i]) * video_frame_->rows(planes[i]));
+    }
+
+    for (int i = 0; i < 3; ++i) {
+      // Since yuv encoding uses block encoding, widths have to be divisible
+      // by the sample size in order for this function to behave properly.
+      DCHECK_EQ(foreground_rect.x() % sample_size[i], 0);
+      DCHECK_EQ(foreground_rect.y() % sample_size[i], 0);
+      DCHECK_EQ(foreground_rect.width() % sample_size[i], 0);
+      DCHECK_EQ(foreground_rect.height() % sample_size[i], 0);
+
+      gfx::Rect sample_rect(foreground_rect.x() / sample_size[i],
+                            foreground_rect.y() / sample_size[i],
+                            foreground_rect.width() / sample_size[i],
+                            foreground_rect.height() / sample_size[i]);
+      for (int y = sample_rect.y(); y < sample_rect.bottom(); ++y) {
+        for (int x = sample_rect.x(); x < sample_rect.right(); ++x) {
+          size_t offset = y * video_frame_->stride(planes[i]) + x;
+          video_frame_->writable_data(planes[i])[offset] = yuv_foreground[i];
+        }
+      }
+    }
+
+    return std::move(video_frame_);
+  }
+
+  scoped_refptr<media::VideoFrame> DrawSolid(uint8_t y, uint8_t u, uint8_t v) {
+    // YUV values of a solid, constant, color. Useful for testing that color
+    // space/color range are being handled properly.
+    memset(video_frame_->writable_data(media::VideoFrame::Plane::kY), y,
+           video_frame_->stride(media::VideoFrame::Plane::kY) *
+               video_frame_->rows(media::VideoFrame::Plane::kY));
+    if (video_frame_->format() == media::PIXEL_FORMAT_NV12) {
+      const int stride_uv = video_frame_->stride(media::VideoFrame::Plane::kUV);
+      const int half_height = (video_frame_->coded_size().height() + 1) / 2;
+      uint8_t* uv_plane =
+          video_frame_->writable_data(media::VideoFrame::Plane::kUV);
+      // Set U and V.
+      for (int row = 0; row < half_height; ++row) {
+        for (int col = 0; col < stride_uv; col++) {
+          *uv_plane = col % 2 == 0 ? u : v;
+          uv_plane++;
+        }
+      }
+    } else {
+      // Only NV12, YV12 and I420 formats are used for testing here.
+      CHECK(video_frame_->format() == media::PIXEL_FORMAT_I420 ||
+            video_frame_->format() == media::PIXEL_FORMAT_YV12);
+      memset(video_frame_->writable_data(media::VideoFrame::Plane::kU), u,
+             video_frame_->stride(media::VideoFrame::Plane::kU) *
+                 video_frame_->rows(media::VideoFrame::Plane::kU));
+      memset(video_frame_->writable_data(media::VideoFrame::Plane::kV), v,
+             video_frame_->stride(media::VideoFrame::Plane::kV) *
+                 video_frame_->rows(media::VideoFrame::Plane::kV));
+    }
+
+    return std::move(video_frame_);
+  }
+
+ private:
+  scoped_refptr<media::VideoFrame> video_frame_;
+};
 
 // Create two quads of specified colors on half-pixel boundaries.
 void CreateTestAxisAlignedQuads(const gfx::Rect& rect,
@@ -937,7 +829,7 @@ TEST_P(RendererPixelTest, SimpleDamageRect) {
 TEST_P(RendererPixelTest, OutputSurfaceClipRect) {
   gfx::Rect rect(device_viewport_size_);
 
-  auto draw_frame = [&](base::FilePath::StringPieceType path, SkColor4f color) {
+  auto draw_frame = [&](base::FilePath::StringViewType path, SkColor4f color) {
     AggregatedRenderPassId id{1};
     auto pass = CreateTestRootRenderPass(id, rect);
 
@@ -1597,6 +1489,120 @@ TEST_P(RendererPixelTest, BypassableRenderPassQuad_DoubleBypass_ScaledClip) {
       cc::ExactPixelComparator()));
 }
 
+TEST_P(RendererPixelTest, BypassableRenderPassQuad_BackdropFilter_Extents) {
+  // This tests that a bypassable render pass with a backdrop filter applies
+  // the backdrop filter to the RPDQ's entire visible_rect, even if the
+  // child of the render pass has smaller content that is being drawn directly
+  // because of the bypass.
+  gfx::Rect root_pass_rect(device_viewport_size_);
+  gfx::Rect backdrop_pass_rect(device_viewport_size_.width() - 20,
+                               device_viewport_size_.height() - 20);
+  gfx::Rect child_content_rect(90, 90);
+
+  AggregatedRenderPassId root_pass_id{1};
+  AggregatedRenderPassId backdrop_pass_id{2};
+
+  gfx::Transform transform_root_to_backdrop_pass;
+  transform_root_to_backdrop_pass.Translate(10, 10);
+
+  AggregatedRenderPassList pass_list;
+  {
+    // The child render pass has a single TextureDrawQuad so it will be bypassed
+    // by SkiaRenderer. The TextureDrawQuad is smaller than the visible rect
+    // of the child render pass, which has a backdrop filter that should cover
+    // the root pass up to a 10px inset.
+    auto backdrop_pass = std::make_unique<AggregatedRenderPass>();
+    backdrop_pass->SetNew(backdrop_pass_id, backdrop_pass_rect,
+                          backdrop_pass_rect,
+                          transform_root_to_backdrop_pass.GetCheckedInverse());
+    backdrop_pass->backdrop_filters.Append(
+        cc::FilterOperation::CreateBlurFilter(8.f, SkTileMode::kMirror));
+
+    gfx::Transform transform_child_to_backdrop_pass;
+    transform_child_to_backdrop_pass.Translate(
+        backdrop_pass_rect.CenterPoint().x() -
+            0.5f * child_content_rect.width(),
+        backdrop_pass_rect.CenterPoint().y() -
+            0.5f * child_content_rect.height());
+
+    auto* sqs = CreateTestSharedQuadState(
+        transform_child_to_backdrop_pass, child_content_rect,
+        backdrop_pass.get(), gfx::MaskFilterInfo());
+    sqs->clip_rect = cc::MathUtil::MapEnclosingClippedRect(
+        transform_child_to_backdrop_pass, child_content_rect);
+
+    // NOTE: From https://g-issues.chromium.org/issues/355981041, the backdrop
+    // filter of a bypassed render pass was being restricted to the visible rect
+    // of the child. Use kTransparent for the outer color and background color
+    // to allow backdrop filtered content to be visible under part of this
+    // texture quad to highlight that the filter is being processed, but was
+    // incorrectly clipped during bypassing.
+    CreateTestTwoColoredTextureDrawQuad(
+        !is_software_renderer(), child_content_rect,
+        /*texel_color_one=*/SkColors::kTransparent,
+        /*texel_color_two=*/SkColors::kMagenta,
+        /*background_color=*/SkColors::kTransparent,
+        /*premultiplied_alpha=*/true,
+        /*flipped_texture_quad=*/false,
+        /*half_and_half=*/false, sqs, resource_provider_.get(),
+        child_resource_provider_.get(), child_context_provider_,
+        backdrop_pass.get());
+    pass_list.push_back(std::move(backdrop_pass));
+  }
+
+  {
+    // The root render pass has a blue and yellow checkerboard background and
+    // draws the (bypassed) render pass inset in the root by 10px.
+    auto root_pass = CreateTestRootRenderPass(root_pass_id, root_pass_rect);
+    {
+      auto* sqs = CreateTestSharedQuadState(transform_root_to_backdrop_pass,
+                                            backdrop_pass_rect, root_pass.get(),
+                                            gfx::MaskFilterInfo());
+      auto* pass_quad =
+          root_pass->CreateAndAppendDrawQuad<AggregatedRenderPassDrawQuad>();
+      pass_quad->SetNew(sqs, backdrop_pass_rect, backdrop_pass_rect,
+                        backdrop_pass_id, kInvalidResourceId, gfx::RectF(),
+                        gfx::Size(), gfx::Vector2dF(1.0f, 1.0f), gfx::PointF(),
+                        gfx::RectF(backdrop_pass_rect), false, 1.0f);
+    }
+    {
+      auto* sqs =
+          CreateTestSharedQuadState(gfx::Transform(), root_pass_rect,
+                                    root_pass.get(), gfx::MaskFilterInfo());
+      static constexpr int checker_size = 16;
+
+      for (int y = root_pass_rect.y(); y < root_pass_rect.bottom();
+           y += checker_size) {
+        for (int x = root_pass_rect.x(); x < root_pass_rect.right();
+             x += checker_size) {
+          gfx::Rect box{x, y, checker_size, checker_size};
+          bool firstColor =
+              ((x / checker_size) + ((y / checker_size) % 2)) % 2 == 0;
+          auto* quad = root_pass->CreateAndAppendDrawQuad<SolidColorDrawQuad>();
+          quad->SetNew(sqs, box, box,
+                       firstColor ? SkColors::kBlue : SkColors::kYellow, false);
+        }
+      }
+    }
+    pass_list.push_back(std::move(root_pass));
+  }
+
+  // Use a fairly fuzz comparison to allow for deviations in how the renderer
+  // types implement the actual blur. In particular, the SW renderer does not
+  // support the mirror tile mode so its blurs deviate more from GPU renderers.
+  const bool blur_fully_supported = !is_software_renderer();
+  auto comparator =
+      cc::FuzzyPixelComparator()
+          .SetErrorPixelsPercentageLimit(blur_fully_supported ? 0.2f : 53.f)
+          .SetAvgAbsErrorLimit(blur_fully_supported ? 1 : 2)
+          .SetAbsErrorLimit(blur_fully_supported ? 1 : 8);
+
+  EXPECT_TRUE(this->RunPixelTest(
+      &pass_list,
+      base::FilePath(FILE_PATH_LITERAL("bypass_texture_backdrop_extent.png")),
+      comparator));
+}
+
 TEST_P(RendererPixelTest, TextureDrawQuadVisibleRectInsetBottomRight) {
 #if BUILDFLAG(IS_LINUX) && defined(THREAD_SANITIZER)
   // Test is flaking with failed large allocations under TSAN when using
@@ -1916,20 +1922,19 @@ class IntersectingMultiplanarVideoQuadPixelTest : public VizPixelTestWithParam {
  public:
   void SetUp() override {
     VizPixelTestWithParam::SetUp();
-    constexpr bool kUseStreamVideoDrawQuad = false;
     constexpr bool kUseGpuMemoryBufferResources = false;
     constexpr int kMaxResourceSize = 10000;
 
     video_resource_updater_ = std::make_unique<media::VideoResourceUpdater>(
         this->child_context_provider_.get(),
         this->child_resource_provider_.get(),
-        /*shared_image_interface=*/nullptr, kUseStreamVideoDrawQuad,
-        kUseGpuMemoryBufferResources, kMaxResourceSize);
+        /*shared_image_interface=*/nullptr, kUseGpuMemoryBufferResources,
+        kMaxResourceSize);
     video_resource_updater2_ = std::make_unique<media::VideoResourceUpdater>(
         this->child_context_provider_.get(),
         this->child_resource_provider_.get(),
-        /*shared_image_interface=*/nullptr, kUseStreamVideoDrawQuad,
-        kUseGpuMemoryBufferResources, kMaxResourceSize);
+        /*shared_image_interface=*/nullptr, kUseGpuMemoryBufferResources,
+        kMaxResourceSize);
   }
 
   void TearDown() override {
@@ -2211,19 +2216,25 @@ TEST_P(IntersectingMultiplanarVideoQuadPixelTest, YUVVideoQuads) {
       (this->quad_rect_.width() / 2) & ~0xF,
       (this->quad_rect_.height() / 2) & ~0xF);
 
-  CreateTestMultiplanarVideoDrawQuad_TwoColor(
-      media::PIXEL_FORMAT_I420, gfx::ColorSpace::CreateJpeg(), transform_,
-      sorting_context_id_, gfx::RectF(0.0f, 0.0f, 1.0f, 1.0f),
-      this->quad_rect_.size(), this->quad_rect_, 0, 128, 128, inner_rect, 29,
-      255, 107, this->render_pass_.get(), this->video_resource_updater_.get(),
+  CreateTestMultiplanarVideoDrawQuad(
+      TestVideoFrameBuilder(media::PIXEL_FORMAT_I420,
+                            gfx::ColorSpace::CreateJpeg(), kUnitSquare,
+                            this->quad_rect_.size(), this->quad_rect_.size())
+          .DrawTwoColor(0, 128, 128, inner_rect, 29, 255, 107),
+      /*alpha_value=*/255, transform_, gfx::MaskFilterInfo(),
+      sorting_context_id_, this->render_pass_.get(),
+      this->video_resource_updater_.get(), this->quad_rect_, this->quad_rect_,
       this->resource_provider_.get(), this->child_resource_provider_.get(),
       this->child_context_provider_.get());
 
-  CreateTestMultiplanarVideoDrawQuad_TwoColor(
-      media::PIXEL_FORMAT_I420, gfx::ColorSpace::CreateJpeg(), transform2_,
-      sorting_context_id_, gfx::RectF(0.0f, 0.0f, 1.0f, 1.0f),
-      this->quad_rect_.size(), this->quad_rect_, 149, 43, 21, inner_rect, 0,
-      128, 128, this->render_pass_.get(), this->video_resource_updater2_.get(),
+  CreateTestMultiplanarVideoDrawQuad(
+      TestVideoFrameBuilder(media::PIXEL_FORMAT_I420,
+                            gfx::ColorSpace::CreateJpeg(), kUnitSquare,
+                            this->quad_rect_.size(), this->quad_rect_.size())
+          .DrawTwoColor(149, 43, 21, inner_rect, 0, 128, 128),
+      /*alpha_value=*/255, transform2_, gfx::MaskFilterInfo(),
+      sorting_context_id_, this->render_pass_.get(),
+      this->video_resource_updater_.get(), this->quad_rect_, this->quad_rect_,
       this->resource_provider_.get(), this->child_resource_provider_.get(),
       this->child_context_provider_.get());
 
@@ -2380,12 +2391,16 @@ class VideoRendererPixelTestBase : public VizPixelTest {
     // green sub-rectangle that should be the only thing displayed in
     // the final image.  Bleeding will appear on all four sides of the video
     // if the tex coords are not clamped.
-    CreateTestMultiplanarVideoDrawQuad_TwoColor(
-        format, color_space, scale_by_2,
-        /*sorting_context_id=*/0, tex_coord_rect, background_size,
-        gfx::Rect(background_size), 128, 128, 128, green_rect, 149, 43, 21,
-        pass.get(), video_resource_updater_.get(), resource_provider_.get(),
-        child_resource_provider_.get(), child_context_provider_.get());
+    CreateTestMultiplanarVideoDrawQuad(
+        TestVideoFrameBuilder(format, color_space, tex_coord_rect,
+                              background_size, background_size)
+            .DrawTwoColor(128, 128, 128, green_rect, 149, 43, 21),
+        /*alpha_value=*/255, scale_by_2, gfx::MaskFilterInfo(),
+        /*sorting_context_id=*/0, pass.get(),
+        this->video_resource_updater_.get(), gfx::Rect(background_size),
+        gfx::Rect(background_size), this->resource_provider_.get(),
+        this->child_resource_provider_.get(),
+        this->child_context_provider_.get());
 
     AggregatedRenderPassId new_id{1};
     auto copy_pass = cc::CopyToAggregatedRenderPass(
@@ -2395,13 +2410,12 @@ class VideoRendererPixelTestBase : public VizPixelTest {
 
   void SetUp() override {
     VizPixelTest::SetUp();
-    constexpr bool kUseStreamVideoDrawQuad = false;
     constexpr bool kUseGpuMemoryBufferResources = false;
     constexpr int kMaxResourceSize = 10000;
     video_resource_updater_ = std::make_unique<media::VideoResourceUpdater>(
         child_context_provider_.get(), child_resource_provider_.get(),
-        /*shared_image_interface=*/nullptr, kUseStreamVideoDrawQuad,
-        kUseGpuMemoryBufferResources, kMaxResourceSize);
+        /*shared_image_interface=*/nullptr, kUseGpuMemoryBufferResources,
+        kMaxResourceSize);
   }
 
   void TearDown() override {
@@ -2413,6 +2427,50 @@ class VideoRendererPixelTestBase : public VizPixelTest {
 };
 
 #if BUILDFLAG(ENABLE_GL_BACKEND_TESTS)
+// Upshift video frame to 10 bit.
+scoped_refptr<media::VideoFrame> CreateHighbitVideoFrame(
+    media::VideoFrame* video_frame) {
+  media::VideoPixelFormat format;
+  switch (video_frame->format()) {
+    case media::PIXEL_FORMAT_I420:
+      format = media::PIXEL_FORMAT_YUV420P10;
+      break;
+    case media::PIXEL_FORMAT_I422:
+      format = media::PIXEL_FORMAT_YUV422P10;
+      break;
+    case media::PIXEL_FORMAT_I444:
+      format = media::PIXEL_FORMAT_YUV444P10;
+      break;
+
+    default:
+      NOTREACHED();
+  }
+  scoped_refptr<media::VideoFrame> ret = media::VideoFrame::CreateFrame(
+      format, video_frame->coded_size(), video_frame->visible_rect(),
+      video_frame->natural_size(), video_frame->timestamp());
+  ret->set_color_space(video_frame->ColorSpace());
+
+  // Copy all metadata.
+  ret->metadata().MergeMetadataFrom(video_frame->metadata());
+
+  for (int plane = media::VideoFrame::Plane::kY;
+       plane <= media::VideoFrame::Plane::kV; ++plane) {
+    int width = video_frame->row_bytes(plane);
+    const uint8_t* src = video_frame->data(plane);
+    uint16_t* dst = reinterpret_cast<uint16_t*>(ret->writable_data(plane));
+    for (int row = 0; row < video_frame->rows(plane); row++) {
+      for (int x = 0; x < width; x++) {
+        // Replicate the top bits into the lower bits, this way
+        // 0xFF becomes 0x3FF.
+        dst[x] = (src[x] << 2) | (src[x] >> 6);
+      }
+      src += video_frame->stride(plane);
+      dst += ret->stride(plane) / 2;
+    }
+  }
+  return ret;
+}
+
 class VideoRendererPixelHiLoTest : public VideoRendererPixelTestBase,
                                    public testing::WithParamInterface<bool> {
  public:
@@ -2432,11 +2490,20 @@ TEST_P(VideoRendererPixelHiLoTest, SimpleYUVRect) {
   // Set the output color space to match the input primaries and transfer.
   this->display_color_spaces_ = kRec601DisplayColorSpaces;
 
-  CreateTestMultiplanarVideoDrawQuad_Striped(
-      media::PIXEL_FORMAT_I420, gfx::ColorSpace::CreateREC601(), false,
-      IsHighbit(), gfx::RectF(0.0f, 0.0f, 1.0f, 1.0f), pass.get(),
-      this->video_resource_updater_.get(), rect, rect,
-      this->resource_provider_.get(), this->child_resource_provider_.get(),
+  auto video_frame =
+      TestVideoFrameBuilder(media::PIXEL_FORMAT_I420,
+                            gfx::ColorSpace::CreateREC601(), kUnitSquare,
+                            rect.size(), rect.size())
+          .DrawStriped();
+  if (IsHighbit()) {
+    video_frame = CreateHighbitVideoFrame(video_frame.get());
+  }
+  CreateTestMultiplanarVideoDrawQuad(
+      std::move(video_frame), /*alpha_value=*/255, gfx::Transform(),
+      gfx::MaskFilterInfo(),
+      /*sorting_context_id=*/0, pass.get(), this->video_resource_updater_.get(),
+      rect, rect, this->resource_provider_.get(),
+      this->child_resource_provider_.get(),
       this->child_context_provider_.get());
 
   AggregatedRenderPassId new_id{1};
@@ -2515,11 +2582,19 @@ TEST_P(VideoRendererPixelHiLoColorSpaceTest, SimpleYUVRect) {
   // Set the output color space to match the input primaries and transfer.
   this->display_color_spaces_ = kRec601DisplayColorSpaces;
 
-  CreateTestMultiplanarVideoDrawQuad_Striped(
-      media::PIXEL_FORMAT_I420, GetColorSpace(), false, IsHighbit(),
-      gfx::RectF(0.0f, 0.0f, 1.0f, 1.0f), pass.get(),
-      this->video_resource_updater_.get(), rect, rect,
-      this->resource_provider_.get(), this->child_resource_provider_.get(),
+  scoped_refptr<media::VideoFrame> video_frame =
+      TestVideoFrameBuilder(media::PIXEL_FORMAT_I420, GetColorSpace(),
+                            kUnitSquare, rect.size(), rect.size())
+          .DrawStriped();
+  if (IsHighbit()) {
+    video_frame = CreateHighbitVideoFrame(video_frame.get());
+  }
+  CreateTestMultiplanarVideoDrawQuad(
+      std::move(video_frame), /*alpha_value=*/255, gfx::Transform(),
+      gfx::MaskFilterInfo(),
+      /*sorting_context_id=*/0, pass.get(), this->video_resource_updater_.get(),
+      rect, rect, this->resource_provider_.get(),
+      this->child_resource_provider_.get(),
       this->child_context_provider_.get());
 
   AggregatedRenderPassId new_id{1};
@@ -2559,11 +2634,20 @@ TEST_P(VideoRendererPixelHiLoTest, MAYBE_ClippedYUVRect) {
   // Set the output color space to match the input primaries and transfer.
   this->display_color_spaces_ = kRec601DisplayColorSpaces;
 
-  CreateTestMultiplanarVideoDrawQuad_Striped(
-      media::PIXEL_FORMAT_I420, gfx::ColorSpace::CreateREC601(), false,
-      IsHighbit(), gfx::RectF(0.0f, 0.0f, 1.0f, 1.0f), pass.get(),
-      this->video_resource_updater_.get(), draw_rect, viewport,
-      this->resource_provider_.get(), this->child_resource_provider_.get(),
+  scoped_refptr<media::VideoFrame> video_frame =
+      TestVideoFrameBuilder(media::PIXEL_FORMAT_I420,
+                            gfx::ColorSpace::CreateREC601(), kUnitSquare,
+                            draw_rect.size(), viewport.size())
+          .DrawStriped();
+  if (IsHighbit()) {
+    video_frame = CreateHighbitVideoFrame(video_frame.get());
+  }
+  CreateTestMultiplanarVideoDrawQuad(
+      std::move(video_frame), /*alpha_value=*/255, gfx::Transform(),
+      gfx::MaskFilterInfo(),
+      /*sorting_context_id=*/0, pass.get(), this->video_resource_updater_.get(),
+      draw_rect, viewport, this->resource_provider_.get(),
+      this->child_resource_provider_.get(),
       this->child_context_provider_.get());
 
   AggregatedRenderPassId new_id{1};
@@ -2605,11 +2689,15 @@ TEST_P(VideoRendererPixelTest, OffsetYUVRect) {
   this->display_color_spaces_ = kRec601DisplayColorSpaces;
 
   // Intentionally sets frame format to I420 for testing coverage.
-  CreateTestMultiplanarVideoDrawQuad_Striped(
-      media::PIXEL_FORMAT_I420, gfx::ColorSpace::CreateREC601(), false, false,
-      gfx::RectF(0.125f, 0.25f, 0.75f, 0.5f), pass.get(),
-      this->video_resource_updater_.get(), rect, rect,
-      this->resource_provider_.get(), this->child_resource_provider_.get(),
+  CreateTestMultiplanarVideoDrawQuad(
+      TestVideoFrameBuilder(
+          media::PIXEL_FORMAT_I420, gfx::ColorSpace::CreateREC601(),
+          gfx::RectF(0.125f, 0.25f, 0.75f, 0.5f), rect.size(), rect.size())
+          .DrawStriped(),
+      /*alpha_value=*/255, gfx::Transform(), gfx::MaskFilterInfo(),
+      /*sorting_context_id=*/0, pass.get(), this->video_resource_updater_.get(),
+      rect, rect, this->resource_provider_.get(),
+      this->child_resource_provider_.get(),
       this->child_context_provider_.get());
 
   AggregatedRenderPassId new_id{1};
@@ -2638,11 +2726,15 @@ TEST_P(VideoRendererPixelTest, SimpleYUVRectBlack) {
   this->display_color_spaces_ = kRec601DisplayColorSpaces;
 
   // In MPEG color range YUV values of (15,128,128) should produce black.
-  CreateTestMultiplanarVideoDrawQuad_Solid(
-      media::PIXEL_FORMAT_I420, gfx::ColorSpace::CreateREC601(), false,
-      gfx::RectF(0.0f, 0.0f, 1.0f, 1.0f), 15, 128, 128, pass.get(),
-      this->video_resource_updater_.get(), rect, rect,
-      this->resource_provider_.get(), this->child_resource_provider_.get(),
+  CreateTestMultiplanarVideoDrawQuad(
+      TestVideoFrameBuilder(media::PIXEL_FORMAT_I420,
+                            gfx::ColorSpace::CreateREC601(), kUnitSquare,
+                            rect.size(), rect.size())
+          .DrawSolid(15, 128, 128),
+      /*alpha_value=*/255, gfx::Transform(), gfx::MaskFilterInfo(),
+      /*sorting_context_id=*/0, pass.get(), this->video_resource_updater_.get(),
+      rect, rect, this->resource_provider_.get(),
+      this->child_resource_provider_.get(),
       this->child_context_provider_.get());
 
   AggregatedRenderPassId new_id{1};
@@ -2666,11 +2758,15 @@ TEST_P(VideoRendererPixelTest, SimpleYUVJRect) {
   auto pass = CreateTestRootRenderPass(id, rect);
 
   // YUV of (149,43,21) should be green (0,255,0) in RGB.
-  CreateTestMultiplanarVideoDrawQuad_Solid(
-      media::PIXEL_FORMAT_I420, gfx::ColorSpace::CreateJpeg(), false,
-      gfx::RectF(0.0f, 0.0f, 1.0f, 1.0f), 149, 43, 21, pass.get(),
-      this->video_resource_updater_.get(), rect, rect,
-      this->resource_provider_.get(), this->child_resource_provider_.get(),
+  CreateTestMultiplanarVideoDrawQuad(
+      TestVideoFrameBuilder(media::PIXEL_FORMAT_I420,
+                            gfx::ColorSpace::CreateJpeg(), kUnitSquare,
+                            rect.size(), rect.size())
+          .DrawSolid(149, 43, 21),
+      /*alpha_value=*/255, gfx::Transform(), gfx::MaskFilterInfo(),
+      /*sorting_context_id=*/0, pass.get(), this->video_resource_updater_.get(),
+      rect, rect, this->resource_provider_.get(),
+      this->child_resource_provider_.get(),
       this->child_context_provider_.get());
 
   AggregatedRenderPassId new_id{1};
@@ -2692,11 +2788,15 @@ TEST_P(VideoRendererPixelTest, SimpleYUVJRectWithYV12) {
   auto pass = CreateTestRootRenderPass(id, rect);
 
   // YUV of (84,114,224) should be crimson red (220,20,60) in RGB.
-  CreateTestMultiplanarVideoDrawQuad_Solid(
-      media::PIXEL_FORMAT_YV12, gfx::ColorSpace::CreateJpeg(), false,
-      gfx::RectF(0.0f, 0.0f, 1.0f, 1.0f), 84, 114, 224, pass.get(),
-      this->video_resource_updater_.get(), rect, rect,
-      this->resource_provider_.get(), this->child_resource_provider_.get(),
+  CreateTestMultiplanarVideoDrawQuad(
+      TestVideoFrameBuilder(media::PIXEL_FORMAT_YV12,
+                            gfx::ColorSpace::CreateJpeg(), kUnitSquare,
+                            rect.size(), rect.size())
+          .DrawSolid(84, 114, 224),
+      /*alpha_value=*/255, gfx::Transform(), gfx::MaskFilterInfo(),
+      /*sorting_context_id=*/0, pass.get(), this->video_resource_updater_.get(),
+      rect, rect, this->resource_provider_.get(),
+      this->child_resource_provider_.get(),
       this->child_context_provider_.get());
 
   AggregatedRenderPassId new_id{1};
@@ -2723,11 +2823,15 @@ TEST_P(VideoRendererPixelTest, SimpleYUVJRectWithTemperature) {
   auto pass = CreateTestRootRenderPass(id, rect);
 
   // YUV of (225,0,148) should be yellow (255,255,0) in RGB.
-  CreateTestMultiplanarVideoDrawQuad_Solid(
-      media::PIXEL_FORMAT_I420, gfx::ColorSpace::CreateJpeg(), false,
-      gfx::RectF(0.0f, 0.0f, 1.0f, 1.0f), 225, 0, 148, pass.get(),
-      this->video_resource_updater_.get(), rect, rect,
-      this->resource_provider_.get(), this->child_resource_provider_.get(),
+  CreateTestMultiplanarVideoDrawQuad(
+      TestVideoFrameBuilder(media::PIXEL_FORMAT_I420,
+                            gfx::ColorSpace::CreateJpeg(), kUnitSquare,
+                            rect.size(), rect.size())
+          .DrawSolid(225, 0, 148),
+      /*alpha_value=*/255, gfx::Transform(), gfx::MaskFilterInfo(),
+      /*sorting_context_id=*/0, pass.get(), this->video_resource_updater_.get(),
+      rect, rect, this->resource_provider_.get(),
+      this->child_resource_provider_.get(),
       this->child_context_provider_.get());
 
   AggregatedRenderPassId new_id{1};
@@ -2755,11 +2859,15 @@ TEST_P(VideoRendererPixelTest, SimpleNV12JRect) {
   auto pass = CreateTestRootRenderPass(id, rect);
 
   // YUV of (149,100,50) should be emerald green (39, 214, 99) in RGB.
-  CreateTestMultiplanarVideoDrawQuad_Solid(
-      media::PIXEL_FORMAT_NV12, gfx::ColorSpace::CreateJpeg(), false,
-      gfx::RectF(0.0f, 0.0f, 1.0f, 1.0f), 149, 100, 50, pass.get(),
-      this->video_resource_updater_.get(), rect, rect,
-      this->resource_provider_.get(), this->child_resource_provider_.get(),
+  CreateTestMultiplanarVideoDrawQuad(
+      TestVideoFrameBuilder(media::PIXEL_FORMAT_NV12,
+                            gfx::ColorSpace::CreateJpeg(), kUnitSquare,
+                            rect.size(), rect.size())
+          .DrawSolid(149, 100, 50),
+      /*alpha_value=*/255, gfx::Transform(), gfx::MaskFilterInfo(),
+      /*sorting_context_id=*/0, pass.get(), this->video_resource_updater_.get(),
+      rect, rect, this->resource_provider_.get(),
+      this->child_resource_provider_.get(),
       this->child_context_provider_.get());
 
   AggregatedRenderPassId new_id{1};
@@ -2803,11 +2911,15 @@ TEST_P(VideoRendererPixelTest, SimpleYUVJRectGrey) {
   auto pass = CreateTestRootRenderPass(id, rect);
 
   // Dark grey in JPEG color range (in MPEG, this is black).
-  CreateTestMultiplanarVideoDrawQuad_Solid(
-      media::PIXEL_FORMAT_I420, gfx::ColorSpace::CreateJpeg(), false,
-      gfx::RectF(0.0f, 0.0f, 1.0f, 1.0f), 15, 128, 128, pass.get(),
-      this->video_resource_updater_.get(), rect, rect,
-      this->resource_provider_.get(), this->child_resource_provider_.get(),
+  CreateTestMultiplanarVideoDrawQuad(
+      TestVideoFrameBuilder(media::PIXEL_FORMAT_I420,
+                            gfx::ColorSpace::CreateJpeg(), kUnitSquare,
+                            rect.size(), rect.size())
+          .DrawSolid(15, 128, 128),
+      /*alpha_value=*/255, gfx::Transform(), gfx::MaskFilterInfo(),
+      /*sorting_context_id=*/0, pass.get(), this->video_resource_updater_.get(),
+      rect, rect, this->resource_provider_.get(),
+      this->child_resource_provider_.get(),
       this->child_context_provider_.get());
 
   AggregatedRenderPassId new_id{1};
@@ -2830,11 +2942,15 @@ TEST_P(VideoRendererPixelTest, SimpleYUVARect) {
   // Set the output color space to match the input primaries and transfer.
   this->display_color_spaces_ = kRec601DisplayColorSpaces;
 
-  CreateTestMultiplanarVideoDrawQuad_Striped(
-      media::PIXEL_FORMAT_I420A, gfx::ColorSpace::CreateREC601(), false, false,
-      gfx::RectF(0.0f, 0.0f, 1.0f, 1.0f), pass.get(),
-      this->video_resource_updater_.get(), rect, rect,
-      this->resource_provider_.get(), this->child_resource_provider_.get(),
+  CreateTestMultiplanarVideoDrawQuad(
+      TestVideoFrameBuilder(media::PIXEL_FORMAT_I420A,
+                            gfx::ColorSpace::CreateREC601(), kUnitSquare,
+                            rect.size(), rect.size())
+          .DrawStriped(),
+      /*alpha_value=*/128, gfx::Transform(), gfx::MaskFilterInfo(),
+      /*sorting_context_id=*/0, pass.get(), this->video_resource_updater_.get(),
+      rect, rect, this->resource_provider_.get(),
+      this->child_resource_provider_.get(),
       this->child_context_provider_.get());
 
   SharedQuadState* shared_state = CreateTestSharedQuadState(
@@ -2862,11 +2978,15 @@ TEST_P(VideoRendererPixelTest, FullyTransparentYUVARect) {
   // Set the output color space to match the input primaries and transfer.
   this->display_color_spaces_ = kRec601DisplayColorSpaces;
 
-  CreateTestMultiplanarVideoDrawQuad_Striped(
-      media::PIXEL_FORMAT_I420A, gfx::ColorSpace::CreateREC601(), true, false,
-      gfx::RectF(0.0f, 0.0f, 1.0f, 1.0f), pass.get(),
-      this->video_resource_updater_.get(), rect, rect,
-      this->resource_provider_.get(), this->child_resource_provider_.get(),
+  CreateTestMultiplanarVideoDrawQuad(
+      TestVideoFrameBuilder(media::PIXEL_FORMAT_I420A,
+                            gfx::ColorSpace::CreateREC601(), kUnitSquare,
+                            rect.size(), rect.size())
+          .DrawStriped(),
+      /*alpha_value=*/0, gfx::Transform(), gfx::MaskFilterInfo(),
+      /*sorting_context_id=*/0, pass.get(), this->video_resource_updater_.get(),
+      rect, rect, this->resource_provider_.get(),
+      this->child_resource_provider_.get(),
       this->child_context_provider_.get());
 
   SharedQuadState* shared_state = CreateTestSharedQuadState(
@@ -5838,6 +5958,8 @@ class RendererPixelTestColorConversion
     this->display_color_spaces_ =
         gfx::DisplayColorSpaces(gfx::ColorSpace::CreateSCRGBLinear80Nits());
     this->display_color_spaces_.SetSDRMaxLuminanceNits(80.f);
+    this->display_color_spaces_.SetOutputBufferFormats(
+        gfx::BufferFormat::RGBA_F16, gfx::BufferFormat::RGBA_F16);
 
     if (std::get<1>(GetParam())) {
       features_.InitAndEnableFeature(features::kColorConversionInRenderer);
@@ -5894,6 +6016,140 @@ INSTANTIATE_TEST_SUITE_P(
 // GetGpuRendererTypes() can return an empty list, e.g. on Fuchsia ARM64.
 GTEST_ALLOW_UNINSTANTIATED_PARAMETERIZED_TEST(RendererPixelTestColorConversion);
 
+#if BUILDFLAG(IS_WIN)
+class VideoPixelRendererPixelTestColorConversion
+    : public VideoRendererPixelTestBase,
+      public testing::WithParamInterface<std::tuple<RendererType, bool>> {
+ public:
+  VideoPixelRendererPixelTestColorConversion()
+      : VideoRendererPixelTestBase(std::get<0>(GetParam())) {}
+
+  void SetUp() override {
+    // Set a color space that is not suitable for blending to ensure we go
+    // through the color conversion code paths.
+    this->display_color_spaces_ =
+        gfx::DisplayColorSpaces(gfx::ColorSpace::CreateSCRGBLinear80Nits());
+    this->display_color_spaces_.SetSDRMaxLuminanceNits(80.f);
+    this->display_color_spaces_.SetOutputBufferFormats(
+        gfx::BufferFormat::RGBA_F16, gfx::BufferFormat::RGBA_F16);
+
+    // Allow non-root render passes to have the above non-suitable-for-blending
+    // color space by being scanout.
+    renderer_settings_.force_non_scanout_backing_for_pixel_tests = true;
+
+    if (std::get<1>(GetParam())) {
+      features_.InitWithFeatures({features::kDelegatedCompositing,
+                                  features::kColorConversionInRenderer},
+                                 {});
+    } else {
+      features_.InitWithFeatures({features::kDelegatedCompositing},
+                                 {features::kColorConversionInRenderer});
+    }
+
+    VideoRendererPixelTestBase::SetUp();
+  }
+
+ private:
+  base::test::ScopedFeatureList features_;
+};
+
+// This checks the correct color conversion is happening in the following case:
+// a non-root render pass has a texture quad that requires a color conversion
+// filter, but no quads in the render pass require blending.
+//
+// In this case, the color conversion layer is elided, but we choose the wrong
+// "destination" color space for the color conversion filter when we draw the
+// texture quad.
+// See: crbug.com/397995970
+TEST_P(VideoPixelRendererPixelTestColorConversion,
+       RenderPassWithHdrVideoDoesntNeedBlending) {
+  // Create a test frame that embeds a pass which:
+  // - contains a texture quad that requires a color conversion filter and
+  // - needs blending, iff `child_pass_needs_blending`.
+  auto CreateFrame =
+      [&](bool child_pass_needs_blending) -> AggregatedRenderPassList {
+    const gfx::Rect rect(this->device_viewport_size_);
+
+    CompositorRenderPassId id{1};
+    auto child_pass = CreateTestRootRenderPass(id, rect);
+
+    auto color_space = gfx::ColorSpace::CreateHDR10();
+
+    CreateTestMultiplanarVideoDrawQuad(
+        TestVideoFrameBuilder(media::PIXEL_FORMAT_I420, color_space,
+                              kUnitSquare, rect.size(), rect.size())
+            .DrawSolid(144, 54, 34),
+        /*alpha_value=*/255, gfx::Transform(), gfx::MaskFilterInfo(),
+        /*sorting_context_id=*/0, child_pass.get(),
+        this->video_resource_updater_.get(), rect, rect,
+        this->resource_provider_.get(), this->child_resource_provider_.get(),
+        this->child_context_provider_.get());
+
+    AggregatedRenderPassList pass_list;
+
+    AggregatedRenderPassId hdr_child_id{2};
+    {
+      auto child_pass_copy = cc::CopyToAggregatedRenderPass(
+          child_pass.get(), hdr_child_id, gfx::ContentColorUsage::kHDR);
+
+      // Make `is_scanout == true` on Windows for non-root pass.
+      // See: `DirectRenderer::CalculateRenderPassRequirements`
+      {
+        EXPECT_TRUE(
+            base::FeatureList::IsEnabled(features::kDelegatedCompositing));
+        child_pass_copy->is_from_surface_root_pass = true;
+        child_pass_copy->will_backing_be_read_by_viz = false;
+      }
+
+      // When `ColorConversionInRenderer` is enabled, make the HDR child render
+      // pass not use the color conversion layer since it won't contain quads
+      // that require blending.
+      // When `ColorConversionInRenderer` is disabled, color conversion will
+      // happen unconditionally as a render pass.
+      for (auto* quad : child_pass_copy->quad_list) {
+        quad->needs_blending = child_pass_needs_blending;
+      }
+
+      pass_list.push_back(std::move(child_pass_copy));
+    }
+
+    // Add a root pass that embeds the problematic pass. The root render pass
+    // color space is handled specially and we are testing the non-root case.
+    {
+      AggregatedRenderPassId root_id{1};
+      auto root_pass = CreateTestRootRenderPass(root_id, rect);
+      root_pass->content_color_usage = gfx::ContentColorUsage::kSRGB;
+
+      SharedQuadState* shared_state = CreateTestSharedQuadState(
+          gfx::Transform(), rect, root_pass.get(), gfx::MaskFilterInfo());
+      CreateTestRenderPassDrawQuad(shared_state, rect, hdr_child_id,
+                                   root_pass.get());
+
+      pass_list.push_back(std::move(root_pass));
+    }
+
+    return pass_list;
+  };
+
+  // Render the child pass with blending to use as a baseline, since we expect
+  // the output to be the same in both cases.
+  AggregatedRenderPassList pass_list_with_blending =
+      CreateFrame(/*child_pass_needs_blending=*/true);
+
+  AggregatedRenderPassList pass_list_without_blending =
+      CreateFrame(/*child_pass_needs_blending=*/false);
+  EXPECT_TRUE(this->RunPixelTest(&pass_list_without_blending,
+                                 &pass_list_with_blending,
+                                 cc::AlphaDiscardingExactPixelComparator()));
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    ,
+    VideoPixelRendererPixelTestColorConversion,
+    testing::Combine(testing::ValuesIn(GetGpuRendererTypes()),
+                     testing::Bool()));
+#endif
+
 using PrimaryID = gfx::ColorSpace::PrimaryID;
 using TransferID = gfx::ColorSpace::TransferID;
 
@@ -5922,6 +6178,10 @@ class ColorTransformPixelTest
     }
     this->display_color_spaces_ =
         gfx::DisplayColorSpaces(this->dst_color_space_);
+    if (this->dst_color_space_.IsWide()) {
+      this->display_color_spaces_.SetOutputBufferFormats(
+          gfx::BufferFormat::RGBA_F16, gfx::BufferFormat::RGBA_F16);
+    }
     this->premultiplied_alpha_ = std::get<3>(GetParam());
     if (std::get<4>(GetParam())) {
       features_.InitAndEnableFeature(features::kColorConversionInRenderer);

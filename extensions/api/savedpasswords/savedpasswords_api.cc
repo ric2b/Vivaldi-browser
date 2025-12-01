@@ -23,6 +23,7 @@
 
 #include "extensions/api/vivaldi_utilities/vivaldi_utilities_api.h"
 #include "extensions/schema/savedpasswords.h"
+#include "extensions/vivaldi_browser_component_wrapper.h"
 #include "password_list_sorter.h"
 #include "ui/vivaldi_browser_window.h"
 
@@ -268,7 +269,8 @@ ExtensionFunction::ResponseAction SavedpasswordsAuthenticateFunction::Run() {
   EXTENSION_FUNCTION_VALIDATE(params);
 
   VivaldiBrowserWindow* window =
-      VivaldiBrowserWindow::FromId(params->window_id);
+      VivaldiBrowserComponentWrapper::GetInstance()->
+          VivaldiBrowserWindowFromId(params->window_id);
   if (!window) {
     return RespondNow(Error("No such window"));
   }

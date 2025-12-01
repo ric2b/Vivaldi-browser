@@ -115,6 +115,7 @@ install_config("install_headers") {
 install_dbus_client_headers("install_dbus_headers") {
   target_packages = [
     "anomaly_detector",
+    "arc_manager",
     "attestation",
     "biod",
     "chunneld",

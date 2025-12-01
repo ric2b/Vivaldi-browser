@@ -19,10 +19,9 @@
 #include "base/functional/bind.h"
 #include "base/functional/callback.h"
 #include "base/functional/callback_helpers.h"
-#include "base/i18n/message_formatter.h"
 #include "base/logging.h"
-#include "base/notimplemented.h"
 #include "base/notreached.h"
+#include "base/strings/utf_string_conversions.h"
 #include "base/task/single_thread_task_runner.h"
 #include "chrome/browser/ash/file_manager/fileapi_util.h"
 #include "chrome/browser/ash/file_manager/io_task_controller.h"
@@ -32,11 +31,12 @@
 #include "chrome/browser/ash/policy/skyvault/local_files_migration_constants.h"
 #include "chrome/browser/ash/policy/skyvault/odfs_skyvault_uploader.h"
 #include "chrome/browser/ash/policy/skyvault/policy_utils.h"
-#include "chrome/browser/download/download_dir_util.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/grit/generated_resources.h"
+#include "components/strings/grit/components_strings.h"
 #include "storage/browser/file_system/file_system_url.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "url/origin.h"
 
 namespace policy::local_user_files {
 
@@ -65,36 +65,40 @@ bool ErrorCanBeIgnored(MigrationUploadError error) {
          error == MigrationUploadError::kFileNotFound;
 }
 
-std::string FormatErrorMessage(CloudProvider provider,
+std::string FormatErrorMessage(MigrationDestination destination,
                                MigrationUploadError error) {
+  CHECK(IsCloudDestination(destination));
   switch (error) {
     case MigrationUploadError::kCloudQuotaFull:
-      return base::UTF16ToUTF8(
-          base::i18n::MessageFormatter::FormatWithNumberedArgs(
-              l10n_util::GetStringUTF16(
-                  IDS_OFFICE_UPLOAD_ERROR_FREE_UP_SPACE_TO_MOVE),
-              1,
-              l10n_util::GetStringUTF16(
-                  provider == CloudProvider::kGoogleDrive
-                      ? IDS_OFFICE_CLOUD_PROVIDER_GOOGLE_DRIVE_SHORT
-                      : IDS_OFFICE_CLOUD_PROVIDER_ONEDRIVE_SHORT)));
+      return base::UTF16ToUTF8(base::ReplaceStringPlaceholders(
+          l10n_util::GetStringUTF16(
+              IDS_POLICY_SKYVAULT_MIGRATION_UPLOAD_ERROR_NO_SPACE),
+          l10n_util::GetStringUTF16(
+              destination == MigrationDestination::kGoogleDrive
+                  ? IDS_OFFICE_CLOUD_PROVIDER_GOOGLE_DRIVE_SHORT
+                  : IDS_OFFICE_CLOUD_PROVIDER_ONEDRIVE_SHORT),
+          /*offset=*/nullptr));
     case MigrationUploadError::kFileNotFound:
       return l10n_util::GetStringUTF8(
-          IDS_OFFICE_UPLOAD_ERROR_FILE_NOT_EXIST_TO_MOVE);
-    case MigrationUploadError::kInvalidURL:
-      return l10n_util::GetStringUTF8(IDS_OFFICE_UPLOAD_ERROR_REJECTED);
+          IDS_POLICY_SKYVAULT_MIGRATION_UPLOAD_ERROR_FILE_NOT_EXIST);
     case MigrationUploadError::kAuthRequired:
       return l10n_util::GetStringUTF8(
-          IDS_OFFICE_UPLOAD_ERROR_REAUTHENTICATION_REQUIRED);
+          IDS_POLICY_SKYVAULT_MIGRATION_UPLOAD_ERROR_ODFS_SIGN_IN);
+    case MigrationUploadError::kNetworkError:
+    case MigrationUploadError::kReconnectTimeout:
+      return l10n_util::GetStringUTF8(
+          IDS_POLICY_SKYVAULT_MIGRATION_UPLOAD_ERROR_NO_INTERNET);
     case MigrationUploadError::kCopyFailed:
     case MigrationUploadError::kCreateFolderFailed:
     case MigrationUploadError::kSyncFailed:
-    case MigrationUploadError::kDeleteFailed:  // should not be logged
+    case MigrationUploadError::kDeleteFailed:
     case MigrationUploadError::kMoveFailed:
-    case MigrationUploadError::kCancelled:  // should not be logged
+    case MigrationUploadError::kCancelled:
     case MigrationUploadError::kUnexpectedError:
     case MigrationUploadError::kServiceUnavailable:
-      return l10n_util::GetStringUTF8(IDS_OFFICE_UPLOAD_ERROR_GENERIC);
+    case MigrationUploadError::kInvalidURL:
+      return l10n_util::GetStringUTF8(
+          IDS_POLICY_SKYVAULT_MIGRATION_UPLOAD_ERROR_GENERIC);
   }
 }
 
@@ -112,7 +116,7 @@ base::File CreateOrOpenLogFile(Profile* profile, base::FilePath path) {
 }
 
 void LogError(base::File& error_log_file,
-              CloudProvider provider,
+              MigrationDestination destination,
               base::FilePath file_path,
               MigrationUploadError error) {
   if (!error_log_file.IsValid()) {
@@ -120,8 +124,9 @@ void LogError(base::File& error_log_file,
     return;
   }
 
-  std::string log_entry = absl::StrFormat("%s - %s\n", file_path.AsUTF8Unsafe(),
-                                          FormatErrorMessage(provider, error));
+  std::string log_entry =
+      absl::StrFormat("%s - %s\n", file_path.AsUTF8Unsafe(),
+                      FormatErrorMessage(destination, error));
   error_log_file.WriteAtCurrentPos(log_entry.c_str(), log_entry.size());
 }
 
@@ -135,7 +140,7 @@ MigrationCoordinator::MigrationCoordinator(Profile* profile)
 
 MigrationCoordinator::~MigrationCoordinator() = default;
 
-void MigrationCoordinator::Run(CloudProvider cloud_provider,
+void MigrationCoordinator::Run(MigrationDestination destination,
                                std::vector<base::FilePath> files,
                                const std::string& upload_root,
                                MigrationDoneCallback callback) {
@@ -144,20 +149,21 @@ void MigrationCoordinator::Run(CloudProvider cloud_provider,
   MigrationDoneCallback wrapped_callback =
       base::BindOnce(&MigrationCoordinator::OnMigrationDone,
                      weak_ptr_factory_.GetWeakPtr(), std::move(callback));
-  switch (cloud_provider) {
-    case CloudProvider::kGoogleDrive:
+  switch (destination) {
+    case MigrationDestination::kGoogleDrive:
       uploader_ = std::make_unique<GoogleDriveMigrationUploader>(
           profile_, std::move(files), upload_root, error_log_path_,
           std::move(wrapped_callback));
       break;
-    case CloudProvider::kOneDrive:
+    case MigrationDestination::kOneDrive:
       uploader_ = std::make_unique<OneDriveMigrationUploader>(
           profile_, std::move(files), upload_root, error_log_path_,
           std::move(wrapped_callback));
       break;
-    case CloudProvider::kNotSpecified:
-      NOTREACHED()
-          << "Run() should only be called if cloud_provider is specified";
+    case MigrationDestination::kDelete:
+    case MigrationDestination::kNotSpecified:
+      NOTREACHED() << "Run() should only be called if destination is set to a "
+                      "cloud location";
   }
   uploader_->Run();
 }
@@ -298,11 +304,30 @@ void OneDriveMigrationUploader::OnUploadDone(
     return;
   }
 
-  SkyVaultMigrationUploadErrorHistogram(CloudProvider::kOneDrive,
+  SkyVaultMigrationUploadErrorHistogram(MigrationDestination::kOneDrive,
                                         error.value());
 
   if (!ErrorCanBeIgnored(error.value())) {
     errors_.insert({file_path, error.value()});
+  }
+
+  if (error.value() == MigrationUploadError::kNetworkError) {
+    // Just retry, uploaders handle waiting for connectivity.
+    base::FilePath relative_path =
+        GetPathRelativeToMyFiles(profile_, file_path);
+    // Safe to replace; original OdfsSkyvaultUploader is destroyed when its
+    // Upload method completes.
+    uploaders_.insert_or_assign(
+        file_path,
+        ash::cloud_upload::OdfsSkyvaultUploader::Upload(
+            profile_, file_path, relative_path, upload_root_,
+            UploadTrigger::kMigration,
+            // No need to show progress updates.
+            /*progress_callback=*/base::DoNothing(),
+            /*upload_callback=*/
+            base::BindOnce(&OneDriveMigrationUploader::OnUploadDone,
+                           weak_ptr_factory_.GetWeakPtr(), file_path)));
+    return;
   }
 
   if (!error_log_file_.IsValid()) {
@@ -314,7 +339,7 @@ void OneDriveMigrationUploader::OnUploadDone(
   log_task_runner_->PostTaskAndReply(
       FROM_HERE,
       base::BindOnce(&LogError, std::ref(error_log_file_),
-                     CloudProvider::kOneDrive, file_path, error.value()),
+                     MigrationDestination::kOneDrive, file_path, error.value()),
       base::BindOnce(&OneDriveMigrationUploader::OnErrorLogged,
                      weak_ptr_factory_.GetWeakPtr(), file_path));
 }
@@ -400,11 +425,28 @@ void GoogleDriveMigrationUploader::OnUploadDone(
     return;
   }
 
-  SkyVaultMigrationUploadErrorHistogram(CloudProvider::kGoogleDrive,
+  SkyVaultMigrationUploadErrorHistogram(MigrationDestination::kGoogleDrive,
                                         error.value());
 
   if (!ErrorCanBeIgnored(error.value())) {
     errors_.insert({file_path, error.value()});
+  }
+
+  if (error.value() == MigrationUploadError::kNetworkError) {
+    // Just retry, uploaders handle waiting for connectivity.
+    base::FilePath target_path = GetPathRelativeToMyFiles(profile_, file_path);
+    std::unique_ptr<DriveSkyvaultUploader> uploader =
+        std::make_unique<DriveSkyvaultUploader>(
+            profile_, file_path, target_path, upload_root_,
+            base::BindOnce(&GoogleDriveMigrationUploader::OnUploadDone,
+                           weak_ptr_factory_.GetWeakPtr(), file_path));
+
+    auto uploader_ptr = uploader.get();
+    // Safe to replace; original DriveSkyvaultUploader is destroyed when its
+    // unique_ptr is removed from the map.
+    uploaders_.insert_or_assign(file_path, std::move(uploader));
+    uploader_ptr->Run();
+    return;
   }
 
   if (!error_log_file_.IsValid()) {
@@ -416,7 +458,8 @@ void GoogleDriveMigrationUploader::OnUploadDone(
   log_task_runner_->PostTaskAndReply(
       FROM_HERE,
       base::BindOnce(&LogError, std::ref(error_log_file_),
-                     CloudProvider::kGoogleDrive, file_path, error.value()),
+                     MigrationDestination::kGoogleDrive, file_path,
+                     error.value()),
       base::BindOnce(&GoogleDriveMigrationUploader::OnErrorLogged,
                      weak_ptr_factory_.GetWeakPtr(), file_path));
 }

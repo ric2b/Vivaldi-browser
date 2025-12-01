@@ -6,7 +6,6 @@
 
 #include <algorithm>
 #include <cstdint>
-#include <iterator>
 #include <memory>
 #include <optional>
 #include <string>
@@ -26,17 +25,14 @@
 #include "base/location.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
-#include "base/no_destructor.h"
-#include "base/notimplemented.h"
 #include "base/notreached.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/sequenced_task_runner.h"
-#include "base/task/task_traits.h"
-#include "base/task/thread_pool.h"
 #include "base/time/tick_clock.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
+#include "build/build_config.h"
 #include "build/buildflag.h"
 #include "chrome/browser/net/system_network_context_manager.h"
 #include "chrome/browser/profiles/profile.h"
@@ -52,7 +48,6 @@
 #include "chrome/browser/webauthn/gpm_enclave_transaction.h"
 #include "chrome/browser/webauthn/gpm_user_verification_policy.h"
 #include "chrome/browser/webauthn/passkey_model_factory.h"
-#include "chrome/browser/webauthn/proto/enclave_local_state.pb.h"
 #include "chrome/browser/webauthn/webauthn_metrics_util.h"
 #include "chrome/browser/webauthn/webauthn_pref_names.h"
 #include "components/device_event_log/device_event_log.h"
@@ -80,7 +75,7 @@
 #include "google_apis/gaia/gaia_id.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
 #include "ash/public/cpp/webauthn_dialog_controller.h"
 #endif
 
@@ -249,11 +244,7 @@ EnclaveUserVerificationMethod PickEnclaveUserVerificationMethod(
     EnclaveManager::UvKeyState uv_key_state,
     bool platform_has_biometrics,
     bool browser_is_app) {
-#if BUILDFLAG(IS_MAC)
-  constexpr bool kIsMac = true;
-#else
-  constexpr bool kIsMac = false;
-#endif
+  constexpr bool kIsMac = BUILDFLAG(IS_MAC);
 
   if (have_entered_pin_for_recovery) {
     return EnclaveUserVerificationMethod::kImplicit;
@@ -312,15 +303,6 @@ const char* ToString(
   }
 }
 
-bool ExpiryTooSoon(base::Time expiry) {
-  const base::Time now = base::Time::Now();
-  // LSKFs must have at least 18 weeks of validity on them because we don't want
-  // users depending on an LSKF from a device that they've stopped using.
-  // Validities are generally six months, thus this implies that the device was
-  // used in the previous six weeks.
-  return expiry < now || (expiry - now) < base::Days(7 * 18);
-}
-
 void ResetDeclinedBootstrappingCount(Profile* profile) {
   profile->GetPrefs()->SetInteger(
       webauthn::pref_names::kEnclaveDeclinedGPMBootstrappingCount, 0);
@@ -354,6 +336,9 @@ GPMEnclaveController::GPMEnclaveController(
   webauthn::PasskeyModel* passkey_model =
       PasskeyModelFactory::GetInstance()->GetForProfile(profile);
   creds_ = passkey_model->GetPasskeysForRelyingPartyId(rp_id_);
+  if (base::FeatureList::IsEnabled(device::kWebAuthnSignalApiHidePasskeys)) {
+    std::erase_if(creds_, [](const auto& cred) { return cred.hidden(); });
+  }
 
   // The following code may do some asynchronous processing. However the control
   // flow terminates, it must have called SetAccountState with some value.
@@ -428,10 +413,8 @@ void GPMEnclaveController::BuildUVKeyOptions(
     EnclaveManager::UVKeyOptions& uv_options) {
   uv_options.rp_id = rp_id_;
   uv_options.render_frame_host_id = render_frame_host_id_;
-#if BUILDFLAG(IS_MAC)
-  uv_options.lacontext = std::move(model_->lacontext);
-#endif  // BUILDFLAG(IS_MAC)
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+  uv_options.local_auth_token = std::move(model_->local_auth_token);
+#if BUILDFLAG(IS_CHROMEOS)
   if (ash::features::IsWebAuthNAuthDialogMergeEnabled()) {
     uv_options.dialog_controller = ash::ActiveSessionAuthController::Get();
   } else {
@@ -442,9 +425,6 @@ void GPMEnclaveController::BuildUVKeyOptions(
 
 void GPMEnclaveController::OnPasskeyCreated(
     const sync_pb::WebauthnCredentialSpecifics& passkey) {
-  if (!device::kWebAuthnGpmPin.Get()) {
-    return;
-  }
   PasswordsClientUIDelegate* manage_passwords_ui_controller =
       PasswordsClientUIDelegateFromWebContents(web_contents());
   if (manage_passwords_ui_controller) {
@@ -498,8 +478,7 @@ void GPMEnclaveController::OnEnclaveLoaded() {
       }
     }
 
-    if (device::kWebAuthnGpmPin.Get() &&
-        !base::FeatureList::IsEnabled(device::kWebAuthnNoAccountTimeout)) {
+    if (!base::FeatureList::IsEnabled(device::kWebAuthnNoAccountTimeout)) {
       // For get() requests, progress the UI now because, with GPM PIN support,
       // we can handle the account in any state and we'll block the UI if needed
       // when the user selects a GPM credential.
@@ -515,19 +494,7 @@ void GPMEnclaveController::OnEnclaveLoaded() {
 
 void GPMEnclaveController::OnUVCapabilityKnown(bool can_make_uv_keys) {
   FIDO_LOG(EVENT) << "UV key capability: " << can_make_uv_keys;
-
   can_make_uv_keys_ = can_make_uv_keys;
-
-  if (!can_make_uv_keys && !device::kWebAuthnGpmPin.Get()) {
-    // Without the ability to do user verification, we cannot enroll the current
-    // device.
-    SetAccountState(AccountState::kNone);
-    if (!base::FeatureList::IsEnabled(device::kWebAuthnNoAccountTimeout)) {
-      SetActive(EnclaveEnabledStatus::kDisabled);
-    }
-    return;
-  }
-
   DownloadAccountState();
 }
 
@@ -610,15 +577,16 @@ void GPMEnclaveController::OnAccountStateDownloaded(
   download_account_state_request_.reset();
   account_state_timeout_.reset();
 
-  FIDO_LOG(EVENT) << "Download account state result: " << ToString(result.state)
-                  << ", key_version: " << result.key_version.value_or(0)
-                  << ", has PIN: " << result.gpm_pin_metadata.has_value()
-                  << ", expiry: "
-                  << (result.gpm_pin_metadata.has_value()
-                          ? base::TimeFormatAsIso8601(
-                                result.gpm_pin_metadata->expiry)
-                          : "<none>")
-                  << ", iCloud Keychain keys: " << result.icloud_keys.size();
+  FIDO_LOG(EVENT)
+      << "Download account state result: " << ToString(result.state)
+      << ", key_version: " << result.key_version.value_or(0)
+      << ", has PIN: " << result.gpm_pin_metadata.has_value() << ", expiry: "
+      << (result.gpm_pin_metadata &&
+                  result.gpm_pin_metadata->usable_pin_metadata
+              ? base::TimeFormatAsIso8601(
+                    result.gpm_pin_metadata->usable_pin_metadata->expiry)
+              : "<none>")
+      << ", iCloud Keychain keys: " << result.icloud_keys.size();
 
   if (enclave_manager_->is_ready() &&
       enclave_manager_->ConsiderSecurityDomainState(result,
@@ -628,24 +596,6 @@ void GPMEnclaveController::OnAccountStateDownloaded(
       SetActive(EnclaveEnabledStatus::kEnabled);
     }
     return;
-  }
-
-  FIDO_LOG(EVENT) << "Account state: " << ToString(result.state)
-                  << ", has PIN: " << result.gpm_pin_metadata.has_value()
-                  << ", iCloud Keychain keys: " << result.icloud_keys.size();
-
-  if (!device::kWebAuthnGpmPin.Get() &&
-      result.state == Result::State::kRecoverable &&
-      !result.lskf_expiries.empty() &&
-      std::ranges::all_of(result.lskf_expiries, ExpiryTooSoon)) {
-    std::vector<std::string> expiries;
-    std::ranges::transform(
-        result.lskf_expiries, std::back_inserter(expiries),
-        [](const auto& time) { return base::TimeFormatAsIso8601(time); });
-    FIDO_LOG(EVENT) << "Account considered irrecoverable because no LSKF has "
-                       "acceptable expiry: "
-                    << base::JoinString(expiries, ", ");
-    result.state = Result::State::kIrrecoverable;
   }
 
   switch (result.state) {
@@ -665,23 +615,14 @@ void GPMEnclaveController::OnAccountStateDownloaded(
       SetAccountState(AccountState::kIrrecoverable);
       break;
   }
-
-  if (result.gpm_pin_metadata) {
-    pin_metadata_ = std::move(result.gpm_pin_metadata);
-  }
+  pin_metadata_ = std::move(result.gpm_pin_metadata);
   security_domain_icloud_recovery_keys_ = std::move(result.icloud_keys);
   user_gaia_id_ = std::move(gaia_id);
 
   if (!base::FeatureList::IsEnabled(device::kWebAuthnNoAccountTimeout)) {
-    if (device::kWebAuthnGpmPin.Get()) {
-      SetActive(account_state_ != AccountState::kNone
-                    ? EnclaveEnabledStatus::kEnabled
-                    : EnclaveEnabledStatus::kDisabled);
-    } else {
-      SetActive(account_state_ == AccountState::kRecoverable
-                    ? EnclaveEnabledStatus::kEnabled
-                    : EnclaveEnabledStatus::kDisabled);
-    }
+    SetActive(account_state_ != AccountState::kNone
+                  ? EnclaveEnabledStatus::kEnabled
+                  : EnclaveEnabledStatus::kDisabled);
   }
 }
 
@@ -713,7 +654,10 @@ void GPMEnclaveController::OnKeysStored() {
   CHECK(enclave_manager_->has_pending_keys());
   CHECK(!enclave_manager_->is_ready());
 
-  if (pin_metadata_.has_value() || *can_make_uv_keys_) {
+  if ((pin_metadata_.has_value() && pin_metadata_->usable_pin_metadata) ||
+      *can_make_uv_keys_) {
+    // No need to create a GPM PIN if the user already has a usable GPM PIN or
+    // can make UV keys.
     if (!enclave_manager_->AddDeviceToAccount(
             std::move(pin_metadata_),
             base::BindOnce(&GPMEnclaveController::OnDeviceAdded,
@@ -721,8 +665,8 @@ void GPMEnclaveController::OnKeysStored() {
       model_->SetStep(Step::kGPMError);
     }
   } else {
-    // Create a GPM PIN if the user doesn't have one and can't make
-    // a UV key locally.
+    // Create a GPM PIN if the user doesn't have one (or it cannot be used) and
+    // can't make a UV key locally.
     model_->SetStep(Step::kGPMCreatePin);
   }
 }
@@ -746,7 +690,8 @@ void GPMEnclaveController::RecoverSecurityDomain() {
   model_->DisableUiOrShowLoadingDialog();
   device::enclave::ICloudRecoveryKey::Retrieve(
       base::BindOnce(&GPMEnclaveController::OnICloudKeysRetrievedForRecovery,
-                      weak_ptr_factory_.GetWeakPtr()),
+                     weak_ptr_factory_.GetWeakPtr()),
+      trusted_vault::SecurityDomainId::kPasskeys,
       kICloudKeychainRecoveryKeyAccessGroup);
 #else
   model_->SetStep(Step::kRecoverSecurityDomain);
@@ -759,6 +704,7 @@ void GPMEnclaveController::MaybeAddICloudRecoveryKey() {
   device::enclave::ICloudRecoveryKey::Retrieve(
       base::BindOnce(&GPMEnclaveController::OnICloudKeysRetrievedForEnrollment,
                      weak_ptr_factory_.GetWeakPtr()),
+      trusted_vault::SecurityDomainId::kPasskeys,
       kICloudKeychainRecoveryKeyAccessGroup);
 }
 
@@ -790,6 +736,7 @@ void GPMEnclaveController::OnICloudKeysRetrievedForEnrollment(
   device::enclave::ICloudRecoveryKey::Create(
       base::BindOnce(&GPMEnclaveController::EnrollICloudRecoveryKey,
                      weak_ptr_factory_.GetWeakPtr()),
+      trusted_vault::SecurityDomainId::kPasskeys,
       kICloudKeychainRecoveryKeyAccessGroup);
 }
 
@@ -902,14 +849,6 @@ void GPMEnclaveController::SetAccountState(AccountState account_state) {
 }
 
 void GPMEnclaveController::OnGPMSelected() {
-  if (!device::kWebAuthnGpmPin.Get() &&
-      account_state_ != AccountState::kRecoverable) {
-    // It is possible to get to this state if the PIN feature is disabled and
-    // kWebAuthnNoAccountTimeout is enabled. This should not be a valid
-    // combination, but some tests exercise it.
-    model_->SetStep(Step::kGPMError);
-    return;
-  }
   // Reset after each GPM selection to ensure correct metric emission.
   model_->in_onboarding_flow = false;
 
@@ -987,14 +926,6 @@ void GPMEnclaveController::OnGPMSelected() {
 
 void GPMEnclaveController::OnGPMPasskeySelected(
     std::vector<uint8_t> credential_id) {
-  if (!device::kWebAuthnGpmPin.Get() &&
-      account_state_ != AccountState::kRecoverable) {
-    // It is possible to get to this state if the PIN feature is disabled and
-    // kWebAuthnNoAccountTimeout is enabled. This should not be a valid
-    // combination, but some tests exercise it.
-    model_->SetStep(Step::kGPMError);
-    return;
-  }
   selected_cred_id_ = std::move(credential_id);
 
   if (account_state_ != AccountState::kLoading &&
@@ -1043,14 +974,8 @@ void GPMEnclaveController::OnGPMPasskeySelected(
 
     case AccountState::kRecoverable:
     case AccountState::kIrrecoverable:
-      if (base::FeatureList::IsEnabled(
-              device::kWebAuthnNeverSkipTrustThisComputer) ||
-          model_->priority_phone_name.has_value()) {
-        device::enclave::RecordEvent(device::enclave::Event::kOnboarding);
-        model_->SetStep(Step::kTrustThisComputerAssertion);
-      } else {
-        RecoverSecurityDomain();
-      }
+      device::enclave::RecordEvent(device::enclave::Event::kOnboarding);
+      model_->SetStep(Step::kTrustThisComputerAssertion);
       break;
 
     case AccountState::kLoading:
@@ -1213,8 +1138,9 @@ void GPMEnclaveController::OnGPMPinEntered(const std::u16string& pin) {
     CHECK(enclave_manager_->has_pending_keys());
     // In this case, we were waiting for the user to create their GPM PIN.
     enclave_manager_->AddDeviceAndPINToAccount(
-        *pin_, base::BindOnce(&GPMEnclaveController::OnDeviceAdded,
-                              weak_ptr_factory_.GetWeakPtr()));
+        *pin_, pin_metadata_ ? pin_metadata_->public_key : std::nullopt,
+        base::BindOnce(&GPMEnclaveController::OnDeviceAdded,
+                       weak_ptr_factory_.GetWeakPtr()));
   } else if (account_state_ == AccountState::kEmpty) {
     // The user has set a PIN to create the account.
     enclave_manager_->SetupWithPIN(
@@ -1313,8 +1239,7 @@ bool GPMEnclaveController::BrowserIsApp() const {
 void GPMEnclaveController::OnGpmPasskeysReset(bool success) {
   CHECK(model_->step() == Step::kRecoverSecurityDomain);
   if (!success ||
-      model_->request_type != device::FidoRequestType::kMakeCredential ||
-      !device::kWebAuthnGpmPin.Get()) {
+      model_->request_type != device::FidoRequestType::kMakeCredential) {
     model_->CancelAuthenticatorRequest();
     return;
   }

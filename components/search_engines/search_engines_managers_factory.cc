@@ -9,9 +9,10 @@
 #include "base/json/json_reader.h"
 #include "base/logging.h"
 #include "base/path_service.h"
-#include "chrome/common/chrome_paths.h"
 
-#if BUILDFLAG(IS_IOS)
+#if !BUILDFLAG(IS_IOS)
+#include "chrome/common/chrome_paths.h"
+#else
 #include "ios/chrome/browser/shared/model/paths/paths.h"
 #endif
 
@@ -90,32 +91,37 @@ std::unique_ptr<T> UpdateJsonFileAndParse(
     return LoadDefaults<T>(defaults_string);
   }
 
+  std::unique_ptr<T> old_data = LoadFromFile<T>(*regular_file);
+  LOG_IF(INFO, old_data) << regular_file->BaseName()
+                         << " loaded from: " << *regular_file;
+  if (!old_data) {
+    LOG(INFO) << "Attempting to load " << regular_file->BaseName()
+              << " failed.";
+    old_data = LoadDefaults<T>(defaults_string);
+  }
+
   if (base::PathExists(*update_file)) {
     // The updated prompt file is there.
-    std::unique_ptr<T> t = LoadFromFile<T>(*update_file);
-    if (t) {
+    std::unique_ptr<T> new_data = LoadFromFile<T>(*update_file);
+    if (new_data &&
+        new_data->current_data_version() > old_data->current_data_version()) {
       // Make it a regular file.
       base::Move(*update_file, *regular_file);
       LOG(INFO) << regular_file->BaseName() << " sucessfully updated.";
-      return t;
+      return new_data;
     } else {
-      LOG(INFO) << "Update failed from: " << *update_file
-                << "Attempting to use " << regular_file->BaseName()
-                << " instead.";
+      LOG_IF(INFO, new_data)
+          << "Update from: " << *update_file << " is older version than current.";
+      LOG_IF(INFO, !new_data)
+          << "Update failed from: " << *update_file << ". Using "
+          << regular_file->BaseName() << " instead.";
 
-      // Get rid of the broken json file.
+      // Get rid of the update json file.
       base::DeleteFile(*update_file);
     }
   }
 
-  std::unique_ptr<T> t = LoadFromFile<T>(*regular_file);
-  if (!t) {
-    LOG(INFO) << "Attempting to load " << regular_file->BaseName()
-              << " failed.";
-    return LoadDefaults<T>(defaults_string);
-  }
-  LOG(INFO) << regular_file->BaseName() << " loaded from: " << *regular_file;
-  return t;
+  return old_data;
 }
 
 }  // namespace

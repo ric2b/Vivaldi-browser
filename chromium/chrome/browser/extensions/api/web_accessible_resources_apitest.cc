@@ -5,6 +5,7 @@
 #include "base/files/file_path.h"
 #include "base/path_service.h"
 #include "base/test/scoped_feature_list.h"
+#include "chrome/browser/extensions/extension_apitest.h"
 #include "chrome/browser/extensions/extension_tab_util.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/chrome_paths.h"
@@ -20,10 +21,7 @@
 #include "net/base/filename_util.h"
 #include "net/dns/mock_host_resolver.h"
 
-#if BUILDFLAG(IS_ANDROID)
-#include "chrome/browser/extensions/extension_platform_apitest.h"
-#else
-#include "chrome/browser/extensions/extension_apitest.h"
+#if !BUILDFLAG(IS_ANDROID)
 #include "chrome/browser/ui/browser.h"
 #include "chrome/test/base/ui_test_utils.h"
 #endif
@@ -31,16 +29,10 @@
 namespace extensions {
 namespace {
 
-#if BUILDFLAG(IS_ANDROID)
-using ExtensionApiTestBase = ExtensionPlatformApiTest;
-#else
-using ExtensionApiTestBase = ExtensionApiTest;
-#endif
-
-class WebAccessibleResourcesApiTest : public ExtensionApiTestBase {
+class WebAccessibleResourcesApiTest : public ExtensionApiTest {
  public:
   void SetUpOnMainThread() override {
-    ExtensionApiTestBase::SetUpOnMainThread();
+    ExtensionApiTest::SetUpOnMainThread();
     host_resolver()->AddRule("*", "127.0.0.1");
     ASSERT_TRUE(StartEmbeddedTestServer());
   }
@@ -92,7 +84,7 @@ IN_PROC_BROWSER_TEST_F(WebAccessibleResourcesApiTest,
   static constexpr char kScriptTemplate[] = R"(
     // Verify that web accessible resource can be fetched.
     async function run(isAllowed, filename) {
-      return new Promise(async resolve => {
+      return new Promise(async (resolve, reject) => {
         const url = `chrome-extension://%s/${filename}`;
 
         // Fetch and verify the contents of fetched web accessible resources.
@@ -220,15 +212,12 @@ IN_PROC_BROWSER_TEST_F(WebAccessibleResourcesApiTest,
 
 // Useful for testing web accessible resources loaded from a content script.
 class WebAccessibleResourcesDynamicUrlScriptingApiTest
-    : public ExtensionApiTestBase {
+    : public ExtensionApiTest {
  public:
-  WebAccessibleResourcesDynamicUrlScriptingApiTest() {
-    feature_list_.InitAndEnableFeature(
-        extensions_features::kExtensionDynamicURLRedirection);
-  }
+  WebAccessibleResourcesDynamicUrlScriptingApiTest() = default;
 
   void SetUpOnMainThread() override {
-    ExtensionApiTestBase::SetUpOnMainThread();
+    ExtensionApiTest::SetUpOnMainThread();
     host_resolver()->AddRule("*", "127.0.0.1");
     ASSERT_TRUE(StartEmbeddedTestServer());
   }

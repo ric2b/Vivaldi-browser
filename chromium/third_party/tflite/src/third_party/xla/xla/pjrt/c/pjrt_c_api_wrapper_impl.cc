@@ -63,12 +63,12 @@ limitations under the License.
 #include "xla/shape.h"
 #include "xla/shape_util.h"
 #include "xla/tsl/framework/allocator.h"
+#include "xla/tsl/platform/errors.h"
+#include "xla/tsl/platform/statusor.h"
 #include "xla/util.h"
 #include "xla/xla.pb.h"
 #include "xla/xla_data.pb.h"
 #include "tsl/platform/casts.h"
-#include "tsl/platform/errors.h"
-#include "tsl/platform/statusor.h"
 #include "tsl/profiler/lib/connected_traceme.h"
 #include "tsl/profiler/lib/context_types.h"
 
@@ -599,13 +599,9 @@ static PJRT_Device* FindDeviceWrapper(
   return nullptr;
 }
 
-// Searches `memory_list` for a PJRT_Memory* that wraps a provided
-// `xla::PjRtMemorySpace *` (`cpp_memory`). If a match is found, that
-// PJRT_Memory* is returned. Otherwise, returns nullptr.
-static PJRT_Memory* FindMemoryWrapper(
-    xla::PjRtMemorySpace* cpp_memory,
-    absl::Span<PJRT_Memory* const> memory_list) {
-  for (PJRT_Memory* memory : memory_list) {
+PJRT_Memory* PJRT_Client_FindMemoryWrapper(xla::PjRtMemorySpace* cpp_memory,
+                                           PJRT_Client* client) {
+  for (PJRT_Memory* memory : client->addressable_memories) {
     if (memory->memory_space == cpp_memory) {
       return memory;
     }
@@ -827,7 +823,7 @@ PJRT_Error* PJRT_Client_Compile(PJRT_Client_Compile_Args* args) {
   PJRT_ASSIGN_OR_RETURN(std::unique_ptr<xla::PjRtLoadedExecutable> executable,
                         std::visit(
                             [args, &options](auto& program) {
-                              return args->client->client->Compile(
+                              return args->client->client->CompileAndLoad(
                                   UnpackPjrtProgram(program), options);
                             },
                             module_or_hlo));
@@ -932,13 +928,15 @@ PJRT_Error* PJRT_Client_BufferFromHostBuffer(
                     std::move(on_done_with_host_buffer),
                     args->memory->memory_space, &layout.value()));
   } else if (has_layout_and_no_memory) {
+    PJRT_ASSIGN_OR_RETURN(xla::PjRtMemorySpace * memory_space,
+                          args->device->device->default_memory_space());
     PJRT_ASSIGN_OR_RETURN(
         buffer, args->client->client->BufferFromHostBuffer(
                     args->data, ::pjrt::ConvertFromPjRtBufferType(args->type),
                     dims, byte_strides,
                     ::pjrt::ConvertFromPjRtHostBufferSemantics(
                         args->host_buffer_semantics),
-                    std::move(on_done_with_host_buffer), args->device->device,
+                    std::move(on_done_with_host_buffer), memory_space,
                     &layout.value()));
   } else if (has_memory_and_no_layout) {
     PJRT_ASSIGN_OR_RETURN(
@@ -1849,9 +1847,10 @@ PJRT_Error* PJRT_Executable_DeserializeAndLoad(
   absl::string_view serialized(args->serialized_executable,
                                args->serialized_executable_size);
 
-  PJRT_ASSIGN_OR_RETURN(std::unique_ptr<xla::PjRtLoadedExecutable> executable,
-                        args->client->client->DeserializeExecutable(
-                            serialized, /*options=*/std::nullopt));
+  PJRT_ASSIGN_OR_RETURN(
+      std::unique_ptr<xla::PjRtLoadedExecutable> executable,
+      args->client->client->LoadSerializedExecutable(
+          serialized, /*options=*/std::nullopt, xla::LoadOptions()));
 
   args->loaded_executable =
       new PJRT_LoadedExecutable(std::move(executable), args->client);
@@ -1992,8 +1991,8 @@ PJRT_Error* PJRT_Buffer_Memory(PJRT_Buffer_Memory_Args* args) {
   PJRT_RETURN_IF_ERROR(ActualStructSizeIsGreaterOrEqual(
       "PJRT_Buffer_Memory_Args", PJRT_Buffer_Memory_Args_STRUCT_SIZE,
       args->struct_size));
-  args->memory = FindMemoryWrapper(args->buffer->buffer->memory_space(),
-                                   args->buffer->client->addressable_memories);
+  args->memory = PJRT_Client_FindMemoryWrapper(
+      args->buffer->buffer->memory_space(), args->buffer->client);
   if (args->memory == nullptr) {
     return new PJRT_Error{xla::Unimplemented(
         "PJRT_Buffer_Memory not implemented for platform '%s'",
@@ -2032,9 +2031,10 @@ PJRT_Error* PJRT_Buffer_CopyToDevice(PJRT_Buffer_CopyToDevice_Args* args) {
   PJRT_RETURN_IF_ERROR(ActualStructSizeIsGreaterOrEqual(
       "PJRT_Buffer_CopyToDevice_Args",
       PJRT_Buffer_CopyToDevice_Args_STRUCT_SIZE, args->struct_size));
-  PJRT_ASSIGN_OR_RETURN(
-      std::unique_ptr<xla::PjRtBuffer> dst_buffer,
-      args->buffer->buffer->CopyToDevice(args->dst_device->device));
+  PJRT_ASSIGN_OR_RETURN(xla::PjRtMemorySpace * memory_space,
+                        args->dst_device->device->default_memory_space());
+  PJRT_ASSIGN_OR_RETURN(std::unique_ptr<xla::PjRtBuffer> dst_buffer,
+                        args->buffer->buffer->CopyToMemorySpace(memory_space));
   args->dst_buffer =
       new PJRT_Buffer{std::move(dst_buffer), args->dst_device->client};
   return nullptr;

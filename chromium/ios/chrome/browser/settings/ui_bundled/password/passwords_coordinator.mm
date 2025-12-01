@@ -47,8 +47,6 @@
 #import "ios/chrome/grit/ios_strings.h"
 #import "ui/base/l10n/l10n_util.h"
 
-using password_manager::WarningType;
-
 @interface PasswordsCoordinator () <
     AddPasswordCoordinatorDelegate,
     PasswordDetailsCoordinatorDelegate,
@@ -132,7 +130,7 @@ using password_manager::WarningType;
 #pragma mark - ChromeCoordinator
 
 - (void)start {
-  ProfileIOS* profile = self.browser->GetProfile();
+  ProfileIOS* profile = self.profile;
   FaviconLoader* faviconLoader =
       IOSChromeFaviconLoaderFactory::GetForProfile(profile);
 

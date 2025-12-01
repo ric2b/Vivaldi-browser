@@ -18,8 +18,8 @@ from telemetry.web_perf import timeline_based_measurement
 
 from page_sets import speedometer3_pages
 
-_PERF_TEST_DIR = os.path.join(path_util.GetChromiumSrcDir(), 'third_party',
-                              'speedometer')
+_SPEEDOMETER_DIR = os.path.join(path_util.GetChromiumSrcDir(), 'third_party',
+                                'speedometer')
 _ARCHIVE_DATA_FILE = 'data/crossbench_android_speedometer_3.0.json'
 _CLOUD_STORAGE_BUCKET = story.PARTNER_BUCKET
 
@@ -153,7 +153,7 @@ class Speedometer30(_Speedometer3):
   """Speedometer3.0 benchmark.
   Explicitly named version."""
 
-  _SOURCE_DIR = os.path.join(_PERF_TEST_DIR, 'v3.0')
+  _SOURCE_DIR = os.path.join(_SPEEDOMETER_DIR, 'v3.0')
 
   @classmethod
   def GetStoryClass(cls):
@@ -162,6 +162,24 @@ class Speedometer30(_Speedometer3):
   @classmethod
   def Name(cls):
     return 'UNSCHEDULED_speedometer3.0'
+
+
+@benchmark.Info(emails=['cbruni@chromium.org', 'vahl@chromium.org'],
+                component='Blink>JavaScript',
+                documentation_url='https://browserbench.org/Speedometer3.1')
+class Speedometer31(_Speedometer3):
+  """Speedometer3.1 benchmark.
+  Explicitly named version."""
+
+  _SOURCE_DIR = os.path.join(_SPEEDOMETER_DIR, 'v3.1')
+
+  @classmethod
+  def GetStoryClass(cls):
+    return speedometer3_pages.Speedometer31Story
+
+  @classmethod
+  def Name(cls):
+    return 'UNSCHEDULED_speedometer3.1'
 
 
 @benchmark.Info(emails=['cbruni@chromium.org', 'vahl@chromium.org'],

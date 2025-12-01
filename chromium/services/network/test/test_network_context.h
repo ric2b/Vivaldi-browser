@@ -85,6 +85,8 @@ class TestNetworkContext : public mojom::NetworkContext {
       const url::Origin& issuer,
       DeleteStoredTrustTokensCallback callback) override {}
   void SetBlockTrustTokens(bool block) override {}
+  void SetTrackingProtectionContentSetting(
+      const ContentSettingsForOneType& settings) override {}
 #if BUILDFLAG(ENABLE_REPORTING)
   void AddReportingApiObserver(
       mojo::PendingRemote<network::mojom::ReportingApiObserver> observer)
@@ -238,12 +240,17 @@ class TestNetworkContext : public mojom::NetworkContext {
                               const std::string& http_method,
                               const net::NetworkIsolationKey& key,
                               bool include_credentials) override {}
+  void VerifyCert(const scoped_refptr<net::X509Certificate>& certificate,
+                  const net::HostPortPair& host_port,
+                  const std::string& ocsp_result,
+                  const std::string& sct_list,
+                  VerifyCertCallback callback) override {}
   void VerifyCertForSignedExchange(
       const scoped_refptr<net::X509Certificate>& certificate,
-      const GURL& url,
+      const net::HostPortPair& host_port,
       const std::string& ocsp_result,
       const std::string& sct_list,
-      VerifyCertForSignedExchangeCallback callback) override {}
+      VerifyCertCallback callback) override {}
   void IsHSTSActiveForHost(const std::string& host,
                            bool is_top_level_nav,
                            IsHSTSActiveForHostCallback callback) override {}

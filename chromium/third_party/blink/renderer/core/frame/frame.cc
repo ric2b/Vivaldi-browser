@@ -505,9 +505,8 @@ void Frame::UpdateVisibleToHitTesting() {
   bool self_visible_to_hit_testing = true;
   if (auto* local_owner = DynamicTo<HTMLFrameOwnerElement>(owner_.Get())) {
     self_visible_to_hit_testing =
-        local_owner->GetLayoutObject()
-            ? local_owner->GetLayoutObject()->Style()->VisibleToHitTesting()
-            : true;
+        !local_owner->GetLayoutObject() ||
+        local_owner->GetLayoutObject()->Style()->VisibleToHitTesting();
   }
 
   bool visible_to_hit_testing =
@@ -657,6 +656,10 @@ void Frame::InsertAfter(Frame* new_child, Frame* previous_sibling) {
 base::OnceClosure Frame::ScheduleFormSubmission(
     FrameScheduler* scheduler,
     FormSubmission* form_submission) {
+  // Notify inspector about the imminent navigation synchronously,
+  // instead of in a later task, which might be deferred for a while.
+  // See https://crbug.com/350540984#comment32 for details.
+  form_submission->NotifyInspector();
   form_submit_navigation_task_ = PostCancellableTask(
       *scheduler->GetTaskRunner(TaskType::kDOMManipulation), FROM_HERE,
       WTF::BindOnce(&FormSubmission::Navigate,
@@ -1052,6 +1055,18 @@ HeapVector<Member<Resource>> Frame::AllResourcesUnderFrame() {
     resources.AppendVector(child->AllResourcesUnderFrame());
   }
   return resources;
+}
+
+void Frame::AdjustOffsetByAncestorFrames(gfx::Point* origin_point) {
+  CHECK(origin_point);
+  Frame* current_frame = this;
+  while (current_frame->Owner()) {
+    if (auto* frame_view = current_frame->View()) {
+      gfx::Point location = frame_view->Location();
+      origin_point->Offset(-location.x(), -location.y());
+    }
+    current_frame = current_frame->Parent();
+  }
 }
 
 }  // namespace blink

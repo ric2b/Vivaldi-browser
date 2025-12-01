@@ -13,10 +13,10 @@
 #include <cstdint>
 #include <memory>
 #include <string>
+#include <variant>
 #include <vector>
 
 #include "absl/strings/string_view.h"
-#include "absl/types/variant.h"
 #include "api/async_dns_resolver.h"
 #include "api/audio/audio_mixer.h"
 #include "api/audio/audio_processing.h"
@@ -47,10 +47,10 @@ namespace webrtc_pc_e2e {
 class PeerConfigurer {
  public:
   using VideoSource =
-      absl::variant<std::unique_ptr<test::FrameGeneratorInterface>,
-                    CapturingDeviceIndex>;
+      std::variant<std::unique_ptr<test::FrameGeneratorInterface>,
+                   CapturingDeviceIndex>;
 
-  explicit PeerConfigurer(const PeerNetworkDependencies& network_dependencies);
+  explicit PeerConfigurer(PeerNetworkDependencies& network);
 
   // Sets peer name that will be used to report metrics related to this peer.
   // If not set, some default name will be assigned. All names have to be
@@ -93,7 +93,7 @@ class PeerConfigurer {
       std::unique_ptr<webrtc::AsyncDnsResolverFactoryInterface>
           async_dns_resolver_factory);
   PeerConfigurer* SetRTCCertificateGenerator(
-      std::unique_ptr<rtc::RTCCertificateGeneratorInterface> cert_generator);
+      std::unique_ptr<RTCCertificateGeneratorInterface> cert_generator);
   PeerConfigurer* SetSSLCertificateVerifier(
       std::unique_ptr<rtc::SSLCertificateVerifier> tls_cert_verifier);
   PeerConfigurer* SetIceTransportFactory(

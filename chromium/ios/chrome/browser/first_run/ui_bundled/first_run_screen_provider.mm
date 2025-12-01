@@ -4,8 +4,10 @@
 
 #import "ios/chrome/browser/first_run/ui_bundled/first_run_screen_provider.h"
 
+#import "base/feature_list.h"
 #import "base/notreached.h"
 #import "ios/chrome/app/tests_hook.h"
+#import "ios/chrome/browser/first_run/ui_bundled/best_features/coordinator/best_features_screen_coordinator.h"
 #import "ios/chrome/browser/first_run/ui_bundled/features.h"
 #import "ios/chrome/browser/screen/ui_bundled/screen_provider+protected.h"
 #import "ios/chrome/browser/screen/ui_bundled/screen_type.h"
@@ -19,6 +21,34 @@
 #import "ios/public/provider/chrome/browser/signin/choice_api.h"
 
 namespace {
+
+// Helper function to add the Best Features, Default Browser Promo, and Address
+// Bar screens when kUpdatedFirstRunSequence is disabled.
+void AddDBPromoAndBestFeaturesScreens(NSMutableArray* screens) {
+  using enum first_run::BestFeaturesScreenVariationType;
+  first_run::BestFeaturesScreenVariationType bestFeaturesType =
+      first_run::GetBestFeaturesScreenVariationType();
+  switch (bestFeaturesType) {
+    case kGeneralScreenAfterDBPromo:
+    case kGeneralScreenWithPasswordItemAfterDBPromo:
+    case kShoppingUsersWithFallbackAfterDBPromo:
+    case kSignedInUsersOnlyAfterDBPromo:
+      [screens addObject:@(kDefaultBrowserPromo)];
+      [screens addObject:@(kBestFeatures)];
+      break;
+    case kGeneralScreenBeforeDBPromo:
+      [screens addObject:@(kBestFeatures)];
+      [screens addObject:@(kDefaultBrowserPromo)];
+      break;
+    case kAddressBarPromoInsteadOfBestFeaturesScreen:
+      // TODO(crbug.com/402429544): Add address bar promo screen.
+      [screens addObject:@(kDefaultBrowserPromo)];
+      break;
+    case kDisabled:
+      [screens addObject:@(kDefaultBrowserPromo)];
+      break;
+  }
+}
 
 NSArray* FirstRunScreenSequenceForProfile(ProfileIOS* profile) {
   NSMutableArray* screens = [NSMutableArray array];
@@ -38,7 +68,9 @@ NSArray* FirstRunScreenSequenceForProfile(ProfileIOS* profile) {
               /*app_started_via_external_intent=*/false)) {
         [screens addObject:@(kChoice)];
       }
-      [screens addObject:@(kDefaultBrowserPromo)];
+      // Only add best features screen if feature kUpdatedFirstRunSequence is
+      // disabled for now.
+      AddDBPromoAndBestFeaturesScreens(screens);
       break;
     case first_run::UpdatedFRESequenceVariationType::kDBPromoFirst:
       [screens addObject:@(kDefaultBrowserPromo)];

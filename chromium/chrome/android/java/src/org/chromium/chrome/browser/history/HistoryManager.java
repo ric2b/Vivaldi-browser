@@ -8,7 +8,6 @@ import android.app.Activity;
 import android.content.Intent;
 import android.content.res.Resources;
 import android.os.Build;
-import android.view.KeyEvent;
 import android.view.LayoutInflater;
 import android.view.MenuItem;
 import android.view.View;
@@ -211,7 +210,7 @@ public class HistoryManager
         if (mContentManager.showAppFilter()) {
             // Now the search mode can have a header. Let the layout ignore it to
             // return the right item count.
-            mSelectableListLayout.ignoreItemTypeForEmptyState(ItemViewType.HEADER);
+            mSelectableListLayout.ignoreItemTypeForEmptyState(ItemViewType.STANDARD_HEADER);
         }
 
         // VAB-6771: Fab covers up bottommost item in panel lists
@@ -270,16 +269,6 @@ public class HistoryManager
         // the toolbar to the neighboring delete button, and automatically to other items on the
         // HistoryPage such as the list of HistoryItem(s).
         mToolbar.setFocusable(true);
-        mToolbar.setNextFocusForwardId(R.id.clear_browsing_data_button);
-        mToolbar.setOnKeyListener(
-                (View view, int keyCode, KeyEvent event) -> {
-                    if ((keyCode == KeyEvent.KEYCODE_ENTER || keyCode == KeyEvent.KEYCODE_DPAD_DOWN)
-                            && event.getAction() == KeyEvent.ACTION_UP) {
-                        mToolbar.getMenu().performIdentifierAction(R.id.search_menu_id, 0);
-                        return true;
-                    }
-                    return false;
-                });
 
         // 4. Width constrain the SelectableListLayout.
         mSelectableListLayout.configureWideDisplayStyle();
@@ -383,27 +372,12 @@ public class HistoryManager
         } else if (item.getItemId() == R.id.selection_mode_delete_menu_id) {
             mUmaRecorder.recordRemoveSelected(mIsSearching);
 
-            int numItemsRemoved = 0;
-            HistoryItem lastItemRemoved = null;
             for (HistoryItem historyItem : mSelectionDelegate.getSelectedItems()) {
                 mContentManager.markItemForRemoval(historyItem);
-                numItemsRemoved++;
-                lastItemRemoved = historyItem;
             }
 
             mContentManager.removeItems();
             mSelectionDelegate.clearSelection();
-
-            if (numItemsRemoved == 1) {
-                assert lastItemRemoved != null;
-                mContentManager.announceItemRemoved(lastItemRemoved);
-            } else if (numItemsRemoved > 1) {
-                mContentManager
-                        .getRecyclerView()
-                        .announceForAccessibility(
-                                mActivity.getString(
-                                        R.string.multiple_history_items_deleted, numItemsRemoved));
-            }
 
             return true;
         } else if (item.getItemId() == R.id.search_menu_id) {
@@ -452,6 +426,13 @@ public class HistoryManager
      */
     public ViewGroup getView() {
         return mRootView;
+    }
+
+    /**
+     * @return The view that shows the list content below toolbar.
+     */
+    View getListContentView() {
+        return mActivity.findViewById(R.id.list_content);
     }
 
     /**

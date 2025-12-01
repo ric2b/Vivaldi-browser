@@ -5,6 +5,9 @@
 #ifndef V8_HEAP_HEAP_INL_H_
 #define V8_HEAP_HEAP_INL_H_
 
+#include "src/heap/heap.h"
+// Include the non-inl header before the rest of the headers.
+
 #include <atomic>
 #include <optional>
 
@@ -19,7 +22,6 @@
 #include "src/heap/heap-allocator-inl.h"
 #include "src/heap/heap-layout-inl.h"
 #include "src/heap/heap-write-barrier.h"
-#include "src/heap/heap.h"
 #include "src/heap/large-spaces.h"
 #include "src/heap/memory-allocator.h"
 #include "src/heap/memory-chunk-inl.h"
@@ -320,7 +322,7 @@ bool Heap::IsPendingAllocationInternal(Tagged<HeapObject> object) {
     case NEW_LO_SPACE: {
       LargeObjectSpace* large_space =
           static_cast<LargeObjectSpace*>(base_space);
-      base::SpinningMutexGuard guard(large_space->pending_allocation_mutex());
+      base::MutexGuard guard(large_space->pending_allocation_mutex());
       return addr == large_space->pending_object();
     }
 
@@ -353,7 +355,7 @@ bool Heap::IsPendingAllocation(Tagged<Object> object) {
 }
 
 void Heap::ExternalStringTable::AddString(Tagged<String> string) {
-  std::optional<base::SpinningMutexGuard> guard;
+  std::optional<base::MutexGuard> guard;
 
   // With --shared-string-table client isolates may insert into the main
   // isolate's table concurrently.
@@ -377,9 +379,18 @@ Tagged<Boolean> Heap::ToBoolean(bool condition) {
   return roots.boolean_value(condition);
 }
 
-int Heap::GetNextTemplateSerialNumber() {
-  int next_serial_number = next_template_serial_number().value();
-  set_next_template_serial_number(Smi::FromInt(next_serial_number + 1));
+uint32_t Heap::GetNextTemplateSerialNumber() {
+  uint32_t next_serial_number =
+      static_cast<uint32_t>(next_template_serial_number().value());
+  if (next_serial_number < Smi::kMaxValue) {
+    ++next_serial_number;
+  } else {
+    // In case of overflow, restart from a range where it's ok for serial
+    // numbers to be non-unique.
+    next_serial_number = TemplateInfo::kFirstNonUniqueSerialNumber;
+  }
+  DCHECK_NE(next_serial_number, TemplateInfo::kUninitializedSerialNumber);
+  set_next_template_serial_number(Smi::FromInt(next_serial_number));
   return next_serial_number;
 }
 

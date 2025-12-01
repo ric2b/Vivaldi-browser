@@ -1,8 +1,9 @@
 Name: web-platform-tests - Test Suites for Web Platform specifications
 Short Name: wpt
 URL: https://github.com/web-platform-tests/wpt/
-Version: a23771ce0e0e27c0befd759554e90d43237964dc
-License: LICENSES FOR W3C TEST SUITES (https://www.w3.org/Consortium/Legal/2008/03-bsd-license.html)
+Version: N/A
+Revision: 3f090bd618f3e0e270f5a3b022f66be610daf276
+License: BSD-3-Clause
 Security Critical: no
 Shipped: no
 Description: This includes code for the manifest tool, lint tool, and wptserve.
@@ -12,6 +13,3 @@ Description: This includes code for the manifest tool, lint tool, and wptserve.
     for more details on maintenance.
 Local Modifications:
 - Removed all files except for those listed in wpt/WPTIncludeList.
-- Local patch to the webtransport-H3 server to stay on `aioquic` 0.x, which
-  can't be upgraded to 1.x until chromium/src is on python3.11
-  (https://crbug.com/387535231).

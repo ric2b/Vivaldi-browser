@@ -6,6 +6,7 @@
 #include <map>
 #include <memory>
 #include <string_view>
+#include <variant>
 
 #include "base/test/task_environment.h"
 #include "base/time/time.h"
@@ -65,7 +66,7 @@ class SuccessfulMuxer : public Muxer {
   bool PutFrame(EncodedFrame frame,
                 base::TimeDelta relative_timestamp) override {
     int media_type =
-        absl::get_if<AudioParameters>(&frame.params) ? kAudio : kVideo;
+        std::get_if<AudioParameters>(&frame.params) ? kAudio : kVideo;
     put_timestamps_->emplace_back(media_type,
                                   relative_timestamp.InMilliseconds());
     muxer_->PutFrame(std::move(frame), relative_timestamp);
@@ -149,14 +150,14 @@ class MuxerTimestampAdapterTest : public MuxerTimestampAdapterTestBase,
                                   public ::testing::Test {};
 
 MATCHER_P(MatchBufferData, data, "decoderbuffer data matcher") {
-  return arg.data->AsSpan() == base::as_byte_span(data);
+  return (*arg.data) == base::as_byte_span(data);
 }
 
 MATCHER_P2(MatchBufferDataAndAlphaData,
            data,
            alpha_data,
            "decoderbuffer data matcher") {
-  return arg.data->AsSpan() == base::as_byte_span(data) &&
+  return (*arg.data) == base::as_byte_span(data) &&
          arg.data->WritableSideData().alpha_data ==
              base::as_byte_span(alpha_data);
 }

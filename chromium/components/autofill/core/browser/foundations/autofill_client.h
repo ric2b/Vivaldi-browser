@@ -21,9 +21,10 @@
 #include "build/build_config.h"
 #include "components/autofill/core/browser/autofill_trigger_source.h"
 #include "components/autofill/core/browser/country_type.h"
-#include "components/autofill/core/browser/data_manager/entities/entity_data_manager.h"
+#include "components/autofill/core/browser/data_manager/autofill_ai/entity_data_manager.h"
 #include "components/autofill/core/browser/filling/filling_product.h"
 #include "components/autofill/core/browser/integrators/fast_checkout_client.h"
+#include "components/autofill/core/browser/integrators/identity_credential_delegate.h"
 #include "components/autofill/core/browser/integrators/password_form_classification.h"
 #include "components/autofill/core/browser/suggestions/suggestion.h"
 #include "components/autofill/core/browser/suggestions/suggestion_hiding_reason.h"
@@ -47,6 +48,7 @@
 #include "url/gurl.h"
 #include "url/origin.h"
 
+class GoogleGroupsManager;
 class PrefService;
 
 namespace signin {
@@ -62,7 +64,7 @@ class UkmRecorder;
 }
 
 namespace optimization_guide::proto {
-class UserAnnotationsEntry;
+class AnnotatedPageContent;
 }
 
 namespace version_info {
@@ -84,6 +86,8 @@ class AutofillSnackbarControllerImpl;
 class AutofillSuggestionDelegate;
 class AutofillPlusAddressDelegate;
 class AutofillAiDelegate;
+class AutofillAiModelCache;
+class AutofillAiModelExecutor;
 class AutofillProfile;
 class FieldClassificationModelHandler;
 class FormDataImporter;
@@ -91,6 +95,7 @@ class LogManager;
 class PersonalDataManager;
 class SingleFieldFillRouter;
 class StrikeDatabase;
+class ValuableManager;
 class VotesUploader;
 struct Suggestion;
 enum class WebauthnDialogState;
@@ -260,6 +265,7 @@ class AutofillClient {
   // Gets the EntityDataManager instance associated with the client, if there is
   // one.
   virtual EntityDataManager* GetEntityDataManager() = 0;
+  const EntityDataManager* GetEntityDataManager() const;
 
   // Gets the AutofillOptimizationGuide instance associated with the client.
   // This function can return nullptr if we are on an unsupported platform, or
@@ -286,10 +292,33 @@ class AutofillClient {
   // Returns the `AutofillComposeDelegate` instance for the tab of this client.
   virtual AutofillComposeDelegate* GetComposeDelegate();
 
+  // Attempts to the annotated page content for the current tab and calls
+  // `callback` with the results.
+  using GetAiPageContentCallback = base::OnceCallback<void(
+      std::optional<optimization_guide::proto::AnnotatedPageContent>)>;
+  virtual void GetAiPageContent(GetAiPageContentCallback callback);
+
   // Returns the `AutofillAiDelegate` instance for the tab of this client.
   // Returns `nullptr` if, at the time of the AutofillClient's construction, the
   // Autofill AI feature is unsupported.
   virtual AutofillAiDelegate* GetAutofillAiDelegate();
+
+  // Returns the per-profile `AutofillAiModelCache`. Returns `nullptr` if the
+  // `kAutofillAiServerModel` is not enabled.
+  virtual AutofillAiModelCache* GetAutofillAiModelCache();
+
+  // Returns the per-profile `AutofillAiModelExecutor`. Returns `nullptr` if the
+  // `kAutofillAiServerModel` is not enabled or the profile is OTR.
+  virtual AutofillAiModelExecutor* GetAutofillAiModelExecutor();
+
+  // Returns nullptr if no identity credential conditional request was made
+  // before.
+  const IdentityCredentialDelegate* GetIdentityCredentialDelegate() const {
+    return const_cast<const IdentityCredentialDelegate*>(
+        const_cast<AutofillClient*>(this)->GetIdentityCredentialDelegate());
+  }
+
+  virtual IdentityCredentialDelegate* GetIdentityCredentialDelegate();
 
   // Returns the `AutofillPlusAddressDelegate` associated with the profile of
   // the window of this tab.
@@ -336,6 +365,9 @@ class AutofillClient {
   virtual signin::IdentityManager* GetIdentityManager() = 0;
   virtual const signin::IdentityManager* GetIdentityManager() const = 0;
 
+  // Gets the `GoogleGroupsManager` associated with the client.
+  virtual const GoogleGroupsManager* GetGoogleGroupsManager() const;
+
   // Gets the FormDataImporter instance owned by the client.
   virtual FormDataImporter* GetFormDataImporter() = 0;
 
@@ -347,6 +379,9 @@ class AutofillClient {
   // functions will return nullptr.
   virtual payments::PaymentsAutofillClient* GetPaymentsAutofillClient();
   const payments::PaymentsAutofillClient* GetPaymentsAutofillClient() const;
+
+  // Gets the ValuableManager instance associated with the client.
+  virtual ValuableManager* GetValuableManager();
 
   // Gets the StrikeDatabase associated with the client. Note: Nullptr may be
   // returned so check before use.

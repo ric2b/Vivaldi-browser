@@ -4,13 +4,16 @@
 
 #include "chrome/browser/ash/policy/skyvault/policy_utils.h"
 
+#include <optional>
+
 #include "ash/constants/ash_pref_names.h"
 #include "base/check_is_test.h"
 #include "base/feature_list.h"
 #include "base/files/file_path.h"
+#include "base/time/time.h"
 #include "chrome/browser/ash/policy/skyvault/file_location_utils.h"
+#include "chrome/browser/ash/policy/skyvault/local_files_migration_manager.h"
 #include "chrome/browser/browser_process.h"
-#include "chrome/browser/download/download_dir_util.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/pref_names.h"
@@ -46,6 +49,10 @@ FileSaveDestination GetDestinationForPref(Profile* profile,
 constexpr char kGoogleDrivePolicyVariableName[] = "${google_drive}";
 constexpr char kOneDrivePolicyVariableName[] = "${microsoft_onedrive}";
 
+constexpr char kMigrationDestinationGoogleDrive[] = "google_drive";
+constexpr char kMigrationDestinationOneDrive[] = "microsoft_onedrive";
+constexpr char kMigrationDestinationDelete[] = "delete";
+
 bool LocalUserFilesAllowed() {
   // If the flag is disabled, ignore the policy value and allow local storage.
   if (!base::FeatureList::IsEnabled(features::kSkyVault)) {
@@ -60,22 +67,31 @@ bool LocalUserFilesAllowed() {
       prefs::kLocalUserFilesAllowed);
 }
 
-CloudProvider GetMigrationDestination() {
+MigrationDestination GetMigrationDestination() {
   if (!base::FeatureList::IsEnabled(features::kSkyVault) ||
       !base::FeatureList::IsEnabled(features::kSkyVaultV2)) {
-    return CloudProvider::kNotSpecified;
+    return MigrationDestination::kNotSpecified;
   }
 
   const std::string destination = g_browser_process->local_state()->GetString(
       prefs::kLocalUserFilesMigrationDestination);
 
-  if (destination == download_dir_util::kLocationGoogleDrive) {
-    return CloudProvider::kGoogleDrive;
+  if (destination == kMigrationDestinationGoogleDrive) {
+    return MigrationDestination::kGoogleDrive;
   }
-  if (destination == download_dir_util::kLocationOneDrive) {
-    return CloudProvider::kOneDrive;
+  if (destination == kMigrationDestinationOneDrive) {
+    return MigrationDestination::kOneDrive;
   }
-  return CloudProvider::kNotSpecified;
+  if (base::FeatureList::IsEnabled(features::kSkyVaultV3) &&
+      destination == kMigrationDestinationDelete) {
+    return MigrationDestination::kDelete;
+  }
+  return MigrationDestination::kNotSpecified;
+}
+
+bool IsCloudDestination(MigrationDestination destination) {
+  return destination == MigrationDestination::kGoogleDrive ||
+         destination == MigrationDestination::kOneDrive;
 }
 
 FileSaveDestination GetDownloadsDestination(Profile* profile) {
@@ -93,6 +109,18 @@ bool DownloadToTemp(Profile* profile) {
 
 base::FilePath GetMyFilesPath(Profile* profile) {
   return profile->GetPath().Append("MyFiles");
+}
+
+std::optional<base::Time> GetMigrationStartTime(Profile* profile) {
+  const LocalFilesMigrationManager* manager =
+      LocalFilesMigrationManagerFactory::GetInstance()->GetForBrowserContext(
+          profile);
+  if (!manager) {
+    LOG(ERROR) << "LocalFilesMigrationManager not available for profile. "
+                  "Migration/deletion start time cannot be determined.";
+    return std::nullopt;
+  }
+  return manager->GetMigrationStartTime();
 }
 
 }  // namespace policy::local_user_files

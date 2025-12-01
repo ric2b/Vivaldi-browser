@@ -14,6 +14,7 @@
 <translation id="1454726940098520109">Ne mutassa újra</translation>
 <translation id="1462666970065907900">Biztos be akarod zárni az ablakot?</translation>
 <translation id="1480046233931937785">Készítők</translation>
+<translation id="1490502035430975848">Portáldokumentum vizsgálata</translation>
 <translation id="1521774566618522728">Ma aktív</translation>
 <translation id="1526344461589023948">Hiba lépett fel a letöltött frissítés mentésekor. Ellenőrizd, hogy a gépen van elegendő szabad lemezterület, és később próbáld újra.</translation>
 <translation id="1635542496948266458">Profil váltása</translation>
@@ -34,9 +35,11 @@
 <translation id="2141974047387702305">Hiba lépett fel a frissítése letöltése közben. Ellenőrizd az internetkapcsolatot és próbáld újra.</translation>
 <translation id="2226825946708954262">⚠ Folytatás adatvesztéssel</translation>
 <translation id="2339641773402824483">Frissítések keresése...</translation>
+<translation id="2429571091666452569">A listáról:</translation>
 <translation id="2441056087170876076">Szörny 2</translation>
 <translation id="2444387452209867610">Jegyzet beszúrása</translation>
 <translation id="2486841023299517366">Állat 4</translation>
+<translation id="2501278716633472235">Visszalépés</translation>
 <translation id="2612127540243995147">Telepítésre kész. A Vivaldi most bezáródik, majd újraindul.</translation>
 <translation id="2613387515621326337">Frissítési weboldal megjelenítése</translation>
 <translation id="2645477450146475243">Sajnos az Opera beállításai nem érhetők el, míg a böngésző fut. A beállítások Vivaldiba importálásához mentsd el a munkáid és zárj be minden Opera ablakot. Majd Tovább gomb.</translation>
@@ -61,6 +64,7 @@
 <translation id="3259769196742189631">Érvényesítés</translation>
 <translation id="3291915639428159043">Automatikus lejátszás letiltva</translation>
 <translation id="3302905971452834934">Szörny 1</translation>
+<translation id="3308738399950580893">Reklámok</translation>
 <translation id="3334610655141903168">(nincs cím)</translation>
 <translation id="3372505110412186107">A Vivaldi <ph name="VERSION" /> a jelenlegi legfrissebb verzió.</translation>
 <translation id="3383198080133834965">Naprakész vagy!</translation>
@@ -71,9 +75,11 @@
 <translation id="3521635864657970829">Biztos be akarod zárni az ablakot?</translation>
 <translation id="3540597690227428180">Állat 9</translation>
 <translation id="3542768452570884558">Hivatkozás megnyitása új ablakban</translation>
+<translation id="3586931643579894722">Részletek elrejtése</translation>
 <translation id="3588820906588687999">Kép megnyitása új lapon</translation>
 <translation id="3601066750251199488">Szörny 3</translation>
 <translation id="3620979700683094848">A webhelyek automatikusan lejátszhatnak videókat</translation>
+<translation id="3650023731264842343">A következő oldal betöltésekor:</translation>
 <translation id="3658651522139217005">Opera GX</translation>
 <translation id="3680031241659195730">Új Vivaldi verzió érhető el!</translation>
 <translation id="3708982624815781692">A letöltés megszakítva.</translation>
@@ -83,6 +89,7 @@
 <translation id="3795800845758778870">Sajnos a Brave beállításai nem érhetők el, míg a böngésző fut. A beállítások Vivaldiba importálásához mentsd el a munkáid és zárj be minden Brave ablakot. Majd Tovább gomb.</translation>
 <translation id="3822431842304177896">Új elválasztó</translation>
 <translation id="3832132597516774400">Tájkép 5</translation>
+<translation id="3894751534882749287">Ha mindenképp meg kívánod nézni az oldalt, a felugró Követésblokkoló ablakban módosíthatod a követési védelmét, vagy az Engedélyezés gombra kattintva</translation>
 <translation id="3914946330804881301">Operából importálva</translation>
 <translation id="3921292902397893431">Szörny 8</translation>
 <translation id="3943857333388298514">Beillesztés</translation>
@@ -107,6 +114,7 @@
 <translation id="4582480609585453144">Hivatkozás megnyitása háttérbeli lapon</translation>
 <translation id="4636708767492582204">Küldés levélben</translation>
 <translation id="4677434526832593569">Állat 8</translation>
+<translation id="4736016046474602958">Követésblokkoló</translation>
 <translation id="474217410105706308">Lap hangjának némítása</translation>
 <translation id="4861715717329665002">Automatikusan mentett munkamenetek</translation>
 <translation id="4881695831933465202">Megnyitás</translation>
@@ -133,9 +141,11 @@
 <translation id="588258955323874662">Teljes képernyő</translation>
 <translation id="5916080360077521750">Sajnos a Chrome beállításaid nem érhetők el, míg a böngésző fut. Hogy beimportáld azon beállításokat a Vivaldiba, mentsd el a munkáidat és zárj be minden Chrome ablakot, majd kattints a Folytatás gombra.</translation>
 <translation id="6040143037577758943">Bezárás</translation>
+<translation id="6140948187512243695">Részletek megjelenítése</translation>
 <translation id="6229528619562190452">Kattints ide a Vivaldi frissítéséhez.</translation>
 <translation id="6234173136417926046">Kép beállítása Induló oldal háttereként</translation>
 <translation id="6339818817272922368">Helyi fiók</translation>
+<translation id="6376435169746695498">Az oldal betöltését blokkolta egy egyezés: <ph name="BLOCKER_NAME" /></translation>
 <translation id="6398710281890660037">Profilom biztosítása</translation>
 <translation id="6438786710866753178">Tájkép 4</translation>
 <translation id="6477028720702061455">Opera profil mappa kiválasztása importáláshoz</translation>
@@ -152,6 +162,7 @@
 <translation id="7086554968911045110">Tájkép 7</translation>
 <translation id="7099506190679014195">Biztonsági kulcstár frissítése</translation>
 <translation id="7111492742514999492">Tájkép 9</translation>
+<translation id="7113310725918019676"><ph name="BLOCKED_TYPE" /> engedélyezése innen: <ph name="DOMAIN" /></translation>
 <translation id="7208252576848052204">Sajnos az Arc beállításai nem érhetők el, míg a böngésző fut. A beállítások Vivaldiba importálásához mentsd el a munkáid és zárj be minden Arc ablakot. Majd Tovább gomb.</translation>
 <translation id="7321500017121629018">Tegnap aktív</translation>
 <translation id="7337881442233988129">Chromium</translation>
@@ -167,12 +178,13 @@
 <translation id="8027581147000338959">Megnyitás új ablakban</translation>
 <translation id="8044382196220116469">A weboldalak nem játszhatják le automatikusan a videókat</translation>
 <translation id="8099620695029051217">Oldal címének másolása</translation>
+<translation id="8119307142152921512">Követések és reklámok</translation>
 <translation id="8197810018650377191">Könyvjelző oldal</translation>
 <translation id="8261506727792406068">Törlés</translation>
-<translation id="8263047843452521549">Háttérbeli szolgáltatás-munkavégző vizsgálata</translation>
 <translation id="8331671104904436324">Megnyitás a háttérben</translation>
 <translation id="8373293945112511707">Tájkép 1</translation>
 <translation id="8388552048012645975">Frissítés letöltése...</translation>
+<translation id="8392904568172593155">Paraméterek nélkül</translation>
 <translation id="8427094907586191051">Tájkép 17</translation>
 <translation id="8439034818057146672">Egy új Vivaldi verzió áll készen a telepítésre.</translation>
 <translation id="8446668873108041390">A JavaScript futtatása AppleScripten keresztül, ki van kapcsolva. A Rendszerbeállítások &gt; Adatvédelem &gt; Apple-események alatt engedélyezheted a JavaScriptet Apple-eseményekből.</translation>
@@ -183,14 +195,15 @@
 <translation id="8651348004684669199">Aktív fül hozzáadása</translation>
 <translation id="8669345741879513971">Szörny 10</translation>
 <translation id="867544375504146191">Yandex</translation>
-<translation id="8689295374912158752">Portáldokumentum vizsgálata</translation>
 <translation id="875142999698251063">Kilépés most</translation>
 <translation id="8768970203213061953">Tájkép 14</translation>
 <translation id="8773635261052182196">Nem fogod többet látni ezeket az értesítéseket. A Vivaldi beállításaiban visszakapcsolhatod.</translation>
 <translation id="8774017153185436870">A webhelyek automatikusan lejátszhatnak videókat</translation>
 <translation id="8813277370772331957">Emlékeztessen később</translation>
+<translation id="8837256239226739065">Háttérbeli szolgáltatás-munkavégző vizsgálata</translation>
 <translation id="8894900864683381599">Hivatkozás web oldalsávhoz adása</translation>
 <translation id="8912720443398351457">Biztos ki akarsz lépni a Vivaldiból?</translation>
+<translation id="8940028675168378100">Blokkolta: <ph name="BLOCKER_NAME" /></translation>
 <translation id="8947109330183116400">HTML könyvjelző fájl kiválasztása</translation>
 <translation id="9017566390391482291">Vivaldi profil mappa kiválasztása importáláshoz</translation>
 <translation id="9048058608784130603">Függő <ph name="VERSION" /> frissítés</translation>
@@ -201,6 +214,7 @@
 <translation id="912022491595344261">Kép megnyitása mint <ph name="USER" /></translation>
 <translation id="9157539936604258187">Hivatkozás megnyitása</translation>
 <translation id="9169060351863393881">Opera 12.x</translation>
+<translation id="9180553614777056266">Reklámblokkoló</translation>
 <translation id="939305735877869636">Brave</translation>
 <translation id="970294721402795299">Tájkép 16</translation>
 </translationbundle>

@@ -123,10 +123,13 @@ message AutofillQueryResponse {
       // specify requirements for the generation of passwords.
       optional .autofill.PasswordRequirementsSpec password_requirements = 5;
       reserved 6;  // optional bool primary_type_prediction_is_override
+      optional string format_string = 7;
     };
     // Suggestions on the fields in the same form.
     repeated FieldSuggestion field_suggestions = 1;
-    reserved 2;  // repeated .autofill.Context contexts
+
+    // Indicates whether the client may run the AutofillAI model on this form.
+    optional bool run_autofill_ai_model = 2;
   };
   // Suggestions for forms in the same page.
   repeated FormSuggestion form_suggestions = 1;

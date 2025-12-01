@@ -132,6 +132,13 @@ BASE_FEATURE(kV8MemoryReducer,
 const base::FeatureParam<int> kV8MemoryReducerGCCount{
     &kV8MemoryReducer, "V8MemoryReducerGCCount", 3};
 
+BASE_FEATURE(kV8PreconfigureOldGen,
+             "V8PreconfigureOldGen",
+             kFeatureDefaultStateControlledByV8);
+
+const base::FeatureParam<int> kV8PreconfigureOldGenSize{
+    &kV8PreconfigureOldGen, "V8PreconfigureOldGenSize", 32};
+
 // Enables MinorMC young generation garbage collector.
 BASE_FEATURE(kV8MinorMS, ("V8MinorMS"), kFeatureDefaultStateControlledByV8);
 
@@ -141,10 +148,6 @@ BASE_FEATURE(kV8ScavengerHigherCapacity,
 
 const base::FeatureParam<int> kV8ScavengerMaxCapacity{
     &kV8ScavengerHigherCapacity, "V8ScavengerMaxCapacity", 16};
-
-BASE_FEATURE(kV8SeparateGCPhases,
-             ("V8SeparateGCPhases"),
-             kFeatureDefaultStateControlledByV8);
 
 // Enables Sparkplug compiler. Note that this only sets the V8 flag when
 // manually overridden; otherwise it defers to whatever the V8 default is.
@@ -241,10 +244,6 @@ BASE_FEATURE(kV8ConcurrentMarkingHighPriorityThreads,
              ("V8ConcurrentMarkingHighPriorityThreads"),
              kFeatureDefaultStateControlledByV8);
 
-BASE_FEATURE(kV8UpdateLimitAfterLoading,
-             ("V8UpdateLimitAfterLoading"),
-             kFeatureDefaultStateControlledByV8);
-
 BASE_FEATURE(kV8UseLibmTrigFunctions,
              ("V8UseLibmTrigFunctions"),
              kFeatureDefaultStateControlledByV8);
@@ -277,16 +276,6 @@ BASE_FEATURE(kV8IntelJCCErratumMitigation,
 
 // JavaScript language features.
 
-// Enables the iterator helpers proposal.
-BASE_FEATURE(kJavaScriptIteratorHelpers,
-             ("kJavaScriptIteratorHelpers"),
-             kFeatureDefaultStateControlledByV8);
-
-// Enables the Promise.withResolvers proposal.
-BASE_FEATURE(kJavaScriptPromiseWithResolvers,
-             ("JavaScriptPromiseWithResolvers"),
-             kFeatureDefaultStateControlledByV8);
-
 // Enables the RegExp modifiers proposal.
 BASE_FEATURE(kJavaScriptRegExpModifiers,
              ("JavaScriptRegExpModifiers"),
@@ -295,11 +284,6 @@ BASE_FEATURE(kJavaScriptRegExpModifiers,
 // Enables the `with` syntax for the Import Attributes proposal.
 BASE_FEATURE(kJavaScriptImportAttributes,
              ("JavaScriptImportAttributes"),
-             kFeatureDefaultStateControlledByV8);
-
-// Enables the set methods proposal.
-BASE_FEATURE(kJavaScriptSetMethods,
-             ("JavaScriptSetMethods"),
              kFeatureDefaultStateControlledByV8);
 
 // Enables the RegExp duplicate named capture groups proposal.
@@ -325,21 +309,6 @@ BASE_FEATURE(kWebAssemblyDeopt,
 // and call_ref inlining, which has already launched above). Not user visible.
 BASE_FEATURE(kWebAssemblyInliningCallIndirect,
              "WebAssemblyInliningCallIndirect",
-             kFeatureDefaultStateControlledByV8);
-
-// Enable support for multiple memories according to the multi-memory proposal:
-// https://github.com/WebAssembly/multi-memory. See
-// https://chromestatus.com/feature/5106389887746048.
-BASE_FEATURE(kWebAssemblyMultipleMemories,
-             ("WebAssemblyMultipleMemories"),
-             kFeatureDefaultStateControlledByV8);
-
-BASE_FEATURE(kWebAssemblyTurboshaft,
-             ("WebAssemblyTurboshaft"),
-             kFeatureDefaultStateControlledByV8);
-
-BASE_FEATURE(kWebAssemblyTurboshaftInstructionSelection,
-             ("WebAssemblyTurboshaftInstructionSelection"),
              kFeatureDefaultStateControlledByV8);
 
 }  // namespace features

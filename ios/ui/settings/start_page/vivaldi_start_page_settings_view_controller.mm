@@ -34,6 +34,7 @@ typedef NS_ENUM(NSInteger, ItemType) {
   SettingsItemTypeWallpaper,
   SettingsItemTypeStartPageOpenWithItem,
   SettingsItemTypeCustomizeStartPage,
+  SettingsItemTypeShowAdd,
 };
 
 NSString* const kStartPageShowFrequentlyVisitedSettingsCellId =
@@ -48,6 +49,8 @@ NSString* const kStartPageOpenWithSettingsCellId =
     @"kStartPageOpenWithSettingsCellId";
 NSString* const kStartPageCustomizeStartPageSettingsCellId =
     @"kStartPageCustomizeStartPageSettingsCellId";
+NSString* const kStartPageShowAddSettingsCellId =
+    @"kStartPageShowAddSettingsCellId";
 
 }  // namespace
 
@@ -69,6 +72,9 @@ NSString* const kStartPageCustomizeStartPageSettingsCellId =
   // The item related to the switch for the "Customize Start Page button"
   // setting.
   TableViewSwitchItem* _customizeStartPageItem;
+  // The item related to the switch for the "Show Add button"
+  // setting.
+  TableViewSwitchItem* _showAddItem;
   // Whether Settings have been dismissed.
   BOOL _settingsAreDismissed;
   // Layout settings coordinator.
@@ -83,6 +89,8 @@ NSString* const kStartPageCustomizeStartPageSettingsCellId =
 @property(nonatomic, assign) BOOL displaySpeedDials;
 // Boolean for "Customize Start Page button" setting state.
 @property(nonatomic, assign) BOOL customizeStartPage;
+// Boolean for "Show Add button" setting state.
+@property(nonatomic, assign) BOOL showAddButton;
 
 @end
 
@@ -137,6 +145,9 @@ NSString* const kStartPageCustomizeStartPageSettingsCellId =
 
   [model addItem:[self customizeStartPageTableItem]
       toSectionWithIdentifier:SectionIdentifierStartPageSettings];
+
+  [model addItem:[self showAddTableItem]
+      toSectionWithIdentifier:SectionIdentifierStartPageSettings];
 }
 
 
@@ -170,6 +181,14 @@ NSString* const kStartPageCustomizeStartPageSettingsCellId =
         base::apple::ObjCCastStrict<TableViewSwitchCell>(cell);
     [switchCell.switchView addTarget:self
           action:@selector(showCustomizeStartPageSwitchToggled:)
+                forControlEvents:UIControlEventValueChanged];
+  }
+
+  if (itemType == SettingsItemTypeShowAdd) {
+    TableViewSwitchCell* switchCell =
+        base::apple::ObjCCastStrict<TableViewSwitchCell>(cell);
+    [switchCell.switchView addTarget:self
+          action:@selector(showAddSwitchToggled:)
                 forControlEvents:UIControlEventValueChanged];
   }
 
@@ -228,6 +247,14 @@ NSString* const kStartPageCustomizeStartPageSettingsCellId =
   [self reconfigureCellsForItems:@[_customizeStartPageItem]];
 }
 
+- (void)setPreferenceShowAddButton:(BOOL)showAddButton {
+  self.showAddButton = showAddButton;
+  if (!_showAddItem)
+    return;
+  _showAddItem.on = showAddButton;
+  [self reconfigureCellsForItems:@[_showAddItem]];
+}
+
 - (void)setPreferenceSpeedDialLayout:
     (VivaldiStartPageLayoutStyle)layoutStyle {
   _startPageLayout = layoutStyle;
@@ -269,6 +296,7 @@ NSString* const kStartPageCustomizeStartPageSettingsCellId =
   _layoutSettingsItem = nullptr;
   _openStartPageWithSettingsItem = nullptr;
   _customizeStartPageItem = nullptr;
+  _showAddItem = nullptr;
   _settingsAreDismissed = YES;
 
   [_layoutSettingsCoordinator stop];
@@ -297,6 +325,13 @@ NSString* const kStartPageCustomizeStartPageSettingsCellId =
   self.customizeStartPage = newSwitchValue;
   [self.consumer
       setPreferenceShowCustomizeStartPageButton:newSwitchValue];
+}
+
+- (void)showAddSwitchToggled:(UISwitch*)sender {
+  BOOL newSwitchValue = sender.isOn;
+  _showAddItem.on = newSwitchValue;
+  self.showAddButton = newSwitchValue;
+  [self.consumer setPreferenceShowAddButton:newSwitchValue];
 }
 
 #pragma mark - Private Methods
@@ -373,6 +408,18 @@ NSString* const kStartPageCustomizeStartPageSettingsCellId =
         kStartPageCustomizeStartPageSettingsCellId;
   }
   return _customizeStartPageItem;
+}
+
+- (TableViewSwitchItem*)showAddTableItem {
+  if (!_showAddItem) {
+    _showAddItem = [[TableViewSwitchItem alloc]
+        initWithType:SettingsItemTypeShowAdd];
+    _showAddItem.text =
+        GetNSString(IDS_IOS_START_PAGE_SETTINGS_SHOW_ADD_TITLE);
+    _showAddItem.on = self.showAddButton;
+    _showAddItem.accessibilityIdentifier = kStartPageShowAddSettingsCellId;
+  }
+  return _showAddItem;
 }
 
 #pragma mark - Navigation Actions

@@ -42,7 +42,6 @@ skia_core_public = [
   "$_include/core/SkClipOp.h",
   "$_include/core/SkColor.h",
   "$_include/core/SkColorFilter.h",
-  "$_include/core/SkColorPriv.h",
   "$_include/core/SkColorSpace.h",
   "$_include/core/SkColorTable.h",
   "$_include/core/SkColorType.h",
@@ -144,7 +143,6 @@ skia_core_public = [
 #  //src/text:text_hdrs
 #  //src/text:text_srcs
 skia_core_sources = [
-  "$_include/private/SkColorData.h",
   "$_include/private/SkGainmapInfo.h",
   "$_include/private/SkGainmapShader.h",
   "$_include/private/SkIDChangeListener.h",
@@ -187,6 +185,7 @@ skia_core_sources = [
   "$_include/private/base/SkTypeTraits.h",
   "$_include/private/chromium/SkChromeRemoteGlyphCache.h",
   "$_include/private/chromium/SkDiscardableMemory.h",
+  "$_include/private/chromium/SkPMColor.h",
   "$_include/private/chromium/Slug.h",
   "$_src/base/SkArenaAlloc.cpp",
   "$_src/base/SkArenaAlloc.h",
@@ -318,8 +317,10 @@ skia_core_sources = [
   "$_src/core/SkClipStackDevice.cpp",
   "$_src/core/SkClipStackDevice.h",
   "$_src/core/SkColor.cpp",
+  "$_src/core/SkColorData.h",
   "$_src/core/SkColorFilter.cpp",
   "$_src/core/SkColorFilterPriv.h",
+  "$_src/core/SkColorPriv.h",
   "$_src/core/SkColorSpace.cpp",
   "$_src/core/SkColorSpacePriv.h",
   "$_src/core/SkColorSpaceXformSteps.cpp",
@@ -505,6 +506,7 @@ skia_core_sources = [
   "$_src/core/SkRasterPipelineContextUtils.h",
   "$_src/core/SkRasterPipelineOpContexts.h",
   "$_src/core/SkRasterPipelineOpList.h",
+  "$_src/core/SkRasterPipelineVizualizer.h",
   "$_src/core/SkReadBuffer.cpp",
   "$_src/core/SkReadBuffer.h",
   "$_src/core/SkReadPixelsRec.cpp",

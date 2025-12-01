@@ -37,6 +37,7 @@
 #include "chrome/browser/extensions/api/passwords_private/passwords_private_event_router_factory.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/extensions/extension_tab_util.h"
+#include "chrome/browser/extensions/extension_util.h"
 #include "chrome/browser/first_run/first_run.h"
 #include "chrome/browser/history/top_sites_factory.h"
 #include "chrome/browser/icon_manager.h"
@@ -104,22 +105,22 @@
 #include "ui/shell_dialogs/select_file_policy.h"
 #include "url/third_party/mozilla/url_parse.h"
 #include "url/url_constants.h"
-
 #include "app/vivaldi_apptools.h"
 #include "app/vivaldi_constants.h"
 #include "app/vivaldi_version_info.h"
 #include "base/vivaldi_switches.h"
 #include "browser/translate/vivaldi_translate_server_request.h"
 #include "browser/vivaldi_browser_finder.h"
-#include "browser/vivaldi_version_utils.h"
 #include "components/bookmarks/vivaldi_bookmark_kit.h"
 #include "components/datasource/vivaldi_data_url_utils.h"
 #include "components/datasource/vivaldi_image_store.h"
 #include "components/locale/locale_kit.h"
+#include "components/version_utils/vivaldi_version_utils.h"
 #include "extensions/api/runtime/runtime_api.h"
 #include "extensions/api/vivaldi_utilities/drag_download_items.h"
 #include "extensions/helper/file_selection_options.h"
 #include "extensions/tools/vivaldi_tools.h"
+#include "extensions/vivaldi_browser_component_wrapper.h"
 #include "prefs/vivaldi_gen_prefs.h"
 #include "prefs/vivaldi_pref_names.h"
 #include "sync/file_sync/file_store.h"
@@ -128,6 +129,7 @@
 #include "ui/vivaldi_browser_window.h"
 #include "ui/vivaldi_skia_utils.h"
 #include "ui/vivaldi_ui_utils.h"
+#include "vivaldi_status/vivaldi_status_factory.h"
 
 #include "chrome/browser/net/proxy_service_factory.h"
 #include "chromium/net/proxy_resolution/proxy_config_service.h"
@@ -135,8 +137,11 @@
 #include "net/proxy_resolution/proxy_config_service.h"
 #include "net/proxy_resolution/proxy_config_with_annotation.h"
 
+#include "extensions/vivaldi_silent_extension_installer.h"
+
 #include "components/qr_code_generator/bitmap_generator.h"
 #include "components/qr_code_generator/qr_code_generator.h"
+
 
 #if BUILDFLAG(IS_WIN)
 
@@ -167,12 +172,6 @@ namespace {
 constexpr char kMutexNameKey[] = "name";
 constexpr char kMutexReleaseTokenKey[] = "release_token";
 
-ContentSetting vivContentSettingFromString(const std::string& name) {
-  ContentSetting setting;
-  content_settings::ContentSettingFromString(name, &setting);
-  return setting;
-}
-
 }  // namespace
 
 VivaldiUtilitiesAPI::VivaldiUtilitiesAPI(content::BrowserContext* context)
@@ -190,7 +189,10 @@ VivaldiUtilitiesAPI::VivaldiUtilitiesAPI(content::BrowserContext* context)
   razer_chroma_handler_.reset(
       new RazerChromaHandler(Profile::FromBrowserContext(context)));
 
-  TopSitesFactory::GetForProfile((Profile::FromBrowserContext(context)))
+  VivaldiBrowserComponentWrapper::GetInstance()->TopSitesFactoryAddObserver(
+      context, this);
+
+  vivaldi_status::VivaldiStatusFactory::GetForBrowserContext(context)
       ->AddObserver(this);
 }
 
@@ -215,8 +217,10 @@ void VivaldiUtilitiesAPI::Shutdown() {
     razer_chroma_handler_->Shutdown();
   }
 
-  TopSitesFactory::GetForProfile(
-      (Profile::FromBrowserContext(browser_context_)))
+  VivaldiBrowserComponentWrapper::GetInstance()->TopSitesFactoryRemoveObserver(
+      browser_context_, this);
+
+  vivaldi_status::VivaldiStatusFactory::GetForBrowserContext(browser_context_)
       ->RemoveObserver(this);
 }
 
@@ -450,6 +454,32 @@ void VivaldiUtilitiesAPI::TopSitesChanged(
   ::vivaldi::BroadcastEvent(vivaldi::utilities::OnTopSitesChanged::kEventName,
                             vivaldi::utilities::OnTopSitesChanged::Create(),
                             browser_context_);
+}
+
+void VivaldiUtilitiesAPI::OnVivaldiSyncStatusUpdated(
+    vivaldi_status::VivaldiStatus::Mode mode) {
+
+  vivaldi::utilities::VivaldiStatus status;
+  switch (mode) {
+    case vivaldi_status::VivaldiStatus::kOperational:
+      status = vivaldi::utilities::VivaldiStatus::kOperational;
+      break;
+    case vivaldi_status::VivaldiStatus::kMaintenance:
+      status = vivaldi::utilities::VivaldiStatus::kMaintenance;
+      break;
+    case vivaldi_status::VivaldiStatus::kMinorOutage:
+      status = vivaldi::utilities::VivaldiStatus::kMinoroutage;
+      break;
+    case vivaldi_status::VivaldiStatus::kMajorOutage:
+      status = vivaldi::utilities::VivaldiStatus::kMajoroutage;
+      break;
+    default:
+      return;
+  }
+  ::vivaldi::BroadcastEvent(
+      vivaldi::utilities::OnVivaldiSyncStatusUpdated::kEventName,
+      vivaldi::utilities::OnVivaldiSyncStatusUpdated::Create(status),
+      browser_context_);
 }
 
 void VivaldiUtilitiesAPI::OnSessionRecoveryStart() {
@@ -1279,7 +1309,9 @@ UtilitiesLaunchNetworkSettingsFunction::Run() {
   EXTENSION_FUNCTION_VALIDATE(params);
 
   VivaldiBrowserWindow* window =
-      VivaldiBrowserWindow::FromId(params->window_id);
+      VivaldiBrowserComponentWrapper::GetInstance()->
+          VivaldiBrowserWindowFromId(
+            params->window_id);
   if (!window) {
     return RespondNow(Error("No such window"));
   }
@@ -1345,16 +1377,10 @@ UtilitiesSetDefaultContentSettingsFunction::Run() {
   std::string& content_settings = params->content_setting;
   std::string& value = params->value;
 
-  ContentSetting default_setting = vivContentSettingFromString(value);
-  //
+  ContentSetting default_setting;
+  content_settings::ContentSettingFromString(value, &default_setting);
   ContentSettingsType content_type =
       site_settings::ContentSettingsTypeFromGroupName(content_settings);
-
-  Profile* profile =
-      Profile::FromBrowserContext(browser_context())->GetOriginalProfile();
-
-  HostContentSettingsMap* map =
-      HostContentSettingsMapFactory::GetForProfile(profile);
 
   const content_settings::ContentSettingsInfo* info =
       content_settings::ContentSettingsRegistry::GetInstance()->Get(
@@ -1363,7 +1389,8 @@ UtilitiesSetDefaultContentSettingsFunction::Run() {
   bool is_valid_settings_value = info->IsDefaultSettingValid(default_setting);
   DCHECK(is_valid_settings_value);
   if (is_valid_settings_value) {
-    map->SetDefaultContentSetting(content_type, default_setting);
+    VivaldiBrowserComponentWrapper::GetInstance()->SetDefaultContentSetting(
+        browser_context(), content_settings, value);
   }
 
   return RespondNow(ArgumentList(Results::Create()));
@@ -1378,17 +1405,9 @@ UtilitiesGetDefaultContentSettingsFunction::Run() {
   EXTENSION_FUNCTION_VALIDATE(params);
 
   std::string& content_settings = params->content_setting;
-  ContentSettingsType content_type =
-      site_settings::ContentSettingsTypeFromGroupName(content_settings);
-  ContentSetting default_setting;
-  Profile* profile =
-      Profile::FromBrowserContext(browser_context())->GetOriginalProfile();
-
-  default_setting = HostContentSettingsMapFactory::GetForProfile(profile)
-                        ->GetDefaultContentSetting(content_type, nullptr);
-
-  std::string setting =
-      content_settings::ContentSettingToString(default_setting);
+  std::string setting = VivaldiBrowserComponentWrapper::GetInstance()
+      ->GetDefaultContentSetting(
+      browser_context(), content_settings);
 
   return RespondNow(ArgumentList(Results::Create(setting)));
 }
@@ -1466,7 +1485,9 @@ ExtensionFunction::ResponseAction UtilitiesOpenTaskManagerFunction::Run() {
   EXTENSION_FUNCTION_VALIDATE(params);
 
   VivaldiBrowserWindow* window =
-      VivaldiBrowserWindow::FromId(params->window_id);
+      VivaldiBrowserComponentWrapper::GetInstance()->
+          VivaldiBrowserWindowFromId(
+            params->window_id);
   if (!window) {
     return RespondNow(Error("No such window"));
   }
@@ -1684,17 +1705,18 @@ ExtensionFunction::ResponseAction UtilitiesSetContentSettingsFunction::Run() {
   if (params->details.secondary_pattern) {
     secondary_pattern_string = *params->details.secondary_pattern;
   }
-  std::string type = params->details.type;
-  std::string value = params->details.value;
+  std::string content_type_string = params->details.type;
+  std::string content_setting_string = params->details.value;
   bool incognito = false;
   if (params->details.incognito) {
     incognito = *params->details.incognito;
   }
 
   ContentSettingsType content_type =
-      site_settings::ContentSettingsTypeFromGroupName(type);
+      site_settings::ContentSettingsTypeFromGroupName(content_type_string);
   ContentSetting setting;
-  CHECK(content_settings::ContentSettingFromString(value, &setting));
+  CHECK(content_settings::ContentSettingFromString(content_setting_string,
+                                                   &setting));
 
   Profile* profile = Profile::FromBrowserContext(browser_context());
   if (incognito) {
@@ -1704,9 +1726,6 @@ ExtensionFunction::ResponseAction UtilitiesSetContentSettingsFunction::Run() {
     profile = profile->GetOffTheRecordProfile(
         Profile::OTRProfileID::PrimaryID(), false);
   }
-
-  HostContentSettingsMap* map =
-      HostContentSettingsMapFactory::GetForProfile(profile);
 
   ContentSettingsPattern primary_pattern =
       ContentSettingsPattern::FromString(primary_pattern_string);
@@ -1729,8 +1748,11 @@ ExtensionFunction::ResponseAction UtilitiesSetContentSettingsFunction::Run() {
           profile, primary_pattern, secondary_pattern, content_type,
           permissions::PermissionSourceUI::SITE_SETTINGS);
 
-  map->SetContentSettingCustomScope(primary_pattern, secondary_pattern,
-                                    content_type, setting);
+
+  VivaldiBrowserComponentWrapper::GetInstance()->SetContentSettingCustomScope(
+      browser_context(), primary_pattern_string, secondary_pattern_string,
+      content_type_string, content_setting_string);
+
 
   return RespondNow(NoArguments());
 }
@@ -2257,7 +2279,9 @@ UtilitiesShowManageSSLCertificatesFunction::Run() {
   EXTENSION_FUNCTION_VALIDATE(params);
 
   VivaldiBrowserWindow* window =
-      VivaldiBrowserWindow::FromId(params->window_id);
+      VivaldiBrowserComponentWrapper::GetInstance()->
+          VivaldiBrowserWindowFromId(
+            params->window_id);
   if (!window) {
     return RespondNow(Error("No such window"));
   }
@@ -2294,7 +2318,9 @@ ExtensionFunction::ResponseAction UtilitiesBrowserWindowReadyFunction::Run() {
       vivaldi::utilities::BrowserWindowReady::Params::Create(args()));
   EXTENSION_FUNCTION_VALIDATE(params);
   VivaldiBrowserWindow* window =
-      VivaldiBrowserWindow::FromId(params->window_id);
+      VivaldiBrowserComponentWrapper::GetInstance()->
+          VivaldiBrowserWindowFromId(
+            params->window_id);
   if (window) {
     window->OnUIReady();
     return RespondNow(ArgumentList(Results::Create(true)));
@@ -2390,7 +2416,8 @@ ExtensionFunction::ResponseAction UtilitiesEmulateUserInputFunction::Run() {
   EXTENSION_FUNCTION_VALIDATE(params);
 
   VivaldiBrowserWindow* window =
-      VivaldiBrowserWindow::FromId(params->window_id);
+      VivaldiBrowserComponentWrapper::GetInstance()->
+          VivaldiBrowserWindowFromId(params->window_id);
   if (!window) {
     return RespondNow(Error("No such window"));
   }
@@ -2586,7 +2613,63 @@ void UtilitiesSilentlyInstallExtensionFunction::OnExtensionInstalled(
     const std::string& error,
     webstore_install::Result result) {
   namespace Results = vivaldi::utilities::SilentlyInstallExtension::Results;
-  Respond(ArgumentList(Results::Create(success)));
+  using vivaldi::utilities::ExtensionInstallResult;
+
+  ExtensionInstallResult install_result;
+
+  install_result.success = success;
+  install_result.error = error;
+
+
+  Respond(ArgumentList(Results::Create(install_result)));
 }
+
+ExtensionFunction::ResponseAction UtilitiesAllowVPNIncognitoFunction::Run() {
+  Profile* profile = Profile::FromBrowserContext(browser_context());
+  extensions::util::SetIsIncognitoEnabled("jplgfhpmjnbigmhklmmbgecoobifkmpa", profile, true);
+  return RespondNow(NoArguments());
+}
+
+ExtensionFunction::ResponseAction
+UtilitiesRequestVivaldiSyncStatusFunction::Run() {
+  namespace Results = vivaldi::utilities::RequestVivaldiSyncStatus::Results;
+  vivaldi_status::VivaldiStatus* service =
+    vivaldi_status::VivaldiStatusFactory::GetForBrowserContext(
+        browser_context());
+  if (!service) {
+    return RespondNow(Error("Service not available."));
+  }
+  vivaldi_status::VivaldiStatus::Mode mode;
+  if (service->GetSyncMode(&mode)) {
+    vivaldi::utilities::VivaldiStatus status;
+    switch (mode) {
+      case vivaldi_status::VivaldiStatus::kOperational:
+        status = vivaldi::utilities::VivaldiStatus::kOperational;
+        break;
+      case vivaldi_status::VivaldiStatus::kMaintenance:
+        status = vivaldi::utilities::VivaldiStatus::kMaintenance;
+        break;
+      case vivaldi_status::VivaldiStatus::kMinorOutage:
+        status = vivaldi::utilities::VivaldiStatus::kMinoroutage;
+        break;
+      case vivaldi_status::VivaldiStatus::kMajorOutage:
+        status = vivaldi::utilities::VivaldiStatus::kMajoroutage;
+        break;
+      case vivaldi_status::VivaldiStatus::kUnknown:
+      default:
+        status = vivaldi::utilities::VivaldiStatus::kNone;
+    }
+    if (status != vivaldi::utilities::VivaldiStatus::kNone) {
+      return RespondNow(ArgumentList(Results::Create(status)));
+    }
+  }
+  // Data has either not been fetched from server or is too old. Ask service to
+  // fetch/refetch from server. UI will be informed by an event when it has
+  // completed.
+  service->Refresh(vivaldi_status::VivaldiStatus::kSync);
+
+  return RespondNow(NoArguments());
+}
+
 
 }  // namespace extensions

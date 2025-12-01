@@ -375,7 +375,6 @@ static int queue_alloc(ThreadQueue **ptq, unsigned nb_streams, unsigned queue_si
                        enum QueueType type)
 {
     ThreadQueue *tq;
-    ObjPool *op;
 
     if (queue_size <= 0) {
         if (type == QUEUE_FRAMES)
@@ -393,17 +392,10 @@ static int queue_alloc(ThreadQueue **ptq, unsigned nb_streams, unsigned queue_si
         av_assert0(queue_size == DEFAULT_FRAME_THREAD_QUEUE_SIZE);
     }
 
-    op = (type == QUEUE_PACKETS) ? objpool_alloc_packets() :
-                                   objpool_alloc_frames();
-    if (!op)
+    tq = tq_alloc(nb_streams, queue_size,
+                  (type == QUEUE_PACKETS) ? THREAD_QUEUE_PACKETS : THREAD_QUEUE_FRAMES);
+    if (!tq)
         return AVERROR(ENOMEM);
-
-    tq = tq_alloc(nb_streams, queue_size, op,
-                  (type == QUEUE_PACKETS) ? pkt_move : frame_move);
-    if (!tq) {
-        objpool_free(&op);
-        return AVERROR(ENOMEM);
-    }
 
     *ptq = tq;
     return 0;
@@ -1844,7 +1836,7 @@ static int mux_queue_packet(SchMux *mux, SchMuxStream *ms, AVPacket *pkt)
         if (new_size <= packets) {
             av_log(mux, AV_LOG_ERROR,
                    "Too many packets buffered for output stream.\n");
-            return AVERROR(ENOSPC);
+            return AVERROR_BUFFER_TOO_SMALL;
         }
         ret = av_fifo_grow2(q->fifo, new_size - packets);
         if (ret < 0)

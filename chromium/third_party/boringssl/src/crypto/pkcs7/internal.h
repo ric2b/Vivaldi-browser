@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef OPENSSL_HEADER_PKCS7_INTERNAL_H
-#define OPENSSL_HEADER_PKCS7_INTERNAL_H
+#ifndef OPENSSL_HEADER_CRYPTO_PKCS7_INTERNAL_H
+#define OPENSSL_HEADER_CRYPTO_PKCS7_INTERNAL_H
 
 #include <openssl/base.h>
 
@@ -55,4 +55,4 @@ int pkcs7_add_signed_data(CBB *out,
 }  // extern C
 #endif
 
-#endif  // OPENSSL_HEADER_PKCS7_INTERNAL_H
+#endif  // OPENSSL_HEADER_CRYPTO_PKCS7_INTERNAL_H

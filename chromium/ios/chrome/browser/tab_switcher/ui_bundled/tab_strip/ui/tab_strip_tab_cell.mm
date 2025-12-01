@@ -21,7 +21,6 @@
 #import "ios/chrome/browser/tab_switcher/ui_bundled/tab_strip/ui/tab_strip_features_utils.h"
 #import "ios/chrome/browser/tab_switcher/ui_bundled/tab_strip/ui/tab_strip_group_stroke_view.h"
 #import "ios/chrome/browser/tab_switcher/ui_bundled/tab_strip/ui/tab_strip_utils.h"
-#import "ios/chrome/browser/tabs/ui_bundled/tab_strip_constants.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #import "ios/chrome/common/ui/elements/gradient_view.h"
 #import "ios/chrome/common/ui/util/constraints_ui_util.h"
@@ -595,19 +594,22 @@ UIImage* DefaultFavicon() {
 - (void)updateColors {
   BOOL isSelected = self.isSelected;
 
-  UIColor* backgroundColor;
   if (self.isHighlighted || self.configurationState.cellDragState !=
                                 UICellConfigurationDragStateNone) {
     // Before a cell is dragged, it is highlighted.
     // The cell's background color must be updated at this moment, otherwise it
     // will not be applied correctly.
-    backgroundColor = [UIColor colorNamed:kGroupedSecondaryBackgroundColor];
-  } else if (_hovered) {
-    backgroundColor = [UIColor colorNamed:kUpdatedTertiaryBackgroundColor];
+    _selectedBackground.backgroundColor =
+        [UIColor colorNamed:kGroupedSecondaryBackgroundColor];
+    _accessibilityContainerView.backgroundColor =
+        _selectedBackground.backgroundColor;
   } else {
-    backgroundColor =
+    _selectedBackground.backgroundColor =
         isSelected ? [UIColor colorNamed:kGroupedSecondaryBackgroundColor]
                    : TabStripHelper.cellBackgroundColor;
+    _accessibilityContainerView.backgroundColor =
+        _hovered ? [UIColor colorNamed:kGrey50Color]
+                 : _selectedBackground.backgroundColor;
   }
 
   if (TabStripFeaturesUtils.hasBlackBackground) {
@@ -630,7 +632,6 @@ UIImage* DefaultFavicon() {
         isSelected ? [UIColor colorNamed:kTextPrimaryColor] : inactiveColor;
   }
 
-  _selectedBackground.backgroundColor = backgroundColor;
   _faviconView.tintColor = self.selected
                                ? [UIColor colorNamed:kCloseButtonColor]
                                : [UIColor colorNamed:kGrey500Color];
@@ -1083,11 +1084,12 @@ UIImage* DefaultFavicon() {
   CGFloat gradientPercentage = kTitleGradientWidth / cellMaxWidth;
 
   CAGradientLayer* gradientMask = [[CAGradientLayer alloc] init];
-  gradientMask.frame = CGRectMake(0, 0, cellMaxWidth, kModernTabStripHeight);
+  gradientMask.frame =
+      CGRectMake(0, 0, cellMaxWidth, TabStripCollectionViewConstants.height);
   [NSLayoutConstraint activateConstraints:@[
     [titleContainer.widthAnchor constraintEqualToConstant:cellMaxWidth],
     [titleContainer.heightAnchor
-        constraintEqualToConstant:kModernTabStripHeight],
+        constraintEqualToConstant:TabStripCollectionViewConstants.height],
   ]];
   gradientMask.colors = @[
     (id)UIColor.clearColor.CGColor, (id)UIColor.blackColor.CGColor,

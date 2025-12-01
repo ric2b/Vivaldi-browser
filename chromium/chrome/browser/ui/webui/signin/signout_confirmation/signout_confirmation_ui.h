@@ -9,13 +9,19 @@
 #include "chrome/browser/ui/signin/chrome_signout_confirmation_prompt.h"
 #include "chrome/browser/ui/webui/signin/signout_confirmation/signout_confirmation.mojom.h"
 #include "chrome/common/webui_url_constants.h"
+#include "content/public/browser/web_contents.h"
 #include "content/public/browser/webui_config.h"
 #include "content/public/common/url_constants.h"
 #include "ui/webui/mojo_web_ui_controller.h"
+#include "ui/webui/resources/cr_components/color_change_listener/color_change_listener.mojom.h"
 
 namespace content {
 class WebUI;
 }  // namespace content
+
+namespace ui {
+class ColorChangeHandler;
+}  // namespace ui
 
 class Browser;
 class SignoutConfirmationHandler;
@@ -40,10 +46,13 @@ class SignoutConfirmationUI
   SignoutConfirmationUI& operator=(const SignoutConfirmationUI&) = delete;
 
   // Prepares the information to be given to the handler once ready.
-  void Initialize(
-      Browser* browser,
-      ChromeSignoutConfirmationPromptVariant variant,
-      base::OnceCallback<void(ChromeSignoutConfirmationChoice)> callback);
+  void Initialize(Browser* browser,
+                  ChromeSignoutConfirmationPromptVariant variant,
+                  SignoutConfirmationCallback callback);
+
+  void BindInterface(
+      mojo::PendingReceiver<color_change_listener::mojom::PageHandler>
+          pending_receiver);
 
   // Instantiates the implementor of the
   // `signout_confirmation::mojom::PageHandlerFactory` mojo interface passing
@@ -51,6 +60,18 @@ class SignoutConfirmationUI
   void BindInterface(
       mojo::PendingReceiver<signout_confirmation::mojom::PageHandlerFactory>
           receiver);
+
+  // Returns the instance of this class for the provided `contents` or nullptr
+  // if `contents` does not display the signout confirmation UI.
+  static SignoutConfirmationUI* GetForTesting(content::WebContents* contents);
+
+  // Simulates accepting the signout confirmation dialog through a direct call
+  // to the `handler_`.
+  void AcceptDialogForTesting();
+
+  // Simulates cancelling the signout confirmation dialog through a direct call
+  // to the `handler_`.
+  void CancelDialogForTesting();
 
  private:
   // signout_confirmation::mojom::SignoutConfirmationFactory:
@@ -64,7 +85,7 @@ class SignoutConfirmationUI
   void OnMojoHandlersReady(
       Browser* browser,
       ChromeSignoutConfirmationPromptVariant variant,
-      base::OnceCallback<void(ChromeSignoutConfirmationChoice)> callback,
+      SignoutConfirmationCallback callback,
       mojo::PendingRemote<signout_confirmation::mojom::Page> page,
       mojo::PendingReceiver<signout_confirmation::mojom::PageHandler> receiver);
 
@@ -74,6 +95,10 @@ class SignoutConfirmationUI
       mojo::PendingRemote<signout_confirmation::mojom::Page>,
       mojo::PendingReceiver<signout_confirmation::mojom::PageHandler>)>
       initialize_handler_callback_;
+
+  // Handler that notifies WebUI to fetch new stylesheets containing color
+  // variables if the color provider changes.
+  std::unique_ptr<ui::ColorChangeHandler> color_provider_handler_;
 
   // Handler implementing Mojo interface to communicate with the WebUI.
   std::unique_ptr<SignoutConfirmationHandler> handler_;

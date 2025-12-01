@@ -4,17 +4,28 @@
 
 #include "app/vivaldi_apptools.h"
 #include "base/lazy_instance.h"
-#include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/sync/device_info_sync_service_factory.h"
-#include "chrome/browser/sync/sessions/sync_sessions_web_contents_router.h"
-#include "chrome/browser/sync/sessions/sync_sessions_web_contents_router_factory.h"
-#include "chromium/components/prefs/pref_change_registrar.h"
+#include "base/task/thread_pool.h"
+#include "base/task/thread_pool/thread_pool_instance.h"
+#include "components/prefs/pref_change_registrar.h"
 #include "components/prefs/pref_service.h"
 #include "components/sync_device_info/device_info_sync_service.h"
+#include "components/sync_device_info/local_device_info_util.h"
 #include "components/sync_sessions/vivaldi_specific.h"
-#include "content/public/browser/browser_context.h"
 #include "vivaldi/prefs/vivaldi_gen_prefs.h"
 
+#if BUILDFLAG(IS_IOS)
+#include "components/sync_sessions/session_sync_service_impl.h"
+#include "components/sync_sessions/sync_sessions_client.h"
+#include "ios/chrome/browser/shared/model/profile/profile_ios.h"
+#include "ios/chrome/browser/sync/model/device_info_sync_service_factory.h"
+#include "ios/chrome/browser/sync/model/session_sync_service_factory.h"
+#include "ios/chrome/browser/tabs/model/ios_chrome_local_session_event_router.h"
+#else
+#include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/sync/device_info_sync_service_factory.h"
+#include "chrome/browser/sync/sessions/sync_sessions_web_contents_router_factory.h"
+#include "chrome/browser/sync/sessions/sync_sessions_web_contents_router.h"
+#endif
 
 namespace {
 void GetPanels(PrefService* prefs, sync_sessions::VivaldiSpecific& specific) {
@@ -106,16 +117,31 @@ VivaldiLocalSessionObserver::~VivaldiLocalSessionObserver() {
   DeregisterDeviceInfoObservers();
 }
 
-VivaldiLocalSessionObserver::VivaldiLocalSessionObserver(Profile* profile)
+#if BUILDFLAG(IS_IOS)
+VivaldiLocalSessionObserver::VivaldiLocalSessionObserver(
+    ProfileClass* profile,
+    sync_sessions::SyncSessionsClient* sessions_client)
+    : profile_(profile),
+      device_info_service_(
+          vivaldi::IsVivaldiRunning()
+              ? DeviceInfoSyncServiceFactory::GetForProfile(profile_)
+              : nullptr),
+      sessions_client_(sessions_client) {
+#else
+VivaldiLocalSessionObserver::VivaldiLocalSessionObserver(ProfileClass* profile)
     : profile_(profile),
       device_info_service_(
           vivaldi::IsVivaldiRunning()
               ? DeviceInfoSyncServiceFactory::GetForProfile(profile_)
               : nullptr) {
+#endif
   if (!vivaldi::IsVivaldiRunning())
     return;
 
   CHECK(device_info_service_);
+#if BUILDFLAG(IS_IOS)
+  CHECK(sessions_client_);
+#endif
 
   device_info_service_->GetDeviceInfoTracker()->AddObserver(this);
 
@@ -138,6 +164,18 @@ VivaldiLocalSessionObserver::VivaldiLocalSessionObserver(Profile* profile)
       base::BindRepeating(
           &VivaldiLocalSessionObserver::OnSessionNamePrefsChanged,
           base::Unretained(this)));
+
+  // Prepare fallback name. It will never change and is the same as the
+  // default name in SessionStore. It will be used if user clears a custom name
+  // that has earlier modified the name in SessionStore.
+  base::ThreadPool::PostTaskAndReplyWithResult(
+      FROM_HERE,
+      {base::MayBlock(), base::TaskPriority::BEST_EFFORT,
+       base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN},
+      base::BindOnce(&syncer::GetPersonalizableDeviceNameBlocking),
+      base::BindOnce(
+          &VivaldiLocalSessionObserver::SetFallbackDeviceName,
+          weak_factory_.GetWeakPtr()));
 }
 
 void VivaldiLocalSessionObserver::OnDeviceInfoChange() {
@@ -158,24 +196,51 @@ void VivaldiLocalSessionObserver::DeregisterDeviceInfoObservers() {
 }
 
 void VivaldiLocalSessionObserver::UpdateSession() {
+#if BUILDFLAG(IS_IOS)
+  IOSChromeLocalSessionEventRouter* router =
+      static_cast<IOSChromeLocalSessionEventRouter*>(
+        sessions_client_->GetLocalSessionEventRouter());
+#else
   sync_sessions::SyncSessionsWebContentsRouter* router =
       sync_sessions::SyncSessionsWebContentsRouterFactory::GetForProfile(
           profile_);
+#endif
 
   if (router) {
     PrefService* prefs = profile_->GetOriginalProfile()->GetPrefs();
-    std::string device_name = prefs->GetString(vivaldiprefs::kSyncSessionName);
-    router->UpdateDeviceName(device_name);
+    std::string candidate = prefs->GetString(vivaldiprefs::kSyncSessionName);
+
+    std::string device_name;
+    base::TrimWhitespaceASCII(candidate, base::TrimPositions::TRIM_ALL,
+                              &device_name);
+
+    if (!device_name.empty()) {
+      router->UpdateDeviceName(device_name);
+    } else if (!fallback_device_name_.empty()) {
+      router->UpdateDeviceName(fallback_device_name_);
+    }
   }
+}
+
+void VivaldiLocalSessionObserver::SetFallbackDeviceName(
+  const std::string& device_name) {
+  fallback_device_name_ = device_name;
 }
 
 void VivaldiLocalSessionObserver::TriggerSync() {
   if (!vivaldi::IsVivaldiRunning())
     return;
   CHECK(profile_);
+
+#if BUILDFLAG(IS_IOS)
+  IOSChromeLocalSessionEventRouter* router =
+      static_cast<IOSChromeLocalSessionEventRouter*>(
+        sessions_client_->GetLocalSessionEventRouter());
+#else
   sync_sessions::SyncSessionsWebContentsRouter* router =
       sync_sessions::SyncSessionsWebContentsRouterFactory::GetForProfile(
           profile_);
+#endif
 
   if (!router)
     return;

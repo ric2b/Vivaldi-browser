@@ -40,7 +40,7 @@
 namespace google_breakpad {
 
 ByteReader::ByteReader(enum Endianness endian)
-    :offset_reader_(NULL), address_reader_(NULL), endian_(endian),
+    :offset_reader_(nullptr), address_reader_(nullptr), endian_(endian),
      address_size_(0), offset_size_(0),
      have_section_base_(), have_text_base_(), have_data_base_(),
      have_function_base_() { }

@@ -42,6 +42,9 @@ constexpr char16_t kPrivacyPolicyFunc[] = u"onPrivacyPolicyLinkClicked_";
 // The id of the html element that opens the privacy policy link.
 inline constexpr char16_t kPrivacyPolicyId[] = u"privacyPolicyLink";
 
+// The V2 id of the html element that opens the privacy policy link.
+inline constexpr char16_t kPrivacyPolicyIdV2[] = u"privacyPolicyLinkV2";
+
 void AddPrivacySandboxStrings(content::WebUIDataSource* html_source,
                               Profile* profile) {
   // Strings used outside the privacy sandbox page. The i18n preprocessor might
@@ -228,12 +231,12 @@ void AddPrivacySandboxStrings(content::WebUIDataSource* html_source,
        IDS_SETTINGS_PRIVACY_GUIDE_AD_TOPICS_WHEN_ON_BULLET1},
       {"privacyGuideAdTopicsWhenOnBullet2",
        IDS_SETTINGS_PRIVACY_GUIDE_AD_TOPICS_WHEN_ON_BULLET2},
+      {"privacyGuideAdTopicsWhenOnBullet3",
+       IDS_SETTINGS_PRIVACY_GUIDE_AD_TOPICS_WHEN_ON_BULLET3},
       {"privacyGuideAdTopicsThingsToConsiderBullet1",
        IDS_SETTINGS_PRIVACY_GUIDE_AD_TOPICS_THINGS_TO_CONSIDER_BULLET1},
       {"privacyGuideAdTopicsThingsToConsiderBullet2",
        IDS_SETTINGS_PRIVACY_GUIDE_AD_TOPICS_THINGS_TO_CONSIDER_BULLET2},
-      {"trackingProtectionExceptionsListDescription",
-       IDS_SETTINGS_TRACKING_PROTECTION_EXCEPTIONS_LIST_DESCRIPTION},
       {"cookiePageSettingsAllowBulletOne",
        IDS_SETTINGS_COOKIES_BLOCK_THIRD_PARTY_SETTINGS_ALLOW_BULLET_ONE},
       {"cookiePageSettingsAllowBulletTwo",
@@ -246,8 +249,45 @@ void AddPrivacySandboxStrings(content::WebUIDataSource* html_source,
        IDS_SETTINGS_COOKIES_BLOCK_THIRD_PARTY_SETTINGS_BLOCK_BULLET_TWO},
       {"cookiePageSettingsBlockBulletThree",
        IDS_SETTINGS_COOKIES_BLOCK_THIRD_PARTY_SETTINGS_BLOCK_BULLET_THREE},
-
-  };
+      {"privacyGuideCookieSettingsAllowWhenOnBulletOne",
+       IDS_PRIVACY_GUIDE_COOKIE_SETTINGS_ALLOW_WHEN_ON_BULLET_ONE},
+      {"privacyGuideCookieSettingsAllowWhenOnBulletTwo",
+       IDS_PRIVACY_GUIDE_COOKIE_SETTINGS_ALLOW_WHEN_ON_BULLET_TWO},
+      {"privacyGuideCookieSettingsAllowThingsToConsiderBulletOne",
+       IDS_PRIVACY_GUIDE_COOKIE_SETTINGS_ALLOW_THINGS_TO_CONSIDER_BULLET_ONE},
+      {"privacyGuideCookieSettingsAllowThingsToConsiderBulletTwo",
+       IDS_PRIVACY_GUIDE_COOKIE_SETTINGS_ALLOW_THINGS_TO_CONSIDER_BULLET_TWO},
+      {"privacyGuideCookieSettingsBlockWhenOnBulletOne",
+       IDS_PRIVACY_GUIDE_COOKIE_SETTINGS_BLOCK_WHEN_ON_BULLET_ONE},
+      {"privacyGuideCookieSettingsBlockWhenOnBulletTwo",
+       IDS_PRIVACY_GUIDE_COOKIE_SETTINGS_BLOCK_WHEN_ON_BULLET_TWO},
+      {"privacyGuideCookieSettingsBlockThingsToConsiderBulletOne",
+       IDS_PRIVACY_GUIDE_COOKIE_SETTINGS_BLOCK_THINGS_TO_CONSIDER_BULLET_ONE},
+      {"privacyGuideCookieSettingsBlockThingsToConsiderBulletTwo",
+       IDS_PRIVACY_GUIDE_COOKIE_SETTINGS_BLOCK_THINGS_TO_CONSIDER_BULLET_TWO},
+      {"privacyGuideCookiesCardBlockTpcAllowSubheader",
+       IDS_SETTINGS_PRIVACY_GUIDE_COOKIES_CARD_BLOCK_TPC_ALLOW_SUBHEADER},
+      {"privacyGuideCookiesCardBlockTpcBlockSubheader",
+       IDS_SETTINGS_PRIVACY_GUIDE_COOKIES_CARD_BLOCK_TPC_BLOCK_SUBHEADER},
+      {"allowThirdPartyCookiesExpandA11yLabel",
+       IDS_SETTINGS_ALLOW_THIRD_PARTY_COOKIES_EXPAND_A11Y_LABEL},
+      {"blockThirdPartyCookiesExpandA11yLabel",
+       IDS_SETTINGS_BLOCK_THIRD_PARTY_COOKIES_EXPAND_A11Y_LABEL},
+      // All sites RWS
+      {"allSitesRwsFilterViewTitle", IDS_ALL_SITES_RWS_FILTER_VIEW_TITLE},
+      {"allSitesRwsFilterViewStorageDescription",
+       IDS_ALL_SITES_RWS_FILTER_VIEW_STORAGE_DESCRIPTION},
+      {"allSitesShowRwsButton", IDS_ALL_SITES_SHOW_RWS_BUTTON},
+      {"allSitesRwsMembershipLabel", IDS_ALL_SITES_RWS_LABEL},
+      {"allSitesRwsDeleteDataButtonLabel",
+       IDS_ALL_SITES_RWS_DELETE_DATA_BUTTON_LABEL},
+      {"allSitesRwsDeleteDataDialogTitle",
+       IDS_ALL_SITES_RWS_DELETE_DATA_DIALOG_TITLE},
+      // Ad Topics Content Parity - Ad Topics Settings
+      {"adTopicsPageToggleSubLabel",
+       IDS_SETTINGS_AD_TOPICS_PAGE_TOGGLE_SUB_LABEL},
+      {"adTopicsPageActiveTopicsDescription",
+       IDS_SETTINGS_AD_TOPICS_PAGE_ACTIVE_TOPICS_DESCRIPTION}};
   html_source->AddLocalizedStrings(kLocalizedStrings);
 
   html_source->AddString("adPrivacyLearnMoreURL",
@@ -303,10 +343,6 @@ void AddPrivacySandboxStrings(content::WebUIDataSource* html_source,
            chrome::kChromeUIPrivacySandboxManageTopicsLearnMoreURL,
            l10n_util::GetStringUTF16(IDS_SETTINGS_OPENS_IN_NEW_TAB)},
           nullptr));
-  html_source->AddBoolean(
-      "firstPartySetsUIEnabled",
-      base::FeatureList::IsEnabled(
-          privacy_sandbox::kPrivacySandboxFirstPartySetsUI));
   html_source->AddBoolean(
       "isPrivacySandboxAdsApiUxEnhancementsEnabled",
       base::FeatureList::IsEnabled(
@@ -371,6 +407,32 @@ void AddPrivacySandboxStrings(content::WebUIDataSource* html_source,
           l10n_util::GetStringUTF16(
               IDS_SETTINGS_SITE_SUGGESTED_ADS_PAGE_DISCLAIMER_LINK_ARIA_DESCRIPTION),
           kPrivacyPolicyFunc, kPrivacyPolicyId));
+  // Ad Topics Content Parity - Ad Topics Settings
+  html_source->AddString(
+      "adTopicsPageDisclaimerV2Desktop",
+      l10n_util::GetStringFUTF16(
+          IDS_SETTINGS_AD_TOPICS_PAGE_DISCLAIMER_V2_DESKTOP,
+          base::ASCIIToUTF16(privacy_policy_url),
+          l10n_util::GetStringUTF16(
+              IDS_SETTINGS_SITE_SUGGESTED_ADS_PAGE_DISCLAIMER_LINK_ARIA_DESCRIPTION),
+          kPrivacyPolicyFunc, kPrivacyPolicyIdV2));
+  // Privacy Guide Ad Topics Card - Ad Topics Content Parity
+  html_source->AddString(
+      "privacyGuideAdTopicsThingsToConsiderBullet3Desktop",
+      l10n_util::GetStringFUTF16(
+          IDS_SETTINGS_PRIVACY_GUIDE_AD_TOPICS_THINGS_TO_CONSIDER_BULLET3_DESKTOP,
+          base::ASCIIToUTF16(privacy_policy_url),
+          l10n_util::GetStringUTF16(
+              IDS_SETTINGS_SITE_SUGGESTED_ADS_PAGE_DISCLAIMER_LINK_ARIA_DESCRIPTION),
+          kPrivacyPolicyFunc, kPrivacyPolicyId));
+  // RWS description
+  const char* rws_learn_more_url = chrome::kRelatedWebsiteSetsLearnMoreURL;
+  html_source->AddString(
+      "allSitesRwsFilterViewDescription",
+      l10n_util::GetStringFUTF16(
+          IDS_ALL_SITES_RWS_FILTER_VIEW_DESCRIPTION,
+          base::ASCIIToUTF16(rws_learn_more_url),
+          l10n_util::GetStringUTF16(IDS_SETTINGS_OPENS_IN_NEW_TAB)));
 }
 #endif // Vivaldi
 

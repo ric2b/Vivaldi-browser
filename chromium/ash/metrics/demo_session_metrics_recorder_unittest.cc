@@ -35,6 +35,10 @@ namespace {
 
 constexpr char kUserEmail[] = "crosdemoandapbp@gmail.com";
 
+constexpr char kGooglePhotosPkg[] = "com.google.Photos";
+constexpr char kAppUsageGooglePhotoHistogramName[] =
+    "DemoMode.AppUsageTime.GooglePhoto";
+
 // Tests app usage recorded by DemoSessionMetricsRecorder.
 // Mocks out the timer to control the sampling cycle. Tests will create and
 // activate different window types to test that samples are attributed to the
@@ -175,6 +179,16 @@ class DemoSessionMetricsRecorderTest : public AshTestBase {
     generator.GestureTapAt(gfx::Point(0, 0));
   }
 
+  void MockOnAppCreation(const std::string& app_id_or_package,
+                         const bool is_arc_app) {
+    metrics_recorder_->OnAppCreation(app_id_or_package, is_arc_app);
+  }
+
+  void MockOnAppDestruction(const std::string& app_id_or_package,
+                            const bool is_arc_app) {
+    metrics_recorder_->OnAppDestruction(app_id_or_package, is_arc_app);
+  }
+
  protected:
   // Captures histograms.
   std::unique_ptr<base::HistogramTester> histogram_tester_;
@@ -230,8 +244,7 @@ TEST_F(DemoSessionMetricsRecorderTest, AppTypes) {
       CreateChromeAppWindow(extension_misc::kCalculatorAppId);
   std::unique_ptr<aura::Window> hosted_app_browser_window =
       CreateHostedAppBrowserWindow(extension_misc::kYoutubeAppId);
-  std::unique_ptr<aura::Window> arc_window =
-      CreateArcWindow("com.google.Photos");
+  std::unique_ptr<aura::Window> arc_window = CreateArcWindow(kGooglePhotosPkg);
 
   wm::ActivateWindow(browser_window.get());
   FireTimer();
@@ -288,8 +301,7 @@ TEST_F(DemoSessionMetricsRecorderTest, ActiveAppAfterDelayedArcPackageName) {
   FireTimer();
 
   // Set the package name after window creation/activation.
-  arc_window->SetProperty(kArcPackageNameKey,
-                          new std::string("com.google.Photos"));
+  arc_window->SetProperty(kArcPackageNameKey, kGooglePhotosPkg);
 
   // Trigger sample reporting by sending user activity.
   SendUserActivity();
@@ -301,8 +313,7 @@ TEST_F(DemoSessionMetricsRecorderTest, ActiveAppAfterDelayedArcPackageName) {
   // Set the package name again.  The count shouldn't change because
   // after getting the package name once, we stop observing the
   // window.
-  arc_window->SetProperty(kArcPackageNameKey,
-                          new std::string("com.google.Photos"));
+  arc_window->SetProperty(kArcPackageNameKey, kGooglePhotosPkg);
   // Trigger sample reporting by sending user activity.
   SendUserActivity();
 
@@ -376,7 +387,7 @@ TEST_F(DemoSessionMetricsRecorderTest, DiscardAfterInactivity) {
   std::unique_ptr<aura::Window> chrome_app_window =
       CreateChromeAppWindow(extension_misc::kCalculatorAppId);
   std::unique_ptr<aura::Window> arc_window =
-      CreateChromeAppWindow("com.google.Photos");
+      CreateChromeAppWindow(kGooglePhotosPkg);
 
   wm::ActivateWindow(chrome_app_window.get());
   for (int i = 0; i < 5; i++)
@@ -446,8 +457,7 @@ TEST_F(DemoSessionMetricsRecorderTest, ActivateWindowWhenIdle) {
 TEST_F(DemoSessionMetricsRecorderTest, RepeatedUserActivity) {
   std::unique_ptr<aura::Window> chrome_app_window =
       CreateChromeAppWindow(extension_misc::kCalculatorAppId);
-  std::unique_ptr<aura::Window> arc_window =
-      CreateArcWindow("com.google.Photos");
+  std::unique_ptr<aura::Window> arc_window = CreateArcWindow(kGooglePhotosPkg);
 
   wm::ActivateWindow(chrome_app_window.get());
 
@@ -479,8 +489,7 @@ TEST_F(DemoSessionMetricsRecorderTest, RepeatedUserActivity) {
 TEST_F(DemoSessionMetricsRecorderTest, RecordOnExit) {
   std::unique_ptr<aura::Window> chrome_app_window =
       CreateChromeAppWindow(extension_misc::kGoogleKeepAppId);
-  std::unique_ptr<aura::Window> arc_window =
-      CreateArcWindow("com.google.Photos");
+  std::unique_ptr<aura::Window> arc_window = CreateArcWindow(kGooglePhotosPkg);
 
   wm::ActivateWindow(chrome_app_window.get());
   for (int i = 0; i < 2; i++)
@@ -555,7 +564,7 @@ TEST_F(DemoSessionMetricsRecorderTest, UniqueAppsLaunchedOnDeletion) {
   wm::ActivateWindow(chrome_browser_window.get());
 
   std::unique_ptr<aura::Window> arc_window_1 =
-      CreateArcWindow("com.google.Photos");
+      CreateArcWindow(kGooglePhotosPkg);
   wm::ActivateWindow(arc_window_1.get());
   wm::DeactivateWindow(arc_window_1.get());
   wm::ActivateWindow(arc_window_1.get());
@@ -596,13 +605,11 @@ TEST_F(DemoSessionMetricsRecorderTest,
   wm::ActivateWindow(arc_window_1.get());
 
   // Set the package name after window creation/activation.
-  arc_window_1->SetProperty(kArcPackageNameKey,
-                            new std::string("com.google.Photos"));
+  arc_window_1->SetProperty(kArcPackageNameKey, kGooglePhotosPkg);
 
   // Set the package name again. This shouldn't cause a double-recording
   // of the stat.
-  arc_window_1->SetProperty(kArcPackageNameKey,
-                            new std::string("com.google.Photos"));
+  arc_window_1->SetProperty(kArcPackageNameKey, kGooglePhotosPkg);
 
   // Delete the window.
   arc_window_1.reset();
@@ -660,7 +667,7 @@ TEST_F(DemoSessionMetricsRecorderTest, AppLaunched) {
 
   // ARC Apps
   std::unique_ptr<aura::Window> arc_window_1 =
-      CreateArcWindow("com.google.Photos");
+      CreateArcWindow(kGooglePhotosPkg);
   wm::ActivateWindow(arc_window_1.get());
   wm::DeactivateWindow(arc_window_1.get());
   wm::ActivateWindow(arc_window_1.get());
@@ -725,8 +732,12 @@ TEST_F(DemoSessionMetricsRecorderTest, DwellTime) {
   histogram_tester_->ExpectUniqueSample("DemoMode.DwellTime", 10, 1);
 }
 
-TEST_F(DemoSessionMetricsRecorderTest, ShopperSessionDwellTime) {
-  // Simulate user activity for 12 seconds.
+TEST_F(DemoSessionMetricsRecorderTest, SignedInShopperSessionDwellTime) {
+  // Simulate a signed-in demo session.
+  DemoSessionMetricsRecorder::SetCurrentSessionType(
+      DemoSessionMetricsRecorder::SessionType::kSignedInDemoSession);
+
+  // Simulate user activities for 12 seconds.
   SendUserActivity();
 
   task_environment()->FastForwardBy(base::Seconds(4));
@@ -758,6 +769,44 @@ TEST_F(DemoSessionMetricsRecorderTest, ShopperSessionDwellTime) {
                                         12, 2);
 }
 
+TEST_F(DemoSessionMetricsRecorderTest,
+       SignedInMGSFallbackShopperSessionDwellTime) {
+  // Simulate a sign-in failure. It falls back to a managed guest session.
+  DemoSessionMetricsRecorder::SetCurrentSessionType(
+      DemoSessionMetricsRecorder::SessionType::kFallbackMGS);
+
+  // Simulate user activities for 12 seconds.
+  SendUserActivity();
+
+  task_environment()->FastForwardBy(base::Seconds(4));
+  SendUserActivity();
+
+  task_environment()->FastForwardBy(base::Seconds(8));
+  SendUserActivity();
+
+  // Simulate a shopper session "timing out" after 90 seconds.
+  task_environment()->FastForwardBy(base::Seconds(90));
+  DemoSessionMetricsRecorder::Get()->ReportShopperSessionDwellTime();
+
+  // The recorded dwell time should be 12 seconds.
+  histogram_tester_->ExpectUniqueSample(
+      "DemoMode.SignedIn.MGSFallback.Shopper.DwellTime", 12, 1);
+
+  // Simulate user activity in another shopper session for 12 seconds.
+  SendUserActivity();
+
+  task_environment()->FastForwardBy(base::Seconds(12));
+  SendUserActivity();
+
+  // Simulate exiting the shopper and cros sessions after 90 seconds.
+  task_environment()->FastForwardBy(base::Seconds(90));
+  DeleteMetricsRecorder();
+
+  // The recorded dwell time should be 12 seconds again.
+  histogram_tester_->ExpectUniqueSample(
+      "DemoMode.SignedIn.MGSFallback.Shopper.DwellTime", 12, 2);
+}
+
 TEST_F(DemoSessionMetricsRecorderTest, ZeroDwellTime) {
   // Simulate the user comes in after 15 seconds.
   task_environment()->FastForwardBy(base::Seconds(15));
@@ -772,8 +821,6 @@ TEST_F(DemoSessionMetricsRecorderTest, ZeroDwellTime) {
   // The recorded dwell time should be 0 second because the first and the last
   // user activities are the same.
   histogram_tester_->ExpectUniqueSample("DemoMode.DwellTime", 0, 1);
-  histogram_tester_->ExpectUniqueSample("DemoMode.SignedIn.Shopper.DwellTime",
-                                        0, 1);
 }
 
 // Within the demo session, test user clicks the home button on shelf, clicks on
@@ -843,11 +890,9 @@ TEST_F(DemoSessionMetricsRecorderTest,
 // In MGS demo session, test user actively exits the session. Check the
 // corresponding user actions are recorded.
 TEST_F(DemoSessionMetricsRecorderTest, UserActivelyExitsMGS) {
-  TestSessionControllerClient* session = GetSessionControllerClient();
   // Simulate to enter the demo MGS.
-  session->Reset();
-  session->AddUserSession(kUserEmail, user_manager::UserType::kPublicAccount);
-  session->SetSessionState(session_manager::SessionState::ACTIVE);
+  ClearLogin();
+  SimulateUserLogin({kUserEmail, user_manager::UserType::kPublicAccount});
 
   DemoSessionMetricsRecorder::RecordExitSessionAction(
       DemoSessionMetricsRecorder::ExitSessionFrom::kShelf);
@@ -876,8 +921,12 @@ TEST_F(DemoSessionMetricsRecorderTest, UserActivelyExitsMGS) {
 // In signed-in demo session, test user actively exits the session. Check the
 // corresponding user actions are recorded.
 TEST_F(DemoSessionMetricsRecorderTest, UserActivelyExitsSignedInSession) {
+  // Simulate a signed-in demo session.
+  DemoSessionMetricsRecorder::SetCurrentSessionType(
+      DemoSessionMetricsRecorder::SessionType::kSignedInDemoSession);
+
   // Simulate to sign in the session with a regular user.
-  GetSessionControllerClient()->AddUserSession(kUserEmail);
+  SimulateUserLogin({kUserEmail});
 
   // Even though it's signed-in, the generic exit demo session user actions are
   // still recorded.
@@ -900,6 +949,21 @@ TEST_F(DemoSessionMetricsRecorderTest, UserActivelyExitsSignedInSession) {
                    "DemoMode.ExitFromSystemTrayPowerButton"));
   EXPECT_EQ(1, user_action_tester_.GetActionCount(
                    "DemoMode.SignedIn.ExitFromSystemTrayPowerButton"));
+}
+
+TEST_F(DemoSessionMetricsRecorderTest, AppUsageTime) {
+  const auto expected_usage_time = base::Seconds(5);
+  MockOnAppCreation(kGooglePhotosPkg, /*is_arc_app*/ true);
+  task_environment()->FastForwardBy(expected_usage_time);
+  MockOnAppDestruction(kGooglePhotosPkg, /*is_arc_app*/ true);
+
+  MockOnAppCreation(kGooglePhotosPkg, /*is_arc_app*/ true);
+  task_environment()->FastForwardBy(base::Milliseconds(500));
+  MockOnAppDestruction(kGooglePhotosPkg, /*is_arc_app*/ false);
+
+  // Verify usage less than 1s is not recorded:
+  histogram_tester_->ExpectUniqueSample(kAppUsageGooglePhotoHistogramName,
+                                        /*bucket=*/5, 1);
 }
 
 }  // namespace

@@ -98,9 +98,6 @@ void CanvasResourceHost::CreateRateLimiter() {
 }
 
 RasterMode CanvasResourceHost::GetRasterMode() const {
-  if (preferred_2d_raster_mode() == RasterModeHint::kPreferCPU) {
-    return RasterMode::kCPU;
-  }
   if (IsHibernating()) {
     return RasterMode::kCPU;
   }
@@ -149,12 +146,12 @@ cc::TextureLayer* CanvasResourceHost::GetOrCreateCcLayerIfNeeded() {
     return nullptr;
   }
   if (!cc_layer_) [[unlikely]] {
-    cc_layer_ = cc::TextureLayer::CreateForMailbox(this);
+    cc_layer_ = cc::TextureLayer::Create(this);
     InitializeLayerWithCSSProperties(cc_layer_.get());
     cc_layer_->SetIsDrawable(true);
     cc_layer_->SetHitTestable(true);
-    cc_layer_->SetContentsOpaque(opacity_mode_ == kOpaque);
-    cc_layer_->SetBlendBackgroundColor(opacity_mode_ != kOpaque);
+    cc_layer_->SetContentsOpaque(is_opaque_);
+    cc_layer_->SetBlendBackgroundColor(!is_opaque_);
   }
   return cc_layer_.get();
 }
@@ -245,10 +242,10 @@ void CanvasResourceHost::DoPaintInvalidation(const gfx::Rect& dirty_rect) {
 }
 
 void CanvasResourceHost::SetOpacityMode(OpacityMode opacity_mode) {
-  opacity_mode_ = opacity_mode;
+  is_opaque_ = opacity_mode == kOpaque;
   if (cc_layer_) {
-    cc_layer_->SetContentsOpaque(opacity_mode_ == kOpaque);
-    cc_layer_->SetBlendBackgroundColor(opacity_mode_ != kOpaque);
+    cc_layer_->SetContentsOpaque(is_opaque_);
+    cc_layer_->SetBlendBackgroundColor(!is_opaque_);
   }
 }
 
@@ -287,10 +284,9 @@ bool CanvasResourceHost::IsResourceValid() {
     return false;
   }
 
-  // For software rendering with CanvasResourceProvider::kSharedBitmap
+  // For software rendering
   if (resource_provider_ &&
-      resource_provider_->GetType() == CanvasResourceProvider::kSharedBitmap &&
-      resource_provider_->IsSharedBitmapGpuChannelLost()) {
+      resource_provider_->IsSoftwareSharedImageGpuChannelLost()) {
     shared_bitmap_gpu_channel_lost_ = true;
     ReplaceResourceProvider(nullptr);
     NotifyGpuContextLost();

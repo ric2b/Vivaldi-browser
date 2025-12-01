@@ -395,19 +395,19 @@ github,                             level 13 with dict,                 advanced
 github,                             level 13 with dict dms,             advanced one pass,                  39900
 github,                             level 13 with dict dds,             advanced one pass,                  39900
 github,                             level 13 with dict copy,            advanced one pass,                  39948
-github,                             level 13 with dict load,            advanced one pass,                  42624
+github,                             level 13 with dict load,            advanced one pass,                  42643
 github,                             level 16,                           advanced one pass,                  133209
 github,                             level 16 with dict,                 advanced one pass,                  37902
 github,                             level 16 with dict dms,             advanced one pass,                  37902
 github,                             level 16 with dict dds,             advanced one pass,                  37902
 github,                             level 16 with dict copy,            advanced one pass,                  37892
-github,                             level 16 with dict load,            advanced one pass,                  42402
+github,                             level 16 with dict load,            advanced one pass,                  42434
 github,                             level 19,                           advanced one pass,                  132879
 github,                             level 19 with dict,                 advanced one pass,                  37916
 github,                             level 19 with dict dms,             advanced one pass,                  37916
 github,                             level 19 with dict dds,             advanced one pass,                  37916
 github,                             level 19 with dict copy,            advanced one pass,                  37906
-github,                             level 19 with dict load,            advanced one pass,                  39770
+github,                             level 19 with dict load,            advanced one pass,                  40405
 github,                             no source size,                     advanced one pass,                  136331
 github,                             no source size with dict,           advanced one pass,                  41118
 github,                             long distance mode,                 advanced one pass,                  136331
@@ -713,19 +713,19 @@ github,                             level 13 with dict,                 advanced
 github,                             level 13 with dict dms,             advanced one pass small out,        39900
 github,                             level 13 with dict dds,             advanced one pass small out,        39900
 github,                             level 13 with dict copy,            advanced one pass small out,        39948
-github,                             level 13 with dict load,            advanced one pass small out,        42624
+github,                             level 13 with dict load,            advanced one pass small out,        42643
 github,                             level 16,                           advanced one pass small out,        133209
 github,                             level 16 with dict,                 advanced one pass small out,        37902
 github,                             level 16 with dict dms,             advanced one pass small out,        37902
 github,                             level 16 with dict dds,             advanced one pass small out,        37902
 github,                             level 16 with dict copy,            advanced one pass small out,        37892
-github,                             level 16 with dict load,            advanced one pass small out,        42402
+github,                             level 16 with dict load,            advanced one pass small out,        42434
 github,                             level 19,                           advanced one pass small out,        132879
 github,                             level 19 with dict,                 advanced one pass small out,        37916
 github,                             level 19 with dict dms,             advanced one pass small out,        37916
 github,                             level 19 with dict dds,             advanced one pass small out,        37916
 github,                             level 19 with dict copy,            advanced one pass small out,        37906
-github,                             level 19 with dict load,            advanced one pass small out,        39770
+github,                             level 19 with dict load,            advanced one pass small out,        40405
 github,                             no source size,                     advanced one pass small out,        136331
 github,                             no source size with dict,           advanced one pass small out,        41118
 github,                             long distance mode,                 advanced one pass small out,        136331
@@ -1031,19 +1031,19 @@ github,                             level 13 with dict,                 advanced
 github,                             level 13 with dict dms,             advanced streaming,                 39900
 github,                             level 13 with dict dds,             advanced streaming,                 39900
 github,                             level 13 with dict copy,            advanced streaming,                 39948
-github,                             level 13 with dict load,            advanced streaming,                 42624
+github,                             level 13 with dict load,            advanced streaming,                 42643
 github,                             level 16,                           advanced streaming,                 133209
 github,                             level 16 with dict,                 advanced streaming,                 37902
 github,                             level 16 with dict dms,             advanced streaming,                 37902
 github,                             level 16 with dict dds,             advanced streaming,                 37902
 github,                             level 16 with dict copy,            advanced streaming,                 37892
-github,                             level 16 with dict load,            advanced streaming,                 42402
+github,                             level 16 with dict load,            advanced streaming,                 42434
 github,                             level 19,                           advanced streaming,                 132879
 github,                             level 19 with dict,                 advanced streaming,                 37916
 github,                             level 19 with dict dms,             advanced streaming,                 37916
 github,                             level 19 with dict dds,             advanced streaming,                 37916
 github,                             level 19 with dict copy,            advanced streaming,                 37906
-github,                             level 19 with dict load,            advanced streaming,                 39770
+github,                             level 19 with dict load,            advanced streaming,                 40405
 github,                             no source size,                     advanced streaming,                 136331
 github,                             no source size with dict,           advanced streaming,                 41118
 github,                             long distance mode,                 advanced streaming,                 136331

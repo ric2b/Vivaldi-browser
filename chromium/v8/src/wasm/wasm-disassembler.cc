@@ -405,12 +405,10 @@ class ImmediatesPrinter {
     if (imm.type.is_index()) use_type(imm.type.ref_index());
   }
 
-  void ValueType(HeapTypeImmediate& imm, bool is_nullable) {
+  void ValueType(ValueType type) {
     out_ << " ";
-    names()->PrintValueType(
-        out_, ValueType::RefMaybeNull(imm.type,
-                                      is_nullable ? kNullable : kNonNullable));
-    if (imm.type.is_index()) use_type(imm.type.ref_index());
+    names()->PrintValueType(out_, type);
+    if (type.has_index()) use_type(type.ref_index());
   }
 
   void BrOnCastFlags(BrOnCastImmediate& flags) {
@@ -763,7 +761,9 @@ void ModuleDisassembler::PrintTypeDefinition(uint32_t type_index,
   if (has_super) {
     out_ << " (sub ";
     if (type.is_final) out_ << "final ";
-    names_->PrintHeapType(out_, HeapType(type.supertype));
+    names_->PrintHeapType(out_,
+                          HeapType::Index(type.supertype, type.is_shared,
+                                          static_cast<RefTypeKind>(type.kind)));
   }
   if (type.kind == TypeDefinition::kArray) {
     const ArrayType* atype = type.array_type;
@@ -1161,7 +1161,7 @@ void ModuleDisassembler::PrintInitExpression(const ConstantExpression& init,
       break;
     case ConstantExpression::Kind::kRefNull:
       out_ << " (ref.null ";
-      names_->PrintHeapType(out_, HeapType(init.repr()));
+      names_->PrintHeapType(out_, init.type());
       out_ << ")";
       break;
     case ConstantExpression::Kind::kRefFunc:

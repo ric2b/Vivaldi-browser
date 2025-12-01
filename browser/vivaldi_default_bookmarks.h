@@ -4,7 +4,11 @@
 #ifndef BROWSER_VIVALDI_DEFAULT_BOOKMARKS_H_
 #define BROWSER_VIVALDI_DEFAULT_BOOKMARKS_H_
 
+#include <set>
+
 #include "base/functional/callback.h"
+#include "base/uuid.h"
+#include "base/values.h"
 
 class PrefService;
 
@@ -36,6 +40,9 @@ using UpdateCallback = base::OnceCallback<
     void(bool ok, bool no_version, const std::string& locale)>;
 void UpdatePartners(std::unique_ptr<UpdaterClient> client,
                     UpdateCallback callback = UpdateCallback());
+std::set<base::Uuid> ReadRemovedPartners(
+    const base::Value::List& deleted_partners,
+    bool& upgraded_old_id);
 
 }  // namespace vivaldi_default_bookmarks
 

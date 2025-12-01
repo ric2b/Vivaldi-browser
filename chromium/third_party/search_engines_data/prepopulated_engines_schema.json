@@ -148,6 +148,8 @@
         ]
       },
       "optional": true
-    }
+    },
+    // Vivaldi: 'Boolean' value representing is search engine Vivaldi partner.
+    { "field": "is_partner", "type": "int", "default": 0, "optional": true }
   ]
 }

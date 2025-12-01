@@ -249,7 +249,7 @@ class FactoryBase : public TorqueGeneratedFactory<Impl> {
       int length, DirectHandle<Context> context,
       DirectHandle<FixedArray> arguments,
       AllocationType allocation = AllocationType::kYoung);
-  Handle<ArrayList> NewArrayList(
+  DirectHandle<ArrayList> NewArrayList(
       int size, AllocationType allocation = AllocationType::kYoung);
 
   Handle<SharedFunctionInfo> NewSharedFunctionInfoForLiteral(
@@ -343,8 +343,10 @@ class FactoryBase : public TorqueGeneratedFactory<Impl> {
   V8_WARN_UNUSED_RESULT MaybeHandle<SeqTwoByteString> NewRawTwoByteString(
       int length, AllocationType allocation = AllocationType::kYoung);
   // Create a new cons string object which consists of a pair of strings.
-  V8_WARN_UNUSED_RESULT MaybeHandle<String> NewConsString(
-      Handle<String> left, Handle<String> right,
+  template <template <typename> typename HandleType>
+    requires(std::is_convertible_v<HandleType<String>, DirectHandle<String>>)
+  V8_WARN_UNUSED_RESULT HandleType<String>::MaybeType NewConsString(
+      HandleType<String> left, HandleType<String> right,
       AllocationType allocation = AllocationType::kYoung);
 
   V8_WARN_UNUSED_RESULT Handle<String> NewConsString(
@@ -396,6 +398,12 @@ class FactoryBase : public TorqueGeneratedFactory<Impl> {
 
   AllocationType RefineAllocationTypeForInPlaceInternalizableString(
       AllocationType allocation, Tagged<Map> string_map);
+
+#ifdef V8_ENABLE_LEAPTIERING
+  JSDispatchHandle NewJSDispatchHandle(uint16_t parameter_count,
+                                       DirectHandle<Code> code,
+                                       JSDispatchTable::Space* space);
+#endif
 
  protected:
   // Must be large enough to fit any double, int, or size_t.

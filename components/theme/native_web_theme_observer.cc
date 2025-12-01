@@ -7,8 +7,8 @@
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/pref_names.h"
-#include "components/flags_ui/flags_storage.h"
 #include "components/prefs/pref_service.h"
+#include "components/webui/flags/flags_storage.h"
 #include "content/public/browser/browser_context.h"
 #include "ui/native_theme/native_theme.h"
 

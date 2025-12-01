@@ -41,7 +41,7 @@ struct SessionContent {
   SessionContent();
   ~SessionContent();
   IdToSessionTab tabs;
-  TokenToSessionTabGroup tab_groups;
+  GroupIdToSessionTabGroup tab_groups;
   IdToSessionWindow windows;
   SessionID active_window_id = SessionID::InvalidValue();
 };

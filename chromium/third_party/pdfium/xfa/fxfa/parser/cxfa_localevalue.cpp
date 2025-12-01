@@ -6,8 +6,6 @@
 
 #include "xfa/fxfa/parser/cxfa_localevalue.h"
 
-#include <wchar.h>
-
 #include <memory>
 #include <utility>
 #include <vector>
@@ -15,6 +13,7 @@
 #include "core/fxcrt/cfx_datetime.h"
 #include "core/fxcrt/check.h"
 #include "core/fxcrt/fx_extension.h"
+#include "core/fxcrt/fx_string.h"
 #include "core/fxcrt/span.h"
 #include "xfa/fgas/crt/cfgas_stringformatter.h"
 #include "xfa/fxfa/parser/cxfa_document.h"
@@ -224,8 +223,7 @@ double CXFA_LocaleValue::GetDoubleNum() const {
     return 0;
   }
 
-  // SAFETY: WideStrings are always terminated.
-  return UNSAFE_BUFFERS(wcstod(m_wsValue.c_str(), nullptr));
+  return StringToDouble(m_wsValue.AsStringView());
 }
 
 CFX_DateTime CXFA_LocaleValue::GetDate() const {
@@ -246,30 +244,27 @@ CFX_DateTime CXFA_LocaleValue::GetTime() const {
   return dt;
 }
 
-bool CXFA_LocaleValue::SetDate(const CFX_DateTime& d) {
+void CXFA_LocaleValue::SetDate(const CFX_DateTime& d) {
   m_eType = CXFA_LocaleValue::ValueType::kDate;
   m_wsValue = WideString::Format(L"%04d-%02d-%02d", d.GetYear(), d.GetMonth(),
                                  d.GetDay());
-  return true;
 }
 
-bool CXFA_LocaleValue::SetTime(const CFX_DateTime& t) {
+void CXFA_LocaleValue::SetTime(const CFX_DateTime& t) {
   m_eType = CXFA_LocaleValue::ValueType::kTime;
   m_wsValue = WideString::Format(L"%02d:%02d:%02d", t.GetHour(), t.GetMinute(),
                                  t.GetSecond());
   if (t.GetMillisecond() > 0)
     m_wsValue += WideString::Format(L"%:03d", t.GetMillisecond());
-  return true;
 }
 
-bool CXFA_LocaleValue::SetDateTime(const CFX_DateTime& dt) {
+void CXFA_LocaleValue::SetDateTime(const CFX_DateTime& dt) {
   m_eType = CXFA_LocaleValue::ValueType::kDateTime;
   m_wsValue = WideString::Format(L"%04d-%02d-%02dT%02d:%02d:%02d", dt.GetYear(),
                                  dt.GetMonth(), dt.GetDay(), dt.GetHour(),
                                  dt.GetMinute(), dt.GetSecond());
   if (dt.GetMillisecond() > 0)
     m_wsValue += WideString::Format(L"%:03d", dt.GetMillisecond());
-  return true;
 }
 
 bool CXFA_LocaleValue::FormatPatterns(WideString& wsResult,

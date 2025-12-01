@@ -39,7 +39,8 @@ public:
 
     TextureInfo getDefaultDepthStencilTextureInfo(SkEnumBitMask<DepthStencilFlags>,
                                                   uint32_t sampleCount,
-                                                  Protected) const override;
+                                                  Protected,
+                                                  Discardable discardable) const override;
 
     TextureInfo getDefaultStorageTextureInfo(SkColorType) const override;
 
@@ -52,12 +53,8 @@ public:
                               RenderPassDesc*,
                               const RendererProvider*) const override;
 
-    bool deserializeTextureInfo(SkStream*,
-                                BackendApi,
-                                Mipmapped,
-                                Protected,
-                                uint32_t sampleCount,
-                                TextureInfo* out) const override;
+    bool serializeTextureInfo(const TextureInfo&, SkWStream*) const override;
+    bool deserializeTextureInfo(SkStream*, TextureInfo* out) const override;
 
     // Get a sufficiently unique bit representation for the RenderPassDesc to be embedded in other
     // UniqueKeys (e.g. makeGraphicsPipelineKey).
@@ -65,8 +62,6 @@ public:
 
     bool isMac() const { return fGPUFamily == GPUFamily::kMac; }
     bool isApple() const { return fGPUFamily == GPUFamily::kApple; }
-
-    uint32_t channelMask(const TextureInfo&) const override;
 
     bool isRenderable(const TextureInfo&) const override;
     bool isStorage(const TextureInfo&) const override;

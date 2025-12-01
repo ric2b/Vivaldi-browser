@@ -56,6 +56,8 @@ using ::testing::Return;
 constexpr char kFakeEmailAddress[] = "alice@email.example";
 constexpr char16_t kFakeEmailAddressU16[] = u"alice@email.example";
 constexpr char kFakeManagementUrl[] = "https://manage.example/";
+constexpr char kFakeOrigin[] = "https://test.example";
+constexpr char16_t kFakeDomainU16[] = u"test.example";
 constexpr char kFakeOauthScope[] = "https://foo.example";
 constexpr char kFakeErrorReportUrl[] = "https://error-link.example/";
 constexpr char kFakeLearnMoreUrl[] = "https://learn-more.stuff";
@@ -304,7 +306,7 @@ class PlusAddressCreationDialogInteractiveTest : public InteractiveBrowserTest {
     });
   }
 
-  const url::Origin facet = url::Origin::Create(GURL("https://test.example"));
+  const url::Origin facet = url::Origin::Create(GURL(kFakeOrigin));
   base::CallbackListSubscription unused_subscription_;
   std::unique_ptr<IdentityTestEnvironmentProfileAdaptor>
       identity_test_environment_adaptor_;
@@ -333,7 +335,7 @@ IN_PROC_BROWSER_TEST_F(PlusAddressCreationDialogInteractiveTest,
       InAnyContext(WaitForViewProperty(
           PlusAddressCreationView::kPlusAddressConfirmButtonElementId,
           views::View, Enabled, true)),
-      InSameContext(Steps(
+      InSameContext(
           CheckViewProperty(
               PlusAddressCreationView::kPlusAddressSuggestedEmailElementId,
               &views::Label::GetText, kFakePlusAddressU16),
@@ -344,7 +346,7 @@ IN_PROC_BROWSER_TEST_F(PlusAddressCreationDialogInteractiveTest,
               PlusAddressCreationView::kPlusAddressConfirmButtonElementId),
           // Successful confirmation should close the modal.
           WaitForHide(
-              PlusAddressCreationView::kPlusAddressDescriptionTextElementId))),
+              PlusAddressCreationView::kPlusAddressDescriptionTextElementId)),
       // Flush remaining instructions to ensure that all metrics are
       // recorded.
       Check([&] {
@@ -383,7 +385,7 @@ IN_PROC_BROWSER_TEST_F(PlusAddressCreationDialogInteractiveTest,
       InAnyContext(WaitForViewProperty(
           PlusAddressCreationView::kPlusAddressConfirmButtonElementId,
           views::View, Enabled, true)),
-      InSameContext(Steps(
+      InSameContext(
           CheckViewProperty(
               PlusAddressCreationView::kPlusAddressSuggestedEmailElementId,
               &views::Label::GetText, kFakePlusAddressU16),
@@ -403,7 +405,7 @@ IN_PROC_BROWSER_TEST_F(PlusAddressCreationDialogInteractiveTest,
               PlusAddressCreationView::kPlusAddressConfirmButtonElementId),
           // Successful confirmation should close the modal.
           WaitForHide(
-              PlusAddressCreationView::kPlusAddressDescriptionTextElementId))),
+              PlusAddressCreationView::kPlusAddressDescriptionTextElementId)),
       // Flush remaining instructions to ensure that all metrics are
       // recorded.
       Check([&] {
@@ -439,11 +441,11 @@ IN_PROC_BROWSER_TEST_F(PlusAddressCreationDialogInteractiveTest,
       ShowModal(),
       InAnyContext(WaitForShow(
           PlusAddressCreationView::kPlusAddressCancelButtonElementId)),
-      InSameContext(Steps(
+      InSameContext(
           PressButton(
               PlusAddressCreationView::kPlusAddressCancelButtonElementId),
           WaitForHide(
-              PlusAddressCreationView::kPlusAddressCancelButtonElementId))),
+              PlusAddressCreationView::kPlusAddressCancelButtonElementId)),
       CheckModalEventHistogramBuckets(/*shown=*/1, /*confirmed=*/0,
                                       /*canceled=*/1, /*notice_shown=*/false),
       CheckHistogramTotalCount(
@@ -469,7 +471,7 @@ IN_PROC_BROWSER_TEST_F(PlusAddressCreationDialogInteractiveTest,
   RunTestSequence(
       // First, show the UI normally.
       ShowModal(),
-      InAnyContext(Steps(
+      InAnyContext(
           WaitForShow(
               PlusAddressCreationView::kPlusAddressDescriptionTextElementId),
           Do([this]() {
@@ -477,7 +479,7 @@ IN_PROC_BROWSER_TEST_F(PlusAddressCreationDialogInteractiveTest,
             // teardown. See crbug.com/1502957.
             EXPECT_EQ(1, browser()->tab_strip_model()->count());
             browser()->tab_strip_model()->GetActiveWebContents()->Close();
-          }))),
+          })),
 
       CheckModalEventHistogramBuckets(/*shown=*/1, /*confirmed=*/0,
                                       /*canceled=*/0, /*notice_shown=*/false),
@@ -497,7 +499,7 @@ IN_PROC_BROWSER_TEST_F(PlusAddressCreationDialogInteractiveTest, DoubleInit) {
   RunTestSequence(
       // First, show the UI normally.
       ShowModal(),
-      InAnyContext(Steps(
+      InAnyContext(
           WaitForShow(
               PlusAddressCreationView::kPlusAddressDescriptionTextElementId),
           Do([&]() {
@@ -515,7 +517,7 @@ IN_PROC_BROWSER_TEST_F(PlusAddressCreationDialogInteractiveTest, DoubleInit) {
           PressButton(
               PlusAddressCreationView::kPlusAddressConfirmButtonElementId),
           WaitForHide(
-              PlusAddressCreationView::kPlusAddressDescriptionTextElementId))),
+              PlusAddressCreationView::kPlusAddressDescriptionTextElementId)),
 
       // The second callback should not be run on confirmation on
       // the modal.
@@ -544,7 +546,7 @@ IN_PROC_BROWSER_TEST_F(PlusAddressCreationDialogInteractiveTest,
       InAnyContext(WaitForViewProperty(
           PlusAddressCreationView::kPlusAddressConfirmButtonElementId,
           views::View, Enabled, true)),
-      InSameContext(Steps(
+      InSameContext(
           CheckViewProperty(
               PlusAddressCreationView::kPlusAddressSuggestedEmailElementId,
               &views::Label::GetText, kFakePlusAddressU16),
@@ -555,8 +557,8 @@ IN_PROC_BROWSER_TEST_F(PlusAddressCreationDialogInteractiveTest,
           CheckViewProperty(
               PlusAddressCreationView::kPlusAddressDescriptionTextElementId,
               &views::StyledLabel::GetText,
-              l10n_util::GetStringUTF16(
-                  IDS_PLUS_ADDRESS_MODAL_DESCRIPTION_NOTICE)),
+              l10n_util::GetStringFUTF16(
+                  IDS_PLUS_ADDRESS_MODAL_DESCRIPTION_NOTICE, kFakeDomainU16)),
           EnsurePresent(PlusAddressCreationView::kPlusAddressNoticeElementId),
           SetOnIncompatibleAction(OnIncompatibleAction::kIgnoreAndContinue,
                                   kSuppressedScreenshotError),
@@ -566,7 +568,7 @@ IN_PROC_BROWSER_TEST_F(PlusAddressCreationDialogInteractiveTest,
           PressButton(
               PlusAddressCreationView::kPlusAddressCancelButtonElementId),
           WaitForHide(
-              PlusAddressCreationView::kPlusAddressDescriptionTextElementId))),
+              PlusAddressCreationView::kPlusAddressDescriptionTextElementId)),
       CheckModalEventHistogramBuckets(/*shown=*/1, /*confirmed=*/0,
                                       /*canceled=*/1, /*notice_shown=*/true),
       CheckModalOutcomeHistograms(
@@ -592,7 +594,7 @@ IN_PROC_BROWSER_TEST_F(PlusAddressCreationDialogInteractiveTest,
       InAnyContext(WaitForViewProperty(
           PlusAddressCreationView::kPlusAddressConfirmButtonElementId,
           views::View, Enabled, true)),
-      InSameContext(Steps(
+      InSameContext(
           CheckViewProperty(
               PlusAddressCreationView::kPlusAddressSuggestedEmailElementId,
               &views::Label::GetText, kFakePlusAddressU16),
@@ -610,7 +612,7 @@ IN_PROC_BROWSER_TEST_F(PlusAddressCreationDialogInteractiveTest,
           PressButton(
               PlusAddressCreationView::kPlusAddressConfirmButtonElementId),
           WaitForHide(
-              PlusAddressCreationView::kPlusAddressDescriptionTextElementId))),
+              PlusAddressCreationView::kPlusAddressDescriptionTextElementId)),
       CheckModalEventHistogramBuckets(/*shown=*/1, /*confirmed=*/1,
                                       /*canceled=*/0, /*notice_shown=*/false),
       CheckUserAction("PlusAddresses.OfferedPlusAddressAccepted", 1));
@@ -633,14 +635,14 @@ IN_PROC_BROWSER_TEST_F(PlusAddressCreationDialogInteractiveTest,
       InAnyContext(WaitForViewProperty(
           PlusAddressCreationView::kPlusAddressConfirmButtonElementId,
           views::View, Enabled, true)),
-      InSameContext(Steps(
+      InSameContext(
           CheckViewProperty(
               PlusAddressCreationView::kPlusAddressSuggestedEmailElementId,
               &views::Label::GetText, kFakePlusAddressU16),
           PressButton(
               PlusAddressCreationView::kPlusAddressConfirmButtonElementId),
           WaitForHide(
-              PlusAddressCreationView::kPlusAddressDescriptionTextElementId))),
+              PlusAddressCreationView::kPlusAddressDescriptionTextElementId)),
       // Flush remaining instructions to ensure that all metrics are recorded.
       Check([&] {
         return future_.IsReady() && future_.Get() == kFakePlusAddress;
@@ -668,20 +670,20 @@ IN_PROC_BROWSER_TEST_F(PlusAddressCreationDialogInteractiveTest,
   DEFINE_LOCAL_ELEMENT_IDENTIFIER_VALUE(kTabElementId);
   RunTestSequence(
       InstrumentNextTab(kTabElementId, AnyBrowser()), ShowModal(),
-      InAnyContext(Steps(
+      InAnyContext(
           WaitForShow(PlusAddressCreationView::kPlusAddressNoticeElementId),
           // EnsurePresent here is necessary to ensure that the link can be
           // clicked.
-          EnsurePresent(PlusAddressCreationView::kPlusAddressNoticeElementId))),
-      InAnyContext(
+          EnsurePresent(PlusAddressCreationView::kPlusAddressNoticeElementId),
+
           WithElement(
               PlusAddressCreationView::kPlusAddressNoticeElementId,
               [](ui::TrackedElement* el) {
                 AsView<views::StyledLabel>(el)->ClickFirstLinkForTesting();
               })
-              .SetMustRemainVisible(false)),
-      InAnyContext(WaitForWebContentsNavigation(kTabElementId,
-                                                GURL(kFakeLearnMoreUrl))));
+              .SetMustRemainVisible(false),
+          WaitForWebContentsNavigation(kTabElementId,
+                                       GURL(kFakeLearnMoreUrl))));
 }
 
 class PlusAddressCreationDialogUiVariationsTestBase
@@ -742,7 +744,7 @@ IN_PROC_BROWSER_TEST_P(PlusAddressCreationDialogUiVariationsTest,
       InAnyContext(WaitForViewProperty(
           PlusAddressCreationView::kPlusAddressConfirmButtonElementId,
           views::View, Enabled, true)),
-      InSameContext(Steps(
+      InSameContext(
           // Ensure hidden elements are not present.
           EnsureNotPresent(PlusAddressCreationView::kPlusAddressProgressBarId),
           SetOnIncompatibleAction(OnIncompatibleAction::kIgnoreAndContinue,
@@ -755,7 +757,7 @@ IN_PROC_BROWSER_TEST_P(PlusAddressCreationDialogUiVariationsTest,
               PlusAddressCreationView::kPlusAddressConfirmButtonElementId),
           // Successful confirmation should close the modal.
           WaitForHide(
-              PlusAddressCreationView::kPlusAddressDescriptionTextElementId))));
+              PlusAddressCreationView::kPlusAddressDescriptionTextElementId)));
 }
 
 INSTANTIATE_TEST_SUITE_P(
@@ -790,7 +792,7 @@ IN_PROC_BROWSER_TEST_P(PlusAddressCreationDialogUiVariationsOnboardingTest,
       ShowModal(),
       InAnyContext(WaitForShow(
           PlusAddressCreationView::kPlusAddressGenerationMessageElementId)),
-      InSameContext(Steps(
+      InSameContext(
           // Ensure that modal shows a placeholder & disables the confirm button
           // while `Reserve()` is pending.
           CheckViewProperty(
@@ -814,7 +816,7 @@ IN_PROC_BROWSER_TEST_P(PlusAddressCreationDialogUiVariationsOnboardingTest,
           PressButton(
               PlusAddressCreationView::kPlusAddressCancelButtonElementId),
           WaitForHide(
-              PlusAddressCreationView::kPlusAddressDescriptionTextElementId))),
+              PlusAddressCreationView::kPlusAddressDescriptionTextElementId)),
       CheckModalEventHistogramBuckets(/*shown=*/1, /*confirmed=*/0,
                                       /*canceled=*/1, /*notice_shown=*/true),
       CheckModalOutcomeHistograms(
@@ -850,7 +852,7 @@ IN_PROC_BROWSER_TEST_P(PlusAddressCreationDialogUiVariationsOnboardingTest,
       InAnyContext(WaitForViewProperty(
           PlusAddressCreationView::kPlusAddressConfirmButtonElementId,
           views::View, Enabled, true)),
-      InSameContext(Steps(
+      InSameContext(
           PressButton(
               PlusAddressCreationView::kPlusAddressConfirmButtonElementId),
           // Ensure that progress indicator is shown while waiting for response
@@ -867,7 +869,7 @@ IN_PROC_BROWSER_TEST_P(PlusAddressCreationDialogUiVariationsOnboardingTest,
           PressButton(
               PlusAddressCreationView::kPlusAddressCancelButtonElementId),
           WaitForHide(
-              PlusAddressCreationView::kPlusAddressDescriptionTextElementId))),
+              PlusAddressCreationView::kPlusAddressDescriptionTextElementId)),
       CheckHistogramUniqueSample(
           FormatHistogramNameFor(PlusAddressNetworkRequestType::kReserve),
           net::HttpStatusCode::HTTP_OK, 1),

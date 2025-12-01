@@ -25,6 +25,7 @@
 #include "src/base/platform/platform-posix.h"
 #include "src/builtins/builtins.h"
 #include "src/common/globals.h"
+#include "src/common/ptr-compr.h"
 #include "src/common/thread-local-storage.h"
 #include "src/debug/interface-types.h"
 #include "src/execution/execution.h"
@@ -139,6 +140,7 @@ class MaterializedObjectStore;
 class Microtask;
 class MicrotaskQueue;
 class OptimizingCompileDispatcher;
+class OptimizingCompileTaskExecutor;
 class PersistentHandles;
 class PersistentHandlesList;
 class ReadOnlyArtifacts;
@@ -424,6 +426,15 @@ class WaiterQueueNode;
       DCHECK((isolate)->has_exception());                     \
       return value;                                           \
     }                                                         \
+  } while (false)
+
+#define MAYBE_RETURN_FAILURE_ON_EXCEPTION(isolate, call) \
+  do {                                                   \
+    Isolate* __isolate__ = (isolate);                    \
+    if ((call).IsNothing()) {                            \
+      DCHECK((__isolate__)->has_exception());            \
+      return ReadOnlyRoots(__isolate__).exception();     \
+    }                                                    \
   } while (false)
 
 #define MAYBE_ASSIGN_RETURN_ON_EXCEPTION_VALUE(isolate, dst, call, value) \
@@ -725,30 +736,28 @@ class V8_EXPORT_PRIVATE Isolate final : private HiddenFactory {
   base::RecursiveMutex* break_access() { return &break_access_; }
 
   // Shared mutex for allowing thread-safe concurrent reads of FeedbackVectors.
-  base::SpinningMutex* feedback_vector_access() {
-    return &feedback_vector_access_;
-  }
+  base::Mutex* feedback_vector_access() { return &feedback_vector_access_; }
 
   // Shared mutex for allowing thread-safe concurrent reads of
   // InternalizedStrings.
-  base::SpinningMutex* internalized_string_access() {
+  base::Mutex* internalized_string_access() {
     return &internalized_string_access_;
   }
 
   // Shared mutex for allowing thread-safe concurrent reads of TransitionArrays
   // of kind kFullTransitionArray.
-  base::SpinningMutex* full_transition_array_access() {
+  base::Mutex* full_transition_array_access() {
     return &full_transition_array_access_;
   }
 
   // Shared mutex for allowing thread-safe concurrent reads of
   // SharedFunctionInfos.
-  base::SpinningMutex* shared_function_info_access() {
+  base::Mutex* shared_function_info_access() {
     return &shared_function_info_access_;
   }
 
   // Protects (most) map update operations, see also MapUpdater.
-  base::SpinningMutex* map_updater_access() { return &map_updater_access_; }
+  base::Mutex* map_updater_access() { return &map_updater_access_; }
 
   // Protects JSObject boilerplate migrations (i.e. calls to MigrateInstance on
   // boilerplate objects; elements kind transitions are *not* protected).
@@ -758,7 +767,7 @@ class V8_EXPORT_PRIVATE Isolate final : private HiddenFactory {
   // - if so, `boilerplate_migration_access` is locked before
   //   `map_updater_access`.
   // - backgrounds threads must use the same lock order to avoid deadlocks.
-  base::SpinningMutex* boilerplate_migration_access() {
+  base::Mutex* boilerplate_migration_access() {
     return &boilerplate_migration_access_;
   }
 
@@ -965,7 +974,9 @@ class V8_EXPORT_PRIVATE Isolate final : private HiddenFactory {
       v8::Isolate::AbortOnUncaughtExceptionCallback callback);
 
   enum PrintStackMode { kPrintStackConcise, kPrintStackVerbose };
-  void PrintCurrentStackTrace(std::ostream& out);
+  void PrintCurrentStackTrace(std::ostream& out,
+                              PrintCurrentStackTraceFilterCallback
+                                  should_include_frame_callback = nullptr);
   void PrintStack(StringStream* accumulator,
                   PrintStackMode mode = kPrintStackVerbose);
   void PrintStack(FILE* out, PrintStackMode mode = kPrintStackVerbose);
@@ -1705,6 +1716,10 @@ class V8_EXPORT_PRIVATE Isolate final : private HiddenFactory {
     DCHECK_NOT_NULL(optimizing_compile_dispatcher_);
     return optimizing_compile_dispatcher_;
   }
+
+  OptimizingCompileDispatcher* SetOptimizingCompileDispatcherForTesting(
+      OptimizingCompileDispatcher* dispatcher);
+
   // Flushes all pending concurrent optimization jobs from the optimizing
   // compile dispatcher's queue.
   void AbortConcurrentOptimization(BlockingBehavior blocking_behavior);
@@ -1727,13 +1742,16 @@ class V8_EXPORT_PRIVATE Isolate final : private HiddenFactory {
   void DumpAndResetStats();
   void DumpAndResetBuiltinsProfileData();
 
-  void* stress_deopt_count_address() { return &stress_deopt_count_; }
+  uint64_t* stress_deopt_count_address() { return &stress_deopt_count_; }
 
   void set_force_slow_path(bool v) { force_slow_path_ = v; }
   bool force_slow_path() const { return force_slow_path_; }
   bool* force_slow_path_address() { return &force_slow_path_; }
 
   bool jitless() const { return jitless_; }
+
+  void set_stack_size(size_t v) { stack_size_ = v; }
+  size_t stack_size() { return stack_size_; }
 
   base::RandomNumberGenerator* random_number_generator();
 
@@ -1846,14 +1864,6 @@ class V8_EXPORT_PRIVATE Isolate final : private HiddenFactory {
   void SetReleaseCppHeapCallback(v8::Isolate::ReleaseCppHeapCallback callback);
 
   void RunReleaseCppHeapCallback(std::unique_ptr<v8::CppHeap> cpp_heap);
-
-  void SetAtomicsWaitCallback(v8::Isolate::AtomicsWaitCallback callback,
-                              void* data);
-  void RunAtomicsWaitCallback(v8::Isolate::AtomicsWaitEvent event,
-                              DirectHandle<JSArrayBuffer> array_buffer,
-                              size_t offset_in_bytes, int64_t value,
-                              double timeout_in_ms,
-                              AtomicsWaitWakeHandle* stop_handle);
 
   void SetPromiseHook(PromiseHook hook);
   void RunPromiseHook(PromiseHookType type, DirectHandle<JSPromise> promise,
@@ -2256,7 +2266,13 @@ class V8_EXPORT_PRIVATE Isolate final : private HiddenFactory {
   }
   void set_trusted_pointer_publishing_scope(
       TrustedPointerPublishingScope* scope) {
+    DCHECK_NE((trusted_pointer_publishing_scope() == nullptr),
+              (scope == nullptr));
     isolate_data_.trusted_pointer_publishing_scope_ = scope;
+  }
+
+  Address code_pointer_table_base_address() {
+    return isolate_data_.code_pointer_table_base_address_;
   }
 #endif  // V8_ENABLE_SANDBOX
 
@@ -2315,17 +2331,18 @@ class V8_EXPORT_PRIVATE Isolate final : private HiddenFactory {
   std::vector<std::unique_ptr<wasm::StackMemory>>& wasm_stacks() {
     return wasm_stacks_;
   }
-  // Update the thread local's Stack object so that it is aware of the new stack
-  // start and the inactive stacks.
-  void UpdateCentralStackInfo();
 
-  void SyncStackLimit();
+  // Sets the new stack limit, updates the central stack info and checks the
+  // validity of the switch.
+  void SwitchStacks(Tagged<WasmContinuationObject> source_continuation,
+                    Tagged<WasmContinuationObject> target_continuation);
 
-  // To be called when returning from {stack}, or when an exception crosses the
-  // stack boundary. This updates the {StackMemory} object and the global
-  // {wasm_stacks_} list. This does *not* update the ActiveContinuation root and
-  // the stack limit.
-  void RetireWasmStack(wasm::StackMemory* stack);
+  // Retires the stack owned by {continuation}, to be called when returning or
+  // throwing from this continuation.
+  // This updates the {StackMemory} state, removes it from the global
+  // {wasm_stacks_} vector and nulls the EPT entry. This does not update the
+  // {ActiveContinuation} root or the stack limit.
+  void RetireWasmStack(Tagged<WasmContinuationObject> continuation);
 #else
   bool IsOnCentralStack() { return true; }
 #endif
@@ -2379,7 +2396,7 @@ class V8_EXPORT_PRIVATE Isolate final : private HiddenFactory {
       DirectHandle<FunctionTemplateInfo> function,
       v8::ExceptionContext callback_kind);
   void ReportExceptionPropertyCallback(DirectHandle<JSReceiver> holder,
-                                       Handle<Name> name,
+                                       DirectHandle<Name> name,
                                        v8::ExceptionContext callback_kind);
   void SetExceptionPropagationCallback(ExceptionPropagationCallback callback);
 
@@ -2402,12 +2419,17 @@ class V8_EXPORT_PRIVATE Isolate final : private HiddenFactory {
     if (v8_flags.memory_reducer_respects_frozen_state && IsFrozen()) {
       // We will either finalize an ongoing GC, or simply do a GC to reclaim
       // any unreachable memory.
-      heap()->FinalizeIncrementalMarkingAtomically(
+      heap()->FinalizeIncrementalMarkingAtomicallyIfRunning(
           i::GarbageCollectionReason::kFrozen);
       heap()->EnsureSweepingCompleted(
           Heap::SweepingForcedFinalizationMode::kUnifiedHeap);
     }
   }
+
+  static void IterateRegistersAndStackOfSimulator(
+      ::heap::base::StackVisitor* visitor);
+
+  std::shared_ptr<v8::TaskRunner> task_runner() const { return task_runner_; }
 
  private:
   explicit Isolate(IsolateGroup* isolate_group);
@@ -2534,12 +2556,12 @@ class V8_EXPORT_PRIVATE Isolate final : private HiddenFactory {
   CompilationCache* compilation_cache_ = nullptr;
   std::shared_ptr<Counters> async_counters_;
   base::RecursiveMutex break_access_;
-  base::SpinningMutex feedback_vector_access_;
-  base::SpinningMutex internalized_string_access_;
-  base::SpinningMutex full_transition_array_access_;
-  base::SpinningMutex shared_function_info_access_;
-  base::SpinningMutex map_updater_access_;
-  base::SpinningMutex boilerplate_migration_access_;
+  base::Mutex feedback_vector_access_;
+  base::Mutex internalized_string_access_;
+  base::Mutex full_transition_array_access_;
+  base::Mutex shared_function_info_access_;
+  base::Mutex map_updater_access_;
+  base::Mutex boilerplate_migration_access_;
   V8FileLogger* v8_file_logger_ = nullptr;
   StubCache* load_stub_cache_ = nullptr;
   StubCache* store_stub_cache_ = nullptr;
@@ -2581,9 +2603,7 @@ class V8_EXPORT_PRIVATE Isolate final : private HiddenFactory {
   DateCache* date_cache_ = nullptr;
   base::RandomNumberGenerator* random_number_generator_ = nullptr;
   base::RandomNumberGenerator* fuzzer_rng_ = nullptr;
-  v8::Isolate::AtomicsWaitCallback atomics_wait_callback_ = nullptr;
   v8::Isolate::ReleaseCppHeapCallback release_cpp_heap_callback_ = nullptr;
-  void* atomics_wait_callback_data_ = nullptr;
   PromiseHook promise_hook_ = nullptr;
   HostImportModuleDynamicallyCallback host_import_module_dynamically_callback_ =
       nullptr;
@@ -2717,7 +2737,7 @@ class V8_EXPORT_PRIVATE Isolate final : private HiddenFactory {
   std::unique_ptr<PersistentHandlesList> persistent_handles_list_;
 
   // Counts deopt points if deopt_every_n_times is enabled.
-  unsigned int stress_deopt_count_ = 0;
+  uint64_t stress_deopt_count_ = 0;
 
   bool force_slow_path_ = false;
 
@@ -2791,6 +2811,8 @@ class V8_EXPORT_PRIVATE Isolate final : private HiddenFactory {
   std::shared_ptr<v8::ArrayBuffer::Allocator> array_buffer_allocator_shared_;
   size_t array_buffer_max_size_ = 0;
 
+  std::shared_ptr<v8::TaskRunner> task_runner_;
+
   FutexWaitListNode futex_wait_list_node_;
 
   CancelableTaskManager* cancelable_task_manager_ = nullptr;
@@ -2809,7 +2831,7 @@ class V8_EXPORT_PRIVATE Isolate final : private HiddenFactory {
   bool allow_atomics_wait_ = true;
   bool flush_denormals_ = false;
 
-  base::SpinningMutex managed_ptr_destructors_mutex_;
+  base::Mutex managed_ptr_destructors_mutex_;
   ManagedPtrDestructor* managed_ptr_destructors_head_ = nullptr;
 
   size_t total_regexp_code_generated_ = 0;
@@ -2833,7 +2855,7 @@ class V8_EXPORT_PRIVATE Isolate final : private HiddenFactory {
   // TODO(kenton@cloudflare.com): This mutex can be removed if
   // thread_data_table_ is always accessed under the isolate lock. I do not
   // know if this is the case, so I'm preserving it for now.
-  base::SpinningMutex thread_data_table_mutex_;
+  base::Mutex thread_data_table_mutex_;
   ThreadDataTable thread_data_table_;
 
   // Stores the isolate containing the shared space.
@@ -2873,8 +2895,11 @@ class V8_EXPORT_PRIVATE Isolate final : private HiddenFactory {
   std::vector<MemoryRange> code_pages_buffer1_;
   std::vector<MemoryRange> code_pages_buffer2_;
   // The mutex only guards adding pages, the retrieval is signal safe.
-  base::SpinningMutex code_pages_mutex_;
+  base::Mutex code_pages_mutex_;
 
+  // Stack size set with ResourceConstraints or Isolate::SetStackLimit, in
+  // bytes. This is initialized with value of --stack-size.
+  size_t stack_size_;
 #ifdef V8_ENABLE_WEBASSEMBLY
   wasm::WasmCodeLookupCache* wasm_code_look_up_cache_ = nullptr;
   std::vector<std::unique_ptr<wasm::StackMemory>> wasm_stacks_;
@@ -3054,33 +3079,38 @@ class StackTraceFailureMessage {
   enum StackTraceMode { kIncludeStackTrace, kDontIncludeStackTrace };
 
   explicit StackTraceFailureMessage(Isolate* isolate, StackTraceMode mode,
-                                    void* ptr1 = nullptr, void* ptr2 = nullptr,
-                                    void* ptr3 = nullptr, void* ptr4 = nullptr,
-                                    void* ptr5 = nullptr, void* ptr6 = nullptr);
+                                    const Address* ptrs, size_t ptrs_count);
+
+  explicit StackTraceFailureMessage(Isolate* isolate, StackTraceMode mode,
+                                    std::initializer_list<Address> ptrs)
+      : StackTraceFailureMessage(isolate, mode, ptrs.begin(), ptrs.size()) {}
+
+  explicit StackTraceFailureMessage(Isolate* isolate, StackTraceMode mode,
+                                    std::initializer_list<void*> ptrs)
+      : StackTraceFailureMessage(isolate, mode,
+                                 reinterpret_cast<const Address*>(ptrs.begin()),
+                                 ptrs.size()) {}
 
   V8_NOINLINE void Print() volatile;
 
   static const uintptr_t kStartMarker = 0xdecade30;
-  static const uintptr_t kEndMarker = 0xdecade31;
+  static const uintptr_t kMiddleMarker = 0xdecade33;
+  static const uintptr_t kEndMarker = 0xdecade36;
   static const int kStacktraceBufferSize = 32 * KB;
 
   uintptr_t start_marker_ = kStartMarker;
-  void* isolate_;
-  void* ptr1_;
-  void* ptr2_;
-  void* ptr3_;
-  void* ptr4_;
-  void* ptr5_;
-  void* ptr6_;
-  void* code_objects_[4];
-  char js_stack_trace_[kStacktraceBufferSize];
+  Isolate* isolate_;
+  Address ptrs_[64] = {};
+  uintptr_t middle_marker_ = kMiddleMarker;
+  Address code_objects_[4] = {};
+  char js_stack_trace_[kStacktraceBufferSize] = {};
   uintptr_t end_marker_ = kEndMarker;
 };
 
 template <>
 class V8_NODISCARD MutexGuardIfOffThread<Isolate> final {
  public:
-  MutexGuardIfOffThread(base::SpinningMutex* mutex, Isolate* isolate) {
+  MutexGuardIfOffThread(base::Mutex* mutex, Isolate* isolate) {
     DCHECK_NOT_NULL(mutex);
     DCHECK_NOT_NULL(isolate);
     DCHECK_EQ(ThreadId::Current(), isolate->thread_id());
@@ -3088,6 +3118,21 @@ class V8_NODISCARD MutexGuardIfOffThread<Isolate> final {
 
   MutexGuardIfOffThread(const MutexGuardIfOffThread&) = delete;
   MutexGuardIfOffThread& operator=(const MutexGuardIfOffThread&) = delete;
+};
+
+// Set the current isolate for the thread *without* entering the isolate. Used
+// e.g. by background GC threads to be able to access pointer tables.
+// This subsumes a `PtrComprCageAccessScope` which is needed in the same
+// contexts in order to be able to access on-heap objects.
+class V8_NODISCARD SetCurrentIsolateScope final {
+ public:
+  explicit inline SetCurrentIsolateScope(Isolate* isolate);
+
+  inline ~SetCurrentIsolateScope();
+
+ private:
+  V8_NO_UNIQUE_ADDRESS PtrComprCageAccessScope ptr_compr_cage_access_scope_;
+  Isolate* const previous_isolate_;
 };
 
 }  // namespace internal

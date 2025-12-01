@@ -9,7 +9,7 @@
 #include <string>
 #include <string_view>
 
-#include "base/location.h"
+#include "remoting/base/source_location.h"
 #include "remoting/protocol/errors.h"
 #include "remoting/protocol/session_config.h"
 #include "remoting/protocol/transport.h"
@@ -93,18 +93,12 @@ class Session {
   // method returns.
   // |error| specifies the error code in case when the session is being closed
   //   due to an error.
-  void Close(ErrorCode error);
-
-  // Closes connection. EventHandler is guaranteed not to be called after this
-  // method returns.
-  // |error| specifies the error code in case when the session is being closed
-  //   due to an error.
   // |error_details| is a free-form human-readable string that describes the
   //   reason for closing the connection.
   // |error_location| denotes where the error occurs in the code.
   virtual void Close(ErrorCode error,
                      std::string_view error_details,
-                     const base::Location& error_location) = 0;
+                     const SourceLocation& error_location) = 0;
 
   // Adds a SessionPlugin to handle attachments. To ensure plugin attachments
   // are processed correctly for session-initiate message, this function must be

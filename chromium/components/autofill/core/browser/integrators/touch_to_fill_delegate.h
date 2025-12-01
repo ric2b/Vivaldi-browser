@@ -2,8 +2,10 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "components/autofill/core/browser/data_model/credit_card.h"
-#include "components/autofill/core/browser/data_model/iban.h"
+#include <variant>
+
+#include "components/autofill/core/browser/data_model/payments/credit_card.h"
+#include "components/autofill/core/browser/data_model/payments/iban.h"
 #include "components/autofill/core/common/form_data.h"
 #include "components/autofill/core/common/form_field_data.h"
 #include "components/autofill/core/common/unique_ids.h"
@@ -53,7 +55,7 @@ class TouchToFillDelegate {
   // An Iban::Guid is passed in case of a locally stored IBAN and an
   // Iban::InstrumentId for server IBANs.
   virtual void IbanSuggestionSelected(
-      absl::variant<Iban::Guid, Iban::InstrumentId> backend_id) = 0;
+      std::variant<Iban::Guid, Iban::InstrumentId> backend_id) = 0;
   virtual void OnDismissed(bool dismissed_by_user) = 0;
 
   virtual void LogMetricsAfterSubmission(

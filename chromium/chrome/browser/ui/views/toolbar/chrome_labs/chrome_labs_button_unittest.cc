@@ -2,21 +2,20 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "chrome/browser/ui/views/toolbar/chrome_labs/chrome_labs_button.h"
-
 #include "base/memory/raw_ptr.h"
 #include "chrome/browser/about_flags.h"
+#include "chrome/browser/ui/actions/chrome_action_id.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_features.h"
 #include "chrome/browser/ui/toolbar/chrome_labs/chrome_labs_model.h"
 #include "chrome/browser/ui/toolbar/chrome_labs/chrome_labs_prefs.h"
 #include "chrome/browser/ui/toolbar/chrome_labs/chrome_labs_utils.h"
-#include "chrome/browser/ui/ui_features.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/frame/test_with_browser_view.h"
 #include "chrome/browser/ui/views/toolbar/chrome_labs/chrome_labs_bubble_view.h"
+#include "chrome/browser/ui/views/toolbar/chrome_labs/chrome_labs_coordinator.h"
 #include "chrome/browser/ui/views/toolbar/toolbar_view.h"
 #include "chrome/browser/unexpire_flags.h"
-#include "components/flags_ui/feature_entry_macros.h"
+#include "components/webui/flags/feature_entry_macros.h"
 #include "ui/events/event_utils.h"
 #include "ui/views/controls/dot_indicator.h"
 #include "ui/views/test/button_test_api.h"
@@ -72,12 +71,10 @@ class ChromeLabsButtonTest : public TestWithBrowserView {
     profile()->GetPrefs()->SetBoolean(
         chrome_labs_prefs::kBrowserLabsEnabledEnterprisePolicy, true);
 
-    if (features::IsToolbarPinningEnabled()) {
-      browser_view()
-          ->toolbar()
-          ->pinned_toolbar_actions_container()
-          ->ShowActionEphemerallyInToolbar(kActionShowChromeLabs, true);
-    }
+    browser_view()
+        ->toolbar()
+        ->pinned_toolbar_actions_container()
+        ->ShowActionEphemerallyInToolbar(kActionShowChromeLabs, true);
   }
 
  private:
@@ -133,20 +130,17 @@ TEST_F(ChromeLabsButtonTest, ShouldButtonShowTest) {
 }
 
 TEST_F(ChromeLabsButtonTest, DotIndicatorTest) {
-  // TODO(crbug.com/354207075): enable this test when the dot indicator is added
-  // back.
-  if (features::IsToolbarPinningEnabled()) {
-    GTEST_SKIP()
-        << "The dot indicator doesn't exist when toolbar pinning is enabled";
-  }
-  ChromeLabsButton* chrome_labs_button =
-      browser_view()->toolbar()->chrome_labs_button();
-  EXPECT_TRUE(chrome_labs_button->GetDotIndicatorVisibilityForTesting());
+  views::Button* labs_button = browser_view()->toolbar()->GetChromeLabsButton();
+  ChromeLabsCoordinator* coordinator =
+      browser_view()->browser()->GetFeatures().chrome_labs_coordinator();
+  coordinator->MaybeInstallDotIndicator();
+  views::DotIndicator* dot_indicator = coordinator->GetDotIndicator();
+  EXPECT_TRUE(dot_indicator->GetVisible());
   ui::MouseEvent e(ui::EventType::kMousePressed, gfx::Point(), gfx::Point(),
                    ui::EventTimeForNow(), 0, 0);
-  views::test::ButtonTestApi test_api(chrome_labs_button);
+  views::test::ButtonTestApi test_api(labs_button);
   test_api.NotifyClick(e);
-  EXPECT_FALSE(chrome_labs_button->GetDotIndicatorVisibilityForTesting());
+  EXPECT_FALSE(dot_indicator->GetVisible());
 }
 
 #if BUILDFLAG(IS_CHROMEOS)

@@ -90,14 +90,6 @@ export class SettingsSecurityPageElement extends
 
   static get properties() {
     return {
-      /**
-       * Preferences state.
-       */
-      prefs: {
-        type: Object,
-        notify: true,
-      },
-
       // <if expr="chrome_root_store_cert_management_ui">
       /**
        * Whether we should show the new cert management UI.
@@ -265,9 +257,13 @@ export class SettingsSecurityPageElement extends
   // </if>
 
   private enableSecurityKeysSubpage_: boolean;
+  // <if expr="is_win">
+  private enableSecurityKeysPhonesSubpage_: boolean;
+  // </if>
   focusConfig: FocusConfig;
   private showDisableSafebrowsingDialog_: boolean;
   private enableHashPrefixRealTimeLookups_: boolean;
+  private httpsFirstModeUncheckedValues_: HttpsFirstModeSetting[];
   private enableHttpsFirstModeNewSettings_: boolean;
   private lastFocusTime_: number|undefined;
   private totalTimeInFocus_: number;

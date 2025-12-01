@@ -107,6 +107,7 @@
 <translation id="1810764548349082891">Ingen förhandsgranskning</translation>
 <translation id="1812302367230252929">amhariska, translitterering</translation>
 <translation id="1813278315230285598">Tjänster</translation>
+<translation id="181434555916624618">Just nu visas inga resultat med personer. Testa en annan prompt.</translation>
 <translation id="1829129547161959350">Pingvin</translation>
 <translation id="183183971458492120">Läser in information …</translation>
 <translation id="1832073788765803750">Katakana med halvbredd</translation>
@@ -275,7 +276,7 @@
 <translation id="3241720467332021590">iriska</translation>
 <translation id="3248185426436836442">Väntar</translation>
 <translation id="3252266817569339921">franska</translation>
-<translation id="3253225298092156258">Inte tillgängligt</translation>
+<translation id="3253225298092156258">Inte tillgänglig</translation>
 <translation id="3254434849914415189">Välj standardapp för <ph name="FILE_TYPE" />-filer:</translation>
 <translation id="3255159654094949700">arabiska</translation>
 <translation id="326396468955264502">Det gick inte att flytta <ph name="NUMBER_OF_FILES" /> eftersom de är krypterade.</translation>

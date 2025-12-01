@@ -510,42 +510,6 @@ const FramebufferAttachment *FramebufferState::getReadPixelsAttachment(GLenum re
     }
 }
 
-const FramebufferAttachment *FramebufferState::getFirstNonNullAttachment() const
-{
-    auto *colorAttachment = getFirstColorAttachment();
-    if (colorAttachment)
-    {
-        return colorAttachment;
-    }
-    return getDepthOrStencilAttachment();
-}
-
-const FramebufferAttachment *FramebufferState::getFirstColorAttachment() const
-{
-    for (const FramebufferAttachment &colorAttachment : mColorAttachments)
-    {
-        if (colorAttachment.isAttached())
-        {
-            return &colorAttachment;
-        }
-    }
-
-    return nullptr;
-}
-
-const FramebufferAttachment *FramebufferState::getDepthOrStencilAttachment() const
-{
-    if (mDepthAttachment.isAttached())
-    {
-        return &mDepthAttachment;
-    }
-    if (mStencilAttachment.isAttached())
-    {
-        return &mStencilAttachment;
-    }
-    return nullptr;
-}
-
 const FramebufferAttachment *FramebufferState::getStencilOrDepthStencilAttachment() const
 {
     if (mStencilAttachment.isAttached())
@@ -2199,23 +2163,26 @@ void Framebuffer::onSubjectStateChange(angle::SubjectIndex index, angle::Subject
             return;
         }
 
-        // Swapchain changes should only result in color buffer changes.
-        if (message == angle::SubjectMessage::SwapchainImageChanged)
-        {
-            if (index < DIRTY_BIT_COLOR_ATTACHMENT_MAX)
-            {
-                mDirtyBits.set(DIRTY_BIT_COLOR_BUFFER_CONTENTS_0 + index);
-                onStateChange(angle::SubjectMessage::DirtyBitsFlagged);
-            }
-            return;
-        }
-
         ASSERT(message != angle::SubjectMessage::BindingChanged);
 
         // This can be triggered by external changes to the default framebuffer.
         if (message == angle::SubjectMessage::SurfaceChanged)
         {
-            onStateChange(angle::SubjectMessage::SurfaceChanged);
+            // Ignore notification for the depth and stencil bindings.
+            if (index < DIRTY_BIT_COLOR_ATTACHMENT_MAX)
+            {
+                // Surface only has single color attachment.
+                ASSERT(index == 0);
+                // During syncState the bit must be already set, skip setting it again.
+                ASSERT(!mDirtyBitsGuard.valid() ||
+                       mDirtyBitsGuard.value().test(DIRTY_BIT_COLOR_BUFFER_CONTENTS_0));
+                if (!mDirtyBitsGuard.valid())
+                {
+                    mDirtyBits.set(DIRTY_BIT_COLOR_BUFFER_CONTENTS_0);
+                    onStateChange(angle::SubjectMessage::DirtyBitsFlagged);
+                }
+                onStateChange(angle::SubjectMessage::SurfaceChanged);
+            }
             return;
         }
 
@@ -2425,11 +2392,6 @@ void Framebuffer::setFlipY(bool flipY)
     mState.mFlipY = flipY;
     mDirtyBits.set(DIRTY_BIT_FLIP_Y);
     invalidateCompletenessCache();
-}
-
-GLsizei Framebuffer::getNumViews() const
-{
-    return mState.getNumViews();
 }
 
 GLint Framebuffer::getBaseViewIndex() const

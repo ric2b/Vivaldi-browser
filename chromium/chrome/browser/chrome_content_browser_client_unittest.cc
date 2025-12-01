@@ -97,6 +97,7 @@
 #include "url/origin.h"
 
 #if !BUILDFLAG(IS_ANDROID)
+#include "chrome/browser/picture_in_picture/auto_picture_in_picture_tab_helper.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/chrome_pages.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
@@ -108,6 +109,7 @@
 #include "chrome/test/base/browser_with_test_window_test.h"
 #include "chrome/test/base/search_test_utils.h"
 #include "components/password_manager/core/common/password_manager_features.h"
+#include "media/base/picture_in_picture_events_info.h"
 #include "third_party/blink/public/mojom/installedapp/related_application.mojom.h"
 #include "ui/base/page_transition_types.h"
 #else
@@ -145,6 +147,9 @@
 #include "chromeos/components/kiosk/kiosk_utils.h"
 #include "components/user_manager/scoped_user_manager.h"
 #include "content/public/test/scoped_web_ui_controller_factory_registration.h"
+#include "google_apis/api_key_cache.h"
+#include "google_apis/default_api_keys.h"
+#include "google_apis/google_api_keys.h"
 #endif  // BUILDFLAG(IS_CHROMEOS)
 
 #if BUILDFLAG(IS_WIN)
@@ -352,6 +357,39 @@ TEST_F(ChromeContentBrowserClientWindowTest, AutomaticBeaconCredentials) {
   EXPECT_FALSE(client.AreDeprecatedAutomaticBeaconCredentialsAllowed(
       browser()->profile(), GURL("a.test"),
       url::Origin::Create(GURL("c.test"))));
+}
+
+TEST_F(ChromeContentBrowserClientWindowTest, GetAutoPipReason) {
+  ChromeContentBrowserClient client;
+
+  const GURL url("https://www.google.com");
+  content::OpenURLParams params(url, content::Referrer(),
+                                WindowOpenDisposition::NEW_FOREGROUND_TAB,
+                                ui::PAGE_TRANSITION_AUTO_TOPLEVEL, false);
+
+  content::WebContents* web_contents = nullptr;
+  scoped_refptr<content::SiteInstance> site_instance =
+      content::SiteInstance::Create(browser()->profile());
+  client.OpenURL(site_instance.get(), params,
+                 base::BindOnce(&DidOpenURLForWindowTest, &web_contents));
+  EXPECT_TRUE(web_contents);
+
+  auto* tab_helper =
+      AutoPictureInPictureTabHelper::FromWebContents(web_contents);
+  ASSERT_NE(nullptr, tab_helper);
+  EXPECT_EQ(media::PictureInPictureEventsInfo::AutoPipReason::kUnknown,
+            client.GetAutoPipReason(*web_contents));
+
+  tab_helper->set_auto_pip_trigger_reason_for_testing(
+      media::PictureInPictureEventsInfo::AutoPipReason::kVideoConferencing);
+  EXPECT_EQ(
+      media::PictureInPictureEventsInfo::AutoPipReason::kVideoConferencing,
+      client.GetAutoPipReason(*web_contents));
+
+  tab_helper->set_auto_pip_trigger_reason_for_testing(
+      media::PictureInPictureEventsInfo::AutoPipReason::kMediaPlayback);
+  EXPECT_EQ(media::PictureInPictureEventsInfo::AutoPipReason::kMediaPlayback,
+            client.GetAutoPipReason(*web_contents));
 }
 
 #endif  // !BUILDFLAG(IS_ANDROID)
@@ -728,7 +766,7 @@ TEST_F(ChromeContentBrowserClientTest, BindVideoEffectsProcessor) {
   auto service_reset =
       video_effects::SetVideoEffectsServiceRemoteForTesting(&service);
 
-  std::unique_ptr<base::test::TestFuture<void>> effects_processor_future =
+  base::test::TestFuture<void> effects_processor_future =
       fake_effects_service.GetEffectsProcessorCreationFuture();
 
   TestChromeContentBrowserClient test_content_browser_client;
@@ -738,7 +776,7 @@ TEST_F(ChromeContentBrowserClientTest, BindVideoEffectsProcessor) {
       "test_device_id", &profile_,
       video_effects_processor.BindNewPipeAndPassReceiver());
 
-  EXPECT_TRUE(effects_processor_future->Wait());
+  EXPECT_TRUE(effects_processor_future.Wait());
   EXPECT_TRUE(video_effects_processor.is_connected());
 }
 #endif  // !BUILDFLAG(ENABLE_VIDEO_EFFECTS)
@@ -1343,6 +1381,50 @@ TEST_F(ChromeContentBrowserClientTest, RequestFileAccessDeny) {
                             continuation_callback.GetCallback());
   EXPECT_FALSE(continuation_callback.Take().is_allowed());
 }
+
+namespace override_geo_api_keys {
+
+// We start every test by creating a clean environment for the
+// preprocessor defines used in define_baked_in_api_keys-inc.cc
+#undef GOOGLE_API_KEY
+#undef GOOGLE_API_KEY_CROS_SYSTEM_GEO
+#undef GOOGLE_API_KEY_CROS_CHROME_GEO
+
+// Set Geolocation-specific keys.
+#define GOOGLE_API_KEY "bogus_api_key"
+#define GOOGLE_API_KEY_CROS_SYSTEM_GEO "bogus_cros_system_geo_api_key"
+#define GOOGLE_API_KEY_CROS_CHROME_GEO "bogus_cros_chrome_geo_api_key"
+
+// This file must be included after the internal files defining official keys.
+#include "google_apis/default_api_keys-inc.cc"
+
+}  // namespace override_geo_api_keys
+
+// Test that when `kCrosSeparateGeoApiKey` feature is enabled,
+// Chrome-on-ChromeOS switches to using a separate (ChromeOS-specific) API Key
+// for the location requests.
+TEST_F(ChromeContentBrowserClientTest, UseCorrectGeoAPIKey) {
+  auto default_key_values =
+      override_geo_api_keys::GetDefaultApiKeysFromDefinedValues();
+  default_key_values.allow_unset_values = true;
+  google_apis::ApiKeyCache api_key_cache(default_key_values);
+  auto scoped_override =
+      google_apis::SetScopedApiKeyCacheForTesting(&api_key_cache);
+
+  // Check that by default Chrome-on-ChromeOS uses shared API key for
+  // geolocation requests.
+  ChromeContentBrowserClient client;
+  EXPECT_EQ(client.GetGeolocationApiKey(), google_apis::GetAPIKey());
+
+  // Check that when the `kCrosSeparateGeoApiKey` feature is enabled,
+  // Chrome-on-ChromeOS uses ChromeOS-specific API key for geolocation.
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndEnableFeature(
+      ash::features::kCrosSeparateGeoApiKey);
+  EXPECT_EQ(client.GetGeolocationApiKey(),
+            google_apis::GetCrosChromeGeoAPIKey());
+}
+
 #endif  // BUILDFLAG(IS_CHROMEOS)
 
 class ChromeContentBrowserClientSwitchTest

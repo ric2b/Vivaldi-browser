@@ -6,6 +6,9 @@
       {
         "args": [],
         "merge": {
+          "args": [
+            "--upload-skia-json"
+          ],
           "script": "//tools/perf/process_perf_results.py"
         },
         "name": "resource_sizes_monochrome_minimal_apks",
@@ -29,6 +32,9 @@
       {
         "args": [],
         "merge": {
+          "args": [
+            "--upload-skia-json"
+          ],
           "script": "//tools/perf/process_perf_results.py"
         },
         "name": "resource_sizes_system_webview_google_bundle",
@@ -52,6 +58,9 @@
       {
         "args": [],
         "merge": {
+          "args": [
+            "--upload-skia-json"
+          ],
           "script": "//tools/perf/process_perf_results.py"
         },
         "name": "resource_sizes_trichrome_google",
@@ -75,14 +84,7 @@
     ]
   },
   "android-builder-perf-pgo": {},
-  "android-go-processor-perf": {
-    "merge": {
-      "args": [
-        "--lightweight"
-      ],
-      "script": "//tools/perf/process_perf_results.py"
-    }
-  },
+  "android-go-processor-perf": {},
   "android-go-wembley-perf": {
     "isolated_scripts": [
       {
@@ -95,6 +97,9 @@
           "--ignore-benchmark-exit-code"
         ],
         "merge": {
+          "args": [
+            "--upload-skia-json"
+          ],
           "script": "//tools/perf/process_perf_results.py"
         },
         "name": "performance_test_suite_android_trichrome_chrome_google_bundle",
@@ -139,6 +144,9 @@
           "--ignore-benchmark-exit-code"
         ],
         "merge": {
+          "args": [
+            "--upload-skia-json"
+          ],
           "script": "//tools/perf/process_perf_results.py"
         },
         "name": "performance_webview_test_suite",
@@ -339,6 +347,9 @@
           "--ignore-benchmark-exit-code"
         ],
         "merge": {
+          "args": [
+            "--upload-skia-json"
+          ],
           "script": "//tools/perf/process_perf_results.py"
         },
         "name": "performance_test_suite_android_trichrome_chrome_google_64_32_bundle",
@@ -357,7 +368,7 @@
           "hard_timeout": 14400,
           "io_timeout": 21600,
           "service_account": "chrome-tester@chops-service-accounts.iam.gserviceaccount.com",
-          "shards": 2
+          "shards": 18
         },
         "test": "performance_test_suite_android_trichrome_chrome_google_64_32_bundle",
         "trigger_script": {
@@ -383,6 +394,9 @@
           "--ignore-benchmark-exit-code"
         ],
         "merge": {
+          "args": [
+            "--upload-skia-json"
+          ],
           "script": "//tools/perf/process_perf_results.py"
         },
         "name": "performance_test_suite_android_trichrome_chrome_google_64_32_bundle",
@@ -427,6 +441,9 @@
           "--ignore-benchmark-exit-code"
         ],
         "merge": {
+          "args": [
+            "--upload-skia-json"
+          ],
           "script": "//tools/perf/process_perf_results.py"
         },
         "name": "performance_test_suite_android_trichrome_chrome_google_64_32_bundle",
@@ -517,6 +534,9 @@
           "--ignore-benchmark-exit-code"
         ],
         "merge": {
+          "args": [
+            "--upload-skia-json"
+          ],
           "script": "//tools/perf/process_perf_results.py"
         },
         "name": "performance_webview_test_suite",
@@ -562,6 +582,9 @@
           "--ignore-benchmark-exit-code"
         ],
         "merge": {
+          "args": [
+            "--upload-skia-json"
+          ],
           "script": "//tools/perf/process_perf_results.py"
         },
         "name": "performance_webview_test_suite",
@@ -607,6 +630,9 @@
           "--ignore-benchmark-exit-code"
         ],
         "merge": {
+          "args": [
+            "--upload-skia-json"
+          ],
           "script": "//tools/perf/process_perf_results.py"
         },
         "name": "performance_test_suite_android_trichrome_chrome_google_64_32_bundle",
@@ -652,6 +678,9 @@
           "--benchmark-max-runs=3"
         ],
         "merge": {
+          "args": [
+            "--upload-skia-json"
+          ],
           "script": "//tools/perf/process_perf_results.py"
         },
         "name": "performance_test_suite_android_trichrome_chrome_google_64_32_bundle",
@@ -697,6 +726,9 @@
           "--ignore-benchmark-exit-code"
         ],
         "merge": {
+          "args": [
+            "--upload-skia-json"
+          ],
           "script": "//tools/perf/process_perf_results.py"
         },
         "name": "performance_test_suite_android_trichrome_chrome_google_64_32_bundle",
@@ -780,6 +812,9 @@
       {
         "args": [],
         "merge": {
+          "args": [
+            "--upload-skia-json"
+          ],
           "script": "//tools/perf/process_perf_results.py"
         },
         "name": "resource_sizes_monochrome_minimal_apks",
@@ -803,6 +838,9 @@
       {
         "args": [],
         "merge": {
+          "args": [
+            "--upload-skia-json"
+          ],
           "script": "//tools/perf/process_perf_results.py"
         },
         "name": "resource_sizes_system_webview_google_bundle",
@@ -826,6 +864,9 @@
       {
         "args": [],
         "merge": {
+          "args": [
+            "--upload-skia-json"
+          ],
           "script": "//tools/perf/process_perf_results.py"
         },
         "name": "resource_sizes_trichrome_google",
@@ -863,6 +904,9 @@
       {
         "args": [],
         "merge": {
+          "args": [
+            "--upload-skia-json"
+          ],
           "script": "//tools/perf/process_perf_results.py"
         },
         "name": "chrome_sizes",
@@ -994,6 +1038,9 @@
           "--assert-gpu-compositing"
         ],
         "merge": {
+          "args": [
+            "--upload-skia-json"
+          ],
           "script": "//tools/perf/process_perf_results.py"
         },
         "name": "performance_test_suite",
@@ -1026,14 +1073,7 @@
       }
     ]
   },
-  "linux-processor-perf": {
-    "merge": {
-      "args": [
-        "--lightweight"
-      ],
-      "script": "//tools/perf/process_perf_results.py"
-    }
-  },
+  "linux-processor-perf": {},
   "linux-r350-perf": {
     "isolated_scripts": [
       {
@@ -1047,6 +1087,9 @@
           "--assert-gpu-compositing"
         ],
         "merge": {
+          "args": [
+            "--upload-skia-json"
+          ],
           "script": "//tools/perf/process_perf_results.py"
         },
         "name": "performance_test_suite",
@@ -1086,6 +1129,9 @@
       {
         "args": [],
         "merge": {
+          "args": [
+            "--upload-skia-json"
+          ],
           "script": "//tools/perf/process_perf_results.py"
         },
         "name": "chrome_sizes",
@@ -1117,6 +1163,9 @@
       {
         "args": [],
         "merge": {
+          "args": [
+            "--upload-skia-json"
+          ],
           "script": "//tools/perf/process_perf_results.py"
         },
         "name": "chrome_sizes",
@@ -1153,6 +1202,9 @@
           "--assert-gpu-compositing"
         ],
         "merge": {
+          "args": [
+            "--upload-skia-json"
+          ],
           "script": "//tools/perf/process_perf_results.py"
         },
         "name": "performance_test_suite",
@@ -1199,6 +1251,9 @@
           "--assert-gpu-compositing"
         ],
         "merge": {
+          "args": [
+            "--upload-skia-json"
+          ],
           "script": "//tools/perf/process_perf_results.py"
         },
         "name": "performance_test_suite",
@@ -1244,6 +1299,9 @@
           "--assert-gpu-compositing"
         ],
         "merge": {
+          "args": [
+            "--upload-skia-json"
+          ],
           "script": "//tools/perf/process_perf_results.py"
         },
         "name": "performance_test_suite",
@@ -1289,6 +1347,9 @@
           "--assert-gpu-compositing"
         ],
         "merge": {
+          "args": [
+            "--upload-skia-json"
+          ],
           "script": "//tools/perf/process_perf_results.py"
         },
         "name": "performance_test_suite",
@@ -1334,6 +1395,9 @@
           "--assert-gpu-compositing"
         ],
         "merge": {
+          "args": [
+            "--upload-skia-json"
+          ],
           "script": "//tools/perf/process_perf_results.py"
         },
         "name": "performance_test_suite",
@@ -1379,6 +1443,9 @@
           "--assert-gpu-compositing"
         ],
         "merge": {
+          "args": [
+            "--upload-skia-json"
+          ],
           "script": "//tools/perf/process_perf_results.py"
         },
         "name": "performance_test_suite",
@@ -1504,14 +1571,7 @@
       }
     ]
   },
-  "win-10-processor-perf": {
-    "merge": {
-      "args": [
-        "--lightweight"
-      ],
-      "script": "//tools/perf/process_perf_results.py"
-    }
-  },
+  "win-10-processor-perf": {},
   "win-10_amd_laptop-perf": {
     "isolated_scripts": [
       {
@@ -1525,6 +1585,9 @@
           "--assert-gpu-compositing"
         ],
         "merge": {
+          "args": [
+            "--upload-skia-json"
+          ],
           "script": "//tools/perf/process_perf_results.py"
         },
         "name": "performance_test_suite",
@@ -1695,14 +1758,7 @@
       }
     ]
   },
-  "win-10_laptop_low_end-processor-perf": {
-    "merge": {
-      "args": [
-        "--lightweight"
-      ],
-      "script": "//tools/perf/process_perf_results.py"
-    }
-  },
+  "win-10_laptop_low_end-processor-perf": {},
   "win-11-perf": {
     "isolated_scripts": [
       {
@@ -1797,14 +1853,7 @@
       }
     ]
   },
-  "win-11-processor-perf": {
-    "merge": {
-      "args": [
-        "--lightweight"
-      ],
-      "script": "//tools/perf/process_perf_results.py"
-    }
-  },
+  "win-11-processor-perf": {},
   "win-11_laptop_low_end-perf": {
     "isolated_scripts": [
       {
@@ -1818,6 +1867,9 @@
           "--assert-gpu-compositing"
         ],
         "merge": {
+          "args": [
+            "--upload-skia-json"
+          ],
           "script": "//tools/perf/process_perf_results.py"
         },
         "name": "performance_test_suite",
@@ -1858,6 +1910,9 @@
       {
         "args": [],
         "merge": {
+          "args": [
+            "--upload-skia-json"
+          ],
           "script": "//tools/perf/process_perf_results.py"
         },
         "name": "chrome_sizes",

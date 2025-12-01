@@ -535,7 +535,7 @@ void HostResolverManagerTest::PopulateCache(const HostCache::Key& key,
       resolve_context_->host_cache(), key,
       HostCache::Entry(OK, std::move(endpoints), /*aliases=*/{},
                        HostCache::Entry::SOURCE_UNKNOWN),
-      base::Seconds(1));
+      kDefaultTtl);
 }
 
 const std::pair<const HostCache::Key, HostCache::Entry>*
@@ -5251,7 +5251,7 @@ TEST_F(HostResolverManagerDnsTest, ServeFromHosts) {
               testing::Pointee(testing::ElementsAre(ExpectEndpointResult(
                   testing::ElementsAre(CreateExpected("127.0.0.1", 80))))));
   EXPECT_THAT(response_ipv4.request()->GetDnsAliasResults(),
-              testing::Pointee(testing::IsEmpty()));
+              testing::Pointee(ElementsAre("nx_ipv4")));
 
   ResolveHostResponseHelper response_ipv6(resolver_->CreateRequest(
       HostPortPair("nx_ipv6", 80), NetworkAnonymizationKey(),
@@ -5263,7 +5263,7 @@ TEST_F(HostResolverManagerDnsTest, ServeFromHosts) {
               testing::Pointee(testing::ElementsAre(ExpectEndpointResult(
                   testing::ElementsAre(CreateExpected("::1", 80))))));
   EXPECT_THAT(response_ipv6.request()->GetDnsAliasResults(),
-              testing::Pointee(testing::IsEmpty()));
+              testing::Pointee(ElementsAre("nx_ipv6")));
 
   ResolveHostResponseHelper response_both(resolver_->CreateRequest(
       HostPortPair("nx_both", 80), NetworkAnonymizationKey(),
@@ -5278,7 +5278,7 @@ TEST_F(HostResolverManagerDnsTest, ServeFromHosts) {
           ExpectEndpointResult(testing::UnorderedElementsAre(
               CreateExpected("::1", 80), CreateExpected("127.0.0.1", 80))))));
   EXPECT_THAT(response_both.request()->GetDnsAliasResults(),
-              testing::Pointee(testing::IsEmpty()));
+              testing::Pointee(ElementsAre("nx_both")));
 
   // Requests with specified DNS query type.
   HostResolver::ResolveHostParameters parameters;
@@ -5295,7 +5295,7 @@ TEST_F(HostResolverManagerDnsTest, ServeFromHosts) {
               testing::Pointee(testing::ElementsAre(ExpectEndpointResult(
                   testing::ElementsAre(CreateExpected("127.0.0.1", 80))))));
   EXPECT_THAT(response_specified_ipv4.request()->GetDnsAliasResults(),
-              testing::Pointee(testing::IsEmpty()));
+              testing::Pointee(ElementsAre("nx_ipv4")));
 
   parameters.dns_query_type = DnsQueryType::AAAA;
   ResolveHostResponseHelper response_specified_ipv6(resolver_->CreateRequest(
@@ -5309,7 +5309,7 @@ TEST_F(HostResolverManagerDnsTest, ServeFromHosts) {
               testing::Pointee(testing::ElementsAre(ExpectEndpointResult(
                   testing::ElementsAre(CreateExpected("::1", 80))))));
   EXPECT_THAT(response_specified_ipv6.request()->GetDnsAliasResults(),
-              testing::Pointee(testing::IsEmpty()));
+              testing::Pointee(ElementsAre("nx_ipv6")));
 }
 
 TEST_F(HostResolverManagerDnsTest,
@@ -7994,14 +7994,13 @@ TEST_F(HostResolverManagerDnsTest, DnsAliasesAreFixedUp) {
 
   // Need to manually encode non-URL-canonical names because DNSDomainFromDot()
   // requires URL-canonical names.
-  constexpr char kNonCanonicalName[] = "\005HOST2\004test\000";
-
+  constexpr const uint8_t kNonCanonicalName[] = {
+      0x05, 'H', 'O', 'S', 'T', '2', 0x04, 't', 'e', 's', 't', 0x00};
   DnsResponse expected_A_response = BuildTestDnsResponse(
       "host.test", dns_protocol::kTypeA,
       {BuildTestAddressRecord("host2.test", IPAddress::IPv4Localhost()),
-       BuildTestDnsRecord(
-           "host.test", dns_protocol::kTypeCNAME,
-           std::string(kNonCanonicalName, sizeof(kNonCanonicalName) - 1))});
+       BuildTestDnsRecord("host.test", dns_protocol::kTypeCNAME,
+                          kNonCanonicalName)});
 
   AddDnsRule(&rules, "host.test", dns_protocol::kTypeA,
              std::move(expected_A_response), false /* delay */);
@@ -8009,9 +8008,8 @@ TEST_F(HostResolverManagerDnsTest, DnsAliasesAreFixedUp) {
   DnsResponse expected_AAAA_response = BuildTestDnsResponse(
       "host.test", dns_protocol::kTypeAAAA,
       {BuildTestAddressRecord("host2.test", IPAddress::IPv6Localhost()),
-       BuildTestDnsRecord(
-           "host.test", dns_protocol::kTypeCNAME,
-           std::string(kNonCanonicalName, sizeof(kNonCanonicalName) - 1))});
+       BuildTestDnsRecord("host.test", dns_protocol::kTypeCNAME,
+                          kNonCanonicalName)});
 
   AddDnsRule(&rules, "host.test", dns_protocol::kTypeAAAA,
              std::move(expected_AAAA_response), false /* delay */);
@@ -9044,15 +9042,19 @@ TEST_F(HostResolverManagerDnsTest, TxtQueryRejectsIpLiteral) {
 // unrecognized record types.
 TEST_F(HostResolverManagerDnsTest, TxtQuery_MixedWithUnrecognizedType) {
   std::vector<std::string> text_strings = {"foo"};
+  const uint8_t fake_test_rdata_1[] = {'f', 'a', 'k', 'e', ' ', 'r',
+                                       'd', 'a', 't', 'a', ' ', '1'};
+  const uint8_t fake_test_rdata_2[] = {'f', 'a', 'k', 'e', ' ', 'r',
+                                       'd', 'a', 't', 'a', ' ', '2'};
 
   MockDnsClientRuleList rules;
   rules.emplace_back(
       "host", dns_protocol::kTypeTXT, false /* secure */,
       MockDnsClientRule::Result(BuildTestDnsResponse(
           "host", dns_protocol::kTypeTXT,
-          {BuildTestDnsRecord("host", 3u /* type */, "fake rdata 1"),
+          {BuildTestDnsRecord("host", 3u /* type */, fake_test_rdata_1),
            BuildTestTextRecord("host", std::move(text_strings)),
-           BuildTestDnsRecord("host", 3u /* type */, "fake rdata 2")})),
+           BuildTestDnsRecord("host", 3u /* type */, fake_test_rdata_2)})),
       false /* delay */);
 
   CreateResolver();
@@ -11045,7 +11047,9 @@ TEST_F(HostResolverManagerDnsTest,
 TEST_F(HostResolverManagerDnsTest,
        MalformedHttpsRdataInAddressRequestIsIgnored) {
   const char kName[] = "name.test";
-
+  const uint8_t malformed_test_rdata[] = {'m', 'a', 'l', 'f', 'o',
+                                          'r', 'm', 'e', 'd', ' ',
+                                          'r', 'd', 'a', 't', 'a'};
   base::test::ScopedFeatureList features;
   features.InitAndEnableFeatureWithParameters(
       features::kUseDnsHttpsSvcb,
@@ -11063,7 +11067,7 @@ TEST_F(HostResolverManagerDnsTest,
                      MockDnsClientRule::Result(BuildTestDnsResponse(
                          kName, dns_protocol::kTypeHttps, /*answers=*/
                          {BuildTestDnsRecord(kName, dns_protocol::kTypeHttps,
-                                             /*rdata=*/"malformed rdata")})),
+                                             /*rdata=*/malformed_test_rdata)})),
                      /*delay=*/false);
   rules.emplace_back(
       kName, dns_protocol::kTypeA, /*secure=*/true,
@@ -14066,6 +14070,8 @@ TEST_F(HostResolverManagerDnsTest,
 
   constexpr std::string_view kHost = "host.test";
   constexpr base::TimeDelta kTtl = base::Minutes(30);
+  const uint8_t fake_test_rdata[] = {'f', 'a', 'k', 'e', ' ',
+                                     'r', 'd', 'a', 't', 'a'};
 
   MockDnsClientRuleList rules;
   DnsResponse a_response = BuildTestDnsResponse(
@@ -14075,7 +14081,7 @@ TEST_F(HostResolverManagerDnsTest,
        BuildTestCnameRecord("alias1.test", "alias2.test")},
       /*authority=*/
       {BuildTestDnsRecord("authority.test", dns_protocol::kTypeSOA,
-                          "fake rdata", kTtl)});
+                          fake_test_rdata, kTtl)});
   AddDnsRule(&rules, std::string(kHost), dns_protocol::kTypeA,
              std::move(a_response),
              /*delay=*/false);

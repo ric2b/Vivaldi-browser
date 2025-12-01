@@ -72,7 +72,7 @@ class TestWebContents : public WebContentsImpl, public WebContentsTester {
       uint32_t max_bitmap_size,
       bool bypass_cache,
       ImageDownloadCallback callback) override;
-  const GURL& GetLastCommittedURL() override;
+  const GURL& GetLastCommittedURL() const override;
   const std::u16string& GetTitle() override;
 
   // Override to cache the tab switch start time without going through
@@ -90,6 +90,7 @@ class TestWebContents : public WebContentsImpl, public WebContentsTester {
   void NavigateAndFail(const GURL& url, int error_code) override;
   void TestSetIsLoading(bool value) override;
   void SetOpener(WebContents* opener) override;
+  void SetOriginalOpener(WebContents* opener) override;
   void SetIsCrashed(base::TerminationStatus status, int error_code) override;
   const std::string& GetSaveFrameHeaders() override;
   const std::u16string& GetSuggestedFileName() override;
@@ -225,11 +226,12 @@ class TestWebContents : public WebContentsImpl, public WebContentsTester {
           blink_widget_host,
       mojo::PendingAssociatedRemote<blink::mojom::Widget> blink_widget)
       override;
-  void ShowCreatedWindow(RenderFrameHostImpl* opener,
-                         int route_id,
-                         WindowOpenDisposition disposition,
-                         const blink::mojom::WindowFeatures& window_features,
-                         bool user_gesture) override;
+  WebContents* ShowCreatedWindow(
+      RenderFrameHostImpl* opener,
+      int route_id,
+      WindowOpenDisposition disposition,
+      const blink::mojom::WindowFeatures& window_features,
+      bool user_gesture) override;
   void ShowCreatedWidget(int process_id,
                          int route_id,
                          const gfx::Rect& initial_rect,

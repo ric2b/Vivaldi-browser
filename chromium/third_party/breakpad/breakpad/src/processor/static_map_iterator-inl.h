@@ -106,7 +106,7 @@ template<typename Key, typename Value, typename Compare>
 const Key* StaticMapIterator<Key, Value, Compare>::GetKeyPtr() const {
   if (!IsValid()) {
     BPLOG(ERROR) << "call GetKeyPtr() on invalid iterator";
-    return NULL;
+    return nullptr;
   }
   return &(keys_[index_]);
 }
@@ -115,7 +115,7 @@ template<typename Key, typename Value, typename Compare>
 const char* StaticMapIterator<Key, Value, Compare>::GetValueRawPtr() const {
   if (!IsValid()) {
     BPLOG(ERROR) << "call GetValuePtr() on invalid iterator";
-    return NULL;
+    return nullptr;
   }
   return base_ + offsets_[index_];
 }

@@ -10,7 +10,7 @@
 namespace autofill {
 
 void TestFormFiller::ScheduleRefill(const FormData& form,
-                                    const FormStructure& form_structure,
+                                    RefillContext& refill_context,
                                     AutofillTriggerSource trigger_source,
                                     RefillTriggerReason refill_trigger_reason) {
   TriggerRefill(form, trigger_source, refill_trigger_reason);

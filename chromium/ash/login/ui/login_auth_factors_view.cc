@@ -265,7 +265,7 @@ LoginAuthFactorsView::LoginAuthFactorsView(
   label_wrapper_->SetProperty(
       views::kMarginsKey,
       gfx::Insets::TLBR(kSpacingBetweenIconsAndLabelDp, 0, 0, 0));
-  label_wrapper_->label()->SetEnabledColorId(cros_tokens::kCrosSysOnSurface);
+  label_wrapper_->label()->SetEnabledColor(cros_tokens::kCrosSysOnSurface);
 }
 
 LoginAuthFactorsView::~LoginAuthFactorsView() = default;
@@ -519,8 +519,9 @@ void LoginAuthFactorsView::OnThemeChanged() {
 }
 
 void LoginAuthFactorsView::FireAlert() {
-  label_wrapper_->label()->NotifyAccessibilityEvent(ax::mojom::Event::kAlert,
-                                                    /*send_native_event=*/true);
+  label_wrapper_->label()->NotifyAccessibilityEventDeprecated(
+      ax::mojom::Event::kAlert,
+      /*send_native_event=*/true);
 }
 
 void LoginAuthFactorsView::ArrowButtonPressed(const ui::Event& event) {

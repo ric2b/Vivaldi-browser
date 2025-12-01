@@ -83,13 +83,11 @@ pub enum ChromaUpsampling {
 impl ChromaUpsampling {
     #[cfg(feature = "libyuv")]
     pub(crate) fn nearest_neighbor_filter_allowed(&self) -> bool {
-        // TODO: this function has to return different values based on whether libyuv is used.
         !matches!(self, Self::Bilinear | Self::BestQuality)
     }
 
     #[cfg(feature = "libyuv")]
     pub(crate) fn bilinear_or_better_filter_allowed(&self) -> bool {
-        // TODO: this function has to return different values based on whether libyuv is used.
         !matches!(self, Self::Nearest | Self::Fastest)
     }
 }
@@ -346,8 +344,12 @@ impl Image {
         ) | matches!(self.format, Format::Rgba1010102)
         {
             // These conversions are only supported via libyuv.
-            // TODO: b/362984605 - Handle alpha channel for these formats.
             if converted_with_libyuv {
+                if image.has_alpha() && matches!(self.format, Format::Rgba1010102) {
+                    // If the source image has an alpha channel, scale them to 2 bits and fill it
+                    // into the rgb image. Otherwise, libyuv writes them as opaque by default.
+                    self.import_alpha_from(image)?;
+                }
                 return Ok(());
             } else {
                 return Err(AvifError::NotImplemented);
@@ -463,10 +465,10 @@ impl Image {
 mod tests {
     use super::*;
 
-    use crate::decoder::Category;
     use crate::image::YuvRange;
     use crate::image::ALL_PLANES;
     use crate::image::MAX_PLANE_COUNT;
+    use crate::Category;
 
     use test_case::test_case;
     use test_case::test_matrix;

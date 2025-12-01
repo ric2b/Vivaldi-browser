@@ -4,6 +4,7 @@
 
 #include "services/screen_ai/screen_ai_service_impl.h"
 
+#include <algorithm>
 #include <memory>
 #include <optional>
 #include <utility>
@@ -12,13 +13,17 @@
 #include "base/check.h"
 #include "base/check_is_test.h"
 #include "base/compiler_specific.h"
+#include "base/cpu.h"
 #include "base/functional/bind.h"
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/process/process.h"
+#include "base/strings/stringprintf.h"
+#include "base/system/sys_info.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/task/thread_pool.h"
+#include "components/crash/core/common/crash_key.h"
 #include "services/screen_ai/buildflags/buildflags.h"
 #include "services/screen_ai/proto/chrome_screen_ai.pb.h"
 #include "services/screen_ai/proto/main_content_extractor_proto_convertor.h"
@@ -41,6 +46,10 @@ namespace screen_ai {
 
 namespace {
 
+// Maximum image resolution that OCR service processes. Images larger than this
+// threshold are downsampled before processing.
+const uint32_t kLargestOcrResolution = 2048 * 2048;
+
 // How often it would be checked that the service is idle and can be shutdown.
 constexpr base::TimeDelta kIdleCheckingDelay = base::Minutes(5);
 
@@ -51,6 +60,7 @@ constexpr base::TimeDelta kCoolDownTime = base::Seconds(10);
 // These values are persisted to logs. Entries should not be renumbered and
 // numeric values should never be reused.
 // See `screen_ai_service.mojom` for more info.
+// LINT.IfChange(OcrClientType)
 enum class OcrClientTypeForMetrics {
   kTest = 0,
   kPdfViewer = 1,
@@ -61,6 +71,20 @@ enum class OcrClientTypeForMetrics {
   kScreenshotTextDetection,
   kMaxValue = kScreenshotTextDetection
 };
+// LINT.ThenChange(//tools/metrics/histograms/metadata/accessibility/enums.xml:OcrClientType)
+
+// These values are persisted to logs. Entries should not be renumbered and
+// numeric values should never be reused.
+// See `screen_ai_service.mojom` for more info.
+// LINT.IfChange(MainContentExtractionClientType)
+enum class MainContentExtractionClientTypeForMetrics {
+  kTest = 0,
+  kReadingMode = 1,
+  kMainNode = 2,
+  kMahi = 3,
+  kMaxValue = kMahi
+};
+// LINT.ThenChange(//tools/metrics/histograms/metadata/accessibility/enums.xml:MainContentExtractionClientType)
 
 OcrClientTypeForMetrics GetClientType(mojom::OcrClientType client_type) {
   switch (client_type) {
@@ -77,6 +101,21 @@ OcrClientTypeForMetrics GetClientType(mojom::OcrClientType client_type) {
       return OcrClientTypeForMetrics::kMediaApp;
     case mojom::OcrClientType::kScreenshotTextDetection:
       return OcrClientTypeForMetrics::kScreenshotTextDetection;
+  }
+}
+
+MainContentExtractionClientTypeForMetrics GetClientType(
+    mojom::MceClientType client_type) {
+  switch (client_type) {
+    case mojom::MceClientType::kTest:
+      CHECK_IS_TEST();
+      return MainContentExtractionClientTypeForMetrics::kTest;
+    case mojom::MceClientType::kReadingMode:
+      return MainContentExtractionClientTypeForMetrics::kReadingMode;
+    case mojom::MceClientType::kMainNode:
+      return MainContentExtractionClientTypeForMetrics::kMainNode;
+    case mojom::MceClientType::kMahi:
+      return MainContentExtractionClientTypeForMetrics::kMahi;
   }
 }
 
@@ -98,6 +137,31 @@ ui::AXNodeID ComputeMainNode(
   ui::AXNode* back = tree->GetFromId(content_node_ids.back());
   ui::AXNode* main = front->GetLowestCommonAncestor(*back);
   return main->id();
+}
+
+#if !BUILDFLAG(USE_FAKE_SCREEN_AI)
+void SetCPUInstructionSetCrashKey() {
+#if defined(ARCH_CPU_X86_FAMILY)
+  base::CPU();
+  // Report cpu micro architecture in case of crash.
+  static crash_reporter::CrashKeyString<3> cpu_info("intel_micro_architecture");
+  cpu_info.Set(
+      base::StringPrintf("%i", base::CPU().GetIntelMicroArchitecture()));
+#endif
+}
+#endif
+
+// Return a maximum 11 character string with the signature of available and
+// total memory, both in MB and capped to 99999.
+std::string GetMemoryStatusForCrashKey() {
+  int total_memory = base::SysInfo::AmountOfPhysicalMemoryMB();
+  int available_memory = static_cast<int>(
+      base::SysInfo::AmountOfAvailablePhysicalMemory() / (1024 * 1024));
+
+  // Cap the number of digits for crash report.
+  total_memory = std::min(total_memory, 99999);
+  available_memory = std::min(available_memory, 99999);
+  return base::StringPrintf("%i,%i", available_memory, total_memory);
 }
 
 }  // namespace
@@ -192,6 +256,9 @@ void ScreenAIService::LoadLibrary(const base::FilePath& library_path) {
   library_ = std::make_unique<ScreenAILibraryWrapperFake>();
 #else
   library_ = std::make_unique<ScreenAILibraryWrapperImpl>();
+
+  // TODO(crbug.com/381256355): Remove when the library is SSE3 compatible.
+  SetCPUInstructionSetCrashKey();
 #endif
 
   bool load_sucessful = library_->Load(library_path);
@@ -262,6 +329,9 @@ void ScreenAIService::InitializeOCR(
     base::flat_map<base::FilePath, base::File> model_files,
     mojo::PendingReceiver<mojom::OCRService> ocr_service_receiver,
     InitializeOCRCallback callback) {
+  static crash_reporter::CrashKeyString<12> memory_ocr_init(
+      "screen_ai_mem_ocr_init");
+  memory_ocr_init.Set(GetMemoryStatusForCrashKey());
   if (!library_) {
     LoadLibrary(library_path);
   }
@@ -291,6 +361,13 @@ void ScreenAIService::InitializeOCR(
   ocr_last_used_ = base::TimeTicks::Now();
 }
 
+void ScreenAIService::BindShutdownHandler(
+    mojo::PendingRemote<mojom::ScreenAIServiceShutdownHandler>
+        shutdown_handler) {
+  DCHECK(!screen_ai_shutdown_handler_.is_bound());
+  screen_ai_shutdown_handler_.Bind(std::move(shutdown_handler));
+}
+
 void ScreenAIService::BindAnnotator(
     mojo::PendingReceiver<mojom::ScreenAIAnnotator> annotator) {
   screen_ai_annotators_.Add(this, std::move(annotator));
@@ -305,12 +382,16 @@ void ScreenAIService::BindMainContentExtractor(
 
 std::optional<chrome_screen_ai::VisualAnnotation>
 ScreenAIService::PerformOcrAndRecordMetrics(const SkBitmap& image) {
+  static crash_reporter::CrashKeyString<12> memory_perform_ocr(
+      "screen_ai_mem_ocr_perform");
+  memory_perform_ocr.Set(GetMemoryStatusForCrashKey());
+
   CHECK(base::Contains(ocr_client_types_,
                        screen_ai_annotators_.current_receiver()));
-  mojom::OcrClientType client_type =
-      ocr_client_types_.find(screen_ai_annotators_.current_receiver())->second;
+  OcrClientTypeForMetrics client_type = GetClientType(
+      ocr_client_types_.find(screen_ai_annotators_.current_receiver())->second);
   base::UmaHistogramEnumeration("Accessibility.ScreenAI.OCR.ClientType",
-                                GetClientType(client_type));
+                                client_type);
 
   ocr_last_used_ = base::TimeTicks::Now();
   auto result = library_->PerformOcr(image);
@@ -321,9 +402,13 @@ ScreenAIService::PerformOcrAndRecordMetrics(const SkBitmap& image) {
 
   if (!result) {
     base::UmaHistogramEnumeration(
-        "Accessibility.ScreenAI.OCR.Failed.ClientType",
-        GetClientType(client_type));
+        "Accessibility.ScreenAI.OCR.Failed.ClientType", client_type);
   }
+  if (image_size >= kLargestOcrResolution) {
+    base::UmaHistogramEnumeration(
+        "Accessibility.ScreenAI.OCR.Oversize.ClientType", client_type);
+  }
+
   base::UmaHistogramBoolean("Accessibility.ScreenAI.OCR.Successful",
                             result.has_value());
   base::UmaHistogramCounts100("Accessibility.ScreenAI.OCR.LinesCount",
@@ -345,14 +430,16 @@ ScreenAIService::PerformOcrAndRecordMetrics(const SkBitmap& image) {
   }
 
   // MediaApp provides OCR for ChromeOS PDF viewer.
-  if (client_type == mojom::OcrClientType::kPdfViewer ||
-      client_type == mojom::OcrClientType::kMediaApp) {
+  if (client_type == OcrClientTypeForMetrics::kPdfViewer ||
+      client_type == OcrClientTypeForMetrics::kMediaApp) {
     base::UmaHistogramCounts100("Accessibility.ScreenAI.OCR.LinesCount.PDF",
                                 lines_count);
     base::UmaHistogramTimes("Accessibility.ScreenAI.OCR.Time.PDF",
                             elapsed_time);
-    base::UmaHistogramCounts10M("Accessibility.ScreenAI.OCR.ImageSize.PDF",
-                                image.width() * image.height());
+    base::UmaHistogramCounts10M(
+        lines_count ? "Accessibility.ScreenAI.OCR.ImageSize.PDF.WithText"
+                    : "Accessibility.ScreenAI.OCR.ImageSize.PDF.NoText",
+        image_size);
 
     if (result.has_value()) {
       std::optional<uint64_t> most_detected_language =
@@ -370,6 +457,11 @@ ScreenAIService::PerformOcrAndRecordMetrics(const SkBitmap& image) {
 
 void ScreenAIService::SetClientType(mojom::OcrClientType client_type) {
   ocr_client_types_[screen_ai_annotators_.current_receiver()] = client_type;
+}
+
+void ScreenAIService::SetClientType(mojom::MceClientType client_type) {
+  mce_client_types_[screen2x_main_content_extractors_.current_receiver()] =
+      client_type;
 }
 
 void ScreenAIService::PerformOcrAndReturnAnnotation(
@@ -401,10 +493,10 @@ void ScreenAIService::PerformOcrAndReturnAXTreeUpdate(
 
 void ScreenAIService::ExtractMainContent(const ui::AXTreeUpdate& snapshot,
                                          ExtractMainContentCallback callback) {
-  main_content_extraction_last_used_ = base::TimeTicks::Now();
   ui::AXTree tree;
   std::optional<std::vector<int32_t>> content_node_ids;
-  bool success = ExtractMainContentInternal(snapshot, tree, content_node_ids);
+  bool success = ExtractMainContentInternalAndRecordMetrics(snapshot, tree,
+                                                            content_node_ids);
 
   if (success) {
     std::move(callback).Run(*content_node_ids);
@@ -417,7 +509,8 @@ void ScreenAIService::ExtractMainNode(const ui::AXTreeUpdate& snapshot,
                                       ExtractMainNodeCallback callback) {
   ui::AXTree tree;
   std::optional<std::vector<int32_t>> content_node_ids;
-  bool success = ExtractMainContentInternal(snapshot, tree, content_node_ids);
+  bool success = ExtractMainContentInternalAndRecordMetrics(snapshot, tree,
+                                                            content_node_ids);
 
   if (success) {
     ui::AXNodeID main_node_id = ComputeMainNode(&tree, *content_node_ids);
@@ -427,33 +520,91 @@ void ScreenAIService::ExtractMainNode(const ui::AXTreeUpdate& snapshot,
   }
 }
 
-bool ScreenAIService::ExtractMainContentInternal(
+void ScreenAIService::IdentifyMainNode(const ui::AXTreeUpdate& snapshot,
+                                       IdentifyMainNodeCallback callback) {
+  ui::AXTree tree;
+  std::optional<std::vector<int32_t>> content_node_ids;
+  bool success = ExtractMainContentInternalAndRecordMetrics(snapshot, tree,
+                                                            content_node_ids);
+
+  if (success) {
+    ui::AXNodeID main_node_id = ComputeMainNode(&tree, *content_node_ids);
+    std::move(callback).Run(tree.GetAXTreeID(), main_node_id);
+  } else {
+    std::move(callback).Run(ui::AXTreeIDUnknown(), ui::kInvalidAXNodeID);
+  }
+}
+
+bool ScreenAIService::ExtractMainContentInternalAndRecordMetrics(
     const ui::AXTreeUpdate& snapshot,
     ui::AXTree& tree,
     std::optional<std::vector<int32_t>>& content_node_ids) {
+  CHECK(base::Contains(mce_client_types_,
+                       screen2x_main_content_extractors_.current_receiver()));
+  main_content_extraction_last_used_ = base::TimeTicks::Now();
+  MainContentExtractionClientTypeForMetrics client_type = GetClientType(
+      mce_client_types_[screen2x_main_content_extractors_.current_receiver()]);
+
+  static crash_reporter::CrashKeyString<2> cpu_info(
+      "main_content_extraction_client");
+  cpu_info.Set(base::StringPrintf("%i", static_cast<int>(client_type)));
+
   // Early return if input is empty.
   if (snapshot.nodes.empty()) {
+    base::UmaHistogramEnumeration(
+        "Accessibility.ScreenAI.MainContentExtraction.Error.SnapshotEmpty",
+        client_type);
     return false;
   }
 
   // Deserialize the snapshot and reserialize it to a view hierarchy proto.
-  CHECK(tree.Unserialize(snapshot));
-  std::optional<ViewHierarchyAndTreeSize> converted_snapshot =
-      SnapshotToViewHierarchy(tree);
-  if (!converted_snapshot) {
-    VLOG(0) << "Proto not generated.";
+  if (!tree.Unserialize(snapshot)) {
+    base::UmaHistogramEnumeration(
+        "Accessibility.ScreenAI.MainContentExtraction.Error."
+        "SnapshotUnserialize",
+        client_type);
     return false;
   }
 
+  std::optional<ViewHierarchyAndTreeSize> converted_snapshot =
+      SnapshotToViewHierarchy(tree);
+  if (!converted_snapshot) {
+    base::UmaHistogramEnumeration(
+        "Accessibility.ScreenAI.MainContentExtraction.Error.SnapshotProto",
+        client_type);
+    return false;
+  }
+
+  base::TimeTicks start_time = base::TimeTicks::Now();
   content_node_ids =
       library_->ExtractMainContent(converted_snapshot->serialized_proto);
+  base::TimeDelta elapsed_time = base::TimeTicks::Now() - start_time;
+
+  bool successful =
+      content_node_ids.has_value() && content_node_ids->size() > 0;
   base::UmaHistogramBoolean(
-      "Accessibility.ScreenAI.MainContentExtraction.Successful",
-      content_node_ids.has_value());
-  if (content_node_ids.has_value() && content_node_ids->size() > 0) {
+      "Accessibility.ScreenAI.MainContentExtraction.Successful2", successful);
+
+  if (!content_node_ids.has_value()) {
+    base::UmaHistogramEnumeration(
+        "Accessibility.ScreenAI.MainContentExtraction.Error.ResultNull",
+        client_type);
+  } else if (content_node_ids->empty()) {
+    base::UmaHistogramEnumeration(
+        "Accessibility.ScreenAI.MainContentExtraction.Error.ResultEmpty",
+        client_type);
+  }
+
+  if (successful) {
+    base::UmaHistogramTimes(
+        "Accessibility.ScreenAI.MainContentExtraction.Latency.Success",
+        elapsed_time);
     VLOG(2) << "Screen2x returned " << content_node_ids->size() << " node ids.";
     return true;
   } else {
+    base::UmaHistogramTimes(
+        "Accessibility.ScreenAI.MainContentExtraction.Latency.Failure",
+        elapsed_time);
     VLOG(0) << "Screen2x returned no results.";
     return false;
   }
@@ -493,6 +644,7 @@ void ScreenAIService::ShutDownIfNoClients() {
       main_content_extraction_last_used_ < kIdlenessThreshold;
 
   if (ocr_not_needed && main_content_extractioncan_not_needed) {
+    screen_ai_shutdown_handler_->ShuttingDownOnIdle();
     VLOG(2) << "Shutting down since no client or idle.";
     base::Process::TerminateCurrentProcessImmediately(0);
   }

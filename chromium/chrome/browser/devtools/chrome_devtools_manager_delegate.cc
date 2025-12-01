@@ -14,11 +14,11 @@
 #include "base/strings/strcat.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
-#include "build/chromeos_buildflags.h"
 #include "chrome/browser/browser_features.h"
 #include "chrome/browser/devtools/chrome_devtools_session.h"
 #include "chrome/browser/devtools/device/android_device_manager.h"
 #include "chrome/browser/devtools/device/tcp_device_provider.h"
+#include "chrome/browser/devtools/devtools_availability_checker.h"
 #include "chrome/browser/devtools/devtools_browser_context_manager.h"
 #include "chrome/browser/devtools/devtools_window.h"
 #include "chrome/browser/devtools/protocol/target_handler.h"
@@ -61,13 +61,8 @@
 #include "ui/views/controls/webview/webview.h"
 
 #if BUILDFLAG(IS_CHROMEOS)
-#include "chromeos/constants/chromeos_features.h"
-#include "chromeos/constants/pref_names.h"
-#include "components/prefs/pref_service.h"
-#endif
-
-#if BUILDFLAG(IS_CHROMEOS_ASH)
 #include "ash/constants/ash_switches.h"
+#include "chromeos/constants/chromeos_features.h"
 #endif
 
 using content::DevToolsAgentHost;
@@ -153,26 +148,6 @@ bool GetExtensionInfo(content::WebContents* wc,
   return true;
 }
 
-policy::DeveloperToolsPolicyHandler::Availability GetDevToolsAvailability(
-    Profile* profile) {
-  using Availability = policy::DeveloperToolsPolicyHandler::Availability;
-  Availability availability =
-      policy::DeveloperToolsPolicyHandler::GetEffectiveAvailability(profile);
-#if BUILDFLAG(IS_CHROMEOS)
-  // On ChromeOS disable dev tools for captive portal signin windows to prevent
-  // them from being used for general navigation.
-  if (availability != Availability::kDisallowed) {
-    const PrefService::Preference* const captive_portal_pref =
-        profile->GetPrefs()->FindPreference(
-            chromeos::prefs::kCaptivePortalSignin);
-    if (captive_portal_pref && captive_portal_pref->GetValue()->GetBool()) {
-      availability = Availability::kDisallowed;
-    }
-  }
-#endif
-  return availability;
-}
-
 ChromeDevToolsManagerDelegate* g_instance;
 
 }  // namespace
@@ -215,7 +190,7 @@ ChromeDevToolsManagerDelegate::ChromeDevToolsManagerDelegate() {
           profile, ProfileKeepAliveOrigin::kRemoteDebugging);
     }
   }
-#endif  // !BUILDFLAG(IS_CHROMEOS_ASH)
+#endif  // !BUILDFLAG(IS_CHROMEOS)
 }
 
 ChromeDevToolsManagerDelegate::~ChromeDevToolsManagerDelegate() {
@@ -311,7 +286,7 @@ bool ChromeDevToolsManagerDelegate::AllowInspectingRenderFrameHost(
                         ? process_manager->GetExtensionForRenderFrameHost(rfh)
                         : nullptr;
   if (extension || !web_app::AreWebAppsEnabled(profile)) {
-    return AllowInspection(profile, extension);
+    return IsInspectionAllowed(profile, extension);
   }
 
   if (auto* web_app_provider =
@@ -323,104 +298,11 @@ bool ChromeDevToolsManagerDelegate::AllowInspectingRenderFrameHost(
     if (app_id) {
       const auto* web_app =
           web_app_provider->registrar_unsafe().GetAppById(app_id.value());
-      return AllowInspection(profile, web_app);
+      return IsInspectionAllowed(profile, web_app);
     }
   }
   // |extension| is always nullptr here.
-  return AllowInspection(profile, extension);
-}
-
-// static
-bool ChromeDevToolsManagerDelegate::AllowInspection(
-    Profile* profile,
-    content::WebContents* web_contents) {
-  const extensions::Extension* extension = nullptr;
-  if (web_contents) {
-    if (auto* process_manager = extensions::ProcessManager::Get(
-            web_contents->GetBrowserContext())) {
-      extension = process_manager->GetExtensionForWebContents(web_contents);
-    }
-    if (extension || !web_app::AreWebAppsEnabled(profile)) {
-      return AllowInspection(profile, extension);
-    }
-
-    const webapps::AppId* app_id =
-        web_app::WebAppTabHelper::GetAppId(web_contents);
-    auto* web_app_provider =
-        web_app::WebAppProvider::GetForWebContents(web_contents);
-    if (app_id && web_app_provider) {
-      const web_app::WebApp* web_app =
-          web_app_provider->registrar_unsafe().GetAppById(*app_id);
-      return AllowInspection(profile, web_app);
-    }
-  }
-  // |extension| is always nullptr here.
-  return AllowInspection(profile, extension);
-}
-
-// static
-bool ChromeDevToolsManagerDelegate::AllowInspection(
-    Profile* profile,
-    const extensions::Extension* extension) {
-  using Availability = policy::DeveloperToolsPolicyHandler::Availability;
-  Availability availability;
-  if (extension) {
-    availability =
-        policy::DeveloperToolsPolicyHandler::GetEffectiveAvailability(profile);
-  } else {
-    // Perform additional checks for browser windows (extension == null).
-    availability = GetDevToolsAvailability(profile);
-  }
-  switch (availability) {
-    case Availability::kDisallowed:
-      return false;
-    case Availability::kAllowed:
-      return true;
-    case Availability::kDisallowedForForceInstalledExtensions:
-      if (!extension) {
-        return true;
-      }
-      if (extensions::Manifest::IsPolicyLocation(extension->location())) {
-        return false;
-      }
-      // We also disallow inspecting component extensions, but only for managed
-      // profiles.
-      if (extensions::Manifest::IsComponentLocation(extension->location()) &&
-          profile->GetProfilePolicyConnector()->IsManaged()) {
-        return false;
-      }
-      return true;
-    default:
-      NOTREACHED() << "Unknown developer tools policy";
-  }
-}
-
-// static
-bool ChromeDevToolsManagerDelegate::AllowInspection(
-    Profile* profile,
-    const web_app::WebApp* web_app) {
-  using Availability = policy::DeveloperToolsPolicyHandler::Availability;
-  Availability availability =
-      policy::DeveloperToolsPolicyHandler::GetEffectiveAvailability(profile);
-  switch (availability) {
-    case Availability::kDisallowed:
-      return false;
-    case Availability::kAllowed:
-      return true;
-    case Availability::kDisallowedForForceInstalledExtensions: {
-      if (!web_app) {
-        return true;
-      }
-      // DevTools should be blocked for Kiosk apps and policy-installed IWAs.
-      if (web_app->IsKioskInstalledApp() ||
-          web_app->IsIwaPolicyInstalledApp()) {
-        return false;
-      }
-      return true;
-    }
-    default:
-      NOTREACHED() << "Unknown developer tools policy";
-  }
+  return IsInspectionAllowed(profile, extension);
 }
 
 void ChromeDevToolsManagerDelegate::ClientAttached(
@@ -436,7 +318,8 @@ void ChromeDevToolsManagerDelegate::ClientDetached(
 
 scoped_refptr<DevToolsAgentHost> ChromeDevToolsManagerDelegate::CreateNewTarget(
     const GURL& url,
-    DevToolsManagerDelegate::TargetType target_type) {
+    DevToolsManagerDelegate::TargetType target_type,
+    bool new_window) {
   NavigateParams params(ProfileManager::GetLastUsedProfile(), url,
                         ui::PAGE_TRANSITION_AUTO_TOPLEVEL);
   params.disposition = WindowOpenDisposition::NEW_FOREGROUND_TAB;

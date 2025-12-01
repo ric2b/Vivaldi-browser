@@ -6,10 +6,11 @@
 
 #import <CoreML/CoreML.h>
 
+#include "base/compiler_specific.h"
 #include "base/functional/callback_helpers.h"
 #include "base/memory/scoped_refptr.h"
 #include "mojo/public/cpp/base/big_buffer.h"
-#include "services/webnn/coreml/buffer_content.h"
+#include "services/webnn/coreml/buffer_content_coreml.h"
 #include "services/webnn/coreml/context_impl_coreml.h"
 #include "services/webnn/coreml/utils_coreml.h"
 #include "services/webnn/public/cpp/operand_descriptor.h"
@@ -98,7 +99,7 @@ TensorImplCoreml::Create(
 
     // TODO(crbug.com/333392274): Use the `WriteToMLMultiArray()` function
     // which handles non-contiguous buffers.
-    memset(mutable_bytes, 0, size);
+    UNSAFE_TODO(memset(mutable_bytes, 0, size));
   }];
   block_executing_synchronously = false;
 

@@ -7,6 +7,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "base/check.h"
@@ -91,8 +92,7 @@ SavedTabGroupButton::SavedTabGroupButton(const SavedTabGroup& group,
       is_shared_(group.is_shared_tab_group()),
       tab_group_color_id_(group.color()),
       guid_(group.saved_guid()),
-      local_group_id_(group.local_group_id()),
-      tabs_(group.saved_tabs()) {
+      local_group_id_(group.local_group_id()) {
   GetViewAccessibility().SetRole(ax::mojom::Role::kButton);
   GetViewAccessibility().SetName(GetAccessibleNameForButton());
   GetViewAccessibility().SetRoleDescription(l10n_util::GetStringUTF16(
@@ -135,8 +135,6 @@ void SavedTabGroupButton::UpdateButtonData(const SavedTabGroup& group) {
   tab_group_color_id_ = group.color();
   local_group_id_ = group.local_group_id();
   guid_ = group.saved_guid();
-  tabs_.clear();
-  tabs_ = group.saved_tabs();
   is_shared_ = group.is_shared_tab_group();
 
   UpdateButtonLayout();
@@ -200,8 +198,8 @@ std::u16string SavedTabGroupButton::GetAccessibleNameForButton() const {
           ? l10n_util::GetStringFUTF16(
                 IDS_GROUP_AX_LABEL_UNNAMED_SAVED_GROUP_FORMAT, opened_state)
           : l10n_util::GetStringFUTF16(
-                IDS_GROUP_AX_LABEL_NAMED_SAVED_GROUP_FORMAT, GetText(),
-                opened_state);
+                IDS_GROUP_AX_LABEL_NAMED_SAVED_GROUP_FORMAT,
+                std::u16string(GetText()), opened_state);
   return saved_group_acessible_name;
 }
 
@@ -213,7 +211,7 @@ void SavedTabGroupButton::UpdateAccessibleName() {
   GetViewAccessibility().SetName(GetAccessibleNameForButton());
 }
 
-void SavedTabGroupButton::SetText(const std::u16string& text) {
+void SavedTabGroupButton::SetText(std::u16string_view text) {
   LabelButton::SetText(text);
   UpdateAccessibleName();
   UpdateCachedTooltipText();
@@ -226,9 +224,8 @@ void SavedTabGroupButton::SetTextProperties(const SavedTabGroup& group) {
 }
 
 void SavedTabGroupButton::UpdateButtonLayout() {
-  SetEnabledTextColorIds(
-      GetSavedTabGroupForegroundColorId(tab_group_color_id_));
-  SetBackground(views::CreateThemedRoundedRectBackground(
+  SetEnabledTextColors(GetSavedTabGroupForegroundColorId(tab_group_color_id_));
+  SetBackground(views::CreateRoundedRectBackground(
       GetTabGroupBookmarkColorId(tab_group_color_id_), kButtonRadius));
 
   // Adjust the insets so the share icon can fit within the bounds of this
@@ -243,10 +240,9 @@ void SavedTabGroupButton::UpdateButtonLayout() {
   if (!local_group_id_.has_value()) {
     SetBorder(views::CreateEmptyBorder(insets));
   } else {
-    std::unique_ptr<views::Border> border =
-        views::CreateThemedRoundedRectBorder(
-            kBorderThickness, kButtonRadius,
-            GetSavedTabGroupOutlineColorId(tab_group_color_id_));
+    std::unique_ptr<views::Border> border = views::CreateRoundedRectBorder(
+        kBorderThickness, kButtonRadius,
+        GetSavedTabGroupOutlineColorId(tab_group_color_id_));
     SetBorder(views::CreatePaddedBorder(std::move(border), insets));
   }
 

@@ -2,10 +2,10 @@
 
 #include "browser/vivaldi_app_observer.h"
 
+#include "app/vivaldi_command_controller.h"
 #include "base/apple/foundation_util.h"
 #include "base/lazy_instance.h"
 #include "chrome/browser/app_controller_mac.h"
-#include "chrome/browser/ui/browser_commands.h"
 #include "ui/vivaldi_browser_window.h"
 
 namespace vivaldi {
@@ -45,9 +45,8 @@ void VivaldiAppObserver::SetUrlsToOpen(const std::vector<GURL>& urls) {
 // AppWindowRegistry::Observer
 void VivaldiAppObserver::OnWindowShown(VivaldiBrowserWindow* window,
                                        bool was_hidden) {
-
   if (browser_ && tag_ > 0) {
-    chrome::ExecuteCommand(browser_, tag_);
+    vivaldi::ExecuteVivaldiCommands(browser_, tag_);
     tag_ = 0;
     browser_ = nullptr;
   }

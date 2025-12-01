@@ -543,7 +543,7 @@ const UIStrings = {
    */
   webSocketSticky: 'Back/forward cache is disabled because WebSocket has been used.',
 
-};
+} as const;
 
 const str_ = i18n.i18n.registerUIStrings('panels/application/components/BackForwardCacheStrings.ts', UIStrings);
 const i18nLazyString = i18n.i18n.getLazilyComputedLocalizedString.bind(undefined, str_);
@@ -703,4 +703,6 @@ export const NotRestoredReasonDescription = {
   WebViewMessageListenerInjected: {name: i18n.i18n.lockedLazyString('WebViewMessageListenerInjected')},
   WebViewSafeBrowsingAllowlistChanged: {name: i18n.i18n.lockedLazyString('WebViewSafeBrowsingAllowlistChanged')},
   WebViewDocumentStartJavascriptChanged: {name: i18n.i18n.lockedLazyString('WebViewDocumentStartJavascriptChanged')},
+  CacheControlNoStoreDeviceBoundSessionTerminated: {name: i18nLazyString(UIStrings.cacheControlNoStore)},
+  CacheLimitPruned: {name: i18n.i18n.lockedLazyString('CacheLimitPruned')},
 };

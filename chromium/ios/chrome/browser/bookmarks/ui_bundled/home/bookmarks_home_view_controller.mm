@@ -53,7 +53,7 @@
 #import "ios/chrome/browser/favicon/model/favicon_loader.h"
 #import "ios/chrome/browser/favicon/model/ios_chrome_favicon_loader_factory.h"
 #import "ios/chrome/browser/incognito_reauth/ui_bundled/incognito_reauth_scene_agent.h"
-#import "ios/chrome/browser/intents/intents_donation_helper.h"
+#import "ios/chrome/browser/intents/model/intents_donation_helper.h"
 #import "ios/chrome/browser/keyboard/ui_bundled/UIKeyCommand+Chrome.h"
 #import "ios/chrome/browser/menu/ui_bundled/browser_action_factory.h"
 #import "ios/chrome/browser/menu/ui_bundled/menu_histograms.h"
@@ -1750,14 +1750,30 @@ BookmarkNodeIDSet GetBookmarkNodeIDSet(
     return 0;
   }
 
+  UITableView* tableView = self.tableView;
+
   // If no rows in table, return 0.
-  NSArray* visibleIndexPaths = [self.tableView indexPathsForVisibleRows];
+  NSArray* visibleIndexPaths = [tableView indexPathsForVisibleRows];
   if (!visibleIndexPaths.count) {
     return 0;
   }
 
-  // Return the first visible row.
-  NSIndexPath* topMostIndexPath = [visibleIndexPaths objectAtIndex:0];
+  NSIndexPath* topMostIndexPath;
+  UIView* navigationBar = self.navigationController.navigationBar;
+  CGRect navigationBarFrame = [navigationBar.superview
+      convertRect:self.navigationController.navigationBar.frame
+           toView:nil];
+  // Take the first row that has its center visible below the navigation bar.
+  for (NSIndexPath* indexPath in visibleIndexPaths) {
+    CGRect rowFrame =
+        [tableView convertRect:[tableView rectForRowAtIndexPath:indexPath]
+                        toView:nil];
+    if (CGRectGetMidY(rowFrame) > CGRectGetMaxY(navigationBarFrame)) {
+      topMostIndexPath = indexPath;
+      break;
+    }
+  }
+
   return topMostIndexPath.row;
 }
 
@@ -1868,22 +1884,28 @@ BookmarkNodeIDSet GetBookmarkNodeIDSet(
   // End Vivaldi
 
   self.navigationController.toolbarHidden = YES;
-  self.scrimView.alpha = 0.0f;
-  [self.tableView addSubview:self.scrimView];
+  UIView* scrimView = self.scrimView;
+  UITableView* tableView = self.tableView;
+  UIView* superview = tableView.superview;
+  scrimView.alpha = 0.0f;
+  [tableView addSubview:scrimView];
   // We attach our constraints to the superview because the tableView is
   // a scrollView and it seems that we get an empty frame when attaching to it.
-  AddSameConstraints(self.scrimView, self.view.superview);
-  self.tableView.accessibilityElementsHidden = YES;
-  self.tableView.scrollEnabled = NO;
-  __weak BookmarksHomeViewController* weakSelf = self;
+  [NSLayoutConstraint activateConstraints:@[
+    [scrimView.leadingAnchor constraintEqualToAnchor:superview.leadingAnchor],
+    [scrimView.trailingAnchor constraintEqualToAnchor:superview.trailingAnchor],
+    [scrimView.bottomAnchor constraintEqualToAnchor:superview.bottomAnchor],
+    [scrimView.topAnchor
+        constraintEqualToAnchor:self.navigationController.navigationBar
+                                    .bottomAnchor],
+
+  ]];
+  tableView.accessibilityElementsHidden = YES;
+  tableView.scrollEnabled = NO;
   [UIView animateWithDuration:kTableViewNavigationScrimFadeDuration
                    animations:^{
-                     BookmarksHomeViewController* strongSelf = weakSelf;
-                     if (!strongSelf) {
-                       return;
-                     }
-                     strongSelf.scrimView.alpha = 1.0f;
-                     [strongSelf.view layoutIfNeeded];
+                     scrimView.alpha = 1.0f;
+                     [superview layoutIfNeeded];
                    }];
 }
 
@@ -3524,8 +3546,14 @@ BookmarkNodeIDSet GetBookmarkNodeIDSet(
                            delegate:self];
   UISheetPresentationController *sheetPc =
       self.settingsNavigationController.sheetPresentationController;
-  sheetPc.detents = @[UISheetPresentationControllerDetent.mediumDetent,
-                      UISheetPresentationControllerDetent.largeDetent];
+  // When iPad full screen or 2/3 SplitView support only large detent because
+  // medium detent cuts the contents makes the dialog small and off centered.
+  if (IsSplitToolbarMode(self.settingsNavigationController)) {
+    sheetPc.detents = @[UISheetPresentationControllerDetent.mediumDetent,
+                        UISheetPresentationControllerDetent.largeDetent];
+  } else {
+    sheetPc.detents = @[UISheetPresentationControllerDetent.largeDetent];
+  }
   sheetPc.prefersScrollingExpandsWhenScrolledToEdge = NO;
   sheetPc.widthFollowsPreferredContentSizeWhenEdgeAttached = YES;
   [self presentViewController:self.settingsNavigationController

@@ -60,6 +60,7 @@ swift_source_set("vivaldi_bookmarks_editor_swift") {
   ]
 
   deps = [
+    "//vivaldi/app:vivaldi_ios_native_strings",
     "//vivaldi/ios/ui/helpers:helpers_swift",
   ]
 

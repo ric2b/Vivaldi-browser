@@ -39,7 +39,7 @@
 #include "hwconfig.h"
 #include "profiles.h"
 #include "progressframe.h"
-#include "refstruct.h"
+#include "libavutil/refstruct.h"
 
 /**< same with Div_Lut defined in spec 7.11.3.7 */
 static const uint16_t div_lut[AV1_DIV_LUT_NUM] = {
@@ -687,8 +687,8 @@ static int get_pixel_format(AVCodecContext *avctx)
 static void av1_frame_unref(AV1Frame *f)
 {
     ff_progress_frame_unref(&f->pf);
-    ff_refstruct_unref(&f->hwaccel_picture_private);
-    ff_refstruct_unref(&f->header_ref);
+    av_refstruct_unref(&f->hwaccel_picture_private);
+    av_refstruct_unref(&f->header_ref);
     f->raw_frame_header = NULL;
     f->spatial_id = f->temporal_id = 0;
     memset(f->skip_mode_frame_idx, 0,
@@ -701,13 +701,13 @@ static void av1_frame_replace(AV1Frame *dst, const AV1Frame *src)
 {
     av_assert1(dst != src);
 
-    ff_refstruct_replace(&dst->header_ref, src->header_ref);
+    av_refstruct_replace(&dst->header_ref, src->header_ref);
 
     dst->raw_frame_header = src->raw_frame_header;
 
     ff_progress_frame_replace(&dst->pf, &src->pf);
 
-    ff_refstruct_replace(&dst->hwaccel_picture_private,
+    av_refstruct_replace(&dst->hwaccel_picture_private,
                           src->hwaccel_picture_private);
 
     dst->spatial_id = src->spatial_id;
@@ -747,10 +747,10 @@ static av_cold int av1_decode_free(AVCodecContext *avctx)
         av1_frame_unref(&s->ref[i]);
     av1_frame_unref(&s->cur_frame);
     av_buffer_unref(&s->seq_data_ref);
-    ff_refstruct_unref(&s->seq_ref);
-    ff_refstruct_unref(&s->header_ref);
-    ff_refstruct_unref(&s->cll_ref);
-    ff_refstruct_unref(&s->mdcv_ref);
+    av_refstruct_unref(&s->seq_ref);
+    av_refstruct_unref(&s->header_ref);
+    av_refstruct_unref(&s->cll_ref);
+    av_refstruct_unref(&s->mdcv_ref);
     av_freep(&s->tile_group_info);
 
     while (s->itut_t35_fifo && av_fifo_read(s->itut_t35_fifo, &itut_t35, 1) >= 0)
@@ -788,10 +788,14 @@ static int set_context_with_sequence(AVCodecContext *avctx,
         break;
     }
 
+#if FF_API_CODEC_PROPS
+FF_DISABLE_DEPRECATION_WARNINGS
     if (seq->film_grain_params_present)
         avctx->properties |= FF_CODEC_PROPERTY_FILM_GRAIN;
     else
         avctx->properties &= ~FF_CODEC_PROPERTY_FILM_GRAIN;
+FF_ENABLE_DEPRECATION_WARNINGS
+#endif
 
     if (avctx->width != width || avctx->height != height) {
         int ret = ff_set_dimensions(avctx, width, height);
@@ -983,7 +987,11 @@ static int export_itut_t35(AVCodecContext *avctx, AVFrame *frame,
             if (ret < 0)
                 return ret;
 
+#if FF_API_CODEC_PROPS
+FF_DISABLE_DEPRECATION_WARNINGS
             avctx->properties |= FF_CODEC_PROPERTY_CLOSED_CAPTIONS;
+FF_ENABLE_DEPRECATION_WARNINGS
+#endif
             break;
         }
         default: // ignore unsupported identifiers
@@ -1218,7 +1226,7 @@ static int get_current_frame(AVCodecContext *avctx)
 
     av1_frame_unref(&s->cur_frame);
 
-    s->cur_frame.header_ref = ff_refstruct_ref(s->header_ref);
+    s->cur_frame.header_ref = av_refstruct_ref(s->header_ref);
 
     s->cur_frame.raw_frame_header = s->raw_frame_header;
 
@@ -1306,7 +1314,7 @@ static int av1_receive_frame_internal(AVCodecContext *avctx, AVFrame *frame)
 
             s->seq_data_ref->data = unit->data;
             s->seq_data_ref->size = unit->data_size;
-            ff_refstruct_replace(&s->seq_ref, unit->content_ref);
+            av_refstruct_replace(&s->seq_ref, unit->content_ref);
 
             s->raw_seq = &obu->obu.sequence_header;
 
@@ -1334,7 +1342,7 @@ static int av1_receive_frame_internal(AVCodecContext *avctx, AVFrame *frame)
                 goto end;
             }
 
-            ff_refstruct_replace(&s->header_ref, unit->content_ref);
+            av_refstruct_replace(&s->header_ref, unit->content_ref);
 
             if (unit->type == AV1_OBU_FRAME)
                 s->raw_frame_header = &obu->obu.frame.header;
@@ -1414,11 +1422,11 @@ static int av1_receive_frame_internal(AVCodecContext *avctx, AVFrame *frame)
         case AV1_OBU_METADATA:
             switch (obu->obu.metadata.metadata_type) {
             case AV1_METADATA_TYPE_HDR_CLL:
-                ff_refstruct_replace(&s->cll_ref, unit->content_ref);
+                av_refstruct_replace(&s->cll_ref, unit->content_ref);
                 s->cll = &obu->obu.metadata.metadata.hdr_cll;
                 break;
             case AV1_METADATA_TYPE_HDR_MDCV:
-                ff_refstruct_replace(&s->mdcv_ref, unit->content_ref);
+                av_refstruct_replace(&s->mdcv_ref, unit->content_ref);
                 s->mdcv = &obu->obu.metadata.metadata.hdr_mdcv;
                 break;
             case AV1_METADATA_TYPE_ITUT_T35: {

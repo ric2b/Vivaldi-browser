@@ -6,6 +6,7 @@
 
 #import "base/ios/ios_util.h"
 #import "base/strings/sys_string_conversions.h"
+#import "components/bookmarks/vivaldi_bookmark_kit.h"
 #import "components/direct_match/direct_match_service.h"
 #import "ios/chrome/browser/favicon/model/favicon_loader.h"
 #import "ios/chrome/browser/net/model/crurl.h"
@@ -216,6 +217,7 @@ const CGFloat commonPadding = 20;
       !(frequentlyVisited && topSitesAvailable &&
         self.speedDialItems.count == 0);
   [self.collectionView reloadData];
+  [self checkIfScrollable];
 
   [self.addGroupView refreshLayoutWithVerticalSizeClass:verticalSizeClass];
   [self.addGroupView setNeedsLayout];
@@ -229,6 +231,11 @@ const CGFloat commonPadding = 20;
   self.layout.numberOfColumns = column;
   [self.collectionView.collectionViewLayout invalidateLayout];
   [self.collectionView reloadData];
+  [self checkIfScrollable];
+}
+
+- (void)visibleCellDidChange {
+  [self checkIfScrollable];
 }
 
 #pragma mark - VivaldiSpeedDialAddGroupViewDelegate
@@ -242,41 +249,11 @@ const CGFloat commonPadding = 20;
 
 - (NSInteger)collectionView:(UICollectionView *)collectionView
      numberOfItemsInSection:(NSInteger)section {
-  // '+1' is for the 'New Speed Dial' item on the start page that's reponsible
-  // for opening bookmark/speed dial editor.
-  // Do not show that add item tile when frequently visited pages are visible.
-  return self.speedDialItems.count + (self.showingFrequentlyVisited ? 0 : 1);
+  return self.speedDialItems.count;
 }
 
 - (UICollectionViewCell*)collectionView:(UICollectionView*)collectionView
                  cellForItemAtIndexPath:(NSIndexPath*)indexPath {
-
-  // If there's no more object then load the new speed dial creation tile
-  if (indexPath.row == (long)self.speedDialItems.count) {
-    switch (_selectedLayout) {
-      case VivaldiStartPageLayoutStyleLarge:
-      case VivaldiStartPageLayoutStyleMedium:
-      case VivaldiStartPageLayoutStyleSmall: {
-        VivaldiSpeedDialFolderRegularCell *folderRegularCell =
-        [collectionView
-          dequeueReusableCellWithReuseIdentifier:cellIdFolderRegular
-                                    forIndexPath:indexPath];
-        [folderRegularCell configureCellWith:nil
-                                      addNew:YES
-                                 layoutStyle:self.selectedLayout];
-        return folderRegularCell;
-      }
-      case VivaldiStartPageLayoutStyleList: {
-        VivaldiSpeedDialFolderListCell *folderListCell =
-            [collectionView
-              dequeueReusableCellWithReuseIdentifier:cellIdFolderList
-                                        forIndexPath:indexPath];
-        [folderListCell configureCellWith:nil
-                                   addNew:YES];
-        return folderListCell;
-      }
-    }
-  }
 
   // Deque speed dial items
   VivaldiSpeedDialItem* item =
@@ -292,7 +269,6 @@ const CGFloat commonPadding = 20;
           dequeueReusableCellWithReuseIdentifier:cellIdFolderRegular
                                     forIndexPath:indexPath];
         [folderRegularCell configureCellWith:item
-                                      addNew:NO
                                  layoutStyle:self.selectedLayout];
         return folderRegularCell;
       }
@@ -301,8 +277,7 @@ const CGFloat commonPadding = 20;
             [collectionView
               dequeueReusableCellWithReuseIdentifier:cellIdFolderList
                                         forIndexPath:indexPath];
-        [folderListCell configureCellWith:item
-                                   addNew:NO];
+        [folderListCell configureCellWith:item];
         return folderListCell;
       }
     }
@@ -430,22 +405,11 @@ const CGFloat commonPadding = 20;
 #pragma mark - COLLECTIONVIEW DELEGATE
 - (void)collectionView:(UICollectionView *)collectionView
 didSelectItemAtIndexPath:(NSIndexPath *)indexPath {
-  // If last item tapped then open the view controller for adding new speed dial
-  // item. Otherwise, pass the node which will be handleed by the delegate
-  // method implementation.
-  if (indexPath.row == (long)self.speedDialItems.count) {
-    // Add speed dial item. The boolean in the method represents whether its
-    // speed dial item or speed dial folder
-    if (self.delegate)
-        [self.delegate didSelectAddNewSpeedDial:NO
-                                         parent:self.parent];
-  } else {
-    VivaldiSpeedDialItem* item =
-      [self.speedDialItems objectAtIndex: indexPath.row];
-    if (self.delegate)
-        [self.delegate didSelectItem:item
-                              parent:self.parent];
-  }
+  VivaldiSpeedDialItem* item =
+    [self.speedDialItems objectAtIndex: indexPath.row];
+  if (self.delegate)
+      [self.delegate didSelectItem:item
+                            parent:self.parent];
 }
 
 #pragma mark - COLLECTIONVIEW DRAG DELEGATE
@@ -457,13 +421,9 @@ didSelectItemAtIndexPath:(NSIndexPath *)indexPath {
   if (self.showingFrequentlyVisited)
     return @[];
 
-  // If there's at least two items apart from the add speed dial tile then
+  // If there's at least two items then
   // enable the drag and drop otherwise return
   if (!(self.speedDialItems.count > 1))
-    return @[];
-
-  // Disable drag and drop for the add speed dial tile
-  if (indexPath.row == (long)self.speedDialItems.count)
     return @[];
 
   VivaldiSpeedDialItem* item =
@@ -561,18 +521,12 @@ destinationIndexPath:(NSIndexPath*)destinationIndexPath
 - (UIContextMenuConfiguration*)collectionView:(UICollectionView *)collectionView
     contextMenuConfigurationForItemAtIndexPath:(NSIndexPath *)indexPath
                                          point:(CGPoint)point {
-  // If the last item is tapped show the context menu for add new speed dial
-  // item
-  if (indexPath.row == (long)self.speedDialItems.count) {
-    return [self contextMenuForAddNewItem];
-  } else {
-    return [self contextMenuForRegularItem: indexPath];
-  }
+  return [self contextMenuForItem: indexPath];
 }
 
 /// Returns the context menu item for regular item such as a an speed dial
 /// URL item or speed dial folder item.
-- (UIContextMenuConfiguration*)contextMenuForRegularItem:
+- (UIContextMenuConfiguration*)contextMenuForItem:
 (NSIndexPath*)indexPath {
   UIContextMenuConfiguration* config =
   [UIContextMenuConfiguration configurationWithIdentifier:nil
@@ -711,53 +665,21 @@ destinationIndexPath:(NSIndexPath*)destinationIndexPath
         [actions addObject:thumbnailRefreshAction];
       }
 
-      [actions addObjectsFromArray:@[editAction, moveAction, deleteAction]];
+      NSMutableArray *modificationActions =
+          [NSMutableArray arrayWithObject:editAction];
+
+      if (item.isMoveOutAble) {
+        [modificationActions addObject:moveAction];
+      }
+
+      [modificationActions addObject:deleteAction];
+
+      [actions addObjectsFromArray:modificationActions];
     }
 
     // Create the menu with the actions array
     UIMenu* menu = [UIMenu menuWithTitle:@"" children:actions];
     return menu;
-  }];
-
-  return config;
-}
-
-/// Returns the context menu item for new speed dial item
-- (UIContextMenuConfiguration*)contextMenuForAddNewItem {
-  UIContextMenuConfiguration* config =
-  [UIContextMenuConfiguration configurationWithIdentifier:nil
-                                          previewProvider:nil
-                                           actionProvider:^UIMenu*
-   _Nullable(NSArray<UIMenuElement*>* _Nonnull menuActions) {
-    NSString* newSpeedDialActionTitle = GetNSString(IDS_IOS_NEW_SPEED_DIAL);
-    UIAction * newSpeedDialAction =
-      [UIAction actionWithTitle:newSpeedDialActionTitle
-                          image:[UIImage systemImageNamed:@"plus"]
-                     identifier:nil
-                        handler:^(__kindof UIAction* _Nonnull action) {
-        // Add new speed dial action
-        if (self.delegate)
-          [self.delegate didSelectAddNewSpeedDial:NO
-                                           parent:self.parent];
-      }];
-
-    NSString* newFolderActionTitle = GetNSString(IDS_IOS_NEW_FOLDER);
-    UIAction * newFolderAction =
-      [UIAction actionWithTitle:newFolderActionTitle
-                          image:[UIImage systemImageNamed:@"folder.badge.plus"]
-                     identifier:nil
-                        handler:^(__kindof UIAction* _Nonnull action) {
-        // Add new speed dial folder action
-        if (self.delegate)
-          [self.delegate didSelectAddNewSpeedDial:YES
-                                           parent:self.parent];
-    }];
-
-    UIMenu* menu = [UIMenu menuWithTitle:@"" children:@[
-      newSpeedDialAction, newFolderAction
-    ]];
-    return menu;
-
   }];
 
   return config;
@@ -837,6 +759,17 @@ destinationIndexPath:(NSIndexPath*)destinationIndexPath
 /// Returns whether items should have tablet or phone layout.
 - (BOOL)showTabletLayout {
   return [VivaldiGlobalHelpers canShowSidePanelForTrait:self.traitCollection];
+}
+
+- (void)checkIfScrollable {
+  [self.collectionView layoutIfNeeded];
+  BOOL isScrollable =
+      self.collectionView.contentSize.height >
+          self.collectionView.bounds.size.height;
+  if (self.delegate && self.parent) {
+    [self.delegate collectionViewHasScrollableContent:isScrollable
+                                               parent:self.parent];
+  }
 }
 
 @end

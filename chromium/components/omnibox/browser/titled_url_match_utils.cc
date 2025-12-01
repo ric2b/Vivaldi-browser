@@ -24,6 +24,7 @@
 
 // Vivaldi
 #include "app/vivaldi_apptools.h"
+#include "base/i18n/case_conversion.h"
 
 namespace bookmarks {
 namespace {
@@ -84,22 +85,19 @@ AutocompleteMatch TitledUrlMatchToAutocompleteMatch(
   // Otherwise, display the path, even if the input matches both or neither.
   bool show_path = titled_url_match.has_ancestor_match ||
                    titled_url_match.url_match_positions.empty();
+  // Vivaldi
+  show_path = false;
+  bool title_match =
+      base::i18n::ToLower(title).find(input.text()) != std::string::npos;
 
-#if defined(VIVALDI_BUILD)
-  bool search_in_title = false;
-  if (base::StartsWith(title, fixed_up_input_text,
-                       base::CompareCase::INSENSITIVE_ASCII)) {
-    search_in_title = true;
-  }
+  const std::u16string description =
+      titled_url_match.node->GetTitledUrlNodeDescription();
+  bool description_match =
+      base::i18n::ToLower(description).find(input.text()) != std::string::npos;
+  // End Vivaldi
 
-  if (search_in_title) {
-    match.contents = formatted_url;
-  } else {
-    match.contents = show_path ? path : formatted_url;
-  }
-#else
-  match.contents = show_path ? path : formatted_url;
-#endif
+  match.contents =
+      show_path && !vivaldi::IsVivaldiRunning() ? path : formatted_url;
 
   // The path can become stale (when the bookmark is moved). So persist the URL
   // instead when creating shortcuts.
@@ -130,8 +128,12 @@ AutocompleteMatch TitledUrlMatchToAutocompleteMatch(
         ACMatchClassification::MATCH | ACMatchClassification::URL,
         ACMatchClassification::URL);
   }
-
-  match.description = title;
+  // Vivaldi
+  if (description_match && !title_match) {
+    match.description = description;
+  } else {
+    match.description = title;
+  }
 
   base::TrimWhitespace(match.description, base::TRIM_LEADING,
                        &match.description);
@@ -146,29 +148,29 @@ AutocompleteMatch TitledUrlMatchToAutocompleteMatch(
       input.text(), fixed_up_input_text, false, base::UTF8ToUTF16(url.spec()));
 
   // Find autocomplete offset for the title if search is within the title.
-  if (vivaldi::IsVivaldiRunning() && search_in_title) {
+  if (vivaldi::IsVivaldiRunning() && title_match) {
     inline_autocomplete_offset = URLPrefix::GetInlineAutocompleteOffset(
         input.text(), fixed_up_input_text, false, title);
-  } // End Vivaldi
+  }  // End Vivaldi
 
   auto fill_into_edit_format_types = url_formatter::kFormatUrlOmitDefaults;
   if (match_in_scheme)
     fill_into_edit_format_types &= ~url_formatter::kFormatUrlOmitHTTP;
 
   // Autofill the title if search is within the title
-  if (vivaldi::IsVivaldiRunning() && search_in_title) {
+  if (vivaldi::IsVivaldiRunning() && title_match) {
     match.fill_into_edit = title;
   } else {
-  match.fill_into_edit =
-      AutocompleteInput::FormattedStringWithEquivalentMeaning(
-          url,
-          url_formatter::FormatUrl(url, fill_into_edit_format_types,
+    match.fill_into_edit =
+        AutocompleteInput::FormattedStringWithEquivalentMeaning(
+            url,
+            url_formatter::FormatUrl(url, fill_into_edit_format_types,
                                    base::UnescapeRule::SPACES, nullptr, nullptr,
                                    &inline_autocomplete_offset),
-          scheme_classifier, &inline_autocomplete_offset);
-  } // End Vivaldi
+            scheme_classifier, &inline_autocomplete_offset);
+  }  // End Vivaldi
 
-  if (match.TryRichAutocompletion(match.contents, match.description, input)) {
+  if (match.TryRichAutocompletion(input, match.contents, match.description)) {
     // If rich autocompletion applies, we skip trying the alternatives below.
   } else if (inline_autocomplete_offset != std::u16string::npos) {
     match.inline_autocompletion =

@@ -96,14 +96,18 @@ void PagedSpaceBase::TearDown() {
   while (!memory_chunk_list_.Empty()) {
     MutablePageMetadata* chunk = memory_chunk_list_.front();
     memory_chunk_list_.Remove(chunk);
-    heap()->memory_allocator()->Free(MemoryAllocator::FreeMode::kImmediately,
-                                     chunk);
+    auto mode = (id_ == NEW_SPACE || id_ == OLD_SPACE) &&
+                        !chunk->Chunk()->IsFlagSet(
+                            MemoryChunk::SHRINK_TO_HIGH_WATER_MARK)
+                    ? MemoryAllocator::FreeMode::kPool
+                    : MemoryAllocator::FreeMode::kImmediately;
+    heap()->memory_allocator()->Free(mode, chunk);
   }
   accounting_stats_.Clear();
 }
 
 void PagedSpaceBase::MergeCompactionSpace(CompactionSpace* other) {
-  base::SpinningMutexGuard guard(mutex());
+  base::MutexGuard guard(mutex());
 
   DCHECK_NE(NEW_SPACE, identity());
   DCHECK_NE(NEW_SPACE, other->identity());
@@ -213,7 +217,7 @@ void PagedSpaceBase::RefineAllocatedBytesAfterSweeping(PageMetadata* page) {
 }
 
 PageMetadata* PagedSpaceBase::RemovePageSafe(int size_in_bytes) {
-  base::SpinningMutexGuard guard(mutex());
+  base::MutexGuard guard(mutex());
   PageMetadata* page = free_list()->GetPageForSize(size_in_bytes);
   if (!page) return nullptr;
   RemovePage(page);
@@ -301,7 +305,7 @@ bool PagedSpaceBase::TryExpand(LocalHeap* local_heap, AllocationOrigin origin) {
   const size_t accounted_size =
       MemoryChunkLayout::AllocatableMemoryInMemoryChunk(identity());
   if (origin != AllocationOrigin::kGC && identity() != NEW_SPACE) {
-    base::SpinningMutexGuard expansion_guard(heap_->heap_expansion_mutex());
+    base::MutexGuard expansion_guard(heap_->heap_expansion_mutex());
     if (!heap()->IsOldGenerationExpansionAllowed(accounted_size,
                                                  expansion_guard)) {
       return false;
@@ -609,7 +613,7 @@ void CompactionSpace::RefillFreeList() {
     // during compaction.
     DCHECK_NE(this, p->owner());
     PagedSpace* owner = static_cast<PagedSpace*>(p->owner());
-    base::SpinningMutexGuard guard(owner->mutex());
+    base::MutexGuard guard(owner->mutex());
     owner->RefineAllocatedBytesAfterSweeping(p);
     owner->RemovePage(p);
     added += AddPage(p);

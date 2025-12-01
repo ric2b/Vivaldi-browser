@@ -27,7 +27,7 @@ import type {TimelineSectionData} from './TimelineSection.js';
 
 // TODO(crbug.com/391381439): Fully migrate off of constructed style sheets.
 const stepViewStyles = new CSSStyleSheet();
-stepViewStyles.replaceSync(stepViewStylesRaw.cssContent);
+stepViewStyles.replaceSync(stepViewStylesRaw.cssText);
 
 const {html} = Lit;
 
@@ -137,7 +137,7 @@ const UIStrings = {
    * @description The title of the menu group that holds actions related to breakpoints.
    */
   breakpoints: 'Breakpoints',
-};
+} as const;
 const str_ = i18n.i18n.registerUIStrings(
     'panels/recorder/components/StepView.ts',
     UIStrings,
@@ -304,7 +304,7 @@ export interface ViewInput extends StepViewData {
   extensionConverters: Converters.Converter.Converter[];
   isSelected: boolean;
   recorderSettings?: Models.RecorderSettings.RecorderSettings;
-  actions: Array<Action>;
+  actions: Action[];
 
   stepEdited: (event: StepEditedEvent) => void;
   onBreakpointClick: () => void;
@@ -714,7 +714,7 @@ export class StepView extends HTMLElement {
     this.#render();
   }
 
-  #getActions = (): Array<Action> => {
+  #getActions = (): Action[] => {
     const actions = [];
 
     if (!this.#viewInput.isPlaying) {

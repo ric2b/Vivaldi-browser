@@ -47,7 +47,7 @@ class LensOverlayEntryPointController : public FullscreenObserver,
 
   // Whether the entry points should be enabled. Enabled means the Lens Overlay
   // functionality is available.
-  bool IsEnabled();
+  bool IsEnabled() const;
 
   // Returns true if the Lens Overlay entrypoints should be hidden. This is
   // different from IsEnabled() as IsEnabled() returns true if the Lens Overlay
@@ -77,7 +77,6 @@ class LensOverlayEntryPointController : public FullscreenObserver,
   void OnTemplateURLServiceShuttingDown() override;
 
   // views::FocusChangeListener
-  void OnWillChangeFocus(views::View* before, views::View* now) override;
   void OnDidChangeFocus(views::View* before, views::View* now) override;
 
   // views::ViewObserver
@@ -86,6 +85,7 @@ class LensOverlayEntryPointController : public FullscreenObserver,
 
   // Updates the Lens Overlay page action state.
   void UpdatePageActionState();
+  bool ShouldShowPageAction(tabs::TabInterface* active_tab) const;
 
   // Returns the ActionItem corresponding to our pinnable toolbar entrypoint.
   actions::ActionItem* GetToolbarEntrypoint();

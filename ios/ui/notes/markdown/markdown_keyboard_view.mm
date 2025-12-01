@@ -134,14 +134,14 @@ constexpr CGFloat kTintCornerRadius = 6.0f;
       @(OrderedList),
       @(UnorderedList),
       @(CheckList),
-      @(Indent),   // TODO(tomas@vivaldi): does not get saved
-      @(Outdent),  // TODO(tomas@vivaldi): does not get saved
+      @(Image),
+      @(Link),
       @(Highlight),
     ]],
     [self getButtonGroup:@[
-      @(Image),
-      @(Link),
       @(Quote),
+      @(BlankSpace),
+      @(BlankSpace),
       @(BlankSpace),
       @(BlankSpace),
       @(BlankSpace),
@@ -199,23 +199,20 @@ constexpr CGFloat kTintCornerRadius = 6.0f;
     [self getButtonGroup:@[
       @(OrderedList),
       @(UnorderedList),
-      @(Indent),   // TODO(tomas@vivaldi): does not get saved
-      @(Outdent),  // TODO(tomas@vivaldi): does not get saved
+      @(CheckList),
+      @(Quote),
     ]],
   ];
 
   NSArray* buttonLayout2 = @[
     [self getButtonGroup:@[
-      @(Quote),
-      @(CheckList),
+      @(Image),
       @(Link),
       @(CodeBlock),    // block type
+      @(BlankSpace),
     ]],
     [self getButtonGroup:@[
-      @(Image),
-      @(BlankSpace),
-      @(BlankSpace),
-      @(BlankSpace),
+      @(BlankSpace), // Blank row
     ]],
     [self getButtonGroup:@[
       @(BlankSpace), // Blank row

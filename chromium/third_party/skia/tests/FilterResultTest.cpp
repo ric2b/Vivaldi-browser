@@ -26,11 +26,11 @@
 #include "include/core/SkSize.h"
 #include "include/core/SkString.h"
 #include "include/core/SkTileMode.h"
-#include "include/private/SkColorData.h"
 #include "include/private/base/SkAssert.h"
 #include "include/private/base/SkDebug.h"
 #include "include/private/base/SkTArray.h"
 #include "include/private/base/SkTo.h"
+#include "src/core/SkColorData.h"
 #include "src/core/SkDevice.h"
 #include "src/core/SkImageFilterTypes.h"
 #include "src/core/SkMatrixPriv.h"
@@ -1115,7 +1115,7 @@ public:
         }
 
         Context baseContext{fRunner.refBackend(),
-                            skif::Mapping{SkMatrix::I()},
+                            skif::Mapping{SkM44()},
                             skif::LayerSpace<SkIRect>::Empty(),
                             source,
                             colorSpace.get(),
@@ -2303,7 +2303,7 @@ DEF_TEST_SUITE(CroppedTransformedTransparencyAffectingColorFilter, r, CtsEnforce
 }
 
 DEF_TEST_SUITE(BackdropFilterRotated, r,
-               CtsEnforcement::kApiLevel_V, CtsEnforcement::kNextRelease) {
+               CtsEnforcement::kApiLevel_202404, CtsEnforcement::kNextRelease) {
     // These values are extracted from a cc_unittest that had a 200x200 image, with a 10-degree
     // rotated 100x200 layer over the right half of the base image, with a backdrop blur. The
     // rotation forces SkCanvas to crop and transform the base device's content to be aligned with
@@ -2331,7 +2331,7 @@ DEF_TEST_SUITE(BackdropFilterRotated, r,
 static constexpr SkSize kNearlyIdentity = {0.999f, 0.999f};
 
 DEF_TEST_SUITE(RescaleWithTileMode, r,
-               CtsEnforcement::kApiLevel_V, CtsEnforcement::kNextRelease) {
+               CtsEnforcement::kApiLevel_202404, CtsEnforcement::kNextRelease) {
     for (SkTileMode tm : kTileModes) {
         TestCase(r, "Identity rescale is a no-op")
                 .source({0, 0, 50, 50})
@@ -2481,7 +2481,7 @@ DEF_TEST_SUITE(RescaleWithTileMode, r,
 }
 
 DEF_TEST_SUITE(RescaleWithTransform, r,
-               CtsEnforcement::kApiLevel_V, CtsEnforcement::kNextRelease) {
+               CtsEnforcement::kApiLevel_202404, CtsEnforcement::kNextRelease) {
     for (SkTileMode tm : kTileModes) {
         TestCase(r, "Identity rescale defers integer translation")
                 .source({0, 0, 50, 50})
@@ -2573,7 +2573,7 @@ DEF_TEST_SUITE(RescaleWithTransform, r,
 }
 
 DEF_TEST_SUITE(RescaleWithColorFilter, r,
-               CtsEnforcement::kApiLevel_V, CtsEnforcement::kNextRelease) {
+               CtsEnforcement::kApiLevel_202404, CtsEnforcement::kNextRelease) {
     for (SkTileMode tm : kTileModes) {
         TestCase(r, "Identity rescale applies color filter but defers tile mode")
                 .source({0, 0, 50, 50})
@@ -2613,7 +2613,7 @@ DEF_TEST_SUITE(RescaleWithColorFilter, r,
     }
 }
 
-DEF_TEST_SUITE(MakeFromImage, r, CtsEnforcement::kApiLevel_V, CtsEnforcement::kNextRelease) {
+DEF_TEST_SUITE(MakeFromImage, r, CtsEnforcement::kApiLevel_202404, CtsEnforcement::kNextRelease) {
     static constexpr SkISize kSrcSize = {128,128};
     static constexpr SkIRect kIdentitySrc = {0,0,128,128};
     static constexpr SkIRect kSubsetSrc = {16,16,112,112};

@@ -36,14 +36,6 @@ g.test('scalar_vector')
       )
       .beginSubcases()
   )
-  .beforeAllSubcases(t => {
-    if (
-      scalarTypeOf(kScalarAndVectorTypes[t.params.lhs]) === Type.f16 ||
-      scalarTypeOf(kScalarAndVectorTypes[t.params.rhs]) === Type.f16
-    ) {
-      t.selectDeviceOrSkipTestCase('shader-f16');
-    }
-  })
   .fn(t => {
     const lhs = kScalarAndVectorTypes[t.params.lhs];
     const rhs = kScalarAndVectorTypes[t.params.rhs];
@@ -333,4 +325,38 @@ fn main() {
 `;
 
     t.expectCompileResult(t.params.control, code);
+  });
+
+g.test('array_override')
+  .desc(
+    `
+  Validates that override initializing expressions works in conjunction with arrays
+  `
+  )
+  .params(u =>
+    u.combine('op', ['&&', '||']).combine('a_val', [0, 1]).combine('b_val', [0, 1]).beginSubcases()
+  )
+  .fn(t => {
+    const code = `
+override a_val:i32;
+override b_val:i32;
+override bad_size = (a_val - 10);
+override good_size = (b_val + 10);
+var<workgroup> zero_array:array<i32, select(bad_size, good_size, a_val == 1 ${t.params.op} b_val == 1 )>;
+`;
+    const code_entry = `let foo = zero_array[0];`;
+    const op_a_or = kLhsForShortCircuit[t.params.op];
+    const constants: Record<string, number> = {};
+    constants['a_val'] = t.params.a_val;
+    constants['b_val'] = t.params.b_val;
+    const cond_val = op_a_or
+      ? t.params.a_val === 1 || t.params.b_val === 1
+      : t.params.a_val === 1 && t.params.b_val === 1;
+
+    t.expectPipelineResult({
+      expectedResult: cond_val,
+      code,
+      constants,
+      statements: [code_entry],
+    });
   });

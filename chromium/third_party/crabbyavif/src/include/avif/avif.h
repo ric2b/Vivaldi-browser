@@ -18,13 +18,13 @@ struct avifIO;
 
 namespace crabbyavif {
 
+constexpr static const size_t CRABBY_AVIF_MAX_AV1_LAYER_COUNT = 4;
+
 constexpr static const uint32_t CRABBY_AVIF_DEFAULT_IMAGE_SIZE_LIMIT = (16384 * 16384);
 
 constexpr static const uint32_t CRABBY_AVIF_DEFAULT_IMAGE_DIMENSION_LIMIT = 32768;
 
 constexpr static const uint32_t CRABBY_AVIF_DEFAULT_IMAGE_COUNT_LIMIT = ((12 * 3600) * 60);
-
-constexpr static const size_t CRABBY_AVIF_MAX_AV1_LAYER_COUNT = 4;
 
 constexpr static const int CRABBY_AVIF_TRUE = 1;
 

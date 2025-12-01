@@ -19,6 +19,7 @@
 #include <cstring>
 #include <string>
 #include <utility>
+#include <vector>
 
 #include "tensorflow/lite/c/c_api_opaque.h"
 #include "tensorflow/lite/c/c_api_types.h"
@@ -26,6 +27,7 @@
 #include "tensorflow/lite/core/c/c_api_opaque.h"
 #include "tensorflow/lite/experimental/litert/c/litert_common.h"
 #include "tensorflow/lite/experimental/litert/c/litert_dispatch_delegate.h"
+#include "tensorflow/lite/experimental/litert/c/litert_event.h"
 #include "tensorflow/lite/experimental/litert/c/litert_logging.h"
 #include "tensorflow/lite/experimental/litert/c/litert_model.h"
 #include "tensorflow/lite/experimental/litert/c/litert_tensor_buffer_requirements.h"
@@ -136,6 +138,11 @@ Expected<DispatchDelegateKernel::Ptr> DispatchDelegateKernel::Create(
                       "Dispatch API has insufficient capabilities");
   }
 
+  bool async_dispatch = (capabilities & kLiteRtDispatchCapabilitiesAsync);
+  if (async_dispatch) {
+    LITERT_LOG(LITERT_INFO, "Found async dispatch capabilities");
+  }
+
   LiteRtDispatchDeviceContext device_context;
   if (auto status = LiteRtDispatchDeviceContextCreate(&device_context);
       status != kLiteRtStatusOk) {
@@ -146,7 +153,7 @@ Expected<DispatchDelegateKernel::Ptr> DispatchDelegateKernel::Create(
   }
 
   return Ptr(new DispatchDelegateKernel(options, std::move(graph_name),
-                                        device_context));
+                                        device_context, async_dispatch));
 }
 
 TfLiteStatus DispatchDelegateKernel::Init(
@@ -194,23 +201,26 @@ TfLiteStatus DispatchDelegateKernel::Init(
   const auto alloc_base = FindAllocBase(options_);
   if (!alloc_base) {
     LITERT_LOG(LITERT_ERROR,
-               "Could not find requried delegate options \"alloc_base\"", "");
+               "Could not find requried delegate options \"alloc_base\"");
     return kTfLiteError;
   }
 
-  // Get location of bytecode in the model buffer relative to alloc_base.
-  const auto bytecode_start = reinterpret_cast<const uint8_t*>(*alloc_base) +
-                              dispatch_opts.bytecode_offset;
-  BufferRef<uint8_t> bytecode(bytecode_start, dispatch_opts.bytecode_size);
-  const auto& function_name = dispatch_opts.name;
+  const auto alloc_fd = FindAllocFd(options_);
 
+  // Get location of bytecode in the model buffer relative to alloc_base.
+  LiteRtMemBuffer exec_bytecode_buffer = {
+      /*.fd=*/alloc_fd ? *alloc_fd : -1,
+      /*.base_addr=*/*alloc_base,
+      /*.offset=*/dispatch_opts.bytecode_offset,
+      /*.size=*/dispatch_opts.bytecode_size};
+  const auto& function_name = dispatch_opts.name;
   const int num_inputs = params->input_tensors->size;
   const int num_outputs = params->output_tensors->size;
 
   if (auto status = LiteRtDispatchInvocationContextCreate(
           device_context_, kLiteRtDispatchExecutableTypeMlModel,
-          bytecode.Data(), bytecode.Size(), function_name.data(), num_inputs,
-          num_outputs, &invocation_context_);
+          &exec_bytecode_buffer, function_name.data(), num_inputs, num_outputs,
+          &invocation_context_);
       status != kLiteRtStatusOk) {
     LITERT_LOG(LITERT_ERROR, "Failed to create invocation context: %d", status);
     return kTfLiteError;
@@ -234,7 +244,7 @@ TfLiteStatus DispatchDelegateKernel::Init(
     return kTfLiteError;
   }
 
-  auto* buffer_context =
+  buffer_context_ =
       reinterpret_cast<litert::internal::ExternalLiteRtBufferContext*>(
           external_context);
 
@@ -253,7 +263,7 @@ TfLiteStatus DispatchDelegateKernel::Init(
     }
     auto input_buffer_requirements =
         GetBufferRequirements(*tensor_type, i, /*is_input=*/true);
-    if (auto res = buffer_context->RegisterBufferRequirement(
+    if (auto res = buffer_context_->RegisterBufferRequirement(
             tfl_opaque_tensor, std::move(*input_buffer_requirements));
         res != kLiteRtStatusOk) {
       LITERT_LOG(LITERT_ERROR, "Failed to register buffer requirement");
@@ -275,7 +285,7 @@ TfLiteStatus DispatchDelegateKernel::Init(
     }
     auto output_buffer_requirements =
         GetBufferRequirements(*tensor_type, i, /*is_input=*/false);
-    if (auto res = buffer_context->RegisterBufferRequirement(
+    if (auto res = buffer_context_->RegisterBufferRequirement(
             tfl_opaque_tensor, std::move(*output_buffer_requirements));
         res != kLiteRtStatusOk) {
       LITERT_LOG(LITERT_ERROR, "Failed to register buffer requirement");
@@ -421,6 +431,37 @@ TfLiteStatus DispatchDelegateKernel::RegisterLiteRtTensorBuffer(
                  buffer_index, status);
       return kTfLiteError;
     }
+
+    if (tensor_buffer.HasEvent()) {
+      auto event = tensor_buffer.GetEvent();
+      if (!event) {
+        LITERT_LOG(LITERT_ERROR,
+                   "Failed to get event from tensor buffer %d: %s",
+                   buffer_index, event.Error().Message().c_str());
+        return kTfLiteError;
+      }
+
+      if (!async_dispatch_) {
+        // If the Dispatch API runtime doesn't support async execution, then
+        // wait for the event on the CPU.
+        LITERT_LOG(LITERT_WARNING, "Waiting on an input event on the CPU...");
+        if (auto status = event->Wait(/*timeout_in_ms=*/-1); !status) {
+          LITERT_LOG(LITERT_ERROR, "Failed to wait on event: %s",
+                     status.Error().Message().c_str());
+          return kTfLiteError;
+        }
+
+      } else {
+        if (auto status = LiteRtDispatchAttachInputEvent(
+                invocation_context_, buffer_index, event->Get());
+            status != kLiteRtStatusOk) {
+          LITERT_LOG(LITERT_ERROR, "Failed to attach event to input %d: %d",
+                     buffer_index, status);
+          return kTfLiteError;
+        }
+      }
+    }
+
   } else {
     if (auto status = LiteRtDispatchAttachOutput(invocation_context_,
                                                  buffer_index, buffer_handle);
@@ -453,17 +494,10 @@ TfLiteStatus DispatchDelegateKernel::Prepare(TfLiteOpaqueContext* context,
 
 TfLiteStatus DispatchDelegateKernel::RegisterLiteRtTensorBuffers(
     TfLiteOpaqueContext* context, TfLiteOpaqueNode* node) {
-  void* external_context;
-  TfLiteOpaqueContextGetExternalContext(context, &external_context,
-                                        kTfLiteLiteRtBufferContext);
-  auto* buffer_context =
-      reinterpret_cast<litert::internal::ExternalLiteRtBufferContext*>(
-          external_context);
-
   size_t num_node_inputs = TfLiteOpaqueNodeNumberOfInputs(node);
   for (size_t i = 0; i < num_node_inputs; ++i) {
     auto* tfl_opaque_tensor = TfLiteOpaqueNodeGetInput(context, node, i);
-    auto tensor_buffer = buffer_context->GetTensorBuffer(tfl_opaque_tensor);
+    auto tensor_buffer = buffer_context_->GetTensorBuffer(tfl_opaque_tensor);
     if (tensor_buffer.HasValue()) {
       // TODO - b/379176766: If the provided TensorBuffer is not supported
       // types, we need to create a new one and convert the data from the
@@ -481,7 +515,7 @@ TfLiteStatus DispatchDelegateKernel::RegisterLiteRtTensorBuffers(
       }
       input_tensor_buffers_require_cpu_sync_[i] = false;
     } else {
-      LITERT_LOG(LITERT_INFO,
+      LITERT_LOG(LITERT_VERBOSE,
                  "Input#%d TensorBuffer is not registered. Create a new one",
                  i);
       if (auto status =
@@ -496,7 +530,7 @@ TfLiteStatus DispatchDelegateKernel::RegisterLiteRtTensorBuffers(
   size_t num_node_outputs = TfLiteOpaqueNodeNumberOfOutputs(node);
   for (size_t i = 0; i < num_node_outputs; ++i) {
     auto* tfl_opaque_tensor = TfLiteOpaqueNodeGetOutput(context, node, i);
-    auto tensor_buffer = buffer_context->GetTensorBuffer(tfl_opaque_tensor);
+    auto tensor_buffer = buffer_context_->GetTensorBuffer(tfl_opaque_tensor);
     if (tensor_buffer.HasValue()) {
       // TODO - b/379176766: If the provided TensorBuffer is not supported
       // types, we need to create a new one and convert the data back to the
@@ -514,7 +548,7 @@ TfLiteStatus DispatchDelegateKernel::RegisterLiteRtTensorBuffers(
       }
       output_tensor_buffers_require_cpu_sync_[i] = false;
     } else {
-      LITERT_LOG(LITERT_INFO,
+      LITERT_LOG(LITERT_VERBOSE,
                  "Output#%d TensorBuffer is not registered. Create a new one",
                  i);
       if (auto status =
@@ -561,16 +595,41 @@ TfLiteStatus DispatchDelegateKernel::Eval(TfLiteOpaqueContext* context,
     std::memcpy(lock_and_addr->second, tensor_data, buffer_size);
   }
 
-  if (auto status = LiteRtDispatchInvoke(invocation_context_);
-      status != kLiteRtStatusOk) {
-    LITERT_LOG(LITERT_ERROR, "Failed to invoke context: %d", status);
-    return kTfLiteError;
-  }
-
   size_t num_node_outputs = TfLiteOpaqueNodeNumberOfOutputs(node);
   if (num_node_outputs != output_tensor_buffers_.size()) {
     LITERT_LOG(LITERT_ERROR, "Invalid number of outputs");
     return kTfLiteError;
+  }
+
+  if (async_dispatch_ && buffer_context_->IsAsyncExecutionMode()) {
+    std::vector<LiteRtEvent> output_events(num_node_outputs);
+    if (auto status = LiteRtDispatchInvokeAsync(
+            invocation_context_, output_events.size(), output_events.data());
+        status != kLiteRtStatusOk) {
+      LITERT_LOG(LITERT_ERROR, "Failed to invoke context asynchronously: %d",
+                 status);
+      return kTfLiteError;
+    }
+    for (size_t i = 0; i < output_events.size(); ++i) {
+      auto output_event = output_events[i];
+      if (output_event) {
+        auto& tensor_buffer = output_tensor_buffers_[i];
+        if (auto status = tensor_buffer.SetEvent(Event(output_event));
+            !status) {
+          LITERT_LOG(LITERT_ERROR,
+                     "Failed to set event on output tensor buffer: %s",
+                     status.Error().Message().c_str());
+          return kTfLiteError;
+        }
+      }
+    }
+
+  } else {
+    if (auto status = LiteRtDispatchInvoke(invocation_context_);
+        status != kLiteRtStatusOk) {
+      LITERT_LOG(LITERT_ERROR, "Failed to invoke context: %d", status);
+      return kTfLiteError;
+    }
   }
 
   for (size_t i = 0; i < num_node_outputs; ++i) {

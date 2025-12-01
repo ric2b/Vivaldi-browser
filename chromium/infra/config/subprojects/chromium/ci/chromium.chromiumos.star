@@ -24,6 +24,7 @@ ci.defaults.set(
     os = os.LINUX_DEFAULT,
     gardener_rotations = gardener_rotations.CHROMIUM,
     tree_closing = True,
+    tree_closing_notifiers = ci.DEFAULT_TREE_CLOSING_NOTIFIERS,
     execution_timeout = ci.DEFAULT_EXECUTION_TIMEOUT,
     health_spec = health_spec.modified_default({
         "Unhealthy": struct(
@@ -32,12 +33,10 @@ ci.defaults.set(
             ),
         ),
     }),
+    reclient_enabled = False,
     service_account = ci.DEFAULT_SERVICE_ACCOUNT,
     shadow_service_account = ci.DEFAULT_SHADOW_SERVICE_ACCOUNT,
     siso_enabled = True,
-    # crbug.com/391160876: fast deps with CrOS toolchain may cause
-    # incorrect results.
-    siso_experiments = ["no-fast-deps"],
     siso_project = siso.project.DEFAULT_TRUSTED,
     siso_remote_jobs = siso.remote_jobs.DEFAULT,
 )
@@ -821,6 +820,7 @@ ci.builder(
             "linux_chromeos_rel_cq",
             "linux_chromeos_isolated_scripts",
             "chromeos_annotation_scripts",
+            "gtests_once",
         ],
         additional_compile_targets = [
             "all",

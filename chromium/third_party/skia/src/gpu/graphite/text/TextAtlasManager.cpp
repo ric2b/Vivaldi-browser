@@ -42,9 +42,12 @@ TextAtlasManager::TextAtlasManager(Recorder* recorder)
 
 TextAtlasManager::~TextAtlasManager() = default;
 
-void TextAtlasManager::freeAll() {
+void TextAtlasManager::freeGpuResources() {
+    auto tokenTracker = fRecorder->priv().tokenTracker();
     for (int i = 0; i < kMaskFormatCount; ++i) {
-        fAtlases[i] = nullptr;
+        if (fAtlases[i]) {
+            fAtlases[i]->freeGpuResources(tokenTracker->nextFlushToken());
+        }
     }
 }
 
@@ -303,11 +306,11 @@ bool TextAtlasManager::initAtlas(MaskFormat format) {
     return true;
 }
 
-void TextAtlasManager::compact(bool forceCompact) {
+void TextAtlasManager::compact() {
     auto tokenTracker = fRecorder->priv().tokenTracker();
     for (int i = 0; i < kMaskFormatCount; ++i) {
         if (fAtlases[i]) {
-            fAtlases[i]->compact(tokenTracker->nextFlushToken(), forceCompact);
+            fAtlases[i]->compact(tokenTracker->nextFlushToken());
         }
     }
 }

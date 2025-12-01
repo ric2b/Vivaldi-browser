@@ -39,6 +39,7 @@
 #include "components/keep_alive_registry/scoped_keep_alive.h"
 #include "components/keyed_service/content/browser_context_dependency_manager.h"
 #include "components/keyed_service/core/keyed_service.h"
+#include "components/regional_capabilities/regional_capabilities_switches.h"
 #include "components/search_engines/default_search_manager.h"
 #include "components/search_engines/search_engine_choice/search_engine_choice_utils.h"
 #include "components/search_engines/search_engines_pref_names.h"
@@ -426,9 +427,9 @@ IN_PROC_BROWSER_TEST_F(SearchEngineChoiceDialogBrowserTest,
   EXPECT_EQ(first_profile_service->GetNumberOfBrowsersWithDialogsOpen(), 0u);
 }
 
-// We don't run this test on ChromeOS Ash because we can't create multiple
-// profiles on Ash.
-#if !BUILDFLAG(IS_CHROMEOS_ASH)
+// We don't run this test on ChromeOS because we can't create multiple
+// profiles.
+#if !BUILDFLAG(IS_CHROMEOS)
 IN_PROC_BROWSER_TEST_F(SearchEngineChoiceDialogBrowserTest,
                        DialogGetsDisplayedForAllProfiles) {
   // Start a first profile that will later show the dialog.
@@ -520,7 +521,7 @@ IN_PROC_BROWSER_TEST_F(SearchEngineChoiceDialogBrowserTest,
   EXPECT_FALSE(service);
 }
 
-#if !BUILDFLAG(IS_CHROMEOS_ASH)
+#if !BUILDFLAG(IS_CHROMEOS)
 IN_PROC_BROWSER_TEST_F(SearchEngineChoiceDialogBrowserTest,
                        DialogDoesNotOverlapWithProfileCustomizationDialog) {
   Profile* profile = browser()->profile();

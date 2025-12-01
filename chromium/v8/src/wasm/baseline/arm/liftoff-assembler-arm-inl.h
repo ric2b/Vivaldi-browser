@@ -291,7 +291,6 @@ inline void Store(LiftoffAssembler* assm, LiftoffRegister src, MemOperand dst,
     case kI32:
     case kRefNull:
     case kRef:
-    case kRtt:
       assm->str(src.gp(), dst);
       break;
     case kI64:
@@ -328,7 +327,6 @@ inline void Load(LiftoffAssembler* assm, LiftoffRegister dst, MemOperand src,
     case kI32:
     case kRefNull:
     case kRef:
-    case kRtt:
       assm->ldr(dst.gp(), src);
       break;
     case kI64:
@@ -592,6 +590,7 @@ void LiftoffAssembler::PatchPrepareStackFrame(
         Operand(stack_param_slots * kStackSlotSize +
                 CommonFrameConstants::kFixedFrameSizeAboveFp));
     CallBuiltin(Builtin::kWasmHandleStackOverflow);
+    safepoint_table_builder->DefineSafepoint(this);
     PopRegisters(regs_to_save);
   } else {
     Call(static_cast<Address>(Builtin::kWasmStackOverflow),
@@ -2627,7 +2626,8 @@ void LiftoffAssembler::LoadTransform(LiftoffRegister dst, Register src_addr,
                                      Register offset_reg, uintptr_t offset_imm,
                                      LoadType type,
                                      LoadTransformationKind transform,
-                                     uint32_t* protected_load_pc) {
+                                     uint32_t* protected_load_pc,
+                                     bool i64_offset) {
   UseScratchRegisterScope temps(this);
   Register actual_src_addr = liftoff::CalculateActualAddress(
       this, &temps, src_addr, offset_reg, offset_imm);
@@ -5000,7 +5000,6 @@ void LiftoffStackSlots::Construct(int param_slots) {
           case kI32:
           case kRef:
           case kRefNull:
-          case kRtt:
             asm_->push(src.reg().gp());
             break;
           case kF32:

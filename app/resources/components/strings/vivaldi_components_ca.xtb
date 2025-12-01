@@ -21,6 +21,9 @@
           &gt;
           <ph name="PROXIES_TITLE" />
           i assegura't que la configuració estigui definida com a "sense servidor intermediari" o com a "directa".</translation>
+<translation id="4949828774841497663">Ves a Aplicacions &gt; Ajustos del sistema &gt; Xarxa, selecciona la
+          xarxa activa, clica el botó de detalls, i desmarca qualsevol servidor intermediari
+          que pugui estar seleccionat.</translation>
 <translation id="5248344925342018662">Estàs consultant una pàgina segura de Vivaldi</translation>
 <translation id="6690242244468452299">Aquesta pàgina mostra informació sobre errors recents si actives el registre d'errors.</translation>
 <translation id="7023871570427738255">Ves al
@@ -32,7 +35,4 @@
         Si això no resol el problema, et recomanem que tornis a seleccionar
         aquesta opció per obtenir un rendiment millorat.</translation>
 <translation id="7496505986576158197">Vivaldi és possible gràcies a <ph name="BEGIN_LINK_CHROMIUM" />Chromium<ph name="END_LINK_CHROMIUM" /> i altres <ph name="BEGIN_LINK_OSS" />projectes de codi obert<ph name="END_LINK_OSS" />.</translation>
-<translation id="8187289872471304532">Ves a
-          Aplicacions &gt; Preferències del sistema &gt; Xarxa &gt; Configuració avançada &gt; Servidors intermediaris
-          i desmarca tots els servidors intermediaris seleccionats.</translation>
 </translationbundle>

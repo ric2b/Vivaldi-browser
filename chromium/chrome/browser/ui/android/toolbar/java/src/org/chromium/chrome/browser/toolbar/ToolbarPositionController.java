@@ -17,7 +17,6 @@ import androidx.annotation.VisibleForTesting;
 import androidx.coordinatorlayout.widget.CoordinatorLayout;
 import androidx.coordinatorlayout.widget.CoordinatorLayout.LayoutParams;
 
-import org.chromium.base.ContextUtils;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.base.supplier.ObservableSupplierImpl;
@@ -26,12 +25,12 @@ import org.chromium.chrome.browser.browser_controls.BottomControlsStacker;
 import org.chromium.chrome.browser.browser_controls.BottomControlsStacker.LayerScrollBehavior;
 import org.chromium.chrome.browser.browser_controls.BottomControlsStacker.LayerType;
 import org.chromium.chrome.browser.browser_controls.BottomControlsStacker.LayerVisibility;
-import org.chromium.chrome.browser.browser_controls.BrowserControlsOffsetTagsInfo;
 import org.chromium.chrome.browser.browser_controls.BrowserControlsSizer;
 import org.chromium.chrome.browser.browser_controls.BrowserControlsStateProvider.ControlsPosition;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.preferences.ChromePreferenceKeys;
 import org.chromium.chrome.browser.tab.Tab;
+import org.chromium.chrome.browser.toolbar.settings.AddressBarPreference;
 import org.chromium.components.embedder_support.util.UrlUtilities;
 import org.chromium.ui.KeyboardVisibilityDelegate;
 import org.chromium.ui.base.DeviceFormFactor;
@@ -85,6 +84,7 @@ public class ToolbarPositionController implements OnSharedPreferenceChangeListen
     private final BottomControlsLayer mProgressBarLayer;
 
     @ControlsPosition private int mCurrentPosition;
+    private int mHairlineHeight;
 
     /**
      * @param browserControlsSizer {@link BrowserControlsSizer}, used to manipulate position of the
@@ -132,6 +132,8 @@ public class ToolbarPositionController implements OnSharedPreferenceChangeListen
         mContext = context;
         mCurrentPosition = mBrowserControlsSizer.getControlsPosition();
 
+        mHairlineHeight =
+                context.getResources().getDimensionPixelSize(R.dimen.toolbar_hairline_height);
         mIsNtpShowingSupplier.addObserver((showing) -> updateCurrentPosition());
         mIsTabSwitcherFinishedShowingSupplier.addObserver((showing) -> updateCurrentPosition());
         mIsOmniboxFocusedSupplier.addObserver((focused) -> updateCurrentPosition());
@@ -167,18 +169,11 @@ public class ToolbarPositionController implements OnSharedPreferenceChangeListen
                     }
 
                     @Override
-                    public void onBrowserControlsOffsetUpdate(
-                            int layerYOffset, boolean didMinHeightChange) {
+                    public void onBrowserControlsOffsetUpdate(int layerYOffset) {
                         if (mLayerVisibility == LayerVisibility.VISIBLE) {
                             mBrowserControlsOffsetSupplier.set(layerYOffset);
                             mControlContainer.getView().setTranslationY(layerYOffset);
                         }
-                    }
-
-                    // TODO(peilinwang) implement bciv for bottom toolbar.
-                    @Override
-                    public int updateOffsetTag(BrowserControlsOffsetTagsInfo offsetTagsInfo) {
-                        return 0;
                     }
                 };
         mProgressBarLayer =
@@ -204,15 +199,8 @@ public class ToolbarPositionController implements OnSharedPreferenceChangeListen
                     }
 
                     @Override
-                    public void onBrowserControlsOffsetUpdate(
-                            int layerYOffset, boolean didMinHeightChange) {
+                    public void onBrowserControlsOffsetUpdate(int layerYOffset) {
                         mToolbarProgressBarContainer.setTranslationY(layerYOffset);
-                    }
-
-                    // TODO(peilinwang) implement bciv for bottom toolbar.
-                    @Override
-                    public int updateOffsetTag(BrowserControlsOffsetTagsInfo offsetTagsInfo) {
-                        return 0;
                     }
                 };
 
@@ -224,6 +212,10 @@ public class ToolbarPositionController implements OnSharedPreferenceChangeListen
     /**
      * Returns whether the given {context, device, cct-ness} combo is eligible for toolbar position
      * customization.
+     *
+     * <p>NOTE: this method controls whether feature can take effect, and is separate from code
+     * controlling whether feature can be configured - {@see
+     * org.chromium.chrome.browser.settings.MainSettings#updateAddressBarPreference()}.
      */
     public static boolean isToolbarPositionCustomizationEnabled(
             Context context, boolean isCustomTab) {
@@ -261,9 +253,7 @@ public class ToolbarPositionController implements OnSharedPreferenceChangeListen
     /** Returns true if toolbar is user-configured to show on top. */
     private static boolean isToolbarConfiguredToShowOnTop() {
         if (sToolbarShouldShowOnTop == null) {
-            sToolbarShouldShowOnTop =
-                    ContextUtils.getAppSharedPreferences()
-                            .getBoolean(ChromePreferenceKeys.TOOLBAR_TOP_ANCHORED, true);
+            sToolbarShouldShowOnTop = AddressBarPreference.isToolbarConfiguredToShowOnTop();
         }
         return sToolbarShouldShowOnTop;
     }
@@ -372,6 +362,10 @@ public class ToolbarPositionController implements OnSharedPreferenceChangeListen
         int verticalGravity =
                 mCurrentPosition == ControlsPosition.TOP ? Gravity.TOP : Gravity.BOTTOM;
         layoutParams.gravity = Gravity.START | verticalGravity;
+        FrameLayout.LayoutParams toolbarLayoutParams =
+                mControlContainer.mutateToolbarLayoutParams();
+        toolbarLayoutParams.topMargin =
+                mCurrentPosition == ControlsPosition.BOTTOM ? mHairlineHeight : 0;
     }
 
     @VisibleForTesting

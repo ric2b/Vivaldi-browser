@@ -10,7 +10,6 @@
 #import "components/optimization_guide/optimization_guide_buildflags.h"
 
 namespace optimization_guide::proto {
-class StringValue;
 
 enum BlingPrototypingRequest_ModelEnum : int;
 enum TabOrganizationRequest_TabOrganizationModelStrategy : int;
@@ -19,14 +18,6 @@ enum TabOrganizationRequest_TabOrganizationModelStrategy : int;
 // Mutator protocol for the UI layer to communicate to the
 // AIPrototypingMediator.
 @protocol AIPrototypingMutator
-
-#if BUILDFLAG(BUILD_WITH_INTERNAL_OPTIMIZATION_GUIDE)
-
-// Executes a freeform prototyping request to an on-device model.
-- (void)executeFreeformOnDeviceQuery:
-    (optimization_guide::proto::StringValue)request;
-
-#endif  // BUILDFLAG(BUILD_WITH_INTERNAL_OPTIMIZATION_GUIDE)
 
 // Executes a freeform prototyping request to a server-hosted model.
 - (void)executeFreeformServerQuery:(NSString*)query
@@ -40,6 +31,12 @@ enum TabOrganizationRequest_TabOrganizationModelStrategy : int;
 - (void)executeGroupTabsWithStrategy:
     (optimization_guide::proto::
          TabOrganizationRequest_TabOrganizationModelStrategy)strategy;
+
+// Executes an enhanced calendar request with a given (optional) prompt and
+// selected text.
+- (void)executeEnhancedCalendarQueryWithPrompt:(NSString*)prompt
+                                  selectedText:(NSString*)selectedText;
+;
 
 @end
 

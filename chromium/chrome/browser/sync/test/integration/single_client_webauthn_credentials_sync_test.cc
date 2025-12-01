@@ -7,7 +7,6 @@
 #include "base/containers/span.h"
 #include "base/location.h"
 #include "base/rand_util.h"
-#include "base/test/scoped_feature_list.h"
 #include "chrome/browser/sync/test/integration/multi_client_status_change_checker.h"
 #include "chrome/browser/sync/test/integration/secondary_account_helper.h"
 #include "chrome/browser/sync/test/integration/sync_datatype_helper.h"
@@ -45,7 +44,9 @@ using testing::IsEmpty;
 using testing::Optional;
 using testing::UnorderedElementsAre;
 
+using webauthn_credentials_helper::EntityHasCurrentHiddenTime;
 using webauthn_credentials_helper::EntityHasDisplayName;
+using webauthn_credentials_helper::EntityHasHidden;
 using webauthn_credentials_helper::EntityHasLastUsedTime;
 using webauthn_credentials_helper::EntityHasSyncId;
 using webauthn_credentials_helper::EntityHasUsername;
@@ -109,7 +110,8 @@ CreateEntityWithCustomClientTagHash(
                                              client_tag_hash),
       syncer::WEBAUTHN_CREDENTIAL, /*version=*/0,
       /*non_unique_name=*/"", client_tag_hash, entity, /*creation_time=*/0,
-      /*last_modified_time=*/0, /*collaboration_id=*/"");
+      /*last_modified_time=*/0,
+      /*collaboration_metadata=*/sync_pb::SyncEntity::CollaborationMetadata());
 }
 
 class PasskeyModelReadyChecker : public StatusChangeChecker,
@@ -689,6 +691,34 @@ IN_PROC_BROWSER_TEST_F(SingleClientWebAuthnCredentialsSyncTest,
   EXPECT_TRUE(GetModel().GetAllPasskeys().empty());
 }
 
+IN_PROC_BROWSER_TEST_F(SingleClientWebAuthnCredentialsSyncTest,
+                       SetPasskeyHidden) {
+  ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
+
+  // Add a passkey. It should not be hidden.
+  sync_pb::WebauthnCredentialSpecifics passkey = NewPasskey();
+  GetModel().AddNewPasskeyForTesting(passkey);
+  EXPECT_TRUE(ServerPasskeysMatchChecker(
+                  UnorderedElementsAre(testing::AllOf(EntityHasHidden(false))))
+                  .Wait());
+
+  // Hide the passkey.
+  PasskeyChangeObservationChecker change_checker(
+      kSingleProfile,
+      {{webauthn::PasskeyModelChange::ChangeType::UPDATE, passkey.sync_id()}});
+  EXPECT_TRUE(GetModel().SetPasskeyHidden(passkey.credential_id(), true));
+  EXPECT_TRUE(ServerPasskeysMatchChecker(
+                  UnorderedElementsAre(testing::AllOf(
+                      EntityHasHidden(true), EntityHasCurrentHiddenTime())))
+                  .Wait());
+  EXPECT_TRUE(GetModel().GetAllPasskeys().at(0).hidden());
+
+  // `hidden_time` should have been updated with the current timestamp.
+  base::Time hidden_time = base::Time::FromMillisecondsSinceUnixEpoch(
+      GetModel().GetAllPasskeys().at(0).hidden_time());
+  EXPECT_LE(base::Time::Now() - hidden_time, base::Seconds(5));
+}
+
 // Tests updating a passkey.
 IN_PROC_BROWSER_TEST_F(SingleClientWebAuthnCredentialsSyncTest, UpdatePasskey) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
@@ -1018,7 +1048,7 @@ IN_PROC_BROWSER_TEST_F(SingleClientWebAuthnCredentialsSyncTest,
 }
 
 // The unconsented primary account isn't supported on ChromeOS.
-#if !BUILDFLAG(IS_CHROMEOS_ASH)
+#if !BUILDFLAG(IS_CHROMEOS)
 
 class SingleClientWebAuthnCredentialsSyncTestExplicitParamTest
     : public SingleClientWebAuthnCredentialsSyncTest,
@@ -1027,10 +1057,6 @@ class SingleClientWebAuthnCredentialsSyncTestExplicitParamTest
   SingleClientWebAuthnCredentialsSyncTestExplicitParamTest() = default;
 
   bool is_explicit_signin() const { return GetParam(); }
-
- private:
-  base::test::ScopedFeatureList scoped_feature_list_{
-      switches::kExplicitBrowserSigninUIOnDesktop};
 };
 
 // Tests that passkeys sync on transport mode only if the user has consented to
@@ -1079,6 +1105,6 @@ INSTANTIATE_TEST_SUITE_P(
     [](const testing::TestParamInfo<bool>& info) {
       return info.param ? "Explicit" : "Implicit";
     });
-#endif  // !BUILDFLAG(IS_CHROMEOS_ASH)
+#endif  // !BUILDFLAG(IS_CHROMEOS)
 
 }  // namespace

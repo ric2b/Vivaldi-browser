@@ -2,12 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifndef V8_WASM_SIMD_SHUFFLE_H_
+#define V8_WASM_SIMD_SHUFFLE_H_
+
 #if !V8_ENABLE_WEBASSEMBLY
 #error This header should only be included if WebAssembly is enabled.
 #endif  // !V8_ENABLE_WEBASSEMBLY
-
-#ifndef V8_WASM_SIMD_SHUFFLE_H_
-#define V8_WASM_SIMD_SHUFFLE_H_
 
 #include "src/base/macros.h"
 #include "src/common/globals.h"
@@ -135,10 +135,25 @@ class V8_EXPORT_PRIVATE SimdShuffle {
   static bool TryMatch32x4OneLaneSwizzle(const uint8_t* shuffle32x4,
                                          uint8_t* from, uint8_t* to);
 
+  // Tries to match an 8x8 byte shuffle to an equivalent 64x1 shuffle. If
+  // successful, it writes the 64x1 shuffle word indices. E.g.
+  // [8 9 10 11 12 13 14 15] == [1]
+  static bool TryMatch64x1Shuffle(const uint8_t* shuffle, uint8_t* shuffle64x1);
+
   // Tries to match an 8x16 byte shuffle to an equivalent 64x2 shuffle. If
   // successful, it writes the 64x2 shuffle word indices. E.g.
   // [8 9 10 11 12 13 14 15 0 1 2 3 4 5 6 7] == [1 0]
   static bool TryMatch64x2Shuffle(const uint8_t* shuffle, uint8_t* shuffle64x2);
+
+  // Tries to match an 8x4 byte shuffle to an equivalent 32x1 shuffle. If
+  // successful, it writes the 32x1 shuffle word indices. E.g.
+  // [8 9 10 11] == [2]
+  static bool TryMatch32x1Shuffle(const uint8_t* shuffle, uint8_t* shuffle32x1);
+
+  // Tries to match an 8x8 byte shuffle to an equivalent 32x2 shuffle. If
+  // successful, it writes the 32x2 shuffle word indices. E.g.
+  // [0 1 2 3 8 9 10 11] == [0 2]
+  static bool TryMatch32x2Shuffle(const uint8_t* shuffle, uint8_t* shuffle32x2);
 
   // Tries to match an 8x16 byte shuffle to an equivalent 32x4 shuffle. If
   // successful, it writes the 32x4 shuffle word indices. E.g.
@@ -150,6 +165,21 @@ class V8_EXPORT_PRIVATE SimdShuffle {
   // [0 1 2 3 8 9 10 11 4 5 6 7 12 13 14 15 16 17 18 19 24 25 26 27 20 21 22 23
   //  28 29 30 31 == [0 2 1 3 4 6 5 7]
   static bool TryMatch32x8Shuffle(const uint8_t* shuffle, uint8_t* shuffle32x8);
+
+  // Tries to match an 8x2 byte shuffle to an equivalent 16x1 shuffle. If
+  // successful, it writes the 16x1 shuffle word indices. E.g.
+  // [8 9] == [4]
+  static bool TryMatch16x1Shuffle(const uint8_t* shuffle, uint8_t* shuffle16x1);
+
+  // Tries to match an 8x4 byte shuffle to an equivalent 16x2 shuffle. If
+  // successful, it writes the 16x2 shuffle word indices. E.g.
+  // [0 1 8 9] == [0 4]
+  static bool TryMatch16x2Shuffle(const uint8_t* shuffle, uint8_t* shuffle16x2);
+
+  // Tries to match an 8x8 byte shuffle to an equivalent 16x4 shuffle. If
+  // successful, it writes the 16x4 shuffle word indices. E.g.
+  // [0 1 8 9 2 3 10 11] == [0 4 1 5]
+  static bool TryMatch16x4Shuffle(const uint8_t* shuffle, uint8_t* shuffle16x4);
 
   // Tries to match an 8x16 byte shuffle to an equivalent 16x8 shuffle. If
   // successful, it writes the 16x8 shuffle word indices. E.g.
@@ -226,8 +256,8 @@ class V8_EXPORT_PRIVATE SimdShuffle {
     kS64x2Odd,
     kS64x2ReverseBytes,
     kS64x2Reverse,
-    kS32x4InterleaveEven,
-    kS32x4InterleaveOdd,
+    kS32x4Even,
+    kS32x4Odd,
     kS32x4InterleaveLowHalves,
     kS32x4InterleaveHighHalves,
     kS32x4ReverseBytes,
@@ -235,8 +265,8 @@ class V8_EXPORT_PRIVATE SimdShuffle {
     kS32x2Reverse,
     kS32x4TransposeEven,
     kS32x4TransposeOdd,
-    kS16x8InterleaveEven,
-    kS16x8InterleaveOdd,
+    kS16x8Even,
+    kS16x8Odd,
     kS16x8InterleaveLowHalves,
     kS16x8InterleaveHighHalves,
     kS16x8ReverseBytes,
@@ -244,8 +274,8 @@ class V8_EXPORT_PRIVATE SimdShuffle {
     kS16x4Reverse,
     kS16x8TransposeEven,
     kS16x8TransposeOdd,
-    kS8x16InterleaveEven,
-    kS8x16InterleaveOdd,
+    kS8x16Even,
+    kS8x16Odd,
     kS8x16InterleaveLowHalves,
     kS8x16InterleaveHighHalves,
     kS8x16TransposeEven,

@@ -106,10 +106,14 @@ LensOverlayUntrustedUI::LensOverlayUntrustedUI(content::WebUI* web_ui)
       IDS_LENS_OVERLAY_TARGET_LANGUAGE_ACCESSIBILITY_LABEL);
   html_source->AddLocalizedString(
       "searchboxGhostLoaderHintTextPrimaryDefault",
-      IDS_GOOGLE_SEARCH_BOX_CONTEXTUAL_LOADING_HINT_PRIMARY);
+      lens::features::ShouldUseAltLoadingHintWeb()
+          ? IDS_GOOGLE_SEARCH_BOX_CONTEXTUAL_LOADING_HINT_PRIMARY_ALT
+          : IDS_GOOGLE_SEARCH_BOX_CONTEXTUAL_LOADING_HINT_PRIMARY);
   html_source->AddLocalizedString(
       "searchboxGhostLoaderHintTextPrimaryPdf",
-      IDS_GOOGLE_SEARCH_BOX_CONTEXTUAL_LOADING_HINT_PRIMARY_PDF);
+      lens::features::ShouldUseAltLoadingHintPdf()
+          ? IDS_GOOGLE_SEARCH_BOX_CONTEXTUAL_LOADING_HINT_PRIMARY_ALT
+          : IDS_GOOGLE_SEARCH_BOX_CONTEXTUAL_LOADING_HINT_PRIMARY_PDF);
   html_source->AddLocalizedString(
       "searchboxGhostLoaderHintTextSecondary",
       IDS_GOOGLE_SEARCH_BOX_CONTEXTUAL_LOADING_HINT_SECONDARY);
@@ -180,8 +184,16 @@ LensOverlayUntrustedUI::LensOverlayUntrustedUI(content::WebUI* web_ui)
                           lens::features::IsLensOverlaySaveAsImageEnabled());
   html_source->AddInteger(
       "textReceivedTimeout",
-      lens::features::
-          GetLensOverlayImageContextMenuActionsTextReceivedTimeout());
+      lens::features::IsSimplifiedSelectionEnabled()
+          ? lens::features::GetSimplifiedSelectionTextReceivedTimeout()
+          : lens::features::
+                GetLensOverlayImageContextMenuActionsTextReceivedTimeout());
+  html_source->AddInteger("copyTextTimeout",
+                          lens::features::GetCopyTextReceivedTimeout());
+  html_source->AddInteger("translateTextTimeout",
+                          lens::features::GetTranslateTextReceivedTimeout());
+  html_source->AddBoolean("shouldCopyAsImage",
+                          lens::features::GetShouldCopyAsImage());
   html_source->AddBoolean(
       "darkMode",
       lens::LensOverlayShouldUseDarkMode(
@@ -189,6 +201,9 @@ LensOverlayUntrustedUI::LensOverlayUntrustedUI(content::WebUI* web_ui)
   html_source->AddBoolean(
       "enableOverlayContextualSearchbox",
       lens::features::IsLensOverlayContextualSearchboxEnabled());
+  html_source->AddBoolean(
+      "enableGhostLoader",
+      lens::features::EnableContextualSearchboxGhostLoader());
   html_source->AddBoolean(
       "showContextualSearchboxLoadingState",
       lens::features::ShowContextualSearchboxGhostLoaderLoadingState());
@@ -208,6 +223,10 @@ LensOverlayUntrustedUI::LensOverlayUntrustedUI(content::WebUI* web_ui)
   html_source->AddInteger(
       "recentLanguagesAmount",
       lens::features::GetLensOverlayTranslateRecentLanguagesAmount());
+  html_source->AddBoolean("simplifiedSelectionEnabled",
+                          lens::features::IsSimplifiedSelectionEnabled());
+  html_source->AddBoolean("autoFocusSearchbox",
+                          lens::features::ShouldAutoFocusSearchbox());
 
   LensOverlayController& controller = GetLensOverlayController();
   html_source->AddDouble("invocationTime",

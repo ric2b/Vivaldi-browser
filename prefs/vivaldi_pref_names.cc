@@ -75,6 +75,10 @@ const char kVivaldiNoteFolderDefault[] = "vivaldi.note.default_folder";
 const char kVivaldiNotesSortingMode[] = "vivaldi.notes.sorting_mode";
 const char kVivaldiNotesSortingOrder[] = "vivaldi.notes.sorting_order";
 
+// Show the markdown editor by default when editing notes
+const char kVivaldiNotesShowMarkdownEditor[] =
+    "vivaldi.notes.show_markdown_editor";
+
 // Setting for folder visiblity on bookmark folder page
 const char kVivaldiBookmarkFoldersViewMode[] =
     "vivaldi.bookmark_folders.view_mode";
@@ -115,6 +119,7 @@ const char kVivaldiNewTabSetting[] = "vivaldi.tabs.newtab.setting";
 // General Settings
 const char kVivaldiHomepageURL[] = "vivaldi.general.homepage.url";
 const char kVivaldiHomepageEnabled[] = "vivaldi.general.homepage.enabled";
+const char kVivaldiBackgroundAudioEnabled[] = "vivaldi.general.backgroundaudio.enabled";
 
 // Apearance
 const char kVivaldiAppearanceMode[] = "vivaldi.appearance.selected.mode";
@@ -139,6 +144,8 @@ const char kVivaldiStartPageShowSpeedDials[] =
     "vivaldi.start_page.show_speed_dials";
 const char kVivaldiStartPageShowCustomizeButton[] =
     "vivaldi.start_page.show_customize_button";
+const char kVivaldiStartPageShowAddButton[] =
+    "vivaldi.start_page.show_add_button";
 const char kVivaldiStartpagePortraitImage[] =
     "vivaldi.appearance.startpage.image";
 const char kVivaldiStartpageLandscapeImage[] =

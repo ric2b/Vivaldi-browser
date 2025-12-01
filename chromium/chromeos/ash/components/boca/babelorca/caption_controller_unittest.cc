@@ -10,13 +10,13 @@
 #include <utility>
 
 #include "base/values.h"
-#include "chromeos/ash/components/boca/babelorca/babel_orca_caption_bubble_settings.h"
+#include "chromeos/ash/components/boca/babelorca/caption_bubble_settings_impl.h"
 #include "chromeos/ash/components/boca/babelorca/fakes/fake_caption_controller_delegate.h"
+#include "chromeos/ash/components/boca/babelorca/testing_utils.h"
 #include "components/live_caption/caption_bubble_context.h"
 #include "components/live_caption/caption_bubble_controller.h"
 #include "components/live_caption/pref_names.h"
 #include "components/prefs/pref_registry_simple.h"
-#include "components/prefs/pref_service.h"
 #include "components/prefs/testing_pref_service.h"
 #include "media/mojo/mojom/speech_recognition_result.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -27,33 +27,6 @@ namespace ash::babelorca {
 namespace {
 
 const std::string kApplicationLocale = "en-US";
-
-const std::string kCaptionsTextSize = "20%";
-const std::string kCaptionsTextFont = "aerial";
-const std::string kCaptionsTextColor = "255,99,71";
-const std::string kCaptionsBackgroundColor = "90,255,50";
-const std::string kCaptionsTextShadow = "10px";
-
-constexpr int kCaptionsTextOpacity = 50;
-constexpr int kCaptionsBackgroundOpacity = 30;
-
-void RegisterPrefs(TestingPrefServiceSimple* pref_service) {
-  pref_service->registry()->RegisterStringPref(
-      prefs::kAccessibilityCaptionsTextSize, kCaptionsTextSize);
-  pref_service->registry()->RegisterStringPref(
-      prefs::kAccessibilityCaptionsTextFont, kCaptionsTextFont);
-  pref_service->registry()->RegisterStringPref(
-      prefs::kAccessibilityCaptionsTextColor, kCaptionsTextColor);
-  pref_service->registry()->RegisterIntegerPref(
-      prefs::kAccessibilityCaptionsTextOpacity, kCaptionsTextOpacity);
-  pref_service->registry()->RegisterStringPref(
-      prefs::kAccessibilityCaptionsBackgroundColor, kCaptionsBackgroundColor);
-  pref_service->registry()->RegisterStringPref(
-      prefs::kAccessibilityCaptionsTextShadow, kCaptionsTextShadow);
-  pref_service->registry()->RegisterIntegerPref(
-      prefs::kAccessibilityCaptionsBackgroundOpacity,
-      kCaptionsBackgroundOpacity);
-}
 
 void VerifyStyle(const ui::CaptionStyle& style,
                  const std::string& text_size = kCaptionsTextSize) {
@@ -72,7 +45,7 @@ void VerifyStyle(const ui::CaptionStyle& style,
 
 TEST(CaptionControllerTest, SetStyleOnStartLiveCaption) {
   TestingPrefServiceSimple pref_service;
-  RegisterPrefs(&pref_service);
+  RegisterPrefsForTesting(&pref_service);
   auto delegate = std::make_unique<FakeCaptionControllerDelegate>();
   auto* delegate_ptr = delegate.get();
   CaptionController caption_controller(
@@ -88,7 +61,7 @@ TEST(CaptionControllerTest, SetStyleOnStartLiveCaption) {
 
 TEST(CaptionControllerTest, DispatchBeforeStartLiveCaption) {
   TestingPrefServiceSimple pref_service;
-  RegisterPrefs(&pref_service);
+  RegisterPrefsForTesting(&pref_service);
   auto delegate = std::make_unique<FakeCaptionControllerDelegate>();
   auto* delegate_ptr = delegate.get();
   CaptionController caption_controller(
@@ -105,7 +78,7 @@ TEST(CaptionControllerTest, DispatchBeforeStartLiveCaption) {
 
 TEST(CaptionControllerTest, DispatchTranscription) {
   TestingPrefServiceSimple pref_service;
-  RegisterPrefs(&pref_service);
+  RegisterPrefsForTesting(&pref_service);
   auto delegate = std::make_unique<FakeCaptionControllerDelegate>();
   auto* delegate_ptr = delegate.get();
   CaptionController caption_controller(
@@ -124,7 +97,7 @@ TEST(CaptionControllerTest, DispatchTranscription) {
 
 TEST(CaptionControllerTest, DispatchAfterStopLiveCaption) {
   TestingPrefServiceSimple pref_service;
-  RegisterPrefs(&pref_service);
+  RegisterPrefsForTesting(&pref_service);
   auto delegate = std::make_unique<FakeCaptionControllerDelegate>();
   auto* delegate_ptr = delegate.get();
   CaptionController caption_controller(
@@ -140,23 +113,23 @@ TEST(CaptionControllerTest, DispatchAfterStopLiveCaption) {
   EXPECT_EQ(delegate_ptr->GetCreateBubbleControllerCount(), 1u);
 }
 
-TEST(CaptionControllerTest, OnAudioStreamEndBeforeStart) {
+TEST(CaptionControllerTest, OnLanguageIdentificationEventBeforeStart) {
   TestingPrefServiceSimple pref_service;
-  RegisterPrefs(&pref_service);
+  RegisterPrefsForTesting(&pref_service);
   auto delegate = std::make_unique<FakeCaptionControllerDelegate>();
   auto* delegate_ptr = delegate.get();
   CaptionController caption_controller(
       /*caption_bubble_context=*/nullptr, &pref_service, kApplicationLocale,
       /*caption_bubble_settings=*/nullptr, std::move(delegate));
 
-  caption_controller.OnAudioStreamEnd();
+  caption_controller.OnLanguageIdentificationEvent(nullptr);
 
-  EXPECT_EQ(delegate_ptr->GetOnAudioStreamEndCount(), 0u);
+  EXPECT_EQ(delegate_ptr->GetOnLanguageIdentificationEventCount(), 0u);
 }
 
-TEST(CaptionControllerTest, OnAudioStreamEnd) {
+TEST(CaptionControllerTest, OnLanguageIdentificationEvent) {
   TestingPrefServiceSimple pref_service;
-  RegisterPrefs(&pref_service);
+  RegisterPrefsForTesting(&pref_service);
   auto delegate = std::make_unique<FakeCaptionControllerDelegate>();
   auto* delegate_ptr = delegate.get();
   CaptionController caption_controller(
@@ -164,14 +137,14 @@ TEST(CaptionControllerTest, OnAudioStreamEnd) {
       /*caption_bubble_settings=*/nullptr, std::move(delegate));
 
   caption_controller.StartLiveCaption();
-  caption_controller.OnAudioStreamEnd();
+  caption_controller.OnLanguageIdentificationEvent(nullptr);
 
-  EXPECT_EQ(delegate_ptr->GetOnAudioStreamEndCount(), 1u);
+  EXPECT_EQ(delegate_ptr->GetOnLanguageIdentificationEventCount(), 1u);
 }
 
-TEST(CaptionControllerTest, OnAudioStreamEndAfterStop) {
+TEST(CaptionControllerTest, OnLanguageIdentificationEventAfterStop) {
   TestingPrefServiceSimple pref_service;
-  RegisterPrefs(&pref_service);
+  RegisterPrefsForTesting(&pref_service);
   auto delegate = std::make_unique<FakeCaptionControllerDelegate>();
   auto* delegate_ptr = delegate.get();
   CaptionController caption_controller(
@@ -180,14 +153,14 @@ TEST(CaptionControllerTest, OnAudioStreamEndAfterStop) {
 
   caption_controller.StartLiveCaption();
   caption_controller.StopLiveCaption();
-  caption_controller.OnAudioStreamEnd();
+  caption_controller.OnLanguageIdentificationEvent(nullptr);
 
-  EXPECT_EQ(delegate_ptr->GetOnAudioStreamEndCount(), 0u);
+  EXPECT_EQ(delegate_ptr->GetOnLanguageIdentificationEventCount(), 0u);
 }
 
 TEST(CaptionControllerTest, OnCaptionStyleUpdated) {
   TestingPrefServiceSimple pref_service;
-  RegisterPrefs(&pref_service);
+  RegisterPrefsForTesting(&pref_service);
   auto delegate = std::make_unique<FakeCaptionControllerDelegate>();
   auto* delegate_ptr = delegate.get();
   CaptionController caption_controller(
@@ -206,7 +179,7 @@ TEST(CaptionControllerTest, OnCaptionStyleUpdated) {
 TEST(CaptionControllerTest, OnCaptionStylePrefChange) {
   const std::string kNewCaptionsTextSize = "50%";
   TestingPrefServiceSimple pref_service;
-  RegisterPrefs(&pref_service);
+  RegisterPrefsForTesting(&pref_service);
   auto delegate = std::make_unique<FakeCaptionControllerDelegate>();
   auto* delegate_ptr = delegate.get();
   CaptionController caption_controller(
@@ -225,7 +198,7 @@ TEST(CaptionControllerTest, OnCaptionStylePrefChange) {
 
 TEST(CaptionControllerTest, NoCaptionStyleUpdatesAfterStopLiveCaption) {
   TestingPrefServiceSimple pref_service;
-  RegisterPrefs(&pref_service);
+  RegisterPrefsForTesting(&pref_service);
   auto delegate = std::make_unique<FakeCaptionControllerDelegate>();
   auto* delegate_ptr = delegate.get();
   CaptionController caption_controller(
@@ -242,7 +215,7 @@ TEST(CaptionControllerTest, NoCaptionStyleUpdatesAfterStopLiveCaption) {
 
 TEST(CaptionControllerTest, DispatchTranscriptionFailed) {
   TestingPrefServiceSimple pref_service;
-  RegisterPrefs(&pref_service);
+  RegisterPrefsForTesting(&pref_service);
   auto delegate = std::make_unique<FakeCaptionControllerDelegate>();
   auto* delegate_ptr = delegate.get();
   CaptionController caption_controller(
@@ -255,10 +228,9 @@ TEST(CaptionControllerTest, DispatchTranscriptionFailed) {
   bool success = caption_controller.DispatchTranscription(transcript);
 
   EXPECT_FALSE(success);
-  EXPECT_EQ(delegate_ptr->GetCreateBubbleControllerCount(), 2u);
-  ASSERT_EQ(delegate_ptr->GetTranscriptions().size(), 2u);
+  EXPECT_EQ(delegate_ptr->GetCreateBubbleControllerCount(), 1u);
+  ASSERT_EQ(delegate_ptr->GetTranscriptions().size(), 1u);
   EXPECT_EQ(delegate_ptr->GetTranscriptions().at(0), transcript);
-  EXPECT_EQ(delegate_ptr->GetTranscriptions().at(1), transcript);
 }
 
 }  // namespace

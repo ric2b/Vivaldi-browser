@@ -315,11 +315,6 @@ void RecordSignoutConfirmationFromDataLossAlert(
   }
   base::UmaHistogramBoolean(histogram, signout_confirmed);
 }
-
-void RecordSignoutForceClearDataChoice(bool force_clear_data) {
-  base::UmaHistogramBoolean("Signin.UserRequestedWipeDataOnSignout",
-                            force_clear_data);
-}
 #endif  // BUILDFLAG(IS_IOS)
 
 void RecordOpenTabCountOnSignin(signin::ConsentLevel consent_level,
@@ -467,11 +462,16 @@ void RecordSigninUserActionForAccessPoint(AccessPoint access_point) {
     case AccessPoint::kWebauthnModalDialog:
     case AccessPoint::kCctAccountMismatchNotification:
     case AccessPoint::kDriveFilePickerIos:
+    case AccessPoint::kHistoryPage:
       NOTREACHED() << "Access point " << static_cast<int>(access_point)
                    << " is not supposed to log signin user actions.";
-    case AccessPoint::kCollaborationTabGroup:
-      base::RecordAction(
-          base::UserMetricsAction("Signin_Signin_FromCollaborationTabGroup"));
+    case AccessPoint::kCollaborationShareTabGroup:
+      base::RecordAction(base::UserMetricsAction(
+          "Signin_Signin_FromCollaborationShareTabGroup"));
+      break;
+    case AccessPoint::kCollaborationJoinTabGroup:
+      base::RecordAction(base::UserMetricsAction(
+          "Signin_Signin_FromCollaborationJoinTabGroup"));
       break;
     case AccessPoint::kSafetyCheck:
       VLOG(1) << "Signin_Signin_From* user action is not recorded "
@@ -577,14 +577,6 @@ void RecordSigninUserActionForAccessPoint(AccessPoint access_point) {
       base::RecordAction(
           base::UserMetricsAction("Signin_Signin_FromGlicLaunchButton"));
       break;
-  }
-}
-
-void RecordSignoutUserAction(bool force_clear_data) {
-  if (force_clear_data) {
-    base::RecordAction(base::UserMetricsAction("Signin_SignoutClearData"));
-  } else {
-    base::RecordAction(base::UserMetricsAction("Signin_Signout"));
   }
 }
 
@@ -750,8 +742,10 @@ void RecordSigninImpressionUserActionForAccessPoint(AccessPoint access_point) {
     case AccessPoint::kAccountMenuFailedSwitch:
     case AccessPoint::kCctAccountMismatchNotification:
     case AccessPoint::kDriveFilePickerIos:
-    case AccessPoint::kCollaborationTabGroup:
+    case AccessPoint::kCollaborationShareTabGroup:
     case AccessPoint::kGlicLaunchButton:
+    case AccessPoint::kHistoryPage:
+    case AccessPoint::kCollaborationJoinTabGroup:
       NOTREACHED() << "Signin_Impression_From* user actions are not recorded "
                       "for access point "
                    << static_cast<int>(access_point);

@@ -26,7 +26,7 @@ const char kLocalTracesTableName[] = "local_traces";
 constexpr int kCurrentVersionNumber = 5;
 
 ClientTraceReport GetReportFromStatement(sql::Statement& statement) {
-  auto trace_id = base::Token::FromString(statement.ColumnString(0));
+  auto trace_id = base::Token::FromString(statement.ColumnStringView(0));
   CHECK(trace_id.has_value());
 
   ClientTraceReport client_report;
@@ -61,20 +61,21 @@ ClientTraceReport GetReportFromStatement(sql::Statement& statement) {
 // `trace_content` The serialized trace content string
 // `system_profile` The serialized system profile string
 // `file_size` The size of trace in bytes.
-constexpr char kLocalTracesTableSql[] = R"sql(
-  CREATE TABLE IF NOT EXISTS local_traces(
-    uuid TEXT PRIMARY KEY NOT NULL,
-    creation_time DATETIME NOT NULL,
-    scenario_name TEXT NOT NULL,
-    upload_rule_name TEXT NOT NULL,
-    upload_rule_value INT NULL,
-    state INT NOT NULL,
-    upload_time DATETIME NULL,
-    skip_reason INT NOT NULL,
-    trace_content BLOB NULL,
-    system_profile BLOB NULL,
-    file_size INTEGER NOT NULL)
-)sql";
+constexpr char kLocalTracesTableSql[] =
+    // clang-format off
+  "CREATE TABLE IF NOT EXISTS local_traces("
+    "uuid TEXT PRIMARY KEY NOT NULL,"
+    "creation_time DATETIME NOT NULL,"
+    "scenario_name TEXT NOT NULL,"
+    "upload_rule_name TEXT NOT NULL,"
+    "upload_rule_value INT NULL,"
+    "state INT NOT NULL,"
+    "upload_time DATETIME NULL,"
+    "skip_reason INT NOT NULL,"
+    "trace_content BLOB NULL,"
+    "system_profile BLOB NULL,"
+    "file_size INTEGER NOT NULL)";
+// clang-format on
 
 }  // namespace
 
@@ -539,7 +540,8 @@ TraceReportDatabase::GetNextReportPendingUpload() {
 }
 
 std::optional<size_t> TraceReportDatabase::UploadCountSince(
-    std::string scenario_name,
+    const std::string& scenario_name,
+    const std::string& upload_rule_name,
     base::Time since) {
   if (!is_initialized()) {
     return std::nullopt;
@@ -547,12 +549,13 @@ std::optional<size_t> TraceReportDatabase::UploadCountSince(
 
   sql::Statement statement(database_.GetCachedStatement(SQL_FROM_HERE, R"sql(
       SELECT COUNT(uuid) FROM local_traces
-      WHERE scenario_name = ? AND creation_time > ?
+      WHERE scenario_name = ? AND upload_rule_name = ? AND creation_time > ?
       AND skip_reason=?
     )sql"));
   statement.BindString(0, scenario_name);
-  statement.BindTime(1, since);
-  statement.BindInt(2, static_cast<int>(SkipUploadReason::kNoSkip));
+  statement.BindString(1, upload_rule_name);
+  statement.BindTime(2, since);
+  statement.BindInt(3, static_cast<int>(SkipUploadReason::kNoSkip));
   CHECK(statement.is_valid());
 
   while (statement.Step()) {

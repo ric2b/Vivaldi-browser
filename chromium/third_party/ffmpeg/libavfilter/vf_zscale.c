@@ -781,7 +781,7 @@ static int filter_frame(AVFilterLink *link, AVFrame *in)
     const AVPixFmtDescriptor *desc = av_pix_fmt_desc_get(link->format);
     const AVPixFmtDescriptor *odesc = av_pix_fmt_desc_get(outlink->format);
     char buf[32];
-    int ret = 0;
+    int ret = 0, changed = 0;
     AVFrame *out = NULL;
     ThreadData td;
 
@@ -874,6 +874,12 @@ static int filter_frame(AVFilterLink *link, AVFrame *in)
                   (int64_t)in->sample_aspect_ratio.num * outlink->h * link->w,
                   (int64_t)in->sample_aspect_ratio.den * outlink->w * link->h,
                   INT_MAX);
+
+        if (out->width != in->width || out->height != in->height)
+            changed |= AV_SIDE_DATA_PROP_SIZE_DEPENDENT;
+        if (out->color_trc != in->color_trc || out->color_primaries != in->color_primaries)
+            changed |= AV_SIDE_DATA_PROP_COLOR_DEPENDENT;
+        av_frame_side_data_remove_by_props(&out->side_data, &out->nb_side_data, changed);
 
         td.in = in;
         td.out = out;
@@ -1124,16 +1130,16 @@ static const AVFilterPad avfilter_vf_zscale_outputs[] = {
     },
 };
 
-const AVFilter ff_vf_zscale = {
-    .name            = "zscale",
-    .description     = NULL_IF_CONFIG_SMALL("Apply resizing, colorspace and bit depth conversion."),
+const FFFilter ff_vf_zscale = {
+    .p.name          = "zscale",
+    .p.description   = NULL_IF_CONFIG_SMALL("Apply resizing, colorspace and bit depth conversion."),
+    .p.priv_class    = &zscale_class,
+    .p.flags         = AVFILTER_FLAG_SLICE_THREADS,
     .init            = init,
     .priv_size       = sizeof(ZScaleContext),
-    .priv_class      = &zscale_class,
     .uninit          = uninit,
     FILTER_INPUTS(avfilter_vf_zscale_inputs),
     FILTER_OUTPUTS(avfilter_vf_zscale_outputs),
     FILTER_QUERY_FUNC2(query_formats),
     .process_command = process_command,
-    .flags           = AVFILTER_FLAG_SLICE_THREADS,
 };

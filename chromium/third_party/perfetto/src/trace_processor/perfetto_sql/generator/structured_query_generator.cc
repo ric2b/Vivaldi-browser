@@ -19,6 +19,7 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <memory>
 #include <optional>
 #include <string>
@@ -68,17 +69,17 @@ struct QueryState {
   std::string sql;
 };
 
-using SharedQuery = StructuredQueryGenerator::SharedQuery;
-using SharedQueryProto = StructuredQueryGenerator::SharedQueryProto;
+using Query = StructuredQueryGenerator::Query;
+using QueryProto = StructuredQueryGenerator::QueryProto;
 
 class GeneratorImpl {
  public:
-  GeneratorImpl(base::FlatHashMap<std::string, SharedQueryProto>& shared_protos,
-                std::vector<SharedQuery>& shared,
+  GeneratorImpl(base::FlatHashMap<std::string, QueryProto>& protos,
+                std::vector<Query>& queries,
                 base::FlatHashMap<std::string, std::nullptr_t>& modules,
                 std::vector<std::string>& preambles)
-      : shared_queries_protos_(shared_protos),
-        shared_queries_(shared),
+      : query_protos_(protos),
+        queries_(queries),
         referenced_modules_(modules),
         preambles_(preambles) {}
 
@@ -113,7 +114,7 @@ class GeneratorImpl {
   static base::StatusOr<std::string> SelectColumnsAggregates(
       RepeatedString group_by,
       RepeatedProto aggregates,
-      RepeatedProto select_columns);
+      RepeatedProto select_cols);
   static base::StatusOr<std::string> SelectColumnsNoAggregates(
       RepeatedProto select_columns);
 
@@ -127,8 +128,8 @@ class GeneratorImpl {
   // Index of the current query we are processing in the `state_` vector.
   size_t state_index_ = 0;
   std::vector<QueryState> state_;
-  base::FlatHashMap<std::string, SharedQueryProto>& shared_queries_protos_;
-  std::vector<SharedQuery>& shared_queries_;
+  base::FlatHashMap<std::string, QueryProto>& query_protos_;
+  std::vector<Query>& queries_;
   base::FlatHashMap<std::string, std::nullptr_t>& referenced_modules_;
   std::vector<std::string>& preambles_;
 };
@@ -150,8 +151,8 @@ base::StatusOr<std::string> GeneratorImpl::Generate(
   for (size_t i = 0; i < state_.size(); ++i) {
     QueryState& state = state_[state_.size() - i - 1];
     if (state.type == QueryType::kShared) {
-      shared_queries_.emplace_back(SharedQuery{state.id_from_proto.value(),
-                                               state.table_name, state.sql});
+      queries_.emplace_back(
+          Query{state.id_from_proto.value(), state.table_name, state.sql});
       continue;
     }
     sql += state.table_name + " AS (" + state.sql + ")";
@@ -250,11 +251,11 @@ base::StatusOr<std::string> GeneratorImpl::SqlSource(
 
 base::StatusOr<std::string> GeneratorImpl::SimpleSlices(
     const StructuredQuery::SimpleSlices::Decoder& slices) {
-  referenced_modules_.Insert("slices.slices", nullptr);
+  referenced_modules_.Insert("slices.with_context", nullptr);
 
   std::string sql =
       "SELECT id, ts, dur, name AS slice_name, thread_name, process_name, "
-      "track_name FROM _slice_with_thread_and_process_info";
+      "track_name FROM thread_or_process_slice";
 
   std::vector<std::string> conditions;
   if (slices.has_slice_name_glob()) {
@@ -325,13 +326,13 @@ base::StatusOr<std::string> GeneratorImpl::IntervalIntersect(
 base::StatusOr<std::string> GeneratorImpl::ReferencedSharedQuery(
     protozero::ConstChars raw_id) {
   std::string id = raw_id.ToStdString();
-  auto* it = shared_queries_protos_.Find(id);
+  auto* it = query_protos_.Find(id);
   if (!it) {
     return base::ErrStatus("Shared query with id '%s' not found", id.c_str());
   }
-  auto sq = std::find_if(shared_queries_.begin(), shared_queries_.end(),
-                         [&](const SharedQuery& sq) { return id == sq.id; });
-  if (sq != shared_queries_.end()) {
+  auto sq = std::find_if(queries_.begin(), queries_.end(),
+                         [&](const Query& sq) { return id == sq.id; });
+  if (sq != queries_.end()) {
     return sq->table_name;
   }
   state_.emplace_back(QueryType::kShared,
@@ -406,28 +407,31 @@ base::StatusOr<std::string> GeneratorImpl::GroupBy(
 }
 
 base::StatusOr<std::string> GeneratorImpl::SelectColumnsAggregates(
-    protozero::RepeatedFieldIterator<protozero::ConstChars> group_by,
+    protozero::RepeatedFieldIterator<protozero::ConstChars> group_by_cols,
     protozero::RepeatedFieldIterator<protozero::ConstBytes> aggregates,
-    protozero::RepeatedFieldIterator<protozero::ConstBytes> select_columns) {
-  base::FlatHashMap<std::string, std::string> output;
-  if (select_columns) {
-    for (auto it = select_columns; it; ++it) {
+    protozero::RepeatedFieldIterator<protozero::ConstBytes> select_cols) {
+  base::FlatHashMap<std::string, std::optional<std::string>> output;
+  if (select_cols) {
+    for (auto it = select_cols; it; ++it) {
       StructuredQuery::SelectColumn::Decoder select(*it);
+      std::string selected_col_name = select.column_name().ToStdString();
       output.Insert(select.column_name().ToStdString(),
-                    select.alias().ToStdString());
+                    select.has_alias()
+                        ? std::make_optional(select.alias().ToStdString())
+                        : std::nullopt);
     }
   } else {
-    for (auto it = group_by; it; ++it) {
-      output.Insert((*it).ToStdString(), (*it).ToStdString());
+    for (auto it = group_by_cols; it; ++it) {
+      output.Insert((*it).ToStdString(), std::nullopt);
     }
     for (auto it = aggregates; it; ++it) {
       StructuredQuery::GroupBy::Aggregate::Decoder aggregate(*it);
-      output.Insert(aggregate.result_column_name().ToStdString(),
-                    aggregate.result_column_name().ToStdString());
+      output.Insert(aggregate.result_column_name().ToStdString(), std::nullopt);
     }
   }
+
   std::string sql;
-  auto itg = group_by;
+  auto itg = group_by_cols;
   for (; itg; ++itg) {
     std::string column_name = (*itg).ToStdString();
     auto* o = output.Find(column_name);
@@ -437,12 +441,17 @@ base::StatusOr<std::string> GeneratorImpl::SelectColumnsAggregates(
     if (!sql.empty()) {
       sql += ", ";
     }
-    sql += (*itg).ToStdString() + " AS " + *o;
+    if (o->has_value()) {
+      sql += column_name + " AS " + o->value();
+    } else {
+      sql += column_name;
+    }
   }
+
   for (auto ita = aggregates; ita; ++ita) {
     StructuredQuery::GroupBy::Aggregate::Decoder aggregate(*ita);
-    std::string column_name = aggregate.result_column_name().ToStdString();
-    auto* o = output.Find(column_name);
+    std::string res_column_name = aggregate.result_column_name().ToStdString();
+    auto* o = output.Find(res_column_name);
     if (!o) {
       continue;
     }
@@ -454,7 +463,11 @@ base::StatusOr<std::string> GeneratorImpl::SelectColumnsAggregates(
         AggregateToString(static_cast<StructuredQuery::GroupBy::Aggregate::Op>(
                               aggregate.op()),
                           aggregate.column_name()));
-    sql += agg + " AS " + column_name;
+    if (o->has_value()) {
+      sql += agg + " AS " + o->value();
+    } else {
+      sql += agg + " AS " + res_column_name;
+    }
   }
   return sql;
 }
@@ -538,15 +551,24 @@ base::StatusOr<std::string> GeneratorImpl::AggregateToString(
 base::StatusOr<std::string> StructuredQueryGenerator::Generate(
     const uint8_t* data,
     size_t size) {
-  GeneratorImpl impl(shared_queries_protos_, referenced_shared_queries_,
-                     referenced_modules_, preambles_);
+  GeneratorImpl impl(query_protos_, referenced_queries_, referenced_modules_,
+                     preambles_);
   ASSIGN_OR_RETURN(std::string sql,
                    impl.Generate(protozero::ConstBytes{data, size}));
   return sql;
 }
 
-base::Status StructuredQueryGenerator::AddSharedQuery(const uint8_t* data,
-                                                      size_t size) {
+base::StatusOr<std::string> StructuredQueryGenerator::GenerateById(
+    const std::string& id) {
+  auto* ptr = query_protos_.Find(id);
+  if (!ptr) {
+    return base::ErrStatus("Query with id %s not found", id.c_str());
+  }
+  return Generate(ptr->data.get(), ptr->size);
+}
+
+base::Status StructuredQueryGenerator::AddQuery(const uint8_t* data,
+                                                size_t size) {
   protozero::ProtoDecoder decoder(data, size);
   auto field = decoder.FindField(
       protos::pbzero::PerfettoSqlStructuredQuery::kIdFieldNumber);
@@ -557,8 +579,9 @@ base::Status StructuredQueryGenerator::AddSharedQuery(const uint8_t* data,
   }
   std::string id = field.as_std_string();
   auto ptr = std::make_unique<uint8_t[]>(size);
+  memcpy(ptr.get(), data, size);
   auto [it, inserted] =
-      shared_queries_protos_.Insert(id, SharedQueryProto{std::move(ptr), size});
+      query_protos_.Insert(id, QueryProto{std::move(ptr), size});
   if (!inserted) {
     return base::ErrStatus("Multiple shared queries specified with the ids %s",
                            id.c_str());

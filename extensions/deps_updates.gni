@@ -59,7 +59,8 @@ update_target("//components/guest_view/browser:browser") {
     "//chrome/browser/extensions:cws_item_service_proto",
     "//chrome/browser/resource_coordinator:mojo_bindings",
     "//extensions/buildflags",
-    "//vivaldi/extensions/helper:app_helper"
+    "//vivaldi/extensions/helper:app_helper",
+    "//vivaldi/extensions:vivaldi_extension_component_wrapper",
   ]
 }
 

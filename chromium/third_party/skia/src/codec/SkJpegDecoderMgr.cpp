@@ -15,6 +15,7 @@
     #include "include/android/SkAndroidFrameworkUtils.h"
 #endif
 
+#include <jpeglib.h>
 #include <cstddef>
 #include <utility>
 
@@ -24,9 +25,11 @@ class SkStream;
  * Print information, warning, and error messages
  */
 static void print_message(const j_common_ptr info, const char caller[]) {
-    char buffer[JMSG_LENGTH_MAX];
-    info->err->format_message(info, buffer);
-    SkCodecPrintf("libjpeg error %d <%s> from %s\n", info->err->msg_code, buffer, caller);
+    [[maybe_unused]] char buffer[JMSG_LENGTH_MAX];
+    SkCodecPrintf("libjpeg error %d <%s> from %s\n",
+                  info->err->msg_code,
+                  (info->err->format_message(info, buffer), buffer),
+                  caller);
 }
 
 /*

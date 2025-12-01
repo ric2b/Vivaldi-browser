@@ -24,6 +24,10 @@ class SequencedTaskRunner;
 class Version;
 }  // namespace base
 
+namespace policy {
+enum class PolicyFetchReason;
+}  // namespace policy
+
 namespace update_client {
 class UpdateClient;
 }  // namespace update_client
@@ -42,7 +46,8 @@ class UpdateServiceImplImpl : public UpdateService {
   // Overrides for updater::UpdateService.
   void GetVersion(
       base::OnceCallback<void(const base::Version&)> callback) override;
-  void FetchPolicies(base::OnceCallback<void(int)> callback) override;
+  void FetchPolicies(policy::PolicyFetchReason reason,
+                     base::OnceCallback<void(int)> callback) override;
   void RegisterApp(const RegistrationRequest& request,
                    base::OnceCallback<void(int)> callback) override;
   void GetAppStates(
@@ -132,12 +137,6 @@ class UpdateServiceImplImpl : public UpdateService {
       const std::string& install_data,
       const std::string& install_settings,
       const std::string& language,
-      base::RepeatingCallback<void(const UpdateState&)> state_update,
-      base::OnceCallback<void(Result)> callback);
-
-  bool IsAppPolicyLoadedOK(const std::string& app_id) const;
-  void HandlePolicyLoadError(
-      const std::string& app_id,
       base::RepeatingCallback<void(const UpdateState&)> state_update,
       base::OnceCallback<void(Result)> callback);
 

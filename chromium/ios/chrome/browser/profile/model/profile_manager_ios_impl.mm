@@ -8,11 +8,13 @@
 
 #import <utility>
 
+#import "base/barrier_closure.h"
 #import "base/check.h"
 #import "base/check_deref.h"
 #import "base/feature_list.h"
 #import "base/files/file_enumerator.h"
 #import "base/files/file_path.h"
+#import "base/files/file_util.h"
 #import "base/functional/bind.h"
 #import "base/functional/callback.h"
 #import "base/metrics/histogram_functions.h"
@@ -24,6 +26,7 @@
 #import "components/prefs/scoped_user_pref_update.h"
 #import "components/signin/public/identity_manager/identity_manager.h"
 #import "ios/chrome/browser/profile/model/off_the_record_profile_ios_impl.h"
+#import "ios/chrome/browser/profile/model/profile_deleter_ios.h"
 #import "ios/chrome/browser/profile/model/profile_ios_impl.h"
 #import "ios/chrome/browser/profile_metrics/model/profile_metrics.h"
 #import "ios/chrome/browser/shared/model/prefs/pref_names.h"
@@ -155,6 +158,8 @@ ProfileManagerIOSImpl::ProfileManagerIOSImpl(PrefService* local_state,
       profile_attributes_storage_(local_state) {
   CHECK(local_state_);
   CHECK(!profile_data_dir_.empty());
+
+  profile_attributes_storage_.EnsurePersonalProfileExists();
 }
 
 ProfileManagerIOSImpl::~ProfileManagerIOSImpl() {
@@ -233,51 +238,18 @@ bool ProfileManagerIOSImpl::HasProfileWithName(std::string_view name) const {
 bool ProfileManagerIOSImpl::CanCreateProfileWithName(
     std::string_view name) const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-
-  // Cannot create a profile with the same name as an existing profile.
-  if (HasProfileWithName(name)) {
-    return false;
-  }
-
-  // Cannot create a profile with the same name as a legacy profile.
-  if (local_state_->GetDict(prefs::kLegacyProfileMap).Find(name)) {
-    return false;
-  }
-
-  // Cannot create a profile that have been marked for deletion, and currently
-  // not fully deleted yet.
-  if (IsProfileMarkedForDeletion(name)) {
-    return false;
-  }
-
-  return true;
+  return profile_attributes_storage_.CanCreateProfileWithName(name);
 }
 
 std::string ProfileManagerIOSImpl::ReserveNewProfileName() {
-  std::string profile_name;
-  do {
-    const base::Uuid uuid = base::Uuid::GenerateRandomV4();
-    profile_name = uuid.AsLowercaseString();
-  } while (!CanCreateProfileWithName(profile_name));
-
-  DCHECK(!profile_name.empty());
-  DCHECK(!HasProfileWithName(profile_name));
-  profile_attributes_storage_.AddProfile(profile_name);
-
-  return profile_name;
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  return profile_attributes_storage_.ReserveNewProfileName();
 }
 
 bool ProfileManagerIOSImpl::CanDeleteProfileWithName(
     std::string_view name) const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  if (!HasProfileWithName(name)) {
-    return false;
-  }
-  // Cannot delete the personal profile.
-  if (name == profile_attributes_storage_.GetPersonalProfileName()) {
-    return false;
-  }
-  return true;
+  return profile_attributes_storage_.CanDeleteProfileWithName(name);
 }
 
 bool ProfileManagerIOSImpl::LoadProfileAsync(
@@ -343,22 +315,36 @@ void ProfileManagerIOSImpl::UnloadProfile(std::string_view name) {
     return;
   }
 
-  ProfileInfo info = std::move(iter->second);
-  profiles_map_.erase(iter);
+  // Use std::map::extract(...) to take ownership of the node after
+  // removing it from the map. Do not use `name` from this point as
+  // it may be invalidated by the removal -- e.g. UnloadAllProfiles
+  // pass a reference to the key as a parameter. Using the node key
+  // is fine though.
+  auto node = profiles_map_.extract(iter);
+  ProfileInfo& info = node.mapped();
 
-  // If profile is loaded, notify all observers that it is unloaded.
-  if (info.is_loaded()) {
+  // If the profile is still loading, pretend that the loading failed
+  // by calling the ProfileLoadedCallbacks with nullptr.
+  if (!info.is_loaded()) {
+    for (auto& callback : info.TakeCallbacks()) {
+      std::move(callback).Run(nullptr);
+    }
+  } else {
+    // If profile is loaded, notify all observers that it is unloaded.
     ProfileIOS* profile = info.profile();
     for (auto& observer : observers_) {
       observer.OnProfileUnloaded(this, profile);
     }
-    return;
   }
 
-  // If the profile is still loading, pretend that the loading failed
-  // by calling the ProfileLoadedCallbacks with nullptr.
-  for (auto& callback : info.TakeCallbacks()) {
-    std::move(callback).Run(nullptr);
+  // If the profile has been marked for deletion, then try to delete it
+  // after notifying all observers that it has been unloaded.
+  if (IsProfileMarkedForDeletion(node.key())) {
+    profile_deleter_.DeleteProfile(
+        node.key(), profile_data_dir_,
+        base::BindOnce(&ProfileManagerIOSImpl::OnProfileDeletionComplete,
+                       weak_ptr_factory_.GetWeakPtr(), base::DoNothing(),
+                       std::string(node.key())));
   }
 }
 
@@ -371,19 +357,12 @@ void ProfileManagerIOSImpl::UnloadAllProfiles() {
 }
 
 void ProfileManagerIOSImpl::MarkProfileForDeletion(std::string_view name) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(CanDeleteProfileWithName(name));
-
-  // Use a local block to ensure that the change to the local state are
-  // committed and propagated before progressing further with marking
-  // the profile for deletion.
-  {
-    ScopedListPrefUpdate update(local_state_, prefs::kProfilesToRemove);
-    update->Append(base::Value(name));
-  }
 
   // Remove the profile from the ProfileAttributesStorageIOS to prevent
   // people iterating over all profiles from seeing it anymore.
-  profile_attributes_storage_.RemoveProfile(name);
+  profile_attributes_storage_.MarkProfileForDeletion(name);
 
   // If the profile is not loaded, nor loading, return.
   auto iter = profiles_map_.find(name);
@@ -391,31 +370,56 @@ void ProfileManagerIOSImpl::MarkProfileForDeletion(std::string_view name) {
     return;
   }
 
-  // If profile is loaded, notify all observers that it is marked for
-  // deletion.
+  // If the profile is still loading, pretend that the loading failed
+  // by calling the ProfileLoadedCallbacks with nullptr.
   ProfileInfo& info = iter->second;
-  if (info.is_loaded()) {
+  if (!info.is_loaded()) {
+    for (auto& callback : info.TakeCallbacks()) {
+      std::move(callback).Run(nullptr);
+    }
+  } else {
     ProfileIOS* profile = info.profile();
-    DCHECK(profile);
-
     for (auto& observer : observers_) {
       observer.OnProfileMarkedForPermanentDeletion(this, profile);
     }
-    return;
-  }
-
-  // If the profile is still loading, pretend that the loading failed
-  // by calling the ProfileLoadedCallbacks with nullptr.
-  for (auto& callback : info.TakeCallbacks()) {
-    std::move(callback).Run(nullptr);
   }
 }
 
 bool ProfileManagerIOSImpl::IsProfileMarkedForDeletion(
     std::string_view name) const {
-  const base::Value::List& profiles_to_remove =
-      local_state_->GetList(prefs::kProfilesToRemove);
-  return base::Contains(profiles_to_remove, name);
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  return profile_attributes_storage_.IsProfileMarkedForDeletion(name);
+}
+
+void ProfileManagerIOSImpl::PurgeProfilesMarkedForDeletion(
+    base::OnceClosure callback) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+
+  // Get the list of profiles marked for deletion, and ignore those that
+  // are already loaded or loading (their data will be deleted when they
+  // are unloaded).
+  std::set<std::string> profiles =
+      profile_attributes_storage_.GetProfilesMarkedForDeletion();
+  for (const auto& [key, _] : profiles_map_) {
+    profiles.erase(key);
+  }
+
+  // If there are no profiles to delete, the operation is complete. Post
+  // the callback on the current sequence to ensure it is always invoked
+  // asynchronously.
+  if (profiles.empty()) {
+    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+        FROM_HERE, std::move(callback));
+    return;
+  }
+
+  auto closure = base::BarrierClosure(profiles.size(), std::move(callback));
+  for (const std::string& name : profiles) {
+    profile_deleter_.DeleteProfile(
+        name, profile_data_dir_,
+        base::BindOnce(&ProfileManagerIOSImpl::OnProfileDeletionComplete,
+                       weak_ptr_factory_.GetWeakPtr(), closure, name));
+  }
 }
 
 ProfileAttributesStorageIOS*
@@ -462,13 +466,27 @@ void ProfileManagerIOSImpl::OnProfileCreationFinished(
   if (is_new_profile) {
     if (success) {
       profile_attributes_storage_.UpdateAttributesForProfileWithName(
-          name, base::BindOnce([](ProfileAttributesIOS attrs) {
+          name, base::BindOnce([](ProfileAttributesIOS& attrs) {
             attrs.ClearIsNewProfile();
-            return attrs;
           }));
     } else {
       MarkProfileForDeletion(name);
     }
+  }
+
+  // If the profile is marked for deletion, then try to delete it and
+  // return (the callback would have been called with nullptr when it
+  // was marked for deletion, so there is no need to call them again).
+  if (IsProfileMarkedForDeletion(name)) {
+    ProfileInfo info = std::move(iter->second);
+    profiles_map_.erase(iter);
+
+    profile_deleter_.DeleteProfile(
+        name, profile_data_dir_,
+        base::BindOnce(&ProfileManagerIOSImpl::OnProfileDeletionComplete,
+                       weak_ptr_factory_.GetWeakPtr(), base::DoNothing(),
+                       name));
+    return;
   }
 
   if (success) {
@@ -543,12 +561,6 @@ bool ProfileManagerIOSImpl::CreateProfileWithMode(
     if (!existing) {
       profile_attributes_storage_.AddProfile(name);
       DCHECK(HasProfileWithName(name));
-    }
-
-    // If this is the first profile ever loaded, mark it as the personal
-    // profile.
-    if (profile_attributes_storage_.GetPersonalProfileName().empty()) {
-      profile_attributes_storage_.SetPersonalProfileName(name);
     }
 
     std::tie(iter, inserted) = profiles_map_.insert(std::make_pair(
@@ -628,4 +640,16 @@ void ProfileManagerIOSImpl::DoFinalInitForServices(ProfileIOS* profile) {
   ChildAccountServiceFactory::GetForProfile(profile)->Init();
   SupervisedUserServiceFactory::GetForProfile(profile)->Init();
   ListFamilyMembersServiceFactory::GetForProfile(profile)->Init();
+}
+
+void ProfileManagerIOSImpl::OnProfileDeletionComplete(
+    base::OnceClosure closure,
+    const std::string& profile_name,
+    ProfileDeleterIOS::Result result) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  if (result == ProfileDeleterIOS::Result::kSuccess) {
+    profile_attributes_storage_.ProfileDeletionComplete(profile_name);
+  }
+
+  std::move(closure).Run();
 }

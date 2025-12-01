@@ -52,6 +52,7 @@
 #include "content/browser/renderer_host/back_forward_cache_metrics.h"
 #include "content/browser/renderer_host/browsing_context_state.h"
 #include "content/browser/renderer_host/code_cache_host_impl.h"
+#include "content/browser/renderer_host/cookie_access_observers.h"
 #include "content/browser/renderer_host/document_associated_data.h"
 #include "content/browser/renderer_host/frame_navigation_entry.h"
 #include "content/browser/renderer_host/keep_alive_handle_factory.h"
@@ -81,6 +82,7 @@
 #include "content/public/browser/back_forward_cache.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/content_browser_client.h"
+#include "content/public/browser/cookie_access_details.h"
 #include "content/public/browser/frame_tree_node_id.h"
 #include "content/public/browser/frame_type.h"
 #include "content/public/browser/global_request_id.h"
@@ -94,6 +96,7 @@
 #include "content/public/common/content_client.h"
 #include "content/public/common/extra_mojo_js_features.mojom-forward.h"
 #include "content/public/common/javascript_dialog_type.h"
+#include "media/base/picture_in_picture_events_info.h"
 #include "media/mojo/mojom/interface_factory.mojom-forward.h"
 #include "media/mojo/mojom/key_system_support.mojom-forward.h"
 #include "media/mojo/mojom/media_metrics_provider.mojom-forward.h"
@@ -107,6 +110,7 @@
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/receiver.h"
+#include "mojo/public/cpp/bindings/receiver_set.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "mojo/public/cpp/system/data_pipe.h"
 #include "net/base/isolation_info.h"
@@ -118,19 +122,20 @@
 #include "services/metrics/public/cpp/ukm_source_id.h"
 #include "services/network/public/cpp/cross_origin_embedder_policy.h"
 #include "services/network/public/cpp/cross_origin_opener_policy.h"
+#include "services/network/public/cpp/permissions_policy/permissions_policy.h"
+#include "services/network/public/cpp/permissions_policy/permissions_policy_declaration.h"
 #include "services/network/public/mojom/cookie_access_observer.mojom.h"
 #include "services/network/public/mojom/fetch_api.mojom-forward.h"
 #include "services/network/public/mojom/mdns_responder.mojom.h"
 #include "services/network/public/mojom/shared_dictionary_access_observer.mojom.h"
 #include "services/network/public/mojom/trust_token_access_observer.mojom.h"
 #include "services/network/public/mojom/url_loader_network_service_observer.mojom-forward.h"
+#include "third_party/abseil-cpp/absl/container/flat_hash_map.h"
 #include "third_party/blink/public/common/associated_interfaces/associated_interface_provider.h"
 #include "third_party/blink/public/common/frame/delegated_capability_request_token.h"
 #include "third_party/blink/public/common/frame/frame_owner_element_type.h"
 #include "third_party/blink/public/common/frame/history_user_activation_state.h"
 #include "third_party/blink/public/common/frame/user_activation_state.h"
-#include "third_party/blink/public/common/permissions_policy/permissions_policy.h"
-#include "third_party/blink/public/common/permissions_policy/permissions_policy_declaration.h"
 #include "third_party/blink/public/common/scheduler/web_scheduler_tracked_feature.h"
 #include "third_party/blink/public/common/storage_key/storage_key.h"
 #include "third_party/blink/public/common/tokens/tokens.h"
@@ -169,6 +174,7 @@
 #include "third_party/blink/public/mojom/render_accessibility.mojom.h"
 #include "third_party/blink/public/mojom/security_context/insecure_request_policy.mojom-forward.h"
 #include "third_party/blink/public/mojom/sensor/web_sensor_provider.mojom-forward.h"
+#include "third_party/blink/public/mojom/serial/serial.mojom-forward.h"
 #include "third_party/blink/public/mojom/sms/webotp_service.mojom-forward.h"
 #include "third_party/blink/public/mojom/speech/speech_synthesis.mojom-forward.h"
 #include "third_party/blink/public/mojom/webaudio/audio_context_manager.mojom-forward.h"
@@ -198,7 +204,6 @@
 #include "services/device/public/mojom/nfc.mojom.h"
 #else
 #include "third_party/blink/public/mojom/hid/hid.mojom-forward.h"
-#include "third_party/blink/public/mojom/serial/serial.mojom-forward.h"
 #endif
 
 #if BUILDFLAG(IS_CHROMEOS)
@@ -241,6 +246,7 @@ class UrgentMessageScope;
 }
 
 namespace network {
+struct ResourceRequest;
 class ResourceRequestBody;
 }  // namespace network
 
@@ -323,7 +329,6 @@ class CONTENT_EXPORT RenderFrameHostImpl
       public blink::mojom::LocalMainFrameHost,
       public ui::AXActionHandlerBase,
       public device::mojom::VibrationManagerListener,
-      public network::mojom::CookieAccessObserver,
       public network::mojom::TrustTokenAccessObserver,
       public network::mojom::SharedDictionaryAccessObserver,
       public network::mojom::DeviceBoundSessionAccessObserver,
@@ -544,8 +549,8 @@ class CONTENT_EXPORT RenderFrameHostImpl
       blink::mojom::SuddenTerminationDisablerType disabler_type) override;
   bool IsFeatureEnabled(
       network::mojom::PermissionsPolicyFeature feature) override;
-  const blink::PermissionsPolicy* GetPermissionsPolicy() override;
-  const blink::ParsedPermissionsPolicy& GetPermissionsPolicyHeader() override;
+  const network::PermissionsPolicy* GetPermissionsPolicy() override;
+  const network::ParsedPermissionsPolicy& GetPermissionsPolicyHeader() override;
   void ViewSource() override;
   void ExecuteMediaPlayerActionAtLocation(
       const gfx::Point&,
@@ -1570,6 +1575,31 @@ class CONTENT_EXPORT RenderFrameHostImpl
     CookieChangeInfo cookie_change_info_;
   };
 
+  class DeviceBoundSessionObserver
+      : public network::mojom::DeviceBoundSessionAccessObserver {
+   public:
+    DeviceBoundSessionObserver(StoragePartition* storage_partition, GURL& url);
+    ~DeviceBoundSessionObserver() override;
+    DeviceBoundSessionObserver(const DeviceBoundSessionObserver&) = delete;
+    DeviceBoundSessionObserver& operator=(const DeviceBoundSessionObserver&) =
+        delete;
+
+    bool IsTerminated() const { return is_terminated_; }
+
+   private:
+    // network::mojom::DeviceBoundSessionAccessObserver
+    void OnDeviceBoundSessionAccessed(
+        const net::device_bound_sessions::SessionAccess& access) override;
+    void Clone(
+        mojo::PendingReceiver<network::mojom::DeviceBoundSessionAccessObserver>
+            observer) override;
+
+    mojo::Receiver<network::mojom::DeviceBoundSessionAccessObserver> receiver_{
+        this};
+
+    bool is_terminated_ = false;
+  };
+
   // Indicates that a navigation is ready to commit and can be
   // handled by this RenderFrame.
   // |subresource_loader_params| is used in network service land to pass
@@ -2053,10 +2083,10 @@ class CONTENT_EXPORT RenderFrameHostImpl
 
 #if !BUILDFLAG(IS_ANDROID)
   void GetHidService(mojo::PendingReceiver<blink::mojom::HidService> receiver);
+#endif
 
   void BindSerialService(
       mojo::PendingReceiver<blink::mojom::SerialService> receiver);
-#endif
 
 #if BUILDFLAG(IS_CHROMEOS)
   void GetSmartCardService(
@@ -2718,8 +2748,10 @@ class CONTENT_EXPORT RenderFrameHostImpl
   mojo::PendingRemote<network::mojom::URLLoaderNetworkServiceObserver>
   CreateURLLoaderNetworkObserver();
 
+  // All `CookieAccessDetails` reported via the returned `PendingRemote` will
+  // have their source member set to `source`.
   mojo::PendingRemote<network::mojom::CookieAccessObserver>
-  CreateCookieAccessObserver();
+  CreateCookieAccessObserver(CookieAccessDetails::Source source);
 
   mojo::PendingRemote<network::mojom::TrustTokenAccessObserver>
   CreateTrustTokenAccessObserver();
@@ -2733,9 +2765,13 @@ class CONTENT_EXPORT RenderFrameHostImpl
   mojo::PendingRemote<network::mojom::DeviceBoundSessionAccessObserver>
   CreateDeviceBoundSessionObserver();
 
-  // network::mojom::CookieAccessObserver:
-  void OnCookiesAccessed(std::vector<network::mojom::CookieAccessDetailsPtr>
-                             details_vector) override;
+  // Emits cookie warnings/metrics and calls OnCookiesAccessed() on the
+  // RenderFrameHostDelegate, for all cookies in `details_vector`. Every
+  // `CookieAccessDetails` passed to `OnCookiesAccessed()` will have its source
+  // set to `source`.
+  void NotifyCookiesAccessed(
+      std::vector<network::mojom::CookieAccessDetailsPtr> details_vector,
+      CookieAccessDetails::Source source);
 
   // network::mojom::TrustTokenAccessObserver:
   void OnTrustTokensAccessed(
@@ -2943,8 +2979,8 @@ class CONTENT_EXPORT RenderFrameHostImpl
   // from the browser process, this may be different.
   // |is_payment_credential_creation| indicates whether MakeCredential is making
   // a payment credential.
-  // |remote_desktop_client_override| optionally contains a
-  // RemoteDesktopClientOverride client extension for the request.
+  // |remote_desktop_client_override_origin| is the origin from the
+  // RemoteDesktopClientOverride client extension for this request, if present.
   // |PerformGetAssertionWebAuthSecurityChecks| returns a security check result
   // and a boolean representing whether the given origin is cross-origin with
   // any frame in this frame's ancestor chain. This extra cross-origin bit is
@@ -2953,12 +2989,14 @@ class CONTENT_EXPORT RenderFrameHostImpl
       const std::string& relying_party_id,
       const url::Origin& effective_origin,
       bool is_payment_credential_get_assertion,
+      const std::optional<url::Origin>& remote_desktop_client_override_origin,
       base::OnceCallback<void(blink::mojom::AuthenticatorStatus, bool)>
           callback);
   void PerformMakeCredentialWebAuthSecurityChecks(
       const std::string& relying_party_id,
       const url::Origin& effective_origin,
       bool is_payment_credential_creation,
+      const std::optional<url::Origin>& remote_desktop_client_override_origin,
       base::OnceCallback<void(blink::mojom::AuthenticatorStatus, bool)>
           callback);
 #endif
@@ -3082,6 +3120,10 @@ class CONTENT_EXPORT RenderFrameHostImpl
   // Retrieves the information about the cookie changes that are observed on the
   // last committed document.
   CookieChangeListener::CookieChangeInfo GetCookieChangeInfo();
+
+  // Retrieves the whether a device bound session on the last committed
+  // document has been terminated.
+  bool IsDeviceBoundSessionTerminated();
 
   // Records metrics on sudden termination handlers found in this frame and
   // subframes.
@@ -3216,7 +3258,7 @@ class CONTENT_EXPORT RenderFrameHostImpl
   // popin and this host is not within a fenced frame (as this prevents the
   // popin from impacting partitioning).
   // See https://explainers-by-googlers.github.io/partitioned-popins/
-  bool ShouldPartitionAsPopin() const;
+  bool ShouldPartitionAsPopin() const override;
 
   void SimulateDiscardShutdownKeepAliveTimeoutForTesting();
 
@@ -3224,6 +3266,15 @@ class CONTENT_EXPORT RenderFrameHostImpl
   // with `frame_origin` (or its precursor if opaque).
   bool AncestorsAllowSameSiteNoneCookiesOverride(
       const url::Origin& frame_origin) const;
+
+  const std::map<std::string, base::WeakPtr<ServiceWorkerClient>>&
+  service_worker_clients_for_testing() const {
+    return service_worker_clients_;
+  }
+
+  // Called when a fetch keepalive request is created in this RenderFrameHost.
+  void OnKeepAliveRequestCreated(
+      const network::ResourceRequest& resource_request);
 
  protected:
   friend class RenderFrameHostFactory;
@@ -3276,7 +3327,7 @@ class CONTENT_EXPORT RenderFrameHostImpl
           keep_alive_loader_factory,
       mojo::PendingAssociatedRemote<blink::mojom::FetchLaterLoaderFactory>
           fetch_later_loader_factory,
-      const std::optional<blink::ParsedPermissionsPolicy>& permissions_policy,
+      const std::optional<network::ParsedPermissionsPolicy>& permissions_policy,
       blink::mojom::PolicyContainerPtr policy_container,
       const blink::DocumentToken& document_token,
       const base::UnguessableToken& devtools_navigation_token);
@@ -3606,10 +3657,6 @@ class CONTENT_EXPORT RenderFrameHostImpl
   // mojom::DomAutomationControllerHost:
   void DomOperationResponse(const std::string& json_string) override;
 
-  // network::mojom::CookieAccessObserver
-  void Clone(mojo::PendingReceiver<network::mojom::CookieAccessObserver>
-                 observer) override;
-
   // network::mojom::TrustTokenAccessObserver
   void Clone(mojo::PendingReceiver<network::mojom::TrustTokenAccessObserver>
                  observer) override;
@@ -3856,7 +3903,7 @@ class CONTENT_EXPORT RenderFrameHostImpl
   // Clears any existing policy and constructs a new policy for this frame,
   // based on its parent frame and the parsed `header_policy`.
   void ResetPermissionsPolicy(
-      const blink::ParsedPermissionsPolicy& header_policy);
+      const network::ParsedPermissionsPolicy& header_policy);
 
   // Runs |callback| for all the local roots immediately under this frame, i.e.
   // local roots which are under this frame and their first ancestor which is a
@@ -4078,6 +4125,8 @@ class CONTENT_EXPORT RenderFrameHostImpl
                                       bool is_same_document_navigation,
                                       NavigationRequest* navigation_request);
 
+  void UpdateOrDisableCompositorMetricRecorder() const;
+
   // Verifies that browser-calculated and renderer-calculated values for some
   // params in DidCommitProvisionalLoadParams match, to ensure we can completely
   // remove the dependence on the renderer-calculated values. Logs crash keys
@@ -4156,8 +4205,6 @@ class CONTENT_EXPORT RenderFrameHostImpl
   // Returns true if this frame requires a proxy to talk to its parent.
   // Note: Using a proxy to talk to a parent does not imply that the parent
   // is in a different process.
-  // (e.g. kProcessSharingWithStrictSiteInstances mode uses proxies for frames
-  //  that are in the same process.)
   bool RequiresProxyToParent();
 
   // Increases by one `commit_navigation_sent_counter_`.
@@ -4204,8 +4251,16 @@ class CONTENT_EXPORT RenderFrameHostImpl
 
   void LogWebFeatureForCurrentPage(blink::mojom::WebFeature feature);
 
-  base::RepeatingClosure CreateLogWebFeatureClosure(
-      blink::mojom::WebFeature feature);
+  // This runs when the storage_key check fails
+  // in `BlobURLStoreImpl::ResolveAsURLLoaderFactory` and increments the use
+  // counter.
+  void ReportBlockingCrossPartitionBlobURL(
+      const GURL& blocked_url,
+      std::optional<blink::mojom::PartitioningBlobURLInfo> info);
+
+  // This runs when fetches to cross-partition, same-origin Blob URL checks for
+  // storage access
+  bool DoesDocumentHaveStorageAccess();
 
   // For frames and main thread worklets we use a navigation-associated
   // interface and bind `receiver` to a `BlobURLStore` instance, which
@@ -4347,6 +4402,14 @@ class CONTENT_EXPORT RenderFrameHostImpl
 
   blink::mojom::PermissionStatus GetCombinedPermissionStatus(
       blink::PermissionType permission_type);
+
+  // Creates and returns a
+  // `media::PictureInPictureEventsInfo::AutoPipReasonCallback`. This callback
+  // is used to retrieve the reason for entering picture in picture
+  // automatically. Ownership is transferred to the `MediaMetricsProvider`
+  // during the provider creation.
+  media::PictureInPictureEventsInfo::AutoPipReasonCallback
+  CreateAutoPipReasonCallback();
 
   // The RenderViewHost that this RenderFrameHost is associated with.
   //
@@ -4702,7 +4765,7 @@ class CONTENT_EXPORT RenderFrameHostImpl
   // A mapping of each AXNodeID managed by `browser_accessibility_manager_`,
   // which is only unique within its renderer, to an AXUniqueId, which is unique
   // within the scope of the web contents.
-  std::map<ui::AXNodeID, ui::AXUniqueId> ax_unique_ids_;
+  absl::flat_hash_map<ui::AXNodeID, ui::AXUniqueId> ax_unique_ids_;
 
   // This is the value of the reset token expected for accessibility messages.
   // Any message with a different reset token will be dropped.
@@ -4908,10 +4971,10 @@ class CONTENT_EXPORT RenderFrameHostImpl
   // Parsed permissions policy header. It is parsed from blink, received during
   // DidCommitProvisionalLoad. This is constant during the whole lifetime of
   // this document.
-  blink::ParsedPermissionsPolicy permissions_policy_header_;
+  network::ParsedPermissionsPolicy permissions_policy_header_;
 
   // Tracks the permissions policy which has been set on this frame.
-  std::unique_ptr<blink::PermissionsPolicy> permissions_policy_;
+  std::unique_ptr<network::PermissionsPolicy> permissions_policy_;
 
   // Tracks the document policy which has been set on this frame.
   std::unique_ptr<blink::DocumentPolicy> document_policy_;
@@ -5189,15 +5252,14 @@ class CONTENT_EXPORT RenderFrameHostImpl
   // scoped lifetime and changes on cross-document navigations.
   std::optional<base::UnguessableToken> embedding_token_;
 
-  // Observers listening to cookie access notifications for the current document
-  // in this RenderFrameHost.
-  // Note: at the moment this set is not cleared when a new document is created
-  // in this RenderFrameHost. This is done because the first observer is created
-  // before the navigation actually commits and because the old routing-id based
-  // behaved in the same way as well.
-  // This problem should go away with RenderDocument in any case.
+  // Observers listening to cookie access notifications for the current
+  // document in this RenderFrameHost. Note: at the moment this set is not
+  // cleared when a new document is created in this RenderFrameHost. This is
+  // done because the first observer is created before the navigation actually
+  // commits and because the old routing-id based behaved in the same way as
+  // well. This problem should go away with RenderDocument in any case.
   // TODO(crbug.com/40615943): Remove this warning after the RD ships.
-  mojo::ReceiverSet<network::mojom::CookieAccessObserver> cookie_observers_;
+  CookieAccessObservers cookie_observers_;
 
   // Observers listening to Trust Token access notifications for the current
   // document in this RenderFrameHost. Note: at the moment this set is not
@@ -5399,6 +5461,9 @@ class CONTENT_EXPORT RenderFrameHostImpl
   // the destruction of the document. See the comments of the
   // `cookie_change_listener_` in `NavigationRequest`.
   std::unique_ptr<CookieChangeListener> cookie_change_listener_;
+
+  // Listens for changes to DeviceBoundSessions on this page.
+  std::unique_ptr<DeviceBoundSessionObserver> device_bound_session_observer_;
 
   // If true, the renderer side widget is created after the navigation is
   // committed.

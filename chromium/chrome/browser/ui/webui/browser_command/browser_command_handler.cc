@@ -6,6 +6,7 @@
 
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/user_metrics.h"
+#include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/command_updater_impl.h"
 #include "chrome/browser/enterprise/util/managed_browser_utils.h"
 #include "chrome/browser/feedback/show_feedback_page.h"
@@ -25,6 +26,7 @@
 #include "chrome/browser/user_education/tutorial_identifiers.h"
 #include "chrome/browser/user_education/user_education_service.h"
 #include "chrome/browser/user_education/user_education_service_factory.h"
+#include "chrome/common/buildflags.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/webui_url_constants.h"
 #include "components/password_manager/core/common/password_manager_features.h"
@@ -42,6 +44,13 @@
 #include "ui/base/window_open_disposition.h"
 #include "ui/base/window_open_disposition_utils.h"
 
+#if BUILDFLAG(ENABLE_GLIC)
+#include "chrome/browser/glic/glic_enabling.h"
+#include "chrome/browser/glic/glic_keyed_service.h"
+#include "chrome/browser/glic/glic_keyed_service_factory.h"
+#include "chrome/browser/ui/webui/webui_embedding_context.h"
+#endif  // BUILDFLAG(ENABLE_GLIC)
+
 using browser_command::mojom::ClickInfoPtr;
 using browser_command::mojom::Command;
 using browser_command::mojom::CommandHandler;
@@ -53,11 +62,13 @@ const char BrowserCommandHandler::kPromoBrowserCommandHistogramName[] =
 BrowserCommandHandler::BrowserCommandHandler(
     mojo::PendingReceiver<CommandHandler> pending_page_handler,
     Profile* profile,
-    std::vector<browser_command::mojom::Command> supported_commands)
+    std::vector<browser_command::mojom::Command> supported_commands,
+    content::WebContents* web_contents)
     : profile_(profile),
       supported_commands_(supported_commands),
       command_updater_(std::make_unique<CommandUpdaterImpl>(this)),
-      page_handler_(this, std::move(pending_page_handler)) {
+      page_handler_(this, std::move(pending_page_handler)),
+      web_contents_(web_contents) {
   if (supported_commands_.empty()) {
     return;
   }
@@ -100,6 +111,7 @@ void BrowserCommandHandler::CanExecuteCommand(
                                 can_execute);
       break;
     case Command::kStartTabGroupTutorial:
+    case Command::kStartSavedTabGroupTutorial:
       can_execute = TutorialServiceExists() && BrowserSupportsTabGroups();
       break;
     case Command::kOpenPasswordManager:
@@ -117,11 +129,6 @@ void BrowserCommandHandler::CanExecuteCommand(
     case Command::kStartPasswordManagerTutorial:
       can_execute = TutorialServiceExists();
       break;
-    case Command::kStartSavedTabGroupTutorial:
-      can_execute = TutorialServiceExists() &&
-                    BrowserSupportsSavedTabGroups() &&
-                    !tab_groups::IsTabGroupsSaveV2Enabled();
-      break;
     case Command::kOpenAISettings:
       can_execute = true;
       break;
@@ -131,11 +138,8 @@ void BrowserCommandHandler::CanExecuteCommand(
     case Command::kOpenPaymentsSettings:
       can_execute = true;
       break;
-    case Command::KOpenHistorySearchSettings:
+    case Command::kOpenGlic:
       can_execute = true;
-      break;
-    case Command::kShowCustomizeChromeToolbar:
-      can_execute = ActiveTabSupportsCustomizeChrome();
       break;
   }
   std::move(callback).Run(can_execute);
@@ -191,6 +195,7 @@ void BrowserCommandHandler::ExecuteCommandWithDisposition(
           */
       break;
     case Command::kStartTabGroupTutorial:
+    case Command::kStartSavedTabGroupTutorial:
       StartTabGroupTutorial();
       break;
     case Command::kOpenPasswordManager:
@@ -209,9 +214,6 @@ void BrowserCommandHandler::ExecuteCommandWithDisposition(
     case Command::kStartPasswordManagerTutorial:
       StartPasswordManagerTutorial();
       break;
-    case Command::kStartSavedTabGroupTutorial:
-      StartSavedTabGroupTutorial();
-      break;
     case Command::kOpenAISettings:
       OpenAISettings();
       break;
@@ -223,13 +225,10 @@ void BrowserCommandHandler::ExecuteCommandWithDisposition(
       NavigateToURL(GURL(chrome::GetSettingsUrl(chrome::kPaymentsSubPage)),
                     disposition);
       break;
-    case Command::KOpenHistorySearchSettings:
-      NavigateToURL(GURL(chrome::GetSettingsUrl(chrome::kHistorySearchSubpage)),
-                    disposition);
+    case Command::kOpenGlic: {
+      OpenGlic();
       break;
-    case Command::kShowCustomizeChromeToolbar:
-      ShowCustomizeChromeToolbar();
-      break;
+    }
     default:
       NOTREACHED() << "Unspecified behavior for command " << id;
   }
@@ -260,18 +259,6 @@ bool BrowserCommandHandler::BrowserSupportsTabGroups() {
   return browser->tab_strip_model()->SupportsTabGroups();
 }
 
-bool BrowserCommandHandler::ActiveTabSupportsCustomizeChrome() {
-  Browser* browser = chrome::FindBrowserWithProfile(profile_);
-  tabs::TabInterface* tab = browser->tab_strip_model()->GetActiveTab();
-  if (!tab || !tab->GetTabFeatures()) {
-    return false;
-  }
-  customize_chrome::SidePanelController* side_panel_controller =
-      tab->GetTabFeatures()->customize_chrome_side_panel_controller();
-  return side_panel_controller &&
-         side_panel_controller->IsCustomizeChromeEntryAvailable();
-}
-
 void BrowserCommandHandler::StartTabGroupTutorial() {
   auto* tutorial_id = kTabGroupTutorialId;
 
@@ -297,11 +284,6 @@ void BrowserCommandHandler::OpenPasswordManager() {
 void BrowserCommandHandler::OpenAISettings() {
   chrome::ShowSettingsSubPage(chrome::FindBrowserWithProfile(profile_),
                               chrome::kExperimentalAISettingsSubPage);
-}
-
-void BrowserCommandHandler::ShowCustomizeChromeToolbar() {
-  chrome::ExecuteCommand(chrome::FindBrowserWithProfile(profile_),
-                         IDC_SHOW_CUSTOMIZE_CHROME_TOOLBAR);
 }
 
 bool BrowserCommandHandler::DefaultSearchProviderIsGoogle() {
@@ -347,6 +329,26 @@ void BrowserCommandHandler::StartSavedTabGroupTutorial() {
   params.callback = base::BindOnce(&BrowserCommandHandler::OnTutorialStarted,
                                    base::Unretained(this), tutorial_id);
   StartTutorial(std::move(params));
+}
+
+void BrowserCommandHandler::OpenGlic() {
+#if BUILDFLAG(ENABLE_GLIC)
+  if (!glic::GlicEnabling::IsEnabledForProfile(profile_)) {
+    return;
+  }
+
+  glic::GlicKeyedService* glic_service = glic::GlicKeyedService::Get(profile_);
+
+  if (!glic_service) {
+    return;
+  }
+
+  auto* browser_window = webui::GetBrowserWindowInterface(web_contents_);
+
+  glic_service->window_controller().Toggle(
+      browser_window, /*prevent_close=*/false,
+      glic::mojom::InvocationSource::kWhatsNew);
+#endif  // BUILDFLAG(ENABLE_GLIC)
 }
 
 void BrowserCommandHandler::OpenFeedbackForm() {

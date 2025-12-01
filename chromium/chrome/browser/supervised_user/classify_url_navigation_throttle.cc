@@ -73,7 +73,7 @@ bool ShouldShowReAuthInterstitial(
     content::NavigationHandle& navigation_handle) {
   Profile* profile = Profile::FromBrowserContext(
       navigation_handle.GetWebContents()->GetBrowserContext());
-  supervised_user::ChildAccountService* child_account_service =
+  ChildAccountService* child_account_service =
       ChildAccountServiceFactory::GetForProfile(profile);
   return SupervisedUserVerificationPage::ShouldShowPage(*child_account_service);
 }
@@ -141,7 +141,7 @@ void ClassifyUrlNavigationThrottle::CheckURL() {
         url,
         base::BindOnce(&ClassifyUrlNavigationThrottle::OnURLCheckDone,
                        weak_ptr_factory_.GetWeakPtr(), key),
-        supervised_user::ShouldContentSkipParentAllowlistFiltering(
+        ShouldContentSkipParentAllowlistFiltering(
             navigation_handle()->GetWebContents()->GetOutermostWebContents()),
         FilteringContext::kNavigationThrottle,
         navigation_handle()->GetPageTransition());
@@ -268,10 +268,21 @@ MaybeCreateClassifyUrlNavigationThrottleFor(
   Profile* profile = Profile::FromBrowserContext(
       navigation_handle->GetWebContents()->GetBrowserContext());
   CHECK(profile);
-  if (!profile->IsChild()) {
+
+  if (!IsSubjectToParentalControls(*profile->GetPrefs())) {
     return nullptr;
   }
-  return ClassifyUrlNavigationThrottle::MakeUnique(navigation_handle);
+
+  SupervisedUserService* supervised_user_service =
+      SupervisedUserServiceFactory::GetForProfile(profile);
+  if (!supervised_user_service) {
+    return nullptr;
+  }
+
+  SupervisedUserURLFilter* filter = supervised_user_service->GetURLFilter();
+  CHECK(filter) << "Supervised user service for child users is expected to "
+                   "have the URL filter present";
+  return ClassifyUrlNavigationThrottle::MakeUnique(navigation_handle, filter);
 }
 
 std::optional<ClassifyUrlNavigationThrottle::ThrottleCheckResult>
@@ -340,8 +351,10 @@ void ClassifyUrlNavigationThrottle::CancelDeferredNavigation(
 
 std::unique_ptr<ClassifyUrlNavigationThrottle>
 ClassifyUrlNavigationThrottle::MakeUnique(
-    content::NavigationHandle* navigation_handle) {
-  return base::WrapUnique(new ClassifyUrlNavigationThrottle(navigation_handle));
+    content::NavigationHandle* navigation_handle,
+    SupervisedUserURLFilter* url_filter) {
+  return base::WrapUnique(
+      new ClassifyUrlNavigationThrottle(navigation_handle, url_filter));
 }
 
 const char* ClassifyUrlNavigationThrottle::GetNameForLogging() {
@@ -349,13 +362,9 @@ const char* ClassifyUrlNavigationThrottle::GetNameForLogging() {
 }
 
 ClassifyUrlNavigationThrottle::ClassifyUrlNavigationThrottle(
-    content::NavigationHandle* navigation_handle)
-    : content::NavigationThrottle(navigation_handle),
-      url_filter_(
-          SupervisedUserServiceFactory::GetForProfile(
-              Profile::FromBrowserContext(
-                  navigation_handle->GetWebContents()->GetBrowserContext()))
-              ->GetURLFilter()) {}
+    content::NavigationHandle* navigation_handle,
+    SupervisedUserURLFilter* url_filter)
+    : content::NavigationThrottle(navigation_handle), url_filter_(url_filter) {}
 ClassifyUrlNavigationThrottle::~ClassifyUrlNavigationThrottle() = default;
 
 ClassifyUrlNavigationThrottle::ClassifyUrlCheckList::ClassifyUrlCheckList() =

@@ -35,7 +35,8 @@ bool IsLongPathsSupportEnabled() {
 
       // If the ntdll approach failed, the registry approach is still reliable,
       // because the manifest should've always be linked with gn.exe in Windows.
-      const char16_t key_name[] = uR"(SYSTEM\CurrentControlSet\Control\FileSystem)";
+      const char16_t key_name[] =
+          uR"(SYSTEM\CurrentControlSet\Control\FileSystem)";
       const char16_t value_name[] = u"LongPathsEnabled";
 
       base::win::RegKey key(HKEY_LOCAL_MACHINE, key_name, KEY_READ);

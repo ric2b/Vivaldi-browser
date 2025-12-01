@@ -22,9 +22,12 @@
 #include "content/public/browser/legacy_tech_cookie_issue_details.h"
 #include "content/public/common/content_client.h"
 #include "content/public/common/content_features.h"
+#include "net/cookies/cookie_constants.h"
 #include "net/cookies/cookie_inclusion_status.h"
+#include "net/cookies/cookie_setting_override.h"
 #include "services/metrics/public/cpp/metrics_utils.h"
 #include "services/metrics/public/cpp/ukm_builders.h"
+#include "third_party/blink/public/mojom/use_counter/metrics/web_feature.mojom-shared.h"
 #include "url/gurl.h"
 
 namespace content {
@@ -274,10 +277,26 @@ bool ShouldReportDevToolsIssueForStatus(
              net::CookieInclusionStatus::ExemptionReason::k3PCDHeuristics;
 }
 
+bool IsCrossOriginSameSiteNetworkAccessWithStorageAccessEligible(
+    const network::mojom::CookieAccessDetailsPtr& cookie_details) {
+  if (!cookie_details->frame_origin ||
+      !cookie_details->cookie_setting_overrides.Has(
+          net::CookieSettingOverride::kStorageAccessGrantEligible)) {
+    // `frame_origin` is unset for script accesses, and network accesses whose
+    // IsolationInfo's `frame_origin` was nullptr.
+    return false;
+  }
+  const url::Origin origin = url::Origin::Create(cookie_details->url);
+  return !origin.IsSameOriginWith(cookie_details->frame_origin.value()) &&
+         net::SchemefulSite::IsSameSite(origin,
+                                        cookie_details->frame_origin.value());
+}
+
 }  // namespace
 
 void SplitCookiesIntoAllowedAndBlocked(
     const network::mojom::CookieAccessDetailsPtr& cookie_details,
+    CookieAccessDetails::Source source,
     CookieAccessDetails* allowed,
     CookieAccessDetails* blocked) {
   // For some cases `site_for_cookies` representative url is empty when
@@ -301,7 +320,8 @@ void SplitCookiesIntoAllowedAndBlocked(
                                   /* blocked_by_policy=*/false,
                                   cookie_details->is_ad_tagged,
                                   cookie_details->cookie_setting_overrides,
-                                  cookie_details->site_for_cookies});
+                                  cookie_details->site_for_cookies,
+                                  source});
   int allowed_count = std::ranges::count_if(
       cookie_details->cookie_list,
       [](const network::mojom::CookieOrLineWithAccessResultPtr&
@@ -320,7 +340,8 @@ void SplitCookiesIntoAllowedAndBlocked(
                                   /* blocked_by_policy=*/true,
                                   cookie_details->is_ad_tagged,
                                   cookie_details->cookie_setting_overrides,
-                                  cookie_details->site_for_cookies});
+                                  cookie_details->site_for_cookies,
+                                  source});
   int blocked_count = std::ranges::count_if(
       cookie_details->cookie_list,
       [](const network::mojom::CookieOrLineWithAccessResultPtr&
@@ -371,6 +392,11 @@ void EmitCookieWarningsAndMetrics(
   bool cookie_has_domain_non_ascii = false;
 
   int cookies_exempted_by_top_level_storage_access = 0;
+
+  const bool cross_origin_same_site_with_storage_access_eligible =
+      IsCrossOriginSameSiteNetworkAccessWithStorageAccessEligible(
+          cookie_details);
+  bool cross_origin_same_site_cookie_via_storage_access_api = false;
 
   for (const network::mojom::CookieOrLineWithAccessResultPtr& cookie :
        cookie_details->cookie_list) {
@@ -496,6 +522,12 @@ void EmitCookieWarningsAndMetrics(
       cookie_has_not_been_refreshed_in_351_to_400_days |=
           days_since_refresh > 350 && days_since_refresh <= 400;
     }
+
+    cross_origin_same_site_cookie_via_storage_access_api |=
+        cross_origin_same_site_with_storage_access_eligible &&
+        cookie->access_result.status.IsInclude() &&
+        cookie->access_result.status.exemption_reason() ==
+            net::CookieInclusionStatus::ExemptionReason::kStorageAccess;
   }
 
   if (samesite_treated_as_lax_cookies) {
@@ -556,6 +588,12 @@ void EmitCookieWarningsAndMetrics(
     RecordCookiesExemptedByTopLevelStorage(
         rfh->GetPageUkmSourceId(),
         cookies_exempted_by_top_level_storage_access);
+  }
+
+  if (cross_origin_same_site_cookie_via_storage_access_api) {
+    GetContentClient()->browser()->LogWebFeatureForCurrentPage(
+        rfh, blink::mojom::WebFeature::
+                 kCrossOriginSameSiteCookieAccessViaStorageAccessAPI);
   }
 }
 

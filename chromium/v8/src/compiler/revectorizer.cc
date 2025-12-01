@@ -884,7 +884,7 @@ void SLPTree::ForEach(FunctionType callback) {
 
 //////////////////////////////////////////////////////
 
-Revectorizer::Revectorizer(Zone* zone, Graph* graph, MachineGraph* mcgraph,
+Revectorizer::Revectorizer(Zone* zone, TFGraph* graph, MachineGraph* mcgraph,
                            SourcePositionTable* source_positions)
     : zone_(zone),
       graph_(graph),
@@ -1074,7 +1074,7 @@ Node* Revectorizer::VectorizeTree(PackNode* pnode) {
 
         source = node0->InputAt(offset >> 4);
         DCHECK_EQ(source->opcode(), IrOpcode::kProtectedLoad);
-        inputs.resize_no_init(4);
+        inputs.resize(4);
         // Update LoadSplat offset.
         if (index) {
           SourcePositionTable::Scope scope(source_positions_, source);

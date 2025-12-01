@@ -406,7 +406,6 @@ def parse_operation(
   ret = idl_type_to_iltype(op.return_type)
   return SignatureType(args=parse_args(op.arguments), ret=ret)
 
-
 def parse_interface(
     interface: Union[web_idl.interface.Interface,
                      web_idl.callback_interface.CallbackInterface]
@@ -441,6 +440,36 @@ def parse_interface(
                       methods=methods,
                       parent=parent)
   return obj, group
+
+
+def sort_object_groups(
+    groups: Sequence[Union[web_idl.interface.Interfaces,
+                           web_idl.dictionary.Dictionary]]
+) -> Sequence[web_idl.interface.Interfaces]:
+  """Sorts the object groups given their dependencies to each others.
+
+  Args:
+      ifaces: the objects (either interface of dictionary)
+
+  Returns:
+      the sorted groups
+  """
+  ids = {i.identifier: i for i in groups}
+  inserted = set()
+  sorted_groups = []
+
+  def add_iface(interface: web_idl.interface.Interface):
+    if interface.identifier in inserted:
+      return
+    if hasattr(interface, 'inherited') and interface.inherited:
+      assert interface.inherited.identifier in ids
+      add_iface(interface.inherited)
+    sorted_groups.append(interface)
+    inserted.add(interface.identifier)
+
+  for interface in groups:
+    add_iface(interface)
+  return sorted_groups
 
 
 def parse_constructors(
@@ -545,6 +574,7 @@ def main():
   template_dir = os.path.dirname(os.path.abspath(__file__))
   environment = jinja2.Environment(loader=jinja2.FileSystemLoader(template_dir))
   environment.filters['parse_interface'] = parse_interface
+  environment.filters['sort_object_groups'] = sort_object_groups
   environment.filters['parse_constructors'] = parse_constructors
   environment.filters['parse_operation'] = parse_operation
   environment.filters['parse_dictionary'] = parse_dictionary

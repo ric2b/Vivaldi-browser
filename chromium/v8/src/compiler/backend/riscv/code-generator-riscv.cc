@@ -706,6 +706,42 @@ void CodeGenerator::AssembleCodeStartRegisterCheck() {
             kJavaScriptCallCodeStartRegister, Operand(kScratchReg));
 }
 
+#ifdef V8_ENABLE_LEAPTIERING
+// Check that {kJavaScriptCallDispatchHandleRegister} is correct.
+void CodeGenerator::AssembleDispatchHandleRegisterCheck() {
+#ifdef V8_TARGET_ARCH_RISCV32
+  CHECK(!V8_JS_LINKAGE_INCLUDES_DISPATCH_HANDLE_BOOL);
+#else
+  DCHECK(linkage()->GetIncomingDescriptor()->IsJSFunctionCall());
+
+  if (!V8_JS_LINKAGE_INCLUDES_DISPATCH_HANDLE_BOOL) return;
+
+  // We currently don't check this for JS builtins as those are sometimes
+  // called directly (e.g. from other builtins) and not through the dispatch
+  // table. This is fine as builtin functions don't use the dispatch handle,
+  // but we could enable this check in the future if we make sure to pass the
+  // kInvalidDispatchHandle whenever we do a direct call to a JS builtin.
+  if (Builtins::IsBuiltinId(info()->builtin())) {
+    return;
+  }
+
+  // For now, we only ensure that the register references a valid dispatch
+  // entry with the correct parameter count. In the future, we may also be able
+  // to check that the entry points back to this code.
+  UseScratchRegisterScope temps(masm());
+  Register actual_parameter_count = temps.Acquire();
+  {
+    UseScratchRegisterScope temps(masm());
+    Register scratch = temps.Acquire();
+    __ LoadParameterCountFromJSDispatchTable(
+        actual_parameter_count, kJavaScriptCallDispatchHandleRegister, scratch);
+  }
+  __ Assert(eq, AbortReason::kWrongFunctionDispatchHandle,
+            actual_parameter_count, Operand(parameter_count_));
+#endif
+}
+#endif  // V8_ENABLE_LEAPTIERING
+
 // Check if the code object is marked for deoptimization. If it is, then it
 // jumps to the CompileLazyDeoptimizedCode builtin. In order to do this we need
 // to:
@@ -713,16 +749,7 @@ void CodeGenerator::AssembleCodeStartRegisterCheck() {
 //       the flags in the referenced {Code} object;
 //    2. test kMarkedForDeoptimizationBit in those flags; and
 //    3. if it is not zero then it jumps to the builtin.
-void CodeGenerator::BailoutIfDeoptimized() {
-  int offset = InstructionStream::kCodeOffset - InstructionStream::kHeaderSize;
-  __ LoadProtectedPointerField(
-      kScratchReg, MemOperand(kJavaScriptCallCodeStartRegister, offset));
-  __ Lw(kScratchReg, FieldMemOperand(kScratchReg, Code::kFlagsOffset));
-  __ And(kScratchReg, kScratchReg,
-         Operand(1 << Code::kMarkedForDeoptimizationBit));
-  __ TailCallBuiltin(Builtin::kCompileLazyDeoptimizedCode, ne, kScratchReg,
-                     Operand(zero_reg));
-}
+void CodeGenerator::BailoutIfDeoptimized() { __ BailoutIfDeoptimized(); }
 
 // Assembles an instruction after register allocation, producing machine code.
 CodeGenerator::CodeGenResult CodeGenerator::AssembleArchInstruction(
@@ -991,14 +1018,12 @@ CodeGenerator::CodeGenResult CodeGenerator::AssembleArchInstruction(
       break;
     case kArchSetStackPointer: {
       DCHECK(instr->InputAt(0)->IsRegister());
-#ifdef V8_TARGET_ARCH_RISCV64
       if (masm()->options().enable_simulator_code) {
         __ RecordComment("-- Set simulator stack limit --");
         __ LoadStackLimit(kSimulatorBreakArgument,
                           StackLimitKind::kRealStackLimit);
         __ break_(kExceptionIsSwitchStackLimit);
       }
-#endif
       __ Move(sp, i.InputRegister(0));
       break;
     }
@@ -1321,27 +1346,7 @@ CodeGenerator::CodeGenResult CodeGenerator::AssembleArchInstruction(
     case kRiscvClz64:
       __ Clz64(i.OutputRegister(), i.InputOrZeroRegister(0));
       break;
-    case kRiscvCtz64: {
-      Register src = i.InputRegister(0);
-      Register dst = i.OutputRegister();
-      __ Ctz64(dst, src);
-    } break;
-    case kRiscvPopcnt64: {
-      Register src = i.InputRegister(0);
-      Register dst = i.OutputRegister();
-      __ Popcnt64(dst, src, kScratchReg);
-    } break;
 #endif
-    case kRiscvCtz32: {
-      Register src = i.InputRegister(0);
-      Register dst = i.OutputRegister();
-      __ Ctz32(dst, src);
-    } break;
-    case kRiscvPopcnt32: {
-      Register src = i.InputRegister(0);
-      Register dst = i.OutputRegister();
-      __ Popcnt32(dst, src, kScratchReg);
-    } break;
     case kRiscvShl32:
       if (instr->InputAt(1)->IsRegister()) {
         __ Sll32(i.OutputRegister(), i.InputRegister(0), i.InputRegister(1));
@@ -2449,46 +2454,49 @@ CodeGenerator::CodeGenResult CodeGenerator::AssembleArchInstruction(
 #if V8_TARGET_ARCH_RISCV64
     case kRiscvStoreCompressTagged: {
       MemOperand mem = i.MemoryOperand(1);
-      __ StoreTaggedField(i.InputOrZeroRegister(0), mem);
+      __ StoreTaggedField(i.InputOrZeroRegister(0), mem, trapper);
       break;
     }
     case kRiscvLoadDecompressTaggedSigned: {
       CHECK(instr->HasOutput());
       Register result = i.OutputRegister();
       MemOperand operand = i.MemoryOperand();
-      __ DecompressTaggedSigned(result, operand);
+      __ DecompressTaggedSigned(result, operand, trapper);
       break;
     }
     case kRiscvLoadDecompressTagged: {
       CHECK(instr->HasOutput());
       Register result = i.OutputRegister();
       MemOperand operand = i.MemoryOperand();
-      __ DecompressTagged(result, operand);
+      __ DecompressTagged(result, operand, trapper);
       break;
     }
-    case kRiscvLoadDecodeSandboxedPointer:
-      __ LoadSandboxedPointerField(i.OutputRegister(), i.MemoryOperand());
+    case kRiscvLoadDecodeSandboxedPointer: {
+      __ LoadSandboxedPointerField(i.OutputRegister(), i.MemoryOperand(),
+                                   trapper);
       break;
+    }
     case kRiscvStoreEncodeSandboxedPointer: {
       MemOperand mem = i.MemoryOperand(1);
-      __ StoreSandboxedPointerField(i.InputOrZeroRegister(0), mem);
+      __ StoreSandboxedPointerField(i.InputOrZeroRegister(0), mem, trapper);
       break;
     }
     case kRiscvStoreIndirectPointer: {
       MemOperand mem = i.MemoryOperand(1);
-      __ StoreIndirectPointerField(i.InputOrZeroRegister(0), mem);
+      __ StoreIndirectPointerField(i.InputOrZeroRegister(0), mem, trapper);
       break;
     }
     case kRiscvAtomicLoadDecompressTaggedSigned:
-      __ AtomicDecompressTaggedSigned(i.OutputRegister(), i.MemoryOperand());
+      __ AtomicDecompressTaggedSigned(i.OutputRegister(), i.MemoryOperand(),
+                                      trapper);
       break;
     case kRiscvAtomicLoadDecompressTagged:
-      __ AtomicDecompressTagged(i.OutputRegister(), i.MemoryOperand());
+      __ AtomicDecompressTagged(i.OutputRegister(), i.MemoryOperand(), trapper);
       break;
     case kRiscvAtomicStoreCompressTagged: {
       size_t index = 0;
       MemOperand mem = i.MemoryOperand(&index);
-      __ AtomicStoreTaggedField(i.InputOrZeroRegister(index), mem);
+      __ AtomicStoreTaggedField(i.InputOrZeroRegister(index), mem, trapper);
       break;
     }
     case kRiscvLoadDecompressProtected: {

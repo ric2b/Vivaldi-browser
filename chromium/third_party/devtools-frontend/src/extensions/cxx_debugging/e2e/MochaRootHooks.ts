@@ -11,8 +11,8 @@ import {
   getBrowserAndPages,
   registerHandlers,
   setBrowserAndPages,
-  setTestServerPort,
 } from 'test/conductor/puppeteer-state.js';
+import {setTestServerPort} from 'test/conductor/server_port.js';
 import {TestConfig} from 'test/conductor/test_config.js';
 import {click} from 'test/shared/helper.js';
 
@@ -43,6 +43,7 @@ async function beforeAll() {
       `--disable-extensions-except=${EXTENSION_DIR}`,
       `--window-size=${defaultViewport.width + 20, defaultViewport.height + 100}`,
       `--custom-devtools-frontend=${new URL(`${DEVTOOLS_DIR}/front_end`, 'file://').href}`,
+      '--disable-features=RenderDocument',
       '--enable-features=DevToolsVeLogging:testing/true',
     ],
   });

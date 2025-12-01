@@ -7,6 +7,7 @@
 
 #include <cstdint>
 #include <functional>
+#include <optional>
 #include <string>
 
 #include "services/on_device_model/ml/chrome_ml_types.h"
@@ -15,10 +16,9 @@
 
 // This header defines the public interface to the ChromeML shared library.
 
-// TODO: crbug.com/379723772 - Remove this when internal code migrates.
-using ::ml::ModelBackendType;
-
 extern "C" {
+
+typedef struct TfLiteDelegate TfLiteDelegate;
 
 // A function used to handle fatal errors.
 using ChromeMLFatalErrorFn = void (*)(const char* msg);
@@ -58,6 +58,9 @@ struct ChromeMLModelData {
   // library and closed once weight loading is complete. kApuBackend provides
   // the `model_path` and not this field.
   PlatformFile weights_file;
+  // A unique ID to identify `weights_file`s which point to the same data.
+  // Matching `file_id` tells the backend that the data also matches.
+  std::optional<uint32_t> file_id;
 
   // Null-terminated model path pointing to the model to use. Only kApuBackend
   // provides this field. Other backends provide model through the
@@ -113,8 +116,15 @@ struct ChromeMLAdaptationDescriptor {
   // `max_tokens` set by the base model will be used.
   uint32_t max_tokens;
 
+  // Parameters which control the output sampling.
+  uint32_t top_k;
+  float temperature;
+
   // Whether this model will handle InputPieces containing images.
   bool enable_image_input;
+
+  // Whether this model will handle InputPieces containing audio.
+  bool enable_audio_input;
 };
 
 // A status value included with each output chunk.
@@ -195,8 +205,6 @@ struct ChromeMLExecuteOptions {
   const ChromeMLExecutionOutputFn* execution_output_fn;
   // Optional adaptation ID for this request.
   uint32_t* adaptation_id;
-  uint32_t top_k;
-  float temperature;
 
   const ml::InputPiece* input;
   size_t input_size;
@@ -224,6 +232,12 @@ struct GpuConfig {
   WGPUBackendType backend_type;
 };
 
+// A set of capabilities that a model can have.
+struct ChromeMLCapabilities {
+  bool image_input = false;
+  bool audio_input = false;
+};
+
 struct ChromeMLMetricsFns {
   // Logs an exact sample for the named metric.
   void (*RecordExactLinearHistogram)(const char* name,
@@ -238,6 +252,9 @@ struct ChromeMLMetricsFns {
                                       int exclusive_max,
                                       size_t buckets);
 };
+
+// Precision used by the gpu delegate during inference.
+enum class GpuDelegatePrecision { kFp16, kFp32 };
 
 struct ChromeMLTSAPI {
   // Construct a text safety model.
@@ -321,6 +338,10 @@ struct ChromeMLAPI {
                                                       void* userdata),
                           void* userdata);
 
+  // Gets the model capabilities for the model pointed to by `model_data`.
+  bool (*GetCapabilities)(PlatformFile file,
+                          ChromeMLCapabilities& capabilities);
+
   // Same as SetFatalErrorFn(), but for fatal errors that occur outside of the
   // gpu.
   void (*SetFatalErrorNonGpuFn)(ChromeMLFatalErrorFn error_fn);
@@ -390,6 +411,15 @@ struct ChromeMLAPI {
   // `CreateInferenceEngine()` call. It is invalid to use `engine` for inference
   // after this call.
   void (*DestroyInferenceEngine)(ChromeMLInferenceEngine engine);
+
+  // Creates a new TFLite delegate using the GPU inference engine.
+  TfLiteDelegate* (*CreateGpuDelegate)();
+
+  TfLiteDelegate* (*CreateGpuDelegateWithPrecision)(
+      GpuDelegatePrecision precision);
+
+  // Destroys the TFLite delegate created by `CreateDelegate()` call.
+  void (*DestroyGpuDelegate)(TfLiteDelegate* delegate);
 
   ChromeMLTSAPI ts_api;
 };

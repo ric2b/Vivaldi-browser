@@ -49,6 +49,12 @@
 
 namespace {
 
+// TODO(thestig): Remove/restore other unused resource types:
+// - ColorSpace
+// - Pattern
+// - Shading
+constexpr const char* kResourceKeys[] = {"ExtGState", "Font", "XObject"};
+
 // Key: The resource type.
 // Value: The resource names of a given type.
 using ResourcesMap = std::map<ByteString, std::set<ByteString>>;
@@ -159,12 +165,6 @@ void RemoveOrRestoreUnusedResources(
     RetainPtr<CPDF_Dictionary> resources_dict,
     const ResourcesMap& resources_in_use,
     CPDF_PageObjectHolder::AllRemovedResourcesMap& all_removed_resources_map) {
-  // TODO(thestig): Remove/restore other unused resource types:
-  // - ColorSpace
-  // - Pattern
-  // - Shading
-  static constexpr const char* kResourceKeys[] = {"ExtGState", "Font",
-                                                  "XObject"};
   for (const char* resource_key : kResourceKeys) {
     auto resources_in_use_it = resources_in_use.find(resource_key);
     const std::set<ByteString>* resource_in_use_of_current_type =
@@ -210,6 +210,103 @@ void RemoveOrRestoreUnusedResources(
     }
     RestoreUsedResources(current_resource_dict, keys_to_restore,
                          saved_resource_map);
+  }
+}
+
+bool IsPageResourceShared(CPDF_Document* doc,
+                          RetainPtr<const CPDF_Dictionary> page_dict,
+                          RetainPtr<const CPDF_Dictionary> resources_dict) {
+  CHECK(doc);
+  CHECK(page_dict);
+  CHECK(resources_dict);
+
+  const uint32_t resources_object_number = resources_dict->GetObjNum();
+  if (resources_object_number) {
+    // If `resources_dict` is not an inline object, then check to see if is a
+    // shared object.
+    if (pdfium::Contains(GetObjectsWithMultipleReferences(doc),
+                         resources_object_number)) {
+      return true;
+    }
+  }
+
+  // The check above may not catch all cases. e.g. inline objects. Check all
+  // pages in the document to see if another page is using the same resources.
+  int page_dict_seen = 0;
+  int resources_dict_seen = 0;
+  for (int i = 0; i < doc->GetPageCount(); ++i) {
+    RetainPtr<CPDF_Dictionary> current_page_dict =
+        doc->GetMutablePageDictionary(i);
+    if (!current_page_dict) {
+      continue;
+    }
+
+    // Check to see if the current page's page dictionary is seen twice: Once
+    // for this page, and once for another. If the same page dictionary is in
+    // use twice, then the resource dictionary within must also be shared.
+    if (current_page_dict == page_dict) {
+      ++page_dict_seen;
+      if (page_dict_seen == 2) {
+        return true;
+      }
+    }
+
+    // Similar check as above, for the current page's resource dictionary.
+    auto page =
+        pdfium::MakeRetain<CPDF_Page>(doc, std::move(current_page_dict));
+    if (resources_dict == page->GetMutableResources()) {
+      ++resources_dict_seen;
+      if (resources_dict_seen == 2) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
+
+void CloneResourcesDictEntries(CPDF_Document* doc,
+                               RetainPtr<CPDF_Dictionary> resources_dict) {
+  struct KeyAndObject {
+    ByteString key;
+    RetainPtr<const CPDF_Object> object;
+  };
+  std::vector<KeyAndObject> entries_to_maybe_clone;
+  {
+    CPDF_DictionaryLocker locker(resources_dict);
+    for (const auto& it : locker) {
+      const ByteString& key = it.first;
+      const RetainPtr<CPDF_Object>& object = it.second;
+      // Clone resource dictionaries that may get modified. While out for
+      // self-referencing loops.
+      if (object != resources_dict &&
+          object->GetType() == CPDF_Object::kReference &&
+          pdfium::Contains(kResourceKeys, key)) {
+        RetainPtr<const CPDF_Object> direct_object = object->GetDirect();
+        if (direct_object) {
+          entries_to_maybe_clone.emplace_back(key, std::move(direct_object));
+        }
+      }
+    }
+  }
+
+  if (entries_to_maybe_clone.empty()) {
+    return;
+  }
+
+  std::set<uint32_t> shared_objects = GetObjectsWithMultipleReferences(doc);
+  if (shared_objects.empty()) {
+    return;
+  }
+
+  // Must modify `resources_dict` after `locker` goes out of scope.
+  for (const auto& entry : entries_to_maybe_clone) {
+    if (pdfium::Contains(shared_objects, entry.object->GetObjNum())) {
+      const uint32_t clone_object_number =
+          doc->AddIndirectObject(entry.object->Clone());
+      resources_dict->SetNewFor<CPDF_Reference>(entry.key, doc,
+                                                clone_object_number);
+    }
   }
 }
 
@@ -379,20 +476,19 @@ void CPDF_PageContentGenerator::UpdateResourcesDict() {
     return;
   }
 
-  const uint32_t resources_object_number = resources->GetObjNum();
-  if (resources_object_number) {
-    // If `resources` is not an inline object, then do not modify it directly if
-    // it has multiple references.
-    if (pdfium::Contains(GetObjectsWithMultipleReferences(m_pDocument),
-                         resources_object_number)) {
-      resources = pdfium::WrapRetain(resources->Clone()->AsMutableDictionary());
-      const uint32_t clone_object_number =
-          m_pDocument->AddIndirectObject(resources);
-      m_pObjHolder->SetResources(resources);
-      m_pObjHolder->GetMutableDict()->SetNewFor<CPDF_Reference>(
-          pdfium::page_object::kResources, m_pDocument, clone_object_number);
-    }
+  // Do not modify shared resource dictionaries. Give this page its own copy.
+  if (IsPageResourceShared(m_pDocument, m_pObjHolder->GetDict(), resources)) {
+    resources = pdfium::WrapRetain(resources->Clone()->AsMutableDictionary());
+    const uint32_t clone_object_number =
+        m_pDocument->AddIndirectObject(resources);
+    m_pObjHolder->SetResources(resources);
+    m_pObjHolder->GetMutableDict()->SetNewFor<CPDF_Reference>(
+        pdfium::page_object::kResources, m_pDocument, clone_object_number);
   }
+
+  // Even though `resources` itself is not shared, its dictionary entries may be
+  // shared. Checked for that and clone those as well.
+  CloneResourcesDictEntries(m_pDocument, resources);
 
   ResourcesMap seen_resources;
   for (auto& page_object : m_pageObjects) {

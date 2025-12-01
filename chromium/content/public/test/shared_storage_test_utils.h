@@ -8,13 +8,13 @@
 #include <stddef.h>
 
 #include <string>
+#include <variant>
 
 #include "base/memory/weak_ptr.h"
 #include "base/strings/string_split.h"
 #include "components/services/storage/shared_storage/shared_storage_manager.h"
 #include "content/browser/private_aggregation/private_aggregation_host.h"
 #include "services/network/public/mojom/url_loader_network_service_observer.mojom.h"
-#include "third_party/abseil-cpp/absl/types/variant.h"
 #include "url/origin.h"
 
 class GURL;
@@ -26,7 +26,7 @@ class SharedStorageRuntimeManager;
 class StoragePartition;
 class TestSharedStorageHeaderObserver;
 
-using FencedFrameNavigationTarget = absl::variant<GURL, std::string>;
+using FencedFrameNavigationTarget = std::variant<GURL, std::string>;
 using OperationResult = storage::SharedStorageManager::OperationResult;
 using MethodWithOptionsPtr =
     network::mojom::SharedStorageModifierMethodWithOptionsPtr;
@@ -50,6 +50,9 @@ network::mojom::SharedStorageModifierMethodWithOptionsPtr MojomClearMethod(
     std::optional<std::string> with_lock = std::nullopt);
 
 std::vector<MethodWithOptionsPtr> CloneSharedStorageMethods(
+    const std::vector<MethodWithOptionsPtr>& methods_with_options);
+
+std::string SerializeSharedStorageMethods(
     const std::vector<MethodWithOptionsPtr>& methods_with_options);
 
 SharedStorageRuntimeManager* GetSharedStorageRuntimeManagerForStoragePartition(

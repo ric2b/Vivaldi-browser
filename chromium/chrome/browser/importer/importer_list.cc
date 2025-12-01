@@ -178,6 +178,10 @@ void DetectFirefoxProfiles(const std::string locale,
     // macOSes, so don't promise an import service that can't be delivered.
     firefox.services_supported |= importer::PASSWORDS;
 #endif
+
+    // Vivaldi: We're able to import tabs as well.
+    firefox.services_supported |= importer::TABS;
+
     firefox.locale = locale;
     profiles->push_back(firefox);
   }

@@ -14,6 +14,8 @@
 #include "components/search_engines/parsed_search_engines.h"
 #include "components/search_engines/prepopulated_engines.h"
 
+class PrefService;
+
 class SearchEnginesManager {
  public:
   explicit SearchEnginesManager(
@@ -23,16 +25,17 @@ class SearchEnginesManager {
   using PrepopulatedEngine = TemplateURLPrepopulateData::PrepopulatedEngine;
 
   ParsedSearchEngines::EnginesListWithDefaults GetEnginesByCountryId(
-      int country_id,
-      const std::string& lang) const;
+      country_codes::CountryId country_id,
+      const std::string& language,
+      PrefService& prefs) const;
 
-/*  const std::vector<const PrepopulatedEngine*>& GetAllEngines() const;*/
+  /*  const std::vector<const PrepopulatedEngine*>& GetAllEngines() const;*/
   const PrepopulatedEngine* GetEngine(const std::string& name) const;
 
   // Google is necessary for some chromium code to work.
-//  const PrepopulatedEngine* GetGoogleEngine() const;
+  //  const PrepopulatedEngine* GetGoogleEngine() const;
   // This returns our main default engine. It will never return a nullptr.
-  const PrepopulatedEngine* GetMainDefaultEngine() const;
+  const PrepopulatedEngine* GetMainDefaultEngine(PrefService* prefs = nullptr) const;
 
   int GetCurrentDataVersion() const;
 

@@ -9,7 +9,7 @@
 #include <string>
 
 #include "base/time/time.h"
-#include "components/ad_blocker/adblock_types.h"
+#include "components/request_filter/adblock_filter/adblock_tab_state_and_logs.h"
 #include "components/security_interstitials/content/security_interstitial_page.h"
 
 class GURL;
@@ -28,6 +28,9 @@ class DocumentBlockedInterstitial
       content::WebContents* web_contents,
       const GURL& request_url,
       RuleGroup blocking_group,
+      std::string_view rule_text,
+      std::string rule_source_name,
+      GURL rule_source_link,
       std::unique_ptr<
           security_interstitials::SecurityInterstitialControllerClient>
           controller_client);
@@ -53,6 +56,9 @@ class DocumentBlockedInterstitial
   friend class LookalikeUrlNavigationThrottleBrowserTest;
 
   RuleGroup blocking_group_;
+  std::string rule_text_;
+  std::string rule_source_name_;
+  GURL rule_source_link_;
 };
 }  // namespace adblock_filter
 

@@ -10,11 +10,11 @@
 #if defined(GPU_TEST_UTILS)
 
 #include "include/gpu/ganesh/GrRecordingContext.h"
-#include "include/private/SkColorData.h"
 #include "include/private/base/SkDebug.h"
 #include "include/private/gpu/ganesh/GrTypesPriv.h"
 #include "src/base/SkArenaAlloc.h"
 #include "src/base/SkRandom.h"
+#include "src/core/SkColorData.h"
 #include "src/gpu/ganesh/GrFragmentProcessor.h"
 #include "src/gpu/ganesh/GrRecordingContextPriv.h"
 
@@ -118,7 +118,7 @@ GrXPFactoryTestFactory::GrXPFactoryTestFactory(GetFn* getProc) : fGetProc(getPro
 
 const GrXPFactory* GrXPFactoryTestFactory::Get(GrProcessorTestData* data) {
     VerifyFactoryCount();
-    if (GetFactories()->size() == 0) {
+    if (GetFactories()->empty()) {
         return nullptr;
     }
     uint32_t idx = data->fRandom->nextRangeU(0, GetFactories()->size() - 1);

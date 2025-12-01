@@ -81,10 +81,6 @@ views::Widget* CaptureModeSessionTestApi::GetDimensionsLabelWidget() {
   return session_->dimensions_label_widget_.get();
 }
 
-views::Widget* CaptureModeSessionTestApi::GetFeedbackButtonWidget() {
-  return session_->feedback_button_widget_.get();
-}
-
 UserNudgeController* CaptureModeSessionTestApi::GetUserNudgeController() {
   return session_->user_nudge_controller_.get();
 }
@@ -119,7 +115,15 @@ CaptureModeSessionTestApi::GetCurrentFocusedView() {
   return items[GetCurrentFocusIndex()];
 }
 
-bool CaptureModeSessionTestApi::HasFocus() {
+bool CaptureModeSessionTestApi::HasAxVirtualWidget() const {
+  return !!session_->focus_cycler_->ax_widget_;
+}
+
+size_t CaptureModeSessionTestApi::GetAxVirtualViewsCount() const {
+  return session_->focus_cycler_->ax_virtual_views_.size();
+}
+
+bool CaptureModeSessionTestApi::HasFocus() const {
   return session_->focus_cycler_->HasFocus();
 }
 
@@ -154,7 +158,7 @@ std::vector<ActionButtonView*> CaptureModeSessionTestApi::GetActionButtons()
   return action_buttons;
 }
 
-ActionButtonView* CaptureModeSessionTestApi::GetButtonWithViewID(
+ActionButtonView* CaptureModeSessionTestApi::GetActionButtonByViewId(
     ActionButtonViewID id) const {
   raw_ptr<ActionButtonContainerView> container =
       session_->action_container_view_;
@@ -163,13 +167,18 @@ ActionButtonView* CaptureModeSessionTestApi::GetButtonWithViewID(
              : nullptr;
 }
 
+ActionButtonContainerView::ErrorView*
+CaptureModeSessionTestApi::GetActionContainerErrorView() const {
+  raw_ptr<ActionButtonContainerView> container =
+      session_->action_container_view_;
+  return container ? views::AsViewClass<ActionButtonContainerView::ErrorView>(
+                         container->error_view_for_testing())
+                   : nullptr;
+}
+
 CaptureRegionOverlayController*
 CaptureModeSessionTestApi::GetCaptureRegionOverlayController() const {
   return session_->capture_region_overlay_controller_.get();
-}
-
-PillButton* CaptureModeSessionTestApi::GetFeedbackButton() {
-  return session_->feedback_button_.get();
 }
 
 }  // namespace ash

@@ -924,6 +924,9 @@ PFN_vkGetPhysicalDeviceMemoryProperties2KHR vkGetPhysicalDeviceMemoryProperties2
 // VK_KHR_external_semaphore_fd
 PFN_vkImportSemaphoreFdKHR vkImportSemaphoreFdKHR = nullptr;
 
+// VK_EXT_device_fault
+PFN_vkGetDeviceFaultInfoEXT vkGetDeviceFaultInfoEXT = nullptr;
+
 // VK_EXT_host_query_reset
 PFN_vkResetQueryPoolEXT vkResetQueryPoolEXT = nullptr;
 
@@ -971,10 +974,6 @@ PFN_vkCreateImagePipeSurfaceFUCHSIA vkCreateImagePipeSurfaceFUCHSIA = nullptr;
 PFN_vkGetAndroidHardwareBufferPropertiesANDROID vkGetAndroidHardwareBufferPropertiesANDROID =
     nullptr;
 PFN_vkGetMemoryAndroidHardwareBufferANDROID vkGetMemoryAndroidHardwareBufferANDROID = nullptr;
-#    endif
-
-#    if defined(ANGLE_PLATFORM_GGP)
-PFN_vkCreateStreamDescriptorSurfaceGGP vkCreateStreamDescriptorSurfaceGGP = nullptr;
 #    endif
 
 #    define GET_INSTANCE_FUNC(vkName)                                                          \
@@ -1085,16 +1084,14 @@ void InitExternalMemoryHardwareBufferANDROIDFunctions(VkDevice device)
 }
 #    endif
 
-#    if defined(ANGLE_PLATFORM_GGP)
-void InitGGPStreamDescriptorSurfaceFunctions(VkInstance instance)
-{
-    GET_INSTANCE_FUNC(vkCreateStreamDescriptorSurfaceGGP);
-}
-#    endif  // defined(ANGLE_PLATFORM_GGP)
-
 void InitExternalSemaphoreFdFunctions(VkDevice device)
 {
     GET_DEVICE_FUNC(vkImportSemaphoreFdKHR);
+}
+
+void InitDeviceFaultFunctions(VkDevice device)
+{
+    GET_DEVICE_FUNC(vkGetDeviceFaultInfoEXT);
 }
 
 void InitHostQueryResetFunctions(VkDevice device)
@@ -1844,7 +1841,7 @@ GLint ConvertCompressionFlagsToGLFixedRates(
     }
     VkImageCompressionFixedRateFlagsEXT tmpFlags = imageCompressionFixedRateFlags;
     uint8_t bitCount                             = 0;
-    std::vector<GLint> GLRates;
+    angle::FastVector<GLint, 4> GLRates;
 
     while (tmpFlags > 0)
     {

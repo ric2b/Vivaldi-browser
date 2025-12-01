@@ -4,7 +4,6 @@
 import * as Common from '../../core/common/common.js';
 import * as Host from '../../core/host/host.js';
 import * as i18n from '../../core/i18n/i18n.js';
-import type * as Platform from '../../core/platform/platform.js';
 import * as SDK from '../../core/sdk/sdk.js';
 import * as Buttons from '../../ui/components/buttons/buttons.js';
 import * as UI from '../../ui/legacy/legacy.js';
@@ -42,7 +41,7 @@ const UIStrings = {
    *@description Text that is usually a hyperlink to more documentation
    */
   learnMore: 'Learn more',
-};
+} as const;
 const str_ = i18n.i18n.registerUIStrings('panels/elements/ElementStatePaneWidget.ts', UIStrings);
 const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
 enum SpecificPseudoStates {
@@ -147,8 +146,8 @@ export class ElementStatePaneWidget extends UI.Widget.Widget {
       };
       learnMoreButton.addEventListener(
           'click',
-          () => Host.InspectorFrontendHost.InspectorFrontendHostInstance.openInNewTab(
-              'https://goo.gle/devtools-emulate-focused-page' as Platform.DevToolsPath.UrlString));
+          () => UI.UIUtils.openInNewTab(
+              'https://developer.chrome.com/docs/devtools/rendering/apply-effects#emulate_a_focused_page'));
 
       div.appendChild(label);
       div.appendChild(learnMoreButton);

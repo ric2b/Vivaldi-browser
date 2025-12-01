@@ -266,12 +266,8 @@ TEST_F(AppMenuModelTest, GlobalError) {
   EXPECT_EQ(1, error1->execute_count());
 }
 
-#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_CHROMEOS)
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
 TEST_F(AppMenuModelTest, DefaultBrowserPrompt) {
-  feature_list_.Reset();
-  feature_list_.InitAndEnableFeatureWithParameters(
-      features::kDefaultBrowserPromptRefresh,
-      {{features::kShowDefaultBrowserAppMenuItem.name, "true"}});
   DefaultBrowserPromptManager::GetInstance()->MaybeShowPrompt();
   FakeIconDelegate fake_delegate;
   AppMenuIconController app_menu_icon_controller(browser()->profile(),
@@ -286,7 +282,7 @@ TEST_F(AppMenuModelTest, DefaultBrowserPrompt) {
       model.GetIndexOfCommandId(IDC_SET_BROWSER_AS_DEFAULT).value();
   EXPECT_TRUE(model.IsEnabledAt(default_prompt_index));
 }
-#endif
+#endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
 
 // Tests that extensions sub menu (when enabled) generates the correct elements
 // or does not generate its elements when disabled.
@@ -316,8 +312,6 @@ TEST_F(AppMenuModelTest, PerformanceItem) {
 }
 
 TEST_F(AppMenuModelTest, CustomizeChromeItem) {
-  feature_list_.Reset();
-  feature_list_.InitAndEnableFeature(features::kToolbarPinning);
   AppMenuModel model(this, browser());
   model.Init();
   ToolsMenuModel tool_model(&model, browser());
@@ -330,13 +324,26 @@ TEST_F(AppMenuModelTest, CustomizeChromeItem) {
 }
 
 TEST_F(AppMenuModelTest, CustomizeChromeLogMetrics) {
-  feature_list_.Reset();
-  feature_list_.InitAndEnableFeature(features::kToolbarPinning);
-
   TestLogMetricsAppMenuModel model(this, browser());
   model.Init();
   model.ExecuteCommand(IDC_SHOW_CUSTOMIZE_CHROME_SIDE_PANEL, 0);
   EXPECT_EQ(1, model.log_metrics_count_);
+}
+
+TEST_F(AppMenuModelTest, TabSearchItem) {
+  feature_list_.Reset();
+  feature_list_.InitWithFeaturesAndParameters(
+      /*enabled_features=*/
+      {{features::kTabstripComboButton,
+        {{"tab_search_toolbar_button", "true"}}}},
+      /*disabled_features=*/{});
+
+  AppMenuModel model(this, browser());
+  model.Init();
+  ToolsMenuModel toolModel(&model, browser());
+  size_t tab_search_index =
+      toolModel.GetIndexOfCommandId(IDC_TAB_SEARCH).value();
+  EXPECT_TRUE(toolModel.IsEnabledAt(tab_search_index));
 }
 
 TEST_F(AppMenuModelTest, OrganizeTabsItem) {
@@ -366,6 +373,19 @@ TEST_F(AppMenuModelTest, DeclutterTabsItem) {
   model.ExecuteCommand(IDC_DECLUTTER_TABS, 0);
   EXPECT_EQ(1, model.log_metrics_count_);
 }
+
+#if BUILDFLAG(ENABLE_GLIC)
+TEST_F(AppMenuModelTest, GlicItem) {
+  feature_list_.Reset();
+  feature_list_.InitWithFeatures(
+      {features::kGlic, features::kTabstripComboButton}, {});
+
+  TestLogMetricsAppMenuModel model(this, browser());
+  model.Init();
+  model.ExecuteCommand(IDC_OPEN_GLIC, 0);
+  EXPECT_EQ(1, model.log_metrics_count_);
+}
+#endif
 
 TEST_F(AppMenuModelTest, ModelHasIcons) {
   // Skip the items that are either not supposed to have an icon, or are not
@@ -585,7 +605,7 @@ TEST_F(TestAppMenuModelSafetyHubTest, SafetyHubMenuNotification) {
 TEST_F(TestAppMenuModelSafetyHubTest, HaTSControlTrigger) {
   EXPECT_CALL(*mock_hats_service(),
               LaunchSurvey(kHatsSurveyTriggerSafetyHubOneOffExperimentControl,
-                           _, _, _, _))
+                           _, _, _, _, _, _))
       .Times(1);
 
   // Attempting to show the safety hub item in the app menu should trigger the

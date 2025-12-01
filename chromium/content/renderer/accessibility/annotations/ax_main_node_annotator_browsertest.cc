@@ -53,6 +53,11 @@ class MockMainNodeAnnotationService
     std::move(callback).Run(main_);
   }
 
+  void IdentifyMainNode(const ui::AXTreeUpdate& snapshot,
+                        IdentifyMainNodeCallback callback) override {}
+
+  void SetClientType(screen_ai::mojom::MceClientType client) override {}
+
   // Tests should not modify entries in these lists.
   std::vector<ui::AXNodeID> content_nodes_;
   ui::AXNodeID main_ = ui::kInvalidAXNodeID;

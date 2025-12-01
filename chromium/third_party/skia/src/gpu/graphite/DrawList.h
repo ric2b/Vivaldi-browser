@@ -16,7 +16,7 @@
 #include "src/gpu/graphite/PaintParams.h"
 #include "src/gpu/graphite/geom/Geometry.h"
 #include "src/gpu/graphite/geom/Rect.h"
-#include "src/gpu/graphite/geom/Transform_graphite.h"
+#include "src/gpu/graphite/geom/Transform.h"
 
 #include <limits>
 #include <optional>
@@ -68,6 +68,9 @@ public:
     static constexpr int kMaxRenderSteps = 4096;
     static_assert(kMaxRenderSteps <= std::numeric_limits<uint16_t>::max());
 
+    // Add a construtor to prevent default zero initialization of SkTBlockList members' storage.
+    DrawList() {}
+
     // DrawList requires that all Transforms be valid and asserts as much; invalid transforms should
     // be detected at the Device level or similar. The provided Renderer must be compatible with the
     // 'shape' and 'stroke' parameters. If the renderer uses coverage AA, 'ordering' must have a
@@ -102,6 +105,10 @@ private:
                 : fRenderer(renderer)
                 , fDrawParams(transform, geometry, clip, order, stroke)
                 , fPaintParams(paint ? std::optional<PaintParams>(*paint) : std::nullopt) {}
+
+        bool readsFromDst() const {
+            return fPaintParams.has_value() ? fPaintParams.value().dstReadRequired() : false;
+        }
     };
 
     // The returned Transform reference remains valid for the lifetime of the DrawList.

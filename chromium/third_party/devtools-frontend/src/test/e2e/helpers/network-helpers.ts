@@ -66,7 +66,7 @@ export async function getSelectedRequestName() {
     return null;
   }
   return await request.evaluate(node => {
-    return node && node.childNodes[1].textContent;
+    return node?.childNodes[1].textContent;
   });
 }
 
@@ -138,7 +138,7 @@ export async function getTextFilterContent(): Promise<string> {
   const textFilterContent = toolbarHandle.evaluate(toolbar => {
     return toolbar.querySelector('[aria-label="Filter"]')?.textContent ?? '';
   });
-  return textFilterContent;
+  return await textFilterContent;
 }
 
 export async function clearTextFilter(): Promise<void> {
@@ -194,7 +194,7 @@ export function veImpressionForNetworkPanel(options?: {newFilterBar?: boolean}) 
               veImpression('Item', 'image'),
               veImpression('Item', 'media'),
               veImpression('Item', 'manifest'),
-              veImpression('Item', 'web-socket'),
+              veImpression('Item', 'socket'),
               veImpression('Item', 'wasm'),
               veImpression('Item', 'other'),
             ]),
@@ -219,7 +219,12 @@ export function veImpressionForNetworkPanel(options?: {newFilterBar?: boolean}) 
         ]),
     veImpression('Timeline', 'network-overview'),
     veImpression('Toggle', 'network-settings'),
-    veImpression('Link', 'learn-more'),
+    veImpression(
+        'Section', 'empty-view',
+        [
+          veImpression('Action', 'inspector-main.reload'),
+          veImpression('Link', 'learn-more'),
+        ]),
     veImpression('TableHeader', 'name'),
     veImpression('TableHeader', 'status'),
     veImpression('TableHeader', 'type'),

@@ -6,22 +6,26 @@ package org.chromium.chrome.browser.pdf;
 
 import android.app.Activity;
 import android.net.Uri;
+import android.os.SystemClock;
 
-import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 
+import org.chromium.build.annotations.NullMarked;
+import org.chromium.build.annotations.Nullable;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.ui.native_page.BasicNativePage;
 import org.chromium.chrome.browser.ui.native_page.NativePageHost;
 import org.chromium.components.embedder_support.util.UrlConstants;
 
 /** Native page that displays pdf file. */
+@NullMarked
 public class PdfPage extends BasicNativePage {
     @VisibleForTesting final PdfCoordinator mPdfCoordinator;
     private String mTitle;
     private final String mUrl;
     private boolean mIsIncognito;
     private boolean mIsDownloadSafe;
+    private long mTransientDownloadStartTimestamp;
 
     /**
      * Create a new instance of the pdf page.
@@ -58,6 +62,10 @@ public class PdfPage extends BasicNativePage {
         mPdfCoordinator = new PdfCoordinator(profile, activity, filepath, tabId);
         mIsIncognito = profile.isOffTheRecord();
         initWithView(mPdfCoordinator.getView());
+        // PDF is downloading when the filepath is null.
+        if (filepath == null) {
+            mTransientDownloadStartTimestamp = SystemClock.elapsedRealtime();
+        }
     }
 
     @Override
@@ -81,7 +89,7 @@ public class PdfPage extends BasicNativePage {
     }
 
     @Override
-    public String getCanonicalFilepath() {
+    public @Nullable String getCanonicalFilepath() {
         return mPdfCoordinator.getFilepath();
     }
 
@@ -111,6 +119,8 @@ public class PdfPage extends BasicNativePage {
     public void onDownloadComplete(String pdfFileName, String pdfFilePath, boolean isDownloadSafe) {
         mTitle = pdfFileName;
         mIsDownloadSafe = isDownloadSafe;
+        PdfUtils.recordPdfTransientDownloadTime(
+                SystemClock.elapsedRealtime() - mTransientDownloadStartTimestamp);
         // TODO(b/348701300): check if pdf should be opened inline.
         if (mIsIncognito) {
             Uri uri = PdfContentProvider.createContentUri(pdfFilePath, pdfFileName);
@@ -146,7 +156,7 @@ public class PdfPage extends BasicNativePage {
      *
      * @param isWorkProfile Whether Chrome is running in the Android work profile.
      */
-    public String requestAssistContent(boolean isWorkProfile) {
+    public @Nullable String requestAssistContent(boolean isWorkProfile) {
         return mPdfCoordinator.requestAssistContent(getTitle(), isWorkProfile);
     }
 }

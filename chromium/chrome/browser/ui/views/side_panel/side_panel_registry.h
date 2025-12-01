@@ -6,6 +6,7 @@
 #define CHROME_BROWSER_UI_VIEWS_SIDE_PANEL_SIDE_PANEL_REGISTRY_H_
 
 #include <memory>
+#include <variant>
 #include <vector>
 
 #include "base/supports_user_data.h"

@@ -63,7 +63,7 @@ public abstract class BaseButtonDataProvider implements ButtonDataProvider, OnCl
             @Nullable IphCommandBuilder iphCommandBuilder,
             @AdaptiveToolbarButtonVariant int adaptiveButtonVariant,
             @StringRes int tooltipTextResId,
-            boolean showHoverHighlight) {
+            boolean showBackgroundHighlight) {
         mActiveTabSupplier = activeTabSupplier;
         mModalDialogManager = modalDialogManager;
         if (mModalDialogManager != null) {
@@ -101,7 +101,7 @@ public abstract class BaseButtonDataProvider implements ButtonDataProvider, OnCl
                         /* isEnabled= */ true,
                         adaptiveButtonVariant,
                         tooltipTextResId,
-                        showHoverHighlight);
+                        showBackgroundHighlight);
     }
 
     /**

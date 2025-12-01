@@ -9,7 +9,6 @@
 #include "base/feature_list.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
-#include "build/chromeos_buildflags.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/signin/chrome_signin_client_factory.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
@@ -258,6 +257,13 @@ SyncStatusLabels GetSyncStatusLabelsForSettings(
     const syncer::SyncService* service) {
   // Check to see if sync has been disabled via the dashboard and needs to be
   // set up once again.
+  if (!service) {
+    // This can happen if Sync is disabled via the command line.
+    return {SyncStatusMessageType::kPreSynced, IDS_SYNC_EMPTY_STRING,
+            IDS_SYNC_EMPTY_STRING, IDS_SYNC_EMPTY_STRING,
+            SyncStatusActionType::kNoAction};
+  }
+
 #if BUILDFLAG(IS_CHROMEOS)
   if (service->GetUserSettings()->IsSyncFeatureDisabledViaDashboard()) {
     return {SyncStatusMessageType::kSyncError,

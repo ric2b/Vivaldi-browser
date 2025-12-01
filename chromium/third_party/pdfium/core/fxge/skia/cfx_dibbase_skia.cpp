@@ -25,7 +25,6 @@
 #include "core/fxge/dib/fx_dib.h"
 #include "third_party/skia/include/core/SkAlphaType.h"
 #include "third_party/skia/include/core/SkColor.h"
-#include "third_party/skia/include/core/SkColorPriv.h"
 #include "third_party/skia/include/core/SkColorType.h"
 #include "third_party/skia/include/core/SkImage.h"
 #include "third_party/skia/include/core/SkImageInfo.h"
@@ -243,8 +242,8 @@ sk_sp<SkImage> CFX_DIBBase::RealizeSkImage() const {
     case 24:
       return CreateSkiaImageFromTransformedDib</*source_bits_per_pixel=*/24>(
           *this, kBGRA_8888_SkColorType, kOpaque_SkAlphaType,
-          [](uint8_t red, uint8_t green, uint8_t blue) {
-            return SkPackARGB32(0xFF, red, green, blue);
+          [](uint8_t red, uint8_t green, uint8_t blue) -> SkColor {
+            return SkColorSetRGB(red, green, blue);
           });
 
     case 32:
@@ -253,8 +252,8 @@ sk_sp<SkImage> CFX_DIBBase::RealizeSkImage() const {
           return CreateSkiaImageFromTransformedDib<
               /*source_bits_per_pixel=*/32>(
               *this, kBGRA_8888_SkColorType, kOpaque_SkAlphaType,
-              [](uint8_t red, uint8_t green, uint8_t blue) {
-                return SkPackARGB32(0xFF, red, green, blue);
+              [](uint8_t red, uint8_t green, uint8_t blue) -> SkColor {
+                return SkColorSetRGB(red, green, blue);
               });
         case FXDIB_Format::kBgra:
           return CreateSkiaImageFromDib(this, kBGRA_8888_SkColorType,

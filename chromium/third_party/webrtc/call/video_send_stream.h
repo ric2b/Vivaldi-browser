@@ -25,6 +25,7 @@
 #include "api/rtp_parameters.h"
 #include "api/rtp_sender_interface.h"
 #include "api/scoped_refptr.h"
+#include "api/units/data_rate.h"
 #include "api/video/video_content_type.h"
 #include "api/video/video_frame.h"
 #include "api/video/video_source_interface.h"
@@ -37,6 +38,7 @@
 #include "modules/rtp_rtcp/include/report_block_data.h"
 #include "modules/rtp_rtcp/include/rtcp_statistics.h"
 #include "modules/rtp_rtcp/include/rtp_rtcp_defines.h"
+#include "rtc_base/checks.h"
 #include "video/config/video_encoder_config.h"
 
 namespace webrtc {
@@ -95,6 +97,9 @@ class VideoSendStream {
     uint64_t total_encoded_bytes_target = 0;
     uint32_t huge_frames_sent = 0;
     std::optional<ScalabilityMode> scalability_mode;
+    // The target bitrate is what we tell the encoder to produce. What the
+    // encoder actually produces is the sum of encoded bytes.
+    std::optional<DataRate> target_bitrate;
   };
 
   struct Stats {
@@ -118,8 +123,11 @@ class VideoSendStream {
     uint32_t frames_dropped_by_rate_limiter = 0;
     uint32_t frames_dropped_by_congestion_window = 0;
     uint32_t frames_dropped_by_encoder = 0;
-    // Bitrate the encoder is currently configured to use due to bandwidth
-    // limitations.
+    // Metric only used by legacy getStats()'s BWE.
+    // - Similar to `StreamStats::target_bitrate` except this is for the whole
+    //   stream as opposed to being per substream (per SSRC).
+    // - Unlike what you would expect, it is not equal to the sum of all
+    //   substream targets and may sometimes over-report e.g. webrtc:392424845.
     int target_media_bitrate_bps = 0;
     // Bitrate the encoder is actually producing.
     int media_bitrate_bps = 0;
@@ -248,6 +256,9 @@ class VideoSendStream {
                                        SetParametersCallback callback) = 0;
 
   virtual Stats GetStats() = 0;
+
+  // TODO: webrtc:40644448 - Make this pure virtual.
+  virtual void SetStats(const Stats& stats) { RTC_CHECK_NOTREACHED(); }
 
   virtual void GenerateKeyFrame(const std::vector<std::string>& rids) = 0;
 

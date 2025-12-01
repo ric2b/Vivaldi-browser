@@ -160,6 +160,7 @@ descentOverride
 direction
 display
 dominantBaseline
+dynamicRangeLimit
 emptyCells
 fallback
 fieldSizing
@@ -241,6 +242,7 @@ insetBlockStart
 insetInline
 insetInlineEnd
 insetInlineStart
+interactivity
 interpolateSize
 isolation
 item
@@ -316,7 +318,9 @@ outlineStyle
 outlineWidth
 overflow
 overflowAnchor
+overflowBlock
 overflowClipMargin
+overflowInline
 overflowWrap
 overflowX
 overflowY
@@ -360,6 +364,7 @@ positionTryFallbacks
 positionTryOrder
 positionVisibility
 prefix
+printColorAdjust
 quotes
 r
 range
@@ -386,6 +391,7 @@ scrollMarginInlineStart
 scrollMarginLeft
 scrollMarginRight
 scrollMarginTop
+scrollMarkerGroup
 scrollPadding
 scrollPaddingBlock
 scrollPaddingBlockEnd

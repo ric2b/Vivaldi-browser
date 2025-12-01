@@ -359,9 +359,3 @@ void NetErrorHelper::OnNetworkDiagnosticsClientRequest(
 void NetErrorHelper::SetCanShowNetworkDiagnosticsDialog(bool can_show) {
   core_->OnSetCanShowNetworkDiagnosticsDialog(can_show);
 }
-
-void NetErrorHelper::OpenVivaldia() {
-  GetRemoteNetErrorPageSupport()->OpenVivaldia();
-}
-// End Vivaldi
-

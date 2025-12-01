@@ -8,6 +8,7 @@
 #import "base/check_op.h"
 #import "components/strings/grit/components_strings.h"
 #import "ios/chrome/browser/badges/ui_bundled/badge_view_visibility_delegate.h"
+#import "ios/chrome/browser/content_suggestions/ui_bundled/content_suggestions_collection_utils.h"
 #import "ios/chrome/browser/contextual_panel/entrypoint/ui/contextual_panel_entrypoint_visibility_delegate.h"
 #import "ios/chrome/browser/location_bar/ui_bundled/badges_container_view.h"
 #import "ios/chrome/browser/omnibox/ui_bundled/omnibox_constants.h"
@@ -16,7 +17,6 @@
 #import "ios/chrome/browser/shared/ui/symbols/symbols.h"
 #import "ios/chrome/browser/shared/ui/util/dynamic_type_util.h"
 #import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
-#import "ios/chrome/browser/ui/content_suggestions/content_suggestions_collection_utils.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #import "ios/chrome/common/ui/util/constraints_ui_util.h"
 #import "ios/chrome/common/ui/util/pointer_interaction_util.h"
@@ -25,8 +25,8 @@
 
 // Vivaldi
 #import "app/vivaldi_apptools.h"
+#import "ios/chrome/browser/popup_menu/ui_bundled/popup_menu_constants.h"
 #import "ios/chrome/browser/ui/location_bar/location_bar_constants+vivaldi.h"
-#import "ios/chrome/browser/ui/popup_menu/popup_menu_constants.h"
 #import "ios/ui/ad_tracker_blocker/vivaldi_atb_constants.h"
 #import "ios/ui/helpers/vivaldi_global_helpers.h"
 #import "ios/ui/ntp/vivaldi_ntp_constants.h"
@@ -595,16 +595,13 @@ const CGFloat kSmallerLocationLabelFontMultiplier = 0.75;
   _locationButton.accessibilityLabel =
       l10n_util::GetNSString(IDS_ACCNAME_LOCATION);
 
-  _accessibleElements = [[NSMutableArray alloc] init];
-  [_accessibleElements addObject:_locationButton];
-  [_accessibleElements addObject:_trailingButton];
-
   // These two elements must remain accessible for egtests, but will not be
   // included in accessibility navigation as they are not added to the
   // accessibleElements array.
   _locationIconImageView.isAccessibilityElement = YES;
   _locationLabel.isAccessibilityElement = YES;
 
+  _accessibleElements = [[NSMutableArray alloc] init];
   [self updateAccessibility];
 }
 

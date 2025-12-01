@@ -57,6 +57,11 @@ void TestURLLoaderNetworkObserver::OnPrivateNetworkAccessPermissionRequired(
   std::move(callback).Run(false);
 }
 
+void TestURLLoaderNetworkObserver::OnLocalNetworkAccessPermissionRequired(
+    OnLocalNetworkAccessPermissionRequiredCallback callback) {
+  std::move(callback).Run(false);
+}
+
 void TestURLLoaderNetworkObserver::OnClearSiteData(
     const GURL& url,
     const std::string& header_value,
@@ -86,6 +91,9 @@ void TestURLLoaderNetworkObserver::OnSharedStorageHeaderReceived(
     OnSharedStorageHeaderReceivedCallback callback) {
   std::move(callback).Run();
 }
+
+void TestURLLoaderNetworkObserver::OnAdAuctionEventRecordHeaderReceived(
+    network::AdAuctionEventRecord event_record) {}
 
 void TestURLLoaderNetworkObserver::Clone(
     mojo::PendingReceiver<URLLoaderNetworkServiceObserver> observer) {

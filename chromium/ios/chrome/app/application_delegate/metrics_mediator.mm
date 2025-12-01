@@ -26,6 +26,7 @@
 #import "ios/chrome/app/application_delegate/app_state.h"
 #import "ios/chrome/app/application_delegate/metric_kit_subscriber.h"
 #import "ios/chrome/app/application_delegate/startup_information.h"
+#import "ios/chrome/app/profile/profile_state.h"
 #import "ios/chrome/app/startup/ios_enable_sandbox_dump_buildflags.h"
 #import "ios/chrome/browser/crash_report/model/crash_helper.h"
 #import "ios/chrome/browser/default_browser/model/default_browser_interest_signals.h"
@@ -39,6 +40,7 @@
 #import "ios/chrome/browser/shared/model/browser/browser_provider.h"
 #import "ios/chrome/browser/shared/model/browser/browser_provider_interface.h"
 #import "ios/chrome/browser/shared/model/prefs/pref_names.h"
+#import "ios/chrome/browser/shared/model/profile/profile_ios.h"
 #import "ios/chrome/browser/shared/model/url/chrome_url_constants.h"
 #import "ios/chrome/browser/shared/model/web_state_list/tab_group.h"
 #import "ios/chrome/browser/shared/model/web_state_list/web_state_list.h"
@@ -321,8 +323,6 @@ using metrics_mediator::kAppEnteredBackgroundDateKey;
 // prefs, so as not to trigger upload of various stale data.
 // Mirrors the function in metrics_reporting_state.cc.
 - (void)updateMetricsPrefsOnPermissionChange:(BOOL)enabled;
-// Logs the inactive tabs settings preference.
-+ (void)recordInactiveTabsSettingsAtStartup:(int)preference;
 // Logs the number of active tabs (based on the arm's definition of
 // active/inactive).
 + (void)recordStartupActiveTabCount:(int)tabCount;
@@ -524,9 +524,6 @@ BOOL _credentialExtensionWasUsed = NO;
   }
 
   if (startupInformation.isColdStart) {
-    [self recordInactiveTabsSettingsAtStartup:
-              GetApplicationContext()->GetLocalState()->GetInteger(
-                  prefs::kInactiveTabsTimeThreshold)];
     [self recordStartupActiveTabCount:activeTabCount];
     [self recordStartupInactiveTabCount:inactiveTabCount];
     [self recordStartupAbsoluteInactiveTabCount:absoluteInactiveTabCount];
@@ -630,6 +627,13 @@ BOOL _credentialExtensionWasUsed = NO;
     }
   }
   base::UmaHistogramEnumeration("Startup.IOSColdStartType", sessionType);
+}
+
++ (void)logProfileLoadMetrics:(ProfileIOS*)profile {
+  base::UmaHistogramEnumeration(
+      kInactiveTabsThresholdSettingHistogram,
+      InactiveTabsSettingFromPreference(
+          profile->GetPrefs()->GetInteger(prefs::kInactiveTabsTimeThreshold)));
 }
 
 - (void)updateMetricsStateBasedOnPrefsUserTriggered:(BOOL)isUserTriggered {
@@ -761,7 +765,10 @@ BOOL _credentialExtensionWasUsed = NO;
 
 + (void)applicationDidEnterBackground:(NSInteger)memoryWarningCount {
   base::RecordAction(base::UserMetricsAction("MobileEnteredBackground"));
+  [self logMemoryToUMA:"Memory.Browser.MemoryFootprint.OnBackground"];
+}
 
++ (void)logMemoryToUMA:(const std::string&)histogramName {
   task_vm_info task_info_data;
   mach_msg_type_number_t count = sizeof(task_vm_info) / sizeof(natural_t);
   kern_return_t result =
@@ -769,8 +776,7 @@ BOOL _credentialExtensionWasUsed = NO;
                 reinterpret_cast<task_info_t>(&task_info_data), &count);
   if (result == KERN_SUCCESS) {
     mach_vm_size_t footprint_mb = task_info_data.phys_footprint / 1024 / 1024;
-    base::UmaHistogramMemoryLargeMB(
-        "Memory.Browser.MemoryFootprint.OnBackground", footprint_mb);
+    base::UmaHistogramMemoryLargeMB(histogramName, footprint_mb);
   }
 }
 
@@ -792,11 +798,6 @@ BOOL _credentialExtensionWasUsed = NO;
 }
 
 #pragma mark - interfaces methods
-
-+ (void)recordInactiveTabsSettingsAtStartup:(int)preference {
-  UMA_HISTOGRAM_ENUMERATION(kInactiveTabsThresholdSettingHistogram,
-                            InactiveTabsSettingFromPreference(preference));
-}
 
 + (void)recordStartupActiveTabCount:(int)tabCount {
   base::UmaHistogramCounts100("Tabs.ActiveCountAtStartup", tabCount);

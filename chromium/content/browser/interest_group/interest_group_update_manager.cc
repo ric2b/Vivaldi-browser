@@ -21,7 +21,7 @@
 #include "base/containers/span.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback.h"
-#include "base/json/json_string_value_serializer.h"
+#include "base/json/json_writer.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/rand_util.h"
@@ -324,12 +324,12 @@ constexpr net::NetworkTrafficAnnotationTag kTrafficAnnotation =
   if (!maybe_user_bidding_signals) {
     return true;
   }
-  std::string user_bidding_signals;
-  JSONStringValueSerializer serializer(&user_bidding_signals);
-  if (!serializer.Serialize(*maybe_user_bidding_signals)) {
+  std::optional<std::string> user_bidding_signals =
+      base::WriteJson(*maybe_user_bidding_signals);
+  if (!user_bidding_signals.has_value()) {
     return false;
   }
-  interest_group_update.user_bidding_signals = std::move(user_bidding_signals);
+  interest_group_update.user_bidding_signals = *std::move(user_bidding_signals);
   return true;
 }
 
@@ -424,6 +424,48 @@ constexpr net::NetworkTrafficAnnotationTag kTrafficAnnotation =
   return true;
 }
 
+// Copies the viewAndClickCountsProviders JSON field into
+// `view_and_click_counts_providers`.
+[[nodiscard]] bool TryToCopyViewAndClickCountsProviders(
+    const base::Value::Dict& dict,
+    InterestGroupUpdate& interest_group_update) {
+  const base::Value* maybe_view_and_click_counts_providers =
+      dict.Find("viewAndClickCountsProviders");
+
+  // No `viewAndClickCountsProviders` field in the update JSON.
+  if (!maybe_view_and_click_counts_providers) {
+    return true;
+  }
+
+  // `viewAndClickCountsProviders` field is `null` in the update JSON.
+  if (maybe_view_and_click_counts_providers->is_none()) {
+    interest_group_update.view_and_click_counts_providers = std::nullopt;
+    return true;
+  }
+
+  // If `view_and_click_counts_providers` is present and not null, it must
+  // be a valid list of URL origin strings.
+  if (!maybe_view_and_click_counts_providers->is_list()) {
+    return false;
+  }
+
+  const base::Value::List& view_and_click_counts_providers =
+      maybe_view_and_click_counts_providers->GetList();
+
+  interest_group_update.view_and_click_counts_providers.emplace();
+  interest_group_update.view_and_click_counts_providers->reserve(
+      view_and_click_counts_providers.size());
+  for (const base::Value& provider : view_and_click_counts_providers) {
+    if (!provider.is_string()) {
+      return false;
+    }
+    interest_group_update.view_and_click_counts_providers->emplace_back(
+        url::Origin::Create(GURL(provider.GetString())));
+  }
+
+  return true;
+}
+
 // Helper for TryToCopyAds() and TryToCopyAdComponents().
 [[nodiscard]] std::optional<std::vector<blink::InterestGroup::Ad>> ExtractAds(
     const base::Value::List& ads_list,
@@ -502,14 +544,13 @@ constexpr net::NetworkTrafficAnnotationTag kTrafficAnnotation =
     }
     const base::Value* maybe_metadata = ads_dict->Find("metadata");
     if (maybe_metadata) {
-      std::string metadata;
-      JSONStringValueSerializer serializer(&metadata);
-      if (!serializer.Serialize(*maybe_metadata)) {
+      std::optional<std::string> metadata = base::WriteJson(*maybe_metadata);
+      if (!metadata.has_value()) {
         // Binary blobs shouldn't be present, but it's possible we exceeded the
         // max JSON depth.
         return std::nullopt;
       }
-      ad.metadata = std::move(metadata);
+      ad.metadata = *std::move(metadata);
     }
     const std::string* maybe_ad_render_id = ads_dict->FindString("adRenderId");
     if (maybe_ad_render_id) {
@@ -780,6 +821,9 @@ std::optional<InterestGroupUpdate> ParseUpdateJson(
   }
   if (!TryToCopyTrustedBiddingSignalsCoordinator(*dict,
                                                  interest_group_update)) {
+    return std::nullopt;
+  }
+  if (!TryToCopyViewAndClickCountsProviders(*dict, interest_group_update)) {
     return std::nullopt;
   }
   if (!TryToCopyUserBiddingSignals(*dict, interest_group_update)) {

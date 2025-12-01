@@ -2,11 +2,13 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="no">
 <translation id="1038842779957582377">ukjent navn</translation>
+<translation id="1068672505746868501">Oversett aldri sider på <ph name="SOURCE_LANGUAGE" /></translation>
 <translation id="1089439967362294234">Endre passord</translation>
 <translation id="1110994991967754504">Velg tillatelser for <ph name="PERMISSION_NAME" /></translation>
 <translation id="1158211211994409885"><ph name="HOST_NAME" /> avsluttet tilkoblingen uventet.</translation>
 <translation id="1161325031994447685">Kobler til Wi-Fi på nytt</translation>
 <translation id="1175364870820465910">&amp;Skriv ut...</translation>
+<translation id="1285320974508926690">Oversett aldri dette nettstedet</translation>
 <translation id="1375198122581997741">Om versjon</translation>
 <translation id="139305205187523129"><ph name="HOST_NAME" /> sendte ikke noe data.</translation>
 <translation id="1555191101192706055">Angripere på nettstedet du prøvde å besøke, kan lure deg til å installere skadelig programvare som påvirker måten du surfer på – for eksempel ved å endre startsiden eller vise deg ekstra annonser på nettstedene du besøker.</translation>
@@ -20,6 +22,7 @@
 <translation id="1768211456781949159"><ph name="BEGIN_LINK" />Prøv å kjøre Windows Nettverksdiagnose<ph name="END_LINK" />.</translation>
 <translation id="1974060860693918893">Avansert</translation>
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />Sjekk mellomtjeneren og brannmuren<ph name="END_LINK" /></translation>
+<translation id="2048261947532620704">Oversetter siden</translation>
 <translation id="2119505898009119320">Utstedt til <ph name="ORGANIZATION" /> [<ph name="JURISDICTION" />]</translation>
 <translation id="2166378884831602661">Denne siden kan ikke tilby en sikker tilkobling</translation>
 <translation id="2178904466768126352">Angripere på nettstedet du prøvde å besøke, kan muligens installere skadelig programvare som stjeler eller sletter ting som passord, bilder, meldinger eller kredittkortnumre.</translation>
@@ -35,7 +38,6 @@
 <translation id="2388886110302389394">Åpne siden i nytt privatvindu (Ctrl-Skift-N)</translation>
 <translation id="2467694685043708798"><ph name="BEGIN_LINK" />Kjør Nettverksdiagnose<ph name="END_LINK" /></translation>
 <translation id="2491414235131909199">Denne siden er blokkert av en utvidelse</translation>
-<translation id="2501278716633472235">Gå tilbake</translation>
 <translation id="2539524384386349900">Oppdag</translation>
 <translation id="255002559098805027"><ph name="HOST_NAME" /> sendte et ugyldig svar.</translation>
 <translation id="2634124572758952069">IP-adressen for tjeneren til <ph name="HOST_NAME" /> ble ikke funnet.</translation>
@@ -45,6 +47,7 @@
 <translation id="2730326759066348565"><ph name="BEGIN_LINK" />Kjør Tilkoblingsdiagnostikk<ph name="END_LINK" /></translation>
 <translation id="2784949926578158345">Tilkoblingen ble nullstilt.</translation>
 <translation id="2826760142808435982">Tilkoblingen er kryptert og autentisert med <ph name="CIPHER" /> og bruker <ph name="KX" /> som nøkkelutvekslingsmekanisme.</translation>
+<translation id="290376772003165898">Er ikke siden på <ph name="LANGUAGE" />?</translation>
 <translation id="2909946352844186028">En nettverksendring ble oppdaget.</translation>
 <translation id="2948083400971632585">På innstillingssiden kan du deaktivere eventuelle mellomtjenere for tilkoblinger.</translation>
 <translation id="2954624054936281172">Tabell med lagrede betalingsmetoder</translation>
@@ -62,7 +65,6 @@
       <ph name="PLATFORM_TEXT" /></translation>
 <translation id="3226128629678568754">Trykk på oppdater-knappen for å sende inn dataene som trengs for å laste siden på nytt.</translation>
 <translation id="3234666976984236645">Alltid oppdag viktig innhold på dette nettstedet</translation>
-<translation id="3308738399950580893">reklame</translation>
 <translation id="3384522979010096022">Organisasjonen din tillater deg ikke å se dette nettstedet</translation>
 <translation id="3422472998109090673"><ph name="HOST_NAME" /> kan ikke nås for øyeblikket.</translation>
 <translation id="3427092606871434483">Tillat (standard)</translation>
@@ -80,7 +82,7 @@
 <translation id="3681007416295224113">Sertifikatinformasjon</translation>
 <translation id="3717027428350673159"><ph name="BEGIN_LINK" />Sjekk proxy-, brannmur- og DNS-konfigurasjoner<ph name="END_LINK" /></translation>
 <translation id="382518646247711829">Hvis du bruker en mellomtjener …</translation>
-<translation id="3894751534882749287">Hvis du vil vise siden likevel, kan du endre nivået av sporingsbeskyttelse i menyen for sporingsblokkering, eller ved å trykke på Tillat-knappen</translation>
+<translation id="3861977424605124250">Vis ved oppstart</translation>
 <translation id="3950820424414687140">Logg inn</translation>
 <translation id="3973234410852337861"><ph name="HOST_NAME" /> er blokkert</translation>
 <translation id="3987940399970879459">Mindre enn 1 MB</translation>
@@ -108,7 +110,6 @@
 <translation id="4701488924964507374"><ph name="SENTENCE1" /> <ph name="SENTENCE2" /></translation>
 <translation id="4708268264240856090">Tilkoblingen din ble forstyrret</translation>
 <translation id="4722547256916164131"><ph name="BEGIN_LINK" />Kjør Windows Nettverksdiagnose<ph name="END_LINK" /></translation>
-<translation id="4736016046474602958">Sporingsblokkering</translation>
 <translation id="4744603770635761495">Programplassering</translation>
 <translation id="4750917950439032686">Informasjonen din (for eksempel passord eller betalingsinformasjon) er privat når den sendes til denne siden.</translation>
 <translation id="4764776831041365478">Nettsiden på <ph name="URL" /> er kanskje midlertidig nede eller kan ha flyttet permanent til en ny adresse.</translation>
@@ -153,6 +154,7 @@
 <translation id="6328639280570009161">Prøv å deaktivere nettverksforslag</translation>
 <translation id="6348220984832452017">Aktive variasjoner</translation>
 <translation id="6358450015545214790">Hva innebærer dette?</translation>
+<translation id="6404511346730675251">Rediger bokmerke</translation>
 <translation id="6433595998831338502"><ph name="HOST_NAME" /> avviste tilkoblingen.</translation>
 <translation id="6447842834002726250">Infokapsler</translation>
 <translation id="6451458296329894277">Bekreft gjentatt innsending av skjemaer</translation>
@@ -162,18 +164,19 @@
 <translation id="6757797048963528358">Enheten din gikk inn i hvilemodus.</translation>
 <translation id="6890956352250146925">Alternativer for informasjonskapsler og nettstedsdata</translation>
 <translation id="6897140037006041989">Brukeragent</translation>
+<translation id="6935179587384421592"><ph name="SIZE" />. Det kan hende at enkelte nettsteder lastes inn tregere neste gang du besøker dem.</translation>
 <translation id="6957624206566198865">Åpne side i ny privatfane</translation>
 <translation id="7053983685419859001">Blokker</translation>
+<translation id="7066262000446496119">Hvem bruker Vivaldi?</translation>
 <translation id="7096937462164235847">Identiteten til dette nettstedet er ikke bekreftet.</translation>
 <translation id="7108819624672055576">Tillatt av en utvidelse</translation>
 <translation id="7111012039238467737">(Gyldig)</translation>
-<translation id="7113310725918019676">Tillat <ph name="BLOCKED_TYPE" /> fra <ph name="DOMAIN" /></translation>
 <translation id="7126644664682723998">Lim inn og søk</translation>
 <translation id="7210863904660874423"><ph name="HOST_NAME" /> følger ikke sikkerhetsstandarder.</translation>
 <translation id="7219179957768738017">Tilkoblinger bruker <ph name="SSL_VERSION" />.</translation>
 <translation id="7221855153210829124">Vis varsler</translation>
+<translation id="7283555985781738399">Gjestemodus</translation>
 <translation id="7353601530677266744">Kommandolinje</translation>
-<translation id="7364115444476960850">Siden du prøvde å få tilgang til ble blokkert av Vivaldis <ph name="BLOCKER_NAME" /></translation>
 <translation id="7419106976560586862">Profilplassering</translation>
 <translation id="7455133967321480974">Bruk global standardinnstilling (Blokker)</translation>
 <translation id="7518003948725431193">Ingen nettside ble funnet på nettadressen: <ph name="URL" /></translation>
@@ -184,6 +187,7 @@
 <translation id="7714464543167945231">Sertifikat</translation>
 <translation id="7716147886133743102">Blokkert av administratoren</translation>
 <translation id="7716424297397655342">Denne siden kan ikke innlastes fra hurtiglager</translation>
+<translation id="773466115871691567">Oversett alltid sider på <ph name="SOURCE_LANGUAGE" /></translation>
 <translation id="7758069387465995638">Brannmur eller antivirusprogram kan ha blokkert tilkoblingen.</translation>
 <translation id="7800304661137206267">Tilkoblingen er kryptert ved bruk av <ph name="CIPHER" />, med <ph name="MAC" /> for meldingsautentisering og <ph name="KX" /> som nøkkelutvekslingsmekanisme.</translation>
 <translation id="7834399512844817676"><ph name="SITE" /> bruker vanligvis kryptering for å beskytte informasjonen din. Når Vivaldi prøvde å koble til <ph name="SITE" /> denne gangen returnerte nettstedet uvanlig eller feil legitimasjon. Dette kan skje når en angriper prøver å utgi seg som <ph name="SITE" />, eller når en Wi-Fi-inloggingsskjerm avbryter tilkoblingen. Din informasjon er fortsatt trygg, fordi Vivaldi stoppet tilkoblingen før data ble sendt.</translation>
@@ -193,7 +197,6 @@
 <translation id="8037357227543935929">Spør (standard)</translation>
 <translation id="8041940743680923270">Bruk global standardinnstilling (Spør)</translation>
 <translation id="808894953321890993">Endre passord</translation>
-<translation id="8119307142152921512">sporing og reklame</translation>
 <translation id="8149426793427495338">Datamaskinen din gikk inn i hvilemodus.</translation>
 <translation id="8150722005171944719">Filen på <ph name="URL" /> er ikke lesbar.  Den kan ha blitt slettet eller flyttet, eller filtillatelsene forhindrer tilgang til filen.</translation>
 <translation id="8184538546369750125">Bruk global standardinnstilling (Tillat)</translation>
@@ -210,7 +213,6 @@
 <translation id="8703575177326907206">Tilkoblingen til <ph name="DOMAIN" /> er ikke kryptert.</translation>
 <translation id="8740359287975076522"><ph name="HOST_NAME" /> sin &lt;abbr id="dnsDefinition"&gt;DNS-adresse&lt;/abbr&gt; ble ikke funnet. Undersøker problemet.</translation>
 <translation id="8820817407110198400">Bokmerker</translation>
-<translation id="8940028675168378100">Blokkert av <ph name="BLOCKER_NAME" /></translation>
 <translation id="8963117664422609631">Gå til nettstedsinnstillingene</translation>
 <translation id="8975012916872825179">Inkluderer informasjon som telefonnumre, e-postadresser og leveringsadresser</translation>
 <translation id="9001074447101275817">Mellomtjeneren <ph name="DOMAIN" /> krever brukernavn og passord.</translation>
@@ -222,7 +224,6 @@
 <translation id="9073799351042754113">Du har valgt å slå av sikkerhetsadvarsler for dette nettstedet.</translation>
 <translation id="9168814207360376865">Tillatt nettsteder å sjekke om du har noen lagrede betalingsmåter</translation>
 <translation id="9169664750068251925">Alltid blokker på dette nettstedet</translation>
-<translation id="9180553614777056266">Reklameblokkering</translation>
 <translation id="9183425211371246419"><ph name="HOST_NAME" /> bruker en protokoll som ikke støttes.</translation>
 <translation id="936602727769022409">Du kan miste tilgangen til Google-kontoen din. Chromium anbefaler at du endrer passordet ditt nå. Du blir bedt om å logge på.</translation>
 <translation id="969892804517981540">Offisiell versjon</translation>

@@ -14,9 +14,6 @@ build_webui("build") {
     "product_specifications.html",
   ]
 
-  # Files holding a Polymer element definition and have an equivalent .html file.
-  web_component_files = [ "table.ts" ]
-
   css_files = [
     "app.css",
     "buying_options_section.css",
@@ -25,6 +22,7 @@ build_webui("build") {
     "description_citation.css",
     "description_section.css",
     "disclosure/app.css",
+    "empty_section.css",
     "header.css",
     "header_menu.css",
     "horizontal_carousel.css",
@@ -33,6 +31,7 @@ build_webui("build") {
     "product_selection_menu.css",
     "product_selector.css",
     "shared_vars.css",
+    "table.css",
   ]
 
   mojo_files_deps =
@@ -59,6 +58,8 @@ build_webui("build") {
     "disclosure/app.html.ts",
     "disclosure/app.ts",
     "drag_and_drop_manager.ts",
+    "empty_section.html.ts",
+    "empty_section.ts",
     "header.html.ts",
     "header.ts",
     "header_menu.html.ts",
@@ -74,6 +75,8 @@ build_webui("build") {
     "product_selector.html.ts",
     "product_selector.ts",
     "router.ts",
+    "table.html.ts",
+    "table.ts",
     "utils.ts",
     "window_proxy.ts",
   ]
@@ -83,6 +86,7 @@ build_webui("build") {
   html_to_wrapper_template = "detect"
 
   ts_composite = true
+  ts_tsconfig_base = "//tools/typescript/tsconfig_base_lit_389737066.json"
   ts_definitions = [
     "//tools/typescript/definitions/chrome_send.d.ts",
     "//tools/typescript/definitions/metrics_private.d.ts",
@@ -93,7 +97,6 @@ build_webui("build") {
                            target_gen_dir) ]
   ts_deps = [
     "//third_party/lit/v3_0:build_ts",
-    "//third_party/polymer/v3_0:library",
     "//ui/webui/resources/cr_components/color_change_listener:build_ts",
     "//ui/webui/resources/cr_components/commerce:build_ts",
     "//ui/webui/resources/cr_components/localized_link:build_ts",

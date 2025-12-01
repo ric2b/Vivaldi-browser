@@ -14,7 +14,6 @@
 
 use crate::codecs::Decoder;
 use crate::codecs::DecoderConfig;
-use crate::decoder::Category;
 use crate::image::Image;
 use crate::image::YuvRange;
 use crate::internal_utils::pixels::*;
@@ -30,6 +29,41 @@ use std::ptr;
 
 #[cfg(android_soong)]
 include!(concat!(env!("OUT_DIR"), "/mediaimage2_bindgen.rs"));
+
+// This sub-module is used by non-soong Android builds. It contains the bindings necessary to
+// infer the YUV format that comes out of MediaCodec. The C struct source is here:
+// https://cs.android.com/android/platform/superproject/main/+/main:frameworks/native/headers/media_plugin/media/hardware/VideoAPI.h;l=60;drc=a68f3a49e36e043b1640fe85010b0005d1bdb875
+#[allow(non_camel_case_types, non_snake_case, unused)]
+#[cfg(not(android_soong))]
+mod android_soong_placeholder {
+    #[repr(C)]
+    #[derive(Clone, Copy)]
+    pub(crate) struct android_MediaImage2_PlaneInfo {
+        pub mOffset: u32,
+        pub mColInc: i32,
+        pub mRowInc: i32,
+        pub mHorizSubsampling: u32,
+        pub mVertSubsampling: u32,
+    }
+
+    #[derive(Clone, Copy)]
+    #[repr(C)]
+    pub(crate) struct android_MediaImage2 {
+        pub mType: u32,
+        pub mNumPlanes: u32,
+        pub mWidth: u32,
+        pub mHeight: u32,
+        pub mBitDepth: u32,
+        pub mBitDepthAllocated: u32,
+        pub mPlane: [android_MediaImage2_PlaneInfo; 4usize],
+    }
+
+    #[allow(non_upper_case_globals)]
+    pub(crate) const android_MediaImage2_Type_MEDIA_IMAGE_TYPE_YUV: u32 = 1;
+}
+
+#[cfg(not(android_soong))]
+use android_soong_placeholder::*;
 
 #[derive(Debug)]
 struct MediaFormat {
@@ -209,45 +243,37 @@ impl MediaFormat {
     }
 
     fn get_plane_info(&self) -> AvifResult<PlaneInfo> {
-        // When not building for the Android platform, image-data is not available, so simply try to
-        // guess the buffer format based on the available keys in the format.
-        #[cfg(not(android_soong))]
-        return self.guess_plane_info();
-
-        #[cfg(android_soong)]
-        {
-            c_str!(key_str, key_str_tmp, "image-data");
-            let mut data: *mut std::ffi::c_void = ptr::null_mut();
-            let mut size: usize = 0;
-            if !unsafe {
-                AMediaFormat_getBuffer(
-                    self.format,
-                    key_str,
-                    &mut data as *mut _,
-                    &mut size as *mut _,
-                )
-            } {
-                return self.guess_plane_info();
-            }
-            if size != std::mem::size_of::<android_MediaImage2>() {
-                return self.guess_plane_info();
-            }
-            let image_data = unsafe { *(data as *const android_MediaImage2) };
-            if image_data.mType != android_MediaImage2_Type_MEDIA_IMAGE_TYPE_YUV {
-                return self.guess_plane_info();
-            }
-            let planes = unsafe { ptr::read_unaligned(ptr::addr_of!(image_data.mPlane)) };
-            let mut plane_info = PlaneInfo {
-                color_format: self.color_format()?.into(),
-                ..Default::default()
-            };
-            for plane_index in 0usize..3 {
-                plane_info.offset[plane_index] = isize_from_u32(planes[plane_index].mOffset)?;
-                plane_info.row_stride[plane_index] = u32_from_i32(planes[plane_index].mRowInc)?;
-                plane_info.column_stride[plane_index] = u32_from_i32(planes[plane_index].mColInc)?;
-            }
-            return Ok(plane_info);
+        c_str!(key_str, key_str_tmp, "image-data");
+        let mut data: *mut std::ffi::c_void = ptr::null_mut();
+        let mut size: usize = 0;
+        if !unsafe {
+            AMediaFormat_getBuffer(
+                self.format,
+                key_str,
+                &mut data as *mut _,
+                &mut size as *mut _,
+            )
+        } {
+            return self.guess_plane_info();
         }
+        if size != std::mem::size_of::<android_MediaImage2>() {
+            return self.guess_plane_info();
+        }
+        let image_data = unsafe { *(data as *const android_MediaImage2) };
+        if image_data.mType != android_MediaImage2_Type_MEDIA_IMAGE_TYPE_YUV {
+            return self.guess_plane_info();
+        }
+        let planes = unsafe { ptr::read_unaligned(ptr::addr_of!(image_data.mPlane)) };
+        let mut plane_info = PlaneInfo {
+            color_format: self.color_format()?.into(),
+            ..Default::default()
+        };
+        for plane_index in 0usize..3 {
+            plane_info.offset[plane_index] = isize_from_u32(planes[plane_index].mOffset)?;
+            plane_info.row_stride[plane_index] = u32_from_i32(planes[plane_index].mRowInc)?;
+            plane_info.column_stride[plane_index] = u32_from_i32(planes[plane_index].mColInc)?;
+        }
+        return Ok(plane_info);
     }
 }
 

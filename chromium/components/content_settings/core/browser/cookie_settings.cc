@@ -401,9 +401,8 @@ bool CookieSettings::ShouldBlockThirdPartyCookiesInternal() const {
     case CookieControlsMode::kIncognitoOnly:
       return is_incognito_;
     case CookieControlsMode::kOff:
-      return base::FeatureList::IsEnabled(
-                 privacy_sandbox::kAlwaysBlock3pcsIncognito) &&
-             is_incognito_;
+      return is_incognito_ && base::FeatureList::IsEnabled(
+                                  privacy_sandbox::kAlwaysBlock3pcsIncognito);
   }
 #endif
 }
@@ -505,6 +504,20 @@ void CookieSettings::OnCookiePreferencesChanged() {
 }
 
 bool CookieSettings::ShouldBlockThirdPartyCookies() const {
+  return ShouldBlockThirdPartyCookies(std::nullopt,
+                                      net::CookieSettingOverrides());
+}
+
+bool CookieSettings::ShouldBlockThirdPartyCookies(
+    base::optional_ref<const url::Origin> top_frame_origin,
+    net::CookieSettingOverrides overrides) const {
+  if (Are3pcsForceDisabledByOverride(overrides)) {
+    return true;
+  }
+  if (top_frame_origin &&
+      IsBlockedByTopLevel3pcdOriginTrial(top_frame_origin->GetURL())) {
+    return true;
+  }
   base::AutoLock auto_lock(lock_);
   return block_third_party_cookies_;
 }

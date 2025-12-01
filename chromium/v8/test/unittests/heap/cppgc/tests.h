@@ -7,6 +7,7 @@
 
 #include "include/cppgc/heap-consistency.h"
 #include "include/cppgc/heap.h"
+#include "include/cppgc/macros.h"
 #include "include/cppgc/platform.h"
 #include "src/heap/cppgc/heap.h"
 #include "src/heap/cppgc/trace-event.h"

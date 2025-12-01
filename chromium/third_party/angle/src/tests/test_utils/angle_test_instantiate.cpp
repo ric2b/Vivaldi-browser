@@ -187,6 +187,12 @@ std::array<char, kMaxConfigNameLen> gSelectedConfig;
 
 bool gEnableANGLEPerTestCaptureLabel = false;
 
+#if defined(ANGLE_TEST_ENABLE_RENDERDOC_CAPTURE)
+bool gEnableRenderDocCapture = true;
+#else
+bool gEnableRenderDocCapture = false;
+#endif
+
 bool IsConfigSelected()
 {
     return gSelectedConfig[0] != 0;
@@ -351,7 +357,7 @@ bool IsSwiftshaderDevice()
     return HasSystemDeviceID(kVendorID_GOOGLE, kDeviceID_Swiftshader);
 }
 
-bool IsSwiftShaderSupported()
+bool SwiftshaderTestsEnabled()
 {
 #if defined(ANGLE_ENABLE_SWIFTSHADER)
     return true;
@@ -402,13 +408,13 @@ bool IsConfigAllowlisted(const SystemInfo &systemInfo, const PlatformParameters 
             return true;
     }
 
+    if (param.isSwiftshader() && !SwiftshaderTestsEnabled())
+    {
+        return false;
+    }
+
     if (param.isSwiftshader() || IsSwiftshaderDevice())
     {
-        if (!IsSwiftShaderSupported())
-        {
-            return false;
-        }
-
         // TODO: http://crbug.com/swiftshader/145
         // Swiftshader does not currently have all the robustness features
         // we need for ANGLE. In particular, it is unable to detect and recover

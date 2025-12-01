@@ -13,12 +13,11 @@
 // limitations under the License.
 
 //go:build !interactive
-// +build !interactive
 
 package main
 
 import (
-	"boringssl.googlesource.com/boringssl/util/fipstools/acvp/acvptool/acvp"
+	"boringssl.googlesource.com/boringssl.git/util/fipstools/acvp/acvptool/acvp"
 )
 
 const interactiveModeSupported = false

@@ -168,7 +168,7 @@ export class ParsedURL {
     // Based on net::FilePathToFileURL. Ideally we would handle
     // '\\' as well on non-Windows file systems.
     for (const specialChar of ['%', ';', '#', '?', ' ']) {
-      (path as string) = path.replaceAll(specialChar, encodeURIComponent(specialChar));
+      (path) = path.replaceAll(specialChar, encodeURIComponent(specialChar));
     }
     return path;
   }
@@ -364,15 +364,15 @@ export class ParsedURL {
 
   static completeURL(baseURL: Platform.DevToolsPath.UrlString, href: string): Platform.DevToolsPath.UrlString|null {
     // Return special URLs as-is.
-    const trimmedHref = href.trim();
-    if (trimmedHref.startsWith('data:') || trimmedHref.startsWith('blob:') || trimmedHref.startsWith('javascript:') ||
-        trimmedHref.startsWith('mailto:')) {
+    if (href.startsWith('data:') || href.startsWith('blob:') || href.startsWith('javascript:') ||
+        href.startsWith('mailto:')) {
       return href as Platform.DevToolsPath.UrlString;
     }
 
     // Return absolute URLs with normalized path and other components as-is.
+    const trimmedHref = href.trim();
     const parsedHref = this.fromString(trimmedHref);
-    if (parsedHref && parsedHref.scheme) {
+    if (parsedHref?.scheme) {
       const securityOrigin = parsedHref.securityOrigin();
       const pathText = normalizePath(parsedHref.path);
       const queryText = parsedHref.queryParams && `?${parsedHref.queryParams}`;
@@ -537,8 +537,13 @@ export class ParsedURL {
     return this.scheme === 'data';
   }
 
-  isHttpOrHttps(): boolean {
-    return this.scheme === 'http' || this.scheme === 'https';
+  extractDataUrlMimeType(): {type: string|undefined, subtype: string|undefined} {
+    const regexp = /^data:((?<type>\w+)\/(?<subtype>\w+))?(;base64)?,/;
+    const match = this.url.match(regexp);
+    return {
+      type: match?.groups?.type,
+      subtype: match?.groups?.subtype,
+    };
   }
 
   isBlobURL(): boolean {

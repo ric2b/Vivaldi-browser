@@ -481,7 +481,7 @@ void VideoStreamEncoderResourceManager::OnEncodeCompleted(
   // Inform `encode_usage_resource_` of the encode completed event.
   uint32_t timestamp = encoded_image.RtpTimestamp();
   int64_t capture_time_us =
-      encoded_image.capture_time_ms_ * rtc::kNumMicrosecsPerMillisec;
+      encoded_image.capture_time_ms_ * kNumMicrosecsPerMillisec;
   encode_usage_resource_->OnEncodeCompleted(
       timestamp, time_sent_in_us, capture_time_us, encode_duration_us);
   quality_scaler_resource_->OnEncodeCompleted(encoded_image, time_sent_in_us);
@@ -538,7 +538,8 @@ void VideoStreamEncoderResourceManager::UpdateQualityScalerSettings(
 void VideoStreamEncoderResourceManager::UpdateBandwidthQualityScalerSettings(
     bool bandwidth_quality_scaling_allowed,
     const std::vector<VideoEncoder::ResolutionBitrateLimits>&
-        resolution_bitrate_limits) {
+        resolution_bitrate_limits,
+    VideoCodecType codec_type) {
   RTC_DCHECK_RUN_ON(encoder_queue_);
 
   if (!bandwidth_quality_scaling_allowed) {
@@ -553,7 +554,7 @@ void VideoStreamEncoderResourceManager::UpdateBandwidthQualityScalerSettings(
       AddResource(bandwidth_quality_scaler_resource_,
                   webrtc::VideoAdaptationReason::kQuality);
       bandwidth_quality_scaler_resource_->StartCheckForOveruse(
-          resolution_bitrate_limits);
+          resolution_bitrate_limits, codec_type);
     }
   }
 }
@@ -612,8 +613,9 @@ void VideoStreamEncoderResourceManager::ConfigureBandwidthQualityScaler(
        encoder_settings_->encoder_config().is_quality_scaling_allowed) &&
       !encoder_info.is_qp_trusted.value_or(true);
 
-  UpdateBandwidthQualityScalerSettings(bandwidth_quality_scaling_allowed,
-                                       encoder_info.resolution_bitrate_limits);
+  UpdateBandwidthQualityScalerSettings(
+      bandwidth_quality_scaling_allowed, encoder_info.resolution_bitrate_limits,
+      GetVideoCodecTypeOrGeneric(encoder_settings_));
   UpdateStatsAdaptationSettings();
 }
 
@@ -644,7 +646,7 @@ CpuOveruseOptions VideoStreamEncoderResourceManager::GetCpuOveruseOptions()
     options.high_encode_usage_threshold_percent = 200;
   }
   if (experiment_cpu_load_estimator_) {
-    options.filter_time_ms = 5 * rtc::kNumMillisecsPerSec;
+    options.filter_time_ms = 5 * kNumMillisecsPerSec;
   }
   return options;
 }
@@ -745,7 +747,7 @@ void VideoStreamEncoderResourceManager::UpdateStatsAdaptationSettings() const {
 std::string VideoStreamEncoderResourceManager::ActiveCountsToString(
     const std::map<VideoAdaptationReason, VideoAdaptationCounters>&
         active_counts) {
-  rtc::StringBuilder ss;
+  StringBuilder ss;
 
   ss << "Downgrade counts: fps: {";
   for (auto& reason_count : active_counts) {

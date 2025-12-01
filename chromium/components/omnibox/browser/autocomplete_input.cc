@@ -741,7 +741,7 @@ bool AutocompleteInput::HasHTTPSScheme(const std::u16string& input) {
 
 // static
 AutocompleteInput::FeaturedKeywordMode
-AutocompleteInput::GetFeaturedKeywordMode(const std::u16string& text) {
+AutocompleteInput::GetFeaturedKeywordMode(std::u16string_view text) {
   if (text == u"@")
     return FeaturedKeywordMode::kExact;
   if (text.starts_with(u'@'))
@@ -775,7 +775,7 @@ const TemplateURL* AutocompleteInput::AdjustInputForStarterPackEngines(
 
 // static
 const TemplateURL* AutocompleteInput::GetSubstitutingTemplateURLForInput(
-    TemplateURLService* model,
+    const TemplateURLService* model,
     AutocompleteInput* input) {
   if (!input->allow_exact_keyword_match()) {
     return nullptr;

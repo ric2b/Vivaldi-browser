@@ -290,7 +290,6 @@ const std::vector<std::string> commands_to_fwd = {
   "COMMAND_CLOSE_WINDOW",
   "COMMAND_DEVELOPER_TOOLS",
   "COMMAND_DEVTOOLS_CONSOLE",
-  "COMMAND_DEVTOOLS_INSPECTOR",
   "COMMAND_NEW_TAB",
   "COMMAND_NEW_BACKGROUND_TAB",
   "COMMAND_NEW_PRIVATE_WINDOW",
@@ -299,6 +298,7 @@ const std::vector<std::string> commands_to_fwd = {
   "COMMAND_CLIPBOARD_COPY",
   "COMMAND_CLIPBOARD_CUT",
   "COMMAND_CLIPBOARD_PASTE",
+  "COMMAND_CLIPBOARD_SELECT_ALL",
   "COMMAND_CLIPBOARD_PASTE_AS_PLAIN_TEXT"
 };
 
@@ -433,6 +433,10 @@ UIBindingsDelegate::UIBindingsDelegate(content::BrowserContext* browser_context,
 }
 
 UIBindingsDelegate::~UIBindingsDelegate() {}
+
+content::WebContents* UIBindingsDelegate::GetInspectedWebContents() {
+  return nullptr;
+}
 
 void UIBindingsDelegate::ActivateWindow() {
   ::vivaldi::BroadcastEvent(

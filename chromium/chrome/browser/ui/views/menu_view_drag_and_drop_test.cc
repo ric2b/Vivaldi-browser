@@ -114,11 +114,11 @@ void TestTargetView::Init() {
 
   // Then add two draggable views, each 10x5.
   views::View* first = new TestDragView();
-  AddChildView(first);
+  AddChildViewRaw(first);
   first->SetBounds(2, 2, 10, 5);
 
   views::View* second = new TestDragView();
-  AddChildView(second);
+  AddChildViewRaw(second);
   second->SetBounds(15, 2, 10, 5);
 }
 
@@ -242,7 +242,7 @@ void MenuViewDragAndDropTest::BuildMenu(views::MenuItemView* menu) {
   // drop...
   views::MenuItemView* menu_item_view = menu->AppendMenuItem(1, u"item 1");
   target_view_ = new TestTargetView();
-  menu_item_view->AddChildView(target_view_.get());
+  menu_item_view->AddChildViewRaw(target_view_.get());
   // ... as well as two other, normal items.
   menu->AppendMenuItem(2, u"item 2");
   menu->AppendMenuItem(3, u"item 3");
@@ -280,7 +280,7 @@ void MenuViewDragAndDropTest::OnDragEntered() {
       FROM_HERE,
       base::BindOnce(base::IgnoreResult(&ui_controls::SendMouseEvents),
                      ui_controls::LEFT, ui_controls::UP,
-                     ui_controls::kNoAccelerator, ui_controls::kNoWindowHint));
+                     ui_controls::kNoAccelerator, gfx::NativeWindow()));
 }
 
 bool MenuViewDragAndDropTest::GetDropFormats(
@@ -367,9 +367,8 @@ void MenuViewDragAndDropTestTestInMenuDrag::OnWidgetDragWillStart(
   const gfx::Point target =
       ui_test_utils::GetCenterInScreenCoordinates(drop_target_view);
   GetDragTaskRunner()->PostTask(
-      FROM_HERE,
-      base::BindOnce(base::IgnoreResult(&ui_controls::SendMouseMove),
-                     target.x(), target.y(), ui_controls::kNoWindowHint));
+      FROM_HERE, base::BindOnce(base::IgnoreResult(&ui_controls::SendMouseMove),
+                                target.x(), target.y(), gfx::NativeWindow()));
 }
 
 void MenuViewDragAndDropTestTestInMenuDrag::OnWidgetDragComplete(
@@ -459,7 +458,7 @@ void MenuViewDragAndDropTestTestInMenuDragNoDrop::OnWidgetDragWillStart(
       FROM_HERE,
       base::BindOnce(base::IgnoreResult(&ui_controls::SendMouseEvents),
                      ui_controls::LEFT, ui_controls::UP,
-                     ui_controls::kNoAccelerator, ui_controls::kNoWindowHint));
+                     ui_controls::kNoAccelerator, gfx::NativeWindow()));
 }
 
 void MenuViewDragAndDropTestTestInMenuDragNoDrop::OnWidgetDragComplete(
@@ -538,9 +537,8 @@ void MenuViewDragAndDropTestNestedDrag::OnWidgetDragWillStart(
   const gfx::Point target =
       ui_test_utils::GetCenterInScreenCoordinates(drop_target_view);
   GetDragTaskRunner()->PostTask(
-      FROM_HERE,
-      base::BindOnce(base::IgnoreResult(&ui_controls::SendMouseMove),
-                     target.x(), target.y(), ui_controls::kNoWindowHint));
+      FROM_HERE, base::BindOnce(base::IgnoreResult(&ui_controls::SendMouseMove),
+                                target.x(), target.y(), gfx::NativeWindow()));
 }
 
 void MenuViewDragAndDropTestNestedDrag::OnWidgetDragComplete(

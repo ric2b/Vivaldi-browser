@@ -23,8 +23,10 @@
 #include "third_party/blink/renderer/modules/webcodecs/video_frame_handle.h"
 #include "third_party/blink/renderer/platform/bindings/script_wrappable.h"
 #include "third_party/blink/renderer/platform/bindings/v8_external_memory_accounter.h"
+#include "third_party/blink/renderer/platform/graphics/predefined_color_space.h"
 #include "third_party/blink/renderer/platform/heap/member.h"
 #include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
+#include "third_party/skia/include/core/SkImage.h"
 #include "third_party/skia/include/core/SkRefCnt.h"
 
 // Note: Don't include "media/base/video_frame.h" here without good reason,
@@ -129,11 +131,9 @@ class MODULES_EXPORT VideoFrame final : public ScriptWrappable,
 
  private:
   // CanvasImageSource implementation
-  scoped_refptr<Image> GetSourceImageForCanvas(
-      FlushReason,
-      SourceImageStatus*,
-      const gfx::SizeF&,
-      const AlphaDisposition alpha_disposition) override;
+  scoped_refptr<Image> GetSourceImageForCanvas(FlushReason,
+                                               SourceImageStatus*,
+                                               const gfx::SizeF&) override;
 
   gfx::SizeF ElementSize(const gfx::SizeF&,
                          const RespectImageOrientationEnum) const override;

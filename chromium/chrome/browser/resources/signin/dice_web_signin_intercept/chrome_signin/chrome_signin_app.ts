@@ -45,16 +45,17 @@ export class ChromeSigninAppElement extends ChromeSigninAppElementBase {
     };
   }
 
-  protected interceptionParameters_: ChromeSigninInterceptionParameters = {
-    title: '',
-    subtitle: '',
-    fullName: '',
-    givenName: '',
-    email: '',
-    pictureUrl: '',
-    managedUserBadge: '',
-    userBadgeAltText: '',
-  };
+  protected accessor interceptionParameters_:
+      ChromeSigninInterceptionParameters = {
+        title: '',
+        subtitle: '',
+        fullName: '',
+        givenName: '',
+        email: '',
+        pictureUrl: '',
+        managedUserBadge: '',
+        userBadgeAltText: '',
+      };
   private diceWebSigninInterceptBrowserProxy_:
       DiceWebSigninInterceptBrowserProxy =
           DiceWebSigninInterceptBrowserProxyImpl.getInstance();
@@ -95,8 +96,10 @@ export class ChromeSigninAppElement extends ChromeSigninAppElementBase {
     if (this.interceptionParameters_.email.length === 0) {
       return nothing;
     }
-    return this.i18n(
-        'acceptButtonAriaLabel', this.interceptionParameters_.email);
+
+    return this
+        .i18n('acceptButtonAriaLabel', this.interceptionParameters_.givenName)
+        .concat(' ', this.interceptionParameters_.email);
   }
 }
 

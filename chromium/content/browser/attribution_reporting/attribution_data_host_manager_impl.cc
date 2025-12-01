@@ -13,6 +13,7 @@
 #include <string>
 #include <string_view>
 #include <utility>
+#include <variant>
 #include <vector>
 
 #include "base/check.h"
@@ -27,6 +28,7 @@
 #include "base/functional/callback.h"
 #include "base/functional/overloaded.h"
 #include "base/memory/raw_ref.h"
+#include "base/memory/scoped_refptr.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/notreached.h"
 #include "base/time/time.h"
@@ -72,9 +74,9 @@
 #include "net/http/http_response_headers.h"
 #include "net/http/structured_headers.h"
 #include "services/data_decoder/public/cpp/data_decoder.h"
+#include "services/metrics/public/cpp/ukm_source_id.h"
 #include "services/network/public/cpp/attribution_utils.h"
 #include "services/network/public/mojom/attribution.mojom-forward.h"
-#include "third_party/abseil-cpp/absl/types/variant.h"
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/common/tokens/tokens.h"
 #include "third_party/blink/public/mojom/devtools/inspector_issue.mojom.h"
@@ -144,6 +146,33 @@ enum class RegistrationMethod {
 
 void RecordRegistrationMethod(RegistrationMethod method) {
   base::UmaHistogramEnumeration("Conversions.RegistrationMethod2", method);
+}
+
+std::string_view ToString(RegistrationMethod method) {
+  switch (method) {
+    case RegistrationMethod::kNavForeground:
+      return "kNavForeground";
+    case RegistrationMethod::kNavBackgroundBlink:
+      return "kNavBackgroundBlink";
+    case RegistrationMethod::kNavBackgroundBlinkViaSW:
+      return "kNavBackgroundBlinkViaSW";
+    case RegistrationMethod::kNavBackgroundBrowser:
+      return "kNavBackgroundBrowser";
+    case RegistrationMethod::kFencedFrameBeacon:
+      return "kFencedFrameBeacon";
+    case RegistrationMethod::kFencedFrameAutomaticBeacon:
+      return "kFencedFrameAutomaticBeacon";
+    case RegistrationMethod::kForegroundBlink:
+      return "kForegroundBlink";
+    case RegistrationMethod::kForegroundBlinkViaSW:
+      return "kForegroundBlinkViaSW";
+    case RegistrationMethod::kBackgroundBlink:
+      return "kBackgroundBlink";
+    case RegistrationMethod::kBackgroundBlinkViaSW:
+      return "kBackgroundBlinkViaSW";
+    case RegistrationMethod::kForegroundOrBackgroundBrowser:
+      return "kForegroundOrBackgroundBrowser";
+  }
 }
 
 // These values are persisted to logs. Entries should not be renumbered and
@@ -431,6 +460,10 @@ class AttributionDataHostManagerImpl::RegistrationContext {
     return suitable_context_.is_context_google_amp_viewer();
   }
 
+  ukm::SourceId ukm_source_id() const {
+    return suitable_context_.ukm_source_id();
+  }
+
   RegistrationMethod GetRegistrationMethod(
       bool was_fetched_via_service_worker) const {
     switch (method_) {
@@ -524,6 +557,10 @@ class AttributionDataHostManagerImpl::RegistrationContext {
       }
       SCOPED_CRASH_KEY_STRING32("AttributionReporting", "unmatched_context",
                                 unmatched_field);
+      SCOPED_CRASH_KEY_STRING32("AttributionReporting", "first_method",
+                                ToString(method_));
+      SCOPED_CRASH_KEY_STRING32("AttributionReporting", "second_method",
+                                ToString(other.method_));
       base::debug::DumpWithoutCrashing();
     }
     return is_equivalent;
@@ -623,6 +660,8 @@ class AttributionDataHostManagerImpl::Registrations {
   bool is_within_fenced_frame() const {
     return context_.is_within_fenced_frame();
   }
+
+  ukm::SourceId ukm_source_id() const { return context_.ukm_source_id(); }
 
   bool IsReadyToProcess() const {
     if (waiting_on_navigation_) {
@@ -1609,7 +1648,7 @@ void AttributionDataHostManagerImpl::NotifyBackgroundRegistrationStarted(
 
 bool AttributionDataHostManagerImpl::NotifyBackgroundRegistrationData(
     BackgroundRegistrationsId id,
-    const net::HttpResponseHeaders* headers,
+    scoped_refptr<net::HttpResponseHeaders> headers,
     GURL reporting_url) {
   CHECK(BackgroundRegistrationsEnabled());
 
@@ -1632,7 +1671,7 @@ bool AttributionDataHostManagerImpl::NotifyBackgroundRegistrationData(
   }
 
   auto pending_registration_data =
-      PendingRegistrationData::Get(headers, *it, std::move(reporting_url),
+      PendingRegistrationData::Get(headers.get(), *it, std::move(reporting_url),
                                    *std::move(suitable_reporting_origin));
 
   if (!pending_registration_data.has_value()) {
@@ -1730,7 +1769,8 @@ void AttributionDataHostManagerImpl::SourceDataAvailable(
   attribution_manager_->HandleSource(
       StorableSource(std::move(reporting_origin), std::move(data),
                      /*source_origin=*/context->context_origin(), source_type,
-                     context->is_within_fenced_frame()),
+                     context->is_within_fenced_frame(),
+                     context->ukm_source_id()),
       context->render_frame_id());
 }
 
@@ -1764,7 +1804,8 @@ void AttributionDataHostManagerImpl::TriggerDataAvailable(
   attribution_manager_->HandleTrigger(
       AttributionTrigger(std::move(reporting_origin), std::move(data),
                          /*destination_origin=*/context->context_origin(),
-                         context->is_within_fenced_frame()),
+                         context->is_within_fenced_frame(),
+                         context->ukm_source_id()),
       context->render_frame_id());
 }
 
@@ -1958,7 +1999,8 @@ AttributionDataHostManagerImpl::HandleParsedWebSource(
   attribution_manager_->HandleSource(
       StorableSource(std::move(pending_decode.reporting_origin),
                      std::move(registration), registrations.context_origin(),
-                     source_type, registrations.is_within_fenced_frame()),
+                     source_type, registrations.is_within_fenced_frame(),
+                     registrations.ukm_source_id()),
       registrations.render_frame_id());
 
   return base::ok();
@@ -1981,7 +2023,8 @@ AttributionDataHostManagerImpl::HandleParsedWebTrigger(
       AttributionTrigger(std::move(pending_decode.reporting_origin),
                          std::move(registration),
                          /*destination_origin=*/registrations.context_origin(),
-                         registrations.is_within_fenced_frame()),
+                         registrations.is_within_fenced_frame(),
+                         registrations.ukm_source_id()),
       registrations.render_frame_id());
 
   return base::ok();
@@ -2353,7 +2396,7 @@ void AttributionDataHostManagerImpl::MaybeLogAuditIssueAndReportHeaderError(
   auto&& [header, reporting_origin, reporting_url, report_header_errors,
           registration_type] = std::move(pending_decode);
 
-  AttributionReportingIssueType issue_type = absl::visit(
+  AttributionReportingIssueType issue_type = std::visit(
       base::Overloaded{
           [](SourceRegistrationError error) {
             attribution_reporting::RecordSourceRegistrationError(error);

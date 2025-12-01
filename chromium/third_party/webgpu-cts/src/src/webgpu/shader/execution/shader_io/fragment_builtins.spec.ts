@@ -20,15 +20,15 @@ is evaluated per-fragment or per-sample. With @interpolate(, sample) or usage of
 import { makeTestGroup } from '../../../../common/framework/test_group.js';
 import { ErrorWithExtra, assert, range, unreachable } from '../../../../common/util/util.js';
 import { InterpolationSampling, InterpolationType } from '../../../constants.js';
-import { kTextureFormatInfo } from '../../../format_info.js';
-import { GPUTest, TextureTestMixin } from '../../../gpu_test.js';
+import { getBlockInfoForTextureFormat } from '../../../format_info.js';
+import { AllFeaturesMaxLimitsGPUTest, GPUTest, TextureTestMixin } from '../../../gpu_test.js';
 import { getProvokingVertexForFlatInterpolationEitherSampling } from '../../../inter_stage.js';
 import { getMultisampleFragmentOffsets } from '../../../multisample_info.js';
 import { dotProduct, subtractVectors, align } from '../../../util/math.js';
 import { TexelView } from '../../../util/texture/texel_view.js';
 import { findFailedPixels } from '../../../util/texture/texture_ok.js';
 
-class FragmentBuiltinTest extends TextureTestMixin(GPUTest) {}
+class FragmentBuiltinTest extends TextureTestMixin(AllFeaturesMaxLimitsGPUTest) {}
 
 export const g = makeTestGroup(FragmentBuiltinTest);
 
@@ -528,9 +528,8 @@ function computeSampleMask({ sampleMask }: FragData) {
  * backends like M1 Mac so it seems better to stick to rgba8unorm here and test
  * using a storage buffer in a fragment shader separately.
  *
- * We can't use rgba32float because it's optional. We can't use rgba16float
- * because it's optional in compat. We can't we use rgba32uint as that can't be
- * multisampled.
+ * We can't use rgba32float, nor rgba16float, nor rgba32uint as they can't be
+ * multisampled in all feature levels.
  */
 async function renderFragmentShaderInputsTo4TexturesAndReadbackValues(
   t: GPUTest,
@@ -1499,7 +1498,7 @@ fn vsMain(@builtin(vertex_index) index : u32) -> @builtin(position) vec4f {
     },
   });
 
-  const { blockWidth, blockHeight, bytesPerBlock } = kTextureFormatInfo[format];
+  const { blockWidth, blockHeight, bytesPerBlock } = getBlockInfoForTextureFormat(format);
   assert(bytesPerBlock !== undefined);
 
   const blocksPerRow = width / blockWidth;
@@ -1530,7 +1529,7 @@ fn vsMain(@builtin(vertex_index) index : u32) -> @builtin(position) vec4f {
       ],
     });
     pass.setPipeline(pipeline);
-    // Draw the uperr-left triangle (vertices 0-2) or the lower-right triangle (vertices 3-5)
+    // Draw the upper-left triangle (vertices 0-2) or the lower-right triangle (vertices 3-5)
     pass.draw(3, 1, i * 3);
     pass.end();
     t.queue.submit([encoder.finish()]);
@@ -1548,7 +1547,7 @@ fn vsMain(@builtin(vertex_index) index : u32) -> @builtin(position) vec4f {
   }
 }
 
-const kMaximiumSubgroupSize = 128;
+const kMaximumSubgroupSize = 128;
 // A non-zero magic number indicating no expectation error, in order to prevent the false no-error
 // result from zero-initialization.
 const kSubgroupShaderNoError = 17;
@@ -1564,7 +1563,7 @@ const kSubgroupShaderNoError = 17;
  *             * balloted active invocations number
  *             * balloted subgroup size all active invocations agreed on, otherwise 0
  *             * error flag, should be equal to kSubgroupShaderNoError or shader found
- *               expection failed otherwise.
+ *               expectation failed otherwise.
  * @param format The texture format for data
  * @param min The minimum subgroup size from the device
  * @param max The maximum subgroup size from the device
@@ -1579,7 +1578,7 @@ function checkSubgroupSizeConsistency(
   width: number,
   height: number
 ): Error | undefined {
-  const { blockWidth, blockHeight, bytesPerBlock } = kTextureFormatInfo[format];
+  const { blockWidth, blockHeight, bytesPerBlock } = getBlockInfoForTextureFormat(format);
   const blocksPerRow = width / blockWidth;
   // Image copies require bytesPerRow to be a multiple of 256.
   const bytesPerRow = align(blocksPerRow * (bytesPerBlock ?? 1), 256);
@@ -1651,10 +1650,8 @@ g.test('subgroup_size')
       .beginSubcases()
       .combineWithParams([{ format: 'rgba32uint' }] as const)
   )
-  .beforeAllSubcases(t => {
-    t.selectDeviceOrSkipTestCase('subgroups' as GPUFeatureName);
-  })
   .fn(async t => {
+    t.skipIfDeviceDoesNotHaveFeature('subgroups' as GPUFeatureName);
     interface SubgroupProperties extends GPUAdapterInfo {
       subgroupMinSize: number;
       subgroupMaxSize: number;
@@ -1664,7 +1661,7 @@ g.test('subgroup_size')
     const fsShader = `
 enable subgroups;
 
-const subgroupMaxSize = ${kMaximiumSubgroupSize}u;
+const subgroupMaxSize = ${kMaximumSubgroupSize}u;
 const noError = ${kSubgroupShaderNoError}u;
 
 const width = ${t.params.size[0]};
@@ -1737,7 +1734,7 @@ fn fsMain(
  *             * subgroup size
  *             * ballot active invocation number
  *             * error flag, should be equal to kSubgroupShaderNoError or shader found
- *               expection failed otherwise.
+ *               expectation failed otherwise.
  * @param format The texture format of data
  * @param width The width of the framebuffer
  * @param height The height of the framebuffer
@@ -1748,7 +1745,7 @@ function checkSubgroupInvocationIdConsistency(
   width: number,
   height: number
 ): Error | undefined {
-  const { blockWidth, blockHeight, bytesPerBlock } = kTextureFormatInfo[format];
+  const { blockWidth, blockHeight, bytesPerBlock } = getBlockInfoForTextureFormat(format);
   const blocksPerRow = width / blockWidth;
   const bytesPerRow = align(blocksPerRow * (bytesPerBlock ?? 1), 256);
   const uintsPerRow = bytesPerRow / 4;
@@ -1806,17 +1803,15 @@ g.test('subgroup_invocation_id')
       .beginSubcases()
       .combineWithParams([{ format: 'rgba32uint' }] as const)
   )
-  .beforeAllSubcases(t => {
-    t.selectDeviceOrSkipTestCase('subgroups' as GPUFeatureName);
-  })
   .fn(async t => {
+    t.skipIfDeviceDoesNotHaveFeature('subgroups' as GPUFeatureName);
     const fsShader = `
 enable subgroups;
 
 const width = ${t.params.size[0]};
 const height = ${t.params.size[1]};
 
-const subgroupMaxSize = ${kMaximiumSubgroupSize}u;
+const subgroupMaxSize = ${kMaximumSubgroupSize}u;
 // A non-zero magic number indicating no expectation error, in order to prevent the
 // false no-error result from zero-initialization.
 const noError = ${kSubgroupShaderNoError}u;

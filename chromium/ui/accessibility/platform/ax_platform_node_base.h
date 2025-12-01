@@ -470,6 +470,10 @@ class COMPONENT_EXPORT(AX_PLATFORM) AXPlatformNodeBase : public AXPlatformNode {
   static AXPlatformNodeBase* FromNativeViewAccessible(
       gfx::NativeViewAccessible accessible);
 
+  // Releases resources used by the platform node. Called by `Destroy()`. The
+  // default implementation deletes the instance. Subclasses with different
+  // memory management requirements may provide their own implementation; e.g.,
+  // Windows.
   virtual void Dispose();
 
   // Sets the hypertext selection in this object if possible.
@@ -613,7 +617,7 @@ class COMPONENT_EXPORT(AX_PLATFORM) AXPlatformNodeBase : public AXPlatformNode {
   // Is there an aria-describedby that points to a role="tooltip".
   bool IsDescribedByTooltip() const;
 
-  friend AXPlatformNode* AXPlatformNode::Create(
+  friend AXPlatformNode::Pointer AXPlatformNode::Create(
       AXPlatformNodeDelegate* delegate);
 
   FRIEND_TEST_ALL_PREFIXES(AXPlatformNodeTest, HypertextOffsetFromEndpoint);

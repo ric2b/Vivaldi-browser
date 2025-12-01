@@ -107,6 +107,15 @@ std::optional<HeapSimulator::Chunk> GetSlicedCopyAllocationChunk(
 
 }  // namespace
 
+std::string MemorySpaceToString(MemorySpace memory_space) {
+  switch (memory_space) {
+    case MemorySpace::kDefault:
+      return "def";
+    case MemorySpace::kAlternate:
+      return "alt";
+  }
+}
+
 std::optional<int64_t> Allocation::cross_program_prefetch_index() const {
   return cross_program_prefetch_index_;
 }
@@ -308,8 +317,7 @@ absl::Status PinnedAllocation::Process(const BitcastSplitFn& bitcast_split_fn) {
 }
 
 std::string PinnedAllocation::ToString() const {
-  std::string memory_space_str =
-      memory_space() == MemorySpace::kDefault ? "def" : "alt";
+  std::string memory_space_str = MemorySpaceToString(memory_space());
   std::optional<HeapSimulator::Chunk> chunk = maybe_chunk();
   if (chunk) {
     absl::StrAppend(&memory_space_str, " (off: ", chunk->offset,
@@ -364,19 +372,14 @@ absl::Status CopyAllocation::Process(const BitcastSplitFn& bitcast_split_fn) {
   HloInstruction* producing_instruction = AddGetTupleElements();
   HloComputation* computation = producing_instruction->parent();
   if (sync_mem_op_ != nullptr && sync_mem_op_->opcode() != HloOpcode::kCopy) {
-    if (sync_mem_op_->opcode() == HloOpcode::kSlice) {
+    if (sync_mem_op_->opcode() == HloOpcode::kSlice ||
+        sync_mem_op_->opcode() == HloOpcode::kDynamicSlice) {
       TF_ASSIGN_OR_RETURN(copy_done_,
                           computation->CreateAsyncInstructions(
                               sync_mem_op_, {ShapeUtil::MakeShape(S32, {})},
                               HloInstruction::kMainExecutionThread, false));
     } else {
-      TF_RET_CHECK(sync_mem_op_->opcode() == HloOpcode::kDynamicSlice);
-      TF_ASSIGN_OR_RETURN(
-          copy_done_,
-          computation->CreateAsyncInstructions(
-              sync_mem_op_,
-              {ShapeUtil::MakeShape(S32, {}), ShapeUtil::MakeShape(S32, {})},
-              HloInstruction::kMainExecutionThread, false));
+      return Internal("Sync mem op is not a copy, slice, or dynamic slice.");
     }
     copy_start_ = copy_done_->mutable_operand(0);
     // If the shape of the copy start operand is not compatible with the
@@ -395,6 +398,10 @@ absl::Status CopyAllocation::Process(const BitcastSplitFn& bitcast_split_fn) {
     if (memory_space() == MemorySpace::kAlternate &&
         mutable_split_shape().has_value()) {
       dest_shape = mutable_split_shape().value();
+    } else if (memory_space() == MemorySpace::kDefault && shape.has_layout() &&
+               shape.layout().split_configs_size() > 0) {
+      dest_shape = shape;
+      dest_shape.mutable_layout()->clear_split_configs();
     } else {
       dest_shape = shape;
     }
@@ -426,8 +433,7 @@ void CopyAllocation::MarkNeeded(
 }
 
 std::string CopyAllocation::ToString() const {
-  std::string memory_space_str =
-      memory_space() == MemorySpace::kDefault ? "def" : "alt";
+  std::string memory_space_str = MemorySpaceToString(memory_space());
   std::optional<HeapSimulator::Chunk> chunk = maybe_chunk();
   if (chunk) {
     absl::StrAppend(&memory_space_str, " (off: ", chunk->offset,
@@ -692,9 +698,9 @@ bool SlicedCopyAllocation::operator==(const SlicedCopyAllocation& other) const {
 }
 
 std::string SlicedCopyAllocation::ToString() const {
-  std::string memory_space_str = "def";
+  std::string memory_space_str = MemorySpaceToString(memory_space());
   if (memory_space() == MemorySpace::kAlternate) {
-    memory_space_str = absl::StrCat("alt (off: ", maybe_chunk()->offset, ")");
+    absl::StrAppend(&memory_space_str, " (off: ", maybe_chunk()->offset, ")");
   }
   return absl::StrCat(
       "Sliced Copy Allocation in ", memory_space_str,
@@ -741,11 +747,13 @@ bool SlicedCopyAllocation::SliceDetail::operator==(
 absl::Status SlicedCopyAllocation::SliceDetail::CreateAsyncSlice(
     const Shape& original_shape, HloInstruction& producer,
     HloComputation& parent) {
-  if (original_shape.rank() != slice_decision.sizing.slice_params.size()) {
+  if (original_shape.dimensions_size() !=
+      slice_decision.sizing.slice_params.size()) {
     return FailedPrecondition(
         "%s", absl::StrCat("The number of SlicedCopyAllocation parameters ",
                            slice_decision.sizing.slice_params.size(),
-                           " does not match the rank ", original_shape.rank(),
+                           " does not match the rank ",
+                           original_shape.dimensions_size(),
                            " of the tensor we are slicing."));
   }
 

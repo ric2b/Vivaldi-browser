@@ -245,18 +245,18 @@ const MLOpSupportLimits* MLContext::opSupportLimits(ScriptState* script_state) {
 
   MLBatchNormalizationSupportLimits* batch_normalization =
       MLBatchNormalizationSupportLimits::Create();
-  batch_normalization->setInput(SupportedDataTypesToDataTypeLimits(
+  batch_normalization->setInput(SupportedTensorLimitsToTensorLimits(
       data_type_limits.batch_normalization_input));
-  batch_normalization->setMean(SupportedDataTypesToDataTypeLimits(
-      data_type_limits.batch_normalization_input));
-  batch_normalization->setVariance(SupportedDataTypesToDataTypeLimits(
-      data_type_limits.batch_normalization_input));
-  batch_normalization->setScale(SupportedDataTypesToDataTypeLimits(
-      data_type_limits.batch_normalization_input));
-  batch_normalization->setBias(SupportedDataTypesToDataTypeLimits(
-      data_type_limits.batch_normalization_input));
+  batch_normalization->setMean(SupportedTensorLimitsToTensorLimits(
+      data_type_limits.batch_normalization_mean));
+  batch_normalization->setVariance(SupportedTensorLimitsToTensorLimits(
+      data_type_limits.batch_normalization_mean));
+  batch_normalization->setScale(SupportedTensorLimitsToTensorLimits(
+      data_type_limits.batch_normalization_mean));
+  batch_normalization->setBias(SupportedTensorLimitsToTensorLimits(
+      data_type_limits.batch_normalization_mean));
   batch_normalization->setOutput(SupportedDataTypesToDataTypeLimits(
-      data_type_limits.batch_normalization_input));
+      data_type_limits.batch_normalization_input.data_types));
   op_support_limits->setBatchNormalization(batch_normalization);
 
   MLSingleInputSupportLimits* cast = MLSingleInputSupportLimits::Create();
@@ -275,31 +275,31 @@ const MLOpSupportLimits* MLContext::opSupportLimits(ScriptState* script_state) {
 
   MLConcatSupportLimits* concat = MLConcatSupportLimits::Create();
   concat->setInputs(
-      SupportedDataTypesToDataTypeLimits(data_type_limits.concat_inputs));
-  concat->setOutput(
-      SupportedDataTypesToDataTypeLimits(data_type_limits.concat_inputs));
+      SupportedTensorLimitsToTensorLimits(data_type_limits.concat_inputs));
+  concat->setOutput(SupportedDataTypesToDataTypeLimits(
+      data_type_limits.concat_inputs.data_types));
   op_support_limits->setConcat(concat);
 
   MLConv2dSupportLimits* conv2d = MLConv2dSupportLimits::Create();
   conv2d->setInput(
-      SupportedDataTypesToDataTypeLimits(data_type_limits.conv2d_input));
+      SupportedTensorLimitsToTensorLimits(data_type_limits.conv2d_input));
   conv2d->setFilter(
-      SupportedDataTypesToDataTypeLimits(data_type_limits.conv2d_input));
+      SupportedTensorLimitsToTensorLimits(data_type_limits.conv2d_input));
   conv2d->setBias(
-      SupportedDataTypesToDataTypeLimits(data_type_limits.conv2d_input));
-  conv2d->setOutput(
-      SupportedDataTypesToDataTypeLimits(data_type_limits.conv2d_input));
+      SupportedTensorLimitsToTensorLimits(data_type_limits.conv2d_bias));
+  conv2d->setOutput(SupportedDataTypesToDataTypeLimits(
+      data_type_limits.conv2d_input.data_types));
   op_support_limits->setConv2d(conv2d);
 
   MLConv2dSupportLimits* conv_transpose2d = MLConv2dSupportLimits::Create();
-  conv_transpose2d->setInput(SupportedDataTypesToDataTypeLimits(
+  conv_transpose2d->setInput(SupportedTensorLimitsToTensorLimits(
       data_type_limits.conv_transpose2d_input));
-  conv_transpose2d->setFilter(SupportedDataTypesToDataTypeLimits(
+  conv_transpose2d->setFilter(SupportedTensorLimitsToTensorLimits(
       data_type_limits.conv_transpose2d_input));
-  conv_transpose2d->setBias(SupportedDataTypesToDataTypeLimits(
-      data_type_limits.conv_transpose2d_input));
+  conv_transpose2d->setBias(SupportedTensorLimitsToTensorLimits(
+      data_type_limits.conv_transpose2d_bias));
   conv_transpose2d->setOutput(SupportedDataTypesToDataTypeLimits(
-      data_type_limits.conv_transpose2d_input));
+      data_type_limits.conv_transpose2d_input.data_types));
   op_support_limits->setConvTranspose2d(conv_transpose2d);
 
   MLSingleInputSupportLimits* cumulative_sum =
@@ -312,14 +312,14 @@ const MLOpSupportLimits* MLContext::opSupportLimits(ScriptState* script_state) {
 
   MLQuantizeDequantizeLinearSupportLimits* dequantize_linear =
       MLQuantizeDequantizeLinearSupportLimits::Create();
-  dequantize_linear->setInput(SupportedDataTypesToDataTypeLimits(
+  dequantize_linear->setInput(SupportedTensorLimitsToTensorLimits(
       data_type_limits.dequantize_linear_input));
-  dequantize_linear->setScale(SupportedDataTypesToDataTypeLimits(
+  dequantize_linear->setScale(SupportedTensorLimitsToTensorLimits(
       data_type_limits.dequantize_linear_scale));
-  dequantize_linear->setZeroPoint(SupportedDataTypesToDataTypeLimits(
-      data_type_limits.dequantize_linear_input));
+  dequantize_linear->setZeroPoint(SupportedTensorLimitsToTensorLimits(
+      data_type_limits.dequantize_linear_zero_point));
   dequantize_linear->setOutput(SupportedDataTypesToDataTypeLimits(
-      data_type_limits.dequantize_linear_scale));
+      data_type_limits.dequantize_linear_scale.data_types));
   op_support_limits->setDequantizeLinear(dequantize_linear);
 
   // Element-wise binary ops.
@@ -548,29 +548,29 @@ const MLOpSupportLimits* MLContext::opSupportLimits(ScriptState* script_state) {
 
   MLGatherSupportLimits* gather = MLGatherSupportLimits::Create();
   gather->setInput(
-      SupportedDataTypesToDataTypeLimits(data_type_limits.gather_input));
+      SupportedTensorLimitsToTensorLimits(data_type_limits.gather_input));
   gather->setIndices(
-      SupportedDataTypesToDataTypeLimits(data_type_limits.gather_indices));
-  gather->setOutput(
-      SupportedDataTypesToDataTypeLimits(data_type_limits.gather_input));
+      SupportedTensorLimitsToTensorLimits(data_type_limits.gather_indices));
+  gather->setOutput(SupportedDataTypesToDataTypeLimits(
+      data_type_limits.gather_input.data_types));
   op_support_limits->setGather(gather);
 
   MLGatherSupportLimits* gather_elements = MLGatherSupportLimits::Create();
-  gather_elements->setInput(SupportedDataTypesToDataTypeLimits(
+  gather_elements->setInput(SupportedTensorLimitsToTensorLimits(
       data_type_limits.gather_elements_input));
-  gather_elements->setIndices(SupportedDataTypesToDataTypeLimits(
+  gather_elements->setIndices(SupportedTensorLimitsToTensorLimits(
       data_type_limits.gather_elements_indices));
   gather_elements->setOutput(SupportedDataTypesToDataTypeLimits(
-      data_type_limits.gather_elements_input));
+      data_type_limits.gather_elements_input.data_types));
   op_support_limits->setGatherElements(gather_elements);
 
   MLGatherSupportLimits* gather_nd = MLGatherSupportLimits::Create();
   gather_nd->setInput(
-      SupportedDataTypesToDataTypeLimits(data_type_limits.gather_nd_input));
+      SupportedTensorLimitsToTensorLimits(data_type_limits.gather_nd_input));
   gather_nd->setIndices(
-      SupportedDataTypesToDataTypeLimits(data_type_limits.gather_nd_indices));
-  gather_nd->setOutput(
-      SupportedDataTypesToDataTypeLimits(data_type_limits.gather_nd_input));
+      SupportedTensorLimitsToTensorLimits(data_type_limits.gather_nd_indices));
+  gather_nd->setOutput(SupportedDataTypesToDataTypeLimits(
+      data_type_limits.gather_nd_input.data_types));
   op_support_limits->setGatherND(gather_nd);
 
   MLSingleInputSupportLimits* gelu = MLSingleInputSupportLimits::Create();
@@ -581,84 +581,83 @@ const MLOpSupportLimits* MLContext::opSupportLimits(ScriptState* script_state) {
   op_support_limits->setGelu(gelu);
 
   MLGemmSupportLimits* gemm = MLGemmSupportLimits::Create();
-  gemm->setA(SupportedDataTypesToDataTypeLimits(data_type_limits.gemm_input));
-  gemm->setB(SupportedDataTypesToDataTypeLimits(data_type_limits.gemm_input));
-  gemm->setC(SupportedDataTypesToDataTypeLimits(data_type_limits.gemm_input));
+  gemm->setA(SupportedTensorLimitsToTensorLimits(data_type_limits.gemm_a));
+  gemm->setB(SupportedTensorLimitsToTensorLimits(data_type_limits.gemm_a));
+  gemm->setC(SupportedTensorLimitsToTensorLimits(data_type_limits.gemm_c));
   gemm->setOutput(
-      SupportedDataTypesToDataTypeLimits(data_type_limits.gemm_input));
+      SupportedDataTypesToDataTypeLimits(data_type_limits.gemm_a.data_types));
   op_support_limits->setGemm(gemm);
 
   MLGruSupportLimits* gru = MLGruSupportLimits::Create();
-  gru->setInput(SupportedDataTypesToDataTypeLimits(
-      properties_.data_type_limits.gru_input));
-  gru->setWeight(SupportedDataTypesToDataTypeLimits(
-      properties_.data_type_limits.gru_input));
-  gru->setRecurrentWeight(SupportedDataTypesToDataTypeLimits(
-      properties_.data_type_limits.gru_input));
-  gru->setBias(SupportedDataTypesToDataTypeLimits(
-      properties_.data_type_limits.gru_input));
-  gru->setRecurrentBias(SupportedDataTypesToDataTypeLimits(
-      properties_.data_type_limits.gru_input));
-  gru->setInitialHiddenState(SupportedDataTypesToDataTypeLimits(
-      properties_.data_type_limits.gru_input));
+  gru->setInput(
+      SupportedTensorLimitsToTensorLimits(data_type_limits.gru_input));
+  gru->setWeight(
+      SupportedTensorLimitsToTensorLimits(data_type_limits.gru_input));
+  gru->setRecurrentWeight(
+      SupportedTensorLimitsToTensorLimits(data_type_limits.gru_input));
+  gru->setBias(SupportedTensorLimitsToTensorLimits(data_type_limits.gru_bias));
+  gru->setRecurrentBias(
+      SupportedTensorLimitsToTensorLimits(data_type_limits.gru_bias));
+  gru->setInitialHiddenState(
+      SupportedTensorLimitsToTensorLimits(data_type_limits.gru_input));
   gru->setOutputs(SupportedDataTypesToDataTypeLimits(
-      properties_.data_type_limits.gru_input));
+      data_type_limits.gru_input.data_types));
   op_support_limits->setGru(gru);
 
   MLGruCellSupportLimits* gru_cell = MLGruCellSupportLimits::Create();
-  gru_cell->setInput(SupportedDataTypesToDataTypeLimits(
-      properties_.data_type_limits.gru_cell_input));
-  gru_cell->setWeight(SupportedDataTypesToDataTypeLimits(
-      properties_.data_type_limits.gru_cell_input));
-  gru_cell->setRecurrentWeight(SupportedDataTypesToDataTypeLimits(
-      properties_.data_type_limits.gru_cell_input));
-  gru_cell->setHiddenState(SupportedDataTypesToDataTypeLimits(
-      properties_.data_type_limits.gru_cell_input));
-  gru_cell->setBias(SupportedDataTypesToDataTypeLimits(
-      properties_.data_type_limits.gru_cell_input));
-  gru_cell->setRecurrentBias(SupportedDataTypesToDataTypeLimits(
-      properties_.data_type_limits.gru_cell_input));
+  gru_cell->setInput(
+      SupportedTensorLimitsToTensorLimits(data_type_limits.gru_cell_input));
+  gru_cell->setWeight(
+      SupportedTensorLimitsToTensorLimits(data_type_limits.gru_cell_input));
+  gru_cell->setRecurrentWeight(
+      SupportedTensorLimitsToTensorLimits(data_type_limits.gru_cell_input));
+  gru_cell->setHiddenState(
+      SupportedTensorLimitsToTensorLimits(data_type_limits.gru_cell_input));
+  gru_cell->setBias(
+      SupportedTensorLimitsToTensorLimits(data_type_limits.gru_cell_bias));
+  gru_cell->setRecurrentBias(
+      SupportedTensorLimitsToTensorLimits(data_type_limits.gru_cell_bias));
   gru_cell->setOutput(SupportedDataTypesToDataTypeLimits(
-      properties_.data_type_limits.gru_cell_input));
+      data_type_limits.gru_cell_input.data_types));
   op_support_limits->setGruCell(gru_cell);
 
   MLSingleInputSupportLimits* hard_sigmoid =
       MLSingleInputSupportLimits::Create();
-  hard_sigmoid->setInput(SupportedTensorLimitsToTensorLimits(
-      properties_.data_type_limits.hard_sigmoid_input));
+  hard_sigmoid->setInput(
+      SupportedTensorLimitsToTensorLimits(data_type_limits.hard_sigmoid_input));
   hard_sigmoid->setOutput(SupportedDataTypesToDataTypeLimits(
-      properties_.data_type_limits.hard_sigmoid_input.data_types));
+      data_type_limits.hard_sigmoid_input.data_types));
   op_support_limits->setHardSigmoid(hard_sigmoid);
 
   MLSingleInputSupportLimits* hard_swish = MLSingleInputSupportLimits::Create();
-  hard_swish->setInput(SupportedTensorLimitsToTensorLimits(
-      properties_.data_type_limits.hard_swish_input));
+  hard_swish->setInput(
+      SupportedTensorLimitsToTensorLimits(data_type_limits.hard_swish_input));
   hard_swish->setOutput(SupportedDataTypesToDataTypeLimits(
-      properties_.data_type_limits.hard_swish_input.data_types));
+      data_type_limits.hard_swish_input.data_types));
   op_support_limits->setHardSwish(hard_swish);
 
   MLNormalizationSupportLimits* instance_normalization =
       MLNormalizationSupportLimits::Create();
-  instance_normalization->setInput(SupportedDataTypesToDataTypeLimits(
+  instance_normalization->setInput(SupportedTensorLimitsToTensorLimits(
       data_type_limits.instance_normalization_input));
-  instance_normalization->setScale(SupportedDataTypesToDataTypeLimits(
-      data_type_limits.instance_normalization_input));
-  instance_normalization->setBias(SupportedDataTypesToDataTypeLimits(
-      data_type_limits.instance_normalization_input));
+  instance_normalization->setScale(SupportedTensorLimitsToTensorLimits(
+      data_type_limits.instance_normalization_scale));
+  instance_normalization->setBias(SupportedTensorLimitsToTensorLimits(
+      data_type_limits.instance_normalization_scale));
   instance_normalization->setOutput(SupportedDataTypesToDataTypeLimits(
-      data_type_limits.instance_normalization_input));
+      data_type_limits.instance_normalization_input.data_types));
   op_support_limits->setInstanceNormalization(instance_normalization);
 
   MLNormalizationSupportLimits* layer_normalization =
       MLNormalizationSupportLimits::Create();
-  layer_normalization->setInput(SupportedDataTypesToDataTypeLimits(
+  layer_normalization->setInput(SupportedTensorLimitsToTensorLimits(
       data_type_limits.layer_normalization_input));
-  layer_normalization->setScale(SupportedDataTypesToDataTypeLimits(
+  layer_normalization->setScale(SupportedTensorLimitsToTensorLimits(
       data_type_limits.layer_normalization_input));
-  layer_normalization->setBias(SupportedDataTypesToDataTypeLimits(
+  layer_normalization->setBias(SupportedTensorLimitsToTensorLimits(
       data_type_limits.layer_normalization_input));
   layer_normalization->setOutput(SupportedDataTypesToDataTypeLimits(
-      data_type_limits.layer_normalization_input));
+      data_type_limits.layer_normalization_input.data_types));
   op_support_limits->setLayerNormalization(layer_normalization);
 
   MLSingleInputSupportLimits* leaky_relu = MLSingleInputSupportLimits::Create();
@@ -676,45 +675,45 @@ const MLOpSupportLimits* MLContext::opSupportLimits(ScriptState* script_state) {
   op_support_limits->setLinear(linear);
 
   MLLstmSupportLimits* lstm = MLLstmSupportLimits::Create();
-  lstm->setInput(SupportedDataTypesToDataTypeLimits(
-      properties_.data_type_limits.lstm_input));
-  lstm->setWeight(SupportedDataTypesToDataTypeLimits(
-      properties_.data_type_limits.lstm_input));
-  lstm->setRecurrentWeight(SupportedDataTypesToDataTypeLimits(
-      properties_.data_type_limits.lstm_input));
-  lstm->setBias(SupportedDataTypesToDataTypeLimits(
-      properties_.data_type_limits.lstm_input));
-  lstm->setRecurrentBias(SupportedDataTypesToDataTypeLimits(
-      properties_.data_type_limits.lstm_input));
-  lstm->setPeepholeWeight(SupportedDataTypesToDataTypeLimits(
-      properties_.data_type_limits.lstm_input));
-  lstm->setInitialHiddenState(SupportedDataTypesToDataTypeLimits(
-      properties_.data_type_limits.lstm_input));
-  lstm->setInitialCellState(SupportedDataTypesToDataTypeLimits(
-      properties_.data_type_limits.lstm_input));
+  lstm->setInput(
+      SupportedTensorLimitsToTensorLimits(data_type_limits.lstm_input));
+  lstm->setWeight(
+      SupportedTensorLimitsToTensorLimits(data_type_limits.lstm_input));
+  lstm->setRecurrentWeight(
+      SupportedTensorLimitsToTensorLimits(data_type_limits.lstm_input));
+  lstm->setBias(
+      SupportedTensorLimitsToTensorLimits(data_type_limits.lstm_bias));
+  lstm->setRecurrentBias(
+      SupportedTensorLimitsToTensorLimits(data_type_limits.lstm_bias));
+  lstm->setPeepholeWeight(
+      SupportedTensorLimitsToTensorLimits(data_type_limits.lstm_bias));
+  lstm->setInitialHiddenState(
+      SupportedTensorLimitsToTensorLimits(data_type_limits.lstm_input));
+  lstm->setInitialCellState(
+      SupportedTensorLimitsToTensorLimits(data_type_limits.lstm_input));
   lstm->setOutputs(SupportedDataTypesToDataTypeLimits(
-      properties_.data_type_limits.lstm_input));
+      data_type_limits.lstm_input.data_types));
   op_support_limits->setLstm(lstm);
 
   MLLstmCellSupportLimits* lstm_cell = MLLstmCellSupportLimits::Create();
-  lstm_cell->setInput(SupportedDataTypesToDataTypeLimits(
-      properties_.data_type_limits.lstm_cell_input));
-  lstm_cell->setWeight(SupportedDataTypesToDataTypeLimits(
-      properties_.data_type_limits.lstm_cell_input));
-  lstm_cell->setRecurrentWeight(SupportedDataTypesToDataTypeLimits(
-      properties_.data_type_limits.lstm_cell_input));
-  lstm_cell->setHiddenState(SupportedDataTypesToDataTypeLimits(
-      properties_.data_type_limits.lstm_cell_input));
-  lstm_cell->setCellState(SupportedDataTypesToDataTypeLimits(
-      properties_.data_type_limits.lstm_cell_input));
-  lstm_cell->setBias(SupportedDataTypesToDataTypeLimits(
-      properties_.data_type_limits.lstm_cell_input));
-  lstm_cell->setRecurrentBias(SupportedDataTypesToDataTypeLimits(
-      properties_.data_type_limits.lstm_cell_input));
-  lstm_cell->setPeepholeWeight(SupportedDataTypesToDataTypeLimits(
-      properties_.data_type_limits.lstm_cell_input));
+  lstm_cell->setInput(
+      SupportedTensorLimitsToTensorLimits(data_type_limits.lstm_cell_input));
+  lstm_cell->setWeight(
+      SupportedTensorLimitsToTensorLimits(data_type_limits.lstm_cell_input));
+  lstm_cell->setRecurrentWeight(
+      SupportedTensorLimitsToTensorLimits(data_type_limits.lstm_cell_input));
+  lstm_cell->setHiddenState(
+      SupportedTensorLimitsToTensorLimits(data_type_limits.lstm_cell_input));
+  lstm_cell->setCellState(
+      SupportedTensorLimitsToTensorLimits(data_type_limits.lstm_cell_input));
+  lstm_cell->setBias(
+      SupportedTensorLimitsToTensorLimits(data_type_limits.lstm_cell_bias));
+  lstm_cell->setRecurrentBias(
+      SupportedTensorLimitsToTensorLimits(data_type_limits.lstm_cell_bias));
+  lstm_cell->setPeepholeWeight(
+      SupportedTensorLimitsToTensorLimits(data_type_limits.lstm_cell_bias));
   lstm_cell->setOutputs(SupportedDataTypesToDataTypeLimits(
-      properties_.data_type_limits.lstm_cell_input));
+      data_type_limits.lstm_cell_input.data_types));
   op_support_limits->setLstmCell(lstm_cell);
 
   MLBinarySupportLimits* matmul = MLBinarySupportLimits::Create();
@@ -758,23 +757,23 @@ const MLOpSupportLimits* MLContext::opSupportLimits(ScriptState* script_state) {
 
   MLPreluSupportLimits* prelu = MLPreluSupportLimits::Create();
   prelu->setInput(
-      SupportedDataTypesToDataTypeLimits(data_type_limits.prelu_input));
+      SupportedTensorLimitsToTensorLimits(data_type_limits.prelu_input));
   prelu->setSlope(
-      SupportedDataTypesToDataTypeLimits(data_type_limits.prelu_input));
-  prelu->setOutput(
-      SupportedDataTypesToDataTypeLimits(data_type_limits.prelu_input));
+      SupportedTensorLimitsToTensorLimits(data_type_limits.prelu_input));
+  prelu->setOutput(SupportedDataTypesToDataTypeLimits(
+      data_type_limits.prelu_input.data_types));
   op_support_limits->setPrelu(prelu);
 
   MLQuantizeDequantizeLinearSupportLimits* quantize_linear =
       MLQuantizeDequantizeLinearSupportLimits::Create();
-  quantize_linear->setInput(SupportedDataTypesToDataTypeLimits(
+  quantize_linear->setInput(SupportedTensorLimitsToTensorLimits(
       data_type_limits.quantize_linear_input));
-  quantize_linear->setScale(SupportedDataTypesToDataTypeLimits(
+  quantize_linear->setScale(SupportedTensorLimitsToTensorLimits(
       data_type_limits.quantize_linear_input));
-  quantize_linear->setZeroPoint(SupportedDataTypesToDataTypeLimits(
+  quantize_linear->setZeroPoint(SupportedTensorLimitsToTensorLimits(
       data_type_limits.quantize_linear_zero_point));
   quantize_linear->setOutput(SupportedDataTypesToDataTypeLimits(
-      data_type_limits.quantize_linear_zero_point));
+      data_type_limits.quantize_linear_zero_point.data_types));
   op_support_limits->setQuantizeLinear(quantize_linear);
 
   // Reduction ops.
@@ -873,25 +872,25 @@ const MLOpSupportLimits* MLContext::opSupportLimits(ScriptState* script_state) {
   op_support_limits->setReverse(reverse);
 
   MLScatterSupportLimits* scatter_elements = MLScatterSupportLimits::Create();
-  scatter_elements->setInput(SupportedDataTypesToDataTypeLimits(
+  scatter_elements->setInput(SupportedTensorLimitsToTensorLimits(
       data_type_limits.scatter_elements_input));
-  scatter_elements->setIndices(SupportedDataTypesToDataTypeLimits(
+  scatter_elements->setIndices(SupportedTensorLimitsToTensorLimits(
       data_type_limits.scatter_elements_indices));
-  scatter_elements->setUpdates(SupportedDataTypesToDataTypeLimits(
+  scatter_elements->setUpdates(SupportedTensorLimitsToTensorLimits(
       data_type_limits.scatter_elements_input));
   scatter_elements->setOutput(SupportedDataTypesToDataTypeLimits(
-      data_type_limits.scatter_elements_input));
+      data_type_limits.scatter_elements_input.data_types));
   op_support_limits->setScatterElements(scatter_elements);
 
   MLScatterSupportLimits* scatter_nd = MLScatterSupportLimits::Create();
   scatter_nd->setInput(
-      SupportedDataTypesToDataTypeLimits(data_type_limits.scatter_nd_input));
+      SupportedTensorLimitsToTensorLimits(data_type_limits.scatter_nd_input));
   scatter_nd->setIndices(
-      SupportedDataTypesToDataTypeLimits(data_type_limits.scatter_nd_indices));
+      SupportedTensorLimitsToTensorLimits(data_type_limits.scatter_nd_indices));
   scatter_nd->setUpdates(
-      SupportedDataTypesToDataTypeLimits(data_type_limits.scatter_nd_input));
-  scatter_nd->setOutput(
-      SupportedDataTypesToDataTypeLimits(data_type_limits.scatter_nd_input));
+      SupportedTensorLimitsToTensorLimits(data_type_limits.scatter_nd_updates));
+  scatter_nd->setOutput(SupportedDataTypesToDataTypeLimits(
+      data_type_limits.scatter_nd_input.data_types));
   op_support_limits->setScatterND(scatter_nd);
 
   MLSingleInputSupportLimits* sigmoid = MLSingleInputSupportLimits::Create();

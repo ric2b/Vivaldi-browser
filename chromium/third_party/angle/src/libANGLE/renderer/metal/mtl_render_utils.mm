@@ -312,146 +312,36 @@ angle::Result GenTriFanFromClientElements(ContextMtl *contextMtl,
     return angle::Result::Continue;
 }
 
-template <typename T>
-angle::Result GenPrimitiveRestartBuffer(ContextMtl *contextMtl,
-                                        GLsizei count,
-                                        GLsizei indicesPerPrimitive,
-                                        const T *indices,
-                                        const BufferRef &dstBuffer,
-                                        uint32_t dstOffset,
-                                        size_t *indicesGenerated)
+// Converts line loop vertices to line strip vertices.
+// Returns number of vertices written.
+template <typename In, typename Out>
+size_t CopyLineLoopIndices(GLsizei indexCount,
+                           const uint8_t *indices,
+                           bool usePrimitiveRestart,
+                           uint8_t *outIndices)
 {
-    constexpr T kSrcPrimitiveRestartIndex = std::numeric_limits<T>::max();
-    uint32_t *dstPtr     = reinterpret_cast<uint32_t *>(dstBuffer->map(contextMtl) + dstOffset);
-    GLsizei readValueLoc = 0;
-    T readValue          = 0;
-    uint32_t dstIdx      = 0;
-    memcpy(&readValue, indices, sizeof(readValue));
-    while (readValue == kSrcPrimitiveRestartIndex)
+    if (usePrimitiveRestart)
     {
-
-        ++readValueLoc;
-        memcpy(&readValue, indices + readValueLoc, sizeof(readValue));
+        return CopyLineLoopIndicesWithRestart<In, Out>(indexCount, indices, outIndices);
     }
-    while (readValueLoc + indicesPerPrimitive <= count)
+    if (indexCount <= 0)
     {
-
-        uint32_t primIndicies[3];
-        bool foundPrimitive = true;
-        for (int k = 0; k < indicesPerPrimitive; ++k)
-        {
-            memcpy(&readValue, indices + readValueLoc, sizeof(readValue));
-            ++readValueLoc;
-            if (readValue == kSrcPrimitiveRestartIndex)
-            {
-                foundPrimitive = false;
-                break;
-            }
-            else
-            {
-                primIndicies[k] = (uint32_t)readValue;
-            }
-        }
-        if (foundPrimitive)
-        {
-            memcpy(&dstPtr[dstIdx], primIndicies, (indicesPerPrimitive) * sizeof(uint32_t));
-            dstIdx += indicesPerPrimitive;
-        }
+        return 0;
     }
-    if (indicesGenerated)
-        *indicesGenerated = dstIdx;
-    return angle::Result::Continue;
-}
-
-template <typename T>
-angle::Result GenLineLoopFromClientElements(ContextMtl *contextMtl,
-                                            GLsizei count,
-                                            bool primitiveRestartEnabled,
-                                            const T *indices,
-                                            const BufferRef &dstBuffer,
-                                            uint32_t dstOffset,
-                                            uint32_t *indicesGenerated)
-{
-    ASSERT(count >= 2);
-    constexpr T kSrcPrimitiveRestartIndex    = std::numeric_limits<T>::max();
-    const uint32_t kDstPrimitiveRestartIndex = std::numeric_limits<uint32_t>::max();
-
-    uint32_t *dstPtr = reinterpret_cast<uint32_t *>(dstBuffer->map(contextMtl) + dstOffset);
-    // lineLoopFirstIdx: value of of current line loop's first vertex index. Can change when
-    // encounter a primitive restart index.
-    T lineLoopFirstIdx;
-    memcpy(&lineLoopFirstIdx, indices, sizeof(lineLoopFirstIdx));
-
-    if (primitiveRestartEnabled)
+    In firstValue;
+    memcpy(&firstValue, indices, sizeof(In));
+    for (GLsizei i = 0; i < indexCount; ++i)
     {
-        // lineLoopFirstIdxLoc: location of current line loop's first vertex in the source buffer.
-        GLsizei lineLoopFirstIdxLoc = 0;
-        while (lineLoopFirstIdx == kSrcPrimitiveRestartIndex)
-        {
-            memcpy(&dstPtr[lineLoopFirstIdxLoc++], &kDstPrimitiveRestartIndex,
-                   sizeof(kDstPrimitiveRestartIndex));
-            memcpy(&lineLoopFirstIdx, indices + lineLoopFirstIdxLoc, sizeof(lineLoopFirstIdx));
-        }
-
-        // dstIdx : value of index to be written to dest buffer
-        uint32_t dstIdx = lineLoopFirstIdx;
-        memcpy(&dstPtr[lineLoopFirstIdxLoc], &dstIdx, sizeof(dstIdx));
-        // dstWritten: number of indices written to dest buffer
-        uint32_t dstWritten = lineLoopFirstIdxLoc + 1;
-
-        for (GLsizei i = lineLoopFirstIdxLoc + 1; i < count; ++i)
-        {
-            // srcIdx : value of index from source buffer
-            T srcIdx;
-            memcpy(&srcIdx, indices + i, sizeof(srcIdx));
-            if (srcIdx == kSrcPrimitiveRestartIndex)
-            {
-                // breaking line strip
-                dstIdx = lineLoopFirstIdx;
-                memcpy(&dstPtr[dstWritten++], &dstIdx, sizeof(dstIdx));
-                memcpy(&dstPtr[dstWritten++], &kDstPrimitiveRestartIndex,
-                       sizeof(kDstPrimitiveRestartIndex));
-                lineLoopFirstIdxLoc = i + 1;
-            }
-            else
-            {
-                dstIdx = srcIdx;
-                memcpy(&dstPtr[dstWritten++], &dstIdx, sizeof(dstIdx));
-                if (lineLoopFirstIdxLoc == i)
-                {
-                    lineLoopFirstIdx = srcIdx;
-                }
-            }
-        }
-
-        if (lineLoopFirstIdxLoc < count)
-        {
-            // last segment
-            dstIdx = lineLoopFirstIdx;
-            memcpy(&dstPtr[dstWritten++], &dstIdx, sizeof(dstIdx));
-        }
-
-        *indicesGenerated = dstWritten;
+        In value;
+        memcpy(&value, indices, sizeof(In));
+        indices += sizeof(In);
+        Out outValue = value;
+        memcpy(outIndices, &outValue, sizeof(Out));
+        outIndices += sizeof(Out);
     }
-    else
-    {
-        uint32_t dstIdx = lineLoopFirstIdx;
-        memcpy(dstPtr, &dstIdx, sizeof(dstIdx));
-        memcpy(dstPtr + count, &dstIdx, sizeof(dstIdx));
-        for (GLsizei i = 1; i < count; ++i)
-        {
-            T srcIdx;
-            memcpy(&srcIdx, indices + i, sizeof(srcIdx));
-
-            dstIdx = srcIdx;
-            memcpy(dstPtr + i, &dstIdx, sizeof(dstIdx));
-        }
-
-        *indicesGenerated = count + 1;
-    }
-    dstBuffer->unmapAndFlushSubset(contextMtl, dstOffset, (*indicesGenerated) * sizeof(uint32_t));
-
-    return angle::Result::Continue;
+    Out outFirstValue = firstValue;
+    memcpy(outIndices, &outFirstValue, sizeof(Out));
+    return indexCount + 1;
 }
 
 template <typename T>
@@ -507,11 +397,11 @@ int GetPixelTypeIndex(const angle::Format &angleFormat)
     }
 }
 
-angle::Result EnsureComputeShaderInitialized(ContextMtl *context,
-                                             NSString *functionName,
-                                             AutoObjCPtr<id<MTLFunction>> *shaderOut)
+angle::Result EnsureShaderInitialized(ContextMtl *context,
+                                      NSString *functionName,
+                                      angle::ObjCPtr<id<MTLFunction>> *shaderOut)
 {
-    AutoObjCPtr<id<MTLFunction>> &shader = *shaderOut;
+    angle::ObjCPtr<id<MTLFunction>> &shader = *shaderOut;
     if (shader)
     {
         return angle::Result::Continue;
@@ -520,24 +410,24 @@ angle::Result EnsureComputeShaderInitialized(ContextMtl *context,
     ANGLE_MTL_OBJC_SCOPE
     {
         auto shaderLib = context->getDisplay()->getDefaultShadersLib();
-        shader         = adoptObjCObj([shaderLib newFunctionWithName:functionName]);
+        shader         = angle::adoptObjCPtr([shaderLib newFunctionWithName:functionName]);
         ANGLE_CHECK(context, shader, gl::err::kInternalError, GL_INVALID_OPERATION);
         return angle::Result::Continue;
     }
 }
 
-angle::Result EnsureSpecializedComputeShaderInitialized(ContextMtl *context,
-                                                        NSString *functionName,
-                                                        MTLFunctionConstantValues *funcConstants,
-                                                        AutoObjCPtr<id<MTLFunction>> *shaderOut)
+angle::Result EnsureSpecializedShaderInitialized(ContextMtl *context,
+                                                 NSString *functionName,
+                                                 MTLFunctionConstantValues *funcConstants,
+                                                 angle::ObjCPtr<id<MTLFunction>> *shaderOut)
 {
     if (!funcConstants)
     {
         // Non specialized constants provided, use default creation function.
-        return EnsureComputeShaderInitialized(context, functionName, shaderOut);
+        return EnsureShaderInitialized(context, functionName, shaderOut);
     }
 
-    AutoObjCPtr<id<MTLFunction>> &shader = *shaderOut;
+    angle::ObjCPtr<id<MTLFunction>> &shader = *shaderOut;
     if (shader)
     {
         return angle::Result::Continue;
@@ -547,9 +437,9 @@ angle::Result EnsureSpecializedComputeShaderInitialized(ContextMtl *context,
     {
         auto shaderLib = context->getDisplay()->getDefaultShadersLib();
         NSError *err   = nil;
-        shader         = adoptObjCObj([shaderLib newFunctionWithName:functionName
-                                              constantValues:funcConstants
-                                                       error:&err]);
+        shader         = angle::adoptObjCPtr([shaderLib newFunctionWithName:functionName
+                                                     constantValues:funcConstants
+                                                              error:&err]);
         ANGLE_MTL_CHECK(context, shader, err);
         return angle::Result::Continue;
     }
@@ -563,8 +453,8 @@ RenderPipelineDesc GetComputingVertexShaderOnlyRenderPipelineDesc(RenderCommandE
     const RenderPassDesc &renderPassDesc = cmdEncoder->renderPassDesc();
 
     renderPassDesc.populateRenderPipelineOutputDesc(&pipelineDesc.outputDescriptor);
-    pipelineDesc.rasterizationType      = RenderPipelineRasterization::Disabled;
-    pipelineDesc.inputPrimitiveTopology = MTLPrimitiveTopologyClassPoint;
+    pipelineDesc.setRasterizationType(RenderPipelineRasterization::Disabled);
+    pipelineDesc.setInputPrimitiveTopology(MTLPrimitiveTopologyClassPoint);
 
     return pipelineDesc;
 }
@@ -925,26 +815,6 @@ angle::Result RenderUtils::generateLineLoopLastSegmentFromElementsArray(
 {
     return mIndexUtils.generateLineLoopLastSegmentFromElementsArray(contextMtl, params);
 }
-angle::Result RenderUtils::generatePrimitiveRestartPointsBuffer(ContextMtl *contextMtl,
-                                                                const IndexGenerationParams &params,
-                                                                size_t *indicesGenerated)
-{
-    return mIndexUtils.generatePrimitiveRestartPointsBuffer(contextMtl, params, indicesGenerated);
-}
-angle::Result RenderUtils::generatePrimitiveRestartLinesBuffer(ContextMtl *contextMtl,
-                                                               const IndexGenerationParams &params,
-                                                               size_t *indicesGenerated)
-{
-    return mIndexUtils.generatePrimitiveRestartLinesBuffer(contextMtl, params, indicesGenerated);
-}
-angle::Result RenderUtils::generatePrimitiveRestartTrianglesBuffer(
-    ContextMtl *contextMtl,
-    const IndexGenerationParams &params,
-    size_t *indicesGenerated)
-{
-    return mIndexUtils.generatePrimitiveRestartTrianglesBuffer(contextMtl, params,
-                                                               indicesGenerated);
-}
 
 void RenderUtils::combineVisibilityResult(
     ContextMtl *contextMtl,
@@ -1042,7 +912,7 @@ angle::Result ClearUtils::ensureShadersInitialized(ContextMtl *ctx, uint32_t num
         if (!mVertexShader)
         {
             id<MTLLibrary> shaderLib = ctx->getDisplay()->getDefaultShadersLib();
-            mVertexShader            = adoptObjCObj([shaderLib newFunctionWithName:@"clearVS"]);
+            mVertexShader = angle::adoptObjCPtr([shaderLib newFunctionWithName:@"clearVS"]);
             ANGLE_CHECK(ctx, mVertexShader, gl::err::kInternalError, GL_INVALID_OPERATION);
         }
 
@@ -1050,8 +920,8 @@ angle::Result ClearUtils::ensureShadersInitialized(ContextMtl *ctx, uint32_t num
         {
             NSError *err             = nil;
             id<MTLLibrary> shaderLib = ctx->getDisplay()->getDefaultShadersLib();
-            AutoObjCPtr<MTLFunctionConstantValues *> funcConstants =
-                adoptObjCObj([[MTLFunctionConstantValues alloc] init]);
+            angle::ObjCPtr<MTLFunctionConstantValues> funcConstants =
+                angle::adoptObjCPtr([[MTLFunctionConstantValues alloc] init]);
 
             // Create clear shader for each number of color outputs.
             // So clear k color outputs will use mFragmentShaders[k] for example:
@@ -1059,7 +929,7 @@ angle::Result ClearUtils::ensureShadersInitialized(ContextMtl *ctx, uint32_t num
                                        type:MTLDataTypeUInt
                                    withName:NUM_COLOR_OUTPUTS_CONSTANT_NAME];
 
-            mFragmentShaders[numOutputs] = adoptObjCObj([shaderLib
+            mFragmentShaders[numOutputs] = angle::adoptObjCPtr([shaderLib
                 newFunctionWithName:[NSString stringWithUTF8String:mFragmentShaderName.c_str()]
                      constantValues:funcConstants
                               error:&err]);
@@ -1081,25 +951,13 @@ id<MTLDepthStencilState> ClearUtils::getClearDepthStencilState(const gl::Context
             contextMtl->getMetalDevice());
     }
 
-    DepthStencilDesc desc;
-    desc.reset();
-
-    if (params.clearDepth.valid())
-    {
-        // Clear depth state
-        desc.depthWriteEnabled = true;
-    }
-    else
-    {
-        desc.depthWriteEnabled = false;
-    }
-
+    DepthStencilDesc desc(MTLCompareFunctionAlways, params.clearDepth.valid());
     if (params.clearStencil.valid())
     {
         // Clear stencil state
-        desc.frontFaceStencil.depthStencilPassOperation = MTLStencilOperationReplace;
+        desc.frontFaceStencil.setDepthStencilPassOperation(MTLStencilOperationReplace);
         desc.frontFaceStencil.writeMask                 = contextMtl->getStencilMask();
-        desc.backFaceStencil.depthStencilPassOperation  = MTLStencilOperationReplace;
+        desc.backFaceStencil.setDepthStencilPassOperation(MTLStencilOperationReplace);
         desc.backFaceStencil.writeMask                  = contextMtl->getStencilMask();
     }
 
@@ -1111,7 +969,7 @@ angle::Result ClearUtils::getClearRenderPipelineState(
     const gl::Context *context,
     RenderCommandEncoder *cmdEncoder,
     const ClearRectParams &params,
-    AutoObjCPtr<id<MTLRenderPipelineState>> *outPipelineState)
+    angle::ObjCPtr<id<MTLRenderPipelineState>> *outPipelineState)
 {
     ContextMtl *contextMtl = GetImpl(context);
     // The color mask to be applied to every color attachment:
@@ -1136,7 +994,7 @@ angle::Result ClearUtils::getClearRenderPipelineState(
     renderPassDesc.populateRenderPipelineOutputDesc(clearWriteMaskArray,
                                                     &pipelineDesc.outputDescriptor);
 
-    pipelineDesc.inputPrimitiveTopology = MTLPrimitiveTopologyClassTriangle;
+    pipelineDesc.setInputPrimitiveTopology(MTLPrimitiveTopologyClassTriangle);
 
     ANGLE_TRY(ensureShadersInitialized(contextMtl, renderPassDesc.numColorAttachments));
 
@@ -1150,7 +1008,7 @@ angle::Result ClearUtils::setupClearWithDraw(const gl::Context *context,
                                              const ClearRectParams &params)
 {
     // Generate render pipeline state
-    AutoObjCPtr<id<MTLRenderPipelineState>> renderPipelineState;
+    angle::ObjCPtr<id<MTLRenderPipelineState>> renderPipelineState;
     ANGLE_TRY(getClearRenderPipelineState(context, cmdEncoder, params, &renderPipelineState));
 
     // Setup states
@@ -1238,14 +1096,14 @@ ColorBlitUtils::ColorBlitUtils(const std::string &fragmentShaderName)
 angle::Result ColorBlitUtils::ensureShadersInitialized(
     ContextMtl *ctx,
     const ShaderKey &key,
-    AutoObjCPtr<id<MTLFunction>> *fragmentShaderOut)
+    angle::ObjCPtr<id<MTLFunction>> *fragmentShaderOut)
 {
     ANGLE_MTL_OBJC_SCOPE
     {
         if (!mVertexShader)
         {
             id<MTLLibrary> shaderLib = ctx->getDisplay()->getDefaultShadersLib();
-            mVertexShader            = adoptObjCObj([shaderLib newFunctionWithName:@"blitVS"]);
+            mVertexShader = angle::adoptObjCPtr([shaderLib newFunctionWithName:@"blitVS"]);
             ANGLE_CHECK(ctx, mVertexShader, gl::err::kInternalError, GL_INVALID_OPERATION);
         }
 
@@ -1253,23 +1111,27 @@ angle::Result ColorBlitUtils::ensureShadersInitialized(
         {
             NSError *err             = nil;
             id<MTLLibrary> shaderLib = ctx->getDisplay()->getDefaultShadersLib();
-            AutoObjCPtr<MTLFunctionConstantValues *> funcConstants =
-                adoptObjCObj([[MTLFunctionConstantValues alloc] init]);
+            angle::ObjCPtr<MTLFunctionConstantValues> funcConstants =
+                angle::adoptObjCPtr([[MTLFunctionConstantValues alloc] init]);
 
+            bool unmultiplyAlpha       = key.unmultiplyAlpha;
+            bool premultiplyAlpha      = key.premultiplyAlpha;
+            bool transformLinearToSrgb = key.transformLinearToSrgb;
             // Set alpha multiply flags
-            [funcConstants setConstantValue:&key.unmultiplyAlpha
+            [funcConstants setConstantValue:&unmultiplyAlpha
                                        type:MTLDataTypeBool
                                    withName:UNMULTIPLY_ALPHA_CONSTANT_NAME];
-            [funcConstants setConstantValue:&key.premultiplyAlpha
+            [funcConstants setConstantValue:&premultiplyAlpha
                                        type:MTLDataTypeBool
                                    withName:PREMULTIPLY_ALPHA_CONSTANT_NAME];
-            [funcConstants setConstantValue:&key.transformLinearToSrgb
+            [funcConstants setConstantValue:&transformLinearToSrgb
                                        type:MTLDataTypeBool
                                    withName:TRANSFORM_LINEAR_TO_SRGB_CONSTANT_NAME];
 
+            uint32_t numColorAttachments = key.numColorAttachments;
             // We create blit shader pipeline cache for each number of color outputs.
             // So blit k color outputs will use mBlitRenderPipelineCache[k-1] for example:
-            [funcConstants setConstantValue:&key.numColorAttachments
+            [funcConstants setConstantValue:&numColorAttachments
                                        type:MTLDataTypeUInt
                                    withName:NUM_COLOR_OUTPUTS_CONSTANT_NAME];
 
@@ -1278,7 +1140,7 @@ angle::Result ColorBlitUtils::ensureShadersInitialized(
                                        type:MTLDataTypeInt
                                    withName:SOURCE_TEXTURE_TYPE_CONSTANT_NAME];
 
-            *fragmentShaderOut = adoptObjCObj([shaderLib
+            *fragmentShaderOut = angle::adoptObjCPtr([shaderLib
                 newFunctionWithName:[NSString stringWithUTF8String:mFragmentShaderName.c_str()]
                      constantValues:funcConstants
                               error:&err]);
@@ -1292,7 +1154,7 @@ angle::Result ColorBlitUtils::getColorBlitRenderPipelineState(
     const gl::Context *context,
     RenderCommandEncoder *cmdEncoder,
     const ColorBlitParams &params,
-    AutoObjCPtr<id<MTLRenderPipelineState>> *outPipelineState)
+    angle::ObjCPtr<id<MTLRenderPipelineState>> *outPipelineState)
 {
     ContextMtl *contextMtl = GetImpl(context);
     RenderPipelineDesc pipelineDesc;
@@ -1303,19 +1165,13 @@ angle::Result ColorBlitUtils::getColorBlitRenderPipelineState(
     // Disable blit for some outputs that are not enabled
     pipelineDesc.outputDescriptor.updateEnabledDrawBuffers(params.enabledBuffers);
 
-    pipelineDesc.inputPrimitiveTopology = MTLPrimitiveTopologyClassTriangle;
+    pipelineDesc.setInputPrimitiveTopology(MTLPrimitiveTopologyClassTriangle);
 
-    ShaderKey key;
-    key.numColorAttachments   = renderPassDesc.numColorAttachments;
-    key.sourceTextureType     = GetShaderTextureType(params.src);
-    key.transformLinearToSrgb = params.transformLinearToSrgb;
-    if (params.unpackPremultiplyAlpha != params.unpackUnmultiplyAlpha)
-    {
-        key.unmultiplyAlpha  = params.unpackUnmultiplyAlpha;
-        key.premultiplyAlpha = params.unpackPremultiplyAlpha;
-    }
+    ShaderKey key(GetShaderTextureType(params.src), renderPassDesc.numColorAttachments,
+                  params.unpackUnmultiplyAlpha, params.unpackPremultiplyAlpha,
+                  params.transformLinearToSrgb);
 
-    AutoObjCPtr<id<MTLFunction>> *fragmentShader = &mBlitFragmentShaders[key];
+    angle::ObjCPtr<id<MTLFunction>> *fragmentShader = &mBlitFragmentShaders[key];
     ANGLE_TRY(ensureShadersInitialized(contextMtl, key, fragmentShader));
 
     return contextMtl->getPipelineCache().getRenderPipeline(
@@ -1331,7 +1187,7 @@ angle::Result ColorBlitUtils::setupColorBlitWithDraw(const gl::Context *context,
     ContextMtl *contextMtl = mtl::GetImpl(context);
 
     // Generate render pipeline state
-    AutoObjCPtr<id<MTLRenderPipelineState>> renderPipelineState;
+    angle::ObjCPtr<id<MTLRenderPipelineState>> renderPipelineState;
     ANGLE_TRY(getColorBlitRenderPipelineState(context, cmdEncoder, params, &renderPipelineState));
 
     // Setup states
@@ -1344,8 +1200,8 @@ angle::Result ColorBlitUtils::setupColorBlitWithDraw(const gl::Context *context,
 
     // Set sampler state
     SamplerDesc samplerDesc;
-    samplerDesc.reset();
-    samplerDesc.minFilter = samplerDesc.magFilter = GetFilter(params.filter);
+    samplerDesc.setMinFilter(GetFilter(params.filter));
+    samplerDesc.setMagFilter(GetFilter(params.filter));
 
     cmdEncoder->setFragmentSamplerState(contextMtl->getDisplay()->getStateCache().getSamplerState(
                                             contextMtl->getMetalDevice(), samplerDesc),
@@ -1382,7 +1238,7 @@ angle::Result DepthStencilBlitUtils::ensureShadersInitialized(
     ContextMtl *ctx,
     int sourceDepthTextureType,
     int sourceStencilTextureType,
-    AutoObjCPtr<id<MTLFunction>> *fragmentShaderOut)
+    angle::ObjCPtr<id<MTLFunction>> *fragmentShaderOut)
 {
 
     ANGLE_MTL_OBJC_SCOPE
@@ -1390,7 +1246,7 @@ angle::Result DepthStencilBlitUtils::ensureShadersInitialized(
         if (!mVertexShader)
         {
             id<MTLLibrary> shaderLib = ctx->getDisplay()->getDefaultShadersLib();
-            mVertexShader            = adoptObjCObj([shaderLib newFunctionWithName:@"blitVS"]);
+            mVertexShader = angle::adoptObjCPtr([shaderLib newFunctionWithName:@"blitVS"]);
             ANGLE_CHECK(ctx, mVertexShader, gl::err::kInternalError, GL_INVALID_OPERATION);
         }
 
@@ -1398,8 +1254,8 @@ angle::Result DepthStencilBlitUtils::ensureShadersInitialized(
         {
             NSError *err             = nil;
             id<MTLLibrary> shaderLib = ctx->getDisplay()->getDefaultShadersLib();
-            AutoObjCPtr<MTLFunctionConstantValues *> funcConstants =
-                adoptObjCObj([[MTLFunctionConstantValues alloc] init]);
+            angle::ObjCPtr<MTLFunctionConstantValues> funcConstants =
+                angle::adoptObjCPtr([[MTLFunctionConstantValues alloc] init]);
             NSString *shaderName;
             if (sourceDepthTextureType != -1 && sourceStencilTextureType != -1)
             {
@@ -1428,9 +1284,9 @@ angle::Result DepthStencilBlitUtils::ensureShadersInitialized(
                                        withName:SOURCE_TEXTURE2_TYPE_CONSTANT_NAME];
             }
 
-            *fragmentShaderOut = adoptObjCObj([shaderLib newFunctionWithName:shaderName
-                                                              constantValues:funcConstants
-                                                                       error:&err]);
+            *fragmentShaderOut = angle::adoptObjCPtr([shaderLib newFunctionWithName:shaderName
+                                                                     constantValues:funcConstants
+                                                                              error:&err]);
             ANGLE_MTL_CHECK(ctx, *fragmentShaderOut, err);
         }
 
@@ -1441,27 +1297,27 @@ angle::Result DepthStencilBlitUtils::ensureShadersInitialized(
 angle::Result DepthStencilBlitUtils::getStencilToBufferComputePipelineState(
     ContextMtl *contextMtl,
     const StencilBlitViaBufferParams &params,
-    AutoObjCPtr<id<MTLComputePipelineState>> *outComputePipelineState)
+    angle::ObjCPtr<id<MTLComputePipelineState>> *outComputePipelineState)
 {
     int sourceStencilTextureType = GetShaderTextureType(params.srcStencil);
-    AutoObjCPtr<id<MTLFunction>> &shader =
+    angle::ObjCPtr<id<MTLFunction>> &shader =
         mStencilBlitToBufferComputeShaders[sourceStencilTextureType];
     if (!shader)
     {
         ANGLE_MTL_OBJC_SCOPE
         {
-            auto shaderLib     = contextMtl->getDisplay()->getDefaultShadersLib();
-            NSError *err       = nil;
-            AutoObjCPtr<MTLFunctionConstantValues *> funcConstants =
-                adoptObjCObj([[MTLFunctionConstantValues alloc] init]);
+            auto shaderLib = contextMtl->getDisplay()->getDefaultShadersLib();
+            NSError *err   = nil;
+            angle::ObjCPtr<MTLFunctionConstantValues> funcConstants =
+                angle::adoptObjCPtr([[MTLFunctionConstantValues alloc] init]);
 
             [funcConstants setConstantValue:&sourceStencilTextureType
                                        type:MTLDataTypeInt
                                    withName:SOURCE_TEXTURE2_TYPE_CONSTANT_NAME];
 
-            shader = adoptObjCObj([shaderLib newFunctionWithName:@"blitStencilToBufferCS"
-                                                  constantValues:funcConstants
-                                                           error:&err]);
+            shader = angle::adoptObjCPtr([shaderLib newFunctionWithName:@"blitStencilToBufferCS"
+                                                         constantValues:funcConstants
+                                                                  error:&err]);
             ANGLE_MTL_CHECK(contextMtl, shader, err);
         }
     }
@@ -1474,7 +1330,7 @@ angle::Result DepthStencilBlitUtils::getDepthStencilBlitRenderPipelineState(
     const gl::Context *context,
     RenderCommandEncoder *cmdEncoder,
     const DepthStencilBlitParams &params,
-    AutoObjCPtr<id<MTLRenderPipelineState>> *outRenderPipelineState)
+    angle::ObjCPtr<id<MTLRenderPipelineState>> *outRenderPipelineState)
 {
     ContextMtl *contextMtl = GetImpl(context);
     RenderPipelineDesc pipelineDesc;
@@ -1485,11 +1341,11 @@ angle::Result DepthStencilBlitUtils::getDepthStencilBlitRenderPipelineState(
     // Disable all color outputs
     pipelineDesc.outputDescriptor.updateEnabledDrawBuffers(gl::DrawBufferMask());
 
-    pipelineDesc.inputPrimitiveTopology = MTLPrimitiveTopologyClassTriangle;
+    pipelineDesc.setInputPrimitiveTopology(MTLPrimitiveTopologyClassTriangle);
 
-    AutoObjCPtr<id<MTLFunction>> *fragmentShader = nullptr;
-    int depthTextureType                         = GetShaderTextureType(params.src);
-    int stencilTextureType                       = GetShaderTextureType(params.srcStencil);
+    angle::ObjCPtr<id<MTLFunction>> *fragmentShader = nullptr;
+    int depthTextureType                            = GetShaderTextureType(params.src);
+    int stencilTextureType                          = GetShaderTextureType(params.srcStencil);
     if (params.src && params.srcStencil)
     {
         fragmentShader = &mDepthStencilBlitFragmentShaders[depthTextureType][stencilTextureType];
@@ -1524,7 +1380,7 @@ angle::Result DepthStencilBlitUtils::setupDepthStencilBlitWithDraw(
     SetupCommonBlitWithDrawStates(context, cmdEncoder, params, false);
 
     // Generate render pipeline state
-    AutoObjCPtr<id<MTLRenderPipelineState>> renderPipelineState;
+    angle::ObjCPtr<id<MTLRenderPipelineState>> renderPipelineState;
     ANGLE_TRY(
         getDepthStencilBlitRenderPipelineState(context, cmdEncoder, params, &renderPipelineState));
 
@@ -1532,20 +1388,8 @@ angle::Result DepthStencilBlitUtils::setupDepthStencilBlitWithDraw(
     cmdEncoder->setRenderPipelineState(renderPipelineState);
 
     // Depth stencil state
-    mtl::DepthStencilDesc dsStateDesc;
-    dsStateDesc.reset();
-    dsStateDesc.depthCompareFunction = MTLCompareFunctionAlways;
-
-    if (params.src)
-    {
-        // Enable depth write
-        dsStateDesc.depthWriteEnabled = true;
-    }
-    else
-    {
-        // Disable depth write
-        dsStateDesc.depthWriteEnabled = false;
-    }
+    mtl::DepthStencilDesc dsStateDesc(MTLCompareFunctionAlways,
+                                      /*depthWriteEnabled*/ params.src != nullptr);
 
     if (params.srcStencil)
     {
@@ -1557,11 +1401,11 @@ angle::Result DepthStencilBlitUtils::setupDepthStencilBlitWithDraw(
             UNREACHABLE();
         }
         // Enable stencil write to framebuffer
-        dsStateDesc.frontFaceStencil.stencilCompareFunction = MTLCompareFunctionAlways;
-        dsStateDesc.backFaceStencil.stencilCompareFunction  = MTLCompareFunctionAlways;
+        dsStateDesc.frontFaceStencil.setStencilCompareFunction(MTLCompareFunctionAlways);
+        dsStateDesc.backFaceStencil.setStencilCompareFunction(MTLCompareFunctionAlways);
 
-        dsStateDesc.frontFaceStencil.depthStencilPassOperation = MTLStencilOperationReplace;
-        dsStateDesc.backFaceStencil.depthStencilPassOperation  = MTLStencilOperationReplace;
+        dsStateDesc.frontFaceStencil.setDepthStencilPassOperation(MTLStencilOperationReplace);
+        dsStateDesc.backFaceStencil.setDepthStencilPassOperation(MTLStencilOperationReplace);
 
         dsStateDesc.frontFaceStencil.writeMask = kStencilMaskAll;
         dsStateDesc.backFaceStencil.writeMask  = kStencilMaskAll;
@@ -1625,7 +1469,7 @@ angle::Result DepthStencilBlitUtils::blitStencilViaCopyBuffer(
     ComputeCommandEncoder *cmdEncoder = contextMtl->getComputeCommandEncoder();
     ASSERT(cmdEncoder);
 
-    AutoObjCPtr<id<MTLComputePipelineState>> pipeline;
+    angle::ObjCPtr<id<MTLComputePipelineState>> pipeline;
     ANGLE_TRY(getStencilToBufferComputePipelineState(contextMtl, params, &pipeline));
 
     cmdEncoder->setComputePipelineState(pipeline);
@@ -1697,19 +1541,19 @@ angle::Result IndexGeneratorUtils::getIndexConversionPipeline(
     ContextMtl *contextMtl,
     gl::DrawElementsType srcType,
     uint32_t srcOffset,
-    AutoObjCPtr<id<MTLComputePipelineState>> *outComputePipeline)
+    angle::ObjCPtr<id<MTLComputePipelineState>> *outComputePipeline)
 {
-    size_t elementSize                   = gl::GetDrawElementsTypeSize(srcType);
-    BOOL aligned                         = (srcOffset % elementSize) == 0;
-    int srcTypeKey                       = static_cast<int>(srcType);
-    AutoObjCPtr<id<MTLFunction>> &shader = mIndexConversionShaders[srcTypeKey][aligned ? 1 : 0];
+    size_t elementSize                      = gl::GetDrawElementsTypeSize(srcType);
+    BOOL aligned                            = (srcOffset % elementSize) == 0;
+    int srcTypeKey                          = static_cast<int>(srcType);
+    angle::ObjCPtr<id<MTLFunction>> &shader = mIndexConversionShaders[srcTypeKey][aligned ? 1 : 0];
 
     if (!shader)
     {
         ANGLE_MTL_OBJC_SCOPE
         {
-            AutoObjCPtr<MTLFunctionConstantValues *> funcConstants =
-                adoptObjCObj([[MTLFunctionConstantValues alloc] init]);
+            angle::ObjCPtr<MTLFunctionConstantValues> funcConstants =
+                angle::adoptObjCPtr([[MTLFunctionConstantValues alloc] init]);
 
             [funcConstants setConstantValue:&aligned
                                        type:MTLDataTypeBool
@@ -1733,8 +1577,8 @@ angle::Result IndexGeneratorUtils::getIndexConversionPipeline(
                     UNREACHABLE();
             }
 
-            ANGLE_TRY(EnsureSpecializedComputeShaderInitialized(contextMtl, shaderName,
-                                                                funcConstants, &shader));
+            ANGLE_TRY(
+                EnsureSpecializedShaderInitialized(contextMtl, shaderName, funcConstants, &shader));
         }
     }
 
@@ -1748,20 +1592,20 @@ angle::Result IndexGeneratorUtils::getIndicesFromElemArrayGeneratorPipeline(
     uint32_t srcOffset,
     NSString *shaderName,
     IndexConversionShaderArray *shaderArray,
-    AutoObjCPtr<id<MTLComputePipelineState>> *outComputePipeline)
+    angle::ObjCPtr<id<MTLComputePipelineState>> *outComputePipeline)
 {
     size_t elementSize = gl::GetDrawElementsTypeSize(srcType);
     BOOL aligned       = (srcOffset % elementSize) == 0;
     int srcTypeKey     = static_cast<int>(srcType);
 
-    AutoObjCPtr<id<MTLFunction>> &shader = (*shaderArray)[srcTypeKey][aligned ? 1 : 0];
+    angle::ObjCPtr<id<MTLFunction>> &shader = (*shaderArray)[srcTypeKey][aligned ? 1 : 0];
 
     if (!shader)
     {
         ANGLE_MTL_OBJC_SCOPE
         {
-            AutoObjCPtr<MTLFunctionConstantValues *> funcConstants =
-                adoptObjCObj([[MTLFunctionConstantValues alloc] init]);
+            angle::ObjCPtr<MTLFunctionConstantValues> funcConstants =
+                angle::adoptObjCPtr([[MTLFunctionConstantValues alloc] init]);
 
             bool isU8  = false;
             bool isU16 = false;
@@ -1795,8 +1639,8 @@ angle::Result IndexGeneratorUtils::getIndicesFromElemArrayGeneratorPipeline(
                                        type:MTLDataTypeBool
                                    withName:SOURCE_IDX_IS_U32_CONSTANT_NAME];
 
-            ANGLE_TRY(EnsureSpecializedComputeShaderInitialized(contextMtl, shaderName,
-                                                                funcConstants, &shader));
+            ANGLE_TRY(
+                EnsureSpecializedShaderInitialized(contextMtl, shaderName, funcConstants, &shader));
         }
     }
 
@@ -1806,20 +1650,20 @@ angle::Result IndexGeneratorUtils::getIndicesFromElemArrayGeneratorPipeline(
 
 angle::Result IndexGeneratorUtils::getTriFanFromArrayGeneratorPipeline(
     ContextMtl *contextMtl,
-    AutoObjCPtr<id<MTLComputePipelineState>> *outComputePipeline)
+    angle::ObjCPtr<id<MTLComputePipelineState>> *outComputePipeline)
 {
-    ANGLE_TRY(EnsureComputeShaderInitialized(contextMtl, @"genTriFanIndicesFromArray",
-                                             &mTriFanFromArraysGeneratorShader));
+    ANGLE_TRY(EnsureShaderInitialized(contextMtl, @"genTriFanIndicesFromArray",
+                                      &mTriFanFromArraysGeneratorShader));
     return contextMtl->getPipelineCache().getComputePipeline(
         contextMtl, mTriFanFromArraysGeneratorShader, outComputePipeline);
 }
 
 angle::Result IndexGeneratorUtils::getLineLoopFromArrayGeneratorPipeline(
     ContextMtl *contextMtl,
-    AutoObjCPtr<id<MTLComputePipelineState>> *outComputePipeline)
+    angle::ObjCPtr<id<MTLComputePipelineState>> *outComputePipeline)
 {
-    ANGLE_TRY(EnsureComputeShaderInitialized(contextMtl, @"genLineLoopIndicesFromArray",
-                                             &mLineLoopFromArraysGeneratorShader));
+    ANGLE_TRY(EnsureShaderInitialized(contextMtl, @"genLineLoopIndicesFromArray",
+                                      &mLineLoopFromArraysGeneratorShader));
     return contextMtl->getPipelineCache().getComputePipeline(
         contextMtl, mLineLoopFromArraysGeneratorShader, outComputePipeline);
 }
@@ -1830,7 +1674,7 @@ angle::Result IndexGeneratorUtils::convertIndexBufferGPU(ContextMtl *contextMtl,
     ComputeCommandEncoder *cmdEncoder = contextMtl->getIndexPreprocessingCommandEncoder();
     ASSERT(cmdEncoder);
 
-    AutoObjCPtr<id<MTLComputePipelineState>> pipelineState;
+    angle::ObjCPtr<id<MTLComputePipelineState>> pipelineState;
     ANGLE_TRY(
         getIndexConversionPipeline(contextMtl, params.srcType, params.srcOffset, &pipelineState));
 
@@ -1861,7 +1705,7 @@ angle::Result IndexGeneratorUtils::generateTriFanBufferFromArrays(
     ComputeCommandEncoder *cmdEncoder = contextMtl->getComputeCommandEncoder();
     ASSERT(cmdEncoder);
 
-    AutoObjCPtr<id<MTLComputePipelineState>> pipeline;
+    angle::ObjCPtr<id<MTLComputePipelineState>> pipeline;
     ANGLE_TRY(getTriFanFromArrayGeneratorPipeline(contextMtl, &pipeline));
 
     ASSERT(params.vertexCount > 2);
@@ -1931,7 +1775,7 @@ angle::Result IndexGeneratorUtils::generateTriFanBufferFromElementsArrayGPU(
     ComputeCommandEncoder *cmdEncoder = contextMtl->getComputeCommandEncoder();
     ASSERT(cmdEncoder);
 
-    AutoObjCPtr<id<MTLComputePipelineState>> pipelineState;
+    angle::ObjCPtr<id<MTLComputePipelineState>> pipelineState;
     ANGLE_TRY(getIndicesFromElemArrayGeneratorPipeline(
         contextMtl, srcType, srcOffset, @"genTriFanIndicesFromElements",
         &mTriFanFromElemArrayGeneratorShaders, &pipelineState));
@@ -1992,7 +1836,7 @@ angle::Result IndexGeneratorUtils::generateLineLoopBufferFromArrays(
     ComputeCommandEncoder *cmdEncoder = contextMtl->getComputeCommandEncoder();
     ASSERT(cmdEncoder);
 
-    AutoObjCPtr<id<MTLComputePipelineState>> pipeline;
+    angle::ObjCPtr<id<MTLComputePipelineState>> pipeline;
     ANGLE_TRY(getLineLoopFromArrayGeneratorPipeline(contextMtl, &pipeline));
 
     cmdEncoder->setComputePipelineState(pipeline);
@@ -2061,7 +1905,7 @@ angle::Result IndexGeneratorUtils::generateLineLoopBufferFromElementsArrayGPU(
     ComputeCommandEncoder *cmdEncoder = contextMtl->getComputeCommandEncoder();
     ASSERT(cmdEncoder);
 
-    AutoObjCPtr<id<MTLComputePipelineState>> pipelineState;
+    angle::ObjCPtr<id<MTLComputePipelineState>> pipelineState;
     ANGLE_TRY(getIndicesFromElemArrayGeneratorPipeline(
         contextMtl, srcType, srcOffset, @"genLineLoopIndicesFromElements",
         &mLineLoopFromElemArrayGeneratorShaders, &pipelineState));
@@ -2089,28 +1933,34 @@ angle::Result IndexGeneratorUtils::generateLineLoopBufferFromElementsArrayCPU(
     const IndexGenerationParams &params,
     uint32_t *indicesGenerated)
 {
+    uint8_t *dstIndices = params.dstBuffer->map(contextMtl, params.dstOffset);
+    if (dstIndices == nullptr)
+    {
+        return angle::Result::Stop;
+    }
+    const uint8_t *indices = static_cast<const uint8_t *>(params.indices);
+    size_t dstIndexCount   = 0;
     switch (params.srcType)
     {
         case gl::DrawElementsType::UnsignedByte:
-            return GenLineLoopFromClientElements(
-                contextMtl, params.indexCount, params.primitiveRestartEnabled,
-                static_cast<const uint8_t *>(params.indices), params.dstBuffer, params.dstOffset,
-                indicesGenerated);
+            dstIndexCount = CopyLineLoopIndices<uint8_t, uint32_t>(
+                params.indexCount, indices, params.primitiveRestartEnabled, dstIndices);
+            break;
         case gl::DrawElementsType::UnsignedShort:
-            return GenLineLoopFromClientElements(
-                contextMtl, params.indexCount, params.primitiveRestartEnabled,
-                static_cast<const uint16_t *>(params.indices), params.dstBuffer, params.dstOffset,
-                indicesGenerated);
+            dstIndexCount = CopyLineLoopIndices<uint16_t, uint32_t>(
+                params.indexCount, indices, params.primitiveRestartEnabled, dstIndices);
+            break;
         case gl::DrawElementsType::UnsignedInt:
-            return GenLineLoopFromClientElements(
-                contextMtl, params.indexCount, params.primitiveRestartEnabled,
-                static_cast<const uint32_t *>(params.indices), params.dstBuffer, params.dstOffset,
-                indicesGenerated);
+            dstIndexCount = CopyLineLoopIndices<uint32_t, uint32_t>(
+                params.indexCount, indices, params.primitiveRestartEnabled, dstIndices);
+            break;
         default:
             UNREACHABLE();
     }
-
-    return angle::Result::Stop;
+    params.dstBuffer->unmapAndFlushSubset(contextMtl, params.dstOffset,
+                                          dstIndexCount * sizeof(uint32_t));
+    *indicesGenerated = static_cast<uint32_t>(dstIndexCount);
+    return angle::Result::Continue;
 }
 
 angle::Result IndexGeneratorUtils::generateLineLoopLastSegment(ContextMtl *contextMtl,
@@ -2187,77 +2037,28 @@ angle::Result IndexGeneratorUtils::generateLineLoopLastSegmentFromElementsArrayC
     return generateLineLoopLastSegment(contextMtl, first, last, params.dstBuffer, params.dstOffset);
 }
 
-angle::Result IndexGeneratorUtils::generatePrimitiveRestartBuffer(
-    ContextMtl *contextMtl,
-    unsigned numVerticesPerPrimitive,
-    const IndexGenerationParams &params,
-    size_t *indicesGenerated)
-{
-    switch (params.srcType)
-    {
-        case gl::DrawElementsType::UnsignedByte:
-            return GenPrimitiveRestartBuffer(contextMtl, params.indexCount, numVerticesPerPrimitive,
-                                             static_cast<const uint8_t *>(params.indices),
-                                             params.dstBuffer, params.dstOffset, indicesGenerated);
-        case gl::DrawElementsType::UnsignedShort:
-            return GenPrimitiveRestartBuffer(contextMtl, params.indexCount, numVerticesPerPrimitive,
-                                             static_cast<const uint16_t *>(params.indices),
-                                             params.dstBuffer, params.dstOffset, indicesGenerated);
-        case gl::DrawElementsType::UnsignedInt:
-            return GenPrimitiveRestartBuffer(contextMtl, params.indexCount, numVerticesPerPrimitive,
-                                             static_cast<const uint32_t *>(params.indices),
-                                             params.dstBuffer, params.dstOffset, indicesGenerated);
-        default:
-            UNREACHABLE();
-            return angle::Result::Stop;
-    }
-}
-
-angle::Result IndexGeneratorUtils::generatePrimitiveRestartTrianglesBuffer(
-    ContextMtl *contextMtl,
-    const IndexGenerationParams &params,
-    size_t *indicesGenerated)
-{
-    return generatePrimitiveRestartBuffer(contextMtl, 3, params, indicesGenerated);
-}
-
-angle::Result IndexGeneratorUtils::generatePrimitiveRestartLinesBuffer(
-    ContextMtl *contextMtl,
-    const IndexGenerationParams &params,
-    size_t *indicesGenerated)
-{
-    return generatePrimitiveRestartBuffer(contextMtl, 2, params, indicesGenerated);
-}
-
-angle::Result IndexGeneratorUtils::generatePrimitiveRestartPointsBuffer(
-    ContextMtl *contextMtl,
-    const IndexGenerationParams &params,
-    size_t *indicesGenerated)
-{
-    return generatePrimitiveRestartBuffer(contextMtl, 1, params, indicesGenerated);
-}
-
 angle::Result VisibilityResultUtils::getVisibilityResultCombinePipeline(
     ContextMtl *contextMtl,
     bool keepOldValue,
-    AutoObjCPtr<id<MTLComputePipelineState>> *outComputePipeline)
+    angle::ObjCPtr<id<MTLComputePipelineState>> *outComputePipeline)
 {
     // There is no guarantee Objective-C's BOOL is equal to bool, so casting just in case.
-    BOOL keepOldValueVal                 = keepOldValue;
-    AutoObjCPtr<id<MTLFunction>> &shader = mVisibilityResultCombineComputeShaders[keepOldValueVal];
+    BOOL keepOldValueVal = keepOldValue;
+    angle::ObjCPtr<id<MTLFunction>> &shader =
+        mVisibilityResultCombineComputeShaders[keepOldValueVal];
     if (!shader)
     {
         ANGLE_MTL_OBJC_SCOPE
         {
-            AutoObjCPtr<MTLFunctionConstantValues *> funcConstants =
-                adoptObjCObj([[MTLFunctionConstantValues alloc] init]);
+            angle::ObjCPtr<MTLFunctionConstantValues> funcConstants =
+                angle::adoptObjCPtr([[MTLFunctionConstantValues alloc] init]);
 
             [funcConstants setConstantValue:&keepOldValueVal
                                        type:MTLDataTypeBool
                                    withName:VISIBILITY_RESULT_KEEP_OLD_VAL_CONSTANT_NAME];
 
-            ANGLE_TRY(EnsureSpecializedComputeShaderInitialized(
-                contextMtl, @"combineVisibilityResult", funcConstants, &shader));
+            ANGLE_TRY(EnsureSpecializedShaderInitialized(contextMtl, @"combineVisibilityResult",
+                                                         funcConstants, &shader));
         }
     }
 
@@ -2287,7 +2088,7 @@ angle::Result VisibilityResultUtils::combineVisibilityResult(
     ComputeCommandEncoder *cmdEncoder = contextMtl->getComputeCommandEncoder();
     ASSERT(cmdEncoder);
 
-    AutoObjCPtr<id<MTLComputePipelineState>> pipeline;
+    angle::ObjCPtr<id<MTLComputePipelineState>> pipeline;
     ANGLE_TRY(getVisibilityResultCombinePipeline(contextMtl, keepOldValue, &pipeline));
     cmdEncoder->setComputePipelineState(pipeline);
 
@@ -2307,40 +2108,38 @@ angle::Result VisibilityResultUtils::combineVisibilityResult(
 
 angle::Result MipmapUtils::get3DMipGeneratorPipeline(
     ContextMtl *contextMtl,
-    AutoObjCPtr<id<MTLComputePipelineState>> *outComputePipeline)
+    angle::ObjCPtr<id<MTLComputePipelineState>> *outComputePipeline)
 {
-    ANGLE_TRY(
-        EnsureComputeShaderInitialized(contextMtl, @"generate3DMipmaps", &m3DMipGeneratorShader));
+    ANGLE_TRY(EnsureShaderInitialized(contextMtl, @"generate3DMipmaps", &m3DMipGeneratorShader));
     return contextMtl->getPipelineCache().getComputePipeline(contextMtl, m3DMipGeneratorShader,
                                                              outComputePipeline);
 }
 
 angle::Result MipmapUtils::get2DMipGeneratorPipeline(
     ContextMtl *contextMtl,
-    AutoObjCPtr<id<MTLComputePipelineState>> *outComputePipeline)
+    angle::ObjCPtr<id<MTLComputePipelineState>> *outComputePipeline)
 {
-    ANGLE_TRY(
-        EnsureComputeShaderInitialized(contextMtl, @"generate2DMipmaps", &m2DMipGeneratorShader));
+    ANGLE_TRY(EnsureShaderInitialized(contextMtl, @"generate2DMipmaps", &m2DMipGeneratorShader));
     return contextMtl->getPipelineCache().getComputePipeline(contextMtl, m2DMipGeneratorShader,
                                                              outComputePipeline);
 }
 
 angle::Result MipmapUtils::get2DArrayMipGeneratorPipeline(
     ContextMtl *contextMtl,
-    AutoObjCPtr<id<MTLComputePipelineState>> *outComputePipeline)
+    angle::ObjCPtr<id<MTLComputePipelineState>> *outComputePipeline)
 {
-    ANGLE_TRY(EnsureComputeShaderInitialized(contextMtl, @"generate2DArrayMipmaps",
-                                             &m2DArrayMipGeneratorShader));
+    ANGLE_TRY(EnsureShaderInitialized(contextMtl, @"generate2DArrayMipmaps",
+                                      &m2DArrayMipGeneratorShader));
     return contextMtl->getPipelineCache().getComputePipeline(contextMtl, m2DArrayMipGeneratorShader,
                                                              outComputePipeline);
 }
 
 angle::Result MipmapUtils::getCubeMipGeneratorPipeline(
     ContextMtl *contextMtl,
-    AutoObjCPtr<id<MTLComputePipelineState>> *outComputePipeline)
+    angle::ObjCPtr<id<MTLComputePipelineState>> *outComputePipeline)
 {
-    ANGLE_TRY(EnsureComputeShaderInitialized(contextMtl, @"generateCubeMipmaps",
-                                             &mCubeMipGeneratorShader));
+    ANGLE_TRY(
+        EnsureShaderInitialized(contextMtl, @"generateCubeMipmaps", &mCubeMipGeneratorShader));
     return contextMtl->getPipelineCache().getComputePipeline(contextMtl, mCubeMipGeneratorShader,
                                                              outComputePipeline);
 }
@@ -2355,7 +2154,7 @@ angle::Result MipmapUtils::generateMipmapCS(ContextMtl *contextMtl,
 
     MTLSize threadGroupSize;
     uint32_t slices = 1;
-    AutoObjCPtr<id<MTLComputePipelineState>> computePipeline;
+    angle::ObjCPtr<id<MTLComputePipelineState>> computePipeline;
     switch (srcTexture->textureType())
     {
         case MTLTextureType2D:
@@ -2476,7 +2275,7 @@ angle::Result CopyPixelsUtils::getPixelsCopyPipeline(
     const angle::Format &angleFormat,
     const TextureRef &texture,
     bool bufferWrite,
-    AutoObjCPtr<id<MTLComputePipelineState>> *outComputePipeline)
+    angle::ObjCPtr<id<MTLComputePipelineState>> *outComputePipeline)
 {
     int formatIDValue     = static_cast<int>(angleFormat.id);
     int shaderTextureType = GetShaderTextureType(texture);
@@ -2489,8 +2288,8 @@ angle::Result CopyPixelsUtils::getPixelsCopyPipeline(
         // Pipeline not cached, create it now:
         ANGLE_MTL_OBJC_SCOPE
         {
-            AutoObjCPtr<MTLFunctionConstantValues *> funcConstants =
-                adoptObjCObj([[MTLFunctionConstantValues alloc] init]);
+            angle::ObjCPtr<MTLFunctionConstantValues> funcConstants =
+                angle::adoptObjCPtr([[MTLFunctionConstantValues alloc] init]);
 
             [funcConstants setConstantValue:&formatIDValue
                                        type:MTLDataTypeInt
@@ -2509,8 +2308,8 @@ angle::Result CopyPixelsUtils::getPixelsCopyPipeline(
                 shaderName = [NSString stringWithUTF8String:mReadShaderName.c_str()];
             }
 
-            ANGLE_TRY(EnsureSpecializedComputeShaderInitialized(contextMtl, shaderName,
-                                                                funcConstants, &shader));
+            ANGLE_TRY(
+                EnsureSpecializedShaderInitialized(contextMtl, shaderName, funcConstants, &shader));
         }
     }
 
@@ -2526,7 +2325,7 @@ angle::Result CopyPixelsUtils::unpackPixelsFromBufferToTexture(
     ComputeCommandEncoder *cmdEncoder = contextMtl->getComputeCommandEncoder();
     ASSERT(cmdEncoder);
 
-    AutoObjCPtr<id<MTLComputePipelineState>> pipeline;
+    angle::ObjCPtr<id<MTLComputePipelineState>> pipeline;
     ANGLE_TRY(getPixelsCopyPipeline(contextMtl, srcAngleFormat, params.texture, false, &pipeline));
 
     cmdEncoder->setComputePipelineState(pipeline);
@@ -2565,7 +2364,7 @@ angle::Result CopyPixelsUtils::packPixelsFromTextureToBuffer(ContextMtl *context
     ComputeCommandEncoder *cmdEncoder = contextMtl->getComputeCommandEncoder();
     ASSERT(cmdEncoder);
 
-    AutoObjCPtr<id<MTLComputePipelineState>> pipeline;
+    angle::ObjCPtr<id<MTLComputePipelineState>> pipeline;
     ANGLE_TRY(getPixelsCopyPipeline(contextMtl, dstAngleFormat, params.texture, true, &pipeline));
 
     cmdEncoder->setComputePipelineState(pipeline);
@@ -2607,7 +2406,7 @@ angle::Result VertexFormatConversionUtils::convertVertexFormatToFloatCS(
         contextMtl->getComputeCommandEncoderWithoutEndingRenderEncoder();
     ASSERT(cmdEncoder);
 
-    AutoObjCPtr<id<MTLComputePipelineState>> pipeline;
+    angle::ObjCPtr<id<MTLComputePipelineState>> pipeline;
     ANGLE_TRY(getFloatConverstionComputePipeline(contextMtl, srcAngleFormat, &pipeline));
 
     ANGLE_TRY(setupCommonConvertVertexFormatToFloat(contextMtl, cmdEncoder, pipeline,
@@ -2627,7 +2426,7 @@ angle::Result VertexFormatConversionUtils::convertVertexFormatToFloatVS(
     ASSERT(cmdEncoder);
     ASSERT(contextMtl->getDisplay()->getFeatures().hasExplicitMemBarrier.enabled);
 
-    AutoObjCPtr<id<MTLRenderPipelineState>> pipeline;
+    angle::ObjCPtr<id<MTLRenderPipelineState>> pipeline;
     ANGLE_TRY(getFloatConverstionRenderPipeline(contextMtl, cmdEncoder, srcAngleFormat, &pipeline));
 
     ANGLE_TRY(setupCommonConvertVertexFormatToFloat(contextMtl, cmdEncoder, pipeline,
@@ -2687,7 +2486,7 @@ angle::Result VertexFormatConversionUtils::expandVertexFormatComponentsCS(
         contextMtl->getComputeCommandEncoderWithoutEndingRenderEncoder();
     ASSERT(cmdEncoder);
 
-    AutoObjCPtr<id<MTLComputePipelineState>> pipeline;
+    angle::ObjCPtr<id<MTLComputePipelineState>> pipeline;
     ANGLE_TRY(getComponentsExpandComputePipeline(contextMtl, &pipeline));
 
     ANGLE_TRY(setupCommonExpandVertexFormatComponents(contextMtl, cmdEncoder, pipeline,
@@ -2707,7 +2506,7 @@ angle::Result VertexFormatConversionUtils::expandVertexFormatComponentsVS(
     ASSERT(cmdEncoder);
     ASSERT(contextMtl->getDisplay()->getFeatures().hasExplicitMemBarrier.enabled);
 
-    AutoObjCPtr<id<MTLRenderPipelineState>> pipeline;
+    angle::ObjCPtr<id<MTLRenderPipelineState>> pipeline;
     ANGLE_TRY(getComponentsExpandRenderPipeline(contextMtl, cmdEncoder, &pipeline));
 
     ANGLE_TRY(setupCommonExpandVertexFormatComponents(contextMtl, cmdEncoder, pipeline,
@@ -2760,10 +2559,10 @@ angle::Result VertexFormatConversionUtils::setupCommonExpandVertexFormatComponen
 
 angle::Result VertexFormatConversionUtils::getComponentsExpandComputePipeline(
     ContextMtl *contextMtl,
-    AutoObjCPtr<id<MTLComputePipelineState>> *outPipelineState)
+    angle::ObjCPtr<id<MTLComputePipelineState>> *outPipelineState)
 {
-    ANGLE_TRY(EnsureComputeShaderInitialized(contextMtl, @"expandVertexFormatComponentsCS",
-                                             &mComponentsExpandComputeShader));
+    ANGLE_TRY(EnsureShaderInitialized(contextMtl, @"expandVertexFormatComponentsCS",
+                                      &mComponentsExpandComputeShader));
     return contextMtl->getPipelineCache().getComputePipeline(
         contextMtl, mComponentsExpandComputeShader, outPipelineState);
 }
@@ -2771,15 +2570,15 @@ angle::Result VertexFormatConversionUtils::getComponentsExpandComputePipeline(
 angle::Result VertexFormatConversionUtils::getComponentsExpandRenderPipeline(
     ContextMtl *contextMtl,
     RenderCommandEncoder *cmdEncoder,
-    AutoObjCPtr<id<MTLRenderPipelineState>> *outPipelineState)
+    angle::ObjCPtr<id<MTLRenderPipelineState>> *outPipelineState)
 {
     ANGLE_MTL_OBJC_SCOPE
     {
         if (!mComponentsExpandVertexShader)
         {
-            id<MTLLibrary> shaderLib     = contextMtl->getDisplay()->getDefaultShadersLib();
-            mComponentsExpandVertexShader =
-                adoptObjCObj([shaderLib newFunctionWithName:@"expandVertexFormatComponentsVS"]);
+            id<MTLLibrary> shaderLib      = contextMtl->getDisplay()->getDefaultShadersLib();
+            mComponentsExpandVertexShader = angle::adoptObjCPtr(
+                [shaderLib newFunctionWithName:@"expandVertexFormatComponentsVS"]);
             ANGLE_CHECK(contextMtl, mComponentsExpandVertexShader, gl::err::kInternalError,
                         GL_INVALID_OPERATION);
         }
@@ -2795,7 +2594,7 @@ angle::Result VertexFormatConversionUtils::getComponentsExpandRenderPipeline(
 angle::Result VertexFormatConversionUtils::getFloatConverstionComputePipeline(
     ContextMtl *contextMtl,
     const angle::Format &srcAngleFormat,
-    AutoObjCPtr<id<MTLComputePipelineState>> *outPipelineState)
+    angle::ObjCPtr<id<MTLComputePipelineState>> *outPipelineState)
 {
     int formatIDValue = static_cast<int>(srcAngleFormat.id);
 
@@ -2806,14 +2605,14 @@ angle::Result VertexFormatConversionUtils::getFloatConverstionComputePipeline(
         // Pipeline not cached, create it now:
         ANGLE_MTL_OBJC_SCOPE
         {
-            AutoObjCPtr<MTLFunctionConstantValues *> funcConstants =
-                adoptObjCObj([[MTLFunctionConstantValues alloc] init]);
+            angle::ObjCPtr<MTLFunctionConstantValues> funcConstants =
+                angle::adoptObjCPtr([[MTLFunctionConstantValues alloc] init]);
 
             [funcConstants setConstantValue:&formatIDValue
                                        type:MTLDataTypeInt
                                    withName:COPY_FORMAT_TYPE_CONSTANT_NAME];
 
-            ANGLE_TRY(EnsureSpecializedComputeShaderInitialized(
+            ANGLE_TRY(EnsureSpecializedShaderInitialized(
                 contextMtl, @"convertToFloatVertexFormatCS", funcConstants, &shader));
         }
     }
@@ -2825,7 +2624,7 @@ angle::Result VertexFormatConversionUtils::getFloatConverstionRenderPipeline(
     ContextMtl *contextMtl,
     RenderCommandEncoder *cmdEncoder,
     const angle::Format &srcAngleFormat,
-    AutoObjCPtr<id<MTLRenderPipelineState>> *outPipelineState)
+    angle::ObjCPtr<id<MTLRenderPipelineState>> *outPipelineState)
 {
     ANGLE_MTL_OBJC_SCOPE
     {
@@ -2835,17 +2634,17 @@ angle::Result VertexFormatConversionUtils::getFloatConverstionRenderPipeline(
         {
             NSError *err             = nil;
             id<MTLLibrary> shaderLib = contextMtl->getDisplay()->getDefaultShadersLib();
-            AutoObjCPtr<MTLFunctionConstantValues *> funcConstants =
-                adoptObjCObj([[MTLFunctionConstantValues alloc] init]);
+            angle::ObjCPtr<MTLFunctionConstantValues> funcConstants =
+                angle::adoptObjCPtr([[MTLFunctionConstantValues alloc] init]);
 
             [funcConstants setConstantValue:&formatIDValue
                                        type:MTLDataTypeInt
                                    withName:COPY_FORMAT_TYPE_CONSTANT_NAME];
 
             mConvertToFloatVertexShaders[formatIDValue] =
-                adoptObjCObj([shaderLib newFunctionWithName:@"convertToFloatVertexFormatVS"
-                                             constantValues:funcConstants
-                                                      error:&err]);
+                angle::adoptObjCPtr([shaderLib newFunctionWithName:@"convertToFloatVertexFormatVS"
+                                                    constantValues:funcConstants
+                                                             error:&err]);
             ANGLE_MTL_CHECK(contextMtl, mConvertToFloatVertexShaders[formatIDValue], err);
         }
 
@@ -2864,7 +2663,7 @@ angle::Result BlockLinearizationUtils::linearizeBlocks(ContextMtl *contextMtl,
     ComputeCommandEncoder *cmdEncoder = contextMtl->getComputeCommandEncoder();
     ASSERT(cmdEncoder);
 
-    AutoObjCPtr<id<MTLComputePipelineState>> pipeline;
+    angle::ObjCPtr<id<MTLComputePipelineState>> pipeline;
     ANGLE_TRY(getBlockLinearizationComputePipeline(contextMtl, &pipeline));
     cmdEncoder->setComputePipelineState(pipeline);
 
@@ -2890,10 +2689,10 @@ angle::Result BlockLinearizationUtils::linearizeBlocks(ContextMtl *contextMtl,
 
 angle::Result BlockLinearizationUtils::getBlockLinearizationComputePipeline(
     ContextMtl *contextMtl,
-    AutoObjCPtr<id<MTLComputePipelineState>> *outPipelineState)
+    angle::ObjCPtr<id<MTLComputePipelineState>> *outPipelineState)
 {
-    ANGLE_TRY(EnsureComputeShaderInitialized(contextMtl, @"linearizeBlocks",
-                                             &mLinearizeBlocksComputeShader));
+    ANGLE_TRY(
+        EnsureShaderInitialized(contextMtl, @"linearizeBlocks", &mLinearizeBlocksComputeShader));
     return contextMtl->getPipelineCache().getComputePipeline(
         contextMtl, mLinearizeBlocksComputeShader, outPipelineState);
 }
@@ -2904,7 +2703,7 @@ angle::Result DepthSaturationUtils::saturateDepth(ContextMtl *contextMtl,
     ComputeCommandEncoder *cmdEncoder = contextMtl->getComputeCommandEncoder();
     ASSERT(cmdEncoder);
 
-    AutoObjCPtr<id<MTLComputePipelineState>> pipeline;
+    angle::ObjCPtr<id<MTLComputePipelineState>> pipeline;
     ANGLE_TRY(getDepthSaturationComputePipeline(contextMtl, &pipeline));
     cmdEncoder->setComputePipelineState(pipeline);
 
@@ -2928,10 +2727,9 @@ angle::Result DepthSaturationUtils::saturateDepth(ContextMtl *contextMtl,
 
 angle::Result DepthSaturationUtils::getDepthSaturationComputePipeline(
     ContextMtl *contextMtl,
-    AutoObjCPtr<id<MTLComputePipelineState>> *outPipelineState)
+    angle::ObjCPtr<id<MTLComputePipelineState>> *outPipelineState)
 {
-    ANGLE_TRY(
-        EnsureComputeShaderInitialized(contextMtl, @"saturateDepth", &mSaturateDepthComputeShader));
+    ANGLE_TRY(EnsureShaderInitialized(contextMtl, @"saturateDepth", &mSaturateDepthComputeShader));
     return contextMtl->getPipelineCache().getComputePipeline(
         contextMtl, mSaturateDepthComputeShader, outPipelineState);
 }

@@ -42,7 +42,6 @@
 #if BUILDFLAG(IS_CHROMEOS)
 #include "ash/constants/ash_features.h"
 #include "chrome/browser/ash/crosapi/crosapi_manager.h"
-#include "chrome/browser/ash/crosapi/idle_service_ash.h"
 #include "chrome/browser/ash/kcer/kcer_factory_ash.h"
 #include "chrome/browser/ash/login/users/fake_chrome_user_manager.h"
 #include "chromeos/ash/components/login/login_state/login_state.h"
@@ -72,7 +71,7 @@ bool SlotContainsCertWithHash(PK11SlotInfo* slot, std::string_view hash_hex) {
     return false;
   }
   net::SHA256HashValue hash;
-  if (!base::HexStringToSpan(hash_hex, hash.data)) {
+  if (!base::HexStringToSpan(hash_hex, hash)) {
     return false;
   }
   for (CERTCertListNode* node = CERT_LIST_HEAD(cert_list);
@@ -169,7 +168,6 @@ class ClientCertSourceWritableUnitTest
          { ash::features::kUseKcerClientCertStore,
            kcer_enabled() }});
 
-    crosapi::IdleServiceAsh::DisableForTesting();
     ash::LoginState::Initialize();
     crosapi_manager_ = std::make_unique<crosapi::CrosapiManager>();
 #endif

@@ -96,7 +96,7 @@ class ServiceListener final {
   ServiceListener& operator=(const ServiceListener&) = delete;
   ServiceListener(ServiceListener&&) noexcept = delete;
   ServiceListener& operator=(ServiceListener&&) noexcept = delete;
-  virtual ~ServiceListener();
+  ~ServiceListener();
 
   // Sets the service configuration for this listener.
   void SetConfig(const Config& config);

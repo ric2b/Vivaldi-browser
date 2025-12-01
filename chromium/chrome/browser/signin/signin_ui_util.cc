@@ -21,7 +21,6 @@
 #include "base/supports_user_data.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
-#include "build/chromeos_buildflags.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/feature_engagement/tracker_factory.h"
 #include "chrome/browser/profiles/profile.h"
@@ -53,13 +52,13 @@
 #include "ui/gfx/font_list.h"
 #include "ui/gfx/text_elider.h"
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
 #include "chrome/browser/ash/profiles/profile_helper.h"
 #include "chrome/browser/signin/signin_ui_chromeos_util.h"
 #include "components/account_manager_core/account_manager_facade.h"
 #include "components/account_manager_core/chromeos/account_manager_facade_factory.h"
 #include "components/user_manager/user.h"
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+#endif  // BUILDFLAG(IS_CHROMEOS)
 
 #if BUILDFLAG(ENABLE_DICE_SUPPORT)
 #include "chrome/browser/signin/dice_tab_helper.h"
@@ -146,14 +145,14 @@ std::u16string GetAuthenticatedUsername(Profile* profile) {
     user_display_name =
         identity_manager->GetPrimaryAccountInfo(signin::ConsentLevel::kSync)
             .email;
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
     // See https://crbug.com/994798 for details.
     user_manager::User* user =
         ash::ProfileHelper::Get()->GetUserByProfile(profile);
     // |user| may be null in tests.
     if (user)
       user_display_name = user->GetDisplayEmail();
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+#endif  // BUILDFLAG(IS_CHROMEOS)
   }
 
   return base::UTF8ToUTF16(user_display_name);
@@ -185,7 +184,7 @@ void ShowReauthForPrimaryAccountWithAuthError(
 void ShowReauthForAccount(Profile* profile,
                           const std::string& email,
                           signin_metrics::AccessPoint access_point) {
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
   ::GetAccountManagerFacade(profile->GetPath().value())
       ->ShowReauthAccountDialog(
           GetAccountReauthSourceFromAccessPoint(access_point), email,
@@ -203,7 +202,7 @@ void ShowReauthForAccount(Profile* profile,
 void ShowExtensionSigninPrompt(Profile* profile,
                                bool enable_sync,
                                const std::string& email_hint) {
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
   NOTREACHED();
 #elif BUILDFLAG(ENABLE_DICE_SUPPORT)
   // There is no sign-in flow for guest or system profile.
@@ -234,12 +233,12 @@ void ShowExtensionSigninPrompt(Profile* profile,
       profile, email_hint, enable_sync,
       signin_metrics::AccessPoint::kExtensions,
       signin_metrics::PromoAction::PROMO_ACTION_NO_SIGNIN_PROMO);
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+#endif  // BUILDFLAG(IS_CHROMEOS)
 }
 
 void ShowSigninPromptFromPromo(Profile* profile,
                                signin_metrics::AccessPoint access_point) {
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
   NOTREACHED();
 #elif BUILDFLAG(ENABLE_DICE_SUPPORT)
   CHECK_NE(signin_metrics::AccessPoint::kUnknown, access_point);
@@ -256,7 +255,7 @@ void ShowSigninPromptFromPromo(Profile* profile,
       profile, /*enable_sync=*/false, access_point,
       signin_metrics::PromoAction::
           PROMO_ACTION_NEW_ACCOUNT_NO_EXISTING_ACCOUNT);
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+#endif  // BUILDFLAG(IS_CHROMEOS)
 }
 
 void SignInFromSingleAccountPromo(Profile* profile,
@@ -393,8 +392,7 @@ void EnableSyncFromMultiAccountPromo(Profile* profile,
         is_sync_promo || access_point == signin_metrics::AccessPoint::kSettings;
   }
   TurnSyncOnHelper::SigninAbortedMode signin_aborted_mode =
-      switches::IsExplicitBrowserSigninUIOnDesktopEnabled() &&
-              account.account_id !=
+      account.account_id !=
                   identity_manager
                       ->GetPrimaryAccountInfo(signin::ConsentLevel::kSignin)
                       .account_id &&
@@ -404,9 +402,23 @@ void EnableSyncFromMultiAccountPromo(Profile* profile,
   signin_metrics::LogSigninAccessPointStarted(access_point,
                                               existing_account_promo_action);
   signin_metrics::RecordSigninUserActionForAccessPoint(access_point);
+
+  bool turn_sync_on_signed_profile =
+      identity_manager->GetPrimaryAccountId(signin::ConsentLevel::kSignin) ==
+      account.account_id;
+
+  // The Turn On Sync flow might fail before setting an account as primary. If
+  // enabling Sync is optional, do not rely on its result to sign the web-only
+  // account in the profile.
+  if (is_sync_promo &&
+      !identity_manager->HasPrimaryAccount(signin::ConsentLevel::kSignin)) {
+    identity_manager->GetPrimaryAccountMutator()->SetPrimaryAccount(
+        account.account_id, signin::ConsentLevel::kSignin, access_point);
+  }
+
   GetSigninUiDelegate()->ShowTurnSyncOnUI(
       profile, access_point, existing_account_promo_action, account.account_id,
-      signin_aborted_mode, is_sync_promo);
+      signin_aborted_mode, is_sync_promo, turn_sync_on_signed_profile);
 #else
   DUMP_WILL_BE_NOTREACHED();
 #endif  // BUILDFLAG(ENABLE_DICE_SUPPORT)
@@ -459,7 +471,7 @@ std::vector<AccountInfo> GetOrderedAccountsForDisplay(
   return accounts;
 }
 
-#if !BUILDFLAG(IS_CHROMEOS_ASH)
+#if !BUILDFLAG(IS_CHROMEOS)
 
 AccountInfo GetSingleAccountForPromos(
     const signin::IdentityManager* identity_manager) {
@@ -470,7 +482,7 @@ AccountInfo GetSingleAccountForPromos(
   return AccountInfo();
 }
 
-#endif  // !BUILDFLAG(IS_CHROMEOS_ASH)
+#endif  // !BUILDFLAG(IS_CHROMEOS)
 
 #if BUILDFLAG(ENABLE_DICE_SUPPORT)
 

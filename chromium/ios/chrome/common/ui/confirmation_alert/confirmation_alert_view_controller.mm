@@ -145,6 +145,7 @@ UIImage* DefaultCheckmarkCircleFillSymbol(CGFloat point_size) {
     _activityIndicatorColor = [UIColor colorNamed:kSolidWhiteColor];
     _confirmationButtonColor = [UIColor colorNamed:kBlue100Color];
     _confirmationCheckmarkColor = [UIColor colorNamed:kBlue700Color];
+    _imageBackgroundColor = [UIColor colorNamed:kBackgroundColor];
   }
   return self;
 }
@@ -537,8 +538,9 @@ UIImage* DefaultCheckmarkCircleFillSymbol(CGFloat point_size) {
   // Make sure detent is not larger than 75% of the maximum detent value but at
   // least as large as a standard medium detent.
   height = MIN(height, 0.75 * context.maximumDetentValue);
-  CGFloat mediumDetentHeight = [UISheetPresentationControllerDetent.mediumDetent
-      resolvedValueInContext:context];
+  CGFloat mediumDetentHeight =
+      [[UISheetPresentationControllerDetent mediumDetent]
+          resolvedValueInContext:context];
   height = MAX(height, mediumDetentHeight);
   return height;
 }
@@ -677,7 +679,7 @@ UIImage* DefaultCheckmarkCircleFillSymbol(CGFloat point_size) {
 
   UIView* frameView = [[UIView alloc] init];
   frameView.translatesAutoresizingMaskIntoConstraints = NO;
-  frameView.backgroundColor = [UIColor colorNamed:kBackgroundColor];
+  frameView.backgroundColor = _imageBackgroundColor;
   frameView.layer.cornerRadius = kFaviconCornerRadius;
   frameView.layer.shadowOffset =
       CGSizeMake(kFaviconShadowOffsetX, kFaviconShadowOffsetY);

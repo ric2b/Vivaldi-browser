@@ -51,14 +51,6 @@ export class PrivacyGuideHistorySyncFragmentElement extends
 
   static get properties() {
     return {
-      /**
-       * Preferences state.
-       */
-      prefs: {
-        type: Object,
-        notify: true,
-      },
-
       /** Virtual pref to drive the settings-toggle from syncPrefs. */
       historySyncVirtualPref_: {
         type: Object,
@@ -130,7 +122,7 @@ export class PrivacyGuideHistorySyncFragmentElement extends
           PrivacyGuideSettingsStates.HISTORY_SYNC_OFF_TO_ON :
           PrivacyGuideSettingsStates.HISTORY_SYNC_OFF_TO_OFF;
     }
-    this.metricsBrowserProxy_.recordPrivacyGuideSettingsStatesHistogram(state!);
+    this.metricsBrowserProxy_.recordPrivacyGuideSettingsStatesHistogram(state);
 
     this.firstSyncPrefUpdate_ = true;
   }

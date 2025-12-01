@@ -31,7 +31,6 @@
 <translation id="2388886110302389394">Open page in a new Private window (Ctrl-Shift-N)</translation>
 <translation id="2467694685043708798"><ph name="BEGIN_LINK" />Running Network Diagnostics<ph name="END_LINK" /></translation>
 <translation id="2491414235131909199">This page has been blocked by an extension</translation>
-<translation id="2501278716633472235">Go back</translation>
 <translation id="2539524384386349900">Detect</translation>
 <translation id="255002559098805027"><ph name="HOST_NAME" /> sent an invalid response.</translation>
 <translation id="2634124572758952069"><ph name="HOST_NAME" />’s server IP address could not be found.</translation>
@@ -56,7 +55,6 @@
       <ph name="PLATFORM_TEXT" /></translation>
 <translation id="3226128629678568754">Press the reload button to resubmit the data needed to load the page.</translation>
 <translation id="3234666976984236645">Always detect important content on this site</translation>
-<translation id="3308738399950580893">ads</translation>
 <translation id="3384522979010096022">Your organization doesn’t allow you to view this site</translation>
 <translation id="3422472998109090673"><ph name="HOST_NAME" /> is currently unreachable.</translation>
 <translation id="3427092606871434483">Allow (default)</translation>
@@ -74,7 +72,6 @@
 <translation id="3681007416295224113">Certificate information</translation>
 <translation id="3717027428350673159"><ph name="BEGIN_LINK" />Checking the proxy, firewall, and DNS configuration<ph name="END_LINK" /></translation>
 <translation id="382518646247711829">If you use a proxy server...</translation>
-<translation id="3894751534882749287">If you wish to view the page anyway, you can change its tracking protection level in the Tracker-blocker popup or by clicking the Allow button</translation>
 <translation id="3950820424414687140">Sign in</translation>
 <translation id="3973234410852337861"><ph name="HOST_NAME" /> is blocked</translation>
 <translation id="3987940399970879459">Less than 1 MB</translation>
@@ -100,7 +97,6 @@
 <translation id="4701488924964507374"><ph name="SENTENCE1" /> <ph name="SENTENCE2" /></translation>
 <translation id="4708268264240856090">Your connection was interrupted</translation>
 <translation id="4722547256916164131"><ph name="BEGIN_LINK" />Running Windows Network Diagnostics<ph name="END_LINK" /></translation>
-<translation id="4736016046474602958">Tracker Blocker</translation>
 <translation id="4744603770635761495">Executable Path</translation>
 <translation id="4750917950439032686">Your information (for example, passwords or credit card numbers) is private when it is sent to this site.</translation>
 <translation id="4764776831041365478">The web page at <ph name="URL" /> might be temporarily down or it may have moved permanently to a new web address.</translation>
@@ -158,12 +154,10 @@
 <translation id="7096937462164235847">The identity of this website isn't verified.</translation>
 <translation id="7108819624672055576">Allowed by an extension</translation>
 <translation id="7111012039238467737">(Valid)</translation>
-<translation id="7113310725918019676">Allow <ph name="BLOCKED_TYPE" /> from <ph name="DOMAIN" /></translation>
 <translation id="7210863904660874423"><ph name="HOST_NAME" /> doesn't adhere to security standards.</translation>
 <translation id="7219179957768738017">The connection uses <ph name="SSL_VERSION" />.</translation>
 <translation id="7221855153210829124">Show notifications</translation>
 <translation id="7353601530677266744">Command Line</translation>
-<translation id="7364115444476960850">The page you were trying to access was blocked by Vivaldi's <ph name="BLOCKER_NAME" /></translation>
 <translation id="7419106976560586862">Profile Path</translation>
 <translation id="7455133967321480974">Use global default (Block)</translation>
 <translation id="7518003948725431193">No web page was found for the web address: <ph name="URL" /></translation>
@@ -183,7 +177,6 @@
 <translation id="8037357227543935929">Ask (default)</translation>
 <translation id="8041940743680923270">Use global default (Ask)</translation>
 <translation id="808894953321890993">Change password</translation>
-<translation id="8119307142152921512">trackers and ads</translation>
 <translation id="8149426793427495338">Your computer went to sleep.</translation>
 <translation id="8150722005171944719">The file at <ph name="URL" /> is not readable.  It may have been removed, moved or file permissions may be preventing access.</translation>
 <translation id="8184538546369750125">Use global default (Allow)</translation>
@@ -199,7 +192,6 @@
 <translation id="8703575177326907206">Your connection to <ph name="DOMAIN" /> is not encrypted.</translation>
 <translation id="8740359287975076522"><ph name="HOST_NAME" />’s &lt;abbr id="dnsDefinition"&gt;DNS address&lt;/abbr&gt; could not be found. Diagnosing the problem.</translation>
 <translation id="8820817407110198400">Bookmarks</translation>
-<translation id="8940028675168378100">Blocked by <ph name="BLOCKER_NAME" /></translation>
 <translation id="8963117664422609631">Go to site settings</translation>
 <translation id="9001074447101275817">The proxy <ph name="DOMAIN" /> requires a username and password.</translation>
 <translation id="9008201768610948239">Ignore</translation>
@@ -209,7 +201,6 @@
 <translation id="9069693763241529744">Blocked by an extension</translation>
 <translation id="9073799351042754113">You have chosen to turn off security warnings for this site.</translation>
 <translation id="9169664750068251925">Always block on this site</translation>
-<translation id="9180553614777056266">Ad Blocker</translation>
 <translation id="9183425211371246419"><ph name="HOST_NAME" /> uses an unsupported protocol.</translation>
 <translation id="936602727769022409">You could lose access to your Google Account. Chromium recommends changing your password now. You'll be asked to sign in.</translation>
 <translation id="969892804517981540">Official Build</translation>

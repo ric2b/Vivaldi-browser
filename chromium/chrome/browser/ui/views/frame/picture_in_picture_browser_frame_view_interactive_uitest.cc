@@ -39,6 +39,10 @@
 #include "ui/linux/linux_ui_getter.h"
 #endif
 
+#if BUILDFLAG(IS_OZONE)
+#include "ui/ozone/public/ozone_platform.h"
+#endif
+
 namespace {
 
 using ::testing::WithParamInterface;
@@ -115,6 +119,16 @@ class ModalWidgetDelegate : public views::WidgetDelegate {
 
   ui::mojom::ModalType modal_type_;
 };
+
+bool PlatformSupportsScreenCoordinates() {
+#if BUILDFLAG(IS_OZONE)
+  return ui::OzonePlatform::GetInstance()
+      ->GetPlatformProperties()
+      .supports_global_screen_coordinates;
+#else
+  return true;
+#endif  // BUILDFLAG(IS_OZONE)
+}
 
 class PictureInPictureBrowserFrameViewTest : public WebRtcTestBase,
                                              public AnimationTimingTest {
@@ -296,11 +310,12 @@ class PictureInPictureBrowserFrameViewTest : public WebRtcTestBase,
   std::unique_ptr<ModalWidgetDelegate> delegate_;
 };
 
-#if BUILDFLAG(IS_WIN)
+#if BUILDFLAG(IS_WIN) && defined(NDEBUG)
 // TODO(jazzhsu): Fix test on MAC and Wayland. Test currently not working on
 // those platforms because if we send mouse move event outside of the pip window
 // in ui_test_utils::SendMouseMoveSync, the pip window will not receive the
 // event.
+// TODO(crbug.com/403599401): Fails on Win11 debug.
 #define MAYBE_TitleActivation TitleActivation
 #else
 #define MAYBE_TitleActivation DISABLED_TitleActivation
@@ -410,6 +425,8 @@ IN_PROC_BROWSER_TEST_F(PictureInPictureBrowserFrameViewTest,
 
 IN_PROC_BROWSER_TEST_F(PictureInPictureBrowserFrameViewTest,
                        ResizesToFitNonModalChildDialogs) {
+  // Note that on Windows and CrOS, this should not resize, because they do not
+  // clip child dialogs.
   ASSERT_NO_FATAL_FAILURE(SetUpDocumentPIP());
 
   gfx::Rect initial_pip_bounds =
@@ -424,9 +441,17 @@ IN_PROC_BROWSER_TEST_F(PictureInPictureBrowserFrameViewTest,
   // The pip window should increase its size to contain the child dialog.
   gfx::Rect new_pip_bounds =
       pip_frame_view()->GetWidget()->GetWindowBoundsInScreen();
+  // Memorize these, rather than reusing the #if's in the cc file, in case
+  // somebody accidentally changes them.
+#if BUILDFLAG(IS_LINUX)
+  // On these platforms, the pip window should be updated.
   EXPECT_NE(initial_pip_bounds, new_pip_bounds);
   EXPECT_GE(new_pip_bounds.width(), child_dialog_size.width());
   EXPECT_GE(new_pip_bounds.height(), child_dialog_size.height());
+#else
+  // On these platforms, no adjustment should be made.
+  EXPECT_EQ(initial_pip_bounds, new_pip_bounds);
+#endif
 
   // Close the dialog.
   child_dialog->CloseNow();
@@ -473,6 +498,9 @@ IN_PROC_BROWSER_TEST_F(PictureInPictureBrowserFrameViewTest,
 
 IN_PROC_BROWSER_TEST_F(PictureInPictureBrowserFrameViewTest,
                        RespectsUserLocationChangesAfterChildDialogCloses) {
+  if (!PlatformSupportsScreenCoordinates()) {
+    GTEST_SKIP() << "Global screen coordinates unavailable";
+  }
   ASSERT_NO_FATAL_FAILURE(SetUpDocumentPIP());
 
   gfx::Rect initial_pip_bounds =
@@ -534,8 +562,11 @@ IN_PROC_BROWSER_TEST_F(PictureInPictureBrowserFrameViewTest,
   gfx::Rect moved_bounds = new_pip_bounds;
   moved_bounds.set_width(moved_bounds.width() + 10);
   moved_bounds.set_height(moved_bounds.height() + 10);
-  moved_bounds.set_x(moved_bounds.x() - 10);
-  moved_bounds.set_y(moved_bounds.y() - 10);
+
+  if (PlatformSupportsScreenCoordinates()) {
+    moved_bounds.set_x(moved_bounds.x() - 10);
+    moved_bounds.set_y(moved_bounds.y() - 10);
+  }
   pip_frame_view()->GetWidget()->SetBounds(moved_bounds);
 
   // Close the dialog.
@@ -645,7 +676,8 @@ class FakeLinuxUiGetter : public ui::LinuxUiGetter {
     }
 
     ui::WindowFrameProvider* GetWindowFrameProvider(bool solid_frame,
-                                                    bool tiled) override {
+                                                    bool tiled,
+                                                    bool maximized) override {
       // The test relies on this returning null.
       return nullptr;
     }
@@ -752,9 +784,13 @@ IN_PROC_BROWSER_TEST_P(PictureInPictureBrowserFrameViewTest,
   // Move mouse to the top-left corner of the main browser window (out side of
   // the pip window) should deactivate the title.
   gfx::Point outside = gfx::Point();
-  views::View::ConvertPointToScreen(
-      static_cast<BrowserView*>(browser()->window()), &outside);
-  ASSERT_FALSE(IsPointInPIPFrameView(outside));
+  if (PlatformSupportsScreenCoordinates()) {
+    views::View::ConvertPointToScreen(
+        static_cast<BrowserView*>(browser()->window()), &outside);
+    // This check only makes sense in platforms that support global screen
+    // coordinates.
+    ASSERT_FALSE(IsPointInPIPFrameView(outside));
+  }
   UpdateTopBarView(outside);
 
   AnimationWaiter hide_animation_waiter(

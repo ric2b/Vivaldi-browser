@@ -195,7 +195,7 @@ void ConfigureLabelText(views::Label* title) {
   title->SetProperty(views::kCrossAxisAlignmentKey,
                      views::LayoutAlignment::kStretch);
   title->SetHorizontalAlignment(gfx::ALIGN_CENTER);
-  title->SetEnabledColorId(cros_tokens::kCrosSysOnSurface);
+  title->SetEnabledColor(cros_tokens::kCrosSysOnSurface);
   TypographyProvider::Get()->StyleLabel(ash::TypographyToken::kCrosHeadline1,
                                         *title);
 }
@@ -822,7 +822,8 @@ std::unique_ptr<views::View> EcheTray::CreateBubbleHeaderView(
 
   // Add minimize button
   minimize_button_ = header->AddChildView(CreateButton(
-      base::BindRepeating(&EcheTray::CloseBubble, weak_factory_.GetWeakPtr()),
+      base::BindRepeating(&EcheTray::CloseBubble, weak_factory_.GetWeakPtr(),
+                          TrayBackgroundView::CloseReason::kUnspecified),
       kEcheMinimizeIcon, IDS_APP_ACCNAME_MINIMIZE));
 
   // Add close button

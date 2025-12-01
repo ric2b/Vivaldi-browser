@@ -29,6 +29,7 @@
 <translation id="2441056087170876076">halimaw 2</translation>
 <translation id="2444387452209867610">Ipasok ang Tala</translation>
 <translation id="2486841023299517366">Hayop 4</translation>
+<translation id="2501278716633472235">Bumalik ka na</translation>
 <translation id="2612127540243995147">Handa nang i-install. Ang Vivaldi ay isasara at muling ilulunsad.</translation>
 <translation id="2613387515621326337">Magpakita ng update na website</translation>
 <translation id="2647368062414805334">Nakakalungkot, ang iyong mga setting ng Edge ay hindi magagamit habang tumatakbo ang browser na iyon. Upang mai import ang mga setting na iyon sa Vivaldi, i save ang iyong trabaho at isara ang lahat ng mga window ng Edge. Pagkatapos ay i click ang Magpatuloy.</translation>
@@ -48,6 +49,7 @@
 <translation id="3259769196742189631">Patunayan ang</translation>
 <translation id="3291915639428159043">Hinarang ang autoplay</translation>
 <translation id="3302905971452834934">halimaw 1</translation>
+<translation id="3308738399950580893">mga ad</translation>
 <translation id="3334610655141903168">(no title)</translation>
 <translation id="3372505110412186107">Si Vivaldi <ph name="VERSION" /> ang pinakabagong bersyong magagamit ngayon.</translation>
 <translation id="3383198080133834965">Updated ka na!</translation>
@@ -67,6 +69,7 @@
 <translation id="3795800845758778870">Nakakalungkot, ang iyong mga setting ng Brave ay hindi magagamit habang tumatakbo ang browser na iyon. Upang mai import ang mga setting na iyon sa Vivaldi, i save ang iyong trabaho at isara ang lahat ng mga window ng Matapang. Pagkatapos ay i click ang Magpatuloy.</translation>
 <translation id="3822431842304177896">Bagong Separator</translation>
 <translation id="3832132597516774400">Landscape 5</translation>
+<translation id="3894751534882749287">Kung nais mong tingnan ang pahina pa rin, maaari mong baguhin ang antas ng proteksyon sa pagsubaybay nito sa popup ng blocker ng Tagasubaybay o sa pamamagitan ng pag click sa pindutan ng Payagan</translation>
 <translation id="3914946330804881301">Na-import Mula sa Opera</translation>
 <translation id="3921292902397893431">halimaw 8</translation>
 <translation id="3943857333388298514">I-paste</translation>
@@ -82,6 +85,7 @@
 <translation id="4582480609585453144">Buksan ang Link sa Background Tab</translation>
 <translation id="4636708767492582204">Ipadala sa pamamagitan ng Koreo</translation>
 <translation id="4677434526832593569">Hayop 8</translation>
+<translation id="4736016046474602958">Tracker Blocker</translation>
 <translation id="474217410105706308">Muting Tab</translation>
 <translation id="4881695831933465202">Buksan ang</translation>
 <translation id="498766871928286903"><ph name="DOWNLOADED" /> ng <ph name="TOTAL_SIZE_TO_DOWNLOAD" /></translation>
@@ -117,6 +121,7 @@
 <translation id="6896758677409633944">Kopyahin</translation>
 <translation id="7086554968911045110">Landscape 7</translation>
 <translation id="7111492742514999492">Landscape 9</translation>
+<translation id="7113310725918019676">Pahintulutan ang <ph name="BLOCKED_TYPE" /> mula sa <ph name="DOMAIN" /></translation>
 <translation id="7337881442233988129">Chromium</translation>
 <translation id="7581266044164103589">Nabigo upang ilunsad ang installer ng pag update. Mangyaring suriin kung ang computer ay may sapat na memorya o disc space at subukang muli mamaya.</translation>
 <translation id="7658239707568436148">Kanselahin</translation>
@@ -129,9 +134,9 @@
 <translation id="7957213167373139414">Ang Aking Kalendaryo</translation>
 <translation id="8027581147000338959">Buksan sa Bagong Window</translation>
 <translation id="8044382196220116469">Huwag payagan ang mga site na awtomatikong mag play ng video</translation>
+<translation id="8119307142152921512">mga tracker at ad</translation>
 <translation id="8197810018650377191">Pahina ng Bookmark</translation>
 <translation id="8261506727792406068">Alisin</translation>
-<translation id="8263047843452521549">Inspeksyunin ang background service-worker</translation>
 <translation id="8331671104904436324">Buksan sa Background Tab</translation>
 <translation id="8373293945112511707">Landscape 1</translation>
 <translation id="8388552048012645975">Nag-download ng update...</translation>
@@ -145,13 +150,13 @@
 <translation id="8651348004684669199">Magdagdag ng Active Tab</translation>
 <translation id="8669345741879513971">halimaw 10</translation>
 <translation id="867544375504146191">Yandex sa Filipino ay "Yandeks".</translation>
-<translation id="8689295374912158752">Inspeksyunin ang portal-document</translation>
 <translation id="8768970203213061953">Landscape 14</translation>
 <translation id="8773635261052182196">Hindi ka na muling makikita ang mga abiso na ito. Maaari mo silang muling paganahin mula sa mga setting ng Vivaldi.</translation>
 <translation id="8774017153185436870">Maaaring maglaro ng video ang mga site nang awtomatiko</translation>
 <translation id="8813277370772331957">Ipaalala mo sa akin mamaya</translation>
 <translation id="8894900864683381599">Magdagdag ng Link sa Web Panel</translation>
 <translation id="8912720443398351457">Gusto Mo Bang Lumabas sa Vivaldi?</translation>
+<translation id="8940028675168378100">Hinarang ng <ph name="BLOCKER_NAME" /></translation>
 <translation id="8947109330183116400">Piliin ang HTML bookmark file</translation>
 <translation id="9017566390391482291">Piliin ang folder ng profile ng Vivaldi para sa pag import</translation>
 <translation id="9048058608784130603">Nakabinbing update <ph name="VERSION" /></translation>
@@ -161,6 +166,7 @@
 <translation id="912022491595344261">Buksan ang Imahe bilang <ph name="USER" /></translation>
 <translation id="9157539936604258187">Buksan ang Link</translation>
 <translation id="9169060351863393881">Opera 12.x</translation>
+<translation id="9180553614777056266">Tagapigil ng Ad</translation>
 <translation id="939305735877869636">matapang na</translation>
 <translation id="970294721402795299">Landscape 16</translation>
 </translationbundle>

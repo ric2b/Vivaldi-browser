@@ -1,7 +1,10 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="cs">
+<translation id="1204037785786432551">Stáhnout cíl odkazu</translation>
+<translation id="1206892813135768548">Zkopírovat text odkazu</translation>
 <translation id="1397811292916898096">Hledat pomocí vyhledávače <ph name="PRODUCT_NAME" /></translation>
+<translation id="1435593198351412143">Automaticky otevírat PDF soubory</translation>
 <translation id="1456207338570705181">Touch to Search je funkce, která je dostupná pouze v případě, že je Google nastaven jako výchozí vyhledávač ve Vivaldi. Odešle vybrané slovo a aktuální stránku jako kontext do Vyhledávání Google. Můžete jej vypnout v <ph name="BEGIN_LINK" />Nastavení<ph name="END_LINK" />.</translation>
 <translation id="1598449788754183301">Přepnout normální/soukromé listy</translation>
 <translation id="1644574205037202324">Historie</translation>
@@ -14,13 +17,21 @@
 <translation id="2433507940547922241">Vzhled</translation>
 <translation id="2501278716633472235">Přejít zpět</translation>
 <translation id="2633278372998075009">Soukromé listy</translation>
+<translation id="2650751991977523696">Stáhnout soubor znovu?</translation>
+<translation id="265156376773362237">Standardní předběžné načítání</translation>
 <translation id="272026394418727548">Domovská stránka Vivaldi</translation>
+<translation id="2842985007712546952">Nadřazená složka</translation>
+<translation id="2871733351037274014">Předběžně načítat stránky</translation>
+<translation id="2904300462646366554">Stažené PDF soubory se automaticky otevřou v jednom z PDF prohlížečů v zařízení</translation>
 <translation id="2951071800649516099">Přidejte si stránky do seznamu četby na později</translation>
+<translation id="3029276696788198026">Žádné předběžné načítání</translation>
 <translation id="3060635849835183725">{BOOKMARKS_COUNT, plural,
           =1 {<ph name="BOOKMARKS_COUNT_ONE" /> záložka}
           other {<ph name="BOOKMARKS_COUNT_MANY" /> záložek}}</translation>
 <translation id="3076631378407175873">Copyright <ph name="YEAR" /> Vivaldi spol. s r.o. Všechna práva vyhrazena.</translation>
+<translation id="3232293466644486101">Vymazat údaje o prohlížení…</translation>
 <translation id="3234355010754616171">Nový soukromý list</translation>
+<translation id="3237087289225714896">Standardní předběžné načítání:</translation>
 <translation id="3377025655491224618">Soukromý list</translation>
 <translation id="3504699618187058974">Seskupit listy</translation>
 <translation id="3518985090088779359">Přijmout a pokračovat</translation>
@@ -28,7 +39,9 @@
 <translation id="3602290021589620013">Náhled</translation>
 <translation id="3700829948786686853">Vítá vás Vivaldi</translation>
 <translation id="3719826155360621982">Domovská stránka</translation>
+<translation id="3738139272394829648">Vyhledání klepnutím</translation>
 <translation id="385051799172605136">Zpět</translation>
+<translation id="3987993985790029246">Kopírovat odkaz</translation>
 <translation id="399014816462153200">Přečtené články:</translation>
 <translation id="4121750346708795461">Používáním této aplikace vyjadřujete souhlas se <ph name="BEGIN_LINK1" />smluvními podmínkami<ph name="END_LINK1" /> a <ph name="BEGIN_LINK2" />zásadami ochrany soukromí<ph name="END_LINK2" /> prohlížeče Vivaldi.</translation>
 <translation id="4137746084635924146">Aktuální jazyk zařízení</translation>
@@ -36,9 +49,13 @@
 <translation id="4195643157523330669">Otevřít na nové kartě</translation>
 <translation id="4225895483398857530">Zkratka lišty</translation>
 <translation id="4243710787042215766">Otevřít v soukromém listu</translation>
+<translation id="4269820728363426813">Zkopírovat adresu odkazu</translation>
+<translation id="4291407919474070700"><ph name="BEGIN_LINK" />Zapněte v nastavení systému Android zámek obrazovky<ph name="END_LINK" /></translation>
 <translation id="4304713468139749426">Správce hesel</translation>
 <translation id="451872707440238414">Prohledat záložky</translation>
 <translation id="4526803704855831732">Soukromé listy</translation>
+<translation id="4532845899244822526">Vybrat složku</translation>
+<translation id="4699172675775169585">Obrázky a soubory v mezipaměti</translation>
 <translation id="4719086422742491124">Získejte informace o tématech na webových stránkách, aniž byste opustili stránku. Vyberte jedno nebo více slov na stránce a vyhledejte je.
 
 Touch to Search je funkce, která je dostupná pouze v případě, že je Google nastaven jako výchozí vyhledávač ve Vivaldi.</translation>
@@ -49,32 +66,63 @@ Touch to Search je funkce, která je dostupná pouze v případě, že je Google
 <translation id="49576331685473090">Blokování obsahu</translation>
 <translation id="5079259810715830221">Když Google požádá o soukromé přednačtení odkazů na jejich stránce, Vivaldi zašifruje a přednačte stránky pomocí Google serverů bez cookies. Tím je vaše identita skryta před přednačítanou stránkou.</translation>
 <translation id="5118676864324397542">Úložiště aplikace <ph name="APP_NAME" /></translation>
+<translation id="5144385790872094440">Některé stránky, které navštěvujete, se načítají předběžně. Pokud na stránky odkazuje web nebo aplikace Google, mohou se předběžně načíst prostřednictvím serverů Google.</translation>
 <translation id="5186185447130319458">Soukromí</translation>
+<translation id="5206168361184759344">{FILE_COUNT,plural,
+            =1{Stahování souboru…}
+            few{Stahování # souborů…}
+            many{Stahování # souborů…}
+            other{Stahování # souborů…}}</translation>
 <translation id="5233638681132016545">Nový list</translation>
 <translation id="5375131951310889874">Získejte informace o tématech na webových stránkách, aniž byste opustili stránku. Touch to Search je funkce, která je dostupná pouze v případě, že je Google nastaven jako výchozí vyhledávač ve Vivaldi. Odešle slovo a jeho okolní kontext do Vyhledávání Google a vrátí definice, obrázky, výsledky vyhledávání a další podrobnosti.
 
 Chcete-li upravit hledaný výraz, vyberte jej dlouhým stisknutím. Chcete-li vyhledávání upřesnit, posuňte panel úplně nahoru a klepněte na vyhledávací pole.</translation>
+<translation id="543338862236136125">Upravit heslo</translation>
 <translation id="572328651809341494">Nedávno použité listy</translation>
+<translation id="5833984609253377421">Sdílet odkaz</translation>
 <translation id="6150320133806434356">Záložka uložena</translation>
+<translation id="6193448654517602979">Vyberte listy</translation>
 <translation id="6336451774241870485">Nový soukromý list</translation>
+<translation id="6337323516034698937">Pro odeslání tohoto listu do dalšího zařízení se přihlaste k Vivaldi synchronizaci na obou zařízeních. Zadejte také svůj šifrovací klíč, pokud je třeba.</translation>
+<translation id="6341580099087024258">Ptát se, kam ukládat soubory</translation>
 <translation id="6404511346730675251">Upravit záložku</translation>
+<translation id="650224091954855786">{FILE_COUNT,plural,
+          =1{Byl stažen jeden soubor}
+          few{Byly staženy # soubory}
+          many{Bylo staženo # souborů}
+          other{Bylo staženo # souborů}}</translation>
 <translation id="6585139692466700358">Navrhovat překlad stránek v jiných jazycích pomocí překladatelské služby Vivaldi</translation>
+<translation id="6588043302623806746">Používat zabezpečené DNS</translation>
 <translation id="6593061639179217415">Stránky pro počítač</translation>
 <translation id="6610147964972079463">Zavřít soukromé listy</translation>
+<translation id="6627583120233659107">Upravit složku</translation>
+<translation id="6865313869410766144">Automatické vyplňování formulářů</translation>
+<translation id="6909589135458168665">Předběžně načítat stránky</translation>
 <translation id="7029995644714925509">Když web požádá o soukromé přednačtení odkazů na jejich stránce, Vivaldi zašifruje a přednačte stránky pomocí Google serverů bez cookies. Tím je vaše identita skryta před přednačítanou stránkou.</translation>
 <translation id="706339621163631076">Nakládání se soukromím</translation>
 <translation id="732145680195464316">Záložka uložena v <ph name="PRODUCT_NAME" /></translation>
+<translation id="7324354302972299151">Odesílat požadavek Do Not Track</translation>
+<translation id="7359002509206457351">Poskytnout přístup k platební metodám</translation>
+<translation id="7419565702166471774">Vždy používat zabezpečená připojení</translation>
 <translation id="7427132068601343474">O aplikaci</translation>
+<translation id="7456774706094330779">Rozšířené předběžné načítání</translation>
 <translation id="7465104139234185284">Zavřít všechny soukromé listy</translation>
 <translation id="7481312909269577407">Vpřed</translation>
+<translation id="7764225426217299476">Přidat adresu</translation>
 <translation id="7968014550143838305">Přidáno do seznamu četby</translation>
 <translation id="804786196054284061">Smluvní podmínky Vivaldi</translation>
+<translation id="8062594758852531064">Rozšířené předběžné načítání:</translation>
+<translation id="8073388330009372546">Otevřít obrázek v novém listu</translation>
 <translation id="8127542551745560481">Upravit domovskou stránku</translation>
+<translation id="8266862848225348053">Složka pro stahování</translation>
+<translation id="8348430946834215779">Používejte HTTPS, kdykoli je to možné, a nechte se upozornit, než načtete web, který tento protokol nepodporuje</translation>
 <translation id="8560602726703398413">Seznam četby naleznete v záložkách</translation>
 <translation id="85991616550051997">Přejít na domovskou stránku</translation>
 <translation id="8820817407110198400">Záložky</translation>
 <translation id="9042893549633094279">Soukromí a bezpečí</translation>
 <translation id="9063523880881406963">Vypnout funkci Stránky pro počítač</translation>
 <translation id="9080642952018487277">Zahájit soukromé prohlížení</translation>
+<translation id="930124987204876019">Vymazat historii, soubory cookie, data webů, mezipaměť…</translation>
+<translation id="961856697154696964">Vymazat údaje o prohlížení</translation>
 <translation id="96681097142096641">Zobrazit zjednodušenou stránku?</translation>
 </translationbundle>

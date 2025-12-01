@@ -55,10 +55,11 @@ limitations under the License.
 #include "xla/shape.h"
 #include "xla/shape_util.h"
 #include "xla/tests/literal_test_util.h"
+#include "xla/tsl/platform/errors.h"
+#include "xla/tsl/platform/statusor.h"
+#include "xla/xla_data.pb.h"
 #include "tensorflow/core/framework/tensor.h"
 #include "tensorflow/core/framework/tensor_shape.h"
-#include "tsl/platform/errors.h"
-#include "tsl/platform/statusor.h"
 
 namespace mlir::quant::stablehlo {
 namespace {
@@ -198,7 +199,7 @@ class ConvertTfQuantToMhloIntTest : public Test {
     AddQuantizationLoweringPasses(pm);
     CHECK(succeeded(pm.run(module_op.get())));
     // Compile the program.
-    return pjrt_client_->Compile(*module_op, xla::CompileOptions{});
+    return pjrt_client_->CompileAndLoad(*module_op, xla::CompileOptions{});
   }
 
   absl::StatusOr<std::shared_ptr<xla::Literal>>
@@ -311,6 +312,58 @@ func.func @main(%arg0: tensor<10xf32>) -> tensor<10xf32> {
   // may cause +/-1 differences.
   ExecuteAndCompareResultsWithTfKernel(
       kProgram, {&arg0}, /*tf_program=*/std::nullopt, /*error_tolerance=*/0.35);
+}
+
+TEST_F(ConvertTfQuantToMhloIntTest,
+       UniformQuantizeAndDequantizeToValidGraphQuint8) {
+  constexpr absl::string_view kProgram = R"mlir(
+func.func @main(%arg0: tensor<10xf32>) -> tensor<10xf32> {
+  %scale = "tf.Const"() { value = dense<0.347> : tensor<f32> } : () -> tensor<f32>
+  %zp = "tf.Const"() { value = dense<3> : tensor<i32> } : () -> tensor<i32>
+  %0 = "tf.UniformQuantize"(%arg0, %scale, %zp) {
+    quantization_axis = -1 : i64,
+    quantization_min_val = 0 : i64,
+    quantization_max_val = 255 : i64
+  } : (tensor<10xf32>, tensor<f32>, tensor<i32>) -> tensor<10x!tf_type.quint8>
+  %1 = "tf.UniformDequantize"(%0, %scale, %zp) {
+    quantization_axis = -1 : i64,
+    quantization_min_val = 0 : i64,
+    quantization_max_val = 255 : i64
+  } : (tensor<10x!tf_type.quint8>, tensor<f32>, tensor<i32>) -> tensor<10xf32>
+  return %1 : tensor<10xf32>
+})mlir";
+  TF_ASSERT_OK_AND_ASSIGN(auto arg0, CreateRandomF32Literal({10}));
+  ExecuteAndCompareResultsWithTfKernel(kProgram, {&arg0},
+                                       /*tf_program=*/std::nullopt,
+                                       /*error_tolerance=*/0.35);
+}
+
+TEST_F(ConvertTfQuantToMhloIntTest,
+       UniformQuantizeAndDequantizePerChannelToValidGraphQuint8) {
+  constexpr absl::string_view kProgram = R"mlir(
+func.func @main(
+  %arg0: tensor<10x10xf32>, %scale: tensor<10xf32>, %zp: tensor<10xi32>
+  ) -> tensor<10x10xf32> {
+  %0 = "tf.UniformQuantize"(%arg0, %scale, %zp) {
+    quantization_axis = 1 : i64,
+    quantization_min_val = 0 : i64,
+    quantization_max_val = 255 : i64
+  } : (tensor<10x10xf32>, tensor<10xf32>, tensor<10xi32>) -> tensor<10x10x!tf_type.quint8>
+  %1 = "tf.UniformDequantize"(%0, %scale, %zp) {
+    quantization_axis = 1 : i64,
+    quantization_min_val = 0 : i64,
+    quantization_max_val = 255 : i64
+  } : (tensor<10x10x!tf_type.quint8>, tensor<10xf32>, tensor<10xi32>) -> tensor<10x10xf32>
+  return %1 : tensor<10x10xf32>
+})mlir";
+  TF_ASSERT_OK_AND_ASSIGN(auto arg0, CreateRandomF32Literal({10, 10}));
+  TF_ASSERT_OK_AND_ASSIGN(
+      auto scale, CreateRandomF32Literal({10}, /*min=*/0.0001, /*max=*/2));
+  TF_ASSERT_OK_AND_ASSIGN(auto zp,
+                          CreateRandomI32Literal({10}, /*min=*/0, /*max=*/255));
+  ExecuteAndCompareResultsWithTfKernel(kProgram, {&arg0, &scale, &zp},
+                                       /*tf_program=*/std::nullopt,
+                                       /*error_tolerance=*/0.35);
 }
 
 TEST_F(ConvertTfQuantToMhloIntTest, UniformQuantizePerChannelToValidGraph) {

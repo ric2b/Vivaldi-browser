@@ -160,7 +160,7 @@ SdpVideoFormat& SdpVideoFormat::operator=(SdpVideoFormat&&) = default;
 SdpVideoFormat::~SdpVideoFormat() = default;
 
 std::string SdpVideoFormat::ToString() const {
-  rtc::StringBuilder builder;
+  StringBuilder builder;
   builder << "Codec name: " << name << ", parameters: {";
   for (const auto& kv : parameters) {
     builder << " " << kv.first << "=" << kv.second;
@@ -216,6 +216,10 @@ const SdpVideoFormat SdpVideoFormat::H264() {
   // * level-asymmetry-allowed (which defaults to 0 but 1 is more common)
   // * profile-level-id of which there are many.
   return SdpVideoFormat(cricket::kH264CodecName, {});
+}
+
+const SdpVideoFormat SdpVideoFormat::H265() {
+  return SdpVideoFormat(cricket::kH265CodecName, {});
 }
 
 const SdpVideoFormat SdpVideoFormat::VP9Profile0() {

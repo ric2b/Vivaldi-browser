@@ -3,11 +3,11 @@
 // found in the LICENSE file.
 
 import * as SDK from '../../core/sdk/sdk.js';
+import * as AiAssistanceModel from '../../models/ai_assistance/ai_assistance.js';
 import * as Bindings from '../../models/bindings/bindings.js';
 import * as Formatter from '../../models/formatter/formatter.js';
 import * as Logs from '../../models/logs/logs.js';
 import * as Components from '../../ui/legacy/components/utils/utils.js';
-import * as AiAssistance from '../ai_assistance/ai_assistance.js';
 import type * as Console from '../console/console.js';
 
 const MAX_MESSAGE_SIZE = 1000;
@@ -185,7 +185,7 @@ export function allowHeader(header: SDK.NetworkRequest.NameValue): boolean {
 
 export function lineWhitespace(line: string): string|null {
   const matches = /^\s*/.exec(line);
-  if (!matches || !matches.length) {
+  if (!matches?.length) {
     // This should not happen
     return null;
   }
@@ -208,7 +208,7 @@ export function formatRelatedCode(
   let relatedCodeSize = 0;
   let currentLineNumber = lineNumber;
   let currentWhitespace = lineWhitespace(lines[lineNumber]);
-  const startByPrefix: Map<string, number> = new Map();
+  const startByPrefix = new Map<string, number>();
   while (lines[currentLineNumber] !== undefined &&
          (relatedCodeSize + lines[currentLineNumber].length <= maxCodeSize / 2)) {
     const whitespace = lineWhitespace(lines[currentLineNumber]);
@@ -268,9 +268,9 @@ export function formatNetworkRequest(
     string {
   return `Request: ${request.url()}
 
-${AiAssistance.formatHeaders('Request headers:', request.requestHeaders())}
+${AiAssistanceModel.NetworkRequestFormatter.formatHeaders('Request headers:', request.requestHeaders())}
 
-${AiAssistance.formatHeaders('Response headers:', request.responseHeaders)}
+${AiAssistanceModel.NetworkRequestFormatter.formatHeaders('Response headers:', request.responseHeaders)}
 
 Response status: ${request.statusCode} ${request.statusText}`;
 }

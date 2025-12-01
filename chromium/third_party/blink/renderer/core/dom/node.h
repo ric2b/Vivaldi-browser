@@ -389,6 +389,9 @@ class CORE_EXPORT Node : public EventTarget {
   DISABLE_CFI_PERF bool IsViewTransitionPseudoElement() const {
     return IsTransitionPseudoElement(GetPseudoId());
   }
+  DISABLE_CFI_PERF bool IsViewTransitionGroupPseudoElement() const {
+    return GetPseudoId() == kPseudoIdViewTransitionGroup;
+  }
   virtual PseudoId GetPseudoId() const { return kPseudoIdNone; }
   virtual PseudoId GetPseudoIdForStyling() const { return kPseudoIdNone; }
 
@@ -460,8 +463,10 @@ class CORE_EXPORT Node : public EventTarget {
   // isInShadowTree() returns true.
   // This can happen when handling queued events (e.g. during execCommand())
   ShadowRoot* ContainingShadowRoot() const;
-  ShadowRoot* GetShadowRoot() const;
-  bool IsInUserAgentShadowRoot() const;
+
+  // Inline-defined in shadow_root.h
+  inline ShadowRoot* GetShadowRoot() const;
+  inline bool IsInUserAgentShadowRoot() const;
 
   // Returns nullptr, a child of ShadowRoot, or a legacy shadow root.
   Node* NonBoundaryShadowTreeRootNode();
@@ -1044,6 +1049,17 @@ class CORE_EXPORT Node : public EventTarget {
   }
   void SetCachedDirectionality(TextDirection direction);
 
+  bool SelfOrAncestorHasContainerTiming() const {
+    return GetFlag(kSelfOrAncestorHasContainerTiming);
+  }
+  void SetSelfOrAncestorHasContainerTiming() {
+    SetFlag(kSelfOrAncestorHasContainerTiming);
+  }
+  void ClearSelfOrAncestorHasContainerTiming() {
+    ClearFlag(kSelfOrAncestorHasContainerTiming);
+  }
+  bool HasContainerTiming() const;
+
   void Trace(Visitor*) const override;
 
   bool IsModifiedBySoftNavigation() const {
@@ -1119,6 +1135,10 @@ class CORE_EXPORT Node : public EventTarget {
 
     // Bits indicating this Node is a NodePart or a ChildNodePart endpoint.
     kHasNodePart = 1u << 30,
+
+    // Indicate the node is in a hierarchy that needs to be considered for
+    // ContainerTiming events.
+    kSelfOrAncestorHasContainerTiming = 1u << 31,
 
     kDefaultNodeFlags = kIsFinishedParsingChildrenFlag,
 

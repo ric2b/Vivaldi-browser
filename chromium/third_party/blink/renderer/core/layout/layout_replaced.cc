@@ -91,7 +91,7 @@ void LayoutReplaced::StyleDidChange(StyleDifference diff,
   float old_zoom = had_style ? old_style->EffectiveZoom()
                              : ComputedStyleInitialValues::InitialZoom();
   if (Style() && StyleRef().EffectiveZoom() != old_zoom)
-    IntrinsicSizeChanged();
+    NaturalSizeChanged();
 
   if ((IsLayoutImage() || IsVideo() || IsCanvas()) && !ClipsToContentBox() &&
       !StyleRef().ObjectPropertiesPreventReplacedOverflow()) {
@@ -109,7 +109,7 @@ void LayoutReplaced::StyleDidChange(StyleDifference diff,
   }
 }
 
-void LayoutReplaced::IntrinsicSizeChanged() {
+void LayoutReplaced::NaturalSizeChanged() {
   NOT_DESTROYED();
   SetNeedsLayoutAndIntrinsicWidthsRecalcAndFullPaintInvalidation(
       layout_invalidation_reason::kSizeChanged);
@@ -156,6 +156,7 @@ void LayoutReplaced::RecalcVisualOverflow() {
 
 std::optional<PhysicalRect> LayoutReplaced::ComputeObjectViewBoxRect(
     const PhysicalNaturalSizingInfo& sizing_info) const {
+  NOT_DESTROYED();
   const BasicShape* object_view_box = StyleRef().ObjectViewBox();
   if (!object_view_box) [[likely]] {
     return std::nullopt;
@@ -175,9 +176,8 @@ std::optional<PhysicalRect> LayoutReplaced::ComputeObjectViewBoxRect(
 
   DCHECK_EQ(object_view_box->GetType(), BasicShape::kBasicShapeInsetType);
 
-  Path path;
   const gfx::RectF bounding_box{gfx::SizeF(sizing_info.size)};
-  object_view_box->GetPath(path, bounding_box, 1.f);
+  const Path path = object_view_box->GetPath(bounding_box, 1.f);
 
   const PhysicalRect view_box_rect =
       PhysicalRect::EnclosingRect(path.BoundingRect());
@@ -195,6 +195,7 @@ std::optional<PhysicalRect> LayoutReplaced::ComputeObjectViewBoxRect(
 PhysicalRect LayoutReplaced::ComputeReplacedContentRect(
     const PhysicalRect& base_content_rect,
     const PhysicalNaturalSizingInfo& sizing_info) const {
+  NOT_DESTROYED();
   // |intrinsic_size| provides the size of the embedded content rendered in the
   // replaced element. This is the reference size that object-view-box applies
   // to.
@@ -340,7 +341,7 @@ PhysicalRect LayoutReplaced::PreSnappedRectForPersistentSizing(
   return PhysicalRect(rect.offset, PhysicalSize(ToRoundedSize(rect.size)));
 }
 
-PhysicalNaturalSizingInfo LayoutReplaced::ComputeIntrinsicSizingInfo() const {
+PhysicalNaturalSizingInfo LayoutReplaced::ComputeNaturalSizingInfo() const {
   NOT_DESTROYED();
   DCHECK(!ShouldApplySizeContainment());
   PhysicalNaturalSizingInfo sizing_info = GetNaturalDimensions();
@@ -400,24 +401,11 @@ PositionWithAffinity LayoutReplaced::PositionForPoint(
 
   auto [top, bottom] = SelectionTopAndBottom(*this);
 
-  LayoutUnit block_direction_position;
-  LayoutUnit line_direction_position;
-  if (RuntimeEnabledFeatures::SidewaysWritingModesEnabled()) {
-    LogicalOffset logical_point =
-        LocationContainer()->CreateWritingModeConverter().ToLogical(
-            point + PhysicalLocation(), {});
-    block_direction_position = logical_point.block_offset;
-    line_direction_position = logical_point.inline_offset;
-  } else {
-    LayoutPoint flipped_point_in_container =
-        LocationContainer()->FlipForWritingMode(point + PhysicalLocation());
-    block_direction_position = IsHorizontalWritingMode()
-                                   ? flipped_point_in_container.Y()
-                                   : flipped_point_in_container.X();
-    line_direction_position = IsHorizontalWritingMode()
-                                  ? flipped_point_in_container.X()
-                                  : flipped_point_in_container.Y();
-  }
+  LogicalOffset logical_point =
+      LocationContainer()->CreateWritingModeConverter().ToLogical(
+          point + PhysicalLocation(), {});
+  LayoutUnit block_direction_position = logical_point.block_offset;
+  LayoutUnit line_direction_position = logical_point.inline_offset;
 
   if (block_direction_position < top)
     return PositionBeforeThis();  // coordinates are above
@@ -463,11 +451,13 @@ PhysicalRect LayoutReplaced::LocalSelectionVisualRect() const {
 }
 
 bool LayoutReplaced::RespectsCSSOverflow() const {
+  NOT_DESTROYED();
   const Element* element = DynamicTo<Element>(GetNode());
   return element && element->IsReplacedElementRespectingCSSOverflow();
 }
 
 bool LayoutReplaced::ClipsToContentBox() const {
+  NOT_DESTROYED();
   if (!RespectsCSSOverflow()) {
     // If an svg is clipped, it is guaranteed to be clipped to the element's
     // content box.

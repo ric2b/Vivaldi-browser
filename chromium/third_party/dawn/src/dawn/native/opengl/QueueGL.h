@@ -49,7 +49,8 @@ class Queue final : public QueueBase {
 
     // Returns a shared fence which represents work done up to lastUsageSerial. It may be a cached
     // fence or newly created.
-    ResultOrError<Ref<SharedFence>> GetOrCreateSharedFence(ExecutionSerial lastUsageSerial);
+    ResultOrError<Ref<SharedFence>> GetOrCreateSharedFence(ExecutionSerial lastUsageSerial,
+                                                           wgpu::SharedFenceType type);
 
   private:
     Queue(Device* device, const QueueDescriptor* descriptor);
@@ -59,10 +60,10 @@ class Queue final : public QueueBase {
                                uint64_t bufferOffset,
                                const void* data,
                                size_t size) override;
-    MaybeError WriteTextureImpl(const ImageCopyTexture& destination,
+    MaybeError WriteTextureImpl(const TexelCopyTextureInfo& destination,
                                 const void* data,
                                 size_t dataSize,
-                                const TextureDataLayout& dataLayout,
+                                const TexelCopyBufferLayout& dataLayout,
                                 const Extent3D& writeSizePixel) override;
 
     ResultOrError<bool> WaitForQueueSerial(ExecutionSerial serial, Nanoseconds timeout) override;

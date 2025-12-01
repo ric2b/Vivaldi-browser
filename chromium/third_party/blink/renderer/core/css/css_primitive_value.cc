@@ -34,6 +34,7 @@
 #include "third_party/blink/renderer/core/css/css_value_pool.h"
 #include "third_party/blink/renderer/platform/geometry/layout_unit.h"
 #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
+#include "third_party/blink/renderer/platform/wtf/math_extras.h"
 #include "third_party/blink/renderer/platform/wtf/size_assertions.h"
 #include "third_party/blink/renderer/platform/wtf/std_lib_extras.h"
 #include "third_party/blink/renderer/platform/wtf/text/string_builder.h"
@@ -229,6 +230,11 @@ bool CSSPrimitiveValue::IsComputationallyIndependent() const {
   return To<CSSMathFunctionValue>(this)->IsComputationallyIndependent();
 }
 
+bool CSSPrimitiveValue::IsElementDependent() const {
+  return IsMathFunctionValue() &&
+         To<CSSMathFunctionValue>(this)->IsElementDependent();
+}
+
 bool CSSPrimitiveValue::HasContainerRelativeUnits() const {
   CSSPrimitiveValue::LengthTypeFlags units;
   AccumulateLengthUnitTypes(units);
@@ -250,7 +256,7 @@ CSSPrimitiveValue* CSSPrimitiveValue::CreateFromLength(const Length& length,
       return CSSNumericLiteralValue::Create(length.Percent(),
                                             UnitType::kPercentage);
     case Length::kFixed:
-      return CSSNumericLiteralValue::Create(length.Value() / zoom,
+      return CSSNumericLiteralValue::Create(length.Pixels() / zoom,
                                             UnitType::kPixels);
     case Length::kCalculated: {
       const CalculationValue& calc = length.GetCalculationValue();
@@ -264,8 +270,7 @@ CSSPrimitiveValue* CSSPrimitiveValue::CreateFromLength(const Length& length,
       return CSSNumericLiteralValue::Create(num, UnitType::kPercentage);
     }
     case Length::kFlex:
-      return CSSNumericLiteralValue::Create(length.GetFloatValue(),
-                                            UnitType::kFlex);
+      return CSSNumericLiteralValue::Create(length.Flex(), UnitType::kFlex);
     default:
       break;
   }
@@ -398,12 +403,19 @@ double CSSPrimitiveValue::ComputeNumber(
              : To<CSSNumericLiteralValue>(this)->ComputeNumber();
 }
 
+template <>
 double CSSPrimitiveValue::ComputePercentage(
     const CSSLengthResolver& length_resolver) const {
   DCHECK(IsPercentage());
   return IsCalculated() ? To<CSSMathFunctionValue>(this)->ComputePercentage(
                               length_resolver)
                         : To<CSSNumericLiteralValue>(this)->ComputePercentage();
+}
+
+template <>
+float CSSPrimitiveValue::ComputePercentage(
+    const CSSLengthResolver& length_resolver) const {
+  return ClampTo<float>(ComputePercentage<double>(length_resolver));
 }
 
 double CSSPrimitiveValue::ComputeValueInCanonicalUnit(

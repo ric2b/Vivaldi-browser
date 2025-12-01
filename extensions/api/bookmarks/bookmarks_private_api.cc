@@ -43,19 +43,19 @@
 #include "extensions/browser/extension_function.h"
 #include "extensions/schema/bookmarks_private.h"
 #include "extensions/tools/vivaldi_tools.h"
+#include "extensions/vivaldi_browser_component_wrapper.h"
 #include "ui/vivaldi_browser_window.h"
 #include "vivaldi/prefs/vivaldi_gen_prefs.h"
 #include "browser/vivaldi_browser_finder.h"
-
 #if BUILDFLAG(IS_WIN)
+#include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/win/jumplist.h"
 #include "chrome/browser/win/jumplist_factory.h"
-#endif
+#endif  // IS_WIN
 
 using bookmarks::BookmarkModel;
 using bookmarks::BookmarkNode;
-using vivaldi::FindVivaldiBrowser;
 using vivaldi::IsVivaldiApp;
 using vivaldi::kVivaldiReservedApiError;
 
@@ -87,7 +87,8 @@ namespace bookmarks_private = vivaldi::bookmarks_private;
 
 VivaldiBookmarksAPI::VivaldiBookmarksAPI(content::BrowserContext* context)
     : browser_context_(context),
-      bookmark_model_(BookmarkModelFactory::GetForBrowserContext(context)) {
+      bookmark_model_(VivaldiBrowserComponentWrapper::GetInstance()->
+          GetBookmarkModelForBrowserContext(context)) {
   if (bookmark_model_) {
     bookmark_model_->AddObserver(this);
   }
@@ -148,7 +149,7 @@ BookmarksPrivateUpdateSpeedDialsForWindowsJumplistFunction::Run() {
   EXTENSION_FUNCTION_VALIDATE(params);
 
 #if BUILDFLAG(IS_WIN)
-  Browser* browser = FindVivaldiBrowser();
+  Browser* browser = BrowserList::GetInstance()->GetLastActive();
   if (browser && browser->is_vivaldi()) {
     JumpList* jump_list = JumpListFactory::GetForProfile(browser->profile());
     if (jump_list)
@@ -163,8 +164,8 @@ ExtensionFunction::ResponseAction BookmarksPrivateGetFolderIdsFunction::Run() {
 
   vivaldi::bookmarks_private::FolderIds ids;
 
-  BookmarkModel* model = BookmarkModelFactory::GetForBrowserContext(
-      browser_context());
+  BookmarkModel* model = VivaldiBrowserComponentWrapper::GetInstance()->
+      GetBookmarkModelForBrowserContext(browser_context());
   if (model) {
     ids.bookmarks = base::NumberToString(model->bookmark_bar_node()->id());
     ids.mobile = base::NumberToString(model->mobile_node()->id());

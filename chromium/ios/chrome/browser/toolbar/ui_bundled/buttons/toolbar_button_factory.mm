@@ -115,9 +115,14 @@ const CGFloat kShareIconBalancingHeightPadding = 1;
 - (ToolbarTabGridButton*)tabGridButton {
   auto imageBlock = ^UIImage*(ToolbarTabGroupState tabGroupState) {
 
-    if (IsVivaldiRunning())
-      return [UIImage imageNamed:vToolbarTabSwitcherButtonIcon];
-    // End Vivaldi
+    if (IsVivaldiRunning()) {
+      switch (tabGroupState) {
+        case ToolbarTabGroupState::kNormal:
+          return [UIImage imageNamed:vToolbarTabSwitcherButtonIcon];
+        case ToolbarTabGroupState::kTabGroup:
+          return [UIImage imageNamed:vToolbarTabSwitcherStackButtonIcon];
+      }
+    } // End Vivaldi
 
     switch (tabGroupState) {
       case ToolbarTabGroupState::kNormal:

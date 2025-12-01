@@ -28,7 +28,6 @@
 #include "base/functional/callback_forward.h"
 #include "base/memory/scoped_refptr.h"
 #include "build/build_config.h"
-#include "build/chromeos_buildflags.h"
 #include "chrome/common/buildflags.h"
 #include "components/safe_browsing/buildflags.h"
 #include "media/media_buildflags.h"
@@ -255,9 +254,7 @@ class BrowserProcess {
   // before the full browser starts.
   virtual StartupData* startup_data() = 0;
 
-// TODO(crbug.com/40118868): Revisit once build flag switch of lacros-chrome is
-// complete.
-#if BUILDFLAG(IS_WIN) || (BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS))
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX)
   // This will start a timer that, if Chrome is in persistent mode, will check
   // whether an update is available, and if that's the case, restart the
   // browser. Note that restart code will strip some of the command line keys
@@ -289,11 +286,11 @@ class BrowserProcess {
   virtual resource_coordinator::ResourceCoordinatorParts*
   resource_coordinator_parts() = 0;
 
-#if !BUILDFLAG(IS_ANDROID)
   // Returns the object which keeps track of serial port permissions configured
   // through the policy engine.
   virtual SerialPolicyAllowedPorts* serial_policy_allowed_ports() = 0;
 
+#if !BUILDFLAG(IS_ANDROID)
   // Returns the object which maintains Human Interface Device (HID) system tray
   // icon.
   virtual HidSystemTrayIcon* hid_system_tray_icon() = 0;

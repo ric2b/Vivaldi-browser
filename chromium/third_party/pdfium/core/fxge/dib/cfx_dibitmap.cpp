@@ -508,12 +508,10 @@ void CFX_DIBitmap::ConvertBGRColorScale(uint32_t forecolor,
   }
 }
 
-bool CFX_DIBitmap::ConvertColorScale(uint32_t forecolor, uint32_t backcolor) {
-  if (!m_pBuffer || IsMaskFormat())
-    return false;
-
-  ConvertBGRColorScale(forecolor, backcolor);
-  return true;
+void CFX_DIBitmap::ConvertColorScale(uint32_t forecolor, uint32_t backcolor) {
+  if (m_pBuffer && !IsMaskFormat()) {
+    ConvertBGRColorScale(forecolor, backcolor);
+  }
 }
 
 // static
@@ -963,19 +961,24 @@ bool CFX_DIBitmap::ConvertFormat(FXDIB_Format dest_format) {
 
 #if defined(PDF_USE_SKIA)
 CFX_DIBitmap::ScopedPremultiplier::ScopedPremultiplier(
-    RetainPtr<CFX_DIBitmap> bitmap,
-    bool do_premultiply)
-    : bitmap_(std::move(bitmap)), do_premultiply_(do_premultiply) {
-  CHECK(!bitmap_->IsPremultiplied());
+    RetainPtr<CFX_DIBitmap> bitmap)
+    : bitmap_(std::move(bitmap)), do_premultiply_(NeedToPremultiplyBitmap()) {
   if (do_premultiply_) {
+    CHECK(!bitmap_->IsPremultiplied());
     bitmap_->PreMultiply();
   }
 }
 
 CFX_DIBitmap::ScopedPremultiplier::~ScopedPremultiplier() {
   if (do_premultiply_) {
+    CHECK(bitmap_->IsPremultiplied());
     bitmap_->UnPreMultiply();
   }
-  CHECK(!bitmap_->IsPremultiplied());
 }
+
+bool CFX_DIBitmap::ScopedPremultiplier::NeedToPremultiplyBitmap() const {
+  return CFX_DefaultRenderDevice::UseSkiaRenderer() &&
+         bitmap_->GetFormat() == FXDIB_Format::kBgra;
+}
+
 #endif  // defined(PDF_USE_SKIA)

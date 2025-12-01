@@ -85,7 +85,7 @@
 <translation id="2379281330731083556">Udskriv med systemets dialogboks... <ph name="SHORTCUT_KEY" /></translation>
 <translation id="241082044617551207">Ukendt plugin</translation>
 <translation id="2423578206845792524">Ge&amp;m billede som...</translation>
-<translation id="2439110203301358333">Et andet program på din computer tilføjede en udvidelse, der kan ændre Vivaldi's måde at fungere på.</translation>
+<translation id="2439110203301358333">Et andet program på din computer tilføjede en udvidelse, der kan ændre Vivaldi’s måde at fungere på.</translation>
 <translation id="2443487764245141020">Websites skal muligvis også genkende din enhed ved hjælp af en identifikator</translation>
 <translation id="2445081178310039857">Udvidelsens rodmappe er påkrævet.</translation>
 <translation id="2485422356828889247">Afinstaller</translation>
@@ -107,7 +107,7 @@
 <translation id="2785873697295365461">Filbeskrivelser</translation>
 <translation id="2825758591930162672">Emnets offentlige nøgle</translation>
 <translation id="2850541429955027218">Tilføj tema</translation>
-<translation id="2861941300086904918">Sikkerhedsadministrator for Native Client</translation>
+<translation id="2861941300086904918">Native Client-sikkerhedsadministrator</translation>
 <translation id="2881076733170862447">Når du klikker på udvidelsen</translation>
 <translation id="2889064240420137087">Åbn link med...</translation>
 <translation id="2902127500170292085"><ph name="EXTENSION_NAME" /> kunne ikke kommunikere med denne printer. Sørg for, at printeren er tilsluttet, og prøv igen.</translation>
@@ -124,26 +124,26 @@
 <translation id="3036546437875325427">Aktivér Flash</translation>
 <translation id="3046910703532196514">Webside (komplet)</translation>
 <translation id="3067198360141518313">Kør dette plugin</translation>
-<translation id="3080207940057008665">Et andet program på din computer tilføjede et tema, der kan ændre Vivaldi's måde at fungere på.</translation>
+<translation id="3080207940057008665">Et andet program på din computer tilføjede et tema, der kan ændre Vivaldi’s måde at fungere på.</translation>
 <translation id="3084548735795614657">Slip for at installere</translation>
 <translation id="3122464029669770682">CPU</translation>
 <translation id="3124111068741548686">BRUGER-håndtag</translation>
 <translation id="3129173833825111527">Venstre margen</translation>
 <translation id="3144647712221361880">Åbn link som</translation>
 <translation id="3222066309010235055">Forhåndsgengivelse: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
-<translation id="3241680850019875542">Vælg rodmappen for udvidelsen, der skal pakkes. Opdater en udvidelse ved også at vælge den private nøglefil til genbrug.</translation>
+<translation id="3241680850019875542">Vælg rodmappen for udvidelsen, der skal pakkes. For at opdatere en udvidelse, vælg også den private nøglefil til genbrug.</translation>
 <translation id="3275778913554317645">Åbn som vindue</translation>
 <translation id="3280237271814976245">Gem &amp;som...</translation>
 <translation id="3285322247471302225">Ny &amp;fane</translation>
 <translation id="329838636886466101">Reparer</translation>
 <translation id="33022249435934718">GDI-håndtag</translation>
 <translation id="3303818374450886607">Kopier</translation>
-<translation id="3305661444342691068">Åbn PDF i Billedfremviser</translation>
+<translation id="3305661444342691068">Åbn PDF i fremviser</translation>
 <translation id="3308134619352333507">Skjul knap</translation>
 <translation id="3313622045786997898">Signaturværdi for certifikat</translation>
 <translation id="3317459757438853210">To-sidet</translation>
 <translation id="3331974543021145906">App-info</translation>
-<translation id="3341703758641437857">Tillad adgang til fil-URL'er</translation>
+<translation id="3341703758641437857">Tillad adgang til fil-URL’er</translation>
 <translation id="3347086966102161372">K&amp;opiér billedadresse</translation>
 <translation id="3360297538363969800">Udskrift mislykkedes. Tjek din printer, og prøv igen.</translation>
 <translation id="3378572629723696641">Denne udvidelse kan være blevet beskadiget.</translation>
@@ -170,13 +170,14 @@
 <translation id="3838085852053358637">Kunne ikke indlæse udvidelse</translation>
 <translation id="383891835335927981">Ingen websites er blevet zoomet ind eller ud</translation>
 <translation id="385051799172605136">Tilbage</translation>
+<translation id="3858860766373142691">Navn</translation>
 <translation id="3861977424605124250">Vis ved opstart</translation>
 <translation id="3867944738977021751">Certifikatfelter</translation>
 <translation id="3905761538810670789">Reparer appen</translation>
 <translation id="3908501907586732282">Aktivér udvidelse</translation>
 <translation id="3909701002594999354">Vis alle &amp;knapper</translation>
 <translation id="3909791450649380159">Kli&amp;p</translation>
-<translation id="3927932062596804919">TIllad ikke</translation>
+<translation id="3927932062596804919">Afvis</translation>
 <translation id="3936390757709632190">&amp;Åbn lyd i ny fane</translation>
 <translation id="3943582379552582368">&amp;Tilbage</translation>
 <translation id="3948116654032448504">&amp;Søg efter billedet på <ph name="SEARCH_ENGINE" /></translation>
@@ -190,7 +191,7 @@
 <translation id="4087089424473531098">Oprettede udvidelsen:
 
 <ph name="EXTENSION_FILE" /></translation>
-<translation id="4100839878934973028">Et andet program på din computer tilføjede en app, der kan ændre Vivaldi's måde at fungere på.</translation>
+<translation id="4100839878934973028">Et andet program på din computer tilføjede en app, der kan ændre Vivaldi’s måde at fungere på.</translation>
 <translation id="4104163789986725820">E&amp;ksportér...</translation>
 <translation id="4109898769411476438">Luk browser før import</translation>
 <translation id="4131410914670010031">Sort/hvid</translation>
@@ -233,7 +234,7 @@
 <translation id="4895799941222633551">Opret &amp;genvej...</translation>
 <translation id="4912643508233590958">Aktivering efter dvale</translation>
 <translation id="49265687513387605">Kan ikke caste skærm. Tjek, om du har bekræftet beskeden om at starte deling.</translation>
-<translation id="4927753642311223124">Intet at se her, gå videre.</translation>
+<translation id="4927753642311223124">Intet at se her; gå videre.</translation>
 <translation id="4930714375720679147">Aktivér</translation>
 <translation id="4961318399572185831">Cast skærm</translation>
 <translation id="4988526792673242964">Sider</translation>
@@ -245,12 +246,12 @@
 <translation id="5059526285558225588">Vælg, hvad du vil dele</translation>
 <translation id="5063480226653192405">Forbrug</translation>
 <translation id="5116628073786783676">Ge&amp;m lyd som...</translation>
-<translation id="5143374789336132547">Udvidelsen <ph name="EXTENSION_NAME" /> har ændret, hvilken side der vises, når du klikker på Hjem-knappen.</translation>
+<translation id="5143374789336132547">Udvidelsen “<ph name="EXTENSION_NAME" />” har ændret, hvilken side der vises, når du klikker på Hjem-knappen.</translation>
 <translation id="5154108062446123722">Avancerede indstillinger for <ph name="PRINTING_DESTINATION" /></translation>
 <translation id="5154702632169343078">Emne</translation>
 <translation id="5171343362375269016">Ombyttet hukommelse</translation>
 <translation id="5233019165164992427">NaCl-fejlfindingsport</translation>
-<translation id="5233231016133573565">Behandling af ID</translation>
+<translation id="5233231016133573565">Proces-ID</translation>
 <translation id="5233736638227740678">&amp;Indsæt</translation>
 <translation id="5256861893479663409">På alle websites</translation>
 <translation id="5260334392110301220">Smarte citationstegn</translation>
@@ -310,7 +311,7 @@
 <translation id="6101226222197207147">Ny app tilføjet (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="6147020289383635445">Forhåndsvisning af udskrift mislykkedes.</translation>
 <translation id="6156863943908443225">Script-cache</translation>
-<translation id="6196854373336333322">Udvidelsen "<ph name="EXTENSION_NAME" />" har taget kontrol over dine proxyindstillinger, hvilket betyder, at den kan ændre, ødelægge eller aflytte alt, hvad du laver online. Hvis du er usikker på, hvorfor denne ændring er sket, vil du nok ikke have den.</translation>
+<translation id="6196854373336333322">Udvidelsen “<ph name="EXTENSION_NAME" />” har taget kontrol over dine proxyindstillinger, hvilket betyder, at den kan ændre, ødelægge eller aflytte alt, hvad du laver online. Hvis du er usikker på, hvorfor denne ændring er sket, vil du nok ikke have den.</translation>
 <translation id="6200151268994853226">Administrer udvidelse</translation>
 <translation id="6206311232642889873">Kop&amp;iér billede</translation>
 <translation id="6239558157302047471">Genindlæs &amp;ramme</translation>
@@ -370,7 +371,7 @@
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" />x<ph name="VERTICAL_DPI" /> dpi</translation>
 <translation id="7339785458027436441">Kontrollér stavning under indtastning</translation>
 <translation id="7359680654975233185">Kan ikke caste fane</translation>
-<translation id="7385854874724088939">Der gik noget galt, da du prøvede at udskrive. Tjek din printer, og prøv igen.</translation>
+<translation id="7385854874724088939">Noget gik galt under udskrivning. Tjek din printer, og prøv igen.</translation>
 <translation id="7412226954991670867">GPU-hukommelse</translation>
 <translation id="7421925624202799674">&amp;Vis kildekode</translation>
 <translation id="7427348830195639090">Baggrundsside: <ph name="BACKGROUND_PAGE_URL" /></translation>
@@ -414,7 +415,10 @@ Nøglefil: <ph name="KEY_FILE" />
 Opbevar din nøglefil et sikkert sted. Du skal bruge den til at oprette nye versioner af din udvidelse.</translation>
 <translation id="8004582292198964060">Browser</translation>
 <translation id="8018313076035239964">Kontrollér, hvilke oplysninger websites kan bruge, og hvilket indhold de kan vise dig</translation>
-<translation id="8071432093239591881">Udskriv i billedformat</translation>
+<translation id="8071432093239591881">Udskriv som billede</translation>
+<translation id="8118448640060360549">{EXTENSIONS_COUNT, plural,
+        =1 {# bogmærke}
+        other {# bogmærker}}</translation>
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" />K</translation>
 <translation id="8212008074015601248">{NUM_DOWNLOAD, plural,
         =1 {Download er i gang} other {Downloads er i gang}}</translation>
@@ -451,7 +455,7 @@ Opbevar din nøglefil et sikkert sted. Du skal bruge den til at oprette nye vers
 <translation id="8859174528519900719">Underramme: <ph name="SUBFRAME_SITE" /></translation>
 <translation id="8899851313684471736">Åbn link i nyt &amp;vindue</translation>
 <translation id="8915370057835397490">Indlæser forslag</translation>
-<translation id="8916476537757519021">Underramme for inkognitotilstand: <ph name="SUBFRAME_SITE" /></translation>
+<translation id="8916476537757519021">Inkognito-underramme: <ph name="SUBFRAME_SITE" /></translation>
 <translation id="8929696694736010839">Kun aktuel inkognitosession</translation>
 <translation id="895944840846194039">JavaScript-hukommelse</translation>
 <translation id="8962083179518285172">Skjul detaljer</translation>
@@ -465,11 +469,11 @@ Opbevar din nøglefil et sikkert sted. Du skal bruge den til at oprette nye vers
 <translation id="9137916601698928395">Åbn link som <ph name="USER" /></translation>
 <translation id="916607977885256133">Billede-i-billede</translation>
 <translation id="9170848237812810038">&amp;Fortryd</translation>
-<translation id="9215293857209265904">"<ph name="EXTENSION_NAME" />" blev tilføjet</translation>
+<translation id="9215293857209265904">“<ph name="EXTENSION_NAME" />” blev tilføjet</translation>
 <translation id="9218430445555521422">Indstil som standard</translation>
 <translation id="93766956588638423">Reparer udvidelsen</translation>
 <translation id="961012016278832836">Microsoft Edge (Ældre)</translation>
 <translation id="961856697154696964">Slet browserdata</translation>
 <translation id="994289308992179865">&amp;Gentag</translation>
-<translation id="998747458861718449">U&amp;ndersøg</translation>
+<translation id="998747458861718449">I&amp;nspicer</translation>
 </translationbundle>

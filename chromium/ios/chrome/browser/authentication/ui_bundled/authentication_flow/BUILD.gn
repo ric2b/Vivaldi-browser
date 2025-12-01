@@ -15,6 +15,7 @@ source_set("authentication_flow") {
     "//base",
     "//components/bookmarks/common",
     "//components/reading_list/features:flags",
+    "//components/signin/core/browser",
     "//components/signin/public/base",
     "//components/signin/public/identity_manager:tribool",
     "//components/sync/base",
@@ -62,6 +63,7 @@ source_set("authentication_flow_in_profile") {
     "//base",
     "//components/signin/public/identity_manager",
     "//components/sync/service",
+    "//ios/chrome/app:change_profile_commands",
     "//ios/chrome/app/application_delegate:app_state",
     "//ios/chrome/app/profile",
     "//ios/chrome/browser/authentication/ui_bundled/history_sync:capabilities_fetcher",
@@ -75,6 +77,7 @@ source_set("authentication_flow_in_profile") {
     "//ios/chrome/browser/signin/model:authentication_service_factory",
     "//ios/chrome/browser/signin/model:system_identity",
     "//ios/chrome/browser/sync/model",
+    "//ios/public/provider/chrome/browser/signin:signin_error_api",
   ]
   frameworks = [ "UIKit.framework" ]
 }
@@ -101,6 +104,7 @@ source_set("authentication_flow_performer") {
     "//ios/chrome/browser/authentication/ui_bundled/enterprise/managed_profile_creation",
     "//ios/chrome/browser/authentication/ui_bundled/signin:signin_headers",
     "//ios/chrome/browser/policy/model",
+    "//ios/chrome/browser/policy/ui_bundled:management_util",
     "//ios/chrome/browser/shared/coordinator/alert",
     "//ios/chrome/browser/shared/coordinator/scene:scene_state_header",
     "//ios/chrome/browser/shared/model/application_context",
@@ -109,6 +113,7 @@ source_set("authentication_flow_performer") {
     "//ios/chrome/browser/shared/public/features:system_flags",
     "//ios/chrome/browser/shared/ui/util",
     "//ios/chrome/browser/shared/ui/util:snackbar_util",
+    "//ios/chrome/browser/shared/ui/util/identity_snackbar:identity_snackbar",
     "//ios/chrome/browser/signin/model",
     "//ios/chrome/browser/signin/model:authentication_service",
     "//ios/chrome/browser/signin/model:authentication_service_factory",
@@ -125,11 +130,13 @@ source_set("authentication_flow_performer") {
 source_set("unit_tests") {
   testonly = true
   sources = [
+    "authentication_flow_in_profile_unittest.mm",
     "authentication_flow_performer_unittest.mm",
     "authentication_flow_unittest.mm",
   ]
   deps = [
     ":authentication_flow",
+    ":authentication_flow_in_profile",
     ":authentication_flow_performer",
     "//base",
     "//base/test:test_support",
@@ -154,6 +161,7 @@ source_set("unit_tests") {
     "//ios/chrome/browser/signin/model:fake_system_identity",
     "//ios/chrome/browser/signin/model:fake_system_identity_manager",
     "//ios/chrome/browser/signin/model:test_support",
+    "//ios/chrome/browser/sync/model",
     "//ios/chrome/test:test_support",
     "//ios/testing:protocol_fake",
     "//ios/web/public/test",

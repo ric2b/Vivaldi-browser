@@ -12,8 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+load("@rules_apple//apple:apple.bzl", "apple_static_xcframework")
+load("@rules_apple//apple:macos.bzl", "macos_dylib")
 load("//third_party/cpptoolchains/windows_llvm/build_defs:windows.bzl", "windows")
-load("//tools/build_defs/apple:apple.bzl", "apple_static_xcframework")
 
 package(default_visibility = [
     "//connections:__subpackages__",
@@ -42,18 +43,19 @@ cc_library(
         "//connections:core",
         "//connections:core_types",
         "//connections/implementation/flags:connections_flags",
+        "//internal/flags:flag_reader",
         "//internal/flags:nearby_flags",
         "//internal/platform:base",
         "//internal/platform:types",
-        "//proto:connections_enums_cc_proto",
         "@com_google_absl//absl/base:no_destructor",
         "@com_google_absl//absl/container:flat_hash_map",
         "@com_google_absl//absl/strings",
-        "@com_google_absl//absl/strings:str_format",
         "@com_google_absl//absl/types:span",
     ],
 )
 
+# iOS only.
+# Warning: Do not rename this target, as it will break Kokoro workflows.
 apple_static_xcframework(
     name = "NearbyConnections",
     avoid_deps = [],
@@ -70,6 +72,11 @@ apple_static_xcframework(
     minimum_os_versions = {
         "ios": "15.0",
     },
+    public_hdrs = [
+        ":nc_types.h",
+        ":nc_def.h",
+        ":nc.h",
+    ],
     deps = [
         ":nc",
         "//internal/platform/implementation/apple",
@@ -77,6 +84,7 @@ apple_static_xcframework(
     ],
 )
 
+# Windows.
 windows.cc_windows_dll(
     name = "nc_windows",
     srcs = [],
@@ -86,5 +94,19 @@ windows.cc_windows_dll(
         ":nc",
         "//internal/platform/implementation/windows",
         "@com_google_absl//absl/strings",
+    ],
+)
+
+# macOS.
+macos_dylib(
+    name = "libnc",
+    exported_symbols_lists = ["macOS_exported_symbols.txt"],
+    linkopts = ["-install_name,@rpath/libnc.dylib"],
+    minimum_os_version = "10.15",
+    tags = ["notap"],
+    deps = [
+        ":nc",
+        "//internal/platform/implementation/apple",
+        "//internal/platform/implementation/apple/Mediums",
     ],
 )

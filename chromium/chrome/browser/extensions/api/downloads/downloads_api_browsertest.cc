@@ -55,7 +55,6 @@
 #include "chrome/browser/ui/browser_tabstrip.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/download/download_display.h"
-#include "chrome/browser/ui/extensions/extension_action_test_helper.h"
 #include "chrome/common/extensions/api/downloads.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/test/base/in_process_browser_test.h"
@@ -4504,16 +4503,8 @@ void OnDangerPromptCreated(DownloadDangerPrompt* prompt) {
   prompt->InvokeActionForTesting(DownloadDangerPrompt::ACCEPT);
 }
 
-// TODO(https://crbug.com/40304461): Flaky on Mac debug, failing with a timeout.
-#if (BUILDFLAG(IS_MAC) && !defined(NDEBUG))
-#define MAYBE_DownloadExtensionTest_AcceptDanger \
-  DISABLED_DownloadExtensionTest_AcceptDanger
-#else
-#define MAYBE_DownloadExtensionTest_AcceptDanger \
-  DownloadExtensionTest_AcceptDanger
-#endif
 IN_PROC_BROWSER_TEST_F(DownloadExtensionTest,
-                       MAYBE_DownloadExtensionTest_AcceptDanger) {
+                       DownloadExtensionTest_AcceptDanger) {
   safe_browsing::FileTypePoliciesTestOverlay scoped_dangerous =
       safe_browsing::ScopedMarkAllFilesDangerousForTesting();
 
@@ -4548,7 +4539,10 @@ IN_PROC_BROWSER_TEST_F(DownloadExtensionTest,
       base::BindOnce(&OnDangerPromptCreated);
   DownloadsAcceptDangerFunction::OnPromptCreatedForTesting(
       &callback);
-  ExtensionActionTestHelper::Create(current_browser())->Press(GetExtensionId());
+
+  const GURL url = extension()->GetResourceURL("accept_danger.html");
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(current_browser(), url));
+
   observer->WaitForFinished();
 }
 

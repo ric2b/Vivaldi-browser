@@ -32,7 +32,7 @@ interface ScopeInfo {
   icon?: string;
 }
 
-type LazyFSNode = FS.FSNode&{contents: {cacheLength: Function, length: number}};
+type LazyFSNode = FS.FSNode&{contents: {cacheLength: () => void, length: number}};
 
 function mapEnumerator(apiEnumerator: SymbolsBackend.Enumerator): Formatters.Enumerator {
   return {typeId: apiEnumerator.typeId, value: apiEnumerator.value, name: apiEnumerator.name};
@@ -43,15 +43,13 @@ function mapFieldInfo(apiFieldInfo: SymbolsBackend.FieldInfo): Formatters.FieldI
 }
 
 class ModuleInfo {
-  readonly fileNameToUrl: Map<string, string>;
-  readonly urlToFileName: Map<string, string>;
+  readonly fileNameToUrl = new Map<string, string>();
+  readonly urlToFileName = new Map<string, string>();
   readonly dwarfSymbolsPlugin: SymbolsBackend.DWARFSymbolsPlugin;
 
   constructor(
       readonly symbolsUrl: string, readonly symbolsFileName: string, readonly symbolsDwpFileName: string|undefined,
       readonly backend: SymbolsBackend.Module) {
-    this.fileNameToUrl = new Map<string, string>();
-    this.urlToFileName = new Map<string, string>();
     this.dwarfSymbolsPlugin = new backend.DWARFSymbolsPlugin();
   }
 
@@ -99,7 +97,7 @@ export function createEmbindPool(): {
 
     manage<T extends SymbolsBackend.EmbindObject|undefined>(object: T): T {
       if (typeof object !== 'undefined') {
-        this.objectPool.push(object as SymbolsBackend.EmbindObject);
+        this.objectPool.push(object);
       }
       return object;
     }
@@ -201,7 +199,7 @@ export class DWARFLanguageExtensionPlugin implements Chrome.DevTools.LanguageExt
           // Ensure directory exists
           if (parentDirectory.length > 1) {
             // TypeScript doesn't know about createPath
-            // @ts-ignore
+            // @ts-expect-error doesn't exit on types
             backend.FS.createPath('/', parentDirectory.substring(1), true, true);
           }
 
@@ -216,7 +214,7 @@ export class DWARFLanguageExtensionPlugin implements Chrome.DevTools.LanguageExt
               void this.hostInterface.reportResourceLoad(dwoURL, {success: false, errorMessage: (e as Error).message});
               // Rethrow any error fetching the content as errno 44 (EEXIST)
               // TypeScript doesn't know about the ErrnoError constructor
-              // @ts-ignore
+              // @ts-expect-error doesn't exit on types
               throw new backend.FS.ErrnoError(44);
             }
           };
@@ -557,7 +555,7 @@ export class DWARFLanguageExtensionPlugin implements Chrome.DevTools.LanguageExt
         description: '<optimized out>',
       };
     }
-    return cxxObject.asRemoteObject();
+    return await cxxObject.asRemoteObject();
   }
 
   async getProperties(objectId: Chrome.DevTools.RemoteObjectId): Promise<Chrome.DevTools.PropertyDescriptor[]> {
@@ -582,7 +580,7 @@ export class DWARFLanguageExtensionPlugin implements Chrome.DevTools.LanguageExt
 export async function createPlugin(
     hostInterface: HostInterface, resourceLoader: ResourceLoader,
     moduleConfigurations: ModuleConfigurations = DEFAULT_MODULE_CONFIGURATIONS,
-    logPluginApiCalls: boolean = false): Promise<DWARFLanguageExtensionPlugin> {
+    logPluginApiCalls = false): Promise<DWARFLanguageExtensionPlugin> {
   const plugin = new DWARFLanguageExtensionPlugin(moduleConfigurations, resourceLoader, hostInterface);
   if (logPluginApiCalls) {
     const pluginLoggingProxy = {
@@ -601,7 +599,8 @@ export async function createPlugin(
                                      .join(', ');
                 // eslint-disable-next-line no-console
                 console.info(`${key}(${jsonArgs})`);
-                return (target[key] as Function).apply(target, arguments);
+                // @ts-expect-error TypeScript does not play well with `arguments`
+                return (target[key] as (...args: any[]) => void).apply(target, arguments);
               } as unknown as DWARFLanguageExtensionPlugin[Key];
             }
             return Reflect.get(target, key);

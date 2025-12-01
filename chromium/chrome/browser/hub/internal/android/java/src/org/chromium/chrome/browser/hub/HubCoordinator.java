@@ -31,6 +31,7 @@ import org.chromium.chrome.browser.ui.searchactivityutils.SearchActivityClient;
 import org.chromium.components.browser_ui.edge_to_edge.EdgeToEdgePadAdjuster;
 import org.chromium.components.browser_ui.widget.gesture.BackPressHandler;
 import org.chromium.components.feature_engagement.Tracker;
+import org.chromium.ui.util.XrUtils;
 
 /** Root coordinator of the Hub. */
 public class HubCoordinator implements PaneHubController, BackPressHandler {
@@ -70,10 +71,9 @@ public class HubCoordinator implements PaneHubController, BackPressHandler {
      * @param hubLayoutController The controller of the {@link HubLayout}.
      * @param currentTabSupplier The supplier of the current {@link Tab}.
      * @param menuButtonCoordinator Root component for the app menu.
-     * @param hubToolbarOverviewColorSupplier Notifies when the hub's toolbar overview color
-     *     changes.
      * @param edgeToEdgeSupplier The supplier of {@link EdgeToEdgeController}.
      * @param searchActivityClient A client for the search activity, used to launch search.
+     * @param hubColorMixer Mixes the Hub Overview Color.
      */
     public HubCoordinator(
             @NonNull Activity activity,
@@ -85,7 +85,7 @@ public class HubCoordinator implements PaneHubController, BackPressHandler {
             @NonNull MenuButtonCoordinator menuButtonCoordinator,
             @NonNull SearchActivityClient searchActivityClient,
             @NonNull ObservableSupplier<EdgeToEdgeController> edgeToEdgeSupplier,
-            @NonNull ObservableSupplierImpl<Integer> hubToolbarOverviewColorSupplier) {
+            @NonNull HubColorMixer hubColorMixer) {
         Context context = containerView.getContext();
         mBackPressStateChangeCallback = (ignored) -> updateHandleBackPressSupplier();
         mPaneManager = paneManager;
@@ -97,7 +97,8 @@ public class HubCoordinator implements PaneHubController, BackPressHandler {
                 castCallback(mBackPressStateChangeCallback));
 
         mContainerView = containerView;
-        mMainHubParent = LayoutInflater.from(context).inflate(R.layout.hub_layout, null);
+        int layoutId = XrUtils.isXrDevice() ? R.layout.hub_xr_layout : R.layout.hub_layout;
+        mMainHubParent = LayoutInflater.from(context).inflate(layoutId, null);
         mContainerView.addView(mMainHubParent);
 
         ProfileProvider profileProvider = profileProviderSupplier.get();
@@ -112,11 +113,12 @@ public class HubCoordinator implements PaneHubController, BackPressHandler {
                         menuButtonCoordinator,
                         tracker,
                         searchActivityClient,
-                        hubToolbarOverviewColorSupplier);
+                        hubColorMixer);
 
         HubPaneHostView hubPaneHostView = mContainerView.findViewById(R.id.hub_pane_host);
         mHubPaneHostCoordinator =
-                new HubPaneHostCoordinator(hubPaneHostView, paneManager.getFocusedPaneSupplier());
+                new HubPaneHostCoordinator(
+                        hubPaneHostView, paneManager.getFocusedPaneSupplier(), hubColorMixer);
 
         mHubLayoutController = hubLayoutController;
         mHandleBackPressSupplier = new ObservableSupplierImpl<>();

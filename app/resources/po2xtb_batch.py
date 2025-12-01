@@ -21,9 +21,11 @@ scriptdir = os.path.dirname(__file__)
 filemap = {
   # Android
   "vivaldi_android_chrome_strings": "android",
+  "vivaldi_browser_ui_strings": "android-browser-ui",
   "vivaldi_android_chrome_tab_ui_strings": "android-tab-ui",
   "vivaldi_android_strings": os.path.join("..", "android"),
   "vivaldi_android_webapps_strings": "android_webapps",
+  "vivaldi_android_content_strings": "android_content",
   # iOS
   "vivaldi_ios_strings": "ios_strings",
   "vivaldi_ios_native_strings": os.path.join("..", "ios"),

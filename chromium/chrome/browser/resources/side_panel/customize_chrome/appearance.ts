@@ -11,7 +11,6 @@ import 'chrome://resources/cr_components/managed_dialog/managed_dialog.js';
 import 'chrome://resources/cr_elements/cr_button/cr_button.js';
 import 'chrome://resources/cr_elements/cr_toggle/cr_toggle.js';
 
-import type {CrA11yAnnouncerElement} from 'chrome://resources/cr_elements/cr_a11y_announcer/cr_a11y_announcer.js';
 import {getInstance as getAnnouncerInstance} from 'chrome://resources/cr_elements/cr_a11y_announcer/cr_a11y_announcer.js';
 import type {CrToggleElement} from 'chrome://resources/cr_elements/cr_toggle/cr_toggle.js';
 import {I18nMixinLit} from 'chrome://resources/cr_elements/i18n_mixin_lit.js';
@@ -78,6 +77,7 @@ export class AppearanceElement extends AppearanceElementBase {
       showUploadedImageButton_: {type: Boolean},
       showSearchedImageButton_: {type: Boolean},
       showManagedDialog_: {type: Boolean},
+      showEditTheme_: {type: Boolean},
       isSourceTabFirstPartyNtp_: {type: Boolean},
 
       wallpaperSearchButtonEnabled_: {
@@ -106,7 +106,9 @@ export class AppearanceElement extends AppearanceElementBase {
   private wallpaperSearchEnabled_: boolean =
       loadTimeData.getBoolean('wallpaperSearchEnabled');
   protected isSourceTabFirstPartyNtp_: boolean = true;
+  protected showEditTheme_: boolean = true;
   protected ntpManagedByName_: string = '';
+  private setThemeEditableId_: number|null = null;
   private setThemeListenerId_: number|null = null;
   private attachedTabStateUpdatedId_: number|null = null;
   private ntpManagedByNameUpdatedId_: number|null = null;
@@ -137,6 +139,12 @@ export class AppearanceElement extends AppearanceElementBase {
                 });
     this.pageHandler_.updateAttachedTabState();
 
+    this.setThemeEditableId_ = CustomizeChromeApiProxy.getInstance()
+                                   .callbackRouter.setThemeEditable.addListener(
+                                       (isThemeEditable: boolean) => {
+                                         this.showEditTheme_ = isThemeEditable;
+                                       });
+
     this.ntpManagedByNameUpdatedId_ =
         CustomizeChromeApiProxy.getInstance()
             .callbackRouter.ntpManagedByNameUpdated.addListener(
@@ -152,12 +160,13 @@ export class AppearanceElement extends AppearanceElementBase {
     this.callbackRouter_.removeListener(this.setThemeListenerId_);
 
     assert(this.attachedTabStateUpdatedId_);
-    CustomizeChromeApiProxy.getInstance().callbackRouter.removeListener(
-        this.attachedTabStateUpdatedId_);
+    this.callbackRouter_.removeListener(this.attachedTabStateUpdatedId_);
 
     assert(this.ntpManagedByNameUpdatedId_);
-    CustomizeChromeApiProxy.getInstance().callbackRouter.removeListener(
-        this.ntpManagedByNameUpdatedId_);
+    this.callbackRouter_.removeListener(this.ntpManagedByNameUpdatedId_);
+
+    assert(this.setThemeEditableId_);
+    this.callbackRouter_.removeListener(this.setThemeEditableId_);
   }
 
   override willUpdate(changedProperties: PropertyValues<this>) {
@@ -189,11 +198,11 @@ export class AppearanceElement extends AppearanceElementBase {
         changedPrivateProperties.has('showClassicChromeButton_') &&
         !!changedPrivateProperties.get('theme_') &&
         !this.showClassicChromeButton_) {
-      const announcer = getAnnouncerInstance() as CrA11yAnnouncerElement;
+      const announcer = getAnnouncerInstance();
       announcer.announce(this.i18n('updatedToClassicChrome'));
       // If the classicChrome button has focus, change focus to editTheme
       // button, since the button is disappearing.
-      if (this.shadowRoot!.activeElement === this.$.setClassicChromeButton) {
+      if (this.shadowRoot.activeElement === this.$.setClassicChromeButton) {
         this.focusOnThemeButton();
       }
     }
@@ -248,6 +257,8 @@ export class AppearanceElement extends AppearanceElementBase {
     return !!this.theme_ && !this.theme_.thirdPartyThemeInfo &&
         (!(this.theme_.backgroundImage &&
            this.theme_.backgroundImage.isUploadedImage)) &&
+        // TODO(crbug.com/404247286) Enable snapshots for extension NTP with 1P
+        // theme.
         this.isSourceTabFirstPartyNtp_;
   }
 

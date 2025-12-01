@@ -73,8 +73,7 @@ history::WebHistoryService* WebHistoryServiceGetter(
       std::make_unique<BrowserObserverBridge>(self.browser, self);
 
   // Initialize and set HistoryMediator.
-  _mediator =
-      [[HistoryMediator alloc] initWithProfile:self.browser->GetProfile()];
+  _mediator = [[HistoryMediator alloc] initWithProfile:self.profile];
   self.viewController.imageDataSource = _mediator;
 
   // Initialize and configure HistoryServices.
@@ -82,14 +81,13 @@ history::WebHistoryService* WebHistoryServiceGetter(
       std::make_unique<IOSBrowsingHistoryDriverDelegateBridge>(
           self.viewController);
   _browsingHistoryDriver = std::make_unique<IOSBrowsingHistoryDriver>(
-      base::BindRepeating(&WebHistoryServiceGetter,
-                          self.browser->GetProfile()->AsWeakPtr()),
+      base::BindRepeating(&WebHistoryServiceGetter, self.profile->AsWeakPtr()),
       _browsingHistoryDriverDelegate.get());
   _browsingHistoryService = std::make_unique<history::BrowsingHistoryService>(
       _browsingHistoryDriver.get(),
       ios::HistoryServiceFactory::GetForProfile(
-          self.browser->GetProfile(), ServiceAccessType::EXPLICIT_ACCESS),
-      SyncServiceFactory::GetForProfile(self.browser->GetProfile()));
+          self.profile, ServiceAccessType::EXPLICIT_ACCESS),
+      SyncServiceFactory::GetForProfile(self.profile));
   self.viewController.historyService = _browsingHistoryService.get();
 
   self.viewController.presentationDelegate = self.presentationDelegate;
@@ -195,7 +193,7 @@ history::WebHistoryService* WebHistoryServiceGetter(
                                   completion:^{
                                     [weakSelf onOpenedURLInNewIncognitoTab];
                                   }];
-    if (IsIncognitoModeDisabled(self.browser->GetProfile()->GetPrefs())) {
+    if (IsIncognitoModeDisabled(self.profile->GetPrefs())) {
       // Disable the "Open in Incognito" option if the incognito mode is
       // disabled.
       incognitoAction.attributes = UIMenuElementAttributesDisabled;

@@ -74,6 +74,10 @@ struct COMPONENT_EXPORT(SQL) DatabaseOptions {
   static constexpr int kDefaultPageSize = 4096;
 
   DatabaseOptions();
+  DatabaseOptions(const DatabaseOptions&);
+  DatabaseOptions(DatabaseOptions&&);
+  DatabaseOptions& operator=(const DatabaseOptions&);
+  DatabaseOptions& operator=(DatabaseOptions&&);
   ~DatabaseOptions();
 
   // If true, the database can only be opened by one process at a time.
@@ -139,6 +143,19 @@ struct COMPONENT_EXPORT(SQL) DatabaseOptions {
   // More details at https://www.sqlite.org/wal.html
   DatabaseOptions& set_wal_mode(bool wal_mode) {
     wal_mode_ = wal_mode;
+    return *this;
+  }
+
+  // If true, enables preloading the database before opening it.
+  //
+  // Hints the file system that the database will be accessed soon.
+  //
+  // This method should be called on databases that are on the critical path to
+  // Chrome startup. Informing the filesystem about our expected access pattern
+  // early on reduces the likelihood that we'll be blocked on disk I/O. This has
+  // a high impact on startup time.
+  DatabaseOptions& set_preload(bool preload) {
+    preload_ = preload;
     return *this;
   }
 
@@ -231,6 +248,14 @@ struct COMPONENT_EXPORT(SQL) DatabaseOptions {
     return *this;
   }
 
+  // If true database attempts using memory mapped files. True by default. Only
+  // set to false when a condition is known that prevents the use of memory
+  // mapped files. See https://www.sqlite.org/mmap.html.
+  DatabaseOptions& set_mmap_enabled(bool mmap_enabled) {
+    mmap_enabled_ = mmap_enabled;
+    return *this;
+  }
+
  private:
   friend class Database;
   FRIEND_TEST_ALL_PREFIXES(DatabaseOptionsTest,
@@ -245,9 +270,11 @@ struct COMPONENT_EXPORT(SQL) DatabaseOptions {
   bool flush_to_media_ = false;
   int page_size_ = kDefaultPageSize;
   int cache_size_ = 0;
+  bool preload_ = false;
   bool mmap_alt_status_discouraged_ = false;
   bool enable_views_discouraged_ = false;
   const char* vfs_name_discouraged_ = nullptr;
+  bool mmap_enabled_ = true;
 };
 
 // Holds database diagnostics in a structured format.
@@ -363,12 +390,6 @@ class COMPONENT_EXPORT(SQL) Database {
   Database(Database&&) = delete;
   Database& operator=(Database&&) = delete;
   ~Database();
-
-  // Allows mmapping to be disabled globally by default in the calling process.
-  // Must be called before any threads attempt to create a Database.
-  //
-  // TODO(crbug.com/40144971): Remove this global configuration.
-  static void DisableMmapByDefault();
 
   // Pre-init configuration ----------------------------------------------------
 
@@ -797,7 +818,6 @@ class COMPONENT_EXPORT(SQL) Database {
   FRIEND_TEST_ALL_PREFIXES(SQLDatabaseTest, ComputeMmapSizeForOpenAltStatus);
   FRIEND_TEST_ALL_PREFIXES(SQLDatabaseTest, OnMemoryDump);
   FRIEND_TEST_ALL_PREFIXES(SQLDatabaseTest, RegisterIntentToUpload);
-  FRIEND_TEST_ALL_PREFIXES(SQLiteFeaturesTest, FTS3_Prefix);
   FRIEND_TEST_ALL_PREFIXES(SQLiteFeaturesTest, WALNoClose);
   FRIEND_TEST_ALL_PREFIXES(SQLEmptyPathDatabaseTest, EmptyPathTest);
 
@@ -828,6 +848,9 @@ class COMPONENT_EXPORT(SQL) Database {
   // `file_name` is the SQLite magic memory path :memory:, the database will be
   // opened in-memory.
   bool OpenInternal(const std::string& file_name);
+
+  // Requests the operating system to preload the pages on disk into memory.
+  void PreloadInternal(const base::FilePath& path);
 
   // Configures the underlying sqlite3* object via sqlite3_db_config().
   //
@@ -1021,9 +1044,6 @@ class COMPONENT_EXPORT(SQL) Database {
   bool GetMmapAltStatus(int64_t* status);
   bool SetMmapAltStatus(int64_t status);
 
-  // sqlite3_prepare_v3() flags for this database.
-  int SqlitePrepareFlags() const;
-
   // Returns a SQLite VFS interface pointer to the file storing database pages.
   //
   // Returns null if the database is not backed by a VFS file. This is always
@@ -1050,10 +1070,6 @@ class COMPONENT_EXPORT(SQL) Database {
   // based on its histogram tag.
   perfetto::NamedTrack GetTracingNamedTrack() const;
 
-  void SetEnableVirtualTablesForTesting(bool enable) {
-    enable_virtual_tables_ = enable;
-  }
-
   // Will eventually be checked on all methods. See https://crbug.com/1306694
   SEQUENCE_CHECKER(sequence_checker_);
 
@@ -1063,10 +1079,6 @@ class COMPONENT_EXPORT(SQL) Database {
 
   // Immutable options for the database.
   const DatabaseOptions options_;
-
-  // TODO(crbug.com/340805983): Remove this once virtual tables are no longer needed for
-  // WebSQL, which requires them for fts3 support.
-  bool enable_virtual_tables_ = false;
 
   // Holds references to all cached statements so they remain active.
   //

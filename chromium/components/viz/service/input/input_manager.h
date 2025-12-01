@@ -58,6 +58,7 @@ class VIZ_SERVICE_EXPORT InputManager
       public input::RenderWidgetHostInputEventRouter::Delegate,
 #if BUILDFLAG(IS_ANDROID)
       public FlingSchedulerAndroid::Delegate,
+      public AndroidStateTransferHandlerClient,
 #endif
       public RenderInputRouterSupportBase::Delegate,
       public RenderInputRouterDelegateImpl::Delegate,
@@ -102,6 +103,9 @@ class VIZ_SERVICE_EXPORT InputManager
   // FlingSchedulerAndroid::Delegate implementation.
   BeginFrameSource* GetBeginFrameSourceForFrameSink(
       const FrameSinkId& id) override;
+
+  // AndroidStateTransferHandlerClient implementation.
+  bool TransferInputBackToBrowser() override;
 #endif
 
   // RenderInputRouterDelegateImpl::Delegate implementation.
@@ -149,6 +153,13 @@ class VIZ_SERVICE_EXPORT InputManager
   bool ReturnInputBackToBrowser();
 
  private:
+  // Recreates RenderInputRouterSupport in cases where Viz receives a
+  // |CreateCompositorFrameSink| call before |CreateRootCompositorFrameSink|
+  // call which can cause incorrect construction of type
+  // RenderInputRouterSupportAndroid as RenderInputRouterSupportChildFrame.
+  void MaybeRecreateRootRenderInputRouterSupports(
+      const FrameSinkId& root_frame_sink_id);
+
   std::unique_ptr<RenderInputRouterSupportBase> MakeRenderInputRouterSupport(
       input::RenderInputRouter* rir,
       const FrameSinkId& frame_sink_id);

@@ -7,6 +7,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <variant>
 
 #include "base/functional/bind.h"
 #include "base/functional/callback.h"
@@ -28,7 +29,6 @@
 #include "chrome/grit/generated_resources.h"
 #include "components/strings/grit/components_strings.h"
 #include "components/webapps/common/web_app_id.h"
-#include "third_party/abseil-cpp/absl/types/variant.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/mojom/ui_base_types.mojom-shared.h"
 #include "ui/base/ui_base_types.h"
@@ -267,8 +267,8 @@ void IsolatedWebAppInstallerViewController::Show() {
 
   widget_ =
       views::DialogDelegate::CreateDialogWidget(std::move(dialog_delegate),
-                                                /*context=*/nullptr,
-                                                /*parent=*/nullptr);
+                                                /*context=*/gfx::NativeWindow(),
+                                                /*parent=*/gfx::NativeView());
 
   CHECK(!window_);
   window_ = widget_->GetNativeWindow();
@@ -392,7 +392,7 @@ void IsolatedWebAppInstallerViewController::OnGetMetadataProgressUpdated(
 
 void IsolatedWebAppInstallerViewController::OnInstallabilityChecked(
     InstallabilityChecker::Result result) {
-  absl::visit(InstallabilityCheckedVisitor(*model_, *this), result);
+  std::visit(InstallabilityCheckedVisitor(*model_, *this), result);
 }
 
 void IsolatedWebAppInstallerViewController::OnInstallProgressUpdated(
@@ -524,7 +524,6 @@ void IsolatedWebAppInstallerViewController::OnChildDialogChanged() {
 std::unique_ptr<views::DialogDelegate>
 IsolatedWebAppInstallerViewController::CreateDialogDelegate(
     std::unique_ptr<views::View> contents_view) {
-  gfx::Size contents_max_size = contents_view->GetMaximumSize();
   auto delegate = std::make_unique<OnCompleteDialogDelegate>();
   delegate->set_internal_name(
       IsolatedWebAppInstallerView::kInstallerWidgetName);
@@ -533,8 +532,9 @@ IsolatedWebAppInstallerViewController::CreateDialogDelegate(
   delegate->SetModalType(ui::mojom::ModalType::kWindow);
   delegate->SetShowCloseButton(false);
   delegate->SetHasWindowSizeControls(false);
+  delegate->set_fixed_width(views::LayoutProvider::Get()->GetDistanceMetric(
+      views::DISTANCE_LARGE_MODAL_DIALOG_PREFERRED_WIDTH));
   delegate->SetCanResize(false);
-  delegate->set_fixed_width(contents_max_size.width());
   // TODO(crbug.com/40280769): Set the title of the dialog for Alt+Tab
   delegate->SetShowTitle(false);
 

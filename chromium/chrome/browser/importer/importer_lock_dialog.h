@@ -5,8 +5,6 @@
 #ifndef CHROME_BROWSER_IMPORTER_IMPORTER_LOCK_DIALOG_H_
 #define CHROME_BROWSER_IMPORTER_IMPORTER_LOCK_DIALOG_H_
 
-#include <string>
-
 #include "base/functional/callback_forward.h"
 #include "chrome/grit/generated_resources.h"
 #include "ui/gfx/native_widget_types.h"

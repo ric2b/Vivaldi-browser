@@ -54,6 +54,7 @@ ALLOWED_SPDX_LICENSES = frozenset([
     # go/keep-sorted end
     # permissive.
     # go/keep-sorted start case=no
+    "0BSD",
     "GPL-2.0-with-autoconf-exception",
     "GPL-2.0-with-classpath-exception",
     "GPL-3.0-with-autoconf-exception",
@@ -92,7 +93,9 @@ ALLOWED_SPDX_LICENSES = frozenset([
     "NCSA",
     "OFL-1.1",
     "OpenSSL",
+    "Python-2.0",
     "SGI-B-2.0",
+    "Spencer-86",
     "SunPro",
     "Unicode-3.0",
     "Unicode-DFS-2015",
@@ -145,8 +148,10 @@ EXTENDED_LICENSE_CLASSIFIERS = frozenset([
     "LicenseRef-OpenGLUT",
     "LicenseRef-takuya-ooura",
     "pffft",
+    "PngSuite",
     "Punycode",
     "SSLeay",
+    "unicode_org",
     "WebM-Project-Patent",
     "X11-Lucent",
     "zxing",
@@ -195,8 +200,20 @@ WITH_PERMISSION_ONLY = frozenset([
     "Opus-Patent-BSD-3-Clause",
     "UnRAR",
     # go/keep-sorted end
+    # Patent files are special, and must be handled on a case by case basis.
+    "Patent",
 ])
 
-ALLOWED_LICENSES = ALLOWED_SPDX_LICENSES | EXTENDED_LICENSE_CLASSIFIERS
+# These are references to files that are not licenses, but are allowed to be
+# included in the LICENSE field.
+ALLOWED_REFERENCES = frozenset([
+    "Refer to additional_readme_paths.json",
+])
+
+ALLOWED_LICENSES = (
+    ALLOWED_SPDX_LICENSES
+    | EXTENDED_LICENSE_CLASSIFIERS
+    | ALLOWED_REFERENCES
+)
 ALLOWED_OPEN_SOURCE_LICENSES = ALLOWED_LICENSES | OPEN_SOURCE_SPDX_LICENSES
 ALL_LICENSES = ALLOWED_OPEN_SOURCE_LICENSES | WITH_PERMISSION_ONLY

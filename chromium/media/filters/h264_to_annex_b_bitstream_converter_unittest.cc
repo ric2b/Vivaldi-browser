@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/390223051): Remove C-library calls to fix the errors.
+#pragma allow_unsafe_libc_calls
+#endif
+
 #include "media/filters/h264_to_annex_b_bitstream_converter.h"
 
 #include <stdint.h>
@@ -372,10 +377,9 @@ TEST_F(H264ToAnnexBBitstreamConverterTest, FailureNalUnitBreakage) {
   H264ToAnnexBBitstreamConverter converter;
 
   // Parse the headers.
-  EXPECT_TRUE(converter.ParseConfiguration(
-      kHeaderDataOkWithFieldLen4,
-      sizeof(kHeaderDataOkWithFieldLen4),
-      &avc_config_));
+  EXPECT_TRUE(converter.ParseConfiguration(kHeaderDataOkWithFieldLen4,
+                                           sizeof(kHeaderDataOkWithFieldLen4),
+                                           &avc_config_));
   uint32_t config_size = converter.GetConfigSize(avc_config_);
   EXPECT_GT(config_size, 0U);
 

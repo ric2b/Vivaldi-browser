@@ -56,7 +56,7 @@ const UIStrings = {
    */
   srEntriesLinked: 'The connected entries annotation now links from {PH1} to {PH2}',
 
-};
+} as const;
 const str_ = i18n.i18n.registerUIStrings('panels/timeline/AnnotationHelpers.ts', UIStrings);
 const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
 
@@ -164,7 +164,8 @@ export function ariaDescriptionForOverlay(overlay: Overlays.Overlays.TimelineOve
     return i18nString(UIStrings.entriesLink);
   }
   if (isEntryLabel(overlay)) {
-    return i18nString(UIStrings.entryLabel);
+    // Don't announce an empty label
+    return overlay.label.length > 0 ? i18nString(UIStrings.entryLabel) : null;
   }
 
   // Not an annotation overlay: ignore.

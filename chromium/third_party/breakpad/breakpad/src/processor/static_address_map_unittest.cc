@@ -71,7 +71,7 @@ class TestStaticAddressMap : public ::testing::Test {
       testdata[2][i] = tempdata[i];
 
     // Test data set3:
-    srand(time(NULL));
+    srand(time(nullptr));
     for (int i = 0; i < testsize[3]; ++i)
       testdata[3][i] = rand();
 
@@ -83,7 +83,7 @@ class TestStaticAddressMap : public ::testing::Test {
         sstream << "test " << testdata[testcase][data_item];
         addr_map[testcase].Store(testdata[testcase][data_item], sstream.str());
       }
-      map_data[testcase] = serializer.Serialize(addr_map[testcase], NULL);
+      map_data[testcase] = serializer.Serialize(addr_map[testcase], nullptr);
       test_map[testcase] = TestMap(map_data[testcase]);
     }
   }
@@ -100,7 +100,7 @@ class TestStaticAddressMap : public ::testing::Test {
     int address_test;
     string entry;
     string entry_test;
-    const char* entry_cstring = NULL;
+    const char* entry_cstring = nullptr;
     bool found;
     bool found_test;
 

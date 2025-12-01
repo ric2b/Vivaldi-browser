@@ -136,17 +136,17 @@
             "description": "Should the user be able to delete this match."
           },
           "type": {
-            "type": "string",
-            "description": "The type of provider."
+            "type": "integer",
+            "description": "Same as AutocompleteMatch::Type. Used by AddOrUpdateShortcut."
           },
-        "faviconUrl": {
-          "type": "string",
-          "description": "The url of the favicon."
-        },
-        "faviconType": {
-          "type": "string",
-          "description": "How to load the favicon. This is used by Favicon component."
-        }
+          "faviconUrl": {
+            "type": "string",
+            "description": "The url of the favicon."
+          },
+          "faviconType": {
+            "type": "string",
+            "description": "How to load the favicon. This is used by Favicon component."
+          }
         }
       }
     ],
@@ -189,6 +189,32 @@
                 "description": "The type of page the user was on when they used the omnibox. Or the type of page for which suggestions were prefetched from the server"
               }
             }
+          }
+        ]
+      },
+      {
+        "name": "addOrUpdateShortcut",
+        "type": "function",
+        "description": "",
+        "parameters": [
+          {
+            "name": "text",
+            "type": "string"
+          },
+          {
+            "name": "item",
+            "$ref": "OmniboxItem"
+          }
+        ]
+      },
+      {
+        "name": "deleteShortcut",
+        "type": "function",
+        "description": "",
+        "parameters": [
+          {
+            "name": "url",
+            "type": "string"
           }
         ]
       }

@@ -1416,6 +1416,12 @@
   <message name="IDS_AI_INTRO_SLIDE_WRITE_TEXT" desc="The text of the write info slide">
     Right-click in a text box to use Help me write
   </message>
+  <message name="IDS_AI_INTRO_SLIDE_IMAGE_TITLE" desc="The title of the info slide for image generation feature">
+    Create images with AI
+  </message>
+  <message name="IDS_AI_INTRO_SLIDE_IMAGE_TEXT" desc="The text of the info slide for image generation feature">
+    Right-click to easily visualize your ideas
+  </message>
   <message name="IDS_AI_INTRO_SLIDE_WALLPAPER_TITLE" desc="The title of the wallpaper info slide">
     Create wallpapers with AI
   </message>
@@ -1427,6 +1433,12 @@
   </message>
   <message name="IDS_AI_INTRO_SLIDE_BACKGROUND_TEXT" desc="The text of the background info slide">
     Personalize your camera backgrounds for video calls and more
+  </message>
+  <message name="IDS_AI_INTRO_SLIDE_READ_TITLE" desc="The title of the read info slide">
+    Summarize content, simplify complex language, or ask questions
+  </message>
+  <message name="IDS_AI_INTRO_SLIDE_READ_TEXT" desc="The text of the read info slide">
+    Right-click to use Help me read
   </message>
   <message name="IDS_AI_INTRO_SLIDE_LABEL" desc="Text of slide label for accessibility.">
     Extra content <ph name="CURRENT_ELEMENT">$1<ex>1</ex></ph> out of <ph name="TOTAL_ELEMENTS">$2<ex>2</ex></ph>
@@ -4349,6 +4361,9 @@
   <message name="IDS_CONSOLIDATED_CONSENT_HEADER_CHILD" desc="Title of the consolidated consent screen for child account.">
     Review these terms and control your child's data
   </message>
+  <message name="IDS_CONSOLIDATED_CONSENT_HEADER_DEMO_MODE" desc="Title of the consolidated consent screen for demo mode.">
+    Review these terms
+  </message>
   <message name="IDS_CONSOLIDATED_CONSENT_HEADER_MANAGED" desc="Title of the consolidated consent screen for managed accounts.">
     Control your data
   </message>
@@ -4357,6 +4372,9 @@
   </message>
   <message name="IDS_CONSOLIDATED_CONSENT_SUBHEADER" desc="Subtitle of the consolidated consent screen.">
     You can control what data is shared with Google. You can change this anytime in Settings. Data will be used according to Google's <ph name="BEGIN_LINK">&lt;a id="privacyPolicyLink"&gt;</ph>Privacy Policy<ph name="END_LINK">&lt;/a&gt;</ph>.
+  </message>
+  <message name="IDS_CONSOLIDATED_CONSENT_SUBHEADER_DEMO_MODE" desc="Subtitle of the consolidated consent screen in demo mode.">
+    All data collected will be used according to Google's <ph name="BEGIN_LINK">&lt;a id="privacyPolicyLink"&gt;</ph>Privacy Policy<ph name="END_LINK">&lt;/a&gt;</ph>.
   </message>
   <message name="IDS_CONSOLIDATED_CONSENT_TERMS_TITLE" desc="Title of the main terms and conditions to be accepted in the consolidated consent screen">
     Terms and conditions
@@ -4372,6 +4390,9 @@
   </message>
   <message name="IDS_CONSOLIDATED_CONSENT_USAGE_OPT_IN_OWNER" desc="Message in the consolidated consent screen to opt-in for metrics when the user is the device owner.">
     Help improve Chrome and ChromeOS features and performance by automatically sending crash reports as well as diagnostic and usage data to Google.
+  </message>
+  <message name="IDS_CONSOLIDATED_CONSENT_USAGE_OPT_IN_DEMO_MODE" desc="Message in the consolidated consent screen to opt-in for metrics in demo mode.">
+    Demo Mode devices automatically send crash reports as well as diagnostic and usage data to Google, to help improve features and performance.
   </message>
   <message name="IDS_CONSOLIDATED_CONSENT_USAGE_OPT_IN_LEARN_MORE_LINK" desc="Learn more about usage opt in">
     Learn more about diagnostic and usage data
@@ -6849,7 +6870,7 @@ Your <ph name="DEVICE_TYPE">{0}<ex>Chromebook</ex></ph> will be locked now.
     Quick Insert
   </message>
   <message name="IDS_OOBE_SPLIT_MODIFIER_INFO_FIRST_DESCRIPTION_TEXT" desc="Text inside the first description section.">
-    Insert links, emojis, and more. You can also get help writing with Google AI.
+    Insert links, emojis, and more. You can also get help writing and creating images with Google AI.
   </message>
   <message name="IDS_OOBE_SPLIT_MODIFIER_INFO_FIRST_DESCRIPTION_ACCESSIBILITY" desc="Additional information for the accessibility tools for the first description section.">
     Quick insert key is located beneath the tab key

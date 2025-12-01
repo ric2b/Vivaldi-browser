@@ -6,8 +6,8 @@
 #define TOOLS_GN_ESCAPE_H_
 
 #include <iosfwd>
-#include <string_view>
 #include <string>
+#include <string_view>
 
 enum EscapingMode {
   // No escaping.

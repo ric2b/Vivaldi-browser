@@ -959,30 +959,42 @@ static bool GetConfig(const Span<const uint8_t> args[],
         "algorithm": "ML-DSA",
         "mode": "sigGen",
         "revision": "FIPS204",
-        "parameterSets": [
-          "ML-DSA-65",
-          "ML-DSA-87"
-        ],
+        "signatureInterfaces": ["internal"],
         "deterministic": [
           true,
           false
         ],
-        "messageLength": [
-          {
+        "externalMu": [
+          false
+        ],
+        "capabilities": [{
+          "parameterSets": [
+            "ML-DSA-65",
+            "ML-DSA-87"
+          ],
+          "messageLength": [{
             "min": 8,
             "max": 65536,
             "increment": 8
-          }
-        ]
+          }]
+        }]
       },
       {
         "algorithm": "ML-DSA",
         "mode": "sigVer",
         "revision": "FIPS204",
-        "parameterSets": [
-          "ML-DSA-65",
-          "ML-DSA-87"
-        ]
+        "signatureInterfaces": ["internal"],
+        "capabilities": [{
+          "messageLength": [{
+            "min": 8,
+            "max": 65536,
+            "increment": 8
+          }],
+          "parameterSets": [
+            "ML-DSA-65",
+            "ML-DSA-87"
+          ]
+        }]
       },
       {
         "algorithm": "ML-KEM",
@@ -1022,6 +1034,7 @@ static bool GetConfig(const Span<const uint8_t> args[],
           true,
           false
         ],
+        "signatureInterfaces": [ "internal" ],
         "capabilities": [
           {
             "parameterSets": [
@@ -1041,6 +1054,7 @@ static bool GetConfig(const Span<const uint8_t> args[],
         "algorithm": "SLH-DSA",
         "mode": "sigVer",
         "revision": "FIPS205",
+        "signatureInterfaces": [ "internal" ],
         "deterministic": [
           true,
           false
@@ -2573,11 +2587,11 @@ static constexpr struct {
     {"FFDH", 6, FFDH},
     {"ML-DSA-65/keyGen", 1,
      MLDSAKeyGen<BCM_mldsa65_private_key, BCM_MLDSA65_PUBLIC_KEY_BYTES,
-                 BCM_mldsa65_generate_key_external_entropy,
+                 BCM_mldsa65_generate_key_external_entropy_fips,
                  BCM_mldsa65_marshal_private_key>},
     {"ML-DSA-87/keyGen", 1,
      MLDSAKeyGen<BCM_mldsa87_private_key, BCM_MLDSA87_PUBLIC_KEY_BYTES,
-                 BCM_mldsa87_generate_key_external_entropy,
+                 BCM_mldsa87_generate_key_external_entropy_fips,
                  BCM_mldsa87_marshal_private_key>},
     {"ML-DSA-65/sigGen", 3,
      MLDSASigGen<BCM_mldsa65_private_key, BCM_MLDSA65_SIGNATURE_BYTES,

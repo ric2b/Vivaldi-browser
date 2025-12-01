@@ -94,6 +94,8 @@ class CaptionBubble : public views::BubbleDialogDelegateView,
   // gfx::AnimationDelegate:
   void AnimationProgressed(const gfx::Animation* animation) override;
 
+  void OnContextActivatabilityChanged();
+
   // Sets the caption bubble model currently being used for this caption bubble.
   // There exists one CaptionBubble per profile, but one CaptionBubbleModel per
   // media stream. A new CaptionBubbleModel is set when transcriptions from a
@@ -261,8 +263,6 @@ class CaptionBubble : public views::BubbleDialogDelegateView,
   std::u16string GetSourceLanguageName() const;
   std::u16string GetTargetLanguageName() const;
 
-  bool IsLiveTranslateEnabled();
-
   // Unowned. Owned by views hierarchy.
   raw_ptr<CaptionBubbleLabel> label_;
   raw_ptr<views::Label> title_;
@@ -338,9 +338,6 @@ class CaptionBubble : public views::BubbleDialogDelegateView,
 
   std::unique_ptr<ui::SimpleMenuModel> translation_menu_model_;
   std::unique_ptr<views::MenuRunner> translation_menu_runner_;
-
-  bool live_translate_enabled_by_context_ = false;
-  bool skip_pref_change_on_close_ = false;
 
   base::WeakPtrFactory<CaptionBubble> weak_ptr_factory_{this};
 };

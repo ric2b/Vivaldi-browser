@@ -61,6 +61,7 @@ PROCESS_TABLE = Table(
         C('parent_upid', CppOptional(CppSelfTableId())),
         C('uid', CppOptional(CppUint32())),
         C('android_appid', CppOptional(CppUint32())),
+        C('android_user_id', CppOptional(CppUint32())),
         C('cmdline', CppOptional(CppString())),
         C('arg_set_id', CppOptional(CppUint32())),
         C('machine_id', CppOptional(CppTableId(MACHINE_TABLE))),
@@ -114,6 +115,12 @@ PROCESS_TABLE = Table(
                     joinable='package_list.uid'),
             'android_appid':
                 'Android appid of this process.',
+            'android_user_id':
+                '''
+                Android user id running the process.
+                Related to Android multi-user (not to be confused with the
+                unix uid)
+                ''',
             'cmdline':
                 '/proc/cmdline for this process.',
             'arg_set_id':
@@ -138,6 +145,7 @@ THREAD_TABLE = Table(
         C('end_ts', CppOptional(CppInt64())),
         C('upid', CppOptional(CppTableId(PROCESS_TABLE))),
         C('is_main_thread', CppOptional(CppUint32())),
+        C('is_idle', CppUint32()),
         C('machine_id', CppOptional(CppTableId(MACHINE_TABLE))),
     ],
     wrapping_sql_view=WrappingSqlView(view_name='thread',),
@@ -184,6 +192,12 @@ THREAD_TABLE = Table(
                 '''
                   Boolean indicating if this thread is the main thread
                   in the process.
+                ''',
+            'is_idle':
+                '''
+                  Boolean indicating if this thread is an kernel idle task (
+                  pid = 0 on Linux).
+
                 ''',
             'machine_id':
                 '''

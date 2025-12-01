@@ -4,6 +4,7 @@
 
 #include "chrome/browser/ui/lens/lens_permission_bubble_controller.h"
 
+#include "base/functional/bind.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/user_metrics.h"
 #include "base/metrics/user_metrics_action.h"
@@ -21,6 +22,7 @@
 #include "components/lens/lens_overlay_permission_utils.h"
 #include "components/lens/lens_permission_user_action.h"
 #include "components/prefs/pref_service.h"
+#include "components/tab_collections/public/tab_interface.h"
 #include "components/vector_icons/vector_icons.h"
 #include "content/public/browser/page_navigator.h"
 #include "content/public/common/referrer.h"
@@ -40,12 +42,16 @@
 namespace lens {
 
 LensPermissionBubbleController::LensPermissionBubbleController(
-    BrowserWindowInterface* browser_window_interface,
+    tabs::TabInterface& tab_interface,
     PrefService* pref_service,
     LensOverlayInvocationSource invocation_source)
     : invocation_source_(invocation_source),
-      browser_window_interface_(browser_window_interface),
-      pref_service_(pref_service) {}
+      tab_interface_(tab_interface),
+      pref_service_(pref_service) {
+  tab_will_detach_subscription_ = tab_interface_->RegisterWillDetach(
+      base::BindRepeating(&LensPermissionBubbleController::TabWillDetach,
+                          base::Unretained(this)));
+}
 
 LensPermissionBubbleController::~LensPermissionBubbleController() {
   if (HasOpenDialogWidget()) {
@@ -155,7 +161,7 @@ void LensPermissionBubbleController::OnHelpCenterLinkClicked(
     const ui::Event& event) {
   RecordPermissionUserAction(LensPermissionUserAction::kLinkOpened,
                              invocation_source_);
-  browser_window_interface_->OpenGURL(
+  tab_interface_->GetBrowserWindowInterface()->OpenGURL(
       GURL(lens::features::GetLensOverlayHelpCenterURL()),
       ui::DispositionFromEventFlags(event.flags(),
                                     WindowOpenDisposition::NEW_BACKGROUND_TAB));
@@ -207,6 +213,16 @@ void LensPermissionBubbleController::OnPermissionPreferenceUpdated(
     }
     pref_observer_.Reset();
     callback.Run();
+  }
+}
+
+void LensPermissionBubbleController::TabWillDetach(
+    tabs::TabInterface* tab,
+    tabs::TabInterface::DetachReason reason) {
+  if (reason == tabs::TabInterface::DetachReason::kDelete &&
+      HasOpenDialogWidget()) {
+    dialog_widget_->Close();
+    dialog_widget_ = nullptr;
   }
 }
 

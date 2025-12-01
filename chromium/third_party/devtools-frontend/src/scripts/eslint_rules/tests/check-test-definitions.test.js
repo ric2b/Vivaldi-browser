@@ -4,14 +4,10 @@
 'use strict';
 
 const rule = require('../lib/check-test-definitions.js');
-const ruleTester = new (require('eslint').RuleTester)({
-  languageOptions: {
-    ecmaVersion: 'latest',
-    sourceType: 'module',
-  },
-});
 
-ruleTester.run('check-test-definitions', rule, {
+const {RuleTester} = require('./utils/utils.js');
+
+new RuleTester().run('check-test-definitions', rule, {
   valid: [
     {
       code: `import {describe, it} from '../../shared/mocha-extensions.js';
@@ -102,7 +98,7 @@ ruleTester.run('check-test-definitions', rule, {
       });
       `,
       filename: 'test/e2e/folder/file.ts',
-      errors: [{message: rule.meta.messages.missingBugId}],
+      errors: [{messageId: 'missingBugId'}],
     },
     {
       code: `import {describe, it} from '../../shared/mocha-extensions.js';
@@ -113,7 +109,7 @@ ruleTester.run('check-test-definitions', rule, {
       });
       `,
       filename: 'test/e2e/folder/file.ts',
-      errors: [{message: rule.meta.messages.comment}],
+      errors: [{messageId: 'comment'}],
     },
     {
       code: `import {describe, it} from '../../shared/mocha-extensions.js';
@@ -125,7 +121,7 @@ ruleTester.run('check-test-definitions', rule, {
       });
       `,
       filename: 'test/e2e/folder/file.ts',
-      errors: [{message: rule.meta.messages.missingBugId}],
+      errors: [{messageId: 'missingBugId'}],
     },
     {
       code: `describe('e2e-test', async () => {
@@ -135,7 +131,7 @@ ruleTester.run('check-test-definitions', rule, {
       });
       `,
       filename: 'test/e2e/folder/file.ts',
-      errors: [{message: rule.meta.messages.missingBugId}],
+      errors: [{messageId: 'missingBugId'}],
     },
     {
       code: `import {describe, it} from '../../shared/mocha-extensions.js';
@@ -146,7 +142,7 @@ ruleTester.run('check-test-definitions', rule, {
       });
       `,
       filename: 'test/e2e/folder/file.ts',
-      errors: [{message: rule.meta.messages.extraBugId}],
+      errors: [{messageId: 'extraBugId'}],
     },
     {
       code: `import {describe, it} from '../../shared/mocha-extensions.js';
@@ -154,10 +150,7 @@ ruleTester.run('check-test-definitions', rule, {
       });
       `,
       filename: 'test/e2e/folder/file.ts',
-      errors: [
-        {message: rule.meta.messages.missingBugId},
-        {message: rule.meta.messages.comment},
-      ],
+      errors: [{messageId: 'missingBugId'}, {messageId: 'comment'}],
     },
     {
       code: `import {describe, it} from '../../shared/mocha-extensions.js';
@@ -167,10 +160,7 @@ ruleTester.run('check-test-definitions', rule, {
       });
       `,
       filename: 'test/e2e/folder/file.ts',
-      errors: [
-        {message: rule.meta.messages.missingBugId},
-        {message: rule.meta.messages.comment},
-      ],
+      errors: [{messageId: 'missingBugId'}, {messageId: 'comment'}],
     },
   ],
 });

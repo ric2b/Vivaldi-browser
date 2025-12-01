@@ -30,6 +30,12 @@ std::string InvocationSourceToString(
       return "FindInPage";
     case LensOverlayInvocationSource::kOmnibox:
       return "Omnibox";
+    case LensOverlayInvocationSource::kLVFShutterButton:
+      return "LVFShutterButton";
+    case LensOverlayInvocationSource::kLVFGallery:
+      return "LVFGallery";
+    case LensOverlayInvocationSource::kContextMenu:
+      return "ContextMenu";
   }
 }
 
@@ -57,6 +63,8 @@ std::string MimeTypeToMetricString(lens::MimeType mime_type) {
       return "Html";
     case lens::MimeType::kPlainText:
       return "PlainText";
+    case lens::MimeType::kAnnotatedPageContent:
+      return "AnnotatedPageContent";
     case lens::MimeType::kImage:
       return "Image";
     case lens::MimeType::kVideo:
@@ -367,6 +375,12 @@ void RecordTimeToFirstInteraction(
       // without the user having to interact with the overlay. Time to first
       // interaction in this case is essentially zero.
       break;
+    case LensOverlayInvocationSource::kLVFShutterButton:
+    case LensOverlayInvocationSource::kLVFGallery:
+    case LensOverlayInvocationSource::kContextMenu:
+      // Not recorded since for LVF and context menu invocation the first
+      // interaction is done automatically by autoselection.
+      break;
     case lens::LensOverlayInvocationSource::kToolbar:
       event.SetToolbar(time_to_first_interaction.InMilliseconds());
       break;
@@ -465,13 +479,13 @@ void RecordDocumentSizeBytes(lens::MimeType page_content_type,
                              size_t document_size_bytes) {
   const auto sliced_invoked_histogram_name =
       "Lens.Overlay.ByPageContentType." +
-      MimeTypeToMetricString(page_content_type) + ".DocumentSize";
-  base::UmaHistogramMemoryKB(sliced_invoked_histogram_name,
-                             document_size_bytes / 1000);
+      MimeTypeToMetricString(page_content_type) + ".DocumentSize2";
+  base::UmaHistogramCustomCounts(sliced_invoked_histogram_name,
+                                 document_size_bytes / 1000, 1, 100000, 100);
 }
 
 void RecordPdfPageCount(uint32_t page_count) {
-  base::UmaHistogramCounts1000("Lens.Overlay.ByPageContentType.Pdf.PageCount",
+  base::UmaHistogramCounts10000("Lens.Overlay.ByPageContentType.Pdf.PageCount",
                                page_count);
 }
 

@@ -74,11 +74,6 @@ export class SettingsLiveCaptionElement extends SettingsLiveCaptionElementBase {
 
   static get properties() {
     return {
-      prefs: {
-        type: Object,
-        notify: true,
-      },
-
       /**
        * The subtitle to display under the Live Caption heading. Generally, this
        * is a generic subtitle describing the feature. While the SODA model is
@@ -252,7 +247,7 @@ export class SettingsLiveCaptionElement extends SettingsLiveCaptionElementBase {
     this.$.menu.get().close();
     this.installedLanguagePacks_ = this.installedLanguagePacks_.filter(
         languagePack => languagePack.code !== this.detailLanguage_!.code);
-    this.browserProxy_.removeLanguagePack(this.detailLanguage_!.code);
+    this.browserProxy_.removeLanguagePack(this.detailLanguage_.code);
 
     if (this.installedLanguagePacks_.length === 0) {
       this.setPrefValue('accessibility.captions.live_caption_enabled', false);

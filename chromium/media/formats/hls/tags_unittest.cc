@@ -9,12 +9,14 @@
 #include <optional>
 #include <string_view>
 #include <utility>
+#include <variant>
 
 #include "base/location.h"
 #include "base/strings/string_number_conversions.h"
 #include "media/base/media_serializers.h"
 #include "media/formats/hls/items.h"
 #include "media/formats/hls/parse_status.h"
+#include "media/formats/hls/quirks.h"
 #include "media/formats/hls/source_string.h"
 #include "media/formats/hls/test_util.h"
 #include "media/formats/hls/variable_dictionary.h"
@@ -116,7 +118,7 @@ void RunTagIdenficationTest(
   ASSERT_TRUE(item_result.has_value()) << from.ToString();
 
   auto item = std::move(item_result).value();
-  auto* tag = absl::get_if<TagItem>(&item);
+  auto* tag = std::get_if<TagItem>(&item);
   ASSERT_NE(tag, nullptr) << from.ToString();
   EXPECT_EQ(tag->GetName(), name) << from.ToString();
   EXPECT_EQ(tag->GetContent().has_value(), expected_content.has_value())
@@ -1316,12 +1318,15 @@ TEST(HlsTagsTest, ParseInfTag) {
   EXPECT_TRUE(RoughlyEqual(result.tag.duration, base::Seconds(12.0)));
   EXPECT_EQ(result.tag.title.Str(), "asdfsdf   ");
 
-  // By Spec, this should be an error, but alas, feral manifests exists and
-  // often lack the trailing comma emblematic of their domesticated brethren.
-  // ErrorTest<InfTag>("123", ParseStatusCode::kMalformedTag);
-  result = OkTest<InfTag>("123");
-  EXPECT_TRUE(RoughlyEqual(result.tag.duration, base::Seconds(123)));
-  EXPECT_EQ(result.tag.title.Str(), "");
+  if (HLSQuirks::AllowMissingSegmentInfCommas()) {
+    result = OkTest<InfTag>("123");
+    EXPECT_TRUE(RoughlyEqual(result.tag.duration, base::Seconds(123)));
+    EXPECT_EQ(result.tag.title.Str(), "");
+  } else {
+    // By Spec, this should be an error, but alas, feral manifests exist and
+    // often lack the trailing comma emblematic of their domesticated brethren.
+    ErrorTest<InfTag>("123", ParseStatusCode::kMalformedTag);
+  }
 
   // Test some invalid tags
   ErrorTest<InfTag>(std::nullopt, ParseStatusCode::kMalformedTag);

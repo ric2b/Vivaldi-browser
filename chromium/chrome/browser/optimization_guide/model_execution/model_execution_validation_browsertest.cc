@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "base/strings/strcat.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
 #include "build/chromeos_buildflags.h"
@@ -51,23 +52,6 @@ class ModelExecutionValidationBrowserTestBase : public InProcessBrowserTest {
     InProcessBrowserTest::SetUp();
   }
 
-  void SetUpOnMainThread() override {
-    InProcessBrowserTest::SetUpOnMainThread();
-    identity_test_env_adaptor_ =
-        std::make_unique<IdentityTestEnvironmentProfileAdaptor>(
-            browser()->profile());
-    host_resolver()->AddRule("*", "127.0.0.1");
-  }
-
-  void SetUpInProcessBrowserTestFixture() override {
-    create_services_subscription_ =
-        BrowserContextDependencyManager::GetInstance()
-            ->RegisterCreateServicesCallbackForTesting(
-                base::BindRepeating(&ModelExecutionValidationBrowserTestBase::
-                                        OnWillCreateBrowserContextServices,
-                                    base::Unretained(this)));
-  }
-
   void SetUpCommandLine(base::CommandLine* cmd) override {
     cmd->AppendSwitchASCII(
         switches::kOptimizationGuideServiceModelExecutionURL,
@@ -76,6 +60,21 @@ class ModelExecutionValidationBrowserTestBase : public InProcessBrowserTest {
                 GURL(kOptimizationGuideServiceModelExecutionDefaultURL).host(),
                 "/")
             .spec());
+  }
+
+  void SetUpBrowserContextKeyedServices(
+      content::BrowserContext* context) override {
+    InProcessBrowserTest::SetUpBrowserContextKeyedServices(context);
+    IdentityTestEnvironmentProfileAdaptor::
+        SetIdentityTestEnvironmentFactoriesOnBrowserContext(context);
+  }
+
+  void SetUpOnMainThread() override {
+    InProcessBrowserTest::SetUpOnMainThread();
+    identity_test_env_adaptor_ =
+        std::make_unique<IdentityTestEnvironmentProfileAdaptor>(
+            browser()->profile());
+    host_resolver()->AddRule("*", "127.0.0.1");
   }
 
   void TearDownOnMainThread() override {
@@ -119,8 +118,8 @@ class ModelExecutionValidationBrowserTestBase : public InProcessBrowserTest {
     string_response.set_value("test_response");
     proto::ExecuteResponse execute_response;
     proto::Any* any_metadata = execute_response.mutable_response_metadata();
-    any_metadata->set_type_url("type.googleapis.com/" +
-                               string_response.GetTypeName());
+    any_metadata->set_type_url(
+        base::StrCat({"type.googleapis.com/", string_response.GetTypeName()}));
     string_response.SerializeToString(any_metadata->mutable_value());
 
     std::string serialized_response;
@@ -128,11 +127,6 @@ class ModelExecutionValidationBrowserTestBase : public InProcessBrowserTest {
     response->set_code(net::HTTP_OK);
     response->set_content(serialized_response);
     return std::move(response);
-  }
-
-  void OnWillCreateBrowserContextServices(content::BrowserContext* context) {
-    IdentityTestEnvironmentProfileAdaptor::
-        SetIdentityTestEnvironmentFactoriesOnBrowserContext(context);
   }
 
   base::test::ScopedFeatureList scoped_feature_list_;
@@ -146,7 +140,6 @@ class ModelExecutionValidationBrowserTestBase : public InProcessBrowserTest {
   // Identity test support.
   std::unique_ptr<IdentityTestEnvironmentProfileAdaptor>
       identity_test_env_adaptor_;
-  base::CallbackListSubscription create_services_subscription_;
 };
 
 class ModelExecutionValidationBrowserTest

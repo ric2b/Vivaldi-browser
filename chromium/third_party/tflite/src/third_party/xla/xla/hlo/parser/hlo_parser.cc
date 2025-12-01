@@ -275,6 +275,7 @@ class HloParserImpl : public HloParser {
   ParseConvolutionDimensionNumbersOnly();
   absl::StatusOr<PaddingConfig> ParsePaddingConfigOnly();
   absl::StatusOr<std::vector<ReplicaGroup>> ParseReplicaGroupsOnly();
+  absl::StatusOr<CollectiveDeviceList> ParseCollectiveDeviceListOnly();
 
  private:
   // Types of attributes.
@@ -1472,18 +1473,37 @@ bool HloParserImpl::ParseInstructionRhs(HloComputation::Builder* builder,
   }
   if (metadata) {
     instruction->set_metadata(*metadata);
+    if (instruction->IsAsynchronous()) {
+      instruction->async_wrapped_instruction()->set_metadata(*metadata);
+    }
   }
   if (original_value) {
     instruction->set_original_value(*original_value);
+    if (instruction->IsAsynchronous()) {
+      instruction->async_wrapped_instruction()->set_original_value(
+          *original_value);
+    }
   }
   if (backend_config) {
-    instruction->set_raw_backend_config_string(std::move(*backend_config));
+    instruction->set_raw_backend_config_string(*backend_config);
+    if (instruction->IsAsynchronous()) {
+      instruction->async_wrapped_instruction()->set_raw_backend_config_string(
+          *backend_config);
+    }
   }
   if (frontend_attributes) {
     instruction->set_frontend_attributes(*frontend_attributes);
+    if (instruction->IsAsynchronous()) {
+      instruction->async_wrapped_instruction()->set_frontend_attributes(
+          *frontend_attributes);
+    }
   }
   if (statistics_viz) {
     instruction->set_statistics_viz(*statistics_viz);
+    if (instruction->IsAsynchronous()) {
+      instruction->async_wrapped_instruction()->set_statistics_viz(
+          *statistics_viz);
+    }
   }
 
   return AddInstruction(name, instruction, name_loc);
@@ -2679,8 +2699,9 @@ HloInstruction* HloParserImpl::CreateInstruction(  // NOLINT
         TokenError("Expected at least one operand.");
         return nullptr;
       }
-      if (!(operands.size() == 2 && operands[1]->shape().rank() == 1) &&
-          operands.size() != 1 + operands[0]->shape().rank()) {
+      if (!(operands.size() == 2 &&
+            operands[1]->shape().dimensions_size() == 1) &&
+          operands.size() != 1 + operands[0]->shape().dimensions_size()) {
         TokenError("Wrong number of operands.");
         return nullptr;
       }
@@ -2698,8 +2719,9 @@ HloInstruction* HloParserImpl::CreateInstruction(  // NOLINT
         TokenError("Expected at least two operands.");
         return nullptr;
       }
-      if (!(operands.size() == 3 && operands[2]->shape().rank() == 1) &&
-          operands.size() != 2 + operands[0]->shape().rank()) {
+      if (!(operands.size() == 3 &&
+            operands[2]->shape().dimensions_size() == 1) &&
+          operands.size() != 2 + operands[0]->shape().dimensions_size()) {
         TokenError("Wrong number of operands.");
         return nullptr;
       }
@@ -4482,7 +4504,7 @@ bool HloParserImpl::ParseDenseLiteral(Literal* literal, const Shape& shape) {
   // Cast `rank` to int because we call shape.dimensions(int rank) below, and if
   // `rank` is an int64_t, that's an implicit narrowing conversion, which is
   // implementation-defined behavior.
-  const int rank = static_cast<int>(shape.rank());
+  const int rank = static_cast<int>(shape.dimensions_size());
 
   // Create a literal with the given shape in default layout.
   *literal = LiteralUtil::CreateFromDimensions(shape.element_type(),
@@ -6315,17 +6337,17 @@ bool HloParserImpl::ParseShape(Shape* result,
       return false;
     }
     if (layout.dim_level_types_size() != 0 &&
-        layout.dim_level_types_size() != result->rank()) {
+        layout.dim_level_types_size() != result->dimensions_size()) {
       return Error(
           lexer_.GetLoc(),
           StrFormat("Dimensions size is %ld, but dim level types size is %ld.",
-                    result->rank(), layout.dim_level_types_size()));
+                    result->dimensions_size(), layout.dim_level_types_size()));
     }
-    if (layout.minor_to_major_size() != result->rank()) {
+    if (layout.minor_to_major_size() != result->dimensions_size()) {
       return Error(
           lexer_.GetLoc(),
           StrFormat("Dimensions size is %ld, but minor to major size is %ld.",
-                    result->rank(), layout.minor_to_major_size()));
+                    result->dimensions_size(), layout.minor_to_major_size()));
     }
     if (LayoutUtil::IsSparse(layout) && layout.tiles_size() > 0) {
       return Error(lexer_.GetLoc(),
@@ -7143,6 +7165,20 @@ HloParserImpl::ParseReplicaGroupsOnly() {
   return replica_groups;
 }
 
+absl::StatusOr<CollectiveDeviceList>
+HloParserImpl::ParseCollectiveDeviceListOnly() {
+  lexer_.Lex();
+  CollectiveDeviceList collective_device_list;
+  if (!ParseCollectiveDeviceList(&collective_device_list)) {
+    return InvalidArgument("Syntax error:\n%s", GetError());
+  }
+  if (lexer_.GetKind() != TokKind::kEof) {
+    return InvalidArgument(
+        "Syntax error:\nExtra content after collective device list");
+  }
+  return collective_device_list;
+}
+
 absl::StatusOr<Window> HloParserImpl::ParseWindowOnly() {
   lexer_.Lex();
   Window window;
@@ -7281,6 +7317,12 @@ absl::StatusOr<std::vector<ReplicaGroup>> ParseReplicaGroupsOnly(
     absl::string_view str) {
   HloParserImpl parser(str);
   return parser.ParseReplicaGroupsOnly();
+}
+
+absl::StatusOr<CollectiveDeviceList> ParseCollectiveDeviceListOnly(
+    absl::string_view str) {
+  HloParserImpl parser(str);
+  return parser.ParseCollectiveDeviceListOnly();
 }
 
 absl::StatusOr<Window> ParseWindow(absl::string_view str) {

@@ -18,6 +18,7 @@ include_rules = [
   "+components/global_media_controls",
   "+components/language/core/browser/pref_names.h",
   "+components/language/core/common/locale_util.h",
+  "+components/lens",
   "+components/live_caption",
   "+components/manta",
   "+components/media_message_center",
@@ -47,6 +48,7 @@ include_rules = [
   "+crypto",
   "+dbus",
   "+extensions/common/constants.h",
+  "+google_apis/gaia/gaia_auth_util.h",
   "+google_apis/gaia/gaia_id.h",
   "+gpu/config",
   "+media",
@@ -89,7 +91,9 @@ include_rules = [
   "+chromeos/ash/components/editor_menu",
   "+chromeos/ash/components/emoji",
   "+chromeos/ash/components/feature_usage",
+  "+chromeos/ash/components/geolocation",
   "+chromeos/ash/components/human_presence",
+  "+chromeos/ash/components/install_attributes",
   "+chromeos/ash/components/local_search_service",
   "+chromeos/ash/components/login/auth",
   "+chromeos/ash/components/mojo_service_manager",
@@ -140,6 +144,11 @@ include_rules = [
   "+chromeos/strings",
   "+chromeos/ui",
   "+chromeos/utils",
+
+  # ash/ should not depend on chromeos/ash/experiences, because ash is
+  # expected to provide basic UI functions to implement OS specific features
+  # (in chromeos/ash/experiences).
+  "-chromeos/ash/experiences",
 
   # ui/base/idle depends on SessionManagerClient so disallow it.
   "-ui/base/idle",

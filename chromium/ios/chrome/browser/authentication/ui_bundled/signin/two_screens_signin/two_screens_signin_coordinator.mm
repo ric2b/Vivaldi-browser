@@ -40,7 +40,7 @@ using base::UserMetricsAction;
 
   // This can be either the SigninScreenCoordinator or the
   // HistorySyncCoordinator depending on which step the user is on.
-  InterruptibleChromeCoordinator* _childCoordinator;
+  ChromeCoordinator* _childCoordinator;
 
   // The navigation controller used to present the views.
   UINavigationController* _navigationController;
@@ -66,10 +66,9 @@ using base::UserMetricsAction;
     CHECK_NE(accessPoint, signin_metrics::AccessPoint::kStartPage);
     _promoAction = promoAction;
     signin::IdentityManager* identityManager =
-        IdentityManagerFactory::GetForProfile(self.browser->GetProfile());
+        IdentityManagerFactory::GetForProfile(self.profile);
     ChromeAccountManagerService* accountManagerService =
-        ChromeAccountManagerServiceFactory::GetForProfile(
-            self.browser->GetProfile());
+        ChromeAccountManagerServiceFactory::GetForProfile(self.profile);
     _upgradeSigninLogger =
         [[UpgradeSigninLogger alloc] initWithAccessPoint:accessPoint
                                              promoAction:promoAction
@@ -104,12 +103,7 @@ using base::UserMetricsAction;
 
 - (void)stop {
   if (_navigationController) {
-    __block BOOL completionBlockCalled = NO;
-    [self interruptWithAction:SynchronousStopAction()
-                   completion:^{
-                     completionBlockCalled = YES;
-                   }];
-    CHECK(completionBlockCalled);
+    [self interruptAnimated:NO];
   }
   [_upgradeSigninLogger disconnect];
   _upgradeSigninLogger = nil;
@@ -132,7 +126,7 @@ using base::UserMetricsAction;
 - (void)finishPresentingScreens {
   __weak __typeof(self) weakSelf = self;
   AuthenticationService* authService =
-      AuthenticationServiceFactory::GetForProfile(self.browser->GetProfile());
+      AuthenticationServiceFactory::GetForProfile(self.profile);
   id<SystemIdentity> identity =
       authService->GetPrimaryIdentity(signin::ConsentLevel::kSignin);
   ProceduralBlock completion = ^{
@@ -158,8 +152,7 @@ using base::UserMetricsAction;
 }
 
 // Creates a screen coordinator according to `type`.
-- (InterruptibleChromeCoordinator*)createChildCoordinatorWithScreenType:
-    (ScreenType)type {
+- (ChromeCoordinator*)createChildCoordinatorWithScreenType:(ScreenType)type {
   switch (type) {
     case kSignIn:
       return [[SigninScreenCoordinator alloc]
@@ -180,6 +173,7 @@ using base::UserMetricsAction;
     case kDefaultBrowserPromo:
     case kChoice:
     case kDockingPromo:
+    case kBestFeatures:
     case kStepsCompleted:
       break;
   }
@@ -214,67 +208,20 @@ using base::UserMetricsAction;
   [self presentScreen:[_screenProvider nextScreenType]];
 }
 
-#pragma mark - SigninCoordinator
+#pragma mark - InterruptibleChromeCoordinator
 
-- (void)interruptWithAction:(SigninCoordinatorInterrupt)action
-                 completion:(ProceduralBlock)completion {
-  __weak __typeof(self) weakSelf = self;
-  __weak __typeof(_navigationController) weakNavigationController =
-      _navigationController;
-  ProceduralBlock finishCompletion = ^() {
-    [weakSelf finishWithResult:SigninCoordinatorResultInterrupted identity:nil];
-    if (completion) {
-      completion();
-    }
-  };
-  BOOL animated = NO;
-  switch (action) {
-    case SigninCoordinatorInterrupt::UIShutdownNoDismiss: {
-      CHECK(!IsInterruptibleCoordinatorAlwaysDismissedEnabled(),
-            base::NotFatalUntil::M136);
-      [_childCoordinator
-          interruptWithAction:SigninCoordinatorInterrupt::UIShutdownNoDismiss
-                   completion:^{
-                     [weakNavigationController.presentingViewController
-                         dismissViewControllerAnimated:NO
-                                            completion:nil];
-                     finishCompletion();
-                   }];
-      return;
-    }
-    case SigninCoordinatorInterrupt::DismissWithoutAnimation: {
-      animated = NO;
-      break;
-    }
-    case SigninCoordinatorInterrupt::DismissWithAnimation: {
-      animated = YES;
-      break;
-    }
-  }
-
-  ProceduralBlock signinCompletion = ^{
-    UIViewController* presentingViewController =
-        weakNavigationController.presentingViewController;
-    if (presentingViewController) {
-      if (IsInterruptibleCoordinatorStoppedSynchronouslyEnabled()) {
-        [presentingViewController dismissViewControllerAnimated:animated
-                                                     completion:nil];
-        finishCompletion();
-      } else {
-        [presentingViewController
-            dismissViewControllerAnimated:animated
-                               completion:finishCompletion];
-      }
-    } else {
-      finishCompletion();
-    }
-  };
-
+- (void)interruptAnimated:(BOOL)animated {
   // Interrupt the child coordinator UI first before dismissing the new
   // sign-in navigation controller.
-  [_childCoordinator
-      interruptWithAction:SigninCoordinatorInterrupt::DismissWithoutAnimation
-               completion:signinCompletion];
+  if ([_childCoordinator
+          conformsToProtocol:@protocol(InterruptibleChromeCoordinator)]) {
+    [((id<InterruptibleChromeCoordinator>)_childCoordinator)
+        interruptAnimated:NO];
+  }
+  [_navigationController.presentingViewController
+      dismissViewControllerAnimated:animated
+                         completion:nil];
+  [self finishWithResult:SigninCoordinatorResultInterrupted identity:nil];
 }
 
 #pragma mark - HistorySyncCoordinatorDelegate
@@ -291,8 +238,7 @@ using base::UserMetricsAction;
 - (void)presentationControllerDidDismiss:
     (UIPresentationController*)presentationController {
   RecordAction(UserMetricsAction("Signin_TwoScreens_SwipeDismiss"));
-  [self interruptWithAction:SigninCoordinatorInterrupt::DismissWithoutAnimation
-                 completion:nil];
+  [self interruptAnimated:NO];
 }
 
 #pragma mark - NSObject

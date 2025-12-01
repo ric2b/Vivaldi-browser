@@ -714,7 +714,7 @@ void SkiaOutputSurfaceImpl::MakePromiseSkImageMultiPlane(
     }
 
     skgpu::graphite::YUVABackendTextureInfo yuva_backend_info(
-        graphite_recorder_, yuva_info, texture_infos, skgpu::Mipmapped::kNo);
+        yuva_info, texture_infos, skgpu::Mipmapped::kNo);
     void* fulfill_array_ptr = std::move(fulfill_array).leak().data();
     auto image = SkImages::PromiseTextureFromYUVA(
         graphite_recorder_, yuva_backend_info, image_context->color_space(),
@@ -773,10 +773,11 @@ SkiaOutputSurfaceImpl::CreateImageContext(
     bool maybe_concurrent_reads,
     const std::optional<gpu::VulkanYCbCrInfo>& ycbcr_info,
     sk_sp<SkColorSpace> color_space,
+    GrSurfaceOrigin origin,
     bool raw_draw_if_possible) {
   return std::make_unique<ImageContextImpl>(
       mailbox, sync_token, texture_target, size, format, maybe_concurrent_reads,
-      ycbcr_info, std::move(color_space),
+      ycbcr_info, std::move(color_space), origin,
       /*is_for_render_pass=*/false, raw_draw_if_possible);
 }
 
@@ -988,6 +989,7 @@ sk_sp<SkImage> SkiaOutputSurfaceImpl::MakePromiseSkImageFromRenderPass(
         mailbox, gpu::SyncToken(), GL_TEXTURE_2D, size, format,
         /*maybe_concurrent_reads=*/false,
         /*ycbcr_info=*/std::nullopt, std::move(color_space),
+        kTopLeft_GrSurfaceOrigin,
         /*is_for_render_pass=*/true);
   }
   if (!image_context->has_image()) {
@@ -1064,12 +1066,15 @@ void SkiaOutputSurfaceImpl::ScheduleOverlays(
                  /*make_current=*/false, /*need_framebuffer=*/false);
 }
 
-void SkiaOutputSurfaceImpl::SetFrameRate(float frame_rate) {
+#if BUILDFLAG(IS_ANDROID)
+void SkiaOutputSurfaceImpl::SetFrameRate(
+    gfx::SurfaceControlFrameRate frame_rate) {
   auto task = base::BindOnce(&SkiaOutputSurfaceImplOnGpu::SetFrameRate,
                              base::Unretained(impl_on_gpu_.get()), frame_rate);
   EnqueueGpuTask(std::move(task), {}, /*make_current=*/false,
                  /*need_framebuffer=*/false);
 }
+#endif
 
 void SkiaOutputSurfaceImpl::SetCapabilitiesForTesting(
     gfx::SurfaceOrigin output_surface_origin) {

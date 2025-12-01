@@ -36,12 +36,12 @@
 <translation id="1589055389569595240">Vis stavekontroll og grammatikk</translation>
 <translation id="159359590073980872">Bildebuffer</translation>
 <translation id="1601560923496285236">Bruk</translation>
-<translation id="1603914832182249871">(privatmodus)</translation>
+<translation id="1603914832182249871">(privatvindu)</translation>
 <translation id="1627276047960621195">Filbeskrivelser</translation>
 <translation id="1654713139320245449">Fant ingen enheter å caste til. Trenger du hjelp?</translation>
 <translation id="166278006618318542">Algoritme for subjektets offentlige nøkkel</translation>
 <translation id="1682548588986054654">Nytt privatvindu</translation>
-<translation id="1708338024780164500">(Inaktiv)</translation>
+<translation id="1708338024780164500">(inaktiv)</translation>
 <translation id="1723824996674794290">&amp;Nytt vindu</translation>
 <translation id="1729533290416704613">Den kontrollerer også hvilken side som vises når du søker fra adressefeltet.</translation>
 <translation id="174123615272205933">Tilpasset</translation>
@@ -170,6 +170,7 @@
 <translation id="3838085852053358637">Utvidelsen kunne ikke lastes inn</translation>
 <translation id="383891835335927981">Ingen nettsteder er zoomet inn eller ut</translation>
 <translation id="385051799172605136">Tilbake</translation>
+<translation id="3858860766373142691">Navn</translation>
 <translation id="3861977424605124250">Vis ved oppstart</translation>
 <translation id="3867944738977021751">Sertifikatfelter</translation>
 <translation id="3905761538810670789">Reparer app</translation>
@@ -205,7 +206,7 @@
 <translation id="4309420042698375243"><ph name="NUM_KILOBYTES" />K (<ph name="NUM_KILOBYTES_LIVE" />K aktivt)</translation>
 <translation id="431076611119798497">&amp;Detaljer</translation>
 <translation id="4345587454538109430">Konfigurer...</translation>
-<translation id="4348766275249686434">Samle feil</translation>
+<translation id="4348766275249686434">Samle inn feil</translation>
 <translation id="4384652540891215547">Aktiver utvidelsen</translation>
 <translation id="4394049700291259645">Deaktiver</translation>
 <translation id="4409697491990005945">Marger</translation>
@@ -275,7 +276,7 @@
 <translation id="5521078259930077036">Er dette hjemmesiden du forventet?</translation>
 <translation id="5542132724887566711">Profil</translation>
 <translation id="5556459405103347317">Last igjen</translation>
-<translation id="5575473780076478375">Privatmodus-utvidelse: <ph name="EXTENSION_NAME" /></translation>
+<translation id="5575473780076478375">Utvidelse i privatvindu: <ph name="EXTENSION_NAME" /></translation>
 <translation id="5582839680698949063">Hovedmeny</translation>
 <translation id="5614553682702429503">Lagre passord?</translation>
 <translation id="5623842676595125836">Logg</translation>
@@ -415,6 +416,7 @@ Ta godt vare på nøkkelfilen. Du vil trenge den for å lage nye versjoner av ut
 <translation id="8004582292198964060">Nettleser</translation>
 <translation id="8018313076035239964">Kontroller hvilken informasjon nettsider kan bruke, og hvilket innhold de kan vise deg</translation>
 <translation id="8071432093239591881">Skriv ut som bilde</translation>
+<translation id="8118448640060360549">{EXTENSIONS_COUNT,plural, =1{# bokmerke}other{# bokmerker}}</translation>
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" />K</translation>
 <translation id="8212008074015601248">{NUM_DOWNLOAD, plural,
         =1 {Nedlasting pågår} other {Nedlastinger pågår}}</translation>

@@ -110,6 +110,11 @@ chromium-metrics-reviews@google.com.
 
 <!-- LINT.ThenChange(/components/sync_bookmarks/bookmark_model_merger.cc:BookmarksGUIDDuplicates) -->
 
+<enum name="BooleanIsFirstSync">
+  <int value="0" label="Not first sync"/>
+  <int value="1" label="First sync"/>
+</enum>
+
 <enum name="BooleanIsSignedIn">
   <int value="0" label="Not signed in"/>
   <int value="1" label="Signed in"/>
@@ -164,6 +169,16 @@ chromium-metrics-reviews@google.com.
 </enum>
 
 <!-- LINT.ThenChange(/components/sync_bookmarks/bookmark_specifics_conversions.cc:InvalidBookmarkSpecificsError) -->
+
+<!-- LINT.IfChange(NudgedUpdateResult) -->
+
+<enum name="NudgedUpdateResult">
+  <int value="0" label="Success"/>
+  <int value="1" label="Empty response"/>
+  <int value="2" label="Failed to download data"/>
+</enum>
+
+<!-- LINT.ThenChange(/components/sync/engine/data_type_worker.cc:NudgedUpdateResult) -->
 
 <!-- LINT.IfChange(OutgoingPasswordSharingInvitationCommitError) -->
 
@@ -341,6 +356,8 @@ chromium-metrics-reviews@google.com.
   <int value="79" label="SafeBrowsingEnhanced"/>
   <int value="80" label="FacilitatedPaymentsEwallet"/>
   <int value="81" label="AutofillBnplEnabled"/>
+  <int value="82" label="AutofillHasSeenBnpl"/>
+  <int value="83" label="AutomaticPasskeyUpgrades"/>
 <!-- LINT.ThenChange(/components/sync_preferences/common_syncable_prefs_database.cc:CommonSyncablePref)-->
 
 <!-- LINT.IfChange(ChromeSyncablePref) -->
@@ -701,6 +718,10 @@ chromium-metrics-reviews@google.com.
       label="OfficeMoveConfirmationShownForCloudToDriveSyncable"/>
   <int value="100322"
       label="OfficeMoveConfirmationShownForCloudToOneDriveSyncable"/>
+  <int value="100323" label="PinnedCastMigrationComplete"/>
+  <int value="100324" label="AccessibilityAXTreeFixingEnabled"/>
+  <int value="100325" label="TabSearchMigrationComplete"/>
+  <int value="100326" label="ReadAloudPlaybackMode"/>
 <!-- LINT.ThenChange(/chrome/browser/sync/prefs/chrome_syncable_prefs_database.cc:ChromeSyncablePref)-->
 
 <!-- LINT.IfChange(IosSyncablePref) -->
@@ -878,6 +899,8 @@ chromium-metrics-reviews@google.com.
   <int value="66" label="Product Comparison"/>
   <int value="67" label="Cookies"/>
   <int value="68" label="Plus Address Settings"/>
+  <int value="69" label="Autofill Valuable"/>
+  <int value="70" label="Shared Tab Group Account Data"/>
 
   <int value="300" label="Notes"/>
 </enum>
@@ -1288,16 +1311,6 @@ chromium-metrics-reviews@google.com.
 </enum>
 
 <!-- LINT.ThenChange(/components/trusted_vault/trusted_vault_histograms.h:TrustedVaultHintDegradedRecoverabilityChangedReason) -->
-
-<!-- LINT.IfChange(TrustedVaultRecoverabilityStatus) -->
-
-<enum name="TrustedVaultRecoverabilityStatus">
-  <int value="0" label="Not degraded"/>
-  <int value="1" label="Degraded"/>
-  <int value="2" label="Error"/>
-</enum>
-
-<!-- LINT.ThenChange(/components/trusted_vault/trusted_vault_connection.h:TrustedVaultRecoverabilityStatus) -->
 
 <!-- LINT.IfChange(TrustedVaultUserActionTrigger) -->
 

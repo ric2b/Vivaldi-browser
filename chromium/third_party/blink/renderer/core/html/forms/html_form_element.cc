@@ -28,6 +28,7 @@
 #include <limits>
 
 #include "base/auto_reset.h"
+#include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/common/security_context/insecure_request_policy.h"
 #include "third_party/blink/public/mojom/security_context/insecure_request_policy.mojom-blink.h"
 #include "third_party/blink/public/web/web_form_related_change_type.h"
@@ -830,6 +831,18 @@ void HTMLFormElement::CollectListedElements(
   }
 }
 
+const Node* HTMLFormElement::GetListedElementsScope() const {
+  HTMLFormElement* mutable_this = const_cast<HTMLFormElement*>(this);
+  Node* scope = mutable_this;
+  if (has_elements_associated_by_parser_) {
+    scope = &NodeTraversal::HighestAncestorOrSelf(*mutable_this);
+  }
+  if (isConnected() && has_elements_associated_by_form_attribute_) {
+    scope = &GetTreeScope().RootNode();
+  }
+  return scope;
+}
+
 const ListedElement::List& HTMLFormElement::CollectAndCacheListedElements(
     bool include_shadow_trees) const {
   bool collect_shadow_inputs =
@@ -837,13 +850,9 @@ const ListedElement::List& HTMLFormElement::CollectAndCacheListedElements(
 
   if (listed_elements_are_dirty_ || collect_shadow_inputs) {
     HTMLFormElement* mutable_this = const_cast<HTMLFormElement*>(this);
-    Node* scope = mutable_this;
-    if (has_elements_associated_by_parser_)
-      scope = &NodeTraversal::HighestAncestorOrSelf(*mutable_this);
-    if (isConnected() && has_elements_associated_by_form_attribute_)
-      scope = &GetTreeScope().RootNode();
     mutable_this->listed_elements_.clear();
     mutable_this->listed_elements_including_shadow_trees_.clear();
+    const Node* scope = GetListedElementsScope();
     CollectListedElements(
         scope, mutable_this->listed_elements_,
         collect_shadow_inputs

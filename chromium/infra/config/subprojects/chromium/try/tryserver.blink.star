@@ -18,6 +18,7 @@ try_.defaults.set(
     pool = try_.DEFAULT_POOL,
     cores = 8,
     execution_timeout = try_.DEFAULT_EXECUTION_TIMEOUT,
+    reclient_enabled = False,
     service_account = try_.DEFAULT_SERVICE_ACCOUNT,
     siso_enabled = True,
     siso_project = siso.project.DEFAULT_UNTRUSTED,
@@ -210,7 +211,7 @@ try_.builder(
         ),
     ),
     builder_config_settings = builder_config.try_settings(
-        retry_failed_shards = True,
+        retry_failed_shards = False,
     ),
     gn_args = gn_args.config(
         configs = [
@@ -252,6 +253,7 @@ try_.builder(
     ),
     builderless = True,
     os = os.WINDOWS_ANY,
+    siso_remote_linking = True,
 )
 
 try_.builder(

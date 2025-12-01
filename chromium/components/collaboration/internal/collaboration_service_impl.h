@@ -10,9 +10,13 @@
 #include "base/memory/weak_ptr.h"
 #include "base/scoped_observation.h"
 #include "components/collaboration/public/collaboration_service.h"
+#include "components/prefs/pref_service.h"
+#include "components/signin/public/identity_manager/account_managed_status_finder.h"
 #include "components/signin/public/identity_manager/identity_manager.h"
 #include "components/signin/public/identity_manager/primary_account_change_event.h"
 #include "components/sync/service/sync_service_observer.h"
+
+class PrefService;
 
 namespace data_sharing {
 class DataSharingService;
@@ -38,7 +42,8 @@ class CollaborationServiceImpl : public CollaborationService,
       tab_groups::TabGroupSyncService* tab_group_sync_service,
       data_sharing::DataSharingService* data_sharing_service,
       signin::IdentityManager* identity_manager,
-      syncer::SyncService* sync_service);
+      syncer::SyncService* sync_service,
+      PrefService* profile_prefs);
   ~CollaborationServiceImpl() override;
 
   // CollaborationService implementation.
@@ -46,15 +51,22 @@ class CollaborationServiceImpl : public CollaborationService,
   void AddObserver(CollaborationService::Observer* observer) override;
   void RemoveObserver(CollaborationService::Observer* observer) override;
   void StartJoinFlow(std::unique_ptr<CollaborationControllerDelegate> delegate,
-                     const GURL& url) override;
+                     const GURL& url,
+                     CollaborationServiceJoinEntryPoint entry) override;
   void StartShareOrManageFlow(
       std::unique_ptr<CollaborationControllerDelegate> delegate,
-      const tab_groups::EitherGroupID& group_id) override;
+      const tab_groups::EitherGroupID& either_id,
+      CollaborationServiceShareOrManageEntryPoint entry) override;
+  void CancelAllFlows(base::OnceCallback<void()> finish_callback) override;
   ServiceStatus GetServiceStatus() override;
   data_sharing::MemberRole GetCurrentUserRoleForGroup(
       const data_sharing::GroupId& group_id) override;
   std::optional<data_sharing::GroupData> GetGroupData(
       const data_sharing::GroupId& group_id) override;
+  void DeleteGroup(const data_sharing::GroupId& group_id,
+                   base::OnceCallback<void(bool)> callback) override;
+  void LeaveGroup(const data_sharing::GroupId& group_id,
+                  base::OnceCallback<void(bool)> callback) override;
 
   // SyncServiceObserver implementation.
   void OnStateChanged(syncer::SyncService* sync) override;
@@ -84,13 +96,16 @@ class CollaborationServiceImpl : public CollaborationService,
   SigninStatus GetSigninStatus();
   CollaborationStatus GetCollaborationStatus();
   void RefreshServiceStatus();
-  void ExitConflictingFlows(base::OnceCallback<void()> finish_callback);
   void StartJoinFlowInternal(
       std::unique_ptr<CollaborationControllerDelegate> delegate,
       const data_sharing::GroupToken& token);
   void StartShareOrManageFlowInternal(
       std::unique_ptr<CollaborationControllerDelegate> delegate,
       const tab_groups::EitherGroupID& group_id);
+  void OnCollaborationGroupRemoved(
+      const data_sharing::GroupId& group_id,
+      base::OnceCallback<void(bool)> callback,
+      data_sharing::DataSharingService::PeopleGroupActionOutcome result);
 
   ServiceStatus current_status_;
   base::ScopedObservation<syncer::SyncService, syncer::SyncServiceObserver>
@@ -99,6 +114,8 @@ class CollaborationServiceImpl : public CollaborationService,
                           signin::IdentityManager::Observer>
       identity_manager_observer_{this};
   base::ObserverList<CollaborationService::Observer> observers_;
+  std::unique_ptr<signin::AccountManagedStatusFinder>
+      account_managed_status_finder_;
 
   // Service providing information about tabs and tab groups.
   const raw_ptr<tab_groups::TabGroupSyncService> tab_group_sync_service_;
@@ -111,6 +128,8 @@ class CollaborationServiceImpl : public CollaborationService,
 
   // Service providing information about sync.
   const raw_ptr<syncer::SyncService> sync_service_;
+
+  const raw_ptr<PrefService> profile_prefs_;
 
   // Started flows.
   // Join controllers: <GroupId, CollaborationController>

@@ -65,6 +65,7 @@ limitations under the License.
 #include "tensorflow/compiler/mlir/tensorflow/utils/dump_mlir_util.h"
 #include "tensorflow/compiler/mlir/tools/kernel_gen/transforms/passes.h"
 #include "tensorflow/compiler/mlir/tools/kernel_gen/transforms/rewriters.h"
+#include "xla/mlir_hlo/deallocation/transforms/passes.h"
 #include "xla/mlir_hlo/mhlo/IR/hlo_ops.h"
 #include "xla/mlir_hlo/mhlo/transforms/passes.h"
 #include "xla/mlir_hlo/transforms/gpu_passes.h"
@@ -274,14 +275,13 @@ absl::Status LowerLoopsToGPU(mlir::ModuleOp module, bool index_64bit,
   pm.addNestedPass<FuncOp>(mlir::bufferization::createPromoteBuffersToStackPass(
       [](Value alloc) { return IsSmallAlloc(alloc); }));
   // Free all temporaries,
-  pm.addNestedPass<FuncOp>(
-      ::mlir::bufferization::createBufferDeallocationPass());
+  pm.addNestedPass<FuncOp>(mlir::deallocation::createBufferDeallocationPass());
   pm.addPass(mlir::createCanonicalizerPass());
   pm.addNestedPass<FuncOp>(::mlir::createConvertLinalgToLoopsPass());
 
   // Apply the mapping and go to GPU. We cannot do this earlier as the GPU
   // dialect requires memrefs.
-  pm.addNestedPass<FuncOp>(mlir::createParallelLoopToGpuPass());
+  pm.addNestedPass<FuncOp>(mlir::createConvertParallelLoopToGpuPass());
 
   // Some basic cleanup.
   pm.addNestedPass<FuncOp>(::mlir::createCanonicalizerPass());
@@ -289,17 +289,18 @@ absl::Status LowerLoopsToGPU(mlir::ModuleOp module, bool index_64bit,
   // Make loops with min bounds into a conditional plus static bounds.
   pm.addNestedPass<FuncOp>(mlir::createForLoopSpecializationPass());
   // Take launches to launches with kernels.
-  pm.addPass(mlir::createGpuLauchSinkIndexComputationsPass());
+  pm.addPass(mlir::createGpuLaunchSinkIndexComputationsPass());
   const std::string gpuDataLayoutSpec =
       index_64bit ? "#dlti.dl_spec<#dlti.dl_entry<index,64:i64>>"
                   : "#dlti.dl_spec<#dlti.dl_entry<index,32:i32>>";
-  pm.addPass(mlir::createGpuKernelOutliningPass(gpuDataLayoutSpec));
+  pm.addPass(
+      mlir::createGpuKernelOutliningPass({.dataLayoutStr = gpuDataLayoutSpec}));
 
   pm.addPass(::mlir::createLowerAffinePass());
   // Constraints are removed as late as possible and before lowering to CFG.
   pm.addNestedPass<FuncOp>(::mlir::createConvertShapeConstraintsPass());
   pm.addNestedPass<FuncOp>(::mlir::createCanonicalizerPass());
-  pm.addPass(::mlir::createConvertSCFToCFPass());
+  pm.addPass(::mlir::createSCFToControlFlowPass());
   // Map asserts to the tensorflow framework.
   pm.addPass(mlir::kernel_gen::tf_framework::CreateRewriteTFFrameworkAssert());
   if (failed(pm.run(module))) {
@@ -335,7 +336,7 @@ absl::Status LowerKernelBodiesToLowLevelIr(mlir::ModuleOp module,
   // pm.enableVerifier(false);
   if (apply_cl_options) tensorflow::applyTensorflowAndCLOptions(pm);
   auto& kernelPm = pm.nest<::mlir::gpu::GPUModuleOp>();
-  kernelPm.addPass(::mlir::createConvertSCFToCFPass());
+  kernelPm.addPass(::mlir::createSCFToControlFlowPass());
 #if TENSORFLOW_USE_ROCM
   kernelPm.addPass(mlir::createGpuKernelToRocdlPass());
 #elif GOOGLE_CUDA

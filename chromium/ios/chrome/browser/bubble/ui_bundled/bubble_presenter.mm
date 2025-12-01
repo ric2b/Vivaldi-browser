@@ -108,8 +108,9 @@ BOOL CanGestureInProductHelpViewFitInGuide(GestureInProductHelpView* view,
   BubbleViewControllerPresenter*
       _priceNotificationsWhileBrowsingBubbleTipPresenter;
   BubbleViewControllerPresenter* _lensKeyboardPresenter;
-  BubbleViewControllerPresenter* _parcelTrackingTipBubblePresenter;
   BubbleViewControllerPresenter* _lensOverlayEntrypointBubblePresenter;
+  BubbleViewControllerPresenter* _settingsInOverflowMenuBubblePresenter;
+  BubbleViewControllerPresenter* _feedSwipeBubblePresenter;
 
   // List of existing gestural IPH views.
   GestureInProductHelpView* _pullToRefreshGestureIPH;
@@ -177,7 +178,6 @@ BOOL CanGestureInProductHelpViewFitInGuide(GestureInProductHelpView* view,
   [_whatsNewBubblePresenter dismissAnimated:NO];
   [_lensKeyboardPresenter dismissAnimated:NO];
   [_defaultPageModeTipBubblePresenter dismissAnimated:NO];
-  [_parcelTrackingTipBubblePresenter dismissAnimated:NO];
   [_lensOverlayEntrypointBubblePresenter dismissAnimated:NO];
   [self hideAllGestureInProductHelpViewsForReason:IPHDismissalReasonType::
                                                       kUnknown];
@@ -237,9 +237,7 @@ BOOL CanGestureInProductHelpViewFitInGuide(GestureInProductHelpView* view,
                                   : BubbleAlignmentBottomOrTrailing
                          text:text
         voiceOverAnnouncement:text
-                  anchorPoint:discoverFeedMenuAnchor
-                presentAction:nil
-                dismissAction:nil];
+                  anchorPoint:discoverFeedMenuAnchor];
   if (!presenter) {
     return;
   }
@@ -273,9 +271,7 @@ BOOL CanGestureInProductHelpViewFitInGuide(GestureInProductHelpView* view,
                           alignment:BubbleAlignmentTopOrLeading
                                text:text
               voiceOverAnnouncement:text
-                        anchorPoint:customizationMenuAnchor
-                      presentAction:nil
-                      dismissAction:nil];
+                        anchorPoint:customizationMenuAnchor];
   if (!presenter) {
     return;
   }
@@ -305,6 +301,7 @@ BOOL CanGestureInProductHelpViewFitInGuide(GestureInProductHelpView* view,
   BubbleViewControllerPresenter* presenter = [self
       presentBubbleForFeature:feature_engagement::kIPHFollowWhileBrowsingFeature
                     direction:arrowDirection
+                    alignment:BubbleAlignmentBottomOrTrailing
                          text:text
         voiceOverAnnouncement:l10n_util::GetNSString(
                                   IDS_IOS_FOLLOW_WHILE_BROWSING_IPH)
@@ -342,6 +339,7 @@ BOOL CanGestureInProductHelpViewFitInGuide(GestureInProductHelpView* view,
   BubbleViewControllerPresenter* presenter = [self
       presentBubbleForFeature:feature_engagement::kIPHDefaultSiteViewFeature
                     direction:arrowDirection
+                    alignment:BubbleAlignmentBottomOrTrailing
                          text:text
         voiceOverAnnouncement:l10n_util::GetNSString(
                                   IDS_IOS_DEFAULT_PAGE_MODE_TIP_VOICE_OVER)
@@ -371,6 +369,7 @@ BOOL CanGestureInProductHelpViewFitInGuide(GestureInProductHelpView* view,
   BubbleViewControllerPresenter* presenter = [self
       presentBubbleForFeature:feature_engagement::kIPHWhatsNewFeature
                     direction:arrowDirection
+                    alignment:BubbleAlignmentBottomOrTrailing
                          text:text
         voiceOverAnnouncement:l10n_util::GetNSString(IDS_IOS_WHATS_NEW_IPH_TEXT)
                   anchorPoint:toolsMenuAnchor];
@@ -400,6 +399,7 @@ BOOL CanGestureInProductHelpViewFitInGuide(GestureInProductHelpView* view,
       [self presentBubbleForFeature:
                 feature_engagement::kIPHPriceNotificationsWhileBrowsingFeature
                           direction:arrowDirection
+                          alignment:BubbleAlignmentBottomOrTrailing
                                text:text
               voiceOverAnnouncement:text
                         anchorPoint:toolsMenuAnchor];
@@ -425,37 +425,9 @@ BOOL CanGestureInProductHelpViewFitInGuide(GestureInProductHelpView* view,
                     alignment:BubbleAlignmentTopOrLeading
                          text:text
         voiceOverAnnouncement:text
-                  anchorPoint:lensButtonAnchor
-                presentAction:nil
-                dismissAction:nil];
+                  anchorPoint:lensButtonAnchor];
   if (presenter) {
     _lensKeyboardPresenter = presenter;
-  }
-}
-
-- (void)presentParcelTrackingTipBubble {
-  if (![self canPresentBubble]) {
-    return;
-  }
-
-  BubbleArrowDirection arrowDirection = BubbleArrowDirectionDown;
-  NSString* text = l10n_util::GetNSString(IDS_IOS_PARCEL_TRACKING_IPH);
-
-  CGPoint magicStackAnchor = [self anchorPointToGuide:kMagicStackGuide
-                                            direction:arrowDirection];
-
-  BubbleViewControllerPresenter* presenter = [self
-      presentBubbleForFeature:feature_engagement::kIPHiOSParcelTrackingFeature
-                    direction:arrowDirection
-                    alignment:BubbleAlignmentCenter
-                         text:text
-        voiceOverAnnouncement:text
-                  anchorPoint:magicStackAnchor
-                presentAction:nil
-                dismissAction:nil];
-
-  if (!presenter) {
-    _parcelTrackingTipBubblePresenter = presenter;
   }
 }
 
@@ -494,12 +466,51 @@ BOOL CanGestureInProductHelpViewFitInGuide(GestureInProductHelpView* view,
         voiceOverAnnouncement:text
                   anchorPoint:CGPoint(
                                   lensOverlayEntrypointAnchor.x + anchorXOffset,
-                                  lensOverlayEntrypointAnchor.y)
-                presentAction:nil
-                dismissAction:nil];
+                                  lensOverlayEntrypointAnchor.y)];
 
   if (presenter) {
     _lensOverlayEntrypointBubblePresenter = presenter;
+  }
+}
+
+- (void)presentOverflowMenuSettingsBubble {
+  if (![self canPresentBubble]) {
+    return;
+  }
+
+  // Only show on top of the NTP:
+  // If the user had opened the account menu from the NTP, chances are they were
+  // looking for settings (because that's where the account particle disc used
+  // to link), so this IPH will help them.
+  // If they had opened the account menu from anywhere else, there's no
+  // connection to settings, and so this IPH wouldn't make sense.
+  web::WebState* currentWebState = _webStateList->GetActiveWebState();
+  if (!IsUrlNtp(currentWebState->GetVisibleURL())) {
+    return;
+  }
+
+  BubbleArrowDirection arrowDirection =
+      IsSplitToolbarMode(self.rootViewController) ? BubbleArrowDirectionDown
+                                                  : BubbleArrowDirectionUp;
+  NSString* text =
+      l10n_util::GetNSString(IDS_IOS_SETTINGS_IN_OVERFLOW_MENU_IPH_TEXT);
+
+  CGPoint toolsMenuAnchor = [self anchorPointToGuide:kToolsMenuGuide
+                                           direction:arrowDirection];
+
+  // If the feature engagement tracker does not consider it valid to display
+  // the IPH, then end early to prevent the potential reassignment of the
+  // existing presenter to nil.
+  BubbleViewControllerPresenter* presenter =
+      [self presentBubbleForFeature:
+                feature_engagement::kIPHiOSSettingsInOverflowMenuBubbleFeature
+                          direction:arrowDirection
+                          alignment:BubbleAlignmentBottomOrTrailing
+                               text:text
+              voiceOverAnnouncement:text
+                        anchorPoint:toolsMenuAnchor];
+  if (presenter) {
+    _settingsInOverflowMenuBubblePresenter = presenter;
   }
 }
 
@@ -653,29 +664,63 @@ BOOL CanGestureInProductHelpViewFitInGuide(GestureInProductHelpView* view,
   _toolbarSwipeGestureIPH = toolbarSwipeGestureIPH;
 }
 
+- (void)presentFeedSwipeGestureInProductHelp {
+  // TODO(crbug.com/402803175): Present animated IPH.
+}
+
+- (void)presentFeedSwipeBubble {
+  if (![self canPresentBubble]) {
+    return;
+  }
+
+  web::WebState* currentWebState = _webStateList->GetActiveWebState();
+  if (!IsUrlNtp(currentWebState->GetVisibleURL())) {
+    return;
+  }
+
+  NSString* text = l10n_util::GetNSString(IDS_IOS_FEED_SWIPE_IPH);
+
+  CGPoint toolbarAnchor = [self anchorPointToGuide:kSecondaryToolbarGuide
+                                         direction:BubbleArrowDirectionDown];
+
+  // Tip bubble should present slightly above the toolbar/bottom of screen and
+  // not on the toolbar itself.
+  CGFloat anchorYOffset = -25;
+
+  // If the feature engagement tracker does not consider it valid to display
+  // the IPH, then end early to prevent the potential reassignment of the
+  // existing presenter to nil.
+  BubbleViewControllerPresenter* presenter = [self
+      presentBubbleForFeature:feature_engagement::kIPHiOSFeedSwipeStaticFeature
+                    direction:BubbleArrowDirectionDown
+                    alignment:BubbleAlignmentCenter
+                         text:text
+        voiceOverAnnouncement:text
+                  anchorPoint:CGPoint(toolbarAnchor.x,
+                                      toolbarAnchor.y + anchorYOffset)];
+  if (presenter) {
+    _feedSwipeBubblePresenter = presenter;
+  }
+}
+
 #pragma mark - GestureInProductHelpViewDelegate
 
 - (void)gestureInProductHelpView:(GestureInProductHelpView*)view
             didDismissWithReason:(IPHDismissalReasonType)reason {
-  const feature_engagement::Tracker::SnoozeAction snoozeAction =
-      feature_engagement::Tracker::SnoozeAction::DISMISSED;
   std::string dismissButtonTappedEvent;
   if (view == _pullToRefreshGestureIPH) {
     dismissButtonTappedEvent =
         feature_engagement::events::kIOSPullToRefreshIPHDismissButtonTapped;
-    [self featureDismissed:feature_engagement::kIPHiOSPullToRefreshFeature
-                withSnooze:snoozeAction];
+    [self featureDismissed:feature_engagement::kIPHiOSPullToRefreshFeature];
   } else if (view == _swipeBackForwardGestureIPH) {
     dismissButtonTappedEvent =
         feature_engagement::events::kIOSSwipeBackForwardIPHDismissButtonTapped;
-    [self featureDismissed:feature_engagement::kIPHiOSSwipeBackForwardFeature
-                withSnooze:snoozeAction];
+    [self featureDismissed:feature_engagement::kIPHiOSSwipeBackForwardFeature];
   } else if (view == _toolbarSwipeGestureIPH) {
     dismissButtonTappedEvent = feature_engagement::events::
         kIOSSwipeToolbarToChangeTabIPHDismissButtonTapped;
     [self featureDismissed:feature_engagement::
-                               kIPHiOSSwipeToolbarToChangeTabFeature
-                withSnooze:snoozeAction];
+                               kIPHiOSSwipeToolbarToChangeTabFeature];
   } else {
     NOTREACHED();
   }
@@ -733,12 +778,13 @@ BOOL CanGestureInProductHelpViewFitInGuide(GestureInProductHelpView* view,
 - (BubbleViewControllerPresenter*)
     presentBubbleForFeature:(const base::Feature&)feature
                   direction:(BubbleArrowDirection)direction
+                  alignment:(BubbleAlignment)alignment
                        text:(NSString*)text
       voiceOverAnnouncement:(NSString*)voiceOverAnnouncement
                 anchorPoint:(CGPoint)anchorPoint {
   return [self presentBubbleForFeature:feature
                              direction:direction
-                             alignment:BubbleAlignmentBottomOrTrailing
+                             alignment:alignment
                                   text:text
                  voiceOverAnnouncement:voiceOverAnnouncement
                            anchorPoint:anchorPoint
@@ -879,13 +925,12 @@ BOOL CanGestureInProductHelpViewFitInGuide(GestureInProductHelpView* view,
   // the feature engagement tracker will remain pointing to invalid memory if
   // its owner (the ProfileIOS) is deallocated.
   __weak BubblePresenter* weakSelf = self;
-  CallbackWithIPHDismissalReasonType dismissalCallbackWithSnoozeAction =
-      ^(IPHDismissalReasonType IPHDismissalReasonType,
-        feature_engagement::Tracker::SnoozeAction snoozeAction) {
+  CallbackWithIPHDismissalReasonType dismissalCallback =
+      ^(IPHDismissalReasonType IPHDismissalReasonType) {
         if (dismissAction) {
           dismissAction();
         }
-        [weakSelf featureDismissed:feature withSnooze:snoozeAction];
+        [weakSelf featureDismissed:feature];
       };
 
   BubbleViewControllerPresenter* bubbleViewControllerPresenter =
@@ -893,10 +938,20 @@ BOOL CanGestureInProductHelpViewFitInGuide(GestureInProductHelpView* view,
           initDefaultBubbleWithText:text
                      arrowDirection:direction
                           alignment:alignment
-                  dismissalCallback:dismissalCallbackWithSnoozeAction];
+                  dismissalCallback:dismissalCallback];
 
   bubbleViewControllerPresenter.customBubbleVisibilityDuration =
       [self bubbleVisibilityDurationForFeature:feature];
+
+  BOOL shouldDisablePanRecognizer =
+      base::FeatureList::IsEnabled(kLensOverlayDisableIPHPanGesture);
+  BOOL isLensOverlayIPH =
+      (feature.name ==
+           feature_engagement::kIPHiOSLensOverlayEscapeHatchTipFeature.name ||
+       feature.name ==
+           feature_engagement::kIPHiOSLensOverlayEntrypointTipFeature.name);
+  bubbleViewControllerPresenter.forceDisablePanGestureRecognizer =
+      shouldDisablePanRecognizer && isLensOverlayIPH;
 
   return bubbleViewControllerPresenter;
 }
@@ -977,13 +1032,11 @@ BOOL CanGestureInProductHelpViewFitInGuide(GestureInProductHelpView* view,
   return nil;
 }
 
-- (void)featureDismissed:(const base::Feature&)feature
-              withSnooze:
-                  (feature_engagement::Tracker::SnoozeAction)snoozeAction {
+- (void)featureDismissed:(const base::Feature&)feature {
   if (!_engagementTracker) {
     return;
   }
-  _engagementTracker->DismissedWithSnooze(feature, snoozeAction);
+  _engagementTracker->Dismissed(feature);
 }
 
 // Returns the custom duration of the bubble for `feature`, or 0 if there is

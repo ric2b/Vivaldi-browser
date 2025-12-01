@@ -107,9 +107,13 @@ CSSPrimitiveValue* ConsumeIntegerOrNumberCalc(
     CSSPrimitiveValue::ValueRange = CSSPrimitiveValue::ValueRange::kInteger);
 CSSPrimitiveValue* ConsumePositiveInteger(CSSParserTokenStream&,
                                           const CSSParserContext&);
-bool ConsumeNumberRaw(CSSParserTokenStream&,
-                      const CSSParserContext& context,
-                      double& result);
+// All <numbers> should allow calc() expressions, and calc() expressions are not
+// always possible to reduce to a number at parse time. This method will fail
+// for valid values like `sibling-index()` and `sign(1em - 20px)`.
+// Use ConsumeNumber() instead.
+bool ConsumeNumberRaw_DO_NOT_USE(CSSParserTokenStream&,
+                                 const CSSParserContext& context,
+                                 double& result);
 CSSPrimitiveValue* ConsumeNumber(CSSParserTokenStream&,
                                  const CSSParserContext&,
                                  CSSPrimitiveValue::ValueRange);
@@ -316,6 +320,12 @@ bool IsDefaultKeyword(StringView);
 bool IsHashIdentifier(const CSSParserToken&);
 CORE_EXPORT bool IsDashedIdent(const CSSParserToken&);
 
+// https://drafts.csswg.org/css-mixins-1/#function-rule
+inline bool IsDashedFunctionName(const CSSParserToken& token) {
+  return token.GetType() == kFunctionToken && token.Value().length() >= 3 &&
+         token.Value()[0] == '-' && token.Value()[1] == '-';
+}
+
 CSSValue* ConsumeCSSWideKeyword(CSSParserTokenStream&);
 
 // This function returns false for CSS-wide keywords, 'default', and any
@@ -407,6 +417,9 @@ bool ParseBackgroundOrMask(bool,
                            const CSSParserLocalContext&,
                            HeapVector<CSSPropertyValue, 64>&);
 
+CORE_EXPORT CSSValue* ConsumeProgressType(CSSParserTokenStream&,
+                                          const CSSParserContext&);
+
 CSSValue* ConsumeCoordBoxOrNoClip(CSSParserTokenStream&);
 
 CSSRepeatStyleValue* ConsumeRepeatStyleValue(CSSParserTokenStream& stream);
@@ -439,6 +452,8 @@ CSSValue* ParseBorderWidthSide(CSSParserTokenStream&,
 const CSSValue* ParseBorderStyleSide(CSSParserTokenStream&,
                                      const CSSParserContext&);
 
+CSSValue* ConsumeCornerShape(CSSParserTokenStream&, const CSSParserContext&);
+
 CSSValue* ConsumeGapDecorationPropertyList(CSSParserTokenStream&,
                                            const CSSParserContext&,
                                            const CSSGapDecorationPropertyType);
@@ -451,7 +466,7 @@ CSSShadowValue* ParseSingleShadow(CSSParserTokenStream&,
                                   AllowInsetAndSpread);
 
 CSSValue* ConsumeColumnCount(CSSParserTokenStream&, const CSSParserContext&);
-CSSValue* ConsumeColumnWidth(CSSParserTokenStream&, const CSSParserContext&);
+CSSValue* ConsumeColumnLength(CSSParserTokenStream&, const CSSParserContext&);
 bool ConsumeColumnWidthOrCount(CSSParserTokenStream&,
                                const CSSParserContext&,
                                CSSValue*&,
@@ -560,6 +575,9 @@ bool ConsumeRadii(std::array<CSSValue*, 4>& horizontal_radii,
                   CSSParserTokenStream& stream,
                   const CSSParserContext& context,
                   bool use_legacy_parsing);
+bool ConsumeCornerShapes(std::array<CSSValue*, 4>& shapes,
+                         CSSParserTokenStream& stream,
+                         const CSSParserContext& context);
 
 CSSValue* ConsumeTextDecorationLine(CSSParserTokenStream&);
 CSSValue* ConsumeTextBoxEdge(CSSParserTokenStream&);
@@ -596,7 +614,7 @@ CSSValue* ParseSpacing(CSSParserTokenStream&, const CSSParserContext&);
 CSSValue* ConsumeSingleContainerName(CSSParserTokenStream&,
                                      const CSSParserContext&);
 CSSValue* ConsumeContainerName(CSSParserTokenStream&, const CSSParserContext&);
-CSSValue* ConsumeContainerType(CSSParserTokenStream&);
+CSSValue* ConsumeContainerType(CSSParserTokenStream&, const CSSParserContext&);
 
 UnitlessQuirk UnitlessUnlessShorthand(const CSSParserLocalContext&);
 
@@ -770,6 +788,13 @@ CORE_EXPORT CSSValue* ConsumePositionTryFallbacks(CSSParserTokenStream&,
 // and returns false. The same pattern as above holds.
 bool MaybeConsumeImportant(CSSParserTokenStream& stream,
                            bool allow_important_annotation);
+
+// Return true if env(safe-inset-area-bottom [, ...]) exists.
+bool ContainsSafeAreaInsetBottom(StringView string);
+
+// Return true if it's a simple sum of literals, e.g. "0px + 42em - 13cqw" or
+// calc(10px + 42em - 13cqw).
+bool IsSimpleSum(StringView string);
 
 }  // namespace css_parsing_utils
 }  // namespace blink

@@ -35,18 +35,9 @@ const BABYLON_OPTIONS = {
     tokens: false,
     ranges: false,
     plugins: [
-        'asyncGenerators',
-        'bigInt',
-        'classPrivateMethods',
-        'classPrivateProperties',
-        'classProperties',
         'doExpressions',
+        'explicitResourceManagement',
         'exportDefaultFrom',
-        'nullishCoalescingOperator',
-        'numericSeparator',
-        'objectRestSpread',
-        'optionalCatchBinding',
-        'optionalChaining',
     ],
 }
 
@@ -156,6 +147,7 @@ function _findDependentCodePath(filePath, baseDirectory, caseSensitive=true) {
  */
 function resolveDependencies(originalFilePath, ast) {
   const dependencies = new Set();
+  const orphanedDeclarations = new Set();
 
   babelTraverse(ast, {
     CallExpression(path) {
@@ -166,6 +158,15 @@ function resolveDependencies(originalFilePath, ast) {
       }
 
       let loadValue = path.node.arguments[0].extra.rawValue;
+
+      // If the load we're removing initialized a variable, we need to also
+      // eliminate the entire declaration in the end.
+      if(path.parentPath.isVariableDeclarator() &&
+         path.parentPath.parentPath.isVariableDeclaration() &&
+         path.parentPath.node.init == path.node) {
+        // Using a set so that we don't attempt to remove a path twice.
+        orphanedDeclarations.add(path.parentPath.parentPath);
+      }
 
       // Remove load call.
       path.remove();
@@ -210,6 +211,12 @@ function resolveDependencies(originalFilePath, ast) {
       }
     }
   });
+
+  // Remove declarations where we eliminated the initializers.
+  for (const decl of orphanedDeclarations) {
+    decl.remove();
+  }
+
   return Array.from(dependencies);
 }
 
@@ -254,6 +261,13 @@ class BaseCorpus {
    */
   loadFlags(relPath, data) {
     return [];
+  }
+
+  /**
+   * By default load dependencies from within this corpus.
+   */
+  loadDependency(relPath) {
+    return loadDependency(this, relPath);
   }
 }
 
@@ -338,6 +352,7 @@ class ParsedSource extends Source {
   constructor(ast, corpus, relPath, flags, dependentPaths) {
     super(corpus, relPath, flags, dependentPaths);
     this.ast = ast;
+    this.sloppy |= hasSloppyCode(ast);
   }
 
   isStrict() {
@@ -424,6 +439,38 @@ function removeComments(ast) {
 }
 
 /**
+ * Replace all throw statements with no-ops to reduce bailouts from
+ * dependencies.
+ */
+function neuralizeThrows(ast) {
+  babelTraverse(ast, {
+    ThrowStatement(path) {
+      path.replaceWith(babelTypes.emptyStatement());
+      path.skip();
+    }
+  });
+}
+
+/**
+ * Return true if there's any code incompatible with strict mode.
+ */
+function hasSloppyCode(ast) {
+  let sloppy = false;
+  babelTraverse(ast, {
+    WithStatement(path) {
+      sloppy = true;
+    },
+    UnaryExpression(path) {
+      if (path.node.operator === 'delete' &&
+          babelTypes.isIdentifier(path.node.argument)) {
+        sloppy = true;
+      }
+    }
+  });
+  return sloppy;
+}
+
+/**
  * Removes "Assert" from strings in spidermonkey shells or from older
  * crash tests: https://crbug.com/1068268
  */
@@ -468,6 +515,10 @@ function loadDependency(corpus, relPath) {
   let dependency = dependencyCache.get(absPath);
   if (!dependency) {
     const source = loadSource(corpus, relPath);
+
+    // Reduce bailouts from dependencies by removing throws.
+    neuralizeThrows(source.ast);
+
     dependency = new CachedSource(source);
     dependencyCache.set(absPath, dependency);
   }
@@ -475,7 +526,7 @@ function loadDependency(corpus, relPath) {
 }
 
 function loadDependencyAbs(corpus, absPath) {
-  return loadDependency(corpus, fsPath.relative(corpus.inputDir, absPath));
+  return corpus.loadDependency(fsPath.relative(corpus.inputDir, absPath));
 }
 
 // Convenience helper to load a file from the resources directory.

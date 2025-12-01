@@ -101,7 +101,7 @@ class AX_EXPORT AXNode final {
          AXNodeID id,
          size_t index_in_parent,
          size_t unignored_index_in_parent = 0u);
-  virtual ~AXNode();
+  ~AXNode();
 
   // Accessors.
   AXTree* tree() const { return tree_; }
@@ -586,6 +586,11 @@ class AX_EXPORT AXNode final {
   // table header container node, or nullptr if not applicable.
   const std::vector<raw_ptr<AXNode, VectorExperimental>>* GetExtraMacNodes()
       const;
+
+#if BUILDFLAG(IS_LINUX)
+  AXNode* GetExtraAnnouncementNode(
+      ax::mojom::AriaNotificationPriority priority_property) const;
+#endif  // BUILDFLAG(IS_LINUX)
 
   // Return true for mock nodes added to the map, such as extra mac nodes.
   bool IsGenerated() const;

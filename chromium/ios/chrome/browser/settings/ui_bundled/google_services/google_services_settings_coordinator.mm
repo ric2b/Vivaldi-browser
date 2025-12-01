@@ -10,14 +10,12 @@
 #import "components/strings/grit/components_strings.h"
 #import "components/sync/service/sync_service.h"
 #import "components/sync/service/sync_user_settings.h"
-#import "ios/chrome/browser/authentication/ui_bundled/authentication_flow/authentication_flow.h"
 #import "ios/chrome/browser/authentication/ui_bundled/authentication_ui_util.h"
 #import "ios/chrome/browser/authentication/ui_bundled/signin/signin_utils.h"
 #import "ios/chrome/browser/authentication/ui_bundled/signout_action_sheet/signout_action_sheet_coordinator.h"
 #import "ios/chrome/browser/ntp/ui_bundled/new_tab_page_feature.h"
 #import "ios/chrome/browser/settings/ui_bundled/google_services/google_services_settings_command_handler.h"
 #import "ios/chrome/browser/settings/ui_bundled/google_services/google_services_settings_mediator.h"
-#import "ios/chrome/browser/settings/ui_bundled/google_services/parcel_tracking_settings_coordinator.h"
 #import "ios/chrome/browser/settings/ui_bundled/sync/sync_encryption_passphrase_table_view_controller.h"
 #import "ios/chrome/browser/shared/coordinator/alert/action_sheet_coordinator.h"
 #import "ios/chrome/browser/shared/model/application_context/application_context.h"
@@ -51,22 +49,14 @@ using signin_metrics::PromoAction;
 @property(nonatomic, strong) GoogleServicesSettingsMediator* mediator;
 // Returns the authentication service.
 @property(nonatomic, assign, readonly) AuthenticationService* authService;
-// Manages the authentication flow for a given identity.
-@property(nonatomic, strong) AuthenticationFlow* authenticationFlow;
-// Manages user's Google identities.
-@property(nonatomic, assign, readonly) signin::IdentityManager* identityManager;
 // View controller presented by this coordinator.
 @property(nonatomic, strong, readonly)
     GoogleServicesSettingsViewController* googleServicesSettingsViewController;
 // Action sheets that provides options for sign out.
 @property(nonatomic, strong) ActionSheetCoordinator* signOutCoordinator;
-@property(nonatomic, strong)
-    SignoutActionSheetCoordinator* signoutActionSheetCoordinator;
 @end
 
-@implementation GoogleServicesSettingsCoordinator {
-  ParcelTrackingSettingsCoordinator* _parcelTrackingSettingsCoordinator;
-}
+@implementation GoogleServicesSettingsCoordinator
 
 @synthesize baseNavigationController = _baseNavigationController;
 
@@ -92,8 +82,8 @@ using signin_metrics::PromoAction;
   self.viewController = viewController;
   self.mediator = [[GoogleServicesSettingsMediator alloc]
       initWithIdentityManager:IdentityManagerFactory::GetForProfile(
-                                  self.browser->GetProfile())
-              userPrefService:self.browser->GetProfile()->GetPrefs()
+                                  self.profile)
+              userPrefService:self.profile->GetPrefs()
              localPrefService:GetApplicationContext()->GetLocalState()];
   self.mediator.consumer = viewController;
   self.mediator.authService = self.authService;
@@ -118,8 +108,6 @@ using signin_metrics::PromoAction;
 
 - (void)stop {
   _signOutCoordinator = nil;
-  [_parcelTrackingSettingsCoordinator stop];
-  _parcelTrackingSettingsCoordinator = nil;
   [self dismissSignoutCoordinator];
 }
 
@@ -133,16 +121,6 @@ using signin_metrics::PromoAction;
                                        (signin_ui::SignoutCompletionCallback)
                                            completion {
   [self dismissSignoutCoordinator];
-  // Provide additional data retention options if the user is
-  // syncing their data.
-  // TODO(crbug.com/40066949): Simplify once kSync becomes
-  // unreachable or is deleted from the codebase. See
-  // ConsentLevel::kSync documentation for details.
-  if (self.identityManager->HasPrimaryAccount(signin::ConsentLevel::kSync)) {
-    [self showDataRetentionOptionsWithTargetRect:targetRect
-                                      completion:completion];
-    return;
-  }
   [self signOutWithCompletion:completion];
 }
 
@@ -151,26 +129,15 @@ using signin_metrics::PromoAction;
   self.signOutCoordinator = nil;
 }
 
-- (void)authenticationFlowDidComplete {
-  DCHECK(self.authenticationFlow);
-  self.authenticationFlow = nil;
-  [self.googleServicesSettingsViewController allowUserInteraction];
-}
-
 #pragma mark - Properties
 
 - (AuthenticationService*)authService {
-  return AuthenticationServiceFactory::GetForProfile(
-      self.browser->GetProfile());
+  return AuthenticationServiceFactory::GetForProfile(self.profile);
 }
 
 - (GoogleServicesSettingsViewController*)googleServicesSettingsViewController {
   return base::apple::ObjCCast<GoogleServicesSettingsViewController>(
       self.viewController);
-}
-
-- (signin::IdentityManager*)identityManager {
-  return IdentityManagerFactory::GetForProfile(self.browser->GetProfile());
 }
 
 #pragma mark - GoogleServicesSettingsCommandHandler
@@ -179,11 +146,6 @@ using signin_metrics::PromoAction;
                        completion:
                            (signin_ui::SignoutCompletionCallback)completion {
   DCHECK(completion);
-  syncer::SyncService* syncService =
-      SyncServiceFactory::GetForProfile(self.browser->GetProfile());
-  BOOL isSyncConsentGiven =
-      syncService &&
-      syncService->GetUserSettings()->IsInitialSyncFeatureSetupComplete();
   BOOL shouldClearDataOnSignOut =
       self.authService->ShouldClearDataForSignedInPeriodOnSignOut();
 
@@ -198,21 +160,12 @@ using signin_metrics::PromoAction;
   // Because setting `title` to nil automatically forces the title-style text on
   // `message` in the UIAlertController, the attributed message below
   // specifically denotes the font style to apply.
-  if (isSyncConsentGiven) {
-    self.signOutCoordinator.attributedMessage = [[NSAttributedString alloc]
-        initWithString:l10n_util::GetNSString(
-                           IDS_IOS_SIGNOUT_DIALOG_MESSAGE_WITH_SYNC)
-            attributes:@{
-              NSFontAttributeName :
-                  [UIFont preferredFontForTextStyle:UIFontTextStyleSubheadline]
-            }];
-    [self.signOutCoordinator updateAttributedText];
-  } else if (shouldClearDataOnSignOut) {
+  if (shouldClearDataOnSignOut) {
     // If `kIdentityDiscAccountMenu` is enabled, signing out may also cause tabs
     // to be closed, see `MainControllerAuthenticationServiceDelegate::
     //    ClearBrowsingDataForSignedinPeriod`.
     NSString* clearDataMessage =
-        base::FeatureList::IsEnabled(kIdentityDiscAccountMenu)
+        IsIdentityDiscAccountMenuEnabled()
             ? l10n_util::GetNSString(
                   IDS_IOS_SIGNOUT_AND_DISALLOW_SIGNIN_CLOSES_TABS_AND_CLEARS_DATA_MESSAGE_WITH_MANAGED_ACCOUNT)
             : l10n_util::GetNSString(
@@ -244,40 +197,6 @@ using signin_metrics::PromoAction;
                                      }
                                       style:UIAlertActionStyleCancel];
   [self.signOutCoordinator start];
-}
-
-- (void)showParcelTrackingSettingsPage {
-  _parcelTrackingSettingsCoordinator =
-      [[ParcelTrackingSettingsCoordinator alloc]
-          initWithBaseNavigationController:_baseNavigationController
-                                   browser:self.browser];
-  [_parcelTrackingSettingsCoordinator start];
-}
-
-// Displays the option to keep or clear data for a syncing user.
-- (void)showDataRetentionOptionsWithTargetRect:(CGRect)targetRect
-                                    completion:
-                                        (signin_ui::SignoutCompletionCallback)
-                                            completion {
-  DCHECK(completion);
-  self.signoutActionSheetCoordinator = [[SignoutActionSheetCoordinator alloc]
-      initWithBaseViewController:self.viewController
-                         browser:self.browser
-                            rect:targetRect
-                            view:self.viewController.view
-        forceSnackbarOverToolbar:NO
-                      withSource:signin_metrics::ProfileSignout::
-                                     kUserClickedSignoutSettings];
-  __weak GoogleServicesSettingsCoordinator* weakSelf = self;
-  self.signoutActionSheetCoordinator.delegate = self;
-  self.signoutActionSheetCoordinator.signoutCompletion = ^(BOOL success) {
-    if (completion) {
-      completion(success);
-    }
-    [weakSelf.signoutActionSheetCoordinator stop];
-    weakSelf.signoutActionSheetCoordinator = nil;
-  };
-  [self.signoutActionSheetCoordinator start];
 }
 
 // Signs the user out of Chrome, only clears data for managed accounts.

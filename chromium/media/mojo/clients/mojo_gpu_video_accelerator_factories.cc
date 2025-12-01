@@ -18,7 +18,6 @@
 #include "base/task/sequenced_task_runner.h"
 #include "base/unguessable_token.h"
 #include "build/build_config.h"
-#include "gpu/command_buffer/client/gpu_memory_buffer_manager.h"
 #include "gpu/ipc/client/command_buffer_proxy_impl.h"
 #include "gpu/ipc/client/gpu_channel_host.h"
 #include "media/base/decoder.h"
@@ -54,7 +53,6 @@ MojoGpuVideoAcceleratorFactories::Create(
     const scoped_refptr<base::SequencedTaskRunner>& task_runner,
     const scoped_refptr<viz::ContextProviderCommandBuffer>& context_provider,
     std::unique_ptr<MojoCodecFactory> codec_factory,
-    gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager,
     bool enable_video_gpu_memory_buffers,
     bool enable_media_stream_gpu_memory_buffers,
     bool enable_video_decode_accelerator,
@@ -62,9 +60,8 @@ MojoGpuVideoAcceleratorFactories::Create(
   return base::WrapUnique(new MojoGpuVideoAcceleratorFactories(
       std::move(gpu_channel_host), main_thread_task_runner, task_runner,
       std::move(context_provider), std::move(codec_factory),
-      std::move(gpu_memory_buffer_manager), enable_video_gpu_memory_buffers,
-      enable_media_stream_gpu_memory_buffers, enable_video_decode_accelerator,
-      enable_video_encode_accelerator));
+      enable_video_gpu_memory_buffers, enable_media_stream_gpu_memory_buffers,
+      enable_video_decode_accelerator, enable_video_encode_accelerator));
 }
 
 MojoGpuVideoAcceleratorFactories::MojoGpuVideoAcceleratorFactories(
@@ -73,7 +70,6 @@ MojoGpuVideoAcceleratorFactories::MojoGpuVideoAcceleratorFactories(
     const scoped_refptr<base::SequencedTaskRunner>& task_runner,
     const scoped_refptr<viz::ContextProviderCommandBuffer>& context_provider,
     std::unique_ptr<MojoCodecFactory> codec_factory,
-    gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager,
     bool enable_video_gpu_memory_buffers,
     bool enable_media_stream_gpu_memory_buffers,
     bool enable_video_decode_accelerator,
@@ -87,19 +83,23 @@ MojoGpuVideoAcceleratorFactories::MojoGpuVideoAcceleratorFactories(
       enable_media_stream_gpu_memory_buffers_(
           enable_media_stream_gpu_memory_buffers),
       video_decode_accelerator_enabled_(enable_video_decode_accelerator),
-      video_encode_accelerator_enabled_(enable_video_encode_accelerator),
-      gpu_memory_buffer_manager_(gpu_memory_buffer_manager) {
+      video_encode_accelerator_enabled_(enable_video_encode_accelerator) {
   DCHECK(main_thread_task_runner_);
   DCHECK(gpu_channel_host_);
 
   task_runner_->PostTask(
       FROM_HERE,
       base::BindOnce(&MojoGpuVideoAcceleratorFactories::BindOnTaskRunner,
-                     base::Unretained(this)));
+                     task_runner_weak_factory_.GetWeakPtr()));
 }
 
 MojoGpuVideoAcceleratorFactories::~MojoGpuVideoAcceleratorFactories() {
   DCHECK(task_runner_->RunsTasksInCurrentSequence());
+
+  // `context_provider_lost_` is a pointer to a boolean, and should be
+  // deleted on the main thread.
+  main_thread_task_runner_->DeleteSoon(FROM_HERE,
+                                       std::move(context_provider_lost_));
 }
 
 void MojoGpuVideoAcceleratorFactories::BindOnTaskRunner() {
@@ -117,7 +117,7 @@ void MojoGpuVideoAcceleratorFactories::BindOnTaskRunner() {
   // Request the channel token.
   context_provider_->GetCommandBufferProxy()->GetGpuChannel().GetChannelToken(
       base::BindOnce(&MojoGpuVideoAcceleratorFactories::OnChannelTokenReady,
-                     base::Unretained(this)));
+                     task_runner_weak_factory_.GetWeakPtr()));
 }
 
 bool MojoGpuVideoAcceleratorFactories::IsDecoderSupportKnown() {
@@ -270,14 +270,6 @@ bool MojoGpuVideoAcceleratorFactories::ShouldUseGpuMemoryBuffersForVideoFrames(
 media::GpuVideoAcceleratorFactories::OutputFormat
 MojoGpuVideoAcceleratorFactories::VideoFrameOutputFormat(
     media::VideoPixelFormat pixel_format) {
-  auto format = VideoFrameOutputFormatImpl(pixel_format);
-  UMA_HISTOGRAM_ENUMERATION("Media.GPU.OutputFormat", format);
-  return format;
-}
-
-media::GpuVideoAcceleratorFactories::OutputFormat
-MojoGpuVideoAcceleratorFactories::VideoFrameOutputFormatImpl(
-    media::VideoPixelFormat pixel_format) {
   using OutputFormat = media::GpuVideoAcceleratorFactories::OutputFormat;
 
   DCHECK(task_runner_->RunsTasksInCurrentSequence());
@@ -370,11 +362,6 @@ MojoGpuVideoAcceleratorFactories::SharedImageInterface() {
                             : context_provider_->SharedImageInterface();
 }
 
-gpu::GpuMemoryBufferManager*
-MojoGpuVideoAcceleratorFactories::GpuMemoryBufferManager() {
-  return gpu_memory_buffer_manager_;
-}
-
 base::UnsafeSharedMemoryRegion
 MojoGpuVideoAcceleratorFactories::CreateSharedMemoryRegion(size_t size) {
   // If necessary, this call will make a synchronous request to a privileged
@@ -421,7 +408,7 @@ MojoGpuVideoAcceleratorFactories::GetRenderingColorSpace() const {
 
 bool MojoGpuVideoAcceleratorFactories::CheckContextProviderLostOnMainThread() {
   DCHECK(main_thread_task_runner_->RunsTasksInCurrentSequence());
-  return context_provider_lost_;
+  return *context_provider_lost_;
 }
 
 void MojoGpuVideoAcceleratorFactories::OnContextLost() {
@@ -432,18 +419,19 @@ void MojoGpuVideoAcceleratorFactories::OnContextLost() {
   // it notifying about the loss, and we'd be destroying it while it's on
   // the stack.
   context_provider_lost_on_media_thread_ = true;
+
   // Inform the main thread of the loss as well, so that this class can be
   // replaced.
   main_thread_task_runner_->PostTask(
-      FROM_HERE,
-      base::BindOnce(
-          &MojoGpuVideoAcceleratorFactories::SetContextProviderLostOnMainThread,
-          base::Unretained(this)));
-}
+      FROM_HERE, base::BindOnce(
+                     [](bool* context_provider_lost) {
+                       *context_provider_lost = true;
 
-void MojoGpuVideoAcceleratorFactories::SetContextProviderLostOnMainThread() {
-  DCHECK(main_thread_task_runner_->RunsTasksInCurrentSequence());
-  context_provider_lost_ = true;
+                       // Use of Unretained here is safe, because
+                       // `context_provider_lost_` is deleted on the main thread
+                       // using DeleteSoon().
+                     },
+                     base::Unretained(context_provider_lost_.get())));
 }
 
 }  // namespace media

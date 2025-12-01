@@ -27,7 +27,6 @@ import {reloadDevTools} from '../helpers/cross-tool-helper.js';
 import {
   clickNthChildOfSelectedElementNode,
   focusElementsTree,
-  waitForContentOfSelectedElementsNode,
   waitForCSSPropertyValue,
   waitForElementsStyleSection,
 } from '../helpers/elements-helpers.js';
@@ -229,7 +228,7 @@ describe('The Sources Tab', function() {
 
       const scopeValues = await waitForFunction(async () => {
         const values = await getValuesForScope('Local', 0, 0);
-        return (values && values.includes(unminifiedVariable)) ? values : undefined;
+        return (values?.includes(unminifiedVariable)) ? values : undefined;
       });
       assert.include(scopeValues, unminifiedVariable);
     });
@@ -280,7 +279,7 @@ describe('The Sources Tab', function() {
     await step('Check local scope variable is eventually un-minified', async () => {
       const scopeValues = await waitForFunction(async () => {
         const values = await getValuesForScope('Local', 0, 0);
-        return (values && values.includes(outerUnminifiedVariable)) ? values : undefined;
+        return (values?.includes(outerUnminifiedVariable)) ? values : undefined;
       });
       assert.include(scopeValues, outerUnminifiedVariable);
     });
@@ -295,13 +294,13 @@ describe('The Sources Tab', function() {
     await step('Check local and block scope variables are eventually un-minified', async () => {
       const blockScopeValues = await waitForFunction(async () => {
         const values = await getValuesForScope('Block', 0, 0);
-        return (values && values.includes(innerUnminifiedVariable)) ? values : undefined;
+        return (values?.includes(innerUnminifiedVariable)) ? values : undefined;
       });
       assert.include(blockScopeValues, innerUnminifiedVariable);
 
       const scopeValues = await waitForFunction(async () => {
         const values = await getValuesForScope('Local', 0, 0);
-        return (values && values.includes(outerUnminifiedVariable)) ? values : undefined;
+        return (values?.includes(outerUnminifiedVariable)) ? values : undefined;
       });
       assert.include(scopeValues, outerUnminifiedVariable);
     });
@@ -457,7 +456,7 @@ describe('The Sources Tab', function() {
     await step('Get infobar text', async () => {
       await openFileInEditor('sourcemap-origin.min.js');
       const infobarText = await waitForTextContent(INFOBAR_TEXT);
-      assert.strictEqual(infobarText, 'Source map loaded.');
+      assert.strictEqual(infobarText, 'Source map loaded');
     });
   });
 
@@ -476,7 +475,7 @@ describe('The Sources Tab', function() {
 
     await step('Get infobar text', async () => {
       const infobarText = await waitForTextContent(INFOBAR_TEXT);
-      assert.strictEqual(infobarText, 'Source map loaded.');
+      assert.strictEqual(infobarText, 'Source map loaded');
     });
   });
 
@@ -490,7 +489,7 @@ describe('The Sources Tab', function() {
       await waitFor('.infobar-info');
       const infobarTexts = await getVisibleTextContents(INFOBAR_TEXT);
       assert.deepEqual(
-          infobarTexts, ['This script is on the debugger\'s ignore list', 'Source map skipped for this file.']);
+          infobarTexts, ['This script is on the debugger\'s ignore list', 'Source map skipped for this file']);
     });
   });
 
@@ -509,7 +508,7 @@ describe('The Sources Tab', function() {
 
     await step('Get infobar text', async () => {
       const infobarText = await waitForTextContent(INFOBAR_TEXT);
-      assert.strictEqual(infobarText, 'Source map failed to load.');
+      assert.strictEqual(infobarText, 'Source map failed to load');
     });
   });
 
@@ -701,7 +700,6 @@ describe('The Elements Tab', () => {
     await goToResource('sources/sourcemap-css-inline-relative.html');
     await step('Prepare elements tab', async () => {
       await waitForElementsStyleSection();
-      await waitForContentOfSelectedElementsNode('<body>\u200B');
       await focusElementsTree();
       await clickNthChildOfSelectedElementNode(1);
     });
@@ -713,7 +711,6 @@ describe('The Elements Tab', () => {
     await goToResource('sources/sourcemap-css-dynamic-link.html');
     await step('Prepare elements tab', async () => {
       await waitForElementsStyleSection();
-      await waitForContentOfSelectedElementsNode('<body>\u200B');
       await focusElementsTree();
       await clickNthChildOfSelectedElementNode(1);
     });
@@ -725,7 +722,6 @@ describe('The Elements Tab', () => {
     await goToResource('sources/sourcemap-css-dynamic.html');
     await step('Prepare elements tab', async () => {
       await waitForElementsStyleSection();
-      await waitForContentOfSelectedElementsNode('<body>\u200B');
       await focusElementsTree();
       await clickNthChildOfSelectedElementNode(1);
     });
@@ -737,7 +733,6 @@ describe('The Elements Tab', () => {
     await goToResource('sources/sourcemap-css-dynamic-link.html');
     await step('Prepare elements tab', async () => {
       await waitForElementsStyleSection();
-      await waitForContentOfSelectedElementsNode('<body>\u200B');
       await focusElementsTree();
       await clickNthChildOfSelectedElementNode(1);
     });

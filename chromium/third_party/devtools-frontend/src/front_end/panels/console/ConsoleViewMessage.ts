@@ -37,6 +37,7 @@ import * as Common from '../../core/common/common.js';
 import * as Host from '../../core/host/host.js';
 import * as i18n from '../../core/i18n/i18n.js';
 import * as Platform from '../../core/platform/platform.js';
+import * as Root from '../../core/root/root.js';
 import * as SDK from '../../core/sdk/sdk.js';
 import * as Protocol from '../../generated/protocol.js';
 import * as Bindings from '../../models/bindings/bindings.js';
@@ -218,7 +219,7 @@ const UIStrings = {
    *@description Tooltip shown when user hovers over the cookie icon to explain that the button will bring the user to the cookie report
    */
   SeeIssueInCookieReport: 'Click to open privacy and security panel and show third-party cookie report',
-};
+} as const;
 const str_ = i18n.i18n.registerUIStrings('panels/console/ConsoleViewMessage.ts', UIStrings);
 const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
 const elementToMessage = new WeakMap<Element, ConsoleViewMessage>();
@@ -283,10 +284,10 @@ export class ConsoleViewMessage implements ConsoleViewportElement {
   private repeatCountInternal: number;
   private closeGroupDecorationCount: number;
   private consoleGroupInternal: ConsoleGroupViewMessage|null;
-  private selectableChildren: {
+  private selectableChildren: Array<{
     element: HTMLElement,
     forceSelect: () => void,
-  }[];
+  }>;
   private readonly messageResized: (arg0: Common.EventTarget.EventTargetEvent<UI.TreeOutline.TreeElement>) => void;
   // The wrapper that contains consoleRowWrapper and other elements in a column.
   protected elementInternal: HTMLElement|null;
@@ -313,7 +314,7 @@ export class ConsoleViewMessage implements ConsoleViewportElement {
   protected repeatCountElement: UI.UIUtils.DevToolsSmallBubble|null;
   private requestResolver: Logs.RequestResolver.RequestResolver;
   private issueResolver: IssuesManager.IssueResolver.IssueResolver;
-  #adjacentUserCommandResult: boolean = false;
+  #adjacentUserCommandResult = false;
 
   /** Formatting Error#stack is asynchronous. Allow tests to wait for the result */
   #formatErrorStackPromiseForTest = Promise.resolve();
@@ -449,25 +450,23 @@ export class ConsoleViewMessage implements ConsoleViewportElement {
           messageElement = messageElement || this.format(args);
         }
       }
+    } else if (this.message.source === Protocol.Log.LogEntrySource.Network) {
+      messageElement = this.formatAsNetworkRequest() || this.format([messageText]);
     } else {
-      if (this.message.source === Protocol.Log.LogEntrySource.Network) {
-        messageElement = this.formatAsNetworkRequest() || this.format([messageText]);
-      } else {
-        const messageInParameters = this.message.parameters && messageText === (this.message.parameters[0] as string);
-        // These terms are locked because the console message will not be translated anyway.
-        if (this.message.source === Protocol.Log.LogEntrySource.Violation) {
-          messageText = i18nString(UIStrings.violationS, {PH1: messageText});
-        } else if (this.message.source === Protocol.Log.LogEntrySource.Intervention) {
-          messageText = i18nString(UIStrings.interventionS, {PH1: messageText});
-        } else if (this.message.source === Protocol.Log.LogEntrySource.Deprecation) {
-          messageText = i18nString(UIStrings.deprecationS, {PH1: messageText});
-        }
-        const args = this.message.parameters || [messageText];
-        if (messageInParameters) {
-          args[0] = messageText;
-        }
-        messageElement = this.format(args);
+      const messageInParameters = this.message.parameters && messageText === (this.message.parameters[0] as string);
+      // These terms are locked because the console message will not be translated anyway.
+      if (this.message.source === Protocol.Log.LogEntrySource.Violation) {
+        messageText = i18nString(UIStrings.violationS, {PH1: messageText});
+      } else if (this.message.source === Protocol.Log.LogEntrySource.Intervention) {
+        messageText = i18nString(UIStrings.interventionS, {PH1: messageText});
+      } else if (this.message.source === Protocol.Log.LogEntrySource.Deprecation) {
+        messageText = i18nString(UIStrings.deprecationS, {PH1: messageText});
       }
+      const args = this.message.parameters || [messageText];
+      if (messageInParameters) {
+        args[0] = messageText;
+      }
+      messageElement = this.format(args);
     }
     messageElement.classList.add('console-message-text');
 
@@ -510,8 +509,7 @@ export class ConsoleViewMessage implements ConsoleViewportElement {
       const fragment = this.linkifyWithCustomLinkifier(messageText, (text, url, lineNumber, columnNumber) => {
         const linkElement = url === request.url() ?
             Components.Linkifier.Linkifier.linkifyRevealable(
-                (request as SDK.NetworkRequest.NetworkRequest), url, request.url(), undefined, undefined,
-                'network-request') :
+                (request), url, request.url(), undefined, undefined, 'network-request') :
             Components.Linkifier.Linkifier.linkifyURL(
                 url, ({text, lineNumber, columnNumber} as Components.Linkifier.LinkifyURLOptions));
         linkElement.tabIndex = -1;
@@ -592,7 +590,7 @@ export class ConsoleViewMessage implements ConsoleViewportElement {
             runtimeModel.target(), scriptId, url || Platform.DevToolsPath.EmptyUrlString, line,
             {columnNumber: column, inlineFrameIndex: 0, userMetric});
       }
-      if (stackTrace && stackTrace.callFrames.length) {
+      if (stackTrace?.callFrames.length) {
         return this.linkifier.linkifyStackTraceTopFrame(runtimeModel.target(), stackTrace);
       }
       if (url && url !== 'undefined') {
@@ -603,8 +601,7 @@ export class ConsoleViewMessage implements ConsoleViewportElement {
       return null;
     };
 
-    if (this.message.isCookieReportIssue &&
-        Common.Settings.Settings.instance().getHostConfig().devToolsPrivacyUI?.enabled) {
+    if (this.message.isCookieReportIssue && Root.Runtime.hostConfig.devToolsPrivacyUI?.enabled) {
       const anchorWrapperElement = document.createElement('span');
       anchorWrapperElement.classList.add('console-message-anchor', 'cookie-report-anchor');
       this.#appendCookieReportButtonToElem(anchorWrapperElement);
@@ -674,7 +671,7 @@ export class ConsoleViewMessage implements ConsoleViewportElement {
       this.expandTrace(true);
     }
 
-    // @ts-ignore
+    // @ts-expect-error
     toggleElement._expandStackTraceForTest = this.expandTrace.bind(this, true);
     return toggleElement;
   }
@@ -721,7 +718,7 @@ export class ConsoleViewMessage implements ConsoleViewportElement {
     return {stackTraceElement, contentElement, messageElement, clickableElement, toggleElement};
   }
 
-  private format(rawParameters: (string|SDK.RemoteObject.RemoteObject|Protocol.Runtime.RemoteObject|undefined)[]):
+  private format(rawParameters: Array<string|SDK.RemoteObject.RemoteObject|Protocol.Runtime.RemoteObject|undefined>):
       HTMLElement {
     // This node is used like a Builder. Values are continually appended onto it.
     const formattedResult = document.createElement('span');
@@ -738,8 +735,7 @@ export class ConsoleViewMessage implements ConsoleViewportElement {
     let parameters = rawParameters.map(parameterToRemoteObject(this.message.runtimeModel()));
 
     // There can be string log and string eval result. We distinguish between them based on message type.
-    const shouldFormatMessage =
-        SDK.RemoteObject.RemoteObject.type((parameters as SDK.RemoteObject.RemoteObject[])[0]) === 'string' &&
+    const shouldFormatMessage = SDK.RemoteObject.RemoteObject.type((parameters)[0]) === 'string' &&
         (this.message.type !== SDK.ConsoleModel.FrontendMessageType.Result ||
          this.message.level === Protocol.Log.LogEntryLevel.Error);
 
@@ -923,9 +919,9 @@ export class ConsoleViewMessage implements ConsoleViewportElement {
   }
 
   protected renderPropertyPreviewOrAccessor(
-      object: SDK.RemoteObject.RemoteObject|null, property: Protocol.Runtime.PropertyPreview, propertyPath: {
-        name: (string|symbol),
-      }[]): HTMLElement {
+      object: SDK.RemoteObject.RemoteObject|null, property: Protocol.Runtime.PropertyPreview, propertyPath: Array<{
+        name: (string | symbol),
+      }>): HTMLElement {
     if (property.type === 'accessor') {
       return this.formatAsAccessorProperty(object, propertyPath.map(property => property.name.toString()), false);
     }
@@ -986,8 +982,11 @@ export class ConsoleViewMessage implements ConsoleViewportElement {
       const error = SDK.RemoteObject.RemoteError.objectAsError(errorObj);
       const [details, cause] = await Promise.all([error.exceptionDetails(), error.cause()]);
       const errorElementType = includeCausedByPrefix ? 'div' : 'span';
-      const errorElement = this.tryFormatAsError(error.errorStack, details, errorElementType) ??
-          this.linkifyStringAsFragment(error.errorStack);
+      let errorElement = this.tryFormatAsError(error.errorStack, details, errorElementType);
+      if (!errorElement) {
+        errorElement = document.createElement(errorElementType);
+        errorElement.append(this.linkifyStringAsFragment(error.errorStack));
+      }
       if (includeCausedByPrefix) {
         errorElement.prepend('Caused by: ');
       }
@@ -1458,7 +1457,7 @@ export class ConsoleViewMessage implements ConsoleViewportElement {
     const icon = new IconButton.Icon.Icon();
     icon.data = {
       iconName: 'lightbulb-spark',
-      color: 'var(--sys-color-on-surface-subtle)',
+      color: 'var(--devtools-icon-color)',
       width: '16px',
       height: '16px',
     };
@@ -1475,10 +1474,6 @@ export class ConsoleViewMessage implements ConsoleViewportElement {
     const text = document.createElement('div');
     text.innerText = this.getExplainLabel();
     label.append(text);
-    const badge = document.createElement('div');
-    badge.classList.add('badge');
-    badge.innerText = i18n.i18n.lockedString('AI');
-    label.append(badge);
     button.append(label);
     button.classList.add('hover-button');
     button.ariaLabel = this.#getExplainAriaLabel();
@@ -1639,7 +1634,7 @@ export class ConsoleViewMessage implements ConsoleViewportElement {
   }
 
   setSearchRegex(regex: RegExp|null): void {
-    if (this.searchHighlightNodeChanges && this.searchHighlightNodeChanges.length) {
+    if (this.searchHighlightNodeChanges?.length) {
       UI.UIUtils.revertDomChanges(this.searchHighlightNodeChanges);
     }
     this.searchRegexInternal = regex;
@@ -1680,8 +1675,7 @@ export class ConsoleViewMessage implements ConsoleViewportElement {
       lineNumber: number|undefined, columnNumber: number|undefined): Promise<{frames: Chrome.DevTools.FunctionInfo[]}> {
     const debuggerWorkspaceBinding = Bindings.DebuggerWorkspaceBinding.DebuggerWorkspaceBinding.instance();
     const projects = Workspace.Workspace.WorkspaceImpl.instance().projects();
-    const uiSourceCodes = projects.map(project => project.uiSourceCodeForURL(url)).flat().filter(f => Boolean(f)) as
-        Workspace.UISourceCode.UISourceCode[];
+    const uiSourceCodes = projects.map(project => project.uiSourceCodeForURL(url)).flat().filter(f => !!f);
     const scripts =
         uiSourceCodes.map(uiSourceCode => debuggerWorkspaceBinding.scriptsForUISourceCode(uiSourceCode)).flat();
     if (scripts.length) {
@@ -1896,9 +1890,9 @@ export class ConsoleViewMessage implements ConsoleViewportElement {
     });
   }
 
-  private static tokenizeMessageText(string: string): {
+  private static tokenizeMessageText(string: string): Array<{
     type?: string, text: string,
-  }[] {
+  }> {
     const {tokenizerRegexes, tokenizerTypes} = getOrCreateTokenizers();
     if (string.length > getMaxTokenizableStringLength()) {
       return [{text: string, type: undefined}];
@@ -1939,8 +1933,8 @@ let tokenizerRegexes: RegExp[]|null = null;
 let tokenizerTypes: string[]|null = null;
 
 function getOrCreateTokenizers(): {
-  tokenizerRegexes: Array<RegExp>,
-  tokenizerTypes: Array<string>,
+  tokenizerRegexes: RegExp[],
+  tokenizerTypes: string[],
 } {
   if (!tokenizerRegexes || !tokenizerTypes) {
     const controlCodes = '\\u0000-\\u0020\\u007f-\\u009f';
@@ -2039,7 +2033,7 @@ export class ConsoleGroupViewMessage extends ConsoleViewMessage {
       return true;
     }
     const parent = this.consoleGroup();
-    return Boolean(parent && parent.messagesHidden());
+    return Boolean(parent?.messagesHidden());
   }
 
   setGroupEnd(viewMessage: ConsoleViewMessage): void {
@@ -2173,23 +2167,23 @@ export class ConsoleTableMessageView extends ConsoleViewMessage {
       formattedMessage.appendChild(this.anchorElement);
     }
 
-    const table = this.message.parameters && this.message.parameters.length ? this.message.parameters[0] : null;
+    const table = this.message.parameters?.length ? this.message.parameters[0] : null;
     if (!table) {
       return this.buildMessage();
     }
     const actualTable = parameterToRemoteObject(this.message.runtimeModel())(table);
-    if (!actualTable || !actualTable.preview) {
+    if (!actualTable?.preview) {
       return this.buildMessage();
     }
 
     const rawValueColumnSymbol = Symbol('rawValueColumn');
-    const columnNames: (string|symbol)[] = [];
+    const columnNames: Array<string|symbol> = [];
     const preview = actualTable.preview;
     const rows = [];
     for (let i = 0; i < preview.properties.length; ++i) {
       const rowProperty = preview.properties[i];
       let rowSubProperties: Protocol.Runtime.PropertyPreview[];
-      if (rowProperty.valuePreview && rowProperty.valuePreview.properties.length) {
+      if (rowProperty.valuePreview?.properties.length) {
         rowSubProperties = rowProperty.valuePreview.properties;
       } else if (rowProperty.value || rowProperty.value === '') {
         rowSubProperties =
@@ -2257,7 +2251,7 @@ export class ConsoleTableMessageView extends ConsoleViewMessage {
   }
 
   override approximateFastHeight(): number {
-    const table = this.message.parameters && this.message.parameters[0];
+    const table = this.message.parameters?.[0];
     if (table && typeof table !== 'string' && table.preview) {
       return defaultConsoleRowHeight * table.preview.properties.length;
     }
@@ -2269,12 +2263,12 @@ export class ConsoleTableMessageView extends ConsoleViewMessage {
  * The maximum length before strings are considered too long for syntax highlighting.
  * @const
  */
-const MaxLengthToIgnoreHighlighter: number = 10000;
+const MaxLengthToIgnoreHighlighter = 10000;
 
 /**
  * @const
  */
-export const MaxLengthForLinks: number = 40;
+export const MaxLengthForLinks = 40;
 
 let maxTokenizableStringLength = 10000;
 let longStringVisibleLength = 5000;

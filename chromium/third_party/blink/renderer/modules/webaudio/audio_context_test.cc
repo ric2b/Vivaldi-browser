@@ -2,13 +2,9 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
-#pragma allow_unsafe_buffers
-#endif
-
 #include "third_party/blink/renderer/modules/webaudio/audio_context.h"
 
+#include <array>
 #include <memory>
 
 #include "base/synchronization/waitable_event.h"
@@ -183,6 +179,7 @@ class AudioContextTestPlatform : public TestingPlatformSupport {
       const WebAudioSinkDescriptor& sink_descriptor,
       unsigned number_of_output_channels,
       const WebAudioLatencyHint& latency_hint,
+      std::optional<float> context_sample_rate,
       media::AudioRendererSink::RenderCallback*) override {
     double buffer_size = 0;
     const double interactive_size = AudioHardwareBufferSize();
@@ -209,7 +206,7 @@ class AudioContextTestPlatform : public TestingPlatformSupport {
     }
 
     return std::make_unique<MockWebAudioDeviceForAudioContext>(
-        AudioHardwareSampleRate(), buffer_size);
+        context_sample_rate.value_or(AudioHardwareSampleRate()), buffer_size);
   }
 
   double AudioHardwareSampleRate() override { return 44100; }
@@ -475,15 +472,15 @@ TEST_F(AudioContextTest, PlayoutStats) {
   AudioContext* audio_context = AudioContext::Create(
       GetFrame().DomWindow(), options, ASSERT_NO_EXCEPTION);
 
-  const int kNumberOfRenderEvents = 9;
-  uint32_t frames_to_process[kNumberOfRenderEvents]{100, 200, 300, 10, 500,
-                                                    120, 120, 30,  100};
-  base::TimeDelta playout_delay[kNumberOfRenderEvents]{
+  constexpr int kNumberOfRenderEvents = 9;
+  std::array<uint32_t, kNumberOfRenderEvents> frames_to_process{
+      100, 200, 300, 10, 500, 120, 120, 30, 100};
+  std::array<base::TimeDelta, kNumberOfRenderEvents> playout_delay{
       base::Milliseconds(10),  base::Milliseconds(20), base::Milliseconds(300),
       base::Milliseconds(107), base::Milliseconds(17), base::Milliseconds(3),
       base::Milliseconds(500), base::Milliseconds(10), base::Milliseconds(112)};
-  const media::AudioGlitchInfo glitch_info[kNumberOfRenderEvents]{
-      {.duration = base::Milliseconds(5), .count = 1},
+  const std::array<media::AudioGlitchInfo, kNumberOfRenderEvents> glitch_info{
+      media::AudioGlitchInfo{.duration = base::Milliseconds(5), .count = 1},
       {},
       {.duration = base::Milliseconds(60), .count = 3},
       {},

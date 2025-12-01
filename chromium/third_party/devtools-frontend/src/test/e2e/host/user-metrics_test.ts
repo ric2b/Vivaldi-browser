@@ -68,12 +68,12 @@ declare global {
 }
 
 function retrieveRecordedHistogramEvents(frontend: puppeteer.Page): Promise<EnumHistogramEvent[]> {
-  // @ts-ignore
+  // @ts-expect-error
   return frontend.evaluate(() => window.InspectorFrontendHost.recordedEnumeratedHistograms);
 }
 
 function retrieveRecordedPerformanceHistogramEvents(frontend: puppeteer.Page): Promise<PerformanceHistogramEvent[]> {
-  // @ts-ignore
+  // @ts-expect-error
   return frontend.evaluate(() => window.InspectorFrontendHost.recordedPerformanceHistograms);
 }
 
@@ -287,7 +287,7 @@ describe('User Metrics', () => {
     await waitFor('.keybinds-set-select');
 
     const keybindSetSelect = await $('.keybinds-set-select select') as puppeteer.ElementHandle<HTMLSelectElement>;
-    keybindSetSelect.select('vsCode');
+    await keybindSetSelect.select('vsCode');
 
     await assertHistogramEventsInclude([
       {
@@ -341,7 +341,7 @@ describe('User Metrics', () => {
     await assertHistogramEventsInclude([
       {
         actionName: 'DevTools.ExperimentEnabledAtLaunch',
-        actionCode: 82,  // Enabled by default: Autofill View
+        actionCode: 42,  // Enabled by default: Full accessibility tree
       },
       {
         actionName: 'DevTools.ExperimentDisabledAtLaunch',
@@ -521,6 +521,69 @@ describe('User Metrics for Issue Panel', () => {
       },
     ]);
   });
+
+  it('dispatches an event when a SelectElementAccessibility DisallowedSelectChild issue is created', async () => {
+    await goToResource('issues/select-element-accessibility-issue-DisallowedSelectChild.html');
+    await waitFor('.issue');
+
+    await assertHistogramEventsInclude([
+      {
+        actionName: 'DevTools.IssueCreated',
+        actionCode: 86,  // SelectElementAccessibilityIssue::DisallowedSelectChild
+      },
+    ]);
+  });
+
+  it('dispatches an event when a SelectElementAccessibility DisallowedOptGroupChild issue is created', async () => {
+    await goToResource('issues/select-element-accessibility-issue-DisallowedOptGroupChild.html');
+    await waitFor('.issue');
+
+    await assertHistogramEventsInclude([
+      {
+        actionName: 'DevTools.IssueCreated',
+        actionCode: 87,  // SelectElementAccessibilityIssue::DisallowedOptGroupChild
+      },
+    ]);
+  });
+
+  it('dispatches an event when a SelectElementAccessibility NonPhrasingContentOptionChild issue is created',
+     async () => {
+       await goToResource('issues/select-element-accessibility-issue-NonPhrasingContentOptionChild.html');
+       await waitFor('.issue');
+
+       await assertHistogramEventsInclude([
+         {
+           actionName: 'DevTools.IssueCreated',
+           actionCode: 88,  // SelectElementAccessibilityIssue::NonPhrasingContentOptionChild
+         },
+       ]);
+     });
+
+  it('dispatches an event when a SelectElementAccessibility InteractiveContentOptionChild issue is created',
+     async () => {
+       await goToResource('issues/select-element-accessibility-issue-InteractiveContentOptionChild.html');
+       await waitFor('.issue');
+
+       await assertHistogramEventsInclude([
+         {
+           actionName: 'DevTools.IssueCreated',
+           actionCode: 89,  // SelectElementAccessibilityIssue::InteractiveContentOptionChild
+         },
+       ]);
+     });
+
+  it('dispatches an event when a SelectElementAccessibility InteractiveContentLegendChild issue is created',
+     async () => {
+       await goToResource('issues/select-element-accessibility-issue-InteractiveContentLegendChild.html');
+       await waitFor('.issue');
+
+       await assertHistogramEventsInclude([
+         {
+           actionName: 'DevTools.IssueCreated',
+           actionCode: 90,  // SelectElementAccessibilityIssue::InteractiveContentLegendChild
+         },
+       ]);
+     });
 });
 
 describe('User Metrics for CSS custom properties in the Styles pane', () => {
@@ -528,7 +591,6 @@ describe('User Metrics for CSS custom properties in the Styles pane', () => {
     await goToResource('elements/css-variables.html');
     await navigateToSidePane('Styles');
     await waitForElementsStyleSection();
-    await waitForContentOfSelectedElementsNode('<body>\u200B');
     await focusElementsTree();
   });
 
@@ -584,7 +646,7 @@ describe('User Metrics for clicking stylesheet request initiators', () => {
     actionCode: 80,  // StyleSheetInitiatorLinkClicked
   };
   it('dispatches an event when clicked in the console', async () => {
-    async function clickOnLinkWithText(text: string, root?: puppeteer.JSHandle) {
+    async function clickOnLinkWithText(text: string, root?: puppeteer.ElementHandle) {
       const element = await click(`text/${text}`, {root});
       assert.isTrue(
           await element.evaluate(e => e.classList.contains('devtools-link')),

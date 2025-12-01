@@ -46,11 +46,9 @@
 #import "ios/chrome/browser/tab_switcher/ui_bundled/tab_group_item.h"
 #import "ios/chrome/browser/tab_switcher/ui_bundled/tab_switcher_item.h"
 #import "ios/chrome/browser/tab_switcher/ui_bundled/tab_utils.h"
-#import "ios/chrome/browser/tabs/model/inactive_tabs/features.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #import "ios/chrome/common/ui/util/constraints_ui_util.h"
 #import "ios/chrome/grit/ios_strings.h"
-#import "ios/public/provider/chrome/browser/modals/modals_api.h"
 #import "ios/public/provider/chrome/browser/raccoon/raccoon_api.h"
 #import "ios/web/public/web_state_id.h"
 #import "ui/base/l10n/l10n_util.h"
@@ -1266,7 +1264,7 @@ NSString* GroupGridCellAccessibilityIdentifier(NSUInteger index) {
 }
 
 - (void)dismissModals {
-  ios::provider::DismissModalsForCollectionView(self.collectionView);
+  [self.collectionView.contextMenuInteraction dismissMenu];
 }
 
 - (void)reload {

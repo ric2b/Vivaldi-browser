@@ -67,7 +67,7 @@
 #include "url/gurl.h"
 
 // Must come after all headers that specialize FromJniType() / ToJniType().
-#include "chrome/android/chrome_jni_headers/BookmarkBridge_jni.h"
+#include "chrome/browser/bookmarks/android/jni_headers/BookmarkBridge_jni.h"
 
 #include "app/vivaldi_apptools.h"
 #include "components/bookmarks/vivaldi_bookmark_kit.h"

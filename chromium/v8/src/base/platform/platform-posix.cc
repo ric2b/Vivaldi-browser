@@ -39,6 +39,7 @@
 
 #include "src/base/lazy-instance.h"
 #include "src/base/macros.h"
+#include "src/base/platform/mutex.h"
 #include "src/base/platform/platform-posix.h"
 #include "src/base/platform/platform.h"
 #include "src/base/platform/time.h"
@@ -843,8 +844,7 @@ int OS::GetCurrentProcessId() {
   return static_cast<int>(getpid());
 }
 
-
-int OS::GetCurrentThreadId() {
+int OS::GetCurrentThreadIdInternal() {
 #if V8_OS_DARWIN || (V8_OS_ANDROID && defined(__APPLE__))
   return static_cast<int>(pthread_mach_thread_np(pthread_self()));
 #elif V8_OS_LINUX

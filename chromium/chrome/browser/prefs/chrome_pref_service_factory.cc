@@ -26,7 +26,6 @@
 #include "base/trace_event/trace_event.h"
 #include "build/branding_buildflags.h"
 #include "build/build_config.h"
-#include "build/chromeos_buildflags.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/enterprise/signin/enterprise_signin_prefs.h"
 #include "chrome/browser/policy/chrome_browser_policy_connector.h"
@@ -61,6 +60,7 @@
 #include "components/search_engines/default_search_manager.h"
 #include "components/search_engines/search_engines_pref_names.h"
 #include "components/signin/public/base/signin_pref_names.h"
+#include "components/signin/public/base/signin_switches.h"
 #include "components/supervised_user/core/browser/supervised_user_pref_store.h"
 #include "components/sync/base/data_type.h"
 #include "components/sync/base/features.h"
@@ -78,7 +78,7 @@
 #include "sql/error_delegate_util.h"
 #include "ui/base/resource/resource_bundle.h"
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
 #include "base/files/file_util.h"
 #endif
 
@@ -259,7 +259,7 @@ GetTrackingConfiguration() {
     // Add the account value equivalent for syncable prefs for tracking, by
     // prefixing the pref name with `kAccountPreferencesPrefix`.
     if (base::FeatureList::IsEnabled(
-            syncer::kEnablePreferencesAccountStorage) &&
+            switches::kEnablePreferencesAccountStorage) &&
         syncable_prefs_db.IsPreferenceSyncable(data->name)) {
       auto account_data = data->Clone();
       account_data->name = base::StringPrintf(
@@ -291,7 +291,7 @@ std::unique_ptr<ProfilePrefStoreManager> CreateProfilePrefStoreManager(
                                                    legacy_device_id);
 }
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
 // The standalone browser prefs store does not exist anymore but there may still
 // be files left on disk. Delete them.
 // TODO(crbug.com/380780352): Remove this code after the stepping stone.
@@ -412,7 +412,7 @@ std::unique_ptr<sync_preferences::PrefServiceSyncable> CreateProfilePrefs(
               io_task_runner, std::move(reset_on_load_observer),
               std::move(validation_delegate));
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
   io_task_runner->PostTask(
       FROM_HERE,
       base::BindOnce(&CleanupObsoleteStandaloneBrowserPrefsFile, profile_path));
@@ -422,7 +422,8 @@ std::unique_ptr<sync_preferences::PrefServiceSyncable> CreateProfilePrefs(
                  supervised_user_settings, user_pref_store,
                  std::move(extension_prefs), async, connector);
 
-  if (base::FeatureList::IsEnabled(syncer::kEnablePreferencesAccountStorage)) {
+  if (base::FeatureList::IsEnabled(
+          switches::kEnablePreferencesAccountStorage)) {
     // Desktop and Mobile platforms have different implementation for account
     // preferences. Mobile platforms have a separate file to store account
     // preferences. Whereas, desktop platforms would store account preferences
@@ -541,7 +542,7 @@ void HandlePersistentPrefStoreReadError(
          !BrowserThread::IsThreadInitialized(BrowserThread::UI));
 
   if (error != PersistentPrefStore::PREF_READ_ERROR_NONE) {
-#if !BUILDFLAG(IS_CHROMEOS_ASH)
+#if !BUILDFLAG(IS_CHROMEOS)
     // Failing to load prefs on startup is a bad thing(TM). See bug 38352 for
     // an example problem that this can cause.
     // Do some diagnosis and try to avoid losing data.

@@ -23,9 +23,9 @@ import {HatsBrowserProxyImpl, TrustSafetyInteraction} from '../../hats_browser_p
 import {loadTimeData} from '../../i18n_setup.js';
 import type {MetricsBrowserProxy} from '../../metrics_browser_proxy.js';
 import {MetricsBrowserProxyImpl, PrivacyGuideInteractions, PrivacyGuideStepsEligibleAndReached} from '../../metrics_browser_proxy.js';
+import type {PrivacySandboxBrowserProxy} from '../../privacy_sandbox/privacy_sandbox_browser_proxy.js';
+import {PrivacySandboxBrowserProxyImpl} from '../../privacy_sandbox/privacy_sandbox_browser_proxy.js';
 
-import type {PrivacyGuideBrowserProxy} from './privacy_guide_browser_proxy.js';
-import {PrivacyGuideBrowserProxyImpl} from './privacy_guide_browser_proxy.js';
 import {getTemplate} from './privacy_guide_completion_fragment.html.js';
 
 export interface PrivacyGuideCompletionFragmentElement {
@@ -49,16 +49,11 @@ export class PrivacyGuideCompletionFragmentElement extends
 
   static get properties() {
     return {
-      isNoLinkLayout: {
+      isNoLinkLayout_: {
         reflectToAttribute: true,
         type: Boolean,
         computed: 'computeIsNoLinkLayout_(shouldShowWaa_,' +
             'shouldShowPrivacySandbox_)',
-      },
-
-      subheader_: {
-        type: String,
-        computed: 'computeSubheader_(isNoLinkLayout)',
       },
 
       shouldShowAiSettings_: {
@@ -86,13 +81,15 @@ export class PrivacyGuideCompletionFragmentElement extends
     };
   }
 
+  private isNoLinkLayout_: boolean;
+  private shouldShowAiSettings_: boolean;
   private shouldShowPrivacySandbox_: boolean;
   private shouldShowWaa_: boolean;
   private metricsBrowserProxy_: MetricsBrowserProxy =
       MetricsBrowserProxyImpl.getInstance();
   private shouldShowV2AdPrivacySubLabel_: boolean;
-  private privacyGuideBrowserProxy_: PrivacyGuideBrowserProxy =
-      PrivacyGuideBrowserProxyImpl.getInstance();
+  private privacySandboxBrowserProxy_: PrivacySandboxBrowserProxy =
+      PrivacySandboxBrowserProxyImpl.getInstance();
 
   override ready() {
     super.ready();
@@ -103,8 +100,8 @@ export class PrivacyGuideCompletionFragmentElement extends
         (event: UpdateSyncStateEvent) => this.updateWaaLink_(event.signedIn));
     ClearBrowsingDataBrowserProxyImpl.getInstance().getSyncState().then(
         (status: UpdateSyncStateEvent) => this.updateWaaLink_(status.signedIn));
-    this.privacyGuideBrowserProxy_
-        .privacySandboxPrivacyGuideShouldShowCompletionCardAdTopicsSubLabel()
+    this.privacySandboxBrowserProxy_
+        .shouldShowPrivacySandboxAdTopicsContentParity()
         .then(state => {
           this.shouldShowV2AdPrivacySubLabel_ = state;
         });
@@ -126,7 +123,7 @@ export class PrivacyGuideCompletionFragmentElement extends
     return !this.shouldShowWaa_ && !this.shouldShowPrivacySandbox_;
   }
 
-  private computeSubheader_(): string {
+  private getSubheader_(): string {
     return this.computeIsNoLinkLayout_() ?
         this.i18n('privacyGuideCompletionCardSubHeaderNoLinks') :
         this.i18n('privacyGuideCompletionCardSubHeader');

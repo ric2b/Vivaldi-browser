@@ -87,11 +87,13 @@ export interface Event {
 
 export interface Args {
   data?: ArgsData;
+  sampleTraceId?: number;
   stackTrace?: CallFrame[];
 }
 
 export interface ArgsData {
   stackTrace?: CallFrame[];
+  sampleTraceId?: number;
   url?: string;
   navigationId?: string;
   frame?: string;
@@ -107,7 +109,7 @@ export interface CallFrame {
   url: string;
 }
 
-export function objectIsCallFrame(object: {}): object is CallFrame {
+export function objectIsCallFrame(object: object): object is CallFrame {
   return ('functionName' in object && typeof object.functionName === 'string') &&
       ('scriptId' in object && (typeof object.scriptId === 'string' || typeof object.scriptId === 'number')) &&
       ('columnNumber' in object && typeof object.columnNumber === 'number') &&
@@ -247,9 +249,7 @@ export interface ParseHTML extends Complete {
   name: 'ParseHTML';
   args: Args&{
     beginData: {
-      frame: string,
-      startLine: number,
-      url: string,
+      sampleTraceId?: number, frame: string, startLine: number, url: string,
     },
     endData?: {
       endLine: number,
@@ -402,7 +402,6 @@ export interface SyntheticNetworkRequest extends Complete, SyntheticBased<Phase.
       initiator?: Initiator,
       requestMethod?: string,
       timing?: ResourceReceiveResponseTimingData,
-      syntheticServerTimings?: SyntheticServerTiming[],
     },
   };
   cat: 'loading';
@@ -1377,6 +1376,15 @@ export interface BeginRemoteFontLoad extends UserTiming {
   args: Args&{
     display: string,
     id: number,
+    url?: string,
+  };
+}
+
+export interface RemoteFontLoaded extends UserTiming {
+  name: Name.REMOTE_FONT_LOADED;
+  args: Args&{
+    url: string,
+    name: string,
   };
 }
 
@@ -1385,8 +1393,8 @@ export type PairableUserTiming = UserTiming&PairableAsync;
 export interface PerformanceMeasureBegin extends PairableUserTiming {
   args: Args&{
     detail?: string,
-    stackTrace?: CallFrame[],
     callTime?: Micro,
+    traceId?: number,
   };
   ph: Phase.ASYNC_NESTABLE_START;
 }
@@ -1398,7 +1406,6 @@ export interface PerformanceMark extends UserTiming {
   args: Args&{
     data?: ArgsData & {
       detail?: string,
-      stackTrace?: CallFrame[],
       callTime?: Micro,
     },
   };
@@ -1416,14 +1423,15 @@ export interface ConsoleTimeEnd extends PairableAsyncEnd {
 export type ConsoleTime = ConsoleTimeBegin|ConsoleTimeEnd;
 
 export interface ConsoleTimeStamp extends Event {
-  cat: 'disabled-by-default-v8.inspector';
-  name: Name.CONSOLE_TIME_STAMP;
-  ph: Phase.COMPLETE;
+  cat: 'devtools.timeline';
+  name: Name.TIME_STAMP;
+  ph: Phase.INSTANT;
   args: Args&{
     data?: ArgsData & {
       // The console.timeStamp allows to pass integers as values as well
       // as strings
-      name: string | number,
+      message: string,
+      name?: string|number,
       start?: string|number,
       end?: string|number,
       track?: string|number,
@@ -1439,6 +1447,16 @@ export interface SyntheticConsoleTimeStamp extends Event, SyntheticBased {
   ph: Phase.COMPLETE;
 }
 
+export interface UserTimingMeasure extends Event {
+  cat: 'devtools.timeline';
+  ph: Phase.COMPLETE;
+  name: Name.USER_TIMING_MEASURE;
+  args: Args&{
+    sampleTraceId: number,
+    traceId: number,
+  };
+}
+
 /** ChromeFrameReporter args for PipelineReporter event.
     Matching proto: https://source.chromium.org/chromium/chromium/src/+/main:third_party/perfetto/protos/perfetto/trace/track_event/chrome_frame_reporter.proto
  */
@@ -1452,7 +1470,7 @@ interface ChromeFrameReporter {
   /**  Identifies a BeginFrameArgs (along with the source_id).
        See comments in components/viz/common/frame_sinks/begin_frame_args.h. */
   frame_sequence: number;
-  /**  If this is a droped frame (i.e. if |state| is set to |STATE_DROPPED| or
+  /**  If this is a dropped frame (i.e. if |state| is set to |STATE_DROPPED| or
        |STATE_PRESENTED_PARTIAL|), then indicates whether this frame impacts smoothness. */
   affects_smoothness: boolean;
   /** The type of active scroll. */
@@ -1612,7 +1630,7 @@ export interface SyntheticInteractionPair extends SyntheticEventPair<EventTiming
  * trace event.
  *
  * We store the sampleIndex, profileId and nodeId so that we can easily link
- * back a Synthetic Trace Entry to an indivdual Sample trace event within a
+ * back a Synthetic Trace Entry to an individual Sample trace event within a
  * Profile.
  *
  * Because a sample contains a set of call frames representing the stack at the
@@ -1624,25 +1642,6 @@ export interface SyntheticProfileCall extends Event {
   nodeId: Protocol.integer;
   sampleIndex: number;
   profileId: ProfileID;
-}
-
-/**
- * A synthetic event created from the Server-Timing header of network
- * request. In order to create these synthetic events, the corresponding
- * metric (timing) in the header must contain a "start" param, which
- * corresponds to the timestamp of the metric in the server. The
- * ServerTimingsHandler implements a heuristic to estimate the offset
- * between the client clock and the server clock so that the server
- * timestamp can be translated to the tracing clock.
- */
-export interface SyntheticServerTiming<T extends Phase = Phase.COMPLETE> extends SyntheticBased<T> {
-  rawSourceEvent: ResourceSendRequest;
-  cat: 'devtools.server-timing';
-  args: Args&{
-    data: ArgsData & {
-      desc?: string, origin: string,
-    },
-  };
 }
 
 /**
@@ -1677,17 +1676,6 @@ export interface DrawFrame extends Instant {
 export function isDrawFrame(event: Event): event is DrawFrame {
   // The extra check for INSTANT here is because in the past DrawFrame events had an ASYNC_NESTABLE_START and ASYNC_NESTABLE_END pair. We don't want to support those old events, so we have to check we are dealing with an instant event.
   return event.name === Name.DRAW_FRAME && event.ph === Phase.INSTANT;
-}
-export interface LegacyDrawFrameBegin extends Async {
-  name: Name.DRAW_FRAME;
-  ph: Phase.ASYNC_NESTABLE_START;
-  args: Args&{
-    layerTreeId: number,
-    frameSeqId: number,
-  };
-}
-export function isLegacyTraceEventDrawFrameBegin(event: Event): event is LegacyDrawFrameBegin {
-  return event.name === Name.DRAW_FRAME && event.ph === Phase.ASYNC_NESTABLE_START;
 }
 
 export interface BeginFrame extends Instant {
@@ -1887,7 +1875,7 @@ export interface UpdateLayoutTree extends Complete {
   args: Args&{
     elementCount: number,
     beginData?: {
-      frame: string,
+      sampleTraceId?: number, frame: string,
       stackTrace?: CallFrame[],
     },
   };
@@ -1900,10 +1888,8 @@ export interface Layout extends Complete {
   name: Name.LAYOUT;
   args: Args&{
     beginData: {
-      frame: string,
-      dirtyObjects: number,
-      partialLayout: boolean,
-      totalObjects: number,
+      sampleTraceId?: number, frame: string, dirtyObjects: number, partialLayout: boolean, totalObjects: number,
+      stackTrace?: CallFrame[],
     },
     // endData is not reliably populated.
     // Why? TBD. https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/frame/local_frame_view.cc;l=847-851;drc=8b6aaad8027390ce6b32d82d57328e93f34bb8e5
@@ -2208,6 +2194,14 @@ export function isResourceReceivedData(
   return event.name === 'ResourceReceivedData';
 }
 
+// Any event where we receive data (and get an encodedDataLength)
+export function isReceivedDataEvent(
+    event: Event,
+    ): event is ResourceReceivedData|ResourceFinish|ResourceReceiveResponse {
+  return event.name === 'ResourceReceivedData' || event.name === 'ResourceFinish' ||
+      event.name === 'ResourceReceiveResponse';
+}
+
 export function isSyntheticNetworkRequest(
     event: Event,
     ): event is SyntheticNetworkRequest {
@@ -2233,6 +2227,20 @@ export function isPrePaint(
 /** A VALID navigation start (as it has a populated documentLoaderURL) */
 export function isNavigationStart(event: Event): event is NavigationStart {
   return event.name === 'navigationStart' && (event as NavigationStart).args?.data?.documentLoaderURL !== '';
+}
+
+export interface DidCommitSameDocumentNavigation extends Complete {
+  name: 'RenderFrameHostImpl::DidCommitSameDocumentNavigation';
+  args: Args&{
+    url: string,
+    render_frame_host: {
+      frame_type: string,
+    },
+  };
+}
+
+export function isDidCommitSameDocumentNavigation(event: Event): event is DidCommitSameDocumentNavigation {
+  return event.name === 'RenderFrameHostImpl::DidCommitSameDocumentNavigation';
 }
 
 export function isMainFrameViewport(
@@ -2275,6 +2283,10 @@ export function isBeginRemoteFontLoad(event: Event): event is BeginRemoteFontLoa
   return event.name === Name.BEGIN_REMOTE_FONT_LOAD;
 }
 
+export function isRemoteFontLoaded(event: Event): event is RemoteFontLoaded {
+  return event.name === Name.REMOTE_FONT_LOADED;
+}
+
 export function isPerformanceMeasure(event: Event): event is PerformanceMeasure {
   return isUserTiming(event) && isPhaseAsync(event.ph);
 }
@@ -2292,7 +2304,11 @@ export function isConsoleTime(event: Event): event is ConsoleTime {
 }
 
 export function isConsoleTimeStamp(event: Event): event is ConsoleTimeStamp {
-  return event.ph === Phase.COMPLETE && event.name === Name.CONSOLE_TIME_STAMP;
+  return event.ph === Phase.INSTANT && event.name === Name.TIME_STAMP;
+}
+
+export function isUserTimingMeasure(event: Event): event is UserTimingMeasure {
+  return event.name === Name.USER_TIMING_MEASURE;
 }
 
 export function isParseHTML(event: Event): event is ParseHTML {
@@ -2342,8 +2358,13 @@ export interface PaintImage extends Complete {
       width: number,
       x: number,
       y: number,
+      isCSS: boolean,
+      isPicture?: boolean,
+      loadingAttribute?: string,
+      srcsetAttribute?: string,
       url?: string, srcHeight: number, srcWidth: number,
       nodeId?: Protocol.DOM.BackendNodeId,
+      frame?: string,
     },
   };
 }
@@ -2695,10 +2716,6 @@ export function isFunctionCall(event: Event): event is FunctionCall {
   return event.name === Name.FUNCTION_CALL;
 }
 
-export function isSyntheticServerTiming(event: Event): event is SyntheticServerTiming {
-  return event.cat === 'devtools.server-timing';
-}
-
 export interface SchedulePostTaskCallback extends Instant {
   name: Name.SCHEDULE_POST_TASK_CALLBACK;
   args: Args&{
@@ -2948,7 +2965,7 @@ export const enum Name {
   CONSOLE_TIME = 'ConsoleTime',
   USER_TIMING = 'UserTiming',
   INTERACTIVE_TIME = 'InteractiveTime',
-  CONSOLE_TIME_STAMP = 'V8Console::TimeStamp',
+  TIME_STAMP = 'TimeStamp',
 
   /* Frames */
   BEGIN_FRAME = 'BeginFrame',
@@ -3005,11 +3022,13 @@ export const enum Name {
 
   DOM_LOADING = 'domLoading',
   BEGIN_REMOTE_FONT_LOAD = 'BeginRemoteFontLoad',
+  REMOTE_FONT_LOADED = 'RemoteFontLoaded',
 
   ANIMATION_FRAME = 'AnimationFrame',
   ANIMATION_FRAME_PRESENTATION = 'AnimationFrame::Presentation',
 
-  SYNTHETIC_NETWORK_REQUEST = 'SyntheticNetworkRequest'
+  SYNTHETIC_NETWORK_REQUEST = 'SyntheticNetworkRequest',
+  USER_TIMING_MEASURE = 'UserTiming::Measure',
 }
 
 // NOT AN EXHAUSTIVE LIST: just some categories we use and refer
@@ -3065,6 +3084,91 @@ export interface LegacyLayerPaintEvent {
 }
 
 export interface LegacyLayerPaintEventPicture {
-  rect: Array<number>;
+  rect: number[];
   serializedPicture: string;
+}
+
+export interface TargetRundownEvent extends Event {
+  cat: 'disabled-by-default-devtools.target-rundown';
+  name: 'ScriptCompiled';
+  args: Args&{
+    data?: {
+      frame: Protocol.Page.FrameId,
+      frameType: string,
+      url: string,
+      isolate: string,
+      v8context: string,
+      origin: string,
+      scriptId: number,
+      isDefault?: boolean,
+      contextType?: string,
+    },
+  };
+}
+
+export function isTargetRundownEvent(event: Event): event is TargetRundownEvent {
+  return event.cat === 'disabled-by-default-devtools.target-rundown' && event.name === 'ScriptCompiled';
+}
+
+export interface V8SourceRundownEvent extends Event {
+  cat: 'disabled-by-default-devtools.v8-source-rundown';
+  name: 'ScriptCatchup';
+  args: Args&{
+    data: {
+      isolate: string,
+      executionContextId: Protocol.Runtime.ExecutionContextId,
+      scriptId: number,
+      startLine: number,
+      startColumn: number,
+      endLine: number,
+      endColumn: number,
+      hash: string,
+      isModule: boolean,
+      hasSourceUrl: boolean,
+      url?: string,
+      sourceUrl?: string,
+      sourceMapUrl?: string,
+    },
+  };
+}
+
+export function isV8SourceRundownEvent(event: Event): event is V8SourceRundownEvent {
+  return event.cat === 'disabled-by-default-devtools.v8-source-rundown' && event.name === 'ScriptCatchup';
+}
+
+export interface V8SourceRundownSourcesScriptCatchupEvent extends Event {
+  cat: 'disabled-by-default-devtools.v8-source-rundown-sources';
+  name: 'ScriptCatchup';
+  args: Args&{
+    data: {
+      isolate: string,
+      scriptId: number,
+      length: number,
+      sourceText: string,
+    },
+  };
+}
+
+export function isV8SourceRundownSourcesScriptCatchupEvent(event: Event):
+    event is V8SourceRundownSourcesScriptCatchupEvent {
+  return event.cat === 'disabled-by-default-devtools.v8-source-rundown-sources' && event.name === 'ScriptCatchup';
+}
+
+export interface V8SourceRundownSourcesLargeScriptCatchupEvent extends Event {
+  cat: 'disabled-by-default-devtools.v8-source-rundown-sources';
+  name: 'LargeScriptCatchup';
+  args: Args&{
+    data: {
+      isolate: string,
+      scriptId: number,
+      splitIndex: number,
+      splitCount: number,
+      sourceText: string,
+    },
+  };
+}
+
+export function isV8SourceRundownSourcesLargeScriptCatchupEvent(event: Event):
+    event is V8SourceRundownSourcesLargeScriptCatchupEvent {
+  return event.cat === 'disabled-by-default-devtools.v8-source-rundown-sources' && event.name === 'LargeScriptCatchup';
 }

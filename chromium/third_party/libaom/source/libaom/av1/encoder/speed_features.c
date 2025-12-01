@@ -917,6 +917,20 @@ static void set_good_speed_feature_framesize_dependent(
   }
 }
 
+// Configures speed features for low complexity decoding.
+static void set_speed_features_low_complexity_decode(const AV1_COMP *const cpi,
+                                                     SPEED_FEATURES *const sf) {
+  const FRAME_UPDATE_TYPE update_type =
+      get_frame_update_type(&cpi->ppi->gf_group, cpi->gf_frame_index);
+
+  if (cpi->oxcf.enable_low_complexity_decode >= 1) {
+    sf->lpf_sf.adaptive_luma_loop_filter_skip =
+        (update_type != OVERLAY_UPDATE && update_type != INTNL_OVERLAY_UPDATE)
+            ? 1
+            : 0;
+  }
+}
+
 static void set_good_speed_features_framesize_independent(
     const AV1_COMP *const cpi, SPEED_FEATURES *const sf, int speed) {
   const AV1_COMMON *const cm = &cpi->common;
@@ -1316,6 +1330,9 @@ static void set_good_speed_features_framesize_independent(
 
     sf->fp_sf.skip_zeromv_motion_search = 1;
   }
+
+  if (cpi->oxcf.enable_low_complexity_decode)
+    set_speed_features_low_complexity_decode(cpi, sf);
 }
 
 static void set_rt_speed_feature_framesize_dependent(const AV1_COMP *const cpi,
@@ -1591,6 +1608,15 @@ static void set_rt_speed_feature_framesize_dependent(const AV1_COMP *const cpi,
       sf->rt_sf.increase_color_thresh_palette = 0;
       sf->rt_sf.prune_h_pred_using_best_mode_so_far = true;
       sf->rt_sf.enable_intra_mode_pruning_using_neighbors = true;
+    }
+    if (speed >= 12) {
+      if (cpi->rc.high_source_sad && cpi->rc.frame_source_sad > 40000 &&
+          cpi->rc.prev_avg_source_sad < 1000 &&
+          cpi->oxcf.frm_dim_cfg.width * cpi->oxcf.frm_dim_cfg.height >=
+              1280 * 720) {
+        sf->rt_sf.prune_palette_search_nonrd = 3;
+        sf->rt_sf.skip_newmv_mode_sad_screen = 1;
+      }
     }
     sf->rt_sf.skip_encoding_non_reference_slide_change =
         cpi->oxcf.rc_cfg.drop_frames_water_mark > 0 ? 1 : 0;
@@ -2238,6 +2264,7 @@ static inline void init_lpf_sf(LOOP_FILTER_SPEED_FEATURES *lpf_sf) {
   lpf_sf->prune_sgr_based_on_wiener = 0;
   lpf_sf->enable_sgr_ep_pruning = 0;
   lpf_sf->reduce_wiener_window_size = 0;
+  lpf_sf->adaptive_luma_loop_filter_skip = 0;
   lpf_sf->lpf_pick = LPF_PICK_FROM_FULL_IMAGE;
   lpf_sf->use_coarse_filter_level_search = 0;
   lpf_sf->cdef_pick_method = CDEF_FULL_SEARCH;
@@ -2328,6 +2355,7 @@ static inline void init_rt_sf(REAL_TIME_SPEED_FEATURES *rt_sf) {
   rt_sf->skip_newmv_flat_blocks_screen = 0;
   rt_sf->skip_encoding_non_reference_slide_change = 0;
   rt_sf->rc_faster_convergence_static = 0;
+  rt_sf->skip_newmv_mode_sad_screen = 0;
 }
 
 static fractional_mv_step_fp

@@ -21,6 +21,8 @@
 #include "ash/public/cpp/holding_space/holding_space_progress.h"
 #include "ash/public/cpp/holding_space/holding_space_util.h"
 #include "ash/public/cpp/image_util.h"
+#include "ash/session/session_controller_impl.h"
+#include "ash/shell.h"
 #include "base/containers/fixed_flat_set.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
@@ -65,6 +67,7 @@
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/sync_preferences/pref_service_mock_factory.h"
 #include "components/sync_preferences/pref_service_syncable.h"
+#include "components/user_manager/test_helper.h"
 #include "components/user_manager/user_names.h"
 #include "components/vector_icons/vector_icons.h"
 #include "content/public/test/fake_download_item.h"
@@ -605,8 +608,8 @@ class HoldingSpaceKeyedServiceTest : public BrowserWithTestWindowTest {
   TestingProfile* CreateSecondaryProfile(
       std::unique_ptr<sync_preferences::PrefServiceSyncable> prefs = nullptr) {
     constexpr char kSecondaryProfileName[] = "secondary_profile";
-    constexpr char kFakeGaia2[] = "fakegaia2";
-    LogIn(kSecondaryProfileName, GaiaId(kFakeGaia2));
+    const GaiaId kFakeGaia2("fakegaia2");
+    LogIn(kSecondaryProfileName, kFakeGaia2);
     return profile_manager()->CreateTestingProfile(
         kSecondaryProfileName, std::move(prefs), /*user_name=*/std::u16string(),
         /*avatar_id=*/0, GetTestingFactories());
@@ -633,11 +636,7 @@ class HoldingSpaceKeyedServiceTest : public BrowserWithTestWindowTest {
   void ActivateSecondaryProfile() {
     const std::string kSecondaryProfileName = "secondary_profile";
     const AccountId account_id(AccountId::FromUserEmail(kSecondaryProfileName));
-    GetSessionControllerClient()->SwitchActiveUser(account_id);
-  }
-
-  TestSessionControllerClient* GetSessionControllerClient() {
-    return ash_test_helper()->test_session_controller_client();
+    ash::Shell::Get()->session_controller()->SwitchActiveUser(account_id);
   }
 
   // Resolves an absolute file path in the file manager's file system context,
@@ -778,10 +777,7 @@ class HoldingSpaceKeyedServiceWithExperimentalFeatureForGuestTest
     auto* user = user_manager()->AddGuestUser();
     user_manager()->UserLoggedIn(
         user->GetAccountId(),
-        user_manager::FakeUserManager::GetFakeUsernameHash(
-            user->GetAccountId()),
-        /*browser_restart=*/false,
-        /*is_child=*/false);
+        user_manager::TestHelper::GetFakeUsernameHash(user->GetAccountId()));
   }
 
   TestingProfile* CreateProfile(const std::string& profile_name) override {
@@ -3203,7 +3199,7 @@ class HoldingSpaceKeyedServicePrintToPdfIntegrationTest
 
     // Create the PDF printer handler.
     Browser* browser = GetBrowserForPdfPrinterHandler();
-    pdf_printer_handler_ = std::make_unique<printing::PdfPrinterHandler>(
+    pdf_printer_handler_ = std::make_unique<::printing::PdfPrinterHandler>(
         browser->profile(), browser->tab_strip_model()->GetActiveWebContents(),
         /*sticky_settings=*/nullptr);
   }
@@ -3226,7 +3222,7 @@ class HoldingSpaceKeyedServicePrintToPdfIntegrationTest
     return incognito_browser_.get();
   }
 
-  std::unique_ptr<printing::PdfPrinterHandler> pdf_printer_handler_;
+  std::unique_ptr<::printing::PdfPrinterHandler> pdf_printer_handler_;
   std::unique_ptr<Browser> incognito_browser_;
 };
 

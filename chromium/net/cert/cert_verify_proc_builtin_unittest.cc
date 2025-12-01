@@ -15,13 +15,16 @@
 #include "base/strings/stringprintf.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/task/thread_pool.h"
+#include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/task_environment.h"
 #include "base/time/time.h"
 #include "components/network_time/time_tracker/time_tracker.h"
 #include "net/base/features.h"
+#include "net/base/ip_address.h"
 #include "net/base/net_errors.h"
 #include "net/base/test_completion_callback.h"
+#include "net/cert/cert_status_flags.h"
 #include "net/cert/cert_verify_proc.h"
 #include "net/cert/crl_set.h"
 #include "net/cert/do_nothing_ct_verifier.h"
@@ -29,6 +32,7 @@
 #include "net/cert/internal/system_trust_store.h"
 #include "net/cert/sct_status_flags.h"
 #include "net/cert/time_conversions.h"
+#include "net/cert/x509_certificate.h"
 #include "net/cert/x509_util.h"
 #include "net/cert_net/cert_net_fetcher_url_request.h"
 #include "net/http/transport_security_state.h"
@@ -107,6 +111,32 @@ static std::string MakeRandomPath(std::string_view suffix) {
   return "/" + MakeRandomHexString(12) + std::string(suffix);
 }
 
+#if BUILDFLAG(CHROME_ROOT_STORE_SUPPORTED)
+std::vector<std::string> ParseNetLogCertificatesList(
+    const base::Value::List& list) {
+  std::vector<std::string> result;
+  for (const auto& pem_value : list) {
+    if (!pem_value.is_string()) {
+      result.push_back("Value is not a string");
+      continue;
+    }
+    CertificateList certs = X509Certificate::CreateCertificateListFromBytes(
+        base::as_byte_span(pem_value.GetString()),
+        X509Certificate::Format::FORMAT_PEM_CERT_SEQUENCE);
+    if (certs.empty()) {
+      result.push_back("error decoding pem");
+      continue;
+    }
+    if (certs.size() > 1) {
+      result.push_back("multiple certs in pem");
+      continue;
+    }
+    result.emplace_back(base::as_string_view(certs[0]->cert_span()));
+  }
+  return result;
+}
+#endif  // BUILDFLAG(CHROME_ROOT_STORE_SUPPORTED)
+
 int VerifyOnWorkerThread(const scoped_refptr<CertVerifyProc>& verify_proc,
                          scoped_refptr<X509Certificate> cert,
                          const std::string& hostname,
@@ -159,12 +189,21 @@ class MockSystemTrustStore : public SystemTrustStore {
     return mock_chrome_root_constraints_;
   }
 
+  bssl::TrustStore* eutl_trust_store() override { return &eutl_trust_store_; }
+
   void SetMockChromeRootConstraints(
       std::vector<StaticChromeRootCertConstraints> chrome_root_constraints) {
     mock_chrome_root_constraints_.clear();
     for (const auto& constraint : chrome_root_constraints) {
       mock_chrome_root_constraints_.emplace_back(constraint);
     }
+  }
+
+  void AddMockEutlRoot(CRYPTO_BUFFER* der_cert) {
+    auto parsed_cert =
+        bssl::ParsedCertificate::Create(bssl::UpRef(der_cert), {}, nullptr);
+    ASSERT_TRUE(parsed_cert);
+    eutl_trust_store_.AddTrustAnchor(std::move(parsed_cert));
   }
 #endif
 
@@ -174,6 +213,7 @@ class MockSystemTrustStore : public SystemTrustStore {
 #if BUILDFLAG(CHROME_ROOT_STORE_SUPPORTED)
   bool mock_is_locally_trusted_root_ = false;
   std::vector<ChromeRootCertConstraints> mock_chrome_root_constraints_;
+  bssl::TrustStoreInMemory eutl_trust_store_;
 #endif
 };
 
@@ -358,6 +398,10 @@ class CertVerifyProcBuiltinTest : public ::testing::Test {
     mock_system_trust_store_->SetMockChromeRootConstraints(
         std::move(chrome_root_constraints));
   }
+
+  void AddMockEutlRoot(CRYPTO_BUFFER* der_cert) {
+    mock_system_trust_store_->AddMockEutlRoot(der_cert);
+  }
 #endif
 
   net::URLRequestContext* context() { return context_.get(); }
@@ -480,6 +524,43 @@ TEST_F(CertVerifyProcBuiltinTest, CallsCtVerifierAndReturnsSctStatus) {
   EXPECT_EQ(verify_result.scts.front().sct->log_id, kLogId);
   EXPECT_EQ(verify_result.policy_compliance,
             ct::CTPolicyCompliance::CT_POLICY_NOT_DIVERSE_SCTS);
+}
+
+TEST_F(CertVerifyProcBuiltinTest, DefaultCtComplianceIsNotAvailable) {
+  auto [leaf, intermediate, root] = CertBuilder::CreateSimpleChain3();
+
+  const std::string kOcspResponse = "OCSP response";
+  const std::string kSctList = "SCT list";
+  const std::string kLogId = "CT log id";
+  const ct::SCTVerifyStatus kSctVerifyStatus = ct::SCT_STATUS_OK;
+
+  SignedCertificateTimestampAndStatus sct_and_status;
+  sct_and_status.sct = base::MakeRefCounted<ct::SignedCertificateTimestamp>();
+  sct_and_status.sct->log_id = kLogId;
+  sct_and_status.status = kSctVerifyStatus;
+  SignedCertificateTimestampAndStatusList sct_and_status_list;
+  sct_and_status_list.push_back(sct_and_status);
+  EXPECT_CALL(*mock_ct_verifier(), Verify(_, kOcspResponse, kSctList, _, _, _))
+      .WillOnce(testing::SetArgPointee<4>(sct_and_status_list));
+
+  scoped_refptr<X509Certificate> chain = leaf->GetX509CertificateChain();
+  ASSERT_TRUE(chain.get());
+
+  CertVerifyResult verify_result;
+  NetLogSource verify_net_log_source;
+  TestCompletionCallback callback;
+  Verify(chain.get(), "www.example.com", kOcspResponse, kSctList, /*flags=*/0,
+         &verify_result, &verify_net_log_source, callback.callback());
+
+  int error = callback.WaitForResult();
+  EXPECT_THAT(error, IsError(ERR_CERT_AUTHORITY_INVALID));
+  ASSERT_EQ(verify_result.scts.size(), 1u);
+  EXPECT_EQ(verify_result.scts.front().status, kSctVerifyStatus);
+  EXPECT_EQ(verify_result.scts.front().sct->log_id, kLogId);
+  // Verification failed, so CT policy compliance isn't checked, and the default
+  // value should be COMPLIANCE_DETAILS_NOT_AVAILABLE.
+  EXPECT_EQ(verify_result.policy_compliance,
+            ct::CTPolicyCompliance::CT_POLICY_COMPLIANCE_DETAILS_NOT_AVAILABLE);
 }
 
 #if defined(PLATFORM_USES_CHROMIUM_EV_METADATA)
@@ -1815,6 +1896,446 @@ TEST_F(CertVerifyProcBuiltinTest,
   int error = callback.WaitForResult();
   EXPECT_THAT(error, IsOk());
 }
+
+class CertVerifyProcBuiltin1QwacTest
+    : public CertVerifyProcBuiltinTest,
+      public testing::WithParamInterface<bool> {
+ public:
+  CertVerifyProcBuiltin1QwacTest() {
+    if (GetParam()) {
+      feature_list_.InitAndEnableFeature(features::kVerifyQWACs);
+    } else {
+      feature_list_.InitAndDisableFeature(features::kVerifyQWACs);
+    }
+  }
+
+  void ExpectHistogramSample(const base::HistogramTester& histograms,
+                             Verify1QwacResult result) {
+    if (GetParam()) {
+      histograms.ExpectUniqueSample("Net.CertVerifier.Qwac.1Qwac", result, 1u);
+    } else {
+      histograms.ExpectTotalCount("Net.CertVerifier.Qwac.1Qwac", 0u);
+    }
+  }
+
+ private:
+  base::test::ScopedFeatureList feature_list_;
+};
+
+TEST_P(CertVerifyProcBuiltin1QwacTest, NotQwac) {
+  auto [leaf, intermediate, root] = CertBuilder::CreateSimpleChain3();
+  InitializeVerifyProc(CreateParams(
+      /*additional_trust_anchors=*/{}));
+  {
+    base::HistogramTester histograms;
+    CertVerifyResult verify_result;
+    NetLogSource verify_net_log_source;
+    TestCompletionCallback callback;
+    Verify(leaf->GetX509CertificateChain(), "www.example.com",
+           /*flags=*/0, &verify_result, &verify_net_log_source,
+           callback.callback());
+
+    int error = callback.WaitForResult();
+    EXPECT_THAT(error, IsError(ERR_CERT_AUTHORITY_INVALID));
+    EXPECT_FALSE(verify_result.cert_status & CERT_STATUS_IS_QWAC);
+
+    // The histogram is not logged if regular verification failed.
+    histograms.ExpectTotalCount("Net.CertVerifier.Qwac.1Qwac", 0u);
+  }
+
+  InitializeVerifyProc(CreateParams(
+      /*additional_trust_anchors=*/{root->GetX509Certificate()}));
+  {
+    base::HistogramTester histograms;
+    CertVerifyResult verify_result;
+    NetLogSource verify_net_log_source;
+    TestCompletionCallback callback;
+    Verify(leaf->GetX509CertificateChain(), "www.example.com",
+           /*flags=*/0, &verify_result, &verify_net_log_source,
+           callback.callback());
+
+    int error = callback.WaitForResult();
+    EXPECT_THAT(error, IsOk());
+    EXPECT_FALSE(verify_result.cert_status & CERT_STATUS_IS_QWAC);
+
+    ExpectHistogramSample(histograms, Verify1QwacResult::kNotQwac);
+  }
+}
+
+TEST_P(CertVerifyProcBuiltin1QwacTest,
+       CanUseEutlCertsAsHintsInNormalPathbuilding) {
+  auto [leaf, intermediate, root] = CertBuilder::CreateSimpleChain3();
+
+  // CABF OV, ETSI QNCP-w
+  leaf->SetCertificatePolicies({"2.23.140.1.2.2", "0.4.0.194112.1.5"});
+
+  leaf->SetQwacQcStatements({bssl::der::Input(kEtsiQctWebOid)});
+
+  InitializeVerifyProc(CreateParams(
+      /*additional_trust_anchors=*/{root->GetX509Certificate()}));
+
+  {
+    base::HistogramTester histograms;
+    CertVerifyResult verify_result;
+    NetLogSource verify_net_log_source;
+    TestCompletionCallback callback;
+    Verify(leaf->GetX509Certificate(), "www.example.com",
+           /*flags=*/0, &verify_result, &verify_net_log_source,
+           callback.callback());
+
+    int error = callback.WaitForResult();
+    // The intermediate was not supplied, so verification fails to find a path
+    // to the root.
+    EXPECT_THAT(error, IsError(ERR_CERT_AUTHORITY_INVALID));
+    EXPECT_FALSE(verify_result.cert_status & CERT_STATUS_IS_QWAC);
+    histograms.ExpectTotalCount("Net.CertVerifier.Qwac.1Qwac", 0u);
+  }
+
+  AddMockEutlRoot(intermediate->GetCertBuffer());
+
+  {
+    base::HistogramTester histograms;
+    CertVerifyResult verify_result;
+    NetLogSource verify_net_log_source;
+    TestCompletionCallback callback;
+    Verify(leaf->GetX509Certificate(), "www.example.com",
+           /*flags=*/0, &verify_result, &verify_net_log_source,
+           callback.callback());
+
+    int error = callback.WaitForResult();
+    if (GetParam()) {
+      // If the intermediate is on the EUTL, regular path building is able to
+      // use it as a hint, so the chain now verifies successfully.
+      EXPECT_THAT(error, IsOk());
+      EXPECT_TRUE(verify_result.cert_status & CERT_STATUS_IS_QWAC);
+      ASSERT_EQ(2u, verify_result.verified_cert->intermediate_buffers().size());
+      // The verified chain has the cert chain from the normal TLS verification,
+      // not the QWAC verification.
+      EXPECT_EQ(intermediate->GetCertBuffer(),
+                verify_result.verified_cert->intermediate_buffers()[0].get());
+      EXPECT_EQ(root->GetCertBuffer(),
+                verify_result.verified_cert->intermediate_buffers()[1].get());
+    } else {
+      EXPECT_THAT(error, IsError(ERR_CERT_AUTHORITY_INVALID));
+      EXPECT_FALSE(verify_result.cert_status & CERT_STATUS_IS_QWAC);
+    }
+    ExpectHistogramSample(histograms, Verify1QwacResult::kValid1Qwac);
+  }
+
+  InitializeVerifyProc(CreateParams(
+      /*additional_trust_anchors=*/{}));
+  AddMockEutlRoot(intermediate->GetCertBuffer());
+
+  {
+    base::HistogramTester histograms;
+    CertVerifyResult verify_result;
+    NetLogSource verify_net_log_source;
+    TestCompletionCallback callback;
+    Verify(leaf->GetX509Certificate(), "www.example.com",
+           /*flags=*/0, &verify_result, &verify_net_log_source,
+           callback.callback());
+
+    int error = callback.WaitForResult();
+    // If the intermediate is an EUTL cert but the root is not trusted,
+    // verification should fail. The EUTL certs are only used as hints in
+    // the regular path building attempt, but are not trust anchors.
+    EXPECT_THAT(error, IsError(ERR_CERT_AUTHORITY_INVALID));
+    EXPECT_FALSE(verify_result.cert_status & CERT_STATUS_IS_QWAC);
+    if (GetParam()) {
+      // The path builder should have been able to build the partial path to the
+      // hint certificate, but there is no root to build a path to from there.
+      ASSERT_EQ(1u, verify_result.verified_cert->intermediate_buffers().size());
+      EXPECT_EQ(intermediate->GetCertBuffer(),
+                verify_result.verified_cert->intermediate_buffers()[0].get());
+    } else {
+      ASSERT_EQ(0u, verify_result.verified_cert->intermediate_buffers().size());
+    }
+    histograms.ExpectTotalCount("Net.CertVerifier.Qwac.1Qwac", 0u);
+  }
+}
+
+TEST_P(CertVerifyProcBuiltin1QwacTest, OneQwacRequiresEutl) {
+  auto [leaf, intermediate, root] = CertBuilder::CreateSimpleChain3();
+  // intermediate->SetCertificatePolicies({"2.5.29.32.0"}); // anyPolicy
+
+  // CABF OV, ETSI QNCP-w
+  leaf->SetCertificatePolicies({"2.23.140.1.2.2", "0.4.0.194112.1.5"});
+
+  leaf->SetQwacQcStatements({bssl::der::Input(kEtsiQctWebOid)});
+
+  InitializeVerifyProc(CreateParams(
+      /*additional_trust_anchors=*/{root->GetX509Certificate()}));
+
+  {
+    base::HistogramTester histograms;
+    CertVerifyResult verify_result;
+    NetLogSource verify_net_log_source;
+    TestCompletionCallback callback;
+    Verify(leaf->GetX509CertificateChain(), "www.example.com",
+           /*flags=*/0, &verify_result, &verify_net_log_source,
+           callback.callback());
+
+    int error = callback.WaitForResult();
+    // If the intermediate is not on the EUTL, the certificate verifies
+    // successfully but does not have QWAC status set.
+    EXPECT_THAT(error, IsOk());
+    EXPECT_FALSE(verify_result.cert_status & CERT_STATUS_IS_QWAC);
+    ExpectHistogramSample(histograms, Verify1QwacResult::kFailedVerification);
+  }
+
+  AddMockEutlRoot(intermediate->GetCertBuffer());
+
+  {
+    base::HistogramTester histograms;
+    CertVerifyResult verify_result;
+    NetLogSource verify_net_log_source;
+    TestCompletionCallback callback;
+    Verify(leaf->GetX509CertificateChain(), "www.example.com",
+           /*flags=*/0, &verify_result, &verify_net_log_source,
+           callback.callback());
+
+    int error = callback.WaitForResult();
+    // If the intermediate is on the EUTL, the same certificate verifies
+    // successfully with the QWAC status set.
+    EXPECT_THAT(error, IsOk());
+    EXPECT_EQ(GetParam(), !!(verify_result.cert_status & CERT_STATUS_IS_QWAC));
+    ExpectHistogramSample(histograms, Verify1QwacResult::kValid1Qwac);
+  }
+}
+
+TEST_P(CertVerifyProcBuiltin1QwacTest, OneQwacRequiresPolicies) {
+  auto [leaf, intermediate, root] = CertBuilder::CreateSimpleChain3();
+
+  // CABF OV
+  leaf->SetCertificatePolicies({"2.23.140.1.2.2"});
+
+  leaf->SetQwacQcStatements({bssl::der::Input(kEtsiQctWebOid)});
+
+  InitializeVerifyProc(CreateParams(
+      /*additional_trust_anchors=*/{root->GetX509Certificate()}));
+
+  AddMockEutlRoot(intermediate->GetCertBuffer());
+
+  {
+    base::HistogramTester histograms;
+    CertVerifyResult verify_result;
+    NetLogSource verify_net_log_source;
+    TestCompletionCallback callback;
+    Verify(leaf->GetX509CertificateChain(), "www.example.com",
+           /*flags=*/0, &verify_result, &verify_net_log_source,
+           callback.callback());
+
+    int error = callback.WaitForResult();
+    // If the leaf doesn't have the necessary policies, the certificate
+    // verifies successfully but does not have QWAC status set.
+    EXPECT_THAT(error, IsOk());
+    EXPECT_FALSE(verify_result.cert_status & CERT_STATUS_IS_QWAC);
+    ExpectHistogramSample(histograms, Verify1QwacResult::kInconsistentBits);
+  }
+
+  // CABF OV, ETSI QNCP-w
+  leaf->SetCertificatePolicies({"2.23.140.1.2.2", "0.4.0.194112.1.5"});
+
+  {
+    base::HistogramTester histograms;
+    CertVerifyResult verify_result;
+    NetLogSource verify_net_log_source;
+    TestCompletionCallback callback;
+    Verify(leaf->GetX509CertificateChain(), "www.example.com",
+           /*flags=*/0, &verify_result, &verify_net_log_source,
+           callback.callback());
+
+    int error = callback.WaitForResult();
+    // If the leaf has the qwac policies, verifies successfully with the QWAC
+    // status set.
+    EXPECT_THAT(error, IsOk());
+    EXPECT_EQ(GetParam(), !!(verify_result.cert_status & CERT_STATUS_IS_QWAC));
+    ExpectHistogramSample(histograms, Verify1QwacResult::kValid1Qwac);
+  }
+}
+
+TEST_P(CertVerifyProcBuiltin1QwacTest, OneQwacRequiresQcStatements) {
+  auto [leaf, intermediate, root] = CertBuilder::CreateSimpleChain3();
+
+  // CABF OV, ETSI QNCP-w
+  leaf->SetCertificatePolicies({"2.23.140.1.2.2", "0.4.0.194112.1.5"});
+
+  // Initially, set QcStatements with the wrong QcType.
+  // id-etsi-qct-eseal OBJECT IDENTIFIER ::= { id-etsi-qcs-QcType 2 }
+  constexpr uint8_t kEtsiQctEsealOid[] = {0x04, 0x00, 0x8e, 0x46,
+                                          0x01, 0x06, 0x02};
+  leaf->SetQwacQcStatements({bssl::der::Input(kEtsiQctEsealOid)});
+
+  InitializeVerifyProc(CreateParams(
+      /*additional_trust_anchors=*/{root->GetX509Certificate()}));
+
+  AddMockEutlRoot(intermediate->GetCertBuffer());
+
+  {
+    base::HistogramTester histograms;
+    CertVerifyResult verify_result;
+    NetLogSource verify_net_log_source;
+    TestCompletionCallback callback;
+    Verify(leaf->GetX509CertificateChain(), "www.example.com",
+           /*flags=*/0, &verify_result, &verify_net_log_source,
+           callback.callback());
+
+    int error = callback.WaitForResult();
+    // If the leaf doesn't have the necessary QcStatements, the certificate
+    // verifies successfully but does not have QWAC status set.
+    EXPECT_THAT(error, IsOk());
+    EXPECT_FALSE(verify_result.cert_status & CERT_STATUS_IS_QWAC);
+    ExpectHistogramSample(histograms, Verify1QwacResult::kInconsistentBits);
+  }
+
+  // Try again with the correct QcType.
+  leaf->SetQwacQcStatements({bssl::der::Input(kEtsiQctWebOid)});
+
+  {
+    base::HistogramTester histograms;
+    CertVerifyResult verify_result;
+    NetLogSource verify_net_log_source;
+    TestCompletionCallback callback;
+    Verify(leaf->GetX509CertificateChain(), "www.example.com",
+           /*flags=*/0, &verify_result, &verify_net_log_source,
+           callback.callback());
+
+    int error = callback.WaitForResult();
+    // If the leaf has the qwac QcStatements, verifies successfully with the
+    // QWAC status set.
+    EXPECT_THAT(error, IsOk());
+    EXPECT_EQ(GetParam(), !!(verify_result.cert_status & CERT_STATUS_IS_QWAC));
+    ExpectHistogramSample(histograms, Verify1QwacResult::kValid1Qwac);
+  }
+}
+
+TEST_P(CertVerifyProcBuiltin1QwacTest, OneQwacCanBuildAlternatePath) {
+  auto [leaf, intermediate, root] = CertBuilder::CreateSimpleChain3();
+
+  // CABF OV, ETSI QNCP-w
+  leaf->SetCertificatePolicies({"2.23.140.1.2.2", "0.4.0.194112.1.5"});
+
+  leaf->SetQwacQcStatements({bssl::der::Input(kEtsiQctWebOid)});
+
+  InitializeVerifyProc(CreateParams(
+      /*additional_trust_anchors=*/{root->GetX509Certificate()}));
+
+  // Create separate intermediate which chains to a different root but has same
+  // subject, private key, and SKI so that `leaf` can also be verified with
+  // this chain.
+  auto [unused, root2] = CertBuilder::CreateSimpleChain2();
+  CertBuilder eutl_intermediate(/*orig_cert=*/intermediate->GetCertBuffer(),
+                                /*issuer=*/root2.get());
+  eutl_intermediate.SetSubjectTLV(
+      base::as_byte_span(intermediate->GetSubject()));
+  eutl_intermediate.SetKey(bssl::UpRef(intermediate->GetKey()));
+  eutl_intermediate.SetSubjectKeyIdentifier(
+      intermediate->GetSubjectKeyIdentifier());
+  AddMockEutlRoot(eutl_intermediate.GetCertBuffer());
+
+  RecordingNetLogObserver net_log_observer(NetLogCaptureMode::kDefault);
+  CertVerifyResult verify_result;
+  NetLogSource verify_net_log_source;
+  TestCompletionCallback callback;
+  Verify(leaf->GetX509CertificateChain(), "www.example.com",
+         /*flags=*/0, &verify_result, &verify_net_log_source,
+         callback.callback());
+
+  int error = callback.WaitForResult();
+  EXPECT_THAT(error, IsOk());
+  EXPECT_EQ(GetParam(), !!(verify_result.cert_status & CERT_STATUS_IS_QWAC));
+
+  ASSERT_EQ(2u, verify_result.verified_cert->intermediate_buffers().size());
+  // The verified chain has the cert chain from the normal TLS verification,
+  // not the QWAC verification.
+  EXPECT_EQ(intermediate->GetCertBuffer(),
+            verify_result.verified_cert->intermediate_buffers()[0].get());
+  EXPECT_EQ(root->GetCertBuffer(),
+            verify_result.verified_cert->intermediate_buffers()[1].get());
+
+  auto events = net_log_observer.GetEntriesForSource(verify_net_log_source);
+
+  auto event = std::ranges::find(
+      events, NetLogEventType::CERT_VERIFY_PROC_PATH_BUILD_ATTEMPT,
+      &NetLogEntry::type);
+  ASSERT_NE(event, events.end());
+  EXPECT_EQ(net::NetLogEventPhase::BEGIN, event->phase);
+  EXPECT_EQ(std::nullopt, event->params.FindBool("is_qwac_attempt"));
+
+  event = std::ranges::find(++event, events.end(),
+                            NetLogEventType::CERT_VERIFY_PROC_PATH_BUILT,
+                            &NetLogEntry::type);
+  ASSERT_NE(event, events.end());
+  EXPECT_EQ(net::NetLogEventPhase::BEGIN, event->phase);
+
+  event = std::ranges::find(++event, events.end(),
+                            NetLogEventType::CERT_VERIFY_PROC_PATH_BUILT,
+                            &NetLogEntry::type);
+  ASSERT_NE(event, events.end());
+  EXPECT_EQ(net::NetLogEventPhase::END, event->phase);
+  EXPECT_EQ(true, event->params.FindBool("is_valid"));
+  base::Value::List* pem_certs = event->params.FindList("certificates");
+  ASSERT_TRUE(pem_certs);
+  // The CERT_VERIFY_PROC_PATH_BUILT netlog for the main verification should
+  // contain the TLS cert chain.
+  EXPECT_THAT(ParseNetLogCertificatesList(*pem_certs),
+              testing::ElementsAre(leaf->GetDER(), intermediate->GetDER(),
+                                   root->GetDER()));
+
+  event = std::ranges::find(
+      ++event, events.end(),
+      NetLogEventType::CERT_VERIFY_PROC_PATH_BUILD_ATTEMPT, &NetLogEntry::type);
+  ASSERT_NE(event, events.end());
+  EXPECT_EQ(net::NetLogEventPhase::END, event->phase);
+  EXPECT_EQ(true, event->params.FindBool("has_valid_path"));
+
+  event = std::ranges::find(
+      ++event, events.end(),
+      NetLogEventType::CERT_VERIFY_PROC_PATH_BUILD_ATTEMPT, &NetLogEntry::type);
+  if (!GetParam()) {
+    // If the feature flag wasn't enabled, there should only be one
+    // CERT_VERIFY_PROC_PATH_BUILD_ATTEMPT.
+    ASSERT_EQ(event, events.end());
+    return;
+  }
+  ASSERT_NE(event, events.end());
+  EXPECT_EQ(net::NetLogEventPhase::BEGIN, event->phase);
+  EXPECT_EQ(true, event->params.FindBool("is_qwac_attempt"));
+
+  event = std::ranges::find(++event, events.end(),
+                            NetLogEventType::CERT_VERIFY_PROC_PATH_BUILT,
+                            &NetLogEntry::type);
+  ASSERT_NE(event, events.end());
+  EXPECT_EQ(net::NetLogEventPhase::BEGIN, event->phase);
+
+  event = std::ranges::find(++event, events.end(),
+                            NetLogEventType::CERT_VERIFY_PROC_PATH_BUILT,
+                            &NetLogEntry::type);
+  ASSERT_NE(event, events.end());
+  EXPECT_EQ(net::NetLogEventPhase::END, event->phase);
+  EXPECT_EQ(true, event->params.FindBool("is_valid"));
+  pem_certs = event->params.FindList("certificates");
+  ASSERT_TRUE(pem_certs);
+  // The CERT_VERIFY_PROC_PATH_BUILT netlog for the 1-QWAC verification should
+  // contain the QWAC cert chain.
+  EXPECT_THAT(ParseNetLogCertificatesList(*pem_certs),
+              testing::ElementsAre(leaf->GetDER(), eutl_intermediate.GetDER()));
+
+  event = std::ranges::find(
+      ++event, events.end(),
+      NetLogEventType::CERT_VERIFY_PROC_PATH_BUILD_ATTEMPT, &NetLogEntry::type);
+  ASSERT_NE(event, events.end());
+  EXPECT_EQ(net::NetLogEventPhase::END, event->phase);
+  EXPECT_EQ(true, event->params.FindBool("has_valid_path"));
+
+  event = std::ranges::find(
+      ++event, events.end(),
+      NetLogEventType::CERT_VERIFY_PROC_PATH_BUILD_ATTEMPT, &NetLogEntry::type);
+  ASSERT_EQ(event, events.end());
+}
+
+INSTANTIATE_TEST_SUITE_P(, CertVerifyProcBuiltin1QwacTest, testing::Bool());
+
 #endif  // BUILDFLAG(CHROME_ROOT_STORE_SUPPORTED)
 
 TEST_F(CertVerifyProcBuiltinTest, DeadlineExceededDuringSyncGetIssuers) {
@@ -2110,5 +2631,212 @@ TEST_F(CertVerifyProcBuiltinTest, IterationLimit) {
   EXPECT_THAT(error, IsError(ERR_CERT_AUTHORITY_INVALID));
   EXPECT_EQ(true, event->params.FindBool("exceeded_iteration_limit"));
 }
+
+class CertVerifyProcBuiltinSelfSignedTest
+    : public CertVerifyProcBuiltinTest,
+      public testing::WithParamInterface<bool> {
+ public:
+  CertVerifyProcBuiltinSelfSignedTest() {
+    if (GetParam()) {
+      feature_list_.InitAndEnableFeature(
+          features::kSelfSignedLocalNetworkInterstitial);
+    } else {
+      feature_list_.InitAndDisableFeature(
+          features::kSelfSignedLocalNetworkInterstitial);
+    }
+  }
+
+  scoped_refptr<X509Certificate> CreateSelfSigned(
+      std::string_view subject_dns_name) {
+    // Create a chain of size 1, which will result in a self-signed certificate
+    std::vector<std::unique_ptr<CertBuilder>> builders =
+        CertBuilder::CreateSimpleChain(1);
+    base::Time not_before = base::Time::Now() - base::Days(1);
+    base::Time not_after = base::Time::Now() + base::Days(1);
+    builders[0]->SetValidity(not_before, not_after);
+    builders[0]->SetSubjectAltName(subject_dns_name);
+    return builders[0]->GetX509Certificate();
+  }
+
+  scoped_refptr<X509Certificate> CreateSelfSignedIPSubject(
+      std::string_view ip_address) {
+    // Create a chain of size 1, which will result in a self-signed certificate
+    std::vector<std::unique_ptr<CertBuilder>> builders =
+        CertBuilder::CreateSimpleChain(1);
+    base::Time not_before = base::Time::Now() - base::Days(1);
+    base::Time not_after = base::Time::Now() + base::Days(1);
+    builders[0]->SetValidity(not_before, not_after);
+    IPAddress ip;
+    if (!ParseURLHostnameToAddress(ip_address, &ip)) {
+      ADD_FAILURE() << "Failed to parse IP address";
+    }
+
+    builders[0]->SetSubjectAltNames({}, {ip});
+    return builders[0]->GetX509Certificate();
+  }
+
+ private:
+  base::test::ScopedFeatureList feature_list_;
+};
+
+TEST_P(CertVerifyProcBuiltinSelfSignedTest,
+       SelfSignedCertOnLocalNetworkHostname) {
+  scoped_refptr<X509Certificate> cert = CreateSelfSigned("testurl.local");
+
+  CertVerifyResult verify_result;
+  NetLogSource verify_net_log_source;
+  TestCompletionCallback callback;
+  Verify(cert, "testurl.local", 0, &verify_result, &verify_net_log_source,
+         callback.callback());
+  int error = callback.WaitForResult();
+
+  if (GetParam()) {
+    EXPECT_TRUE(verify_result.cert_status &
+                CERT_STATUS_SELF_SIGNED_LOCAL_NETWORK);
+    EXPECT_THAT(error, IsError(ERR_CERT_SELF_SIGNED_LOCAL_NETWORK));
+  } else {
+    EXPECT_FALSE(verify_result.cert_status &
+                 CERT_STATUS_SELF_SIGNED_LOCAL_NETWORK);
+    EXPECT_THAT(error, IsError(ERR_CERT_AUTHORITY_INVALID));
+  }
+}
+
+TEST_P(CertVerifyProcBuiltinSelfSignedTest, SelfSignedCertOnLocalNetworkIP) {
+  scoped_refptr<X509Certificate> cert =
+      CreateSelfSignedIPSubject("192.168.0.1");
+
+  CertVerifyResult verify_result;
+  NetLogSource verify_net_log_source;
+  TestCompletionCallback callback;
+  Verify(cert, "192.168.0.1", 0, &verify_result, &verify_net_log_source,
+         callback.callback());
+  int error = callback.WaitForResult();
+
+  if (GetParam()) {
+    EXPECT_TRUE(verify_result.cert_status &
+                CERT_STATUS_SELF_SIGNED_LOCAL_NETWORK);
+    EXPECT_THAT(error, IsError(ERR_CERT_SELF_SIGNED_LOCAL_NETWORK));
+  } else {
+    EXPECT_FALSE(verify_result.cert_status &
+                 CERT_STATUS_SELF_SIGNED_LOCAL_NETWORK);
+    EXPECT_THAT(error, IsError(ERR_CERT_AUTHORITY_INVALID));
+  }
+}
+
+TEST_P(CertVerifyProcBuiltinSelfSignedTest, SelfSignedCertOnLocalNetworkIPv6) {
+  scoped_refptr<X509Certificate> cert =
+      CreateSelfSignedIPSubject("[fc00:0:0:0:0:0:0:0]");
+
+  CertVerifyResult verify_result;
+  NetLogSource verify_net_log_source;
+  TestCompletionCallback callback;
+  Verify(cert, "fc00:0:0:0:0:0:0:0", 0, &verify_result, &verify_net_log_source,
+         callback.callback());
+  int error = callback.WaitForResult();
+
+  if (GetParam()) {
+    EXPECT_TRUE(verify_result.cert_status &
+                CERT_STATUS_SELF_SIGNED_LOCAL_NETWORK);
+    EXPECT_THAT(error, IsError(ERR_CERT_SELF_SIGNED_LOCAL_NETWORK));
+  } else {
+    EXPECT_FALSE(verify_result.cert_status &
+                 CERT_STATUS_SELF_SIGNED_LOCAL_NETWORK);
+    EXPECT_THAT(error, IsError(ERR_CERT_AUTHORITY_INVALID));
+  }
+}
+
+TEST_P(CertVerifyProcBuiltinSelfSignedTest, NonSelfSignedCertOnLocalNetwork) {
+  std::vector<std::unique_ptr<CertBuilder>> builders =
+      CertBuilder::CreateSimpleChain(2);
+
+  base::Time not_before = base::Time::Now() - base::Days(2);
+  base::Time not_after = base::Time::Now() - base::Days(2);
+  builders[0]->SetValidity(not_before, not_after);
+  builders[0]->SetSubjectAltName("testurl.local");
+
+  CertVerifyResult verify_result;
+  NetLogSource verify_net_log_source;
+  TestCompletionCallback callback;
+  Verify(builders[0]->GetX509CertificateChain(), "testurl.local", 0,
+         &verify_result, &verify_net_log_source, callback.callback());
+  int error = callback.WaitForResult();
+
+  EXPECT_FALSE(verify_result.cert_status &
+               CERT_STATUS_SELF_SIGNED_LOCAL_NETWORK);
+  EXPECT_THAT(error, IsError(ERR_CERT_AUTHORITY_INVALID));
+}
+
+TEST_P(CertVerifyProcBuiltinSelfSignedTest,
+       SelfSignedCertNotLocalNetworkHostname) {
+  scoped_refptr<X509Certificate> cert = CreateSelfSigned("www.example.com");
+
+  CertVerifyResult verify_result;
+  NetLogSource verify_net_log_source;
+  TestCompletionCallback callback;
+  Verify(cert, "www.example.com", 0, &verify_result, &verify_net_log_source,
+         callback.callback());
+  int error = callback.WaitForResult();
+
+  EXPECT_FALSE(verify_result.cert_status &
+               CERT_STATUS_SELF_SIGNED_LOCAL_NETWORK);
+  EXPECT_THAT(error, IsError(ERR_CERT_AUTHORITY_INVALID));
+}
+
+TEST_P(CertVerifyProcBuiltinSelfSignedTest, SelfSignedCertNotLocalNetworkIP) {
+  scoped_refptr<X509Certificate> cert = CreateSelfSignedIPSubject("8.8.8.8");
+
+  CertVerifyResult verify_result;
+  NetLogSource verify_net_log_source;
+  TestCompletionCallback callback;
+  Verify(cert, "8.8.8.8", 0, &verify_result, &verify_net_log_source,
+         callback.callback());
+  int error = callback.WaitForResult();
+
+  EXPECT_FALSE(verify_result.cert_status &
+               CERT_STATUS_SELF_SIGNED_LOCAL_NETWORK);
+  EXPECT_THAT(error, IsError(ERR_CERT_AUTHORITY_INVALID));
+}
+
+TEST_P(CertVerifyProcBuiltinSelfSignedTest, SelfSignedCertNotLocalNetworkIPv6) {
+  scoped_refptr<X509Certificate> cert =
+      CreateSelfSignedIPSubject("[2001:4860:4860::8888]");
+
+  CertVerifyResult verify_result;
+  NetLogSource verify_net_log_source;
+  TestCompletionCallback callback;
+  Verify(cert, "2001:4860:4860::8888", 0, &verify_result,
+         &verify_net_log_source, callback.callback());
+  int error = callback.WaitForResult();
+
+  EXPECT_FALSE(verify_result.cert_status &
+               CERT_STATUS_SELF_SIGNED_LOCAL_NETWORK);
+  EXPECT_THAT(error, IsError(ERR_CERT_AUTHORITY_INVALID));
+}
+
+TEST_P(CertVerifyProcBuiltinSelfSignedTest,
+       SelfSignedCertOnLocalNetworkHostnameNameMismatchTakesPrecedence) {
+  scoped_refptr<X509Certificate> cert = CreateSelfSigned("nottesturl.local");
+
+  CertVerifyResult verify_result;
+  NetLogSource verify_net_log_source;
+  TestCompletionCallback callback;
+  Verify(cert, "testurl.local", 0, &verify_result, &verify_net_log_source,
+         callback.callback());
+  int error = callback.WaitForResult();
+
+  if (GetParam()) {
+    EXPECT_TRUE(verify_result.cert_status &
+                CERT_STATUS_SELF_SIGNED_LOCAL_NETWORK);
+    EXPECT_THAT(error, IsError(ERR_CERT_COMMON_NAME_INVALID));
+  } else {
+    EXPECT_FALSE(verify_result.cert_status &
+                 CERT_STATUS_SELF_SIGNED_LOCAL_NETWORK);
+    EXPECT_THAT(error, IsError(ERR_CERT_AUTHORITY_INVALID));
+  }
+}
+
+INSTANTIATE_TEST_SUITE_P(SelfSignedInterstitial,
+                         CertVerifyProcBuiltinSelfSignedTest,
+                         testing::Bool());
 
 }  // namespace net

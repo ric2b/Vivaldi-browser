@@ -61,6 +61,7 @@
 #include "src/interpreter/interpreter.h"
 #include "src/logging/counters.h"
 #include "src/logging/log-file.h"
+#include "src/objects/js-array.h"
 #include "src/objects/managed-inl.h"
 #include "src/objects/objects-inl.h"
 #include "src/objects/objects.h"
@@ -81,6 +82,10 @@
 #ifdef V8_ENABLE_MAGLEV
 #include "src/maglev/maglev-concurrent-dispatcher.h"
 #endif  // V8_ENABLE_MAGLEV
+
+#ifdef V8_ENABLE_PARTITION_ALLOC
+#include <partition_alloc/shim/allocator_shim_default_dispatch_to_partition_alloc.h>
+#endif  // V8_ENABLE_PARTITION_ALLOC
 
 #if V8_OS_POSIX
 #include <signal.h>
@@ -151,6 +156,10 @@ class ArrayBufferAllocatorBase : public v8::ArrayBuffer::Allocator {
     allocator_->Free(data, length);
   }
 
+  PageAllocator* GetPageAllocator() override {
+    return allocator_->GetPageAllocator();
+  }
+
  private:
   std::unique_ptr<Allocator> allocator_ =
       std::unique_ptr<Allocator>(NewDefaultAllocator());
@@ -182,7 +191,7 @@ class ShellArrayBufferAllocator : public ArrayBufferAllocatorBase {
 
   void* AllocateVM(size_t length) {
     DCHECK_LE(kVMThreshold, length);
-    v8::PageAllocator* page_allocator = i::GetArrayBufferPageAllocator();
+    v8::PageAllocator* page_allocator = GetPageAllocator();
     size_t page_size = page_allocator->AllocatePageSize();
     size_t allocated = RoundUp(length, page_size);
     return i::AllocatePages(page_allocator, nullptr, allocated, page_size,
@@ -190,7 +199,7 @@ class ShellArrayBufferAllocator : public ArrayBufferAllocatorBase {
   }
 
   void FreeVM(void* data, size_t length) {
-    v8::PageAllocator* page_allocator = i::GetArrayBufferPageAllocator();
+    v8::PageAllocator* page_allocator = GetPageAllocator();
     size_t page_size = page_allocator->AllocatePageSize();
     size_t allocated = RoundUp(length, page_size);
     i::FreePages(page_allocator, data, allocated);
@@ -344,7 +353,7 @@ class MultiMappedAllocator : public ArrayBufferAllocatorBase {
         FATAL("mremap failed with error %d: %s", errno, strerror(errno));
       }
     }
-    base::SpinningMutexGuard lock_guard(&regions_mutex_);
+    base::MutexGuard lock_guard(&regions_mutex_);
     regions_[virtual_alloc] = real_alloc;
     return virtual_alloc;
   }
@@ -353,7 +362,7 @@ class MultiMappedAllocator : public ArrayBufferAllocatorBase {
     if (length < kChunkSize) {
       return ArrayBufferAllocatorBase::Free(data, length);
     }
-    base::SpinningMutexGuard lock_guard(&regions_mutex_);
+    base::MutexGuard lock_guard(&regions_mutex_);
     void* real_alloc = regions_[data];
     munmap(real_alloc, kChunkSize);
     size_t rounded_length = RoundUp(length, kChunkSize);
@@ -371,7 +380,7 @@ class MultiMappedAllocator : public ArrayBufferAllocatorBase {
   static constexpr size_t kChunkSize = 2 * 1024 * 1024;
 
   std::unordered_map<void*, void*> regions_;
-  base::SpinningMutex regions_mutex_;
+  base::Mutex regions_mutex_;
 };
 
 #endif  // V8_OS_LINUX
@@ -521,14 +530,14 @@ class ExternalOwningOneByteStringResource
 
 // static variables:
 CounterMap* Shell::counter_map_;
-base::SpinningMutex Shell::counter_mutex_;
+base::Mutex Shell::counter_mutex_;
 base::OS::MemoryMappedFile* Shell::counters_file_ = nullptr;
 CounterCollection Shell::local_counters_;
 CounterCollection* Shell::counters_ = &local_counters_;
 base::LazyMutex Shell::context_mutex_;
 const base::TimeTicks Shell::kInitialTicks = base::TimeTicks::Now();
 Global<Function> Shell::stringify_function_;
-base::SpinningMutex Shell::profiler_end_callback_lock_;
+base::Mutex Shell::profiler_end_callback_lock_;
 std::map<Isolate*, std::pair<Global<Function>, Global<Context>>>
     Shell::profiler_end_callback_;
 base::LazyMutex Shell::workers_mutex_;
@@ -1540,6 +1549,46 @@ void RejectPromiseIfExecutionIsNotTerminating(Isolate* isolate,
     resolver->Reject(realm, try_catch.Exception()).ToChecked();
   }
 }
+
+Maybe<bool> ChainDynamicImportPromise(Isolate* isolate, Local<Context> realm,
+                                      v8::Local<v8::Promise::Resolver> resolver,
+                                      Local<Promise> result_promise,
+                                      Local<Value> namespace_or_source) {
+  Local<Array> module_resolution_data = v8::Array::New(isolate);
+  if (module_resolution_data->SetPrototypeV2(realm, v8::Null(isolate))
+          .IsNothing()) {
+    return Nothing<bool>();
+  }
+  if (module_resolution_data
+          ->Set(realm, ModuleResolutionDataIndex::kResolver, resolver)
+          .IsNothing()) {
+    return Nothing<bool>();
+  }
+  if (module_resolution_data
+          ->Set(realm, ModuleResolutionDataIndex::kNamespaceOrSource,
+                namespace_or_source)
+          .IsNothing()) {
+    return Nothing<bool>();
+  }
+  Local<Function> callback_success;
+  if (!Function::New(realm, Shell::ModuleResolutionSuccessCallback,
+                     module_resolution_data)
+           .ToLocal(&callback_success)) {
+    return Nothing<bool>();
+  }
+
+  Local<Function> callback_failure;
+  if (!Function::New(realm, Shell::ModuleResolutionFailureCallback,
+                     module_resolution_data)
+           .ToLocal(&callback_failure)) {
+    return Nothing<bool>();
+  }
+  if (result_promise->Then(realm, callback_success, callback_failure)
+          .IsEmpty()) {
+    return Nothing<bool>();
+  }
+  return Just(true);
+}
 }  // namespace
 
 void Shell::DoHostImportModuleDynamically(void* import_data) {
@@ -1605,9 +1654,7 @@ void Shell::DoHostImportModuleDynamically(void* import_data) {
         } else if (!FetchModuleSource(Local<Module>(), realm, absolute_path,
                                       module_type)
                         .ToLocal(&module_source)) {
-          RejectPromiseIfExecutionIsNotTerminating(isolate, realm, resolver,
-                                                   try_catch);
-          return;
+          break;
         }
         Local<Promise::Resolver> module_resolver =
             Promise::Resolver::New(realm).ToLocalChecked();
@@ -1626,16 +1673,14 @@ void Shell::DoHostImportModuleDynamically(void* import_data) {
         } else if (!FetchModuleTree(Local<Module>(), realm, absolute_path,
                                     module_type)
                         .ToLocal(&root_module)) {
-          RejectPromiseIfExecutionIsNotTerminating(isolate, realm, resolver,
-                                                   try_catch);
-          return;
+          break;
         }
         if (root_module
                 ->InstantiateModule(realm, ResolveModuleCallback,
                                     ResolveModuleSourceCallback)
                 .FromMaybe(false)) {
           MaybeLocal<Value> maybe_result = root_module->Evaluate(realm);
-          CHECK(!maybe_result.IsEmpty());
+          if (maybe_result.IsEmpty()) break;
           global_result_promise.Reset(
               isolate, maybe_result.ToLocalChecked().As<Promise>());
           global_namespace_or_source.Reset(isolate,
@@ -1679,25 +1724,15 @@ void Shell::DoHostImportModuleDynamically(void* import_data) {
 
   Context::Scope context_scope(realm);
 
-  Local<Array> module_resolution_data = v8::Array::New(isolate);
-  module_resolution_data->SetPrototypeV2(realm, v8::Null(isolate)).ToChecked();
-  module_resolution_data
-      ->Set(realm, ModuleResolutionDataIndex::kResolver, resolver)
-      .ToChecked();
-  module_resolution_data
-      ->Set(realm, ModuleResolutionDataIndex::kNamespaceOrSource,
-            namespace_or_source)
-      .ToChecked();
-  Local<Function> callback_success;
-  CHECK(Function::New(realm, ModuleResolutionSuccessCallback,
-                      module_resolution_data)
-            .ToLocal(&callback_success));
-  Local<Function> callback_failure;
-  CHECK(Function::New(realm, ModuleResolutionFailureCallback,
-                      module_resolution_data)
-            .ToLocal(&callback_failure));
-  result_promise->Then(realm, callback_success, callback_failure)
-      .ToLocalChecked();
+  // Chaining the promise generally does not throw, but execution may be
+  // terminating (e.g. when within a worker being terminated). Check the return
+  // value to display a helpful message.
+  if (ChainDynamicImportPromise(isolate, realm, resolver, result_promise,
+                                namespace_or_source)
+          .IsNothing()) {
+    RejectPromiseIfExecutionIsNotTerminating(isolate, realm, resolver,
+                                             try_catch);
+  }
 }
 
 bool Shell::ExecuteModule(Isolate* isolate, const char* file_name) {
@@ -2640,6 +2675,12 @@ void Shell::EnableJSPI(const v8::FunctionCallbackInfo<v8::Value>& info) {
 
 void Shell::SetFlushDenormals(const v8::FunctionCallbackInfo<v8::Value>& info) {
   Isolate* isolate = info.GetIsolate();
+  if (i::v8_flags.correctness_fuzzer_suppressions) {
+    // Setting denormals flushing in the middle of code is almost certain to
+    // cause correctness issues, in a way that isn't interesting to us. Make
+    // this a no-op instead.
+    return;
+  }
   // Check if the argument is a valid function.
   if (info.Length() != 1) {
     ThrowError(isolate, "Expected single boolean argument.");
@@ -2778,14 +2819,14 @@ void Shell::ProfilerSetOnProfileEndListener(
     ThrowError(isolate, "The OnProfileEnd listener has to be a function");
     return;
   }
-  base::SpinningMutexGuard lock_guard(&profiler_end_callback_lock_);
+  base::MutexGuard lock_guard(&profiler_end_callback_lock_);
   profiler_end_callback_[isolate] =
       std::make_pair(Global<Function>(isolate, info[0].As<Function>()),
                      Global<Context>(isolate, isolate->GetCurrentContext()));
 }
 
 bool Shell::HasOnProfileEndListener(Isolate* isolate) {
-  base::SpinningMutexGuard lock_guard(&profiler_end_callback_lock_);
+  base::MutexGuard lock_guard(&profiler_end_callback_lock_);
   return profiler_end_callback_.find(isolate) != profiler_end_callback_.end();
 }
 
@@ -2794,7 +2835,7 @@ void Shell::ResetOnProfileEndListener(Isolate* isolate) {
   // D8Console.
   if (options.enable_inspector) return;
   {
-    base::SpinningMutexGuard lock_guard(&profiler_end_callback_lock_);
+    base::MutexGuard lock_guard(&profiler_end_callback_lock_);
     profiler_end_callback_.erase(isolate);
   }
 
@@ -2824,7 +2865,7 @@ void Shell::TriggerOnProfileEndListener(Isolate* isolate, std::string profile) {
   Local<Value> argv[1] = {
       String::NewFromUtf8(isolate, profile.c_str()).ToLocalChecked()};
   {
-    base::SpinningMutexGuard lock_guard(&profiler_end_callback_lock_);
+    base::MutexGuard lock_guard(&profiler_end_callback_lock_);
     auto& callback_pair = profiler_end_callback_[isolate];
     callback = callback_pair.first.Get(isolate);
     context = callback_pair.second.Get(isolate);
@@ -3251,6 +3292,20 @@ void Shell::WorkerNew(const v8::FunctionCallbackInfo<v8::Value>& info) {
   // early-out from the instance calls.
   info.This()->SetInternalField(0, v8::Integer::New(isolate, 0));
 
+  // By default, propagate flush denormals state.
+  bool flush_denormals = base::FPU::GetFlushDenormals();
+  if (info.Length() > 1 && info[1]->IsObject()) {
+    Local<Value> value;
+    if (!TryGetValue(isolate, isolate->GetCurrentContext(),
+                     info[1].As<Object>(), "flushDenormals")
+             .ToLocal(&value)) {
+      return;
+    }
+    if (!value->IsUndefined()) {
+      flush_denormals = value->BooleanValue(isolate);
+    }
+  }
+
   {
     // Don't allow workers to create more workers if the main thread
     // is waiting for existing running workers to terminate.
@@ -3268,7 +3323,7 @@ void Shell::WorkerNew(const v8::FunctionCallbackInfo<v8::Value>& info) {
     // The C++ worker object's lifetime is shared between the Managed<Worker>
     // object on the heap, which the JavaScript object points to, and an
     // internal std::shared_ptr in the worker thread itself.
-    auto worker = std::make_shared<Worker>(isolate, *script);
+    auto worker = std::make_shared<Worker>(isolate, *script, flush_denormals);
     i::Isolate* i_isolate = reinterpret_cast<i::Isolate*>(isolate);
     const size_t kWorkerSizeEstimate = 4 * 1024 * 1024;  // stack + heap.
     i::DirectHandle<i::Object> managed =
@@ -3516,7 +3571,6 @@ void Shell::QuitOnce(v8::FunctionCallbackInfo<v8::Value>* info) {
                       .FromMaybe(0);
   Isolate* isolate = info->GetIsolate();
   ResetOnProfileEndListener(isolate);
-  isolate->Exit();
 
   // As we exit the process anyway, we do not dispose the platform and other
   // global data and manually unlock to quell DCHECKs. Other isolates might
@@ -3532,6 +3586,10 @@ void Shell::QuitOnce(v8::FunctionCallbackInfo<v8::Value>* info) {
     i_isolate->main_thread_local_isolate()->ExecuteMainThreadWhileParked(
         [](const i::ParkedScope& parked) { WaitForRunningWorkers(parked); });
   }
+
+  // Reset thread-locals here only after stopping workers. They are still used
+  // e.g. during heap verification in shared GCs.
+  isolate->Exit();
 
   OnExit(isolate, false);
   base::OS::ExitProcess(exit_code);
@@ -3677,7 +3735,7 @@ void Shell::MapCounters(v8::Isolate* isolate, const char* name) {
 Counter* Shell::GetCounter(const char* name, bool is_histogram) {
   Counter* counter = nullptr;
   {
-    base::SpinningMutexGuard mutex_guard(&counter_mutex_);
+    base::MutexGuard mutex_guard(&counter_mutex_);
     auto map_entry = counter_map_->find(name);
     if (map_entry != counter_map_->end()) {
       counter = map_entry->second;
@@ -3685,7 +3743,7 @@ Counter* Shell::GetCounter(const char* name, bool is_histogram) {
   }
 
   if (counter == nullptr) {
-    base::SpinningMutexGuard mutex_guard(&counter_mutex_);
+    base::MutexGuard mutex_guard(&counter_mutex_);
 
     counter = (*counter_map_)[name];
 
@@ -4084,6 +4142,22 @@ Local<ObjectTemplate> Shell::CreateD8Template(Isolate* isolate) {
         FunctionTemplate::New(isolate, ProfilerTriggerSample));
     d8_template->Set(isolate, "profiler", profiler_template);
   }
+  {
+    Local<ObjectTemplate> constants_template = ObjectTemplate::New(isolate);
+    if (!i::v8_flags.correctness_fuzzer_suppressions) {
+      // Don't expose these constants in differential-fuzzing builds as they
+      // differ with lower-limits mode.
+      constants_template->Set(
+          String::NewFromUtf8Literal(isolate, "maxFixedArrayCapacity",
+                                     NewStringType::kInternalized),
+          Number::New(isolate, i::kMaxFixedArrayCapacity));
+      constants_template->Set(
+          String::NewFromUtf8Literal(isolate, "maxFastArrayLength",
+                                     NewStringType::kInternalized),
+          Number::New(isolate, i::JSArray::kMaxFastArrayLength));
+    }
+    d8_template->Set(isolate, "constants", constants_template);
+  }
 #ifdef V8_ENABLE_CONTINUATION_PRESERVED_EMBEDDER_DATA
   d8_template->Set(
       isolate, "getContinuationPreservedEmbedderDataViaAPIForTesting",
@@ -4390,7 +4464,7 @@ void Shell::OnExit(v8::Isolate* isolate, bool dispose) {
   }
 
   if (options.dump_counters || options.dump_counters_nvp) {
-    base::SpinningMutexGuard mutex_guard(&counter_mutex_);
+    base::MutexGuard mutex_guard(&counter_mutex_);
     std::vector<std::pair<std::string, Counter*>> counters(
         counter_map_->begin(), counter_map_->end());
     std::sort(counters.begin(), counters.end());
@@ -5058,14 +5132,14 @@ void SourceGroup::JoinThread(const i::ParkedScope& parked) {
 }
 
 void SerializationDataQueue::Enqueue(std::unique_ptr<SerializationData> data) {
-  base::SpinningMutexGuard lock_guard(&mutex_);
+  base::MutexGuard lock_guard(&mutex_);
   data_.push_back(std::move(data));
 }
 
 bool SerializationDataQueue::Dequeue(
     std::unique_ptr<SerializationData>* out_data) {
   out_data->reset();
-  base::SpinningMutexGuard lock_guard(&mutex_);
+  base::MutexGuard lock_guard(&mutex_);
   if (data_.empty()) return false;
   *out_data = std::move(data_[0]);
   data_.erase(data_.begin());
@@ -5073,17 +5147,20 @@ bool SerializationDataQueue::Dequeue(
 }
 
 bool SerializationDataQueue::IsEmpty() {
-  base::SpinningMutexGuard lock_guard(&mutex_);
+  base::MutexGuard lock_guard(&mutex_);
   return data_.empty();
 }
 
 void SerializationDataQueue::Clear() {
-  base::SpinningMutexGuard lock_guard(&mutex_);
+  base::MutexGuard lock_guard(&mutex_);
   data_.clear();
 }
 
-Worker::Worker(Isolate* parent_isolate, const char* script)
-    : script_(i::StrDup(script)), parent_isolate_(parent_isolate) {
+Worker::Worker(Isolate* parent_isolate, const char* script,
+               bool flush_denormals)
+    : script_(i::StrDup(script)),
+      flush_denormals_(flush_denormals),
+      parent_isolate_(parent_isolate) {
   state_.store(State::kReady);
 }
 
@@ -5143,7 +5220,7 @@ class ProcessMessageTask : public i::CancelableTask {
 };
 
 void Worker::PostMessage(std::unique_ptr<SerializationData> data) {
-  base::SpinningMutexGuard lock_guard(&worker_mutex_);
+  base::MutexGuard lock_guard(&worker_mutex_);
   if (!is_running()) return;
   std::unique_ptr<v8::Task> task(new ProcessMessageTask(
       task_manager_, shared_from_this(), std::move(data)));
@@ -5190,7 +5267,7 @@ void Worker::TerminateAndWaitForThread(const i::ParkedScope& parked) {
   USE(parked);
   Terminate();
   {
-    base::SpinningMutexGuard lock_guard(&worker_mutex_);
+    base::MutexGuard lock_guard(&worker_mutex_);
     // Prevent double-joining.
     if (is_joined_) return;
     is_joined_ = true;
@@ -5199,7 +5276,7 @@ void Worker::TerminateAndWaitForThread(const i::ParkedScope& parked) {
 }
 
 void Worker::Terminate() {
-  base::SpinningMutexGuard lock_guard(&worker_mutex_);
+  base::MutexGuard lock_guard(&worker_mutex_);
   auto expected = State::kRunning;
   if (!state_.compare_exchange_strong(expected, State::kTerminating)) return;
   std::unique_ptr<v8::Task> task(
@@ -5212,7 +5289,7 @@ void Worker::Terminate() {
 }
 
 void Worker::EnterTerminatedState() {
-  base::SpinningMutexGuard lock_guard(&worker_mutex_);
+  base::MutexGuard lock_guard(&worker_mutex_);
   state_.store(State::kTerminated);
   CHECK(!is_running());
   task_runner_.reset();
@@ -5287,7 +5364,7 @@ void Worker::SetCurrentWorker(Worker* worker) {
 Worker* Worker::GetCurrentWorker() { return current_worker_; }
 
 void Worker::ExecuteInThread() {
-  v8::base::FlushDenormalsScope denormals_scope(Shell::options.flush_denormals);
+  v8::base::FlushDenormalsScope denormals_scope(flush_denormals_);
 
   Isolate::CreateParams create_params;
   create_params.array_buffer_allocator = Shell::array_buffer_allocator;
@@ -6388,6 +6465,13 @@ void d8_install_sigterm_handler() {
 }  // namespace
 
 int Shell::Main(int argc, char* argv[]) {
+#if defined(V8_ENABLE_PARTITION_ALLOC)
+#if PA_BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC)
+  allocator_shim::ConfigurePartitionsForTesting();
+  allocator_shim::internal::PartitionAllocMalloc::Allocator()
+      ->EnableThreadCacheIfSupported();
+#endif  // PA_BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC)
+#endif
   v8::base::EnsureConsoleOutput();
   if (!SetOptions(argc, argv)) return 1;
   if (!i::v8_flags.fuzzing) d8_install_sigterm_handler();

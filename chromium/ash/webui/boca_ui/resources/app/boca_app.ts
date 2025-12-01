@@ -12,6 +12,7 @@
  * Declare tab information
  */
 export declare interface TabInfo {
+  id?: number;
   title: string;
   url: string;
   favicon: string;
@@ -52,6 +53,7 @@ export declare interface Assignment {
   url: string;
   lastUpdateTime: Date;
   materials: Material[];
+  type: AssignmentType;
 }
 
 /**
@@ -71,7 +73,8 @@ export enum NavigationType {
   BLOCK = 2,
   DOMAIN = 3,
   LIMITED = 4,
-  SAME_DOMAIN_OPEN_OTHER_DOMAIN_LIMITED = 5
+  SAME_DOMAIN_OPEN_OTHER_DOMAIN_LIMITED = 5,
+  WORKSPACE_NAVIGATION = 6
 }
 
 export enum JoinMethod {
@@ -83,6 +86,26 @@ export enum SubmitAccessCodeResult {
   UNKNOWN = 0,
   SUCCESS = 1,
   INVALID_CODE = 2,
+}
+
+export enum StudentStatusDetail {
+  STUDENT_STATE_UNKNOWN = 0,
+
+  NOT_FOUND = 1,
+
+  ADDED = 2,
+
+  ACTIVE = 3,
+
+  REMOVED_BY_OTHER_SESSION = 4,
+
+  REMOVED_BY_BEING_TEACHER = 5,
+
+  REMOVED_BY_TEACHER = 6,
+
+  NOT_ADDED_CONFIGURED_AS_TEACHER = 7,
+
+  NOT_ADDED_NOT_CONFIGURED = 8,
 }
 
 /**
@@ -107,11 +130,29 @@ export enum NetworkType {
 }
 
 /**
+ * Declare permission type enum type
+ */
+export enum Permission {
+  MICROPHONE = 0,
+  CAMERA = 1,
+}
+
+/**
+ * Declare permission setting type enum type
+ */
+export enum PermissionSetting {
+  ALLOW = 0,
+  ASK = 1,
+  BLOCK = 2,
+}
+
+/**
  * Declare boca user pref type.
  */
 export enum BocaValidPref {
   NAVIGATION_SETTING = 0,
   CAPTION_ENABLEMENT_SETTING = 1,
+  DEFAULT_MEDIASTREAM_SETTING = 2,
 }
 
 /**
@@ -123,6 +164,16 @@ export enum MaterialType {
   YOUTUBE_VIDEO = 2,
   LINK = 3,
   FORM = 4,
+}
+
+/**
+ * Declare course assignment type enum type
+ */
+export enum AssignmentType {
+  UNSPECIFIED = 0,
+  ASSIGNMENT = 1,
+  SHORT_ANSWER_QUESTION = 2,
+  MULTIPLE_CHOICE_QUESTION = 3,
 }
 
 /**
@@ -138,6 +189,7 @@ export declare interface ControlledTab {
  */
 export declare interface OnTaskConfig {
   isLocked: boolean;
+  isPaused?: boolean;
   tabs: ControlledTab[];
 }
 
@@ -176,6 +228,7 @@ export declare interface Session {
  * Declare StudentActivity
  */
 export declare interface StudentActivity {
+  studentStatusDetail?: StudentStatusDetail;
   // Whether the student status have flipped from added to active in the
   // session.
   isActive: boolean;
@@ -231,6 +284,11 @@ export declare interface ClientApiDelegate {
   getStudentList(courseId: string): Promise<Identity[]>;
 
   /**
+   * Add students to the current session.
+   */
+  addStudents(ids: string[]): Promise<boolean>;
+
+  /**
    * Get list of assignments in a course.
    */
   getAssignmentList(courseId: string): Promise<Assignment[]>;
@@ -253,6 +311,12 @@ export declare interface ClientApiDelegate {
    * End the current session
    */
   endSession(): Promise<boolean>;
+
+  /**
+   * Extend session duration
+   */
+  extendSessionDuration(extendDurationInMinutes: number): Promise<boolean>;
+
   /**
    * Update on task config
    */
@@ -283,6 +347,12 @@ export declare interface ClientApiDelegate {
   endViewScreenSession(id: string): Promise<boolean>;
 
   /**
+   * Request to set the view screen session to active for the student with the
+   * given id.
+   */
+  setViewScreenSessionActive(id: string): Promise<boolean>;
+
+  /**
    * Get the value of a boca specific user pref.
    */
   getUserPref(pref: BocaValidPref): Promise<any>;
@@ -291,6 +361,25 @@ export declare interface ClientApiDelegate {
    * Set the value of a boca specific user pref.
    */
   setUserPref(pref: BocaValidPref, value: any): Promise<void>;
+
+  /**
+   * Set the permission of a site.
+   */
+  setSitePermission(
+      url: string, permission: Permission,
+      setting: PermissionSetting): Promise<boolean>;
+
+  /**
+   * Close the tab with tabId.
+   */
+  closeTab(tabId: number): Promise<boolean>;
+
+  openFeedbackDialog(): Promise<void>;
+
+  /**
+   * Refresh the workbook for students.
+   */
+  refreshWorkbook(): Promise<void>;
 }
 
 /**
@@ -319,4 +408,11 @@ export declare interface ClientApi {
    * Notify the app that the active networks has been updated.
    */
   onActiveNetworkStateChanged(activeNetworks: NetworkInfo[]): void;
+
+  /**
+   * Notify the app that the local captions has been turned off from the caption
+   * bubble or by another mean from chrome. This can be called during a session
+   * or outside of a session in the teacher case.
+   */
+  onLocalCaptionDisabled(): void;
 }

@@ -121,6 +121,21 @@ ScopedJavaLocalRef<jobject> CreatePersistentMessageAndMaybeAddToListHelper(
 
   return jmessage;
 }
+
+ScopedJavaLocalRef<jobject> AttributionListToJava(
+    JNIEnv* env,
+    const std::vector<MessageAttribution>& attributions) {
+  ScopedJavaLocalRef<jobject> j_attribution_list;
+
+  for (const auto& attribution : attributions) {
+    auto j_attribution = MessageAttributionToJava(env, attribution);
+    j_attribution_list = Java_ConversionUtils_addAttributionToList(
+        env, j_attribution_list, j_attribution);
+  }
+
+  return j_attribution_list;
+}
+
 }  // namespace
 
 ScopedJavaLocalRef<jobject> PersistentMessageToJava(
@@ -145,10 +160,13 @@ ScopedJavaLocalRef<jobject> PersistentMessagesToJava(
 ScopedJavaLocalRef<jobject> InstantMessageToJava(
     JNIEnv* env,
     const InstantMessage& message) {
+  ScopedJavaLocalRef<jobject> j_attribution_list =
+      AttributionListToJava(env, message.attributions);
   return Java_ConversionUtils_createInstantMessage(
-      env, MessageAttributionToJava(env, message.attribution),
-      static_cast<int>(message.collaboration_event),
-      static_cast<int>(message.level), static_cast<int>(message.type));
+      env, static_cast<int>(message.collaboration_event),
+      static_cast<int>(message.level), static_cast<int>(message.type),
+      ConvertUTF16ToJavaString(env, message.localized_message),
+      j_attribution_list);
 }
 
 ScopedJavaLocalRef<jobject> ActivityLogItemsToJava(

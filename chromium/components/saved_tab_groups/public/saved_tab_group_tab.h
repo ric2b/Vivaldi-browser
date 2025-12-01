@@ -58,6 +58,9 @@ class SavedTabGroupTab {
   const base::Time& update_time_windows_epoch_micros() const {
     return update_time_windows_epoch_micros_;
   }
+  const base::Time& last_seen_time_windows_epoch_micros() const {
+    return last_seen_time_windows_epoch_micros_;
+  }
   const std::optional<std::string>& creator_cache_guid() const {
     return creator_cache_guid_;
   }
@@ -110,6 +113,11 @@ class SavedTabGroupTab {
   SavedTabGroupTab& SetUpdateTimeWindowsEpochMicros(
       base::Time update_time_windows_epoch_micros) {
     update_time_windows_epoch_micros_ = update_time_windows_epoch_micros;
+    return *this;
+  }
+  SavedTabGroupTab& SetLastSeenTimeWindowsEpochMicros(
+      base::Time last_seen_time_windows_epoch_micros) {
+    last_seen_time_windows_epoch_micros_ = last_seen_time_windows_epoch_micros;
     return *this;
   }
   SavedTabGroupTab& SetRedirectURLChain(
@@ -184,6 +192,16 @@ class SavedTabGroupTab {
   // microseconds.
   base::Time update_time_windows_epoch_micros_;
 
+  // Timestamp of the last time a user saw the contents of this tab.
+  // This value may be null if the user has never focused a tab added
+  // from collaboration. Windows-epoch based.
+  //
+  // This is used by SharedTabGroupAccountDataSyncBridge to sync "read"
+  // status for shared tab updates. As such, it is not saved to disk
+  // alongside saved/shared tab group data. The account data sync bridge
+  // manages syncing and saving this to disk.
+  base::Time last_seen_time_windows_epoch_micros_;
+
   // The following fields aren't synced across devices.
 
   // The favicon of the website this SavedTabGroupTab represents.
@@ -215,6 +233,7 @@ class SavedTabGroupTabBuilder {
   SavedTabGroupTabBuilder& SetPosition(size_t position);
   SavedTabGroupTabBuilder& SetRedirectURLChain(
       const std::vector<GURL>& redirect_url_chain);
+  SavedTabGroupTabBuilder& SetLastSeenTimestamp(base::Time last_seen_time);
 
   SavedTabGroupTab Build(const SavedTabGroupTab& tab) const;
 
@@ -224,6 +243,7 @@ class SavedTabGroupTabBuilder {
  private:
   size_t position_ = 0;
   std::vector<GURL> redirect_url_chain_;
+  base::Time last_seen_time_;
 
   // Flags to indicate which properties have been set.
   bool has_position_ = false;

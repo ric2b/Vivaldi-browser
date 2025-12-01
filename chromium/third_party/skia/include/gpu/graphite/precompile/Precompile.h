@@ -8,12 +8,13 @@
 #ifndef skgpu_graphite_precompile_Precompile_DEFINED
 #define skgpu_graphite_precompile_Precompile_DEFINED
 
+#include "include/core/SkColorSpace.h"
+#include "include/core/SkColorType.h"
 #include "include/core/SkSpan.h"
 #include "include/gpu/graphite/GraphiteTypes.h"
 
 namespace skgpu::graphite {
 
-class Context;
 class PaintOptions;
 class PrecompileContext;
 
@@ -23,9 +24,18 @@ class PrecompileContext;
  *  a pipeline.
  */
 struct SK_API RenderPassProperties {
-    DepthStencilFlags fDSFlags      = DepthStencilFlags::kNone;
-    SkColorType       fDstCT        = kRGBA_8888_SkColorType;
-    bool              fRequiresMSAA = false;
+    bool operator==(const RenderPassProperties& other) const {
+        return fDSFlags == other.fDSFlags &&
+               fDstCT == other.fDstCT &&
+               fRequiresMSAA == other.fRequiresMSAA &&
+               SkColorSpace::Equals(fDstCS.get(), other.fDstCS.get());
+    }
+    bool operator!= (const RenderPassProperties& other) const { return !(*this == other); }
+
+    DepthStencilFlags   fDSFlags      = DepthStencilFlags::kNone;
+    SkColorType         fDstCT        = kRGBA_8888_SkColorType;
+    sk_sp<SkColorSpace> fDstCS        = nullptr;
+    bool                fRequiresMSAA = false;
 };
 
 /**

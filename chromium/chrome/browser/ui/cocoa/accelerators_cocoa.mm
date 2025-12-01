@@ -74,12 +74,8 @@ const struct AcceleratorMapping {
     // AcceleratorForCloseWindow().
     {IDC_CLOSE_TAB, ui::EF_COMMAND_DOWN, ui::VKEY_W},
 
-#if defined(VIVALDI_BUILD)
-    {IDC_EMAIL_PAGE_LOCATION, ui::EF_COMMAND_DOWN, ui::VKEY_I},
-#else
     {IDC_EMAIL_PAGE_LOCATION, ui::EF_COMMAND_DOWN | ui::EF_SHIFT_DOWN,
      ui::VKEY_I},
-#endif // VIVALDI_BUILD
 #if BUILDFLAG(ENABLE_PRINTING)
     {IDC_BASIC_PRINT, ui::EF_COMMAND_DOWN | ui::EF_ALT_DOWN, ui::VKEY_P},
 #endif  // ENABLE_PRINTING

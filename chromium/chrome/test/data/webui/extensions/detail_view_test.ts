@@ -36,6 +36,7 @@ suite('ExtensionDetailViewTest', function() {
     document.body.innerHTML = window.trustedTypes!.emptyHTML;
     extensionData = createExtensionInfo({
       incognitoAccess: {isEnabled: true, isActive: false},
+      userScriptsAccess: {isEnabled: true, isActive: false},
       fileAccess: {isEnabled: true, isActive: false},
       errorCollection: {isEnabled: true, isActive: false},
     });
@@ -57,6 +58,17 @@ suite('ExtensionDetailViewTest', function() {
     f(isChildVisible(item, id));
   }
 
+  function testIsVisible(selector: string): boolean {
+    return isChildVisible(item, selector);
+  }
+
+  // Check the checkboxes visibility and state. They should be visible only if
+  // the associated option is enabled, and checked if the associated option is
+  // active.
+  function isChecked(id: string): boolean {
+    return item.shadowRoot.querySelector<CrCheckboxElement>(id)!.checked;
+  }
+
   function updateItemData(
       properties?: Partial<chrome.developerPrivate.ExtensionInfo>):
       Promise<void> {
@@ -72,8 +84,6 @@ suite('ExtensionDetailViewTest', function() {
   }
 
   test('Layout', async () => {
-    const testIsVisible: (selector: string) => boolean =
-        isChildVisible.bind(null, item);
     assertTrue(testIsVisible('#closeButton'));
     assertTrue(testIsVisible('#icon'));
     assertFalse(testIsVisible('#extensionsOptions'));
@@ -81,25 +91,32 @@ suite('ExtensionDetailViewTest', function() {
         item.$.description.textContent!.indexOf('This is an extension') !== -1);
     assertTrue(testIsVisible('#siteSettings'));
 
-    // Check the checkboxes visibility and state. They should be visible
-    // only if the associated option is enabled, and checked if the
-    // associated option is active.
-    const isChecked = (id: string) =>
-        item.shadowRoot!.querySelector<CrCheckboxElement>(id)!.checked;
-
     assertTrue(isChildVisible(item, '#allow-incognito'));
     assertFalse(isChecked('#allow-incognito'), '#allow-incognito');
-    await updateItemData(
-        {incognitoAccess: {isEnabled: false, isActive: false}});
+    assertFalse(isChildVisible(item, '#allow-incognito-warning'));
+    await updateItemData({incognitoAccessPendingChange: true});
+    assertTrue(isChildVisible(item, '#allow-incognito-warning'));
+    await updateItemData({
+      incognitoAccess: {isEnabled: false, isActive: false},
+      incognitoAccessPendingChange: false,
+    });
     assertFalse(isChildVisible(item, '#allow-incognito'));
+    assertFalse(isChildVisible(item, '#allow-incognito-warning'));
     await updateItemData({incognitoAccess: {isEnabled: true, isActive: true}});
     assertTrue(isChildVisible(item, '#allow-incognito'));
     assertTrue(isChecked('#allow-incognito'));
 
     assertTrue(isChildVisible(item, '#allow-on-file-urls'));
     assertFalse(isChecked('#allow-on-file-urls'), '#allow-on-file-urls');
-    await updateItemData({fileAccess: {isEnabled: false, isActive: false}});
+    assertFalse(isChildVisible(item, '#allow-on-file-urls-warning'));
+    await updateItemData({fileAccessPendingChange: true});
+    assertTrue(isChildVisible(item, '#allow-on-file-urls-warning'));
+    await updateItemData({
+      fileAccess: {isEnabled: false, isActive: false},
+      fileAccessPendingChange: false,
+    });
     assertFalse(isChildVisible(item, '#allow-on-file-urls'));
+    assertFalse(isChildVisible(item, '#allow-on-file-urls-warning'));
     await updateItemData({fileAccess: {isEnabled: true, isActive: true}});
     assertTrue(isChildVisible(item, '#allow-on-file-urls'));
     assertTrue(isChecked('#allow-on-file-urls'));
@@ -121,7 +138,7 @@ suite('ExtensionDetailViewTest', function() {
     assertTrue(testIsVisible('#dependent-extensions-list'));
     assertEquals(
         2,
-        item.shadowRoot!.querySelector('#dependent-extensions-list')!
+        item.shadowRoot.querySelector('#dependent-extensions-list')!
             .querySelectorAll('li')
             .length);
 
@@ -142,7 +159,7 @@ suite('ExtensionDetailViewTest', function() {
     assertTrue(testIsVisible('#permissions-list'));
     assertEquals(
         2,
-        item.shadowRoot!.querySelector('#permissions-list')!
+        item.shadowRoot.querySelector('#permissions-list')!
             .querySelectorAll('li:not([hidden])')
             .length);
     assertFalse(testIsVisible('#no-permissions'));
@@ -350,13 +367,13 @@ suite('ExtensionDetailViewTest', function() {
       });
     }
 
-    item.shadowRoot!.querySelector<HTMLElement>('#dev-reload-button')!.click();
+    item.shadowRoot.querySelector<HTMLElement>('#dev-reload-button')!.click();
     let id = await proxyDelegate.whenCalled('reloadItem');
     assertEquals(item.data.id, id);
     await verifyEventPromise(false);
     proxyDelegate.resetResolver('reloadItem');
     proxyDelegate.setForceReloadItemError(true);
-    item.shadowRoot!.querySelector<HTMLElement>('#dev-reload-button')!.click();
+    item.shadowRoot.querySelector<HTMLElement>('#dev-reload-button')!.click();
     id = await proxyDelegate.whenCalled('reloadItem');
     assertEquals(item.data.id, id);
     return verifyEventPromise(true);
@@ -444,33 +461,33 @@ suite('ExtensionDetailViewTest', function() {
     currentPage = null;
 
     await mockDelegate.testClickingCalls(
-        item.shadowRoot!
+        item.shadowRoot
             .querySelector<ExtensionsToggleRowElement>(
                 '#allow-incognito')!.getLabel(),
         'setItemAllowedIncognito', [extensionData.id, true]);
     await mockDelegate.testClickingCalls(
-        item.shadowRoot!
+        item.shadowRoot
             .querySelector<ExtensionsToggleRowElement>(
                 '#allow-on-file-urls')!.getLabel(),
         'setItemAllowedOnFileUrls', [extensionData.id, true]);
     await mockDelegate.testClickingCalls(
-        item.shadowRoot!
+        item.shadowRoot
             .querySelector<ExtensionsToggleRowElement>(
                 '#collect-errors')!.getLabel(),
         'setItemCollectsErrors', [extensionData.id, true]);
     await mockDelegate.testClickingCalls(
         item.$.extensionsOptions, 'showItemOptionsPage', [extensionData]);
     await mockDelegate.testClickingCalls(
-        item.shadowRoot!.querySelector('#remove-extension')!, 'deleteItem',
+        item.shadowRoot.querySelector('#remove-extension')!, 'deleteItem',
         [extensionData.id]);
     await mockDelegate.testClickingCalls(
-        item.shadowRoot!.querySelector('#load-path > a[is=\'action-link\']')!,
+        item.shadowRoot.querySelector('#load-path > a[is=\'action-link\']')!,
         'showInFolder', [extensionData.id]);
     // Add a dummy warning so the warnings section is be rendered.
     await updateItemData({runtimeWarnings: ['Dummy warning']});
     await mockDelegate.testClickingCalls(
-        item.shadowRoot!.querySelector('#warnings-reload-button')!,
-        'reloadItem', [extensionData.id], Promise.resolve());
+        item.shadowRoot.querySelector('#warnings-reload-button')!, 'reloadItem',
+        [extensionData.id], Promise.resolve());
 
     // We need to wait for isReloading_ to be set to false, which happens
     // slightly asynchronously.
@@ -480,12 +497,12 @@ suite('ExtensionDetailViewTest', function() {
     await updateItemData(
         {state: chrome.developerPrivate.ExtensionState.TERMINATED});
     await mockDelegate.testClickingCalls(
-        item.shadowRoot!.querySelector('#terminated-reload-button')!,
+        item.shadowRoot.querySelector('#terminated-reload-button')!,
         'reloadItem', [extensionData.id], Promise.resolve());
   });
 
   test('Indicator', async () => {
-    const indicator = item.shadowRoot!.querySelector('cr-tooltip-icon')!;
+    const indicator = item.shadowRoot.querySelector('cr-tooltip-icon')!;
     assertTrue(indicator.hidden);
     await updateItemData({controlledInfo: {text: 'policy'}});
     assertFalse(indicator.hidden);
@@ -639,7 +656,7 @@ suite('ExtensionDetailViewTest', function() {
     await microtasksFinished();
 
     assertTrue(testIsVisible('#no-permissions'));
-    assertTrue(item.shadowRoot!.querySelector<HTMLElement>('#no-permissions')!
+    assertTrue(item.shadowRoot.querySelector<HTMLElement>('#no-permissions')!
                    .textContent!.includes(loadTimeData.getString(
                        'itemPermissionsAndSiteAccessEmpty')));
     assertFalse(testIsVisible('#no-site-access'));
@@ -659,7 +676,7 @@ suite('ExtensionDetailViewTest', function() {
     assertTrue(testIsVisible('#permissions-list'));
     assertEquals(
         3,
-        item.shadowRoot!.querySelector('#permissions-list')!
+        item.shadowRoot.querySelector('#permissions-list')!
             .querySelectorAll('li:not([hidden])')
             .length);
     assertFalse(testIsVisible('#no-permissions'));
@@ -704,7 +721,7 @@ suite('ExtensionDetailViewTest', function() {
 
     const orderedListItems =
         Array
-            .from(item.shadowRoot!.querySelectorAll<HTMLElement>(
+            .from(item.shadowRoot.querySelectorAll<HTMLElement>(
                 '.inspectable-view'))
             .map(e => e.textContent!.trim());
 
@@ -735,12 +752,12 @@ suite('ExtensionDetailViewTest', function() {
     await microtasksFinished();
 
     assertTrue(testIsVisible('#show-access-requests-toggle'));
-    assertTrue(item.shadowRoot!
+    assertTrue(item.shadowRoot
                    .querySelector<ExtensionsToggleRowElement>(
                        '#show-access-requests-toggle')!.checked);
 
     await mockDelegate.testClickingCalls(
-        item.shadowRoot!
+        item.shadowRoot
             .querySelector<ExtensionsToggleRowElement>(
                 '#show-access-requests-toggle')!.getLabel(),
         'setShowAccessRequestsInToolbar', [extensionData.id, false]);
@@ -750,7 +767,7 @@ suite('ExtensionDetailViewTest', function() {
     // Ensure that the SafetyCheckWarningContainer is not visible
     // before enabling the feature.
     assertFalse(isVisible(
-        item.shadowRoot!.querySelector('#safetyCheckWarningContainer')));
+        item.shadowRoot.querySelector('#safetyCheckWarningContainer')));
     await updateItemData({
       safetyCheckText: {'detailString': 'Test Message'},
       blocklistText: 'This item is blocklisted',
@@ -758,12 +775,12 @@ suite('ExtensionDetailViewTest', function() {
     // Check to make sure the warning text is hidden due to the
     // SafetyCheckWarningContainer being shown.
     assertFalse(isVisible(
-        item.shadowRoot!.querySelector('#blocklisted-warning')));  // nocheck
+        item.shadowRoot.querySelector('#blocklisted-warning')));  // nocheck
     const safetyWarningText =
-        item.shadowRoot!.querySelector('#safetyCheckWarningContainer');
+        item.shadowRoot.querySelector('#safetyCheckWarningContainer');
     assertTrue(!!safetyWarningText);
     assertTrue(isVisible(safetyWarningText));
-    assertTrue(safetyWarningText!.textContent!.includes('Test Message'));
+    assertTrue(safetyWarningText.textContent!.includes('Test Message'));
   });
 
   test('Mv2DeprecationMessage_None', () => {
@@ -790,21 +807,21 @@ suite('ExtensionDetailViewTest', function() {
     // Find alternative button is hidden when the extension doesn't have a
     // recommendations url.
     const findAlternativeButton =
-        item.shadowRoot!.querySelector<HTMLElement>('#mv2DeprecationMessage')!
+        item.shadowRoot.querySelector<HTMLElement>('#mv2DeprecationMessage')!
             .querySelector<HTMLButtonElement>('.find-alternative-button');
     assertTrue(!!findAlternativeButton);
     assertFalse(isVisible(findAlternativeButton));
 
     // Remove button is always hidden.
     const removeButton =
-        item.shadowRoot!.querySelector<HTMLElement>('#mv2DeprecationMessage')!
+        item.shadowRoot.querySelector<HTMLElement>('#mv2DeprecationMessage')!
             .querySelector<HTMLButtonElement>('.remove-button');
     assertTrue(!!removeButton);
     assertFalse(isVisible(removeButton));
 
     // Action menu is always hidden.
     const actionMenu =
-        item.shadowRoot!.querySelector<HTMLElement>('#mv2DeprecationMessage')!
+        item.shadowRoot.querySelector<HTMLElement>('#mv2DeprecationMessage')!
             .querySelector<HTMLButtonElement>('#actionMenu');
     assertTrue(!!actionMenu);
     assertFalse(isVisible(actionMenu));
@@ -869,7 +886,7 @@ suite('ExtensionDetailViewTest', function() {
 
     // Find alternative button is always hidden.
     const findAlternativeButton =
-        item.shadowRoot!.querySelector<HTMLElement>('#mv2DeprecationMessage')!
+        item.shadowRoot.querySelector<HTMLElement>('#mv2DeprecationMessage')!
             .querySelector<HTMLButtonElement>('.find-alternative-button');
     assertTrue(!!findAlternativeButton);
     assertFalse(isVisible(findAlternativeButton));
@@ -877,7 +894,7 @@ suite('ExtensionDetailViewTest', function() {
     // Remove button is hidden if extension must remain installed.
     await updateItemData({mustRemainInstalled: true});
     const removeButton =
-        item.shadowRoot!.querySelector<HTMLElement>('#mv2DeprecationMessage')!
+        item.shadowRoot.querySelector<HTMLElement>('#mv2DeprecationMessage')!
             .querySelector<HTMLButtonElement>('.remove-button');
     assertTrue(!!removeButton);
     assertFalse(isVisible(removeButton));
@@ -893,7 +910,7 @@ suite('ExtensionDetailViewTest', function() {
 
     // Action menu is always visible.
     const actionMenu =
-        item.shadowRoot!.querySelector<HTMLElement>('#mv2DeprecationMessage')!
+        item.shadowRoot.querySelector<HTMLElement>('#mv2DeprecationMessage')!
             .querySelector<HTMLButtonElement>('#actionMenuButton');
     assertTrue(!!actionMenu);
     assertTrue(isVisible(actionMenu));
@@ -904,7 +921,7 @@ suite('ExtensionDetailViewTest', function() {
     // Find alternative action is not visible when the extension doesn't have a
     // recommendations url.
     const findAlternativeAction =
-        item.shadowRoot!.querySelector<HTMLElement>('#findAlternativeAction');
+        item.shadowRoot.querySelector<HTMLElement>('#findAlternativeAction');
     assertTrue(!!findAlternativeAction);
     assertFalse(isVisible(findAlternativeAction));
 
@@ -927,7 +944,7 @@ suite('ExtensionDetailViewTest', function() {
     // Keep action is always visible.
     actionMenu.click();
     const keepAction =
-        item.shadowRoot!.querySelector<HTMLElement>('#keepAction');
+        item.shadowRoot.querySelector<HTMLElement>('#keepAction');
     assertTrue(!!keepAction);
     assertTrue(isVisible(keepAction));
 
@@ -972,7 +989,7 @@ suite('ExtensionDetailViewTest', function() {
 
     // Find alternative button is always hidden.
     const findAlternativeButton =
-        item.shadowRoot!.querySelector<HTMLElement>('#mv2DeprecationMessage')!
+        item.shadowRoot.querySelector<HTMLElement>('#mv2DeprecationMessage')!
             .querySelector<HTMLButtonElement>('.find-alternative-button');
     assertTrue(!!findAlternativeButton);
     assertFalse(isVisible(findAlternativeButton));
@@ -980,7 +997,7 @@ suite('ExtensionDetailViewTest', function() {
     // Remove button is hidden if extension must remain installed.
     await updateItemData({mustRemainInstalled: true});
     const removeButton =
-        item.shadowRoot!.querySelector<HTMLElement>('#mv2DeprecationMessage')!
+        item.shadowRoot.querySelector<HTMLElement>('#mv2DeprecationMessage')!
             .querySelector<HTMLButtonElement>('.remove-button');
     assertTrue(!!removeButton);
     assertFalse(isVisible(removeButton));
@@ -997,7 +1014,7 @@ suite('ExtensionDetailViewTest', function() {
     // Action menu is hidden when the extension doesn't have a recommendations
     // url.
     const actionMenu =
-        item.shadowRoot!.querySelector<HTMLElement>('#mv2DeprecationMessage')!
+        item.shadowRoot.querySelector<HTMLElement>('#mv2DeprecationMessage')!
             .querySelector<HTMLButtonElement>('#actionMenuButton');
     assertTrue(!!actionMenu);
     assertFalse(isVisible(actionMenu));
@@ -1017,7 +1034,7 @@ suite('ExtensionDetailViewTest', function() {
 
     // Find alternative action is visible.
     const findAlternativeAction =
-        item.shadowRoot!.querySelector<HTMLElement>('#findAlternativeAction');
+        item.shadowRoot.querySelector<HTMLElement>('#findAlternativeAction');
     assertTrue(!!findAlternativeAction);
     assertTrue(isVisible(findAlternativeAction));
 
@@ -1029,12 +1046,12 @@ suite('ExtensionDetailViewTest', function() {
 
   test('PinnedToToolbar', async function() {
     assertFalse(
-        isVisible(item.shadowRoot!.querySelector<ExtensionsToggleRowElement>(
+        isVisible(item.shadowRoot.querySelector<ExtensionsToggleRowElement>(
             '#pin-to-toolbar')));
 
     await updateItemData({pinnedToToolbar: true});
     const itemPinnedToggle =
-        item.shadowRoot!.querySelector<ExtensionsToggleRowElement>(
+        item.shadowRoot.querySelector<ExtensionsToggleRowElement>(
             '#pin-to-toolbar');
     assertTrue(isVisible(itemPinnedToggle));
     assertTrue(itemPinnedToggle!.checked);
@@ -1053,7 +1070,37 @@ suite('ExtensionDetailViewTest', function() {
     testVisible(item, '#account-upload-button', true);
 
     await mockDelegate.testClickingCalls(
-        item.shadowRoot!.querySelector<HTMLElement>('#account-upload-button')!,
+        item.shadowRoot.querySelector<HTMLElement>('#account-upload-button')!,
         'uploadItemToAccount', [item.data.id]);
   });
+
+  test('UserScripts', async () => {
+    // Confirm the toggle is in the layout.
+    assertTrue(item.data.userScriptsAccess.isEnabled);
+    assertTrue(testIsVisible('#allow-user-scripts'));
+
+    // Confirm the element changes visibility based on ExtensionInfo changes.
+    // Not visible.
+    await updateItemData(
+        {userScriptsAccess: {isEnabled: false, isActive: false}});
+    assertFalse(isChildVisible(item, '#allow-user-scripts'));
+    // Visible and checked.
+    await updateItemData(
+        {userScriptsAccess: {isEnabled: true, isActive: true}});
+    assertTrue(isChildVisible(item, '#allow-user-scripts'));
+    assertTrue(isChecked('#allow-user-scripts'));
+    // Visible and not checked.
+    await updateItemData(
+        {userScriptsAccess: {isEnabled: true, isActive: false}});
+    assertTrue(isChildVisible(item, '#allow-user-scripts'));
+    assertFalse(isChecked('#allow-user-scripts'));
+
+    // Confirm the toggle can be clicked to be checked when it's visible.
+    await mockDelegate.testClickingCalls(
+        item.shadowRoot
+            .querySelector<ExtensionsToggleRowElement>(
+                '#allow-user-scripts')!.getLabel(),
+        'setItemAllowedUserScripts', [extensionData.id, true]);
+  });
+
 });

@@ -190,6 +190,9 @@ def ShouldUseSSO(host: str, email: str) -> bool:
     if not ssoHelper.find_cmd():
         LOGGER.debug("SSO=False: no SSO command")
         return False
+    if gclient_utils.IsEnvCog():
+        LOGGER.debug("SSO=True: in Cog")
+        return True
     if not email:
         LOGGER.debug(
             "SSO=True: email is empty or missing (and SSO command available)")
@@ -333,16 +336,7 @@ def ensure_authenticated(gerrit_host: str, git_host: str) -> Tuple[bool, str]:
 
 
 class SSOAuthenticator(_Authenticator):
-    """SSOAuthenticator implements a Google-internal authentication scheme.
-
-    TEMPORARY configuration for Googlers (one `url` block for each Gerrit host):
-
-        [url "sso://chromium/"]
-          insteadOf = https://chromium.googlesource.com/
-          insteadOf = http://chromium.googlesource.com/
-        [depot-tools]
-          useNewAuthStack = 1
-    """
+    """SSOAuthenticator implements a Google-internal authentication scheme."""
 
     # This is set to true in tests, allows _parse_config to consume expired
     # cookies.

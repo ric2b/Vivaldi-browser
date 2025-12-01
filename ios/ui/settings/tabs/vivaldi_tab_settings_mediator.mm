@@ -80,14 +80,12 @@
     [self.consumer setPreferenceForVivaldiNTPType:self.newTabSetting
                                           withURL:self.newTabURL];
 
-    if (IsInactiveTabsAvailable()) {
-      _prefChangeRegistrar.Init(_local_prefs);
-      _prefObserverBridge.reset(new PrefObserverBridge(self));
-      _prefObserverBridge->ObserveChangesForPreference(
-          prefs::kInactiveTabsTimeThreshold, &_prefChangeRegistrar);
-      [self.consumer
-          setPreferenceForInactiveTabsTimeThreshold:[self defaultThreshold]];
-    }
+    _prefChangeRegistrar.Init(_local_prefs);
+    _prefObserverBridge.reset(new PrefObserverBridge(self));
+    _prefObserverBridge->ObserveChangesForPreference(
+        prefs::kInactiveTabsTimeThreshold, &_prefChangeRegistrar);
+    [self.consumer
+        setPreferenceForInactiveTabsTimeThreshold:[self defaultThreshold]];
 
   }
   return self;
@@ -118,10 +116,8 @@
   [_focusOmniboxOnNTPEnabled setObserver:nil];
   _focusOmniboxOnNTPEnabled = nil;
 
-  if (IsInactiveTabsAvailable()) {
-    _prefChangeRegistrar.RemoveAll();
-    _prefObserverBridge.reset();
-  }
+  _prefChangeRegistrar.RemoveAll();
+  _prefObserverBridge.reset();
   _local_prefs = nil;
   _consumer = nil;
 }
@@ -184,9 +180,9 @@
 - (int)defaultThreshold {
   // Use InactiveTabsTimeThreshold() instead of reading the pref value
   // directly as this function also manage flag and default value.
-  int currentThreshold = IsInactiveTabsExplicitlyDisabledByUser()
+  int currentThreshold = IsInactiveTabsExplicitlyDisabledByUser(_prefService)
                              ? kInactiveTabsDisabledByUser
-                             : InactiveTabsTimeThreshold().InDays();
+                             : InactiveTabsTimeThreshold(_prefService).InDays();
   return currentThreshold;
 }
 
@@ -206,12 +202,8 @@
   [self.consumer
       setPreferenceFocusOmniboxOnNTP:[self focusOmniboxOnNTP]];
 
-  [self.consumer setPreferenceForShowInactiveTabs:
-      [VivaldiTabSettingPrefs isInactiveTabsAvailable]];
-  if (IsInactiveTabsAvailable()) {
-    [self.consumer
-        setPreferenceForInactiveTabsTimeThreshold:[self defaultThreshold]];
-  }
+  [self.consumer
+      setPreferenceForInactiveTabsTimeThreshold:[self defaultThreshold]];
 
   [self.consumer setPreferenceForVivaldiNTPType:self.newTabSetting
                                         withURL:self.newTabURL];
@@ -285,7 +277,6 @@
 
 - (void)onPreferenceChanged:(const std::string&)preferenceName {
   if (preferenceName == prefs::kInactiveTabsTimeThreshold) {
-    CHECK(IsInactiveTabsAvailable());
     [_consumer
         setPreferenceForInactiveTabsTimeThreshold:_local_prefs->GetInteger(
                                             prefs::kInactiveTabsTimeThreshold)];

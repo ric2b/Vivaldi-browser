@@ -10,7 +10,7 @@ import cssVariableValueViewStylesRaw from './cssVariableValueView.css.js';
 
 // TODO(crbug.com/391381439): Fully migrate off of constructed style sheets.
 const cssVariableValueViewStyles = new CSSStyleSheet();
-cssVariableValueViewStyles.replaceSync(cssVariableValueViewStylesRaw.cssContent);
+cssVariableValueViewStyles.replaceSync(cssVariableValueViewStylesRaw.cssText);
 
 const UIStrings = {
   /**
@@ -29,7 +29,7 @@ const UIStrings = {
    *@example {--my-custom-property-name} PH1
    */
   sIsNotDefined: '{PH1} is not defined',
-};
+} as const;
 const str_ = i18n.i18n.registerUIStrings('panels/elements/components/CSSVariableValueView.ts', UIStrings);
 const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
 const i18nTemplate = Lit.i18nTemplate.bind(undefined, str_);
@@ -75,7 +75,7 @@ export class CSSVariableParserError extends HTMLElement {
 export class CSSVariableValueView extends HTMLElement {
   readonly #shadow = this.attachShadow({mode: 'open'});
   readonly variableName: string;
-  readonly value: string|undefined;
+  #value: string|undefined;
   readonly details: RegisteredPropertyDetails|undefined;
 
   constructor({
@@ -90,8 +90,16 @@ export class CSSVariableValueView extends HTMLElement {
     super();
     this.#shadow.adoptedStyleSheets = [cssVariableValueViewStyles];
     this.variableName = variableName;
-    this.value = value;
     this.details = details;
+    this.value = value;
+  }
+
+  get value(): string|undefined {
+    return this.#value;
+  }
+
+  set value(value: string|undefined) {
+    this.#value = value;
     this.#render();
   }
 

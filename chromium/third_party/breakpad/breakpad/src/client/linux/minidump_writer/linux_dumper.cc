@@ -329,7 +329,7 @@ LinuxDumper::ElfFileIdentifierForMapping(const MappingInfo& mapping,
 
   // Special-case linux-gate because it's not a real file.
   if (my_strcmp(mapping.name, kLinuxGateLibraryName) == 0) {
-    void* linux_gate = NULL;
+    void* linux_gate = nullptr;
     if (pid_ == sys_getpid()) {
       linux_gate = reinterpret_cast<void*>(mapping.start_addr);
     } else {
@@ -488,7 +488,7 @@ void LinuxDumper::GetMappingEffectiveNameAndPath(const MappingInfo& mapping,
     //   file_path := /path/to/libname.so
     //   file_name := libname.so
     const char* basename = my_strrchr(file_path, '/');
-    basename = basename == NULL ? file_path : (basename + 1);
+    basename = basename == nullptr ? file_path : (basename + 1);
     my_strlcpy(file_name, basename, file_name_size);
     return;
   }
@@ -579,10 +579,10 @@ bool LinuxDumper::EnumerateMappings() {
         bool exec = (*(i2 + 3) == 'x');
         const char* i3 = my_read_hex_ptr(&offset, i2 + 6 /* skip ' rwxp ' */);
         if (*i3 == ' ') {
-          const char* name = NULL;
+          const char* name = nullptr;
           // Only copy name if the name is a valid path name, or if
           // it's the VDSO image.
-          if (((name = my_strchr(line, '/')) == NULL) &&
+          if (((name = my_strchr(line, '/')) == nullptr) &&
               linux_gate_loc &&
               reinterpret_cast<void*>(start_addr) == linux_gate_loc) {
             name = kLinuxGateLibraryName;
@@ -615,7 +615,7 @@ bool LinuxDumper::EnumerateMappings() {
           module->size = end_addr - start_addr;
           module->offset = offset;
           module->exec = exec;
-          if (name != NULL) {
+          if (name != nullptr) {
             const unsigned l = my_strlen(name);
             if (l < sizeof(module->name))
               my_memcpy(module->name, name, l);
@@ -915,7 +915,7 @@ const MappingInfo* LinuxDumper::FindMapping(const void* address) const {
       return mappings_[i];
   }
 
-  return NULL;
+  return nullptr;
 }
 
 // Find the mapping which the given memory address falls in. Uses the
@@ -928,7 +928,7 @@ const MappingInfo* LinuxDumper::FindMappingNoBias(uintptr_t address) const {
       return mappings_[i];
     }
   }
-  return NULL;
+  return nullptr;
 }
 
 bool LinuxDumper::HandleDeletedFileInMapping(char* path) const {

@@ -43,6 +43,7 @@
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/location_bar/location_bar_view.h"
 #include "chrome/browser/ui/views/location_bar/location_icon_view.h"
+#include "chrome/browser/ui/views/page_info/page_info_ad_personalization_content_view.h"
 #include "chrome/browser/ui/views/page_info/page_info_cookies_content_view.h"
 #include "chrome/browser/ui/views/page_info/page_info_permission_content_view.h"
 #include "chrome/browser/ui/views/page_info/page_info_view_factory.h"
@@ -69,8 +70,10 @@
 #include "components/privacy_sandbox/tracking_protection_prefs.h"
 #include "components/safe_browsing/content/browser/password_protection/password_protection_test_util.h"
 #include "components/safe_browsing/core/common/features.h"
+#include "components/safe_browsing/core/common/proto/csd.pb.h"
 #include "components/security_state/content/security_state_tab_helper.h"
 #include "components/strings/grit/components_strings.h"
+#include "components/strings/grit/privacy_sandbox_strings.h"
 #include "components/ukm/test_ukm_recorder.h"
 #include "content/public/browser/file_system_access_permission_context.h"
 #include "content/public/browser/navigation_handle.h"
@@ -185,6 +188,26 @@ void AddHintForTesting(Browser* browser,
       url, optimization_guide::proto::ABOUT_THIS_SITE, optimization_metadata);
 }
 
+// A WebContentsObserver to allow waiting on a change in visible security state.
+class SecurityStyleTestObserver : public content::WebContentsObserver {
+ public:
+  explicit SecurityStyleTestObserver(content::WebContents* web_contents)
+      : content::WebContentsObserver(web_contents) {}
+
+  SecurityStyleTestObserver(const SecurityStyleTestObserver&) = delete;
+  SecurityStyleTestObserver& operator=(const SecurityStyleTestObserver&) =
+      delete;
+
+  ~SecurityStyleTestObserver() override = default;
+
+  void DidChangeVisibleSecurityState() override { run_loop_.Quit(); }
+
+  void WaitForDidChangeVisibleSecurityState() { run_loop_.Run(); }
+
+ private:
+  base::RunLoop run_loop_;
+};
+
 }  // namespace
 
 class PageInfoBubbleViewBrowserTest : public InProcessBrowserTest {
@@ -255,6 +278,13 @@ class PageInfoBubbleViewBrowserTest : public InProcessBrowserTest {
                     ->presenter_for_testing();
     DCHECK(presenter);
     return presenter;
+  }
+
+  void SetAdPersonalizationInfo(
+      const PageInfoUI::AdPersonalizationInfo& identity_info) {
+    auto* presenter = GetPresenter();
+    EXPECT_TRUE(presenter->ui_for_testing());
+    presenter->ui_for_testing()->SetAdPersonalizationInfo(identity_info);
   }
 
   void SetPageInfoBubbleIdentityInfo(
@@ -876,6 +906,46 @@ IN_PROC_BROWSER_TEST_F(PageInfoBubbleViewBrowserTest,
           u" " + l10n_util::GetStringUTF16(IDS_LEARN_MORE));
 }
 
+IN_PROC_BROWSER_TEST_F(PageInfoBubbleViewBrowserTest, AdPrivacyStrings) {
+  base::UserActionTester user_actions_stats;
+  net::EmbeddedTestServer https_server(net::EmbeddedTestServer::TYPE_HTTPS);
+  https_server.AddDefaultHandlers(
+      base::FilePath(FILE_PATH_LITERAL("chrome/test/data")));
+  ASSERT_TRUE(https_server.Start());
+
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      browser(), https_server.GetURL("/simple.html")));
+
+  // Setup the bogus ad personalization info.
+  PageInfoUI::AdPersonalizationInfo info;
+  info.has_joined_user_to_interest_group = true;
+
+  auto* pscs = content_settings::PageSpecificContentSettings::GetForFrame(
+      browser()
+          ->tab_strip_model()
+          ->GetActiveWebContents()
+          ->GetPrimaryMainFrame());
+  pscs->OnTopicAccessed(
+      url::Origin::Create(GURL("https://a.test")), false,
+      privacy_sandbox::CanonicalTopic(browsing_topics::Topic(1), 1));
+
+  OpenPageInfoBubble(browser());
+
+  SetAdPersonalizationInfo(info);
+
+  views::View* button =
+      GetView(PageInfoViewFactory::VIEW_ID_PAGE_INFO_AD_PERSONALIZATION_BUTTON);
+  PerformMouseClickOnView(button);
+
+  auto* label = PageInfoBubbleView::GetPageInfoBubbleForTesting()->GetViewByID(
+      PageInfoViewFactory::VIEW_ID_PAGE_INFO_AD_PERSONALIZATION_LABEL);
+  ASSERT_TRUE(label);
+
+  EXPECT_EQ(user_actions_stats.GetActionCount(
+                "PageInfo.AdPersonalization.OpenedWithTopics"),
+            1);
+}
+
 IN_PROC_BROWSER_TEST_F(PageInfoBubbleViewBrowserTest, UnwantedSoftwareStrings) {
   net::EmbeddedTestServer https_server(net::EmbeddedTestServer::TYPE_HTTPS);
   https_server.AddDefaultHandlers(
@@ -1130,6 +1200,28 @@ class PageInfoBubbleViewAboutThisSiteBrowserTest : public InProcessBrowserTest {
     return site_info;
   }
 
+  content::WebContents* web_contents() {
+    return browser()->tab_strip_model()->GetActiveWebContents();
+  }
+
+  void TriggerSafeBrowsingWarning() {
+    safe_browsing::ChromePasswordProtectionService* service =
+        safe_browsing::ChromePasswordProtectionService::
+            GetPasswordProtectionService(browser()->profile());
+    safe_browsing::ReusedPasswordAccountType reused_password_account_type;
+    reused_password_account_type.set_account_type(
+        safe_browsing::ReusedPasswordAccountType::NON_GAIA_ENTERPRISE);
+    service->set_reused_password_account_type_for_last_shown_warning(
+        reused_password_account_type);
+
+    scoped_refptr<safe_browsing::PasswordProtectionRequest> request =
+        safe_browsing::CreateDummyRequest(web_contents());
+    service->ShowModalWarning(
+        request.get(),
+        safe_browsing::LoginReputationClientResponse::VERDICT_TYPE_UNSPECIFIED,
+        "unused_token", reused_password_account_type);
+  }
+
  protected:
   net::EmbeddedTestServer https_server_{net::EmbeddedTestServer::TYPE_HTTPS};
   base::test::ScopedFeatureList feature_list_;
@@ -1289,6 +1381,38 @@ IN_PROC_BROWSER_TEST_F(PageInfoBubbleViewAboutThisSiteBrowserTest,
   base::RunLoop().RunUntilIdle();
 }
 
+IN_PROC_BROWSER_TEST_F(PageInfoBubbleViewAboutThisSiteBrowserTest,
+                       AboutThisSiteNotSecureAsync) {
+  auto url = https_server_.GetURL("a.test", "/title1.html");
+  AddHintForTesting(browser(), url, CreateValidSiteInfo());
+
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), url));
+  OpenPageInfoBubble(browser());
+  auto* page_info = PageInfoBubbleView::GetPageInfoBubbleForTesting();
+  // The button is shown because connection is secure.
+  EXPECT_TRUE(
+      page_info
+          ->GetViewByID(
+              PageInfoViewFactory::VIEW_ID_PAGE_INFO_EXTENDED_SITE_INFO_SECTION)
+          ->GetVisible());
+
+  // Connection state changed to insecure.
+  SecurityStyleTestObserver observer(web_contents());
+  TriggerSafeBrowsingWarning();
+  observer.WaitForDidChangeVisibleSecurityState();
+
+  // The button isn't shown because connection now isn't secure.
+  EXPECT_FALSE(
+      page_info
+          ->GetViewByID(
+              PageInfoViewFactory::VIEW_ID_PAGE_INFO_EXTENDED_SITE_INFO_SECTION)
+          ->GetVisible());
+
+  page_info->GetWidget()->CloseWithReason(
+      views::Widget::ClosedReason::kEscKeyPressed);
+  base::RunLoop().RunUntilIdle();
+}
+
 // Test that no info is shown and "kNotShownOptimizationGuideNotAllowed" is
 // logged when hints fetching is disabled.
 class PageInfoBubbleViewAboutThisSiteDisabledBrowserTest
@@ -1350,7 +1474,8 @@ class PageInfoBubbleViewBrowserTestCookiesSubpage
  public:
   PageInfoBubbleViewBrowserTestCookiesSubpage() {
     std::vector<base::test::FeatureRef>
-        enabled_features = {privacy_sandbox::kPrivacySandboxFirstPartySetsUI},
+        enabled_features =
+            {privacy_sandbox::kPrivacySandboxRelatedWebsiteSetsUi},
         disabled_features = {};
     if (GetParam()) {
       enabled_features.push_back(
@@ -1474,8 +1599,14 @@ IN_PROC_BROWSER_TEST_P(PageInfoBubbleViewBrowserTestCookiesSubpage,
   EXPECT_EQ(kExpectedChildren, cookies_buttons_container->children().size());
   EXPECT_TRUE(GetView(
       PageInfoViewFactory::VIEW_ID_PAGE_INFO_LINK_OR_BUTTON_COOKIE_DIALOG));
-  auto* rws_button = GetView(
-      PageInfoViewFactory::VIEW_ID_PAGE_INFO_LINK_OR_BUTTON_RWS_SETTINGS);
+  auto* rws_button = static_cast<RichHoverButton*>(GetView(
+      PageInfoViewFactory::VIEW_ID_PAGE_INFO_LINK_OR_BUTTON_RWS_SETTINGS));
+
+  EXPECT_EQ(rws_button->GetTitleText(),
+            l10n_util::GetStringUTF16(IDS_PAGE_INFO_RWS_V2_BUTTON_TITLE));
+  EXPECT_EQ(rws_button->GetSubtitleText(),
+            l10n_util::GetStringFUTF16(IDS_PAGE_INFO_RWS_V2_BUTTON_SUBTITLE,
+                                       rws_owner));
 
   // Checking if rws button opens correct page and records correctly user
   // actions.

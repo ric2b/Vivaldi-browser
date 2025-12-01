@@ -32,6 +32,7 @@ class BookmarkModel;
 
 namespace history {
 class HistoryService;
+class WebHistoryService; // Vivaldi
 }  // namespace history
 
 namespace history_clusters {
@@ -78,6 +79,11 @@ class FakeAutocompleteProviderClient : public MockAutocompleteProviderClient {
   scoped_refptr<history::TopSites> GetTopSites() override;
   std::string ProfileUserName() const override;
 
+  // Vivaldi
+  history::WebHistoryService* GetWebHistoryService() override {
+      return nullptr;
+  }
+  // End Vivaldi
 
 #if BUILDFLAG(BUILD_WITH_TFLITE_LIB)
   OnDeviceTailModelService* GetOnDeviceTailModelService() const override;

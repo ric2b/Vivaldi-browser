@@ -33,7 +33,7 @@ typedef struct OverlayVulkanContext {
 
     int initialized;
     FFVkExecPool e;
-    FFVkQueueFamilyCtx qf;
+    AVVulkanDeviceQueueFamily *qf;
     FFVulkanShader shd;
     VkSampler sampler;
 
@@ -101,8 +101,14 @@ static av_cold int init_filter(AVFilterContext *ctx)
         return AVERROR_EXTERNAL;
     }
 
-    ff_vk_qf_init(vkctx, &s->qf, VK_QUEUE_COMPUTE_BIT);
-    RET(ff_vk_exec_pool_init(vkctx, &s->qf, &s->e, s->qf.nb_queues*4, 0, 0, 0, NULL));
+    s->qf = ff_vk_qf_find(vkctx, VK_QUEUE_COMPUTE_BIT, 0);
+    if (!s->qf) {
+        av_log(ctx, AV_LOG_ERROR, "Device has no compute queues\n");
+        err = AVERROR(ENOTSUP);
+        goto fail;
+    }
+
+    RET(ff_vk_exec_pool_init(vkctx, s->qf, &s->e, s->qf->num*4, 0, 0, 0, NULL));
     RET(ff_vk_init_sampler(vkctx, &s->sampler, 1, VK_FILTER_NEAREST));
     RET(ff_vk_shader_init(vkctx, &s->shd, "overlay",
                           VK_SHADER_STAGE_COMPUTE_BIT,
@@ -330,9 +336,11 @@ static const AVFilterPad overlay_vulkan_outputs[] = {
     },
 };
 
-const AVFilter ff_vf_overlay_vulkan = {
-    .name           = "overlay_vulkan",
-    .description    = NULL_IF_CONFIG_SMALL("Overlay a source on top of another"),
+const FFFilter ff_vf_overlay_vulkan = {
+    .p.name         = "overlay_vulkan",
+    .p.description  = NULL_IF_CONFIG_SMALL("Overlay a source on top of another"),
+    .p.priv_class   = &overlay_vulkan_class,
+    .p.flags        = AVFILTER_FLAG_HWDEVICE,
     .priv_size      = sizeof(OverlayVulkanContext),
     .init           = &overlay_vulkan_init,
     .uninit         = &overlay_vulkan_uninit,
@@ -340,7 +348,5 @@ const AVFilter ff_vf_overlay_vulkan = {
     FILTER_INPUTS(overlay_vulkan_inputs),
     FILTER_OUTPUTS(overlay_vulkan_outputs),
     FILTER_SINGLE_PIXFMT(AV_PIX_FMT_VULKAN),
-    .priv_class     = &overlay_vulkan_class,
     .flags_internal = FF_FILTER_FLAG_HWFRAME_AWARE,
-    .flags          = AVFILTER_FLAG_HWDEVICE,
 };

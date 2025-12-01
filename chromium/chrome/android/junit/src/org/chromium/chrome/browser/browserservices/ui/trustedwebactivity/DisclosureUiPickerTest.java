@@ -7,7 +7,8 @@ package org.chromium.chrome.browser.browserservices.ui.trustedwebactivity;
 import static android.app.NotificationManager.IMPORTANCE_DEFAULT;
 import static android.app.NotificationManager.IMPORTANCE_NONE;
 
-import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.any;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -24,9 +25,11 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.Mock;
 import org.mockito.Mockito;
-import org.mockito.MockitoAnnotations;
+import org.mockito.junit.MockitoJUnit;
+import org.mockito.junit.MockitoRule;
 import org.robolectric.annotation.Config;
 
+import org.chromium.base.Callback;
 import org.chromium.base.test.BaseRobolectricTestRunner;
 import org.chromium.base.test.util.Feature;
 import org.chromium.chrome.browser.browserservices.intents.BrowserServicesIntentDataProvider;
@@ -39,6 +42,9 @@ import org.chromium.chrome.test.AutomotiveContextWrapperTestRule;
 import org.chromium.components.browser_ui.notifications.BaseNotificationManagerProxyFactory;
 import org.chromium.components.browser_ui.notifications.NotificationManagerProxy;
 import org.chromium.components.browser_ui.notifications.NotificationProxyUtils;
+
+import java.util.ArrayList;
+import java.util.List;
 
 /** Tests for {@link DisclosureUiPicker}. */
 @RunWith(BaseRobolectricTestRunner.class)
@@ -53,15 +59,17 @@ public class DisclosureUiPickerTest {
     @Mock public NotificationManagerProxy mNotificationManager;
     @Mock public ActivityLifecycleDispatcher mLifecycleDispatcher;
 
+    @Rule public final MockitoRule mMockitoRule = MockitoJUnit.rule();
+
     @Rule
     public AutomotiveContextWrapperTestRule mAutomotiveContextWrapperTestRule =
             new AutomotiveContextWrapperTestRule();
 
     private DisclosureUiPicker mPicker;
+    private List<NotificationChannel> mEnabledChannels = new ArrayList<>();
 
     @Before
     public void setUp() {
-        MockitoAnnotations.initMocks(this);
 
         when(mIntentDataProvider.getTwaDisclosureUi()).thenReturn(TwaDisclosureUi.DEFAULT);
         BaseNotificationManagerProxyFactory.setInstanceForTesting(mNotificationManager);
@@ -72,10 +80,20 @@ public class DisclosureUiPickerTest {
                         () -> mNotification,
                         mIntentDataProvider,
                         mLifecycleDispatcher);
+        doAnswer(
+                        (invocation) -> {
+                            Callback<List<NotificationChannel>> callback =
+                                    invocation.getArgument(0);
+                            callback.onResult(mEnabledChannels);
+                            return null;
+                        })
+                .when(mNotificationManager)
+                .getNotificationChannels(any(Callback.class));
     }
 
     @After
     public void tearDown() {
+        mEnabledChannels.clear();
         NotificationProxyUtils.setNotificationEnabledForTest(null);
     }
 
@@ -148,6 +166,7 @@ public class DisclosureUiPickerTest {
     private void setChannelEnabled(String channelId, boolean enabled) {
         NotificationChannel channel = Mockito.mock(NotificationChannel.class);
         when(channel.getImportance()).thenReturn(enabled ? IMPORTANCE_DEFAULT : IMPORTANCE_NONE);
-        when(mNotificationManager.getNotificationChannel(eq(channelId))).thenReturn(channel);
+        when(channel.getId()).thenReturn(channelId);
+        mEnabledChannels.add(channel);
     }
 }

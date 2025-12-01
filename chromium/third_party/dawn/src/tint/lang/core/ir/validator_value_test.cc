@@ -37,9 +37,11 @@
 #include "src/tint/lang/core/number.h"
 #include "src/tint/lang/core/type/abstract_float.h"
 #include "src/tint/lang/core/type/abstract_int.h"
+#include "src/tint/lang/core/type/binding_array.h"
 #include "src/tint/lang/core/type/manager.h"
 #include "src/tint/lang/core/type/matrix.h"
 #include "src/tint/lang/core/type/reference.h"
+#include "src/tint/lang/core/type/sampled_texture.h"
 #include "src/tint/lang/core/type/storage_texture.h"
 #include "src/tint/lang/core/type/struct.h"
 
@@ -48,6 +50,29 @@ namespace tint::core::ir {
 using namespace tint::core::fluent_types;     // NOLINT
 using namespace tint::core::number_suffixes;  // NOLINT
 
+TEST_F(IR_ValidatorTest, Var_RootBlock_NullOperand) {
+    auto* v = b.Var(ty.ptr(private_, ty.i32()));
+    v->SetOperands(Vector{static_cast<ir::Value*>(nullptr)});
+    mod.root_block->Append(v);
+
+    auto res = ir::Validate(mod);
+    ASSERT_EQ(res, Success);
+}
+
+TEST_F(IR_ValidatorTest, Var_RootBlock_TooManyOperands) {
+    auto* v = b.Var(ty.ptr(private_, ty.i32()));
+    v->SetOperands(Vector{b.Value(0_i), b.Value(1_i)});
+    mod.root_block->Append(v);
+
+    auto res = ir::Validate(mod);
+    ASSERT_NE(res, Success);
+    EXPECT_THAT(res.Failure().reason,
+                testing::HasSubstr(R"(:2:38 error: var: expected exactly 1 operands, got 2
+  %1:ptr<private, i32, read_write> = var 0i, 1i
+                                     ^^^
+)")) << res.Failure();
+}
+
 TEST_F(IR_ValidatorTest, Var_RootBlock_NullResult) {
     auto* v = mod.CreateInstruction<ir::Var>(nullptr);
     v->SetInitializer(b.Constant(0_i));
@@ -55,11 +80,10 @@ TEST_F(IR_ValidatorTest, Var_RootBlock_NullResult) {
 
     auto res = ir::Validate(mod);
     ASSERT_NE(res, Success);
-    EXPECT_THAT(res.Failure().reason.Str(),
-                testing::HasSubstr(R"(:2:3 error: var: result is undefined
-  undef = var, 0i
+    EXPECT_THAT(res.Failure().reason, testing::HasSubstr(R"(:2:3 error: var: result is undefined
+  undef = var 0i
   ^^^^^
-)")) << res.Failure().reason.Str();
+)")) << res.Failure();
 }
 
 TEST_F(IR_ValidatorTest, Var_VoidType) {
@@ -67,11 +91,11 @@ TEST_F(IR_ValidatorTest, Var_VoidType) {
 
     auto res = ir::Validate(mod);
     ASSERT_NE(res, Success);
-    EXPECT_THAT(res.Failure().reason.Str(),
+    EXPECT_THAT(res.Failure().reason,
                 testing::HasSubstr(R"(:2:3 error: var: pointers to void are not permitted
-  %1:ptr<private, void, read_write> = var
+  %1:ptr<private, void, read_write> = var undef
   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-)")) << res.Failure().reason.Str();
+)")) << res.Failure();
 }
 
 TEST_F(IR_ValidatorTest, Var_Function_NullResult) {
@@ -86,11 +110,10 @@ TEST_F(IR_ValidatorTest, Var_Function_NullResult) {
 
     auto res = ir::Validate(mod);
     ASSERT_NE(res, Success);
-    EXPECT_THAT(res.Failure().reason.Str(),
-                testing::HasSubstr(R"(:3:5 error: var: result is undefined
-    undef = var, 0i
+    EXPECT_THAT(res.Failure().reason, testing::HasSubstr(R"(:3:5 error: var: result is undefined
+    undef = var 0i
     ^^^^^
-)")) << res.Failure().reason.Str();
+)")) << res.Failure();
 }
 
 TEST_F(IR_ValidatorTest, Var_Function_NoResult) {
@@ -105,11 +128,11 @@ TEST_F(IR_ValidatorTest, Var_Function_NoResult) {
 
     auto res = ir::Validate(mod);
     ASSERT_NE(res, Success);
-    EXPECT_THAT(res.Failure().reason.Str(),
+    EXPECT_THAT(res.Failure().reason,
                 testing::HasSubstr(R"(:3:13 error: var: expected exactly 1 results, got 0
-    undef = var, 1i
+    undef = var 1i
             ^^^
-)")) << res.Failure().reason.Str();
+)")) << res.Failure();
 }
 
 TEST_F(IR_ValidatorTest, Var_Function_NonPtrResult) {
@@ -124,11 +147,11 @@ TEST_F(IR_ValidatorTest, Var_Function_NonPtrResult) {
     auto res = ir::Validate(mod);
     ASSERT_NE(res, Success);
     EXPECT_THAT(
-        res.Failure().reason.Str(),
+        res.Failure().reason,
         testing::HasSubstr(R"(:3:14 error: var: result type 'f32' must be a pointer or a reference
-    %2:f32 = var
+    %2:f32 = var undef
              ^^^
-)")) << res.Failure().reason.Str();
+)")) << res.Failure();
 }
 
 TEST_F(IR_ValidatorTest, Var_Function_UnexpectedInputAttachmentIndex) {
@@ -142,12 +165,12 @@ TEST_F(IR_ValidatorTest, Var_Function_UnexpectedInputAttachmentIndex) {
 
     auto res = ir::Validate(mod);
     ASSERT_NE(res, Success);
-    EXPECT_THAT(res.Failure().reason.Str(),
+    EXPECT_THAT(res.Failure().reason,
                 testing::HasSubstr(
                     R"(:3:41 error: var: '@input_attachment_index' is not valid for non-handle var
-    %2:ptr<function, f32, read_write> = var @input_attachment_index(0)
+    %2:ptr<function, f32, read_write> = var undef @input_attachment_index(0)
                                         ^^^
-)")) << res.Failure().reason.Str();
+)")) << res.Failure();
 }
 
 TEST_F(IR_ValidatorTest, Var_Function_OutsideFunctionScope) {
@@ -157,12 +180,12 @@ TEST_F(IR_ValidatorTest, Var_Function_OutsideFunctionScope) {
     auto res = ir::Validate(mod);
     ASSERT_NE(res, Success);
     EXPECT_THAT(
-        res.Failure().reason.Str(),
+        res.Failure().reason,
         testing::HasSubstr(
             R"(:2:39 error: var: vars in the 'function' address space must be in a function scope
-  %1:ptr<function, f32, read_write> = var
+  %1:ptr<function, f32, read_write> = var undef
                                       ^^^
-)")) << res.Failure().reason.Str();
+)")) << res.Failure();
 }
 
 TEST_F(IR_ValidatorTest, Var_NonFunction_InsideFunctionScope) {
@@ -176,12 +199,12 @@ TEST_F(IR_ValidatorTest, Var_NonFunction_InsideFunctionScope) {
     auto res = ir::Validate(mod);
     ASSERT_NE(res, Success);
     EXPECT_THAT(
-        res.Failure().reason.Str(),
+        res.Failure().reason,
         testing::HasSubstr(
             R"(:3:40 error: var: vars in a function scope must be in the 'function' address space
-    %2:ptr<private, f32, read_write> = var
+    %2:ptr<private, f32, read_write> = var undef
                                        ^^^
-)")) << res.Failure().reason.Str();
+)")) << res.Failure();
 }
 
 TEST_F(IR_ValidatorTest, Var_Private_InsideFunctionScopeWithCapability) {
@@ -203,12 +226,12 @@ TEST_F(IR_ValidatorTest, Var_Private_UnexpectedInputAttachmentIndex) {
 
     auto res = ir::Validate(mod);
     ASSERT_NE(res, Success);
-    EXPECT_THAT(res.Failure().reason.Str(),
+    EXPECT_THAT(res.Failure().reason,
                 testing::HasSubstr(
                     R"(:2:38 error: var: '@input_attachment_index' is not valid for non-handle var
-  %1:ptr<private, f32, read_write> = var @input_attachment_index(0)
+  %1:ptr<private, f32, read_write> = var undef @input_attachment_index(0)
                                      ^^^
-)")) << res.Failure().reason.Str();
+)")) << res.Failure();
 }
 
 TEST_F(IR_ValidatorTest, Var_PushConstant_UnexpectedInputAttachmentIndex) {
@@ -218,12 +241,12 @@ TEST_F(IR_ValidatorTest, Var_PushConstant_UnexpectedInputAttachmentIndex) {
 
     auto res = ir::Validate(mod);
     ASSERT_NE(res, Success);
-    EXPECT_THAT(res.Failure().reason.Str(),
+    EXPECT_THAT(res.Failure().reason,
                 testing::HasSubstr(
                     R"(:2:38 error: var: '@input_attachment_index' is not valid for non-handle var
-  %1:ptr<push_constant, f32, read> = var @input_attachment_index(0)
+  %1:ptr<push_constant, f32, read> = var undef @input_attachment_index(0)
                                      ^^^
-)")) << res.Failure().reason.Str();
+)")) << res.Failure();
 }
 
 TEST_F(IR_ValidatorTest, Var_Storage_UnexpectedInputAttachmentIndex) {
@@ -234,12 +257,12 @@ TEST_F(IR_ValidatorTest, Var_Storage_UnexpectedInputAttachmentIndex) {
 
     auto res = ir::Validate(mod);
     ASSERT_NE(res, Success);
-    EXPECT_THAT(res.Failure().reason.Str(),
+    EXPECT_THAT(res.Failure().reason,
                 testing::HasSubstr(
                     R"(:2:38 error: var: '@input_attachment_index' is not valid for non-handle var
-  %1:ptr<storage, f32, read_write> = var @binding_point(0, 0) @input_attachment_index(0)
+  %1:ptr<storage, f32, read_write> = var undef @binding_point(0, 0) @input_attachment_index(0)
                                      ^^^
-)")) << res.Failure().reason.Str();
+)")) << res.Failure();
 }
 
 TEST_F(IR_ValidatorTest, Var_Uniform_UnexpectedInputAttachmentIndex) {
@@ -250,12 +273,12 @@ TEST_F(IR_ValidatorTest, Var_Uniform_UnexpectedInputAttachmentIndex) {
 
     auto res = ir::Validate(mod);
     ASSERT_NE(res, Success);
-    EXPECT_THAT(res.Failure().reason.Str(),
+    EXPECT_THAT(res.Failure().reason,
                 testing::HasSubstr(
                     R"(:2:32 error: var: '@input_attachment_index' is not valid for non-handle var
-  %1:ptr<uniform, f32, read> = var @binding_point(0, 0) @input_attachment_index(0)
+  %1:ptr<uniform, f32, read> = var undef @binding_point(0, 0) @input_attachment_index(0)
                                ^^^
-)")) << res.Failure().reason.Str();
+)")) << res.Failure();
 }
 
 TEST_F(IR_ValidatorTest, Var_Workgroup_UnexpectedInputAttachmentIndex) {
@@ -265,12 +288,12 @@ TEST_F(IR_ValidatorTest, Var_Workgroup_UnexpectedInputAttachmentIndex) {
 
     auto res = ir::Validate(mod);
     ASSERT_NE(res, Success);
-    EXPECT_THAT(res.Failure().reason.Str(),
+    EXPECT_THAT(res.Failure().reason,
                 testing::HasSubstr(
                     R"(:2:40 error: var: '@input_attachment_index' is not valid for non-handle var
-  %1:ptr<workgroup, f32, read_write> = var @input_attachment_index(0)
+  %1:ptr<workgroup, f32, read_write> = var undef @input_attachment_index(0)
                                        ^^^
-)")) << res.Failure().reason.Str();
+)")) << res.Failure();
 }
 
 TEST_F(IR_ValidatorTest, Var_Init_WrongType) {
@@ -284,12 +307,12 @@ TEST_F(IR_ValidatorTest, Var_Init_WrongType) {
 
     auto res = ir::Validate(mod);
     ASSERT_NE(res, Success);
-    EXPECT_THAT(res.Failure().reason.Str(),
+    EXPECT_THAT(res.Failure().reason,
                 testing::HasSubstr(
                     R"(:3:41 error: var: initializer type 'i32' does not match store type 'f32'
-    %2:ptr<function, f32, read_write> = var, 1i
+    %2:ptr<function, f32, read_write> = var 1i
                                         ^^^
-)")) << res.Failure().reason.Str();
+)")) << res.Failure();
 }
 
 TEST_F(IR_ValidatorTest, Var_Init_NullType) {
@@ -308,11 +331,11 @@ TEST_F(IR_ValidatorTest, Var_Init_NullType) {
 
     auto res = ir::Validate(mod);
     ASSERT_NE(res, Success);
-    EXPECT_THAT(res.Failure().reason.Str(),
-                testing::HasSubstr(R"(:5:46 error: var: operand type is undefined
-    %j:ptr<function, f32, read_write> = var, %3
-                                             ^^
-)")) << res.Failure().reason.Str();
+    EXPECT_THAT(res.Failure().reason,
+                testing::HasSubstr(R"(:5:45 error: var: operand type is undefined
+    %j:ptr<function, f32, read_write> = var %3
+                                            ^^
+)")) << res.Failure();
 }
 
 TEST_F(IR_ValidatorTest, Var_Init_FunctionTypeInit) {
@@ -329,12 +352,12 @@ TEST_F(IR_ValidatorTest, Var_Init_FunctionTypeInit) {
     auto res = ir::Validate(mod);
     ASSERT_NE(res, Success);
     EXPECT_THAT(
-        res.Failure().reason.Str(),
+        res.Failure().reason,
         testing::HasSubstr(
             R"(:8:41 error: var: initializer type '<function>' does not match store type 'f32'
-    %i:ptr<function, f32, read_write> = var, %invalid_init
+    %i:ptr<function, f32, read_write> = var %invalid_init
                                         ^^^
-)")) << res.Failure().reason.Str();
+)")) << res.Failure();
 }
 
 TEST_F(IR_ValidatorTest, Var_Init_InvalidAddressSpace) {
@@ -355,12 +378,12 @@ TEST_F(IR_ValidatorTest, Var_Init_InvalidAddressSpace) {
     auto res = ir::Validate(mod);
     ASSERT_NE(res, Success);
     EXPECT_THAT(
-        res.Failure().reason.Str(),
+        res.Failure().reason,
         testing::HasSubstr(
             R"(:3:38 error: var: only variables in the function or private address space may be initialized
-  %s:ptr<storage, f32, read_write> = var, 1.0f
+  %s:ptr<storage, f32, read_write> = var 1.0f
                                      ^^^
-)")) << res.Failure().reason.Str();
+)")) << res.Failure();
 }
 
 TEST_F(IR_ValidatorTest, Var_HandleMissingBindingPoint) {
@@ -369,11 +392,11 @@ TEST_F(IR_ValidatorTest, Var_HandleMissingBindingPoint) {
 
     auto res = ir::Validate(mod);
     ASSERT_NE(res, Success);
-    EXPECT_THAT(res.Failure().reason.Str(),
+    EXPECT_THAT(res.Failure().reason,
                 testing::HasSubstr(R"(:2:31 error: var: a resource variable is missing binding point
-  %1:ptr<handle, i32, read> = var
+  %1:ptr<handle, i32, read> = var undef
                               ^^^
-)")) << res.Failure().reason.Str();
+)")) << res.Failure();
 }
 
 TEST_F(IR_ValidatorTest, Var_StorageMissingBindingPoint) {
@@ -382,11 +405,11 @@ TEST_F(IR_ValidatorTest, Var_StorageMissingBindingPoint) {
 
     auto res = ir::Validate(mod);
     ASSERT_NE(res, Success);
-    EXPECT_THAT(res.Failure().reason.Str(),
+    EXPECT_THAT(res.Failure().reason,
                 testing::HasSubstr(R"(:2:38 error: var: a resource variable is missing binding point
-  %1:ptr<storage, i32, read_write> = var
+  %1:ptr<storage, i32, read_write> = var undef
                                      ^^^
-)")) << res.Failure().reason.Str();
+)")) << res.Failure();
 }
 
 TEST_F(IR_ValidatorTest, Var_UniformMissingBindingPoint) {
@@ -395,11 +418,11 @@ TEST_F(IR_ValidatorTest, Var_UniformMissingBindingPoint) {
 
     auto res = ir::Validate(mod);
     ASSERT_NE(res, Success);
-    EXPECT_THAT(res.Failure().reason.Str(),
+    EXPECT_THAT(res.Failure().reason,
                 testing::HasSubstr(R"(:2:32 error: var: a resource variable is missing binding point
-  %1:ptr<uniform, i32, read> = var
+  %1:ptr<uniform, i32, read> = var undef
                                ^^^
-)")) << res.Failure().reason.Str();
+)")) << res.Failure();
 }
 
 TEST_F(IR_ValidatorTest, Var_NonResourceWithBindingPoint) {
@@ -409,11 +432,11 @@ TEST_F(IR_ValidatorTest, Var_NonResourceWithBindingPoint) {
 
     auto res = ir::Validate(mod);
     ASSERT_NE(res, Success);
-    EXPECT_THAT(res.Failure().reason.Str(),
+    EXPECT_THAT(res.Failure().reason,
                 testing::HasSubstr(R"(:2:38 error: var: a non-resource variable has binding point
-  %1:ptr<private, i32, read_write> = var @binding_point(0, 0)
+  %1:ptr<private, i32, read_write> = var undef @binding_point(0, 0)
                                      ^^^
-)")) << res.Failure().reason.Str();
+)")) << res.Failure();
 }
 
 TEST_F(IR_ValidatorTest, Var_MultipleIOAnnotations) {
@@ -427,12 +450,12 @@ TEST_F(IR_ValidatorTest, Var_MultipleIOAnnotations) {
     auto res = ir::Validate(mod);
     ASSERT_NE(res, Success);
     EXPECT_THAT(
-        res.Failure().reason.Str(),
+        res.Failure().reason,
         testing::HasSubstr(
             R"(:2:35 error: var: module scope variable has more than one IO annotation, [ @location, built-in ]
-  %1:ptr<__in, vec4<f32>, read> = var @location(0) @builtin(position)
+  %1:ptr<__in, vec4<f32>, read> = var undef @location(0) @builtin(position)
                                   ^^^
-)")) << res.Failure().reason.Str();
+)")) << res.Failure();
 }
 
 TEST_F(IR_ValidatorTest, Var_Struct_MultipleIOAnnotations) {
@@ -450,12 +473,12 @@ TEST_F(IR_ValidatorTest, Var_Struct_MultipleIOAnnotations) {
     auto res = ir::Validate(mod);
     ASSERT_NE(res, Success);
     EXPECT_THAT(
-        res.Failure().reason.Str(),
+        res.Failure().reason,
         testing::HasSubstr(
             R"(:6:41 error: var: module scope variable struct member has more than one IO annotation, [ built-in, @color ]
-  %1:ptr<__out, MyStruct, read_write> = var
+  %1:ptr<__out, MyStruct, read_write> = var undef
                                         ^^^
-)")) << res.Failure().reason.Str();
+)")) << res.Failure();
 }
 
 TEST_F(IR_ValidatorTest, Var_MissingIOAnnotations) {
@@ -465,12 +488,12 @@ TEST_F(IR_ValidatorTest, Var_MissingIOAnnotations) {
     auto res = ir::Validate(mod);
     ASSERT_NE(res, Success);
     EXPECT_THAT(
-        res.Failure().reason.Str(),
+        res.Failure().reason,
         testing::HasSubstr(
             R"(:2:35 error: var: module scope variable must have at least one IO annotation, e.g. a binding point, a location, etc
-  %1:ptr<__in, vec4<f32>, read> = var
+  %1:ptr<__in, vec4<f32>, read> = var undef
                                   ^^^
-)")) << res.Failure().reason.Str();
+)")) << res.Failure();
 }
 
 TEST_F(IR_ValidatorTest, Var_Struct_MissingIOAnnotations) {
@@ -483,12 +506,60 @@ TEST_F(IR_ValidatorTest, Var_Struct_MissingIOAnnotations) {
     auto res = ir::Validate(mod);
     ASSERT_NE(res, Success);
     EXPECT_THAT(
-        res.Failure().reason.Str(),
+        res.Failure().reason,
         testing::HasSubstr(
             R"(:6:41 error: var: module scope variable struct members must have at least one IO annotation, e.g. a binding point, a location, etc
-  %1:ptr<__out, MyStruct, read_write> = var
+  %1:ptr<__out, MyStruct, read_write> = var undef
                                         ^^^
-)")) << res.Failure().reason.Str();
+)")) << res.Failure();
+}
+
+TEST_F(IR_ValidatorTest, Var_Sampler_NonHandleAddressSpace) {
+    auto* v = b.Var(ty.ptr(AddressSpace::kPrivate, ty.sampler(), read_write));
+    mod.root_block->Append(v);
+
+    auto res = ir::Validate(mod);
+    ASSERT_NE(res, Success);
+    EXPECT_THAT(
+        res.Failure().reason,
+        testing::HasSubstr(
+            R"(:2:42 error: var: handle types can only be declared in the 'handle' address space
+  %1:ptr<private, sampler, read_write> = var undef
+                                         ^^^
+)")) << res.Failure();
+}
+
+TEST_F(IR_ValidatorTest, Var_Texture_NonHandleAddressSpace) {
+    auto* v = b.Var(ty.ptr(AddressSpace::kPrivate, ty.sampler(), read_write));
+    mod.root_block->Append(v);
+
+    auto res = ir::Validate(mod);
+    ASSERT_NE(res, Success);
+    EXPECT_THAT(
+        res.Failure().reason,
+        testing::HasSubstr(
+            R"(:2:42 error: var: handle types can only be declared in the 'handle' address space
+  %1:ptr<private, sampler, read_write> = var undef
+                                         ^^^
+)")) << res.Failure();
+}
+
+TEST_F(IR_ValidatorTest, Var_BindingArray_Texture_NonHandleAddressSpace) {
+    auto* v = b.Var(ty.ptr(
+        AddressSpace::kPrivate,
+        ty.binding_array(ty.sampled_texture(core::type::TextureDimension::k2d, ty.f32()), 4_u),
+        read));
+    mod.root_block->Append(v);
+
+    auto res = ir::Validate(mod);
+    ASSERT_NE(res, Success);
+    EXPECT_THAT(
+        res.Failure().reason,
+        testing::HasSubstr(
+            R"(:2:62 error: var: handle types can only be declared in the 'handle' address space
+  %1:ptr<private, binding_array<texture_2d<f32>, 4>, read> = var undef
+                                                             ^^^
+)")) << res.Failure();
 }
 
 TEST_F(IR_ValidatorTest, Let_NullResult) {
@@ -502,11 +573,10 @@ TEST_F(IR_ValidatorTest, Let_NullResult) {
 
     auto res = ir::Validate(mod);
     ASSERT_NE(res, Success);
-    EXPECT_THAT(res.Failure().reason.Str(),
-                testing::HasSubstr(R"(:3:5 error: let: result is undefined
+    EXPECT_THAT(res.Failure().reason, testing::HasSubstr(R"(:3:5 error: let: result is undefined
     undef = let 1i
     ^^^^^
-)")) << res.Failure().reason.Str();
+)")) << res.Failure();
 }
 
 TEST_F(IR_ValidatorTest, Let_EmptyResults) {
@@ -521,11 +591,11 @@ TEST_F(IR_ValidatorTest, Let_EmptyResults) {
 
     auto res = ir::Validate(mod);
     ASSERT_NE(res, Success);
-    EXPECT_THAT(res.Failure().reason.Str(),
+    EXPECT_THAT(res.Failure().reason,
                 testing::HasSubstr(R"(:3:13 error: let: expected exactly 1 results, got 0
     undef = let 1i
             ^^^
-)")) << res.Failure().reason.Str();
+)")) << res.Failure();
 }
 
 TEST_F(IR_ValidatorTest, Let_NullValue) {
@@ -538,11 +608,10 @@ TEST_F(IR_ValidatorTest, Let_NullValue) {
 
     auto res = ir::Validate(mod);
     ASSERT_NE(res, Success);
-    EXPECT_THAT(res.Failure().reason.Str(),
-                testing::HasSubstr(R"(:3:18 error: let: operand is undefined
+    EXPECT_THAT(res.Failure().reason, testing::HasSubstr(R"(:3:18 error: let: operand is undefined
     %2:f32 = let undef
                  ^^^^^
-)")) << res.Failure().reason.Str();
+)")) << res.Failure();
 }
 
 TEST_F(IR_ValidatorTest, Let_EmptyValue) {
@@ -557,11 +626,11 @@ TEST_F(IR_ValidatorTest, Let_EmptyValue) {
 
     auto res = ir::Validate(mod);
     ASSERT_NE(res, Success);
-    EXPECT_THAT(res.Failure().reason.Str(),
+    EXPECT_THAT(res.Failure().reason,
                 testing::HasSubstr(R"(:3:14 error: let: expected exactly 1 operands, got 0
     %2:i32 = let
              ^^^
-)")) << res.Failure().reason.Str();
+)")) << res.Failure();
 }
 
 TEST_F(IR_ValidatorTest, Let_WrongType) {
@@ -576,14 +645,31 @@ TEST_F(IR_ValidatorTest, Let_WrongType) {
     auto res = ir::Validate(mod);
     ASSERT_NE(res, Success);
     EXPECT_THAT(
-        res.Failure().reason.Str(),
+        res.Failure().reason,
         testing::HasSubstr(R"(:3:14 error: let: result type 'f32' does not match value type 'i32'
     %2:f32 = let 1i
              ^^^
-)")) << res.Failure().reason.Str();
+)")) << res.Failure();
 }
 
-TEST_F(IR_ValidatorTest, Let_VoidResult) {
+TEST_F(IR_ValidatorTest, Let_VoidResultWithCapability) {
+    auto* f = b.Function("my_func", ty.void_());
+    b.Append(f->Block(), [&] {
+        auto* l = mod.CreateInstruction<ir::Let>(b.InstructionResult(ty.void_()), b.Constant(1_i));
+        b.Append(l);
+        b.Return(f);
+    });
+
+    auto res = ir::Validate(mod, Capabilities{ir::Capability::kAllowAnyLetType});
+    ASSERT_NE(res, Success);
+    EXPECT_THAT(res.Failure().reason, testing::HasSubstr(
+                                          R"(:3:15 error: let: result type cannot be void
+    %2:void = let 1i
+              ^^^
+)")) << res.Failure();
+}
+
+TEST_F(IR_ValidatorTest, Let_VoidResultWithoutCapability) {
     auto* f = b.Function("my_func", ty.void_());
     b.Append(f->Block(), [&] {
         auto* l = mod.CreateInstruction<ir::Let>(b.InstructionResult(ty.void_()), b.Constant(1_i));
@@ -593,14 +679,36 @@ TEST_F(IR_ValidatorTest, Let_VoidResult) {
 
     auto res = ir::Validate(mod);
     ASSERT_NE(res, Success);
-    EXPECT_THAT(res.Failure().reason.Str(),
-                testing::HasSubstr(R"(:3:15 error: let: result type cannot be void
+    EXPECT_THAT(
+        res.Failure().reason,
+        testing::HasSubstr(
+            R"(:3:15 error: let: result type, 'void', must be concrete constructible type or a pointer type
     %2:void = let 1i
               ^^^
-)")) << res.Failure().reason.Str();
+)")) << res.Failure();
 }
 
-TEST_F(IR_ValidatorTest, Let_VoidValue) {
+TEST_F(IR_ValidatorTest, Let_VoidValueWithCapability) {
+    auto* v = b.Function("void_func", ty.void_());
+    b.Append(v->Block(), [&] { b.Return(v); });
+
+    auto* f = b.Function("my_func", ty.void_());
+    b.Append(f->Block(), [&] {
+        auto* l = mod.CreateInstruction<ir::Let>(b.InstructionResult(ty.i32()), b.Value(b.Call(v)));
+        b.Append(l);
+        b.Return(f);
+    });
+
+    auto res = ir::Validate(mod, Capabilities{ir::Capability::kAllowAnyLetType});
+    ASSERT_NE(res, Success);
+    EXPECT_THAT(res.Failure().reason,
+                testing::HasSubstr(R"(:9:14 error: let: value type cannot be void
+    %4:i32 = let %3
+             ^^^
+)")) << res.Failure();
+}
+
+TEST_F(IR_ValidatorTest, Let_VoidValueWithoutCapability) {
     auto* v = b.Function("void_func", ty.void_());
     b.Append(v->Block(), [&] { b.Return(v); });
 
@@ -613,11 +721,125 @@ TEST_F(IR_ValidatorTest, Let_VoidValue) {
 
     auto res = ir::Validate(mod);
     ASSERT_NE(res, Success);
-    EXPECT_THAT(res.Failure().reason.Str(),
-                testing::HasSubstr(R"(:9:14 error: let: value type cannot be void
+    EXPECT_THAT(
+        res.Failure().reason,
+        testing::HasSubstr(
+            R"(:9:14 error: let: value type, 'void', must be concrete constructible type or a pointer type
     %4:i32 = let %3
              ^^^
-)")) << res.Failure().reason.Str();
+)")) << res.Failure();
+}
+
+TEST_F(IR_ValidatorTest, Let_NotConstructibleResult) {
+    auto* f = b.Function("my_func", ty.void_());
+    auto* p = b.FunctionParam("p", ty.sampler());
+    f->AppendParam(p);
+    b.Append(f->Block(), [&] {
+        auto* l =
+            mod.CreateInstruction<ir::Let>(b.InstructionResult(ty.sampler()), b.Constant(1_i));
+        b.Append(l);
+        b.Return(f);
+    });
+
+    auto res = ir::Validate(mod);
+    ASSERT_NE(res, Success);
+    EXPECT_THAT(
+        res.Failure().reason,
+        testing::HasSubstr(
+            R"(:3:18 error: let: result type, 'sampler', must be concrete constructible type or a pointer type
+    %3:sampler = let 1i
+                 ^^^
+)")) << res.Failure();
+}
+
+TEST_F(IR_ValidatorTest, Let_NotConstructibleValue) {
+    auto* f = b.Function("my_func", ty.void_());
+    auto* p = b.FunctionParam("p", ty.sampler());
+    f->AppendParam(p);
+    b.Append(f->Block(), [&] {
+        auto* l = mod.CreateInstruction<ir::Let>(b.InstructionResult(ty.i32()), p);
+        b.Append(l);
+        b.Return(f);
+    });
+
+    auto res = ir::Validate(mod);
+    ASSERT_NE(res, Success);
+    EXPECT_THAT(
+        res.Failure().reason,
+        testing::HasSubstr(
+            R"(:3:14 error: let: value type, 'sampler', must be concrete constructible type or a pointer type
+    %3:i32 = let %p
+             ^^^
+)")) << res.Failure();
+}
+
+TEST_F(IR_ValidatorTest, Let_CapabilityBypass) {
+    auto* f = b.Function("my_func", ty.void_());
+    auto* p = b.FunctionParam("p", ty.sampler());
+    f->AppendParam(p);
+
+    b.Append(f->Block(), [&] {
+        auto* l = mod.CreateInstruction<ir::Let>(b.InstructionResult(ty.sampler()), p);
+        b.Append(l);
+        b.Return(f);
+    });
+
+    auto res = ir::Validate(mod, Capabilities{ir::Capability::kAllowAnyLetType});
+    ASSERT_EQ(res, Success) << res.Failure();
+}
+
+TEST_F(IR_ValidatorTest, Phony_NullValue) {
+    auto* v = mod.CreateInstruction<ir::Phony>(nullptr);
+    auto* f = b.Function("my_func", ty.void_());
+
+    auto sb = b.Append(f->Block());
+    sb.Append(v);
+    sb.Return(f);
+
+    auto res = ir::Validate(mod, Capabilities{ir::Capability::kAllowPhonyInstructions});
+    ASSERT_NE(res, Success);
+    EXPECT_THAT(res.Failure().reason, testing::HasSubstr(R"(:3:19 error: phony: operand is undefined
+    undef = phony undef
+                  ^^^^^
+)")) << res.Failure();
+}
+
+TEST_F(IR_ValidatorTest, Phony_EmptyValue) {
+    auto* v = mod.CreateInstruction<ir::Phony>(b.Constant(1_i));
+    v->ClearOperands();
+
+    auto* f = b.Function("my_func", ty.void_());
+
+    auto sb = b.Append(f->Block());
+    sb.Append(v);
+    sb.Return(f);
+
+    auto res = ir::Validate(mod, Capabilities{ir::Capability::kAllowPhonyInstructions});
+    ASSERT_NE(res, Success);
+    EXPECT_THAT(res.Failure().reason,
+                testing::HasSubstr(R"(:3:13 error: phony: expected exactly 1 operands, got 0
+    undef = phony
+            ^^^^^
+)")) << res.Failure();
+}
+
+TEST_F(IR_ValidatorTest, Phony_MissingCapability) {
+    auto* v = mod.CreateInstruction<ir::Phony>(b.Constant(1_i));
+
+    auto* f = b.Function("my_func", ty.void_());
+
+    auto sb = b.Append(f->Block());
+    sb.Append(v);
+    sb.Return(f);
+
+    auto res = ir::Validate(mod);
+    ASSERT_NE(res, Success);
+    EXPECT_THAT(
+        res.Failure().reason,
+        testing::HasSubstr(R"(:3:13 error: phony: missing capability 'kAllowPhonyInstructions'
+    undef = phony 1i
+            ^^^^^
+)")) << res.Failure();
 }
 
 }  // namespace tint::core::ir

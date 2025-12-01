@@ -3,17 +3,18 @@
 #include <chrono>
 #include <cmath>
 #include <functional>
+#include <limits>
 #include <random>
 #include <vector>
 
-#include "utils.h"
-#include "xnnpack.h"
-#include "xnnpack/common.h"
-#include "xnnpack/microfnptr.h"
-#include "xnnpack/raddexpminusmax.h"
-#include "xnnpack/reduce.h"
-#include "xnnpack/vscaleexpminusmax.h"
-#include "xnnpack/buffer.h"
+#include "bench/utils.h"
+#include "include/xnnpack.h"
+#include "src/xnnpack/common.h"
+#include "src/xnnpack/microfnptr.h"
+#include "src/xnnpack/raddexpminusmax.h"
+#include "src/xnnpack/reduce.h"
+#include "src/xnnpack/vscaleexpminusmax.h"
+#include "src/xnnpack/buffer.h"
 #include <benchmark/benchmark.h>
 
 static void f32_vscaleexpminusmax(
@@ -47,7 +48,7 @@ static void f32_vscaleexpminusmax(
   size_t buffer_index = 0;
   for (auto _ : state) {
     state.PauseTiming();
-    float x_max;
+    float x_max = -std::numeric_limits<float>::infinity();
     rmax(elements * sizeof(float), x.data(), &x_max, /*params=*/nullptr);
     float y_sum;
     raddexpminusmax(elements * sizeof(float), x.data(), &y_sum, x_max);

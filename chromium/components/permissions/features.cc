@@ -45,10 +45,6 @@ BASE_FEATURE(kPermissionPredictionsV2,
              "PermissionPredictionsV2",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
-BASE_FEATURE(kPermissionPredictionsV3,
-             "PermissionPredictionsV3",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
 BASE_FEATURE(kPermissionsAIv1,
              "PermissionsAIv1",
              base::FEATURE_DISABLED_BY_DEFAULT);
@@ -120,6 +116,23 @@ BASE_FEATURE(kCpssQuietChipTextUpdate,
 BASE_FEATURE(kCpssUseTfliteSignatureRunner,
              "CpssUseTfliteSignatureRunner",
              base::FEATURE_DISABLED_BY_DEFAULT);
+
+// When enabled, FederatedIdentityApiEmbargoDurationDismiss will use values from
+// a field trial.
+BASE_FEATURE(kFedCmUpdatedCooldownPeriod,
+             "FedCmUpdatedCooldownPeriod",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+#if BUILDFLAG(IS_ANDROID)
+// When the kill switch is unset, some Chrome features such as
+// Javascript-Optimizers are gated on an additional OS-provided security
+// permission. When the kill switch is set, the OS-provided security permission
+// is ignored when determining whether to enable Chrome features such as
+// Javascript-Optimizers.
+BASE_FEATURE(kOsAdditionalSecurityPermissionKillSwitch,
+             "OsAdditionalSecurityPermissionKillSwitch",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+#endif
 }  // namespace features
 namespace feature_params {
 
@@ -152,18 +165,6 @@ const base::FeatureParam<PermissionElementPromptPosition>
         "PermissionElementPromptPositioningParam",
         PermissionElementPromptPosition::kWindowMiddle,
         &kPromptPositioningOptions};
-
-const base::FeatureParam<double>
-    kPermissionOnDeviceGeolocationPredictionsHoldbackChance(
-        &features::kPermissionOnDeviceGeolocationPredictions,
-        "holdback_chance",
-        0.3);
-
-const base::FeatureParam<double>
-    kPermissionOnDeviceNotificationPredictionsHoldbackChance(
-        &features::kPermissionOnDeviceNotificationPredictions,
-        "holdback_chance",
-        0.2);
 
 const base::FeatureParam<double> kPermissionPredictionsV2HoldbackChance(
     &features::kPermissionPredictionsV2,

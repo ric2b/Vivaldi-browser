@@ -26,14 +26,15 @@ class TestResolver : public CompilationResultResolver {
   explicit TestResolver(std::atomic<int>* pending)
       : native_module_(nullptr), pending_(pending) {}
 
-  void OnCompilationSucceeded(i::Handle<i::WasmModuleObject> module) override {
+  void OnCompilationSucceeded(
+      i::DirectHandle<i::WasmModuleObject> module) override {
     if (!module.is_null()) {
       native_module_ = module->shared_native_module();
       pending_->fetch_sub(1);
     }
   }
 
-  void OnCompilationFailed(i::Handle<i::Object> error_reason) override {
+  void OnCompilationFailed(i::DirectHandle<i::JSAny> error_reason) override {
     CHECK(false);
   }
 
@@ -50,7 +51,7 @@ class StreamTester {
       : internal_scope_(CcTest::i_isolate()), test_resolver_(test_resolver) {
     i::Isolate* i_isolate = CcTest::i_isolate();
 
-    Handle<Context> context = i_isolate->native_context();
+    DirectHandle<Context> context = i_isolate->native_context();
 
     stream_ = GetWasmEngine()->StartStreamingCompilation(
         i_isolate, WasmEnabledFeatures::All(), CompileTimeImports{}, context,
@@ -276,9 +277,9 @@ void TestModuleSharingBetweenIsolates() {
   };
 
   std::vector<std::shared_ptr<NativeModule>> modules;
-  base::SpinningMutex mutex;
+  base::Mutex mutex;
   auto register_module = [&](std::shared_ptr<NativeModule> module) {
-    base::SpinningMutexGuard guard(&mutex);
+    base::MutexGuard guard(&mutex);
     modules.emplace_back(std::move(module));
   };
 

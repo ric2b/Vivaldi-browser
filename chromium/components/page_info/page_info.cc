@@ -60,6 +60,7 @@
 #include "content/public/browser/permission_controller.h"
 #include "content/public/common/content_features.h"
 #include "content/public/common/url_constants.h"
+#include "net/base/features.h"
 #include "net/base/schemeful_site.h"
 #include "net/cert/cert_status_flags.h"
 #include "net/cert/x509_certificate.h"
@@ -151,6 +152,10 @@ ContentSettingsType kPermissionType[] = {
 #if BUILDFLAG(IS_CHROMEOS)
     ContentSettingsType::WEB_PRINTING,
 #endif  // BUILDFLAG(IS_CHROMEOS)
+#if !BUILDFLAG(IS_ANDROID)
+    // TODO(crbug.com/400455013): Enable on Android.
+    ContentSettingsType::LOCAL_NETWORK_ACCESS,
+#endif  // BUIDLFLAG(IS_ANDROID)
 
 #if defined(VIVALDI_BUILD)
     ContentSettingsType::AUTOPLAY,
@@ -975,47 +980,46 @@ void PageInfo::ComputeUIInputs(const GURL& url) {
 
   if (certificate_ &&
       (!net::IsCertStatusError(visible_security_state.cert_status))) {
-    // HTTPS with no or minor errors.
-    if (security_level == security_state::SECURE_WITH_POLICY_INSTALLED_CERT) {
-#if BUILDFLAG(IS_CHROMEOS)
-      site_identity_status_ = SITE_IDENTITY_STATUS_ADMIN_PROVIDED_CERT;
-#else
-      DCHECK(false) << "Policy certificates exist only on ChromeOS";
+    // No major or minor errors.
+#if BUILDFLAG(CHROME_ROOT_STORE_SUPPORTED)
+    if (base::FeatureList::IsEnabled(net::features::kVerifyQWACs) &&
+        visible_security_state.cert_status & net::CERT_STATUS_IS_QWAC) {
+      // 1-QWAC HTTPS page. A page might have both IS_QWAC and IS_EV
+      // cert_status, so IS_QWAC must be checked first.
+      site_identity_status_ = SITE_IDENTITY_STATUS_1QWAC_CERT;
+    } else
 #endif
+        if (visible_security_state.cert_status & net::CERT_STATUS_IS_EV) {
+      // EV HTTPS page.
+      site_identity_status_ = SITE_IDENTITY_STATUS_EV_CERT;
     } else {
-      // No major or minor errors.
-      if (visible_security_state.cert_status & net::CERT_STATUS_IS_EV) {
-        // EV HTTPS page.
-        site_identity_status_ = SITE_IDENTITY_STATUS_EV_CERT;
-      } else {
-        // Non-EV OK HTTPS page.
-        site_identity_status_ = SITE_IDENTITY_STATUS_CERT;
-        std::u16string issuer_name(
-            UTF8ToUTF16(certificate_->issuer().GetDisplayName()));
-        if (issuer_name.empty()) {
-          issuer_name.assign(l10n_util::GetStringUTF16(
-              IDS_PAGE_INFO_SECURITY_TAB_UNKNOWN_PARTY));
-        }
+      // Non-EV OK HTTPS page.
+      site_identity_status_ = SITE_IDENTITY_STATUS_CERT;
+      std::u16string issuer_name(
+          UTF8ToUTF16(certificate_->issuer().GetDisplayName()));
+      if (issuer_name.empty()) {
+        issuer_name.assign(l10n_util::GetStringUTF16(
+            IDS_PAGE_INFO_SECURITY_TAB_UNKNOWN_PARTY));
+      }
 
 #if BUILDFLAG(IS_ANDROID)
-        // This string is shown on all non-error HTTPS sites on Android when
-        // the user taps "Details" link on page info.
-        identity_status_description_android_.assign(l10n_util::GetStringFUTF16(
-            IDS_PAGE_INFO_SECURE_IDENTITY_VERIFIED,
-            delegate_->GetClientApplicationName(), issuer_name));
+      // This string is shown on all non-error HTTPS sites on Android when
+      // the user taps "Details" link on page info.
+      identity_status_description_android_.assign(l10n_util::GetStringFUTF16(
+          IDS_PAGE_INFO_SECURE_IDENTITY_VERIFIED,
+          delegate_->GetClientApplicationName(), issuer_name));
 #endif
-      }
-      if (security_state::IsSHA1InChain(visible_security_state)) {
-        site_identity_status_ =
-            SITE_IDENTITY_STATUS_DEPRECATED_SIGNATURE_ALGORITHM;
+    }
+    if (security_state::IsSHA1InChain(visible_security_state)) {
+      site_identity_status_ =
+          SITE_IDENTITY_STATUS_DEPRECATED_SIGNATURE_ALGORITHM;
 
 #if BUILDFLAG(IS_ANDROID)
-        identity_status_description_android_ +=
-            u"\n\n" +
-            l10n_util::GetStringUTF16(
-                IDS_PAGE_INFO_SECURITY_TAB_DEPRECATED_SIGNATURE_ALGORITHM);
+      identity_status_description_android_ +=
+          u"\n\n" +
+          l10n_util::GetStringUTF16(
+              IDS_PAGE_INFO_SECURITY_TAB_DEPRECATED_SIGNATURE_ALGORITHM);
 #endif
-      }
     }
   } else {
     // HTTP or HTTPS with errors (not warnings).
@@ -1507,13 +1511,10 @@ void PageInfo::PresentSiteDataInternal(base::OnceClosure done) {
   cookies_info.allowed_sites_count = GetSitesWithAllowedCookiesAccessCount();
 
 #if !BUILDFLAG(IS_ANDROID)
-  if (base::FeatureList::IsEnabled(
-          privacy_sandbox::kPrivacySandboxFirstPartySetsUI)) {
-    auto rws_owner = delegate_->GetRwsOwner(site_url_);
-    if (rws_owner) {
-      cookies_info.rws_info = PageInfoUI::CookiesRwsInfo(*rws_owner);
-      cookies_info.rws_info->is_managed = delegate_->IsRwsManaged();
-    }
+  if (auto rws_owner = delegate_->GetRwsOwner(site_url_);
+      rws_owner.has_value()) {
+    cookies_info.rws_info = PageInfoUI::CookiesRwsInfo(*rws_owner);
+    cookies_info.rws_info->is_managed = delegate_->IsRwsManaged(site_url_);
   }
 #endif
 

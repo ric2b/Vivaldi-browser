@@ -6,6 +6,8 @@
 
 #include "core/fpdfapi/parser/cpdf_flateencoder.h"
 
+#include <variant>
+
 #include "constants/stream_dict_common.h"
 #include "core/fpdfapi/parser/cpdf_dictionary.h"
 #include "core/fpdfapi/parser/cpdf_name.h"
@@ -40,8 +42,8 @@ CPDF_FlateEncoder::CPDF_FlateEncoder(RetainPtr<const CPDF_Stream> pStream,
     return;
   }
 
-  // TODO(thestig): Move to Init() and check for empty return value?
   m_Data = FlateModule::Encode(m_pAcc->GetSpan());
+  CHECK(!GetSpan().empty());
   m_pClonedDict = ToDictionary(pStream->GetDict()->Clone());
   m_pClonedDict->SetNewFor<CPDF_Number>(
       "Length", pdfium::checked_cast<int>(GetSpan().size()));
@@ -80,6 +82,6 @@ const CPDF_Dictionary* CPDF_FlateEncoder::GetDict() const {
 
 pdfium::span<const uint8_t> CPDF_FlateEncoder::GetSpan() const {
   if (is_owned())
-    return absl::get<DataVector<uint8_t>>(m_Data);
-  return absl::get<pdfium::raw_span<const uint8_t>>(m_Data);
+    return std::get<DataVector<uint8_t>>(m_Data);
+  return std::get<pdfium::raw_span<const uint8_t>>(m_Data);
 }

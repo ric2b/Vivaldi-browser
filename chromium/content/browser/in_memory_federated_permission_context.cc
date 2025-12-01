@@ -10,7 +10,12 @@
 #include "base/containers/contains.h"
 #include "base/feature_list.h"
 #include "base/functional/callback_helpers.h"
+#include "content/browser/webid/flags.h"
 #include "content/public/common/content_features.h"
+#include "mojo/public/cpp/bindings/message.h"
+#include "third_party/blink/public/common/webid/login_status_account.h"
+#include "third_party/blink/public/common/webid/login_status_options.h"
+#include "third_party/blink/public/mojom/webid/federated_auth_request.mojom.h"
 
 namespace content {
 
@@ -44,6 +49,9 @@ void InMemoryFederatedPermissionContext::RemoveEmbargoAndResetCounts(
     const url::Origin& relying_party_embedder) {
   embargoed_origins_.erase(relying_party_embedder);
 }
+
+void InMemoryFederatedPermissionContext::RecordIgnoreAndEmbargo(
+    const url::Origin& relying_party_embedder) {}
 
 bool InMemoryFederatedPermissionContext::ShouldCompleteRequestImmediately()
     const {
@@ -234,12 +242,49 @@ std::optional<bool> InMemoryFederatedPermissionContext::GetIdpSigninStatus(
   }
 }
 
+// TODO(crbug.com/405194067) Clean up account types in Lightweight FedCM.
+std::vector<scoped_refptr<IdentityRequestAccount>>
+InMemoryFederatedPermissionContext::GetAccounts(const url::Origin& idp_origin) {
+  auto options = idp_login_status_options_.find(idp_origin.Serialize());
+  if (options == idp_login_status_options_.end()) {
+    return {};
+  }
+  const std::vector<blink::common::webid::LoginStatusAccount>&
+      login_status_accounts = options->second.accounts;
+  std::vector<scoped_refptr<IdentityRequestAccount>> request_accounts;
+
+  request_accounts.reserve(request_accounts.size());
+  std::transform(login_status_accounts.begin(), login_status_accounts.end(),
+                 std::inserter(request_accounts, request_accounts.begin()),
+                 [](const auto& login_status_account) {
+                   return base::MakeRefCounted<IdentityRequestAccount>(
+                       login_status_account);
+                 });
+
+  return request_accounts;
+}
+
 void InMemoryFederatedPermissionContext::SetIdpSigninStatus(
     const url::Origin& idp_origin,
-    bool idp_signin_status) {
+    bool idp_signin_status,
+    base::optional_ref<const blink::common::webid::LoginStatusOptions>
+        options) {
+  if (idp_origin.opaque()) {
+    mojo::ReportBadMessage("Bad IdP Origin from renderer.");
+    return;
+  }
+
   idp_signin_status_[idp_origin.Serialize()] = idp_signin_status;
   for (IdpSigninStatusObserver& observer : idp_signin_status_observer_list_) {
     observer.OnIdpSigninStatusReceived(idp_origin, idp_signin_status);
+  }
+
+  if (options && IsFedCmLightweightModeEnabled()) {
+    if (idp_signin_status) {
+      idp_login_status_options_[idp_origin.Serialize()] = options.value();
+    } else {
+      idp_login_status_options_.erase(idp_origin.Serialize());
+    }
   }
 
   // TODO(crbug.com/40245925): Replace this with AddIdpSigninStatusObserver.

@@ -33,7 +33,7 @@ import java.util.function.BooleanSupplier;
 
 // Vivaldi
 import android.graphics.Bitmap;
-import org.chromium.chrome.browser.bookmarks.BookmarkUtils;
+import org.chromium.chrome.browser.bookmarks.BookmarkViewUtils;
 import org.chromium.chrome.browser.ChromeApplicationImpl;
 import org.chromium.components.favicon.IconType;
 
@@ -61,7 +61,7 @@ public class HistoryItemView extends SelectableItemView<HistoryItem> {
         if (!ChromeApplicationImpl.isVivaldi())
         mMinIconSize = getResources().getDimensionPixelSize(R.dimen.default_favicon_min_size);
         else {
-            mMinIconSize = BookmarkUtils.getFaviconFetchSize(context.getResources());
+            mMinIconSize = BookmarkViewUtils.getFaviconFetchSize(context.getResources());
         } // End Vivaldi
         mDisplayedIconSize = getResources().getDimensionPixelSize(R.dimen.default_favicon_size);
         mIconGenerator = FaviconUtils.createCircularIconGenerator(context);

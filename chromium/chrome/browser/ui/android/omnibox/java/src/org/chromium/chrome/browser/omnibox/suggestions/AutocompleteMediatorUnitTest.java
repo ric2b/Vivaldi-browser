@@ -25,13 +25,11 @@ import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 import android.app.Activity;
-import android.os.Build.VERSION_CODES;
 import android.os.Handler;
 import android.view.View;
 import android.view.Window;
 
 import androidx.annotation.Nullable;
-import androidx.core.view.WindowInsetsCompat;
 import androidx.test.filters.SmallTest;
 
 import org.junit.Before;
@@ -144,7 +142,6 @@ public class AutocompleteMediatorUnitTest {
             mVisualStateObserver;
     private @Mock DeferredIMEWindowInsetApplicationCallback mDeferredImeCallback;
     private @Captor ArgumentCaptor<OmniboxLoadUrlParams> mOmniboxLoadUrlParamsCaptor;
-    private @Captor ArgumentCaptor<ImeSyncedSuggestionsListAnimationDriver> mDriverCaptor;
 
     private PropertyModel mListModel;
     private AutocompleteMediator mMediator;
@@ -245,6 +242,7 @@ public class AutocompleteMediatorUnitTest {
                 JUnitTestGURLs.NTP_URL, "New Tab Page", PageClassification.NTP_VALUE);
 
         mMediator.setOmniboxSuggestionsVisualStateObserver(Optional.of(mVisualStateObserver));
+        mMediator.onTopResumedActivityChanged(true);
     }
 
     /**
@@ -407,30 +405,6 @@ public class AutocompleteMediatorUnitTest {
         when(mAutocompleteDelegate.isKeyboardActive()).thenReturn(false);
         mMediator.onSuggestionDropdownHeightChanged(heightOfOAllSuggestions);
         mMediator.onSuggestionsReceived(AutocompleteResult.fromCache(mSuggestionsList, null), true);
-    }
-
-    @Test
-    @SmallTest
-    @EnableFeatures(OmniboxFeatureList.ANIMATE_SUGGESTIONS_LIST_APPEARANCE)
-    @Config(sdk = VERSION_CODES.R)
-    public void onOmniboxSessionStateChange_startsAnimationDriver() {
-        mListModel.set(SuggestionListProperties.ALPHA, 1.0f);
-        var animationDriver =
-                (ImeSyncedSuggestionsListAnimationDriver) mMediator.getAnimationDriverForTesting();
-        mMediator.onNativeInitialized();
-
-        // Animation shouldn't run if IME insets are not yet controllable.
-        mMediator.onOmniboxSessionStateChange(true);
-        verify(mInsetObserver, never()).addWindowInsetsAnimationListener(animationDriver);
-        mMediator.onOmniboxSessionStateChange(false);
-
-        animationDriver.onControllableInsetsChanged(null, WindowInsetsCompat.Type.ime());
-        // Animation can run now that IME insets are controllable.
-        mMediator.onOmniboxSessionStateChange(true);
-        verify(mInsetObserver).addWindowInsetsAnimationListener(animationDriver);
-
-        mMediator.onOmniboxSessionStateChange(false);
-        verify(mInsetObserver).removeWindowInsetsAnimationListener(animationDriver);
     }
 
     @Test
@@ -1210,6 +1184,7 @@ public class AutocompleteMediatorUnitTest {
 
         when(mAutocompleteDelegate.isUrlBarFocused()).thenReturn(true);
         when(mAutocompleteDelegate.didFocusUrlFromFakebox()).thenReturn(false);
+        UnsyncedSuggestionsListAnimationDriver.setAnimationsDisabledForTesting(true);
 
         GURL url = JUnitTestGURLs.BLUE_1;
         String title = "Title";
@@ -1237,6 +1212,7 @@ public class AutocompleteMediatorUnitTest {
         ShadowPausedSystemClock.advanceBy(Duration.ofMillis(100));
         mMediator.onSuggestionsReceived(mAutocompleteResult, /* isFinal= */ true);
         verifySuggestionRequestToUiModelHistograms(2, 100, 1, 100);
+        UnsyncedSuggestionsListAnimationDriver.setAnimationsDisabledForTesting(false);
     }
 
     @Test
@@ -1418,18 +1394,63 @@ public class AutocompleteMediatorUnitTest {
     }
 
     @Test
-    public void onTopResumedActivityChanged_toActive() {
+    public void onTopResumedActivityChanged_nonZeroSuggest() {
+        mMediator.setAutocompleteProfile(mProfile);
+
+        GURL url = JUnitTestGURLs.BLUE_1;
+        int pageClassification = PageClassification.BLANK_VALUE;
+        setUpLocationBarDataProvider(url, url.getSpec(), pageClassification);
+        mMediator.onOmniboxSessionStateChange(true);
+
+        when(mTextStateProvider.shouldAutocomplete()).thenReturn(true);
+        when(mTextStateProvider.getSelectionStart()).thenReturn(4);
+        when(mTextStateProvider.getSelectionEnd()).thenReturn(4);
+
+        mMediator.onNativeInitialized();
+        mMediator.onTextChanged("test", /* isOnFocusContext= */ false);
+        ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
+        verify(mAutocompleteController, times(1)).start(url, pageClassification, "test", 4, false);
+
+        mMediator.onTopResumedActivityChanged(false);
+        ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
+        verify(mAutocompleteController, times(1)).start(url, pageClassification, "test", 4, false);
+
+        when(mTextStateProvider.getTextWithoutAutocomplete()).thenReturn("test");
+
         mMediator.onTopResumedActivityChanged(true);
-        verify(mAutocompleteDelegate, never()).clearOmniboxFocus();
+        ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
+        verify(mAutocompleteController, times(2)).start(url, pageClassification, "test", 4, false);
     }
 
     @Test
-    public void onTopResumedActivityChanged_toNonActive() {
+    public void onTopResumedActivityChanged_zeroSuggest() {
         mMediator.setAutocompleteProfile(mProfile);
+
+        when(mAutocompleteDelegate.isUrlBarFocused()).thenReturn(true);
+        when(mAutocompleteDelegate.didFocusUrlFromFakebox()).thenReturn(false);
+
+        GURL url = JUnitTestGURLs.BLUE_1;
+        String title = "Title";
+        int pageClassification = PageClassification.BLANK_VALUE;
+        setUpLocationBarDataProvider(url, title, pageClassification);
+        mMediator.onOmniboxSessionStateChange(true);
+
+        when(mTextStateProvider.getTextWithAutocomplete()).thenReturn("");
+
         mMediator.onNativeInitialized();
+        mMediator.onTextChanged("", /* isOnFocusContext= */ false);
+        verify(mAutocompleteController, times(1))
+                .startZeroSuggest("", url, pageClassification, title);
 
         mMediator.onTopResumedActivityChanged(false);
-        verify(mAutocompleteDelegate, times(1)).clearOmniboxFocus();
+        verify(mAutocompleteController, times(1))
+                .startZeroSuggest("", url, pageClassification, title);
+
+        when(mTextStateProvider.getTextWithoutAutocomplete()).thenReturn("");
+
+        mMediator.onTopResumedActivityChanged(true);
+        verify(mAutocompleteController, times(2))
+                .startZeroSuggest("", url, pageClassification, title);
     }
 
     @Test
@@ -1593,12 +1614,27 @@ public class AutocompleteMediatorUnitTest {
 
     @Test
     public void propagateOmniboxSessionStateChange_hubSearchContainerVisible() {
-        mMediator
-                .getAutocompleteInputForTesting()
-                .setPageClassification(PageClassification.ANDROID_HUB_VALUE);
+        GURL url = new GURL("https://www.google.com");
+        String title = "title";
+        int pageClassification = PageClassification.ANDROID_HUB_VALUE;
+        setUpLocationBarDataProvider(url, title, pageClassification);
 
         mMediator.propagateOmniboxSessionStateChange(true);
         assertTrue(mListModel.get(SuggestionListProperties.CONTAINER_ALWAYS_VISIBLE));
+    }
+
+    @Test
+    public void onTopResumedActivityChanged_hubSearchContainerVisible() {
+        GURL url = new GURL("https://www.google.com");
+        String title = "title";
+        int pageClassification = PageClassification.ANDROID_HUB_VALUE;
+        setUpLocationBarDataProvider(url, title, pageClassification);
+
+        // Ensure that the ACTIVITY_WINDOW_FOCUSED property always remains true.
+        mMediator.onTopResumedActivityChanged(true);
+        assertTrue(mListModel.get(SuggestionListProperties.ACTIVITY_WINDOW_FOCUSED));
+        mMediator.onTopResumedActivityChanged(false);
+        assertTrue(mListModel.get(SuggestionListProperties.ACTIVITY_WINDOW_FOCUSED));
     }
 
     @Test

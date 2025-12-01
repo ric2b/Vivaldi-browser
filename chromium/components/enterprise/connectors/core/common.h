@@ -18,6 +18,7 @@
 #include "base/supports_user_data.h"
 #include "build/blink_buildflags.h"
 #include "components/enterprise/common/proto/connectors.pb.h"
+#include "components/enterprise/common/proto/synced_from_google3/chrome_reporting_entity.pb.h"
 #include "components/enterprise/connectors/core/reporting_constants.h"
 #include "ui/gfx/range/range.h"
 #include "url/gurl.h"
@@ -30,6 +31,10 @@ class DownloadItem;
 }  // namespace download
 #endif  // BUILDFLAG(USE_BLINK)
 
+namespace signin {
+class IdentityManager;
+}
+
 namespace enterprise_connectors {
 
 // Alias to reduce verbosity when using TriggeredRule::Actions.
@@ -37,6 +42,9 @@ using TriggeredRule = ContentAnalysisResponse::Result::TriggeredRule;
 
 // Pair to specify the source and destination.
 using SourceDestinationStringPair = std::pair<std::string, std::string>;
+
+// Alias to reduce verbosity when using Event::EventCase.
+using EventCase = ::chrome::cros::reporting::proto::Event::EventCase;
 
 // Keys used to read a connector's policy values.
 inline constexpr char kKeyServiceProvider[] = "service_provider";
@@ -122,6 +130,33 @@ inline constexpr auto kEventNameToUmaEnumMap =
          EnterpriseReportingEventType::kExtensionInstallEvent},
         {kBrowserCrashEvent, EnterpriseReportingEventType::kBrowserCrashEvent},
         {kExtensionTelemetryEvent,
+         EnterpriseReportingEventType::kExtensionTelemetryEvent},
+    });
+
+inline constexpr auto kEventCaseToUmaEnumMap =
+    base::MakeFixedFlatMap<EventCase, EnterpriseReportingEventType>({
+        {EventCase::kPasswordReuseEvent,
+         EnterpriseReportingEventType::kPasswordReuseEvent},
+        {EventCase::kPasswordChangedEvent,
+         EnterpriseReportingEventType::kPasswordChangedEvent},
+        {EventCase::kDangerousDownloadEvent,
+         EnterpriseReportingEventType::kDangerousDownloadEvent},
+        {EventCase::kInterstitialEvent,
+         EnterpriseReportingEventType::kInterstitialEvent},
+        {EventCase::kSensitiveDataEvent,
+         EnterpriseReportingEventType::kSensitiveDataEvent},
+        {EventCase::kUnscannedFileEvent,
+         EnterpriseReportingEventType::kUnscannedFileEvent},
+        {EventCase::kLoginEvent, EnterpriseReportingEventType::kLoginEvent},
+        {EventCase::kPasswordBreachEvent,
+         EnterpriseReportingEventType::kPasswordBreachEvent},
+        {EventCase::kUrlFilteringInterstitialEvent,
+         EnterpriseReportingEventType::kUrlFilteringInterstitialEvent},
+        {EventCase::kBrowserExtensionInstallEvent,
+         EnterpriseReportingEventType::kExtensionInstallEvent},
+        {EventCase::kBrowserCrashEvent,
+         EnterpriseReportingEventType::kBrowserCrashEvent},
+        {EventCase::kExtensionTelemetryEvent,
          EnterpriseReportingEventType::kExtensionTelemetryEvent},
     });
 
@@ -224,8 +259,8 @@ struct RequestHandlerResult {
   RequestHandlerResult(const RequestHandlerResult&);
   RequestHandlerResult& operator=(const RequestHandlerResult&);
 
-  bool complies;
-  FinalContentAnalysisResult final_result;
+  bool complies = false;
+  FinalContentAnalysisResult final_result = FinalContentAnalysisResult::FAILURE;
   std::string tag;
   std::string request_token;
   ContentAnalysisResponse::Result::TriggeredRule::CustomRuleMessage
@@ -286,6 +321,8 @@ DataRegion ChromeDataRegionSettingToEnum(int chrome_data_region_setting);
 EnterpriseReportingEventType GetUmaEnumFromEventName(
     std::string_view eventName);
 
+EnterpriseReportingEventType GetUmaEnumFromEventCase(EventCase eventCase);
+
 //  The resulting action that chrome performed in response to a scan request.
 //  This maps to the event result in the real-time reporting.
 enum class EventResult {
@@ -309,6 +346,11 @@ enum class EventResult {
 // Helper function to convert a EventResult to a string that.  The format of
 // string returned is processed by the sever.
 std::string EventResultToString(EventResult result);
+
+// Returns the email address of the unconsented account signed in to the profile
+// or an empty string if no account is signed in.  If `identity_manager` is null
+// then the empty string is returned.
+std::string GetProfileEmail(signin::IdentityManager* identity_manager);
 
 }  // namespace enterprise_connectors
 

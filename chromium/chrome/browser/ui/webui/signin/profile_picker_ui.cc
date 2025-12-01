@@ -109,6 +109,7 @@ void AddStrings(content::WebUIDataSource* html_source, bool is_glic_version) {
       {"addSpaceButton", IDS_PROFILE_PICKER_ADD_SPACE_BUTTON},
       {"askOnStartupCheckboxText", IDS_PROFILE_PICKER_ASK_ON_STARTUP},
       {"browseAsGuestButton", IDS_PROFILE_PICKER_BROWSE_AS_GUEST_BUTTON},
+      {"controlledSettingPolicy", IDS_MANAGED},
       {"needsSigninPrompt",
        IDS_PROFILE_PICKER_PROFILE_CARD_NEEDS_SIGNIN_PROMPT},
       {"profileCardInputLabel", IDS_PROFILE_PICKER_PROFILE_CARD_INPUT_LABEL},
@@ -170,9 +171,7 @@ void AddStrings(content::WebUIDataSource* html_source, bool is_glic_version) {
 
   html_source->AddLocalizedString(
       "profileTypeChoiceSubtitle",
-      base::FeatureList::IsEnabled(switches::kExplicitBrowserSigninUIOnDesktop)
-          ? IDS_PROFILE_PICKER_PROFILE_CREATION_FLOW_PROFILE_TYPE_CHOICE_SUBTITLE_UNO
-          : IDS_PROFILE_PICKER_PROFILE_CREATION_FLOW_PROFILE_TYPE_CHOICE_SUBTITLE);
+      IDS_PROFILE_PICKER_PROFILE_CREATION_FLOW_PROFILE_TYPE_CHOICE_SUBTITLE_UNO);
 
   html_source->AddString("minimumPickerSize",
                          base::StringPrintf("%ipx", kMinimumPickerSizePx));
@@ -238,7 +237,12 @@ void AddResourcePaths(content::WebUIDataSource* html_source) {
 #if BUILDFLAG(ENABLE_GLIC)
       {"glic_banner_top_right.svg", IDR_GLIC_PROFILE_BANNER_TOP_RIGHT},
       {"glic_banner_bottom_left.svg", IDR_GLIC_PROFILE_BANNER_BOTTOM_LEFT},
+      {"glic_banner_top_right_light.svg",
+       IDR_GLIC_PROFILE_BANNER_TOP_RIGHT_LIGHT},
+      {"glic_banner_bottom_left_light.svg",
+       IDR_GLIC_PROFILE_BANNER_BOTTOM_LEFT_LIGHT},
       {"glic_logo.svg", IDR_GLIC_PROFILE_LOGO},
+      {"glic_profile_branding.css", IDR_GLIC_PROFILE_BRANDING_CSS},
 #endif  // BUILDFLAG(ENABLE_GLIC)
       {"product_logo.svg", IDR_PRODUCT_LOGO_SVG},
   };

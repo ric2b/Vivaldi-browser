@@ -5,27 +5,19 @@
 #ifndef V8_SANDBOX_ISOLATE_INL_H_
 #define V8_SANDBOX_ISOLATE_INL_H_
 
-#include "src/execution/isolate.h"
+#include "src/sandbox/isolate.h"
+// Include the non-inl header before the rest of the headers.
+
+#include "src/execution/isolate-inl.h"
 #include "src/heap/heap-layout-inl.h"
 #include "src/objects/heap-object.h"
 #include "src/sandbox/external-pointer-table-inl.h"
 #include "src/sandbox/indirect-pointer-tag.h"
-#include "src/sandbox/isolate.h"
 
-namespace v8 {
-namespace internal {
-
-template <typename IsolateT>
-IsolateForSandbox::IsolateForSandbox(IsolateT* isolate)
-#ifdef V8_ENABLE_SANDBOX
-    : isolate_(isolate->ForSandbox()) {
-}
-#else
-{
-}
-#endif
+namespace v8::internal {
 
 #ifdef V8_ENABLE_SANDBOX
+
 ExternalPointerTable& IsolateForSandbox::GetExternalPointerTableFor(
     ExternalPointerTagRange tag_range) {
   IsolateForPointerCompression isolate(isolate_);
@@ -59,35 +51,57 @@ TrustedPointerTable::Space* IsolateForSandbox::GetTrustedPointerTableSpaceFor(
              : isolate_->heap()->trusted_pointer_space();
 }
 
-inline ExternalPointerTag IsolateForSandbox::GetExternalPointerTableTagFor(
+ExternalPointerTag IsolateForSandbox::GetExternalPointerTableTagFor(
     Tagged<HeapObject> witness, ExternalPointerHandle handle) {
   DCHECK(!HeapLayout::InWritableSharedSpace(witness));
   return isolate_->external_pointer_table().GetTag(handle);
 }
 
-TrustedPointerPublishingScope*
-IsolateForSandbox::GetTrustedPointerPublishingScope() {
-  return isolate_->trusted_pointer_publishing_scope();
+bool IsolateForSandbox::SharesPointerTablesWith(IsolateForSandbox other) const {
+  return &isolate_->shared_trusted_pointer_table() ==
+             &other.isolate_->shared_trusted_pointer_table() &&
+         &isolate_->shared_external_pointer_table() ==
+             &other.isolate_->shared_external_pointer_table() &&
+         isolate_->shared_external_pointer_space() ==
+             other.isolate_->shared_external_pointer_space();
 }
 
-void IsolateForSandbox::SetTrustedPointerPublishingScope(
-    TrustedPointerPublishingScope* scope) {
-  DCHECK((isolate_->trusted_pointer_publishing_scope() == nullptr) !=
-         (scope == nullptr));
-  isolate_->set_trusted_pointer_publishing_scope(scope);
+V8_INLINE IsolateForSandbox GetIsolateForSandbox(Tagged<HeapObject> object) {
+  // This method can be used on shared objects as opposed to
+  // GetHeapFromWritableObject because it only returns IsolateForSandbox instead
+  // of the Isolate. This is because shared objects will go to shared external
+  // pointer table which is the same for main and all worker isolates.
+  MemoryChunk* chunk = MemoryChunk::FromHeapObject(object);
+  Isolate* isolate = Isolate::FromHeap(chunk->GetHeap());
+  // Until we replace all GetIsolateForSandbox calls by
+  // GetCurrentIsolateForSandbox, do check that both return the same (or
+  // compatible, in case of shared isolate) isolates.
+  // See https://crbug.com/396607238 for context.
+  bool allow_isolate_sharing = V8_UNLIKELY(v8_flags.shared_heap);
+  if (V8_UNLIKELY(HeapLayout::InWritableSharedSpace(object))) {
+    // The only shared objects so far are shared strings, if enabled (off by
+    // default). Rethink this check once we have more shared objects.
+    CHECK(v8_flags.shared_string_table);
+    CHECK(IsString(object));
+    CHECK(isolate->is_shared_space_isolate());
+    allow_isolate_sharing = true;
+  }
+  if (allow_isolate_sharing) {
+    // TODO(396607238): Make this a `SBXCHECK`.
+    DCHECK(IsolateForSandbox{isolate}.SharesPointerTablesWith(
+        Isolate::TryGetCurrent()));
+  } else {
+    // TODO(396607238): Make this a `SBXCHECK`.
+    DCHECK_EQ(isolate, Isolate::TryGetCurrent());
+  }
+  return isolate;
+}
+
+V8_INLINE IsolateForSandbox GetCurrentIsolateForSandbox() {
+  return Isolate::Current();
 }
 
 #endif  // V8_ENABLE_SANDBOX
-
-template <typename IsolateT>
-IsolateForPointerCompression::IsolateForPointerCompression(IsolateT* isolate)
-#ifdef V8_COMPRESS_POINTERS
-    : isolate_(isolate->ForSandbox()) {
-}
-#else
-{
-}
-#endif
 
 #ifdef V8_COMPRESS_POINTERS
 
@@ -132,7 +146,6 @@ IsolateForPointerCompression::GetCppHeapPointerTableSpace() {
 
 #endif  // V8_COMPRESS_POINTERS
 
-}  // namespace internal
-}  // namespace v8
+}  // namespace v8::internal
 
 #endif  // V8_SANDBOX_ISOLATE_INL_H_

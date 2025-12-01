@@ -178,7 +178,7 @@ FPDFImageObj_SetBitmap(FPDF_PAGE* pages,
   if (!holder) {
     return false;
   }
-  CHECK(!holder->IsPremultiplied());
+  ValidateBitmapPremultiplyState(holder);
 
   if (pages) {
     for (int index = 0; index < count; index++) {
@@ -280,7 +280,7 @@ FPDFImageObj_GetBitmap(FPDF_PAGEOBJECT image_object) {
   }
 
   CHECK(!pBitmap->HasPalette());
-  CHECK(!pBitmap->IsPremultiplied());
+  ValidateBitmapPremultiplyState(pBitmap);
 
   // Caller takes ownership.
   return FPDFBitmapFromCFXDIBitmap(pBitmap.Leak());
@@ -324,23 +324,37 @@ FPDFImageObj_GetRenderedBitmap(FPDF_DOCUMENT document,
   CPDF_ImageRenderer renderer(&status);
 
   // Need to first flip the image, as expected by |renderer|.
-  CFX_Matrix render_matrix(1, 0, 0, -1, 0, output_height);
+  const CFX_Matrix render_matrix(1, 0, 0, -1, 0, output_height);
 
   // Then take |image_matrix|'s offset into account.
   float min_x = image_matrix.e + std::min(image_matrix.a, image_matrix.c);
   float min_y = image_matrix.f + std::min(image_matrix.b, image_matrix.d);
-  render_matrix.Translate(-min_x, min_y);
+  CFX_Matrix image_render_matrix = render_matrix;
+  image_render_matrix.Translate(-min_x, min_y);
+
+  // Apply the clip path if there is one.
+  if (image->clip_path().HasRef()) {
+    CFX_FloatRect output_rect(0, 0, output_width, output_height);
+    CFX_FloatRect original_image_rect =
+        image->original_matrix().TransformRect(CFX_FloatRect(0, 0, 1, 1));
+    CFX_Matrix clip_render_matrix;
+    clip_render_matrix.MatchRect(output_rect, original_image_rect);
+    clip_render_matrix.Concat(render_matrix);
+    status.ProcessClipPath(image->clip_path(), clip_render_matrix);
+  }
 
   // Do the actual rendering.
-  bool should_continue = renderer.Start(image, render_matrix, /*bStdCS=*/false);
+  bool should_continue =
+      renderer.Start(image, image_render_matrix, /*bStdCS=*/false);
   while (should_continue) {
     should_continue = renderer.Continue(/*pPause=*/nullptr);
   }
 
-  if (!renderer.GetResult())
+  if (!renderer.GetResult()) {
     return nullptr;
+  }
 
-  CHECK(!result_bitmap->IsPremultiplied());
+  ValidateBitmapPremultiplyState(result_bitmap);
 
   // Caller takes ownership.
   return FPDFBitmapFromCFXDIBitmap(result_bitmap.Leak());

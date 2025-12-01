@@ -799,10 +799,29 @@ def _Method(module, parsed_method, interface):
   method.parameters = list(
       map(lambda parameter: _Parameter(module, parameter, interface),
           parsed_method.parameter_list))
+  # Method can only have one of result response or response parameter list.
+  assert not (parsed_method.response_parameter_list
+              and parsed_method.result_response)
   if parsed_method.response_parameter_list is not None:
     method.response_parameters = list(
         map(lambda parameter: _Parameter(module, parameter, interface),
             parsed_method.response_parameter_list))
+  if parsed_method.result_response is not None:
+    result_type = parsed_method.result_response
+    success_kind = _Kind(module, module.kinds,
+                         _MapKind(result_type.success_type),
+                         (module.mojom_namespace, interface.mojom_name))
+    failure_kind = _Kind(module, module.kinds,
+                         _MapKind(result_type.failure_type),
+                         (module.mojom_namespace, interface.mojom_name))
+    result_response = mojom.Result(method, success_kind, failure_kind)
+    method.result_response = result_response
+    param = result_response.ToResponseParam(module)
+    method.response_parameters = [param]
+    # We need to add the generated types to the module.
+    module.kinds[param.kind.spec] = param.kind
+    module.unions.append(param.kind)
+
   method.attributes = _AttributeListToDict(module, method,
                                            parsed_method.attribute_list)
 
@@ -1035,21 +1054,29 @@ def _CollectReferencedKinds(module, all_defined_kinds):
     return kind
 
   referenced_user_kinds = {}
+
+  def find_and_add_all_user_kinds(kind):
+    for referenced_kind in extract_referenced_user_kinds(kind):
+      sanitized_kind = sanitize_kind(referenced_kind)
+      referenced_user_kinds[sanitized_kind.spec] = sanitized_kind
+
   for defined_kind in all_defined_kinds:
     if mojom.IsStructKind(defined_kind) or mojom.IsUnionKind(defined_kind):
       for field in defined_kind.fields:
-        for referenced_kind in extract_referenced_user_kinds(field.kind):
-          sanitized_kind = sanitize_kind(referenced_kind)
-          referenced_user_kinds[sanitized_kind.spec] = sanitized_kind
+        find_and_add_all_user_kinds(field.kind)
 
   # Also scan for references in parameter lists
   for interface in module.interfaces:
     for method in interface.methods:
       for param in itertools.chain(method.parameters or [],
                                    method.response_parameters or []):
-        for referenced_kind in extract_referenced_user_kinds(param.kind):
-          sanitized_kind = sanitize_kind(referenced_kind)
-          referenced_user_kinds[sanitized_kind.spec] = sanitized_kind
+        find_and_add_all_user_kinds(param.kind)
+
+      if method.result_response:
+        result_response = method.result_response
+        find_and_add_all_user_kinds(result_response.success_kind)
+        find_and_add_all_user_kinds(result_response.failure_kind)
+
   # Consts can reference imported enums.
   for const in module.constants:
     if not const.kind in mojom.PRIMITIVES:
@@ -1207,6 +1234,13 @@ def _Module(tree, path, imports):
     all_defined_kinds[interface.spec] = interface
     for enum in interface.enums:
       all_defined_kinds[enum.spec] = enum
+
+  # Methods with result response will generate its own return union, so we do a
+  # second pass.
+  for defined_union in module.unions:
+    if not defined_union.spec in all_defined_kinds:
+      all_defined_kinds[defined_union.spec] = defined_union
+
   for enum in module.enums:
     all_defined_kinds[enum.spec] = enum
 

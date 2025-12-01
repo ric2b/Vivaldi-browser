@@ -43,7 +43,7 @@ DEF_TEST(FontMgr_Font, reporter) {
     REPORTER_ASSERT(reporter, 1 == font.getScaleX());
     REPORTER_ASSERT(reporter, 0 == font.getSkewX());
 
-    uint16_t glyphs[5];
+    SkGlyphID glyphs[5];
     sk_bzero(glyphs, sizeof(glyphs));
 
     // Check that no glyphs are copied with insufficient storage.
@@ -123,7 +123,8 @@ DEF_TEST(FontMgr_Iter, reporter) {
 
             sk_sp<SkTypeface> face1(set->createTypeface(j));
             if (!face1) {
-                REPORTER_ASSERT(reporter, face1.get());
+                REPORTER_ASSERT(reporter, face1.get(),
+                                "Could not create %s %s.", fname.c_str(), sname.c_str());
                 continue;
             }
             SkString name1;
@@ -140,7 +141,11 @@ DEF_TEST(FontMgr_Iter, reporter) {
 
             sk_sp<SkTypeface> face2(fm->matchFamilyStyle(name1.c_str(), s1));
             if (!face2) {
-                REPORTER_ASSERT(reporter, face2.get());
+                // The Ubunutu 18.04 test machines have Noto Emoji but it cannot be found by name.
+                if (name1.equals("Noto Emoji")) {
+                    continue;
+                }
+                REPORTER_ASSERT(reporter, face2.get(), "Could not find %s", name1.c_str());
                 continue;
             }
             SkString name2;
@@ -194,8 +199,7 @@ DEF_TEST(FontMgr_MatchStyleCSS3, reporter) {
         std::unique_ptr<SkScalerContext> onCreateScalerContext(
             const SkScalerContextEffects& effects, const SkDescriptor* desc) const override
         {
-            return SkScalerContext::MakeEmpty(
-                    sk_ref_sp(const_cast<TestTypeface*>(this)), effects, desc);
+            return SkScalerContext::MakeEmpty(*const_cast<TestTypeface*>(this), effects, desc);
         }
         void onFilterRec(SkScalerContextRec*) const override { }
         std::unique_ptr<SkAdvancedTypefaceMetrics> onGetAdvancedMetrics() const override {

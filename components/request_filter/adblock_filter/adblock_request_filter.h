@@ -13,15 +13,12 @@ class RenderFrameHost;
 }
 
 namespace adblock_filter {
-class RulesIndexManager;
-class StateAndLogsImpl;
-class Resources;
+class RuleServiceImpl;
 
 class AdBlockRequestFilter : public vivaldi::RequestFilter {
  public:
-  AdBlockRequestFilter(base::WeakPtr<RulesIndexManager> rules_index_manager,
-                       base::WeakPtr<StateAndLogsImpl> state_and_logs,
-                       base::WeakPtr<Resources> resources);
+  AdBlockRequestFilter(base::WeakPtr<RuleServiceImpl> rule_service,
+                       RuleGroup group);
   ~AdBlockRequestFilter() override;
   AdBlockRequestFilter(const AdBlockRequestFilter&) = delete;
   AdBlockRequestFilter& operator=(const AdBlockRequestFilter&) = delete;
@@ -64,10 +61,8 @@ class AdBlockRequestFilter : public vivaldi::RequestFilter {
                               std::string_view tracker_url_spec,
                               std::string_view ad_domain_and_query_trigger);
 
-  base::WeakPtr<RulesIndexManager> rules_index_manager_;
-  base::WeakPtr<StateAndLogsImpl> state_and_logs_;
-  base::WeakPtr<Resources> resources_;
-
+  base::WeakPtr<RuleServiceImpl> rule_service_;
+  RuleGroup group_;
   bool allow_blocking_documents_;
 };
 

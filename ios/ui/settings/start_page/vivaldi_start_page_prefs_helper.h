@@ -27,6 +27,8 @@
 + (BOOL)showSpeedDials;
 /// Returns whether start page customize button is visible on the start page.
 + (BOOL)showStartPageCustomizeButton;
+/// Returns whether Add (SD/Folder) button is visible on the start page.
++ (BOOL)showAddButton;
 
 /// Returns the option to open start page with.
 + (const VivaldiStartPageStartItemType)getReopenStartPageWithItem;

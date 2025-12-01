@@ -60,7 +60,7 @@ import java.util.concurrent.atomic.AtomicReference;
 
 /** BlankUiTestActivity Tests for the {@link TabGridDialogView}. */
 @RunWith(ChromeJUnit4ClassRunner.class)
-@DisableFeatures({ChromeFeatureList.DATA_SHARING})
+@DisableFeatures({ChromeFeatureList.DATA_SHARING, ChromeFeatureList.DATA_SHARING_JOIN_ONLY})
 @Batch(Batch.UNIT_TESTS)
 public class TabGridDialogViewTest {
     @ClassRule
@@ -530,6 +530,21 @@ public class TabGridDialogViewTest {
                     assertEquals(0f, mBackgroundFrameView.getAlpha(), 0.0);
                     assertFalse(mTabGridDialogContainer.isFocused());
                 });
+    }
+
+    @Test
+    @MediumTest
+    public void testInvokeVisibilityListenerOnChange() throws TimeoutException {
+        CallbackHelper visibilityCallback = new CallbackHelper();
+        mTabGridDialogView.setVisibilityListener(
+                new VisibilityListener() {
+                    @Override
+                    public void finishedHidingDialogView() {
+                        visibilityCallback.notifyCalled();
+                    }
+                });
+        mTabGridDialogView.setVisibilityListener(null);
+        visibilityCallback.waitForNext();
     }
 
     @Test

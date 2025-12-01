@@ -35,7 +35,7 @@ import responseHeaderSectionStylesRaw from './ResponseHeaderSection.css.js';
 
 // TODO(crbug.com/391381439): Fully migrate off of constructed style sheets.
 const responseHeaderSectionStyles = new CSSStyleSheet();
-responseHeaderSectionStyles.replaceSync(responseHeaderSectionStylesRaw.cssContent);
+responseHeaderSectionStyles.replaceSync(responseHeaderSectionStylesRaw.cssText);
 
 const UIStrings = {
   /**
@@ -77,7 +77,7 @@ const UIStrings = {
    */
   toUseThisResourceFromADifferentSite:
       'To use this resource from a different site, the server may relax the cross-origin resource policy response header:',
-};
+} as const;
 
 const str_ = i18n.i18n.registerUIStrings('panels/network/components/ResponseHeaderSection.ts', UIStrings);
 const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
@@ -283,7 +283,7 @@ export class ResponseHeaderSection extends ResponseHeaderSectionBase {
       this.#overrides =
           JSON.parse(deferredContent.content || '[]') as Persistence.NetworkPersistenceManager.HeaderOverride[];
       if (!this.#overrides.every(Persistence.NetworkPersistenceManager.isHeaderOverride)) {
-        throw 'Type mismatch after parsing';
+        throw new Error('Type mismatch after parsing');
       }
       if (Common.Settings.Settings.instance().moduleSetting('persistence-network-overrides-enabled').get() &&
           this.#isEditingAllowed === EditingAllowedStatus.DISABLED) {

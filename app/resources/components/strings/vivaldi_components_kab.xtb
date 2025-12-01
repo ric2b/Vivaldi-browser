@@ -1,4 +1,33 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="kab">
+<translation id="3830627370375585318">Sireg Vivaldi ad ikcem ɣer uzeṭṭa deg yiɣewwaren-ik•im n uɣrab n tmes neɣ
+..........n umgal ivirusen.</translation>
+<translation id="4200102020577305737">Rzu ɣer
+          wumuɣ n Vivaldi &gt;
+          <ph name="SETTINGS_TITLE" />
+          &gt;
+          <ph name="ADVANCED_TITLE" />
+          &gt;
+          <ph name="PROXIES_TITLE" />
+          &gt;
+          Iɣewwaren n uzeṭṭa adigan LAN
+          tekkseḍ afran i uɣewwar "Seqdec aqeddac n upṛuksi i uẓeṭṭa-inek•inem adigan LAN".</translation>
+<translation id="4932161901409251843">Rzu ɣer
+          wumuɣ n Vivaldi &gt;
+          <ph name="SETTINGS_TITLE" />
+          &gt;
+          <ph name="ADVANCED_TITLE" />
+          &gt;
+          <ph name="PROXIES_TITLE" />
+          tḍemneḍ dakken tawila-k•m ttwasbadun ɣer "war apṛuksi" neɣ "srid."</translation>
+<translation id="5248344925342018662">La tettwaliḍ asebter n Vivaldi aɣellsan</translation>
+<translation id="7023871570427738255">Ddu ɣer
+          wumuɣ n  Vivaldi &gt;
+          <ph name="SETTINGS_TITLE" />
+          &gt;
+          <ph name="ADVANCED_TITLE" />
+          syen fren "<ph name="NO_PREFETCH_DESCRIPTION" />."
+          Ma yella aya ur ifri ara ugur, ad nwelleh afran n textiṛit-a
+          i tikkelt-nniḍen i tmellit iǧehden.</translation>
 </translationbundle>

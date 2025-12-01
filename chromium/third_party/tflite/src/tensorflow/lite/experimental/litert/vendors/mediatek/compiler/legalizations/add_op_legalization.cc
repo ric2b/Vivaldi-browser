@@ -18,17 +18,19 @@
 #include <vector>
 
 #include "tensorflow/lite/experimental/litert/c/litert_common.h"
+#include "tensorflow/lite/experimental/litert/c/litert_logging.h"
 #include "tensorflow/lite/experimental/litert/c/litert_options.h"
 #include "tensorflow/lite/experimental/litert/cc/litert_expected.h"
 #include "tensorflow/lite/experimental/litert/cc/litert_model.h"
 #include "tensorflow/lite/experimental/litert/vendors/mediatek/compiler/legalizations/operand_map.h"
-#include "tensorflow/lite/experimental/litert/vendors/mediatek/neuron_adapter.h"
+#include "tensorflow/lite/experimental/litert/vendors/mediatek/neuron_adapter_api.h"
 
 namespace litert::mediatek {
 
-Expected<void> LegalizeAddOp(const NeuronAdapter& neuron_adapter,
+Expected<void> LegalizeAddOp(const NeuronAdapterApi& neuron_adapter_api,
                              NeuronModel* model, OperandMap& operand_map,
                              const litert::Op& op) {
+  LITERT_LOG(LITERT_INFO, "Legalize Add");
   std::vector<uint32_t> input_indices;
   for (auto& input : op.Inputs()) {
     auto id = operand_map.GetOperandIndex(input);
@@ -62,12 +64,10 @@ Expected<void> LegalizeAddOp(const NeuronAdapter& neuron_adapter,
     output_indices.push_back(*id);
   }
 
-  if (neuron_adapter.api().model_add_operation(
-          model, /*type=*/NEURON_ADD, input_indices.size(),
-          input_indices.data(), output_indices.size(),
-          output_indices.data()) != NEURON_NO_ERROR) {
+  if (ModelAddOperation(neuron_adapter_api, model, /*type=*/NEURON_ADD,
+                        input_indices, output_indices) != NEURON_NO_ERROR) {
     return Error(kLiteRtStatusErrorRuntimeFailure,
-                 "Failed to set value of NEURON_ADD fused activation");
+                 "Failed to add NEURON_ADD op");
   }
 
   return {};

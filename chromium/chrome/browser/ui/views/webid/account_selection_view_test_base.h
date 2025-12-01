@@ -31,6 +31,8 @@ inline constexpr char kIdpForDisplay[] = "idp-example.com";
 // The char version of `kSecondIdpETLDPlusOne`.
 inline constexpr char kSecondIdpForDisplay[] = "idp2.com";
 inline constexpr char kIdBase[] = "id";
+inline constexpr char kDisplayIdentifierBase[] = "displayid";
+inline constexpr char kDisplayNameBase[] = "displayname";
 inline constexpr char kEmailBase[] = "email";
 inline constexpr char kNameBase[] = "name";
 inline constexpr char kGivenNameBase[] = "given_name";
@@ -57,7 +59,7 @@ class AccountSelectionViewTestBase {
   ~AccountSelectionViewTestBase();
 
  protected:
-  std::u16string GetHoverButtonTitle(HoverButton* account);
+  std::u16string_view GetHoverButtonTitle(HoverButton* account);
   views::Label* GetHoverButtonSubtitle(HoverButton* account);
   views::View* GetHoverButtonIconView(HoverButton* account);
   views::Label* GetHoverButtonFooter(HoverButton* account);

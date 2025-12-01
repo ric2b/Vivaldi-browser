@@ -92,6 +92,9 @@ message LoadApplicationResponse {
     V2ChannelInfo v2_info = 1;
     MessagePortInfo message_port_info = 2;
   }
+  // RuntimeApplication service info selected by the Runtime per hint from the
+  // request.
+  cast.common.ServiceInfo runtime_application_service_info = 3;
 }
 
 message LaunchApplicationRequest {

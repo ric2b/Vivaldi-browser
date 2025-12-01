@@ -84,9 +84,6 @@ void InitializeCrashReporting(UpdaterScope updater_scope) {
     VLOG(1) << "Crash reporting is not available.";
     return;
   }
-  if (AreRawUsageStatsEnabled(updater_scope)) {
-    CrashClient::GetInstance()->SetUploadsEnabled(true);
-  }
   crash_reporter::InitializeCrashKeys();
   crash_keys::SetSwitchesFromCommandLine(
       *base::CommandLine::ForCurrentProcess(), nullptr);
@@ -295,8 +292,8 @@ void EnableLoggingByDefault() {
     command_line->AppendSwitch(kEnableLoggingSwitch);
   }
   if (!command_line->HasSwitch(kLoggingModuleSwitch)) {
-    command_line->AppendSwitchASCII(kLoggingModuleSwitch,
-                                    kLoggingModuleSwitchValue);
+    command_line->AppendSwitchUTF8(kLoggingModuleSwitch,
+                                   kLoggingModuleSwitchValue);
   }
 }
 

@@ -21,6 +21,9 @@
           &gt;
           <ph name="PROXIES_TITLE" />
           e verifica che la configurazione sia impostata su "nessun proxy" o "diretta."</translation>
+<translation id="4949828774841497663">Vai su Applicazioni &gt; Impostazioni di sistema &gt; Rete, seleziona la
+          rete attiva, clicca sul pulsante Dettagli... e deseleziona i proxy
+          che potrebbe essere stati selezionati.</translation>
 <translation id="5248344925342018662">Stai visualizzando una pagina protetta di Vivaldi</translation>
 <translation id="6690242244468452299">Questa pagina mostra informazioni sugli arresti anomali recenti se abiliti la segnalazione arresti anomali.</translation>
 <translation id="7023871570427738255">Seleziona
@@ -32,7 +35,4 @@
           Se il problema non si risolve, prova a riselezionare questa opzione
           per ottenere prestazioni migliori.</translation>
 <translation id="7496505986576158197">Vivaldi è reso possibile dal progetto open source <ph name="BEGIN_LINK_CHROMIUM" />Chromium<ph name="END_LINK_CHROMIUM" /> e da altri <ph name="BEGIN_LINK_OSS" />software open source<ph name="END_LINK_OSS" />.</translation>
-<translation id="8187289872471304532">Seleziona
-          Applicazioni &gt; Preferenze di Sistema &gt; Rete &gt; Avanzate &gt; Proxy
-          e deseleziona i proxy selezionati.</translation>
 </translationbundle>

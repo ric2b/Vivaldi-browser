@@ -7,6 +7,8 @@
 #include <algorithm>
 
 #include "base/containers/contains.h"
+#include "components/autofill/core/browser/autofill_field.h"
+#include "components/autofill/core/browser/data_model/data_model_utils.h"
 #include "components/autofill/core/browser/field_types.h"
 #include "components/autofill/core/browser/form_parsing/autofill_parsing_utils.h"
 #include "components/autofill/core/browser/form_parsing/credit_card_field_parser.h"
@@ -17,6 +19,7 @@
 #include "components/autofill/core/common/autofill_internals/log_message.h"
 #include "components/autofill/core/common/autofill_internals/logging_scope.h"
 #include "components/autofill/core/common/autofill_payments_features.h"
+#include "components/autofill/core/common/autofill_regexes.h"
 #include "components/autofill/core/common/logging/log_buffer.h"
 #include "components/autofill/core/common/logging/log_macros.h"
 
@@ -299,7 +302,8 @@ void FormStructureRationalizer::RationalizeContentEditables(
     LogManager* log_manager) {
   for (const auto& field : *fields_) {
     if (field->form_control_type() == FormControlType::kContentEditable) {
-      field->SetTypeTo(AutofillType(UNKNOWN_TYPE));
+      field->SetTypeTo(AutofillType(UNKNOWN_TYPE),
+                       AutofillPredictionSource::kRationalization);
     }
   }
 }
@@ -404,23 +408,31 @@ void FormStructureRationalizer::RationalizeCreditCardFieldPredictions(
     FieldType current_field_type = field->ComputedType().GetStorableType();
     switch (current_field_type) {
       case CREDIT_CARD_NAME_FIRST:
-        if (!keep_cc_fields)
-          field->SetTypeTo(AutofillType(NAME_FIRST));
+        if (!keep_cc_fields) {
+          field->SetTypeTo(AutofillType(NAME_FIRST),
+                           AutofillPredictionSource::kRationalization);
+        }
         break;
       case CREDIT_CARD_NAME_LAST:
-        if (!keep_cc_fields)
-          field->SetTypeTo(AutofillType(NAME_LAST));
+        if (!keep_cc_fields) {
+          field->SetTypeTo(AutofillType(NAME_LAST),
+                           AutofillPredictionSource::kRationalization);
+        }
         break;
       case CREDIT_CARD_NAME_FULL:
-        if (!keep_cc_fields)
-          field->SetTypeTo(AutofillType(NAME_FULL));
+        if (!keep_cc_fields) {
+          field->SetTypeTo(AutofillType(NAME_FULL),
+                           AutofillPredictionSource::kRationalization);
+        }
         break;
       case CREDIT_CARD_NUMBER:
       case CREDIT_CARD_TYPE:
       case CREDIT_CARD_EXP_DATE_2_DIGIT_YEAR:
       case CREDIT_CARD_EXP_DATE_4_DIGIT_YEAR:
-        if (!keep_cc_fields)
-          field->SetTypeTo(AutofillType(UNKNOWN_TYPE));
+        if (!keep_cc_fields) {
+          field->SetTypeTo(AutofillType(UNKNOWN_TYPE),
+                           AutofillPredictionSource::kRationalization);
+        }
         break;
       case CREDIT_CARD_EXP_MONTH:
         // Do not preserve an expiry month prediction if any of the following
@@ -440,7 +452,8 @@ void FormStructureRationalizer::RationalizeCreditCardFieldPredictions(
                 << "Credit card rationalization: Found CC expiration month but "
                    "not a full date.";
           }
-          field->SetTypeTo(AutofillType(UNKNOWN_TYPE));
+          field->SetTypeTo(AutofillType(UNKNOWN_TYPE),
+                           AutofillPredictionSource::kRationalization);
         } else if (num_months_found > 1) {
           auto it2 = it + 1;
           if (it2 == fields_->end()) {
@@ -449,7 +462,8 @@ void FormStructureRationalizer::RationalizeCreditCardFieldPredictions(
                 << LogMessage::kRationalization
                 << "Credit card rationalization: Found multiple expiration "
                    "months and the last field was an expiration month";
-            field->SetTypeTo(AutofillType(UNKNOWN_TYPE));
+            field->SetTypeTo(AutofillType(UNKNOWN_TYPE),
+                             AutofillPredictionSource::kRationalization);
           } else {
             FieldType next_field_type =
                 (*it2)->ComputedType().GetStorableType();
@@ -462,7 +476,8 @@ void FormStructureRationalizer::RationalizeCreditCardFieldPredictions(
                      "months and the field following one is not an "
                      "expiration year but "
                   << FieldTypeToStringView(next_field_type) << ".";
-              field->SetTypeTo(AutofillType(UNKNOWN_TYPE));
+              field->SetTypeTo(AutofillType(UNKNOWN_TYPE),
+                               AutofillPredictionSource::kRationalization);
             }
           }
         }
@@ -470,7 +485,8 @@ void FormStructureRationalizer::RationalizeCreditCardFieldPredictions(
       case CREDIT_CARD_EXP_2_DIGIT_YEAR:
       case CREDIT_CARD_EXP_4_DIGIT_YEAR:
         if (!keep_cc_fields || !cc_date_found) {
-          field->SetTypeTo(AutofillType(UNKNOWN_TYPE));
+          field->SetTypeTo(AutofillType(UNKNOWN_TYPE),
+                           AutofillPredictionSource::kRationalization);
           if (!cc_date_found) {
             LOG_AF(log_manager)
                 << LoggingScope::kRationalization
@@ -488,14 +504,16 @@ void FormStructureRationalizer::RationalizeCreditCardFieldPredictions(
           // field, than we presume this is a credit card saved on file of a
           // merchant webpage.
           field->SetTypeTo(
-              AutofillType(CREDIT_CARD_STANDALONE_VERIFICATION_CODE));
+              AutofillType(CREDIT_CARD_STANDALONE_VERIFICATION_CODE),
+              AutofillPredictionSource::kRationalization);
           LOG_AF(log_manager)
               << LoggingScope::kRationalization << LogMessage::kRationalization
               << "Credit card rationalization: Found CVC field but no other "
                  "credit card fields or email address field. Changed to "
                  "standalone CVC field.";
         } else if (!keep_cc_fields) {
-          field->SetTypeTo(AutofillType(UNKNOWN_TYPE));
+          field->SetTypeTo(AutofillType(UNKNOWN_TYPE),
+                           AutofillPredictionSource::kRationalization);
         }
         break;
       }
@@ -531,7 +549,8 @@ void FormStructureRationalizer::RationalizeCreditCardFieldPredictions(
               << LoggingScope::kRationalization << LogMessage::kRationalization
               << "Credit card rationalization: Updated expiration date format "
                  "with server hints or via patterns found in the labels.";
-          field->SetTypeTo(AutofillType(new_field_type));
+          field->SetTypeTo(AutofillType(new_field_type),
+                           AutofillPredictionSource::kRationalization);
         }
       }
     }
@@ -557,7 +576,8 @@ void FormStructureRationalizer::RationalizeMultiOriginCreditCardFields(
     if (std::ranges::any_of(*fields_, is_relevant_in_subframe)) {
       for (auto& field : *fields_) {
         if (is_relevant(*field) && !is_in_subframe(*field)) {
-          field->SetTypeTo(AutofillType(UNKNOWN_TYPE));
+          field->SetTypeTo(AutofillType(UNKNOWN_TYPE),
+                           AutofillPredictionSource::kRationalization);
           LOG_AF(log_manager)
               << LoggingScope::kRationalization << LogMessage::kRationalization
               << "Multi-origin Credit Card Rationalization: Converting type of "
@@ -665,13 +685,135 @@ void FormStructureRationalizer::RationalizeCreditCardNumberOffsets(
   }
 }
 
+void FormStructureRationalizer::RationalizeFormatStrings(
+    LogManager* log_manager) {
+  if (!base::FeatureList::IsEnabled(features::kAutofillAiWithDataSchema)) {
+    return;
+  }
+
+  auto set_format = [&](AutofillField& field, std::u16string format_string) {
+    LOG_AF(log_manager) << LoggingScope::kRationalization
+                        << LogMessage::kRationalization
+                        << "Set format string of " << field.global_id()
+                        << " to " << format_string;
+    field.set_format_string_unless_overruled(
+        std::move(format_string),
+        AutofillField::FormatStringSource::kHeuristics);
+  };
+
+  for (auto it = fields_->begin(); it != fields_->end(); ++it) {
+    AutofillField& field = **it;
+    if (std::optional<FieldType> type =
+            field.GetAutofillAiServerTypePredictions();
+        !type || !IsDateFieldType(*type)) {
+      continue;
+    }
+    switch (field.format_string_source()) {
+      case AutofillField::FormatStringSource::kUnset:
+      case AutofillField::FormatStringSource::kHeuristics:
+        break;  // Breaks the switch, not the loop.
+      case AutofillField::FormatStringSource::kModelResult:
+      case AutofillField::FormatStringSource::kServer:
+        continue;
+    }
+
+    std::u16string format;
+    if (data_util::IsValidDateFormat(field.placeholder())) {
+      set_format(field, field.placeholder());
+      continue;
+    } else if (data_util::IsValidDateFormat(
+                   field.value(ValueSemantics::kInitial))) {
+      set_format(field, field.value(ValueSemantics::kInitial));
+      continue;
+    }
+
+    // A regex that covers all date formats (with false positives).
+    // The first, second, third capture groups correspond to the different
+    // components.
+    static constexpr char16_t kRegex[] =
+        u"\\b"
+        u"(YYYY|YY|MM|M|DD|D)\\s?([/\\.-])?\\s?"
+        u"(YYYY|YY|MM|M|DD|D)\\s?([/\\.-])?\\s?"
+        u"(YYYY|YY|MM|M|DD|D)?\\b";
+
+    // Contains the match groups of `kRegex`. For example:
+    // - full() == u"YYYY-MM-DD"
+    // - part(0) == u"YYYY"
+    // - part(1) == u"MM"
+    // - part(2) == u"DD"
+    // - separator(0) == u"/"
+    // - separator(1) == u"/"
+    struct {
+      const std::u16string& full() const { return groups[0]; }
+
+      const std::u16string& part(size_t i) const {
+        DCHECK_EQ(groups.size(), 6u);
+        DCHECK_LT(i, 3u);
+        return groups[i * 2 + 1];
+      }
+
+      const std::u16string& separator(size_t i) const {
+        DCHECK_EQ(groups.size(), 6u);
+        DCHECK_LT(i, 2u);
+        return groups[(i + 1) * 2];
+      }
+
+      std::vector<std::u16string> groups;
+    } match;
+
+    if (MatchesRegex<kRegex>(field.label(), &match.groups) &&
+        data_util::IsValidDateFormat(match.full())) {
+      // Returns the n-th next field if it has the same FieldType.
+      auto successor = [&](int n) -> AutofillField* {
+        if (n >= std::distance(it, fields_->end())) {
+          return nullptr;
+        }
+        AutofillField& successor = **std::next(it, n);
+        if (successor.GetAutofillAiServerTypePredictions() !=
+            field.GetAutofillAiServerTypePredictions()) {
+          return nullptr;
+        }
+        // TODO(crbug.com/396325496): Remove the separator comparisons if
+        // crrev.com/c/6360977 has landed.
+        if (successor.label() != field.label() &&
+            successor.label() != match.separator(0) &&
+            successor.label() != match.separator(1)) {
+          return nullptr;
+        }
+        return &successor;
+      };
+
+      AutofillField* fields[] = {&field, successor(1), successor(2)};
+      DCHECK(fields[1] || !fields[2]);
+
+      // Split the parts of the date format over `fields`.
+      if (!fields[1]) {
+        set_format(*fields[0], match.full());
+      } else if (fields[1] && !fields[2] && match.part(2).empty()) {
+        set_format(*fields[0], match.part(0));
+        set_format(*fields[1], match.part(1));
+        it += 1;
+      } else if (fields[1] && fields[2] && !match.part(2).empty()) {
+        set_format(*fields[0], match.part(0));
+        set_format(*fields[1], match.part(1));
+        set_format(*fields[2], match.part(2));
+        it += 2;
+      } else {
+        set_format(*fields[0], match.full());
+      }
+    }
+  }
+}
+
 void FormStructureRationalizer::RationalizeStreetAddressAndAddressLine(
     LogManager* log_manager) {
-  if (fields_->size() < 2)
+  if (fields_->size() < 2) {
     return;
+  }
   for (auto field = fields_->begin() + 1; field != fields_->end(); ++field) {
-    if ((*field)->ComputedType().GetStorableType() != ADDRESS_HOME_LINE2)
+    if ((*field)->ComputedType().GetStorableType() != ADDRESS_HOME_LINE2) {
       continue;
+    }
     // Rationalize a preceding street address belonging to the same section
     // unless it's a server override.
     AutofillField& previous_field = **(field - 1);
@@ -685,7 +827,8 @@ void FormStructureRationalizer::RationalizeStreetAddressAndAddressLine(
         << LoggingScope::kRationalization << LogMessage::kRationalization
         << "Street Address Rationalization: Converting sequence of (street "
            "address, address line 2) to (address line 1, address line 2)";
-    previous_field.SetTypeTo(AutofillType(ADDRESS_HOME_LINE1));
+    previous_field.SetTypeTo(AutofillType(ADDRESS_HOME_LINE1),
+                             AutofillPredictionSource::kRationalization);
   }
 }
 
@@ -720,8 +863,10 @@ void FormStructureRationalizer::RationalizeBetweenStreetFields(
                            "home_between_street_1) or (home_between_street, "
                            "home_between_street_2) to (home_between_street_1, "
                            "home_between_street_2)";
-    (**field).SetTypeTo(AutofillType(ADDRESS_HOME_BETWEEN_STREETS_1));
-    next_field.SetTypeTo(AutofillType(ADDRESS_HOME_BETWEEN_STREETS_2));
+    (**field).SetTypeTo(AutofillType(ADDRESS_HOME_BETWEEN_STREETS_1),
+                        AutofillPredictionSource::kRationalization);
+    next_field.SetTypeTo(AutofillType(ADDRESS_HOME_BETWEEN_STREETS_2),
+                         AutofillPredictionSource::kRationalization);
     break;
   }
 }
@@ -736,7 +881,8 @@ void FormStructureRationalizer::RationalizePhoneNumberTrunkTypes(
         if (current_type == new_type) {
           return;
         }
-        field.SetTypeTo(AutofillType(new_type));
+        field.SetTypeTo(AutofillType(new_type),
+                        AutofillPredictionSource::kRationalization);
         LOG_AF(log_manager)
             << LoggingScope::kRationalization << LogMessage::kRationalization
             << "Converting " << FieldTypeToStringView(current_type) << " to "
@@ -798,7 +944,8 @@ void FormStructureRationalizer::RationalizeRepeatedStreetAddressFields(
           << LoggingScope::kRationalization << LogMessage::kRationalization
           << "RationalizeAddressLineFields ADDRESS_HOME_STREET_ADDRESS to "
           << FieldTypeToString(*next_type);
-      field->SetTypeTo(AutofillType(*next_type));
+      field->SetTypeTo(AutofillType(*next_type),
+                       AutofillPredictionSource::kRationalization);
       ++next_type;
     }
   }
@@ -812,6 +959,7 @@ void FormStructureRationalizer::RationalizeFieldTypePredictions(
   RationalizeCreditCardFieldPredictions(log_manager);
   RationalizeMultiOriginCreditCardFields(main_origin, log_manager);
   RationalizeCreditCardNumberOffsets(log_manager);
+  RationalizeFormatStrings(log_manager);
   RationalizeRepeatedStreetAddressFields(log_manager);
   RationalizeStreetAddressAndAddressLine(log_manager);
   RationalizeBetweenStreetFields(log_manager);
@@ -834,7 +982,8 @@ void FormStructureRationalizer::RationalizePhoneCountryCode(
   }
   for (const std::unique_ptr<AutofillField>& field : *fields_) {
     if (field->ComputedType().GetStorableType() == PHONE_HOME_COUNTRY_CODE) {
-      field->SetTypeTo(AutofillType(UNKNOWN_TYPE));
+      field->SetTypeTo(AutofillType(UNKNOWN_TYPE),
+                       AutofillPredictionSource::kRationalization);
       LOG_AF(log_manager)
           << "RationalizeTypeRelationships: Fields of type "
              "PHONE_HOME_COUNTRY_CODE can only coexist with other"

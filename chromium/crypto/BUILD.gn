@@ -3,7 +3,6 @@
 # found in the LICENSE file.
 
 import("//build/buildflag_header.gni")
-import("//build/config/chromeos/ui_mode.gni")
 import("//components/nacl/toolchain.gni")
 import("//crypto/features.gni")
 import("//testing/test.gni")
@@ -29,8 +28,6 @@ component("crypto") {
     "ec_signature_creator.h",
     "ec_signature_creator_impl.cc",
     "ec_signature_creator_impl.h",
-    "encryptor.cc",
-    "encryptor.h",
     "features.cc",
     "features.h",
     "hash.cc",
@@ -62,8 +59,6 @@ component("crypto") {
     "signature_verifier.h",
     "subtle_passkey.cc",
     "subtle_passkey.h",
-    "symmetric_key.cc",
-    "symmetric_key.h",
     "unexportable_key.cc",
     "unexportable_key.h",
     "unexportable_key_metrics.cc",
@@ -138,21 +133,15 @@ component("crypto") {
       "nss_util.h",
       "nss_util_internal.h",
     ]
-    deps += [
-      "//build:chromeos_buildflags",
-      "//components/nacl/common:buildflags",
-    ]
+    deps += [ "//components/nacl/common:buildflags" ]
     configs += [ "//build/config/linux/nss" ]
-  }
-
-  if (is_chromeos_ash && !is_minimal_toolchain) {
-    sources += [ "nss_util_chromeos.cc" ]
   }
 
   if (is_chromeos && !is_minimal_toolchain) {
     sources += [
       "chaps_support.cc",
       "chaps_support.h",
+      "nss_util_chromeos.cc",
     ]
   }
 
@@ -186,7 +175,6 @@ test("crypto_unittests") {
     "aes_ctr_unittest.cc",
     "ec_private_key_unittest.cc",
     "ec_signature_creator_unittest.cc",
-    "encryptor_unittest.cc",
     "hash_unittest.cc",
     "hmac_unittest.cc",
     "kdf_unittest.cc",
@@ -197,7 +185,6 @@ test("crypto_unittests") {
     "sha2_unittest.cc",
     "signature_creator_unittest.cc",
     "signature_verifier_unittest.cc",
-    "symmetric_key_unittest.cc",
     "unexportable_key_unittest.cc",
   ]
 
@@ -244,10 +231,10 @@ test("crypto_unittests") {
 static_library("test_support") {
   testonly = true
   sources = [
+    "scoped_fake_unexportable_key_provider.cc",
+    "scoped_fake_unexportable_key_provider.h",
     "scoped_fake_user_verifying_key_provider.cc",
     "scoped_fake_user_verifying_key_provider.h",
-    "scoped_mock_unexportable_key_provider.cc",
-    "scoped_mock_unexportable_key_provider.h",
   ]
 
   if (use_nss_certs) {
@@ -258,7 +245,7 @@ static_library("test_support") {
     configs += [ "//build/config/linux/nss" ]
   }
 
-  if (is_chromeos_ash) {
+  if (is_chromeos) {
     sources += [
       "scoped_test_nss_chromeos_user.cc",
       "scoped_test_nss_chromeos_user.h",

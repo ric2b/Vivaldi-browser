@@ -11,15 +11,11 @@
 
 namespace {
 
-constexpr char kLocalWebApprovalDurationHistogramName[] =
-    "FamilyLinkUser.LocalWebApprovalCompleteRequestTotalDuration";
-constexpr char kLocalWebApprovalResultHistogramName[] =
-    "FamilyLinkUser.LocalWebApprovalResult";
-
 // Records the duration of a complete local web approval flow.
 void RecordTimeToApprovalDurationMetric(base::TimeDelta durationMs) {
-  base::UmaHistogramLongTimes(kLocalWebApprovalDurationHistogramName,
-                              durationMs);
+  base::UmaHistogramLongTimes(
+      supervised_user::kLocalWebApprovalDurationMillisecondsHistogramName,
+      durationMs);
 }
 
 std::string LocalApprovalResultToString(
@@ -36,6 +32,14 @@ std::string LocalApprovalResultToString(
   }
 }
 
+void MaybeRecordLocalWebApprovalErrorTypeMetric(
+    std::optional<supervised_user::LocalWebApprovalErrorType> error_type) {
+  if (!error_type.has_value()) {
+    return;
+  }
+  base::UmaHistogramEnumeration(
+      supervised_user::kLocalWebApprovalErrorTypeHistogramName, error_type.value());
+}
 }  // namespace
 
 namespace supervised_user {
@@ -53,7 +57,9 @@ void WebContentHandler::OnLocalApprovalRequestCompleted(
     supervised_user::SupervisedUserSettingsService& settings_service,
     const GURL& url,
     base::TimeTicks start_time,
-    LocalApprovalResult approval_result) {
+    LocalApprovalResult approval_result,
+    std::optional<supervised_user::LocalWebApprovalErrorType>
+        local_approval_error_type) {
   VLOG(0) << "Local URL approval final result: "
           << LocalApprovalResultToString(approval_result);
 
@@ -68,7 +74,9 @@ void WebContentHandler::OnLocalApprovalRequestCompleted(
       RecordTimeToApprovalDurationMetric(base::TimeTicks::Now() - start_time);
       break;
     case LocalApprovalResult::kCanceled:
+      break;
     case LocalApprovalResult::kError:
+      MaybeRecordLocalWebApprovalErrorTypeMetric(local_approval_error_type);
       break;
   }
   RecordLocalWebApprovalResultMetric(approval_result);
@@ -76,7 +84,7 @@ void WebContentHandler::OnLocalApprovalRequestCompleted(
 
 // static
 const char* WebContentHandler::GetLocalApprovalDurationMillisecondsHistogram() {
-  return kLocalWebApprovalDurationHistogramName;
+  return kLocalWebApprovalDurationMillisecondsHistogramName;
 }
 
 // static

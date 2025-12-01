@@ -1,7 +1,10 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="it">
+<translation id="1204037785786432551">Scarica contenuto</translation>
+<translation id="1206892813135768548">Copia testo link</translation>
 <translation id="1397811292916898096">Cerca con <ph name="PRODUCT_NAME" /></translation>
+<translation id="1435593198351412143">Apri automaticamente i PDF</translation>
 <translation id="1456207338570705181">Tocca per cercare è una funzione disponibile solo quando Google è impostato come motore di ricerca predefinito in Vivaldi. Invia la parola selezionata e la pagina corrente come contesto a Ricerca di Google. Puoi disattivarlo in <ph name="BEGIN_LINK" />Impostazioni<ph name="END_LINK" />.</translation>
 <translation id="1598449788754183301">Mostra/nascondi le schede normali/private</translation>
 <translation id="1644574205037202324">Cronologia</translation>
@@ -14,10 +17,14 @@
 <translation id="2433507940547922241">Aspetto</translation>
 <translation id="2501278716633472235">Vai indietro</translation>
 <translation id="2633278372998075009">Schede private</translation>
+<translation id="2650751991977523696">Scaricare di nuovo il file?</translation>
 <translation id="265156376773362237">Precaricamento standard</translation>
 <translation id="272026394418727548">Pagina iniziale di Vivaldi</translation>
+<translation id="2842985007712546952">Cartella superiore</translation>
 <translation id="2871733351037274014">Precarica le pagine</translation>
+<translation id="2904300462646366554">I PDF scaricati si aprono automaticamente con uno dei visualizzatori di PDF sul tuo dispositivo</translation>
 <translation id="2951071800649516099">Aggiungi pagine alla tua lista di lettura per dopo</translation>
+<translation id="3029276696788198026">Nessun precaricamento</translation>
 <translation id="3060635849835183725">{BOOKMARKS_COUNT, plural,
           =1 {<ph name="BOOKMARKS_COUNT_ONE" /> segnalibro}
           other {<ph name="BOOKMARKS_COUNT_MANY" /> segnalibri}}</translation>
@@ -34,6 +41,7 @@
 <translation id="3719826155360621982">Pagina iniziale</translation>
 <translation id="3738139272394829648">Tocca per cercare</translation>
 <translation id="385051799172605136">Indietro</translation>
+<translation id="3987993985790029246">Copia il link</translation>
 <translation id="399014816462153200">Articoli letti:</translation>
 <translation id="4121750346708795461">Se utilizzi questa applicazione, accetti il <ph name="BEGIN_LINK1" />Contratto di licenza per l'utente finale<ph name="END_LINK1" /> e l'<ph name="BEGIN_LINK2" />Informativa sulla privacy<ph name="END_LINK2" /> di Vivaldi.</translation>
 <translation id="4137746084635924146">Lingua del dispositivo</translation>
@@ -41,10 +49,13 @@
 <translation id="4195643157523330669">Apri in nuova scheda</translation>
 <translation id="4225895483398857530">Scorciatoia della barra degli strumenti</translation>
 <translation id="4243710787042215766">Apri in scheda privata</translation>
+<translation id="4269820728363426813">Copia indirizzo link</translation>
 <translation id="4291407919474070700"><ph name="BEGIN_LINK" />Attiva il blocco schermo nelle impostazioni Android<ph name="END_LINK" /></translation>
 <translation id="4304713468139749426">Gestore password</translation>
 <translation id="451872707440238414">Cerca nei segnalibri</translation>
 <translation id="4526803704855831732">Schede private</translation>
+<translation id="4532845899244822526">Scegli cartella</translation>
+<translation id="4699172675775169585">Immagini e file nella cache</translation>
 <translation id="4719086422742491124">Scopri gli argomenti sui siti Web senza uscire dalla pagina. Seleziona una o più parole nella pagina per cercarle.
 
 Tocca per cercare è una funzione disponibile solo quando Google è impostato come motore di ricerca predefinito in Vivaldi.</translation>
@@ -55,20 +66,34 @@ Tocca per cercare è una funzione disponibile solo quando Google è impostato co
 <translation id="49576331685473090">Blocco dei contenuti</translation>
 <translation id="5079259810715830221">Quando un sito di Google chiede di precaricare privatamente i collegamenti sulla propria pagina, Vivaldi crittografa e precarica le pagine attraverso i server di Google senza cookie. Questo nasconde la tua identità dal sito precaricato.</translation>
 <translation id="5118676864324397542">Spazio di archiviazione di <ph name="APP_NAME" /></translation>
+<translation id="5144385790872094440">Alcune delle pagine che visiti sono precaricate. Le pagine potrebbero essere precaricate tramite i server di Google se collegate da un sito o un'app di Google.</translation>
 <translation id="5186185447130319458">Privato</translation>
+<translation id="5206168361184759344">{FILE_COUNT, plural,
+            =1 {Sto scaricando il file…}
+            other {Sto scaricando # file…}}</translation>
 <translation id="5233638681132016545">Nuova scheda</translation>
 <translation id="5375131951310889874">Scopri gli argomenti sui siti Web senza uscire dalla pagina. Tocca per cercare è una funzione disponibile solo quando Google è impostato come motore di ricerca predefinito in Vivaldi. Invia una parola e il contesto circostante a Ricerca di Google, restituendo definizioni, immagini, risultati di ricerca e altri dettagli.
 
 Per modificare il termine di ricerca, premere a lungo per selezionare. Per perfezionare la ricerca, fai scorrere il pannello completamente in alto e tocca la casella di ricerca.</translation>
+<translation id="543338862236136125">Modifica password</translation>
 <translation id="572328651809341494">Schede recenti</translation>
+<translation id="5833984609253377421">Condividi link</translation>
 <translation id="6150320133806434356">Segnalibro salvato</translation>
+<translation id="6193448654517602979">Seleziona schede</translation>
 <translation id="6336451774241870485">Nuova scheda privata</translation>
 <translation id="6337323516034698937">Per inviare questa scheda a un altro dispositivo, accedi a Sincronizzazione Vivaldi su entrambi i dispositivi. Assicurati di inserire la password di crittografia, se necessario.</translation>
+<translation id="6341580099087024258">Chiedi dove salvare i file</translation>
 <translation id="6404511346730675251">Modifica segnalibro</translation>
+<translation id="650224091954855786">{FILE_COUNT, plural,
+          =1 {File scaricato}
+          other {# trasferimenti completati}}</translation>
 <translation id="6585139692466700358">Offre di tradurre le pagine in altre lingue usando il servizio di traduzione di Vivaldi</translation>
 <translation id="6588043302623806746">Usa DNS sicuro</translation>
 <translation id="6593061639179217415">Sito desktop</translation>
 <translation id="6610147964972079463">Chiudi schede private</translation>
+<translation id="6627583120233659107">Modifica cartella</translation>
+<translation id="6865313869410766144">Dati compilazione automatica del modulo</translation>
+<translation id="6909589135458168665">Precarica le pagine</translation>
 <translation id="7029995644714925509">Quando un sito chiede di precaricare privatamente i link sulla propria pagina, Vivaldi crittografa e precarica le pagine attraverso i server di Google senza cookie. Questo nasconde la tua identità dal sito precaricato.</translation>
 <translation id="706339621163631076">Informativa sulla privacy di Vivaldi</translation>
 <translation id="732145680195464316">Segnalibro salvato in <ph name="PRODUCT_NAME" /></translation>
@@ -79,10 +104,13 @@ Per modificare il termine di ricerca, premere a lungo per selezionare. Per perfe
 <translation id="7456774706094330779">Precaricamento esteso</translation>
 <translation id="7465104139234185284">Chiudi tutte le schede private</translation>
 <translation id="7481312909269577407">Avanti</translation>
+<translation id="7764225426217299476">Aggiungi indirizzo</translation>
 <translation id="7968014550143838305">Aggiunto alla lista di lettura</translation>
 <translation id="804786196054284061">Contratto di licenza per l'utente finale</translation>
-<translation id="8062594758852531064">Precaricamento esteso:</translation>
+<translation id="8062594758852531064">Precaricamento estesa:</translation>
+<translation id="8073388330009372546">Apri immagine in nuova scheda</translation>
 <translation id="8127542551745560481">Modifica pagina iniziale</translation>
+<translation id="8266862848225348053">Cartella trasferimenti</translation>
 <translation id="8348430946834215779">Usa HTTPS quando possibile e ricevi un avviso prima di caricare i siti che non lo supportano</translation>
 <translation id="8560602726703398413">Trova la tua lista di lettura nei segnalibri</translation>
 <translation id="85991616550051997">Vai alla pagina iniziale</translation>

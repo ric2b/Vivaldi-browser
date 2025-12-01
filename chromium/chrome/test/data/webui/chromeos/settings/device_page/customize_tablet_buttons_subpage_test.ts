@@ -65,7 +65,7 @@ suite('<settings-customize-tablet-buttons-subpage>', () => {
         assertEquals(Router.getInstance().currentRoute, routes.DEVICE);
       });
 
-  test('button action list fetched from provider', async () => {
+  test('button action list fetched from provider', () => {
     const graphicsTablet: GraphicsTablet = page.selectedTablet;
     assertTrue(!!graphicsTablet);
     assertEquals(graphicsTablet.id, fakeGraphicsTablets[0]!.id);
@@ -85,7 +85,7 @@ suite('<settings-customize-tablet-buttons-subpage>', () => {
     assertTrue(!!provider);
     assertEquals(provider.getSetGraphicsTabletSettingsCallCount(), 0);
     const buttonName =
-        page!.selectedTablet!.settings!.tabletButtonRemappings[0]!.name;
+        page!.selectedTablet.settings.tabletButtonRemappings[0]!.name;
     assertEquals(buttonName, 'Back Button');
     page.set(
         `selectedTablet.settings.tabletButtonRemappings.0.name`,

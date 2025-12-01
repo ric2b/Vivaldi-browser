@@ -77,11 +77,6 @@ export class SettingsPersonalizationOptionsElement extends
 
   static get properties() {
     return {
-      prefs: {
-        type: Object,
-        notify: true,
-      },
-
       focusConfig: {
         type: Object,
         observer: 'onFocusConfigChange_',
@@ -185,7 +180,7 @@ export class SettingsPersonalizationOptionsElement extends
   }
 
   private getPriceEmailNotificationsPrefDesc_(): string {
-    const username = this.syncStatus!.signedInUsername || '';
+    const username = this.syncStatus.signedInUsername || '';
     return loadTimeData.getStringF('priceEmailNotificationsPrefDesc', username);
   }
 

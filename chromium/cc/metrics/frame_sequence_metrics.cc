@@ -277,7 +277,7 @@ void FrameSequenceMetrics::AdoptTrace(FrameSequenceMetrics* adopt_from) {
   adopt_from->trace_data_.trace_id = 0u;
 }
 
-void FrameSequenceMetrics::ReportMetrics() {
+int FrameSequenceMetrics::ReportMetrics() {
   // Terminates |trace_data_| for all types of FrameSequenceTracker.
   trace_data_.Terminate(v3_, v4_, GetEffectiveThread());
 
@@ -301,7 +301,7 @@ void FrameSequenceMetrics::ReportMetrics() {
     v4_.frames_checkerboarded = 0u;
     v4_.frames_checkerboarded_need_raster = 0u;
     v4_.frames_checkerboarded_need_record = 0u;
-    return;
+    return -1;
   }
 
   const auto thread_type = GetEffectiveThread();
@@ -457,6 +457,7 @@ void FrameSequenceMetrics::ReportMetrics() {
         base::LinearHistogram::FactoryGet(
             GetJankV3HistogramName(type_, thread_name), 1, 100, 101,
             base::HistogramBase::kUmaTargetedHistogramFlag));
+
     v3_.frames_expected = 0u;
     v3_.frames_dropped = 0u;
     v3_.frames_missing_content = 0u;
@@ -465,7 +466,11 @@ void FrameSequenceMetrics::ReportMetrics() {
     v4_.frames_checkerboarded = 0u;
     v4_.frames_checkerboarded_need_raster = 0u;
     v4_.frames_checkerboarded_need_record = 0u;
+
+    // Return PDF4 to write to UKMs.
+    return percent_dropped_v4;
   }
+  return -1;
 }
 
 FrameSequenceMetrics::TraceData::TraceData(FrameSequenceMetrics* m)

@@ -13,50 +13,19 @@ import type * as Overlays from '../../overlays/overlays.js';
 import {BaseInsightComponent} from './BaseInsightComponent.js';
 import type {TableData} from './Table.js';
 
-const {html} = Lit;
+const {UIStrings, i18nString} = Trace.Insights.Models.LCPPhases;
 
-const UIStrings = {
-  /**
-   *@description Time to first byte title for the Largest Contentful Paint's phases timespan breakdown.
-   */
-  timeToFirstByte: 'Time to first byte',
-  /**
-   *@description Resource load delay title for the Largest Contentful Paint phases timespan breakdown.
-   */
-  resourceLoadDelay: 'Resource load delay',
-  /**
-   *@description Resource load duration title for the Largest Contentful Paint phases timespan breakdown.
-   */
-  resourceLoadDuration: 'Resource load duration',
-  /**
-   *@description Element render delay title for the Largest Contentful Paint phases timespan breakdown.
-   */
-  elementRenderDelay: 'Element render delay',
-  /**
-   *@description Label used for the phase/component/stage/section of a larger duration.
-   */
-  phase: 'Phase',
-  /**
-   *@description Label used for the percentage a single phase/component/stage/section takes up of a larger duration.
-   */
-  percentLCP: '% of LCP',
-  /**
-   * @description Text status indicating that the the Largest Contentful Paint (LCP) metric timing was not found. "LCP" is an acronym and should not be translated.
-   */
-  noLcp: 'No LCP detected',
-};
-const str_ = i18n.i18n.registerUIStrings('panels/timeline/components/insights/LCPPhases.ts', UIStrings);
-const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
+const {html} = Lit;
 
 interface PhaseData {
   phase: string;
   timing: number|Trace.Types.Timing.Milli;
-  percent: string;
 }
 
 export class LCPPhases extends BaseInsightComponent<LCPPhasesInsightModel> {
   static override readonly litTagName = Lit.StaticHtml.literal`devtools-performance-lcp-by-phases`;
-  override internalName: string = 'lcp-by-phase';
+  override internalName = 'lcp-by-phase';
+  protected override hasAskAISupport = true;
   #overlay: Overlays.Overlays.TimespanBreakdown|null = null;
 
   #getPhaseData(): PhaseData[] {
@@ -75,21 +44,18 @@ export class LCPPhases extends BaseInsightComponent<LCPPhasesInsightModel> {
 
     if (loadDelay && loadTime) {
       const phaseData = [
-        {phase: i18nString(UIStrings.timeToFirstByte), timing: ttfb, percent: `${(100 * ttfb / timing).toFixed(0)}%`},
+        {phase: i18nString(UIStrings.timeToFirstByte), timing: ttfb},
         {
           phase: i18nString(UIStrings.resourceLoadDelay),
           timing: loadDelay,
-          percent: `${(100 * loadDelay / timing).toFixed(0)}%`,
         },
         {
           phase: i18nString(UIStrings.resourceLoadDuration),
           timing: loadTime,
-          percent: `${(100 * loadTime / timing).toFixed(0)}%`,
         },
         {
           phase: i18nString(UIStrings.elementRenderDelay),
           timing: renderDelay,
-          percent: `${(100 * renderDelay / timing).toFixed(0)}%`,
         },
       ];
       return phaseData;
@@ -97,11 +63,10 @@ export class LCPPhases extends BaseInsightComponent<LCPPhasesInsightModel> {
 
     // If the lcp is text, we only have ttfb and render delay.
     const phaseData = [
-      {phase: i18nString(UIStrings.timeToFirstByte), timing: ttfb, percent: `${(100 * ttfb / timing).toFixed(0)}%`},
+      {phase: i18nString(UIStrings.timeToFirstByte), timing: ttfb},
       {
         phase: i18nString(UIStrings.elementRenderDelay),
         timing: renderDelay,
-        percent: `${(100 * renderDelay / timing).toFixed(0)}%`,
       },
     ];
     return phaseData;
@@ -186,6 +151,46 @@ export class LCPPhases extends BaseInsightComponent<LCPPhasesInsightModel> {
     return overlays;
   }
 
+  #renderFieldPhases(): Lit.LitTemplate|null {
+    if (!this.fieldMetrics) {
+      return null;
+    }
+
+    const {ttfb, loadDelay, loadDuration, renderDelay} = this.fieldMetrics.lcpPhases;
+    if (!ttfb || !loadDelay || !loadDuration || !renderDelay) {
+      return null;
+    }
+
+    const ttfbMillis = i18n.TimeUtilities.preciseMillisToString(Trace.Helpers.Timing.microToMilli(ttfb.value));
+    const loadDelayMillis =
+        i18n.TimeUtilities.preciseMillisToString(Trace.Helpers.Timing.microToMilli(loadDelay.value));
+    const loadDurationMillis =
+        i18n.TimeUtilities.preciseMillisToString(Trace.Helpers.Timing.microToMilli(loadDuration.value));
+    const renderDelayMillis =
+        i18n.TimeUtilities.preciseMillisToString(Trace.Helpers.Timing.microToMilli(renderDelay.value));
+
+    const rows = [
+      {values: [i18nString(UIStrings.timeToFirstByte), ttfbMillis]},
+      {values: [i18nString(UIStrings.resourceLoadDelay), loadDelayMillis]},
+      {values: [i18nString(UIStrings.resourceLoadDuration), loadDurationMillis]},
+      {values: [i18nString(UIStrings.elementRenderDelay), renderDelayMillis]},
+    ];
+
+    // clang-format off
+    return html`
+      <div class="insight-section">
+        <devtools-performance-table
+          .data=${{
+            insight: this,
+            headers: [i18nString(UIStrings.phase), i18nString(UIStrings.fieldDuration)],
+            rows,
+          } as TableData}>
+        </devtools-performance-table>
+      </div>
+    `;
+    // clang-format on
+  }
+
   override renderContent(): Lit.LitTemplate {
     if (!this.model) {
       return Lit.nothing;
@@ -196,10 +201,10 @@ export class LCPPhases extends BaseInsightComponent<LCPPhasesInsightModel> {
       return html`<div class="insight-section">${i18nString(UIStrings.noLcp)}</div>`;
     }
 
-    const rows = phaseData.map(({phase, percent}) => {
+    const rows = phaseData.map(({phase, timing}) => {
       const section = this.#overlay?.sections.find(section => phase === section.label);
       return {
-        values: [phase, percent],
+        values: [phase, i18n.TimeUtilities.preciseMillisToString(timing)],
         overlays: section && [{
                     type: 'TIMESPAN_BREAKDOWN',
                     sections: [section],
@@ -208,17 +213,25 @@ export class LCPPhases extends BaseInsightComponent<LCPPhasesInsightModel> {
     });
 
     // clang-format off
-    return html`
+    const sections: Lit.LitTemplate[] = [html`
       <div class="insight-section">
-        ${html`<devtools-performance-table
+        <devtools-performance-table
           .data=${{
             insight: this,
-            headers: [i18nString(UIStrings.phase), i18nString(UIStrings.percentLCP)],
+            headers: [i18nString(UIStrings.phase), i18nString(UIStrings.duration)],
             rows,
           } as TableData}>
-        </devtools-performance-table>`}
-      </div>`;
+        </devtools-performance-table>
+      </div>`
+    ];
     // clang-format on
+
+    const fieldDataSection = this.#renderFieldPhases();
+    if (fieldDataSection) {
+      sections.push(fieldDataSection);
+    }
+
+    return html`${sections}`;
   }
 }
 

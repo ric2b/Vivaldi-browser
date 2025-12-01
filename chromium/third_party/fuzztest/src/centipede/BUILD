@@ -189,10 +189,7 @@ cc_library(
     name = "reverse_pc_table",
     hdrs = ["reverse_pc_table.h"],
     # Avoid non-trivial dependencies here, as this library will be linked to target binaries.
-    deps = [
-        ":pc_info",
-        "@com_google_absl//absl/types:span",
-    ],
+    deps = [":pc_info"],
 )
 
 cc_library(
@@ -459,6 +456,7 @@ cc_library(
         ":feature",
         ":execution_metadata",
         ":shared_memory_blob_sequence",
+        "@com_google_fuzztest//common:defs",
     ],
 )
 
@@ -584,6 +582,7 @@ cc_library(
         ":control_flow",
         ":feature",
         ":util",
+        "@com_google_absl//absl/log",
         "@com_google_absl//absl/log:check",
         "@com_google_absl//absl/strings",
         "@com_google_fuzztest//common:logging",
@@ -736,7 +735,6 @@ cc_library(
     visibility = PUBLIC_API_VISIBILITY,
     deps = [
         ":environment",
-        ":util",
         "@com_google_absl//absl/flags:flag",
         "@com_google_absl//absl/log",
         "@com_google_absl//absl/log:check",
@@ -861,6 +859,7 @@ cc_library(
     deps = [
         ":feature",
         ":knobs",
+        ":util",
         "@com_google_absl//absl/base:no_destructor",
         "@com_google_absl//absl/container:flat_hash_map",
         "@com_google_absl//absl/log",
@@ -1467,6 +1466,7 @@ cc_test(
         ":feature",
         ":runner_result",
         ":shared_memory_blob_sequence",
+        "@com_google_fuzztest//common:defs",
         "@com_google_fuzztest//common:test_util",
         "@com_google_googletest//:gtest_main",
     ],
@@ -1828,6 +1828,8 @@ cc_test(
         "@com_google_fuzztest//centipede/testing:abort_fuzz_target",
         "@com_google_fuzztest//centipede/testing:expensive_startup_fuzz_target",
         "@com_google_fuzztest//centipede/testing:fuzz_target_with_config",
+        "@com_google_fuzztest//centipede/testing:fuzz_target_with_custom_mutator",
+        "@com_google_fuzztest//centipede/testing:hanging_fuzz_target",
         "@com_google_fuzztest//centipede/testing:seeded_fuzz_target",
         "@com_google_fuzztest//centipede/testing:test_fuzz_target",
         "@com_google_fuzztest//centipede/testing:test_input_filter",
@@ -1847,6 +1849,7 @@ cc_test(
         "@com_google_absl//absl/log",
         "@com_google_absl//absl/log:check",
         "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/time",
         "@com_google_fuzztest//common:defs",
         "@com_google_fuzztest//common:hash",
         "@com_google_fuzztest//common:logging",

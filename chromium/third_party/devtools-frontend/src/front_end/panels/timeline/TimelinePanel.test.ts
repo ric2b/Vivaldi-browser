@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+import * as Common from '../../core/common/common.js';
 import * as SDK from '../../core/sdk/sdk.js';
 import * as Bindings from '../../models/bindings/bindings.js';
 import * as Trace from '../../models/trace/trace.js';
@@ -96,7 +97,7 @@ describeWithEnvironment('TimelinePanel', function() {
     const tracksAfterEnablingSetting = timeline.getFlameChart().getMainDataProvider().timelineData().groups;
     assert.deepEqual(tracksBeforeDisablingSetting, tracksAfterEnablingSetting);
   });
-  it('should keep overlays when the custom tracks setting is toggled', async function() {
+  it('should keep marker overlays when the custom tracks setting is toggled', async function() {
     const events = await TraceLoader.rawEvents(this, 'web-dev.json.gz') as Trace.Types.Events.Event[];
     await timeline.loadingComplete(events, null, null);
     const overlaysBeforeDisablingSetting = timeline.getFlameChart().overlays().allOverlays();
@@ -117,5 +118,52 @@ describeWithEnvironment('TimelinePanel', function() {
 
     const overlaysAfterEnablingSetting = timeline.getFlameChart().overlays().allOverlays();
     assert.deepEqual(overlaysBeforeDisablingSetting, overlaysAfterEnablingSetting);
+  });
+
+  it('keeps entries set to be dimmed as so after toggling the custom tracks setting', async function() {
+    const events = await TraceLoader.rawEvents(this, 'web-dev.json.gz') as Trace.Types.Events.Event[];
+    await timeline.loadingComplete(events, null, null);
+    const thirdPartyDimSetting = Common.Settings.Settings.instance().createSetting('timeline-dim-third-parties', false);
+
+    // Dim 3P entries.
+    thirdPartyDimSetting.set(true);
+    const dimIndicesBeforeToggle = timeline.getFlameChart().getMainFlameChart().getDimIndices();
+    assert.exists(dimIndicesBeforeToggle);
+    assert.isAbove(dimIndicesBeforeToggle.length, 0);
+
+    // Toggle the custom track setting and verify 3P entries remain dimmed.
+    Timeline.TimelinePanel.TimelinePanel.extensionDataVisibilitySetting().set(true);
+    const dimIndicesAfterToggle = timeline.getFlameChart().getMainFlameChart().getDimIndices();
+    assert.exists(dimIndicesAfterToggle);
+    assert.isAbove(dimIndicesAfterToggle.length, 0);
+  });
+
+  it('keeps annotations after toggling the custom tracks setting', async function() {
+    const events = await TraceLoader.rawEvents(this, 'web-dev.json.gz') as Trace.Types.Events.Event[];
+    await timeline.loadingComplete(events, null, null);
+    const parsedTrace = traceModel.parsedTrace();
+    assert.isOk(parsedTrace?.Meta.traceBounds.min);
+    const modificationsManager = Timeline.ModificationsManager.ModificationsManager.activeManager();
+    assert.isOk(modificationsManager);
+
+    // Add an annotation
+    modificationsManager.createAnnotation({
+      bounds: Trace.Helpers.Timing.traceWindowFromMicroSeconds(
+          parsedTrace.Meta.traceBounds.min, parsedTrace.Meta.traceBounds.max),
+      type: 'TIME_RANGE',
+      label: '',
+    });
+
+    const annotationsBeforeToggle =
+        timeline.getFlameChart().overlays().allOverlays().filter(e => e.type === 'TIME_RANGE');
+    assert.exists(annotationsBeforeToggle);
+    assert.isAbove(annotationsBeforeToggle.length, 0);
+
+    // Toggle the custom track setting and verify annotations remain.
+    Timeline.TimelinePanel.TimelinePanel.extensionDataVisibilitySetting().set(true);
+    const annotationsAfterToggle =
+        timeline.getFlameChart().overlays().allOverlays().filter(e => e.type === 'TIME_RANGE');
+    assert.exists(annotationsAfterToggle);
+    assert.isAbove(annotationsAfterToggle.length, 0);
   });
 });

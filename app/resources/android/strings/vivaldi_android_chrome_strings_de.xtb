@@ -1,7 +1,10 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="de">
+<translation id="1204037785786432551">Link herunterladen</translation>
+<translation id="1206892813135768548">Link-Text kopieren</translation>
 <translation id="1397811292916898096">Mit <ph name="PRODUCT_NAME" /> suchen</translation>
+<translation id="1435593198351412143">PDFs automatisch öffnen</translation>
 <translation id="1456207338570705181">Touch to Search ist eine Funktion, die nur verfügbar ist, wenn Google in Vivaldi als Standardsuchmaschine festgelegt ist. Es sendet das ausgewählte Wort und die aktuelle Seite als Kontext an die Google-Suche. Sie können es in den <ph name="BEGIN_LINK" />Einstellungen<ph name="END_LINK" /> ausschalten.</translation>
 <translation id="1598449788754183301">Tabs normal/privat umschalten</translation>
 <translation id="1644574205037202324">Verlauf</translation>
@@ -14,10 +17,14 @@
 <translation id="2433507940547922241">Darstellung</translation>
 <translation id="2501278716633472235">Zurück</translation>
 <translation id="2633278372998075009">Private Tabs</translation>
+<translation id="2650751991977523696">Datei noch einmal herunterladen?</translation>
 <translation id="265156376773362237">Standard-Vorabladen</translation>
 <translation id="272026394418727548">Vivaldi-Startseite</translation>
+<translation id="2842985007712546952">Übergeordneter Ordner</translation>
 <translation id="2871733351037274014">Seiten vorab laden</translation>
+<translation id="2904300462646366554">Heruntergeladene PDFs werden automatisch mit einem der PDF-Viewer auf Ihrem Gerät geöffnet</translation>
 <translation id="2951071800649516099">Ihrer Leseliste für später Seiten hinzufügen</translation>
+<translation id="3029276696788198026">Kein Vorabladen</translation>
 <translation id="3060635849835183725">{BOOKMARKS_COUNT, plural,
           =1 {<ph name="BOOKMARKS_COUNT_ONE" /> Lesezeichen}
           other {<ph name="BOOKMARKS_COUNT_MANY" /> Lesezeichen}}</translation>
@@ -34,6 +41,7 @@
 <translation id="3719826155360621982">Gehe zur Startseite</translation>
 <translation id="3738139272394829648">Zum Suchen antippen</translation>
 <translation id="385051799172605136">Zurück</translation>
+<translation id="3987993985790029246">Link kopieren</translation>
 <translation id="399014816462153200">Artikel lesen:</translation>
 <translation id="4121750346708795461">Durch die Verwendung dieser App stimmen Sie den <ph name="BEGIN_LINK1" />Nutzungsbedingungen<ph name="END_LINK1" /> und der <ph name="BEGIN_LINK2" />Datenschutzerklärung<ph name="END_LINK2" /> von Vivaldi zu.</translation>
 <translation id="4137746084635924146">Aktuelle Gerätesprache</translation>
@@ -41,10 +49,13 @@
 <translation id="4195643157523330669">In neuem Tab öffnen</translation>
 <translation id="4225895483398857530">Symbolleistenkürzel</translation>
 <translation id="4243710787042215766">Im privaten Tab öffnen</translation>
+<translation id="4269820728363426813">Link-Adresse kopieren</translation>
 <translation id="4291407919474070700"><ph name="BEGIN_LINK" />Displaysperre in den Android-Einstellungen aktivieren<ph name="END_LINK" /></translation>
 <translation id="4304713468139749426">Passwortverwaltung</translation>
 <translation id="451872707440238414">Lesezeichen durchsuchen</translation>
 <translation id="4526803704855831732">Private Tabs</translation>
+<translation id="4532845899244822526">Ordner auswählen</translation>
+<translation id="4699172675775169585">Bilder und Dateien im Cache</translation>
 <translation id="4719086422742491124">Erfahren Sie mehr über Themen auf Webseiten ohne sie zu verlassen. Wählen Sie eines oder mehrere Wörter auf der Seite, um nach ihnen zu suchen.
 
 "Zum Suchen berühren" kann nur ausgeführt werden, wenn Google als Standardsuchmaschine in Vivaldi definiert ist.</translation>
@@ -55,20 +66,34 @@
 <translation id="49576331685473090">Inhalte blockieren</translation>
 <translation id="5079259810715830221">Wenn eine Google-Website darum bittet, Links auf ihrer Seite privat vorab zu laden, verschlüsselt und lädt Vivaldi Seiten über Google-Server ohne Cookies vor. Dies verbirgt Ihre Identität vor der vorinstallierten Website.</translation>
 <translation id="5118676864324397542"><ph name="APP_NAME" />-Speicher</translation>
+<translation id="5144385790872094440">Einige der Seiten, die Sie besuchen, werden vorab geladen. Diese Seiten werden über Google-Server geladen, wenn sie von einer Google-Website oder ‑App verlinkt sind.</translation>
 <translation id="5186185447130319458">Privat</translation>
+<translation id="5206168361184759344">{FILE_COUNT, plural,
+            =1 {Lade Datei herunter…}
+            other {Lade # Dateien herunter…}}</translation>
 <translation id="5233638681132016545">Neuer Tab</translation>
 <translation id="5375131951310889874">Erfahren Sie mehr über Themen auf Websites, ohne die Seite zu verlassen. Touch to Search ist eine Funktion, die nur verfügbar ist, wenn Google in Vivaldi als Standardsuchmaschine festgelegt ist. Es sendet ein Wort und seinen umgebenden Kontext an Google Search und gibt Definitionen, Bilder, Suchergebnisse und andere Details zurück.
 
 Drücken Sie lange, um Ihren Suchbegriff anzupassen. Um Ihre Suche zu verfeinern, schieben Sie das Bedienfeld ganz nach oben und tippen Sie auf das Suchfeld.</translation>
+<translation id="543338862236136125">Passwort ändern</translation>
 <translation id="572328651809341494">Zuletzt geöffnete Tabs</translation>
+<translation id="5833984609253377421">Link teilen</translation>
 <translation id="6150320133806434356">Lesezeichen gespeichert</translation>
+<translation id="6193448654517602979">Tabs auswählen</translation>
 <translation id="6336451774241870485">Neuer privater Tab</translation>
 <translation id="6337323516034698937">Um diesen Tab an ein anderes Gerät zu senden, melden Sie sich bei Vivaldi Sync auf beiden Geräten an. Falls erforderlich, geben Sie das Verschlüsselungspasswort ein.</translation>
+<translation id="6341580099087024258">Fragen, wo Dateien gespeichert werden sollen</translation>
 <translation id="6404511346730675251">Lesezeichen bearbeiten</translation>
+<translation id="650224091954855786">{FILE_COUNT, plural,
+          =1 {Datei heruntergeladen}
+          other {# Downloads abgeschlossen}}</translation>
 <translation id="6585139692466700358">Übersetzung von Seiten in andere Sprachen mit Hilfe des Vivaldi-Übersetzungsdienstes anbieten</translation>
 <translation id="6588043302623806746">Sicheres DNS verwenden</translation>
 <translation id="6593061639179217415">Desktopwebsite</translation>
 <translation id="6610147964972079463">Private Tabs schließen</translation>
+<translation id="6627583120233659107">Ordner bearbeiten</translation>
+<translation id="6865313869410766144">Autofill-Formulardaten</translation>
+<translation id="6909589135458168665">Seiten vorab laden</translation>
 <translation id="7029995644714925509">Wenn eine Website darum bittet, Links auf ihrer Seite privat vorab zu laden, verschlüsselt und lädt Vivaldi Seiten über Google-Server ohne Cookies vor. Dies verbirgt Ihre Identität vor der vorinstallierten Website.</translation>
 <translation id="706339621163631076">Vivaldi-Datenschutzerklärung</translation>
 <translation id="732145680195464316">Lesezeichen in <ph name="PRODUCT_NAME" /> gespeichert</translation>
@@ -79,10 +104,13 @@ Drücken Sie lange, um Ihren Suchbegriff anzupassen. Um Ihre Suche zu verfeinern
 <translation id="7456774706094330779">Erweitertes Vorabladen</translation>
 <translation id="7465104139234185284">Alle privaten Tabs schließen</translation>
 <translation id="7481312909269577407">Vorwärts</translation>
+<translation id="7764225426217299476">Adresse hinzufügen</translation>
 <translation id="7968014550143838305">Zur Leseliste hinzugefügt</translation>
 <translation id="804786196054284061">Endbenutzer-Lizenzvereinbarung</translation>
 <translation id="8062594758852531064">Erweitertes Vorabladen:</translation>
+<translation id="8073388330009372546">Bild in neuem Tab öffnen</translation>
 <translation id="8127542551745560481">Startseite bearbeiten</translation>
+<translation id="8266862848225348053">Download-Ordner</translation>
 <translation id="8348430946834215779">Nach Möglichkeit HTTPS verwenden und vor dem Laden von Websites warnen, die das Protokoll nicht unterstützen</translation>
 <translation id="8560602726703398413">Finden Sie Ihre Leseliste in den Lesezeichen</translation>
 <translation id="85991616550051997">Startseite</translation>

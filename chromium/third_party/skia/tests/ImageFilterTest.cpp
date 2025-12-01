@@ -98,7 +98,7 @@ static constexpr GrSurfaceOrigin kTestSurfaceOrigin = kTopLeft_GrSurfaceOrigin;
 
 class MatrixTestImageFilter : public SkImageFilter_Base {
 public:
-    MatrixTestImageFilter(skiatest::Reporter* reporter, const SkMatrix& expectedMatrix)
+    MatrixTestImageFilter(skiatest::Reporter* reporter, const SkM44& expectedMatrix)
             : SkImageFilter_Base(nullptr, 0)
             , fReporter(reporter)
             , fExpectedMatrix(expectedMatrix) {
@@ -132,7 +132,7 @@ private:
     }
 
     skiatest::Reporter* fReporter;
-    SkMatrix fExpectedMatrix;
+    SkM44 fExpectedMatrix;
 };
 
 void draw_gradient_circle(SkCanvas* canvas, int width, int height) {
@@ -305,7 +305,7 @@ static skif::Context make_context(const SkIRect& out, const SkSpecialImage* src)
     }
 
     return skif::Context{std::move(backend),
-                         skif::Mapping{SkMatrix::I()},
+                         skif::Mapping{SkM44()},
                          skif::LayerSpace<SkIRect>{out},
                          skif::FilterResult{sk_ref_sp(src)},
                          src->getColorSpace(),
@@ -575,8 +575,7 @@ static void test_negative_blur_sigma(skiatest::Reporter* reporter,
             as_IFB(positiveFilter)->filterImage(ctx).imageAndOffset(ctx, &offset));
     REPORTER_ASSERT(reporter, positiveResult);
 
-    SkMatrix negativeScale;
-    negativeScale.setScale(-SK_Scalar1, SK_Scalar1);
+    const SkM44 negativeScale = SkM44::Scale(-SK_Scalar1, SK_Scalar1);
     skif::Context negativeCTX = ctx.withNewMapping(skif::Mapping(negativeScale));
 
     sk_sp<SkSpecialImage> negativeResult(
@@ -647,8 +646,7 @@ static void test_morphology_radius_with_mirror_ctm(skiatest::Reporter* reporter,
             as_IFB(filter)->filterImage(ctx).imageAndOffset(ctx, &offset));
     REPORTER_ASSERT(reporter, normalResult);
 
-    SkMatrix mirrorX;
-    mirrorX.setTranslate(0, SkIntToScalar(32));
+    SkM44 mirrorX = SkM44::Translate(0, 32);
     mirrorX.preScale(SK_Scalar1, -SK_Scalar1);
     skif::Context mirrorXCTX = ctx.withNewMapping(skif::Mapping(mirrorX));
 
@@ -656,8 +654,7 @@ static void test_morphology_radius_with_mirror_ctm(skiatest::Reporter* reporter,
             as_IFB(filter)->filterImage(mirrorXCTX).imageAndOffset(ctx, &offset));
     REPORTER_ASSERT(reporter, mirrorXResult);
 
-    SkMatrix mirrorY;
-    mirrorY.setTranslate(SkIntToScalar(32), 0);
+    SkM44 mirrorY = SkM44::Translate(32, 0);
     mirrorY.preScale(-SK_Scalar1, SK_Scalar1);
     skif::Context mirrorYCTX = ctx.withNewMapping(skif::Mapping(mirrorY));
 
@@ -1281,7 +1278,7 @@ DEF_TEST(ImageFilterMatrix, reporter) {
     SkCanvas canvas(temp);
     canvas.scale(SkIntToScalar(2), SkIntToScalar(2));
 
-    SkMatrix expectedMatrix = canvas.getTotalMatrix();
+    const SkM44 expectedMatrix = canvas.getLocalToDevice();
 
     SkRTreeFactory factory;
     SkPictureRecorder recorder;
@@ -1901,7 +1898,7 @@ DEF_GANESH_TEST_FOR_RENDERING_CONTEXTS(ImageFilterMakeWithFilter_Ganesh,
 DEF_GRAPHITE_TEST_FOR_RENDERING_CONTEXTS(ImageFilterMakeWithFilter_Graphite,
                                          reporter,
                                          context,
-                                         CtsEnforcement::kApiLevel_V) {
+                                         CtsEnforcement::kApiLevel_202404) {
     std::unique_ptr<skgpu::graphite::Recorder> recorder =
             context->makeRecorder(ToolUtils::CreateTestingRecorderOptions());
 
@@ -2326,4 +2323,56 @@ DEF_TEST(DropShadowImageFilter_Huge, reporter) {
 
     surf->getCanvas()->saveLayer(nullptr, &paint);
     surf->getCanvas()->restore();
+}
+
+DEF_TEST(DisplacementImageFilter_InvalidInputs_ReturnsNullptr, reporter) {
+    sk_sp<SkImageFilter> valid(SkImageFilters::Shader(SkShaders::Color(SK_ColorGREEN)));
+    REPORTER_ASSERT(reporter, valid != nullptr);
+
+    REPORTER_ASSERT(
+            reporter,
+            nullptr == SkImageFilters::DisplacementMap(SkColorChannel::kR,
+                                                       SkColorChannel::kB,
+                                                       std::numeric_limits<float>::infinity(),
+                                                       valid,
+                                                       valid));
+
+    REPORTER_ASSERT(reporter,
+                    nullptr == SkImageFilters::DisplacementMap(static_cast<SkColorChannel>(22),
+                                                               SkColorChannel::kB,
+                                                               5.f,
+                                                               valid,
+                                                               valid));
+}
+
+DEF_TEST(ImageFilter_DrawExtremeMatrixTransform_DoesNotAssert, reporter) {
+    // Found by fuzzing
+    SkPaint p;
+    p.setDither(true);
+    p.setColor(SkColorSetARGB(255, 1, 255, 255));
+    p.setStyle(SkPaint::Style::kFill_Style);
+
+    SkRRect rr = SkRRect::MakeRectXY({5, 10, 15, 20}, 2, 2);
+
+    sk_sp<SkImageFilter> ifs[4];
+    ifs[0] = nullptr;
+    ifs[1] = SkImageFilters::Blur(SkBits2Float(0xe0e0e0e), SkBits2Float(0x10108000), nullptr);
+    SkSamplingOptions sampling(SkFilterMode::kLinear, SkMipmapMode::kLinear);
+    SkMatrix matrix = SkMatrix::MakeAll(SkBits2Float(0xfdfe0200),
+                                        SkBits2Float(0xfdfdfdfd),
+                                        SkBits2Float(0x2a0202fe),
+                                        SkBits2Float(0x2020202),
+                                        SkBits2Float(0x2020202),
+                                        SkBits2Float(0x20200202),
+                                        SkBits2Float(0x2fab0024),
+                                        SkBits2Float(0x8),
+                                        SkBits2Float(0x0));
+    ifs[2] = SkImageFilters::MatrixTransform(matrix, sampling, nullptr);
+    ifs[3] = SkImageFilters::Shader(nullptr);
+    auto merged = SkImageFilters::Merge(ifs, 4, nullptr);
+    p.setImageFilter(merged);
+
+    auto surface = SkSurfaces::Raster(SkImageInfo::MakeN32Premul(128, 160));
+    surface->getCanvas()->clear(SK_ColorWHITE);
+    surface->getCanvas()->drawRRect(rr, p);
 }

@@ -18,6 +18,7 @@ import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.base.supplier.OneshotSupplier;
 import org.chromium.base.supplier.Supplier;
 import org.chromium.chrome.browser.back_press.BackPressManager;
+import org.chromium.chrome.browser.bookmarks.TabBookmarker;
 import org.chromium.chrome.browser.browser_controls.BrowserControlsStateProvider;
 import org.chromium.chrome.browser.compositor.CompositorViewHolder;
 import org.chromium.chrome.browser.data_sharing.DataSharingTabManager;
@@ -28,9 +29,11 @@ import org.chromium.chrome.browser.layouts.LayoutStateProvider;
 import org.chromium.chrome.browser.lifecycle.ActivityLifecycleDispatcher;
 import org.chromium.chrome.browser.multiwindow.MultiWindowModeStateDispatcher;
 import org.chromium.chrome.browser.profiles.ProfileProvider;
+import org.chromium.chrome.browser.share.ShareDelegate;
 import org.chromium.chrome.browser.tab_ui.TabContentManager;
 import org.chromium.chrome.browser.tab_ui.TabSwitcher;
 import org.chromium.chrome.browser.tabmodel.TabCreatorManager;
+import org.chromium.chrome.browser.tabmodel.TabGroupModelFilter;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.theme.ThemeColorProvider;
 import org.chromium.chrome.browser.ui.edge_to_edge.EdgeToEdgeController;
@@ -107,6 +110,10 @@ public interface TabManagementDelegate {
      * @param tabModelNotificationDotSupplier Supplier for whether the notification dot should show
      *     on the tab switcher drawable.
      * @param compositorViewHolderSupplier Supplier to the {@link CompositorViewHolder} instance.
+     * @param shareDelegateSupplier Supplies the {@link ShareDelegate} that will be used to share
+     *     the tab's URL when the user selects the "Share" option.
+     * @param tabBookmarkerSupplier Supplier of {@link TabBookmarker} for bookmarking a given tab.
+     * @param tabGroupCreationUiFlow Orchestrates the tab group creation UI flow.
      */
     Pair<TabSwitcher, Pane> createTabSwitcherPane(
             @NonNull Activity activity,
@@ -130,7 +137,10 @@ public interface TabManagementDelegate {
             @NonNull ObservableSupplier<EdgeToEdgeController> edgeToEdgeSupplier,
             @Nullable DesktopWindowStateManager desktopWindowStateManager,
             @NonNull ObservableSupplier<Boolean> tabModelNotificationDotSupplier,
-            @NonNull ObservableSupplier<CompositorViewHolder> compositorViewHolderSupplier);
+            @NonNull ObservableSupplier<CompositorViewHolder> compositorViewHolderSupplier,
+            @NonNull ObservableSupplier<ShareDelegate> shareDelegateSupplier,
+            @NonNull ObservableSupplier<TabBookmarker> tabBookmarkerSupplier,
+            @NonNull TabGroupCreationUiFlow tabGroupCreationUiFlow);
 
     /**
      * Create a {@link TabGroupsPane} for the Hub.
@@ -155,4 +165,18 @@ public interface TabManagementDelegate {
             @NonNull Supplier<TabGroupUiActionHandler> tabGroupUiActionHandlerSupplier,
             @NonNull Supplier<ModalDialogManager> modalDialogManagerSupplier,
             @NonNull ObservableSupplier<EdgeToEdgeController> edgeToEdgeSupplier);
+
+    /**
+     * Create a {@link TabGroupCreationUiFlow} for tab group creation UI flows.
+     *
+     * @param context The {@link Context} for this UI flow.
+     * @param modalDialogManager The modal dialog manager for the activity.
+     * @param hubManagerSupplier Supplier ultimately used to get the pane manager to switch panes.
+     * @param tabGroupModelFilterSupplier Supplies the current tab group model filter.
+     */
+    TabGroupCreationUiFlow createTabGroupCreationUiFlow(
+            @NonNull Context context,
+            @NonNull ModalDialogManager modalDialogManager,
+            @NonNull OneshotSupplier<HubManager> hubManagerSupplier,
+            @NonNull Supplier<TabGroupModelFilter> tabGroupModelFilterSupplier);
 }

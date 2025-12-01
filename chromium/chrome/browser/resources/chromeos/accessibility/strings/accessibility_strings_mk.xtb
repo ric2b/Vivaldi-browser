@@ -295,6 +295,7 @@
 <translation id="2867808975387772810">Библиографија</translation>
 <translation id="2873259058405069099">Одете на почетокот на табелата</translation>
 <translation id="287383510823843610">Темнопортокалова</translation>
+<translation id="2876760662374103627">„Контрола со лик“ е активна</translation>
 <translation id="2879867157561757640">Повлечете надолу со три прста</translation>
 <translation id="288178314850623291">Користете ги наредбите за скокање за да прескокнете одредени типови елементи. За да скокнете нанапред помеѓу насловите, притиснете Пребарување + H, а за да скокнете наназад, Пребарување + Shift + H.</translation>
 <translation id="2885764457467528513">{COUNT,plural, =1{минута}one{минута}other{минути}}</translation>
@@ -825,7 +826,7 @@
 <translation id="6236061028292614533">Следен наслов</translation>
 <translation id="6254901459154107917">Следна област за уредување текст</translation>
 <translation id="6259464875943891919">Излеговте од <ph name="TYPE" />.</translation>
-<translation id="6280088282605782512">Допрете двапати</translation>
+<translation id="6280088282605782512">Двоен допир</translation>
 <translation id="6282062888058716985">nav</translation>
 <translation id="6295699829709583154">Основни копчиња: Search</translation>
 <translation id="6305702903308659374">Пуштај со нормална јачина на звук дури и кога зборува ChromeVox</translation>
@@ -1116,6 +1117,7 @@
 <translation id="8316881042119029234">Боја на стара чипка</translation>
 <translation id="8326783648485765113">Зелена како трева</translation>
 <translation id="8345569862449483843">{COUNT,plural, =1{тараба}one{# знак тараба}other{# знаци тараба}}</translation>
+<translation id="8351821207686449674">Вклучување/Исклучување титлови</translation>
 <translation id="8378855320830505539">Регион</translation>
 <translation id="8382679411218029383">Линеарно автоматско комплетирање и набројување</translation>
 <translation id="8394908167088220973">Пушти/Паузирај медиум</translation>

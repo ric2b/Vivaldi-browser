@@ -11,8 +11,9 @@
 #include "base/types/pass_key.h"
 #include "chrome/browser/tab_group_sync/tab_group_sync_utils.h"
 #include "chrome/browser/ui/browser.h"
+#include "chrome/browser/ui/browser_window/public/browser_window_features.h"
 #include "chrome/browser/ui/tabs/public/tab_features.h"
-#include "chrome/browser/ui/tabs/public/tab_interface.h"
+#include "chrome/browser/ui/tabs/saved_tab_groups/most_recent_shared_tab_update_store.h"
 #include "chrome/browser/ui/tabs/saved_tab_groups/saved_tab_group_utils.h"
 #include "chrome/browser/ui/tabs/saved_tab_groups/saved_tab_group_web_contents_listener.h"
 #include "chrome/browser/ui/tabs/tab_group.h"
@@ -21,6 +22,7 @@
 #include "components/saved_tab_groups/public/features.h"
 #include "components/saved_tab_groups/public/saved_tab_group_tab.h"
 #include "components/saved_tab_groups/public/utils.h"
+#include "components/tab_collections/public/tab_interface.h"
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/web_contents.h"
 
@@ -125,6 +127,15 @@ void LocalTabGroupListener::AddTabFromLocal(tabs::TabInterface* local_tab,
 
   service_->AddTab(local_id_, local_tab_id, tab.title(), tab.url(),
                    relative_index_of_tab_in_group);
+
+  MostRecentSharedTabUpdateStore* most_recent_shared_tab_update_store =
+      local_tab->GetBrowserWindowInterface()
+          ->GetFeatures()
+          .most_recent_shared_tab_update_store();
+  if (most_recent_shared_tab_update_store) {
+    most_recent_shared_tab_update_store->SetLastUpdatedTab(local_id_,
+                                                           local_tab_id);
+  }
 }
 
 void LocalTabGroupListener::MoveWebContentsFromLocal(
@@ -175,6 +186,16 @@ void LocalTabGroupListener::MoveWebContentsFromLocal(
   CHECK_GE(index_in_group, 0);
 
   service_->MoveTab(local_id_, local_tab_id, index_in_group);
+
+  MostRecentSharedTabUpdateStore* most_recent_shared_tab_update_store =
+      tab_strip_model->GetTabForWebContents(web_contents)
+          ->GetBrowserWindowInterface()
+          ->GetFeatures()
+          .most_recent_shared_tab_update_store();
+  if (most_recent_shared_tab_update_store) {
+    most_recent_shared_tab_update_store->SetLastUpdatedTab(local_id_,
+                                                           local_tab_id);
+  }
 }
 
 LocalTabGroupListener::Liveness
@@ -184,15 +205,19 @@ LocalTabGroupListener::MaybeRemoveWebContentsFromLocal(
     return Liveness::kGroupExists;
   }
 
+  tabs::TabInterface* local_tab =
+      tabs::TabInterface::GetFromContents(web_contents);
+
   // Remove the tab from the service. If it's the last tab, the group
   // listener itself should be deleted.
-  const LocalTabID local_tab_id =
-      tabs::TabInterface::GetFromContents(web_contents)
-          ->GetHandle()
-          .raw_value();
+  const LocalTabID local_tab_id = local_tab->GetHandle().raw_value();
   const std::optional<SavedTabGroup> saved_group =
       service_->GetGroup(saved_guid_);
-  CHECK(saved_group);
+  if (!saved_group) {
+    // This can happen if the saved group was removed before the tab.
+    return Liveness::kGroupDeleted;
+  }
+
   const SavedTabGroupTab* saved_tab = saved_group->GetTab(local_tab_id);
   if (!saved_tab) {
     // The tab that was removed didn't belong to this group. This is natural
@@ -203,6 +228,12 @@ LocalTabGroupListener::MaybeRemoveWebContentsFromLocal(
 
   CHECK(saved_group->local_group_id().has_value());
 
+  // Get controller before tab is removed.
+  MostRecentSharedTabUpdateStore* most_recent_shared_tab_update_store =
+      local_tab->GetBrowserWindowInterface()
+          ->GetFeatures()
+          .most_recent_shared_tab_update_store();
+
   // This object is deleted by the time we have reached here. This means
   // saved_guid_ gives us a garbage value and cannot be used anymore to query.
   // Since we are removing 1 tab, we can check if the group would have been
@@ -211,6 +242,12 @@ LocalTabGroupListener::MaybeRemoveWebContentsFromLocal(
   // group is removed.
   const bool was_last_tab_in_group = saved_group->saved_tabs().size() == 1;
   service_->RemoveTab(local_id_, local_tab_id);
+
+  if (most_recent_shared_tab_update_store) {
+    most_recent_shared_tab_update_store->SetLastUpdatedTab(local_id_,
+                                                           std::nullopt);
+  }
+
   return was_last_tab_in_group ? Liveness::kGroupDeleted
                                : Liveness::kGroupExists;
 }

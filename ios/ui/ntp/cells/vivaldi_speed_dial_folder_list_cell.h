@@ -15,8 +15,7 @@
 - (instancetype)initWithFrame:(CGRect)rect;
 
 // SETTERS
-- (void)configureCellWith:(VivaldiSpeedDialItem*)item
-                   addNew:(bool)addNew;
+- (void)configureCellWith:(VivaldiSpeedDialItem*)item;
 
 @end
 

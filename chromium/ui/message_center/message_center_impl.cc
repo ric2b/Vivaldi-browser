@@ -552,6 +552,11 @@ void MessageCenterImpl::ClickOnNotification(const std::string& id) {
     return;
   }
 
+  if (lock_screen_controller_->IsNotificationAllowedOnLockScreen(id)) {
+    ClickOnNotificationUnlocked(id, std::nullopt, std::nullopt);
+    return;
+  }
+
   lock_screen_controller_->DismissLockScreenThenExecute(
       base::BindOnce(&MessageCenterImpl::ClickOnNotificationUnlocked,
                      base::Unretained(this), id, std::nullopt, std::nullopt),
@@ -565,6 +570,11 @@ void MessageCenterImpl::ClickOnNotificationButton(const std::string& id,
     return;
   }
 
+  if (lock_screen_controller_->IsNotificationAllowedOnLockScreen(id)) {
+    ClickOnNotificationUnlocked(id, button_index, std::nullopt);
+    return;
+  }
+
   lock_screen_controller_->DismissLockScreenThenExecute(
       base::BindOnce(&MessageCenterImpl::ClickOnNotificationUnlocked,
                      base::Unretained(this), id, button_index, std::nullopt),
@@ -574,15 +584,21 @@ void MessageCenterImpl::ClickOnNotificationButton(const std::string& id,
 void MessageCenterImpl::ClickOnNotificationButtonWithReply(
     const std::string& id,
     int button_index,
-    const std::u16string& reply) {
+    std::u16string_view reply) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   if (!FindVisibleNotificationById(id)) {
     return;
   }
 
+  if (lock_screen_controller_->IsNotificationAllowedOnLockScreen(id)) {
+    ClickOnNotificationUnlocked(id, button_index, std::u16string(reply));
+    return;
+  }
+
   lock_screen_controller_->DismissLockScreenThenExecute(
       base::BindOnce(&MessageCenterImpl::ClickOnNotificationUnlocked,
-                     base::Unretained(this), id, button_index, reply),
+                     base::Unretained(this), id, button_index,
+                     std::u16string(reply)),
       base::OnceClosure());
 }
 
@@ -592,8 +608,10 @@ void MessageCenterImpl::ClickOnNotificationUnlocked(
     const std::optional<std::u16string>& reply) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
 
-  // This method must be called under unlocked screen.
-  DCHECK(!lock_screen_controller_->IsScreenLocked());
+  // This method must be called under unlocked screen or if the notification is
+  // allowed on the lock screen.
+  DCHECK(lock_screen_controller_->IsNotificationAllowedOnLockScreen(id) ||
+         !lock_screen_controller_->IsScreenLocked());
 
   // Ensure the notification is still visible.
   if (!FindVisibleNotificationById(id)) {

@@ -8,6 +8,7 @@
 #include "build/branding_buildflags.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
+#include "chrome/browser/tab_group_sync/tab_group_sync_service_factory.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_features.h"
@@ -20,10 +21,17 @@
 #include "third_party/abseil-cpp/absl/status/status.h"
 
 namespace {
-constexpr base::TimeDelta kTokenRefreshTimeBuffer = base::Seconds(10);
+constexpr base::TimeDelta kTokenRetryTimeDelta = base::Seconds(1);
 #if !BUILDFLAG(GOOGLE_CHROME_BRANDING)
 constexpr base::TimeDelta kDummyTokenExpirationDuration = base::Minutes(1);
 #endif
+
+tab_groups::TabGroupId ParseTabGroupIdFromString(const std::string& value) {
+  std::optional<base::Token> token = base::Token::FromString(value);
+  CHECK(token);
+  return tab_groups::TabGroupId::FromRawToken(token.value());
+}
+
 }  // namespace
 
 DataSharingPageHandler::DataSharingPageHandler(
@@ -62,6 +70,21 @@ void DataSharingPageHandler::ApiInitComplete() {
   webui_controller_->ApiInitComplete();
 }
 
+void DataSharingPageHandler::MakeTabGroupShared(
+    const std::string& tab_group_id,
+    const std::string& group_id,
+    const std::string& access_token,
+    MakeTabGroupSharedCallback callback) {
+  // This call is only allowed to call once per lifetime of this class.
+  // All subsequent calls should go through GetSharedLink instead.
+  // TODO(crbug.com/396133860): Replace CHECK with call to terminate the
+  // renderer instead.
+  CHECK(!has_made_tab_group_shared_);
+  has_made_tab_group_shared_ = true;
+  webui_controller_->OnShareLinkRequested(group_id, access_token,
+                                          std::move(callback));
+}
+
 void DataSharingPageHandler::GetShareLink(const std::string& group_id,
                                           const std::string& access_token,
                                           GetShareLinkCallback callback) {
@@ -77,19 +100,29 @@ void DataSharingPageHandler::GetTabGroupPreview(
                                    std::move(callback));
 }
 
-void DataSharingPageHandler::AssociateTabGroupWithGroupId(
-    const std::string& tab_group_id,
-    const std::string& group_id) {
-  data_sharing::AssociateTabGroupWithGroupId(tab_group_id, group_id,
-                                             GetProfile());
-}
-
 void DataSharingPageHandler::OpenTabGroup(const std::string& group_id) {
   Browser* const browser = chrome::FindLastActiveWithProfile(GetProfile());
   CHECK(browser);
   browser->browser_window_features()
       ->data_sharing_open_group_helper()
       ->OpenTabGroupWhenAvailable(group_id);
+}
+
+void DataSharingPageHandler::AboutToUnShareTabGroup(
+    const std::string& tab_group_id) {
+  tab_groups::TabGroupId local_tab_group_id =
+      ParseTabGroupIdFromString(tab_group_id);
+  // TODO(crbug.com/399961647): Prefer to wait for the callback to complete.
+  tab_groups::TabGroupSyncServiceFactory::GetForProfile(GetProfile())
+      ->AboutToUnShareTabGroup(local_tab_group_id, base::DoNothing());
+}
+
+void DataSharingPageHandler::OnTabGroupUnShareComplete(
+    const std::string& tab_group_id) {
+  tab_groups::TabGroupId local_tab_group_id =
+      ParseTabGroupIdFromString(tab_group_id);
+  tab_groups::TabGroupSyncServiceFactory::GetForProfile(GetProfile())
+      ->OnTabGroupUnShareComplete(local_tab_group_id, /*success=*/true);
 }
 
 Profile* DataSharingPageHandler::GetProfile() {
@@ -136,18 +169,16 @@ void DataSharingPageHandler::OnAccessTokenFetched(
   // Note: We do not do anything special for empty tokens.
   page_->OnAccessTokenFetched(access_token_info.token);
 
-  base::TimeDelta time_delta = access_token_info.expiration_time -
-                               base::Time::Now() - kTokenRefreshTimeBuffer;
+  base::TimeDelta time_delta =
+      access_token_info.expiration_time - base::Time::Now();
 
-  if (time_delta.is_positive()) {
-    access_token_refresh_timer_->Start(
-        FROM_HERE, time_delta, this,
-        &DataSharingPageHandler::RequestAccessToken);
-  } else {
-    LOG(ERROR) << "Access token refresh time should not be negative or zero: "
-                  "TimeDelta="
-               << time_delta;
+  // In case access token is expired, retry it later.
+  if (!time_delta.is_positive()) {
+    time_delta = kTokenRetryTimeDelta;
   }
+
+  access_token_refresh_timer_->Start(
+      FROM_HERE, time_delta, this, &DataSharingPageHandler::RequestAccessToken);
 }
 
 void DataSharingPageHandler::ReadGroups(
@@ -169,4 +200,17 @@ void DataSharingPageHandler::LeaveGroup(
     data_sharing::mojom::Page::LeaveGroupCallback callback) {
   CHECK(api_initialized_);
   page_->LeaveGroup(group_id, std::move(callback));
+}
+
+void DataSharingPageHandler::ReadGroupWithToken(
+    data_sharing::mojom::ReadGroupWithTokenParamPtr param,
+    data_sharing::mojom::Page::ReadGroupWithTokenCallback callback) {
+  CHECK(api_initialized_);
+  page_->ReadGroupWithToken(std::move(param), std::move(callback));
+}
+
+void DataSharingPageHandler::OnGroupAction(
+    data_sharing::mojom::GroupAction action,
+    data_sharing::mojom::GroupActionProgress progress) {
+  webui_controller_->OnGroupAction(action, progress);
 }

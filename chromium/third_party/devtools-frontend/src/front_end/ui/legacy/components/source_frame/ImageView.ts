@@ -41,6 +41,21 @@ import * as UI from '../../legacy.js';
 
 import imageViewStyles from './imageView.css.js';
 
+declare global {
+  interface FileSystemWritableFileStream extends WritableStream {
+    write(data: unknown): Promise<void>;
+    close(): Promise<void>;
+  }
+
+  interface FileSystemHandle {
+    createWritable(): Promise<FileSystemWritableFileStream>;
+  }
+
+  interface Window {
+    showSaveFilePicker(opts: unknown): Promise<FileSystemHandle>;
+  }
+}
+
 const UIStrings = {
   /**
    *@description Text in Image View of the Sources panel
@@ -81,7 +96,7 @@ const UIStrings = {
    *@description The default file name when downloading a file
    */
   download: 'download',
-};
+} as const;
 const str_ = i18n.i18n.registerUIStrings('ui/legacy/components/source_frame/ImageView.ts', UIStrings);
 const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
 export class ImageView extends UI.View.SimpleView {
@@ -107,9 +122,7 @@ export class ImageView extends UI.View.SimpleView {
     this.parsedURL = new Common.ParsedURL.ParsedURL(this.url);
     this.mimeType = mimeType;
     this.contentProvider = contentProvider;
-    this.uiSourceCode = contentProvider instanceof Workspace.UISourceCode.UISourceCode ?
-        contentProvider as Workspace.UISourceCode.UISourceCode :
-        null;
+    this.uiSourceCode = contentProvider instanceof Workspace.UISourceCode.UISourceCode ? contentProvider : null;
     if (this.uiSourceCode) {
       this.uiSourceCode.addEventListener(
           Workspace.UISourceCode.Events.WorkingCopyCommitted, this.workingCopyCommitted, this);
@@ -215,17 +228,30 @@ export class ImageView extends UI.View.SimpleView {
       return;
     }
 
-    const link = document.createElement('a');
-    link.href = imageDataURL;
+    let suggestedName = '';
+    if (this.parsedURL.isDataURL()) {
+      suggestedName = i18nString(UIStrings.download);
+      const {type, subtype} = this.parsedURL.extractDataUrlMimeType();
+      if (type === 'image' && subtype) {
+        suggestedName += '.' + subtype;
+      }
+    } else {
+      suggestedName = decodeURIComponent(this.parsedURL.displayName);
+    }
 
-    // If it is a Base64 image, set a default file name.
-    // When chrome saves a file, the file name characters that are not supported
-    // by the OS will be replaced automatically. For example, in the Mac,
-    // `:` it will be replaced with `_`.
-    link.download =
-        this.parsedURL.isDataURL() ? i18nString(UIStrings.download) : decodeURIComponent(this.parsedURL.displayName);
-    link.click();
-    link.remove();
+    const blob = await fetch(imageDataURL).then(r => r.blob());
+    try {
+      const handle = await window.showSaveFilePicker({suggestedName});
+      const writable = await handle.createWritable();
+      await writable.write(blob);
+      await writable.close();
+    } catch (error) {
+      // If the user aborts the action no need to report it, otherwise do.
+      if (error.name === 'AbortError') {
+        return;
+      }
+      throw error;
+    }
   }
 
   private openInNewTab(): void {

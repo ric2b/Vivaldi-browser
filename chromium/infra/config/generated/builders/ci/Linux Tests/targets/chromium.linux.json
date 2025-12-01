@@ -202,7 +202,7 @@
             "os": "Ubuntu-22.04"
           },
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com",
-          "shards": 33
+          "shards": 36
         },
         "test": "browser_tests",
         "test_id_prefix": "ninja://chrome/test:browser_tests/"
@@ -311,7 +311,7 @@
             "os": "Ubuntu-22.04"
           },
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com",
-          "shards": 2
+          "shards": 3
         },
         "test": "components_unittests",
         "test_id_prefix": "ninja://components:components_unittests/"
@@ -724,6 +724,25 @@
         },
         "test": "latency_unittests",
         "test_id_prefix": "ninja://ui/latency:latency_unittests/"
+      },
+      {
+        "args": [
+          "--test-launcher-filter-file=../../testing/buildbot/filters/layer_list_mode.cc_unittests.filter",
+          "--enable-features=UseLayerListsByDefault"
+        ],
+        "isolate_profile_data": true,
+        "merge": {
+          "script": "//testing/merge_scripts/standard_gtest_merge.py"
+        },
+        "name": "layer_list_mode_cc_unittests",
+        "swarming": {
+          "dimensions": {
+            "os": "Ubuntu-22.04"
+          },
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
+        },
+        "test": "cc_unittests",
+        "test_id_prefix": "ninja://cc:cc_unittests/"
       },
       {
         "ci_only": true,
@@ -1362,7 +1381,7 @@
             "os": "Ubuntu-22.04"
           },
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com",
-          "shards": 9
+          "shards": 7
         },
         "test": "blink_web_tests",
         "test_id_prefix": "ninja://:blink_web_tests/"
@@ -1714,7 +1733,7 @@
             "os": "Ubuntu-22.04"
           },
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com",
-          "shards": 20
+          "shards": 19
         },
         "test": "headless_shell_wpt",
         "test_id_prefix": "ninja://:headless_shell_wpt/"
@@ -2069,6 +2088,21 @@
         },
         "test": "blink_web_tests",
         "test_id_prefix": "ninja://:blink_web_tests/"
+      },
+      {
+        "isolate_profile_data": true,
+        "merge": {
+          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
+        },
+        "name": "webui_resources_tools_python_unittests",
+        "swarming": {
+          "dimensions": {
+            "os": "Ubuntu-22.04"
+          },
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
+        },
+        "test": "webui_resources_tools_python_unittests",
+        "test_id_prefix": "ninja://ui/webui/resources/tools:webui_resources_tools_python_unittests/"
       },
       {
         "isolate_profile_data": true,

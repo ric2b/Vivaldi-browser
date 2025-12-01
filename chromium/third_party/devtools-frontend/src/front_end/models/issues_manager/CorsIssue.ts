@@ -11,6 +11,10 @@ import type {MarkdownIssueDescription} from './MarkdownIssueDescription.js';
 
 const UIStrings = {
   /**
+   *@description Label for the link for CORS Local Network Access issues
+   */
+  corsLocalNetworkAccess: 'Local Network Access',
+  /**
    *@description Label for the link for CORS private network issues
    */
   corsPrivateNetworkAccess: 'Private Network Access',
@@ -18,7 +22,7 @@ const UIStrings = {
    *@description Label for the link for CORS network issues
    */
   CORS: 'Cross-Origin Resource Sharing (`CORS`)',
-};
+} as const;
 const str_ = i18n.i18n.registerUIStrings('models/issues_manager/CorsIssue.ts', UIStrings);
 const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
 
@@ -46,6 +50,7 @@ export const enum IssueCode {
   PREFLIGHT_MISSING_PRIVATE_NETWORK_ACCESS_NAME = 'CorsIssue::PreflightMissingPrivateNetworkAccessName',
   PRIVATE_NETWORK_ACCESS_PERMISSION_UNAVAILABLE = 'CorsIssue::PrivateNetworkAccessPermissionUnavailable',
   PRIVATE_NETWORK_ACCESS_PERMISSION_DENIED = 'CorsIssue::PrivateNetworkAccessPermissionDenied',
+  LOCAL_NETWORK_ACCESS_PERMISSION_DENIED = 'CorsIssue::LocalNetworkAccessPermissionDenied',
 }
 
 function getIssueCode(details: Protocol.Audits.CorsIssueDetails): IssueCode {
@@ -105,6 +110,8 @@ function getIssueCode(details: Protocol.Audits.CorsIssueDetails): IssueCode {
       return IssueCode.PRIVATE_NETWORK_ACCESS_PERMISSION_UNAVAILABLE;
     case Protocol.Network.CorsError.PrivateNetworkAccessPermissionDenied:
       return IssueCode.PRIVATE_NETWORK_ACCESS_PERMISSION_DENIED;
+    case Protocol.Network.CorsError.LocalNetworkAccessPermissionDenied:
+      return IssueCode.LOCAL_NETWORK_ACCESS_PERMISSION_DENIED;
   }
 }
 
@@ -241,6 +248,14 @@ export class CorsIssue extends Issue<IssueCode> {
           links: [{
             link: 'https://developer.chrome.com/blog/private-network-access-update',
             linkTitle: i18nString(UIStrings.corsPrivateNetworkAccess),
+          }],
+        };
+      case IssueCode.LOCAL_NETWORK_ACCESS_PERMISSION_DENIED:
+        return {
+          file: 'corsLocalNetworkAccessPermissionDenied.md',
+          links: [{
+            link: 'https://chromestatus.com/feature/5152728072060928',
+            linkTitle: i18nString(UIStrings.corsLocalNetworkAccess),
           }],
         };
       case IssueCode.PREFLIGHT_MISSING_ALLOW_EXTERNAL:

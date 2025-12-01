@@ -76,7 +76,7 @@ class IRToProgramRoundtripTest : public testing::Test {
         result.ir_pre_raise = core::ir::Disassembler(ir_module.Get()).Plain();
 
         if (auto res = tint::wgsl::writer::Raise(ir_module.Get()); res != Success) {
-            result.err = res.Failure().reason.Str();
+            result.err = res.Failure().reason;
             return result;
         }
 
@@ -3422,6 +3422,32 @@ fn a(f32 : f32) {
              R"(
 fn a(f32_1 : f32) {
   let x = array<f32, 1u>(1.0f);
+}
+)");
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// chromium_experimental_subgroup_matrix
+////////////////////////////////////////////////////////////////////////////////
+TEST_F(IRToProgramRoundtripTest, SubgroupMatrixConstruct) {
+    RUN_TEST(R"(
+enable chromium_experimental_subgroup_matrix;
+
+fn f() {
+  var m = subgroup_matrix_left<f32, 8, 8>>();
+}
+)");
+}
+
+TEST_F(IRToProgramRoundtripTest, SubgroupMatrixLoad) {
+    RUN_TEST(R"(
+enable chromium_experimental_subgroup_matrix;
+
+@group(0u) @binding(0u) var<storage, read_write> buffer : array<f32, 64u>;
+
+fn f() {
+  let l = subgroupMatrixLoad<subgroup_matrix_left<f32, 4, 2>>(&(buffer), 0u, false, 4u);
+  let r = subgroupMatrixLoad<subgroup_matrix_right<f32, 2, 4>>(&(buffer), 32u, true, 8u);
 }
 )");
 }

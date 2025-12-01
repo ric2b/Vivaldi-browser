@@ -115,15 +115,19 @@ enum class ProfileSignout {
   // Signout as part of the profile deletion procedure, to avoid that deletion
   // of data propagates via sync.
   kSignoutDuringProfileDeletion = 34,
-  // Signout, in the account menu, as part of switching to a new primary
-  // account.
-  kChangeAccountInAccountMenu = 35,
+  // Signout to switch account. This can still happen when switching from a
+  // managed profile to the personal profile, if the personal profile doesn't
+  // have the right primary account.
+  kSignoutForAccountSwitching = 35,
   // User clicked to signout from the account menu view.
   kUserClickedSignoutInAccountMenu = 36,
   // User disabled allow chrome sign-in from google settings page.
   kUserDisabledAllowChromeSignIn = 37,
+  // User was forced signed out as there was a supervised user added to the
+  // device.
+  kSignoutBeforeSupervisedSignin = 38,
   // Keep this as the last enum.
-  kMaxValue = kUserDisabledAllowChromeSignIn
+  kMaxValue = kSignoutBeforeSupervisedSignin
 };
 
 // Enum values which enumerates all access points where sign in could be
@@ -246,33 +250,42 @@ enum class AccessPoint : int {
   kCctAccountMismatchNotification = 71,
   // Access point for the Drive file picker on iOS.
   kDriveFilePickerIos = 72,
-  // Access point triggered when a user attempts to share or join a tab group
-  // without being signed in or synced.
-  kCollaborationTabGroup = 73,
+  // Access point triggered when a user attempts to share a tab group without
+  // being signed in or synced.
+  kCollaborationShareTabGroup = 73,
   // Glic launch button on the tab strip.
   kGlicLaunchButton = 74,
-
+  // History sync promo shown on the History page. Should not be visible when
+  // the use is not signed-in. Android only.
+  kHistoryPage = 75,
+  // Access point triggered when a user attempts to join a tab group without
+  // being signed in or synced.
+  kCollaborationJoinTabGroup = 76,
   // Add values above this line with a corresponding label to the
   // "SigninAccessPoint" enum in
   // tools/metrics/histograms/metadata/signin/enums.xml.
-  kMaxValue = kGlicLaunchButton,  // This must be last.
+  kMaxValue = kCollaborationJoinTabGroup,  // This must be last.
 };
 // LINT.ThenChange(/tools/metrics/histograms/metadata/signin/enums.xml)
 
 // Enum values which enumerates all user actions on the sign-in promo.
+// GENERATED_JAVA_ENUM_PACKAGE: org.chromium.components.signin.metrics
+// GENERATED_JAVA_CLASS_NAME_OVERRIDE: SigninPromoAction
+// GENERATED_JAVA_PREFIX_TO_STRIP: PROMO_ACTION_
 enum class PromoAction : int {
   PROMO_ACTION_NO_SIGNIN_PROMO = 0,
   // The user selected the default account.
-  PROMO_ACTION_WITH_DEFAULT,
+  PROMO_ACTION_WITH_DEFAULT = 1,
   // On desktop, the user selected an account that is not the default. On
   // mobile, the user selected the generic "Use another account" button.
-  PROMO_ACTION_NOT_DEFAULT,
+  PROMO_ACTION_NOT_DEFAULT = 2,
   // Non personalized promo, when there is no account on the device.
-  PROMO_ACTION_NEW_ACCOUNT_NO_EXISTING_ACCOUNT,
+  PROMO_ACTION_NEW_ACCOUNT_NO_EXISTING_ACCOUNT = 3,
   // The user clicked on the "Add account" button, when there are already
   // accounts on the device. (desktop only, the button does not exist on
   // mobile).
-  PROMO_ACTION_NEW_ACCOUNT_EXISTING_ACCOUNT
+  PROMO_ACTION_NEW_ACCOUNT_EXISTING_ACCOUNT = 4,
+  kMaxValue = PROMO_ACTION_NEW_ACCOUNT_EXISTING_ACCOUNT,
 };
 
 #if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_IOS)
@@ -668,8 +681,6 @@ void RecordRefreshTokenRevokedFromSource(SourceForRefreshTokenOperation source);
 void RecordSignoutConfirmationFromDataLossAlert(
     SignoutDataLossAlertReason reason,
     bool signout_confirmed);
-// Records whether the user chooses to "Clear Data" or "Keep Data" on signout.
-void RecordSignoutForceClearDataChoice(bool force_clear_data);
 #endif  // BUILDFLAG(IS_IOS)
 
 // Records the total number of open tabs at the moment of signin or enabling
@@ -693,9 +704,6 @@ void RecordHistoryOptInStateOnSignin(signin_metrics::AccessPoint access_point,
 
 // Records corresponding sign in user action for an access point.
 void RecordSigninUserActionForAccessPoint(AccessPoint access_point);
-
-// Records corresponding sign out user action.
-void RecordSignoutUserAction(bool force_clear_data);
 
 // Records |Signin_Impression_From*| user action.
 void RecordSigninImpressionUserActionForAccessPoint(AccessPoint access_point);

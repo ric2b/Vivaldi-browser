@@ -48,6 +48,7 @@ static const struct arg_enum_list tuning_enum[] = {
   { "vmaf_neg", AOM_TUNE_VMAF_NEG_MAX_GAIN },
   { "butteraugli", AOM_TUNE_BUTTERAUGLI },
   { "vmaf_saliency_map", AOM_TUNE_VMAF_SALIENCY_MAP },
+  { "iq", AOM_TUNE_IQ },
   { "ssimulacra2", AOM_TUNE_SSIMULACRA2 },
   { NULL, 0 }
 };
@@ -305,7 +306,7 @@ const av1_codec_arg_definitions_t g_av1_codec_arg_defs = {
       ARG_DEF(NULL, "max-intra-rate", 1, "Max I-frame bitrate (pct)"),
 #if CONFIG_AV1_ENCODER
   .cpu_used_av1 = ARG_DEF(NULL, "cpu-used", 1,
-                          "Speed setting (0..6 in good mode, 5..11 in realtime "
+                          "Speed setting (0..6 in good mode, 5..12 in realtime "
                           "mode, 0..9 in all intra mode)"),
   .rowmtarg =
       ARG_DEF(NULL, "row-mt", 1,
@@ -338,7 +339,7 @@ const av1_codec_arg_definitions_t g_av1_codec_arg_defs = {
       NULL, "enable-cdef", 1,
       "Enable the constrained directional enhancement filter (0: false, "
       "1: true (default), 2: disable for non-reference frames, 3: enable "
-      "adaptively on frame qindex)"),
+      "adaptively based on frame qindex)"),
   .enable_restoration = ARG_DEF(NULL, "enable-restoration", 1,
                                 "Enable the loop restoration filter (0: false "
                                 "(default in realtime mode), "
@@ -705,5 +706,8 @@ const av1_codec_arg_definitions_t g_av1_codec_arg_defs = {
       ARG_DEF(NULL, "sb-qp-sweep", 1,
               "When set to 1, enable the superblock level qp sweep for a "
               "given lambda to minimize the rdcost."),
+  .enable_low_complexity_decode =
+      ARG_DEF(NULL, "enable-low-complexity-decode", 1,
+              "Enable low complexity decode (0: false (default), 1: true)"),
 #endif  // CONFIG_AV1_ENCODER
 };

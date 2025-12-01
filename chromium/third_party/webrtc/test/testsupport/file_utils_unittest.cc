@@ -121,7 +121,7 @@ TEST_F(FileUtilsTest, OutputPathFromRootWorkingDir) {
 }
 
 TEST_F(FileUtilsTest, RandomOutputPathFromUnchangedWorkingDir) {
-  rtc::SetRandomTestMode(true);
+  SetRandomTestMode(true);
   std::string fixed_first_uuid = "def01482-f829-429a-bfd4-841706e92cdd";
   std::string expected_end = ExpectedRootDirByPlatform() + fixed_first_uuid +
                              std::string(kPathDelimiter);
@@ -133,7 +133,7 @@ TEST_F(FileUtilsTest, RandomOutputPathFromUnchangedWorkingDir) {
 TEST_F(FileUtilsTest, RandomOutputPathFromRootWorkingDir) {
   ASSERT_EQ(0, chdir(kPathDelimiter.data()));
 
-  rtc::SetRandomTestMode(true);
+  SetRandomTestMode(true);
   std::string fixed_first_uuid = "def01482-f829-429a-bfd4-841706e92cdd";
   std::string expected_end = ExpectedRootDirByPlatform() + fixed_first_uuid +
                              std::string(kPathDelimiter);
@@ -278,6 +278,30 @@ TEST_F(FileUtilsTest, WriteReadDeleteFilesAndDirs) {
   EXPECT_NO_FATAL_FAILURE(CleanDir(temp_directory, &num_deleted_entries));
   EXPECT_EQ(2u, num_deleted_entries);
   EXPECT_TRUE(RemoveDir(temp_directory));
+  EXPECT_FALSE(DirExists(temp_directory));
+}
+
+TEST_F(FileUtilsTest, DeleteNonEmptyDirectory) {
+  const std::string temp_directory =
+      OutputPathWithRandomDirectory() + Path("TempFileUtilsTestReadDirectory/");
+  CreateDir(temp_directory);
+  EXPECT_TRUE(DirExists(temp_directory));
+
+  // Add a file.
+  const std::string temp_filename = temp_directory + "TempFilenameTest";
+  WriteStringInFile("test\n", temp_filename);
+  EXPECT_TRUE(FileExists(temp_filename));
+
+  // Add a directory with one file.
+  const std::string temp_subdir = temp_directory + Path("subdir/");
+  EXPECT_TRUE(CreateDir(temp_subdir));
+  EXPECT_TRUE(DirExists(temp_subdir));
+  const std::string temp_filename2 = temp_subdir + "TempFilenameTest2";
+  WriteStringInFile("test2\n", temp_filename2);
+  EXPECT_TRUE(FileExists(temp_filename2));
+
+  // Checks.
+  EXPECT_TRUE(RemoveNonEmptyDir(temp_directory));
   EXPECT_FALSE(DirExists(temp_directory));
 }
 

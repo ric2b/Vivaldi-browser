@@ -83,6 +83,7 @@ import org.chromium.chrome.browser.customtabs.features.toolbar.CustomTabBrowserC
 import org.chromium.chrome.browser.customtabs.features.toolbar.CustomTabToolbarColorController;
 import org.chromium.chrome.browser.customtabs.features.toolbar.CustomTabToolbarCoordinator;
 import org.chromium.chrome.browser.flags.ActivityType;
+import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.fullscreen.FullscreenManager;
 import org.chromium.chrome.browser.fullscreen.FullscreenManager.Observer;
 import org.chromium.chrome.browser.fullscreen.FullscreenOptions;
@@ -316,6 +317,7 @@ public abstract class BaseCustomTabActivity extends ChromeActivity {
                         () -> getCustomTabActivityTabController(),
                         () -> getCustomTabMinimizationManagerHolder().getMinimizationManager(),
                         () -> getCustomTabFeatureOverridesManager(),
+                        () -> getCustomTabActivityNavigationController().openCurrentUrlInBrowser(),
                         getEdgeToEdgeManager());
         return mBaseCustomTabRootUiCoordinator;
     }
@@ -864,7 +866,9 @@ public abstract class BaseCustomTabActivity extends ChromeActivity {
 
     @Override
     protected int getToolbarLayoutId() {
-        return R.layout.custom_tabs_toolbar;
+        return ChromeFeatureList.sCctToolbarRefactor.isEnabled()
+                ? R.layout.new_custom_tab_toolbar
+                : R.layout.custom_tabs_toolbar;
     }
 
     @Override

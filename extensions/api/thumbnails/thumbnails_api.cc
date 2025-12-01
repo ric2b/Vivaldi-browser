@@ -47,6 +47,7 @@
 #include "components/capture/capture_page.h"
 #include "components/datasource/vivaldi_image_store.h"
 #include "extensions/tools/vivaldi_tools.h"
+#include "extensions/vivaldi_browser_component_wrapper.h"
 #include "ui/vivaldi_browser_window.h"
 #include "ui/vivaldi_skia_utils.h"
 #include "ui/vivaldi_ui_utils.h"
@@ -182,7 +183,7 @@ base::FilePath ConstructCaptureFilename(
     const std::string& pattern,
     const GURL& url,
     const std::string& title,
-    const base::FilePath::StringPieceType& extension) {
+    const base::FilePath::StringViewType& extension) {
   if (pattern.empty()) {
     base_path = base_path.AppendASCII(
         base::Uuid::GenerateRandomV4().AsLowercaseString());
@@ -250,7 +251,7 @@ std::unique_ptr<CaptureData> SaveBitmapOnWorkerThread(
     if (!base::PathExists(path)) {
       base::CreateDirectory(path);
     }
-    base::FilePath::StringPieceType ext = FILE_PATH_LITERAL(".jpg");
+    base::FilePath::StringViewType ext = FILE_PATH_LITERAL(".jpg");
     if (data->image_format == ::vivaldi::skia_utils::ImageFormat::kPNG) {
       ext = FILE_PATH_LITERAL(".png");
     }
@@ -330,7 +331,8 @@ ExtensionFunction::ResponseAction ThumbnailsCaptureUIFunction::Run() {
   EXTENSION_FUNCTION_VALIDATE(params);
 
   VivaldiBrowserWindow* window =
-      VivaldiBrowserWindow::FromId(params->params.window_id);
+      VivaldiBrowserComponentWrapper::GetInstance()->
+          VivaldiBrowserWindowFromId(params->params.window_id);
   if (!window) {
     return RespondNow(Error("No such window"));
   }

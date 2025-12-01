@@ -43,7 +43,7 @@ class SimulatedSequenceRunner {
 };
 
 class SimulatedTimeControllerImpl : public TaskQueueFactory,
-                                    public rtc::YieldInterface {
+                                    public YieldInterface {
  public:
   explicit SimulatedTimeControllerImpl(Timestamp start_time);
   ~SimulatedTimeControllerImpl() override;
@@ -58,9 +58,9 @@ class SimulatedTimeControllerImpl : public TaskQueueFactory,
   void YieldExecution() RTC_LOCKS_EXCLUDED(time_lock_, lock_) override;
 
   // Create thread using provided `socket_server`.
-  std::unique_ptr<rtc::Thread> CreateThread(
+  std::unique_ptr<Thread> CreateThread(
       const std::string& name,
-      std::unique_ptr<rtc::SocketServer> socket_server)
+      std::unique_ptr<SocketServer> socket_server)
       RTC_LOCKS_EXCLUDED(time_lock_, lock_);
 
   // Runs all runners in `runners_` that has tasks or modules ready for
@@ -84,7 +84,7 @@ class SimulatedTimeControllerImpl : public TaskQueueFactory,
 
  private:
   const rtc::PlatformThreadId thread_id_;
-  const std::unique_ptr<rtc::Thread> dummy_thread_ = rtc::Thread::Create();
+  const std::unique_ptr<Thread> dummy_thread_ = Thread::Create();
   mutable Mutex time_lock_;
   Timestamp current_time_ RTC_GUARDED_BY(time_lock_);
   mutable Mutex lock_;
@@ -131,10 +131,10 @@ class GlobalSimulatedTimeController : public TimeController {
 
   Clock* GetClock() override;
   TaskQueueFactory* GetTaskQueueFactory() override;
-  std::unique_ptr<rtc::Thread> CreateThread(
+  std::unique_ptr<Thread> CreateThread(
       const std::string& name,
-      std::unique_ptr<rtc::SocketServer> socket_server) override;
-  rtc::Thread* GetMainThread() override;
+      std::unique_ptr<SocketServer> socket_server) override;
+  Thread* GetMainThread() override;
 
   void AdvanceTime(TimeDelta duration) override;
 
@@ -154,12 +154,12 @@ class GlobalSimulatedTimeController : public TimeController {
   void Unregister(sim_time_impl::SimulatedSequenceRunner* runner);
 
  private:
-  rtc::ScopedBaseFakeClock global_clock_;
+  ScopedBaseFakeClock global_clock_;
   // Provides simulated CurrentNtpInMilliseconds()
   SimulatedClock sim_clock_;
   sim_time_impl::SimulatedTimeControllerImpl impl_;
-  rtc::ScopedYieldPolicy yield_policy_;
-  std::unique_ptr<rtc::Thread> main_thread_;
+  ScopedYieldPolicy yield_policy_;
+  std::unique_ptr<Thread> main_thread_;
 };
 }  // namespace webrtc
 

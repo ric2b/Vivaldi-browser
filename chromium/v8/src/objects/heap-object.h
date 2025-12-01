@@ -342,13 +342,16 @@ class HeapObject : public TaggedImpl<HeapObjectReferenceType::STRONG, Address> {
       size_t offset, IsolateForPointerCompression isolate, Address value,
       CppHeapPointerTag tag);
 
+#if V8_ENABLE_SANDBOX
   //
   // Indirect pointers.
   //
   // These are only available when the sandbox is enabled, in which case they
   // are the under-the-hood implementation of trusted pointers.
-  inline void InitSelfIndirectPointerField(size_t offset,
-                                           IsolateForSandbox isolate);
+  inline void InitSelfIndirectPointerField(
+      size_t offset, IsolateForSandbox isolate,
+      TrustedPointerPublishingScope* opt_publishing_scope);
+#endif  // V8_ENABLE_SANDBOX
 
   // Trusted pointers.
   //
@@ -379,6 +382,9 @@ class HeapObject : public TaggedImpl<HeapObjectReferenceType::STRONG, Address> {
   // in the TrustedPointerTable which just contains nullptr). When the sandbox
   // is disabled, this will set the field to Smi::zero().
   inline bool IsTrustedPointerFieldEmpty(size_t offset) const;
+  inline bool IsTrustedPointerFieldUnpublished(size_t offset,
+                                               IndirectPointerTag tag,
+                                               IsolateForSandbox isolate) const;
   inline void ClearTrustedPointerField(size_t offest);
   inline void ClearTrustedPointerField(size_t offest, ReleaseStoreTag);
 
@@ -405,9 +411,10 @@ class HeapObject : public TaggedImpl<HeapObjectReferenceType::STRONG, Address> {
   //
   // These are references to entries in the JSDispatchTable, which contain the
   // current code for a function.
-  inline void AllocateAndInstallJSDispatchHandle(
-      size_t offset, Isolate* isolate, uint16_t parameter_count,
-      Tagged<Code> code,
+  template <typename ObjectType>
+  static inline JSDispatchHandle AllocateAndInstallJSDispatchHandle(
+      ObjectType host, size_t offset, Isolate* isolate,
+      uint16_t parameter_count, DirectHandle<Code> code,
       WriteBarrierMode mode = WriteBarrierMode::UPDATE_WRITE_BARRIER);
 
   // Returns the field at offset in obj, as a read/write Object reference.

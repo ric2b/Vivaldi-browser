@@ -4,6 +4,7 @@
 
 #import "chrome/browser/app_controller_mac.h"
 
+#include <AppKit/AppKit.h>
 #include <dispatch/dispatch.h>
 #include <stddef.h>
 
@@ -119,6 +120,7 @@
 #include "ui/base/l10n/l10n_util_mac.h"
 #include "ui/color/color_provider.h"
 #include "ui/color/color_provider_manager.h"
+#include "ui/gfx/native_widget_types.h"
 #include "ui/native_theme/native_theme_mac.h"
 #include "ui/native_theme/native_theme_observer.h"
 #include "url/gurl.h"
@@ -132,19 +134,17 @@
 #include "browser/vivaldi_app_observer.h"
 #include "browser/vivaldi_internal_handlers.h"
 #include "chrome/browser/devtools/devtools_window.h"
+#include "chrome/browser/ui/cocoa/accelerators_cocoa.h"
 #include "chrome/browser/ui/startup/launch_mode_recorder.h"
 #include "extensions/api/auto_update/auto_update_status.h"
 #include "extensions/api/menubar/menubar_api.h"
 #include "extensions/browser/app_window/app_window_contents.h"
+#include "extensions/tools/vivaldi_tools.h"
 #include "prefs/vivaldi_gen_prefs.h"
 #include "ui/vivaldi_bookmark_menu_mac.h"
 
 #ifndef VIVALDI_SPARKLE_DISABLED
 #import  "vivaldi/Sparkle/SPUUpdater.h"
-#endif
-
-#if defined(ENABLE_RELAY_PROXY)
-#include "proxy/launcher.h"
 #endif
 
 namespace {
@@ -315,24 +315,21 @@ void ConfigureNSAppForKioskMode() {
       NSApplicationPresentationFullScreen;
 }
 
-// Returns the list of gfx::NativeWindows for all browser windows (excluding
-// apps).
-std::set<gfx::NativeWindow> GetBrowserNativeWindows() {
-  std::set<gfx::NativeWindow> result;
+// Returns the list of windows for all browser windows (excluding apps).
+NSSet<NSWindow*>* GetBrowserWindows() {
+  NSMutableSet<NSWindow*>* result = [NSMutableSet set];
   for (Browser* browser : *BrowserList::GetInstance()) {
-    if (!browser)
-      continue;
     // When focusing Chrome, don't focus any browser windows associated with
-    // an app.
-    // https://crbug.com/960904
-    if (browser->is_type_app())
+    // an app (https://crbug.com/40626510).
+    if (browser->is_type_app()) {
       continue;
-    result.insert(browser->window()->GetNativeWindow());
+    }
+    [result addObject:browser->window()->GetNativeWindow().GetNativeNSWindow()];
   }
   return result;
 }
 
-void FocusWindowSetOnCurrentSpace(const std::set<gfx::NativeWindow>& windows) {
+void FocusWindowSetOnCurrentSpace(NSSet<NSWindow*>* windows) {
   // This callback runs before AppKit picks its own window to
   // deminiaturize, so we get to pick one from the right set. Limit to
   // the windows on the current workspace. Otherwise we jump spaces
@@ -342,7 +339,7 @@ void FocusWindowSetOnCurrentSpace(const std::set<gfx::NativeWindow>& windows) {
   // with the system unhiding the application. http://crbug.com/368238
   //
   // NOTE: If this is called in the
-  // applicationShouldHandleReopen:hasVisibleWindows: hook when
+  // -applicationShouldHandleReopen:hasVisibleWindows: hook when
   // clicking the dock icon, and that caused macOS to begin switch
   // spaces, isOnActiveSpace gives the answer for the PREVIOUS
   // space. This means that we actually raise and focus the wrong
@@ -361,14 +358,15 @@ void FocusWindowSetOnCurrentSpace(const std::set<gfx::NativeWindow>& windows) {
   NSWindow* frontmost_window = nil;
   NSWindow* frontmost_miniaturized_window = nil;
   bool all_miniaturized = true;
-  for (NSWindow* win in [[NSApp orderedWindows] reverseObjectEnumerator]) {
-    if (windows.find(win) == windows.end())
+  for (NSWindow* win in [NSApp.orderedWindows reverseObjectEnumerator]) {
+    if (![windows containsObject:win]) {
       continue;
-    if ([win isMiniaturized]) {
+    }
+    if (win.miniaturized) {
       frontmost_miniaturized_window = win;
-    } else if ([win isVisible]) {
+    } else if (win.visible) {
       all_miniaturized = false;
-      if ([win isOnActiveSpace]) {
+      if (win.onActiveSpace) {
         // Raise the old |frontmost_window| (if any). The topmost |win| will be
         // raised with makeKeyAndOrderFront: below.
         [frontmost_window orderFront:nil];
@@ -1007,11 +1005,6 @@ class AppControllerNativeThemeObserver : public ui::NativeThemeObserver {
   CHECK_EQ(0u, chrome::GetTotalBrowserCount());
 
 
-  #if defined(ENABLE_RELAY_PROXY)
-  if (vivaldi::IsVivaldiRunning()) {
-    vivaldi::proxy::disconnect();
-  }
-  #endif
 
   // Tell BrowserList not to keep the browser process alive. Once all the
   // browsers get dealloc'd, it will stop the RunLoop and fall back into main().
@@ -1077,7 +1070,8 @@ class AppControllerNativeThemeObserver : public ui::NativeThemeObserver {
 }
 
 - (void)windowDidBecomeMain:(NSNotification*)notify {
-  Browser* browser = chrome::FindBrowserWithWindow([notify object]);
+  Browser* browser =
+      chrome::FindBrowserWithWindow(gfx::NativeWindow([notify object]));
   if (!browser)
     return;
 
@@ -1633,7 +1627,8 @@ class AppControllerNativeThemeObserver : public ui::NativeThemeObserver {
   // the private profile when needed. It is ok if there is no window. We then
   // correctly fall back to the regular profile.
   if (vivaldi::IsVivaldiRunning()) {
-    Browser* browser = chrome::FindBrowserWithWindow([NSApp mainWindow]);
+    Browser* browser =
+        chrome::FindBrowserWithWindow(gfx::NativeWindow([NSApp mainWindow]));
     if (browser) {
       lastProfile = browser->profile();
     }
@@ -1665,7 +1660,8 @@ class AppControllerNativeThemeObserver : public ui::NativeThemeObserver {
     // VB-13452 [Mac] Can not close developer tools window using keyboard
     if ([NSApp keyWindow] &&
         (tag == IDC_VIV_CLOSE_TAB || tag == IDC_VIV_CLOSE_WINDOW)) {
-      Browser* browser = chrome::FindBrowserWithWindow([NSApp keyWindow]);
+      Browser* browser =
+          chrome::FindBrowserWithWindow(gfx::NativeWindow([NSApp mainWindow]));
       if (browser && browser->is_type_devtools()) {
         // When inspecting Vivaldi UI, devtools is in a BrowerWindow
         [[NSApp keyWindow] close];
@@ -1675,7 +1671,7 @@ class AppControllerNativeThemeObserver : public ui::NativeThemeObserver {
         // When inspecting a page, devtools is in an AppWindow -> no browser
         extensions::AppWindow* app_window =
           AppWindowRegistryUtil::GetAppWindowForNativeWindowAnyProfile(
-            [NSApp keyWindow]);
+            gfx::NativeWindow([NSApp keyWindow]));
         if (app_window) {
           for (content::WebContents* web_contents :
               app_window->web_contents()->GetInnerWebContents()) {
@@ -1763,10 +1759,7 @@ class AppControllerNativeThemeObserver : public ui::NativeThemeObserver {
   if (tag == IDC_VIV_NEW_TAB || tag == IDC_VIV_NEW_WINDOW)
     return;
 
-  vivaldi::VivaldiAppObserver::Get(browser->tab_strip_model()
-                                      ->GetActiveWebContents()
-                                      ->GetBrowserContext())
-        ->SetCommand(tag, browser);
+  vivaldi::VivaldiAppObserver::Get(profile)->SetCommand(tag, browser);
 }
 
 - (void)executeCommand:(id)sender withProfile:(Profile*)profile {
@@ -1933,8 +1926,8 @@ class AppControllerNativeThemeObserver : public ui::NativeThemeObserver {
   // If there are any, return here. Otherwise, the windows are panels or
   // notifications so we still need to open a new window.
   if (hasVisibleWindows  || vivaldi::IsVivaldiRunning()) {
-    std::set<gfx::NativeWindow> browserWindows = GetBrowserNativeWindows();
-    if (!browserWindows.empty()) {
+    NSSet<NSWindow*>* browserWindows = GetBrowserWindows();
+    if (browserWindows.count) {
       FocusWindowSetOnCurrentSpace(browserWindows);
       // We've performed the unminimize, so AppKit shouldn't do anything.
       return NO;
@@ -1945,8 +1938,8 @@ class AppControllerNativeThemeObserver : public ui::NativeThemeObserver {
   DCHECK_NE(lastProfilePath, ProfileManager::GetSystemProfilePath());
 
   // If launched as a hidden login item (due to installation of a persistent app
-  // or by the user, for example in System Preferences->Accounts->Login Items),
-  // allow session to be restored first time the user clicks on a Dock icon.
+  // or by the user, for example in System Settings->General->Login Items),
+  // allow the session to be restored first time the user clicks on a Dock icon.
   // Normally, it'd just open a new empty page.
   static BOOL doneOnce = NO;
   BOOL attemptRestore =
@@ -2087,7 +2080,8 @@ class AppControllerNativeThemeObserver : public ui::NativeThemeObserver {
     command = IDC_FORWARD;
   }
   if (command != 0) {
-    Browser* browser = chrome::FindBrowserWithWindow([NSApp mainWindow]);
+    Browser* browser =
+        chrome::FindBrowserWithWindow(gfx::NativeWindow([NSApp mainWindow]));
     if (browser) {
       browser->window()->Activate();
       if (chrome::IsCommandEnabled(browser, command)) {
@@ -2121,6 +2115,12 @@ class AppControllerNativeThemeObserver : public ui::NativeThemeObserver {
 }
 
 - (void)vivInitShareMenu:(NSMenuItem*)menuItem {
+  Profile* profile = [self lastProfileIfLoaded];
+  std::string shortcut = ::vivaldi::GetMacOSEmailLinkShortcut(profile);
+  AcceleratorsCocoa::GetInstance()->OverrideAcceleratorForCommand(
+      IDC_EMAIL_PAGE_LOCATION,
+      ::vivaldi::VivaldiShortcut2Accelerator(shortcut));
+
   if (!_shareMenuController) {
     _shareMenuController = [[ShareMenuController alloc] init];
   }
@@ -2503,7 +2503,7 @@ class AppControllerNativeThemeObserver : public ui::NativeThemeObserver {
   if (!window) {
     return NO;
   }
-  Browser* browser = chrome::FindBrowserWithWindow(window);
+  Browser* browser = chrome::FindBrowserWithWindow(gfx::NativeWindow(window));
 
   return browser && browser->is_type_normal() &&
          !browser->tab_strip_model()->empty();

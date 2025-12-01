@@ -4,6 +4,8 @@
 
 #include "components/unexportable_keys/unexportable_key_loader.h"
 
+#include <variant>
+
 #include "base/check.h"
 #include "base/test/bind.h"
 #include "base/test/task_environment.h"
@@ -12,7 +14,7 @@
 #include "components/unexportable_keys/service_error.h"
 #include "components/unexportable_keys/unexportable_key_service_impl.h"
 #include "components/unexportable_keys/unexportable_key_task_manager.h"
-#include "crypto/scoped_mock_unexportable_key_provider.h"
+#include "crypto/scoped_fake_unexportable_key_provider.h"
 #include "crypto/signature_verifier.h"
 #include "crypto/unexportable_key.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -71,9 +73,9 @@ class UnexportableKeyLoaderTest : public testing::Test {
       base::test::TaskEnvironment::ThreadPoolExecutionMode::
           QUEUED};  // QUEUED - tasks don't run until `RunUntilIdle()` is
                     // called.
-  // Provides a mock key provider by default.
-  absl::variant<crypto::ScopedMockUnexportableKeyProvider,
-                crypto::ScopedNullUnexportableKeyProvider>
+  // Provides a fake key provider by default.
+  std::variant<crypto::ScopedFakeUnexportableKeyProvider,
+               crypto::ScopedNullUnexportableKeyProvider>
       scoped_key_provider_;
   std::unique_ptr<UnexportableKeyTaskManager> task_manager_;
   std::unique_ptr<UnexportableKeyServiceImpl> service_;
@@ -185,9 +187,9 @@ TEST_F(UnexportableKeyLoaderTest, SignDataAfterLoading) {
   key_loader->InvokeCallbackAfterKeyLoaded(base::BindLambdaForTesting(
       [&](ServiceErrorOr<UnexportableKeyId> key_id_or_error) {
         ASSERT_TRUE(key_id_or_error.has_value());
-        service().SignSlowlyAsync(*key_id_or_error,
-                                  std::vector<uint8_t>({1, 2, 3}),
-                                  kTaskPriority, sign_future.GetCallback());
+        service().SignSlowlyAsync(
+            *key_id_or_error, std::vector<uint8_t>({1, 2, 3}), kTaskPriority,
+            /*max_retries=*/0, sign_future.GetCallback());
       }));
   EXPECT_FALSE(sign_future.IsReady());
   RunBackgroundTasks();

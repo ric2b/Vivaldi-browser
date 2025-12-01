@@ -482,7 +482,7 @@ TEST(CertVerifierServiceFactoryTest, RootStoreInfoWithUpdatedRootStore) {
   net::SHA256HashValue root_hash =
       net::X509Certificate::CalculateFingerprint256(root->GetCertBuffer());
   EXPECT_EQ(info_ptr->root_cert_info[0]->sha256hash_hex,
-            base::HexEncode(root_hash.data));
+            base::HexEncode(root_hash));
   EXPECT_TRUE(net::x509_util::CryptoBufferEqual(
       net::x509_util::CreateCryptoBuffer(info_ptr->root_cert_info[0]->cert)
           .get(),
@@ -600,8 +600,8 @@ TEST(CertVerifierServiceFactoryTest, RootStoreInfoWithVersionConstraintMet) {
 
 TEST(CertVerifierServiceFactoryTest, RootStoreInfoWithCompiledRootStore) {
   base::test::TaskEnvironment task_environment;
-  std::vector<net::ChromeRootStoreData::Anchor> anchors =
-      net::CompiledChromeRootStoreAnchors();
+  net::ChromeRootStoreData root_store_data =
+      net::ChromeRootStoreData::CreateFromCompiledRootStore();
 
   mojo::Remote<mojom::CertVerifierServiceFactory> cv_service_factory_remote;
   CertVerifierServiceFactoryImpl cv_service_factory_impl(
@@ -617,7 +617,7 @@ TEST(CertVerifierServiceFactoryTest, RootStoreInfoWithCompiledRootStore) {
   // In cases where the compiled Chrome Root Store has roots with version
   // constraints, there might be less trusted roots depending on what version #
   // the test is running at.
-  EXPECT_LE(info_ptr->root_cert_info.size(), anchors.size());
+  EXPECT_LE(info_ptr->root_cert_info.size(), root_store_data.anchors().size());
   EXPECT_GT(info_ptr->root_cert_info.size(), static_cast<std::size_t>(0));
 }
 

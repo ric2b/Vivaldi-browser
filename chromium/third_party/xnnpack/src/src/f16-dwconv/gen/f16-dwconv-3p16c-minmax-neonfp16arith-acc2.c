@@ -1,3 +1,4 @@
+// clang-format off
 // Auto-generated file. Do not edit!
 //   Template: src/f16-dwconv/unipass-neonfp16arith.c.in
 //   Generator: tools/xngen
@@ -11,7 +12,7 @@
 
 #include <arm_neon.h>
 
-#include "xnnpack/dwconv.h"
+#include "src/xnnpack/dwconv.h"
 
 
 void xnn_f16_dwconv_minmax_ukernel_3p16c__neonfp16arith_acc2(
@@ -24,7 +25,7 @@ void xnn_f16_dwconv_minmax_ukernel_3p16c__neonfp16arith_acc2(
     size_t output_increment,
     size_t input_offset,
     const xnn_float16* zero,
-    const union xnn_f16_minmax_params params[restrict XNN_MIN_ELEMENTS(1)]) XNN_OOB_READS
+    const struct xnn_f16_minmax_params params[restrict XNN_MIN_ELEMENTS(1)]) XNN_OOB_READS
 {
   assert(channels != 0);
   assert(output_width != 0);

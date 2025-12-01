@@ -10,6 +10,7 @@ update_target("//chrome/browser:browser") {
     "//vivaldi/components/notes",
     "//vivaldi/components/notes:browser",
     "//vivaldi/components/request_filter",
+    "//vivaldi/components/request_filter/adblock_filter",
     "//vivaldi/components/ad_blocker",
     "//vivaldi/components/page_actions",
     "//vivaldi/components/signature:signature",
@@ -18,7 +19,6 @@ update_target("//chrome/browser:browser") {
     "//vivaldi/components:adverse_adblocking",
     "//vivaldi/components/notes",
     "//vivaldi/components/notes:browser",
-    "//vivaldi/components/request_filter",
     "//vivaldi/components/ad_blocker",
   ]
   deps += [
@@ -26,15 +26,8 @@ update_target("//chrome/browser:browser") {
     "//vivaldi/components/ad_blocker",
     "//vivaldi/components/request_filter/adblock_filter/mojom",
     "//vivaldi/components:user_agent",
+    "//vivaldi/components:version_utils",
   ]
-}
-
-if (!is_android) {
-  update_target("//chrome/browser:browser") {
-    public_deps += [
-      "//vivaldi/components:panel_request_filter",
-    ]
-  }
 }
 
 update_target("//chrome/renderer:renderer") {
@@ -85,6 +78,10 @@ if (is_android) {
   update_target("//chrome:chrome_android_core") {
     deps += [ "//vivaldi/components/notes" ]
   }
+}
+
+update_target("//chrome/browser/content_settings:content_settings") {
+  deps += [ "//vivaldi/components:tabs" ]
 }
 
 update_template_instance("//third_party/blink/renderer/core:core") {

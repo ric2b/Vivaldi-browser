@@ -124,6 +124,21 @@ bool FunctionTemplateInfo::IsLeafTemplateForApiObject(
 }
 
 // static
+void FunctionTemplateInfo::SealAndPrepareForPromotionToReadOnly(
+    Isolate* isolate, DirectHandle<FunctionTemplateInfo> info) {
+  if (info->should_promote_to_read_only()) return;
+  CHECK(!HeapLayout::InReadOnlySpace(*info));
+
+  info->EnsureHasSerialNumber(isolate);
+
+  GetOrCreateSharedFunctionInfo(isolate, info,
+                                isolate->factory()->empty_string());
+
+  info->set_should_promote_to_read_only(true);
+  info->set_published(true);
+}
+
+// static
 Tagged<FunctionTemplateRareData>
 FunctionTemplateInfo::AllocateFunctionTemplateRareData(
     Isolate* isolate,
@@ -240,8 +255,7 @@ DirectHandle<JSObject> DictionaryTemplateInfo::NewInstance(
   MaybeDirectHandle<Map> maybe_cached_map;
   if (V8_LIKELY(can_use_map_cache)) {
     maybe_cached_map = TemplateInfo::ProbeInstantiationsCache<Map>(
-        isolate, context, self->serial_number(),
-        TemplateInfo::CachingMode::kUnlimited);
+        isolate, context, self, TemplateInfo::CachingMode::kUnlimited);
   }
   DirectHandle<Map> cached_map;
   if (V8_LIKELY(can_use_map_cache && maybe_cached_map.ToHandle(&cached_map))) {

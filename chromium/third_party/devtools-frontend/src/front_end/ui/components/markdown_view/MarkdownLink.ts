@@ -12,7 +12,7 @@ import {getMarkdownLink} from './MarkdownLinksMap.js';
 
 // TODO(crbug.com/391381439): Fully migrate off of constructed style sheets.
 const markdownLinkStyles = new CSSStyleSheet();
-markdownLinkStyles.replaceSync(markdownLinkStylesRaw.cssContent);
+markdownLinkStyles.replaceSync(markdownLinkStylesRaw.cssText);
 
 export interface MarkdownLinkData {
   key: string;
@@ -27,8 +27,8 @@ export interface MarkdownLinkData {
 export class MarkdownLink extends HTMLElement {
 
   readonly #shadow = this.attachShadow({mode: 'open'});
-  #linkText: string = '';
-  #linkUrl: string = '';
+  #linkText = '';
+  #linkUrl = '';
 
   connectedCallback(): void {
     this.#shadow.adoptedStyleSheets = [markdownLinkStyles];

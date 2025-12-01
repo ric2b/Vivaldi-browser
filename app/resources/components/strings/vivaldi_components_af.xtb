@@ -21,6 +21,9 @@
           &gt;
           <ph name="PROXIES_TITLE" />
           en maak seker dat u opstelling op “geen instaanbediener” of “direk” ingestel is.</translation>
+<translation id="4949828774841497663">Gaan na Toeps &gt; Stelselinstellings &gt; Netwerk, kies die
+          aktiewe netwerk, klik die Details…-knop, en ontkies enige instaanbedieners
+          wat dalk gekies is.</translation>
 <translation id="5248344925342018662">U bekyk ’n beveiligde Vivaldi-blad</translation>
 <translation id="6690242244468452299">Hierdie blad toon inligting oor u onlangse uitbomme indien uitbomrapportering geaktiveer is.</translation>
 <translation id="7023871570427738255">Gaan na
@@ -32,7 +35,4 @@
           Indien dit nie die probleem verhelp nie, stel ons voor om hierdie opsie
           weer te kies vir verbeterde verrigting.</translation>
 <translation id="7496505986576158197">Vivaldi word moontlik gemaak deur die <ph name="BEGIN_LINK_CHROMIUM" />Chromium<ph name="END_LINK_CHROMIUM" />-oopbronprojek en ander <ph name="BEGIN_LINK_OSS" />oopbronprogrammatuur<ph name="END_LINK_OSS" />.</translation>
-<translation id="8187289872471304532">Gaan na
-          Toepassings &gt; Stelselvoorkeure &gt; Netwerk &gt; Gevorderd &gt; Instaanbedieners
-          en deselekteer enige gekose instaanbedieners.</translation>
 </translationbundle>

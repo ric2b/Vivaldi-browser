@@ -42,6 +42,7 @@ swift_source_set("vivaldi_sync_error_dialog_swift") {
     "//base",
     "//ui/base",
     "//ios/chrome/common/ui/colors:swift",
+    "//vivaldi/app:vivaldi_ios_native_strings",
     "//vivaldi/ios/ui/helpers:helpers_swift",
   ]
 

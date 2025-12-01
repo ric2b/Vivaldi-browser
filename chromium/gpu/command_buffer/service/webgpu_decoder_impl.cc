@@ -697,7 +697,7 @@ class WebGPUDecoderImpl final : public WebGPUDecoder {
 
       wgpu::CommandEncoder encoder =
           device_.CreateCommandEncoder(&command_encoder_desc);
-      wgpu::ImageCopyBuffer buffer_copy = {
+      wgpu::TexelCopyBufferInfo buffer_copy = {
           .layout =
               {
                   .bytesPerRow = bytes_per_row,
@@ -705,7 +705,7 @@ class WebGPUDecoderImpl final : public WebGPUDecoder {
               },
           .buffer = buffer.Get(),
       };
-      wgpu::ImageCopyTexture texture_copy = {
+      wgpu::TexelCopyTextureInfo texture_copy = {
           .texture = texture_,
       };
       wgpu::Extent3D extent = {
@@ -739,10 +739,10 @@ class WebGPUDecoderImpl final : public WebGPUDecoder {
       };
       wgpu::Buffer buffer = device_.CreateBuffer(&buffer_desc);
 
-      wgpu::ImageCopyTexture texture_copy = {
+      wgpu::TexelCopyTextureInfo texture_copy = {
           .texture = texture_,
       };
-      wgpu::ImageCopyBuffer buffer_copy = {
+      wgpu::TexelCopyBufferInfo buffer_copy = {
           .layout =
               {
                   .bytesPerRow = bytes_per_row,
@@ -1073,7 +1073,8 @@ WebGPUDecoder* CreateWebGPUDecoderImpl(
       dawn_caching_interface = caching_interface_factory->CreateInstance(
           *dawn_cache_options.handle,
           base::BindRepeating(&DecoderClient::CacheBlob,
-                              base::Unretained(client)));
+                              base::Unretained(client),
+                              gpu::GpuDiskCacheType::kDawnWebGPU));
     } else {
       dawn_caching_interface = caching_interface_factory->CreateInstance();
     }
@@ -1251,6 +1252,7 @@ bool WebGPUDecoderImpl::IsFeatureExposed(wgpu::FeatureName feature) const {
     case wgpu::FeatureName::AdapterPropertiesVk:
     case wgpu::FeatureName::AdapterPropertiesMemoryHeaps:
     case wgpu::FeatureName::ShaderModuleCompilationOptions:
+    case wgpu::FeatureName::CoreFeaturesAndLimits:
       return safety_level_ == webgpu::SafetyLevel::kUnsafe ||
              safety_level_ == webgpu::SafetyLevel::kSafeExperimental;
     case wgpu::FeatureName::DepthClipControl:
@@ -1580,7 +1582,7 @@ struct WGPUDeviceDescriptorDeepCopy : WGPUDeviceDescriptor {
   std::optional<std::string> device_label_;
   std::optional<std::string> queue_label_;
   std::vector<WGPUFeatureName> required_features_;
-  WGPURequiredLimits required_limits_;
+  WGPULimits required_limits_;
 };
 
 }  // namespace
@@ -1611,7 +1613,7 @@ WebGPUDecoderImpl::CreateQueuedRequestDeviceCallback(
                                      callback_info);
         } else {
           callback_info.callback(
-              WGPURequestDeviceStatus_InstanceDropped, nullptr,
+              WGPURequestDeviceStatus_CallbackCancelled, nullptr,
               MakeStringView("Queued device request cancelled."),
               callback_info.userdata1, callback_info.userdata2);
         }

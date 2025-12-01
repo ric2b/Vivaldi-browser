@@ -88,6 +88,7 @@ import java.util.concurrent.TimeoutException;
 @RunWith(ChromeJUnit4ClassRunner.class)
 @DisableFeatures({
     ChromeFeatureList.AUTOFILL_ENABLE_CARD_BENEFITS_FOR_AMERICAN_EXPRESS,
+    ChromeFeatureList.AUTOFILL_ENABLE_CARD_BENEFITS_FOR_BMO
 })
 // TODO(crbug.com/344661357): Failing when batched, batch this again.
 public class AutofillPaymentMethodsFragmentTest {
@@ -388,7 +389,6 @@ public class AutofillPaymentMethodsFragmentTest {
 
     @Test
     @MediumTest
-    @EnableFeatures({ChromeFeatureList.AUTOFILL_ENABLE_VIRTUAL_CARD_METADATA})
     public void testCreditCardSummary_displaysVirtualCardEnrolledStatus() throws Exception {
         mAutofillTestHelper.addServerCreditCard(SAMPLE_VIRTUAL_CARD_ENROLLED);
 
@@ -402,7 +402,6 @@ public class AutofillPaymentMethodsFragmentTest {
 
     @Test
     @MediumTest
-    @EnableFeatures({ChromeFeatureList.AUTOFILL_ENABLE_VIRTUAL_CARD_METADATA})
     public void testCreditCardSummary_displaysExpirationDateForUnenrolledCards() throws Exception {
         mAutofillTestHelper.addServerCreditCard(SAMPLE_VIRTUAL_CARD_UNENROLLED);
 
@@ -417,23 +416,8 @@ public class AutofillPaymentMethodsFragmentTest {
 
     @Test
     @MediumTest
-    @EnableFeatures({ChromeFeatureList.AUTOFILL_ENABLE_VIRTUAL_CARD_METADATA})
     public void testCreditCardSummary_displaysExpirationDateForNonVirtualCards() throws Exception {
         mAutofillTestHelper.addServerCreditCard(SAMPLE_CARD_VISA);
-
-        SettingsActivity activity = mSettingsActivityTestRule.startSettingsActivity();
-
-        Preference cardPreference = getFirstPaymentMethodPreference(activity);
-        String summary = cardPreference.getSummary().toString();
-        assertThat(summary).contains(String.format("05/%s", AutofillTestHelper.twoDigitNextYear()));
-    }
-
-    @Test
-    @MediumTest
-    @DisableFeatures({ChromeFeatureList.AUTOFILL_ENABLE_VIRTUAL_CARD_METADATA})
-    public void testCreditCardSummary_displaysExpirationDateForVirtualCardsWhenMetadataFlagOff()
-            throws Exception {
-        mAutofillTestHelper.addServerCreditCard(SAMPLE_VIRTUAL_CARD_ENROLLED);
 
         SettingsActivity activity = mSettingsActivityTestRule.startSettingsActivity();
 

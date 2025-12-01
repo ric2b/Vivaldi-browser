@@ -11,10 +11,8 @@ import subprocess
 import sys
 import time
 
-BUG_QUERY_URLS = ["https://issues.chromium.org/issues?"
-                  "q=status:open%20componentid:1456176%20customfield1223031:WPT-Tooling-Roll",
-                  "https://issues.chromium.org/issues?"
-                  "q=status:open%20componentid:1456176%20customfield1223031:WPT-JS-Roll"]
+BUG_QUERY_URLS = ["https://issues.chromium.org/issues?q=status:open%20customfield1223031:WPT-Tooling-Roll",
+                  "https://issues.chromium.org/issues?q=status:open%20customfield1223031:WPT-JS-Roll"]
 
 
 def main():
@@ -35,11 +33,11 @@ def main():
     remote_head = remote_head[0]
     print("Roll to remote head: %s" % remote_head)
 
-    pattern = "s/^Version: .*$/Version: %s/g" % remote_head
+    pattern = "s/^Revision: .*$/Revision: %s/g" % remote_head
     path_to_wpt_tools_dir = os.path.abspath(os.path.dirname(__file__))
     path_to_readme = os.path.join(path_to_wpt_tools_dir, "README.chromium")
 
-    # Update Version in //third_party/wpt_tools/README.chromium
+    # Update Revision in //third_party/wpt_tools/README.chromium
     # This program only works on linux for now, as sed has slightly
     # different format on mac
     print("Update commit hash code for %s" % path_to_readme)

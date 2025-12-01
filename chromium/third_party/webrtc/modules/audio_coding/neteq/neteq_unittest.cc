@@ -120,8 +120,8 @@ TEST_F(NetEqDecodingTestFaxMode, TestFrameWaitingTimeStatistics) {
   for (size_t i = 0; i < num_frames; ++i) {
     const uint8_t payload[kPayloadBytes] = {0};
     RTPHeader rtp_info;
-    rtp_info.sequenceNumber = rtc::checked_cast<uint16_t>(i);
-    rtp_info.timestamp = rtc::checked_cast<uint32_t>(i * kSamples);
+    rtp_info.sequenceNumber = checked_cast<uint16_t>(i);
+    rtp_info.timestamp = checked_cast<uint32_t>(i * kSamples);
     rtp_info.ssrc = 0x1234;     // Just an arbitrary SSRC.
     rtp_info.payloadType = 94;  // PCM16b WB codec.
     rtp_info.markerBit = 0;
@@ -261,7 +261,7 @@ TEST_F(NetEqDecodingTest, MAYBE_DecoderError) {
   static const int kExpectedOutputLength = 160;  // 10 ms at 16 kHz sample rate.
   const int16_t* const_out_frame_data = out_frame_.data();
   for (int i = 0; i < kExpectedOutputLength; ++i) {
-    rtc::StringBuilder ss;
+    StringBuilder ss;
     ss << "i = " << i;
     SCOPED_TRACE(ss.str());  // Print out the parameter values on failure.
     EXPECT_EQ(0, const_out_frame_data[i]);
@@ -283,7 +283,7 @@ TEST_F(NetEqDecodingTest, GetAudioBeforeInsertPacket) {
       kInitSampleRateHz / 100;  // 10 ms at initial sample rate.
   const int16_t* const_out_frame_data = out_frame_.data();
   for (int i = 0; i < kExpectedOutputLength; ++i) {
-    rtc::StringBuilder ss;
+    StringBuilder ss;
     ss << "i = " << i;
     SCOPED_TRACE(ss.str());  // Print out the parameter values on failure.
     EXPECT_EQ(0, const_out_frame_data[i]);
@@ -346,7 +346,7 @@ class NetEqBgnTest : public NetEqDecodingTest {
 
       // Next packet.
       rtp_info.timestamp +=
-          rtc::checked_cast<uint32_t>(expected_samples_per_channel);
+          checked_cast<uint32_t>(expected_samples_per_channel);
       rtp_info.sequenceNumber++;
     }
 
@@ -799,7 +799,7 @@ TEST_F(NetEqDecodingTestTwoInstances, CompareMutedStateOnOff) {
   AudioFrame out_frame1, out_frame2;
   bool muted;
   for (int i = 0; i < 1000; ++i) {
-    rtc::StringBuilder ss;
+    StringBuilder ss;
     ss << "i = " << i;
     SCOPED_TRACE(ss.str());  // Print out the loop iterator on failure.
     EXPECT_EQ(0, neteq_->GetAudio(&out_frame1, &muted));
@@ -825,7 +825,7 @@ TEST_F(NetEqDecodingTestTwoInstances, CompareMutedStateOnOff) {
   int counter = 0;
   while (out_frame1.speech_type_ != AudioFrame::kNormalSpeech) {
     ASSERT_LT(counter++, 1000) << "Test timed out";
-    rtc::StringBuilder ss;
+    StringBuilder ss;
     ss << "counter = " << counter;
     SCOPED_TRACE(ss.str());  // Print out the loop iterator on failure.
     EXPECT_EQ(0, neteq_->GetAudio(&out_frame1, &muted));
@@ -929,11 +929,10 @@ void NetEqDecodingTestFaxMode::TestJitterBufferDelay(bool apply_packet_loss) {
 
   // Check jitter buffer delay.
   NetEqLifetimeStatistics stats = neteq_->GetLifetimeStatistics();
-  EXPECT_EQ(expected_delay,
-            rtc::checked_cast<int>(stats.jitter_buffer_delay_ms));
+  EXPECT_EQ(expected_delay, checked_cast<int>(stats.jitter_buffer_delay_ms));
   EXPECT_EQ(expected_emitted_count, stats.jitter_buffer_emitted_count);
   EXPECT_EQ(expected_target_delay,
-            rtc::checked_cast<int>(stats.jitter_buffer_target_delay_ms));
+            checked_cast<int>(stats.jitter_buffer_target_delay_ms));
   // In this test, since the packets are inserted with a receive time equal to
   // the current clock time, the jitter buffer delay should match the total
   // processing delay.
@@ -982,7 +981,7 @@ TEST_F(NetEqDecodingTestFaxMode, TestJitterBufferDelayWithAcceleration) {
   EXPECT_EQ(10 * kSamples * 3, stats.jitter_buffer_delay_ms);
   EXPECT_EQ(kSamples * 3, stats.jitter_buffer_emitted_count);
   EXPECT_EQ(expected_target_delay,
-            rtc::checked_cast<int>(stats.jitter_buffer_target_delay_ms));
+            checked_cast<int>(stats.jitter_buffer_target_delay_ms));
 }
 
 namespace test {

@@ -5,15 +5,15 @@ export const description = `
 import { makeTestGroup } from '../../../common/framework/test_group.js';
 import { assert } from '../../../common/util/util.js';
 
-import { ValidationTest } from './validation_test.js';
+import { AllFeaturesMaxLimitsValidationTest } from './validation_test.js';
 
-export const g = makeTestGroup(ValidationTest);
+export const g = makeTestGroup(AllFeaturesMaxLimitsValidationTest);
 
 g.test('index_range,explicit_layout')
   .desc(
     `
-  Test that a validation error is generated if the index exceeds the size of the bind group layouts
-  using a pipeline with an explicit layout.
+  Test that a validation error is generated if the index is greater than the maximum number of bind
+  groups.
   `
   )
   .params(u => u.combine('index', [0, 1, 2, 3, 4, 5]))
@@ -24,7 +24,6 @@ g.test('index_range,explicit_layout')
       entries: [],
     });
 
-    const kBindGroupLayoutsSizeInPipelineLayout = 1;
     const pipelineLayout = t.device.createPipelineLayout({
       bindGroupLayouts: [pipelineBindGroupLayouts],
     });
@@ -54,7 +53,7 @@ g.test('index_range,explicit_layout')
       },
     });
 
-    const shouldError = index >= kBindGroupLayoutsSizeInPipelineLayout;
+    const shouldError = index >= t.device.limits.maxBindGroups;
 
     t.expectValidationError(() => {
       pipeline.getBindGroupLayout(index);
@@ -64,15 +63,13 @@ g.test('index_range,explicit_layout')
 g.test('index_range,auto_layout')
   .desc(
     `
-  Test that a validation error is generated if the index exceeds the size of the bind group layouts
-  using a pipeline with an auto layout.
+  Test that a validation error is generated if the index is greater than the maximum number of bind
+  groups.
   `
   )
   .params(u => u.combine('index', [0, 1, 2, 3, 4, 5]))
   .fn(t => {
     const { index } = t.params;
-
-    const kBindGroupLayoutsSizeInPipelineLayout = 1;
 
     const pipeline = t.device.createRenderPipeline({
       layout: 'auto',
@@ -101,7 +98,7 @@ g.test('index_range,auto_layout')
       },
     });
 
-    const shouldError = index >= kBindGroupLayoutsSizeInPipelineLayout;
+    const shouldError = index >= t.device.limits.maxBindGroups;
 
     t.expectValidationError(() => {
       pipeline.getBindGroupLayout(index);

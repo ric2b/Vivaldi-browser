@@ -55,15 +55,13 @@ CreateTestFixture(const std::string& test_case_name,
                   TimeController& time_controller,
                   std::pair<EmulatedNetworkManagerInterface*,
                             EmulatedNetworkManagerInterface*> network_links,
-                  rtc::FunctionView<void(PeerConfigurer*)> alice_configurer,
-                  rtc::FunctionView<void(PeerConfigurer*)> bob_configurer) {
+                  FunctionView<void(PeerConfigurer*)> alice_configurer,
+                  FunctionView<void(PeerConfigurer*)> bob_configurer) {
   auto fixture = webrtc_pc_e2e::CreatePeerConnectionE2EQualityTestFixture(
       test_case_name, time_controller, /*audio_quality_analyzer=*/nullptr,
       /*video_quality_analyzer=*/nullptr);
-  auto alice = std::make_unique<PeerConfigurer>(
-      network_links.first->network_dependencies());
-  auto bob = std::make_unique<PeerConfigurer>(
-      network_links.second->network_dependencies());
+  auto alice = std::make_unique<PeerConfigurer>(*network_links.first);
+  auto bob = std::make_unique<PeerConfigurer>(*network_links.second);
   alice_configurer(alice.get());
   bob_configurer(bob.get());
   fixture->AddPeer(std::move(alice));

@@ -18,6 +18,7 @@
 #include "base/task/thread_pool.h"
 #include "base/time/time.h"
 #include "content/browser/interest_group/bidding_and_auction_server_key_fetcher.h"
+#include "content/browser/interest_group/for_debugging_only_report_util.h"
 #include "content/browser/interest_group/interest_group_features.h"
 #include "content/browser/interest_group/interest_group_manager_impl.h"
 #include "content/browser/interest_group/interest_group_storage.h"
@@ -346,10 +347,11 @@ void InterestGroupCachingStorage::RecordInterestGroupWin(
 }
 
 void InterestGroupCachingStorage::RecordDebugReportLockout(
-    base::Time last_report_sent_time) {
+    base::Time starting_time,
+    base::TimeDelta duration) {
   interest_group_storage_
       .AsyncCall(&InterestGroupStorage::RecordDebugReportLockout)
-      .WithArgs(last_report_sent_time);
+      .WithArgs(starting_time, duration);
 }
 
 void InterestGroupCachingStorage::RecordDebugReportCooldown(
@@ -359,6 +361,23 @@ void InterestGroupCachingStorage::RecordDebugReportCooldown(
   interest_group_storage_
       .AsyncCall(&InterestGroupStorage::RecordDebugReportCooldown)
       .WithArgs(origin, cooldown_start, cooldown_type);
+}
+
+void InterestGroupCachingStorage::RecordViewClick(
+    network::AdAuctionEventRecord event_record) {
+  // Cached interest groups containing stale view / click counts are
+  // intentionally not evicted -- views especially occur frequently, and would
+  // result in many evictions, limiting the usefulness of this cache. So, for
+  // performance, it is better to return view / click data that's slightly
+  // stale.
+  //
+  // TODO(crbug.com/394108643): Cap the time duration of this staleness with a
+  // new timer that evicts groups loaded more than say 120 seconds ago. Without
+  // this, in the rare case that auctions that each load a given IG are running
+  // constantly, back-to-back, the view click data for that IG could become
+  // arbitrarily stale.
+  interest_group_storage_.AsyncCall(&InterestGroupStorage::RecordViewClick)
+      .WithArgs(std::move(event_record));
 }
 
 void InterestGroupCachingStorage::UpdateKAnonymity(
@@ -442,13 +461,6 @@ void InterestGroupCachingStorage::GetInterestGroupsForUpdate(
       .Then(std::move(callback));
 }
 
-void InterestGroupCachingStorage::GetDebugReportLockout(
-    base::OnceCallback<void(std::optional<base::Time>)> callback) {
-  return interest_group_storage_
-      .AsyncCall(&InterestGroupStorage::GetDebugReportLockout)
-      .Then(std::move(callback));
-}
-
 void InterestGroupCachingStorage::GetDebugReportLockoutAndCooldowns(
     base::flat_set<url::Origin> origins,
     base::OnceCallback<void(std::optional<DebugReportLockoutAndCooldowns>)>
@@ -456,6 +468,14 @@ void InterestGroupCachingStorage::GetDebugReportLockoutAndCooldowns(
   return interest_group_storage_
       .AsyncCall(&InterestGroupStorage::GetDebugReportLockoutAndCooldowns)
       .WithArgs(std::move(origins))
+      .Then(std::move(callback));
+}
+
+void InterestGroupCachingStorage::GetDebugReportLockoutAndAllCooldowns(
+    base::OnceCallback<void(std::optional<DebugReportLockoutAndCooldowns>)>
+        callback) {
+  return interest_group_storage_
+      .AsyncCall(&InterestGroupStorage::GetDebugReportLockoutAndAllCooldowns)
       .Then(std::move(callback));
 }
 
@@ -527,20 +547,40 @@ void InterestGroupCachingStorage::UpdateInterestGroupPriorityOverrides(
 
 void InterestGroupCachingStorage::SetBiddingAndAuctionServerKeys(
     const url::Origin& coordinator,
-    const std::vector<BiddingAndAuctionServerKey>& keys,
+    std::string serialized_keys,
     base::Time expiration) {
   interest_group_storage_
       .AsyncCall(&InterestGroupStorage::SetBiddingAndAuctionServerKeys)
-      .WithArgs(coordinator, keys, expiration);
+      .WithArgs(coordinator, std::move(serialized_keys), expiration);
 }
 void InterestGroupCachingStorage::GetBiddingAndAuctionServerKeys(
     const url::Origin& coordinator,
-    base::OnceCallback<
-        void(std::pair<base::Time, std::vector<BiddingAndAuctionServerKey>>)>
-        callback) {
+    base::OnceCallback<void(std::pair<base::Time, std::string>)> callback) {
   interest_group_storage_
       .AsyncCall(&InterestGroupStorage::GetBiddingAndAuctionServerKeys)
       .WithArgs(coordinator)
+      .Then(std::move(callback));
+}
+
+void InterestGroupCachingStorage::WriteHashedKAnonymityKeysToCache(
+    const std::vector<std::string>& positive_hashed_keys,
+    const std::vector<std::string>& negative_hashed_keys,
+    base::Time time_fetched) {
+  interest_group_storage_
+      .AsyncCall(base::IgnoreResult(
+          &InterestGroupStorage::WriteHashedKAnonymityKeysToCache))
+      .WithArgs(positive_hashed_keys, negative_hashed_keys, time_fetched);
+}
+
+void InterestGroupCachingStorage::LoadPositiveHashedKAnonymityKeysFromCache(
+    const std::vector<std::string>& keys,
+    base::Time min_valid_time,
+    base::OnceCallback<void(InterestGroupStorage::KAnonymityCacheResponse)>
+        callback) {
+  interest_group_storage_
+      .AsyncCall(
+          &InterestGroupStorage::LoadPositiveHashedKAnonymityKeysFromCache)
+      .WithArgs(keys, min_valid_time)
       .Then(std::move(callback));
 }
 

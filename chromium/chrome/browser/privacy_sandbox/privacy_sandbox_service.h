@@ -11,6 +11,7 @@
 #include "base/memory/raw_ptr.h"
 #include "chrome/browser/first_party_sets/first_party_sets_policy_service.h"
 #include "chrome/browser/privacy_sandbox/privacy_sandbox_countries.h"
+#include "chrome/browser/privacy_sandbox/privacy_sandbox_queue_manager.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "components/prefs/pref_change_registrar.h"
@@ -147,21 +148,6 @@ class PrivacySandboxService : public KeyedService {
     kMaxValue = kNoticeAdsMeasurementMoreInfoClosed,
   };
 
-  // Contains the possible states of the Notice Queue.
-  enum class NoticeQueueState {
-    // Queued on browser startup.
-    kQueueOnStartup = 0,
-    // Queued when new tab helper is created or navigation occurred.
-    kQueueOnThOrNav = 1,
-    // Released when new tab helper is created or navigation occurred.
-    kReleaseOnThOrNav = 2,
-    // Released because DMA notice showed during session.
-    kReleaseOnDMA = 3,
-    // Released after successful show.
-    kReleaseOnShown = 4,
-    kMaxValue = kReleaseOnShown,
-  };
-
   // If during the trials a previous consent decision was made, or the notice
   // was already acknowledged, and the privacy sandbox is disabled,
   // `prefs::kPrivacySandboxM1PromptSuppressed` was set to either
@@ -215,6 +201,16 @@ class PrivacySandboxService : public KeyedService {
   };
   // LINT.ThenChange(//tools/metrics/histograms/metadata/settings/enums.xml:SettingsPrivacySandboxPromptStartupState)
 
+  // Enum for the different events that can be triggered from the
+  // PrivacySandboxApis Dialog. It used to bubble up some Dialog events to other
+  // components.
+  enum class AdsDialogCallbackNoArgsEvents {
+    kShowDialog,
+    kCloseDialog,
+    kOpenAdsPrivacySettings,
+    kOpenMeasurementSettings,
+  };
+
   // Returns whether |url| is suitable to display the Privacy Sandbox prompt
   // over. Only about:blank and certain chrome:// URLs are considered
   // suitable.
@@ -257,25 +253,8 @@ class PrivacySandboxService : public KeyedService {
   // Returns whether a Privacy Sandbox prompt is currently open for |browser|.
   virtual bool IsPromptOpenForBrowser(Browser* browser) = 0;
 
-  // The following methods call directly into the product messaging controller.
-  // TODO(crbug.com/370804492): When we add DMA notice to queue, consider
-  // extrapolating these methods.
-  virtual bool IsNoticeQueued() = 0;
-  virtual bool IsHoldingHandle() = 0;
-  // If the notice is in the queue, it will unqueue it. Otherwise, if the handle
-  // is being held, it will release the handle.
-  virtual void MaybeUnqueueNotice(NoticeQueueState queue_source) = 0;
-  // If a prompt is required and we are not already in the queue or holding the
-  // handle, will add the notice to the product messaging controller queue.
-  virtual void MaybeQueueNotice(NoticeQueueState queue_source) = 0;
-  // Triggered by product messaging code when our turn in queue has arrived.
-  // Moves the handle to temporary location to hold it.
-  virtual void HoldQueueHandle(user_education::RequiredNoticePriorityHandle
-                                   messaging_priority_handle) = 0;
-  // Tracks whether the queue is meant to be suppressed or not. If set to true,
-  // queueing and unqueueing attempts will be ignored, but the existing queue
-  // will be unaffected.
-  virtual void SetSuppressQueue(bool suppress_queue) = 0;
+  virtual privacy_sandbox::PrivacySandboxQueueManager&
+  GetPrivacySandboxNoticeQueueManager() = 0;
 #endif  // !BUILDFLAG(IS_ANDROID)
 
   // If set to true, this treats the testing environment as that of a branded
@@ -299,12 +278,6 @@ class PrivacySandboxService : public KeyedService {
 
   // Returns whether the RelatedWebsiteSets preference is managed.
   virtual bool IsRelatedWebsiteSetsDataAccessManaged() const = 0;
-
-  // DEPRECATED - Do not use in new code. It will be replaced with queries to
-  // the Related Website Sets that are in the browser-process.
-  // Virtual for mocking in tests.
-  virtual base::flat_map<net::SchemefulSite, net::SchemefulSite>
-  GetSampleRelatedWebsiteSets() const = 0;
 
   // Returns the owner domain of the related website set that `site_url` is a
   // member of, or std::nullopt if `site_url` is not recognised as a member of

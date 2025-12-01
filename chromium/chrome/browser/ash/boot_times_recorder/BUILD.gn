@@ -18,11 +18,11 @@ static_library("boot_times_recorder") {
 
   deps = [
     "//base",
-    "//chrome/browser:browser_process",
     "//chrome/browser/ui:browser_list",
     "//chrome/common",
     "//chromeos/ash/components/metrics",
     "//components/prefs",
+    "//components/session_manager/core",
     "//components/user_manager",
     "//content/public/browser",
   ]

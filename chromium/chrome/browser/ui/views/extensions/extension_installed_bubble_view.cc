@@ -11,19 +11,18 @@
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
 #include "chrome/browser/extensions/account_extension_tracker.h"
-#include "chrome/browser/extensions/extension_sync_util.h"
 #include "chrome/browser/extensions/extension_util.h"
 #include "chrome/browser/platform_util.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/signin/signin_promo_util.h"
 #include "chrome/browser/signin/signin_ui_util.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_navigator.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/chrome_pages.h"
-#include "chrome/browser/ui/extensions/extension_install_ui.h"
+#include "chrome/browser/ui/extensions/extension_install_ui_desktop.h"
 #include "chrome/browser/ui/extensions/extension_installed_bubble_model.h"
 #include "chrome/browser/ui/extensions/extension_installed_waiter.h"
-#include "chrome/browser/ui/signin/bubble_signin_promo_delegate.h"
 #include "chrome/browser/ui/singleton_tabs.h"
 #include "chrome/browser/ui/views/chrome_layout_provider.h"
 #include "chrome/browser/ui/views/extensions/extensions_toolbar_button.h"
@@ -33,8 +32,11 @@
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/branded_strings.h"
 #include "chrome/grit/generated_resources.h"
+#include "components/signin/public/base/signin_switches.h"
 #include "components/signin/public/identity_manager/account_info.h"
+#include "components/sync/service/local_data_description.h"
 #include "extensions/common/extension.h"
+#include "extensions/common/extension_id.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
@@ -46,7 +48,7 @@
 #include "ui/views/layout/box_layout.h"
 
 #if !BUILDFLAG(IS_CHROMEOS)
-#include "chrome/browser/ui/views/promos/bubble_signin_promo_view.h"
+#include "chrome/browser/ui/signin/promos/bubble_signin_promo_view.h"
 #endif
 
 #include "app/vivaldi_apptools.h"
@@ -54,14 +56,24 @@
 namespace {
 
 const int kRightColumnWidth = 285;
+
+// When used, the entire bubble will be approximately 448px in width.
+const int kExplicitSigninRightColumnWidth = 348;
 constexpr gfx::Size kMaxIconSize{43, 43};
 
-views::Label* CreateLabel(const std::u16string& text) {
-  views::Label* label = new views::Label(text);
-  label->SetMultiLine(true);
-  label->SetHorizontalAlignment(gfx::ALIGN_LEFT);
-  label->SizeToFit(kRightColumnWidth);
-  return label;
+int GetRightColumnWidth() {
+  return switches::IsExtensionsExplicitBrowserSigninEnabled()
+             ? kExplicitSigninRightColumnWidth
+             : kRightColumnWidth;
+}
+
+std::unique_ptr<views::Label> CreateLabel(const std::u16string& text) {
+  return views::Builder<views::Label>()
+      .SetText(text)
+      .SetHorizontalAlignment(gfx::ALIGN_LEFT)
+      .SetMultiLine(true)
+      .SizeToFit(GetRightColumnWidth())
+      .Build();
 }
 
 views::View* AnchorViewForBrowser(const ExtensionInstalledBubbleModel* model,
@@ -90,18 +102,13 @@ views::View* AnchorViewForBrowser(const ExtensionInstalledBubbleModel* model,
 
 #if !BUILDFLAG(IS_CHROMEOS)
 std::unique_ptr<views::View> CreateSigninPromoView(
-    Profile* profile,
-    BubbleSignInPromoDelegate* delegate) {
-  int promo_message_id =
-      extensions::sync_util::IsExtensionsExplicitSigninEnabled()
-          ? IDS_EXTENSION_INSTALLED_PROMO_EXPLICIT_SIGNIN_MESSAGE
-          : IDS_EXTENSION_INSTALLED_DICE_PROMO_SYNC_MESSAGE;
-
+    content::WebContents* web_contents,
+    const extensions::ExtensionId& extension_id) {
   return std::make_unique<BubbleSignInPromoView>(
-      profile, delegate, signin_metrics::AccessPoint::kExtensionInstallBubble,
-      promo_message_id, ui::ButtonStyle::kProminent);
+      web_contents, signin_metrics::AccessPoint::kExtensionInstallBubble,
+      syncer::LocalDataItemModel::DataId(extension_id));
 }
-#endif
+#endif  // !BUILDFLAG(IS_CHROMEOS)
 
 }  // namespace
 
@@ -141,11 +148,6 @@ ExtensionInstalledBubbleView::ExtensionInstalledBubbleView(
       browser_(browser),
       model_(std::move(model)) {
   SetButtons(static_cast<int>(ui::mojom::DialogButton::kNone));
-  if (model_->show_sign_in_promo()) {
-#if !BUILDFLAG(IS_CHROMEOS)
-    SetFootnoteView(CreateSigninPromoView(browser->profile(), this));
-#endif
-  }
   SetIcon(ui::ImageModel::FromImageSkia(model_->MakeIconOfSize(kMaxIconSize)));
   SetShowIcon(true);
   SetShowCloseButton(true);
@@ -156,6 +158,23 @@ ExtensionInstalledBubbleView::ExtensionInstalledBubbleView(
   base::i18n::AdjustStringForLocaleDirection(&extension_name);
   SetTitle(l10n_util::GetStringFUTF16(IDS_EXTENSION_INSTALLED_HEADING,
                                       extension_name));
+
+#if !BUILDFLAG(IS_CHROMEOS)
+  // Add a sync or sign in promo in the footer if it should be shown.
+  extensions::ExtensionRegistry* registry =
+      extensions::ExtensionRegistry::Get(browser->profile());
+  const extensions::Extension* extension =
+      registry->enabled_extensions().GetByID(model_->extension_id());
+
+  if (signin::ShouldShowExtensionSignInPromo(*browser->profile(), *extension) ||
+      (signin::ShouldShowExtensionSyncPromo(*browser->profile(), *extension) &&
+       !base::FeatureList::IsEnabled(
+           switches::kEnableExtensionsExplicitBrowserSignin))) {
+    SetFootnoteView(CreateSigninPromoView(
+        browser->tab_strip_model()->GetActiveWebContents(),
+        model_->extension_id()));
+  }
+#endif  // !BUILDFLAG(IS_CHROMEOS)
 }
 
 ExtensionInstalledBubbleView::~ExtensionInstalledBubbleView() = default;
@@ -164,11 +183,6 @@ void ExtensionInstalledBubbleView::UpdateAnchorView() {
   views::View* reference_view = AnchorViewForBrowser(model_.get(), browser_);
   DCHECK(reference_view);
   SetAnchorView(reference_view);
-}
-
-void ExtensionInstalledBubbleView::SignInForTesting(
-    const AccountInfo& account_info) {
-  OnSignIn(account_info);
 }
 
 void ExtensionInstalledBubbleView::Init() {
@@ -195,7 +209,7 @@ void ExtensionInstalledBubbleView::Init() {
   auto layout = std::make_unique<views::BoxLayout>(
       views::BoxLayout::Orientation::kVertical, gfx::Insets(),
       provider->GetDistanceMetric(views::DISTANCE_RELATED_CONTROL_VERTICAL));
-  layout->set_minimum_cross_axis_size(kRightColumnWidth);
+  layout->set_minimum_cross_axis_size(GetRightColumnWidth());
   // Indent by the size of the icon.
   layout->set_inside_border_insets(
       gfx::Insets::TLBR(0,
@@ -224,23 +238,6 @@ void ExtensionInstalledBubbleView::Init() {
   }
 }
 
-void ExtensionInstalledBubbleView::OnSignIn(const AccountInfo& account) {
-  // Sign the user into transport mode (sync not enabled) if extensions sync in
-  // transport mode is supported. Otherwise, sign in with sync enabled.
-  if (extensions::sync_util::IsExtensionsExplicitSigninEnabled()) {
-    signin_ui_util::SignInFromSingleAccountPromo(
-        browser_->profile(), account,
-        signin_metrics::AccessPoint::kExtensionInstallBubble);
-    extensions::AccountExtensionTracker::Get(browser_->profile())
-        ->OnSignInInitiatedFromExtensionPromo(model_->extension_id());
-  } else {
-    signin_ui_util::EnableSyncFromSingleAccountPromo(
-        browser_->profile(), account,
-        signin_metrics::AccessPoint::kExtensionInstallBubble);
-  }
-  GetWidget()->Close();
-}
-
 void ExtensionInstalledBubbleView::LinkClicked() {
   const GURL kUrl(base::StrCat({chrome::kChromeUIExtensionsURL,
                                 chrome::kExtensionConfigureCommandsSubPage}));
@@ -260,7 +257,7 @@ void ShowUiOnToolbarMenu(scoped_refptr<const extensions::Extension> extension,
                    browser->profile(), extension.get(), icon));
 }
 
-void ExtensionInstallUI::ShowBubble(
+void ExtensionInstallUIDesktop::ShowBubble(
     scoped_refptr<const extensions::Extension> extension,
     Browser* browser,
     const SkBitmap& icon) {

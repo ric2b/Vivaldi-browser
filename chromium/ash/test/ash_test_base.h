@@ -15,6 +15,7 @@
 #include "ash/session/test_session_controller_client.h"
 #include "ash/system/privacy_hub/sensor_disabled_notification_delegate.h"
 #include "ash/test/ash_test_helper.h"
+#include "ash/test/login_info.h"
 #include "ash/test/pixel/ash_pixel_test_init_params.h"
 #include "ash/wm/desks/desks_util.h"
 #include "ash/wm/overview/overview_types.h"
@@ -68,16 +69,14 @@ namespace ash {
 class AmbientAshTestHelper;
 class AppListTestHelper;
 class AshPixelDiffer;
+class AshPixelTestHelper;
 class AshTestHelper;
 class NotificationCenterTray;
 class Shelf;
 class TestAppListClient;
-class TestShellDelegate;
 class TestSystemTrayClient;
 class UnifiedSystemTray;
 class WorkAreaInsets;
-
-inline constexpr std::string kDefaultUserEmail = "user0@tray";
 
 // Base class for most tests in //ash. Constructs ash::Shell and all its
 // dependencies. Provides a user login session (use NoSessionAshTestBase for
@@ -105,7 +104,6 @@ class AshTestBase : public testing::Test {
 
   // testing::Test:
   void SetUp() override;
-  void SetUp(std::unique_ptr<TestShellDelegate> delegate);
   void TearDown() override;
 
   // Returns the notification center tray on the primary display.
@@ -198,11 +196,6 @@ class AshTestBase : public testing::Test {
   // Returns the raw pointer carried by `pixel_differ_`.
   AshPixelDiffer* GetPixelDiffer();
 
-  // Stabilizes the variable UI components (such as the battery view). It should
-  // be called after the active user changes since some UI components are
-  // associated with the active account.
-  void StabilizeUIForPixelTest();
-
   // Returns the EventGenerator that uses screen coordinates and works
   // across multiple displays. It creates a new generator if it
   // hasn't been created yet.
@@ -279,21 +272,34 @@ class AshTestBase : public testing::Test {
       const;
 
   void set_start_session(bool start_session) {
-    init_params_.start_session = start_session;
+    CHECK(init_params_) << "start_session must set before calling SetUp()";
+    init_params_->start_session = start_session;
   }
 
   void set_create_signin_pref_service(bool create_signin_pref_service) {
-    init_params_.create_signin_pref_service = create_signin_pref_service;
+    CHECK(init_params_)
+        << "create_create_signin_pref_service must set before calling SetUp()";
+    init_params_->create_signin_pref_service = create_signin_pref_service;
   }
 
   void set_create_global_cras_audio_handler(
       bool create_global_cras_audio_handler) {
-    init_params_.create_global_cras_audio_handler =
+    CHECK(init_params_)
+        << "create_global_cras_audio_handler must set before calling SetUp()";
+    init_params_->create_global_cras_audio_handler =
         create_global_cras_audio_handler;
   }
 
   void set_create_quick_pair_mediator(bool create_quick_pair_mediator) {
-    init_params_.create_quick_pair_mediator = create_quick_pair_mediator;
+    CHECK(init_params_)
+        << "create_quick_pair_mediator must set before calling SetUp()";
+    init_params_->create_quick_pair_mediator = create_quick_pair_mediator;
+  }
+
+  void set_shell_delegate(std::unique_ptr<ShellDelegate> shell_delegate) {
+    CHECK(init_params_) << "shell_delegate mustset before calling SetUp()";
+    CHECK(!init_params_->delegate);
+    init_params_->delegate = std::move(shell_delegate);
   }
 
   base::test::TaskEnvironment* task_environment() {
@@ -323,33 +329,24 @@ class AshTestBase : public testing::Test {
 
   AmbientAshTestHelper* GetAmbientAshTestHelper();
 
-  // Simulates a user sign-in, and returns an AccountId used to sign in.  It
-  // creates a new user session, adds it to existing user sessions and makes it
-  // the active user session.
-  //
-  // For convenience |user_email| is used to create an |AccountId|. For testing
-  // behavior where |AccountId|s are compared, prefer the method of the same
-  // name that takes an |AccountId| created with a valid storage key instead.
-  // See the documentation for|AccountId::GetUserEmail| for discussion.
+  // Simulates a user sign-in, and returns an AccountId used to sign in.
+  // Please see `AshTestHelper::SimulateUserLogin` for more details.
   AccountId SimulateUserLogin(
-      const std::string& user_email,
-      user_manager::UserType user_type = user_manager::UserType::kRegular);
-
-  // Simulates a user sign-in. It creates a new user session, adds it to
-  // existing user sessions and makes it the active user session.
-  void SimulateUserLogin(
-      const AccountId& account_id,
-      user_manager::UserType user_type = user_manager::UserType::kRegular,
+      LoginInfo login_info,
+      std::optional<AccountId> opt_account_id = std::nullopt,
       std::unique_ptr<PrefService> pref_service = nullptr);
+
+  // Similar to above, but it uses AccountId with default values.
+  void SimulateUserLogin(const AccountId& account_id);
 
   // Simular to SimulateUserLogin but for a newly created user first ever login.
   AccountId SimulateNewUserFirstLogin(const std::string& user_email);
 
   // Similar to SimulateUserLogin but for a guest user.
-  void SimulateGuestLogin();
+  AccountId SimulateGuestLogin();
 
   // Simulates kiosk mode. |user_type| must correlate to a kiosk type user.
-  void SimulateKioskMode(user_manager::UserType user_type);
+  AccountId SimulateKioskMode(user_manager::UserType user_type);
 
   // Switches the active user to `account_id`;
   void SwitchActiveUser(const AccountId& account_id);
@@ -402,7 +399,8 @@ class AshTestBase : public testing::Test {
   bool teardown_called_ = false;
 
   // AshTestHelper's init params.
-  AshTestHelper::InitParams init_params_;
+  std::unique_ptr<AshTestHelper::InitParams> init_params_ =
+      std::make_unique<AshTestHelper::InitParams>();
 
   // |task_environment_| is initialized-once at construction time but
   // subclasses may elect to provide their own.
@@ -419,6 +417,9 @@ class AshTestBase : public testing::Test {
 
   // Must be constructed after |task_environment_|.
   std::unique_ptr<AshTestHelper> ash_test_helper_;
+
+  // Used only for pixel tests.
+  std::unique_ptr<AshPixelTestHelper> pixel_test_helper_;
 
   std::unique_ptr<ui::test::EventGenerator> event_generator_;
 

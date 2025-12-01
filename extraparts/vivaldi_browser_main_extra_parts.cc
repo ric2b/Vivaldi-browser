@@ -60,8 +60,10 @@
 #include "contact/contact_service_factory.h"
 #include "prefs/vivaldi_pref_names.h"
 #include "ui/webui/vivaldi_web_ui_controller_factory.h"
+#include "vivaldi_status/vivaldi_status_factory.h"
 
 #include "components/direct_match/direct_match_service_factory.h"
+#include "vivaldi_status/vivaldi_status_factory.h"
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
 #include "extensions/api/auto_update/auto_update_api.h"
@@ -98,6 +100,8 @@
 #include "extensions/vivaldi_extensions_init.h"
 #include "ui/devtools/devtools_connector.h"
 #include "ui/vivaldi_rootdocument_handler.h"
+#include "browser/vivaldi_browser_component_wrapper_impl.h"
+#include "browser/vivaldi_extension_handover_impl.h"
 #endif
 
 #if BUILDFLAG(IS_LINUX)
@@ -136,6 +140,7 @@ void VivaldiBrowserMainExtraParts::PostEarlyInitialization() {
 
 void VivaldiBrowserMainExtraParts::
     EnsureBrowserContextKeyedServiceFactoriesBuilt() {
+  vivaldi_status::VivaldiStatusFactory::GetInstance();
   translate::TranslateLanguageList::DisableUpdate();
 #if !BUILDFLAG(IS_ANDROID)
   vivaldi::NotesModelFactory::GetInstance();
@@ -159,6 +164,7 @@ void VivaldiBrowserMainExtraParts::
   vivaldi::NotesModelFactory::GetInstance();
   direct_match::DirectMatchServiceFactory::GetInstance();
   VivaldiImageStore::InitFactory();
+  vivaldi_status::VivaldiStatusFactory::GetInstance();
 #if BUILDFLAG(ENABLE_EXTENSIONS)
   extensions::AutoUpdateAPI::GetFactoryInstance();
   extensions::BookmarkContextMenuAPI::GetFactoryInstance();
@@ -196,6 +202,12 @@ void VivaldiBrowserMainExtraParts::
   extensions::VivaldiRootDocumentHandlerFactory::GetInstance();
   vivaldi::WindowRegistryServiceFactory::GetInstance();
 
+  vivaldi::VivaldiExtensionHandoverImpl::CreateImpl();
+
+  // Create a browser-component side function wrapper that is accessed in the
+  // extension module via VivaldiBrowserComponentWrapper.
+  VivaldiBrowserComponentWrapper::CreateImpl();
+
 #endif  // ENABLE_EXTENSIONS
   VivaldiAdverseAdFilterListFactory::GetFactoryInstance();
 
@@ -210,6 +222,7 @@ void VivaldiBrowserMainExtraParts::
 
   VivaldiTranslateClient::LoadTranslationScript();
   SearchEnginesManagersFactory::GetInstance();
+
 }
 
 void VivaldiBrowserMainExtraParts::PreProfileInit() {
@@ -340,6 +353,12 @@ void VivaldiBrowserMainExtraPartsSmall::
   page_actions::ServiceFactory::GetInstance();
   adblock_filter::RuleServiceFactory::GetInstance();
   vivaldi::RequestFilterManagerFactory::GetInstance();
+
+#if BUILDFLAG(ENABLE_EXTENSIONS)
+  // Create a browser-component side function wrapper that is accessed in the
+  // extension module via VivaldiBrowserComponentWrapper.
+  VivaldiBrowserComponentWrapper::CreateImpl();
+#endif
 }
 
 void VivaldiBrowserMainExtraPartsSmall::PostEarlyInitialization() {}

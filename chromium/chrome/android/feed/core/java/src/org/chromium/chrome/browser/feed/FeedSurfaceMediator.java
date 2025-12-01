@@ -326,6 +326,7 @@ public class FeedSurfaceMediator
     private boolean mIsNewTabSearchEngineUrlAndroidEnabled;
     private boolean mIsPropertiesInitializedForStream;
     private @ClosedReason int mClosedReason = ClosedReason.SUSPEND_APP;
+    private final boolean mIsNewTabPageCustomizationEnabled;
 
     /**
      * @param coordinator The {@link FeedSurfaceCoordinator} that interacts with this class.
@@ -359,6 +360,7 @@ public class FeedSurfaceMediator
         mOptionsCoordinator.setOptionsListener(this);
         mIsNewTabSearchEngineUrlAndroidEnabled =
                 DseNewTabUrlManager.isNewTabSearchEngineUrlAndroidEnabled();
+        mIsNewTabPageCustomizationEnabled = ChromeFeatureList.sNewTabPageCustomization.isEnabled();
         mUiConfig = uiConfig;
 
         /*
@@ -613,14 +615,17 @@ public class FeedSurfaceMediator
                 mCoordinator.createFeedStream(StreamKind.FOR_YOU, new StreamsMediatorImpl()));
         setHeaderIndicatorState(suggestionsVisible);
 
-        // Build menu after section enabled key is set.
-        mFeedMenuModel = buildMenuItems();
-
         mCoordinator.initializeBubbleTriggering();
         mSigninManager.getIdentityManager().addObserver(this);
 
-        mSectionHeaderModel.set(SectionHeaderListProperties.MENU_MODEL_LIST_KEY, mFeedMenuModel);
-        mSectionHeaderModel.set(SectionHeaderListProperties.MENU_DELEGATE_KEY, this);
+        if (!mIsNewTabPageCustomizationEnabled) {
+            // Build menu after section enabled key is set.
+            mFeedMenuModel = buildMenuItems();
+
+            mSectionHeaderModel.set(
+                    SectionHeaderListProperties.MENU_MODEL_LIST_KEY, mFeedMenuModel);
+            mSectionHeaderModel.set(SectionHeaderListProperties.MENU_DELEGATE_KEY, this);
+        }
 
         setUpWebFeedTab();
 
@@ -640,6 +645,9 @@ public class FeedSurfaceMediator
 
         mStreamScrollListener =
                 new RecyclerView.OnScrollListener() {
+                    private RecyclerViewAnimationFinishDetector mAnimationFinishDetector =
+                            new RecyclerViewAnimationFinishDetector();
+
                     @Override
                     public void onScrollStateChanged(
                             @NonNull RecyclerView recyclerView, int newState) {
@@ -650,40 +658,57 @@ public class FeedSurfaceMediator
 
                     @Override
                     public void onScrolled(RecyclerView v, int dx, int dy) {
-                        mCoordinator
-                                .getView()
-                                .postOnAnimation(
-                                        () -> {
-                                            if (mSnapScrollHelper != null) {
-                                                mSnapScrollHelper.handleScroll();
-                                            }
-                                            for (ScrollListener listener : mScrollListeners) {
-                                                listener.onScrolled(dx, dy);
-                                            }
-
-                                            // Null if the stream has not been binded yet.
-                                            if (mCoordinator.getHybridListRenderer() != null
-                                                    && mCoordinator
-                                                                    .getHybridListRenderer()
-                                                                    .getListLayoutHelper()
-                                                            != null
-                                                    && mPositionToRestore
-                                                            != RecyclerView.NO_POSITION
-                                                    && mGetRestoringStateSupplier.get()
-                                                            == RestoringState.WAITING_TO_RESTORE) {
-                                                final boolean restored =
+                        final Runnable callback =
+                                () -> {
+                                    if (mSnapScrollHelper != null) {
+                                        mSnapScrollHelper.handleScroll();
+                                    }
+                                    for (ScrollListener listener : mScrollListeners) {
+                                        listener.onScrolled(dx, dy);
+                                    }
+                                    // Null if the stream has not been binded yet.
+                                    if (ChromeFeatureList.isEnabled(
+                                                    ChromeFeatureList.BACK_FORWARD_TRANSITIONS)
+                                            && mCoordinator.getHybridListRenderer() != null
+                                            && mCoordinator
+                                                            .getHybridListRenderer()
+                                                            .getListLayoutHelper()
+                                                    != null
+                                            && mPositionToRestore != RecyclerView.NO_POSITION
+                                            && mGetRestoringStateSupplier.get()
+                                                    == RestoringState.WAITING_TO_RESTORE) {
+                                        final boolean restored =
+                                                mCoordinator
+                                                                .getHybridListRenderer()
+                                                                .getListLayoutHelper()
+                                                                .findFirstVisibleItemPosition()
+                                                        >= mPositionToRestore;
+                                        if (restored) {
+                                            mPositionToRestore = RecyclerView.NO_POSITION;
+                                            final var originalAnimator =
+                                                    mCoordinator
+                                                            .getRecyclerView()
+                                                            .getItemAnimator();
+                                            mCoordinator
+                                                    .getRecyclerView()
+                                                    .setItemAnimator(
+                                                            new ItemAnimatorWithoutAnimation());
+                                            final Runnable onComplete =
+                                                    () -> {
+                                                        mGetRestoringStateSupplier.set(
+                                                                RestoringState.RESTORED);
                                                         mCoordinator
-                                                                        .getHybridListRenderer()
-                                                                        .getListLayoutHelper()
-                                                                        .findFirstVisibleItemPosition()
-                                                                >= mPositionToRestore;
-                                                if (restored) {
-                                                    mGetRestoringStateSupplier.set(
-                                                            RestoringState.RESTORED);
-                                                    mPositionToRestore = RecyclerView.NO_POSITION;
-                                                }
-                                            }
-                                        });
+                                                                .getRecyclerView()
+                                                                .setItemAnimator(originalAnimator);
+                                                        mAnimationFinishDetector
+                                                                .runWhenAnimationComplete(null);
+                                                    };
+                                            mAnimationFinishDetector.runWhenAnimationComplete(
+                                                    onComplete);
+                                        }
+                                    }
+                                };
+                        mCoordinator.getView().postOnAnimation(callback);
                     }
                 };
         mCoordinator.getRecyclerView().addOnScrollListener(mStreamScrollListener);
@@ -909,7 +934,7 @@ public class FeedSurfaceMediator
      * @return Whether the SignPromo should be visible.
      */
     private boolean shouldShowSigninPromo() {
-        // TODO(crbug.com/327387704): Move SignInPromo.shouldCreatePromo inside FeedSigninPromo
+        // TODO(crbug.com/352735671): Move SignInPromo.shouldCreatePromo inside FeedSigninPromo
         //  after phase 2 follow-up launch.
         boolean shouldCreatePromo = SignInPromo.shouldCreatePromo();
         if (ChromeFeatureList.isEnabled(ChromeFeatureList.UNO_PHASE_2_FOLLOW_UP)) {
@@ -1056,8 +1081,11 @@ public class FeedSurfaceMediator
 
         setHeaderIndicatorState(suggestionsVisible);
 
-        // Update toggleswitch item, which is last item in list.
-        mSectionHeaderModel.set(SectionHeaderListProperties.MENU_MODEL_LIST_KEY, buildMenuItems());
+        if (!mIsNewTabPageCustomizationEnabled) {
+            // Update toggleswitch item, which is last item in list.
+            mSectionHeaderModel.set(
+                    SectionHeaderListProperties.MENU_MODEL_LIST_KEY, buildMenuItems());
+        }
 
         if (mLegacySignInPromo != null) {
             mLegacySignInPromo.setCanShowPersonalizedSuggestions(suggestionsVisible);
@@ -1110,7 +1138,6 @@ public class FeedSurfaceMediator
         // Model and stream visibility set in {@link #updateSectionHeader}
         // which is called by the prefService observer.
         getPrefService().setBoolean(Pref.ARTICLES_LIST_VISIBLE, isExpanded);
-        FeedUma.recordFeedControlsAction(FeedUma.CONTROLS_ACTION_TOGGLED_FEED);
         SuggestionsMetrics.recordArticlesListVisible(mProfile);
 
         int streamType =
@@ -1330,7 +1357,6 @@ public class FeedSurfaceMediator
             Intent intent = new Intent(mContext, FeedManagementActivity.class);
             intent.putExtra(FeedManagementActivity.INITIATING_STREAM_TYPE_EXTRA, feedType);
             FeedServiceBridge.reportOtherUserAction(feedType, FeedUserActionType.TAPPED_MANAGE);
-            FeedUma.recordFeedControlsAction(FeedUma.CONTROLS_ACTION_CLICKED_MANAGE);
             mContext.startActivity(intent);
         } else if (itemId == R.id.ntp_feed_header_menu_item_activity) {
             mActionDelegate.openUrl(
@@ -1338,25 +1364,21 @@ public class FeedSurfaceMediator
                     new LoadUrlParams("https://myactivity.google.com/myactivity?product=50"));
             FeedServiceBridge.reportOtherUserAction(
                     feedType, FeedUserActionType.TAPPED_MANAGE_ACTIVITY);
-            FeedUma.recordFeedControlsAction(FeedUma.CONTROLS_ACTION_CLICKED_MY_ACTIVITY);
         } else if (itemId == R.id.ntp_feed_header_menu_item_interest) {
             mActionDelegate.openUrl(
                     WindowOpenDisposition.CURRENT_TAB,
                     new LoadUrlParams("https://www.google.com/preferences/interests"));
             FeedServiceBridge.reportOtherUserAction(
                     feedType, FeedUserActionType.TAPPED_MANAGE_INTERESTS);
-            FeedUma.recordFeedControlsAction(FeedUma.CONTROLS_ACTION_CLICKED_MANAGE_INTERESTS);
         } else if (itemId == R.id.ntp_feed_header_menu_item_reactions) {
             mActionDelegate.openUrl(
                     WindowOpenDisposition.CURRENT_TAB,
                     new LoadUrlParams("https://www.google.com/search/contributions/reactions"));
             FeedServiceBridge.reportOtherUserAction(
                     feedType, FeedUserActionType.TAPPED_MANAGE_REACTIONS);
-            FeedUma.recordFeedControlsAction(FeedUma.CONTROLS_ACTION_CLICKED_MANAGE_INTERESTS);
         } else if (itemId == R.id.ntp_feed_header_menu_item_learn) {
             mActionDelegate.openHelpPage();
             FeedServiceBridge.reportOtherUserAction(feedType, FeedUserActionType.TAPPED_LEARN_MORE);
-            FeedUma.recordFeedControlsAction(FeedUma.CONTROLS_ACTION_CLICKED_LEARN_MORE);
         } else if (itemId == R.id.ntp_feed_header_menu_item_toggle_switch) {
             onSectionHeaderToggled();
         } else {
@@ -1400,7 +1422,7 @@ public class FeedSurfaceMediator
     // https://stackoverflow.com/questions/33710605/detect-animation-finish-in-androids-recyclerview
     private class RecyclerViewAnimationFinishDetector
             implements RecyclerView.ItemAnimator.ItemAnimatorFinishedListener {
-        private Runnable mFinishedCallback;
+        private @Nullable Runnable mFinishedCallback;
 
         /**
          * Asynchronously waits for the animation to finish. If there's already a callback waiting,
@@ -1416,11 +1438,7 @@ public class FeedSurfaceMediator
 
             // The RecyclerView has not started animating yet, so post a message to the
             // message queue that will be run after the RecyclerView has started animating.
-            new Handler()
-                    .post(
-                            () -> {
-                                checkFinish();
-                            });
+            new Handler().post(this::checkFinish);
         }
 
         private void checkFinish() {
@@ -1446,11 +1464,58 @@ public class FeedSurfaceMediator
         @Override
         public void onAnimationsFinished() {
             // There might still be more items that will be animated after this one.
-            new Handler()
-                    .post(
-                            () -> {
-                                checkFinish();
-                            });
+            new Handler().post(this::checkFinish);
+        }
+    }
+
+    // Force RecyclerView to skip all animations.
+    private static class ItemAnimatorWithoutAnimation extends RecyclerView.ItemAnimator {
+
+        @Override
+        public boolean animateDisappearance(
+                RecyclerView.ViewHolder viewHolder,
+                ItemHolderInfo itemHolderInfo,
+                ItemHolderInfo itemHolderInfo1) {
+            return false;
+        }
+
+        @Override
+        public boolean animateAppearance(
+                RecyclerView.ViewHolder viewHolder,
+                ItemHolderInfo itemHolderInfo,
+                ItemHolderInfo itemHolderInfo1) {
+            return false;
+        }
+
+        @Override
+        public boolean animatePersistence(
+                RecyclerView.ViewHolder viewHolder,
+                ItemHolderInfo itemHolderInfo,
+                ItemHolderInfo itemHolderInfo1) {
+            return false;
+        }
+
+        @Override
+        public boolean animateChange(
+                RecyclerView.ViewHolder viewHolder,
+                RecyclerView.ViewHolder viewHolder1,
+                ItemHolderInfo itemHolderInfo,
+                ItemHolderInfo itemHolderInfo1) {
+            return false;
+        }
+
+        @Override
+        public void runPendingAnimations() {}
+
+        @Override
+        public void endAnimation(RecyclerView.ViewHolder viewHolder) {}
+
+        @Override
+        public void endAnimations() {}
+
+        @Override
+        public boolean isRunning() {
+            return false;
         }
     }
 

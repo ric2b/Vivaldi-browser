@@ -13,11 +13,11 @@ import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 
 import org.chromium.base.Callback;
+import org.chromium.base.lifetime.DestroyChecker;
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.base.supplier.Supplier;
 import org.chromium.chrome.browser.browser_controls.BrowserControlsStateProvider;
-import org.chromium.chrome.browser.compositor.overlays.strip.StripLayoutHelperManager;
 import org.chromium.chrome.browser.device.DeviceClassManager;
 import org.chromium.chrome.browser.fullscreen.FullscreenManager;
 import org.chromium.chrome.browser.hub.HubLayout;
@@ -39,10 +39,13 @@ import org.chromium.components.browser_ui.desktop_windowing.DesktopWindowStateMa
 import org.chromium.components.browser_ui.widget.gesture.SwipeGestureListener.ScrollDirection;
 import org.chromium.components.browser_ui.widget.gesture.SwipeGestureListener.SwipeHandler;
 import org.chromium.ui.resources.dynamics.DynamicResourceLoader;
+import org.chromium.ui.util.XrUtils;
 
 import java.util.List;
 
 // Vivaldi
+import androidx.annotation.NonNull;
+
 import org.chromium.build.BuildConfig;
 import org.chromium.chrome.browser.ChromeApplicationImpl;
 
@@ -81,6 +84,7 @@ public class LayoutManagerChrome extends LayoutManagerImpl
     private final HubLayoutDependencyHolder mHubLayoutDependencyHolder;
     private final ThumbnailChangeListener mThumbnailChangeListener = (id) -> requestUpdate();
     private final Callback<TabContentManager> mOnTabContentManager = this::onTabContentManager;
+    private final DestroyChecker mDestroyChecker = new DestroyChecker();
 
     protected @Nullable DesktopWindowStateManager mDesktopWindowStateManager;
 
@@ -214,10 +218,12 @@ public class LayoutManagerChrome extends LayoutManagerImpl
 
     @Override
     public void showLayout(int layoutType, boolean animate) {
+        if (mDestroyChecker.isDestroyed()) return;
+
         if (layoutType == LayoutType.TAB_SWITCHER && mHubLayout == null) {
             initTabSwitcher();
         }
-        super.showLayout(layoutType, animate);
+        super.showLayout(layoutType, XrUtils.isXrDevice() ? false : animate);
     }
 
     /**
@@ -245,6 +251,7 @@ public class LayoutManagerChrome extends LayoutManagerImpl
     @Override
     public void destroy() {
         super.destroy();
+        mDestroyChecker.destroy();
 
         if (mTabContentManagerSupplier != null) {
             mTabContentManagerSupplier.removeObserver(mOnTabContentManager);
@@ -303,7 +310,8 @@ public class LayoutManagerChrome extends LayoutManagerImpl
         boolean animate = !tabRemoved && animationsEnabled();
         if (getActiveLayoutType() != LayoutType.TAB_SWITCHER
                 && showOverview
-                && getNextLayoutType() != LayoutType.TAB_SWITCHER) {
+                && getNextLayoutType() != LayoutType.TAB_SWITCHER
+                && !XrUtils.isXrDevice()) {
             // Vivaldi
             if (!BuildConfig.IS_VIVALDI)
             showLayout(LayoutType.TAB_SWITCHER, animate);
@@ -313,7 +321,7 @@ public class LayoutManagerChrome extends LayoutManagerImpl
 
     @Override
     public void onTabsAllClosing(boolean incognito) {
-        if (getActiveLayout() == mStaticLayout && !incognito) {
+        if (getActiveLayout() == mStaticLayout && !incognito && !XrUtils.isXrDevice()) {
             // Note(david@vivaldi.com): We always create a new tab rather then showing the tab
             // switcher.
             if (!ChromeApplicationImpl.isVivaldi())
@@ -347,17 +355,13 @@ public class LayoutManagerChrome extends LayoutManagerImpl
         return mHubLayout;
     }
 
-    /** Returns the {@link StripLayoutHelperManager} managed by this class. */
-    public StripLayoutHelperManager getStripLayoutHelperManager() {
-        return null;
-    }
-
     /**
      * @param enabled Whether or not to allow model-reactive animations (tab creation, closing,
-     *     etc.).
+     *     etc.). Note that on an XR device the this param value is ignored and animation is
+     *     disabled.
      */
     public void setEnableAnimations(boolean enabled) {
-        mEnableAnimations = enabled;
+        mEnableAnimations = XrUtils.isXrDevice() ? false : enabled;
     }
 
     /** Returns whether animations should be done for model changes. */
@@ -419,7 +423,9 @@ public class LayoutManagerChrome extends LayoutManagerImpl
             if (mScrollDirection == ScrollDirection.LEFT
                     || mScrollDirection == ScrollDirection.RIGHT) {
                 startShowing(mToolbarSwipeLayout, true);
-            } else if (mSupportsSwipeToShowTabSwitcher) {
+
+            } else if (mSupportsSwipeToShowTabSwitcher
+                    && VivaldiUtils.isAddressBarSwipeGestureEnabled()) { // Vivaldi
                 // No need to test scroll direction here, as we've ruled out other possibilities.
                 RecordUserAction.record("MobileToolbarSwipeOpenStackView");
                 showLayout(LayoutType.TAB_SWITCHER, true);

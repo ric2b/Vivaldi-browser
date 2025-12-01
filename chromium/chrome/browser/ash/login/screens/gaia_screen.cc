@@ -315,6 +315,11 @@ void GaiaScreen::OnGetAuthFactorsConfiguration(
     std::optional<AuthenticationError> error) {
   bool is_recovery_configured = false;
   bool is_gaia_password_configured = true;
+  if (!view_) {
+    LOG(WARNING) << "The view is nullptr during OnGetAuthFactorsConfiguration";
+    return;
+  }
+  CHECK(user_context);
   if (error.has_value()) {
     LOG(WARNING) << "Failed to get auth factors configuration, code "
                  << error->get_cryptohome_error()
@@ -407,7 +412,7 @@ bool GaiaScreen::ShouldFetchEnrollmentNudgePolicy(
     return false;
   }
   const bool is_first_user =
-      user_manager::UserManager::Get()->GetUsers().empty();
+      user_manager::UserManager::Get()->GetPersistedUsers().empty();
   if (!is_first_user) {
     // Enrollment nudge targets only initial OOBE flow on unowned devices.
     // Current user is not a first user which means that device is already

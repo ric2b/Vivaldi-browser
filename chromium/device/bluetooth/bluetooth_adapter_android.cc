@@ -23,6 +23,7 @@
 #include "device/bluetooth/bluetooth_device.h"
 #include "device/bluetooth/bluetooth_device_android.h"
 #include "device/bluetooth/bluetooth_discovery_session_outcome.h"
+#include "device/bluetooth/bluetooth_socket_thread.h"
 
 // Must come after all headers that specialize FromJniType() / ToJniType().
 #include "device/bluetooth/jni_headers/ChromeBluetoothAdapter_jni.h"
@@ -69,6 +70,7 @@ scoped_refptr<BluetoothAdapterAndroid> BluetoothAdapterAndroid::Create(
       bluetooth_adapter_wrapper));
 
   adapter->ui_task_runner_ = base::SingleThreadTaskRunner::GetCurrentDefault();
+  adapter->socket_thread_ = BluetoothSocketThread::Get();
 
   return adapter;
 }
@@ -131,21 +133,17 @@ bool BluetoothAdapterAndroid::IsDiscovering() const {
 }
 
 BluetoothAdapter::ConstDeviceList BluetoothAdapterAndroid::GetDevices() const {
-  StartListingPairedDevices();
+  PopulatePairedDevices();
   return BluetoothAdapter::GetDevices();
 }
 
-void BluetoothAdapterAndroid::StartListingPairedDevices() const {
+void BluetoothAdapterAndroid::PopulatePairedDevices() const {
   if (!base::FeatureList::IsEnabled(features::kBluetoothRfcommAndroid)) {
     return;
   }
 
-  if (started_listing_paired_devices_) {
-    return;
-  }
-  started_listing_paired_devices_ =
-      Java_ChromeBluetoothAdapter_startListingPairedDevices(
-          AttachCurrentThread(), j_adapter_);
+  Java_ChromeBluetoothAdapter_populatePairedDevices(AttachCurrentThread(),
+                                                    j_adapter_);
 }
 
 BluetoothAdapter::UUIDList BluetoothAdapterAndroid::GetUUIDs() const {
@@ -224,8 +222,8 @@ void BluetoothAdapterAndroid::CreateOrUpdateDeviceOnScan(
   if (iter == devices_.end()) {
     // New device.
     is_new_device = true;
-    device_android_owner =
-        BluetoothDeviceAndroid::Create(this, bluetooth_device_wrapper);
+    device_android_owner = BluetoothDeviceAndroid::Create(
+        this, bluetooth_device_wrapper, ui_task_runner_, socket_thread_);
     device_android = device_android_owner.get();
   } else {
     // Existing device.
@@ -324,12 +322,14 @@ void BluetoothAdapterAndroid::PopulatePairedDevice(
   }
 
   std::unique_ptr<BluetoothDeviceAndroid> device_owner =
-      BluetoothDeviceAndroid::Create(this, bluetooth_device_wrapper);
-  BluetoothDeviceAndroid* device = device_owner.get();
+      BluetoothDeviceAndroid::Create(this, bluetooth_device_wrapper,
+                                     ui_task_runner_, socket_thread_);
   devices_[device_address] = std::move(device_owner);
-  for (auto& observer : observers_) {
-    observer.DeviceAdded(this, device);
-  }
+
+  // We don't notify observers for populated paired devices because there is no
+  // current need to monitor device bond states. We always fetch the list of
+  // paired devices when GetDevices() is called. See crbug.com/387371131 for
+  // more details.
 }
 
 BluetoothAdapterAndroid::BluetoothAdapterAndroid() {}
@@ -426,9 +426,6 @@ void BluetoothAdapterAndroid::StartScanWithFilter(
   // This function should only be called if this is the first discovery session.
   // Otherwise we should have called updateFilter.
   DCHECK_EQ(NumDiscoverySessions(), 1);
-
-  // Likely we have enough permissions to also obtain paired devices.
-  StartListingPairedDevices();
 
   bool session_added = false;
   if (IsPowered()) {

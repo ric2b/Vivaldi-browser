@@ -31,6 +31,7 @@
 #include "base/strings/stringprintf.h"
 #include "base/test/gtest_util.h"
 #include "base/test/launcher/test_launcher.h"
+#include "base/test/launcher/test_result.h"
 #include "base/test/test_switches.h"
 #include "base/time/time.h"
 #include "base/values.h"
@@ -87,6 +88,160 @@ struct TestSuiteResultsAggregator {
 
   TimeDelta elapsed_time;
 };
+
+// Create value for `TestResultPart`.
+Value::Dict CreateTestResultPartValue(const TestResultPart& part) {
+  Value::Dict value;
+
+  value.Set("type", part.TypeAsString());
+  value.Set("file", part.file_name);
+  value.Set("line", part.line_number);
+
+  bool lossless_summary = IsStringUTF8(part.summary);
+  if (lossless_summary) {
+    value.Set("summary", part.summary);
+  } else {
+    value.Set("summary", "<non-UTF-8 snippet, see summary_base64>");
+  }
+  value.Set("lossless_summary", lossless_summary);
+
+  value.Set("summary_base64", base::Base64Encode(part.summary));
+
+  bool lossless_message = IsStringUTF8(part.message);
+  if (lossless_message) {
+    value.Set("message", part.message);
+  } else {
+    value.Set("message", "<non-UTF-8 snippet, see message_base64>");
+  }
+  value.Set("lossless_message", lossless_message);
+
+  value.Set("message_base64", base::Base64Encode(part.message));
+
+  return value;
+}
+
+// Create value for `TestResult`.
+Value::Dict CreateTestResultValue(const TestResult& test_result) {
+  Value::Dict value;
+  value.Set("status", test_result.StatusAsString());
+  value.Set("elapsed_time_ms",
+            static_cast<int>(test_result.elapsed_time.InMilliseconds()));
+
+  if (test_result.thread_id) {
+    // The thread id might be an int64, however int64 values are not
+    // representable in JS and JSON (cf. crbug.com/40228085) since JS
+    // numbers are float64. Since thread IDs are likely to be allocated
+    // sequentially, truncation of the high bits is preferable to loss of
+    // precision in the low bits, as threads are more likely to differ in
+    // their low bit values, so we truncate the value to int32. Since this
+    // is only used for dumping test runner state, the loss of information
+    // is not catastrophic and won't happen in normal browser execution.
+    // Additionally, the test launcher tid is also truncated, so the
+    // truncated values should match.
+    //
+    // LINT.IfChange(TestLauncherTidTruncation)
+    value.Set("thread_id",
+              test_result.thread_id->truncate_to_int32_for_display_only());
+    // LINT.ThenChange(test_launcher_tracer.cc:TestLauncherTidTruncation)
+  }
+  if (test_result.process_num) {
+    value.Set("process_num", *test_result.process_num);
+  }
+  if (test_result.timestamp) {
+    // The timestamp is formatted using TimeFormatAsIso8601 instead of
+    // FormatTimeAsIso8601 here for a better accuracy, since the former
+    // method includes fractions of a second.
+    value.Set("timestamp", TimeFormatAsIso8601(*test_result.timestamp).c_str());
+  }
+
+  bool lossless_snippet = false;
+  if (IsStringUTF8(test_result.output_snippet)) {
+    value.Set("output_snippet", test_result.output_snippet);
+    lossless_snippet = true;
+  } else {
+    value.Set("output_snippet",
+              "<non-UTF-8 snippet, see output_snippet_base64>");
+  }
+
+  // TODO(phajdan.jr): Fix typo in JSON key (losless -> lossless)
+  // making sure not to break any consumers of this data.
+  value.Set("losless_snippet", lossless_snippet);
+
+  // Also include the raw version (base64-encoded so that it can be safely
+  // JSON-serialized - there are no guarantees about character encoding
+  // of the snippet). This can be very useful piece of information when
+  // debugging a test failure related to character encoding.
+  std::string base64_output_snippet =
+      base::Base64Encode(test_result.output_snippet);
+  value.Set("output_snippet_base64", base64_output_snippet);
+  if (!test_result.links.empty()) {
+    Value::Dict links;
+    for (const auto& link : test_result.links) {
+      Value::Dict link_info;
+      link_info.Set("content", link.second);
+      links.SetByDottedPath(link.first, std::move(link_info));
+    }
+    value.Set("links", std::move(links));
+  }
+  if (!test_result.tags.empty()) {
+    Value::Dict tags;
+    for (const auto& tag : test_result.tags) {
+      Value::List tag_values;
+      for (const auto& tag_value : tag.second) {
+        tag_values.Append(tag_value);
+      }
+      Value::Dict tag_info;
+      tag_info.Set("values", std::move(tag_values));
+      tags.SetByDottedPath(tag.first, std::move(tag_info));
+    }
+    value.Set("tags", std::move(tags));
+  }
+  if (!test_result.properties.empty()) {
+    Value::Dict properties;
+    for (const auto& property : test_result.properties) {
+      Value::Dict property_info;
+      property_info.Set("value", property.second);
+      properties.SetByDottedPath(property.first, std::move(property_info));
+    }
+    value.Set("properties", std::move(properties));
+  }
+
+  Value::List test_result_parts;
+  for (const TestResultPart& result_part : test_result.test_result_parts) {
+    Value::Dict result_part_value = CreateTestResultPartValue(result_part);
+    test_result_parts.Append(std::move(result_part_value));
+  }
+  value.Set("result_parts", std::move(test_result_parts));
+
+  return value;
+}
+
+// Create value for `SubTestResult`.
+Value::Dict CreateSubTestResultValue(const TestResult& primary_test_result,
+                                     const SubTestResult& sub_test_result) {
+  // Partially copy the primary TestResult.
+  TestResult test_result;
+  test_result.elapsed_time = primary_test_result.elapsed_time;
+  test_result.links = primary_test_result.links;
+  test_result.properties = primary_test_result.properties;
+  test_result.tags = primary_test_result.tags;
+  test_result.thread_id = primary_test_result.thread_id;
+  test_result.timestamp = primary_test_result.timestamp;
+  if (sub_test_result.failure_message) {
+    test_result.status = TestResult::TEST_FAILURE;
+    // Add a TestPartResult to the new TestResult if the SubTestResult is a
+    // failure. This is how the failure message is passed along.
+    TestResultPart part;
+    part.type = TestResultPart::Type::kNonFatalFailure;
+    part.summary = *sub_test_result.failure_message;
+    // Line number is unknown.
+    part.line_number = 0;
+    test_result.test_result_parts.push_back(std::move(part));
+  } else {
+    test_result.status = TestResult::TEST_SUCCESS;
+  }
+  return CreateTestResultValue(test_result);
+}
 
 }  // namespace
 
@@ -443,125 +598,23 @@ bool TestResultsTracker::SaveSummaryAsJSON(
 
     for (const auto& j : per_iteration_data_[i].results) {
       Value::List test_results;
+      std::map<std::string, Value::List> name_to_test_results;
 
-      for (const auto& test_result : j.second.test_results) {
-        Value::Dict test_result_value;
+      for (const TestResult& test_result : j.second.test_results) {
+        name_to_test_results[j.first].Append(
+            CreateTestResultValue(test_result));
 
-        test_result_value.Set("status", test_result.StatusAsString());
-        test_result_value.Set(
-            "elapsed_time_ms",
-            static_cast<int>(test_result.elapsed_time.InMilliseconds()));
-
-        if (test_result.thread_id) {
-          test_result_value.Set("thread_id",
-                                static_cast<int>(*test_result.thread_id));
+        // Add each SubTestResult as an individual test result.
+        for (const SubTestResult& sub_test_result :
+             test_result.sub_test_results) {
+          name_to_test_results[sub_test_result.FullName()].Append(
+              CreateSubTestResultValue(test_result, sub_test_result));
         }
-        if (test_result.process_num) {
-          test_result_value.Set("process_num", *test_result.process_num);
-        }
-        if (test_result.timestamp) {
-          // The timestamp is formatted using TimeFormatAsIso8601 instead of
-          // FormatTimeAsIso8601 here for a better accuracy, since the former
-          // method includes fractions of a second.
-          test_result_value.Set(
-              "timestamp", TimeFormatAsIso8601(*test_result.timestamp).c_str());
-        }
-
-        bool lossless_snippet = false;
-        if (IsStringUTF8(test_result.output_snippet)) {
-          test_result_value.Set("output_snippet", test_result.output_snippet);
-          lossless_snippet = true;
-        } else {
-          test_result_value.Set(
-              "output_snippet",
-              "<non-UTF-8 snippet, see output_snippet_base64>");
-        }
-
-        // TODO(phajdan.jr): Fix typo in JSON key (losless -> lossless)
-        // making sure not to break any consumers of this data.
-        test_result_value.Set("losless_snippet", lossless_snippet);
-
-        // Also include the raw version (base64-encoded so that it can be safely
-        // JSON-serialized - there are no guarantees about character encoding
-        // of the snippet). This can be very useful piece of information when
-        // debugging a test failure related to character encoding.
-        std::string base64_output_snippet =
-            base::Base64Encode(test_result.output_snippet);
-        test_result_value.Set("output_snippet_base64", base64_output_snippet);
-        if (!test_result.links.empty()) {
-          Value::Dict links;
-          for (const auto& link : test_result.links) {
-            Value::Dict link_info;
-            link_info.Set("content", link.second);
-            links.SetByDottedPath(link.first, std::move(link_info));
-          }
-          test_result_value.Set("links", std::move(links));
-        }
-        if (!test_result.tags.empty()) {
-          Value::Dict tags;
-          for (const auto& tag : test_result.tags) {
-            Value::List tag_values;
-            for (const auto& tag_value : tag.second) {
-              tag_values.Append(tag_value);
-            }
-            Value::Dict tag_info;
-            tag_info.Set("values", std::move(tag_values));
-            tags.SetByDottedPath(tag.first, std::move(tag_info));
-          }
-          test_result_value.Set("tags", std::move(tags));
-        }
-        if (!test_result.properties.empty()) {
-          Value::Dict properties;
-          for (const auto& property : test_result.properties) {
-            Value::Dict property_info;
-            property_info.Set("value", property.second);
-            properties.SetByDottedPath(property.first,
-                                       std::move(property_info));
-          }
-          test_result_value.Set("properties", std::move(properties));
-        }
-
-        Value::List test_result_parts;
-        for (const TestResultPart& result_part :
-             test_result.test_result_parts) {
-          Value::Dict result_part_value;
-
-          result_part_value.Set("type", result_part.TypeAsString());
-          result_part_value.Set("file", result_part.file_name);
-          result_part_value.Set("line", result_part.line_number);
-
-          bool lossless_summary = IsStringUTF8(result_part.summary);
-          if (lossless_summary) {
-            result_part_value.Set("summary", result_part.summary);
-          } else {
-            result_part_value.Set("summary",
-                                  "<non-UTF-8 snippet, see summary_base64>");
-          }
-          result_part_value.Set("lossless_summary", lossless_summary);
-
-          std::string encoded_summary = base::Base64Encode(result_part.summary);
-          result_part_value.Set("summary_base64", encoded_summary);
-
-          bool lossless_message = IsStringUTF8(result_part.message);
-          if (lossless_message) {
-            result_part_value.Set("message", result_part.message);
-          } else {
-            result_part_value.Set("message",
-                                  "<non-UTF-8 snippet, see message_base64>");
-          }
-          result_part_value.Set("lossless_message", lossless_message);
-
-          std::string encoded_message = base::Base64Encode(result_part.message);
-          result_part_value.Set("message_base64", encoded_message);
-
-          test_result_parts.Append(std::move(result_part_value));
-        }
-        test_result_value.Set("result_parts", std::move(test_result_parts));
-
-        test_results.Append(std::move(test_result_value));
       }
 
-      current_iteration_data.Set(j.first, std::move(test_results));
+      for (auto& p : name_to_test_results) {
+        current_iteration_data.Set(p.first, std::move(p.second));
+      }
     }
     per_iteration_data.Append(std::move(current_iteration_data));
   }

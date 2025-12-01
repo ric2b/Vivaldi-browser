@@ -69,12 +69,12 @@ import org.chromium.content.browser.WindowEventObserver;
 import org.chromium.content.browser.WindowEventObserverManager;
 import org.chromium.content.browser.picker.InputDialogContainer;
 import org.chromium.content.browser.webcontents.WebContentsImpl;
-import org.chromium.content.browser.webcontents.WebContentsImpl.UserDataFactory;
 import org.chromium.content_public.browser.ImeAdapter;
 import org.chromium.content_public.browser.ImeEventObserver;
 import org.chromium.content_public.browser.InputMethodManagerWrapper;
 import org.chromium.content_public.browser.StylusWritingImeCallback;
 import org.chromium.content_public.browser.WebContents;
+import org.chromium.content_public.browser.WebContents.UserDataFactory;
 import org.chromium.mojo.system.MessagePipeHandle;
 import org.chromium.mojo.system.MojoException;
 import org.chromium.mojo.system.impl.CoreImpl;
@@ -247,8 +247,8 @@ public class ImeAdapterImpl
      */
     public static ImeAdapterImpl fromWebContents(WebContents webContents) {
         ImeAdapterImpl ret =
-                ((WebContentsImpl) webContents)
-                        .getOrSetUserData(ImeAdapterImpl.class, UserDataFactoryLazyHolder.INSTANCE);
+                webContents.getOrSetUserData(
+                        ImeAdapterImpl.class, UserDataFactoryLazyHolder.INSTANCE);
         assert ret != null;
         return ret;
     }
@@ -365,8 +365,9 @@ public class ImeAdapterImpl
     @CalledByNative
     private void onStylusWritingGestureActionCompleted(
             int id, @HandwritingGestureResult.EnumType int result) {
-        if (mOngoingGestures.get(id) != null) {
-            mOngoingGestures.get(id).onGestureHandled(result);
+        OngoingGesture gesture = mOngoingGestures.get(id);
+        if (gesture != null) {
+            gesture.onGestureHandled(result);
             mOngoingGestures.remove(id);
         } else {
             assert id == -1;
@@ -887,6 +888,7 @@ public class ImeAdapterImpl
         mTextInputFlags = 0;
         mTextInputMode = WebTextInputMode.DEFAULT;
         mRestartInputOnNextStateUpdate = false;
+        mNodeEditable = false;
         // This will trigger unblocking if necessary.
         hideKeyboard();
     }
@@ -1614,11 +1616,6 @@ public class ImeAdapterImpl
     private void cancelComposition() {
         if (DEBUG_LOGS) Log.i(TAG, "cancelComposition");
         if (mInputConnection != null) restartInput();
-    }
-
-    @CalledByNative
-    private void setBounds(float @Nullable [] characterBounds, float @Nullable [] lineBounds) {
-        mCursorAnchorInfoController.setBounds(characterBounds, lineBounds, getContainerView());
     }
 
     @CalledByNative

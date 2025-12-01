@@ -17,6 +17,7 @@
 #include "third_party/blink/renderer/core/css/css_image_value.h"
 #include "third_party/blink/renderer/core/css/css_test_helpers.h"
 #include "third_party/blink/renderer/core/css/css_value_list.h"
+#include "third_party/blink/renderer/core/css/media_feature_names.h"
 #include "third_party/blink/renderer/core/css/out_of_flow_data.h"
 #include "third_party/blink/renderer/core/css/parser/css_parser_local_context.h"
 #include "third_party/blink/renderer/core/css/post_style_update_scope.h"
@@ -43,7 +44,6 @@
 #include "third_party/blink/renderer/core/testing/page_test_base.h"
 #include "third_party/blink/renderer/platform/bindings/exception_state.h"
 #include "third_party/blink/renderer/platform/geometry/calculation_value.h"
-#include "third_party/blink/renderer/platform/testing/runtime_enabled_features_test_helpers.h"
 
 namespace blink {
 
@@ -633,10 +633,6 @@ TEST_F(StyleResolverTest, BackgroundImageFetch) {
 }
 
 TEST_F(StyleResolverTest, FetchForAtPage) {
-  // Without PageMarginBoxes enabled, only a thimbleful of properties are
-  // supported, and background-image is not one of them.
-  ScopedPageMarginBoxesForTest enable(true);
-
   // The background-image property applies in an @page context, according to
   // https://drafts.csswg.org/css-page-3/#page-property-list
   GetDocument().documentElement()->setInnerHTML(R"HTML(
@@ -659,8 +655,6 @@ TEST_F(StyleResolverTest, FetchForAtPage) {
 }
 
 TEST_F(StyleResolverTest, NoFetchForAtPage) {
-  ScopedPageMarginBoxesForTest enable(true);
-
   // The list-style-image property doesn't apply in an @page context, since
   // it's not in https://drafts.csswg.org/css-page-3/#page-property-list
   GetDocument().documentElement()->setInnerHTML(R"HTML(
@@ -686,8 +680,6 @@ TEST_F(StyleResolverTest, NoFetchForAtPage) {
 // test for it. See https://drafts.csswg.org/css-page-3/#page-property-list for
 // applicable properties within a page context.
 TEST_F(StyleResolverTest, PageComputedStyle) {
-  ScopedPageMarginBoxesForTest enable(true);
-
   GetDocument().documentElement()->setInnerHTML(R"HTML(
     <style>
       html {
@@ -751,50 +743,6 @@ TEST_F(StyleResolverTest, PageComputedStyle) {
   EXPECT_TRUE(style->HasAutoColumnCount());
   EXPECT_TRUE(style->HasAutoColumnWidth());
   EXPECT_FALSE(style->ColumnGap().has_value());
-}
-
-TEST_F(StyleResolverTest, PageComputedStyleLimited) {
-  ScopedPageMarginBoxesForTest enable(false);
-
-  GetDocument().documentElement()->setInnerHTML(R"HTML(
-    <style>
-      html {
-        margin: 77px;
-      }
-      body {
-        /* Note: @page inherits from html, but not body. */
-        margin: 13px;
-      }
-      @page {
-        size: 100px 150px;
-        margin: inherit;
-        margin-top: 11px;
-        margin-inline-end: 12px;
-        page-orientation: rotate-left;
-        padding-top: 7px;
-      }
-    </style>
-    <body></body>
-  )HTML");
-
-  UpdateAllLifecyclePhasesForTest();
-  const ComputedStyle* style =
-      GetDocument().GetStyleResolver().StyleForPage(0, g_empty_atom);
-  ASSERT_TRUE(style);
-
-  EXPECT_EQ(style->GetPageSizeType(), PageSizeType::kFixed);
-  gfx::SizeF page_size = style->PageSize();
-  EXPECT_EQ(page_size.width(), 100);
-  EXPECT_EQ(page_size.height(), 150);
-
-  EXPECT_EQ(style->MarginTop(), Length::Fixed(11));
-  EXPECT_EQ(style->MarginRight(), Length::Fixed(12));
-  EXPECT_EQ(style->MarginBottom(), Length::Fixed(77));
-  EXPECT_EQ(style->MarginLeft(), Length::Fixed(77));
-  EXPECT_EQ(style->GetPageOrientation(), PageOrientation::kRotateLeft);
-
-  // The padding-top declaration should be ignored.
-  EXPECT_EQ(style->PaddingTop(), Length::Fixed(0));
 }
 
 TEST_F(StyleResolverTest, NoFetchForHighlightPseudoElements) {
@@ -1271,6 +1219,20 @@ TEST_F(StyleResolverTest, ComputeValueStandardProperty) {
       target, CSSPropertyName(property_id), *parsed_value);
   ASSERT_TRUE(computed_value);
   EXPECT_EQ("rgb(0, 128, 0)", computed_value->CssText());
+}
+
+TEST_F(StyleResolverTest, ComputedValueRootElement) {
+  UpdateAllLifecyclePhasesForTest();
+  Element* target = GetDocument().documentElement();
+  ASSERT_TRUE(target);
+  CSSPropertyID property_id = CSSPropertyID::kFontSize;
+  const CSSValue* parsed_value = css_test_helpers::ParseLonghand(
+      GetDocument(), GetCSSPropertyFontSize(), "calc(40px + 2px)");
+  ASSERT_TRUE(parsed_value);
+  const CSSValue* computed_value = StyleResolver::ComputeValue(
+      target, CSSPropertyName(property_id), *parsed_value);
+  ASSERT_TRUE(computed_value);
+  EXPECT_EQ("42px", computed_value->CssText());
 }
 
 namespace {
@@ -1883,6 +1845,37 @@ TEST_F(StyleResolverTestCQ, DependsOnStyleContainerQueries) {
   EXPECT_FALSE(c->ComputedStyleRef().DependsOnSizeContainerQueries());
   EXPECT_FALSE(d->ComputedStyleRef().DependsOnSizeContainerQueries());
   EXPECT_FALSE(e->ComputedStyleRef().DependsOnSizeContainerQueries());
+}
+
+TEST_F(StyleResolverTest, AffectedByFunctionalMedia) {
+  GetDocument().documentElement()->setInnerHTML(R"HTML(
+    <style>
+      @function --a() {
+        result: 10px;
+      }
+      @function --b() {
+        result: 10px;
+        @media (width) {
+          result: 20px;
+        }
+      }
+      #a { width: --a(); }
+      #b { width: --b(); }
+    </style>
+    <div id=a></div>
+    <div id=b></div>
+  )HTML");
+
+  UpdateAllLifecyclePhasesForTest();
+
+  Element* a = GetDocument().getElementById(AtomicString("a"));
+  Element* b = GetDocument().getElementById(AtomicString("b"));
+
+  ASSERT_TRUE(a);
+  ASSERT_TRUE(b);
+
+  EXPECT_FALSE(a->ComputedStyleRef().AffectedByFunctionalMedia());
+  EXPECT_TRUE(b->ComputedStyleRef().AffectedByFunctionalMedia());
 }
 
 TEST_F(StyleResolverTest, AnchorQueriesMPC) {

@@ -23,6 +23,8 @@
 #include "chrome/browser/ui/views/location_bar/location_bar_view.h"
 #include "chrome/browser/ui/views/profiles/avatar_toolbar_button.h"
 #include "chrome/browser/ui/views/toolbar/overflow_button.h"
+#include "chrome/browser/ui/views/toolbar/pinned_action_toolbar_button.h"
+#include "chrome/browser/ui/views/toolbar/split_tabs_button.h"
 #include "components/prefs/pref_member.h"
 #include "ui/base/accelerators/accelerator.h"
 #include "ui/base/interaction/element_identifier.h"
@@ -44,7 +46,6 @@ class AvatarToolbarButton;
 class BatterySaverButton;
 class BrowserAppMenuButton;
 class Browser;
-class DownloadToolbarButtonView;
 class ExtensionsToolbarButton;
 class ExtensionsToolbarContainer;
 class ChromeLabsButton;
@@ -67,10 +68,6 @@ class CastToolbarButton;
 namespace page_actions {
 class PageActionView;
 }  // namespace page_actions
-
-namespace send_tab_to_self {
-class SendTabToSelfToolbarIconView;
-}
 
 namespace views {
 class FlexLayout;
@@ -159,9 +156,6 @@ class ToolbarView : public views::AccessiblePaneView,
   ChromeLabsModel* chrome_labs_model() const {
     return chrome_labs_model_.get();
   }
-  DownloadToolbarButtonView* download_button() const {
-    return download_button_;
-  }
   ExtensionsToolbarContainer* extensions_container() const {
     return extensions_container_;
   }
@@ -181,12 +175,11 @@ class ToolbarView : public views::AccessiblePaneView,
     return pinned_toolbar_actions_container_;
   }
   MediaToolbarButtonView* media_button() const { return media_button_; }
-  send_tab_to_self::SendTabToSelfToolbarIconView* send_tab_to_self_button()
-      const {
-    return send_tab_to_self_button_;
-  }
   BrowserAppMenuButton* app_menu_button() const { return app_menu_button_; }
   HomeButton* home_button() const { return home_; }
+  PinnedActionToolbarButton* tab_search_button() const {
+    return tab_search_button_;
+  }
   AppMenuIconController* app_menu_icon_controller() {
     return &app_menu_icon_controller_;
   }
@@ -250,6 +243,7 @@ class ToolbarView : public views::AccessiblePaneView,
 
   // ToolbarButtonProvider:
   ExtensionsToolbarContainer* GetExtensionsToolbarContainer() override;
+  PinnedToolbarActionsContainer* GetPinnedToolbarActionsContainer() override;
   gfx::Size GetToolbarButtonSize() const override;
   views::View* GetDefaultExtensionDialogAnchorView() override;
   PageActionIconView* GetPageActionIconView(PageActionIconType type) override;
@@ -266,7 +260,7 @@ class ToolbarView : public views::AccessiblePaneView,
   ToolbarButton* GetBackButton() override;
   ReloadButton* GetReloadButton() override;
   IntentChipButton* GetIntentChipButton() override;
-  DownloadToolbarButtonView* GetDownloadButton() override;
+  ToolbarButton* GetDownloadButton() override;
 
   // BrowserRootView::DropTarget
   std::optional<BrowserRootView::DropIndex> GetDropIndex(
@@ -303,6 +297,7 @@ class ToolbarView : public views::AccessiblePaneView,
   raw_ptr<ToolbarButton> forward_ = nullptr;
   raw_ptr<ReloadButton> reload_ = nullptr;
   raw_ptr<HomeButton> home_ = nullptr;
+  raw_ptr<SplitTabsToolbarButton> split_tabs_ = nullptr;
   raw_ptr<CustomTabBarView> custom_tab_bar_ = nullptr;
   raw_ptr<LocationBarView> location_bar_ = nullptr;
   raw_ptr<ExtensionsToolbarContainer> extensions_container_ = nullptr;
@@ -316,11 +311,9 @@ class ToolbarView : public views::AccessiblePaneView,
       nullptr;
   raw_ptr<AvatarToolbarButton> avatar_ = nullptr;
   raw_ptr<MediaToolbarButtonView> media_button_ = nullptr;
-  raw_ptr<send_tab_to_self::SendTabToSelfToolbarIconView>
-      send_tab_to_self_button_ = nullptr;
   raw_ptr<BrowserAppMenuButton> app_menu_button_ = nullptr;
-  raw_ptr<DownloadToolbarButtonView> download_button_ = nullptr;
   raw_ptr<views::View> new_tab_button_ = nullptr;
+  raw_ptr<PinnedActionToolbarButton> tab_search_button_ = nullptr;
 
   const raw_ptr<Browser> browser_;
   const raw_ptr<BrowserView> browser_view_;

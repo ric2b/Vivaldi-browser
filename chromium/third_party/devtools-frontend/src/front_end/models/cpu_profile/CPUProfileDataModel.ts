@@ -72,13 +72,13 @@ export class CPUProfileDataModel extends ProfileTreeModel {
   #stackChildrenDuration?: number[];
   constructor(profile: ExtendedProfile) {
     super();
-    // @ts-ignore Legacy types
+    // @ts-expect-error Legacy types
     const isLegacyFormat = Boolean(profile['head']);
     if (isLegacyFormat) {
       // Legacy format contains raw timestamps and start/stop times are in seconds.
       this.profileStartTime = profile.startTime * 1000;
       this.profileEndTime = profile.endTime * 1000;
-      // @ts-ignore Legacy types
+      // @ts-expect-error Legacy types
       this.timestamps = profile.timestamps;
       this.compatibilityConversionHeadToNodes(profile);
     } else {
@@ -91,7 +91,7 @@ export class CPUProfileDataModel extends ProfileTreeModel {
     this.samples = profile.samples;
 
     // Lines are available only in profiles coming from tracing.
-    // Elements in the lines array have a 1 to 1 correspondance with
+    // Elements in the lines array have a 1 to 1 correspondence with
     // samples, by array position. They can be 1 or 0 and indicate if
     // there is line data for a given sample, i.e. if a given sample
     // needs to be included to calculate the line level execution time
@@ -110,19 +110,19 @@ export class CPUProfileDataModel extends ProfileTreeModel {
   }
 
   private compatibilityConversionHeadToNodes(profile: Protocol.Profiler.Profile): void {
-    // @ts-ignore Legacy types
+    // @ts-expect-error Legacy types
     if (!profile.head || profile.nodes) {
       return;
     }
     const nodes: Protocol.Profiler.ProfileNode[] = [];
-    // @ts-ignore Legacy types
+    // @ts-expect-error Legacy types
     convertNodesTree(profile.head);
     profile.nodes = nodes;
-    // @ts-ignore Legacy types
+    // @ts-expect-error Legacy types
     delete profile.head;
     function convertNodesTree(node: Protocol.Profiler.ProfileNode): number {
       nodes.push(node);
-      // @ts-ignore Legacy types
+      // @ts-expect-error Legacy types
       node.children = (node.children as Protocol.Profiler.ProfileNode[]).map(convertNodesTree);
       return node.id;
     }
@@ -163,7 +163,7 @@ export class CPUProfileDataModel extends ProfileTreeModel {
       nodes[0].children = [];
       for (let i = 1; i < nodes.length; ++i) {
         const node = nodes[i];
-        // @ts-ignore Legacy types
+        // @ts-expect-error Legacy types
         const parentNode = protocolNodeById.get(node.parent);
         if (!parentNode) {
           continue;
@@ -194,7 +194,7 @@ export class CPUProfileDataModel extends ProfileTreeModel {
       }
       for (let i = 0; i < samples.length; ++i) {
         const node = protocolNodeById.get(samples[i]);
-        if (!node || node.hitCount === undefined) {
+        if (node?.hitCount === undefined) {
           continue;
         }
         node.hitCount++;
@@ -239,7 +239,7 @@ export class CPUProfileDataModel extends ProfileTreeModel {
       parentNode = targetNode;
 
       idToUseForRemovedNode.set(sourceNode.id, parentNode.id);
-      parentNodeStack.push.apply(parentNodeStack, sourceNode.children.map(() => parentNode as CPUProfileNode));
+      parentNodeStack.push.apply(parentNodeStack, sourceNode.children.map(() => parentNode));
       sourceNodeStack.push.apply(sourceNodeStack, sourceNode.children.map(id => protocolNodeById.get(id)));
       this.#idToParsedNode.set(sourceNode.id, targetNode);
     }
@@ -334,7 +334,7 @@ export class CPUProfileDataModel extends ProfileTreeModel {
     // apart when they shouldn't.
     // Here's a workaround for that. When there's a single (program) sample
     // between two call stacks sharing the same bottom node, it is replaced
-    // with the preceeding sample.
+    // with the preceding sample.
     const samples = this.samples;
     if (!samples) {
       return;
@@ -365,7 +365,7 @@ export class CPUProfileDataModel extends ProfileTreeModel {
       nodeId = nextNodeId;
     }
     function bottomNode(node: ProfileNode): ProfileNode {
-      while (node.parent && node.parent.parent) {
+      while (node.parent?.parent) {
         node = node.parent;
       }
       return node;
@@ -523,7 +523,7 @@ export class CPUProfileDataModel extends ProfileTreeModel {
       --stackTop;
       prevId = gcParentNode.id;
     }
-    for (let node = idToNode.get(prevId); node && node.parent; node = node.parent) {
+    for (let node = idToNode.get(prevId); node?.parent; node = node.parent) {
       const start = stackStartTimes[stackTop];
       const duration = sampleTime - start;
       stackChildrenDuration[stackTop - 1] += duration;
@@ -557,5 +557,13 @@ export type ExtendedProfileNode = Protocol.Profiler.ProfileNode&{parent?: number
 export type ExtendedProfile = Protocol.Profiler.Profile&{
   nodes: Protocol.Profiler.ProfileNode[] | ExtendedProfileNode[],
   lines?: number[],
+  /**
+   * A sample can be manually collected with v8::CpuProfiler::collectSample.
+   * When this is done an id (trace id) can be passed to the API to
+   * identify the collected sample in the resulting CPU profile. We
+   * do this for several trace events, to efficiently calculate their
+   * stack trace and improve the JS flamechart we build. This property
+   * contains the mapping of the trace ids with the shape traceId -> nodeId
+   */
   traceIds?: Record<string, number>,
 };

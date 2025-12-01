@@ -8,7 +8,6 @@
  * the graphics tablets, and allow users to configure the pen buttons for
  * each graphics tablet.
  */
-import '../icons.html.js';
 import '../settings_shared.css.js';
 import './input_device_settings_shared.css.js';
 
@@ -168,7 +167,7 @@ export class SettingsCustomizePenButtonsSubpageElement extends
     }
 
     this.inputDeviceSettingsProvider_.setGraphicsTabletSettings(
-        this.selectedTablet!.id, this.selectedTablet!.settings);
+        this.selectedTablet.id, this.selectedTablet.settings);
   }
 
   private getDescription_(): string {
@@ -176,7 +175,7 @@ export class SettingsCustomizePenButtonsSubpageElement extends
       return '';
     }
     return this.i18n(
-        'customizeTabletButtonSubpageDescription', this.selectedTablet!.name);
+        'customizeTabletButtonSubpageDescription', this.selectedTablet.name);
   }
 
   private getcustomizePenButtonsNudgeHeader_(): string {

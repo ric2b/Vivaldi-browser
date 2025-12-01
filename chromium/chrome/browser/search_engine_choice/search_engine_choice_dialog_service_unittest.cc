@@ -17,6 +17,7 @@
 #include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/base/testing_profile_manager.h"
 #include "components/country_codes/country_codes.h"
+#include "components/regional_capabilities/regional_capabilities_switches.h"
 #include "components/regional_capabilities/regional_capabilities_utils.h"
 #include "components/search_engines/search_engine_choice/search_engine_choice_service.h"
 #include "components/search_engines/search_engine_choice/search_engine_choice_utils.h"
@@ -29,6 +30,10 @@
 #include "components/web_modal/test_web_contents_modal_dialog_host.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/search_engines_data/resources/definitions/prepopulated_engines.h"
+#include "third_party/search_engines_data/resources/definitions/regional_settings.h"
+#include "ui/gfx/native_widget_types.h"
+
+using ::country_codes::CountryId;
 
 namespace {
 
@@ -103,7 +108,8 @@ class ResizableDialogTestBrowserWindow : public DialogTestBrowserWindow {
   GetTestWebContentsModalDialogHost() {
     if (!dialog_host_) {
       dialog_host_ =
-          std::make_unique<web_modal::TestWebContentsModalDialogHost>(nullptr);
+          std::make_unique<web_modal::TestWebContentsModalDialogHost>(
+              gfx::NativeView());
 
       // Absurdly large size to ensure we don't run into "too small" issues.
       dialog_host_->set_max_dialog_size(gfx::Size(5000, 5000));
@@ -135,11 +141,9 @@ class SearchEngineChoiceDialogServiceTest : public BrowserWithTestWindowTest {
 
     // The search engine choice feature is only enabled for countries in the
     // EEA region.
-    const int kBelgiumCountryId =
-        country_codes::CountryCharsToCountryID('B', 'E');
+    const CountryId kBelgiumCountryId("BE");
     base::CommandLine::ForCurrentProcess()->AppendSwitchASCII(
-        switches::kSearchEngineChoiceCountry,
-        country_codes::CountryIDToCountryString(kBelgiumCountryId));
+        switches::kSearchEngineChoiceCountry, kBelgiumCountryId.CountryCode());
     base::CommandLine::ForCurrentProcess()->AppendSwitch(
         switches::kIgnoreNoFirstRunForSearchEngineChoiceScreen);
   }
@@ -576,12 +580,10 @@ TEST_P(SearchEngineListCountryOverrideParametrizedTest,
        CheckNumberOfSearchEngines) {
   SearchEngineChoiceDialogService* search_engine_choice_service =
       SearchEngineChoiceDialogServiceFactory::GetForProfile(profile());
-  const int kBelgiumCountryId =
-      country_codes::CountryCharsToCountryID('B', 'E');
+  const CountryId kBelgiumCountryId("BE");
   size_t expected_search_engine_list_size =
-      TemplateURLPrepopulateData::GetPrepopulationSetFromCountryIDForTesting(
-          kBelgiumCountryId)
-          .size();
+      TemplateURLPrepopulateData::kRegionalSettings.find(kBelgiumCountryId)
+          ->second->search_engines.size();
   auto search_engine_list_override = GetParam().list_override;
 
   if (search_engine_list_override.has_value() &&

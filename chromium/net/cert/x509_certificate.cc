@@ -452,12 +452,9 @@ bool X509Certificate::VerifyHostname(
   //                         access, i.e. the thing displayed in the URL bar.
   // Presented identifier(s) == name(s) the server knows itself as, in its cert.
 
-  // CanonicalizeHost requires surrounding brackets to parse an IPv6 address.
-  const std::string host_or_ip = hostname.find(':') != std::string::npos
-                                     ? base::StrCat({"[", hostname, "]"})
-                                     : std::string(hostname);
   url::CanonHostInfo host_info;
-  std::string reference_name = CanonicalizeHost(host_or_ip, &host_info);
+  std::string reference_name =
+      CanonicalizeHostSupportsBareIPV6(hostname, &host_info);
 
   // If the host cannot be canonicalized, fail fast.
   if (reference_name.empty())
@@ -669,13 +666,12 @@ SHA256HashValue X509Certificate::CalculateFingerprint256(
     const CRYPTO_BUFFER* cert) {
   SHA256HashValue sha256;
 
-  SHA256(CRYPTO_BUFFER_data(cert), CRYPTO_BUFFER_len(cert), sha256.data);
+  SHA256(CRYPTO_BUFFER_data(cert), CRYPTO_BUFFER_len(cert), sha256.data());
   return sha256;
 }
 
 SHA256HashValue X509Certificate::CalculateChainFingerprint256() const {
-  SHA256HashValue sha256;
-  memset(sha256.data, 0, sizeof(sha256.data));
+  SHA256HashValue sha256 = {0};
 
   SHA256_CTX sha256_ctx;
   SHA256_Init(&sha256_ctx);
@@ -685,7 +681,7 @@ SHA256HashValue X509Certificate::CalculateChainFingerprint256() const {
     SHA256_Update(&sha256_ctx, CRYPTO_BUFFER_data(cert.get()),
                   CRYPTO_BUFFER_len(cert.get()));
   }
-  SHA256_Final(sha256.data, &sha256_ctx);
+  SHA256_Final(sha256.data(), &sha256_ctx);
 
   return sha256;
 }

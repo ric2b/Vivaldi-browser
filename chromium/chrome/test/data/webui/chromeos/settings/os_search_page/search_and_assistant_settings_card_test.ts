@@ -24,6 +24,12 @@ interface SubpageTriggerData {
 suite('<search-and-assistant-settings-card>', () => {
   const defaultRoute = routes.SYSTEM_PREFERENCES;
 
+  const ALLOWED_ENTERPRISE_POLICIES = [
+    {desc: 'allowed with model improvement', value: 0},
+    {desc: 'allowed without model improvement', value: 1},
+    {desc: 'an invalid value', value: 3},
+  ] as const satisfies ReadonlyArray<{desc: string, value: number}>;
+
   let searchAndAssistantSettingsCard: SearchAndAssistantSettingsCardElement;
 
   function createSearchAndAssistantCard() {
@@ -168,9 +174,8 @@ suite('<search-and-assistant-settings-card>', () => {
       const subItems = new Map<settingMojom.Setting, string>([
         [settingMojom.Setting.kMahiOnOff, '#helpMeReadToggle'],
         [settingMojom.Setting.kShowOrca, '#helpMeWriteToggle'],
-        // <if expr="_google_chrome" >
         [settingMojom.Setting.kLobsterOnOff, '#lobsterToggle'],
-        // </if>
+
       ]);
 
       for (const [setting, element] of subItems) {
@@ -190,144 +195,877 @@ suite('<search-and-assistant-settings-card>', () => {
       }
     });
 
-    suite('Lobster setting toggle', () => {
-      [{
-        isMagicBoostFeatureEnabled: false,
-        isLobsterSettingsToggleVisible: false,
-        expectedVisibility: false,
-      },
-       {
-         isMagicBoostFeatureEnabled: false,
-         isLobsterSettingsToggleVisible: true,
-         expectedVisibility: false,
-       },
-       {
-         isMagicBoostFeatureEnabled: true,
-         isLobsterSettingsToggleVisible: false,
-         expectedVisibility: false,
-       },
-       {
-         isMagicBoostFeatureEnabled: true,
-         isLobsterSettingsToggleVisible: true,
-         expectedVisibility: true,
-       },
-      ].forEach(({
-                  isMagicBoostFeatureEnabled,
-                  isLobsterSettingsToggleVisible,
-                  expectedVisibility,
-                }) => {
-        test(
-            `should ${
-                expectedVisibility ?
-                    '' :
-                    'not'} show if isMagicBoostFeatureEnabled is ${
-                isMagicBoostFeatureEnabled ?
-                    'true' :
-                    'false'} and isLobsterSettingsToggleVisible is ${
-                isLobsterSettingsToggleVisible ? 'true' : 'false'}`,
-            () => {
-              loadTimeData.overrideValues({
-                isMagicBoostFeatureEnabled,
-                isLobsterSettingsToggleVisible,
-              });
-              createSearchAndAssistantCard();
-              const fakePrefs = {
-                settings: {
-                  magic_boost_enabled: {
-                    value: true,
+    suite('Hmr enterprise policy', () => {
+      setup(() => {
+        loadTimeData.overrideValues({
+          isMagicBoostFeatureEnabled: true,
+        });
+      });
+
+      for (const {desc, value} of ALLOWED_ENTERPRISE_POLICIES) {
+        suite(`is ${desc}`, () => {
+          let hmrToggle: SettingsToggleButtonElement;
+
+          setup(() => {
+            createSearchAndAssistantCard();
+            searchAndAssistantSettingsCard.prefs = {
+              settings: {
+                magic_boost_enabled: {
+                  value: true,
+                  type: chrome.settingsPrivate.PrefType.BOOLEAN,
+                },
+                mahi_enabled: {
+                  value: true,
+                  type: chrome.settingsPrivate.PrefType.BOOLEAN,
+                },
+                managed: {
+                  help_me_read: {
+                    value,
+                    type: chrome.settingsPrivate.PrefType.NUMBER,
                   },
                 },
-              };
-              searchAndAssistantSettingsCard.prefs = fakePrefs;
-              flush();
-              // <if expr="_google_chrome" >
-              assertEquals(
-                  isVisible(
-                      searchAndAssistantSettingsCard.shadowRoot!.querySelector(
-                          '#lobsterToggle')),
-                  expectedVisibility);
-              // </if>
-              // <if expr="not _google_chrome" >
-              assertFalse(isVisible(
-                  searchAndAssistantSettingsCard.shadowRoot!.querySelector(
-                      '#lobsterToggle')));
-              // </if>
-            });
-      });
-    });
-  });
+              },
+            };
+            flush();
 
-  test(
-      'when isSunfishSettingsToggleVisible flag is false, ' +
-          'Sunfish toggle is hidden',
-      () => {
-        loadTimeData.overrideValues({
-          isSunfishSettingsToggleVisible: false,
+            const nullableHmrToggle =
+                searchAndAssistantSettingsCard.shadowRoot!
+                    .querySelector<SettingsToggleButtonElement>(
+                        '#helpMeReadToggle');
+            assertTrue(nullableHmrToggle !== null);
+            hmrToggle = nullableHmrToggle;
+          });
+
+          test('Hmr toggle should appear', () => {
+            assertTrue(isVisible(hmrToggle));
+          });
+
+          test('Hmr enterprise toggle should not appear', () => {
+            const hmrEnterpriseToggle =
+                searchAndAssistantSettingsCard.shadowRoot!
+                    .querySelector<SettingsToggleButtonElement>(
+                        '#helpMeReadEnterpriseToggle');
+            assertFalse(isVisible(hmrEnterpriseToggle));
+          });
+
+          test('Hmr toggle reflects pref value', () => {
+            assertTrue(isVisible(hmrToggle));
+            assertTrue(hmrToggle.checked);
+            assertTrue(searchAndAssistantSettingsCard.get(
+                'prefs.settings.mahi_enabled.value'));
+
+            hmrToggle.click();
+            assertFalse(hmrToggle.checked);
+            assertFalse(searchAndAssistantSettingsCard.get(
+                'prefs.settings.mahi_enabled.value'));
+          });
+
+          test(
+              'then changes to disallowed, ' +
+                  'Hmr enterprise toggle is deep-linkable',
+              async () => {
+                searchAndAssistantSettingsCard.set(
+                    'prefs.settings.managed.help_me_read.value', 2);
+                flush();
+
+                const hmrEnterpriseToggle =
+                    searchAndAssistantSettingsCard.shadowRoot!
+                        .querySelector<SettingsToggleButtonElement>(
+                            '#helpMeReadEnterpriseToggle');
+                assertTrue(hmrEnterpriseToggle !== null);
+
+                const setting = settingMojom.Setting.kMahiOnOff;
+                const params = new URLSearchParams();
+                params.append('settingId', setting.toString());
+                Router.getInstance().navigateTo(defaultRoute, params);
+
+                await waitAfterNextRender(hmrEnterpriseToggle);
+                assertEquals(
+                    hmrEnterpriseToggle,
+                    searchAndAssistantSettingsCard.shadowRoot!.activeElement,
+                    `Element should be focused for settingId=${setting}.'`);
+              });
         });
-        createSearchAndAssistantCard();
-        assertFalse(
-            isVisible(searchAndAssistantSettingsCard.shadowRoot!.querySelector(
-                '#sunfishToggle')));
-      });
+      }
 
-  suite(
-      'when isSunfishSettingsToggleVisible flag is true, Sunfish toggle',
-      () => {
-        let sunfishToggle: SettingsToggleButtonElement;
+      suite('is disallowed', () => {
+        let hmrEnterpriseToggle: SettingsToggleButtonElement;
 
         setup(() => {
-          loadTimeData.overrideValues({
-            isSunfishSettingsToggleVisible: true,
-          });
           createSearchAndAssistantCard();
-
-          const nullableSunfishToggle =
-              searchAndAssistantSettingsCard.shadowRoot!
-                  .querySelector<SettingsToggleButtonElement>('#sunfishToggle');
-          assertTrue(nullableSunfishToggle !== null);
-          sunfishToggle = nullableSunfishToggle;
-        });
-
-        test('should appear', () => {
-          assertTrue(isVisible(sunfishToggle));
-        });
-
-        test('reflects pref value', () => {
           searchAndAssistantSettingsCard.prefs = {
-            ash: {
-              capture_mode: {
-                sunfish_enabled: {
-                  value: true,
+            settings: {
+              magic_boost_enabled: {
+                value: true,
+                type: chrome.settingsPrivate.PrefType.BOOLEAN,
+              },
+              mahi_enabled: {
+                value: true,
+                type: chrome.settingsPrivate.PrefType.BOOLEAN,
+              },
+              managed: {
+                help_me_read: {
+                  value: 2,
+                  type: chrome.settingsPrivate.PrefType.NUMBER,
                 },
               },
             },
           };
           flush();
 
-          assertTrue(isVisible(sunfishToggle));
-          assertTrue(sunfishToggle.checked);
-          assertTrue(searchAndAssistantSettingsCard.get(
-              'prefs.ash.capture_mode.sunfish_enabled.value'));
-
-          sunfishToggle.click();
-          assertFalse(sunfishToggle.checked);
-          assertFalse(searchAndAssistantSettingsCard.get(
-              'prefs.ash.capture_mode.sunfish_enabled.value'));
+          const nullableHmrEnterpriseToggle =
+              searchAndAssistantSettingsCard.shadowRoot!
+                  .querySelector<SettingsToggleButtonElement>(
+                      '#helpMeReadEnterpriseToggle');
+          assertTrue(nullableHmrEnterpriseToggle !== null);
+          hmrEnterpriseToggle = nullableHmrEnterpriseToggle;
         });
 
-        test('is deep-linkable', async () => {
-          const setting = settingMojom.Setting.kSunfishOnOff;
+        test('Hmr enterprise toggle should appear', () => {
+          assertTrue(isVisible(hmrEnterpriseToggle));
+        });
+
+        test('Hmr toggle should not appear', () => {
+          const hmrToggle = searchAndAssistantSettingsCard.shadowRoot!
+                                .querySelector<SettingsToggleButtonElement>(
+                                    '#helpMeReadToggle');
+          assertFalse(isVisible(hmrToggle));
+        });
+
+        test('Hmr enterprise toggle appears unchecked', () => {
+          assertTrue(isVisible(hmrEnterpriseToggle));
+          assertFalse(hmrEnterpriseToggle.checked);
+        });
+
+        test('Hmr enterprise toggle does not respond to clicks', () => {
+          assertTrue(isVisible(hmrEnterpriseToggle));
+          hmrEnterpriseToggle.click();
+
+          assertFalse(hmrEnterpriseToggle.checked);
+          assertTrue(searchAndAssistantSettingsCard.get(
+              'prefs.settings.mahi_enabled.value'));
+          assertEquals(
+              2,
+              searchAndAssistantSettingsCard.get(
+                  'prefs.settings.managed.help_me_read.value'));
+        });
+
+        test('Hmr enterprise toggle is deep-linkable', async () => {
+          const setting = settingMojom.Setting.kMahiOnOff;
           const params = new URLSearchParams();
           params.append('settingId', setting.toString());
           Router.getInstance().navigateTo(defaultRoute, params);
 
-          await waitAfterNextRender(sunfishToggle);
+          await waitAfterNextRender(hmrEnterpriseToggle);
           assertEquals(
-              sunfishToggle,
+              hmrEnterpriseToggle,
               searchAndAssistantSettingsCard.shadowRoot!.activeElement,
               `Element should be focused for settingId=${setting}.'`);
         });
+
+        for (const {desc, value} of ALLOWED_ENTERPRISE_POLICIES) {
+          test(
+              `then changes to ${desc}, Hmr toggle is deep-linkable`,
+              async () => {
+                searchAndAssistantSettingsCard.set(
+                    'prefs.settings.managed.help_me_read.value', value);
+                flush();
+
+                const hmrToggle =
+                    searchAndAssistantSettingsCard.shadowRoot!
+                        .querySelector<SettingsToggleButtonElement>(
+                            '#helpMeReadToggle');
+                assertTrue(hmrToggle !== null);
+
+                const setting = settingMojom.Setting.kMahiOnOff;
+                const params = new URLSearchParams();
+                params.append('settingId', setting.toString());
+                Router.getInstance().navigateTo(defaultRoute, params);
+
+                await waitAfterNextRender(hmrToggle);
+                assertEquals(
+                    hmrToggle,
+                    searchAndAssistantSettingsCard.shadowRoot!.activeElement,
+                    `Element should be focused for settingId=${setting}.'`);
+              });
+        }
       });
+    });
+
+    suite('Help me write enterprise policy', () => {
+      setup(() => {
+        loadTimeData.overrideValues({
+          isMagicBoostFeatureEnabled: true,
+        });
+      });
+
+      for (const {desc, value} of ALLOWED_ENTERPRISE_POLICIES) {
+        suite(`is ${desc}`, () => {
+          let hmwToggle: SettingsToggleButtonElement;
+
+          setup(() => {
+            createSearchAndAssistantCard();
+            searchAndAssistantSettingsCard.prefs = {
+              assistive_input: {
+                orca_enabled: {
+                  value: true,
+                  type: chrome.settingsPrivate.PrefType.BOOLEAN,
+                },
+              },
+              settings: {
+                magic_boost_enabled: {
+                  value: true,
+                  type: chrome.settingsPrivate.PrefType.BOOLEAN,
+                },
+                managed: {
+                  help_me_write: {
+                    value,
+                    type: chrome.settingsPrivate.PrefType.NUMBER,
+                  },
+                },
+              },
+
+            };
+            flush();
+
+            const nullableHmwToggle =
+                searchAndAssistantSettingsCard.shadowRoot!
+                    .querySelector<SettingsToggleButtonElement>(
+                        '#helpMeWriteToggle');
+            assertTrue(nullableHmwToggle !== null);
+            hmwToggle = nullableHmwToggle;
+          });
+
+          test('Hmw toggle should appear', () => {
+            assertTrue(isVisible(hmwToggle));
+          });
+
+          test('Hmw enterprise toggle should not appear', () => {
+            const hmwEnterpriseToggle =
+                searchAndAssistantSettingsCard.shadowRoot!
+                    .querySelector<SettingsToggleButtonElement>(
+                        '#helpMeWriteEnterpriseToggle');
+            assertFalse(isVisible(hmwEnterpriseToggle));
+          });
+
+          test('Hmw toggle reflects pref value', () => {
+            assertTrue(isVisible(hmwToggle));
+            assertTrue(hmwToggle.checked);
+            assertTrue(searchAndAssistantSettingsCard.get(
+                'prefs.assistive_input.orca_enabled.value'));
+
+            hmwToggle.click();
+            assertFalse(hmwToggle.checked);
+            assertFalse(searchAndAssistantSettingsCard.get(
+                'prefs.assistive_input.orca_enabled.value'));
+          });
+
+          test(
+              'then changes to disallowed, ' +
+                  'Hmw enterprise toggle is deep-linkable',
+              async () => {
+                searchAndAssistantSettingsCard.set(
+                    'prefs.settings.managed.help_me_write.value', 2);
+                flush();
+
+                const hmwEnterpriseToggle =
+                    searchAndAssistantSettingsCard.shadowRoot!
+                        .querySelector<SettingsToggleButtonElement>(
+                            '#helpMeWriteEnterpriseToggle');
+                assertTrue(hmwEnterpriseToggle !== null);
+
+                const setting = settingMojom.Setting.kShowOrca;
+                const params = new URLSearchParams();
+                params.append('settingId', setting.toString());
+                Router.getInstance().navigateTo(defaultRoute, params);
+
+                await waitAfterNextRender(hmwEnterpriseToggle);
+                assertEquals(
+                    hmwEnterpriseToggle,
+                    searchAndAssistantSettingsCard.shadowRoot!.activeElement,
+                    `Element should be focused for settingId=${setting}.'`);
+              });
+        });
+      }
+
+      suite('is disallowed', () => {
+        let hmwEnterpriseToggle: SettingsToggleButtonElement;
+
+        setup(() => {
+          createSearchAndAssistantCard();
+          searchAndAssistantSettingsCard.prefs = {
+            settings: {
+              magic_boost_enabled: {
+                value: true,
+                type: chrome.settingsPrivate.PrefType.BOOLEAN,
+              },
+              managed: {
+                help_me_write: {
+                  value: 2,
+                  type: chrome.settingsPrivate.PrefType.NUMBER,
+                },
+              },
+            },
+            assistive_input: {
+              orca_enabled: {
+                value: true,
+                type: chrome.settingsPrivate.PrefType.BOOLEAN,
+              },
+            },
+          };
+          flush();
+
+          const nullableHmwEnterpriseToggle =
+              searchAndAssistantSettingsCard.shadowRoot!
+                  .querySelector<SettingsToggleButtonElement>(
+                      '#helpMeWriteEnterpriseToggle');
+          assertTrue(nullableHmwEnterpriseToggle !== null);
+          hmwEnterpriseToggle = nullableHmwEnterpriseToggle;
+        });
+
+        test('Hmw enterprise toggle should appear', () => {
+          assertTrue(isVisible(hmwEnterpriseToggle));
+        });
+
+        test('Hmw toggle should not appear', () => {
+          const hmwToggle = searchAndAssistantSettingsCard.shadowRoot!
+                                .querySelector<SettingsToggleButtonElement>(
+                                    '#helpMeWriteToggle');
+          assertFalse(isVisible(hmwToggle));
+        });
+
+        test('Hmw enterprise toggle appears unchecked', () => {
+          assertTrue(isVisible(hmwEnterpriseToggle));
+          assertFalse(hmwEnterpriseToggle.checked);
+        });
+
+        test('Hmw enterprise toggle does not respond to clicks', () => {
+          assertTrue(isVisible(hmwEnterpriseToggle));
+          hmwEnterpriseToggle.click();
+
+          assertFalse(hmwEnterpriseToggle.checked);
+          assertTrue(searchAndAssistantSettingsCard.get(
+              'prefs.assistive_input.orca_enabled.value'));
+          assertEquals(
+              2,
+              searchAndAssistantSettingsCard.get(
+                  'prefs.settings.managed.help_me_write.value'));
+        });
+
+        test('Hmw enterprise toggle is deep-linkable', async () => {
+          const setting = settingMojom.Setting.kShowOrca;
+          const params = new URLSearchParams();
+          params.append('settingId', setting.toString());
+          Router.getInstance().navigateTo(defaultRoute, params);
+
+          await waitAfterNextRender(hmwEnterpriseToggle);
+          assertEquals(
+              hmwEnterpriseToggle,
+              searchAndAssistantSettingsCard.shadowRoot!.activeElement,
+              `Element should be focused for settingId=${setting}.'`);
+        });
+
+        for (const {desc, value} of ALLOWED_ENTERPRISE_POLICIES) {
+          test(
+              `then changes to ${desc}, Hmw toggle is deep-linkable`,
+              async () => {
+                searchAndAssistantSettingsCard.set(
+                    'prefs.settings.managed.help_me_write.value', value);
+                flush();
+
+                const hmwToggle =
+                    searchAndAssistantSettingsCard.shadowRoot!
+                        .querySelector<SettingsToggleButtonElement>(
+                            '#helpMeWriteToggle');
+                assertTrue(hmwToggle !== null);
+
+                const setting = settingMojom.Setting.kShowOrca;
+                const params = new URLSearchParams();
+                params.append('settingId', setting.toString());
+                Router.getInstance().navigateTo(defaultRoute, params);
+
+                await waitAfterNextRender(hmwToggle);
+                assertEquals(
+                    hmwToggle,
+                    searchAndAssistantSettingsCard.shadowRoot!.activeElement,
+                    `Element should be focused for settingId=${setting}.'`);
+              });
+        }
+      });
+    });
+
+    suite('Lobster setting toggle', () => {
+      suite('should be hidden', () => {
+        [{
+          isMagicBoostFeatureEnabled: false,
+          isLobsterSettingsToggleVisible: false,
+        },
+         {
+           isMagicBoostFeatureEnabled: false,
+           isLobsterSettingsToggleVisible: true,
+         },
+         {
+           isMagicBoostFeatureEnabled: true,
+           isLobsterSettingsToggleVisible: false,
+         }].forEach(({
+                      isMagicBoostFeatureEnabled,
+                      isLobsterSettingsToggleVisible,
+                    }) => {
+          test(
+              `when isMagicBoostFeatureEnabled is ${
+                  isMagicBoostFeatureEnabled
+                      .toString()} and isLobsterSettingsToggleVisible is ${
+                  isLobsterSettingsToggleVisible.toString()}`,
+              () => {
+                loadTimeData.overrideValues({
+                  isMagicBoostFeatureEnabled,
+                  isLobsterSettingsToggleVisible,
+                });
+                createSearchAndAssistantCard();
+                searchAndAssistantSettingsCard.prefs = {
+                  settings: {
+                    magic_boost_enabled: {
+                      value: true,
+                    },
+                  },
+                };
+                flush();
+                assertFalse(isVisible(
+                    searchAndAssistantSettingsCard.shadowRoot!.querySelector(
+                        '#lobsterToggle')));
+                assertFalse(isVisible(
+                    searchAndAssistantSettingsCard.shadowRoot!.querySelector(
+                        '#lobsterEnterpriseToggle')));
+              });
+        });
+      });
+
+      suite(
+          'should be visible when isMagicBoostFeatureEnabled and' +
+              ' isLobsterSettingsToggleVisible are both true, and ',
+          () => {
+            setup(() => {
+              loadTimeData.overrideValues({
+                isMagicBoostFeatureEnabled: true,
+                isLobsterSettingsToggleVisible: true,
+              });
+            });
+            suite('when Lobster enterprise policy enables the feature', () => {
+              for (const {desc, value} of ALLOWED_ENTERPRISE_POLICIES) {
+                suite(`is ${desc}`, () => {
+                  let lobsterToggle: SettingsToggleButtonElement;
+
+                  setup(() => {
+                    createSearchAndAssistantCard();
+                    searchAndAssistantSettingsCard.prefs = {
+                      settings: {
+                        magic_boost_enabled: {
+                          value: true,
+                          type: chrome.settingsPrivate.PrefType.BOOLEAN,
+                        },
+                        lobster: {
+                          enterprise_settings: {
+                            value: value,
+                            type: chrome.settingsPrivate.PrefType.NUMBER,
+                          },
+                        },
+                        lobster_enabled: {
+                          value: true,
+                          type: chrome.settingsPrivate.PrefType.BOOLEAN,
+                        },
+                      },
+                    };
+                    flush();
+
+                    const nullableLobsterToggle =
+                        searchAndAssistantSettingsCard.shadowRoot!
+                            .querySelector<SettingsToggleButtonElement>(
+                                '#lobsterToggle');
+                    assertTrue(nullableLobsterToggle !== null);
+                    lobsterToggle = nullableLobsterToggle;
+                  });
+
+                  test('Lobster toggle should appear', () => {
+                    assertTrue(isVisible(lobsterToggle));
+                  });
+
+                  test('Lobster enterprise toggle should not appear', () => {
+                    const lobsterEnterpriseToggle =
+                        searchAndAssistantSettingsCard.shadowRoot!
+                            .querySelector<SettingsToggleButtonElement>(
+                                '#lobsterEnterpriseToggle');
+                    assertFalse(isVisible(lobsterEnterpriseToggle));
+                  });
+
+                  test('Lobster toggle reflects pref value', () => {
+                    assertTrue(isVisible(lobsterToggle));
+                    assertTrue(lobsterToggle.checked);
+                    assertTrue(searchAndAssistantSettingsCard.get(
+                        'prefs.settings.lobster_enabled.value'));
+
+                    lobsterToggle.click();
+                    assertFalse(lobsterToggle.checked);
+                    assertFalse(searchAndAssistantSettingsCard.get(
+                        'prefs.settings.lobster_enabled.value'));
+                  });
+
+                  test(
+                      'then changes to disallowed, Lobster enterprise toggle' +
+                          ' is deep-linkable',
+                      async () => {
+                        searchAndAssistantSettingsCard.set(
+                            'prefs.settings.lobster.enterprise_settings.value',
+                            2);
+                        flush();
+
+                        const lobsterEnterpriseToggle =
+                            searchAndAssistantSettingsCard.shadowRoot!
+                                .querySelector<SettingsToggleButtonElement>(
+                                    '#lobsterEnterpriseToggle');
+                        assertTrue(lobsterEnterpriseToggle !== null);
+
+                        const setting = settingMojom.Setting.kLobsterOnOff;
+                        const params = new URLSearchParams();
+                        params.append('settingId', setting.toString());
+                        Router.getInstance().navigateTo(defaultRoute, params);
+
+                        await waitAfterNextRender(lobsterEnterpriseToggle);
+                        assertEquals(
+                            lobsterEnterpriseToggle,
+                            searchAndAssistantSettingsCard.shadowRoot!
+                                .activeElement,
+                            `Element should be focused for settingId=${
+                                setting}.'`);
+                      });
+                });
+              }
+            });
+            suite('when Lobster enterprise policy disables the feature, ', () => {
+              let lobsterEnterpriseToggle: SettingsToggleButtonElement;
+              setup(() => {
+                createSearchAndAssistantCard();
+                searchAndAssistantSettingsCard.prefs = {
+                  settings: {
+                    lobster: {
+                      enterprise_settings: {
+                        value: 2,
+                        type: chrome.settingsPrivate.PrefType.NUMBER,
+                      },
+                    },
+                    lobster_enabled: {
+                      value: true,
+                      type: chrome.settingsPrivate.PrefType.BOOLEAN,
+                    },
+                    magic_boost_enabled: {
+                      value: true,
+                      type: chrome.settingsPrivate.PrefType.BOOLEAN,
+                    },
+                  },
+                };
+                flush();
+                const nullableLobsterEnterpriseToggle =
+                    searchAndAssistantSettingsCard.shadowRoot!
+                        .querySelector<SettingsToggleButtonElement>(
+                            '#lobsterEnterpriseToggle');
+                assertTrue(nullableLobsterEnterpriseToggle !== null);
+                lobsterEnterpriseToggle = nullableLobsterEnterpriseToggle;
+              });
+
+              test('Lobster enterprise toggle should appear', () => {
+                assertTrue(isVisible(lobsterEnterpriseToggle));
+              });
+
+              test('Lobster toggle should not appear', () => {
+                const lobsterToggle =
+                    searchAndAssistantSettingsCard.shadowRoot!
+                        .querySelector<SettingsToggleButtonElement>(
+                            '#lobsterToggle');
+                assertFalse(isVisible(lobsterToggle));
+              });
+
+              test('Lobster enterprise toggle appears unchecked', () => {
+                assertTrue(isVisible(lobsterEnterpriseToggle));
+                assertFalse(lobsterEnterpriseToggle.checked);
+              });
+
+              test(
+                  'Lobster enterprise toggle does not respond to clicks',
+                  () => {
+                    assertTrue(isVisible(lobsterEnterpriseToggle));
+                    lobsterEnterpriseToggle.click();
+
+                    assertFalse(lobsterEnterpriseToggle.checked);
+                    assertTrue(searchAndAssistantSettingsCard.get(
+                        'prefs.settings.lobster_enabled.value'));
+                    assertEquals(
+                        2,
+                        searchAndAssistantSettingsCard.get(
+                            'prefs.settings.lobster.enterprise_settings.value'));
+                  });
+
+              test('Lobster enterprise toggle is deep-linkable', async () => {
+                const setting = settingMojom.Setting.kLobsterOnOff;
+                const params = new URLSearchParams();
+                params.append('settingId', setting.toString());
+                Router.getInstance().navigateTo(defaultRoute, params);
+
+                await waitAfterNextRender(lobsterEnterpriseToggle);
+                assertEquals(
+                    lobsterEnterpriseToggle,
+                    searchAndAssistantSettingsCard.shadowRoot!.activeElement,
+                    `Element should be focused for settingId=${setting}.'`);
+              });
+
+              for (const {desc, value} of ALLOWED_ENTERPRISE_POLICIES) {
+                test(
+                    `then changes to ${desc}, Lobster toggle is deep-linkable`,
+                    async () => {
+                      searchAndAssistantSettingsCard.set(
+                          'prefs.settings.lobster.enterprise_settings.value',
+                          value);
+                      flush();
+
+                      const lobsterToggle =
+                          searchAndAssistantSettingsCard.shadowRoot!
+                              .querySelector<SettingsToggleButtonElement>(
+                                  '#lobsterToggle');
+                      assertTrue(lobsterToggle !== null);
+
+                      const setting = settingMojom.Setting.kLobsterOnOff;
+                      const params = new URLSearchParams();
+                      params.append('settingId', setting.toString());
+                      Router.getInstance().navigateTo(defaultRoute, params);
+
+                      await waitAfterNextRender(lobsterToggle);
+                      assertEquals(
+                          lobsterToggle,
+                          searchAndAssistantSettingsCard.shadowRoot!
+                              .activeElement,
+                          `Element should be focused for settingId=${
+                              setting}.'`);
+                    });
+              }
+            });
+          });
+    });
+  });
+
+  test(
+      'when isScannerSettingsToggleVisible flag is false, ' +
+          'Scanner toggles are hidden',
+      () => {
+        loadTimeData.overrideValues({
+          isScannerSettingsToggleVisible: false,
+        });
+        createSearchAndAssistantCard();
+        assertFalse(
+            isVisible(searchAndAssistantSettingsCard.shadowRoot!.querySelector(
+                '#scannerToggle')));
+        assertFalse(
+            isVisible(searchAndAssistantSettingsCard.shadowRoot!.querySelector(
+                '#scannerEnterpriseToggle')));
+      });
+
+  suite('when isScannerSettingsToggleVisible flag is true', () => {
+    setup(() => {
+      loadTimeData.overrideValues({
+        isScannerSettingsToggleVisible: true,
+      });
+    });
+
+    for (const {desc, value} of ALLOWED_ENTERPRISE_POLICIES) {
+      suite(`and enterprise policy is ${desc}`, () => {
+        let scannerToggle: SettingsToggleButtonElement;
+
+        setup(() => {
+          createSearchAndAssistantCard();
+          searchAndAssistantSettingsCard.prefs = {
+            ash: {
+              scanner: {
+                enabled: {
+                  value: true,
+                  type: chrome.settingsPrivate.PrefType.BOOLEAN,
+                },
+                enterprise_policy_allowed: {
+                  value,
+                  type: chrome.settingsPrivate.PrefType.NUMBER,
+                },
+              },
+            },
+          };
+          flush();
+
+          const nullableScannerToggle =
+              searchAndAssistantSettingsCard.shadowRoot!
+                  .querySelector<SettingsToggleButtonElement>('#scannerToggle');
+          assertTrue(nullableScannerToggle !== null);
+          scannerToggle = nullableScannerToggle;
+        });
+
+        test('Scanner toggle should appear', () => {
+          assertTrue(isVisible(scannerToggle));
+        });
+
+        test('Scanner enterprise toggle should not appear', () => {
+          const scannerEnterpriseToggle =
+              searchAndAssistantSettingsCard.shadowRoot!
+                  .querySelector<SettingsToggleButtonElement>(
+                      '#scannerEnterpriseToggle');
+          assertTrue(!isVisible(scannerEnterpriseToggle));
+        });
+
+        test('Scanner toggle reflects pref value', () => {
+          assertTrue(isVisible(scannerToggle));
+          assertTrue(scannerToggle.checked);
+          assertTrue(searchAndAssistantSettingsCard.get(
+              'prefs.ash.scanner.enabled.value'));
+
+          scannerToggle.click();
+          assertFalse(scannerToggle.checked);
+          assertFalse(searchAndAssistantSettingsCard.get(
+              'prefs.ash.scanner.enabled.value'));
+        });
+
+        test('Scanner toggle is deep-linkable', async () => {
+          const setting = settingMojom.Setting.kScannerOnOff;
+          const params = new URLSearchParams();
+          params.append('settingId', setting.toString());
+          Router.getInstance().navigateTo(defaultRoute, params);
+
+          await waitAfterNextRender(scannerToggle);
+          assertEquals(
+              scannerToggle,
+              searchAndAssistantSettingsCard.shadowRoot!.activeElement,
+              `Element should be focused for settingId=${setting}.'`);
+        });
+
+        test(
+            'then changes to disallowed, ' +
+                'Scanner enterprise toggle is deep-linkable',
+            async () => {
+              searchAndAssistantSettingsCard.set(
+                  'prefs.ash.scanner.enterprise_policy_allowed.value', 2);
+              flush();
+
+              const scannerEnterpriseToggle =
+                  searchAndAssistantSettingsCard.shadowRoot!
+                      .querySelector<SettingsToggleButtonElement>(
+                          '#scannerEnterpriseToggle');
+              assertTrue(scannerEnterpriseToggle !== null);
+
+              const setting = settingMojom.Setting.kScannerOnOff;
+              const params = new URLSearchParams();
+              params.append('settingId', setting.toString());
+              Router.getInstance().navigateTo(defaultRoute, params);
+
+              await waitAfterNextRender(scannerEnterpriseToggle);
+              assertEquals(
+                  scannerEnterpriseToggle,
+                  searchAndAssistantSettingsCard.shadowRoot!.activeElement,
+                  `Element should be focused for settingId=${setting}.'`);
+            });
+      });
+    }
+
+    suite('and enterprise policy is disallowed', () => {
+      let scannerEnterpriseToggle: SettingsToggleButtonElement;
+
+      setup(() => {
+        createSearchAndAssistantCard();
+        searchAndAssistantSettingsCard.prefs = {
+          ash: {
+            scanner: {
+              enabled: {
+                value: true,
+                type: chrome.settingsPrivate.PrefType.BOOLEAN,
+              },
+              enterprise_policy_allowed: {
+                value: 2,
+                type: chrome.settingsPrivate.PrefType.NUMBER,
+              },
+            },
+          },
+        };
+        flush();
+
+        const nullableScannerEnterpriseToggle =
+            searchAndAssistantSettingsCard.shadowRoot!
+                .querySelector<SettingsToggleButtonElement>(
+                    '#scannerEnterpriseToggle');
+        assertTrue(nullableScannerEnterpriseToggle !== null);
+        scannerEnterpriseToggle = nullableScannerEnterpriseToggle;
+      });
+
+      test('Scanner enterprise toggle should appear', () => {
+        assertTrue(isVisible(scannerEnterpriseToggle));
+      });
+
+      test('Scanner toggle should not appear', () => {
+        const scannerToggle =
+            searchAndAssistantSettingsCard.shadowRoot!
+                .querySelector<SettingsToggleButtonElement>('#scannerToggle');
+        assertTrue(!isVisible(scannerToggle));
+      });
+
+      test('Scanner enterprise toggle appears unchecked', () => {
+        assertTrue(isVisible(scannerEnterpriseToggle));
+        assertFalse(scannerEnterpriseToggle.checked);
+      });
+
+      test('Scanner enterprise toggle does not respond to clicks', () => {
+        assertTrue(isVisible(scannerEnterpriseToggle));
+        scannerEnterpriseToggle.click();
+
+        assertFalse(scannerEnterpriseToggle.checked);
+        assertTrue(searchAndAssistantSettingsCard.get(
+            'prefs.ash.scanner.enabled.value'));
+        assertEquals(
+            searchAndAssistantSettingsCard.get(
+                'prefs.ash.scanner.enterprise_policy_allowed.value'),
+            2);
+      });
+
+      test('Scanner enterprise toggle is deep-linkable', async () => {
+        const setting = settingMojom.Setting.kScannerOnOff;
+        const params = new URLSearchParams();
+        params.append('settingId', setting.toString());
+        Router.getInstance().navigateTo(defaultRoute, params);
+
+        await waitAfterNextRender(scannerEnterpriseToggle);
+        assertEquals(
+            scannerEnterpriseToggle,
+            searchAndAssistantSettingsCard.shadowRoot!.activeElement,
+            `Element should be focused for settingId=${setting}.'`);
+      });
+
+      for (const {desc, value} of ALLOWED_ENTERPRISE_POLICIES) {
+        test(
+            `then changes to ${desc}, Scanner toggle is deep-linkable`,
+            async () => {
+              searchAndAssistantSettingsCard.set(
+                  'prefs.ash.scanner.enterprise_policy_allowed.value', value);
+              flush();
+
+              const scannerToggle =
+                  searchAndAssistantSettingsCard.shadowRoot!
+                      .querySelector<SettingsToggleButtonElement>(
+                          '#scannerToggle');
+              assertTrue(scannerToggle !== null);
+
+              const setting = settingMojom.Setting.kScannerOnOff;
+              const params = new URLSearchParams();
+              params.append('settingId', setting.toString());
+              Router.getInstance().navigateTo(defaultRoute, params);
+
+              await waitAfterNextRender(scannerToggle);
+              assertEquals(
+                  scannerToggle,
+                  searchAndAssistantSettingsCard.shadowRoot!.activeElement,
+                  `Element should be focused for settingId=${setting}.'`);
+            });
+      }
+    });
+  });
 
   suite('when Quick Answers is not supported', () => {
     test('Search engine row should be visible', () => {

@@ -14,6 +14,7 @@
 #import "base/observer_list_types.h"
 #import "base/scoped_observation.h"
 #import "google_apis/gaia/gaia_id.h"
+#import "ios/chrome/browser/signin/model/account_widget_updater.h"
 #import "ios/chrome/browser/signin/model/system_identity_manager.h"
 
 @protocol ChangeProfileCommands;
@@ -112,8 +113,6 @@ class AccountProfileMapper {
   // moves all personal accounts to a new empty personal profile. Deletes the
   // managed profile to which `gaia_id` was attached. That profile must not be
   // fully initialized yet (per ProfileAttributesIOS::IsFullyInitialized()).
-  // Runs the `done_callback` once the profile has been converted and accounts
-  // reattached.
   // This is meant for two situations:
   // 1. Signing in with a managed account during the FRE. In this case, there
   //    can't be any pre-existing local data, so no need to move to a new empty
@@ -122,8 +121,14 @@ class AccountProfileMapper {
   //    personal profile. In this case, the user *may* be offered to take
   //    existing local data along into the managed profile, which is implemented
   //    as converting the personal profile into a managed one.
-  void MakePersonalProfileManagedWithGaiaID(const GaiaId& gaia_id,
-                                            base::OnceClosure done_callback);
+  void MakePersonalProfileManagedWithGaiaID(const GaiaId& gaia_id);
+
+  // For testing purposes, this moves the account with `gaia_id` from its
+  // current (managed) profile into the personal profile. This simulates the
+  // situation where a managed account was already signed in before
+  // kSeparateProfilesForManagedAccounts was enabled (but makes test setup much
+  // easier).
+  void MoveManagedAccountToPersonalProfileForTesting(const GaiaId& gaia_id);
 
  private:
   class Assigner;
@@ -182,6 +187,8 @@ class AccountProfileMapper {
   raw_ptr<SystemIdentityManager> system_identity_manager_;
 
   raw_ptr<ProfileManagerIOS> profile_manager_;
+
+  std::unique_ptr<AccountWidgetUpdater> widget_updater_;
 
   std::unique_ptr<Assigner> assigner_;
 

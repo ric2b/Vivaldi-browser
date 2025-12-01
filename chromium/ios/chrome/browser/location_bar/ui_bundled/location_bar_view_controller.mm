@@ -176,7 +176,7 @@ const CGFloat kShareIconBalancingHeightPadding = 1;
 }
 
 - (void)setPlaceholderType:(LocationBarPlaceholderType)placeholderType {
-  CHECK(IsLensOverlayAvailable());
+  CHECK(IsLensOverlayAvailable(_profilePrefs));
   if (placeholderType == _placeholderType) {
     return;
   }
@@ -242,15 +242,8 @@ const CGFloat kShareIconBalancingHeightPadding = 1;
           UIUserInterfaceSizeClassRegular ||
       self.traitCollection.verticalSizeClass == UIUserInterfaceSizeClassCompact;
 
-  if (shouldShowVoiceSearch) {
-    if (self.voiceSearchEnabled) {
-      self.trailingButtonState = kVoiceSearchButton;
-    } else {
-      self.trailingButtonState = kNoButton;
-    }
-  } else {
-    self.trailingButtonState = kShareButton;
-  }
+  self.trailingButtonState =
+      shouldShowVoiceSearch ? kVoiceSearchButton : kShareButton;
   } // End Vivaldi
 }
 
@@ -284,39 +277,16 @@ const CGFloat kShareIconBalancingHeightPadding = 1;
   DCHECK(self.badgeView) << "The badge view must be set at this point";
   [self.locationBarSteadyView setBadgeView:self.badgeView];
 
-  if (IsLensOverlayAvailable()) {
-    _lensOverlayPlaceholderView = [[LensOverlayEntrypointButton alloc] init];
+  if (IsLensOverlayAvailable(_profilePrefs)) {
+    _lensOverlayPlaceholderView = [[LensOverlayEntrypointButton alloc]
+        initWithProfilePrefs:_profilePrefs];
     [self.layoutGuideCenter referenceView:_lensOverlayPlaceholderView
                                 underName:kLensOverlayEntrypointGuide];
 
     BOOL showSpeedbumpMenu = GetLensOverlayOnboardingTreatment() ==
                              LensOverlayOnboardingTreatment::kSpeedbumpMenu;
     if (showSpeedbumpMenu) {
-      __weak __typeof__(self) weakSelf = self;
-      _lensOverlayPlaceholderView.menu = [UIMenu
-          menuWithTitle:l10n_util::GetNSString(IDS_IOS_LENS_PRODUCT_NAME)
-               children:@[
-                 [UIAction
-                     actionWithTitle:
-                         l10n_util::GetNSString(
-                             IDS_IOS_LENS_OVERLAY_SPEEDBUMP_MENU_SCREEN)
-                               image:nil
-                          identifier:nil
-                             handler:^(UIAction* _) {
-                               [weakSelf
-                                   handleLensSpeedbumpMenuOpenLensOverlay];
-                             }],
-                 [UIAction
-                     actionWithTitle:
-                         l10n_util::GetNSString(
-                             IDS_IOS_LENS_OVERLAY_SPEEDBUMP_MENU_CAMERA)
-                               image:nil
-                          identifier:nil
-                             handler:^(UIAction* _) {
-                               [weakSelf
-                                   handleLensSpeedbumpMenuOpenLensViewFinder];
-                             }],
-               ]];
+      _lensOverlayPlaceholderView.menu = [self createSpeedbumpMenu];
       _lensOverlayPlaceholderView.showsMenuAsPrimaryAction = YES;
     } else {
       [_lensOverlayPlaceholderView
@@ -500,7 +470,7 @@ const CGFloat kShareIconBalancingHeightPadding = 1;
 }
 
 - (void)attemptShowingLensOverlayIPH {
-  if (IsLensOverlayAvailable() &&
+  if (IsLensOverlayAvailable(_profilePrefs) &&
       !self.locationBarSteadyView.badgesContainerView.placeholderView.hidden) {
     [self.helpCommandsHandler
         presentInProductHelpWithType:InProductHelpType::kLensOverlayEntrypoint];
@@ -745,7 +715,7 @@ const CGFloat kShareIconBalancingHeightPadding = 1;
       } else {
       [self.locationBarSteadyView.trailingButton
                  addTarget:self.dispatcher
-                    action:@selector(sharePage)
+                    action:@selector(showShareSheet)
           forControlEvents:UIControlEventTouchUpInside];
 
       // Add self as a target to collect the metrics.
@@ -806,7 +776,7 @@ const CGFloat kShareIconBalancingHeightPadding = 1;
           self.locationBarSteadyView.trailingButton.frame.size.width / 2;
       self.locationBarSteadyView.trailingButton.clipsToBounds = YES;
 
-      [self.locationBarSteadyView enableTrailingButton:YES];
+      [self.locationBarSteadyView enableTrailingButton:self.voiceSearchEnabled];
     }
   }
 }
@@ -842,6 +812,37 @@ const CGFloat kShareIconBalancingHeightPadding = 1;
          self.lensImageEnabled;
 }
 
+// Creates a new menu to use as the "speedbump" menu for the lens overlay
+// entrypoint. Only used in LensOverlayOnboardingTreatment::kSpeedbumpMenu.
+- (UIMenu*)createSpeedbumpMenu {
+  DCHECK(GetLensOverlayOnboardingTreatment() ==
+         LensOverlayOnboardingTreatment::kSpeedbumpMenu);
+
+  NSString* lensOverlayTitle =
+      l10n_util::GetNSString(IDS_IOS_LENS_OVERLAY_SPEEDBUMP_MENU_SCREEN);
+  __weak __typeof__(self) weakSelf = self;
+  UIAction* lensOverlayAction =
+      [UIAction actionWithTitle:lensOverlayTitle
+                          image:nil
+                     identifier:nil
+                        handler:^(UIAction* /* action */) {
+                          [weakSelf handleLensSpeedbumpMenuOpenLensOverlay];
+                        }];
+
+  NSString* cameraTitle =
+      l10n_util::GetNSString(IDS_IOS_LENS_OVERLAY_SPEEDBUMP_MENU_CAMERA);
+  UIAction* viewfinderAction =
+      [UIAction actionWithTitle:cameraTitle
+                          image:nil
+                     identifier:nil
+                        handler:^(UIAction* /* action */) {
+                          [weakSelf handleLensSpeedbumpMenuOpenLensViewFinder];
+                        }];
+  NSString* menuTitle = l10n_util::GetNSString(IDS_IOS_LENS_PRODUCT_NAME);
+  return [UIMenu menuWithTitle:menuTitle
+                      children:@[ lensOverlayAction, viewfinderAction ]];
+}
+
 #pragma mark - UIContextMenuInteractionDelegate
 
 - (UIMenu*)contextMenuUIMenu:(NSArray<UIMenuElement*>*)suggestedActions {
@@ -861,7 +862,7 @@ const CGFloat kShareIconBalancingHeightPadding = 1;
                     imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate]
                  identifier:nil
                     handler:^(UIAction* action) {
-                      [weakSelf.dispatcher sharePage];
+                      [weakSelf.dispatcher showShareSheet];
                     }];
         [menuElements addObject:copyAction];
       }

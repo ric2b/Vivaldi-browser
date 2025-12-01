@@ -38,6 +38,7 @@
 #include "ui/ozone/platform/wayland/host/wayland_window_drag_controller.h"
 #include "ui/ozone/platform/wayland/host/wayland_zwp_pointer_constraints.h"
 #include "ui/ozone/platform/wayland/host/xdg_activation.h"
+#include "ui/ozone/platform/wayland/host/xdg_session.h"
 #include "ui/platform_window/common/platform_window_defaults.h"
 #include "ui/platform_window/extensions/wayland_extension.h"
 #include "ui/platform_window/platform_window_delegate.h"
@@ -65,11 +66,6 @@ WaylandToplevelWindow::WaylandToplevelWindow(PlatformWindowDelegate* delegate,
 WaylandToplevelWindow::~WaylandToplevelWindow() = default;
 
 bool WaylandToplevelWindow::CreateShellToplevel() {
-  // Certain Wayland compositors (E.g. Mutter) expects wl_surface to have no
-  // buffer attached when xdg-surface role is created.
-  wl_surface_attach(root_surface()->surface(), nullptr, 0, 0);
-  root_surface()->Commit(false);
-
   ShellObjectFactory factory;
   shell_toplevel_ = factory.CreateShellToplevelWrapper(connection(), this);
   if (!shell_toplevel_) {
@@ -83,6 +79,21 @@ bool WaylandToplevelWindow::CreateShellToplevel() {
   TriggerStateChanges(GetPlatformWindowState());
   SetUpShellIntegration();
   OnDecorationModeChanged();
+
+  // If session management is supported and session data was passed in at
+  // construction time, with a valid `restore_id`, restoring this toplevel
+  // must be done now, before the first wl_surface commit. The remaining
+  // handling steps are done when the first xdg_surface.configure comes in
+  // (see HandleToplevelConfigure and UpdateSessionStateIfNeeded).
+  if (session_ && session_data_->restore_id) {
+    toplevel_session_ = session_->TrackToplevel(
+        this, session_data_->restore_id.value(), XdgSession::Action::kRestore);
+  }
+
+  if (!initial_icon_.isNull()) {
+    SetWindowIcons(gfx::ImageSkia(), initial_icon_);
+    initial_icon_ = gfx::ImageSkia();
+  }
 
   // This could be the proper time to update window mask using
   // NonClientView::GetWindowMask, since |non_client_view| is not created yet
@@ -138,18 +149,10 @@ void WaylandToplevelWindow::Hide() {
   }
   WaylandWindow::Hide();
 
-  // When running under Weston, if we don't do this immediately, the window
-  // will be unable to receive mouse events after making it visible again.
-  // See https://gitlab.freedesktop.org/wayland/weston/-/issues/950.
-  if (root_surface() && root_surface()->buffer_id() != 0) {
-    root_surface()->AttachBuffer(nullptr);
-    root_surface()->ApplyPendingState();
-    root_surface()->Commit(false);
-  }
-
   if (gtk_surface1_)
     gtk_surface1_.reset();
 
+  toplevel_session_.reset();
   shell_toplevel_.reset();
   ClearInFlightRequestsSerial();
 
@@ -263,6 +266,14 @@ void WaylandToplevelWindow::Restore() {
   SetWindowState(PlatformWindowState::kNormal, display::kInvalidDisplayId);
 }
 
+void WaylandToplevelWindow::ShowWindowControlsMenu(const gfx::Point& point) {
+  if (shell_toplevel_) {
+    shell_toplevel_->ShowWindowMenu(
+        connection(),
+        gfx::ScaleToRoundedPoint(point, applied_state().ui_scale));
+  }
+}
+
 void WaylandToplevelWindow::ActivateWithToken(std::string token) {
   DCHECK(connection()->xdg_activation());
   // xdg-activation implementation doesn't seem to interact well with dnd in
@@ -309,10 +320,15 @@ void WaylandToplevelWindow::SetWindowIcons(const gfx::ImageSkia& window_icon,
   // Let the app icon take precedence over the window icon.
   if (!app_icon.isNull()) {
     shell_toplevel_->SetIcon(app_icon);
-  } else {
+  } else if (!window_icon.isNull()) {
     shell_toplevel_->SetIcon(window_icon);
+  } else {
+    // Don't reset the icon if a null icon is passed in. There are callers
+    // that attempt to set a null icon after the initial icon has been set,
+    // but don't intend to reset the icon. This matches the behavior of the
+    // X11 backend.
+    return;
   }
-  root_surface()->Commit(/*flush=*/true);
 }
 
 void WaylandToplevelWindow::SizeConstraintsChanged() {
@@ -395,11 +411,38 @@ WaylandToplevelWindow* WaylandToplevelWindow::AsWaylandToplevelWindow() {
   return this;
 }
 
+void WaylandToplevelWindow::UpdateActivationState() {
+  bool prev_is_active = is_active_;
+
+  // Determine active state from keyboard focus. If keyboard is unavailable,
+  // determine it from xdg-shell "activated" state as that's the only hint the
+  // compositor provides us on whether our window is considered active.
+  // TODO(crbug.com/369574355): utilize zwp_text_input_v3::{enter,leave}
+  // eventually
+  if (connection()->IsKeyboardAvailable()) {
+    auto* keyboard_focused_window =
+        connection()->window_manager()->GetCurrentKeyboardFocusedWindow();
+    is_active_ = keyboard_focused_window &&
+                 keyboard_focused_window->GetRootParentWindow() == this;
+  } else {
+    is_active_ = is_xdg_active_;
+  }
+
+  if (prev_is_active != is_active_) {
+    if (active_bubble()) {
+      ActivateBubble(is_active_ ? active_bubble() : nullptr);
+    } else {
+      delegate()->OnActivationChanged(is_active_);
+    }
+  }
+}
+
 void WaylandToplevelWindow::HandleToplevelConfigure(
     int32_t width_dip,
     int32_t height_dip,
     const WindowStates& window_states) {
   HandleToplevelConfigureWithOrigin(0, 0, width_dip, height_dip, window_states);
+  UpdateSessionStateIfNeeded();
 }
 
 void WaylandToplevelWindow::HandleToplevelConfigureWithOrigin(
@@ -430,19 +473,18 @@ void WaylandToplevelWindow::HandleToplevelConfigureWithOrigin(
   fullscreen_display_id_ = display::kInvalidDisplayId;
 
   // Update state before notifying delegate.
-  const bool did_active_change = is_active_ != window_states.is_activated;
-  is_active_ = window_states.is_activated;
+  is_xdg_active_ = window_states.is_activated;
   bool prev_suspended = is_suspended_;
   is_suspended_ = window_states.is_suspended;
 
   // The tiled state affects the window geometry, so apply it here.
-  if (window_states.tiled_edges != tiled_state_) {
+  if (window_states.tiled_edges != applied_state().tiled_edges) {
     // This configure changes the decoration insets.  We should adjust the
     // bounds appropriately.
-    tiled_state_ = window_states.tiled_edges;
     delegate()->OnWindowTiledStateChanged(window_states.tiled_edges);
   }
 
+  pending_configure_state_.tiled_edges = window_states.tiled_edges;
   pending_configure_state_.window_state = window_state;
 
   // Width or height set to 0 means that we should decide on width and height by
@@ -488,14 +530,7 @@ void WaylandToplevelWindow::HandleToplevelConfigureWithOrigin(
     SetRestoredBoundsInDIP(GetBoundsInDIP());
   }
 
-  if (did_active_change) {
-    frame_manager()->OnWindowActivationChanged();
-    if (active_bubble()) {
-      ActivateBubble(is_active_ ? active_bubble() : nullptr);
-    } else {
-      delegate()->OnActivationChanged(is_active_);
-    }
-  }
+  UpdateActivationState();
   if (prev_suspended != is_suspended_) {
     frame_manager()->OnWindowSuspensionChanged();
   }
@@ -521,7 +556,11 @@ void WaylandToplevelWindow::OnSequencePoint(int64_t seq) {
 bool WaylandToplevelWindow::OnInitialize(
     PlatformWindowInitProperties properties,
     PlatformWindowDelegate::State* state) {
-  state->window_state = PlatformWindowState::kNormal;
+  // State is kept as "unknown" until the first configure sequence arrives, when
+  // it's possible to which state it should transition to. That's also when
+  // xdg_surface.set_window_geometry must be sent for the first time in. See
+  // WaylandWindow::LatchStateRequest for more details.
+  CHECK_EQ(state->window_state, PlatformWindowState::kUnknown);
 
   app_id_ = properties.wayland_app_id;
   SetWaylandToplevelExtension(this, this);
@@ -539,6 +578,24 @@ bool WaylandToplevelWindow::OnInitialize(
     workspace_ = kVisibleOnAllWorkspaces;
   }
   SetSystemModalExtension(this, static_cast<SystemModalExtension*>(this));
+  if (properties.icon) {
+    initial_icon_ = *properties.icon;
+  }
+
+  if (!properties.session_id.empty()) {
+    session_data_ = PlatformSessionWindowData{
+        .session_id = properties.session_id,
+        .window_id = properties.session_window_new_id,
+        .restore_id = properties.session_window_restore_id,
+    };
+    if (auto* session_manager = connection()->session_manager()) {
+      session_ = session_manager->GetSession(session_data_->session_id);
+      if (session_) {
+        session_observer_.Observe(session_);
+      }
+    }
+  }
+
   return true;
 }
 
@@ -656,6 +713,12 @@ void WaylandToplevelWindow::DumpState(std::ostream& out) const {
   out << ", title=" << window_title_
       << ", is_active=" << ToBoolString(is_active_)
       << ", system_modal=" << ToBoolString(system_modal_);
+}
+
+void WaylandToplevelWindow::OnSessionDestroying() {
+  toplevel_session_.reset();
+  session_observer_.Reset();
+  session_ = nullptr;
 }
 
 void WaylandToplevelWindow::UpdateSystemModal() {
@@ -829,6 +892,27 @@ void WaylandToplevelWindow::UpdateWindowMask() {
                               : std::nullopt));
   root_surface()->set_input_region(input_region_px_ ? input_region_px_
                                                     : region);
+}
+
+void WaylandToplevelWindow::UpdateSessionStateIfNeeded() {
+  CHECK(shell_toplevel_);
+  if (!session_) {
+    return;
+  }
+  // If we're handling the first configure sequence and a `toplevel_session_`
+  // was instantiated at window creation (see CreateShellToplevel), it must be
+  // removed now, so the requested `new_id` can be associated to this window.
+  // Note that IsConfigured returns true only after the first ack_configure.
+  if (!shell_toplevel_->IsConfigured()) {
+    const auto& session_data = session_data_.value();
+    if (toplevel_session_) {
+      CHECK(session_data.restore_id.has_value());
+      toplevel_session_->Remove();
+    }
+    toplevel_session_ = session_->TrackToplevel(this, session_data.window_id,
+                                                XdgSession::Action::kAdd);
+    connection()->Flush();
+  }
 }
 
 }  // namespace ui

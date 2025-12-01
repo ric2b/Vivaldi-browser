@@ -85,19 +85,10 @@ bool ScopedTempDir::Delete() {
     return false;
   }
 
-  int retries = 3;
-  bool ret = false;
-  while (retries > 0) {
-  /* bool */ ret = DeletePathRecursively(path_);
+  bool ret = DeletePathRecursively(path_);
   if (ret) {
     // We only clear the path if deleted the directory.
     path_.clear();
-    break;
-  }
-    retries--;
-    if (retries) {
-      PlatformThread::Sleep(base::Milliseconds(3000));
-    }
   }
 
   return ret;

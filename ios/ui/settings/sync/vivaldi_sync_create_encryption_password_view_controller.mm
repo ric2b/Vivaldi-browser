@@ -32,7 +32,8 @@ typedef NS_ENUM(NSInteger, ItemType) {
     UITextFieldDelegate,
     UITableViewDelegate>
 
-@property(nonatomic, strong) VivaldiTableViewTextEditItem* encryptionPasswordItem;
+@property(nonatomic, strong)
+    VivaldiTableViewTextEditItem* encryptionPasswordItem;
 @property(nonatomic, strong) VivaldiTableViewIllustratedItem* header;
 @property(nonatomic, strong) VivaldiTableViewLinkAndButtonItem* saveButton;
 
@@ -42,7 +43,8 @@ typedef NS_ENUM(NSInteger, ItemType) {
 @synthesize delegate;
 
 - (instancetype)initWithStyle:(UITableViewStyle)style {
-  if ((self = [super initWithStyle:style])) {}
+  if ((self = [super initWithStyle:style])) {
+  }
   return self;
 }
 
@@ -61,7 +63,6 @@ typedef NS_ENUM(NSInteger, ItemType) {
       l10n_util::GetNSString(IDS_VIVALDI_SYNC_ENCRYPTION_PASSWORD_TITLE);
 }
 
-
 - (void)setHeaderSubtitleText {
   NSMutableParagraphStyle* paragraphStyle =
       [[NSParagraphStyle defaultParagraphStyle] mutableCopy];
@@ -74,7 +75,7 @@ typedef NS_ENUM(NSInteger, ItemType) {
   };
   _header.subtitle = [[NSAttributedString alloc]
       initWithString:l10n_util::GetNSString(IDS_VIVALDI_SET_UP_ENCRYPTION_DESC)
-      attributes:textAttributes];
+          attributes:textAttributes];
 }
 
 #pragma mark - TableViewModel
@@ -88,16 +89,14 @@ typedef NS_ENUM(NSInteger, ItemType) {
   [model addSectionWithIdentifier:SectionIdentifierSaveButton];
   [model addSectionWithIdentifier:SectionIdentifierLogOutButton];
 
-  _header = [
-    [VivaldiTableViewIllustratedItem alloc] initWithType:ItemTypeHeader
-  ];
+  _header =
+      [[VivaldiTableViewIllustratedItem alloc] initWithType:ItemTypeHeader];
   _header.image = [UIImage imageNamed:kVivaldiIcon];
   _header.title =
       l10n_util::GetNSString(IDS_VIVALDI_SYNC_ENCRYPTION_PASSWORD_TITLE);
   [self setHeaderSubtitleText];
 
-  [model addItem:_header
-      toSectionWithIdentifier:SectionIdentifierHeader];
+  [model addItem:_header toSectionWithIdentifier:SectionIdentifierHeader];
 
   self.encryptionPasswordItem =
       [[VivaldiTableViewTextEditItem alloc] initWithType:ItemTypePassword];
@@ -112,7 +111,7 @@ typedef NS_ENUM(NSInteger, ItemType) {
   self.encryptionPasswordItem.autoCapitalizationType =
       UITextAutocapitalizationTypeNone;
   self.encryptionPasswordItem.identifyingIconAccessibilityLabel =
-    l10n_util::GetNSString(IDS_VIVALDI_IOS_SETTINGS_SHOW_PASSWORD_HINT);
+      l10n_util::GetNSString(IDS_VIVALDI_IOS_SETTINGS_SHOW_PASSWORD_HINT);
   [model addItem:self.encryptionPasswordItem
       toSectionWithIdentifier:SectionIdentifierEncryptionPassword];
 
@@ -122,7 +121,7 @@ typedef NS_ENUM(NSInteger, ItemType) {
   _saveButton.textAlignment = NSTextAlignmentNatural;
 
   [self.tableViewModel addItem:_saveButton
-      toSectionWithIdentifier:SectionIdentifierSaveButton];
+       toSectionWithIdentifier:SectionIdentifierSaveButton];
 }
 
 #pragma mark - UITableViewDelegate
@@ -188,33 +187,43 @@ typedef NS_ENUM(NSInteger, ItemType) {
 
 - (void)saveButtonPressed:(UIButton*)sender {
   if ([self.encryptionPasswordItem.textFieldValue length] == 0) {
-    [self showErrorCellWithMessage:l10n_util::GetNSString(
-        IDS_VIVALDI_ACCOUNT_ENCRYPTION_PASSPHRASE_REQUIRED)
+    [self showErrorCellWithMessage:
+              l10n_util::GetNSString(
+                  IDS_VIVALDI_ACCOUNT_ENCRYPTION_PASSPHRASE_REQUIRED)
+                           section:SectionIdentifierEncryptionPassword
+                          itemType:ItemTypeError];
+    return;
+  } else if ([self.encryptionPasswordItem.textFieldValue length] <
+             vMinimumPasswordLength) {
+    [self showErrorCellWithMessage:
+              l10n_util::GetNSString(
+                  IDS_VIVALDI_ACCOUNT_ENCRYPTION_PASSPHRASE_REQUIRED_LENGTH)
                            section:SectionIdentifierEncryptionPassword
                           itemType:ItemTypeError];
     return;
   } else {
     [self removeErrorCell:SectionIdentifierEncryptionPassword
-                itemType:ItemTypeError];
+                 itemType:ItemTypeError];
   }
 
   __weak __typeof__(self) weakSelf = self;
   [self.delegate
       saveEncryptionKeyButtonPressed:self.encryptionPasswordItem.textFieldValue
                    completionHandler:^(BOOL success) {
-    dispatch_async(dispatch_get_main_queue(), ^{
-      if (!success) {
-        [weakSelf showPasswordWrongMessage];
-      }
-    });
-  }];
+                     dispatch_async(dispatch_get_main_queue(), ^{
+                       if (!success) {
+                         [weakSelf showPasswordWrongMessage];
+                       }
+                     });
+                   }];
 }
 
 - (void)showPasswordWrongMessage {
-  [self showErrorCellWithMessage:l10n_util::GetNSString(
-      IDS_VIVALDI_ACCOUNT_ENCRYPTION_PASSPHRASE_WRONG)
-                      section:SectionIdentifierEncryptionPassword
-                    itemType:ItemTypeError];
+  [self showErrorCellWithMessage:
+            l10n_util::GetNSString(
+                IDS_VIVALDI_ACCOUNT_ENCRYPTION_PASSPHRASE_WRONG)
+                         section:SectionIdentifierEncryptionPassword
+                        itemType:ItemTypeError];
 }
 
 @end

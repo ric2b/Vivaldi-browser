@@ -5,6 +5,8 @@
 #ifndef CHROME_BROWSER_UI_VIEWS_DOWNLOAD_BUBBLE_DOWNLOAD_BUBBLE_ROW_VIEW_H_
 #define CHROME_BROWSER_UI_VIEWS_DOWNLOAD_BUBBLE_DOWNLOAD_BUBBLE_ROW_VIEW_H_
 
+#include <string_view>
+
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/task/cancelable_task_tracker.h"
@@ -16,7 +18,6 @@
 #include "chrome/browser/ui/download/download_item_mode.h"
 #include "chrome/browser/ui/views/controls/hover_button.h"
 #include "chrome/browser/ui/views/download/bubble/download_bubble_row_list_view.h"
-#include "chrome/browser/ui/views/download/bubble/download_toolbar_button_view.h"
 #include "components/download/public/common/download_item.h"
 #include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/base/mojom/menu_source_type.mojom-forward.h"
@@ -76,7 +77,6 @@ class DownloadBubbleRowView : public views::View,
 
   // Overrides views::FocusChangeListener
   void OnWillChangeFocus(views::View* before, views::View* now) override;
-  void OnDidChangeFocus(views::View* before, views::View* now) override {}
 
   // Update the row and its elements for hover and focus events.
   void UpdateRowForHover(bool hovered);
@@ -95,7 +95,7 @@ class DownloadBubbleRowView : public views::View,
   // Returns the transparent button that is activated when the row is clicked.
   views::Button* transparent_button() { return transparent_button_; }
 
-  const std::u16string& GetSecondaryLabelTextForTesting();
+  std::u16string_view GetSecondaryLabelTextForTesting();
 
   DownloadUIModel* model() { return info_->model(); }
   const DownloadBubbleRowViewInfo& info() const { return *info_; }

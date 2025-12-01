@@ -1,9 +1,17 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="sv">
+<translation id="2277224997687551299">Redigera gruppnamn</translation>
+<translation id="2330212241471632770">{TABS_COUNT, plural,
+ =1 {Bokmärkesflik}
+ other {Bokmärkes flikar}
+ }</translation>
 <translation id="2947471979790858922">Din aktivitet på dessa privata flikar kommer att tas bort från den här enheten</translation>
 <translation id="3870643923290313246">{INCOGNITO_TABS_COUNT, plural,
          =1 {Du kan hitta dina stängda flikar i Senaste flikarna under Vivaldis huvudmeny. Din privata flik kommer inte att vara tillgänglig.}
          other {Du kan hitta dina stängda flikar i Senaste flikarna under Vivaldis huvudmeny. Dina # privata flikar kommer inte att vara tillgängliga.}}</translation>
+<translation id="4460014764210899310">Ta bort gruppering</translation>
 <translation id="4871187110787939393">Stäng alla privata flikar?</translation>
+<translation id="5494920125229734069">Markera alla</translation>
+<translation id="6744956528665271406">Redigera gruppfärg</translation>
 </translationbundle>

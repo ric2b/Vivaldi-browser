@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+import * as Root from '../../../core/root/root.js';
 import * as Trace from '../../../models/trace/trace.js';
 
 import {nameForEntry} from './EntryName.js';
@@ -19,15 +20,58 @@ function depthFirstWalk(
   }
 }
 
+export interface FromTimeOnThreadOptions {
+  thread: {pid: Trace.Types.Events.ProcessID, tid: Trace.Types.Events.ThreadID};
+  parsedTrace: Trace.Handlers.Types.ParsedTrace;
+  bounds: Trace.Types.Timing.TraceWindowMicro;
+}
 export class AICallTree {
   constructor(
-      public selectedNode: Trace.Extras.TraceTree.Node,
+      public selectedNode: Trace.Extras.TraceTree.Node|null,
       public rootNode: Trace.Extras.TraceTree.TopDownRootNode,
       // TODO: see if we can avoid passing around this entire thing.
       public parsedTrace: Trace.Handlers.Types.ParsedTrace,
   ) {
   }
 
+  /**
+   * Builds a call tree representing all calls within the given timeframe for
+   * the provided thread.
+   * Events that are less than 0.05% of the range duration are removed.
+   */
+  static fromTimeOnThread({thread, parsedTrace, bounds}: FromTimeOnThreadOptions): AICallTree|null {
+    const threadEvents = parsedTrace.Renderer.processes.get(thread.pid)?.threads.get(thread.tid)?.entries;
+
+    if (!threadEvents) {
+      return null;
+    }
+    const overlappingEvents = threadEvents.filter(e => Trace.Helpers.Timing.eventIsInBounds(e, bounds));
+
+    const visibleEventsFilter = new Trace.Extras.TraceFilter.VisibleEventsFilter(visibleTypes());
+
+    // By default, we remove events whose duration is less than 0.5% of the total
+    // range. So if the range is 10s, an event must be 0.05s+ to be included.
+    // This does risk eliminating useful data when we pass it to the LLM, but
+    // we are trying to balance context window sizes and not using it up too
+    // eagerly. We will experiment with this filter and likely make it smarter
+    // or tweak it based on range size rather than using a blanket value. Or we
+    // could consider limiting the depth when we serialize. Or some
+    // combination!
+    const minDuration = Trace.Types.Timing.Micro(bounds.range * 0.005);
+    const minDurationFilter = new MinDurationFilter(minDuration);
+    const compileCodeFilter = new ExcludeCompileCodeFilter();
+    // Build a tree bounded by the selected event's timestamps, and our other filters applied
+    const rootNode = new Trace.Extras.TraceTree.TopDownRootNode(overlappingEvents, {
+      filters: [minDurationFilter, compileCodeFilter, visibleEventsFilter],
+      startTime: Trace.Helpers.Timing.microToMilli(bounds.min),
+      endTime: Trace.Helpers.Timing.microToMilli(bounds.max),
+      doNotAggregate: true,
+      includeInstantEvents: true,
+    });
+
+    const instance = new AICallTree(null /* no selected node*/, rootNode, parsedTrace);
+    return instance;
+  }
   /**
    * Attempts to build an AICallTree from a given selected event. It also
    * validates that this event is one that we support being used with the AI
@@ -37,7 +81,8 @@ export class AICallTree {
    * This filters out other events we make such as SyntheticLayoutShifts which are not valid
    * If the event is not valid, or there is an unexpected error building the tree, `null` is returned.
    */
-  static from(selectedEvent: Trace.Types.Events.Event, parsedTrace: Trace.Handlers.Types.ParsedTrace): AICallTree|null {
+  static fromEvent(selectedEvent: Trace.Types.Events.Event, parsedTrace: Trace.Handlers.Types.ParsedTrace): AICallTree
+      |null {
     // First: check that the selected event is on the thread we have identified as the main thread.
     const threads = Trace.Handlers.Threads.threadsInTrace(parsedTrace);
     const thread = threads.find(t => t.pid === selectedEvent.pid && t.tid === selectedEvent.tid);
@@ -47,7 +92,7 @@ export class AICallTree {
     // We allow two thread types to deal with the NodeJS use case.
     // MAIN_THREAD is used when a trace has been generated through Chrome
     //   tracing on a website (and we have a renderer)
-    // CPU_PROFILE is used only when we have recieved a CPUProfile - in this
+    // CPU_PROFILE is used only when we have received a CPUProfile - in this
     //   case all the threads are CPU_PROFILE so we allow those. If we only allow
     //   MAIN_THREAD then we wouldn't ever allow NodeJS users to use the AI
     //   integration.
@@ -65,8 +110,8 @@ export class AICallTree {
       return null;
     }
 
+    const allEventsEnabled = Root.Runtime.experiments.isEnabled('timeline-show-all-events');
     const {startTime, endTime} = Trace.Helpers.Timing.eventTimingsMilliSeconds(selectedEvent);
-
     const selectedEventBounds = Trace.Helpers.Timing.traceWindowFromMicroSeconds(
         Trace.Helpers.Timing.milliToMicro(startTime), Trace.Helpers.Timing.milliToMicro(endTime));
     let threadEvents = parsedTrace.Renderer.processes.get(selectedEvent.pid)?.threads.get(selectedEvent.tid)?.entries;
@@ -81,11 +126,23 @@ export class AICallTree {
     }
     const overlappingEvents = threadEvents.filter(e => Trace.Helpers.Timing.eventIsInBounds(e, selectedEventBounds));
 
-    const visibleEventsFilter = new Trace.Extras.TraceFilter.VisibleEventsFilter(visibleTypes());
-    const customFilter = new AITreeFilter(selectedEvent);
+    const filters: Trace.Extras.TraceFilter.TraceFilter[] =
+        [new SelectedEventDurationFilter(selectedEvent), new ExcludeCompileCodeFilter(selectedEvent)];
+
+    // If the "Show all events" experiment is on, we don't filter out any
+    // events here, otherwise the generated call tree will not match what the
+    // user is seeing.
+    if (!allEventsEnabled) {
+      filters.push(new Trace.Extras.TraceFilter.VisibleEventsFilter(visibleTypes()));
+    }
+
     // Build a tree bounded by the selected event's timestamps, and our other filters applied
-    const rootNode = new Trace.Extras.TraceTree.TopDownRootNode(
-        overlappingEvents, [visibleEventsFilter, customFilter], startTime, endTime, false, null, true);
+    const rootNode = new Trace.Extras.TraceTree.TopDownRootNode(overlappingEvents, {
+      filters,
+      startTime,
+      endTime,
+      includeInstantEvents: true,
+    });
 
     // Walk the tree to find selectedNode
     let selectedNode: Trace.Extras.TraceTree.Node|null = null;
@@ -129,7 +186,7 @@ export class AICallTree {
   /* This custom YAML-like format with an adjacency list for children is 35% more token efficient than JSON */
   static stringifyNode(
       node: Trace.Extras.TraceTree.Node, parsedTrace: Trace.Handlers.Types.ParsedTrace,
-      selectedNode: Trace.Extras.TraceTree.Node, nodeToIdMap: Map<Trace.Extras.TraceTree.Node, number>,
+      selectedNode: Trace.Extras.TraceTree.Node|null, nodeToIdMap: Map<Trace.Extras.TraceTree.Node, number>,
       allUrls: string[]): string {
     const event = node.event;
     if (!event) {
@@ -144,9 +201,6 @@ export class AICallTree {
     // Identifier string includes an id and name:
     //   eg "[13] Parse HTML" or "[45] parseCPUProfileFormatFromFile"
     const getIdentifier = (node: Trace.Extras.TraceTree.Node): string => {
-      if (!node.event || typeof node.id !== 'string') {
-        throw new Error('ok');
-      }
       if (!nodeToIdMap.has(node)) {
         nodeToIdMap.set(node, nodeToIdMap.size + 1);
       }
@@ -185,7 +239,27 @@ export class AICallTree {
   }
 }
 
-export class AITreeFilter extends Trace.Extras.TraceFilter.TraceFilter {
+/**
+ * These events are very noisy and take up room in the context window for no real benefit.
+ */
+export class ExcludeCompileCodeFilter extends Trace.Extras.TraceFilter.TraceFilter {
+  #selectedEvent: Trace.Types.Events.Event|null = null;
+  constructor(selectedEvent?: Trace.Types.Events.Event) {
+    super();
+    this.#selectedEvent = selectedEvent ?? null;
+  }
+
+  accept(event: Trace.Types.Events.Event): boolean {
+    if (this.#selectedEvent && event === this.#selectedEvent) {
+      // If the user selects this event, we should accept it, else the
+      // behaviour is confusing when the selected event is not used.
+      return true;
+    }
+    return event.name !== Trace.Types.Events.Name.COMPILE_CODE;
+  }
+}
+
+export class SelectedEventDurationFilter extends Trace.Extras.TraceFilter.TraceFilter {
   #minDuration: Trace.Types.Timing.Micro;
   #selectedEvent: Trace.Types.Events.Event;
   constructor(selectedEvent: Trace.Types.Events.Event) {
@@ -198,9 +272,19 @@ export class AITreeFilter extends Trace.Extras.TraceFilter.TraceFilter {
     if (event === this.#selectedEvent) {
       return true;
     }
-    if (event.name === Trace.Types.Events.Name.COMPILE_CODE) {
-      return false;
-    }
+    return event.dur ? event.dur >= this.#minDuration : false;
+  }
+}
+
+export class MinDurationFilter extends Trace.Extras.TraceFilter.TraceFilter {
+  #minDuration: Trace.Types.Timing.Micro;
+
+  constructor(minDuration: Trace.Types.Timing.Micro) {
+    super();
+    this.#minDuration = minDuration;
+  }
+
+  accept(event: Trace.Types.Events.Event): boolean {
     return event.dur ? event.dur >= this.#minDuration : false;
   }
 }

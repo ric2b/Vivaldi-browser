@@ -21,6 +21,7 @@
 #include "third_party/blink/renderer/core/dom/names_map.h"
 #include "third_party/blink/renderer/core/dom/node_rare_data.h"
 #include "third_party/blink/renderer/core/dom/popover_data.h"
+#include "third_party/blink/renderer/core/dom/scroll_marker_group_data.h"
 #include "third_party/blink/renderer/core/dom/shadow_root.h"
 #include "third_party/blink/renderer/core/dom/space_split_string.h"
 #include "third_party/blink/renderer/core/editing/ime/edit_context.h"
@@ -97,6 +98,12 @@ PseudoElement* ElementRareDataVector::GetPseudoElement(
     return nullptr;
   return data->GetPseudoElement(pseudo_id, document_transition_tag);
 }
+bool ElementRareDataVector::HasViewTransitionGroupPseudoElement() const {
+  PseudoElementData* data =
+      static_cast<PseudoElementData*>(GetField(FieldId::kPseudoElementData));
+  return data && data->HasViewTransitionGroupPseudoElement();
+}
+
 PseudoElementData::PseudoElementVector
 ElementRareDataVector::GetPseudoElements() const {
   PseudoElementData* data =
@@ -439,6 +446,29 @@ void ElementRareDataVector::RemoveInterestInvokerTargetData() {
   SetField(FieldId::kInterestInvokerTargetData, nullptr);
 }
 
+ScrollMarkerGroupData* ElementRareDataVector::GetScrollMarkerGroupData() const {
+  return static_cast<ScrollMarkerGroupData*>(
+      GetField(FieldId::kScrollMarkerGroupData));
+}
+void ElementRareDataVector::RemoveScrollMarkerGroupData() {
+  SetField(FieldId::kScrollMarkerGroupData, nullptr);
+}
+ScrollMarkerGroupData& ElementRareDataVector::EnsureScrollMarkerGroupData(
+    Element* element) {
+  return EnsureField<ScrollMarkerGroupData>(FieldId::kScrollMarkerGroupData,
+                                            element->GetDocument().GetFrame());
+}
+
+void ElementRareDataVector::SetScrollMarkerGroupContainerData(
+    ScrollMarkerGroupData* data) {
+  SetField(FieldId::kScrollMarkerGroupContainerData, data);
+}
+ScrollMarkerGroupData*
+ElementRareDataVector::GetScrollMarkerGroupContainerData() const {
+  return static_cast<ScrollMarkerGroupData*>(
+      GetField(FieldId::kScrollMarkerGroupContainerData));
+}
+
 AnchorPositionScrollData* ElementRareDataVector::GetAnchorPositionScrollData()
     const {
   return static_cast<AnchorPositionScrollData*>(
@@ -481,7 +511,7 @@ void ElementRareDataVector::DecrementImplicitlyAnchoredElementCount() {
 bool ElementRareDataVector::HasImplicitlyAnchoredElement() const {
   wtf_size_t* anchored_element_count =
       GetWrappedField<wtf_size_t>(FieldId::kImplicitlyAnchoredElementCount);
-  return anchored_element_count ? *anchored_element_count : false;
+  return anchored_element_count && *anchored_element_count;
 }
 
 void ElementRareDataVector::Trace(blink::Visitor* visitor) const {

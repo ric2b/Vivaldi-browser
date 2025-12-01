@@ -7,7 +7,7 @@ import * as Platform from '../../../core/platform/platform.js';
 import * as Trace from '../../../models/trace/trace.js';
 import type * as PerfUI from '../../../ui/legacy/components/perf_ui/perf_ui.js';
 import * as VisualLogging from '../../../ui/visual_logging/visual_logging.js';
-import {EntryStyles} from '../../timeline/utils/utils.js';
+import * as Utils from '../utils/utils.js';
 
 import * as Components from './components/components.js';
 
@@ -32,7 +32,7 @@ const UIStrings = {
    * @description Label for an option that selects the page's entire origin/domain as opposed to it's specific URL.
    */
   originOption: 'Origin',
-};
+} as const;
 const str_ = i18n.i18n.registerUIStrings('panels/timeline/overlays/OverlaysImpl.ts', UIStrings);
 const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
 
@@ -291,7 +291,7 @@ export interface CandyStripedTimeRange {
  */
 export interface TimespanBreakdown {
   type: 'TIMESPAN_BREAKDOWN';
-  sections: Array<Components.TimespanBreakdownOverlay.EntryBreakdown>;
+  sections: Components.TimespanBreakdownOverlay.EntryBreakdown[];
   entry?: Trace.Types.Events.Event;
   renderLocation?: 'BOTTOM_OF_TIMELINE'|'BELOW_EVENT'|'ABOVE_EVENT';
 }
@@ -332,7 +332,11 @@ export interface TimelineOverlaySetOptions {
  */
 type SingletonOverlay = EntrySelected|TimestampMarker;
 export function overlayIsSingleton(overlay: TimelineOverlay): overlay is SingletonOverlay {
-  return overlay.type === 'TIMESTAMP_MARKER' || overlay.type === 'ENTRY_SELECTED';
+  return overlayTypeIsSingleton(overlay.type);
+}
+
+export function overlayTypeIsSingleton(type: TimelineOverlay['type']): type is SingletonOverlay['type'] {
+  return type === 'TIMESTAMP_MARKER' || type === 'ENTRY_SELECTED';
 }
 
 /**
@@ -382,6 +386,7 @@ export interface TimelineCharts {
 }
 
 export interface OverlayEntryQueries {
+  parsedTrace: () => Trace.Handlers.Types.ParsedTrace | null;
   isEntryCollapsedByUser: (entry: Trace.Types.Events.Event) => boolean;
   firstVisibleParentForEntry: (entry: Trace.Types.Events.Event) => Trace.Types.Events.Event | null;
 }
@@ -395,6 +400,12 @@ export class AnnotationOverlayActionEvent extends Event {
 
   constructor(public overlay: TimelineOverlay, public action: UpdateAction) {
     super(AnnotationOverlayActionEvent.eventName);
+  }
+}
+export class ConsentDialogVisibilityChange extends Event {
+  static readonly eventName = 'consentdialogvisibilitychange';
+  constructor(public isVisible: boolean) {
+    super(ConsentDialogVisibilityChange.eventName, {bubbles: true, composed: true});
   }
 }
 
@@ -452,7 +463,9 @@ export class Overlays extends EventTarget {
    * subsequent renders we do not destroy and recreate it, instead we update it
    * based on the new position of the timeline.
    */
-  #overlaysToElements: Map<TimelineOverlay, HTMLElement|null> = new Map();
+  #overlaysToElements = new Map<TimelineOverlay, HTMLElement|null>();
+
+  #singletonOverlays = new Map<SingletonOverlay['type'], TimelineOverlay>();
 
   // When the Entries Link Annotation is created, the arrow needs to follow the mouse.
   // Update the mouse coordinates while it is being created.
@@ -490,7 +503,7 @@ export class Overlays extends EventTarget {
    */
   #overlaysContainer: HTMLElement;
 
-  // Setting that specififed if the annotations overlays need to be visible.
+  // Setting that specified if the annotations overlays need to be visible.
   // It is switched on/off from the annotations tab in the sidebar.
   readonly #annotationsHiddenSetting: Common.Settings.Setting<boolean>;
 
@@ -581,10 +594,14 @@ export class Overlays extends EventTarget {
      * the existing one, rather than create a new one. This ensures you can only
      * ever have one instance of the overlay type.
      */
-    const existing = this.overlaysOfType<T>(newOverlay.type);
-    if (overlayIsSingleton(newOverlay) && existing[0]) {
-      this.updateExisting(existing[0], newOverlay);
-      return existing[0];
+    if (overlayIsSingleton(newOverlay)) {
+      const existing = this.#singletonOverlays.get(newOverlay.type);
+      if (existing) {
+        this.updateExisting(existing, newOverlay);
+        return existing as T;  // The is a safe cast, thanks to `type` above.
+      }
+
+      this.#singletonOverlays.set(newOverlay.type, newOverlay);
     }
 
     // By setting the value to null, we ensure that on the next render that the
@@ -644,6 +661,16 @@ export class Overlays extends EventTarget {
    * @returns the number of overlays that were removed.
    */
   removeOverlaysOfType(type: TimelineOverlay['type']): number {
+    if (overlayTypeIsSingleton(type)) {
+      const singleton = this.#singletonOverlays.get(type);
+      if (singleton) {
+        this.remove(singleton);
+        return 1;
+      }
+
+      return 0;
+    }
+
     const overlaysToRemove = Array.from(this.#overlaysToElements.keys()).filter(overlay => {
       return overlay.type === type;
     });
@@ -656,7 +683,16 @@ export class Overlays extends EventTarget {
   /**
    * @returns all overlays that match the provided type.
    */
-  overlaysOfType<T extends TimelineOverlay>(type: T['type']): NoInfer<T>[] {
+  overlaysOfType<T extends TimelineOverlay>(type: T['type']): Array<NoInfer<T>> {
+    if (overlayTypeIsSingleton(type)) {
+      const singleton = this.#singletonOverlays.get(type);
+      if (singleton) {
+        return [singleton as T];
+      }
+
+      return [];
+    }
+
     const matches: T[] = [];
 
     function overlayIsOfType(overlay: TimelineOverlay): overlay is T {
@@ -688,10 +724,13 @@ export class Overlays extends EventTarget {
       this.#overlaysContainer.removeChild(htmlElement);
     }
     this.#overlaysToElements.delete(overlay);
+    if (overlayIsSingleton(overlay)) {
+      this.#singletonOverlays.delete(overlay.type);
+    }
   }
 
   /**
-   * Update the dimenions of a chart.
+   * Update the dimensions of a chart.
    * IMPORTANT: this does not trigger a re-draw. You must call the render() method manually.
    */
   updateChartDimensions(chart: EntryChartLocation, dimensions: FlameChartDimensions): void {
@@ -709,7 +748,7 @@ export class Overlays extends EventTarget {
   /**
    * Clears all overlays and all data. Call this when the trace is changing
    * (e.g. the user has imported/recorded a new trace) and we need to start from
-   * scratch and remove all overlays relating to the preivous trace.
+   * scratch and remove all overlays relating to the previous trace.
    */
   reset(): void {
     if (this.#overlaysContainer) {
@@ -781,7 +820,7 @@ export class Overlays extends EventTarget {
     // This isn't bi-directional: if we find that O2 overlaps O1, we will
     // store O1 => [O2]. We will not then also store O2 => [O1], because we
     // only need to deal with the overlap once.
-    const overlapsByOverlay: Map<TimeRangeLabel, TimeRangeLabel[]> = new Map();
+    const overlapsByOverlay = new Map<TimeRangeLabel, TimeRangeLabel[]>();
 
     for (let i = 0; i < overlaysSorted.length; i++) {
       const current = overlaysSorted[i];
@@ -1027,7 +1066,7 @@ export class Overlays extends EventTarget {
 
         // Available space between the bottom of the overlay and top of the chart.
         const minSpace = Math.max(bottom, 0);
-        // Contrain height to available space.
+        // Constrain height to available space.
         const height = Math.min(MAX_BOX_HEIGHT, minSpace);
 
         const top = bottom - height;
@@ -1241,7 +1280,7 @@ export class Overlays extends EventTarget {
       return null;
     }
 
-    // Position the start of label overlay at the start of the entry + length of connector + legth of the label element
+    // Position the start of label overlay at the start of the entry + length of connector + length of the label element
     element.style.top = `${y - Components.EntryLabelOverlay.EntryLabelOverlay.LABEL_AND_CONNECTOR_HEIGHT}px`;
     element.style.left = `${x}px`;
     element.style.width = `${entryWidth}px`;
@@ -1372,7 +1411,7 @@ export class Overlays extends EventTarget {
       widthPixels = customPos.width;
     }
 
-    // Calculate the visible overlay width by substracting the entry width that is outside of the flamechart width
+    // Calculate the visible overlay width by subtracting the entry width that is outside of the flamechart width
     const cutOffRight = (x + widthPixels > chartWidth) ? (x + widthPixels) - chartWidth : null;
     const cutOffLeft = (x < 0) ? Math.abs(x) : null;
     element.classList.toggle('cut-off-right', cutOffRight !== null);
@@ -1496,6 +1535,16 @@ export class Overlays extends EventTarget {
       case 'ENTRY_LABEL': {
         const shouldDrawLabelBelowEntry = Trace.Types.Events.isLegacyTimelineFrame(overlay.entry);
         const component = new Components.EntryLabelOverlay.EntryLabelOverlay(overlay.label, shouldDrawLabelBelowEntry);
+        // Generate the AI Call Tree for the AI Auto-Annotation feature.
+        const parsedTrace = this.#queries.parsedTrace();
+        const callTree = parsedTrace ? Utils.AICallTree.AICallTree.fromEvent(overlay.entry, parsedTrace) : null;
+        component.callTree = callTree;
+
+        component.addEventListener(
+            Components.EntryLabelOverlay.LabelAnnotationsConsentDialogVisiblityChange.eventName, e => {
+              const event = e as Components.EntryLabelOverlay.LabelAnnotationsConsentDialogVisiblityChange;
+              this.dispatchEvent(new ConsentDialogVisibilityChange(event.isVisible));
+            });
         component.addEventListener(Components.EntryLabelOverlay.EmptyEntryLabelRemoveEvent.eventName, () => {
           this.dispatchEvent(new AnnotationOverlayActionEvent(overlay, 'Remove'));
         });
@@ -1570,7 +1619,7 @@ export class Overlays extends EventTarget {
         return overlayElement;
       }
       case 'TIMINGS_MARKER': {
-        const {color} = EntryStyles.markerDetailsForEvent(overlay.entries[0]);
+        const {color} = Utils.EntryStyles.markerDetailsForEvent(overlay.entries[0]);
         const markersComponent = this.#createTimingsMarkerElement(overlay);
         overlayElement.appendChild(markersComponent);
         overlayElement.style.backgroundColor = color;
@@ -1639,7 +1688,7 @@ export class Overlays extends EventTarget {
     const markers = document.createElement('div');
     markers.classList.add('markers');
     for (const entry of overlay.entries) {
-      const {color, title} = EntryStyles.markerDetailsForEvent(entry);
+      const {color, title} = Utils.EntryStyles.markerDetailsForEvent(entry);
       const marker = document.createElement('div');
       marker.classList.add('marker-title');
       marker.textContent = title;
@@ -1786,7 +1835,7 @@ export class Overlays extends EventTarget {
   /**
    * Calculate if an entry is visible vertically on the chart. A bit fiddly as
    * we have to figure out its pixel offset and go on that. Unlike horizontal
-   * visibility, we can't work soley from its microsecond values.
+   * visibility, we can't work solely from its microsecond values.
    */
   #entryIsVerticallyVisibleOnChart(entry: OverlayEntry): boolean {
     const chartName = chartForEntry(entry);

@@ -29,7 +29,7 @@
 #include "content/public/browser/global_routing_id.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents.h"
-#include "device/fido/features.h"
+#include "device/fido/discoverable_credential_metadata.h"
 #include "device/fido/fido_types.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/gfx/paint_vector_icon.h"
@@ -51,6 +51,7 @@ StepUIType step_ui_type(AuthenticatorRequestDialogModel::Step step) {
     case AuthenticatorRequestDialogModel::Step::kNotStarted:
     case AuthenticatorRequestDialogModel::Step::kPasskeyAutofill:
     case AuthenticatorRequestDialogModel::Step::kPasskeyUpgrade:
+    case AuthenticatorRequestDialogModel::Step::kPasswordOsAuth:
       return StepUIType::NONE;
 
     case AuthenticatorRequestDialogModel::Step::kRecoverSecurityDomain:
@@ -91,36 +92,41 @@ AUTHENTICATOR_EVENTS
 
 // static
 std::u16string AuthenticatorRequestDialogModel::GetMechanismDescription(
-    device::AuthenticatorType type,
-    const std::optional<std::string>& phone_name) {
-  if (type == device::AuthenticatorType::kPhone) {
+    const device::DiscoverableCredentialMetadata& cred,
+    const std::optional<std::string>& phone_name,
+    UIPresentation ui_presentation) {
+  if (cred.source == device::AuthenticatorType::kPhone) {
     return l10n_util::GetStringFUTF16(IDS_WEBAUTHN_SOURCE_PHONE,
                                       base::UTF8ToUTF16(*phone_name));
   }
+  if (cred.provider_name) {
+    return base::UTF8ToUTF16(*cred.provider_name);
+  }
   int message;
-  const bool gpm_enabled =
-      base::FeatureList::IsEnabled(device::kWebAuthnEnclaveAuthenticator);
-  switch (type) {
+  bool immediate_mode = UIPresentation::kModalImmediate == ui_presentation;
+  switch (cred.source) {
     case device::AuthenticatorType::kWinNative:
-      message = gpm_enabled ? IDS_WEBAUTHN_SOURCE_WINDOWS_HELLO_NEW
-                            : IDS_WEBAUTHN_SOURCE_WINDOWS_HELLO;
+      message = immediate_mode ? IDS_PASSWORD_MANAGER_PASSKEY_FROM_WINDOWS_HELLO
+                               : IDS_WEBAUTHN_SOURCE_WINDOWS_HELLO;
       break;
     case device::AuthenticatorType::kTouchID:
-      message = gpm_enabled ? IDS_WEBAUTHN_SOURCE_CHROME_PROFILE_NEW
-                            : IDS_WEBAUTHN_SOURCE_CHROME_PROFILE;
+      message = immediate_mode
+                    ? IDS_PASSWORD_MANAGER_PASSKEY_FROM_CHROME_PROFILE
+                    : IDS_WEBAUTHN_SOURCE_CHROME_PROFILE;
       break;
     case device::AuthenticatorType::kICloudKeychain:
-      // TODO(crbug.com/40265798): Use IDS_WEBAUTHN_SOURCE_CUSTOM_VENDOR for
-      // third party providers.
-      message = gpm_enabled ? IDS_WEBAUTHN_SOURCE_ICLOUD_KEYCHAIN_NEW
-                            : IDS_WEBAUTHN_SOURCE_ICLOUD_KEYCHAIN;
+      message = immediate_mode
+                    ? IDS_PASSWORD_MANAGER_PASSKEY_FROM_ICLOUD_KEYCHAIN
+                    : IDS_WEBAUTHN_SOURCE_ICLOUD_KEYCHAIN;
       break;
     case device::AuthenticatorType::kEnclave:
-      CHECK(gpm_enabled);
-      message = IDS_WEBAUTHN_SOURCE_GOOGLE_PASSWORD_MANAGER;
+      message = immediate_mode
+                    ? IDS_PASSWORD_MANAGER_PASSKEY_FROM_GOOGLE_PASSWORD_MANAGER
+                    : IDS_WEBAUTHN_SOURCE_GOOGLE_PASSWORD_MANAGER;
       break;
     case device::AuthenticatorType::kOther:
       // "Other" is USB security keys and the virtual authenticator.
+      CHECK(!immediate_mode);
       message = IDS_WEBAUTHN_SOURCE_USB_SECURITY_KEY;
       break;
     default:
@@ -311,8 +317,9 @@ std::ostream& operator<<(std::ostream& os,
       {Step::kGPMReauthForPinReset, "kGPMReauthForPinReset"},
       {Step::kGPMLockedPin, "kGPMLockedPin"},
       {Step::kErrorFetchingChallenge, "kErrorFetchingChallenge"},
+      {Step::kPasswordOsAuth, "kPasswordAuth"},
   });
-  static_assert(Step::kMaxValue == Step::kErrorFetchingChallenge &&
+  static_assert(Step::kMaxValue == Step::kPasswordOsAuth &&
                     kStepNames.size() - 1 == static_cast<int>(Step::kMaxValue),
                 "implement operator<< overload when adding new Step values");
   return os << kStepNames.at(step);

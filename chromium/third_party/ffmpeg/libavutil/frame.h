@@ -283,6 +283,20 @@ enum AVSideDataProps {
      * a single side data array.
      */
     AV_SIDE_DATA_PROP_MULTI  = (1 << 1),
+
+    /**
+     * Side data depends on the video dimensions. Side data with this property
+     * loses its meaning when rescaling or cropping the image, unless
+     * either recomputed or adjusted to the new resolution.
+     */
+    AV_SIDE_DATA_PROP_SIZE_DEPENDENT = (1 << 2),
+
+    /**
+     * Side data depends on the video color space. Side data with this property
+     * loses its meaning when changing the video color encoding, e.g. by
+     * adapting to a different set of primaries or transfer characteristics.
+     */
+    AV_SIDE_DATA_PROP_COLOR_DEPENDENT = (1 << 3),
 };
 
 /**
@@ -651,6 +665,14 @@ typedef struct AVFrame {
  * is interlaced.
  */
 #define AV_FRAME_FLAG_TOP_FIELD_FIRST (1 << 4)
+/**
+ * A decoder can use this flag to mark frames which were originally encoded losslessly.
+ *
+ * For coding bitstream formats which support both lossless and lossy
+ * encoding, it is sometimes possible for a decoder to determine which method
+ * was used when the bitsream was encoded.
+ */
+#define AV_FRAME_FLAG_LOSSLESS        (1 << 5)
 /**
  * @}
  */
@@ -1064,6 +1086,11 @@ void av_frame_side_data_free(AVFrameSideData ***sd, int *nb_sd);
  * Applies only for side data types without the AV_SIDE_DATA_PROP_MULTI prop.
  */
 #define AV_FRAME_SIDE_DATA_FLAG_REPLACE (1 << 1)
+/**
+ * Create a new reference to the passed in buffer instead of taking ownership
+ * of it.
+ */
+#define AV_FRAME_SIDE_DATA_FLAG_NEW_REF (1 << 2)
 
 /**
  * Add new side data entry to an array.
@@ -1169,6 +1196,14 @@ const AVFrameSideData *av_frame_side_data_get(AVFrameSideData * const *sd,
  */
 void av_frame_side_data_remove(AVFrameSideData ***sd, int *nb_sd,
                                enum AVFrameSideDataType type);
+
+/**
+ * Remove and free all side data instances that match any of the given
+ * side data properties. (See enum AVSideDataProps)
+ */
+void av_frame_side_data_remove_by_props(AVFrameSideData ***sd, int *nb_sd,
+                                        int props);
+
 /**
  * @}
  */

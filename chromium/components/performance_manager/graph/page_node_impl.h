@@ -87,7 +87,6 @@ class PageNodeImpl
   // Partial PageNode implementation:
   const std::string& GetBrowserContextID() const override;
   resource_attribution::PageContext GetResourceContext() const override;
-  EmbeddingType GetEmbeddingType() const override;
   PageType GetType() const override;
   bool IsFocused() const override;
   bool IsVisible() const override;
@@ -161,9 +160,8 @@ class PageNodeImpl
   void ClearOpenerFrameNode();
 
   // Invoked to set/clear the embedder of this page.
-  void SetEmbedderFrameNodeAndEmbeddingType(FrameNodeImpl* embedder,
-                                            EmbeddingType embedder_type);
-  void ClearEmbedderFrameNodeAndEmbeddingType();
+  void SetEmbedderFrameNode(FrameNodeImpl* embedder);
+  void ClearEmbedderFrameNode();
 
   void set_has_nonempty_beforeunload(bool has_nonempty_beforeunload);
 
@@ -195,7 +193,6 @@ class PageNodeImpl
     SetHadUserEdits(had_user_edits);
   }
 
-  base::WeakPtr<PageNodeImpl> GetWeakPtrOnUIThread();
   base::WeakPtr<PageNodeImpl> GetWeakPtr();
 
   // Functions meant to be called by a FrameNodeImpl:
@@ -325,10 +322,6 @@ class PageNodeImpl
   raw_ptr<FrameNodeImpl> embedder_frame_node_
       GUARDED_BY_CONTEXT(sequence_checker_) = nullptr;
 
-  // The way in which this page was embedded, if it was embedded.
-  EmbeddingType embedding_type_ GUARDED_BY_CONTEXT(sequence_checker_) =
-      EmbeddingType::kInvalid;
-
   // The type of the page.
   ObservedProperty::NotifiesOnlyOnChangesWithPreviousValue<
       PageType,
@@ -415,7 +408,6 @@ class PageNodeImpl
       NotifiesOnlyOnChanges<bool, &PageNodeObserver::OnHadUserEditsChanged>
           had_user_edits_ GUARDED_BY_CONTEXT(sequence_checker_){false};
 
-  base::WeakPtr<PageNodeImpl> weak_this_;
   base::WeakPtrFactory<PageNodeImpl> weak_factory_
       GUARDED_BY_CONTEXT(sequence_checker_){this};
 };

@@ -32,8 +32,8 @@ buffer f_FSUniforms_ssbo {
   FSUniformData fsUniformData[];
 } _storage1;
 uint shadingSsboIndex = 0u;
-uniform highp sampler2D permutationsSampler_1_Texture_permutationsSampler_1_Sampler;
-uniform highp sampler2D noiseSampler_1_Texture_noiseSampler_1_Sampler;
+uniform highp sampler2D f_permutationsSampler_1_Texture_permutationsSampler_1_Sampler;
+uniform highp sampler2D f_noiseSampler_1_Texture_noiseSampler_1_Sampler;
 layout(location = 0) flat in uvec2 tint_interstage_location0;
 layout(location = 1) in vec2 tint_interstage_location1;
 layout(location = 0) out vec4 main_loc0_Output;
@@ -52,9 +52,9 @@ void _skslMain(FSIn _stageIn, inout FSOut _stageOut) {
   float _60_n = 1.0f;
   int _61_o = 0;
   {
-    uvec2 tint_loop_idx = uvec2(0u);
+    uvec2 tint_loop_idx = uvec2(4294967295u);
     while(true) {
-      if (all(equal(tint_loop_idx, uvec2(4294967295u)))) {
+      if (all(equal(tint_loop_idx, uvec2(0u)))) {
         break;
       }
       int v_6 = _61_o;
@@ -71,8 +71,8 @@ void _skslMain(FSIn _stageIn, inout FSOut _stageOut) {
           vec4 _skTemp3 = step(_59_m.xyxy, _62_f);
           _62_f = (_62_f - (_skTemp3 * _59_m.xyxy));
         }
-        float _63_g = texture(permutationsSampler_1_Texture_permutationsSampler_1_Sampler, vec2(vec2(((_62_f.x + 0.5f) * 0.00390625f), 0.5f)), clamp(-0.47499999403953552246f, -16.0f, 15.9899997711181640625f)).x;
-        float _64_h = texture(permutationsSampler_1_Texture_permutationsSampler_1_Sampler, vec2(vec2(((_62_f.z + 0.5f) * 0.00390625f), 0.5f)), clamp(-0.47499999403953552246f, -16.0f, 15.9899997711181640625f)).x;
+        float _63_g = texture(f_permutationsSampler_1_Texture_permutationsSampler_1_Sampler, vec2(vec2(((_62_f.x + 0.5f) * 0.00390625f), 0.5f)), clamp(-0.47499999403953552246f, -16.0f, 15.9899997711181640625f)).x;
+        float _64_h = texture(f_permutationsSampler_1_Texture_permutationsSampler_1_Sampler, vec2(vec2(((_62_f.z + 0.5f) * 0.00390625f), 0.5f)), clamp(-0.47499999403953552246f, -16.0f, 15.9899997711181640625f)).x;
         vec2 _65_i = vec2(_63_g, _64_h);
         if (false) {
           vec2 _skTemp4 = floor(((_65_i * vec2(255.0f)) + vec2(0.5f)));
@@ -88,20 +88,20 @@ void _skslMain(FSIn _stageIn, inout FSOut _stageOut) {
         vec4 _71_g = vec4(0.0f);
         int _72_h = 0;
         {
-          uvec2 tint_loop_idx_1 = uvec2(0u);
+          uvec2 tint_loop_idx_1 = uvec2(4294967295u);
           while(true) {
-            if (all(equal(tint_loop_idx_1, uvec2(4294967295u)))) {
+            if (all(equal(tint_loop_idx_1, uvec2(0u)))) {
               break;
             }
             float _73_i = ((float(_72_h) + 0.5f) * 0.25f);
             float v_11 = float(_67_p.x);
-            vec4 _74_j = texture(noiseSampler_1_Texture_noiseSampler_1_Sampler, vec2(v_11, float(_73_i)), clamp(-0.47499999403953552246f, -16.0f, 15.9899997711181640625f));
+            vec4 _74_j = texture(f_noiseSampler_1_Texture_noiseSampler_1_Sampler, vec2(v_11, float(_73_i)), clamp(-0.47499999403953552246f, -16.0f, 15.9899997711181640625f));
             float v_12 = float(_67_p.y);
-            vec4 _75_k = texture(noiseSampler_1_Texture_noiseSampler_1_Sampler, vec2(v_12, float(_73_i)), clamp(-0.47499999403953552246f, -16.0f, 15.9899997711181640625f));
+            vec4 _75_k = texture(f_noiseSampler_1_Texture_noiseSampler_1_Sampler, vec2(v_12, float(_73_i)), clamp(-0.47499999403953552246f, -16.0f, 15.9899997711181640625f));
             float v_13 = float(_67_p.w);
-            vec4 _76_l = texture(noiseSampler_1_Texture_noiseSampler_1_Sampler, vec2(v_13, float(_73_i)), clamp(-0.47499999403953552246f, -16.0f, 15.9899997711181640625f));
+            vec4 _76_l = texture(f_noiseSampler_1_Texture_noiseSampler_1_Sampler, vec2(v_13, float(_73_i)), clamp(-0.47499999403953552246f, -16.0f, 15.9899997711181640625f));
             float v_14 = float(_67_p.z);
-            vec4 _77_m = texture(noiseSampler_1_Texture_noiseSampler_1_Sampler, vec2(v_14, float(_73_i)), clamp(-0.47499999403953552246f, -16.0f, 15.9899997711181640625f));
+            vec4 _77_m = texture(f_noiseSampler_1_Texture_noiseSampler_1_Sampler, vec2(v_14, float(_73_i)), clamp(-0.47499999403953552246f, -16.0f, 15.9899997711181640625f));
             vec2 _78_n = _68_d;
             float _skTemp7 = dot((((_74_j.yw + (_74_j.xz * 0.00390625f)) * 2.0f) - 1.0f), _78_n);
             float _79_o = _skTemp7;
@@ -121,10 +121,10 @@ void _skslMain(FSIn _stageIn, inout FSOut _stageOut) {
             float _skTemp13 = mix(_81_q, _82_r, _69_e.y);
             _71_g[min(uint(_72_h), 3u)] = _skTemp13;
             {
-              uint tint_low_inc_1 = (tint_loop_idx_1.x + 1u);
+              uint tint_low_inc_1 = (tint_loop_idx_1.x - 1u);
               tint_loop_idx_1.x = tint_low_inc_1;
-              uint tint_carry_1 = uint((tint_low_inc_1 == 0u));
-              tint_loop_idx_1.y = (tint_loop_idx_1.y + tint_carry_1);
+              uint tint_carry_1 = uint((tint_low_inc_1 == 4294967295u));
+              tint_loop_idx_1.y = (tint_loop_idx_1.y - tint_carry_1);
               _72_h = (_72_h + 1);
               if ((_72_h >= 4)) { break; }
             }
@@ -144,10 +144,10 @@ void _skslMain(FSIn _stageIn, inout FSOut _stageOut) {
         break;
       }
       {
-        uint tint_low_inc = (tint_loop_idx.x + 1u);
+        uint tint_low_inc = (tint_loop_idx.x - 1u);
         tint_loop_idx.x = tint_low_inc;
-        uint tint_carry = uint((tint_low_inc == 0u));
-        tint_loop_idx.y = (tint_loop_idx.y + tint_carry);
+        uint tint_carry = uint((tint_low_inc == 4294967295u));
+        tint_loop_idx.y = (tint_loop_idx.y - tint_carry);
         _61_o = (_61_o + 1);
       }
       continue;

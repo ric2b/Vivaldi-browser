@@ -7,11 +7,11 @@
 #include "browser/vivaldi_browser_finder.h"
 #include "chrome/browser/devtools/devtools_contents_resizing_strategy.h"
 #include "chrome/browser/devtools/devtools_window.h"
-#include "chrome/browser/extensions/extension_tab_util.h"
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "components/sessions/content/session_tab_helper.h"
 #include "content/public/browser/web_contents.h"
+#include "extensions/vivaldi_browser_component_wrapper.h"
 #include "net/base/url_util.h"
 #include "ui/devtools/devtools_connector.h"
 #include "ui/vivaldi_browser_window.h"
@@ -69,32 +69,30 @@ ExtensionFunction::ResponseAction DevtoolsPrivateCloseDevtoolsFunction::Run() {
   bool success = false;
 
   if (params->window_id) {
-    int window_id = *params->window_id;
-    for (Browser* browser : *BrowserList::GetInstance()) {
-      if (browser->session_id().id() == window_id) {
-        TabStripModel* tabs = browser->tab_strip_model();
-        for (int n = 0; n < tabs->count(); n++) {
-          content::WebContents* contents = tabs->GetWebContentsAt(n);
-          DevToolsWindow* window =
-              DevToolsWindow::GetInstanceForInspectedWebContents(contents);
-          if (window) {
-            window->ForceCloseWindow();
-            int tab_id_w = sessions::SessionTabHelper::IdForTab(contents).id();
-            DevtoolsConnectorAPI::SendClosed(browser_context(), tab_id_w);
-          }
+    Browser* browser = ::vivaldi::FindBrowserByWindowId(
+            *params->window_id);
+    if (browser) {
+      TabStripModel* tabs = browser->tab_strip_model();
+      for (int n = 0; n < tabs->count(); n++) {
+        content::WebContents* contents = tabs->GetWebContentsAt(n);
+        DevToolsWindow* window =
+            DevToolsWindow::GetInstanceForInspectedWebContents(contents);
+        if (window) {
+          window->ForceCloseWindow();
+          int tab_id_w = sessions::SessionTabHelper::IdForTab(contents).id();
+          DevtoolsConnectorAPI::SendClosed(browser_context(), tab_id_w);
         }
-        success = true;
-        break;
       }
+      success = true;
     }
   } else {
     content::WebContents* contents = nullptr;
     WindowController* browser;
     int tab_index;
 
-    if (extensions::ExtensionTabUtil::GetTabById(tab_id, browser_context(),
-                                                 true, &browser,
-                                                 &contents, &tab_index)) {
+    if (VivaldiBrowserComponentWrapper::GetInstance()
+            ->ExtensionTabUtilGetTabById(tab_id, browser_context(), true,
+                                         &browser, &contents, &tab_index)) {
       DevToolsWindow* window =
           DevToolsWindow::GetInstanceForInspectedWebContents(contents);
       if (window) {
@@ -124,7 +122,10 @@ ExtensionFunction::ResponseAction DevtoolsPrivateToggleDevtoolsFunction::Run() {
   DevToolsWindow* window =
       DevToolsWindow::GetInstanceForInspectedWebContents(current_tab);
   if (window) {
-    if (window->IsDocked()) {
+    if (window->IsDocked() && panelType != PanelType::kInspect) {
+      // NOTE(tomas@vivaldi)
+      // VB-93529 Don't close if opening elements tab (kInspect)
+      // That is the behaviour in chromium and is expected by users
       window->ForceCloseWindow();
     } else {
       // Will activate the existing devtools.

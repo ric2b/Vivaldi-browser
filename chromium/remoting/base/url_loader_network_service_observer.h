@@ -25,7 +25,8 @@ namespace remoting {
 class UrlLoaderNetworkServiceObserver
     : public network::mojom::URLLoaderNetworkServiceObserver {
  public:
-  UrlLoaderNetworkServiceObserver();
+  explicit UrlLoaderNetworkServiceObserver(
+      std::unique_ptr<net::ClientCertStore> client_cert_store);
   ~UrlLoaderNetworkServiceObserver() override;
 
   UrlLoaderNetworkServiceObserver(const UrlLoaderNetworkServiceObserver&) =
@@ -62,6 +63,8 @@ class UrlLoaderNetworkServiceObserver
       const std::optional<std::string>& private_network_device_id,
       const std::optional<std::string>& private_network_device_name,
       OnPrivateNetworkAccessPermissionRequiredCallback callback) override;
+  void OnLocalNetworkAccessPermissionRequired(
+      OnLocalNetworkAccessPermissionRequiredCallback callback) override;
   void OnClearSiteData(
       const GURL& url,
       const std::string& header_value,
@@ -80,6 +83,8 @@ class UrlLoaderNetworkServiceObserver
           methods_with_options,
       const std::optional<std::string>& with_lock,
       OnSharedStorageHeaderReceivedCallback callback) override;
+  void OnAdAuctionEventRecordHeaderReceived(
+      network::AdAuctionEventRecord event_record) override;
   void Clone(
       mojo::PendingReceiver<network::mojom::URLLoaderNetworkServiceObserver>
           listener) override;
@@ -94,7 +99,6 @@ class UrlLoaderNetworkServiceObserver
   void OnCertificatesSelected(
       mojo::PendingRemote<network::mojom::ClientCertificateResponder>
           client_cert_responder,
-      std::unique_ptr<net::ClientCertStore> cert_store,
       const scoped_refptr<net::SSLCertRequestInfo>& cert_info,
       net::ClientCertIdentityList selected_certs);
 
@@ -107,6 +111,7 @@ class UrlLoaderNetworkServiceObserver
   SEQUENCE_CHECKER(sequence_checker_);
 
   mojo::ReceiverSet<network::mojom::URLLoaderNetworkServiceObserver> receivers_;
+  std::unique_ptr<net::ClientCertStore> client_cert_store_;
   base::WeakPtrFactory<UrlLoaderNetworkServiceObserver> weak_factory_{this};
 };
 

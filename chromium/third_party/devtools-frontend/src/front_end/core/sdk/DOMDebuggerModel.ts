@@ -21,12 +21,12 @@ export class DOMDebuggerModel extends SDKModel<EventTypes> {
   readonly #runtimeModelInternal: RuntimeModel;
   #domModel: DOMModel;
   #domBreakpointsInternal: DOMBreakpoint[];
-  readonly #domBreakpointsSetting: Common.Settings.Setting<{
+  readonly #domBreakpointsSetting: Common.Settings.Setting<Array<{
     url: Platform.DevToolsPath.UrlString,
     path: string,
     type: Protocol.DOMDebugger.DOMBreakpointType,
     enabled: boolean,
-  }[]>;
+  }>>;
   suspended = false;
 
   constructor(target: Target) {
@@ -380,22 +380,22 @@ export class EventListener {
           },
           type: string, listener: () => void, useCapture: boolean): void {
         this.removeEventListener(type, listener, useCapture);
-        // @ts-ignore:
+        // @ts-expect-error:
         if (this['on' + type]) {
-          // @ts-ignore:
+          // @ts-expect-error:
           this['on' + type] = undefined;
         }
       }
 
       return this.#eventTarget
-                 .callFunction(
-                     removeListener,
-                     [
-                       RemoteObject.toCallArgument(this.#typeInternal),
-                       RemoteObject.toCallArgument(this.#originalHandlerInternal),
-                       RemoteObject.toCallArgument(this.#useCaptureInternal),
-                     ])
-                 .then(() => undefined) as Promise<undefined>;
+          .callFunction(
+              removeListener,
+              [
+                RemoteObject.toCallArgument(this.#typeInternal),
+                RemoteObject.toCallArgument(this.#originalHandlerInternal),
+                RemoteObject.toCallArgument(this.#useCaptureInternal),
+              ])
+          .then(() => undefined);
     }
 
     if (this.#customRemoveFunction) {
@@ -518,25 +518,23 @@ export class DOMEventListenerBreakpoint extends CategorizedBreakpoint {
 let domDebuggerManagerInstance: DOMDebuggerManager;
 
 export class DOMDebuggerManager implements SDKModelObserver<DOMDebuggerModel> {
-  readonly #xhrBreakpointsSetting: Common.Settings.Setting<{url: string, enabled: boolean}[]>;
-  readonly #xhrBreakpointsInternal: Map<string, boolean>;
-  readonly #cspViolationsToBreakOn: CSPViolationBreakpoint[];
-  readonly #eventListenerBreakpointsInternal: DOMEventListenerBreakpoint[];
+  readonly #xhrBreakpointsSetting: Common.Settings.Setting<Array<{url: string, enabled: boolean}>>;
+  readonly #xhrBreakpointsInternal = new Map<string, boolean>();
+
+  readonly #cspViolationsToBreakOn: CSPViolationBreakpoint[] = [];
+  readonly #eventListenerBreakpointsInternal: DOMEventListenerBreakpoint[] = [];
 
   constructor() {
     this.#xhrBreakpointsSetting = Common.Settings.Settings.instance().createLocalSetting('xhr-breakpoints', []);
-    this.#xhrBreakpointsInternal = new Map();
     for (const breakpoint of this.#xhrBreakpointsSetting.get()) {
       this.#xhrBreakpointsInternal.set(breakpoint.url, breakpoint.enabled);
     }
 
-    this.#cspViolationsToBreakOn = [];
     this.#cspViolationsToBreakOn.push(new CSPViolationBreakpoint(
         Category.TRUSTED_TYPE_VIOLATION, Protocol.DOMDebugger.CSPViolationType.TrustedtypeSinkViolation));
     this.#cspViolationsToBreakOn.push(new CSPViolationBreakpoint(
         Category.TRUSTED_TYPE_VIOLATION, Protocol.DOMDebugger.CSPViolationType.TrustedtypePolicyViolation));
 
-    this.#eventListenerBreakpointsInternal = [];
     this.createEventListenerBreakpoints(
         Category.MEDIA,
         [

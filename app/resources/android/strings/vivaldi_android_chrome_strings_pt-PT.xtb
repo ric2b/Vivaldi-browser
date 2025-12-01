@@ -1,7 +1,10 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="pt-PT">
+<translation id="1204037785786432551">Transferir ligação</translation>
+<translation id="1206892813135768548">Copiar texto da ligação</translation>
 <translation id="1397811292916898096">Pesquisar com <ph name="PRODUCT_NAME" /></translation>
+<translation id="1435593198351412143">Abrir PDFs automaticamente</translation>
 <translation id="1456207338570705181">Tocar e procurar é uma funcionalidade que apenas está disponível quando o Google é o motor de busca padrão no Vivaldi. Envia a palavra selecionada e a página atual como contexto à Pesquisa Google. Pode desligá-la nas <ph name="BEGIN_LINK" />Definições<ph name="END_LINK" />.</translation>
 <translation id="1598449788754183301">Alternar separadores normais/privados</translation>
 <translation id="1644574205037202324">Histórico</translation>
@@ -14,10 +17,14 @@
 <translation id="2433507940547922241">Aspeto</translation>
 <translation id="2501278716633472235">Voltar</translation>
 <translation id="2633278372998075009">Separadores privados</translation>
+<translation id="2650751991977523696">Transferir novamente o ficheiro?</translation>
 <translation id="265156376773362237">Pré-carregamento padrão</translation>
 <translation id="272026394418727548">Página inicial do Vivaldi</translation>
+<translation id="2842985007712546952">Pasta acima</translation>
 <translation id="2871733351037274014">Pré-carregar páginas</translation>
+<translation id="2904300462646366554">Os PDFs transferidos são abertos automaticamente com um dos leitores de PDFs no seu equipamento</translation>
 <translation id="2951071800649516099">Adicione páginas à sua lista de leitura para ler mais tarde</translation>
+<translation id="3029276696788198026">Sem pré-carregamento</translation>
 <translation id="3060635849835183725">{BOOKMARKS_COUNT, plural,
           =1 {<ph name="BOOKMARKS_COUNT_ONE" /> favorito}
           other {<ph name="BOOKMARKS_COUNT_MANY" /> favoritos}}</translation>
@@ -34,6 +41,7 @@
 <translation id="3719826155360621982">Página principal</translation>
 <translation id="3738139272394829648">Tocar para pesquisar</translation>
 <translation id="385051799172605136">Voltar</translation>
+<translation id="3987993985790029246">Copiar ligação</translation>
 <translation id="399014816462153200">Artigos lidos:</translation>
 <translation id="4121750346708795461">Ao utilizar esta aplicação, aceita as <ph name="BEGIN_LINK1" />Condições de Utilização<ph name="END_LINK1" /> e a <ph name="BEGIN_LINK2" />Política de Privacidade<ph name="END_LINK2" /> do Vivaldi.</translation>
 <translation id="4137746084635924146">Idioma atual do equipamento</translation>
@@ -41,10 +49,13 @@
 <translation id="4195643157523330669">Abrir num novo separador</translation>
 <translation id="4225895483398857530">Atalho da barra de ferramentas</translation>
 <translation id="4243710787042215766">Abrir num separador privado</translation>
+<translation id="4269820728363426813">Copiar endereço da ligação</translation>
 <translation id="4291407919474070700"><ph name="BEGIN_LINK" />Ative o bloqueio de ecrã nas definições do Android<ph name="END_LINK" /></translation>
 <translation id="4304713468139749426">Gestor de palavras-passe</translation>
 <translation id="451872707440238414">Procure os seus favoritos</translation>
 <translation id="4526803704855831732">Separadores privados</translation>
+<translation id="4532845899244822526">Escolher pasta</translation>
+<translation id="4699172675775169585">Imagens e ficheiros em cache</translation>
 <translation id="4719086422742491124">Saiba mais sobre o tema dos websites sem sair da página. Selecione uma ou mais palavras na página para pesquisar por elas.
 
 Tocar e pesquisar é uma funcionalidade disponível apenas quando tiver escolhido o Google como motor de busca padrão no Vivaldi.</translation>
@@ -55,20 +66,34 @@ Tocar e pesquisar é uma funcionalidade disponível apenas quando tiver escolhid
 <translation id="49576331685473090">Bloqueador de conteúdos</translation>
 <translation id="5079259810715830221">Quando um website Google pede para pré-carregar ligações privadas na sua página, o Vivaldi encripta e pré-carrega páginas através dos servidores Google sem cookies. Isto esconde a sua identidade do website pré-carregado.</translation>
 <translation id="5118676864324397542">Armazenamento do <ph name="APP_NAME" /></translation>
+<translation id="5144385790872094440">Algumas das páginas que visita são pré-carregadas. As páginas podem ser pré-carregadas através dos servidores da Google quando ligadas a partir de um website ou aplicação da Google.</translation>
 <translation id="5186185447130319458">Privado</translation>
+<translation id="5206168361184759344">{FILE_COUNT,plural,
+            =1{A transferir o ficheiro…}
+            other{A transferir # ficheiros…}}</translation>
 <translation id="5233638681132016545">Novo separador</translation>
 <translation id="5375131951310889874">Saiba mais sobre o tema dos websites sem sair da página. Selecione uma ou mais palavras na página para pesquisar por elas. Tocar e pesquisar é uma funcionalidade disponível apenas quando tiver escolhido o Google como motor de busca padrão no Vivaldi. Envia à Pesquisa Google a palavra e o contexto que a rodeia, devolvendo definições, imagens, resultados de pesquisa e outros detalhes.
 
 Para ajustar o seu termo de pesquisa, faça um toque longo para selecionar. Para refinar a sua pesquisa, deslize o painel completamente para cima e toque na caixa de pesquisa.</translation>
+<translation id="543338862236136125">Editar palavra-passe</translation>
 <translation id="572328651809341494">Separadores recentes</translation>
+<translation id="5833984609253377421">Partilhar ligação</translation>
 <translation id="6150320133806434356">Favorito guardado</translation>
+<translation id="6193448654517602979">Selecionar separadores</translation>
 <translation id="6336451774241870485">Novo separador privado</translation>
 <translation id="6337323516034698937">Para enviar este separador para outro equipamento autentique-se na sincronização Vivaldi em ambos os equipamentos. Insira a palavra-passe de encriptação, se necessário.</translation>
+<translation id="6341580099087024258">Perguntar onde guardar os ficheiros</translation>
 <translation id="6404511346730675251">Editar favorito</translation>
+<translation id="650224091954855786">{FILE_COUNT,plural,
+            =1{Ficheiro transferido}
+            other{# transferências concluídas}}</translation>
 <translation id="6585139692466700358">Propor tradução de páginas noutros idiomas utilizando o serviço de tradução do Vivaldi</translation>
 <translation id="6588043302623806746">Usar DNS seguro</translation>
 <translation id="6593061639179217415">Website para computador</translation>
 <translation id="6610147964972079463">Fechar separadores privados</translation>
+<translation id="6627583120233659107">Editar pasta</translation>
+<translation id="6865313869410766144">Dados de preenchimento automático de formulários</translation>
+<translation id="6909589135458168665">Pré-carregar páginas</translation>
 <translation id="7029995644714925509">Quando um website pede para pré-carregar ligações na sua página, o Vivaldi encripta e pré-carrega páginas através dos servidores Google sem cookies. Isto esconde a sua identidade do website pré-carregado.</translation>
 <translation id="706339621163631076">Política de privacidade do Vivaldi</translation>
 <translation id="732145680195464316">Favorito guardado em <ph name="PRODUCT_NAME" /></translation>
@@ -79,10 +104,13 @@ Para ajustar o seu termo de pesquisa, faça um toque longo para selecionar. Para
 <translation id="7456774706094330779">Pré-carregamento alargado</translation>
 <translation id="7465104139234185284">Fechar todos os separadores privados</translation>
 <translation id="7481312909269577407">Avançar</translation>
+<translation id="7764225426217299476">Adicionar endereço</translation>
 <translation id="7968014550143838305">Adicionado à lista de leitura</translation>
 <translation id="804786196054284061">Condições de Utilização do Vivaldi</translation>
 <translation id="8062594758852531064">Pré-carregamento alargado:</translation>
+<translation id="8073388330009372546">Abrir imagem num novo separador</translation>
 <translation id="8127542551745560481">Editar página principal</translation>
+<translation id="8266862848225348053">Localização de transferências</translation>
 <translation id="8348430946834215779">Usar HTTPS sempre que possível e receber um aviso antes de carregar websites que não suportam este protocolo</translation>
 <translation id="8560602726703398413">Encontre a sua lista de leitura nos Favoritos</translation>
 <translation id="85991616550051997">Ir para a página principal</translation>

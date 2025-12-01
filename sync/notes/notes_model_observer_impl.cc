@@ -5,6 +5,7 @@
 #include "sync/notes/notes_model_observer_impl.h"
 
 #include <utility>
+#include <variant>
 
 #include "base/check.h"
 #include "base/no_destructor.h"
@@ -18,7 +19,6 @@
 #include "sync/notes/synced_note_tracker.h"
 #include "sync/notes/synced_note_tracker_entity.h"
 #include "sync/vivaldi_hash_util.h"
-#include "third_party/abseil-cpp/absl/types/variant.h"
 
 namespace sync_notes {
 
@@ -51,7 +51,7 @@ class UniquePositionWrapper {
     static const base::NoDestructor<syncer::UniquePosition>
         kEmptyUniquePosition;
     if (HoldsUniquePosition()) {
-      return absl::get<syncer::UniquePosition>(value_);
+      return std::get<syncer::UniquePosition>(value_);
     }
     return *kEmptyUniquePosition;
   }
@@ -72,17 +72,17 @@ class UniquePositionWrapper {
   struct MinUniquePosition {};
   struct MaxUniquePosition {};
 
-  explicit UniquePositionWrapper(absl::variant<MinUniquePosition,
-                                               syncer::UniquePosition,
-                                               MaxUniquePosition> value)
+  explicit UniquePositionWrapper(
+      std::variant<MinUniquePosition, syncer::UniquePosition, MaxUniquePosition>
+          value)
       : value_(std::move(value)) {}
 
   bool HoldsUniquePosition() const {
-    return absl::holds_alternative<syncer::UniquePosition>(value_);
+    return std::holds_alternative<syncer::UniquePosition>(value_);
   }
 
   // The order is used to compare positions.
-  absl::variant<MinUniquePosition, syncer::UniquePosition, MaxUniquePosition>
+  std::variant<MinUniquePosition, syncer::UniquePosition, MaxUniquePosition>
       value_;
 };
 

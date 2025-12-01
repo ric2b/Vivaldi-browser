@@ -685,6 +685,8 @@ String StylePropertySerializer::SerializeShorthand(
     }
     case CSSPropertyID::kBorderRadius:
       return BorderRadiusValue();
+    case CSSPropertyID::kCornerShape:
+      return CornerShapeValue();
     case CSSPropertyID::kScrollPadding:
       return Get4Values(scrollPaddingShorthand());
     case CSSPropertyID::kScrollPaddingBlock:
@@ -1231,7 +1233,6 @@ String StylePropertySerializer::FontValue() const {
     return g_empty_string;
   }
 
-  if (RuntimeEnabledFeatures::FontVariantEmojiEnabled()) {
     int font_variant_emoji_property_index =
         property_set_.FindPropertyIndex(GetCSSPropertyFontVariantEmoji());
     DCHECK_NE(font_variant_emoji_property_index, -1);
@@ -1241,7 +1242,6 @@ String StylePropertySerializer::FontValue() const {
                              CSSValueID::kNormal)) {
       return g_empty_string;
     }
-  }
 
   if (RuntimeEnabledFeatures::CSSFontSizeAdjustEnabled()) {
     int font_size_adjust_property_index =
@@ -1327,10 +1327,8 @@ String StylePropertySerializer::FontVariantValue() const {
                                      result);
   AppendFontLonghandValueIfNotNormal(GetCSSPropertyFontVariantPosition(),
                                      result);
-  if (RuntimeEnabledFeatures::FontVariantEmojiEnabled()) {
     AppendFontLonghandValueIfNotNormal(GetCSSPropertyFontVariantEmoji(),
                                        result);
-  }
 
   // The font-variant shorthand should return an empty string where
   // it cannot represent "font-variant-ligatures: none" along
@@ -1818,7 +1816,8 @@ String StylePropertySerializer::GetLayeredShorthandValue(
         } else if (property->IDEquals(CSSPropertyID::kWebkitMaskPositionY)) {
           omit_value = true;
 
-          if (!IsZeroPercent(mask_position_x) || !IsZeroPercent(value)) {
+          if (mask_position_x &&
+              (!IsZeroPercent(mask_position_x) || !IsZeroPercent(value))) {
             is_position_x_serialized = true;
             is_position_y_serialized = true;
 
@@ -2373,6 +2372,37 @@ String StylePropertySerializer::BorderRadiusValue() const {
     builder.Append(" / ");
     builder.Append(serialize(top_left.Second(), top_right.Second(),
                              bottom_right.Second(), bottom_left.Second()));
+  }
+
+  return builder.ReleaseString();
+}
+
+String StylePropertySerializer::CornerShapeValue() const {
+  const CSSValue& top_left =
+      *property_set_.GetPropertyCSSValue(GetCSSPropertyCornerTopLeftShape());
+  const CSSValue& top_right =
+      *property_set_.GetPropertyCSSValue(GetCSSPropertyCornerTopRightShape());
+  const CSSValue& bottom_right = *property_set_.GetPropertyCSSValue(
+      GetCSSPropertyCornerBottomRightShape());
+  const CSSValue& bottom_left =
+      *property_set_.GetPropertyCSSValue(GetCSSPropertyCornerBottomLeftShape());
+  StringBuilder builder;
+  builder.Append(top_left.CssText());
+  bool show_bottom_left = top_right != bottom_left;
+  bool show_bottom_right = (top_left != bottom_right) || show_bottom_left;
+  bool show_top_right = (top_left != top_right) || show_bottom_right;
+  if (show_top_right) {
+    builder.Append(" ");
+    builder.Append(top_right.CssText());
+  }
+  if (show_bottom_right) {
+    builder.Append(" ");
+    builder.Append(bottom_right.CssText());
+  }
+
+  if (show_bottom_left) {
+    builder.Append(" ");
+    builder.Append(bottom_left.CssText());
   }
 
   return builder.ReleaseString();

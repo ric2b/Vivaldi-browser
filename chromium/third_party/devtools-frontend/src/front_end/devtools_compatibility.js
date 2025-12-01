@@ -100,15 +100,13 @@ const DevToolsAPIImpl = class {
     // Support for legacy front-ends (<M41).
     if (window['WebInspector'] && window['WebInspector']['addExtensions']) {
       window['WebInspector']['addExtensions'](extensions);
-    } else {
       // The addExtensions command is sent as the onload event happens for
       // DevTools front-end. We should buffer this command until the frontend
       // is ready for it.
-      if (this._addExtensionCallback) {
-        extensions.forEach(this._addExtensionCallback);
-      } else {
-        this._pendingExtensionDescriptors.push(...extensions);
-      }
+    } else if (this._addExtensionCallback) {
+      extensions.forEach(this._addExtensionCallback);
+    } else {
+      this._pendingExtensionDescriptors.push(...extensions);
     }
   }
 
@@ -406,6 +404,7 @@ window.DevToolsAPI = DevToolsAPI;
  * @enum {string}
  */
 const EnumeratedHistogram = {
+  // LINT.IfChange(EnumeratedHistogram)
   ActionTaken: 'DevTools.ActionTaken',
   CSSHintShown: 'DevTools.CSSHintShown',
   DeveloperResourceLoaded: 'DevTools.DeveloperResourceLoaded',
@@ -439,12 +438,11 @@ const EnumeratedHistogram = {
   SourcesPanelFileOpened: 'DevTools.SourcesPanelFileOpened',
   NetworkPanelResponsePreviewOpened: 'DevTools.NetworkPanelResponsePreviewOpened',
   TimelineNavigationSettingState: 'DevTools.TimelineNavigationSettingState',
-  StyleTextCopied: 'DevTools.StyleTextCopied',
   SyncSetting: 'DevTools.SyncSetting',
-  CSSPropertyDocumentation: 'DevTools.CSSPropertyDocumentation',
   SwatchActivated: 'DevTools.SwatchActivated',
   AnimationPlaybackRateChanged: 'DevTools.AnimationPlaybackRateChanged',
   AnimationPointDragged: 'DevTools.AnimationPointDragged',
+  // LINT.ThenChange(/front_end/core/host/InspectorFrontendHostAPI.ts:EnumeratedHistogram)
 };
 
 /**
@@ -805,6 +803,28 @@ const InspectorFrontendHostImpl = class {
   /**
    * @override
    */
+  connectAutomaticFileSystem(fileSystemPath, fileSystemUUID, addIfMissing, callback) {
+    DevToolsAPI.sendMessageToEmbedder(
+        'connectAutomaticFileSystem',
+        [fileSystemPath, fileSystemUUID, addIfMissing],
+        callback,
+    );
+  }
+
+  /**
+   * @override
+   */
+  disconnectAutomaticFileSystem(fileSystemPath) {
+    DevToolsAPI.sendMessageToEmbedder(
+        'disconnectAutomaticFileSystem',
+        [fileSystemPath],
+        null,
+    );
+  }
+
+  /**
+   * @override
+   */
   requestFileSystems() {
     DevToolsAPI.sendMessageToEmbedder('requestFileSystems', [], null);
   }
@@ -982,15 +1002,6 @@ const InspectorFrontendHostImpl = class {
 
   /**
    * @override
-   * @param {string} pageId
-   * @param {string} action
-   */
-  performActionOnRemotePage(pageId, action) {
-    DevToolsAPI.sendMessageToEmbedder('performActionOnRemotePage', [pageId, action], null);
-  }
-
-  /**
-   * @override
    * @param {string} browserId
    * @param {string} url
    */
@@ -1086,6 +1097,14 @@ const InspectorFrontendHostImpl = class {
    */
   recordKeyDown(keyDownEvent) {
     DevToolsAPI.sendMessageToEmbedder('recordKeyDown', [keyDownEvent], null);
+  }
+
+  /**
+   * @override
+   * @param {InspectorFrontendHostAPI.SettingAccessEvent} settingAccessEvent
+   */
+  recordSettingAccess(settingAccessEvent) {
+    DevToolsAPI.sendMessageToEmbedder('recordSettingAccess', [settingAccessEvent], null);
   }
 
   // Backward-compatible methods below this line --------------------------------------------

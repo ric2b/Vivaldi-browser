@@ -42,6 +42,8 @@
 #include "connections/payload.h"
 #include "connections/status.h"
 #include "connections/strategy.h"
+#include "internal/flags/flag.h"
+#include "internal/flags/flag_reader.h"
 #include "internal/flags/nearby_flags.h"
 #include "internal/platform/bluetooth_utils.h"
 #include "internal/platform/byte_array.h"
@@ -54,6 +56,63 @@ class ServiceController;
 class ServiceControllerRouter;
 class OfflineServiceController;
 }  // namespace nearby::connections
+
+namespace {
+class FlagReaderWrapper : public nearby::flags::FlagReader {
+ public:
+  explicit FlagReaderWrapper(READER_CONTEXT context,
+                             NC_PHENOTYPE_FLAG_READER phenotype_flag_reader)
+      : context_(context), phenotype_flag_reader_(phenotype_flag_reader) {}
+
+  bool GetBoolFlag(const nearby::flags::Flag<bool>& flag) override {
+    NC_DATA flag_name = NC_DATA{
+        .size = static_cast<uint64_t>(flag.name().size()),
+        .data = (char*)flag.name().data(),
+    };
+    return phenotype_flag_reader_.get_bool_flag_value(context_, &flag_name,
+                                                      flag.default_value());
+  }
+
+  int64_t GetInt64Flag(const nearby::flags::Flag<int64_t>& flag) override {
+    NC_DATA flag_name = NC_DATA{
+        .size = static_cast<uint64_t>(flag.name().size()),
+        .data = (char*)flag.name().data(),
+    };
+    return phenotype_flag_reader_.get_long_flag_value(context_, &flag_name,
+                                                      flag.default_value());
+  }
+
+  double GetDoubleFlag(const nearby::flags::Flag<double>& flag) override {
+    NC_DATA flag_name = NC_DATA{
+        .size = static_cast<uint64_t>(flag.name().size()),
+        .data = (char*)flag.name().data(),
+    };
+    return phenotype_flag_reader_.get_double_flag_value(context_, &flag_name,
+                                                        flag.default_value());
+  }
+
+  std::string GetStringFlag(
+      const nearby::flags::Flag<absl::string_view>& flag) override {
+    NC_DATA flag_name = NC_DATA{
+        .size = static_cast<uint64_t>(flag.name().size()),
+        .data = (char*)flag.name().data(),
+    };
+    NC_DATA default_value = NC_DATA{
+        .size = static_cast<uint64_t>(flag.default_value().size()),
+        .data = (char*)flag.default_value().data(),
+    };
+    NC_DATA flag_value = phenotype_flag_reader_.get_string_flag_value(
+        context_, &flag_name, &default_value);
+    std::string ret = std::string(flag_value.data, flag_value.size);
+    phenotype_flag_reader_.free_string_value(&flag_value);
+    return ret;
+  }
+
+ private:
+  READER_CONTEXT context_;
+  NC_PHENOTYPE_FLAG_READER phenotype_flag_reader_;
+};
+}  // namespace
 
 typedef struct NcContext {
   ::nearby::connections::ServiceControllerRouter* router = nullptr;
@@ -333,9 +392,9 @@ void NcStartDiscovery(NC_INSTANCE instance, const NC_DATA* service_id,
                                    const nearby::ByteArray& endpoint_info,
                                    const std::string& service_id) {
     NC_DATA endpoint_info_data = {
-        .size = static_cast<int64_t>(endpoint_info.size()),
+        .size = static_cast<uint64_t>(endpoint_info.size()),
         .data = (char*)endpoint_info.data()};
-    NC_DATA service_id_data = {.size = static_cast<int64_t>(service_id.size()),
+    NC_DATA service_id_data = {.size = static_cast<uint64_t>(service_id.size()),
                                .data = (char*)service_id.data()};
     discovery_listener_copy.endpoint_found_callback(
         instance, convertStringToInt(endpoint_id), &endpoint_info_data,
@@ -677,4 +736,11 @@ void NcSetCustomSavePath(NC_INSTANCE instance, const NC_DATA* save_path,
       [=](::nearby::connections::Status status) {
         result_callback(static_cast<NC_STATUS>(status.value), context);
       });
+}
+
+void NcSetPhenotypeFlagReader(READER_CONTEXT context,
+                              NC_PHENOTYPE_FLAG_READER phenotype_flag_reader) {
+  static absl::NoDestructor<FlagReaderWrapper> kNearbyFlags(
+      context, phenotype_flag_reader);
+  nearby::NearbyFlags::GetInstance().SetFlagReader(*kNearbyFlags);
 }

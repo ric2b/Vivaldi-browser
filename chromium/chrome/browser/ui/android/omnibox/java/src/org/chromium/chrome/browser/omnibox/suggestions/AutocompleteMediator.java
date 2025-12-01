@@ -7,12 +7,10 @@ package org.chromium.chrome.browser.omnibox.suggestions;
 import android.content.Context;
 import android.content.Intent;
 import android.content.res.Resources;
-import android.os.Build;
 import android.os.Handler;
 import android.os.SystemClock;
 import android.text.TextUtils;
 import android.view.View;
-import android.view.Window;
 
 import androidx.annotation.Nullable;
 import androidx.annotation.Px;
@@ -63,7 +61,6 @@ import org.chromium.components.omnibox.action.OmniboxAction;
 import org.chromium.components.omnibox.action.OmniboxActionDelegate;
 import org.chromium.content_public.browser.LoadUrlParams;
 import org.chromium.content_public.browser.WebContents;
-import org.chromium.ui.InsetObserver;
 import org.chromium.ui.base.PageTransition;
 import org.chromium.ui.base.WindowAndroid;
 import org.chromium.ui.modaldialog.DialogDismissalCause;
@@ -125,13 +122,20 @@ import org.vivaldi.browser.suggestions.SearchEngineSuggestionView;
 
     /* Vivaldi */ public boolean mNativeInitialized;
     private long mUrlFocusTime;
-    // When set, indicates an active omnibox session.
-    private boolean mIsActive;
+    // When set, indicates if the omnibox is focused.
+    private boolean mOmniboxFocused;
+    // Tracks whether the activity window is currently focused.
+    // This flag is updated via the onTopResumedActivityChanged(boolean) callback:
+    // https://developer.android.com/reference/android/app/Activity#onTopResumedActivityChanged(boolean)
+    // Default value is true, as this API is only available starting from API level 29.
+    private boolean mActivityWindowFocused = true;
     // When set, specifies the system time of the most recent suggestion list request.
     private @Nullable Long mLastSuggestionRequestTime;
     // When set, specifies the time when the suggestion list was shown the first time.
     // Suggestions are refreshed several times per keystroke.
     private @Nullable Long mFirstSuggestionListModelCreatedTime;
+
+    private @Nullable Boolean mOmniboxInZeroPrefixState;
 
     // Vivaldi
     private @Nullable Callback<Boolean> mNativeInitializedCallback;
@@ -219,7 +223,7 @@ import org.vivaldi.browser.suggestions.SearchEngineSuggestionView;
         OmniboxActionFactoryImpl.get()
                 .setDialerAvailable(!pm.queryIntentActivities(dialIntent, 0).isEmpty());
 
-        mAnimationDriver = initializeAnimationDriver(mWindowAndroid.getWindow());
+        mAnimationDriver = initializeAnimationDriver();
     }
 
     /**
@@ -402,8 +406,8 @@ import org.vivaldi.browser.suggestions.SearchEngineSuggestionView;
      *     session state changes, {@code true} if this will be activated, {@code false} otherwise.
      */
     void onOmniboxSessionStateChange(boolean activated) {
-        if (mIsActive == activated) return;
-        mIsActive = activated;
+        if (mOmniboxFocused == activated) return;
+        mOmniboxFocused = activated;
 
         // Propagate the information about omnibox session state change to all the processors first.
         // Processors need this for accounting purposes.
@@ -465,15 +469,11 @@ import org.vivaldi.browser.suggestions.SearchEngineSuggestionView;
             mNumPrefetchesStartedInOmniboxSession = 0;
             mLastPrefetchStartedSuggestion = Optional.empty();
 
+            mOmniboxInZeroPrefixState = null;
             mNewOmniboxEditSessionTimestamp = -1;
             // Prevent any upcoming omnibox suggestions from showing once a URL is loaded (and as
-            // a consequence the omnibox is unfocused), unless it is for hub search.
-            // TODO(crbug.com/390011136): Find a better way to create a seamless animation when
-            // exiting hub search that dismisses the URL bar and suggestions list together.
-            if (mDataProvider.getPageClassification(/* isPrefetch= */ false)
-                    != PageClassification.ANDROID_HUB_VALUE) {
-                clearSuggestions();
-            }
+            // a consequence the omnibox is unfocused).
+            clearSuggestions();
         }
     }
 
@@ -873,14 +873,24 @@ import org.vivaldi.browser.suggestions.SearchEngineSuggestionView;
         mListPropertyModel.set(SuggestionListProperties.LIST_IS_FINAL, false);
 
         mAutocompleteInput.setUserText(textWithoutAutocomplete);
+        boolean isInZeroPrefixContext = mAutocompleteInput.isInZeroPrefixContext();
         mIgnoreOmniboxItemSelection = true;
         cancelAutocompleteRequests();
 
-        mAutocomplete.ifPresent(a -> a.resetSession());
-        mNewOmniboxEditSessionTimestamp = SystemClock.elapsedRealtime();
+        // The user recently focused the Omnibox, began typing, or cleared the Omnibox.
+        if (mOmniboxInZeroPrefixState == null
+                || mOmniboxInZeroPrefixState != isInZeroPrefixContext) {
+            mOmniboxInZeroPrefixState = isInZeroPrefixContext;
+            if (!isInZeroPrefixContext) {
+                // User started typing.
+                mAutocomplete.ifPresent(a -> a.resetSession());
+                mNewOmniboxEditSessionTimestamp = SystemClock.elapsedRealtime();
+            }
+        }
+
         stopAutocomplete(false);
 
-        if (mAutocompleteInput.isInZeroPrefixContext() || isOnFocusContext) {
+        if (isInZeroPrefixContext || isOnFocusContext) {
             clearSuggestions();
             startCachedZeroSuggest();
         } else {
@@ -919,7 +929,7 @@ import org.vivaldi.browser.suggestions.SearchEngineSuggestionView;
         }
 
         // Reject results if the current session is inactive.
-        if (!mIsActive) return;
+        if (!isActive()) return;
 
         @Nullable AutocompleteMatch defaultMatch = autocompleteResult.getDefaultMatch();
         String inlineAutocompleteText =
@@ -934,9 +944,7 @@ import org.vivaldi.browser.suggestions.SearchEngineSuggestionView;
                     mDropdownViewInfoListBuilder.buildDropdownViewInfoList(
                             mAutocompleteInput, autocompleteResult);
             mDropdownViewInfoListManager.setSourceViewInfoList(viewInfoList);
-            if (mIsActive) {
-                mDelegate.onSuggestionsChanged(defaultMatch);
-            }
+            mDelegate.onSuggestionsChanged(defaultMatch);
         }
 
         mListPropertyModel.set(SuggestionListProperties.LIST_IS_FINAL, isFinal);
@@ -1141,7 +1149,7 @@ import org.vivaldi.browser.suggestions.SearchEngineSuggestionView;
         if (isActive) {
             mListPropertyModel.set(
                     SuggestionListProperties.CONTAINER_ALWAYS_VISIBLE,
-                    mAutocompleteInput.getPageClassification()
+                    mDataProvider.getPageClassification(/* isPrefetch= */ false)
                             == PageClassification.ANDROID_HUB_VALUE);
         }
 
@@ -1410,39 +1418,17 @@ import org.vivaldi.browser.suggestions.SearchEngineSuggestionView;
     }
 
     @VisibleForTesting(otherwise = VisibleForTesting.PRIVATE)
-    SuggestionsListAnimationDriver initializeAnimationDriver(@Nullable Window window) {
+    SuggestionsListAnimationDriver initializeAnimationDriver() {
         SuggestionsListAnimationDriver driver;
-        if (mDelegate.isToolbarPositionCustomizationEnabled()) {
-            int addedVerticalOffset =
-                    mContext.getResources()
-                            .getDimensionPixelOffset(
-                                    R.dimen
-                                            .omnibox_suggestion_list_bottom_animation_starting_vertical_offset);
+        if (mDelegate.isToolbarPositionCustomizationEnabled()
+                || OmniboxFeatures.shouldAnimateSuggestionsListAppearance()) {
             driver =
                     new UnsyncedSuggestionsListAnimationDriver(
                             mListPropertyModel,
                             () -> propagateOmniboxSessionStateChange(true),
                             mDelegate::isToolbarBottomAnchored,
-                            addedVerticalOffset);
-        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R
-                && OmniboxFeatures.shouldAnimateSuggestionsListAppearance()
-                && window != null) {
-            int addedVerticalOffset =
-                    mContext.getResources()
-                            .getDimensionPixelOffset(
-                                    R.dimen
-                                            .omnibox_suggestion_list_animation_added_vertical_offset);
-            InsetObserver insetObserver = mWindowAndroid.getInsetObserver();
-            assert insetObserver != null;
-            driver =
-                    new ImeSyncedSuggestionsListAnimationDriver(
-                            insetObserver,
-                            mListPropertyModel,
                             mEmbedder::getVerticalTranslationForAnimation,
-                            () -> propagateOmniboxSessionStateChange(true),
-                            addedVerticalOffset,
-                            new Handler(),
-                            window);
+                            mContext);
         } else {
             driver =
                     new SuggestionsListAnimationDriver() {
@@ -1465,7 +1451,7 @@ import org.vivaldi.browser.suggestions.SearchEngineSuggestionView;
 
     /** Returns whether Omnibox session is active (the user is interacting with the Omnibox). */
     boolean isOmniboxSessionActiveForTesting() {
-        return mIsActive;
+        return mOmniboxFocused;
     }
 
     /** Returns the current Animation Driver instance. */
@@ -1475,13 +1461,26 @@ import org.vivaldi.browser.suggestions.SearchEngineSuggestionView;
 
     @Override
     public void onTopResumedActivityChanged(boolean isTopResumedActivity) {
-        // TODO(crbug.com/329702834): Ensuring showing Suggestions when activity resumes.
-        if (!isTopResumedActivity) {
-            // Careful: only clear suggestions after Omnibox session state changes to inactive.
-            // This has an immediate impact on suggestions caching mechanism: if suggestions get
-            // cleared before session state becomes inactive, we will cache empty result.
-            mDelegate.clearOmniboxFocus();
+        mActivityWindowFocused = isTopResumedActivity;
+        // Always set the window activity focused property to true for hub search so that the
+        // dropdown container persists when search activity is dismissed.
+        // TODO(crbug.com/390011136): Find a better way to create a seamless animation when
+        // exiting hub search that dismisses the URL bar and suggestions list together.
+        mListPropertyModel.set(
+                SuggestionListProperties.ACTIVITY_WINDOW_FOCUSED,
+                mDataProvider.getPageClassification(/* isPrefetch= */ false)
+                                == PageClassification.ANDROID_HUB_VALUE
+                        ? true
+                        : isTopResumedActivity);
+        if (isActive()) {
+            onTextChanged(
+                    mUrlBarEditingTextProvider.getTextWithoutAutocomplete(),
+                    /* isOnFocusContext= */ false);
         }
+    }
+
+    private boolean isActive() {
+        return mOmniboxFocused && mActivityWindowFocused;
     }
 
     @Override

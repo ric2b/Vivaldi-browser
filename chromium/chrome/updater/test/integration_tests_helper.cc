@@ -70,7 +70,7 @@ base::RepeatingCallback<bool(Args...)> WithSwitch(
     const base::CommandLine* command_line =
         base::CommandLine::ForCurrentProcess();
     if (command_line->HasSwitch(flag)) {
-      return callback.Run(command_line->GetSwitchValueASCII(flag),
+      return callback.Run(command_line->GetSwitchValueUTF8(flag),
                           std::move(args)...);
     }
     LOG(ERROR) << "Missing switch: " << flag;
@@ -491,10 +491,12 @@ void AppTestHelper::FirstTaskRun() {
                       WithSwitch("legacy_install",
                                  WithSystemScope(Wrap(&RunOfflineInstall))))},
           {"run_offline_install_os_not_supported",
-           WithSwitch("silent",
-                      WithSwitch("legacy_install",
-                                 WithSystemScope(
-                                     Wrap(&RunOfflineInstallOsNotSupported))))},
+           WithSwitch(
+               "language",
+               WithSwitch("silent",
+                          WithSwitch("legacy_install",
+                                     WithSystemScope(Wrap(
+                                         &RunOfflineInstallOsNotSupported)))))},
           {"dm_push_enrollment_token",
            WithSwitch("enrollment_token", Wrap(DMPushEnrollmentToken))},
           {"dm_deregister_device", WithSystemScope(Wrap(&DMDeregisterDevice))},

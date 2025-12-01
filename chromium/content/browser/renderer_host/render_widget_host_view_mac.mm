@@ -9,6 +9,7 @@
 #include <limits>
 #include <memory>
 #include <optional>
+#include <string_view>
 #include <tuple>
 #include <utility>
 
@@ -78,6 +79,7 @@
 #include "ui/gfx/geometry/dip_util.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/mac/coordinate_conversion.h"
+#include "ui/gfx/native_widget_types.h"
 #include "ui/menus/cocoa/text_services_context_menu.h"
 
 #include "app/vivaldi_apptools.h"
@@ -222,7 +224,7 @@ RenderWidgetHostViewMac::RenderWidgetHostViewMac(RenderWidgetHost* widget)
   // https://crbug.com/357443
   auto* screen = display::Screen::GetScreen();
   screen_infos_ = screen->GetScreenInfosNearestDisplay(
-      screen->GetDisplayNearestWindow([NSApp keyWindow]).id());
+      screen->GetDisplayNearestWindow(gfx::NativeWindow(NSApp.keyWindow)).id());
   original_screen_infos_ = screen_infos_;
 
   viz::FrameSinkId frame_sink_id = host()->GetFrameSinkId();
@@ -573,7 +575,7 @@ void RenderWidgetHostViewMac::SetBounds(const gfx::Rect& rect) {
 }
 
 gfx::NativeView RenderWidgetHostViewMac::GetNativeView() {
-  return GetInProcessNSView();
+  return gfx::NativeView(GetInProcessNSView());
 }
 
 gfx::NativeViewAccessible RenderWidgetHostViewMac::GetNativeViewAccessible() {
@@ -719,8 +721,7 @@ void RenderWidgetHostViewMac::OnImeCancelComposition(
 void RenderWidgetHostViewMac::OnImeCompositionRangeChanged(
     TextInputManager* text_input_manager,
     RenderWidgetHostViewBase* updated_view,
-    bool character_bounds_changed,
-    const std::optional<std::vector<gfx::Rect>>& line_bounds) {
+    bool character_bounds_changed) {
   const TextInputManager::CompositionRangeInfo* info =
       GetCompositionRangeInfo();
   if (!info)
@@ -947,7 +948,7 @@ void AddTextNodesToVector(const ui::AXNode* node,
   }
 }
 
-using SpeechCallback = base::OnceCallback<void(const std::u16string&)>;
+using SpeechCallback = base::OnceCallback<void(std::u16string_view)>;
 void CombineTextNodesAndMakeCallback(SpeechCallback callback,
                                      ui::AXTreeUpdate& update) {
   std::vector<std::u16string> text_node_contents;
@@ -1002,6 +1003,12 @@ void RenderWidgetHostViewMac::SetWindowFrameInScreen(const gfx::Rect& rect) {
   DCHECK(GetInProcessNSView() && ![GetInProcessNSView() window])
       << "This method should only be called in headless browser!";
   OnWindowFrameInScreenChanged(rect);
+
+  // Force screen info update because with no NSWindow in headless there is no
+  // notification to trigger it automatically. This ensures correct current
+  // screen association. Note the use of the generic variant of
+  // UpdateScreenInfo() that does not consider Cocoa provided screen info.
+  RenderWidgetHostViewBase::UpdateScreenInfo();
 }
 
 //
@@ -1608,12 +1615,18 @@ std::optional<DisplayFeature> RenderWidgetHostViewMac::GetDisplayFeature() {
   return display_feature_;
 }
 
-void RenderWidgetHostViewMac::SetDisplayFeatureForTesting(
+void RenderWidgetHostViewMac::DisableDisplayFeatureOverrideForEmulation() {
+  display_feature_ = std::nullopt;
+  host()->SynchronizeVisualProperties();
+}
+
+void RenderWidgetHostViewMac::OverrideDisplayFeatureForEmulation(
     const DisplayFeature* display_feature) {
   if (display_feature)
     display_feature_ = *display_feature;
   else
     display_feature_ = std::nullopt;
+  host()->SynchronizeVisualProperties();
 }
 
 gfx::NativeViewAccessible
@@ -2255,7 +2268,7 @@ void RenderWidgetHostViewMac::ForwardKeyboardEventWithCommands(
   }
   const blink::WebKeyboardEvent& keyboard_event =
       static_cast<const blink::WebKeyboardEvent&>(input_event->Event());
-  input::NativeWebKeyboardEvent native_event(keyboard_event, nil);
+  input::NativeWebKeyboardEvent native_event(keyboard_event, gfx::NativeView());
   native_event.skip_if_unhandled = skip_if_unhandled;
   // The NSEvent constructed from the InputEvent sent over mojo is not even
   // close to the original NSEvent, resulting in all sorts of bugs. Use the

@@ -30,7 +30,6 @@ import org.chromium.chrome.browser.SwipeRefreshHandler;
 import org.chromium.chrome.browser.app.tabmodel.TabWindowManagerSingleton;
 import org.chromium.chrome.browser.browser_controls.BrowserControlsStateProvider;
 import org.chromium.chrome.browser.compositor.CompositorViewHolder;
-import org.chromium.chrome.browser.contextmenu.ContextMenuUtils;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.fullscreen.FullscreenManager;
 import org.chromium.chrome.browser.fullscreen.FullscreenOptions;
@@ -43,6 +42,7 @@ import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.tab.EmptyTabObserver;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabLaunchType;
+import org.chromium.chrome.browser.tab.TabObserver;
 import org.chromium.chrome.browser.tab.TabUtils;
 import org.chromium.chrome.browser.tab.TabWebContentsDelegateAndroid;
 import org.chromium.chrome.browser.tabmodel.TabCreator;
@@ -52,6 +52,7 @@ import org.chromium.chrome.browser.tabmodel.TabModel;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.tabmodel.TabModelUtils;
 import org.chromium.chrome.browser.ui.edge_to_edge.EdgeToEdgeControllerFactory;
+import org.chromium.components.embedder_support.contextmenu.ContextMenuUtils;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.content_public.common.ResourceRequestBody;
 import org.chromium.ui.base.WindowAndroid;
@@ -65,6 +66,7 @@ import org.chromium.ui.util.ColorUtils;
 import org.chromium.url.GURL;
 
 import java.util.Arrays;
+import java.util.Objects;
 
 // Vivaldi
 import org.chromium.chrome.browser.ChromeApplicationImpl;
@@ -91,6 +93,7 @@ public class ActivityTabWebContentsDelegateAndroid extends TabWebContentsDelegat
     private final Supplier<TabModelSelector> mTabModelSelectorSupplier;
     private final Supplier<CompositorViewHolder> mCompositorViewHolderSupplier;
     private final Supplier<ModalDialogManager> mModalDialogManagerSupplier;
+    private final TabObserver mTabObserver;
 
     public ActivityTabWebContentsDelegateAndroid(
             Tab tab,
@@ -113,8 +116,7 @@ public class ActivityTabWebContentsDelegateAndroid extends TabWebContentsDelegat
         mTabModelSelectorSupplier = tabModelSelectorSupplier;
         mCompositorViewHolderSupplier = compositorViewHolderSupplier;
         mModalDialogManagerSupplier = modalDialogManagerSupplier;
-
-        tab.addObserver(
+        mTabObserver =
                 new EmptyTabObserver() {
                     @Override
                     public void onActivityAttachmentChanged(
@@ -126,7 +128,8 @@ public class ActivityTabWebContentsDelegateAndroid extends TabWebContentsDelegat
                     public void onDestroyed(Tab tab) {
                         tab.removeObserver(this);
                     }
-                });
+                };
+        tab.addObserver(mTabObserver);
     }
 
     @Override
@@ -206,47 +209,66 @@ public class ActivityTabWebContentsDelegateAndroid extends TabWebContentsDelegat
         boolean success =
                 tabCreator.createTabWithWebContents(
                         mTab, webContents, TabLaunchType.FROM_LONGPRESS_FOREGROUND, url);
+        if (!success) return false;
 
-        if (success) {
-            if (disposition == WindowOpenDisposition.NEW_FOREGROUND_TAB) {
-                RecordUserAction.record("LinkNavigationOpenedInForegroundTab");
-            } else if (disposition == WindowOpenDisposition.NEW_POPUP) {
-                PolicyAuditor auditor = PolicyAuditor.maybeCreate();
-                if (auditor != null) {
-                    auditor.notifyAuditEvent(
-                            ContextUtils.getApplicationContext(),
-                            AuditEvent.OPEN_POPUP_URL_SUCCESS,
-                            url.getSpec(),
-                            "");
-                }
+        if (disposition == WindowOpenDisposition.NEW_FOREGROUND_TAB) {
+            RecordUserAction.record("LinkNavigationOpenedInForegroundTab");
+        } else if (disposition == WindowOpenDisposition.NEW_POPUP) {
+            PolicyAuditor auditor = PolicyAuditor.maybeCreate();
+            if (auditor != null) {
+                auditor.notifyAuditEvent(
+                        ContextUtils.getApplicationContext(),
+                        AuditEvent.OPEN_POPUP_URL_SUCCESS,
+                        url.getSpec(),
+                        "");
             }
         }
 
         Tab sourceTab = fromWebContents(sourceWebContents);
         if (sourceTab == null
-                || sourceTab.getTabGroupId() == null
                 || !ChromeFeatureList.isEnabled(ChromeFeatureList.GROUP_NEW_TAB_WITH_PARENT)) {
-            return success;
+            return true;
         }
 
         if (disposition != WindowOpenDisposition.NEW_FOREGROUND_TAB
                 && disposition != WindowOpenDisposition.NEW_BACKGROUND_TAB) {
-            return success;
+            return true;
         }
 
         Tab newTab = fromWebContents(webContents);
+        if (newTab == null || newTab.getParentId() != sourceTab.getId()) {
+            return true;
+        }
+
         // If the new tab is in a different TabModel from the parent tab, don't group them.
         if (TabWindowManagerSingleton.getInstance().getTabModelForTab(sourceTab)
                 == TabWindowManagerSingleton.getInstance().getTabModelForTab(newTab)) {
             TabGroupModelFilter tabGroupModelFilter = getTabGroupModelFilter(sourceTab);
             // Set notify to false so snackbar to undo the grouping will not be shown.
-            if (tabGroupModelFilter != null) {
+            if (tabGroupModelFilter != null
+                    && tabGroupModelFilter.isTabInTabGroup(sourceTab)
+                    && tabGroupModelFilter.isTabModelRestored()) {
                 tabGroupModelFilter.mergeListOfTabsToGroup(
                         Arrays.asList(newTab), sourceTab, /* notify= */ false);
+                if (mChromeActivityNativeDelegate != null) {
+                    assert newTab.getRootId() == sourceTab.getRootId();
+                    assert Objects.equals(newTab.getTabGroupId(), sourceTab.getTabGroupId());
+                    assert tabGroupModelFilter
+                            .getTabsInGroup(newTab.getTabGroupId())
+                            .contains(sourceTab);
+                    assert tabGroupModelFilter
+                            .getTabsInGroup(sourceTab.getTabGroupId())
+                            .contains(newTab);
+                }
             }
         }
 
-        return success;
+        return true;
+    }
+
+    @Override
+    protected void setContentsBounds(WebContents source, Rect bounds) {
+        // Do nothing.
     }
 
     @Override
@@ -552,7 +574,7 @@ public class ActivityTabWebContentsDelegateAndroid extends TabWebContentsDelegat
 
     @Override
     protected boolean isModalContextMenu() {
-        return !ContextMenuUtils.usePopupContextMenuForContext(mActivity);
+        return !ContextMenuUtils.isPopupSupported(mActivity);
     }
 
     @Override
@@ -566,5 +588,10 @@ public class ActivityTabWebContentsDelegateAndroid extends TabWebContentsDelegat
 
     protected Tab fromWebContents(WebContents webContents) {
         return TabUtils.fromWebContents(webContents);
+    }
+
+    @Override
+    public void destroy() {
+        mTab.removeObserver(mTabObserver);
     }
 }

@@ -451,6 +451,12 @@ class VIEWS_EXPORT View : public ui::LayerDelegate,
   // for new code.
   template <typename T>
   T* AddChildView(T* view) {
+    return AddChildViewRaw(view);
+  }
+  // TODO(crbug.com/40485510): Migration AddChildView => AddChildViewRaw in
+  // progress. When finished, AddChildView will be removed.
+  template <typename T>
+  T* AddChildViewRaw(T* view) {
     CHECK_CLASS_HAS_METADATA(T)
     AddChildViewAtImpl(view, children_.size());
     return view;
@@ -468,18 +474,14 @@ class VIEWS_EXPORT View : public ui::LayerDelegate,
     AddChildViewAtImpl(view.get(), children_.size());
     return view;
   }
-  template <typename T, base::RawPtrTraits Traits = base::RawPtrTraits::kEmpty>
-  T* AddChildViewAt(raw_ptr<T, Traits> view, size_t index) {
-    CHECK_CLASS_HAS_METADATA(T)
-    AddChildViewAtImpl(view.get(), index);
-    return view;
-  }
 
   // Moves |view| to the specified |index|. An |index| at least as large as that
   // of the last child moves the view to the end.
   void ReorderChildView(View* view, size_t index);
 
   // Removes |view| from this view. The view's parent will change to null.
+  // This does not delete |view|, even if |view| is owned by the views tree. Do
+  // not use this method, use RemoveChildViewT.
   void RemoveChildView(View* view);
 
   // Removes |view| from this view and transfers ownership back to the caller in
@@ -1511,18 +1513,6 @@ class VIEWS_EXPORT View : public ui::LayerDelegate,
   // Get the object managing the accessibility interface for this View.
   ViewAccessibility& GetViewAccessibility() const;
 
-  // Modifies `node_data` to reflect the current accessible state of this view.
-  // It accomplishes this by keeping the data up-to-date in response to the use
-  // of the accessible-property setters.
-  // NOTE: View authors should use the available property setters rather than
-  // overriding this function. Views which need to expose accessibility
-  // properties which are currently not supported View properties should ensure
-  // their view's `GetAccessibleNodeData` calls `GetAccessibleNodeData` on the
-  // parent class. This ensures that if an owning view customizes an accessible
-  // property, such as the name, role, or description, that customization is
-  // included in your view's `AXNodeData`.
-  virtual void GetAccessibleNodeData(ui::AXNodeData* node_data) {}
-
   // This method allows lazy loading of some accessibility attributes. It is
   // used only for accessibility attributes that can be expensive to compute
   // and/or heavy to store, such as long string attributes. Views that override
@@ -1634,13 +1624,21 @@ class VIEWS_EXPORT View : public ui::LayerDelegate,
   // view. Returns true on success, but note that the success/failure is
   // not propagated to the client that requested the action, since the
   // request is sometimes asynchronous. The right way to send a response is
-  // via NotifyAccessibilityEvent(), below.
+  // via NotifyAccessibilityEventDeprecated(), below.
   virtual bool HandleAccessibleAction(const ui::AXActionData& action_data);
 
   // Returns an instance of the native accessibility interface for this view.
   virtual gfx::NativeViewAccessible GetNativeViewAccessible();
 
-  // DEPRECATED: Use `ViewAccessibility::NotifyEvent` instead.
+  // DEPRECATED:
+  // In most situations, this function should not be called directly.
+  // There are a lot of events that are already sent automatically by
+  // the setters from ViewAccessibility. Soon, events will be generated
+  // automatically by the AXEventGenerator, using
+  // the AXNodeData cached in the View's ViewAccessibility.
+  // Some specific scenarios currently do require manual event generation,
+  // for example if its an event not being fired by the ViewAccessibility
+  // setters.
   //
   // Notifies assistive technology that an accessibility event has
   // occurred on this view, such as when the view is focused or when its
@@ -1648,8 +1646,8 @@ class VIEWS_EXPORT View : public ui::LayerDelegate,
   // cases where the view is a native control that's already sending a
   // native accessibility event and the duplicate event would cause
   // problems.
-  void NotifyAccessibilityEvent(ax::mojom::Event event_type,
-                                bool send_native_event);
+  void NotifyAccessibilityEventDeprecated(ax::mojom::Event event_type,
+                                          bool send_native_event);
 
   // Views may override this function to know when an accessibility
   // event is fired. This will be called by NotifyAccessibilityEvent.
@@ -1822,6 +1820,8 @@ class VIEWS_EXPORT View : public ui::LayerDelegate,
   // Override to provide rendering in any part of the View's bounds. Typically
   // this is the "contents" of the view. If you override this method you will
   // have to call the subsequent OnPaint*() methods manually.
+  // Note that the paint operation is done with regards to the origin of the
+  // current view.
   virtual void OnPaint(gfx::Canvas* canvas);
 
   // Override to paint a background before any content is drawn. Typically this
@@ -2549,6 +2549,7 @@ class VIEWS_EXPORT View : public ui::LayerDelegate,
 
 namespace internal {
 
+// Helper to catch reentrant mutations while iterating over a view's children.
 #if DCHECK_IS_ON()
 class ScopedChildrenLock {
  public:
@@ -2565,8 +2566,8 @@ class ScopedChildrenLock {
 #else
 class ScopedChildrenLock {
  public:
-  explicit ScopedChildrenLock(const View* view);
-  ~ScopedChildrenLock();
+  explicit ScopedChildrenLock(const View* view) {}
+  ~ScopedChildrenLock() = default;
 };
 #endif
 

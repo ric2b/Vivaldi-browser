@@ -49,6 +49,7 @@ namespace history {
 class HistoryService;
 class TopSites;
 class URLDatabase;
+class WebHistoryService; // Vivaldi
 }  // namespace history
 
 namespace history_clusters {
@@ -227,6 +228,9 @@ class AutocompleteProviderClient : public OmniboxAction::Client {
     return nullptr;
   }
 
+  virtual history::WebHistoryService* GetWebHistoryService() {
+    return nullptr;
+  }
   virtual void SetFromSearchField(bool from_search_field) {}
   virtual bool GetFromSearchField() { return false; }
   virtual bool VivaldiOnlyKeywordSearch() { return false; }

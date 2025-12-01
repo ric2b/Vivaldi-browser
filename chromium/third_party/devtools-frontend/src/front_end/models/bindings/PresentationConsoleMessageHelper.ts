@@ -116,10 +116,10 @@ export class PresentationConsoleMessageManager {
 export class PresentationSourceFrameMessageHelper {
   #debuggerModel?: SDK.DebuggerModel.DebuggerModel;
   #cssModel?: SDK.CSSModel.CSSModel;
-  #presentationMessages: Map<Platform.DevToolsPath.UrlString, Array<{
-                               source: MessageSource,
-                               presentation: PresentationSourceFrameMessage,
-                             }>> = new Map();
+  #presentationMessages = new Map<Platform.DevToolsPath.UrlString, Array<{
+                                    source: MessageSource,
+                                    presentation: PresentationSourceFrameMessage,
+                                  }>>();
   readonly #locationPool: LiveLocationPool;
 
   constructor() {
@@ -195,7 +195,7 @@ export class PresentationSourceFrameMessageHelper {
     if (source.scriptId) {
       return this.#debuggerModel.createRawLocationByScriptId(source.scriptId, source.line, source.column);
     }
-    const callFrame = source.stackTrace && source.stackTrace.callFrames ? source.stackTrace.callFrames[0] : null;
+    const callFrame = source.stackTrace?.callFrames ? source.stackTrace.callFrames[0] : null;
     if (callFrame) {
       return this.#debuggerModel.createRawLocationByScriptId(
           callFrame.scriptId, callFrame.lineNumber, callFrame.columnNumber);
@@ -210,7 +210,7 @@ export class PresentationSourceFrameMessageHelper {
     const script = event.data;
     const messages = this.#presentationMessages.get(script.sourceURL);
 
-    const promises: Promise<void>[] = [];
+    const promises: Array<Promise<void>> = [];
     for (const {presentation, source} of messages ?? []) {
       const rawLocation = this.#rawLocation(source);
       if (rawLocation && script.scriptId === rawLocation.scriptId) {
@@ -228,7 +228,7 @@ export class PresentationSourceFrameMessageHelper {
     const uiSourceCode = event.data;
     const messages = this.#presentationMessages.get(uiSourceCode.url());
 
-    const promises: Promise<void>[] = [];
+    const promises: Array<Promise<void>> = [];
     for (const {presentation, source} of messages ?? []) {
       promises.push(presentation.updateLocationSource(
           new Workspace.UISourceCode.UILocation(uiSourceCode, source.line, source.column)));
@@ -244,7 +244,7 @@ export class PresentationSourceFrameMessageHelper {
     const header = event.data;
     const messages = this.#presentationMessages.get(header.sourceURL);
 
-    const promises: Promise<void>[] = [];
+    const promises: Array<Promise<void>> = [];
     for (const {source, presentation} of messages ?? []) {
       if (header.containsLocation(source.line, source.column)) {
         promises.push(

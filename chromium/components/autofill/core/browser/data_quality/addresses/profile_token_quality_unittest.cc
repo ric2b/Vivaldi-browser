@@ -17,7 +17,7 @@
 #include "components/autofill/core/browser/country_type.h"
 #include "components/autofill/core/browser/data_manager/addresses/address_data_manager.h"
 #include "components/autofill/core/browser/data_manager/addresses/test_address_data_manager.h"
-#include "components/autofill/core/browser/data_model/autofill_profile.h"
+#include "components/autofill/core/browser/data_model/addresses/autofill_profile.h"
 #include "components/autofill/core/browser/data_quality/addresses/profile_token_quality_test_api.h"
 #include "components/autofill/core/browser/field_types.h"
 #include "components/autofill/core/browser/form_structure.h"
@@ -230,7 +230,8 @@ TEST_F(ProfileTokenQualityTest, AddObservationsForFilledForm_DynamicChange) {
   FillForm(form, profile);
 
   FormStructure* form_structure = bam_.FindCachedFormById(form.global_id());
-  form_structure->field(0)->SetTypeTo(AutofillType(NAME_LAST));
+  form_structure->field(0)->SetTypeTo(AutofillType(NAME_LAST),
+                                      AutofillPredictionSource::kHeuristics);
   EXPECT_TRUE(
       quality.AddObservationsForFilledForm(*form_structure, form, adm()));
   EXPECT_THAT(quality.GetObservationTypesForFieldType(NAME_FIRST),
@@ -285,8 +286,7 @@ TEST_F(ProfileTokenQualityTest,
 TEST_F(ProfileTokenQualityTest,
        LoadSerializedObservationsForStoredType_InvalidData) {
   AutofillProfile profile = test::GetFullProfile();
-  FieldTypeSet supported_types;
-  profile.GetSupportedTypes(&supported_types);
+  FieldTypeSet supported_types = profile.GetSupportedTypes();
 
   // Attempt loading observations for an unsupported type.
   ASSERT_FALSE(supported_types.contains(ADDRESS_HOME_LANDMARK));

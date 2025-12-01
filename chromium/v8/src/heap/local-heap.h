@@ -15,7 +15,6 @@
 #include "src/base/logging.h"
 #include "src/base/macros.h"
 #include "src/base/platform/condition-variable.h"
-#include "src/base/platform/mutex.h"
 #include "src/common/assert-scope.h"
 #include "src/common/ptr-compr.h"
 #include "src/common/thread-local-storage.h"
@@ -235,6 +234,8 @@ class V8_EXPORT_PRIVATE LocalHeap {
 #if V8_OS_DARWIN
   pthread_t thread_handle() { return thread_handle_; }
 #endif
+
+  HeapAllocator* allocator() { return &heap_allocator_; }
 
  private:
   using ParkedBit = base::BitField8<bool, 0, 1>;

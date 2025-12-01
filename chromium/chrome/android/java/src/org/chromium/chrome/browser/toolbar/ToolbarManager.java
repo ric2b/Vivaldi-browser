@@ -23,6 +23,7 @@ import android.view.View.OnLayoutChangeListener;
 import android.view.View.OnLongClickListener;
 import android.view.ViewGroup;
 import android.view.ViewStub;
+import android.widget.ImageButton;
 
 import androidx.activity.BackEventCompat;
 import androidx.annotation.NonNull;
@@ -34,8 +35,10 @@ import org.chromium.base.Callback;
 import org.chromium.base.CallbackController;
 import org.chromium.base.ContextUtils;
 import org.chromium.base.JavaExceptionReporter;
+import org.chromium.base.TimeUtils;
 import org.chromium.base.TraceEvent;
 import org.chromium.base.ValueChangedCallback;
+import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.base.supplier.ObservableSupplierImpl;
 import org.chromium.base.supplier.OneshotSupplier;
@@ -125,6 +128,7 @@ import org.chromium.chrome.browser.theme.ThemeColorProvider.ThemeColorObserver;
 import org.chromium.chrome.browser.theme.ThemeColorProvider.TintObserver;
 import org.chromium.chrome.browser.theme.TopUiThemeColorProvider;
 import org.chromium.chrome.browser.toolbar.adaptive.AdaptiveToolbarButtonVariant;
+import org.chromium.chrome.browser.toolbar.back_button.BackButtonCoordinator;
 import org.chromium.chrome.browser.toolbar.bottom.BottomControlsContentDelegate;
 import org.chromium.chrome.browser.toolbar.bottom.BottomControlsCoordinator;
 import org.chromium.chrome.browser.toolbar.bottom.ScrollingBottomViewResourceFrameLayout;
@@ -132,8 +136,10 @@ import org.chromium.chrome.browser.toolbar.home_button.HomeButtonCoordinator;
 import org.chromium.chrome.browser.toolbar.load_progress.LoadProgressCoordinator;
 import org.chromium.chrome.browser.toolbar.menu_button.MenuButtonCoordinator;
 import org.chromium.chrome.browser.toolbar.menu_button.MenuButtonState;
+import org.chromium.chrome.browser.toolbar.reload_button.ReloadButtonCoordinator;
 import org.chromium.chrome.browser.toolbar.top.ActionModeController;
 import org.chromium.chrome.browser.toolbar.top.ActionModeController.ActionBarDelegate;
+import org.chromium.chrome.browser.toolbar.top.NavigationPopup;
 import org.chromium.chrome.browser.toolbar.top.TabSwitcherActionMenuCoordinator;
 import org.chromium.chrome.browser.toolbar.top.ToggleTabStackButton;
 import org.chromium.chrome.browser.toolbar.top.ToggleTabStackButtonCoordinator;
@@ -177,7 +183,6 @@ import org.chromium.content_public.browser.LoadUrlParams;
 import org.chromium.content_public.browser.NavigationController;
 import org.chromium.content_public.browser.NavigationEntry;
 import org.chromium.content_public.browser.NavigationHandle;
-import org.chromium.content_public.browser.NavigationHistory;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.content_public.browser.back_forward_transition.AnimationStage;
 import org.chromium.net.NetError;
@@ -192,7 +197,6 @@ import org.chromium.ui.widget.ViewRectProvider;
 import org.chromium.url.GURL;
 
 import java.util.List;
-import java.util.Objects;
 
 // Vivaldi
 import org.chromium.build.BuildConfig;
@@ -305,6 +309,9 @@ public class ToolbarManager
     private HomeButtonCoordinator mHomeButtonCoordinator;
     private ToggleTabStackButtonCoordinator mTabSwitcherButtonCoordinator;
 
+    private @Nullable ReloadButtonCoordinator mReloadButtonCoordinator;
+    private @Nullable BackButtonCoordinator mBackButtonCoordinator;
+
     private BrowserStateBrowserControlsVisibilityDelegate mControlsVisibilityDelegate;
     private int mFullscreenFocusToken = TokenHolder.INVALID_TOKEN;
     private int mFullscreenFindInPageToken = TokenHolder.INVALID_TOKEN;
@@ -357,10 +364,9 @@ public class ToolbarManager
     private @Nullable ObservableSupplier<Integer> mBookmarkBarHeightSupplier;
     private boolean mInTabSwitcherTransition;
 
-    private String mLastUrl;
-    private String mCurrentUrl;
-    private int mLastIndex = -1;
     private Tab mLastTab;
+
+    private @Nullable StripLayoutHelperManager mStripLayoutHelperManager;
 
     // Vivaldi
     private OnClickListener mTabSwitcherClickHandler;
@@ -405,10 +411,6 @@ public class ToolbarManager
         private ObservableSupplier<Integer> mCurrentConstraintDelegate;
 
         void onTabSwitched(Tab newTab) {
-            if (!ToolbarFeatures.shouldSuppressCaptures()) {
-                return;
-            }
-
             if (mCurrentConstraintDelegate != null) {
                 mCurrentConstraintDelegate.removeObserver(this);
                 mCurrentConstraintDelegate = null;
@@ -926,12 +928,47 @@ public class ToolbarManager
                             mTabModelSelectorSupplier);
         }
 
+        ImageButton reloadButton = mControlContainer.findViewById(R.id.refresh_button);
+        if (reloadButton != null) {
+            mReloadButtonCoordinator =
+                    new ReloadButtonCoordinator(
+                            reloadButton,
+                            ignoreCache -> {
+                                setUrlBarFocus(false, OmniboxFocusReason.UNFOCUS);
+                                mToolbarTabController.stopOrReloadCurrentTab(ignoreCache);
+                            },
+                            browsingModeThemeColorProvider);
+        }
+
+        NavigationPopup.HistoryDelegate historyDelegate =
+                (tab) -> {
+                    HistoryManagerUtils.showHistoryManager(
+                            tab.getWindowAndroid().getActivity().get(), tab, tab.getProfile());
+                };
+
+        ImageButton backButton = mControlContainer.findViewById(R.id.back_button);
+        if (backButton != null) {
+            mBackButtonCoordinator =
+                    new BackButtonCoordinator(
+                            backButton,
+                            () -> {
+                                setUrlBarFocus(false, OmniboxFocusReason.UNFOCUS);
+                                final boolean isSuccess = mToolbarTabController.back();
+                                if (isSuccess) RecordUserAction.record("MobileToolbarBack");
+                            },
+                            browsingModeThemeColorProvider,
+                            mActivityTabProvider,
+                            historyDelegate);
+        }
+
         mToolbarLongPressMenuHandler =
                 new ToolbarLongPressMenuHandler(
                         /* context= */ mActivity,
                         profileSupplier,
                         mIsCustomTab,
                         mOmniboxFocusStateSupplier,
+                        mActivityLifecycleDispatcher,
+                        mWindowAndroid,
                         () -> getUrlBarTextWithoutAutocomplete(),
                         () -> getUrlBarViewRectProvider());
         OnLongClickListener onLongClickListener =
@@ -953,7 +990,8 @@ public class ToolbarManager
                         initializeWithIncognitoColors,
                         mConstraintsProxy,
                         onLongClickListener,
-                        progressBar);
+                        progressBar,
+                        historyDelegate);
         mTabStripHeightSupplier = new ObservableSupplierImpl<>(mToolbar.getTabStripHeight());
         mActionModeController =
                 new ActionModeController(
@@ -1073,6 +1111,11 @@ public class ToolbarManager
 
         mActivityTabTabObserver =
                 new ActivityTabProvider.ActivityTabTabObserver(mActivityTabProvider) {
+                    private NavigationHandle mLastNavigation;
+                    private String mLastUrl;
+                    private String mCurrentUrl;
+                    private long mLastNavigationTimestamp;
+
                     @Override
                     public void onObservingDifferentTab(Tab tab, boolean hint) {
                         // ActivityTabProvider will null out the tab passed to
@@ -1089,12 +1132,6 @@ public class ToolbarManager
                         }
                         // Switching tabs.
                         if (mLastTab != tab) {
-                            NavigationHistory navigationHistory =
-                                    Objects.requireNonNull(tab.getWebContents())
-                                            .getNavigationController()
-                                            .getNavigationHistory();
-                            // Reset mLastIndex to the index of the new tab we switched to.
-                            mLastIndex = navigationHistory.getCurrentEntryIndex();
                             // Update mLastTab.
                             mLastTab = tab;
                         }
@@ -1252,33 +1289,36 @@ public class ToolbarManager
                             Tab tab, NavigationHandle navigation) {
                         onBackPressStateChanged();
                         if (navigation.hasCommitted() && !navigation.isSameDocument()) {
-                            // Account for forward vs backward navigation.
-                            NavigationHistory navigationHistory =
-                                    Objects.requireNonNull(tab.getWebContents())
-                                            .getNavigationController()
-                                            .getNavigationHistory();
-
-                            int currentIndex = navigationHistory.getCurrentEntryIndex();
-                            // 0: forward nav, 1: backward nav, 2: neither (tab switched).
-                            @NavigationDirection
-                            int direction =
-                                    currentIndex > mLastIndex
-                                            ? NavigationDirection.FORWARD
-                                            : currentIndex < mLastIndex
-                                                    ? NavigationDirection.BACKWARD
-                                                    : NavigationDirection.NEITHER;
                             String newUrl = navigation.getUrl().getSpec();
 
                             if (mLastUrl != null
                                     && mLastUrl.equals(newUrl)
                                     && !mLastUrl.equals(mCurrentUrl)) {
                                 // Backfalsing detected, emit metrics.
+                                // NavigationHandle#isBack or #isForward is true when the
+                                // navigation is caused by Tab#goBack or #goForward, such as
+                                // the back/forward button in toolbar, the navigation gesture,
+                                // the back button in system navigation bar.
+                                // 0: forward nav, 1: backward nav, 2: neither.
+                                @NavigationDirection int direction = NavigationDirection.NEITHER;
+                                if (mLastNavigation.isBack() && !navigation.isBack()) {
+                                    direction = NavigationDirection.FORWARD;
+                                } else if (mLastNavigation.isForward() && navigation.isBack()) {
+                                    direction = NavigationDirection.BACKWARD;
+                                }
+                                if (TimeUtils.elapsedRealtimeMillis() - mLastNavigationTimestamp
+                                        <= 3 * 1000) {
+                                    // Only record if two consecutive navigations happen with 3
+                                    // seconds.
+                                    BackPressMetrics.recordStrictBackFalsing(direction);
+                                }
                                 BackPressMetrics.recordBackFalsing(direction);
                             }
                             // Update the URLs and index.
                             mLastUrl = mCurrentUrl;
                             mCurrentUrl = newUrl;
-                            mLastIndex = currentIndex;
+                            mLastNavigation = navigation;
+                            mLastNavigationTimestamp = TimeUtils.elapsedRealtimeMillis();
 
                             mToolbar.onNavigatedToDifferentPage();
                             maybeTriggerCacheRefreshForZeroSuggest(navigation.getUrl());
@@ -1621,8 +1661,8 @@ public class ToolbarManager
             boolean initializeWithIncognitoColors,
             ObservableSupplier<Integer> constraintsSupplier,
             OnLongClickListener onLongClickListener,
-            ToolbarProgressBar progressBar) {
-
+            ToolbarProgressBar progressBar,
+            NavigationPopup.HistoryDelegate historyDelegate) {
         // clang-format off
         VivaldiTopToolbarCoordinator toolbar =
         new VivaldiTopToolbarCoordinator(
@@ -1641,7 +1681,7 @@ public class ToolbarManager
                         mTabModelSelectorSupplier,
                         mHomepageEnabledSupplier,
                         mCompositorViewHolder::getResourceManager,
-                        HistoryManagerUtils::showHistoryManager,
+                        historyDelegate,
                         PartnerBrowserCustomizations.getInstance()
                                 ::isHomepageProviderAvailableAndEnabled,
                         DownloadUtils::downloadOfflinePage,
@@ -1654,7 +1694,8 @@ public class ToolbarManager
                         mDesktopWindowStateManager,
                         mTabStripTransitionDelegateSupplier,
                         onLongClickListener,
-                        progressBar);
+                        progressBar,
+                        mReloadButtonCoordinator);
         // clang-format on
 
         mHomepageStateListener =
@@ -1876,7 +1917,6 @@ public class ToolbarManager
                                 mTabGroupUiOneshotSupplier);
         var bottomControlsCoordinator =
                 new BottomControlsCoordinator(
-                        mActivity,
                         mWindowAndroid,
                         mLayoutManager,
                         mCompositorViewHolder.getResourceManager(),
@@ -1894,7 +1934,9 @@ public class ToolbarManager
                             return readAloud != null && readAloud.isRestoringPlayer();
                         },
                         mBrowserControlsSizer); // Vivaldi
-
+        if (mInitializedWithNative) {
+            bottomControlsCoordinator.initializeWithNative();
+        }
         mBottomControlsCoordinatorSupplier.set(bottomControlsCoordinator);
         if (mBackPressManager != null) {
             mBackPressManager.addHandler(
@@ -1953,6 +1995,8 @@ public class ToolbarManager
         TraceEvent.begin("ToolbarManager.initializeWithNative");
         assert !mInitializedWithNative;
         assert mTabModelSelectorSupplier.get() != null;
+
+        mStripLayoutHelperManager = stripLayoutHelperManager;
 
         mTabModelSelector = mTabModelSelectorSupplier.get();
         Profile profile = mTabModelSelector.getModel(false).getProfile();
@@ -2058,6 +2102,10 @@ public class ToolbarManager
         handleTabRestoreCompleted();
         mIncognitoStateProvider.setTabModelSelector(mTabModelSelector);
         mAppThemeColorProvider.setIncognitoStateProvider(mIncognitoStateProvider);
+
+        if (mBottomControlsCoordinatorSupplier.get() != null) {
+            mBottomControlsCoordinatorSupplier.get().initializeWithNative();
+        }
 
         if (mOnInitializedRunnable != null) {
             mOnInitializedRunnable.run();
@@ -2198,6 +2246,7 @@ public class ToolbarManager
         mTabStripHeightSupplier = null;
         mToolbar.removeUrlExpansionObserver(mStatusBarColorController);
         mToolbar.destroy();
+        mToolbarLongPressMenuHandler.destroy();
 
         mIncognitoStateProvider.destroy();
 
@@ -2236,6 +2285,15 @@ public class ToolbarManager
 
             mMenuButtonCoordinator.destroy();
             mMenuButtonCoordinator = null;
+        }
+
+        if (mReloadButtonCoordinator != null) {
+            mReloadButtonCoordinator.destroy();
+            mReloadButtonCoordinator = null;
+        }
+
+        if (mBackButtonCoordinator != null) {
+            mBackButtonCoordinator.destroy();
         }
 
         if (mOverviewModeMenuButtonCoordinator != null) {
@@ -2410,12 +2468,12 @@ public class ToolbarManager
         // Note(david@vivaldi.com): This is for resetting the color when toggling the tab strip
         // setting.
         ChromeActivity activity = (ChromeActivity) mActivity;
-        if ((ChromeSharedPreferences.getInstance().readBoolean(
-                     VivaldiPreferences.SHOW_TAB_STRIP, true)
-                    && !activity.isCustomTab())
-                || activity.isTablet()) {
-            color = ChromeColors.getDefaultThemeColor(
-                    mActivity, mLocationBarModel.isIncognito());
+        if (activity.isTablet() ||
+                (ChromeSharedPreferences
+                        .getInstance().readBoolean(VivaldiPreferences.SHOW_TAB_STRIP, true) &&
+                        !activity.isCustomTab() &&
+                        (activity.getActivityType() != ActivityType.WEBAPP))) {
+            color = ChromeColors.getDefaultThemeColor(mActivity, mLocationBarModel.isIncognito());
         }
 
         boolean colorChanged = mCurrentThemeColor != color;
@@ -2543,14 +2601,6 @@ public class ToolbarManager
         if (wasFocused && focused) {
             mLocationBar.selectAll();
         }
-    }
-
-    /**
-     * Unfocus the url bar when back press is performed. Do nothing if it is unfocused.
-     * @return Whether url bar is focused when this method is called.
-     */
-    public boolean unfocusUrlBarOnBackPress() {
-        return mLocationBar.unfocusUrlBarOnBackPressed();
     }
 
     /**
@@ -3025,6 +3075,25 @@ public class ToolbarManager
     public static boolean isRightEdgeGoesForwardGestureNavEnabled() {
         return Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE
                 && ChromeFeatureList.sRightEdgeGoesForwardGestureNav.isEnabled();
+    }
+
+    /** Requests focus onto the toolbar. */
+    public void requestFocus() {
+        mToolbar.requestFocus();
+    }
+
+    /**
+     * @return The {@link StripLayoutHelperManager} used by this {@link ToolbarManager}, or null
+     */
+    public @Nullable StripLayoutHelperManager getStripLayoutHelperManager() {
+        return mStripLayoutHelperManager;
+    }
+
+    /**
+     * @return Whether the toolbar contains keyboard focus.
+     */
+    public boolean containsKeyboardFocus() {
+        return mToolbar.containsKeyboardFocus();
     }
 
     /** Vivaldi */

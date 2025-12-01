@@ -23,7 +23,6 @@
 #include "base/sequence_checker.h"
 #include "base/timer/timer.h"
 #include "build/build_config.h"
-#include "build/chromeos_buildflags.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/common/buildflags.h"
 #include "components/keep_alive_registry/keep_alive_state_observer.h"
@@ -210,9 +209,7 @@ class BrowserProcessImpl : public BrowserProcess,
 
   StartupData* startup_data() override;
 
-// TODO(crbug.com/40118868): Revisit the macro expression once build flag switch
-// of lacros-chrome is complete.
-#if BUILDFLAG(IS_WIN) || (BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS))
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX)
   void StartAutoupdateTimer() override;
 #endif
 
@@ -227,8 +224,8 @@ class BrowserProcessImpl : public BrowserProcess,
   resource_coordinator::ResourceCoordinatorParts* resource_coordinator_parts()
       override;
 
-#if !BUILDFLAG(IS_ANDROID)
   SerialPolicyAllowedPorts* serial_policy_allowed_ports() override;
+#if !BUILDFLAG(IS_ANDROID)
   HidSystemTrayIcon* hid_system_tray_icon() override;
   UsbSystemTrayIcon* usb_system_tray_icon() override;
 #endif
@@ -411,9 +408,7 @@ class BrowserProcessImpl : public BrowserProcess,
 
   std::unique_ptr<BatteryMetrics> battery_metrics_;
 
-// TODO(crbug.com/40118868): Revisit the macro expression once build flag switch
-// of lacros-chrome is complete.
-#if BUILDFLAG(IS_WIN) || (BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS))
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX)
   base::RepeatingTimer autoupdate_timer_;
 
   // Gets called by autoupdate timer to see if browser needs restart and can be
@@ -422,8 +417,7 @@ class BrowserProcessImpl : public BrowserProcess,
   bool IsRunningInBackground() const;
   void OnPendingRestartResult(bool is_update_pending_restart);
   void RestartBackgroundInstance();
-#endif  // BUILDFLAG(IS_WIN) || (BUILDFLAG(IS_LINUX) ||
-        // BUILDFLAG(IS_CHROMEOS_LACROS))
+#endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX)
 
   // component updater is normally not used under ChromeOS due
   // to concerns over integrity of data shared between profiles,
@@ -463,11 +457,11 @@ class BrowserProcessImpl : public BrowserProcess,
   std::unique_ptr<SecureOriginPrefsObserver> secure_origin_prefs_observer_;
   std::unique_ptr<SiteIsolationPrefsObserver> site_isolation_prefs_observer_;
 
+  std::unique_ptr<SerialPolicyAllowedPorts> serial_policy_allowed_ports_;
 #if !BUILDFLAG(IS_ANDROID)
   // Called to signal the process' main message loop to exit.
   base::OnceClosure quit_closure_;
 
-  std::unique_ptr<SerialPolicyAllowedPorts> serial_policy_allowed_ports_;
   std::unique_ptr<HidSystemTrayIcon> hid_system_tray_icon_;
   std::unique_ptr<UsbSystemTrayIcon> usb_system_tray_icon_;
 

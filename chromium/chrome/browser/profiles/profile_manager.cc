@@ -47,7 +47,6 @@
 #include "chrome/browser/browsing_data/chrome_browsing_data_lifetime_manager.h"
 #include "chrome/browser/browsing_data/chrome_browsing_data_lifetime_manager_factory.h"
 #include "chrome/browser/buildflags.h"
-#include "chrome/browser/contextual_cueing/contextual_cueing_service_factory.h"
 #include "chrome/browser/extensions/chrome_content_browser_client_extensions_part.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
 #include "chrome/browser/navigation_predictor/navigation_predictor_keyed_service_factory.h"
@@ -98,6 +97,7 @@
 #include "components/signin/public/base/signin_pref_names.h"
 #include "components/signin/public/identity_manager/identity_manager.h"
 #include "components/signin/public/identity_manager/primary_account_mutator.h"
+#include "components/signin/public/identity_manager/tribool.h"
 #include "components/supervised_user/core/browser/child_account_service.h"
 #include "components/supervised_user/core/browser/supervised_user_service.h"
 #include "components/supervised_user/core/common/pref_names.h"
@@ -428,6 +428,16 @@ std::string GetKeepAliveOriginName(ProfileKeepAliveOrigin origin) {
   return oss.str();
 }
 
+// Determines if profile should be OTR.
+bool ShouldGoOffTheRecord(Profile* profile) {
+#if BUILDFLAG(IS_CHROMEOS)
+  if (!ash::ProfileHelper::IsUserProfile(profile)) {
+    return true;
+  }
+#endif
+  return profile->IsGuestSession() || profile->IsSystemProfile();
+}
+
 }  // namespace
 
 ProfileManager::ProfileManager(const base::FilePath& user_data_dir)
@@ -690,12 +700,12 @@ Profile* ProfileManager::GetActiveUserProfile() {
 // static
 Profile* ProfileManager::CreateInitialProfile() {
   ProfileManager* const profile_manager = g_browser_process->profile_manager();
-  Profile* profile =
-      profile_manager->GetProfile(profile_manager->user_data_dir().Append(
-          profile_manager->GetInitialProfileDir()));
+  Profile* profile = profile_manager->GetProfile(
+      profile_manager->user_data_dir().Append(GetInitialProfileDir()));
 
-  if (profile_manager->ShouldGoOffTheRecord(profile))
+  if (ShouldGoOffTheRecord(profile)) {
     return profile->GetPrimaryOTRProfile(/*create_if_needed=*/true);
+  }
   return profile;
 }
 #endif  // BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_ANDROID)
@@ -818,6 +828,7 @@ bool ProfileManager::IsValidProfile(const void* profile) {
   return false;
 }
 
+// static
 base::FilePath ProfileManager::GetInitialProfileDir() {
 #if BUILDFLAG(IS_CHROMEOS)
   if (IsLoggedIn()) {
@@ -1514,10 +1525,6 @@ void ProfileManager::DoFinalInitForServices(Profile* profile,
   // Ensure PreloadingModelKeyedService is started.
   PreloadingModelKeyedServiceFactory::GetForProfile(profile);
 
-#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)
-  contextual_cueing::ContextualCueingServiceFactory::GetForProfile(profile);
-#endif
-
   IdentityManagerFactory::GetForProfile(profile)->OnNetworkInitialized();
   AccountReconcilorFactory::GetForProfile(profile);
 #if BUILDFLAG(IS_ANDROID)
@@ -2002,15 +2009,6 @@ void ProfileManager::SetNonPersonalProfilePrefs(Profile* profile) {
   prefs->ClearPref(DefaultSearchManager::kDefaultSearchProviderDataPrefName);
 }
 
-bool ProfileManager::ShouldGoOffTheRecord(Profile* profile) {
-#if BUILDFLAG(IS_CHROMEOS)
-  if (!ash::ProfileHelper::IsUserProfile(profile)) {
-    return true;
-  }
-#endif
-  return profile->IsGuestSession() || profile->IsSystemProfile();
-}
-
 void ProfileManager::SaveActiveProfiles() {
   PrefService* local_state = g_browser_process->local_state();
   DCHECK(local_state);
@@ -2071,8 +2069,14 @@ void ProfileManager::SetProfileAsLastUsed(Profile* last_active) {
       identity_manager->HasPrimaryAccount(signin::ConsentLevel::kSignin)) {
     CoreAccountInfo account_info =
         identity_manager->GetPrimaryAccountInfo(signin::ConsentLevel::kSignin);
+    AccountInfo extended_info =
+        identity_manager->FindExtendedAccountInfo(account_info);
+    signin::Tribool is_managed =
+        extended_info.hosted_domain.empty()
+            ? signin::Tribool::kUnknown
+            : signin::TriboolFromBool(extended_info.IsManaged());
     active_primary_accounts_metrics_recorder->MarkAccountAsActiveNow(
-        account_info.gaia);
+        account_info.gaia, is_managed);
   }
 
   // Don't remember ephemeral profiles as last because they are not going to

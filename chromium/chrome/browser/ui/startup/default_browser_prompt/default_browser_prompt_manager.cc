@@ -12,6 +12,7 @@
 #include "base/metrics/histogram_functions.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
+#include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_list.h"
@@ -24,7 +25,14 @@
 #include "components/prefs/pref_service.h"
 #include "content/public/browser/web_contents.h"
 
+#if BUILDFLAG(IS_WIN)
+#include "chrome/browser/win/taskbar_manager.h"
+#include "chrome/installer/util/install_util.h"
+#include "chrome/installer/util/shell_util.h"
+#endif
+
 namespace {
+
 #if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_CHROMEOS)
 bool ShouldShowPrompts() {
   PrefService* local_state = g_browser_process->local_state();
@@ -33,13 +41,14 @@ bool ShouldShowPrompts() {
       local_state->GetInteger(prefs::kDefaultBrowserDeclinedCount);
   const base::Time last_declined_time =
       local_state->GetTime(prefs::kDefaultBrowserLastDeclinedTime);
-  const int max_prompt_count = features::kMaxPromptCount.Get();
+  constexpr int kMaxPromptCount = 5;
+  constexpr int kRepromptDurationDays = 21;
 
   // A negative value for the max prompt count indicates that the prompt
   // should be shown indefinitely. Otherwise, don't show the prompt if
   // declined count equals or exceeds the max prompt count. A max prompt count
   // of zero should mean that the prompt is never shown.
-  if (max_prompt_count >= 0 && declined_count >= max_prompt_count) {
+  if (declined_count >= kMaxPromptCount) {
     return false;
   }
 
@@ -50,7 +59,7 @@ bool ShouldShowPrompts() {
 
   // Show if it has been long enough since the last declined time
   return (base::Time::Now() - last_declined_time) >
-         features::kRepromptDuration.Get();
+         base::Days(kRepromptDurationDays);
 }
 #endif  // !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_CHROMEOS)
 }  // namespace
@@ -60,25 +69,47 @@ DefaultBrowserPromptManager* DefaultBrowserPromptManager::GetInstance() {
   return base::Singleton<DefaultBrowserPromptManager>::get();
 }
 
+void DefaultBrowserPromptManager::InitTabStripTracker() {
+  browser_tab_strip_tracker_ =
+      std::make_unique<BrowserTabStripTracker>(this, this);
+  // This will trigger a call to `OnTabStripModelChanged`, which will create
+  // the info bar.
+  browser_tab_strip_tracker_->Init();
+}
+
 void DefaultBrowserPromptManager::MaybeShowPrompt() {
-  CHECK(base::FeatureList::IsEnabled(features::kDefaultBrowserPromptRefresh));
 #if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_CHROMEOS)
   NOTREACHED() << "Unsupported platforms for showing default browser prompts.";
 #else
-  if (features::kShowDefaultBrowserAppMenuItem.Get()) {
-    SetAppMenuItemVisibility(true);
-  }
+  SetAppMenuItemVisibility(true);
 
   if (!ShouldShowPrompts()) {
     return;
   }
 
-  if (features::kShowDefaultBrowserInfoBar.Get()) {
-    browser_tab_strip_tracker_ =
-        std::make_unique<BrowserTabStripTracker>(this, this);
-    browser_tab_strip_tracker_->Init();
+#if BUILDFLAG(IS_WIN)
+  // On Windows, before showing the info bar, determine whether or not to
+  // offer to pin to taskbar, and store that result in `this`.
+  if (base::FeatureList::IsEnabled(
+          features::kOfferPinToTaskbarWhenSettingToDefault)) {
+    // base::Unretained is safe because DefaultBrowserPromptManager is a
+    // global singleton.
+    browser_util::ShouldOfferToPin(
+        ShellUtil::GetBrowserModelId(InstallUtil::IsPerUserInstall()),
+        base::BindOnce(&DefaultBrowserPromptManager::OnCanPinToTaskbarResult,
+                       base::Unretained(this)));
+    return;
   }
-#endif
+#endif  // BUILDFLAG(IS_WIN)
+
+  InitTabStripTracker();
+#endif  // BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_CHROMEOS)
+}
+
+void DefaultBrowserPromptManager::OnCanPinToTaskbarResult(
+    bool should_offer_to_pin) {
+  can_pin_to_taskbar_ = should_offer_to_pin;
+  InitTabStripTracker();
 }
 
 void DefaultBrowserPromptManager::CloseAllPrompts(CloseReason close_reason) {
@@ -104,7 +135,8 @@ void DefaultBrowserPromptManager::CreateInfoBarForWebContents(
   CHECK(!infobars_.contains(web_contents));
 
   infobars::InfoBar* infobar = DefaultBrowserInfoBarDelegate::Create(
-      infobars::ContentInfoBarManager::FromWebContents(web_contents), profile);
+      infobars::ContentInfoBarManager::FromWebContents(web_contents), profile,
+      can_pin_to_taskbar_);
 
   if (infobar == nullptr) {
     // Infobar may be null if `InfoBarManager::ShouldShowInfoBar` returns false,

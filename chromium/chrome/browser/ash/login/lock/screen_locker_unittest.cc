@@ -9,6 +9,7 @@
 #include "ash/login/test_login_screen.h"
 #include "ash/public/cpp/login_screen_model.h"
 #include "ash/public/cpp/login_types.h"
+#include "base/check_deref.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback_helpers.h"
 #include "base/memory/ptr_util.h"
@@ -97,8 +98,8 @@ class ScreenLockerUnitTest : public testing::Test {
     user_profile_ = testing_profile_manager_->CreateTestingProfile(
         test_account_id_.GetUserEmail());
 
-    session_controller_client_ =
-        std::make_unique<SessionControllerClientImpl>();
+    session_controller_client_ = std::make_unique<SessionControllerClientImpl>(
+        CHECK_DEREF(TestingBrowserProcess::GetGlobal()->local_state()));
     session_controller_client_->Init();
 
     login_screen_client_ = std::make_unique<LoginScreenClientImpl>();
@@ -116,14 +117,17 @@ class ScreenLockerUnitTest : public testing::Test {
 
   void CreateSessionForUser(bool is_public_account) {
     ASSERT_FALSE(user_manager::UserManager::Get()->GetPrimaryUser());
+    user_manager::User* user = nullptr;
     if (is_public_account) {
-      fake_user_manager_->AddPublicAccountUser(test_account_id_);
+      user = fake_user_manager_->AddPublicAccountUser(test_account_id_);
     } else {
-      fake_user_manager_->AddUser(test_account_id_);
+      user = fake_user_manager_->AddUser(test_account_id_);
     }
     auto* session_manager = session_manager::SessionManager::Get();
-    session_manager->CreateSession(test_account_id_,
-                                   test_account_id_.GetUserEmail(), false);
+    session_manager->CreateSession(user->GetAccountId(),
+                                   user->GetAccountId().GetUserEmail(),
+                                   /*new_user=*/false,
+                                   /*has_active_session=*/false);
     auto* primary_user = user_manager::UserManager::Get()->GetPrimaryUser();
     ASSERT_TRUE(primary_user);
     ProfileHelper::Get()->SetUserToProfileMappingForTesting(primary_user,

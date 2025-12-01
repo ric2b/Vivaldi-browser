@@ -173,6 +173,8 @@ constexpr SharedImageUsageSet kSupportedUsage =
     SHARED_IMAGE_USAGE_WEBGPU_STORAGE_TEXTURE |
     SHARED_IMAGE_USAGE_WEBGPU_SHARED_BUFFER;
 
+const char* kD3DImageBackingLabel = "D3DImageBacking";
+
 }  // anonymous namespace
 
 D3DImageBackingFactory::D3DImageBackingFactory(
@@ -218,15 +220,16 @@ D3DImageBackingFactory::SwapChainBackings::operator=(
 
 // static
 bool D3DImageBackingFactory::IsD3DSharedImageSupported(
+    ID3D11Device* d3d11_device,
     const GpuPreferences& gpu_preferences) {
   // Only supported for passthrough command decoder.
-  if (!gpu_preferences.use_passthrough_cmd_decoder ||
-      !gl::PassthroughCommandDecoderSupported()) {
+  if (!gpu_preferences.use_passthrough_cmd_decoder) {
     return false;
   }
 
-  // D3D11 device will be null if ANGLE is using the D3D9 backend.
-  if (!gl::QueryD3D11DeviceObjectFromANGLE()) {
+  // D3D11 device will be null if ANGLE is using the D3D9 backend or
+  // when we're running with Graphite on D3D12.
+  if (!d3d11_device) {
     return false;
   }
 
@@ -323,6 +326,8 @@ D3DImageBackingFactory::CreateSwapChain(const Mailbox& front_buffer_mailbox,
                << hr;
     return {nullptr, nullptr};
   }
+
+  gl::LabelSwapChainAndBuffers(swap_chain.Get(), kD3DImageBackingLabel);
 
   if (gl::DXGIWaitableSwapChainEnabled()) {
     Microsoft::WRL::ComPtr<IDXGISwapChain3> swap_chain3;
@@ -559,7 +564,15 @@ std::unique_ptr<SharedImageBacking> D3DImageBackingFactory::CreateSharedImage(
     // If this trips, it means we're claiming support for SCANOUT when DComp
     // textures is not supported by the system, or an incompatible texture was
     // created above.
-    CHECK(DCompTextureIsSupported(desc));
+    if (!DCompTextureIsSupported(desc)) {
+      LOG(ERROR) << "Composition texture not supported for scanout usage";
+      SCOPED_CRASH_KEY_BOOL("d3d image backing", "dcomp tex support",
+                            gl::DirectCompositionTextureSupported());
+      SCOPED_CRASH_KEY_STRING256("d3d image backing", "dcomp tex desc",
+                                 D3D11TextureDescToString(desc));
+      base::debug::DumpWithoutCrashing();
+      return nullptr;
+    }
 
     Microsoft::WRL::ComPtr<IDCompositionDevice3> dcomp_device =
         gl::GetDirectCompositionDevice();
@@ -613,6 +626,7 @@ std::unique_ptr<SharedImageBacking> D3DImageBackingFactory::CreateSharedImage(
     SkAlphaType alpha_type,
     SharedImageUsageSet usage,
     std::string debug_label,
+    bool is_thread_safe,
     gfx::GpuMemoryBufferHandle handle) {
   // Windows does not support external sampler.
   CHECK(!format.PrefersExternalSampler());

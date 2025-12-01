@@ -90,7 +90,6 @@ inline void Load(LiftoffAssembler* assm, LiftoffRegister dst, Register base,
     case kI32:
     case kRef:
     case kRefNull:
-    case kRtt:
       assm->Lw(dst.gp(), src);
       break;
     case kI64:
@@ -126,7 +125,6 @@ inline void Store(LiftoffAssembler* assm, Register base, int32_t offset,
     case kI32:
     case kRefNull:
     case kRef:
-    case kRtt:
       assm->Sw(src.gp(), dst);
       break;
     case kI64:
@@ -160,7 +158,6 @@ inline void push(LiftoffAssembler* assm, LiftoffRegister reg, ValueKind kind) {
     case kI32:
     case kRefNull:
     case kRef:
-    case kRtt:
       assm->addi(sp, sp, -kSystemPointerSize);
       assm->Sw(reg.gp(), MemOperand(sp, 0));
       break;
@@ -1063,7 +1060,6 @@ void LiftoffAssembler::MoveStackValue(uint32_t dst_offset, uint32_t src_offset,
     case kI64:
     case kRef:
     case kRefNull:
-    case kRtt:
       Lw(kScratchReg, src);
       Sw(kScratchReg, dst);
       src = liftoff::GetStackSlot(src_offset - 4);
@@ -1122,7 +1118,6 @@ void LiftoffAssembler::Spill(int offset, LiftoffRegister reg, ValueKind kind) {
     case kI32:
     case kRef:
     case kRefNull:
-    case kRtt:
       Sw(reg.gp(), dst);
       break;
     case kI64:
@@ -1882,7 +1877,8 @@ void LiftoffAssembler::LoadTransform(LiftoffRegister dst, Register src_addr,
                                      Register offset_reg, uintptr_t offset_imm,
                                      LoadType type,
                                      LoadTransformationKind transform,
-                                     uint32_t* protected_load_pc) {
+                                     uint32_t* protected_load_pc,
+                                     bool i64_offset) {
   UseScratchRegisterScope temps(this);
   Register scratch = temps.Acquire();
   MemOperand src_op = liftoff::GetMemOp(this, src_addr, offset_reg, offset_imm);

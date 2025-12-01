@@ -32,7 +32,7 @@
   background-color: var(--sys-color-cdt-base-container);
   z-index: 0;
   position: relative;
-  container: sections / inline-size; /* stylelint-disable-line property-no-unknown */
+  container: sections / inline-size;
 }
 
 .section {
@@ -43,7 +43,7 @@
 }
 
 .section::after {
-  content: "";
+  content: '';
   border-bottom: 1px solid var(--sys-color-divider);
   position: absolute;
   left: 0;
@@ -64,10 +64,10 @@
 .screenshot-wrapper {
   flex: 0 0 80px;
   padding-top: 32px;
-  z-index: 2; /* We want this to be on top of `.step-overlay` */
+  /* We want this to be on top of `.step-overlay` */
+  z-index: 2;
 }
 
-/* stylelint-disable-next-line at-rule-no-unknown */
 @container sections (max-width: 400px) {
   .screenshot-wrapper {
     display: none;
@@ -160,7 +160,7 @@
 }
 
 .header-title::before {
-  content: "";
+  content: '';
   min-width: 12px;
   height: 12px;
   display: inline-block;
@@ -231,6 +231,7 @@
 .settings {
   margin-top: 4px;
   display: flex;
+  flex-wrap: wrap;
   font-size: 12px;
   line-height: 20px;
   letter-spacing: 0.03em;
@@ -338,7 +339,11 @@ devtools-split-view {
   min-height: 0;
 }
 
-[slot="sidebar"] {
+[slot='main'] {
+  overflow: hidden auto;
+}
+
+[slot='sidebar'] {
   display: flex;
   flex-direction: column;
   overflow: auto;
@@ -346,7 +351,7 @@ devtools-split-view {
   width: 100%;
 }
 
-[slot="sidebar"] .section-toolbar {
+[slot='sidebar'] .section-toolbar {
   border-bottom: 1px solid var(--sys-color-divider);
 }
 

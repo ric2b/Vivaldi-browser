@@ -84,6 +84,8 @@ enum class PersistentNotificationType {
   // A marker that an entity (tab or tab group) has been deleted and the user
   // has not seen it yet.
   TOMBSTONED,
+  // The message was an instant message.
+  INSTANT_MESSAGE,
 };
 
 // Metadata about the tab group a message is attributed to.
@@ -171,10 +173,14 @@ struct MessageAttribution {
 };
 
 // An instant notification that the UI to show something to the user
-// immediately.
+// immediately. Depending on the type of message, it might represent
+// a single event or multiple events of similar type aggregated as a single
+// message.
 struct InstantMessage {
  public:
-  MessageAttribution attribution;
+  InstantMessage();
+  InstantMessage(const InstantMessage& other);
+  ~InstantMessage();
 
   // The collaboration event associated with the message.
   CollaborationEvent collaboration_event;
@@ -184,6 +190,14 @@ struct InstantMessage {
 
   // The type of instant notification to show.
   InstantNotificationType type;
+
+  // The message content to be shown in the UI.
+  std::u16string localized_message;
+
+  // The list of message attributions for the messages that it represents.
+  // For single message case, the size is 1. For aggregated message case, it
+  // will be greater than 1.
+  std::vector<MessageAttribution> attributions;
 };
 
 // A persistent notification that requires an ongoing UI affordance until
@@ -198,6 +212,10 @@ struct PersistentMessage {
   // The type of persistent notification to show.
   PersistentNotificationType type;
 };
+
+// Helper method to query whether the message represents a non-aggregated
+// message.
+bool IsSingleMessage(const InstantMessage& message);
 
 }  // namespace collaboration::messaging
 

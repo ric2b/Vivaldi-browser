@@ -377,10 +377,29 @@ WebContents* TabWebContentsDelegateAndroid::AddNewContents(
 
   // When handled is |true|, ownership has been passed to java, which in turn
   // creates a new TabAndroid instance to own the WebContents.
-  if (handled)
-    new_contents.release();
+  if (handled) {
+    return new_contents.release();
+  }
 
   return nullptr;
+}
+
+void TabWebContentsDelegateAndroid::SetContentsBounds(
+    content::WebContents* source,
+    const gfx::Rect& bounds) {
+  JNIEnv* env = AttachCurrentThread();
+  ScopedJavaLocalRef<jobject> obj = GetJavaDelegate(env);
+  if (!obj.is_null()) {
+    ScopedJavaLocalRef<jobject> jsource;
+    if (source) {
+      jsource = source->GetJavaWebContents();
+    }
+    ScopedJavaLocalRef<jobject> jbounds =
+        JNI_TabWebContentsDelegateAndroidImpl_CreateJavaRect(env, bounds);
+
+    Java_TabWebContentsDelegateAndroidImpl_setContentsBounds(env, obj, jsource,
+                                                             jbounds);
+  }
 }
 
 void TabWebContentsDelegateAndroid::OnDidBlockNavigation(

@@ -12,6 +12,10 @@ BASE_FEATURE(kContextualCueing,
              "ContextualCueing",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
+BASE_FEATURE(kGlicZeroStateSuggestions,
+             "GlicZeroStateSuggestions",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
 const base::FeatureParam<base::TimeDelta> kBackoffTime(&kContextualCueing,
                                                        "BackoffTime",
                                                        base::Hours(24));
@@ -22,20 +26,20 @@ const base::FeatureParam<double> kBackoffMultiplierBase(&kContextualCueing,
 
 const base::FeatureParam<base::TimeDelta> kNudgeCapTime(&kContextualCueing,
                                                         "NudgeCapTime",
-                                                        base::Hours(24));
+                                                        base::Hours(8));
 
 const base::FeatureParam<int> kNudgeCapCount(&kContextualCueing,
                                              "NudgeCapCount",
-                                             3);
+                                             10);
 
 const base::FeatureParam<base::TimeDelta> kNudgeCapTimePerDomain(
     &kContextualCueing,
     "NudgeCapTimePerDomain",
-    base::Hours(24));
+    base::Hours(8));
 
 const base::FeatureParam<int> kNudgeCapCountPerDomain(&kContextualCueing,
                                                       "NudgeCapCountPerDomain",
-                                                      1);
+                                                      3);
 
 const base::FeatureParam<int> kMinPageCountBetweenNudges(
     &kContextualCueing,

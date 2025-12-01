@@ -5,12 +5,15 @@
 #ifndef V8_OBJECTS_INSTANCE_TYPE_INL_H_
 #define V8_OBJECTS_INSTANCE_TYPE_INL_H_
 
+#include "src/objects/instance-type.h"
+// Include the non-inl header before the rest of the headers.
+
 #include <optional>
 
 #include "src/base/bounds.h"
 #include "src/execution/isolate-utils-inl.h"
 #include "src/objects/instance-type-checker.h"
-#include "src/objects/instance-type.h"
+#include "src/objects/map-inl.h"
 
 // Has to be the last include (doesn't have include guards):
 #include "src/objects/object-macros.h"
@@ -452,6 +455,18 @@ V8_INLINE constexpr bool IsFreeSpaceOrFiller(InstanceType instance_type) {
 
 V8_INLINE bool IsFreeSpaceOrFiller(Tagged<Map> map_object) {
   return IsFreeSpaceOrFiller(map_object->instance_type());
+}
+
+// These JSObject types are wrappers around a set of primitive values
+// and exist only for the purpose of passing the data across V8 Api.
+// They are not supposed to be ever leaked to user JS code and their maps
+// are not supposed to be ever extended or changed.
+V8_INLINE constexpr bool IsMaybeReadOnlyJSObject(InstanceType instance_type) {
+  return IsJSExternalObject(instance_type) || IsJSMessageObject(instance_type);
+}
+
+V8_INLINE bool IsMaybeReadOnlyJSObject(Tagged<Map> map_object) {
+  return IsMaybeReadOnlyJSObject(map_object->instance_type());
 }
 
 V8_INLINE constexpr bool IsPropertyDictionary(InstanceType instance_type) {

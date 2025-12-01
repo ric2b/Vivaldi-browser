@@ -48,7 +48,6 @@
 #include "services/network/public/mojom/cookie_manager.mojom-blink.h"
 #include "services/network/public/mojom/cross_origin_embedder_policy.mojom.h"
 #include "services/network/public/mojom/url_loader_factory.mojom-blink.h"
-#include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/mojom/fetch/fetch_api_request.mojom-blink.h"
 #include "third_party/blink/public/mojom/notifications/notification.mojom-blink.h"
 #include "third_party/blink/public/mojom/push_messaging/push_messaging.mojom-blink.h"
@@ -60,7 +59,6 @@
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/public/platform/web_url.h"
 #include "third_party/blink/public/platform/web_v8_value_converter.h"
-#include "third_party/blink/renderer/bindings/core/v8/callback_promise_adapter.h"
 #include "third_party/blink/renderer/bindings/core/v8/js_based_event_listener.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise_resolver.h"
@@ -262,8 +260,6 @@ ServiceWorkerGlobalScope::ServiceWorkerGlobalScope(
   // service workers, but basically that won't be big problem because we have
   // ping-pong timer and that will kill paused service workers.
   event_queue_ = std::make_unique<ServiceWorkerEventQueue>(
-      WTF::BindRepeating(&ServiceWorkerGlobalScope::OnBeforeStartEvent,
-                         WrapWeakPersistent(this)),
       WTF::BindRepeating(&ServiceWorkerGlobalScope::OnIdleTimeout,
                          WrapWeakPersistent(this)),
       GetTaskRunner(TaskType::kInternalDefault));
@@ -1375,11 +1371,6 @@ ServiceWorkerGlobalScope::GetServiceWorkerHost() {
   return service_worker_host_.get();
 }
 
-void ServiceWorkerGlobalScope::OnBeforeStartEvent(bool is_offline_event) {
-  DCHECK(IsContextThread());
-  SetIsOfflineMode(is_offline_event);
-}
-
 void ServiceWorkerGlobalScope::OnIdleTimeout() {
   DCHECK(IsContextThread());
   // RequestedTermination() returns true if ServiceWorkerEventQueue agrees
@@ -1417,7 +1408,7 @@ void ServiceWorkerGlobalScope::DispatchExtendableMessageEventInternal(
     int event_id,
     mojom::blink::ExtendableMessageEventPtr event) {
   BlinkTransferableMessage msg = std::move(event->message);
-  MessagePortArray* ports =
+  GCedMessagePortArray* ports =
       MessagePort::EntanglePorts(*this, std::move(msg.ports));
   String origin;
   if (!event->source_origin->IsOpaque())
@@ -1559,8 +1550,8 @@ void ServiceWorkerGlobalScope::StartFetchEvent(
   // main resource load -> only resultingClientId.
   // sub resource load -> only clientId.
   // worker script load -> only clientId. (treated as subresource)
-  // * PlzDecicatedWorker makes this as main resource load.
-  //   We should fix this.
+  // * TODO(crbug.com/1064920): PlzDedicatedWorker makes this as main resource
+  //   load. We should fix this.
   //
   // Expected behavior:
   // main resource load -> clientId and resultingClientId.
@@ -1580,7 +1571,6 @@ void ServiceWorkerGlobalScope::StartFetchEvent(
     if (is_main_resource_load &&
         params->request->destination ==
             network::mojom::RequestDestination::kWorker) {
-      CHECK(base::FeatureList::IsEnabled(features::kPlzDedicatedWorker));
       is_main_resource_load = false;
     }
     event_init->setClientId(is_main_resource_load ? String()

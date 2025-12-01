@@ -1011,7 +1011,14 @@ Maybe<bool> JSReceiver::DeletePropertyOrElement(Isolate* isolate,
                                                 DirectHandle<JSReceiver> object,
                                                 DirectHandle<Name> name,
                                                 LanguageMode language_mode) {
-  PropertyKey key(isolate, name);
+  return DeletePropertyOrElement(isolate, object, PropertyKey(isolate, name),
+                                 language_mode);
+}
+
+Maybe<bool> JSReceiver::DeletePropertyOrElement(Isolate* isolate,
+                                                DirectHandle<JSReceiver> object,
+                                                PropertyKey key,
+                                                LanguageMode language_mode) {
   LookupIterator it(isolate, object, key, object, LookupIterator::OWN);
   return DeleteProperty(&it, language_mode);
 }
@@ -3476,12 +3483,12 @@ Maybe<InterceptorResult> JSObject::SetPropertyWithInterceptor(
 
 DirectHandle<Map> JSObject::GetElementsTransitionMap(
     DirectHandle<JSObject> object, ElementsKind to_kind) {
-  Handle<Map> map(object->map(), object->GetIsolate());
+  DirectHandle<Map> map(object->map(), object->GetIsolate());
   return Map::TransitionElementsTo(object->GetIsolate(), map, to_kind);
 }
 
 void JSObject::AllocateStorageForMap(DirectHandle<JSObject> object,
-                                     Handle<Map> map) {
+                                     DirectHandle<Map> map) {
   DCHECK(object->map()->GetInObjectProperties() ==
          map->GetInObjectProperties());
   ElementsKind obj_kind = object->map()->elements_kind();
@@ -3587,7 +3594,7 @@ bool TryFastAddDataProperty(Isolate* isolate, DirectHandle<JSObject> object,
   if (map.is_null()) return false;
   DCHECK(!map->is_dictionary_map());
 
-  Handle<Map> new_map(map, isolate);
+  DirectHandle<Map> new_map(map, isolate);
   if (map->is_deprecated()) {
     new_map = Map::Update(isolate, new_map);
     if (new_map->is_dictionary_map()) return false;
@@ -3788,7 +3795,7 @@ Maybe<bool> JSObject::DefineOwnPropertyIgnoreAttributes(
 
 MaybeDirectHandle<Object> JSObject::SetOwnPropertyIgnoreAttributes(
     DirectHandle<JSObject> object, DirectHandle<Name> name,
-    Handle<Object> value, PropertyAttributes attributes) {
+    DirectHandle<Object> value, PropertyAttributes attributes) {
   DCHECK(!IsTheHole(*value));
   LookupIterator it(object->GetIsolate(), object, name, object,
                     LookupIterator::OWN);
@@ -3796,7 +3803,7 @@ MaybeDirectHandle<Object> JSObject::SetOwnPropertyIgnoreAttributes(
 }
 
 MaybeDirectHandle<Object> JSObject::SetOwnElementIgnoreAttributes(
-    DirectHandle<JSObject> object, size_t index, Handle<Object> value,
+    DirectHandle<JSObject> object, size_t index, DirectHandle<Object> value,
     PropertyAttributes attributes) {
   DCHECK(!IsJSTypedArray(*object));
   Isolate* isolate = object->GetIsolate();
@@ -3806,7 +3813,7 @@ MaybeDirectHandle<Object> JSObject::SetOwnElementIgnoreAttributes(
 
 MaybeDirectHandle<Object> JSObject::DefinePropertyOrElementIgnoreAttributes(
     DirectHandle<JSObject> object, DirectHandle<Name> name,
-    Handle<Object> value, PropertyAttributes attributes) {
+    DirectHandle<Object> value, PropertyAttributes attributes) {
   Isolate* isolate = object->GetIsolate();
   PropertyKey key(isolate, name);
   LookupIterator it(isolate, object, key, object, LookupIterator::OWN);
@@ -4475,26 +4482,24 @@ Maybe<bool> JSObject::PreventExtensionsWithTransition(
   // elements kind change in one go. If seal or freeze with Smi or Double
   // elements kind, we will transition to Object elements kind first to make
   // sure of valid element access.
-  if (v8_flags.enable_sealed_frozen_elements_kind) {
-    switch (object->map()->elements_kind()) {
-      case PACKED_SMI_ELEMENTS:
-      case PACKED_DOUBLE_ELEMENTS:
-        JSObject::TransitionElementsKind(object, PACKED_ELEMENTS);
-        break;
-      case HOLEY_SMI_ELEMENTS:
-      case HOLEY_DOUBLE_ELEMENTS:
-        JSObject::TransitionElementsKind(object, HOLEY_ELEMENTS);
-        break;
-      default:
-        break;
-    }
+  switch (object->map()->elements_kind()) {
+    case PACKED_SMI_ELEMENTS:
+    case PACKED_DOUBLE_ELEMENTS:
+      JSObject::TransitionElementsKind(object, PACKED_ELEMENTS);
+      break;
+    case HOLEY_SMI_ELEMENTS:
+    case HOLEY_DOUBLE_ELEMENTS:
+      JSObject::TransitionElementsKind(object, HOLEY_ELEMENTS);
+      break;
+    default:
+      break;
   }
 
   // Make sure we only use this element dictionary in case we can't transition
   // to sealed, frozen elements kind.
   DirectHandle<NumberDictionary> new_element_dictionary;
 
-  Handle<Map> old_map(object->map(), isolate);
+  DirectHandle<Map> old_map(object->map(), isolate);
   old_map = Map::Update(isolate, old_map);
   DirectHandle<Map> transition_map;
   MaybeDirectHandle<Map> maybe_transition_map =
@@ -4566,14 +4571,17 @@ Maybe<bool> JSObject::PreventExtensionsWithTransition(
     return Just(true);
   }
 
-  // Both seal and preventExtensions always go through without modifications to
-  // typed array elements if the typed array is fixed length. Freeze works only
-  // if there are no actual elements.
+  // PreventExtensions works without modifications to typed array elements if
+  // the typed array is fixed length; see #sec-typedarray-preventextensions.
+  // Seal and freeze work only if there are no actual elements, because
+  // TypedArray elements cannot be reconfigured; see
+  // #sec-typedarray-defineownproperty.
   if (object->HasTypedArrayOrRabGsabTypedArrayElements()) {
     DCHECK(new_element_dictionary.is_null());
-    if (attrs == FROZEN && Cast<JSTypedArray>(*object)->GetLength() > 0) {
+    if (attrs != NONE && Cast<JSTypedArray>(*object)->GetLength() > 0) {
       isolate->Throw(*isolate->factory()->NewTypeError(
-          MessageTemplate::kCannotFreezeArrayBufferView));
+          attrs == SEALED ? MessageTemplate::kCannotSealArrayBufferView
+                          : MessageTemplate::kCannotFreezeArrayBufferView));
       return Nothing<bool>();
     }
     return Just(true);
@@ -5258,7 +5266,7 @@ Maybe<bool> JSObject::SetPrototype(Isolate* isolate,
       all_extensible = all_extensible && real_receiver->map()->is_extensible();
     }
   }
-  Handle<Map> map(real_receiver->map(), isolate);
+  DirectHandle<Map> map(real_receiver->map(), isolate);
 
   // Nothing to do if prototype is already set.
   if (map->prototype() == *value) return Just(true);
@@ -5665,10 +5673,10 @@ void JSGlobalObject::InvalidatePropertyCell(DirectHandle<JSGlobalObject> global,
 }
 
 // static
-MaybeHandle<JSDate> JSDate::New(DirectHandle<JSFunction> constructor,
-                                DirectHandle<JSReceiver> new_target,
-                                double tv) {
-  Handle<JSDate> result;
+MaybeDirectHandle<JSDate> JSDate::New(DirectHandle<JSFunction> constructor,
+                                      DirectHandle<JSReceiver> new_target,
+                                      double tv) {
+  DirectHandle<JSDate> result;
   ASSIGN_RETURN_ON_EXCEPTION(
       constructor->GetIsolate(), result,
       Cast<JSDate>(JSObject::New(constructor, new_target, {})));

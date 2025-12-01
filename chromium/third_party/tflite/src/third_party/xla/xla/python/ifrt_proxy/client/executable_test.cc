@@ -27,6 +27,7 @@
 #include "xla/layout_util.h"
 #include "xla/pjrt/pjrt_layout.h"
 #include "xla/python/ifrt/array.h"
+#include "xla/python/ifrt/basic_device_list.h"
 #include "xla/python/ifrt/device.h"
 #include "xla/python/ifrt/device_list.h"
 #include "xla/python/ifrt/dtype.h"
@@ -174,10 +175,37 @@ TEST_F(LoadedExecutableTest, Metadata) {
 // TODO(b/315809436): Test needs rewrite because protobuf matchers are not OSS
 #if defined(PLATFORM_GOOGLE)
 TEST_F(LoadedExecutableTest, Execute) {
-  MockDevice device;
-  ON_CALL(device, Id()).WillByDefault(Return(DeviceId(1)));
-
   MockClient client;
+
+  IfrtResponse response;
+  ASSERT_TRUE(TextFormat::ParseFromString(
+      R"pb(
+        loaded_executable_metadata_response {
+          parameter_shardings {
+            shardings { type: REPLICATED }
+            shardings { type: REPLICATED }
+          }
+          output_shardings {
+            shardings { type: REPLICATED }
+            shardings { type: REPLICATED }
+          }
+        }
+      )pb",
+      &response));
+  EXPECT_CALL(*session_, Enqueue(Pointee(Partially(EquivToProto(
+                             R"pb(loaded_executable_metadata_request {
+                                    loaded_executable_handle: 1234
+                                  })pb")))))
+      .WillOnce(MockClientSessionReturnResponse(response));
+
+  ON_CALL(client, MakeDeviceList(_))
+      .WillByDefault([](absl::Span<xla::ifrt::Device* const> devices) {
+        return xla::ifrt::BasicDeviceList::Create(devices);
+      });
+
+  MockDevice device;
+  ON_CALL(device, client()).WillByDefault(Return(&client));
+  ON_CALL(device, Id()).WillByDefault(Return(DeviceId(1)));
   ON_CALL(client, LookupDevice(DeviceId(1))).WillByDefault(Return(&device));
 
   LoadedExecutable executable(
@@ -243,7 +271,7 @@ TEST_F(LoadedExecutableTest, Execute) {
                                                           })pb")))))
       .WillOnce(MockClientSessionReturnResponse(check_future_response));
 
-  tsl::RCReference<DeviceList> devices = BasicDeviceList::Create({&device});
+  DeviceListRef devices = BasicDeviceList::Create({&device});
 
   std::vector<tsl::RCReference<xla::ifrt::Array>> args;
   for (const uint64_t handle : {1000, 1001}) {
@@ -264,12 +292,18 @@ TEST_F(LoadedExecutableTest, Execute) {
   const auto output0 = result.outputs[0];
   EXPECT_EQ(output0->dtype(), DType(DType::kF32));
   EXPECT_EQ(output0->shape(), Shape({4, 4}));
-  EXPECT_EQ(llvm::cast<Array>(output0.get())->handle().handle, 3000);
+  EXPECT_EQ(llvm::cast<Array>(output0.get())
+                ->GetHandleUnknownIfBeingDonated()
+                ->handle,
+            3000);
 
   const auto output1 = result.outputs[1];
   EXPECT_EQ(output1->dtype(), DType(DType::kF16));
   EXPECT_EQ(output1->shape(), Shape({8}));
-  EXPECT_EQ(llvm::cast<Array>(output1.get())->handle().handle, 3001);
+  EXPECT_EQ(llvm::cast<Array>(output1.get())
+                ->GetHandleUnknownIfBeingDonated()
+                ->handle,
+            3001);
 
   // Execute again. This time, the client already knows the output spec and so
   // will supply client-generated handles.
@@ -301,9 +335,13 @@ TEST_F(LoadedExecutableTest, Execute) {
 
   ASSERT_THAT(result.outputs, SizeIs(2));
   ASSERT_THAT(execute_req.result_array_handle(), SizeIs(2));
-  EXPECT_EQ(llvm::cast<Array>(result.outputs[0].get())->handle().handle,
+  EXPECT_EQ(llvm::cast<Array>(result.outputs[0].get())
+                ->GetHandleUnknownIfBeingDonated()
+                ->handle,
             execute_req.result_array_handle()[0]);
-  EXPECT_EQ(llvm::cast<Array>(result.outputs[1].get())->handle().handle,
+  EXPECT_EQ(llvm::cast<Array>(result.outputs[1].get())
+                ->GetHandleUnknownIfBeingDonated()
+                ->handle,
             execute_req.result_array_handle()[1]);
 }
 #endif

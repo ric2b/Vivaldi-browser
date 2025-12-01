@@ -65,6 +65,7 @@ import org.chromium.base.test.util.DisableIf;
 import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.Features.DisableFeatures;
 import org.chromium.base.test.util.Features.EnableFeatures;
+import org.chromium.base.test.util.HistogramWatcher;
 import org.chromium.base.test.util.PackageManagerWrapper;
 import org.chromium.base.test.util.Restriction;
 import org.chromium.blink_public.common.BlinkFeatures;
@@ -135,7 +136,6 @@ import java.util.concurrent.atomic.AtomicReference;
 /** Test suite for verifying the behavior of various URL overriding actions. */
 @RunWith(ChromeJUnit4ClassRunner.class)
 @CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE})
-@DisableIf.Device(DeviceFormFactor.TABLET) // crbug.com/372085373
 public class UrlOverridingTest {
     @Rule
     public ChromeTabbedActivityTestRule mActivityTestRule = new ChromeTabbedActivityTestRule();
@@ -215,6 +215,8 @@ public class UrlOverridingTest {
     private static final String TRUSTED_CCT_PACKAGE = "com.trusted.cct";
 
     private static final String EXTERNAL_APP_SCHEME = "externalappscheme";
+
+    private static final String TAB_OPENED_FOR_REDIRECT_HISTOGRAM = "Android.TabOpenedForRedirect";
 
     @IntDef({NavigationType.SELF, NavigationType.BLANK, NavigationType.TOP})
     @Retention(RetentionPolicy.SOURCE)
@@ -1034,6 +1036,8 @@ public class UrlOverridingTest {
     @Test
     @SmallTest
     public void testRedirectionFromIntentWarm() throws Exception {
+        HistogramWatcher redirectWatcher =
+                HistogramWatcher.newSingleRecordWatcher(TAB_OPENED_FOR_REDIRECT_HISTOGRAM, true);
         Context context = ContextUtils.getApplicationContext();
         mActivityTestRule.startMainActivityOnBlankPage();
 
@@ -1053,6 +1057,7 @@ public class UrlOverridingTest {
                 },
                 10000L,
                 CriteriaHelper.DEFAULT_POLLING_INTERVAL);
+        redirectWatcher.assertExpected();
         CriteriaHelper.pollUiThread(
                 () -> AsyncInitializationActivity.wasMoveTaskToBackInterceptedForTesting());
     }
@@ -1429,6 +1434,7 @@ public class UrlOverridingTest {
     @LargeTest
     @EnableFeatures({BlinkFeatures.PRERENDER2})
     @DisableFeatures({BlinkFeatures.PRERENDER2_MEMORY_CONTROLS})
+    @DisableIf.Device(DeviceFormFactor.TABLET) // crbug.com/398904538
     public void testClearRedirectHandlerOnPageActivation() throws Exception {
         mActivityTestRule.startMainActivityOnBlankPage();
 
@@ -1741,7 +1747,6 @@ public class UrlOverridingTest {
 
     @Test
     @LargeTest
-    @EnableFeatures({ExternalIntentsFeatures.TRUSTED_CLIENT_GESTURE_BYPASS_NAME})
     public void testRedirectToTrustedCaller() throws Exception {
         final String url = mTestServer.getURL(HELLO_PAGE);
         final CustomTabsConnection connection = CustomTabsTestUtils.warmUpAndWait();

@@ -15,6 +15,7 @@
 #include "third_party/blink/public/common/privacy_budget/identifiability_study_settings.h"
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/public/platform/scheduler/web_agent_group_scheduler.h"
+#include "third_party/blink/renderer/core/canvas_interventions/canvas_interventions_helper.h"
 #include "third_party/blink/renderer/core/css/css_font_selector.h"
 #include "third_party/blink/renderer/core/css/offscreen_font_selector.h"
 #include "third_party/blink/renderer/core/css/style_engine.h"
@@ -30,11 +31,13 @@
 #include "third_party/blink/renderer/core/html/canvas/canvas_resource_tracker.h"
 #include "third_party/blink/renderer/core/html/canvas/image_data.h"
 #include "third_party/blink/renderer/core/html/canvas/ukm_parameters.h"
+#include "third_party/blink/renderer/core/html/canvas/unique_font_selector.h"
 #include "third_party/blink/renderer/core/imagebitmap/image_bitmap.h"
 #include "third_party/blink/renderer/core/inspector/console_message.h"
 #include "third_party/blink/renderer/core/probe/core_probes.h"
 #include "third_party/blink/renderer/core/workers/dedicated_worker_global_scope.h"
 #include "third_party/blink/renderer/platform/bindings/exception_state.h"
+#include "third_party/blink/renderer/platform/fonts/plain_text_painter.h"
 #include "third_party/blink/renderer/platform/graphics/canvas_resource_dispatcher.h"
 #include "third_party/blink/renderer/platform/graphics/canvas_resource_provider.h"
 #include "third_party/blink/renderer/platform/graphics/gpu/shared_gpu_context.h"
@@ -239,6 +242,12 @@ ImageBitmap* OffscreenCanvas::transferToImageBitmap(
                                       "ImageBitmap construction failed");
   }
 
+  if (plain_text_painter_ != nullptr) {
+    plain_text_painter_->DidSwitchFrame();
+  }
+  if (unique_font_selector_) {
+    unique_font_selector_->DidSwitchFrame();
+  }
   return image;
 }
 
@@ -255,8 +264,7 @@ void OffscreenCanvas::RecordIdentifiabilityMetric(
 scoped_refptr<Image> OffscreenCanvas::GetSourceImageForCanvas(
     FlushReason reason,
     SourceImageStatus* status,
-    const gfx::SizeF& size,
-    const AlphaDisposition alpha_disposition) {
+    const gfx::SizeF& size) {
   if (!context_) {
     *status = kInvalidSourceImageStatus;
     sk_sp<SkSurface> surface = SkSurfaces::Raster(
@@ -278,11 +286,7 @@ scoped_refptr<Image> OffscreenCanvas::GetSourceImageForCanvas(
     image = CreateTransparentImage(Size());
 
   *status = image ? kNormalSourceImageStatus : kInvalidSourceImageStatus;
-
-  // If the alpha_disposition is already correct, or the image is opaque, this
-  // is a no-op.
-  return StaticBitmapImageTransform::GetWithAlphaDisposition(
-      reason, std::move(image), alpha_disposition);
+  return image;
 }
 
 ScriptPromise<ImageBitmap> OffscreenCanvas::CreateImageBitmap(
@@ -359,6 +363,14 @@ ScriptPromise<Blob> OffscreenCanvas::convertToBlob(
   scoped_refptr<StaticBitmapImage> image_bitmap =
       context_->GetImage(FlushReason::kToBlob);
   if (image_bitmap) {
+    auto intervention_type =
+        CanvasInterventionsHelper::CanvasInterventionType::kNone;
+    if (CanvasInterventionsHelper::MaybeNoiseSnapshot(
+            context_, GetExecutionContext(), image_bitmap, GetRasterMode())) {
+      intervention_type =
+          CanvasInterventionsHelper::CanvasInterventionType::kNoise;
+    };
+
     auto* resolver = MakeGarbageCollected<ScriptPromiseResolver<Blob>>(
         script_state, exception_state.GetContext());
     CanvasAsyncBlobCreator::ToBlobFunctionType function_type =
@@ -370,7 +382,7 @@ ScriptPromise<Blob> OffscreenCanvas::convertToBlob(
             IdentifiableSurface::Type::kCanvasReadback)
             ? IdentifiabilityInputDigest(context_)
             : 0,
-        resolver);
+        intervention_type, resolver);
     async_creator->ScheduleAsyncBlobCreation(options->quality());
     return resolver->Promise();
   }
@@ -380,7 +392,7 @@ ScriptPromise<Blob> OffscreenCanvas::convertToBlob(
 }
 
 bool OffscreenCanvas::IsOpaque() const {
-  return context_ ? !context_->CreationAttributes().alpha : false;
+  return context_ && !context_->CreationAttributes().alpha;
 }
 
 CanvasRenderingContext* OffscreenCanvas::GetCanvasRenderingContext(
@@ -476,8 +488,7 @@ bool OffscreenCanvas::EnableAcceleration() {
   // Note that `OffscreenCanvas::IsAccelerated` above is not equivalent! This
   // returns false if the canvas resource provider doesn't exist yet, even if it
   // will be an accelerated canvas once it has been created.
-  CanvasResourceProvider* provider =
-      GetOrCreateCanvasResourceProvider(RasterModeHint::kPreferGPU);
+  CanvasResourceProvider* provider = GetOrCreateResourceProvider();
   if (!provider) {
     return false;
   }
@@ -568,10 +579,11 @@ CanvasResourceProvider* OffscreenCanvas::GetOrCreateResourceProvider() {
     // using the software compositor
     base::WeakPtr<CanvasResourceDispatcher> dispatcher_weakptr =
         GetOrCreateResourceDispatcher()->GetWeakPtr();
-    provider = CanvasResourceProvider::CreateSharedBitmapProvider(
-        Size(), format, alpha_type, color_space,
-        CanvasResourceProvider::ShouldInitialize::kCallClear,
-        SharedGpuContext::SharedImageInterfaceProvider(), this);
+    provider =
+        CanvasResourceProvider::CreateSharedImageProviderForSoftwareCompositor(
+            Size(), format, alpha_type, color_space,
+            CanvasResourceProvider::ShouldInitialize::kCallClear,
+            SharedGpuContext::SharedImageInterfaceProvider(), this);
   }
 
   if (!provider) {
@@ -638,6 +650,13 @@ bool OffscreenCanvas::PushFrame(scoped_refptr<CanvasResource>&& canvas_resource,
       std::move(canvas_resource), commit_start_time, current_frame_damage_rect_,
       IsOpaque());
   current_frame_damage_rect_ = SkIRect::MakeEmpty();
+
+  if (plain_text_painter_ != nullptr) {
+    plain_text_painter_->DidSwitchFrame();
+  }
+  if (unique_font_selector_) {
+    unique_font_selector_->DidSwitchFrame();
+  }
   return true;
 }
 
@@ -681,8 +700,7 @@ void OffscreenCanvas::CheckForGpuContextLost() {
 
   // For software rendering.
   if (!shared_bitmap_gpu_channel_lost() && ResourceProvider() &&
-      ResourceProvider()->GetType() == CanvasResourceProvider::kSharedBitmap &&
-      ResourceProvider()->IsSharedBitmapGpuChannelLost()) {
+      ResourceProvider()->IsSoftwareSharedImageGpuChannelLost()) {
     set_shared_bitmap_gpu_channel_lost(true);
     NotifyGpuContextLost();
   }
@@ -692,14 +710,43 @@ TextDirection OffscreenCanvas::GetTextDirection(const ComputedStyle*) {
   return text_direction_.value_or(TextDirection::kLtr);
 }
 
-FontSelector* OffscreenCanvas::GetFontSelector() {
-  if (auto* window = DynamicTo<LocalDOMWindow>(GetExecutionContext())) {
-    return window->document()->GetStyleEngine().GetFontSelector();
+void OffscreenCanvas::SetLocale(scoped_refptr<const LayoutLocale> locale) {
+  locale_ = std::move(locale);
+}
+
+const LayoutLocale* OffscreenCanvas::GetLocale() const {
+  if (locale_) {
+    return locale_.get();
   }
-  // TODO(crbug.com/40059901): Temporary mitigation.  Remove the following
-  // CHECK once a more comprehensive solution has been implemented.
-  CHECK(GetExecutionContext()->IsWorkerGlobalScope());
-  return To<WorkerGlobalScope>(GetExecutionContext())->GetFontSelector();
+  if (const auto* window = DynamicTo<LocalDOMWindow>(GetExecutionContext())) {
+    const Element* document_element = window->document()->documentElement();
+    if (document_element) {
+      return &LayoutLocale::ValueOrDefault(
+          LayoutLocale::Get(document_element->ComputeInheritedLanguage()));
+    }
+  }
+  return &LayoutLocale::GetDefault();
+}
+
+UniqueFontSelector* OffscreenCanvas::GetFontSelector() {
+  if (UniqueFontSelector* unique_font_selector = unique_font_selector_) {
+    return unique_font_selector;
+  }
+  FontSelector* base_selector = nullptr;
+  if (auto* window = DynamicTo<LocalDOMWindow>(GetExecutionContext())) {
+    base_selector = window->document()->GetStyleEngine().GetFontSelector();
+  } else {
+    // TODO(crbug.com/40059901): Temporary mitigation.  Remove the following
+    // CHECK once a more comprehensive solution has been implemented.
+    CHECK(GetExecutionContext()->IsWorkerGlobalScope());
+    base_selector =
+        To<WorkerGlobalScope>(GetExecutionContext())->GetFontSelector();
+  }
+  auto* unique_font_selector = MakeGarbageCollected<UniqueFontSelector>(
+      base_selector,
+      RuntimeEnabledFeatures::CanvasTextNgEnabled(GetExecutionContext()));
+  unique_font_selector_ = unique_font_selector;
+  return unique_font_selector;
 }
 
 void OffscreenCanvas::UpdateMemoryUsage() {
@@ -739,7 +786,9 @@ size_t OffscreenCanvas::GetMemoryUsage() const {
 void OffscreenCanvas::Trace(Visitor* visitor) const {
   visitor->Trace(context_);
   visitor->Trace(execution_context_);
+  CanvasRenderingContextHost::Trace(visitor);
   EventTarget::Trace(visitor);
+  CanvasRenderingContextHost::Trace(visitor);
 }
 
 }  // namespace blink

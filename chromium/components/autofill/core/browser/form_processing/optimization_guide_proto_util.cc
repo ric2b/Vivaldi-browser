@@ -2,10 +2,16 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "components/optimization_guide/core/optimization_guide_proto_util.h"
+#include "components/autofill/core/browser/form_processing/optimization_guide_proto_util.h"
 
+#include <concepts>
+
+#include "base/check_op.h"
 #include "base/strings/utf_string_conversions.h"
-#include "components/autofill/core/browser/form_structure.h"
+#include "components/autofill/core/common/form_data.h"
+#include "components/autofill/core/common/form_field_data.h"
+#include "components/autofill/core/common/signatures.h"
+#include "components/autofill/core/common/unique_ids.h"
 #include "components/optimization_guide/proto/features/common_quality_data.pb.h"
 
 namespace autofill {
@@ -21,6 +27,8 @@ optimization_guide::proto::FormControlType ToFormControlTypeProto(
     case FormControlType::kInputCheckbox:
       return optimization_guide::proto::FORM_CONTROL_TYPE_INPUT_CHECKBOX;
     case FormControlType::kInputEmail:
+      return optimization_guide::proto::FORM_CONTROL_TYPE_INPUT_DATE;
+    case FormControlType::kInputDate:
       return optimization_guide::proto::FORM_CONTROL_TYPE_INPUT_EMAIL;
     case FormControlType::kInputMonth:
       return optimization_guide::proto::FORM_CONTROL_TYPE_INPUT_MONTH;
@@ -40,24 +48,49 @@ optimization_guide::proto::FormControlType ToFormControlTypeProto(
       return optimization_guide::proto::FORM_CONTROL_TYPE_INPUT_URL;
     case FormControlType::kSelectOne:
       return optimization_guide::proto::FORM_CONTROL_TYPE_SELECT_ONE;
-    case FormControlType::kSelectMultiple:
-      return optimization_guide::proto::FORM_CONTROL_TYPE_SELECT_MULTIPLE;
     case FormControlType::kTextArea:
       return optimization_guide::proto::FORM_CONTROL_TYPE_TEXT_AREA;
   }
   return optimization_guide::proto::FORM_CONTROL_TYPE_UNSPECIFIED;
 }
 
+template <typename T>
+  requires(std::same_as<T, FormGlobalId> || std::same_as<T, FieldGlobalId>)
+optimization_guide::proto::AutofillGlobalId ToGlobalIdProto(T global_id) {
+  optimization_guide::proto::AutofillGlobalId proto;
+  proto.set_frame_token(global_id.frame_token.ToString());
+  proto.set_renderer_id(global_id.renderer_id.value());
+  return proto;
+}
+
+void PopulateExtensionAPISpecificFields(
+    const FormData& form_data,
+    optimization_guide::proto::FormData& form_proto) {
+  // Add additional form-level metadata.
+  *form_proto.mutable_global_id() = ToGlobalIdProto(form_data.global_id());
+  form_proto.set_form_signature(*CalculateFormSignature(form_data));
+  // Add additional field-level metadata.
+  CHECK_EQ(form_data.fields().size(),
+           static_cast<size_t>(form_proto.fields_size()));
+  for (size_t i = 0; i < form_data.fields().size(); i++) {
+    const FormFieldData& field = form_data.fields()[i];
+    optimization_guide::proto::FormFieldData* proto_field =
+        form_proto.mutable_fields(i);
+    *proto_field->mutable_global_id() = ToGlobalIdProto(field.global_id());
+    proto_field->set_field_signature(*CalculateFieldSignatureForField(field));
+  }
+}
+
 }  // namespace
 
 optimization_guide::proto::FormData ToFormDataProto(
     const FormData& form_data,
-    const base::flat_map<FieldGlobalId, bool>& field_eligibility_map,
-    const base::flat_map<FieldGlobalId, bool>& field_value_sensitivity_map) {
+    FormDataProtoConversionReason conversion_reason) {
   optimization_guide::proto::FormData form_data_proto;
   form_data_proto.set_form_name(base::UTF16ToUTF8(form_data.name()));
-  for (const auto& field : form_data.fields()) {
-    auto* field_proto = form_data_proto.add_fields();
+  for (const FormFieldData& field : form_data.fields()) {
+    optimization_guide::proto::FormFieldData* field_proto =
+        form_data_proto.add_fields();
 
     // Unconditionally assign html meta data to the field.
     field_proto->set_field_name(base::UTF16ToUTF8(field.name()));
@@ -67,52 +100,23 @@ optimization_guide::proto::FormData ToFormDataProto(
     field_proto->set_placeholder(base::UTF16ToUTF8(field.placeholder()));
     field_proto->set_form_control_type(
         ToFormControlTypeProto(field.form_control_type()));
-    for (const auto& option : field.options()) {
-      auto* select_option_proto = field_proto->add_select_options();
+    for (const SelectOption& option : field.options()) {
+      optimization_guide::proto::SelectOption* select_option_proto =
+          field_proto->add_select_options();
       select_option_proto->set_value(base::UTF16ToUTF8(option.value));
       select_option_proto->set_text(base::UTF16ToUTF8(option.text));
     }
     field_proto->set_form_control_ax_node_id(field.form_control_ax_id());
+  }
 
-    // Utility function to map the eligibility and value sensitivity to the form
-    // data.
-    auto map_is_true_for_key =
-        [](const base::flat_map<FieldGlobalId, bool>& map, FieldGlobalId key) {
-          auto it = map.find(key);
-          return it != map.end() ? it->second : false;
-        };
-
-    field_proto->set_is_eligible(
-        map_is_true_for_key(field_eligibility_map, field.global_id()));
-
-    // Only forward the value if it was not identified as potentially sensitive.
-    if (!map_is_true_for_key(field_value_sensitivity_map, field.global_id())) {
-      field_proto->set_field_value(base::UTF16ToUTF8(field.value()));
-    }
+  switch (conversion_reason) {
+    case FormDataProtoConversionReason::kModelRequest:
+      break;
+    case FormDataProtoConversionReason::kExtensionAPI:
+      PopulateExtensionAPISpecificFields(form_data, form_data_proto);
+      break;
   }
   return form_data_proto;
-}
-
-optimization_guide::proto::FormData ToFormDataProto(
-    const FormStructure& form_structure) {
-  auto field_eligibility_map = base::MakeFlatMap<FieldGlobalId, bool>(
-      form_structure.fields(), {}, [](const auto& field) {
-        return std::make_pair(
-            field->global_id(),
-            field->field_is_eligible_for_autofill_ai().value_or(false));
-      });
-
-  auto field_value_sensitivity_map =
-      base::MakeFlatMap<FieldGlobalId, bool>(
-          form_structure.fields(), {}, [](const auto& field) {
-            return std::make_pair(
-                field->global_id(),
-                field->value_identified_as_potentially_sensitive());
-          });
-
-  FormData form_data = form_structure.ToFormData();
-  return ToFormDataProto(form_data, field_eligibility_map,
-                         field_value_sensitivity_map);
 }
 
 }  // namespace autofill

@@ -15,7 +15,7 @@ BASE_FEATURE(kConvertTrackpadEventsToMouse,
 
 BASE_FEATURE(kDeprecatedExternalPickerFunction,
              "DeprecatedExternalPickerFunction",
-             base::FEATURE_ENABLED_BY_DEFAULT);
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
 BASE_FEATURE(kMirrorBackForwardGesturesInRTL,
              "MirrorBackForwardGesturesInRTL",
@@ -51,5 +51,9 @@ BASE_FEATURE(kDisablePhotoPickerForVideoCapture,
 
 BASE_FEATURE(kUsingCorrectWorkArea,
              "UsingCorrectWorkArea",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+BASE_FEATURE(kUseNewEtc1Encoder,
+             "UseNewEtc1Encoder",
              base::FEATURE_DISABLED_BY_DEFAULT);
 }  // namespace ui

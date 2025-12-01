@@ -27,11 +27,8 @@ enum class AudioDecoderType : int {
   kMediaFoundation = 8,  // MediaFoundationAudioDecoder
   kPassthroughDTS = 9,   // Passthrough DTS audio
 
-
-  kVivPassThrough,
-
   // Keep this at the end and equal to the last entry.
-  kMaxValue = kVivPassThrough,
+  kMaxValue = kPassthroughDTS,
 };
 
 // List of known VideoDecoder implementations; recorded to UKM, always add new
@@ -60,10 +57,9 @@ enum class VideoDecoderType : int {
   kVideoToolbox = 19,  // VideoToolboxVideoDecoder (Mac)
 
   kVivWMFDecoder,
-  kVivPassThrough,
 
   // Keep this at the end and equal to the last entry.
-  kMaxValue = kVivPassThrough
+  kMaxValue = kVivWMFDecoder
 };
 
 MEDIA_EXPORT std::string GetDecoderName(AudioDecoderType type);

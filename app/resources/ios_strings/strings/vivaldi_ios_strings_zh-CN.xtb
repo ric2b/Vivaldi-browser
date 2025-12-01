@@ -5,7 +5,7 @@
 <translation id="1097355661841455597">我们很想听听您的想法。</translation>
 <translation id="1137850887415122856">要锁定“隐身”标签，请设置 Touch ID、Face ID 或密码。</translation>
 <translation id="1310184829257917508">要求隐身打开其他应用程序的链接</translation>
-<translation id="1561609750546413721">Vivaldi 翻译</translation>
+<translation id="1743244221910283364">丢弃更改</translation>
 <translation id="207677936531967364">新隐身标签</translation>
 <translation id="2353953000228441783">默认网站视图</translation>
 <translation id="2394192052244849643">粘贴并搜索</translation>
@@ -17,7 +17,9 @@
 <translation id="3463990832590571933">在隐身标签页打开图片</translation>
 <translation id="3473652525653758699">新建隐身窗口</translation>
 <translation id="3501504415290398157">使用 <ph name="BIOMETRIC_AUTHENITCATION_TYPE" /> 解锁您的隐身标签。</translation>
+<translation id="3607792383367580513">翻译</translation>
 <translation id="3692650606013198282">隐身模式打开</translation>
+<translation id="3922395466317605522">自定义菜单</translation>
 <translation id="3981599532037327317">以隐身模式打开 ${url}</translation>
 <translation id="398477389655464998">复制链接到突出显示</translation>
 <translation id="4026745073321351206">🙄发现问题了吗？</translation>
@@ -33,16 +35,17 @@
 <translation id="570209299585559496">您可在“设置”&gt;“内容设置”中将默认网站视图改为桌面版视图</translation>
 <translation id="5962477178930921574">粘贴并搜索</translation>
 <translation id="6233792867654386826">在 Vivaldi 中打开输入的链接。</translation>
+<translation id="6532106788206463496">保存修改</translation>
 <translation id="6680416467695217368">自定义菜单</translation>
 <translation id="6827597288286078054">隐身搜索</translation>
 <translation id="6851516051005285358">请求切换到桌面版网站</translation>
 <translation id="7307970171564921489">使用 <ph name="BIOMETRIC_AUTHENITCATION_TYPE" /> 解锁隐身标签</translation>
 <translation id="7347289093190902150">隐身模式打开？</translation>
+<translation id="7498234416455752244">继续修改</translation>
 <translation id="7549299604720382000">新建隐身标签</translation>
-<translation id="755255281989213264">自定义菜单</translation>
-<translation id="7920949005883349320">隐私与安全</translation>
 <translation id="7961015016161918242">一律不</translation>
 <translation id="8326104954595890674">新隐身标签</translation>
 <translation id="8756969031206844760">要更新密码吗？</translation>
+<translation id="9042893549633094279">隐私与安全</translation>
 <translation id="9094033019050270033">更新密码</translation>
 </translationbundle>

@@ -9,12 +9,12 @@
 #include <vector>
 
 #include <gtest/gtest.h>
-#include "xnnpack.h"
-#include "xnnpack/indirection.h"
-#include "xnnpack/math.h"
-#include "xnnpack/operator-utils.h"
-#include "xnnpack/operator.h"
-#include "xnnpack/buffer.h"
+#include "include/xnnpack.h"
+#include "src/xnnpack/indirection.h"
+#include "src/xnnpack/math.h"
+#include "src/xnnpack/operator-utils.h"
+#include "src/xnnpack/operator.h"
+#include "src/xnnpack/buffer.h"
 
 namespace xnnpack {
 namespace {
@@ -168,7 +168,7 @@ class IndirectionTester {
         kernel_size + (output_width - 1) * step_width * kernel_height_;
 
     input_ = xnnpack::Buffer<float>(channels_ * input_height_ * input_width_);
-    std::iota(input_.begin(), input_.end(), 0);
+    std::iota(input_.begin(), input_.end(), 0.0f);
     zero_buffer_ = xnnpack::Buffer<float>(channels_, 0.0f);
 
     const size_t indirect_top_height = divide_round_up(padding_height_ / 2, subsampling_);

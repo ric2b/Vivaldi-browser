@@ -1373,13 +1373,11 @@ void InitImagePipeSurfaceFUCHSIAFunctions(VkInstance instance);
 void InitExternalMemoryHardwareBufferANDROIDFunctions(VkDevice device);
 #    endif
 
-#    if defined(ANGLE_PLATFORM_GGP)
-// VK_GGP_stream_descriptor_surface
-void InitGGPStreamDescriptorSurfaceFunctions(VkInstance instance);
-#    endif  // defined(ANGLE_PLATFORM_GGP)
-
 // VK_KHR_external_semaphore_fd
 void InitExternalSemaphoreFdFunctions(VkDevice device);
+
+// VK_EXT_device_fault
+void InitDeviceFaultFunctions(VkDevice device);
 
 // VK_EXT_host_query_reset
 void InitHostQueryResetFunctions(VkDevice device);
@@ -1553,6 +1551,7 @@ enum class RenderPassClosureReason
     DepthStencilUseInFeedbackLoop,
     DepthStencilWriteAfterFeedbackLoop,
     PipelineBindWhileXfbActive,
+    XfbWriteThenTextureBuffer,
 
     // Use of resource after render pass
     BufferWriteThenMap,
@@ -1583,6 +1582,7 @@ enum class RenderPassClosureReason
     SyncObjectClientWait,
     SyncObjectServerWait,
     SyncObjectGetStatus,
+    ForeignImageRelease,
 
     // Closures that ANGLE could have avoided, but doesn't for simplicity or optimization of more
     // common cases.

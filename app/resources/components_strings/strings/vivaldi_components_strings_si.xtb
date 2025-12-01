@@ -35,7 +35,6 @@
 <translation id="2388886110302389394">පිටුව නව පුද්ගලික කවුළුවක විවෘත කරන්න (Ctrl-Shift-N)</translation>
 <translation id="2467694685043708798"><ph name="BEGIN_LINK" />ජාල චිකිත්සාව<ph name="END_LINK" /></translation>
 <translation id="2491414235131909199">මෙම පිටුව දිගුවකින් අවහිර කර ඇත</translation>
-<translation id="2501278716633472235">ආපසු යන්න</translation>
 <translation id="2539524384386349900">හඳුනාගන්න</translation>
 <translation id="255002559098805027"><ph name="HOST_NAME" /> වලංගු නොවන ප්‍රතිචාරයක් එවා ඇත.</translation>
 <translation id="2634124572758952069"><ph name="HOST_NAME" /> සේවාදායකයේ අ.ජා.කෙ. ලිපිනය හමු නොවිණි.</translation>
@@ -62,7 +61,6 @@
       <ph name="PLATFORM_TEXT" /></translation>
 <translation id="3226128629678568754">පිටුව පූරණය කිරීමට අවශ්‍ය දත්ත නැවත ඉදිරිපත් කිරීමට රීලෝඩ් බොත්තම ඔබන්න.</translation>
 <translation id="3234666976984236645">සැමවිට මෙම අඩවියේ වැදගත් අන්තර්ගත හඳුනා ගන්න</translation>
-<translation id="3308738399950580893">දැන්වීම්</translation>
 <translation id="3384522979010096022">ඔබේ සංවිධානය ඔබට මෙම අඩවිය නැරඹීමට ඉඩ නොදේ.</translation>
 <translation id="3422472998109090673"><ph name="HOST_NAME" /> වෙත දැනට ළඟා වීමට නොහැකිය.</translation>
 <translation id="3427092606871434483">ඉඩදෙන්න (පෙරනිමි)</translation>
@@ -80,7 +78,6 @@
 <translation id="3681007416295224113">සහතික තොරතුරු</translation>
 <translation id="3717027428350673159"><ph name="BEGIN_LINK" />ප්‍රතියුක්තය, ගිනිපවුර සහ ව.නා.ප. වින්‍යාසය පරීක්ෂා කිරීම<ph name="END_LINK" /></translation>
 <translation id="382518646247711829">ඔබ ප්‍රොක්සි සේවාදායකයක් භාවිතා කරන්නේ නම්...</translation>
-<translation id="3894751534882749287">ඔබට කෙසේ වුවත් පිටුව බැලීමට වුවමනා නම් ලුහුබැඳීම් අවහිර උත්පතන වල හෝ ඉඩ දෙන්න බොත්තම එබීමෙන් ලුහුබැඳීමේ ආරක්ෂණ මට්ටම වෙනස් කිරීමට හැකිය</translation>
 <translation id="3950820424414687140">පුරන්න</translation>
 <translation id="3973234410852337861"><ph name="HOST_NAME" /> අවහිර කර ඇත</translation>
 <translation id="3987940399970879459">1 MB ට වඩා අඩුය</translation>
@@ -108,7 +105,6 @@
 <translation id="4701488924964507374"><ph name="SENTENCE1" /> <ph name="SENTENCE2" /></translation>
 <translation id="4708268264240856090">ඔබගේ සම්බන්ධතාවයට බාධා විය</translation>
 <translation id="4722547256916164131"><ph name="BEGIN_LINK" />වින්‌ඩෝස් ජාල චිකිත්සාව<ph name="END_LINK" /></translation>
-<translation id="4736016046474602958">ට්රැකර් අවහිර කරන්නා</translation>
 <translation id="4744603770635761495">ක්රියාත්මක කළ හැකි මාර්ගය</translation>
 <translation id="4750917950439032686">ඔබගේ තොරතුරු (උදා. මුරපද හෝ ණයපත් අංක) මෙම අඩවියට යවන විට රහසිගත වේ.</translation>
 <translation id="4764776831041365478"><ph name="URL" /> හි වෙබ් පිටුව තාවකාලිකව ක්‍රියා විරහිත විය හැකිය, නැතහොත් එය ස්ථිරවම නව වෙබ් ලිපිනයකට මාරු වී තිබිය හැක.</translation>
@@ -167,13 +163,11 @@
 <translation id="7096937462164235847">මෙම වෙබ් අඩවියේ අනන්‍යතාවය සත්‍යාපනය කර නොමැත.</translation>
 <translation id="7108819624672055576">දිගුවකින් ඉඩ දී ඇත</translation>
 <translation id="7111012039238467737">(වලංගුයි)</translation>
-<translation id="7113310725918019676"><ph name="DOMAIN" /> වෙතින් <ph name="BLOCKED_TYPE" /> ඉඩදෙන්න</translation>
 <translation id="7126644664682723998">අලවා සොයන්න</translation>
 <translation id="7210863904660874423"><ph name="HOST_NAME" /> ආරක්ෂණ ප්‍රමිතීන් නොපිළිපදියි.</translation>
 <translation id="7219179957768738017">සම්බන්ධතාවය <ph name="SSL_VERSION" />භාවිතා කරයි.</translation>
 <translation id="7221855153210829124">දැනුම්දීම් පෙන්වන්න</translation>
 <translation id="7353601530677266744">විධාන රේඛාව</translation>
-<translation id="7364115444476960850">ඔබ ප්‍රවේශයට උත්සාහ කළ පිටුව විවාල්ඩි <ph name="BLOCKER_NAME" /> මගින් අවහිර කර ඇත</translation>
 <translation id="7419106976560586862">පැතිකඩ මාර්ගය</translation>
 <translation id="7455133967321480974">ගෝලීය පෙරනිමිය භාවිතා කරන්න (බ්ලොක්)</translation>
 <translation id="7518003948725431193">වෙබ් ලිපිනය සඳහා වෙබ් පිටුවක් හමු නොවිණි: <ph name="URL" /></translation>
@@ -193,7 +187,6 @@
 <translation id="8037357227543935929">විමසන්න (පෙරනිමි)</translation>
 <translation id="8041940743680923270">ගෝලීය පෙරනිමිය භාවිතා කරන්න (අසන්න)</translation>
 <translation id="808894953321890993">මුරපදය වෙනස් කරන්න</translation>
-<translation id="8119307142152921512">ලුහුබැඳීම් සහ දැන්වීම්</translation>
 <translation id="8149426793427495338">ඔබේ පරිගණකය නින්දට ගියේය.</translation>
 <translation id="8150722005171944719"><ph name="URL" /> හි ඇති ගොනුව කියවිය නොහැක. එය ඉවත් කර තිබීම, ගෙන යාම හෝ ගොනු අවසර ප්‍රවේශය වැලැක්වීම විය හැක.</translation>
 <translation id="8184538546369750125">ගෝලීය පෙරනිමිය භාවිතා කරන්න (ඉඩ දෙන්න)</translation>
@@ -210,7 +203,6 @@
 <translation id="8703575177326907206"><ph name="DOMAIN" /> වෙත ඔබගේ සම්බන්ධතාවය සංකේතනය නොවේ.</translation>
 <translation id="8740359287975076522"><ph name="HOST_NAME" />ගේ &lt;abbr id="dnsDefinition"&gt;ව.නා.ප. ලිපිනය&lt;/abbr&gt; හමු නොවිණි. ගැටලුව සොයමින්.</translation>
 <translation id="8820817407110198400">පොත්යොමු</translation>
-<translation id="8940028675168378100"><ph name="BLOCKER_NAME" /> මගින් අවහිරයි</translation>
 <translation id="8963117664422609631">අඩවි සැකසීම් වෙත යන්න</translation>
 <translation id="8975012916872825179">දුරකථන අංක, ඊමේල් ලිපින සහ නැව්ගත කිරීමේ ලිපින වැනි තොරතුරු ඇතුළත් වේ</translation>
 <translation id="9001074447101275817">ප්‍රොක්සි <ph name="DOMAIN" /> සඳහා පරිශීලක නාමයක් සහ මුරපදයක් අවශ්‍ය වේ.</translation>
@@ -222,7 +214,6 @@
 <translation id="9073799351042754113">ඔබ මෙම අඩවිය සඳහා ආරක්ෂක අනතුරු ඇඟවීම් අක්‍රිය කිරීමට තෝරාගෙන ඇත.</translation>
 <translation id="9168814207360376865">ඔබ ගෙවීම් ක්‍රම සුරකින ලදදැයි පරීක්ෂා කිරීමට අඩවි වලට ඉඩ දෙන්න.</translation>
 <translation id="9169664750068251925">සැමවිට මෙම අඩවියේ අවහිර කරන්න</translation>
-<translation id="9180553614777056266">දැන්වීම් අවහිරකය</translation>
 <translation id="9183425211371246419"><ph name="HOST_NAME" /> සහාය නොදක්වන කෙටුම්පතක් භාවිතා කරයි.</translation>
 <translation id="936602727769022409">ඔබට ඔබගේ Google ගිණුමට ප්‍රවේශය අහිමි විය හැක. Chromium දැන් ඔබගේ මුරපදය වෙනස් කිරීම නිර්දේශ කරයි. පුරනය වීමට ඔබෙන් අසනු ඇත.</translation>
 <translation id="969892804517981540">නිල ගොඩනැගීම</translation>

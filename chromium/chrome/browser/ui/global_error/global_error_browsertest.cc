@@ -16,9 +16,10 @@
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/extensions/extension_disabled_ui.h"
 #include "chrome/browser/extensions/extension_error_controller.h"
-#include "chrome/browser/extensions/extension_error_ui_default.h"
+#include "chrome/browser/extensions/extension_error_ui_desktop.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/extensions/external_install_error.h"
+#include "chrome/browser/extensions/external_provider_manager.h"
 #include "chrome/browser/extensions/test_blocklist.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/recovery/recovery_install_global_error.h"
@@ -136,8 +137,7 @@ void GlobalErrorBubbleTest::ShowUi(const std::string& name) {
 
   if (name == "ExtensionDisabledGlobalError") {
     GlobalErrorWaiter waiter(profile);
-    extensions::AddExtensionDisabledError(extension_service,
-                                          test_extension.get(), false);
+    extensions::AddExtensionDisabledError(profile, test_extension.get(), false);
     waiter.Wait();
     ShowPendingError(browser());
   } else if (name == "ExtensionWithLongNameDisabledGlobalError") {
@@ -149,15 +149,13 @@ void GlobalErrorBubbleTest::ShowUi(const std::string& name) {
     extension_service->AddExtension(long_name_extension.get());
 
     GlobalErrorWaiter waiter(profile);
-    extensions::AddExtensionDisabledError(extension_service,
-                                          long_name_extension.get(),
+    extensions::AddExtensionDisabledError(profile, long_name_extension.get(),
                                           /*is_remote_install=*/false);
     waiter.Wait();
     ShowPendingError(browser());
   } else if (name == "ExtensionDisabledGlobalErrorRemote") {
     GlobalErrorWaiter waiter(profile);
-    extensions::AddExtensionDisabledError(extension_service,
-                                          test_extension.get(), true);
+    extensions::AddExtensionDisabledError(profile, test_extension.get(), true);
     waiter.Wait();
     ShowPendingError(browser());
   } else if (name == "ExtensionGlobalError") {
@@ -198,13 +196,16 @@ void GlobalErrorBubbleTest::ShowUi(const std::string& name) {
         &temp_dir, "update_from_webstore", "update_from_webstore.pem");
 
     GlobalErrorWaiter waiter(profile);
+    extensions::ExternalProviderManager* external_provider_manager =
+        extensions::ExternalProviderManager::Get(profile);
     auto provider = std::make_unique<extensions::MockExternalProvider>(
-        extension_service, extensions::mojom::ManifestLocation::kExternalPref);
+        external_provider_manager,
+        extensions::mojom::ManifestLocation::kExternalPref);
     extensions::MockExternalProvider* provider_ptr = provider.get();
-    extension_service->AddProviderForTesting(std::move(provider));
+    external_provider_manager->AddProviderForTesting(std::move(provider));
     provider_ptr->UpdateOrAddExtension(kExtensionWithUpdateUrl, "1.0.0.0",
                                        crx_path);
-    extension_service->CheckForExternalUpdates();
+    external_provider_manager->CheckForExternalUpdates();
 
     // ExternalInstallError::OnDialogReady() adds the error and shows the dialog
     // immediately.

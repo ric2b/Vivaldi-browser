@@ -37,9 +37,6 @@ struct TabInfo {
   TabType type = TabType::NOT_SET;
 };
 
-
-bool ResolveTab(content::WebContents *, TabInfo *);
-bool ResolveTab(int tab_id, TabInfo *);
 bool IsPanel(TabType type);
 bool IsPage(TabType type);
 bool IsWidget(TabType type);

@@ -118,9 +118,10 @@ base::Value::List GetPublicSessionLocales(
 
   // Construct the list of available locales. This list consists of the
   // recommended locales, followed by all others.
-  auto available_locales =
-      GetUILanguageList(&recommended_locales, std::string(),
-                        input_method::InputMethodManager::Get());
+  // TODO(crbug.com/404133029): Remove g_browser_process usage.
+  auto available_locales = GetUILanguageList(
+      g_browser_process->GetApplicationLocale(), &recommended_locales,
+      std::string(), input_method::InputMethodManager::Get());
 
   // Select the the first recommended locale that is actually available or the
   // current UI locale if none of them are available.
@@ -161,7 +162,7 @@ bool IsSigninToAdd() {
 
 bool CanRemoveUser(const user_manager::User* user) {
   const bool is_single_user =
-      user_manager::UserManager::Get()->GetUsers().size() == 1;
+      user_manager::UserManager::Get()->GetPersistedUsers().size() == 1;
 
   // Single user check here is necessary because owner info might not be
   // available when running into login screen on first boot.

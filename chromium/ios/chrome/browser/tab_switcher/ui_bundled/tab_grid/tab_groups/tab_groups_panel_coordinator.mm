@@ -9,6 +9,7 @@
 #import "components/saved_tab_groups/public/tab_group_sync_service.h"
 #import "ios/chrome/browser/collaboration/model/collaboration_service_factory.h"
 #import "ios/chrome/browser/collaboration/model/messaging/messaging_backend_service_factory.h"
+#import "ios/chrome/browser/data_sharing/model/data_sharing_service_factory.h"
 #import "ios/chrome/browser/favicon/model/ios_chrome_favicon_loader_factory.h"
 #import "ios/chrome/browser/policy/model/policy_util.h"
 #import "ios/chrome/browser/saved_tab_groups/model/ios_tab_group_action_context.h"
@@ -66,7 +67,7 @@ using collaboration::messaging::MessagingBackendServiceFactory;
 - (void)start {
   [super start];
 
-  ProfileIOS* profile = self.browser->GetProfile();
+  ProfileIOS* profile = self.profile;
   _gridContainerViewController = [[GridContainerViewController alloc] init];
 
   BOOL regularModeDisabled = IsIncognitoModeForced(profile->GetPrefs());
@@ -81,14 +82,23 @@ using collaboration::messaging::MessagingBackendServiceFactory;
     _gridContainerViewController.containedViewController = _gridViewController;
   }
 
+  tab_groups::TabGroupSyncService* tabGroupSyncService =
+      tab_groups::TabGroupSyncServiceFactory::GetForProfile(profile);
+  ShareKitService* shareKitService =
+      ShareKitServiceFactory::GetForProfile(profile);
+  collaboration::CollaborationService* collaborationService =
+      collaboration::CollaborationServiceFactory::GetForProfile(profile);
+  collaboration::messaging::MessagingBackendService* messagingService =
+      MessagingBackendServiceFactory::GetForProfile(profile);
+  data_sharing::DataSharingService* dataSharingService =
+      data_sharing::DataSharingServiceFactory::GetForProfile(profile);
+
   _mediator = [[TabGroupsPanelMediator alloc]
-      initWithTabGroupSyncService:tab_groups::TabGroupSyncServiceFactory::
-                                      GetForProfile(profile)
-                  shareKitService:ShareKitServiceFactory::GetForProfile(profile)
-             collaborationService:CollaborationServiceFactory::GetForProfile(
-                                      profile)
-                 messagingService:MessagingBackendServiceFactory::GetForProfile(
-                                      profile)
+      initWithTabGroupSyncService:tabGroupSyncService
+                  shareKitService:shareKitService
+             collaborationService:collaborationService
+                 messagingService:messagingService
+               dataSharingService:dataSharingService
               regularWebStateList:self.browser->GetWebStateList()
                     faviconLoader:IOSChromeFaviconLoaderFactory::GetForProfile(
                                       profile)
@@ -138,16 +148,15 @@ using collaboration::messaging::MessagingBackendServiceFactory;
 - (void)tabGroupsPanelMediator:(TabGroupsPanelMediator*)tabGroupsPanelMediator
            openGroupWithSyncID:(const base::Uuid&)syncID {
   tab_groups::TabGroupSyncService* tabGroupSyncService =
-      tab_groups::TabGroupSyncServiceFactory::GetForProfile(
-          self.browser->GetProfile());
+      tab_groups::TabGroupSyncServiceFactory::GetForProfile(self.profile);
   tabGroupSyncService->OpenTabGroup(
       syncID,
       std::make_unique<tab_groups::IOSTabGroupActionContext>(self.browser));
 }
 
 - (void)tabGroupsPanelMediator:(TabGroupsPanelMediator*)tabGroupsPanelMediator
-    showDeleteConfirmationWithSyncID:(const base::Uuid)syncID
-                          sourceView:(UIView*)sourceView {
+    showDeleteGroupConfirmationWithSyncID:(const base::Uuid)syncID
+                               sourceView:(UIView*)sourceView {
   _tabGroupConfirmationCoordinator = [[TabGroupConfirmationCoordinator alloc]
       initWithBaseViewController:self.baseViewController
                          browser:self.browser
@@ -161,11 +170,61 @@ using collaboration::messaging::MessagingBackendServiceFactory;
   [_tabGroupConfirmationCoordinator start];
 }
 
+- (void)tabGroupsPanelMediator:(TabGroupsPanelMediator*)tabGroupsPanelMediator
+    showDeleteSharedGroupConfirmationWithSyncID:(const base::Uuid)syncID
+                                     groupTitle:(NSString*)groupTitle
+                                     sourceView:(UIView*)sourceView {
+  _tabGroupConfirmationCoordinator = [[TabGroupConfirmationCoordinator alloc]
+      initWithBaseViewController:self.baseViewController
+                         browser:self.browser
+                      actionType:TabGroupActionType::kDeleteSharedTabGroup
+                      sourceView:sourceView];
+  _tabGroupConfirmationCoordinator.tabGroupName = groupTitle;
+  __weak TabGroupsPanelCoordinator* weakSelf = self;
+  _tabGroupConfirmationCoordinator.primaryAction = ^{
+    [weakSelf deleteSharedTabGroup:syncID];
+  };
+
+  [_tabGroupConfirmationCoordinator start];
+}
+
+- (void)tabGroupsPanelMediator:(TabGroupsPanelMediator*)tabGroupsPanelMediator
+    showLeaveSharedGroupConfirmationWithSyncID:(const base::Uuid)syncID
+                                    groupTitle:(NSString*)groupTitle
+                                    sourceView:(UIView*)sourceView {
+  _tabGroupConfirmationCoordinator = [[TabGroupConfirmationCoordinator alloc]
+      initWithBaseViewController:self.baseViewController
+                         browser:self.browser
+                      actionType:TabGroupActionType::kLeaveSharedTabGroup
+                      sourceView:sourceView];
+  _tabGroupConfirmationCoordinator.tabGroupName = groupTitle;
+  __weak TabGroupsPanelCoordinator* weakSelf = self;
+  _tabGroupConfirmationCoordinator.primaryAction = ^{
+    [weakSelf leaveSharedTabGroup:syncID];
+  };
+
+  [_tabGroupConfirmationCoordinator start];
+}
+
 #pragma mark - Private
 
 // Deletes a synced tab group and dismisses the confirmation coordinator.
 - (void)deleteSyncedTabGroup:(const base::Uuid&)syncID {
   [_mediator deleteSyncedTabGroup:syncID];
+  [_tabGroupConfirmationCoordinator stop];
+  _tabGroupConfirmationCoordinator = nil;
+}
+
+// Deletes a shared tab group and dismisses the confirmation coordinator.
+- (void)deleteSharedTabGroup:(const base::Uuid&)syncID {
+  [_mediator deleteSharedTabGroup:syncID];
+  [_tabGroupConfirmationCoordinator stop];
+  _tabGroupConfirmationCoordinator = nil;
+}
+
+// Leaves a shared tab group and dismisses the confirmation coordinator.
+- (void)leaveSharedTabGroup:(const base::Uuid&)syncID {
+  [_mediator leaveSharedTabGroup:syncID];
   [_tabGroupConfirmationCoordinator stop];
   _tabGroupConfirmationCoordinator = nil;
 }

@@ -185,6 +185,11 @@ class MockAutocompleteProviderClient
   MOCK_METHOD0(OpenIncognitoClearBrowsingDataDialog, void());
   MOCK_METHOD0(CloseIncognitoWindows, void());
   MOCK_METHOD0(PromptPageTranslation, void());
+  MOCK_METHOD1(OpenLensOverlay, void(bool));
+  MOCK_METHOD3(IssueContextualSearchRequest,
+               void(const GURL& destination_url,
+                    AutocompleteMatchType::Type match_type,
+                    bool is_zero_prefix_suggestion));
 
  private:
   network::TestURLLoaderFactory test_url_loader_factory_;

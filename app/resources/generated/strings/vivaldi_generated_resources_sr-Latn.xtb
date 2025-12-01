@@ -13,7 +13,7 @@
 <translation id="1165039591588034296">Greška</translation>
 <translation id="1175364870820465910">&amp;Odštampaj...</translation>
 <translation id="1181037720776840403">Ukloni</translation>
-<translation id="1184037892196730210">Nije moguće prebacivanje ekrana</translation>
+<translation id="1184037892196730210">Nije moguće prebacivanje ekrana</translation>
 <translation id="1187722533808055681">Aktiviranja iz stanja mirovanja</translation>
 <translation id="122082903575839559">Algoritam potpisa sertifikata</translation>
 <translation id="1221825588892235038">Samo izabrani sadržaj</translation>
@@ -38,7 +38,7 @@
 <translation id="1601560923496285236">Primeni</translation>
 <translation id="1603914832182249871">(Privatno)</translation>
 <translation id="1627276047960621195">Deskriptori datoteka</translation>
-<translation id="1654713139320245449">Nije pronađeno nijedno odredište za prebacivanje. Potrebna vam je pomoć?</translation>
+<translation id="1654713139320245449">Nije pronađeno nijedno odredište za prebacivanje. Potrebna vam je pomoć?</translation>
 <translation id="166278006618318542">Algoritam javnog ključa subjekta</translation>
 <translation id="1682548588986054654">Novi privatni prozor</translation>
 <translation id="1708338024780164500">(Neaktivno)</translation>
@@ -130,7 +130,7 @@
 <translation id="3124111068741548686">USER regulatori</translation>
 <translation id="3129173833825111527">Leva margina</translation>
 <translation id="3144647712221361880">Otvori vezu kao</translation>
-<translation id="3222066309010235055">Pretprikazivanje: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
+<translation id="3222066309010235055">Prerenderovanje: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
 <translation id="3241680850019875542">Izaberite osnovni direktorijum proširenja koji ćete upakovati. Da biste ažurirali proširenje, izaberite i datoteku privatnog ključa za ponovno korišćenje.</translation>
 <translation id="3275778913554317645">Otvori kao prozor</translation>
 <translation id="3280237271814976245">&amp;Sačuvaj kao...</translation>
@@ -170,6 +170,7 @@
 <translation id="3838085852053358637">Učitavanje proširenja nije uspelo</translation>
 <translation id="383891835335927981">Nijedan sajt nije uvećan ili umanjen</translation>
 <translation id="385051799172605136">Nazad</translation>
+<translation id="3858860766373142691">Ime</translation>
 <translation id="3861977424605124250">Prikaži pri pokretanju</translation>
 <translation id="3867944738977021751">Polja sertifikata</translation>
 <translation id="3905761538810670789">Popravi aplikaciju</translation>
@@ -279,7 +280,7 @@
 <translation id="5582839680698949063">Glavni meni</translation>
 <translation id="5614553682702429503">Sačuvati lozinku?</translation>
 <translation id="5623842676595125836">Evidencija</translation>
-<translation id="5624959475330585145">Pitaj pre korišćenja nebezbednih veza</translation>
+<translation id="5624959475330585145">Pitaj pre korišćenja nebezbednih veza</translation>
 <translation id="5638309510554459422">Pronađite proširenja i teme u <ph name="BEGIN_LINK" />Chrome veb prodavnici<ph name="END_LINK" /></translation>
 <translation id="5677928146339483299">Blokirano</translation>
 <translation id="5707185214361380026">Neuspešno učitavanje proširenja iz:</translation>
@@ -369,7 +370,7 @@
 <translation id="7287143125007575591">Pristup je odbijen.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" />x<ph name="VERTICAL_DPI" /> tpi</translation>
 <translation id="7339785458027436441">Proveri pravopis tokom kucanja</translation>
-<translation id="7359680654975233185">Nije moguće prebacivanje kartice</translation>
+<translation id="7359680654975233185">Nije moguće prebacivanje kartice</translation>
 <translation id="7385854874724088939">Došlo je do greške pri pokušaju štampanja. Proverite štampač i pokušajte ponovo.</translation>
 <translation id="7412226954991670867">GPU memorija</translation>
 <translation id="7421925624202799674">&amp;Prikaži izvor stranice</translation>
@@ -383,7 +384,7 @@
 <translation id="7661259717474717992">Dozvoli sajtovima da čuvaju i čitaju podatke kolačića</translation>
 <translation id="7663719505383602579">Prijemnik: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7684212569183643648">Instalirao administrator</translation>
-<translation id="7685038817958445325">Nije moguće prebacivanje</translation>
+<translation id="7685038817958445325">Nije moguće prebacivanje</translation>
 <translation id="7685049629764448582">JavaScript memorija</translation>
 <translation id="7701869757853594372">USER regulatori</translation>
 <translation id="7704305437604973648">Zadatak</translation>
@@ -415,6 +416,10 @@ Datoteka ključa: <ph name="KEY_FILE" />
 <translation id="8004582292198964060">Pregledač</translation>
 <translation id="8018313076035239964">Kontrolišu koje informacije veb sajtovi mogu da koriste i koji sadržaj mogu da vam prikazuju</translation>
 <translation id="8071432093239591881">Odštampaj kao sliku</translation>
+<translation id="8118448640060360549">{EXTENSIONS_COUNT, plural,
+        =1 {# obeleživač}
+        few {# obeleživača}
+        other {# obeleživača}}</translation>
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" />kB</translation>
 <translation id="8212008074015601248">{NUM_DOWNLOAD,plural,
 =1 {Preuzimanje je u toku} one {Preuzimanja su u toku} few {Preuzimanja su u toku} other {Preuzimanja su u toku}}</translation>

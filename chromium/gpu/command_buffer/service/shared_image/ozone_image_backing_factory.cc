@@ -11,7 +11,6 @@
 #include "base/memory/scoped_refptr.h"
 #include "build/build_config.h"
 #include "build/chromecast_buildflags.h"
-#include "build/chromeos_buildflags.h"
 #include "components/viz/common/resources/shared_image_format_utils.h"
 #include "gpu/command_buffer/common/shared_image_usage.h"
 #include "gpu/command_buffer/service/dawn_context_provider.h"
@@ -191,8 +190,10 @@ std::unique_ptr<SharedImageBacking> OzoneImageBackingFactory::CreateSharedImage(
     SkAlphaType alpha_type,
     SharedImageUsageSet usage,
     std::string debug_label,
+    bool is_thread_safe,
     gfx::GpuMemoryBufferHandle handle) {
   DCHECK_EQ(handle.type, gfx::NATIVE_PIXMAP);
+  CHECK(!is_thread_safe);
 
   scoped_refptr<gfx::NativePixmap> pixmap;
 

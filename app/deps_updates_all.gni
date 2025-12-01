@@ -13,6 +13,12 @@ update_target("//components/bookmarks/browser:browser") {
 }
 
 if (is_ios) {
+  update_target("//ios/chrome/app/strings:strings") {
+    public_deps += [
+      "//vivaldi/app:vivaldi_ios_native_strings",
+    ]
+  }
+
   update_target("//ios/chrome/app/resources:packed_resources") {
     public_deps += [
       "//vivaldi/app:vivaldi_native_strings",

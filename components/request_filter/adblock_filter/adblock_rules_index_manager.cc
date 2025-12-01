@@ -56,7 +56,7 @@ std::string GetRuleBufferFromFile(const base::FilePath& buffer_path,
 
   auto buffer =
       base::span(reinterpret_cast<const uint8_t*>(buffer_contents.data()),
-                      buffer_contents.size());
+                 buffer_contents.size());
 
   // Copy of the default values taken by the flatbuffers::Verifier constructor
   constexpr int kFlatBufferVerifierDefaultMaxDepth = 64;
@@ -110,8 +110,7 @@ RulesIndexManager::RulesIndexManager(
       rules_index_change_callback_(rules_index_change_callback),
       rules_index_loaded_callback_(rules_index_loaded_callback),
       rule_buffer_read_fail_callback_(rule_buffer_read_fail_callback),
-      file_task_runner_(file_task_runner),
-      weak_factory_(this) {
+      file_task_runner_(file_task_runner) {
   rule_service->GetRuleManager()->AddObserver(this);
 
   for (const auto& [rule_source_id, rule_source] : rule_sources_) {

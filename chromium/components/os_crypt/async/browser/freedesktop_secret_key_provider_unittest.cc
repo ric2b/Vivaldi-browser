@@ -15,7 +15,6 @@
 #include "build/branding_buildflags.h"
 #include "components/dbus/properties/types.h"
 #include "components/dbus/utils/name_has_owner.h"
-#include "crypto/encryptor.h"
 #include "dbus/message.h"
 #include "dbus/mock_bus.h"
 #include "dbus/mock_object_proxy.h"
@@ -246,9 +245,9 @@ TEST(FreedesktopSecretKeyProviderTest, BasicHappyPath) {
   std::optional<Encryptor::Key> key;
   provider.GetKey(base::BindLambdaForTesting(
       [&](const std::string& returned_tag,
-          std::optional<Encryptor::Key> returned_key) {
+          base::expected<Encryptor::Key, KeyProvider::KeyError> returned_key) {
         tag = returned_tag;
-        key = std::move(returned_key);
+        key = std::move(returned_key.value());
       }));
   EXPECT_EQ(tag, "v11");
   EXPECT_TRUE(key.has_value());
@@ -479,9 +478,9 @@ TEST(FreedesktopSecretKeyProviderTest,
   std::optional<Encryptor::Key> key;
   provider.GetKey(base::BindLambdaForTesting(
       [&](const std::string& returned_tag,
-          std::optional<Encryptor::Key> returned_key) {
+          base::expected<Encryptor::Key, KeyProvider::KeyError> returned_key) {
         tag = returned_tag;
-        key = std::move(returned_key);
+        key = std::move(returned_key.value());
       }));
 
   EXPECT_EQ(tag, "v11");
@@ -677,9 +676,9 @@ TEST(FreedesktopSecretKeyProviderTest, MigrateFromKWallet) {
   std::optional<Encryptor::Key> key;
   provider.GetKey(base::BindLambdaForTesting(
       [&](const std::string& returned_tag,
-          std::optional<Encryptor::Key> returned_key) {
+          base::expected<Encryptor::Key, KeyProvider::KeyError> returned_key) {
         tag = returned_tag;
-        key = std::move(returned_key);
+        key = std::move(returned_key.value());
       }));
 
   EXPECT_EQ(tag, "v11");

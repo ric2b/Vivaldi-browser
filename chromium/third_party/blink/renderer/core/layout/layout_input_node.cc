@@ -5,6 +5,7 @@
 #include "third_party/blink/renderer/core/layout/layout_input_node.h"
 
 #include "third_party/blink/renderer/core/core_export.h"
+#include "third_party/blink/renderer/core/dom/shadow_root.h"
 #include "third_party/blink/renderer/core/html/forms/html_input_element.h"
 #include "third_party/blink/renderer/core/html/shadow/shadow_element_utils.h"
 #include "third_party/blink/renderer/core/input_type_names.h"
@@ -65,7 +66,8 @@ void AppendNodeToString(const LayoutInputNode& node,
   } else if (auto* inline_node = DynamicTo<InlineNode>(node)) {
     const auto& items = inline_node->ItemsData(false).items;
     indent += 2;
-    for (const InlineItem& inline_item : items) {
+    for (const Member<InlineItem>& inline_item_ptr : items) {
+      const InlineItem& inline_item = *inline_item_ptr;
       BlockNode child_node(nullptr);
       if (auto* box = DynamicTo<LayoutBox>(inline_item.GetLayoutObject())) {
         child_node = BlockNode(box);
@@ -141,6 +143,58 @@ bool LayoutInputNode::IsPaginatedRoot() const {
   return view && view->IsFragmentationContextRoot();
 }
 
+bool LayoutInputNode::UseParentPercentageResolutionBlockSizeForChildren()
+    const {
+  if (!IsBlock()) {
+    return false;
+  }
+  auto* block = DynamicTo<LayoutBlock>(box_.Get());
+  if (!block) {
+    return false;
+  }
+
+  const ComputedStyle& style = Style();
+  const bool in_quirks_mode = GetDocument().InQuirksMode();
+  // Anonymous blocks should not impede percentage resolution on a child.
+  // Examples of such anonymous blocks are blocks wrapped around inlines that
+  // have block siblings (from the CSS spec) and multicol flow threads (an
+  // implementation detail). Another implementation detail, ruby columns, create
+  // anonymous inline-blocks, so skip those too. All other types of anonymous
+  // objects, such as table-cells, will be treated just as if they were
+  // non-anonymous.
+  if (block->IsAnonymous()) {
+    if (!in_quirks_mode && block->Parent() && block->Parent()->IsFieldset()) {
+      return false;
+    }
+    EDisplay display = style.Display();
+    return display == EDisplay::kBlock || display == EDisplay::kInlineBlock ||
+           display == EDisplay::kFlowRoot;
+  }
+
+  // For quirks mode, we skip most auto-height containing blocks when computing
+  // percentages.
+  if (!in_quirks_mode || !style.LogicalHeight().HasAuto()) {
+    return false;
+  }
+
+  const Node* node = GetDOMNode();
+  if (node->IsInUserAgentShadowRoot()) [[unlikely]] {
+    const Element* host = node->OwnerShadowHost();
+    if (const auto* input = DynamicTo<HTMLInputElement>(host)) {
+      // In web_tests/fast/forms/range/range-thumb-height-percentage.html, a
+      // percent height for the slider thumb element should refer to the height
+      // of the INPUT box.
+      if (input->FormControlType() == FormControlType::kInputRange) {
+        return true;
+      }
+    }
+  }
+
+  return !block->IsLayoutReplaced() && !block->IsTableCell() &&
+         !block->IsOutOfFlowPositioned() && !block->IsLayoutGrid() &&
+         !block->IsFlexibleBox() && !block->IsLayoutCustom();
+}
+
 BlockNode LayoutInputNode::ListMarkerBlockNodeIfListItem() const {
   if (auto* list_item = DynamicTo<LayoutListItem>(box_.Get())) {
     return BlockNode(DynamicTo<LayoutBox>(list_item->Marker()));
@@ -158,7 +212,7 @@ void LayoutInputNode::IntrinsicSize(
     return;
 
   const PhysicalNaturalSizingInfo legacy_sizing_info =
-      To<LayoutReplaced>(*box_).ComputeIntrinsicSizingInfo();
+      To<LayoutReplaced>(*box_).ComputeNaturalSizingInfo();
 
   std::optional<LayoutUnit> intrinsic_inline_size =
       legacy_sizing_info.has_width

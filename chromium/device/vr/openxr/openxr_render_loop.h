@@ -25,7 +25,6 @@
 #include "device/vr/public/mojom/xr_session.mojom.h"
 #include "device/vr/util/fps_meter.h"
 #include "device/vr/util/sliding_average.h"
-#include "device/vr/vr_device.h"
 #include "gpu/command_buffer/client/gles2_interface.h"
 #include "mojo/public/cpp/bindings/associated_receiver.h"
 #include "mojo/public/cpp/bindings/associated_remote.h"
@@ -293,6 +292,8 @@ class OpenXrRenderLoop : public XRThread,
   bool is_presenting_ = false;  // True if we have a presenting session.
   bool webxr_visible_ = true;   // The browser may hide a presenting session.
   bool overlay_visible_ = false;
+
+  std::optional<int16_t> delayed_get_frame_data_id_;
   base::OnceCallback<void()> delayed_get_frame_data_callback_;
 
   gfx::RectF left_webxr_bounds_;

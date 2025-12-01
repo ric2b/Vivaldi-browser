@@ -34,7 +34,7 @@ export function setVeDebuggingEnabled(enabled: boolean, inspect?: (query: string
   }
 }
 
-// @ts-ignore
+// @ts-expect-error
 globalThis.setVeDebuggingEnabled = setVeDebuggingEnabled;
 
 export function processForDebugging(loggable: Loggable): void {
@@ -126,7 +126,7 @@ function processElementForDebugging(element: HTMLElement, loggingState: LoggingS
   }
 }
 
-type EventType = 'Click'|'Drag'|'Hover'|'Change'|'KeyDown'|'Resize';
+type EventType = 'Click'|'Drag'|'Hover'|'Change'|'KeyDown'|'Resize'|'SettingAccess';
 export function processEventForDebugging(
     event: EventType, state: LoggingState|null, extraInfo?: EventAttributes): void {
   const format = localStorage.getItem('veDebugLoggingEnabled');
@@ -163,7 +163,9 @@ export function processEventForIntuitiveDebugging(
 
 export function processEventForTestDebugging(
     event: EventType, state: LoggingState|null, _extraInfo?: EventAttributes): void {
-  lastImpressionLogEntry = null;
+  if (event !== 'SettingAccess') {
+    lastImpressionLogEntry = null;
+  }
   maybeLogDebugEvent(
       {interaction: `${event}: ${veTestKeys.get(state?.veid || 0) || (state?.veid ? '<UNKNOWN>' : '')}`});
   checkPendingEventExpectation();
@@ -194,6 +196,9 @@ export interface EventAttributes {
   height?: number;
   mouseButton?: number;
   doubleClick?: boolean;
+  name?: string;
+  numericValue?: number;
+  stringValue?: string;
 }
 
 interface VisualElementAttributes {
@@ -376,7 +381,7 @@ export function debugString(config: LoggingConfig): string {
   return components.join('; ');
 }
 
-const veDebugEventsLog: (IntuitiveLogEntry|AdHocAnalysisLogEntry|TestLogEntry)[] = [];
+const veDebugEventsLog: Array<IntuitiveLogEntry|AdHocAnalysisLogEntry|TestLogEntry> = [];
 
 function maybeLogDebugEvent(entry: IntuitiveLogEntry|AdHocAnalysisLogEntry|TestLogEntry): void {
   const format = localStorage.getItem('veDebugLoggingEnabled');
@@ -429,7 +434,8 @@ function findVeDebugImpression(veid: number, includeAncestorChain?: boolean): In
 
 function fieldValuesForSql<T>(
     obj: T,
-    fields: {strings: readonly(keyof T)[], numerics: readonly(keyof T)[], booleans: readonly(keyof T)[]}): string {
+    fields: {strings: ReadonlyArray<keyof T>, numerics: ReadonlyArray<keyof T>, booleans: ReadonlyArray<keyof T>}):
+    string {
   return [
     ...fields.strings.map(f => obj[f] ? `"${obj[f]}"` : '$NullString'),
     ...fields.numerics.map(f => obj[f] ?? 'null'),
@@ -674,7 +680,8 @@ export async function expectVeEvents(expectedEvents: TestLogEntry[]): Promise<vo
   const {promise, resolve: success, reject: fail} = Promise.withResolvers<void>();
   pendingEventExpectation = {expectedEvents, success, fail};
   checkPendingEventExpectation();
-  setTimeout(() => {
+
+  const timeout = setTimeout(() => {
     if (pendingEventExpectation?.missingEvents) {
       pendingEventExpectation.fail(new Error(
           'Missing VE Events: ' +
@@ -683,7 +690,10 @@ export async function expectVeEvents(expectedEvents: TestLogEntry[]): Promise<vo
               .join('\n')));
     }
   }, EVENT_EXPECTATION_TIMEOUT);
-  return promise;
+
+  return await promise.finally(() => {
+    clearTimeout(timeout);
+  });
 }
 
 let numMatchedEvents = 0;
@@ -719,17 +729,17 @@ function getUnmatchedVeEvents(): string {
       .join('\n');
 }
 
-// @ts-ignore
+// @ts-expect-error
 globalThis.setVeDebugLoggingEnabled = setVeDebugLoggingEnabled;
-// @ts-ignore
+// @ts-expect-error
 globalThis.getUnmatchedVeEvents = getUnmatchedVeEvents;
-// @ts-ignore
+// @ts-expect-error
 globalThis.veDebugEventsLog = veDebugEventsLog;
-// @ts-ignore
+// @ts-expect-error
 globalThis.findVeDebugImpression = findVeDebugImpression;
-// @ts-ignore
+// @ts-expect-error
 globalThis.exportAdHocAnalysisLogForSql = exportAdHocAnalysisLogForSql;
-// @ts-ignore
+// @ts-expect-error
 globalThis.buildStateFlow = buildStateFlow;
-// @ts-ignore
+// @ts-expect-error
 globalThis.expectVeEvents = expectVeEvents;

@@ -1,4 +1,4 @@
-// Copyright 2025 The Chromium Authors
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -323,8 +323,9 @@ void WebAppCommandScheduler::ApplyPendingIsolatedWebAppUpdate(
     const IsolatedWebAppUrlInfo& url_info,
     std::unique_ptr<ScopedKeepAlive> optional_keep_alive,
     std::unique_ptr<ScopedProfileKeepAlive> optional_profile_keep_alive,
-    base::OnceCallback<void(
-        base::expected<void, IsolatedWebAppApplyUpdateCommandError>)> callback,
+    base::OnceCallback<
+        void(base::expected<IsolatedWebAppApplyUpdateCommandSuccess,
+                            IsolatedWebAppApplyUpdateCommandError>)> callback,
     const base::Location& call_location) {
   provider_->command_manager().ScheduleCommand(
       std::make_unique<IsolatedWebAppApplyUpdateCommand>(
@@ -642,13 +643,13 @@ void WebAppCommandScheduler::RunIconDiagnosticsForApp(
 }
 
 void WebAppCommandScheduler::InstallAppFromUrl(
-    const GURL& manifest_id,
     const GURL& install_url,
+    const std::optional<GURL>& manifest_id,
     WebInstallFromUrlCommandCallback installed_callback,
     const base::Location& location) {
   provider_->command_manager().ScheduleCommand(
-      std::make_unique<WebInstallFromUrlCommand>(profile_.get(), manifest_id,
-                                                 install_url,
+      std::make_unique<WebInstallFromUrlCommand>(profile_.get(), install_url,
+                                                 manifest_id,
                                                  std::move(installed_callback)),
       location);
 }

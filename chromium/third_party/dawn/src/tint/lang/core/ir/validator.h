@@ -28,10 +28,8 @@
 #ifndef SRC_TINT_LANG_CORE_IR_VALIDATOR_H_
 #define SRC_TINT_LANG_CORE_IR_VALIDATOR_H_
 
-#include <string>
-
 #include "src/tint/utils/containers/enum_set.h"
-#include "src/tint/utils/result/result.h"
+#include "src/tint/utils/result.h"
 
 // Forward declarations
 namespace tint::core::ir {
@@ -44,6 +42,8 @@ namespace tint::core::ir {
 enum class Capability : uint8_t {
     /// Allows 8-bit integer types.
     kAllow8BitIntegers,
+    /// Allows 64-bit integer types.
+    kAllow64BitIntegers,
     /// Allows ClipDistances on f32 parameters
     kAllowClipDistancesOnF32,
     /// Allows handle vars to not have binding points
@@ -60,6 +60,10 @@ enum class Capability : uint8_t {
     kAllowVectorElementPointer,
     /// Allows private address space variables in function scopes.
     kAllowPrivateVarsInFunctions,
+    /// Allows phony assignment instructions to be used.
+    kAllowPhonyInstructions,
+    /// Allows lets to have any type, used by MSL backend for module scoped vars
+    kAllowAnyLetType,
 };
 
 /// Capabilities is a set of Capability

@@ -12,19 +12,15 @@ import {type Target, Type} from './Target.js';
 
 export class SourceMapManager<T extends FrameAssociated> extends Common.ObjectWrapper.ObjectWrapper<EventTypes<T>> {
   readonly #target: Target;
-  #isEnabled: boolean;
-  readonly #clientData: Map<T, ClientData>;
-  readonly #sourceMaps: Map<SourceMap, T>;
-  #attachingClient: T|null;
+  #isEnabled = true;
+  readonly #clientData = new Map<T, ClientData>();
+  readonly #sourceMaps = new Map<SourceMap, T>();
+  #attachingClient: T|null = null;
 
   constructor(target: Target) {
     super();
 
     this.#target = target;
-    this.#isEnabled = true;
-    this.#attachingClient = null;
-    this.#clientData = new Map();
-    this.#sourceMaps = new Map();
   }
 
   setEnabled(isEnabled: boolean): void {
@@ -145,13 +141,11 @@ export class SourceMapManager<T extends FrameAssociated> extends Common.ObjectWr
   cancelAttachSourceMap(client: T): void {
     if (client === this.#attachingClient) {
       this.#attachingClient = null;
-    } else {
       // This should not happen.
-      if (this.#attachingClient) {
-        console.error('cancel attach source map requested but a different source map was being attached');
-      } else {
-        console.error('cancel attach source map requested but no source map was being attached');
-      }
+    } else if (this.#attachingClient) {
+      console.error('cancel attach source map requested but a different source map was being attached');
+    } else {
+      console.error('cancel attach source map requested but no source map was being attached');
     }
   }
 
@@ -174,13 +168,24 @@ export class SourceMapManager<T extends FrameAssociated> extends Common.ObjectWr
   }
 }
 
-async function loadSourceMap(
+export async function loadSourceMap(
     url: Platform.DevToolsPath.UrlString, initiator: PageResourceLoadInitiator): Promise<SourceMapV3> {
   try {
     const {content} = await PageResourceLoader.instance().loadResource(url, initiator);
     return parseSourceMap(content);
   } catch (cause) {
     throw new Error(`Could not load content for ${url}: ${cause.message}`, {cause});
+  }
+}
+
+export async function tryLoadSourceMap(
+    url: Platform.DevToolsPath.UrlString, initiator: PageResourceLoadInitiator): Promise<SourceMapV3|null> {
+  try {
+    const {content} = await PageResourceLoader.instance().loadResource(url, initiator);
+    return parseSourceMap(content);
+  } catch (cause) {
+    console.error(`Could not load content for ${url}: ${cause.message}`, {cause});
+    return null;
   }
 }
 

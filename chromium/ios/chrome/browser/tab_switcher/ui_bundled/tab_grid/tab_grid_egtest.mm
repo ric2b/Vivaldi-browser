@@ -22,6 +22,7 @@
 #import "ios/chrome/browser/history/ui_bundled/history_ui_constants.h"
 #import "ios/chrome/browser/metrics/model/metrics_app_interface.h"
 #import "ios/chrome/browser/optimization_guide/model/optimization_guide_test_app_interface.h"
+#import "ios/chrome/browser/popup_menu/ui_bundled/popup_menu_constants.h"
 #import "ios/chrome/browser/reading_list/ui_bundled/reading_list_app_interface.h"
 #import "ios/chrome/browser/recent_tabs/ui_bundled/recent_tabs_app_interface.h"
 #import "ios/chrome/browser/recent_tabs/ui_bundled/recent_tabs_constants.h"
@@ -33,8 +34,6 @@
 #import "ios/chrome/browser/tab_switcher/ui_bundled/tab_grid/grid/grid_constants.h"
 #import "ios/chrome/browser/tab_switcher/ui_bundled/tab_grid/tab_grid_constants.h"
 #import "ios/chrome/browser/tab_switcher/ui_bundled/test/tabs_egtest_util.h"
-#import "ios/chrome/browser/tabs/model/inactive_tabs/features.h"
-#import "ios/chrome/browser/ui/popup_menu/popup_menu_constants.h"
 #import "ios/chrome/common/ui/table_view/table_view_cells_constants.h"
 #import "ios/chrome/grit/ios_strings.h"
 #import "ios/chrome/test/earl_grey/chrome_actions.h"
@@ -465,7 +464,7 @@ void EchoURLDefaultSearchEngineResponseProvider::GetResponseHeadersAndBody(
 // there are inactive tabs but no regular tabs.
 - (void)testCloseAllAndUndoCloseAllWithInactiveTabs {
   [self loadTestURLsInNewTabs];
-  [self relaunchAppWithInactiveTabsEnabled];
+  [self relaunchAppWithInactiveTabsTestMode];
 
   [ChromeEarlGreyUI openTabGrid];
   GREYAssertEqual(1UL, [ChromeEarlGrey mainTabCount],
@@ -1455,7 +1454,8 @@ void EchoURLDefaultSearchEngineResponseProvider::GetResponseHeadersAndBody(
 }
 
 // Tests dragging a selection of tab grid items between windows.
-- (void)testDragAndDropSelectionBetweenWindows {
+// TODO(crbug.com/382632079): Fix flakyness.
+- (void)FLAKY_testDragAndDropSelectionBetweenWindows {
   if (![ChromeEarlGrey areMultipleWindowsSupported]) {
     EARL_GREY_TEST_SKIPPED(@"Multiple windows can't be opened.");
   }
@@ -3223,7 +3223,7 @@ void EchoURLDefaultSearchEngineResponseProvider::GetResponseHeadersAndBody(
 // at each step.
 - (void)testSearchHeaderWithInactiveTabs {
   [self loadTestURLsInNewTabs];
-  [self relaunchAppWithInactiveTabsEnabled];
+  [self relaunchAppWithInactiveTabsTestMode];
 
   [ChromeEarlGreyUI openTabGrid];
   GREYAssertEqual(1UL, [ChromeEarlGrey mainTabCount],
@@ -3530,7 +3530,7 @@ void EchoURLDefaultSearchEngineResponseProvider::GetResponseHeadersAndBody(
 
 // Ensures that when users tap on a tab from tab search result and this tab is
 // in another window currently displaying tab grid, the tab is opened.
-- (void)testOpenSearchedTabFromAnotherWindowWhenTabGrisIsVisible {
+- (void)testOpenSearchedTabFromAnotherWindowWhenTabGridIsVisible {
   if (![ChromeEarlGrey areMultipleWindowsSupported]) {
     EARL_GREY_TEST_DISABLED(@"Multiple windows can't be opened.");
   }
@@ -3779,11 +3779,11 @@ void EchoURLDefaultSearchEngineResponseProvider::GetResponseHeadersAndBody(
   [RecentTabsAppInterface clearCollapsedListViewSectionStates];
 }
 
-// Relaunches the app with Inactive Tabs enabled.
-- (void)relaunchAppWithInactiveTabsEnabled {
+// Relaunches the app with Inactive Tabs in test mode (i.e. considers tabs as
+// inactive immediately).
+- (void)relaunchAppWithInactiveTabsTestMode {
   AppLaunchConfiguration config;
   config.relaunch_policy = ForceRelaunchByCleanShutdown;
-  config.features_enabled.push_back(kInactiveTabsIPadFeature);
   config.additional_args.push_back("-InactiveTabsTestMode");
   config.additional_args.push_back("true");
   [[AppLaunchManager sharedManager] ensureAppLaunchedWithConfiguration:config];

@@ -28,7 +28,7 @@ public class TabBrowserControlsConstraintsHelper implements UserData {
             TabBrowserControlsConstraintsHelper.class;
 
     private final TabImpl mTab;
-    private final Callback<Integer> mConstraintsChangedCallback;
+    private final Callback<@BrowserControlsState Integer> mConstraintsChangedCallback;
 
     private long mNativeTabBrowserControlsConstraintsHelper; // Lazily initialized in |update|
     private BrowserControlsVisibilityDelegate mVisibilityDelegate;
@@ -62,10 +62,12 @@ public class TabBrowserControlsConstraintsHelper implements UserData {
     /**
      * Returns the constraints delegate for a particular tab. The returned supplier will always be
      * associated with that tab, even if it stops being the active tab.
+     *
      * @param tab Tab whose browser controls state is looked into.
      * @return Observable supplier for the current visibility constraints.
      */
-    public static ObservableSupplier<Integer> getObservableConstraints(Tab tab) {
+    public static @Nullable ObservableSupplier<@BrowserControlsState Integer>
+            getObservableConstraints(Tab tab) {
         if (tab == null) {
             return null;
         }
@@ -176,6 +178,7 @@ public class TabBrowserControlsConstraintsHelper implements UserData {
     public void destroy() {
         if (mVisibilityDelegate != null) {
             mVisibilityDelegate.removeObserver(mConstraintsChangedCallback);
+            mVisibilityDelegate.destroy();
             mVisibilityDelegate = null;
         }
 
@@ -190,6 +193,7 @@ public class TabBrowserControlsConstraintsHelper implements UserData {
     private void updateVisibilityDelegate() {
         if (mVisibilityDelegate != null) {
             mVisibilityDelegate.removeObserver(mConstraintsChangedCallback);
+            mVisibilityDelegate.destroy();
         }
         mVisibilityDelegate =
                 mTab.getDelegateFactory().createBrowserControlsVisibilityDelegate(mTab);
@@ -238,23 +242,14 @@ public class TabBrowserControlsConstraintsHelper implements UserData {
 
         boolean isNewStateForced = isStateForced(constraints);
         if (!mOffsetTagsInfo.hasTags() && !isNewStateForced) {
-            OffsetTag topControlsOffsetTag = null;
             OffsetTag bottomControlsOffsetTag = null;
-
-            if (ChromeFeatureList.sBcivZeroBrowserFrames.isEnabled()) {
-                // Create 2 tags so the top controls can move separately from other views so that
-                // renderer+viz can correctly control the visibility of the toolbar hairline without
-                // additional browser frames.
-                topControlsOffsetTag = OffsetTag.createRandom();
-            }
-
             if (ChromeFeatureList.sBcivBottomControls.isEnabled()) {
                 bottomControlsOffsetTag = OffsetTag.createRandom();
             }
 
             updateOffsetTags(
                     new BrowserControlsOffsetTagsInfo(
-                            topControlsOffsetTag,
+                            OffsetTag.createRandom(),
                             OffsetTag.createRandom(),
                             bottomControlsOffsetTag),
                     constraints);

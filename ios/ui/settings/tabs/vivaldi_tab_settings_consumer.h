@@ -28,9 +28,6 @@
 // Updates the new tab setting state
 - (void)setPreferenceForVivaldiNTPType:(VivaldiNTPType)setting
                                withURL:(NSString*)url;
-@optional
-// Updates the state with the show inactive tabs preference value.
-- (void)setPreferenceForShowInactiveTabs:(BOOL)showInactiveTabs;
 @end
 
 #endif  // IOS_UI_SETTINGS_TABS_VIVALDI_TAB_SETTINGS_CONSUMER_H_

@@ -15,6 +15,7 @@
 #ifndef CORE_INTERNAL_MEDIUMS_BLE_V2_H_
 #define CORE_INTERNAL_MEDIUMS_BLE_V2_H_
 
+#include <cstdint>
 #include <memory>
 #include <string>
 #include <utility>
@@ -32,6 +33,7 @@
 #include "connections/implementation/mediums/ble_v2/discovered_peripheral_tracker.h"
 #include "connections/implementation/mediums/ble_v2/instant_on_lost_manager.h"
 #include "connections/implementation/mediums/bluetooth_radio.h"
+#include "connections/implementation/pcp.h"
 #include "connections/power_level.h"
 #include "internal/platform/ble_v2.h"
 #include "internal/platform/bluetooth_adapter.h"
@@ -60,6 +62,18 @@ class BleV2 final {
   using AcceptedConnectionCallback = absl::AnyInvocable<void(
       BleV2Socket socket, const std::string& service_id)>;
 
+  // Callback that is invoked when a new l2cap connection is accepted.
+  using AcceptedL2capConnectionCallback = absl::AnyInvocable<void(
+      BleL2capSocket socket, const std::string& service_id)>;
+
+  // The type of the BLE advertising. In current implementation, we don't
+  // support multiple advertising types on a Medium instance.
+  enum class AdvertisingType : int {
+    kRegular = 0,
+    kFast = 1,
+    kDct = 2,
+  };
+
   explicit BleV2(BluetoothRadio& bluetooth_radio);
   ~BleV2();
 
@@ -70,15 +84,14 @@ class BleV2 final {
   // supports it.
   //
   // service_id            - The service ID to track.
+  // power_level           - The power level to use for the advertisement.
+  // advertising_type      - The type of the BLE advertisement.
   // advertisement_bytes   - The connections BLE Advertisement used in
   //                         advertising.
-  // power_level           - The power level to use for the advertisement.
-  // is_fast_advertisement - True to use fast advertisements, which are smaller
-  //                         but much more efficient to discover.
   ErrorOr<bool> StartAdvertising(const std::string& service_id,
-                                 const ByteArray& advertisement_bytes,
                                  PowerLevel power_level,
-                                 bool is_fast_advertisement)
+                                 AdvertisingType advertising_type,
+                                 const ByteArray& advertisement_bytes)
       ABSL_LOCKS_EXCLUDED(mutex_);
 
   // Disables BLE advertising.
@@ -99,20 +112,32 @@ class BleV2 final {
       ABSL_LOCKS_EXCLUDED(mutex_);
 
   // (TODO:hais) update this after ble_v2 async api refactor.
-  // Stop Ble advertising with dummy bytes for legagy device.
+  // Stop Ble advertising with dummy bytes for legacy device.
   bool StopLegacyAdvertising(const std::string& service_id)
       ABSL_LOCKS_EXCLUDED(mutex_);
+
+  // Adds an alternative BLE service UUID16s for a given Nearby service
+  // id. If a device does not support BLE extended advertisements, an alternate
+  // service UUID16 may be used to trigger a GATT connection to retrieve GATT
+  // characteristics for the Nearby service
+  // These alternate uuids are active until the next call to `StopScanning`.
+  void AddAlternateUuidForService(
+      uint16_t uuid, const std::string& service_id);
 
   // Enables BLE scanning for a service ID. Will report any discoverable
   // advertisement data through a callback.
   // Returns true, if the scanning is successfully enabled, false otherwise.
   //
   // service_id  - The service ID to track.
+  // pcp         - The PCP to use for the discovery.
   // power_level - The power level to use for the discovery.
+  // include_dct_advertisement - Whether to include the dct advertisement in
+  //                              the discovery. it is false by default.
   // discovered_peripheral_callback - The callback to invoke for discovery
   //                                  events.
-  ErrorOr<bool> StartScanning(const std::string& service_id,
+  ErrorOr<bool> StartScanning(const std::string& service_id, Pcp pcp,
                               PowerLevel power_level,
+                              bool include_dct_advertisement,
                               DiscoveredPeripheralCallback callback)
       ABSL_LOCKS_EXCLUDED(mutex_);
 
@@ -130,11 +155,24 @@ class BleV2 final {
                                           AcceptedConnectionCallback callback)
       ABSL_LOCKS_EXCLUDED(mutex_);
 
+  // Starts a worker thread, creates a Ble L2CAP socket, associates it with a
+  // service id.
+  ErrorOr<bool> StartAcceptingL2capConnections(
+      const std::string& service_id,
+      AcceptedL2capConnectionCallback l2cap_callback)
+      ABSL_LOCKS_EXCLUDED(mutex_);
+
   // Closes socket corresponding to a service id.
   bool StopAcceptingConnections(const std::string& service_id)
       ABSL_LOCKS_EXCLUDED(mutex_);
 
+  bool StopAcceptingL2capConnections(const std::string& service_id)
+      ABSL_LOCKS_EXCLUDED(mutex_);
+
   bool IsAcceptingConnections(const std::string& service_id)
+      ABSL_LOCKS_EXCLUDED(mutex_);
+
+  bool IsAcceptingL2capConnections(const std::string& service_id)
       ABSL_LOCKS_EXCLUDED(mutex_);
 
   // Establishes connection to Ble peripheral.
@@ -142,6 +180,13 @@ class BleV2 final {
   ErrorOr<BleV2Socket> Connect(const std::string& service_id,
                                const BleV2Peripheral& peripheral,
                                CancellationFlag* cancellation_flag)
+      ABSL_LOCKS_EXCLUDED(mutex_);
+
+  // Establishes connection to Ble peripheral.
+  // Returns socket instance. On success, BleSocket.IsValid() return true.
+  ErrorOr<BleL2capSocket> ConnectOverL2cap(const std::string& service_id,
+                                           const BleV2Peripheral& peripheral,
+                                           CancellationFlag* cancellation_flag)
       ABSL_LOCKS_EXCLUDED(mutex_);
 
   // Returns true if this object owns a valid platform implementation.
@@ -159,8 +204,9 @@ class BleV2 final {
  private:
   struct AdvertisingInfo {
     mediums::BleAdvertisement medium_advertisement;
+    ByteArray dct_advertisement;
     PowerLevel power_level;
-    bool is_fast_advertisement;
+    AdvertisingType advertising_type;
   };
 
   // Same as IsAvailable(), but must be called with `mutex_` held.
@@ -183,6 +229,10 @@ class BleV2 final {
   // `mutex_` held.
   bool IsAcceptingConnectionsLocked(const std::string& service_id)
       ABSL_EXCLUSIVE_LOCKS_REQUIRED(mutex_);
+  // Same as IsListeningForIncomingConnections(), but must be called with
+  // `mutex_` held.
+  bool IsAcceptingL2capConnectionsLocked(const std::string& service_id)
+      ABSL_EXCLUSIVE_LOCKS_REQUIRED(mutex_);
 
   bool IsAdvertisementGattServerRunningLocked()
       ABSL_EXCLUSIVE_LOCKS_REQUIRED(mutex_);
@@ -200,14 +250,11 @@ class BleV2 final {
       ABSL_EXCLUSIVE_LOCKS_REQUIRED(mutex_);
   bool StopAdvertisementGattServerLocked()
       ABSL_EXCLUSIVE_LOCKS_REQUIRED(mutex_);
-
   ByteArray CreateAdvertisementHeader(int psm,
                                       bool extended_advertisement_advertised)
       ABSL_SHARED_LOCKS_REQUIRED(mutex_);
-
   // For devices that don't have extended nor gatt adverting.
   api::ble_v2::BleAdvertisementData CreateAdvertisingDataForLegacyDevice();
-
   bool StartAdvertisingLocked(const std::string& service_id)
       ABSL_EXCLUSIVE_LOCKS_REQUIRED(mutex_);
   bool StartFastAdvertisingLocked(
@@ -223,6 +270,10 @@ class BleV2 final {
                                   const ByteArray& medium_advertisement_bytes,
                                   bool extended_advertisement_advertised)
       ABSL_EXCLUSIVE_LOCKS_REQUIRED(mutex_);
+  bool StartDctAdvertisingLocked(const std::string& service_id,
+                                 PowerLevel power_level,
+                                 const ByteArray& dct_advertisement)
+      ABSL_EXCLUSIVE_LOCKS_REQUIRED(mutex_);
   // Called by StartScanning when using the async methods.
   bool StartAsyncScanningLocked(absl::string_view service_id,
                                 PowerLevel power_level)
@@ -230,9 +281,7 @@ class BleV2 final {
   // Called by StartScanning when using the async methods.
   bool StopAsyncScanningLocked(absl::string_view service_id)
       ABSL_EXCLUSIVE_LOCKS_REQUIRED(mutex_);
-
   api::ble_v2::TxPowerLevel PowerLevelToTxPowerLevel(PowerLevel power_level);
-
   void RunOnBleThread(Runnable runnable);
 
   static constexpr int kMaxConcurrentAcceptLoops = 5;
@@ -281,6 +330,17 @@ class BleV2 final {
       ABSL_GUARDED_BY(mutex_);
 
   mediums::InstantOnLostManager instant_on_lost_manager_;
+
+  // A map of service_id -> L2capServerSocket. If map is non-empty, we
+  // are currently listening for incoming connections.
+  absl::flat_hash_map<std::string, BleL2capServerSocket>
+      l2cap_server_socket_map_ ABSL_GUARDED_BY(mutex_);
+
+  // A map of service_id -> BleL2capSocket.
+  // Tracks currently connected incoming sockets. This lets the device know when
+  // it's okay to restart L2CAP server related operations.
+  absl::flat_hash_map<std::string, BleL2capSocket>
+      l2cap_incoming_service_id_to_socket_map_ ABSL_GUARDED_BY(mutex_);
 };
 
 }  // namespace connections

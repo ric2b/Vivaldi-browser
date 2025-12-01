@@ -571,8 +571,7 @@ bool ImageReaderGLOwner::OnMemoryDump(
     base::trace_event::ProcessMemoryDump* pmd) {
   if (args.level_of_detail ==
       base::trace_event::MemoryDumpLevelOfDetail::kBackground) {
-    auto dump_name =
-        base::StringPrintf("gpu/media_texture_owner_%d/", tracing_id());
+    auto dump_name = base::StringPrintf(kMemoryDumpPrefix, tracing_id());
 
     base::trace_event::MemoryAllocatorDump* dump =
         pmd->CreateAllocatorDump(dump_name);
@@ -587,7 +586,7 @@ bool ImageReaderGLOwner::OnMemoryDump(
   base::AutoLock auto_lock(lock_);
   for (const auto& image : image_refs_) {
     std::string dump_name = base::StringPrintf(
-        "gpu/media_texture_owner_%d/image_%d", tracing_id(), i++);
+        "gpu/media_texture_owner_0x%x/image_%d", tracing_id(), i++);
 
     // If we fail to get AImage size for any reason, we still report the image
     // as a empty size, so it can be diagnosed in necessary.

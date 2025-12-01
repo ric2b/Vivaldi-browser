@@ -124,7 +124,9 @@ void AppInstall::SendPing(int exit_code, base::OnceClosure callback) {
           base::BindOnce(
               [](base::OnceClosure callback, UpdaterScope scope,
                  int exit_code) {
-                if (exit_code == kErrorOk || !AreRawUsageStatsEnabled(scope)) {
+                if (exit_code == kErrorOk ||
+                    !UsageStatsProvider::Create()->AnyAppEnablesUsageStats(
+                        scope)) {
                   std::move(callback).Run();
                   return;
                 }
@@ -139,7 +141,8 @@ void AppInstall::SendPing(int exit_code, base::OnceClosure callback) {
                         {
                             .event_type =
                                 update_client::protocol_request::kEventInstall,
-                            .result = 1,
+                            .result = update_client::protocol_request::
+                                kEventResultError,
                             .error_code = exit_code,
                         },
                         base::BindOnce(
@@ -206,7 +209,7 @@ void AppInstall::FirstTaskRun() {
     app_name_ = app_args.app_name;
   } else {
     // If no apps are present, try to use --app-id, if present.
-    app_id_ = base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
+    app_id_ = base::CommandLine::ForCurrentProcess()->GetSwitchValueUTF8(
         kAppIdSwitch);
   }
 

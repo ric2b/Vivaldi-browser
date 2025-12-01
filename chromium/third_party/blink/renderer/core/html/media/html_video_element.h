@@ -112,11 +112,9 @@ class CORE_EXPORT HTMLVideoElement final
       bool reinterpret_as_srgb = false);
 
   // CanvasImageSource implementation
-  scoped_refptr<Image> GetSourceImageForCanvas(
-      FlushReason,
-      SourceImageStatus*,
-      const gfx::SizeF&,
-      const AlphaDisposition alpha_disposition) override;
+  scoped_refptr<Image> GetSourceImageForCanvas(FlushReason,
+                                               SourceImageStatus*,
+                                               const gfx::SizeF&) override;
   bool IsVideoElement() const override { return true; }
   bool WouldTaintOrigin() const override;
   gfx::SizeF ElementSize(const gfx::SizeF&,
@@ -150,6 +148,10 @@ class CORE_EXPORT HTMLVideoElement final
   void MediaRemotingStopped(int error_code) final;
   DisplayType GetDisplayType() const final;
   bool IsInAutoPIP() const final;
+  void DidPlayerMediaPositionStateChange(double playback_rate,
+                                         base::TimeDelta duration,
+                                         base::TimeDelta position,
+                                         bool end_of_media) final;
   void OnPictureInPictureStateChange() final;
   void SetPersistentState(bool persistent) final;
 
@@ -275,7 +277,6 @@ class CORE_EXPORT HTMLVideoElement final
   // Used to fulfill blink::Image requests (CreateImage(),
   // GetSourceImageForCanvas(), etc). Created on demand.
   std::unique_ptr<CanvasResourceProvider> resource_provider_;
-  SkImageInfo resource_provider_info_;
   bool allow_accelerated_images_ = true;
   HeapTaskRunnerTimer<HTMLVideoElement> cache_deleting_timer_;
 

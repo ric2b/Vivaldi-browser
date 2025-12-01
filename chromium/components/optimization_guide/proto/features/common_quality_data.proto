@@ -196,7 +196,7 @@ message PageContext {
 
 // The page content represented as a tree of semantic chunks and (in the
 // future) annotated with additional information about the page.
-// Next ID: 4
+// Next ID: 6
 message AnnotatedPageContent {
   AnnotatedPageContentVersion version = 1;
 
@@ -204,6 +204,16 @@ message AnnotatedPageContent {
 
   // The data for the main frame of the page.
   FrameData main_frame_data = 3;
+
+  // The interaction information for the page--the subtree represented by the
+  // AnnotatedPageContent. This is for top-level interactions, such as the mouse
+  // position and focused element, for which there can only be one unique value
+  // for the entire page. Includes interaction information for the main frame
+  // and embedded iframes.
+  PageInteractionInfo page_interaction_info = 4;
+
+  // The rect of the viewport for the tab. i.e., screenshot dimensions.
+  BoundingRect viewport_geometry = 5;
 }
 
 // The ContentNode tree is a sparse representation of the DOM tree for a web
@@ -232,7 +242,7 @@ message ContentNode {
   ContentAttributes content_attributes = 2;
 }
 
-// Next ID: 21
+// Next ID: 23
 message ContentAttributes {
   oneof content_data {
     // Only set if attribute_type is CONTENT_ATTRIBUTE_TEXT.
@@ -260,6 +270,12 @@ message ContentAttributes {
     TableRowData table_row_data = 13;
   }
 
+  // The ID for this ContentNode. This is unique to the AnnotatedPageContent,
+  // including the embedded iframes. The value may change across different
+  // AnnotatedPageContent extractions for the same page; it is not guaranteed to
+  // be stable in the same page across different time.
+  int32 content_node_id = 22;
+
   // The IDs of the DOM nodes whose content is represented by this ContentNode.
   // This is used to map the results of the receiver's action back to the
   // original DOM node.
@@ -274,6 +290,9 @@ message ContentAttributes {
   // This is the geometry of the common_ancestor_dom_node_id.
   Geometry geometry = 4;
 
+  // The interaction information for the content node.
+  InteractionInfo interaction_info = 21;
+
   // These can come from the aria role, the html tag, or are assumed from some
   // properties of the page.
   repeated AnnotatedRole annotated_roles = 15;
@@ -282,11 +301,7 @@ message ContentAttributes {
   // be "Submit".
   string label = 16;
 
-  string tag_name = 17; // HTML tag name.
-
-  string type = 18; // HTML type attribute.
-
-  reserved 5, 6, 7;
+  reserved 5, 6, 7, 17, 18;
 }
 
 // The geometry of the content, in the page coordinate system.
@@ -307,11 +322,7 @@ message Geometry {
   // that the node is a header, footer, or sidebar.
   bool is_fixed_or_sticky_position = 3;
 
-  // Whether the content node can scroll in the x direction.
-  bool scrolls_overflow_x = 4;
-
-  // Whether the content node can scroll in the y direction.
-  bool scrolls_overflow_y = 5;
+  reserved 4, 5;
 }
 
 message BoundingRect {
@@ -322,6 +333,44 @@ message BoundingRect {
   int32 width = 3;
 
   int32 height = 4;
+}
+
+// The interaction information for the content node. This indicates whether the
+// node is interactive and what type of interaction it supports.
+// Next ID: 11
+message InteractionInfo {
+  // Whether the content node can scroll in the x direction.
+  bool scrolls_overflow_x = 1;
+
+  // Whether the content node can scroll in the y direction.
+  bool scrolls_overflow_y = 2;
+
+  // Whether the content node is selectable.
+  bool is_selectable = 3;
+
+  // Whether the content node is editable; i.e. whether the user can type into
+  // it. This refers to the text actually being editable, not whether the
+  // content node is a text field.
+  bool is_editable = 4;
+
+  // Whether the content node can be resized. This is relevant for scroll
+  // containers and iframes which have the CSS resize behavior.
+  bool can_resize_horizontal = 5;
+
+  bool can_resize_vertical = 6;
+
+  // Whether the content node is focusable.
+  bool is_focusable = 7;
+
+  // Whether the content node is draggable.
+  bool is_draggable = 9;
+
+  // Whether the content node is clickable. This checks for whether the node is
+  // a clickable control (e.g. form control elements) or has activation
+  // behavior. It also checks for whether the node has a click handler.
+  bool is_clickable = 10;
+
+  reserved 8;
 }
 
 // Next ID: 5
@@ -459,14 +508,103 @@ message IframeData {
 
 // The data for a frame in the web page. This is the common data structure for
 // both the root frame and embedded iframes.
-// Next ID: 2
+// Next ID: 6
 message FrameData {
   // The security origin of the frame.
   SecurityOrigin security_origin = 1;
+
+  // Interaction information for the frame.
+  FrameInteractionInfo frame_interaction_info = 2;
+
+  // Identifies the document in a frame.
+  DocumentIdentifier document_identifier = 3;
+
+  // The URL of the frame.
+  string url = 4;
+
+  // The title of the frame.
+  string title = 5;
+
+  // Information about paid content in the frame.  Only set
+  // if paid content was checked.
+  PaidContentMetadata paid_content_metadata = 6;
+}
+
+message PaidContentMetadata {
+  // Whether the frame contains paid content.
+  bool contains_paid_content = 1;
+}
+
+// The interaction information for the frame. This is for interactions that
+// are specific to the frame, such as the current selection.
+// Next ID: 2
+message FrameInteractionInfo {
+  // The current selection.
+  Selection selection = 1;
+}
+
+// Represents a selection in the page. This is a frame-level concept.
+message Selection {
+  // The content node ID of the start node. Note that this could be the same as
+  // the end node ID. This node is always before or equal to the end node.
+  int32 start_node_id = 1;
+
+  // The character offset of the start of the selection from the start of the
+  // text contained in start node.
+  int32 start_offset = 2;
+
+  // The content node ID of the end node. Note that this could be the same as
+  // the start node ID. This node is always after or equal to the start node.
+  int32 end_node_id = 3;
+
+  // The character offset of the end of the selection from the start of the
+  // text contained in end node.
+  int32 end_offset = 4;
+
+  // The selected text.
+  string selected_text = 5;
+}
+
+// Directs the action to a specific Document in a frame in Chrome.
+// Next ID: 3
+message DocumentIdentifier {
+  // A unique identifier for the frame that is not stable across APC
+  // calls/pages. Caller can map these to a client side frame id.
+  string serialized_token = 1;
 }
 
 message TableRowData {
   TableRowType type = 1;
+}
+
+// Represents the interaction information for the page. This is for top-level
+// interactions, such as the mouse position and focused element, for which
+// there can only be one unique value. Includes interaction information for
+// the main frame and embedded iframes.
+// Next ID: 4
+message PageInteractionInfo {
+  // The content node ID of the content node that is currently focused.
+  int32 focused_node_id = 1;
+
+  // The content node ID of the content node that is currently focused by a
+  // screen reader. If this is set, it means that a screen reader is being used.
+  int32 accessibility_focused_node_id = 2;
+
+  // The last known mouse position, in the page coordinate system.
+  Point mouse_position = 3;
+}
+
+message Point {
+  int32 x = 1;
+
+  int32 y = 2;
+}
+
+// Uniquely identifies a DOM elements across all frames.
+message AutofillGlobalId {
+  string frame_token = 1;
+
+  uint64 renderer_id = 2;
 }
 
 message FormData {
@@ -477,6 +615,14 @@ message FormData {
 
   // The fields contained in this form.
   repeated FormFieldData fields = 2;
+
+  // Only set during data collection, not in prediction requests.
+  AutofillGlobalId global_id = 3;
+
+  // Autofill's internal identifier for the form. Can change when the form
+  // changes dynamically.
+  // Only set during data collection, not in prediction requests.
+  uint64 form_signature = 4;
 }
 
 message FormFieldData {
@@ -511,9 +657,13 @@ message FormFieldData {
   // take the value of the field into consideration.
   bool is_eligible = 10;
 
-  // Uniquely identifies the DOM element that this field represents among the
-  // field DOM elements in the same frame.
-  string global_id = 11;
+  // Only set during data collection, not in prediction requests.
+  AutofillGlobalId global_id = 11;
+
+  // Autofill's internal identifier for the field. Can change when the form
+  // changes dynamically.
+  // Only set during data collection, not in prediction requests.
+  uint32 field_signature = 12;
 }
 
 message TableRow {
@@ -570,6 +720,14 @@ message SiteEngagementEntry {
 message SiteEngagement {
   // The site engagement information for the user.
   repeated SiteEngagementEntry entries = 1;
+}
+
+// The coordinates of a point.
+// Next ID: 3
+message Coordinate {
+  int32 x = 1;
+
+  int32 y = 2;
 }
 
 // Selection text affinity, part of the a11y snapshot.
@@ -1387,7 +1545,7 @@ enum AXStringListAttribute {
 
   AX_SLA_ARIANOTIFICATIONANNOUNCEMENTS = 2;
 
-  AX_SLA_ARIANOTIFICATIONIDS = 3;
+  AX_SLA_ARIANOTIFICATIONTYPES = 3;
 }
 
 // This will be updated when there is a significant change in the parsing logic.
@@ -1562,7 +1720,7 @@ enum TableRowType {
 // role, the html tag, or are assumed from some properties of the page.
 // When adding new roles, please also update AIPageContentAnnotatedRole in
 // third_party/blink/public/mojom/content_extraction/ai_page_content.mojom.
-// Next ID: 14
+// Next ID: 15
 enum AnnotatedRole {
   ANNOTATED_ROLE_UNKNOWN = 0;
 
@@ -1593,6 +1751,12 @@ enum AnnotatedRole {
   // for nodes in a hidden subtree may be non-empty, depending on whether the
   // content would be in the viewport if the user searched for it.
   ANNOTATED_ROLE_CONTENT_HIDDEN = 13;
+
+  // Indicates that the subtree for this ContentNode contains content marked as
+  // isAccessibleForFree=false by a schema.org CreativeWork declaration, as
+  // described at
+  // https://developers.google.com/search/docs/appearance/structured-data/paywalled-content.
+  ANNOTATED_ROLE_PAID_CONTENT = 14;
 
   reserved 1 to 4;
 }

@@ -4,6 +4,7 @@
 
 import * as Common from '../../../core/common/common.js';
 import * as CrUXManager from '../../../models/crux-manager/crux-manager.js';
+import type * as Trace from '../../../models/trace/trace.js';
 import {renderElementIntoDOM} from '../../../testing/DOMHelpers.js';
 import {describeWithMockConnection} from '../../../testing/MockConnection.js';
 import * as RenderCoordinator from '../../../ui/components/render_coordinator/render_coordinator.js';
@@ -20,13 +21,13 @@ function getFieldMetricValue(view: Element): HTMLElement|null {
 
 function getFieldHistogramPercents(view: Element): string[] {
   const histogram = view.shadowRoot!.querySelector('.bucket-summaries') as HTMLElement;
-  const percents = Array.from(histogram.querySelectorAll('.histogram-percent')) as HTMLElement[];
+  const percents = Array.from(histogram.querySelectorAll('.histogram-percent'));
   return percents.map(p => p.textContent || '');
 }
 
 function getFieldHistogramLabels(view: Element): string[] {
   const histogram = view.shadowRoot!.querySelector('.bucket-summaries') as HTMLElement;
-  const percents = Array.from(histogram.querySelectorAll('.bucket-label')) as HTMLElement[];
+  const percents = Array.from(histogram.querySelectorAll('.bucket-label'));
   return percents.map(p => p.textContent || '');
 }
 
@@ -223,9 +224,9 @@ describeWithMockConnection('MetricCard', () => {
         fieldValue: 200,
         histogram: createMockHistogram(),
         phases: [
-          ['TTFB', 500],
-          ['Phase 1', 0],
-          ['Phase 2', 123.783458345],
+          ['TTFB', 500 as Trace.Types.Timing.Milli],
+          ['Phase 1', 0 as Trace.Types.Timing.Milli],
+          ['Phase 2', 123.783458345 as Trace.Types.Timing.Milli],
         ],
       };
       renderElementIntoDOM(view);
@@ -234,9 +235,34 @@ describeWithMockConnection('MetricCard', () => {
 
       const phaseTable = getPhaseTable(view);
       assert.deepEqual(phaseTable, [
-        ['TTFB', '500'],
-        ['Phase 1', '0'],
-        ['Phase 2', '124'],
+        ['TTFB', '500 ms'],
+        ['Phase 1', '0 ms'],
+        ['Phase 2', '124 ms'],
+      ]);
+    });
+
+    it('should display field data phases in a table format', async () => {
+      const view = new Components.MetricCard.MetricCard();
+      view.data = {
+        metric: 'LCP',
+        localValue: 100,
+        fieldValue: 200,
+        histogram: createMockHistogram(),
+        phases: [
+          ['TTFB', 500 as Trace.Types.Timing.Milli, 400 as Trace.Types.Timing.Milli],
+          ['Phase 1', 0 as Trace.Types.Timing.Milli, 10 as Trace.Types.Timing.Milli],
+          ['Phase 2', 123.783458345 as Trace.Types.Timing.Milli, 100 as Trace.Types.Timing.Milli],
+        ],
+      };
+      renderElementIntoDOM(view);
+
+      await RenderCoordinator.done();
+
+      const phaseTable = getPhaseTable(view);
+      assert.deepEqual(phaseTable, [
+        ['TTFB', '500 ms', '400 ms'],
+        ['Phase 1', '0 ms', '10 ms'],
+        ['Phase 2', '124 ms', '100 ms'],
       ]);
     });
   });

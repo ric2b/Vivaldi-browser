@@ -44,7 +44,6 @@
 #include "mojo/public/cpp/bindings/type_converter.h"
 #include "net/storage_access_api/status.h"
 #include "third_party/blink/public/common/blob/blob_utils.h"
-#include "third_party/blink/public/common/permissions_policy/permissions_policy.h"
 #include "third_party/blink/public/common/scheduler/task_attribution_id.h"
 #include "third_party/blink/public/common/tokens/tokens.h"
 #include "third_party/blink/public/common/user_agent/user_agent_metadata.h"
@@ -526,7 +525,7 @@ void LocalFrameClientImpl::DispatchDidCommitLoad(
     HistoryItem* item,
     WebHistoryCommitType commit_type,
     bool should_reset_browser_interface_broker,
-    const blink::ParsedPermissionsPolicy& permissions_policy_header,
+    const network::ParsedPermissionsPolicy& permissions_policy_header,
     const blink::DocumentPolicyFeatureState& document_policy_header) {
   if (!web_frame_->Parent()) {
     web_frame_->ViewImpl()->DidCommitLoad(commit_type == kWebStandardCommit,
@@ -566,10 +565,13 @@ void LocalFrameClientImpl::DispatchDidCommitLoad(
             web_frame_->GetDocument().GetUkmSourceId(),
             KURL(web_frame_->Client()->LastCommittedUrlForUKM()));
 
-        auto shmem = frame_widget->CreateSharedMemoryForSmoothnessUkm();
-        if (shmem.IsValid()) {
-          web_frame_->Client()->SetUpSharedMemoryForSmoothness(
-              std::move(shmem));
+        auto smoothness_shmem =
+            frame_widget->CreateSharedMemoryForSmoothnessUkm();
+        auto dropped_frames_shmem =
+            frame_widget->CreateSharedMemoryForDroppedFramesUkm();
+        if (smoothness_shmem.IsValid() && dropped_frames_shmem.IsValid()) {
+          web_frame_->Client()->SetUpSharedMemoryForUkms(
+              std::move(smoothness_shmem), std::move(dropped_frames_shmem));
         }
       }
     }

@@ -132,10 +132,10 @@ bool CreateV3Schema(sql::Database* db, sql::MetaTable* meta_table) {
 std::optional<SHA256HashValue> ToSHA256HashValue(
     base::span<const uint8_t> sha256_bytes) {
   SHA256HashValue sha256_hash;
-  if (sha256_bytes.size() != sizeof(sha256_hash.data)) {
+  if (sha256_bytes.size() != sha256_hash.size()) {
     return std::nullopt;
   }
-  memcpy(sha256_hash.data, sha256_bytes.data(), sha256_bytes.size());
+  memcpy(sha256_hash.data(), sha256_bytes.data(), sha256_bytes.size());
   return sha256_hash;
 }
 
@@ -570,7 +570,7 @@ SQLitePersistentSharedDictionaryStore::Backend::RegisterDictionaryImpl(
   statement.BindTime(9, dictionary_info.GetExpirationTime());
   statement.BindTime(10, dictionary_info.last_used_time());
   statement.BindInt64(11, dictionary_info.size());
-  statement.BindBlob(12, base::span(dictionary_info.hash().data));
+  statement.BindBlob(12, base::span(dictionary_info.hash()));
   // There is no `sql::Statement::BindUint64()` method. So we cast to int64_t.
   int64_t token_high = static_cast<int64_t>(
       dictionary_info.disk_cache_key_token().GetHighForSerialization());
@@ -1006,7 +1006,7 @@ SQLitePersistentSharedDictionaryStore::Backend::GetOriginsBetweenImpl(
 
   std::set<url::Origin> origins;
   while (statement.Step()) {
-    const std::string frame_origin_string = statement.ColumnString(0);
+    const std::string_view frame_origin_string = statement.ColumnStringView(0);
     origins.insert(url::Origin::Create(GURL(frame_origin_string)));
   }
   return base::ok(std::vector<url::Origin>(origins.begin(), origins.end()));

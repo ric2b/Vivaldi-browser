@@ -42,8 +42,6 @@
 #include "chrome/browser/apps/app_service/publishers/arc_apps_factory.h"
 #include "chrome/browser/ash/app_list/arc/arc_app_test.h"
 #include "chrome/browser/ash/borealis/borealis_util.h"
-#include "chrome/browser/ash/crosapi/browser_util.h"
-#include "chrome/browser/ash/crosapi/fake_browser_manager.h"
 #include "chrome/browser/ash/login/users/fake_chrome_user_manager.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/grit/branded_strings.h"
@@ -229,7 +227,6 @@ class PublisherTest : public extensions::ExtensionServiceTestBase {
     service_->Init();
     ConfigureWebAppProvider();
 #if BUILDFLAG(IS_CHROMEOS)
-    browser_manager_ = std::make_unique<crosapi::FakeBrowserManager>();
     ash::LoginState::Initialize();
 #endif  // BUILDFLAG(IS_CHROMEOS)
   }
@@ -239,7 +236,6 @@ class PublisherTest : public extensions::ExtensionServiceTestBase {
     profile_.reset();
 #if BUILDFLAG(IS_CHROMEOS)
     ash::LoginState::Shutdown();
-    browser_manager_.reset();
 #endif  // BUILDFLAG(IS_CHROMEOS)
   }
 
@@ -422,11 +418,6 @@ class PublisherTest : public extensions::ExtensionServiceTestBase {
               NOTREACHED();
             }));
   }
-
-#if BUILDFLAG(IS_CHROMEOS)
- private:
-  std::unique_ptr<crosapi::FakeBrowserManager> browser_manager_;
-#endif  // BUILDFLAG(IS_CHROMEOS)
 };
 
 #if BUILDFLAG(IS_CHROMEOS)
@@ -662,11 +653,7 @@ TEST_F(PublisherTest, WebAppsOnApps) {
   app_service_test_.SetUp(profile());
   auto app_id = CreateWebApp(kAppName);
 
-  InstallReason expected_install_reason = InstallReason::kSync;
-  if (base::FeatureList::IsEnabled(
-          features::kWebAppDontAddExistingAppsToSync)) {
-    expected_install_reason = InstallReason::kUser;
-  }
+  InstallReason expected_install_reason = InstallReason::kUser;
 
   VerifyApp(AppType::kWeb, app_id, kAppName, Readiness::kReady,
             expected_install_reason, InstallSource::kBrowser, {}, base::Time(),

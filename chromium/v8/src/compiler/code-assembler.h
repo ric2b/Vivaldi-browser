@@ -96,64 +96,28 @@ inline bool NeedsBoundsCheck(CheckBounds check_bounds) {
 
 enum class StoreToObjectWriteBarrier { kNone, kMap, kFull };
 
-class AccessCheckNeeded;
-class BigIntBase;
-class BigIntWrapper;
-class ClassBoilerplate;
-class BooleanWrapper;
-class CompilationCacheTable;
-class Constructor;
-class Filler;
-class FunctionTemplateRareData;
-class HeapNumber;
-class InternalizedString;
-class JSArgumentsObject;
-class JSArrayBufferView;
-class JSContextExtensionObject;
-class JSError;
-class JSSloppyArgumentsObject;
-class MapCache;
-class NativeContext;
-class NumberWrapper;
-class ScriptWrapper;
-class SloppyArgumentsElements;
-class StringWrapper;
-class SymbolWrapper;
-class Undetectable;
-class UniqueName;
-class WasmCapiFunctionData;
-class WasmTagObject;
-class WasmExceptionPackage;
-class WasmExceptionTag;
-class WasmExportedFunctionData;
-class WasmGlobalObject;
-class WasmJSFunctionData;
-class WasmMemoryObject;
-class WasmModuleObject;
-class WasmTableObject;
-
 template <class T>
 struct ObjectTypeOf {};
 
-#define OBJECT_TYPE_CASE(Name)                           \
-  template <>                                            \
-  struct ObjectTypeOf<Name> {                            \
-    static const ObjectType value = ObjectType::k##Name; \
+#define OBJECT_TYPE_CASE(Name)                               \
+  template <>                                                \
+  struct ObjectTypeOf<Name> {                                \
+    static constexpr ObjectType value = ObjectType::k##Name; \
   };
-#define OBJECT_TYPE_STRUCT_CASE(NAME, Name, name)        \
-  template <>                                            \
-  struct ObjectTypeOf<Name> {                            \
-    static const ObjectType value = ObjectType::k##Name; \
+#define OBJECT_TYPE_STRUCT_CASE(NAME, Name, name)            \
+  template <>                                                \
+  struct ObjectTypeOf<Name> {                                \
+    static constexpr ObjectType value = ObjectType::k##Name; \
   };
-#define OBJECT_TYPE_TEMPLATE_CASE(Name)                  \
-  template <class... Args>                               \
-  struct ObjectTypeOf<Name<Args...>> {                   \
-    static const ObjectType value = ObjectType::k##Name; \
+#define OBJECT_TYPE_TEMPLATE_CASE(Name)                      \
+  template <class... Args>                                   \
+  struct ObjectTypeOf<Name<Args...>> {                       \
+    static constexpr ObjectType value = ObjectType::k##Name; \
   };
-#define OBJECT_TYPE_ODDBALL_CASE(Name)                    \
-  template <>                                             \
-  struct ObjectTypeOf<Name> {                             \
-    static const ObjectType value = ObjectType::kOddball; \
+#define OBJECT_TYPE_ODDBALL_CASE(Name)                        \
+  template <>                                                 \
+  struct ObjectTypeOf<Name> {                                 \
+    static constexpr ObjectType value = ObjectType::kOddball; \
   };
 OBJECT_TYPE_CASE(Object)
 OBJECT_TYPE_CASE(Smi)
@@ -162,6 +126,7 @@ OBJECT_TYPE_CASE(HeapObject)
 OBJECT_TYPE_CASE(HeapObjectReference)
 OBJECT_TYPE_LIST(OBJECT_TYPE_CASE)
 HEAP_OBJECT_ORDINARY_TYPE_LIST(OBJECT_TYPE_CASE)
+VIRTUAL_OBJECT_TYPE_LIST(OBJECT_TYPE_CASE)
 HEAP_OBJECT_TRUSTED_TYPE_LIST(OBJECT_TYPE_CASE)
 STRUCT_LIST(OBJECT_TYPE_STRUCT_CASE)
 HEAP_OBJECT_TEMPLATE_TYPE_LIST(OBJECT_TYPE_TEMPLATE_CASE)
@@ -172,6 +137,18 @@ OBJECT_TYPE_ODDBALL_CASE(False)
 #undef OBJECT_TYPE_CASE
 #undef OBJECT_TYPE_STRUCT_CASE
 #undef OBJECT_TYPE_TEMPLATE_CASE
+
+template <class... T>
+struct ObjectTypeOf<Union<T...>> {
+  // For simplicity, don't implement TaggedIndex or HeapObjectReference.
+  static_assert(!base::has_type_v<TaggedIndex, T...>);
+  static_assert(!base::has_type_v<HeapObjectReference, T...>);
+
+  static constexpr bool kHasSmi = base::has_type_v<Smi, T...>;
+  static constexpr bool kHasObject = base::has_type_v<Object, T...>;
+  static constexpr ObjectType value =
+      (kHasSmi || kHasObject) ? ObjectType::kObject : ObjectType::kHeapObject;
+};
 
 #if defined(V8_HOST_ARCH_32_BIT)
 #define BINT_IS_SMI
@@ -357,10 +334,12 @@ TNode<Float64T> Float64Add(TNode<Float64T> a, TNode<Float64T> b);
   V(ChangeFloat32ToFloat64, Float64T, Float32T)                 \
   V(ChangeFloat64ToUint32, Uint32T, Float64T)                   \
   V(ChangeFloat64ToUint64, Uint64T, Float64T)                   \
+  V(ChangeFloat64ToInt64, Int64T, Float64T)                     \
   V(ChangeInt32ToFloat64, Float64T, Int32T)                     \
   V(ChangeInt32ToInt64, Int64T, Int32T)                         \
   V(ChangeUint32ToFloat64, Float64T, Word32T)                   \
   V(ChangeUint32ToUint64, Uint64T, Word32T)                     \
+  V(ChangeInt64ToFloat64, Float64T, Int64T)                     \
   V(BitcastInt32ToFloat32, Float32T, Word32T)                   \
   V(BitcastFloat32ToInt32, Uint32T, Float32T)                   \
   V(BitcastFloat64ToInt64, Int64T, Float64T)                    \
@@ -584,11 +563,12 @@ class V8_EXPORT_PRIVATE CodeAssembler {
 #define TO_STRING_LITERAL(x) STRINGIFY(x)
 #define CAST(x) \
   Cast(x, "CAST(" #x ") at " __FILE__ ":" TO_STRING_LITERAL(__LINE__))
-#define TORQUE_CAST(x) \
-  ca_.Cast(x, "CAST(" #x ") at " __FILE__ ":" TO_STRING_LITERAL(__LINE__))
+#define TORQUE_CAST(...)                                      \
+  ca_.Cast(__VA_ARGS__, "CAST(" #__VA_ARGS__ ") at " __FILE__ \
+                        ":" TO_STRING_LITERAL(__LINE__))
 #else
 #define CAST(x) Cast(x)
-#define TORQUE_CAST(x) ca_.Cast(x)
+#define TORQUE_CAST(...) ca_.Cast(__VA_ARGS__)
 #endif
 
   // Constants.
@@ -1083,6 +1063,9 @@ class V8_EXPORT_PRIVATE CodeAssembler {
   TNode<Uint64T> Word64Shl(TNode<Uint64T> left, TNode<Uint64T> right) {
     return Unsigned(Word64Shl(static_cast<TNode<Word64T>>(left), right));
   }
+  TNode<Int64T> Word64Shr(TNode<Int64T> left, TNode<Uint64T> right) {
+    return Signed(Word64Shr(static_cast<TNode<Word64T>>(left), right));
+  }
   TNode<Uint64T> Word64Shr(TNode<Uint64T> left, TNode<Uint64T> right) {
     return Unsigned(Word64Shr(static_cast<TNode<Word64T>>(left), right));
   }
@@ -1481,9 +1464,9 @@ class V8_EXPORT_PRIVATE CodeAssembler {
 
   // Call the given JavaScript callable through one of the JS Call builtins.
   template <class... TArgs>
-  TNode<Object> CallJS(Builtin builtin, TNode<Context> context,
-                       TNode<Object> function, TNode<Object> receiver,
-                       TArgs... args) {
+  TNode<JSAny> CallJS(Builtin builtin, TNode<Context> context,
+                      TNode<Object> function, TNode<JSAny> receiver,
+                      TArgs... args) {
     DCHECK(Builtins::IsAnyCall(builtin));
     Callable callable = Builtins::CallableFor(isolate(), builtin);
     int argc = JSParameterCount(static_cast<int>(sizeof...(args)));
@@ -1496,16 +1479,16 @@ class V8_EXPORT_PRIVATE CodeAssembler {
 
   // Construct the given JavaScript callable through a JS Construct builtin.
   template <class... TArgs>
-  TNode<Object> ConstructJS(Builtin builtin, TNode<Context> context,
-                            TNode<Object> function, TNode<Object> new_target,
-                            TArgs... args) {
+  TNode<JSAny> ConstructJS(Builtin builtin, TNode<Context> context,
+                           TNode<Object> function, TNode<JSAny> new_target,
+                           TArgs... args) {
     // Consider creating a Builtins::IsAnyConstruct if we ever expect other
     // Construct builtins here.
     DCHECK_EQ(builtin, Builtin::kConstruct);
     Callable callable = Builtins::CallableFor(isolate(), builtin);
     int argc = JSParameterCount(static_cast<int>(sizeof...(args)));
     TNode<Int32T> arity = Int32Constant(argc);
-    TNode<Object> receiver = LoadRoot(RootIndex::kUndefinedValue);
+    TNode<JSAny> receiver = CAST(LoadRoot(RootIndex::kUndefinedValue));
     TNode<Code> target = HeapConstantNoHole(callable.code());
     return CAST(CallJSStubImpl(callable.descriptor(), target, context, function,
                                new_target, arity, std::nullopt,
@@ -1864,7 +1847,7 @@ class CodeAssemblerParameterizedLabel
 };
 
 using CodeAssemblerExceptionHandlerLabel =
-    CodeAssemblerParameterizedLabel<Object>;
+    CodeAssemblerParameterizedLabel<JSAny>;
 
 class V8_EXPORT_PRIVATE CodeAssemblerState {
  public:

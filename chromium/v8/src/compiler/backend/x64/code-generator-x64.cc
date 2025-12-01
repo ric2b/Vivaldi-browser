@@ -25,6 +25,7 @@
 #include "src/compiler/node-matchers.h"
 #include "src/compiler/osr.h"
 #include "src/execution/frame-constants.h"
+#include "src/heap/heap-write-barrier.h"
 #include "src/heap/mutable-page-metadata.h"
 #include "src/objects/code-kind.h"
 #include "src/objects/smi.h"
@@ -1846,6 +1847,7 @@ CodeGenerator::CodeGenResult CodeGenerator::AssembleArchInstruction(
                        not_zero, ool->stub_call());
       __ CheckMarkBit(object, scratch0, scratch1, carry, ool->entry());
 #else   // !V8_ENABLE_STICKY_MARK_BITS_BOOL
+      static_assert(WriteBarrier::kUninterestingPagesCanBeSkipped);
       __ CheckPageFlag(object, scratch0,
                        MemoryChunk::kPointersFromHereAreInterestingMask,
                        not_zero, ool->entry());
@@ -7402,6 +7404,12 @@ void CodeGenerator::AssembleArchDeoptBranch(Instruction* instr,
     if (isolate() != nullptr) {
       ExternalReference counter =
           ExternalReference::stress_deopt_count(isolate());
+      // The following code assumes that `Isolate::stress_deopt_count_` is 8
+      // bytes wide.
+      static constexpr size_t kSizeofRAX = 8;
+      static_assert(
+          sizeof(decltype(*isolate()->stress_deopt_count_address())) ==
+          kSizeofRAX);
 
       __ pushfq();
       __ pushq(rax);

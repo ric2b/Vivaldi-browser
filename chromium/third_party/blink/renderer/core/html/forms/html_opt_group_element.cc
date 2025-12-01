@@ -136,23 +136,41 @@ Node::InsertionNotificationRequest HTMLOptGroupElement::InsertedInto(
     ContainerNode& insertion_point) {
   customizable_select_rendering_ = false;
   HTMLElement::InsertedInto(insertion_point);
-  if (HTMLSelectElement* select = OwnerSelectElement()) {
-    if (&insertion_point == select)
-      select->OptGroupInsertedOrRemoved(*this);
-    // TODO(crbug.com/1511354): This UsesMenuList check doesn't account for
-    // the case when the select's rendering is changed after insertion.
-    customizable_select_rendering_ =
-        RuntimeEnabledFeatures::CustomizableSelectEnabled() &&
-        select->UsesMenuList();
+
+  if (HTMLSelectElement::SelectParserRelaxationEnabled(this)) {
+    owner_select_ = HTMLSelectElement::NearestAncestorSelectNoNesting(*this);
+    if (owner_select_) {
+      owner_select_->OptGroupInsertedOrRemoved(*this);
+    }
+    if (HTMLSelectElement::CustomizableSelectEnabled(this)) {
+      // TODO(crbug.com/1511354): This UsesMenuList check doesn't account for
+      // the case when the select's rendering is changed after insertion.
+      customizable_select_rendering_ =
+          owner_select_ && owner_select_->UsesMenuList();
+      UpdateGroupLabel();
+    }
   }
-  if (RuntimeEnabledFeatures::CustomizableSelectEnabled()) {
-    UpdateGroupLabel();
+
+  if (HTMLSelectElement* select = OwnerSelectElement()) {
+    if (&insertion_point == select) {
+      select->OptGroupInsertedOrRemoved(*this);
+    }
   }
   return kInsertionDone;
 }
 
 void HTMLOptGroupElement::RemovedFrom(ContainerNode& insertion_point) {
-  if (auto* select = DynamicTo<HTMLSelectElement>(insertion_point)) {
+  if (HTMLSelectElement::SelectParserRelaxationEnabled(this)) {
+    HTMLSelectElement* new_ancestor_select =
+        HTMLSelectElement::NearestAncestorSelectNoNesting(*this);
+    if (owner_select_ != new_ancestor_select) {
+      // When removing, we can only lose an associated <select>
+      CHECK(owner_select_);
+      CHECK(!new_ancestor_select);
+      owner_select_->OptGroupInsertedOrRemoved(*this);
+      owner_select_ = new_ancestor_select;
+    }
+  } else if (auto* select = DynamicTo<HTMLSelectElement>(insertion_point)) {
     if (!parentNode())
       select->OptGroupInsertedOrRemoved(*this);
   }
@@ -161,7 +179,7 @@ void HTMLOptGroupElement::RemovedFrom(ContainerNode& insertion_point) {
 
 String HTMLOptGroupElement::GroupLabelText() const {
   String label_attribute_text = LabelAttributeText();
-  if (RuntimeEnabledFeatures::CustomizableSelectEnabled() &&
+  if (HTMLSelectElement::CustomizableSelectEnabled(this) &&
       label_attribute_text.ContainsOnlyWhitespaceOrEmpty()) {
     if (auto* legend = FirstChildLegend(*this)) {
       return legend->textContent();
@@ -182,21 +200,14 @@ String HTMLOptGroupElement::LabelAttributeText() const {
   return item_text;
 }
 
-HTMLSelectElement* HTMLOptGroupElement::OwnerSelectElement() const {
-  if (RuntimeEnabledFeatures::SelectParserRelaxationEnabled()) {
-    // TODO(crbug.com/351990825): Cache the owner select ancestor on insertion
-    // rather than doing a tree traversal here every time OwnerSelectElement is
-    // called, which may be a lot.
-    for (Node& ancestor : NodeTraversal::AncestorsOf(*this)) {
-      if (IsA<HTMLOptGroupElement>(ancestor) ||
-          IsA<HTMLOptionElement>(ancestor)) {
-        return nullptr;
-      }
-      if (auto* select = DynamicTo<HTMLSelectElement>(ancestor)) {
-        return select;
-      }
+HTMLSelectElement* HTMLOptGroupElement::OwnerSelectElement(
+    bool skip_check) const {
+  if (HTMLSelectElement::SelectParserRelaxationEnabled(this)) {
+    if (!skip_check) {
+      DCHECK_EQ(owner_select_,
+                HTMLSelectElement::NearestAncestorSelectNoNesting(*this));
     }
-    return nullptr;
+    return owner_select_;
   } else {
     return DynamicTo<HTMLSelectElement>(parentNode());
   }
@@ -263,6 +274,7 @@ HTMLDivElement& HTMLOptGroupElement::OptGroupLabelElement() const {
 void HTMLOptGroupElement::Trace(Visitor* visitor) const {
   visitor->Trace(opt_group_slot_);
   visitor->Trace(label_);
+  visitor->Trace(owner_select_);
   HTMLElement::Trace(visitor);
 }
 

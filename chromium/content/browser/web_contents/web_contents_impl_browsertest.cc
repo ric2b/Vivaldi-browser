@@ -36,6 +36,7 @@
 #include "base/time/time.h"
 #include "base/values.h"
 #include "build/build_config.h"
+#include "components/fingerprinting_protection_filter/interventions/common/interventions_features.h"
 #include "components/input/render_widget_host_input_event_router.h"
 #include "components/ukm/test_ukm_recorder.h"
 #include "components/url_formatter/url_formatter.h"
@@ -143,7 +144,11 @@ void ResizeWebContentsView(Shell* shell,
 
 class WebContentsImplBrowserTest : public ContentBrowserTest {
  public:
-  WebContentsImplBrowserTest() = default;
+  WebContentsImplBrowserTest() {
+    scoped_feature_list_.InitAndEnableFeature(
+        fingerprinting_protection_interventions::features::kCanvasNoise);
+  }
+
   void SetUp() override {
     RenderWidgetHostImpl::DisableResizeAckCheckForTesting();
     ContentBrowserTest::SetUp();
@@ -3190,44 +3195,6 @@ IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest,
 }
 
 IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest,
-                       DisconnectFileChooserListener) {
-  ASSERT_TRUE(embedded_test_server()->Start());
-  shell()->set_hold_file_chooser();
-
-  GURL url = embedded_test_server()->GetURL("/click-noreferrer-links.html");
-  EXPECT_TRUE(NavigateToURL(shell(), url));
-
-  WebContentsImpl* wc = static_cast<WebContentsImpl*>(shell()->web_contents());
-  auto [chooser, remote] =
-      FileChooserImpl::CreateForTesting(wc->GetPrimaryMainFrame());
-  base::WeakPtr<FileChooserImpl> chooser_weak_ptr = chooser->GetWeakPtr();
-
-  // Request file chooser.
-  base::RunLoop run_loop;
-  base::OnceClosure quit_closure = run_loop.QuitClosure();
-  blink::mojom::FileChooserResultPtr result_received;
-  remote->OpenFileChooser(blink::mojom::FileChooserParams::New(),
-                          base::BindLambdaForTesting(
-                              [&](blink::mojom::FileChooserResultPtr result) {
-                                result_received = std::move(result);
-                                std::move(quit_closure).Run();
-                              }));
-  remote.FlushForTesting();
-  EXPECT_EQ(shell()->run_file_chooser_count(), 1u);
-
-  // Disconnect listener.
-  wc->DisconnectFileSelectListenerIfAny();
-
-  // Send result from listener, which now should be ignored.
-  shell()->held_file_chooser_listener()->FileSelected(
-      {}, base::FilePath(), blink::mojom::FileChooserParams::Mode::kOpen);
-  run_loop.Run();
-
-  // Check that request was cancelled, ie returned null result.
-  EXPECT_FALSE(result_received);
-}
-
-IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest,
                        FrameDetachInCopyDoesNotCrash) {
   ASSERT_TRUE(embedded_test_server()->Start());
   EXPECT_TRUE(NavigateToURL(
@@ -5256,7 +5223,8 @@ class DidChangeVerticalScrollDirectionObserver : public WebContentsObserver {
 // Tests that DidChangeVerticalScrollDirection is called only when the vertical
 // scroll direction has changed and that it includes the correct details.
 // TODO(crbug.com/40862270): This is flaky on the Mac10.14 bot.
-#if BUILDFLAG(IS_MAC)
+// TODO(crbug.com/401544068): This is failing on Android bots.
+#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_ANDROID)
 #define MAYBE_DidChangeVerticalScrollDirection \
   DISABLED_DidChangeVerticalScrollDirection
 #else
@@ -5296,8 +5264,8 @@ IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest,
   const double device_pixel_ratio =
       EvalJs(web_contents, "window.devicePixelRatio").ExtractDouble();
   auto ScaledPointF = [device_pixel_ratio](float x, float y) {
-    return gfx::PointF(std::floor(x * device_pixel_ratio),
-                       std::floor(y * device_pixel_ratio));
+    return gfx::PointF(std::round(x * device_pixel_ratio),
+                       std::round(y * device_pixel_ratio));
   };
 
   // Scroll down.

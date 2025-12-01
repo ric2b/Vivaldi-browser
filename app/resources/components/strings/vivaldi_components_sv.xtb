@@ -21,6 +21,9 @@
           &gt;
           <ph name="PROXIES_TITLE" />
           och kontrollera att "ingen proxy" eller "direkt" har angetts i konfigurationen.</translation>
+<translation id="4949828774841497663">Öppna Program &gt; Systeminställningar &gt; Nätverk, välj det
+          aktiva nätverket, klicka på Detaljer... knappen och avmarkera alla proxyservrar
+          som kan ha valts.</translation>
 <translation id="5248344925342018662">Du kollar på en säker Vivaldi-sida</translation>
 <translation id="6690242244468452299">Den här sidan visar information om dina senaste krascher om du har kraschrapportering aktiverat.</translation>
 <translation id="7023871570427738255">Öppna
@@ -32,7 +35,4 @@
         Om det inte hjälper rekommenderar vi att du markerar det
         här alternativet igen så att funktionaliteten förbättras.</translation>
 <translation id="7496505986576158197">Vivaldi möjliggörs av <ph name="BEGIN_LINK_CHROMIUM" />Chromium<ph name="END_LINK_CHROMIUM" /> öppen källkodsprojekt och annan <ph name="BEGIN_LINK_OSS" />öppen källkod<ph name="END_LINK_OSS" />.</translation>
-<translation id="8187289872471304532">Öppna
-          Program &gt; Systeminställningar &gt; Nätverk &gt; Avancerat &gt; Proxyservrar
-          och avmarkera alla proxyservrar.</translation>
 </translationbundle>

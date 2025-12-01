@@ -319,6 +319,12 @@ bool ReadVerifyCertChainTestFromFile(const std::string &file_path_ascii,
         test->key_purpose = KeyPurpose::SERVER_AUTH_STRICT_LEAF;
       } else if (value == "CLIENT_AUTH_STRICT_LEAF") {
         test->key_purpose = KeyPurpose::CLIENT_AUTH_STRICT_LEAF;
+      } else if (value == "MLS_CLIENT_AUTH") {
+        test->key_purpose = KeyPurpose::RCS_MLS_CLIENT_AUTH;
+      } else if (value == "C2PA_TIMESTAMPING") {
+        test->key_purpose = KeyPurpose::C2PA_TIMESTAMPING;
+      } else if (value == "C2PA_MANIFEST") {
+        test->key_purpose = KeyPurpose::C2PA_MANIFEST;
       } else {
         ADD_FAILURE() << "Unrecognized key_purpose: " << value;
         return false;

@@ -12,6 +12,8 @@
 class Browser;
 @class ChromeBroadcaster;
 class FullscreenControllerObserver;
+@class ToolbarsSize;
+enum class FullscreenExitReason;
 
 // An object that observes scrolling events in the main content area and
 // calculates how much of the toolbar should be visible as a result.  When the
@@ -31,6 +33,10 @@ class FullscreenController : public base::SupportsUserData::Data {
   // remove this ad-hoc broadcaster and drive the animations via the Browser's
   // ChromeBroadcaster.
   virtual ChromeBroadcaster* broadcaster() = 0;
+
+  // Getter and setter for the ToolbarsSize.
+  virtual ToolbarsSize* GetToolbarsSize() const = 0;
+  virtual void SetToolbarsSize(ToolbarsSize* toolbars_size) = 0;
 
   // Adds and removes FullscreenControllerObservers.
   virtual void AddObserver(FullscreenControllerObserver* observer) = 0;
@@ -75,9 +81,12 @@ class FullscreenController : public base::SupportsUserData::Data {
   // to 0.0.  Calling this function while fullscreen is disabled has no effect.
   virtual void EnterFullscreen() = 0;
 
+  // Needs to be cleanup.
+  virtual void ExitFullscreen() = 0;
+
   // Exits fullscreen mode, animating in toolbars and resetting the progress to
   // 1.0.
-  virtual void ExitFullscreen() = 0;
+  virtual void ExitFullscreen(FullscreenExitReason fullscreen_exit_reason) = 0;
 
   // Exits fullscreen without animation, resetting the progress to 1.0.
   virtual void ExitFullscreenWithoutAnimation() = 0;

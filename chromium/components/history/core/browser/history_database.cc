@@ -38,7 +38,7 @@ namespace {
 // Current version number. We write databases at the "current" version number,
 // but any previous version that can read the "compatible" one can make do with
 // our database without *too* many bad effects.
-const int kCurrentVersionNumber = 69;
+const int kCurrentVersionNumber = 70;
 const int kCompatibleVersionNumber = 16;
 
 const char kEarlyExpirationThresholdKey[] = "early_expiration_threshold";
@@ -91,6 +91,8 @@ HistoryDatabase::HistoryDatabase(
               // TODO(crbug.com/40159106) Remove this dependency on normal
               // locking mode.
               .set_exclusive_locking(false)
+              .set_preload(base::FeatureList::IsEnabled(
+                  sql::features::kPreOpenPreloadDatabase))
               // Set the database page size to something a little larger to give
               // us better performance (we're typically seek rather than
               // bandwidth limited). Must be a power of 2 and a max of 65536.
@@ -120,7 +122,9 @@ sql::InitStatus HistoryDatabase::Init(const base::FilePath& history_name) {
 #endif
 
   // Prime the cache.
-  db_.Preload();
+  if (!base::FeatureList::IsEnabled(sql::features::kPreOpenPreloadDatabase)) {
+    db_.Preload();
+  }
 
   // Create the tables and indices. If you add something here, also add it to
   // `RecreateAllTablesButURL()`.
@@ -278,7 +282,7 @@ void HistoryDatabase::ComputeDatabaseMetrics(
     std::set<std::string> month_hosts;
     base::Time one_week_ago = base::Time::Now() - base::Days(7);
     while (url_sql.Step()) {
-      GURL url(url_sql.ColumnString(0));
+      GURL url(url_sql.ColumnStringView(0));
       base::Time visit_time = url_sql.ColumnTime(1);
       ++month_url_count;
       month_hosts.insert(url.host());
@@ -311,7 +315,7 @@ int HistoryDatabase::CountUniqueHostsVisitedLastMonth() {
 
   std::set<std::string> hosts;
   while (url_sql.Step()) {
-    GURL url(url_sql.ColumnString(0));
+    GURL url(url_sql.ColumnStringView(0));
     hosts.insert(url.host());
   }
 
@@ -349,7 +353,7 @@ DomainsVisitedResult HistoryDatabase::GetUniqueDomainsVisited(
   std::set<std::string> locally_visited_domains_set;
 
   while (url_sql.Step()) {
-    GURL url(url_sql.ColumnString(0));
+    GURL url(url_sql.ColumnStringView(0));
     std::string domain = net::registry_controlled_domains::GetDomainAndRegistry(
         url, net::registry_controlled_domains::EXCLUDE_PRIVATE_REGISTRIES);
 
@@ -364,7 +368,7 @@ DomainsVisitedResult HistoryDatabase::GetUniqueDomainsVisited(
       result.all_visited_domains.push_back(domain);
     }
 
-    bool is_local = url_sql.ColumnString(1).empty() &&
+    bool is_local = url_sql.ColumnStringView(1).empty() &&
                     url_sql.ColumnInt(2) == VisitSource::SOURCE_BROWSED;
 
     if (is_local && !locally_visited_domains_set.contains(domain)) {
@@ -609,10 +613,9 @@ sql::InitStatus HistoryDatabase::EnsureCurrentVersion() {
 
   if (cur_version == 21) {
     // The android_urls table's data schemal was changed in version 21.
-#if BUILDFLAG(IS_ANDROID)
-    if (!MigrateToVersion22())
-      return LogMigrationFailure(21);
-#endif
+
+    // The android_urls table ceased usage in 91.0.4438.0 and is dropped in
+    // version 70. The migration code was removed along with version 70.
     ++cur_version;
     // TODO(crbug.com/40891923): Handle failure instead of ignoring it.
     std::ignore = meta_table_.SetVersionNumber(cur_version);
@@ -1008,6 +1011,19 @@ sql::InitStatus HistoryDatabase::EnsureCurrentVersion() {
     std::ignore = meta_table_.SetVersionNumber(cur_version);
   }
 
+  if (cur_version == 69) {
+    // The android_urls table's stopped being read in 91.0.4438.0. Delete it if
+    // it still exists.
+#if BUILDFLAG(IS_ANDROID)
+    if (!DropAndroidUrlsTable()) {
+      return LogMigrationFailure(69);
+    }
+#endif
+    cur_version++;
+    // TODO(crbug.com/40891923): Handle failure instead of ignoring it.
+    std::ignore = meta_table_.SetVersionNumber(cur_version);
+  }
+
   // =========================       ^^ new migration code goes here ^^
   // ADDING NEW MIGRATION CODE
   // =========================
@@ -1059,5 +1075,14 @@ bool HistoryDatabase::MigrateRemoveTypedUrlMetadata() {
   }
   return true;
 }
+
+#if BUILDFLAG(IS_ANDROID)
+bool HistoryDatabase::DropAndroidUrlsTable() {
+  if (!db_.Execute("DROP TABLE IF EXISTS android_urls;")) {
+    return false;
+  }
+  return true;
+}
+#endif
 
 }  // namespace history

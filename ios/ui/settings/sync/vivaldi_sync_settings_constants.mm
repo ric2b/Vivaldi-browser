@@ -31,6 +31,9 @@ const int vUserMaximumValidAge = 150;
 const unsigned long vUserMinimumPasswordLength = 12;
 const unsigned long vActivationCodeLength = 6;
 
+// Encryption Password
+const unsigned long vMinimumPasswordLength = 12;
+
 NSString* const vHttpMethod = @"POST";
 NSString* const vRequestHeader = @"Content-Type";
 NSString* const vRequestValue = @"application/json;utf-8";

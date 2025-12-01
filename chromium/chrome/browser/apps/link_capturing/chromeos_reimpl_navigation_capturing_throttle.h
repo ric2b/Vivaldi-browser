@@ -6,6 +6,7 @@
 #define CHROME_BROWSER_APPS_LINK_CAPTURING_CHROMEOS_REIMPL_NAVIGATION_CAPTURING_THROTTLE_H_
 
 #include "base/auto_reset.h"
+#include "base/values.h"
 #include "content/public/browser/navigation_throttle.h"
 
 class Profile;
@@ -47,12 +48,12 @@ class ChromeOsReimplNavigationCapturingThrottle
       content::NavigationHandle* navigation_handle,
       Profile* profile);
 
+  ThrottleCheckResult HandleRequest();
+
   // Identify whether web contents need to be deleted post navigation capturing.
   bool IsEmptyDanglingWebContentsAfterLinkCapture();
 
-  // Identify if the current navigation was triggered via a link click and not
-  // any other sources.
-  bool IsCapturableLinkClick();
+  base::Value::Dict debug_data_;
 
   raw_ref<Profile> profile_;
   base::WeakPtrFactory<ChromeOsReimplNavigationCapturingThrottle>

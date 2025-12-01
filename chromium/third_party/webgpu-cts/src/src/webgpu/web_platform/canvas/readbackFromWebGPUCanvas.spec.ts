@@ -25,7 +25,7 @@ import {
   kCanvasColorSpaces,
   kCanvasTextureFormats,
 } from '../../capability_info.js';
-import { GPUTest } from '../../gpu_test.js';
+import { AllFeaturesMaxLimitsGPUTest, GPUTest } from '../../gpu_test.js';
 import { checkElementsEqual } from '../../util/check_contents.js';
 import {
   kAllCanvasTypes,
@@ -37,7 +37,7 @@ import {
 import { TexelView } from '../../util/texture/texel_view.js';
 import { findFailedPixels } from '../../util/texture/texture_ok.js';
 
-export const g = makeTestGroup(GPUTest);
+export const g = makeTestGroup(AllFeaturesMaxLimitsGPUTest);
 
 // We choose 0x66 as the value for each color and alpha channel
 // 0x66 / 0xff = 0.4
@@ -261,10 +261,6 @@ g.test('onscreenCanvas,snapshot')
       .combine('colorSpace', kCanvasColorSpaces)
       .combine('snapshotType', ['toDataURL', 'toBlob', 'imageBitmap'])
   )
-  .beforeAllSubcases(t => {
-    // rgba16float may not be color-renderable in compat mode
-    t.skipIfColorRenderableNotSupportedForFormat(t.params.format);
-  })
   .fn(async t => {
     const canvas = initWebGPUCanvasContent(
       t,
@@ -327,10 +323,6 @@ g.test('offscreenCanvas,snapshot')
       .combine('colorSpace', kCanvasColorSpaces)
       .combine('snapshotType', ['convertToBlob', 'transferToImageBitmap', 'imageBitmap'] as const)
   )
-  .beforeAllSubcases(t => {
-    // rgba16float may not be color-renderable in compat mode
-    t.skipIfColorRenderableNotSupportedForFormat(t.params.format);
-  })
   .fn(async t => {
     const offscreenCanvas = initWebGPUCanvasContent(
       t,
@@ -386,10 +378,6 @@ g.test('onscreenCanvas,uploadToWebGL')
       .combine('webgl', ['webgl', 'webgl2'])
       .combine('upload', ['texImage2D', 'texSubImage2D'])
   )
-  .beforeAllSubcases(t => {
-    // rgba16float may not be color-renderable in compat mode
-    t.skipIfColorRenderableNotSupportedForFormat(t.params.format);
-  })
   .fn(t => {
     const { format, webgl, upload } = t.params;
     const canvas = initWebGPUCanvasContent(t, format, t.params.alphaMode, 'srgb', 'onscreen');
@@ -471,10 +459,6 @@ g.test('drawTo2DCanvas')
       .combine('webgpuCanvasType', kAllCanvasTypes)
       .combine('canvas2DType', kAllCanvasTypes)
   )
-  .beforeAllSubcases(t => {
-    // rgba16float may not be color-renderable in compat mode
-    t.skipIfColorRenderableNotSupportedForFormat(t.params.format);
-  })
   .fn(t => {
     const { format, webgpuCanvasType, alphaMode, colorSpace, canvas2DType } = t.params;
 

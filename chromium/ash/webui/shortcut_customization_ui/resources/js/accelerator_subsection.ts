@@ -6,12 +6,14 @@ import './accelerator_row.js';
 
 import {I18nMixin} from 'chrome://resources/ash/common/cr_elements/i18n_mixin.js';
 import {assert} from 'chrome://resources/js/assert.js';
-import {PolymerElementProperties} from 'chrome://resources/polymer/v3_0/polymer/interfaces.js';
-import {DomRepeat, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+import type {PolymerElementProperties} from 'chrome://resources/polymer/v3_0/polymer/interfaces.js';
+import type {DomRepeat} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {AcceleratorLookupManager} from './accelerator_lookup_manager.js';
 import {getTemplate} from './accelerator_subsection.html.js';
-import {AcceleratorCategory, AcceleratorInfo, AcceleratorState, AcceleratorSubcategory, AcceleratorType, LayoutInfo} from './shortcut_types.js';
+import type {AcceleratorCategory, AcceleratorInfo, AcceleratorSubcategory, LayoutInfo} from './shortcut_types.js';
+import {AcceleratorState, AcceleratorType} from './shortcut_types.js';
 import {compareAcceleratorInfos, getSubcategoryNameStringId, isCustomizationAllowed} from './shortcut_utils.js';
 
 /**
@@ -59,10 +61,10 @@ export class AcceleratorSubsectionElement extends
         observer: AcceleratorSubsectionElement.prototype.onCategoryUpdated,
       },
 
-      acceleratorContainer: {
+      accelRowDataArray: {
         type: Array,
-        value: [],
-      },
+        value: () => [],
+      }
     };
   }
 
@@ -74,11 +76,6 @@ export class AcceleratorSubsectionElement extends
       AcceleratorLookupManager.getInstance();
 
   updateSubsection(): void {
-    // Force the rendered list to reset, Polymer's dom-repeat does not perform
-    // a deep check on objects so it won't detect changes to same size length
-    // array of objects.
-    this.set('acceleratorContainer', []);
-    this.$.list.render();
     this.onCategoryUpdated();
   }
 
@@ -100,7 +97,7 @@ export class AcceleratorSubsectionElement extends
     // individual subsections. An atomic replacement makes ensures each
     // subsection's accelerators are kept distinct from each other.
     const tempAccelRowData: AcceleratorRowData[] = [];
-    layoutInfos!.forEach((layoutInfo) => {
+    layoutInfos.forEach((layoutInfo) => {
       if (this.lookupManager.isStandardAccelerator(layoutInfo.style)) {
         const acceleratorInfos =
             this.lookupManager

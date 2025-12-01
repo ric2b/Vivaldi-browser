@@ -43,9 +43,21 @@ class SimdShuffleTest : public ::testing::Test {
   static bool TryMatchSplat(const Shuffle<kSimd128Size>& shuffle, int* index) {
     return SimdShuffle::TryMatchSplat<LANES>(&shuffle[0], index);
   }
+  static bool TryMatch64x1Shuffle(const Shuffle<kSimd128Size>& shuffle,
+                                  uint8_t* shuffle64x1) {
+    return SimdShuffle::TryMatch64x1Shuffle(&shuffle[0], shuffle64x1);
+  }
   static bool TryMatch64x2Shuffle(const Shuffle<kSimd128Size>& shuffle,
                                   uint8_t* shuffle64x2) {
     return SimdShuffle::TryMatch64x2Shuffle(&shuffle[0], shuffle64x2);
+  }
+  static bool TryMatch32x1Shuffle(const Shuffle<kSimd128Size>& shuffle,
+                                  uint8_t* shuffle32x1) {
+    return SimdShuffle::TryMatch32x1Shuffle(&shuffle[0], shuffle32x1);
+  }
+  static bool TryMatch32x2Shuffle(const Shuffle<kSimd128Size>& shuffle,
+                                  uint8_t* shuffle32x2) {
+    return SimdShuffle::TryMatch32x2Shuffle(&shuffle[0], shuffle32x2);
   }
   static bool TryMatch32x4Shuffle(const Shuffle<kSimd128Size>& shuffle,
                                   uint8_t* shuffle32x4) {
@@ -61,6 +73,18 @@ class SimdShuffleTest : public ::testing::Test {
   static bool TryMatch32x4OneLaneSwizzle(const uint8_t* shuffle32x4,
                                          uint8_t* from, uint8_t* to) {
     return SimdShuffle::TryMatch32x4OneLaneSwizzle(shuffle32x4, from, to);
+  }
+  static bool TryMatch16x1Shuffle(const Shuffle<kSimd128Size>& shuffle,
+                                  uint8_t* shuffle16x1) {
+    return SimdShuffle::TryMatch16x1Shuffle(&shuffle[0], shuffle16x1);
+  }
+  static bool TryMatch16x2Shuffle(const Shuffle<kSimd128Size>& shuffle,
+                                  uint8_t* shuffle16x2) {
+    return SimdShuffle::TryMatch16x2Shuffle(&shuffle[0], shuffle16x2);
+  }
+  static bool TryMatch16x4Shuffle(const Shuffle<kSimd128Size>& shuffle,
+                                  uint8_t* shuffle16x4) {
+    return SimdShuffle::TryMatch16x4Shuffle(&shuffle[0], shuffle16x4);
   }
   static bool TryMatch16x8Shuffle(const Shuffle<kSimd128Size>& shuffle,
                                   uint8_t* shuffle16x8) {
@@ -230,6 +254,35 @@ TEST_F(SimdShuffleTest, TryMatchConcat) {
       {{0, 1, 2, 3, 0, 1, 2, 3, 0, 1, 2, 3, 0, 1, 2, 3}}, &offset));
 }
 
+TEST_F(SimdShuffleTest, TryMatch32x1Shuffle) {
+  uint8_t shuffle32x1;
+  EXPECT_TRUE(TryMatch32x1Shuffle({{12, 13, 14, 15}}, &shuffle32x1));
+  EXPECT_EQ(3, shuffle32x1);
+  EXPECT_TRUE(TryMatch32x1Shuffle({{16, 17, 18, 19}}, &shuffle32x1));
+  EXPECT_EQ(4, shuffle32x1);
+
+  EXPECT_FALSE(TryMatch32x1Shuffle({{3, 4, 5, 6}}, &shuffle32x1));
+  EXPECT_FALSE(TryMatch32x1Shuffle({{19, 18, 17, 16}}, &shuffle32x1));
+}
+
+TEST_F(SimdShuffleTest, TryMatch32x2Shuffle) {
+  uint8_t shuffle32x2[2];
+  EXPECT_TRUE(
+      TryMatch32x2Shuffle({{12, 13, 14, 15, 8, 9, 10, 11}}, shuffle32x2));
+  EXPECT_EQ(3, shuffle32x2[0]);
+  EXPECT_EQ(2, shuffle32x2[1]);
+
+  EXPECT_TRUE(TryMatch32x2Shuffle({{4, 5, 6, 7, 16, 17, 18, 19}}, shuffle32x2));
+  EXPECT_EQ(1, shuffle32x2[0]);
+  EXPECT_EQ(4, shuffle32x2[1]);
+
+  EXPECT_FALSE(
+      TryMatch32x2Shuffle({{3, 4, 5, 6, 16, 17, 18, 19}}, shuffle32x2));
+
+  EXPECT_FALSE(
+      TryMatch32x2Shuffle({{4, 5, 6, 7, 19, 18, 17, 16}}, shuffle32x2));
+}
+
 TEST_F(SimdShuffleTest, TryMatch32x4Shuffle) {
   uint8_t shuffle32x4[4];
   // Match if each group of 4 bytes is from the same 32 bit lane.
@@ -347,6 +400,67 @@ TEST_F(SimdShuffleTest, TryMatch32x4OneLaneSwizzle) {
   EXPECT_EQ(to, 2);
 }
 
+TEST_F(SimdShuffleTest, TryMatch16x1Shuffle) {
+  uint8_t shuffle16x1;
+  // Match if each group of 2 bytes is from the same 16 bit lane.
+  EXPECT_TRUE(TryMatch16x1Shuffle({{12, 13}}, &shuffle16x1));
+  EXPECT_EQ(6, shuffle16x1);
+  EXPECT_TRUE(TryMatch16x1Shuffle({{26, 27}}, &shuffle16x1));
+  EXPECT_EQ(13, shuffle16x1);
+
+  // Bytes must be in order in the 16 bit lane.
+  EXPECT_FALSE(TryMatch16x1Shuffle({{1, 2}}, &shuffle16x1));
+  // Each group must start with the first byte in the 16 bit lane.
+  EXPECT_FALSE(TryMatch16x1Shuffle({{25, 26}}, &shuffle16x1));
+}
+
+TEST_F(SimdShuffleTest, TryMatch16x2Shuffle) {
+  uint8_t shuffle16x2[2];
+  // Match if each group of 2 bytes is from the same 16 bit lane.
+  EXPECT_TRUE(TryMatch16x2Shuffle({{12, 13, 30, 31}}, shuffle16x2));
+  EXPECT_EQ(6, shuffle16x2[0]);
+  EXPECT_EQ(15, shuffle16x2[1]);
+  EXPECT_TRUE(TryMatch16x2Shuffle({{8, 9, 26, 27}}, shuffle16x2));
+  EXPECT_EQ(4, shuffle16x2[0]);
+  EXPECT_EQ(13, shuffle16x2[1]);
+
+  EXPECT_TRUE(TryMatch16x2Shuffle({{4, 5, 22, 23}}, shuffle16x2));
+  EXPECT_EQ(2, shuffle16x2[0]);
+  EXPECT_EQ(11, shuffle16x2[1]);
+  EXPECT_TRUE(TryMatch16x2Shuffle({{16, 17, 2, 3}}, shuffle16x2));
+  EXPECT_EQ(8, shuffle16x2[0]);
+  EXPECT_EQ(1, shuffle16x2[1]);
+
+  // Bytes must be in order in the 16 bit lane.
+  EXPECT_FALSE(TryMatch16x2Shuffle({{12, 13, 11, 11}}, shuffle16x2));
+  // Each group must start with the first byte in the 16 bit lane.
+  EXPECT_FALSE(TryMatch16x2Shuffle({{1, 0, 3, 2}}, shuffle16x2));
+}
+
+TEST_F(SimdShuffleTest, TryMatch16x4Shuffle) {
+  uint8_t shuffle16x4[4];
+  // Match if each group of 2 bytes is from the same 16 bit lane.
+  EXPECT_TRUE(
+      TryMatch16x4Shuffle({{12, 13, 30, 31, 8, 9, 26, 27}}, shuffle16x4));
+  EXPECT_EQ(6, shuffle16x4[0]);
+  EXPECT_EQ(15, shuffle16x4[1]);
+  EXPECT_EQ(4, shuffle16x4[2]);
+  EXPECT_EQ(13, shuffle16x4[3]);
+
+  EXPECT_TRUE(TryMatch16x4Shuffle({{4, 5, 22, 23, 16, 17, 2, 3}}, shuffle16x4));
+  EXPECT_EQ(2, shuffle16x4[0]);
+  EXPECT_EQ(11, shuffle16x4[1]);
+  EXPECT_EQ(8, shuffle16x4[2]);
+  EXPECT_EQ(1, shuffle16x4[3]);
+
+  // Bytes must be in order in the 16 bit lane.
+  EXPECT_FALSE(
+      TryMatch16x4Shuffle({{12, 13, 30, 30, 8, 9, 26, 27}}, shuffle16x4));
+  // Each group must start with the first byte in the 16 bit lane.
+  EXPECT_FALSE(
+      TryMatch16x4Shuffle({{12, 13, 31, 30, 8, 9, 26, 27}}, shuffle16x4));
+}
+
 TEST_F(SimdShuffleTest, TryMatch16x8Shuffle) {
   uint8_t shuffle16x8[8];
   // Match if each group of 2 bytes is from the same 16 bit lane.
@@ -427,6 +541,18 @@ TEST_F(SimdShuffleTest, UpperToLowerReduce) {
       upper_to_lower_8x2));
 }
 
+TEST_F(SimdShuffleTest, Shuffle64x1) {
+  uint8_t shuffle64x1;
+  EXPECT_TRUE(
+      TryMatch64x1Shuffle({{24, 25, 26, 27, 28, 29, 30, 31}}, &shuffle64x1));
+  EXPECT_EQ(3, shuffle64x1);
+  EXPECT_TRUE(
+      TryMatch64x1Shuffle({{8, 9, 10, 11, 12, 13, 14, 15}}, &shuffle64x1));
+  EXPECT_EQ(1, shuffle64x1);
+
+  EXPECT_FALSE(TryMatch64x1Shuffle({{1, 2, 3, 4, 5, 6, 7, 8}}, &shuffle64x1));
+}
+
 TEST_F(SimdShuffleTest, Shuffle64x2) {
   constexpr uint8_t identity_64x2[] = {0, 1, 2,  3,  4,  5,  6,  7,
                                        8, 9, 10, 11, 12, 13, 14, 15};
@@ -487,9 +613,9 @@ ShuffleMap test_shuffles = {
      {{0, 1, 2, 3, 16, 17, 18, 19, 4, 5, 6, 7, 20, 21, 22, 23}}},
     {CanonicalShuffle::kS32x4InterleaveHighHalves,
      {{8, 9, 10, 11, 24, 25, 26, 27, 12, 13, 14, 15, 28, 29, 30, 31}}},
-    {CanonicalShuffle::kS32x4InterleaveEven,
+    {CanonicalShuffle::kS32x4Even,
      {{0, 1, 2, 3, 8, 9, 10, 11, 16, 17, 18, 19, 24, 25, 26, 27}}},
-    {CanonicalShuffle::kS32x4InterleaveOdd,
+    {CanonicalShuffle::kS32x4Odd,
      {{4, 5, 6, 7, 12, 13, 14, 15, 20, 21, 22, 23, 28, 29, 30, 31}}},
     {CanonicalShuffle::kS32x4TransposeEven,
      {{0, 1, 2, 3, 16, 17, 18, 19, 8, 9, 10, 11, 24, 25, 26, 27}}},
@@ -501,9 +627,9 @@ ShuffleMap test_shuffles = {
      {{0, 1, 16, 17, 2, 3, 18, 19, 4, 5, 20, 21, 6, 7, 22, 23}}},
     {CanonicalShuffle::kS16x8InterleaveHighHalves,
      {{8, 9, 24, 25, 10, 11, 26, 27, 12, 13, 28, 29, 14, 15, 30, 31}}},
-    {CanonicalShuffle::kS16x8InterleaveEven,
+    {CanonicalShuffle::kS16x8Even,
      {{0, 1, 4, 5, 8, 9, 12, 13, 16, 17, 20, 21, 24, 25, 28, 29}}},
-    {CanonicalShuffle::kS16x8InterleaveOdd,
+    {CanonicalShuffle::kS16x8Odd,
      {{2, 3, 6, 7, 10, 11, 14, 15, 18, 19, 22, 23, 26, 27, 30, 31}}},
     {CanonicalShuffle::kS16x8TransposeEven,
      {{0, 1, 16, 17, 4, 5, 20, 21, 8, 9, 24, 25, 12, 13, 28, 29}}},
@@ -513,9 +639,9 @@ ShuffleMap test_shuffles = {
      {{0, 16, 1, 17, 2, 18, 3, 19, 4, 20, 5, 21, 6, 22, 7, 23}}},
     {CanonicalShuffle::kS8x16InterleaveHighHalves,
      {{8, 24, 9, 25, 10, 26, 11, 27, 12, 28, 13, 29, 14, 30, 15, 31}}},
-    {CanonicalShuffle::kS8x16InterleaveEven,
+    {CanonicalShuffle::kS8x16Even,
      {{0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30}}},
-    {CanonicalShuffle::kS8x16InterleaveOdd,
+    {CanonicalShuffle::kS8x16Odd,
      {{1, 3, 5, 7, 9, 11, 13, 15, 17, 19, 21, 23, 25, 27, 29, 31}}},
     {CanonicalShuffle::kS8x16TransposeEven,
      {{0, 16, 2, 18, 4, 20, 6, 22, 8, 24, 10, 26, 12, 28, 14, 30}}},

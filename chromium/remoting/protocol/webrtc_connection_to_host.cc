@@ -58,7 +58,7 @@ void WebrtcConnectionToHost::Connect(
 }
 
 void WebrtcConnectionToHost::Disconnect(ErrorCode error) {
-  session_->Close(error);
+  session_->Close(error, /* error_details= */ {}, FROM_HERE);
 }
 
 void WebrtcConnectionToHost::ApplyNetworkSettings(
@@ -138,7 +138,10 @@ void WebrtcConnectionToHost::OnWebrtcTransportConnecting() {
 
 void WebrtcConnectionToHost::OnWebrtcTransportConnected() {}
 
-void WebrtcConnectionToHost::OnWebrtcTransportError(ErrorCode error) {
+void WebrtcConnectionToHost::OnWebrtcTransportError(
+    ErrorCode error,
+    std::string_view error_details,
+    const base::Location& error_location) {
   CloseChannels();
   SetState(FAILED, error);
 }
@@ -199,7 +202,7 @@ void WebrtcConnectionToHost::OnChannelClosed(
     ChannelDispatcherBase* channel_dispatcher) {
   LOG(ERROR) << "Channel " << channel_dispatcher->channel_name()
              << " was closed unexpectedly.";
-  SetState(FAILED, ErrorCode::INCOMPATIBLE_PROTOCOL);
+  SetState(FAILED, ErrorCode::CHANNEL_CONNECTION_ERROR);
 }
 
 ConnectionToHost::State WebrtcConnectionToHost::state() const {

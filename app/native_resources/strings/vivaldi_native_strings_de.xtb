@@ -14,6 +14,7 @@
 <translation id="1454726940098520109">Nicht mehr nachfragen</translation>
 <translation id="1462666970065907900">Wollen Sie dieses Fenster wirklich schließen?</translation>
 <translation id="1480046233931937785">Credits</translation>
+<translation id="1490502035430975848">Portaldokument prüfen</translation>
 <translation id="1521774566618522728">Heute aktiv</translation>
 <translation id="1526344461589023948">Beim Versuch, ein heruntergeladenes Update zu speichern, ist ein Fehler aufgetreten. Bitte prüfen Sie, ob der Computer über genügend Speicherplatz verfügt und versuchen Sie es später erneut.</translation>
 <translation id="1635542496948266458">Profile wechseln</translation>
@@ -34,9 +35,11 @@
 <translation id="2141974047387702305">Beim Herunterladen der Update-Dateien ist ein Fehler aufgetreten. Bitte prüfen Sie Ihre Internetverbindung und versuchen Sie es später erneut.</translation>
 <translation id="2226825946708954262">⚠ Mit Datenverlust fortfahren</translation>
 <translation id="2339641773402824483">Auf Aktualisierungen prüfen …</translation>
+<translation id="2429571091666452569">Von der Liste:</translation>
 <translation id="2441056087170876076">Monster 2</translation>
 <translation id="2444387452209867610">&amp;Notiz einfügen</translation>
 <translation id="2486841023299517366">Tier 4</translation>
+<translation id="2501278716633472235">Gehe zurück</translation>
 <translation id="2612127540243995147">Bereit zur Installation. Vivaldi wird geschlossen und neu gestartet.</translation>
 <translation id="2613387515621326337">Update-Webseite anzeigen</translation>
 <translation id="2645477450146475243">Leider stehen Ihre Opera Einstellungen nicht zur Verfügung, während er noch läuft. Um diese Einstellungen in Vivaldi zu importieren, speichern Sie Ihre Arbeit, schließen alle Opera-Fenster und klicken danach auf „Erneut versuchen“.</translation>
@@ -61,6 +64,7 @@
 <translation id="3259769196742189631">Validieren</translation>
 <translation id="3291915639428159043">Automatische Wiedergabe gesperrt</translation>
 <translation id="3302905971452834934">Monster 1</translation>
+<translation id="3308738399950580893">Werbung</translation>
 <translation id="3334610655141903168">(kein Titel)</translation>
 <translation id="3372505110412186107">Vivaldi <ph name="VERSION" /> ist derzeit die neueste verfügbare Version.</translation>
 <translation id="3383198080133834965">Sie benutzen bereits die neueste Version!</translation>
@@ -71,9 +75,11 @@
 <translation id="3521635864657970829">Wollen Sie dieses Fenster wirklich schließen?</translation>
 <translation id="3540597690227428180">Tier 9</translation>
 <translation id="3542768452570884558">Link in neuem Fenster öffnen</translation>
+<translation id="3586931643579894722">Details ausblenden</translation>
 <translation id="3588820906588687999">Bild in neuem Tab öffnen</translation>
 <translation id="3601066750251199488">Monster 3</translation>
 <translation id="3620979700683094848">Webseiten können Videos automatisch abspielen</translation>
+<translation id="3650023731264842343">Beim Laden der folgenden Seite:</translation>
 <translation id="3658651522139217005">Opera GX</translation>
 <translation id="3680031241659195730">Eine neue Version von Vivaldi ist verfügbar!</translation>
 <translation id="3708982624815781692">Der Download wurde abgebrochen.</translation>
@@ -83,6 +89,7 @@
 <translation id="3795800845758778870">Leider stehen die Brave-Einstellungen nicht zur Verfügung, während er noch läuft. Um die Einstellungen in Vivaldi zu importieren, speichern Sie Ihre Arbeit, schließen Sie alle Brave-Fenster und klicken danach auf „Erneut versuchen“.</translation>
 <translation id="3822431842304177896">Neue Trennlinie</translation>
 <translation id="3832132597516774400">Landschaft 5</translation>
+<translation id="3894751534882749287">Wenn Sie die Seite trotzdem ansehen möchten, können Sie die Tracking-Schutzstufe im Tracker-Blocker-Popup oder durch Klicken auf die Zulassen-Schaltfläche ändern</translation>
 <translation id="3914946330804881301">Importiert von Opera</translation>
 <translation id="3921292902397893431">Monster 8</translation>
 <translation id="3943857333388298514">Einfügen</translation>
@@ -107,6 +114,7 @@
 <translation id="4582480609585453144">Link im Hintergrund-Tab öffnen</translation>
 <translation id="4636708767492582204">Per Mail senden</translation>
 <translation id="4677434526832593569">Tier 8</translation>
+<translation id="4736016046474602958">Tracker-Blocker</translation>
 <translation id="474217410105706308">Tab stummschalten (Audio aus)</translation>
 <translation id="4861715717329665002">Automatisch gespeicherte Sitzungen</translation>
 <translation id="4881695831933465202">Öffnen</translation>
@@ -133,9 +141,11 @@
 <translation id="588258955323874662">Vollbild</translation>
 <translation id="5916080360077521750">Leider stehen Ihre Chrome Einstellungen nicht zur Verfügung, während er noch läuft. Um die Einstellungen nach Vivaldi zu importieren, speichern Sie Ihre Dokumente, beenden Sie alle Chrome Fenster und klicken danach auf „Erneut versuchen“.</translation>
 <translation id="6040143037577758943">Schließen</translation>
+<translation id="6140948187512243695">Details anzeigen</translation>
 <translation id="6229528619562190452">Klicken Sie hier, um Vivaldi zu aktualisieren.</translation>
 <translation id="6234173136417926046">Bild als Schnellwahl-Hintergrund verwenden</translation>
 <translation id="6339818817272922368">Lokales Konto</translation>
+<translation id="6376435169746695498">Das Laden dieser Seite wurde durch einen Treffer in <ph name="BLOCKER_NAME" /> blockiert</translation>
 <translation id="6398710281890660037">Mein Profil sichern</translation>
 <translation id="6438786710866753178">Landschaft 4</translation>
 <translation id="6477028720702061455">Opera-Profilordner für den Import auswählen</translation>
@@ -152,6 +162,7 @@
 <translation id="7086554968911045110">Landschaft 7</translation>
 <translation id="7099506190679014195">Aktualisierung des sicheren Schlüsselspeichers</translation>
 <translation id="7111492742514999492">Landschaft 9</translation>
+<translation id="7113310725918019676"><ph name="BLOCKED_TYPE" /> von <ph name="DOMAIN" /> zulassen</translation>
 <translation id="7208252576848052204">Leider stehen Ihre Arc-Einstellungen nicht zur Verfügung, während er noch läuft. Um die Einstellungen in Vivaldi zu importieren, speichern Sie Ihre Arbeit, schließen alle Arc-Fenster und klicken danach auf „Erneut versuchen“.</translation>
 <translation id="7321500017121629018">Gestern aktiv</translation>
 <translation id="7337881442233988129">Chromium</translation>
@@ -167,12 +178,13 @@
 <translation id="8027581147000338959">In neuem Fenster öffnen</translation>
 <translation id="8044382196220116469">Webseiten nicht erlauben, Videos automatisch abzuspielen</translation>
 <translation id="8099620695029051217">Seitenadresse kopieren</translation>
+<translation id="8119307142152921512">Tracker und Werbung</translation>
 <translation id="8197810018650377191">Lesezeichen Seite</translation>
 <translation id="8261506727792406068">Löschen</translation>
-<translation id="8263047843452521549">Den Service-Worker im Hintergrund inspizieren</translation>
 <translation id="8331671104904436324">In Hintergrund-Tab öffnen</translation>
 <translation id="8373293945112511707">Landschaft 1</translation>
 <translation id="8388552048012645975">Die aktuelle Version wird heruntergeladen …</translation>
+<translation id="8392904568172593155">Ohne Parameter</translation>
 <translation id="8427094907586191051">Landschaft 17</translation>
 <translation id="8439034818057146672">Eine neue Version von Vivaldi ist bereit zur Installation.</translation>
 <translation id="8446668873108041390">Die Ausführung von JavaScript über AppleScript ist deaktiviert. Unter Einstellungen &gt; Privatsphäre &gt; Apple Events gibt es eine Einstellung, um JavaScript von Apple Events aus zuzulassen.</translation>
@@ -183,14 +195,15 @@
 <translation id="8651348004684669199">Aktiven Tab hinzufügen</translation>
 <translation id="8669345741879513971">Monster 10</translation>
 <translation id="867544375504146191">Yandex</translation>
-<translation id="8689295374912158752">Portaldokument inspizieren</translation>
 <translation id="875142999698251063">Jetzt beenden</translation>
 <translation id="8768970203213061953">Landschaft 14</translation>
 <translation id="8773635261052182196">Sie werden diese Benachrichtigungen nicht mehr sehen. Sie können sie aber wieder in den Vivaldi-Einstellungen aktivieren.</translation>
 <translation id="8774017153185436870">Seiten können Videos automatisch abspielen</translation>
 <translation id="8813277370772331957">Später erinnern</translation>
+<translation id="8837256239226739065">Hintergrund-Service-Worker prüfen</translation>
 <translation id="8894900864683381599">Link als Web-Paneel hinzufügen</translation>
 <translation id="8912720443398351457">Wollen Sie wirklich Vivaldi beenden?</translation>
+<translation id="8940028675168378100">Geblockt von <ph name="BLOCKER_NAME" /></translation>
 <translation id="8947109330183116400">HTML-Lesezeichen-Datei auswählen</translation>
 <translation id="9017566390391482291">Vivaldi-Profilordner für den Import auswählen</translation>
 <translation id="9048058608784130603">Ausstehendes Update <ph name="VERSION" /></translation>
@@ -201,6 +214,7 @@
 <translation id="912022491595344261">Bild als <ph name="USER" /> öffnen</translation>
 <translation id="9157539936604258187">Link öffnen</translation>
 <translation id="9169060351863393881">Opera 12.x</translation>
+<translation id="9180553614777056266">Werbeblocker</translation>
 <translation id="939305735877869636">Brave</translation>
 <translation id="970294721402795299">Landschaft 16</translation>
 </translationbundle>

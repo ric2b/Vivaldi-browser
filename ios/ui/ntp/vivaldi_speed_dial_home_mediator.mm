@@ -17,6 +17,8 @@
 #import "ios/chrome/browser/bookmarks/model/bookmark_model_bridge_observer.h"
 #import "ios/chrome/browser/bookmarks/model/managed_bookmark_service_factory.h"
 #import "ios/chrome/browser/bookmarks/ui_bundled/bookmark_utils_ios.h"
+#import "ios/chrome/browser/content_suggestions/ui_bundled/cells/content_suggestions_most_visited_item.h"
+#import "ios/chrome/browser/content_suggestions/ui_bundled/cells/most_visited_tiles_config.h"
 #import "ios/chrome/browser/features/vivaldi_features.h"
 #import "ios/chrome/browser/first_run/ui_bundled/first_run_util.h"
 #import "ios/chrome/browser/shared/model/application_context/application_context.h"
@@ -25,8 +27,6 @@
 #import "ios/chrome/browser/shared/model/profile/profile_ios.h"
 #import "ios/chrome/browser/shared/model/utils/observable_boolean.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
-#import "ios/chrome/browser/ui/content_suggestions/cells/content_suggestions_most_visited_item.h"
-#import "ios/chrome/browser/ui/content_suggestions/cells/most_visited_tiles_config.h"
 #import "ios/most_visited_sites/vivaldi_most_visited_sites_manager.h"
 #import "ios/ui/helpers/vivaldi_global_helpers.h"
 #import "ios/ui/ntp/top_toolbar/top_toolbar_swift.h"
@@ -44,6 +44,7 @@ using bookmarks::BookmarkNode;
 using bookmarks::ManagedBookmarkService;
 using vivaldi_bookmark_kit::GetSpeeddial;
 using vivaldi_bookmark_kit::IsSeparator;
+using vivaldi_bookmark_kit::IsDirectChildOfRoot;
 using l10n_util::GetNSString;
 
 @interface VivaldiSpeedDialHomeMediator ()<BookmarkModelBridgeObserver,
@@ -68,6 +69,8 @@ using l10n_util::GetNSString;
   PrefBackedBoolean* _showSpeedDials;
   // Observer for start page customize button visibility state
   PrefBackedBoolean* _showCustomizeStartPageButton;
+  // Observer for start page Add button visibility state
+  PrefBackedBoolean* _showAddButton;
 }
 
 // Manager that provides most visited sites
@@ -135,6 +138,13 @@ using l10n_util::GetNSString;
                  prefName:prefs::kBottomOmnibox];
     [_bottomOmniboxEnabled setObserver:self];
     [self booleanDidChange:_bottomOmniboxEnabled];
+
+    _showAddButton =
+        [[PrefBackedBoolean alloc]
+            initWithPrefService:GetApplicationContext()->GetLocalState()
+                 prefName:vivaldiprefs::kVivaldiStartPageShowAddButton];
+    [_showAddButton setObserver:self];
+    [self booleanDidChange:_showAddButton];
 
     _showFrequentlyVisited =
         [[PrefBackedBoolean alloc]
@@ -205,6 +215,10 @@ using l10n_util::GetNSString;
   [_showCustomizeStartPageButton stop];
   [_showCustomizeStartPageButton setObserver:nil];
   _showCustomizeStartPageButton = nil;
+
+  [_showAddButton stop];
+  [_showAddButton setObserver:nil];
+  _showAddButton = nil;
 }
 
 - (void)setConsumer:(id<SpeedDialHomeConsumer>)consumer {
@@ -420,8 +434,14 @@ using l10n_util::GetNSString;
       const BookmarkNode* childNode = child.get();
       if (IsSeparator(childNode))
         continue;
-      [childrens addObject:
-          [[VivaldiSpeedDialItem alloc] initWithBookmark:childNode]];
+      VivaldiSpeedDialItem* item =
+          [[VivaldiSpeedDialItem alloc] initWithBookmark:childNode];
+      // If the group/folder is a direct children of one of the root nodes
+      // then do not show the 'Move out of folder' action since that moves
+      // the item to the root folder and user do not see it on StartPage
+      // anymore.
+      item.isMoveOutAble = !IsDirectChildOfRoot(_bookmarkModel.get(), node);
+      [childrens addObject:item];
     }
 
     groupItem.children = [self sortSpeedDials:childrens
@@ -587,9 +607,11 @@ using l10n_util::GetNSString;
       if (!self.showFrequentlyVisited) {
         index = 0;
       } else {
-        // If there are items in toolbar,
+        // If there are items in toolbar except add group,
         // select the second menu item (index 1); otherwise, select the first.
-        index = self.toolbarItems.count > 0 ? 1 : 0;
+        // When top sites visible, toolbar contains at least two items
+        // (top sites and add group) even if there is no speed dial groups.
+        index = self.toolbarItems.count > 2 ? 1 : 0;
       }
       break;
     }
@@ -629,14 +651,20 @@ using l10n_util::GetNSString;
 
 - (void)booleanDidChange:(id<ObservableBoolean>)observableBoolean {
   if (observableBoolean == _showSpeedDials) {
+    // If SpeedDials is disabled set the index to 0.
+    if (![observableBoolean value]) {
+      [VivaldiStartPagePrefsHelper setStartPageLastVisitedGroupIndex:0];
+    }
+    [self refreshContents];
     [self.consumer setSpeedDialsEnabled:[observableBoolean value]];
-    [self refreshContents];
   } else if (observableBoolean == _showFrequentlyVisited) {
-    [self.consumer setFrequentlyVisitedPagesEnabled:[observableBoolean value]];
     [self refreshContents];
+    [self.consumer setFrequentlyVisitedPagesEnabled:[observableBoolean value]];
   } else if (observableBoolean == _showCustomizeStartPageButton) {
     [self.consumer
         setShowCustomizeStartPageButtonEnabled:[observableBoolean value]];
+  } else if (observableBoolean == _showAddButton) {
+    [self.consumer setShowAddButtonEnabled:[observableBoolean value]];
   } else if (observableBoolean == _tabBarEnabled ||
              observableBoolean == _bottomOmniboxEnabled) {
     [self handleLayoutChangeNotification];

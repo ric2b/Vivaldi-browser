@@ -1,9 +1,16 @@
 
 # cargo-vet imports lock
 
+[[publisher.hashbrown]]
+version = "0.15.2"
+when = "2024-11-25"
+user-id = 2915
+user-login = "Amanieu"
+user-name = "Amanieu d'Antras"
+
 [[publisher.libc]]
-version = "0.2.169"
-when = "2024-12-19"
+version = "0.2.171"
+when = "2025-03-11"
 user-id = 55123
 user-login = "rust-lang-owner"
 
@@ -141,6 +148,17 @@ who = "George Burgess IV <gbiv@google.com>"
 criteria = ["safe-to-run", "does-not-implement-crypto"]
 version = "1.4.0"
 
+[[audits.chromeos.audits.equivalent]]
+who = "George Burgess IV <gbiv@google.com>"
+criteria = ["safe-to-deploy", "does-not-implement-crypto"]
+version = "1.0.1"
+
+[[audits.chromeos.audits.equivalent]]
+who = "George Burgess IV <gbiv@google.com>"
+criteria = "ub-risk-0"
+version = "1.0.1"
+notes = "`rg -i unsafe` resulted in zero hits for this package."
+
 [[audits.chromeos.audits.getrandom]]
 who = "Android Legacy"
 criteria = "safe-to-run"
@@ -155,16 +173,6 @@ version = "0.4.3"
 who = "Ying Hsu <yinghsu@chromium.org>"
 criteria = ["safe-to-run", "does-not-implement-crypto"]
 version = "2.7.2"
-
-[[audits.chromeos.audits.rand_chacha]]
-who = "Android Legacy"
-criteria = "safe-to-run"
-version = "0.3.1"
-
-[[audits.chromeos.audits.rand_core]]
-who = "Android Legacy"
-criteria = "safe-to-run"
-version = "0.6.4"
 
 [[audits.chromeos.audits.rustc-demangle-capi]]
 who = "George Burgess IV <gbiv@google.com>"

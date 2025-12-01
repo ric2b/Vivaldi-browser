@@ -35,12 +35,6 @@ class PrefService;
 /// Returns Newtab Url
 + (NSString*)getNewTabUrlWithPrefService: (PrefService*)prefService;
 
-/// Returns whether inactive tabs available. Depends on a
-/// chrome flag. Due to dependencies in other place we also
-/// show/hide the inactive tabs section on tabs settings based
-/// on the same pref value.
-+ (BOOL)isInactiveTabsAvailable;
-
 /// Sets the desktop style tab mode.
 + (void)setDesktopTabsMode:(BOOL)enabled
             inPrefServices:(PrefService*)prefService;

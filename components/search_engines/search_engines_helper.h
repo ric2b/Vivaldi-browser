@@ -1,9 +1,12 @@
+// Copyright (c) 2024 Vivaldi Technologies AS. All rights reserved
+
 #ifndef COMPONENTS_SEARCH_ENGINES_SEARCH_ENGINES_HELPER_H_
 #define COMPONENTS_SEARCH_ENGINES_SEARCH_ENGINES_HELPER_H_
 
 #include <string>
 #include <vector>
 
+#include "components/search_engines/parsed_search_engines.h"
 #include "components/search_engines/regulatory_extension_type.h"
 #include "components/search_engines/search_engine_type.h"
 #include "components/search_engines/template_url_prepopulate_data.h"
@@ -26,13 +29,21 @@ struct EngineAndTier {
 };
 
 const std::vector<EngineAndTier> GetPrepopulationSetFromCountryID(
-    int country_id,
-    std::string application_locale = "");
+    country_codes::CountryId country_id,
+    const std::string_view application_locale,
+    PrefService& prefs);
+
+ParsedSearchEngines::EnginesListWithDefaults GetPrepopulatedSearchEngines(
+    country_codes::CountryId country_id,
+    const std::string_view application_locale,
+    PrefService& prefs);
 
 const PrepopulatedEngine* GetFallbackEngine(
-    int country_id,
-    std::string application_locale = "",
+    country_codes::CountryId country_id,
+    const std::string_view application_locale,
+    PrefService& prefs,
     SearchType search_type = SearchType::kMain);
+
 }  // namespace TemplateURLPrepopulateData
 
 #endif  // COMPONENTS_SEARCH_ENGINES_SEARCH_ENGINES_HELPER_H_

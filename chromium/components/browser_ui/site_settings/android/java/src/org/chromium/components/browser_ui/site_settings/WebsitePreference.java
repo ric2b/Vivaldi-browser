@@ -4,6 +4,7 @@
 
 package org.chromium.components.browser_ui.site_settings;
 
+import static org.chromium.build.NullUtil.assumeNonNull;
 import static org.chromium.components.browser_ui.site_settings.WebsitePreferenceBridge.SITE_WILDCARD;
 
 import android.content.Context;
@@ -19,6 +20,8 @@ import android.widget.TextView;
 import androidx.preference.Preference;
 import androidx.preference.PreferenceViewHolder;
 
+import org.chromium.build.annotations.NullMarked;
+import org.chromium.build.annotations.Nullable;
 import org.chromium.components.browser_ui.accessibility.PageZoomUtils;
 import org.chromium.components.browser_ui.settings.ChromeImageViewPreference;
 import org.chromium.components.browser_ui.settings.FaviconViewUtils;
@@ -32,16 +35,17 @@ import org.chromium.url.GURL;
  * of the preference. See {@link ChromeImageViewPreference} for more details on how this icon
  * can be used.
  */
+@NullMarked
 class WebsitePreference extends ChromeImageViewPreference {
     protected final SiteSettingsDelegate mSiteSettingsDelegate;
     protected final Website mSite;
     protected final SiteSettingsCategory mCategory;
-    private Runnable mRefreshZoomsListFunction;
+    private @Nullable Runnable mRefreshZoomsListFunction;
 
     // Whether the favicon has been fetched already.
     private boolean mFaviconFetched;
 
-    private OnStorageAccessWebsiteDetailsRequested mStorageAccessSettingsPageListener;
+    private @Nullable OnStorageAccessWebsiteDetailsRequested mStorageAccessSettingsPageListener;
 
     /** Used to notify storage access website details subpage requests. */
     public interface OnStorageAccessWebsiteDetailsRequested {
@@ -111,7 +115,7 @@ class WebsitePreference extends ChromeImageViewPreference {
             return false;
         }
 
-        int numberSites = mSite.getEmbeddedContentSettings(type).size();
+        int numberSites = assumeNonNull(mSite.getEmbeddedContentSettings(type)).size();
         return numberSites != 1 || !mSite.isEmbargoed(type);
     }
 
@@ -125,7 +129,7 @@ class WebsitePreference extends ChromeImageViewPreference {
 
     protected String buildExpirationSummary(ContentSettingException exception) {
         assert exception != null && exception.hasExpiration();
-        var expirationInDays = exception.getExpirationInDays();
+        var expirationInDays = assumeNonNull(exception.getExpirationInDays());
         return expirationInDays == 0
                 ? getContext().getString(R.string.site_settings_expires_today_label)
                 : getContext()
@@ -136,9 +140,8 @@ class WebsitePreference extends ChromeImageViewPreference {
                                 expirationInDays);
     }
 
-    protected String buildSummary() {
-        if (mSiteSettingsDelegate.isPrivacySandboxFirstPartySetsUiFeatureEnabled()
-                && mSiteSettingsDelegate.isRelatedWebsiteSetsDataAccessEnabled()
+    protected @Nullable String buildSummary() {
+        if (mSiteSettingsDelegate.isRelatedWebsiteSetsDataAccessEnabled()
                 && mSite.getRwsCookieInfo() != null) {
             var rwsInfo = mSite.getRwsCookieInfo();
             return getContext()
@@ -152,7 +155,10 @@ class WebsitePreference extends ChromeImageViewPreference {
 
         if (hasSubPage()) {
             int numberSites =
-                    mSite.getEmbeddedContentSettings(mCategory.getContentSettingsType()).size();
+                    assumeNonNull(
+                                    mSite.getEmbeddedContentSettings(
+                                            mCategory.getContentSettingsType()))
+                            .size();
             return getContext()
                     .getResources()
                     .getQuantityString(
@@ -209,7 +215,7 @@ class WebsitePreference extends ChromeImageViewPreference {
                             view -> {
                                 SiteSettingsUtil.resetZoomLevel(
                                         mSite, mSiteSettingsDelegate.getBrowserContextHandle());
-                                mRefreshZoomsListFunction.run();
+                                assumeNonNull(mRefreshZoomsListFunction).run();
                             });
             setImageViewEnabled(true);
             setImagePadding(25, 0, 0, 0);
@@ -225,8 +231,21 @@ class WebsitePreference extends ChromeImageViewPreference {
                                     buildTitle()),
                     (OnClickListener)
                             view -> {
-                                mStorageAccessSettingsPageListener
+                                assumeNonNull(mStorageAccessSettingsPageListener)
                                         .onStorageAccessWebsiteDetailsRequested(this);
+                            });
+            setImageViewEnabled(true);
+            setImagePadding(25, 0, 0, 0);
+            return;
+        }
+
+        if (mSiteSettingsDelegate.isPermissionSiteSettingsRadioButtonFeatureEnabled()) {
+            setImageView(
+                    R.drawable.ic_more_vert_24dp,
+                    null,
+                    (OnClickListener)
+                            view -> {
+                                performClick(view);
                             });
             setImageViewEnabled(true);
             setImagePadding(25, 0, 0, 0);

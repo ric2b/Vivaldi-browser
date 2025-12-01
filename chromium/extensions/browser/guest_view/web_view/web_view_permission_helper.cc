@@ -40,6 +40,7 @@
 #include "extensions/api/tabs/tabs_private_api.h"
 #include "extensions/browser/guest_view/mime_handler_view/mime_handler_view_guest.h"
 #include "extensions/helper/vivaldi_app_helper.h"
+#include "extensions/vivaldi_browser_component_wrapper.h"
 #include "ui/content/vivaldi_tab_check.h"
 
 using base::UserMetricsAction;
@@ -245,13 +246,14 @@ void WebViewPermissionHelper::RequestMediaAccessPermission(
   // Let the extension requesting permission handle this as it already has
   // permission.
   if (extension) {
-    MediaCaptureDevicesDispatcher::GetInstance()->ProcessMediaAccessRequest(
+    VivaldiBrowserComponentWrapper::GetInstance()->ProcessMediaAccessRequest(
         source, request, std::move(callback), extension);
     return;
   }
 
   extensions::VivaldiPrivateTabObserver* private_tab =
-    extensions::VivaldiPrivateTabObserver::FromWebContents(source);
+      VivaldiBrowserComponentWrapper::GetInstance()
+          ->VivaldiPrivateTabObserverFromWebContents(source);
 
   // The block below will allow or deny access when the permission has been set.
   extensions::VivaldiAppHelper* helper = web_view_guest()->attached() ?
@@ -259,17 +261,16 @@ void WebViewPermissionHelper::RequestMediaAccessPermission(
       web_view_guest()->embedder_web_contents()) : nullptr;
   if (helper)
     do {
-      Profile* source_profile =
-          Profile::FromBrowserContext(source->GetBrowserContext());
 
       ContentSetting audio_setting = CONTENT_SETTING_DEFAULT;
       ContentSetting camera_setting = CONTENT_SETTING_DEFAULT;
 
       if (request.audio_type != blink::mojom::MediaStreamType::NO_SERVICE) {
-        audio_setting =
-            HostContentSettingsMapFactory::GetForProfile(source_profile)
-                ->GetContentSetting(request.security_origin, GURL(),
-                                    ContentSettingsType::MEDIASTREAM_MIC);
+        audio_setting = static_cast<ContentSetting>(
+            VivaldiBrowserComponentWrapper::GetInstance()->GetContentSetting(
+                source, request.security_origin, GURL(),
+                ContentSettingsType::MEDIASTREAM_MIC));
+
 
         if (audio_setting != CONTENT_SETTING_ALLOW &&
             audio_setting != CONTENT_SETTING_BLOCK)
@@ -283,10 +284,11 @@ void WebViewPermissionHelper::RequestMediaAccessPermission(
 
       }
       if (request.video_type != blink::mojom::MediaStreamType::NO_SERVICE) {
-        camera_setting =
-            HostContentSettingsMapFactory::GetForProfile(source_profile)
-                ->GetContentSetting(request.security_origin, GURL(),
-                                    ContentSettingsType::MEDIASTREAM_CAMERA);
+        camera_setting = static_cast<ContentSetting>(
+            VivaldiBrowserComponentWrapper::GetInstance()->GetContentSetting(
+                source, request.security_origin, GURL(),
+                ContentSettingsType::MEDIASTREAM_CAMERA));
+
         if (camera_setting != CONTENT_SETTING_ALLOW &&
             camera_setting != CONTENT_SETTING_BLOCK)
           break;
@@ -404,21 +406,23 @@ void WebViewPermissionHelper::OnMediaPermissionResponse(
       extensions::VivaldiAppHelper::FromWebContents(
           web_view_guest()->embedder_web_contents());
   if (helper) {
-    Profile* profile = Profile::FromBrowserContext(
-        web_view_guest()->web_contents()->GetBrowserContext());
     if (request.audio_type != blink::mojom::MediaStreamType::NO_SERVICE) {
-      HostContentSettingsMapFactory::GetForProfile(profile)
+      VivaldiBrowserComponentWrapper::GetInstance()
           ->SetContentSettingCustomScope(
+            web_view_guest()->web_contents(), allow,
               primary_pattern, ContentSettingsPattern::Wildcard(),
               ContentSettingsType::MEDIASTREAM_MIC,
-              allow ? CONTENT_SETTING_ALLOW : CONTENT_SETTING_BLOCK);
+              allow ? CONTENT_SETTING_ALLOW
+                    : CONTENT_SETTING_BLOCK);
     }
     if (request.video_type  != blink::mojom::MediaStreamType::NO_SERVICE) {
-      HostContentSettingsMapFactory::GetForProfile(profile)
+      VivaldiBrowserComponentWrapper::GetInstance()
           ->SetContentSettingCustomScope(
-              primary_pattern, ContentSettingsPattern::Wildcard(),
+              web_view_guest()->web_contents(), allow, primary_pattern,
+              ContentSettingsPattern::Wildcard(),
               ContentSettingsType::MEDIASTREAM_CAMERA,
-              allow ? CONTENT_SETTING_ALLOW : CONTENT_SETTING_BLOCK);
+              allow ? CONTENT_SETTING_ALLOW
+                    : CONTENT_SETTING_BLOCK);
     }
   }
 
@@ -517,6 +521,11 @@ void WebViewPermissionHelper::RequestFullscreenPermission(
     PermissionResponseCallback callback) {
   web_view_permission_helper_delegate_->RequestFullscreenPermission(
       requesting_origin, std::move(callback));
+}
+
+std::optional<content::PermissionResult>
+WebViewPermissionHelper::OverridePermissionResult(ContentSettingsType type) {
+  return web_view_permission_helper_delegate_->OverridePermissionResult(type);
 }
 
 int WebViewPermissionHelper::RequestPermission(

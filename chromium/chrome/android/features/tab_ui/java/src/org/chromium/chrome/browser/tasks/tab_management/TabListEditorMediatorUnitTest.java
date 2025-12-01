@@ -9,8 +9,6 @@ import static org.mockito.Mockito.when;
 
 import android.content.Context;
 
-import androidx.test.filters.SmallTest;
-
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
@@ -23,6 +21,7 @@ import org.mockito.junit.MockitoRule;
 import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.base.test.BaseRobolectricTestRunner;
 import org.chromium.chrome.browser.tabmodel.TabGroupModelFilter;
+import org.chromium.chrome.browser.tasks.tab_management.TabListEditorCoordinator.CreationMode;
 import org.chromium.chrome.browser.tasks.tab_management.TabProperties.TabActionState;
 import org.chromium.components.browser_ui.desktop_windowing.AppHeaderState;
 import org.chromium.components.browser_ui.desktop_windowing.DesktopWindowStateManager;
@@ -54,7 +53,8 @@ public final class TabListEditorMediatorUnitTest {
                         /* bottomSheetController= */ null,
                         /* tabListEditorLayout= */ null,
                         TabActionState.SELECTABLE,
-                        mDesktopWindowStateManager);
+                        mDesktopWindowStateManager,
+                        CreationMode.FULL_SCREEN);
     }
 
     @After
@@ -63,7 +63,6 @@ public final class TabListEditorMediatorUnitTest {
     }
 
     @Test
-    @SmallTest
     public void testTopMarginOnAppHeaderStateChange() {
         AppHeaderState state = mock(AppHeaderState.class);
         when(state.getAppHeaderHeight()).thenReturn(10);

@@ -1267,14 +1267,13 @@ TEST(SpanTest, TemplatedLastOnDynamicSpan) {
   }
 }
 
-TEST(SpanTest, TemplatedSubspanFromDynamicSpan) {
+TEST(SpanTest, TemplatedSubspanOnDynamicSpan) {
   int array[] = {1, 2, 3};
-  span<int, 3> span(array);
+  span<int> span(array);
 
   {
     auto subspan = span.subspan<0>();
     EXPECT_EQ(span.data(), subspan.data());
-    static_assert(3 == decltype(subspan)::extent);
     EXPECT_THAT(subspan, ElementsAre(1, 2, 3));
   }
 
@@ -1283,7 +1282,6 @@ TEST(SpanTest, TemplatedSubspanFromDynamicSpan) {
     // SAFETY: `array` has three elmenents, so `span` has three elements, so
     // `span.data() + 1` points within it.
     EXPECT_EQ(UNSAFE_BUFFERS(span.data() + 1), subspan.data());
-    static_assert(2 == decltype(subspan)::extent);
     EXPECT_THAT(subspan, ElementsAre(2, 3));
   }
 
@@ -1292,7 +1290,6 @@ TEST(SpanTest, TemplatedSubspanFromDynamicSpan) {
     // SAFETY: `array` has three elmenents, so `span` has three elements, so
     // `span.data() + 2` points within it.
     EXPECT_EQ(UNSAFE_BUFFERS(span.data() + 2), subspan.data());
-    static_assert(1 == decltype(subspan)::extent);
     EXPECT_THAT(subspan, ElementsAre(3));
   }
 
@@ -1302,7 +1299,6 @@ TEST(SpanTest, TemplatedSubspanFromDynamicSpan) {
     // `span.data() + 3` points to one byte beyond the object as permitted by
     // C++ specification.
     EXPECT_EQ(UNSAFE_BUFFERS(span.data() + 3), subspan.data());
-    static_assert(0 == decltype(subspan)::extent);
     EXPECT_THAT(subspan, IsEmpty());
   }
 
@@ -2062,51 +2058,6 @@ TEST(SpanTest, OutOfBoundsDeath) {
   // Copying more values than exist in the source.
   ASSERT_DEATH_IF_SUPPORTED(
       std::copy_n(span_len2.begin(), 3, span_len3.begin()), "");
-}
-
-TEST(SpanTest, IteratorIsRangeMoveSafe) {
-  static constexpr int kArray[] = {1, 6, 1, 8, 0};
-  const size_t kNumElements = 5;
-  constexpr span<const int> span(kArray);
-
-  static constexpr int kOverlappingStartIndexes[] = {-4, 0, 3, 4};
-  static constexpr int kNonOverlappingStartIndexes[] = {-7, -5, 5, 7};
-
-  // Overlapping ranges.
-  for (const int dest_start_index : kOverlappingStartIndexes) {
-    EXPECT_FALSE(CheckedContiguousIterator<const int>::IsRangeMoveSafe(
-        span.begin(), span.end(),
-        // SAFETY: TODO(tsepez): iterator constructor safety is dubious
-        // given that we are adding indices like -4 to `data()`.
-        UNSAFE_BUFFERS(CheckedContiguousIterator<const int>(
-            span.data() + dest_start_index,
-            span.data() + dest_start_index + kNumElements))));
-  }
-
-  // Non-overlapping ranges.
-  for (const int dest_start_index : kNonOverlappingStartIndexes) {
-    EXPECT_TRUE(CheckedContiguousIterator<const int>::IsRangeMoveSafe(
-        span.begin(), span.end(),
-        // SAFETY: TODO(tsepez): iterator constructor safety is dubious
-        // given that we are adding indices like -7 to `data()`.
-        UNSAFE_BUFFERS(CheckedContiguousIterator<const int>(
-            span.data() + dest_start_index,
-            span.data() + dest_start_index + kNumElements))));
-  }
-
-  // IsRangeMoveSafe is true if the length to be moved is 0.
-  EXPECT_TRUE(CheckedContiguousIterator<const int>::IsRangeMoveSafe(
-      span.begin(), span.begin(),
-      // SAFETY: Empty range at the start of a span is always valid.
-      UNSAFE_BUFFERS(
-          CheckedContiguousIterator<const int>(span.data(), span.data()))));
-
-  // IsRangeMoveSafe is false if end < begin.
-  EXPECT_FALSE(CheckedContiguousIterator<const int>::IsRangeMoveSafe(
-      span.end(), span.begin(),
-      // SAFETY: Empty range at the start of a span is always valid.
-      UNSAFE_BUFFERS(
-          CheckedContiguousIterator<const int>(span.data(), span.data()))));
 }
 
 TEST(SpanTest, Sort) {

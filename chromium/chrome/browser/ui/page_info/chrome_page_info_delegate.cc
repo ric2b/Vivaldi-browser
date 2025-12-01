@@ -214,13 +214,13 @@ std::optional<std::u16string> ChromePageInfoDelegate::GetRwsOwner(
       ->GetRelatedWebsiteSetOwnerForDisplay(site_url);
 }
 
-bool ChromePageInfoDelegate::IsRwsManaged() {
+bool ChromePageInfoDelegate::IsRwsManaged(const GURL& site_url) {
   // Vivaldi
   if (!PrivacySandboxServiceFactory::GetForProfile(GetProfile()))
     return false;
 
   return PrivacySandboxServiceFactory::GetForProfile(GetProfile())
-      ->IsRelatedWebsiteSetsDataAccessManaged();
+      ->IsPartOfManagedRelatedWebsiteSet(net::SchemefulSite(site_url));
 }
 
 bool ChromePageInfoDelegate::CreateInfoBarDelegate() {

@@ -1,16 +1,18 @@
 // Copyright 2012 the V8 project authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
-//
+
+#ifndef V8_OBJECTS_OBJECTS_INL_H_
+#define V8_OBJECTS_OBJECTS_INL_H_
+
 // Review notes:
 //
 // - The use of macros in these inline functions may seem superfluous
 // but it is absolutely needed to make sure gcc generates optimal
 // code. gcc is not happy when attempting to inline too deep.
-//
 
-#ifndef V8_OBJECTS_OBJECTS_INL_H_
-#define V8_OBJECTS_OBJECTS_INL_H_
+#include "src/objects/objects.h"
+// Include the non-inl header before the rest of the headers.
 
 #include "include/v8-internal.h"
 #include "src/base/bits.h"
@@ -37,11 +39,11 @@
 #include "src/objects/literal-objects.h"
 #include "src/objects/lookup-inl.h"  // TODO(jkummerow): Drop.
 #include "src/objects/object-list-macros.h"
-#include "src/objects/objects.h"
 #include "src/objects/oddball-inl.h"
 #include "src/objects/property-details.h"
 #include "src/objects/property.h"
 #include "src/objects/regexp-match-info-inl.h"
+#include "src/objects/scope-info-inl.h"
 #include "src/objects/shared-function-info.h"
 #include "src/objects/slots-inl.h"
 #include "src/objects/slots.h"
@@ -218,6 +220,7 @@ bool IsNoSharedNameSentinel(Tagged<Object> obj) {
   };
 HEAP_OBJECT_ORDINARY_TYPE_LIST(IS_HELPER_DEF)
 HEAP_OBJECT_TRUSTED_TYPE_LIST(IS_HELPER_DEF)
+VIRTUAL_OBJECT_TYPE_LIST(IS_HELPER_DEF)
 ODDBALL_LIST(IS_HELPER_DEF)
 
 #define IS_HELPER_DEF_STRUCT(NAME, Name, name) IS_HELPER_DEF(Name)
@@ -673,6 +676,18 @@ double Object::NumberValue(Tagged<Smi> obj) {
 }
 
 // static
+template <typename T, template <typename> typename HandleType>
+  requires(std::is_convertible_v<HandleType<T>, DirectHandle<T>>)
+Maybe<double> Object::IntegerValue(Isolate* isolate, HandleType<T> input) {
+  ASSIGN_RETURN_ON_EXCEPTION_VALUE(
+      isolate, input, ConvertToNumber(isolate, input), Nothing<double>());
+  if (IsSmi(*input)) {
+    return Just(static_cast<double>(Cast<Smi>(*input).value()));
+  }
+  return Just(DoubleToInteger(Cast<HeapNumber>(*input)->value()));
+}
+
+// static
 bool Object::SameNumberValue(double value1, double value2) {
   // Compare values bitwise, to cover -0 being different from 0 -- we'd need to
   // look at sign bits anyway if we'd done a double comparison, so we may as
@@ -1034,13 +1049,18 @@ void HeapObject::WriteLazilyInitializedCppHeapPointerField(
                                                value, tag);
 }
 
-void HeapObject::InitSelfIndirectPointerField(size_t offset,
-                                              IsolateForSandbox isolate) {
+#if V8_ENABLE_SANDBOX
+
+void HeapObject::InitSelfIndirectPointerField(
+    size_t offset, IsolateForSandbox isolate,
+    TrustedPointerPublishingScope* opt_publishing_scope) {
   DCHECK(IsExposedTrustedObject(*this));
   InstanceType instance_type = map()->instance_type();
   IndirectPointerTag tag = IndirectPointerTagFromInstanceType(instance_type);
-  i::InitSelfIndirectPointerField(field_address(offset), isolate, *this, tag);
+  i::InitSelfIndirectPointerField(field_address(offset), isolate, *this, tag,
+                                  opt_publishing_scope);
 }
+#endif  // V8_ENABLE_SANDBOX
 
 template <IndirectPointerTag tag>
 Tagged<ExposedTrustedObject> HeapObject::ReadTrustedPointerField(
@@ -1097,6 +1117,17 @@ bool HeapObject::IsTrustedPointerFieldEmpty(size_t offset) const {
 #endif
 }
 
+bool HeapObject::IsTrustedPointerFieldUnpublished(
+    size_t offset, IndirectPointerTag tag, IsolateForSandbox isolate) const {
+#ifdef V8_ENABLE_SANDBOX
+  IndirectPointerHandle handle = ACQUIRE_READ_UINT32_FIELD(*this, offset);
+  const TrustedPointerTable& table = isolate.GetTrustedPointerTableFor(tag);
+  return table.IsUnpublished(handle);
+#else
+  return false;
+#endif
+}
+
 void HeapObject::ClearTrustedPointerField(size_t offset) {
 #ifdef V8_ENABLE_SANDBOX
   RELEASE_WRITE_UINT32_FIELD(*this, offset, kNullIndirectPointerHandle);
@@ -1138,24 +1169,26 @@ void HeapObject::WriteCodeEntrypointViaCodePointerField(size_t offset,
   i::WriteCodeEntrypointViaCodePointerField(field_address(offset), value, tag);
 }
 
-void HeapObject::AllocateAndInstallJSDispatchHandle(size_t offset,
-                                                    Isolate* isolate,
-                                                    uint16_t parameter_count,
-                                                    Tagged<Code> code,
-                                                    WriteBarrierMode mode) {
+// static
+template <typename ObjectType>
+JSDispatchHandle HeapObject::AllocateAndInstallJSDispatchHandle(
+    ObjectType host, size_t offset, Isolate* isolate, uint16_t parameter_count,
+    DirectHandle<Code> code, WriteBarrierMode mode) {
 #ifdef V8_ENABLE_LEAPTIERING
-  JSDispatchTable* jdt = IsolateGroup::current()->js_dispatch_table();
   JSDispatchTable::Space* space =
-      isolate->GetJSDispatchTableSpaceFor(field_address(offset));
+      isolate->GetJSDispatchTableSpaceFor(host->field_address(offset));
   JSDispatchHandle handle =
-      jdt->AllocateAndInitializeEntry(space, parameter_count, code);
+      isolate->factory()->NewJSDispatchHandle(parameter_count, code, space);
 
   // Use a Release_Store to ensure that the store of the pointer into the table
   // is not reordered after the store of the handle. Otherwise, other threads
   // may access an uninitialized table entry and crash.
-  auto location = reinterpret_cast<JSDispatchHandle*>(field_address(offset));
+  auto location =
+      reinterpret_cast<JSDispatchHandle*>(host->field_address(offset));
   base::AsAtomic32::Release_Store(location, handle);
-  CONDITIONAL_JS_DISPATCH_HANDLE_WRITE_BARRIER(*this, handle, mode);
+  CONDITIONAL_JS_DISPATCH_HANDLE_WRITE_BARRIER(*host, handle, mode);
+
+  return handle;
 #else
   UNREACHABLE();
 #endif  // V8_ENABLE_LEAPTIERING
@@ -1723,7 +1756,12 @@ Maybe<bool> Object::LessThanOrEqual(Isolate* isolate, DirectHandle<Object> x,
 MaybeHandle<Object> Object::GetPropertyOrElement(Isolate* isolate,
                                                  DirectHandle<JSAny> object,
                                                  DirectHandle<Name> name) {
-  PropertyKey key(isolate, name);
+  return GetPropertyOrElement(isolate, object, PropertyKey(isolate, name));
+}
+
+MaybeHandle<Object> Object::GetPropertyOrElement(Isolate* isolate,
+                                                 DirectHandle<JSAny> object,
+                                                 PropertyKey key) {
   LookupIterator it(isolate, object, key);
   return GetProperty(&it);
 }
@@ -1732,19 +1770,17 @@ MaybeDirectHandle<Object> Object::SetPropertyOrElement(
     Isolate* isolate, DirectHandle<JSAny> object, DirectHandle<Name> name,
     DirectHandle<Object> value, Maybe<ShouldThrow> should_throw,
     StoreOrigin store_origin) {
-  PropertyKey key(isolate, name);
+  return SetPropertyOrElement(isolate, object, PropertyKey(isolate, name),
+                              value, should_throw, store_origin);
+}
+
+MaybeDirectHandle<Object> Object::SetPropertyOrElement(
+    Isolate* isolate, DirectHandle<JSAny> object, PropertyKey key,
+    DirectHandle<Object> value, Maybe<ShouldThrow> should_throw,
+    StoreOrigin store_origin) {
   LookupIterator it(isolate, object, key);
   MAYBE_RETURN_NULL(SetProperty(&it, value, store_origin, should_throw));
   return value;
-}
-
-MaybeDirectHandle<Object> Object::GetPropertyOrElement(
-    DirectHandle<JSAny> receiver, DirectHandle<Name> name,
-    DirectHandle<JSReceiver> holder) {
-  Isolate* isolate = holder->GetIsolate();
-  PropertyKey key(isolate, name);
-  LookupIterator it(isolate, receiver, key, holder);
-  return GetProperty(&it);
 }
 
 // static
@@ -1786,6 +1822,10 @@ Tagged<Object> Object::GetSimpleHash(Tagged<Object> object) {
   } else if (InstanceTypeChecker::IsScript(instance_type)) {
     int id = Cast<Script>(object)->id();
     return Smi::FromInt(ComputeUnseededHash(id) & Smi::kMaxValue);
+  } else if (InstanceTypeChecker::IsTemplateInfo(instance_type)) {
+    uint32_t hash = Cast<TemplateInfo>(object)->GetHash();
+    DCHECK_EQ(hash, hash & Smi::kMaxValue);
+    return Smi::FromInt(hash);
   }
 
   DCHECK(!InstanceTypeChecker::IsHole(instance_type));

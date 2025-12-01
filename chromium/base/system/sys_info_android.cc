@@ -9,6 +9,7 @@
 #include <sys/system_properties.h>
 
 #include "base/android/sys_utils.h"
+#include "base/compiler_specific.h"
 #include "base/lazy_instance.h"
 #include "base/logging.h"
 #include "base/strings/string_number_conversions.h"
@@ -19,12 +20,11 @@
 namespace {
 
 // Default version of Android to fall back to when actual version numbers
-// cannot be acquired. Use the latest Android release with a higher bug fix
-// version to avoid unnecessarily comparison errors with the latest release.
-// This should be manually kept up to date on each Android release.
-const int kDefaultAndroidMajorVersion = 12;
+// cannot be acquired. Use a super high number in this case, as we assume
+// it's due to being a pre-release version.
+const int kDefaultAndroidMajorVersion = 9999;
 const int kDefaultAndroidMinorVersion = 0;
-const int kDefaultAndroidBugfixVersion = 99;
+const int kDefaultAndroidBugfixVersion = 0;
 
 // Get and parse out the OS version numbers from the system properties.
 // Note if parse fails, the "default" version is returned as fallback.
@@ -38,8 +38,8 @@ void GetOsVersionStringAndNumbers(std::string* version_string,
 
   if (os_version_str[0]) {
     // Try to parse out the version numbers from the string.
-    int num_read = sscanf(os_version_str, "%d.%d.%d", major_version,
-                          minor_version, bugfix_version);
+    int num_read = UNSAFE_TODO(sscanf(os_version_str, "%d.%d.%d", major_version,
+                                      minor_version, bugfix_version));
 
     if (num_read > 0) {
       // If we don't have a full set of version numbers, make the extras 0.

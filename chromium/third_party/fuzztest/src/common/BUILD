@@ -62,6 +62,7 @@ cc_library(
         ":logging",
         ":remote_file",
         ":status_macros",
+        "@com_google_absl//absl/base:core_headers",
         "@com_google_absl//absl/base:nullability",
         "@com_google_absl//absl/log",
         "@com_google_absl//absl/log:check",
@@ -207,6 +208,17 @@ cc_library(
     ],
 )
 
+cc_library(
+    name = "temp_dir",
+    srcs = ["temp_dir.cc"],
+    hdrs = ["temp_dir.h"],
+    deps = [
+        "@com_google_absl//absl/log:check",
+        "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/strings:string_view",
+    ],
+)
+
 ### Tests
 
 cc_test(
@@ -235,6 +247,9 @@ cc_library(
     name = "remote_file_test_lib",
     testonly = True,
     srcs = ["remote_file_test.cc"],
+    defines = select({
+        "//conditions:default": [],
+    }),
     deps = [
         ":logging",
         ":remote_file",
@@ -243,7 +258,9 @@ cc_library(
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/time",
         "@com_google_googletest//:gtest",
-    ],
+    ] + select({
+        "//conditions:default": [],
+    }),
     alwayslink = True,
 )
 

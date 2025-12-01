@@ -22,6 +22,7 @@ import android.util.SparseArray;
 
 import org.jni_zero.CalledByNative;
 import org.jni_zero.JNINamespace;
+import org.jni_zero.JniType;
 import org.jni_zero.NativeMethods;
 
 import org.chromium.base.Log;
@@ -36,11 +37,17 @@ import org.chromium.device.bluetooth.wrapper.BluetoothGattDescriptorWrapper;
 import org.chromium.device.bluetooth.wrapper.BluetoothGattServiceWrapper;
 import org.chromium.device.bluetooth.wrapper.BluetoothGattWrapper;
 import org.chromium.device.bluetooth.wrapper.BluetoothLeScannerWrapper;
+import org.chromium.device.bluetooth.wrapper.BluetoothSocketWrapper;
 import org.chromium.device.bluetooth.wrapper.DeviceBondStateReceiverWrapper;
 import org.chromium.device.bluetooth.wrapper.ScanCallbackWrapper;
 import org.chromium.device.bluetooth.wrapper.ScanResultWrapper;
 import org.chromium.device.bluetooth.wrapper.ThreadUtilsWrapper;
 
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -360,7 +367,7 @@ class Fakes {
         }
 
         @CalledByNative("FakeBluetoothAdapter")
-        public void simulatePairedClassicDevice(int deviceOrdinal) {
+        public @JniType("std::string") String simulatePairedClassicDevice(int deviceOrdinal) {
             final FakeBluetoothDevice device;
             switch (deviceOrdinal) {
                 case 0:
@@ -395,10 +402,7 @@ class Fakes {
             }
 
             mFakePairedDevices.add(device);
-            if (mDeviceBondStateCallback != null) {
-                mDeviceBondStateCallback.onDeviceBondStateChanged(
-                        device, BluetoothDevice.BOND_BONDED);
-            }
+            return device.getAddress();
         }
 
         @CalledByNative("FakeBluetoothAdapter")
@@ -504,13 +508,6 @@ class Fakes {
             }
 
             return mFakePairedDevices;
-        }
-
-        @Override
-        public DeviceBondStateReceiverWrapper createDeviceBondStateReceiver(
-                DeviceBondStateReceiverWrapper.Callback callback) {
-            mDeviceBondStateCallback = callback;
-            return super.createDeviceBondStateReceiver(callback);
         }
     }
 
@@ -693,6 +690,7 @@ class Fakes {
         private final String mUuid;
         final FakeBluetoothGatt mGatt;
         private BluetoothGattCallbackWrapper mGattCallback;
+        private String mNextExceptionMessageOnServiceConnection;
 
         static FakeBluetoothDevice sRememberedDevice;
 
@@ -758,6 +756,13 @@ class Fakes {
             fakeDevice.mGattCallback.onServicesDiscovered(status);
         }
 
+        @CalledByNative("FakeBluetoothDevice")
+        private static void failNextServiceConnection(
+                ChromeBluetoothDevice chromeDevice, @JniType("std::string") String message) {
+            FakeBluetoothDevice device = (FakeBluetoothDevice) chromeDevice.mDevice;
+            device.mNextExceptionMessageOnServiceConnection = message;
+        }
+
         // -----------------------------------------------------------------------------------------
         // BluetoothDeviceWrapper overrides:
 
@@ -816,6 +821,24 @@ class Fakes {
             return new ParcelUuid[] {
                 ParcelUuid.fromString(mUuid) // Serial UUID
             };
+        }
+
+        @Override
+        public BluetoothSocketWrapper createRfcommSocketToServiceRecord(UUID uuid)
+                throws IOException {
+            if (mNextExceptionMessageOnServiceConnection != null) {
+                throw new IOException(mNextExceptionMessageOnServiceConnection);
+            }
+            return new FakeBluetoothSocket();
+        }
+
+        @Override
+        public BluetoothSocketWrapper createInsecureRfcommSocketToServiceRecord(UUID uuid)
+                throws IOException {
+            if (mNextExceptionMessageOnServiceConnection != null) {
+                throw new IOException(mNextExceptionMessageOnServiceConnection);
+            }
+            return new FakeBluetoothSocket();
         }
 
         @Override
@@ -1289,6 +1312,140 @@ class Fakes {
         public boolean setValue(byte[] value) {
             mValue = value;
             return true;
+        }
+    }
+
+    static class FakeBluetoothSocket extends BluetoothSocketWrapper {
+        private static final int BUFFER_SIZE = 8192;
+
+        private final byte[] mInputByteBuffer = new byte[BUFFER_SIZE];
+        private final FakeSocketInputStream mInputStream =
+                new FakeSocketInputStream(mInputByteBuffer, this);
+        private final FakeSocketOutputStream mOutputStream = new FakeSocketOutputStream(this);
+
+        private volatile String mNextOperationExceptionMessage;
+
+        private volatile boolean mIsConnected;
+
+        FakeBluetoothSocket() {
+            super(null);
+        }
+
+        // Simulates an IOException.
+        @CalledByNative("FakeBluetoothSocket")
+        private static void setNextOperationExceptionMessage(
+                ChromeBluetoothSocket chromeSocket, @JniType("std::string") String message) {
+            FakeBluetoothSocket fakeSocket = (FakeBluetoothSocket) chromeSocket.mSocket;
+            fakeSocket.mNextOperationExceptionMessage = message;
+        }
+
+        // Simulates received data.
+        @CalledByNative("FakeBluetoothSocket")
+        private static void setReceivedBytes(ChromeBluetoothSocket chromeSocket, byte[] buffer) {
+            assert buffer.length <= BUFFER_SIZE;
+            FakeBluetoothSocket fakeSocket = (FakeBluetoothSocket) chromeSocket.mSocket;
+            System.arraycopy(buffer, 0, fakeSocket.mInputByteBuffer, 0, buffer.length);
+        }
+
+        // Obtains sent data.
+        @CalledByNative("FakeBluetoothSocket")
+        private static byte[] getSentBytes(ChromeBluetoothSocket chromeSocket) {
+            FakeBluetoothSocket fakeSocket = (FakeBluetoothSocket) chromeSocket.mSocket;
+            return fakeSocket.mOutputStream.toByteArray();
+        }
+
+        private void throwIfFailNextOperation() throws IOException {
+            if (mNextOperationExceptionMessage == null) {
+                return;
+            }
+            String exceptionMessage = mNextOperationExceptionMessage;
+            mNextOperationExceptionMessage = null;
+            throw new IOException(exceptionMessage);
+        }
+
+        // -----------------------------------------------------------------------------------------
+        // BluetoothSocketWrapper overrides:
+
+        @Override
+        public void connect() throws IOException {
+            throwIfFailNextOperation();
+
+            mIsConnected = true;
+        }
+
+        @Override
+        public boolean isConnected() {
+            return mIsConnected;
+        }
+
+        @Override
+        public InputStream getInputStream() {
+            return mInputStream;
+        }
+
+        @Override
+        public OutputStream getOutputStream() {
+            return mOutputStream;
+        }
+
+        @Override
+        public void close() throws IOException {
+            mIsConnected = false;
+            throwIfFailNextOperation();
+        }
+    }
+
+    private static class FakeSocketInputStream extends InputStream {
+        private FakeBluetoothSocket mSocket;
+        private ByteArrayInputStream mInputStream;
+
+        FakeSocketInputStream(byte[] buffer, FakeBluetoothSocket socket) {
+            mInputStream = new ByteArrayInputStream(buffer);
+            mSocket = socket;
+        }
+
+        @Override
+        public int read() throws IOException {
+            mSocket.throwIfFailNextOperation();
+            return mInputStream.read();
+        }
+
+        @Override
+        public int read(byte[] b, int off, int len) throws IOException {
+            mSocket.throwIfFailNextOperation();
+            return mInputStream.read(b, off, len);
+        }
+    }
+
+    private static class FakeSocketOutputStream extends OutputStream {
+        private FakeBluetoothSocket mSocket;
+        private ByteArrayOutputStream mOutputStream;
+
+        private FakeSocketOutputStream(FakeBluetoothSocket socket) {
+            mSocket = socket;
+            mOutputStream = new ByteArrayOutputStream();
+        }
+
+        @Override
+        public void write(int b) throws IOException {
+            mSocket.throwIfFailNextOperation();
+            mOutputStream.write(b);
+        }
+
+        @Override
+        public void write(byte[] b, int off, int len) throws IOException {
+            mSocket.throwIfFailNextOperation();
+            mOutputStream.write(b, off, len);
+        }
+
+        @Override
+        public void flush() throws IOException {
+            mSocket.throwIfFailNextOperation();
+            mOutputStream.flush();
+        }
+
+        private byte[] toByteArray() {
+            return mOutputStream.toByteArray();
         }
     }
 

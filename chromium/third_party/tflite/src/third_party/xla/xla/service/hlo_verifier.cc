@@ -106,27 +106,6 @@ int64_t GetSubgroupSize(HloCollectiveInstruction* hlo,
   }
 }
 
-absl::Status CheckNestedComputationThreadNameEqual(
-    const HloComputation* comp, bool skip_nested_async_op_check) {
-  for (const HloInstruction* instr : comp->instructions()) {
-    if (skip_nested_async_op_check && instr->IsAsynchronous()) {
-      continue;
-    }
-    for (const HloComputation* called_cmp : instr->called_computations()) {
-      if (called_cmp->execution_thread() != comp->execution_thread()) {
-        return Internal(
-            "Nested computations expects same computation's thread name: %s vs "
-            "%s, in called computation `%s` vs caller computation `%s`",
-            called_cmp->execution_thread(), comp->execution_thread(),
-            called_cmp->name(), comp->name());
-      }
-      TF_RETURN_IF_ERROR(CheckNestedComputationThreadNameEqual(
-          called_cmp, skip_nested_async_op_check));
-    }
-  }
-  return absl::OkStatus();
-}
-
 absl::Status CheckUnaryOpWithResultAccuracy(HloInstruction* unary) {
   HloOpcode opcode = unary->opcode();
   if (unary->has_result_accuracy()) {
@@ -476,7 +455,8 @@ static absl::Status CheckCommonAllGatherInvariants(
 
   int64_t shard_count;
   for (int64_t i = 0; i < ag->operand_count(); ++i) {
-    TF_RET_CHECK(ag->all_gather_dimension() < ag->operand(i)->shape().rank());
+    TF_RET_CHECK(ag->all_gather_dimension() <
+                 ag->operand(i)->shape().dimensions_size());
 
     Shape output_shape;
     if (hlo->opcode() == HloOpcode::kAllGather) {
@@ -488,7 +468,7 @@ static absl::Status CheckCommonAllGatherInvariants(
                          ? ag->shape().tuple_shapes(1)
                          : ag->shape().tuple_shapes(1).tuple_shapes(i);
     }
-    TF_RET_CHECK(ag->all_gather_dimension() < output_shape.rank());
+    TF_RET_CHECK(ag->all_gather_dimension() < output_shape.dimensions_size());
     if (i == 0) {
       shard_count = CeilOfRatio(
           output_shape.dimensions(ag->all_gather_dimension()),
@@ -563,12 +543,13 @@ absl::Status ShapeVerifier::HandleReduceScatter(HloInstruction* hlo) {
   TF_RET_CHECK(ars->operand_count() >= 1);
 
   for (int64_t i = 0; i < ars->operand_count(); ++i) {
-    TF_RET_CHECK(ars->scatter_dimension() < ars->operand(i)->shape().rank());
+    TF_RET_CHECK(ars->scatter_dimension() <
+                 ars->operand(i)->shape().dimensions_size());
 
     const Shape& output_shape = (ars->operand_count() == 1)
                                     ? ars->shape()
                                     : ars->shape().tuple_shapes(i);
-    TF_RET_CHECK(ars->scatter_dimension() < output_shape.rank());
+    TF_RET_CHECK(ars->scatter_dimension() < output_shape.dimensions_size());
   }
 
   const Shape& output0_shape =
@@ -649,12 +630,31 @@ absl::Status ShapeVerifier::HandleRaggedAllToAll(HloInstruction* hlo) {
 
   TF_RETURN_IF_ERROR(CheckReplicaGroups(hlo, group_mode));
 
+  const int64_t kNumRaggedOperands = 6;
   TF_RET_CHECK(all_to_all != nullptr);
-  TF_RET_CHECK(hlo->operand_count() == 6);
+  TF_RET_CHECK(hlo->operand_count() == kNumRaggedOperands);
   std::vector<const Shape*> operand_shapes;
   for (const HloInstruction* operand : hlo->operands()) {
     operand_shapes.push_back(&operand->shape());
   }
+
+  // Check that *_offsets/*_sizes operands all have the same shape and
+  // are rank 1 or rank 2.
+  const int64_t kOffsetsSizesOperandsStart = 2;
+  for (int64_t i = kOffsetsSizesOperandsStart + 1; i < kNumRaggedOperands;
+       ++i) {
+    if (operand_shapes[i - 1]->dimensions_size() != 1 &&
+        operand_shapes[i - 1]->dimensions_size() != 2) {
+      return Internal("RaggedAllToAll operand %d must be rank 1 or 2: %s",
+                      i - 1, hlo->ToString());
+    }
+    if (!ShapeUtil::Equal(*operand_shapes[i - 1], *operand_shapes[i])) {
+      return Internal(
+          "RaggedAllToAll operands have different shapes (%d, %d): %s", i - 1,
+          i, hlo->ToString());
+    }
+  }
+
   return CheckShape(hlo,
                     ShapeInference::InferRaggedAllToAllShape(operand_shapes));
 }
@@ -690,14 +690,15 @@ absl::Status CheckBufferOffset(const Shape& buffer_shape,
     if (absl::c_any_of(buffer_offset_shape.tuple_shapes(),
                        [&buffer_shape](const Shape& shape) {
                          return ShapeUtil::TupleElementCount(shape) !=
-                                buffer_shape.rank();
+                                buffer_shape.dimensions_size();
                        })) {
       return Internal(
           "Buffer offset index should have the same number of "
           "elements as the buffer's rank.");
     }
   } else {
-    if (buffer_offset_shape.tuple_shapes_size() != buffer_shape.rank()) {
+    if (buffer_offset_shape.tuple_shapes_size() !=
+        buffer_shape.dimensions_size()) {
       return Internal(
           "Buffer offset index should have the same number of "
           "elements as the buffer's rank.");
@@ -1123,11 +1124,11 @@ absl::Status ShapeVerifier::HandleSort(HloInstruction* hlo) {
   }
 
   // Verify the sort_dimension.
-  if (sort->sort_dimension() >= sort->operand(0)->shape().rank()) {
+  if (sort->sort_dimension() >= sort->operand(0)->shape().dimensions_size()) {
     return Internal(
         "Expected the sort_dimension %d of sort to be smaller than the rank %d "
         "of the operand(s).",
-        sort->sort_dimension(), sort->shape().rank());
+        sort->sort_dimension(), sort->shape().dimensions_size());
   }
 
   return CheckVariadicShape(sort);
@@ -1147,7 +1148,7 @@ absl::Status ShapeVerifier::HandleIota(HloInstruction* hlo) {
   if (!iota->shape().IsArray()) {
     return Internal("Iota does not support non-array result.");
   }
-  const int64_t rank = iota->shape().rank();
+  const int64_t rank = iota->shape().dimensions_size();
   if (rank == 0) {
     return Internal("Iota does not support scalars.");
   }
@@ -1249,12 +1250,14 @@ absl::Status ShapeVerifier::HandleBroadcast(HloInstruction* broadcast) {
   // Check for mixed precision.
   TF_RET_CHECK(SameElementType(broadcast->shape(), operand_shape))
       << broadcast->ToString();
-  TF_RET_CHECK(operand_shape.rank() == broadcast->dimensions().size())
+  TF_RET_CHECK(operand_shape.dimensions_size() ==
+               broadcast->dimensions().size())
       << broadcast->ToString();
-  for (int64_t operand_dimension = 0; operand_dimension < operand_shape.rank();
+  for (int64_t operand_dimension = 0;
+       operand_dimension < operand_shape.dimensions_size();
        ++operand_dimension) {
     int64_t output_dimension = broadcast->dimensions()[operand_dimension];
-    TF_RET_CHECK((output_dimension < broadcast->shape().rank()) &&
+    TF_RET_CHECK((output_dimension < broadcast->shape().dimensions_size()) &&
                  output_dimension >= 0 &&
                  (broadcast->shape().dimensions(output_dimension) ==
                   operand_shape.dimensions(operand_dimension)))
@@ -1270,7 +1273,7 @@ absl::Status ShapeVerifier::HandleDynamicReshape(
   TF_RET_CHECK(SameElementType(dynamic_reshape->shape(), operand_shape));
   TF_RET_CHECK(ShapeUtil::ElementsIn(dynamic_reshape->shape()) ==
                ShapeUtil::ElementsIn(operand_shape));
-  TF_RET_CHECK(dynamic_reshape->shape().rank() + 1 ==
+  TF_RET_CHECK(dynamic_reshape->shape().dimensions_size() + 1 ==
                dynamic_reshape->operand_count());
   for (int64_t i = 1; i < dynamic_reshape->operand_count(); ++i) {
     TF_RET_CHECK(dynamic_reshape->operand(i)->shape().element_type() == S32);
@@ -1490,7 +1493,9 @@ absl::Status ShapeVerifier::HandleMap(HloInstruction* map) {
   int64_t max_operand_rank = 0;
   for (const HloInstruction* operand : map->operands()) {
     operand_shapes.push_back(&operand->shape());
-    max_operand_rank = std::max(max_operand_rank, operand->shape().rank());
+    max_operand_rank =
+        std::max(max_operand_rank,
+                 static_cast<int64_t>(operand->shape().dimensions_size()));
   }
   // TODO(b/65689298) Remove code below once Map is generalized to accept
   // arbitrary map dimensions.
@@ -1632,13 +1637,11 @@ absl::Status CheckAsyncOpComputationThreadName(const HloInstruction* async_op) {
         HloOpcodeString(async_op->opcode()), async_execution_thread,
         async_op->async_wrapped_computation()->execution_thread());
   }
-  return CheckNestedComputationThreadNameEqual(
-      async_op->async_wrapped_computation(),
-      /*skip_nested_async_op_check=*/false);
+  return absl::OkStatus();
 }
 
 absl::Status CheckCallableInstructionThreadName(
-    const HloInstruction* instruction, bool skip_nested_async_op_check) {
+    const HloInstruction* instruction) {
   for (const HloComputation* computation : instruction->called_computations()) {
     if (instruction->parent() != nullptr) {
       if (instruction->parent()->execution_thread() !=
@@ -1650,8 +1653,6 @@ absl::Status CheckCallableInstructionThreadName(
             computation->execution_thread());
       }
     }
-    TF_RETURN_IF_ERROR(CheckNestedComputationThreadNameEqual(
-        computation, skip_nested_async_op_check));
   }
   return absl::OkStatus();
 }
@@ -1839,6 +1840,7 @@ absl::Status CheckMixedPrecisionOperands(const HloInstruction* instruction) {
     case HloOpcode::kConstant:
     case HloOpcode::kConvolution:
     case HloOpcode::kDot:
+    case HloOpcode::kRaggedDot:
     case HloOpcode::kAllReduce:
     case HloOpcode::kAllReduceStart:
     case HloOpcode::kAllReduceDone:
@@ -2517,9 +2519,6 @@ absl::Status VerifyOriginalValue(const HloModule& module) {
 // collectives).
 absl::Status VerifyChannels(const HloModule& module,
                             const HloVerifierOpts& opts) {
-  absl::flat_hash_map<int64_t, std::vector<const HloInstruction*>>
-      channel_instructions;
-
   // Send/recv instruction must have a unique user. If it is the corresponding
   // send-done/recv-done operation, channel IDs must match.
   for (const HloComputation* computation : module.computations()) {
@@ -2528,7 +2527,6 @@ absl::Status VerifyChannels(const HloModule& module,
       if (!channel_instr || !channel_instr->channel_id()) {
         continue;
       }
-      channel_instructions[*channel_instr->channel_id()].push_back(instruction);
 
       switch (instruction->opcode()) {
         case HloOpcode::kSend: {
@@ -2567,29 +2565,6 @@ absl::Status VerifyChannels(const HloModule& module,
           break;
         default:
           break;
-      }
-    }
-  }
-
-  // Iterate over each channel to check invariants.
-  for (auto& [channel_id, instructions] : channel_instructions) {
-    const HloInstruction* first = instructions[0];
-    if (const auto* sendrecv = DynCast<HloSendRecvInstruction>(first)) {
-      absl::flat_hash_set<HloOpcode> opcodes;
-      for (const HloInstruction* instr : instructions) {
-        opcodes.insert(instr->opcode());
-        auto cast = DynCast<HloSendRecvInstruction>(instr);
-        TF_RET_CHECK(cast != nullptr)
-            << "channel " << channel_id
-            << " is used for different types of channel instructions";
-      }
-    } else {
-      if (opts.verify_unique_channel_ids) {
-        for (const HloInstruction* instr : instructions) {
-          TF_RET_CHECK(first->opcode() == instr->opcode())
-              << "channel " << channel_id
-              << " is used for different types of channel instructions";
-        }
       }
     }
   }
@@ -2787,8 +2762,7 @@ class InstructionVerifier : public DfsHloVisitorWithDefault {
   }
 
   absl::Status HandleFusion(HloInstruction* fusion) override {
-    TF_RETURN_IF_ERROR(CheckCallableInstructionThreadName(
-        fusion, /*skip_nested_async_op_check*/ false));
+    TF_RETURN_IF_ERROR(CheckCallableInstructionThreadName(fusion));
     return CheckFusionInstruction(fusion);
   }
 
@@ -2798,11 +2772,11 @@ class InstructionVerifier : public DfsHloVisitorWithDefault {
     // op. See https://groups.google.com/forum/#!topic/xla-dev/9LqijHmTt_I
     // or ComputationLowerer::Visit()
     TF_RET_CHECK(broadcast->dimensions().size() ==
-                 broadcast->operand(0)->shape().rank())
+                 broadcast->operand(0)->shape().dimensions_size())
         << "Broadcast HLO (" << broadcast->ToShortString()
         << ") has invalid number of dimensions: "
         << broadcast->dimensions().size()
-        << " != " << broadcast->operand(0)->shape().rank();
+        << " != " << broadcast->operand(0)->shape().dimensions_size();
     if (opts_.verify_broadcast_dimensions_order) {
       TF_RET_CHECK(absl::c_is_sorted(broadcast->dimensions()))
           << "Broadcast dimensions should be ordered, got: "
@@ -2835,8 +2809,7 @@ class InstructionVerifier : public DfsHloVisitorWithDefault {
           xla_while->operand_count(), xla_while->ToString());
     }
     // Allow kWhile to contain computations on separate thread.
-    TF_RETURN_IF_ERROR(CheckCallableInstructionThreadName(
-        xla_while, /*skip_nested_async_op_check=*/true));
+    TF_RETURN_IF_ERROR(CheckCallableInstructionThreadName(xla_while));
 
     // Verify consistency of sharding of while instructions and related
     // instructions (parameters, root) in its called computations.
@@ -2849,9 +2822,10 @@ class InstructionVerifier : public DfsHloVisitorWithDefault {
   }
 
   absl::Status HandleCall(HloInstruction* call) override {
-    // Allow kCall to contain computations on separate thread.
-    return CheckCallableInstructionThreadName(
-        call, /*skip_nested_async_op_check=*/true);
+    if (opts_.verify_call_nested_computation_thread_name) {
+      return CheckCallableInstructionThreadName(call);
+    }
+    return absl::OkStatus();
   }
 
   absl::Status HandleConditional(HloInstruction* conditional) override {
@@ -2872,8 +2846,7 @@ class InstructionVerifier : public DfsHloVisitorWithDefault {
           branch_computation->root_instruction());
     }
     // Allow kConditional to contain computations on separate thread.
-    TF_RETURN_IF_ERROR(CheckCallableInstructionThreadName(
-        conditional, /*skip_nested_async_op_check=*/true));
+    TF_RETURN_IF_ERROR(CheckCallableInstructionThreadName(conditional));
 
     // Verify consistency of sharding of conditional instructions and roots of
     // its branches.
@@ -2932,16 +2905,15 @@ class InstructionVerifier : public DfsHloVisitorWithDefault {
   }
 
   absl::Status HandleCustomCall(HloInstruction* hlo) override {
-    if (opts_.verify_custom_call_nested_computation_thread_name) {
+    if (opts_.verify_call_nested_computation_thread_name) {
       // Allow kCustomCall to contain computations on separate thread.
-      return CheckCallableInstructionThreadName(
-          hlo, /*skip_nested_async_op_check=*/true);
+      return CheckCallableInstructionThreadName(hlo);
     }
     return absl::OkStatus();
   }
 
   absl::Status HandleScatter(HloInstruction* scatter) override {
-    int64_t rank = scatter->operand(0)->shape().rank();
+    int64_t rank = scatter->operand(0)->shape().dimensions_size();
     for (int64_t operand_dim :
          scatter->scatter_dimension_numbers().scatter_dims_to_operand_dims()) {
       if (operand_dim > rank) {
@@ -2974,7 +2946,8 @@ class InstructionVerifier : public DfsHloVisitorWithDefault {
       }
     }
 
-    if (instruction->has_to_apply() &&
+    if (opts_.verify_call_nested_computation_thread_name &&
+        instruction->has_to_apply() &&
         instruction->to_apply()->execution_thread() !=
             instruction->parent()->execution_thread()) {
       return Internal(
@@ -2987,6 +2960,9 @@ class InstructionVerifier : public DfsHloVisitorWithDefault {
   }
 
   absl::Status Postprocess(HloInstruction* instruction) override {
+    if (opts_.verify_no_host_memory_space) {
+      TF_RETURN_IF_ERROR(VerifyNoHostMemorySpace(instruction));
+    }
     if (!opts_.InstructionCanChangeLayout(instruction) &&
         LayoutUtil::IsDenseArray(instruction->shape()) &&
         instruction->shape().has_layout()) {
@@ -2995,7 +2971,7 @@ class InstructionVerifier : public DfsHloVisitorWithDefault {
       for (HloInstruction* operand : instruction->operands()) {
         const Shape& operand_shape = operand->shape();
         if (LayoutUtil::IsDenseArray(operand_shape) &&
-            operand_shape.rank() == result_shape.rank() &&
+            operand_shape.dimensions_size() == result_shape.dimensions_size() &&
             operand_shape.has_layout()) {
           const Layout& operand_layout = operand_shape.layout();
           Layout::Equal equal_predicate =
@@ -3079,6 +3055,26 @@ class InstructionVerifier : public DfsHloVisitorWithDefault {
                        instruction->ToString()));
     }
     return absl::OkStatus();
+  }
+
+  // Returns an error status if an instruction or any operand contains host
+  // memory space.
+  static absl::Status VerifyNoHostMemorySpace(
+      const HloInstruction* instruction) {
+    return ShapeUtil::ForEachSubshapeWithStatus(
+        instruction->shape(),
+        [&](const Shape& subshape, const ShapeIndex& index) -> absl::Status {
+          if (subshape.has_layout()) {
+            const Layout& result_layout = subshape.layout();
+            if (result_layout.memory_space() == Layout::kHostMemorySpace) {
+              return absl::InternalError(absl::StrCat(
+                  "Instruction shouldn't have the layout of host memory "
+                  "space: ",
+                  instruction->ToString()));
+            }
+          }
+          return absl::OkStatus();
+        });
   }
 
   absl::flat_hash_map<std::string, const HloInstruction*> instructions_by_name_;

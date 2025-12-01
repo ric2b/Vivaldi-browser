@@ -6,8 +6,6 @@ source_set("vivaldi_ntp") {
   sources = [
     "vivaldi_ntp_constants.h",
     "vivaldi_ntp_constants.mm",
-    "vivaldi_ntp_util.h",
-    "vivaldi_ntp_util.mm",
     "vivaldi_private_mode_view.h",
     "vivaldi_private_mode_view.mm",
     "vivaldi_speed_dial_add_group_view.h",
@@ -47,6 +45,8 @@ source_set("vivaldi_ntp") {
     "//ui/base",
     "//vivaldi/ios/most_visited_sites",
     "//vivaldi/ios/ui/custom_views:custom_views_swift",
+    "//vivaldi/ios/ui/ntp/bottom_toolbar:bottom_toolbar_swift",
+    "//vivaldi/ios/ui/ntp/bottom_toolbar",
     "//vivaldi/ios/ui/ntp/cells",
     "//vivaldi/ios/ui/ntp/nsd",
     "//vivaldi/ios/ui/ntp/top_toolbar:top_toolbar_swift",

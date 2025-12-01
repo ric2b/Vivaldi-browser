@@ -11,8 +11,8 @@ import android.net.Uri;
 import android.os.SystemClock;
 import android.view.LayoutInflater;
 import android.view.View;
+import android.widget.ProgressBar;
 
-import androidx.annotation.NonNull;
 import androidx.annotation.VisibleForTesting;
 import androidx.fragment.app.Fragment;
 import androidx.fragment.app.FragmentActivity;
@@ -24,6 +24,8 @@ import org.json.JSONException;
 import org.json.JSONObject;
 
 import org.chromium.base.Log;
+import org.chromium.build.annotations.NullMarked;
+import org.chromium.build.annotations.Nullable;
 import org.chromium.chrome.browser.gsa.GSAUtils;
 import org.chromium.chrome.browser.pdf.PdfUtils.PdfLoadResult;
 import org.chromium.chrome.browser.profiles.Profile;
@@ -37,6 +39,7 @@ import org.chromium.ui.base.MimeTypeUtils;
  * support is enabled via PdfUtils#shouldOpenPdfInline.
  */
 @SuppressLint("NewApi")
+@NullMarked
 public class PdfCoordinator {
     private static final String TAG = "PdfCoordinator";
     private static boolean sSkipLoadPdfForTesting;
@@ -49,7 +52,7 @@ public class PdfCoordinator {
     private final int mFragmentContainerViewId;
 
     /** The filepath of the pdf. It is null before download complete. */
-    private String mPdfFilePath;
+    private @Nullable String mPdfFilePath;
 
     /**
      * Whether the pdf has been loaded, despite of success or failure. This is used to ensure we
@@ -58,11 +61,14 @@ public class PdfCoordinator {
     private boolean mIsPdfLoaded;
 
     /** Uri of the pdf document. Generated when the pdf is ready to load. */
-    private Uri mUri;
+    private @Nullable Uri mUri;
 
     @VisibleForTesting ChromePdfViewerFragment mChromePdfViewerFragment;
 
     private int mFindInPageCount;
+
+    /** ProgressBar to be shown during PDF download. */
+    private ProgressBar mProgressBar;
 
     /**
      * Creates a PdfCoordinator for the PdfPage.
@@ -72,10 +78,12 @@ public class PdfCoordinator {
      * @param filepath The pdf filepath.
      * @param tabId The id of the tab.
      */
-    public PdfCoordinator(Profile profile, Activity activity, String filepath, int tabId) {
+    public PdfCoordinator(
+            Profile profile, Activity activity, @Nullable String filepath, int tabId) {
         mActivity = activity;
         mTabId = String.valueOf(tabId);
         mView = LayoutInflater.from(activity).inflate(R.layout.pdf_page, null);
+        mProgressBar = mView.findViewById(R.id.progress_bar);
         mView.setBackgroundColor(
                 ChromeColors.getPrimaryBackgroundColor(activity, profile.isOffTheRecord()));
         mView.addOnAttachStateChangeListener(
@@ -99,6 +107,10 @@ public class PdfCoordinator {
         }
         // Create PdfViewerFragment to start showing the loading spinner.
         mChromePdfViewerFragment = new ChromePdfViewerFragment();
+        // PDF is downloading when the filepath is null.
+        if (filepath == null) {
+            mProgressBar.setVisibility(View.VISIBLE);
+        }
         loadPdfFile(filepath);
     }
 
@@ -115,30 +127,24 @@ public class PdfCoordinator {
 
         @Override
         public void onLoadDocumentSuccess() {
-            long duration = SystemClock.elapsedRealtime() - mDocumentLoadStartTimestamp;
-            PdfUtils.recordPdfLoadTime(duration);
-            PdfUtils.recordPdfLoadResult(true);
             if (mDocumentLoadStartTimestamp <= 0) {
                 return;
             }
-            PdfUtils.recordPdfLoadTimePaired(duration);
-            PdfUtils.recordPdfLoadResultPaired(true);
             // There should be only one success callback for each pdf. Add this confidence check to
             // be consistent with the error callback.
             if (!mIsLoadDocumentSuccess) {
-                PdfUtils.recordPdfLoadTimeFirstPaired(duration);
+                PdfUtils.recordPdfLoadTimeFirstPaired(
+                        SystemClock.elapsedRealtime() - mDocumentLoadStartTimestamp);
                 PdfUtils.recordPdfLoadResultDetail(PdfLoadResult.SUCCESS);
             }
             mIsLoadDocumentSuccess = true;
         }
 
         @Override
-        public void onLoadDocumentError(@NonNull Throwable throwable) {
-            PdfUtils.recordPdfLoadResult(false);
+        public void onLoadDocumentError(Throwable throwable) {
             if (mDocumentLoadStartTimestamp <= 0) {
                 return;
             }
-            PdfUtils.recordPdfLoadResultPaired(false);
             // Only record the first error emitted.
             if (!mIsLoadDocumentError) {
                 PdfUtils.recordPdfLoadResultDetail(PdfLoadResult.ERROR);
@@ -169,9 +175,9 @@ public class PdfCoordinator {
     /**
      * Called after a pdf page has been removed from the view hierarchy and will no longer be used.
      */
+    @SuppressWarnings({"NullAway"})
     void destroy() {
         if (mChromePdfViewerFragment == null) {
-            PdfUtils.recordHasFilepathWithoutFragmentOnDestroy(mPdfFilePath != null);
             Log.w(TAG, "Fragment is null when pdf page is destroyed.");
             return;
         }
@@ -200,11 +206,11 @@ public class PdfCoordinator {
     }
 
     /** Returns the filepath of the pdf document. */
-    String getFilepath() {
+    @Nullable String getFilepath() {
         return mPdfFilePath;
     }
 
-    private void loadPdfFile(String pdfFilePath) {
+    private void loadPdfFile(@Nullable String pdfFilePath) {
         mPdfFilePath = pdfFilePath;
         loadPdfFile();
     }
@@ -232,6 +238,7 @@ public class PdfCoordinator {
                     PdfUtils.recordPdfLoad();
                     mChromePdfViewerFragment.mDocumentLoadStartTimestamp =
                             SystemClock.elapsedRealtime();
+                    mProgressBar.setVisibility(View.GONE);
                     mChromePdfViewerFragment.setDocumentUri(mUri);
                 }
             } catch (Exception e) {
@@ -245,7 +252,7 @@ public class PdfCoordinator {
         }
     }
 
-    String requestAssistContent(String filename, boolean isWorkProfile) {
+    @Nullable String requestAssistContent(String filename, boolean isWorkProfile) {
         if (mUri == null) {
             return null;
         }
@@ -270,7 +277,7 @@ public class PdfCoordinator {
         return structuredData;
     }
 
-    Uri getUri() {
+    @Nullable Uri getUri() {
         return mUri;
     }
 

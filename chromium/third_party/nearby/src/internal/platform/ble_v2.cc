@@ -17,8 +17,12 @@
 #include <memory>
 #include <string>
 #include <utility>
+#include <vector>
 
+#include "absl/functional/any_invocable.h"
 #include "absl/status/status.h"
+#include "absl/types/optional.h"
+#include "internal/platform/cancellation_flag.h"
 #include "internal/platform/implementation/ble_v2.h"
 #include "internal/platform/logging.h"
 #include "internal/platform/mutex_lock.h"
@@ -75,9 +79,6 @@ bool BleV2Medium::StartScanning(const Uuid& service_uuid,
                 }
 
                 BleV2Peripheral proxy(*this, peripheral);
-                NEARBY_LOGS(INFO)
-                    << "New peripheral imp=" << &peripheral
-                    << ", callback the proxy peripheral=" << &proxy;
                 if (!scanning_enabled_) return;
                 scan_callback_.advertisement_found_cb(std::move(proxy),
                                                       advertisement_data);
@@ -90,6 +91,42 @@ bool BleV2Medium::StartScanning(const Uuid& service_uuid,
     // existing `peripherals_` if the scanning is not started successfully. If
     // scanning is started successfully, we need to clear `peripherals_` to
     // prevent the stale data in cache.
+    peripherals_.clear();
+    scanning_enabled_ = true;
+    NEARBY_LOGS(INFO) << "Ble Scanning enabled; impl=" << GetImpl();
+  }
+  return success;
+}
+
+bool BleV2Medium::StartMultipleServicesScanning(
+    const std::vector<Uuid>& service_uuids,
+    api::ble_v2::TxPowerLevel tx_power_level, ScanCallback callback) {
+  MutexLock lock(&mutex_);
+  if (scanning_enabled_) {
+    NEARBY_LOGS(INFO) << "Ble Scanning already enabled; impl=" << GetImpl();
+    return false;
+  }
+  bool success = impl_->StartMultipleServicesScanning(
+      service_uuids, tx_power_level,
+      api::ble_v2::BleMedium::ScanCallback{
+          .advertisement_found_cb =
+              [this](api::ble_v2::BlePeripheral& peripheral,
+                     BleAdvertisementData advertisement_data) {
+                MutexLock lock(&mutex_);
+                if (!peripherals_.contains(&peripheral)) {
+                  NEARBY_LOGS(INFO) << "Peripheral impl=" << &peripheral
+                                    << " does not exist; add it to the map.";
+                  peripherals_.insert(&peripheral);
+                }
+
+                BleV2Peripheral proxy(*this, peripheral);
+                if (!scanning_enabled_) return;
+                scan_callback_.advertisement_found_cb(std::move(proxy),
+                                                      advertisement_data);
+              },
+      });
+  if (success) {
+    scan_callback_ = std::move(callback);
     peripherals_.clear();
     scanning_enabled_ = true;
     NEARBY_LOGS(INFO) << "Ble Scanning enabled; impl=" << GetImpl();
@@ -213,6 +250,12 @@ BleV2ServerSocket BleV2Medium::OpenServerSocket(const std::string& service_id) {
   return BleV2ServerSocket(*this, impl_->OpenServerSocket(service_id));
 }
 
+BleL2capServerSocket BleV2Medium::OpenL2capServerSocket(
+    const std::string& service_id) {
+  // TODO(mingshiouwu): Replace with a real implementation listening flow.
+  return BleL2capServerSocket(*this, nullptr);
+}
+
 BleV2Socket BleV2Medium::Connect(const std::string& service_id,
                                  TxPowerLevel tx_power_level,
                                  const BleV2Peripheral& peripheral,
@@ -223,6 +266,13 @@ BleV2Socket BleV2Medium::Connect(const std::string& service_id,
                                                     device, cancellation_flag));
   });
   return socket;
+}
+
+BleL2capSocket BleV2Medium::ConnectOverL2cap(
+    const std::string& service_id, TxPowerLevel tx_power_level,
+    const BleV2Peripheral& peripheral, CancellationFlag* cancellation_flag) {
+  // TODO(mingshiouwu): Replace with a real implementation connecting flow.
+  return BleL2capSocket(peripheral, nullptr);
 }
 
 bool BleV2Medium::IsExtendedAdvertisementsAvailable() {

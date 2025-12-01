@@ -15,95 +15,134 @@
 #include "tensorflow/lite/experimental/litert/core/dynamic_loading.h"
 
 #include <dlfcn.h>
+#include <unistd.h>
 
+// clang-format off
 #ifndef __ANDROID__
 #if __has_include(<link.h>)
 #include <link.h>
 #endif
 #endif
+// clang-format on
 
+#include <cstdlib>
 #include <filesystem>  // NOLINT
 #include <string>
 #include <vector>
 
-#include "absl/strings/str_format.h"
+#include "absl/strings/match.h"
+#include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
 #include "tensorflow/lite/experimental/litert/c/litert_common.h"
 #include "tensorflow/lite/experimental/litert/c/litert_logging.h"
+#include "tensorflow/lite/experimental/litert/cc/litert_macros.h"
+#include "tensorflow/lite/experimental/litert/core/filesystem.h"
 
 namespace litert::internal {
 
-LiteRtStatus OpenLib(const std::vector<std::string>& so_paths,
-                     void** lib_handle) {
-  for (const auto& so_path : so_paths) {
-    if (OpenLib(so_path, lib_handle, /*log_failure=*/false) ==
-        kLiteRtStatusOk) {
-      return kLiteRtStatusOk;
-    }
-  }
-  return kLiteRtStatusErrorDynamicLoading;
-}
-
-LiteRtStatus OpenLib(absl::string_view so_path, void** lib_handle,
-                     bool log_failure) {
-#ifdef RTLD_DEEPBIND
-  void* res = ::dlopen(so_path.data(), RTLD_NOW | RTLD_LOCAL | RTLD_DEEPBIND);
-#else
-  void* res = ::dlopen(so_path.data(), RTLD_NOW | RTLD_LOCAL);
-#endif
-
-  if (res == nullptr) {
-    if (log_failure) {
-      LITERT_LOG(LITERT_ERROR, "Failed to load .so at path: %s\n",
-                 so_path.data());
-      LogDlError();
-    }
-    return kLiteRtStatusErrorDynamicLoading;
-  }
-  *lib_handle = res;
-  return kLiteRtStatusOk;
-}
-
-LiteRtStatus CloseLib(void* lib_handle) {
-  if (0 != ::dlclose(lib_handle)) {
-    LITERT_LOG(LITERT_ERROR, "Failed to close .so with error: %s", ::dlerror());
-    return kLiteRtStatusErrorDynamicLoading;
-  }
-  return kLiteRtStatusOk;
-}
-
 namespace {
 
-LiteRtStatus FindLiteRtSharedLibsHelper(const std::string& search_path,
-                                        std::vector<std::string>& results) {
-  if (!std::filesystem::exists(search_path)) {
-    return kLiteRtStatusErrorInvalidArgument;
-  }
+static constexpr absl::string_view kLdLibraryPath = "LD_LIBRARY_PATH";
 
-  const std::string compiler_plugin_lib_pattern =
-      absl::StrFormat("%s%s", kLiteRtSharedLibPrefix, "CompilerPlugin");
-  for (const auto& entry : std::filesystem::directory_iterator(search_path)) {
-    const auto& path = entry.path();
-    if (entry.is_regular_file()) {
-      auto stem = path.stem().string();
-      auto ext = path.extension().string();
-      if (stem.find(compiler_plugin_lib_pattern) == 0 && ext == ".so") {
-        results.push_back(path);
-      }
-    } else if (entry.is_directory()) {
-      FindLiteRtSharedLibsHelper(path, results);
-    }
-  }
-
-  return kLiteRtStatusOk;
+bool EnvPathContains(absl::string_view path, absl::string_view var_value) {
+  return absl::EndsWith(var_value, path) ||
+         absl::StrContains(var_value, absl::StrCat(path, ":"));
 }
 
 }  // namespace
 
-LiteRtStatus FindLiteRtSharedLibs(absl::string_view search_path,
-                                  std::vector<std::string>& results) {
+static constexpr absl::string_view kSo = ".so";
+
+LiteRtStatus FindLiteRtSharedLibsHelper(const std::string& search_path,
+                                        const std::string& lib_pattern,
+                                        bool full_match,
+                                        std::vector<std::string>& results) {
+  if (!Exists(search_path)) {
+    return kLiteRtStatusErrorInvalidArgument;
+  }
+
+  // TODO implement path glob in core/filesystem.h and remove filesystem
+  // include from this file.
+  for (const auto& entry : std::filesystem::directory_iterator(
+           search_path,
+           std::filesystem::directory_options::skip_permission_denied)) {
+    const auto& path = entry.path();
+    if (access(path.c_str(), R_OK) != 0) {
+      continue;
+    }
+    if (entry.is_regular_file()) {
+      if (full_match) {
+        if (path.string().find(lib_pattern) != -1) {
+          LITERT_LOG(LITERT_VERBOSE, "Found shared library: %s", path.c_str());
+          results.push_back(path);
+        }
+      } else {
+        const auto stem = path.stem().string();
+        const auto ext = path.extension().string();
+        if (stem.find(lib_pattern) == 0 && kSo == ext) {
+          LITERT_LOG(LITERT_VERBOSE, "Found shared library: %s", path.c_str());
+          results.push_back(path);
+        }
+      }
+    } else if (entry.is_directory()) {
+      FindLiteRtSharedLibsHelper(path, lib_pattern, full_match, results);
+    }
+  }
+
+  return kLiteRtStatusOk;
+}
+
+static const char kCompilerPluginLibPatternFmt[] = "CompilerPlugin";
+
+LiteRtStatus FindLiteRtCompilerPluginSharedLibs(
+    absl::string_view search_path, std::vector<std::string>& results) {
+  std::string root(search_path);
+  const std::string lib_pattern =
+      absl::StrCat(kLiteRtSharedLibPrefix, kCompilerPluginLibPatternFmt);
+  return FindLiteRtSharedLibsHelper(root, lib_pattern, /*full_match=*/false,
+                                    results);
+}
+
+static const char kDispatchLibPatternFmt[] = "Dispatch";
+
+LiteRtStatus FindLiteRtDispatchSharedLibs(absl::string_view search_path,
+                                          std::vector<std::string>& results) {
   std::string root(search_path.data());
-  return FindLiteRtSharedLibsHelper(root, results);
+  const std::string lib_pattern =
+      absl::StrCat(kLiteRtSharedLibPrefix, kDispatchLibPatternFmt);
+  return FindLiteRtSharedLibsHelper(root, lib_pattern, /*full_match=*/false,
+                                    results);
+}
+
+LiteRtStatus PutLibOnLdPath(absl::string_view search_path,
+                            absl::string_view lib_pattern) {
+  std::vector<std::string> results;
+  LITERT_RETURN_IF_ERROR(FindLiteRtSharedLibsHelper(
+      std::string(search_path), std::string(lib_pattern), true, results));
+  if (results.empty()) {
+    LITERT_LOG(LITERT_INFO, "No match found in %s", search_path.data());
+    return kLiteRtStatusOk;
+  }
+
+  const auto lib_dir = std::filesystem::path(results[0]).parent_path().string();
+  absl::string_view ld = getenv(kLdLibraryPath.data());
+
+  if (EnvPathContains(lib_dir, ld)) {
+    LITERT_LOG(LITERT_INFO, "dir already in LD_LIBRARY_PATH");
+    return kLiteRtStatusOk;
+  }
+
+  std::string new_ld;
+  if (ld.empty()) {
+    new_ld = lib_dir;
+  } else {
+    new_ld = absl::StrCat(ld, ":", lib_dir);
+  }
+
+  LITERT_LOG(LITERT_INFO, "Adding %s to LD_LIBRARY_PATH", new_ld.c_str());
+  setenv(kLdLibraryPath.data(), new_ld.c_str(), /*overwrite=*/1);
+
+  return kLiteRtStatusOk;
 }
 
 }  // namespace litert::internal

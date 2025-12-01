@@ -28,7 +28,7 @@ import {TrackData} from '../../components/tracks/track_data';
 import {TimelineFetcher} from '../../components/tracks/track_helper';
 import {checkerboardExcept} from '../../components/checkerboard';
 import {Point2D} from '../../base/geom';
-import {Track} from '../../public/track';
+import {TrackRenderer} from '../../public/track';
 import {LONG, NUM} from '../../trace_processor/query_result';
 import {uuidv4Sql} from '../../base/uuid';
 import {TrackMouseEvent, TrackRenderContext} from '../../public/track';
@@ -40,6 +40,7 @@ import {Trace} from '../../public/trace';
 import {exists} from '../../base/utils';
 import {ThreadMap} from '../dev.perfetto.Thread/threads';
 import {SourceDataset} from '../../trace_processor/dataset';
+import {Cpu} from '../../base/multi_machine_trace';
 
 export interface Data extends TrackData {
   // Slices are stored in a columnar fashion. All fields have the same length.
@@ -58,7 +59,7 @@ const TRACK_HEIGHT = MARGIN_TOP * 2 + RECT_HEIGHT;
 const CPU_SLICE_FLAGS_INCOMPLETE = 1;
 const CPU_SLICE_FLAGS_REALTIME = 2;
 
-export class CpuSliceTrack implements Track {
+export class CpuSliceTrack implements TrackRenderer {
   private mousePos?: Point2D;
   private utidHoveredInThisTrack?: number;
   private fetcher = new TimelineFetcher<Data>(this.onBoundsChange.bind(this));
@@ -71,7 +72,7 @@ export class CpuSliceTrack implements Track {
   constructor(
     private readonly trace: Trace,
     private readonly uri: string,
-    private readonly cpu: number,
+    private readonly cpu: Cpu,
     private readonly threads: ThreadMap,
   ) {}
 
@@ -85,13 +86,15 @@ export class CpuSliceTrack implements Track {
           iif(dur = -1, lead(ts, 1, trace_end()) over (order by ts) - ts, dur),
           0 as depth
         from sched
-        where cpu = ${this.cpu} and utid != 0
+        where ucpu = ${this.cpu.ucpu} and
+          not utid in (select utid from thread where is_idle)
       ));
     `);
     const it = await this.trace.engine.query(`
       select coalesce(max(id), -1) as lastRowId
       from sched
-      where cpu = ${this.cpu} and utid != 0
+      where ucpu = ${this.cpu.ucpu} and
+        not utid in (select utid from thread where is_idle)
     `);
     this.lastRowId = it.firstRow({lastRowId: NUM}).lastRowId;
   }
@@ -101,17 +104,19 @@ export class CpuSliceTrack implements Track {
       // TODO(stevegolton): Once we allow datasets to have more than one filter,
       // move this where clause to a dataset filter and change this src to
       // 'sched'.
-      src: 'select id, ts, dur, cpu, utid from sched where utid != 0',
+      src: `select id, ts, dur, ucpu, utid
+            from sched
+            where not utid in (select utid from thread where is_idle)`,
       schema: {
         id: NUM,
         ts: LONG,
         dur: LONG,
-        cpu: NUM,
+        ucpu: NUM,
         utid: NUM,
       },
       filter: {
-        col: 'cpu',
-        eq: this.cpu,
+        col: 'ucpu',
+        eq: this.cpu.ucpu,
       },
     });
   }
@@ -392,7 +397,7 @@ export class CpuSliceTrack implements Track {
       }
 
       // Draw diamond if the track being drawn is the cpu of the waker.
-      if (this.cpu === selection.wakerCpu && selection.wakeupTs) {
+      if (this.cpu.cpu === selection.wakerCpu && selection.wakeupTs) {
         const wakeupPos = Math.floor(timescale.timeToPx(selection.wakeupTs));
         ctx.beginPath();
         ctx.moveTo(wakeupPos, MARGIN_TOP + RECT_HEIGHT / 2 + 8);

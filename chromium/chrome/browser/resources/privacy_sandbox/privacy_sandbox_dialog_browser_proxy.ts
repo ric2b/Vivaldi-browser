@@ -55,8 +55,8 @@ export class PrivacySandboxDialogBrowserProxy {
     chrome.send('showDialog');
   }
 
-  shouldShowPrivacySandboxPrivacyPolicy() {
-    return sendWithPromise('shouldShowPrivacySandboxPrivacyPolicy');
+  shouldShowAdTopicsContentParity() {
+    return sendWithPromise('shouldShowAdTopicsContentParity');
   }
 
   static getInstance(): PrivacySandboxDialogBrowserProxy {

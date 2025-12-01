@@ -351,6 +351,28 @@ TEST(GIFImageDecoderTest, verifyRepetitionCount) {
                       kAnimationLoopInfinite);
 }
 
+TEST(GIFImageDecoderTest, repetitionCountOfPartialStaticGif) {
+  // Data section begins at offset 397 and ends at offset 1033.
+  const size_t kOffsetInMiddleOfData = 500u;
+  const bool kAllDataReceived = false;
+
+  const Vector<char> full_data = ReadFile(kDecodersTestingDir, "radient.gif");
+  scoped_refptr<SharedBuffer> partial_data =
+      SharedBuffer::Create(base::span(full_data).first(kOffsetInMiddleOfData));
+
+  std::unique_ptr<ImageDecoder> decoder = CreateDecoder();
+  decoder->SetData(partial_data.get(), kAllDataReceived);
+
+  EXPECT_TRUE(decoder->IsSizeAvailable());
+  EXPECT_EQ(1u, decoder->FrameCount());
+
+  // TODO(lukasza): This is incorrect - for a static image we should get
+  // `kAnimationNone`.  OTOH, the GIF input doesn't specify upfront how
+  // many frame there are, so a partially received input is ambiguous
+  // wrt whether more animation frames will come or not.
+  EXPECT_EQ(kAnimationLoopInfinite, decoder->RepetitionCount());
+}
+
 TEST(GIFImageDecoderTest, repetitionCountChangesWhenSeen) {
   const Vector<char> full_data =
       ReadFile(kWebTestsResourcesDir, "animated-10color.gif");
@@ -505,6 +527,31 @@ TEST(GIFImageDecoderTest, errorFrame) {
     decoder->DecodeFrameBufferAtIndex(i);
   }
   EXPECT_FALSE(decoder->Failed());
+}
+
+// This is a regression test for https://crbug.com/404288140 where
+// the following DCHECK in `blink::ImageFrame::TakeBitmapDataIfWritable` would
+// fail when called from `blink::SkiaImageDecoderBase::Decode`:
+//
+//     ```
+//     bool ImageFrame::TakeBitmapDataIfWritable(ImageFrame* other) {
+//       DCHECK(other);
+//       DCHECK_EQ(kFrameComplete, other->status_);  // <- this one
+//     ```
+TEST(GIFImageDecoderTest, regressionAgainstReusingIncompletePreviousFrame) {
+  scoped_refptr<SharedBuffer> test_data = ReadFileToSharedBuffer(
+      kDecodersTestingDir,
+      "incomplete-prev-frame-reusing-clusterfuzz-repro.gif");
+  ASSERT_TRUE(test_data.get());
+
+  std::unique_ptr<ImageDecoder> decoder = CreateDecoder();
+  decoder->SetData(test_data.get(), true);
+  ImageFrame* frame = decoder->DecodeFrameBufferAtIndex(2);
+  // Lack of a `DCHECK`-triggered crash is the main verification in this test.
+  // But for completeness, some supplementary verification follows below...
+  EXPECT_TRUE(decoder->Failed());
+  EXPECT_TRUE(frame);
+  EXPECT_EQ(frame->GetStatus(), ImageFrame::kFrameEmpty);
 }
 
 }  // namespace blink

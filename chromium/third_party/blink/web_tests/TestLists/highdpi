@@ -19,14 +19,6 @@ animations/responsive/stacked-visibility-animations-responsive.html
 animations/responsive/zoom-responsive-transform-animation-001.html
 animations/stability/font-builder-crash.html
 animations/state-at-end-event.html
-animations/svg-attribute-composition/svg-amplitude-composition.html
-animations/svg-attribute-composition/svg-azimuth-composition.html
-animations/svg-attribute-composition/svg-baseFrequency-composition.html
-animations/svg-attribute-composition/svg-bias-composition.html
-animations/svg-attribute-interpolation/svg-edgeMode-interpolation.html
-animations/svg-attribute-interpolation/svg-elevation-interpolation.html
-animations/svg-attribute-interpolation/svg-exponent-interpolation.html
-animations/svg-attribute-interpolation/svg-viewBox-interpolation.html
 animations/svg/animated-filter-svg-element.html
 animations/web-animations/KeyframeEffect-animation.html
 clipboard/copy-image-at.html
@@ -1300,7 +1292,7 @@ html/details_summary/details-add-summary.html
 html/document_metadata/head-has-text-1.html
 html/grouping_content/listing.html
 html/tabular_data/table_createcaption.html
-html/text_level_semantics/font-weight-bold-for-b-and-strong.html
+html/text_level_semantics/font-weight-bolder-for-b-and-strong.html
 http/tests/css/css-resources-referrer.html
 http/tests/csspaint/border-color.html
 http/tests/csspaint/entire-canvas-visible-zoom.html

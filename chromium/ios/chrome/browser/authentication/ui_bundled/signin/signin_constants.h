@@ -29,6 +29,8 @@ typedef NS_ENUM(NSUInteger, SigninCoordinatorResult) {
   // Only triggered by `SceneController` when processing a ShowSigninCommand
   // and when the UI is not ready to present any signin coordinator.
   SigninCoordinatorUINotAvailable,
+  // Sign-in coordinator is stopped because of a change in profile.
+  SigninCoordinatorProfileSwitch,
 };
 
 // Called when the sign-in dialog is closed.
@@ -36,28 +38,6 @@ typedef NS_ENUM(NSUInteger, SigninCoordinatorResult) {
 // `signinCompletionIdentity` the identity that was used if any.
 using SigninCoordinatorCompletionCallback =
     void (^)(SigninCoordinatorResult result, id<SystemIdentity> identity);
-
-// User's signed-in state as defined by AuthenticationService.
-// TODO(crbug.com/40066949): Revisit after phase 3 migration of syncing users.
-typedef NS_ENUM(NSUInteger, IdentitySigninState) {
-  IdentitySigninStateSignedOut,
-  IdentitySigninStateSignedInWithSyncDisabled,
-  IdentitySigninStateSignedInWithSyncEnabled,
-};
-
-// Action to do when the sign-in dialog needs to be interrupted.
-enum class SigninCoordinatorInterrupt {
-  // Stops the sign-in coordinator without dismissing the view. The sign-in
-  // completion block and the interrupt completion block will be called
-  // synchronously.
-  // This should be only used when UI shutdown.
-  // See crbug.com/1455216.
-  UIShutdownNoDismiss,
-  // Stops the sign-in coordinator and dismisses the view without animation.
-  DismissWithoutAnimation,
-  // Stops the sign-in coordinator and dismisses the view with animation.
-  DismissWithAnimation,
-};
 
 // Name of accessibility identifier for the skip sign-in button.
 extern NSString* const kSkipSigninAccessibilityIdentifier;
@@ -87,6 +67,18 @@ extern NSString* const kConsistencyAccountChooserAddAccountIdentifier;
 
 // Name of the accessibility identifier for the managed profile creation screen.
 extern NSString* const kManagedProfileCreationScreenAccessibilityIdentifier;
+
+// Name of the accessibility identifier for the browsing data management screen.
+extern NSString* const kBrowsingDataManagementScreenAccessibilityIdentifier;
+
+// Name of the accessibility identifier for the navigation bar of the managed
+// profile creation screen.
+extern NSString* const
+    kManagedProfileCreationNavigationBarAccessibilityIdentifier;
+
+// Name of the accessibility identifier for the browsing data button on the
+// managed profile creation screen.
+extern NSString* const kBrowsingDataButtonAccessibilityIdentifier;
 
 // Name of the accessibility identifier for the keep browsing data separate
 // cell.
@@ -140,6 +132,10 @@ extern NSString* const kSigninPromoViewDisplayCountKey;
 // TODO(crbug.com/40831586): Need to merge with kSigninPromoViewDisplayCountKey.
 // Exposed for testing.
 extern NSString* const kDisplayedSSORecallPromoCountKey;
+// Key in NSUserDefaults containing a boolean indicating whether the sign-in
+// fullscreen promo migration to the promo manager has been completed.
+// TODO(crbug.com/396111171): Post migration clean up.
+extern NSString* const kFullscreenSigninPromoManagerMigrationDone;
 // Name of the UMA SSO Recall histogram.
 extern const char* const kUMASSORecallPromoAction;
 // Name of the histogram recording how many accounts were available on the

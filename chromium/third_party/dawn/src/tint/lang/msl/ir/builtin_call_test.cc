@@ -33,7 +33,6 @@
 #include "src/tint/lang/core/ir/validator.h"
 #include "src/tint/lang/core/type/sampled_texture.h"
 #include "src/tint/lang/core/type/texture_dimension.h"
-#include "src/tint/utils/result/result.h"
 
 using namespace tint::core::fluent_types;  // NOLINT
 
@@ -63,8 +62,7 @@ TEST_F(IR_MslBuiltinCallTest, Clone) {
 }
 
 TEST_F(IR_MslBuiltinCallTest, DoesNotMatchMemberFunction) {
-    auto* t = b.FunctionParam(
-        "t", ty.Get<core::type::SampledTexture>(core::type::TextureDimension::k2d, ty.f32()));
+    auto* t = b.FunctionParam("t", ty.sampled_texture(core::type::TextureDimension::k2d, ty.f32()));
     auto* s = b.FunctionParam("s", ty.sampler());
     auto* coords = b.FunctionParam("coords", ty.vec2<f32>());
     auto* func = b.Function("foo", ty.vec4<f32>());
@@ -77,7 +75,7 @@ TEST_F(IR_MslBuiltinCallTest, DoesNotMatchMemberFunction) {
     auto res = core::ir::Validate(mod);
     ASSERT_NE(res, Success);
     EXPECT_EQ(
-        res.Failure().reason.Str(),
+        res.Failure().reason,
         R"(:3:20 error: msl.sample: no matching call to 'msl.sample(texture_2d<f32>, sampler, vec2<f32>)'
 
     %5:vec4<f32> = msl.sample %t, %s, %coords

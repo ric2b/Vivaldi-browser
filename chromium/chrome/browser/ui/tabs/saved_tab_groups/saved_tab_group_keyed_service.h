@@ -5,16 +5,17 @@
 #ifndef CHROME_BROWSER_UI_TABS_SAVED_TAB_GROUPS_SAVED_TAB_GROUP_KEYED_SERVICE_H_
 #define CHROME_BROWSER_UI_TABS_SAVED_TAB_GROUPS_SAVED_TAB_GROUP_KEYED_SERVICE_H_
 
+#include <map>
 #include <memory>
+#include <string>
+#include <utility>
+#include <vector>
 
 #include "base/memory/raw_ptr.h"
 #include "base/timer/timer.h"
 #include "chrome/browser/ui/tabs/saved_tab_groups/saved_tab_group_controller.h"
-#include "chrome/browser/ui/tabs/saved_tab_groups/saved_tab_group_model_listener.h"
 #include "components/keyed_service/core/keyed_service.h"
-#include "components/saved_tab_groups/internal/saved_tab_group_model.h"
-#include "components/saved_tab_groups/internal/tab_group_sync_bridge_mediator.h"
-#include "components/saved_tab_groups/public/tab_group_sync_metrics_logger.h"
+#include "components/saved_tab_groups/internal/saved_tab_group_model_observer.h"
 #include "components/saved_tab_groups/public/tab_group_sync_service.h"
 #include "components/saved_tab_groups/public/types.h"
 #include "components/sync/model/data_type_store.h"
@@ -23,17 +24,23 @@
 
 class Profile;
 class TabGroup;
-
-namespace tabs {
-class TabInterface;
-}
+class TabStripModel;
 
 namespace syncer {
 class DeviceInfoTracker;
 }
 
+namespace tabs {
+class TabInterface;
+}
+
 namespace tab_groups {
 
+class SavedTabGroupModel;
+class SavedTabGroupModelListener;
+class SharedTabGroupAccountDataSyncBridge;
+class TabGroupSyncBridgeMediator;
+class TabGroupSyncMetricsLogger;
 class TabGroupSyncServiceProxy;
 
 // Serves to instantiate and own the SavedTabGroup infrastructure for the
@@ -57,6 +64,8 @@ class SavedTabGroupKeyedService : public KeyedService,
   GetSavedTabGroupControllerDelegate();
   base::WeakPtr<syncer::DataTypeControllerDelegate>
   GetSharedTabGroupControllerDelegate();
+  base::WeakPtr<syncer::DataTypeControllerDelegate>
+  GetSharedTabGroupAccountControllerDelegate();
   Profile* profile() { return profile_; }
 
   // SavedTabGroupController
@@ -194,6 +203,13 @@ class SavedTabGroupKeyedService : public KeyedService,
   // Records the Unsaved TabGroup count and the Tab count per Unsaved TabGroup.
   void RecordTabGroupMetrics();
 
+  // Returns whether a given groups' cache guid doesnt match the current device.
+  bool IsRemoteDevice(const std::optional<std::string>& cache_guid) const;
+
+  // Record metrics similar to TabGroupSyncService when the model is
+  // initialized.
+  void RecordStartupMetrics();
+
   // Helper function to log a tab group event in histograms. This is implemented
   // in the same way as TabGroupSyncServiceImpl.
   void LogEvent(TabGroupEvent event,
@@ -216,6 +232,10 @@ class SavedTabGroupKeyedService : public KeyedService,
 
   // Stores SavedTabGroup data to the disk and to sync if enabled.
   std::unique_ptr<TabGroupSyncBridgeMediator> sync_bridge_mediator_;
+
+  // Sync bridge for shared tab group account data.
+  std::unique_ptr<SharedTabGroupAccountDataSyncBridge>
+      shared_tab_group_account_data_bridge_;
 
   // Helper class for logging metrics.
   std::unique_ptr<TabGroupSyncMetricsLogger> metrics_logger_;

@@ -20,7 +20,6 @@
 #include "chrome/browser/ash/file_manager/volume_manager.h"
 #include "chrome/browser/ash/hats/hats_config.h"
 #include "chrome/browser/ash/hats/hats_notification_controller.h"
-#include "chrome/browser/browser_process.h"
 #include "chrome/browser/feedback/show_feedback_page.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
@@ -37,6 +36,7 @@
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_ui.h"
 #include "ui/events/event_constants.h"
+#include "ui/views/widget/widget.h"
 #include "url/gurl.h"
 
 ChromeMediaAppUIDelegate::ChromeMediaAppUIDelegate(content::WebUI* web_ui)
@@ -65,10 +65,9 @@ std::optional<std::string> ChromeMediaAppUIDelegate::OpenFeedbackDialog() {
 }
 
 void ChromeMediaAppUIDelegate::ToggleBrowserFullscreenMode() {
-  Browser* browser = chrome::FindBrowserWithTab(web_ui_->GetWebContents());
-  if (browser) {
-    chrome::ToggleFullscreenMode(browser, /*user_initiated=*/true);
-  }
+  views::Widget* top = views::Widget::GetTopLevelWidgetForNativeView(
+      web_ui_->GetWebContents()->GetNativeView());
+  top->SetFullscreen(!top->IsFullscreen());
 }
 
 void ChromeMediaAppUIDelegate::MaybeTriggerPdfHats() {

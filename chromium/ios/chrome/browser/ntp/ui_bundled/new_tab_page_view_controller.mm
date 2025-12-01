@@ -12,6 +12,12 @@
 #import "base/feature_list.h"
 #import "base/ios/block_types.h"
 #import "base/task/sequenced_task_runner.h"
+#import "ios/chrome/browser/content_suggestions/ui_bundled/cells/content_suggestions_cells_constants.h"
+#import "ios/chrome/browser/content_suggestions/ui_bundled/content_suggestions_collection_utils.h"
+#import "ios/chrome/browser/content_suggestions/ui_bundled/content_suggestions_view_controller.h"
+#import "ios/chrome/browser/content_suggestions/ui_bundled/magic_stack/magic_stack_collection_view.h"
+#import "ios/chrome/browser/content_suggestions/ui_bundled/magic_stack/magic_stack_constants.h"
+#import "ios/chrome/browser/content_suggestions/ui_bundled/ntp_home_constant.h"
 #import "ios/chrome/browser/ntp/shared/metrics/feed_metrics_constants.h"
 #import "ios/chrome/browser/ntp/shared/metrics/feed_metrics_recorder.h"
 #import "ios/chrome/browser/ntp/ui_bundled/discover_feed_constants.h"
@@ -29,12 +35,6 @@
 #import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
 #import "ios/chrome/browser/toolbar/ui_bundled/public/toolbar_utils.h"
-#import "ios/chrome/browser/ui/content_suggestions/cells/content_suggestions_cells_constants.h"
-#import "ios/chrome/browser/ui/content_suggestions/content_suggestions_collection_utils.h"
-#import "ios/chrome/browser/ui/content_suggestions/content_suggestions_view_controller.h"
-#import "ios/chrome/browser/ui/content_suggestions/magic_stack/magic_stack_collection_view.h"
-#import "ios/chrome/browser/ui/content_suggestions/magic_stack/magic_stack_constants.h"
-#import "ios/chrome/browser/ui/content_suggestions/ntp_home_constant.h"
 #import "ios/chrome/common/material_timing.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #import "ios/chrome/common/ui/elements/gradient_view.h"
@@ -43,6 +43,7 @@
 #import "ui/base/device_form_factor.h"
 
 namespace {
+
 // Animation time for the shift up/down animations to focus/defocus omnibox.
 const CGFloat kShiftTilesUpAnimationDuration = 0.1;
 // The minimum height of the feed container.
@@ -50,6 +51,14 @@ const CGFloat kFeedContainerMinimumHeight = 1000;
 // Added height to the feed container so that it doesn't end abruptly on
 // overscroll.
 const CGFloat kFeedContainerExtraHeight = 500;
+
+// Vertical spacing between modules.
+CGFloat SpaceBetweenModules() {
+  return GetDeprecateFeedHeaderParameterValueAsDouble(
+      kDeprecateFeedHeaderParameterSpaceBetweenModules,
+      /*default_value=*/14);
+}
+
 }  // namespace
 
 @interface NewTabPageViewController () <UICollectionViewDelegate,
@@ -294,6 +303,13 @@ const CGFloat kFeedContainerExtraHeight = 500;
     [self setMinimumHeight];
   }
 
+  if (self.feedVisible &&
+      GetFeedSwipeIPHVariation() == FeedSwipeIPHVariation::kStaticInSecondRun &&
+      !IsFirstRun()) {
+    [self.helpHandler
+        presentInProductHelpWithType:InProductHelpType::kFeedSwipe];
+  }
+
   [self.helpHandler
       presentInProductHelpWithType:InProductHelpType::kDiscoverFeedMenu];
 
@@ -531,7 +547,7 @@ const CGFloat kFeedContainerExtraHeight = 500;
     [self setMinimumHeight];
   }
 
-  [self updateAccessibilityElements];
+  [self updateAccessibilityElementsForSwitchControl];
 }
 
 - (void)willUpdateSnapshot {
@@ -632,7 +648,7 @@ const CGFloat kFeedContainerExtraHeight = 500;
         (viewController == self.magicStackCollectionView ||
          viewController == self.contentSuggestionsViewController ||
          viewController == self.feedHeaderViewController)) {
-      heightAboveFeed += kSpaceBetweenModules;
+      heightAboveFeed += SpaceBetweenModules();
     }
   }
   if (!IsHomeCustomizationEnabled()) {
@@ -640,7 +656,8 @@ const CGFloat kFeedContainerExtraHeight = 500;
       heightAboveFeed += kBottomMagicStackPadding;
     }
     if (!self.contentSuggestionsViewController) {
-      heightAboveFeed += content_suggestions::HeaderBottomPadding();
+      heightAboveFeed +=
+          content_suggestions::HeaderBottomPadding(self.traitCollection);
     }
   }
   return heightAboveFeed;
@@ -853,6 +870,7 @@ const CGFloat kFeedContainerExtraHeight = 500;
   if (self.feedVisible) {
     [self.feedMetricsRecorder recordFeedScrolled:scrollView.contentOffset.y -
                                                  self.scrollStartPosition];
+    [self.NTPContentDelegate feedDidScroll];
   }
 }
 
@@ -1216,7 +1234,7 @@ const CGFloat kFeedContainerExtraHeight = 500;
       self.fakeOmniboxConstraints = @[
         [viewBelowHeader.topAnchor
             constraintEqualToAnchor:self.headerViewController.view.bottomAnchor
-                           constant:kSpaceBetweenModules],
+                           constant:SpaceBetweenModules()],
       ];
     }
   } else {
@@ -1232,7 +1250,8 @@ const CGFloat kFeedContainerExtraHeight = 500;
       self.fakeOmniboxConstraints = @[
         [self.magicStackCollectionView.view.topAnchor
             constraintEqualToAnchor:self.headerViewController.view.bottomAnchor
-                           constant:content_suggestions::HeaderBottomPadding()],
+                           constant:content_suggestions::HeaderBottomPadding(
+                                        self.traitCollection)],
       ];
     }
   }
@@ -1345,6 +1364,10 @@ const CGFloat kFeedContainerExtraHeight = 500;
   [center addObserver:self
              selector:@selector(deviceOrientationDidChange)
                  name:UIDeviceOrientationDidChangeNotification
+               object:nil];
+  [center addObserver:self
+             selector:@selector(updateAccessibilityElementsForSwitchControl)
+                 name:UIAccessibilitySwitchControlStatusDidChangeNotification
                object:nil];
 }
 
@@ -1506,7 +1529,7 @@ const CGFloat kFeedContainerExtraHeight = 500;
       UIView* viewAbove = self.viewControllersAboveFeed[index - 1].view;
       [NSLayoutConstraint activateConstraints:@[
         [view.topAnchor constraintEqualToAnchor:viewAbove.bottomAnchor
-                                       constant:kSpaceBetweenModules],
+                                       constant:SpaceBetweenModules()],
       ]];
     }
   }
@@ -1558,16 +1581,23 @@ const CGFloat kFeedContainerExtraHeight = 500;
   }
 }
 
-// Updates the accessibilityElements used by VoiceOver / Switch Control to
-// iterate through on-screen elements. The feed collectionView does not seem to
-// include non-feed items in its `accessibilityElements` so they are added here.
-- (void)updateAccessibilityElements {
+// The default behavior of Switch Control does not iterate through elements
+// added to the collection view by default; manually setting
+// `accessibilityElements` for these elements to be recognized by Switch
+// Control.
+- (void)updateAccessibilityElementsForSwitchControl {
+  if (!UIAccessibilityIsSwitchControlRunning()) {
+    // Reset to `nil` after switch control has been turned off. Other a11y
+    // features can handle the iteration correctly.
+    self.containerView.accessibilityElements = nil;
+    return;
+  }
   NSMutableArray* elements = [[NSMutableArray alloc] init];
   for (UIViewController* viewController in self.viewControllersAboveFeed) {
     [elements addObject:viewController.view];
   }
   [elements addObject:self.collectionView];
-  self.view.accessibilityElements = elements;
+  self.containerView.accessibilityElements = elements;
 }
 
 // Calculate the scroll position that should be saved in the NTP state and
@@ -1654,7 +1684,8 @@ const CGFloat kFeedContainerExtraHeight = 500;
       // Add in half of the margin between the fakebox and the rest of the
       // content suggestions, to ensure there is enough height to fully
       // finish the fakebox to omnibox transition.
-      minimumHeight += content_suggestions::HeaderBottomPadding() / 2;
+      minimumHeight +=
+          content_suggestions::HeaderBottomPadding(self.traitCollection) / 2;
     }
   }
 

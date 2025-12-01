@@ -7,6 +7,7 @@
 
 #include "base/functional/callback_forward.h"
 #include "build/build_config.h"
+#include "components/country_codes/country_codes.h"
 #include "components/regional_capabilities/regional_capabilities_service.h"
 
 namespace variations {
@@ -14,6 +15,21 @@ class VariationsService;
 }
 
 namespace regional_capabilities {
+#if BUILDFLAG(IS_CHROMEOS)
+inline constexpr const char kCrOSMissingVariationData[] =
+    "ChromeOS.CountryCode.MissingVariationData";
+// LINT.IfChange(ChromeOSFallbackCountry)
+enum class ChromeOSFallbackCountry {
+  kNoStatisticsProvider = 0,
+  kStatisticsLoadingNotFinished = 1,
+  kGroupedRegion = 2,
+  kRegionTooShort = 3,
+  kRegionTooLong = 4,
+  kValidCountryCode = 5,
+  kMaxValue = kValidCountryCode,
+};
+// LINT.ThenChange(//tools/metrics/histograms/metadata/chromeos/enums.xml:ChromeOSFallbackCountry)
+#endif
 
 // Helper that is responsible for providing the `RegionalCapabilitiesService`
 // with country data that could be coming from platform-specific or //chrome
@@ -21,23 +37,19 @@ namespace regional_capabilities {
 class RegionalCapabilitiesServiceClient
     : public RegionalCapabilitiesService::Client {
  public:
-#if BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_LINUX)
   explicit RegionalCapabilitiesServiceClient(
       variations::VariationsService* variations_service);
-#else
-  RegionalCapabilitiesServiceClient();
-#endif
 
   ~RegionalCapabilitiesServiceClient() override;
 
-  int GetFallbackCountryId() override;
+  country_codes::CountryId GetVariationsLatestCountryId() override;
+
+  country_codes::CountryId GetFallbackCountryId() override;
 
   void FetchCountryId(CountryIdCallback country_id_fetched_callback) override;
 
  private:
-#if BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_LINUX)
-  const int variations_country_id_;
-#endif
+  const country_codes::CountryId variations_latest_country_id_;
 };
 
 }  // namespace regional_capabilities

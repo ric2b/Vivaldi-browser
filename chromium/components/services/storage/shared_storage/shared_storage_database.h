@@ -62,6 +62,12 @@ class SharedStorageDatabase {
       base::RepeatingCallback<bool(const blink::StorageKey&,
                                    SpecialStoragePolicy*)>;
 
+  enum class DataClearSource {
+    kSite,
+    kUI,
+    kExpiration,
+  };
+
   enum class InitStatus {
     kUnattempted =
         0,  // Status if `LazyInit()` has not yet been called or if `LazyInit()`
@@ -121,6 +127,31 @@ class SharedStorageDatabase {
                         // `Keys()`/`Entries()` exceeds INT_MAX.
     kExpired = 9,       // Result if the retrieved entry is expired.
     kMaxValue = kExpired,
+  };
+
+  struct BatchUpdateResult {
+    BatchUpdateResult(OperationResult overall_result,
+                      std::vector<OperationResult> inner_method_results);
+    ~BatchUpdateResult();
+
+    BatchUpdateResult(const BatchUpdateResult&) = delete;
+    BatchUpdateResult& operator=(const BatchUpdateResult&) = delete;
+    BatchUpdateResult(BatchUpdateResult&&);
+    BatchUpdateResult& operator=(BatchUpdateResult&&);
+
+    // Indicates the overall result of the batch update operation. If the entire
+    // batch succeeded, it will be `kSuccess`. Otherwise, it will hold the first
+    // error encountered, either from the batch itself or from an individual
+    // inner method. If an inner method failed, this will match the last element
+    // of `inner_method_results`.
+    OperationResult overall_result = OperationResult::kSqlError;
+
+    // Stores the results of each inner method, in the order they were executed.
+    // Contains results up to and including the first failed method or all
+    // methods if the entire batch succeeded. Note that even if an inner method
+    // succeeds, it will be rolled back if a subsequent operation within the
+    // same transaction fails.
+    std::vector<OperationResult> inner_method_results;
   };
 
   // Bundles a retrieved string `data` and its last write time `last_used_time`
@@ -302,7 +333,17 @@ class SharedStorageDatabase {
 
   // Clears all entries for `context_origin`. Returns whether the operation is
   // successful.
-  [[nodiscard]] OperationResult Clear(url::Origin context_origin);
+  [[nodiscard]] OperationResult Clear(
+      url::Origin context_origin,
+      DataClearSource source = DataClearSource::kSite);
+
+  // Executes `methods_with_options` as a transaction. If any method fails, the
+  // entire batch operation is rolled back, and a failure result is returned.
+  [[nodiscard]] BatchUpdateResult BatchUpdate(
+      const url::Origin& context_origin,
+      const std::vector<
+          network::mojom::SharedStorageModifierMethodWithOptionsPtr>&
+          methods_with_options);
 
   // Returns the number of unexpired entries for `context_origin` in the
   // database, or -1 on error.
@@ -477,7 +518,8 @@ class SharedStorageDatabase {
   // successful. Not named `Clear()` to distinguish it from the public method
   // called via `SequenceBound::AsyncCall()`. We remove `context_origin` from
   // `per_origin_mapping` if the origin becomes empty.
-  [[nodiscard]] bool Purge(const std::string& context_origin)
+  [[nodiscard]] bool Purge(const std::string& context_origin,
+                           DataClearSource source)
       VALID_CONTEXT_REQUIRED(sequence_checker_);
 
   // Performs the common last steps for calls to `Set()` or `Append()`.
@@ -567,8 +609,8 @@ class SharedStorageDatabase {
 
   // Deletes the row for `context_origin` from `per_origin_mapping`.
   [[nodiscard]] bool DeleteFromPerOriginMapping(
-      const std::string& context_origin)
-      VALID_CONTEXT_REQUIRED(sequence_checker_);
+      const std::string& context_origin,
+      DataClearSource source) VALID_CONTEXT_REQUIRED(sequence_checker_);
 
   // Inserts the tuple for `(context_origin, creation_time, num_bytes)`
   // into `per_origin_mapping`.

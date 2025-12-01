@@ -90,6 +90,7 @@ enum Medium {
   BLE_L2CAP = 10;
   USB = 11;
   WEB_RTC_NON_CELLULAR = 12;
+  AWDL = 13;
 }
 // LINT.ThenChange(
 //     //depot/google3/java/com/google/android/gmscore/integ/client/nearby/src/com/google/android/gms/nearby/connection/Medium.java,
@@ -134,6 +135,18 @@ enum ConnectionMode {
 // LINT.ThenChange(
 //     //depot/google3/java/com/google/android/gmscore/integ/client/nearby/src/com/google/android/gms/nearby/connection/ConnectionMode.java,
 //     //depot/google3/third_party/nearby/connections/implementation/proto/offline_wire_formats.proto
+// )
+
+// LINT.IfChange
+// Result of a instant connection.
+enum InstantConnectionResult {
+  UNKNOWN_INSTANT_CONNECTION_RESULT = 0;
+  INSTANT_CONNECTION_SUCCESS = 1;
+  INSTANT_CONNECTION_FAILURE = 2;
+  INSTANT_CONNECTION_TIMEOUT = 3;
+}
+// LINT.ThenChange(
+//     //depot/google3/java/com/google/android/gmscore/integ/client/nearby/src/com/google/android/gms/nearby/connection/InstantConnectionResult.java
 // )
 
 // The result of a ConnectionRequest.

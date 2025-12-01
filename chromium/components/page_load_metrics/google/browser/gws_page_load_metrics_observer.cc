@@ -8,6 +8,7 @@
 #include <unordered_map>
 #include <vector>
 
+#include "base/containers/fixed_flat_set.h"
 #include "base/debug/crash_logging.h"
 #include "base/debug/dump_without_crashing.h"
 #include "base/feature_list.h"
@@ -27,7 +28,6 @@
 #include "components/page_load_metrics/google/browser/google_url_util.h"
 #include "components/page_load_metrics/google/browser/gws_abandoned_page_load_metrics_observer.h"
 #include "components/page_load_metrics/google/browser/histogram_suffixes.h"
-#include "components/policy/content/policy_blocklist_metrics.h"
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/site_instance.h"
 #include "services/metrics/public/cpp/ukm_builders.h"
@@ -55,6 +55,8 @@ const char kHistogramGWSNavigationStartToFirstLoaderCallback[] =
     HISTOGRAM_PREFIX "NavigationTiming.NavigationStartToFirstLoaderCallback";
 const char kHistogramGWSNavigationStartToOnComplete[] =
     HISTOGRAM_PREFIX "NavigationTiming.NavigationStartToOnComplete";
+const char kHistogramGWSInitializeStreamDelay[] =
+    HISTOGRAM_PREFIX "NavigationTiming.InitializeStreamDelay";
 
 const char kHistogramGWSConnectTimingFirstRequestDomainLookupDelay[] =
     HISTOGRAM_PREFIX "ConnectTiming.FirstRequestDomainLookupDelay";
@@ -127,9 +129,6 @@ const char kHistogramGWSHeaderMismatchType[] =
 
 namespace {
 
-constexpr char kSafeSitesFilterEnabledSuffix[] = ".SafeSitesFilterEnabled";
-constexpr char kSafeSitesFilterDisabledSuffix[] = ".SafeSitesFilterDisabled";
-
 // TODO(crbug.com/352578800): When this is enabled, the browser will log
 // response headers if those're unexpected to be in the navigation response.
 BASE_FEATURE(kSyntheticResponseReportUnexpectedHeader,
@@ -165,35 +164,6 @@ GWSPageLoadMetricsObserver::NavigationSourceType GetBackgroundedState(
       // Types that already have backgrounded types
       return type;
   }
-}
-
-void RecordPageLoadHistogramWithVariants(bool is_safesites_filter_enabled,
-                                         std::string_view name,
-                                         base::TimeDelta sample) {
-  PAGE_LOAD_HISTOGRAM(name, sample);
-  PAGE_LOAD_HISTOGRAM(
-      base::StrCat({name, is_safesites_filter_enabled
-                              ? kSafeSitesFilterEnabledSuffix
-                              : kSafeSitesFilterDisabledSuffix}),
-      sample);
-}
-
-void RecordFineGrainedPageLoadHistogramWithVariants(
-    bool is_safesites_filter_enabled,
-    std::string_view name,
-    base::TimeDelta sample) {
-  // Record variant metrics in a range from 10ms to 10s with 100 buckets.
-  // Current PAGE_LOAD_HISTOGRAM macro does it from 10ms to 10 minutes with 100
-  // buckets, but it would not be suitable to monitor much faster pages living
-  // in the real world today, as the bucket size for median value is about 50ms
-  // in the current config.
-  base::UmaHistogramCustomTimes(name, sample, base::Milliseconds(10),
-                                base::Seconds(10), 100);
-  base::UmaHistogramCustomTimes(
-      base::StrCat({name, is_safesites_filter_enabled
-                              ? kSafeSitesFilterEnabledSuffix
-                              : kSafeSitesFilterDisabledSuffix}),
-      sample, base::Milliseconds(10), base::Seconds(10), 100);
 }
 
 struct ExpectedHeaderInfo {
@@ -259,20 +229,6 @@ std::unordered_map<std::string, ExpectedHeaderInfo> GetExpectedHeaderInfo() {
 #endif  // BUDILDFLAG(IS_ANDROID)
 
   return expected_headers;
-}
-
-// Headers that are not handled by the browser, or not used at all for the
-// navigation commit.
-std::unordered_set<std::string> GetIgnorableHeaderInfo() {
-  std::unordered_set<std::string> ignorable_headers;
-  ignorable_headers.emplace("date");
-  ignorable_headers.emplace("p3p");
-  // TODO(crbug.com/379764811): Consider moving this header to <meta> HTML tag.
-  // Even though the impact is very limited, the existence of this header will
-  // change the behavior.
-  ignorable_headers.emplace("X-DNS-Prefetch-Control");
-
-  return ignorable_headers;
 }
 
 // Check the Content-Security-Policy header is expected, except for the `nonce`.
@@ -354,7 +310,7 @@ void SetHeaderCrashKeys(const ReportedHeaders& reported_headers,
 
 #define SetCrashKeyForUnexpectedHeader(headers, keys, is_header_name) \
   it = headers.begin();                                               \
-  for (ArrayItemKey & key : keys) {                                   \
+  for (ArrayItemKey& key : keys) {                                    \
     if (it == headers.end()) {                                        \
       key.Clear();                                                    \
     } else {                                                          \
@@ -435,48 +391,6 @@ GWSPageLoadMetricsObserver::OnCommit(
     base::UmaHistogramBoolean(internal::kHistogramGWSIsFirstNavigationForGWS,
                               is_gws_url);
   }
-  if (const PolicyBlocklistMetrics* const metrics =
-          PolicyBlocklistMetrics::Get(*navigation_handle)) {
-    is_safesites_filter_enabled_ = true;
-    base::UmaHistogramCounts100(
-        "Navigation.Throttles.PolicyBlocklist.RedirectCount."
-        "SafeSitesFilterEnabled",
-        metrics->redirect_count);
-    base::UmaHistogramTimes(
-        "Navigation.Throttles.PolicyBlocklist.RequestToResponseTime2."
-        "SafeSitesFilterEnabled",
-        metrics->request_to_response_time);
-    base::UmaHistogramTimes(
-        "Navigation.Throttles.PolicyBlocklist.ResponseDeferDuration."
-        "SafeSitesFilterEnabled",
-        metrics->response_defer_duration);
-    if (metrics->cache_hit.has_value()) {
-      base::UmaHistogramBoolean(
-          "Navigation.Throttles.PolicyBlocklist.CacheHit."
-          "SafeSitesFilterEnabled",
-          *metrics->cache_hit);
-    }
-    if (is_gws_url) {
-      base::UmaHistogramCounts100(
-          "Navigation.Throttles.PolicyBlocklist.RedirectCount.GoogleSearch."
-          "SafeSitesFilterEnabled",
-          metrics->redirect_count);
-      base::UmaHistogramTimes(
-          "Navigation.Throttles.PolicyBlocklist.RequestToResponseTime2."
-          "GoogleSearch.SafeSitesFilterEnabled",
-          metrics->request_to_response_time);
-      base::UmaHistogramTimes(
-          "Navigation.Throttles.PolicyBlocklist.ResponseDeferDuration."
-          "GoogleSearch.SafeSitesFilterEnabled",
-          metrics->response_defer_duration);
-      if (metrics->cache_hit.has_value()) {
-        base::UmaHistogramBoolean(
-            "Navigation.Throttles.PolicyBlocklist.CacheHit.GoogleSearch."
-            "SafeSitesFilterEnabled",
-            *metrics->cache_hit);
-      }
-    }
-  }
   if (!is_gws_url) {
     return STOP_OBSERVING;
   }
@@ -514,9 +428,8 @@ void GWSPageLoadMetricsObserver::OnFirstContentfulPaintInPage(
     return;
   }
 
-  RecordPageLoadHistogramWithVariants(
-      is_safesites_filter_enabled_, internal::kHistogramGWSFirstContentfulPaint,
-      timing.paint_timing->first_contentful_paint.value());
+  PAGE_LOAD_HISTOGRAM(internal::kHistogramGWSFirstContentfulPaint,
+                      timing.paint_timing->first_contentful_paint.value());
 }
 
 void GWSPageLoadMetricsObserver::OnParseStart(
@@ -576,34 +489,26 @@ void GWSPageLoadMetricsObserver::OnCustomUserTimingMarkObserved(
         timings) {
   for (const auto& mark : timings) {
     if (mark->mark_name == internal::kGwsAFTStartMarkName) {
-      RecordPageLoadHistogramWithVariants(is_safesites_filter_enabled_,
-                                          internal::kHistogramGWSAFTStart,
-                                          mark->start_time);
+      PAGE_LOAD_HISTOGRAM(internal::kHistogramGWSAFTStart, mark->start_time);
       aft_start_time_ = mark->start_time;
     } else if (mark->mark_name == internal::kGwsAFTEndMarkName) {
-      RecordPageLoadHistogramWithVariants(is_safesites_filter_enabled_,
-                                          internal::kHistogramGWSAFTEnd,
-                                          mark->start_time);
+      PAGE_LOAD_HISTOGRAM(internal::kHistogramGWSAFTEnd, mark->start_time);
       aft_end_time_ = mark->start_time;
     } else if (mark->mark_name == internal::kGwsHeaderChunkStartMarkName) {
-      RecordPageLoadHistogramWithVariants(
-          is_safesites_filter_enabled_, internal::kHistogramGWSHeaderChunkStart,
-          mark->start_time);
+      PAGE_LOAD_HISTOGRAM(internal::kHistogramGWSHeaderChunkStart,
+                          mark->start_time);
       header_chunk_start_time_ = mark->start_time;
     } else if (mark->mark_name == internal::kGwsHeaderChunkEndMarkName) {
-      RecordPageLoadHistogramWithVariants(is_safesites_filter_enabled_,
-                                          internal::kHistogramGWSHeaderChunkEnd,
-                                          mark->start_time);
+      PAGE_LOAD_HISTOGRAM(internal::kHistogramGWSHeaderChunkEnd,
+                          mark->start_time);
       header_chunk_end_time_ = mark->start_time;
     } else if (mark->mark_name == internal::kGwsBodyChunkStartMarkName) {
-      RecordPageLoadHistogramWithVariants(is_safesites_filter_enabled_,
-                                          internal::kHistogramGWSBodyChunkStart,
-                                          mark->start_time);
+      PAGE_LOAD_HISTOGRAM(internal::kHistogramGWSBodyChunkStart,
+                          mark->start_time);
       body_chunk_start_time_ = mark->start_time;
     } else if (mark->mark_name == internal::kGwsBodyChunkEndMarkName) {
-      RecordPageLoadHistogramWithVariants(is_safesites_filter_enabled_,
-                                          internal::kHistogramGWSBodyChunkEnd,
-                                          mark->start_time);
+      PAGE_LOAD_HISTOGRAM(internal::kHistogramGWSBodyChunkEnd,
+                          mark->start_time);
     }
   }
 }
@@ -627,14 +532,18 @@ void GWSPageLoadMetricsObserver::LogMetricsOnComplete() {
     return;
   }
   RecordNavigationTimingHistograms();
-  RecordPageLoadHistogramWithVariants(
-      is_safesites_filter_enabled_,
-      internal::kHistogramGWSLargestContentfulPaint,
-      all_frames_largest_contentful_paint.Time().value());
-  RecordFineGrainedPageLoadHistogramWithVariants(
-      is_safesites_filter_enabled_,
+
+  PAGE_LOAD_HISTOGRAM(internal::kHistogramGWSLargestContentfulPaint,
+                      all_frames_largest_contentful_paint.Time().value());
+  // Record variant metrics in a range from 10ms to 10s with 100 buckets.
+  // Current PAGE_LOAD_HISTOGRAM macro does it from 10ms to 10 minutes with 100
+  // buckets, but it would not be suitable to monitor much faster pages living
+  // in the real world today, as the bucket size for median value is about 50ms
+  // in the current config.
+  base::UmaHistogramCustomTimes(
       internal::kFineGrainedHistogramGWSLargestContentfulPaint,
-      all_frames_largest_contentful_paint.Time().value());
+      all_frames_largest_contentful_paint.Time().value(),
+      base::Milliseconds(10), base::Seconds(10), 100);
 }
 
 void GWSPageLoadMetricsObserver::RecordNavigationTimingHistograms() {
@@ -692,6 +601,8 @@ void GWSPageLoadMetricsObserver::RecordNavigationTimingHistograms() {
   PAGE_LOAD_SHORT_HISTOGRAM(
       internal::kHistogramGWSConnectTimingFinalRequestSslDelay,
       timing.final_request_ssl_delay);
+  PAGE_LOAD_SHORT_HISTOGRAM(internal::kHistogramGWSInitializeStreamDelay,
+                            timing.initialize_stream_delay);
 
   // Record latency trace events.
   RecordLatencyHitograms(timing.non_redirect_response_start_time);
@@ -868,13 +779,23 @@ void GWSPageLoadMetricsObserver::MaybeRecordUnexpectedHeaders(
 
   std::unordered_map<std::string, ExpectedHeaderInfo> expected_headers =
       GetExpectedHeaderInfo();
-  const static std::unordered_set<std::string> ignorable_headers =
-      GetIgnorableHeaderInfo();
+
+  // Headers that are not handled by the browser, or not used at all for the
+  // navigation commit.
+  constexpr auto kIgnorableHeaderInfo =
+      base::MakeFixedFlatSet<std::string_view>({
+          "date",
+          "p3p",
+          // TODO(crbug.com/379764811): Consider moving this header to <meta>
+          // HTML tag. Even though the impact is very limited, the existence of
+          // this header will change the behavior.
+          "X-DNS-Prefetch-Control",
+      });
 
   size_t iter = 0;
   std::string name, value;
   while (response_headers->EnumerateHeaderLines(&iter, &name, &value)) {
-    if (ignorable_headers.contains(name)) {
+    if (kIgnorableHeaderInfo.contains(name)) {
       continue;
     }
     if (!expected_headers.contains(name)) {

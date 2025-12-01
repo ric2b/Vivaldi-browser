@@ -140,7 +140,7 @@ void TabStripSceneLayer::SetContentTree(
       if (is_stack_strip_)
         content_tree->layer()->AddChild(background_layer_);
       else
-        layer()->AddChild(tab_strip_layer_);
+        layer()->AddChild(background_layer_);
     }
   }
 }

@@ -496,6 +496,9 @@ static int klv_read_packet(MXFContext *mxf, KLVPacket *klv, AVIOContext *pb)
     if (length < 0)
         return length;
     klv->length = length;
+    if (klv->offset > INT64_MAX - 16 - llen)
+        return AVERROR_INVALIDDATA;
+
     pos = klv->offset + 16 + llen;
     if (pos > INT64_MAX - length)
         return AVERROR_INVALIDDATA;
@@ -1553,7 +1556,8 @@ static int mxf_read_indirect_value(void *arg, AVIOContext *pb, int size)
     if (size <= 17)
         return 0;
 
-    avio_read(pb, key, 17);
+    if (avio_read(pb, key, 17) != 17)
+        return AVERROR_INVALIDDATA;
     /* TODO: handle other types of of indirect values */
     if (memcmp(key, mxf_indirect_value_utf16le, 17) == 0) {
         return mxf_read_utf16le_string(pb, size - 17, &tagged_value->value);
@@ -1924,6 +1928,8 @@ static int mxf_edit_unit_absolute_offset(MXFContext *mxf, MXFIndexTable *index_t
     // clamp to actual range of index
     index_end = av_sat_add64(last_segment->index_start_position, last_segment->index_duration);
     edit_unit = FFMAX(FFMIN(edit_unit, index_end), first_segment->index_start_position);
+    if (edit_unit < 0)
+        return AVERROR_PATCHWELCOME;
 
     // guess which table segment this edit unit is in
     // saturation is fine since it's just a guess

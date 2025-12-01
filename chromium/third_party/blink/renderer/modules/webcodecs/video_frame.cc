@@ -2,11 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
-#pragma allow_unsafe_buffers
-#endif
-
 #include "third_party/blink/renderer/modules/webcodecs/video_frame.h"
 
 #include <limits>
@@ -59,7 +54,6 @@
 #include "third_party/blink/renderer/platform/geometry/geometry_hash_traits.h"
 #include "third_party/blink/renderer/platform/graphics/canvas_resource_provider.h"
 #include "third_party/blink/renderer/platform/graphics/gpu/shared_gpu_context.h"
-#include "third_party/blink/renderer/platform/graphics/graphics_types.h"
 #include "third_party/blink/renderer/platform/graphics/image.h"
 #include "third_party/blink/renderer/platform/graphics/skia/sk_image_info_hash.h"
 #include "third_party/blink/renderer/platform/graphics/skia/skia_utils.h"
@@ -367,7 +361,13 @@ class CanvasResourceProviderCache
       delete;
   CanvasResourceProviderCache(const CanvasResourceProviderCache&) = delete;
 
-  CanvasResourceProvider* CreateProvider(const SkImageInfo& info) {
+  CanvasResourceProvider* CreateProvider(gfx::Size size) {
+    // TODO(https://crbug.com/1341235): The choice of color type, alpha type,
+    // and color space is inappropriate in many circumstances.
+    const auto info =
+        SkImageInfo::Make(gfx::SizeToSkISize(size), kN32_SkColorType,
+                          kPremul_SkAlphaType, nullptr);
+
     if (info_to_provider_.empty())
       PostMonitoringTask();
 
@@ -384,7 +384,9 @@ class CanvasResourceProviderCache
       info_to_provider_.clear();
 
     auto provider = CreateResourceProviderForVideoFrame(
-        info, GetRasterContextProvider().get());
+        size, viz::SkColorTypeToSinglePlaneSharedImageFormat(info.colorType()),
+        info.alphaType(), SkColorSpaceToGfxColorSpace(info.refColorSpace()),
+        GetRasterContextProvider().get());
     auto* result = provider.get();
     info_to_provider_.Set(info, std::move(provider));
     return result;
@@ -486,16 +488,18 @@ void CopyMappablePlanes(const media::VideoFrame& src_frame,
         media::VideoFrame::SampleSize(dest_layout.Format(), i);
     const int sample_bytes =
         media::VideoFrame::BytesPerElement(dest_layout.Format(), i);
-    const uint8_t* src =
-        src_frame.data(i) +
-        src_rect.y() / sample_size.height() * src_frame.stride(i) +
-        src_rect.x() / sample_size.width() * sample_bytes;
-    libyuv::CopyPlane(
-        src, static_cast<int>(src_frame.stride(i)),
-        dest_buffer.data() + dest_layout.Offset(i),
-        static_cast<int>(dest_layout.Stride(i)),
-        PlaneSize(src_rect.width(), sample_size.width()) * sample_bytes,
-        PlaneSize(src_rect.height(), sample_size.height()));
+    UNSAFE_TODO({
+      const uint8_t* src =
+          src_frame.data(i) +
+          src_rect.y() / sample_size.height() * src_frame.stride(i) +
+          src_rect.x() / sample_size.width() * sample_bytes;
+      libyuv::CopyPlane(
+          src, static_cast<int>(src_frame.stride(i)),
+          dest_buffer.data() + dest_layout.Offset(i),
+          static_cast<int>(dest_layout.Stride(i)),
+          PlaneSize(src_rect.width(), sample_size.width()) * sample_bytes,
+          PlaneSize(src_rect.height(), sample_size.height()));
+    });
   }
 }
 
@@ -515,7 +519,7 @@ bool CopyTexturablePlanes(media::VideoFrame& src_frame,
     const gfx::Size sample_size =
         media::VideoFrame::SampleSize(dest_layout.Format(), i);
     gfx::Rect plane_src_rect = PlaneRect(src_rect, sample_size);
-    uint8_t* dest_pixels = dest_buffer.data() + dest_layout.Offset(i);
+    uint8_t* dest_pixels = dest_buffer.subspan(dest_layout.Offset(i)).data();
     if (!media::ReadbackTexturePlaneToMemorySync(src_frame, i, plane_src_rect,
                                                  dest_pixels,
                                                  dest_layout.Stride(i), ri)) {
@@ -773,7 +777,7 @@ VideoFrame* VideoFrame::Create(ScriptState* script_state,
 
   SourceImageStatus status = kInvalidSourceImageStatus;
   auto image = image_source->GetSourceImageForCanvas(
-      FlushReason::kCreateVideoFrame, &status, source_size, kPremultiplyAlpha);
+      FlushReason::kCreateVideoFrame, &status, source_size);
   if (!image || status != kNormalSourceImageStatus) {
     exception_state.ThrowDOMException(DOMExceptionCode::kInvalidStateError,
                                       "Invalid source state");
@@ -803,10 +807,15 @@ VideoFrame* VideoFrame::Create(ScriptState* script_state,
   const gfx::Size coded_size(sk_image_info.width(), sk_image_info.height());
   const gfx::Rect default_visible_rect(coded_size);
   const gfx::Size default_display_size(coded_size);
+  const bool has_undiscarded_unpremultiplied_alpha =
+      sk_image_info.alphaType() == kUnpremul_SkAlphaType &&
+      !image->CurrentFrameKnownToBeOpaque() &&
+      !(init && init->alpha() == kAlphaDiscard);
 
   sk_sp<SkImage> sk_image;
   scoped_refptr<media::VideoFrame> frame;
-  if (image->IsTextureBacked() && SharedGpuContext::IsGpuCompositingEnabled()) {
+  if (image->IsTextureBacked() && SharedGpuContext::IsGpuCompositingEnabled() &&
+      !has_undiscarded_unpremultiplied_alpha) {
     DCHECK(image->IsStaticBitmapImage());
     const auto format = media::VideoPixelFormatFromSkColorType(
         paint_image.GetColorType(),
@@ -849,20 +858,29 @@ VideoFrame* VideoFrame::Create(ScriptState* script_state,
     // <img> creation, but probably such users should be using ImageDecoder
     // directly.
     sk_image = paint_image.GetSwSkImage();
+    if (sk_image && sk_image->isLazyGenerated()) {
+      sk_image = sk_image->makeRasterImage();
+    }
+    if (sk_image && has_undiscarded_unpremultiplied_alpha) {
+      // Historically `sk_image` has always been premultiplied. Preserve this
+      // behavior.
+      SkBitmap bm;
+      if (bm.tryAllocPixels(
+              sk_image->imageInfo().makeAlphaType(kUnpremul_SkAlphaType)) &&
+          sk_image->readPixels(nullptr, bm.pixmap(), 0, 0)) {
+        bm.setImmutable();
+        sk_image = bm.asImage();
+      } else {
+        sk_image = nullptr;
+      }
+    }
     if (!sk_image) {
-      // Can happen if, for example, |paint_image| is texture-backed and the
-      // context was lost.
+      // This can happen if, for example, `paint_image` is texture-backed and
+      // the context was lost, or if there was an out-of-memory allocating the
+      // SkBitmap for alpha multiplication.
       exception_state.ThrowDOMException(DOMExceptionCode::kOperationError,
                                         "Failed to create video frame");
       return nullptr;
-    }
-    if (sk_image->isLazyGenerated()) {
-      sk_image = sk_image->makeRasterImage();
-      if (!sk_image) {
-        exception_state.ThrowDOMException(DOMExceptionCode::kOperationError,
-                                          "Failed to create video frame");
-        return nullptr;
-      }
     }
 
     const bool force_opaque =
@@ -993,61 +1011,57 @@ VideoFrame* VideoFrame::Create(ScriptState* script_state,
       return nullptr;
   }
 
-  // Set up the copy to be minimally-sized.
-  gfx::Rect crop = src_visible_rect;
-  gfx::Size dest_coded_size = crop.size();
-  gfx::Rect dest_visible_rect = gfx::Rect(crop.size());
-
-  // Create a frame.
-  const auto timestamp = base::Microseconds(init->timestamp());
+  // Destination frame.
   scoped_refptr<media::VideoFrame> frame;
-  if (frame_contents.IsValid()) {
-    // We can directly use memory from the array buffer, no need to copy.
-    frame = media::VideoFrame::WrapExternalDataWithLayout(
-        src_layout.ToMediaLayout(), dest_visible_rect, display_size,
-        buffer.data(), buffer.size(), timestamp);
-    if (frame) {
-      base::OnceCallback<void()> cleanup_cb =
-          base::DoNothingWithBoundArgs(std::move(frame_contents));
-      auto runner = execution_context->GetTaskRunner(TaskType::kInternalMedia);
-      frame->AddDestructionObserver(
-          base::BindPostTask(runner, std::move(cleanup_cb)));
-    }
 
+  // Create a frame wrapping the source data.
+  const auto timestamp = base::Microseconds(init->timestamp());
+  auto src_frame = media::VideoFrame::WrapExternalDataWithLayout(
+      src_layout.ToMediaLayout(), src_visible_rect, display_size, buffer,
+      timestamp);
+
+  // All parameters should have been validated by this point and wrapping
+  // doesn't allocate new memory, so we should never fail to wrap.
+  CHECK(src_frame);
+
+  // We can directly use memory from the array buffer, no need to copy.
+  if (frame_contents.IsValid()) {
+    frame = src_frame;
+    base::OnceCallback<void()> cleanup_cb =
+        base::DoNothingWithBoundArgs(std::move(frame_contents));
+    auto runner = execution_context->GetTaskRunner(TaskType::kInternalMedia);
+    frame->AddDestructionObserver(
+        base::BindPostTask(runner, std::move(cleanup_cb)));
   } else {
+    // Set up the copy to be minimally-sized. Note: The parameters to the
+    // CopyPlane() method below depend on coded_size == visible_size.
+    gfx::Rect crop = src_visible_rect;
+    gfx::Size dest_coded_size = crop.size();
+    gfx::Rect dest_visible_rect = gfx::Rect(crop.size());
+
     // The array buffer hasn't been transferred, we need to allocate and
     // copy pixel data.
     auto& frame_pool = CachedVideoFramePool::From(*execution_context);
     frame = frame_pool.CreateFrame(media_fmt, dest_coded_size,
                                    dest_visible_rect, display_size, timestamp);
 
-    if (frame) {
-      for (wtf_size_t i = 0; i < media::VideoFrame::NumPlanes(media_fmt); i++) {
-        const gfx::Size sample_size =
-            media::VideoFrame::SampleSize(media_fmt, i);
-        const int sample_bytes =
-            media::VideoFrame::BytesPerElement(media_fmt, i);
-        const int rows = PlaneSize(crop.height(), sample_size.height());
-        const int columns = PlaneSize(crop.width(), sample_size.width());
-        const int row_bytes = columns * sample_bytes;
-        libyuv::CopyPlane(buffer.data() + src_layout.Offset(i),
-                          static_cast<int>(src_layout.Stride(i)),
-                          frame->writable_data(i),
-                          static_cast<int>(frame->stride(i)), row_bytes, rows);
-      }
+    if (!frame) {
+      exception_state.ThrowDOMException(
+          DOMExceptionCode::kOperationError,
+          String::Format("Failed to create a VideoFrame with format: %s, "
+                         "coded size: %s, visibleRect: %s, display size: %s.",
+                         VideoPixelFormatToString(media_fmt).c_str(),
+                         dest_coded_size.ToString().c_str(),
+                         dest_visible_rect.ToString().c_str(),
+                         display_size.ToString().c_str()));
+      return nullptr;
     }
-  }
 
-  if (!frame) {
-    exception_state.ThrowDOMException(
-        DOMExceptionCode::kOperationError,
-        String::Format("Failed to create a VideoFrame with format: %s, "
-                       "coded size: %s, visibleRect: %s, display size: %s.",
-                       VideoPixelFormatToString(media_fmt).c_str(),
-                       dest_coded_size.ToString().c_str(),
-                       dest_visible_rect.ToString().c_str(),
-                       display_size.ToString().c_str()));
-    return nullptr;
+    for (wtf_size_t i = 0; i < media::VideoFrame::NumPlanes(media_fmt); i++) {
+      libyuv::CopyPlane(src_frame->visible_data(i), src_frame->stride(i),
+                        frame->GetWritableVisibleData(i), frame->stride(i),
+                        frame->row_bytes(i), frame->rows(i));
+    }
   }
 
   if (init->hasColorSpace()) {
@@ -1271,7 +1285,7 @@ void VideoFrame::ConvertAndCopyToRGB(scoped_refptr<media::VideoFrame> frame,
 
   const wtf_size_t plane = 0;
   DCHECK_EQ(dest_layout.NumPlanes(), 1u);
-  uint8_t* dst = buffer.data() + dest_layout.Offset(plane);
+  uint8_t* dst = buffer.subspan(dest_layout.Offset(plane)).data();
   auto sk_canvas = SkCanvas::MakeRasterDirect(dst_image_info, dst,
                                               dest_layout.Stride(plane));
 
@@ -1430,11 +1444,7 @@ VideoFrame* VideoFrame::clone(ExceptionState& exception_state) {
 scoped_refptr<Image> VideoFrame::GetSourceImageForCanvas(
     FlushReason,
     SourceImageStatus* status,
-    const gfx::SizeF&,
-    const AlphaDisposition alpha_disposition) {
-  // UnpremultiplyAlpha is not implemented yet.
-  DCHECK_EQ(alpha_disposition, kPremultiplyAlpha);
-
+    const gfx::SizeF&) {
   const auto local_handle = handle_->CloneForInternalUse();
   if (!local_handle) {
     DLOG(ERROR) << "GetSourceImageForCanvas() called for closed frame.";
@@ -1455,14 +1465,9 @@ scoped_refptr<Image> VideoFrame::GetSourceImageForCanvas(
       ExecutionContext::From(v8::Isolate::GetCurrent()->GetCurrentContext());
   auto& provider_cache = CanvasResourceProviderCache::From(*execution_context);
 
-  // TODO(https://crbug.com/1341235): The choice of color type, alpha type, and
-  // color space is inappropriate in many circumstances.
   const auto& resource_provider_size = local_handle->frame()->natural_size();
-  const auto resource_provider_info =
-      SkImageInfo::Make(gfx::SizeToSkISize(resource_provider_size),
-                        kN32_SkColorType, kPremul_SkAlphaType, nullptr);
   auto* resource_provider =
-      provider_cache.CreateProvider(resource_provider_info);
+      provider_cache.CreateProvider(resource_provider_size);
 
   const auto dest_rect = gfx::Rect(resource_provider_size);
   auto image = CreateImageFromVideoFrame(local_handle->frame(),
@@ -1566,14 +1571,9 @@ ScriptPromise<ImageBitmap> VideoFrame::CreateImageBitmap(
       ExecutionContext::From(v8::Isolate::GetCurrent()->GetCurrentContext());
   auto& provider_cache = CanvasResourceProviderCache::From(*execution_context);
 
-  // TODO(https://crbug.com/1341235): The choice of color type, alpha type, and
-  // color space is inappropriate in many circumstances.
   const auto& resource_provider_size = local_handle->frame()->natural_size();
-  const auto resource_provider_info =
-      SkImageInfo::Make(gfx::SizeToSkISize(resource_provider_size),
-                        kN32_SkColorType, kPremul_SkAlphaType, nullptr);
   auto* resource_provider =
-      provider_cache.CreateProvider(resource_provider_info);
+      provider_cache.CreateProvider(resource_provider_size);
 
   // We disable zero copy images since the ImageBitmap spec says created bitmaps
   // are copies. Many other paths can avoid doing this w/o issue, but hardware

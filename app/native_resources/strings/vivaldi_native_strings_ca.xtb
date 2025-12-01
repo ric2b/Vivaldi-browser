@@ -14,6 +14,7 @@
 <translation id="1454726940098520109">No tornar a mostrar confirmació</translation>
 <translation id="1462666970065907900">Segur que vols tancar aquesta finestra?</translation>
 <translation id="1480046233931937785">Crèdits</translation>
+<translation id="1490502035430975848">Inspecciona el document del portal</translation>
 <translation id="1521774566618522728">Actiu avui</translation>
 <translation id="1526344461589023948">Ha ocorregut un error mentre s'intentava desar una actualització descarregada. Si us plau, comprova que el dispositiu tingui prou espai al disc i torna-ho a intentar més tard.</translation>
 <translation id="1635542496948266458">Canvia de perfil</translation>
@@ -34,9 +35,11 @@
 <translation id="2141974047387702305">Ha ocorregut un error mentre es descarregaven els fitxers de l'actualització. Si us plau, revisa la teva connexió a internet i torna-ho a intentar més tard.</translation>
 <translation id="2226825946708954262">⚠ Continua, amb pèrdua de dades</translation>
 <translation id="2339641773402824483">Buscant actualitzacions...</translation>
+<translation id="2429571091666452569">De la llista:</translation>
 <translation id="2441056087170876076">Monstre 2</translation>
 <translation id="2444387452209867610">Insereix nota</translation>
 <translation id="2486841023299517366">Animal 4</translation>
+<translation id="2501278716633472235">Torna enrere</translation>
 <translation id="2612127540243995147">Preparat per instal·lar. Vivaldi es tancarà i reobrirà.</translation>
 <translation id="2613387515621326337">Mostra el lloc web d'actualitzacions</translation>
 <translation id="2645477450146475243">Desgraciadament, els teus ajusts d'Opera no estan disponibles mentre el navegador funciona. Per importar-los a Vivaldi, desa el que estiguis fent i tanca totes les finestres d'Opera. Després clica a continuar.</translation>
@@ -61,6 +64,7 @@
 <translation id="3259769196742189631">Valida</translation>
 <translation id="3291915639428159043">Reproducció automàtica bloquejada</translation>
 <translation id="3302905971452834934">Monstre 1</translation>
+<translation id="3308738399950580893">anuncis</translation>
 <translation id="3334610655141903168">(sense títol)</translation>
 <translation id="3372505110412186107">Vivaldi <ph name="VERSION" /> és la versió disponible més recent.</translation>
 <translation id="3383198080133834965">Vivaldi s'ha actualitzat!</translation>
@@ -71,9 +75,11 @@
 <translation id="3521635864657970829">Segur que vols tancar aquesta finestra?</translation>
 <translation id="3540597690227428180">Animal 9</translation>
 <translation id="3542768452570884558">Obre l'enllaç a una finestra nova</translation>
+<translation id="3586931643579894722">Amaga els detalls</translation>
 <translation id="3588820906588687999">Obre la imatge a una pestanya nova</translation>
 <translation id="3601066750251199488">Monstre 3</translation>
 <translation id="3620979700683094848">Llocs que poden reproduir vídeo automàticament</translation>
+<translation id="3650023731264842343">Mentre es carregava la següent pàgina:</translation>
 <translation id="3658651522139217005">Opera GX</translation>
 <translation id="3680031241659195730">Una nova versió de Vivaldi està disponible!</translation>
 <translation id="3708982624815781692">La descàrrega s'ha cancel·lat.</translation>
@@ -83,6 +89,7 @@
 <translation id="3795800845758778870">Malauradament, els teus ajustos de Brave no són disponibles mentre aquest sigui obert. Per importar aquests ajustos a Vivaldi, desa la teva feina i tanca totes les finestres de Brave. Aleshores, fes clic a continua.</translation>
 <translation id="3822431842304177896">Nou separador</translation>
 <translation id="3832132597516774400">Paisatge 5</translation>
+<translation id="3894751534882749287">Si vols veure la pàgina de totes maneres, pots canviar el seu nivell de protecció de rastreig a la finestra emergent del bloquejador de rastrejadors o fent clic sobre el botó permetre</translation>
 <translation id="3914946330804881301">Importat des de l'Opera</translation>
 <translation id="3921292902397893431">Monstre 8</translation>
 <translation id="3943857333388298514">Enganxa</translation>
@@ -107,6 +114,7 @@
 <translation id="4582480609585453144">Obre l'enllaç a una pestanya en segon pla</translation>
 <translation id="4636708767492582204">Envia per correu</translation>
 <translation id="4677434526832593569">Animal 8</translation>
+<translation id="4736016046474602958">Bloquejador de rastrejadors</translation>
 <translation id="474217410105706308">Silencia la pestanya</translation>
 <translation id="4861715717329665002">Sessions autodesades</translation>
 <translation id="4881695831933465202">Obre</translation>
@@ -133,9 +141,11 @@
 <translation id="588258955323874662">Pantalla completa</translation>
 <translation id="5916080360077521750">Malauradament, els teus ajustos de Chrome no són disponibles mentre aquest sigui obert. Per importar aquests ajustos a Vivaldi, desa la teva feina i tanca totes les finestres de Chrome. Aleshores, fes clic a continua.</translation>
 <translation id="6040143037577758943">Tanca</translation>
+<translation id="6140948187512243695">Mostra els detalls</translation>
 <translation id="6229528619562190452">Fes clic aquí per actualitzar Vivaldi.</translation>
 <translation id="6234173136417926046">Fes servir aquesta imatge com a fons de la pantalla d'inici</translation>
 <translation id="6339818817272922368">Compte local</translation>
+<translation id="6376435169746695498">La càrrega d'aquesta pàgina s'ha bloquejat per una coincidència a <ph name="BLOCKER_NAME" /></translation>
 <translation id="6398710281890660037">Assegura el meu perfil</translation>
 <translation id="6438786710866753178">Paisatge 4</translation>
 <translation id="6477028720702061455">Selecciona la carpeta del perfil d'Opera a importar</translation>
@@ -152,6 +162,7 @@
 <translation id="7086554968911045110">Paisatge 7</translation>
 <translation id="7099506190679014195">Actualització del magatzem de claus segures</translation>
 <translation id="7111492742514999492">Paisatge 9</translation>
+<translation id="7113310725918019676">Permet <ph name="BLOCKED_TYPE" /> de <ph name="DOMAIN" /></translation>
 <translation id="7208252576848052204">Desgraciadament, els teus ajusts d'Arc no estan disponibles mentre el navegador funciona. Per importar-los a Vivaldi, desa el que estiguis fent i tanca totes les finestres d'Arc. Després clica a continuar.</translation>
 <translation id="7321500017121629018">Actiu ahir</translation>
 <translation id="7337881442233988129">Chromium</translation>
@@ -167,12 +178,13 @@
 <translation id="8027581147000338959">Obre a una finestra nova</translation>
 <translation id="8044382196220116469">No permetre la reproducció automàtica de vídeos</translation>
 <translation id="8099620695029051217">Copia l'adreça de la pàgina</translation>
+<translation id="8119307142152921512">rastrejadors i anuncis</translation>
 <translation id="8197810018650377191">Afegeix als marcadors</translation>
 <translation id="8261506727792406068">Suprimeix</translation>
-<translation id="8263047843452521549">Inspecciona el servei de treball en segon pla</translation>
 <translation id="8331671104904436324">Obre a una pestanya en segon pla</translation>
 <translation id="8373293945112511707">Paisatge 1</translation>
 <translation id="8388552048012645975">Baixant actualització...</translation>
+<translation id="8392904568172593155">Sense paràmetres</translation>
 <translation id="8427094907586191051">Paisatge 17</translation>
 <translation id="8439034818057146672">Una nova versió de Vivaldi està llesta per instal·lar-se.</translation>
 <translation id="8446668873108041390">L'execució de JavaScript a través d'AppleScript està desactivada. A Ajustos &gt; Privacitat &gt; Esdeveniments d'Apple, hi ha una opció per permetre JavaScript per als esdeveniments d'Apple.</translation>
@@ -183,14 +195,15 @@
 <translation id="8651348004684669199">Afegeix la pestanya activa</translation>
 <translation id="8669345741879513971">Monstre 10</translation>
 <translation id="867544375504146191">Yandex</translation>
-<translation id="8689295374912158752">Inspecciona el document del portal</translation>
 <translation id="875142999698251063">Surt ara</translation>
 <translation id="8768970203213061953">Paisatge 14</translation>
 <translation id="8773635261052182196">No tornaràs a veure aquestes notificacions. Pots activar-les de nou des dels ajustos de Vivaldi.</translation>
 <translation id="8774017153185436870">Els llocs podrien reproduir vídeo automàticament</translation>
 <translation id="8813277370772331957">Recorda-m'ho més tard</translation>
+<translation id="8837256239226739065">Inspecciona els serveis en segon pla</translation>
 <translation id="8894900864683381599">Afegeix l'enllaç al tauler web</translation>
 <translation id="8912720443398351457">Segur que vols sortir de Vivaldi?</translation>
+<translation id="8940028675168378100">Bloquejat per <ph name="BLOCKER_NAME" /></translation>
 <translation id="8947109330183116400">Selecciona un fitxer HTML de marcadors</translation>
 <translation id="9017566390391482291">Selecciona la carpeta del perfil de Vivaldi a importar</translation>
 <translation id="9048058608784130603">Actualització pendent <ph name="VERSION" /></translation>
@@ -201,6 +214,7 @@
 <translation id="912022491595344261">Obre la imatge com a <ph name="USER" /></translation>
 <translation id="9157539936604258187">Obre l'enllaç</translation>
 <translation id="9169060351863393881">Opera 12.x</translation>
+<translation id="9180553614777056266">Bloquejador d'anuncis</translation>
 <translation id="939305735877869636">Brave</translation>
 <translation id="970294721402795299">Paisatge 16</translation>
 </translationbundle>

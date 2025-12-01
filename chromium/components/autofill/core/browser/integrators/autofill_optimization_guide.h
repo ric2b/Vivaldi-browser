@@ -6,7 +6,7 @@
 #define COMPONENTS_AUTOFILL_CORE_BROWSER_INTEGRATORS_AUTOFILL_OPTIMIZATION_GUIDE_H_
 
 #include "base/memory/raw_ptr.h"
-#include "components/autofill/core/browser/data_model/credit_card_benefit.h"
+#include "components/autofill/core/browser/data_model/payments/credit_card_benefit.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "components/optimization_guide/proto/hints.pb.h"
 
@@ -86,10 +86,11 @@ class AutofillOptimizationGuide : public KeyedService {
       const GURL& url,
       optimization_guide::proto::OptimizationType type) const;
 
-  // Returns whether `url` is eligible for a buy now pay later flow
+  // Returns whether `url` is eligible for a checkout amount search
   // with the provided issuer based on the `issuer_id`.
-  virtual bool IsEligibleForBuyNowPayLater(std::string_view issuer_id,
-                                           const GURL& url) const;
+  virtual bool IsUrlEligibleForCheckoutAmountSearchForIssuerId(
+      std::string_view issuer_id,
+      const GURL& url) const;
 
  private:
   // Raw pointer to a decider which is owned by the decider's factory.

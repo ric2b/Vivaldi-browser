@@ -86,6 +86,7 @@ IsolatedSVGDocumentHost::IsolatedSVGDocumentHost(
     scoped_refptr<const SharedBuffer> data,
     base::OnceClosure async_load_callback,
     const Settings* inherited_settings,
+    const ColorProviderColorMaps* inherited_color_maps,
     ProcessingMode processing_mode)
     : async_load_callback_(std::move(async_load_callback)) {
   TRACE_EVENT("blink", "IsolatedSVGDocumentHost::IsolatedSVGDocumentHost");
@@ -104,7 +105,7 @@ IsolatedSVGDocumentHost::IsolatedSVGDocumentHost(
     TRACE_EVENT("blink",
                 "IsolatedSVGDocumentHost::IsolatedSVGDocumentHost::createPage");
     page = Page::CreateNonOrdinary(chrome_client, agent_group_scheduler,
-                                   /*color_provider_colors=*/nullptr);
+                                   inherited_color_maps);
 
     Settings& settings = page->GetSettings();
     settings.SetScriptEnabled(false);
@@ -212,21 +213,25 @@ void IsolatedSVGDocumentHost::LoadCompleted() {
       break;
 
     case kWaitingForAsyncLoadCompletion:
-      load_state_ = kCompleted;
-
       // Because LoadCompleted() is called synchronously from
       // Document::ImplicitClose(), we defer AsyncLoadCompleted() to avoid
       // potential bugs and timing dependencies around ImplicitClose() and
       // to make LoadEventFinished() true when AsyncLoadCompleted() is called.
       async_load_task_handle_ = PostCancellableTask(
           *GetFrame()->GetTaskRunner(TaskType::kInternalLoading), FROM_HERE,
-          std::move(async_load_callback_));
+          WTF::BindOnce(&IsolatedSVGDocumentHost::AsyncLoadCompleted,
+                        WrapPersistent(this)));
       break;
 
     case kNotStarted:
     case kCompleted:
       NOTREACHED();
   }
+}
+
+void IsolatedSVGDocumentHost::AsyncLoadCompleted() {
+  load_state_ = kCompleted;
+  std::move(async_load_callback_).Run();
 }
 
 void IsolatedSVGDocumentHost::Shutdown() {

@@ -16,10 +16,12 @@
 #define OPENSSL_HEADER_BASE_H
 
 
-// This file should be the first included by all BoringSSL headers.
+// This file should be the first included by all BoringSSL headers. All
+// BoringSSL headers can be assumed to import this file, and this header can be
+// assumed to include stddef.h (size_t) and stdint.h (uint*_t, etc).
 
-#include <stddef.h>
-#include <stdint.h>
+#include <stddef.h>  // IWYU pragma: export
+#include <stdint.h>  // IWYU pragma: export
 #include <stdlib.h>
 #include <sys/types.h>
 
@@ -71,7 +73,7 @@ extern "C" {
 // A consumer may use this symbol in the preprocessor to temporarily build
 // against multiple revisions of BoringSSL at the same time. It is not
 // recommended to do so for longer than is necessary.
-#define BORINGSSL_API_VERSION 34
+#define BORINGSSL_API_VERSION 35
 
 #if defined(BORINGSSL_SHARED_LIBRARY)
 

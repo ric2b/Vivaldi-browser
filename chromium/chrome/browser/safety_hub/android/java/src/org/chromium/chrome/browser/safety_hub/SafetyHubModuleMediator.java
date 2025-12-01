@@ -18,26 +18,34 @@ import java.lang.annotation.RetentionPolicy;
 interface SafetyHubModuleMediator {
     /**
      * Order reflects state severity. Lowest being the most severe state and highest being the
-     * safest state. Must be kept in sync with SafetyHubModuleState in settings/enums.xml.
+     * safest state.
      */
-    @IntDef({ModuleState.WARNING, ModuleState.UNAVAILABLE, ModuleState.INFO, ModuleState.SAFE})
+    @IntDef({
+        ModuleState.WARNING,
+        ModuleState.UNAVAILABLE,
+        ModuleState.INFO,
+        ModuleState.LOADING,
+        ModuleState.SAFE
+    })
     @Retention(RetentionPolicy.SOURCE)
     public @interface ModuleState {
         int WARNING = 0;
         int UNAVAILABLE = 1;
         int INFO = 2;
-        int SAFE = 3;
+        int LOADING = 3;
+        int SAFE = 4;
         int MAX_VALUE = SAFE;
     }
 
     /**
-     * Values used in "for" loop below - should start from 0 and can't have gaps, lowest value is
-     * additionally used for starting loop. Order reflects the way modules should be ordered if they
-     * have the same state.
+     * Values used in "switch" statements below - should start from 0 and can't have gaps, lowest
+     * value is additionally used for starting loop. Order reflects the way modules should be
+     * ordered if they have the same state.
      */
     @IntDef({
         ModuleOption.UPDATE_CHECK,
         ModuleOption.ACCOUNT_PASSWORDS,
+        ModuleOption.LOCAL_PASSWORDS,
         ModuleOption.SAFE_BROWSING,
         ModuleOption.UNUSED_PERMISSIONS,
         ModuleOption.NOTIFICATION_REVIEW,
@@ -46,11 +54,11 @@ interface SafetyHubModuleMediator {
     public @interface ModuleOption {
         int UPDATE_CHECK = 0;
         int ACCOUNT_PASSWORDS = 1;
-        int SAFE_BROWSING = 2;
-        int UNUSED_PERMISSIONS = 3;
-        int NOTIFICATION_REVIEW = 4;
-        int OPTION_FIRST = UPDATE_CHECK;
-        int NUM_ENTRIES = 5;
+        int LOCAL_PASSWORDS = 2;
+        int SAFE_BROWSING = 3;
+        int UNUSED_PERMISSIONS = 4;
+        int NOTIFICATION_REVIEW = 5;
+        int NUM_ENTRIES = 6;
     }
 
     public void setUpModule();
@@ -79,6 +87,9 @@ interface SafetyHubModuleMediator {
             case ModuleState.SAFE:
                 setExpandState(false);
                 break;
+            case ModuleState.LOADING:
+                setExpandState(false);
+                break;
             default:
                 throw new IllegalArgumentException();
         }
@@ -102,6 +113,8 @@ interface SafetyHubModuleMediator {
                         ? SafetyHubUtils.getManagedIcon(context)
                         : SettingsUtils.getTintedIcon(
                                 context, R.drawable.ic_error, R.color.default_red);
+            case ModuleState.LOADING:
+                return null;
             default:
                 throw new IllegalArgumentException();
         }
@@ -118,6 +131,7 @@ interface SafetyHubModuleMediator {
         @ModuleOption int option = getOption();
         switch (state) {
             case ModuleState.SAFE:
+            case ModuleState.LOADING:
             case ModuleState.INFO:
             case ModuleState.UNAVAILABLE:
                 return option + (state * ModuleOption.NUM_ENTRIES);
@@ -129,5 +143,9 @@ interface SafetyHubModuleMediator {
             default:
                 throw new IllegalArgumentException();
         }
+    }
+
+    default boolean isLoading() {
+        return getModuleState() == ModuleState.LOADING;
     }
 }

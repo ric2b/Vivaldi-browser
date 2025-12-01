@@ -6,6 +6,8 @@
 #define CHROME_BROWSER_APPS_LINK_CAPTURING_LINK_CAPTURING_FEATURE_TEST_SUPPORT_H_
 
 #include <optional>
+#include <string>
+#include <vector>
 
 #include "base/test/scoped_feature_list.h"
 #include "base/types/expected.h"
@@ -16,6 +18,7 @@ class Profile;
 namespace content {
 class DOMMessageQueue;
 class NavigationHandle;
+class WebContents;
 }  // namespace content
 
 namespace testing {
@@ -30,10 +33,18 @@ enum class LinkCapturingFeatureVersion {
   // TODO(https://crbug.com/377522792): Remove v1 values on non-ChromeOS
   kV1DefaultOff,
   kV2DefaultOff,
+  kV2DefaultOffCaptureExistingFrames,
 #if !BUILDFLAG(IS_CHROMEOS)
   kV2DefaultOn,
 #endif
 };
+
+// Returns if links that target existing frames (e.g. "_self", "_top",
+// "namedFrame" where the frame exists, etc) should capture into an app.
+bool ShouldLinksWithExistingFrameTargetsCapture(
+    LinkCapturingFeatureVersion version);
+bool IsV1(LinkCapturingFeatureVersion version);
+bool IsV2(LinkCapturingFeatureVersion version);
 
 std::string ToString(LinkCapturingFeatureVersion version);
 
@@ -44,8 +55,6 @@ std::string LinkCapturingVersionToString(
 // account per platform behavior.
 std::vector<base::test::FeatureRefAndParams> GetFeaturesToEnableLinkCapturingUX(
     LinkCapturingFeatureVersion version);
-
-std::vector<base::test::FeatureRef> GetFeaturesToDisableLinkCapturingUX();
 
 // Enables link capturing as if the user did it from the app settings page.
 // Returns the error description if there was an error.
@@ -109,6 +118,16 @@ ResolveWebContentsWaitingForLaunchQueueFlush();
 // allowing this function to exit.
 testing::AssertionResult WaitForNavigationFinishedMessage(
     content::DOMMessageQueue& message_queue);
+
+// Looks for the existence of `params_variable_name` in `contents` assuming that
+// urls are stored in it, and returns them.
+// One of the use-cases this is used more consistently is by returning the urls
+// enqueued in the launch queue of the site currently loaded in `contents`
+// inside `params_variable_name`. This will CHECK-fail if `params_variable_name`
+// exists but it doesn't store a list or the list doesn't contain any strings.
+std::vector<GURL> GetLaunchParamUrlsInContents(
+    content::WebContents* contents,
+    const std::string& params_variable_name);
 
 }  // namespace apps::test
 

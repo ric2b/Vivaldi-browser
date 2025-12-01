@@ -10,8 +10,9 @@
     <div class="container">
       <div class="header">
         <img class="logo" src="glic_logo.svg">
-        <cr-icon-button class="close-button"
-          iron-icon="cr:close"></cr-icon-button>
+        <cr-icon-button class="close-button" iron-icon="cr:close"
+            aria-label="$i18n{closeButtonLabel}">
+        </cr-icon-button>
       </div>
       <div class="notice">
         <div class="icon"><cr-icon icon="glic:offline"></cr-icon></div>
@@ -25,9 +26,14 @@
   <section hidden class="dialog panel" id="loadingPanel">
     <div class="container">
       <div class="header">
-        <div class="placeholder"></div>
-        <cr-icon-button class="close-button"
-          iron-icon="cr:close"></cr-icon-button>
+        <div class="placeholder p1"></div>
+        <cr-icon-button class="close-button" iron-icon="cr:close"
+            aria-label="$i18n{closeButtonLabel}">
+        </cr-icon-button>
+      </div>
+      <div class="secondline">
+        <div class="placeholder p2"></div>
+        <div class="placeholder p3"></div>
       </div>
     </div>
   </section>
@@ -35,8 +41,9 @@
     <div class="container">
       <div class="header">
         <img class="logo" src="glic_logo.svg">
-        <cr-icon-button class="close-button"
-          iron-icon="cr:close"></cr-icon-button>
+        <cr-icon-button class="close-button" iron-icon="cr:close"
+            aria-label="$i18n{closeButtonLabel}">
+        </cr-icon-button>
       </div>
       <div class="notice">
         <div class="icon"><cr-icon icon="glic:error"></cr-icon></div>
@@ -58,13 +65,30 @@
       </div>
     </div>
   </section>
+  <section hidden class="dialog panel" id="signInPanel">
+    <div class="container">
+      <div class="header">
+        <img class="logo" src="glic_logo.svg">
+        <cr-icon-button class="close-button"
+          iron-icon="cr:close"></cr-icon-button>
+      </div>
+      <div class="notice">
+        <div class="icon"><cr-icon icon="glic:error"></cr-icon></div>
+        <p class="headline">$i18n{signInNoticeHeader}</p>
+        <p>$i18n{signInNotice}</p>
+        <cr-button class="tonal-button" id="signInButton"
+          role="button">$i18n{signInNoticeActionButton}</cr-button>
+      </div>
+    </div>
+  </section>
   <section hidden class="panel" id="guestPanel">
     <div id="webviewContainer"></div>
     <div class="outerheader" id="webviewHeader">
       <div class="header">
         <img class="logo" src="glic_logo.svg">
-        <cr-icon-button class="close-button"
-          iron-icon="cr:close"></cr-icon-button>
+        <cr-icon-button class="close-button" iron-icon="cr:close"
+            aria-label="$i18n{closeButtonLabel}">
+        </cr-icon-button>
       </div>
     </div>
   </section>

@@ -230,17 +230,18 @@ def RunSteps(api, repository):
 
           with api.step.nest('build jemalloc-' + platform), api.context(
               env=env, cwd=jemalloc_build_dir):
-            api.step(
-                'configure',
-                [
-                  '../configure',
-                  '--build=' + host_target.triple,
-                  '--host=' + target.triple,
-                  '--disable-shared',
-                  '--enable-static',
-                  '--disable-syscall',
-                  '--disable-stats',
-                ])
+            configure_args = [
+              '../configure',
+              '--build=' + host_target.triple,
+              '--host=' + target.triple,
+              '--disable-shared',
+              '--enable-static',
+              '--disable-syscall',
+              '--disable-stats',
+            ]
+            if platform == 'linux-arm64':
+              configure_args.append('--with-lg-page=16')
+            api.step('configure', configure_args)
             api.step('build', ['make', '-j%d' % api.platform.cpu_count, 'build_lib_static'])
             jemalloc_static_lib = jemalloc_build_dir.join('lib', 'libjemalloc.a')
 

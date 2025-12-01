@@ -24,17 +24,20 @@ import android.widget.PopupMenu;
 
 import org.hamcrest.Matchers;
 import org.junit.Before;
+import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.Mock;
 import org.mockito.Mockito;
-import org.mockito.MockitoAnnotations;
+import org.mockito.junit.MockitoJUnit;
+import org.mockito.junit.MockitoRule;
 import org.robolectric.annotation.Config;
 
 import org.chromium.base.ContextUtils;
 import org.chromium.base.supplier.ObservableSupplierImpl;
 import org.chromium.base.supplier.OneshotSupplierImpl;
 import org.chromium.base.test.BaseRobolectricTestRunner;
+import org.chromium.base.test.util.Features.DisableFeatures;
 import org.chromium.build.BuildConfig;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ActivityTabProvider;
@@ -47,6 +50,7 @@ import org.chromium.chrome.browser.feed.FeedFeatures;
 import org.chromium.chrome.browser.feed.webfeed.WebFeedBridge;
 import org.chromium.chrome.browser.feed.webfeed.WebFeedBridgeJni;
 import org.chromium.chrome.browser.feed.webfeed.WebFeedSnackbarController;
+import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.incognito.reauth.IncognitoReauthController;
 import org.chromium.chrome.browser.layouts.LayoutStateProvider;
 import org.chromium.chrome.browser.layouts.LayoutType;
@@ -93,6 +97,7 @@ import java.util.List;
 
 /** Unit tests for {@link TabbedAppMenuPropertiesDelegate}. */
 @RunWith(BaseRobolectricTestRunner.class)
+@DisableFeatures(ChromeFeatureList.ADAPTIVE_BUTTON_IN_TOP_TOOLBAR_PAGE_SUMMARY)
 public class TabbedAppMenuPropertiesDelegateUnitTest {
     // Constants defining flags that determines multi-window menu items visibility.
     private static final boolean TAB_M = true; // multiple tabs
@@ -114,6 +119,7 @@ public class TabbedAppMenuPropertiesDelegateUnitTest {
     private static final boolean MOVE_YES = true; // show 'move to other window'
     private static final boolean MOVE_NO = false;
     private static final Boolean X____ = null; // do not care
+    @Rule public final MockitoRule mMockitoRule = MockitoJUnit.rule();
     @Mock private ActivityTabProvider mActivityTabProvider;
     @Mock private Tab mTab;
     @Mock private WebContents mWebContents;
@@ -169,7 +175,6 @@ public class TabbedAppMenuPropertiesDelegateUnitTest {
 
     @Before
     public void setUp() {
-        MockitoAnnotations.initMocks(this);
 
         mLayoutStateProviderSupplier.set(mLayoutStateProvider);
         mIncognitoReauthControllerSupplier.set(mIncognitoReauthControllerMock);

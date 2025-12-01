@@ -51,6 +51,8 @@ tint_add_target(tint_lang_core_type lib
   lang/core/type/array_count.h
   lang/core/type/atomic.cc
   lang/core/type/atomic.h
+  lang/core/type/binding_array.cc
+  lang/core/type/binding_array.h
   lang/core/type/bool.cc
   lang/core/type/bool.h
   lang/core/type/builtin_structs.cc
@@ -114,6 +116,8 @@ tint_add_target(tint_lang_core_type lib
   lang/core/type/type.h
   lang/core/type/u32.cc
   lang/core/type/u32.h
+  lang/core/type/u64.cc
+  lang/core/type/u64.h
   lang/core/type/u8.cc
   lang/core/type/u8.h
   lang/core/type/unique_node.cc
@@ -133,7 +137,6 @@ tint_target_add_dependencies(tint_lang_core_type lib
   tint_utils_macros
   tint_utils_math
   tint_utils_memory
-  tint_utils_result
   tint_utils_rtti
   tint_utils_symbol
   tint_utils_text
@@ -150,6 +153,7 @@ tint_target_add_external_dependencies(tint_lang_core_type lib
 tint_add_target(tint_lang_core_type_test test
   lang/core/type/array_test.cc
   lang/core/type/atomic_test.cc
+  lang/core/type/binding_array_test.cc
   lang/core/type/bool_test.cc
   lang/core/type/builtin_structs_test.cc
   lang/core/type/depth_multisampled_texture_test.cc
@@ -174,6 +178,7 @@ tint_add_target(tint_lang_core_type_test test
   lang/core/type/texture_test.cc
   lang/core/type/type_test.cc
   lang/core/type/u32_test.cc
+  lang/core/type/u64_test.cc
   lang/core/type/u8_test.cc
   lang/core/type/vector_test.cc
 )
@@ -197,7 +202,6 @@ tint_target_add_dependencies(tint_lang_core_type_test test
   tint_utils_macros
   tint_utils_math
   tint_utils_memory
-  tint_utils_result
   tint_utils_rtti
   tint_utils_symbol
   tint_utils_text

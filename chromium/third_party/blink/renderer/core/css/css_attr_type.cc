@@ -13,6 +13,7 @@
 #include "third_party/blink/renderer/core/css/parser/css_parser_token.h"
 #include "third_party/blink/renderer/core/css/parser/css_parser_token_stream.h"
 #include "third_party/blink/renderer/core/css/properties/css_parsing_utils.h"
+#include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 
 namespace blink {
 
@@ -49,7 +50,10 @@ std::optional<CSSPrimitiveValue::UnitType> ConsumeDimensionUnitType(
 
 std::optional<CSSAttrType> CSSAttrType::Consume(CSSParserTokenStream& stream) {
   if (stream.Peek().GetType() == kIdentToken &&
-      stream.Peek().Value() == "string") {
+      ((RuntimeEnabledFeatures::CSSAttrRawStringEnabled() &&
+        stream.Peek().Value() == "raw-string") ||
+       (!RuntimeEnabledFeatures::CSSAttrRawStringEnabled() &&
+        stream.Peek().Value() == "string"))) {
     stream.Consume();
     return CSSAttrType();
   }
@@ -82,11 +86,12 @@ const CSSValue* CSSAttrType::Parse(StringView text,
     CSSParserTokenStream stream(text);
     CSSPrimitiveValue* number_value = css_parsing_utils::ConsumeNumber(
         stream, context, CSSPrimitiveValue::ValueRange::kAll);
-    if (!number_value) {
-      return nullptr;
+    if (CSSNumericLiteralValue* literal =
+            DynamicTo<CSSNumericLiteralValue>(number_value)) {
+      return MakeGarbageCollected<CSSNumericLiteralValue>(
+          literal->GetDoubleValue(), *dimension_unit_);
     }
-    return MakeGarbageCollected<CSSNumericLiteralValue>(
-        number_value->GetDoubleValue(), *dimension_unit_);
+    return nullptr;
   }
   if (IsSyntax()) {
     return syntax_->Parse(text, context, false);

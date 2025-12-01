@@ -23,6 +23,7 @@
 #include <unordered_map>
 #include <unordered_set>
 
+#include "base/containers/flat_set.h"
 #include "base/containers/lru_cache.h"
 #include "base/containers/span.h"
 #include "base/files/file_path.h"
@@ -37,6 +38,7 @@
 #include "build/build_config.h"
 #include "net/base/cache_type.h"
 #include "net/base/completion_once_callback.h"
+#include "net/base/does_url_match_filter.h"
 #include "net/base/load_states.h"
 #include "net/base/net_errors.h"
 #include "net/base/net_export.h"
@@ -46,6 +48,10 @@
 #include "net/http/no_vary_search_cache.h"
 
 class GURL;
+
+namespace base {
+class Time;
+}
 
 namespace url {
 class Origin;
@@ -223,6 +229,16 @@ class NET_EXPORT HttpCache : public HttpTransactionFactory {
                           const NetworkIsolationKey& network_isolation_key,
                           bool include_credentials);
 
+  // Delete entries matching the criteria `filter_type`, `origins`, `domains`,
+  // `delete_begin` and `delete_end` from the NoVarySearchCache and refresh the
+  // on-disk cache to reflect the removals if necessary. See
+  // no_vary_search_cache.h for the definition of the parameter.
+  void ClearNoVarySearchCache(UrlFilterType filter_type,
+                              const base::flat_set<url::Origin>& origins,
+                              const base::flat_set<std::string>& domains,
+                              base::Time delete_begin,
+                              base::Time delete_end);
+
   // Causes all transactions created after this point to simulate lock timeout
   // and effectively bypass the cache lock whenever there is lock contention.
   void SimulateCacheLockTimeoutForTesting() { bypass_lock_for_test_ = true; }
@@ -273,37 +289,6 @@ class NET_EXPORT HttpCache : public HttpTransactionFactory {
   static std::optional<std::string> GenerateCacheKeyForRequestWithAlternateURL(
       const HttpRequestInfo* request,
       const GURL& url);
-
-  enum class ExperimentMode {
-    // No additional partitioning is done for top-level navigations.
-    kStandard,
-    // A boolean is incorporated into the cache key that is true for
-    // renderer-initiated main frame navigations when the request initiator site
-    // is cross-site to the URL being navigated to.
-    kCrossSiteInitiatorBoolean,
-    // The request initiator site is incorporated into the cache key for
-    // renderer-initiated main frame navigations when the request initiator site
-    // is cross-site to the URL being navigated to. If the request initiator
-    // site is opaque, then no caching is performed of the navigated-to
-    // document.
-    kMainFrameNavigationInitiator,
-    // The request initiator site is incorporated into the cache key for all
-    // renderer-initiated navigations (including subframe navigations) when the
-    // request initiator site is cross-site to the URL being navigated to. If
-    // the request initiator site is opaque, then no caching is performed of the
-    // navigated-to document. When this scheme is used, the
-    // `is-subframe-document-resource` boolean is not incorporated into the
-    // cache key, since incorporating the initiator site for subframe
-    // navigations
-    // should be sufficient for mitigating the attacks that the
-    // `is-subframe-document-resource` mitigates.
-    kNavigationInitiator,
-  };
-
-  // Returns the HTTP Cache partitioning experiment mode currently in use. Only
-  // one experiment mode feature flag should be enabled at a time, but if
-  // multiple are enabled then `ExperimentMode::kStandard` will be returned.
-  static ExperimentMode GetExperimentMode();
 
   // Enable split cache feature if not already overridden in the feature list.
   // Should only be invoked during process initialization before the HTTP
@@ -773,6 +758,7 @@ class NET_EXPORT HttpCache : public HttpTransactionFactory {
   static const char kDoubleKeyPrefix[];
   static const char kDoubleKeySeparator[];
   static const char kSubframeDocumentResourcePrefix[];
+  static const char kCrossSiteMainFrameNavigationPrefix[];
 
   // Used for single-keyed entries if the cache is split.
   static const char kSingleKeyPrefix[];

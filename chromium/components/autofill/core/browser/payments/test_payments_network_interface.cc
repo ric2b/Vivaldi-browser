@@ -93,16 +93,6 @@ void TestPaymentsNetworkInterface::UploadCard(
                           upload_card_response_details_);
 }
 
-#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
-void TestPaymentsNetworkInterface::MigrateCards(
-    const MigrationRequestDetails& details,
-    const std::vector<MigratableCreditCard>& migratable_credit_cards,
-    MigrateCardsCallback callback) {
-  std::move(callback).Run(PaymentsRpcResult::kSuccess, std::move(save_result_),
-                          "this is display text");
-}
-#endif  // !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
-
 void TestPaymentsNetworkInterface::SelectChallengeOption(
     const SelectChallengeOptionRequestDetails& details,
     base::OnceCallback<void(PaymentsRpcResult, const std::string&)> callback) {
@@ -139,16 +129,18 @@ void TestPaymentsNetworkInterface::ShouldReturnUnmaskDetailsImmediately(
   should_return_unmask_details_ = should_return_unmask_details;
 }
 
-void TestPaymentsNetworkInterface::AllowFidoRegistration(bool offer_fido_opt_in) {
+void TestPaymentsNetworkInterface::AllowFidoRegistration(
+    bool server_denotes_fido_eligible_but_not_opted_in) {
   should_return_unmask_details_ = true;
-  unmask_details_.offer_fido_opt_in = offer_fido_opt_in;
+  unmask_details_.server_denotes_fido_eligible_but_not_opted_in =
+      server_denotes_fido_eligible_but_not_opted_in;
 }
 
 void TestPaymentsNetworkInterface::AddFidoEligibleCard(std::string server_id,
                                              std::string credential_id,
                                              std::string relying_party_id) {
   should_return_unmask_details_ = true;
-  unmask_details_.offer_fido_opt_in = false;
+  unmask_details_.server_denotes_fido_eligible_but_not_opted_in = false;
   unmask_details_.unmask_auth_method =
       PaymentsAutofillClient::UnmaskAuthMethod::kFido;
   unmask_details_.fido_eligible_card_ids.insert(server_id);
@@ -187,11 +179,6 @@ void TestPaymentsNetworkInterface::SetFidoRequestOptionsInUnmaskDetails(
 void TestPaymentsNetworkInterface::SetUploadCardResponseDetailsForUploadCard(
     const UploadCardResponseDetails& upload_card_response_details) {
   upload_card_response_details_ = upload_card_response_details;
-}
-
-void TestPaymentsNetworkInterface::SetSaveResultForCardsMigration(
-    std::unique_ptr<std::unordered_map<std::string, std::string>> save_result) {
-  save_result_ = std::move(save_result);
 }
 
 void TestPaymentsNetworkInterface::SetSupportedBINRanges(

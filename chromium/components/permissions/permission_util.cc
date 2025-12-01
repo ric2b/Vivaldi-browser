@@ -214,6 +214,9 @@ bool PermissionUtil::GetPermissionType(ContentSettingsType type,
     case ContentSettingsType::WEB_APP_INSTALLATION:
       *out = PermissionType::WEB_APP_INSTALLATION;
       break;
+    case ContentSettingsType::LOCAL_NETWORK_ACCESS:
+      *out = PermissionType::LOCAL_NETWORK_ACCESS;
+      break;
     default:
       return false;
   }
@@ -386,6 +389,8 @@ ContentSettingsType PermissionUtil::PermissionTypeToContentSettingsTypeSafe(
       return ContentSettingsType::AUTOMATIC_FULLSCREEN;
     case PermissionType::WEB_APP_INSTALLATION:
       return ContentSettingsType::WEB_APP_INSTALLATION;
+    case PermissionType::LOCAL_NETWORK_ACCESS:
+      return ContentSettingsType::LOCAL_NETWORK_ACCESS;
     case PermissionType::NUM:
       break;
   }
@@ -424,8 +429,6 @@ ContentSetting PermissionUtil::PermissionStatusToContentSetting(
     default:
       return CONTENT_SETTING_BLOCK;
   }
-
-  NOTREACHED();
 }
 
 blink::mojom::PermissionStatus PermissionUtil::ContentSettingToPermissionStatus(

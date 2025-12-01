@@ -1,9 +1,17 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="ka">
+<translation id="2277224997687551299">ჯგუფის სახელის ჩასწორება</translation>
+<translation id="2330212241471632770">{TABS_COUNT, plural,
+          =1 {სანიშნეს ჩანართი}
+          other {სანიშნეს ჩანართი}
+        }</translation>
 <translation id="2947471979790858922">თქვენი აქტივობები ამ პირად ჩანართებში წაიშლება ამ მოწყობილობიდან</translation>
 <translation id="3870643923290313246">{INCOGNITO_TABS_COUNT, plural,
         =1 {დახურული ჩანართები Vivaldi-ის მთავარ მენიუში უახლესი ჩანართების მენიუში შეგიძლიათ, იპოვოთ. თქვენი პირადი ჩანართები ხელმისაწვდომი არ იქნება.}
         other {დახურული ჩანართები Vivaldi-ის მთავარ მენიუში უახლესი ჩანართების მენიუში შეგიძლიათ, იპოვოთ. თქვენი პირადი ჩანართების # ხელმისაწვდომი არ იქნება.}}</translation>
+<translation id="4460014764210899310">დაჯგუფების გაუქმება</translation>
 <translation id="4871187110787939393">დავხურო ყველა პირადი ჩანართი?</translation>
+<translation id="5494920125229734069">ყველას მონიშვნა</translation>
+<translation id="6744956528665271406">ჯგუფის ფერის ჩასწორება</translation>
 </translationbundle>

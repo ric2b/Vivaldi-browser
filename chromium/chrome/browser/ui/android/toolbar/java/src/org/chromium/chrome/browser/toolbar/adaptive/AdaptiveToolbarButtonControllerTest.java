@@ -5,6 +5,7 @@
 package org.chromium.chrome.browser.toolbar.adaptive;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
@@ -18,6 +19,7 @@ import static org.chromium.chrome.browser.preferences.ChromePreferenceKeys.ADAPT
 import android.app.Activity;
 import android.content.res.Configuration;
 import android.content.res.Resources;
+import android.os.Bundle;
 import android.util.Pair;
 import android.view.View;
 import android.view.View.OnLongClickListener;
@@ -27,10 +29,12 @@ import androidx.test.filters.SmallTest;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
+import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.Mock;
-import org.mockito.MockitoAnnotations;
+import org.mockito.junit.MockitoJUnit;
+import org.mockito.junit.MockitoRule;
 import org.mockito.stubbing.Answer;
 import org.robolectric.Robolectric;
 import org.robolectric.annotation.Config;
@@ -64,6 +68,7 @@ import java.util.List;
 @EnableFeatures(ChromeFeatureList.ADAPTIVE_BUTTON_IN_TOP_TOOLBAR_CUSTOMIZATION_V2)
 public class AdaptiveToolbarButtonControllerTest {
 
+    @Rule public final MockitoRule mMockitoRule = MockitoJUnit.rule();
     @Mock private AndroidPermissionDelegate mAndroidPermissionDelegate;
     @Mock private ButtonDataProvider mShareButtonController;
     @Mock private ButtonDataProvider mVoiceToolbarButtonController;
@@ -80,9 +85,7 @@ public class AdaptiveToolbarButtonControllerTest {
 
     @Before
     public void setUp() {
-        MockitoAnnotations.initMocks(this);
         VoiceRecognitionUtil.setIsVoiceSearchEnabledForTesting(true);
-        AdaptiveToolbarFeatures.clearParsedParamsForTesting();
         SettingsNavigationFactory.setInstanceForTesting(mSettingsNavigation);
         mButtonData =
                 new ButtonDataImpl(
@@ -95,7 +98,7 @@ public class AdaptiveToolbarButtonControllerTest {
                         /* isEnabled= */ true,
                         AdaptiveToolbarButtonVariant.UNKNOWN,
                         /* tooltipTextResId= */ Resources.ID_NULL,
-                        /* showHoverhighlight= */ false);
+                        /* showBackgroundHighlight= */ false);
         mConfiguration.screenWidthDp = 420;
         doReturn(mProfile).when(mProfile).getOriginalProfile();
         mProfileSupplier = new ObservableSupplierImpl<>();
@@ -235,6 +238,7 @@ public class AdaptiveToolbarButtonControllerTest {
                         mActivityLifecycleDispatcher,
                         mProfileSupplier,
                         menuCoordinator,
+                        /* toolbarBehavior= */ null,
                         mAndroidPermissionDelegate);
         adaptiveToolbarButtonController.addButtonVariant(
                 AdaptiveToolbarButtonVariant.NEW_TAB, mNewTabButtonController);
@@ -252,7 +256,9 @@ public class AdaptiveToolbarButtonControllerTest {
         longClickListener.onLongClick(view);
         adaptiveToolbarButtonController.destroy();
 
-        verify(mSettingsNavigation).startSettings(activity, AdaptiveToolbarSettingsFragment.class);
+        verify(mSettingsNavigation)
+                .startSettings(
+                        eq(activity), eq(AdaptiveToolbarSettingsFragment.class), any(Bundle.class));
     }
 
     @Test
@@ -284,6 +290,7 @@ public class AdaptiveToolbarButtonControllerTest {
                         mActivityLifecycleDispatcher,
                         mProfileSupplier,
                         menuCoordinator,
+                        /* toolbarBehavior= */ null,
                         mAndroidPermissionDelegate);
         adaptiveToolbarButtonController.addButtonVariant(
                 AdaptiveToolbarButtonVariant.PRICE_TRACKING, mPriceTrackingButtonController);
@@ -444,6 +451,7 @@ public class AdaptiveToolbarButtonControllerTest {
                         mActivityLifecycleDispatcher,
                         mProfileSupplier,
                         mock(AdaptiveButtonActionMenuCoordinator.class),
+                        /* toolbarBehavior= */ null,
                         mAndroidPermissionDelegate);
         adaptiveToolbarButtonController.addButtonVariant(
                 AdaptiveToolbarButtonVariant.NEW_TAB, mNewTabButtonController);
@@ -465,6 +473,7 @@ public class AdaptiveToolbarButtonControllerTest {
                 variant,
                 /* actionChipLabelResId= */ 0,
                 /* tooltipTextResId= */ Resources.ID_NULL,
-                /* showHoverHighlight= */ false);
+                /* showBackgroundHighlight= */ false,
+                /* hasErrorBadge= */ false);
     }
 }

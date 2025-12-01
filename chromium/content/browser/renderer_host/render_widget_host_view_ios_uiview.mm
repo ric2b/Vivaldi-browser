@@ -91,6 +91,23 @@ static void* kObservingContext = &kObservingContext;
 }
 @end
 
+#pragma mark - BETextSelectionRect
+@interface BETextSelectionRect : UITextSelectionRect {
+  CGRect rect_;
+}
+- (instancetype)initWithCGRect:(CGRect)rect;
+@end
+
+@implementation BETextSelectionRect
+- (instancetype)initWithCGRect:(CGRect)rect {
+  rect_ = rect;
+  return [self init];
+}
+- (CGRect)rect {
+  return rect_;
+}
+@end
+
 @interface BlinkExtendedTextInputTraits : NSObject <BEExtendedTextInputTraits>
 @property(nonatomic) UITextAutocapitalizationType autocapitalizationType;
 @property(nonatomic) UITextAutocorrectionType autocorrectionType;
@@ -438,25 +455,36 @@ static void* kObservingContext = &kObservingContext;
               options:(BETextReplacementOptions)options
     completionHandler:
         (void (^)(NSArray<UITextSelectionRect*>* rects))completionHandler {
+  if (replacementText == originalText) {
+    completionHandler(@[]);
+    return;
+  }
+
   auto* state = [self editState];
   if (!state) {
-    _view->ImeCommitText(base::SysNSStringToUTF16(replacementText),
-                         gfx::Range::InvalidRange(), 0);
-  } else {
-    auto len = originalText.length;
-    if (state->selection.length() == 0) {
-      auto pos = state->selection.start();
-      auto start = pos > len ? pos - len : 0;
-      auto end = start + len;
-      gfx::Range replacementRange(start, end);
-      _view->ImeCommitText(base::SysNSStringToUTF16(replacementText),
-                           replacementRange, 0);
-    } else {
-      _view->ImeCommitText(base::SysNSStringToUTF16(replacementText),
-                           state->selection, 0);
-    }
-    gfx::Range replacementRange(0, originalText.length);
+    completionHandler(@[]);
+    return;
   }
+
+  auto originalRange = state->selection;
+  if (state->selection.is_empty()) {
+    auto pos = state->selection.start();
+    auto len = originalText.length;
+    auto start = pos > len ? pos - len : 0;
+    auto end = start + len;
+    originalRange = gfx::Range(start, end);
+  }
+
+  auto textForRange =
+      [[self editText] substringWithRange:originalRange.ToNSRange()];
+  if (textForRange != originalText) {
+    completionHandler(@[]);
+    return;
+  }
+
+  _view->ImeCommitText(base::SysNSStringToUTF16(replacementText), originalRange,
+                       0);
+
   // TODO: bug 388320178 - still don't know what to do with this.
   completionHandler(@[]);
 }
@@ -470,11 +498,34 @@ static void* kObservingContext = &kObservingContext;
             withCompletionHandler:
                 (void (^)(NSArray<UITextSelectionRect*>* rects))
                     completionHandler {
-  // TODO: bug 388320178 - need to implement this.
-  // During the input process, there are instances where the text system will
-  // continuously wait for the completionHandler to be called; if not, the
-  // on-screen keyboard will become unresponsive.
-  completionHandler(@[]);
+  auto* state = [self editState];
+  if (!state || !state->selection.is_empty()) {
+    completionHandler(@[]);
+    return;
+  }
+
+  NSRange range =
+      [[self editText] rangeOfString:input
+                             options:NSLiteralSearch
+                               range:NSMakeRange(0, state->selection.start())];
+  if (range.location == NSNotFound) {
+    completionHandler(@[]);
+    return;
+  }
+
+  _view->RectForEditFieldChars(
+      gfx::Range(range),
+      base::BindOnce(
+          [](void (^completionHandler)(NSArray<UITextSelectionRect*>* rects),
+             const gfx::Rect& rect) {
+            if (rect.IsEmpty()) {
+              completionHandler(@[]);
+              return;
+            }
+            completionHandler(@[ [[BETextSelectionRect alloc]
+                initWithCGRect:rect.ToCGRect()] ]);
+          },
+          completionHandler));
 }
 
 - (void)requestPreferredArrowDirectionForEditMenuWithCompletionHandler:
@@ -612,12 +663,26 @@ static void* kObservingContext = &kObservingContext;
   completionHandler();
 }
 
+// To set caret when users long-press on spacebar and move.
 - (void)selectPositionAtPoint:(CGPoint)point
             completionHandler:(void (^)(void))completionHandler {
-  // Unclear when this is used instead of selectTextInGranularity.
-  [self selectTextInGranularity:UITextGranularityWord
-                        atPoint:point
-              completionHandler:completionHandler];
+  if (!_view) {
+    completionHandler();
+    return;
+  }
+
+  CGFloat x = point.x;
+  CGFloat y = point.y;
+  // Constrain point to bounds of focused element.
+  auto textControlBounds = [self textControlBounds];
+  if (textControlBounds.has_value()) {
+    x = std::clamp<CGFloat>(x, textControlBounds->x(),
+                            textControlBounds->right());
+    y = std::clamp<CGFloat>(y, textControlBounds->y(),
+                            textControlBounds->bottom());
+  }
+  _view->host()->delegate()->MoveCaret(gfx::ToRoundedPoint(gfx::PointF(x, y)));
+  completionHandler();
 }
 
 - (void)selectPositionAtPoint:(CGPoint)point
@@ -695,11 +760,11 @@ static void* kObservingContext = &kObservingContext;
 }
 
 - (void)autoscrollToPoint:(CGPoint)point {
-  // This is a good place to tell Blink to auto scroll.
+  _view->StartAutoscrollForSelectionToPoint(gfx::PointF(point.x, point.y));
 }
 
 - (void)cancelAutoscroll {
-  // This is a good place to tell Blink to stop auto scroll.
+  _view->StopAutoscroll();
 }
 
 - (UITextRange*)markedTextRange {

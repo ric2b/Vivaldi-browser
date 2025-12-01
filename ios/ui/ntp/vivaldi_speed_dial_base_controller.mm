@@ -31,12 +31,13 @@
 #import "ios/ui/bookmarks_editor/vivaldi_bookmarks_editor_entry_point.h"
 #import "ios/ui/helpers/vivaldi_global_helpers.h"
 #import "ios/ui/helpers/vivaldi_uiview_layout_helper.h"
+#import "ios/ui/ntp/bottom_toolbar/bottom_toolbar_swift.h"
+#import "ios/ui/ntp/bottom_toolbar/vivaldi_ntp_bottom_toolbar_consumer.h"
 #import "ios/ui/ntp/cells/vivaldi_speed_dial_container_cell.h"
 #import "ios/ui/ntp/nsd/vivaldi_nsd_coordinator.h"
 #import "ios/ui/ntp/top_toolbar/top_toolbar_swift.h"
 #import "ios/ui/ntp/top_toolbar/vivaldi_ntp_top_toolbar_view_consumer.h"
 #import "ios/ui/ntp/vivaldi_ntp_constants.h"
-#import "ios/ui/ntp/vivaldi_ntp_util.h"
 #import "ios/ui/ntp/vivaldi_speed_dial_base_controller_flow_layout.h"
 #import "ios/ui/ntp/vivaldi_speed_dial_constants.h"
 #import "ios/ui/ntp/vivaldi_speed_dial_sorting_mode.h"
@@ -84,12 +85,8 @@ CGFloat moreButtonContainerRadius = 4.0f;
 // Opacity for background color for more button container
 CGFloat moreButtonContainerOpacity = 0.6f;
 
-// Customize Start Page button
-CGFloat customizeButtonShadowOpacity = 0.3f;
-CGFloat customizeButtonVerticalPadding = 10.f;
-CGFloat customizeButtonHorizontalPadding = 20.f;
-CGFloat customizeButtonBottomPadding = 20.f;
-CGFloat customizeButtonHeight = 40.f;
+// Height for bottom toolbar view.
+CGFloat bottomToolbarHeight = 70.f;
 
 // Do not show toolbar when there's only one toolbar item excluding the add
 // group item.
@@ -101,6 +98,7 @@ NSUInteger toolbarVisibleThreshold = 2;
                                              UICollectionViewDelegate,
                                             UIGestureRecognizerDelegate,
                                           VivaldiNTPTopToolbarViewConsumer,
+                                           VivaldiNTPBottomToolbarConsumer,
                                         VivaldiSpeedDialContainerDelegate,
                                             VivaldiNSDCoordinatorDelegate,
                                                     SpeedDialHomeConsumer> {
@@ -115,13 +113,13 @@ NSUInteger toolbarVisibleThreshold = 2;
 @property(nonatomic, weak) UIView* topScrollMenuContainer;
 // Top toolbar menu view
 @property(nonatomic, strong)VivaldiNTPTopToolbarView* topToolbarView;
+// Bottom toolbar view
+@property(nonatomic, strong)
+    VivaldiBottomToolbarViewProvider* bottomToolbarProvider;
 // More action button
 @property(nonatomic, weak) UIButton* moreButton;
 // More action button container
 @property(nonatomic, weak) UIView* moreButtonContainer;
-// Customize start page button visible at the bottom of the page based on pref
-// value.
-@property(nonatomic, weak) UIButton* customizeStartPageButton;
 // The view controller to present when pushing to new view controller
 @property(nonatomic, strong)
   VivaldiSpeedDialViewController* speedDialViewController;
@@ -158,6 +156,13 @@ NSUInteger toolbarVisibleThreshold = 2;
     NSMutableArray<VivaldiNTPTopToolbarItem*>* toolbarItems;
 // Index of the selected toolbar item
 @property(nonatomic, assign) NSInteger selectedToolbarItemIndex;
+// Index of the last selected toolbar item. This is used for transitioning
+// the bottom toolbar components by tracking when user
+// moves from one page to another using top toolbar. Some transition should not
+// be animated such as when user goes from AddGroup to TopSites where
+// AddGroup do not have the toolbar view, and TopSites should not show the
+// Add button.
+@property(nonatomic, assign) NSInteger lastSelectedToolbarItemIndex;
 // Array to hold the sort button context menu options
 @property (strong, nonatomic) NSMutableArray *speedDialSortActions;
 // Array to hold ascendeing decending buttons for sort context menu options
@@ -169,6 +174,9 @@ NSUInteger toolbarVisibleThreshold = 2;
 // swipes the collection view left or right by pan/swipe gesture. The other one
 // is when taps on the menu item.
 @property (assign, nonatomic) BOOL scrollFromMenuTap;
+// Boolean to keep track when view size is changing due to a trait collection
+// change.
+@property (assign, nonatomic) BOOL traitCollectionChangeInProgress;
 // Bool to keep track if top sites result is ready. The results can be empty,
 // this only checks if we got a response from backend for the query.
 @property(nonatomic,assign) BOOL isTopSitesResultsAvailable;
@@ -254,6 +262,8 @@ NSUInteger toolbarVisibleThreshold = 2;
   _nsdCoordinator = nil;
   _topToolbarView.consumer = nil;
   _topToolbarView = nil;
+  _bottomToolbarProvider.consumer = nil;
+  _bottomToolbarProvider = nil;
   _vivaldiThumbnailService = nullptr;
   _startPageSettingsCoordinator = nullptr;
   [self.sharingCoordinator stop];
@@ -294,6 +304,7 @@ NSUInteger toolbarVisibleThreshold = 2;
     if (strongSelf) {
       strongSelf.backgroundImageView.image = [strongSelf getWallpaperImage];
       [strongSelf setUpMoreButtonProperties];
+      [strongSelf updateBottomToolbarStateIfNeeded];
       [strongSelf.collectionView reloadData];
       [strongSelf scrollViewDidScroll:strongSelf.collectionView];
     }
@@ -329,6 +340,11 @@ NSUInteger toolbarVisibleThreshold = 2;
   [super viewDidAppear:animated];
 
   [self reloadLayout];
+
+  // Show bottom toolbar if needed. This function does nothing if the toolbar
+  // is already visible.
+  [self fadeInBottomToolbarIfNeeded];
+
   // If the top menu is not visible show it.
   if (self.topScrollMenuContainer.alpha != 0) {
     return;
@@ -342,6 +358,7 @@ NSUInteger toolbarVisibleThreshold = 2;
     withTransitionCoordinator:
       (id<UIViewControllerTransitionCoordinator>)coordinator {
   [super viewWillTransitionToSize:size withTransitionCoordinator:coordinator];
+  self.traitCollectionChangeInProgress = YES;
 
   // Get the current offset and width
   CGPoint offset = self.collectionView.contentOffset;
@@ -368,7 +385,9 @@ NSUInteger toolbarVisibleThreshold = 2;
     // the animation block.
     [self reloadLayout];
     [self.collectionView setContentOffset:newOffset animated:NO];
-  } completion:nil];
+  } completion:^(id<UIViewControllerTransitionCoordinatorContext> context) {
+    self.traitCollectionChangeInProgress = NO;
+  }];
 }
 
 #pragma mark - PRIVATE
@@ -382,7 +401,7 @@ NSUInteger toolbarVisibleThreshold = 2;
   [self setUpBlurView];
   [self setUpHeaderView];
   [self setupSpeedDialView];
-  [self setUpCustomizeStartPageButton];
+  [self setUpBottomToolbarView];
   [self setUpLongPressGesture];
   [self setUpTapGesture];
 }
@@ -640,53 +659,29 @@ NSUInteger toolbarVisibleThreshold = 2;
   [omniboxCommandHandler cancelOmniboxEdit];
 }
 
-- (void)setUpCustomizeStartPageButton {
-  // Customize Start page button
-  UIButton *customizeStartPageButton = [UIButton new];
-  _customizeStartPageButton = customizeStartPageButton;
-  [customizeStartPageButton
-       setTitle:GetNSString(IDS_IOS_START_PAGE_CUSTOMIZE_TITLE)
-       forState:UIControlStateNormal];
-  customizeStartPageButton.pointerInteractionEnabled = YES;
-  customizeStartPageButton.pointerStyleProvider =
-      CreateOpaqueOrTransparentButtonPointerStyleProvider();
+- (void)setUpBottomToolbarView {
+  VivaldiBottomToolbarViewProvider *toolbarProvider =
+      [[VivaldiBottomToolbarViewProvider alloc] init];
+  self.bottomToolbarProvider = toolbarProvider;
+  toolbarProvider.consumer = self;
 
-  customizeStartPageButton.layer.shadowColor =
-      [[UIColor blackColor]
-          colorWithAlphaComponent:customizeButtonShadowOpacity].CGColor;
-  customizeStartPageButton.layer.shadowOpacity = vSpeedDialItemShadowOpacity;
-  customizeStartPageButton.layer.shadowRadius = vSpeedDialItemShadowRadius;
-  customizeStartPageButton.layer.shadowOffset = vSpeedDialItemShadowOffset;
+  UIViewController *toolbarViewController =
+      [toolbarProvider makeViewController];
+  toolbarViewController.view.backgroundColor = [UIColor clearColor];
 
-  UIButtonConfiguration* buttonConfiguration =
-      [UIButtonConfiguration filledButtonConfiguration];
-  buttonConfiguration.contentInsets = NSDirectionalEdgeInsetsMake(
-      customizeButtonVerticalPadding, customizeButtonHorizontalPadding,
-      customizeButtonVerticalPadding, customizeButtonHorizontalPadding);
-  buttonConfiguration.baseForegroundColor = [UIColor labelColor];
-  buttonConfiguration.background.backgroundColor =
-      [UIColor colorNamed:vNTPSpeedDialCellBackgroundColor];
-  buttonConfiguration.cornerStyle = UIButtonConfigurationCornerStyleCapsule;
-  customizeStartPageButton.configuration = buttonConfiguration;
-  [customizeStartPageButton
-       addTarget:self
-          action:@selector(handleCustomizeStartPageButtonTap)
-       forControlEvents:UIControlEventTouchUpInside];
-  [self.view addSubview:customizeStartPageButton];
+  [self addChildViewController:toolbarViewController];
+  [self.view addSubview:toolbarViewController.view];
+  [toolbarViewController didMoveToParentViewController:self];
 
-  [customizeStartPageButton centerXInSuperview];
-  [NSLayoutConstraint activateConstraints:@[
-    [customizeStartPageButton.bottomAnchor
-         constraintGreaterThanOrEqualToAnchor:self.view.bottomAnchor
-         constant:-customizeButtonBottomPadding],
-    [customizeStartPageButton.heightAnchor
-        constraintEqualToConstant:customizeButtonHeight]
-  ]];
+  [self.view addSubview:toolbarViewController.view];
+  [toolbarViewController.view anchorTop:nil
+                                leading:self.view.leadingAnchor
+                                 bottom:self.view.bottomAnchor
+                               trailing:self.view.trailingAnchor
+                                   size:CGSizeMake(0, bottomToolbarHeight)];
 
-  BOOL hideButton =
-      !ShouldShowCustomizeStartPageButton() &&
-          ![self showStartPageCustomizeButton];
-  customizeStartPageButton.hidden = hideButton;
+  // Trigger update for initial state.
+  [self updateBottomToolbarStateIfNeeded];
 }
 
 // Returns the context menu actions for toolbar more button action
@@ -707,7 +702,7 @@ NSUInteger toolbarVisibleThreshold = 2;
 
   // Customize start page action button
   NSString* customizePageActionTitle =
-      GetNSString(IDS_IOS_START_PAGE_CUSTOMIZE_TITLE);
+      GetNSString(IDS_IOS_START_PAGE_CUSTOMIZE_CONTEXT_MENU_TITLE);
   UIAction* customizePageAction =
       [UIAction actionWithTitle:customizePageActionTitle
                           image:nil
@@ -875,6 +870,7 @@ NSUInteger toolbarVisibleThreshold = 2;
 
 /// Set current selected index of the menu to the pref
 - (void)setSelectedMenuItemIndex:(NSInteger)index {
+  self.lastSelectedToolbarItemIndex = self.selectedToolbarItemIndex;
   self.selectedToolbarItemIndex = index;
   [self updateSortingActionVisibilityForPage:index];
   [self resetMoreButtonContextMenuOptions];
@@ -957,6 +953,12 @@ NSUInteger toolbarVisibleThreshold = 2;
 /// Returns whether show start page customize button is enabled
 - (BOOL)showStartPageCustomizeButton {
   return [VivaldiStartPagePrefs showStartPageCustomizeButton];
+}
+
+/// Returns true when show Add button is enabled
+/// `showSpeedDials` enabled.
+- (BOOL)showAddButton {
+  return [VivaldiStartPagePrefs showAddButton] && [self showSpeedDials];
 }
 
 - (void)updateSortOrderActionButtonState:(UIAction*)settable {
@@ -1177,45 +1179,25 @@ NSUInteger toolbarVisibleThreshold = 2;
 
 - (void)setTopToolbarAndPagesHiddenWithShowFrequentlyVisited:
     (BOOL)showFrequentlyVisited showSpeedDials:(BOOL)showSpeedDials {
-  if (IsTopSitesEnabled()) {
-    self.collectionView.hidden = !showSpeedDials && !showFrequentlyVisited;
-  } else {
-    self.collectionView.hidden = !showSpeedDials;
-  }
-
-  if (showSpeedDials || (IsTopSitesEnabled() && showFrequentlyVisited)) {
-    [self setSelectedMenuItemIndex:0];
-    [self scrollToItemWithIndex:self.selectedToolbarItemIndex animated:NO];
-    __weak __typeof(self) weakSelf = self;
-    dispatch_async(dispatch_get_main_queue(), ^{
-      __strong __typeof(weakSelf) strongSelf = weakSelf;
-      if (strongSelf) {
-        [strongSelf.topToolbarView
-         selectItemWithIndex:strongSelf.selectedToolbarItemIndex];
-      }
-    });
-  }
-  [self scrollViewDidScroll:self.collectionView];
-  [self setUpMoreButtonProperties];
+  // (Workaround Alert!)
+  // When TopSites or SpeedDials pref is modified we will only hide the
+  // CollectionView from this function.
+  // Because when pref is changed the function `refreshMenuItems` also gets
+  // called from meditor because we want to compute the updated items.
+  // However, if we show the CollectionView in this function there is a split
+  // second state where Group items are not computed but CollectionView is
+  // visible which satisfies the condition of showing `Add Group` page and
+  // there is a glitch of `Add Group` transitions to `Top Sites` or
+  // `First Group`.
+  // Therefore, we will show the CollectionView from `refreshMenuItems` method
+  // when items are loaded and page moved to correct scroll position.
+  [self hideCollectionViewIfNeeded];
+  // Update bottom toolbar button visibility when pref is changed.
+  [self updateBottomToolbarStateIfNeeded];
 }
 
 - (void)handleCustomizeStartPageButtonTap {
-  if (ShouldShowCustomizeStartPageButton()) {
-    SetCustomizeStartPageButtonShown();
-  }
   [self showStartPageSettings];
-  _customizeStartPageButton.hidden = ![self showStartPageCustomizeButton] &&
-       !ShouldShowCustomizeStartPageButton();
-}
-
-- (void)showBlurViewDependentPropertiesWithProgress:(CGFloat)progress {
-  self.blurEffectView.alpha = progress;
-  self.customizeStartPageButton.alpha = 1-progress;
-}
-
-- (void)hideBlurViewDependentProperties {
-  self.blurEffectView.alpha = 0;
-  self.customizeStartPageButton.alpha = 1;
 }
 
 - (void)updateBookmarkBarNodeIfNeeded {
@@ -1247,6 +1229,234 @@ NSUInteger toolbarVisibleThreshold = 2;
   return [[VivaldiSpeedDialItem alloc] initWithBookmark:node];
 }
 
+// Returns the VivaldiSpeedDialItem associated with current toolbar item
+// visible at the moment of calling this function.
+- (VivaldiSpeedDialItem*)currentActivePageItem {
+  if (self.selectedToolbarItemIndex < long(self.toolbarItems.count)) {
+    VivaldiNTPTopToolbarItem* toolbarItem =
+        [self.toolbarItems objectAtIndex:self.selectedToolbarItemIndex];
+    if (!toolbarItem ||
+        toolbarItem.pageType == VivaldiSpeedDialPageTypeTopSites)
+      return nil;
+    return [self nodeForToolbarItem:toolbarItem];
+  }
+  return nil;
+}
+
+// Function to check condition and hide the collection view based
+// on current state.
+- (void)hideCollectionViewIfNeeded {
+  BOOL shouldHideCollectionView;
+
+  if (IsTopSitesEnabled()) {
+    shouldHideCollectionView =
+        !self.showSpeedDials && !self.showFrequentlyVisited;
+  } else {
+    shouldHideCollectionView = !self.showSpeedDials;
+  }
+
+  if (shouldHideCollectionView && !self.collectionView.hidden) {
+    self.collectionView.hidden = YES;
+  }
+}
+
+- (void)showCollectionViewIfNeeded {
+  BOOL shouldShowCollectionView;
+
+  if (IsTopSitesEnabled()) {
+    shouldShowCollectionView =
+        self.showSpeedDials || self.showFrequentlyVisited;
+  } else {
+    shouldShowCollectionView = self.showSpeedDials;
+  }
+
+  if (shouldShowCollectionView && self.collectionView.hidden) {
+    self.collectionView.hidden = NO;
+  }
+}
+
+#pragma mark - Bottom Toolbar Add Button Visibility Updates
+
+- (void)updateAddButtonVisibilityProgressWithCurrentPage:(CGFloat)currentPage
+                                      numberOfPages:(NSInteger)numberOfPages {
+  if (numberOfPages <= 1 || self.toolbarItems.count <= 1) return;
+
+  NSInteger fromIndex = (NSInteger)floorf(currentPage);
+  NSInteger toIndex   = (NSInteger)ceilf(currentPage);
+
+  // Clamp page indices
+  fromIndex = MAX(0, MIN(fromIndex, (NSInteger)self.toolbarItems.count - 1));
+  toIndex   = MAX(0, MIN(toIndex,   (NSInteger)self.toolbarItems.count - 1));
+
+  if (fromIndex == toIndex) return;
+
+  // Calculate fraction between pages
+  CGFloat fraction = (currentPage - fromIndex) / (toIndex - fromIndex);
+  fraction = MAX(0, MIN(1, fraction));
+
+  VivaldiNTPTopToolbarItem *fromItem = self.toolbarItems[fromIndex];
+  VivaldiNTPTopToolbarItem *toItem   = self.toolbarItems[toIndex];
+
+  BOOL fromIsTopSites =
+      (fromItem.pageType == VivaldiSpeedDialPageTypeTopSites);
+  BOOL toIsTopSites =
+      (toItem.pageType   == VivaldiSpeedDialPageTypeTopSites);
+
+  // Only act if exactly one page is TopSites
+  if (fromIsTopSites == toIsTopSites) return;
+
+  // If fromIndex is TopSites, progress = 0->1; else 1->0
+  CGFloat progress = fromIsTopSites ? fraction : (1.0 - fraction);
+
+  // Skip if from menu tap or AddGroup->TopSites otherwise button opacity
+  // animation creates glitch because of the pages in between `Add Group`
+  // and `Top Sites`.
+  if (self.lastSelectedToolbarItemIndex < long(self.toolbarItems.count)) {
+    VivaldiNTPTopToolbarItem *lastItem =
+        self.toolbarItems[self.lastSelectedToolbarItemIndex];
+    if (self.scrollFromMenuTap ||
+        (lastItem.pageType == VivaldiSpeedDialPageTypeAddGroup &&
+         toItem.pageType == VivaldiSpeedDialPageTypeTopSites)) {
+      return;
+    }
+  }
+
+  // Notify bottom toolbar
+  [self.bottomToolbarProvider handleAddButtonVisibilityWithProgress:progress];
+}
+
+// This method only deals with final transition from certain index to another
+// index. This does not consider the fractional progress between 0...1.
+// The purpose of this function is to deal with 0 <-> 1 state in one jump with
+// or without animation. There is not animation when user jumps from
+// `Add Group` to `Top Sites` there's no animation.
+- (void)handleAddButtonTransitionFromPreviousToNewIndex:(NSInteger)newIndex {
+
+  if (newIndex < 0 || newIndex >= long(self.toolbarItems.count) ||
+      self.lastSelectedToolbarItemIndex < 0 ||
+      self.lastSelectedToolbarItemIndex >= long(self.toolbarItems.count)) {
+    return;
+  }
+
+  if (IsTopSitesEnabled() && [self showFrequentlyVisited] &&
+      [self showSpeedDials]) {
+    VivaldiNTPTopToolbarItem *fromItem =
+        self.toolbarItems[self.lastSelectedToolbarItemIndex];
+    VivaldiNTPTopToolbarItem *toItem =
+        self.toolbarItems[newIndex];
+
+    // Disable animation if going from AddGroup -> TopSites
+    BOOL noAnimation = (fromItem.pageType == toItem.pageType) ||
+        (fromItem.pageType == VivaldiSpeedDialPageTypeAddGroup &&
+         toItem.pageType == VivaldiSpeedDialPageTypeTopSites);
+
+    // If target index >= 1, show button (progress=1); else hide (progress=0)
+    CGFloat progress = (newIndex >= 1) ? 1.0 : 0.0;
+
+    [self.bottomToolbarProvider
+        handleAddButtonVisibilityWithProgress:progress
+                                     animated:!noAnimation];
+  }
+}
+
+// This function is responsible for fading in the bottom toolbar view
+// ONLY if it was hidden due to navigation to a new folder.
+// When view appears after child view is popped, this should fade in the
+// toolbar view.
+-(void)fadeInBottomToolbarIfNeeded {
+  if (self.selectedToolbarItemIndex < 0 ||
+      self.selectedToolbarItemIndex >= long(self.toolbarItems.count)) {
+    return;
+  }
+
+  VivaldiNTPTopToolbarItem* toolbarItem =
+      [self.toolbarItems objectAtIndex:self.selectedToolbarItemIndex];
+  if (toolbarItem.pageType == VivaldiSpeedDialPageTypeAddGroup)
+    return;
+
+  [self.bottomToolbarProvider handleToolbarVisibilityWithProgress:0
+                                                         animated:YES];
+}
+
+- (void)observeVisibleCellScrollableContents {
+  NSIndexPath *currentVisibleIndexPath =
+      [NSIndexPath indexPathForRow:self.selectedToolbarItemIndex
+                         inSection:0];
+  VivaldiSpeedDialContainerCell *selectedCell =
+      (VivaldiSpeedDialContainerCell*)
+          [self.collectionView cellForItemAtIndexPath:currentVisibleIndexPath];
+  if (selectedCell) {
+    [selectedCell visibleCellDidChange];
+  }
+
+  [self.bottomToolbarProvider handleToolbarVisibilityWithProgress:0
+                                                         animated:YES];
+}
+
+#pragma mark - Blur & Bottom Toolbar View Visibility Updates
+
+- (void)updateBlurAndToolbarViewVisibilityWithPages:(NSInteger)totalPages
+                                        currentPage:(CGFloat)currentPage {
+  // If only one page, set progress=1 (fully visible blur & toolbar view)
+  if (totalPages == 1) {
+    [self applyBlurAndToolbarViewVisibilityProgress:1.0];
+    return;
+  }
+  // If near the last pages, compute partial progress
+  if (totalPages >= 2 && currentPage >= totalPages - 2) {
+    CGFloat progress = (currentPage - (totalPages - 2));
+    progress = MAX(0, MIN(1, progress));
+
+    // Avoid redundant update if alpha already matches
+    if (progress == 0 && self.blurEffectView.alpha == progress) return;
+    [self applyBlurAndToolbarViewVisibilityProgress:progress];
+  } else {
+    [self resetBlurAndToolbarViewVisibility];
+  }
+}
+
+- (void)applyBlurAndToolbarViewVisibilityProgress:(CGFloat)progress {
+  if ([self getWallpaperImage]) {
+    self.blurEffectView.alpha = progress;
+  }
+  // Update toolbar view opacity with progress.
+  [self.bottomToolbarProvider handleToolbarVisibilityWithProgress:progress];
+}
+
+- (void)resetBlurAndToolbarViewVisibility {
+  if ([self getWallpaperImage]) {
+    self.blurEffectView.alpha = 0;
+  }
+  // Show toolbar view. Progress 0 means alpha is 1, calculated in the provider.
+  [self.bottomToolbarProvider handleToolbarVisibilityWithProgress:0];
+}
+
+#pragma mark - Bottom Toolbar Common State
+
+- (void)updateBottomToolbarStateIfNeeded {
+  // Update the customize and add button from prefs
+  [self.bottomToolbarProvider
+      setCustomizeButtonVisible:[self showStartPageCustomizeButton]];
+
+  [self.bottomToolbarProvider
+      setAddButtonVisible:[self showAddButton]];
+
+  // Update background shading for the toolbar
+  if ([self getWallpaperImage]) {
+    BOOL shouldUseDarkText =
+        [VivaldiGlobalHelpers
+            shouldUseDarkTextForImage:[self getWallpaperImage]];
+    [self.bottomToolbarProvider setHasBackground:YES];
+    // If the background demands dark text over it, it means the background is
+    // brighter colors and we need to use bright shadow for the toolbar.
+    [self.bottomToolbarProvider
+        setUseLightBackgroundGradient:shouldUseDarkText];
+  } else {
+    [self.bottomToolbarProvider setHasBackground:NO];
+    [self.bottomToolbarProvider setUseLightBackgroundGradient:NO];
+  }
+}
+
 #pragma mark - COLLECTIONVIEW DATA SOURCE
 - (NSInteger)collectionView:(UICollectionView *)collectionView
      numberOfItemsInSection:(NSInteger)section{
@@ -1254,11 +1464,33 @@ NSUInteger toolbarVisibleThreshold = 2;
 }
 
 - (UICollectionViewCell*)collectionView:(UICollectionView *)collectionView
-                           cellForItemAtIndexPath:(NSIndexPath *)indexPath {
+                  cellForItemAtIndexPath:(NSIndexPath *)indexPath {
+
+  // Early validation to prevent accessing invalid object
+  NSInteger index = indexPath.row;
+  if (index < 0 || index >= long(self.toolbarItems.count)) {
+    // Return an empty default cell
+    VivaldiSpeedDialContainerCell *emptyCell =
+      [collectionView dequeueReusableCellWithReuseIdentifier:cellId
+                                             forIndexPath:indexPath];
+    // Configure with empty/default state
+    [emptyCell configureWith:@[]
+                     parent:nil
+              faviconLoader:self.faviconLoader
+         directMatchService:_directMatchService
+                layoutStyle:[self currentLayoutStyle]
+               layoutColumn:[self currentLayoutColumn]
+               showAddGroup:NO
+          frequentlyVisited:NO
+          topSitesAvailable:NO
+           topToolbarHidden:[self shouldHideToolbar]
+          verticalSizeClass:self.view.traitCollection.verticalSizeClass];
+    return emptyCell;
+  }
+
   VivaldiSpeedDialContainerCell *cell =
     [collectionView dequeueReusableCellWithReuseIdentifier:cellId
                                             forIndexPath:indexPath];
-  NSInteger index = indexPath.row;
   cell.delegate = self;
 
   BrowserActionFactory* actionFactory =
@@ -1266,8 +1498,10 @@ NSUInteger toolbarVisibleThreshold = 2;
               scenario:kMenuScenarioHistogramBookmarkEntry];
   [cell configureActionFactory:actionFactory];
 
+  // Safe access to toolbarItems array
   VivaldiNTPTopToolbarItem* toolbarItem =
       [self.toolbarItems objectAtIndex:index];
+
   if (toolbarItem.pageType == VivaldiSpeedDialPageTypeAddGroup) {
     [cell configureWith:@[]
                  parent:_bookmarkBarItem
@@ -1287,8 +1521,8 @@ NSUInteger toolbarVisibleThreshold = 2;
     if (toolbarItem.pageType == VivaldiSpeedDialPageTypeTopSites) {
       parent = _bookmarkBarItem;
     } else {
-      parent = [self nodeForToolbarItem:
-                    [self.toolbarItems objectAtIndex:index]];
+      // Safe access with validation to prevent crash
+      parent = [self nodeForToolbarItem:toolbarItem];
     }
 
     [cell configureWith:toolbarItem.children
@@ -1318,41 +1552,55 @@ targetContentOffsetForProposedContentOffset:(CGPoint)proposedContentOffset {
   return newOriginForOldIndex;
 }
 
+#pragma mark - ScrollViewDelegate
+
 - (void)scrollViewWillBeginDecelerating:(UIScrollView *)scrollView {
   if (self.scrollFromMenuTap) {
     self.scrollFromMenuTap = NO;
   }
 }
 
-- (void)scrollViewDidScroll:(UIScrollView *)scrollView {
-  if ([self getWallpaperImage] &&
-      ([self showSpeedDials] ||
-       (IsTopSitesEnabled() && [self showFrequentlyVisited]))) {
+- (void)scrollViewDidScroll:(UIScrollView*)scrollView {
+
+  // scrollViewDidScroll gets called when Trait Collection Changes as it affects
+  // the horizontal sizing of the view frame. Hence, skip all the animation
+  // based on scroll progress when traitCollectionChange is in progress.
+  if (!self.traitCollectionChangeInProgress) {
     CGFloat pageWidth = scrollView.frame.size.width;
     CGFloat currentPage = scrollView.contentOffset.x / pageWidth;
     NSInteger numberOfPages = [self.collectionView numberOfItemsInSection:0];
 
-    // Show the blur view when number of pages is exactly one, which means only
-    // add group page is visible.
-    // Otherwise check if two or more pages are available so that we can track
-    // swiping progress from second last page to the last page and animate the
-    // alpha change based on progress. Progress 0 hides the blur view, where 1
-    // shows the blur view fully.
-    if (numberOfPages == 1) {
-      [self showBlurViewDependentPropertiesWithProgress:1.0];
-    } else {
-      if (numberOfPages >= 2 && currentPage >= numberOfPages - 2) {
-        CGFloat progress = (currentPage - (numberOfPages - 2));
-        progress = MAX(0, MIN(1, progress));
-        if (progress == 0 && self.blurEffectView.alpha == progress)
-          return;
-        [self showBlurViewDependentPropertiesWithProgress:progress];
-      } else {
-        [self hideBlurViewDependentProperties];
+    // Decide if we should handle swiping/scroll progress between pages e.g.
+    // Top Sites <-> Group <-> Add group.
+    // There are two states:
+    // 1: When user swipes to `Add Group` page and user has wallpaper there is a
+    // a blur view above the wallpaper. Also, the bottom toolbar is hidden
+    // regardless of wallpaper.
+    // 2: When user swipes to `Top Sites` page, `Add` button transitions to hidden
+    // state with progress.
+    // Therefore, we track progress only if `SpeedDials` or `TopSites` is enabled.
+    // Otherwise, blur view is hidden since no `Add Group` page available for that
+    // state.
+
+    if (([self showSpeedDials] ||
+         (IsTopSitesEnabled() && [self showFrequentlyVisited]))) {
+
+      // Update `Add` button visibility only if both `Top Sites` and `Speed Dial`
+      // enabled. Otherwise `Add` button is not transition between visible or
+      // hidden state.
+      if (IsTopSitesEnabled() && [self showFrequentlyVisited] &&
+          [self showSpeedDials]) {
+        [self updateAddButtonVisibilityProgressWithCurrentPage:currentPage
+                                                 numberOfPages:numberOfPages];
       }
+
+      // Update visibility for blur view and toolbar view.
+      [self updateBlurAndToolbarViewVisibilityWithPages:numberOfPages
+                                            currentPage:currentPage];
+
+    } else {
+      [self resetBlurAndToolbarViewVisibility];
     }
-  } else {
-    [self hideBlurViewDependentProperties];
   }
 }
 
@@ -1378,6 +1626,10 @@ targetContentOffsetForProposedContentOffset:(CGPoint)proposedContentOffset {
       currentIndexPath.row == long(self.toolbarItems.count)) {
     [self.topToolbarView removeToolbarSelection];
   }
+}
+
+- (void)scrollViewDidEndScrollingAnimation:(UIScrollView*)scrollView {
+  [self observeVisibleCellScrollableContents];
 }
 
 #pragma mark - UIGestureRecognizerDelegate
@@ -1432,6 +1684,10 @@ targetContentOffsetForProposedContentOffset:(CGPoint)proposedContentOffset {
   } completion:^(BOOL finished) {
     [self scrollToItemWithIndex:self.selectedToolbarItemIndex animated:NO];
     [self scrollViewDidScroll:self.collectionView];
+
+    // See comments on `setTopToolbarAndPagesHiddenWithShowFrequentlyVisited`
+    // function.
+    [self showCollectionViewIfNeeded];
   }];
 }
 
@@ -1448,6 +1704,7 @@ targetContentOffsetForProposedContentOffset:(CGPoint)proposedContentOffset {
     if (strongSelf) {
       [strongSelf.topToolbarView
           selectItemWithIndex:strongSelf.selectedToolbarItemIndex];
+      [strongSelf handleAddButtonTransitionFromPreviousToNewIndex:index];
     }
   });
 }
@@ -1504,8 +1761,11 @@ targetContentOffsetForProposedContentOffset:(CGPoint)proposedContentOffset {
 }
 
 - (void)setShowCustomizeStartPageButtonEnabled:(BOOL)enabled {
-  _customizeStartPageButton.hidden =
-      !enabled && !ShouldShowCustomizeStartPageButton();
+  [self.bottomToolbarProvider setCustomizeButtonVisible:enabled];
+}
+
+- (void)setShowAddButtonEnabled:(BOOL)enabled {
+  [self.bottomToolbarProvider setAddButtonVisible:[self showAddButton]];
 }
 
 - (void)updateSortingActionVisibilityForPage:(NSInteger)index {
@@ -1566,6 +1826,26 @@ targetContentOffsetForProposedContentOffset:(CGPoint)proposedContentOffset {
   }
 }
 
+#pragma mark - VivaldiNTPBottomToolbarViewConsumer
+
+- (void)didTapAddButton {
+  if ([self currentActivePageItem]) {
+    [self didSelectAddNewSpeedDial:NO
+                            parent:[self currentActivePageItem]];
+  }
+}
+
+- (void)didTapAddFolderButton {
+  if ([self currentActivePageItem]) {
+    [self didSelectAddNewSpeedDial:YES
+                            parent:[self currentActivePageItem]];
+  }
+}
+
+- (void)didTapCustomizeButton {
+  [self handleCustomizeStartPageButtonTap];
+}
+
 #pragma mark - VivaldiNSDCoordinatorDelegate
 - (void)newSpeedDialCoordinatorDidDismiss {
   if (self.nsdCoordinator) {
@@ -1575,7 +1855,19 @@ targetContentOffsetForProposedContentOffset:(CGPoint)proposedContentOffset {
   }
 }
 
-#pragma mark - VIVALDI_SPEED_DIAL_CONTAINER_DELEGATE
+#pragma mark - VivaldiSpeedDialContainerDelegate
+
+- (void)collectionViewHasScrollableContent:(BOOL)hasScrollableContents
+                                    parent:(VivaldiSpeedDialItem*)parent {
+  if (![self currentActivePageItem] || !parent)
+    return;
+
+  if ([self currentActivePageItem].idValue == parent.idValue) {
+    [self.bottomToolbarProvider
+        setToolbarShouldShowShadow:hasScrollableContents];
+  }
+}
+
 - (void)didSelectItem:(VivaldiSpeedDialItem*)item
                parent:(VivaldiSpeedDialItem*)parent {
   // Navigate to the folder if the selected speed dial is a folder.
@@ -1584,6 +1876,9 @@ targetContentOffsetForProposedContentOffset:(CGPoint)proposedContentOffset {
     if (self.topScrollMenuContainer.alpha == 1) {
       [self.topScrollMenuContainer setAlpha:0];
     }
+
+    // Hide the bottom toolbar before navigating.
+    [self.bottomToolbarProvider handleToolbarVisibilityWithProgress:1];
 
     // Make sure navigation bar is not hidden when we navigate down to children
     // as the back button is required to come back to root.
@@ -1595,8 +1890,7 @@ targetContentOffsetForProposedContentOffset:(CGPoint)proposedContentOffset {
                                             parent:parent
                                          bookmarks:self.bookmarks
                                            browser:self.browser
-                                     faviconLoader:self.faviconLoader
-                                   backgroundImage:[self getWallpaperImage]];
+                                     faviconLoader:self.faviconLoader];
     controller.delegate = self;
     [self.navigationController pushViewController:controller
                                          animated:YES];

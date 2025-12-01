@@ -12,6 +12,7 @@
 #include "ash/public/cpp/lobster/lobster_result.h"
 #include "ash/public/cpp/lobster/lobster_session.h"
 #include "ash/public/cpp/lobster/lobster_system_state.h"
+#include "ash/public/cpp/lobster/lobster_text_input_context.h"
 #include "base/functional/callback.h"
 
 class AccountId;
@@ -24,7 +25,8 @@ class ASH_PUBLIC_EXPORT LobsterClient {
   virtual ~LobsterClient() = default;
 
   virtual void SetActiveSession(LobsterSession* session) = 0;
-  virtual LobsterSystemState GetSystemState() = 0;
+  virtual LobsterSystemState GetSystemState(
+      const LobsterTextInputContext& text_input_context) = 0;
   virtual void RequestCandidates(const std::string& query,
                                  int num_candidates,
                                  RequestCandidatesCallback) = 0;
@@ -44,6 +46,7 @@ class ASH_PUBLIC_EXPORT LobsterClient {
   // equivalent to getting the active user's account ID when this class was
   // created.
   virtual const AccountId& GetAccountId() = 0;
+  virtual void AnnounceLater(const std::u16string& message) = 0;
 };
 
 }  // namespace ash

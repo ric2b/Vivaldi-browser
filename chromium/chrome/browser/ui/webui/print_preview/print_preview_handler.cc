@@ -82,7 +82,6 @@
 #endif  // BUILDFLAG(IS_MAC)
 #endif
 #if BUILDFLAG(IS_CHROMEOS)
-#include "chrome/browser/ash/crosapi/browser_util.h"
 #include "chrome/browser/ash/crosapi/crosapi_ash.h"
 #include "chrome/browser/ash/crosapi/crosapi_manager.h"
 #include "chrome/browser/ash/crosapi/local_printer_ash.h"
@@ -652,9 +651,6 @@ void PrintPreviewHandler::HandleGetPreview(const base::Value::List& args) {
   base::Value::Dict settings = GetSettingsDictionary(json_str);
   int request_id = settings.FindInt(kPreviewRequestID).value();
   CHECK_GT(request_id, -1);
-  mojom::PrinterType printer_type = static_cast<mojom::PrinterType>(
-      settings.FindInt(kSettingPrinterType).value());
-  CHECK_NE(printer_type, mojom::PrinterType::kCloudDeprecated);
 
   CHECK(!base::Contains(preview_callbacks_, request_id));
   preview_callbacks_[request_id] = callback_id;

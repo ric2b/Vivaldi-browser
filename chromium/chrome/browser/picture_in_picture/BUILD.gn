@@ -96,9 +96,13 @@ source_set("impl") {
       "//components/strings:components_strings",
       "//components/url_formatter",
       "//net",
+      "//services/metrics/public/cpp:ukm_builders",
       "//third_party/blink/public/common:headers",
       "//ui/views",
     ]
+  }
+  if (use_ozone) {
+    deps += [ "//ui/ozone" ]
   }
 }
 
@@ -159,7 +163,6 @@ if (!is_android) {
       ":test_support_ui",
       "//base",
       "//base/test:test_support",
-      "//build:chromeos_buildflags",
       "//chrome/browser",
       "//chrome/browser/content_settings:content_settings_factory",
       "//chrome/browser/devtools:test_support",
@@ -197,6 +200,9 @@ if (!is_android) {
         "//chromeos/ui/base",
         "//ui/aura",
       ]
+    }
+    if (use_ozone) {
+      deps += [ "//ui/ozone" ]
     }
   }
 }

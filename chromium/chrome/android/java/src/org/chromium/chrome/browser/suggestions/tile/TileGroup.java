@@ -33,6 +33,7 @@ import org.chromium.chrome.browser.suggestions.SiteSuggestion;
 import org.chromium.chrome.browser.suggestions.SuggestionsMetrics;
 import org.chromium.chrome.browser.suggestions.SuggestionsOfflineModelObserver;
 import org.chromium.chrome.browser.suggestions.SuggestionsUiDelegate;
+import org.chromium.chrome.browser.suggestions.mostvisited.CustomLinkOperations;
 import org.chromium.chrome.browser.suggestions.mostvisited.MostVisitedSites;
 import org.chromium.ui.mojom.WindowOpenDisposition;
 import org.chromium.url.GURL;
@@ -49,11 +50,11 @@ public class TileGroup implements MostVisitedSites.Observer {
     /**
      * Performs work in other parts of the system that the {@link TileGroup} should not know about.
      */
-    public interface Delegate {
+    public interface Delegate extends CustomLinkOperations {
         /**
          * @param tile The tile corresponding to the most visited item to remove.
          * @param removalUndoneCallback The callback to invoke if the removal is reverted. The
-         *                              callback's argument is the URL being restored.
+         *     callback's argument is the URL being restored.
          */
         void removeMostVisitedItem(Tile tile, Callback<GURL> removalUndoneCallback);
 
@@ -63,6 +64,7 @@ public class TileGroup implements MostVisitedSites.Observer {
 
         /**
          * Gets the list of most visited sites.
+         *
          * @param observer The observer to be notified with the list of sites.
          * @param maxResults The maximum number of sites to retrieve.
          */
@@ -651,6 +653,37 @@ public class TileGroup implements MostVisitedSites.Observer {
         }
 
         @Override
+        public void pinItem() {
+            @Nullable Tile tile = findTile(mSuggestion);
+            if (tile == null) return;
+
+            GURL url = tile.getUrl();
+            // TODO(crbug.com/397422235): Trigger reload by having onSiteSuggestionsAvailable()
+            // call loadTiles() if the operation below succeeds.
+            mTileGroupDelegate.assignCustomLink(url, tile.getTitle(), url);
+        }
+
+        @Override
+        public void unpinItem() {
+            @Nullable Tile tile = findTile(mSuggestion);
+            if (tile == null) return;
+
+            // Unlike removeItem(), don't run {@link mOnRemoveRunnable}.
+
+            // TODO(crbug.com/397422235): Trigger reload by having onSiteSuggestionsAvailable()
+            // call loadTiles() if the operation below succeeds.
+            mTileGroupDelegate.deleteCustomLink(tile.getUrl());
+        }
+
+        @Override
+        public void editItem() {
+            @Nullable Tile tile = findTile(mSuggestion);
+            if (tile == null) return;
+
+            // TODO(crbug.com/397422235): Show "Edit shortcut" dialog.
+        }
+
+        @Override
         public GURL getUrl() {
             return mSuggestion.url;
         }
@@ -663,9 +696,13 @@ public class TileGroup implements MostVisitedSites.Observer {
         @Override
         public boolean isItemSupported(@ContextMenuItemId int menuItemId) {
             switch (menuItemId) {
-                    // Personalized tiles are the only tiles that can be removed.
                 case ContextMenuItemId.REMOVE:
-                    return mSuggestion.sectionType == TileSectionType.PERSONALIZED;
+                    return !isCustomizationItemSupported(/* matchIsCustomLink= */ true);
+                case ContextMenuItemId.PIN_THIS_SHORTCUT:
+                    return isCustomizationItemSupported(/* matchIsCustomLink= */ false);
+                case ContextMenuItemId.EDIT_SHORTCUT: // Fall through.
+                case ContextMenuItemId.UNPIN:
+                    return isCustomizationItemSupported(/* matchIsCustomLink= */ true);
                 default:
                     return true;
             }
@@ -698,6 +735,15 @@ public class TileGroup implements MostVisitedSites.Observer {
         @Override
         public void setOnRemoveRunnable(Runnable removeRunnable) {
             mOnRemoveRunnable = removeRunnable;
+        }
+
+        boolean isCustomizationItemSupported(boolean matchIsCustomLink) {
+            if (!ChromeFeatureList.sMostVisitedTilesCustomization.isEnabled()
+                    || mSuggestion.sectionType != TileSectionType.PERSONALIZED) {
+                return false;
+            }
+            boolean isCustomLink = (mSuggestion.source == TileSource.CUSTOM_LINKS);
+            return isCustomLink == matchIsCustomLink;
         }
     }
 

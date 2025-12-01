@@ -47,6 +47,8 @@ chromium-metrics-reviews@google.com.
   <variant name="HistoryInMemoryDB" summary="HistoryInMemoryDB"/>
   <variant name="InterestGroups" summary="InterestGroups"/>
   <variant name="InterestGroupStorage" summary="InterestGroupStorage"/>
+  <variant name="IpProtectionProbabilisticRevealTokens"
+      summary="IpProtectionProbabilisticRevealTokens"/>
   <variant name="KAnonymityService" summary="KAnonymityService"/>
   <variant name="LocalTraces" summary="LocalTraces"/>
   <variant name="MediaDeviceSalts" summary="MediaDeviceSalts"/>
@@ -55,6 +57,7 @@ chromium-metrics-reviews@google.com.
   <variant name="OptOutBlacklist" summary="OptOutBlacklist"/>
   <variant name="Passwords" summary="Passwords"/>
   <variant name="PermissionAuditingLogs" summary="PermissionAuditingLogs"/>
+  <variant name="PersistentCache" summary="PersistentCache"/>
   <variant name="PowerBookmarks" summary="PowerBookmarks"/>
   <variant name="Predictor" summary="Predictor"/>
   <variant name="PrivateAggregation" summary="PrivateAggregation"/>
@@ -81,6 +84,7 @@ chromium-metrics-reviews@google.com.
   <variant name="Calendar" summary="Calendar"/>
   <variant name="Contact" summary="Contact"/>
   <variant name="mail" summary="mail"/>
+  <variant name="AdBlockStats" summary="AdBlockStats"/>
   <!-- End Vivaldi -->
 </variants>
 
@@ -234,7 +238,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Sql.Statement.{DatabaseTag}.VMSteps" units="count"
-    expires_after="2025-06-22">
+    expires_after="2025-08-24">
   <owner>etienneb@chromium.org</owner>
   <owner>estade@chromium.org</owner>
   <owner>chrome-catan@google.com</owner>
@@ -246,7 +250,7 @@ chromium-metrics-reviews@google.com.
   <token key="DatabaseTag" variants="DatabaseTag"/>
 </histogram>
 
-<histogram name="Sql.vfs.SyncTime" units="ms" expires_after="2025-06-22">
+<histogram name="Sql.vfs.SyncTime" units="ms" expires_after="2025-08-24">
   <owner>etienneb@chromium.org</owner>
   <owner>estade@chromium.org</owner>
   <owner>chrome-catan@google.com</owner>

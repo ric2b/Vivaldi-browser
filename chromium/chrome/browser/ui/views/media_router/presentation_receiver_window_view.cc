@@ -17,7 +17,6 @@
 #include "chrome/browser/content_settings/page_specific_content_settings_delegate.h"
 #include "chrome/browser/password_manager/chrome_password_manager_client.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/safe_browsing/chrome_password_reuse_detection_manager_client.h"
 #include "chrome/browser/ssl/chrome_security_state_tab_helper.h"
 #include "chrome/browser/subresource_filter/chrome_content_subresource_filter_web_contents_helper_factory.h"
 #include "chrome/browser/translate/chrome_translate_client.h"
@@ -37,6 +36,7 @@
 #include "components/content_settings/browser/page_specific_content_settings.h"
 #include "components/infobars/content/content_infobar_manager.h"
 #include "components/omnibox/browser/location_bar_model_impl.h"
+#include "components/safe_browsing/buildflags.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/content_constants.h"
 #include "ui/base/accelerators/accelerator_manager.h"
@@ -59,6 +59,10 @@
 #include "ui/aura/window.h"
 #include "ui/aura/window_observer.h"
 #include "ui/gfx/native_widget_types.h"
+#endif
+
+#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+#include "chrome/browser/safe_browsing/chrome_password_reuse_detection_manager_client.h"
 #endif
 
 using content::WebContents;
@@ -172,7 +176,9 @@ void PresentationReceiverWindowView::Init() {
   ChromeSecurityStateTabHelper::CreateForWebContents(web_contents);
   autofill::ChromeAutofillClient::CreateForWebContents(web_contents);
   ChromePasswordManagerClient::CreateForWebContents(web_contents);
+#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
   ChromePasswordReuseDetectionManagerClient::CreateForWebContents(web_contents);
+#endif
   ManagePasswordsUIController::CreateForWebContents(web_contents);
   SearchTabHelper::CreateForWebContents(web_contents);
   TabDialogs::CreateForWebContents(web_contents);
@@ -197,9 +203,9 @@ void PresentationReceiverWindowView::Init() {
   box_owner->set_cross_axis_alignment(
       views::BoxLayout::CrossAxisAlignment::kStretch);
   auto* box = SetLayoutManager(std::move(box_owner));
-  AddChildView(location_bar_view_.get());
+  AddChildViewRaw(location_bar_view_.get());
   box->SetFlexForView(location_bar_view_, 0);
-  AddChildView(web_view);
+  AddChildViewRaw(web_view);
   box->SetFlexForView(web_view, 1);
 
   location_bar_view_->Init();
@@ -292,14 +298,14 @@ bool PresentationReceiverWindowView::IsFullscreen() const {
 }
 
 void PresentationReceiverWindowView::EnterFullscreen(
-    const GURL& url,
+    const url::Origin& origin,
     ExclusiveAccessBubbleType bubble_type,
     const int64_t display_id) {
   frame_->SetFullscreen(true);
 #if !BUILDFLAG(IS_CHROMEOS)
   OnFullscreenChanged();
 #endif
-  UpdateExclusiveAccessBubble({.url = url, .type = bubble_type},
+  UpdateExclusiveAccessBubble({.origin = origin, .type = bubble_type},
                               base::NullCallback());
 }
 
@@ -313,18 +319,21 @@ void PresentationReceiverWindowView::ExitFullscreen() {
 void PresentationReceiverWindowView::UpdateExclusiveAccessBubble(
     const ExclusiveAccessBubbleParams& params,
     ExclusiveAccessBubbleHideCallback first_hide_callback) {
+  bool should_hide_bubble =
+      !params.has_download && params.type == EXCLUSIVE_ACCESS_BUBBLE_TYPE_NONE;
+
 #if BUILDFLAG(IS_CHROMEOS)
   // On Chrome OS, we will not show the toast for the normal browser fullscreen
   // mode.  The 'F11' text is confusing since how to access F11 on a Chromebook
   // is not common knowledge and there is also a dedicated fullscreen toggle
   // button available.
-  if ((!params.has_download &&
-       params.type == EXCLUSIVE_ACCESS_BUBBLE_TYPE_NONE) ||
-      params.url.is_empty()) {
-#else
-  if (!params.has_download &&
-      params.type == EXCLUSIVE_ACCESS_BUBBLE_TYPE_NONE) {
+  if (params.type ==
+      EXCLUSIVE_ACCESS_BUBBLE_TYPE_BROWSER_FULLSCREEN_EXIT_INSTRUCTION) {
+    should_hide_bubble = true;
+  }
 #endif
+
+  if (should_hide_bubble) {
     // |exclusive_access_bubble_.reset()| will trigger callback for current
     // bubble with |ExclusiveAccessBubbleHideReason::kInterrupted| if available.
     exclusive_access_bubble_.reset();

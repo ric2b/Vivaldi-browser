@@ -28,8 +28,8 @@
 #include "components/autofill/content/browser/test_autofill_manager_injector.h"
 #include "components/autofill/content/browser/test_content_autofill_driver.h"
 #include "components/autofill/core/browser/data_manager/test_personal_data_manager.h"
-#include "components/autofill/core/browser/data_model/autofill_profile.h"
-#include "components/autofill/core/browser/data_model/autofill_profile_test_api.h"
+#include "components/autofill/core/browser/data_model/addresses/autofill_profile.h"
+#include "components/autofill/core/browser/data_model/addresses/autofill_profile_test_api.h"
 #include "components/autofill/core/browser/foundations/test_autofill_manager_waiter.h"
 #include "components/autofill/core/browser/foundations/test_browser_autofill_manager.h"
 #include "components/autofill/core/browser/integrators/mock_fast_checkout_client.h"
@@ -522,8 +522,7 @@ TEST_F(ChromeAutofillClientTest,
 }
 
 TEST_F(ChromeAutofillClientTest, AutofillFieldIPH_NotShownByPromoController) {
-  SetUpIphForTesting(
-      feature_engagement::kIPHAutofillPredictionImprovementsFeature);
+  SetUpIphForTesting(feature_engagement::kIPHAutofillAiOptInFeature);
 
   EXPECT_CALL(*autofill_field_promo_controller(), IsMaybeShowing)
       .WillRepeatedly(Return(false));
@@ -533,8 +532,7 @@ TEST_F(ChromeAutofillClientTest, AutofillFieldIPH_NotShownByPromoController) {
 }
 
 TEST_F(ChromeAutofillClientTest, AutofillFieldIPH_IsShown) {
-  SetUpIphForTesting(
-      feature_engagement::kIPHAutofillPredictionImprovementsFeature);
+  SetUpIphForTesting(feature_engagement::kIPHAutofillAiOptInFeature);
 
   InSequence sequence;
   EXPECT_CALL(*autofill_field_promo_controller(), IsMaybeShowing)
@@ -548,8 +546,7 @@ TEST_F(ChromeAutofillClientTest, AutofillFieldIPH_IsShown) {
 }
 
 TEST_F(ChromeAutofillClientTest, AutofillImprovedPredictionsIPH_IsShown) {
-  SetUpIphForTesting(
-      feature_engagement::kIPHAutofillPredictionImprovementsFeature);
+  SetUpIphForTesting(feature_engagement::kIPHAutofillAiOptInFeature);
 
   InSequence sequence;
   EXPECT_CALL(*autofill_field_promo_controller(), IsMaybeShowing)
@@ -564,8 +561,7 @@ TEST_F(ChromeAutofillClientTest, AutofillImprovedPredictionsIPH_IsShown) {
 
 TEST_F(ChromeAutofillClientTest,
        AutofillFieldIPH_HideOnShowAutofillSuggestions) {
-  SetUpIphForTesting(
-      feature_engagement::kIPHAutofillPredictionImprovementsFeature);
+  SetUpIphForTesting(feature_engagement::kIPHAutofillAiOptInFeature);
   auto delegate = std::make_unique<MockAutofillSuggestionDelegate>();
 
   EXPECT_CALL(*autofill_field_promo_controller(), Hide);
@@ -609,11 +605,9 @@ class ChromeAutofillClientTestWithWindow : public BrowserWithTestWindowTest {
 };
 
 TEST_F(ChromeAutofillClientTestWithWindow, AutofillFieldIPH_NotifyFeatureUsed) {
-  EXPECT_CALL(
-      *feature_promo_controller(),
-      EndPromo(
-          Ref(feature_engagement::kIPHAutofillPredictionImprovementsFeature),
-          user_education::EndFeaturePromoReason::kFeatureEngaged));
+  EXPECT_CALL(*feature_promo_controller(),
+              EndPromo(Ref(feature_engagement::kIPHAutofillAiOptInFeature),
+                       user_education::EndFeaturePromoReason::kFeatureEngaged));
   client()->NotifyIphFeatureUsed(AutofillClient::IphFeature::kAutofillAi);
 }
 #endif

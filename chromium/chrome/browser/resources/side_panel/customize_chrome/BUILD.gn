@@ -3,6 +3,7 @@
 # found in the LICENSE file.
 
 import("//ui/webui/resources/tools/build_webui.gni")
+import("//ui/webui/webui_features.gni")
 
 assert(!is_android)
 
@@ -32,6 +33,8 @@ build_webui("build") {
     "customize_toolbar/customize_toolbar_api_proxy.ts",
     "customize_toolbar/toolbar.html.ts",
     "customize_toolbar/toolbar.ts",
+    "footer.html.ts",
+    "footer.ts",
     "hover_button.html.ts",
     "hover_button.ts",
     "shortcuts.html.ts",
@@ -58,10 +61,12 @@ build_webui("build") {
     "categories.css",
     "check_mark_wrapper.css",
     "customize_toolbar/toolbar.css",
+    "footer.css",
     "hover_button.css",
     "shortcuts.css",
     "theme_snapshot.css",
     "themes.css",
+    "toggle_container_shared.css",
     "wallpaper_search/combobox/customize_chrome_combobox.css",
     "wallpaper_search/wallpaper_search.css",
     "wallpaper_search/wallpaper_search_tile.css",
@@ -97,4 +102,5 @@ build_webui("build") {
             "$root_gen_dir/chrome/browser/resources/side_panel/shared/tsc/*",
             target_gen_dir) ]
   webui_context_type = "trusted"
+  generate_code_cache = enable_webui_generate_code_cache
 }

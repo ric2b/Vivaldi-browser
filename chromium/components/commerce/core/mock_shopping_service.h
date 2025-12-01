@@ -41,6 +41,10 @@ class MockShoppingService : public commerce::ShoppingService {
               (const GURL& url, commerce::ProductInfoCallback callback),
               (override));
   MOCK_METHOD(void,
+              GetProductInfoForUrls,
+              (const std::vector<GURL>& url, ProductInfoBatchCallback callback),
+              (override));
+  MOCK_METHOD(void,
               GetPriceInsightsInfoForUrl,
               (const GURL& url, commerce::PriceInsightsInfoCallback callback),
               (override));
@@ -120,19 +124,6 @@ class MockShoppingService : public commerce::ShoppingService {
               (const GURL& url, DiscountInfoCallback callback),
               (override));
   MOCK_METHOD(void,
-              GetAllParcelStatuses,
-              (GetParcelStatusCallback callback),
-              (override));
-  MOCK_METHOD(void,
-              StopTrackingParcel,
-              (const std::string& tracking_id,
-               base::OnceCallback<void(bool)> callback),
-              (override));
-  MOCK_METHOD(void,
-              StopTrackingAllParcels,
-              (base::OnceCallback<void(bool)> callback),
-              (override));
-  MOCK_METHOD(void,
               GetProductSpecificationsForUrls,
               (const std::vector<GURL>& urls,
                ProductSpecificationsCallback callback),
@@ -172,8 +163,6 @@ class MockShoppingService : public commerce::ShoppingService {
       std::vector<const bookmarks::BookmarkNode*> bookmarks);
   void SetResponseForGetDiscountInfoForUrl(
       const std::vector<DiscountInfo>& infos);
-  void SetGetAllParcelStatusesCallbackValue(
-      std::vector<ParcelTrackingStatus> parcels);
   void SetResponseForGetProductSpecificationsForUrls(
       ProductSpecifications specs);
 

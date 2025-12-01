@@ -31,7 +31,6 @@
 #include "third_party/blink/renderer/platform/text/text_direction.h"
 #include "third_party/blink/renderer/platform/wtf/allocator/allocator.h"
 #include "third_party/blink/renderer/platform/wtf/text/string_view.h"
-#include "third_party/blink/renderer/platform/wtf/text/utf16.h"
 #include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
 
 namespace blink {
@@ -41,6 +40,9 @@ class PLATFORM_EXPORT TextRun final {
   DISALLOW_NEW();
 
  public:
+  // For all constructors, the contents of the specified string must
+  // outlive the created TextRun instance.
+
   explicit TextRun(base::span<const LChar> c) : TextRun(StringView(c)) {}
 
   explicit TextRun(base::span<const UChar> c) : TextRun(StringView(c)) {}
@@ -85,12 +87,6 @@ class PLATFORM_EXPORT TextRun final {
   base::span<const UChar> Span16() const { return text_.Span16(); }
 
   const StringView& ToStringView() const { return text_; }
-
-  UChar32 CodepointAtAndNext(unsigned& i) const {
-    if (Is8Bit())
-      return text_[i++];
-    return CodePointAtAndNext(Span16(), i);
-  }
 
   bool Is8Bit() const { return text_.Is8Bit(); }
   unsigned length() const { return text_.length(); }

@@ -125,7 +125,7 @@ class MoqtIngestionHandler {
                               "disallowed characters; namespace: "
                            << track_namespace;
       return MoqtAnnounceErrorReason{
-          MoqtAnnounceErrorCode::kInternalError,
+          SubscribeErrorCode::kInternalError,
           "Track namespace contains disallowed characters"};
     }
 
@@ -144,7 +144,7 @@ class MoqtIngestionHandler {
       subscribed_namespaces_.erase(it);
       QUICHE_LOG(ERROR) << "Failed to create directory " << directory_path
                         << "; " << status;
-      return MoqtAnnounceErrorReason{MoqtAnnounceErrorCode::kInternalError,
+      return MoqtAnnounceErrorReason{SubscribeErrorCode::kInternalError,
                                      "Failed to create output directory"};
     }
 
@@ -154,7 +154,8 @@ class MoqtIngestionHandler {
     for (absl::string_view track : tracks_to_subscribe) {
       FullTrackName full_track_name = track_namespace;
       full_track_name.AddElement(track);
-      session_->SubscribeCurrentGroup(full_track_name, &it->second);
+      session_->JoiningFetch(full_track_name, &it->second, 0,
+                             MoqtSubscribeParameters());
     }
 
     return std::nullopt;
@@ -191,6 +192,8 @@ class MoqtIngestionHandler {
       output.write(object.data(), object.size());
       output.close();
     }
+
+    void OnSubscribeDone(FullTrackName /*full_track_name*/) override {}
 
    private:
     std::string directory_;

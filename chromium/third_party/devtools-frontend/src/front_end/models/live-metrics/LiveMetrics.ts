@@ -18,7 +18,11 @@ const UIStrings = {
    */
   lcpEmulationWarning:
       'Simulating a new device after the page loads can affect LCP. Reload the page after simulating a new device for accurate LCP data.',
-};
+  /**
+   * @description Warning text indicating that the Largest Contentful Paint (LCP) performance metric was affected by the page loading in the background.
+   */
+  lcpVisibilityWarning: 'LCP value may be inflated because the page started loading in the background.',
+} as const;
 
 const str_ = i18n.i18n.registerUIStrings('models/live-metrics/LiveMetrics.ts', UIStrings);
 const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
@@ -230,7 +234,7 @@ export class LiveMetrics extends Common.ObjectWrapper.ObjectWrapper<EventTypes> 
       this.#lcpValue?.nodeRef,
       ...this.#interactions.values().map(i => i.nodeRef),
       ...this.#layoutShifts.flatMap(shift => shift.affectedNodeRefs),
-    ].filter((nodeRef): nodeRef is NodeRef => Boolean(nodeRef));
+    ].filter(nodeRef => !!nodeRef);
 
     const idsToRefresh = new Set(toRefresh.map(nodeRef => nodeRef.node.backendNodeId()));
     const nodes = await domModel.pushNodesByBackendIdsToFrontend(idsToRefresh);
@@ -275,6 +279,10 @@ export class LiveMetrics extends Common.ObjectWrapper.ObjectWrapper<EventTypes> 
 
         if (this.#lastEmulationChangeTime && Date.now() - this.#lastEmulationChangeTime < 500) {
           warnings.push(i18nString(UIStrings.lcpEmulationWarning));
+        }
+
+        if (webVitalsEvent.startedHidden) {
+          warnings.push(i18nString(UIStrings.lcpVisibilityWarning));
         }
 
         this.#lcpValue = lcpEvent;
@@ -343,8 +351,7 @@ export class LiveMetrics extends Common.ObjectWrapper.ObjectWrapper<EventTypes> 
           return this.#resolveNodeRef(nodeIndex, executionContextId);
         });
 
-        const affectedNodes =
-            (await Promise.all(nodePromises)).filter((nodeRef): nodeRef is NodeRef => Boolean(nodeRef));
+        const affectedNodes = (await Promise.all(nodePromises)).filter(nodeRef => !!nodeRef);
 
         const layoutShift: LayoutShift = {
           score: webVitalsEvent.score,
@@ -389,7 +396,7 @@ export class LiveMetrics extends Common.ObjectWrapper.ObjectWrapper<EventTypes> 
     }
 
     const frameManager = SDK.FrameManager.FrameManager.instance();
-    return frameManager.getOrWaitForFrame(frameId);
+    return await frameManager.getOrWaitForFrame(frameId);
   }
 
   async #onBindingCalled(event: {data: Protocol.Runtime.BindingCalledEvent}): Promise<void> {
@@ -401,20 +408,25 @@ export class LiveMetrics extends Common.ObjectWrapper.ObjectWrapper<EventTypes> 
     // Async tasks can be performed while handling an event (e.g. resolving DOM node)
     // Use a mutex here to ensure the events are handled in the order they are received.
     await this.#mutex.run(async () => {
-      const frame = await this.#getFrameForExecutionContextId(data.executionContextId);
-      if (!frame?.isPrimaryFrame()) {
-        return;
-      }
-
       const webVitalsEvent = JSON.parse(data.payload) as Spec.WebVitalsEvent;
 
-      // Previously injected scripts shouldn't persist, this is just a defensive measure.
-      // Ensure we only handle events from the same execution context as the most recent "reset" event.
-      // "reset" events are only emitted once when the script is injected or a bfcache restoration.
-      if (webVitalsEvent.name === 'reset') {
+      // This ensures that `#lastResetContextId` will always be an execution context on the
+      // primary frame. If we receive events from this execution context then we automatically
+      // know that they are for the primary frame.
+      if (this.#lastResetContextId !== data.executionContextId) {
+        if (webVitalsEvent.name !== 'reset') {
+          return;
+        }
+
+        // We should avoid calling this function for every event.
+        // If an interaction triggers a pre-rendered navigation then the old primary frame could
+        // be removed before we reach this point, and then it will hang forever.
+        const frame = await this.#getFrameForExecutionContextId(data.executionContextId);
+        if (!frame?.isPrimaryFrame()) {
+          return;
+        }
+
         this.#lastResetContextId = data.executionContextId;
-      } else if (this.#lastResetContextId !== data.executionContextId) {
-        return;
       }
 
       await this.#handleWebVitalsEvent(webVitalsEvent, data.executionContextId);

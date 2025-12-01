@@ -40,6 +40,7 @@ class HttpTransaction;
 class HttpUserAgentSettings;
 class SSLPrivateKey;
 struct TransportInfo;
+struct LoadTimingInternalInfo;
 class UploadDataStream;
 
 // A URLRequestJob subclass that is built on top of HttpTransaction. It
@@ -171,8 +172,12 @@ class NET_EXPORT_PRIVATE URLRequestHttpJob : public URLRequestJob {
   LoadState GetLoadState() const override;
   bool GetMimeType(std::string* mime_type) const override;
   bool GetCharset(std::string* charset) override;
+  void GetClientSideContentDecodingTypes(
+      std::vector<net::SourceStreamType>* types) const override;
   void GetResponseInfo(HttpResponseInfo* info) override;
   void GetLoadTimingInfo(LoadTimingInfo* load_timing_info) const override;
+  void PopulateLoadTimingInternalInfo(
+      LoadTimingInternalInfo* load_timing_internal_info) const override;
   bool GetTransactionRemoteEndpoint(IPEndPoint* endpoint) const override;
   int GetResponseCode() const override;
   void PopulateNetErrorDetails(NetErrorDetails* details) const override;
@@ -328,6 +333,18 @@ class NET_EXPORT_PRIVATE URLRequestHttpJob : public URLRequestJob {
   // The First-Party Set metadata associated with this job. Set when the job is
   // started.
   FirstPartySetMetadata first_party_set_metadata_;
+
+  // The number of times this request was deferred due to a Device Bound
+  // Session.
+  size_t device_bound_session_deferral_count_ = 0;
+
+  // The time of the first deferral due to Device Bound Sessions. This
+  // is used to measure the total delay of Device Bound Session
+  // Deferral.
+  base::TimeTicks device_bound_session_first_deferral_;
+
+  // The content encoding types that need to be handled in the client side.
+  std::vector<net::SourceStreamType> client_side_content_decoding_types_;
 
   base::WeakPtrFactory<URLRequestHttpJob> weak_factory_{this};
 };

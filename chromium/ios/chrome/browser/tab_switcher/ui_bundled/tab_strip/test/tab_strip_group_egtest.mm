@@ -229,13 +229,16 @@ void LongPressTabWithTitle(NSString* title) {
 - (AppLaunchConfiguration)appConfigurationForTestCase {
   AppLaunchConfiguration config;
   config.features_enabled.push_back(kTabGroupsIPad);
-  config.features_enabled.push_back(kModernTabStrip);
   config.features_enabled.push_back(kTabGroupSync);
   return config;
 }
 
 // Tests creating a tab group and opening the grouped tab.
 - (void)testCompleteTabGroupCreation {
+  if (@available(iOS 17, *)) {
+  } else if ([ChromeEarlGrey isIPadIdiom]) {
+    EARL_GREY_TEST_SKIPPED(@"Only available on iOS 17+ on iPad.");
+  }
   if ([ChromeEarlGrey isCompactWidth]) {
     EARL_GREY_TEST_SKIPPED(@"No tab strip on this device.");
   }
@@ -256,6 +259,10 @@ void LongPressTabWithTitle(NSString* title) {
 
 // Tests canceling a tab group creation.
 - (void)testCancelTabGroupCreation {
+  if (@available(iOS 17, *)) {
+  } else if ([ChromeEarlGrey isIPadIdiom]) {
+    EARL_GREY_TEST_SKIPPED(@"Only available on iOS 17+ on iPad.");
+  }
   if ([ChromeEarlGrey isCompactWidth]) {
     EARL_GREY_TEST_SKIPPED(@"No tab strip on this device.");
   }
@@ -276,6 +283,10 @@ void LongPressTabWithTitle(NSString* title) {
 
 // Tests that a tab can be closed using its context menu.
 - (void)testTabStripContextMenuCloseTab {
+  if (@available(iOS 17, *)) {
+  } else if ([ChromeEarlGrey isIPadIdiom]) {
+    EARL_GREY_TEST_SKIPPED(@"Only available on iOS 17+ on iPad.");
+  }
   if ([ChromeEarlGrey isCompactWidth]) {
     EARL_GREY_TEST_SKIPPED(@"No tab strip on this device.");
   }
@@ -296,6 +307,10 @@ void LongPressTabWithTitle(NSString* title) {
 
 // Tests that a tab can be closed using the close button in the tab cell.
 - (void)testTabStripCloseTab {
+  if (@available(iOS 17, *)) {
+  } else if ([ChromeEarlGrey isIPadIdiom]) {
+    EARL_GREY_TEST_SKIPPED(@"Only available on iOS 17+ on iPad.");
+  }
   if ([ChromeEarlGrey isCompactWidth]) {
     EARL_GREY_TEST_SKIPPED(@"No tab strip on this device.");
   }
@@ -318,6 +333,10 @@ void LongPressTabWithTitle(NSString* title) {
 
 // Tests that a tab can be added to a new named group using the context menu.
 - (void)testTabStripCreateNewNamedGroupWithTab {
+  if (@available(iOS 17, *)) {
+  } else if ([ChromeEarlGrey isIPadIdiom]) {
+    EARL_GREY_TEST_SKIPPED(@"Only available on iOS 17+ on iPad.");
+  }
   if ([ChromeEarlGrey isCompactWidth]) {
     EARL_GREY_TEST_SKIPPED(@"No tab strip on this device.");
   }
@@ -331,6 +350,10 @@ void LongPressTabWithTitle(NSString* title) {
 
 // Tests that adding a tab to an unnamed group increases the count in the title.
 - (void)testTabStripAddingToUnnamedGroupIncreasesCountInTitle {
+  if (@available(iOS 17, *)) {
+  } else if ([ChromeEarlGrey isIPadIdiom]) {
+    EARL_GREY_TEST_SKIPPED(@"Only available on iOS 17+ on iPad.");
+  }
   if ([ChromeEarlGrey isCompactWidth]) {
     EARL_GREY_TEST_SKIPPED(@"No tab strip on this device.");
   }
@@ -362,6 +385,10 @@ void LongPressTabWithTitle(NSString* title) {
 
 // Tests that a tab can be added to a new unnamed group using the context menu.
 - (void)testTabStripCancelTabGroupCreation {
+  if (@available(iOS 17, *)) {
+  } else if ([ChromeEarlGrey isIPadIdiom]) {
+    EARL_GREY_TEST_SKIPPED(@"Only available on iOS 17+ on iPad.");
+  }
   if ([ChromeEarlGrey isCompactWidth]) {
     EARL_GREY_TEST_SKIPPED(@"No tab strip on this device.");
   }
@@ -392,6 +419,10 @@ void LongPressTabWithTitle(NSString* title) {
 
 // Tests that a tab can be removed from a tab group.
 - (void)testTabStripRemoveTabFromGroup {
+  if (@available(iOS 17, *)) {
+  } else if ([ChromeEarlGrey isIPadIdiom]) {
+    EARL_GREY_TEST_SKIPPED(@"Only available on iOS 17+ on iPad.");
+  }
   if ([ChromeEarlGrey isCompactWidth]) {
     EARL_GREY_TEST_SKIPPED(@"No tab strip on this device.");
   }
@@ -428,6 +459,10 @@ void LongPressTabWithTitle(NSString* title) {
 
 // Tests that a tab can be added to an existing tab group.
 - (void)testTabStripAddTabToGroup {
+  if (@available(iOS 17, *)) {
+  } else if ([ChromeEarlGrey isIPadIdiom]) {
+    EARL_GREY_TEST_SKIPPED(@"Only available on iOS 17+ on iPad.");
+  }
   if ([ChromeEarlGrey isCompactWidth]) {
     EARL_GREY_TEST_SKIPPED(@"No tab strip on this device.");
   }
@@ -469,6 +504,10 @@ void LongPressTabWithTitle(NSString* title) {
 
 // Tests that a tab can be moved to another tab group.
 - (void)testTabStripMoveTabToGroup {
+  if (@available(iOS 17, *)) {
+  } else if ([ChromeEarlGrey isIPadIdiom]) {
+    EARL_GREY_TEST_SKIPPED(@"Only available on iOS 17+ on iPad.");
+  }
   if ([ChromeEarlGrey isCompactWidth]) {
     EARL_GREY_TEST_SKIPPED(@"No tab strip on this device.");
   }
@@ -519,6 +558,10 @@ void LongPressTabWithTitle(NSString* title) {
 
 // Tests that a tab group can be collapsed and expanded.
 - (void)testTabStripCollapseExpandGroup {
+  if (@available(iOS 17, *)) {
+  } else if ([ChromeEarlGrey isIPadIdiom]) {
+    EARL_GREY_TEST_SKIPPED(@"Only available on iOS 17+ on iPad.");
+  }
   if ([ChromeEarlGrey isCompactWidth]) {
     EARL_GREY_TEST_SKIPPED(@"No tab strip on this device.");
   }
@@ -546,6 +589,10 @@ void LongPressTabWithTitle(NSString* title) {
 
 // Tests that a tab group can be renamed.
 - (void)testTabStripRenameGroup {
+  if (@available(iOS 17, *)) {
+  } else if ([ChromeEarlGrey isIPadIdiom]) {
+    EARL_GREY_TEST_SKIPPED(@"Only available on iOS 17+ on iPad.");
+  }
   if ([ChromeEarlGrey isCompactWidth]) {
     EARL_GREY_TEST_SKIPPED(@"No tab strip on this device.");
   }
@@ -579,6 +626,10 @@ void LongPressTabWithTitle(NSString* title) {
 
 // Tests that a new tab can be added to a tab group.
 - (void)testTabStripAddNewTabInGroup {
+  if (@available(iOS 17, *)) {
+  } else if ([ChromeEarlGrey isIPadIdiom]) {
+    EARL_GREY_TEST_SKIPPED(@"Only available on iOS 17+ on iPad.");
+  }
   if ([ChromeEarlGrey isCompactWidth]) {
     EARL_GREY_TEST_SKIPPED(@"No tab strip on this device.");
   }
@@ -618,6 +669,10 @@ void LongPressTabWithTitle(NSString* title) {
 
 // Tests that a tab group can be ungrouped.
 - (void)testTabStripUngroupGroup {
+  if (@available(iOS 17, *)) {
+  } else if ([ChromeEarlGrey isIPadIdiom]) {
+    EARL_GREY_TEST_SKIPPED(@"Only available on iOS 17+ on iPad.");
+  }
   if ([ChromeEarlGrey isCompactWidth]) {
     EARL_GREY_TEST_SKIPPED(@"No tab strip on this device.");
   }
@@ -651,6 +706,10 @@ void LongPressTabWithTitle(NSString* title) {
 
 // Tests that a tab group can be deleted.
 - (void)testTabStripDeleteGroup {
+  if (@available(iOS 17, *)) {
+  } else if ([ChromeEarlGrey isIPadIdiom]) {
+    EARL_GREY_TEST_SKIPPED(@"Only available on iOS 17+ on iPad.");
+  }
   if ([ChromeEarlGrey isCompactWidth]) {
     EARL_GREY_TEST_SKIPPED(@"No tab strip on this device.");
   }
@@ -690,6 +749,10 @@ void LongPressTabWithTitle(NSString* title) {
 
 // Tests that a tab group can be closed.
 - (void)testTabStripCloseGroup {
+  if (@available(iOS 17, *)) {
+  } else if ([ChromeEarlGrey isIPadIdiom]) {
+    EARL_GREY_TEST_SKIPPED(@"Only available on iOS 17+ on iPad.");
+  }
   if ([ChromeEarlGrey isCompactWidth]) {
     EARL_GREY_TEST_SKIPPED(@"No tab strip on this device.");
   }
@@ -725,6 +788,10 @@ void LongPressTabWithTitle(NSString* title) {
 
 // Tests the "Close Other Tabs" action when a tab group is involved.
 - (void)testTabStripCloseOtherTabsWithGroup {
+  if (@available(iOS 17, *)) {
+  } else if ([ChromeEarlGrey isIPadIdiom]) {
+    EARL_GREY_TEST_SKIPPED(@"Only available on iOS 17+ on iPad.");
+  }
   if ([ChromeEarlGrey isCompactWidth]) {
     EARL_GREY_TEST_SKIPPED(@"No tab strip on this device.");
   }
@@ -766,6 +833,10 @@ void LongPressTabWithTitle(NSString* title) {
 
 // Tests the "Close Other Tabs" action when a tab group is not involved.
 - (void)testTabStripCloseOtherTabsWithoutGroup {
+  if (@available(iOS 17, *)) {
+  } else if ([ChromeEarlGrey isIPadIdiom]) {
+    EARL_GREY_TEST_SKIPPED(@"Only available on iOS 17+ on iPad.");
+  }
   if ([ChromeEarlGrey isCompactWidth]) {
     EARL_GREY_TEST_SKIPPED(@"No tab strip on this device.");
   }
@@ -807,6 +878,10 @@ void LongPressTabWithTitle(NSString* title) {
 // Tests dragging the last tab out of a group then accepting to delete the
 // group.
 - (void)testDragLastTabOutOfGroupDelete {
+  if (@available(iOS 17, *)) {
+  } else if ([ChromeEarlGrey isIPadIdiom]) {
+    EARL_GREY_TEST_SKIPPED(@"Only available on iOS 17+ on iPad.");
+  }
   if ([ChromeEarlGrey isCompactWidth]) {
     EARL_GREY_TEST_SKIPPED(@"No tab strip on this device.");
   }
@@ -848,6 +923,10 @@ void LongPressTabWithTitle(NSString* title) {
 
 // Tests dragging the last tab out of a group then cancelling it.
 - (void)testDragLastTabOutOfGroupCancel {
+  if (@available(iOS 17, *)) {
+  } else if ([ChromeEarlGrey isIPadIdiom]) {
+    EARL_GREY_TEST_SKIPPED(@"Only available on iOS 17+ on iPad.");
+  }
   if ([ChromeEarlGrey isCompactWidth]) {
     EARL_GREY_TEST_SKIPPED(@"No tab strip on this device.");
   }
@@ -888,6 +967,10 @@ void LongPressTabWithTitle(NSString* title) {
 
 // Tests that a tab group can be deleted.
 - (void)testTabStripCancelConfirmation {
+  if (@available(iOS 17, *)) {
+  } else if ([ChromeEarlGrey isIPadIdiom]) {
+    EARL_GREY_TEST_SKIPPED(@"Only available on iOS 17+ on iPad.");
+  }
   if ([ChromeEarlGrey isCompactWidth]) {
     EARL_GREY_TEST_SKIPPED(@"No tab strip on this device.");
   }
@@ -922,6 +1005,10 @@ void LongPressTabWithTitle(NSString* title) {
 
 // Tests the tab group snackbar CTA.
 - (void)testTabStripTabGroupSnackbarAction {
+  if (@available(iOS 17, *)) {
+  } else if ([ChromeEarlGrey isIPadIdiom]) {
+    EARL_GREY_TEST_SKIPPED(@"Only available on iOS 17+ on iPad.");
+  }
   if ([ChromeEarlGrey isCompactWidth]) {
     EARL_GREY_TEST_SKIPPED(@"No tab strip on this device.");
   }

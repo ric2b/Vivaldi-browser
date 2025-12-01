@@ -57,6 +57,18 @@ bool IsFedCmFlexibleFieldsEnabled();
 // Whether showing filtered accounts is enabled.
 bool IsFedCmShowFilteredAccountsEnabled();
 
+// Whether lightweight FedCM credentials are enabled.
+bool IsFedCmLightweightModeEnabled();
+
+// Whether phone/username is supported and name/email are optional.
+bool IsFedCmAlternativeIdentifiersEnabled();
+
+// Whether cooldown on ignore is enabled.
+bool IsFedCmCooldownOnIgnoreEnabled();
+
+// Whether to support the newer syntax for the "Use Other Account"
+// and account labels features.
+bool IsFedCmUseOtherAccountAndLabelsNewSyntaxEnabled();
 }  // namespace content
 
 #endif  // CONTENT_BROWSER_WEBID_FLAGS_H_

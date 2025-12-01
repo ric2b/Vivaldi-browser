@@ -402,7 +402,7 @@ const UIStrings = {
    *@description Text in grid and details: Preloading failed.
    */
   statusFailure: 'Failure',
-};
+} as const;
 
 const str_ = i18n.i18n.registerUIStrings('panels/application/preloading/components/PreloadingString.ts', UIStrings);
 const i18nLazyString = i18n.i18n.getLazilyComputedLocalizedString.bind(undefined, str_);
@@ -436,6 +436,9 @@ export const PrefetchReasonDescription: {[key: string]: {name: () => Platform.UI
   PrefetchEvictedAfterCandidateRemoved: {name: i18nLazyString(UIStrings.PrefetchEvictedAfterCandidateRemoved)},
   PrefetchNotEligibleBatterySaverEnabled: {name: i18nLazyString(UIStrings.PrefetchNotEligibleBatterySaverEnabled)},
   PrefetchNotEligiblePreloadingDisabled: {name: i18nLazyString(UIStrings.PrefetchNotEligiblePreloadingDisabled)},
+  PrefetchNotEligibleUserHasServiceWorkerNoFetchHandler: {name: () => i18n.i18n.lockedString('Unknown')},
+  PrefetchNotEligibleRedirectFromServiceWorker: {name: () => i18n.i18n.lockedString('Unknown')},
+  PrefetchNotEligibleRedirectToServiceWorker: {name: () => i18n.i18n.lockedString('Unknown')},
 };
 
 // Decoding PrefetchFinalStatus prefetchAttempt to failure description.
@@ -510,6 +513,15 @@ export function prefetchFailureReason({prefetchStatus}: SDK.PreloadingModel.Pref
       return PrefetchReasonDescription['PrefetchNotEligibleBatterySaverEnabled'].name();
     case Protocol.Preload.PrefetchStatus.PrefetchNotEligiblePreloadingDisabled:
       return PrefetchReasonDescription['PrefetchNotEligiblePreloadingDisabled'].name();
+    case Protocol.Preload.PrefetchStatus.PrefetchNotEligibleUserHasServiceWorkerNoFetchHandler:
+      return PrefetchReasonDescription['PrefetchNotEligibleUserHasServiceWorkerNoFetchHandler'].name();
+    case Protocol.Preload.PrefetchStatus.PrefetchNotEligibleRedirectFromServiceWorker:
+      return PrefetchReasonDescription['PrefetchNotEligibleRedirectFromServiceWorker'].name();
+    case Protocol.Preload.PrefetchStatus.PrefetchNotEligibleRedirectToServiceWorker:
+      return PrefetchReasonDescription['PrefetchNotEligibleRedirectToServiceWorker'].name();
+    case Protocol.Preload.PrefetchStatus.PrefetchEvictedAfterBrowsingDataRemoved:
+      // TODO(crbug.com/40262310): Add description.
+      return null;
     default:
       // Note that we use switch and exhaustiveness check to prevent to
       // forget updating these strings, but allow to handle unknown
@@ -695,9 +707,8 @@ export function prerenderFailureReason(attempt: SDK.PreloadingModel.PrerenderAtt
       // Note that we use switch and exhaustiveness check to prevent to
       // forget updating these strings, but allow to handle unknown
       // PrerenderFinalStatus at runtime.
-      return i18n.i18n.lockedString(`Unknown failure reason: ${
-          attempt.prerenderStatus as
-          'See https://docs.google.com/document/d/1PnrfowsZMt62PX1EvvTp2Nqs3ji1zrklrAEe1JYbkTk'}`);
+      // See https://docs.google.com/document/d/1PnrfowsZMt62PX1EvvTp2Nqs3ji1zrklrAEe1JYbkTk'
+      return i18n.i18n.lockedString(`Unknown failure reason: ${attempt.prerenderStatus as string}`);
   }
 }
 

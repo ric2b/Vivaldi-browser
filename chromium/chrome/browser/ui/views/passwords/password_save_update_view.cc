@@ -21,11 +21,11 @@
 #include "chrome/browser/ui/hats/hats_service_factory.h"
 #include "chrome/browser/ui/passwords/password_dialog_prompts.h"
 #include "chrome/browser/ui/passwords/ui_utils.h"
+#include "chrome/browser/ui/signin/promos/bubble_signin_promo_view.h"
 #include "chrome/browser/ui/views/chrome_layout_provider.h"
 #include "chrome/browser/ui/views/chrome_typography.h"
 #include "chrome/browser/ui/views/passwords/credentials_item_view.h"
 #include "chrome/browser/ui/views/passwords/views_utils.h"
-#include "chrome/browser/ui/views/promos/autofill_bubble_signin_promo_view.h"
 #include "chrome/grit/branded_strings.h"
 #include "chrome/grit/generated_resources.h"
 #include "chrome/grit/theme_resources.h"
@@ -135,7 +135,7 @@ PasswordSaveUpdateView::PasswordSaveUpdateView(
     // `accessibility_alert_` to inform screen readers about that change.
     accessibility_alert_ =
         root_view->AddChildView(std::make_unique<views::View>());
-    AddChildView(accessibility_alert_.get());
+    AddChildViewRaw(accessibility_alert_.get());
   }
 
   {
@@ -209,11 +209,14 @@ bool PasswordSaveUpdateView::CloseOrReplaceWithPromo() {
   accessibility_alert_ = AddChildView(std::move(accessibility_view));
 
   // Show the sign in promo.
-  auto sign_in_promo = std::make_unique<AutofillBubbleSignInPromoView>(
+  auto sign_in_promo = std::make_unique<BubbleSignInPromoView>(
       controller_.GetWebContents(),
       signin_metrics::AccessPoint::kPasswordBubble,
       PasswordFormUniqueKey(controller_.pending_password()));
   AddChildView(std::move(sign_in_promo));
+  // TODO(crbug.com/41493925) remove this SizeToContents() when the subsequent
+  // code no longer depends on the sync auto-size here.
+  SizeToContents();
 
   // Notify the screen reader that the bubble changed.
   AnnounceBubbleChange();
@@ -339,8 +342,8 @@ void PasswordSaveUpdateView::AnnounceBubbleChange() {
   views::ViewAccessibility& ax = accessibility_alert_->GetViewAccessibility();
   ax.SetRole(ax::mojom::Role::kAlert);
   ax.SetName(GetWindowTitle(), ax::mojom::NameFrom::kAttribute);
-  accessibility_alert_->NotifyAccessibilityEvent(ax::mojom::Event::kAlert,
-                                                 true);
+  accessibility_alert_->NotifyAccessibilityEventDeprecated(
+      ax::mojom::Event::kAlert, true);
 }
 
 void PasswordSaveUpdateView::OnContentChanged() {

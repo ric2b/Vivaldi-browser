@@ -4,9 +4,10 @@
 
 #include "components/autofill/core/browser/form_processing/optimization_guide_proto_util.h"
 
-#include "components/autofill/core/browser/form_structure.h"
-#include "components/autofill/core/browser/form_structure_test_api.h"
+#include "components/autofill/core/browser/test_utils/autofill_form_test_utils.h"
+#include "components/autofill/core/common/autofill_test_utils.h"
 #include "components/autofill/core/common/form_data.h"
+#include "components/autofill/core/common/signatures.h"
 #include "components/optimization_guide/proto/features/common_quality_data.pb.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -14,81 +15,58 @@ namespace autofill {
 
 namespace {
 
-AutofillField& AddInputField(FormStructure& form,
-                             const std::u16string& label,
-                             const std::u16string& name,
-                             const std::u16string value,
-                             bool is_sensitive = false) {
-  // Needed to have unique renderer ids for different fields.
-  static int renderer_id = 0;
-  FormStructureTestApi test_api{form};
-  AutofillField& added_field = test_api.PushField();
-  added_field.set_renderer_id(FieldRendererId(++renderer_id));
-  added_field.set_value(value);
-  added_field.set_name(name);
-  added_field.set_label(label);
-  added_field.set_value_identified_as_potentially_sensitive(is_sensitive);
-  return added_field;
-}
+class AutofillOptimizationGuideProtoUtilTest : public testing::Test {
+ private:
+  test::AutofillUnitTestEnvironment autofill_test_environment_;
+};
 
-AutofillField& AddSelect(FormStructure& form,
-                         const std::u16string& label,
-                         const std::u16string& name,
-                         const std::u16string value,
-                         const std::vector<SelectOption> options,
-                         bool is_sensitive = false) {
-  AutofillField& added_field =
-      AddInputField(form, label, name, value, is_sensitive);
-  added_field.set_form_control_type(FormControlType::kSelectOne);
-  added_field.set_options(options);
-  return added_field;
-}
+class ByConversionReason
+    : public AutofillOptimizationGuideProtoUtilTest,
+      public testing::WithParamInterface<FormDataProtoConversionReason> {};
 
-TEST(AutofillOptimizationGuideProtoUtilTest, ToFormDataProto) {
-  FormStructure form{FormData()};
-  // TODO(crbug.com/373776019): Restructure to remove and extend the
-  // AddInputField method.
-  AutofillField& field1 = AddInputField(form, u"label", u"name", u"val");
-  field1.set_field_is_eligible_for_autofill_ai(true);
-  field1.set_is_visible(true);
-  field1.set_is_focusable(true);
-  field1.set_placeholder(u"placeholder");
-  field1.set_form_control_ax_id(123);
-  field1.set_field_is_eligible_for_autofill_ai(true);
+INSTANTIATE_TEST_SUITE_P(
+    AutofillOptimizationGuideProtoUtilTest,
+    ByConversionReason,
+    testing::Values(FormDataProtoConversionReason::kModelRequest,
+                    FormDataProtoConversionReason::kExtensionAPI));
 
-  AutofillField& field2 =
-      AddInputField(form, u"label2", u"name2", u"sensitive_value",
-                    /*is_sensitive=*/true);
-  field2.set_field_is_eligible_for_autofill_ai(false);
-  field2.set_is_visible(true);
-  field2.set_is_focusable(false);
-  field2.set_placeholder(u"");
-  field2.set_form_control_ax_id(124);
-  field2.set_value_identified_as_potentially_sensitive(true);
+TEST_P(ByConversionReason, ToFormDataProto) {
+  FormData form = test::GetFormData(
+      {.fields = {{.is_focusable = true,
+                   .is_visible = true,
+                   .label = u"label",
+                   .name = u"name",
+                   .value = u"val",
+                   .placeholder = u"placeholder",
+                   .form_control_ax_id = 123},
+                  {.is_focusable = false,
+                   .is_visible = true,
+                   .label = u"label2",
+                   .name = u"name2",
+                   .value = u"value",
+                   .form_control_ax_id = 124},
+                  {.is_focusable = false,
+                   .is_visible = true,
+                   .label = u"select",
+                   .form_control_type = FormControlType::kSelectOne,
+                   .select_options = {{{.value = u"1", .text = u"text1"},
+                                       {.value = u"2", .text = u"text2"}}
 
-  AutofillField& field3 = AddSelect(
-      form, u"select", u"", u"",
-      {{.value = u"1", .text = u"text1"}, {.value = u"2", .text = u"text2"}},
-      /*is_sensitive=*/false);
-  field3.set_field_is_eligible_for_autofill_ai(false);
+                   }}}});
+  optimization_guide::proto::FormData form_data_proto =
+      ToFormDataProto(form, /*conversion_reason=*/GetParam());
+  ASSERT_EQ(form_data_proto.fields_size(), 3);
 
-  optimization_guide::proto::FormData form_data_proto = ToFormDataProto(form);
-  EXPECT_EQ(form_data_proto.fields_size(), 3);
-
-  // The first field should contain everything including the value.
   optimization_guide::proto::FormFieldData field_data1 =
       form_data_proto.fields(0);
   EXPECT_EQ(field_data1.field_label(), "label");
-  EXPECT_EQ(field_data1.field_value(), "val");
+  EXPECT_EQ(field_data1.field_value(), "");
   EXPECT_EQ(field_data1.field_name(), "name");
   EXPECT_EQ(field_data1.is_visible(), true);
   EXPECT_EQ(field_data1.is_focusable(), true);
   EXPECT_EQ(field_data1.placeholder(), "placeholder");
   EXPECT_EQ(field_data1.form_control_ax_node_id(), 123);
-  EXPECT_EQ(field_data1.is_eligible(), true);
 
-  // The second field should contain an empty value because it was marked as
-  // sensitive.
   optimization_guide::proto::FormFieldData field_data2 =
       form_data_proto.fields(1);
   EXPECT_EQ(field_data2.field_label(), "label2");
@@ -98,7 +76,6 @@ TEST(AutofillOptimizationGuideProtoUtilTest, ToFormDataProto) {
   EXPECT_EQ(field_data2.is_focusable(), false);
   EXPECT_EQ(field_data2.placeholder(), "");
   EXPECT_EQ(field_data2.form_control_ax_node_id(), 124);
-  EXPECT_EQ(field_data2.is_eligible(), false);
 
   // Check that the options are corectly extracted from the select element.
   optimization_guide::proto::FormFieldData field_data3 =
@@ -106,7 +83,7 @@ TEST(AutofillOptimizationGuideProtoUtilTest, ToFormDataProto) {
   EXPECT_EQ(field_data3.field_label(), "select");
   EXPECT_TRUE(field_data3.field_value().empty());
   EXPECT_TRUE(field_data3.field_name().empty());
-  EXPECT_EQ(2, field_data3.select_options_size());
+  ASSERT_EQ(2, field_data3.select_options_size());
   optimization_guide::proto::SelectOption select_option1 =
       field_data3.select_options(0);
   EXPECT_EQ("1", select_option1.value());
@@ -115,7 +92,39 @@ TEST(AutofillOptimizationGuideProtoUtilTest, ToFormDataProto) {
       field_data3.select_options(1);
   EXPECT_EQ("2", select_option2.value());
   EXPECT_EQ("text2", select_option2.text());
-  EXPECT_FALSE(field_data3.is_eligible());
 }
+
+// Tests that the "ForExtensionAPI" flavor additionally populates signatures and
+// global IDs.
+TEST_F(AutofillOptimizationGuideProtoUtilTest, ToFormDataProtoForExtensionAPI) {
+  const FormGlobalId form_id = test::MakeFormGlobalId();
+  const FieldGlobalId field_id = test::MakeFieldGlobalId();
+  FormData form = test::GetFormData({
+      .fields = {{.host_frame = field_id.frame_token,
+                  .renderer_id = field_id.renderer_id,
+                  .name = u"name"}},
+      .host_frame = form_id.frame_token,
+      .renderer_id = form_id.renderer_id,
+  });
+  optimization_guide::proto::FormData form_proto =
+      ToFormDataProto(form, FormDataProtoConversionReason::kExtensionAPI);
+
+  // Form-level metadata.
+  EXPECT_EQ(form_proto.global_id().frame_token(),
+            form_id.frame_token->ToString());
+  EXPECT_EQ(form_proto.global_id().renderer_id(), *form_id.renderer_id);
+  EXPECT_EQ(form_proto.form_signature(), *CalculateFormSignature(form));
+
+  // Field-level metadata.
+  ASSERT_EQ(form_proto.fields_size(), 1);
+  const optimization_guide::proto::FormFieldData& field_proto =
+      form_proto.fields(0);
+  EXPECT_EQ(field_proto.global_id().frame_token(),
+            field_id.frame_token->ToString());
+  EXPECT_EQ(field_proto.global_id().renderer_id(), *field_id.renderer_id);
+  EXPECT_EQ(field_proto.field_signature(),
+            *CalculateFieldSignatureForField(form.fields()[0]));
+}
+
 }  // namespace
 }  // namespace autofill

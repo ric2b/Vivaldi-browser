@@ -8,6 +8,7 @@
  *  be found in the AUTHORS file in the root of the source tree.
  */
 
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
@@ -75,11 +76,12 @@ using ::testing::IsTrue;
 using RTCConfiguration = PeerConnectionInterface::RTCConfiguration;
 using ::testing::ElementsAre;
 using ::testing::Pair;
+using ::testing::SizeIs;
 
 namespace {
 
-std::unique_ptr<rtc::Thread> CreateAndStartThread() {
-  auto thread = rtc::Thread::Create();
+std::unique_ptr<Thread> CreateAndStartThread() {
+  auto thread = Thread::Create();
   thread->Start();
   return thread;
 }
@@ -137,7 +139,7 @@ class SdpOfferAnswerTest : public ::testing::Test {
   }
 
   std::optional<RtpCodecCapability> FindFirstSendCodecWithName(
-      cricket::MediaType media_type,
+      webrtc::MediaType media_type,
       const std::string& name) const {
     std::vector<RtpCodecCapability> codecs =
         pc_factory_->GetRtpSenderCapabilities(media_type).codecs;
@@ -150,18 +152,18 @@ class SdpOfferAnswerTest : public ::testing::Test {
   }
 
  protected:
-  std::unique_ptr<rtc::Thread> signaling_thread_;
+  std::unique_ptr<Thread> signaling_thread_;
   rtc::scoped_refptr<PeerConnectionFactoryInterface> pc_factory_;
 
  private:
-  rtc::AutoThread main_thread_;
+  AutoThread main_thread_;
 };
 
 TEST_F(SdpOfferAnswerTest, OnTrackReturnsProxiedObject) {
   auto caller = CreatePeerConnection();
   auto callee = CreatePeerConnection();
 
-  auto audio_transceiver = caller->AddTransceiver(cricket::MEDIA_TYPE_AUDIO);
+  auto audio_transceiver = caller->AddTransceiver(webrtc::MediaType::AUDIO);
 
   ASSERT_TRUE(caller->ExchangeOfferAnswerWith(callee.get()));
   // Verify that caller->observer->OnTrack() has been called with a
@@ -605,7 +607,7 @@ TEST_F(SdpOfferAnswerTest, SimulcastAnswerWithNoRidsIsRejected) {
   rid2.rid = "2";
   init.send_encodings.push_back(rid2);
 
-  auto transceiver = pc->AddTransceiver(cricket::MEDIA_TYPE_VIDEO, init);
+  auto transceiver = pc->AddTransceiver(webrtc::MediaType::VIDEO, init);
   EXPECT_TRUE(pc->CreateOfferAndSetAsLocal());
   auto mid = pc->pc()->local_description()->description()->contents()[0].mid();
 
@@ -652,57 +654,60 @@ TEST_F(SdpOfferAnswerTest, SimulcastAnswerWithNoRidsIsRejected) {
   EXPECT_TRUE(pc->SetRemoteDescription(std::move(rejected_answer)));
 }
 
-// TODO: bugs.webrtc.org/362277533 - reenable before launch.
-TEST_F(SdpOfferAnswerTest, DISABLED_SimulcastOfferWithMixedCodec) {
+TEST_F(SdpOfferAnswerTest, SimulcastOfferWithMixedCodec) {
   auto pc = CreatePeerConnection(
       FieldTrials::CreateNoGlobal("WebRTC-MixedCodecSimulcast/Enabled/"));
 
-  std::optional<RtpCodecCapability> vp8_codec = FindFirstSendCodecWithName(
-      cricket::MEDIA_TYPE_VIDEO, cricket::kVp8CodecName);
-  ASSERT_TRUE(vp8_codec);
-  std::optional<RtpCodecCapability> vp9_codec = FindFirstSendCodecWithName(
-      cricket::MEDIA_TYPE_VIDEO, cricket::kVp9CodecName);
-  ASSERT_TRUE(vp9_codec);
+  std::optional<RtpCodecCapability> vp8_codec_capability =
+      FindFirstSendCodecWithName(webrtc::MediaType::VIDEO,
+                                 cricket::kVp8CodecName);
+  ASSERT_TRUE(vp8_codec_capability);
+  std::optional<RtpCodecCapability> vp9_codec_capability =
+      FindFirstSendCodecWithName(webrtc::MediaType::VIDEO,
+                                 cricket::kVp9CodecName);
+  ASSERT_TRUE(vp9_codec_capability);
 
   RtpTransceiverInit init;
   RtpEncodingParameters rid1;
   rid1.rid = "1";
-  rid1.codec = *vp8_codec;
+  rid1.codec = *vp8_codec_capability;
   init.send_encodings.push_back(rid1);
   RtpEncodingParameters rid2;
   rid2.rid = "2";
-  rid2.codec = *vp9_codec;
+  rid2.codec = *vp9_codec_capability;
   init.send_encodings.push_back(rid2);
 
-  auto transceiver = pc->AddTransceiver(cricket::MEDIA_TYPE_VIDEO, init);
+  auto transceiver = pc->AddTransceiver(webrtc::MediaType::VIDEO, init);
   auto offer = pc->CreateOffer();
   auto& offer_contents = offer->description()->contents();
   auto send_codecs = offer_contents[0].media_description()->codecs();
   // Verify that the serialized SDP includes pt=.
   std::string sdp;
   offer->ToString(&sdp);
-  int vp8_pt = cricket::Codec::kIdNotSet;
-  int vp9_pt = cricket::Codec::kIdNotSet;
+  const cricket::Codec* vp8_send_codec = nullptr;
+  const cricket::Codec* vp9_send_codec = nullptr;
   for (auto& codec : send_codecs) {
-    if (codec.name == vp8_codec->name && vp8_pt == cricket::Codec::kIdNotSet) {
-      vp8_pt = codec.id;
+    if (codec.name == vp8_codec_capability->name && !vp8_send_codec) {
+      vp8_send_codec = &codec;
     }
-    if (codec.name == vp9_codec->name && vp9_pt == cricket::Codec::kIdNotSet) {
-      vp9_pt = codec.id;
+    if (codec.name == vp9_codec_capability->name && !vp9_send_codec) {
+      vp9_send_codec = &codec;
     }
   }
-  EXPECT_THAT(sdp,
-              testing::HasSubstr("a=rid:1 send pt=" + std::to_string(vp8_pt)));
-  EXPECT_THAT(sdp,
-              testing::HasSubstr("a=rid:2 send pt=" + std::to_string(vp9_pt)));
+  ASSERT_TRUE(vp8_send_codec);
+  ASSERT_TRUE(vp9_send_codec);
+  EXPECT_THAT(sdp, testing::HasSubstr("a=rid:1 send pt=" +
+                                      std::to_string(vp8_send_codec->id)));
+  EXPECT_THAT(sdp, testing::HasSubstr("a=rid:2 send pt=" +
+                                      std::to_string(vp9_send_codec->id)));
   // Verify that SDP containing pt= can be parsed correctly.
   auto offer2 = CreateSessionDescription(SdpType::kOffer, sdp);
   auto& offer_contents2 = offer2->description()->contents();
   auto send_rids2 = offer_contents2[0].media_description()->streams()[0].rids();
-  EXPECT_EQ(send_rids2[0].payload_types.size(), 1u);
-  EXPECT_EQ(send_rids2[0].payload_types[0], vp8_pt);
-  EXPECT_EQ(send_rids2[1].payload_types.size(), 1u);
-  EXPECT_EQ(send_rids2[1].payload_types[0], vp9_pt);
+  EXPECT_EQ(send_rids2[0].codecs.size(), 1u);
+  EXPECT_EQ(send_rids2[0].codecs[0], *vp8_send_codec);
+  EXPECT_EQ(send_rids2[1].codecs.size(), 1u);
+  EXPECT_EQ(send_rids2[1].codecs[0], *vp9_send_codec);
 }
 
 TEST_F(SdpOfferAnswerTest, SimulcastAnswerWithPayloadType) {
@@ -1253,6 +1258,136 @@ TEST_F(SdpOfferAnswerTest, MsidSignalingUnknownRespondsWithMsidAndKeepsSsrc) {
   EXPECT_TRUE(pc->SetLocalDescription(std::move(reoffer)));
 }
 
+// Runs for each payload type in the valid dynamic ranges.
+class SdpOfferAnswerWithPayloadTypeTest
+    : public SdpOfferAnswerTest,
+      public testing::WithParamInterface<int> {
+ public:
+  static std::vector<int> GetAllPayloadTypesInValidDynamicRange() {
+    std::vector<int> payload_types;
+    // The lower range is [35, 63].
+    for (int pt = 35; pt <= 63; ++pt) {
+      payload_types.push_back(pt);
+    }
+    // The upper range is [96, 127].
+    for (int pt = 96; pt <= 127; ++pt) {
+      payload_types.push_back(pt);
+    }
+    return payload_types;
+  }
+};
+
+TEST_P(SdpOfferAnswerWithPayloadTypeTest,
+       FollowUpOfferDoesNotRepurposePayloadType) {
+  int payload_type = GetParam();
+  std::string payload_type_str = rtc::ToString(payload_type);
+
+  auto pc = CreatePeerConnection();
+  std::string sdp =
+      "v=0\r\n"
+      "o=- 8506393630701383055 2 IN IP4 127.0.0.1\r\n"
+      "s=-\r\n"
+      "t=0 0\r\n"
+      "a=group:BUNDLE 0\r\n"
+      "a=extmap-allow-mixed\r\n"
+      "a=msid-semantic: WMS\r\n"
+      "m=video 9 UDP/TLS/RTP/SAVPF " +
+      payload_type_str +
+      "\r\n"
+      "c=IN IP4 0.0.0.0\r\n"
+      "a=rtcp:9 IN IP4 0.0.0.0\r\n"
+      "a=ice-ufrag:7ZPs\r\n"
+      "a=ice-pwd:3/ZaqZrZaVzg1Tfju5x3CGeJ\r\n"
+      "a=ice-options:trickle\r\n"
+      "a=fingerprint:sha-256 7D:29:C5:B8:D2:30:57:F3:0D:CA:0A:8E:4B:6A:AE:53:26"
+      ":9F:14:DF:47:8E:0C:A3:EC:8D:B1:71:B5:D5:5A:9C\r\n"
+      "a=setup:actpass\r\n"
+      "a=mid:0\r\n"
+      "a=extmap:9 urn:ietf:params:rtp-hdrext:sdes:mid\r\n"
+      "a=sendrecv\r\n"
+      "a=msid:- e2628265-b712-40de-81c9-76d49b7079a0\r\n"
+      "a=rtcp-mux\r\n"
+      "a=rtcp-rsize\r\n"
+      "a=rtpmap:" +
+      payload_type_str +
+      " VP9/90000\r\n"
+      "a=rtcp-fb:" +
+      payload_type_str +
+      " goog-remb\r\n"
+      "a=rtcp-fb:" +
+      payload_type_str +
+      " transport-cc\r\n"
+      "a=rtcp-fb:" +
+      payload_type_str +
+      " ccm fir\r\n"
+      "a=rtcp-fb:" +
+      payload_type_str +
+      " nack\r\n"
+      "a=rtcp-fb:" +
+      payload_type_str +
+      " nack pli\r\n"
+      "a=fmtp:" +
+      payload_type_str +
+      " profile-id=0\r\n"
+      "a=ssrc:2245042191 cname:A206VC6FXsn47EwJ\r\n"
+      "a=ssrc:2245042191 msid:- e2628265-b712-40de-81c9-76d49b7079a0\r\n";
+
+  // Set remote offer with given PT for VP9.
+  EXPECT_TRUE(
+      pc->SetRemoteDescription(CreateSessionDescription(SdpType::kOffer, sdp)));
+  // The answer should accept the PT for VP9.
+  auto answer = pc->CreateAnswer();
+  {
+    const auto* mid_0 = answer->description()->GetContentDescriptionByName("0");
+    ASSERT_TRUE(mid_0);
+    ASSERT_THAT(mid_0->codecs(), SizeIs(1));
+    const auto& codec = mid_0->codecs()[0];
+    EXPECT_EQ(codec.name, "VP9");
+    EXPECT_EQ(codec.id, payload_type);
+    std::string param;
+    EXPECT_TRUE(codec.GetParam("profile-id", &param));
+    EXPECT_EQ(param, "0");
+  }
+
+  EXPECT_TRUE(pc->SetLocalDescription(std::move(answer)));
+  // The follow-up offer should continue to use the same PT for VP9.
+  auto offer = pc->CreateOffer();
+  {
+    const auto* mid_0 = offer->description()->GetContentDescriptionByName("0");
+    ASSERT_TRUE(mid_0);
+    // We should have more codecs to offer than the one previously negotiated.
+    const auto& codecs = mid_0->codecs();
+    ASSERT_GT(codecs.size(), 1u);
+    // The previously negotiated PT should still map to the same VP9 codec.
+    auto it = std::find_if(
+        codecs.begin(), codecs.end(),
+        [&](const cricket::Codec& codec) { return codec.id == payload_type; });
+    ASSERT_TRUE(it != codecs.end());
+    const auto& vp9_codec = *it;
+    EXPECT_EQ(vp9_codec.name, "VP9");
+    EXPECT_EQ(vp9_codec.id, payload_type);
+    std::string param;
+    EXPECT_TRUE(vp9_codec.GetParam("profile-id", &param));
+    EXPECT_EQ(param, "0");
+    // None of the other codecs should collide with our VP9 PT.
+    for (const auto& codec : codecs) {
+      if (codec == vp9_codec) {
+        continue;
+      }
+      EXPECT_NE(codec.id, vp9_codec.id);
+    }
+  }
+  // Last sanity check: it's always possible to set an unmunged local offer.
+  EXPECT_TRUE(pc->SetLocalDescription(std::move(offer)));
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    SdpOfferAnswerWithPayloadTypeTest,
+    SdpOfferAnswerWithPayloadTypeTest,
+    ::testing::ValuesIn(SdpOfferAnswerWithPayloadTypeTest::
+                            GetAllPayloadTypesInValidDynamicRange()),
+    ::testing::PrintToStringParamName());
+
 // Test variant with boolean order for audio-video and video-audio.
 class SdpOfferAnswerShuffleMediaTypes
     : public SdpOfferAnswerTest,
@@ -1485,8 +1620,8 @@ TEST_F(SdpOfferAnswerTest, ReducedSizeNegotiated) {
   auto caller = CreatePeerConnection();
   auto callee = CreatePeerConnection();
 
-  auto audio_transceiver = caller->AddTransceiver(cricket::MEDIA_TYPE_AUDIO);
-  auto video_transceiver = caller->AddTransceiver(cricket::MEDIA_TYPE_VIDEO);
+  auto audio_transceiver = caller->AddTransceiver(webrtc::MediaType::AUDIO);
+  auto video_transceiver = caller->AddTransceiver(webrtc::MediaType::VIDEO);
 
   ASSERT_TRUE(caller->ExchangeOfferAnswerWith(callee.get()));
   auto receivers = callee->pc()->GetReceivers();
@@ -1508,8 +1643,8 @@ TEST_F(SdpOfferAnswerTest, ReducedSizeNotNegotiated) {
   auto caller = CreatePeerConnection();
   auto callee = CreatePeerConnection();
 
-  auto audio_transceiver = caller->AddTransceiver(cricket::MEDIA_TYPE_AUDIO);
-  auto video_transceiver = caller->AddTransceiver(cricket::MEDIA_TYPE_VIDEO);
+  auto audio_transceiver = caller->AddTransceiver(webrtc::MediaType::AUDIO);
+  auto video_transceiver = caller->AddTransceiver(webrtc::MediaType::VIDEO);
 
   auto offer = caller->CreateOfferAndSetAsLocal();
   ASSERT_NE(offer, nullptr);
@@ -1537,6 +1672,79 @@ TEST_F(SdpOfferAnswerTest, ReducedSizeNotNegotiated) {
   EXPECT_FALSE(video_send_param.rtcp.reduced_size);
 }
 
+TEST_F(SdpOfferAnswerTest, PayloadTypeMatchingWithSubsequentOfferAnswer) {
+  auto caller = CreatePeerConnection();
+  auto callee = CreatePeerConnection();
+
+  // 1. Restrict codecs and set a local description and remote description.
+  //    with a different payload type.
+  auto video_transceiver = caller->AddTransceiver(webrtc::MediaType::VIDEO);
+  std::vector<RtpCodecCapability> codec_caps =
+      pc_factory_->GetRtpReceiverCapabilities(webrtc::MediaType::VIDEO).codecs;
+  codec_caps.erase(std::remove_if(codec_caps.begin(), codec_caps.end(),
+                                  [](const RtpCodecCapability& codec) {
+                                    return !absl::EqualsIgnoreCase(codec.name,
+                                                                   "VP8");
+                                  }),
+                   codec_caps.end());
+  EXPECT_TRUE(video_transceiver->SetCodecPreferences(codec_caps).ok());
+
+  auto offer1 = caller->CreateOfferAndSetAsLocal();
+
+  // 2. Add additional supported but not offered codec before SRD
+  auto& contents = offer1->description()->contents();
+  ASSERT_EQ(contents.size(), 1u);
+  auto* media_description = contents[0].media_description();
+  ASSERT_TRUE(media_description);
+  std::vector<cricket::Codec> codecs = media_description->codecs();
+  ASSERT_EQ(codecs.size(), 1u);
+  ASSERT_NE(codecs[0].id, 127);
+  auto av1 = cricket::CreateVideoCodec(SdpVideoFormat("AV1", {}));
+  av1.id = 127;
+  codecs.insert(codecs.begin(), av1);
+  media_description->set_codecs(codecs);
+  EXPECT_TRUE(callee->SetRemoteDescription(std::move(offer1)));
+
+  auto answer1 = callee->CreateAnswerAndSetAsLocal();
+  EXPECT_TRUE(caller->SetRemoteDescription(std::move(answer1)));
+
+  // 3. sCP to reenable that codec. Payload type is not matched at this point.
+  codec_caps =
+      pc_factory_->GetRtpReceiverCapabilities(webrtc::MediaType::VIDEO).codecs;
+  codec_caps.erase(
+      std::remove_if(codec_caps.begin(), codec_caps.end(),
+                     [](const RtpCodecCapability& codec) {
+                       return !(absl::EqualsIgnoreCase(codec.name, "VP8") ||
+                                absl::EqualsIgnoreCase(codec.name, "AV1"));
+                     }),
+      codec_caps.end());
+  EXPECT_TRUE(video_transceiver->SetCodecPreferences(codec_caps).ok());
+  auto offer2 = caller->CreateOffer();
+  auto& contents2 = offer2->description()->contents();
+  ASSERT_EQ(contents2.size(), 1u);
+  auto* media_description2 = contents2[0].media_description();
+  codecs = media_description2->codecs();
+  ASSERT_EQ(codecs.size(), 2u);
+  EXPECT_EQ(codecs[1].name, av1.name);
+  EXPECT_NE(codecs[1].id, av1.id);
+
+  // 4. O/A triggered by remote. This "locks in" the payload type.
+  auto offer3 = callee->CreateOfferAndSetAsLocal();
+  EXPECT_TRUE(caller->SetRemoteDescription(std::move(offer3)));
+  EXPECT_TRUE(caller->CreateAnswerAndSetAsLocal());
+
+  // 5. Subsequent offer has the payload type.
+  auto offer4 = caller->CreateOfferAndSetAsLocal();
+  auto& contents4 = offer4->description()->contents();
+  ASSERT_EQ(contents4.size(), 1u);
+  auto* media_description4 = contents4[0].media_description();
+  ASSERT_TRUE(media_description4);
+  codecs = media_description4->codecs();
+  ASSERT_EQ(codecs.size(), 2u);
+  EXPECT_EQ(codecs[1].name, av1.name);
+  EXPECT_EQ(codecs[1].id, av1.id);
+}
+
 class SdpOfferAnswerMungingTest : public SdpOfferAnswerTest {
  public:
   SdpOfferAnswerMungingTest() : SdpOfferAnswerTest() { metrics::Reset(); }
@@ -1546,8 +1754,8 @@ TEST_F(SdpOfferAnswerMungingTest, DISABLED_ReportUMAMetricsWithNoMunging) {
   auto caller = CreatePeerConnection();
   auto callee = CreatePeerConnection();
 
-  caller->AddTransceiver(cricket::MEDIA_TYPE_AUDIO);
-  caller->AddTransceiver(cricket::MEDIA_TYPE_VIDEO);
+  caller->AddTransceiver(webrtc::MediaType::AUDIO);
+  caller->AddTransceiver(webrtc::MediaType::VIDEO);
 
   // Negotiate, gather candidates, then exchange ICE candidates.
   ASSERT_TRUE(caller->ExchangeOfferAnswerWith(callee.get()));
@@ -1713,12 +1921,28 @@ TEST_F(SdpOfferAnswerMungingTest, IceOptions) {
   auto& transport_infos = offer->description()->transport_infos();
   ASSERT_EQ(transport_infos.size(), 1u);
   transport_infos[0].description.transport_options.push_back(
-      cricket::ICE_OPTION_RENOMINATION);
+      "something-unsupported");
   RTCError error;
   EXPECT_TRUE(pc->SetLocalDescription(std::move(offer), &error));
   EXPECT_THAT(
       metrics::Samples("WebRTC.PeerConnection.SdpMunging.Offer.Initial"),
       ElementsAre(Pair(SdpMungingType::kIceOptions, 1)));
+}
+
+TEST_F(SdpOfferAnswerMungingTest, IceOptionsRenomination) {
+  auto pc = CreatePeerConnection();
+  pc->AddAudioTrack("audio_track", {});
+
+  auto offer = pc->CreateOffer();
+  auto& transport_infos = offer->description()->transport_infos();
+  ASSERT_EQ(transport_infos.size(), 1u);
+  transport_infos[0].description.transport_options.push_back(
+      cricket::ICE_OPTION_RENOMINATION);
+  RTCError error;
+  EXPECT_TRUE(pc->SetLocalDescription(std::move(offer), &error));
+  EXPECT_THAT(
+      metrics::Samples("WebRTC.PeerConnection.SdpMunging.Offer.Initial"),
+      ElementsAre(Pair(SdpMungingType::kIceOptionsRenomination, 1)));
 }
 
 TEST_F(SdpOfferAnswerMungingTest, DtlsRole) {
@@ -1865,6 +2089,76 @@ TEST_F(SdpOfferAnswerMungingTest, OpusStereo) {
   EXPECT_THAT(
       metrics::Samples("WebRTC.PeerConnection.SdpMunging.Offer.Initial"),
       ElementsAre(Pair(SdpMungingType::kAudioCodecsFmtpOpusStereo, 1)));
+}
+
+TEST_F(SdpOfferAnswerMungingTest, OpusFec) {
+  auto pc = CreatePeerConnection();
+  pc->AddAudioTrack("audio_track", {});
+
+  auto offer = pc->CreateOffer();
+  auto& contents = offer->description()->contents();
+  ASSERT_EQ(contents.size(), 1u);
+  auto* media_description = contents[0].media_description();
+  ASSERT_TRUE(media_description);
+  std::vector<cricket::Codec> codecs = media_description->codecs();
+  for (auto& codec : codecs) {
+    if (codec.name == cricket::kOpusCodecName) {
+      // Enabled by default so we need to remove the parameter.
+      EXPECT_TRUE(codec.RemoveParam(cricket::kCodecParamUseInbandFec));
+    }
+  }
+  media_description->set_codecs(codecs);
+  RTCError error;
+  EXPECT_TRUE(pc->SetLocalDescription(std::move(offer), &error));
+  EXPECT_THAT(
+      metrics::Samples("WebRTC.PeerConnection.SdpMunging.Offer.Initial"),
+      ElementsAre(Pair(SdpMungingType::kAudioCodecsFmtpOpusFec, 1)));
+}
+
+TEST_F(SdpOfferAnswerMungingTest, OpusDtx) {
+  auto pc = CreatePeerConnection();
+  pc->AddAudioTrack("audio_track", {});
+
+  auto offer = pc->CreateOffer();
+  auto& contents = offer->description()->contents();
+  ASSERT_EQ(contents.size(), 1u);
+  auto* media_description = contents[0].media_description();
+  ASSERT_TRUE(media_description);
+  std::vector<cricket::Codec> codecs = media_description->codecs();
+  for (auto& codec : codecs) {
+    if (codec.name == cricket::kOpusCodecName) {
+      codec.SetParam(cricket::kCodecParamUseDtx, cricket::kParamValueTrue);
+    }
+  }
+  media_description->set_codecs(codecs);
+  RTCError error;
+  EXPECT_TRUE(pc->SetLocalDescription(std::move(offer), &error));
+  EXPECT_THAT(
+      metrics::Samples("WebRTC.PeerConnection.SdpMunging.Offer.Initial"),
+      ElementsAre(Pair(SdpMungingType::kAudioCodecsFmtpOpusDtx, 1)));
+}
+
+TEST_F(SdpOfferAnswerMungingTest, OpusCbr) {
+  auto pc = CreatePeerConnection();
+  pc->AddAudioTrack("audio_track", {});
+
+  auto offer = pc->CreateOffer();
+  auto& contents = offer->description()->contents();
+  ASSERT_EQ(contents.size(), 1u);
+  auto* media_description = contents[0].media_description();
+  ASSERT_TRUE(media_description);
+  std::vector<cricket::Codec> codecs = media_description->codecs();
+  for (auto& codec : codecs) {
+    if (codec.name == cricket::kOpusCodecName) {
+      codec.SetParam(cricket::kCodecParamCbr, cricket::kParamValueTrue);
+    }
+  }
+  media_description->set_codecs(codecs);
+  RTCError error;
+  EXPECT_TRUE(pc->SetLocalDescription(std::move(offer), &error));
+  EXPECT_THAT(
+      metrics::Samples("WebRTC.PeerConnection.SdpMunging.Offer.Initial"),
+      ElementsAre(Pair(SdpMungingType::kAudioCodecsFmtpOpusCbr, 1)));
 }
 
 TEST_F(SdpOfferAnswerMungingTest, AudioCodecsRemoved) {
@@ -2071,6 +2365,195 @@ TEST_F(SdpOfferAnswerMungingTest, HeaderExtensionModified) {
   EXPECT_THAT(
       metrics::Samples("WebRTC.PeerConnection.SdpMunging.Offer.Initial"),
       ElementsAre(Pair(SdpMungingType::kRtpHeaderExtensionModified, 1)));
+}
+
+TEST_F(SdpOfferAnswerMungingTest, PayloadTypeChanged) {
+  auto pc = CreatePeerConnection();
+  pc->AddAudioTrack("audio_track", {});
+
+  auto offer = pc->CreateOffer();
+  auto& contents = offer->description()->contents();
+  ASSERT_EQ(contents.size(), 1u);
+  auto* media_description = contents[0].media_description();
+  ASSERT_TRUE(media_description);
+  auto codecs = media_description->codecs();
+  ASSERT_GT(codecs.size(), 0u);
+  codecs[0].id = 19;  // IANA reserved payload type, should not conflict.
+  media_description->set_codecs(codecs);
+
+  RTCError error;
+  EXPECT_TRUE(pc->SetLocalDescription(std::move(offer), &error));
+  EXPECT_THAT(
+      metrics::Samples("WebRTC.PeerConnection.SdpMunging.Offer.Initial"),
+      ElementsAre(Pair(SdpMungingType::kPayloadTypes, 1)));
+}
+
+TEST_F(SdpOfferAnswerMungingTest, AudioCodecsReordered) {
+  auto pc = CreatePeerConnection();
+  pc->AddAudioTrack("audio_track", {});
+
+  auto offer = pc->CreateOffer();
+  auto& contents = offer->description()->contents();
+  ASSERT_EQ(contents.size(), 1u);
+  auto* media_description = contents[0].media_description();
+  ASSERT_TRUE(media_description);
+  auto codecs = media_description->codecs();
+  ASSERT_GT(codecs.size(), 1u);
+  std::swap(codecs[0], codecs[1]);
+  media_description->set_codecs(codecs);
+
+  RTCError error;
+  EXPECT_TRUE(pc->SetLocalDescription(std::move(offer), &error));
+  EXPECT_THAT(
+      metrics::Samples("WebRTC.PeerConnection.SdpMunging.Offer.Initial"),
+      ElementsAre(Pair(SdpMungingType::kAudioCodecsReordered, 1)));
+}
+
+TEST_F(SdpOfferAnswerMungingTest, VideoCodecsReordered) {
+  auto pc = CreatePeerConnection();
+  pc->AddVideoTrack("video_track", {});
+
+  auto offer = pc->CreateOffer();
+  auto& contents = offer->description()->contents();
+  ASSERT_EQ(contents.size(), 1u);
+  auto* media_description = contents[0].media_description();
+  ASSERT_TRUE(media_description);
+  auto codecs = media_description->codecs();
+  ASSERT_GT(codecs.size(), 1u);
+  std::swap(codecs[0], codecs[1]);
+  media_description->set_codecs(codecs);
+
+  RTCError error;
+  EXPECT_TRUE(pc->SetLocalDescription(std::move(offer), &error));
+  EXPECT_THAT(
+      metrics::Samples("WebRTC.PeerConnection.SdpMunging.Offer.Initial"),
+      ElementsAre(Pair(SdpMungingType::kVideoCodecsReordered, 1)));
+}
+
+TEST_F(SdpOfferAnswerMungingTest, AudioCodecsFmtp) {
+  auto pc = CreatePeerConnection();
+  pc->AddAudioTrack("audio_track", {});
+
+  auto offer = pc->CreateOffer();
+  auto& contents = offer->description()->contents();
+  ASSERT_EQ(contents.size(), 1u);
+  auto* media_description = contents[0].media_description();
+  ASSERT_TRUE(media_description);
+  auto codecs = media_description->codecs();
+  ASSERT_GT(codecs.size(), 0u);
+  codecs[0].params["dont"] = "munge";
+  media_description->set_codecs(codecs);
+
+  RTCError error;
+  EXPECT_TRUE(pc->SetLocalDescription(std::move(offer), &error));
+  EXPECT_THAT(
+      metrics::Samples("WebRTC.PeerConnection.SdpMunging.Offer.Initial"),
+      ElementsAre(Pair(SdpMungingType::kAudioCodecsFmtp, 1)));
+}
+
+TEST_F(SdpOfferAnswerMungingTest, VideoCodecsFmtp) {
+  auto pc = CreatePeerConnection();
+  pc->AddVideoTrack("video_track", {});
+
+  auto offer = pc->CreateOffer();
+  auto& contents = offer->description()->contents();
+  ASSERT_EQ(contents.size(), 1u);
+  auto* media_description = contents[0].media_description();
+  ASSERT_TRUE(media_description);
+  auto codecs = media_description->codecs();
+  ASSERT_GT(codecs.size(), 0u);
+  codecs[0].params["dont"] = "munge";
+  media_description->set_codecs(codecs);
+
+  RTCError error;
+  EXPECT_TRUE(pc->SetLocalDescription(std::move(offer), &error));
+  EXPECT_THAT(
+      metrics::Samples("WebRTC.PeerConnection.SdpMunging.Offer.Initial"),
+      ElementsAre(Pair(SdpMungingType::kVideoCodecsFmtp, 1)));
+}
+
+TEST_F(SdpOfferAnswerMungingTest, AudioCodecsRtcpFb) {
+  auto pc = CreatePeerConnection();
+  pc->AddAudioTrack("audio_track", {});
+
+  auto offer = pc->CreateOffer();
+  auto& contents = offer->description()->contents();
+  ASSERT_EQ(contents.size(), 1u);
+  auto* media_description = contents[0].media_description();
+  ASSERT_TRUE(media_description);
+  auto codecs = media_description->codecs();
+  ASSERT_GT(codecs.size(), 0u);
+  codecs[0].feedback_params.Add({"dont", "munge"});
+  media_description->set_codecs(codecs);
+
+  RTCError error;
+  EXPECT_TRUE(pc->SetLocalDescription(std::move(offer), &error));
+  EXPECT_THAT(
+      metrics::Samples("WebRTC.PeerConnection.SdpMunging.Offer.Initial"),
+      ElementsAre(Pair(SdpMungingType::kAudioCodecsRtcpFb, 1)));
+}
+
+TEST_F(SdpOfferAnswerMungingTest, AudioCodecsRtcpFbNack) {
+  auto pc = CreatePeerConnection();
+  pc->AddAudioTrack("audio_track", {});
+
+  auto offer = pc->CreateOffer();
+  auto& contents = offer->description()->contents();
+  ASSERT_EQ(contents.size(), 1u);
+  auto* media_description = contents[0].media_description();
+  ASSERT_TRUE(media_description);
+  auto codecs = media_description->codecs();
+  ASSERT_GT(codecs.size(), 0u);
+  codecs[0].feedback_params.Add(cricket::FeedbackParam("nack"));
+  media_description->set_codecs(codecs);
+
+  RTCError error;
+  EXPECT_TRUE(pc->SetLocalDescription(std::move(offer), &error));
+  EXPECT_THAT(
+      metrics::Samples("WebRTC.PeerConnection.SdpMunging.Offer.Initial"),
+      ElementsAre(Pair(SdpMungingType::kAudioCodecsRtcpFbAudioNack, 1)));
+}
+
+TEST_F(SdpOfferAnswerMungingTest, AudioCodecsRtcpFbRrtr) {
+  auto pc = CreatePeerConnection();
+  pc->AddAudioTrack("audio_track", {});
+
+  auto offer = pc->CreateOffer();
+  auto& contents = offer->description()->contents();
+  ASSERT_EQ(contents.size(), 1u);
+  auto* media_description = contents[0].media_description();
+  ASSERT_TRUE(media_description);
+  auto codecs = media_description->codecs();
+  ASSERT_GT(codecs.size(), 0u);
+  codecs[0].feedback_params.Add(cricket::FeedbackParam("rrtr"));
+  media_description->set_codecs(codecs);
+
+  RTCError error;
+  EXPECT_TRUE(pc->SetLocalDescription(std::move(offer), &error));
+  EXPECT_THAT(
+      metrics::Samples("WebRTC.PeerConnection.SdpMunging.Offer.Initial"),
+      ElementsAre(Pair(SdpMungingType::kAudioCodecsRtcpFbRrtr, 1)));
+}
+
+TEST_F(SdpOfferAnswerMungingTest, VideoCodecsRtcpFb) {
+  auto pc = CreatePeerConnection();
+  pc->AddVideoTrack("video_track", {});
+
+  auto offer = pc->CreateOffer();
+  auto& contents = offer->description()->contents();
+  ASSERT_EQ(contents.size(), 1u);
+  auto* media_description = contents[0].media_description();
+  ASSERT_TRUE(media_description);
+  auto codecs = media_description->codecs();
+  ASSERT_GT(codecs.size(), 0u);
+  codecs[0].feedback_params.Add({"dont", "munge"});
+  media_description->set_codecs(codecs);
+
+  RTCError error;
+  EXPECT_TRUE(pc->SetLocalDescription(std::move(offer), &error));
+  EXPECT_THAT(
+      metrics::Samples("WebRTC.PeerConnection.SdpMunging.Offer.Initial"),
+      ElementsAre(Pair(SdpMungingType::kVideoCodecsRtcpFb, 1)));
 }
 
 }  // namespace webrtc

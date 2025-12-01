@@ -90,8 +90,6 @@
 
 #pragma mark - Private
 - (void)showInactiveTabsSettings {
-  if (!IsInactiveTabsAvailable())
-    return;
   _inactiveTabsSettingsCoordinator = [[InactiveTabsSettingsCoordinator alloc]
       initWithBaseNavigationController:self.baseNavigationController
                                browser:self.browser];

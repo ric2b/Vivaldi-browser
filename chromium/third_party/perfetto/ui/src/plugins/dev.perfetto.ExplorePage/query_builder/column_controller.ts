@@ -37,20 +37,43 @@ export interface ColumnControllerRow {
 
 export function columnControllerRowFromSqlColumn(
   column: SqlColumn,
+  checked: boolean = false,
 ): ColumnControllerRow {
   return {
     id: column.name,
-    checked: true,
+    checked,
     column: column,
   };
 }
 
-export function columnControllerRowFromName(name: string): ColumnControllerRow {
+export function columnControllerRowFromName(
+  name: string,
+  checked: boolean = false,
+): ColumnControllerRow {
   return {
     id: name,
-    checked: true,
+    checked,
     column: {name: name, type: {name: 'NA', shortName: 'NA'}},
   };
+}
+
+export function newColumnControllerRow(
+  oldCol: ColumnControllerRow,
+  checked?: boolean | undefined,
+) {
+  return {
+    id: oldCol.alias ?? oldCol.column.name,
+    column: oldCol.column,
+    alias: undefined,
+    checked: checked ?? oldCol.checked,
+  };
+}
+
+export function newColumnControllerRows(
+  oldCols: ColumnControllerRow[],
+  checked?: boolean | undefined,
+) {
+  return oldCols.map((col) => newColumnControllerRow(col, checked));
 }
 
 export interface ColumnControllerDiff {
@@ -63,14 +86,14 @@ export interface ColumnControllerAttrs {
   options: ColumnControllerRow[];
   onChange?: (diffs: ColumnControllerDiff[]) => void;
   fixedSize?: boolean;
-  hasValidColumns: boolean;
+  allowAlias?: boolean;
 }
 
 export class ColumnController
   implements m.ClassComponent<ColumnControllerAttrs>
 {
   view({attrs}: m.CVnode<ColumnControllerAttrs>) {
-    const {options, fixedSize = true} = attrs;
+    const {options, fixedSize = false, allowAlias = true} = attrs;
 
     const filteredItems = options;
 
@@ -78,13 +101,14 @@ export class ColumnController
       fixedSize
         ? '.pf-column-controller-panel.pf-column-controller-fixed-size'
         : '.pf-column-controller-panel',
-      this.renderListOfItems(attrs, filteredItems),
+      this.renderListOfItems(attrs, filteredItems, allowAlias),
     );
   }
 
   private renderListOfItems(
     attrs: ColumnControllerAttrs,
     options: ColumnControllerRow[],
+    allowAlias: boolean,
   ) {
     const {onChange = () => {}} = attrs;
     const allChecked = options.every(({checked}) => checked);
@@ -102,7 +126,6 @@ export class ColumnController
             '.pf-column-controller-container',
             m(
               '.pf-column-controller-header',
-              m('span', 'Options'),
               m(Button, {
                 label: 'Select All',
                 icon: Icons.SelectAll,
@@ -128,7 +151,7 @@ export class ColumnController
                 disabled: !anyChecked,
               }),
             ),
-            this.renderColumnRows(attrs, options),
+            this.renderColumnRows(attrs, options, allowAlias),
           ),
         ),
       ];
@@ -138,6 +161,7 @@ export class ColumnController
   private renderColumnRows(
     attrs: ColumnControllerAttrs,
     options: ColumnControllerRow[],
+    allowAlias: boolean,
   ): m.Children {
     const {onChange = () => {}} = attrs;
 
@@ -154,21 +178,23 @@ export class ColumnController
             onChange([{id, alias, checked: !checked}]);
           },
         }),
-        ' as ',
-        m(TextInput, {
-          placeholder: item.alias ? item.alias : column.name,
-          type: 'string',
-          oninput: (e: KeyboardEvent) => {
-            if (!e.target) return;
-            onChange([
-              {id, checked, alias: (e.target as HTMLInputElement).value.trim()},
-            ]);
-          },
-        }),
-        m(Popup, {
-          className: 'pf-visible-on-hover',
-          trigger: m(Button, {icon: 'info'}),
-        }),
+        allowAlias && [
+          ' as ',
+          m(TextInput, {
+            placeholder: item.alias ? item.alias : column.name,
+            type: 'string',
+            oninput: (e: KeyboardEvent) => {
+              if (!e.target) return;
+              onChange([
+                {
+                  id,
+                  checked,
+                  alias: (e.target as HTMLInputElement).value.trim(),
+                },
+              ]);
+            },
+          }),
+        ],
       );
     });
   }

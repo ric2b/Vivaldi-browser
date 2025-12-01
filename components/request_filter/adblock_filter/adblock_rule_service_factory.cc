@@ -11,6 +11,8 @@
 #include "components/prefs/pref_service.h"
 #include "components/request_filter/adblock_filter/adblock_rule_service_impl.h"
 #include "components/request_filter/adblock_filter/flat_rules_compiler.h"
+#include "components/request_filter/request_filter_manager_factory.h"
+#include "components/request_filter/request_filter_manager.h"
 
 namespace adblock_filter {
 
@@ -28,8 +30,10 @@ RuleServiceFactory* RuleServiceFactory::GetInstance() {
 
 RuleServiceFactory::RuleServiceFactory()
     : BrowserContextKeyedServiceFactory(
-          "FilterManager",
-          BrowserContextDependencyManager::GetInstance()) {}
+          "AdBlocker",
+          BrowserContextDependencyManager::GetInstance()) {
+  DependsOn(vivaldi::RequestFilterManagerFactory::GetInstance());
+}
 
 RuleServiceFactory::~RuleServiceFactory() {}
 
@@ -54,6 +58,7 @@ RuleServiceFactory::BuildServiceInstanceForBrowserContext(
   std::unique_ptr<RuleServiceImpl> rule_service =
       std::make_unique<RuleServiceImpl>(
           context, Profile::FromBrowserContext(context)->GetPrefs(),
+          vivaldi::RequestFilterManagerFactory::GetForBrowserContext(context),
           base::BindRepeating(&CompileFlatRules), locale);
   // Avoid actually loading the service during unit tests.
   if (vivaldi::IsVivaldiRunning())

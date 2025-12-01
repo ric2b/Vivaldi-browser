@@ -95,8 +95,9 @@ static void UpdateCcTransformLocalMatrix(
     DCHECK(transform_node.IsIdentityOr2dTranslation());
     // Blink creates a 2d transform node just for scroll offset whereas cc's
     // transform node has a special scroll offset field.
-    compositor_node.scroll_offset =
-        gfx::PointAtOffsetFromOrigin(-transform_node.Get2dTranslation());
+    compositor_node.SetScrollOffset(
+        gfx::PointAtOffsetFromOrigin(-transform_node.Get2dTranslation()),
+        cc::DamageReason::kUntracked);
     DCHECK(compositor_node.local.IsIdentity());
     DCHECK_EQ(gfx::Point3F(), compositor_node.origin);
   } else {
@@ -125,11 +126,6 @@ bool PropertyTreeManager::DirectlyUpdateCompositedOpacityValue(
       effect.CcNodeId(property_trees->sequence_number()));
   if (!cc_effect)
     return false;
-
-  // We directly update opacity only when it's not animating in compositor. If
-  // the compositor has not cleared is_currently_animating_opacity, we should
-  // clear it now to let the compositor respect the new value.
-  cc_effect->is_currently_animating_opacity = false;
 
   cc_effect->opacity = effect.Opacity();
   cc_effect->effect_changed = true;
@@ -167,9 +163,9 @@ bool PropertyTreeManager::DirectlyUpdateScrollOffsetTransform(
       gfx::PointAtOffsetFromOrigin(-transform.Get2dTranslation());
   DirectlySetScrollOffset(host, scroll_node->GetCompositorElementId(),
                           scroll_offset);
-  if (cc_transform->scroll_offset != scroll_offset) {
+  if (cc_transform->scroll_offset() != scroll_offset) {
     UpdateCcTransformLocalMatrix(*cc_transform, transform);
-    cc_transform->transform_changed = true;
+    cc_transform->SetTransformChanged(cc::DamageReason::kUntracked);
     property_trees->transform_tree_mutable().set_needs_update(true);
     host.SetNeedsCommit();
   }
@@ -197,7 +193,7 @@ bool PropertyTreeManager::DirectlyUpdateTransform(
   // flag, we should clear it to let the compositor respect the new value.
   cc_transform->is_currently_animating = false;
 
-  cc_transform->transform_changed = true;
+  cc_transform->SetTransformChanged(cc::DamageReason::kUntracked);
   property_trees->transform_tree_mutable().set_needs_update(true);
   host.SetNeedsCommit();
   return true;
@@ -218,7 +214,7 @@ bool PropertyTreeManager::DirectlyUpdatePageScaleTransform(
   UpdateCcTransformLocalMatrix(*cc_transform, transform);
   SetTransformTreePageScaleFactor(property_trees->transform_tree_mutable(),
                                   *cc_transform);
-  cc_transform->transform_changed = true;
+  cc_transform->SetTransformChanged(cc::DamageReason::kUntracked);
   property_trees->transform_tree_mutable().set_needs_update(true);
   return true;
 }
@@ -464,7 +460,11 @@ int PropertyTreeManager::EnsureCompositorTransformNode(
 
   compositor_node.should_undo_overscroll =
       transform_node.RequiresCompositingForFixedToViewport();
-  compositor_node.transform_changed = transform_node.NodeChangeAffectsRaster();
+  if (transform_node.NodeChangeAffectsRaster()) {
+    compositor_node.SetTransformChanged(cc::DamageReason::kUntracked);
+  } else {
+    compositor_node.ClearTransformChanged();
+  }
   compositor_node.flattens_inherited_transform =
       transform_node.FlattensInheritedTransform();
   compositor_node.sorting_context_id = transform_node.RenderingContextId();
@@ -524,6 +524,9 @@ int PropertyTreeManager::EnsureCompositorTransformNode(
 
   if (const auto* data = transform_node.GetAnchorPositionScrollData()) {
     transform_tree_.EnsureAnchorPositionScrollData(id) = *data;
+    for (auto container_id : data->adjustment_container_ids) {
+      anchor_position_adjustment_container_ids_.insert(container_id);
+    }
   }
 
   auto compositor_element_id = transform_node.GetCompositorElementId();
@@ -1258,8 +1261,7 @@ static cc::RenderSurfaceReason ConditionalRenderSurfaceReasonForEffect(
 
 static cc::RenderSurfaceReason RenderSurfaceReasonForEffect(
     const EffectPaintPropertyNode& effect) {
-  if (!effect.Filter().IsEmpty() ||
-      effect.RequiresCompositingForWillChangeFilter()) {
+  if (effect.Filter() || effect.RequiresCompositingForWillChangeFilter()) {
     return cc::RenderSurfaceReason::kFilter;
   }
   if (effect.HasActiveFilterAnimation())
@@ -1304,17 +1306,19 @@ void PropertyTreeManager::PopulateCcEffectNode(
   effect_node.opacity = effect.Opacity();
   const auto& transform = effect.LocalTransformSpace().Unalias();
   effect_node.transform_id = EnsureCompositorTransformNode(transform);
+  effect_node.has_2d_scale_transform = effect.Has2DScaleTransform();
   if (effect.MayHaveBackdropEffect()) {
+    effect_node.may_have_backdrop_effect = true;
     // We never have backdrop effect and filter on the same effect node.
-    DCHECK(effect.Filter().IsEmpty());
+    DCHECK(!effect.Filter());
     if (auto* backdrop_filter = effect.BackdropFilter()) {
       effect_node.backdrop_filters = backdrop_filter->AsCcFilterOperations();
       effect_node.backdrop_filter_bounds = effect.BackdropFilterBounds();
       effect_node.backdrop_mask_element_id = effect.BackdropMaskElementId();
     }
     effect_node.blend_mode = effect.BlendMode();
-  } else {
-    effect_node.filters = effect.Filter().AsCcFilterOperations();
+  } else if (auto* filter = effect.Filter()) {
+    effect_node.filters = filter->AsCcFilterOperations();
   }
   effect_node.double_sided = !transform.IsBackfaceHidden();
   effect_node.effect_changed = effect.NodeChangeAffectsRaster();
@@ -1327,16 +1331,22 @@ void PropertyTreeManager::PopulateCcEffectNode(
 }
 
 void PropertyTreeManager::UpdateConditionalRenderSurfaceReasons(
-    const cc::LayerList& layers) {
+    const cc::LayerList& layers,
+    const HashSet<int>& layers_having_text) {
   // This vector is indexed by effect node id. The value is the number of
   // layers and sub-render-surfaces controlled by this effect.
   wtf_size_t tree_size = base::checked_cast<wtf_size_t>(effect_tree_.size());
   Vector<int> effect_layer_counts(tree_size);
+  Vector<bool> has_text(tree_size);
   Vector<bool> has_child_surface(tree_size);
+  Vector<bool> has_backdrop_effect_descendant(tree_size);
   // Initialize the vector to count directly controlled layers.
   for (const auto& layer : layers) {
-    if (layer->draws_content())
+    if (layer->draws_content()) {
       effect_layer_counts[layer->effect_tree_index()]++;
+      has_text[layer->effect_tree_index()] |=
+          layers_having_text.Contains(layer->id());
+    }
   }
 
   // In the effect tree, parent always has lower id than children, so the
@@ -1344,6 +1354,16 @@ void PropertyTreeManager::UpdateConditionalRenderSurfaceReasons(
   // effect_layer_counts.
   for (int id = tree_size - 1; id > cc::kSecondaryRootPropertyNodeId; id--) {
     auto* effect = effect_tree_.Node(id);
+
+    if (RuntimeEnabledFeatures::RenderSurfaceFor2DScaleTransformEnabled() &&
+        effect->render_surface_reason == cc::RenderSurfaceReason::kNone &&
+        !has_backdrop_effect_descendant[id] &&
+        !effect->may_have_backdrop_effect && effect->has_2d_scale_transform &&
+        effect_layer_counts[id] >= 2 && !has_text[id]) {
+      effect->render_surface_reason =
+          cc::RenderSurfaceReason::k2DScaleTransformWithCompositedDescendants;
+    }
+
     if (effect_layer_counts[id] < 2 &&
         IsConditionalRenderSurfaceReason(effect->render_surface_reason) &&
         // kBlendModeDstIn should create a render surface if the mask itself
@@ -1366,6 +1386,12 @@ void PropertyTreeManager::UpdateConditionalRenderSurfaceReasons(
       // Otherwise all layers count as controlled layers of the parent.
       effect_layer_counts[effect->parent_id] += effect_layer_counts[id];
       has_child_surface[effect->parent_id] |= has_child_surface[id];
+      has_text[effect->parent_id] |= has_text[id];
+    }
+
+    if (effect->may_have_backdrop_effect ||
+        has_backdrop_effect_descendant[id]) {
+      has_backdrop_effect_descendant[effect->parent_id] = true;
     }
 
 #if DCHECK_IS_ON()
@@ -1389,6 +1415,20 @@ void PropertyTreeManager::UpdatePixelMovingFilterClipExpanders() {
     // may not be composited, and the clip node is a no-op node.
   }
   pixel_moving_filter_clip_expanders_.clear();
+}
+
+void PropertyTreeManager::
+    EnsureCompositorNodesForAnchorPositionAdjustmentContainers(
+        const StackScrollTranslationVector& scroll_translations) {
+  if (anchor_position_adjustment_container_ids_.empty()) {
+    return;
+  }
+  for (auto& scroll_translation : scroll_translations) {
+    if (anchor_position_adjustment_container_ids_.Contains(
+            scroll_translation->ScrollNode()->GetCompositorElementId())) {
+      EnsureCompositorScrollAndTransformNode(*scroll_translation);
+    }
+  }
 }
 
 }  // namespace blink

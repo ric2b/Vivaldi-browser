@@ -9,15 +9,11 @@ class Browser;
 
 // This class is the coordinator for the pagezoom setting.
 @interface VivaldiPageZoomSettingsCoordinator : ChromeCoordinator
-
+// Flag to determine if the coordinator is initiated from a dialog.
+@property(nonatomic, assign) BOOL isFromDialog;
 // Designated initializer.
 - (instancetype)initWithBaseNavigationController:
-    (UINavigationController*)navigationController browser:(Browser*)browser
-      NS_DESIGNATED_INITIALIZER;
-
-- (instancetype)initWithBaseViewController:(UIViewController*)viewController
-                                   browser:(Browser*)browser NS_UNAVAILABLE;
-
+    (UINavigationController*)navigationController browser:(Browser*)browser;
 @end
 
 #endif  // IOS_UI_SETTINGS_PAGEZOOM_VIVALDI_PAGEZOOM_SETTINGS_COORDINATOR_H_

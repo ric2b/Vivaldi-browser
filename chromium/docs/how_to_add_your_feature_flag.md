@@ -60,16 +60,8 @@ and add appropriate logic to `DevToolsUIBindings::GetHostConfig()` in
 * [chrome/browser/devtools/devtools_ui_bindings.cc](https://source.chromium.org/chromium/chromium/src/+/main:chrome/browser/devtools/devtools_ui_bindings.cc)
 
 to expose the feature to DevTools' front-end ([example CL](https://crrev.com/c/6084996)).
-Afterwards hook up the feature in `devtools-frontend` by updating the following files
-([example CL](https://crrev.com/c/6085435)):
-
-* [front_end/core/host/InspectorFrontendHost.ts](https://source.chromium.org/chromium/chromium/src/+/main:third_party/devtools-frontend/src/front_end/core/host/InspectorFrontendHost.ts) (add default state to `getHostConfig()`)
-* [front_end/core/root/Runtime.ts](https://source.chromium.org/chromium/chromium/src/+/main:third_party/devtools-frontend/src/front_end/core/root/Runtime.ts) (add type definitions for your host config additions)
-* [front_end/testing/EnvironmentHelpers.ts](https://source.chromium.org/chromium/chromium/src/+/main:third_party/devtools-frontend/src/front_end/testing/EnvironmentHelpers.ts) (add default state for unit tests)
-
-You can access the host config via `Common.Settings.Settings.instance().getHostConfig()`
-in your code and check for your feature. Refer to the [documentation][devtools-cli-docs]
-for more information.
+Afterwards hook up the feature in `devtools-frontend` by following the steps outlined
+in the [documentation][devtools-cli-docs].
 
 Historically, DevTools front-end used [Experiments][devtools-experiments] to gate
 new (experimental) features, but going forward the `base::Feature` mechanism should
@@ -113,7 +105,7 @@ for WebView flags.
 
 You have to modify these five files in total.
 
-* [chrome/browser/about_flags.cc](https://cs.chromium.org/chromium/src/chrome/browser/about_flags.cc) (Add your changes at the bottom of the list)
+* [chrome/browser/about_flags.cc](https://cs.chromium.org/chromium/src/chrome/browser/about_flags.cc) (Add your changes at the bottom of the list, search for "Add new entries above this line.")
 * [chrome/browser/flag_descriptions.cc](https://cs.chromium.org/chromium/src/chrome/browser/flag_descriptions.cc) (Features should be alphabetically sorted)
 * [chrome/browser/flag_descriptions.h](https://cs.chromium.org/chromium/src/chrome/browser/flag_descriptions.h) (Features should be alphabetically sorted)
 * [tools/metrics/histograms/enums.xml](https://cs.chromium.org/chromium/src/tools/metrics/histograms/enums.xml)

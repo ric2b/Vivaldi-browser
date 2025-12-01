@@ -23,6 +23,7 @@
 #include "base/metrics/metrics_hashes.h"
 #include "base/metrics/statistics_recorder.h"
 #include "base/metrics/user_metrics.h"
+#include "base/strings/to_string.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/task_environment.h"
@@ -1080,8 +1081,7 @@ TEST_P(MetricsServiceTestWithStartupVisibility, InitialStabilityLogAfterCrash) {
   // InitializeMetricsRecordingState() depends on the type of Android Chrome
   // session. See the comments in MetricsService::InitializeMetricsState() for
   // more details.
-  const std::string beacon_value =
-      params.expected_beacon_value ? "true" : "false";
+  const std::string beacon_value = base::ToString(params.expected_beacon_value);
   partial_expected_contents = "exited_cleanly\":" + beacon_value;
 #else
   partial_expected_contents = "exited_cleanly\":false";
@@ -1343,6 +1343,50 @@ TEST_F(MetricsServiceTest, FirstLogCreatedBeforeUnsentLogsSent) {
   // and added to the ongoing logs.
   EXPECT_EQ(0u, test_log_store->initial_log_count());
   EXPECT_EQ(2u, test_log_store->ongoing_log_count());
+}
+
+// Verify that calling StartOutOfBandUploadIfPossible() triggers an upload when
+// called after the initial ongoing logs have been uploaded.
+TEST_F(MetricsServiceTest, OutOfBandLogUpload) {
+  // Initial set-up.
+  EnableMetricsReporting();
+  TestMetricsServiceClient client;
+  TestMetricsService service(GetMetricsStateManager(), &client,
+                             GetLocalState());
+  service.InitializeMetricsRecordingState();
+  service.Start();
+  ASSERT_EQ(TestMetricsService::INIT_TASK_SCHEDULED, service.state());
+
+  // Fast forward the time by `initialization_delay`, which is when the pending
+  // init tasks will run.
+  base::TimeDelta initialization_delay = service.GetInitializationDelay();
+  task_environment_.FastForwardBy(initialization_delay);
+  EXPECT_EQ(TestMetricsService::INIT_TASK_DONE, service.state());
+
+  // Fast forward the time until the MetricsRotationScheduler first runs, which
+  // should complete the first ongoing log.
+  task_environment_.FastForwardBy(
+      base::Seconds(MetricsScheduler::GetInitialIntervalSeconds()) -
+      initialization_delay);
+  ASSERT_EQ(TestMetricsService::SENDING_LOGS, service.state());
+
+  // Fast forward the time so that the upload loop starts uploading logs.
+  base::TimeDelta unsent_log_interval =
+      MetricsUploadScheduler::GetUnsentLogsInterval();
+  task_environment_.FastForwardBy(unsent_log_interval);
+  EXPECT_TRUE(client.uploader()->is_uploading());
+  client.uploader()->CompleteUpload(200);
+
+  // Assert that the uploader is no longer uploading, and then trigger an
+  // upload.
+  EXPECT_FALSE(client.uploader()->is_uploading());
+  service.StartOutOfBandUploadIfPossible(
+      MetricsService::OutOfBandUploadPasskey());
+
+  // Fast forward the time so that the upload loop starts uploading logs.
+  task_environment_.FastForwardBy(unsent_log_interval);
+  EXPECT_TRUE(client.uploader()->is_uploading());
+  client.uploader()->CompleteUpload(200);
 }
 
 TEST_F(MetricsServiceTest,

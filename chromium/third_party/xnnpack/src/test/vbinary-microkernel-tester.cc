@@ -3,7 +3,7 @@
 // This source code is licensed under the BSD-style license found in the
 // LICENSE file in the root directory of this source tree.
 
-#include "vbinary-microkernel-tester.h"
+#include "test/vbinary-microkernel-tester.h"
 
 #include <stdint.h>
 
@@ -20,14 +20,14 @@
 #include <vector>
 
 #include <gtest/gtest.h>
-#include "xnnpack.h"
-#include "xnnpack/buffer.h"
-#include "xnnpack/math.h"
-#include "xnnpack/microfnptr.h"
-#include "xnnpack/microparams-init.h"
-#include "xnnpack/microparams.h"
-#include "xnnpack/requantization.h"
-#include "replicable_random_device.h"
+#include "include/xnnpack.h"
+#include "src/xnnpack/buffer.h"
+#include "src/xnnpack/math.h"
+#include "src/xnnpack/microfnptr.h"
+#include "src/xnnpack/microparams-init.h"
+#include "src/xnnpack/microparams.h"
+#include "src/xnnpack/requantization.h"
+#include "test/replicable_random_device.h"
 
 void VBinaryMicrokernelTester::Test(xnn_f16_vbinary_ukernel_fn vbinary,
                                     OpType op_type,
@@ -63,7 +63,7 @@ void VBinaryMicrokernelTester::Test(xnn_f16_vbinary_ukernel_fn vbinary,
 
     // Verify results.
     for (size_t i = 0; i < batch_size(); i++) {
-      EXPECT_NEAR(y[i], y_ref[i],
+      ASSERT_NEAR(y[i], y_ref[i],
                   std::max(1.0e-4f, std::abs(y_ref[i]) * 1.0e-2f))
           << "at " << i << " / " << batch_size();
     }
@@ -102,7 +102,7 @@ void VBinaryMicrokernelTester::Test(xnn_f32_vbinary_ukernel_fn vbinary,
 
     // Verify results.
     for (size_t i = 0; i < batch_size(); i++) {
-      EXPECT_NEAR(y[i], y_ref[i], std::abs(y_ref[i]) * 1.0e-6f)
+      ASSERT_NEAR(y[i], y_ref[i], std::abs(y_ref[i]) * 1.0e-6f)
           << "at " << i << " / " << batch_size();
     }
   }
@@ -165,7 +165,7 @@ void VBinaryMicrokernelTester::Test(
 
     // Verify results.
     for (size_t i = 0; i < batch_size(); i++) {
-      EXPECT_NEAR(static_cast<float>(static_cast<int32_t>(y[i])), y_fp[i], 1.0f)
+      ASSERT_NEAR(static_cast<float>(static_cast<int32_t>(y[i])), y_fp[i], 1.0f)
           << "at element " << i << " / " << batch_size();
       EXPECT_EQ(static_cast<uint32_t>(y_ref[i]), static_cast<uint32_t>(y[i]))
           << "at element " << i << " / " << batch_size();
@@ -231,9 +231,9 @@ void VBinaryMicrokernelTester::Test(
 
     // Verify results.
     for (size_t i = 0; i < batch_size(); i++) {
-      EXPECT_NEAR(static_cast<float>(static_cast<int32_t>(y[i])), y_fp[i], 1.0f)
+      ASSERT_NEAR(static_cast<float>(static_cast<int32_t>(y[i])), y_fp[i], 1.0f)
           << "at element " << i << " / " << batch_size();
-      EXPECT_NEAR(static_cast<uint32_t>(y[i]), static_cast<uint32_t>(y_ref[i]), 1)
+      ASSERT_NEAR(static_cast<uint32_t>(y[i]), static_cast<uint32_t>(y_ref[i]), 1)
           << "at element " << i << " / " << batch_size();
     }
   }
@@ -302,7 +302,7 @@ void VBinaryMicrokernelTester::Test(
     for (size_t i = 0; i < batch_size(); i++) {
       EXPECT_EQ(static_cast<int32_t>(y_ref[i]), static_cast<int32_t>(y[i]))
           << "at element " << i << " / " << batch_size();
-      EXPECT_NEAR(static_cast<float>(static_cast<int32_t>(y[i])), y_fp[i], 1.0f)
+      ASSERT_NEAR(static_cast<float>(static_cast<int32_t>(y[i])), y_fp[i], 1.0f)
           << "at element " << i << " / " << batch_size();
     }
   }
@@ -372,9 +372,9 @@ void VBinaryMicrokernelTester::Test(
 
     // Verify results.
     for (size_t i = 0; i < batch_size(); i++) {
-      EXPECT_NEAR(static_cast<int32_t>(y_ref[i]), static_cast<int32_t>(y[i]), 1)
+      ASSERT_NEAR(static_cast<int32_t>(y_ref[i]), static_cast<int32_t>(y[i]), 1)
           << "at element " << i << " / " << batch_size();
-      EXPECT_NEAR(static_cast<float>(static_cast<int32_t>(y[i])), y_fp[i], 1.0f)
+      ASSERT_NEAR(static_cast<float>(static_cast<int32_t>(y[i])), y_fp[i], 1.0f)
           << "at element " << i << " / " << batch_size();
     }
   }

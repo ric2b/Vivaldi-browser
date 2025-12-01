@@ -78,28 +78,36 @@ static const struct {
 };
 
 static const EVP_CIPHER *cbs_to_cipher(const CBS *cbs) {
-  for (size_t i = 0; i < OPENSSL_ARRAY_SIZE(kCipherOIDs); i++) {
-    if (CBS_mem_equal(cbs, kCipherOIDs[i].oid, kCipherOIDs[i].oid_len)) {
-      return kCipherOIDs[i].cipher_func();
+  for (const auto &cipher : kCipherOIDs) {
+    if (CBS_mem_equal(cbs, cipher.oid, cipher.oid_len)) {
+      return cipher.cipher_func();
     }
   }
 
-  return NULL;
+  return nullptr;
 }
 
 static int add_cipher_oid(CBB *out, int nid) {
-  for (size_t i = 0; i < OPENSSL_ARRAY_SIZE(kCipherOIDs); i++) {
-    if (kCipherOIDs[i].nid == nid) {
+  for (const auto &cipher : kCipherOIDs) {
+    if (cipher.nid == nid) {
       CBB child;
       return CBB_add_asn1(out, &child, CBS_ASN1_OBJECT) &&
-             CBB_add_bytes(&child, kCipherOIDs[i].oid,
-                           kCipherOIDs[i].oid_len) &&
+             CBB_add_bytes(&child, cipher.oid, cipher.oid_len) &&
              CBB_flush(out);
     }
   }
 
   OPENSSL_PUT_ERROR(PKCS8, PKCS8_R_UNSUPPORTED_CIPHER);
   return 0;
+}
+
+const EVP_CIPHER *pkcs5_pbe2_nid_to_cipher(int nid) {
+  for (const auto &cipher : kCipherOIDs) {
+    if (cipher.nid == nid) {
+      return cipher.cipher_func();
+    }
+  }
+  return nullptr;
 }
 
 static int pkcs5_pbe2_cipher_init(EVP_CIPHER_CTX *ctx, const EVP_CIPHER *cipher,
@@ -154,6 +162,7 @@ int PKCS5_pbe2_encrypt_init(CBB *out, EVP_CIPHER_CTX *ctx,
       (cipher_nid == NID_rc2_cbc &&
        !CBB_add_asn1_uint64(&kdf_param, EVP_CIPHER_key_length(cipher))) ||
       // Omit the PRF. We use the default hmacWithSHA1.
+      // TODO(crbug.com/396434682): Improve this defaults.
       !CBB_add_asn1(&param, &cipher_cbb, CBS_ASN1_SEQUENCE) ||
       !add_cipher_oid(&cipher_cbb, cipher_nid) ||
       // RFC 2898 says RC2-CBC and RC5-CBC-Pad use a SEQUENCE with version and

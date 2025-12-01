@@ -7,6 +7,7 @@
 
 #import <Foundation/Foundation.h>
 
+#import "components/policy/core/browser/signin/profile_separation_policies.h"
 #import "components/sync/base/user_selectable_type.h"
 #import "ios/testing/earl_grey/base_eg_test_helper_impl.h"
 
@@ -71,6 +72,9 @@ class GURL;
 // If there is no signed-in account returns an empty string.
 - (NSString*)primaryAccountGaiaID;
 
+// Returns the gaia IDs of all accounts in the current profile.
+- (NSSet<NSString*>*)accountsInProfileGaiaIDs;
+
 // Checks that no identity is signed in.
 - (BOOL)isSignedOut;
 
@@ -86,20 +90,23 @@ class GURL;
 // entry-point-implemented behavior (e.g. history & tabs sync will be disabled,
 // no check for management status, sign-in related
 // metrics will not be sent)
-// Note that, when sync-the-feature is enabled, this function differs from
-// `[SigninEarlGreyUI signinWithFakeIdentity:identity]`. The
-// UI function enable sync too.
-// TODO(crbug.com/40067025): Remove this last remark when sync is disabled.
 - (void)signinWithFakeIdentity:(FakeSystemIdentity*)identity;
+
+// Signs in with the fake identity and access point Settings.
+// Adds the fake-identity to the identity manager if necessary.
+// Converts the personal profile into a managed one.
+// Only intended for tests requiring sign-in but not covering the sign-in UI
+// behavior to speed up and simplify those tests.
+// Will bypass the usual verifications before signin and other
+// entry-point-implemented behavior (e.g. history & tabs sync will be disabled,
+// no check for management status, sign-in related
+// metrics will not be sent)
+- (void)signinWithFakeManagedIdentityInPersonalProfile:
+    (FakeSystemIdentity*)identity;
 
 // Calls `[self signinWithFakeIdentity:identity]` and then waits for sync
 // transport state to become active.
 - (void)signinAndWaitForSyncTransportStateActive:(FakeSystemIdentity*)identity;
-
-// TODO(crbug.com/40066949): Remove all tests invoking this when deleting the
-// MaybeMigrateSyncingUserToSignedIn() call on //ios (not right after launching
-// kMigrateSyncingUserToSignedIn).
-- (void)signinAndEnableLegacySyncFeature:(FakeSystemIdentity*)identity;
 
 // Signs in with `identity` without history sync consent.
 - (void)signInWithoutHistorySyncWithFakeIdentity:(FakeSystemIdentity*)identity;
@@ -126,12 +133,6 @@ class GURL;
 // Induces a GREYAssert if an identity is signed in.
 - (void)verifySignedOut;
 
-// Induces a GREYAssert if the Sync state does not match `enabled`.
-- (void)verifySyncUIEnabled:(BOOL)enabled;
-
-// Induces a GREYAssert if the Sync cell is not hidden.
-- (void)verifySyncUIIsHidden;
-
 - (void)setSelectedType:(syncer::UserSelectableType)type enabled:(BOOL)enabled;
 
 // Returns if the data type is enabled for the sync service.
@@ -140,6 +141,18 @@ class GURL;
 // Checks that fore each histogram listed above as properties, it’s emitted the
 // number of time indicated in the property for `accessPoint`.
 - (void)assertExpectedSigninHistograms:(ExpectedSigninHistograms*)expecteds;
+
+// Stores a policy that will be returned for the next fetch profile separation
+// policy request.
+- (void)setPolicyResponseForNextProfileSeparationPolicyRequest:
+    (policy::ProfileSeparationDataMigrationSettings)
+        profileSeparationDataMigrationSettings;
+
+// Returns whether the feature to put each managed account into its own separate
+// profile is enabled. This depends on the `kSeparateProfilesForManagedAccounts`
+// feature flag, plus some additional conditions which can't be directly checked
+// in the test app.
+- (BOOL)areSeparateProfilesForManagedAccountsEnabled;
 
 @end
 

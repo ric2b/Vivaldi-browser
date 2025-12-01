@@ -1566,14 +1566,14 @@ void HTMLDocumentParser::ProcessPreloadData(
 }
 
 void HTMLDocumentParser::MaybeFetchQueuedPreloads() {
+  if (!AllowPreloading()) {
+    return;
+  }
+
   TRACE_EVENT_WITH_FLOW0("blink,devtools.timeline",
                          "HTMLDocumentParser::MaybeFetchQueuedPreloads",
                          TRACE_ID_LOCAL(this),
                          TRACE_EVENT_FLAG_FLOW_IN | TRACE_EVENT_FLAG_FLOW_OUT);
-
-  if (!AllowPreloading()) {
-    return;
-  }
 
   base::ElapsedTimer timer;
   preloader_->TakeAndPreload(queued_preloads_);
@@ -1679,7 +1679,7 @@ void HTMLDocumentParser::AddPreloadDataOnBackgroundThread(
 }
 
 bool HTMLDocumentParser::HasPendingPreloads() {
-  return pending_preloads_->IsEmpty();
+  return !pending_preloads_->IsEmpty();
 }
 
 void HTMLDocumentParser::FlushPendingPreloads() {

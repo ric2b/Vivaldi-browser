@@ -647,8 +647,9 @@ void Serializer::ObjectSerializer::SerializeJSArrayBuffer() {
     backing_store = buffer->backing_store();
     // We cannot store byte_length or max_byte_length larger than uint32 range
     // in the snapshot.
-    CHECK_LE(buffer->byte_length(), std::numeric_limits<uint32_t>::max());
-    uint32_t byte_length = static_cast<uint32_t>(buffer->byte_length());
+    size_t byte_length_size = buffer->GetByteLength();
+    CHECK_LE(byte_length_size, std::numeric_limits<uint32_t>::max());
+    uint32_t byte_length = static_cast<uint32_t>(byte_length_size);
     Maybe<uint32_t> max_byte_length = Nothing<uint32_t>();
     if (buffer->is_resizable_by_js()) {
       CHECK_LE(buffer->max_byte_length(), std::numeric_limits<uint32_t>::max());
@@ -912,7 +913,7 @@ void Serializer::ObjectSerializer::SerializeObject() {
 
   // Descriptor arrays have complex element weakness, that is dependent on the
   // maps pointing to them. During deserialization, this can cause them to get
-  // prematurely trimmed one of their owners isn't deserialized yet. We work
+  // prematurely trimmed if one of their owners isn't deserialized yet. We work
   // around this by forcing all descriptor arrays to be serialized as "strong",
   // i.e. no custom weakness, and "re-weaken" them in the deserializer once
   // deserialization completes.

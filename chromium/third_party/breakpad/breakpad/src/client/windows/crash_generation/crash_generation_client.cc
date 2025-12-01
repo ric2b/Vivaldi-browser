@@ -84,7 +84,7 @@ static bool TransactNamedPipeDebugHelper(HANDLE pipe,
                  in_buffer,
                  in_size,
                  bytes_count,
-                 NULL)) {
+                 nullptr)) {
     return false;
   }
 
@@ -92,7 +92,7 @@ static bool TransactNamedPipeDebugHelper(HANDLE pipe,
   // and read.
   // Sleep(5000);
 
-  return ReadFile(pipe, out_buffer, out_size, bytes_count, NULL) != FALSE;
+  return ReadFile(pipe, out_buffer, out_size, bytes_count, nullptr) != FALSE;
 }
 **/
 
@@ -101,15 +101,15 @@ CrashGenerationClient::CrashGenerationClient(
     MINIDUMP_TYPE dump_type,
     const CustomClientInfo* custom_info)
         : pipe_name_(pipe_name),
-          pipe_handle_(NULL),
+          pipe_handle_(nullptr),
           custom_info_(),
           dump_type_(dump_type),
-          crash_event_(NULL),
-          crash_generated_(NULL),
-          server_alive_(NULL),
+          crash_event_(nullptr),
+          crash_generated_(nullptr),
+          server_alive_(nullptr),
           server_process_id_(0),
           thread_id_(0),
-          exception_pointers_(NULL) {
+          exception_pointers_(nullptr) {
   memset(&assert_info_, 0, sizeof(assert_info_));
   if (custom_info) {
     custom_info_ = *custom_info;
@@ -124,12 +124,12 @@ CrashGenerationClient::CrashGenerationClient(
           pipe_handle_(pipe_handle),
           custom_info_(),
           dump_type_(dump_type),
-          crash_event_(NULL),
-          crash_generated_(NULL),
-          server_alive_(NULL),
+          crash_event_(nullptr),
+          crash_generated_(nullptr),
+          server_alive_(nullptr),
           server_process_id_(0),
           thread_id_(0),
-          exception_pointers_(NULL) {
+          exception_pointers_(nullptr) {
   memset(&assert_info_, 0, sizeof(assert_info_));
   if (custom_info) {
     custom_info_ = *custom_info;
@@ -204,12 +204,12 @@ bool CrashGenerationClient::RequestUpload(DWORD crash_id) {
     return false;
   }
 
-  CustomClientInfo custom_info = {NULL, 0};
+  CustomClientInfo custom_info = {nullptr, 0};
   ProtocolMessage msg(MESSAGE_TAG_UPLOAD_REQUEST, crash_id,
-                      static_cast<MINIDUMP_TYPE>(NULL), NULL, NULL, NULL,
-                      custom_info, NULL, NULL, NULL);
+                      MiniDumpNormal, nullptr, nullptr,
+                      nullptr, custom_info, nullptr, nullptr, nullptr);
   DWORD bytes_count = 0;
-  bool success = WriteFile(pipe, &msg, sizeof(msg), &bytes_count, NULL) != 0;
+  bool success = WriteFile(pipe, &msg, sizeof(msg), &bytes_count, nullptr) != 0;
 
   CloseHandle(pipe);
   return success;
@@ -220,13 +220,13 @@ HANDLE CrashGenerationClient::ConnectToServer() {
                               kPipeDesiredAccess,
                               kPipeFlagsAndAttributes);
   if (!pipe) {
-    return NULL;
+    return nullptr;
   }
 
   DWORD mode = kPipeMode;
-  if (!SetNamedPipeHandleState(pipe, &mode, NULL, NULL)) {
+  if (!SetNamedPipeHandleState(pipe, &mode, nullptr, nullptr)) {
     CloseHandle(pipe);
-    pipe = NULL;
+    pipe = nullptr;
   }
 
   return pipe;
@@ -240,9 +240,9 @@ bool CrashGenerationClient::RegisterClient(HANDLE pipe) {
                       &exception_pointers_,
                       &assert_info_,
                       custom_info_,
-                      NULL,
-                      NULL,
-                      NULL);
+                      nullptr,
+                      nullptr,
+                      nullptr);
   ProtocolMessage reply;
   DWORD bytes_count = 0;
   // The call to TransactNamedPipe below can be changed to a call
@@ -254,7 +254,7 @@ bool CrashGenerationClient::RegisterClient(HANDLE pipe) {
                          &reply,
                          sizeof(ProtocolMessage),
                          &bytes_count,
-                         NULL)) {
+                         nullptr)) {
     return false;
   }
 
@@ -265,7 +265,7 @@ bool CrashGenerationClient::RegisterClient(HANDLE pipe) {
   ProtocolMessage ack_msg;
   ack_msg.tag = MESSAGE_TAG_REGISTRATION_ACK;
 
-  if (!WriteFile(pipe, &ack_msg, sizeof(ack_msg), &bytes_count, NULL)) {
+  if (!WriteFile(pipe, &ack_msg, sizeof(ack_msg), &bytes_count, nullptr)) {
     return false;
   }
   crash_event_ = reply.dump_request_handle;
@@ -281,7 +281,7 @@ HANDLE CrashGenerationClient::ConnectToPipe(const wchar_t* pipe_name,
                                             DWORD flags_attrs) {
   if (pipe_handle_) {
     HANDLE t = pipe_handle_;
-    pipe_handle_ = NULL;
+    pipe_handle_ = nullptr;
     return t;
   }
 
@@ -289,10 +289,10 @@ HANDLE CrashGenerationClient::ConnectToPipe(const wchar_t* pipe_name,
     HANDLE pipe = CreateFile(pipe_name,
                              pipe_access,
                              0,
-                             NULL,
+                             nullptr,
                              OPEN_EXISTING,
                              flags_attrs,
-                             NULL);
+                             nullptr);
     if (pipe != INVALID_HANDLE_VALUE) {
       return pipe;
     }
@@ -309,20 +309,20 @@ HANDLE CrashGenerationClient::ConnectToPipe(const wchar_t* pipe_name,
     }
   }
 
-  return NULL;
+  return nullptr;
 }
 
 bool CrashGenerationClient::ValidateResponse(
     const ProtocolMessage& msg) const {
   return (msg.tag == MESSAGE_TAG_REGISTRATION_RESPONSE) &&
          (msg.id != 0) &&
-         (msg.dump_request_handle != NULL) &&
-         (msg.dump_generated_handle != NULL) &&
-         (msg.server_alive_handle != NULL);
+         (msg.dump_request_handle != nullptr) &&
+         (msg.dump_generated_handle != nullptr) &&
+         (msg.server_alive_handle != nullptr);
 }
 
 bool CrashGenerationClient::IsRegistered() const {
-  return crash_event_ != NULL;
+  return crash_event_ != nullptr;
 }
 
 bool CrashGenerationClient::RequestDump(EXCEPTION_POINTERS* ex_info,
@@ -344,11 +344,11 @@ bool CrashGenerationClient::RequestDump(EXCEPTION_POINTERS* ex_info,
 }
 
 bool CrashGenerationClient::RequestDump(EXCEPTION_POINTERS* ex_info) {
-  return RequestDump(ex_info, NULL);
+  return RequestDump(ex_info, nullptr);
 }
 
 bool CrashGenerationClient::RequestDump(MDRawAssertionInfo* assert_info) {
-  return RequestDump(NULL, assert_info);
+  return RequestDump(nullptr, assert_info);
 }
 
 bool CrashGenerationClient::SignalCrashEventAndWait() {
@@ -383,8 +383,8 @@ HANDLE CrashGenerationClient::DuplicatePipeToClientProcess(const wchar_t* pipe_n
                                                            HANDLE hProcess) {
   for (int i = 0; i < kPipeConnectMaxAttempts; ++i) {
     HANDLE local_pipe = CreateFile(pipe_name, kPipeDesiredAccess,
-                                   0, NULL, OPEN_EXISTING,
-                                   kPipeFlagsAndAttributes, NULL);
+                                   0, nullptr, OPEN_EXISTING,
+                                   kPipeFlagsAndAttributes, nullptr);
     if (local_pipe != INVALID_HANDLE_VALUE) {
       HANDLE remotePipe = INVALID_HANDLE_VALUE;
       if (DuplicateHandle(GetCurrentProcess(), local_pipe,

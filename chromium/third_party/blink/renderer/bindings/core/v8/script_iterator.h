@@ -5,7 +5,6 @@
 #ifndef THIRD_PARTY_BLINK_RENDERER_BINDINGS_CORE_V8_SCRIPT_ITERATOR_H_
 #define THIRD_PARTY_BLINK_RENDERER_BINDINGS_CORE_V8_SCRIPT_ITERATOR_H_
 
-#include "third_party/abseil-cpp/absl/types/variant.h"
 #include "third_party/blink/renderer/bindings/core/v8/idl_types.h"
 #include "third_party/blink/renderer/bindings/core/v8/world_safe_v8_reference.h"
 #include "third_party/blink/renderer/core/core_export.h"
@@ -37,9 +36,6 @@ class ScriptPromise;
 // This class resembles ECMAScript's `GetIterator(obj, kind)` [3] abstract
 // operation, whose `kind` argument is either ASYNC or SYNC, directing the
 // operation as to which iterator type to try and obtain from the ES object.
-//
-// In general, this class should be preferred over using the
-// GetEsIteratorMethod() and GetEsIteratorWithMethod() functions directly.
 //
 // [1]: https://tc39.es/ecma262/#sec-iterator-records
 // [2]: https://tc39.es/ecma262/#table-async-iterator-required

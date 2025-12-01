@@ -9,13 +9,11 @@
 #include <utility>
 #include <vector>
 
-#include "base/functional/bind.h"
 #include "base/logging.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
-#include "build/chromeos_buildflags.h"
 #include "media/base/cdm_config.h"
 #include "media/base/eme_constants.h"
 #include "media/base/key_system_names.h"
@@ -29,10 +27,11 @@
 #include "third_party/blink/public/platform/web_content_settings_client.h"
 #include "third_party/blink/public/platform/web_media_key_system_configuration.h"
 #include "third_party/blink/public/platform/web_string.h"
-#include "third_party/blink/public/web/web_local_frame.h"
 #include "third_party/blink/renderer/platform/media/media_player_util.h"
+#include "third_party/blink/renderer/platform/wtf/functional.h"
 
 namespace blink {
+
 namespace {
 
 using ::media::EmeConfig;
@@ -188,18 +187,6 @@ bool IsSupportedMediaType(const std::string& container_mime_type,
 }
 
 }  // namespace
-
-bool KeySystemConfigSelector::WebLocalFrameDelegate::
-    IsCrossOriginToOutermostMainFrame() {
-  DCHECK(web_frame_);
-  return web_frame_->IsCrossOriginToOutermostMainFrame();
-}
-
-bool KeySystemConfigSelector::WebLocalFrameDelegate::AllowStorageAccessSync(
-    WebContentSettingsClient::StorageType storage_type) {
-  DCHECK(web_frame_);
-  return web_frame_->AllowStorageAccessSyncAndNotify(storage_type);
-}
 
 struct KeySystemConfigSelector::SelectionRequest {
   std::string key_system;
@@ -392,7 +379,7 @@ KeySystemConfigSelector::KeySystemConfigSelector(
     : key_systems_(key_systems),
       media_permission_(media_permission),
       web_frame_delegate_(std::move(web_frame_delegate)),
-      is_supported_media_type_cb_(base::BindRepeating(&IsSupportedMediaType)) {
+      is_supported_media_type_cb_(WTF::BindRepeating(&IsSupportedMediaType)) {
   DCHECK(key_systems_);
   DCHECK(media_permission_);
   DCHECK(web_frame_delegate_);
@@ -1099,8 +1086,8 @@ void KeySystemConfigSelector::SelectConfigInternal(
         DVLOG(3) << "Request permission.";
         media_permission_->RequestPermission(
             media::MediaPermission::Type::kProtectedMediaIdentifier,
-            base::BindOnce(&KeySystemConfigSelector::OnPermissionResult,
-                           weak_factory_.GetWeakPtr(), std::move(request)));
+            WTF::BindOnce(&KeySystemConfigSelector::OnPermissionResult,
+                          weak_factory_.GetWeakPtr(), std::move(request)));
         return;
       case CONFIGURATION_SUPPORTED:
         std::string key_system = request->key_system;
@@ -1125,9 +1112,9 @@ void KeySystemConfigSelector::SelectConfigInternal(
             media::kHardwareSecureDecryptionFallbackPerSite.Get()) {
           if (!request->was_hardware_secure_decryption_preferences_requested) {
             media_permission_->IsHardwareSecureDecryptionAllowed(
-                base::BindOnce(&KeySystemConfigSelector::
-                                   OnHardwareSecureDecryptionAllowedResult,
-                               weak_factory_.GetWeakPtr(), std::move(request)));
+                WTF::BindOnce(&KeySystemConfigSelector::
+                                  OnHardwareSecureDecryptionAllowedResult,
+                              weak_factory_.GetWeakPtr(), std::move(request)));
             return;
           }
 

@@ -70,7 +70,7 @@ char* StdMapSerializer<Key, Value>::Write(const std::map<Key, Value>& m,
                                           char* dest) const {
   if (!dest) {
     BPLOG(ERROR) << "StdMapSerializer failed: write to NULL address.";
-    return NULL;
+    return nullptr;
   }
   char* start_address = dest;
 
@@ -105,7 +105,7 @@ char* StdMapSerializer<Key, Value>::Serialize(
   if (!serialized_data) {
     BPLOG(INFO) << "StdMapSerializer memory allocation failed.";
     if (size) *size = 0;
-    return NULL;
+    return nullptr;
   }
   // Write serialized data into memory.
   Write(m, serialized_data);
@@ -138,7 +138,7 @@ char* RangeMapSerializer<Address, Entry>::Write(
     const RangeMap<Address, Entry>& m, char* dest) const {
   if (!dest) {
     BPLOG(ERROR) << "RangeMapSerializer failed: write to NULL address.";
-    return NULL;
+    return nullptr;
   }
   char* start_address = dest;
 
@@ -174,7 +174,7 @@ char* RangeMapSerializer<Address, Entry>::Serialize(
   if (!serialized_data) {
     BPLOG(INFO) << "RangeMapSerializer memory allocation failed.";
     if (size) *size = 0;
-    return NULL;
+    return nullptr;
   }
 
   // Write serialized data into memory.
@@ -212,7 +212,7 @@ char* ContainedRangeMapSerializer<AddrType, EntryType>::Write(
     const ContainedRangeMap<AddrType, EntryType>* m, char* dest) const {
   if (!dest) {
     BPLOG(ERROR) << "StdMapSerializer failed: write to NULL address.";
-    return NULL;
+    return nullptr;
   }
   dest = addr_serializer_.Write(m->base_, dest);
   dest = SimpleSerializer<uint64_t>::Write(entry_serializer_.SizeOf(m->entry_),
@@ -221,7 +221,7 @@ char* ContainedRangeMapSerializer<AddrType, EntryType>::Write(
 
   // Write map<<AddrType, ContainedRangeMap*>:
   char* map_address = dest;
-  if (m->map_ == NULL) {
+  if (m->map_ == nullptr) {
     dest = SimpleSerializer<uint64_t>::Write(0, dest);
   } else {
     dest = SimpleSerializer<uint64_t>::Write(m->map_->size(), dest);
@@ -253,7 +253,7 @@ char* ContainedRangeMapSerializer<AddrType, EntryType>::Serialize(
   if (!serialized_data) {
     BPLOG(INFO) << "ContainedRangeMapSerializer memory allocation failed.";
     if (size) *size = 0;
-    return NULL;
+    return nullptr;
   }
   Write(m, serialized_data);
   if (size) *size = size_to_alloc;

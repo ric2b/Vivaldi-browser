@@ -17,6 +17,18 @@
       <div class="icon" id="icon"></div>
       <div id="main-message">
         <h1>$i18nRaw{heading}</h1>
+        <p><code>$i18n{rule}</code></p>
+        <div>
+          <p><span>$i18n{ruleListCaption}</span> <a href="$i18n{ruleListAddress}">$i18n{ruleListName}</a></p>
+        </div>
+        <div>
+          <p>$i18n{urlDetailsCaption}</p>
+          <div id="request-url">
+            <p><code>$i18n{requestUrl}</code> <a href="#" id="show-url-details" class="hidden"><span>$i18n{urlHideDetails}</span><span>$i18n{urlShowDetails}</span></a></p>
+            <ul id="url-details" class="hidden">
+            </ul>
+          </div>
+        </div>
         <p>$i18nRaw{primaryParagraph}</p>
         <div id="debugging">
           <div id="error-code" class="error-code"></div>

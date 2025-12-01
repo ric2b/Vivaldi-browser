@@ -48,6 +48,9 @@
 // Delegate for banner promo interactions.
 @property(nonatomic, weak) id<BannerPromoViewDelegate> bannerPromoDelegate;
 
+// Whether the toolbar's location bar is currently expanded.
+@property(nonatomic, readonly) BOOL locationBarIsExpanded;
+
 // Sets the tabgroupIndicatorView.
 - (void)setTabGroupIndicatorView:(TabGroupIndicatorView*)view;
 

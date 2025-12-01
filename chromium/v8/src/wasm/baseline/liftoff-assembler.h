@@ -85,6 +85,7 @@ class FreezeCacheState {
  public:
 #if DEBUG
   explicit FreezeCacheState(LiftoffAssembler& assm);
+  FreezeCacheState(FreezeCacheState&& other) V8_NOEXCEPT;
   ~FreezeCacheState();
 
  private:
@@ -303,7 +304,11 @@ class LiftoffAssembler : public MacroAssembler {
 
     // Returns whether this was the last use.
     void dec_used(LiftoffRegister reg) {
-      DCHECK(!frozen);
+      // Note that we do not DCHECK(!frozen) here due to a special case: When
+      // performign a call_indirect, we first create an OOL trap label (which
+      // freezes the state to make sure that the safe point table remains valid)
+      // and then we drop values (which doesn't invalidate safe point table, so
+      // it is actually fine to do it.)
       DCHECK(is_used(reg));
       if (reg.is_pair()) {
         dec_used(reg.low());
@@ -995,7 +1000,7 @@ class LiftoffAssembler : public MacroAssembler {
   inline void LoadTransform(LiftoffRegister dst, Register src_addr,
                             Register offset_reg, uintptr_t offset_imm,
                             LoadType type, LoadTransformationKind transform,
-                            uint32_t* protected_load_pc);
+                            uint32_t* protected_load_pc, bool i64_offset);
   inline void LoadLane(LiftoffRegister dst, LiftoffRegister src, Register addr,
                        Register offset_reg, uintptr_t offset_imm, LoadType type,
                        uint8_t lane, uint32_t* protected_load_pc,
@@ -1636,6 +1641,10 @@ class LiftoffAssembler : public MacroAssembler {
 inline FreezeCacheState::FreezeCacheState(LiftoffAssembler& assm)
     : assm_(assm) {
   assm.SetCacheStateFrozen();
+}
+inline FreezeCacheState::FreezeCacheState(FreezeCacheState&& other) V8_NOEXCEPT
+    : assm_(other.assm_) {
+  assm_.SetCacheStateFrozen();
 }
 inline FreezeCacheState::~FreezeCacheState() { assm_.UnfreezeCacheState(); }
 #endif

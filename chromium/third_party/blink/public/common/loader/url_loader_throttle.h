@@ -198,6 +198,9 @@ class BLINK_COMMON_EXPORT URLLoaderThrottle {
 
   void set_delegate(Delegate* delegate) { delegate_ = delegate; }
 
+  // NOTE(ondrej@vivaldi.com): VB-113318
+  virtual void OnURLLoaderThrottleProviderDestroyed() {}
+
  protected:
   URLLoaderThrottle();
 

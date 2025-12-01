@@ -104,13 +104,16 @@ typedef struct VulkanDevicePriv {
     void *libvulkan;
 
     FFVulkanContext    vkctx;
-    FFVkQueueFamilyCtx compute_qf;
-    FFVkQueueFamilyCtx transfer_qf;
+    AVVulkanDeviceQueueFamily *compute_qf;
+    AVVulkanDeviceQueueFamily *transfer_qf;
 
     /* Properties */
     VkPhysicalDeviceProperties2 props;
     VkPhysicalDeviceMemoryProperties mprops;
     VkPhysicalDeviceExternalMemoryHostPropertiesEXT hprops;
+
+    /* Opaque FD external semaphore properties */
+    VkExternalSemaphoreProperties ext_sem_props_opaque;
 
     /* Enabled features */
     VulkanDeviceFeatures feats;
@@ -533,11 +536,19 @@ static int vkfmt_from_pixfmt2(AVHWDeviceContext *dev_ctx, enum AVPixelFormat p,
     return AVERROR(EINVAL);
 }
 
+#if CONFIG_VULKAN_STATIC
+VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL vkGetInstanceProcAddr(VkInstance instance,
+                                                               const char *pName);
+#endif
+
 static int load_libvulkan(AVHWDeviceContext *ctx)
 {
     VulkanDevicePriv *p = ctx->hwctx;
     AVVulkanDeviceContext *hwctx = &p->p;
 
+#if CONFIG_VULKAN_STATIC
+    hwctx->get_proc_addr = vkGetInstanceProcAddr;
+#else
     static const char *lib_names[] = {
 #if defined(_WIN32)
         "vulkan-1.dll",
@@ -563,6 +574,7 @@ static int load_libvulkan(AVHWDeviceContext *ctx)
     }
 
     hwctx->get_proc_addr = (PFN_vkGetInstanceProcAddr)dlsym(p->libvulkan, "vkGetInstanceProcAddr");
+#endif /* CONFIG_VULKAN_STATIC */
 
     return 0;
 }
@@ -573,7 +585,10 @@ typedef struct VulkanOptExtension {
 } VulkanOptExtension;
 
 static const VulkanOptExtension optional_instance_exts[] = {
+    { VK_EXT_LAYER_SETTINGS_EXTENSION_NAME,                   FF_VK_EXT_NO_FLAG                },
+#ifdef __APPLE__
     { VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME,          FF_VK_EXT_NO_FLAG                },
+#endif
 };
 
 static const VulkanOptExtension optional_device_exts[] = {
@@ -624,6 +639,7 @@ static VkBool32 VKAPI_CALL vk_dbg_callback(VkDebugUtilsMessageSeverityFlagBitsEX
     case 0xfd92477a: /* BestPractices-vkAllocateMemory-small-allocation */
     case 0x618ab1e7: /* VUID-VkImageViewCreateInfo-usage-02275 */
     case 0x30f4ac70: /* VUID-VkImageCreateInfo-pNext-06811 */
+    case 0xa05b236e: /* UNASSIGNED-Threading-MultipleThreads-Write */
         return VK_FALSE;
     default:
         break;
@@ -1702,6 +1718,7 @@ static int vulkan_device_init(AVHWDeviceContext *ctx)
     FFVulkanFunctions *vk = &p->vkctx.vkfn;
     VkQueueFamilyProperties2 *qf;
     VkQueueFamilyVideoPropertiesKHR *qf_vid;
+    VkPhysicalDeviceExternalSemaphoreInfo ext_sem_props_info;
     int graph_index, comp_index, tx_index, enc_index, dec_index;
 
     /* Set device extension flags */
@@ -1746,6 +1763,24 @@ static int vulkan_device_init(AVHWDeviceContext *ctx)
         av_log(ctx, AV_LOG_ERROR, "Failed to get queues!\n");
         return AVERROR_EXTERNAL;
     }
+
+    ext_sem_props_info = (VkPhysicalDeviceExternalSemaphoreInfo) {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTERNAL_SEMAPHORE_INFO,
+    };
+
+    /* Opaque FD semaphore properties */
+    ext_sem_props_info.handleType =
+#ifdef _WIN32
+        IsWindows8OrGreater()
+            ? VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_OPAQUE_WIN32_BIT
+            : VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_OPAQUE_WIN32_KMT_BIT;
+#else
+        VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_OPAQUE_FD_BIT;
+#endif
+    p->ext_sem_props_opaque.sType = VK_STRUCTURE_TYPE_EXTERNAL_SEMAPHORE_PROPERTIES;
+    vk->GetPhysicalDeviceExternalSemaphoreProperties(hwctx->phys_dev,
+                                                     &ext_sem_props_info,
+                                                     &p->ext_sem_props_opaque);
 
     qf = av_malloc_array(qf_num, sizeof(VkQueueFamilyProperties2));
     if (!qf)
@@ -1901,8 +1936,8 @@ FF_ENABLE_DEPRECATION_WARNINGS
     p->vkctx.hwctx = hwctx;
 
     ff_vk_load_props(&p->vkctx);
-    ff_vk_qf_init(&p->vkctx, &p->compute_qf, VK_QUEUE_COMPUTE_BIT);
-    ff_vk_qf_init(&p->vkctx, &p->transfer_qf, VK_QUEUE_TRANSFER_BIT);
+    p->compute_qf = ff_vk_qf_find(&p->vkctx, VK_QUEUE_COMPUTE_BIT, 0);
+    p->transfer_qf = ff_vk_qf_find(&p->vkctx, VK_QUEUE_TRANSFER_BIT, 0);
 
 end:
     av_free(qf_vid);
@@ -2406,8 +2441,19 @@ static int create_frame(AVHWFramesContext *hwfc, AVVkFrame **frame,
     VulkanDevicePriv *p = ctx->hwctx;
     AVVulkanDeviceContext *hwctx = &p->p;
     FFVulkanFunctions *vk = &p->vkctx.vkfn;
+    AVVkFrame *f;
 
-    VkExportSemaphoreCreateInfo ext_sem_info = {
+    VkSemaphoreTypeCreateInfo sem_type_info = {
+        .sType         = VK_STRUCTURE_TYPE_SEMAPHORE_TYPE_CREATE_INFO,
+        .semaphoreType = VK_SEMAPHORE_TYPE_TIMELINE,
+        .initialValue  = 0,
+    };
+    VkSemaphoreCreateInfo sem_spawn = {
+        .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
+        .pNext = &sem_type_info,
+    };
+
+    VkExportSemaphoreCreateInfo ext_sem_info_opaque = {
         .sType = VK_STRUCTURE_TYPE_EXPORT_SEMAPHORE_CREATE_INFO,
 #ifdef _WIN32
         .handleTypes = IsWindows8OrGreater()
@@ -2418,23 +2464,13 @@ static int create_frame(AVHWFramesContext *hwfc, AVVkFrame **frame,
 #endif
     };
 
-    VkSemaphoreTypeCreateInfo sem_type_info = {
-        .sType         = VK_STRUCTURE_TYPE_SEMAPHORE_TYPE_CREATE_INFO,
-#ifdef _WIN32
-        .pNext         = p->vkctx.extensions & FF_VK_EXT_EXTERNAL_WIN32_SEM ? &ext_sem_info : NULL,
-#else
-        .pNext         = p->vkctx.extensions & FF_VK_EXT_EXTERNAL_FD_SEM ? &ext_sem_info : NULL,
-#endif
-        .semaphoreType = VK_SEMAPHORE_TYPE_TIMELINE,
-        .initialValue  = 0,
-    };
+    /* Check if exporting is supported before chaining any structs */
+    if (p->ext_sem_props_opaque.externalSemaphoreFeatures & VK_EXTERNAL_SEMAPHORE_FEATURE_EXPORTABLE_BIT) {
+        if (p->vkctx.extensions & (FF_VK_EXT_EXTERNAL_WIN32_SEM | FF_VK_EXT_EXTERNAL_FD_SEM))
+            ff_vk_link_struct(&sem_type_info, &ext_sem_info_opaque);
+    }
 
-    VkSemaphoreCreateInfo sem_spawn = {
-        .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
-        .pNext = &sem_type_info,
-    };
-
-    AVVkFrame *f = av_vk_frame_alloc();
+    f = av_vk_frame_alloc();
     if (!f) {
         av_log(ctx, AV_LOG_ERROR, "Unable to allocate memory for AVVkFrame!\n");
         return AVERROR(ENOMEM);
@@ -2786,18 +2822,18 @@ static int vulkan_frames_init(AVHWFramesContext *hwfc)
     if (!hwctx->unlock_frame)
         hwctx->unlock_frame = unlock_frame;
 
-    err = ff_vk_exec_pool_init(&p->vkctx, &p->compute_qf, &fp->compute_exec,
-                               p->compute_qf.nb_queues, 0, 0, 0, NULL);
+    err = ff_vk_exec_pool_init(&p->vkctx, p->compute_qf, &fp->compute_exec,
+                               p->compute_qf->num, 0, 0, 0, NULL);
     if (err)
         return err;
 
-    err = ff_vk_exec_pool_init(&p->vkctx, &p->transfer_qf, &fp->upload_exec,
-                               p->transfer_qf.nb_queues*2, 0, 0, 0, NULL);
+    err = ff_vk_exec_pool_init(&p->vkctx, p->transfer_qf, &fp->upload_exec,
+                               p->transfer_qf->num*2, 0, 0, 0, NULL);
     if (err)
         return err;
 
-    err = ff_vk_exec_pool_init(&p->vkctx, &p->transfer_qf, &fp->download_exec,
-                               p->transfer_qf.nb_queues, 0, 0, 0, NULL);
+    err = ff_vk_exec_pool_init(&p->vkctx, p->transfer_qf, &fp->download_exec,
+                               p->transfer_qf->num, 0, 0, 0, NULL);
     if (err)
         return err;
 

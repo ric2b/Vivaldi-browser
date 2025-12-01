@@ -73,6 +73,7 @@ bool WhatsNewUIConfig::IsWebUIEnabled(
 void WhatsNewUI::RegisterLocalStatePrefs(PrefRegistrySimple* registry) {
   registry->RegisterDictionaryPref(prefs::kWhatsNewEditionUsed);
   registry->RegisterListPref(prefs::kWhatsNewFirstEnabledOrder);
+  registry->RegisterIntegerPref(prefs::kWhatsNewVersionUsed, 0);
 }
 
 WhatsNewUI::WhatsNewUI(content::WebUI* web_ui)
@@ -147,7 +148,8 @@ void WhatsNewUI::CreateBrowserCommandHandler(
           browser_command::mojom::Command::kOpenSafetyCheckFromWhatsNew,
       });
   command_handler_ = std::make_unique<BrowserCommandHandler>(
-      std::move(pending_handler), profile_, supported_commands);
+      std::move(pending_handler), profile_, supported_commands,
+      web_ui()->GetWebContents());
 }
 
 WhatsNewUI::~WhatsNewUI() = default;

@@ -31,6 +31,10 @@
 #include "test/fuzzer/fuzzer-support.h"
 #include "tools/wasm/mjsunit-module-disassembler-impl.h"
 
+#if V8_ENABLE_DRUMBRAKE
+#include "src/wasm/interpreter/wasm-interpreter.h"
+#endif  // V8_ENABLE_DRUMBRAKE
+
 namespace v8::internal::wasm::fuzzing {
 
 namespace {
@@ -77,7 +81,7 @@ CompileTimeImports CompileTimeImportsForFuzzing() {
 
 // Compile a baseline module. We pass a pointer to a max step counter and a
 // nondeterminsm flag that are updated during execution by Liftoff.
-Handle<WasmModuleObject> CompileReferenceModule(
+DirectHandle<WasmModuleObject> CompileReferenceModule(
     Isolate* isolate, base::Vector<const uint8_t> wire_bytes,
     int32_t* max_steps) {
   // Create the native module.
@@ -95,9 +99,11 @@ Handle<WasmModuleObject> CompileReferenceModule(
   WasmError imports_error = ValidateAndSetBuiltinImports(
       module.get(), wire_bytes, compile_imports, &detected_features);
   CHECK(!imports_error.has_error());  // The module was compiled before.
+  const size_t code_size_estimate =
+      WasmCodeManager::EstimateNativeModuleCodeSize(module.get());
   native_module = GetWasmEngine()->NewNativeModule(
       isolate, enabled_features, detected_features,
-      CompileTimeImportsForFuzzing(), module, 0);
+      CompileTimeImportsForFuzzing(), module, code_size_estimate);
   native_module->SetWireBytes(base::OwnedCopyOf(wire_bytes));
   // The module is known to be valid as this point (it was compiled by the
   // caller before).
@@ -123,18 +129,31 @@ Handle<WasmModuleObject> CompileReferenceModule(
   return WasmModuleObject::New(isolate, std::move(native_module), script);
 }
 
-void ExecuteAgainstReference(Isolate* isolate,
-                             Handle<WasmModuleObject> module_object,
-                             int32_t max_executed_instructions) {
+#if V8_ENABLE_DRUMBRAKE
+void ClearJsToWasmWrappersForTesting(Isolate* isolate) {
+  for (int i = 0; i < isolate->heap()->js_to_wasm_wrappers()->length(); i++) {
+    isolate->heap()->js_to_wasm_wrappers()->set(i, ClearedValue(isolate));
+  }
+}
+
+int ExecuteAgainstReference(Isolate* isolate,
+                            DirectHandle<WasmModuleObject> module_object,
+                            int32_t max_executed_instructions,
+                            bool is_wasm_jitless) {
+#else   // V8_ENABLE_DRUMBRAKE
+int ExecuteAgainstReference(Isolate* isolate,
+                            DirectHandle<WasmModuleObject> module_object,
+                            int32_t max_executed_instructions) {
+#endif  // V8_ENABLE_DRUMBRAKE
   // We do not instantiate the module if there is a start function, because a
   // start function can contain an infinite loop which we cannot handle.
-  if (module_object->module()->start_function_index >= 0) return;
+  if (module_object->module()->start_function_index >= 0) return -1;
 
   int32_t max_steps = max_executed_instructions;
 
   HandleScope handle_scope(isolate);  // Avoid leaking handles.
   Zone reference_module_zone(isolate->allocator(), "wasm reference module");
-  Handle<WasmModuleObject> module_ref = CompileReferenceModule(
+  DirectHandle<WasmModuleObject> module_ref = CompileReferenceModule(
       isolate, module_object->native_module()->wire_bytes(), &max_steps);
   DirectHandle<WasmInstanceObject> instance_ref;
 
@@ -151,7 +170,7 @@ void ExecuteAgainstReference(Isolate* isolate,
              .ToHandle(&instance_ref)) {
       isolate->clear_exception();
       thrower.Reset();  // Ignore errors.
-      return;
+      return -1;
     }
   }
 
@@ -159,7 +178,7 @@ void ExecuteAgainstReference(Isolate* isolate,
   DirectHandle<WasmExportedFunction> main_function;
   if (!testing::GetExportedFunction(isolate, instance_ref, "main")
            .ToHandle(&main_function)) {
-    return;
+    return -1;
   }
 
   struct OomCallbackData {
@@ -208,6 +227,31 @@ void ExecuteAgainstReference(Isolate* isolate,
     isolate->CancelTerminateExecution();
   }
 
+#if V8_ENABLE_DRUMBRAKE
+  if (is_wasm_jitless) {
+    v8::internal::v8_flags.jitless = true;
+    v8::internal::v8_flags.wasm_jitless = true;
+    FlagList::EnforceFlagImplications();
+    v8::internal::wasm::WasmInterpreterThread::Initialize();
+    ClearJsToWasmWrappersForTesting(isolate);
+
+    // Compiled WasmCode objects should be cleared before running drumbrake.
+    module_ref = Handle<WasmModuleObject>::null();
+    isolate->heap()->CollectAllGarbage(GCFlag::kNoFlags,
+                                       i::GarbageCollectionReason::kTesting);
+
+    // The module should be validated when compiled for jitless mode.
+    // But, we already compiled the module without jitless for the reference
+    // instance. So, we run the validation here before running drumbrake.
+    auto enabled_features = WasmEnabledFeatures::FromIsolate(isolate);
+    WasmDetectedFeatures unused_detected_features;
+    ModuleDecoderImpl decoder(
+        enabled_features, module_object->native_module()->wire_bytes(),
+        ModuleOrigin::kWasmOrigin, &unused_detected_features);
+    if (decoder.DecodeModule(/*validate_functions=*/true).failed()) return -1;
+  }
+#endif  // V8_ENABLE_DRUMBRAKE
+
   if (exception_ref) {
     if (strcmp(exception_ref.get(),
                "RangeError: Maximum call stack size exceeded") == 0) {
@@ -220,7 +264,7 @@ void ExecuteAgainstReference(Isolate* isolate,
   if (!execute) {
     // Before discarding the module, see if Turbofan runs into any DCHECKs.
     TierUpAllForTesting(isolate, instance_ref->trusted_data(isolate));
-    return;
+    return -1;
   }
 
   // Instantiate a fresh instance for the actual (non-ref) execution.
@@ -238,7 +282,7 @@ void ExecuteAgainstReference(Isolate* isolate,
         // The initial memory size might be too large for instantiation
         // (especially on 32 bit systems), therefore do not treat it as a fuzzer
         // failure.
-        return;
+        return -1;
       }
       FATAL("Second instantiation failed unexpectedly: %s",
             thrower.error_msg());
@@ -254,7 +298,7 @@ void ExecuteAgainstReference(Isolate* isolate,
   // growing memory). In that case, do not compare results.
   // TODO(384781857): Due to nondeterminism, the second run could even not
   // terminate. If this happens often enough we should do something about this.
-  if (WasmEngine::clear_nondeterminism()) return;
+  if (WasmEngine::clear_nondeterminism()) return -1;
 
   if ((exception_ref != nullptr) != (exception != nullptr)) {
     FATAL("Exception mismatch! Expected: <%s>; got: <%s>",
@@ -265,6 +309,8 @@ void ExecuteAgainstReference(Isolate* isolate,
   if (!exception) {
     CHECK_EQ(result_ref, result);
   }
+
+  return 0;
 }
 
 void GenerateTestCase(Isolate* isolate, ModuleWireBytes wire_bytes,
@@ -314,7 +360,7 @@ std::vector<uint8_t> CreateDummyModuleWireBytes(Zone* zone) {
   const bool is_final = true;
   builder.AddRecursiveTypeGroup(0, 2);
   builder.AddArrayType(zone->New<ArrayType>(kWasmF32, true), is_final);
-  StructType::Builder struct_builder(zone, 2);
+  StructType::Builder struct_builder(zone, 2, false);
   struct_builder.AddField(kWasmI64, false);
   struct_builder.AddField(kWasmExternRef, false);
   builder.AddStructType(struct_builder.Build(), !is_final);
@@ -396,15 +442,15 @@ void ResetTypeCanonicalizer(v8::Isolate* isolate, Zone* zone) {
   AddDummyTypesToTypeCanonicalizer(i_isolate, zone);
 }
 
-void WasmExecutionFuzzer::FuzzWasmModule(base::Vector<const uint8_t> data,
-                                         bool require_valid) {
+int WasmExecutionFuzzer::FuzzWasmModule(base::Vector<const uint8_t> data,
+                                        bool require_valid) {
   v8_fuzzer::FuzzerSupport* support = v8_fuzzer::FuzzerSupport::Get();
   v8::Isolate* isolate = support->GetIsolate();
 
   // Strictly enforce the input size limit. Note that setting "max_len" on the
   // fuzzer target is not enough, since different fuzzers are used and not all
   // respect that limit.
-  if (data.size() > max_input_size()) return;
+  if (data.size() > max_input_size()) return -1;
 
   Isolate* i_isolate = reinterpret_cast<Isolate*>(isolate);
 
@@ -454,7 +500,7 @@ void WasmExecutionFuzzer::FuzzWasmModule(base::Vector<const uint8_t> data,
   }
 
   if (!GenerateModule(i_isolate, &zone, data, &buffer)) {
-    return;
+    return -1;
   }
 
   testing::SetupIsolateForWasmModule(i_isolate);
@@ -484,11 +530,16 @@ void WasmExecutionFuzzer::FuzzWasmModule(base::Vector<const uint8_t> data,
                                  tier_mask);
   FlagScope<int> debug_mask_scope(&v8_flags.wasm_debug_mask_for_testing,
                                   debug_mask);
+  // Reference runs use extra compile settings (like non-determinism detection),
+  // which would be removed and replaced with a new liftoff function without
+  // these options.
+  FlagScope<bool> no_liftoff_code_flushing(&v8_flags.flush_liftoff_code, false);
 
   ErrorThrower thrower(i_isolate, "WasmFuzzerSyncCompile");
-  MaybeHandle<WasmModuleObject> compiled_module = GetWasmEngine()->SyncCompile(
-      i_isolate, enabled_features, CompileTimeImportsForFuzzing(), &thrower,
-      base::OwnedCopyOf(buffer));
+  MaybeDirectHandle<WasmModuleObject> compiled_module =
+      GetWasmEngine()->SyncCompile(i_isolate, enabled_features,
+                                   CompileTimeImportsForFuzzing(), &thrower,
+                                   base::OwnedCopyOf(buffer));
   CHECK_EQ(valid, !compiled_module.is_null());
   CHECK_EQ(!valid, thrower.error());
   if (require_valid && !valid) {
@@ -496,10 +547,14 @@ void WasmExecutionFuzzer::FuzzWasmModule(base::Vector<const uint8_t> data,
   }
   thrower.Reset();
 
-  if (valid) {
-    ExecuteAgainstReference(i_isolate, compiled_module.ToHandleChecked(),
-                            kDefaultMaxFuzzerExecutedInstructions);
-  }
+  // Do not execute invalid modules, and return `-1` to avoid adding them to the
+  // corpus. Even though invalid modules are also somewhat interesting to fuzz,
+  // we will get them often enough via mutations, so we do not add them to the
+  // corpus.
+  if (!valid) return -1;
+
+  return ExecuteAgainstReference(i_isolate, compiled_module.ToHandleChecked(),
+                                 kDefaultMaxFuzzerExecutedInstructions);
 }
 
 }  // namespace v8::internal::wasm::fuzzing

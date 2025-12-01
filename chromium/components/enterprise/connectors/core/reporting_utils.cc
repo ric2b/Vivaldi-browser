@@ -4,12 +4,13 @@
 
 #include "components/enterprise/connectors/core/reporting_utils.h"
 
+#include "base/logging.h"
 #include "base/strings/utf_string_conversions.h"
 #include "components/enterprise/common/proto/synced/browser_events.pb.h"
 #include "components/enterprise/connectors/core/common.h"
 #include "components/enterprise/connectors/core/reporting_constants.h"
-#include "components/url_matcher/url_matcher.h"
 #include "components/url_matcher/url_util.h"
+#include "net/base/network_interfaces.h"
 
 namespace enterprise_connectors {
 
@@ -31,19 +32,6 @@ using InterstitialReason = ::chrome::cros::reporting::proto::
 using ProtoEventResult = ::chrome::cros::reporting::proto::EventResult;
 
 const char kMaskedUsername[] = "*****";
-
-// Do a best-effort masking of `username`. If it's an email address (such as
-// foo@example.com), everything before @ should be masked. Otherwise, the entire
-// username should be masked.
-std::string MaskUsername(const std::u16string& username) {
-  size_t pos = username.find(u"@");
-  if (pos == std::string::npos) {
-    return kMaskedUsername;
-  }
-
-  return base::StrCat(
-      {kMaskedUsername, base::UTF16ToUTF8(username.substr(pos))});
-}
 
 TriggerType GetTriggerType(const std::string& trigger) {
   TriggerType type;
@@ -77,13 +65,33 @@ ProtoEventResult GetEventResult(EventResult event_result) {
   }
 }
 
-// Create a URLMatcher representing the filters in
-// `settings.enabled_opt_in_events` for `event_type`. This field of the
-// reporting settings connector contains a map where keys are event types and
-// values are lists of URL patterns specifying on which URLs the events are
-// allowed to be reported. An event is generated iff its event type is present
-// in the opt-in events field and the URL it relates to matches at least one of
-// the event type's filters.
+std::string ActionFromVerdictType(
+    safe_browsing::RTLookupResponse::ThreatInfo::VerdictType verdict_type) {
+  switch (verdict_type) {
+    case safe_browsing::RTLookupResponse::ThreatInfo::DANGEROUS:
+      return "BLOCK";
+    case safe_browsing::RTLookupResponse::ThreatInfo::WARN:
+      return "WARN";
+    case safe_browsing::RTLookupResponse::ThreatInfo::SAFE:
+      return "REPORT_ONLY";
+    case safe_browsing::RTLookupResponse::ThreatInfo::SUSPICIOUS:
+    case safe_browsing::RTLookupResponse::ThreatInfo::VERDICT_TYPE_UNSPECIFIED:
+      return "ACTION_UNKNOWN";
+  }
+}
+
+}  // namespace
+
+std::string MaskUsername(const std::u16string& username) {
+  size_t pos = username.find(u"@");
+  if (pos == std::string::npos) {
+    return kMaskedUsername;
+  }
+
+  return base::StrCat(
+      {kMaskedUsername, base::UTF16ToUTF8(username.substr(pos))});
+}
+
 std::unique_ptr<url_matcher::URLMatcher> CreateURLMatcherForOptInEvent(
     const enterprise_connectors::ReportingSettings& settings,
     const char* event_type) {
@@ -101,12 +109,52 @@ std::unique_ptr<url_matcher::URLMatcher> CreateURLMatcherForOptInEvent(
   return matcher;
 }
 
-bool IsOptInEventEnabled(url_matcher::URLMatcher* matcher, const GURL& url) {
+bool IsUrlMatched(url_matcher::URLMatcher* matcher, const GURL& url) {
   return matcher && !matcher->MatchURL(url).empty();
 }
 
-}  // namespace
+EventResult GetEventResultFromThreatType(std::string threat_type) {
+  if (threat_type == "ENTERPRISE_WARNED_SEEN") {
+    return EventResult::WARNED;
+  }
+  if (threat_type == "ENTERPRISE_WARNED_BYPASS") {
+    return EventResult::BYPASSED;
+  }
+  if (threat_type == "ENTERPRISE_BLOCKED_SEEN") {
+    return EventResult::BLOCKED;
+  }
+  if (threat_type.empty()) {
+    return EventResult::ALLOWED;
+  }
+  NOTREACHED();
+}
 
+void AddTriggeredRuleInfoToUrlFilteringInterstitialEvent(
+    const safe_browsing::RTLookupResponse& response,
+    base::Value::Dict& event) {
+  base::Value::List triggered_rule_info;
+
+  for (const safe_browsing::RTLookupResponse::ThreatInfo& threat_info :
+       response.threat_info()) {
+    base::Value::Dict triggered_rule;
+    triggered_rule.Set(kKeyTriggeredRuleName,
+                       threat_info.matched_url_navigation_rule().rule_name());
+    triggered_rule.Set(kKeyTriggeredRuleId,
+                       threat_info.matched_url_navigation_rule().rule_id());
+    triggered_rule.Set(
+        kKeyUrlCategory,
+        threat_info.matched_url_navigation_rule().matched_url_category());
+    triggered_rule.Set(kKeyAction,
+                       ActionFromVerdictType(threat_info.verdict_type()));
+
+    if (threat_info.matched_url_navigation_rule().has_watermark_message()) {
+      triggered_rule.Set(kKeyHasWatermarking, true);
+    }
+
+    triggered_rule_info.Append(std::move(triggered_rule));
+  }
+  event.Set(kKeyTriggeredRuleInfo, std::move(triggered_rule_info));
+}
 std::optional<proto::PasswordBreachEvent> GetPasswordBreachEvent(
     const std::string& trigger,
     const std::vector<std::pair<GURL, std::u16string>>& identities,
@@ -120,7 +168,7 @@ std::optional<proto::PasswordBreachEvent> GetPasswordBreachEvent(
   proto::PasswordBreachEvent event;
   std::vector<proto::PasswordBreachEvent::Identity> converted_identities;
   for (const std::pair<GURL, std::u16string>& i : identities) {
-    if (!IsOptInEventEnabled(matcher.get(), i.first)) {
+    if (!IsUrlMatched(matcher.get(), i.first)) {
       continue;
     }
     proto::PasswordBreachEvent::Identity identity;
@@ -206,6 +254,19 @@ proto::BrowserCrashEvent GetBrowserCrashEvent(const std::string& channel,
   event.set_platform(platform);
 
   return event;
+}
+
+std::vector<std::string> GetLocalIpAddresses() {
+  net::NetworkInterfaceList list;
+  std::vector<std::string> ip_addresses;
+  if (!net::GetNetworkList(&list, net::INCLUDE_HOST_SCOPE_VIRTUAL_INTERFACES)) {
+    LOG(ERROR) << "GetNetworkList failed";
+    return ip_addresses;
+  }
+  for (const auto& network_interface : list) {
+    ip_addresses.push_back(network_interface.address.ToString());
+  }
+  return ip_addresses;
 }
 
 }  // namespace enterprise_connectors

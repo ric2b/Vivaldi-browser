@@ -220,16 +220,15 @@ static Tagged<Object> SliceHelper(BuiltinArguments args, Isolate* isolate,
   double const len = array_buffer->GetByteLength();
 
   // * Let relativeStart be ? ToInteger(start).
-  DirectHandle<Object> relative_start;
-  ASSIGN_RETURN_FAILURE_ON_EXCEPTION(isolate, relative_start,
-                                     Object::ToInteger(isolate, start));
+  double relative_start;
+  MAYBE_ASSIGN_RETURN_FAILURE_ON_EXCEPTION(
+      isolate, relative_start, Object::IntegerValue(isolate, start));
 
   // * If relativeStart < 0, let first be max((len + relativeStart), 0); else
   //   let first be min(relativeStart, len).
-  double const first =
-      (Object::NumberValue(*relative_start) < 0)
-          ? std::max(len + Object::NumberValue(*relative_start), 0.0)
-          : std::min(Object::NumberValue(*relative_start), len);
+  double const first = (relative_start < 0)
+                           ? std::max(len + relative_start, 0.0)
+                           : std::min(relative_start, len);
 
   // * If end is undefined, let relativeEnd be len; else let relativeEnd be ?
   //   ToInteger(end).
@@ -237,10 +236,8 @@ static Tagged<Object> SliceHelper(BuiltinArguments args, Isolate* isolate,
   if (IsUndefined(*end, isolate)) {
     relative_end = len;
   } else {
-    DirectHandle<Object> relative_end_obj;
-    ASSIGN_RETURN_FAILURE_ON_EXCEPTION(isolate, relative_end_obj,
-                                       Object::ToInteger(isolate, end));
-    relative_end = Object::NumberValue(*relative_end_obj);
+    MAYBE_ASSIGN_RETURN_FAILURE_ON_EXCEPTION(
+        isolate, relative_end, Object::IntegerValue(isolate, end));
   }
 
   // * If relativeEnd < 0, let final be max((len + relativeEnd), 0); else let
@@ -425,7 +422,7 @@ static Tagged<Object> ResizeHelper(BuiltinArguments args, Isolate* isolate,
                                    kMethodName)));
   }
 
-  if (is_shared && new_byte_length < array_buffer->byte_length()) {
+  if (is_shared && new_byte_length < array_buffer->GetByteLength()) {
     // GrowableSharedArrayBuffer is only allowed to grow.
     THROW_NEW_ERROR_RETURN_FAILURE(
         isolate, NewRangeError(MessageTemplate::kInvalidArrayBufferResizeLength,
@@ -444,7 +441,42 @@ static Tagged<Object> ResizeHelper(BuiltinArguments args, Isolate* isolate,
   // [GSAB] Let hostHandled be ? HostGrowArrayBuffer(O, newByteLength).
   // If hostHandled is handled, return undefined.
 
-  // TODO(v8:11111, v8:12746): Wasm integration.
+#ifdef V8_ENABLE_WEBASSEMBLY
+  auto backing_store = array_buffer->GetBackingStore();
+  if (backing_store->is_wasm_memory()) {
+    size_t old_byte_length =
+        backing_store->byte_length(std::memory_order_seq_cst);
+    // WebAssembly memories cannot shrink, and must be a multiple of the page
+    // size.
+    if (new_byte_length < old_byte_length ||
+        (new_byte_length % wasm::kWasmPageSize) != 0) {
+      THROW_NEW_ERROR_RETURN_FAILURE(
+          isolate,
+          NewRangeError(
+              MessageTemplate::kInvalidArrayBufferResizeLength,
+              isolate->factory()->NewStringFromAsciiChecked(kMethodName)));
+    }
+    Handle<Object> memory =
+        Object::GetProperty(
+            isolate, array_buffer,
+            isolate->factory()->array_buffer_wasm_memory_symbol())
+            .ToHandleChecked();
+    CHECK(IsWasmMemoryObject(*memory));
+    // WasmMemoryObject::Grow handles updating byte_length, as it's used by both
+    // ArrayBuffer.prototype.resize and WebAssembly.Memory.prototype.grow.
+    uint32_t delta_pages =
+        static_cast<uint32_t>(new_byte_length - old_byte_length) /
+        wasm::kWasmPageSize;
+    if (WasmMemoryObject::Grow(isolate, Cast<WasmMemoryObject>(memory),
+                               delta_pages) == -1) {
+      THROW_NEW_ERROR_RETURN_FAILURE(
+          isolate, NewRangeError(MessageTemplate::kOutOfMemory,
+                                 isolate->factory()->NewStringFromAsciiChecked(
+                                     kMethodName)));
+    }
+    return ReadOnlyRoots(isolate).undefined_value();
+  }
+#endif  // V8_ENABLE_WEBASSEMBLY
 
   if (!is_shared) {
     // [RAB] Let oldBlock be O.[[ArrayBufferData]].
@@ -495,8 +527,9 @@ static Tagged<Object> ResizeHelper(BuiltinArguments args, Isolate* isolate,
               isolate->factory()->NewStringFromAsciiChecked(kMethodName)));
     }
     // Invariant: byte_length for a GSAB is 0 (it needs to be read from the
-    // BackingStore).
-    CHECK_EQ(0, array_buffer->byte_length());
+    // BackingStore). Don't use the byte_length getter, which DCHECKs that it's
+    // not used on growable SharedArrayBuffers
+    CHECK_EQ(0, array_buffer->byte_length_unchecked());
   }
   return ReadOnlyRoots(isolate).undefined_value();
 }

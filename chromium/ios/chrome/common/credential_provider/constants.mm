@@ -27,14 +27,14 @@ NSString* const kUserDefaultsCredentialProviderManagedUserID =
     @"kUserDefaultsCredentialProviderManagedUserID";
 
 // Used to generate the key for the app group user defaults containing the
-// managed user email.
-NSString* const kUserDefaultsCredentialProviderManagedUserEmail =
-    @"kUserDefaultsCredentialProviderManagedUserEmail";
-
-// Used to generate the key for the app group user defaults containing the
 // current user id.
 NSString* const kUserDefaultsCredentialProviderUserID =
     @"kUserDefaultsCredentialProviderUserID";
+
+// Used to generate the key for the app group user defaults containing whether
+// multiple profiles are currently in use.
+NSString* const kUserDefaultsCredentialProviderMultiProfile =
+    @"kUserDefaultsCredentialProviderMultiProfile";
 
 // Used to generate the key for the app group user defaults containing the
 // current user id.
@@ -126,14 +126,14 @@ NSString* AppGroupUserDefaultsCredentialProviderManagedUserID() {
       stringByAppendingString:kUserDefaultsCredentialProviderManagedUserID];
 }
 
-NSString* AppGroupUserDefaultsCredentialProviderManagedUserEmail() {
-  return [AppGroupPrefix()
-      stringByAppendingString:kUserDefaultsCredentialProviderManagedUserEmail];
-}
-
 NSString* AppGroupUserDefaultsCredentialProviderUserID() {
   return [AppGroupPrefix()
       stringByAppendingString:kUserDefaultsCredentialProviderUserID];
+}
+
+NSString* AppGroupUserDefaultsCredentialProviderMultiProfileSetting() {
+  return [AppGroupPrefix()
+      stringByAppendingString:kUserDefaultsCredentialProviderMultiProfile];
 }
 
 NSString* AppGroupUserDefaultsCredentialProviderUserEmail() {

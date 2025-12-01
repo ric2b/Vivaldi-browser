@@ -2,6 +2,7 @@ include_rules = [
   "+components/aggregation_service",
   "+content/services/auction_worklet/public/mojom",
   "+content/services/auction_worklet/public/cpp",
+  "+third_party/protobuf/src/google/protobuf",
   "+third_party/snappy",
 ]
 
@@ -22,6 +23,9 @@ specific_include_rules = {
     # Like unit tests, MojoLPM fuzzers directly instantiate an in-process
     # auction_worklet service.
     "+content/services/auction_worklet",
+  ],
+  ".*_fuzztest.cc": [
+    "+third_party/fuzztest/src/fuzztest/fuzztest.h",
   ],
   # Test utilities can use gtest.
   ".*_test_util.(cc|h)": [

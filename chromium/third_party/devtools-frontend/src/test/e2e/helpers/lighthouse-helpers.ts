@@ -45,7 +45,7 @@ export async function navigateToLighthouseTab(path?: string): Promise<ElementHan
     await frontend.bringToFront();
   }
 
-  return waitFor('.lighthouse-start-view');
+  return await waitFor('.lighthouse-start-view');
 }
 
 // Instead of watching the worker or controller/panel internals, we wait for the Lighthouse renderer
@@ -148,12 +148,12 @@ export async function clickStartButton() {
 export async function isGenerateReportButtonDisabled() {
   const buttonContainer = await waitFor<HTMLElement>('.lighthouse-start-button-container');
   const button = await waitFor('button', buttonContainer);
-  return button.evaluate(element => element.hasAttribute('disabled'));
+  return await button.evaluate(element => element.hasAttribute('disabled'));
 }
 
 export async function getHelpText() {
   const helpTextHandle = await waitFor('.lighthouse-start-view .lighthouse-help-text');
-  return helpTextHandle.evaluate(helpTextEl => helpTextEl.textContent);
+  return await helpTextHandle.evaluate(helpTextEl => helpTextEl.textContent);
 }
 
 export async function openStorageView() {
@@ -178,7 +178,7 @@ export async function waitForStorageUsage(p: (quota: number) => boolean) {
 }
 
 export async function waitForTimespanStarted() {
-  await waitForElementWithTextContent('Timespan started, interact with the page');
+  await waitForElementWithTextContent('Timespan started');
 }
 
 export async function endTimespan() {
@@ -189,7 +189,7 @@ export async function endTimespan() {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function getAuditsBreakdown(lhr: any, flakyAudits: string[] = []) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const auditResults = Object.values(lhr.audits) as any[];
+  const auditResults = Object.values<any>(lhr.audits);
   const irrelevantDisplayModes = new Set(['notApplicable', 'manual']);
   const applicableAudits = auditResults.filter(
       audit => !irrelevantDisplayModes.has(audit.scoreDisplayMode),
@@ -214,18 +214,18 @@ export function getAuditsBreakdown(lhr: any, flakyAudits: string[] = []) {
 
 export async function getTargetViewport() {
   const {target} = await getBrowserAndPages();
-  return target.evaluate(() => ({
-                           innerHeight: window.innerHeight,
-                           innerWidth: window.innerWidth,
-                           outerWidth: window.outerWidth,
-                           outerHeight: window.outerHeight,
-                           devicePixelRatio: window.devicePixelRatio,
-                         }));
+  return await target.evaluate(() => ({
+                                 innerHeight: window.innerHeight,
+                                 innerWidth: window.innerWidth,
+                                 outerWidth: window.outerWidth,
+                                 outerHeight: window.outerHeight,
+                                 devicePixelRatio: window.devicePixelRatio,
+                               }));
 }
 
 export async function getServiceWorkerCount() {
   const {target} = await getBrowserAndPages();
-  return target.evaluate(async () => {
+  return await target.evaluate(async () => {
     return (await navigator.serviceWorker.getRegistrations()).length;
   });
 }

@@ -28,6 +28,11 @@ class PrefService;
 /// Sets showHomepage enabled
 + (void)setHomepageEnabled:(BOOL)enabled
             inPrefServices:(PrefService*)prefService;
+
++ (BOOL)getBackgroundAudioEnabled:(PrefService*)prefService;
++ (void)setBackgroundAudioEnabled:(BOOL)enabled
+                   inPrefServices:(PrefService*)prefService;
+
 @end
 
 #endif  // IOS_UI_SETTINGS_GENERAL_VIVALDI_GENERAL_SETTING_PREFS_H_

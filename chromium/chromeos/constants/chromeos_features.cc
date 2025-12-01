@@ -17,7 +17,7 @@ BASE_FEATURE(kApnPolicies, "ApnPolicies", base::FEATURE_DISABLED_BY_DEFAULT);
 // percentage.
 BASE_FEATURE(kBatteryBadgeIcon,
              "BatteryBadgeIcon",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 // Enables better quick settings UI for bluetooth and wifi error states.
 BASE_FEATURE(kBluetoothWifiQSPodRefresh,
@@ -39,11 +39,6 @@ BASE_FEATURE(kBlinkExtension,
              "BlinkExtension",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
-// Enables the ChromeOS Diagnostics API.
-BASE_FEATURE(kBlinkExtensionDiagnostics,
-             "BlinkExtensionDiagnostics",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
 // Enables ChromeOS Kiosk APIs.
 BASE_FEATURE(kBlinkExtensionKiosk,
              "BlinkExtensionKiosk",
@@ -62,7 +57,7 @@ BASE_FEATURE(kCrosComponents,
 
 // Enables an app to discover and install other apps. This flag will be enabled
 // with Finch.
-BASE_FEATURE(kCrosMall, "CrosMall", base::FEATURE_DISABLED_BY_DEFAULT);
+BASE_FEATURE(kCrosMall, "CrosMall", base::FEATURE_ENABLED_BY_DEFAULT);
 
 // Enables the Mall app for managed users. Only has an effect when kCrosMall is
 // also enabled.
@@ -97,13 +92,6 @@ BASE_FEATURE(kDisableIdleSocketsCloseOnMemoryPressure,
              "disable_idle_sockets_close_on_memory_pressure",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
-// Disables "Office Editing for Docs, Sheets & Slides" component app so handlers
-// won't be registered, making it possible to install another version for
-// testing.
-BASE_FEATURE(kDisableOfficeEditingComponentApp,
-             "DisableOfficeEditingComponentApp",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
 // Disables translation services of the Quick Answers V2.
 BASE_FEATURE(kDisableQuickAnswersV2Translation,
              "DisableQuickAnswersV2Translation",
@@ -134,7 +122,7 @@ BASE_FEATURE(kKioskHeartbeatsViaERP,
 // Enables the new Magic Boost Consent Flow.
 BASE_FEATURE(kMagicBoostRevamp,
              "MagicBoostRevamp",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 // Controls enabling / disabling the mahi feature.
 BASE_FEATURE(kMahi, "Mahi", base::FEATURE_ENABLED_BY_DEFAULT);
@@ -172,6 +160,11 @@ BASE_FEATURE(kMahiSummarizeSelected,
              "MahiSummarizeSelected",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
+// Controls whether NotebookLM is preinstalled.
+BASE_FEATURE(kNotebookLmAppPreinstall,
+             "NotebookLmAppPreinstall",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
 // Kill switch to disable the new guest profile implementation on CrOS that is
 // consistent with desktop chrome.
 // TODO(crbug.com/40233408): Remove if the change is fully launched.
@@ -205,13 +198,6 @@ BASE_FEATURE(kOrcaInternationalize,
 // Controls enabling / disabling orca l10n strings.
 BASE_FEATURE(kOrcaUseL10nStrings,
              "OrcaUseL10nStrings",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
-// Whether a set of UI optimizations within `OverviewSession::Init()` are
-// enabled or not. These should have no user-visible impact, except a faster
-// presentation time for the first frame of most overview sessions.
-BASE_FEATURE(kOverviewSessionInitOptimizations,
-             "OverviewSessionInitOptimizations",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
 // Feature management flag used to gate preinstallation of the Gemini app. This
@@ -332,6 +318,24 @@ const base::FeatureParam<std::string> kMicrosoft365ScopeExtensionsDomains{
     // https://<customer>-my.sharepoint.com).
     "https://sharepoint.com"};
 
+// Controls whether the PWA manifest on Microsoft 365 Urls should be overridden
+// with a static PWA manifest id.
+BASE_FEATURE(kMicrosoft365ManifestOverride,
+             "Microsoft365ManifestOverride",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+
+// Comma separated list of Urls where the M365 PWA manifest should be
+// overridden.
+const base::FeatureParam<std::string> kMicrosoft365ManifestUrls{
+    &kMicrosoft365ManifestOverride, "m365-manifest-urls",
+    /*default*/
+
+    // The current Microsoft 365 web app.
+    "https://www.microsoft365.com/,"
+
+    // The new branding for the Microsoft 365 web app.
+    "https://m365.cloud.microsoft/"};
+
 // Enables the Microsoft OneDrive integration workflow for enterprise users to
 // cloud integration support.
 BASE_FEATURE(kMicrosoftOneDriveIntegrationForEnterprise,
@@ -340,7 +344,7 @@ BASE_FEATURE(kMicrosoftOneDriveIntegrationForEnterprise,
 
 BASE_FEATURE(kRoundedWindows,
              "RoundedWindows",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 // Enables CloudFileSystem for FileSystemProvider extensions.
 BASE_FEATURE(kFileSystemProviderCloudFileSystem,
@@ -376,11 +380,6 @@ bool IsAlmanacLauncherPayloadEnabled() {
 
 bool IsBlinkExtensionEnabled() {
   return base::FeatureList::IsEnabled(kBlinkExtension);
-}
-
-bool IsBlinkExtensionDiagnosticsEnabled() {
-  return IsBlinkExtensionEnabled() &&
-         base::FeatureList::IsEnabled(kBlinkExtensionDiagnostics);
 }
 
 bool IsCrosComponentsEnabled() {
@@ -523,6 +522,10 @@ bool IsMicrosoft365ScopeExtensionsEnabled() {
   return base::FeatureList::IsEnabled(kMicrosoft365ScopeExtensions);
 }
 
+bool IsMicrosoft365ManifestOverrideEnabled() {
+  return base::FeatureList::IsEnabled(kMicrosoft365ManifestOverride);
+}
+
 bool IsMicrosoftOneDriveIntegrationForEnterpriseEnabled() {
   return IsUploadOfficeToCloudEnabled() &&
          base::FeatureList::IsEnabled(
@@ -530,8 +533,10 @@ bool IsMicrosoftOneDriveIntegrationForEnterpriseEnabled() {
 }
 
 bool IsRoundedWindowsEnabled() {
-  return base::FeatureList::IsEnabled(kFeatureManagementRoundedWindows) &&
-         base::FeatureList::IsEnabled(kRoundedWindows);
+  static bool is_enabled =
+      base::FeatureList::IsEnabled(kFeatureManagementRoundedWindows) &&
+      base::FeatureList::IsEnabled(kRoundedWindows);
+  return is_enabled;
 }
 
 bool IsSystemBlurEnabled() {
@@ -544,10 +549,6 @@ bool IsPkcs12ToChapsDualWriteEnabled() {
 
 bool IsFeatureManagementHistoryEmbeddingEnabled() {
   return base::FeatureList::IsEnabled(kFeatureManagementHistoryEmbedding);
-}
-
-bool AreOverviewSessionInitOptimizationsEnabled() {
-  return base::FeatureList::IsEnabled(kOverviewSessionInitOptimizations);
 }
 
 int RoundedWindowsRadius() {

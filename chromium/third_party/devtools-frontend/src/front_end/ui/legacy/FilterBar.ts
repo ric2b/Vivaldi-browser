@@ -64,7 +64,7 @@ const UIStrings = {
    *@description Text for everything
    */
   allStrings: 'All',
-};
+} as const;
 const str_ = i18n.i18n.registerUIStrings('ui/legacy/FilterBar.ts', UIStrings);
 const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
 export class FilterBar extends Common.ObjectWrapper.eventMixin<FilterBarEventTypes, typeof HBox>(HBox) {
@@ -116,15 +116,6 @@ export class FilterBar extends Common.ObjectWrapper.eventMixin<FilterBarEventTyp
     this.enabled = enabled;
     this.filterButtonInternal.setEnabled(enabled);
     this.updateFilterBar();
-  }
-
-  forceShowFilterBar(): void {
-    this.alwaysShowFilters = true;
-    this.updateFilterBar();
-  }
-
-  showOnce(): void {
-    this.stateSetting.set(true);
   }
 
   private filterChanged(): void {
@@ -217,10 +208,12 @@ export class TextFilterUI extends Common.ObjectWrapper.ObjectWrapper<FilterUIEve
   constructor() {
     super();
     this.filterElement = document.createElement('div');
-    const filterToolbar = this.filterElement.createChild('devtools-toolbar', 'text-filter');
+    this.filterElement.classList.add('text-filter');
+    const filterToolbar = this.filterElement.createChild('devtools-toolbar');
     // Set the style directly on the element to overwrite parent css styling.
     filterToolbar.style.borderBottom = 'none';
-    this.#filter = new ToolbarFilter(undefined, 1, 1, UIStrings.egSmalldUrlacomb, this.completions.bind(this));
+    this.#filter =
+        new ToolbarFilter(undefined, 1, 1, i18nString(UIStrings.egSmalldUrlacomb), this.completions.bind(this));
     filterToolbar.appendToolbarItem(this.#filter);
     this.#filter.addEventListener(ToolbarInput.Event.TEXT_CHANGED, () => this.valueChanged());
     this.suggestionProvider = null;
@@ -274,10 +267,6 @@ interface NamedBitSetFilterUIOptions {
   setting?: Common.Settings.Setting<{[key: string]: boolean}>;
 }
 
-// TODO(crbug.com/391381439): Fully migrate off of constructed style sheets.
-const filterStyleSheet = new CSSStyleSheet();
-filterStyleSheet.replaceSync(filterStyles.cssContent);
-
 export class NamedBitSetFilterUIElement extends HTMLElement {
   #options: NamedBitSetFilterUIOptions = {items: []};
   readonly #shadow = this.attachShadow({mode: 'open'});
@@ -303,6 +292,9 @@ export class NamedBitSetFilterUIElement extends HTMLElement {
     const namedBitSetFilterUI = new NamedBitSetFilterUI(this.#options.items, this.#options.setting);
     namedBitSetFilterUI.element().classList.add('named-bitset-filter');
 
+    const styleElement = this.#shadow.createChild('style');
+    styleElement.textContent = filterStyles.cssText;
+
     const disclosureElement = this.#shadow.createChild('div', 'named-bit-set-filter-disclosure');
     disclosureElement.appendChild(namedBitSetFilterUI.element());
 
@@ -312,12 +304,6 @@ export class NamedBitSetFilterUIElement extends HTMLElement {
 
     this.#namedBitSetFilterUI = namedBitSetFilterUI;
     return this.#namedBitSetFilterUI;
-  }
-
-  connectedCallback(): void {
-    // TODO(crbug.com/391381439): We cannot simply add a `<style>` element here, because
-    // the `options` setter above clears the shadow DOM.
-    this.#shadow.adoptedStyleSheets = [filterStyleSheet];
   }
 
   #filterChanged(): void {
@@ -330,9 +316,9 @@ customElements.define('devtools-named-bit-set-filter', NamedBitSetFilterUIElemen
 
 export class NamedBitSetFilterUI extends Common.ObjectWrapper.ObjectWrapper<FilterUIEventTypes> implements FilterUI {
   private readonly filtersElement: HTMLDivElement;
-  private readonly typeFilterElementTypeNames: WeakMap<HTMLElement, string>;
-  private allowedTypes: Set<string>;
-  private readonly typeFilterElements: HTMLElement[];
+  private readonly typeFilterElementTypeNames = new WeakMap<HTMLElement, string>();
+  private allowedTypes = new Set<string>();
+  private readonly typeFilterElements: HTMLElement[] = [];
   private readonly setting: Common.Settings.Setting<{[key: string]: boolean}>|undefined;
 
   constructor(items: Item[], setting?: Common.Settings.Setting<{[key: string]: boolean}>) {
@@ -346,9 +332,6 @@ export class NamedBitSetFilterUI extends Common.ObjectWrapper.ObjectWrapper<Filt
                       PH1: KeyboardShortcut.shortcutToString('', Modifiers.CtrlOrMeta.value),
                     }));
 
-    this.typeFilterElementTypeNames = new WeakMap();
-    this.allowedTypes = new Set();
-    this.typeFilterElements = [];
     this.addBit(NamedBitSetFilterUI.ALL_TYPES, i18nString(UIStrings.allStrings), NamedBitSetFilterUI.ALL_TYPES);
     this.typeFilterElements[0].tabIndex = 0;
     this.filtersElement.createChild('div', 'filter-bitset-filter-divider');

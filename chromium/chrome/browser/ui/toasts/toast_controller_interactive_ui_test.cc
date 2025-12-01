@@ -11,7 +11,6 @@
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
 #include "chrome/app/chrome_command_ids.h"
-#include "chrome/browser/browser_process.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_element_identifiers.h"
 #include "chrome/browser/ui/browser_window.h"
@@ -22,14 +21,11 @@
 #include "chrome/browser/ui/omnibox/omnibox_tab_helper.h"
 #include "chrome/browser/ui/toasts/api/toast_id.h"
 #include "chrome/browser/ui/toasts/toast_controller.h"
-#include "chrome/browser/ui/toasts/toast_dismiss_menu_model.h"
 #include "chrome/browser/ui/toasts/toast_features.h"
-#include "chrome/browser/ui/toasts/toast_metrics.h"
 #include "chrome/browser/ui/toasts/toast_view.h"
 #include "chrome/browser/ui/views/frame/app_menu_button.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/location_bar/star_view.h"
-#include "chrome/common/pref_names.h"
 #include "chrome/test/base/interactive_test_utils.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "chrome/test/interaction/interactive_browser_test.h"
@@ -145,6 +141,7 @@ class ToastControllerInteractiveTest : public InteractiveBrowserTest {
   ToastController* GetToastController() {
     return browser()->browser_window_features()->toast_controller();
   }
+
 
   auto ShowToast(ToastParams params) {
     return Do(base::BindOnce(
@@ -352,8 +349,16 @@ IN_PROC_BROWSER_TEST_F(ToastControllerInteractiveTest,
 // Tests that attempting to close the `ToastView` does not succeed while the
 // menu is open. If that happens, the `ToastView` is closed once the menu
 // closes.
+
+// TODO(crbug.com/398296825): Flaky on Windows builds.
+#if BUILDFLAG(IS_WIN)
+#define MAYBE_ToastDoesNotCloseWhileMenuIsOpen \
+  DISABLED_ToastDoesNotCloseWhileMenuIsOpen
+#else
+#define MAYBE_ToastDoesNotCloseWhileMenuIsOpen ToastDoesNotCloseWhileMenuIsOpen
+#endif
 IN_PROC_BROWSER_TEST_F(ToastControllerInteractiveTest,
-                       ToastDoesNotCloseWhileMenuIsOpen) {
+                       MAYBE_ToastDoesNotCloseWhileMenuIsOpen) {
 #if BUILDFLAG(IS_OZONE)
   if (ui::OzonePlatform::GetPlatformNameForTest() == "wayland") {
     GTEST_SKIP() << "Flaky in Wayland due to way events are routed and bounds "
@@ -372,58 +377,6 @@ IN_PROC_BROWSER_TEST_F(ToastControllerInteractiveTest,
                   EnsurePresent(toasts::ToastView::kToastViewId),
                   MoveMouseTo(toasts::ToastView::kToastMenuButton),
                   ClickMouse(), WaitForHide(toasts::ToastView::kToastViewId));
-}
-
-// Tests that clicking the menu button twice closes the menu, but not the toast.
-IN_PROC_BROWSER_TEST_F(ToastControllerInteractiveTest, TwoClicksOnMenuButton) {
-#if BUILDFLAG(IS_OZONE)
-  if (ui::OzonePlatform::GetPlatformNameForTest() == "wayland") {
-    GTEST_SKIP() << "Flaky in Wayland due to way events are routed and bounds "
-                    "are reported";
-  }
-#endif
-  RunTestSequence(
-      ShowToast(ToastParams(ToastId::kLinkCopied)),
-      WaitForShow(toasts::ToastView::kToastViewId),
-      EnsurePresent(toasts::ToastView::kToastMenuButton),
-      PressButton(toasts::ToastView::kToastMenuButton),
-      WaitForShow(ToastDismissMenuModel::kToastDontShowAgainMenuItem),
-      CheckViewProperty(toasts::ToastView::kToastMenuButton,
-                        &views::Button::GetState,
-                        views::Button::ButtonState::STATE_PRESSED),
-      MoveMouseTo(toasts::ToastView::kToastMenuButton), ClickMouse(),
-      WaitForHide(ToastDismissMenuModel::kToastDontShowAgainMenuItem),
-      CheckViewProperty(toasts::ToastView::kToastMenuButton,
-                        &views::Button::GetState,
-                        testing::Ne(views::Button::ButtonState::STATE_PRESSED)),
-      EnsurePresent(toasts::ToastView::kToastMenuButton));
-}
-
-IN_PROC_BROWSER_TEST_F(ToastControllerInteractiveTest,
-                       DismissingToastPermanently) {
-  RunTestSequence(
-      ShowToast(ToastParams(ToastId::kLinkCopied)),
-      WaitForShow(toasts::ToastView::kToastViewId),
-      EnsurePresent(toasts::ToastView::kToastMenuButton),
-      PressButton(toasts::ToastView::kToastMenuButton),
-      WaitForShow(ToastDismissMenuModel::kToastDontShowAgainMenuItem),
-      SelectMenuItem(ToastDismissMenuModel::kToastDontShowAgainMenuItem),
-      WaitForHide(toasts::ToastView::kToastViewId),
-      ShowToast(ToastParams(ToastId::kLinkCopied)),
-      EnsureNotPresent(toasts::ToastView::kToastViewId));
-}
-
-IN_PROC_BROWSER_TEST_F(ToastControllerInteractiveTest,
-                       DismissingToastTemporarily) {
-  RunTestSequence(ShowToast(ToastParams(ToastId::kLinkCopied)),
-                  WaitForShow(toasts::ToastView::kToastViewId),
-                  EnsurePresent(toasts::ToastView::kToastMenuButton),
-                  PressButton(toasts::ToastView::kToastMenuButton),
-                  WaitForShow(ToastDismissMenuModel::kToastDismissMenuItem),
-                  SelectMenuItem(ToastDismissMenuModel::kToastDismissMenuItem),
-                  WaitForHide(toasts::ToastView::kToastViewId),
-                  ShowToast(ToastParams(ToastId::kLinkCopied)),
-                  WaitForShow(toasts::ToastView::kToastViewId));
 }
 
 IN_PROC_BROWSER_TEST_F(ToastControllerInteractiveTest,

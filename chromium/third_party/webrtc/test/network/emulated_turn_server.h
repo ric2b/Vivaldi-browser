@@ -16,10 +16,14 @@
 #include <string>
 
 #include "absl/strings/string_view.h"
+#include "api/test/network_emulation/network_emulation_interfaces.h"
 #include "api/test/network_emulation_manager.h"
 #include "api/transport/stun.h"
-#include "p2p/base/turn_server.h"
+#include "p2p/test/turn_server.h"
 #include "rtc_base/async_packet_socket.h"
+#include "rtc_base/socket_address.h"
+#include "rtc_base/thread.h"
+#include "rtc_base/thread_annotations.h"
 
 namespace webrtc {
 namespace test {
@@ -36,14 +40,14 @@ namespace test {
 // using a wrapper around AsyncPacketSocket (no lookup required as the
 // wrapper around AsyncPacketSocket keep a pointer to the EmulatedEndpoint).
 class EmulatedTURNServer : public EmulatedTURNServerInterface,
-                           public cricket::TurnAuthInterface,
+                           public TurnAuthInterface,
                            public webrtc::EmulatedNetworkReceiverInterface {
  public:
   // Create an EmulatedTURNServer.
   // `thread` is a thread that will be used to run cricket::TurnServer
   // that expects all calls to be made from a single thread.
   EmulatedTURNServer(const EmulatedTURNServerConfig& config,
-                     std::unique_ptr<rtc::Thread> thread,
+                     std::unique_ptr<Thread> thread,
                      EmulatedEndpoint* client,
                      EmulatedEndpoint* peer);
   ~EmulatedTURNServer() override;
@@ -52,7 +56,7 @@ class EmulatedTURNServer : public EmulatedTURNServerInterface,
 
   EmulatedEndpoint* GetClientEndpoint() const override { return client_; }
 
-  rtc::SocketAddress GetClientEndpointAddress() const override {
+  SocketAddress GetClientEndpointAddress() const override {
     return client_address_;
   }
 
@@ -66,32 +70,32 @@ class EmulatedTURNServer : public EmulatedTURNServerInterface,
         std::string(username), std::string(realm), std::string(username), key);
   }
 
-  rtc::AsyncPacketSocket* CreatePeerSocket() { return Wrap(peer_); }
+  AsyncPacketSocket* CreatePeerSocket() { return Wrap(peer_); }
 
   // This method is called by network emulation when a packet
   // comes from an emulated link.
   void OnPacketReceived(webrtc::EmulatedIpPacket packet) override;
 
   // This is called when the TURN server deletes a socket.
-  void Unbind(rtc::SocketAddress address);
+  void Unbind(SocketAddress address);
 
   // Unbind all sockets.
   void Stop();
 
  private:
-  std::unique_ptr<rtc::Thread> thread_;
-  rtc::SocketAddress client_address_;
+  std::unique_ptr<Thread> thread_;
+  SocketAddress client_address_;
   IceServerConfig ice_config_;
   EmulatedEndpoint* const client_;
   EmulatedEndpoint* const peer_;
-  std::unique_ptr<cricket::TurnServer> turn_server_ RTC_GUARDED_BY(&thread_);
+  std::unique_ptr<TurnServer> turn_server_ RTC_GUARDED_BY(&thread_);
   class AsyncPacketSocketWrapper;
-  std::map<rtc::SocketAddress, AsyncPacketSocketWrapper*> sockets_
+  std::map<SocketAddress, AsyncPacketSocketWrapper*> sockets_
       RTC_GUARDED_BY(&thread_);
 
   // Wraps a EmulatedEndpoint in a AsyncPacketSocket to bridge interaction
   // with TurnServer. cricket::TurnServer gets ownership of the socket.
-  rtc::AsyncPacketSocket* Wrap(EmulatedEndpoint* endpoint);
+  AsyncPacketSocket* Wrap(EmulatedEndpoint* endpoint);
 };
 
 }  // namespace test

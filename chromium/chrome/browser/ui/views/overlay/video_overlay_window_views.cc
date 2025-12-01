@@ -635,11 +635,14 @@ void VideoOverlayWindowViews::OnNativeWidgetMove() {
   // Update the positioning of some icons when the window is moved.
   WindowQuadrant quadrant =
       GetCurrentWindowQuadrant(GetBounds(), GetController());
-  close_controls_view_->SetPosition(GetBounds().size(), quadrant);
-  if (Use2024UI()) {
-    minimize_button_->SetPosition(GetBounds().size(), quadrant);
-    back_to_tab_button_->SetPosition(GetBounds().size(), quadrant);
+
+  // In the 2024 UI, there are icons on both sides of the top bar, so moving the
+  // close button doesn't make sense. Only move it when using the older
+  // controls.
+  if (!Use2024UI()) {
+    close_controls_view_->SetPosition(GetBounds().size(), quadrant);
   }
+
   UpdateResizeHandleBounds(quadrant);
 #endif
 
@@ -993,6 +996,7 @@ void VideoOverlayWindowViews::SetUpViews() {
   std::unique_ptr<HangUpButton> hang_up_button;
   std::unique_ptr<global_media_controls::MediaProgressView> progress_view;
   std::unique_ptr<views::Label> timestamp;
+  std::unique_ptr<views::Label> live_status;
 
   if (Use2024UI()) {
     play_pause_controls_view->SetSize(
@@ -1015,7 +1019,7 @@ void VideoOverlayWindowViews::SetUpViews() {
     origin = std::make_unique<views::Label>(std::u16string(),
                                             views::style::CONTEXT_LABEL,
                                             views::style::STYLE_BODY_4);
-    origin->SetEnabledColorId(ui::kColorSysOnSurface);
+    origin->SetEnabledColor(ui::kColorSysOnSurface);
     origin->SetBackgroundColor(SK_ColorTRANSPARENT);
     origin->SetHorizontalAlignment(gfx::ALIGN_LEFT);
     origin->SetElideBehavior(gfx::ELIDE_HEAD);
@@ -1111,9 +1115,17 @@ void VideoOverlayWindowViews::SetUpViews() {
     timestamp = std::make_unique<views::Label>(std::u16string(),
                                                views::style::CONTEXT_LABEL,
                                                views::style::STYLE_BODY_4);
-    timestamp->SetEnabledColorId(ui::kColorSysOnSurfaceSubtle);
+    timestamp->SetEnabledColor(ui::kColorSysOnSurfaceSubtle);
     timestamp->SetBackgroundColor(SK_ColorTRANSPARENT);
     timestamp->SetHorizontalAlignment(gfx::ALIGN_LEFT);
+    live_status = std::make_unique<views::Label>(
+        l10n_util::GetStringUTF16(IDS_PICTURE_IN_PICTURE_LIVE_STATUS_TEXT),
+        views::style::CONTEXT_LABEL, views::style::STYLE_CAPTION_BOLD);
+    live_status->SetEnabledColor(ui::kColorSysTonalContainer);
+    live_status->SetBorder(views::CreateEmptyBorder(gfx::Insets::VH(0, 4)));
+    live_status->SetBackground(
+        views::CreateRoundedRectBackground(ui::kColorSysOnTonalContainer, 4));
+    live_status->SetVisible(false);
   } else {
     back_to_tab_label_button =
         std::make_unique<BackToTabLabelButton>(base::BindRepeating(
@@ -1287,6 +1299,10 @@ void VideoOverlayWindowViews::SetUpViews() {
     timestamp->SetPaintToLayer(ui::LAYER_TEXTURED);
     timestamp->layer()->SetFillsBoundsOpaquely(false);
     timestamp->layer()->SetName("Timestamp");
+
+    live_status->SetPaintToLayer(ui::LAYER_TEXTURED);
+    live_status->layer()->SetFillsBoundsOpaquely(false);
+    live_status->layer()->SetName("LiveStatus");
   } else {
     // views::View that holds the skip-ad label button.
     // -------------------------
@@ -1373,6 +1389,9 @@ void VideoOverlayWindowViews::SetUpViews() {
         controls_container_view->AddChildView(std::move(progress_view));
 
     timestamp_ = controls_container_view->AddChildView(std::move(timestamp));
+
+    live_status_ =
+        controls_container_view->AddChildView(std::move(live_status));
   }
 
   next_track_controls_view_ = controls_container_view->AddChildView(
@@ -1587,6 +1606,18 @@ void VideoOverlayWindowViews::OnUpdateControlsBounds() {
               kActionButtonSize.width()),
          bottom_controls_bounds.y() + kBottomControlsVerticalMargin});
 
+    // The previous and next track buttons are always both visible if at least
+    // one of them is visible.
+    const bool should_enable_prev =
+        show_previous_track_button_ || show_previous_slide_button_;
+    const bool should_enable_next =
+        show_next_track_button_ || show_next_slide_button_;
+    const bool should_show_prev_next = should_enable_prev || should_enable_next;
+    previous_track_controls_view_->SetVisible(should_show_prev_next);
+    next_track_controls_view_->SetVisible(should_show_prev_next);
+    previous_track_controls_view_->SetEnabled(should_enable_prev);
+    next_track_controls_view_->SetEnabled(should_enable_next);
+
     // The progress bars should take up all the space that is left after the
     // previous and next buttons. Here we calculate how much horizontal space
     // one of those buttons takes up and use that to calculate the width and x
@@ -1594,36 +1625,48 @@ void VideoOverlayWindowViews::OnUpdateControlsBounds() {
     constexpr int kPreviousNextTrackWidthPlusHorizontalMargins =
         kBottomControlsHorizontalMargin + (2 * kControlHorizontalMargin) +
         kActionButtonSize.width();
+    const int used_horizontal_space_left_of_progress_bar =
+        should_show_prev_next
+            ? kPreviousNextTrackWidthPlusHorizontalMargins
+            : kBottomControlsHorizontalMargin + kControlHorizontalMargin;
     progress_view_->SetPosition(
         {bottom_controls_bounds.x() +
-             kPreviousNextTrackWidthPlusHorizontalMargins,
+             used_horizontal_space_left_of_progress_bar,
          bottom_controls_bounds.y() + kBottomControlsVerticalMargin});
     progress_view_->SetSize(
-        {bounds.width() - (2 * kPreviousNextTrackWidthPlusHorizontalMargins),
+        {bounds.width() - (2 * used_horizontal_space_left_of_progress_bar),
          kProgressBarHeight});
 
-    timestamp_->SetPosition(
-        {bottom_controls_bounds.x() + kTimestampHorizontalMargin,
-         bottom_controls_bounds.y() + bottom_controls_bounds.height() -
-             kTimestampVerticalMargin - kTimestampHeight});
-    timestamp_->SetSize(
-        {bottom_controls_bounds.width() - (2 * kTimestampHorizontalMargin),
+    gfx::Point timestamp_position(
+        bottom_controls_bounds.x() + kTimestampHorizontalMargin,
+        bottom_controls_bounds.y() + bottom_controls_bounds.height() -
+            kTimestampVerticalMargin - kTimestampHeight);
+    const int max_timestamp_width =
+        bottom_controls_bounds.width() - (2 * kTimestampHorizontalMargin);
+    timestamp_->SetPosition(timestamp_position);
+    timestamp_->SetSize({max_timestamp_width, kTimestampHeight});
+    timestamp_->SetVisible(!is_live_);
+
+    live_status_->SetPosition(timestamp_position);
+    live_status_->SetMaximumWidthSingleLine(max_timestamp_width);
+    live_status_->SetSize(
+        {live_status_->GetPreferredSize({max_timestamp_width, kTimestampHeight})
+             .width(),
          kTimestampHeight});
+    live_status_->SetVisible(is_live_);
 
     // The play/pause button and replay/forward 10 seconds buttons should not be
-    // visible while dragging the progress bar.
+    // visible while dragging the progress bar or for live media.
     const bool is_dragging_progress_bar =
         progress_view_drag_state_ ==
         global_media_controls::DragState::kDragStarted;
     play_pause_controls_view_->SetVisible(show_play_pause_button_ &&
                                           !is_dragging_progress_bar);
-    replay_10_seconds_button_->SetVisible(!is_dragging_progress_bar);
-    forward_10_seconds_button_->SetVisible(!is_dragging_progress_bar);
+    replay_10_seconds_button_->SetVisible(!is_dragging_progress_bar &&
+                                          !is_live_);
+    forward_10_seconds_button_->SetVisible(!is_dragging_progress_bar &&
+                                           !is_live_);
 
-    // The previous and next track buttons are always visible, but disabled if
-    // there is no action handler for them.
-    previous_track_controls_view_->SetEnabled(show_previous_track_button_);
-    next_track_controls_view_->SetEnabled(show_next_track_button_);
     return;
   }
 
@@ -2297,6 +2340,10 @@ views::Label* VideoOverlayWindowViews::timestamp_for_testing() const {
   return timestamp_;
 }
 
+views::Label* VideoOverlayWindowViews::live_status_for_testing() const {
+  return live_status_;
+}
+
 views::ImageView* VideoOverlayWindowViews::favicon_view_for_testing() const {
   return favicon_view_;
 }
@@ -2399,9 +2446,17 @@ void VideoOverlayWindowViews::OnProgressViewUpdateCurrentTime(
 
 void VideoOverlayWindowViews::UpdateTimestampLabel(base::TimeDelta current_time,
                                                    base::TimeDelta duration) {
-  timestamp_->SetText(base::StrCat(
-      {global_media_controls::GetFormattedDuration(current_time), u" / ",
-       global_media_controls::GetFormattedDuration(duration)}));
+  bool was_live = is_live_;
+  is_live_ = duration.is_max();
+
+  if (!is_live_) {
+    timestamp_->SetText(base::StrCat(
+        {global_media_controls::GetFormattedDuration(current_time), u" / ",
+         global_media_controls::GetFormattedDuration(duration)}));
+  }
+  if (was_live != is_live_) {
+    OnUpdateControlsBounds();
+  }
 }
 
 void VideoOverlayWindowViews::OnFaviconReceived(const SkBitmap& image) {

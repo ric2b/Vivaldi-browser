@@ -99,6 +99,20 @@ class BatchUploadServiceTest : public testing::Test {
     return description;
   }
 
+  // Sets one element for each available data type in `BatchUploadService`.
+  void SetLocalDataDescriptionForAllAvailableTypes() {
+    for (syncer::DataType type :
+         BatchUploadService::AvailableTypesOrderForTesting()) {
+      SetReturnDescriptions(type, 1);
+    }
+  }
+
+  // Returns the currently expected description for `type`.
+  syncer::LocalDataDescription& GetReturnDescription(syncer::DataType type) {
+    CHECK(returned_descriptions_.contains(type));
+    return returned_descriptions_[type];
+  }
+
   void SigninWithFullInfo(
       signin::ConsentLevel consent_level = signin::ConsentLevel::kSignin) {
     signin::IdentityManager* identity_manager =
@@ -181,20 +195,48 @@ TEST_F(BatchUploadServiceTest, NoLocalDataReturned) {
   BatchUploadService& service = CreateService();
   base::MockCallback<base::OnceCallback<void(bool)>> opened_callback;
 
-  // Lists the requested types.
-  EXPECT_CALL(sync_service_mock(),
-              GetLocalDataDescriptions(
-                  syncer::DataTypeSet{syncer::DataType::PASSWORDS,
-                                      syncer::DataType::BOOKMARKS,
-                                      syncer::DataType::CONTACT_INFO},
-                  _))
-      .Times(1);
+  EXPECT_CALL(sync_service_mock(), GetLocalDataDescriptions(_, _)).Times(1);
   EXPECT_CALL(delegate_mock(), ShowBatchUploadDialog(_, _, _, _)).Times(0);
   EXPECT_CALL(opened_callback, Run(false)).Times(1);
   service.OpenBatchUpload(
       nullptr, BatchUploadService::EntryPoint::kPasswordManagerSettings,
       opened_callback.Get());
   EXPECT_FALSE(service.IsDialogOpened());
+}
+
+TEST_F(BatchUploadServiceTest, LocalDataForAllAvailableTypesMainOrder) {
+  SigninWithFullInfo();
+  BatchUploadService& service = CreateService();
+  // Make sure all available data types have return descriptions so that the
+  // order is properly tested.
+  SetLocalDataDescriptionForAllAvailableTypes();
+
+  // Lists the requested types.
+  EXPECT_CALL(sync_service_mock(),
+              GetLocalDataDescriptions(
+                  syncer::DataTypeSet{
+                      syncer::DataType::PASSWORDS, syncer::DataType::BOOKMARKS,
+                      syncer::DataType::CONTACT_INFO, syncer::DataType::THEMES},
+                  _))
+      .Times(1);
+  // Order is tested.
+  std::vector<syncer::LocalDataDescription> expected_descriptions{
+      GetReturnDescription(syncer::PASSWORDS),
+      GetReturnDescription(syncer::BOOKMARKS),
+      GetReturnDescription(syncer::CONTACT_INFO),
+      GetReturnDescription(syncer::THEMES),
+  };
+  EXPECT_CALL(delegate_mock(),
+              ShowBatchUploadDialog(_, expected_descriptions, _, _))
+      .Times(1);
+
+  base::MockCallback<base::OnceCallback<void(bool)>> opened_callback;
+  EXPECT_CALL(opened_callback, Run(true)).Times(1);
+
+  service.OpenBatchUpload(
+      nullptr, BatchUploadService::EntryPoint::kPasswordManagerSettings,
+      opened_callback.Get());
+  EXPECT_TRUE(service.IsDialogOpened());
 }
 
 TEST_F(BatchUploadServiceTest, EmptyLocalDataReturned) {

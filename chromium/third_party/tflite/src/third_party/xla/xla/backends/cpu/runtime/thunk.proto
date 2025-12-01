@@ -130,7 +130,6 @@ message ConditionalThunkProto {
 message ConvolutionThunkProto {
   message Options {
     bool multi_threaded = 1;
-    bool use_acl = 2;
   }
   ConvolutionDimensionNumbers dimension_numbers = 1;
   Window window = 2;
@@ -156,6 +155,22 @@ message XnnDotThunkProto {
   ShapeBufferAllocationSliceProto out_buffer_shape = 4;
 }
 
+message XnnConvolutionThunkProto {
+  ConvolutionDimensionNumbers dimension_numbers = 1;
+  Window window = 2;
+  int64 feature_group_count = 3;
+  ShapeBufferAllocationSliceProto input_buffer_shape = 4;
+  ShapeBufferAllocationSliceProto kernel_buffer_shape = 5;
+  ShapeBufferAllocationSliceProto output_buffer_shape = 6;
+}
+
+message XnnFusionThunkProtoImpl {
+  repeated ShapeBufferAllocationSliceProto arguments_shapes = 1;
+  repeated ShapeBufferAllocationSliceProto results_shapes = 2;
+  // TODO(basioli) something for Builder?
+  // TODO(basioli) should we support OneUseBuilder?
+}
+
 message XnnFusionThunkProto {
   message Options {
     bool use_threadpool = 1;
@@ -165,6 +180,8 @@ message XnnFusionThunkProto {
 
   oneof impl {
     XnnDotThunkProto xnn_dot_thunk = 2;
+    XnnConvolutionThunkProto xnn_convolution_thunk = 3;
+    XnnFusionThunkProtoImpl xnn_fusion_thunk = 4;
   }
 }
 

@@ -60,6 +60,10 @@ extern NSString* const vNTPToolbarMoreDarkTintColor;
 extern NSString* vNTPSearchIcon;
 // Image name for toolbar more icon
 extern NSString* vNTPToolbarMoreIcon;
+// Image name for toolbar add icon
+extern NSString* vNTPToolbarAddIcon;
+// Image name for toolbar customize
+extern NSString* vNTPToolbarCustomizeIcon;
 // Image name for add new speed dial
 extern NSString* vNTPAddNewSpeedDialIcon;
 // Image name for speed dial folder

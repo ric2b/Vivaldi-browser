@@ -51,7 +51,8 @@ class HpackEncoderPeer {
 
   explicit HpackEncoderPeer(HpackEncoder* encoder) : encoder_(encoder) {}
 
-  bool compression_enabled() const { return encoder_->enable_compression_; }
+  bool dynamic_table_enabled() const { return encoder_->enable_dynamic_table_; }
+  bool huffman_enabled() const { return encoder_->enable_huffman_; }
   HpackHeaderTable* table() { return &encoder_->header_table_; }
   HpackHeaderTablePeer table_peer() { return HpackHeaderTablePeer(table()); }
   void EmitString(absl::string_view str) { encoder_->EmitString(str); }
@@ -205,7 +206,7 @@ class HpackEncoderTest
   }
   void ExpectString(HpackOutputStream* stream, absl::string_view str) {
     size_t encoded_size =
-        peer_.compression_enabled() ? http2::HuffmanSize(str) : str.size();
+        peer_.huffman_enabled() ? http2::HuffmanSize(str) : str.size();
     if (encoded_size < str.size()) {
       expected_.AppendPrefix(kStringLiteralHuffmanEncoded);
       expected_.AppendUint32(encoded_size);
@@ -515,6 +516,20 @@ TEST_P(HpackEncoderTest, StringsDynamicallySelectHuffmanCoding) {
   EXPECT_EQ(expected_out, actual_out);
 }
 
+TEST_P(HpackEncoderTest, StringEncodingWhenHuffmanDisabled) {
+  encoder_.DisableHuffman();
+  // Compactable string, but will not use Huffman.
+  peer_.EmitString("feedbeef");
+  expected_.AppendPrefix(kStringLiteralIdentityEncoded);
+  expected_.AppendUint32(8);
+  expected_.AppendBytes("feedbeef");
+
+  std::string actual_out;
+  std::string expected_out = expected_.TakeString();
+  peer_.TakeString(&actual_out);
+  EXPECT_EQ(expected_out, actual_out);
+}
+
 TEST_P(HpackEncoderTest, EncodingWithoutCompression) {
   encoder_.SetHeaderListener(
       [this](absl::string_view name, absl::string_view value) {
@@ -558,6 +573,57 @@ TEST_P(HpackEncoderTest, EncodingWithoutCompression) {
                     Pair("multivalue", "value1, value2")));
   }
   EXPECT_EQ(kInitialDynamicTableSize, encoder_.GetDynamicTableSize());
+}
+
+TEST_P(HpackEncoderTest, EncodingWithoutHuffman) {
+  encoder_.SetHeaderListener(
+      [this](absl::string_view name, absl::string_view value) {
+        this->SaveHeaders(name, value);
+      });
+  encoder_.DisableHuffman();
+  EXPECT_FALSE(peer_.huffman_enabled());
+
+  // Static table entry: ":path", "/index.html"
+  ExpectIndex(5);
+  // Static table name entry: "cookie"
+  ExpectIndexedLiteral(32, "foo=bar");
+  ++dynamic_table_insertions_;
+  ExpectIndexedLiteral(32, "baz=bing");
+  ++dynamic_table_insertions_;
+  if (strategy_ == kRepresentations) {
+    ExpectIndexedLiteral("hello", std::string("goodbye\0aloha", 13));
+  } else {
+    ExpectIndexedLiteral("hello", "goodbye");
+    const size_t hello_index = dynamic_table_insertions_++;
+    // Dynamic table name entry: "hello"
+    ExpectIndexedLiteral(DynamicIndexToWireIndex(hello_index), "aloha");
+  }
+  ExpectIndexedLiteral("multivalue", "value1, value2");
+
+  quiche::HttpHeaderBlock headers;
+  headers[":path"] = "/index.html";
+  headers["cookie"] = "foo=bar; baz=bing";
+  headers["hello"] = "goodbye";
+  headers.AppendValueOrAddHeader("hello", "aloha");
+  headers["multivalue"] = "value1, value2";
+
+  CompareWithExpectedEncoding(headers);
+
+  if (strategy_ == kRepresentations) {
+    EXPECT_THAT(
+        headers_observed_,
+        ElementsAre(Pair(":path", "/index.html"), Pair("cookie", "foo=bar"),
+                    Pair("cookie", "baz=bing"),
+                    Pair("hello", absl::string_view("goodbye\0aloha", 13)),
+                    Pair("multivalue", "value1, value2")));
+  } else {
+    EXPECT_THAT(
+        headers_observed_,
+        ElementsAre(Pair(":path", "/index.html"), Pair("cookie", "foo=bar"),
+                    Pair("cookie", "baz=bing"), Pair("hello", "goodbye"),
+                    Pair("hello", "aloha"),
+                    Pair("multivalue", "value1, value2")));
+  }
 }
 
 TEST_P(HpackEncoderTest, MultipleEncodingPasses) {

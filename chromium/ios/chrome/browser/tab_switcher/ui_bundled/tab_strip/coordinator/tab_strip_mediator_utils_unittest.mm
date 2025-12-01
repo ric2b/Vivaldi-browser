@@ -47,8 +47,7 @@ std::unique_ptr<web::WebState> CreateWebState() {
 class TabStripMediatorUtilsTest : public PlatformTest {
  public:
   TabStripMediatorUtilsTest() {
-    feature_list_.InitWithFeatures(
-        {kTabGroupsIPad, kModernTabStrip, kTabGroupSync}, {});
+    feature_list_.InitWithFeatures({kTabGroupsIPad, kTabGroupSync}, {});
     TestProfileIOS::Builder profile_builder;
     profile_builder.AddTestingFactory(
         tab_groups::TabGroupSyncServiceFactory::GetInstance(),
@@ -140,6 +139,10 @@ TEST_F(TabStripMediatorUtilsTest, CreateGroupItemIdentifier) {
 // Test that calling `MoveGroupBeforeTabStripItem` in the same browser works as
 // expected.
 TEST_F(TabStripMediatorUtilsTest, MoveGroupBeforeItemSameBrowser) {
+  if (!IsTabGroupInGridEnabled()) {
+    // Disabled on iPadOS 16.
+    return;
+  }
   WebStateListBuilderFromDescription builder(web_state_list_.get());
   ASSERT_TRUE(builder.BuildWebStateListFromDescription(
       "| [ 0 a b* ] c [ 1 d e ]", base::BindRepeating(CreateWebState)));
@@ -214,6 +217,10 @@ TEST_F(TabStripMediatorUtilsTest, MoveGroupBeforeItemSameBrowser) {
 // Test that calling `MoveGroupBeforeTabStripItem` between browsers works as
 // expected.
 TEST_F(TabStripMediatorUtilsTest, MoveGroupBeforeItemDifferentBrowser) {
+  if (!IsTabGroupInGridEnabled()) {
+    // Disabled on iPadOS 16.
+    return;
+  }
   WebStateListBuilderFromDescription builder(web_state_list_.get());
   ASSERT_TRUE(builder.BuildWebStateListFromDescription(
       "| [ 0 a b* ] c", base::BindRepeating(CreateWebState)));

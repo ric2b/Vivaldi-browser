@@ -2,12 +2,15 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifndef V8_WASM_WASM_OBJECTS_INL_H_
+#define V8_WASM_WASM_OBJECTS_INL_H_
+
 #if !V8_ENABLE_WEBASSEMBLY
 #error This header should only be included if WebAssembly is enabled.
 #endif  // !V8_ENABLE_WEBASSEMBLY
 
-#ifndef V8_WASM_WASM_OBJECTS_INL_H_
-#define V8_WASM_WASM_OBJECTS_INL_H_
+#include "src/wasm/wasm-objects.h"
+// Include the non-inl header before the rest of the headers.
 
 #include <type_traits>
 
@@ -26,7 +29,6 @@
 #include "src/roots/roots.h"
 #include "src/wasm/wasm-code-manager.h"
 #include "src/wasm/wasm-module.h"
-#include "src/wasm/wasm-objects.h"
 #include "third_party/fp16/src/include/fp16.h"
 
 #if V8_ENABLE_DRUMBRAKE
@@ -120,7 +122,7 @@ wasm::ValueType WasmGlobalObject::type() const {
   // technically sandbox violations, we should still try to avoid them to keep
   // fuzzers happy. This SBXCHECK accomplishes that.
   wasm::ValueType type = wasm::ValueType::FromRawBitField(raw_type());
-  SBXCHECK(is_valid(type.kind()));
+  SBXCHECK(type.is_valid());
   return type;
 }
 void WasmGlobalObject::set_type(wasm::ValueType value) {
@@ -156,10 +158,10 @@ uint8_t* WasmGlobalObject::GetS128RawBytes() {
   return reinterpret_cast<uint8_t*>(address());
 }
 
-Handle<Object> WasmGlobalObject::GetRef() {
+DirectHandle<Object> WasmGlobalObject::GetRef() {
   // We use this getter for externref, funcref, and stringref.
   DCHECK(type().is_reference());
-  return handle(tagged_buffer()->get(offset()), GetIsolate());
+  return direct_handle(tagged_buffer()->get(offset()), Isolate::Current());
 }
 
 void WasmGlobalObject::SetI32(int32_t value) {
@@ -330,7 +332,7 @@ const wasm::WasmModule* WasmInstanceObject::module() const {
 }
 
 ImportedFunctionEntry::ImportedFunctionEntry(
-    Handle<WasmTrustedInstanceData> instance_data, int index)
+    DirectHandle<WasmTrustedInstanceData> instance_data, int index)
     : instance_data_(instance_data), index_(index) {
   DCHECK_GE(index, 0);
   DCHECK_LT(index, instance_data->module()->num_imported_functions);
@@ -559,8 +561,12 @@ Tagged<WasmFuncRef> WasmExternalFunction::func_ref() const {
 }
 
 // WasmTypeInfo
+wasm::CanonicalValueType WasmTypeInfo::type() const {
+  return wasm::CanonicalValueType::FromRawBitField(canonical_type());
+}
+
 wasm::CanonicalTypeIndex WasmTypeInfo::type_index() const {
-  return wasm::CanonicalTypeIndex{canonical_type_index()};
+  return type().ref_index();
 }
 
 wasm::CanonicalValueType WasmTypeInfo::element_type() const {
@@ -602,7 +608,7 @@ wasm::ValueType WasmTableObject::unsafe_type() {
   // technically sandbox violations, we should still try to avoid them to keep
   // fuzzers happy. This SBXCHECK accomplishes that.
   wasm::ValueType type = wasm::ValueType::FromRawBitField(raw_type());
-  SBXCHECK(is_valid(type.kind()));
+  SBXCHECK(type.is_valid());
   return type;
 }
 
@@ -686,10 +692,6 @@ DirectHandle<Object> WasmObject::ReadValueAt(Isolate* isolate,
       return direct_handle(slot.load(isolate), isolate);
     }
 
-    case wasm::kRtt:
-      // Rtt values are not supposed to be made available to JavaScript side.
-      UNREACHABLE();
-
     case wasm::kVoid:
     case wasm::kTop:
     case wasm::kBottom:
@@ -752,10 +754,18 @@ ObjectSlot WasmStruct::RawField(int raw_offset) {
   return ObjectSlot(RawFieldAddress(raw_offset));
 }
 
+inline Tagged<Map> WasmStruct::get_described_rtt() const {
+  return TaggedField<Map, kHeaderSize>::load(*this);
+}
+
+void WasmStruct::set_described_rtt(Tagged<Map> rtt) {
+  TaggedField<Object, kHeaderSize>::store(*this, rtt);
+}
+
 wasm::CanonicalTypeIndex WasmArray::type_index(Tagged<Map> map) {
   DCHECK_EQ(WASM_ARRAY_TYPE, map->instance_type());
   Tagged<WasmTypeInfo> type_info = map->wasm_type_info();
-  return type_info->type_index();
+  return type_info->type().ref_index();
 }
 
 const wasm::CanonicalValueType WasmArray::GcSafeElementType(Tagged<Map> map) {
@@ -815,9 +825,6 @@ int WasmArray::DecodeElementSizeFromMap(Tagged<Map> map) {
 TRUSTED_POINTER_ACCESSORS(WasmTagObject, trusted_data, WasmTrustedInstanceData,
                           kTrustedDataOffset,
                           kWasmTrustedInstanceDataIndirectPointerTag)
-
-EXTERNAL_POINTER_ACCESSORS(WasmContinuationObject, jmpbuf, Address,
-                           kJmpbufOffset, kWasmContinuationJmpbufTag)
 
 EXTERNAL_POINTER_ACCESSORS(WasmContinuationObject, stack, Address, kStackOffset,
                            kWasmStackMemoryTag)

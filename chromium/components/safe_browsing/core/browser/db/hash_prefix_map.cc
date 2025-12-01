@@ -11,6 +11,7 @@
 #include "base/files/file_util.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/raw_ref.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/run_loop.h"
 #include "base/strings/strcat.h"
 #include "base/threading/scoped_blocking_call.h"
@@ -19,6 +20,20 @@
 
 namespace safe_browsing {
 namespace {
+
+// These values are persisted to logs. Entries should not be renumbered and
+// numeric values should never be reused.
+// LINT.IfChange(WriteError)
+enum class WriteError {
+  kFileWriteError = 0,
+  kInvalidTotalSize = 1,
+  kFileNotFound = 2,
+  kFileSizeMismatch = 3,
+  kFailedMmap = 4,
+  kMmapSizeMismatch = 5,
+  kMaxValue = kMmapSizeMismatch,
+};
+// LINT.ThenChange(//tools/metrics/histograms/metadata/safe_browsing/enums.xml:V4HashPrefixMapWriteError)
 
 std::string GenerateExtension(PrefixSize size) {
   return base::StrCat(
@@ -37,6 +52,10 @@ bool HashPrefixMatches(std::string_view prefix,
                             PrefixIterator(prefixes, end, size), prefix);
 }
 
+void LogWriteError(WriteError error) {
+  base::UmaHistogramEnumeration("SafeBrowsing.V4StoreWriteError", error);
+}
+
 }  // namespace
 
 // Writes a hash prefix file, and buffers writes to avoid a write call for each
@@ -52,6 +71,11 @@ class HashPrefixMap::BufferedFileWriter {
         buffer_size_(buffer_size),
         file_(path_, base::File::FLAG_CREATE_ALWAYS | base::File::FLAG_WRITE),
         has_error_(!file_.IsValid()) {
+    if (has_error_) {
+      base::UmaHistogramExactLinear("SafeBrowsing.V4StoreFileOpenError",
+                                    -file_.error_details(),
+                                    -base::File::FILE_ERROR_MAX);
+    }
     buffer_.reserve(buffer_size);
   }
 
@@ -88,6 +112,8 @@ class HashPrefixMap::BufferedFileWriter {
 
   const std::string& extension() const { return extension_; }
 
+  bool has_error() const { return has_error_; }
+
  private:
   void Flush() {
     WriteToFile(buffer_);
@@ -98,8 +124,18 @@ class HashPrefixMap::BufferedFileWriter {
     if (has_error_ || data.empty())
       return;
 
-    if (!file_.WriteAtCurrentPosAndCheck(base::as_byte_span(data))) {
-      has_error_ = true;
+    size_t bytes_written = 0;
+    while (bytes_written < data.size()) {
+      std::optional<size_t> result = file_.WriteAtCurrentPos(
+          base::as_byte_span(data.substr(bytes_written)));
+      if (!result.has_value()) {
+        has_error_ = true;
+        base::UmaHistogramExactLinear("SafeBrowsing.V4StoreFileWriteError",
+                                      -base::File::GetLastFileError(),
+                                      -base::File::FILE_ERROR_MAX);
+        break;
+      }
+      bytes_written += *result;
     }
   }
 
@@ -157,12 +193,6 @@ HashPrefixMapView HashPrefixMap::view() const {
   return view;
 }
 
-HashPrefixesView HashPrefixMap::at(PrefixSize size) const {
-  const FileInfo& info = map_.at(size);
-  CHECK(info.IsReadable());
-  return info.GetView();
-}
-
 void HashPrefixMap::Append(PrefixSize size, HashPrefixesView prefix) {
   if (prefix.empty())
     return;
@@ -182,7 +212,7 @@ ApplyUpdateResult HashPrefixMap::ReadFromDisk(
     }
 
     auto& file_info = GetFileInfo(prefix_size);
-    if (!file_info.Initialize(hash_file)) {
+    if (!file_info.Initialize(hash_file, /*initialize_after_write=*/false)) {
       return MMAP_FAILURE;
     }
   }
@@ -216,7 +246,7 @@ std::unique_ptr<HashPrefixMap::WriteSession> HashPrefixMap::WriteToDisk(
       continue;
     }
 
-    if (!file_info.Initialize(hash_file)) {
+    if (!file_info.Initialize(hash_file, /*initialize_after_write=*/true)) {
       return nullptr;
     }
 
@@ -305,14 +335,23 @@ HashPrefixesView HashPrefixMap::FileInfo::GetView() const {
                           file_.length());
 }
 
-bool HashPrefixMap::FileInfo::Initialize(const HashFile& hash_file) {
+bool HashPrefixMap::FileInfo::Initialize(const HashFile& hash_file,
+                                         bool initialize_after_write) {
   // Make sure file size is correct before attempting to mmap.
   base::FilePath path = GetPath(store_path_, hash_file.extension());
   std::optional<int64_t> file_size = base::GetFileSize(path);
   if (!file_size.has_value()) {
+    if (initialize_after_write) {
+      LogWriteError(WriteError::kFileNotFound);
+    }
+
     return false;
   }
   if (static_cast<uint64_t>(file_size.value()) != hash_file.file_size()) {
+    if (initialize_after_write) {
+      LogWriteError(WriteError::kFileSizeMismatch);
+    }
+
     return false;
   }
 
@@ -322,10 +361,18 @@ bool HashPrefixMap::FileInfo::Initialize(const HashFile& hash_file) {
   }
 
   if (!file_.Initialize(path)) {
+    if (initialize_after_write) {
+      LogWriteError(WriteError::kFailedMmap);
+    }
+
     return false;
   }
 
   if (file_.length() != static_cast<size_t>(file_size.value())) {
+    if (initialize_after_write) {
+      LogWriteError(WriteError::kMmapSizeMismatch);
+    }
+
     return false;
   }
 
@@ -333,8 +380,15 @@ bool HashPrefixMap::FileInfo::Initialize(const HashFile& hash_file) {
 }
 
 bool HashPrefixMap::FileInfo::Finalize(HashFile* hash_file) {
-  if (!writer_->Finish())
+  if (!writer_->Finish()) {
+    if (writer_->has_error()) {
+      LogWriteError(WriteError::kFileWriteError);
+    } else if (writer_->GetFileSize() % prefix_size_ != 0) {
+      LogWriteError(WriteError::kInvalidTotalSize);
+    }
+
     return false;
+  }
 
   hash_file->set_prefix_size(prefix_size_);
 

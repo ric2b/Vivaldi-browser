@@ -36,6 +36,10 @@
   return [VivaldiStartPagePrefs showStartPageCustomizeButton];
 }
 
++ (BOOL)showAddButton {
+  return [VivaldiStartPagePrefs showAddButton];
+}
+
 + (const VivaldiStartPageStartItemType)getReopenStartPageWithItem {
   return [VivaldiStartPagePrefs getReopenStartPageWithItem];
 }
@@ -85,6 +89,10 @@
 
 + (void)setShowStartPageCustomizeButton:(BOOL)show {
   [VivaldiStartPagePrefs setShowStartPageCustomizeButton:show];
+}
+
++ (void)setShowAddButton:(BOOL)show {
+  [VivaldiStartPagePrefs setShowAddButton:show];
 }
 
 + (void)setReopenStartPageWithItem:(const VivaldiStartPageStartItemType)item {

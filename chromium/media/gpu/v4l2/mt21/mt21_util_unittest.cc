@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/390223051): Remove C-library calls to fix the errors.
+#pragma allow_unsafe_libc_calls
+#endif
+
 #include "build/build_config.h"
 
 #if BUILDFLAG(IS_CHROMEOS) && defined(ARCH_CPU_ARM_FAMILY) && \
@@ -15,7 +20,6 @@
 #include "base/test/launcher/unit_test_launcher.h"
 #include "base/test/test_suite.h"
 #include "build/build_config.h"
-#include "build/chromeos_buildflags.h"
 
 namespace media {
 namespace {

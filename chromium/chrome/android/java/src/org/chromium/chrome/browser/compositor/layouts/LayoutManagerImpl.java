@@ -76,6 +76,7 @@ import org.chromium.ui.modelutil.PropertyModelChangeProcessor;
 import org.chromium.ui.resources.ResourceManager;
 import org.chromium.ui.resources.dynamics.DynamicResourceLoader;
 import org.chromium.ui.util.TokenHolder;
+import org.chromium.ui.util.XrUtils;
 import org.chromium.url.GURL;
 
 import java.util.ArrayList;
@@ -95,6 +96,12 @@ import org.vivaldi.browser.preferences.VivaldiPreferences;
  */
 public class LayoutManagerImpl
         implements ManagedLayoutManager, LayoutUpdateHost, LayoutProvider, BackPressHandler {
+
+    /** Returns the {@link StripLayoutHelperManager} managed by this class. */
+    public @Nullable StripLayoutHelperManager getStripLayoutHelperManager() {
+        return null;
+    }
+
     /** Sampling at 60 fps. */
     private static final long FRAME_DELTA_TIME_MS = 16;
 
@@ -212,6 +219,7 @@ public class LayoutManagerImpl
             // Open the new tab
             if (type == TabLaunchType.FROM_RESTORE
                     || type == TabLaunchType.FROM_REPARENTING
+                    || type == TabLaunchType.FROM_REPARENTING_BACKGROUND
                     || type == TabLaunchType.FROM_EXTERNAL_APP
                     || type == TabLaunchType.FROM_LAUNCHER_SHORTCUT
                     || type == TabLaunchType.FROM_STARTUP
@@ -468,8 +476,6 @@ public class LayoutManagerImpl
 
         mIsNewEventFilter = layoutFilter != mActiveEventFilter;
         mActiveEventFilter = layoutFilter;
-
-        if (mActiveEventFilter != null) mActiveLayout.unstallImmediately();
 
         return mActiveEventFilter != null;
     }
@@ -1028,7 +1034,6 @@ public class LayoutManagerImpl
         TopUiThemeColorProvider topUiTheme = mTopUiThemeColorProvider.get();
         layoutTab.initFromHost(
                 topUiTheme.getBackgroundColor(tab),
-                shouldStall(tab),
                 canUseLiveTexture,
                 topUiTheme.getSceneLayerBackground(tab),
                 ThemeUtils.getTextBoxColorForToolbarBackground(
@@ -1049,11 +1054,6 @@ public class LayoutManagerImpl
 
         layoutTab.set(
                 LayoutTab.BACKGROUND_COLOR, mTopUiThemeColorProvider.get().getBackgroundColor(tab));
-    }
-
-    // Whether the tab is ready to display or it should be faded in as it loads.
-    private static boolean shouldStall(Tab tab) {
-        return (tab.isFrozen() || tab.needsReload()) && !tab.isNativePage();
     }
 
     @Override
@@ -1186,6 +1186,10 @@ public class LayoutManagerImpl
     @Override
     public void showLayout(int layoutType, boolean animate) {
         Layout activeLayout = getActiveLayout();
+        // On XR devices the layout transition animations are not required.
+        if (XrUtils.isXrDevice()) {
+            animate = false;
+        }
         if (activeLayout != null && !activeLayout.isStartingToHide()) {
             setNextLayout(getLayoutForType(layoutType), animate);
             activeLayout.startHiding();
@@ -1285,12 +1289,13 @@ public class LayoutManagerImpl
     /**
      * Sets the next {@link Layout} to show after the current {@link Layout} is finished and is done
      * hiding.
+     *
      * @param layout The new {@link Layout} to show.
      * @param animate Whether the next layout should be animated.
      */
     protected void setNextLayout(Layout layout, boolean animate) {
         mNextActiveLayout = (layout == null) ? getDefaultLayout() : layout;
-        mAnimateNextLayout = animate;
+        mAnimateNextLayout = XrUtils.isXrDevice() ? false : animate;
     }
 
     @Override

@@ -42,11 +42,14 @@
 #include "build/build_config.h"
 #include "mojo/public/cpp/bindings/shared_remote.h"
 #include "mojo/public/cpp/system/simple_watcher.h"
+#include "net/base/completion_once_callback.h"
 #include "net/base/elements_upload_data_stream.h"
 #include "net/base/isolation_info.h"
 #include "net/base/load_flags.h"
 #include "net/base/load_timing_info.h"
+#include "net/base/load_timing_internal_info.h"
 #include "net/base/mime_sniffer.h"
+#include "net/base/net_errors.h"
 #include "net/base/proxy_chain.h"
 #include "net/base/schemeful_site.h"
 #include "net/base/transport_info.h"
@@ -61,18 +64,21 @@
 #include "net/cookies/static_cookie_policy.h"
 #include "net/device_bound_sessions/session.h"
 #include "net/dns/public/secure_dns_policy.h"
+#include "net/filter/filter_source_stream.h"
 #include "net/http/http_connection_info.h"
 #include "net/http/http_request_headers.h"
 #include "net/http/http_response_headers.h"
 #include "net/http/http_util.h"
 #include "net/http/structured_headers.h"
 #include "net/log/net_log_source_type.h"
+#include "net/log/net_log_util.h"
 #include "net/log/net_log_with_source.h"
 #include "net/ssl/client_cert_store.h"
 #include "net/ssl/ssl_connection_status_flags.h"
 #include "net/ssl/ssl_private_key.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
 #include "net/url_request/redirect_info.h"
+#include "net/url_request/url_request.h"
 #include "net/url_request/url_request_context.h"
 #include "net/url_request/url_request_context_getter.h"
 #include "services/network/ad_heuristic_cookie_overrides.h"
@@ -86,6 +92,7 @@
 #include "services/network/public/cpp/cors/origin_access_list.h"
 #include "services/network/public/cpp/cross_origin_resource_policy.h"
 #include "services/network/public/cpp/empty_url_loader_client.h"
+#include "services/network/public/cpp/features.h"
 #include "services/network/public/cpp/header_util.h"
 #include "services/network/public/cpp/ip_address_space_util.h"
 #include "services/network/public/cpp/loading_params.h"
@@ -675,7 +682,7 @@ URLLoader::URLLoader(
       has_user_activation_(request.trusted_params &&
                            request.trusted_params->has_user_activation),
       request_destination_(request.destination),
-      expected_signatures_(request.expected_signatures),
+      expected_public_keys_(request.expected_public_keys),
       resource_scheduler_client_(context.GetResourceSchedulerClient()),
       keepalive_statistics_recorder_(std::move(keepalive_statistics_recorder)),
       custom_proxy_pre_cache_headers_(request.custom_proxy_pre_cache_headers),
@@ -714,6 +721,9 @@ URLLoader::URLLoader(
           std::make_unique<SharedStorageRequestHelper>(
               shared_storage_writable_eligible,
               url_loader_network_observer_)),
+      ad_auction_event_record_request_helper_(
+          request.attribution_reporting_eligibility,
+          url_loader_network_observer_),
       has_fetch_streaming_upload_body_(HasFetchStreamingUploadBody(&request)),
       accept_ch_frame_observer_(std::move(accept_ch_frame_observer)),
       allow_cookies_from_browser_(
@@ -727,7 +737,10 @@ URLLoader::URLLoader(
       include_request_cookies_with_response_(
           request.trusted_params &&
           request.trusted_params->include_request_cookies_with_response),
-      provide_data_use_updates_(context.DataUseUpdatesEnabled()) {
+      include_load_timing_internal_info_with_response_(
+          request.trusted_params.has_value()),
+      provide_data_use_updates_(context.DataUseUpdatesEnabled()),
+      partial_decoder_decoding_buffer_size_(net::kMaxBytesToSniff) {
   DCHECK(delete_callback_);
 
   // crbug.com/387537990: Experiment with creating the mojo data pipe
@@ -781,9 +794,8 @@ URLLoader::URLLoader(
       request.url, request.priority, this, traffic_annotation,
       /*is_for_websockets=*/false, request.net_log_create_info);
 
-  TRACE_EVENT(
-      "loading", "URLLoader::URLLoader",
-      perfetto::Flow::ProcessScoped(url_request_->net_log().source().id));
+  TRACE_EVENT("loading", "URLLoader::URLLoader",
+              net::NetLogWithSourceToFlow(url_request_->net_log()));
 
   // |cors_exempt_headers| must be merged here to avoid breaking CORS checks.
   // They are non-empty when the values are given by the UA code, therefore
@@ -831,6 +843,7 @@ URLLoader::URLLoader(
       request.referrer_policy,
       /*upgrade_if_insecure=*/request.upgrade_if_insecure,
       /*is_ad_tagged=*/request.is_ad_tagged,
+      request.client_side_content_decoding_enabled,
       /*isolation_info=*/
       GetIsolationInfo(factory_params_->isolation_info,
                        factory_params_->automatically_assign_isolation_info,
@@ -852,7 +865,7 @@ URLLoader::URLLoader(
                 shared_dictionary_manager->MaybeCreateSharedDictionaryGetter(
                     request.load_flags, request_destination_))
           : std::nullopt,
-      request.socket_tag);
+      request.socket_tag, request.allows_device_bound_sessions);
 
   if (context.ShouldRequireIsolationInfo()) {
     DCHECK(!url_request_->isolation_info().IsEmpty());
@@ -892,11 +905,12 @@ void URLLoader::ConfigureRequest(
     net::ReferrerPolicy referrer_policy,
     bool upgrade_if_insecure,
     bool is_ad_tagged,
+    bool client_side_content_decoding_enabled,
     std::optional<net::IsolationInfo> isolation_info,
     bool force_main_frame_for_same_site_cookies,
     net::SecureDnsPolicy secure_dns_policy,
     net::HttpRequestHeaders extra_request_headers,
-    const std::optional<std::vector<net::SourceStream::SourceType>>&
+    const std::optional<std::vector<net::SourceStreamType>>&
         accepted_stream_types,
     const std::optional<url::Origin>& initiator,
     net::RedirectInfo::FirstPartyURLPolicy first_party_url_policy,
@@ -904,7 +918,8 @@ void URLLoader::ConfigureRequest(
     bool priority_incremental,
     net::CookieSettingOverrides cookie_setting_overrides,
     std::optional<net::SharedDictionaryGetter> shared_dictionary_getter,
-    net::SocketTag socket_tag) {
+    net::SocketTag socket_tag,
+    bool allows_device_bound_sessions) {
   url_request_->set_method(method);
   url_request_->set_site_for_cookies(site_for_cookies);
   url_request_->set_force_ignore_site_for_cookies(
@@ -916,6 +931,8 @@ void URLLoader::ConfigureRequest(
   url_request_->set_referrer_policy(referrer_policy);
   url_request_->set_upgrade_if_insecure(upgrade_if_insecure);
   url_request_->set_ad_tagged(is_ad_tagged);
+  url_request_->set_client_side_content_decoding_enabled(
+      client_side_content_decoding_enabled);
 
   if (isolation_info) {
     url_request_->set_isolation_info(std::move(isolation_info).value());
@@ -942,15 +959,17 @@ void URLLoader::ConfigureRequest(
   url_request_->cookie_setting_overrides() = cookie_setting_overrides;
   url_request_->SetLoadFlags(request_load_flags);
   SetRequestCredentials(url);
-  url_request_->set_storage_access_status(
-      url_request_->CalculateStorageAccessStatus());
+  if (request_credentials_mode_ == mojom::CredentialsMode::kInclude) {
+    url_request_->set_storage_access_status(
+        url_request_->CalculateStorageAccessStatus());
+  }
 
   SetFetchMetadataHeaders(url_request_.get(), request_mode_,
                           has_user_activation_, request_destination_, nullptr,
                           *factory_params_, *origin_access_list_,
                           request_credentials_mode_);
 
-  MaybeSetAcceptSignatureHeader(url_request_.get(), expected_signatures_);
+  MaybeSetAcceptSignatureHeader(url_request_.get(), expected_public_keys_);
 
   url_request_->set_first_party_url_policy(first_party_url_policy);
 
@@ -988,6 +1007,8 @@ void URLLoader::ConfigureRequest(
         &mojom::DeviceBoundSessionAccessObserver::OnDeviceBoundSessionAccessed,
         Clone(*device_bound_session_observer_)));
   }
+
+  url_request_->set_allows_device_bound_sessions(allows_device_bound_sessions);
 }
 
 // This class is used to manage the queue of pending file upload operations
@@ -1320,9 +1341,8 @@ void URLLoader::OnDoneBeginningTrustTokenOperation(
 }
 
 void URLLoader::ScheduleStart() {
-  TRACE_EVENT(
-      "loading", "URLLoader::ScheduleStart",
-      perfetto::Flow::ProcessScoped(url_request_->net_log().source().id));
+  TRACE_EVENT("loading", "URLLoader::ScheduleStart",
+              net::NetLogWithSourceToFlow(url_request_->net_log()));
   bool defer = false;
   if (resource_scheduler_client_) {
     resource_scheduler_request_handle_ =
@@ -1415,9 +1435,8 @@ void URLLoader::SetupPipeHandlesAndWatchers(
 }
 
 URLLoader::~URLLoader() {
-  TRACE_EVENT(
-      "loading", "URLLoader::~URLLoader",
-      perfetto::Flow::ProcessScoped(url_request_->net_log().source().id));
+  TRACE_EVENT("loading", "URLLoader::~URLLoader",
+              net::NetLogWithSourceToFlow(url_request_->net_log()));
   if (keepalive_ && keepalive_statistics_recorder_) {
     keepalive_statistics_recorder_->OnLoadFinished(
         *factory_params_->top_frame_id, keepalive_request_size_);
@@ -1442,6 +1461,25 @@ void URLLoader::FollowRedirect(
   if (!deferred_redirect_url_) {
     NOTREACHED();
   }
+
+  // Note: There are some ordering dependencies here.
+  // `CalculateStorageAccessStatus` depends on
+  // `url_request->cookie_setting_overrides()`. `SetFetchMetadataHeaders`
+  // depends on `url_request_->storage_access_status()`.
+  if (request_credentials_mode_ == mojom::CredentialsMode::kInclude) {
+    url_request_->set_storage_access_status(
+        url_request_->CalculateStorageAccessStatus());
+  } else {
+    url_request_->reset_storage_access_status();
+  }
+
+  // We may need to clear out old Sec- prefixed request headers. We'll attempt
+  // to do this before we re-add any.
+  MaybeRemoveSecHeaders(url_request_.get(), *deferred_redirect_url_);
+  SetFetchMetadataHeaders(url_request_.get(), request_mode_,
+                          has_user_activation_, request_destination_,
+                          deferred_redirect_url_.get(), *factory_params_,
+                          *origin_access_list_, request_credentials_mode_);
 
   // Set seen_raw_request_headers_ to false in order to make sure this redirect
   // also calls the devtools observer.
@@ -1531,6 +1569,7 @@ PrivateNetworkAccessCheckResult URLLoader::PrivateNetworkAccessCheck(
 
   bool is_warning = false;
   switch (result) {
+    case PrivateNetworkAccessCheckResult::kLNAAllowedByPolicyWarn:
     case PrivateNetworkAccessCheckResult::kAllowedByPolicyWarn:
       is_warning = true;
       break;
@@ -1590,9 +1629,57 @@ int URLLoader::OnConnected(net::URLRequest* url_request,
             PrivateNetworkAccessCheckResult::kBlockedByTargetIpAddressSpace) {
       return net::ERR_INCONSISTENT_IP_ADDRESS_SPACE;
     }
+
+    // Local network access permission is required for this connection.
+    if (url_loader_network_observer_ &&
+        result == PrivateNetworkAccessCheckResult::kLNAPermissionRequired) {
+      // Check if the user has granted permission, otherwise trigger the
+      // permission request and wait for the result.
+      // `ProcessLocalNetworkAccessPermissionResultOnCOnnected` is then called
+      // to either continue the load (if granted) or result in an error (if
+      // denied).
+      // This is bound with a WeakPtr because the URLLoader may not own the
+      // observer's pipe, so we can't rely on destruction to stop the callback
+      // the callback from being invoked.
+      (*url_loader_network_observer_)
+          .OnLocalNetworkAccessPermissionRequired(base::BindOnce(
+              &URLLoader::ProcessLocalNetworkAccessPermissionResultOnConnected,
+              weak_ptr_factory_.GetWeakPtr(), info, url_request,
+              std::move(callback)));
+      return net::ERR_IO_PENDING;
+    }
+
+    // Otherwise, if there was a Private Network Access CORS error, block by
+    // default.
     return net::ERR_BLOCKED_BY_PRIVATE_NETWORK_ACCESS_CHECKS;
   }
 
+  return ProcessAcceptCHFrameOnConnected(info, url_request,
+                                         std::move(callback));
+}
+
+void URLLoader::ProcessLocalNetworkAccessPermissionResultOnConnected(
+    const net::TransportInfo& info,
+    net::URLRequest* url_request,
+    net::CompletionOnceCallback callback,
+    bool permission_granted) {
+  if (!permission_granted) {
+    std::move(callback).Run(net::ERR_BLOCKED_BY_PRIVATE_NETWORK_ACCESS_CHECKS);
+    return;
+  }
+  std::pair<net::CompletionOnceCallback, net::CompletionOnceCallback> split =
+      base::SplitOnceCallback(std::move(callback));
+  int result = ProcessAcceptCHFrameOnConnected(info, url_request,
+                                               std::move(split.first));
+  if (result != net::ERR_IO_PENDING) {
+    std::move(split.second).Run(result);
+  }
+}
+
+int URLLoader::ProcessAcceptCHFrameOnConnected(
+    const net::TransportInfo& info,
+    net::URLRequest* url_request,
+    net::CompletionOnceCallback callback) {
   if (!accept_ch_frame_observer_ || info.accept_ch_frame.empty() ||
       !base::FeatureList::IsEnabled(features::kAcceptCHFrame)) {
     return net::OK;
@@ -1609,11 +1696,20 @@ int URLLoader::OnConnected(net::URLRequest* url_request,
   // started. Otherwise, the callback to continue the network transaction will
   // be called and the URLLoader will continue as normal.
   if (!hints.empty()) {
+    // `accept_ch_frame_observer_` is owned by `this`, so passing in
+    // `callback` is safe.
+    auto record = [](net::CompletionOnceCallback callback,
+                     base::TimeTicks call_time, int status) {
+      base::UmaHistogramMicrosecondsTimes(
+          "Net.URLLoader.AcceptCH.RoundTripTime",
+          base::TimeTicks::Now() - call_time);
+      std::move(callback).Run(status);
+    };
     accept_ch_frame_observer_->OnAcceptCHFrameReceived(
-        url::Origin::Create(url_request->url()), hints, std::move(callback));
+        url::Origin::Create(url_request->url()), hints,
+        base::BindOnce(record, std::move(callback), base::TimeTicks::Now()));
     return net::ERR_IO_PENDING;
   }
-
   return net::OK;
 }
 
@@ -1662,6 +1758,13 @@ mojom::URLResponseHeadPtr URLLoader::BuildResponseHead() const {
   if (is_load_timing_enabled_)
     url_request_->GetLoadTimingInfo(&response->load_timing);
 
+  if (include_load_timing_internal_info_with_response_) {
+    response->load_timing_internal_info =
+        url_request_->GetLoadTimingInternalInfo();
+  }
+  CHECK(include_load_timing_internal_info_with_response_ ||
+        !response->load_timing_internal_info);
+
   if (url_request_->ssl_info().cert.get()) {
     response->cert_status = url_request_->ssl_info().cert_status;
     if ((options_ & mojom::kURLLoadOptionSendSSLInfoWithResponse) ||
@@ -1696,6 +1799,8 @@ mojom::URLResponseHeadPtr URLLoader::BuildResponseHead() const {
       private_network_access_checker_.ClientAddressSpace();
 
   response->load_with_storage_access = ShouldSetLoadWithStorageAccess();
+  url_request_->GetClientSideContentDecodingTypes(
+      &response->client_side_content_decoding_types);
 
   return response;
 }
@@ -1778,8 +1883,7 @@ void URLLoader::OnReceivedRedirect(net::URLRequest* url_request,
       // TODO(https://crbug.com/379030052): the `CookieSettingOverride`s for
       // Storage Access API and Storage Access Headers should be handled
       // consistently during a same-site, cross-origin redirect.
-      bool cross_site =
-          net::SchemefulSite(origin) != net::SchemefulSite(pending_origin);
+      bool cross_site = !net::SchemefulSite::IsSameSite(origin, pending_origin);
       storage_access_redirect_kind =
           cross_site ? kCrossSite : kCrossOriginSameSite;
       if (cross_site ||
@@ -1791,21 +1895,6 @@ void URLLoader::OnReceivedRedirect(net::URLRequest* url_request,
     }
   }
   RecordStorageAccessRedirectMetric(storage_access_redirect_kind);
-
-  // Note: There are some ordering dependencies here.
-  // `CalculateStorageAccessStatus` depends on
-  // `url_request->cookie_setting_overrides()`. `SetFetchMetadataHeaders`
-  // depends on `url_request_->storage_access_status()`.
-  url_request_->set_storage_access_status(
-      url_request_->CalculateStorageAccessStatus(redirect_info));
-
-  // We may need to clear out old Sec- prefixed request headers. We'll attempt
-  // to do this before we re-add any.
-  MaybeRemoveSecHeaders(url_request_.get(), redirect_info.new_url);
-  SetFetchMetadataHeaders(url_request_.get(), request_mode_,
-                          has_user_activation_, request_destination_,
-                          &redirect_info.new_url, *factory_params_,
-                          *origin_access_list_, request_credentials_mode_);
 
   DCHECK_EQ(emitted_devtools_raw_request_, emitted_devtools_raw_response_);
   response->emitted_extra_info = emitted_devtools_raw_request_;
@@ -1929,7 +2018,8 @@ net::CookieSettingOverrides URLLoader::CalculateCookieSettingOverrides(
   // each other's storage access API grants. This must be updated on redirects.
   if (net::cookie_util::ShouldAddInitialStorageAccessApiOverride(
           request.url, request.storage_access_api_status,
-          request.request_initiator, emit_metrics)) {
+          request.request_initiator, emit_metrics,
+          request.credentials_mode == mojom::CredentialsMode::kInclude)) {
     overrides.Put(net::CookieSettingOverride::kStorageAccessGrantEligible);
   }
 
@@ -2016,15 +2106,22 @@ void URLLoader::ProcessInboundSharedStorageInterceptorOnResponseStarted() {
 
 void URLLoader::ProcessInboundAttributionInterceptorOnResponseStarted() {
   if (!attribution_request_helper_) {
-    ProcessInboundSharedStorageInterceptorOnResponseStarted();
+    ProcessInboundAdAuctionEventRecordInterceptorOnResponseStarted();
     return;
   }
 
   attribution_request_helper_->Finalize(
       *response_,
       base::BindOnce(
-          &URLLoader::ProcessInboundSharedStorageInterceptorOnResponseStarted,
+          &URLLoader::
+              ProcessInboundAdAuctionEventRecordInterceptorOnResponseStarted,
           weak_ptr_factory_.GetWeakPtr()));
+}
+
+void URLLoader::
+    ProcessInboundAdAuctionEventRecordInterceptorOnResponseStarted() {
+  ad_auction_event_record_request_helper_.HandleResponse(*url_request_);
+  ProcessInboundSharedStorageInterceptorOnResponseStarted();
 }
 
 void URLLoader::OnResponseStarted(net::URLRequest* url_request, int net_error) {
@@ -2173,8 +2270,9 @@ void URLLoader::ContinueOnResponseStartedImmediately() {
   //
   // https://wicg.github.io/signature-based-sri/
   if (std::optional<mojom::BlockedByResponseReason> blocked_reason =
-          MaybeBlockResponseForSRIMessageSignature(url_request_->url(),
-                                                   *response_)) {
+          MaybeBlockResponseForSRIMessageSignature(
+              url_request_->url(), *response_, expected_public_keys_,
+              devtools_observer_, devtools_request_id().value_or(""))) {
     CompleteBlockedResponse(net::ERR_BLOCKED_BY_RESPONSE, false,
                             blocked_reason);
     // Close the socket associated with the request, to prevent leaking
@@ -2228,6 +2326,7 @@ void URLLoader::ContinueOnResponseStartedImmediately() {
       // is.  That means we need to delay sending the response started IPC.
       VLOG(1) << "Will sniff content for mime type: " << url_request_->url();
       is_more_mime_sniffing_needed_ = true;
+      mime_type_before_sniffing_ = response_->mime_type;
     } else if (response_->mime_type.empty()) {
       // Ugg.  The server told us not to sniff the content but didn't give us
       // a mime type.  What's a browser to do?  Turns out, we're supposed to
@@ -2236,10 +2335,172 @@ void URLLoader::ContinueOnResponseStartedImmediately() {
     }
   }
 
+  // If client-side content decoding is requested and either ORB or MIME
+  // sniffing is needed, use PartialDecoder to get decoded data for sniffing.
+  if (!response_->client_side_content_decoding_types.empty() &&
+      (is_more_orb_sniffing_needed_ || is_more_mime_sniffing_needed_)) {
+    // Create a PartialDecoder to decode the response body up to a certain limit
+    // for sniffing purposes.
+    partial_decoder_ = std::make_unique<PartialDecoder>(
+        base::BindRepeating(
+            [](base::WeakPtr<net::URLRequest> url_request, net::IOBuffer* dest,
+               int dest_size) {
+              CHECK(url_request);
+              return url_request->Read(dest, dest_size);
+            },
+            url_request_->GetWeakPtr()),
+        response_->client_side_content_decoding_types,
+        partial_decoder_decoding_buffer_size_);
+    // Start reading decoded data from the partial decoder.
+    ReadDecodedDataFromPartialDecoder();
+    return;
+  }
+
   StartReading();
 }
 
+void URLLoader::ReadDecodedDataFromPartialDecoder() {
+  // Keep reading from the partial decoder until it signals pending or
+  // completes.
+  while (partial_decoder_) {
+    // Attempt to read more decoded data.
+    int result = partial_decoder_->ReadDecodedDataMore(
+        base::BindOnce(&URLLoader::OnReadDecodedDataFromPartialDecoder,
+                       base::Unretained(this)));
+    if (result == net::ERR_IO_PENDING) {
+      // If the read is pending, return and wait for the callback.
+      return;
+    }
+    // Process the result immediately.
+    CheckPartialDecoderResult(result);
+    if (partial_decoder_result_) {
+      // Sniffing is complete, and we have the raw data. Stop using the
+      // partial decoder and proceed to read the rest of the response.
+      StartReading();
+      return;
+    }
+  }
+}
+
+void URLLoader::OnReadDecodedDataFromPartialDecoder(int result) {
+  // This is the callback from `PartialDecoder::ReadDecodedDataMore`.
+  // Process the result of the partial decode.
+  CheckPartialDecoderResult(result);
+  if (partial_decoder_result_) {
+    // Sniffing is complete. Proceed to read the full response.
+    StartReading();
+  } else if (partial_decoder_) {
+    // More sniffing might be needed, continue reading from the partial decoder.
+    ReadDecodedDataFromPartialDecoder();
+  }
+}
+
+void URLLoader::CheckPartialDecoderResult(int result) {
+  if (result < 0) {
+    // The partial decoder failed. Stop decoding and report the error.
+    partial_decoder_.reset();
+    // Defer calling NotifyCompleted to make sure the caller can still access
+    // |this|.
+    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+        FROM_HERE, base::BindOnce(&URLLoader::NotifyCompleted,
+                                  weak_ptr_factory_.GetWeakPtr(), result));
+    return;
+  }
+  // Check if we should stop sniffing after processing the current chunk of
+  // decoded data. This happens if the decoder returns 0 (end of stream) or
+  // if the decoded buffer is full.
+  const bool stop_sniffing_after_processing_current_data =
+      (result == 0 || !partial_decoder_->HasRemainingBuffer());
+
+  // Get a view of the decoded data, limited to the maximum sniffing size.
+  // Capping the size to net::kMaxBytesToSniff for tests which have called
+  // set_partial_decoder_decoding_buffer_size_for_testing().
+  const std::string_view decoded_data_to_sniff =
+      base::as_string_view(partial_decoder_->decoded_data())
+          .substr(0, net::kMaxBytesToSniff);
+
+  if (is_more_mime_sniffing_needed_) {
+    // Perform MIME sniffing using the decoded data.
+    CHECK(mime_type_before_sniffing_.has_value());
+    std::string new_type;
+    is_more_mime_sniffing_needed_ = !net::SniffMimeType(
+        decoded_data_to_sniff, url_request_->url(),
+        mime_type_before_sniffing_.value(),
+        net::ForceSniffFileUrlsForHtml::kDisabled, &new_type);
+    response_->mime_type = std::move(new_type);
+    response_->did_mime_sniff = true;
+
+    if (stop_sniffing_after_processing_current_data) {
+      is_more_mime_sniffing_needed_ = false;
+    }
+  }
+
+  if (is_more_orb_sniffing_needed_) {
+    // Perform ORB sniffing using the decoded data.
+    orb::ResponseAnalyzer::Decision orb_decision =
+        result == 0 ? orb::ResponseAnalyzer::Decision::kSniffMore
+                    : orb_analyzer_->Sniff(decoded_data_to_sniff);
+    if (orb_decision == orb::ResponseAnalyzer::Decision::kSniffMore &&
+        stop_sniffing_after_processing_current_data) {
+      // If more sniffing was requested but we've reached the limit, get the
+      // final decision for the sniffed data.
+      orb_decision = orb_analyzer_->HandleEndOfSniffableResponseBody();
+      DCHECK_NE(orb::ResponseAnalyzer::Decision::kSniffMore, orb_decision);
+    }
+    if (MaybeBlockResponseForOrb(orb_decision)) {
+      partial_decoder_.reset();
+      return;
+    }
+  }
+  // If no more sniffing is needed, retrieve the accumulated raw data from the
+  // partial decoder.
+  if (!is_more_orb_sniffing_needed_ && !is_more_mime_sniffing_needed_) {
+    partial_decoder_result_ = std::move(*partial_decoder_).TakeResult();
+  }
+}
+
 void URLLoader::ReadMore() {
+  if (partial_decoder_result_) {
+    // If we have buffered raw data from the partial decoder, send that first.
+    while (partial_decoder_result_->HasRawData()) {
+      MojoResult result = NetToMojoPendingBuffer::BeginWrite(
+          &response_body_stream_, &pending_write_);
+      switch (result) {
+        case MOJO_RESULT_OK:
+          break;
+        case MOJO_RESULT_SHOULD_WAIT:
+          // The Mojo data pipe is full. Wait for it to become writable.
+          // While a SlopBucket would be ideal when enabled, it's omitted here
+          // for simplicity.
+          //
+          // This scenario occurs when the PartialDecoder reads raw data
+          // exceeding the Mojo data pipe's capacity. However, since the
+          // PartialDecoder only reads decompressed data up to
+          // net::kMaxBytesToSniff, this situation is extremely rare in
+          // real-world scenarios.
+          writable_handle_watcher_.ArmOrNotify();
+          return;
+        default:
+          // The response body stream is in a bad state. This happens when the
+          // consumer handle of the body was synchronously released in
+          // URLLoaderClient::OnReceiveResponse().
+          NotifyCompleted(net::ERR_FAILED);
+          return;
+      }
+      // Copy data from the raw buffer into the Mojo pipe buffer.
+      pending_write_buffer_offset_ = partial_decoder_result_->ConsumeRawData(
+          base::as_writable_byte_span(*pending_write_));
+      CHECK(pending_write_buffer_offset_);
+      CompletePendingWrite(true);
+    }
+    // Check if the partial decoder finished with a specific status.
+    if (partial_decoder_result_->completion_status()) {
+      NotifyCompleted(*partial_decoder_result_->completion_status());
+      return;
+    }
+    partial_decoder_result_.reset();
+  }
+
   DCHECK(!read_in_progress_);
   // Once the MIME type is sniffed, all data is sent as soon as it is read from
   // the network.
@@ -2401,10 +2662,10 @@ void URLLoader::DidRead(int num_bytes,
            pending_write_buffer_offset_ >= net::kMaxBytesToSniff);
 
       if (is_more_mime_sniffing_needed_) {
-        const std::string& type_hint = response_->mime_type;
+        CHECK(mime_type_before_sniffing_.has_value());
         std::string new_type;
         is_more_mime_sniffing_needed_ = !net::SniffMimeType(
-            data, url_request_->url(), type_hint,
+            data, url_request_->url(), mime_type_before_sniffing_.value(),
             net::ForceSniffFileUrlsForHtml::kDisabled, &new_type);
         // SniffMimeType() returns false if there is not enough data to
         // determine the mime type. However, even if it returns false, it
@@ -2481,6 +2742,12 @@ void URLLoader::DidRead(int num_bytes,
 
 void URLLoader::OnReadCompleted(net::URLRequest* url_request, int bytes_read) {
   DCHECK(url_request == url_request_.get());
+  if (partial_decoder_ && partial_decoder_->read_in_progress()) {
+    // When `partial_decoder_` is reading the body from `url_request`, pass the
+    // result to `partial_decoder_`.
+    partial_decoder_->OnReadRawDataCompleted(bytes_read);
+    return;
+  }
 
   bool into_slop_bucket = false;
   if (slop_bucket_ && slop_bucket_->read_in_progress()) {
@@ -2745,10 +3012,9 @@ void URLLoader::DeleteSelf() {
 }
 
 void URLLoader::SendResponseToClient() {
-  TRACE_EVENT(
-      "loading", "network::URLLoader::SendResponseToClient",
-      perfetto::Flow::ProcessScoped(url_request_->net_log().source().id), "url",
-      url_request_->url());
+  TRACE_EVENT("loading", "network::URLLoader::SendResponseToClient",
+              net::NetLogWithSourceToFlow(url_request_->net_log()), "url",
+              url_request_->url());
   DCHECK_EQ(emitted_devtools_raw_request_, emitted_devtools_raw_response_);
   response_->emitted_extra_info = emitted_devtools_raw_request_;
 
@@ -2859,6 +3125,7 @@ void URLLoader::SetRawRequestHeadersAndNotify(
     if (!reported_cookies.empty()) {
       cookie_access_details_.emplace_back(mojom::CookieAccessDetails::New(
           mojom::CookieAccessDetails::Type::kRead, url_request_->url(),
+          url_request_->isolation_info().frame_origin(),
           url_request_->isolation_info().top_frame_origin().value_or(
               url::Origin()),
           url_request_->site_for_cookies(), std::move(reported_cookies),
@@ -3194,6 +3461,7 @@ void URLLoader::ReportFlaggedResponseCookies(bool call_cookie_observer) {
   if (!reported_cookies.empty()) {
     cookie_access_details_.emplace_back(mojom::CookieAccessDetails::New(
         mojom::CookieAccessDetails::Type::kChange, url_request_->url(),
+        url_request_->isolation_info().frame_origin(),
         url_request_->isolation_info().top_frame_origin().value_or(
             url::Origin()),
         url_request_->site_for_cookies(), std::move(reported_cookies),
@@ -3373,11 +3641,18 @@ bool URLLoader::ShouldSetLoadWithStorageAccess() const {
       return net::cookie_util::ActivateStorageAccessLoadOutcome::
           kFailureHeaderDisabled;
     }
-    if (!url_request_->storage_access_status()) {
+    if (!url_request_->storage_access_status().IsSet()) {
+      url_request_->set_storage_access_status(
+          url_request_->CalculateStorageAccessStatus());
+    }
+    if (!url_request_->storage_access_status()
+             .GetStatusForThirdPartyContext()) {
       return net::cookie_util::ActivateStorageAccessLoadOutcome::
           kFailureInvalidStatus;
     }
-    switch (url_request_->storage_access_status().value()) {
+    switch (url_request_->storage_access_status()
+                .GetStatusForThirdPartyContext()
+                .value()) {
       case net::cookie_util::StorageAccessStatus::kNone:
         return net::cookie_util::ActivateStorageAccessLoadOutcome::
             kFailureInvalidStatus;

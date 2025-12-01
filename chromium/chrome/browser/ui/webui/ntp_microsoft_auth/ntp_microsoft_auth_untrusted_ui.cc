@@ -4,6 +4,7 @@
 
 #include "chrome/browser/ui/webui/ntp_microsoft_auth/ntp_microsoft_auth_untrusted_ui.h"
 
+#include "base/strings/stringprintf.h"
 #include "chrome/browser/new_tab_page/new_tab_page_util.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/webui/new_tab_page/new_tab_page_ui.h"
@@ -70,7 +71,8 @@ NtpMicrosoftAuthUntrustedUI::NtpMicrosoftAuthUntrustedUI(content::WebUI* web_ui)
       "connect-src https://login.microsoftonline.com;");
   untrusted_source->OverrideContentSecurityPolicy(
       network::mojom::CSPDirectiveName::ChildSrc,
-      "child-src https://login.microsoftonline.com;");
+      "child-src https://login.microsoftonline.com "
+      "https://chromeenterprise.google;");
 }
 
 NtpMicrosoftAuthUntrustedUI::~NtpMicrosoftAuthUntrustedUI() = default;

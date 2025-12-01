@@ -328,8 +328,10 @@ ul, menu, dir {
     list-style-type: disc;
     margin-block-start: 1__qem;
     margin-block-end: 1em;
-    margin-inline-start: 0;
-    margin-inline-end: 0;
+    @supports not blink-feature(CorrectStylesForLists) {
+        margin-inline-start: 0;
+        margin-inline-end: 0;
+    }
     padding-inline-start: 40px
 }
 
@@ -338,22 +340,60 @@ ol {
     list-style-type: decimal;
     margin-block-start: 1__qem;
     margin-block-end: 1em;
-    margin-inline-start: 0;
-    margin-inline-end: 0;
+    @supports not blink-feature(CorrectStylesForLists) {
+        margin-inline-start: 0;
+        margin-inline-end: 0;
+    }
     padding-inline-start: 40px
 }
 
 li {
     display: list-item;
+    /* TODO(crbug.com/40774317, crbug.com/40787216): We should use
+       text-align: match-parent once it is supported. */
     text-align: -webkit-match-parent;
 }
 
-ul ul, ol ul {
-    list-style-type: circle
+@supports not blink-feature(CorrectStylesForLists) {
+    ul ul, ol ul {
+        list-style-type: circle
+    }
+
+    ol ol ul, ol ul ul, ul ol ul, ul ul ul {
+        list-style-type: square
+    }
+
+    ol ul, ul ol, ul ul, ol ol {
+        margin-block-start: 0;
+        margin-block-end: 0
+    }
 }
 
-ol ol ul, ol ul ul, ul ol ul, ul ul ul {
-    list-style-type: square
+@supports blink-feature(CorrectStylesForLists) {
+    :is(dir, dl, menu, ol, ul) dir,
+    :is(dir, dl, menu, ol, ul) dl,
+    :is(dir, dl, menu, ol, ul) menu,
+    :is(dir, dl, menu, ol, ul) ol,
+    :is(dir, dl, menu, ol, ul) ul {
+        margin-block-start: 0;
+        margin-block-end: 0;
+    }
+
+    :is(dir, menu, ol, ul) dir,
+    :is(dir, menu, ol, ul) menu,
+    :is(dir, menu, ol, ul) ul {
+        list-style-type: circle
+    }
+
+    :is(dir, menu, ol, ul) :is(dir, menu, ol, ul) dir,
+    :is(dir, menu, ol, ul) :is(dir, menu, ol, ul) menu,
+    :is(dir, menu, ol, ul) :is(dir, menu, ol, ul) ul {
+        list-style-type: square
+    }
+
+    /* TODO(crbug.com/40774317, crbug.com/354025385): We should add rule
+       ol, ul, menu { counter-reset: list-item; }
+       once it is supported. */
 }
 
 dd {
@@ -365,17 +405,14 @@ dl {
     display: block;
     margin-block-start: 1__qem;
     margin-block-end: 1em;
-    margin-inline-start: 0;
-    margin-inline-end: 0;
+    @supports not blink-feature(CorrectStylesForLists) {
+        margin-inline-start: 0;
+        margin-inline-end: 0;
+    }
 }
 
 dt {
     display: block
-}
-
-ol ul, ul ol, ul ul, ol ol {
-    margin-block-start: 0;
-    margin-block-end: 0
 }
 
 /* form elements */
@@ -502,7 +539,7 @@ input[type="search" i]::-webkit-search-cancel-button {
     flex: none;
     -webkit-user-modify: read-only !important;
     margin-inline-start: 1px;
-    margin-right: 3px;
+    margin-inline-end: 3px;
     opacity: 0;
     pointer-events: none;
     user-select: none !important;
@@ -939,8 +976,12 @@ select:disabled {
 select:-internal-list-box {
     appearance: auto;
     align-items: flex-start;
-    -internal-overflow-inline: hidden;
-    -internal-overflow-block: scroll;
+    @supports not blink-feature(CSSLogicalOverflow) {
+      -internal-overflow-inline: hidden;
+      -internal-overflow-block: scroll;
+    }
+    overflow-inline: hidden;
+    overflow-block: scroll;
     vertical-align: text-bottom;
     white-space: nowrap;
     border-radius: 2px;
@@ -962,19 +1003,27 @@ select:-internal-list-box optgroup {
     line-height: initial !important;
 }
 
-/* option selected, list-box focused */
-/* TODO(crbug.com/1244986): We should be able to remove !important here, but
-   it breaks some WebUI menus. */
 select:-internal-list-box:focus option:checked,
+select:-internal-list-box:focus option:checked:disabled,
 select:-internal-list-box:focus option:checked:hover {
-    background-color: SelectedItem !important;
-    color: SelectedItemText !important;
+    background-color: SelectedItem;
+    color: SelectedItemText;
 }
 
-/* TODO(crbug.com/1244986): We should be able to remove !important here, but
-   it breaks some WebUI menus. */
 select:-internal-list-box:focus option:checked:disabled {
-    background-color: -internal-inactive-list-box-selection !important;
+    background-color: -internal-inactive-list-box-selection;
+}
+
+@supports not blink-feature(SelectColorsRemoveImportant) {
+    select:-internal-list-box:focus option:checked,
+    select:-internal-list-box:focus option:checked:hover {
+        background-color: SelectedItem !important;
+        color: SelectedItemText !important;
+    }
+
+    select:-internal-list-box:focus option:checked:disabled {
+        background-color: -internal-inactive-list-box-selection !important;
+    }
 }
 
 /* option selected, list-box not focused */
@@ -1179,7 +1228,12 @@ abbr[title], acronym[title] {
 }
 
 strong, b {
-    font-weight: bold
+    @supports blink-feature(StrongBolder) {
+      font-weight: bolder;
+    }
+    @supports not blink-feature(StrongBolder) {
+     font-weight: bold;
+    }
 }
 
 i, cite, em, var, address, dfn {
@@ -1236,6 +1290,14 @@ nobr {
 
 :focus-visible {
     outline: auto 1px -webkit-focus-ring-color
+}
+
+[interesttarget]:focus-visible {
+  outline: solid 3px -webkit-focus-ring-color;
+}
+
+button[interesttarget] {
+  user-select: none;
 }
 
 html:focus-visible, body:focus-visible {
@@ -1654,22 +1716,20 @@ dialog:where(:modal) {
   select:not(:-internal-list-box):not([multiple]) {
     font: -internal-auto-base(-webkit-small-control, inherit);
     text-shadow: -internal-auto-base(none, inherit);
-    text-transform: -internal-auto-base(none, inherit);
+    text-transform: -internal-auto-base(none, initial);
     text-rendering: -internal-auto-base(auto, inherit);
     letter-spacing: -internal-auto-base(normal, inherit);
     word-spacing: -internal-auto-base(normal, inherit);
-    text-align: -internal-auto-base(start, inherit);
+    text-align: -internal-auto-base(start, initial);
+    text-indent: -internal-auto-base(0px, initial);
+    -webkit-rtl-ordering: -internal-auto-base(logical, inherit);
+    cursor: -internal-auto-base(default, inherit);
+    white-space: -internal-auto-base(pre, inherit);
     /* This text-autospace rule won't work because it is set with !important
      * earlier in the UA stylesheet. After merging with the rest of the UA
      * style rules when removing the CustomizableSelect flag, it should start
      * to work. */
     text-autospace: -internal-auto-base(no-autospace !important, inherit);
-    color: -internal-auto-base(FieldText, inherit);
-    background-color: -internal-auto-base(Field, transparent);
-    border: 1px solid -internal-auto-base(light-dark(#767676, #858585), currentColor);
-    padding-block: -internal-auto-base(0, 0.25em);
-    padding-inline: -internal-auto-base(0, 0.5em);
-    font: -internal-auto-base(-webkit-small-control, inherit);
     color: -internal-auto-base(FieldText, inherit);
     background-color: -internal-auto-base(Field, transparent);
     border: 1px solid -internal-auto-base(light-dark(#767676, #858585), currentColor);
@@ -1707,11 +1767,9 @@ dialog:where(:modal) {
   select:not(:-internal-list-box):not([multiple]):enabled:active {
     background-color: -internal-auto-base(Field, color-mix(in lab, currentColor 20%, transparent));
   }
-
-  /* Without this rule, we would be changing the styles for disabled
-   * appearance:auto selects. */
   select:not(:-internal-list-box):not([multiple]):disabled {
-    color: -internal-auto-base(light-dark(GrayText, #aaa), inherit);
+    opacity: -internal-auto-base(0.7, unset);
+    color: -internal-auto-base(light-dark(GrayText, #aaa), color-mix(in srgb, currentColor 50%, transparent));
     border-color: -internal-auto-base(rgba(118, 118, 118, 0.3), inherit);
   }
 
@@ -1725,7 +1783,7 @@ dialog:where(:modal) {
     box-sizing: border-box;
     border: 1px solid;
     padding: 0;
-    color: CanvasText;
+    color: -internal-auto-base(inherit, CanvasText);
     background-color: Canvas;
     margin: 0;
     inset: auto;
@@ -1776,7 +1834,7 @@ dialog:where(:modal) {
 
 
   select:not(:-internal-list-box):not([multiple]) option::checkmark {
-    content: '\2713' / '';
+    content: '\2713';
   }
   select option:not(:checked)::checkmark {
     visibility: hidden;
@@ -1851,8 +1909,7 @@ dialog:where(:modal) {
     display: contents;
   }
   /* Render the label attribute when it is set. This should be kept in sync
-   * with the logic in HTMLOptionElement::DisplayLabel once an interoperable
-   * decision has been made here: https://github.com/whatwg/html/issues/10955 */
+   * with the logic in HTMLOptionElement::DisplayLabel. */
   select:not(:-internal-list-box):not([multiple])
   option[label]:not([label=""])::-internal-option-label-container {
     display: contents;

@@ -389,13 +389,17 @@ scoped_refptr<const CalculationExpressionNode> BuildLengthBoundExpr(
   NOTREACHED();
 }
 
+void RecordUserInteractionAccepted(bool accepted) {
+  base::UmaHistogramBoolean("Blink.PermissionElement.UserInteractionAccepted",
+                            accepted);
+}
+
 }  // namespace
 
 HTMLPermissionElement::HTMLPermissionElement(Document& document)
     : HTMLElement(html_names::kPermissionTag, document),
       ScrollSnapshotClient(GetDocument().GetFrame()),
       permission_service_(document.GetExecutionContext()),
-      permission_observer_receivers_(this, document.GetExecutionContext()),
       embedded_permission_control_receiver_(this,
                                             document.GetExecutionContext()),
       disable_reason_expire_timer_(
@@ -450,7 +454,6 @@ V8PermissionState HTMLPermissionElement::permissionStatus() const {
 
 void HTMLPermissionElement::Trace(Visitor* visitor) const {
   visitor->Trace(permission_service_);
-  visitor->Trace(permission_observer_receivers_);
   visitor->Trace(embedded_permission_control_receiver_);
   visitor->Trace(permission_text_span_);
   visitor->Trace(intersection_observer_);
@@ -488,9 +491,6 @@ void HTMLPermissionElement::DetachLayoutTree(bool performing_reattach) {
 
 void HTMLPermissionElement::RemovedFrom(ContainerNode& insertion_point) {
   HTMLElement::RemovedFrom(insertion_point);
-  // We also need to remove all permission observer receivers from the set, to
-  // effectively stop listening the permission status change events.
-  permission_observer_receivers_.Clear();
   permission_status_map_.clear();
   aggregated_permission_status_ = std::nullopt;
   pseudo_state_ = {/*has_invalid_style*/ false, /*is_occluded*/ false};
@@ -502,6 +502,7 @@ void HTMLPermissionElement::RemovedFrom(ContainerNode& insertion_point) {
     embedded_permission_control_receiver_.reset();
   }
 
+  is_registered_in_browser_process_ = false;
   if (LocalDOMWindow* window = GetDocument().domWindow()) {
     CachedPermissionStatus::From(window)->UnregisterClient(
         this, permission_descriptors_);
@@ -570,8 +571,6 @@ String HTMLPermissionElement::DisableReasonToString(DisableReason reason) {
   switch (reason) {
     case DisableReason::kRecentlyAttachedToLayoutTree:
       return "being recently attached to layout tree";
-    case DisableReason::kIntersectionRecentlyFullyVisible:
-      return "being recently fully visible";
     case DisableReason::kIntersectionWithViewportChanged:
       return "intersection with viewport changed";
     case DisableReason::kIntersectionVisibilityOutOfViewPortOrClipped:
@@ -592,8 +591,6 @@ HTMLPermissionElement::DisableReasonToUserInteractionDeniedReason(
   switch (reason) {
     case DisableReason::kRecentlyAttachedToLayoutTree:
       return UserInteractionDeniedReason::kRecentlyAttachedToLayoutTree;
-    case DisableReason::kIntersectionRecentlyFullyVisible:
-      return UserInteractionDeniedReason::kIntersectionRecentlyFullyVisible;
     case DisableReason::kIntersectionWithViewportChanged:
       return UserInteractionDeniedReason::kIntersectionWithViewportChanged;
     case DisableReason::kIntersectionVisibilityOutOfViewPortOrClipped:
@@ -615,8 +612,6 @@ AtomicString HTMLPermissionElement::DisableReasonToInvalidReasonString(
   switch (reason) {
     case DisableReason::kRecentlyAttachedToLayoutTree:
       return AtomicString("recently_attached");
-    case DisableReason::kIntersectionRecentlyFullyVisible:
-      return AtomicString("intersection_visible");
     case DisableReason::kIntersectionWithViewportChanged:
       return AtomicString("intersection_changed");
     case DisableReason::kIntersectionVisibilityOutOfViewPortOrClipped:
@@ -877,6 +872,7 @@ void HTMLPermissionElement::AdjustStyle(ComputedStyleBuilder& builder) {
                                     kMaxHorizontalPaddingToFontSizeRatio,
                                 /*should_multiply_by_content_size=*/false));
       builder.SetPaddingRight(builder.PaddingLeft());
+      builder.SetWidth(Length::FitContent());
     } else {
       builder.ResetPaddingLeft();
       builder.ResetPaddingRight();
@@ -898,6 +894,7 @@ void HTMLPermissionElement::AdjustStyle(ComputedStyleBuilder& builder) {
         /*upper_bound=*/builder.FontSize() * kMaxVerticalPaddingToFontSizeRatio,
         /*should_multiply_by_content_size=*/false));
     builder.SetPaddingBottom(builder.PaddingTop());
+    builder.SetHeight(Length::FitContent());
   } else {
     builder.ResetPaddingTop();
     builder.ResetPaddingBottom();
@@ -950,10 +947,13 @@ void HTMLPermissionElement::DefaultEventHandler(Event& event) {
               kDefaultDisableTimeout) {
         AddConsoleError(
             "The permission element already has a request in progress.");
+        RecordUserInteractionAccepted(false);
         return;
       }
 
-      if (IsClickingEnabled()) {
+      bool is_user_interaction_enabled = IsClickingEnabled();
+      RecordUserInteractionAccepted(is_user_interaction_enabled);
+      if (is_user_interaction_enabled) {
         RequestPageEmbededPermissions();
       }
     } else {
@@ -963,6 +963,7 @@ void HTMLPermissionElement::DefaultEventHandler(Event& event) {
       AddConsoleError(
           "The permission element can only be activated by actual user "
           "clicks.");
+      RecordUserInteractionAccepted(false);
       base::UmaHistogramEnumeration(
           "Blink.PermissionElement.UserInteractionDeniedReason",
           UserInteractionDeniedReason::kUntrustedEvent);
@@ -991,19 +992,9 @@ void HTMLPermissionElement::RequestPageEmbededPermissions() {
                     WrapWeakPersistent(this)));
 }
 
-void HTMLPermissionElement::RegisterPermissionObserver(
-    const PermissionDescriptorPtr& descriptor,
-    MojoPermissionStatus current_status) {
-  mojo::PendingRemote<PermissionObserver> observer;
-  permission_observer_receivers_.Add(observer.InitWithNewPipeAndPassReceiver(),
-                                     descriptor->name, GetTaskRunner());
-  GetPermissionService()->AddPageEmbeddedPermissionObserver(
-      descriptor.Clone(), current_status, std::move(observer));
-}
-
 void HTMLPermissionElement::OnPermissionStatusChange(
+    PermissionName permission_name,
     MojoPermissionStatus status) {
-  auto permission_name = permission_observer_receivers_.current_context();
   auto it = permission_status_map_.find(permission_name);
   CHECK(it != permission_status_map_.end());
   it->value = status;
@@ -1027,15 +1018,11 @@ void HTMLPermissionElement::OnEmbeddedPermissionControlRegistered(
   CHECK(statuses.has_value());
   CHECK_EQ(statuses->size(), permission_descriptors_.size());
 
-  bool needs_permission_observer_registration =
-      permission_observer_receivers_.empty();
+  is_registered_in_browser_process_ = true;
   for (wtf_size_t i = 0; i < permission_descriptors_.size(); ++i) {
     auto status = (*statuses)[i];
     const auto& descriptor = permission_descriptors_[i];
     permission_status_map_.Set(descriptor->name, status);
-    if (needs_permission_observer_registration) {
-      RegisterPermissionObserver(descriptor, status);
-    }
   }
 
   UpdatePermissionStatusAndAppearance();
@@ -1046,15 +1033,24 @@ void HTMLPermissionElement::OnEmbeddedPermissionsDecided(
     EmbeddedPermissionControlResult result) {
   pending_request_created_ = std::nullopt;
 
+  // The events `kDismiss` and `kResolve` will be deprecated and replaced by
+  // `kPromptaction` and `kPromptdismiss`. We will keep both for backward
+  // compability and will remove the old events in M138.
   switch (result) {
     case EmbeddedPermissionControlResult::kDismissed:
+      DispatchEvent(
+          *Event::CreateCancelableBubble(event_type_names::kPromptdismiss));
       DispatchEvent(*Event::CreateCancelableBubble(event_type_names::kDismiss));
       return;
     case EmbeddedPermissionControlResult::kGranted:
       aggregated_permission_status_ = MojoPermissionStatus::GRANTED;
+      DispatchEvent(
+          *Event::CreateCancelableBubble(event_type_names::kPromptaction));
       DispatchEvent(*Event::CreateCancelableBubble(event_type_names::kResolve));
       return;
     case EmbeddedPermissionControlResult::kDenied:
+      DispatchEvent(
+          *Event::CreateCancelableBubble(event_type_names::kPromptaction));
       DispatchEvent(*Event::CreateCancelableBubble(event_type_names::kResolve));
       return;
     case EmbeddedPermissionControlResult::kNotSupported:
@@ -1082,8 +1078,9 @@ void HTMLPermissionElement::MaybeDispatchValidationChangeEvent() {
 
   // Always keep `clicking_enabled_state_` up-to-date
   clicking_enabled_state_ = state;
-  DispatchEvent(*Event::CreateCancelableBubble(
-      event_type_names::kValidationstatuschange));
+  EnqueueEvent(
+      *Event::CreateCancelableBubble(event_type_names::kValidationstatuschange),
+      TaskType::kDOMManipulation);
 }
 
 void HTMLPermissionElement::UpdateSnapshot() {
@@ -1128,7 +1125,7 @@ bool HTMLPermissionElement::IsClickingEnabled() {
     return false;
   }
 
-  if (!IsRegisteredInBrowserProcess()) {
+  if (!is_registered_in_browser_process()) {
     AddConsoleError(String::Format(
         "The permission element '%s' cannot be activated because of security "
         "checks or because the page's quota has been exceeded.",
@@ -1245,7 +1242,7 @@ HTMLPermissionElement::GetClickingEnabledState() const {
     }
   }
 
-  if (!IsRegisteredInBrowserProcess()) {
+  if (!is_registered_in_browser_process()) {
     return {false, AtomicString("unsuccessful_registration")};
   }
 
@@ -1377,7 +1374,7 @@ void HTMLPermissionElement::OnIntersectionChanged(
   CHECK(!entries.empty());
   Member<IntersectionObserverEntry> latest_observation = entries.back();
   CHECK_EQ(this, latest_observation->target());
-  IntersectionVisibility intersection_visibility =
+  IntersectionVisibility new_intersection_visibility =
       IntersectionVisibility::kFullyVisible;
   // `intersectionRatio` >= `kIntersectionThreshold` (1.0f) means the element is
   // fully visible on the viewport (vs `intersectionRatio` < 1.0f means its
@@ -1385,27 +1382,31 @@ void HTMLPermissionElement::OnIntersectionChanged(
   // `isVisible` false means the element is occluded by something else or has
   // distorted visual effect applied.
   if (!latest_observation->isVisible()) {
-    intersection_visibility =
+    new_intersection_visibility =
         latest_observation->intersectionRatio() >= kIntersectionThreshold
             ? IntersectionVisibility::kOccludedOrDistorted
             : IntersectionVisibility::kOutOfViewportOrClipped;
   }
 
-  if (intersection_visibility_ == intersection_visibility) {
+  if (intersection_visibility_ == new_intersection_visibility) {
     return;
   }
-  intersection_visibility_ = intersection_visibility;
+
+  intersection_visibility_ = new_intersection_visibility;
   occluder_node_id_ = kInvalidDOMNodeId;
   switch (intersection_visibility_) {
     case IntersectionVisibility::kFullyVisible: {
-      std::optional<base::TimeDelta> interval =
+      std::optional<base::TimeDelta> recently_attached_timeout_remaining =
           GetRecentlyAttachedTimeoutRemaining();
-      DisableClickingTemporarily(
-          DisableReason::kIntersectionRecentlyFullyVisible,
-          interval ? interval.value() : kDefaultDisableTimeout);
-      EnableClicking(DisableReason::kIntersectionVisibilityOccludedOrDistorted);
-      EnableClicking(
-          DisableReason::kIntersectionVisibilityOutOfViewPortOrClipped);
+      base::TimeDelta interval =
+          recently_attached_timeout_remaining
+              ? recently_attached_timeout_remaining.value()
+              : kDefaultDisableTimeout;
+      EnableClickingAfterDelay(
+          DisableReason::kIntersectionVisibilityOccludedOrDistorted, interval);
+      EnableClickingAfterDelay(
+          DisableReason::kIntersectionVisibilityOutOfViewPortOrClipped,
+          interval);
       break;
     }
     case IntersectionVisibility::kOccludedOrDistorted:

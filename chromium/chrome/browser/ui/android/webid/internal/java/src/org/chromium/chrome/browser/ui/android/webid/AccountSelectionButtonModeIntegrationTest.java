@@ -22,9 +22,7 @@ import static org.mockito.Mockito.verify;
 
 import static org.chromium.base.ThreadUtils.runOnUiThreadBlocking;
 import static org.chromium.base.test.util.CriteriaHelper.pollUiThread;
-import static org.chromium.ui.test.util.MockitoHelper.doCallback;
 
-import android.graphics.Bitmap;
 import android.view.View;
 import android.widget.TextView;
 
@@ -39,7 +37,6 @@ import org.junit.runner.RunWith;
 import org.mockito.invocation.InvocationOnMock;
 import org.mockito.stubbing.Answer;
 
-import org.chromium.base.Callback;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.test.util.Batch;
 import org.chromium.base.test.util.CommandLineFlags;
@@ -86,7 +83,7 @@ public class AccountSelectionButtonModeIntegrationTest extends AccountSelectionI
                 () -> {
                     mAccountSelection.showAccounts(
                             EXAMPLE_ETLD_PLUS_ONE,
-                            Arrays.asList(NEW_BOB),
+                            Arrays.asList(mNewBobWithAddAccount),
                             Arrays.asList(mIdpDataWithAddAccount),
                             /* isAutoReauthn= */ false,
                             /* newAccounts= */ Collections.EMPTY_LIST);
@@ -106,7 +103,8 @@ public class AccountSelectionButtonModeIntegrationTest extends AccountSelectionI
                             public Void answer(InvocationOnMock invocation) {
                                 mAccountSelection.showAccounts(
                                         EXAMPLE_ETLD_PLUS_ONE,
-                                        Arrays.asList(NEW_BOB, RETURNING_ANA),
+                                        Arrays.asList(
+                                                mNewBobWithAddAccount, mReturningAnaWithAddAccount),
                                         Arrays.asList(mIdpDataWithAddAccount),
                                         /* isAutoReauthn= */ false,
                                         mNewAccountsReturningAna);
@@ -128,7 +126,7 @@ public class AccountSelectionButtonModeIntegrationTest extends AccountSelectionI
         assertEquals(HeaderType.VERIFY, mAccountSelection.getMediator().getHeaderType());
 
         verify(mMockBridge, never()).onDismissed(anyInt());
-        verify(mMockBridge).onAccountSelected(any(), any());
+        verify(mMockBridge).onAccountSelected(any());
     }
 
     @Test
@@ -138,7 +136,7 @@ public class AccountSelectionButtonModeIntegrationTest extends AccountSelectionI
                 () -> {
                     mAccountSelection.showAccounts(
                             EXAMPLE_ETLD_PLUS_ONE,
-                            Arrays.asList(RETURNING_ANA),
+                            Arrays.asList(mReturningAnaWithAddAccount),
                             Arrays.asList(mIdpDataWithAddAccount),
                             /* isAutoReauthn= */ false,
                             /* newAccounts= */ Collections.EMPTY_LIST);
@@ -158,7 +156,8 @@ public class AccountSelectionButtonModeIntegrationTest extends AccountSelectionI
                             public Void answer(InvocationOnMock invocation) {
                                 mAccountSelection.showAccounts(
                                         EXAMPLE_ETLD_PLUS_ONE,
-                                        Arrays.asList(NEW_BOB, RETURNING_ANA),
+                                        Arrays.asList(
+                                                mNewBobWithAddAccount, mReturningAnaWithAddAccount),
                                         Arrays.asList(mIdpDataWithAddAccount),
                                         /* isAutoReauthn= */ false,
                                         mNewAccountsNewBob);
@@ -195,7 +194,7 @@ public class AccountSelectionButtonModeIntegrationTest extends AccountSelectionI
         assertEquals(HeaderType.VERIFY, mAccountSelection.getMediator().getHeaderType());
 
         verify(mMockBridge, never()).onDismissed(anyInt());
-        verify(mMockBridge).onAccountSelected(any(), any());
+        verify(mMockBridge).onAccountSelected(any());
     }
 
     @Test
@@ -208,17 +207,18 @@ public class AccountSelectionButtonModeIntegrationTest extends AccountSelectionI
                         "Test",
                         "Test",
                         /* secondaryDescription= */ null,
-                        TEST_PROFILE_PIC,
-                        null,
+                        /* pictureBitmap= */ null,
+                        /* circledBadgedPictureBitmap= */ null,
                         /* isSignIn= */ true,
                         /* isBrowserTrustedSignIn= */ false,
-                        /* isFilteredOut= */ false);
+                        /* isFilteredOut= */ false,
+                        mIdpDataWithAddAccount);
 
         runOnUiThreadBlocking(
                 () -> {
                     mAccountSelection.showAccounts(
                             EXAMPLE_ETLD_PLUS_ONE,
-                            Arrays.asList(RETURNING_ANA),
+                            Arrays.asList(mReturningAnaWithAddAccount),
                             Arrays.asList(mIdpDataWithAddAccount),
                             /* isAutoReauthn= */ false,
                             /* newAccounts= */ Collections.EMPTY_LIST);
@@ -238,7 +238,7 @@ public class AccountSelectionButtonModeIntegrationTest extends AccountSelectionI
                             public Void answer(InvocationOnMock invocation) {
                                 mAccountSelection.showAccounts(
                                         EXAMPLE_ETLD_PLUS_ONE,
-                                        Arrays.asList(account, RETURNING_ANA),
+                                        Arrays.asList(account, mReturningAnaWithAddAccount),
                                         Arrays.asList(mIdpDataWithAddAccount),
                                         /* isAutoReauthn= */ false,
                                         Arrays.asList(account));
@@ -268,7 +268,7 @@ public class AccountSelectionButtonModeIntegrationTest extends AccountSelectionI
         assertEquals(HeaderType.VERIFY, mAccountSelection.getMediator().getHeaderType());
 
         verify(mMockBridge, never()).onDismissed(anyInt());
-        verify(mMockBridge).onAccountSelected(any(), any());
+        verify(mMockBridge).onAccountSelected(any());
     }
 
     @Test
@@ -278,7 +278,7 @@ public class AccountSelectionButtonModeIntegrationTest extends AccountSelectionI
                 () -> {
                     mAccountSelection.showAccounts(
                             EXAMPLE_ETLD_PLUS_ONE,
-                            Arrays.asList(NEW_BOB),
+                            Arrays.asList(mNewBobWithAddAccount),
                             Arrays.asList(mIdpDataWithAddAccount),
                             /* isAutoReauthn= */ false,
                             /* newAccounts= */ Collections.EMPTY_LIST);
@@ -312,7 +312,7 @@ public class AccountSelectionButtonModeIntegrationTest extends AccountSelectionI
         clickContinueButton();
 
         verify(mMockBridge, never()).onDismissed(anyInt());
-        verify(mMockBridge).onAccountSelected(any(), any());
+        verify(mMockBridge).onAccountSelected(any());
     }
 
     @Test
@@ -322,7 +322,7 @@ public class AccountSelectionButtonModeIntegrationTest extends AccountSelectionI
                 () -> {
                     mAccountSelection.showAccounts(
                             EXAMPLE_ETLD_PLUS_ONE,
-                            Arrays.asList(RETURNING_ANA),
+                            Arrays.asList(mReturningAnaWithAddAccount),
                             Arrays.asList(mIdpDataWithAddAccount),
                             /* isAutoReauthn= */ false,
                             /* newAccounts= */ Collections.EMPTY_LIST);
@@ -340,7 +340,7 @@ public class AccountSelectionButtonModeIntegrationTest extends AccountSelectionI
 
         // Because this is a returning account, we should immediately sign in now.
         verify(mMockBridge, never()).onDismissed(anyInt());
-        verify(mMockBridge).onAccountSelected(any(), any());
+        verify(mMockBridge).onAccountSelected(any());
     }
 
     @Test
@@ -350,7 +350,7 @@ public class AccountSelectionButtonModeIntegrationTest extends AccountSelectionI
                 () -> {
                     mAccountSelection.showAccounts(
                             EXAMPLE_ETLD_PLUS_ONE,
-                            Arrays.asList(NEW_BOB),
+                            Arrays.asList(mNewBobWithAddAccount),
                             Arrays.asList(mIdpDataWithAddAccount),
                             /* isAutoReauthn= */ false,
                             /* newAccounts= */ Collections.EMPTY_LIST);
@@ -380,7 +380,7 @@ public class AccountSelectionButtonModeIntegrationTest extends AccountSelectionI
                 () -> {
                     mAccountSelection.showAccounts(
                             EXAMPLE_ETLD_PLUS_ONE,
-                            Arrays.asList(NEW_BOB, RETURNING_ANA),
+                            Arrays.asList(mNewBobWithAddAccount, mReturningAnaWithAddAccount),
                             Arrays.asList(mIdpDataWithAddAccount),
                             /* isAutoReauthn= */ false,
                             /* newAccounts= */ Collections.EMPTY_LIST);
@@ -402,7 +402,7 @@ public class AccountSelectionButtonModeIntegrationTest extends AccountSelectionI
                 AccountSelectionProperties.ITEM_TYPE_ACCOUNT,
                 accountsList.getAdapter().getItemViewType(1));
         assertEquals(
-                AccountSelectionProperties.ITEM_TYPE_ADD_ACCOUNT,
+                AccountSelectionProperties.ITEM_TYPE_LOGIN,
                 accountsList.getAdapter().getItemViewType(2));
 
         // Check that secondary button is NOT displayed.
@@ -422,7 +422,7 @@ public class AccountSelectionButtonModeIntegrationTest extends AccountSelectionI
         Espresso.pressBack();
 
         waitForEvent(mMockBridge).onDismissed(IdentityRequestDialogDismissReason.BACK_PRESS);
-        verify(mMockBridge, never()).onAccountSelected(any(), any());
+        verify(mMockBridge, never()).onAccountSelected(any());
     }
 
     @Test
@@ -440,7 +440,7 @@ public class AccountSelectionButtonModeIntegrationTest extends AccountSelectionI
                     sheetSupport.suppressSheet(BottomSheetController.StateChangeReason.SWIPE);
                 });
         waitForEvent(mMockBridge).onDismissed(IdentityRequestDialogDismissReason.SWIPE);
-        verify(mMockBridge, never()).onAccountSelected(any(), any());
+        verify(mMockBridge, never()).onAccountSelected(any());
     }
 
     @Test
@@ -450,7 +450,7 @@ public class AccountSelectionButtonModeIntegrationTest extends AccountSelectionI
                 () -> {
                     mAccountSelection.showAccounts(
                             EXAMPLE_ETLD_PLUS_ONE,
-                            Arrays.asList(NEW_BOB),
+                            Arrays.asList(mNewBobWithAddAccount),
                             Arrays.asList(mIdpDataWithAddAccount),
                             /* isAutoReauthn= */ false,
                             /* newAccounts= */ Collections.EMPTY_LIST);
@@ -473,7 +473,7 @@ public class AccountSelectionButtonModeIntegrationTest extends AccountSelectionI
         // User is now signed in and shown the verifying UI.
         assertEquals(HeaderType.VERIFY, mAccountSelection.getMediator().getHeaderType());
         verify(mMockBridge, never()).onDismissed(anyInt());
-        verify(mMockBridge).onAccountSelected(any(), any());
+        verify(mMockBridge).onAccountSelected(any());
     }
 
     @Test
@@ -483,7 +483,7 @@ public class AccountSelectionButtonModeIntegrationTest extends AccountSelectionI
                 () -> {
                     mAccountSelection.showAccounts(
                             EXAMPLE_ETLD_PLUS_ONE,
-                            Arrays.asList(RETURNING_ANA),
+                            Arrays.asList(mReturningAnaWithAddAccount),
                             Arrays.asList(mIdpDataWithAddAccount),
                             /* isAutoReauthn= */ false,
                             /* newAccounts= */ Collections.EMPTY_LIST);
@@ -500,7 +500,7 @@ public class AccountSelectionButtonModeIntegrationTest extends AccountSelectionI
         // Because this is a returning account, user is now signed in and shown the verifying UI.
         assertEquals(HeaderType.VERIFY, mAccountSelection.getMediator().getHeaderType());
         verify(mMockBridge, never()).onDismissed(anyInt());
-        verify(mMockBridge).onAccountSelected(any(), any());
+        verify(mMockBridge).onAccountSelected(any());
     }
 
     @Test
@@ -511,7 +511,7 @@ public class AccountSelectionButtonModeIntegrationTest extends AccountSelectionI
                 () -> {
                     mAccountSelection.showAccounts(
                             EXAMPLE_ETLD_PLUS_ONE,
-                            Arrays.asList(NEW_BOB),
+                            Arrays.asList(mNewBobWithAddAccount),
                             Arrays.asList(mIdpDataWithAddAccount),
                             /* isAutoReauthn= */ false,
                             /* newAccounts= */ Collections.EMPTY_LIST);
@@ -528,7 +528,7 @@ public class AccountSelectionButtonModeIntegrationTest extends AccountSelectionI
         // Because disclosureFields are empty, user is now signed in and shown the verifying UI.
         assertEquals(HeaderType.VERIFY, mAccountSelection.getMediator().getHeaderType());
         verify(mMockBridge, never()).onDismissed(anyInt());
-        verify(mMockBridge).onAccountSelected(any(), any());
+        verify(mMockBridge).onAccountSelected(any());
     }
 
     @Test
@@ -538,7 +538,7 @@ public class AccountSelectionButtonModeIntegrationTest extends AccountSelectionI
                 () -> {
                     mAccountSelection.showAccounts(
                             EXAMPLE_ETLD_PLUS_ONE,
-                            Arrays.asList(NEW_BOB),
+                            Arrays.asList(mNewBobWithAddAccount),
                             Arrays.asList(mIdpDataWithAddAccount),
                             /* isAutoReauthn= */ false,
                             /* newAccounts= */ Collections.EMPTY_LIST);
@@ -569,7 +569,7 @@ public class AccountSelectionButtonModeIntegrationTest extends AccountSelectionI
                 () -> {
                     mAccountSelection.showAccounts(
                             EXAMPLE_ETLD_PLUS_ONE,
-                            Arrays.asList(NEW_BOB),
+                            Arrays.asList(mNewBobWithAddAccount),
                             Arrays.asList(mIdpDataWithAddAccount),
                             /* isAutoReauthn= */ false,
                             /* newAccounts= */ Collections.EMPTY_LIST);
@@ -595,25 +595,17 @@ public class AccountSelectionButtonModeIntegrationTest extends AccountSelectionI
                     sheetSupport.suppressSheet(BottomSheetController.StateChangeReason.SWIPE);
                 });
         waitForEvent(mMockBridge).onDismissed(IdentityRequestDialogDismissReason.SWIPE);
-        verify(mMockBridge, never()).onAccountSelected(any(), any());
+        verify(mMockBridge, never()).onAccountSelected(any());
     }
 
     @Test
     @MediumTest
     public void testAccountChooserToVerifyingDialogHeaderReused() {
-        doCallback(
-                        /* index= */ 1,
-                        (Callback<Bitmap> callback) -> {
-                            callback.onResult(Bitmap.createBitmap(40, 40, Bitmap.Config.ARGB_8888));
-                        })
-                .when(mMockImageFetcher)
-                .fetchImage(any(), any());
-
         runOnUiThreadBlocking(
                 () -> {
                     mAccountSelection.showAccounts(
                             EXAMPLE_ETLD_PLUS_ONE,
-                            Arrays.asList(RETURNING_ANA),
+                            Arrays.asList(mReturningAnaWithAddAccount),
                             Arrays.asList(mIdpDataWithAddAccount),
                             /* isAutoReauthn= */ false,
                             /* newAccounts= */ Collections.EMPTY_LIST);
@@ -629,7 +621,7 @@ public class AccountSelectionButtonModeIntegrationTest extends AccountSelectionI
                 ((TextView) contentView.findViewById(R.id.header_title)).getText().toString();
         String expectedSubtitle =
                 ((TextView) contentView.findViewById(R.id.header_subtitle)).getText().toString();
-        onView(withId(R.id.header_idp_icon)).check(matches(isDisplayed()));
+        onView(withId(R.id.header_icon)).check(matches(isDisplayed()));
         onView(withId(R.id.header_rp_icon)).check(matches(not(isDisplayed())));
         onView(withId(R.id.arrow_range_icon)).check(matches(not(isDisplayed())));
 
@@ -642,7 +634,7 @@ public class AccountSelectionButtonModeIntegrationTest extends AccountSelectionI
         assertEquals(
                 expectedSubtitle,
                 ((TextView) contentView.findViewById(R.id.header_subtitle)).getText().toString());
-        onView(withId(R.id.header_idp_icon)).check(matches(isDisplayed()));
+        onView(withId(R.id.header_icon)).check(matches(isDisplayed()));
         onView(withId(R.id.header_rp_icon)).check(matches(not(isDisplayed())));
         onView(withId(R.id.arrow_range_icon)).check(matches(not(isDisplayed())));
     }
@@ -650,19 +642,11 @@ public class AccountSelectionButtonModeIntegrationTest extends AccountSelectionI
     @Test
     @MediumTest
     public void testRequestPermissionDialogToVerifyingDialogHeaderReused() {
-        doCallback(
-                        /* index= */ 1,
-                        (Callback<Bitmap> callback) -> {
-                            callback.onResult(Bitmap.createBitmap(40, 40, Bitmap.Config.ARGB_8888));
-                        })
-                .when(mMockImageFetcher)
-                .fetchImage(any(), any());
-
         runOnUiThreadBlocking(
                 () -> {
                     mAccountSelection.showAccounts(
                             EXAMPLE_ETLD_PLUS_ONE,
-                            Arrays.asList(NEW_BOB),
+                            Arrays.asList(mNewBobWithAddAccount),
                             Arrays.asList(mIdpDataWithAddAccount),
                             /* isAutoReauthn= */ false,
                             /* newAccounts= */ Collections.EMPTY_LIST);
@@ -684,7 +668,7 @@ public class AccountSelectionButtonModeIntegrationTest extends AccountSelectionI
                 ((TextView) contentView.findViewById(R.id.header_title)).getText().toString();
         String expectedSubtitle =
                 ((TextView) contentView.findViewById(R.id.header_subtitle)).getText().toString();
-        onView(withId(R.id.header_idp_icon)).check(matches(isDisplayed()));
+        onView(withId(R.id.header_icon)).check(matches(isDisplayed()));
         onView(withId(R.id.header_rp_icon)).check(matches(isDisplayed()));
         onView(withId(R.id.arrow_range_icon)).check(matches(isDisplayed()));
 
@@ -697,7 +681,7 @@ public class AccountSelectionButtonModeIntegrationTest extends AccountSelectionI
         assertEquals(
                 expectedSubtitle,
                 ((TextView) contentView.findViewById(R.id.header_subtitle)).getText().toString());
-        onView(withId(R.id.header_idp_icon)).check(matches(isDisplayed()));
+        onView(withId(R.id.header_icon)).check(matches(isDisplayed()));
         onView(withId(R.id.header_rp_icon)).check(matches(isDisplayed()));
         onView(withId(R.id.arrow_range_icon)).check(matches(isDisplayed()));
     }
@@ -710,7 +694,7 @@ public class AccountSelectionButtonModeIntegrationTest extends AccountSelectionI
                 () -> {
                     mAccountSelection.showAccounts(
                             EXAMPLE_ETLD_PLUS_ONE,
-                            Arrays.asList(RETURNING_ANA),
+                            Arrays.asList(mReturningAnaWithAddAccount),
                             Arrays.asList(mIdpDataWithAddAccount),
                             /* isAutoReauthn= */ false,
                             /* newAccounts= */ Collections.EMPTY_LIST);
@@ -735,7 +719,7 @@ public class AccountSelectionButtonModeIntegrationTest extends AccountSelectionI
                 () -> {
                     mAccountSelection.showAccounts(
                             EXAMPLE_ETLD_PLUS_ONE,
-                            Arrays.asList(NEW_BOB),
+                            Arrays.asList(mNewBobWithAddAccount),
                             Arrays.asList(mIdpDataWithAddAccount),
                             /* isAutoReauthn= */ false,
                             /* newAccounts= */ Collections.EMPTY_LIST);
@@ -767,7 +751,7 @@ public class AccountSelectionButtonModeIntegrationTest extends AccountSelectionI
                 () -> {
                     mAccountSelection.showAccounts(
                             EXAMPLE_ETLD_PLUS_ONE,
-                            Arrays.asList(RETURNING_ANA, NEW_BOB),
+                            Arrays.asList(mReturningAna, mNewBob),
                             Arrays.asList(mIdpData),
                             /* isAutoReauthn= */ false,
                             /* newAccounts= */ Collections.EMPTY_LIST);
@@ -795,7 +779,7 @@ public class AccountSelectionButtonModeIntegrationTest extends AccountSelectionI
                 () -> {
                     mAccountSelection.showAccounts(
                             EXAMPLE_ETLD_PLUS_ONE,
-                            Arrays.asList(RETURNING_ANA),
+                            Arrays.asList(mReturningAnaWithAddAccount),
                             Arrays.asList(mIdpDataWithAddAccount),
                             /* isAutoReauthn= */ false,
                             /* newAccounts= */ Collections.EMPTY_LIST);
@@ -820,7 +804,7 @@ public class AccountSelectionButtonModeIntegrationTest extends AccountSelectionI
                 () -> {
                     mAccountSelection.showAccounts(
                             EXAMPLE_ETLD_PLUS_ONE,
-                            Arrays.asList(RETURNING_ANA),
+                            Arrays.asList(mReturningAnaWithAddAccount),
                             Arrays.asList(mIdpDataWithAddAccount),
                             /* isAutoReauthn= */ false,
                             /* newAccounts= */ Collections.EMPTY_LIST);
@@ -850,7 +834,7 @@ public class AccountSelectionButtonModeIntegrationTest extends AccountSelectionI
                 () -> {
                     mAccountSelection.showAccounts(
                             EXAMPLE_ETLD_PLUS_ONE,
-                            Arrays.asList(RETURNING_ANA),
+                            Arrays.asList(mReturningAnaWithAddAccount),
                             Arrays.asList(mIdpDataWithAddAccount),
                             /* isAutoReauthn= */ false,
                             /* newAccounts= */ Collections.EMPTY_LIST);
@@ -880,7 +864,7 @@ public class AccountSelectionButtonModeIntegrationTest extends AccountSelectionI
                 () -> {
                     mAccountSelection.showAccounts(
                             EXAMPLE_ETLD_PLUS_ONE,
-                            Arrays.asList(NEW_BOB),
+                            Arrays.asList(mNewBobWithAddAccount),
                             Arrays.asList(mIdpDataWithAddAccount),
                             /* isAutoReauthn= */ false,
                             /* newAccounts= */ Collections.EMPTY_LIST);
@@ -915,7 +899,7 @@ public class AccountSelectionButtonModeIntegrationTest extends AccountSelectionI
                 () -> dialogManager.dismissAllDialogs(DialogDismissalCause.UNKNOWN));
 
         waitForEvent(mMockBridge).onDismissed(IdentityRequestDialogDismissReason.OTHER);
-        verify(mMockBridge, never()).onAccountSelected(any(), any());
+        verify(mMockBridge, never()).onAccountSelected(any());
     }
 
     @Test
@@ -929,7 +913,7 @@ public class AccountSelectionButtonModeIntegrationTest extends AccountSelectionI
                 () -> {
                     mAccountSelection.showAccounts(
                             EXAMPLE_ETLD_PLUS_ONE,
-                            Arrays.asList(RETURNING_ANA),
+                            Arrays.asList(mReturningAnaWithAddAccount),
                             Arrays.asList(mIdpDataWithAddAccount),
                             /* isAutoReauthn= */ false,
                             /* newAccounts= */ Collections.EMPTY_LIST);
@@ -954,7 +938,7 @@ public class AccountSelectionButtonModeIntegrationTest extends AccountSelectionI
                     mAccountSelection.getMediator().onModalDialogClosed();
                     mAccountSelection.showAccounts(
                             EXAMPLE_ETLD_PLUS_ONE,
-                            Arrays.asList(RETURNING_ANA),
+                            Arrays.asList(mReturningAnaWithAddAccount),
                             Arrays.asList(mIdpDataWithAddAccount),
                             /* isAutoReauthn= */ false,
                             /* newAccounts= */ Collections.EMPTY_LIST);
@@ -1065,7 +1049,7 @@ public class AccountSelectionButtonModeIntegrationTest extends AccountSelectionI
                 () -> {
                     mAccountSelection.showAccounts(
                             EXAMPLE_ETLD_PLUS_ONE,
-                            Arrays.asList(NEW_BOB),
+                            Arrays.asList(mNewBobWithAddAccount),
                             Arrays.asList(mIdpDataWithAddAccount),
                             /* isAutoReauthn= */ false,
                             /* newAccounts= */ Collections.EMPTY_LIST);
@@ -1095,7 +1079,7 @@ public class AccountSelectionButtonModeIntegrationTest extends AccountSelectionI
                 () -> {
                     mAccountSelection.showAccounts(
                             EXAMPLE_ETLD_PLUS_ONE,
-                            Arrays.asList(NEW_BOB),
+                            Arrays.asList(mNewBobWithAddAccount),
                             Arrays.asList(mIdpDataWithAddAccount),
                             /* isAutoReauthn= */ false,
                             /* newAccounts= */ Collections.EMPTY_LIST);
@@ -1125,7 +1109,7 @@ public class AccountSelectionButtonModeIntegrationTest extends AccountSelectionI
                 () -> {
                     mAccountSelection.showAccounts(
                             EXAMPLE_ETLD_PLUS_ONE,
-                            Arrays.asList(NEW_BOB),
+                            Arrays.asList(mNewBobWithAddAccount),
                             Arrays.asList(mIdpDataWithAddAccount),
                             /* isAutoReauthn= */ false,
                             /* newAccounts= */ Collections.EMPTY_LIST);
@@ -1151,7 +1135,7 @@ public class AccountSelectionButtonModeIntegrationTest extends AccountSelectionI
                 () -> {
                     mAccountSelection.showAccounts(
                             EXAMPLE_ETLD_PLUS_ONE,
-                            Arrays.asList(NEW_BOB),
+                            Arrays.asList(mNewBobWithAddAccount),
                             Arrays.asList(mIdpDataWithAddAccount),
                             /* isAutoReauthn= */ false,
                             /* newAccounts= */ Collections.EMPTY_LIST);
@@ -1183,7 +1167,7 @@ public class AccountSelectionButtonModeIntegrationTest extends AccountSelectionI
                 () -> {
                     mAccountSelection.showAccounts(
                             EXAMPLE_ETLD_PLUS_ONE,
-                            Arrays.asList(NEW_BOB),
+                            Arrays.asList(mNewBobWithAddAccount),
                             Arrays.asList(mIdpDataWithAddAccount),
                             /* isAutoReauthn= */ false,
                             /* newAccounts= */ Collections.EMPTY_LIST);

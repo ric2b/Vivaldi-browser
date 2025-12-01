@@ -19,17 +19,9 @@ generate_css("css_files") {
 devtools_module("ai_assistance") {
   sources = [
     "AiAssistancePanel.ts",
-    "AiHistoryStorage.ts",
-    "ChangeManager.ts",
-    "EvaluateAction.ts",
-    "ExtensionScope.ts",
-    "agents/AiAgent.ts",
-    "agents/FileAgent.ts",
-    "agents/NetworkAgent.ts",
-    "agents/PatchAgent.ts",
-    "agents/PerformanceAgent.ts",
-    "agents/StylingAgent.ts",
+    "PatchWidget.ts",
     "components/ChatView.ts",
+    "components/MarkdownRendererWithCodeBlock.ts",
     "components/UserActionRow.ts",
   ]
 
@@ -39,20 +31,20 @@ devtools_module("ai_assistance") {
     "../../core/host:bundle",
     "../../core/i18n:bundle",
     "../../core/root:bundle",
-    "../../models/bindings:bundle",
-    "../../models/logs:bundle",
-    "../../models/text_utils:bundle",
-    "../../models/trace:bundle",
+    "../../models/ai_assistance:bundle",
+    "../../models/persistence:bundle",
     "../../models/workspace:bundle",
+    "../../models/workspace_diff:bundle",
+    "../../panels/changes:bundle",
     "../../panels/elements:bundle",
     "../../panels/network:bundle",
     "../../panels/sources:bundle",
     "../../panels/timeline:bundle",
     "../../panels/timeline/utils:bundle",
-    "../../panels/utils:bundle",
     "../../third_party/marked:bundle",
     "../../ui/components/markdown_view:bundle",
     "../../ui/components/spinners:bundle",
+    "../../ui/components/tooltips:bundle",
     "../../ui/legacy:bundle",
     "../../ui/lit:bundle",
   ]
@@ -87,15 +79,9 @@ ts_library("unittests") {
 
   sources = [
     "AiAssistancePanel.test.ts",
-    "AiHistoryStorage.test.ts",
-    "ChangeManager.test.ts",
-    "EvaluateAction.test.ts",
-    "agents/AiAgent.test.ts",
-    "agents/FileAgent.test.ts",
-    "agents/NetworkAgent.test.ts",
-    "agents/PerformanceAgent.test.ts",
-    "agents/StylingAgent.test.ts",
+    "PatchWidget.test.ts",
     "components/ChatView.test.ts",
+    "components/MarkdownRendererWithCodeBlock.test.ts",
     "components/UserActionRow.test.ts",
   ]
 
@@ -106,8 +92,6 @@ ts_library("unittests") {
     "../../core/platform:bundle",
     "../../core/sdk:bundle",
     "../../generated:protocol",
-    "../../models/bindings:bundle",
-    "../../models/trace:bundle",
     "../../panels/timeline/utils:bundle",
     "../../testing",
   ]

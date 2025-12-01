@@ -11,6 +11,7 @@
 #include <string>
 #include <unordered_set>
 #include <utility>
+#include <variant>
 #include <vector>
 
 #include "base/barrier_closure.h"
@@ -63,6 +64,7 @@
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/storage_partition.h"
+#include "net/base/schemeful_site.h"
 #include "services/network/public/mojom/trust_tokens.mojom.h"
 #include "storage/browser/quota/quota_manager.h"
 #include "storage/browser/quota/quota_manager_impl.h"
@@ -152,7 +154,7 @@ void GetUsageAndQuotaOnIOThread(
     std::unique_ptr<StorageHandler::GetUsageAndQuotaCallback> callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   manager->GetUsageAndQuotaForDevtools(
-      storage_key, blink::mojom::StorageType::kTemporary,
+      storage_key,
       base::BindOnce(&GotUsageAndQuotaDataCallback, std::move(callback)));
 }
 
@@ -363,13 +365,14 @@ class StorageHandler::SharedStorageObserver
   // content::SharedStorageObserverInterface
   void OnSharedStorageAccessed(
       const base::Time& access_time,
-      AccessType type,
+      blink::SharedStorageAccessScope scope,
+      AccessMethod method,
       FrameTreeNodeId main_frame_id,
       const std::string& owner_origin,
       const SharedStorageEventParams& params) override {
     DCHECK_CURRENTLY_ON(BrowserThread::UI);
-    owner_->NotifySharedStorageAccessed(access_time, type, main_frame_id,
-                                        owner_origin, params);
+    owner_->NotifySharedStorageAccessed(access_time, scope, method,
+                                        main_frame_id, owner_origin, params);
   }
 
   void OnUrnUuidGenerated(const GURL& urn_uuid) override {}
@@ -405,7 +408,7 @@ class StorageHandler::QuotaManagerObserver
       return;
     }
     manager->GetBucketsForStorageKey(
-        storage_key, blink::mojom::StorageType::kTemporary, false,
+        storage_key, /*delete_expired=*/false,
         base::SingleThreadTaskRunner::GetCurrentDefault(),
         base::BindOnce(
             [](base::WeakPtr<StorageHandler> owner_storage_handler,
@@ -901,7 +904,7 @@ SharedStorageRuntimeManager* StorageHandler::GetSharedStorageRuntimeManager() {
       ->GetSharedStorageRuntimeManager();
 }
 
-absl::variant<protocol::Response, storage::SharedStorageManager*>
+std::variant<protocol::Response, storage::SharedStorageManager*>
 StorageHandler::GetSharedStorageManager() {
   if (!storage_partition_) {
     return Response::InternalError();
@@ -1246,13 +1249,13 @@ void StorageHandler::GetSharedStorageMetadata(
     const std::string& owner_origin_string,
     std::unique_ptr<GetSharedStorageMetadataCallback> callback) {
   auto manager_or_response = GetSharedStorageManager();
-  if (absl::holds_alternative<protocol::Response>(manager_or_response)) {
-    callback->sendFailure(absl::get<protocol::Response>(manager_or_response));
+  if (std::holds_alternative<protocol::Response>(manager_or_response)) {
+    callback->sendFailure(std::get<protocol::Response>(manager_or_response));
     return;
   }
 
   storage::SharedStorageManager* manager =
-      absl::get<storage::SharedStorageManager*>(manager_or_response);
+      std::get<storage::SharedStorageManager*>(manager_or_response);
   DCHECK(manager);
 
   GURL owner_origin_url(owner_origin_string);
@@ -1299,13 +1302,13 @@ void StorageHandler::GetSharedStorageEntries(
     const std::string& owner_origin_string,
     std::unique_ptr<GetSharedStorageEntriesCallback> callback) {
   auto manager_or_response = GetSharedStorageManager();
-  if (absl::holds_alternative<protocol::Response>(manager_or_response)) {
-    callback->sendFailure(absl::get<protocol::Response>(manager_or_response));
+  if (std::holds_alternative<protocol::Response>(manager_or_response)) {
+    callback->sendFailure(std::get<protocol::Response>(manager_or_response));
     return;
   }
 
   storage::SharedStorageManager* manager =
-      absl::get<storage::SharedStorageManager*>(manager_or_response);
+      std::get<storage::SharedStorageManager*>(manager_or_response);
   DCHECK(manager);
 
   GURL owner_origin_url(owner_origin_string);
@@ -1344,13 +1347,13 @@ void StorageHandler::SetSharedStorageEntry(
     std::optional<bool> ignore_if_present,
     std::unique_ptr<SetSharedStorageEntryCallback> callback) {
   auto manager_or_response = GetSharedStorageManager();
-  if (absl::holds_alternative<protocol::Response>(manager_or_response)) {
-    callback->sendFailure(absl::get<protocol::Response>(manager_or_response));
+  if (std::holds_alternative<protocol::Response>(manager_or_response)) {
+    callback->sendFailure(std::get<protocol::Response>(manager_or_response));
     return;
   }
 
   storage::SharedStorageManager* manager =
-      absl::get<storage::SharedStorageManager*>(manager_or_response);
+      std::get<storage::SharedStorageManager*>(manager_or_response);
   DCHECK(manager);
 
   GURL owner_origin_url(owner_origin_string);
@@ -1393,13 +1396,13 @@ void StorageHandler::DeleteSharedStorageEntry(
     const std::string& key,
     std::unique_ptr<DeleteSharedStorageEntryCallback> callback) {
   auto manager_or_response = GetSharedStorageManager();
-  if (absl::holds_alternative<protocol::Response>(manager_or_response)) {
-    callback->sendFailure(absl::get<protocol::Response>(manager_or_response));
+  if (std::holds_alternative<protocol::Response>(manager_or_response)) {
+    callback->sendFailure(std::get<protocol::Response>(manager_or_response));
     return;
   }
 
   storage::SharedStorageManager* manager =
-      absl::get<storage::SharedStorageManager*>(manager_or_response);
+      std::get<storage::SharedStorageManager*>(manager_or_response);
   DCHECK(manager);
 
   GURL owner_origin_url(owner_origin_string);
@@ -1421,13 +1424,13 @@ void StorageHandler::ClearSharedStorageEntries(
     const std::string& owner_origin_string,
     std::unique_ptr<ClearSharedStorageEntriesCallback> callback) {
   auto manager_or_response = GetSharedStorageManager();
-  if (absl::holds_alternative<protocol::Response>(manager_or_response)) {
-    callback->sendFailure(absl::get<protocol::Response>(manager_or_response));
+  if (std::holds_alternative<protocol::Response>(manager_or_response)) {
+    callback->sendFailure(std::get<protocol::Response>(manager_or_response));
     return;
   }
 
   storage::SharedStorageManager* manager =
-      absl::get<storage::SharedStorageManager*>(manager_or_response);
+      std::get<storage::SharedStorageManager*>(manager_or_response);
   DCHECK(manager);
 
   GURL owner_origin_url(owner_origin_string);
@@ -1461,13 +1464,13 @@ void StorageHandler::ResetSharedStorageBudget(
     const std::string& owner_origin_string,
     std::unique_ptr<ResetSharedStorageBudgetCallback> callback) {
   auto manager_or_response = GetSharedStorageManager();
-  if (absl::holds_alternative<protocol::Response>(manager_or_response)) {
-    callback->sendFailure(absl::get<protocol::Response>(manager_or_response));
+  if (std::holds_alternative<protocol::Response>(manager_or_response)) {
+    callback->sendFailure(std::get<protocol::Response>(manager_or_response));
     return;
   }
 
   storage::SharedStorageManager* manager =
-      absl::get<storage::SharedStorageManager*>(manager_or_response);
+      std::get<storage::SharedStorageManager*>(manager_or_response);
   DCHECK(manager);
 
   GURL owner_origin_url(owner_origin_string);
@@ -1502,79 +1505,82 @@ std::string GetFrameTokenFromFrameTreeNodeId(FrameTreeNodeId frame_id) {
 
 void StorageHandler::NotifySharedStorageAccessed(
     const base::Time& access_time,
-    SharedStorageRuntimeManager::SharedStorageObserverInterface::AccessType
-        type,
+    blink::SharedStorageAccessScope scope,
+    SharedStorageRuntimeManager::SharedStorageObserverInterface::AccessMethod
+        method,
     FrameTreeNodeId main_frame_id,
     const std::string& owner_origin,
     const SharedStorageEventParams& params) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
-  using AccessType =
-      SharedStorageRuntimeManager::SharedStorageObserverInterface::AccessType;
-  std::string type_enum;
-  switch (type) {
-    case AccessType::kDocumentAddModule:
-      type_enum = Storage::SharedStorageAccessTypeEnum::DocumentAddModule;
+  using AccessScope = blink::SharedStorageAccessScope;
+  using AccessMethod =
+      SharedStorageRuntimeManager::SharedStorageObserverInterface::AccessMethod;
+  std::string scope_enum;
+  switch (scope) {
+    case AccessScope::kWindow:
+      scope_enum = Storage::SharedStorageAccessScopeEnum::Window;
       break;
-    case AccessType::kDocumentSelectURL:
-      type_enum = Storage::SharedStorageAccessTypeEnum::DocumentSelectURL;
+    case AccessScope::kSharedStorageWorklet:
+      scope_enum = Storage::SharedStorageAccessScopeEnum::SharedStorageWorklet;
       break;
-    case AccessType::kDocumentRun:
-      type_enum = Storage::SharedStorageAccessTypeEnum::DocumentRun;
+    case AccessScope::kProtectedAudienceWorklet:
+      // TODO(crbug.com/401011862): Implement callsites for this path.
+      scope_enum =
+          Storage::SharedStorageAccessScopeEnum::ProtectedAudienceWorklet;
       break;
-    case AccessType::kDocumentSet:
-      type_enum = Storage::SharedStorageAccessTypeEnum::DocumentSet;
+    case AccessScope::kHeader:
+      scope_enum = Storage::SharedStorageAccessScopeEnum::Header;
       break;
-    case AccessType::kDocumentAppend:
-      type_enum = Storage::SharedStorageAccessTypeEnum::DocumentAppend;
+  };
+
+  std::string method_enum;
+  switch (method) {
+    case AccessMethod::kAddModule:
+      method_enum = Storage::SharedStorageAccessMethodEnum::AddModule;
       break;
-    case AccessType::kDocumentDelete:
-      type_enum = Storage::SharedStorageAccessTypeEnum::DocumentDelete;
+    case AccessMethod::kCreateWorklet:
+      method_enum = Storage::SharedStorageAccessMethodEnum::CreateWorklet;
       break;
-    case AccessType::kDocumentClear:
-      type_enum = Storage::SharedStorageAccessTypeEnum::DocumentClear;
+    case AccessMethod::kSelectURL:
+      method_enum = Storage::SharedStorageAccessMethodEnum::SelectURL;
       break;
-    case AccessType::kDocumentGet:
-      type_enum = Storage::SharedStorageAccessTypeEnum::DocumentGet;
+    case AccessMethod::kRun:
+      method_enum = Storage::SharedStorageAccessMethodEnum::Run;
       break;
-    case AccessType::kWorkletSet:
-      type_enum = Storage::SharedStorageAccessTypeEnum::WorkletSet;
+    case AccessMethod::kBatchUpdate:
+      // TODO(crbug.com/401011862): Implement callsite for this path.
+      method_enum = Storage::SharedStorageAccessMethodEnum::BatchUpdate;
       break;
-    case AccessType::kWorkletAppend:
-      type_enum = Storage::SharedStorageAccessTypeEnum::WorkletAppend;
+    case AccessMethod::kSet:
+      method_enum = Storage::SharedStorageAccessMethodEnum::Set;
       break;
-    case AccessType::kWorkletDelete:
-      type_enum = Storage::SharedStorageAccessTypeEnum::WorkletDelete;
+    case AccessMethod::kAppend:
+      method_enum = Storage::SharedStorageAccessMethodEnum::Append;
       break;
-    case AccessType::kWorkletClear:
-      type_enum = Storage::SharedStorageAccessTypeEnum::WorkletClear;
+    case AccessMethod::kDelete:
+      method_enum = Storage::SharedStorageAccessMethodEnum::Delete;
       break;
-    case AccessType::kWorkletGet:
-      type_enum = Storage::SharedStorageAccessTypeEnum::WorkletGet;
+    case AccessMethod::kClear:
+      method_enum = Storage::SharedStorageAccessMethodEnum::Clear;
       break;
-    case AccessType::kWorkletKeys:
-      type_enum = Storage::SharedStorageAccessTypeEnum::WorkletKeys;
+    case AccessMethod::kGet:
+      method_enum = Storage::SharedStorageAccessMethodEnum::Get;
       break;
-    case AccessType::kWorkletEntries:
-      type_enum = Storage::SharedStorageAccessTypeEnum::WorkletEntries;
+    case AccessMethod::kKeys:
+      method_enum = Storage::SharedStorageAccessMethodEnum::Keys;
       break;
-    case AccessType::kWorkletLength:
-      type_enum = Storage::SharedStorageAccessTypeEnum::WorkletLength;
+    case AccessMethod::kValues:
+      method_enum = Storage::SharedStorageAccessMethodEnum::Values;
       break;
-    case AccessType::kWorkletRemainingBudget:
-      type_enum = Storage::SharedStorageAccessTypeEnum::WorkletRemainingBudget;
+    case AccessMethod::kEntries:
+      method_enum = Storage::SharedStorageAccessMethodEnum::Entries;
       break;
-    case AccessType::kHeaderSet:
-      type_enum = Storage::SharedStorageAccessTypeEnum::HeaderSet;
+    case AccessMethod::kLength:
+      method_enum = Storage::SharedStorageAccessMethodEnum::Length;
       break;
-    case AccessType::kHeaderAppend:
-      type_enum = Storage::SharedStorageAccessTypeEnum::HeaderAppend;
-      break;
-    case AccessType::kHeaderDelete:
-      type_enum = Storage::SharedStorageAccessTypeEnum::HeaderDelete;
-      break;
-    case AccessType::kHeaderClear:
-      type_enum = Storage::SharedStorageAccessTypeEnum::HeaderClear;
+    case AccessMethod::kRemainingBudget:
+      method_enum = Storage::SharedStorageAccessMethodEnum::RemainingBudget;
       break;
   };
 
@@ -1629,8 +1635,9 @@ void StorageHandler::NotifySharedStorageAccessed(
   }
 
   frontend_->SharedStorageAccessed(
-      access_time.InSecondsFSinceUnixEpoch(), type_enum,
+      access_time.InSecondsFSinceUnixEpoch(), scope_enum, method_enum,
       GetFrameTokenFromFrameTreeNodeId(main_frame_id), owner_origin,
+      net::SchemefulSite(GURL(owner_origin)).Serialize(),
       std::move(protocol_params));
 }
 

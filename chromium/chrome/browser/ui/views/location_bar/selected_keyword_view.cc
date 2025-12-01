@@ -27,6 +27,8 @@
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/gfx/image/image.h"
+#include "ui/gfx/image/image_skia.h"
+#include "ui/gfx/image/image_skia_operations.h"
 #include "ui/gfx/paint_vector_icon.h"
 #include "ui/gfx/text_constants.h"
 #include "ui/gfx/vector_icon_types.h"
@@ -38,8 +40,13 @@ SelectedKeywordView::GetKeywordLabelNames(const std::u16string& keyword,
                                           const TemplateURLService* service) {
   KeywordLabelNames names;
   if (service) {
+    const TemplateURL* template_url =
+        service->GetTemplateURLForKeyword(keyword);
     bool is_extension_keyword = false;
     bool is_gemini_keyword = false;
+    bool is_page_keyword =
+        template_url &&
+        template_url->starter_pack_id() == TemplateURLStarterPackData::kPage;
     names.short_name = service->GetKeywordShortName(
         keyword, &is_extension_keyword, &is_gemini_keyword);
     if (is_gemini_keyword) {
@@ -47,6 +54,9 @@ SelectedKeywordView::GetKeywordLabelNames(const std::u16string& keyword,
           IDS_OMNIBOX_SELECTED_KEYWORD_ASK_TEXT, names.short_name);
     } else if (is_extension_keyword) {
       names.full_name = names.short_name;
+    } else if (is_page_keyword) {
+      names.full_name =
+          l10n_util::GetStringUTF16(IDS_STARTER_PACK_PAGE_KEYWORD_TEXT);
     } else {
       names.full_name = l10n_util::GetStringFUTF16(IDS_OMNIBOX_KEYWORD_TEXT_MD,
                                                    names.short_name);
@@ -83,9 +93,14 @@ SelectedKeywordView::SelectedKeywordView(
 SelectedKeywordView::~SelectedKeywordView() = default;
 
 void SelectedKeywordView::SetCustomImage(const gfx::Image& image) {
+  const int icon_size = GetLayoutConstant(LOCATION_BAR_ICON_SIZE);
   using_custom_image_ = !image.IsEmpty();
   if (using_custom_image_) {
-    IconLabelBubbleView::SetImageModel(ui::ImageModel::FromImage(image));
+    IconLabelBubbleView::SetImageModel(ui::ImageModel::FromImageSkia(
+        gfx::ImageSkiaOperations::CreateResizedImage(
+            image.AsImageSkia(),
+            skia::ImageOperations::ResizeMethod::RESIZE_LANCZOS3,
+            gfx::Size(icon_size, icon_size))));
     return;
   }
 
@@ -109,8 +124,7 @@ void SelectedKeywordView::SetCustomImage(const gfx::Image& image) {
   }
 
   IconLabelBubbleView::SetImageModel(ui::ImageModel::FromVectorIcon(
-      *vector_icon, GetForegroundColor(),
-      GetLayoutConstant(LOCATION_BAR_ICON_SIZE)));
+      *vector_icon, GetForegroundColor(), icon_size));
 }
 
 void SelectedKeywordView::OnBoundsChanged(const gfx::Rect& previous_bounds) {
@@ -162,7 +176,8 @@ void SelectedKeywordView::SetKeyword(const std::u16string& keyword) {
   // class is calculating the preferred size. It will be updated again during
   // layout, taking into account how much space has actually been allotted.
   SetLabelForCurrentWidth();
-  NotifyAccessibilityEvent(ax::mojom::Event::kLiveRegionChanged, true);
+  NotifyAccessibilityEventDeprecated(ax::mojom::Event::kLiveRegionChanged,
+                                     true);
 }
 
 const std::u16string& SelectedKeywordView::GetKeyword() const {

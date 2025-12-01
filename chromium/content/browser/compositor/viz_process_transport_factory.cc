@@ -2,11 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/342213636): Remove this and spanify to fix the errors.
-#pragma allow_unsafe_buffers
-#endif
-
 #include "content/browser/compositor/viz_process_transport_factory.h"
 
 #include <utility>
@@ -79,7 +74,7 @@ scoped_refptr<viz::ContextProviderCommandBuffer> CreateContextProvider(
   attributes.lose_context_when_out_of_memory = true;
   attributes.enable_gles2_interface = false;
   attributes.enable_raster_interface = true;
-  attributes.enable_oop_rasterization = supports_gpu_rasterization;
+  attributes.enable_gpu_rasterization = supports_gpu_rasterization;
 
   gpu::SharedMemoryLimits memory_limits =
       gpu::SharedMemoryLimits::ForDisplayCompositor();
@@ -240,11 +235,6 @@ void VizProcessTransportFactory::RemoveCompositor(ui::Compositor* compositor) {
 #endif
 
   compositor_data_map_.erase(compositor);
-}
-
-gpu::GpuMemoryBufferManager*
-VizProcessTransportFactory::GetGpuMemoryBufferManager() {
-  return gpu_channel_establish_factory_->GetGpuMemoryBufferManager();
 }
 
 cc::TaskGraphRunner* VizProcessTransportFactory::GetTaskGraphRunner() {
@@ -450,6 +440,11 @@ void VizProcessTransportFactory::OnEstablishedGpuChannel(
   if (compositor->use_external_begin_frame_control()) {
     root_params->external_begin_frame_controller =
         external_begin_frame_controller.BindNewEndpointAndPassReceiver();
+    if (auto* factory =
+            compositor->external_begin_frame_controler_client_factory()) {
+      root_params->external_begin_frame_controller_client =
+          factory->CreateExternalBeginFrameControllerClient();
+    }
   }
 
   root_params->frame_sink_id = compositor->frame_sink_id();
@@ -498,10 +493,6 @@ void VizProcessTransportFactory::OnEstablishedGpuChannel(
   // Create LayerTreeFrameSink with the browser end of CompositorFrameSink.
   cc::mojo_embedder::AsyncLayerTreeFrameSink::InitParams params;
   params.compositor_task_runner = compositor->task_runner();
-  params.gpu_memory_buffer_manager =
-      compositor->context_factory()
-          ? compositor->context_factory()->GetGpuMemoryBufferManager()
-          : nullptr;
   params.pipes.compositor_frame_sink_associated_remote = std::move(sink_remote);
   params.pipes.client_receiver = std::move(client_receiver);
 

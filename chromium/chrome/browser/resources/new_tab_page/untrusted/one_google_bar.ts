@@ -4,6 +4,9 @@
 
 type MessageType = 'overlaysUpdated'|'click'|'loaded';
 
+// TODO(crbug.com/373569279): Post launch completion of OGB ABP integration,
+// remove all references and logic associated to the legacy integration
+// implementation.
 declare let abp: boolean;
 
 /**
@@ -32,12 +35,18 @@ interface AsyncBar {
   setDarkMode(matches: boolean): void;
 }
 
-const oneGoogleBarApi = (() => {
-  type IndexableApi = Record<string, Function>;
-  interface Gbar {
-    gbar?: {a: Record<string, () => IndexableApi>, P: () => void};
-  }
+type IndexableApi = Record<string, Function>;
+interface Gbar {
+  gbar?: {a: Record<string, () => IndexableApi>, P: () => void};
+}
 
+if (abp) {
+  window.addEventListener('gbar_a', () => {
+    postOneGoogleBarLoaded();
+  });
+}
+
+const oneGoogleBarApi = (() => {
   async function callApi(
       apiName: string, fnName: string, ...args: any[]): Promise<unknown> {
     const {gbar} = window as Window & Gbar;
@@ -51,11 +60,11 @@ const oneGoogleBarApi = (() => {
   async function callAsyncBarApi(
       fnName: string, ...args: any[]): Promise<unknown> {
     const {gbar} = window as Window & Gbar;
-    if (!gbar) {
-      return;
+    if (!gbar || !gbar.a) {
+      return Promise.resolve();
     }
 
-    const barApi = new (gbar.P as any)();
+    const barApi = await gbar.a['bf']!();
     return barApi[fnName]!.apply(barApi, args);
   }
 
@@ -78,7 +87,7 @@ const oneGoogleBarApi = (() => {
   ].reduce((topLevelApi, def) => {
     (topLevelApi as Record<string, any>)[def.name] =
         def.fns.reduce((apiPart, [name, fnName]) => {
-          apiPart[name!] = callApi.bind(null, def.apiName, fnName!);
+          apiPart[name] = callApi.bind(null, def.apiName, fnName);
           return apiPart;
         }, {} as IndexableApi);
     return topLevelApi;
@@ -311,17 +320,30 @@ window.addEventListener('click', () => {
   postMessage('click');
 }, /*useCapture=*/ true);
 
-document.addEventListener('DOMContentLoaded', () => {
-  // TODO(crbug.com/40667075): remove after OneGoogleBar links are updated.
-  // Updates <a>'s so they load on the top frame instead of the iframe.
-  document.body.querySelectorAll('a').forEach(el => {
-    if (el.target !== '_blank') {
-      el.target = '_top';
-    }
-  });
+function postOneGoogleBarLoaded() {
   postMessage('loaded');
   overlayUpdater.track();
   oneGoogleBarApi.trackDarkModeChanges();
-});
+}
+
+if (!abp) {
+  document.addEventListener('DOMContentLoaded', () => {
+    document.body.style.margin = '0';
+    // TODO(crbug.com/40667075): remove after OneGoogleBar links are updated.
+    // Updates <a>'s so they load on the top frame instead of the iframe.
+    document.body.querySelectorAll('a').forEach(el => {
+      if (el.target !== '_blank') {
+        el.target = '_top';
+      }
+    });
+
+    postOneGoogleBarLoaded();
+  });
+} else {
+  const {gbar} = window as Window & Gbar;
+  if (gbar && gbar.a) {
+    postOneGoogleBarLoaded();
+  }
+}
 
 export {};

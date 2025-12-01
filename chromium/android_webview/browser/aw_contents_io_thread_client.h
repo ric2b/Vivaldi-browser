@@ -125,9 +125,6 @@ class AwContentsIoThreadClient {
       AwWebResourceRequest request,
       ShouldInterceptRequestResponseCallback callback);
 
-  // Check if the request should be blocked based on web content ownership.
-  bool ShouldBlockRequest(AwWebResourceRequest request);
-
   // Retrieve the AllowContentAccess setting value of this AwContents.
   // This method is called on the IO thread only.
   bool ShouldBlockContentUrls() const;
@@ -155,7 +152,6 @@ class AwContentsIoThreadClient {
 
  private:
   base::android::ScopedJavaGlobalRef<jobject> java_object_;
-  base::android::ScopedJavaGlobalRef<jobject> bg_thread_client_object_;
   scoped_refptr<base::SequencedTaskRunner> sequenced_task_runner_ =
       base::ThreadPool::CreateSequencedTaskRunner({base::MayBlock()});
 };

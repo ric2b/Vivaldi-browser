@@ -7,7 +7,10 @@
 
 #import <UIKit/UIKit.h>
 
+#import <map>
+
 #import "base/memory/weak_ptr.h"
+#import "components/data_sharing/public/protocol/group_data.pb.h"
 #import "components/saved_tab_groups/public/types.h"
 #import "ios/chrome/browser/share_kit/model/share_kit_service.h"
 
@@ -42,32 +45,38 @@ class TestShareKitService : public ShareKitService {
   NSString* ManageTabGroup(ShareKitManageConfiguration* config) override;
   NSString* JoinTabGroup(ShareKitJoinConfiguration* config) override;
   UIViewController* FacePile(ShareKitFacePileConfiguration* config) override;
-  void ReadGroups(ShareKitReadConfiguration* config) override;
+  void ReadGroups(ShareKitReadGroupsConfiguration* config) override;
+  void ReadGroupWithToken(
+      ShareKitReadGroupWithTokenConfiguration* config) override;
   void LeaveGroup(ShareKitLeaveConfiguration* config) override;
   void DeleteGroup(ShareKitDeleteConfiguration* config) override;
   void LookupGaiaIdByEmail(ShareKitLookupGaiaIDConfiguration* config) override;
   id<ShareKitAvatarPrimitive> AvatarImage(
       ShareKitAvatarConfiguration* config) override;
 
+  // Creates the shared tab group with the given `collab_id` and marks the
+  // identity as `owner` of it and saves it to the fake server.
+  void CreateSharedTabGroupInFakeServer(bool owner, NSString* collab_id);
+
   // KeyedService.
   void Shutdown() override;
 
  private:
-  // Sets the `collab_id` for the given `tab_group_id`.
-  void SetTabGroupCollabIdFromGroupId(tab_groups::LocalTabGroupID tab_group_id,
+  // Sets the `collab_id` for the given `tab_group_id` and sets the user as
+  // `owner`.
+  void SetTabGroupCollabIdFromGroupId(bool owner,
+                                      tab_groups::LocalTabGroupID tab_group_id,
                                       NSString* collab_id);
 
-  // Sets the `collab_id` for the given `group_guid`.
-  void SetTabGroupCollabIdFromGroupGuid(base::Uuid group_guid,
+  // Sets the `collab_id` for the given `group_guid` and sets the user as
+  // `owner`.
+  void SetTabGroupCollabIdFromGroupGuid(bool owner,
+                                        base::Uuid group_guid,
                                         NSString* collab_id);
 
-  // Called when the user joined a group with the given `collab_id` from the
-  // join flow.
-  void OnTabGroupJoined(NSString* collab_id);
-
-  // Whether the user is the owner of the group. This is a workaround to update
-  // the user's role based on the specific tested flow.
-  bool is_owner_ = false;
+  // Map containing the role of `foo1` identity for each group, based on its
+  // collaboration id.
+  std::map<std::string, data_sharing_pb::MemberRole> group_to_membership_;
 
   raw_ptr<data_sharing::DataSharingService> data_sharing_service_;
   raw_ptr<tab_groups::TabGroupSyncService> tab_group_sync_service_;

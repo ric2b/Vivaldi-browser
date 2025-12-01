@@ -16,7 +16,6 @@
 mod tests;
 
 use crabby_avif::reformat::rgb::*;
-use image::ImageReader;
 use tests::*;
 
 #[test_case::test_case("paris_identity.avif", "paris_icc_exif_xmp.png"; "lossless_identity")]
@@ -34,16 +33,13 @@ fn lossless(avif_file: &str, png_file: &str) {
     rgb.format = Format::Rgb;
     assert!(rgb.allocate().is_ok());
     assert!(rgb.convert_from_yuv(decoded).is_ok());
-
-    let source = ImageReader::open(get_test_file(png_file));
-    let source = source.unwrap().decode().unwrap();
-
+    let source = decode_png(png_file);
     assert_eq!(
-        source.as_bytes(),
+        source,
         rgb.pixels
             .as_ref()
             .unwrap()
-            .slice(0, source.as_bytes().len() as u32)
+            .slice(0, source.len() as u32)
             .unwrap()
     );
 }

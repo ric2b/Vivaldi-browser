@@ -1,4 +1,4 @@
-load("//xla:xla.bzl", "xla_cc_test")
+load("//xla:xla.default.bzl", "xla_cc_test")
 load("//xla/tsl:tsl.bzl", "internal_visibility")
 load("//xla/tsl/platform:rules_cc.bzl", "cc_library")
 
@@ -142,14 +142,18 @@ cc_library(
         "//xla/service:global_device_id",
         "//xla/service:rendezvous",
         "//xla/stream_executor:device_memory",
+        "//xla/tsl/lib/math:math_util",
         "//xla/tsl/platform:errors",
         "//xla/tsl/platform:statusor",
         "@com_google_absl//absl/algorithm:container",
+        "@com_google_absl//absl/cleanup",
         "@com_google_absl//absl/log",
+        "@com_google_absl//absl/log:check",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/strings:str_format",
+        "@com_google_absl//absl/synchronization",
         "@com_google_absl//absl/time",
         "@com_google_absl//absl/types:span",
     ],
@@ -165,12 +169,14 @@ cc_library(
         "-fno-strict-aliasing",
     ],
     features = ["-use_header_modules"],
-    visibility = [
+    visibility = internal_visibility([
         "//xla/pjrt/cpu:legacy_cpu_internal_users",
-    ],
+        "//third_party/py/jax:__subpackages__",
+    ]),
     deps = [
         "//xla/pjrt:status_casters",
         "//xla/pjrt/distributed:key_value_store_interface",
+        "@com_google_absl//absl/strings:string_view",
         "@com_google_absl//absl/time",
         "@gloo",
     ],
@@ -221,7 +227,6 @@ cc_library(
 xla_cc_test(
     name = "gloo_collectives_test",
     srcs = ["gloo_collectives_test.cc"],
-    linkstatic = True,
     deps = [
         ":gloo_collectives",
         ":gloo_kv_store",

@@ -18,12 +18,14 @@
 
 #include <optional>
 #include <tuple>
+#include <variant>
 
 #include "base/check.h"
 #include "base/command_line.h"
 #include "base/feature_list.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/no_destructor.h"
 #include "base/notreached.h"
 #include "base/task/sequenced_task_runner.h"
@@ -39,11 +41,11 @@
 #include "skia/ext/skia_utils_win.h"
 #include "third_party/skia/include/core/SkCanvas.h"
 #include "third_party/skia/include/core/SkColor.h"
-#include "third_party/skia/include/core/SkColorPriv.h"
 #include "third_party/skia/include/core/SkPath.h"
 #include "third_party/skia/include/core/SkRefCnt.h"
 #include "third_party/skia/include/core/SkShader.h"
 #include "third_party/skia/include/core/SkSurface.h"
+#include "third_party/skia/include/private/chromium/SkPMColor.h"
 #include "ui/base/ui_base_features.h"
 #include "ui/base/ui_base_switches.h"
 #include "ui/color/color_provider.h"
@@ -288,7 +290,7 @@ void NativeThemeWin::Paint(cc::PaintCanvas* canvas,
       return;
     case kMenuPopupSeparator:
       PaintMenuSeparator(canvas, color_provider,
-                         absl::get<MenuSeparatorExtraParams>(extra));
+                         std::get<MenuSeparatorExtraParams>(extra));
       return;
     case kMenuPopupBackground:
       PaintMenuBackground(canvas, color_provider, rect);
@@ -296,7 +298,7 @@ void NativeThemeWin::Paint(cc::PaintCanvas* canvas,
     case kMenuItemBackground:
       CommonThemePaintMenuItemBackground(this, color_provider, canvas, state,
                                          rect,
-                                         absl::get<MenuItemExtraParams>(extra));
+                                         std::get<MenuItemExtraParams>(extra));
       return;
     default:
       PaintIndirect(canvas, part, state, rect, extra);
@@ -352,6 +354,12 @@ NativeThemeWin::NativeThemeWin(bool configure_web_instance,
   if (configure_web_instance) {
     ConfigureWebInstance();
   }
+
+#if BUILDFLAG(IS_WIN)
+  base::UmaHistogramEnumeration("Accessibility.WinHighContrastTheme",
+                                GetPlatformHighContrastColorScheme(),
+                                PlatformHighContrastColorScheme::kMaxValue);
+#endif
 }
 
 void NativeThemeWin::ConfigureWebInstance() {
@@ -482,7 +490,7 @@ void NativeThemeWin::PaintDirect(SkCanvas* destination_canvas,
     // matches what XP does in various menus; GetThemePartSize() doesn't seem to
     // return good values here.)
     constexpr int kChannelThickness = 4;
-    if (absl::get<TrackbarExtraParams>(extra).vertical) {
+    if (std::get<TrackbarExtraParams>(extra).vertical) {
       rect_win.top += (rect_win.bottom - rect_win.top - kChannelThickness) / 2;
       rect_win.bottom = rect_win.top + kChannelThickness;
     } else {
@@ -500,7 +508,7 @@ void NativeThemeWin::PaintDirect(SkCanvas* destination_canvas,
       case kMenuPopupArrow:
         // The right-pointing arrow can use the common code, but the
         // left-pointing one needs custom code.
-        if (!absl::get<MenuArrowExtraParams>(extra).pointing_right) {
+        if (!std::get<MenuArrowExtraParams>(extra).pointing_right) {
           PaintLeftMenuArrowThemed(hdc, handle, part_id, state_id, rect);
           return;
         }
@@ -554,15 +562,15 @@ void NativeThemeWin::PaintDirect(SkCanvas* destination_canvas,
     case kPushButton:
     case kRadio:
       PaintButtonClassic(hdc, part, state, &rect_win,
-                         absl::get<ButtonExtraParams>(extra));
+                         std::get<ButtonExtraParams>(extra));
       return;
     case kInnerSpinButton:
       DrawFrameControl(
           hdc, &rect_win, DFC_SCROLL,
-          absl::get<InnerSpinButtonExtraParams>(extra).classic_state);
+          std::get<InnerSpinButtonExtraParams>(extra).classic_state);
       return;
     case kMenuCheck: {
-      const auto& menu_check = absl::get<MenuCheckExtraParams>(extra);
+      const auto& menu_check = std::get<MenuCheckExtraParams>(extra);
       PaintFrameControl(hdc, rect, DFC_MENU,
                         menu_check.is_radio ? DFCS_MENUBULLET : DFCS_MENUCHECK,
                         menu_check.is_selected, state);
@@ -571,10 +579,10 @@ void NativeThemeWin::PaintDirect(SkCanvas* destination_canvas,
     case kMenuList:
       DrawFrameControl(hdc, &rect_win, DFC_SCROLL,
                        DFCS_SCROLLCOMBOBOX |
-                           absl::get<MenuListExtraParams>(extra).classic_state);
+                           std::get<MenuListExtraParams>(extra).classic_state);
       return;
     case kMenuPopupArrow: {
-      const auto& menu_arrow = absl::get<MenuArrowExtraParams>(extra);
+      const auto& menu_arrow = std::get<MenuArrowExtraParams>(extra);
       // For some reason, Windows uses the name DFCS_MENUARROWRIGHT to indicate
       // a left pointing arrow.
       PaintFrameControl(
@@ -584,7 +592,7 @@ void NativeThemeWin::PaintDirect(SkCanvas* destination_canvas,
       return;
     }
     case kProgressBar: {
-      const auto& progress_bar = absl::get<ProgressBarExtraParams>(extra);
+      const auto& progress_bar = std::get<ProgressBarExtraParams>(extra);
       RECT value_rect =
           gfx::Rect(progress_bar.value_rect_x, progress_bar.value_rect_y,
                     progress_bar.value_rect_width,
@@ -613,7 +621,7 @@ void NativeThemeWin::PaintDirect(SkCanvas* destination_canvas,
     case kScrollbarHorizontalTrack:
     case kScrollbarVerticalTrack:
       PaintScrollbarTrackClassic(destination_canvas, hdc, &rect_win,
-                                 absl::get<ScrollbarTrackExtraParams>(extra));
+                                 std::get<ScrollbarTrackExtraParams>(extra));
       return;
     case kTabPanelBackground:
       // Classic just renders a flat color background.
@@ -623,7 +631,7 @@ void NativeThemeWin::PaintDirect(SkCanvas* destination_canvas,
       // TODO(mpcomplete): can we detect if the color is specified by the user,
       // and if not, just use the system color?
       // CreateSolidBrush() accepts a RGB value but alpha must be 0.
-      const auto& text_field = absl::get<TextFieldExtraParams>(extra);
+      const auto& text_field = std::get<TextFieldExtraParams>(extra);
       base::win::ScopedGDIObject<HBRUSH> bg_brush(CreateSolidBrush(
           skia::SkColorToCOLORREF(text_field.background_color)));
       if (handle) {
@@ -635,7 +643,7 @@ void NativeThemeWin::PaintDirect(SkCanvas* destination_canvas,
       return;
     }
     case kTrackbarThumb: {
-      const auto& trackbar = absl::get<TrackbarExtraParams>(extra);
+      const auto& trackbar = std::get<TrackbarExtraParams>(extra);
       if (trackbar.vertical) {
         DrawEdge(hdc, &rect_win, EDGE_RAISED, BF_RECT | BF_SOFT | BF_MIDDLE);
       } else {
@@ -820,7 +828,7 @@ void NativeThemeWin::PaintIndirect(cc::PaintCanvas* destination_canvas,
   ExtraParams adjusted_extra = extra;
   switch (part) {
     case kProgressBar: {
-      auto progress_bar = absl::get<ProgressBarExtraParams>(adjusted_extra);
+      auto progress_bar = std::get<ProgressBarExtraParams>(adjusted_extra);
       progress_bar.value_rect_x = 0;
       progress_bar.value_rect_y = 0;
       break;
@@ -828,7 +836,7 @@ void NativeThemeWin::PaintIndirect(cc::PaintCanvas* destination_canvas,
     case kScrollbarHorizontalTrack:
     case kScrollbarVerticalTrack: {
       auto scrollbar_track =
-          absl::get<ScrollbarTrackExtraParams>(adjusted_extra);
+          std::get<ScrollbarTrackExtraParams>(adjusted_extra);
       scrollbar_track.track_x = 0;
       scrollbar_track.track_y = 0;
       break;
@@ -849,12 +857,12 @@ void NativeThemeWin::PaintIndirect(cc::PaintCanvas* destination_canvas,
   for (int i = 0; i < pixel_count; i++) {
     if (pixels[i] == placeholder_value) {
       // Pixel wasn't touched - make it fully transparent.
-      pixels[i] = SkPackARGB32(0, 0, 0, 0);
-    } else if (SkGetPackedA32(pixels[i]) == 0) {
+      pixels[i] = SkPMColorSetARGB(0, 0, 0, 0);
+    } else if (SkPMColorGetA(pixels[i]) == 0) {
       // Pixel was touched but has incorrect alpha of 0, make it fully opaque.
       pixels[i] =
-          SkPackARGB32(0xFF, SkGetPackedR32(pixels[i]),
-                       SkGetPackedG32(pixels[i]), SkGetPackedB32(pixels[i]));
+          SkPMColorSetARGB(0xFF, SkPMColorGetR(pixels[i]),
+                           SkPMColorGetG(pixels[i]), SkPMColorGetB(pixels[i]));
     }
   }
 
@@ -1268,11 +1276,11 @@ int NativeThemeWin::GetWindowsPart(Part part,
     case kScrollbarVerticalThumb:
       return SBP_THUMBBTNVERT;
     case kScrollbarHorizontalTrack:
-      return absl::get<ScrollbarTrackExtraParams>(extra).is_upper
+      return std::get<ScrollbarTrackExtraParams>(extra).is_upper
                  ? SBP_UPPERTRACKHORZ
                  : SBP_LOWERTRACKHORZ;
     case kScrollbarVerticalTrack:
-      return absl::get<ScrollbarTrackExtraParams>(extra).is_upper
+      return std::get<ScrollbarTrackExtraParams>(extra).is_upper
                  ? SBP_UPPERTRACKVERT
                  : SBP_LOWERTRACKVERT;
     case kWindowResizeGripper:
@@ -1281,16 +1289,16 @@ int NativeThemeWin::GetWindowsPart(Part part,
       // close, but it's supposed to be painted over a status bar.
       return SP_GRIPPER;
     case kInnerSpinButton:
-      return absl::get<InnerSpinButtonExtraParams>(extra).spin_up ? SPNP_UP
-                                                                  : SPNP_DOWN;
+      return std::get<InnerSpinButtonExtraParams>(extra).spin_up ? SPNP_UP
+                                                                 : SPNP_DOWN;
     case kTabPanelBackground:
       return TABP_BODY;
     case kTrackbarThumb:
-      return absl::get<TrackbarExtraParams>(extra).vertical ? TKP_THUMBVERT
-                                                            : TKP_THUMBBOTTOM;
+      return std::get<TrackbarExtraParams>(extra).vertical ? TKP_THUMBVERT
+                                                           : TKP_THUMBBOTTOM;
     case kTrackbarTrack:
-      return absl::get<TrackbarExtraParams>(extra).vertical ? TKP_TRACKVERT
-                                                            : TKP_TRACK;
+      return std::get<TrackbarExtraParams>(extra).vertical ? TKP_TRACKVERT
+                                                           : TKP_TRACK;
     case kMenuPopupBackground:
     case kMenuItemBackground:
     case kScrollbarCorner:
@@ -1310,7 +1318,7 @@ int NativeThemeWin::GetWindowsState(Part part,
         case kDisabled:
           return ABS_DOWNDISABLED;
         case kHovered:
-          return absl::get<ScrollbarArrowExtraParams>(extra).is_hovering
+          return std::get<ScrollbarArrowExtraParams>(extra).is_hovering
                      ? ABS_DOWNHOVER
                      : ABS_DOWNHOT;
         case kNormal:
@@ -1325,7 +1333,7 @@ int NativeThemeWin::GetWindowsState(Part part,
         case kDisabled:
           return ABS_LEFTDISABLED;
         case kHovered:
-          return absl::get<ScrollbarArrowExtraParams>(extra).is_hovering
+          return std::get<ScrollbarArrowExtraParams>(extra).is_hovering
                      ? ABS_LEFTHOVER
                      : ABS_LEFTHOT;
         case kNormal:
@@ -1340,7 +1348,7 @@ int NativeThemeWin::GetWindowsState(Part part,
         case kDisabled:
           return ABS_RIGHTDISABLED;
         case kHovered:
-          return absl::get<ScrollbarArrowExtraParams>(extra).is_hovering
+          return std::get<ScrollbarArrowExtraParams>(extra).is_hovering
                      ? ABS_RIGHTHOVER
                      : ABS_RIGHTHOT;
         case kNormal:
@@ -1355,7 +1363,7 @@ int NativeThemeWin::GetWindowsState(Part part,
         case kDisabled:
           return ABS_UPDISABLED;
         case kHovered:
-          return absl::get<ScrollbarArrowExtraParams>(extra).is_hovering
+          return std::get<ScrollbarArrowExtraParams>(extra).is_hovering
                      ? ABS_UPHOVER
                      : ABS_UPHOT;
         case kNormal:
@@ -1366,7 +1374,7 @@ int NativeThemeWin::GetWindowsState(Part part,
           NOTREACHED();
       }
     case kCheckbox: {
-      const auto& button = absl::get<ButtonExtraParams>(extra);
+      const auto& button = std::get<ButtonExtraParams>(extra);
       switch (state) {
         case kDisabled:
           return button.checked
@@ -1409,7 +1417,7 @@ int NativeThemeWin::GetWindowsState(Part part,
         case kHovered:
           return ETS_HOT;
         case kNormal: {
-          const auto& text_filed = absl::get<TextFieldExtraParams>(extra);
+          const auto& text_filed = std::get<TextFieldExtraParams>(extra);
           if (text_filed.is_read_only) {
             return ETS_READONLY;
           }
@@ -1423,7 +1431,7 @@ int NativeThemeWin::GetWindowsState(Part part,
     case kMenuPopupArrow:
       return (state == kDisabled) ? MSM_DISABLED : MSM_NORMAL;
     case kMenuCheck: {
-      const auto& menu_check = absl::get<MenuCheckExtraParams>(extra);
+      const auto& menu_check = std::get<MenuCheckExtraParams>(extra);
       if (state == kDisabled) {
         return menu_check.is_radio ? MC_BULLETDISABLED : MC_CHECKMARKDISABLED;
       }
@@ -1438,15 +1446,15 @@ int NativeThemeWin::GetWindowsState(Part part,
         case kHovered:
           return PBS_HOT;
         case kNormal:
-          return absl::get<ButtonExtraParams>(extra).is_default ? PBS_DEFAULTED
-                                                                : PBS_NORMAL;
+          return std::get<ButtonExtraParams>(extra).is_default ? PBS_DEFAULTED
+                                                               : PBS_NORMAL;
         case kPressed:
           return PBS_PRESSED;
         case kNumStates:
           NOTREACHED();
       }
     case kRadio: {
-      const auto& button = absl::get<ButtonExtraParams>(extra);
+      const auto& button = std::get<ButtonExtraParams>(extra);
       switch (state) {
         case kDisabled:
           return button.checked ? RBS_CHECKEDDISABLED : RBS_UNCHECKEDDISABLED;
@@ -1465,7 +1473,7 @@ int NativeThemeWin::GetWindowsState(Part part,
     case kScrollbarHorizontalThumb:
     case kScrollbarVerticalThumb:
       if ((state == kHovered) &&
-          !absl::get<ScrollbarThumbExtraParams>(extra).is_hovering) {
+          !std::get<ScrollbarThumbExtraParams>(extra).is_hovering) {
         return SCRBS_HOT;
       }
       [[fallthrough]];
@@ -1498,7 +1506,7 @@ int NativeThemeWin::GetWindowsState(Part part,
           NOTREACHED();
       }
     case kInnerSpinButton: {
-      const auto& inner_spin = absl::get<InnerSpinButtonExtraParams>(extra);
+      const auto& inner_spin = std::get<InnerSpinButtonExtraParams>(extra);
       switch (state) {
         case kDisabled:
           return inner_spin.spin_up ? static_cast<int>(UPS_DISABLED)

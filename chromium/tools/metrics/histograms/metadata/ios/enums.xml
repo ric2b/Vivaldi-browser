@@ -41,23 +41,6 @@ chromium-metrics-reviews@google.com.
   <int value="3" label="Not In Fullscreen"/>
 </enum>
 
-<!-- TODO(crbug.com/339262105): Clean up the old password promo methods after
-the generic promo launch. -->
-
-<enum name="DesktopIOSPasswordPromoAction">
-  <int value="0" label="Dismissed"/>
-  <int value="1" label="ExplicitlyClosed"/>
-  <int value="2" label="GetStartedClicked"/>
-</enum>
-
-<!-- TODO(crbug.com/339262105): Clean up the old password promo methods after
-the generic promo launch. -->
-
-<enum name="DesktopIOSPasswordPromoImpression">
-  <int value="0" label="FirstImpression"/>
-  <int value="1" label="SecondImpression"/>
-</enum>
-
 <enum name="DesktopIOSPromoAction">
   <int value="0" label="Dismissed"/>
   <int value="1" label="ExplicitlyClosed"/>
@@ -95,11 +78,41 @@ the generic promo launch. -->
   <int value="1" label="Apple Calendar"/>
 </enum>
 
+<!-- LINT.IfChange(FullscreenModeTransitionReason) -->
+
+<enum name="FullscreenModeTransitionReason">
+  <int value="0" label="UserControlled"/>
+  <int value="1" label="ForcedByCode"/>
+  <int value="2" label="UserInitiatedFinishedByCode"/>
+  <int value="3" label="UserTapped"/>
+  <int value="4" label="BottomReached"/>
+</enum>
+
+<!-- LINT.ThenChange(//ios/chrome/browser/fullscreen/ui_bundled/fullscreen_metrics.h:FullscreenModeTransitionReason) -->
+
 <enum name="GeolocationAPI">
   <int value="0" label="Clear Watch"/>
   <int value="1" label="Get Current Position"/>
   <int value="2" label="Watch Position"/>
 </enum>
+
+<!-- LINT.IfChange(GoogleOneOutcome) -->
+
+<enum name="GoogleOneOutcome">
+  <int value="0" label="Success (User likely purchased a plan)"/>
+  <int value="1" label="Unknown error"/>
+  <int value="2" label="Unspecified GoogleOne error"/>
+  <int value="3" label="Flow externally interrupted"/>
+  <int value="4" label="Flow interrupted to open a link"/>
+  <int value="5" label="Flow interrupted by the user"/>
+  <int value="6" label="GoogleOne already presented"/>
+  <int value="7" label="Purchase failed"/>
+  <int value="8" label="Flow continued in another app"/>
+  <int value="9" label="Flow could not launch"/>
+  <int value="10" label="Invalid parameters"/>
+</enum>
+
+<!-- LINT.ThenChange(//ios/chrome/browser/google_one/coordinator/google_one_coordinator.mm:GoogleOneOutcome) -->
 
 <enum name="InactiveTabsThresholdSettingType">
   <int value="0" label="Unknown"/>
@@ -156,7 +169,7 @@ the generic promo launch. -->
   <int value="0" label="User selected Don't hide in settings"/>
   <int value="1"
       label="User selected hide with reauth method option in settings"/>
-  <int value="2" label="User selected wide with soft lock option in settings"/>
+  <int value="2" label="User selected hide with soft lock option in settings"/>
 </enum>
 
 <!-- LINT.ThenChange(//ios/chrome/browser/incognito_reauth/ui_bundled/incognito_reauth_constants.h:IncognitoLockSettingInteraction) -->
@@ -171,6 +184,18 @@ the generic promo launch. -->
 
 <!-- LINT.ThenChange(//ios/chrome/browser/incognito_reauth/ui_bundled/incognito_reauth_constants.h:IncognitoLockSettingStartupState) -->
 
+<enum name="IOSAddressValidationOutcome">
+  <int value="0" label="Address is valid for Long Press"/>
+  <int value="1" label="Address is valid for One Tap"/>
+  <int value="2" label="Address has no component"/>
+  <int value="3" label="Address is low confidence"/>
+  <int value="4" label="Address has too many sections"/>
+  <int value="5" label="Address is too short"/>
+  <int value="6" label="Address has too many symbols"/>
+  <int value="7" label="Address has no long word"/>
+  <int value="8" label="Address is not validated by NSDataDetector"/>
+</enum>
+
 <enum name="IOSAnnotationType">
   <int value="0" label="Unknown"/>
   <int value="1" label="Date"/>
@@ -181,6 +206,39 @@ the generic promo launch. -->
   <int value="6" label="ParcelTracking"/>
   <int value="7" label="ParcelCarrier"/>
 </enum>
+
+<enum name="IOSAppModeFetchingOutcomeType">
+  <int value="0" label="Incognito"/>
+  <int value="1" label="Non-Incognito"/>
+  <int value="2" label="Fetching Failure Error"/>
+  <int value="3" label="Fetching Time Out Error"/>
+</enum>
+
+<!-- LINT.IfChange(IOSBestFeaturesDetailScreenActionType) -->
+
+<enum name="IOSBestFeaturesDetailScreenActionType">
+  <int value="0" label="Show me how"/>
+  <int value="1" label="Continue in FRE sequence"/>
+  <int value="2" label="Navigate back to main screen"/>
+</enum>
+
+<!-- LINT.ThenChange(/ios/chrome/browser/first_run/ui_bundled/best_features/ui/metrics_util.h:BestFeaturesDetailScreenActionType) -->
+
+<!-- LINT.IfChange(IOSBestFeaturesMainScreenActionType) -->
+
+<enum name="IOSBestFeaturesMainScreenActionType">
+  <int value="0" label="Continue without interacting with items"/>
+  <int value="1" label="Lens Item Tapped"/>
+  <int value="2" label="Enhanced Safe Browsing Item Tapped"/>
+  <int value="3" label="Locked Incognito Tabs Item Tapped"/>
+  <int value="4" label="Save Autofill Passwords Item Tapped"/>
+  <int value="5" label="Tab Groups Tapped"/>
+  <int value="6" label="Price Tracking Tapped"/>
+  <int value="7" label="Passwords In Other Apps Item Tapped"/>
+  <int value="8" label="Share Passwords Item Tapped"/>
+</enum>
+
+<!-- LINT.ThenChange(/ios/chrome/browser/first_run/ui_bundled/best_features/ui/metrics_util.h:BestFeaturesMainScreenActionType) -->
 
 <enum name="IOSBringAndroidTabsPromptActionType">
   <int value="0" label="Review tabs"/>
@@ -213,12 +271,17 @@ the generic promo launch. -->
   <int value="2" label="Password Suggested and Manually Changed"/>
 </enum>
 
+<!-- LINT.IfChange(IOSCredentialProviderPromoAction) -->
+
 <enum name="IOSCredentialProviderPromoAction">
   <int value="0" label="Learn More"/>
   <int value="1" label="Go To Settings"/>
   <int value="2" label="Remind me later"/>
   <int value="3" label="No"/>
+  <int value="4" label="Turn on autofill"/>
 </enum>
+
+<!-- LINT.ThenChange(/ios/chrome/browser/credential_provider_promo/ui_bundled/credential_provider_promo_metrics.h:IOSCredentialProviderPromoAction) -->
 
 <enum name="IOSCredentialProviderPromoSource">
   <int value="0" label="Unknown"/>
@@ -279,6 +342,38 @@ the generic promo launch. -->
   <int value="2" label="Swipe Down"/>
   <int value="3" label="Tertiary Action Button"/>
 </enum>
+
+<!-- LINT.IfChange(IOSDefaultStatusAPIOutcomeType) -->
+
+<enum name="IOSDefaultStatusAPIOutcomeType">
+  <int value="1" label="Success"/>
+  <int value="2" label="Cooldown error"/>
+  <int value="3" label="Other error"/>
+</enum>
+
+<!-- LINT.ThenChange(/ios/chrome/browser/default_browser/model/default_status/default_status_helper_types.h:DefaultStatusAPIOutcomeType) -->
+
+<!-- LINT.IfChange(IOSDefaultStatusHeuristicAssessment) -->
+
+<enum name="IOSDefaultStatusHeuristicAssessment">
+  <int value="0" label="True negative"/>
+  <int value="1" label="False negative"/>
+  <int value="2" label="True positive"/>
+  <int value="3" label="False positive"/>
+</enum>
+
+<!-- LINT.ThenChange(/ios/chrome/browser/default_browser/model/default_status/default_status_helper_types.h:DefaultStatusHeuristicAssessment) -->
+
+<!-- LINT.IfChange(IOSDefaultStatusRetention) -->
+
+<enum name="IOSDefaultStatusRetention">
+  <int value="0" label="Became default"/>
+  <int value="1" label="Became non-default"/>
+  <int value="2" label="Remained default"/>
+  <int value="3" label="Remained non-default"/>
+</enum>
+
+<!-- LINT.ThenChange(/ios/chrome/browser/default_browser/model/default_status/default_status_helper_types.h:DefaultStatusRetention) -->
 
 <enum name="IOSDeleteAllSavedCredentialsActions">
   <int value="0" label="User confirmed delete all saved credentials"/>
@@ -344,6 +439,7 @@ the generic promo launch. -->
   <int value="47" label="Autofill others"/>
   <int value="48" label="StartWritingTools"/>
   <int value="49" label="ShowTextFormattingOptions"/>
+  <int value="50" label="ExplainWithGemini"/>
 </enum>
 
 <enum name="IOSEditMenuError">
@@ -478,10 +574,11 @@ the generic promo launch. -->
   <int value="5" label="Set Up List"/>
   <int value="6" label="Omnibox navigation"/>
   <int value="7" label="Safety Check tile"/>
-  <int value="8" label="Parcel Tracking tile"/>
+  <int value="8" label="Obsolete in M136 - Parcel Tracking tile"/>
   <int value="9" label="Distant tab resumption tile"/>
   <int value="10" label="Price Tracking Promo tile"/>
   <int value="11" label="Tips tile"/>
+  <int value="12" label="ShopCard tile"/>
 </enum>
 
 <enum name="IOSHomeCustomizationEntrypoint">
@@ -552,6 +649,7 @@ the generic promo launch. -->
   <int value="16" label="Tips (with Product Image)"/>
   <int value="17" label="Tips"/>
   <int value="18" label="Send Tab to Self Promo"/>
+  <int value="21" label="ShopCard"/>
 </enum>
 
 <enum name="IOSMiniMapConsentOutcome">
@@ -570,6 +668,8 @@ the generic promo launch. -->
   <int value="2" label="User reported an issue"/>
   <int value="3" label="User opened settings"/>
   <int value="4" label="User opened a query"/>
+  <int value="5" label="User disabled detection"/>
+  <int value="6" label="User opened settings from disable confirmation"/>
 </enum>
 
 <enum name="IOSMultiWindowConfiguration">
@@ -727,13 +827,6 @@ the generic promo launch. -->
   <int value="1" label="Same Document Web Navigation"/>
   <int value="2" label="Page Load Navigation"/>
   <int value="3" label="Obsolete - Loading Started"/>
-</enum>
-
-<enum name="IOSParcelTrackingOptInActionOnPrompt">
-  <int value="0" label="AskEveryTime"/>
-  <int value="1" label="AlwaysTrack"/>
-  <int value="2" label="NoThanks"/>
-  <int value="3" label="SwipeToDismiss"/>
 </enum>
 
 <enum name="IOSParcelTrackingOptInStatus">
@@ -972,7 +1065,7 @@ the generic promo launch. -->
   <int value="5" label="Animated Promo Dismissed"/>
 </enum>
 
-<!-- LINT.ThenChange(//ios/chrome/browser/ui/content_suggestions/set_up_list/constants.h:SegmentedDefaultBrowserPromoAction) -->
+<!-- LINT.ThenChange(//ios/chrome/browser/content_suggestions/ui_bundled/set_up_list/constants.h:SegmentedDefaultBrowserPromoAction) -->
 
 <enum name="IOSSessionMigration">
   <int value="0" label="No Migration"/>
@@ -1023,6 +1116,8 @@ the generic promo launch. -->
   <int value="2" label="Available"/>
 </enum>
 
+<!-- LINT.IfChange(IOSSpotlightDonatedIntentType) -->
+
 <enum name="IOSSpotlightDonatedIntentType">
   <int value="0" label="Search In Chrome"/>
   <int value="1" label="Open Reading List"/>
@@ -1045,6 +1140,8 @@ the generic promo launch. -->
   <int value="18" label="Manage Passwords"/>
   <int value="19" label="Manage Settings"/>
 </enum>
+
+<!-- LINT.ThenChange(//ios/chrome/browser/intents/model/intent_type.h:IOSSpotlightDonatedIntentType) -->
 
 <enum name="IOSSpotlightOrigin">
   <int value="0" label="Unknown Origin"/>
@@ -1208,14 +1305,14 @@ the generic promo launch. -->
   <int value="0" label="Default Browser [Tip]"/>
   <int value="1" label="Whats New [Tip]"/>
   <int value="2" label="Sign in [Tip]"/>
-  <int value="4" label="Set Up List Continuation [Tip]"/>
-  <int value="5" label="Docking [Tip]"/>
-  <int value="6" label="Omnibox Position [Tip"/>
-  <int value="7" label="Lens [Tip]"/>
-  <int value="8" label="Enhanced Safe Browsing [Tip]"/>
+  <int value="3" label="Set Up List Continuation [Tip]"/>
+  <int value="4" label="Docking [Tip]"/>
+  <int value="5" label="Omnibox Position [Tip"/>
+  <int value="6" label="Lens [Tip]"/>
+  <int value="7" label="Enhanced Safe Browsing [Tip]"/>
+  <int value="8" label="Update Chrome [SafetyCheck]"/>
   <int value="9" label="Passwords [SafetyCheck]"/>
   <int value="10" label="Safe Browsing [SafetyCheck]"/>
-  <int value="11" label="Update Chrome [SafetyCheck]"/>
 </enum>
 
 <!-- LINT.ThenChange(/ios/chrome/browser/push_notification/model/constants.h:NotificationType) -->
@@ -1348,6 +1445,50 @@ the generic promo launch. -->
   <int value="4" label="Ephemeral"/>
   <int value="5" label="Invalid"/>
 </enum>
+
+<!-- LINT.IfChange(ReaderModeAmpClassification) -->
+
+<enum name="ReaderModeAmpClassification">
+  <int value="0" label="Empty distill with AMP"/>
+  <int value="1" label="Populated distill with AMP"/>
+  <int value="2" label="Empty distill no AMP"/>
+  <int value="3" label="Populated distill no AMP"/>
+</enum>
+
+<!-- LINT.ThenChange(/ios/chrome/browser/reader_mode/model/constants.h:ReaderModeAmpClassification) -->
+
+<!-- LINT.IfChange(ReaderModeDistillerResult) -->
+
+<enum name="ReaderModeDistillerResult">
+  <int value="0" label="Not distillable"/>
+  <int value="1" label="Distillable"/>
+</enum>
+
+<!-- LINT.ThenChange(/ios/chrome/browser/reader_mode/model/constants.h:ReaderModeDistillerResult) -->
+
+<!-- LINT.IfChange(ReaderModeHeuristicClassification) -->
+
+<enum name="ReaderModeHeuristicClassification">
+  <int value="0" label="Correct match: Page not eligible with empty distill"/>
+  <int value="1"
+      label="Incorrect match: Page not eligible with populated distill"/>
+  <int value="2" label="Incorrect match: Page eligible with empty distill"/>
+  <int value="3" label="Correct match: Page eligible with populated distill"/>
+</enum>
+
+<!-- LINT.ThenChange(/ios/chrome/browser/reader_mode/model/constants.h:ReaderModeHeuristicClassification) -->
+
+<!-- LINT.IfChange(ReaderModeHeuristicResult) -->
+
+<enum name="ReaderModeHeuristicResult">
+  <int value="0" label="Malformed Response"/>
+  <int value="1" label="Eligible"/>
+  <int value="2" label="Not eligible (content only)"/>
+  <int value="3" label="Not eligible (length only)"/>
+  <int value="4" label="Not eligible (content and length)"/>
+</enum>
+
+<!-- LINT.ThenChange(/ios/chrome/browser/reader_mode/model/constants.h:ReaderModeHeuristicResult) -->
 
 <enum name="TextSelectionDetectedEntityType">
   <int value="0" label="Unknown"/>

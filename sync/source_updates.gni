@@ -33,6 +33,8 @@ update_target("//components/sync/base:base") {
 
 update_target("//components/sync_sessions:sync_sessions") {
   sources += [
+    "//vivaldi/components/sync_sessions/vivaldi_local_session_observer.cc",
+    "//vivaldi/components/sync_sessions/vivaldi_local_session_observer.h",
     "//vivaldi/sync/glue/vivaldi_synced_tab_delegate.cc",
     "//vivaldi/sync/vivaldi_session_sync_prefs.cc",
   ]
@@ -43,19 +45,13 @@ if (!is_ios) {
   update_target("//chrome/browser/sync:sync") {
     sources += [
       "//vivaldi/sync/vivaldi_sync_sessions_router_tab_helper.cc",
+      "//vivaldi/sync/vivaldi_device_info_sync_client_impl.cc",
     ]
   }
 
   update_target("//chrome/browser:browser") {
-    sources += [
-      "//vivaldi/sync/file_sync/file_store_factory.cc",
-      "//vivaldi/sync/file_sync/file_store_factory.h",
+    deps += [
+      "//vivaldi/sync:factory",
     ]
-    if (is_android) {
-      sources += [
-        "//vivaldi/sync/file_sync/file_store_android.cc",
-        "//vivaldi/sync/file_sync/file_store_android.h",
-      ]
-    }
   }
 }

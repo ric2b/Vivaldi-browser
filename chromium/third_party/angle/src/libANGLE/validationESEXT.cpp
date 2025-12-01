@@ -571,8 +571,9 @@ bool ValidateDrawRangeElementsBaseVertexEXT(const Context *context,
 
     // Note that resolving the index range is a bit slow. We should probably optimize this.
     IndexRange indexRange;
-    ANGLE_VALIDATION_TRY(context->getState().getVertexArray()->getIndexRange(context, type, count,
-                                                                             indices, &indexRange));
+    ANGLE_VALIDATION_TRY(context->getState().getVertexArray()->getIndexRange(
+        context, type, count, indices, context->getState().isPrimitiveRestartEnabled(),
+        &indexRange));
 
     if (indexRange.end > end || indexRange.start < start)
     {
@@ -789,8 +790,9 @@ bool ValidateDrawRangeElementsBaseVertexOES(const Context *context,
 
     // Note that resolving the index range is a bit slow. We should probably optimize this.
     IndexRange indexRange;
-    ANGLE_VALIDATION_TRY(context->getState().getVertexArray()->getIndexRange(context, type, count,
-                                                                             indices, &indexRange));
+    ANGLE_VALIDATION_TRY(context->getState().getVertexArray()->getIndexRange(
+        context, type, count, indices, context->getState().isPrimitiveRestartEnabled(),
+        &indexRange));
 
     if (indexRange.end > end || indexRange.start < start)
     {
@@ -931,7 +933,7 @@ bool ValidateReadnPixelsKHR(const Context *context,
 
     if (bufSize < 0)
     {
-        ANGLE_VALIDATION_ERROR(GL_INVALID_VALUE, kNegativeBufferSize);
+        ANGLE_VALIDATION_ERROR(GL_INVALID_VALUE, kNegativeBufSize);
         return false;
     }
 
@@ -1351,7 +1353,7 @@ bool ValidateCreateMemoryObjectsEXT(const Context *context,
         return false;
     }
 
-    return ValidateGenOrDelete(context, entryPoint, n);
+    return ValidateGenOrDelete(context, entryPoint, n, memoryObjects);
 }
 
 bool ValidateDeleteMemoryObjectsEXT(const Context *context,
@@ -1365,7 +1367,7 @@ bool ValidateDeleteMemoryObjectsEXT(const Context *context,
         return false;
     }
 
-    return ValidateGenOrDelete(context, entryPoint, n);
+    return ValidateGenOrDelete(context, entryPoint, n, memoryObjects);
 }
 
 bool ValidateGetMemoryObjectParameterivEXT(const Context *context,
@@ -1582,7 +1584,7 @@ bool ValidateDeleteSemaphoresEXT(const Context *context,
         return false;
     }
 
-    return ValidateGenOrDelete(context, entryPoint, n);
+    return ValidateGenOrDelete(context, entryPoint, n, semaphores);
 }
 
 bool ValidateGenSemaphoresEXT(const Context *context,
@@ -1596,7 +1598,7 @@ bool ValidateGenSemaphoresEXT(const Context *context,
         return false;
     }
 
-    return ValidateGenOrDelete(context, entryPoint, n);
+    return ValidateGenOrDelete(context, entryPoint, n, semaphores);
 }
 
 bool ValidateGetSemaphoreParameterui64vEXT(const Context *context,
@@ -1842,7 +1844,7 @@ bool ValidateGetSamplerParameterIivOES(const Context *context,
         ANGLE_VALIDATION_ERROR(GL_INVALID_OPERATION, kExtensionNotEnabled);
         return false;
     }
-    return ValidateGetSamplerParameterBase(context, entryPoint, sampler, pname, nullptr);
+    return ValidateGetSamplerParameterBase(context, entryPoint, sampler, pname, nullptr, params);
 }
 
 bool ValidateGetSamplerParameterIuivOES(const Context *context,
@@ -1861,7 +1863,7 @@ bool ValidateGetSamplerParameterIuivOES(const Context *context,
         ANGLE_VALIDATION_ERROR(GL_INVALID_OPERATION, kExtensionNotEnabled);
         return false;
     }
-    return ValidateGetSamplerParameterBase(context, entryPoint, sampler, pname, nullptr);
+    return ValidateGetSamplerParameterBase(context, entryPoint, sampler, pname, nullptr, params);
 }
 
 bool ValidateSamplerParameterIivOES(const Context *context,
@@ -1918,7 +1920,8 @@ bool ValidateGetSamplerParameterIivEXT(const Context *context,
         ANGLE_VALIDATION_ERROR(GL_INVALID_OPERATION, kExtensionNotEnabled);
         return false;
     }
-    return ValidateGetSamplerParameterBase(context, entryPoint, samplerPacked, pname, nullptr);
+    return ValidateGetSamplerParameterBase(context, entryPoint, samplerPacked, pname, nullptr,
+                                           params);
 }
 
 bool ValidateGetSamplerParameterIuivEXT(const Context *context,
@@ -1937,7 +1940,8 @@ bool ValidateGetSamplerParameterIuivEXT(const Context *context,
         ANGLE_VALIDATION_ERROR(GL_INVALID_OPERATION, kExtensionNotEnabled);
         return false;
     }
-    return ValidateGetSamplerParameterBase(context, entryPoint, samplerPacked, pname, nullptr);
+    return ValidateGetSamplerParameterBase(context, entryPoint, samplerPacked, pname, nullptr,
+                                           params);
 }
 
 bool ValidateGetTexParameterIivEXT(const Context *context,
@@ -2128,11 +2132,14 @@ bool ValidatePLSCommon(const Context *context,
             return false;
         }
     }
-    else
+    else if (expectedStatus == PLSExpectedStatus::Inactive)
     {
-        // PLSExpectedStatus::Inactive is validated by the allow list.
-        ASSERT(expectedStatus != PLSExpectedStatus::Inactive ||
-               context->getState().getPixelLocalStorageActivePlanes() == 0);
+        // INVALID_OPERATION is generated if PIXEL_LOCAL_STORAGE_ACTIVE_PLANES_ANGLE is nonzero.
+        if (context->getState().getPixelLocalStorageActivePlanes() != 0)
+        {
+            ANGLE_VALIDATION_ERROR(GL_INVALID_OPERATION, kPLSActive);
+            return false;
+        }
     }
 
     return true;
@@ -2189,7 +2196,8 @@ bool ValidatePLSTextureType(const Context *context,
                             size_t *textureDepth)
 {
     // INVALID_OPERATION is generated if <backingtexture> is nonzero
-    // and not of type TEXTURE_2D or TEXTURE_2D_ARRAY.
+    // and not of type TEXTURE_2D, TEXTURE_2D_ARRAY, TEXTURE_CUBE_MAP,
+    // or TEXTURE_CUBE_MAP_ARRAY.
     switch (tex->getType())
     {
         case TextureType::_2D:
@@ -2197,6 +2205,12 @@ bool ValidatePLSTextureType(const Context *context,
             return true;
         case TextureType::_2DArray:
             *textureDepth = tex->getDepth(TextureTarget::_2DArray, 0);
+            return true;
+        case TextureType::CubeMap:
+            *textureDepth = 6;
+            return true;
+        case TextureType::CubeMapArray:
+            *textureDepth = tex->getDepth(TextureTarget::CubeMapArray, 0);
             return true;
         default:
             ANGLE_VALIDATION_ERROR(GL_INVALID_OPERATION, kPLSInvalidTextureType);
@@ -2363,7 +2377,8 @@ bool ValidateFramebufferTexturePixelLocalStorageANGLE(const Context *context,
         }
 
         // INVALID_OPERATION is generated if <backingtexture> is nonzero
-        // and not of type GL_TEXTURE_2D or GL_TEXTURE_2D_ARRAY.
+        // and not of type GL_TEXTURE_2D, GL_TEXTURE_2D_ARRAY, GL_TEXTURE_CUBE_MAP,
+        // or GL_TEXTURE_CUBE_MAP_ARRAY.
         size_t textureDepth;
         if (!ValidatePLSTextureType(context, entryPoint, tex, &textureDepth))
         {
@@ -2465,17 +2480,17 @@ bool ValidateBeginPixelLocalStorageANGLE(const Context *context,
         return false;
     }
 
-    // INVALID_OPERATION is generated if RASTERIZER_DISCARD is enabled.
-    if (state.isRasterizerDiscardEnabled())
-    {
-        ANGLE_VALIDATION_ERROR(GL_INVALID_OPERATION, kPLSRasterizerDiscardEnabled);
-        return false;
-    }
-
     // INVALID_OPERATION is generated if TRANSFORM_FEEDBACK_ACTIVE is true.
     if (state.isTransformFeedbackActive())
     {
         ANGLE_VALIDATION_ERROR(GL_INVALID_OPERATION, kPLSTransformFeedbackActive);
+        return false;
+    }
+
+    // INVALID_OPERATION is generated if QCOM_tiled_rendering is active.
+    if (context->getPrivateState().isTiledRendering())
+    {
+        ANGLE_VALIDATION_ERROR(GL_INVALID_OPERATION, kPLSTiledRenderingActive);
         return false;
     }
 
@@ -2524,28 +2539,11 @@ bool ValidateBeginPixelLocalStorageANGLE(const Context *context,
     // INVALID_FRAMEBUFFER_OPERATION is generated if the draw framebuffer has an image attached to
     // any color attachment point on or after:
     //
-    //   COLOR_ATTACHMENT0 +
-    //   MAX_COLOR_ATTACHMENTS_WITH_ACTIVE_PIXEL_LOCAL_STORAGE_ANGLE
-    //
-    const Caps &caps = context->getCaps();
-    for (int i = caps.maxColorAttachmentsWithActivePixelLocalStorage; i < caps.maxColorAttachments;
-         ++i)
-    {
-        if (framebuffer->getColorAttachment(i))
-        {
-            ANGLE_VALIDATION_ERROR(GL_INVALID_FRAMEBUFFER_OPERATION,
-                                   kPLSMaxColorAttachmentsExceded);
-            return false;
-        }
-    }
-
-    // INVALID_FRAMEBUFFER_OPERATION is generated if the draw framebuffer has an image attached to
-    // any color attachment point on or after:
-    //
     //   COLOR_ATTACHMENT0 + MAX_COMBINED_DRAW_BUFFERS_AND_PIXEL_LOCAL_STORAGE_PLANES_ANGLE - <n>
     //
-    for (GLuint i = caps.maxCombinedDrawBuffersAndPixelLocalStoragePlanes - n;
-         i < caps.maxColorAttachmentsWithActivePixelLocalStorage; ++i)
+    const Caps &caps = context->getCaps();
+    for (int i = caps.maxCombinedDrawBuffersAndPixelLocalStoragePlanes - n; i < caps.maxDrawBuffers;
+         ++i)
     {
         if (framebuffer->getColorAttachment(i))
         {
@@ -2607,13 +2605,74 @@ bool ValidateBeginPixelLocalStorageANGLE(const Context *context,
         }
         else
         {
-            // INVALID_OPERATION is generated if <loadops>[0..<n>-1] is
-            // LOAD_OP_LOAD_ANGLE and the pixel local storage plane at that same
-            // index is memoryless.
+            // INVALID_OPERATION is generated if <loadops>[0..<n>-1] is LOAD_OP_LOAD_ANGLE and the
+            // pixel local storage plane at that same index is memoryless.
             if (loadops[i] == GL_LOAD_OP_LOAD_ANGLE)
             {
                 ANGLE_VALIDATION_ERROR(GL_INVALID_OPERATION, kPLSKeepingMemorylessPlane);
                 return false;
+            }
+        }
+
+        if (!plane.isMemoryless())
+        {
+            ASSERT(plane.getTextureID() != TextureID());
+
+            const ImageIndex &planeImageIdx = plane.getTextureImageIndex();
+            ASSERT(planeImageIdx.getLayerCount() == 1);
+            ASSERT(planeImageIdx.getLevelIndex() >= 0);
+
+            // INVALID_OPERATION is generated if, for any active backing texture, the mipmap level
+            // bound to pixel local storage is outside the effective base/max range of that texture.
+            const Texture *const backingTexture = plane.getBackingTexture(context);
+            if (planeImageIdx.getLevelIndex() <
+                    static_cast<GLint>(backingTexture->getState().getEffectiveBaseLevel()) ||
+                planeImageIdx.getLevelIndex() >
+                    static_cast<GLint>(backingTexture->getState().getEffectiveMaxLevel()))
+            {
+                ANGLE_VALIDATION_ERROR(GL_INVALID_OPERATION, kPLSLevelIndexOutOfRange);
+                return false;
+            }
+
+            // INVALID_OPERATION is generated if a single texture slice is bound to more than one
+            // active pixel local storage plane.
+            for (GLsizei j = i + 1; j < n; ++j)
+            {
+                const PixelLocalStoragePlane &otherPlane = pls->getPlane(j);
+                if (!otherPlane.isMemoryless() &&
+                    plane.getTextureID() == otherPlane.getTextureID() &&
+                    planeImageIdx == otherPlane.getTextureImageIndex())
+                {
+                    ANGLE_VALIDATION_ERROR(GL_INVALID_OPERATION, kPLSSingleTexImageMultiplePlanes);
+                    return false;
+                }
+            }
+
+            // INVALID_OPERATION is generated if a single texture slice is simultaneously bound to
+            // an active pixel local storage plane and attached to an enabled drawbuffer.
+            const GLuint maxDrawBuffersWithPLSPlanes = std::min<GLuint>(
+                caps.maxCombinedDrawBuffersAndPixelLocalStoragePlanes - n, caps.maxDrawBuffers);
+            for (GLuint j = 0; j < maxDrawBuffersWithPLSPlanes; ++j)
+            {
+                if (framebuffer->getDrawBufferMask().test(j) &&
+                    framebuffer->getColorAttachment(j)->isTextureWithId(plane.getTextureID()))
+                {
+                    // Compare the ImageIndex values for the PLS plane and framebuffer attachment
+                    // manually; the framebuffer uses a layer index of -1 for texture2d attachments,
+                    // whereas PLS uses a layer index of 0.
+                    const ImageIndex &attachmentImageIdx =
+                        framebuffer->getColorAttachment(j)->getTextureImageIndex();
+                    ASSERT(attachmentImageIdx.getLayerCount() == 1);
+                    if (planeImageIdx.getType() == attachmentImageIdx.getType() &&
+                        planeImageIdx.getLevelIndex() == attachmentImageIdx.getLevelIndex() &&
+                        planeImageIdx.getLayerIndex() ==
+                            std::max(attachmentImageIdx.getLayerIndex(), 0))
+                    {
+                        ANGLE_VALIDATION_ERROR(GL_INVALID_OPERATION,
+                                               kPLSSingleTexImagePLSAndAttachment);
+                        return false;
+                    }
+                }
             }
         }
     }
@@ -2642,18 +2701,6 @@ bool ValidateBeginPixelLocalStorageANGLE(const Context *context,
             return false;
         }
     }
-
-    // INVALID_OPERATION is generated if a single texture image is bound to more than one pixel
-    // local storage plane.
-    //
-    //   TODO(anglebug.com/40096838): Block feedback loops
-    //
-
-    // INVALID_OPERATION is generated if a single texture image is simultaneously bound to a pixel
-    // local storage plane and attached to the draw framebuffer.
-    //
-    //   TODO(anglebug.com/40096838): Block feedback loops
-    //
 
     return true;
 }
@@ -4013,7 +4060,7 @@ bool ValidateGetObjectLabelEXT(const Context *context,
 
     if (bufSize < 0)
     {
-        ANGLE_VALIDATION_ERROR(GL_INVALID_VALUE, kNegativeBufferSize);
+        ANGLE_VALIDATION_ERROR(GL_INVALID_VALUE, kNegativeBufSize);
         return false;
     }
 

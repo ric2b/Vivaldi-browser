@@ -3517,8 +3517,6 @@ void WebGL2RenderingContextBase::clearBufferfi(GLenum buffer,
 }
 
 WebGLQuery* WebGL2RenderingContextBase::createQuery() {
-  if (isContextLost())
-    return nullptr;
   return MakeGarbageCollected<WebGLQuery>(this);
 }
 
@@ -3745,8 +3743,6 @@ ScriptValue WebGL2RenderingContextBase::getQueryParameter(
 }
 
 WebGLSampler* WebGL2RenderingContextBase::createSampler() {
-  if (isContextLost())
-    return nullptr;
   return MakeGarbageCollected<WebGLSampler>(this);
 }
 
@@ -3960,9 +3956,6 @@ ScriptValue WebGL2RenderingContextBase::getSamplerParameter(
 
 WebGLSync* WebGL2RenderingContextBase::fenceSync(GLenum condition,
                                                  GLbitfield flags) {
-  if (isContextLost())
-    return nullptr;
-
   if (condition != GL_SYNC_GPU_COMMANDS_COMPLETE) {
     SynthesizeGLError(GL_INVALID_ENUM, "fenceSync",
                       "condition must be SYNC_GPU_COMMANDS_COMPLETE");
@@ -4064,8 +4057,6 @@ ScriptValue WebGL2RenderingContextBase::getSyncParameter(
 }
 
 WebGLTransformFeedback* WebGL2RenderingContextBase::createTransformFeedback() {
-  if (isContextLost())
-    return nullptr;
   return MakeGarbageCollected<WebGLTransformFeedback>(
       this, WebGLTransformFeedback::TFType::kUser);
 }
@@ -4431,17 +4422,7 @@ ScriptValue WebGL2RenderingContextBase::getIndexedParameter(
     case GL_BLEND_SRC_RGB:
     case GL_BLEND_SRC_ALPHA:
     case GL_BLEND_DST_RGB:
-    case GL_BLEND_DST_ALPHA: {
-      if (!ExtensionEnabled(kOESDrawBuffersIndexedName)) {
-        // return null
-        SynthesizeGLError(GL_INVALID_ENUM, "getIndexedParameter",
-                          "invalid parameter name");
-        return ScriptValue::CreateNull(script_state->GetIsolate());
-      }
-      GLint value = -1;
-      ContextGL()->GetIntegeri_v(target, index, &value);
-      return WebGLAny(script_state, value);
-    }
+    case GL_BLEND_DST_ALPHA:
     case GL_COLOR_WRITEMASK: {
       if (!ExtensionEnabled(kOESDrawBuffersIndexedName)) {
         // Enum validation has to happen here to return null
@@ -4451,10 +4432,25 @@ ScriptValue WebGL2RenderingContextBase::getIndexedParameter(
                           "invalid parameter name");
         return ScriptValue::CreateNull(script_state->GetIsolate());
       }
-      Vector<bool> values(4);
-      ContextGL()->GetBooleani_v(target, index,
-                                 reinterpret_cast<GLboolean*>(values.data()));
-      return WebGLAny(script_state, values);
+      if (index >= static_cast<GLuint>(MaxDrawBuffers())) {
+        SynthesizeGLError(GL_INVALID_VALUE, "getIndexedParameter",
+                          "index out of range");
+        return ScriptValue::CreateNull(script_state->GetIsolate());
+      }
+      if (target == GL_COLOR_WRITEMASK) {
+        constexpr size_t result_size = 4;
+        Vector<GLint> values(result_size);
+        ContextGL()->GetIntegeri_v(target, index, values.data());
+        Vector<bool> bool_values(result_size);
+        for (size_t i = 0; i < result_size; i++) {
+          bool_values[i] = (values[i] != GL_FALSE);
+        }
+        return WebGLAny(script_state, bool_values);
+      }
+      // All parameters except GL_COLOR_WRITEMASK are a single integer
+      GLint value = -1;
+      ContextGL()->GetIntegeri_v(target, index, &value);
+      return WebGLAny(script_state, value);
     }
     default:
       SynthesizeGLError(GL_INVALID_ENUM, "getIndexedParameter",
@@ -4689,9 +4685,6 @@ void WebGL2RenderingContextBase::uniformBlockBinding(
 }
 
 WebGLVertexArrayObject* WebGL2RenderingContextBase::createVertexArray() {
-  if (isContextLost())
-    return nullptr;
-
   return MakeGarbageCollected<WebGLVertexArrayObject>(
       this, WebGLVertexArrayObjectBase::kVaoTypeUser);
 }
@@ -5000,7 +4993,6 @@ ScriptValue WebGL2RenderingContextBase::getParameter(ScriptState* script_state,
                         "OES_shader_multisample_interpolation not enabled");
       return ScriptValue::CreateNull(script_state->GetIsolate());
     case GL_MAX_PIXEL_LOCAL_STORAGE_PLANES_ANGLE:
-    case GL_MAX_COLOR_ATTACHMENTS_WITH_ACTIVE_PIXEL_LOCAL_STORAGE_ANGLE:
     case GL_MAX_COMBINED_DRAW_BUFFERS_AND_PIXEL_LOCAL_STORAGE_PLANES_ANGLE:
     case GL_PIXEL_LOCAL_STORAGE_ACTIVE_PLANES_ANGLE:
       if (ExtensionEnabled(kWebGLShaderPixelLocalStorageName)) {

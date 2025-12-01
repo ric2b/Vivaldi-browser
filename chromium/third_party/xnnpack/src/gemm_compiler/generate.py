@@ -9,76 +9,47 @@ import sys
 
 from gemm_compiler import base_architecture
 
-"""Shared logic for assembly gemm microkernel generation."""
-
 
 def generate_gemm_microkernel(
-    M: int, N: int, isa: base_architecture.BaseArchitecture, output_file: str
+    isa: base_architecture.BaseArchitecture, output_file: str
 ):
-  elements_per_register = isa.n_step()
-  num_horizontal_registers = int(N / elements_per_register)
-  asm_string = isa.header(M, N, isa.prefix(), isa.isa())
-
-  k_register = isa.k_register()
-  acc_registers = isa.acc_registers()
-  w_ptr_reg = isa.w_ptr_register()
+  """Shared logic for assembly gemm microkernel generation."""
+  asm_string = isa.header()
 
   # adjust inner loop
   asm_string += isa.adjust_kc()
 
   # setup a{1}->a{M-1} & c{1]->c{M-1}registers
-  asm_string += isa.input_output_register_setup(
-      M=M,
-  )
+  asm_string += isa.input_output_register_setup()
 
-  # Pre outer loop preparation
-  asm_string += isa.outer_loop_prepare(M=M, N=num_horizontal_registers)
+  ## Pre outer loop preparation
+  asm_string += isa.outer_loop_prepare()
 
-  # the outer loop label
-  asm_string += '\nouter_loop:\n'
+  ## the outer loop label
+  asm_string += '\n.Louter_loop:\n'
   asm_string += '# Initialize k counter.\n'
-  asm_string += isa.initialize_k_register(k_register)
+  asm_string += isa.initialize_k_register()
 
-  # Read a registers from the stack if required
-  asm_string += isa.read_a_registers(M=M)
+  ## Read a registers from the stack if required
+  asm_string += isa.read_a_registers()
 
-  # Initialize accumulators
-  asm_string += isa.init_accumulators(
-      M=M,
-      N=num_horizontal_registers,
-  )
-  asm_string += isa.increment_ptr(
-      ptr=w_ptr_reg, step=isa.register_bytes() * num_horizontal_registers
-  )
+  ## Initialize accumulators
+  asm_string += isa.init_accumulators()
 
-  # inner loop
-  asm_string += isa.inner_loop(M, N)
+  ## inner loop
+  asm_string += isa.inner_loop()
 
-  # loop counter
-  asm_string += isa.cmp_k_and_jump_if_less(label='inner_loop')
+  asm_string += '.Linner_loop_end:\n'
+  asm_string += isa.dequantize()
 
-  asm_string += isa.dequantize(M=M, N=num_horizontal_registers, W=w_ptr_reg)
+  ## min/max clamping
+  asm_string += '# Min/max clamping.\n'
+  asm_string += isa.clamp()
 
-  # min/max clamping
-  asm_string += '# Min/max clamping..\n'
-  for nr in range(0, num_horizontal_registers):
-    for mr in range(0, M):
-      asm_string += isa.clamp_min(
-          reg=acc_registers[M * nr + mr], prefix=isa.prefix()
-      )
-  for nr in range(0, num_horizontal_registers):
-    for mr in range(0, M):
-      asm_string += isa.clamp_max(
-          reg=acc_registers[M * nr + mr], prefix=isa.prefix()
-      )
+  ## store
+  asm_string += isa.store()
 
-  # store
-  asm_string += isa.store(
-      M=M,
-      N=N,
-  )
-
-  asm_string += isa.epilogue(M, N, isa)
+  asm_string += isa.epilogue()
 
   # Correctly indent the generated assembly.
   lines = asm_string.splitlines()
@@ -92,6 +63,11 @@ def generate_gemm_microkernel(
   ]
   # Strip indentation from empty lines.
   stripped_lines = ['' if line.isspace() else line for line in stripped_lines]
+  # Strip indentation from header.
+  stripped_lines = [
+      line.lstrip() if line.startswith('      //') else line
+      for line in stripped_lines
+  ]
   asm_string = '\n'.join(stripped_lines)
 
   with open(output_file, 'w') as f:

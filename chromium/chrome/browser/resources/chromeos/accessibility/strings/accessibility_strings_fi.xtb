@@ -295,6 +295,7 @@
 <translation id="2867808975387772810">Lähdeluettelo</translation>
 <translation id="2873259058405069099">Siirry taulukon alkuun</translation>
 <translation id="287383510823843610">Tumma oranssi</translation>
+<translation id="2876760662374103627">Kasvo-ohjaus käytössä</translation>
 <translation id="2879867157561757640">Pyyhkäise alas kolmella sormella</translation>
 <translation id="288178314850623291">Siirtymiskomennoilla voit siirtyä tietyn tyyppisten elementtien välillä. Siirry seuraavaan otsikkoon painamalla haku + H tai edelliseen painamalla haku + vaihto + H.</translation>
 <translation id="2885764457467528513">{COUNT,plural, =1{minuutti}other{minuuttia}}</translation>
@@ -1115,6 +1116,7 @@
 <translation id="8316881042119029234">Pitsi</translation>
 <translation id="8326783648485765113">Ruohonvihreä</translation>
 <translation id="8345569862449483843">{COUNT,plural, =1{ristikko}other{# ristikkomerkkiä}}</translation>
+<translation id="8351821207686449674">Tekstitykset päälle/pois</translation>
 <translation id="8378855320830505539">Alue</translation>
 <translation id="8382679411218029383">Ennakoiva tekstin syöttö upotettuna ja luettelona</translation>
 <translation id="8394908167088220973">Media: toista/keskeytä</translation>

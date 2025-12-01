@@ -23,10 +23,6 @@
 #include "sql/init_status.h"
 #include "sql/meta_table.h"
 
-#if BUILDFLAG(IS_ANDROID)
-#include "components/history/core/browser/android/android_urls_database.h"
-#endif
-
 #include "db/vivaldi_history_database.h"
 
 namespace base {
@@ -49,9 +45,6 @@ namespace history {
 // as the storage interface. Logic for manipulating this storage layer should
 // be in HistoryBackend.cc.
 class HistoryDatabase : public DownloadDatabase,
-#if BUILDFLAG(IS_ANDROID)
-                        public AndroidURLsDatabase,
-#endif
                         public URLDatabase,
                         public VisitDatabase,
                         public VisitAnnotationsDatabase,
@@ -203,11 +196,6 @@ class HistoryDatabase : public DownloadDatabase,
   sql::Database& GetDBForTesting();
 
  private:
-#if BUILDFLAG(IS_ANDROID)
-  // AndroidProviderBackend uses the `db_`.
-  friend class AndroidProviderBackend;
-  FRIEND_TEST_ALL_PREFIXES(AndroidURLsMigrationTest, MigrateToVersion22);
-#endif
   friend class ::InMemoryURLIndexTest;
 
   // Overridden from URLDatabase, DownloadDatabase, VisitDatabase, and
@@ -231,6 +219,12 @@ class HistoryDatabase : public DownloadDatabase,
 #endif
 
   bool MigrateRemoveTypedUrlMetadata();
+
+#if BUILDFLAG(IS_ANDROID)
+  // The android_urls table ceased usage in 91.0.4438.0. This method drops the
+  // table if it exists.
+  bool DropAndroidUrlsTable();
+#endif
 
   // ---------------------------------------------------------------------------
 

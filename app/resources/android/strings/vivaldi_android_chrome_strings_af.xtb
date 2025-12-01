@@ -14,13 +14,17 @@
 <translation id="2433507940547922241">Voorkoms</translation>
 <translation id="2501278716633472235">Gaan terug</translation>
 <translation id="2633278372998075009">Privaat oortjies</translation>
+<translation id="265156376773362237">Standaardvooraflaai</translation>
 <translation id="272026394418727548">Vivaldi se tuisblad</translation>
+<translation id="2871733351037274014">Laai bladsye vooraf</translation>
 <translation id="2951071800649516099">Voeg bladsye tot u leeslys toe vir later</translation>
 <translation id="3060635849835183725">{BOOKMARKS_COUNT,plural,
           =1 {<ph name="BOOKMARKS_COUNT_ONE" /> boekmerk}
           other {<ph name="BOOKMARKS_COUNT_MANY" /> boekmerke}}</translation>
 <translation id="3076631378407175873">Kopiereg <ph name="YEAR" /> Vivaldi Technologies AS. Alle regte voorbehou.</translation>
+<translation id="3232293466644486101">Skrap blaaierdata …</translation>
 <translation id="3234355010754616171">Nuwe privaat oortjie</translation>
+<translation id="3237087289225714896">Standaardvooraflaai:</translation>
 <translation id="3377025655491224618">Privaat oortjie</translation>
 <translation id="3504699618187058974">Oortjiegroepe</translation>
 <translation id="3518985090088779359">Aanvaar &amp; gaan voort</translation>
@@ -28,6 +32,7 @@
 <translation id="3602290021589620013">Voorskou</translation>
 <translation id="3700829948786686853">Welkom by Vivaldi</translation>
 <translation id="3719826155360621982">Tuisblad</translation>
+<translation id="3738139272394829648">Raak om te soek</translation>
 <translation id="385051799172605136">Terug</translation>
 <translation id="399014816462153200">Lees artikels:</translation>
 <translation id="4121750346708795461">Deur hierdie toepassing te gebruik, stem u in tot Vivaldi se <ph name="BEGIN_LINK1" />Eindgebruikerlisensieooreenkoms<ph name="END_LINK1" /> en <ph name="BEGIN_LINK2" />Privaatheidsbeleid<ph name="END_LINK2" />.</translation>
@@ -36,6 +41,7 @@
 <translation id="4195643157523330669">Open in nuwe oortjie</translation>
 <translation id="4225895483398857530">Nutsbalkkortpad</translation>
 <translation id="4243710787042215766">Open in privaat oortjie</translation>
+<translation id="4291407919474070700"><ph name="BEGIN_LINK" />Aktiveer skermslot in Android-instellings<ph name="END_LINK" /></translation>
 <translation id="4304713468139749426">Wagwoordbestuurder</translation>
 <translation id="451872707440238414">Deursoek u boekmerke</translation>
 <translation id="4526803704855831732">Privaat Oortjies</translation>
@@ -50,6 +56,9 @@ Tik-om-te-soek is ’n funksie wat slegs beskikbaar is wanneer Google ingestel i
 <translation id="5079259810715830221">Wanneer ’n Google-werf vra om skakels op hul werf vooraf te laai, enkripteer en laai Vivaldi blaaie vooraf deur Google se bedieners sonder koekies. Dit versteek u identeiteit van die vooraf gelaaide werf.</translation>
 <translation id="5118676864324397542"><ph name="APP_NAME" /> berging</translation>
 <translation id="5186185447130319458">Privaat</translation>
+<translation id="5206168361184759344">{FILE_COUNT, plural,
+            =1 {Laai tans lêer af…}
+            other {Laai tans # lêers af…}}</translation>
 <translation id="5233638681132016545">Nuwe oortjie</translation>
 <translation id="5375131951310889874">Leer meer oor onderwerpe op webwerwe sonder om die blad te verlaat. Tik-om-te-soek is ’n funksie wat slegs beskikbaar is wanneer Google ingestel is as versteksoekenjin in Vivaldi. Dit stuur ’n woord en die omringende konteks na Google Search en antwoord met definisies, beelde, soekresultate en ander details.
 
@@ -57,24 +66,37 @@ Druk lank op die soekterm om die seleksie aan te pas. Om die soekopdrag te verfy
 <translation id="572328651809341494">Onlangse oortjies</translation>
 <translation id="6150320133806434356">Boekmerk bewaar</translation>
 <translation id="6336451774241870485">Nuwe privaat oortjie</translation>
+<translation id="6337323516034698937">Om hierdie oortjie na ’n ander toestel te stuur moet u op altwee toestelle op Vivaldi Sinchronisering aangeteken wees. Maak seker dat u die enkripsiewagwoord invoer indien nodig.</translation>
 <translation id="6404511346730675251">Wysig boekmerk</translation>
+<translation id="650224091954855786">{FILE_COUNT, plural,
+          =1 {Lêer is afgelaai}
+          other {# aflaaie is klaar}}</translation>
 <translation id="6585139692466700358">Bied aan om bladsye in vreemde tale d.m.v. Vivaldi se vertaaldiens te vertaal</translation>
+<translation id="6588043302623806746">Gebruik beveiligde DNS</translation>
 <translation id="6593061639179217415">Werkskermwerf</translation>
 <translation id="6610147964972079463">Sluit privaat oortjies</translation>
 <translation id="7029995644714925509">Wanneer ’n werf vra om skakels op hul werf vooraf te laai, enkripteer en laai Vivaldi blaaie vooraf deur Google se bedieners sonder koekies. Dit versteek u identeiteit van die vooraf gelaaide werf.</translation>
 <translation id="706339621163631076">Vivaldi se Privaatheidsbeleid</translation>
 <translation id="732145680195464316">Boekmerk is in <ph name="PRODUCT_NAME" /> bewaar</translation>
+<translation id="7324354302972299151">Stuur ’n “Do Not Track”-versoek</translation>
+<translation id="7359002509206457351">Toegang tot betaalmetodes</translation>
+<translation id="7419565702166471774">Gebruik altyd veilige verbindings</translation>
 <translation id="7427132068601343474">Oor Vivaldi</translation>
+<translation id="7456774706094330779">Uitgebreide vooraflaai</translation>
 <translation id="7465104139234185284">Sluit alle privaat oortjies</translation>
 <translation id="7481312909269577407">Vorentoe</translation>
 <translation id="7968014550143838305">Tot leeslys toegevoeg</translation>
 <translation id="804786196054284061">Eindgebruikerlisensieooreenkoms</translation>
+<translation id="8062594758852531064">Uitgebreide vooraflaai:</translation>
 <translation id="8127542551745560481">Wysig tuisblad</translation>
+<translation id="8348430946834215779">Gebruik HTTPS waar moontlik en word gewaarsku voordat werwe laai wat dit nie steun nie</translation>
 <translation id="8560602726703398413">Bekyk u leeslys in Boekmerke</translation>
 <translation id="85991616550051997">Gaan na tuisblad</translation>
 <translation id="8820817407110198400">Boekmerke</translation>
 <translation id="9042893549633094279">Privaatheid en sekuriteit</translation>
 <translation id="9063523880881406963">Deaktiveer Versoek om werkskermwerf</translation>
 <translation id="9080642952018487277">Betree privaat modus</translation>
+<translation id="930124987204876019">Skrap geskiedenis, webkoekies, werfdata, kasgeheue …</translation>
+<translation id="961856697154696964">Skrap blaaierdata</translation>
 <translation id="96681097142096641">Bekyk vereenvoudigde bladsy?</translation>
 </translationbundle>

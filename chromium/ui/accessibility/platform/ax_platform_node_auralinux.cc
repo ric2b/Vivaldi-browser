@@ -2562,10 +2562,11 @@ void AXPlatformNodeAuraLinux::DestroyAtkObjects() {
 }
 
 // static
-AXPlatformNode* AXPlatformNode::Create(AXPlatformNodeDelegate* delegate) {
+AXPlatformNode::Pointer AXPlatformNode::Create(
+    AXPlatformNodeDelegate* delegate) {
   AXPlatformNodeAuraLinux* node = new AXPlatformNodeAuraLinux();
   node->Init(delegate);
-  return node;
+  return Pointer(node);
 }
 
 // static
@@ -4013,6 +4014,35 @@ void AXPlatformNodeAuraLinux::OnAriaCurrentChanged() {
       ATK_OBJECT(atk_object), ATK_STATE_ACTIVE,
       aria_current != ax::mojom::AriaCurrentState::kNone &&
           aria_current != ax::mojom::AriaCurrentState::kFalse);
+}
+
+void AXPlatformNodeAuraLinux::OnAriaNotificationPosted(
+    const std::string& announcement,
+    ax::mojom::AriaNotificationPriority priority_property) {
+  AtkObject* atk_object = GetOrCreateAtkObject();
+  if (!atk_object) {
+    return;
+  }
+
+  // Only newer Atk versions support the notification signal type.
+  if (base::Version(atk_get_version()).CompareTo(base::Version("2.50.0")) >=
+      0) {
+    auto MapPropertiesToAtkLiveType = [&]() -> AriaNotificationAtkLive {
+      switch (priority_property) {
+        case ax::mojom::AriaNotificationPriority::kNormal:
+          return AriaNotificationAtkLive::kPolite;
+        case ax::mojom::AriaNotificationPriority::kHigh:
+          return AriaNotificationAtkLive::kAssertive;
+      }
+      NOTREACHED();
+    };
+    g_signal_emit_by_name(atk_object, "notification", announcement.c_str(),
+                          MapPropertiesToAtkLiveType());
+  } else {
+    g_signal_emit_by_name(atk_object, "text-insert", 0, announcement.size(),
+                          announcement.c_str());
+    OnSubtreeCreated();
+  }
 }
 
 void AXPlatformNodeAuraLinux::OnAlertShown() {

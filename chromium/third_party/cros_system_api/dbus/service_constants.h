@@ -388,6 +388,7 @@ const char kReadDirectoryEntryIds[] = "ReadDirectoryEntryIds";
 const char kGetFileInfo[] = "GetFileInfo";
 const char kReadFileChunk[] = "ReadFileChunk";
 const char kCopyFileFromLocal[] = "CopyFileFromLocal";
+const char kRequestCopyFileFromLocal[] = "RequestCopyFileFromLocal";
 const char kDeleteObject[] = "DeleteObject";
 const char kRenameObject[] = "RenameObject";
 const char kCreateDirectory[] = "CreateDirectory";
@@ -395,6 +396,7 @@ const char kCreateDirectory[] = "CreateDirectory";
 // Signals.
 const char kMTPStorageAttached[] = "MTPStorageAttached";
 const char kMTPStorageDetached[] = "MTPStorageDetached";
+const char kCopyFileFromLocalCompleted[] = "CopyFileFromLocalCompleted";
 
 // For FileEntry struct:
 const uint32_t kInvalidFileId = 0xffffffff;

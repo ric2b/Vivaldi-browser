@@ -381,8 +381,8 @@ bool String::MakeExternal(Isolate* isolate,
   bool is_internalized = IsInternalizedString(this);
   bool has_pointers = StringShape(this).IsIndirect();
 
-  base::SpinningMutexGuardIf mutex_guard(isolate->internalized_string_access(),
-                                         is_internalized);
+  base::MutexGuardIf mutex_guard(isolate->internalized_string_access(),
+                                 is_internalized);
   // Morph the string to an external string by replacing the map and
   // reinitializing the fields.  This won't work if the space the existing
   // string occupies is too small for a regular external string.  Instead, we
@@ -475,8 +475,8 @@ bool String::MakeExternal(Isolate* isolate,
   bool is_internalized = IsInternalizedString(this);
   bool has_pointers = StringShape(this).IsIndirect();
 
-  base::SpinningMutexGuardIf mutex_guard(isolate->internalized_string_access(),
-                                         is_internalized);
+  base::MutexGuardIf mutex_guard(isolate->internalized_string_access(),
+                                 is_internalized);
   // Morph the string to an external string by replacing the map and
   // reinitializing the fields.  This won't work if the space the existing
   // string occupies is too small for a regular external string.  Instead, we
@@ -1111,8 +1111,8 @@ void String::WriteToFlat2(SinkCharT* dst, Tagged<ConsString> src,
 
 // static
 size_t String::WriteUtf8(Isolate* isolate, DirectHandle<String> string,
-                         char* buffer, size_t capacity,
-                         Utf8EncodingFlags flags) {
+                         char* buffer, size_t capacity, Utf8EncodingFlags flags,
+                         size_t* processed_characters_return) {
   DCHECK_IMPLIES(flags & Utf8EncodingFlag::kNullTerminate, capacity > 0);
   DCHECK_IMPLIES(capacity > 0, buffer != nullptr);
 
@@ -1121,19 +1121,22 @@ size_t String::WriteUtf8(Isolate* isolate, DirectHandle<String> string,
   DisallowGarbageCollection no_gc;
   FlatContent content = string->GetFlatContent(no_gc);
   DCHECK(content.IsFlat());
-  if (content.IsOneByte()) {
-    return unibrow::Utf8::Encode<uint8_t>(
-               content.ToOneByteVector(), buffer, capacity,
-               flags & Utf8EncodingFlag::kNullTerminate,
-               flags & Utf8EncodingFlag::kReplaceInvalid)
-        .bytes_written;
-  } else {
-    return unibrow::Utf8::Encode<uint16_t>(
-               content.ToUC16Vector(), buffer, capacity,
-               flags & Utf8EncodingFlag::kNullTerminate,
-               flags & Utf8EncodingFlag::kReplaceInvalid)
-        .bytes_written;
+
+  auto encoding_result = content.IsOneByte()
+                             ? unibrow::Utf8::Encode<uint8_t>(
+                                   content.ToOneByteVector(), buffer, capacity,
+                                   flags & Utf8EncodingFlag::kNullTerminate,
+                                   flags & Utf8EncodingFlag::kReplaceInvalid)
+                             : unibrow::Utf8::Encode<uint16_t>(
+                                   content.ToUC16Vector(), buffer, capacity,
+                                   flags & Utf8EncodingFlag::kNullTerminate,
+                                   flags & Utf8EncodingFlag::kReplaceInvalid);
+
+  if (processed_characters_return != nullptr) {
+    *processed_characters_return = encoding_result.characters_processed;
   }
+
+  return encoding_result.bytes_written;
 }
 
 template <typename SourceChar>
@@ -1489,10 +1492,9 @@ int String::IndexOf(Isolate* isolate, DirectHandle<String> receiver,
                                         start_index);
 }
 
-MaybeDirectHandle<String> String::GetSubstitution(Isolate* isolate,
-                                                  Match* match,
-                                                  Handle<String> replacement,
-                                                  uint32_t start_index) {
+MaybeDirectHandle<String> String::GetSubstitution(
+    Isolate* isolate, Match* match, DirectHandle<String> replacement,
+    uint32_t start_index) {
   Factory* factory = isolate->factory();
 
   const int replacement_length = replacement->length();

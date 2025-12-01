@@ -22,7 +22,7 @@ namespace {
 
 template <typename Type>
 using ResponseCallback =
-    base::OnceCallback<void(const ProtobufHttpStatus&, std::unique_ptr<Type>)>;
+    base::OnceCallback<void(const HttpStatus&, std::unique_ptr<Type>)>;
 
 template <typename ProtoType, typename StructType>
 using ConversionFunction = std::unique_ptr<StructType> (*)(const ProtoType&);
@@ -37,8 +37,7 @@ ResponseCallback<ProtoType> ConvertCallback(
   return base::BindOnce(
       [](ResponseCallback<StructType> struct_callback,
          ConversionFunction<ProtoType, StructType> conversion_function,
-         const ProtobufHttpStatus& status,
-         std::unique_ptr<ProtoType> proto_type) {
+         const HttpStatus& status, std::unique_ptr<ProtoType> proto_type) {
         std::move(struct_callback)
             .Run(status,
                  proto_type ? conversion_function(*proto_type) : nullptr);
@@ -50,12 +49,14 @@ ResponseCallback<ProtoType> ConvertCallback(
 
 CorpSessionAuthzServiceClient::CorpSessionAuthzServiceClient(
     scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
+    std::unique_ptr<net::ClientCertStore> client_cert_store,
     std::unique_ptr<OAuthTokenGetter> oauth_token_getter,
     std::string_view support_id)
     : oauth_token_getter_(std::move(oauth_token_getter)),
       http_client_(ServiceUrls::GetInstance()->remoting_corp_endpoint(),
                    oauth_token_getter_.get(),
-                   url_loader_factory),
+                   url_loader_factory,
+                   std::move(client_cert_store)),
       support_id_(support_id) {
   session_authz_path_ = support_id.empty()
                             ? internal::GetRemoteAccessSessionAuthzPath()

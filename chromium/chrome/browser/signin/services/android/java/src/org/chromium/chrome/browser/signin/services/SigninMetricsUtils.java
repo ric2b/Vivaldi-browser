@@ -10,8 +10,10 @@ import androidx.annotation.VisibleForTesting;
 import org.jni_zero.NativeMethods;
 
 import org.chromium.base.metrics.RecordHistogram;
+import org.chromium.build.annotations.NullMarked;
 import org.chromium.components.signin.metrics.AccountConsistencyPromoAction;
 import org.chromium.components.signin.metrics.SigninAccessPoint;
+import org.chromium.components.signin.metrics.SigninPromoAction;
 import org.chromium.components.signin.metrics.SyncButtonClicked;
 import org.chromium.components.signin.metrics.SyncButtonsType;
 
@@ -19,6 +21,7 @@ import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 
 /** Util methods for signin metrics logging. */
+@NullMarked
 public class SigninMetricsUtils {
     /** Used to record Signin.AddAccountState histogram. Do not change existing values. */
     @Retention(RetentionPolicy.SOURCE)
@@ -57,18 +60,6 @@ public class SigninMetricsUtils {
     }
 
     /**
-     * Logs Signin.SigninStartedAccessPoint histogram (used to record that the sync consent screen
-     * was shown). Sign-in completion histogram is recorded by {@link
-     * SigninManager#signinAndEnableSync}.
-     *
-     * @param accessPoint {@link SigninAccessPoint} that initiated the sign-in flow.
-     */
-    public static void logSyncConsentStarted(@SigninAccessPoint int accessPoint) {
-        RecordHistogram.recordEnumeratedHistogram(
-                "Signin.SigninStartedAccessPoint", accessPoint, SigninAccessPoint.MAX_VALUE);
-    }
-
-    /**
      * Logs Signin.SignIn.Started histogram (used to record that a signin UI was displayed). Sign-in
      * completion histogram is recorded by {@link SigninManager#signin}.
      *
@@ -79,13 +70,15 @@ public class SigninMetricsUtils {
                 "Signin.SignIn.Started", accessPoint, SigninAccessPoint.MAX_VALUE);
     }
 
-    /** Logs signin user action for a given {@link SigninAccessPoint}. */
-    public static void logSigninUserActionForAccessPoint(@SigninAccessPoint int accessPoint) {
-        // TODO(crbug.com/40233859): Remove this check when user action checks are removed
-        // from native code.
-        if (accessPoint != SigninAccessPoint.SETTINGS_SYNC_OFF_ROW) {
-            SigninMetricsUtilsJni.get().logSigninUserActionForAccessPoint(accessPoint);
-        }
+    /**
+     * Logs Signin.SignIn.Offered histograms (used to record that a sign-in promo was displayed).
+     *
+     * @param promoAction {@link SigninPromoAction} user actions on the sign-in promo.
+     * @param accessPoint {@link SigninAccessPoint} that initiated the sign-in flow.
+     */
+    public static void logSigninOffered(
+            @SigninPromoAction int promoAction, @SigninAccessPoint int accessPoint) {
+        SigninMetricsUtilsJni.get().logSigninOffered(promoAction, accessPoint);
     }
 
     /** Logs Signin.AddAccountState histogram. */
@@ -123,7 +116,9 @@ public class SigninMetricsUtils {
     public interface Natives {
         void logSigninUserActionForAccessPoint(int accessPoint);
 
-        void logAccountConsistencyPromoAction(int promoAction, int accessPoint);
+        void logAccountConsistencyPromoAction(int consistencyPromoAction, int accessPoint);
+
+        void logSigninOffered(int signinPromoAction, int accessPoint);
     }
 
     private SigninMetricsUtils() {}

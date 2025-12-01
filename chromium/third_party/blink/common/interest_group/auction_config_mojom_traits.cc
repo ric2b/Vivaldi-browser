@@ -16,7 +16,6 @@
 #include "base/strings/string_util.h"
 #include "base/time/time.h"
 #include "base/uuid.h"
-#include "third_party/abseil-cpp/absl/types/variant.h"
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/common/interest_group/auction_config.h"
 #include "third_party/blink/public/mojom/interest_group/interest_group_types.mojom-shared.h"
@@ -214,8 +213,10 @@ bool StructTraits<blink::mojom::AuctionAdConfigNonSharedParamsDataView,
   if (!data.ReadInterestGroupBuyers(&out->interest_group_buyers) ||
       !data.ReadAuctionSignals(&out->auction_signals) ||
       !data.ReadSellerSignals(&out->seller_signals) ||
+      !data.ReadSellerTkvSignals(&out->seller_tkv_signals) ||
       !data.ReadSellerTimeout(&out->seller_timeout) ||
       !data.ReadPerBuyerSignals(&out->per_buyer_signals) ||
+      !data.ReadPerBuyerTkvSignals(&out->per_buyer_tkv_signals) ||
       !data.ReadBuyerTimeouts(&out->buyer_timeouts) ||
       !data.ReadReportingTimeout(&out->reporting_timeout) ||
       !data.ReadSellerCurrency(&out->seller_currency) ||
@@ -327,6 +328,13 @@ bool StructTraits<blink::mojom::AuctionAdConfigNonSharedParamsDataView,
     // If `all_slots_requested_sizes` is set, `requested_size` must be in it.
     if (out->requested_size &&
         !base::Contains(ad_sizes, *out->requested_size)) {
+      return false;
+    }
+  }
+
+  for (const auto& signal : out->per_buyer_tkv_signals) {
+    // Buyer must be HTTPS.
+    if (signal.first.scheme() != url::kHttpsScheme) {
       return false;
     }
   }

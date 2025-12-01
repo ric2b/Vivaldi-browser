@@ -116,7 +116,6 @@
 #include "third_party/blink/renderer/core/scroll/scroll_into_view_util.h"
 #include "third_party/blink/renderer/core/scroll/scrollable_area.h"
 #include "third_party/blink/renderer/core/scroll/scrollbar_theme.h"
-#include "third_party/blink/renderer/core/scroll/smooth_scroll_sequencer.h"
 #include "third_party/blink/renderer/core/timing/dom_window_performance.h"
 #include "third_party/blink/renderer/core/timing/event_timing.h"
 #include "third_party/blink/renderer/core/view_transition/view_transition.h"
@@ -126,6 +125,7 @@
 #include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 #include "ui/base/ui_base_features.h"
 #include "ui/gfx/geometry/point_conversions.h"
+#include "ui/gfx/geometry/point_f.h"
 
 namespace blink {
 
@@ -195,6 +195,11 @@ void PaintLayerScrollableArea::DidCompositorScroll(
 void PaintLayerScrollableArea::DisposeImpl() {
   rare_data_.Clear();
 
+  for (ScrollMarkerGroupData* scroll_marker_group :
+       scroll_marker_group_data_set_) {
+    scroll_marker_group->SetNeedsScrollersMapUpdate();
+    GetLayoutBox()->GetDocument().SetNeedsScrollMarkerGroupsMapUpdate();
+  }
   if (InResizeMode() && !GetLayoutBox()->DocumentBeingDestroyed()) {
     if (LocalFrame* frame = GetLayoutBox()->GetFrame())
       frame->GetEventHandler().ResizeScrollableAreaDestroyed();
@@ -230,10 +235,6 @@ void PaintLayerScrollableArea::DisposeImpl() {
     resizer_->Destroy();
 
   ClearScrollableArea();
-
-  if (SmoothScrollSequencer* sequencer = GetSmoothScrollSequencer()) {
-    sequencer->DidDisposeScrollableArea(*this);
-  }
 
   RunScrollCompleteCallbacks(ScrollableArea::ScrollCompletionMode::kFinished);
 
@@ -271,6 +272,7 @@ void PaintLayerScrollableArea::Trace(Visitor* visitor) const {
   visitor->Trace(scroll_corner_display_item_client_);
   visitor->Trace(layer_);
   visitor->Trace(rare_data_);
+  visitor->Trace(scroll_marker_group_data_set_);
   ScrollableArea::Trace(visitor);
 }
 
@@ -284,14 +286,6 @@ ChromeClient* PaintLayerScrollableArea::GetChromeClient() const {
   if (Page* page = GetLayoutBox()->GetFrame()->GetPage())
     return &page->GetChromeClient();
   return nullptr;
-}
-
-SmoothScrollSequencer* PaintLayerScrollableArea::GetSmoothScrollSequencer()
-    const {
-  if (HasBeenDisposed())
-    return nullptr;
-
-  return GetLayoutBox()->GetFrame()->GetSmoothScrollSequencer();
 }
 
 bool PaintLayerScrollableArea::IsActive() const {
@@ -1288,11 +1282,8 @@ mojom::blink::ColorScheme PaintLayerScrollableArea::UsedColorSchemeScrollbars()
   //   - color scheme flags are normal (including cases when flags are not
   //     specified),
   //   - the preferred color scheme is dark (OS-based),
-  //   - the browser preferred color scheme is dark.
-  //   - there is no custom browser theme active
-  //   - there is no color-picked browser theme active
-  //     (both theme conditions are embedded into
-  //        `GetPreferredRootScrollbarColorScheme()`)
+  //   - the browser preferred color scheme is dark (based on the lightness of
+  //     the toolbar's color).
   if (IsGlobalRootNonOverlayScroller() &&
       layout_box->StyleRef().ColorSchemeFlagsIsNormal()) {
     const auto& document = layout_box->GetDocument();
@@ -2465,16 +2456,8 @@ PhysicalRect PaintLayerScrollableArea::ScrollIntoView(
   if (params->is_for_scroll_sequence) {
     mojom::blink::ScrollBehavior behavior = DetermineScrollBehavior(
         params->behavior, GetLayoutBox()->StyleRef().GetScrollBehavior());
-    if (RuntimeEnabledFeatures::MultiSmoothScrollIntoViewEnabled()) {
-      SetScrollOffset(new_scroll_offset, params->type, behavior,
-                      ScrollCallback(), true);
-    } else {
-      CHECK(GetSmoothScrollSequencer());
-      DCHECK(params->type == mojom::blink::ScrollType::kProgrammatic ||
-             params->type == mojom::blink::ScrollType::kUser);
-      GetSmoothScrollSequencer()->QueueAnimation(this, new_scroll_offset,
-                                                 behavior);
-    }
+    SetScrollOffset(new_scroll_offset, params->type, behavior, ScrollCallback(),
+                    true);
   } else {
     SetScrollOffset(new_scroll_offset, params->type,
                     mojom::blink::ScrollBehavior::kInstant, ScrollCallback(),
@@ -2877,11 +2860,11 @@ void PaintLayerScrollableArea::DelayScrollOffsetClampScope::
 
 HeapVector<Member<PaintLayerScrollableArea>>&
 PaintLayerScrollableArea::DelayScrollOffsetClampScope::NeedsClampList() {
-  DEFINE_STATIC_LOCAL(
-      Persistent<HeapVector<Member<PaintLayerScrollableArea>>>,
-      needs_clamp_list,
-      (MakeGarbageCollected<HeapVector<Member<PaintLayerScrollableArea>>>()));
-  return *needs_clamp_list;
+  using Holder =
+      DisallowNewWrapper<HeapVector<Member<PaintLayerScrollableArea>>>;
+  DEFINE_STATIC_LOCAL(Persistent<Holder>, needs_clamp_list,
+                      (MakeGarbageCollected<Holder>()));
+  return needs_clamp_list->Value();
 }
 
 ScrollbarTheme& PaintLayerScrollableArea::GetPageScrollbarTheme() const {
@@ -3181,36 +3164,7 @@ gfx::Rect PaintLayerScrollableArea::ScrollingBackgroundVisualRect(
   auto scroll_size = PixelSnappedContentsSize(clip_rect.offset);
   // Ensure scrolling contents are at least as large as the scroll clip
   scroll_size.SetToMax(overflow_clip_rect.size());
-  gfx::Rect result(overflow_clip_rect.origin(), scroll_size);
-
-  // The HTML element of a document is special, in that it can have a transform,
-  // but the bounds of the painted area of the element still extends beyond
-  // its actual size to encompass the entire viewport canvas. This is
-  // accomplished in ViewPainter by starting with a rect in viewport canvas
-  // space that is equal to the size of the viewport canvas, then mapping it
-  // into the local border box space of the HTML element, and painting a rect
-  // equal to the bounding box of the result. We need to add in that mapped rect
-  // in such cases.
-  const Document& document = box->GetDocument();
-  if (IsA<LayoutView>(box) &&
-      (document.IsXMLDocument() || document.IsHTMLDocument())) {
-    if (const auto* document_element = document.documentElement()) {
-      if (const auto* document_element_object =
-              document_element->GetLayoutObject()) {
-        const auto& document_element_state =
-            document_element_object->FirstFragment().LocalBorderBoxProperties();
-        const auto& view_contents_state =
-            box->FirstFragment().ContentsProperties();
-        gfx::Rect result_in_view = result;
-        GeometryMapper::SourceToDestinationRect(
-            view_contents_state.Transform(), document_element_state.Transform(),
-            result_in_view);
-        result.Union(result_in_view);
-      }
-    }
-  }
-
-  return result;
+  return gfx::Rect(overflow_clip_rect.origin(), scroll_size);
 }
 
 String
@@ -3256,10 +3210,9 @@ void PaintLayerScrollableArea::
 
   auto& rare_data = EnsureRareData();
   bool scrollsnapchange =
-      (rare_data.scrollsnapchange_target_ids_
-           ? (new_target_ids.x != rare_data.scrollsnapchange_target_ids_->x ||
-              new_target_ids.y != rare_data.scrollsnapchange_target_ids_->y)
-           : true);
+      !rare_data.scrollsnapchange_target_ids_ ||
+      new_target_ids.x != rare_data.scrollsnapchange_target_ids_->x ||
+      new_target_ids.y != rare_data.scrollsnapchange_target_ids_->y;
   if (scrollsnapchange) {
     rare_data.scrollsnapchange_target_ids_ = new_target_ids;
     rare_data.snapped_query_target_ids_ = new_target_ids;
@@ -3419,38 +3372,51 @@ void PaintLayerScrollableArea::SetSnappedQueryTargetIds(
   EnsureRareData().snapped_query_target_ids_ = ids;
 }
 
-ScrollOffset PaintLayerScrollableArea::GetScrollOffsetForScrollMarkerUpdate() {
-  ScrollOffset offset_for_scroll_marker_update = GetScrollOffset();
-  if (GetScrollAnimator().HasRunningAnimation()) {
-    offset_for_scroll_marker_update = GetScrollAnimator().DesiredTargetOffset();
-  } else if (GetProgrammaticScrollAnimator().HasRunningAnimation()) {
-    offset_for_scroll_marker_update =
-        GetProgrammaticScrollAnimator().TargetOffset();
-  }
-  return offset_for_scroll_marker_update;
-}
-
 ScrollMarkerGroupPseudoElement* PaintLayerScrollableArea::GetScrollMarkerGroup()
     const {
-  if (Element* element = DynamicTo<Element>(GetLayoutBox()->GetNode())) {
-    if (PseudoElement* before =
-            element->GetPseudoElement(kPseudoIdScrollMarkerGroupBefore)) {
-      auto* group_before = DynamicTo<ScrollMarkerGroupPseudoElement>(before);
-      return group_before;
-    } else if (PseudoElement* after =
-                   element->GetPseudoElement(kPseudoIdScrollMarkerGroupAfter)) {
-      auto* group_after = DynamicTo<ScrollMarkerGroupPseudoElement>(after);
-      return group_after;
-    }
+  Element* element = DynamicTo<Element>(GetLayoutBox()->GetNode());
+  if (GetLayoutBox()->GetNode() &&
+      GetLayoutBox()->GetNode()->IsDocumentNode()) {
+    element = GetDocument()->documentElement();
+  }
+  if (!element) {
+    return nullptr;
+  }
+  if (PseudoElement* before =
+          element->GetPseudoElement(kPseudoIdScrollMarkerGroupBefore)) {
+    auto* group_before = DynamicTo<ScrollMarkerGroupPseudoElement>(before);
+    return group_before;
+  } else if (PseudoElement* after =
+                 element->GetPseudoElement(kPseudoIdScrollMarkerGroupAfter)) {
+    auto* group_after = DynamicTo<ScrollMarkerGroupPseudoElement>(after);
+    return group_after;
   }
   return nullptr;
 }
 
+void PaintLayerScrollableArea::AddScrollMarkerGroupContainerData(
+    ScrollMarkerGroupData* scroll_marker_group_data) {
+  scroll_marker_group_data_set_.insert(scroll_marker_group_data);
+}
+
+void PaintLayerScrollableArea::RemoveScrollMarkerGroupContainerData(
+    ScrollMarkerGroupData* scroll_marker_group_data) {
+  scroll_marker_group_data_set_.erase(scroll_marker_group_data);
+}
+
 void PaintLayerScrollableArea::UpdateScrollMarkers() {
   if (ScrollMarkerGroupPseudoElement* marker_group = GetScrollMarkerGroup()) {
-    ScrollOffset scroll_offset = GetScrollOffsetForScrollMarkerUpdate();
-    marker_group->UpdateSelectedScrollMarker(scroll_offset);
+    marker_group->UpdateSelectedScrollMarker();
   }
+  for (ScrollMarkerGroupData* scroll_marker_group_data :
+       scroll_marker_group_data_set_) {
+    scroll_marker_group_data->UpdateSelectedScrollMarker();
+  }
+}
+
+bool PaintLayerScrollableArea::HasRunningAnimation() {
+  return GetScrollAnimator().HasRunningAnimation() ||
+         GetProgrammaticScrollAnimator().HasRunningAnimation();
 }
 
 }  // namespace blink

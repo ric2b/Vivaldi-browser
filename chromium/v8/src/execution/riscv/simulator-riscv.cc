@@ -57,6 +57,7 @@
 #include "src/codegen/constants-arch.h"
 #include "src/codegen/macro-assembler.h"
 #include "src/diagnostics/disasm.h"
+#include "src/heap/base/stack.h"
 #include "src/heap/combined-heap.h"
 #include "src/runtime/runtime-utils.h"
 #include "src/utils/ostreams.h"
@@ -2389,6 +2390,7 @@ Simulator::Simulator(Isolate* isolate) : isolate_(isolate), builtins_(isolate) {
 
   stack_ = reinterpret_cast<uintptr_t>(new uint8_t[stack_size]());
   stack_limit_ = stack_ + kStackProtectionSize;
+
   pc_modified_ = false;
   icount_ = 0;
   break_count_ = 0;
@@ -2412,7 +2414,7 @@ Simulator::Simulator(Isolate* isolate) : isolate_(isolate), builtins_(isolate) {
   // The sp is initialized to point to the bottom (high address) of the
   // allocated stack area. To be safe in potential stack underflows we leave
   // some buffer below.
-  registers_[sp] = stack_ + stack_size - kStackProtectionSize;
+  registers_[sp] = StackBase();
   // The ra and pc are initialized to a known bad value that will cause an
   // access violation if the simulator ever tries to execute it.
   registers_[pc] = bad_ra;
@@ -3091,6 +3093,8 @@ uintptr_t Simulator::StackLimit(uintptr_t c_limit) const {
   return stack_limit_ + kAdditionalStackMargin;
 }
 
+uintptr_t Simulator::StackBase() const { return stack_ + UsableStackSize(); }
+
 base::Vector<uint8_t> Simulator::GetCentralStackView() const {
   // We do not add an additional safety margin as above in
   // Simulator::StackLimit, as users of this method are expected to add their
@@ -3098,6 +3102,24 @@ base::Vector<uint8_t> Simulator::GetCentralStackView() const {
   return base::VectorOf(
       reinterpret_cast<uint8_t*>(stack_ + kStackProtectionSize),
       UsableStackSize());
+}
+
+// We touch the stack, which may or may not have been initialized properly. Msan
+// reports here are not interesting.
+DISABLE_MSAN void Simulator::IterateRegistersAndStack(
+    ::heap::base::StackVisitor* visitor) {
+  for (int i = 0; i < kNumSimuRegisters; ++i) {
+    visitor->VisitPointer(reinterpret_cast<const void*>(get_register(i)));
+  }
+  for (const void* const* current =
+           reinterpret_cast<const void* const*>(get_sp());
+       current < reinterpret_cast<const void* const*>(StackBase()); ++current) {
+    const void* address = *current;
+    if (address == nullptr) {
+      continue;
+    }
+    visitor->VisitPointer(address);
+  }
 }
 
 // Unsupported instructions use Format to print an error and stop execution.
@@ -3128,6 +3150,7 @@ using SimulatorRuntimeCompareCall = int64_t (*)(double darg0, double darg1);
 using SimulatorRuntimeFPFPCall = double (*)(double darg0, double darg1);
 using SimulatorRuntimeFPCall = double (*)(double darg0);
 using SimulatorRuntimeFPIntCall = double (*)(double darg0, int32_t arg0);
+using SimulatorRuntimeIntFPCall = int32_t (*)(double darg0);
 
 // This signature supports direct call in to API function native callback
 // (refer to InvocationCallback in v8.h).
@@ -3318,7 +3341,8 @@ void Simulator::SoftwareInterrupt() {
         (redirection->type() == ExternalReference::BUILTIN_FP_FP_CALL) ||
         (redirection->type() == ExternalReference::BUILTIN_COMPARE_CALL) ||
         (redirection->type() == ExternalReference::BUILTIN_FP_CALL) ||
-        (redirection->type() == ExternalReference::BUILTIN_FP_INT_CALL);
+        (redirection->type() == ExternalReference::BUILTIN_FP_INT_CALL) ||
+        (redirection->type() == ExternalReference::BUILTIN_INT_FP_CALL);
 
     sreg_t pc = get_pc();
 
@@ -3354,6 +3378,13 @@ void Simulator::SoftwareInterrupt() {
                    reinterpret_cast<void*>(FUNCTION_ADDR(generic_target)),
                    dval0, ival);
             break;
+          case ExternalReference::BUILTIN_INT_FP_CALL:
+            PrintF("Call to host function  %s at %p with args %f",
+                    ExternalReferenceTable::NameOfIsolateIndependentAddress(
+                       pc, IsolateGroup::current()->external_ref_table()),
+                    reinterpret_cast<void*>(FUNCTION_ADDR(generic_target)),
+                    dval0);
+            break;
           default:
             UNREACHABLE();
         }
@@ -3388,12 +3419,20 @@ void Simulator::SoftwareInterrupt() {
           SetFpResult(dresult);
           break;
         }
+        case ExternalReference::BUILTIN_INT_FP_CALL: {
+          SimulatorRuntimeIntFPCall target =
+              reinterpret_cast<SimulatorRuntimeIntFPCall>(external);
+          iresult = target(dval0);
+          set_register(a0, static_cast<int64_t>(iresult));
+          break;
+        }
         default:
           UNREACHABLE();
       }
       if (v8_flags.trace_sim) {
         switch (redirection->type()) {
           case ExternalReference::BUILTIN_COMPARE_CALL:
+          case ExternalReference::BUILTIN_INT_FP_CALL:
             PrintF("Returned %08x\n", static_cast<int32_t>(iresult));
             break;
           case ExternalReference::BUILTIN_FP_FP_CALL:
@@ -3542,6 +3581,9 @@ void Simulator::SoftwareInterrupt() {
         HandleStop(code);
       }
     } else if (IsSwitchStackLimit(code)) {
+      if (v8_flags.trace_sim) {
+        PrintF("Switching stack limit\n");
+      }
       DoSwitchStackLimit(instr_.instr());
     } else {
       // All remaining break_ codes, and all traps are handled here.

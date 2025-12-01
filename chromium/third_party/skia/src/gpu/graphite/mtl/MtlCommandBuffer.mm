@@ -8,7 +8,7 @@
 #include "src/gpu/graphite/mtl/MtlCommandBuffer.h"
 
 #include "include/gpu/graphite/BackendSemaphore.h"
-#include "include/gpu/graphite/mtl/MtlGraphiteTypesUtils.h"
+#include "include/gpu/graphite/mtl/MtlGraphiteTypes.h"
 #include "src/gpu/graphite/ContextUtils.h"
 #include "src/gpu/graphite/Log.h"
 #include "src/gpu/graphite/RenderPassDesc.h"
@@ -341,9 +341,9 @@ void MtlCommandBuffer::endRenderPass() {
 }
 
 void MtlCommandBuffer::addDrawPass(const DrawPass* drawPass) {
-    SkIRect replayPassBounds = drawPass->bounds().makeOffset(fReplayTranslation.x(),
-                                                             fReplayTranslation.y());
-    if (!SkIRect::Intersects(replayPassBounds, SkIRect::MakeSize(fColorAttachmentSize))) {
+    const SkIRect replayedBounds = drawPass->bounds().makeOffset(fReplayTranslation.x(),
+                                                                 fReplayTranslation.y());
+    if (!SkIRect::Intersects(replayedBounds, fRenderPassBounds)) {
         // The entire DrawPass is offscreen given the replay translation so skip adding any
         // commands. When the DrawPass is partially offscreen individual draw commands will be
         // culled while preserving state changing commands.
@@ -442,6 +442,10 @@ void MtlCommandBuffer::addDrawPass(const DrawPass* drawPass) {
             case DrawPassCommands::Type::kDrawIndexedIndirect: {
                 auto draw = static_cast<DrawPassCommands::DrawIndexedIndirect*>(cmdPtr);
                 this->drawIndexedIndirect(draw->fType);
+                break;
+            }
+            case DrawPassCommands::Type::kAddBarrier: {
+                SKGPU_LOG_E("MtlCommandBuffer does not support the addition of barriers.");
                 break;
             }
         }
@@ -585,7 +589,7 @@ void MtlCommandBuffer::bindTextureAndSampler(const Texture* texture,
 void MtlCommandBuffer::setScissor(const Scissor& scissor) {
     SkASSERT(fActiveRenderCommandEncoder);
 
-    SkIRect rect = scissor.getRect(fReplayTranslation, fReplayClip);
+    SkIRect rect = scissor.getRect(fReplayTranslation, fRenderPassBounds);
     fDrawIsOffscreen = rect.isEmpty();
 
     fActiveRenderCommandEncoder->setScissorRect({

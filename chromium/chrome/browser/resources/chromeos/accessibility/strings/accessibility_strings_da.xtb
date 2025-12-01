@@ -295,6 +295,7 @@
 <translation id="2867808975387772810">Bibliografi</translation>
 <translation id="2873259058405069099">Gå til starten af ​​tabellen</translation>
 <translation id="287383510823843610">Mørk orange</translation>
+<translation id="2876760662374103627">Ansigtsstyring er aktiveret</translation>
 <translation id="2879867157561757640">Stryg nedad med tre fingre</translation>
 <translation id="288178314850623291">Brug hoppekommandoer til at springe til bestemte typer elementer. Tryk på Søg+H for at hoppe fremad mellem overskrifter, og tryk på Søg+Shift+H for at hoppe tilbage.</translation>
 <translation id="2885764457467528513">{COUNT,plural, =1{minut}one{minut}other{minutter}}</translation>
@@ -1115,6 +1116,7 @@
 <translation id="8316881042119029234">Gullighvid</translation>
 <translation id="8326783648485765113">Plænegrøn</translation>
 <translation id="8345569862449483843">{COUNT,plural, =1{pund}one{# pund-tegn}other{# pund-tegn}}</translation>
+<translation id="8351821207686449674">Slå undertekster til/fra</translation>
 <translation id="8378855320830505539">Region</translation>
 <translation id="8382679411218029383">Autofuldførelse på linje og på liste</translation>
 <translation id="8394908167088220973">Medie: Afspil/Pause</translation>

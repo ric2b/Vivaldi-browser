@@ -15,6 +15,7 @@ source_set("omnibox") {
   if (!is_ios) {
     deps += [
       "//content/public/browser",
+      "//components/omnibox/browser",
     ]
   }
     configs += [

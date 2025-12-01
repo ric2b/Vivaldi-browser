@@ -49,6 +49,7 @@
 #import "ios/chrome/app/blocking_scene_commands.h"
 #import "ios/chrome/app/change_profile_animator.h"
 #import "ios/chrome/app/change_profile_commands.h"
+#import "ios/chrome/app/chrome_overlay_window.h"
 #import "ios/chrome/app/deferred_initialization_runner.h"
 #import "ios/chrome/app/deferred_initialization_task_names.h"
 #import "ios/chrome/app/enterprise_app_agent.h"
@@ -81,6 +82,7 @@
 #import "ios/chrome/browser/crash_report/model/crash_report_helper.h"
 #import "ios/chrome/browser/credential_provider/model/credential_provider_buildflags.h"
 #import "ios/chrome/browser/default_browser/model/utils.h"
+#import "ios/chrome/browser/device_orientation/ui_bundled/scoped_force_portrait_orientation.h"
 #import "ios/chrome/browser/discover_feed/model/discover_feed_app_agent.h"
 #import "ios/chrome/browser/download/model/download_directory_util.h"
 #import "ios/chrome/browser/first_run/model/first_run.h"
@@ -122,7 +124,6 @@
 #import "ios/chrome/browser/signin/model/account_profile_mapper.h"
 #import "ios/chrome/browser/signin/model/system_identity_manager.h"
 #import "ios/chrome/browser/sync/model/sync_service_factory.h"
-#import "ios/chrome/browser/ui/device_orientation/scoped_force_portrait_orientation.h"
 #import "ios/chrome/browser/url_loading/model/url_loading_params.h"
 #import "ios/chrome/browser/web/model/choose_file/choose_file_file_utils.h"
 #import "ios/chrome/browser/web_state_list/model/web_usage_enabler/web_usage_enabler_browser_agent.h"
@@ -157,6 +158,10 @@
 #import "components/rlz/rlz_tracker.h"                        // nogncheck
 #import "ios/chrome/browser/rlz/rlz_tracker_delegate_impl.h"  // nogncheck
 #endif
+
+#if !BUILDFLAG(IS_IOS_MACCATALYST)
+#import "ios/chrome/browser/default_browser/model/default_status/default_status_helper.h"
+#endif  // !BUILDFLAG(IS_IOS_MACCATALYST)
 
 @interface MainController (ForUnloadProfileMarkedForDeletion)
 
@@ -214,6 +219,12 @@ NSString* const kPurgeWebSessionStates = @"PurgeWebSessionStates";
 // Constant for deffered memory experimentation.
 NSString* const kMemoryExperimentation = @"BeginMemoryExperimentation";
 
+// Constant for deferred automatic download deletion.
+NSString* const kAutoDeletionFileRemoval = @"AutoDeletionFileRemoval";
+
+// Constant for deferred default browser status API check.
+NSString* const kDefaultBrowserStatusCheck = @"DefaultBrowserStatusCheck";
+
 // Adapted from chrome/browser/ui/browser_init.cc.
 void RegisterComponentsForUpdate() {
   component_updater::ComponentUpdateService* cus =
@@ -241,13 +252,11 @@ void BeginMemoryExperimentationAfterDelay() {
 }
 
 // Inserts `session_ids` into the set of discarded sessions for `attrs`.
-ProfileAttributesIOS InsertDiscardedSessions(
-    const std::set<std::string>& session_ids,
-    ProfileAttributesIOS attrs) {
+void InsertDiscardedSessions(const std::set<std::string>& session_ids,
+                             ProfileAttributesIOS& attrs) {
   auto discarded_sessions = attrs.GetDiscardedSessions();
   discarded_sessions.insert(session_ids.begin(), session_ids.end());
   attrs.SetDiscardedSessions(discarded_sessions);
-  return attrs;
 }
 
 // Mark all `sessions` as discarded sessions for all profiles.
@@ -275,11 +284,8 @@ void MarkSessionsAsDiscardedForAllProfiles(NSSet<UISceneSession*>* sessions) {
     sessionIDs.insert(base::SysNSStringToUTF8(session.persistentIdentifier));
   }
 
-  const size_t profiles_count = storage->GetNumberOfProfiles();
-  for (size_t index = 0; index < profiles_count; ++index) {
-    storage->UpdateAttributesForProfileAtIndex(
-        index, base::BindOnce(&InsertDiscardedSessions, sessionIDs));
-  }
+  storage->IterateOverProfileAttributes(
+      base::BindRepeating(&InsertDiscardedSessions, sessionIDs));
 
   sessions_storage_util::ResetDiscardedSessions();
 }
@@ -306,7 +312,8 @@ void RecordDiscardSceneStillConnected(NSSet<UISceneSession*>* scene_sessions,
   NSUInteger count_discarded_scene_still_connected = 0;
   NSMutableSet<NSString*>* connected_identifiers = [[NSMutableSet alloc] init];
   for (SceneState* scene_state in connected_scenes) {
-    [connected_identifiers addObject:scene_state.sceneSessionID];
+    [connected_identifiers
+        addObject:base::SysUTF8ToNSString(scene_state.sceneSessionID)];
   }
 
   for (UISceneSession* scene_session in scene_sessions) {
@@ -324,7 +331,7 @@ void RecordDiscardSceneStillConnected(NSSet<UISceneSession*>* scene_sessions,
 // Helper used to call -unloadProfileMarkedForDeletion:completion: from
 // a callback.
 void UnloadProfileMarkedForDeletion(MainController* controller,
-                                    std::string_view profile_name,
+                                    const std::string& profile_name,
                                     ProfileDeletedCallback completion) {
   [controller unloadProfileMarkedForDeletion:profile_name
                                   completion:std::move(completion)];
@@ -382,6 +389,9 @@ void DeleteProfileContinuation(base::OnceClosure done_closure,
 - (void)scheduleDeleteTempPasswordsDirectory;
 // Schedule the start of memory experimentation.
 - (void)scheduleMemoryExperimentation;
+// Schedules the removal of files that were scheduled for automatic deletion and
+// were downloaded more than 30 days ago.
+- (void)scheduleAutoDeletionFileRemoval;
 // Crashes the application if requested.
 - (void)crashIfRequested;
 // Initializes the application to the minimum initialization needed in all
@@ -593,8 +603,6 @@ void DeleteProfileContinuation(base::OnceClosure done_closure,
   }
 
   RegisterComponentsForUpdate();
-
-  [[PreviousSessionInfo sharedInstance] resetConnectedSceneSessionIDs];
 
   _windowConfigurationRecorder = [[WindowConfigurationRecorder alloc] init];
 }
@@ -878,6 +886,16 @@ void DeleteProfileContinuation(base::OnceClosure done_closure,
 #pragma mark - AppStateObserver
 
 - (void)appState:(AppState*)appState sceneConnected:(SceneState*)sceneState {
+  // Install a LaunchScreenViewController as root view for the newly connected
+  // SceneState and make the window visible (but do not force it above all the
+  // other windows by making it key window). This ensures that something will
+  // be displayed during the blocking steps of the application and/or profile
+  // initialisation (e.g. fetching variation seeds, load profiles' preferences,
+  // migrating session storage, ...).
+  UIWindow* window = sceneState.window;
+  window.rootViewController = [[LaunchScreenViewController alloc] init];
+  window.hidden = NO;
+
   if (appState.initStage < AppInitStage::kFinal) {
     return;
   }
@@ -999,8 +1017,15 @@ void DeleteProfileContinuation(base::OnceClosure done_closure,
 
       case ProfileInitStage::kChoiceScreen:
       case ProfileInitStage::kNormalUI:
-      case ProfileInitStage::kFinal:
         // Nothing to do.
+        break;
+
+      case ProfileInitStage::kFinal:
+        // Request the deletion of the data for all profiles marked for
+        // deletion when the first profile is successfully loaded.
+        GetApplicationContext()
+            ->GetProfileManager()
+            ->PurgeProfilesMarkedForDeletion(base::DoNothing());
         break;
     }
   }
@@ -1010,6 +1035,7 @@ void DeleteProfileContinuation(base::OnceClosure done_closure,
   // which should wait until all SceneStates have been mapped to Profiles.
   if (nextInitStage == ProfileInitStage::kFinal) {
     [profileState removeObserver:self];
+    [MetricsMediator logProfileLoadMetrics:profileState.profile];
     [self recordLaunchMetrics];
   }
 }
@@ -1409,6 +1435,8 @@ void DeleteProfileContinuation(base::OnceClosure done_closure,
   [self scheduleSaveFieldTrialValuesForExternals];
   [self scheduleEnterpriseManagedDeviceCheck];
   [self scheduleMemoryExperimentation];
+  [self scheduleAutoDeletionFileRemoval];
+  [self scheduleDefaultBrowserStatusCheck];
 #if BUILDFLAG(IOS_ENABLE_SANDBOX_DUMP)
   [self scheduleDumpDocumentsStatistics];
 #endif  // BUILDFLAG(IOS_ENABLE_SANDBOX_DUMP)
@@ -1450,6 +1478,25 @@ void DeleteProfileContinuation(base::OnceClosure done_closure,
                                         block:^{
                                           [startupTasks logSiriShortcuts];
                                         }];
+}
+
+- (void)scheduleAutoDeletionFileRemoval {
+  __weak StartupTasks* startupTasks = _startupTasks;
+  [_appState.deferredRunner
+      enqueueBlockNamed:kAutoDeletionFileRemoval
+                  block:^{
+                    [startupTasks removeFilesScheduledForAutoDeletion];
+                  }];
+}
+
+- (void)scheduleDefaultBrowserStatusCheck {
+#if !BUILDFLAG(IS_IOS_MACCATALYST)
+  [_appState.deferredRunner
+      enqueueBlockNamed:kDefaultBrowserStatusCheck
+                  block:^{
+                    default_status::TriggerDefaultStatusCheck();
+                  }];
+#endif  // !BUILDFLAG(IS_IOS_MACCATALYST)
 }
 
 #if BUILDFLAG(IOS_ENABLE_SANDBOX_DUMP)
@@ -1585,8 +1632,7 @@ void DeleteProfileContinuation(base::OnceClosure done_closure,
   CHECK([self.appState.connectedScenes containsObject:sceneState]);
 
   ProfileManagerIOS* manager = GetApplicationContext()->GetProfileManager();
-  CHECK(manager->HasProfileWithName(profileName) ||
-        manager->CanCreateProfileWithName(profileName));
+  CHECK(manager->HasProfileWithName(profileName));
 
   // Get the SceneDelegate from the SceneState.
   UIWindowScene* scene = sceneState.scene;
@@ -1594,26 +1640,18 @@ void DeleteProfileContinuation(base::OnceClosure done_closure,
       base::apple::ObjCCast<SceneDelegate>(scene.delegate);
   CHECK(sceneDelegate);
 
-  UIWindow* window = sceneDelegate.window;
-  UIViewController* rootViewController = window.rootViewController;
-
-  ChangeProfileAnimator* animator =
-      [[ChangeProfileAnimator alloc] initWithViewController:rootViewController];
+  ChangeProfileAnimator* animator = [[ChangeProfileAnimator alloc]
+      initWithWindow:base::apple::ObjCCast<ChromeOverlayWindow>(
+                         sceneDelegate.window)];
 
   ProfileAttributesStorageIOS* storage = manager->GetProfileAttributesStorage();
-  const std::string sceneIdentifier =
-      base::SysNSStringToUTF8(sceneState.sceneSessionID);
+  const std::string& sceneIdentifier = sceneState.sceneSessionID;
 
   // If the SceneState is not associated with the correct profile, then
   // perform the necessary work to switch the profile used for the scene.
   if (profileName != storage->GetProfileNameForSceneID(sceneIdentifier)) {
     // The UI has to be destroyed, start animating.
     [animator startAnimation];
-
-    // Ensure the profile exists.
-    if (!storage->HasProfileWithName(profileName)) {
-      storage->AddProfile(profileName);
-    }
 
     // Set the mapping between profile and scene.
     storage->SetProfileNameForSceneID(sceneIdentifier, profileName);
@@ -1624,26 +1662,17 @@ void DeleteProfileContinuation(base::OnceClosure done_closure,
     UISceneConnectionOptions* savedConnectionOptions =
         sceneState.connectionOptions;
 
-    // Install a new root view controller before destroying the UI (since it
-    // does not support dismissing the root view controller after the Browser
-    // has been destroyed).
-    // TODO(crbug.com/376667510): SceneDelegate should manage the view
-    // controller and this should be unnecessary (in fact, it should be possible
-    // to install a temporary view controller to perform an animation).
-    LaunchScreenViewController* launchScreen =
-        [[LaunchScreenViewController alloc] init];
-    [sceneState setRootViewController:launchScreen makeKeyAndVisible:YES];
-
     [sceneDelegate sceneDidDisconnect:scene];  // destroy the old SceneState
     sceneState = sceneDelegate.sceneState;     // recreate a new SceneState
     sceneState.currentOrigin = savedOrigin;
     sceneState.connectionOptions = savedConnectionOptions;
-    sceneState.activationLevel = SceneActivationLevelBackground;
     sceneState.scene = scene;
 
     // Reconnect the scene. This will attach a profile automatically based
     // on the information stored in the ProfileAttributesStorageIOS.
-    [self appState:self.appState sceneConnected:sceneState];
+    [[NSNotificationCenter defaultCenter]
+        postNotificationName:UISceneWillConnectNotification
+                      object:scene];
     DCHECK(sceneState.profileState);
 
     while (sceneState.activationLevel < savedLevel) {
@@ -1654,7 +1683,7 @@ void DeleteProfileContinuation(base::OnceClosure done_closure,
 
   // Wait for the profile to complete its initialisation.
   [animator waitForSceneState:sceneState
-             toInitReachStage:ProfileInitStage::kUIReady
+             toReachInitStage:ProfileInitStage::kUIReady
                  continuation:std::move(continuation)];
 }
 
@@ -1688,8 +1717,9 @@ void DeleteProfileContinuation(base::OnceClosure done_closure,
 
   __weak MainController* weakSelf = self;
   base::RepeatingClosure closure = BarrierClosure(
-      scenes.count, base::BindOnce(&UnloadProfileMarkedForDeletion, weakSelf,
-                                   profileName, std::move(completion)));
+      scenes.count,
+      base::BindOnce(&UnloadProfileMarkedForDeletion, weakSelf,
+                     std::string(profileName), std::move(completion)));
 
   for (SceneState* scene in scenes) {
     [self changeProfile:personalProfile
@@ -1742,37 +1772,65 @@ void DeleteProfileContinuation(base::OnceClosure done_closure,
               profileManager:(ProfileManagerIOS*)manager
            attributesStorage:(ProfileAttributesStorageIOS*)storage
                   localState:(PrefService*)localState {
-  const std::string sceneID =
-      base::SysNSStringToUTF8(sceneState.sceneSessionID);
+  const std::string& sceneID = sceneState.sceneSessionID;
 
-  // The logic to determine which profile to use for the scene is:
-  //  1. use the profile recorded in ProfileAttributesStorageIOS,
-  //  2. if the profile is marked for deletion, try to use personal profile,
-  //  3. if there is no mapping,
-  //    3.1. use kLastUsedProfile if set,
-  //    3.2. if kLastUsedProfile is unset, generate a new profile.
-  std::string profileName = storage->GetProfileNameForSceneID(sceneID);
-  bool updatedProfileName = false;
+  // Determine which profile to use. The logic is to take the first valid
+  // profile (i.e. the value is set and the profile is known) amongst the
+  // following value: the profile configured for the scene, the last used
+  // profile, the personal profile, or as a last resort a new profile.
+  enum class ProfileChoice {
+    kProfileForScene,
+    kLastUsedProfile,
+    kPersonalProfile,
+    kNewProfile,
+  };
 
-  if (manager->IsProfileMarkedForDeletion(profileName)) {
-    // Marked for deletion, try to use personal profile.
-    profileName = storage->GetPersonalProfileName();
-    updatedProfileName = true;
-  }
+  static constexpr ProfileChoice kProfileChoices[] = {
+      ProfileChoice::kProfileForScene,
+      ProfileChoice::kLastUsedProfile,
+      ProfileChoice::kPersonalProfile,
+      ProfileChoice::kNewProfile,
+  };
 
-  if (profileName.empty()) {
-    profileName = localState->GetString(prefs::kLastUsedProfile);
-    if (profileName.empty()) {
-      profileName = manager->ReserveNewProfileName();
-      DCHECK(!profileName.empty());
+  std::string profileName;
+  bool changedProfileNameForScene = false;
+  for (ProfileChoice choice : kProfileChoices) {
+    switch (choice) {
+      case ProfileChoice::kProfileForScene:
+        profileName = storage->GetProfileNameForSceneID(sceneID);
+        changedProfileNameForScene = false;
+        break;
+
+      case ProfileChoice::kLastUsedProfile:
+        profileName = localState->GetString(prefs::kLastUsedProfile);
+        changedProfileNameForScene = true;
+        break;
+
+      case ProfileChoice::kPersonalProfile:
+        profileName = storage->GetPersonalProfileName();
+        changedProfileNameForScene = true;
+        break;
+
+      case ProfileChoice::kNewProfile:
+        profileName = manager->ReserveNewProfileName();
+        changedProfileNameForScene = true;
+        break;
     }
-    updatedProfileName = true;
+
+    // Pick the first valid profile name found.
+    if (storage->HasProfileWithName(profileName)) {
+      break;
+    }
   }
 
-  if (updatedProfileName) {
-    // Store the mapping between the SceneID and the profile in the
-    // ProfileAttributesStorageIOS so that it is accessible the next
-    // time the window is open.
+  // A valid profile name must have been picked (in the last resort a
+  // new profile name must have been generated).
+  CHECK(storage->HasProfileWithName(profileName));
+
+  // If the mapping has changed, store the mapping between the SceneID
+  // and the profile in the ProfileAttributesStorageIOS so that it is
+  // accessible the next time the window is open.
+  if (changedProfileNameForScene) {
     storage->SetProfileNameForSceneID(sceneID, profileName);
   }
 

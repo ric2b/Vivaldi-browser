@@ -8,6 +8,8 @@ source_set("ui_bundled") {
   sources = [
     "authentication_ui_util.h",
     "authentication_ui_util.mm",
+    "continuation.h",
+    "continuation.mm",
     "re_signin_infobar_delegate.h",
     "re_signin_infobar_delegate.mm",
     "signin_notification_infobar_delegate.h",
@@ -20,6 +22,7 @@ source_set("ui_bundled") {
     ":authentication_constants",
     ":signin_presenter",
     "//components/bookmarks/common",
+    "//components/browser_sync",
     "//components/consent_auditor",
     "//components/infobars/core",
     "//components/policy/core/common",
@@ -39,6 +42,7 @@ source_set("ui_bundled") {
     "//ios/chrome/app/profile",
     "//ios/chrome/app/strings",
     "//ios/chrome/browser/authentication/ui_bundled/cells",
+    "//ios/chrome/browser/authentication/ui_bundled/enterprise:enterprise_utils",
     "//ios/chrome/browser/authentication/ui_bundled/enterprise/managed_profile_creation",
     "//ios/chrome/browser/authentication/ui_bundled/history_sync:capabilities_fetcher",
     "//ios/chrome/browser/authentication/ui_bundled/resources",
@@ -113,11 +117,13 @@ source_set("unit_tests") {
   testonly = true
   sources = [
     "authentication_ui_util_unittest.mm",
+    "continuation_unittest.mm",
     "re_signin_infobar_delegate_unittest.mm",
     "signin_promo_view_mediator_unittest.mm",
   ]
   deps = [
     ":account_settings_presenter",
+    ":change_profile_continuation_test",
     ":signin_presenter",
     ":ui_bundled",
     "//base",
@@ -192,12 +198,14 @@ source_set("eg_app_support+eg2") {
     ":signin_presenter",
     ":ui_bundled",
     "//components/bookmarks/browser",
+    "//components/policy/core/browser",
     "//components/prefs",
     "//components/signin/public/identity_manager",
     "//components/signin/public/identity_manager:test_support",
     "//components/supervised_user/core/browser",
     "//components/sync",
     "//ios/chrome/browser/authentication/ui_bundled/cells",
+    "//ios/chrome/browser/authentication/ui_bundled/enterprise:enterprise_utils",
     "//ios/chrome/browser/authentication/ui_bundled/enterprise/enterprise_prompt",
     "//ios/chrome/browser/bookmarks/model",
     "//ios/chrome/browser/shared/coordinator/scene:scene_state_header",
@@ -205,6 +213,7 @@ source_set("eg_app_support+eg2") {
     "//ios/chrome/browser/shared/model/prefs:pref_names",
     "//ios/chrome/browser/shared/model/profile",
     "//ios/chrome/browser/shared/public/commands",
+    "//ios/chrome/browser/shared/public/features",
     "//ios/chrome/browser/shared/ui/util",
     "//ios/chrome/browser/signin/model",
     "//ios/chrome/browser/signin/model:authentication_service",
@@ -239,6 +248,7 @@ source_set("eg_test_support+eg2") {
     ":signin_presenter",
     "//base",
     "//base/test:test_support",
+    "//components/policy/core/browser",
     "//components/signin/public/base",
     "//components/sync/base",
     "//ios/chrome/app/strings",
@@ -266,21 +276,28 @@ source_set("eg_test_support+eg2") {
 source_set("eg2_tests") {
   configs += [ "//build/config/ios:xctest_config" ]
   testonly = true
-  sources = [ "separate_profiles_egtest.mm" ]
+  sources = [
+    "separate_profiles_egtest.mm",
+    "separate_profiles_migration_egtest.mm",
+  ]
   deps = [
     ":eg_test_support+eg2",
     "//base/test:test_support",
-    "//ios/chrome/app/strings:ios_strings",
-    "//ios/chrome/browser/authentication/ui_bundled/account_menu:constants",
+    "//components/policy/core/browser",
+    "//components/signin/public/base:signin_switches",
+    "//ios/chrome/app/strings",
     "//ios/chrome/browser/authentication/ui_bundled/signin:constants",
+    "//ios/chrome/browser/authentication/ui_bundled/signin/account_menu:constants",
     "//ios/chrome/browser/first_run/ui_bundled:constants",
     "//ios/chrome/browser/ntp/ui_bundled:constants",
     "//ios/chrome/browser/ntp/ui_bundled:feature_flags",
+    "//ios/chrome/browser/settings/ui_bundled/google_services/manage_accounts:constants",
     "//ios/chrome/browser/shared/model/prefs:pref_names",
     "//ios/chrome/browser/shared/public/features",
     "//ios/chrome/browser/signin/model:fake_system_identity",
     "//ios/chrome/browser/signin/model:test_constants",
     "//ios/chrome/common/ui/promo_style:constants",
+    "//ios/chrome/test:eg_test_support+eg2",
     "//ios/chrome/test/earl_grey:eg_test_support+eg2",
     "//ios/chrome/test/earl_grey:switches",
     "//ios/testing/earl_grey:eg_test_support+eg2",
@@ -288,4 +305,18 @@ source_set("eg2_tests") {
     "//ui/base:base",
   ]
   frameworks = [ "UIKit.framework" ]
+}
+
+source_set("change_profile_continuation_test") {
+  testonly = true
+  sources = [
+    "authentication_test_util.h",
+    "authentication_test_util.mm",
+  ]
+  deps = [
+    ":ui_bundled",
+    "//base",
+    "//ios/chrome/app:change_profile_continuation",
+    "//ios/chrome/browser/shared/coordinator/scene:scene_state_header",
+  ]
 }

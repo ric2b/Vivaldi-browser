@@ -52,8 +52,8 @@ using optimization_guide::proto::BlingPrototypingRequest_ModelEnum_Name;
   [super viewDidLoad];
 
   self.sheetPresentationController.detents = @[
-    UISheetPresentationControllerDetent.mediumDetent,
-    UISheetPresentationControllerDetent.largeDetent,
+    [UISheetPresentationControllerDetent mediumDetent],
+    [UISheetPresentationControllerDetent largeDetent],
   ];
 
   // Title/header.
@@ -188,6 +188,8 @@ using optimization_guide::proto::BlingPrototypingRequest_ModelEnum_Name;
   _responseContainer.layer.borderColor = [primaryColor CGColor];
   _responseContainer.layer.borderWidth = kBorderWidth;
   _responseContainer.textContainer.lineBreakMode = NSLineBreakByWordWrapping;
+  _responseContainer.text =
+      l10n_util::GetNSString(IDS_IOS_AI_PROTOTYPING_RESULT_PLACEHOLDER);
 
   UIStackView* stackView = [[UIStackView alloc] initWithArrangedSubviews:@[
     label, systemInstructionsFieldContainer, queryFieldContainer,
@@ -238,6 +240,7 @@ using optimization_guide::proto::BlingPrototypingRequest_ModelEnum_Name;
 
 - (void)serverSideSubmitButtonPressed:(UIButton*)button {
   [self disableSubmitButtons];
+  [self updateResponseField:@""];
 
   [self.mutator executeFreeformServerQuery:_queryField.text
                         systemInstructions:_systemInstructionsField.text
@@ -248,6 +251,7 @@ using optimization_guide::proto::BlingPrototypingRequest_ModelEnum_Name;
 
 - (void)onDeviceSubmitButtonPressed:(UIButton*)button {
   [self disableSubmitButtons];
+  [self updateResponseField:@""];
 
   // TODO(crbug.com/387510419): Include stringified page context in prompt when
   // on-device is better supported.
@@ -262,14 +266,8 @@ using optimization_guide::proto::BlingPrototypingRequest_ModelEnum_Name;
 
 - (void)updateResponseField:(NSString*)response {
   _responseContainer.text = response;
-
-  // Enable the submit buttons, as the request has resolved.
-  [self enableSubmitButtons];
 }
 
-#pragma mark - Private
-
-// Enable submit buttons, and style the accordingly.
 - (void)enableSubmitButtons {
   _serverSideSubmitButton.enabled = YES;
   _serverSideSubmitButton.backgroundColor = [UIColor colorNamed:kBlueColor];
@@ -280,16 +278,7 @@ using optimization_guide::proto::BlingPrototypingRequest_ModelEnum_Name;
 #endif  // BUILDFLAG(BUILD_WITH_INTERNAL_OPTIMIZATION_GUIDE)
 }
 
-// Disable submit buttons, and style the accordingly.
-- (void)disableSubmitButtons {
-  _serverSideSubmitButton.enabled = NO;
-  _serverSideSubmitButton.backgroundColor =
-      [UIColor colorNamed:kDisabledTintColor];
-
-  _onDeviceSubmitButton.enabled = NO;
-  _onDeviceSubmitButton.backgroundColor =
-      [UIColor colorNamed:kDisabledTintColor];
-}
+#pragma mark - Private
 
 // Returns a container for a text field in the menu.
 - (UIView*)textFieldContainer {
@@ -301,6 +290,17 @@ using optimization_guide::proto::BlingPrototypingRequest_ModelEnum_Name;
       [[UIColor colorNamed:kTextPrimaryColor] CGColor];
   container.layer.borderWidth = kBorderWidth;
   return container;
+}
+
+// Disable submit buttons, and style them accordingly.
+- (void)disableSubmitButtons {
+  _serverSideSubmitButton.enabled = NO;
+  _serverSideSubmitButton.backgroundColor =
+      [UIColor colorNamed:kDisabledTintColor];
+
+  _onDeviceSubmitButton.enabled = NO;
+  _onDeviceSubmitButton.backgroundColor =
+      [UIColor colorNamed:kDisabledTintColor];
 }
 
 // Creates the menu for the model picker button.

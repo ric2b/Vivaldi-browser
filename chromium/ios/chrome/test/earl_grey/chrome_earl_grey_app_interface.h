@@ -358,11 +358,6 @@ enum class TipsNotificationType;
 
 #pragma mark - Sync Utilities (EG2)
 
-// Waits for the sync feature to be enabled/disabled. See SyncService::
-// IsSyncFeatureEnabled() for details. If not succeeded a GREYAssert is induced.
-+ (NSError*)waitForSyncFeatureEnabled:(BOOL)isEnabled
-                          syncTimeout:(base::TimeDelta)timeout;
-
 // Waits for sync to become fully active; see
 // SyncService::TransportState::ACTIVE for details. If not succeeded a
 // GREYAssert is induced.
@@ -427,6 +422,9 @@ enum class TipsNotificationType;
 // Adds typed URL into HistoryService at timestamp `visitTimestamp`.
 + (void)addHistoryServiceTypedURL:(NSString*)URL
                    visitTimestamp:(base::Time)visitTimestamp;
+
+// Sets the page `title` for `URL` in the History Service.
++ (void)setHistoryServiceTitle:(NSString*)title forPage:(NSString*)URL;
 
 // Deletes typed URL from HistoryService.
 + (void)deleteHistoryServiceTypedURL:(NSString*)URL;
@@ -527,6 +525,9 @@ enum class TipsNotificationType;
 
 // Returns YES if kTestFeature is enabled.
 + (BOOL)isTestFeatureEnabled;
+
+// Returns YES if DWA feature is enabled.
++ (BOOL)isDWAEnabled [[nodiscard]];
 
 // Returns YES if DemographicMetricsReporting feature is enabled.
 + (BOOL)isDemographicMetricsReportingEnabled [[nodiscard]];

@@ -9,6 +9,8 @@
 #include <string>
 #include <utility>
 
+#include "ash/boca/on_task/on_task_pod_controller.h"
+#include "ash/constants/ash_features.h"
 #include "ash/constants/notifier_catalogs.h"
 #include "ash/public/cpp/shell_window_ids.h"
 #include "ash/shell.h"
@@ -19,6 +21,7 @@
 #include "base/functional/bind.h"
 #include "base/strings/string_util.h"
 #include "base/values.h"
+#include "chrome/browser/ash/boca/on_task/on_task_pod_controller_impl.h"
 #include "chrome/browser/platform_util.h"
 #include "chrome/browser/ui/ash/system_web_apps/system_web_app_ui_utils.h"
 #include "chrome/browser/ui/browser.h"
@@ -96,6 +99,10 @@ void LockedSessionWindowTracker::InitializeBrowserInfoForTracking(
   }
   browser_ = browser;
   browser_->tab_strip_model()->AddObserver(this);
+  if (ash::features::IsBocaOnTaskPodEnabled()) {
+    on_task_pod_controller_ =
+        std::make_unique<ash::OnTaskPodControllerImpl>(browser_);
+  }
 }
 
 void LockedSessionWindowTracker::RefreshUrlBlocklist() {
@@ -208,6 +215,7 @@ void LockedSessionWindowTracker::CleanupWindowTracker() {
   if (on_task_blocklist_) {
     on_task_blocklist_->CleanupBlocklist();
   }
+  on_task_pod_controller_.reset();
   browser_ = nullptr;
   can_open_new_popup_ = true;
   oauth_in_progress_ = false;
@@ -242,6 +250,12 @@ void LockedSessionWindowTracker::TabChangedAt(content::WebContents* contents,
   if (change_type == TabChangeType::kAll) {
     RefreshUrlBlocklist();
   }
+  // When all tabs are closing, the tab strip model is still active, but the
+  // active tab is no longer valid. This can cause a crash if we try to access
+  // the navigation context of the active tab.
+  if (!browser_->tab_strip_model()->closing_all() && on_task_pod_controller_) {
+    on_task_pod_controller_->OnPageNavigationContextChanged();
+  }
 
   if (browser_ && browser_->tab_strip_model()->active_index() == index) {
     // Only fire for active tab.
@@ -257,12 +271,25 @@ void LockedSessionWindowTracker::SetNotificationManagerForTesting(
   notifications_manager_ = std::move(notifications_manager);
 }
 
+ash::OnTaskPodController* LockedSessionWindowTracker::on_task_pod_controller() {
+  if (!on_task_pod_controller_) {
+    return nullptr;
+  }
+  return on_task_pod_controller_.get();
+}
+
 void LockedSessionWindowTracker::OnTabStripModelChanged(
     TabStripModel* tab_strip_model,
     const TabStripModelChange& change,
     const TabStripSelectionChange& selection) {
   if (selection.active_tab_changed()) {
     RefreshUrlBlocklist();
+    // When all tabs are closing, the tab strip model is still active, but the
+    // active tab is no longer valid. This can cause a crash if we try to access
+    // the navigation context of the active tab.
+    if (!tab_strip_model->closing_all() && on_task_pod_controller_) {
+      on_task_pod_controller_->OnPageNavigationContextChanged();
+    }
     if (selection.new_contents) {
       for (auto& observer : observers_) {
         observer.OnActiveTabChanged(selection.new_contents->GetTitle());

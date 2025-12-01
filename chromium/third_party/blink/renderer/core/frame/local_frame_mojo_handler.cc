@@ -570,6 +570,11 @@ void LocalFrameMojoHandler::NotifyVirtualKeyboardOverlayRect(
   frame_->NotifyVirtualKeyboardOverlayRectObservers(scaled_rect);
 }
 
+void LocalFrameMojoHandler::NotifyContextMenuInsetsObservers(
+    const gfx::Rect& safe_area) {
+  frame_->NotifyContextMenuInsetsObservers(safe_area);
+}
+
 void LocalFrameMojoHandler::AddMessageToConsole(
     mojom::blink::ConsoleMessageLevel level,
     const WTF::String& message,
@@ -1422,6 +1427,12 @@ void LocalFrameMojoHandler::AddResourceTimingEntryForFailedSubframeNavigation(
   info->is_secure_transport = is_secure_transport;
   info->timing = std::move(load_timing_info);
   subframe->Owner()->AddResourceTiming(std::move(info));
+}
+
+void LocalFrameMojoHandler::GetScrollPosition(
+    GetScrollPositionCallback callback) {
+  std::move(callback).Run(gfx::ToFlooredPoint(
+      frame_->LocalFrameRoot().View()->LayoutViewport()->ScrollPosition()));
 }
 
 void LocalFrameMojoHandler::RequestFullscreenVideoElement() {

@@ -620,7 +620,11 @@ static void dump_stream_format(const AVFormatContext *ic, int i,
 
     // Fields which are missing from AVCodecParameters need to be taken from the AVCodecContext
     if (sti->avctx) {
+#if FF_API_CODEC_PROPS
+FF_DISABLE_DEPRECATION_WARNINGS
         avctx->properties   = sti->avctx->properties;
+FF_ENABLE_DEPRECATION_WARNINGS
+#endif
         avctx->codec        = sti->avctx->codec;
         avctx->qmin         = sti->avctx->qmin;
         avctx->qmax         = sti->avctx->qmax;
@@ -789,9 +793,13 @@ static void dump_stream_group(const AVFormatContext *ic, uint8_t *printed,
                       tile_grid->width, tile_grid->height, (AVRational) {0,1},
                       "    ", AV_LOG_INFO);
         for (int i = 0; i < tile_grid->nb_tiles; i++) {
-            const AVStream *st = stg->streams[tile_grid->offsets[i].idx];
-            dump_stream_format(ic, st->index, i, index, is_output, AV_LOG_VERBOSE);
-            printed[st->index] = 1;
+            const AVStream *st = NULL;
+            if (tile_grid->offsets[i].idx < stg->nb_streams)
+                st = stg->streams[tile_grid->offsets[i].idx];
+            if (st && !printed[st->index]) {
+                dump_stream_format(ic, st->index, i, index, is_output, AV_LOG_VERBOSE);
+                printed[st->index] = 1;
+            }
         }
         for (int i = 0; i < stg->nb_streams; i++) {
             const AVStream *st = stg->streams[i];

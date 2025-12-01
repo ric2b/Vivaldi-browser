@@ -6,6 +6,8 @@
 // This source code is licensed under the BSD-style license found in the
 // LICENSE file in the root directory of this source tree.
 
+// clang-format off
+
 #ifdef __wasm__
   .macro BEGIN_FUNCTION name
     .text
@@ -63,4 +65,10 @@
 
   .macro END_FUNCTION name
   .endm
+#endif
+
+#ifdef __has_feature
+#define XNN_HAS_FEATURE(feature) __has_feature(feature)
+#else
+#define XNN_HAS_FEATURE(feature) 0
 #endif

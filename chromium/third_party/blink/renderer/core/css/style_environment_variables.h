@@ -59,7 +59,22 @@ enum class UADefinedVariable {
   kTitlebarAreaX,
   kTitlebarAreaY,
   kTitlebarAreaWidth,
-  kTitlebarAreaHeight
+  kTitlebarAreaHeight,
+
+  // The context menu insets are four environment variables that define a
+  // rectangle by its top, right, bottom, and left insets from the edge of
+  // the viewport. These are used for the `interesttarget` attribute on mobile
+  // devices that display context menus, to indicate the still-unoccluded area
+  // of the screen while a context menu is visible.
+  // Explainer:
+  // https://open-ui.org/components/interest-invokers.explainer/#touchscreen
+  kContextMenuInsetTop,
+  kContextMenuInsetLeft,
+  kContextMenuInsetBottom,
+  kContextMenuInsetRight,
+
+  // The text scale as chosen by the user in the OS accessibility settings.
+  kPreferredTextScale
 };
 
 enum class UADefinedTwoDimensionalVariable {
@@ -172,7 +187,8 @@ class CORE_EXPORT StyleEnvironmentVariables
 
   HeapVector<Member<StyleEnvironmentVariables>> children_;
   HeapHashMap<AtomicString, Member<CSSVariableData>> data_;
-  HeapHashMap<AtomicString, TwoDimensionVariableValues> two_dimension_data_;
+  HeapHashMap<AtomicString, Member<TwoDimensionVariableValues>>
+      two_dimension_data_;
   Member<StyleEnvironmentVariables> parent_;
 };
 

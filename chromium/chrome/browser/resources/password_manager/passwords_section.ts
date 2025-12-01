@@ -148,9 +148,13 @@ export class PasswordsSectionElement extends PasswordsSectionElementBase {
   private showAddPasswordDialog_: boolean;
   private showAuthTimedOutDialog_: boolean;
   private showMovePasswordsDialog_: boolean;
+  private importPasswordsText_: string;
+  private passwordsOnDevice_: chrome.passwordsPrivate.PasswordUiEntry[];
+  private showPasswordsDescription_: boolean;
   private movePasswordsText_: string;
   private promoCard_: PromoCard|null;
   private passwordManagerDisabled_: boolean;
+  private shouldShowPromoCard_: boolean;
   private activeListItem_: HTMLElement|null;
 
   private setSavedPasswordsListener_: (
@@ -312,7 +316,7 @@ export class PasswordsSectionElement extends PasswordsSectionElementBase {
     const importLink = this.$.importPasswords.querySelector('a');
     // Add an event listener to the import link, points to the import flow.
     assert(importLink);
-    importLink!.addEventListener('click', (event: Event) => {
+    importLink.addEventListener('click', (event: Event) => {
       // The action is triggered from a dummy anchor element poining to "#".
       // For that case preventing the default behaviour is required here.
       event.preventDefault();

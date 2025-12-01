@@ -131,6 +131,14 @@ enum Destination {
   // active/idle states during the session.
   USER_SESSION_ACTIVITY = 34;
 
+  // |DESKTOP_STATUS_REPORT| is for collecting status report from the Android
+  // desktop devices.
+  DESKTOP_STATUS_REPORT = 35;
+
+  // |DESKTOP_USAGE_LOGS| is for usage logs events from the Android desktop
+  // devices.
+  DESKTOP_USAGE_LOGS = 36;
+
   reserved 8;
 }
 

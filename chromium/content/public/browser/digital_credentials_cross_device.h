@@ -5,6 +5,7 @@
 #ifndef CONTENT_PUBLIC_BROWSER_DIGITAL_CREDENTIALS_CROSS_DEVICE_H_
 #define CONTENT_PUBLIC_BROWSER_DIGITAL_CREDENTIALS_CROSS_DEVICE_H_
 
+#include <variant>
 #include <vector>
 
 #include "base/types/expected.h"
@@ -12,6 +13,7 @@
 #include "base/values.h"
 #include "content/common/content_export.h"
 #include "content/public/browser/cross_device_request_info.h"
+#include "content/public/browser/digital_identity_provider.h"
 #include "device/fido/cable/v2_constants.h"
 #include "device/fido/network_context_factory.h"
 #include "url/origin.h"
@@ -67,15 +69,16 @@ enum class SystemEvent {
   kReady,
 };
 
-using Error = absl::variant<SystemError, ProtocolError, RemoteError>;
+using Error = std::variant<SystemError, ProtocolError, RemoteError>;
 
 // Events either come from the underlying hybrid connection, or are
 // SystemEvents.
-using Event = absl::variant<device::cablev2::Event, SystemEvent>;
+using Event = std::variant<device::cablev2::Event, SystemEvent>;
 
 // A Response is the response to a cross-device request. At this level of
-// abstraction it's an opaque `base::Value` taken from the JSON reply.
-using Response = base::StrongAlias<class CrossDeviceResponseTag, base::Value>;
+// abstraction it's an opaque DigitalCredential taken from the JSON reply.
+using Response = base::StrongAlias<class CrossDeviceResponseTag,
+                                   DigitalIdentityProvider::DigitalCredential>;
 
 // A Transaction performs a cross-device digital identity transaction by
 // listening for mobile devices that have scanned a QR code and thus are

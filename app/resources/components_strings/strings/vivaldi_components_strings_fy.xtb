@@ -35,7 +35,6 @@
 <translation id="2388886110302389394">Side iepenje yn in nij Privee finster (Ctrl+Shift+N)</translation>
 <translation id="2467694685043708798"><ph name="BEGIN_LINK" />Netwurk diagnoaze útfiere<ph name="END_LINK" /></translation>
 <translation id="2491414235131909199">Dizze side is tsjinkeard troch in tafoeging</translation>
-<translation id="2501278716633472235">Tebek</translation>
 <translation id="2539524384386349900">Detektearje</translation>
 <translation id="255002559098805027"><ph name="HOST_NAME" /> stjoerde in ûnjildige reaksje.</translation>
 <translation id="2634124572758952069"><ph name="HOST_NAME" />’s tsjinner IP adres waard net fûn.</translation>
@@ -61,7 +60,6 @@
 nedich ha: <ph name="PLATFORM_TEXT" /></translation>
 <translation id="3226128629678568754">Druk de ferfarsk knop om de gegevens dy nedich binne om de side te laden op 'e nij te ferstjoeren.</translation>
 <translation id="3234666976984236645">Altyd wichtige ynhâld op dizze webstee detektearje</translation>
-<translation id="3308738399950580893">advertinsjes</translation>
 <translation id="3384522979010096022">Dyn organisaasje stiet it net ta datst dizze side besjochst</translation>
 <translation id="3422472998109090673"><ph name="HOST_NAME" /> is op it stuit net berikber.</translation>
 <translation id="3427092606871434483">Tastean (standert)</translation>
@@ -79,7 +77,6 @@ nedich ha: <ph name="PLATFORM_TEXT" /></translation>
 <translation id="3681007416295224113">Sertifikaat ynformaasje</translation>
 <translation id="3717027428350673159"><ph name="BEGIN_LINK" />Kontrolearje de proksy, brânmourre, en DNS ynstellings<ph name="END_LINK" /></translation>
 <translation id="382518646247711829">As jo in proksy tsjinner brûke...</translation>
-<translation id="3894751534882749287">As jo de side dochs besjen wolle, kinne jo it beskerming nivo feroarje yn de pop-up fan it folger filter of troch te klikken op Tastean</translation>
 <translation id="3950820424414687140">Ynlogge</translation>
 <translation id="3973234410852337861"><ph name="HOST_NAME" /> is tsjinkeard</translation>
 <translation id="3987940399970879459">Minder dan 1 MB</translation>
@@ -107,7 +104,6 @@ nedich ha: <ph name="PLATFORM_TEXT" /></translation>
 <translation id="4701488924964507374"><ph name="SENTENCE1" /><ph name="SENTENCE2" /></translation>
 <translation id="4708268264240856090">Jo ferbining wie ûnderbrutsen</translation>
 <translation id="4722547256916164131"><ph name="BEGIN_LINK" />Windows netwurk diagnoaze útfiere<ph name="END_LINK" /></translation>
-<translation id="4736016046474602958">Folger filter</translation>
 <translation id="4744603770635761495">Utfierber paad</translation>
 <translation id="4750917950439032686">Jo ynformaasje (lykas wachtwurden, of kredytkaart nûmers) binne privee as se ferstjoerd wurde nei dizze webstee.</translation>
 <translation id="4764776831041365478">De webstee op <ph name="URL" /> is mooglik tydlik út de loft of permanint ferpleatst nei in oar webadres.</translation>
@@ -166,13 +162,11 @@ nedich ha: <ph name="PLATFORM_TEXT" /></translation>
 <translation id="7096937462164235847">De identiteit fan dizze webstee is net ferifiearre.</translation>
 <translation id="7108819624672055576">Tastean troch in tafoeging</translation>
 <translation id="7111012039238467737">(Jildich)</translation>
-<translation id="7113310725918019676"><ph name="BLOCKED_TYPE" /> tastean op <ph name="DOMAIN" /></translation>
 <translation id="7126644664682723998">Plakke en sykje</translation>
 <translation id="7210863904660874423"><ph name="HOST_NAME" /> foldocht net oan de feiligens standerts.</translation>
 <translation id="7219179957768738017">De ferbining makket brûkme fan <ph name="SSL_VERSION" />.</translation>
 <translation id="7221855153210829124">Notifikaasjes sjen litte</translation>
 <translation id="7353601530677266744">Opdracht rigel</translation>
-<translation id="7364115444476960850">De side dy't jo besykje wolle is tsjinkeard troch Vivaldi's <ph name="BLOCKER_NAME" /></translation>
 <translation id="7419106976560586862">Profyl paad</translation>
 <translation id="7455133967321480974">Algemiene standert ynstelling brûke (Tsjinkeare)</translation>
 <translation id="7518003948725431193">Der is gjin webstee fûn foar it webadres: <ph name="URL" /></translation>
@@ -192,7 +186,6 @@ nedich ha: <ph name="PLATFORM_TEXT" /></translation>
 <translation id="8037357227543935929">Freegje (standert)</translation>
 <translation id="8041940743680923270">Algemiene standert ynstelling brûke (Freegje)</translation>
 <translation id="808894953321890993">Wachtwurd feroarje</translation>
-<translation id="8119307142152921512">folgers en advertinsjes</translation>
 <translation id="8149426793427495338">Jo kompjûter is gien sliepen.</translation>
 <translation id="8150722005171944719">De triem op <ph name="URL" /> is net te berikken. It is miskien wol wiske, ferpleatst, of de triem foech beheind de tagong.</translation>
 <translation id="8184538546369750125">Algemiene standert ynstelling brûke (Tastean)</translation>
@@ -209,7 +202,6 @@ nedich ha: <ph name="PLATFORM_TEXT" /></translation>
 <translation id="8703575177326907206">Jo ferbining mei <ph name="DOMAIN" /> is net fersifere.</translation>
 <translation id="8740359287975076522">It &lt;abbr id="dnsDefinition"&gt;DNS adres&lt;/abbr&gt; fan <ph name="HOST_NAME" /> koe net fûn wurde. De swierigens wurdt ûndersocht.</translation>
 <translation id="8820817407110198400">Blêdwizers</translation>
-<translation id="8940028675168378100">Tsjinkeard op <ph name="BLOCKER_NAME" /></translation>
 <translation id="8963117664422609631">Gean nei webstee ynstellingen</translation>
 <translation id="8975012916872825179">Ynklusief ynformaasje as tellefoannûmers, e-post adressen en ferstjoer adressen</translation>
 <translation id="9001074447101275817">De proksy <ph name="DOMAIN" /> fereasket in brûkersnamme en wachtwurd.</translation>
@@ -221,7 +213,6 @@ nedich ha: <ph name="PLATFORM_TEXT" /></translation>
 <translation id="9073799351042754113">Jo ha der foar keazen foar it útskeakeljen fan feiligens warskôgingen foar dizze webstee.</translation>
 <translation id="9168814207360376865">It tastean dat websteën hifje as der ek betelmetoades bewarre binne</translation>
 <translation id="9169664750068251925">Altyd tsjinkeare op dizze webstee</translation>
-<translation id="9180553614777056266">Advertinsje tsjinkearder</translation>
 <translation id="9183425211371246419"><ph name="HOST_NAME" /> brûkt in net stipe protokol.</translation>
 <translation id="936602727769022409">Jo kinne de tagong ta jo Google akkount ferlieze. Chromium ried oan om jo wachtwurd te feroarjen. Der sil frege wurde om op jo akkount yn te loggen.</translation>
 <translation id="969892804517981540">Offisjele bou</translation>

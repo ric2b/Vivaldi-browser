@@ -134,7 +134,7 @@ void BuiltinStringFromCharCode::GenerateCode(MaglevAssembler* masm,
 }
 
 void InlinedAllocation::SetValueLocationConstraints() {
-  UseRegister(allocation_block());
+  UseRegister(allocation_block_input());
   if (offset() == 0) {
     DefineSameAsFirst(this);
   } else {
@@ -146,7 +146,7 @@ void InlinedAllocation::GenerateCode(MaglevAssembler* masm,
                                      const ProcessingState& state) {
   if (offset() != 0) {
     __ lay(ToRegister(result()),
-           MemOperand(ToRegister(allocation_block()), offset()));
+           MemOperand(ToRegister(allocation_block_input()), offset()));
   }
 }
 
@@ -189,6 +189,31 @@ void CheckedIntPtrToInt32::GenerateCode(MaglevAssembler* masm,
   __ bgt(deopt);
   __ CmpS64(input_reg, Operand(std::numeric_limits<int32_t>::min()));
   __ blt(deopt);
+}
+
+void CheckFloat64SameValue::SetValueLocationConstraints() {
+  UseRegister(target_input());
+  set_temporaries_needed((value().get_scalar() == 0) ? 1 : 0);
+  set_double_temporaries_needed(value().is_nan() ? 0 : 1);
+}
+void CheckFloat64SameValue::GenerateCode(MaglevAssembler* masm,
+                                         const ProcessingState& state) {
+  Label* fail = __ GetDeoptLabel(this, deoptimize_reason());
+  MaglevAssembler::TemporaryRegisterScope temps(masm);
+  DoubleRegister double_scratch = temps.AcquireScratchDouble();
+  DoubleRegister target = ToDoubleRegister(target_input());
+  if (value().is_nan()) {
+    __ JumpIfNotNan(target, fail);
+  } else {
+    __ Move(double_scratch, value());
+    __ CompareFloat64AndJumpIf(double_scratch, target, kNotEqual, fail, fail);
+    if (value().get_scalar() == 0) {  // If value is +0.0 or -0.0.
+      Register scratch = temps.AcquireScratch();
+      __ MovDoubleToInt64(scratch, target);
+      __ CmpU64(scratch, Operand(0));
+      __ JumpIf(value().get_bits() == 0 ? kNotEqual : kEqual, fail);
+    }
+  }
 }
 
 void Int32AddWithOverflow::SetValueLocationConstraints() {
@@ -771,24 +796,17 @@ void HandleInterruptsAndTiering(MaglevAssembler* masm, ZoneLabelRef done,
 }
 
 void GenerateReduceInterruptBudget(MaglevAssembler* masm, Node* node,
+                                   Register feedback_cell,
                                    ReduceInterruptBudgetType type, int amount) {
   MaglevAssembler::TemporaryRegisterScope temps(masm);
-  Register scratch = temps.AcquireScratch();
-  Register feedback_cell = scratch;
   Register budget = temps.AcquireScratch();
-  __ LoadU64(feedback_cell,
-             MemOperand(fp, StandardFrameConstants::kFunctionOffset));
-  __ LoadTaggedField(
-      feedback_cell,
-      FieldMemOperand(feedback_cell, JSFunction::kFeedbackCellOffset));
   __ LoadU32(budget, FieldMemOperand(feedback_cell,
                                      FeedbackCell::kInterruptBudgetOffset));
   __ SubS32(budget, Operand(amount));
   __ StoreU32(budget, FieldMemOperand(feedback_cell,
                                       FeedbackCell::kInterruptBudgetOffset));
   ZoneLabelRef done(masm);
-  __ JumpToDeferredIf(lt, HandleInterruptsAndTiering, done, node, type,
-                      scratch);
+  __ JumpToDeferredIf(lt, HandleInterruptsAndTiering, done, node, type, budget);
   __ bind(*done);
 }
 
@@ -796,22 +814,23 @@ void GenerateReduceInterruptBudget(MaglevAssembler* masm, Node* node,
 
 int ReduceInterruptBudgetForLoop::MaxCallStackArgs() const { return 1; }
 void ReduceInterruptBudgetForLoop::SetValueLocationConstraints() {
-  set_temporaries_needed(1);
+  UseRegister(feedback_cell());
 }
 void ReduceInterruptBudgetForLoop::GenerateCode(MaglevAssembler* masm,
                                                 const ProcessingState& state) {
-  GenerateReduceInterruptBudget(masm, this, ReduceInterruptBudgetType::kLoop,
-                                amount());
+  GenerateReduceInterruptBudget(masm, this, ToRegister(feedback_cell()),
+                                ReduceInterruptBudgetType::kLoop, amount());
 }
 
 int ReduceInterruptBudgetForReturn::MaxCallStackArgs() const { return 1; }
 void ReduceInterruptBudgetForReturn::SetValueLocationConstraints() {
+  UseRegister(feedback_cell());
   set_temporaries_needed(1);
 }
 void ReduceInterruptBudgetForReturn::GenerateCode(
     MaglevAssembler* masm, const ProcessingState& state) {
-  GenerateReduceInterruptBudget(masm, this, ReduceInterruptBudgetType::kReturn,
-                                amount());
+  GenerateReduceInterruptBudget(masm, this, ToRegister(feedback_cell()),
+                                ReduceInterruptBudgetType::kReturn, amount());
 }
 
 // ---

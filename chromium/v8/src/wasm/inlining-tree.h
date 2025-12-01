@@ -2,13 +2,14 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifndef V8_WASM_INLINING_TREE_H_
+#define V8_WASM_INLINING_TREE_H_
+
 #if !V8_ENABLE_WEBASSEMBLY
 #error This header should only be included if WebAssembly is enabled.
 #endif  // !V8_ENABLE_WEBASSEMBLY
 
-#ifndef V8_WASM_INLINING_TREE_H_
-#define V8_WASM_INLINING_TREE_H_
-
+#include <cinttypes>
 #include <cstdint>
 #include <queue>
 #include <vector>
@@ -84,6 +85,13 @@ class InliningTree : public ZoneObject {
   // IIUC, this limit is in place because of the encoding of inlining IDs in
   // a 6-bit bitfield in Turboshaft IR, which we should revisit.
   static constexpr int kMaxInlinedCount = 60;
+
+  // Limit the nesting depth of inlining. Inlining decisions are based on call
+  // counts. A small function with high call counts that is called recursively
+  // would be inlined until all budget is used.
+  // TODO(14108): This still might not lead to ideal results. Other options
+  // could be explored like penalizing nested inlinees.
+  static constexpr uint32_t kMaxInliningNestingDepth = 7;
 
   base::Vector<CasesPerCallSite> function_calls() { return function_calls_; }
   base::Vector<bool> has_non_inlineable_targets() {
@@ -190,12 +198,6 @@ class InliningTree : public ZoneObject {
   base::Vector<CasesPerCallSite> function_calls_{};
   base::Vector<bool> has_non_inlineable_targets_{};
 
-  // Limit the nesting depth of inlining. Inlining decisions are based on call
-  // counts. A small function with high call counts that is called recursively
-  // would be inlined until all budget is used.
-  // TODO(14108): This still might not lead to ideal results. Other options
-  // could be explored like penalizing nested inlinees.
-  static constexpr uint32_t kMaxInliningNestingDepth = 7;
   uint32_t depth_;
 
   // For tracing.
@@ -256,18 +258,18 @@ void InliningTree::FullyExpand() {
       queue;
   queue.push(this);
   int inlined_count = 0;
-  base::SpinningMutexGuard mutex_guard(&data_->module->type_feedback.mutex);
+  base::MutexGuard mutex_guard(&data_->module->type_feedback.mutex);
   while (!queue.empty() && inlined_count < kMaxInlinedCount) {
     InliningTree* top = queue.top();
     if (v8_flags.trace_wasm_inlining) {
       if (top != this) {
         PrintF(
             "[function %d: in function %d, considering call #%d, case #%d, to "
-            "function %d (count=%d, size=%d, score=%lld)... ",
+            "function %d (count=%d, size=%d, score=%" PRId64 ")... ",
             data_->topmost_caller_index, top->caller_index_,
             top->feedback_slot_, static_cast<int>(top->case_),
             static_cast<int>(top->function_index_), top->call_count_,
-            top->wire_byte_size_, static_cast<long long>(top->score()));
+            top->wire_byte_size_, static_cast<int64_t>(top->score()));
       } else {
         PrintF("[function %d: expanding topmost caller... ",
                data_->topmost_caller_index);

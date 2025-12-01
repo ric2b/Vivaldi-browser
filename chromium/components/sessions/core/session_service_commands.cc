@@ -90,6 +90,7 @@ static const SessionCommand::id_type kCommandSetWindowVisibleOnAllWorkspaces =
     34;
 static const SessionCommand::id_type kCommandAddTabExtraData = 35;
 static const SessionCommand::id_type kCommandAddWindowExtraData = 36;
+static const SessionCommand::id_type kCommandSetPlatformSessionId = 37;
 // ID 255 is used by CommandStorageBackend.
 
 // VIVALDI SPECIFIC below, must not change or we must migrate data!
@@ -479,7 +480,8 @@ void CreateTabsAndWindows(
     IdToSessionTab* tabs,
     GroupIdToSessionTabGroup* tab_groups,
     IdToSessionWindow* windows,
-    SessionID* active_window_id) {
+    SessionID* active_window_id,
+    std::string* platform_session_id) {
   // If the file is corrupt (command with wrong size, or unknown command), we
   // still return true and attempt to restore what we we can.
   DVLOG(1) << "CreateTabsAndWindows";
@@ -932,6 +934,17 @@ void CreateTabsAndWindows(
         break;
       }
 
+      case kCommandSetPlatformSessionId: {
+        std::string id;
+        if (!RestoreSetPlatformSessionIdCommand(*command, &id)) {
+          DVLOG(1) << "Failed reading command " << command->id();
+          return;
+        }
+        DVLOG(1) << " restored platform_session_id=" << id;
+        *platform_session_id = id;
+        break;
+      }
+
       // Macro defined in  vivaldi_session_service_commands.inc
       VIVALDI_SESSION_SERVICE_CASES
 
@@ -1207,6 +1220,12 @@ std::unique_ptr<SessionCommand> CreateAddWindowExtraDataCommand(
                                    data);
 }
 
+std::unique_ptr<SessionCommand> CreateSetPlatformSessionIdCommand(
+    const std::string& platform_session_id) {
+  return CreateSetPlatformSessionIdCommand(kCommandSetPlatformSessionId,
+                                           platform_session_id);
+}
+
 bool ReplacePendingCommand(CommandStorageManager* command_storage_manager,
                            std::unique_ptr<SessionCommand>* command) {
   // We optimize page navigations, which can happen quite frequently and
@@ -1270,14 +1289,15 @@ bool IsClosingCommand(SessionCommand* command) {
 void RestoreSessionFromCommands(
     const std::vector<std::unique_ptr<SessionCommand>>& commands,
     std::vector<std::unique_ptr<SessionWindow>>* valid_windows,
-    SessionID* active_window_id) {
+    SessionID* active_window_id,
+    std::string* platform_session_id) {
   IdToSessionTab tabs;
   GroupIdToSessionTabGroup tab_groups;
   IdToSessionWindow windows;
 
   DVLOG(1) << "RestoreSessionFromCommands " << commands.size();
-  CreateTabsAndWindows(commands, &tabs, &tab_groups, &windows,
-                       active_window_id);
+  CreateTabsAndWindows(commands, &tabs, &tab_groups, &windows, active_window_id,
+                       platform_session_id);
   AddTabsToWindows(&tabs, &tab_groups, &windows);
   SortTabsBasedOnVisualOrderAndClear(&windows, valid_windows);
   UpdateSelectedTabIndex(valid_windows);

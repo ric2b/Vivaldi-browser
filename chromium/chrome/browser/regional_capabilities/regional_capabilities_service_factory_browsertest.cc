@@ -9,17 +9,19 @@
 #include "chrome/browser/ui/browser.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "components/country_codes/country_codes.h"
+#include "components/regional_capabilities/regional_capabilities_country_id.h"
 #include "components/regional_capabilities/regional_capabilities_service.h"
+#include "components/regional_capabilities/regional_capabilities_test_utils.h"
 #include "components/variations/variations_switches.h"
 #include "content/public/test/browser_test.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
+using ::country_codes::CountryId;
+
 namespace regional_capabilities {
 namespace {
 
-using ::testing::regional_capabilities::GetCountryId;
-
-constexpr int kUsaCountryId = country_codes::CountryCharsToCountryID('U', 'S');
+constexpr CountryId kUsaCountryId("US");
 
 }  // namespace
 class RegionalCapabilitiesServiceFactoryBrowserTest
@@ -28,7 +30,7 @@ class RegionalCapabilitiesServiceFactoryBrowserTest
 struct VariationsCountryTestParam {
   std::string test_suffix;
   std::string variations_country_code;
-  std::optional<int> expected_country_id;
+  std::optional<CountryId> expected_country_id;
 };
 
 class RegionalCapabilitiesServiceFactoryBrowserTestForVariationsCountry
@@ -45,7 +47,7 @@ class RegionalCapabilitiesServiceFactoryBrowserTestForVariationsCountry
     return GetParam().variations_country_code;
   }
 
-  int GetExpectedCountryId() const {
+  CountryId GetExpectedCountryId() const {
     return GetParam().expected_country_id.value_or(kUsaCountryId);
   }
 };
@@ -56,7 +58,7 @@ const VariationsCountryTestParam kTestParams[] = {
     {.test_suffix = "FR",
      .variations_country_code = "fr",
 #if BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_LINUX)
-     .expected_country_id = country_codes::CountryCharsToCountryID('F', 'R')
+     .expected_country_id = CountryId("FR")
 #else
      .expected_country_id = kUsaCountryId
 #endif
@@ -72,7 +74,7 @@ IN_PROC_BROWSER_TEST_P(
   auto& service = CHECK_DEREF(
       RegionalCapabilitiesServiceFactory::GetForProfile(browser()->profile()));
 
-  EXPECT_EQ(GetCountryId(service), GetExpectedCountryId());
+  EXPECT_EQ(service.GetCountryId().GetForTesting(), GetExpectedCountryId());
 }
 
 INSTANTIATE_TEST_SUITE_P(

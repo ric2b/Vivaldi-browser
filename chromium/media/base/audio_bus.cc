@@ -350,9 +350,8 @@ void AudioBus::CopyAndClipTo(AudioBus* dest) const {
   DCHECK(!is_bitstream_format_);
   CHECK_EQ(channels(), dest->channels());
   CHECK_LE(frames(), dest->frames());
-  for (int ch = 0; ch < channels(); ++ch) {
-    std::ranges::transform(channel_span(ch), dest->channel_span(ch).begin(),
-                           Float32SampleTypeTraits::FromFloat);
+  for (auto [src_ch, dest_ch] : base::zip(channel_data_, dest->AllChannels())) {
+    vector_math::FCLAMP(src_ch, dest_ch);
   }
 }
 
@@ -381,7 +380,7 @@ void AudioBus::Scale(float volume) {
   DCHECK(!is_bitstream_format_);
   if (volume > 0 && volume != 1) {
     for (auto channel : channel_data_) {
-      vector_math::FMUL(channel.data(), volume, frames(), channel.data());
+      vector_math::FMUL(channel, volume, channel);
     }
   } else if (volume == 0) {
     Zero();

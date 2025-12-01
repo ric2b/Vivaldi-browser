@@ -67,6 +67,7 @@ fn main() {
         "AMediaCodec_stop",
         "AMediaFormat",
         "AMediaFormat_delete",
+        "AMediaFormat_getBuffer",
         "AMediaFormat_getInt32",
         "AMediaFormat_new",
         "AMediaFormat_setBuffer",

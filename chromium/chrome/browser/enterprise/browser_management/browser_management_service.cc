@@ -6,7 +6,7 @@
 
 #include "base/logging.h"
 #include "base/strings/utf_string_conversions.h"
-#include "build/chromeos_buildflags.h"
+#include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/enterprise/browser_management/browser_management_status_provider.h"
 #include "chrome/browser/enterprise/util/managed_browser_utils.h"
@@ -38,7 +38,7 @@ GetManagementStatusProviders(Profile* profile) {
       std::make_unique<LocalTestPolicyUserManagementProvider>(profile));
   providers.emplace_back(
       std::make_unique<LocalTestPolicyBrowserManagementProvider>(profile));
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
   providers.emplace_back(std::make_unique<DeviceManagementStatusProvider>());
 #endif
   return providers;
@@ -53,7 +53,7 @@ BrowserManagementService::BrowserManagementService(Profile* profile)
       FROM_HERE,
       base::BindOnce(&BrowserManagementService::UpdateManagementIconForProfile,
                      weak_ptr_factory_.GetWeakPtr(), profile));
-  UpdateEnterpriseLabelForProfile(profile);
+  enterprise_util::SetEnterpriseProfileLabel(profile);
   pref_change_registrar_.Init(profile->GetPrefs());
   pref_change_registrar_.Add(
       prefs::kEnterpriseLogoUrlForProfile,
@@ -62,9 +62,8 @@ BrowserManagementService::BrowserManagementService(Profile* profile)
           weak_ptr_factory_.GetWeakPtr(), profile));
   pref_change_registrar_.Add(
       prefs::kEnterpriseCustomLabelForProfile,
-      base::BindRepeating(
-          &BrowserManagementService::UpdateEnterpriseLabelForProfile,
-          weak_ptr_factory_.GetWeakPtr(), profile));
+      base::BindRepeating(&enterprise_util::SetEnterpriseProfileLabel,
+                          profile));
 #endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
 }
 
@@ -85,25 +84,6 @@ void BrowserManagementService::UpdateManagementIconForProfile(
       profile,
       base::BindOnce(&BrowserManagementService::SetManagementIconForProfile,
                      weak_ptr_factory_.GetWeakPtr()));
-}
-
-void BrowserManagementService::UpdateEnterpriseLabelForProfile(
-    Profile* profile) {
-  ProfileManager* profile_manager = g_browser_process->profile_manager();
-  // profile_manager might be null in testing environments.
-  if (!profile_manager) {
-    return;
-  }
-
-  ProfileAttributesEntry* entry =
-      profile_manager->GetProfileAttributesStorage()
-          .GetProfileAttributesWithPath(profile->GetPath());
-  if (!entry) {
-    return;
-  }
-
-  entry->SetEnterpriseProfileLabel(
-      enterprise_util::GetEnterpriseLabel(profile));
 }
 
 void BrowserManagementService::SetManagementIconForProfile(

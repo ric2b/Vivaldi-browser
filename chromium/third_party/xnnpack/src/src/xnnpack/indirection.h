@@ -11,10 +11,10 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include "xnnpack.h"
-#include "xnnpack/common.h"
-#include "xnnpack/math.h"
-#include "xnnpack/microparams.h"
+#include "include/xnnpack.h"
+#include "src/xnnpack/common.h"
+#include "src/xnnpack/math.h"
+#include "src/xnnpack/microparams.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -104,14 +104,41 @@ XNN_INTERNAL void xnn_indirection_init_dwconv2d(
   size_t primary_tile);
 
 XNN_INTERNAL void xnn_indirection_init_deconv2d(
-  xnn_operator_t op,
   size_t output_tile_size,
-  uint32_t log2_element_size);
+  const void** indirection_buffer,
+  const void* input,
+  size_t input_pixel_stride,
+  const void* zero,
+  size_t input_height,
+  size_t input_width,
+  size_t output_height,
+  size_t output_width,
+  size_t kernel_height,
+  size_t kernel_width,
+  size_t stride_height,
+  size_t stride_width,
+  size_t dilation_height,
+  size_t dilation_width,
+  size_t padding_top,
+  size_t padding_left);
 
 XNN_INTERNAL void xnn_indirection_init_subconv2d(
-  xnn_operator_t op,
   size_t output_tile_size,
-  uint32_t log2_element_size);
+  const void** indirection_buffer,
+  struct subconvolution_params* subconvolution_params,
+  const void* input,
+  size_t input_pixel_stride,
+  const void* zero,
+  size_t input_height,
+  size_t input_width,
+  size_t output_height,
+  size_t output_width,
+  size_t kernel_height,
+  size_t kernel_width,
+  size_t stride_height,
+  size_t stride_width,
+  size_t padding_top,
+  size_t padding_left);
 
 XNN_INTERNAL void xnn_indirection_init_maxpool2d(
   const void** indirection_buffer,
@@ -171,18 +198,6 @@ XNN_INTERNAL void xnn_indirection_init_resize_bilinear2d_hwc_q11(
   const void* input,
   const void** indirection_buffer,
   int16_t* packed_weights,
-  bool align_corners,
-  bool tensorflow_legacy);
-
-typedef void (*xnn_indirection_init_resize_bilinear2d_chw_fn)(
-  size_t input_pixel_stride,
-  size_t input_height,
-  size_t input_width,
-  size_t output_height,
-  size_t output_width,
-  const void* input,
-  const void** indirection_buffer,
-  void* packed_weights,
   bool align_corners,
   bool tensorflow_legacy);
 

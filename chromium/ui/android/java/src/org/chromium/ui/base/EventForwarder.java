@@ -27,7 +27,7 @@ import org.chromium.base.TraceEvent;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.build.annotations.NullMarked;
 import org.chromium.build.annotations.Nullable;
-import org.chromium.ui.MotionEventUtils;
+import org.chromium.ui.util.MotionEventUtils;
 
 import java.lang.reflect.UndeclaredThrowableException;
 import java.util.ArrayList;
@@ -212,6 +212,11 @@ public class EventForwarder {
             }
         }
         return false;
+    }
+
+    @CalledByNative
+    private float getWebContentsOffsetYInWindow() {
+        return mCurrentTouchOffsetY;
     }
 
     private boolean sendTouchEvent(MotionEvent event, boolean isTouchHandleEvent) {
@@ -508,7 +513,7 @@ public class EventForwarder {
      * as well.
      */
     public static boolean isTrackpadToMouseConversionEvent(MotionEvent event) {
-        if (isTrackpadEvent(event)) {
+        if (MotionEventUtils.isTrackpadEvent(event)) {
             // Click or click-and-drag.
             if (event.getAction() == MotionEvent.ACTION_BUTTON_RELEASE
                     || event.getButtonState() != 0) {
@@ -525,28 +530,14 @@ public class EventForwarder {
     }
 
     /**
-     * Returns true if a {@link MotionEvent} is detected to be a trackpad event. Note that {@link
-     * MotionEvent.TOOL_TYPE_FINGER} is used here along with {@link InputDevice.SOURCE_MOUSE}
-     * instead of {@link InputDevice.SOURCE_TOUCHPAD} because {@link InputDevice.SOURCE_TOUCHPAD} is
-     * used when an app captures the touchpad meaning that it gets access to the raw finger
-     * locations, dimensions etc. reported by the touchpad rather than those being used for pointer
-     * movements and gestures.
-     */
-    private static boolean isTrackpadEvent(MotionEvent event) {
-        return event.isFromSource(InputDevice.SOURCE_MOUSE)
-                && event.getToolType(0) == MotionEvent.TOOL_TYPE_FINGER;
-    }
-
-    /**
      * @see View#onDragEvent(DragEvent)
      * @param event {@link DragEvent} instance.
      * @param containerView A view on which the drag event is taking place.
      */
     public boolean onDragEvent(DragEvent event, View containerView) {
         ClipDescription clipDescription = event.getClipDescription();
-        // Do not forward chrome/tab events to native eventForwarder.
-        if (clipDescription != null
-                && clipDescription.hasMimeType(MimeTypeUtils.CHROME_MIMETYPE_TAB)) {
+        // Do not forward browser content events to native eventForwarder.
+        if (MimeTypeUtils.clipDescriptionHasBrowserContent(clipDescription)) {
             return false;
         }
         if (mNativeEventForwarder == 0) {
@@ -559,9 +550,7 @@ public class EventForwarder {
         }
 
         if (event.getAction() == DragEvent.ACTION_DRAG_STARTED) {
-            return mIsDragDropEnabled
-                    && ((mimeTypes != null && mimeTypes.length > 0)
-                            || UiAndroidFeatureMap.isEnabled(UiAndroidFeatureList.DRAG_DROP_EMPTY));
+            return mIsDragDropEnabled;
         }
 
         String content = "";

@@ -161,8 +161,11 @@ void GPUDevice::Initialize(wgpu::Device handle,
                            const GPUDeviceDescriptor* descriptor,
                            GPUDeviceLostInfo* lost_info) {
   SetHandle(std::move(handle));
-  features_ = MakeGarbageCollected<GPUSupportedFeatures>(
-      descriptor->requiredFeatures());
+
+  wgpu::SupportedFeatures features;
+  GetHandle().GetFeatures(&features);
+  features_ = MakeGarbageCollected<GPUSupportedFeatures>(features);
+
   queue_ = MakeGarbageCollected<GPUQueue>(this, GetHandle().GetQueue(),
                                           descriptor->defaultQueue()->label());
 
@@ -175,7 +178,7 @@ void GPUDevice::Initialize(wgpu::Device handle,
                       WebFeature::kWebGPUSubgroupsFeatures);
   }
 
-  wgpu::SupportedLimits limits = {};
+  wgpu::Limits limits = {};
   GetHandle().GetLimits(&limits);
   limits_ = MakeGarbageCollected<GPUSupportedLimits>(limits);
 
@@ -199,11 +202,7 @@ GPUDevice::~GPUDevice() {
 
   // Clear the callbacks since we can't handle callbacks after finalization.
   if (GetHandle().Get() != nullptr) {
-#ifdef WGPU_BREAKING_CHANGE_LOGGING_CALLBACK_TYPE
     GetHandle().SetLoggingCallback([](wgpu::LoggingType, wgpu::StringView) {});
-#else
-    GetHandle().SetLoggingCallback(nullptr, nullptr);
-#endif
   }
 }
 
@@ -366,7 +365,6 @@ void GPUDevice::OnUncapturedError(const wgpu::Device& device,
   }
 }
 
-#ifdef WGPU_BREAKING_CHANGE_LOGGING_CALLBACK_TYPE
 void GPUDevice::OnLogging(wgpu::LoggingType loggingType,
                           wgpu::StringView message) {
   std::string_view messageView = {message.data, message.length};
@@ -402,44 +400,6 @@ void GPUDevice::OnLogging(wgpu::LoggingType loggingType,
     execution_context->AddConsoleMessage(console_message);
   }
 }
-#else
-void GPUDevice::OnLogging(WGPULoggingType cLoggingType,
-                          WGPUStringView message) {
-  std::string_view messageView = {message.data, message.length};
-  wgpu::LoggingType loggingType = static_cast<wgpu::LoggingType>(cLoggingType);
-  // Callback function for WebGPU logging return command
-  mojom::blink::ConsoleMessageLevel level;
-  switch (loggingType) {
-    case (wgpu::LoggingType::Verbose): {
-      level = mojom::blink::ConsoleMessageLevel::kVerbose;
-      break;
-    }
-    case (wgpu::LoggingType::Info): {
-      level = mojom::blink::ConsoleMessageLevel::kInfo;
-      break;
-    }
-    case (wgpu::LoggingType::Warning): {
-      level = mojom::blink::ConsoleMessageLevel::kWarning;
-      break;
-    }
-    case (wgpu::LoggingType::Error): {
-      level = mojom::blink::ConsoleMessageLevel::kError;
-      break;
-    }
-    default: {
-      level = mojom::blink::ConsoleMessageLevel::kError;
-      break;
-    }
-  }
-  ExecutionContext* execution_context = GetExecutionContext();
-  if (execution_context) {
-    auto* console_message = MakeGarbageCollected<ConsoleMessage>(
-        mojom::blink::ConsoleMessageSource::kRendering, level,
-        StringFromASCIIAndUTF8(messageView));
-    execution_context->AddConsoleMessage(console_message);
-  }
-}
-#endif
 
 void GPUDevice::OnDeviceLost(
     std::unique_ptr<WGPURepeatingCallback<wgpu::UncapturedErrorCallback<void>>>,
@@ -485,7 +445,7 @@ void GPUDevice::OnCreateRenderPipelineAsyncCallback(
     }
 
     case wgpu::CreatePipelineAsyncStatus::InternalError:
-    case wgpu::CreatePipelineAsyncStatus::InstanceDropped: {
+    case wgpu::CreatePipelineAsyncStatus::CallbackCancelled: {
       resolver->Reject(GPUPipelineError::Create(
           script_state->GetIsolate(), StringFromASCIIAndUTF8(message),
           V8GPUPipelineErrorReason::Enum::kInternal));
@@ -517,7 +477,7 @@ void GPUDevice::OnCreateComputePipelineAsyncCallback(
     }
 
     case wgpu::CreatePipelineAsyncStatus::InternalError:
-    case wgpu::CreatePipelineAsyncStatus::InstanceDropped: {
+    case wgpu::CreatePipelineAsyncStatus::CallbackCancelled: {
       resolver->Reject(GPUPipelineError::Create(
           script_state->GetIsolate(), StringFromASCIIAndUTF8(message),
           V8GPUPipelineErrorReason::Enum::kInternal));
@@ -594,9 +554,8 @@ GPUBindGroupLayout* GPUDevice::createBindGroupLayout(
 }
 
 GPUPipelineLayout* GPUDevice::createPipelineLayout(
-    ScriptState* script_state,
     const GPUPipelineLayoutDescriptor* descriptor) {
-  return GPUPipelineLayout::Create(script_state, this, descriptor);
+  return GPUPipelineLayout::Create(this, descriptor);
 }
 
 GPUShaderModule* GPUDevice::createShaderModule(
@@ -733,15 +692,15 @@ void GPUDevice::OnPopErrorScopeCallback(
     wgpu::ErrorType type,
     wgpu::StringView message) {
   switch (status) {
-    case wgpu::PopErrorScopeStatus::InstanceDropped:
+    case wgpu::PopErrorScopeStatus::CallbackCancelled:
       resolver->RejectWithDOMException(DOMExceptionCode::kOperationError,
                                        "Instance dropped in popErrorScope");
       return;
     case wgpu::PopErrorScopeStatus::Success:
       break;
-    case wgpu::PopErrorScopeStatus::EmptyStack:
+    case wgpu::PopErrorScopeStatus::Error:
       resolver->RejectWithDOMException(DOMExceptionCode::kOperationError,
-                                       "No error scopes to pop");
+                                       StringFromASCIIAndUTF8(message));
       return;
   }
   switch (type) {

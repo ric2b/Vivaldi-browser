@@ -73,9 +73,8 @@ HoverListView::HoverListView(std::unique_ptr<HoverListModel> model)
                        model_->IsButtonEnabled(item_tag), item_tag);
   }
 
-  scroll_view_ = new views::ScrollView();
+  scroll_view_ = AddChildView(std::make_unique<views::ScrollView>());
   scroll_view_->SetContents(std::move(item_container));
-  AddChildView(scroll_view_.get());
   scroll_view_->ClipHeightTo(GetPreferredViewHeight(),
                              GetPreferredViewHeight());
 }
@@ -93,7 +92,7 @@ void HoverListView::AppendListItemView(const ui::ImageModel& icon,
                           base::Unretained(model_.get()), item_tag));
 
   auto* list_item_view_ptr = hover_button.release();
-  item_container_->AddChildView(list_item_view_ptr);
+  item_container_->AddChildViewRaw(list_item_view_ptr);
   auto* separator =
       item_container_->AddChildView(std::make_unique<views::Separator>());
   tags_to_list_item_views_.emplace(

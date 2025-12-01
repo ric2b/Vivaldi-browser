@@ -9,6 +9,7 @@
 #include <string>
 #include <vector>
 
+#include "base/functional/callback.h"
 #include "base/observer_list.h"
 #include "base/observer_list_types.h"
 #include "base/time/time.h"
@@ -19,6 +20,7 @@
 #include "chromeos/ash/components/boca/session_api/session_client_impl.h"
 #include "chromeos/services/network_config/public/cpp/cros_network_config_observer.h"
 #include "components/account_id/account_id.h"
+#include "components/prefs/pref_service.h"
 #include "components/signin/public/identity_manager/identity_manager.h"
 #include "components/user_manager/user_manager.h"
 #include "google_apis/common/api_error_codes.h"
@@ -42,10 +44,14 @@ class BocaSessionManager
       public signin::IdentityManager::Observer,
       public user_manager::UserManager::UserSessionStateObserver {
  public:
+  using SessionCaptionInitializer =
+      base::RepeatingCallback<void(base::OnceCallback<void(bool)>)>;
+
   inline static constexpr char kDummyDeviceId[] = "kDummyDeviceId";
   inline static constexpr char kHomePageTitle[] = "School Tools Home page";
   inline static constexpr int kDefaultPollingIntervalInSeconds = 60;
   inline static constexpr int kLocalSessionTrackerBufferInSeconds = 60;
+  inline static constexpr int kDefaultStudentHeartbeatIntervalInSeconds = 60;
   inline static constexpr int kSkipPollingBufferInSeconds = 2;
   inline static constexpr char kPollingResultHistName[] =
       "Ash.Boca.PollingResult";
@@ -88,6 +94,7 @@ class BocaSessionManager
   };
 
   BocaSessionManager(SessionClientImpl* session_client_impl,
+                     const PrefService* pref_service,
                      AccountId account_id,
                      bool is_producer);
   BocaSessionManager(const BocaSessionManager&) = delete;
@@ -97,6 +104,7 @@ class BocaSessionManager
   // Interface for observing events.
   class Observer : public base::CheckedObserver {
    public:
+    virtual void OnSessionMetadataUpdated(const std::string& session_id);
     // Notifies when session started. Pure virtual function, must be handled by
     // observer. Session metadata will be provided when fired.
     virtual void OnSessionStarted(const std::string& session_id,
@@ -121,6 +129,10 @@ class BocaSessionManager
     // Notifies when local caption config updated.
     virtual void OnLocalCaptionConfigUpdated(
         const ::boca::CaptionsConfig& config);
+
+    // Notifies when local caption is disabled from a source other than the boca
+    // app.
+    virtual void OnLocalCaptionClosed();
 
     // Notifies when session roster updated. Will emit when only elements order
     // changed in the vector too. Deferred to events consumer to decide on
@@ -171,8 +183,15 @@ class BocaSessionManager
   // Local events.
   virtual void NotifyLocalCaptionEvents(::boca::CaptionsConfig caption_config);
 
+  virtual void NotifyLocalCaptionClosed();
+
   // Triggered by SWA delegate to notify app reload events.
   virtual void NotifyAppReload();
+
+  void SetSessionCaptionInitializer(
+      SessionCaptionInitializer session_caption_initializer);
+  void RemoveSessionCaptionInitializer();
+  void InitSessionCaption(base::OnceCallback<void(bool)> success_cb);
 
   base::ObserverList<Observer>& observers() { return observers_; }
 
@@ -182,6 +201,11 @@ class BocaSessionManager
 
   base::OneShotTimer& session_duration_timer_for_testing() {
     return session_duration_timer_;
+  }
+
+  void set_on_app_status_toggled_cb_for_test(
+      base::OnceCallback<void(bool)> on_app_status_toggled_cb) {
+    on_app_status_toggled_cb_for_test_ = std::move(on_app_status_toggled_cb);
   }
 
  private:
@@ -201,6 +225,7 @@ class BocaSessionManager
                       std::unique_ptr<::boca::Session> session);
   void DispatchEvent();
   void NotifySessionUpdate();
+  void NotifySessionMetadataUpdate();
   void NotifyOnTaskUpdate();
   void NotifySessionCaptionConfigUpdate();
   void NotifyRosterUpdate();
@@ -209,6 +234,12 @@ class BocaSessionManager
                            std::unique_ptr<::boca::Session> current_session,
                            bool dispatch_event);
   void UpdateLocalSessionDurationTracker();
+  void StartSendingStudentHeartbeatRequests();
+  void StopSendingStudentHeartbeatRequests();
+  void SendStudentHeartbeatRequest();
+  void HandleCaptionNotification();
+  void UpdateNetworkRestriction(
+      chromeos::network_config::mojom::NetworkStatePropertiesPtr network_state);
 
   const bool is_producer_;
   bool is_app_opened_ = false;
@@ -230,9 +261,15 @@ class BocaSessionManager
   base::Time last_session_start_time_;
   base::TimeDelta last_session_duration_;
 
+  base::TimeDelta student_heartbeat_interval_;
+
+  // Timer used for student heartbeat.
+  base::RepeatingTimer student_heartbeat_timer_;
+
   std::unique_ptr<::boca::Session> current_session_;
   std::unique_ptr<::boca::Session> previous_session_;
   bool is_network_connected_ = false;
+  bool disabled_on_non_managed_network_ = false;
   // Remote for sending requests to the CrosNetworkConfig service.
   mojo::Remote<chromeos::network_config::mojom::CrosNetworkConfig>
       cros_network_config_;
@@ -241,9 +278,12 @@ class BocaSessionManager
   AccountId account_id_;
   std::u16string active_tab_title_;
   BocaNotificationHandler notification_handler_;
+  raw_ptr<const PrefService> pref_service_;
   raw_ptr<SessionClientImpl> session_client_impl_;
   raw_ptr<signin::IdentityManager> identity_manager_;
   bool is_local_caption_enabled_ = false;
+  SessionCaptionInitializer session_caption_initializer_;
+  base::OnceCallback<void(bool)> on_app_status_toggled_cb_for_test_;
   base::WeakPtrFactory<BocaSessionManager> weak_factory_{this};
 };
 }  // namespace ash::boca

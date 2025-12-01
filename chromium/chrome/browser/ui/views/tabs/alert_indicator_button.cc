@@ -373,7 +373,7 @@ Tab* AlertIndicatorButton::GetTab() {
 }
 
 // Returns a cached image, to be shown by the alert indicator for the given
-// |alert_state|.  Uses the global ui::ResourceBundle shared instance.
+// `alert_state`.  Uses the global ui::ResourceBundle shared instance.
 ui::ImageModel AlertIndicatorButton::GetTabAlertIndicatorImage(
     TabAlertState alert_state,
     ui::ColorId button_color) {
@@ -422,7 +422,7 @@ ui::ImageModel AlertIndicatorButton::GetTabAlertIndicatorImage(
       icon = &vector_icons::kCardboardIcon;
       break;
     case TabAlertState::GLIC_ACCESSING:
-      icon = &vector_icons::kFitScreenIcon;
+      icon = &kTvIcon;
       break;
   }
   DCHECK(icon);

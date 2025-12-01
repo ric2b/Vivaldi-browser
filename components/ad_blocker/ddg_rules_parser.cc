@@ -2,6 +2,7 @@
 
 #include "components/ad_blocker/ddg_rules_parser.h"
 
+#include "base/json/json_string_value_serializer.h"
 #include "base/strings/string_util.h"
 #include "components/ad_blocker/parse_result.h"
 #include "components/ad_blocker/parse_utils.h"
@@ -98,15 +99,14 @@ void DuckDuckGoRulesParser::Parse(const base::Value& root) {
 
   parse_result_->tracker_infos = base::Value::Dict();
 
-  for (const auto item : trackers->GetDict()) {
-    const std::string& domain = item.first;
-    if (!item.second.is_dict()) {
+  for (const auto [domain, tracker] : trackers->GetDict()) {
+    if (!tracker.is_dict()) {
       parse_result_->rules_info.invalid_rules++;
       continue;
     }
 
     const std::string* default_action =
-        item.second.GetDict().FindString(kDefaultActionKey);
+        tracker.GetDict().FindString(kDefaultActionKey);
     if (!default_action || (default_action->compare(kActionBlock) != 0 &&
                             default_action->compare(kActionIgnore) != 0)) {
       parse_result_->rules_info.invalid_rules++;
@@ -115,7 +115,7 @@ void DuckDuckGoRulesParser::Parse(const base::Value& root) {
 
     const base::Value::List* excluded_origins = nullptr;
     const std::string* owner =
-        item.second.GetDict().FindStringByDottedPath(kOwnerNamePath);
+        tracker.GetDict().FindStringByDottedPath(kOwnerNamePath);
     if (owner) {
       const base::Value* entity = entities->GetDict().Find(*owner);
       if (entity)
@@ -123,10 +123,10 @@ void DuckDuckGoRulesParser::Parse(const base::Value& root) {
     }
 
     base::Value::Dict tracker_info;
-    const base::Value* owner_dict = item.second.GetDict().Find(kOwnerKey);
+    const base::Value* owner_dict = tracker.GetDict().Find(kOwnerKey);
     if (owner_dict)
       tracker_info.Set(kOwnerKey, owner_dict->Clone());
-    const base::Value* categories = item.second.GetDict().Find(kCategoriesKey);
+    const base::Value* categories = tracker.GetDict().Find(kCategoriesKey);
     if (categories)
       tracker_info.Set(kCategoriesKey, categories->Clone());
 
@@ -140,7 +140,7 @@ void DuckDuckGoRulesParser::Parse(const base::Value& root) {
       AddBlockingRuleForDomain(domain, excluded_origins);
     }
 
-    const base::Value::List* rules = item.second.GetDict().FindList(kRulesKey);
+    const base::Value::List* rules = tracker.GetDict().FindList(kRulesKey);
     if (!rules)
       continue;
 
@@ -162,6 +162,7 @@ void DuckDuckGoRulesParser::AddBlockingRuleForDomain(
     const std::string& domain,
     const base::Value::List* excluded_origins) {
   RequestFilterRule rule;
+  rule.original_rule_text = domain;
   rule.resource_types.set();
   rule.party.set();
   rule.anchor_type.set(RequestFilterRule::kAnchorHost);
@@ -272,6 +273,7 @@ void DuckDuckGoRulesParser::ParseRule(
 
   if (make_request_filter_rule) {
     RequestFilterRule filter_rule;
+    filter_rule.original_rule_text = domain + ":" + *pattern;
     filter_rule.party.set();
     if (!default_ignore || ignore)
       filter_rule.decision = RequestFilterRule::kPass;
@@ -374,6 +376,7 @@ void DuckDuckGoRulesParser::ParseRule(
 
   if (make_redirect_rule) {
     RequestFilterRule redirect_rule;
+    redirect_rule.original_rule_text = domain + ":" + *pattern;
     redirect_rule.party.set();
     if (option_domains)
       redirect_rule.included_domains.swap(option_domains.value());

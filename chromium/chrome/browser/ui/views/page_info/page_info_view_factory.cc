@@ -197,7 +197,7 @@ std::unique_ptr<views::View> PageInfoViewFactory::CreateSubpageHeader(
                              std::make_unique<views::Label>(
                                  title, views::style::CONTEXT_DIALOG_TITLE,
                                  views::style::STYLE_HEADLINE_4))
-                             .SetEnabledColorId(kColorPageInfoForeground)
+                             .SetEnabledColor(kColorPageInfoForeground)
                              .SetHorizontalAlignment(gfx::ALIGN_LEFT)
                              .SetID(VIEW_ID_PAGE_INFO_SUBPAGE_TITLE));
 
@@ -208,7 +208,7 @@ std::unique_ptr<views::View> PageInfoViewFactory::CreateSubpageHeader(
                 subtitle, views::style::CONTEXT_LABEL,
                 views::style::STYLE_BODY_4,
                 gfx::DirectionalityMode::DIRECTIONALITY_AS_URL))
-            .SetEnabledColorId(kColorPageInfoSubtitleForeground)
+            .SetEnabledColor(kColorPageInfoSubtitleForeground)
             .SetHorizontalAlignment(gfx::ALIGN_LEFT)
             .SetAllowCharacterBreak(true)
             .SetMultiLine(true));
@@ -440,9 +440,13 @@ const ui::ImageModel PageInfoViewFactory::GetPermissionIcon(
                                 : &vector_icons::kTouchpadMouseIcon;
       break;
     case ContentSettingsType::WEB_APP_INSTALLATION:
-      // TODO(crbug.com/333795265): provide dedicated icons.
       icon = show_blocked_badge ? &vector_icons::kInstallDesktopOffIcon
                                 : &vector_icons::kInstallDesktopIcon;
+      break;
+    case ContentSettingsType::LOCAL_NETWORK_ACCESS:
+      // TODO(crbug.com/400455013): Replace with final icons.
+      icon = show_blocked_badge ? &vector_icons::kDevicesOffIcon
+                                : &vector_icons::kDevicesIcon;
       break;
     default:
       break;

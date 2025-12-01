@@ -30,9 +30,8 @@
       ->GetProfileAttributesStorage()
       ->UpdateAttributesForProfileWithName(
           profile->GetProfileName(),
-          base::BindOnce([](ProfileAttributesIOS attr) {
+          base::BindOnce([](ProfileAttributesIOS& attr) {
             attr.SetLastActiveTime(base::Time::Now());
-            return attr;
           }));
 
   // Update the primary account's last-active time (if there is a primary
@@ -46,7 +45,13 @@
       identityManager->HasPrimaryAccount(signin::ConsentLevel::kSignin)) {
     CoreAccountInfo accountInfo =
         identityManager->GetPrimaryAccountInfo(signin::ConsentLevel::kSignin);
-    activeAccountsTracker->MarkAccountAsActiveNow(accountInfo.gaia);
+    AccountInfo extendedInfo =
+        identityManager->FindExtendedAccountInfo(accountInfo);
+    signin::Tribool isManaged =
+        extendedInfo.hosted_domain.empty()
+            ? signin::Tribool::kUnknown
+            : signin::TriboolFromBool(extendedInfo.IsManaged());
+    activeAccountsTracker->MarkAccountAsActiveNow(accountInfo.gaia, isManaged);
   }
 }
 

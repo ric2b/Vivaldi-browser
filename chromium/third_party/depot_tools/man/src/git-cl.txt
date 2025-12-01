@@ -70,6 +70,9 @@ patch::
 presubmit::
   runs presubmit tests on the current changelist
 
+squash-closed::
+  runs `git squash-branch` on all branches associated with closed changelists
+
 set-close::
   closes the issue
 

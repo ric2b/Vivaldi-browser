@@ -16,6 +16,7 @@
 #include "base/gtest_prod_util.h"
 #include "base/memory/raw_ptr.h"
 #include "chrome/browser/first_party_sets/first_party_sets_policy_service.h"
+#include "chrome/browser/privacy_sandbox/privacy_sandbox_queue_manager.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/prefs/pref_change_registrar.h"
 #include "components/privacy_sandbox/canonical_topic.h"
@@ -28,8 +29,6 @@
 #include "components/user_education/common/product_messaging_controller.h"
 #include "content/public/browser/interest_group_manager.h"
 #include "net/base/schemeful_site.h"
-
-DECLARE_REQUIRED_NOTICE_IDENTIFIER(kPrivacySandboxNotice);
 
 class Browser;
 class PrefService;
@@ -77,13 +76,8 @@ class PrivacySandboxServiceImpl : public PrivacySandboxService,
   void PromptOpenedForBrowser(Browser* browser, views::Widget* widget) override;
   void PromptClosedForBrowser(Browser* browser) override;
   bool IsPromptOpenForBrowser(Browser* browser) override;
-  void HoldQueueHandle(user_education::RequiredNoticePriorityHandle
-                           messaging_priority_handle) override;
-  bool IsNoticeQueued() override;
-  void MaybeUnqueueNotice(NoticeQueueState unqueue_source) override;
-  void MaybeQueueNotice(NoticeQueueState queue_source) override;
-  bool IsHoldingHandle() override;
-  void SetSuppressQueue(bool suppress_queue) override;
+  privacy_sandbox::PrivacySandboxQueueManager&
+  GetPrivacySandboxNoticeQueueManager() override;
 #endif  // !BUILDFLAG(IS_ANDROID)
   void ForceChromeBuildForTests(bool force_chrome_build) override;
   bool IsPrivacySandboxRestricted() override;
@@ -91,8 +85,6 @@ class PrivacySandboxServiceImpl : public PrivacySandboxService,
   void SetRelatedWebsiteSetsDataAccessEnabled(bool enabled) override;
   bool IsRelatedWebsiteSetsDataAccessEnabled() const override;
   bool IsRelatedWebsiteSetsDataAccessManaged() const override;
-  base::flat_map<net::SchemefulSite, net::SchemefulSite>
-  GetSampleRelatedWebsiteSets() const override;
   std::optional<net::SchemefulSite> GetRelatedWebsiteSetOwner(
       const GURL& site_url) const override;
   std::optional<std::u16string> GetRelatedWebsiteSetOwnerForDisplay(
@@ -198,6 +190,8 @@ class PrivacySandboxServiceImpl : public PrivacySandboxService,
   FRIEND_TEST_ALL_PREFIXES(
       PrivacySandboxServiceTest,
       RecordPrivacySandbox4StartupMetrics_PromptNotSuppressed_ROW);
+  FRIEND_TEST_ALL_PREFIXES(PrivacySandbox4StartupMetricsNonRegularProfilesTest,
+                           APIs);
   FRIEND_TEST_ALL_PREFIXES(PrivacySandboxServiceTest,
                            RecordPrivacySandbox4StartupMetrics_APIs);
   FRIEND_TEST_ALL_PREFIXES(PrivacySandboxPrivacyGuideShouldShowAdTopicsTest,
@@ -357,9 +351,8 @@ class PrivacySandboxServiceImpl : public PrivacySandboxService,
   // to the Widget for that prompt.
   std::map<Browser*, raw_ptr<views::Widget, CtnExperimental>>
       browsers_to_open_prompts_;
-
-  // Returns instance of product messaging controller.
-  user_education::ProductMessagingController* GetProductMessagingController();
+  // Instance of queue manager used to manage queue states.
+  std::unique_ptr<privacy_sandbox::PrivacySandboxQueueManager> queue_manager_;
 #endif
 
   // Fake implementation for current and blocked topics.
@@ -374,7 +367,8 @@ class PrivacySandboxServiceImpl : public PrivacySandboxService,
   // Record user action metrics based on the |action|.
   void RecordPromptActionMetrics(PrivacySandboxService::PromptAction action);
 
-  // Record user startup state metrics on both client and profile level.
+  // Record user startup state metrics based on the |state| on both client and
+  // profile level.
   void RecordPromptStartupStateHistograms(
       PrivacySandboxService::PromptStartupState state);
 
@@ -407,11 +401,43 @@ class PrivacySandboxServiceImpl : public PrivacySandboxService,
   // Emits histograms relating to a fake notice's shown or suppression status.
   void MaybeEmitFakeNoticePromptMetrics(bool third_party_cookies_blocked);
 
+  // Returns true if the user is in the server trial that allows the prompt to
+  // be shown even if 3PC are blocked. This will also set the Pref that the
+  // trial is registered. This is so we know to re-register for the trial on
+  // subsequent restarts when the Notice is shown, and the profile is therefore
+  // no longer eligible for a prompt.
+
+  // Approach:
+  // The persistent pref tracks whether the server-side trial has been
+  // *activated* for a user.  The pref is set whenever the server-side trial is
+  // activated (via base::FeatureList::IsEnabled()), regardless of the resulting
+  // group (Enabled or Control). On subsequent restarts when the Conditions for
+  // a normal server activation are no longer met (Happens to the Enabled
+  // Group), the pref can be reused to reactivate the trial if needed. This is
+  // to achieve true session consistency even if the conditions for triggering
+  // the server trial are no longer true.
+
+  // Handling Group Changes (Control -> Enabled):
+  // If a user moves from Control to Enabled due to server-side config changes,
+  // we'll continue to activate based on the pref, which will remain set.
+
+  // Timing:
+  // Trial activation happens *before* the promo is shown,
+  // but *after* we confirm the user is a candidate (3P cookies blocked at some
+  // point in the past).
+
+  // Why No Synthetic Trial:
+  // Checking the pref and re-activating the *server-side* trial directly
+  // achieves persistent activation and maintains balance, making a synthetic
+  // trial redundant.
+
+  // Rollout Beyond 50%:
+  // This allows for 100% rollout. The pref-based activation works even when
+  // A/B comparison is no longer the goal.
+  bool CheckAndRegisterAllowPromptForBlocked3PCookiesTrial();
+
   bool force_chrome_build_for_tests_ = false;
   bool should_emit_dark_launch_startup_metrics_ = true;
-  // Temporary flag signifying not to requeue if the prompt has been suppressed.
-  // TODO(crbug.com/370804492): When we add DMA notice to queue, remove this.
-  bool suppress_queue_ = false;
 
   base::WeakPtrFactory<PrivacySandboxServiceImpl> weak_factory_{this};
 };

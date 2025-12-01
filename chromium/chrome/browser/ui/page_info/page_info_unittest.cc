@@ -378,15 +378,6 @@ TEST_F(PageInfoTest, PermissionStringsHaveMidSentenceVersion) {
         EXPECT_EQ(base::ToLowerASCII(normal), base::ToLowerASCII(mid_sentence));
         break;
 #endif
-      case ContentSettingsType::CAPTURED_SURFACE_CONTROL:
-        // The mid sentence for 'CAPTURED_SURFACE_CONTROL' type is different
-        // from the normal text and instead matches the submenu text which is
-        // "scrolling & zooming".
-        normal = l10n_util::GetStringUTF16(
-            IDS_SITE_SETTINGS_TYPE_CAPTURED_SURFACE_CONTROL_SUB_MENU);
-        EXPECT_NE(normal, mid_sentence);
-        EXPECT_EQ(base::ToLowerASCII(normal), mid_sentence);
-        break;
       default:
         EXPECT_NE(normal, mid_sentence);
         EXPECT_EQ(base::ToLowerASCII(normal), mid_sentence);
@@ -1190,27 +1181,6 @@ TEST_F(PageInfoTest, HTTPSConnectionError) {
   EXPECT_EQ(PageInfo::SITE_IDENTITY_STATUS_CERT,
             page_info()->site_identity_status());
 }
-
-#if BUILDFLAG(IS_CHROMEOS)
-TEST_F(PageInfoTest, HTTPSPolicyCertConnection) {
-  security_level_ = security_state::SECURE_WITH_POLICY_INSTALLED_CERT;
-  visible_security_state_.url = GURL("https://scheme-is-cryptographic.test");
-  visible_security_state_.certificate = cert();
-  visible_security_state_.cert_status = 0;
-  int status = 0;
-  status = SetSSLVersion(status, net::SSL_CONNECTION_VERSION_TLS1);
-  status = SetSSLCipherSuite(status, CR_TLS_RSA_WITH_AES_256_CBC_SHA256);
-  visible_security_state_.connection_status = status;
-  visible_security_state_.connection_info_initialized = true;
-
-  SetDefaultUIExpectations(mock_ui());
-
-  EXPECT_EQ(PageInfo::SITE_CONNECTION_STATUS_ENCRYPTED,
-            page_info()->site_connection_status());
-  EXPECT_EQ(PageInfo::SITE_IDENTITY_STATUS_ADMIN_PROVIDED_CERT,
-            page_info()->site_identity_status());
-}
-#endif
 
 TEST_F(PageInfoTest, HTTPSSHA1) {
   SetCertToSHA1();

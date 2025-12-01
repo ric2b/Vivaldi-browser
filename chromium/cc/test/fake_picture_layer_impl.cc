@@ -42,9 +42,10 @@ void FakePictureLayerImpl::PushPropertiesTo(LayerImpl* layer_impl) {
   PictureLayerImpl::PushPropertiesTo(layer_impl);
 }
 
-void FakePictureLayerImpl::AppendQuads(viz::CompositorRenderPass* render_pass,
+void FakePictureLayerImpl::AppendQuads(const AppendQuadsContext& context,
+                                       viz::CompositorRenderPass* render_pass,
                                        AppendQuadsData* append_quads_data) {
-  PictureLayerImpl::AppendQuads(render_pass, append_quads_data);
+  PictureLayerImpl::AppendQuads(context, render_pass, append_quads_data);
   ++append_quads_count_;
 }
 
@@ -129,6 +130,7 @@ void FakePictureLayerImpl::SetTileReady(Tile* tile) {
   TileDrawInfo& draw_info = tile->draw_info();
   draw_info.SetSolidColorForTesting(SkColors::kRed);
   DCHECK(draw_info.IsReadyToDraw());
+  NotifyTileStateChanged(tile);
 }
 
 void FakePictureLayerImpl::DidBecomeActive() {

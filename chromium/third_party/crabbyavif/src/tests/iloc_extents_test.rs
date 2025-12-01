@@ -16,7 +16,6 @@
 mod tests;
 
 use crabby_avif::reformat::rgb::*;
-use image::ImageReader;
 use tests::*;
 
 #[test]
@@ -32,19 +31,16 @@ fn iloc_extents() {
     rgb.format = Format::Rgb;
     assert!(rgb.allocate().is_ok());
     assert!(rgb.convert_from_yuv(decoded).is_ok());
-
-    let source = ImageReader::open(get_test_file("sacre_coeur.png"));
-    let source = source.unwrap().decode().unwrap();
-
+    let source = decode_png("sacre_coeur.png");
     // sacre_coeur_2extents.avif was generated with
     //   avifenc --lossless --ignore-exif --ignore-xmp --ignore-icc sacre_coeur.png
     // so pixels can be compared byte by byte.
     assert_eq!(
-        source.as_bytes(),
+        source,
         rgb.pixels
             .as_ref()
             .unwrap()
-            .slice(0, source.as_bytes().len() as u32)
+            .slice(0, source.len() as u32)
             .unwrap()
     );
 }

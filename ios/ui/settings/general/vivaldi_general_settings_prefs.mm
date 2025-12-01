@@ -14,6 +14,8 @@
 + (void)registerBrowserStatePrefs:(user_prefs::PrefRegistrySyncable*)registry {
   registry->RegisterBooleanPref(vivaldiprefs::kVivaldiHomepageEnabled, NO);
   registry->RegisterStringPref(vivaldiprefs::kVivaldiHomepageURL, "");
+  registry->RegisterBooleanPref(vivaldiprefs::kVivaldiBackgroundAudioEnabled,
+                                NO);
 }
 
 #pragma mark - GETTERS
@@ -29,6 +31,10 @@
   return url;
 }
 
++ (BOOL)getBackgroundAudioEnabled:(PrefService*)prefService {
+  return prefService->GetBoolean(vivaldiprefs::kVivaldiBackgroundAudioEnabled);
+}
+
 #pragma mark - SETTERS
 
 /// Sets showHomepage enabled
@@ -41,6 +47,12 @@
                        inPrefServices:(PrefService*)prefService {
   prefService->SetString(vivaldiprefs::kVivaldiHomepageURL,
                          base::SysNSStringToUTF8(url));
+}
+
++ (void)setBackgroundAudioEnabled:(BOOL)enabled
+                   inPrefServices:(PrefService*)prefService {
+  prefService->SetBoolean(vivaldiprefs::kVivaldiBackgroundAudioEnabled,
+                          enabled);
 }
 
 @end

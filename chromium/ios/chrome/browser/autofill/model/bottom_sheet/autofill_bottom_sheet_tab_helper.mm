@@ -16,6 +16,7 @@
 #import "components/autofill/core/browser/data_manager/personal_data_manager.h"
 #import "components/autofill/core/browser/form_structure.h"
 #import "components/autofill/core/browser/payments/card_unmask_challenge_option.h"
+#import "components/autofill/core/browser/suggestions/payments/payments_suggestion_generator.h"
 #import "components/autofill/core/browser/suggestions/suggestion_type.h"
 #import "components/autofill/core/browser/ui/payments/card_unmask_authentication_selection_dialog_controller_impl.h"
 #import "components/autofill/core/browser/ui/payments/virtual_card_enroll_ui_model.h"
@@ -120,6 +121,12 @@ void AutofillBottomSheetTabHelper::ShowPlusAddressesBottomSheet(
     plus_addresses::PlusAddressCallback callback) {
   pending_plus_address_callback_ = std::move(callback);
   [commands_handler_ showPlusAddressesBottomSheet];
+}
+
+void AutofillBottomSheetTabHelper::ShowSaveCardBottomSheet(
+    std::unique_ptr<autofill::SaveCardBottomSheetModel> model) {
+  save_card_bottom_sheet_model_ = std::move(model);
+  [commands_handler_ showSaveCardBottomSheet];
 }
 
 void AutofillBottomSheetTabHelper::ShowVirtualCardEnrollmentBottomSheet(
@@ -547,10 +554,8 @@ void AutofillBottomSheetTabHelper::AttachListenersForPaymentsForm(
               kCompleteCreditCardForm)) {
     return;
   }
-  if (manager.client()
-          .GetPersonalDataManager()
-          .payments_data_manager()
-          .GetCreditCardsToSuggest()
+  if (autofill::GetCreditCardsToSuggest(
+          manager.client().GetPersonalDataManager().payments_data_manager())
           .empty()) {
     return;
   }
@@ -591,6 +596,11 @@ AutofillBottomSheetTabHelper::
 plus_addresses::PlusAddressCallback
 AutofillBottomSheetTabHelper::GetPendingPlusAddressFillCallback() {
   return std::move(pending_plus_address_callback_);
+}
+
+std::unique_ptr<autofill::SaveCardBottomSheetModel>
+AutofillBottomSheetTabHelper::GetSaveCardBottomSheetModel() {
+  return std::move(save_card_bottom_sheet_model_);
 }
 
 autofill::VirtualCardEnrollmentCallbacks

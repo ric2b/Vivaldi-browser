@@ -13,8 +13,8 @@
 #include "chrome/browser/ui/chrome_pages.h"
 #include "chrome/browser/ui/layout_constants.h"
 #include "chrome/browser/ui/views/chrome_layout_provider.h"
+#include "chrome/browser/ui/views/download/bubble/download_bubble_navigation_handler.h"
 #include "chrome/browser/ui/views/download/bubble/download_bubble_row_list_view.h"
-#include "chrome/browser/ui/views/download/bubble/download_toolbar_button_view.h"
 #include "chrome/common/webui_url_constants.h"
 #include "chrome/grit/generated_resources.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -141,8 +141,7 @@ class SuppressBubbleSettingRow : public views::View,
         views::ViewTargeterDelegate::TargetForRect(root, rect);
     // Links should operate as expected, but all other gestures on this view
     // should be forwarded to the checkbox.
-    if (std::string_view(target->GetClassName()) ==
-        std::string_view(views::LinkFragment::kViewClassName)) {
+    if (target->GetClassName() == views::LinkFragment::kViewClassName) {
       return target;
     }
 
@@ -284,6 +283,11 @@ void DownloadBubblePartialView::OnInteracted() {
 
 void DownloadBubblePartialView::OnWillChangeFocus(views::View* before,
                                                   views::View* now) {
+  // Check 'before' to make sure this is not the first focus change.
+  // This will happen when the bubble is first shown inside Mac PWA.
+  if (!before) {
+    return;
+  }
   if (now && Contains(now)) {
     OnInteracted();
   }

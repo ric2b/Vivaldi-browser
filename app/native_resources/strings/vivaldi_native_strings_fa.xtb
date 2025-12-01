@@ -32,6 +32,7 @@
 <translation id="2441056087170876076">هیولا ۲</translation>
 <translation id="2444387452209867610">درج یادداشت</translation>
 <translation id="2486841023299517366">حیوان ۴</translation>
+<translation id="2501278716633472235">بازگشت</translation>
 <translation id="2612127540243995147">آماده‌ی نصب. ویوالدی بسته شده و مجدداً راه‌اندازی خواهد شد.</translation>
 <translation id="2613387515621326337">نمایش وب‌سایت به‌روزرسانی</translation>
 <translation id="2647368062414805334">متأسفانه، تنظیمات Edge در هنگام اجرای مرورگر در دسترس نیست. برای وارد کردن این تنظیمات به ویوالدی، کارهای خود را ذخیره و تمام پنجره‌های Edge را ببندید. سپس بر روی ادامه کلیک کنید.</translation>
@@ -52,6 +53,7 @@
 <translation id="3259769196742189631">اعتبارسنجی</translation>
 <translation id="3291915639428159043">پخش خودکار مسدود شد</translation>
 <translation id="3302905971452834934">هیولا ۱</translation>
+<translation id="3308738399950580893">تبلیغات</translation>
 <translation id="3334610655141903168">(بدون عنوان)</translation>
 <translation id="3372505110412186107">در حال حاضر، ویوالدی <ph name="VERSION" /> جدیدترین نسخه‌ی موجود است.</translation>
 <translation id="3383198080133834965">شما آخرین نسخه را دارید!</translation>
@@ -73,6 +75,7 @@
 <translation id="3795800845758778870">متأسفانه، تنظیمات Brave در هنگام اجرای مرورگر در دسترس نیست. برای وارد کردن این تنظیمات به ویوالدی، کارهای خود را ذخیره و تمام پنجره‌های Brave را ببندید. سپس بر روی ادامه کلیک کنید.</translation>
 <translation id="3822431842304177896">جدا کننده‌ی جدید</translation>
 <translation id="3832132597516774400">چشم‌انداز ۵</translation>
+<translation id="3894751534882749287">اگر به هر صورت مایل به مشاهده‌ی این صفحه هستید، می‌توانید از طریق پنجره‌ی مسدودساز ردیاب و یا کلیک بر روی دکمه‌ی اجازه، سطح محافظت از ردیابی آن را تغییر دهید</translation>
 <translation id="3914946330804881301">وارد شده از Opera</translation>
 <translation id="3921292902397893431">هیولا ۸</translation>
 <translation id="3943857333388298514">چسباندن</translation>
@@ -94,6 +97,7 @@
 <translation id="4582480609585453144">گشودن پیوند در زبانه‌ی پس‌زمینه</translation>
 <translation id="4636708767492582204">ارسال با ایمیل</translation>
 <translation id="4677434526832593569">حیوان ۸</translation>
+<translation id="4736016046474602958">مسدودساز ردیاب</translation>
 <translation id="474217410105706308">قطع صدای زبانه</translation>
 <translation id="4861715717329665002">نشست‌های ذخیره شده به‌صورت خودکار</translation>
 <translation id="4881695831933465202">باز کردن</translation>
@@ -133,6 +137,7 @@
 <translation id="6896758677409633944">کپی</translation>
 <translation id="7086554968911045110">چشم‌انداز ۷</translation>
 <translation id="7111492742514999492">چشم‌انداز ۹</translation>
+<translation id="7113310725918019676">اجازه به <ph name="BLOCKED_TYPE" /> از <ph name="DOMAIN" /></translation>
 <translation id="7337881442233988129">کرومیوم</translation>
 <translation id="7581266044164103589">نصاب به‌روزرسانی راه اندازی نشد. لطفاً بررسی کنید که رایانه از حافظه یا فضای دیسک کافی برخوردار است و بعد دوباره امتحان کنید.</translation>
 <translation id="7658239707568436148">لغو</translation>
@@ -146,9 +151,9 @@
 <translation id="8027581147000338959">در پنجره‌ای جدید باز کن</translation>
 <translation id="8044382196220116469">به سایت‌ها اجازه‌ی پخش خودکار ویدیوها داده نشود</translation>
 <translation id="8099620695029051217">کپی آدرس صفحه</translation>
+<translation id="8119307142152921512">ردیاب‌ها و تبلیغات</translation>
 <translation id="8197810018650377191">صفحه‌ی نشانک</translation>
 <translation id="8261506727792406068">حذف</translation>
-<translation id="8263047843452521549">بررسی کنترل‌کننده‌ی سرویس پس زمینه</translation>
 <translation id="8331671104904436324">بازگشایی در زبانه‌ی پس‌زمینه</translation>
 <translation id="8373293945112511707">چشم‌انداز ۱</translation>
 <translation id="8388552048012645975">در حال دانلود به‌روزرسانی...</translation>
@@ -162,13 +167,13 @@
 <translation id="8651348004684669199">اضافه کردن زبانه فعال</translation>
 <translation id="8669345741879513971">هیولا ۱۰</translation>
 <translation id="867544375504146191">مرورگر Yandex</translation>
-<translation id="8689295374912158752">بررسی پورتال-سند</translation>
 <translation id="8768970203213061953">چشم‌انداز ۱۴</translation>
 <translation id="8773635261052182196">این اعلانات را دیگر مشاهده نخواهید کرد. مجدداً می‌توانید از طریق تنظیمات ویوالدی آن‌ها را فعال کنید.</translation>
 <translation id="8774017153185436870">سایت‌ها می‌توانند ویدیوها را به صورت خودکار پخش کنند</translation>
 <translation id="8813277370772331957">بعداً یادآوری کن</translation>
 <translation id="8894900864683381599">افزودن لینک به پنل وب</translation>
 <translation id="8912720443398351457">آیا واقعاً می خواهید از ویوالدی خارج شوید؟</translation>
+<translation id="8940028675168378100">مسدود شده توسط <ph name="BLOCKER_NAME" /></translation>
 <translation id="8947109330183116400">انتخاب پرونده‌ی HTML نشانک‌ها</translation>
 <translation id="9017566390391482291">انتخاب پوشه‌ی پروفایل ویوالدی برای وارد کردن</translation>
 <translation id="9048058608784130603">در انتظار به‌روزرسانی <ph name="VERSION" /></translation>
@@ -178,6 +183,7 @@
 <translation id="912022491595344261">گشودن تصویر به عنوان <ph name="USER" /></translation>
 <translation id="9157539936604258187">گشودن پیوند</translation>
 <translation id="9169060351863393881">Opera 12.x</translation>
+<translation id="9180553614777056266">مسدودساز تبلیغات</translation>
 <translation id="939305735877869636">مرورگر Brave</translation>
 <translation id="970294721402795299">چشم‌انداز ۱۶</translation>
 </translationbundle>

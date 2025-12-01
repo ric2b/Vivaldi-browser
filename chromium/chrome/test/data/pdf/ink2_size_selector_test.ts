@@ -2,14 +2,21 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import type {InkSizeSelectorElement} from 'chrome-extension://mhjfbmdgcfjbbpaeojofohoefgiehjai/pdf_viewer_wrapper.js';
+import type {InkSizeSelectorElement, SelectableIconButtonElement} from 'chrome-extension://mhjfbmdgcfjbbpaeojofohoefgiehjai/pdf_viewer_wrapper.js';
+import {PEN_SIZES} from 'chrome-extension://mhjfbmdgcfjbbpaeojofohoefgiehjai/pdf_viewer_wrapper.js';
 import {keyDownOn} from 'chrome://webui-test/keyboard_mock_interactions.js';
-import {microtasksFinished} from 'chrome://webui-test/test_util.js';
+import {eventToPromise, microtasksFinished} from 'chrome://webui-test/test_util.js';
 
-import {assertLabels, assertSelectedSize, getSizeButtons} from './test_util.js';
+import {assertSelectedSize, getSizeButtons} from './test_util.js';
 
-function createSelector(): InkSizeSelectorElement {
+function createSelector(initialValue?: number): InkSizeSelectorElement {
   const selector = document.createElement('ink-size-selector');
+  // Emulate the parent initializing this value via a data binding, e.g. before
+  // the sidepanel is shown, or before the bottom toolbar size button is
+  // clicked to add this element to the DOM.
+  if (initialValue) {
+    selector.currentSize = initialValue;
+  }
   document.body.innerHTML = '';
   document.body.appendChild(selector);
   return selector;
@@ -25,8 +32,8 @@ function createSelector(): InkSizeSelectorElement {
  *     event.
  */
 async function testSizeKeyboardEvent(
-    sizeButtons: NodeListOf<HTMLElement>, targetElement: HTMLElement,
-    key: string, expectedButtonIndex: number) {
+    sizeButtons: NodeListOf<SelectableIconButtonElement>,
+    targetElement: HTMLElement, key: string, expectedButtonIndex: number) {
   keyDownOn(targetElement, 0, [], key);
   await microtasksFinished();
 
@@ -42,9 +49,9 @@ async function testSizeKeyboardEvent(
  * @param buttonIndex The expected size button with a tabindex of 0.
  */
 function assertTabIndices(
-    sizeButtons: NodeListOf<HTMLElement>, buttonIndex: number) {
+    sizeButtons: NodeListOf<SelectableIconButtonElement>, buttonIndex: number) {
   for (let i = 0; i < sizeButtons.length; ++i) {
-    const actualTabIndex = sizeButtons[i].getAttribute('tabindex');
+    const actualTabIndex = sizeButtons[i]!.$.button.getAttribute('tabindex');
     chrome.test.assertTrue(actualTabIndex !== null);
     chrome.test.assertEq(i === buttonIndex ? '0' : '-1', actualTabIndex);
   }
@@ -56,13 +63,17 @@ chrome.test.runTests([
     const selector = createSelector();
     const sizeButtons = getSizeButtons(selector);
 
-    sizeButtons[0].click();
+    let button = sizeButtons[0];
+    chrome.test.assertTrue(!!button);
+    button.click();
     await microtasksFinished();
 
     assertSelectedSize(sizeButtons, /*buttonIndex=*/ 0);
     assertTabIndices(sizeButtons, /*buttonIndex=*/ 0);
 
-    sizeButtons[1].click();
+    button = sizeButtons[1];
+    chrome.test.assertTrue(!!button);
+    button.click();
     await microtasksFinished();
 
     assertSelectedSize(sizeButtons, /*buttonIndex=*/ 1);
@@ -76,7 +87,9 @@ chrome.test.runTests([
     const selector = createSelector();
     const sizeButtons = getSizeButtons(selector);
 
-    sizeButtons[4].click();
+    const button = sizeButtons[4];
+    chrome.test.assertTrue(!!button);
+    button.click();
     await microtasksFinished();
 
     assertSelectedSize(sizeButtons, /*buttonIndex=*/ 4);
@@ -108,7 +121,9 @@ chrome.test.runTests([
     const selector = createSelector();
     const sizeButtons = getSizeButtons(selector);
 
-    sizeButtons[4].click();
+    const button = sizeButtons[4];
+    chrome.test.assertTrue(!!button);
+    button.click();
     await microtasksFinished();
 
     assertSelectedSize(sizeButtons, /*buttonIndex=*/ 4);
@@ -116,17 +131,17 @@ chrome.test.runTests([
 
     // Pressing 'ArrowLeft' or 'ArrowUp' should select the previous size button.
     await testSizeKeyboardEvent(
-        sizeButtons, sizeButtons[4], 'ArrowLeft', /*expectedButtonIndex=*/ 3);
+        sizeButtons, sizeButtons[4]!, 'ArrowLeft', /*expectedButtonIndex=*/ 3);
 
     await testSizeKeyboardEvent(
-        sizeButtons, sizeButtons[3], 'ArrowUp', /*expectedButtonIndex=*/ 2);
+        sizeButtons, sizeButtons[3]!, 'ArrowUp', /*expectedButtonIndex=*/ 2);
 
     // Pressing 'ArrowRight' or 'ArrowDown' should select the next size button.
     await testSizeKeyboardEvent(
-        sizeButtons, sizeButtons[2], 'ArrowRight', /*expectedButtonIndex=*/ 3);
+        sizeButtons, sizeButtons[2]!, 'ArrowRight', /*expectedButtonIndex=*/ 3);
 
     await testSizeKeyboardEvent(
-        sizeButtons, sizeButtons[3], 'ArrowDown', /*expectedButtonIndex=*/ 4);
+        sizeButtons, sizeButtons[3]!, 'ArrowDown', /*expectedButtonIndex=*/ 4);
 
     chrome.test.succeed();
   },
@@ -139,23 +154,25 @@ chrome.test.runTests([
     const selector = createSelector();
     const sizeButtons = getSizeButtons(selector);
 
-    sizeButtons[4].click();
+    const button = sizeButtons[4];
+    chrome.test.assertTrue(!!button);
+    button.click();
     await microtasksFinished();
 
     assertSelectedSize(sizeButtons, /*buttonIndex=*/ 4);
     assertTabIndices(sizeButtons, /*buttonIndex=*/ 4);
 
     await testSizeKeyboardEvent(
-        sizeButtons, sizeButtons[4], 'ArrowRight', /*expectedButtonIndex=*/ 0);
+        sizeButtons, sizeButtons[4]!, 'ArrowRight', /*expectedButtonIndex=*/ 0);
 
     await testSizeKeyboardEvent(
-        sizeButtons, sizeButtons[0], 'ArrowLeft', /*expectedButtonIndex=*/ 4);
+        sizeButtons, sizeButtons[0]!, 'ArrowLeft', /*expectedButtonIndex=*/ 4);
 
     await testSizeKeyboardEvent(
-        sizeButtons, sizeButtons[4], 'ArrowDown', /*expectedButtonIndex=*/ 0);
+        sizeButtons, sizeButtons[4]!, 'ArrowDown', /*expectedButtonIndex=*/ 0);
 
     await testSizeKeyboardEvent(
-        sizeButtons, sizeButtons[0], 'ArrowUp', /*expectedButtonIndex=*/ 4);
+        sizeButtons, sizeButtons[0]!, 'ArrowUp', /*expectedButtonIndex=*/ 4);
 
     chrome.test.succeed();
   },
@@ -165,12 +182,32 @@ chrome.test.runTests([
     const selector = createSelector();
     const sizeButtons = getSizeButtons(selector);
 
-    assertLabels(sizeButtons[0], 'Extra thin');
-    assertLabels(sizeButtons[1], 'Thin');
-    assertLabels(sizeButtons[2], 'Medium');
-    assertLabels(sizeButtons[3], 'Thick');
-    assertLabels(sizeButtons[4], 'Extra thick');
+    chrome.test.assertEq(sizeButtons[0]!.label, 'Extra thin');
+    chrome.test.assertEq(sizeButtons[1]!.label, 'Thin');
+    chrome.test.assertEq(sizeButtons[2]!.label, 'Medium');
+    chrome.test.assertEq(sizeButtons[3]!.label, 'Thick');
+    chrome.test.assertEq(sizeButtons[4]!.label, 'Extra thick');
 
+    chrome.test.succeed();
+  },
+
+  async function testFocusesSelectedItem() {
+    let selector = createSelector(PEN_SIZES[1]!.size);
+    let sizeButtons = getSizeButtons(selector);
+    chrome.test.assertEq(5, sizeButtons.length);
+    assertSelectedSize(sizeButtons, /*buttonIndex=*/ 1);
+    let whenFocused = eventToPromise('focus', sizeButtons[1]!);
+    selector.focus();
+    await whenFocused;
+
+    // Recreate the selector and test a different initial condition.
+    selector = createSelector(PEN_SIZES[3]!.size);
+    sizeButtons = getSizeButtons(selector);
+    chrome.test.assertEq(5, sizeButtons.length);
+    assertSelectedSize(sizeButtons, /*buttonIndex=*/ 3);
+    whenFocused = eventToPromise('focus', sizeButtons[3]!);
+    selector.focus();
+    await whenFocused;
     chrome.test.succeed();
   },
 ]);

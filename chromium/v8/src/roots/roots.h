@@ -323,9 +323,6 @@ class RootVisitor;
 // safely skip write barriers.
 #define STRONG_MUTABLE_IMMOVABLE_ROOT_LIST(V)                                  \
   ACCESSOR_INFO_ROOT_LIST(V)                                                   \
-  /* Maps */                                                                   \
-  V(Map, external_map, ExternalMap)                                            \
-  V(Map, message_object_map, JSMessageObjectMap)                               \
   /* Canonical empty values */                                                 \
   V(Script, empty_script, EmptyScript)                                         \
   /* Protectors */                                                             \
@@ -469,17 +466,20 @@ class RootVisitor;
 #define ACCESSOR_INFO_ROOT_LIST(V) \
   ACCESSOR_INFO_LIST_GENERATOR(ACCESSOR_INFO_ROOT_LIST_ADAPTER, V)
 
-#define READ_ONLY_ROOT_LIST(V)     \
-  STRONG_READ_ONLY_ROOT_LIST(V)    \
-  INTERNALIZED_STRING_ROOT_LIST(V) \
-  PRIVATE_SYMBOL_ROOT_LIST(V)      \
-  PUBLIC_SYMBOL_ROOT_LIST(V)       \
-  WELL_KNOWN_SYMBOL_ROOT_LIST(V)   \
-  STRUCT_MAPS_LIST(V)              \
-  TORQUE_DEFINED_MAP_ROOT_LIST(V)  \
-  ALLOCATION_SITE_MAPS_LIST(V)     \
-  NAME_FOR_PROTECTOR_ROOT_LIST(V)  \
-  DATA_HANDLER_MAPS_LIST(V)
+#define READ_ONLY_ROOT_LIST(V)      \
+  STRONG_READ_ONLY_ROOT_LIST(V)     \
+  INTERNALIZED_STRING_ROOT_LIST(V)  \
+  PRIVATE_SYMBOL_ROOT_LIST(V)       \
+  PUBLIC_SYMBOL_ROOT_LIST(V)        \
+  WELL_KNOWN_SYMBOL_ROOT_LIST(V)    \
+  STRUCT_MAPS_LIST(V)               \
+  TORQUE_DEFINED_MAP_ROOT_LIST(V)   \
+  ALLOCATION_SITE_MAPS_LIST(V)      \
+  NAME_FOR_PROTECTOR_ROOT_LIST(V)   \
+  DATA_HANDLER_MAPS_LIST(V)         \
+  /* Maps */                        \
+  V(Map, external_map, ExternalMap) \
+  V(Map, message_object_map, JSMessageObjectMap)
 
 #define MUTABLE_ROOT_LIST(V)            \
   STRONG_MUTABLE_IMMOVABLE_ROOT_LIST(V) \
@@ -627,6 +627,15 @@ class RootsTable {
            static_cast<unsigned>(RootIndex::kLastReadOnlyRoot);
   }
 
+  static constexpr RootIndex SingleCharacterStringIndex(int c) {
+    DCHECK_GE(c, 0);
+    DCHECK_LE(c, static_cast<unsigned>(RootIndex::klatin1_ff_string) -
+                     static_cast<unsigned>(RootIndex::kascii_nul_string));
+    static_assert(static_cast<int>(RootIndex::kFirstReadOnlyRoot) == 0);
+    return static_cast<RootIndex>(
+        static_cast<unsigned>(RootIndex::kascii_nul_string) + c);
+  }
+
  private:
   FullObjectSlot begin() {
     return FullObjectSlot(&roots_[static_cast<size_t>(RootIndex::kFirstRoot)]);
@@ -722,6 +731,7 @@ class ReadOnlyRoots {
   V8_INLINE void VerifyNameForProtectorsPages() const;
 #ifdef DEBUG
   void VerifyNameForProtectors();
+  void VerifyTypes();
 #endif
 
   V8_INLINE Tagged<Boolean> boolean_value(bool value) const;
@@ -745,13 +755,6 @@ class ReadOnlyRoots {
  private:
   V8_INLINE Address first_name_for_protector() const;
   V8_INLINE Address last_name_for_protector() const;
-#ifdef DEBUG
-#define ROOT_TYPE_CHECK(Type, name, CamelName) \
-  V8_EXPORT_PRIVATE bool CheckType_##name() const;
-
-  READ_ONLY_ROOT_LIST(ROOT_TYPE_CHECK)
-#undef ROOT_TYPE_CHECK
-#endif
 
   V8_INLINE explicit ReadOnlyRoots(Address* ro_roots)
       : read_only_roots_(ro_roots) {}

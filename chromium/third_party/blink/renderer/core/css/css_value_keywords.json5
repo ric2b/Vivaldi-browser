@@ -1089,6 +1089,7 @@
     "under",
     //right
     //left
+    //auto
 
     // -webkit-text-emphasis-style
     "filled",
@@ -1204,6 +1205,15 @@
     // column-fill
     "balance",
 
+    // corner-shape
+    // "bevel",
+    "notch",
+    // "round",
+    "scoop",
+    "squircle",
+    "straight",
+    "superellipse",
+
     // -webkit-app-region
     "drag",
     "no-drag",
@@ -1279,10 +1289,19 @@
     "hanging",
     "mathematical",
 
+    // gap-rule-paint-order
+    "row-over-column",
+    "column-over-row",
+
     // column-rule-break
     // none
     "intersection",
     "spanning-item",
+
+    // row-rule-break
+    // none
+    // intersection
+    // spanning-item
 
     // dominant-baseline
     // auto
@@ -1761,7 +1780,8 @@
     // ([video]-dynamic-range) media feature, and dynamic-range-limit property
     "standard",
     "high",
-    "constrained-high",
+    "no-limit",
+    "constrained",
     "dynamic-range-limit-mix",
 
     // Layered @import rule
@@ -1944,6 +1964,7 @@
     "grid-rows",
     "grid-columns",
     "grid-order",
+    "source-order",
 
     // fill / stroke
     "context-fill",
@@ -1983,5 +2004,6 @@
     // inline conditional
     "if",
     "else",
+    "media",
   ],
 }

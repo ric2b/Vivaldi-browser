@@ -49,11 +49,13 @@ import org.chromium.chrome.browser.tabmodel.TabRemover;
 import org.chromium.chrome.browser.tabmodel.TabUngrouper;
 import org.chromium.chrome.browser.tasks.tab_management.ActionConfirmationManager;
 import org.chromium.chrome.browser.tasks.tab_management.ColorPickerCoordinator;
-import org.chromium.chrome.browser.tasks.tab_management.TabGroupOverflowMenuCoordinator.OnItemClickedCallback;
+import org.chromium.chrome.browser.tasks.tab_management.TabOverflowMenuCoordinator.OnItemClickedCallback;
 import org.chromium.chrome.test.util.browser.tabmodel.MockTabModel;
 import org.chromium.components.collaboration.CollaborationService;
 import org.chromium.components.collaboration.ServiceStatus;
 import org.chromium.components.data_sharing.member_role.MemberRole;
+import org.chromium.components.tab_group_sync.LocalTabGroupId;
+import org.chromium.components.tab_group_sync.SavedTabGroup;
 import org.chromium.components.tab_group_sync.TabGroupSyncService;
 import org.chromium.ui.KeyboardVisibilityDelegate;
 import org.chromium.ui.base.TestActivity;
@@ -74,6 +76,7 @@ public class TabGroupContextMenuCoordinatorUnitTest {
     private static final int TAB_ID = 1;
     private static final int ROOT_ID = TAB_ID;
     private static final Token TAB_GROUP_ID = new Token(3L, 4L);
+    private static final String COLLABORATION_ID = "CollaborationId";
 
     @Rule public MockitoRule mMockitoRule = MockitoJUnit.rule();
 
@@ -82,8 +85,9 @@ public class TabGroupContextMenuCoordinatorUnitTest {
             new ActivityScenarioRule<>(TestActivity.class);
 
     private TabGroupContextMenuCoordinator mTabGroupContextMenuCoordinator;
-    private OnItemClickedCallback mOnItemClickedCallback;
+    private OnItemClickedCallback<Token> mOnItemClickedCallback;
     private MockTabModel mTabModel;
+    private final SavedTabGroup mSavedTabGroup = new SavedTabGroup();
     @Mock private TabRemover mTabRemover;
     @Mock private TabUngrouper mTabUngrouper;
     @Mock private View mMenuView;
@@ -103,9 +107,9 @@ public class TabGroupContextMenuCoordinatorUnitTest {
     @Before
     public void setUp() {
         TabGroupSyncServiceFactory.setForTesting(mTabGroupSyncService);
-        CollaborationServiceFactory.setForTesting(mCollaborationService);
         when(mCollaborationService.getServiceStatus()).thenReturn(mServiceStatus);
-        when(mServiceStatus.isAllowedToJoin()).thenReturn(true);
+        when(mServiceStatus.isAllowedToCreate()).thenReturn(true);
+        CollaborationServiceFactory.setForTesting(mCollaborationService);
 
         Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
         LayoutInflater inflater = LayoutInflater.from(activity);
@@ -119,6 +123,7 @@ public class TabGroupContextMenuCoordinatorUnitTest {
         mTabModel.setTabCreatorForTesting(mTabCreator);
         when(mTabGroupModelFilter.getTabModel()).thenReturn(mTabModel);
         when(mProfile.isOffTheRecord()).thenReturn(true);
+        mSavedTabGroup.collaborationId = COLLABORATION_ID;
         mOnItemClickedCallback =
                 TabGroupContextMenuCoordinator.getMenuItemClickedCallback(
                         activity,
@@ -135,22 +140,22 @@ public class TabGroupContextMenuCoordinatorUnitTest {
                         mWindowAndroid,
                         mDataSharingTabManager);
 
-        // Set groupRootId to bypass showMenu() call.
-        mTabGroupContextMenuCoordinator.setGroupRootIdForTesting(ROOT_ID);
+        // Set group ids manually to bypass showMenu() call.
+        mTabGroupContextMenuCoordinator.setGroupDataForTesting(ROOT_ID, TAB_GROUP_ID);
     }
 
     @Test
     @Feature("Tab Strip Group Context Menu")
     public void testListMenuItems() {
+        when(mTabModel.isIncognitoBranded()).thenReturn(false);
+        mTabGroupContextMenuCoordinator.setTabGroupSyncServiceForTesting(mTabGroupSyncService);
+        when(mTabGroupSyncService.getGroup(any(LocalTabGroupId.class))).thenReturn(null);
+
         // Build custom view first to setup menu view.
         mTabGroupContextMenuCoordinator.buildCustomView(mMenuView, /* isIncognito= */ false);
 
         ModelList modelList = new ModelList();
-        mTabGroupContextMenuCoordinator.buildMenuActionItems(
-                modelList,
-                /* isIncognito= */ false,
-                /* shouldShowDeleteGroup= */ true,
-                /* hasCollaborationData= */ false);
+        mTabGroupContextMenuCoordinator.buildMenuActionItems(modelList, TAB_GROUP_ID);
 
         // Assert: verify number of items in the model list.
         assertEquals("Number of items in the list menu is incorrect", 7, modelList.size());
@@ -172,15 +177,13 @@ public class TabGroupContextMenuCoordinatorUnitTest {
     @Test
     @Feature("Tab Strip Group Context Menu")
     public void testListMenuItems_Incognito() {
+        when(mTabModel.isIncognitoBranded()).thenReturn(true);
+
         // Build custom view first to setup menu view.
         mTabGroupContextMenuCoordinator.buildCustomView(mMenuView, /* isIncognito= */ false);
 
         ModelList modelList = new ModelList();
-        mTabGroupContextMenuCoordinator.buildMenuActionItems(
-                modelList,
-                /* isIncognito= */ true,
-                /* shouldShowDeleteGroup= */ false,
-                /* hasCollaborationData= */ false);
+        mTabGroupContextMenuCoordinator.buildMenuActionItems(modelList, TAB_GROUP_ID);
 
         // Assert: verify number of items in the model list.
         assertEquals("Number of items in the list menu is incorrect", 4, modelList.size());
@@ -193,15 +196,15 @@ public class TabGroupContextMenuCoordinatorUnitTest {
     @DisableFeatures(ChromeFeatureList.DATA_SHARING)
     @Feature("Tab Strip Group Context Menu")
     public void testListMenuItems_DataShareDisabled() {
+        when(mServiceStatus.isAllowedToCreate()).thenReturn(false);
+        when(mTabModel.isIncognitoBranded()).thenReturn(false);
+        mTabGroupContextMenuCoordinator.setTabGroupSyncServiceForTesting(mTabGroupSyncService);
+        when(mTabGroupSyncService.getGroup(any(LocalTabGroupId.class))).thenReturn(null);
+
         // Build custom view first to setup menu view.
         mTabGroupContextMenuCoordinator.buildCustomView(mMenuView, /* isIncognito= */ false);
-
         ModelList modelList = new ModelList();
-        mTabGroupContextMenuCoordinator.buildMenuActionItems(
-                modelList,
-                /* isIncognito= */ false,
-                /* shouldShowDeleteGroup= */ true,
-                /* hasCollaborationData= */ false);
+        mTabGroupContextMenuCoordinator.buildMenuActionItems(modelList, TAB_GROUP_ID);
 
         // Assert: verify number of items in the model list.
         assertEquals("Number of items in the list menu is incorrect", 6, modelList.size());
@@ -236,15 +239,16 @@ public class TabGroupContextMenuCoordinatorUnitTest {
     @Test
     @Feature("Tab Strip Group Context Menu")
     public void testCollaborationMenuItems_Owner() {
+        when(mTabModel.isIncognitoBranded()).thenReturn(false);
+        mTabGroupContextMenuCoordinator.setTabGroupSyncServiceForTesting(mTabGroupSyncService);
+        when(mTabGroupSyncService.getGroup(any(LocalTabGroupId.class))).thenReturn(mSavedTabGroup);
+        when(mServiceStatus.isAllowedToJoin()).thenReturn(true);
+
         ModelList modelList = new ModelList();
 
         // Build regular menu views.
         mTabGroupContextMenuCoordinator.buildCustomView(mMenuView, /* isIncognito= */ false);
-        mTabGroupContextMenuCoordinator.buildMenuActionItems(
-                modelList,
-                /* isIncognito= */ false,
-                /* shouldShowDeleteGroup= */ true,
-                /* hasCollaborationData= */ true);
+        mTabGroupContextMenuCoordinator.buildMenuActionItems(modelList, TAB_GROUP_ID);
 
         // Build collaboration view.
         mTabGroupContextMenuCoordinator.buildCollaborationMenuItems(modelList, MemberRole.OWNER);
@@ -260,15 +264,16 @@ public class TabGroupContextMenuCoordinatorUnitTest {
     @Test
     @Feature("Tab Strip Group Context Menu")
     public void testCollaborationMenuItems_Member() {
+        when(mTabModel.isIncognitoBranded()).thenReturn(false);
+        mTabGroupContextMenuCoordinator.setTabGroupSyncServiceForTesting(mTabGroupSyncService);
+        when(mTabGroupSyncService.getGroup(any(LocalTabGroupId.class))).thenReturn(mSavedTabGroup);
+        when(mServiceStatus.isAllowedToJoin()).thenReturn(true);
+
         ModelList modelList = new ModelList();
 
         // Build regular menu views.
         mTabGroupContextMenuCoordinator.buildCustomView(mMenuView, /* isIncognito= */ false);
-        mTabGroupContextMenuCoordinator.buildMenuActionItems(
-                modelList,
-                /* isIncognito= */ false,
-                /* shouldShowDeleteGroup= */ true,
-                /* hasCollaborationData= */ true);
+        mTabGroupContextMenuCoordinator.buildMenuActionItems(modelList, TAB_GROUP_ID);
 
         // Build collaboration view.
         mTabGroupContextMenuCoordinator.buildCollaborationMenuItems(modelList, MemberRole.MEMBER);
@@ -289,7 +294,8 @@ public class TabGroupContextMenuCoordinatorUnitTest {
 
         // Verify tab group is ungrouped.
         mOnItemClickedCallback.onClick(R.id.ungroup_tab, TAB_GROUP_ID, /* collaborationId= */ null);
-        verify(mTabUngrouper).ungroupTabs(TAB_ID, /* trailing= */ true, /* allowDialog= */ true);
+        verify(mTabUngrouper)
+                .ungroupTabs(TAB_GROUP_ID, /* trailing= */ true, /* allowDialog= */ true);
     }
 
     @Test
@@ -384,10 +390,11 @@ public class TabGroupContextMenuCoordinatorUnitTest {
         when(mTabGroupModelFilter.getTabModel()).thenReturn(mTabModel);
         when(mTabGroupModelFilter.getTabUngrouper()).thenReturn(mTabUngrouper);
         when(mTabGroupModelFilter.isTabInTabGroup(tab)).thenReturn(true);
+        when(mTabGroupModelFilter.tabGroupExists(TAB_GROUP_ID)).thenReturn(true);
         when(mTabGroupModelFilter.getGroupLastShownTabId(TAB_GROUP_ID)).thenReturn(TAB_ID);
-        when(mTabGroupModelFilter.getRelatedTabCountForRootId(eq(TAB_ID))).thenReturn(1);
+        when(mTabGroupModelFilter.getTabCountForGroup(eq(TAB_GROUP_ID))).thenReturn(1);
         List<Tab> tabsInGroup = Arrays.asList(tab);
-        when(mTabGroupModelFilter.getRelatedTabListForRootId(eq(TAB_ID))).thenReturn(tabsInGroup);
+        when(mTabGroupModelFilter.getTabsInGroup(eq(TAB_GROUP_ID))).thenReturn(tabsInGroup);
         when(mTabGroupModelFilter.getRelatedTabList(eq(TAB_ID))).thenReturn(tabsInGroup);
         return tabsInGroup;
     }

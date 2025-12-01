@@ -10,7 +10,7 @@ import srgbOverlayStylesRaw from './srgbOverlay.css.js';
 
 // TODO(crbug.com/391381439): Fully migrate off of constructed style sheets.
 const srgbOverlayStyles = new CSSStyleSheet();
-srgbOverlayStyles.replaceSync(srgbOverlayStylesRaw.cssContent);
+srgbOverlayStyles.replaceSync(srgbOverlayStylesRaw.cssText);
 
 interface SrgbOverlayProps {
   // [0 - 1] corresponding to HSV hue
@@ -42,7 +42,7 @@ export class SrgbOverlay extends HTMLElement {
     ];
   }
 
-  #getLinePoints({hue, width, height}: SrgbOverlayProps): {x: number, y: number}[]|null {
+  #getLinePoints({hue, width, height}: SrgbOverlayProps): Array<{x: number, y: number}>|null {
     if (width === 0 || height === 0) {
       return null;
     }
@@ -77,7 +77,7 @@ export class SrgbOverlay extends HTMLElement {
     return linePoints;
   }
 
-  #closestPointAtHeight(points: {x: number, y: number}[], atHeight: number): {x: number, y: number}|null {
+  #closestPointAtHeight(points: Array<{x: number, y: number}>, atHeight: number): {x: number, y: number}|null {
     let min = Infinity;
     let closestPoint = null;
     for (const point of points) {

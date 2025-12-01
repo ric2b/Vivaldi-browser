@@ -1,7 +1,10 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="zh-CN">
+<translation id="1204037785786432551">下载链接</translation>
+<translation id="1206892813135768548">复制链接文本</translation>
 <translation id="1397811292916898096">用 <ph name="PRODUCT_NAME" /> 搜索</translation>
+<translation id="1435593198351412143">自动打开 PDF 文件</translation>
 <translation id="1456207338570705181">即触即搜功能仅当您将谷歌搜索设置为默认搜索引擎时才能使用的。它将所选单词和当前页面作为上下文发送到谷歌搜索。您可以在 <ph name="BEGIN_LINK" />设置<ph name="END_LINK" />中关闭这个功能。</translation>
 <translation id="1598449788754183301">切换普通/隐身标签</translation>
 <translation id="1644574205037202324">历史</translation>
@@ -14,10 +17,14 @@
 <translation id="2433507940547922241">外观</translation>
 <translation id="2501278716633472235">返回上一页</translation>
 <translation id="2633278372998075009">隐身标签</translation>
+<translation id="2650751991977523696">是否重新下载文件？</translation>
 <translation id="265156376773362237">标准预加载</translation>
 <translation id="272026394418727548">Vivaldi 主页</translation>
+<translation id="2842985007712546952">上级文件夹</translation>
 <translation id="2871733351037274014">预加载网页</translation>
+<translation id="2904300462646366554">下载的 PDF 文件会自动使用设备上的一个 PDF 查看器打开</translation>
 <translation id="2951071800649516099">将网页添加到阅读清单以供日后阅读</translation>
+<translation id="3029276696788198026">无预加载</translation>
 <translation id="3060635849835183725">{BOOKMARKS_COUNT, plural,
           =1 {<ph name="BOOKMARKS_COUNT_ONE" /> 个书签}
           other {<ph name="BOOKMARKS_COUNT_MANY" /> 个书签}}</translation>
@@ -34,6 +41,7 @@
 <translation id="3719826155360621982">主页</translation>
 <translation id="3738139272394829648">即触即搜</translation>
 <translation id="385051799172605136">后退</translation>
+<translation id="3987993985790029246">复制链接</translation>
 <translation id="399014816462153200">阅读文章：</translation>
 <translation id="4121750346708795461">使用此应用即表示您同意遵守 Vivaldi 的<ph name="BEGIN_LINK1" />最终用户许可协议<ph name="END_LINK1" />和<ph name="BEGIN_LINK2" />隐私政策<ph name="END_LINK2" />。</translation>
 <translation id="4137746084635924146">当前设备所用语言</translation>
@@ -41,10 +49,13 @@
 <translation id="4195643157523330669">在新标签页中打开</translation>
 <translation id="4225895483398857530">工具栏快捷方式</translation>
 <translation id="4243710787042215766">在隐身标签中打开</translation>
+<translation id="4269820728363426813">复制链接地址</translation>
 <translation id="4291407919474070700"><ph name="BEGIN_LINK" />在安卓设置中开启“屏幕锁定”功能<ph name="END_LINK" /></translation>
 <translation id="4304713468139749426">密码管理器</translation>
 <translation id="451872707440238414">搜索书签</translation>
 <translation id="4526803704855831732">隐身标签页</translation>
+<translation id="4532845899244822526">选择文件夹</translation>
+<translation id="4699172675775169585">缓存的图片和文件</translation>
 <translation id="4719086422742491124">解读网站上某些关键字无需离开页面，您可以直接划词搜索。
 
 只有将谷歌搜索设置为默认搜索引擎时才能使用即触即搜功能。</translation>
@@ -55,20 +66,34 @@
 <translation id="49576331685473090">内容拦截器</translation>
 <translation id="5079259810715830221">当谷歌网站在其页面上要求加密预下载链接内容时，Vivaldi 将通过谷歌服务器加密和预加载页面而不使用 Cookie。这将对预加载页面隐藏您的身份。</translation>
 <translation id="5118676864324397542"><ph name="APP_NAME" /> 存储空间</translation>
+<translation id="5144385790872094440">预加载您访问的部分网页。从 Google 网站或应用链接到的网页可能会通过 Google 服务器预加载。</translation>
 <translation id="5186185447130319458">隐身模式</translation>
+<translation id="5206168361184759344">{FILE_COUNT, plural,
+            =1 {正在下载个文件…
+            other {正在下载 # 个文件…}}</translation>
 <translation id="5233638681132016545">新建标签</translation>
 <translation id="5375131951310889874">解读网站上某些关键字无需离开页面，您可以直接即触即搜。只有将谷歌搜索设置为默认搜索引擎时才能使用即触即搜功能。它将单词及其附近的上下文发送到谷歌搜索，返回定义、图片、搜索结果和其他详细信息。
 
 要调整您的搜索词，请长按选择。 要优化搜索，请将面板一直向上滑动并点击搜索框。</translation>
+<translation id="543338862236136125">修改密码</translation>
 <translation id="572328651809341494">最近打开的标签</translation>
+<translation id="5833984609253377421">分享链接</translation>
 <translation id="6150320133806434356">书签已保存</translation>
+<translation id="6193448654517602979">选择标签页</translation>
 <translation id="6336451774241870485">新隐身标签</translation>
 <translation id="6337323516034698937">要将此标签页发送到另一台设备，请在两台设备上登录 Vivaldi 同步。如有必要，请确保输入加密密钥。</translation>
+<translation id="6341580099087024258">询问文件保存位置</translation>
 <translation id="6404511346730675251">编辑书签</translation>
+<translation id="650224091954855786">{FILE_COUNT, plural,
+          =1 {# 个文件已下载完毕}
+          other {# 个文件已下载完毕}}</translation>
 <translation id="6585139692466700358">借助 Vivaldi 的翻译服务将网站翻译为其他语言</translation>
 <translation id="6588043302623806746">使用安全 DNS</translation>
 <translation id="6593061639179217415">桌面版网站</translation>
 <translation id="6610147964972079463">关闭隐身标签</translation>
+<translation id="6627583120233659107">编辑文件夹</translation>
+<translation id="6865313869410766144">自动填充表单数据</translation>
+<translation id="6909589135458168665">预加载网页</translation>
 <translation id="7029995644714925509">当某个网站在其页面上要求加密预下载链接内容时，Vivaldi 将通过谷歌服务器加密和预加载页面而不使用 Cookie。这将对预加载页面隐藏您的身份。</translation>
 <translation id="706339621163631076">浏览器隐私政策</translation>
 <translation id="732145680195464316">书签已保存至 <ph name="PRODUCT_NAME" /></translation>
@@ -79,15 +104,18 @@
 <translation id="7456774706094330779">增强型预加载</translation>
 <translation id="7465104139234185284">关闭全部隐身标签</translation>
 <translation id="7481312909269577407">前进</translation>
+<translation id="7764225426217299476">新增地址</translation>
 <translation id="7968014550143838305">已添加到阅读清单</translation>
 <translation id="804786196054284061">最终用户许可协议</translation>
 <translation id="8062594758852531064">增强型预加载：</translation>
+<translation id="8073388330009372546">在新标签页中打开图片</translation>
 <translation id="8127542551745560481">编辑主页</translation>
+<translation id="8266862848225348053">下载位置</translation>
 <translation id="8348430946834215779">尽可能使用 HTTPS，并在加载不支持 HTTPS 的网站前收到警告</translation>
 <translation id="8560602726703398413">您可在书签中找到自己的阅读清单</translation>
 <translation id="85991616550051997">前往首页</translation>
 <translation id="8820817407110198400">书签</translation>
-<translation id="9042893549633094279">隐私和安全</translation>
+<translation id="9042893549633094279">隐私与安全</translation>
 <translation id="9063523880881406963">关闭“请求切换到桌面版网站”</translation>
 <translation id="9080642952018487277">进入隐身模式</translation>
 <translation id="930124987204876019">删除历史记录、Cookie、网站数据、缓存内容…</translation>

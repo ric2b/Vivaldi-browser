@@ -218,8 +218,8 @@ void XRFrameProvider::RestartNonImmersiveFrameLoop() {
 
 // Schedule a session to be notified when the next XR frame is available.
 void XRFrameProvider::RequestFrame(XRSession* session) {
-  DVLOG(3) << __FUNCTION__;
-  TRACE_EVENT0("gpu", __FUNCTION__);
+  DVLOG(3) << __func__;
+  TRACE_EVENT0("gpu", "RequestFrame");
   DCHECK(session);
 
   auto options = device::mojom::blink::XRFrameDataRequestOptions::New();
@@ -236,7 +236,7 @@ void XRFrameProvider::RequestFrame(XRSession* session) {
 
   // Duplicate frame requests are treated as a no-op.
   if (requesting_sessions_.Contains(session)) {
-    DVLOG(2) << __FUNCTION__ << ": session requested duplicate frame";
+    DVLOG(2) << __func__ << ": session requested duplicate frame";
     return;
   }
 
@@ -254,12 +254,16 @@ void XRFrameProvider::RequestFrame(XRSession* session) {
 
 void XRFrameProvider::ScheduleImmersiveFrame(
     device::mojom::blink::XRFrameDataRequestOptionsPtr options) {
-  TRACE_EVENT0("gpu", __FUNCTION__);
+  TRACE_EVENT0("gpu", "ScheduleImmersiveFrame");
   if (pending_immersive_vsync_)
     return;
 
   pending_immersive_vsync_ = true;
   frame_data_time_.StartTimer();
+  // `this` is an okay TRACE ID here, since we are only allowed one immersive
+  // session at a time.
+  TRACE_EVENT_NESTABLE_ASYNC_BEGIN0("xr", "RequestImmersiveFrame",
+                                    TRACE_ID_LOCAL(this));
   immersive_data_provider_->GetFrameData(
       std::move(options), WTF::BindOnce(&XRFrameProvider::OnImmersiveFrameData,
                                         WrapWeakPersistent(this)));
@@ -267,14 +271,14 @@ void XRFrameProvider::ScheduleImmersiveFrame(
 
 void XRFrameProvider::ScheduleNonImmersiveFrame(
     device::mojom::blink::XRFrameDataRequestOptionsPtr options) {
-  DVLOG(3) << __FUNCTION__;
-  TRACE_EVENT0("gpu", __FUNCTION__);
+  DVLOG(3) << __func__;
+  TRACE_EVENT0("gpu", "ScheduleNonImmersiveFrame");
 
   DCHECK(!immersive_session_)
       << "Scheduling should be done via the exclusive session if present.";
 
   if (pending_non_immersive_vsync_) {
-    DVLOG(3) << __FUNCTION__ << ": non immersive vsync already pending";
+    DVLOG(3) << __func__ << ": non immersive vsync already pending";
     return;
   }
 
@@ -292,11 +296,15 @@ void XRFrameProvider::ScheduleNonImmersiveFrame(
 void XRFrameProvider::OnImmersiveFrameData(
     device::mojom::blink::XRFrameDataPtr data) {
   frame_data_time_.StopTimer();
-  TRACE_EVENT0("gpu", __FUNCTION__);
+  TRACE_EVENT_NESTABLE_ASYNC_END0("xr", "RequestImmersiveFrame",
+                                  TRACE_ID_LOCAL(this));
+  TRACE_EVENT0("gpu", "OnImmersiveFrameData");
+
   if (data.is_null()) {
     DVLOG(2) << __func__ << ": no data, current frame_id=" << frame_id_;
   } else {
-    DVLOG(2) << __func__ << ": have data, frame_id=" << data->frame_id;
+    DVLOG(2) << __func__
+             << ": have data, frame_id=" << data->render_info->frame_id;
   }
 
   // We may have lost the immersive session since the last VSync request.
@@ -335,16 +343,16 @@ void XRFrameProvider::OnImmersiveFrameData(
   // [1] https://immersive-web.github.io/webxr/#xr-animation-frame
   double high_res_now_ms = UpdateImmersiveFrameTime(window, *data);
 
-  frame_id_ = data->frame_id;
+  frame_id_ = data->render_info->frame_id;
   if (data->buffer_shared_image.has_value()) {
     buffer_shared_image_ = gpu::ClientSharedImage::ImportUnowned(
-        data->buffer_shared_image.value());
+        std::move(data->buffer_shared_image.value()));
     buffer_sync_token_ = data->buffer_sync_token.value();
   }
 
   if (data->camera_image_buffer_shared_image.has_value()) {
     camera_image_shared_image_ = gpu::ClientSharedImage::ImportUnowned(
-        data->camera_image_buffer_shared_image.value());
+        std::move(data->camera_image_buffer_shared_image.value()));
     camera_image_sync_token_ = data->camera_image_buffer_sync_token.value();
   }
 
@@ -371,8 +379,8 @@ void XRFrameProvider::OnImmersiveFrameData(
 }
 
 void XRFrameProvider::OnNonImmersiveVSync(double high_res_now_ms) {
-  TRACE_EVENT0("gpu", __FUNCTION__);
-  DVLOG(2) << __FUNCTION__;
+  TRACE_EVENT0("gpu", "OnNonImmersiveVSync");
+  DVLOG(2) << __func__;
 
   pending_non_immersive_vsync_ = false;
 
@@ -394,8 +402,8 @@ void XRFrameProvider::OnNonImmersiveVSync(double high_res_now_ms) {
 void XRFrameProvider::OnNonImmersiveFrameData(
     XRSession* session,
     device::mojom::blink::XRFrameDataPtr frame_data) {
-  TRACE_EVENT0("gpu", __FUNCTION__);
-  DVLOG(2) << __FUNCTION__;
+  TRACE_EVENT0("gpu", "OnNonImmersiveFrameData");
+  DVLOG(2) << __func__;
 
   // TODO(https://crbug.com/837834): add unit tests for this code path.
   LocalDOMWindow* window = xr_->DomWindow();
@@ -406,10 +414,10 @@ void XRFrameProvider::OnNonImmersiveFrameData(
   // when the request was sent and this callback, so skip it in that case.
   auto request = requesting_sessions_.find(session);
   if (request == requesting_sessions_.end()) {
-    DVLOG(3) << __FUNCTION__
+    DVLOG(3) << __func__
              << ": request corresponding to received frame data not found";
     if (!session->ended()) {
-      DVLOG(2) << __FUNCTION__
+      DVLOG(2) << __func__
                << ": the session's frame data provider missed the vsync";
     }
 
@@ -417,12 +425,12 @@ void XRFrameProvider::OnNonImmersiveFrameData(
   }
 
   if (frame_data) {
-    DVLOG(3) << __FUNCTION__ << ": frame data for session stored";
+    DVLOG(3) << __func__ << ": frame data for session stored";
     request->value = std::move(frame_data);
   } else {
     // Unexpectedly didn't get frame data, and we don't have a timestamp.
     // Try to request a regular animation frame to avoid getting stuck.
-    DVLOG(1) << __FUNCTION__ << ": NO FRAME DATA!";
+    DVLOG(1) << __func__ << ": NO FRAME DATA!";
     request->value = nullptr;
     window->document()->RequestAnimationFrame(
         MakeGarbageCollected<XRFrameProviderRequestCallback>(this));
@@ -430,7 +438,7 @@ void XRFrameProvider::OnNonImmersiveFrameData(
 }
 
 void XRFrameProvider::RequestNonImmersiveFrameData(XRSession* session) {
-  DVLOG(3) << __FUNCTION__;
+  DVLOG(3) << __func__;
 
   DCHECK(session);
   DCHECK(!session->immersive());
@@ -462,7 +470,7 @@ void XRFrameProvider::ProcessScheduledFrame(
     device::mojom::blink::XRFrameDataPtr frame_data,
     double high_res_now_ms,
     ScheduledFrameType frame_type) {
-  DVLOG(2) << __FUNCTION__ << ": frame_id_=" << frame_id_
+  DVLOG(2) << __func__ << ": frame_id_=" << frame_id_
            << ", high_res_now_ms=" << high_res_now_ms;
 
   TRACE_EVENT2("gpu", "XRFrameProvider::ProcessScheduledFrame", "frame",
@@ -492,10 +500,11 @@ void XRFrameProvider::ProcessScheduledFrame(
     }
 
     bool emulated_position = false;
-    if (frame_data && frame_data->mojo_from_viewer) {
+    if (frame_data && frame_data->render_info->mojo_from_viewer) {
       DVLOG(3) << __func__ << ": pose available, emulated_position="
-               << frame_data->mojo_from_viewer->emulated_position;
-      emulated_position = frame_data->mojo_from_viewer->emulated_position;
+               << frame_data->render_info->mojo_from_viewer->emulated_position;
+      emulated_position =
+          frame_data->render_info->mojo_from_viewer->emulated_position;
     } else {
       DVLOG(2) << __func__ << ": emulating immersive frame position";
       emulated_position = true;
@@ -536,7 +545,7 @@ void XRFrameProvider::ProcessScheduledFrame(
     // from the requests to prevent infinite loops.
     decltype(requesting_sessions_) processing_sessions;
 
-    DVLOG(3) << __FUNCTION__ << ": clearing requesting_sessions_";
+    DVLOG(3) << __func__ << ": clearing requesting_sessions_";
     swap(requesting_sessions_, processing_sessions);
 
     // Inform sessions with a pending request of the new frame
@@ -676,7 +685,7 @@ void XRFrameProvider::SubmitWebGLLayer(XRWebGLLayerClient* layer_client,
     // Image is written to shared buffer already. Just submit with a
     // placeholder.
     scoped_refptr<Image> image_ref;
-    DVLOG(3) << __FUNCTION__ << ": FrameSubmit for SharedBuffer mode";
+    DVLOG(3) << __func__ << ": FrameSubmit for SharedBuffer mode";
     bool succeeded = frame_transport_->FrameSubmit(
         immersive_presentation_provider_.get(), webgl_context->ContextGL(),
         webgl_context->SharedImageInterface(), webgl_context,

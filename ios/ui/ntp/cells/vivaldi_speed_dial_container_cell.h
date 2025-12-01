@@ -37,6 +37,7 @@
 - (void)reloadLayoutWithStyle:(VivaldiStartPageLayoutStyle)style
                  layoutColumn:(VivaldiStartPageLayoutColumn)column;
 - (void)setCurrentPage:(NSInteger)page;
+- (void)visibleCellDidChange;
 @end
 
 #endif  // IOS_UI_NTP_CELLS_VIVALDI_SPEED_DIAL_CONTAINER_CELL_H_

@@ -97,6 +97,15 @@ void StackGuard::AdjustStackLimitForSimulator() {
     thread_local_.set_jslimit(jslimit);
   }
 }
+
+void StackGuard::ResetStackLimitForSimulator() {
+  ExecutionAccess access(isolate_);
+  // If the current limits are special due to a pending interrupt then
+  // leave them alone.
+  if (thread_local_.jslimit() != kInterruptLimit) {
+    thread_local_.set_jslimit(thread_local_.real_jslimit_);
+  }
+}
 #endif
 
 void StackGuard::PushInterruptsScope(InterruptsScope* scope) {
@@ -238,8 +247,8 @@ void StackGuard::FreeThreadResources() {
 void StackGuard::ThreadLocal::Initialize(Isolate* isolate,
                                          const ExecutionAccess& lock) {
   const uintptr_t kLimitSize = v8_flags.stack_size * KB;
-  DCHECK_GT(GetCurrentStackPosition(), kLimitSize);
-  uintptr_t limit = GetCurrentStackPosition() - kLimitSize;
+  DCHECK_GT(base::Stack::GetStackStart(), kLimitSize);
+  uintptr_t limit = base::Stack::GetStackStart() - kLimitSize;
   real_jslimit_ = SimulatorStack::JsLimitFromCLimit(isolate, limit);
   set_jslimit(SimulatorStack::JsLimitFromCLimit(isolate, limit));
 #ifdef USE_SIMULATOR

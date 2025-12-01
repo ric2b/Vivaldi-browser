@@ -3904,14 +3904,6 @@ class MockAutofillClient : public WebAutofillClient {
   }
   void UserGestureObserved() override { ++user_gesture_notifications_count_; }
 
-  bool ShouldSuppressKeyboard(const WebFormControlElement&) override {
-    return should_suppress_keyboard_;
-  }
-
-  void SetShouldSuppressKeyboard(bool should_suppress_keyboard) {
-    should_suppress_keyboard_ = should_suppress_keyboard;
-  }
-
   void ClearChangeCounts() { text_changes_ = 0; }
 
   int TextChanges() { return text_changes_; }
@@ -3922,7 +3914,6 @@ class MockAutofillClient : public WebAutofillClient {
  private:
   int text_changes_ = 0;
   int user_gesture_notifications_count_ = 0;
-  bool should_suppress_keyboard_ = false;
 };
 
 TEST_F(WebViewTest, LosingFocusDoesNotTriggerAutofillTextChange) {
@@ -4093,6 +4084,7 @@ class ViewCreatingWebFrameClient
       const WebURLRequest&,
       const WebWindowFeatures&,
       const WebString& name,
+      const gfx::Rect& requested_screen_rect,
       WebNavigationPolicy,
       network::mojom::blink::WebSandboxFlags,
       const SessionStorageNamespaceId&,
@@ -4192,6 +4184,7 @@ class ViewReusingWebFrameClient
       const WebURLRequest&,
       const WebWindowFeatures&,
       const WebString& name,
+      const gfx::Rect& requested_screen_rect,
       WebNavigationPolicy,
       network::mojom::blink::WebSandboxFlags,
       const SessionStorageNamespaceId&,
@@ -5292,28 +5285,6 @@ TEST_F(ShowUnhandledTapTest, ShowUnhandledTapUIIfNeededWithNonTriggeringNodes) {
 
 #endif  // BUILDFLAG(ENABLE_UNHANDLED_TAP)
 
-TEST_F(WebViewTest, ShouldSuppressKeyboardForPasswordField) {
-  RegisterMockedHttpURLLoad("input_field_password.html");
-  // Pretend client has fill data for all fields it's queried.
-  MockAutofillClient client;
-  client.SetShouldSuppressKeyboard(true);
-  WebViewImpl* web_view = web_view_helper_.InitializeAndLoad(
-      base_url_ + "input_field_password.html");
-  WebLocalFrameImpl* frame = web_view->MainFrameImpl();
-  frame->SetAutofillClient(&client);
-  // No field is focused.
-  EXPECT_FALSE(frame->ShouldSuppressKeyboardForFocusedElement());
-
-  // Focusing a field should result in treating it autofillable.
-  web_view->MainFrameImpl()->GetFrame()->SetInitialFocus(false);
-  EXPECT_TRUE(frame->ShouldSuppressKeyboardForFocusedElement());
-
-  // Pretend that |client| no longer has autofill data available.
-  client.SetShouldSuppressKeyboard(false);
-  EXPECT_FALSE(frame->ShouldSuppressKeyboardForFocusedElement());
-  frame->SetAutofillClient(nullptr);
-}
-
 TEST_F(WebViewTest, PasswordFieldEditingIsUserGesture) {
   RegisterMockedHttpURLLoad("input_field_password.html");
   MockAutofillClient client;
@@ -6304,7 +6275,7 @@ TEST_F(WebViewTest, EmulatingPopupRect) {
   blink::VisualProperties visual_properties;
   visual_properties.screen_infos = display::ScreenInfos(display::ScreenInfo());
   visual_properties.new_size_device_px = gfx::Size(400, 300);
-  visual_properties.visible_viewport_size = gfx::Size(400, 300);
+  visual_properties.visible_viewport_size_device_px = gfx::Size(400, 300);
   visual_properties.screen_infos.mutable_current().rect = gfx::Rect(800, 600);
 
   web_view->MainFrameWidget()->ApplyVisualProperties(visual_properties);

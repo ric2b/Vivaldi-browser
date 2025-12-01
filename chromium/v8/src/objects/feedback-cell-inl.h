@@ -5,11 +5,13 @@
 #ifndef V8_OBJECTS_FEEDBACK_CELL_INL_H_
 #define V8_OBJECTS_FEEDBACK_CELL_INL_H_
 
+#include "src/objects/feedback-cell.h"
+// Include the non-inl header before the rest of the headers.
+
 #include <optional>
 
 #include "src/execution/tiering-manager.h"
 #include "src/heap/heap-write-barrier-inl.h"
-#include "src/objects/feedback-cell.h"
 #include "src/objects/feedback-vector-inl.h"
 #include "src/objects/objects-inl.h"
 #include "src/objects/struct-inl.h"
@@ -60,15 +62,6 @@ void FeedbackCell::clear_dispatch_handle() {
 }
 
 #ifdef V8_ENABLE_LEAPTIERING
-void FeedbackCell::allocate_dispatch_handle(Isolate* isolate,
-                                            uint16_t parameter_count,
-                                            Tagged<Code> code,
-                                            WriteBarrierMode mode) {
-  DCHECK_EQ(dispatch_handle(), kNullJSDispatchHandle);
-  AllocateAndInstallJSDispatchHandle(kDispatchHandleOffset, isolate,
-                                     parameter_count, code, mode);
-}
-
 JSDispatchHandle FeedbackCell::dispatch_handle() const {
   return JSDispatchHandle(
       ReadField<JSDispatchHandle::underlying_type>(kDispatchHandleOffset));

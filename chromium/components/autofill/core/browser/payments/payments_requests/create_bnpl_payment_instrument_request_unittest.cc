@@ -15,7 +15,7 @@ namespace {
 
 constexpr char kAppLocale[] = "dummy_locale";
 constexpr int64_t kBillingCustomerNumber = 111222333;
-constexpr char16_t kContextToken[] = u"somecontexttoken";
+constexpr char kContextToken[] = "somecontexttoken";
 constexpr char kEncodedRiskData[] = "wjhJLga67gowLp3vIbJ4W";
 
 class CreateBnplPaymentInstrumentRequestTest : public testing::Test {
@@ -66,9 +66,8 @@ TEST_F(CreateBnplPaymentInstrumentRequestTest,
             std::string::npos);
   EXPECT_NE(GetRequest()->GetRequestContent().find("context_token"),
             std::string::npos);
-  EXPECT_NE(
-      GetRequest()->GetRequestContent().find(base::UTF16ToUTF8(kContextToken)),
-      std::string::npos);
+  EXPECT_NE(GetRequest()->GetRequestContent().find(kContextToken),
+            std::string::npos);
   EXPECT_NE(GetRequest()->GetRequestContent().find("chrome_user_context"),
             std::string::npos);
   EXPECT_NE(GetRequest()->GetRequestContent().find("risk_data_encoded"),
@@ -80,11 +79,11 @@ TEST_F(CreateBnplPaymentInstrumentRequestTest,
   base::Value::Dict response = base::Value::Dict().Set(
       "buy_now_pay_later_info",
       base::Value::Dict().Set("instrument_id",
-                              base::Value(u"some instrument id")));
+                              base::Value("some instrument id")));
 
   ParseResponse(response);
 
-  EXPECT_EQ(test_api(*GetRequest()).get_instrument_id(), u"some instrument id");
+  EXPECT_EQ(test_api(*GetRequest()).get_instrument_id(), "some instrument id");
   EXPECT_TRUE(IsResponseComplete());
 }
 

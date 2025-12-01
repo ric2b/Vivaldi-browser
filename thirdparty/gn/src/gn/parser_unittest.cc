@@ -145,6 +145,18 @@ TEST(Parser, ParenExpression) {
   DoExpressionErrorTest("(a +", 1, 4);
 }
 
+TEST(Parser, DoubleMinus) {
+  const char* input = "1--1\n";
+  const char* expected =
+      "BINARY(-)\n"
+      " LITERAL(1)\n"
+      " LITERAL(-1)\n";
+  DoExpressionPrintTest(input, expected);
+  DoExpressionErrorTest("1-- 1", 1, 3);
+  DoExpressionErrorTest("1 -- 1", 1, 4);
+  DoExpressionErrorTest("1 - - 1", 1, 5);
+}
+
 TEST(Parser, OrderOfOperationsLeftAssociative) {
   const char* input = "5 - 1 - 2\n";
   const char* expected =

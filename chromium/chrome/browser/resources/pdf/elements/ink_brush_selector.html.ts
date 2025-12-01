@@ -2,7 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import 'chrome://resources/cr_elements/cr_icon_button/cr_icon_button.js';
+import './selectable_icon_button.js';
+import 'chrome://resources/cr_elements/cr_radio_group/cr_radio_group.js';
 
 import {html} from 'chrome://resources/lit/v3_0/lit.rollup.js';
 
@@ -11,19 +12,16 @@ import type {InkBrushSelectorElement} from './ink_brush_selector.js';
 
 export function getHtml(this: InkBrushSelectorElement) {
   // clang-format off
-  return html`
-    <div role="listbox">
+  return html`<!--_html_template_start_-->
+    <cr-radio-group selectable-elements="selectable-icon-button"
+        .selected="${this.currentType}" aria-label="$i18n{ink2Tool}"
+        @selected-changed="${this.onSelectedChanged_}">
       ${BRUSH_TYPES.map(brush =>  html`
-        <cr-icon-button id="${brush}" role="option"
-            iron-icon="${this.getIcon_(brush)}"
-            data-brush="${brush}"
-            data-selected="${this.isCurrentType_(brush)}"
-            aria-selected="${this.isCurrentType_(brush)}"
-            aria-label="${this.getLabel_(brush)}"
-            title="${this.getLabel_(brush)}"
-            @click="${this.onBrushClick_}">
-        </cr-icon-button>`)}
-    </div>
-  `;
+        <selectable-icon-button id="${brush}"
+            icon="${this.getIcon_(brush)}"
+            name="${brush}" label="${this.getLabel_(brush)}">
+        </selectable-icon-button>`)}
+    </cr-radio-group>
+  <!--_html_template_end_-->`;
   // clang-format on
 }

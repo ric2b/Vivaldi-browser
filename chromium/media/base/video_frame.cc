@@ -785,6 +785,8 @@ scoped_refptr<VideoFrame> VideoFrame::WrapExternalYuvData(
   return frame;
 }
 
+// TODO(crbug.com/338570700): This method needs to be remove in favour
+// of its span version.
 // static
 scoped_refptr<VideoFrame> VideoFrame::WrapExternalYuvData(
     VideoPixelFormat format,
@@ -795,6 +797,31 @@ scoped_refptr<VideoFrame> VideoFrame::WrapExternalYuvData(
     size_t uv_stride,
     const uint8_t* y_data,
     const uint8_t* uv_data,
+    base::TimeDelta timestamp) {
+  auto layout = VideoFrameLayout::CreateWithStrides(format, coded_size,
+                                                    {y_stride, uv_stride});
+  if (!layout) {
+    DLOG(ERROR) << "Invalid layout.";
+    return nullptr;
+  }
+
+  return WrapExternalYuvData(
+      format, coded_size, visible_rect, natural_size, y_stride, uv_stride,
+      UNSAFE_TODO(base::span(y_data, layout->planes()[Plane::kY].size)),
+      UNSAFE_TODO(base::span(uv_data, layout->planes()[Plane::kUV].size)),
+      timestamp);
+}
+
+// static
+scoped_refptr<VideoFrame> VideoFrame::WrapExternalYuvData(
+    VideoPixelFormat format,
+    const gfx::Size& coded_size,
+    const gfx::Rect& visible_rect,
+    const gfx::Size& natural_size,
+    size_t y_stride,
+    size_t uv_stride,
+    base::span<const uint8_t> y_data,
+    base::span<const uint8_t> uv_data,
     base::TimeDelta timestamp) {
   const StorageType storage = STORAGE_UNOWNED_MEMORY;
   if (!IsValidConfig(format, storage, coded_size, visible_rect, natural_size)) {
@@ -819,11 +846,9 @@ scoped_refptr<VideoFrame> VideoFrame::WrapExternalYuvData(
   auto frame = base::MakeRefCounted<VideoFrame>(base::PassKey<VideoFrame>(),
                                                 *layout, storage, visible_rect,
                                                 natural_size, timestamp);
-  std::array<const uint8_t*, 2> data = {y_data, uv_data};
+  std::array<base::span<const uint8_t>, 2> data = {y_data, uv_data};
   for (size_t plane = 0; plane < NumPlanes(format); ++plane) {
-    // TODO(crbug.com/338570700): y_data, uv_data should be spans
-    frame->data_[plane] =
-        UNSAFE_TODO(base::span(data[plane], layout->planes()[plane].size));
+    frame->data_[plane] = data[plane];
   }
   return frame;
 }
@@ -959,6 +984,7 @@ scoped_refptr<VideoFrame> VideoFrame::WrapExternalDmabufs(
 scoped_refptr<VideoFrame> VideoFrame::WrapUnacceleratedIOSurface(
     gfx::GpuMemoryBufferHandle handle,
     const gfx::Rect& visible_rect,
+    const gfx::Size& natural_size,
     base::TimeDelta timestamp) {
   if (handle.type != gfx::GpuMemoryBufferType::IO_SURFACE_BUFFER) {
     DLOG(ERROR) << "Non-IOSurface handle.";
@@ -992,7 +1018,8 @@ scoped_refptr<VideoFrame> VideoFrame::WrapUnacceleratedIOSurface(
   }
 
   const StorageType storage_type = STORAGE_UNOWNED_MEMORY;
-  if (!IsValidConfig(pixel_format, storage_type, size, visible_rect, size)) {
+  if (!IsValidConfig(pixel_format, storage_type, size, visible_rect,
+                     natural_size)) {
     DLOG(ERROR) << "Invalid config.";
     return nullptr;
   }
@@ -1010,9 +1037,9 @@ scoped_refptr<VideoFrame> VideoFrame::WrapUnacceleratedIOSurface(
         IOSurfaceUnlock(io_surface.get(), kIOSurfaceLockReadOnly, nullptr);
       };
 
-  auto frame = base::MakeRefCounted<VideoFrame>(base::PassKey<VideoFrame>(),
-                                                *layout, storage_type,
-                                                visible_rect, size, timestamp);
+  auto frame = base::MakeRefCounted<VideoFrame>(
+      base::PassKey<VideoFrame>(), *layout, storage_type, visible_rect,
+      natural_size, timestamp);
   for (size_t i = 0; i < num_planes; ++i) {
     uint8_t* plane_data = reinterpret_cast<uint8_t*>(
         IOSurfaceGetBaseAddressOfPlane(io_surface.get(), i));
@@ -1666,17 +1693,13 @@ gpu::SyncToken VideoFrame::UpdateReleaseSyncToken(SyncTokenClient* client) {
   return release_sync_token_;
 }
 
-gpu::SyncToken VideoFrame::UpdateAcquireSyncToken(SyncTokenClient* client) {
-  DCHECK(HasOneRef());
+void VideoFrame::UpdateAcquireSyncToken(gpu::SyncToken token) {
   DCHECK(HasSharedImage());
-  DCHECK(!wrapped_frame_);
-
-  // No lock is required due to the HasOneRef() check.
-  auto& token = acquire_sync_token_;
-  if (token.HasData())
-    client->WaitSyncToken(token);
-  client->GenerateSyncToken(&token);
-  return token;
+  if (wrapped_frame_) {
+    return wrapped_frame_->UpdateAcquireSyncToken(token);
+  }
+  base::AutoLock locker(release_sync_token_lock_);
+  acquire_sync_token_ = token;
 }
 
 std::string VideoFrame::AsHumanReadableString() const {

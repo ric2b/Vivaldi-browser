@@ -21,7 +21,10 @@
 #include "chrome/browser/ui/browser_element_identifiers.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_window.h"
+#include "chrome/browser/ui/tabs/tab_menu_model.h"
+#include "chrome/browser/ui/ui_features.h"
 #include "chrome/browser/ui/view_ids.h"
+#include "chrome/browser/ui/views/tabs/tab_strip.h"
 #include "chrome/browser/ui/views/toolbar/reload_button.h"
 #include "chrome/browser/ui/views/toolbar/toolbar_button.h"
 #include "chrome/browser/ui/views/toolbar/toolbar_view.h"
@@ -36,6 +39,7 @@
 #include "net/dns/mock_host_resolver.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "ui/base/interaction/element_identifier.h"
+#include "ui/base/mojom/menu_source_type.mojom.h"
 #include "ui/base/test/ui_controls.h"
 #include "ui/base/ui_base_types.h"
 #include "ui/views/focus/focus_manager.h"
@@ -48,7 +52,12 @@ using bookmarks::BookmarkModel;
 
 class ToolbarViewTest : public InteractiveBrowserTest {
  public:
-  ToolbarViewTest() = default;
+  ToolbarViewTest() {
+    scoped_feature_list_.InitWithFeatures(
+        /* enabled_features =*/{features::kSideBySide},
+        /* disabled_features =*/
+        {});
+  }
   ToolbarViewTest(const ToolbarViewTest&) = delete;
   ToolbarViewTest& operator=(const ToolbarViewTest&) = delete;
 
@@ -69,6 +78,40 @@ class ToolbarViewTest : public InteractiveBrowserTest {
 
     location_icon_view->SetSecurityLevelForTesting(security_level);
   }
+
+  auto OpenSideBySideTab(int tab_index) {
+#if !BUILDFLAG(IS_MAC)
+    const char kTabToHover[] = "Tab to hover";
+#endif
+
+    return Steps(
+#if BUILDFLAG(IS_MAC)
+        Do([=, this]() {
+          base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
+              FROM_HERE, base::BindLambdaForTesting([=, this]() {
+                TabStrip* const tab_strip =
+                    BrowserView::GetBrowserViewForBrowser(browser())
+                        ->tabstrip();
+                auto* tab = tab_strip->tab_at(tab_index);
+                tab->ShowContextMenu(tab->bounds().CenterPoint(),
+                                     ui::mojom::MenuSourceType::kMouse);
+              }));
+        }),
+        // Because context menus run inside of a system message pump that cannot
+        // process Chrome tasks, the following steps must be executed
+        // immediately on the platform.
+        WithoutDelay(SelectMenuItem(TabMenuModel::kSplitTabsMenuItem))
+#else
+        NameDescendantViewByType<Tab>(kTabStripElementId, kTabToHover,
+                                      tab_index),
+        MoveMouseTo(kTabToHover), ClickMouse(ui_controls::RIGHT),
+        SelectMenuItem(TabMenuModel::kSplitTabsMenuItem)
+#endif
+    );
+  }
+
+ private:
+  base::test::ScopedFeatureList scoped_feature_list_;
 };
 
 void ToolbarViewTest::RunToolbarCycleFocusTest(Browser* browser) {
@@ -313,6 +356,28 @@ IN_PROC_BROWSER_TEST_F(ToolbarViewTest, BackButtonMenu) {
       Log("Waiting for menu to dismiss."),
       WaitForHide(kToolbarBackButtonMenuElementId), Log("Menu dismissed."));
 #endif
+}
+
+// TODO(crbug.com/402492418): Find workaround for Mac and ChromeOS.
+#if BUILDFLAG(IS_CHROMEOS)
+#define MAYBE_SplitTabsToolbarButton DISABLED_SplitTabsToolbarButton
+#else
+#define MAYBE_SplitTabsToolbarButton SplitTabsToolbarButton
+#endif
+IN_PROC_BROWSER_TEST_F(ToolbarViewTest, MAYBE_SplitTabsToolbarButton) {
+  DEFINE_LOCAL_ELEMENT_IDENTIFIER_VALUE(kWebContents1Id);
+  DEFINE_LOCAL_ELEMENT_IDENTIFIER_VALUE(kWebContents2Id);
+  DEFINE_LOCAL_ELEMENT_IDENTIFIER_VALUE(kWebContents3Id);
+  ASSERT_TRUE(embedded_test_server()->Start());
+  const GURL url1 = embedded_test_server()->GetURL("/title1.html");
+  RunTestSequence(InstrumentTab(kWebContents1Id),
+                  NavigateWebContents(kWebContents1Id, url1),
+                  AddInstrumentedTab(kWebContents2Id, url1),
+                  AddInstrumentedTab(kWebContents3Id, url1),
+                  SelectTab(kTabStripElementId, 0), OpenSideBySideTab(1),
+                  WaitForShow(kToolbarSplitTabsToolbarButtonElementId),
+                  SelectTab(kTabStripElementId, 2),
+                  WaitForHide(kToolbarSplitTabsToolbarButtonElementId));
 }
 
 // Tests that the browser updates the toolbar's visible security state only

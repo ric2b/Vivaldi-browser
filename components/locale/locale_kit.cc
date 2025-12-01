@@ -24,13 +24,10 @@ std::string GetUserCountry() {
     LOG(ERROR) << kVivaldiCountry << " must be two-letter country ISO code - "
                << country;
   }
-  int code = country_codes::GetCurrentCountryID();
-  if (code == country_codes::kCountryIDUnknown)
+  country_codes::CountryId code = country_codes::GetCurrentCountryID();
+  if (!code.IsValid())
     return std::string();
-  char buffer[2];
-  buffer[0] = static_cast<char>(code >> 8);
-  buffer[1] = static_cast<char>(code);
-  return std::string(buffer, 2);
+  return std::string(code.CountryCode());
 }
 
 std::string FindBestMatchingLocale(base::span<const std::string_view> locales,

@@ -51,11 +51,11 @@
 #include "components/sync_preferences/testing_pref_service_syncable.h"
 #include "ui/views/vector_icons.h"
 
-#if BUILDFLAG(FULL_SAFE_BROWSING)
+#if BUILDFLAG(SAFE_BROWSING_DOWNLOAD_PROTECTION)
 #include "chrome/browser/safe_browsing/download_protection/download_protection_service.h"
-#endif  // BUILDFLAG(FULL_SAFE_BROWSING)
+#endif  // BUILDFLAG(SAFE_BROWSING_DOWNLOAD_PROTECTION)
 
-#endif  // BUILDFLAG(IS_ANDROID)
+#endif  // !BUILDFLAG(IS_ANDROID)
 
 using download::DownloadItem;
 using offline_items_collection::FailState;
@@ -68,7 +68,7 @@ using ::testing::ReturnRef;
 using ::testing::ReturnRefOfCopy;
 using ::testing::SetArgPointee;
 
-#if BUILDFLAG(FULL_SAFE_BROWSING)
+#if BUILDFLAG(SAFE_BROWSING_DOWNLOAD_PROTECTION)
 using TailoredVerdict = safe_browsing::ClientDownloadResponse::TailoredVerdict;
 #endif
 
@@ -664,7 +664,7 @@ TEST_F(DownloadItemModelTest,
             DownloadUIModel::DangerUiPattern::kSuspicious);
 #endif
 
-#if !BUILDFLAG(IS_ANDROID) && BUILDFLAG(FULL_SAFE_BROWSING)
+#if !BUILDFLAG(IS_ANDROID) && BUILDFLAG(SAFE_BROWSING_DOWNLOAD_PROTECTION)
   // It doesn't matter what the DownloadProtectionData is; just that it is
   // present.
   std::string token = "token";
@@ -676,7 +676,8 @@ TEST_F(DownloadItemModelTest,
 
   EXPECT_EQ(base::UTF16ToUTF8(model().GetStatusText()),
             "Suspicious download blocked");
-#endif  // !BUILDFLAG(IS_ANDROID) && BUILDFLAG(FULL_SAFE_BROWSING)
+#endif  // !BUILDFLAG(IS_ANDROID) &&
+        // BUILDFLAG(SAFE_BROWSING_DOWNLOAD_PROTECTION)
 }
 
 #if !BUILDFLAG(IS_ANDROID)
@@ -947,13 +948,11 @@ TEST_F(DownloadItemModelTest, RenamingProgress) {
   EXPECT_EQ(60, model().PercentComplete());
 }
 
-#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_CHROMEOS_ASH)
+#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_CHROMEOS)
 class DownloadItemModelTailoredWarningTest : public DownloadItemModelTest {
  public:
   DownloadItemModelTailoredWarningTest() {
     DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-    scoped_feature_list_.InitAndEnableFeature(
-        safe_browsing::kDownloadTailoredWarnings);
   }
 
   ~DownloadItemModelTailoredWarningTest() override = default;
@@ -961,22 +960,15 @@ class DownloadItemModelTailoredWarningTest : public DownloadItemModelTest {
  protected:
   void SetupTailoredWarningForItem(
       download::DownloadDangerType danger_type,
-      TailoredVerdict::TailoredVerdictType tailored_verdict_type,
-      std::vector<TailoredVerdict::ExperimentalWarningAdjustment> adjustments) {
+      TailoredVerdict::TailoredVerdictType tailored_verdict_type) {
     ON_CALL(item(), GetDangerType()).WillByDefault(Return(danger_type));
     TailoredVerdict tailored_verdict;
     tailored_verdict.set_tailored_verdict_type(tailored_verdict_type);
-    for (const auto& adjustment : adjustments) {
-      tailored_verdict.add_adjustments(adjustment);
-    }
     safe_browsing::DownloadProtectionService::SetDownloadProtectionData(
         &item(), "token",
         safe_browsing::ClientDownloadResponse::SAFE,  // placeholder
         tailored_verdict);
   }
-
- private:
-  base::test::ScopedFeatureList scoped_feature_list_;
 };
 
 TEST_F(DownloadItemModelTailoredWarningTest, GetTailoredWarningType) {
@@ -1012,50 +1004,11 @@ TEST_F(DownloadItemModelTailoredWarningTest, GetTailoredWarningType) {
                  << "danger_type "
                  << GetDownloadDangerTypeString(test_case.danger_type));
     SetupTailoredWarningForItem(test_case.danger_type,
-                                test_case.tailored_verdict_type,
-                                /*adjustments=*/{});
+                                test_case.tailored_verdict_type);
     EXPECT_EQ(model().GetTailoredWarningType(),
               test_case.expected_warning_type);
     EXPECT_EQ(model().GetDangerUiPattern(), test_case.expected_danger_pattern);
   }
-
-  SetupTailoredWarningForItem(
-      download::DOWNLOAD_DANGER_TYPE_DANGEROUS_ACCOUNT_COMPROMISE,
-      TailoredVerdict::COOKIE_THEFT,
-      /*adjustments=*/{TailoredVerdict::ACCOUNT_INFO_STRING});
-  EXPECT_EQ(model().GetTailoredWarningType(),
-            DownloadUIModel::TailoredWarningType::kCookieTheftWithAccountInfo);
-  EXPECT_EQ(model().GetDangerUiPattern(),
-            DownloadUIModel::DangerUiPattern::kDangerous);
 }
 
-class DownloadItemModelTailoredWarningDisabledTest
-    : public DownloadItemModelTailoredWarningTest {
- public:
-  DownloadItemModelTailoredWarningDisabledTest() {
-    DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-    scoped_feature_list_.InitAndDisableFeature(
-        safe_browsing::kDownloadTailoredWarnings);
-  }
-
-  ~DownloadItemModelTailoredWarningDisabledTest() override = default;
-
- private:
-  base::test::ScopedFeatureList scoped_feature_list_;
-};
-
-TEST_F(DownloadItemModelTailoredWarningDisabledTest,
-       GetBubbleUIInfoForTailoredWarning_Disabled) {
-  SetupDownloadItemDefaults();
-  SetupTailoredWarningForItem(
-      download::DOWNLOAD_DANGER_TYPE_DANGEROUS_ACCOUNT_COMPROMISE,
-      TailoredVerdict::COOKIE_THEFT, /*adjustments=*/{});
-  EXPECT_EQ(model().GetTailoredWarningType(),
-            DownloadUIModel::TailoredWarningType::kNoTailoredWarning);
-  // This is dangerous despite kNoTailoredWarning, because the base
-  // danger_type is dangerous.
-  EXPECT_EQ(model().GetDangerUiPattern(),
-            DownloadUIModel::DangerUiPattern::kDangerous);
-}
-
-#endif  // !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_CHROMEOS_ASH)
+#endif  // !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_CHROMEOS)

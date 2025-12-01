@@ -29,6 +29,7 @@
 <translation id="2441056087170876076">Quái vật 2</translation>
 <translation id="2444387452209867610">Chèn Ghi chú</translation>
 <translation id="2486841023299517366">Con vật 4</translation>
+<translation id="2501278716633472235">Trở lại</translation>
 <translation id="2612127540243995147">Sẵn sàng để cài đặt. Vivaldi sẽ bị đóng và khởi chạy lại.</translation>
 <translation id="2613387515621326337">Truy cập trang web cập nhật</translation>
 <translation id="2647368062414805334">Rất tiếc, thiết lập trên Edge của bạn không khả dụng khi trình duyệt đó đang chạy. Để nhập các thiết lập đó vào Vivaldi, hãy lưu công việc của bạn và đóng tất cả các cửa sổ Edge . Sau đó bấm Tiếp tục.</translation>
@@ -46,6 +47,7 @@
 <translation id="3255747772218936245">Cài đặt bản cập nhật</translation>
 <translation id="3259769196742189631">Xác thực</translation>
 <translation id="3302905971452834934">Quái vật 1</translation>
+<translation id="3308738399950580893">quảng cáo</translation>
 <translation id="3334610655141903168">(Không tiêu đề)</translation>
 <translation id="3372505110412186107">Vivaldi <ph name="VERSION" /> hiện là phiên bản mới nhất.</translation>
 <translation id="3383198080133834965">Bạn đã cập nhật!</translation>
@@ -64,6 +66,7 @@
 <translation id="3732439195215136813">Con vật 5</translation>
 <translation id="3795800845758778870">Rất tiếc, thiết lập trên Brave của bạn không khả dụng khi trình duyệt đó đang chạy. Để nhập các thiết lập đó vào Vivaldi, hãy lưu công việc của bạn và đóng tất cả các cửa sổ Brave.  Sau đó bấm Tiếp tục.</translation>
 <translation id="3832132597516774400">Phong cảnh 5</translation>
+<translation id="3894751534882749287">Nếu bạn vẫn muốn xem trang, bạn có thể thay đổi mức độ bảo vệ theo dõi của nó trong cửa sổ bật lên của Trình-Chặn-Theo-Dõi hoặc bằng cách nhấp vào nút Cho phép</translation>
 <translation id="3914946330804881301">Nhập Từ Opera</translation>
 <translation id="3921292902397893431">Quái vật 8</translation>
 <translation id="3943857333388298514">Dán</translation>
@@ -80,6 +83,7 @@
 <translation id="4582480609585453144">Mở Liên kết trong Tab Nền</translation>
 <translation id="4636708767492582204">Gửi bằng Email</translation>
 <translation id="4677434526832593569">Con vật 8</translation>
+<translation id="4736016046474602958">Trình chặn Theo dõi</translation>
 <translation id="474217410105706308">Tắt âm Tab</translation>
 <translation id="4881695831933465202">Mở</translation>
 <translation id="498766871928286903"><ph name="DOWNLOADED" /> trên tổng <ph name="TOTAL_SIZE_TO_DOWNLOAD" /></translation>
@@ -117,6 +121,7 @@
 <translation id="6896758677409633944">Sao chép</translation>
 <translation id="7086554968911045110">Phong cảnh 7</translation>
 <translation id="7111492742514999492">Phong cảnh 9</translation>
+<translation id="7113310725918019676">Cho phép <ph name="BLOCKED_TYPE" /> từ <ph name="DOMAIN" /></translation>
 <translation id="7337881442233988129">Chromium</translation>
 <translation id="7581266044164103589">Không khởi chạy được trình cài đặt bản cập nhật. Vui lòng kiểm tra xem máy tính có đủ bộ nhớ hoặc dung lượng đĩa không và thử lại sau.</translation>
 <translation id="7658239707568436148">Huỷ</translation>
@@ -128,6 +133,7 @@
 <translation id="7957213167373139414">Lịch Của tôi</translation>
 <translation id="8027581147000338959">Mở trong Cửa sổ Mới</translation>
 <translation id="8099620695029051217">Sao chép Địa chỉ Trang</translation>
+<translation id="8119307142152921512">theo dõi và quảng cáo</translation>
 <translation id="8197810018650377191">Đánh dấu Trang</translation>
 <translation id="8261506727792406068">Xoá</translation>
 <translation id="8331671104904436324">Mở trong Tab Chạy nền</translation>
@@ -148,11 +154,13 @@
 <translation id="8813277370772331957">Nhắc tôi sau</translation>
 <translation id="8894900864683381599">Thêm Liên kết vào Bảng điều khiển Web</translation>
 <translation id="8912720443398351457">Bạn Thực sự Muốn Thoát Vivaldi?</translation>
+<translation id="8940028675168378100">Chặn bởi <ph name="BLOCKER_NAME" /></translation>
 <translation id="8947109330183116400">Chọn tệp dấu trang HTML</translation>
 <translation id="9017566390391482291">Chọn thư mục hồ sơ Vivaldi để nhập</translation>
 <translation id="9065203028668620118">Hiệu chỉnh</translation>
 <translation id="9157539936604258187">Mở Liên kết</translation>
 <translation id="9169060351863393881">Opera 12.x</translation>
+<translation id="9180553614777056266">Trình chặn Quảng cáo</translation>
 <translation id="939305735877869636">Brave</translation>
 <translation id="970294721402795299">Phong cảnh 16</translation>
 </translationbundle>

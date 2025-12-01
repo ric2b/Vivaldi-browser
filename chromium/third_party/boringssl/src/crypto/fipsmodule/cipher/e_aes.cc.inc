@@ -31,9 +31,6 @@
 #include "internal.h"
 
 
-OPENSSL_MSVC_PRAGMA(warning(push))
-OPENSSL_MSVC_PRAGMA(warning(disable : 4702))  // Unreachable code.
-
 #define AES_GCM_NONCE_LENGTH 12
 
 typedef struct {
@@ -1238,5 +1235,3 @@ int EVP_has_aes_hardware(void) {
   return 0;
 #endif
 }
-
-OPENSSL_MSVC_PRAGMA(warning(pop))

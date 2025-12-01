@@ -1246,33 +1246,32 @@ static bool check_credential(SSL_HANDSHAKE *hs, const SSL_CREDENTIAL *cred,
     return false;
   }
 
-  if (hs->config->check_client_certificate_type) {
-    // Check the certificate types advertised by the peer.
-    uint8_t cert_type;
-    switch (EVP_PKEY_id(cred->pubkey.get())) {
-      case EVP_PKEY_RSA:
-        cert_type = SSL3_CT_RSA_SIGN;
-        break;
-      case EVP_PKEY_EC:
-      case EVP_PKEY_ED25519:
-        cert_type = TLS_CT_ECDSA_SIGN;
-        break;
-      default:
-        OPENSSL_PUT_ERROR(SSL, SSL_R_UNKNOWN_CERTIFICATE_TYPE);
-        return false;
-    }
-    if (std::find(hs->certificate_types.begin(), hs->certificate_types.end(),
-                  cert_type) == hs->certificate_types.end()) {
+  // Check the certificate types advertised by the peer.
+  uint8_t cert_type;
+  switch (EVP_PKEY_id(cred->pubkey.get())) {
+    case EVP_PKEY_RSA:
+      cert_type = SSL3_CT_RSA_SIGN;
+      break;
+    case EVP_PKEY_EC:
+    case EVP_PKEY_ED25519:
+      cert_type = TLS_CT_ECDSA_SIGN;
+      break;
+    default:
       OPENSSL_PUT_ERROR(SSL, SSL_R_UNKNOWN_CERTIFICATE_TYPE);
       return false;
-    }
+  }
+  if (std::find(hs->certificate_types.begin(), hs->certificate_types.end(),
+                cert_type) == hs->certificate_types.end()) {
+    OPENSSL_PUT_ERROR(SSL, SSL_R_UNKNOWN_CERTIFICATE_TYPE);
+    return false;
   }
 
   // All currently supported credentials require a signature. Note this does not
   // check the ECDSA curve. Prior to TLS 1.3, there is no way to determine which
   // ECDSA curves are supported by the peer, so we must assume all curves are
   // supported.
-  return tls1_choose_signature_algorithm(hs, cred, out_sigalg);
+  return tls1_choose_signature_algorithm(hs, cred, out_sigalg) &&
+         ssl_credential_matches_requested_issuers(hs, cred);
 }
 
 static enum ssl_hs_wait_t do_send_client_certificate(SSL_HANDSHAKE *hs) {
@@ -1303,7 +1302,7 @@ static enum ssl_hs_wait_t do_send_client_certificate(SSL_HANDSHAKE *hs) {
   }
 
   Array<SSL_CREDENTIAL *> creds;
-  if (!ssl_get_credential_list(hs, &creds)) {
+  if (!ssl_get_full_credential_list(hs, &creds)) {
     return ssl_hs_error;
   }
 

@@ -107,6 +107,7 @@
 <translation id="1810764548349082891">Ingen tilgængelig forhåndsvisning</translation>
 <translation id="1812302367230252929">Amharisk translitteration</translation>
 <translation id="1813278315230285598">Tjenester</translation>
+<translation id="181434555916624618">Der vises ikke resultater med personer i øjeblikket. Prøv en anden prompt.</translation>
 <translation id="1829129547161959350">Pingvin</translation>
 <translation id="183183971458492120">Indlæser oplysninger...</translation>
 <translation id="1832073788765803750">Katakana i halvbredde</translation>
@@ -275,7 +276,7 @@
 <translation id="3241720467332021590">Irsk</translation>
 <translation id="3248185426436836442">Afventer</translation>
 <translation id="3252266817569339921">Fransk</translation>
-<translation id="3253225298092156258">Ikke tilgængeligt</translation>
+<translation id="3253225298092156258">Ikke tilgængelig</translation>
 <translation id="3254434849914415189">Vælg standardappen for <ph name="FILE_TYPE" />-filer:</translation>
 <translation id="3255159654094949700">Arabisk</translation>
 <translation id="326396468955264502"><ph name="NUMBER_OF_FILES" /> filer kunne ikke flyttes, fordi de er krypteret.</translation>

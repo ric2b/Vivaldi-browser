@@ -5,19 +5,25 @@
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/glic/glic_pref_names.h"
 #include "chrome/browser/glic/glic_settings_util.h"
+#include "chrome/browser/glic/test_support/interactive_glic_test.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/chrome_pages.h"
-#include "chrome/browser/ui/tabs/public/tab_interface.h"
 #include "chrome/browser/user_education/user_education_service.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/webui_url_constants.h"
 #include "chrome/test/user_education/interactive_feature_promo_test.h"
+#include "components/tab_collections/public/tab_interface.h"
+#include "components/user_education/common/user_education_features.h"
 #include "content/public/test/browser_test.h"
 #include "ui/base/interaction/element_tracker.h"
 
 namespace {
+DEFINE_LOCAL_ELEMENT_IDENTIFIER_VALUE(kFirstTab);
+DEFINE_LOCAL_ELEMENT_IDENTIFIER_VALUE(kSecondTab);
+DEFINE_LOCAL_ELEMENT_IDENTIFIER_VALUE(kThirdTab);
 DEFINE_LOCAL_ELEMENT_IDENTIFIER_VALUE(kSettingsTab);
 DEFINE_LOCAL_CUSTOM_ELEMENT_EVENT_TYPE(kOsToggleIsVisible);
+DEFINE_LOCAL_CUSTOM_ELEMENT_EVENT_TYPE(kKeyboardShortcutIsVisible);
 DEFINE_LOCAL_CUSTOM_ELEMENT_EVENT_TYPE(kBubbleIsVisible);
 DEFINE_LOCAL_CUSTOM_ELEMENT_EVENT_TYPE(kBubbleIsHidden);
 
@@ -44,28 +50,36 @@ auto ElementIsHiddenStateChange(
 }
 }  // namespace
 
-class GlicSettingsUtilUiTest : public InteractiveFeaturePromoTest {
+class GlicSettingsUtilUiTest
+    : public glic::test::InteractiveGlicFeaturePromoTest {
  public:
-  GlicSettingsUtilUiTest() {
-    scoped_feature_list_.InitWithFeatures(
-        {features::kGlic, features::kTabstripComboButton,
-         features::kGlicKeyboardShortcutNewBadge},
-        {});
-  }
+  GlicSettingsUtilUiTest() = default;
   ~GlicSettingsUtilUiTest() override = default;
 
   void SetUpOnMainThread() override {
-    InteractiveFeaturePromoTest::SetUpOnMainThread();
+    glic::test::InteractiveGlicFeaturePromoTest::SetUpOnMainThread();
     g_browser_process->local_state()->SetBoolean(
         glic::prefs::kGlicLauncherEnabled, true);
   }
 
+  // Navigates the initial tab to the glic settings page using
+  // chrome::ShowSettingsSubPage, opens 2 more tabs, then calls f and verifies
+  // that only 3 tabs are open.
   auto VerifyOpensGlicSettings(auto f) {
     return Steps(
-        Do([this, f]() { f(browser()->profile()); }),
-        InstrumentTab(kSettingsTab),
+        InstrumentTab(kFirstTab), Do([this] {
+          chrome::ShowSettingsSubPage(browser(), chrome::kGlicSettingsSubpage);
+        }),
+        WaitForWebContentsNavigation(
+            kFirstTab, chrome::GetSettingsUrl(chrome::kGlicSettingsSubpage)),
+        AddInstrumentedTab(kSecondTab , GURL(chrome::kChromeUICreditsURL)),
+        AddInstrumentedTab(kThirdTab, GURL(chrome::kChromeUIAboutURL)),
+        Do([this, f] { f(browser()->profile()); }), InstrumentTab(kSettingsTab),
         WaitForWebContentsReady(
-            kSettingsTab, chrome::GetSettingsUrl(chrome::kChromeUIGlicHost)));
+            kSettingsTab, chrome::GetSettingsUrl(chrome::kGlicSettingsSubpage)),
+        CheckResult(
+            [this] { return browser()->tab_strip_model()->GetTabCount(); }, 3,
+            "CheckTabCount"));
   }
 
   const DeepQuery kOsToggleHelpBubbleQuery{"settings-ui",
@@ -76,16 +90,11 @@ class GlicSettingsUtilUiTest : public InteractiveFeaturePromoTest {
                                            "help-bubble",
                                            "#close"};
 
-  const DeepQuery kKeyboardShortcutHelpBubbleQuery{"settings-ui",
-                                                   "settings-main",
-                                                   "settings-basic-page",
-                                                   "settings-glic-page",
-                                                   "#shortcutInput",
-                                                   "help-bubble",
-                                                   "#close"};
+  const DeepQuery kKeyboardShortcutHelpBubbleQuery{
+      "settings-ui",        "settings-main", "settings-basic-page",
+      "settings-glic-page", "help-bubble",   "#close"};
 
- private:
-  base::test::ScopedFeatureList scoped_feature_list_;
+  const DeepQuery kOpenSettingsButton = {"#openGlicSettings"};
 };
 
 IN_PROC_BROWSER_TEST_F(GlicSettingsUtilUiTest, OpenSettings) {
@@ -96,47 +105,70 @@ IN_PROC_BROWSER_TEST_F(GlicSettingsUtilUiTest, OpenOsToggleSetting) {
   RunTestSequence(
       VerifyOpensGlicSettings(glic::OpenGlicOsToggleSetting),
       WaitForStateChange(
-          kSettingsTab, ElementIsVisibleStateChange(kBubbleIsVisible,
+          kFirstTab, ElementIsVisibleStateChange(kBubbleIsVisible,
                                                     kOsToggleHelpBubbleQuery)));
 }
 
-IN_PROC_BROWSER_TEST_F(GlicSettingsUtilUiTest, OpenKeyboardShortcutSetting) {
+// TODO(crbug.com/401248290): Flaky on "Linux MSan Tests" bot.
+#if BUILDFLAG(IS_LINUX) && defined(MEMORY_SANITIZER)
+#define MAYBE_OpenKeyboardShortcutSetting DISABLED_OpenKeyboardShortcutSetting
+#else
+#define MAYBE_OpenKeyboardShortcutSetting OpenKeyboardShortcutSetting
+#endif
+IN_PROC_BROWSER_TEST_F(GlicSettingsUtilUiTest,
+                       MAYBE_OpenKeyboardShortcutSetting) {
   RunTestSequence(
       VerifyOpensGlicSettings(glic::OpenGlicKeyboardShortcutSetting),
-      WaitForStateChange(kSettingsTab, ElementIsVisibleStateChange(
+      WaitForStateChange(kFirstTab, ElementIsVisibleStateChange(
                                            kBubbleIsVisible,
                                            kKeyboardShortcutHelpBubbleQuery)));
 }
 
 IN_PROC_BROWSER_TEST_F(GlicSettingsUtilUiTest, ThrottleOpenOsToggleSetting) {
-  UserEducationService::MaybeNotifyNewBadgeFeatureUsed(browser()->profile(),
-                                                       features::kGlic);
+  for (int i = 0; i < user_education::features::GetNewBadgeFeatureUsedCount();
+       i++) {
+    UserEducationService::MaybeNotifyNewBadgeFeatureUsed(browser()->profile(),
+                                                         features::kGlic);
+  }
   RunTestSequence(
       VerifyOpensGlicSettings(glic::OpenGlicOsToggleSetting),
       WaitForStateChange(
-          kSettingsTab,
+          kFirstTab,
           ElementIsVisibleStateChange(
               kOsToggleIsVisible,
               {"settings-ui", "settings-main", "settings-basic-page",
                "settings-glic-page", "#launcherToggle"})),
-      WaitForStateChange(kSettingsTab,
+      WaitForStateChange(kFirstTab,
                          ElementIsHiddenStateChange(kBubbleIsHidden,
                                                     kOsToggleHelpBubbleQuery)));
 }
 
 IN_PROC_BROWSER_TEST_F(GlicSettingsUtilUiTest,
                        ThrottleOpenKeyboardShortcutSetting) {
-  UserEducationService::MaybeNotifyNewBadgeFeatureUsed(
-      browser()->profile(), features::kGlicKeyboardShortcutNewBadge);
+  for (int i = 0; i < user_education::features::GetNewBadgeFeatureUsedCount();
+       i++) {
+    UserEducationService::MaybeNotifyNewBadgeFeatureUsed(
+        browser()->profile(), features::kGlicKeyboardShortcutNewBadge);
+  }
   RunTestSequence(
-      VerifyOpensGlicSettings(glic::OpenGlicOsToggleSetting),
+      VerifyOpensGlicSettings(glic::OpenGlicKeyboardShortcutSetting),
       WaitForStateChange(
           kSettingsTab,
           ElementIsVisibleStateChange(
-              kOsToggleIsVisible,
+              kKeyboardShortcutIsVisible,
               {"settings-ui", "settings-main", "settings-basic-page",
                "settings-glic-page", "#shortcutInput"})),
       WaitForStateChange(kSettingsTab, ElementIsHiddenStateChange(
                                            kBubbleIsHidden,
                                            kKeyboardShortcutHelpBubbleQuery)));
+}
+
+IN_PROC_BROWSER_TEST_F(GlicSettingsUtilUiTest, OpenSettingsFromGlicUi) {
+  RunTestSequence(
+      OpenGlicWindow(GlicWindowMode::kAttached,
+                     GlicInstrumentMode::kHostAndContents),
+      InstrumentNextTab(kSettingsTab),
+      ClickMockGlicElement(kOpenSettingsButton),
+      WaitForWebContentsReady(
+          kSettingsTab, chrome::GetSettingsUrl(chrome::kGlicSettingsSubpage)));
 }

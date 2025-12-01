@@ -377,9 +377,9 @@ AshNotificationView::NotificationTitleRow::NotificationTitleRow(
 
   ash::TypographyProvider::Get()->StyleLabel(ash::TypographyToken::kCrosButton2,
                                              *title_view_);
-  title_view_->SetEnabledColorId(cros_tokens::kCrosSysOnSurface);
+  title_view_->SetEnabledColor(cros_tokens::kCrosSysOnSurface);
 
-  timestamp_in_collapsed_view_->SetEnabledColorId(
+  timestamp_in_collapsed_view_->SetEnabledColor(
       cros_tokens::kCrosSysOnSurfaceVariant);
   ash::TypographyProvider::Get()->StyleLabel(
       ash::TypographyToken::kCrosAnnotation1, *timestamp_in_collapsed_view_);
@@ -440,9 +440,9 @@ gfx::Size AshNotificationView::NotificationTitleRow::CalculatePreferredSize(
 void AshNotificationView::NotificationTitleRow::OnThemeChanged() {
   views::View::OnThemeChanged();
 
-  title_view_->SetEnabledColorId(cros_tokens::kCrosSysOnSurface);
-  title_row_divider_->SetEnabledColorId(cros_tokens::kCrosSysOnSurfaceVariant);
-  timestamp_in_collapsed_view_->SetEnabledColorId(
+  title_view_->SetEnabledColor(cros_tokens::kCrosSysOnSurface);
+  title_row_divider_->SetEnabledColor(cros_tokens::kCrosSysOnSurfaceVariant);
+  timestamp_in_collapsed_view_->SetEnabledColor(
       cros_tokens::kCrosSysOnSurfaceVariant);
 }
 
@@ -571,7 +571,7 @@ AshNotificationView::AshNotificationView(
       message_label_in_expanded_state_, kNotificationMessageLabelSize,
       /*is_color_primary=*/false);
 
-  message_label_in_expanded_state_->SetEnabledColorId(
+  message_label_in_expanded_state_->SetEnabledColor(
       cros_tokens::kCrosSysOnSurfaceVariant);
   ash::TypographyProvider::Get()->StyleLabel(
       ash::TypographyToken::kCrosAnnotation1,
@@ -1061,9 +1061,10 @@ void AshNotificationView::UpdateViewForExpandedState(bool expanded) {
     } else {
       progress_bar_bottom_padding = kProgressBarCollapsedBottomPadding;
     }
-    progress_bar_view()->SetBorder(views::CreateEmptyBorder(
+    progress_bar_view()->SetProperty(
+        views::kMarginsKey,
         gfx::Insets::TLBR(message_center::kProgressBarTopPadding, 0,
-                          progress_bar_bottom_padding, 0)));
+                          progress_bar_bottom_padding, 0));
   }
 
   // Custom padding for app icon and expand button. These 2 views should always
@@ -1160,7 +1161,7 @@ void AshNotificationView::UpdateWithNotification(
     notification_style_utils::ConfigureLabelStyle(message_label(),
                                                   kNotificationMessageLabelSize,
                                                   /*is_color_primary=*/false);
-    message_label()->SetEnabledColorId(cros_tokens::kCrosSysOnSurfaceVariant);
+    message_label()->SetEnabledColor(cros_tokens::kCrosSysOnSurfaceVariant);
     ash::TypographyProvider::Get()->StyleLabel(
         ash::TypographyToken::kCrosAnnotation1, *message_label());
   }
@@ -1326,7 +1327,7 @@ void AshNotificationView::CreateOrUpdateProgressViews(
   if (status_view()) {
     status_view()->SetMultiLine(true);
     status_view()->SetMaxLines(message_center::kMaxLinesForStatusView);
-    status_view()->SetEnabledColorId(cros_tokens::kCrosSysOnSurfaceVariant);
+    status_view()->SetEnabledColor(cros_tokens::kCrosSysOnSurfaceVariant);
     TypographyProvider::Get()->StyleLabel(TypographyToken::kCrosAnnotation1,
                                           *status_view());
   }
@@ -1374,7 +1375,7 @@ void AshNotificationView::OnThemeChanged() {
   views::View::OnThemeChanged();
 
   if (message_label()) {
-    message_label()->SetEnabledColorId(cros_tokens::kCrosSysOnSurfaceVariant);
+    message_label()->SetEnabledColor(cros_tokens::kCrosSysOnSurfaceVariant);
   }
 
   if (control_buttons_view_) {
@@ -1384,7 +1385,7 @@ void AshNotificationView::OnThemeChanged() {
   }
 
   if (message_label_in_expanded_state_) {
-    message_label_in_expanded_state_->SetEnabledColorId(
+    message_label_in_expanded_state_->SetEnabledColor(
         cros_tokens::kCrosSysOnSurfaceVariant);
   }
 
@@ -1406,7 +1407,7 @@ void AshNotificationView::OnThemeChanged() {
        right_content()->height() - icon_view()->GetImageDrawingSize().height() >
            kSmallImageBackgroundThreshold)) {
     icon_view()->set_apply_rounded_corners(false);
-    right_content()->SetBackground(views::CreateThemedRoundedRectBackground(
+    right_content()->SetBackground(views::CreateRoundedRectBackground(
         kColorAshControlBackgroundColorInactive,
         message_center::kImageCornerRadius));
   }

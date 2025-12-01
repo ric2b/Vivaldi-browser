@@ -26,6 +26,7 @@
 const FFVulkanDecodeDescriptor ff_vk_dec_hevc_desc = {
     .codec_id         = AV_CODEC_ID_HEVC,
     .decode_extension = FF_VK_EXT_VIDEO_DECODE_H265,
+    .queue_flags      = VK_QUEUE_VIDEO_DECODE_BIT_KHR,
     .decode_op        = VK_VIDEO_CODEC_OPERATION_DECODE_H265_BIT_KHR,
     .ext_props = {
         .extensionName = VK_STD_VULKAN_VIDEO_CODEC_H265_DECODE_EXTENSION_NAME,
@@ -897,7 +898,7 @@ static int vk_hevc_end_frame(AVCodecContext *avctx)
     return ff_vk_decode_frame(avctx, pic->f, vp, rav, rvp);
 }
 
-static void vk_hevc_free_frame_priv(FFRefStructOpaque _hwctx, void *data)
+static void vk_hevc_free_frame_priv(AVRefStructOpaque _hwctx, void *data)
 {
     AVHWDeviceContext *hwctx = _hwctx.nc;
     HEVCVulkanDecodePicture *hp = data;

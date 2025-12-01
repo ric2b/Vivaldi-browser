@@ -153,6 +153,7 @@ class CONTENT_EXPORT SellerWorklet : public mojom::SellerWorklet {
           browser_signal_buyer_and_seller_reporting_id,
       uint32_t browser_signal_bidding_duration_msecs,
       bool browser_signal_for_debugging_only_in_cooldown_or_lockout,
+      bool browser_signal_for_debugging_only_sampling,
       const std::optional<base::TimeDelta> seller_timeout,
       uint64_t trace_id,
       const url::Origin& bidder_joining_origin,
@@ -221,6 +222,7 @@ class CONTENT_EXPORT SellerWorklet : public mojom::SellerWorklet {
     std::optional<std::string> browser_signal_buyer_and_seller_reporting_id;
     uint32_t browser_signal_bidding_duration_msecs;
     bool browser_signal_for_debugging_only_in_cooldown_or_lockout;
+    bool browser_signal_for_debugging_only_sampling;
     std::optional<base::TimeDelta> seller_timeout;
     uint64_t trace_id;
 
@@ -414,6 +416,7 @@ class CONTENT_EXPORT SellerWorklet : public mojom::SellerWorklet {
             browser_signal_buyer_and_seller_reporting_id,
         uint32_t browser_signal_bidding_duration_msecs,
         bool browser_signal_for_debugging_only_in_cooldown_or_lockout,
+        bool browser_signal_for_debugging_only_sampling,
         const std::optional<base::TimeDelta> seller_timeout,
         uint64_t trace_id,
         base::ScopedClosureRunner cleanup_score_ad_task,
@@ -583,9 +586,17 @@ class CONTENT_EXPORT SellerWorklet : public mojom::SellerWorklet {
       ScoreAdTaskList::iterator task,
       DirectFromSellerSignalsRequester::Result result);
 
+  // Returns true iff all scoreAd()'s inputs are ready. The JS
+  // may or may not be ready yet.
+  bool ScoreAdTaskHasInputs(const SellerWorklet::ScoreAdTask& task) const;
+
   // Returns true iff all scoreAd()'s prerequisite loading tasks have
   // completed.
   bool IsReadyToScoreAd(const ScoreAdTask& task) const;
+
+  // We only want to eagerly compile JS if we've received a scoreAd task (to
+  // avoid eager compilation if an auction will be aborted).
+  void SetEagerJsCompilation(bool eagerly_compile_js);
 
   // Checks if the script has been loaded successfully, the
   // DirectFromSellerSignals loads have finished and the TrustedSignals load has

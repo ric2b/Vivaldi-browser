@@ -45,7 +45,7 @@
 #include "frame_thread_encoder.h"
 #include "hwconfig.h"
 #include "internal.h"
-#include "refstruct.h"
+#include "libavutil/refstruct.h"
 #include "thread.h"
 
 /**
@@ -453,8 +453,8 @@ av_cold void ff_codec_close(AVCodecContext *avctx)
         av_frame_free(&avci->in_frame);
         av_frame_free(&avci->recon_frame);
 
-        ff_refstruct_unref(&avci->pool);
-        ff_refstruct_pool_uninit(&avci->progress_frame_pool);
+        av_refstruct_unref(&avci->pool);
+        av_refstruct_pool_uninit(&avci->progress_frame_pool);
         if (av_codec_is_decoder(avctx->codec))
             ff_decode_internal_uninit(avctx);
 
@@ -647,12 +647,16 @@ void avcodec_string(char *buf, int buf_size, AVCodecContext *enc, int encode)
         if (encode) {
             av_bprintf(&bprint, ", q=%d-%d", enc->qmin, enc->qmax);
         } else {
+#if FF_API_CODEC_PROPS
+FF_DISABLE_DEPRECATION_WARNINGS
             if (enc->properties & FF_CODEC_PROPERTY_CLOSED_CAPTIONS)
                 av_bprintf(&bprint, ", Closed Captions");
             if (enc->properties & FF_CODEC_PROPERTY_FILM_GRAIN)
                 av_bprintf(&bprint, ", Film Grain");
             if (enc->properties & FF_CODEC_PROPERTY_LOSSLESS)
                 av_bprintf(&bprint, ", lossless");
+FF_ENABLE_DEPRECATION_WARNINGS
+#endif
         }
         break;
     case AVMEDIA_TYPE_AUDIO:

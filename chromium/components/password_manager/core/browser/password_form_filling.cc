@@ -24,6 +24,9 @@
 #include "components/password_manager/core/browser/password_manager_client.h"
 #include "components/password_manager/core/browser/password_manager_driver.h"
 #include "components/password_manager/core/browser/password_manager_util.h"
+#include "components/signin/public/base/consent_level.h"
+#include "components/signin/public/identity_manager/identity_manager.h"
+#include "components/url_formatter/elide_url.h"
 
 namespace password_manager {
 
@@ -108,8 +111,15 @@ void Autofill(PasswordManagerClient* client,
 }
 
 std::string GetPreferredRealm(const PasswordForm& form) {
-  return form.app_display_name.empty() ? form.signon_realm
-                                       : form.app_display_name;
+  if (!form.app_display_name.empty()) {
+    return form.app_display_name;
+  }
+  if (!form.signon_realm.empty()) {
+    return form.signon_realm;
+  }
+  return base::UTF16ToUTF8(url_formatter::FormatOriginForSecurityDisplay(
+      url::Origin::Create(form.url),
+      url_formatter::SchemeDisplay::OMIT_CRYPTOGRAPHIC));
 }
 
 bool IsSameOrigin(const Origin& frame_origin, const GURL& credential_url) {
@@ -142,7 +152,18 @@ LikelyFormFilling SendFillInformationToRenderer(
   }
 
   if (best_matches.empty() && !webauthn_suggestions_available) {
-    driver->InformNoSavedCredentials();
+    bool should_show_popup_without_passwords = false;
+
+#if BUILDFLAG(ENABLE_DICE_SUPPORT)
+    if (const auto* identity_manager = client->GetIdentityManager()) {
+      should_show_popup_without_passwords =
+          identity_manager->HasAccountWithRefreshTokenInPersistentErrorState(
+              identity_manager->GetPrimaryAccountId(
+                  signin::ConsentLevel::kSignin));
+    }
+
+#endif
+    driver->InformNoSavedCredentials(should_show_popup_without_passwords);
     metrics_recorder->RecordFillEvent(
         PasswordFormMetricsRecorder::kManagerFillEventNoCredential);
     return LikelyFormFilling::kNoFilling;

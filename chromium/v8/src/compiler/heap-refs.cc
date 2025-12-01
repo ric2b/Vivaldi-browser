@@ -8,6 +8,7 @@
 
 #include "src/compiler/js-heap-broker.h"
 #include "src/objects/elements-kind.h"
+#include "src/objects/instance-type-inl.h"
 
 #ifdef ENABLE_SLOW_DCHECKS
 #include <algorithm>
@@ -1161,6 +1162,14 @@ bool MapRef::IsBooleanMap(JSHeapBroker* broker) const {
   return *this == broker->boolean_map();
 }
 
+bool MapRef::IsThinStringMap() const {
+  return InstanceTypeChecker::IsThinString(instance_type());
+}
+
+bool MapRef::IsTwoByteStringMap() const {
+  return InstanceTypeChecker::IsTwoByteString(instance_type());
+}
+
 bool MapRef::CanInlineElementAccess() const {
   if (!IsJSObjectMap()) return false;
   if (is_access_check_needed()) return false;
@@ -1816,13 +1825,11 @@ size_t JSTypedArrayRef::length() const {
 }
 
 size_t JSTypedArrayRef::byte_length() const {
-  CHECK(!is_on_heap());
   // Immutable after initialization (since this is not used for RAB/GSAB).
   return object()->byte_length();
 }
 
 ElementsKind JSTypedArrayRef::elements_kind(JSHeapBroker* broker) const {
-  CHECK(!is_on_heap());
   // Immutable after initialization.
   return map(broker).elements_kind();
 }
@@ -2271,7 +2278,11 @@ PropertyDetails DescriptorArrayRef::GetPropertyDetails(
 
 NameRef DescriptorArrayRef::GetPropertyKey(
     JSHeapBroker* broker, InternalIndex descriptor_index) const {
-  NameRef result = MakeRef(broker, object()->GetKey(descriptor_index));
+  // A property key that has been written to a descriptor array must be being
+  // read because it was observed in a map, which means this write must have
+  // been published.
+  NameRef result =
+      MakeRefAssumeMemoryFence(broker, object()->GetKey(descriptor_index));
   CHECK(result.IsUniqueName());
   return result;
 }

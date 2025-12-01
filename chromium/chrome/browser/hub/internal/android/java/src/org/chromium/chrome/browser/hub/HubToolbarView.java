@@ -63,18 +63,14 @@ public class HubToolbarView extends RelativeLayout { // Vivaldi
     private OnTabSelectedListener mOnTabSelectedListener;
     private boolean mBlockTabSelectionCallback;
     private boolean mApplyDelayForSearchBoxAnimation;
-    private final AnimationHandler mColorBlendAnimatorHandler;
     private final AnimationHandler mHubSearchAnimatorHandler;
-    private final HubColorBlendAnimatorSetHelper mAnimatorSetBuilder;
     private final Handler mHandler;
 
     /** Default {@link LinearLayout} constructor called by inflation. */
     public HubToolbarView(Context context, AttributeSet attributeSet) {
         super(context, attributeSet);
-        mColorBlendAnimatorHandler = new AnimationHandler();
         mHubSearchAnimatorHandler = new AnimationHandler();
         mHandler = new Handler();
-        mAnimatorSetBuilder = new HubColorBlendAnimatorSetHelper();
         mToolbarOverviewColorSetter = (color) -> {};
     }
 
@@ -94,12 +90,6 @@ public class HubToolbarView extends RelativeLayout { // Vivaldi
         mSearchBoxLayout = findViewById(R.id.search_box);
         mSearchBoxTextView = findViewById(R.id.search_box_text);
         mSearchLoupeView = findViewById(R.id.search_loupe);
-
-        registerColorBlends();
-
-        if (OmniboxFeatures.sAndroidHubSearch.isEnabled()) {
-            registerSearchBoxColorBlends();
-        }
     }
 
     void setMenuButtonVisible(boolean visible) {
@@ -110,11 +100,10 @@ public class HubToolbarView extends RelativeLayout { // Vivaldi
         mMenuButtonContainer.setVisibility(visible ? View.VISIBLE : View.INVISIBLE);
     }
 
-    void setActionButton(@Nullable FullButtonData buttonData, boolean showText) {
+    void setActionButton(@Nullable FullButtonData buttonData) {
         ApplyButtonData.apply(buttonData, mActionButton);
-        if (!showText) {
-            mActionButton.setText(null);
-        }
+        mActionButton.setText(null);
+        mActionButton.setCompoundDrawablePadding(0);
     }
 
     void setPaneSwitcherButtonData(
@@ -157,31 +146,23 @@ public class HubToolbarView extends RelativeLayout { // Vivaldi
         mBlockTabSelectionCallback = false;
     }
 
-    void setColorScheme(HubColorSchemeUpdate colorSchemeUpdate) {
-        @HubColorScheme int newColorScheme = colorSchemeUpdate.newColorScheme;
-        @HubColorScheme int prevColorScheme = colorSchemeUpdate.previousColorScheme;
-
-        AnimatorSet animatorSet =
-                mAnimatorSetBuilder
-                        .setNewColorScheme(newColorScheme)
-                        .setPreviousColorScheme(prevColorScheme)
-                        .build();
-        mColorBlendAnimatorHandler.startAnimation(animatorSet);
-
-        // TODO(crbug.com/40948541): Updating the app menu color here is more correct and
-        // should be done for code health.
+    void setColorMixer(HubColorMixer mixer) {
+        registerColorBlends(mixer);
+        if (OmniboxFeatures.sAndroidHubSearch.isEnabled()) {
+            registerSearchBoxColorBlends(mixer);
+        }
     }
 
-    private void registerColorBlends() {
+    private void registerColorBlends(HubColorMixer mixer) {
         Context context = getContext();
 
-        mAnimatorSetBuilder.registerBlend(
+        mixer.registerBlend(
                 new SingleHubViewColorBlend(
                         PANE_COLOR_BLEND_ANIMATION_DURATION_MS,
                         colorScheme -> HubColors.getBackgroundColor(context, colorScheme),
                         this::setBackgroundColor));
 
-        mAnimatorSetBuilder.registerBlend(
+        mixer.registerBlend(
                 new SingleHubViewColorBlend(
                         PANE_COLOR_BLEND_ANIMATION_DURATION_MS,
                         colorScheme -> HubColors.getSelectedIconColor(context, colorScheme),
@@ -212,9 +193,9 @@ public class HubToolbarView extends RelativeLayout { // Vivaldi
                     animation.setInterpolator(getPaneColorBlendInterpolator());
                     return animation;
                 };
-        mAnimatorSetBuilder.registerBlend(multiColorBlend);
+        mixer.registerBlend(multiColorBlend);
 
-        mAnimatorSetBuilder.registerBlend(
+        mixer.registerBlend(
                 new SingleHubViewColorBlend(
                         PANE_COLOR_BLEND_ANIMATION_DURATION_MS,
                         colorScheme -> HubColors.getIconColor(context, colorScheme),
@@ -227,21 +208,17 @@ public class HubToolbarView extends RelativeLayout { // Vivaldi
 
         // We don't want to pass a method reference. Lambdas will ensure we run the most recent
         // setter.
-        mAnimatorSetBuilder.registerBlend(
+        mixer.registerBlend(
                 new SingleHubViewColorBlend(
                         PANE_COLOR_BLEND_ANIMATION_DURATION_MS,
                         colorScheme -> HubColors.getBackgroundColor(context, colorScheme),
                         color -> mToolbarOverviewColorSetter.onResult(color)));
-
-        // TODO(crbug.com/40948541): Updating the app menu color here is more correct and
-        // should be done for code health. Menu Button Color is also set by
-        // HubToolbarCoordinator.
     }
 
-    private void registerSearchBoxColorBlends() {
+    private void registerSearchBoxColorBlends(HubColorMixer mixer) {
         Context context = getContext();
 
-        mAnimatorSetBuilder.registerBlend(
+        mixer.registerBlend(
                 new SingleHubViewColorBlend(
                         PANE_COLOR_BLEND_ANIMATION_DURATION_MS,
                         colorScheme -> HubColors.getSearchBoxHintTextColor(context, colorScheme),
@@ -249,13 +226,13 @@ public class HubToolbarView extends RelativeLayout { // Vivaldi
 
         GradientDrawable backgroundDrawable =
                 (GradientDrawable) mSearchBoxLayout.getBackground().mutate();
-        mAnimatorSetBuilder.registerBlend(
+        mixer.registerBlend(
                 new SingleHubViewColorBlend(
                         PANE_COLOR_BLEND_ANIMATION_DURATION_MS,
                         colorScheme -> HubColors.getSearchBoxBgColor(context, colorScheme),
                         backgroundDrawable::setColor));
 
-        mAnimatorSetBuilder.registerBlend(
+        mixer.registerBlend(
                 new SingleHubViewColorBlend(
                         PANE_COLOR_BLEND_ANIMATION_DURATION_MS,
                         colorScheme -> HubColors.getIconColor(context, colorScheme),
@@ -272,7 +249,6 @@ public class HubToolbarView extends RelativeLayout { // Vivaldi
     private void updateActionButtonColorInternal(Context context, @ColorInt int color) {
         ColorStateList actionButtonColor = HubColors.getActionButtonColor(context, color);
         TextViewCompat.setCompoundDrawableTintList(mActionButton, actionButtonColor);
-        mActionButton.setTextColor(actionButtonColor);
     }
 
     private void updateSearchLoupeColor(@ColorInt int color) {
@@ -304,6 +280,12 @@ public class HubToolbarView extends RelativeLayout { // Vivaldi
                 };
         hubSearchTransitionAnimation.addListener(animationListener);
         mHubSearchAnimatorHandler.startAnimation(hubSearchTransitionAnimation);
+    }
+
+    void setHubSearchEnabledState(boolean enabled) {
+        mSearchBoxLayout.setEnabled(enabled);
+        mSearchBoxTextView.setEnabled(enabled);
+        mSearchLoupeView.setEnabled(enabled);
     }
 
     void setApplyDelayForSearchBoxAnimation(boolean applyDelay) {

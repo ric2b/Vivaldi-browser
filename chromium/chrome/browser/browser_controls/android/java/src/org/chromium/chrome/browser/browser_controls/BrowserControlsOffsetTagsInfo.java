@@ -6,17 +6,20 @@ package org.chromium.chrome.browser.browser_controls;
 
 import com.google.errorprone.annotations.DoNotMock;
 
+import org.chromium.build.annotations.NullMarked;
+import org.chromium.build.annotations.Nullable;
 import org.chromium.cc.input.BrowserControlsOffsetTags;
 import org.chromium.cc.input.OffsetTag;
 import org.chromium.ui.BrowserControlsOffsetTagConstraints;
 import org.chromium.ui.OffsetTagConstraints;
 
 @DoNotMock("This is a simple value object.")
+@NullMarked
 public final class BrowserControlsOffsetTagsInfo {
     private final BrowserControlsOffsetTags mTags;
-    public OffsetTagConstraints mTopControlsConstraints;
-    public OffsetTagConstraints mContentConstraints;
-    public OffsetTagConstraints mBottomControlsConstraints;
+    public @Nullable OffsetTagConstraints mTopControlsConstraints;
+    public @Nullable OffsetTagConstraints mContentConstraints;
+    public @Nullable OffsetTagConstraints mBottomControlsConstraints;
     public int mTopControlsAdditionalHeight;
     public int mBottomControlsAdditionalHeight;
 
@@ -33,9 +36,7 @@ public final class BrowserControlsOffsetTagsInfo {
      * controls. Only the OffsetTags are set, the other fields should be set properly before being
      * passed to the renderer.
      *
-     * @param topControls An OffsetTag enabling viz to move the top controls. Note: For now, this
-     *     tag is only used when AndroidBcivZeroBrowserFrames is enabled. When the flag is disabled,
-     *     the top controls will be tagged with the content OffsetTag.
+     * @param topControls An OffsetTag enabling viz to move the top controls.
      * @param content An OffsetTag enabling viz to move the viewport of the rendered web contents.
      * @param bottomControls An OffsetTag enabling viz to move the bottom controls.
      */
@@ -57,15 +58,15 @@ public final class BrowserControlsOffsetTagsInfo {
                 mTopControlsConstraints, mContentConstraints, mBottomControlsConstraints);
     }
 
-    public OffsetTag getTopControlsOffsetTag() {
+    public @Nullable OffsetTag getTopControlsOffsetTag() {
         return mTags.getTopControlsOffsetTag();
     }
 
-    public OffsetTag getContentOffsetTag() {
+    public @Nullable OffsetTag getContentOffsetTag() {
         return mTags.getContentOffsetTag();
     }
 
-    public OffsetTag getBottomControlsOffsetTag() {
+    public @Nullable OffsetTag getBottomControlsOffsetTag() {
         return mTags.getBottomControlsOffsetTag();
     }
 

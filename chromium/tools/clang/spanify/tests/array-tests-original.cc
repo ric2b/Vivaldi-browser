@@ -19,11 +19,21 @@ struct Type1 {
 
 int UnsafeIndex();  // This function might return an out-of-bound index.
 
+struct Component {
+  // Expected rewrite:
+  // std::array<int, 10> values;
+  int values[10];
+};
+
 void fct() {
   // Expected rewrite:
   // auto buf = std::to_array<int>({1, 2, 3, 4});
   int buf[] = {1, 2, 3, 4};
   buf[UnsafeIndex()] = 11;
+
+  Component component;
+  // Triggers the rewrite of Component::values
+  component.values[UnsafeIndex()]++;
 
   // Expected rewrite:
   // std::array<int, 5> buf2 = {1, 1, 1, 1, 1};
@@ -57,11 +67,11 @@ void fct() {
   buf7[UnsafeIndex()] = nullptr;
 
   // Expected rewrite:
-  // std::array<int(**)[], 16> buf8 = {};
-  int(**buf8[16])[] = {};
+  // std::array<int (**)[], 16> buf8 = {};
+  int (**buf8[16])[] = {};
   buf8[UnsafeIndex()] = nullptr;
 
-  using Arr = int(**)[];
+  using Arr = int (**)[];
   // Expected rewrite:
   // std::array<Arr, buf3[0]> buf9 = {};
   Arr buf9[buf3[0]] = {};
@@ -87,7 +97,8 @@ void sizeof_array_expr() {
   // Expected rewrite:
   // std::ignore = (buf.size() * sizeof(decltype(buf)::value_type));
   std::ignore = sizeof(buf);
-  // The following won't be rewritten.
+  // Expected rewrite:
+  // std::ignore = sizeof buf[0];
   std::ignore = sizeof *buf;
   std::ignore = sizeof buf[0];
 }

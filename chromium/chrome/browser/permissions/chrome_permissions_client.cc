@@ -15,7 +15,6 @@
 #include "base/strings/string_util.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
-#include "build/chromeos_buildflags.h"
 #include "chrome/browser/app_mode/app_mode_utils.h"
 #include "chrome/browser/ash/shimless_rma/chrome_shimless_rma_delegate.h"
 #include "chrome/browser/bluetooth/bluetooth_chooser_context_factory.h"
@@ -25,7 +24,6 @@
 #include "chrome/browser/engagement/important_sites_util.h"
 #include "chrome/browser/media/webrtc/media_stream_device_permissions.h"
 #include "chrome/browser/metrics/ukm_background_recorder_service.h"
-#include "chrome/browser/permissions/contextual_notification_permission_ui_selector.h"
 #include "chrome/browser/permissions/origin_keyed_permission_action_service_factory.h"
 #include "chrome/browser/permissions/permission_actions_history_factory.h"
 #include "chrome/browser/permissions/permission_decision_auto_blocker_factory.h"
@@ -38,6 +36,8 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profiles_state.h"
 #include "chrome/browser/search_engines/ui_thread_search_terms_data.h"
+#include "chrome/browser/serial/serial_chooser_context.h"
+#include "chrome/browser/serial/serial_chooser_context_factory.h"
 #include "chrome/browser/subresource_filter/subresource_filter_profile_context_factory.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/hats/hats_service.h"
@@ -48,6 +48,7 @@
 #include "chrome/common/channel_info.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/common/url_constants.h"
+#include "chrome/grit/branded_strings.h"
 #include "components/content_settings/core/browser/content_settings_type_set.h"
 #include "components/content_settings/core/browser/cookie_settings.h"
 #include "components/content_settings/core/common/content_settings.h"
@@ -71,6 +72,7 @@
 #include "extensions/buildflags/buildflags.h"
 #include "net/base/registry_controlled_domains/registry_controlled_domain.h"
 #include "services/metrics/public/cpp/ukm_recorder.h"
+#include "ui/base/l10n/l10n_util.h"
 #include "url/origin.h"
 
 #if BUILDFLAG(IS_ANDROID)
@@ -88,7 +90,7 @@
 #include "components/vector_icons/vector_icons.h"
 #endif
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
 #include "ash/constants/ash_features.h"
 #include "chrome/browser/ash/app_mode/isolated_web_app/kiosk_iwa_data.h"
 #include "chrome/browser/ash/app_mode/isolated_web_app/kiosk_iwa_manager.h"
@@ -104,6 +106,7 @@
 #endif
 
 #if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+#include "chrome/browser/permissions/contextual_notification_permission_ui_selector.h"
 #include "chrome/browser/safe_browsing/safe_browsing_service.h"
 #endif
 
@@ -213,6 +216,9 @@ ChromePermissionsClient::GetChooserContext(
           Profile::FromBrowserContext(browser_context));
     case ContentSettingsType::BLUETOOTH_CHOOSER_DATA:
       return BluetoothChooserContextFactory::GetForProfile(
+          Profile::FromBrowserContext(browser_context));
+    case ContentSettingsType::SERIAL_CHOOSER_DATA:
+      return SerialChooserContextFactory::GetForProfile(
           Profile::FromBrowserContext(browser_context));
     default:
       NOTREACHED();
@@ -379,11 +385,10 @@ void ChromePermissionsClient::TriggerPromptHatsSurveyIfEnabled(
   auto survey_data = permissions::PermissionHatsTriggerHelper::
       SurveyProductSpecificData::PopulateFrom(prompt_parameters);
 
-  hats_service->LaunchSurveyForWebContents(
-      kHatsSurveyTriggerPermissionsPrompt, web_contents,
-      survey_data.survey_bits_data, survey_data.survey_string_data,
-      std::move(hats_shown_callback), base::DoNothing(),
-      survey_parameters->supplied_trigger_id,
+  hats_service->LaunchSurvey(
+      kHatsSurveyTriggerPermissionsPrompt, std::move(hats_shown_callback),
+      base::DoNothing(), survey_data.survey_bits_data,
+      survey_data.survey_string_data, survey_parameters->supplied_trigger_id,
       HatsService::SurveyOptions(survey_parameters->custom_survey_invitation,
                                  survey_parameters->message_identifier));
 }
@@ -412,8 +417,10 @@ std::vector<std::unique_ptr<permissions::PermissionUiSelector>>
 ChromePermissionsClient::CreatePermissionUiSelectors(
     content::BrowserContext* browser_context) {
   std::vector<std::unique_ptr<permissions::PermissionUiSelector>> selectors;
+#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
   selectors.emplace_back(
       std::make_unique<ContextualNotificationPermissionUiSelector>());
+#endif
   selectors.emplace_back(std::make_unique<PrefBasedQuietPermissionUiSelector>(
       Profile::FromBrowserContext(browser_context)));
   selectors.emplace_back(std::make_unique<PredictionBasedPermissionUiSelector>(
@@ -507,7 +514,7 @@ std::optional<bool> ChromePermissionsClient::HasPreviouslyAutoRevokedPermission(
 
 std::optional<url::Origin> ChromePermissionsClient::GetAutoApprovalOrigin(
     content::BrowserContext* browser_context) {
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
   // In kiosk mode for web apps and isolated web apps, all permission requests
   // are auto-approved for the origin of the main app.
   std::optional<url::Origin> current_kiosk_origin = GetCurrentKioskOrigin();
@@ -672,6 +679,10 @@ favicon::FaviconService* ChromePermissionsClient::GetFaviconService(
   return FaviconServiceFactory::GetForProfile(
       Profile::FromBrowserContext(browser_context),
       ServiceAccessType::EXPLICIT_ACCESS);
+}
+
+const std::u16string ChromePermissionsClient::GetClientApplicationName() const {
+  return l10n_util::GetStringUTF16(IDS_SHORT_PRODUCT_NAME);
 }
 
 #else

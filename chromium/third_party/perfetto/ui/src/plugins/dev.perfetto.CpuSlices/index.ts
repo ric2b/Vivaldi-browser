@@ -22,6 +22,7 @@ import {TrackNode} from '../../public/workspace';
 import {CpuSliceSelectionAggregator} from './cpu_slice_selection_aggregator';
 import {CpuSliceByProcessSelectionAggregator} from './cpu_slice_by_process_selection_aggregator';
 import ThreadPlugin from '../dev.perfetto.Thread';
+import {createAggregationToTabAdaptor} from '../../components/aggregation_adapter';
 
 function uriForSchedTrack(cpu: number): string {
   return `/sched_cpu${cpu}`;
@@ -32,29 +33,42 @@ export default class implements PerfettoPlugin {
   static readonly dependencies = [ThreadPlugin];
 
   async onTraceLoad(ctx: Trace): Promise<void> {
-    ctx.selection.registerAreaSelectionAggregator(
-      new CpuSliceSelectionAggregator(),
+    ctx.selection.registerAreaSelectionTab(
+      createAggregationToTabAdaptor(ctx, new CpuSliceSelectionAggregator()),
     );
-    ctx.selection.registerAreaSelectionAggregator(
-      new CpuSliceByProcessSelectionAggregator(),
+    ctx.selection.registerAreaSelectionTab(
+      createAggregationToTabAdaptor(
+        ctx,
+        new CpuSliceByProcessSelectionAggregator(),
+      ),
     );
 
-    const cpus = ctx.traceInfo.cpus;
+    // ctx.traceInfo.cpus contains all cpus seen from all events. Filter the set
+    // if it's seen in sched slices.
+    const queryRes = await ctx.engine.query(
+      `select distinct ucpu from sched order by ucpu;`,
+    );
+    const ucpus = new Set<number>();
+    for (const it = queryRes.iter({ucpu: NUM}); it.valid(); it.next()) {
+      ucpus.add(it.ucpu);
+    }
+    const cpus = ctx.traceInfo.cpus.filter((cpu) => ucpus.has(cpu.ucpu));
     const cpuToClusterType = await this.getAndroidCpuClusterTypes(ctx.engine);
 
     for (const cpu of cpus) {
-      const size = cpuToClusterType.get(cpu);
-      const uri = uriForSchedTrack(cpu);
+      const uri = uriForSchedTrack(cpu.ucpu);
+      const size = cpuToClusterType.get(cpu.cpu);
+      const sizeStr = size === undefined ? `` : ` (${size})`;
+      const name = `Cpu ${cpu.cpu}${sizeStr}${cpu.maybeMachineLabel()}`;
 
       const threads = ctx.plugins.getPlugin(ThreadPlugin).getThreadMap();
 
-      const name = size === undefined ? `Cpu ${cpu}` : `Cpu ${cpu} (${size})`;
       ctx.tracks.registerTrack({
         uri,
         title: name,
         tags: {
           kind: CPU_SLICE_TRACK_KIND,
-          cpu,
+          cpu: cpu.ucpu,
         },
         track: new CpuSliceTrack(ctx, uri, cpu, threads),
       });

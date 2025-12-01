@@ -14,6 +14,7 @@
 #include "third_party/blink/renderer/core/execution_context/execution_context.h"
 #include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
+#include "third_party/blink/renderer/core/html/forms/html_select_element.h"
 #include "third_party/blink/renderer/core/inspector/identifiers_factory.h"
 #include "third_party/blink/renderer/core/inspector/protocol/audits.h"
 #include "third_party/blink/renderer/core/inspector/protocol/network.h"
@@ -455,6 +456,9 @@ protocol::Audits::ContentSecurityPolicyViolationType CSPViolationTypeToProtocol(
     case ContentSecurityPolicyViolationType::kURLViolation:
       return protocol::Audits::ContentSecurityPolicyViolationTypeEnum::
           KURLViolation;
+    case ContentSecurityPolicyViolationType::kSRIViolation:
+      return protocol::Audits::ContentSecurityPolicyViolationTypeEnum::
+          KSRIViolation;
   }
 }
 
@@ -675,6 +679,42 @@ void AuditsIssue::ReportGenericIssue(
 
   frame->DomWindow()->AddInspectorIssue(AuditsIssue(std::move(issue)));
 }
+void AuditsIssue::ReportPartitioningBlobURLIssue(
+    LocalDOMWindow* window,
+    String blob_url,
+    mojom::blink::PartitioningBlobURLInfo info) {
+  protocol::String partitioning_blob_url_info_string;
+  switch (info) {
+    case mojom::blink::PartitioningBlobURLInfo::kEnforceNoopenerForNavigation:
+      partitioning_blob_url_info_string = protocol::Audits::
+          PartitioningBlobURLInfoEnum::EnforceNoopenerForNavigation;
+      break;
+    case mojom::blink::PartitioningBlobURLInfo::kBlockedCrossPartitionFetching:
+      // This is logged from the browser process and not used in the renderer.
+    default:
+      NOTREACHED();
+  }
+
+  auto partitioning_blob_url_issue_details =
+      protocol::Audits::PartitioningBlobURLIssueDetails::create()
+          .setUrl(blob_url)
+          .setPartitioningBlobURLInfo(partitioning_blob_url_info_string)
+          .build();
+
+  auto protocol_issue_details =
+      protocol::Audits::InspectorIssueDetails::create()
+          .setPartitioningBlobURLIssueDetails(
+              std::move(partitioning_blob_url_issue_details))
+          .build();
+
+  auto issue = protocol::Audits::InspectorIssue::create()
+                   .setCode(protocol::Audits::InspectorIssueCodeEnum::
+                                PartitioningBlobURLIssue)
+                   .setDetails(std::move(protocol_issue_details))
+                   .build();
+
+  window->AddInspectorIssue(AuditsIssue(std::move(issue)));
+}
 
 void AuditsIssue::ReportPropertyRuleIssue(
     Document* document,
@@ -825,7 +865,7 @@ void AuditsIssue::ReportSelectElementAccessibilityIssue(
     DOMNodeId node_id,
     SelectElementAccessibilityIssueReason issue_reason,
     bool has_disallowed_attributes) {
-  CHECK(RuntimeEnabledFeatures::CustomizableSelectEnabled());
+  CHECK(HTMLSelectElement::CustomizableSelectEnabled(document));
   CHECK(RuntimeEnabledFeatures::
             CustomizableSelectElementAccessibilityIssuesEnabled());
 

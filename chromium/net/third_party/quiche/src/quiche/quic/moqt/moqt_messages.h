@@ -13,6 +13,7 @@
 #include <optional>
 #include <string>
 #include <utility>
+#include <variant>
 #include <vector>
 
 #include "absl/container/inlined_vector.h"
@@ -35,11 +36,11 @@ inline constexpr quic::ParsedQuicVersionVector GetMoqtSupportedQuicVersions() {
 }
 
 enum class MoqtVersion : uint64_t {
-  kDraft07 = 0xff000007,
+  kDraft10 = 0xff00000a,
   kUnrecognizedVersionForTests = 0xfe0000ff,
 };
 
-inline constexpr MoqtVersion kDefaultMoqtVersion = MoqtVersion::kDraft07;
+inline constexpr MoqtVersion kDefaultMoqtVersion = MoqtVersion::kDraft10;
 inline constexpr uint64_t kDefaultInitialMaxSubscribeId = 100;
 inline constexpr uint64_t kMinNamespaceElements = 1;
 inline constexpr uint64_t kMaxNamespaceElements = 32;
@@ -70,12 +71,16 @@ struct QUICHE_EXPORT MoqtSessionParameters {
 inline constexpr size_t kMaxMessageHeaderSize = 2048;
 
 enum class QUICHE_EXPORT MoqtDataStreamType : uint64_t {
-  kObjectDatagram = 0x01,
   kStreamHeaderSubgroup = 0x04,
   kStreamHeaderFetch = 0x05,
 
   // Currently QUICHE-specific.  All data on a kPadding stream is ignored.
   kPadding = 0x26d3,
+};
+
+enum class QUICHE_EXPORT MoqtDatagramType : uint64_t {
+  kObject = 0x01,
+  kObjectStatus = 0x02,
 };
 
 enum class QUICHE_EXPORT MoqtMessageType : uint64_t {
@@ -102,6 +107,7 @@ enum class QUICHE_EXPORT MoqtMessageType : uint64_t {
   kFetchCancel = 0x17,
   kFetchOk = 0x18,
   kFetchError = 0x19,
+  kSubscribesBlocked = 0x1a,
   kClientSetup = 0x40,
   kServerSetup = 0x41,
 
@@ -152,32 +158,25 @@ enum class QUICHE_EXPORT MoqtTrackRequestParameter : uint64_t {
   kOackWindowSize = 0xbbf1439,
 };
 
-// TODO: those are non-standard; add standard error codes once those exist, see
-// <https://github.com/moq-wg/moq-transport/issues/393>.
-enum class MoqtAnnounceErrorCode : uint64_t {
-  kInternalError = 0,
-  kAnnounceNotSupported = 1,
-  kNotASubscribedNamespace = 2,
-};
-
+// Used for SUBSCRIBE_ERROR, ANNOUNCE_ERROR, ANNOUNCE_CANCEL,
+// SUBSCRIBE_ANNOUNCES_ERROR, and FETCH_ERROR.
+// TODO(martinduke): Create aliases like FetchErrorCode, etc. to hide the fact
+// that these are all the same enum.
 enum class QUICHE_EXPORT SubscribeErrorCode : uint64_t {
   kInternalError = 0x0,
-  kInvalidRange = 0x1,
-  kRetryTrackAlias = 0x2,
-  kTrackDoesNotExist = 0x3,
-  kUnauthorized = 0x4,
-  kTimeout = 0x5,
+  kUnauthorized = 0x1,
+  kTimeout = 0x2,
+  kNotSupported = 0x3,
+  kDoesNotExist = 0x4,     // Can also mean "not interested" or "unknown".
+  kInvalidRange = 0x5,     // SUBSCRIBE_ERROR and FETCH_ERROR only.
+  kRetryTrackAlias = 0x6,  // SUBSCRIBE_ERROR only.
 };
 
 struct MoqtSubscribeErrorReason {
   SubscribeErrorCode error_code;
   std::string reason_phrase;
 };
-
-struct MoqtAnnounceErrorReason {
-  MoqtAnnounceErrorCode error_code;
-  std::string reason_phrase;
-};
+using MoqtAnnounceErrorReason = MoqtSubscribeErrorReason;
 
 // Full track name represents a tuple of name elements. All higher order
 // elements MUST be present, but lower-order ones (like the name) can be
@@ -334,8 +333,8 @@ enum class QUICHE_EXPORT MoqtObjectStatus : uint64_t {
   kObjectDoesNotExist = 0x1,
   kGroupDoesNotExist = 0x2,
   kEndOfGroup = 0x3,
-  kEndOfTrack = 0x4,
-  kEndOfSubgroup = 0x5,
+  kEndOfTrackAndGroup = 0x4,
+  kEndOfTrack = 0x5,
   kInvalidObjectStatus = 0x6,
 };
 
@@ -348,6 +347,7 @@ struct QUICHE_EXPORT MoqtObject {
   uint64_t group_id;
   uint64_t object_id;
   MoqtPriority publisher_priority;
+  std::string extension_headers;  // Raw, unparsed extension headers.
   MoqtObjectStatus object_status;
   std::optional<uint64_t> subgroup_id;
   uint64_t payload_length;
@@ -355,7 +355,6 @@ struct QUICHE_EXPORT MoqtObject {
 
 enum class QUICHE_EXPORT MoqtFilterType : uint64_t {
   kNone = 0x0,
-  kLatestGroup = 0x1,
   kLatestObject = 0x2,
   kAbsoluteStart = 0x3,
   kAbsoluteRange = 0x4,
@@ -388,17 +387,12 @@ struct QUICHE_EXPORT MoqtSubscribe {
   std::optional<MoqtDeliveryOrder> group_order;
 
   // The combinations of these that have values indicate the filter type.
-  // SG: Start Group; SO: Start Object; EG: End Group; EO: End Object;
   // (none): KLatestObject
-  // SO: kLatestGroup (must be zero)
-  // SG, SO: kAbsoluteStart
-  // SG, SO, EG, EO: kAbsoluteRange
-  // SG, SO, EG: kAbsoluteRange (request whole last group)
+  // start: kAbsoluteStart
+  // start, end_group: kAbsoluteRange (request whole last group)
   // All other combinations are invalid.
-  std::optional<uint64_t> start_group;
-  std::optional<uint64_t> start_object;
+  std::optional<FullSequence> start;
   std::optional<uint64_t> end_group;
-  std::optional<uint64_t> end_object;
   // If the mode is kNone, the these are std::nullopt.
 
   MoqtSubscribeParameters parameters;
@@ -430,28 +424,26 @@ struct QUICHE_EXPORT MoqtUnsubscribe {
 };
 
 enum class QUICHE_EXPORT SubscribeDoneCode : uint64_t {
-  kUnsubscribed = 0x0,
-  kInternalError = 0x1,
-  kUnauthorized = 0x2,
-  kTrackEnded = 0x3,
-  kSubscriptionEnded = 0x4,
-  kGoingAway = 0x5,
-  kExpired = 0x6,
+  kInternalError = 0x0,
+  kUnauthorized = 0x1,
+  kTrackEnded = 0x2,
+  kSubscriptionEnded = 0x3,
+  kGoingAway = 0x4,
+  kExpired = 0x5,
+  kTooFarBehind = 0x6,
 };
 
 struct QUICHE_EXPORT MoqtSubscribeDone {
   uint64_t subscribe_id;
   SubscribeDoneCode status_code;
+  uint64_t stream_count;
   std::string reason_phrase;
-  std::optional<FullSequence> final_id;
 };
 
 struct QUICHE_EXPORT MoqtSubscribeUpdate {
   uint64_t subscribe_id;
-  uint64_t start_group;
-  uint64_t start_object;
+  FullSequence start;
   std::optional<uint64_t> end_group;
-  std::optional<uint64_t> end_object;
   MoqtPriority subscriber_priority;
   MoqtSubscribeParameters parameters;
 };
@@ -467,7 +459,7 @@ struct QUICHE_EXPORT MoqtAnnounceOk {
 
 struct QUICHE_EXPORT MoqtAnnounceError {
   FullTrackName track_namespace;
-  MoqtAnnounceErrorCode error_code;
+  SubscribeErrorCode error_code;
   std::string reason_phrase;
 };
 
@@ -505,7 +497,7 @@ struct QUICHE_EXPORT MoqtTrackStatus {
 
 struct QUICHE_EXPORT MoqtAnnounceCancel {
   FullTrackName track_namespace;
-  MoqtAnnounceErrorCode error_code;
+  SubscribeErrorCode error_code;
   std::string reason_phrase;
 };
 
@@ -540,11 +532,27 @@ struct QUICHE_EXPORT MoqtMaxSubscribeId {
   uint64_t max_subscribe_id;
 };
 
+enum class QUICHE_EXPORT FetchType : uint64_t {
+  kStandalone = 0x1,
+  kJoining = 0x2,
+};
+
+struct JoiningFetch {
+  JoiningFetch(uint64_t joining_subscribe_id, uint64_t preceding_group_offset)
+      : joining_subscribe_id(joining_subscribe_id),
+        preceding_group_offset(preceding_group_offset) {}
+  uint64_t joining_subscribe_id;
+  uint64_t preceding_group_offset;
+};
+
 struct QUICHE_EXPORT MoqtFetch {
-  uint64_t subscribe_id;
-  FullTrackName full_track_name;
+  uint64_t fetch_id;
   MoqtPriority subscriber_priority;
   std::optional<MoqtDeliveryOrder> group_order;
+  // If joining_fetch has a value, then the parser will not populate the name
+  // and ranges. The session will populate them instead.
+  std::optional<JoiningFetch> joining_fetch;
+  FullTrackName full_track_name;
   FullSequence start_object;  // subgroup is ignored
   uint64_t end_group;
   std::optional<uint64_t> end_object;
@@ -568,6 +576,10 @@ struct QUICHE_EXPORT MoqtFetchError {
   std::string reason_phrase;
 };
 
+struct QUICHE_EXPORT MoqtSubscribesBlocked {
+  uint64_t max_subscribe_id;
+};
+
 // All of the four values in this message are encoded as varints.
 // `delta_from_deadline` is encoded as an absolute value, with the lowest bit
 // indicating the sign (0 if positive).
@@ -581,13 +593,9 @@ struct QUICHE_EXPORT MoqtObjectAck {
 
 std::string MoqtMessageTypeToString(MoqtMessageType message_type);
 std::string MoqtDataStreamTypeToString(MoqtDataStreamType type);
+std::string MoqtDatagramTypeToString(MoqtDatagramType type);
 
 std::string MoqtForwardingPreferenceToString(
-    MoqtForwardingPreference preference);
-
-MoqtForwardingPreference GetForwardingPreference(MoqtDataStreamType type);
-
-MoqtDataStreamType GetMessageTypeForForwardingPreference(
     MoqtForwardingPreference preference);
 
 absl::Status MoqtStreamErrorToStatus(webtransport::StreamErrorCode error_code,

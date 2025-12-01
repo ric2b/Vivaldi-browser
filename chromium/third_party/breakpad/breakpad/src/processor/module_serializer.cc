@@ -42,6 +42,7 @@
 #include <string.h>
 
 #include <map>
+#include <memory>
 #include <string>
 
 #include "common/scoped_ptr.h"
@@ -133,7 +134,7 @@ char* ModuleSerializer::Serialize(const BasicSourceLineResolver::Module& module,
     BPLOG(ERROR) << "ModuleSerializer: memory allocation failed, "
                  << "size to alloc: " << size_to_alloc;
     if (size) *size = 0;
-    return NULL;
+    return nullptr;
   }
 
   // Write serialized data to allocated memory chunk.
@@ -176,7 +177,7 @@ bool ModuleSerializer::SerializeModuleAndLoadIntoFastResolver(
   string symbol_data_string(symbol_data.get(), size);
   symbol_data.reset();
 
-  scoped_ptr<CodeModule> code_module(
+  std::unique_ptr<CodeModule> code_module(
       new BasicCodeModule(0, 0, iter->first, "", "", "", ""));
 
   return fast_resolver->LoadModuleUsingMapBuffer(code_module.get(),
@@ -215,15 +216,15 @@ bool ModuleSerializer::ConvertOneModule(
 
 char* ModuleSerializer::SerializeSymbolFileData(const string& symbol_data,
                                                 size_t* size) {
-  scoped_ptr<BasicSourceLineResolver::Module> module(
+  std::unique_ptr<BasicSourceLineResolver::Module> module(
       new BasicSourceLineResolver::Module("no name"));
   scoped_array<char> buffer(new char[symbol_data.size() + 1]);
   memcpy(buffer.get(), symbol_data.c_str(), symbol_data.size());
   buffer.get()[symbol_data.size()] = '\0';
   if (!module->LoadMapFromMemory(buffer.get(), symbol_data.size() + 1)) {
-    return NULL;
+    return nullptr;
   }
-  buffer.reset(NULL);
+  buffer.reset(nullptr);
   return Serialize(*module, size);
 }
 

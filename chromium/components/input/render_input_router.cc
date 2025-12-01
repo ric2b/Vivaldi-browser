@@ -16,6 +16,7 @@
 #include "cc/input/browser_controls_offset_tag_modifications.h"
 #include "components/input/input_constants.h"
 #include "components/input/input_router_config_helper.h"
+#include "components/input/input_router_impl.h"
 #include "components/input/render_input_router_client.h"
 #include "components/input/render_widget_host_input_event_router.h"
 #include "components/input/render_widget_host_view_input.h"
@@ -148,13 +149,18 @@ void RenderInputRouter::SetupInputRouter(float device_scale_factor) {
   in_flight_event_count_ = 0;
   StopInputEventAckTimeout();
 
+  bool was_active = input_router_ && input_router_->IsActive();
+
   input_router_ = std::make_unique<InputRouterImpl>(
       this, this, fling_scheduler_.get(),
       GetInputRouterConfigForPlatform(task_runner_));
 
-  // input_router_ recreated, need to update the force_enable_zoom_ state.
+  // Restore states in the newly recreated `input_router_`.
   input_router_->SetForceEnableZoom(force_enable_zoom_);
   input_router_->SetDeviceScaleFactor(device_scale_factor);
+  if (was_active) {
+    input_router_->MakeActive();
+  }
 }
 
 void RenderInputRouter::SetFlingScheduler(
@@ -239,10 +245,9 @@ blink::mojom::WidgetInputHandler* RenderInputRouter::GetWidgetInputHandler() {
 
 void RenderInputRouter::OnImeCompositionRangeChanged(
     const gfx::Range& range,
-    const std::optional<std::vector<gfx::Rect>>& character_bounds,
-    const std::optional<std::vector<gfx::Rect>>& line_bounds) {
-  render_input_router_client_->OnImeCompositionRangeChanged(
-      range, character_bounds, line_bounds);
+    const std::optional<std::vector<gfx::Rect>>& character_bounds) {
+  render_input_router_client_->OnImeCompositionRangeChanged(range,
+                                                            character_bounds);
 }
 void RenderInputRouter::OnImeCancelComposition() {
   render_input_router_client_->OnImeCancelComposition();

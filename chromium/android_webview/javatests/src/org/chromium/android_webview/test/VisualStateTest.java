@@ -25,6 +25,7 @@ import org.junit.runners.Parameterized.UseParametersRunnerFactory;
 import org.chromium.android_webview.AwContents;
 import org.chromium.android_webview.AwContents.VisualStateCallback;
 import org.chromium.android_webview.AwContentsClient;
+import org.chromium.android_webview.AwWebResourceRequest;
 import org.chromium.android_webview.test.util.CommonResources;
 import org.chromium.android_webview.test.util.GraphicsTestUtils;
 import org.chromium.android_webview.test.util.JSUtils;
@@ -258,7 +259,7 @@ public class VisualStateTest extends AwParameterizedTest {
                             @Override
                             public WebResourceResponseInfo shouldInterceptRequest(
                                     AwWebResourceRequest request) {
-                                if (request.url.equals("intercepted://blue.png")) {
+                                if (request.getUrl().equals("intercepted://blue.png")) {
                                     try {
                                         return new SlowBlueImage();
                                     } catch (Throwable t) {
@@ -468,6 +469,7 @@ public class VisualStateTest extends AwParameterizedTest {
     @Test
     @Feature({"AndroidWebView"})
     @SmallTest
+    @SuppressWarnings("UnusedMethod")
     public void testVisualStateCallbackWhenContainerViewDetached() throws Throwable {
         final CountDownLatch testFinishedSignal = new CountDownLatch(1);
 

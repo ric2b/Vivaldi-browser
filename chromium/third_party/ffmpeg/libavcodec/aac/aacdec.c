@@ -1112,6 +1112,8 @@ static av_cold int decode_close(AVCodecContext *avctx)
             AACUsacElemConfig *ec = &usac->elems[j];
             av_freep(&ec->ext.pl_data);
         }
+
+        av_channel_layout_uninit(&ac->oc[i].ch_layout);
     }
 
     for (int type = 0; type < FF_ARRAY_ELEMS(ac->che); type++) {

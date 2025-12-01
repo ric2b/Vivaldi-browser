@@ -691,6 +691,15 @@ void ViewAndroid::NotifyVirtualKeyboardOverlayRect(
   }
 }
 
+void ViewAndroid::NotifyContextMenuInsetsObservers(const gfx::Rect& safe_area) {
+  if (event_handler_) {
+    event_handler_->NotifyContextMenuInsetsObservers(safe_area);
+  }
+  for (ViewAndroid* child : children_) {
+    child->NotifyContextMenuInsetsObservers(safe_area);
+  }
+}
+
 template <typename E>
 bool ViewAndroid::HitTest(EventHandlerCallback<E> handler_callback,
                           const E& event,
@@ -736,6 +745,12 @@ const ViewAndroid* ViewAndroid::GetTopMostChildForTesting() const {
   // The top-most refers to the back element of the children. This is mirroring
   // the children ordering of the cc Layer tree.
   return children_.back();
+}
+
+void ViewAndroid::OnPointerLockRelease() {
+  if (event_handler_) {
+    event_handler_->OnPointerLockRelease();
+  }
 }
 
 }  // namespace ui

@@ -36,7 +36,9 @@ import org.chromium.chrome.browser.ui.messages.snackbar.SnackbarManager;
 import org.chromium.components.embedder_support.util.UrlConstants;
 import org.chromium.ui.modaldialog.ModalDialogManager;
 
+// Vivaldi
 import org.chromium.chrome.browser.ChromeApplicationImpl;
+import org.chromium.ui.base.DeviceFormFactor;
 
 import org.vivaldi.browser.appmenu.AppMenuIconRow;
 import org.vivaldi.browser.common.VivaldiUtils;
@@ -105,7 +107,7 @@ public class TabbedAppMenuPropertiesDelegate extends AppMenuPropertiesDelegateIm
     @Override
     public int getFooterResourceId() {
         // Vivaldi
-        if (!mIsTablet && !VivaldiUtils.isTopToolbarOn())
+        if (shouldShowAppMenuIconRow() && !VivaldiUtils.isTopToolbarOn())
             return R.layout.icon_row_menu_layout;
 
         if (shouldShowWebFeedMenuItem()) {
@@ -139,7 +141,8 @@ public class TabbedAppMenuPropertiesDelegate extends AppMenuPropertiesDelegateIm
 
     @Override
     public int getHeaderResourceId() {
-        if (!mIsTablet && VivaldiUtils.isTopToolbarOn())
+        // Vivaldi
+        if (shouldShowAppMenuIconRow() && VivaldiUtils.isTopToolbarOn())
             return R.layout.icon_row_menu_layout;
 
         return 0;
@@ -148,7 +151,7 @@ public class TabbedAppMenuPropertiesDelegate extends AppMenuPropertiesDelegateIm
     // Vivaldi
     @Override
     public void onHeaderViewInflated(AppMenuHandler appMenuHandler, View view) {
-        if (!mIsTablet && VivaldiUtils.isTopToolbarOn()) {
+        if (shouldShowAppMenuIconRow() && VivaldiUtils.isTopToolbarOn()) {
             ((AppMenuIconRow) view).initialize(appMenuHandler,
                     mBookmarkModelSupplier,
                     mActivityTabProvider.get(),
@@ -204,5 +207,11 @@ public class TabbedAppMenuPropertiesDelegate extends AppMenuPropertiesDelegateIm
         }
 
         return super.shouldShowHeader(maxMenuHeight);
+    }
+
+    // Vivaldi ref. VAB-11054
+    boolean shouldShowAppMenuIconRow() {
+        return !mIsTablet || (mDecorView.getWidth()
+                < DeviceFormFactor.getNonMultiDisplayMinimumTabletWidthPx(mContext));
     }
 }

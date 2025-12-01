@@ -8,7 +8,7 @@
 #import "base/metrics/user_metrics.h"
 #import "base/strings/sys_string_conversions.h"
 #import "components/autofill/core/browser/data_manager/personal_data_manager.h"
-#import "components/autofill/core/browser/data_model/autofill_profile.h"
+#import "components/autofill/core/browser/data_model/addresses/autofill_profile.h"
 #import "components/autofill/core/browser/data_quality/addresses/profile_requirement_utils.h"
 #import "components/autofill/ios/browser/personal_data_manager_observer_bridge.h"
 #import "ios/chrome/browser/autofill/ui_bundled/manual_fill/address_consumer.h"
@@ -213,8 +213,6 @@ std::vector<AutofillProfile> FetchAddresses(
 // Evaluates whether or not the option to move the address to the account should
 // be available when navigating to the details page of the given address.
 - (BOOL)offerMigrateToAccountForAddress:(const AutofillProfile&)address {
-  BOOL syncIsEnabled = _personalDataManager->address_data_manager()
-                           .IsSyncFeatureEnabledForAutofill();
   BOOL addressIsLocalOrSyncable = !address.IsAccountProfile();
   BOOL addressIsEligibleForAccountMigration =
       addressIsLocalOrSyncable &&
@@ -222,8 +220,7 @@ std::vector<AutofillProfile> FetchAddresses(
           _personalDataManager->address_data_manager(), address);
   BOOL userEmailIsValid = [self userEmail] != nil;
 
-  return !syncIsEnabled && addressIsEligibleForAccountMigration &&
-         userEmailIsValid;
+  return addressIsEligibleForAccountMigration && userEmailIsValid;
 }
 
 // Returns the user's identity email address.

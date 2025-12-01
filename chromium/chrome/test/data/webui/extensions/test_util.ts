@@ -102,6 +102,7 @@ export class MockItemDelegate extends ClickMock implements ItemDelegate {
     return Promise.resolve();
   }
   setItemAllowedIncognito(_id: string, _isAllowedIncognito: boolean) {}
+  setItemAllowedUserScripts(_id: string, _isAllowedUserScripts: boolean) {}
   setItemAllowedOnFileUrls(_id: string, _isAllowedOnFileUrls: boolean) {}
   setItemHostAccess(
       _id: string, _hostAccess: chrome.developerPrivate.HostAccess) {}
@@ -110,7 +111,7 @@ export class MockItemDelegate extends ClickMock implements ItemDelegate {
   inspectItemView(_id: string, _view: chrome.developerPrivate.ExtensionView) {}
   openUrl(_url: string) {}
   uploadItemToAccount(_id: string) {
-    return Promise.resolve();
+    return Promise.resolve(false);
   }
 
 

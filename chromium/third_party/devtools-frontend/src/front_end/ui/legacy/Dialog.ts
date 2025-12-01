@@ -40,13 +40,13 @@ import type {SplitWidget} from './SplitWidget.js';
 import {WidgetFocusRestorer} from './Widget.js';
 
 export class Dialog extends Common.ObjectWrapper.eventMixin<EventTypes, typeof GlassPane>(GlassPane) {
-  private tabIndexBehavior: OutsideTabIndexBehavior;
-  private tabIndexMap: Map<HTMLElement, number>;
-  private focusRestorer: WidgetFocusRestorer|null;
-  private closeOnEscape: boolean;
-  private targetDocument!: Document|null;
+  private tabIndexBehavior = OutsideTabIndexBehavior.DISABLE_ALL_OUTSIDE_TAB_INDEX;
+  private tabIndexMap = new Map<HTMLElement, number>();
+  private focusRestorer: WidgetFocusRestorer|null = null;
+  private closeOnEscape = true;
+  private targetDocument: Document|null = null;
   private readonly targetDocumentKeyDownHandler: (event: Event) => void;
-  private escapeKeyCallback: ((arg0: Event) => void)|null;
+  private escapeKeyCallback: ((arg0: Event) => void)|null = null;
 
   constructor(jslogContext?: string) {
     super();
@@ -64,12 +64,7 @@ export class Dialog extends Common.ObjectWrapper.eventMixin<EventTypes, typeof G
       event.consume(true);
     });
     ARIAUtils.markAsModalDialog(this.contentElement);
-    this.tabIndexBehavior = OutsideTabIndexBehavior.DISABLE_ALL_OUTSIDE_TAB_INDEX;
-    this.tabIndexMap = new Map();
-    this.focusRestorer = null;
-    this.closeOnEscape = true;
     this.targetDocumentKeyDownHandler = this.onKeyDown.bind(this);
-    this.escapeKeyCallback = null;
   }
 
   static hasInstance(): boolean {
@@ -81,8 +76,7 @@ export class Dialog extends Common.ObjectWrapper.eventMixin<EventTypes, typeof G
   }
 
   override show(where?: Document|Element): void {
-    const document =
-        (where instanceof Document ? where : (where || InspectorView.instance().element).ownerDocument as Document);
+    const document = (where instanceof Document ? where : (where || InspectorView.instance().element).ownerDocument);
     this.targetDocument = document;
     this.targetDocument.addEventListener('keydown', this.targetDocumentKeyDownHandler, true);
 
@@ -107,6 +101,10 @@ export class Dialog extends Common.ObjectWrapper.eventMixin<EventTypes, typeof G
     this.restoreTabIndexOnElements();
     this.dispatchEventToListeners(Events.HIDDEN);
     Dialog.instance = null;
+  }
+
+  setAriaLabel(label: string): void {
+    ARIAUtils.setLabel(this.contentElement, label);
   }
 
   setCloseOnEscape(close: boolean): void {
@@ -140,7 +138,7 @@ export class Dialog extends Common.ObjectWrapper.eventMixin<EventTypes, typeof G
     let node: (Node|null)|Document = document;
     for (; node; node = node.traverseNextNode(document)) {
       if (node instanceof HTMLElement) {
-        const element = (node as HTMLElement);
+        const element = (node);
         const tabIndex = element.tabIndex;
         if (!exclusionSet?.has(element)) {
           if (tabIndex >= 0) {
@@ -156,13 +154,13 @@ export class Dialog extends Common.ObjectWrapper.eventMixin<EventTypes, typeof G
   }
 
   private getMainWidgetTabIndexElements(splitWidget: SplitWidget|null): Set<HTMLElement> {
-    const elementSet = (new Set() as Set<HTMLElement>);
+    const elementSet = new Set<HTMLElement>();
     if (!splitWidget) {
       return elementSet;
     }
 
     const mainWidget = splitWidget.mainWidget();
-    if (!mainWidget || !mainWidget.element) {
+    if (!mainWidget?.element) {
       return elementSet;
     }
 
@@ -172,7 +170,7 @@ export class Dialog extends Common.ObjectWrapper.eventMixin<EventTypes, typeof G
         continue;
       }
 
-      const element = (node as HTMLElement);
+      const element = (node);
       const tabIndex = element.tabIndex;
       if (tabIndex < 0) {
         continue;

@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 #include <string>
+#include <string_view>
 #include <utility>
 
 #include "base/command_line.h"
@@ -25,7 +26,6 @@
 #include "base/threading/thread_restrictions.h"
 #include "build/build_config.h"
 #include "build/buildflag.h"
-#include "build/chromeos_buildflags.h"
 #include "chrome/browser/password_manager/chrome_password_manager_client.h"
 #include "chrome/browser/password_manager/password_manager_test_base.h"
 #include "chrome/browser/password_manager/password_manager_uitest_util.h"
@@ -231,7 +231,7 @@ class MockHttpAuthObserver : public password_manager::HttpAuthObserver {
  public:
   MOCK_METHOD(void,
               OnAutofillDataAvailable,
-              (const std::u16string& username, const std::u16string& password),
+              (std::u16string_view username, std::u16string_view password),
               (override));
 
   MOCK_METHOD(void, OnLoginModelDestroying, (), (override));
@@ -4307,12 +4307,6 @@ class MockPrerenderPasswordManagerDriver
               ShowPasswordSuggestions,
               (const autofill::PasswordSuggestionRequest&),
               (override));
-#if BUILDFLAG(IS_ANDROID)
-  MOCK_METHOD(void,
-              ShowKeyboardReplacingSurface,
-              (autofill::mojom::SubmissionReadinessState, bool),
-              (override));
-#endif
   MOCK_METHOD(void,
               CheckSafeBrowsingReputation,
               (const GURL& form_action, const GURL& frame_url),
@@ -4382,14 +4376,6 @@ class MockPrerenderPasswordManagerDriver
               copy.password_field_index = 0;
               impl_->ShowPasswordSuggestions(copy);
             });
-#if BUILDFLAG(IS_ANDROID)
-    ON_CALL(*this, ShowKeyboardReplacingSurface)
-        .WillByDefault([this](autofill::mojom::SubmissionReadinessState
-                                  submission_readiness) {
-          impl_->ShowKeyboardReplacingSurface(submission_readiness,
-                                              /*is_webauthn=*/false);
-        });
-#endif
     ON_CALL(*this, CheckSafeBrowsingReputation)
         .WillByDefault([this](const GURL& form_action, const GURL& frame_url) {
           impl_->CheckSafeBrowsingReputation(form_action, frame_url);

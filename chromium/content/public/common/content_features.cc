@@ -8,11 +8,12 @@
 
 #include "base/feature_list.h"
 #include "base/time/time.h"
+#include "build/android_buildflags.h"
 #include "build/build_config.h"
 #include "build/config/chromebox_for_meetings/buildflags.h"
 #include "content/common/buildflags.h"
+#include "content/public/common/btm_utils.h"
 #include "content/public/common/buildflags.h"
-#include "content/public/common/dips_utils.h"
 
 namespace features {
 
@@ -176,10 +177,10 @@ BASE_FEATURE(kBrokerFileOperationsOnDiskCacheInNetworkService,
 // Allows pages with cache-control:no-store to enter the back/forward cache.
 // Feature params can specify whether pages with cache-control:no-store can be
 // restored if cookies change / if HTTPOnly cookies change.
-// TODO(crbug.com/40189625): Enable this feature.
+// TODO(crbug.com/40189625): Remove this feature and clean up.
 BASE_FEATURE(kCacheControlNoStoreEnterBackForwardCache,
              "CacheControlNoStoreEnterBackForwardCache",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 // This killswitch is distinct from the OT.
 // It allows us to remotely disable the feature, and get it to stop working even
@@ -187,12 +188,6 @@ BASE_FEATURE(kCacheControlNoStoreEnterBackForwardCache,
 // calls gated by the killswitch will fail graceully.
 BASE_FEATURE(kCapturedSurfaceControlKillswitch,
              "CapturedSurfaceControlKillswitch",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
-// If enabled, CSC permissions are sticky - as all other permissions.
-// If disabled, CSC permissions are scoped to the capture session's duration.
-BASE_FEATURE(kCapturedSurfaceControlStickyPermissions,
-             "CapturedSurfaceControlStickyPermissions",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
 // Clear the window.name property for the top-level cross-site navigations that
@@ -233,11 +228,6 @@ const char kCookieDeprecationTestingDisableAdsAPIsName[] = "disable_ads_apis";
 // Adiitional FeatureParams for CookieDeprecationFacilitatedTesting are defined
 // in chrome/browser/tpcd/experiment/tpcd_experiment_features.cc.
 
-// When enabled, the DevTools Privacy UI is displayed.
-BASE_FEATURE(kDevToolsPrivacyUI,
-             "DevToolsPrivacyUI",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
 // Enables deferring the creation of the speculative RFH when the navigation
 // starts. The creation of a speculative RFH consumes about 2ms and is blocking
 // the network request. With this feature the creation will be deferred until
@@ -271,7 +261,21 @@ const base::FeatureParam<int> kCreateSpeculativeRFHDelayMs{
 // See crbug.com/40285083 for more info.
 BASE_FEATURE(kDeleteStaleSessionCookiesOnStartup,
              "DeleteStaleSessionCookiesOnStartup",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+
+// When a device bound session
+// (https://github.com/w3c/webappsec-dbsc/blob/main/README.md) is
+// terminated, evict pages with cache-control:no-store from the
+// BFCache. Note that if `kCacheControlNoStoreEnterBackForwardCache` is
+// disabled, no such pages will be in the cache.
+BASE_FEATURE(kDeviceBoundSessionTerminationEvictBackForwardCache,
+             "DeviceBoundSessionTerminationEvictBackForwardCache",
              base::FEATURE_DISABLED_BY_DEFAULT);
+
+// When enabled, the DevTools Privacy UI is displayed.
+BASE_FEATURE(kDevToolsPrivacyUI,
+             "DevToolsPrivacyUI",
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 // Controls whether the Digital Goods API is enabled.
 // https://github.com/WICG/digital-goods/
@@ -289,15 +293,15 @@ BASE_FEATURE(kDigitalGoodsApi,
 // behavior (database persistence, storage deletion) will be gated by params.
 BASE_FEATURE(kBtm, "DIPS", base::FEATURE_ENABLED_BY_DEFAULT);
 
-// Flag used to control |interaction_ttl| separately from the kBtm feature
-// flag.
+// Flag used to control the TTL for user interactions (separately from the
+// |kBtm| feature flag).
 BASE_FEATURE(kBtmTtl, "DIPSTtl", base::FEATURE_ENABLED_BY_DEFAULT);
 
-// Set whether DIPS persists its database to disk.
+// Set whether BTM persists its database to disk.
 const base::FeatureParam<bool> kBtmPersistedDatabaseEnabled{
     &kBtm, "persist_database", true};
 
-// Set whether DIPS performs deletion.
+// Set whether BTM performs deletion.
 const base::FeatureParam<bool> kBtmDeletionEnabled{&kBtm, "delete", true};
 
 // Set the time period that Chrome will wait for before clearing storage for a
@@ -311,12 +315,12 @@ const base::FeatureParam<base::TimeDelta> kBtmGracePeriod{&kBtm, "grace_period",
 const base::FeatureParam<base::TimeDelta> kBtmTimerDelay{&kBtm, "timer_delay",
                                                          base::Hours(1)};
 
-// Sets how long DIPS maintains interactions and Web Authn Assertions (WAA) for
+// Sets how long BTM maintains interactions and Web Authn Assertions (WAA) for
 // a site.
 //
-// If a site in the DIPS database has an interaction or WAA within the grace
-// period a DIPS-triggering action, then that action and all ensuing actions are
-// protected from DIPS clearing until the interaction and WAA "expire" as set
+// If a site in the BTM database has an interaction or WAA within the grace
+// period a BTM-triggering action, then that action and all ensuing actions are
+// protected from BTM clearing until the interaction and WAA "expire" as set
 // by this param.
 // NOTE: Updating this param name (to reflect WAA) is deemed unnecessary as far
 // as readability is concerned.
@@ -330,14 +334,11 @@ constexpr base::FeatureParam<content::BtmTriggeringAction>::Option
         {content::BtmTriggeringAction::kBounce, "bounce"},
         {content::BtmTriggeringAction::kStatefulBounce, "stateful_bounce"}};
 
-// Sets the actions which will trigger DIPS clearing for a site. The default is
-// to set to kBounce, but can be overridden by Finch experiment groups,
+// Sets the actions which will trigger BTM clearing for a site. The default is
+// to set to |kBounce|, but can be overridden by Finch experiment groups,
 // command-line flags, or chrome flags.
-//
-// Note: Maintain a matching nomenclature of the options with the feature flag
-// entries at about_flags.cc.
 const base::FeatureParam<content::BtmTriggeringAction> kBtmTriggeringAction{
-    &kBtm, "triggering_action", content::BtmTriggeringAction::kStatefulBounce,
+    &kBtm, "triggering_action", content::BtmTriggeringAction::kBounce,
     &kBtmTriggeringActionOptions};
 
 // Denotes the length of a time interval within which any client-side redirect
@@ -346,6 +347,9 @@ const base::FeatureParam<content::BtmTriggeringAction> kBtmTriggeringAction{
 // registered).
 const base::FeatureParam<base::TimeDelta> kBtmClientBounceDetectionTimeout{
     &kBtm, "client_bounce_detection_timeout", base::Seconds(10)};
+
+// Enables Bounce Tracking Mitigations for Dual Use sites.
+BASE_FEATURE(kBtmDualUse, "BtmDualUse", base::FEATURE_DISABLED_BY_DEFAULT);
 
 // Enables HW decode acceleration for WebRTC.
 BASE_FEATURE(kWebRtcHWDecoding,
@@ -381,7 +385,7 @@ BASE_FEATURE(kDrawCutoutEdgeToEdge,
 // Enable establishing the GPU channel early in renderer startup.
 BASE_FEATURE(kEarlyEstablishGpuChannel,
              "EarlyEstablishGpuChannel",
-             base::FEATURE_ENABLED_BY_DEFAULT);
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
 // Enables canvas 2d methods BeginLayer and EndLayer.
 BASE_FEATURE(kEnableCanvas2DLayers,
@@ -417,6 +421,12 @@ BASE_FEATURE(kFedCmUseOtherAccount,
              "FedCmUseOtherAccount",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
+// Support usernames and phone numbers to identify users, instead of
+// (or in addition to) names and emails.
+BASE_FEATURE(kFedCmAlternativeIdentifiers,
+             "FedCmAlternativeIdentifiers",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
 // Enables usage of the FedCM Authz API.
 // Note that actual exposure of the API to web content is controlled by
 // the flag in RuntimeEnabledFeatures on the blink side. See also the use
@@ -432,6 +442,11 @@ BASE_FEATURE(kFedCmAuthz, "FedCmAuthz", base::FEATURE_ENABLED_BY_DEFAULT);
 BASE_FEATURE(kFedCmButtonMode,
              "FedCmButtonMode",
              base::FEATURE_ENABLED_BY_DEFAULT);
+
+// Enables cooldown on ignore in FedCM API.
+BASE_FEATURE(kFedCmCooldownOnIgnore,
+             "FedCmCooldownOnIgnore",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
 // Enables usage of the FedCM Delegation API.
 BASE_FEATURE(kFedCmDelegation,
@@ -598,7 +613,7 @@ BASE_FEATURE(kLazyInitializeMediaControls,
 
 BASE_FEATURE(kLogJsConsoleMessages,
              "LogJsConsoleMessages",
-#if BUILDFLAG(IS_ANDROID)
+#if BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_DESKTOP_ANDROID)
              base::FEATURE_DISABLED_BY_DEFAULT
 #else
              base::FEATURE_ENABLED_BY_DEFAULT
@@ -635,6 +650,15 @@ const base::FeatureParam<MBIMode> kMBIModeParam {
 #endif
       &mbi_mode_types
 };
+
+// Controls the configurablity of the navigation confidence noise level.
+// If the feature is not enabled, then the epsilon value will be 1.1.
+BASE_FEATURE(kNavigationConfidenceEpsilon,
+             "NavigationConfidenceEpsilon",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+// The epsilon value returned if `kNavigationConfidenceNoise` is enabled.
+const base::FeatureParam<double> kNavigationConfidenceEpsilonValue{
+    &kNavigationConfidenceEpsilon, "navigation-confidence-epsilon-value", 1.1};
 
 // When NavigationNetworkResponseQueue is enabled, the browser will schedule
 // some tasks related to navigation network responses in a kHigh priority
@@ -816,6 +840,20 @@ BASE_FEATURE(kReduceSubresourceResponseStartedIPC,
              "ReduceSubresourceResponseStartedIPC",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
+#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
+// When a Web application is video-capturing a tab, it can use the Region
+// Capture API to crop the resulting video.
+// - If `kRegionCaptureOfOtherTabs` is disabled, the Web application can only
+// crop self-capture tracks. (That is, cropping is only possible when the
+// application is capturing its own tab.)
+// - If `kRegionCaptureOfOtherTabs` is enabled, the Web application  can crop
+// video-captures of any tab (so long as that other tab collaborates by sending
+// a CropTarget).
+BASE_FEATURE(kRegionCaptureOfOtherTabs,
+             "RegionCaptureOfOtherTabs",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+#endif  // !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
+
 // RenderDocument:
 //
 // Currently, a RenderFrameHost represents neither a frame nor a document, but a
@@ -971,12 +1009,27 @@ BASE_FEATURE(kServiceWorkerPaymentApps,
 // isolated renderers.
 BASE_FEATURE(kSharedArrayBuffer,
              "SharedArrayBuffer",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+#if BUILDFLAG(PLATFORM_CFM)
+// Supports x-on-meet-coop interop implementation.
+// TODO: crbug.com/398741358 - clean up this temporary workaround after
+// https://crbug.com/333029146 replaces COOP restrict-properties.
+             base::FEATURE_ENABLED_BY_DEFAULT
+#else
+             base::FEATURE_DISABLED_BY_DEFAULT
+#endif
+);
 
 // If enabled, GetUserMedia API will only work when the concerned tab is in
 // focus
 BASE_FEATURE(kUserMediaCaptureOnFocus,
              "UserMediaCaptureOnFocus",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+// A feature to enable using the update token in the manifest or icon url
+// changes to detect app updates. When this is enabled, automatic icon
+// downloading is disabled.
+BASE_FEATURE(kWebAppEnableUpdateTokenParsing,
+             "WebAppEnableUpdateTokenParsing",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 // This is intended as a kill switch for the WebOTP Service feature. To enable
@@ -993,7 +1046,7 @@ BASE_FEATURE(kWebLockScreenApi,
 // SiteInstanceGroup as the initiator.
 BASE_FEATURE(kSiteInstanceGroupsForDataUrls,
              "SiteInstanceGroupsForDataUrls",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 // When enabled, puts non-isolated sites in separate SiteInstances in a default
 // SiteInstanceGroup (per BrowsingInstance), rather than sharing a default
@@ -1038,25 +1091,18 @@ const base::FeatureParam<base::TimeDelta>
 // fetch fonts from the Browser's FontDataService. It is currently scoped to
 // just Windows. See crbug.com/335680565.
 #if BUILDFLAG(IS_WIN)
-BASE_FEATURE(kFontDataService,
-             "FontDataService",
+BASE_FEATURE(kFontDataServiceAllWebContents,
+             "FontDataServiceAllWebContents",
              base::FEATURE_DISABLED_BY_DEFAULT);
 const base::FeatureParam<FontDataServiceTypefaceType>::Option
     font_data_service_typeface[] = {
         {FontDataServiceTypefaceType::kDwrite, "DWrite"},
-        {FontDataServiceTypefaceType::kInternal, "Internal"},
-        {FontDataServiceTypefaceType::kControlWithoutSpareRenderer,
-         "ControlWithoutSpareRenderer"}};
+        {FontDataServiceTypefaceType::kFreetype, "Freetype"},
+        {FontDataServiceTypefaceType::kFontations, "Fontations"}};
 const base::FeatureParam<FontDataServiceTypefaceType>
-    kFontDataServiceTypefaceType{&kFontDataService, "typeface",
+    kFontDataServiceTypefaceType{&kFontDataServiceAllWebContents, "typeface",
                                  FontDataServiceTypefaceType::kDwrite,
                                  &font_data_service_typeface};
-
-// Whether a utility process configured to use a "UI" message pump should also
-// initialize COM.
-BASE_FEATURE(kUtilityWithUiPumpInitializesCom,
-             "UtilityWithUiPumpInitializesCom",
-             base::FEATURE_ENABLED_BY_DEFAULT);
 #endif  // BUILDFLAG(IS_WIN)
 
 // When enabled, OOPIFs will not try to reuse compatible processes from
@@ -1083,7 +1129,7 @@ BASE_FEATURE(kStrictOriginIsolation,
 // much memory is not attempted to be reused.
 BASE_FEATURE(kSubframeProcessReuseThresholds,
              "SubframeProcessReuseThresholds",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 // Specifies the memory threshold for the `kSubframeProcessReuseThresholds`
 // feature, which only allows a process to be reused for another subframe if the
@@ -1093,7 +1139,7 @@ BASE_FEATURE(kSubframeProcessReuseThresholds,
 // process reuse experiments.
 constexpr base::FeatureParam<double> kSubframeProcessReuseMemoryThreshold{
     &kSubframeProcessReuseThresholds, "SubframeProcessReuseMemoryThreshold",
-    2 * 1024 * 1024 * 1024u};
+    512 * 1024 * 1024u};
 
 // Disallows window.{alert, prompt, confirm} if triggered inside a subframe that
 // is not same origin with the main frame.
@@ -1131,6 +1177,15 @@ BASE_FEATURE(kTouchDragAndContextMenu,
 const base::FeatureParam<int> kTouchDragMovementThresholdDip{
     &kTouchDragAndContextMenu, "DragAndDropMovementThresholdDipParam", 60};
 #endif
+
+// Controls whether the browser should track and reuse free and empty renderer
+// processes. When enabled, the browser maintains a list of renderer processes
+// that are currently not hosting any frames and are thus eligible for reuse
+// when a new renderer process is needed. Currently, only background renderer
+// processes are considered for reuse.
+BASE_FEATURE(kTrackEmptyRendererProcessesForReuse,
+             "TrackEmptyRendererProcessesForReuse",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
 // This feature is for a reverse Origin Trial, enabling SharedArrayBuffer for
 // sites as they migrate towards requiring cross-origin isolation for these
@@ -1183,6 +1238,20 @@ BASE_FEATURE(kWebAssemblyBaseline,
              "WebAssemblyBaseline",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
+#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
+// When a Web application is video-capturing a tab, it can use the Element
+// Capture API to restrict the resulting video.
+// - If `kElementCaptureOfOtherTabs` is disabled, the Web application can only
+// restrict self-capture tracks. (That is, restrictping is only possible when
+// the application is capturing its own tab.)
+// - If `kElementCaptureOfOtherTabs` is enabled, the Web application  can
+// restrict video-captures of any tab (so long as that other tab collaborates by
+// sending a RestrictionTarget).
+BASE_FEATURE(kElementCaptureOfOtherTabs,
+             "ElementCaptureOfOtherTabs",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+#endif  // !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
+
 // Enable WebAssembly JSPI.
 BASE_FEATURE(kEnableExperimentalWebAssemblyJSPI,
              "WebAssemblyExperimentalJSPI",
@@ -1192,11 +1261,6 @@ BASE_FEATURE(kEnableExperimentalWebAssemblyJSPI,
 BASE_FEATURE(kWebAssemblyLazyCompilation,
              "WebAssemblyLazyCompilation",
              base::FEATURE_ENABLED_BY_DEFAULT);
-
-// Enable WebAssembly Memory64.
-BASE_FEATURE(kWebAssemblyMemory64,
-             "WebAssemblyMemory64",
-             base::FEATURE_DISABLED_BY_DEFAULT);
 
 // Enable WebAssembly tiering (Liftoff -> TurboFan).
 BASE_FEATURE(kWebAssemblyTiering,
@@ -1250,6 +1314,10 @@ BASE_FEATURE(kWebUIBundledCodeCache,
              "WebUIBundledCodeCache",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
+// Enables populating the WebUI URL to code cache resource map.
+const base::FeatureParam<bool> kWebUIBundledCodeCacheGenerateResourceMap{
+    &kWebUIBundledCodeCache, "WebUIBundledCodeCacheGenerateResourceMap", true};
+
 #if !BUILDFLAG(IS_ANDROID)
 // Reports WebUI Javascript errors to the crash server on all desktop platforms.
 // Previously, this was only supported on ChromeOS and Linux.
@@ -1286,13 +1354,6 @@ BASE_FEATURE(kAccessibilityDeprecateTypeAnnounce,
 BASE_FEATURE(kAccessibilityIncludeLongClickAction,
              "AccessibilityIncludeLongClickAction",
              base::FEATURE_DISABLED_BY_DEFAULT);
-
-// Enables the use of enhancements to the Page Zoom feature based on user
-// feedback from the v1 version (e.g. reset button, Site Settings, etc).
-// This flag is the fast-follow for the AccessibilityPageZoom experiment.
-BASE_FEATURE(kAccessibilityPageZoomEnhancements,
-             "AccessibilityPageZoomEnhancements",
-             base::FEATURE_ENABLED_BY_DEFAULT);
 
 // Enables the second iteration of AccessibilityPageZoom, which continues
 // the work completed in the first experiment and the subsequent fast-follow.

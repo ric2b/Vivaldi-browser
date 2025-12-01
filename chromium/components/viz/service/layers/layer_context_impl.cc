@@ -22,7 +22,9 @@
 #include "cc/animation/keyframe_effect.h"
 #include "cc/debug/rendering_stats_instrumentation.h"
 #include "cc/layers/layer_impl.h"
+#include "cc/layers/mirror_layer_impl.h"
 #include "cc/layers/solid_color_layer_impl.h"
+#include "cc/layers/surface_layer_impl.h"
 #include "cc/layers/tile_display_layer_impl.h"
 #include "cc/trees/layer_tree_host_impl.h"
 #include "cc/trees/layer_tree_impl.h"
@@ -59,6 +61,13 @@ std::unique_ptr<cc::LayerImpl> CreateLayer(LayerContextImpl& context,
     case cc::mojom::LayerType::kLayer:
       return cc::LayerImpl::Create(&tree, id);
 
+    case cc::mojom::LayerType::kMirror:
+      return cc::MirrorLayerImpl::Create(&tree, id);
+
+    case cc::mojom::LayerType::kSurface:
+      // TODO(394137303): handle |update_submission_state_callback|.
+      return cc::SurfaceLayerImpl::Create(&tree, id, base::NullCallback());
+
     case cc::mojom::LayerType::kPicture:
       return std::make_unique<cc::TileDisplayLayerImpl>(context, tree, id);
 
@@ -93,12 +102,14 @@ base::expected<void, std::string> UpdatePropertyTreeNode(
     tree.SetElementIdForNodeId(node.id, node.element_id);
   }
   if (node.local != wire.local || node.origin != wire.origin ||
-      node.scroll_offset != wire.scroll_offset) {
+      node.scroll_offset() != wire.scroll_offset) {
     node.needs_local_transform_update = true;
   }
   node.local = wire.local;
   node.origin = wire.origin;
-  node.scroll_offset = wire.scroll_offset;
+  node.post_translation = wire.post_translation;
+  node.set_to_parent(wire.to_parent);
+  node.SetScrollOffset(wire.scroll_offset, cc::DamageReason::kUntracked);
   node.snap_amount = wire.snap_amount;
 
   if (!wire.sticky_position_constraint_id) {
@@ -135,7 +146,11 @@ base::expected<void, std::string> UpdatePropertyTreeNode(
   node.will_change_transform = wire.will_change_transform;
 
   node.visible_frame_element_id = wire.visible_frame_element_id;
-  node.transform_changed = true;
+  node.SetTransformChanged(cc::DamageReason::kUntracked);
+  if (!node.SetDamageReasonsForDeserialization(
+          cc::DamageReasonSet::FromEnumBitmask(wire.damage_reasons_bit_mask))) {
+    return base::unexpected("Invalid damage_reasons_bit_mask");
+  }
   return base::ok();
 }
 
@@ -185,11 +200,33 @@ base::expected<void, std::string> UpdatePropertyTreeNode(
   }
 
   node.surface_contents_scale = wire.surface_contents_scale;
+  node.subtree_capture_id = wire.subtree_capture_id;
+  node.subtree_size = wire.subtree_size;
+
   if (wire.blend_mode > static_cast<uint32_t>(SkBlendMode::kLastMode)) {
     return base::unexpected("Invalid blend_mode for effect node");
   }
   node.blend_mode = static_cast<SkBlendMode>(wire.blend_mode);
   node.target_id = wire.target_id;
+  node.filters = wire.filters;
+  node.backdrop_filters = wire.backdrop_filters;
+  node.backdrop_filter_bounds = wire.backdrop_filter_bounds;
+  node.backdrop_filter_quality = wire.backdrop_filter_quality;
+  node.backdrop_mask_element_id = wire.backdrop_mask_element_id;
+
+  node.cache_render_surface = wire.cache_render_surface;
+  node.double_sided = wire.double_sided;
+  node.trilinear_filtering = wire.trilinear_filtering;
+  node.subtree_hidden = wire.subtree_hidden;
+  node.has_potential_filter_animation = wire.has_potential_filter_animation;
+  node.has_potential_backdrop_filter_animation =
+      wire.has_potential_backdrop_filter_animation;
+  node.has_potential_opacity_animation = wire.has_potential_opacity_animation;
+  node.subtree_has_copy_request = wire.subtree_has_copy_request;
+  node.is_fast_rounded_corner = wire.is_fast_rounded_corner;
+  node.may_have_backdrop_effect = wire.may_have_backdrop_effect;
+  node.has_2d_scale_transform = wire.has_2d_scale_transform;
+
   return base::ok();
 }
 
@@ -340,6 +377,24 @@ base::expected<void, std::string> UpdateTransformTreeProperties(
   return base::ok();
 }
 
+void UpdateMirrorLayerExtra(const mojom::MirrorLayerExtraPtr& extra,
+                            cc::MirrorLayerImpl& layer) {
+  layer.SetMirroredLayerId(extra->mirrored_layer_id);
+}
+
+void UpdateSurfaceLayerExtra(const mojom::SurfaceLayerExtraPtr& extra,
+                             cc::SurfaceLayerImpl& layer) {
+  layer.SetRange(extra->surface_range, extra->deadline_in_frames);
+  layer.SetStretchContentToFillBounds(extra->stretch_content_to_fill_bounds);
+  layer.SetSurfaceHitTestable(extra->surface_hit_testable);
+  layer.SetHasPointerEventsNone(extra->has_pointer_events_none);
+  layer.SetIsReflection(extra->is_reflection);
+  if (extra->will_draw_needs_reset) {
+    layer.ResetStateForUpdateSubmissionStateCallback();
+  }
+  layer.SetOverrideChildPaintFlags(extra->override_child_paint_flags);
+}
+
 base::expected<void, std::string> UpdateLayer(const mojom::Layer& wire,
                                               cc::LayerImpl& layer) {
   layer.SetBounds(wire.bounds);
@@ -351,6 +406,12 @@ base::expected<void, std::string> UpdateLayer(const mojom::Layer& wire,
   layer.SetElementId(wire.element_id);
   layer.UnionUpdateRect(wire.update_rect);
   layer.SetOffsetToTransformParent(wire.offset_to_transform_parent);
+
+  if (layer.GetLayerType() == cc::mojom::LayerType::kTileDisplay) {
+    auto& tile_display_layer = static_cast<cc::TileDisplayLayerImpl&>(layer);
+    tile_display_layer.SetSolidColor(wire.solid_color);
+    tile_display_layer.SetIsBackdropFilterMask(wire.is_backdrop_filter_mask);
+  }
 
   const cc::PropertyTrees& property_trees =
       *layer.layer_tree_impl()->property_trees();
@@ -386,6 +447,20 @@ base::expected<void, std::string> UpdateLayer(const mojom::Layer& wire,
   layer.SetClipTreeIndex(wire.clip_tree_index);
   layer.SetEffectTreeIndex(wire.effect_tree_index);
   layer.SetScrollTreeIndex(wire.scroll_tree_index);
+
+  switch (wire.type) {
+    case cc::mojom::LayerType::kMirror:
+      UpdateMirrorLayerExtra(wire.layer_extra->get_mirror_layer_extra(),
+                             static_cast<cc::MirrorLayerImpl&>(layer));
+      break;
+    case cc::mojom::LayerType::kSurface:
+      UpdateSurfaceLayerExtra(wire.layer_extra->get_surface_layer_extra(),
+                              static_cast<cc::SurfaceLayerImpl&>(layer));
+      break;
+    default:
+      // TODO(zmo): handle other types of LayerImpl.
+      break;
+  }
   return base::ok();
 }
 
@@ -838,10 +913,8 @@ LayerContextImpl::~LayerContextImpl() {
 }
 
 void LayerContextImpl::BeginFrame(const BeginFrameArgs& args) {
-  // TODO(rockot): Manage these flags properly.
-  last_begin_frame_args_ = args;
-
   if (base::FeatureList::IsEnabled(features::kTreeAnimationsInViz)) {
+    // TODO(vmiura): Manage these flags properly.
     const bool has_damage = true;
     compositor_sink_->SetLayerContextWantsBeginFrames(false);
     if (!host_impl_->CanDraw()) {
@@ -1095,10 +1168,30 @@ base::expected<void, std::string> LayerContextImpl::DoUpdateDisplayTree(
       UpdatePropertyTree(property_trees, property_trees.scroll_tree_mutable(),
                          update->scroll_nodes));
 
+  // Pull any copy output requests that came in over the wire.
+  for (const auto& wire : update->effect_nodes) {
+    for (auto&& copy_request : wire->copy_output_requests) {
+      property_trees.effect_tree_mutable().AddCopyRequest(
+          wire->id, std::move(copy_request));
+    }
+  }
+
+  if (update->surface_ranges) {
+    base::flat_set<SurfaceRange> surface_ranges;
+    for (auto& surface_range : *(update->surface_ranges)) {
+      surface_ranges.insert(surface_range);
+    }
+    layers.ClearSurfaceRanges();
+    layers.SetSurfaceRanges(surface_ranges);
+  }
+
   RETURN_IF_ERROR(
       CreateOrUpdateLayers(*this, update->layers, update->layer_order, layers));
 
   if (update->local_surface_id_from_parent) {
+    layers.SetLocalSurfaceIdFromParent(*update->local_surface_id_from_parent);
+    host_impl_->UpdateChildLocalSurfaceId();
+    // TODO(zmo): Remove calling SetTargetLocalSurfaceId().
     host_impl_->SetTargetLocalSurfaceId(*update->local_surface_id_from_parent);
   }
 
@@ -1117,6 +1210,20 @@ base::expected<void, std::string> LayerContextImpl::DoUpdateDisplayTree(
   layers.set_trace_id(
       cc::BeginMainFrameTraceId::FromUnsafeValue(update->trace_id));
   layers.SetDeviceViewportRect(update->device_viewport);
+
+  if (update->page_scale_factor <= 0 || update->min_page_scale_factor <= 0 ||
+      update->max_page_scale_factor <= 0) {
+    return base::unexpected("Invalid page scale factors");
+  }
+  layers.SetPageScaleFactorAndLimitsForDisplayTree(
+      update->page_scale_factor, update->min_page_scale_factor,
+      update->max_page_scale_factor);
+
+  if (update->external_page_scale_factor <= 0) {
+    return base::unexpected("Invalid external page scale factor");
+  }
+  layers.SetExternalPageScaleFactor(update->external_page_scale_factor);
+
   if (update->device_scale_factor <= 0) {
     return base::unexpected("Invalid device scale factor");
   }
@@ -1130,6 +1237,8 @@ base::expected<void, std::string> LayerContextImpl::DoUpdateDisplayTree(
   }
 
   RETURN_IF_ERROR(UpdateViewportPropertyIds(layers, property_trees, *update));
+
+  host_impl_->SetViewportDamage(update->viewport_damage_rect);
 
   property_trees.UpdateChangeTracking();
   property_trees.transform_tree_mutable().set_needs_update(
@@ -1173,16 +1282,17 @@ base::expected<void, std::string> LayerContextImpl::DoUpdateDisplayTree(
     compositor_sink_->SetLayerContextWantsBeginFrames(true);
   } else {
     if (host_impl_->CanDraw()) {
-      host_impl_->WillBeginImplFrame(last_begin_frame_args_);
+      host_impl_->WillBeginImplFrame(update->begin_frame_args);
 
       cc::LayerTreeHostImpl::FrameData frame;
       const bool has_damage = true;
-      frame.begin_frame_ack = BeginFrameAck(last_begin_frame_args_, has_damage);
-      frame.origin_begin_main_frame_args = last_begin_frame_args_;
+      frame.begin_frame_ack =
+          BeginFrameAck(update->begin_frame_args, has_damage);
+      frame.origin_begin_main_frame_args = update->begin_frame_args;
       host_impl_->PrepareToDraw(&frame);
       host_impl_->DrawLayers(&frame);
       host_impl_->DidDrawAllLayers(frame);
-      host_impl_->DidFinishImplFrame(last_begin_frame_args_);
+      host_impl_->DidFinishImplFrame(update->begin_frame_args);
     }
   }
   return base::ok();

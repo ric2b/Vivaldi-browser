@@ -1918,7 +1918,7 @@ static int basicUnitTests(U32 const seed, double compressibility)
         params.fParams.contentSizeFlag = 0;
         params.cParams.windowLog = ZSTD_WINDOWLOG_MAX;
         for (cnb = 0; cnb < nbCompressions; ++cnb) {
-            DISPLAYLEVEL(6, "run %zu / %zu \n", cnb, nbCompressions);
+            DISPLAYLEVEL(6, "run %u / %u \n", (unsigned)cnb, (unsigned)nbCompressions);
             CHECK_Z( ZSTD_compressBegin_advanced(cctx, NULL, 0, params, ZSTD_CONTENTSIZE_UNKNOWN) );  /* reuse same parameters */
             CHECK_Z( ZSTD_compressEnd(cctx, compressedBuffer, compressedBufferSize, CNBuffer, CNBuffSize) );
         }
@@ -1936,8 +1936,8 @@ static int basicUnitTests(U32 const seed, double compressibility)
                 assert(smallCCtx != NULL);
                 CHECK_Z(ZSTD_compressCCtx(smallCCtx, compressedBuffer, compressedBufferSize, CNBuffer, 1, 1));
                 {   size_t const smallCCtxSize = ZSTD_sizeof_CCtx(smallCCtx);
-                    DISPLAYLEVEL(5, "(large) %zuKB > 32*%zuKB (small) : ",
-                                largeCCtxSize>>10, smallCCtxSize>>10);
+                    DISPLAYLEVEL(5, "(large) %uKB > 32*%uKB (small) : ",
+                                (unsigned)(largeCCtxSize>>10), (unsigned)(smallCCtxSize>>10));
                     assert(largeCCtxSize > 32* smallCCtxSize);  /* note : "too large" definition is handled within zstd_compress.c .
                                                                  * make this test case extreme, so that it doesn't depend on a possibly fluctuating definition */
                 }
@@ -3480,7 +3480,7 @@ static int basicUnitTests(U32 const seed, double compressibility)
             {   size_t const compressionResult = ZSTD_compress2(cctx,
                                     compressedBuffer, compressedBufferSize,
                                     CNBuffer, srcSize);
-                DISPLAYLEVEL(5, "simple=%zu vs %zu=advanced : ", cSize_1pass, compressionResult);
+                DISPLAYLEVEL(5, "simple=%u vs %u=advanced : ", (unsigned)cSize_1pass, (unsigned)compressionResult);
                 if (ZSTD_isError(compressionResult)) goto _output_error;
                 if (compressionResult != cSize_1pass) goto _output_error;
         }   }
@@ -4361,8 +4361,8 @@ static int basicUnitTests(U32 const seed, double compressibility)
         for (; level < ZSTD_maxCLevel(); ++level) {
             size_t const currSize = ZSTD_estimateCCtxSize(level);
             if (prevSize > currSize) {
-                DISPLAYLEVEL(3, "Error! previous cctx size: %zu at level: %d is larger than current cctx size: %zu at level: %d",
-                             prevSize, level-1, currSize, level);
+                DISPLAYLEVEL(3, "Error! previous cctx size: %u at level: %d is larger than current cctx size: %u at level: %d",
+                             (unsigned)prevSize, level-1, (unsigned)currSize, level);
                 goto _output_error;
             }
             prevSize = currSize;
@@ -4386,8 +4386,8 @@ static int basicUnitTests(U32 const seed, double compressibility)
                     if (cctxSizeUsingLevel < cctxSizeUsingCParams
                      || ZSTD_isError(cctxSizeUsingCParams)
                      || ZSTD_isError(cctxSizeUsingLevel)) {
-                        DISPLAYLEVEL(3, "error! l: %d dict: %zu srcSize: %zu cctx size cpar: %zu, cctx size level: %zu\n",
-                                     level, dictSize, srcSize, cctxSizeUsingCParams, cctxSizeUsingLevel);
+                        DISPLAYLEVEL(3, "error! l: %d dict: %u srcSize: %u cctx size cpar: %u, cctx size level: %u\n",
+                                     level, (unsigned)dictSize, (unsigned)srcSize, (unsigned)cctxSizeUsingCParams, (unsigned)cctxSizeUsingLevel);
                         goto _output_error;
     }   }   }   }   }
     DISPLAYLEVEL(3, "OK \n");

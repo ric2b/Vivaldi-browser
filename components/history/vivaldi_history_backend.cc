@@ -27,20 +27,4 @@ void HistoryBackend::DropHistoryTables() {
   db_->DropHistoryTables();
 }
 
-#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
-
-history::TypedUrlResults HistoryBackend::QueryTypedHistory(
-    const std::string query,
-    int max_results) {
-  return db_->GetVivaldiTypedHistory(query, max_results);
-}
-
-history::DetailedUrlResults HistoryBackend::GetVivaldiDetailedHistory(
-    const std::string query,
-    int max_results) {
-  return db_->GetVivaldiDetailedHistory(query, max_results);
-}
-
-#endif
-
 }  // namespace history

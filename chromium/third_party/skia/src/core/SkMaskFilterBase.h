@@ -14,14 +14,16 @@
 #include "include/core/SkRect.h"
 #include "include/core/SkRefCnt.h"
 #include "include/core/SkScalar.h"
+#include "include/core/SkSpan.h"
 #include "include/core/SkStrokeRec.h"
 #include "include/private/base/SkNoncopyable.h"
-#include "src/base/SkTLazy.h"  // IWYU pragma: keep
 #include "src/core/SkMask.h"
 
+#include <optional>
+
 class SkBlitter;
-class SkCachedData;
 class SkImageFilter;
+class SkCachedData;
 class SkMatrix;
 class SkPath;
 class SkRRect;
@@ -108,10 +110,11 @@ protected:
         kUnimplemented,
     };
 
-    class NinePatch : ::SkNoncopyable {
+    class NinePatch final : ::SkNoncopyable {
     public:
         NinePatch(const SkMask& mask, SkIRect outerRect, SkIPoint center, SkCachedData* cache)
             : fMask(mask), fOuterRect(outerRect), fCenter(center), fCache(cache) {}
+        NinePatch(NinePatch&&) = delete;  // the transfer of fCache makes this not work
         ~NinePatch();
 
         SkMask      fMask;      // fBounds must have [0,0] in its top-left
@@ -121,6 +124,11 @@ protected:
     };
 
     /**
+     *  As an optimization, some filters can be applied to a smaller nine-patch
+     *  instead of the full-sized rectangle. These nine-patches are not only smaller,
+     *  but more re-usable/cacheable. Then, when drawing/blitting, the ninepatch
+     *  can be expanded to the desired size.
+     *
      *  Override if your subclass can filter a rect, and return the answer as
      *  a ninepatch mask to be stretched over the returned outerRect. On success
      *  return FilterReturn::kTrue. On failure (e.g. out of memory) return
@@ -135,16 +143,16 @@ protected:
      *  the caller will call mask.fBounds.centerX() and centerY() to find the
      *  strips that will be replicated.
      */
-    virtual FilterReturn filterRectsToNine(const SkRect[], int count,
+    virtual FilterReturn filterRectsToNine(SkSpan<const SkRect>,
                                            const SkMatrix&,
                                            const SkIRect& clipBounds,
-                                           SkTLazy<NinePatch>*) const;
+                                           std::optional<NinePatch>*) const;
     /**
      *  Similar to filterRectsToNine, except it performs the work on a round rect.
      */
-    virtual FilterReturn filterRRectToNine(const SkRRect&, const SkMatrix&,
-                                           const SkIRect& clipBounds,
-                                           SkTLazy<NinePatch>*) const;
+    virtual std::optional<NinePatch> filterRRectToNine(const SkRRect&,
+                                                       const SkMatrix&,
+                                                       const SkIRect& clipBounds) const;
 
 private:
     friend class SkDraw;
@@ -162,10 +170,10 @@ private:
      mask and then call filterMask(). If this returns true, the specified blitter will be called
      to render that mask. Returns false if filterMask() returned false.
      */
-    bool filterRRect(const SkRRect& devRRect, const SkMatrix& ctm, const SkRasterClip&,
+    bool filterRRect(const SkRRect& devRRect,
+                     const SkMatrix& ctm,
+                     const SkRasterClip&,
                      SkBlitter*) const;
-
-    using INHERITED = SkFlattenable;
 };
 
 inline SkMaskFilterBase* as_MFB(SkMaskFilter* mf) {

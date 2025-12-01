@@ -7,6 +7,7 @@
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/browser_window.h"
+#include "extensions/vivaldi_browser_component_wrapper.h"
 #include "ui/shell_dialogs/select_file_policy.h"
 #include "ui/shell_dialogs/selected_file_info.h"
 
@@ -66,7 +67,9 @@ FileSelectionOptions::~FileSelectionOptions() = default;
 void FileSelectionOptions::RunDialog(RunDialogResult callback) && {
   Browser* browser = nullptr;
   if (window_id_.is_valid()) {
-    browser = chrome::FindBrowserWithID(window_id_);
+    browser =
+        VivaldiBrowserComponentWrapper::GetInstance()->FindBrowserByWindowId(
+            window_id_.id());
     if (!browser) {
       LOG(ERROR) << "No such window - " << window_id_.id();
     }

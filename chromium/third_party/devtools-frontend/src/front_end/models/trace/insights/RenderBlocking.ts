@@ -11,15 +11,16 @@ import type * as Types from '../types/types.js';
 
 import {
   InsightCategory,
+  InsightKeys,
   type InsightModel,
   type InsightSetContext,
   type InsightSetContextWithNavigation,
   InsightWarning,
   type LanternContext,
-  type RequiredData,
+  type PartialInsightModel,
 } from './types.js';
 
-const UIStrings = {
+export const UIStrings = {
   /**
    * @description Title of an insight that provides the user with the list of network requests that blocked and therefore slowed down the page rendering and becoming visible to the user.
    */
@@ -30,12 +31,28 @@ const UIStrings = {
   description: 'Requests are blocking the page\'s initial render, which may delay LCP. ' +
       '[Deferring or inlining](https://web.dev/learn/performance/understanding-the-critical-path#render-blocking_resources/) ' +
       'can move these network requests out of the critical path.',
-};
+  /**
+   * @description Label to describe a network request (that happens to be render-blocking).
+   */
+  renderBlockingRequest: 'Request',
+  /**
+   *@description Label used for a time duration.
+   */
+  duration: 'Duration',
+  /**
+   * @description Text status indicating that no requests blocked the initial render of a navigation
+   */
+  noRenderBlocking: 'No render blocking requests for this navigation',
+} as const;
 
 const str_ = i18n.i18n.registerUIStrings('models/trace/insights/RenderBlocking.ts', UIStrings);
-const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
+export const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
 
-export type RenderBlockingInsightModel = InsightModel<{
+export function isRenderBlocking(insight: InsightModel): insight is RenderBlockingInsightModel {
+  return insight.insightKey === 'RenderBlocking';
+}
+
+export type RenderBlockingInsightModel = InsightModel<typeof UIStrings, {
   renderBlockingRequests: Types.Events.SyntheticNetworkRequest[],
   requestIdToWastedMs?: Map<string, number>,
 }>;
@@ -45,10 +62,6 @@ export type RenderBlockingInsightModel = InsightModel<{
 // can be falsely flagged as blocking. Therefore, ignore stylesheets that loaded fast enough
 // to possibly be non-blocking (and they have minimal impact anyway).
 const MINIMUM_WASTED_MS = 50;
-
-export function deps(): ['NetworkRequests', 'PageLoadMetrics', 'LargestImagePaint'] {
-  return ['NetworkRequests', 'PageLoadMetrics', 'LargestImagePaint'];
-}
 
 /**
  * Given a simulation's nodeTimings, return an object with the nodes/timing keyed by network URL
@@ -100,12 +113,12 @@ function estimateSavingsWithGraphs(deferredIds: Set<string>, lanternContext: Lan
   return Math.round(Math.max(estimateBeforeInline - estimateAfterInline, 0)) as Types.Timing.Milli;
 }
 
-function hasImageLCP(parsedTrace: RequiredData<typeof deps>, context: InsightSetContextWithNavigation): boolean {
-  return parsedTrace.LargestImagePaint.lcpRequestByNavigation.get(context.navigation) !== undefined;
+function hasImageLCP(parsedTrace: Handlers.Types.ParsedTrace, context: InsightSetContextWithNavigation): boolean {
+  return parsedTrace.LargestImagePaint.lcpRequestByNavigationId.has(context.navigationId);
 }
 
 function computeSavings(
-    parsedTrace: RequiredData<typeof deps>, context: InsightSetContextWithNavigation,
+    parsedTrace: Handlers.Types.ParsedTrace, context: InsightSetContextWithNavigation,
     renderBlockingRequests: Types.Events.SyntheticNetworkRequest[]):
     Pick<RenderBlockingInsightModel, 'metricSavings'|'requestIdToWastedMs'>|undefined {
   if (!context.lantern) {
@@ -150,19 +163,20 @@ function computeSavings(
   return {metricSavings, requestIdToWastedMs};
 }
 
-function finalize(partialModel: Omit<RenderBlockingInsightModel, 'title'|'description'|'category'|'shouldShow'>):
-    RenderBlockingInsightModel {
+function finalize(partialModel: PartialInsightModel<RenderBlockingInsightModel>): RenderBlockingInsightModel {
   return {
+    insightKey: InsightKeys.RENDER_BLOCKING,
+    strings: UIStrings,
     title: i18nString(UIStrings.title),
     description: i18nString(UIStrings.description),
     category: InsightCategory.LCP,
-    shouldShow: partialModel.renderBlockingRequests.length > 0,
+    state: partialModel.renderBlockingRequests.length > 0 ? 'fail' : 'pass',
     ...partialModel,
   };
 }
 
 export function generateInsight(
-    parsedTrace: RequiredData<typeof deps>, context: InsightSetContext): RenderBlockingInsightModel {
+    parsedTrace: Handlers.Types.ParsedTrace, context: InsightSetContext): RenderBlockingInsightModel {
   if (!context.navigation) {
     return finalize({
       renderBlockingRequests: [],

@@ -32,6 +32,10 @@
 #include "ui/base/ime/mojom/virtual_keyboard_types.mojom.h"
 #include "url/gurl.h"
 
+#if BUILDFLAG(IS_ANDROID)
+#include "content/browser/android/page_proxy.h"
+#endif
+
 namespace cc {
 struct BrowserControlsOffsetTagModifications;
 }  // namespace cc
@@ -72,6 +76,9 @@ class CONTENT_EXPORT PageImpl : public Page {
   const std::string& GetContentsMimeType() const override;
   void SetResizableForTesting(std::optional<bool> resizable) override;
   std::optional<bool> GetResizable() override;
+#if BUILDFLAG(IS_ANDROID)
+  const base::android::JavaRef<jobject>& GetJavaPage() override;
+#endif
 
   // Setter for the `window.setResizable(bool)` API's value defining whether the
   // window can be resized or not. `std::nullopt` means the value is not set.
@@ -201,7 +208,13 @@ class CONTENT_EXPORT PageImpl : public Page {
   }
   double load_progress() const { return load_progress_; }
 
+  // The env() variables for virtual keyboard overlay and context menu insets
+  // are page-level, and don't get propagated into iframes, because a) that
+  // would be a cross-site info leak, and b) it's hard to know exactly how they
+  // would be used in that context.
+  // See https://github.com/w3c/csswg-drafts/issues/4670.
   void NotifyVirtualKeyboardOverlayRect(const gfx::Rect& keyboard_rect);
+  void NotifyContextMenuInsetsObservers(const gfx::Rect&);
 
   void SetVirtualKeyboardMode(ui::mojom::VirtualKeyboardMode mode);
   ui::mojom::VirtualKeyboardMode virtual_keyboard_mode() const {
@@ -435,6 +448,12 @@ class CONTENT_EXPORT PageImpl : public Page {
   // navigation.
   mojom::DidCommitProvisionalLoadParamsPtr last_commit_params_;
 
+#if BUILDFLAG(IS_ANDROID)
+  // For each C++ Page, there is a Java counterpart. It is the JNI bridge in
+  // between the two.
+  std::unique_ptr<PageProxy> page_proxy_;
+#endif
+
   // Vivaldi: Used to track loaded bytes and elements.
  public:
   int64_t vivaldi_loaded_bytes() const { return loaded_bytes_; }
@@ -464,6 +483,8 @@ class CONTENT_EXPORT PageImpl : public Page {
   int64_t loaded_bytes_ = 0;
   int loaded_resources_ = 0;
   int total_resources_ = 0;
+
+  // End Vivaldi
 
   base::WeakPtrFactory<PageImpl> weak_factory_{this};
 };

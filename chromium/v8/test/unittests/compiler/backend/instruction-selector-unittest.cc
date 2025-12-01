@@ -17,6 +17,8 @@ namespace v8 {
 namespace internal {
 namespace compiler {
 
+// TODO(391750831): This needs to be ported to Turboshaft.
+#if 0
 InstructionSelectorTest::InstructionSelectorTest()
     : TestWithNativeContextAndZone(kCompressGraphZone),
       rng_(v8_flags.random_seed) {}
@@ -614,7 +616,7 @@ TARGET_TEST_F(InstructionSelectorTest, CallStubWithDeoptRecursiveFrameState) {
   EXPECT_EQ(kArchRet, s[index++]->arch_opcode());
   EXPECT_EQ(index, s.size());
 }
-
+#endif
 }  // namespace compiler
 }  // namespace internal
 }  // namespace v8

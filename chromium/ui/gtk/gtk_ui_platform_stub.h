@@ -18,7 +18,6 @@ class GtkUiPlatformStub : public GtkUiPlatform {
 
   // GtkUiPlatform:
   void OnInitialized(GtkWidget* widget) override;
-  GdkKeymap* GetGdkKeymap() override;
   GdkModifierType GetGdkKeyEventState(const ui::KeyEvent& key_event) override;
   int GetGdkKeyEventGroup(const ui::KeyEvent& key_event) override;
   GdkWindow* GetGdkWindow(gfx::AcceleratedWidget window_id) override;
@@ -29,6 +28,7 @@ class GtkUiPlatformStub : public GtkUiPlatform {
   std::unique_ptr<ui::LinuxInputMethodContext> CreateInputMethodContext(
       ui::LinuxInputMethodContextDelegate* delegate) const override;
   bool IncludeFontScaleInDeviceScale() const override;
+  bool IncludeScaleInCursorSize() const override;
 };
 
 }  // namespace gtk

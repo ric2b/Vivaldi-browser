@@ -64,9 +64,9 @@ BASE_DECLARE_FEATURE(kApiUserScriptsMultipleWorlds);
 // Controls the availability of the odfsConfigPrivate API.
 BASE_DECLARE_FEATURE(kApiOdfsConfigPrivate);
 
-// If enabled, allows using the
-// `enterprise.reportingPrivate.reportDataMaskingEvent` API.
-BASE_DECLARE_FEATURE(kApiEnterpriseReportingPrivateReportDataMaskingEvent);
+// Controls the availability of the
+// `enterprise.reportingPrivate.onDataMaskingRulesTriggered` API.
+BASE_DECLARE_FEATURE(kApiEnterpriseReportingPrivateOnDataMaskingRulesTriggered);
 
 ///////////////////////////////////////////////////////////////////////////////
 // Other Features
@@ -91,9 +91,6 @@ BASE_DECLARE_FEATURE(kEnableWebHidInWebView);
 
 // If enabled, disables unpacked extensions if developer mode is off.
 BASE_DECLARE_FEATURE(kExtensionDisableUnsupportedDeveloper);
-
-// Determine if dynamic extension URLs are handled and redirected.
-BASE_DECLARE_FEATURE(kExtensionDynamicURLRedirection);
 
 // A replacement key for declaring icons, in addition to supporting dark mode.
 BASE_DECLARE_FEATURE(kExtensionIconVariants);
@@ -127,8 +124,9 @@ BASE_DECLARE_FEATURE(kAllowLegacyMV2Extensions);
 // IsValidSourceUrl enforcement for ExtensionHostMsg_OpenChannelToExtension IPC.
 BASE_DECLARE_FEATURE(kExtensionSourceUrlEnforcement);
 
-// File Handlers.
-BASE_DECLARE_FEATURE(kExtensionWebFileHandlers);
+// Controls whether server-side redirects are subject to extensions' web
+// accessible resource restrictions.
+BASE_DECLARE_FEATURE(kExtensionWARForRedirect);
 
 // If enabled, only manifest v3 extensions is allowed while v2 will be disabled.
 // Note that this feature is now only checked by `ExtensionManagement` which
@@ -189,6 +187,15 @@ BASE_DECLARE_FEATURE(kStructuredCloningForMV3Messaging);
 // https://chromium.googlesource.com/chromium/src/+/master/docs/telemetry_extension/README.md.
 BASE_DECLARE_FEATURE(kTelemetryExtensionPendingApprovalApi);
 
+// Used to control whether downloads initiated by `WebstoreInstaller` are marked
+// as having a corresponding user gesture or not.
+BASE_DECLARE_FEATURE(kWebstoreInstallerUserGestureKillSwitch);
+
+#if BUILDFLAG(IS_WIN)
+// TODO(https://crbug.com/400119351): Remove this feature flag in M138.
+BASE_DECLARE_FEATURE(kWinRejectDotSpaceSuffixFilePaths);
+#endif
+
 ///////////////////////////////////////////////////////////////////////////////
 // STOP!
 // Please don't just add your new feature down here.
@@ -209,11 +216,6 @@ BASE_DECLARE_FEATURE(kDeclarativeNetRequestSafeRuleLimits);
 // sent to the browser process. This data is used for telemetry purpose
 // only.
 BASE_DECLARE_FEATURE(kIncludeJSCallStackInExtensionApiRequest);
-
-// If enabled, the button for visiting the chrome webstore in both the
-// extensions menu in the app menu and the chrome://extensions sidebar will send
-// the user to the new chrome webstore URL.
-BASE_DECLARE_FEATURE(kNewWebstoreURL);
 
 // If enabled, use the new CWS itemSnippets API to fetch extension info.
 BASE_DECLARE_FEATURE(kUseItemSnippetsAPI);
@@ -239,6 +241,16 @@ BASE_DECLARE_FEATURE(kRemoveCoreSiteInstance);
 // Changes the chrome.userScript API to be enabled by a per-extension toggle
 // rather than the developer mode toggle on chrome://extensions.
 BASE_DECLARE_FEATURE(kUserScriptUserExtensionToggle);
+
+// Forces the debugger API/feature to always be restricted by developer mode.
+// This ensures we're always testing the developer mode API/feature restriction
+// capability, even when no other API/feature might be restricted by it.
+BASE_DECLARE_FEATURE(kDebuggerAPIRestrictedToDevMode);
+
+// Creates a `browser` object that can be used in place of `chrome` where
+// extension APIs are available. It does not include non-extension APIs like
+// `loadTimes` , `csi`, etc. or deprecated APIs (e.g. `app`).
+BASE_DECLARE_FEATURE(kExtensionBrowserNamespaceAlternative);
 
 }  // namespace extensions_features
 

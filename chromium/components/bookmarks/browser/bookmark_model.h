@@ -167,6 +167,9 @@ class BookmarkModel : public BookmarkUndoProvider,
     return node && (node == root_ || node->parent() == root_);
   }
 
+  // Returns true if the given `node` should be visible in UI surfaces.
+  bool IsNodeVisible(const BookmarkNode& node) const;
+
   // Returns true if `node` represents a bookmark that is stored on the local
   // profile but not saved to the user's server-side account. The opposite case,
   // returning null, can happen because the user turned sync-the-feature on,
@@ -401,7 +404,8 @@ class BookmarkModel : public BookmarkUndoProvider,
   [[nodiscard]] std::vector<TitledUrlMatch> GetBookmarksMatching(
       const std::u16string& query,
       size_t max_count,
-      query_parser::MatchingAlgorithm matching_algorithm) const;
+      query_parser::MatchingAlgorithm matching_algorithm,
+      bool special_characters = false) const;
 
   // Disables the persistence to disk, useful during testing to speed up
   // testing.
@@ -521,12 +525,18 @@ class BookmarkModel : public BookmarkUndoProvider,
 
   // Removes a child under `parent` at position `index` and notifies its
   // observers. `is_undoable` determines whether the deletion should be
-  // propagated via BookmarkClient to the undo stack.
+  // propagated via BookmarkClient to the undo stack. `notify_observers`
+  // determines whether observers are notified about the removal.
   void RemoveChildAt(const BookmarkNode* parent,
                      size_t index,
                      const base::Location& location,
                      std::optional<metrics::BookmarkEditSource> source,
-                     bool is_undoable);
+                     bool is_undoable,
+                     bool notify_observers);
+
+  // Private counterpart of `RemoveAccountPermanentFolders()` that allows
+  // controlling whether observers are notified.
+  void RemoveAccountPermanentFoldersImpl(bool notify_observers);
 
   // Removes the node from internal maps and recurses through all children. If
   // the node is a url, its url is added to removed_urls.

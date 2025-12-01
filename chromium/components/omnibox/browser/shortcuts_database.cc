@@ -222,6 +222,10 @@ void ShortcutsDatabase::LoadShortcuts(GuidToShortcutMap* shortcuts) {
   DCHECK(shortcuts);
   shortcuts->clear();
 
+  // List of shortcuts that need to be purged from the shortcuts DB (e.g. due to
+  // using a deprecated suggestion type).
+  ShortcutIDs invalid_shortcuts;
+
   static constexpr char kSelectSql[] =
       // clang-format off
       "SELECT id,text,fill_into_edit,url,document_type,contents,contents_class,"
@@ -244,16 +248,18 @@ void ShortcutsDatabase::LoadShortcuts(GuidToShortcutMap* shortcuts) {
     AutocompleteMatchType::Type type;
     if (!AutocompleteMatchType::FromInteger(s.ColumnInt(10), &type))
       continue;
-    // TODO(crbug.com/391666322): Delete all shortcuts pointing to deprecated
-    //   HISTORY_KEYWORD suggestions from the DB. Once this migration (i.e.
-    //   deletion logic) has been in place for some time (e.g. 10+ milestones),
-    //   we should go ahead and delete the below conditional check entirely.
-    //
-    // Shortcuts related to deprecated HISTORY_KEYWORD suggestions should not be
-    // surfaced.
+
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+    // `HISTORY_KEYWORD` suggestions are no longer recorded to the shortcut DB
+    // because a) they're redundant with the keyword provider, and b) we haven't
+    // wired in deleting the keyword to delete the shortcut entry. Purge any old
+    // `HISTORY_KEYWORD` entries already recorded to the DB.
     if (type == AutocompleteMatchType::HISTORY_KEYWORD) {
+      invalid_shortcuts.push_back(s.ColumnString(0));
       continue;
     }
+#pragma GCC diagnostic pop
 
     const int page_transition_integer = s.ColumnInt(9);
     if (!ui::IsValidPageTransitionType(page_transition_integer)) {
@@ -263,16 +269,16 @@ void ShortcutsDatabase::LoadShortcuts(GuidToShortcutMap* shortcuts) {
         ui::PageTransitionFromInt(page_transition_integer);
 
     Shortcut::MatchCore match_core =
-        Shortcut::MatchCore(s.ColumnString16(2),      // fill_into_edit
-                            GURL(s.ColumnString(3)),  // destination_url
-                            document_type,            // document_type
-                            s.ColumnString16(5),      // contents
-                            s.ColumnString(6),        // contents_class
-                            s.ColumnString16(7),      // description
-                            s.ColumnString(8),        // description_class
-                            transition,               // transition
-                            type,                     // type
-                            s.ColumnString16(11));    // keyword
+        Shortcut::MatchCore(s.ColumnString16(2),          // fill_into_edit
+                            GURL(s.ColumnStringView(3)),  // destination_url
+                            document_type,                // document_type
+                            s.ColumnString16(5),          // contents
+                            s.ColumnString(6),            // contents_class
+                            s.ColumnString16(7),          // description
+                            s.ColumnString(8),            // description_class
+                            transition,                   // transition
+                            type,                         // type
+                            s.ColumnString16(11));        // keyword
 
     std::stringstream debug_stream;
     debug_stream << "Contents: " << match_core.contents;
@@ -293,6 +299,8 @@ void ShortcutsDatabase::LoadShortcuts(GuidToShortcutMap* shortcuts) {
                                 s.ColumnTime(12),       // last_access_time
                                 s.ColumnInt(13))));     // number_of_hits
   }
+
+  DeleteShortcutsWithIDs(invalid_shortcuts);
 }
 
 ShortcutsDatabase::~ShortcutsDatabase() = default;

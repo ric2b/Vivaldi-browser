@@ -6,6 +6,7 @@
 
 #include <memory>
 #include <string>
+#include <string_view>
 
 #include "ash/auth/views/active_session_auth_view.h"
 #include "ash/auth/views/auth_common.h"
@@ -110,6 +111,8 @@ const char* ReasonToString(AuthRequest::Reason reason) {
 const char* ActiveSessionAuthStateToString(
     ActiveSessionAuthControllerImpl::ActiveSessionAuthState state) {
   switch (state) {
+    case ActiveSessionAuthControllerImpl::ActiveSessionAuthState::kOnIdle:
+      return "OnIdle";
     case ActiveSessionAuthControllerImpl::ActiveSessionAuthState::kWaitForInit:
       return "WaitForInit";
     case ActiveSessionAuthControllerImpl::ActiveSessionAuthState::kInitialized:
@@ -217,13 +220,18 @@ void ActiveSessionAuthControllerImpl::TestApi::SetPinStatus(
   controller_->contents_view_->SetPinStatus(std::move(pin_status));
 }
 
-const std::u16string&
+std::u16string_view
 ActiveSessionAuthControllerImpl::TestApi::GetPinStatusMessage() const {
   return controller_->contents_view_->GetPinStatusMessage();
 }
 
 ActiveSessionAuthControllerImpl::ActiveSessionAuthControllerImpl() = default;
 ActiveSessionAuthControllerImpl::~ActiveSessionAuthControllerImpl() = default;
+
+bool ActiveSessionAuthControllerImpl::IsPreInitializedState() const {
+  return state_ == ActiveSessionAuthState::kOnIdle ||
+         state_ == ActiveSessionAuthState::kWaitForInit;
+}
 
 bool ActiveSessionAuthControllerImpl::IsSucceedState() const {
   return state_ == ActiveSessionAuthState::kPasswordAuthSucceeded ||
@@ -242,6 +250,25 @@ bool ActiveSessionAuthControllerImpl::ShowAuthDialog(
     auth_request->NotifyAuthFailure();
     return false;
   }
+
+  if (state_ == ActiveSessionAuthState::kWaitForInit) {
+    VLOG(1) << "A show request is already pending; waiting for initialization.";
+    return false;
+  }
+
+  // This state transition checking the current state is kOnIdle.
+  SetState(ActiveSessionAuthState::kWaitForInit);
+
+  CHECK(Shell::Get());
+  CHECK(Shell::Get()->session_controller());
+
+  if (Shell::Get()->session_controller()->GetSessionState() !=
+      session_manager::SessionState::ACTIVE) {
+    LOG(ERROR) << "SessionState is not active.";
+    return false;
+  }
+
+  Shell::Get()->session_controller()->AddObserver(this);
 
   CHECK(!auth_request_);
   auth_request_ = std::move(auth_request);
@@ -369,7 +396,7 @@ void ActiveSessionAuthControllerImpl::AuthFactorsAreReady(
 
 void ActiveSessionAuthControllerImpl::OnFingerprintScan(
     const FingerprintAuthScanResult scan_result) {
-  CHECK_NE(state_, ActiveSessionAuthState::kWaitForInit);
+  CHECK(!ActiveSessionAuthControllerImpl::IsPreInitializedState());
   // Avoid unnecessary processing if we've already initiated close.
   if (IsSucceedState() || state_ == ActiveSessionAuthState::kCloseRequested) {
     return;
@@ -444,19 +471,23 @@ void ActiveSessionAuthControllerImpl::InitUi() {
 void ActiveSessionAuthControllerImpl::StartClose() {
   VLOG(1) << "Close with : " << ActiveSessionAuthStateToString(state_)
           << " state.";
-
   CHECK(user_context_);
   CHECK(auth_request_);
   CHECK(auth_performer_);
-  if (state_ != ActiveSessionAuthState::kWaitForInit) {
+  if (!IsPreInitializedState()) {
     uma_recorder_.RecordClose();
   }
+
+  if (Shell::Get() && Shell::Get()->session_controller()) {
+    Shell::Get()->session_controller()->RemoveObserver(this);
+  }
+
   contents_view_observer_.Reset();
   if (contents_view_) {
     contents_view_->RemoveObserver(this);
     contents_view_ = nullptr;
   } else {
-    CHECK_EQ(state_, ActiveSessionAuthState::kWaitForInit);
+    CHECK(IsPreInitializedState());
   }
   auth_session_broadcast_id_.clear();
 
@@ -493,12 +524,38 @@ void ActiveSessionAuthControllerImpl::CompleteClose(
   auth_request_.reset();
   available_factors_.Clear();
 
-  SetState(ActiveSessionAuthState::kWaitForInit);
+  SetState(ActiveSessionAuthState::kOnIdle);
 
   title_.clear();
   description_.clear();
   fp_auth_tracker_.reset();
   widget_.reset();
+}
+
+void ActiveSessionAuthControllerImpl::OnSessionStateChanged(
+    session_manager::SessionState session_state) {
+  if (session_state == session_manager::SessionState::ACTIVE) {
+    return;
+  }
+  VLOG(1) << "SessionState changed, closing process started";
+  switch (state_) {
+    case ActiveSessionAuthState::kOnIdle:
+    case ActiveSessionAuthState::kWaitForInit:
+    case ActiveSessionAuthState::kInitialized:
+      StartClose();
+      return;
+    case ActiveSessionAuthState::kPasswordAuthStarted:
+    case ActiveSessionAuthState::kPinAuthStarted:
+      SetState(ActiveSessionAuthState::kCloseRequested);
+      return;
+    case ActiveSessionAuthState::kPasswordAuthSucceeded:
+    case ActiveSessionAuthState::kPinAuthSucceeded:
+    case ActiveSessionAuthState::kFingerprintAuthSucceeded:
+    case ActiveSessionAuthState::kFingerprintAuthSucceededWaiting:
+    case ActiveSessionAuthState::kCloseRequested:
+      return;
+  }
+  NOTREACHED();
 }
 
 void ActiveSessionAuthControllerImpl::OnViewPreferredSizeChanged(
@@ -511,7 +568,7 @@ void ActiveSessionAuthControllerImpl::MoveToTheCenter() {
 }
 
 void ActiveSessionAuthControllerImpl::OnPasswordSubmit(
-    const std::u16string& password) {
+    std::u16string_view password) {
   if (IsSucceedState()) {
     return;
   }
@@ -530,7 +587,7 @@ void ActiveSessionAuthControllerImpl::OnPasswordSubmit(
                      weak_ptr_factory_.GetWeakPtr(), AuthInputType::kPassword));
 }
 
-void ActiveSessionAuthControllerImpl::OnPinSubmit(const std::u16string& pin) {
+void ActiveSessionAuthControllerImpl::OnPinSubmit(std::u16string_view pin) {
   if (IsSucceedState()) {
     return;
   }
@@ -580,6 +637,7 @@ void ActiveSessionAuthControllerImpl::OnAuthComplete(
 
 void ActiveSessionAuthControllerImpl::OnClose() {
   switch (state_) {
+    case ActiveSessionAuthState::kOnIdle:
     case ActiveSessionAuthState::kWaitForInit:
       NOTREACHED();
     case ActiveSessionAuthState::kInitialized:
@@ -605,7 +663,10 @@ void ActiveSessionAuthControllerImpl::SetState(ActiveSessionAuthState state) {
           << " state to : " << ActiveSessionAuthStateToString(state)
           << " state.";
   switch (state) {
+    case ActiveSessionAuthState::kOnIdle:
+      break;
     case ActiveSessionAuthState::kWaitForInit:
+      CHECK(state_ == ActiveSessionAuthState::kOnIdle);
       break;
     case ActiveSessionAuthState::kInitialized:
       CHECK(state_ == ActiveSessionAuthState::kWaitForInit ||
@@ -667,6 +728,7 @@ void ActiveSessionAuthControllerImpl::OnAuthFactorStatusUpdate(
       }
       return;
 
+    case ActiveSessionAuthState::kOnIdle:
     case ActiveSessionAuthState::kWaitForInit:
       return;
 

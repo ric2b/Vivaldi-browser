@@ -7,7 +7,9 @@
 #include <memory>
 #include <string>
 #include <utility>
+#include <vector>
 
+#include "base/barrier_closure.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
@@ -20,6 +22,8 @@
 #include "base/test/bind.h"
 #include "base/test/mock_callback.h"
 #include "base/test/task_environment.h"
+#include "base/time/time.h"
+#include "chrome/enterprise_companion/constants.h"
 #include "chrome/enterprise_companion/device_management_storage/dm_storage.h"
 #include "chrome/enterprise_companion/enterprise_companion_status.h"
 #include "chrome/enterprise_companion/event_logger.h"
@@ -30,6 +34,7 @@
 #include "components/policy/core/common/cloud/device_management_service.h"
 #include "components/policy/core/common/cloud/mock_cloud_policy_client.h"
 #include "components/policy/core/common/cloud/mock_device_management_service.h"
+#include "components/policy/core/common/policy_types.h"
 #include "components/policy/proto/device_management_backend.pb.h"
 #include "net/http/http_status_code.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -51,6 +56,7 @@ constexpr int kPublicKey1Version = 100;
 constexpr int kTimestamp1 = 42;
 constexpr int kTimestamp2 = 84;
 
+using ::policy::PolicyFetchReason;
 using ::testing::_;
 using ::testing::ElementsAre;
 
@@ -241,7 +247,9 @@ class DMClientTest : public ::testing::Test {
           return base::WrapUnique(static_cast<policy::CloudPolicyClient*>(
               mock_cloud_policy_client_));
         }),
-        dm_storage_, mock_policy_fetch_response_validator_.Get());
+        dm_storage_, mock_policy_fetch_response_validator_.Get(),
+        CreateDeviceManagementServiceConfig(),
+        /*task_timeout=*/base::Milliseconds(250));
   }
 
   base::test::TaskEnvironment environment_;
@@ -289,8 +297,11 @@ TEST_F(DMClientTest, RegisterDeviceSuccess) {
   test_token_service_->StoreEnrollmentToken(kFakeEnrollmentToken);
   EXPECT_CALL(*mock_cloud_policy_client_,
               RegisterPolicyAgentWithEnrollmentToken(kFakeEnrollmentToken,
-                                                     kFakeDeviceId, testing::_))
-      .Times(1);
+                                                     kFakeDeviceId, _))
+      .WillOnce([&] {
+        mock_cloud_policy_client_->SetDMToken(kFakeDMToken);
+        mock_cloud_policy_client_->NotifyRegistrationStateChanged();
+      });
 
   base::RunLoop run_loop;
   dm_client_->RegisterPolicyAgent(
@@ -299,8 +310,6 @@ TEST_F(DMClientTest, RegisterDeviceSuccess) {
         EXPECT_TRUE(status.ok());
         test_event_logger_->Flush(run_loop.QuitClosure());
       }));
-  mock_cloud_policy_client_->SetDMToken(kFakeDMToken);
-  mock_cloud_policy_client_->NotifyRegistrationStateChanged();
   run_loop.Run();
 
   EXPECT_EQ(test_token_service_->GetDmToken(), kFakeDMToken);
@@ -313,8 +322,12 @@ TEST_F(DMClientTest, RegisterDeviceFailure) {
   test_token_service_->StoreEnrollmentToken(kFakeEnrollmentToken);
   EXPECT_CALL(*mock_cloud_policy_client_,
               RegisterPolicyAgentWithEnrollmentToken(kFakeEnrollmentToken,
-                                                     kFakeDeviceId, testing::_))
-      .Times(1);
+                                                     kFakeDeviceId, _))
+      .WillOnce([&] {
+        mock_cloud_policy_client_->SetStatus(
+            policy::DM_STATUS_SERVICE_INVALID_SERIAL_NUMBER);
+        mock_cloud_policy_client_->NotifyClientError();
+      });
 
   base::RunLoop run_loop;
   dm_client_->RegisterPolicyAgent(
@@ -324,9 +337,6 @@ TEST_F(DMClientTest, RegisterDeviceFailure) {
             policy::DM_STATUS_SERVICE_INVALID_SERIAL_NUMBER));
         test_event_logger_->Flush(run_loop.QuitClosure());
       }));
-  mock_cloud_policy_client_->SetStatus(
-      policy::DM_STATUS_SERVICE_INVALID_SERIAL_NUMBER);
-  mock_cloud_policy_client_->NotifyClientError();
   run_loop.Run();
 
   EXPECT_TRUE(test_token_service_->GetDmToken().empty());
@@ -353,8 +363,11 @@ TEST_F(DMClientTest, RegistrationRemovesPolicies) {
   test_token_service_->StoreEnrollmentToken(kFakeEnrollmentToken);
   EXPECT_CALL(*mock_cloud_policy_client_,
               RegisterPolicyAgentWithEnrollmentToken(kFakeEnrollmentToken,
-                                                     kFakeDeviceId, testing::_))
-      .Times(1);
+                                                     kFakeDeviceId, _))
+      .WillOnce([&] {
+        mock_cloud_policy_client_->SetDMToken(kFakeDMToken);
+        mock_cloud_policy_client_->NotifyRegistrationStateChanged();
+      });
 
   // Register the device. All policies should be removed as a side effect.
   base::RunLoop run_loop;
@@ -364,8 +377,6 @@ TEST_F(DMClientTest, RegistrationRemovesPolicies) {
         EXPECT_TRUE(status.ok());
         test_event_logger_->Flush(run_loop.QuitClosure());
       }));
-  mock_cloud_policy_client_->SetDMToken(kFakeDMToken);
-  mock_cloud_policy_client_->NotifyRegistrationStateChanged();
   run_loop.Run();
 
   EXPECT_FALSE(dm_storage_->ReadPolicyData(kPolicyType1));
@@ -449,7 +460,7 @@ TEST_F(DMClientTest, PoliciesPersistedThroughSkippedRegistration) {
 TEST_F(DMClientTest, FetchPoliciesFailsIfNotRegistered) {
   base::RunLoop run_loop;
   dm_client_->FetchPolicies(
-      test_event_logger_,
+      PolicyFetchReason::kTest, test_event_logger_,
       base::BindLambdaForTesting([&](const EnterpriseCompanionStatus& status) {
         EXPECT_TRUE(status.EqualsApplicationError(
             ApplicationError::kRegistrationPreconditionFailed));
@@ -474,7 +485,7 @@ TEST_F(DMClientTest, FetchPoliciesFailsIfDMStorageCannotPersist) {
 
   base::RunLoop run_loop;
   dm_client_->FetchPolicies(
-      test_event_logger_,
+      PolicyFetchReason::kTest, test_event_logger_,
       base::BindLambdaForTesting([&](const EnterpriseCompanionStatus& status) {
         EXPECT_TRUE(status.EqualsApplicationError(
             ApplicationError::kPolicyPersistenceImpossible));
@@ -496,19 +507,20 @@ TEST_F(DMClientTest, FetchPoliciesFailsIfDMStorageCannotPersist) {
 TEST_F(DMClientTest, FetchPoliciesFailsIfCloudPolicyClientFails) {
   EnsureRegistered();
 
-  EXPECT_CALL(*mock_cloud_policy_client_, FetchPolicy).Times(1);
+  EXPECT_CALL(*mock_cloud_policy_client_, FetchPolicy).WillOnce([&] {
+    mock_cloud_policy_client_->SetStatus(
+        policy::DM_STATUS_SERVICE_MANAGEMENT_TOKEN_INVALID);
+    mock_cloud_policy_client_->NotifyPolicyFetched();
+  });
 
   base::RunLoop run_loop;
   dm_client_->FetchPolicies(
-      test_event_logger_,
+      PolicyFetchReason::kTest, test_event_logger_,
       base::BindLambdaForTesting([&](const EnterpriseCompanionStatus& status) {
         EXPECT_TRUE(status.EqualsDeviceManagementStatus(
             policy::DM_STATUS_SERVICE_MANAGEMENT_TOKEN_INVALID));
         test_event_logger_->Flush(run_loop.QuitClosure());
       }));
-  mock_cloud_policy_client_->SetStatus(
-      policy::DM_STATUS_SERVICE_MANAGEMENT_TOKEN_INVALID);
-  mock_cloud_policy_client_->NotifyPolicyFetched();
   run_loop.Run();
 
   std::unique_ptr<device_management_storage::CachedPolicyInfo>
@@ -525,7 +537,12 @@ TEST_F(DMClientTest, FetchPoliciesFailsIfCloudPolicyClientFails) {
 TEST_F(DMClientTest, FetchPoliciesFailsIfFetchResultInvalid) {
   EnsureRegistered();
 
-  EXPECT_CALL(*mock_cloud_policy_client_, FetchPolicy).Times(1);
+  EXPECT_CALL(*mock_cloud_policy_client_, FetchPolicy).WillOnce([&] {
+    mock_cloud_policy_client_->SetPolicy(
+        kPolicyType1, /*settings_entity_id=*/"",
+        enterprise_management::PolicyFetchResponse());
+    mock_cloud_policy_client_->NotifyPolicyFetched();
+  });
   EXPECT_CALL(*mock_cloud_policy_client_,
               UploadPolicyValidationReport(_, _, _, _, _, _))
       .WillOnce([&](policy::CloudPolicyValidatorBase::Status,
@@ -541,16 +558,12 @@ TEST_F(DMClientTest, FetchPoliciesFailsIfFetchResultInvalid) {
 
   base::RunLoop run_loop;
   dm_client_->FetchPolicies(
-      test_event_logger_,
+      PolicyFetchReason::kTest, test_event_logger_,
       base::BindLambdaForTesting([&](const EnterpriseCompanionStatus& status) {
         EXPECT_TRUE(status.EqualsCloudPolicyValidationResult(
             policy::CloudPolicyValidatorBase::VALIDATION_POLICY_PARSE_ERROR));
         test_event_logger_->Flush(run_loop.QuitClosure());
       }));
-  mock_cloud_policy_client_->SetPolicy(
-      kPolicyType1, /*settings_entity_id=*/"",
-      enterprise_management::PolicyFetchResponse());
-  mock_cloud_policy_client_->NotifyPolicyFetched();
   run_loop.Run();
 
   std::unique_ptr<device_management_storage::CachedPolicyInfo>
@@ -569,22 +582,23 @@ TEST_F(DMClientTest, FetchPoliciesFailsIfResultCannotBePersisted) {
   EnsureRegistered();
   dm_storage_->SetWillPersistPolicies(false);
 
-  EXPECT_CALL(*mock_cloud_policy_client_, FetchPolicy).Times(1);
+  EXPECT_CALL(*mock_cloud_policy_client_, FetchPolicy).WillOnce([&] {
+    mock_cloud_policy_client_->SetPolicy(
+        kPolicyType1, /*settings_entity_id=*/"",
+        enterprise_management::PolicyFetchResponse());
+    mock_cloud_policy_client_->NotifyPolicyFetched();
+  });
   SetMockPolicyFetchResponseValidatorResult(
       policy::CloudPolicyValidatorBase::VALIDATION_OK);
 
   base::RunLoop run_loop;
   dm_client_->FetchPolicies(
-      test_event_logger_,
+      PolicyFetchReason::kTest, test_event_logger_,
       base::BindLambdaForTesting([&](const EnterpriseCompanionStatus& status) {
         EXPECT_TRUE(status.EqualsApplicationError(
             ApplicationError::kPolicyPersistenceFailed));
         test_event_logger_->Flush(run_loop.QuitClosure());
       }));
-  mock_cloud_policy_client_->SetPolicy(
-      kPolicyType1, /*settings_entity_id=*/"",
-      enterprise_management::PolicyFetchResponse());
-  mock_cloud_policy_client_->NotifyPolicyFetched();
   run_loop.Run();
 
   std::unique_ptr<device_management_storage::CachedPolicyInfo>
@@ -600,10 +614,6 @@ TEST_F(DMClientTest, FetchPoliciesFailsIfResultCannotBePersisted) {
 
 TEST_F(DMClientTest, FetchPoliciesSuccess) {
   EnsureRegistered();
-
-  EXPECT_CALL(*mock_cloud_policy_client_, FetchPolicy).Times(1);
-  SetMockPolicyFetchResponseValidatorResult(
-      policy::CloudPolicyValidatorBase::VALIDATION_OK);
 
   enterprise_management::PublicKeyVerificationData key_verification_data;
   key_verification_data.set_new_public_key(kPublicKey1);
@@ -624,16 +634,21 @@ TEST_F(DMClientTest, FetchPoliciesSuccess) {
   enterprise_management::PolicyFetchResponse response2;
   response2.set_policy_data(data2.SerializeAsString());
 
+  EXPECT_CALL(*mock_cloud_policy_client_, FetchPolicy).WillOnce([&] {
+    mock_cloud_policy_client_->SetPolicy(kPolicyType1, "", response1);
+    mock_cloud_policy_client_->SetPolicy(kPolicyType2, "", response2);
+    mock_cloud_policy_client_->NotifyPolicyFetched();
+  });
+  SetMockPolicyFetchResponseValidatorResult(
+      policy::CloudPolicyValidatorBase::VALIDATION_OK);
+
   base::RunLoop run_loop;
   dm_client_->FetchPolicies(
-      test_event_logger_,
+      PolicyFetchReason::kTest, test_event_logger_,
       base::BindLambdaForTesting([&](const EnterpriseCompanionStatus& status) {
         EXPECT_TRUE(status.ok());
         test_event_logger_->Flush(run_loop.QuitClosure());
       }));
-  mock_cloud_policy_client_->SetPolicy(kPolicyType1, "", response1);
-  mock_cloud_policy_client_->SetPolicy(kPolicyType2, "", response2);
-  mock_cloud_policy_client_->NotifyPolicyFetched();
   run_loop.Run();
 
   std::unique_ptr<device_management_storage::CachedPolicyInfo>
@@ -660,11 +675,7 @@ TEST_F(DMClientTest, FetchPoliciesSuccess) {
 TEST_F(DMClientTest, FetchPoliciesOverwrite) {
   EnsureRegistered();
 
-  EXPECT_CALL(*mock_cloud_policy_client_, FetchPolicy).Times(2);
-  SetMockPolicyFetchResponseValidatorResult(
-      policy::CloudPolicyValidatorBase::VALIDATION_OK);
-
-  // Perform a policy a policy fetch which populates the cached info.
+  // The responses from the first policy fetch will populate cached info.
   enterprise_management::PublicKeyVerificationData key_verification_data;
   key_verification_data.set_new_public_key(kPublicKey1);
   key_verification_data.set_new_public_key_version(kPublicKey1Version);
@@ -684,16 +695,36 @@ TEST_F(DMClientTest, FetchPoliciesOverwrite) {
   enterprise_management::PolicyFetchResponse response2;
   response2.set_policy_data(data2.SerializeAsString());
 
+  // The response from a subsequence policy fetch whose response does not
+  // contain a new public key. The cached information should not change.
+  enterprise_management::PolicyData data3;
+  data3.set_timestamp(kTimestamp2);
+  data3.set_policy_type(kPolicyType1);
+  data3.set_policy_value(kPolicyValue3);
+  enterprise_management::PolicyFetchResponse response3;
+  response3.set_policy_data(data3.SerializeAsString());
+
+  SetMockPolicyFetchResponseValidatorResult(
+      policy::CloudPolicyValidatorBase::VALIDATION_OK);
+
+  testing::InSequence expect_calls_in_sequence;
+  EXPECT_CALL(*mock_cloud_policy_client_, FetchPolicy).WillOnce([&] {
+    mock_cloud_policy_client_->SetPolicy(kPolicyType1, "", response1);
+    mock_cloud_policy_client_->SetPolicy(kPolicyType2, "", response2);
+    mock_cloud_policy_client_->NotifyPolicyFetched();
+  });
+  EXPECT_CALL(*mock_cloud_policy_client_, FetchPolicy).WillOnce([&] {
+    mock_cloud_policy_client_->SetPolicy(kPolicyType1, "", response3);
+    mock_cloud_policy_client_->NotifyPolicyFetched();
+  });
+
   base::RunLoop first_fetch_loop;
   dm_client_->FetchPolicies(
-      test_event_logger_,
+      PolicyFetchReason::kTest, test_event_logger_,
       base::BindLambdaForTesting([&](const EnterpriseCompanionStatus& status) {
         EXPECT_TRUE(status.ok());
         test_event_logger_->Flush(first_fetch_loop.QuitClosure());
       }));
-  mock_cloud_policy_client_->SetPolicy(kPolicyType1, "", response1);
-  mock_cloud_policy_client_->SetPolicy(kPolicyType2, "", response2);
-  mock_cloud_policy_client_->NotifyPolicyFetched();
   first_fetch_loop.Run();
 
   std::unique_ptr<device_management_storage::CachedPolicyInfo>
@@ -702,24 +733,13 @@ TEST_F(DMClientTest, FetchPoliciesOverwrite) {
   EXPECT_EQ(cached_policy_info->key_version(), kPublicKey1Version);
   EXPECT_EQ(cached_policy_info->timestamp(), kTimestamp1);
 
-  // Perform a subsequent policy fetch whose response does not contain a new
-  // public key. The cached information should not change.
-  enterprise_management::PolicyData data3;
-  data3.set_timestamp(kTimestamp2);
-  data3.set_policy_type(kPolicyType1);
-  data3.set_policy_value(kPolicyValue3);
-  enterprise_management::PolicyFetchResponse response3;
-  response3.set_policy_data(data3.SerializeAsString());
-
   base::RunLoop second_fetch_loop;
   dm_client_->FetchPolicies(
-      test_event_logger_,
+      PolicyFetchReason::kTest, test_event_logger_,
       base::BindLambdaForTesting([&](const EnterpriseCompanionStatus& status) {
         EXPECT_TRUE(status.ok());
         test_event_logger_->Flush(second_fetch_loop.QuitClosure());
       }));
-  mock_cloud_policy_client_->SetPolicy(kPolicyType1, "", response3);
-  mock_cloud_policy_client_->NotifyPolicyFetched();
   second_fetch_loop.Run();
 
   cached_policy_info = dm_storage_->GetCachedPolicyInfo();
@@ -748,22 +768,22 @@ TEST_F(DMClientTest, FetchPoliciesOverwrite) {
 TEST_F(DMClientTest, FetchPoliciesReset) {
   EnsureRegistered();
 
-  EXPECT_CALL(*mock_cloud_policy_client_, FetchPolicy).Times(1);
+  EXPECT_CALL(*mock_cloud_policy_client_, FetchPolicy).WillOnce([&] {
+    mock_cloud_policy_client_->SetStatus(
+        policy::DM_STATUS_SERVICE_DEVICE_NEEDS_RESET);
+    mock_cloud_policy_client_->dm_token_.clear();
+    mock_cloud_policy_client_->NotifyClientError();
+    mock_cloud_policy_client_->NotifyRegistrationStateChanged();
+  });
 
   base::RunLoop run_loop;
   dm_client_->FetchPolicies(
-      test_event_logger_,
+      PolicyFetchReason::kScheduled, test_event_logger_,
       base::BindLambdaForTesting([&](const EnterpriseCompanionStatus& status) {
         EXPECT_TRUE(status.EqualsDeviceManagementStatus(
             policy::DM_STATUS_SERVICE_DEVICE_NEEDS_RESET));
         test_event_logger_->Flush(run_loop.QuitClosure());
       }));
-
-  mock_cloud_policy_client_->SetStatus(
-      policy::DM_STATUS_SERVICE_DEVICE_NEEDS_RESET);
-  mock_cloud_policy_client_->dm_token_.clear();
-  mock_cloud_policy_client_->NotifyClientError();
-  mock_cloud_policy_client_->NotifyRegistrationStateChanged();
   run_loop.Run();
 
   EXPECT_TRUE(test_token_service_->GetDmToken().empty());
@@ -778,22 +798,22 @@ TEST_F(DMClientTest, FetchPoliciesReset) {
 TEST_F(DMClientTest, FetchPoliciesInvalidation) {
   EnsureRegistered();
 
-  EXPECT_CALL(*mock_cloud_policy_client_, FetchPolicy).Times(1);
+  EXPECT_CALL(*mock_cloud_policy_client_, FetchPolicy).WillOnce([&] {
+    mock_cloud_policy_client_->SetStatus(
+        policy::DM_STATUS_SERVICE_DEVICE_NOT_FOUND);
+    mock_cloud_policy_client_->dm_token_.clear();
+    mock_cloud_policy_client_->NotifyClientError();
+    mock_cloud_policy_client_->NotifyRegistrationStateChanged();
+  });
 
   base::RunLoop run_loop;
   dm_client_->FetchPolicies(
-      test_event_logger_,
+      PolicyFetchReason::kTest, test_event_logger_,
       base::BindLambdaForTesting([&](const EnterpriseCompanionStatus& status) {
         EXPECT_TRUE(status.EqualsDeviceManagementStatus(
             policy::DM_STATUS_SERVICE_DEVICE_NOT_FOUND));
         test_event_logger_->Flush(run_loop.QuitClosure());
       }));
-
-  mock_cloud_policy_client_->SetStatus(
-      policy::DM_STATUS_SERVICE_DEVICE_NOT_FOUND);
-  mock_cloud_policy_client_->dm_token_.clear();
-  mock_cloud_policy_client_->NotifyClientError();
-  mock_cloud_policy_client_->NotifyRegistrationStateChanged();
   run_loop.Run();
 
   EXPECT_TRUE(dm_storage_->IsDeviceDeregistered());
@@ -801,6 +821,112 @@ TEST_F(DMClientTest, FetchPoliciesInvalidation) {
   EXPECT_THAT(test_event_logger_->policy_fetch_events(),
               ElementsAre(EnterpriseCompanionStatus::FromDeviceManagementStatus(
                   policy::DM_STATUS_SERVICE_DEVICE_NOT_FOUND)));
+}
+
+// Tests that the client is able to sequence multiple concurrent requests.
+TEST_F(DMClientTest, OverlappingCallsSequenced) {
+  using enum PolicyFetchReason;
+
+  test_token_service_->StoreEnrollmentToken(kFakeEnrollmentToken);
+  auto respond_to_enroll = [&] {
+    mock_cloud_policy_client_->SetDMToken(kFakeDMToken);
+    mock_cloud_policy_client_->NotifyRegistrationStateChanged();
+  };
+  auto respond_to_fetch = [&] {
+    mock_cloud_policy_client_->SetStatus(policy::DM_STATUS_SUCCESS);
+    mock_cloud_policy_client_->NotifyPolicyFetched();
+  };
+  testing::InSequence expect_calls_in_sequence;
+  EXPECT_CALL(*mock_cloud_policy_client_,
+              RegisterPolicyAgentWithEnrollmentToken)
+      .WillOnce(respond_to_enroll);
+  EXPECT_CALL(*mock_cloud_policy_client_, FetchPolicy(kScheduled))
+      .WillOnce(respond_to_fetch);
+  EXPECT_CALL(*mock_cloud_policy_client_, FetchPolicy(kUserRequest))
+      .WillOnce(respond_to_fetch);
+  EXPECT_CALL(*mock_cloud_policy_client_, FetchPolicy(kUnspecified))
+      .WillOnce(respond_to_fetch);
+
+  base::RunLoop wait_for_all_tasks_complete;
+  base::RepeatingClosure barrier =
+      base::BarrierClosure(4, wait_for_all_tasks_complete.QuitClosure());
+  dm_client_->RegisterPolicyAgent(
+      test_event_logger_,
+      base::BindLambdaForTesting(
+          [&barrier](const EnterpriseCompanionStatus& status) {
+            barrier.Run();
+          }));
+  for (const PolicyFetchReason reason : {
+           kScheduled,
+           kUserRequest,
+           kUnspecified,
+       }) {
+    dm_client_->FetchPolicies(
+        reason, test_event_logger_,
+        base::BindLambdaForTesting(
+            [&barrier](const EnterpriseCompanionStatus& status) {
+              barrier.Run();
+            }));
+  }
+  wait_for_all_tasks_complete.Run();
+}
+
+// Tests that the client can avoid hanging if CloudPolicyClient doesn't respond.
+TEST_F(DMClientTest, HandlesTaskTimeout) {
+  using enum PolicyFetchReason;
+
+  EnsureRegistered();
+
+  EXPECT_CALL(*mock_cloud_policy_client_, FetchPolicy(kScheduled));
+
+  base::RunLoop run_loop;
+  dm_client_->FetchPolicies(
+      kScheduled, test_event_logger_,
+      base::BindLambdaForTesting([&](const EnterpriseCompanionStatus& status) {
+        EXPECT_TRUE(status.EqualsApplicationError(
+            ApplicationError::kCloudPolicyClientTimeout));
+        test_event_logger_->Flush(run_loop.QuitClosure());
+      }));
+  run_loop.Run();
+}
+
+// If a task times out, future tasks shouldn't be broken.
+TEST_F(DMClientTest, HandlesTasksAfterTimeout) {
+  using enum PolicyFetchReason;
+
+  EnsureRegistered();
+
+  EXPECT_CALL(*mock_cloud_policy_client_, FetchPolicy(kScheduled));
+  EXPECT_CALL(*mock_cloud_policy_client_, FetchPolicy(kUserRequest))
+      .WillOnce([&] {
+        mock_cloud_policy_client_->SetStatus(policy::DM_STATUS_SUCCESS);
+        mock_cloud_policy_client_->NotifyPolicyFetched();
+      });
+
+  {
+    base::RunLoop run_loop;
+    dm_client_->FetchPolicies(
+        kScheduled, test_event_logger_,
+        base::BindLambdaForTesting(
+            [&](const EnterpriseCompanionStatus& status) {
+              EXPECT_TRUE(status.EqualsApplicationError(
+                  ApplicationError::kCloudPolicyClientTimeout));
+              test_event_logger_->Flush(run_loop.QuitClosure());
+            }));
+    run_loop.Run();
+  }
+
+  {
+    base::RunLoop run_loop;
+    dm_client_->FetchPolicies(
+        kUserRequest, test_event_logger_,
+        base::BindLambdaForTesting(
+            [&](const EnterpriseCompanionStatus& status) {
+              EXPECT_TRUE(status.ok());
+              test_event_logger_->Flush(run_loop.QuitClosure());
+            }));
+    run_loop.Run();
+  }
 }
 
 }  // namespace enterprise_companion

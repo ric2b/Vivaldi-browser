@@ -5,8 +5,8 @@
 
 #include "base/memory/raw_ptr.h"
 #include "base/scoped_observation.h"
-#include "components/flags_ui/flags_state.h"
 #include "components/prefs/pref_change_registrar.h"
+#include "components/webui/flags/flags_state.h"
 #include "extensions/browser/browser_context_keyed_api_factory.h"
 #include "ui/native_theme/native_theme_observer.h"
 

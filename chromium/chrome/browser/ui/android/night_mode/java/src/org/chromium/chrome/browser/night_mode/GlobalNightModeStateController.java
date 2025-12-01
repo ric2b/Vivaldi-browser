@@ -9,19 +9,20 @@ import static org.chromium.chrome.browser.preferences.ChromePreferenceKeys.UI_TH
 import android.content.SharedPreferences;
 import android.text.TextUtils;
 
-import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatDelegate;
 
 import org.chromium.base.ApplicationState;
 import org.chromium.base.ApplicationStatus;
 import org.chromium.base.ContextUtils;
 import org.chromium.base.ObserverList;
+import org.chromium.build.annotations.NullMarked;
 
 // Vivaldi
 import android.os.Build;
 import org.chromium.build.BuildConfig;
 
 /** Maintains and provides the night mode state for the entire application. */
+@NullMarked
 class GlobalNightModeStateController
         implements NightModeStateProvider,
                 SystemNightModeMonitor.Observer,
@@ -49,7 +50,7 @@ class GlobalNightModeStateController
      * @param powerSaveModeMonitor The {@link PowerSavingModeMonitor} that maintains the system
      *     power saving setting.
      */
-    GlobalNightModeStateController(@NonNull PowerSavingModeMonitor powerSaveModeMonitor) {
+    GlobalNightModeStateController(PowerSavingModeMonitor powerSaveModeMonitor) {
         mPowerSaveModeMonitor = powerSaveModeMonitor;
 
         mPreferenceListener =
@@ -76,12 +77,12 @@ class GlobalNightModeStateController
     }
 
     @Override
-    public void addObserver(@NonNull Observer observer) {
+    public void addObserver(Observer observer) {
         mObservers.addObserver(observer);
     }
 
     @Override
-    public void removeObserver(@NonNull Observer observer) {
+    public void removeObserver(Observer observer) {
         mObservers.removeObserver(observer);
     }
 

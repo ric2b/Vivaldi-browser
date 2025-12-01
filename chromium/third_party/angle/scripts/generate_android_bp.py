@@ -782,8 +782,6 @@ def main():
         {
             'name':
                 'angle_common_library_cflags',
-            'cpp_std':
-                'gnu++17',  # TODO(b/330910097): std::popcount missing from external/libcxx
             'cflags': [
                 # Chrome and Android use different versions of Clang which support differnt warning options.
                 # Ignore errors about unrecognized warning flags.
@@ -844,12 +842,6 @@ def main():
             'src/third_party/libXNVCtrl/LICENSE',
             'src/third_party/volk/LICENSE.md',
             'third_party/abseil-cpp/LICENSE',
-            'third_party/android_system_sdk/LICENSE',
-            'third_party/bazel/LICENSE',
-            'third_party/colorama/LICENSE',
-            'third_party/proguard/LICENSE',
-            'third_party/r8/LICENSE',
-            'third_party/turbine/LICENSE',
             'third_party/glslang/LICENSE',
             'third_party/glslang/src/LICENSE.txt',
             'third_party/spirv-headers/LICENSE',

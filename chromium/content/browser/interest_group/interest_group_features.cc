@@ -25,17 +25,18 @@ BASE_FEATURE(kEnableBandAKAnonEnforcement,
 // Enable parsing private aggregation contributions from B&A response.
 BASE_FEATURE(kEnableBandAPrivateAggregation,
              "EnableBandAPrivateAggregation",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
-// Enable deals support from B&A response.
-BASE_FEATURE(kEnableBandADealSupport,
-             "EnableBandADealSupport",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
-// Enable parsing forDebuggingOnly reports from B&A response, for down sampling.
+// Enable parsing forDebuggingOnly reports from B&A response. B&A sends these
+// reports back to Chrome in its response for (1) device orchestrated multi
+// seller auctions, (2) fDO down sampling.
+// This flag name is confusing because it controls whether Chrome will parse fDO
+// reports from B&A, not about whether enabling fDO sampling on B&A. But since
+// this flag has been enabled by default and will be removed after one Chrome
+// version, so not worth renaming it which may affect B&A's end to end test.
 BASE_FEATURE(kEnableBandASampleDebugReports,
              "EnableBandASampleDebugReports",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 // Enable parsing triggered updates from B&A response.
 BASE_FEATURE(kEnableBandATriggeredUpdates,
@@ -45,6 +46,42 @@ BASE_FEATURE(kEnableBandATriggeredUpdates,
 // Enable response authorization using the Ad-Auction-Result-Nonce header.
 BASE_FEATURE(kFledgeBiddingAndAuctionNonceSupport,
              "FledgeBiddingAndAuctionNonceSupport",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+// Enables a cache of k-anon keys and whether or not each is k-anonymous,
+// written when keys are received these from queries to the k-anonymity server,
+// and used in subsequent key fetches to reduce unnecessary load on the
+// k-anonymity server. This is similar to the refresh behavior managed by the
+// KAnonymityServiceQueryInterval parameter, except that refresh loses keys
+// when ads are removed and then added back to an interest group in joins and
+// updates, whereas the k-anon key cache controlled by this feature retains keys
+// until the TTL, provided the `kFledgeCacheKAnonHashedKeysTtl` parameter below.
+BASE_FEATURE(kFledgeCacheKAnonHashedKeys,
+             "FledgeCacheKAnonHashedKeys",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+// TTL for entries in the k-anon keys cache. This should typically be kept in
+// sync with the KAnonymityServiceQueryInterval parameter, which behaves in much
+// the same way, limiting the frequency of refresh of k-anon keys. Note that
+// changing this parameter has an immediate effect on the TTL of keys already in
+// the cache, extending or shortening them, impacting which keys are used on
+// subsequent fetches and which are cleared on subsequent database maintenance.
+BASE_FEATURE_PARAM(base::TimeDelta,
+                   kFledgeCacheKAnonHashedKeysTtl,
+                   &kFledgeCacheKAnonHashedKeys,
+                   "CacheKAnonHashedKeysTtl",
+                   base::Days(1));
+
+// Force sampling of forDebuggingOnly reports, for testing purpose. This flag
+// will always be disabled by default, and will only be enabled in some tests,
+// or manually enabling it in command for manual testing such as B&A's end to
+// end test of forDebuggingOnly sampling.
+BASE_FEATURE(kFledgeDoSampleDebugReportForTesting,
+             "FledgeDoSampleDebugReportForTesting",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+// Enable un-noised real time reporting for certain user settings.
+BASE_FEATURE(kFledgeEnableUnNoisedRealTimeReport,
+             "FledgeAllowUnNoisedRealTimeReport",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 // Enable the user agent header in auction requests to be overridden.
@@ -61,19 +98,11 @@ BASE_FEATURE(kFledgeFacilitatedTestingSignalsHeaders,
              "FledgeFacilitatedTestingSignalsHeaders",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
-// Provides a configurable limit on the number of
-// `selectableBuyerAndSellerReportingIds` for which the browser fetches k-anon
-// keys. If the `SelectableBuyerAndSellerReportingIdsFetchedFromKAnonLimit` is
-// negative, no limit is enforced.
-BASE_FEATURE(kFledgeLimitSelectableBuyerAndSellerReportingIdsFetchedFromKAnon,
-             "FledgeLimitSelectableBuyerAndSellerReportingIdsFetchedFromKAnon",
+// Check if the owner of joinAdInterestGroup would be able to call
+// joinAdInterestGroup in its own subframe with allow=join-ad-interest-group.
+BASE_FEATURE(kFledgeModifyInterestGroupPolicyCheckOnOwner,
+             "FledgeModifyInterestGroupPolicyCheckOnOwner",
              base::FEATURE_DISABLED_BY_DEFAULT);
-BASE_FEATURE_PARAM(
-    int,
-    kFledgeSelectableBuyerAndSellerReportingIdsFetchedFromKAnonLimit,
-    &kFledgeLimitSelectableBuyerAndSellerReportingIdsFetchedFromKAnon,
-    "SelectableBuyerAndSellerReportingIdsFetchedFromKAnonLimit",
-    -1);
 
 // Turning on kFledgeQueryKAnonymity loads k-anonymity status at interest group
 // join and update time. kFledgeQueryKAnonymity is enabled by default. It may
@@ -84,6 +113,13 @@ BASE_FEATURE_PARAM(
 BASE_FEATURE(kFledgeQueryKAnonymity,
              "FledgeQueryKAnonymity",
              base::FEATURE_ENABLED_BY_DEFAULT);
+
+// Send forDebuggingOnly's per ad tech cooldown statuses to B&A server side in
+// the request. Only lockout status is sent to B&A server side when this flag is
+// disabled.
+BASE_FEATURE(kFledgeSendDebugReportCooldownsToBandA,
+             "FledgeSendDebugReportCooldownsToBandA",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
 // Enables starting worklet processes at auction start time in anticipation
 // of needing them for future worklets.
@@ -108,7 +144,12 @@ BASE_FEATURE(kFledgeStoreBandAKeysInDB,
 // feature also requires blink::features::kFledgeTrustedSignalsKVv2Support to
 // also be enabled for KVv2 to be enabled.
 BASE_FEATURE(kFledgeUseKVv2SignalsCache,
-             "kFledgeUseKVv2SignalsCache",
+             "FledgeUseKVv2SignalsCache",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+
+// Enables a non-transient NIK for trusted selling signals.
+BASE_FEATURE(kFledgeUseNonTransientNIKForSeller,
+             "FledgeUseNonTransientNIKForSeller",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 // Enables preconnecting to interest group owner origins and a bidding signals

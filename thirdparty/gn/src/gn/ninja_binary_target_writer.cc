@@ -214,7 +214,10 @@ void NinjaBinaryTargetWriter::AddSourceSetFiles(
   // the tool if there are more than one.
   for (const auto& source : source_set->sources()) {
     const char* tool_name = Tool::kToolNone;
-    if (source_set->GetOutputFilesForSource(source, &tool_name, &tool_outputs))
+    // Do not add .pcm files as they are not object files linked to final
+    // binaries.
+    if (source.GetType() != SourceFile::SOURCE_MODULEMAP &&
+        source_set->GetOutputFilesForSource(source, &tool_name, &tool_outputs))
       obj_files->push_back(tool_outputs[0]);
   }
 

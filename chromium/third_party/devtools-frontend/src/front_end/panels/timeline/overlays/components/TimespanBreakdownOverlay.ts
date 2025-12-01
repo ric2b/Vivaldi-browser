@@ -9,7 +9,7 @@ import stylesRaw from './timespanBreakdownOverlay.css.js';
 
 // TODO(crbug.com/391381439): Fully migrate off of constructed style sheets.
 const styles = new CSSStyleSheet();
-styles.replaceSync(stylesRaw.cssContent);
+styles.replaceSync(stylesRaw.cssText);
 
 const {html} = Lit;
 
@@ -25,7 +25,7 @@ export interface EntryBreakdown {
 export class TimespanBreakdownOverlay extends HTMLElement {
   readonly #shadow = this.attachShadow({mode: 'open'});
   #canvasRect: DOMRect|null = null;
-  #sections: Array<EntryBreakdown>|null = null;
+  #sections: EntryBreakdown[]|null = null;
 
   connectedCallback(): void {
     this.#shadow.adoptedStyleSheets = [styles];
@@ -43,7 +43,7 @@ export class TimespanBreakdownOverlay extends HTMLElement {
     this.#render();
   }
 
-  set sections(sections: Array<EntryBreakdown>|null) {
+  set sections(sections: EntryBreakdown[]|null) {
     if (sections === this.#sections) {
       return;
     }

@@ -159,6 +159,7 @@ source_set("adblock_parser") {
     "//base:i18n",
     "//url",
     "//net",
+    "//third_party/re2",
     ":make_snippets_lists"
   ]
 }
@@ -181,6 +182,14 @@ source_set("ad_blocker") {
     "adblock_rule_service_storage.h",
     "adblock_rule_source_handler.cc",
     "adblock_rule_source_handler.h",
+    "adblock_stats_data.cc",
+    "adblock_stats_data.h",
+    "adblock_stats_db.cc",
+    "adblock_stats_db.h",
+    "adblock_stats_store.cc",
+    "adblock_stats_store.h",
+    "adblock_stats_store_impl.cc",
+    "adblock_stats_store_impl.h",
     "utils.cc",
     "utils.h",
   ]

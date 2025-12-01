@@ -16,6 +16,7 @@
 #include "src/base/vector.h"
 #include "src/codegen/bailout-reason.h"
 #include "src/codegen/machine-type.h"
+#include "src/common/globals.h"
 #include "src/compiler/common-operator.h"
 #include "src/compiler/compiler-source-position-table.h"
 #include "src/compiler/fast-api-calls.h"
@@ -685,13 +686,11 @@ OpIndex GraphBuilder::Process(
 
       UNARY_CASE(Float64ExtractLowWord32, Float64ExtractLowWord32)
       UNARY_CASE(Float64ExtractHighWord32, Float64ExtractHighWord32)
+
+      UNARY_CASE(TruncateFloat64ToFloat16RawBits,
+                 TruncateFloat64ToFloat16RawBits)
+      UNARY_CASE(ChangeFloat16RawBitsToFloat64, ChangeFloat16RawBitsToFloat64)
 #undef UNARY_CASE
-    case IrOpcode::kTruncateFloat64ToFloat16RawBits:
-      return __ Float16Change(Map(node->InputAt(0)),
-                              Float16ChangeOp::Kind::kToFloat16);
-    case IrOpcode::kChangeFloat16RawBitsToFloat64:
-      return __ Float16Change(Map(node->InputAt(0)),
-                              Float16ChangeOp::Kind::kToFloat64);
     case IrOpcode::kTruncateInt64ToInt32:
       return __ TruncateWord64ToWord32(Map(node->InputAt(0)));
     case IrOpcode::kTruncateFloat32ToInt32:
@@ -1020,6 +1019,9 @@ OpIndex GraphBuilder::Process(
       using IR = TruncateJSPrimitiveToUntaggedOrDeoptOp::InputRequirement;
       IR input_requirement;
       switch (CheckTaggedInputParametersOf(node->op()).mode()) {
+        case CheckTaggedInputMode::kAdditiveSafeInteger:
+          input_requirement = IR::kAdditiveSafeInteger;
+          break;
         case CheckTaggedInputMode::kNumber:
           input_requirement = IR::kNumber;
           break;
@@ -1060,6 +1062,16 @@ OpIndex GraphBuilder::Process(
                               params.mode(), params.feedback());
     }
 
+    case IrOpcode::kCheckedFloat64ToAdditiveSafeInteger: {
+      DCHECK(dominating_frame_state.valid());
+      const CheckMinusZeroParameters& params =
+          CheckMinusZeroParametersOf(node->op());
+      return __ ChangeOrDeopt(
+          Map(node->InputAt(0)), dominating_frame_state,
+          ChangeOrDeoptOp::Kind::kFloat64ToAdditiveSafeInteger, params.mode(),
+          params.feedback());
+    }
+
     case IrOpcode::kCheckedFloat64ToInt64: {
       DCHECK(dominating_frame_state.valid());
       const CheckMinusZeroParameters& params =
@@ -1077,6 +1089,18 @@ OpIndex GraphBuilder::Process(
           Map(node->InputAt(0)), dominating_frame_state,
           ConvertJSPrimitiveToUntaggedOrDeoptOp::JSPrimitiveKind::kNumber,
           ConvertJSPrimitiveToUntaggedOrDeoptOp::UntaggedKind::kInt32,
+          params.mode(), params.feedback());
+    }
+
+    case IrOpcode::kCheckedTaggedToAdditiveSafeInteger: {
+      DCHECK(dominating_frame_state.valid());
+      const CheckMinusZeroParameters& params =
+          CheckMinusZeroParametersOf(node->op());
+      return __ ConvertJSPrimitiveToUntaggedOrDeopt(
+          Map(node->InputAt(0)), dominating_frame_state,
+          ConvertJSPrimitiveToUntaggedOrDeoptOp::JSPrimitiveKind::kNumber,
+          ConvertJSPrimitiveToUntaggedOrDeoptOp::UntaggedKind::
+              kAdditiveSafeInteger,
           params.mode(), params.feedback());
     }
 
@@ -1102,6 +1126,7 @@ OpIndex GraphBuilder::Process(
     from_kind =                                                          \
         ConvertJSPrimitiveToUntaggedOrDeoptOp::JSPrimitiveKind::k##mode; \
     break;
+        CASE(AdditiveSafeInteger)
         CASE(Number)
         CASE(NumberOrBoolean)
         CASE(NumberOrOddball)
@@ -1667,6 +1692,30 @@ OpIndex GraphBuilder::Process(
     case IrOpcode::kLoadFieldByIndex:
       return __ LoadFieldByIndex(Map(node->InputAt(0)), Map(node->InputAt(1)));
 
+    case IrOpcode::kCheckedAdditiveSafeIntegerAdd: {
+      DCHECK(Is64());
+      DCHECK(dominating_frame_state.valid());
+      auto shifted_lhs =
+          __ Word64ShiftLeft(Map(node->InputAt(0)), kAdditiveSafeIntegerShift);
+      auto shifted_rhs =
+          __ Word64ShiftLeft(Map(node->InputAt(1)), kAdditiveSafeIntegerShift);
+      auto shifted_result = __ Word64SignedAddDeoptOnOverflow(
+          shifted_lhs, shifted_rhs, dominating_frame_state, FeedbackSource{});
+      return __ Word64ShiftRightArithmetic(shifted_result,
+                                           kAdditiveSafeIntegerShift);
+    }
+    case IrOpcode::kCheckedAdditiveSafeIntegerSub: {
+      DCHECK(Is64());
+      DCHECK(dominating_frame_state.valid());
+      auto shifted_lhs =
+          __ Word64ShiftLeft(Map(node->InputAt(0)), kAdditiveSafeIntegerShift);
+      auto shifted_rhs =
+          __ Word64ShiftLeft(Map(node->InputAt(1)), kAdditiveSafeIntegerShift);
+      auto shifted_result = __ Word64SignedSubDeoptOnOverflow(
+          shifted_lhs, shifted_rhs, dominating_frame_state, FeedbackSource{});
+      return __ Word64ShiftRightArithmetic(shifted_result,
+                                           kAdditiveSafeIntegerShift);
+    }
     case IrOpcode::kCheckedInt64Add:
       DCHECK(Is64());
       DCHECK(dominating_frame_state.valid());
@@ -2303,12 +2352,6 @@ OpIndex GraphBuilder::Process(
     case IrOpcode::kFindOrderedHashMapEntryForInt32Key:
       return __ FindOrderedHashMapEntryForInt32Key(Map(node->InputAt(0)),
                                                    Map(node->InputAt(1)));
-
-    case IrOpcode::kSpeculativeSafeIntegerAdd:
-      DCHECK(dominating_frame_state.valid());
-      return __ SpeculativeNumberBinop(
-          Map(node->InputAt(0)), Map(node->InputAt(1)), dominating_frame_state,
-          SpeculativeNumberBinopOp::Kind::kSafeIntegerAdd);
 
     case IrOpcode::kBeginRegion:
       inside_region = true;

@@ -25,8 +25,8 @@ GRAPHITE_FILES = [
     "ClientMappedBufferManager.h",
     "ClipAtlasManager.cpp",
     "ClipAtlasManager.h",
-    "ClipStack_graphite.cpp",
-    "ClipStack_graphite.h",
+    "ClipStack.cpp",
+    "ClipStack.h",
     "CommandBuffer.cpp",
     "CommandBuffer.h",
     "CommandTypes.h",
@@ -131,6 +131,8 @@ GRAPHITE_FILES = [
     "Surface_Graphite.h",
     "Texture.cpp",
     "Texture.h",
+    "TextureFormat.cpp",
+    "TextureFormat.h",
     "TextureInfo.cpp",
     "TextureInfoPriv.h",
     "TextureProxy.cpp",
@@ -159,7 +161,8 @@ PRECOMPILE_FILES = [
     "FactoryFunctions.h",
     "PrecompileInternal.h",
     "PublicPrecompile.cpp",
-    "AndroidSpecificPrecompile.h",
+    "SerializationUtils.cpp",
+    "SerializationUtils.h",
 ]
 
 split_srcs_and_hdrs(

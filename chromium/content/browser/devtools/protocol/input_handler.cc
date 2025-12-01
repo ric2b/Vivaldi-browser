@@ -2,11 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/342213636): Remove this and spanify to fix the errors.
-#pragma allow_unsafe_buffers
-#endif
-
 #include "content/browser/devtools/protocol/input_handler.h"
 
 #include <stddef.h>
@@ -1496,8 +1491,8 @@ float InputHandler::ScaleFactor() {
     }
   }
   // Pinch zoom
-  // TODO(376084060): Investigate if this should also be host_->GetPage() when
-  // `host_` is available.
+  // TODO(crbug.com/400860567): Investigate if this should also be
+  // host_->GetPage() when `host_` is available.
   scale_factor *= web_contents_->GetPrimaryPage().GetPageScaleFactor();
 
   return scale_factor;

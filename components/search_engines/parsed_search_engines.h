@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "base/values.h"
+#include "components/country_codes/country_codes.h"
 #include "components/search_engines/prepopulated_engines.h"
 
 class ParsedSearchEngines {
@@ -24,9 +25,17 @@ class ParsedSearchEngines {
 
   using EnginesMap =
       std::map<std::string, TemplateURLPrepopulateData::PrepopulatedEngine*>;
-  using EnginesForLocale =
-      std::map<int,
-               std::vector<std::pair<std::string, EnginesListWithDefaults>>>;
+
+  using LanguageForCountry =
+      std::unordered_map<std::string, country_codes::CountryId>;
+
+  // Map for represending versioned EnginesList (key is a string version
+  // e.g. "7.4", "7.5.0.0" or "default")
+  using VersionedEngines = std::map<std::string, EnginesListWithDefaults>;
+  // List represending localised engines, a list with locale string (e.g.
+  // "no_NO")
+  using LocaleEngines = std::vector<std::pair<std::string, VersionedEngines>>;
+  using EnginesForLocale = std::map<int, LocaleEngines>;
 
   static std::unique_ptr<ParsedSearchEngines> FromJsonString(
       std::string_view json_string,
@@ -44,12 +53,11 @@ class ParsedSearchEngines {
     return engines_for_locale_;
   }
 
-  const EnginesListWithDefaults& default_engines_list() const {
+  const VersionedEngines& default_engines_list() const {
     return default_engines_list_;
   }
 
-  const std::unordered_map<std::string, int>& default_country_for_language()
-      const {
+  const LanguageForCountry& default_country_for_language() const {
     return default_country_for_language_;
   }
 
@@ -63,10 +71,10 @@ class ParsedSearchEngines {
       std::vector<
           std::unique_ptr<TemplateURLPrepopulateData::PrepopulatedEngine>>
           all_engines,
-      EnginesListWithDefaults default_engines_list,
+      VersionedEngines default_engines_list,
       EnginesMap engines_map,
       EnginesForLocale engines_for_locale,
-      std::unordered_map<std::string, int> default_locale_for_language,
+      LanguageForCountry default_locale_for_language,
       int max_prepopulated_engine_id,
       int current_data_version);
   const std::vector<PrepopulatedEngineStorage> storage_;
@@ -77,16 +85,16 @@ class ParsedSearchEngines {
 
   const PrepopulateEnginesList all_engines_ptr_;
 
-  const EnginesListWithDefaults default_engines_list_;
+  const VersionedEngines default_engines_list_;
 
   // Search engine entry name -> PrepopulatedEngine*
   const EnginesMap engines_map_;
 
-  // Country -> [Language -> Vector of PrepopulatedEngine*]
+  // Country -> [Language -> [Version -> Struct of PrepopulatedEngine*]]
   const EnginesForLocale engines_for_locale_;
 
   // Language -> Country
-  const std::unordered_map<std::string, int> default_country_for_language_;
+  const LanguageForCountry default_country_for_language_;
 
   const int max_prepopulated_engine_id_;
   const int current_data_version_;

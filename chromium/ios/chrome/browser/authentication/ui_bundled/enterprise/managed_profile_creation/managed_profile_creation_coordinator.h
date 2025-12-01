@@ -11,6 +11,7 @@
 
 @class ManagedProfileCreationCoordinator;
 @class ManagedProfileCreationMediator;
+@protocol SystemIdentity;
 
 @protocol ManagedProfileCreationCoordinatorDelegate <NSObject>
 
@@ -29,12 +30,13 @@
 // to show the ViewController created and owned by
 // ManagedProfileCreationCoordinator.
 - (instancetype)initWithBaseViewController:(UIViewController*)viewController
-                                 userEmail:(NSString*)userEmail
+                                  identity:(id<SystemIdentity>)identity
                               hostedDomain:(NSString*)hostedDomain
                                    browser:(Browser*)browser
                  skipBrowsingDataMigration:(BOOL)skipBrowsingDataMigration
                 mergeBrowsingDataByDefault:(BOOL)mergeBrowsingDataByDefault
-    NS_DESIGNATED_INITIALIZER;
+     browsingDataMigrationDisabledByPolicy:
+         (BOOL)browsingDataMigrationDisabledByPolicy NS_DESIGNATED_INITIALIZER;
 
 - (instancetype)initWithBaseViewController:(UIViewController*)viewController
                                    browser:(Browser*)browser NS_UNAVAILABLE;

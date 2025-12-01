@@ -5,6 +5,7 @@
 import("//build/config/chromeos/ui_mode.gni")
 import("//chrome/common/features.gni")
 import("//tools/typescript/ts_library.gni")
+import("//ui/webui/resources/tools/generate_code_cache.gni")
 import("//ui/webui/resources/tools/generate_grd.gni")
 import("//ui/webui/resources/tools/minify_js.gni")
 
@@ -87,6 +88,24 @@ generate_grd("build_grdp") {
   resource_path_prefix = "polymer/v3_0"
 }
 
+if (enable_webui_generate_code_cache) {
+  generate_code_cache("build_code_cache") {
+    visibility = [ ":build_code_cache_grdp" ]
+    in_folder = "//third_party/polymer/v3_0/components-chromium/polymer"
+    in_files = [ "polymer_bundled.min.js" ]
+    out_folder = "$target_gen_dir/code_cache"
+    out_manifest = "$target_gen_dir/build_code_cache_manifest.json"
+  }
+
+  generate_grd("build_code_cache_grdp") {
+    grd_prefix = "polymer_v3_0_code_cache"
+    out_grd = "$target_gen_dir/code_cache_resources.grdp"
+    resource_path_prefix = "polymer/v3_0/polymer"
+    manifest_files = [ "$target_gen_dir/build_code_cache_manifest.json" ]
+    deps = [ ":build_code_cache" ]
+  }
+}
+
 ts_library("library") {
   visibility = [
     # Lit has officially being declared as the preferred framework (over
@@ -103,18 +122,15 @@ ts_library("library") {
     "//chrome/browser/resources/about_nacl:build_ts",
     "//chrome/browser/resources/access_code_cast:build_ts",
     "//chrome/browser/resources/app_service_internals:build_ts",
-    "//chrome/browser/resources/bookmarks:build_ts",
     "//chrome/browser/resources/commerce/product_specifications:build_ts",
     "//chrome/browser/resources/compose:build_ts",
     "//chrome/browser/resources/discards:build_ts",
     "//chrome/browser/resources/history:build_ts",
     "//chrome/browser/resources/inline_login:build_ts",
-    "//chrome/browser/resources/internals/user_education:build_ts",
     "//chrome/browser/resources/lens/overlay:build_ts",
     "//chrome/browser/resources/lens/shared:build_ts",
     "//chrome/browser/resources/new_tab_page:build_ts",
     "//chrome/browser/resources/omnibox_popup:build_ts",
-    "//chrome/browser/resources/on_device_internals:build_ts",
     "//chrome/browser/resources/password_manager:build_ts",
     "//chrome/browser/resources/pdf:build_ts",
     "//chrome/browser/resources/print_preview:build_ts",
@@ -123,26 +139,22 @@ ts_library("library") {
     "//chrome/browser/resources/settings_shared:build_ts",
     "//chrome/browser/resources/side_panel/bookmarks:build_ts",
     "//chrome/browser/resources/side_panel/commerce:build_ts",
-    "//chrome/browser/resources/side_panel/read_anything:build_ts",
     "//chrome/browser/resources/side_panel/shared:build_ts",
     "//chrome/browser/resources/suggest_internals:build_ts",
     "//chrome/browser/resources/support_tool:build_ts",
     "//chrome/test/data/webui:build_ts",
-    "//chrome/test/data/webui/bookmarks:build_ts",
     "//chrome/test/data/webui/cr_components:build_ts",
     "//chrome/test/data/webui/cr_components/certificate_manager:build_ts",
     "//chrome/test/data/webui/cr_components/help_bubble:build_ts",
     "//chrome/test/data/webui/cr_elements:build_ts",
     "//chrome/test/data/webui/history:build_ts",
     "//chrome/test/data/webui/inline_login:build_ts",
-    "//chrome/test/data/webui/js:build_ts",
     "//chrome/test/data/webui/new_tab_page:build_ts",
     "//chrome/test/data/webui/password_manager:build_ts",
     "//chrome/test/data/webui/print_preview:build_ts",
     "//chrome/test/data/webui/privacy_sandbox:build_ts",
     "//chrome/test/data/webui/settings:build_ts",
     "//chrome/test/data/webui/side_panel:build_ts",
-    "//chrome/test/data/webui/side_panel/read_anything:build_ts",
     "//chrome/test/data/webui/support_tool:build_ts",
     "//ui/webui/resources/cr_components/certificate_manager:build_ts",
     "//ui/webui/resources/cr_components/customize_themes:build_ts",
@@ -167,6 +179,7 @@ ts_library("library") {
     ]
   }
 
+  tsconfig_base = "tsconfig_base.json"
   composite = true
   definitions = [
     "components-chromium/iron-a11y-keys-behavior/iron-a11y-keys-behavior.d.ts",

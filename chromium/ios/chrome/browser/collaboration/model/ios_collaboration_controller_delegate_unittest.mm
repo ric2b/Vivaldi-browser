@@ -17,6 +17,8 @@
 #import "components/sync/test/test_sync_service.h"
 #import "ios/chrome/browser/collaboration/model/collaboration_service_factory.h"
 #import "ios/chrome/browser/data_sharing/model/data_sharing_service_factory.h"
+#import "ios/chrome/browser/favicon/model/ios_chrome_favicon_loader_factory.h"
+#import "ios/chrome/browser/favicon/model/test_favicon_loader.h"
 #import "ios/chrome/browser/saved_tab_groups/model/tab_group_sync_service_factory.h"
 #import "ios/chrome/browser/share_kit/model/fake_share_kit_flow_view_controller.h"
 #import "ios/chrome/browser/share_kit/model/share_kit_service_factory.h"
@@ -47,6 +49,7 @@
 #import "third_party/ocmock/OCMock/OCMock.h"
 #import "third_party/ocmock/gtest_support.h"
 
+using testing::_;
 using testing::Return;
 
 namespace collaboration {
@@ -76,6 +79,11 @@ std::unique_ptr<KeyedService> BuildMockCollaborationService(
   return std::make_unique<MockCollaborationService>();
 }
 
+std::unique_ptr<KeyedService> BuildTestFaviconLoader(
+    web::BrowserState* context) {
+  return std::make_unique<TestFaviconLoader>();
+}
+
 }  // namespace
 
 // Test fixture for the iOS collaboration controller delegate.
@@ -87,30 +95,33 @@ class IOSCollaborationControllerDelegateTest : public PlatformTest {
         {
             kTabGroupSync,
             kTabGroupsIPad,
-            kModernTabStrip,
             data_sharing::features::kDataSharingFeature,
         },
         /*disable_features=*/{});
 
     // Init the delegate parameters.
-    TestProfileIOS::Builder test_cbs_builder;
-    test_cbs_builder.AddTestingFactory(
+    TestProfileIOS::Builder test_profile_builder;
+    test_profile_builder.AddTestingFactory(
         AuthenticationServiceFactory::GetInstance(),
         AuthenticationServiceFactory::GetFactoryWithDelegate(
             std::make_unique<FakeAuthenticationServiceDelegate>()));
-    test_cbs_builder.AddTestingFactory(
+    test_profile_builder.AddTestingFactory(
         SyncServiceFactory::GetInstance(),
         base::BindRepeating(&BuildTestSyncService));
-    test_cbs_builder.AddTestingFactory(
+    test_profile_builder.AddTestingFactory(
         CollaborationServiceFactory::GetInstance(),
         base::BindRepeating(&BuildMockCollaborationService));
-    test_cbs_builder.AddTestingFactory(
+    test_profile_builder.AddTestingFactory(
         tab_groups::TabGroupSyncServiceFactory::GetInstance(),
         base::BindRepeating(&BuildFakeTabGroupSyncService));
-    test_cbs_builder.AddTestingFactory(
+    test_profile_builder.AddTestingFactory(
         ShareKitServiceFactory::GetInstance(),
         base::BindRepeating(&BuildTestShareKitService));
-    profile_ = std::move(test_cbs_builder).Build();
+    test_profile_builder.AddTestingFactory(
+        IOSChromeFaviconLoaderFactory::GetInstance(),
+        base::BindRepeating(&BuildTestFaviconLoader));
+
+    profile_ = std::move(test_profile_builder).Build();
     browser_ = std::make_unique<TestBrowser>(profile_.get());
 
     web_state_list_ = browser_->GetWebStateList();
@@ -369,7 +380,7 @@ TEST_F(IOSCollaborationControllerDelegateTest,
               }]
       baseViewController:base_view_controller_]);
 
-  delegate_->ShowAuthenticationUi(mock_callback.Get());
+  delegate_->ShowAuthenticationUi(FlowType::kJoin, mock_callback.Get());
 }
 
 // Tests `ShowAuthenticationUi` when the user sign in and accept the sync opt
@@ -394,7 +405,7 @@ TEST_F(IOSCollaborationControllerDelegateTest,
               }]
       baseViewController:base_view_controller_]);
 
-  delegate_->ShowAuthenticationUi(mock_callback.Get());
+  delegate_->ShowAuthenticationUi(FlowType::kJoin, mock_callback.Get());
 }
 
 // Tests `ShowAuthenticationUi` when the user sign in but don't sync.
@@ -417,10 +428,10 @@ TEST_F(IOSCollaborationControllerDelegateTest, ShowAuthenticationUiSyncDenied) {
               }]
       baseViewController:base_view_controller_]);
 
-  delegate_->ShowAuthenticationUi(mock_callback.Get());
+  delegate_->ShowAuthenticationUi(FlowType::kJoin, mock_callback.Get());
 }
 
-// Tests `ShowAuthenticationUi` when the user is SignedIn but not syncing.
+// Tests `ShowAuthenticationUi` when the user is signed-in.
 TEST_F(IOSCollaborationControllerDelegateTest, ShowAuthenticationUiWithSignIn) {
   SignIn();
   InitDelegate();
@@ -441,7 +452,7 @@ TEST_F(IOSCollaborationControllerDelegateTest, ShowAuthenticationUiWithSignIn) {
               }]
       baseViewController:base_view_controller_]);
 
-  delegate_->ShowAuthenticationUi(mock_callback.Get());
+  delegate_->ShowAuthenticationUi(FlowType::kJoin, mock_callback.Get());
 }
 
 // Tests `NotifySignInAndSyncStatusChange`.

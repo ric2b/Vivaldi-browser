@@ -111,7 +111,7 @@ public class OptionalNewTabButtonController extends BaseButtonDataProvider
                 /* iphCommandBuilder= */ null,
                 AdaptiveToolbarButtonVariant.NEW_TAB,
                 /* tooltipTextResId= */ R.string.new_tab_title,
-                /* showHoverHighlight= */ true);
+                /* showBackgroundHighlight= */ true);
         setShouldShowOnIncognitoTabs(true);
 
         mContext = context;
@@ -155,7 +155,7 @@ public class OptionalNewTabButtonController extends BaseButtonDataProvider
 
     @Override
     protected boolean shouldShowButton(Tab tab) {
-        if (!super.shouldShowButton(tab) || mIsTablet) return false;
+        if (!super.shouldShowButton(tab)) return false; // Vivaldi VAB-11026
 
         if (UrlUtilities.isNtpUrl(tab.getUrl())) return false;
 

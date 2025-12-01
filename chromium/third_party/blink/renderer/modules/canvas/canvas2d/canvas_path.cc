@@ -52,7 +52,8 @@
 #include "third_party/blink/renderer/platform/bindings/exception_code.h"
 #include "third_party/blink/renderer/platform/bindings/exception_state.h"
 #include "third_party/blink/renderer/platform/geometry/float_rounded_rect.h"
-#include "third_party/blink/renderer/platform/graphics/path.h"
+#include "third_party/blink/renderer/platform/geometry/path.h"
+#include "third_party/blink/renderer/platform/geometry/path_builder.h"
 #include "third_party/blink/renderer/platform/heap/collection_support/heap_vector.h"
 #include "third_party/blink/renderer/platform/heap/member.h"
 #include "third_party/blink/renderer/platform/heap/visitor.h"
@@ -77,13 +78,11 @@ void CanvasPath::closePath() {
   if (path_.BoundingRect().height() == 0 && path_.BoundingRect().width() == 0 &&
       (IsLine() && line_builder_.BoundingRect().height() == 0 &&
        line_builder_.BoundingRect().width() == 0)) [[unlikely]] {
-    if (!path_.HasCurrentPoint()) {
-      Clear();
-      return;
-    }
-    auto p = path_.CurrentPoint();
+    const auto p = path_.CurrentPoint();
     Clear();
-    moveTo(p.x(), p.y());
+    if (p) {
+      moveTo(p->x(), p->y());
+    }
     return;
   }
 
@@ -183,7 +182,7 @@ void CanvasPath::quadraticCurveTo(double double_cpx,
     cp = GetTransform().MapPoint(cp);
   }
 
-  if (!path_.HasCurrentPoint()) [[unlikely]] {
+  if (!path_.CurrentPoint()) [[unlikely]] {
     path_.MoveTo(gfx::PointF(cpx, cpy));
   }
 
@@ -223,7 +222,7 @@ void CanvasPath::bezierCurveTo(double double_cp1x,
     cp1 = GetTransform().MapPoint(cp1);
     cp2 = GetTransform().MapPoint(cp2);
   }
-  if (!path_.HasCurrentPoint()) [[unlikely]] {
+  if (!path_.CurrentPoint()) [[unlikely]] {
     path_.MoveTo(gfx::PointF(cp1x, cp1y));
   }
 
@@ -267,9 +266,10 @@ void CanvasPath::arcTo(double double_x1,
     p2 = GetTransform().MapPoint(p2);
   }
 
-  if (!path_.HasCurrentPoint()) [[unlikely]] {
+  const auto current_point = path_.CurrentPoint();
+  if (!current_point) [[unlikely]] {
     path_.MoveTo(p1);
-  } else if (p1 == path_.CurrentPoint() || p1 == p2 || !r) [[unlikely]] {
+  } else if (p1 == *current_point || p1 == p2 || !r) [[unlikely]] {
     lineTo(x1, y1);
   } else {
     path_.AddArcTo(p1, p2, r);
@@ -478,6 +478,7 @@ void CanvasPath::arc(double double_x,
         CanvasOps::kArc, double_x, double_y, double_radius, double_start_angle,
         double_end_angle, anticlockwise);
   }
+  SetTriggerForCanvasIntervention();
 
   if (!radius || start_angle == end_angle) [[unlikely]] {
     // The arc is empty but we still need to draw the connecting line.
@@ -562,6 +563,7 @@ void CanvasPath::ellipse(double double_x,
     return;
   }
 
+  SetTriggerForCanvasIntervention();
   path_.AddEllipse(gfx::PointF(x, y), radius_x, radius_y, rotation, start_angle,
                    adjusted_end_angle);
 }
@@ -593,7 +595,11 @@ void CanvasPath::rect(double double_x,
         CanvasOps::kRect, double_x, double_y, double_width, double_height);
   }
 
-  path_.AddRect(gfx::PointF(x, y), gfx::PointF(x + width, y + height));
+  // TODO(crbug.com/378688986): this should clean up when converting CanvasPath
+  // to PathBuilder.
+  path_ = PathBuilder(path_)
+              .AddRect(gfx::PointF(x, y), gfx::PointF(x + width, y + height))
+              .Finalize();
 }
 
 void CanvasPath::roundRect(
@@ -676,7 +682,12 @@ void CanvasPath::roundRect(
   if (width == 0 || height == 0) [[unlikely]] {
     // AddRoundRect does not handle flat rects, correctly.  But since there are
     // no rounded corners on a flat rect, we can just use AddRect.
-    path_.AddRect(gfx::PointF(x, y), gfx::PointF(x + width, y + height));
+
+    // TODO(crbug.com/378688986): this should clean up when converting
+    // CanvasPath to PathBuilder.
+    path_ = PathBuilder(path_)
+                .AddRect(gfx::PointF(x, y), gfx::PointF(x + width, y + height))
+                .Finalize();
     return;
   }
 
@@ -724,10 +735,16 @@ void CanvasPath::roundRect(
   }
 
   gfx::RectF rect(x, y, width, height);
-  path_.AddRoundedRect(FloatRoundedRect(rect, corner_radii[0], corner_radii[1],
-                                        corner_radii[2], corner_radii[3]),
-                       clockwise);
-  path_.MoveTo(gfx::PointF(x, y));
+
+  // TODO(crbug.com/378688986): this should clean up when converting CanvasPath
+  // to PathBuilder.
+  path_ = PathBuilder(path_)
+              .AddRoundedRect(
+                  FloatRoundedRect(rect, corner_radii[0], corner_radii[1],
+                                   corner_radii[2], corner_radii[3]),
+                  clockwise)
+              .MoveTo(gfx::PointF(x, y))
+              .Finalize();
 }
 
 void CanvasPath::roundRect(

@@ -62,6 +62,7 @@
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/public/common/input/synthetic_web_input_event_builders.h"
+#include "third_party/blink/public/common/input/web_mouse_event.h"
 #include "third_party/blink/public/common/page/page_zoom.h"
 #include "third_party/blink/public/common/widget/visual_properties.h"
 #include "third_party/blink/public/mojom/drag/drag.mojom.h"
@@ -380,12 +381,20 @@ class MockRenderWidgetHostDelegate : public RenderWidgetHostDelegate {
     return unhandled_keyboard_event_type_;
   }
 
+  bool prehandle_mouse_event_called() const {
+    return prehandle_mouse_event_called_;
+  }
+
   bool prehandle_keyboard_event_called() const {
     return prehandle_keyboard_event_called_;
   }
 
   WebInputEvent::Type prehandle_keyboard_event_type() const {
     return prehandle_keyboard_event_type_;
+  }
+
+  void set_prehandle_mouse_event(bool handle) {
+    prehandle_mouse_event_ = handle;
   }
 
   void set_prehandle_keyboard_event(bool handle) {
@@ -455,6 +464,14 @@ class MockRenderWidgetHostDelegate : public RenderWidgetHostDelegate {
               (override));
 
  protected:
+  bool PreHandleMouseEvent(const blink::WebMouseEvent& event) override {
+    prehandle_mouse_event_called_ = true;
+    if (prehandle_mouse_event_) {
+      return true;
+    }
+    return false;
+  }
+
   KeyboardEventProcessingResult PreHandleKeyboardEvent(
       const input::NativeWebKeyboardEvent& event) override {
     prehandle_keyboard_event_type_ = event.GetType();
@@ -506,6 +523,8 @@ class MockRenderWidgetHostDelegate : public RenderWidgetHostDelegate {
   }
 
  private:
+  bool prehandle_mouse_event_ = false;
+  bool prehandle_mouse_event_called_ = false;
   bool prehandle_keyboard_event_;
   bool prehandle_keyboard_event_is_shortcut_;
   bool prehandle_keyboard_event_called_;
@@ -648,6 +667,7 @@ class RenderWidgetHostTest : public testing::Test {
         TestRenderWidgetHost::CreateStubFrameWidgetRemote());
 
     host_->RendererWidgetCreated(/*for_frame_widget=*/true);
+    host_->input_router()->MakeActive();
   }
 
   void TearDown() override {
@@ -1186,10 +1206,63 @@ TEST_F(RenderWidgetHostTest, NewSizeIncludesScaleFactor) {
   EXPECT_EQ(202, new_size.width());
   EXPECT_EQ(200, new_size.height());
   auto visible_viewport_size =
-      widget_.ReceivedVisualProperties()[0].visible_viewport_size;
+      widget_.ReceivedVisualProperties()[0].visible_viewport_size_device_px;
   EXPECT_EQ(202, visible_viewport_size.width());
   EXPECT_EQ(200, visible_viewport_size.height());
   EXPECT_TRUE(host_->visual_properties_ack_pending_);
+}
+
+// Tests that SynchronizeVisualProperties which occurs while hidden, before an
+// Eviction, becomes unthrottled when becoming visible again. So that we do not
+// wait for an ack that will never arrive.
+//
+// This ensures the Widget can begin frame production on the newly embedded
+// Surface after the initial eviction.
+TEST_F(RenderWidgetHostTest, EvictUnthrottlesSynchronizeVisualProperties) {
+  display::ScreenInfo screen_info;
+  screen_info.rect = gfx::Rect(0, 0, 800, 600);
+  screen_info.available_rect = gfx::Rect(0, 0, 800, 600);
+  screen_info.orientation_type =
+      display::mojom::ScreenOrientation::kPortraitPrimary;
+  screen_info.device_scale_factor = 2.f;
+
+  ClearVisualProperties();
+  // While hidden we will still synchronize to the Renderer. Though we will
+  // throttle future updates on `visual_properties_ack_pending_`.
+  host_->WasHidden();
+  view_->SetScreenInfo(screen_info);
+  base::RunLoop().RunUntilIdle();
+  EXPECT_EQ(0u, widget_.ReceivedVisualProperties().size());
+  gfx::Rect original_size(0, 0, 101, 100);
+  view_->SetBounds(original_size);
+  EXPECT_TRUE(host_->SynchronizeVisualProperties());
+  EXPECT_TRUE(host_->visual_properties_ack_pending_);
+  // blink::mojom::Widget::UpdateVisualProperties sent to the renderer.
+  base::RunLoop().RunUntilIdle();
+  ASSERT_EQ(1u, widget_.ReceivedVisualProperties().size());
+  auto new_size = widget_.ReceivedVisualProperties()[0].new_size_device_px;
+  EXPECT_EQ(202, new_size.width());
+  EXPECT_EQ(200, new_size.height());
+  auto visible_viewport_size =
+      widget_.ReceivedVisualProperties()[0].visible_viewport_size_device_px;
+  EXPECT_EQ(202, visible_viewport_size.width());
+  EXPECT_EQ(200, visible_viewport_size.height());
+  EXPECT_TRUE(host_->visual_properties_ack_pending_);
+
+  widget_.ClearVisualProperties();
+  // `MockRenderWidgetHostOwnerDelegate` doesn't extend `RenderViewHostImpl` so
+  // the legacy `static_cast` in `RenderViewHostImpl::From` crash here. So we
+  // cannot use `host_->CollectSurfaceIdsForEviction` in tests. Mark the view as
+  // evicted directly.
+  view_->set_is_evicted();
+
+  // Set a new size so we have difference in property to synchronize.
+  gfx::Rect restore_size(0, 0, 1337, 42);
+  view_->SetBounds(restore_size);
+  host_->WasShown({} /* record_tab_switch_time_request */);
+  EXPECT_TRUE(host_->visual_properties_ack_pending_);
+  base::RunLoop().RunUntilIdle();
+  ASSERT_EQ(1u, widget_.ReceivedVisualProperties().size());
 }
 
 // Ensure VisualProperties continues reporting the size of the current screen,
@@ -1259,7 +1332,7 @@ TEST_F(RenderWidgetHostTest, RootViewportSegments) {
       /* offset */ screen_rect.width() / 2 - kDisplayFeatureLength / 2,
       /* mask_length */ kDisplayFeatureLength};
   RenderWidgetHostViewBase* render_widget_host_view = view_.get();
-  render_widget_host_view->SetDisplayFeatureForTesting(
+  render_widget_host_view->OverrideDisplayFeatureForEmulation(
       &emulated_display_feature);
 
   ClearScreenRects();
@@ -1305,7 +1378,7 @@ TEST_F(RenderWidgetHostTest, RootViewportSegments) {
   // resized the widget and causes a pending ack. This is unrelated to what
   // we're testing here so ignore the pending ack by using
   // |SynchronizeVisualPropertiesIgnoringPendingAck()|.
-  render_widget_host_view->SetDisplayFeatureForTesting(nullptr);
+  render_widget_host_view->OverrideDisplayFeatureForEmulation(nullptr);
   host_->SynchronizeVisualPropertiesIgnoringPendingAck();
   base::RunLoop().RunUntilIdle();
   EXPECT_EQ(1u, widget_.ReceivedVisualProperties().size());
@@ -1321,7 +1394,7 @@ TEST_F(RenderWidgetHostTest, RootViewportSegments) {
       DisplayFeature::Orientation::kHorizontal,
       /* offset */ screen_rect.height() / 2 - kDisplayFeatureLength / 2,
       /* mask_length */ kDisplayFeatureLength};
-  render_widget_host_view->SetDisplayFeatureForTesting(
+  render_widget_host_view->OverrideDisplayFeatureForEmulation(
       &emulated_display_feature);
   host_->SynchronizeVisualPropertiesIgnoringPendingAck();
   base::RunLoop().RunUntilIdle();
@@ -1534,6 +1607,37 @@ TEST_F(RenderWidgetHostTest, SendEditCommandsBeforeKeyEvent) {
   // Send the simulated response from the renderer back.
   dispatched_events[1]->ToEvent()->CallCallback(
       blink::mojom::InputEventResultState::kConsumed);
+}
+
+TEST_F(RenderWidgetHostTest, PreHandleMouseEvent) {
+  // Simulate the situation that the browser handled the mouse event during
+  // pre-handle phrase.
+  delegate_->set_prehandle_mouse_event(true);
+
+  // Simulate a mouse event.
+  SimulateMouseEvent(WebMouseEvent::Type::kMouseDown);
+
+  EXPECT_TRUE(delegate_->prehandle_mouse_event_called());
+
+  // Make sure the mouse event is not sent to the renderer.
+  MockWidgetInputHandler::MessageVector dispatched_events =
+      host_->mock_render_input_router()->GetAndResetDispatchedMessages();
+  EXPECT_EQ(0u, dispatched_events.size());
+
+  // Simulate the situation that the browser didn't handle the mouse event
+  // during pre-handle phrase.
+  delegate_->set_prehandle_mouse_event(false);
+
+  // Simulate a mouse event.
+  SimulateMouseEvent(WebMouseEvent::Type::kMouseUp);
+
+  // Make sure the mouse event is sent to the renderer.
+  dispatched_events =
+      host_->mock_render_input_router()->GetAndResetDispatchedMessages();
+  ASSERT_EQ(1u, dispatched_events.size());
+  ASSERT_TRUE(dispatched_events[0]->ToEvent());
+  EXPECT_EQ(WebMouseEvent::Type::kMouseUp,
+            dispatched_events[0]->ToEvent()->Event()->Event().GetType());
 }
 
 TEST_F(RenderWidgetHostTest, PreHandleRawKeyDownEvent) {
@@ -2353,7 +2457,7 @@ TEST_F(RenderWidgetHostTest, NavigateInBackgroundShowsBlank) {
   // ClearDisplayedGraphics.
   host_->WasShown({} /* record_tab_switch_time_request */);
   host_->DidNavigate();
-  host_->StartNewContentRenderingTimeout();
+  host_->InitializePaintHolding(true);
   EXPECT_FALSE(host_->new_content_rendering_timeout_fired());
 
   // Hide then show. ClearDisplayedGraphics must be called.
@@ -2365,7 +2469,7 @@ TEST_F(RenderWidgetHostTest, NavigateInBackgroundShowsBlank) {
   // Hide, navigate, then show. ClearDisplayedGraphics must be called.
   host_->WasHidden();
   host_->DidNavigate();
-  host_->StartNewContentRenderingTimeout();
+  host_->InitializePaintHolding(true);
   host_->WasShown({} /* record_tab_switch_time_request */);
   EXPECT_TRUE(host_->new_content_rendering_timeout_fired());
 }

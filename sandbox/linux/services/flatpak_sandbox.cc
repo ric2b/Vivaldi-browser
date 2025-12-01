@@ -546,7 +546,7 @@ void FlatpakSandbox::SpawnOnBusThread(base::ProcessId* out_external_pid,
   writer.CloseContainer(&options_writer);
 
   object_proxy->CallMethodWithErrorResponse(
-      &method_call, dbus::ObjectProxy::TIMEOUT_INFINITE,
+      &method_call, dbus::ObjectProxy::TIMEOUT_MAX,
       base::BindOnce(&FlatpakSandbox::OnSpawnResponse, base::Unretained(this),
                      base::Unretained(out_external_pid),
                      base::Unretained(event)));

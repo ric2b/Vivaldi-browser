@@ -23,15 +23,15 @@
 #include "base/task/single_thread_task_runner.h"
 #include "base/time/time.h"
 #include "chrome/browser/extensions/extension_garbage_collector_factory.h"
-#include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/extensions/extension_util.h"
 #include "chrome/browser/extensions/install_tracker.h"
-#include "chrome/browser/extensions/pending_extension_manager.h"
 #include "chrome/browser/profiles/profile.h"
 #include "components/crx_file/id_util.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
 #include "extensions/browser/extension_file_task_runner.h"
+#include "extensions/browser/extension_prefs.h"
+#include "extensions/browser/extension_registrar.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/browser/extension_system.h"
 #include "extensions/browser/extension_util.h"
@@ -226,18 +226,17 @@ void ExtensionGarbageCollector::GarbageCollectExtensions() {
         std::make_pair(info.extension_id, info.extension_path));
   }
 
-  ExtensionService* service =
-      ExtensionSystem::Get(context_)->extension_service();
+  ExtensionRegistrar* registrar = ExtensionRegistrar::Get(context_);
   if (!GetExtensionFileTaskRunner()->PostTask(
           FROM_HERE, base::BindOnce(&GarbageCollectExtensionsOnFileThread,
-                                    service->install_directory(),
+                                    registrar->install_directory(),
                                     extension_paths, /*unpacked=*/false))) {
     NOTREACHED();
   }
 
   if (!GetExtensionFileTaskRunner()->PostTask(
           FROM_HERE, base::BindOnce(&GarbageCollectExtensionsOnFileThread,
-                                    service->unpacked_install_directory(),
+                                    registrar->unpacked_install_directory(),
                                     extension_paths, /*unpacked=*/true))) {
     NOTREACHED();
   }
@@ -245,15 +244,15 @@ void ExtensionGarbageCollector::GarbageCollectExtensions() {
 
 void ExtensionGarbageCollector::OnBeginCrxInstall(
     content::BrowserContext* context,
-    const CrxInstaller& installer,
     const ExtensionId& extension_id) {
   crx_installs_in_progress_++;
 }
 
 void ExtensionGarbageCollector::OnFinishCrxInstall(
     content::BrowserContext* context,
-    const CrxInstaller& installer,
+    const base::FilePath& source_file,
     const ExtensionId& extension_id,
+    const Extension* extension,
     bool success) {
   crx_installs_in_progress_--;
   if (crx_installs_in_progress_ < 0) {

@@ -118,7 +118,7 @@ endmacro ()
 
 # Define directories containing the library's public headers
 set(PUBLIC_INCLUDE_DIRS ${LIBRARY_DIR})
-set(CMAKE_RC_FLAGS "${CMAKE_RC_FLAGS} /I ${LIBRARY_DIR}")
+set(CMAKE_RC_FLAGS "${CMAKE_RC_FLAGS} /I \"${LIBRARY_DIR}\"")
 # Split project to static and shared libraries build
 set(library_targets)
 if (ZSTD_BUILD_SHARED)
@@ -280,7 +280,6 @@ install(TARGETS ${library_targets}
     RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}"
     BUNDLE DESTINATION "${CMAKE_INSTALL_BINDIR}"
     FRAMEWORK DESTINATION "${CMAKE_INSTALL_LIBDIR}" COMPONENT runtime OPTIONAL
-    INCLUDES DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}"
     PUBLIC_HEADER DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}"
     )
 

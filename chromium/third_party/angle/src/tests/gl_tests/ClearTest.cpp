@@ -1566,6 +1566,26 @@ TEST_P(ClearTest, RGBA8Framebuffer)
     EXPECT_PIXEL_NEAR(0, 0, 128, 128, 128, 128, 1.0);
 }
 
+// Test clearing a BGRA8 Framebuffer
+TEST_P(ClearTest, BGRA8Framebuffer)
+{
+    ANGLE_SKIP_TEST_IF(getEGLWindow()->isFeatureEnabled(Feature::BgraTexImageFormatsBroken));
+
+    glBindFramebuffer(GL_FRAMEBUFFER, mFBOs[0]);
+
+    GLTexture texture;
+
+    glBindTexture(GL_TEXTURE_2D, texture);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_BGRA_EXT, getWindowWidth(), getWindowHeight(), 0, GL_BGRA_EXT,
+                 GL_UNSIGNED_BYTE, nullptr);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, texture, 0);
+
+    glClearColor(0.0f, 1.0f, 0.0f, 1.0f);
+    glClear(GL_COLOR_BUFFER_BIT);
+
+    EXPECT_PIXEL_NEAR(0, 0, 0, 255, 0, 255, 1.0);
+}
+
 // Test uploading a texture and then clearing a RGBA8 Framebuffer
 TEST_P(ClearTest, TextureUploadAndRGBA8Framebuffer)
 {
@@ -6522,7 +6542,9 @@ GTEST_ALLOW_UNINSTANTIATED_PARAMETERIZED_TEST(ClearTestRGB_ES3);
 ANGLE_INSTANTIATE_TEST(ClearTestRGB_ES3, ES3_D3D11(), ES3_VULKAN(), ES3_METAL());
 
 ANGLE_INSTANTIATE_TEST_ES3(ClearTextureEXTTest);
+GTEST_ALLOW_UNINSTANTIATED_PARAMETERIZED_TEST(ClearTextureEXTTestES31Renderable);
 ANGLE_INSTANTIATE_TEST_ES31(ClearTextureEXTTestES31Renderable);
+GTEST_ALLOW_UNINSTANTIATED_PARAMETERIZED_TEST(ClearTextureEXTTestES31Unrenderable);
 ANGLE_INSTANTIATE_TEST_ES31(ClearTextureEXTTestES31Unrenderable);
 
 }  // anonymous namespace

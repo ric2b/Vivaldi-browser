@@ -18,6 +18,7 @@
 #include "chrome/browser/bookmarks/bookmark_merged_surface_service.h"
 #include "chrome/browser/bookmarks/bookmark_merged_surface_service_factory.h"
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
+#include "chrome/browser/bookmarks/bookmark_test_helpers.h"
 #include "chrome/browser/bookmarks/managed_bookmark_service_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/bookmarks/bookmark_drag_drop.h"
@@ -30,7 +31,7 @@
 #include "components/bookmarks/test/bookmark_test_helpers.h"
 #include "components/bookmarks/test/mock_bookmark_model_observer.h"
 #include "components/bookmarks/test/test_bookmark_client.h"
-#include "components/sync/base/features.h"
+#include "components/signin/public/base/signin_switches.h"
 #include "components/sync_preferences/testing_pref_service_syncable.h"
 #include "content/public/test/browser_task_environment.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -73,7 +74,8 @@ class BookmarkUIOperationsHelperTest : public testing::Test {
     model_ = BookmarkModelFactory::GetForBrowserContext(profile_.get());
     bookmark_merged_surface_service_ =
         BookmarkMergedSurfaceServiceFactory::GetForProfile(profile_.get());
-    model_->LoadEmptyForTest();
+    WaitForBookmarkMergedSurfaceServiceToLoad(bookmark_merged_surface_service_);
+
     CHECK(managed_bookmark_service()->managed_node());
   }
 
@@ -433,11 +435,12 @@ TYPED_TEST(BookmarkUIOperationsHelperTest, PasteNonEditableNodes) {
 TEST(BookmarkUIOperationsHelperMergedSurfacesTest,
      GetDefaultParentForNonMergedSurfacesWithAccountPermanentNodes) {
   base::test::ScopedFeatureList features{
-      syncer::kSyncEnableBookmarksInTransportMode};
+      switches::kSyncEnableBookmarksInTransportMode};
   bookmarks::BookmarkModel model(
       std::make_unique<bookmarks::TestBookmarkClient>());
   BookmarkMergedSurfaceService service(&model,
                                        /*managed_bookmark_service=*/nullptr);
+  service.LoadForTesting({});
   model.LoadEmptyForTest();
   model.CreateAccountPermanentFolders();
 
@@ -454,6 +457,7 @@ TEST(BookmarkUIOperationsHelperMergedSurfacesTest,
       std::make_unique<bookmarks::TestBookmarkClient>());
   BookmarkMergedSurfaceService service(&model,
                                        /*managed_bookmark_service=*/nullptr);
+  service.LoadForTesting({});
   model.LoadEmptyForTest();
   ASSERT_FALSE(model.account_bookmark_bar_node());
   BookmarkParentFolder folder = BookmarkParentFolder::BookmarkBarFolder();
@@ -465,12 +469,13 @@ TEST(BookmarkUIOperationsHelperMergedSurfacesTest,
 TEST(BookmarkUIOperationsHelperMergedSurfacesTest,
      GetDefaultParentForNonMergedSurfacesNonPermanentFolder) {
   base::test::ScopedFeatureList features{
-      syncer::kSyncEnableBookmarksInTransportMode};
+      switches::kSyncEnableBookmarksInTransportMode};
   bookmarks::BookmarkModel model(
       std::make_unique<bookmarks::TestBookmarkClient>());
   BookmarkMergedSurfaceService service(&model,
                                        /*managed_bookmark_service=*/nullptr);
   model.LoadEmptyForTest();
+  service.LoadForTesting({});
   {
     // Test regular non permanent node.
     const BookmarkNode* node =

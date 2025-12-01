@@ -35,6 +35,8 @@
   PrefBackedBoolean* _showSpeedDials;
   // Observer for start page customize button visibility state
   PrefBackedBoolean* _showCustomizeStartPageButton;
+  // Observer for start page Add button visibility state
+  PrefBackedBoolean* _showAddButton;
 }
 
 - (instancetype)initWithOriginalPrefService:(PrefService*)originalPrefService {
@@ -71,8 +73,14 @@
              initWithPrefService:_prefs
                 prefName:vivaldiprefs::kVivaldiStartPageShowCustomizeButton];
     [_showCustomizeStartPageButton setObserver:self];
-
     [self booleanDidChange:_showCustomizeStartPageButton];
+
+    _showAddButton =
+        [[PrefBackedBoolean alloc]
+            initWithPrefService:GetApplicationContext()->GetLocalState()
+                 prefName:vivaldiprefs::kVivaldiStartPageShowAddButton];
+    [_showAddButton setObserver:self];
+    [self booleanDidChange:_showAddButton];
 
     [VivaldiStartPagePrefs setLocalPrefService:_localPrefs];
 
@@ -99,6 +107,10 @@
   [_showCustomizeStartPageButton stop];
   [_showCustomizeStartPageButton setObserver:nil];
   _showCustomizeStartPageButton = nil;
+
+  [_showAddButton stop];
+  [_showAddButton setObserver:nil];
+  _showAddButton = nil;
 }
 
 #pragma mark - Properties
@@ -111,6 +123,7 @@
   [self.consumer setPreferenceSpeedDialLayout:[self currentLayoutStyle]];
   [self.consumer setPreferenceShowCustomizeStartPageButton:
       [_showCustomizeStartPageButton value]];
+  [self.consumer setPreferenceShowAddButton: [_showAddButton value]];
   [self.consumer
       setPreferenceStartPageReopenWithItem:[self reopenStartPageWith]];
 }
@@ -138,6 +151,8 @@
   } else if (observableBoolean == _showCustomizeStartPageButton) {
     [self.consumer
         setPreferenceShowCustomizeStartPageButton:[observableBoolean value]];
+  } else if (observableBoolean == _showAddButton) {
+    [self.consumer setPreferenceShowAddButton:[observableBoolean value]];
   }
 }
 
@@ -156,6 +171,11 @@
 - (void)setPreferenceShowCustomizeStartPageButton:(BOOL)showCustomizeButton {
   if (showCustomizeButton != [_showCustomizeStartPageButton value])
     [_showCustomizeStartPageButton setValue:showCustomizeButton];
+}
+
+- (void)setPreferenceShowAddButton:(BOOL)showAddButton {
+  if (showAddButton != [_showAddButton value])
+    [_showAddButton setValue:showAddButton];
 }
 
 - (void)setPreferenceSpeedDialLayout:

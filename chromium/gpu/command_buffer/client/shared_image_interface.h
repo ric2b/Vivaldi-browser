@@ -252,30 +252,11 @@ class GPU_EXPORT SharedImageInterface
       const SyncToken& sync_token,
       scoped_refptr<ClientSharedImage> client_shared_image) = 0;
 
-  // Adds another owning reference to the SharedImage. It must be released via
-  // DestroySharedImage in the same way as for SharedImages created via
-  // CreateSharedImage(). Note: The image must have been created on different
-  // gpu channel and each can have only single reference.
-  // Note: `usage` must be the same value as passed to CreateSharedImage call
-  // and is just stored without validation.
-  // Note: `texture_target` is the texture target that should be used for this
-  // SharedImage.
-  virtual scoped_refptr<ClientSharedImage> AddReferenceToSharedImage(
-      const SyncToken& sync_token,
-      const Mailbox& mailbox,
-      viz::SharedImageFormat format,
-      const gfx::Size& size,
-      const gfx::ColorSpace& color_space,
-      GrSurfaceOrigin surface_origin,
-      SkAlphaType alpha_type,
-      SharedImageUsageSet usage,
-      uint32_t texture_target);
-
   // Imports SharedImage to this interface and returns an owning reference. It
   // must be released via DestroySharedImage in the same way as for SharedImages
   // created via CreateSharedImage().
   virtual scoped_refptr<ClientSharedImage> ImportSharedImage(
-      const ExportedSharedImage& exported_shared_image) = 0;
+      ExportedSharedImage exported_shared_image) = 0;
 
   struct GPU_EXPORT SwapChainSharedImages {
     SwapChainSharedImages(scoped_refptr<gpu::ClientSharedImage> front_buffer,
@@ -352,21 +333,6 @@ class GPU_EXPORT SharedImageInterface
   // this interface on the service side. This is an async wait for all the
   // previous commands which will be sent to server on the next flush().
   virtual void WaitSyncToken(const gpu::SyncToken& sync_token) = 0;
-
-  // Flush the SharedImageInterface, issuing any deferred IPCs.
-  virtual void Flush() = 0;
-
-#if !BUILDFLAG(IS_NACL)
-  // Returns the NativePixmap backing |mailbox|. This is a privileged API. Only
-  // the callers living inside the GPU process are able to retrieve the
-  // NativePixmap; otherwise null is returned. Also returns null if the
-  // SharedImage doesn't exist or is not backed by a NativePixmap. The caller is
-  // not expected to read from or write into the provided NativePixmap because
-  // it can be modified at any time. The primary purpose of this method is to
-  // facilitate pageflip testing on the viz thread.
-  virtual scoped_refptr<gfx::NativePixmap> GetNativePixmap(
-      const gpu::Mailbox& mailbox) = 0;
-#endif
 
   // Informs that existing |mailbox| with the specified metadata can be passed
   // to DestroySharedImage().

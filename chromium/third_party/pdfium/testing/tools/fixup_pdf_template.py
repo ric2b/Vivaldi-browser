@@ -65,10 +65,10 @@ class TemplateProcessor:
   STARTXREF_TOKEN = b'{{startxref}}'
   STARTXREF_REPLACEMENT = b'startxref\n%d'
 
-  STARTXREFOBJ_PATTERN = b'\{\{startxrefobj\s+(\d+)\s+(\d+)\}\}'
+  STARTXREFOBJ_PATTERN = rb'{{startxrefobj\s+(\d+)\s+(\d+)}}'
 
-  OBJECT_PATTERN = b'\{\{object\s+(\d+)\s+(\d+)\}\}'
-  OBJECT_REPLACEMENT = b'\g<1> \g<2> obj'
+  OBJECT_PATTERN = rb'{{object\s+(\d+)\s+(\d+)}}'
+  OBJECT_REPLACEMENT = rb'\g<1> \g<2> obj'
 
   STREAMLEN_TOKEN = b'{{streamlen}}'
   STREAMLEN_REPLACEMENT = b'/Length %d'
@@ -109,6 +109,9 @@ class TemplateProcessor:
     if self.streamlen_state == StreamLenState.FIND_ENDSTREAM:
       if line.rstrip() == b'endstream':
         self.streamlen_state = StreamLenState.START
+        # Don't count final newline.
+        # insert_includes() already stripped windows line endings.
+        self.streamlens[-1] -= 1
       else:
         self.streamlens[-1] += len(line)
 
@@ -172,7 +175,7 @@ def insert_includes(input_path, output_file, visited_set):
     end_of_file_line_ending = False
     with open(input_path, 'rb') as infile:
       for line in infile:
-        match = re.match(b'\s*\{\{include\s+(.+)\}\}', line)
+        match = re.match(rb'\s*{{include\s+(.+)}}', line)
         if match:
           insert_includes(
               os.path.join(

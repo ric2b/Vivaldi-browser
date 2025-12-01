@@ -166,6 +166,11 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
       const gfx::Rect& src_rect,
       const gfx::Size& output_size,
       base::OnceCallback<void(const SkBitmap&)> callback) override;
+  void CopyFromExactSurfaceWithIpcPriority(
+      const gfx::Rect& src_rect,
+      const gfx::Size& output_size,
+      base::OnceCallback<void(const SkBitmap&)> callback,
+      CopyOutputIpcPriority ipc_priority) override;
   void CopyFromExactSurface(
       const gfx::Rect& src_rect,
       const gfx::Size& output_size,
@@ -204,6 +209,7 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
       bool request_unadjusted_movement) override;
   blink::mojom::PointerLockResult ChangePointerLock(
       bool request_unadjusted_movement) override;
+  bool IsPointerLocked() override;
   void UnlockPointer() override;
   void InvalidateLocalSurfaceIdAndAllocationGroup() override;
   void ClearFallbackSurfaceForCommitPending() override;
@@ -228,6 +234,8 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
   GetTouchSelectionControllerClientManager() override;
   TouchSelectionControllerInputObserver*
   GetTouchSelectionControllerInputObserver() override;
+  RenderWidgetHost::InputEventObserver* GetInputTransferHandlerObserver()
+      override;
   const viz::LocalSurfaceId& GetLocalSurfaceId() const override;
   void OnRendererWidgetCreated() override;
   void TakeFallbackContentFrom(RenderWidgetHostView* view) override;
@@ -252,6 +260,8 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
       std::optional<base::TimeDelta> deadline_override) override;
   void NotifyVirtualKeyboardOverlayRect(
       const gfx::Rect& keyboard_rect) override;
+  void NotifyContextMenuInsetsObservers(const gfx::Rect&) override;
+  void OnPointerLockRelease() override;
 
   // ui::ViewAndroidObserver implementation:
   void OnAttachedToWindow() override;
@@ -366,11 +376,6 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
   void OnUpdateTextInputStateCalled(TextInputManager* text_input_manager,
                                     RenderWidgetHostViewBase* updated_view,
                                     bool did_change_state) override;
-  void OnImeCompositionRangeChanged(
-      TextInputManager* text_input_manager,
-      RenderWidgetHostViewBase* updated_view,
-      bool character_bounds_changed,
-      const std::optional<std::vector<gfx::Rect>>& line_bounds) override;
   void OnImeCancelComposition(TextInputManager* text_input_manager,
                               RenderWidgetHostViewBase* updated_view) override;
   void OnTextSelectionChanged(TextInputManager* text_input_manager,
@@ -407,7 +412,8 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
 
   // InputTransferHandlerAndroidClient implementation.
   gpu::SurfaceHandle GetRootSurfaceHandle() override;
-  void SendStateOnTouchTransfer(const ui::MotionEvent& event) override;
+  void SendStateOnTouchTransfer(const ui::MotionEvent& event,
+                                bool browser_would_have_handled) override;
 
   // Methods called from Java
   bool IsReady(JNIEnv* env, const base::android::JavaParamRef<jobject>& obj);
@@ -474,7 +480,8 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
   void UpdateBackgroundColor() override;
   bool HasFallbackSurface() const override;
   std::optional<DisplayFeature> GetDisplayFeature() override;
-  void SetDisplayFeatureForTesting(
+  void DisableDisplayFeatureOverrideForEmulation() override;
+  void OverrideDisplayFeatureForEmulation(
       const DisplayFeature* display_feature) override;
   void NotifyHostAndDelegateOnWasShown(
       blink::mojom::RecordContentToVisibleTimeRequestPtr visible_time_request)
@@ -521,6 +528,9 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
     void WasEvicted();
     void WasShownAfterEviction();
 
+    // Clears flags used to throttle SurfaceSync.
+    void Unthrottle();
+
    private:
     friend class RenderWidgetHostViewAndroidRotationTest;
 
@@ -532,9 +542,6 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
     // fullscreen, and Picture-in-Picture mode.
     bool HandleScreenStateChanges(const cc::DeadlinePolicy& deadline_policy,
                                   bool force_fullscreen_sync = false);
-
-    // Clears flags used to throttle SurfaceSync.
-    void Unthrottle();
 
     // The ScreenState of the current world, the pending visual properties, or
     // the properties from before we entered Picture-in-Picture mode.
@@ -770,7 +777,7 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
   // are expressed in DIPs relative to the view. See display_feature.h for more
   // details.
   std::optional<DisplayFeature> display_feature_;
-  bool display_feature_overridden_for_testing_ = false;
+  bool display_feature_overridden_for_emulation_ = false;
   // Display feature bounds returned by the OS.
   gfx::Rect display_feature_bounds_;
 

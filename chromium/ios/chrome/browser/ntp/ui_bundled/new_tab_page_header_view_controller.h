@@ -7,10 +7,10 @@
 
 #import <UIKit/UIKit.h>
 
+#import "ios/chrome/browser/content_suggestions/ui_bundled/user_account_image_update_delegate.h"
 #import "ios/chrome/browser/location_bar/ui_bundled/fakebox_buttons_snapshot_provider.h"
 #import "ios/chrome/browser/ntp/ui_bundled/new_tab_page_header_consumer.h"
 #import "ios/chrome/browser/ntp/ui_bundled/new_tab_page_header_view_controller_delegate.h"
-#import "ios/chrome/browser/ui/content_suggestions/user_account_image_update_delegate.h"
 
 @protocol ApplicationCommands;
 @protocol BrowserCoordinatorCommands;
@@ -19,7 +19,6 @@
 @protocol NewTabPageControllerDelegate;
 @protocol NewTabPageHeaderCommands;
 @class NewTabPageMetricsRecorder;
-@protocol OmniboxCommands;
 @protocol LensCommands;
 @class LayoutGuideCenter;
 @class PrimaryToolbarViewController;
@@ -42,12 +41,13 @@
                          bundle:(NSBundle*)nibBundleOrNil NS_UNAVAILABLE;
 - (instancetype)initWithCoder:(NSCoder*)aDecoder NS_UNAVAILABLE;
 
-@property(nonatomic, weak) id<ApplicationCommands,
-                              BrowserCoordinatorCommands,
-                              OmniboxCommands,
-                              FakeboxFocuser,
-                              LensCommands>
-    dispatcher;
+// Handlers for dispatched commands.
+@property(nonatomic, weak) id<FakeboxFocuser> fakeboxFocuserHandler;
+@property(nonatomic, weak) id<LensCommands> lensHandler;
+@property(nonatomic, weak) id<ApplicationCommands> applicationHandler;
+@property(nonatomic, weak) id<BrowserCoordinatorCommands>
+    browserCoordinatorHandler;
+
 @property(nonatomic, weak) id<NewTabPageHeaderViewControllerDelegate> delegate;
 @property(nonatomic, weak) id<NewTabPageHeaderCommands> commandHandler;
 @property(nonatomic, weak) id<NewTabPageControllerDelegate> toolbarDelegate;
@@ -132,6 +132,9 @@
 
 // Sets the tabgroupIndicatorView.
 - (void)setTabGroupIndicatorView:(TabGroupIndicatorView*)view;
+
+// Sets the user signed-in status
+- (void)setUserSignedIn:(BOOL)signedIn;
 
 @end
 

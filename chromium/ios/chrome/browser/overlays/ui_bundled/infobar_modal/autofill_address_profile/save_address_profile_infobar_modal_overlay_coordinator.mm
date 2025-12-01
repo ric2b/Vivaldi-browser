@@ -109,12 +109,13 @@ using autofill_address_profile_infobar_overlays::
       std::make_unique<autofill::AutofillProfile>(*(self.config->GetProfile()));
   autofill::PersonalDataManager* personalDataManager =
       autofill::PersonalDataManagerFactory::GetForProfile(
-          self.browser->GetProfile()->GetOriginalProfile());
+          self.profile->GetOriginalProfile());
   self.sharedEditViewMediator = [[AutofillProfileEditMediator alloc]
          initWithDelegate:self
       personalDataManager:personalDataManager
           autofillProfile:_autofillProfile.get()
-        isMigrationPrompt:self.config->is_migration_to_account()];
+        isMigrationPrompt:self.config->is_migration_to_account()
+         addManualAddress:NO];
 
   LegacyInfobarEditAddressProfileTableViewController* editModalViewController =
       [[LegacyInfobarEditAddressProfileTableViewController alloc]
@@ -126,7 +127,8 @@ using autofill_address_profile_infobar_overlays::
                                 ? base::SysUTF16ToNSString(
                                       self.config->user_email().value())
                                 : nil)controller:editModalViewController
-              settingsView:NO];
+              settingsView:NO
+          addManualAddress:NO];
   self.sharedEditViewMediator.consumer = self.sharedEditViewController;
   editModalViewController.handler = self.sharedEditViewController;
 

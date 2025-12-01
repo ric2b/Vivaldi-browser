@@ -109,7 +109,7 @@ impl Pixels {
         }
     }
 
-    pub(crate) fn size(&self) -> usize {
+    pub fn size(&self) -> usize {
         match self {
             Pixels::Pointer(_) => 0,
             Pixels::Pointer16(_) => 0,

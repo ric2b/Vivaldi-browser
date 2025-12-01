@@ -4,6 +4,8 @@
 
 #import "ios/chrome/browser/tips_notifications/model/utils.h"
 
+#import "base/strings/string_number_conversions.h"
+#import "base/strings/string_split.h"
 #import "base/time/time.h"
 #import "ios/chrome/browser/push_notification/model/constants.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
@@ -76,6 +78,32 @@ base::TimeDelta DefaultTriggerDelta(bool for_reactivation,
   }
 }
 
+// Parses a field trial param as a comma separated list of integers, casts the
+// integers as type T, and returns a vector with elements of type T.
+template <typename T>
+std::vector<T> GetFieldTrialParamByFeatureAsVector(
+    const base::Feature& feature,
+    const std::string& param_name,
+    const std::vector<T> default_values) {
+  std::string param_string =
+      GetFieldTrialParamValueByFeature(feature, param_name);
+  if (param_string.length() == 0) {
+    return default_values;
+  }
+
+  std::vector<T> values;
+  const std::vector<std::string> items = base::SplitString(
+      param_string, ",", base::TRIM_WHITESPACE, base::SPLIT_WANT_NONEMPTY);
+  for (std::string_view item : items) {
+    int value;
+    if (base::StringToInt(item, &value) && value >= 0 &&
+        value <= int(T::kMaxValue)) {
+      values.push_back(static_cast<T>(value));
+    }
+  }
+  return values;
+}
+
 // A bitfield with all notification types from the enum enabled.
 constexpr int kAllNotificationBits =
     (1 << (int(TipsNotificationType::kMaxValue) + 1)) - 1;
@@ -88,6 +116,7 @@ constexpr int kEnableAllNotifications =
 
 NSString* const kTipsNotificationId = @"kTipsNotificationId";
 NSString* const kTipsNotificationTypeKey = @"kTipsNotificationTypeKey";
+NSString* const kReactivationKey = @"kReactivationKey";
 const char kTipsNotificationsSentPref[] = "tips_notifications.sent_bitfield";
 const char kTipsNotificationsLastSent[] = "tips_notifiations.last_sent";
 const char kTipsNotificationsLastTriggered[] =
@@ -104,10 +133,16 @@ bool IsTipsNotification(UNNotificationRequest* request) {
   return [request.identifier isEqualToString:kTipsNotificationId];
 }
 
-NSDictionary* UserInfoForTipsNotificationType(TipsNotificationType type) {
+bool IsProactiveTipsNotification(UNNotificationRequest* request) {
+  return [request.content.userInfo[kReactivationKey] isEqual:@YES];
+}
+
+NSDictionary* UserInfoForTipsNotificationType(TipsNotificationType type,
+                                              bool for_reactivation) {
   return @{
     kTipsNotificationId : @YES,
     kTipsNotificationTypeKey : @(static_cast<int>(type)),
+    kReactivationKey : for_reactivation ? @YES : @NO,
   };
 }
 
@@ -121,25 +156,14 @@ std::optional<TipsNotificationType> ParseTipsNotificationType(
   return static_cast<TipsNotificationType>(type.integerValue);
 }
 
-UNNotificationRequest* TipsNotificationRequest(
-    TipsNotificationType type,
-    bool for_reactivation,
-    TipsNotificationUserType user_type) {
-  return [UNNotificationRequest
-      requestWithIdentifier:kTipsNotificationId
-                    content:ContentForTipsNotificationType(type)
-                    trigger:TipsNotificationTrigger(for_reactivation,
-                                                    user_type)];
-}
-
-UNNotificationContent* ContentForTipsNotificationType(
-    TipsNotificationType type) {
+UNNotificationContent* ContentForTipsNotificationType(TipsNotificationType type,
+                                                      bool for_reactivation) {
   UNMutableNotificationContent* content =
       [[UNMutableNotificationContent alloc] init];
   ContentIDs content_ids = ContentIDsForType(type);
   content.title = l10n_util::GetNSString(content_ids.title);
   content.body = l10n_util::GetNSString(content_ids.body);
-  content.userInfo = UserInfoForTipsNotificationType(type);
+  content.userInfo = UserInfoForTipsNotificationType(type, for_reactivation);
   content.sound = UNNotificationSound.defaultSound;
   return content;
 }
@@ -170,16 +194,6 @@ base::TimeDelta TipsNotificationTriggerDelta(
   }
 }
 
-UNNotificationTrigger* TipsNotificationTrigger(
-    bool for_reactivation,
-    TipsNotificationUserType user_type) {
-  return [UNTimeIntervalNotificationTrigger
-      triggerWithTimeInterval:TipsNotificationTriggerDelta(for_reactivation,
-                                                           user_type)
-                                  .InSecondsF()
-                      repeats:NO];
-}
-
 int TipsNotificationsEnabledBitfield() {
   return GetFieldTrialParamByFeatureAsInt(kIOSTipsNotifications,
                                           kIOSTipsNotificationsEnabledParam,
@@ -189,14 +203,16 @@ int TipsNotificationsEnabledBitfield() {
 std::vector<TipsNotificationType> TipsNotificationsTypesOrder(
     bool for_reactivation) {
   if (for_reactivation) {
-    return {
-        TipsNotificationType::kLens,
-        TipsNotificationType::kWhatsNew,
-        TipsNotificationType::kEnhancedSafeBrowsing,
-    };
+    return GetFieldTrialParamByFeatureAsVector<TipsNotificationType>(
+        kIOSReactivationNotifications, kIOSReactivationNotificationsOrderParam,
+        {
+            TipsNotificationType::kLens,
+            TipsNotificationType::kEnhancedSafeBrowsing,
+            TipsNotificationType::kWhatsNew,
+        });
   }
   int order_num = GetFieldTrialParamByFeatureAsInt(
-      kIOSTipsNotifications, kIOSTipsNotificationsOrderParam, 1);
+      kIOSTipsNotifications, kIOSTipsNotificationsOrderParam, 3);
   switch (order_num) {
     case 1:
       // The default order.

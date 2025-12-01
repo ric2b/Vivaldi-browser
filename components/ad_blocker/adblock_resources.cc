@@ -12,7 +12,10 @@
 #include "base/strings/escape.h"
 #include "base/task/sequenced_task_runner.h"
 #include "build/build_config.h"
+
+#if !BUILDFLAG(IS_IOS)
 #include "chrome/common/chrome_paths.h"
+#endif
 
 #if BUILDFLAG(IS_ANDROID)
 #include "base/android/apk_assets.h"
@@ -175,8 +178,7 @@ bool ShouldUseMainWorldForResource(std::string_view name) {
 }
 }  // namespace
 
-Resources::Resources(scoped_refptr<base::SequencedTaskRunner> task_runner)
-    : weak_factory_(this) {
+Resources::Resources(scoped_refptr<base::SequencedTaskRunner> task_runner) {
   task_runner->PostTaskAndReplyWithResult(
       FROM_HERE, base::BindOnce(&LoadResources, kRedirectableResourcesFilePath),
       base::BindOnce(&Resources::OnLoadFinished, weak_factory_.GetWeakPtr(),

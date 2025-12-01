@@ -66,14 +66,14 @@ suite('HeaderTest', () => {
     header.$.menuButton.click();
     await microtasksFinished();
 
-    assertFalse(!!header.shadowRoot!.querySelector('#input'));
+    assertFalse(!!header.shadowRoot.querySelector('#input'));
     const menu = header.$.menu.$.menu;
     const renameMenuItem = menu.get().querySelector<HTMLElement>('#rename');
     assertTrue(!!renameMenuItem);
     renameMenuItem.click();
     await microtasksFinished();
 
-    assertTrue(!!header.shadowRoot!.querySelector('#input'));
+    assertTrue(!!header.shadowRoot.querySelector('#input'));
     assertFalse(menu.get().open);
   });
 
@@ -81,7 +81,7 @@ suite('HeaderTest', () => {
     header.$.menu.dispatchEvent(new CustomEvent('rename-click'));
     await microtasksFinished();
 
-    const input = header.shadowRoot!.querySelector<CrInputElement>('#input');
+    const input = header.shadowRoot.querySelector<CrInputElement>('#input');
     assertTrue(!!input);
     assertTrue(isVisible(input));
     const newName = 'new name';
@@ -103,7 +103,7 @@ suite('HeaderTest', () => {
     header.subtitle = 'foo';
     await microtasksFinished();
 
-    assertEquals('foo', subtitle!.textContent!.trim());
+    assertEquals('foo', subtitle.textContent!.trim());
     assertFalse(hasStyle(subtitle, 'display', 'none'));
     assertFalse(hasStyle(header.$.divider, 'display', 'none'));
     assertFalse(hasStyle(header.$.menuButton, 'display', 'none'));
@@ -115,7 +115,7 @@ suite('HeaderTest', () => {
     subtitle.dispatchEvent(new KeyboardEvent('keydown', {key: 'Enter'}));
     await microtasksFinished();
 
-    const input = header.shadowRoot!.querySelector<CrInputElement>('#input');
+    const input = header.shadowRoot.querySelector<CrInputElement>('#input');
     assertTrue(!!input);
     assertTrue(isVisible(input));
   });
@@ -127,14 +127,14 @@ suite('HeaderTest', () => {
     header.$.menu.dispatchEvent(new CustomEvent('rename-click'));
     await microtasksFinished();
 
-    let input = header.shadowRoot!.querySelector<CrInputElement>('#input');
+    let input = header.shadowRoot.querySelector<CrInputElement>('#input');
     assertTrue(!!input);
     input.value = '';
     input.dispatchEvent(new KeyboardEvent('keydown', {key: 'Enter'}));
     await microtasksFinished();
 
     // After finishing input, the element should be removed from the DOM.
-    input = header.shadowRoot!.querySelector<CrInputElement>('#input');
+    input = header.shadowRoot.querySelector<CrInputElement>('#input');
     assertFalse(!!input);
 
     assertEquals(subtitle, header.subtitle);
@@ -146,14 +146,14 @@ suite('HeaderTest', () => {
     await microtasksFinished();
 
     // Select a middle section of the input text.
-    let input = header.shadowRoot!.querySelector<CrInputElement>('#input');
+    let input = header.shadowRoot.querySelector<CrInputElement>('#input');
     assertTrue(!!input);
     input.select(5, 9);
     input.dispatchEvent(new KeyboardEvent('keydown', {key: 'Enter'}));
     await microtasksFinished();
 
     // After finishing input, the element should be removed from the DOM.
-    input = header.shadowRoot!.querySelector<CrInputElement>('#input');
+    input = header.shadowRoot.querySelector<CrInputElement>('#input');
     assertFalse(!!input);
   });
 
@@ -163,7 +163,7 @@ suite('HeaderTest', () => {
     subtitle.dispatchEvent(new KeyboardEvent('keydown', {key: 'Enter'}));
     await microtasksFinished();
 
-    const input = header.shadowRoot!.querySelector<CrInputElement>('#input');
+    const input = header.shadowRoot.querySelector<CrInputElement>('#input');
     assertTrue(!!input);
     assertTrue(isVisible(input));
     const nameChangePromise = eventToPromise('name-change', document.body);
@@ -200,5 +200,24 @@ suite('HeaderTest', () => {
         assertEquals(
             /*inNewTab=*/ false,
             productSpecsProxy.getArgs('showComparePage')[0]);
+      });
+
+  test(
+      'menu button and subtitle input are unavailable when disabled',
+      async () => {
+        header.disabled = true;
+        await microtasksFinished();
+
+        // Menu button is disabled.
+        assertTrue(header.$.menuButton.disabled);
+
+        const subtitle = $$(header, '#subtitle');
+        assertTrue(!!subtitle);
+        subtitle.click();
+        await microtasksFinished();
+
+        // Header input does not appear when disabled.
+        const input = header.shadowRoot.querySelector<CrInputElement>('#input');
+        assertFalse(!!input);
       });
 });

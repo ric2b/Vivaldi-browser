@@ -26,6 +26,7 @@
 #include "third_party/blink/renderer/core/html/canvas/canvas_rendering_context.h"
 
 #include "services/metrics/public/cpp/ukm_builders.h"
+#include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/renderer/core/animation_frame/worker_animation_frame_provider.h"
 #include "third_party/blink/renderer/core/frame/local_dom_window.h"
@@ -35,6 +36,28 @@
 #include "third_party/blink/renderer/platform/weborigin/security_origin.h"
 
 namespace blink {
+
+bool CanvasRenderingContext::
+    CheckProviderInCanCreateCanvas2dResourceProvider() {
+  return base::FeatureList::IsEnabled(
+      features::kAdjustCanCreateCanvas2dResourceProvider);
+}
+
+// static
+bool CanvasRenderingContext::
+    CheckProviderInCanvas2DRenderingContextIsPaintable() {
+  // The change to IsPaintable() is safe only if the below feature is enabled,
+  // as (a) our reasoning about the IsPaintable() change is built on the
+  // behavior enabled by this feature, and (b) if we were to ever disable this
+  // feature but leave the IsPaintable() change in place we would be putting
+  // the codebase in an untested state.
+  if (!CheckProviderInCanCreateCanvas2dResourceProvider()) {
+    return false;
+  }
+
+  return base::FeatureList::IsEnabled(
+      features::kIsPaintableChecksResourceProviderInsteadOfBridge);
+}
 
 CanvasRenderingContext::CanvasRenderingContext(
     CanvasRenderingContextHost* host,
@@ -218,7 +241,6 @@ CanvasRenderingContext::RenderingAPIFromId(const String& id) {
 
 void CanvasRenderingContext::Trace(Visitor* visitor) const {
   visitor->Trace(host_);
-  ScriptWrappable::Trace(visitor);
   ActiveScriptWrappable::Trace(visitor);
 }
 

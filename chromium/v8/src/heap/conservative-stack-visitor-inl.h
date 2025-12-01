@@ -6,6 +6,7 @@
 #define V8_HEAP_CONSERVATIVE_STACK_VISITOR_INL_H_
 
 #include "src/heap/conservative-stack-visitor.h"
+// Include the non-inl header before the rest of the headers.
 
 #include "src/common/globals.h"
 #include "src/execution/isolate-inl.h"
@@ -71,7 +72,7 @@ Address ConservativeStackVisitorBase<ConcreteVisitor>::FindBasePtr(
   // heap. Bail out if it is not.
   // TODO(379788114): Consider introducing a bloom filter for pages.
   const MemoryChunk* chunk =
-      allocator_->LookupChunkContainingAddress(maybe_inner_ptr);
+      allocator_->LookupChunkContainingAddressInSafepoint(maybe_inner_ptr);
   if (chunk == nullptr) {
     return kNullAddress;
   }
@@ -183,7 +184,8 @@ void ConservativeStackVisitorBase<
   // Bail out immediately if the pointer is not in the space managed by the
   // allocator.
   if (allocator_->IsOutsideAllocatedSpace(address)) {
-    DCHECK_EQ(nullptr, allocator_->LookupChunkContainingAddress(address));
+    DCHECK_EQ(nullptr,
+              allocator_->LookupChunkContainingAddressInSafepoint(address));
     return;
   }
   // Proceed with inner-pointer resolution.

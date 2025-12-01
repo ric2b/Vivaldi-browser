@@ -13,27 +13,16 @@
 // limitations under the License.
 
 import {AsyncLimiter} from '../../../base/async_limiter';
-import {runQuery} from '../../../components/query_table/queries';
+import {runQueryForQueryTable} from '../../../components/query_table/queries';
 import {ChartAttrs} from '../../../components/widgets/charts/chart';
 import {Trace} from '../../../public/trace';
 import {Row} from '../../../trace_processor/query_result';
-import {QueryNode} from '../query_state';
-import {
-  buildFilterSqlClause,
-  VisFilter,
-  VisFilterOptions,
-  VisFilterOp,
-  filterToSql,
-} from './filters';
-import {SqlTableState} from '../../../components/widgets/sql/legacy_table/state';
-import {FromSimpleColumn} from '../../../components/widgets/sql/legacy_table/column';
-import {SqlColumnAsSimpleColumn} from '../../dev.perfetto.SqlModules/sql_modules';
+import {QueryNode} from '../query_node';
+import {SqlTableState} from '../../../components/widgets/sql/table/state';
+import {createTableColumnFromPerfettoSql} from '../../dev.perfetto.SqlModules/sql_modules';
 import {analyzeNode, Query} from '../query_builder/data_source_viewer';
-import {
-  VegaLiteFieldType,
-  VegaLiteSelectionTypes,
-} from '../../../components/widgets/vega_view';
-import {Item, SignalValue} from 'vega';
+import {Filters} from '../../../components/widgets/sql/table/filters';
+import {buildSqlQuery} from '../../../components/widgets/sql/table/query_builder';
 
 export interface VisViewAttrs {
   charts: Set<ChartAttrs>;
@@ -43,6 +32,7 @@ export interface VisViewAttrs {
 export class VisViewSource {
   readonly trace: Trace;
   readonly queryNode: QueryNode;
+  readonly filters: Filters = new Filters();
 
   private asyncLimiter = new AsyncLimiter();
   private sqlAsyncLimiter = new AsyncLimiter();
@@ -52,22 +42,14 @@ export class VisViewSource {
 
   private _data?: Row[];
   private _visViews?: VisViewAttrs;
-  private _filters: Set<VisFilter> = new Set();
   private _columns?: string[];
 
-  constructor(trace: Trace, queryNode: QueryNode, filters?: Set<VisFilter>) {
+  constructor(trace: Trace, queryNode: QueryNode) {
     this.trace = trace;
     this.queryNode = queryNode;
-
-    if (filters) {
-      this.filters = filters;
-    }
+    this.filters.addObserver(() => this.loadData());
 
     this.loadBaseQuery();
-  }
-
-  set filters(filters: Set<VisFilter>) {
-    this._filters = filters;
   }
 
   get visViews() {
@@ -83,70 +65,43 @@ export class VisViewSource {
   }
 
   addChart(vis: ChartAttrs) {
-    this._visViews?.charts.add(vis);
+    return this._visViews?.charts.add(vis);
   }
 
   removeChart(vis: ChartAttrs) {
-    this._visViews?.charts.delete(vis);
-  }
-
-  addFilterFromChart(
-    selectionType: VegaLiteSelectionTypes,
-    fieldName: string,
-    fieldType: VegaLiteFieldType,
-    filterVal: Item | SignalValue,
-  ) {
-    let filterOption: VisFilterOp = VisFilterOptions.glob;
-
-    if (selectionType === 'interval') {
-      if (fieldType === 'nominal') {
-        filterOption = VisFilterOptions.in;
-      } else if (fieldType === 'quantitative') {
-        filterOption = VisFilterOptions.between;
-      }
-    } else if (selectionType === 'point') {
-      filterOption = VisFilterOptions.equals_to;
-    }
-
-    this.addFilter({
-      columnName: fieldName,
-      value: filterVal,
-      filterOption, // Change filter option types to be a record instead
-    });
-  }
-
-  addFilter(filter: VisFilter) {
-    this._filters.add(filter);
-    this.loadData();
-  }
-
-  removeFilter(filter: VisFilter) {
-    this._filters.forEach((visFilter) => {
-      if (filterToSql(filter) === filterToSql(visFilter)) {
-        this._filters.delete(visFilter);
-      }
-    });
-    this.loadData();
+    return this._visViews?.charts.delete(vis);
   }
 
   private async loadData() {
-    const query = this._baseQuery;
+    const baseSql = this._baseQuery?.sql;
+    if (baseSql === undefined) return;
 
-    if (query === undefined) return;
+    const columns = Object.fromEntries(
+      this.queryNode.sourceCols.map((col) => [
+        col.column.name,
+        col.column.name,
+      ]),
+    );
 
-    if (this._filters.size > 0) {
-      query.sql += `WHERE ${buildFilterSqlClause(Array.from(this._filters.values()))}`;
-    }
+    const query = buildSqlQuery({
+      prefix: `WITH __data AS (${baseSql})`,
+      table: '__data',
+      columns: columns,
+      filters: this.filters.get(),
+    });
 
-    if (query.sql === this._fullQuery) return;
+    if (query === this._fullQuery) return;
 
-    this._fullQuery = query.sql;
+    this._fullQuery = query;
 
     this.asyncLimiter.schedule(async () => {
       if (this._fullQuery === undefined) {
         return;
       }
-      const queryRes = await runQuery(this._fullQuery, this.trace.engine);
+      const queryRes = await runQueryForQueryTable(
+        this._fullQuery,
+        this.trace.engine,
+      );
 
       this._data = queryRes.rows;
       this._columns = queryRes.columns;
@@ -167,8 +122,7 @@ export class VisViewSource {
   }
 
   private updateViews(data?: Row[], columns?: string[]) {
-    const queryNodeColumns = this.queryNode.columns;
-    this.loadBaseQuery();
+    const queryNodeColumns = this.queryNode.sourceCols;
 
     if (
       data === undefined ||
@@ -194,20 +148,33 @@ export class VisViewSource {
       );
     }
 
+    let sqlTableState = this.visViews?.sqlTableState;
+
+    if (sqlTableState === undefined) {
+      sqlTableState = new SqlTableState(
+        this.trace,
+        {
+          imports: this._baseQuery.modules,
+          prefix: `WITH __data AS (${this._baseQuery.sql})`,
+          name: '__data',
+          columns: queryNodeColumns.map((col) =>
+            // TODO: Figure out how to not require table name here.
+            createTableColumnFromPerfettoSql(col.column, ''),
+          ),
+        },
+        {
+          filters: this.filters,
+        },
+      );
+    }
+
     const newVisViews: VisViewAttrs = {
       charts: new Set<ChartAttrs>(newChartAttrs),
-      sqlTableState: new SqlTableState(this.trace, {
-        imports: this._baseQuery.modules,
-        prefix: `WITH vis_view_source_table AS (${this._baseQuery.sql})`,
-        name: 'vis_view_source_table',
-        columns: queryNodeColumns.map(
-          (col) =>
-            // TODO: Figure out how to not require table name here.
-            new FromSimpleColumn(SqlColumnAsSimpleColumn(col.column, '')),
-        ),
-      }),
+      sqlTableState,
     };
 
     this._visViews = newVisViews;
+
+    this.trace.raf.scheduleFullRedraw();
   }
 }

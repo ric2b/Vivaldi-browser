@@ -8,12 +8,12 @@
 
 #include <algorithm>  // for std::lower_bound()
 
+#include "base/compiler_specific.h"
 #include "base/cpu.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/system/sys_info.h"
 #include "build/build_config.h"
-#include "build/chromeos_buildflags.h"
 
 namespace metrics {
 
@@ -113,7 +113,7 @@ const CpuUarchTableEntry* kCpuUarchTableEnd = std::end(kCpuUarchTable);
 
 bool CpuUarchTableCmp(const CpuUarchTableEntry& a,
                       const CpuUarchTableEntry& b) {
-  return strcmp(a.family_model, b.family_model) < 0;
+  return UNSAFE_TODO(strcmp(a.family_model, b.family_model)) < 0;
 }
 
 }  // namespace internal
@@ -144,9 +144,9 @@ CPUIdentity GetCPUIdentity() {
   CPUIdentity result = {};
   result.arch = base::SysInfo::OperatingSystemArchitecture();
   result.release =
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
       base::SysInfo::KernelVersion();
-#elif BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS)
+#elif BUILDFLAG(IS_LINUX)
       base::SysInfo::OperatingSystemVersion();
 #else
 #error "Unsupported configuration"

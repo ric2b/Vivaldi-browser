@@ -436,7 +436,7 @@ const UIStrings = {
    *@description Shown when a field refers to a TLS feature which was enabled.
    */
   enabled: 'enabled',
-};
+} as const;
 const str_ = i18n.i18n.registerUIStrings('panels/security/SecurityPanel.ts', UIStrings);
 const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
 
@@ -561,9 +561,8 @@ export class SecurityPanel extends UI.Panel.Panel implements SDK.TargetManager.S
     // clang-format off
     render(
       html`
-    <devtools-split-widget
-    .options=${{vertical: true, settingName: 'security'}}
-    ${UI.Widget.widgetRef(UI.SplitWidget.SplitWidget, e => {output.splitWidget = e;})}>
+    <devtools-split-view direction="column" name="security"
+      ${UI.Widget.widgetRef(UI.SplitWidget.SplitWidget, e => {output.splitWidget = e;})}>
         <devtools-widget
           slot="sidebar"
           .widgetConfig=${widgetConfig(SecurityPanelSidebar)}
@@ -571,7 +570,7 @@ export class SecurityPanel extends UI.Panel.Panel implements SDK.TargetManager.S
           @showFlagControls=${() => output.setVisibleView(new CookieControlsView())}
           ${UI.Widget.widgetRef(SecurityPanelSidebar, e => {output.sidebar = e;})}>
         </devtools-widget>
-    </devtools-split-widget>`,
+    </devtools-split-view>`,
       target, {host: this});
     // clang-format on
   }) {
@@ -870,7 +869,7 @@ export class SecurityMainView extends UI.Widget.VBox {
   private readonly securityExplanationsExtra: HTMLElement;
   private readonly lockSpectrum: Map<Protocol.Security.SecurityState, HTMLElement>;
   private summaryText: HTMLElement;
-  private explanations: (Protocol.Security.SecurityStateExplanation|SecurityStyleExplanation)[]|null;
+  private explanations: Array<Protocol.Security.SecurityStateExplanation|SecurityStyleExplanation>|null;
   private securityState: Protocol.Security.SecurityState|null;
   constructor(element?: HTMLElement) {
     super(undefined, undefined, element);
@@ -965,7 +964,7 @@ export class SecurityMainView extends UI.Widget.VBox {
           i18nString(UIStrings.viewCertificate), explanation.certificate));
     }
 
-    if (explanation.recommendations && explanation.recommendations.length) {
+    if (explanation.recommendations?.length) {
       const recommendationList = text.createChild('ul', 'security-explanation-recommendations');
       for (const recommendation of explanation.recommendations) {
         recommendationList.createChild('li').textContent = recommendation;
@@ -1007,7 +1006,7 @@ export class SecurityMainView extends UI.Widget.VBox {
   }
 
   private getSecuritySummaryAndExplanations(visibleSecurityState: PageVisibleSecurityState):
-      {summary: (string|undefined), explanations: Array<SecurityStyleExplanation>} {
+      {summary: (string|undefined), explanations: SecurityStyleExplanation[]} {
     const {securityState, securityStateIssueIds} = visibleSecurityState;
     let summary;
     const explanations: SecurityStyleExplanation[] = [];
@@ -1020,8 +1019,7 @@ export class SecurityMainView extends UI.Widget.VBox {
           i18nString(UIStrings.toCheckThisPagesStatusVisit)));
     } else if (
         securityStateIssueIds.includes('is-error-page') &&
-        (visibleSecurityState.certificateSecurityState === null ||
-         visibleSecurityState.certificateSecurityState.certificateNetworkError === null)) {
+        (visibleSecurityState.certificateSecurityState?.certificateNetworkError === null)) {
       summary = i18nString(UIStrings.thisIsAnErrorPage);
       // In the case of a non cert error page, we usually don't have a
       // certificate, connection, or content that needs to be explained, e.g. in
@@ -1060,7 +1058,7 @@ export class SecurityMainView extends UI.Widget.VBox {
         summary: i18nString(UIStrings.thisPageIsSuspicious),
         description: formatedDescription,
       });
-    } else if (securityStateIssueIds.includes('lookalike') && safetyTipInfo && safetyTipInfo.safeUrl) {
+    } else if (securityStateIssueIds.includes('lookalike') && safetyTipInfo?.safeUrl) {
       const hostname = new URL(safetyTipInfo.safeUrl).hostname;
       const hostnamePlaceholder = {PH1: hostname};
       const formatedDescriptionSafety =
@@ -1086,7 +1084,7 @@ export class SecurityMainView extends UI.Widget.VBox {
       visibleSecurityState: PageVisibleSecurityState, explanations: SecurityStyleExplanation[]): void {
     const {certificateSecurityState, securityStateIssueIds} = visibleSecurityState;
     const title = i18nString(UIStrings.certificate);
-    if (certificateSecurityState && certificateSecurityState.certificateHasSha1Signature) {
+    if (certificateSecurityState?.certificateHasSha1Signature) {
       const explanationSummary = i18nString(UIStrings.insecureSha);
       const description = i18nString(UIStrings.theCertificateChainForThisSite);
       if (certificateSecurityState.certificateHasWeakSignature) {
@@ -1125,7 +1123,7 @@ export class SecurityMainView extends UI.Widget.VBox {
           i18nString(UIStrings.publickeypinningWasBypassedByA)));
     }
 
-    if (certificateSecurityState && certificateSecurityState.isCertificateExpiringSoon()) {
+    if (certificateSecurityState?.isCertificateExpiringSoon()) {
       explanations.push(new SecurityStyleExplanation(
           Protocol.Security.SecurityState.Info, undefined, i18nString(UIStrings.certificateExpiresSoon),
           i18nString(UIStrings.theCertificateForThisSiteExpires)));
@@ -1205,8 +1203,7 @@ export class SecurityMainView extends UI.Widget.VBox {
           i18nString(UIStrings.thisPageIncludesAFormWithA)));
     }
 
-    if (visibleSecurityState.certificateSecurityState === null ||
-        visibleSecurityState.certificateSecurityState.certificateNetworkError === null) {
+    if (visibleSecurityState.certificateSecurityState?.certificateNetworkError === null) {
       if (securityStateIssueIds.includes('ran-content-with-cert-error')) {
         addSecureExplanation = false;
         explanations.push(new SecurityStyleExplanation(
@@ -1624,15 +1621,16 @@ export interface OriginState {
 export type Origin = Platform.DevToolsPath.UrlString;
 
 export class SecurityRevealer implements Common.Revealer.Revealer<CookieReportView> {
-  async reveal(cookieReportView: CookieReportView): Promise<void> {
+  async reveal(): Promise<void> {
     await UI.ViewManager.ViewManager.instance().showView('security');
     const view = UI.ViewManager.ViewManager.instance().view('security');
     if (view) {
       const securityPanel = await view.widget();
-      if (securityPanel instanceof SecurityPanel) {
-        securityPanel.setVisibleView(cookieReportView);
+      if (securityPanel instanceof SecurityPanel && securityPanel.sidebar.cookieReportTreeElement) {
+        securityPanel.sidebar.cookieReportTreeElement.select(/* omitFocus=*/ false, /* selectedByUser=*/ true);
       } else {
-        throw new Error('Expected securityPanel to be an instance of SecurityPanel');
+        throw new Error(
+            'Expected securityPanel to be an instance of SecurityPanel with a cookieReportTreeElement in the sidebar');
       }
     }
   }

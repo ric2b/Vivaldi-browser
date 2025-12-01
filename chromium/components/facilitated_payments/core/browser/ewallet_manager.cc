@@ -11,7 +11,7 @@
 #include "base/functional/callback_helpers.h"
 #include "base/time/time.h"
 #include "components/autofill/core/browser/data_manager/payments/payments_data_manager.h"
-#include "components/autofill/core/browser/data_model/ewallet.h"
+#include "components/autofill/core/browser/data_model/payments/ewallet.h"
 #include "components/autofill/core/browser/payments/payments_autofill_client.h"
 #include "components/autofill/core/browser/payments/payments_util.h"
 #include "components/facilitated_payments/core/browser/facilitated_payments_api_client.h"
@@ -19,6 +19,7 @@
 #include "components/facilitated_payments/core/browser/network_api/facilitated_payments_initiate_payment_request_details.h"
 #include "components/facilitated_payments/core/browser/network_api/facilitated_payments_initiate_payment_response_details.h"
 #include "components/facilitated_payments/core/browser/network_api/facilitated_payments_network_interface.h"
+#include "components/facilitated_payments/core/browser/strike_databases/payment_link_suggestion_strike_database.h"
 #include "components/facilitated_payments/core/features/features.h"
 #include "components/facilitated_payments/core/metrics/facilitated_payments_metrics.h"
 #include "components/facilitated_payments/core/utils/facilitated_payments_ui_utils.h"
@@ -42,11 +43,8 @@ EwalletManager::EwalletManager(
     FacilitatedPaymentsApiClientCreator api_client_creator,
     optimization_guide::OptimizationGuideDecider* optimization_guide_decider)
     : client_(CHECK_DEREF(client)),
-      api_client_creator_(std::move(api_client_creator)),
-      optimization_guide_decider_(CHECK_DEREF(optimization_guide_decider)) {
-  optimization_guide_decider_->RegisterOptimizationTypes(
-      {optimization_guide::proto::EWALLET_MERCHANT_ALLOWLIST});
-}
+      api_client_creator_(api_client_creator),
+      optimization_guide_decider_(CHECK_DEREF(optimization_guide_decider)) {}
 
 EwalletManager::~EwalletManager() {
   DismissPrompt();
@@ -83,6 +81,12 @@ void EwalletManager::TriggerEwalletPushPayment(const GURL& payment_link_url,
     return;
   }
 
+  if (client_->IsFoldable()) {
+    LogEwalletFlowExitedReason(EwalletFlowExitedReason::kFoldableDevice,
+                               scheme_);
+    return;
+  }
+
   autofill::PaymentsDataManager* payments_data_manager =
       client_->GetPaymentsDataManager();
   if (!payments_data_manager) {
@@ -93,6 +97,13 @@ void EwalletManager::TriggerEwalletPushPayment(const GURL& payment_link_url,
   if (!payments_data_manager->IsFacilitatedPaymentsEwalletUserPrefEnabled()) {
     LogEwalletFlowExitedReason(EwalletFlowExitedReason::kUserOptedOut, scheme_);
     return;
+  }
+
+  if (auto* strike_database = GetOrCreateStrikeDatabase()) {
+    if (strike_database->ShouldBlockFeature()) {
+      LogEwalletFlowExitedReason(EwalletFlowExitedReason::kMaxStrikes, scheme_);
+      return;
+    }
   }
 
   base::span<const autofill::Ewallet> ewallet_accounts =
@@ -139,7 +150,7 @@ void EwalletManager::Reset() {
 FacilitatedPaymentsApiClient* EwalletManager::GetApiClient() {
   if (!api_client_) {
     if (api_client_creator_) {
-      api_client_ = std::move(api_client_creator_).Run();
+      api_client_ = api_client_creator_.Run();
     }
   }
 
@@ -163,15 +174,13 @@ void EwalletManager::OnApiAvailabilityReceived(base::TimeTicks start_time,
 
   ShowEwalletPaymentPrompt(
       supported_ewallets_,
-      base::BindOnce(&EwalletManager::OnEwalletPaymentPromptResult,
+      base::BindOnce(&EwalletManager::OnEwalletAccountSelected,
                      weak_ptr_factory_.GetWeakPtr()));
 }
 
-void EwalletManager::OnEwalletPaymentPromptResult(
-    bool is_prompt_accepted,
-    int64_t selected_instrument_id) {
-  if (!is_prompt_accepted) {
-    return;
+void EwalletManager::OnEwalletAccountSelected(int64_t selected_instrument_id) {
+  if (auto* strike_database = GetOrCreateStrikeDatabase()) {
+    strike_database->ClearStrikes();
   }
 
   LogEwalletFopSelected(GetAvailableEwalletsConfiguration());
@@ -335,6 +344,9 @@ void EwalletManager::OnUiEvent(UiEvent ui_event_type) {
     }
     case UiEvent::kScreenClosedByUser: {
       if (ui_state_ == UiState::kFopSelector) {
+        if (auto* strike_database = GetOrCreateStrikeDatabase()) {
+          strike_database->AddStrike();
+        }
         LogEwalletFlowExitedReason(
             EwalletFlowExitedReason::kFopSelectorClosedByUser, scheme_);
         LogEwalletFopSelectorResultUkm(/*accepted=*/false, ukm_source_id_,
@@ -353,10 +365,10 @@ void EwalletManager::DismissPrompt() {
 
 void EwalletManager::ShowEwalletPaymentPrompt(
     base::span<const autofill::Ewallet> ewallet_suggestions,
-    base::OnceCallback<void(bool, int64_t)> on_user_decision_callback) {
+    base::OnceCallback<void(int64_t)> on_ewallet_account_selected) {
   ui_state_ = UiState::kFopSelector;
   client_->ShowEwalletPaymentPrompt(std::move(ewallet_suggestions),
-                                    std::move(on_user_decision_callback));
+                                    std::move(on_ewallet_account_selected));
 }
 
 void EwalletManager::ShowProgressScreen() {
@@ -383,6 +395,17 @@ void EwalletManager::DismissProgressScreen() {
   if (ui_state_ == UiState::kProgressScreen) {
     DismissPrompt();
   }
+}
+
+PaymentLinkSuggestionStrikeDatabase*
+EwalletManager::GetOrCreateStrikeDatabase() {
+  if (!strike_database_) {
+    if (auto* strike_database = client_->GetStrikeDatabase()) {
+      strike_database_ = std::make_unique<PaymentLinkSuggestionStrikeDatabase>(
+          strike_database);
+    }
+  }
+  return strike_database_.get();
 }
 
 }  // namespace payments::facilitated

@@ -199,16 +199,18 @@ protected:
             return nullptr;
         }
 
-        // Check if a typeface with this FontIdentity is already in the FontIdentity cache.
+        // Check if a typeface with this FontIdentity is already in the typeface cache.
         face = fTFCache.findByProcAndRef(find_by_FontIdentity, &identity);
         if (!face) {
-            sk_sp<SkTypeface> proxy = fScanner->MakeFromStream(
+            sk_sp<SkTypeface> realTypeface = fScanner->MakeFromStream(
                     std::unique_ptr<SkStreamAsset>(fFCI->openStream(identity)),
                     SkFontArguments().setCollectionIndex(identity.fTTCIndex));
-            face.reset(SkTypeface_FCI::Create(std::move(proxy), fFCI, identity,
+            face.reset(SkTypeface_FCI::Create(std::move(realTypeface), fFCI, identity,
                                               std::move(outFamilyName), outStyle, false));
-            // Add this FontIdentity to the FontIdentity cache.
-            fTFCache.add(face);
+            if (face) {
+                // Add this typeface to the typeface cache.
+                fTFCache.add(face);
+            }
         }
         // Add this request to the request cache.
         fCache.add(face, request.release());

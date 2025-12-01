@@ -7,6 +7,8 @@
 #include <utility>
 
 #include "base/check_op.h"
+#include "base/debug/alias.h"
+#include "base/json/json_writer.h"
 #include "base/notreached.h"
 #include "build/build_config.h"
 #include "printing/buildflags/buildflags.h"
@@ -159,6 +161,13 @@ mojom::ResultCode PrintingContext::UpdatePrintSettings(
     std::unique_ptr<PrintSettings> settings =
         PrintSettingsFromJobSettings(job_settings);
     if (!settings) {
+      // TODO(crbug.com/40897743): Investigate and remove.
+      std::optional<std::string> job_settings_json =
+          base::WriteJson(job_settings);
+      if (job_settings_json.has_value()) {
+        DEBUG_ALIAS_FOR_CSTR(job_settings_json_copy,
+                             job_settings_json.value().c_str(), 1024);
+      }
       DUMP_WILL_BE_NOTREACHED();
       return OnError();
     }
@@ -167,11 +176,6 @@ mojom::ResultCode PrintingContext::UpdatePrintSettings(
 
   mojom::PrinterType printer_type = static_cast<mojom::PrinterType>(
       job_settings.FindInt(kSettingPrinterType).value());
-  if (printer_type == mojom::PrinterType::kPrivetDeprecated ||
-      printer_type == mojom::PrinterType::kCloudDeprecated) {
-    NOTREACHED();
-  }
-
   bool open_in_external_preview =
       job_settings.contains(kSettingOpenPDFInPreview);
 

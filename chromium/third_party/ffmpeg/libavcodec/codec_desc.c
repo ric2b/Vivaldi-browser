@@ -1977,6 +1977,14 @@ static const AVCodecDescriptor codec_descriptors[] = {
         .long_name = NULL_IF_CONFIG_SMALL("RealVideo 6.0"),
         .props     = AV_CODEC_PROP_LOSSY | AV_CODEC_PROP_REORDER,
     },
+    {
+        .id        = AV_CODEC_ID_JPEGXL_ANIM,
+        .type      = AVMEDIA_TYPE_VIDEO,
+        .name      = "jpegxl_anim",
+        .long_name = NULL_IF_CONFIG_SMALL("JPEG XL animated"),
+        .props     = AV_CODEC_PROP_LOSSY | AV_CODEC_PROP_LOSSLESS,
+        .mime_types= MT("image/jxl"),
+    },
 
     /* various PCM "codecs" */
     {
@@ -2595,6 +2603,13 @@ static const AVCodecDescriptor codec_descriptors[] = {
         .type      = AVMEDIA_TYPE_AUDIO,
         .name      = "adpcm_xmd",
         .long_name = NULL_IF_CONFIG_SMALL("ADPCM Konami XMD"),
+        .props     = AV_CODEC_PROP_INTRA_ONLY | AV_CODEC_PROP_LOSSY,
+    },
+    {
+        .id        = AV_CODEC_ID_ADPCM_IMA_XBOX,
+        .type      = AVMEDIA_TYPE_AUDIO,
+        .name      = "adpcm_ima_xbox",
+        .long_name = NULL_IF_CONFIG_SMALL("ADPCM IMA Xbox"),
         .props     = AV_CODEC_PROP_INTRA_ONLY | AV_CODEC_PROP_LOSSY,
     },
 

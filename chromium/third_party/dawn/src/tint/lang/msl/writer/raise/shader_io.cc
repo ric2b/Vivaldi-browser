@@ -28,7 +28,6 @@
 #include "src/tint/lang/msl/writer/raise/shader_io.h"
 
 #include <memory>
-#include <utility>
 
 #include "src/tint/lang/core/ir/builder.h"
 #include "src/tint/lang/core/ir/module.h"

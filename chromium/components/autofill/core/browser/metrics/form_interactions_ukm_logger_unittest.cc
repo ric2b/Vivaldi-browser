@@ -7,12 +7,14 @@
 #include <vector>
 
 #include "base/base64.h"
+#include "base/strings/to_string.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/metrics/user_action_tester.h"
 #include "base/test/scoped_feature_list.h"
 #include "components/autofill/core/browser/crowdsourcing/autofill_crowdsourcing_encoding.h"
 #include "components/autofill/core/browser/field_types.h"
 #include "components/autofill/core/browser/form_structure_test_api.h"
+#include "components/autofill/core/browser/heuristic_source.h"
 #include "components/autofill/core/browser/metrics/autofill_metrics_test_base.h"
 #include "components/autofill/core/browser/metrics/ukm_metrics_test_utils.h"
 #include "components/autofill/core/browser/proto/api_v1.pb.h"
@@ -304,10 +306,9 @@ TEST_F(FieldLogUkmMetricTest, TestShowSuggestionAutofillStatus) {
           AutofillStatus::kSuggestionWasShown, AutofillStatus::kWasFocused};
       std::map<std::string, int64_t> expected = {
           {UFIT::kFormSessionIdentifierName,
-           AutofillMetrics::FormGlobalIdToHash64Bit(form.global_id())},
+           FormGlobalIdToHash64Bit(form.global_id())},
           {UFIT::kFieldSessionIdentifierName,
-           AutofillMetrics::FieldGlobalIdToHash64Bit(
-               form.fields()[i].global_id())},
+           FieldGlobalIdToHash64Bit(form.fields()[i].global_id())},
           {UFIT::kFieldSignatureName,
            Collapse(CalculateFieldSignatureForField(form.fields()[i])).value()},
           {UFIT::kFormControlType2Name,
@@ -410,10 +411,9 @@ TEST_F(FieldLogUkmMetricTest, AddressSubmittedFormLogEvents) {
       }
       std::map<std::string, int64_t> expected = {
           {UFIT::kFormSessionIdentifierName,
-           AutofillMetrics::FormGlobalIdToHash64Bit(form.global_id())},
+           FormGlobalIdToHash64Bit(form.global_id())},
           {UFIT::kFieldSessionIdentifierName,
-           AutofillMetrics::FieldGlobalIdToHash64Bit(
-               form.fields()[i].global_id())},
+           FieldGlobalIdToHash64Bit(form.fields()[i].global_id())},
           {UFIT::kFieldSignatureName,
            Collapse(CalculateFieldSignatureForField(form.fields()[i])).value()},
           {UFIT::kAutofillSkippedStatusName,
@@ -453,10 +453,9 @@ TEST_F(FieldLogUkmMetricTest, AddressSubmittedFormLogEvents) {
           i < 3 ? SubmissionSource::FORM_SUBMISSION : SubmissionSource::NONE;
       std::map<std::string, int64_t> expected = {
           {UFIAST::kFormSessionIdentifierName,
-           AutofillMetrics::FormGlobalIdToHash64Bit(form.global_id())},
+           FormGlobalIdToHash64Bit(form.global_id())},
           {UFIAST::kFieldSessionIdentifierName,
-           AutofillMetrics::FieldGlobalIdToHash64Bit(
-               form.fields()[i % 3].global_id())},
+           FieldGlobalIdToHash64Bit(form.fields()[i % 3].global_id())},
           {UFIAST::kSubmittedType1Name, submitted_type1},
           {UFIAST::kSubmissionSourceName, static_cast<int>(submission_source)},
           {UFIAST::kMillisecondsFromFormParsedUntilSubmissionName, 1000},
@@ -482,7 +481,7 @@ TEST_F(FieldLogUkmMetricTest, AddressSubmittedFormLogEvents) {
         FORM_EVENT_LOCAL_SUGGESTION_WILL_SUBMIT_ONCE};
     std::map<std::string, int64_t> expected = {
         {UFST::kFormSessionIdentifierName,
-         AutofillMetrics::FormGlobalIdToHash64Bit(form.global_id())},
+         FormGlobalIdToHash64Bit(form.global_id())},
         {UFST::kFormSignatureName,
          Collapse(CalculateFormSignature(form)).value()},
         {UFST::kAutofillFormEventsName, form_events.data()[0]},
@@ -622,10 +621,9 @@ TEST_F(FieldLogUkmMetricTest, AutofillFieldInfoMetricsFieldType) {
     field_log_events_count = 2;
     std::map<std::string, int64_t> expected = {
         {UFIT::kFormSessionIdentifierName,
-         AutofillMetrics::FormGlobalIdToHash64Bit(form.global_id())},
+         FormGlobalIdToHash64Bit(form.global_id())},
         {UFIT::kFieldSessionIdentifierName,
-         AutofillMetrics::FieldGlobalIdToHash64Bit(
-             form.fields()[i].global_id())},
+         FieldGlobalIdToHash64Bit(form.fields()[i].global_id())},
         {UFIT::kFieldSignatureName,
          Collapse(CalculateFieldSignatureForField(form.fields()[i])).value()},
         {UFIT::kServerType1Name, server_types[i]},
@@ -645,20 +643,10 @@ TEST_F(FieldLogUkmMetricTest, AutofillFieldInfoMetricsFieldType) {
         {UFIT::kAutofillStatusVectorName, autofill_status_vector.data()[0]},
     };
     if (heuristic_types[i] != UNKNOWN_TYPE) {
-      field_log_events_count += 2;
       expected.merge(std::map<std::string, int64_t>({
           {UFIT::kHeuristicTypeName, heuristic_types[i]},
-#if BUILDFLAG(USE_INTERNAL_AUTOFILL_PATTERNS)
-          {UFIT::kHeuristicTypeLegacyName, UNKNOWN_TYPE},
-          {UFIT::kHeuristicTypeDefaultName, heuristic_types[i]},
-          {UFIT::kHeuristicTypeExperimentalName, UNKNOWN_TYPE},
       }));
-#else
-          {UFIT::kHeuristicTypeLegacyName, heuristic_types[i]},
-          {UFIT::kHeuristicTypeDefaultName, UNKNOWN_TYPE},
-          {UFIT::kHeuristicTypeExperimentalName, UNKNOWN_TYPE},
-      }));
-#endif
+      field_log_events_count += 2;
     } else {
       ++field_log_events_count;
     }
@@ -689,10 +677,9 @@ TEST_F(FieldLogUkmMetricTest, AutofillFieldInfoMetricsFieldType) {
     const auto* const entry = submission_entries[i].get();
     std::map<std::string, int64_t> expected = {
         {UFIAST::kFormSessionIdentifierName,
-         AutofillMetrics::FormGlobalIdToHash64Bit(form.global_id())},
+         FormGlobalIdToHash64Bit(form.global_id())},
         {UFIAST::kFieldSessionIdentifierName,
-         AutofillMetrics::FieldGlobalIdToHash64Bit(
-             form.fields()[i].global_id())},
+         FieldGlobalIdToHash64Bit(form.fields()[i].global_id())},
         {UFIAST::kSubmittedType1Name, EMPTY_TYPE},
         {UFIAST::kSubmissionSourceName,
          static_cast<int>(SubmissionSource::FORM_SUBMISSION)},
@@ -715,7 +702,7 @@ TEST_F(FieldLogUkmMetricTest, AutofillFieldInfoMetricsFieldType) {
   FormInteractionsUkmLogger::FormEventSet form_events = {};
   std::map<std::string, int64_t> expected = {
       {UFST::kFormSessionIdentifierName,
-       AutofillMetrics::FormGlobalIdToHash64Bit(form.global_id())},
+       FormGlobalIdToHash64Bit(form.global_id())},
       {UFST::kFormSignatureName,
        Collapse(CalculateFormSignature(form)).value()},
       {UFST::kAutofillFormEventsName, form_events.data()[0]},
@@ -787,10 +774,9 @@ TEST_F(FieldLogUkmMetricTest, AutofillFieldInfoMetricsEditedFieldWithoutFill) {
     const auto* const entry = entries[i].get();
     std::map<std::string, int64_t> expected = {
         {UFIT::kFormSessionIdentifierName,
-         AutofillMetrics::FormGlobalIdToHash64Bit(form.global_id())},
+         FormGlobalIdToHash64Bit(form.global_id())},
         {UFIT::kFieldSessionIdentifierName,
-         AutofillMetrics::FieldGlobalIdToHash64Bit(
-             form.fields()[i].global_id())},
+         FieldGlobalIdToHash64Bit(form.fields()[i].global_id())},
         {UFIT::kFieldSignatureName,
          Collapse(CalculateFieldSignatureForField(form.fields()[i])).value()},
         {UFIT::kFormControlType2Name,
@@ -821,10 +807,9 @@ TEST_F(FieldLogUkmMetricTest, AutofillFieldInfoMetricsEditedFieldWithoutFill) {
         i < 3 ? SubmissionSource::FORM_SUBMISSION : SubmissionSource::NONE;
     std::map<std::string, int64_t> expected = {
         {UFIAST::kFormSessionIdentifierName,
-         AutofillMetrics::FormGlobalIdToHash64Bit(form.global_id())},
+         FormGlobalIdToHash64Bit(form.global_id())},
         {UFIAST::kFieldSessionIdentifierName,
-         AutofillMetrics::FieldGlobalIdToHash64Bit(
-             form.fields()[i % 3].global_id())},
+         FieldGlobalIdToHash64Bit(form.fields()[i % 3].global_id())},
         {UFIAST::kSubmittedType1Name, submitted_types[i % 3]},
         {UFIAST::kSubmissionSourceName, static_cast<int>(submission_source)},
         {UFIAST::kMillisecondsFromFormParsedUntilSubmissionName, 1000},
@@ -847,7 +832,7 @@ TEST_F(FieldLogUkmMetricTest, AutofillFieldInfoMetricsEditedFieldWithoutFill) {
       FORM_EVENT_DID_PARSE_FORM};
   std::map<std::string, int64_t> expected = {
       {UFST::kFormSessionIdentifierName,
-       AutofillMetrics::FormGlobalIdToHash64Bit(form.global_id())},
+       FormGlobalIdToHash64Bit(form.global_id())},
       {UFST::kFormSignatureName,
        Collapse(CalculateFormSignature(form)).value()},
       {UFST::kAutofillFormEventsName, form_events.data()[0]},
@@ -1038,10 +1023,9 @@ TEST_F(FieldLogUkmMetricTest,
     const auto* const entry = entries[i].get();
     std::map<std::string, int64_t> expected = {
         {UFIT::kFormSessionIdentifierName,
-         AutofillMetrics::FormGlobalIdToHash64Bit(form.global_id())},
+         FormGlobalIdToHash64Bit(form.global_id())},
         {UFIT::kFieldSessionIdentifierName,
-         AutofillMetrics::FieldGlobalIdToHash64Bit(
-             form.fields()[i].global_id())},
+         FieldGlobalIdToHash64Bit(form.fields()[i].global_id())},
         {UFIT::kFieldSignatureName,
          Collapse(CalculateFieldSignatureForField(form.fields()[i])).value()},
         {UFIT::kOverallTypeName, field_types[i]},
@@ -1071,7 +1055,7 @@ TEST_F(FieldLogUkmMetricTest,
       FORM_EVENT_DID_PARSE_FORM};
   std::map<std::string, int64_t> expected = {
       {UFST::kFormSessionIdentifierName,
-       AutofillMetrics::FormGlobalIdToHash64Bit(form.global_id())},
+       FormGlobalIdToHash64Bit(form.global_id())},
       {UFST::kFormSignatureName,
        Collapse(CalculateFormSignature(form)).value()},
       {UFST::kAutofillFormEventsName, form_events.data()[0]},
@@ -1148,10 +1132,9 @@ TEST_F(FieldLogUkmMetricTest, AutofillFieldInfoMetricsRecordOnDifferentFrames) {
     const auto* const entry = entries[i].get();
     std::map<std::string, int64_t> expected = {
         {UFIT::kFormSessionIdentifierName,
-         AutofillMetrics::FormGlobalIdToHash64Bit(form.global_id())},
+         FormGlobalIdToHash64Bit(form.global_id())},
         {UFIT::kFieldSessionIdentifierName,
-         AutofillMetrics::FieldGlobalIdToHash64Bit(
-             form.fields()[i].global_id())},
+         FieldGlobalIdToHash64Bit(form.fields()[i].global_id())},
         {UFIT::kFieldSignatureName,
          Collapse(CalculateFieldSignatureForField(form.fields()[i])).value()},
         {UFIT::kOverallTypeName, field_types[i]},
@@ -1163,19 +1146,9 @@ TEST_F(FieldLogUkmMetricTest, AutofillFieldInfoMetricsRecordOnDifferentFrames) {
          base::to_underlying(AutofillMetrics::AutocompleteState::kNone)},
         {UFIT::kAutofillStatusVectorName, autofill_status_vector.data()[0]},
         {UFIT::kHeuristicTypeName, field_types[i]},
-#if BUILDFLAG(USE_INTERNAL_AUTOFILL_PATTERNS)
-        {UFIT::kHeuristicTypeLegacyName, UNKNOWN_TYPE},
-        {UFIT::kHeuristicTypeDefaultName, field_types[i]},
-        {UFIT::kHeuristicTypeExperimentalName, UNKNOWN_TYPE},
-#else
-        {UFIT::kHeuristicTypeLegacyName, field_types[i]},
-        {UFIT::kHeuristicTypeDefaultName, UNKNOWN_TYPE},
-        {UFIT::kHeuristicTypeExperimentalName, UNKNOWN_TYPE},
-#endif
-        {UFIT::kFieldLogEventCountName, 2},
         {UFIT::kRankInFieldSignatureGroupName, 1},
+        {UFIT::kFieldLogEventCountName, 2},
     };
-
     EXPECT_EQ(expected.size(), entry->metrics.size());
     for (const auto& [metric, value] : expected) {
       test_ukm_recorder().ExpectEntryMetric(entry, metric, value);
@@ -1192,7 +1165,7 @@ TEST_F(FieldLogUkmMetricTest, AutofillFieldInfoMetricsRecordOnDifferentFrames) {
       FORM_EVENT_DID_PARSE_FORM};
   std::map<std::string, int64_t> expected = {
       {UFST::kFormSessionIdentifierName,
-       AutofillMetrics::FormGlobalIdToHash64Bit(form.global_id())},
+       FormGlobalIdToHash64Bit(form.global_id())},
       {UFST::kFormSignatureName,
        Collapse(CalculateFormSignature(form)).value()},
       {UFST::kAutofillFormEventsName, form_events.data()[0]},
@@ -1698,7 +1671,7 @@ TEST_P(LogFocusedComplexFormAtFormRemoveTest, TestEmittedUKM) {
       {features::kAutofillAblationStudyAblationWeightPerMilleParam.name,
        "1000"},
       {features::kAutofillAblationStudyIsDryRun.name,
-       GetParam().ablation_study_is_dry_run ? "true" : "false"}};
+       base::ToString(GetParam().ablation_study_is_dry_run)}};
   base::test::ScopedFeatureList scoped_feature_list;
   if (GetParam().enable_ablation_study_for_addresses) {
     scoped_feature_list.InitAndEnableFeatureWithParameters(
@@ -1786,7 +1759,7 @@ TEST_P(LogFocusedComplexFormAtFormRemoveTest, TestEmittedUKM) {
   EXPECT_EQ(expected.size() + 2, entry->metrics.size());
   test_ukm_recorder().ExpectEntryMetric(
       entry, UkmFocusedComplexFormType::kFormSessionIdentifierName,
-      AutofillMetrics::FormGlobalIdToHash64Bit(form.global_id()));
+      FormGlobalIdToHash64Bit(form.global_id()));
   test_ukm_recorder().ExpectEntryMetric(
       entry, UkmFocusedComplexFormType::kFormSignatureName,
       Collapse(CalculateFormSignature(form)).value());
@@ -1851,7 +1824,7 @@ TEST_F(FieldLogUkmMetricTest,
   test_ukm_recorder().ExpectEntryMetric(
       entry,
       UkmSubmittedFormWithExperimentalFieldsType::kFormSessionIdentifierName,
-      AutofillMetrics::FormGlobalIdToHash64Bit(form.global_id()));
+      FormGlobalIdToHash64Bit(form.global_id()));
   test_ukm_recorder().ExpectEntryMetric(
       entry,
       UkmSubmittedFormWithExperimentalFieldsType::

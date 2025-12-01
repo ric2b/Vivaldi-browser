@@ -14,8 +14,7 @@
 #include "src/sandbox/indirect-pointer-tag.h"
 #include "src/sandbox/isolate.h"
 
-namespace v8 {
-namespace internal {
+namespace v8::internal {
 
 class Object;
 class ExposedTrustedObject;
@@ -503,6 +502,8 @@ class IndirectPointerSlot
   // The isolate parameter is required unless using the kCodeTag tag, as these
   // object use a different pointer table.
   inline Tagged<Object> Relaxed_Load(IsolateForSandbox isolate) const;
+  inline Tagged<Object> Relaxed_Load_AllowUnpublished(
+      IsolateForSandbox isolate) const;
   inline Tagged<Object> Acquire_Load(IsolateForSandbox isolate) const;
 
   // Store a reference to the given object into this slot. The object must be
@@ -528,6 +529,10 @@ class IndirectPointerSlot
   // appropriate pointer table to use and loading the referenced entry in it.
   // This method is used internally by load() and related functions but can
   // also be used to manually implement indirect pointer accessors.
+  // {allow_unpublished}: allow the "unpublished" tag in addition to the
+  // tag specified by the slot.
+  enum TagCheckStrictness { kRequireExactMatch, kAllowUnpublishedEntries };
+  template <TagCheckStrictness allow_unpublished = kRequireExactMatch>
   inline Tagged<Object> ResolveHandle(IndirectPointerHandle handle,
                                       IsolateForSandbox isolate) const;
 
@@ -535,6 +540,7 @@ class IndirectPointerSlot
 #ifdef V8_ENABLE_SANDBOX
   // Retrieve the object referenced through the given trusted pointer handle
   // from the trusted pointer table.
+  template <TagCheckStrictness allow_unpublished = kRequireExactMatch>
   inline Tagged<Object> ResolveTrustedPointerHandle(
       IndirectPointerHandle handle, IsolateForSandbox isolate) const;
   // Retrieve the Code object referenced through the given code pointer handle
@@ -570,7 +576,19 @@ class WriteProtectedSlot : public SlotT {
   WritableJitAllocation& jit_allocation_;
 };
 
-}  // namespace internal
-}  // namespace v8
+// Copies tagged words from |src| to |dst|. The data spans must not overlap.
+// |src| and |dst| must be kTaggedSize-aligned.
+inline void CopyTagged(Address dst, const Address src, size_t num_tagged);
+
+// Sets |counter| number of kTaggedSize-sized values starting at |start| slot.
+inline void MemsetTagged(Tagged_t* start, Tagged<MaybeObject> value,
+                         size_t counter);
+
+// Sets |counter| number of kTaggedSize-sized values starting at |start| slot.
+template <typename T>
+inline void MemsetTagged(SlotBase<T, Tagged_t> start, Tagged<MaybeObject> value,
+                         size_t counter);
+
+}  // namespace v8::internal
 
 #endif  // V8_OBJECTS_SLOTS_H_

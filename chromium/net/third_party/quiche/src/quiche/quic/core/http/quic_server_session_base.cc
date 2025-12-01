@@ -32,8 +32,10 @@ QuicServerSessionBase::QuicServerSessionBase(
     QuicConnection* connection, Visitor* visitor,
     QuicCryptoServerStreamBase::Helper* helper,
     const QuicCryptoServerConfig* crypto_config,
-    QuicCompressedCertsCache* compressed_certs_cache)
-    : QuicSpdySession(connection, visitor, config, supported_versions),
+    QuicCompressedCertsCache* compressed_certs_cache,
+    QuicPriorityType priority_type)
+    : QuicSpdySession(connection, visitor, config, supported_versions,
+                      priority_type),
       crypto_config_(crypto_config),
       compressed_certs_cache_(compressed_certs_cache),
       helper_(helper),
@@ -308,7 +310,7 @@ QuicSSLConfig QuicServerSessionBase::GetSSLConfig() const {
     return ssl_config;
   }
 
-  absl::InlinedVector<uint16_t, 8> signature_algorithms =
+  QuicSignatureAlgorithmVector signature_algorithms =
       crypto_config_->proof_source()->SupportedTlsSignatureAlgorithms();
   if (!signature_algorithms.empty()) {
     ssl_config.signing_algorithm_prefs = std::move(signature_algorithms);

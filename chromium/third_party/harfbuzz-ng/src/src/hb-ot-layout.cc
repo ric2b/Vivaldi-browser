@@ -2033,7 +2033,7 @@ inline void hb_ot_map_t::apply (const Proxy &proxy,
        * (plus some past glyphs).
        *
        * Only try applying the lookup if there is any overlap. */
-      if (accel->digest.may_have (c.digest))
+      if (accel->digest.may_intersect (c.digest))
       {
 	c.set_lookup_index (lookup_index);
 	c.set_lookup_mask (lookup.mask, false);
@@ -2059,7 +2059,7 @@ inline void hb_ot_map_t::apply (const Proxy &proxy,
       if (stage->pause_func (plan, font, buffer))
       {
 	/* Refresh working buffer digest since buffer changed. */
-	c.digest = buffer->digest ();
+	buffer->collect_codepoints (c.digest);
       }
     }
   }

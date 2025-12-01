@@ -2,6 +2,10 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <memory>
+#include <utility>
+
+#include "base/functional/callback_forward.h"
 #ifdef UNSAFE_BUFFERS_BUILD
 // TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
 #pragma allow_unsafe_buffers
@@ -13,7 +17,6 @@
 #include "base/metrics/histogram_macros.h"
 #include "components/affiliations/core/browser/affiliation_api.pb.h"
 #include "components/affiliations/core/browser/affiliation_utils.h"
-#include "components/affiliations/core/browser/features.h"
 #include "components/affiliations/core/browser/lookup_affiliation_response_parser.h"
 #include "components/variations/net/variations_http_headers.h"
 #include "crypto/sha2.h"
@@ -31,11 +34,20 @@ namespace affiliations {
 
 namespace {
 constexpr int kPrefixLength = 16;
+// The header key used to set the criticality of the request.
+// 174067345 represents the extension tag number of
+// `frameworks.client.data.QosExtension`
+constexpr char kQosExtensionHeader[] = "x-goog-ext-174067345-bin";
+// CgIIAQ== is the result of base64 encoding the SHEDDABLE_PLUS criticality
+// value by running: `echo "request_qos { criticality: SHEDDABLE_PLUS }" | \`
+// `printproto --proto2 --reverse --raw_protocol_buffer \`
+// `--message=frameworks.client.data.QosExtension | base64`
+constexpr char kSheddablePlusCriticalityHash[] = "CgIIAQ==";
 
 // Enumeration listing the possible outcomes of fetching affiliation information
 // from the Affiliation API. This is used in UMA histograms, so do not change
 // existing values, only add new values at the end.
-enum class AffiliationFetchResult {
+enum class AffiliationFetchOutcome {
   kSuccess = 0,
   kFailure = 1,
   kMalformed = 2,
@@ -66,28 +78,28 @@ uint64_t ComputeHashPrefix(const FacetURI& uri) {
   return result;
 }
 
-void LogFetchResult(AffiliationFetchResult result,
+void LogFetchResult(AffiliationFetchOutcome result,
                     base::TimeDelta fetch_time,
                     size_t response_size = 0) {
   base::UmaHistogramEnumeration(
       "PasswordManager.AffiliationFetcher.FetchResult", result);
 
   switch (result) {
-    case AffiliationFetchResult::kSuccess:
+    case AffiliationFetchOutcome::kSuccess:
       base::UmaHistogramTimes(
           "PasswordManager.AffiliationFetcher.FetchTime.Success", fetch_time);
       base::UmaHistogramCounts1M(
           "PasswordManager.AffiliationFetcher.ResponseSize.Success",
           response_size);
       break;
-    case AffiliationFetchResult::kMalformed:
+    case AffiliationFetchOutcome::kMalformed:
       base::UmaHistogramTimes(
           "PasswordManager.AffiliationFetcher.FetchTime.Malformed", fetch_time);
       base::UmaHistogramCounts1M(
           "PasswordManager.AffiliationFetcher.ResponseSize.Malformed",
           response_size);
       break;
-    case AffiliationFetchResult::kFailure:
+    case AffiliationFetchOutcome::kFailure:
       base::UmaHistogramTimes(
           "PasswordManager.AffiliationFetcher.FetchTime.Failure", fetch_time);
       break;
@@ -98,10 +110,8 @@ affiliation_pb::LookupAffiliationMask CreateLookupMask(
   affiliation_pb::LookupAffiliationMask mask;
 
   mask.set_branding_info(request_info.branding_info);
-  const bool grouping_info =
-      base::FeatureList::IsEnabled(features::kAffiliationsGroupInfoEnabled);
-  mask.set_grouping_info(grouping_info);
-  mask.set_group_branding_info(grouping_info);
+  mask.set_grouping_info(true);
+  mask.set_group_branding_info(true);
   mask.set_change_password_info(request_info.change_password_info);
   mask.set_psl_extension_list(request_info.psl_extension_list);
   return mask;
@@ -114,7 +124,13 @@ HashAffiliationFetcher::HashAffiliationFetcher(
     AffiliationFetcherDelegate* delegate)
     : url_loader_factory_(std::move(url_loader_factory)), delegate_(delegate) {}
 
-HashAffiliationFetcher::~HashAffiliationFetcher() = default;
+HashAffiliationFetcher::~HashAffiliationFetcher() {
+  // Run the callback in case the fetcher is destroyed before fetching the
+  // result.
+  if (result_callback_) {
+    std::move(result_callback_).Run(AffiliationFetcherInterface::FetchResult());
+  }
+}
 
 AffiliationFetcherDelegate* HashAffiliationFetcher::delegate() const {
   return delegate_;
@@ -122,8 +138,10 @@ AffiliationFetcherDelegate* HashAffiliationFetcher::delegate() const {
 
 void HashAffiliationFetcher::StartRequest(
     const std::vector<FacetURI>& facet_uris,
-    RequestInfo request_info) {
+    RequestInfo request_info,
+    base::OnceCallback<void(FetchResult)> result_callback) {
   requested_facet_uris_ = facet_uris;
+  result_callback_ = std::move(result_callback);
 
   net::NetworkTrafficAnnotationTag traffic_annotation =
       net::DefineNetworkTrafficAnnotation("affiliation_lookup_by_hash", R"(
@@ -200,6 +218,8 @@ void HashAffiliationFetcher::FinalizeRequest(
       net::LOAD_BYPASS_CACHE | net::LOAD_DISABLE_CACHE;
   resource_request->credentials_mode = network::mojom::CredentialsMode::kOmit;
   resource_request->method = "POST";
+  resource_request->headers.SetHeader(kQosExtensionHeader,
+                                      kSheddablePlusCriticalityHash);
 
   variations::AppendVariationsHeaderUnknownSignedIn(
       query_url, variations::InIncognito::kNo, resource_request.get());
@@ -244,39 +264,56 @@ bool HashAffiliationFetcher::ParseResponse(
 
 void HashAffiliationFetcher::OnSimpleLoaderComplete(
     std::unique_ptr<std::string> response_body) {
+  CHECK(result_callback_);
+  // Temporarily create a local copy of the callback to make sure we can run it
+  // even if this fetcher is destroyed in OnFetch[Succeeded|Failed].
+  // This will be removed after the delegate logic is also removed.
+  auto callback_local_copy = std::move(result_callback_);
+  FetchResult fetch_result;
+  fetch_result.network_status = simple_url_loader_->NetError();
   base::TimeDelta fetch_time = fetch_timer_.Elapsed();
   // Note that invoking the |delegate_| may destroy |this| synchronously, so the
   // invocation must happen last.
   bool success = simple_url_loader_->NetError() == net::OK;
-  int response_code = 0;
+  std::optional<net::HttpStatusCode> response_code;
   if (simple_url_loader_->ResponseInfo() &&
       simple_url_loader_->ResponseInfo()->headers) {
-    response_code =
-        simple_url_loader_->ResponseInfo()->headers->response_code();
+    response_code = net::TryToGetHttpStatusCode(
+        simple_url_loader_->ResponseInfo()->headers->response_code());
   }
-
+  fetch_result.http_status_code = response_code;
   if (!success || net::HTTP_OK != response_code) {
-    LogFetchResult(AffiliationFetchResult::kFailure, fetch_time);
-    base::UmaHistogramSparse(
-        "PasswordManager.AffiliationFetcher.FetchHttpResponseCode",
-        response_code);
+    LogFetchResult(AffiliationFetchOutcome::kFailure, fetch_time);
+    if (response_code.has_value()) {
+      base::UmaHistogramSparse(
+          "PasswordManager.AffiliationFetcher.FetchHttpResponseCode",
+          response_code.value());
+    }
     // Network error codes are negative. See: src/net/base/net_error_list.h.
     base::UmaHistogramSparse(
         "PasswordManager.AffiliationFetcher.FetchErrorCode",
         -simple_url_loader_->NetError());
+    // TODO(crbug.com/371938601): clean up delegate.
     delegate_->OnFetchFailed(this);
+    std::move(callback_local_copy).Run(std::move(fetch_result));
     return;
   }
 
-  auto result_data = std::make_unique<AffiliationFetcherDelegate::Result>();
-  if (ParseResponse(*response_body, result_data.get())) {
-    LogFetchResult(AffiliationFetchResult::kSuccess, fetch_time,
+  ParsedFetchResponse result_data;
+  if (ParseResponse(*response_body, &result_data)) {
+    LogFetchResult(AffiliationFetchOutcome::kSuccess, fetch_time,
                    response_body->size());
-    delegate_->OnFetchSucceeded(this, std::move(result_data));
+    fetch_result.data = result_data;
+    // TODO(crbug.com/371938601): clean up delegate.
+    delegate_->OnFetchSucceeded(
+        this, std::make_unique<ParsedFetchResponse>(result_data));
+    std::move(callback_local_copy).Run(std::move(fetch_result));
   } else {
-    LogFetchResult(AffiliationFetchResult::kMalformed, fetch_time,
+    LogFetchResult(AffiliationFetchOutcome::kMalformed, fetch_time,
                    response_body->size());
+    // TODO(crbug.com/371938601): clean up delegate.
     delegate_->OnMalformedResponse(this);
+    std::move(callback_local_copy).Run(std::move(fetch_result));
   }
 }
 

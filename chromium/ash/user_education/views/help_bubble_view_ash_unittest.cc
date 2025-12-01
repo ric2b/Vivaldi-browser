@@ -22,7 +22,6 @@
 #include "ui/color/color_provider.h"
 #include "ui/events/base_event_utils.h"
 #include "ui/events/event.h"
-#include "ui/gfx/paint_vector_icon.h"
 #include "ui/gfx/vector_icon_types.h"
 #include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/bubble/bubble_frame_view.h"
@@ -180,9 +179,8 @@ TEST_P(HelpBubbleViewAshBodyIconTest, BodyIcon) {
 // Verifies that help bubbles have the appropriate background color.
 TEST_F(HelpBubbleViewAshTest, BackgroundColor) {
   const auto* const help_bubble_view = CreateHelpBubbleView();
-  const auto* const color_provider = help_bubble_view->GetColorProvider();
-  EXPECT_EQ(help_bubble_view->color(),
-            color_provider->GetColor(cros_tokens::kCrosSysDialogContainer));
+  EXPECT_EQ(help_bubble_view->background_color(),
+            cros_tokens::kCrosSysDialogContainer);
 }
 
 // Verifies that help bubbles can activate.

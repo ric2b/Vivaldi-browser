@@ -44,7 +44,7 @@ namespace aec3 {
 namespace {
 
 std::string ProduceDebugText(size_t num_render_channels, size_t delay) {
-  rtc::StringBuilder ss;
+  StringBuilder ss;
   ss << "delay: " << delay << ", ";
   ss << "num_render_channels:" << num_render_channels;
   return ss.Release();
@@ -566,7 +566,7 @@ TEST_P(AdaptiveFirFilterMultiChannel, FilterAndAdapt) {
                      e.begin(),
                      [&](float a, float b) { return a - b * kScale; });
       std::for_each(e.begin(), e.end(),
-                    [](float& a) { a = rtc::SafeClamp(a, -32768.f, 32767.f); });
+                    [](float& a) { a = SafeClamp(a, -32768.f, 32767.f); });
       fft.ZeroPaddedFft(e, Aec3Fft::Window::kRectangular, &E);
       for (auto& o : output) {
         for (size_t k = 0; k < kBlockSize; ++k) {

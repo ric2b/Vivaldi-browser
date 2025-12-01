@@ -27,6 +27,7 @@ ensure_in_path() {
 
 ensure_in_path xmlto
 ensure_in_path git
+ensure_in_path asciidoc
 
 DFLT_CATALOG_PATH="/usr/local/etc/xml/catalog"
 if [[ ! $XML_CATALOG_FILES && -f "$DFLT_CATALOG_PATH" ]]
@@ -36,19 +37,6 @@ then
   echo Using \'$DFLT_CATALOG_PATH\' for \$XML_CATALOG_FILES.
 fi
 
-# We pull asciidoc to get the right version
-BRANCH=10.2.0
-ASCIIDOC_HASH=545b79b8d7dae70d12bf0657359bdd36de0c5c26
-if [[ ! -d asciidoc || $(cd asciidoc && git rev-parse HEAD) != $ASCIIDOC_HASH ]]
-then
-  echo Cloning asciidoc
-  rm -rf asciidoc
-  git clone --branch $BRANCH https://github.com/asciidoc-py/asciidoc-py asciidoc
-  (cd asciidoc/asciidoc && ln -s asciidoc.py asciidoc && chmod ug+x asciidoc.py)
-fi
-echo Asciidoc up to date at $ASCIIDOC_HASH \($BRANCH\)
-
-export PATH=`pwd`/asciidoc/asciidoc:$PATH
 
 # We pull ansi2hash to convert demo script output
 BRANCH=1.8.0
@@ -77,6 +65,12 @@ H
 142
 s/Git Manual/Chromium depot_tools Manual
 s/Git/depot_tools
+H
+18
+i
+MAN1_TXT += depot_tools_tutorial.txt
+MAN1_TXT += depot_tools.txt
+.
 wq
 EOF
 
@@ -232,7 +226,7 @@ fi
 (
   export GIT_DIR="$(git rev-parse --git-dir)" &&
   cd git/Documentation &&
-  GIT_EDITOR=true make "${MAN1_TARGETS[@]}" "${MAN7_TARGETS[@]}" "${HTML_TARGETS[@]}"
+  GIT_EDITOR=true PYTHONWARNINGS="ignore" make "${MAN1_TARGETS[@]}" "${MAN7_TARGETS[@]}" "${HTML_TARGETS[@]}"
 )
 
 for x in "${HTML_TARGETS[@]}"

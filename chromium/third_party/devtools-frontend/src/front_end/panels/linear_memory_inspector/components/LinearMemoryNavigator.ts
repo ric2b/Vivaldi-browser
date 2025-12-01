@@ -12,7 +12,7 @@ import linearMemoryNavigatorStylesRaw from './linearMemoryNavigator.css.js';
 
 // TODO(crbug.com/391381439): Fully migrate off of constructed style sheets.
 const linearMemoryNavigatorStyles = new CSSStyleSheet();
-linearMemoryNavigatorStyles.replaceSync(linearMemoryNavigatorStylesRaw.cssContent);
+linearMemoryNavigatorStyles.replaceSync(linearMemoryNavigatorStylesRaw.cssText);
 
 const UIStrings = {
   /**
@@ -39,7 +39,7 @@ const UIStrings = {
    *@description Text to refresh the page
    */
   refresh: 'Refresh',
-};
+} as const;
 const str_ =
     i18n.i18n.registerUIStrings('panels/linear_memory_inspector/components/LinearMemoryNavigator.ts', UIStrings);
 const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);

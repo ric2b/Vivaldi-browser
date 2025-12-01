@@ -30,6 +30,8 @@
 #include "content/public/test/test_browser_context.h"
 #include "content/public/test/test_renderer_host.h"
 #include "content/test/test_render_frame_host.h"
+#include "services/network/public/cpp/permissions_policy/origin_with_possible_wildcards.h"
+#include "services/network/public/cpp/permissions_policy/permissions_policy_declaration.h"
 #include "services/network/public/mojom/permissions_policy/permissions_policy_feature.mojom.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -51,14 +53,15 @@ constexpr const char* kGeolocationPermissionsPolicyActionHistogramName =
     "Permissions.Action.Geolocation.CrossOriginFrame."
     "TopLevelHeaderPolicy";
 
-blink::ParsedPermissionsPolicy CreatePermissionsPolicy(
+network::ParsedPermissionsPolicy CreatePermissionsPolicy(
     network::mojom::PermissionsPolicyFeature feature,
     const std::vector<std::string>& origins,
     bool matches_all_origins = false) {
-  std::vector<blink::OriginWithPossibleWildcards> allow_origins;
+  std::vector<network::OriginWithPossibleWildcards> allow_origins;
   for (const auto& origin : origins) {
-    allow_origins.emplace_back(*blink::OriginWithPossibleWildcards::FromOrigin(
-        url::Origin::Create(GURL(origin))));
+    allow_origins.emplace_back(
+        *network::OriginWithPossibleWildcards::FromOrigin(
+            url::Origin::Create(GURL(origin))));
   }
   return {{feature, allow_origins, /*self_if_matches=*/std::nullopt,
            matches_all_origins,
@@ -135,7 +138,7 @@ class PermissionsDelegationUmaUtilTest
   content::RenderFrameHost* AddChildFrameWithPermissionsPolicy(
       content::RenderFrameHost* parent,
       const char* origin,
-      blink::ParsedPermissionsPolicy policy) {
+      network::ParsedPermissionsPolicy policy) {
     content::RenderFrameHost* result =
         content::RenderFrameHostTester::For(parent)->AppendChildWithPolicy(
             "", policy);
@@ -148,7 +151,7 @@ class PermissionsDelegationUmaUtilTest
   // The permissions policy is invariant and required the page to be
   // refreshed
   void RefreshAndSetPermissionsPolicy(content::RenderFrameHost** rfh,
-                                      blink::ParsedPermissionsPolicy policy) {
+                                      network::ParsedPermissionsPolicy policy) {
     content::RenderFrameHost* current = *rfh;
     auto navigation = content::NavigationSimulator::CreateRendererInitiated(
         current->GetLastCommittedURL(), current);
@@ -673,11 +676,11 @@ TEST_F(PermissionUmaUtilTest, GetDaysSinceUnusedSitePermissionRevocation) {
 // Inside your PermissionRecorderTest test fixture from earlier
 TEST_F(PermissionsDelegationUmaUtilTest, SiteLevelAndOSPromptVariantsTest) {
   std::vector<ElementAnchoredBubbleVariant> variant_vector = {
-      ElementAnchoredBubbleVariant::ASK};
+      ElementAnchoredBubbleVariant::kAsk};
 
 #if BUILDFLAG(IS_MAC)
-  variant_vector.push_back(ElementAnchoredBubbleVariant::OS_PROMPT);
-  variant_vector.push_back(ElementAnchoredBubbleVariant::OS_SYSTEM_SETTINGS);
+  variant_vector.push_back(ElementAnchoredBubbleVariant::kOsPrompt);
+  variant_vector.push_back(ElementAnchoredBubbleVariant::kOsSystemSettings);
 #endif
 
   std::optional<std::vector<ElementAnchoredBubbleVariant>> variants =
@@ -709,13 +712,13 @@ TEST_F(PermissionsDelegationUmaUtilTest, SiteLevelAndOSPromptVariantsTest) {
   ASSERT_EQ(1u, entries.size());
   const auto* entry = entries.back().get();
   EXPECT_EQ(*ukm_recorder.GetEntryMetric(entry, "SiteLevelScreen"),
-            static_cast<int64_t>(ElementAnchoredBubbleVariant::ASK));
+            static_cast<int64_t>(ElementAnchoredBubbleVariant::kAsk));
 #if BUILDFLAG(IS_MAC)
   EXPECT_EQ(*ukm_recorder.GetEntryMetric(entry, "OsPromptScreen"),
-            static_cast<int64_t>(ElementAnchoredBubbleVariant::OS_PROMPT));
+            static_cast<int64_t>(ElementAnchoredBubbleVariant::kOsPrompt));
   EXPECT_EQ(
       *ukm_recorder.GetEntryMetric(entry, "OsSystemSettingsScreen"),
-      static_cast<int64_t>(ElementAnchoredBubbleVariant::OS_SYSTEM_SETTINGS));
+      static_cast<int64_t>(ElementAnchoredBubbleVariant::kOsSystemSettings));
 #endif
 }
 
@@ -768,7 +771,7 @@ TEST_P(PermissionsDelegationUmaUtilTest, TopLevelFrame) {
   base::HistogramTester histograms;
   auto* main_frame = GetMainFrameAndNavigate(kTopLevelUrl);
   auto feature = PermissionUtil::GetPermissionsPolicyFeature(type);
-  blink::ParsedPermissionsPolicy top_policy;
+  network::ParsedPermissionsPolicy top_policy;
   if (feature.has_value() &&
       (GetParam().matches_all_origins || !GetParam().origins.empty())) {
     top_policy = CreatePermissionsPolicy(
@@ -864,7 +867,7 @@ TEST_P(CrossFramePermissionsDelegationUmaUtilTest, CrossOriginFrame) {
   base::HistogramTester histograms;
   auto* main_frame = GetMainFrameAndNavigate(kTopLevelUrl);
   auto feature = PermissionUtil::GetPermissionsPolicyFeature(type);
-  blink::ParsedPermissionsPolicy top_policy;
+  network::ParsedPermissionsPolicy top_policy;
   if (feature.has_value() &&
       (GetParam().matches_all_origins || !GetParam().origins.empty())) {
     top_policy = CreatePermissionsPolicy(
@@ -879,7 +882,7 @@ TEST_P(CrossFramePermissionsDelegationUmaUtilTest, CrossOriginFrame) {
   }
 
   // Add nested subframes A(B(C))
-  blink::ParsedPermissionsPolicy empty_policy;
+  network::ParsedPermissionsPolicy empty_policy;
   auto* child_frame = AddChildFrameWithPermissionsPolicy(
       main_frame, kCrossOriginFrameUrl,
       feature.has_value()

@@ -11,14 +11,15 @@ import {data as userTimingsData} from './UserTimingsHandler.js';
 const extensionTrackEntries: Types.Extensions.SyntheticExtensionTrackEntry[] = [];
 const extensionTrackData: Types.Extensions.ExtensionTrackData[] = [];
 const extensionMarkers: Types.Extensions.SyntheticExtensionMarker[] = [];
-const entryToNode: Map<Types.Events.Event, Helpers.TreeHelpers.TraceEntryNode> = new Map();
-const timeStampByName: Map<string, Types.Events.ConsoleTimeStamp> = new Map();
+const entryToNode = new Map<Types.Events.Event, Helpers.TreeHelpers.TraceEntryNode>();
+const timeStampByName = new Map<string, Types.Events.ConsoleTimeStamp>();
 
 const syntheticConsoleEntriesForTimingsTrack: Types.Events.SyntheticConsoleTimeStamp[] = [];
 
 export interface ExtensionTraceData {
   extensionTrackData: readonly Types.Extensions.ExtensionTrackData[];
   extensionMarkers: readonly Types.Extensions.SyntheticExtensionMarker[];
+  // TODO(andoli): Can we augment Renderer's entryToNode instead? To avoid the split of TimelineUIUtils's getEventSelfTime()?
   entryToNode: Map<Types.Events.Event, Helpers.TreeHelpers.TraceEntryNode>;
   syntheticConsoleEntriesForTimingsTrack: Types.Events.SyntheticConsoleTimeStamp[];
 }
@@ -84,22 +85,27 @@ export function extractConsoleAPIExtensionEntries(): void {
     if (!currentTimeStamp.args.data) {
       continue;
     }
-    const timeStampName = String(currentTimeStamp.args.data.name);
+    const timeStampName = String(currentTimeStamp.args.data.name ?? currentTimeStamp.args.data.message);
     timeStampByName.set(timeStampName, currentTimeStamp);
     const extensionData = extensionDataInConsoleTimeStamp(currentTimeStamp);
-    const startName = currentTimeStamp.args.data.start;
-    const endName = currentTimeStamp.args.data.end;
-    if (!extensionData && !startName && !endName) {
+    const start = currentTimeStamp.args.data.start;
+    const end = currentTimeStamp.args.data.end;
+    if (!extensionData && !start && !end) {
       continue;
     }
-    const startTimeStamp = startName ? timeStampByName.get(String(startName)) : undefined;
-    const endTimeStamp = endName ? timeStampByName.get(String(endName)) : undefined;
-    if (endTimeStamp && !startTimeStamp) {
+    // If the start or end is a number, it's assumed to be a timestamp
+    // from the tracing clock, so we use that directly, otherwise we
+    // assume it's the label of a previous console timestamp, in which
+    // case we use its corresponding timestamp.
+    const startTimeStamp =
+        typeof start === 'number' ? Types.Timing.Micro(start) : timeStampByName.get(String(start))?.ts;
+    const endTimeStamp = typeof end === 'number' ? Types.Timing.Micro(end) : timeStampByName.get(String(end))?.ts;
+    if (endTimeStamp !== undefined && startTimeStamp === undefined) {
       // Invalid data
       continue;
     }
-    const entryStartTime = startTimeStamp?.ts ?? currentTimeStamp.ts;
-    const entryEndTime = endTimeStamp?.ts ?? currentTimeStamp.ts;
+    const entryStartTime = startTimeStamp ?? currentTimeStamp.ts;
+    const entryEndTime = endTimeStamp ?? currentTimeStamp.ts;
     if (extensionData) {
       const unregisteredExtensionEntry: Omit<Types.Extensions.SyntheticExtensionTrackEntry, '_tag'> = {
         ...currentTimeStamp,
@@ -109,6 +115,7 @@ export function extractConsoleAPIExtensionEntries(): void {
         rawSourceEvent: currentTimeStamp,
         dur: Types.Timing.Micro(entryEndTime - entryStartTime),
         ts: entryStartTime,
+        ph: Types.Events.Phase.COMPLETE,
       };
       const extensionEntry =
           Helpers.SyntheticEvents.SyntheticEventsManager.getActiveManager()
@@ -166,7 +173,7 @@ export function extractConsoleAPIExtensionEntries(): void {
  *                `UserTimingsHandler`.
  */
 export function extractPerformanceAPIExtensionEntries(
-    timings: (Types.Events.SyntheticUserTimingPair|Types.Events.PerformanceMark)[]): void {
+    timings: Array<Types.Events.SyntheticUserTimingPair|Types.Events.PerformanceMark>): void {
   for (const timing of timings) {
     const extensionPayload = extensionDataInPerformanceTiming(timing);
     if (!extensionPayload) {
@@ -176,7 +183,8 @@ export function extractPerformanceAPIExtensionEntries(
 
     const extensionSyntheticEntry = {
       name: timing.name,
-      ph: Types.Events.Phase.COMPLETE,
+      ph: Types.Extensions.isExtensionPayloadMarker(extensionPayload) ? Types.Events.Phase.INSTANT :
+                                                                        Types.Events.Phase.COMPLETE,
       pid: timing.pid,
       tid: timing.tid,
       ts: timing.ts,
@@ -206,8 +214,8 @@ export function extractPerformanceAPIExtensionEntries(
   }
 }
 
-export function extensionDataInPerformanceTiming(timing: Types.Events.SyntheticUserTimingPair|
-                                                 Types.Events.PerformanceMark): Types.Extensions.ExtensionDataPayload|
+export function extensionDataInPerformanceTiming(
+    timing: Types.Events.SyntheticUserTimingPair|Types.Events.PerformanceMark): Types.Extensions.ExtensionDataPayload|
     null {
   const timingDetail =
       Types.Events.isPerformanceMark(timing) ? timing.args.data?.detail : timing.args.data.beginEvent.args.detail;

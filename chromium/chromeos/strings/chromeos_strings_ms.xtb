@@ -5,11 +5,13 @@
 <translation id="1014750484722996375">Meja</translation>
 <translation id="1018219910092211213">Tidak dapat menyelesaikan DNS</translation>
 <translation id="1018656279737460067">Dibatalkan</translation>
+<translation id="1019971142067430077">Tidak dapat membuat tajuk rakaman untuk kandungan ini</translation>
 <translation id="1020274983236703756">Aset <ph name="PRODUCT_NAME" /> eksklusif kini tersedia</translation>
 <translation id="1022628058306505708">Aliran Bumi</translation>
 <translation id="102432830749687801">Pastikan anda menggunakan apl Pemindahan kandungan oleh Google untuk mengalihkan data akaun sekolah anda kepada akaun peribadi anda sebelum anda kehilangan akses.</translation>
 <translation id="1026212596705997935">Pintasan digunakan untuk '<ph name="CONFLICT_ACCEL_NAME" />". Tekan pintasan baharu. Untuk menggantikan pintasan sedia ada, tekan pintasan ini sekali lagi.</translation>
 <translation id="1030856839388844477">Tetapkan semula penggunaan data</translation>
+<translation id="1047095725494118091">Tidak dapat memuat turun. Cuba lagi atau mulakan semula <ph name="DEVICE_TYPE" /> anda.</translation>
 <translation id="1047458377670401304"><ph name="CPU_NAME" /> (<ph name="THREAD_COUNT" /> urutan, <ph name="CPU_MAX_CLOCK_SPEED" />GHz)</translation>
 <translation id="1047773237499189053">Ciri baharu tersedia, gunakan kekunci Anak panah ke atas untuk mengetahui lebih lanjut.</translation>
 <translation id="1049663189809099096">kuning pastel</translation>
@@ -25,6 +27,7 @@
 <translation id="1082009148392559545">Memuat turun penyelamat skrin</translation>
 <translation id="1094693127011229778">Alamat IP tidak tersedia</translation>
 <translation id="1100902271996134409">Membuat imej...</translation>
+<translation id="1107856713690040084">Audio <ph name="DEVICE_TYPE" /></translation>
 <translation id="1116694919640316211">Mengenai</translation>
 <translation id="1118572504348554005">Kami boleh berkongsi maklum balas yang diserahkan melalui borang ini dengan rakan kongsi kami untuk menyelesaikan masalah pepijat dan masalah lain yang anda laporkan kepada kami. Jangan sertakan maklumat sensitif seperti kata laluan.</translation>
 <translation id="1119403468619527527">Terlalu sedikit perkataan untuk diringkaskan</translation>
@@ -38,10 +41,8 @@
 <translation id="1155154308031262006">Masukkan gesaan</translation>
 <translation id="115705039208660697">nanas</translation>
 <translation id="1164939766849482256">Penyelamat skrin subuh sehingga gelap</translation>
-<translation id="1166688493741195933">Gagal menjana nama rakaman</translation>
 <translation id="1167755866710282443">Buka menu untuk menyesuaikan kunci. Seret menu untuk bergerak.</translation>
 <translation id="1171349345463658120">lagun berpasir</translation>
-<translation id="1173894706177603556">Namakan semula</translation>
 <translation id="1174073918202301297">Pintasan ditambahkan</translation>
 <translation id="11743817593307477">Gunakan kekunci anak panah untuk menggerakkan kawalan ini kepada aksi permainan yang dikehendaki. Gunakan kekunci enter untuk menempatkan kawalan. Gunakan kekunci escape untuk membatalkan penempatan kawalan.</translation>
 <translation id="1175697296044146566"><ph name="DEVICE_TYPE" /> ini diurus oleh <ph name="MANAGER" />.</translation>
@@ -81,6 +82,7 @@
 <translation id="131461803491198646">Rangkaian utama, bukan perayauan</translation>
 <translation id="1327977588028644528">Get Laluan</translation>
 <translation id="1328223165223065150">Warna kertas dinding</translation>
+<translation id="1329478709358066995">Transkrip:</translation>
 <translation id="1330426557709298164">JPG</translation>
 <translation id="1337912285145772892">Muatkan mengikut kawasan imbasan</translation>
 <translation id="1343442362630695901">tasik garam</translation>
@@ -102,6 +104,7 @@
 <translation id="1418991483994088776">bunga orkid</translation>
 <translation id="142205161612889714">WEBM</translation>
 <translation id="142228117786570094">Saya mempunyai pasangan kunci</translation>
+<translation id="1422912431241997307">Tajuk diedit</translation>
 <translation id="1423591390236870726">Kekunci <ph name="KEY_NAME" /> tidak ditekan</translation>
 <translation id="1432110487435300883">Untuk mendapatkan jawapan anggaran, bahagikan nilai <ph name="CATEGORY_TEXT" /> dengan <ph name="CONVERSION_RATE" /></translation>
 <translation id="1435763214710588005">Menetapkan semula penggunaan data secara automatik setiap bulan pada hari yang dipilih</translation>
@@ -126,7 +129,17 @@
 <translation id="1515129336378114413">laman utama penyemak imbas</translation>
 <translation id="1526389707933164996">Animasi penyelamat skrin</translation>
 <translation id="152892567002884378">Tambah kelantangan</translation>
+<translation id="1531038290222364269">Paparkan tab</translation>
 <translation id="1539864135338521185">lapis lazuli</translation>
+<translation id="1548555207631326346">Pilih tema, kemudian pilih perkataan bergaris untuk memeribadikan imej AI anda.<ph name="LINE_BREAK" />
+          <ph name="LINE_BREAK" />
+          Pilih "Beri saya inspirasi" untuk mendapatkan lebih banyak pilihan imej AI yang unik dan berbeza-beza.
+          <ph name="LINE_BREAK" />
+          <ph name="LINE_BREAK" />
+          Apabila anda mencipta dengan AI, gesaan akan dihantar kepada pelayan Google AI untuk menjana imej dan meningkatkan produk, tertakluk pada <ph name="BEGIN_LINK_GOOGLE_PRIVACY_POLICY" />Dasar Privasi Google<ph name="END_LINK_GOOGLE_PRIVACY_POLICY" />.
+          <ph name="LINE_BREAK" />
+          <ph name="LINE_BREAK" />
+          AI generatif ialah ciri percubaan dan dalam pembangunan awal dengan ketersediaan terhad pada masa ini.</translation>
 <translation id="1555130319947370107">Biru</translation>
 <translation id="155865706765934889">Pad sentuh</translation>
 <translation id="1561927818299383735">warna cahaya belakang</translation>
@@ -142,7 +155,6 @@
 <translation id="1604959087182679653">Sembunyikan transkrip</translation>
 <translation id="160633243685262989">Pratonton Imej</translation>
 <translation id="1611649489706141841">ke hadapan</translation>
-<translation id="1615144046047995187">Tidak dapat memuat turun. Cuba lagi atau mulakan semula Chromebook anda.</translation>
 <translation id="1615335640928990664">Penggunaan data sejak <ph name="FRIENDLY_DATE" /></translation>
 <translation id="1618566998877964907">Gunakan tema</translation>
 <translation id="1621067168122174824">Jalankan Ujian cas</translation>
@@ -230,6 +242,7 @@
 <translation id="1905710495812624430">Melebihi had maksimum percubaan yang dibenarkan.</translation>
 <translation id="1908234395526491708">Kegagalan permintaan UDP</translation>
 <translation id="1908394185991500139">anak panah ke kiri</translation>
+<translation id="1911678930322867245">Alihkan kepada bahagian atas sebelah kanan</translation>
 <translation id="1914144885717544695">pada hari Jumaat</translation>
 <translation id="1915960750806557358">Kongsi maklum balas anda atau huraikan masalah anda. Pastikan anda tidak menyertakan sebarang maklumat yang bersifat peribadi, sensitif atau sulit.</translation>
 <translation id="1923388006036088459">Warna aksen</translation>
@@ -252,7 +265,6 @@
 <translation id="2011174342667534258">Versi SDK:</translation>
 <translation id="2016697457005847575">Cuba langkah penyelesaian masalah</translation>
 <translation id="202500043506723828">EID</translation>
-<translation id="2041627599411887437">Pilih tema, kemudian pilih perkataan bergaris untuk memeribadikan imej AI anda.</translation>
 <translation id="2045814230297767491">kutleri</translation>
 <translation id="2047316797244836561">Sila sambung kepada rangkaian dan muatkan halaman itu untuk melihat penyelamat skrin.</translation>
 <translation id="2056550196601855911">IPv4/IPv6</translation>
@@ -280,7 +292,9 @@
 <translation id="2161394479394250669">Batalkan tugas cetak</translation>
 <translation id="2161656808144014275">Teks</translation>
 <translation id="2163937499206714165">Hidupkan mod gelap</translation>
+<translation id="2164131940279488868">Pastikan mikrofon disambungkan untuk mula merakam audio</translation>
 <translation id="2173302385160625112">Periksa sambungan Internet anda</translation>
+<translation id="2176909213844392588">Tidak dapat memuat turun model transkripsi <ph name="LANGUAGE_NAME" />. Cuba lagi atau mulakan semula <ph name="DEVICE_TYPE" /> anda.</translation>
 <translation id="2180197493692062006">Kesilapan telah berlaku. Cuba buka semula apl.</translation>
 <translation id="2189104374785738357">Edit butiran APN</translation>
 <translation id="2195732836444333448">Kapasiti terhad pada masa ini. Sila kembali sebentar lagi.</translation>
@@ -303,7 +317,6 @@
 <translation id="2240366984605217732">Penukaran reka letak</translation>
 <translation id="2244834438220057800">hijau</translation>
 <translation id="225692081236532131">Status pengaktifan</translation>
-<translation id="2265792117169966196">Pilih dan muat turun model transkripsi <ph name="LANGUAGE_NAME" /></translation>
 <translation id="2267285889943769271">Tambahkan tangkapan skrin</translation>
 <translation id="2268044343513325586">Perhalusi</translation>
 <translation id="2271469253353559191">Jadual mod gelap</translation>
@@ -335,6 +348,7 @@
 <translation id="2418150275289244458">Buka dalam tetapan</translation>
 <translation id="2421798028054665193">Imej <ph name="CURRENT_PAGE" /> daripada <ph name="TOTAL_PAGES" /></translation>
 <translation id="242825218556404975">Tiada pertuturan dikesan</translation>
+<translation id="2438248248625638801">Membuat tajuk rakaman</translation>
 <translation id="2446553403094072641">Ketepatan titik terapung</translation>
 <translation id="2448312741937722512">Jenis</translation>
 <translation id="2468124392950503650">Pilih gesaan untuk membuat atau melihat <ph name="BEGIN_LINK_PROMPTING_GUIDE" />panduan gesaan<ph name="END_LINK_PROMPTING_GUIDE" /></translation>
@@ -362,8 +376,6 @@
 <translation id="2560876255701405320">Senarai rakaman audio</translation>
 <translation id="2561093647892030937">lemon</translation>
 <translation id="2570743873672969996">Menjalankan ujian <ph name="TEST_NAME" />...</translation>
-<translation id="2573178735329662769">Merakam semua audio Chromebook</translation>
-<translation id="2575552334616524665">Anda boleh menghidupkan ciri ini dalam Tetapan atau menu <ph name="THREE_DOTS_MENU_ICON" /></translation>
 <translation id="2576253868710695442">Model ini akan menggunakan hingga 2GB storan</translation>
 <translation id="2584547424703650812">Glowscape</translation>
 <translation id="2584559707064218956">Untuk membuat persediaan, pergi ke Tetapan</translation>
@@ -397,6 +409,7 @@
 <translation id="2731700343119398978">Sila tunggu...</translation>
 <translation id="2740531572673183784">Ok</translation>
 <translation id="2744221223678373668">Dikongsi</translation>
+<translation id="2749164457515831917">Cadangan dirombak</translation>
 <translation id="2751739896257479635">Pengesahan Fasa 2 EAP</translation>
 <translation id="2754757901767760034">lampu</translation>
 <translation id="2780756493585863768">Latar terbaharu dikuasakan oleh Google AI</translation>
@@ -414,6 +427,7 @@
 <translation id="2873483161362553159">Navigasi penyemak imbas</translation>
 <translation id="2874939134665556319">Lagu sebelumnya</translation>
 <translation id="2875812231449496375">Hidupkan tetapan ini untuk mendapatkan hasil terbaik dengan hiasan latar ini. Anda boleh mematikan tetapan ini pada bila-bila masa.</translation>
+<translation id="2878126681324394319">Muat turun model penciptaan ringkasan dan tajuk</translation>
 <translation id="2878387241690264070">Dinyahcas <ph name="RATE" /> dalam masa <ph name="NUM_SECONDS" /> saat.</translation>
 <translation id="2880569433548999039">Penyelamat skrin aliran awan</translation>
 <translation id="2882230315487799269">Sesuaikan gesaan AI</translation>
@@ -450,6 +464,7 @@
 <translation id="3122883569442693641">Lagi butiran</translation>
 <translation id="3124039320086536031">Peranti disambungkan.</translation>
 <translation id="3127341325625468058">{PAGE_NUMBER,plural, =0{Alih keluar halaman?}=1{Alih keluar halaman {PAGE_NUMBER}?}other{Alih keluar halaman {PAGE_NUMBER}?}}</translation>
+<translation id="3134486240968249588">Beberapa perkara yang perlu diingati</translation>
 <translation id="3140130301071865159">salji</translation>
 <translation id="3146655726035122603">Eksklusif untuk <ph name="PRODUCT_NAME" /></translation>
 <translation id="315116470104423982">Data mudah alih</translation>
@@ -468,10 +483,12 @@
 <translation id="3199982728237701504">Penyuap Dokumen (Dwisisi)</translation>
 <translation id="3201315366910775591">Album kongsi boleh dikemaskinikan oleh orang lain</translation>
 <translation id="3211671540163313381">D-pad pemetaan kunci</translation>
+<translation id="3217462202230355157">Pastikan mikrofon anda disambungkan atau cuba mulakan semula <ph name="DEVICE_TYPE" /> anda</translation>
 <translation id="3226405216343213872">Mencari pengimbas</translation>
 <translation id="3226657629376379887">Menu tindakan reka letak</translation>
 <translation id="3227186760713762082">Bahagikan nilai <ph name="CATEGORY_TEXT" /> dengan <ph name="CONVERSION_RATE" /></translation>
 <translation id="3246869037381808805">Tugas cetak yang melebihi 1 hari akan dialih keluar</translation>
+<translation id="3248791727258378769">Tiada transkrip akan dibuat</translation>
 <translation id="324961752321393509">Pentadbir anda tidak membenarkan apl ini ditutup</translation>
 <translation id="3263941347294171263">Cabut dan palamkan semula <ph name="DEVICE_NAME" /> untuk meneruskan proses kemaskinian</translation>
 <translation id="3268178239013324452">Gagal - Pintu terbuka</translation>
@@ -484,13 +501,13 @@
 <translation id="3303855915957856445">Tiada hasil carian ditemui</translation>
 <translation id="3305294846493618482">lagi</translation>
 <translation id="3310640316857623290">Kependaman DNS ternyata melebihi ambang yang dibenarkan</translation>
+<translation id="3316495615885967552">Proses muat turun model penciptaan ringkasan dan tajuk selesai</translation>
 <translation id="3321030238473337787">Kelajuan main balik</translation>
 <translation id="3327613592010997943">Anda akan dapat menggunakan peranti lagi pada <ph name="DAY" /> pukul <ph name="TIME" />.</translation>
 <translation id="3328783797891415197">Ujian sedang berjalan</translation>
 <translation id="3340011300870565703">Peranti mempunyai <ph name="BATTERY_PERCENTAGE" />% paras bateri kanan.</translation>
 <translation id="3340978935015468852">tetapan</translation>
 <translation id="3347558044552027859">moden</translation>
-<translation id="3353477144743332882">Muat turun model ringkasan dan ciptaan nama</translation>
 <translation id="3359218928534347896">togol redam mikrofon</translation>
 <translation id="3360306038446926262">Windows</translation>
 <translation id="3361618936611118375">susyi</translation>
@@ -501,8 +518,8 @@
 <translation id="33736539805963175">Latar <ph name="LETTERS_COLOR" /> dengan huruf <ph name="LETTERS_LETTER" /></translation>
 <translation id="3383623117265110236">Eksklusif</translation>
 <translation id="3404249063913988450">Dayakan penyelamat skrin</translation>
-<translation id="3410165745972100556">Transkrip dimatikan</translation>
 <translation id="3413935475507503304">Untuk meneruskan kemaskinian, klik Seterusnya.</translation>
+<translation id="3416709353545797224">Merakam semua audio <ph name="DEVICE_TYPE" /></translation>
 <translation id="3428551088151258685">di luar</translation>
 <translation id="3428971106895559033">pastel</translation>
 <translation id="3434107140712555581"><ph name="BATTERY_PERCENTAGE" />%</translation>
@@ -553,11 +570,12 @@
 <translation id="3628462041319107639">Memuat turun model transkrip…</translation>
 <translation id="3632040286124154621">Cadangan bagus</translation>
 <translation id="3632579075709132555">Togol skrin privasi</translation>
-<translation id="3639873154908477486">Nama (A hingga Z)</translation>
+<translation id="3634941468757842845">Pilih tema</translation>
 <translation id="3644695927181369554">Cadangan tidak bagus</translation>
 <translation id="3651050199673793219">Pilih unit suhu</translation>
 <translation id="3661106764436337772">Menulis dengan lebih cepat dan yakin</translation>
 <translation id="3662461537616691585">merah tua dan merah manggis</translation>
+<translation id="3664755900672940272">Gesaan sampel dirombak</translation>
 <translation id="3668449597372804501">Hiasan latar aliran awan</translation>
 <translation id="3668570675727296296">Tetapan bahasa</translation>
 <translation id="3675132884790542448">khinzir</translation>
@@ -575,6 +593,7 @@
 <translation id="3767737419527918477">Cari fail rakaman</translation>
 <translation id="3771294271822695279">Fail Video</translation>
 <translation id="3771694256347217732">Syarat Perkhidmatan Google</translation>
+<translation id="3772164567520167489">Tidak dapat membuat tajuk rakaman untuk bahasa transkrip ini</translation>
 <translation id="3780740315729837296">Tetapkan kekunci papan kekunci</translation>
 <translation id="3784455785234192852">Kunci</translation>
 <translation id="3785643128701396311">seni piksel</translation>
@@ -589,6 +608,7 @@
 <translation id="3845880861638660475">Tekan <ph name="ALT_SHORTCUT_START" />alt<ph name="ALT_SHORTCUT_END" /> + <ph name="ESC_SHORTCUT_START" />esc<ph name="ESC_SHORTCUT_END" /> untuk menutup dialog.</translation>
 <translation id="3848280697030027394">menggelapkan papan kekunci</translation>
 <translation id="385051799172605136">Kembali</translation>
+<translation id="3852931845120288955">Tajuk (A hingga Z)</translation>
 <translation id="3858860766373142691">Nama</translation>
 <translation id="3862598938296403232">Perihalan diperlukan</translation>
 <translation id="386280020966669610">Beri inspirasi kepada saya</translation>
@@ -608,7 +628,6 @@
 <translation id="391412459402535266">Tidak dapat menguji peranti. Tukar kepada mod komputer riba untuk menguji.</translation>
 <translation id="3916998944874125962">ambil tangkapan skrin</translation>
 <translation id="3923184630988645767">Penggunaan data</translation>
-<translation id="3924445055519423964">Klik untuk meringkaskan halaman web/fail PDF</translation>
 <translation id="3932043219784172185">Tiada peranti disambungkan</translation>
 <translation id="3934185438132762746"><ph name="CONTROL_TYPE" /> tidak ditentukan</translation>
 <translation id="3941014780699102620">Gagal untuk menyelesaikan hos</translation>
@@ -623,6 +642,7 @@
 <translation id="39823212440917567">Tugas cetak yang melebihi <ph name="NUMBER_OF_DAYS" /> hari akan dialih keluar</translation>
 <translation id="3993704782688964914">Kini <ph name="DEVICE_NAME" /> anda terkini</translation>
 <translation id="3998976413398910035">Urus pencetak</translation>
+<translation id="4002066346123236978">Tajuk</translation>
 <translation id="4003384961948020559">Gagal - Output penuh</translation>
 <translation id="401147258241215701">obsidian</translation>
 <translation id="4021031199988160623">Tukar kepada mod komputer riba untuk menguji</translation>
@@ -643,12 +663,14 @@
 <translation id="4093865285251893588">Imej profil</translation>
 <translation id="409427325554347132">Simpan butiran ujian</translation>
 <translation id="409469431304488632">Percubaan</translation>
+<translation id="4095155732125588500">Proses muat turun model penciptaan ringkasan dan tajuk sedang berlangsung</translation>
 <translation id="4095829376260267438">WPA2WPA3</translation>
 <translation id="4110686435123617899">Pilih album <ph name="TITLE" /> <ph name="DESC" /></translation>
 <translation id="4111761024568264522">Pad sentuh USB</translation>
 <translation id="4113067922640381334">Kini anda boleh mengakses <ph name="BEGIN_LINK_WALLPAPER_SUBPAGE" />hiasan latar<ph name="END_LINK_WALLPAPER_SUBPAGE" /> baharu</translation>
 <translation id="4117637339509843559">Mod gelap</translation>
 <translation id="4126551873361000548">Undur ke belakang 10 saat</translation>
+<translation id="4128271910628504223">Masukkan gesaan seperti "lukis hutan berkabus"</translation>
 <translation id="4130035430755296270">Teruskan menuding untuk mendapatkan lagi pilihan reka letak</translation>
 <translation id="4130750466177569591">Saya bersetuju</translation>
 <translation id="4131410914670010031">Hitam putih</translation>
@@ -661,16 +683,19 @@
 <translation id="4155551848414053977">Pastikan pengimbas dihidupkan dan tersedia melalui rangkaian anda atau sambungan langsung</translation>
 <translation id="4159238217853743776">Separa</translation>
 <translation id="4159784952369912983">Ungu</translation>
+<translation id="416219735020840807">Tidak dapat memuat turun model transkrip. Cuba lagi atau mulakan semula <ph name="DEVICE_TYPE" /> anda.</translation>
 <translation id="4170180284036919717">Ambil foto</translation>
 <translation id="4170700058716978431">GAGAL</translation>
 <translation id="4171077696775491955">kurangkan kecerahan</translation>
 <translation id="4176463684765177261">Dilumpuhkan</translation>
 <translation id="4176659219503619100">Panel Kawalan</translation>
+<translation id="4192913637640303603">Tidak dapat membuat tajuk rakaman</translation>
 <translation id="4193496492959950834">Tetapan Recorder</translation>
 <translation id="4198398257084619072">panda</translation>
 <translation id="420283545744377356">Matikan penyelamat skrin</translation>
 <translation id="4210636113897977670">Simpan dan keluar</translation>
 <translation id="4210659479607886331">sungai glasier</translation>
+<translation id="4212169537710712814">Muat turun model transkripsi <ph name="LANGUAGE_NAME" /> selesai</translation>
 <translation id="42126664696688958">Eksport</translation>
 <translation id="4213104098953699324">Papan kekunci USB</translation>
 <translation id="4227825898293920515">Kata laluan tamat tempoh dalam <ph name="TIME" /></translation>
@@ -679,6 +704,16 @@
 <translation id="4249717042534905822">pada hari Ahad</translation>
 <translation id="4250229828105606438">Tangkapan skrin</translation>
 <translation id="4251839292699800785">Pejabat yang bergaya</translation>
+<translation id="4252261480746798874">Apabila anda memilih "Buat gesaan anda sendiri", anda boleh menulis gesaan tersuai. Anda juga boleh memilih "Pilih tema", kemudian memilih perkataan bergaris untuk memeribadikan hiasan latar AI anda.
+          <ph name="LINE_BREAK" />
+          <ph name="LINE_BREAK" />
+          Pilih "Beri saya inspirasi" untuk mendapatkan lebih banyak pilihan imej AI yang unik dan berbeza-beza.
+          <ph name="LINE_BREAK" />
+          <ph name="LINE_BREAK" />
+          Apabila anda membuat hiasan latar anda sendiri, gesaan akan dihantar kepada pelayan Google untuk menjana imej dan meningkatkan produk, tertakluk pada <ph name="BEGIN_LINK_GOOGLE_PRIVACY_POLICY" />Syarat Perkhidmatan dan Dasar Privasi Google<ph name="END_LINK_GOOGLE_PRIVACY_POLICY" />. Jangan sertakan sebarang maklumat yang bersifat peribadi, sensitif atau sulit.
+          <ph name="LINE_BREAK" />
+          <ph name="LINE_BREAK" />
+          AI generatif boleh membuat kesilapan, termasuk tentang orang, maka semak semula respons. <ph name="BEGIN_LINK_CREATE_YOUR_OWN_WALLPAPER" />Ketahui lebih lanjut<ph name="END_LINK_GOOGLE_PRIVACY_POLICY" /></translation>
 <translation id="4258281355379922695">Kependaman HTTP</translation>
 <translation id="4266143281602681663">yan</translation>
 <translation id="4269815121975886860">Pilihan permulaan</translation>
@@ -732,7 +767,6 @@
 <translation id="4483049906298469269">Gagal untuk ping get laluan rangkaian bukan lalai</translation>
 <translation id="4483498983731992167">Tidak dapat membuat transkrip</translation>
 <translation id="4486524074141928967">Anda akan dilog keluar pada pukul <ph name="TIME" /></translation>
-<translation id="4487890678161807486">Buka pemilih bahasa transkripsi</translation>
 <translation id="4500722292849917410">Pintasan tidak tersedia. Tekan pintasan baharu menggunakan kekunci pengubah suai (ctrl, alt, shift atau <ph name="META_KEY" />).</translation>
 <translation id="4500966230243561393">Warna antara muka</translation>
 <translation id="4503223151711056411">Anak panah ke kiri</translation>
@@ -757,9 +791,7 @@
 <translation id="4593212453765072419">Pengesahan proksi diperlukan</translation>
 <translation id="4594021849294327751">Buat transkrip</translation>
 <translation id="4594541568452132351">Pilih bahasa transkripsi dan model muat turun</translation>
-<translation id="4607282946861182308">Tidak dapat membuat imej ini. Cuba gesaan lain.</translation>
 <translation id="4609350030397390689">Mengurangkan kecerahan papan kekunci</translation>
-<translation id="4623061655523261501">Nama rakaman berjaya dijana</translation>
 <translation id="4627232916386272576"><ph name="DOCUMENT_TITLE" />, <ph name="PRINTER_NAME" />, <ph name="CREATION_TIME" />, <ph name="PRINTED_PAGE_NUMBER" /> daripada <ph name="TOTAL_PAGE_NUMBER" />. Tekan enter untuk membatalkan tugas cetak.</translation>
 <translation id="463791356324567266">Membatalkan pengimbasan...</translation>
 <translation id="4644611440022666152">Hidupkan dan muat turun</translation>
@@ -840,13 +872,11 @@
 <translation id="4981003703840817201">biru dan merah jambu</translation>
 <translation id="498186245079027698">Periksa pengimbas dan cuba lagi. Pastikan terdapat ruang setempat yang mencukupi untuk menyimpan fail yang diimbas.</translation>
 <translation id="4982627662315910959">Pintasan tidak tersedia. Tekan pintasan baharu menggunakan shift dan 1 lagi kekunci pengubah suai (ctrl, alt atau <ph name="META_KEY" />).</translation>
-<translation id="4983216687482551672">Audio Chromebook</translation>
 <translation id="4985509611418653372">Jalankan</translation>
 <translation id="4987769320337599931">Tembok api</translation>
 <translation id="4988526792673242964">Halaman</translation>
 <translation id="4989542687859782284">Tidak tersedia</translation>
 <translation id="4999333166442584738">Sembunyikan laporan</translation>
-<translation id="5005695757087124131">Klik untuk meringkaskan teks yang dipilih</translation>
 <translation id="500920857929044050">Hentikan ujian</translation>
 <translation id="5017508259293544172">LEAP</translation>
 <translation id="5035083460461104704">Warna tema</translation>
@@ -857,6 +887,7 @@
 <translation id="5050042263972837708">Nama kumpulan</translation>
 <translation id="5051044138948155788">Ini ialah satu-satunya halaman. Tindakan ini akan membawa anda ke skrin permulaan pengimbasan.</translation>
 <translation id="5053233795640754917">Jeda</translation>
+<translation id="5056587122125565772">Buat imej</translation>
 <translation id="5078711626843651677">Model suara disimpan secara sementara pada peranti sehingga pelabelan penutur selesai. Anda boleh mematikan ciri ini pada bila-bila masa dalam Tetapan.</translation>
 <translation id="5078983345702708852">futuristik</translation>
 <translation id="5087864757604726239">kembali</translation>
@@ -866,9 +897,7 @@
 <translation id="5095761549884461003">Cabut kabel USB <ph name="DEVICE_NAME" /> dan masukkan semula kabel USB tersebut untuk meneruskan proses kemaskinian</translation>
 <translation id="5099354524039520280">ke atas</translation>
 <translation id="5107243100836678918">Pintasan tanpa kekunci <ph name="META_KEY" /> mungkin bercanggah dengan sesetengah pintasan apl. Tekan pintasan ini sekali lagi untuk terus digunakan atau tekan pintasan baharu menggunakan kekunci <ph name="KEY" />. <ph name="LINK_BEGIN" />Ketahui lebih lanjut<ph name="LINK_END" /></translation>
-<translation id="5107402373921342399">Tidak dapat memuat turun model transkripsi <ph name="LANGUAGE_NAME" />. Cuba lagi atau mulakan semula Chromebook anda</translation>
 <translation id="5108781503443873320">Serupa:</translation>
-<translation id="5121677070210013200">Tidak dapat memuat turun model transkrip. Cuba lagi atau mulakan semula Chromebook anda.</translation>
 <translation id="5130848777448318809">kuda padi</translation>
 <translation id="5137451382116112100">Penuh</translation>
 <translation id="5139813694804168398">jangan ganggu</translation>
@@ -883,7 +912,6 @@
 <translation id="5168185087976003268">Kesihatan bateri</translation>
 <translation id="5170568018924773124">Paparkan dalam folder</translation>
 <translation id="517075088756846356">Cabut dan palamkan semula kabel kuasa <ph name="DEVICE_NAME" /> untuk meneruskan proses kemaskinian</translation>
-<translation id="5178021559562393163">Tidak dapat membuat nama. Cuba transkrip yang lebih pendek.</translation>
 <translation id="5180108905184566358">pokok baobab</translation>
 <translation id="5180712487038406644">Ekspresif</translation>
 <translation id="5190187232518914472">Kenang kembali memori kegemaran anda. Untuk menambah atau mengedit album, pergi ke <ph name="LINK_BEGIN" />Google Photos<ph name="LINK_END" />.</translation>
@@ -912,6 +940,7 @@
 <translation id="5286263799730375393">warna cahaya belakang</translation>
 <translation id="5292579816060236070">Hiasan latar matahari terbenam</translation>
 <translation id="5294769550414936029">versi <ph name="MILESTONE_VERSION" /></translation>
+<translation id="5300172019534884676">togol akses kamera</translation>
 <translation id="5300814202279832142">Alihkan tetingkap ke meja</translation>
 <translation id="5302048478445481009">Bahasa</translation>
 <translation id="5303837385540978511">Hiasan latar eksklusif <ph name="PRODUCT_NAME" /></translation>
@@ -919,17 +948,16 @@
 <translation id="530883153651464140">Kemas kinikan <ph name="DEVICE_NAME" /> kepada versi <ph name="VERSION" /></translation>
 <translation id="5315873049536339193">Identiti</translation>
 <translation id="5317780077021120954">Simpan</translation>
-<translation id="5318310531701770497">Tidak dapat membuat nama. Cuba transkrip yang lebih panjang.</translation>
 <translation id="5318334351163689047">Kegagalan permintaan TCP</translation>
 <translation id="53196409393069519">Hidupkan transkripsi?</translation>
 <translation id="5326394068492324457"><ph name="DOCUMENT_TITLE" />, <ph name="PRINTER_NAME" />, <ph name="CREATION_TIME" />, <ph name="COMPLETION_STATUS" /></translation>
-<translation id="5327248766486351172">Nama</translation>
 <translation id="5332948983412042822">Pilih kata laluan baharu sekarang</translation>
 <translation id="5333530671332546086">Keadaan portal tidak diketahui</translation>
 <translation id="5335373365677455232">merah jambu</translation>
 <translation id="5344619683981067131">Menggantikan teks yang dipilih dengan cadangan</translation>
 <translation id="5346687412805619883">Rangkaian Setempat</translation>
 <translation id="5358174242040570474">Kesilapan telah berlaku. Cuba pilih kertas dinding sekali lagi atau buka semula apl tersebut.</translation>
+<translation id="5368228070728130240">Tidak dapat memuat turun model untuk ringkasan dan ciptaan nama. Cuba lagi atau mulakan semula <ph name="DEVICE_TYPE" /> anda.</translation>
 <translation id="5372659122375744710">Rangkaian Wi-Fi tidak selamat</translation>
 <translation id="5376354385557966694">Mod cerah automatik</translation>
 <translation id="5378184552853359930">Jenis IP</translation>
@@ -943,6 +971,7 @@
 <translation id="5431318178759467895">Warna</translation>
 <translation id="5457599981699367932">Semak Imbas sebagai Tetamu</translation>
 <translation id="54609108002486618">Diuruskan</translation>
+<translation id="5461608756903394951">Muat turun model transkripsi <ph name="LANGUAGE_NAME" /> sedang berlangsung</translation>
 <translation id="5470776029649730099">burlap</translation>
 <translation id="5478289488939624992">{ATTEMPTS_LEFT,plural, =1{{0} percubaan lagi}other{{0} percubaan lagi}}</translation>
 <translation id="5488280942828718790">magenta</translation>
@@ -953,6 +982,7 @@
 <translation id="550600468576850160">padang rumput</translation>
 <translation id="551689408806449779">Peranti telah diputuskan sambungan. Cuba sambung semula untuk menguji</translation>
 <translation id="5519195206574732858">LTE</translation>
+<translation id="552644173505433109">Ketahui penciptaan ringkasan dan tajuk dengan lebih lanjut</translation>
 <translation id="5527146180235316490">Pilihan mikrofon</translation>
 <translation id="5534900277405737921">Rupa bumi</translation>
 <translation id="554067135846762198">merjan dan perang</translation>
@@ -987,7 +1017,6 @@
 <translation id="5680504961595602662"><ph name="SURREAL_LANDSCAPE" /> yang luar biasa dengan <ph name="SURREAL_SUBJECT" /></translation>
 <translation id="5685478548317291523">ceri</translation>
 <translation id="5691511426247308406">Keluarga</translation>
-<translation id="5692395212036914927">Penciptaan ringkasan dan nama rakaman</translation>
 <translation id="5695599963893094957">Taip mana-mana kekunci pada papan kekunci anda. Anda boleh menekan sehingga 4 kekunci secara serentak.</translation>
 <translation id="5701381305118179107">Tengah</translation>
 <translation id="5703716265115423771">kurangkan kelantangan</translation>
@@ -1026,17 +1055,18 @@
 <translation id="5896602941605730551">Main</translation>
 <translation id="5901630391730855834">Kuning</translation>
 <translation id="5903200662178656908">Peranti ialah kombo papan kekunci dan tetikus.</translation>
+<translation id="5903822368221507416">Sembunyikan tab</translation>
 <translation id="5904994456462260490">Tambah APN baharu</translation>
 <translation id="590746845088109442">kucing</translation>
 <translation id="5907649332524363701">warna utama</translation>
 <translation id="5908813850962688338">Pemasangan kemaskinian ini akan mengambil masa beberapa minit. Biarkan peranti anda dipalamkan dan dihidupkan semasa kemaskinian dimuat turun. Peranti anda mungkin akan mengebut semula sendiri beberapa kali dan memaparkan skrin hitam semasa proses ini. Anda akan digesa untuk memulakan semula peranti anda untuk melengkapkan pemasangan.</translation>
+<translation id="5915794087373112615">Guru anda akan melihat skrin anda selepas <ph name="NUM_SECONDS" /> saat</translation>
 <translation id="5916084858004523819">Dilarang</translation>
 <translation id="5916664084637901428">Hidupkan</translation>
 <translation id="5921506667911082617">{COUNT,plural, =1{Fail anda telah berjaya diimbas dan disimpan pada <ph name="LINK_BEGIN" /><ph name="FOLDER_NAME" /><ph name="LINK_END" />.}other{Fail anda telah berjaya diimbas dan disimpan pada <ph name="LINK_BEGIN" /><ph name="FOLDER_NAME" /><ph name="LINK_END" />.}}</translation>
 <translation id="5928411637936685857">Padamkan butang untuk <ph name="ACCELERATOR_INFO" />.</translation>
 <translation id="5930669310554144537">Dreamscape</translation>
 <translation id="5931523347251946569">Fail tidak dijumpai</translation>
-<translation id="5938286923316838007">Tidak dapat membuat nama rakaman untuk kandungan ini</translation>
 <translation id="5939518447894949180">Tetapkan semula</translation>
 <translation id="5942727615796467094">Pentadbir <ph name="MANAGER" /> telah menetapkan masa untuk <ph name="DEVICE_TYPE" /> boleh digunakan</translation>
 <translation id="594552776027197022">Jana pasangan kunci rawak</translation>
@@ -1051,6 +1081,7 @@
 <translation id="5982621672636444458">Pilihan isihan</translation>
 <translation id="5984145644188835034">Kertas Dinding Lalai</translation>
 <translation id="5996832681196460718">sutera</translation>
+<translation id="6016750809509395299">Tajuk dijana:</translation>
 <translation id="6017514345406065928">Hijau</translation>
 <translation id="6019566113895157499">Pintasan Kekunci</translation>
 <translation id="6034694447310538551">Dayakan tetapan semula bulanan automatik</translation>
@@ -1081,7 +1112,6 @@
 <translation id="6122191549521593678">Dalam talian</translation>
 <translation id="6122277663991249694">Perkhidmatan Kaedah Input Chrome OS</translation>
 <translation id="6127426868813166163">putih</translation>
-<translation id="613049107179582049">Apabila audio Chromebook dihidupkan, Recorder akan merakamkan semua audio yang dimainkan pada peranti ini</translation>
 <translation id="6136285399872347291">undur ruang</translation>
 <translation id="6137614725462089991">siberpunk</translation>
 <translation id="6137767437444130246">Sijil pengguna</translation>
@@ -1089,6 +1119,7 @@
 <translation id="6147514244879357420">PNG</translation>
 <translation id="6149015141270619212">Tidak dapat menyambung ke Internet</translation>
 <translation id="6156030503438652198">merah manggis dan merah jambu</translation>
+<translation id="6163318050265152852">Tidak dapat membuat tajuk. Cuba transkrip yang lebih pendek.</translation>
 <translation id="6165508094623778733">Ketahui lebih lanjut</translation>
 <translation id="6184793017104303157">B4</translation>
 <translation id="6185263894115593524">Tetapkan semula kandungan laman Chrome untuk menghentikan orang lain daripada menggunakan mikrofon atau kamera. Berikan kebenaran kepada laman yang anda percayai sahaja.</translation>
@@ -1126,16 +1157,13 @@
 <translation id="6325525973963619867">Gagal</translation>
 <translation id="6327262166342360252">Hiasan latar ini dibuat dengan AI menggunakan teks yang berikut: "<ph name="PROMPT" />".</translation>
 <translation id="6331191339300272798">Tema gelap automatik</translation>
-<translation id="6335228876613776082">Muat turun model selesai</translation>
 <translation id="6340526405444716530">Pemperibadian</translation>
 <translation id="6348252528297699679">Anda boleh mematikan lokasi dalam Tetapan &gt; Privasi dan keselamatan &gt; Kawalan privasi &gt; Akses lokasi. <ph name="LINK_BEGIN" />Ketahui lebih lanjut<ph name="LINK_END" /></translation>
 <translation id="6348738456043757611">Nama pengguna dan kata laluan</translation>
 <translation id="6352210854422428614">planet lain</translation>
 <translation id="6359706544163531585">Lumpuhkan tema cerah</translation>
 <translation id="6359919876285606596">Tindakan ini kekal dan tidak boleh dibuat asal</translation>
-<translation id="6368342879959028556">Apabila anda memilih “Buat dengan AI”, tulis gesaan tersuai. Anda juga boleh memilih “Hiasan latar AI” untuk memilih tema, kemudian memilih perkataan bergaris untuk memeribadikan hiasan latar AI anda.</translation>
 <translation id="636850387210749493">Pendaftaran perusahaan</translation>
-<translation id="6369221585240879141">Tidak dapat membuat nama rakaman untuk bahasa transkrip ini</translation>
 <translation id="6373461326814131011">kolam</translation>
 <translation id="6379086450106841622">Skrin sentuh</translation>
 <translation id="6381741036071372448">Uji papan kekunci anda</translation>
@@ -1171,6 +1199,7 @@
 <translation id="6500818810472529210">Lihat hasil dalam Google Search</translation>
 <translation id="650266656685499220">Untuk mencipta album, pergi ke Google Photos</translation>
 <translation id="6505750420152840539">Subuh sehingga gelap</translation>
+<translation id="6515056490985026110">Tidak dapat membuat tajuk. Cuba transkrip yang lebih panjang.</translation>
 <translation id="6516990319416533844">Untuk menguji kadar pengecasan bateri, biarkan cas bateri anda habis dalam tempoh yang singkat</translation>
 <translation id="6517239166834772319">Teroka</translation>
 <translation id="6526200165918397681">Padankan hiasan latar</translation>
@@ -1194,6 +1223,7 @@
 <translation id="6595046262780525922">Hidupkan transkripsi dan muat turun model transkripsi?</translation>
 <translation id="6596816719288285829">Alamat IP</translation>
 <translation id="6599673642868607614">Terima kasih atas maklum balas anda. Maklum balas anda membantu kami meningkatkan pengalaman Chromebook dan akan disemak oleh pasukan kami. Oleh sebab kami menerima jumlah laporan yang banyak, kami tidak akan dapat menghantar balasan.</translation>
+<translation id="6608043585557830684">Transkripsi dimatikan. Hidupkan transkripsi dalam Tetapan atau dalam menu <ph name="THREE_DOTS_MENU_ICON" />.</translation>
 <translation id="660846213831377756">Kekunci tetikus</translation>
 <translation id="6618744767048954150">Berjalan</translation>
 <translation id="6620487321149975369">Tugas cetak akan dipaparkan dalam sejarah melainkan dialih keluar secara manual</translation>
@@ -1205,16 +1235,7 @@
 <translation id="6657240842932274095">Benarkan perkhidmatan sistem untuk menggunakan lokasi anda?</translation>
 <translation id="6657585470893396449">Kata laluan</translation>
 <translation id="66621959568103627">merah jambu merjan</translation>
-<translation id="6667885109186363316"><ph name="SEA_PEN_INTRO_FIRST_PARAGRAPH" />
-          <ph name="LINE_BREAK" />
-          <ph name="LINE_BREAK" />
-          Pilih "Beri saya inspirasi" untuk mendapatkan lebih banyak pilihan imej AI yang unik dan berbeza-beza.
-          <ph name="LINE_BREAK" />
-          <ph name="LINE_BREAK" />
-          Apabila anda mencipta dengan AI, gesaan akan dihantar kepada pelayan Google AI untuk menjana imej dan meningkatkan produk, tertakluk pada <ph name="BEGIN_LINK_GOOGLE_PRIVACY_POLICY" />Dasar Privasi Google<ph name="END_LINK_GOOGLE_PRIVACY_POLICY" />.
-          <ph name="LINE_BREAK" />
-          <ph name="LINE_BREAK" />
-          AI generatif ialah ciri percubaan dan dalam pembangunan awal dengan ketersediaan terhad pada masa ini.</translation>
+<translation id="6669485505082792176">Tidak dapat membuat imej ini pada masa ini. Cuba frasakan semula perihalan anda. Sentiasa ingat bahawa anda tidak boleh membuat imej orang dan kandungan yang berbahaya atau eksplisit. <ph name="BEGIN_LINK_LEARN_MORE" />Ketahui lebih lanjut<ph name="END_LINK_LEARN_MORE" /></translation>
 <translation id="6673898378497337661">meningkatkan kecerahan papan kekunci</translation>
 <translation id="6692996468359469499">Dapatkan maklumat yang berkaitan dengan pilihan anda</translation>
 <translation id="6694534975463174713">kunci</translation>
@@ -1243,6 +1264,7 @@
 <translation id="6766275201586212568">Penyelesaian DNS gagal</translation>
 <translation id="6768237774506518020">Kadar kegagalan penyelesaian DNS tinggi</translation>
 <translation id="6786747875388722282">Pelanjutan</translation>
+<translation id="6789891265243243337">Apabila audio <ph name="DEVICE_TYPE" /> dihidupkan, Recorder akan menangkap semua audio yang dimainkan pada peranti ini</translation>
 <translation id="6791471867139427246">warna cerah papan kekunci</translation>
 <translation id="6796229976413584781">Pintasan telah dipadamkan</translation>
 <translation id="6798678288485555829">Navigasi teks</translation>
@@ -1265,12 +1287,13 @@
 <translation id="6910312834584889076">Penutup pengimbas terbuka. Tutup penutup dan cuba lagi.</translation>
 <translation id="6910845598686542904">Mengira model suara yang dikesan dalam rakaman</translation>
 <translation id="6911383237894364323">Tidak dapat menyambung kepada pelayan media</translation>
-<translation id="6927968682840110570">Nama rakaman</translation>
+<translation id="6926069762081461162">Tajuk rakaman</translation>
 <translation id="6930242544192836755">Tempoh</translation>
 <translation id="6930597342185648547">Perihal latar</translation>
-<translation id="6939667434404433010">Cari nama rakaman</translation>
 <translation id="6939766318048400022">Kafe</translation>
+<translation id="6942253772720771875">Kongsi maklum balas anda atau huraikan masalah anda</translation>
 <translation id="6943893908656559156">Identiti jauh (pilihan)</translation>
+<translation id="694981048020558038">Cari tajuk rakaman</translation>
 <translation id="6953137545147683679">emas</translation>
 <translation id="6957231940976260713">Nama perkhidmatan</translation>
 <translation id="695776212669661671">anak panah ke kanan</translation>
@@ -1282,6 +1305,7 @@
 <translation id="6975620886940770104"><ph name="GLOWSCAPES_LANDSCAPE" /> dengan <ph name="GLOWSCAPES_FEATURE" /> yang bercahaya</translation>
 <translation id="6975981640379148271">koala</translation>
 <translation id="6977381486153291903">Semakan perisian tegar</translation>
+<translation id="6978396562261420054">Imej yang dijana</translation>
 <translation id="6981982820502123353">Kebolehcapaian</translation>
 <translation id="6982462588253070448">gumuk pasir</translation>
 <translation id="7005833343836210400">Peranti di luar talian</translation>
@@ -1290,6 +1314,7 @@
 <translation id="7040230719604914234">Pengendali</translation>
 <translation id="7040729769968826896">Benarkan pengenalpastian pembesar suara</translation>
 <translation id="7041549558901442110">Peranti tidak disambungkan.</translation>
+<translation id="704183341263526038">Musytari</translation>
 <translation id="7046522406494308071">Tetapkan semula semua pintasan kepada lalai?</translation>
 <translation id="7049916119678019302">Muat turun model transkrip dalam Tetapan</translation>
 <translation id="7058278511608979688">Tamatkan &amp; simpan</translation>
@@ -1302,7 +1327,6 @@
 <translation id="708426984172631313">DIHENTIKAN</translation>
 <translation id="7086168019478250425">pantai biopendarkilau</translation>
 <translation id="7086440545492620869"><ph name="VALUE" /> <ph name="DISPLAY_NAME" /></translation>
-<translation id="7086916854357021265">Sedang menjana nama rakaman</translation>
 <translation id="7097908713073775559">berwarna-warni</translation>
 <translation id="710028965487274708">Gagal - Pemberian Keizinan Gagal</translation>
 <translation id="7101959270679078188">Buka kunci <ph name="DEVICE_NAME" /> untuk meneruskan proses kemaskinian</translation>
@@ -1344,6 +1368,7 @@
 <translation id="7216409898977639127">Penyedia selular</translation>
 <translation id="7223952304612664117">Tindakan ini membolehkan perkhidmatan sistem menggunakan Ketepatan Lokasi untuk menentukan lokasi anda. Ketepatan Lokasi menggunakan maklumat tentang isyarat dan penderia wayarles untuk menganggar lokasi peranti.</translation>
 <translation id="7233782086689993269">Pintasan telah dipulihkan</translation>
+<translation id="723419678599947502">Buat tajuk menggunakan Google AI</translation>
 <translation id="725133483556299729">Pilih e-mel</translation>
 <translation id="7255187042098209569">merah jambu dan ungu</translation>
 <translation id="7267918995585557751">Tetapkan semula permulaan Chrome untuk memastikan halaman permulaan lalai bukan laman web pancingan data. Gunakan laman web yang anda percayai sahaja.</translation>
@@ -1384,6 +1409,7 @@ Muat turun model transkripsi (hingga 100MB) untuk mendapatkan transkripsi ini.</
 <translation id="7388345524791662148">Lagi pilihan untuk <ph name="RECORDING_NAME" /></translation>
 <translation id="7388959671917308825">Pad sentuh terbina dalam</translation>
 <translation id="7397270852490618635">Matikan tema cerah</translation>
+<translation id="7400166052988585408">Guru anda akan mengunci skrin anda selepas <ph name="NUM_SECONDS" /> saat</translation>
 <translation id="7401543881546089382">Padamkan pintasan</translation>
 <translation id="7405493795721832710"><ph name="DEVICE_NAME" /> bersedia untuk dikemaskinikan</translation>
 <translation id="741244894080940828">penukaran</translation>
@@ -1393,7 +1419,6 @@ Muat turun model transkripsi (hingga 100MB) untuk mendapatkan transkripsi ini.</
 <translation id="7425832472614771259">Model transkripsi <ph name="LANGUAGE_NAME" /> telah <ph name="PROGRESS_PERCENTAGE" />% dimuat turun</translation>
 <translation id="7427315641433634153">MSCHAP</translation>
 <translation id="7438298994385592770">Tidak boleh melumpuhkan atau mengalih keluar APN ini. Pastikan APN <ph name="ATTACH" /> didayakan ini dilumpuhkan atau dialih keluar.</translation>
-<translation id="7453118953486228603">Klik untuk meringkaskan teks yang dipilih</translation>
 <translation id="7458970041932198923">Sila sambung kepada rangkaian dan muatkan semula halaman itu untuk melihat dan menetapkan avatar.</translation>
 <translation id="7469648432129124067">Portal dikesan</translation>
 <translation id="7481312909269577407">Majukan</translation>
@@ -1430,7 +1455,7 @@ Muat turun model transkripsi (hingga 100MB) untuk mendapatkan transkripsi ini.</
 <translation id="7618216277886673749">Pilih <ph name="LANGUAGE_NAME" /></translation>
 <translation id="7618774594543487847">Neutral</translation>
 <translation id="7620771111601174153">Ketahui lebih lanjut dalam Pusat Bantuan</translation>
-<translation id="7625095758347640998">Hiasan latar AI</translation>
+<translation id="7623327321610992184">Pod OnTask</translation>
 <translation id="763165478673169849">Masa Terakhir Ditetapkan Semula</translation>
 <translation id="7633068090678117093">Imej latar belakang</translation>
 <translation id="763873111564339966">biru nila</translation>
@@ -1473,6 +1498,7 @@ Muat turun model transkripsi (hingga 100MB) untuk mendapatkan transkripsi ini.</
 <translation id="7828503206075800057">Kafe <ph name="CAFE_TYPE" /> yang <ph name="CAFE_STYLE" /></translation>
 <translation id="7841134249932030522">Dayakan mod gelap</translation>
 <translation id="7846634333498149051">Papan kekunci</translation>
+<translation id="7847923465436619066">Pemilih bahasa transkripsi</translation>
 <translation id="7849030488395653706">teja utara</translation>
 <translation id="7849737607196682401">renda</translation>
 <translation id="7850320739366109486">Jangan Ganggu</translation>
@@ -1491,6 +1517,7 @@ Muat turun model transkripsi (hingga 100MB) untuk mendapatkan transkripsi ini.</
 <translation id="7897043345768902965">laluan pejalan kaki</translation>
 <translation id="7902285181767404769">Senyapkan pemberitahuan semasa merakam</translation>
 <translation id="7903695460270716054">Pilih kerja seni dan imej yang dipilih susun</translation>
+<translation id="7908543555831145677">Tajuk rakaman berjaya dibuat</translation>
 <translation id="7912005977894000746">Kembali kepada halaman utama</translation>
 <translation id="7915220255123750251">Urus tetapan APN rangkaian. APN mewujudkan sambungan antara rangkaian selular dan Internet.</translation>
 <translation id="7915759923880480519">Tetapkan semula Rangkaian ChromeOS untuk melindungi data yang dihantar melalui rangkaian anda. Gunakan rangkaian yang anda percayai sahaja.</translation>
@@ -1513,6 +1540,7 @@ Muat turun model transkripsi (hingga 100MB) untuk mendapatkan transkripsi ini.</
 <translation id="8010765388850538088">Ketahui tentang AI Generatif dengan lebih lanjut</translation>
 <translation id="8017679124341497925">Pintasan diedit</translation>
 <translation id="802154636333426148">Muat turun gagal</translation>
+<translation id="8027467664787098346">Ketahui hiasan latar yang dipilih dengan lebih lanjut</translation>
 <translation id="8028993641010258682">Saiz</translation>
 <translation id="8031884997696620457">HSPAPlus</translation>
 <translation id="80398733265834479">Dayakan mod warna automatik</translation>
@@ -1521,6 +1549,7 @@ Muat turun model transkripsi (hingga 100MB) untuk mendapatkan transkripsi ini.</
 <translation id="8054112564438735763">kuning air</translation>
 <translation id="8062968459344882447"><ph name="CHARACTERS_COLOR" /> <ph name="CHARACTERS_SUBJECTS" /> pada latar <ph name="CHARACTERS_BACKGROUND" /></translation>
 <translation id="8064337065720789104"><ph name="QUERY_TEXT" />; <ph name="RESULT_TEXT" /></translation>
+<translation id="8065371548313750052">Sambungkan mikrofon untuk mula merakam audio</translation>
 <translation id="8067126283828232460">APN telah disambungkan.</translation>
 <translation id="8067208048261192356">coklat</translation>
 <translation id="8067224607978179455">Padamkan <ph name="ACTION_NAME" /></translation>
@@ -1540,6 +1569,7 @@ Muat turun model transkripsi (hingga 100MB) untuk mendapatkan transkripsi ini.</
 <translation id="8132480444149501833">Minta Pembilang Trafik</translation>
 <translation id="8135609423982943441">Chromebook anda ditetapkan semula kepada lalai selamat. Anda boleh melaraskan perubahan ini pada bila-bila masa dalam Tetapan.</translation>
 <translation id="8138405288920084977">LTEAdvanced</translation>
+<translation id="8140591278915222789">Buat komuniti anda sendiri</translation>
 <translation id="8143951647992294073">Pilih <ph name="TOPIC_SOURCE" /> <ph name="TOPIC_SOURCE_DESC" /></translation>
 <translation id="8151185429379586178">Alat pembangun</translation>
 <translation id="8152370627892825"><ph name="DESCRIPTION" />, <ph name="ACCELERATOR_INFO" />.</translation>
@@ -1563,6 +1593,7 @@ Muat turun model transkripsi (hingga 100MB) untuk mendapatkan transkripsi ini.</
 <translation id="8261506727792406068">Padam</translation>
 <translation id="8262870577632766028">1 jam</translation>
 <translation id="827422111966801947">Biru Nila</translation>
+<translation id="8280687443902283243">Edit tajuk</translation>
 <translation id="8286154143153872371">Sila sambung kepada rangkaian dan muatkan semula halaman untuk melihat kertas dinding.</translation>
 <translation id="8291967909914612644">Negara pembekal tempatan</translation>
 <translation id="8294431847097064396">Sumber</translation>
@@ -1570,7 +1601,9 @@ Muat turun model transkripsi (hingga 100MB) untuk mendapatkan transkripsi ini.</
 <translation id="8308787307410010965">Tetapan kandungan laman</translation>
 <translation id="8312330582793120272">mainkan media</translation>
 <translation id="8318753676953949627">Tiada Imej</translation>
+<translation id="8319809980370328428">Penciptaan ringkasan dan tajuk rakaman</translation>
 <translation id="8320910311642849813">hutan</translation>
+<translation id="8322464149031882595">Klik untuk maju</translation>
 <translation id="8329018942023753850">apl kalkulator</translation>
 <translation id="8336739000755212683">Tukar imej akaun peranti</translation>
 <translation id="8339024191194156249">Ketahui lebih lanjut tentang autolancar</translation>
@@ -1591,6 +1624,7 @@ Muat turun model transkripsi (hingga 100MB) untuk mendapatkan transkripsi ini.</
 <translation id="8395584934117017006"><ph name="DEVICE_TYPE" /> ini diurus perusahaan</translation>
 <translation id="8398927464629426868">Kadar pengecasan atau penyahcasan semasa peranti</translation>
 <translation id="8403988360557588704">Lukisan <ph name="ART_FEATURE" /> dalam gaya <ph name="ART_MOVEMENT" /></translation>
+<translation id="8409219750150841791">Ringkasan dijana:</translation>
 <translation id="8410244574650205435">Dikesan secara automatik</translation>
 <translation id="8420955526972171689">Jalankan ujian dan penyelesaian masalah bagi isu perkakasan</translation>
 <translation id="8422748173858722634">IMEI</translation>
@@ -1618,13 +1652,14 @@ Muat turun model transkripsi (hingga 100MB) untuk mendapatkan transkripsi ini.</
 <translation id="8503836310948963452">Hanya beberapa minit lagi…</translation>
 <translation id="8505011850330200833">Model Gemini memerlukan 2GB storan untuk memproses transkrip dan membuat ringkasan</translation>
 <translation id="8508640263392900755">Butiran APN</translation>
-<translation id="8509574872955173831">Ketahui lebih lanjut tentang ringkasan dan penciptaan nama</translation>
 <translation id="8522687886059337719">Kini anda mempunyai akses kepada <ph name="BEGIN_LINK_WALLPAPER_SUBPAGE" />hiasan latar<ph name="END_LINK_WALLPAPER_SUBPAGE" /> dan <ph name="BEGIN_LINK_SCREENSAVER_SUBPAGE" />penyelamat skrin<ph name="END_LINK_SCREENSAVER_SUBPAGE" /> yang baharu</translation>
 <translation id="8528615187455571738">Crosvm</translation>
 <translation id="852896705346853285">restoran teh</translation>
 <translation id="8538236298648811558">Dikuasakan oleh Google AI</translation>
+<translation id="8543574988889671960">Muatkan semula tab</translation>
 <translation id="8550364285433943656">Letakkan kawalan pada tindakan permainan untuk bermain dengan kekunci papan kekunci</translation>
 <translation id="8557447961879934694">WPA2</translation>
+<translation id="8558521694042102707">AI generatif boleh membuat kesilapan, termasuk tentang orang, maka semak semula respons.</translation>
 <translation id="8575298406870537639">Pembawa anda mungkin memerlukan pilihan ini untuk menyambung kepada rangkaian mereka. Hubungi pembawa anda untuk mendapatkan butiran.</translation>
 <translation id="8576249514688522074">Tidak diasalkan</translation>
 <translation id="8584654835905316966">Pemulaan semula perlu dilakukan untuk melengkapkan proses pemasangan perisian tegar untuk <ph name="DEVICE_NAME" /> kepada versi <ph name="VERSION" />. Komputer anda mungkin akan dibut semula beberapa kali. Gelagat ini dijangkakan.</translation>
@@ -1639,7 +1674,6 @@ Muat turun model transkripsi (hingga 100MB) untuk mendapatkan transkripsi ini.</
 <translation id="8655295600908251630">Saluran</translation>
 <translation id="8655828773034788261">Kongsi URL:</translation>
 <translation id="8660881923941176839">paun</translation>
-<translation id="8670057600920888023">AI generatif ialah ciri eksperimen dan kandungan ciri ini mungkin tidak tepat, mengelirukan atau menyinggung.</translation>
 <translation id="8670574982334489519">kanan</translation>
 <translation id="8675354002693747642">Kekunci prakongsi</translation>
 <translation id="8677859815076891398">Tiada album. Buat album dalam <ph name="LINK_BEGIN" />Google Photos<ph name="LINK_END" />.</translation>
@@ -1657,15 +1691,13 @@ Muat turun model transkripsi (hingga 100MB) untuk mendapatkan transkripsi ini.</
 <translation id="8747900814994928677">Sahkan penukaran</translation>
 <translation id="8749478549112817787">Latar Kamera</translation>
 <translation id="8755946156089753497">menara</translation>
-<translation id="8756235582947991808">Cara mencipta dengan AI dan beberapa perkara untuk diingati</translation>
 <translation id="8760616037557661287">Gesaan sebelumnya</translation>
+<translation id="876280838467039397">Muat turun dan pasang model transkripsi <ph name="LANGUAGE_NAME" /></translation>
 <translation id="8764414543112028321">WireGuard</translation>
 <translation id="87646919272181953">Album Google Photos</translation>
 <translation id="8775713578693478175">APN modem</translation>
-<translation id="877735394245039557">Muat turun model sedang dijalankan</translation>
 <translation id="877985182522063539">A4</translation>
 <translation id="879568662008399081">Rangkaian ini mungkin mempunyai portal terbolot</translation>
-<translation id="8797082062139985406">Buat nama menggunakan Google AI</translation>
 <translation id="8798099450830957504">Lalai</translation>
 <translation id="8798441408945964110">Nama penyedia</translation>
 <translation id="8804164990146287819">Dasar Privasi</translation>
@@ -1676,6 +1708,7 @@ Muat turun model transkripsi (hingga 100MB) untuk mendapatkan transkripsi ini.</
 <translation id="8820817407110198400">Penanda buku</translation>
 <translation id="8833620912470026819">hutan kaktus</translation>
 <translation id="8834539327799336565">Tersambung pada masa ini</translation>
+<translation id="8842526499753992487">Alihkan kepada bahagian atas sebelah kiri</translation>
 <translation id="8845001906332463065">Dapatkan bantuan</translation>
 <translation id="8849799913685544685">rumah api</translation>
 <translation id="8851859208664803097">Dihentikan - Pencetak tidak dapat dihubungi</translation>
@@ -1689,8 +1722,8 @@ Muat turun model transkripsi (hingga 100MB) untuk mendapatkan transkripsi ini.</
 <translation id="8876270629542503161">Peranti ialah tablet.</translation>
 <translation id="8881098542468797602">Ujian berjaya</translation>
 <translation id="8882789155418924367">burung hantu</translation>
+<translation id="8885038613856655272">Sambungkan mikrofon</translation>
 <translation id="8892443466059986410">Batalkan pengeditan pintasan</translation>
-<translation id="8897043028305808902">Fail dinamakan semula</translation>
 <translation id="8898840733695078011">Kekuatan isyarat</translation>
 <translation id="8909114361904403025">anak panah ke atas</translation>
 <translation id="8910721771319628100">Rangkaian lalai melebihi ambang kependaman</translation>
@@ -1704,6 +1737,7 @@ Muat turun model transkripsi (hingga 100MB) untuk mendapatkan transkripsi ini.</
 <translation id="8930622219860340959">Wayarles</translation>
 <translation id="8933650076320258356">Kekunci yang dipilih ialah <ph name="KEYS" /> untuk <ph name="DIRECTION" />. <ph name="REASSIGN_INSTRUCTION" /></translation>
 <translation id="8936793075252196307">Alamat IP klien</translation>
+<translation id="8938606491880817721">Tidak dapat memuat turun. Cuba lagi atau mulakan semula <ph name="DEVICE_TYPE" /> anda.</translation>
 <translation id="8944651180182756621">Warna pelancar</translation>
 <translation id="8945308580158685341">lebah</translation>
 <translation id="894617464444543719">Peranti ialah telefon.</translation>
@@ -1714,6 +1748,7 @@ Muat turun model transkripsi (hingga 100MB) untuk mendapatkan transkripsi ini.</
 <translation id="8961025972867871808">penguin</translation>
 <translation id="8968751544471797276">Kadar pengecasan</translation>
 <translation id="8970109610781093811">Jalankan sekali lagi</translation>
+<translation id="8972061581514441296">Klik untuk kembali</translation>
 <translation id="8983038754672563810">HSPA</translation>
 <translation id="8987565828374052507">{NUMBER_OF_PAGES,plural, =0{Imbas}=1{Imbas halaman {NUMBER_OF_PAGES}}other{Imbas halaman {NUMBER_OF_PAGES}}}</translation>
 <translation id="89945434909472341">kampung</translation>

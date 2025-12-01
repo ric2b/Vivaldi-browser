@@ -11,6 +11,8 @@
 #import "base/metrics/field_trial_params.h"
 #import "base/metrics/user_metrics.h"
 #import "base/metrics/user_metrics_action.h"
+#import "ios/chrome/browser/banner_promo/model/default_browser_banner_promo_app_agent.h"
+#import "ios/chrome/browser/content_suggestions/ui_bundled/content_suggestions_collection_utils.h"
 #import "ios/chrome/browser/fullscreen/ui_bundled/fullscreen_animator.h"
 #import "ios/chrome/browser/keyboard/ui_bundled/UIKeyCommand+Chrome.h"
 #import "ios/chrome/browser/omnibox/public/omnibox_ui_features.h"
@@ -31,7 +33,6 @@
 #import "ios/chrome/browser/toolbar/ui_bundled/public/toolbar_height_delegate.h"
 #import "ios/chrome/browser/toolbar/ui_bundled/public/toolbar_utils.h"
 #import "ios/chrome/browser/toolbar/ui_bundled/tab_groups/ui/tab_group_indicator_view.h"
-#import "ios/chrome/browser/ui/content_suggestions/content_suggestions_collection_utils.h"
 #import "ios/chrome/common/ui/util/ui_util.h"
 
 // Vivaldi
@@ -316,6 +317,15 @@ BASE_FEATURE(kPrimaryToolbarViewDidLoadUpdateViews,
   }
 }
 
+- (BOOL)locationBarIsExpanded {
+  for (NSLayoutConstraint* constraint in self.view.expandedConstraints) {
+    if (!constraint.isActive) {
+      return false;
+    }
+  }
+  return true;
+}
+
 #pragma mark - SharingPositioner
 
 - (UIView*)sourceView {
@@ -355,6 +365,7 @@ BASE_FEATURE(kPrimaryToolbarViewDidLoadUpdateViews,
 - (void)expandLocationBar {
   [self deactivateViewLocationBarConstraints];
   [NSLayoutConstraint activateConstraints:self.view.expandedConstraints];
+  [self.delegate locationBarExpandedInViewController:self];
   [self.view layoutIfNeeded];
 }
 
@@ -366,6 +377,7 @@ BASE_FEATURE(kPrimaryToolbarViewDidLoadUpdateViews,
   } else {
     [NSLayoutConstraint activateConstraints:self.view.contractedConstraints];
   }
+  [self.delegate locationBarContractedInViewController:self];
   [self.view layoutIfNeeded];
 }
 
@@ -427,9 +439,14 @@ BASE_FEATURE(kPrimaryToolbarViewDidLoadUpdateViews,
 
   __weak __typeof(self) weakSelf = self;
   [UIView animateWithDuration:kBannerPromoAnimationDuration.InSecondsF()
-                   animations:^{
-                     [weakSelf showBannerPromoAnimationBlock];
-                   }];
+      animations:^{
+        [weakSelf showBannerPromoAnimationBlock];
+      }
+      completion:^(BOOL success) {
+        if (success) {
+          [weakSelf showBannerPromoCompletionBlock];
+        }
+      }];
 }
 
 // Helper method to actually do the animation to show the banner promo.
@@ -437,6 +454,11 @@ BASE_FEATURE(kPrimaryToolbarViewDidLoadUpdateViews,
   [self.view showBannerPromo];
   [self.toolbarHeightDelegate toolbarsHeightChanged];
   [self.view.superview layoutIfNeeded];
+}
+
+- (void)showBannerPromoCompletionBlock {
+  UIAccessibilityPostNotification(UIAccessibilityLayoutChangedNotification,
+                                  self.view.bannerPromo);
 }
 
 - (void)hideBannerPromo {

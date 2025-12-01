@@ -2,86 +2,116 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import './Table.js';
-
 import * as i18n from '../../../../core/i18n/i18n.js';
-import * as Platform from '../../../../core/platform/platform.js';
 import type {ThirdPartiesInsightModel} from '../../../../models/trace/insights/ThirdParties.js';
-import type * as Trace from '../../../../models/trace/trace.js';
+import * as Trace from '../../../../models/trace/trace.js';
 import * as Lit from '../../../../ui/lit/lit.js';
 import type * as Overlays from '../../overlays/overlays.js';
 
 import {BaseInsightComponent} from './BaseInsightComponent.js';
+import {createLimitedRows, renderOthersLabel, type RowLimitAggregator} from './Table.js';
+
+const {UIStrings, i18nString} = Trace.Insights.Models.ThirdParties;
 
 const {html} = Lit;
 
-const UIStrings = {
-  /** Label for a table column that displays the name of a third-party provider. */
-  columnThirdParty: 'Third party',
-  /** Label for a column in a data table; entries will be the download size of a web resource in kilobytes. */
-  columnTransferSize: 'Transfer size',
-  /** Label for a table column that displays how much time each row spent blocking other work on the main thread, entries will be the number of milliseconds spent. */
-  columnBlockingTime: 'Blocking time',
-  /**
-   * @description Text block indicating that no third party content was detected on the page
-   */
-  noThirdParties: 'No third parties found',
-};
-
-const str_ = i18n.i18n.registerUIStrings('panels/timeline/components/insights/ThirdParties.ts', UIStrings);
-const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
+const MAX_TO_SHOW = 5;
 
 export class ThirdParties extends BaseInsightComponent<ThirdPartiesInsightModel> {
   static override readonly litTagName = Lit.StaticHtml.literal`devtools-performance-third-parties`;
-  override internalName: string = 'third-parties';
-
-  #overlaysForEntity = new Map<Trace.Extras.ThirdParties.Entity, Overlays.Overlays.TimelineOverlay[]>();
+  override internalName = 'third-parties';
 
   override createOverlays(): Overlays.Overlays.TimelineOverlay[] {
-    this.#overlaysForEntity.clear();
-
     if (!this.model) {
       return [];
     }
 
     const overlays: Overlays.Overlays.TimelineOverlay[] = [];
-    for (const [entity, events] of this.model.eventsByEntity) {
-      if (entity === this.model.firstPartyEntity) {
+    const summaries = this.model.summaries ?? [];
+    for (const summary of summaries) {
+      if (summary.entity === this.model.firstPartyEntity) {
         continue;
       }
 
-      const overlaysForThisEntity = [];
-      for (const event of events) {
-        const overlay: Overlays.Overlays.TimelineOverlay = {
-          type: 'ENTRY_OUTLINE',
-          entry: event,
-          outlineReason: 'INFO',
-        };
-        overlaysForThisEntity.push(overlay);
-        overlays.push(overlay);
-      }
-
-      this.#overlaysForEntity.set(entity, overlaysForThisEntity);
+      const summaryOverlays = this.#createOverlaysForSummary(summary);
+      overlays.push(...summaryOverlays);
     }
-
     return overlays;
   }
+
+  #createOverlaysForSummary(summary: Trace.Extras.ThirdParties.Summary): Overlays.Overlays.TimelineOverlay[] {
+    const overlays = [];
+    const events = summary.relatedEvents ?? [];
+    for (const event of events) {
+      // The events found for a third party can be vast, as they gather every
+      // single main thread task along with everything else on the page. If the
+      // main thread is busy with large icicles, we can easily create tens of
+      // thousands of overlays. Therefore, only create overlays for events of at least 1ms.
+      if (event.dur === undefined || event.dur < 1_000) {
+        continue;
+      }
+
+      const overlay: Overlays.Overlays.TimelineOverlay = {
+        type: 'ENTRY_OUTLINE',
+        entry: event,
+        outlineReason: 'INFO',
+      };
+      overlays.push(overlay);
+    }
+    return overlays;
+  }
+
+  #mainThreadTimeAggregator: RowLimitAggregator<Trace.Extras.ThirdParties.Summary> = {
+    mapToRow: summary => ({
+      values: [summary.entity.name, i18n.TimeUtilities.millisToString(summary.mainThreadTime)],
+      overlays: this.#createOverlaysForSummary(summary),
+    }),
+    createAggregatedTableRow:
+        remaining => {
+          const totalMainThreadTime = remaining.reduce<Trace.Types.Timing.Milli>(
+              (acc, summary) => Trace.Types.Timing.Milli(acc + summary.mainThreadTime), Trace.Types.Timing.Milli(0));
+          return {
+            values: [renderOthersLabel(remaining.length), i18n.TimeUtilities.millisToString(totalMainThreadTime)],
+            overlays: remaining.flatMap(summary => this.#createOverlaysForSummary(summary) ?? []),
+          };
+        },
+  };
+
+  #transferSizeAggregator: RowLimitAggregator<Trace.Extras.ThirdParties.Summary> = {
+    mapToRow: summary => ({
+      values: [summary.entity.name, i18n.ByteUtilities.formatBytesToKb(summary.transferSize)],
+      overlays: this.#createOverlaysForSummary(summary),
+    }),
+    createAggregatedTableRow:
+        remaining => {
+          const totalBytes = remaining.reduce((acc, summary) => acc + summary.transferSize, 0);
+          return {
+            values: [renderOthersLabel(remaining.length), i18n.ByteUtilities.formatBytesToKb(totalBytes)],
+            overlays: remaining.flatMap(summary => this.#createOverlaysForSummary(summary) ?? []),
+          };
+        },
+  };
 
   override renderContent(): Lit.LitTemplate {
     if (!this.model) {
       return Lit.nothing;
     }
 
-    const entries = [...this.model.summaryByEntity.entries()].filter(kv => kv[0] !== this.model?.firstPartyEntity);
-    if (!entries.length) {
+    let result = this.model.summaries ?? [];
+
+    if (this.model.firstPartyEntity) {
+      result = result.filter(s => s.entity !== this.model?.firstPartyEntity || null);
+    }
+    if (!result.length) {
       return html`<div class="insight-section">${i18nString(UIStrings.noThirdParties)}</div>`;
     }
 
-    const topTransferSizeEntries = entries.sort((a, b) => b[1].transferSize - a[1].transferSize).slice(0, 6);
-    const topMainThreadTimeEntries = entries.sort((a, b) => b[1].mainThreadTime - a[1].mainThreadTime).slice(0, 6);
+    const topTransferSizeEntries = result.toSorted((a, b) => b.transferSize - a.transferSize);
+    const topMainThreadTimeEntries = result.toSorted((a, b) => b.mainThreadTime - a.mainThreadTime);
 
     const sections = [];
     if (topTransferSizeEntries.length) {
+      const rows = createLimitedRows(topTransferSizeEntries, this.#transferSizeAggregator, MAX_TO_SHOW);
       // clang-format off
       sections.push(html`
         <div class="insight-section">
@@ -89,13 +119,7 @@ export class ThirdParties extends BaseInsightComponent<ThirdPartiesInsightModel>
             .data=${{
               insight: this,
               headers: [i18nString(UIStrings.columnThirdParty), i18nString(UIStrings.columnTransferSize)],
-              rows: topTransferSizeEntries.map(([entity, summary]) => ({
-                values: [
-                  entity.name,
-                  i18n.ByteUtilities.bytesToString(summary.transferSize),
-                ],
-                overlays: this.#overlaysForEntity.get(entity),
-              })),
+              rows,
             }}>
           </devtools-performance-table>
         </div>
@@ -104,20 +128,15 @@ export class ThirdParties extends BaseInsightComponent<ThirdPartiesInsightModel>
     }
 
     if (topMainThreadTimeEntries.length) {
+      const rows = createLimitedRows(topMainThreadTimeEntries, this.#mainThreadTimeAggregator, MAX_TO_SHOW);
       // clang-format off
       sections.push(html`
         <div class="insight-section">
           <devtools-performance-table
             .data=${{
               insight: this,
-              headers: [i18nString(UIStrings.columnThirdParty), i18nString(UIStrings.columnBlockingTime)],
-              rows: topMainThreadTimeEntries.map(([entity, summary]) => ({
-                values: [
-                  entity.name,
-                  i18n.TimeUtilities.millisToString(Platform.Timing.microSecondsToMilliSeconds(summary.mainThreadTime)),
-                ],
-                overlays: this.#overlaysForEntity.get(entity),
-              })),
+              headers: [i18nString(UIStrings.columnThirdParty), i18nString(UIStrings.columnMainThreadTime)],
+              rows,
             }}>
           </devtools-performance-table>
         </div>

@@ -15,6 +15,7 @@
 #include "sql/database.h"
 #include "sql/init_status.h"
 #include "sql/meta_table.h"
+#include "sql/transaction.h"
 
 namespace os_crypt_async {
 class Encryptor;
@@ -30,7 +31,7 @@ class WEBDATA_EXPORT WebDatabase {
   // Note: when changing the current version number, corresponding changes must
   // happen in the unit tests, and new migration test added to
   // `WebDatabaseMigrationTest`.
-  static constexpr int kCurrentVersionNumber = 137;
+  static constexpr int kCurrentVersionNumber = 138;
 
   // To support users who are upgrading from older versions of Chrome, we enable
   // migrating from any database version newer than `kDeprecatedVersionNumber`.
@@ -94,6 +95,16 @@ class WEBDATA_EXPORT WebDatabase {
   void BeginTransaction();
   void CommitTransaction();
 
+  // Acquire a scoped transaction. The `AcquireTransaction` is meant to replace
+  // the `BeginTransaction` / `CommitTransaction` transaction management and
+  // both are exclusive.
+  //
+  // Returns an sql::Transaction which automatically rolls back uncommitted
+  // transactions when going out of scope. If this method fails, no transaction
+  // is returned but the database will still execute statements, but they will
+  // be enclosed in their own implicit transaction.
+  std::unique_ptr<sql::Transaction> AcquireTransaction();
+
   std::string GetDiagnosticInfo(int extended_error, sql::Statement* statement);
 
   // Exposed for testing only.
@@ -119,6 +130,11 @@ class WEBDATA_EXPORT WebDatabase {
 
   sql::Database db_;
   sql::MetaTable meta_table_;
+
+  // Sets when the scoped transaction should be used instead of the
+  // BeginTransaction/CommitTransaction transaction APIs. Sets to true when
+  // part of the 'SqlScopedTransactionWebDatabase' Finch experiment.
+  const bool use_scoped_transaction_;
 
   // Map of all the different tables that have been added to this
   // object. Non-owning.

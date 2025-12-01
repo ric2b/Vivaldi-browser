@@ -52,19 +52,41 @@ public class ChromeNullAwayLibraryModel implements LibraryModels {
                                 "getStringSet(java.lang.String,java.util.Set<java.lang.String>)"),
                         1)
                 .put(methodRef("android.content.Intent", "normalizeMimeType(java.lang.String)"), 0)
+                .put(methodRef("android.util.LongSparseArray", "get(long,E)"), 1)
+                .put(methodRef("android.util.SparseArray", "get(int,E)"), 1)
                 .build();
     }
 
     @Override
     public ImmutableSet<MethodRef> nullableReturns() {
         return ImmutableSet.of(
+                methodRef("android.util.SparseArray", "get(int)"),
+                methodRef("android.util.LongSparseArray", "get(long)"),
                 methodRef("java.util.Map", "put(K, V)"),
                 methodRef("java.util.Map", "remove(java.lang.Object)"));
     }
 
     @Override
     public ImmutableSet<MethodRef> nonNullReturns() {
-        return ImmutableSet.of();
+        return ImmutableSet.of(
+                // While findViewById() can return null, call sites are generally pretty confident
+                // that they don't since we use generated constants that map to XML layouts.
+                methodRef("androidx.appcompat.app.AppCompatDelegate", "findViewById(int)"),
+                methodRef("androidx.appcompat.app.AppCompatDialog", "findViewById(int)"),
+                methodRef("androidx.preference.PreferenceViewHolder", "findViewById(int)"),
+                // For correct inputs, findPreference() basically always returns non-null.
+                methodRef(
+                        "androidx.preference.PreferenceGroup",
+                        "<T>findPreference(java.lang.CharSequence)"),
+                methodRef(
+                        "androidx.preference.PreferenceManager",
+                        "<T>findPreference(java.lang.CharSequence)"),
+                methodRef(
+                        "androidx.preference.PreferenceFragment",
+                        "<T>findPreference(java.lang.CharSequence)"),
+                methodRef(
+                        "androidx.preference.PreferenceFragmentCompat",
+                        "<T>findPreference(java.lang.CharSequence)"));
     }
 
     @Override

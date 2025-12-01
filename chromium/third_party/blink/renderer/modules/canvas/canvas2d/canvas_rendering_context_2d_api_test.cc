@@ -21,9 +21,11 @@
 #include "third_party/blink/renderer/bindings/core/v8/v8_binding_for_core.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_binding_for_testing.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_blob_callback.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_canvas_text_align.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_canvas_text_baseline.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_image_bitmap_options.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_image_data_settings.h"
-#include "third_party/blink/renderer/bindings/core/v8/v8_union_float32array_uint16array_uint8clampedarray.h"  // IWYU pragma: keep
+#include "third_party/blink/renderer/bindings/core/v8/v8_union_float16array_float32array_uint8clampedarray.h"  // IWYU pragma: keep
 #include "third_party/blink/renderer/bindings/modules/v8/v8_begin_layer_options.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_typedefs.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_union_blob_htmlcanvaselement_htmlimageelement_htmlvideoelement_imagebitmap_imagedata_offscreencanvas_svgimageelement_videoframe.h"
@@ -48,7 +50,6 @@
 #include "third_party/blink/renderer/platform/bindings/exception_code.h"
 #include "third_party/blink/renderer/platform/bindings/exception_state.h"
 #include "third_party/blink/renderer/platform/bindings/script_state.h"
-#include "third_party/blink/renderer/platform/graphics/graphics_types.h"
 #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
 #include "third_party/blink/renderer/platform/heap/persistent.h"
 #include "third_party/blink/renderer/platform/testing/runtime_enabled_features_test_helpers.h"
@@ -737,7 +738,8 @@ TEST_F(CanvasRenderingContext2DAPITest,
   StudyParticipationRaii study_participation_raii;
   CreateContext(kNonOpaque);
 
-  Context2D()->setTextAlign("center");
+  Context2D()->setTextAlign(
+      V8CanvasTextAlign(V8CanvasTextAlign::Enum::kCenter));
   EXPECT_EQ(INT64_C(-5618040280239325003),
             Context2D()->IdentifiableTextToken().ToUkmMetricValue());
 
@@ -761,7 +763,8 @@ TEST_F(CanvasRenderingContext2DAPITest,
   StudyParticipationRaii study_participation_raii;
   CreateContext(kNonOpaque);
 
-  Context2D()->setTextBaseline("top");
+  Context2D()->setTextBaseline(
+      V8CanvasTextBaseline(V8CanvasTextBaseline::Enum::kTop));
   EXPECT_EQ(INT64_C(-6814889525293785691),
             Context2D()->IdentifiableTextToken().ToUkmMetricValue());
 
@@ -842,8 +845,9 @@ TEST_F(CanvasRenderingContext2DAPITest,
   EXPECT_EQ(INT64_C(-7525055925911674050),
             Context2D()->IdentifiableTextToken().ToUkmMetricValue());
   Context2D()->setFont("Helvetica");
-  Context2D()->setTextBaseline("bottom");
-  Context2D()->setTextAlign("right");
+  Context2D()->setTextBaseline(
+      V8CanvasTextBaseline(V8CanvasTextBaseline::Enum::kBottom));
+  Context2D()->setTextAlign(V8CanvasTextAlign(V8CanvasTextAlign::Enum::kRight));
   SetFillStyleString(Context2D(), GetScriptState(), "red");
   Context2D()->fillText("Bye", 4.0, 3.0);
   EXPECT_EQ(INT64_C(-7631959002534825456),
@@ -874,7 +878,7 @@ TEST_F(CanvasRenderingContext2DAPITest,
       Context2D()->createImageData(/*sw=*/1, /*sh=*/1, exception_state);
   EXPECT_FALSE(exception_state.HadException());
   Context2D()->putImageData(image_data, /*dx=*/1, /*dy=*/1, exception_state);
-  EXPECT_EQ(INT64_C(2821795876044191773),
+  EXPECT_EQ(INT64_C(-4824069156106343739),
             Context2D()->IdentifiableTextToken().ToUkmMetricValue());
 
   EXPECT_FALSE(Context2D()->IdentifiabilityEncounteredSkippedOps());

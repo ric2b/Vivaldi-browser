@@ -27,6 +27,15 @@ NSString* const kConsistencyAccountChooserAddAccountIdentifier =
 NSString* const kManagedProfileCreationScreenAccessibilityIdentifier =
     @"ManagedProfileCreationScreenAccessibilityIdentifier";
 
+NSString* const kBrowsingDataManagementScreenAccessibilityIdentifier =
+    @"BrowsingDataManagementScreenAccessibilityIdentifier";
+
+NSString* const kManagedProfileCreationNavigationBarAccessibilityIdentifier =
+    @"ManagedProfileCreationNavigationBarAccessibilityIdentifier";
+
+NSString* const kBrowsingDataButtonAccessibilityIdentifier =
+    @"BrowsingDataButtonAccessibilityIdentifier";
+
 NSString* const kKeepBrowsingDataSeparateCellId =
     @"KeepBrowsingDataSeparateCellId";
 
@@ -49,6 +58,8 @@ const char* const kUMASSORecallPromoAction = "SSORecallPromo.PromoAction";
 const char* const kUMASSORecallAccountsAvailable =
     "SSORecallPromo.AccountsAvailable";
 const char* const kUMASSORecallPromoSeenCount = "SSORecallPromo.PromoSeenCount";
+NSString* const kFullscreenSigninPromoManagerMigrationDone =
+    @"FullscreenSigninPromoManagerMigrationDone";
 
 NSString* const kManagedProfileLearnMoreURL =
     @"internal://managed-profile-creation-learn-more";

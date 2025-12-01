@@ -24,7 +24,11 @@ VERSION=$1
 REQUIREMENTS=$2
 
 # Install Python packages for this container's version
-if [[ ${VERSION} == "python3.13" || ${VERSION} == "python3.12" ]]; then
+if [[ ${VERSION} == "python3.13-nogil" ]]; then
+  cat >pythons.txt <<EOF
+$VERSION
+EOF
+elif [[ ${VERSION} == "python3.13" || ${VERSION} == "python3.12" ]]; then
   cat >pythons.txt <<EOF
 $VERSION
 $VERSION-dev
@@ -63,6 +67,15 @@ wget --retry-connrefused --waitretry=1 --read-timeout=20 --timeout=15 --tries=5 
 /usr/bin/$VERSION get-pip.py
 /usr/bin/$VERSION -m pip install --no-cache-dir --upgrade pip
 /usr/bin/$VERSION -m pip install -U setuptools
+
+
+# For Python 3.13t, do not install twine as it does not have pre-built wheels
+# for this Python version and building it from source fails. We only need twine
+# to be present on the system Python which in this case is 3.12.
+if [[ ${VERSION} == "python3.13-nogil" ]]; then
+  grep -v "twine" $REQUIREMENTS > requirements_without_twine.txt
+  REQUIREMENTS=requirements_without_twine.txt
+fi
 
 # Disable the cache dir to save image space, and install packages
 /usr/bin/$VERSION -m pip install --no-cache-dir -r $REQUIREMENTS -U

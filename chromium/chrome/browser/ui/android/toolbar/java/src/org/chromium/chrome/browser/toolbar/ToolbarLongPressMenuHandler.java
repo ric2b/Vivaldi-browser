@@ -5,6 +5,7 @@
 package org.chromium.chrome.browser.toolbar;
 
 import android.content.Context;
+import android.content.res.Configuration;
 import android.graphics.Color;
 import android.graphics.Rect;
 import android.graphics.drawable.ColorDrawable;
@@ -12,6 +13,7 @@ import android.view.Gravity;
 import android.view.View;
 import android.view.View.OnLongClickListener;
 import android.view.ViewGroup;
+import android.widget.ListView;
 import android.widget.PopupWindow;
 
 import androidx.annotation.IntDef;
@@ -22,13 +24,18 @@ import androidx.annotation.VisibleForTesting;
 import org.chromium.base.shared_preferences.SharedPreferencesManager;
 import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.chrome.browser.feature_engagement.TrackerFactory;
+import org.chromium.chrome.browser.lifecycle.ActivityLifecycleDispatcher;
+import org.chromium.chrome.browser.lifecycle.ConfigurationChangedObserver;
 import org.chromium.chrome.browser.preferences.ChromePreferenceKeys;
 import org.chromium.chrome.browser.preferences.ChromeSharedPreferences;
 import org.chromium.chrome.browser.profiles.Profile;
+import org.chromium.chrome.browser.toolbar.settings.AddressBarPreference;
 import org.chromium.components.browser_ui.widget.BrowserUiListMenuUtils;
 import org.chromium.components.feature_engagement.EventConstants;
 import org.chromium.components.feature_engagement.Tracker;
 import org.chromium.ui.base.Clipboard;
+import org.chromium.ui.base.WindowAndroid;
+import org.chromium.ui.display.DisplayUtil;
 import org.chromium.ui.listmenu.BasicListMenu;
 import org.chromium.ui.listmenu.ListMenuItemProperties;
 import org.chromium.ui.modelutil.MVCListAdapter.ModelList;
@@ -41,7 +48,7 @@ import java.lang.annotation.RetentionPolicy;
 import java.util.function.Supplier;
 
 /** The handler for the toolbar long press menu. */
-public class ToolbarLongPressMenuHandler {
+public class ToolbarLongPressMenuHandler implements ConfigurationChangedObserver {
     @Retention(RetentionPolicy.SOURCE)
     @IntDef({MenuItemType.MOVE_ADDRESS_BAR_TO, MenuItemType.COPY_LINK})
     public @interface MenuItemType {
@@ -51,9 +58,11 @@ public class ToolbarLongPressMenuHandler {
 
     private PopupWindow mPopupMenu;
     private final int mAppMenuShadowLength;
+    private final int mAdditonalHorizontalPadding;
     private final int mEdgeToTextDistance;
     private final int mUrlBarMargin;
     private final int mMenuOmniboxOverlap;
+    private int mScreenWidthDp;
     @NonNull private final Context mContext;
     @NonNull private final ObservableSupplier<Profile> mProfileSupplier;
     @NonNull private final ObservableSupplier<Boolean> mOmniboxFocusStateSupplier;
@@ -61,6 +70,8 @@ public class ToolbarLongPressMenuHandler {
     @NonNull private final Supplier<ViewRectProvider> mUrlBarViewRectProviderSupplier;
     @Nullable private final OnLongClickListener mOnLongClickListener;
     @NonNull private final SharedPreferencesManager mSharedPreferencesManager;
+    @NonNull private final WindowAndroid mWindowAndroid;
+    @NonNull private final ActivityLifecycleDispatcher mLifecycleDispatcher;
 
     /**
      * Creates a new {@link ToolbarLongPressMenuHandler}.
@@ -72,6 +83,8 @@ public class ToolbarLongPressMenuHandler {
             ObservableSupplier<Profile> profileSupplier,
             boolean isCustomTab,
             ObservableSupplier<Boolean> omniboxFocusStateSupplier,
+            ActivityLifecycleDispatcher lifecycleDispatcher,
+            WindowAndroid windowAndroid,
             Supplier<String> urlBarTextSupplier,
             Supplier<ViewRectProvider> urlBarViewRectProviderSupplier) {
         mContext = context;
@@ -79,6 +92,11 @@ public class ToolbarLongPressMenuHandler {
         mOmniboxFocusStateSupplier = omniboxFocusStateSupplier;
         mUrlBarTextSupplier = urlBarTextSupplier;
         mUrlBarViewRectProviderSupplier = urlBarViewRectProviderSupplier;
+        mWindowAndroid = windowAndroid;
+        mLifecycleDispatcher = lifecycleDispatcher;
+        mLifecycleDispatcher.register(this);
+
+        mScreenWidthDp = context.getResources().getConfiguration().screenWidthDp;
 
         if (ToolbarPositionController.isToolbarPositionCustomizationEnabled(context, isCustomTab)) {
             mOnLongClickListener =
@@ -98,6 +116,10 @@ public class ToolbarLongPressMenuHandler {
         mSharedPreferencesManager = ChromeSharedPreferences.getInstance();
         mAppMenuShadowLength =
                 context.getResources().getDimensionPixelSize(R.dimen.app_menu_shadow_length);
+        mAdditonalHorizontalPadding =
+                context.getResources()
+                        .getDimensionPixelSize(
+                                R.dimen.omnibox_longpress_menu_addtional_horizontal_padding);
 
         // Long press menu layout
         // +----------------------------------+
@@ -117,6 +139,7 @@ public class ToolbarLongPressMenuHandler {
         // mEdgeToTextDistance
         mEdgeToTextDistance =
                 mAppMenuShadowLength
+                        + mAdditonalHorizontalPadding
                         + context.getResources()
                                 .getDimensionPixelSize(R.dimen.list_menu_item_horizontal_padding);
         mUrlBarMargin =
@@ -137,9 +160,7 @@ public class ToolbarLongPressMenuHandler {
     }
 
     private void displayMenu(View view) {
-        boolean onTop =
-                mSharedPreferencesManager.readBoolean(
-                        ChromePreferenceKeys.TOOLBAR_TOP_ANCHORED, true);
+        boolean onTop = AddressBarPreference.isToolbarConfiguredToShowOnTop();
 
         BasicListMenu listMenu =
                 BrowserUiListMenuUtils.getBasicListMenu(
@@ -150,15 +171,26 @@ public class ToolbarLongPressMenuHandler {
                             mPopupMenu.dismiss();
                         });
 
-        View menuListView = listMenu.getContentView();
+        ListView listView = listMenu.getListView();
+        listView.setPaddingRelative(
+                listView.getPaddingStart() + mAdditonalHorizontalPadding,
+                listView.getPaddingTop(),
+                listView.getPaddingEnd() + mAdditonalHorizontalPadding,
+                listView.getPaddingBottom());
 
         mPopupMenu = UiWidgetFactory.getInstance().createPopupWindow(view.getContext());
         mPopupMenu.setFocusable(true);
         mPopupMenu.setOutsideTouchable(true);
-        mPopupMenu.setWidth(listMenu.getMaxItemWidth() + mAppMenuShadowLength * 2);
+
+        int menuWidthPx =
+                listMenu.getMaxItemWidth()
+                        + mAdditonalHorizontalPadding * 2
+                        + mAppMenuShadowLength * 2;
+        int screenWidthPx = DisplayUtil.dpToPx(mWindowAndroid.getDisplay(), mScreenWidthDp);
+        mPopupMenu.setWidth(Math.min(menuWidthPx, screenWidthPx));
         mPopupMenu.setHeight(ViewGroup.LayoutParams.WRAP_CONTENT);
         mPopupMenu.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
-        mPopupMenu.setContentView(menuListView);
+        mPopupMenu.setContentView(listMenu.getContentView());
         mPopupMenu.setAnimationStyle(
                 onTop ? R.style.PopupWindowAnimDropdown : R.style.PopupWindowAnimRaiseup);
 
@@ -202,9 +234,7 @@ public class ToolbarLongPressMenuHandler {
     }
 
     private void handleMoveAddressBarTo() {
-        boolean onTop =
-                mSharedPreferencesManager.readBoolean(
-                        ChromePreferenceKeys.TOOLBAR_TOP_ANCHORED, true);
+        boolean onTop = AddressBarPreference.isToolbarConfiguredToShowOnTop();
         mSharedPreferencesManager.writeBoolean(ChromePreferenceKeys.TOOLBAR_TOP_ANCHORED, !onTop);
     }
 
@@ -240,5 +270,23 @@ public class ToolbarLongPressMenuHandler {
 
     public PopupWindow getPopupWindowForTesting() {
         return mPopupMenu;
+    }
+
+    @Override
+    public void onConfigurationChanged(Configuration newConfig) {
+        if (!mLifecycleDispatcher.isNativeInitializationFinished()
+                || mScreenWidthDp == newConfig.screenWidthDp) {
+            return;
+        }
+
+        mScreenWidthDp = newConfig.screenWidthDp;
+        if (mPopupMenu != null && mPopupMenu.isShowing()) {
+            mPopupMenu.dismiss();
+        }
+    }
+
+    /** Removes all observers. */
+    public void destroy() {
+        mLifecycleDispatcher.unregister(this);
     }
 }

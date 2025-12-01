@@ -22,7 +22,6 @@ import androidx.test.platform.app.InstrumentationRegistry;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
-import org.junit.ClassRule;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -34,7 +33,6 @@ import org.chromium.base.test.util.CriteriaHelper;
 import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.DoNotBatch;
 import org.chromium.base.test.util.Feature;
-import org.chromium.base.test.util.Features;
 import org.chromium.base.test.util.Features.EnableFeatures;
 import org.chromium.base.test.util.HistogramWatcher;
 import org.chromium.base.test.util.MinAndroidSdkLevel;
@@ -50,8 +48,8 @@ import org.chromium.chrome.browser.ui.edge_to_edge.EdgeToEdgeControllerImpl;
 import org.chromium.chrome.browser.ui.messages.snackbar.Snackbar;
 import org.chromium.chrome.browser.ui.messages.snackbar.SnackbarManager;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
-import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
-import org.chromium.chrome.test.batch.BlankCTATabInitialStateRule;
+import org.chromium.chrome.test.transit.AutoResetCtaTransitTestRule;
+import org.chromium.chrome.test.transit.ChromeTransitTestRules;
 import org.chromium.chrome.test.util.ActivityTestUtils;
 import org.chromium.content_public.browser.test.util.UiUtils;
 import org.chromium.net.test.EmbeddedTestServer;
@@ -77,13 +75,9 @@ import java.io.IOException;
     ChromeFeatureList.EDGE_TO_EDGE_WEB_OPT_IN
 })
 public class EdgeToEdgeInstrumentationTest {
-    @ClassRule
-    public static final ChromeTabbedActivityTestRule sActivityTestRule =
-            new ChromeTabbedActivityTestRule();
-
     @Rule
-    public final BlankCTATabInitialStateRule mInitialStateRule =
-            new BlankCTATabInitialStateRule(sActivityTestRule, false);
+    public final AutoResetCtaTransitTestRule mActivityTestRule =
+            ChromeTransitTestRules.fastAutoResetCtaActivityRule();
 
     @Rule
     public final RenderTestRule renderTestRule =
@@ -114,8 +108,8 @@ public class EdgeToEdgeInstrumentationTest {
 
     @Before
     public void setUp() {
-        mTestServer = sActivityTestRule.getTestServer();
-        mActivity = sActivityTestRule.getActivity();
+        mTestServer = mActivityTestRule.getTestServer();
+        mActivity = mActivityTestRule.getActivity();
         assertNotNull(mActivity);
 
         CriteriaHelper.pollUiThread(
@@ -142,7 +136,7 @@ public class EdgeToEdgeInstrumentationTest {
 
     /** Puts the screen ToEdge by loading a page that has the appropriate HTML. */
     void goToEdge() {
-        sActivityTestRule.loadUrl(mTestServer.getURL(TEST_COVER_PAGE));
+        mActivityTestRule.loadUrl(mTestServer.getURL(TEST_COVER_PAGE));
         waitUntilOptedIntoEdgeToEdge();
         assertTrue("Helper goToEdge failed to go ToEdge", mEdgeToEdgeController.isDrawingToEdge());
         assertTrue(
@@ -152,7 +146,7 @@ public class EdgeToEdgeInstrumentationTest {
 
     /** Puts the screen ToNormal by loading a page that has the appropriate HTML. */
     void optOutOfToEdge() {
-        sActivityTestRule.loadUrl(mTestServer.getURL(TEST_AUTO_PAGE));
+        mActivityTestRule.loadUrl(mTestServer.getURL(TEST_AUTO_PAGE));
         waitUntilNotOptedIntoEdgeToEdge();
         assertFalse(
                 "Helper optOutOfToEdge failed to stop opting into E2E",
@@ -160,7 +154,7 @@ public class EdgeToEdgeInstrumentationTest {
     }
 
     void loadSafeAreaConstrainPage() {
-        sActivityTestRule.loadUrl(mTestServer.getURL(TEST_CONTAIN_PAGE));
+        mActivityTestRule.loadUrl(mTestServer.getURL(TEST_CONTAIN_PAGE));
         waitUntilNotOptedIntoEdgeToEdge();
         assertFalse(
                 "Helper loadSafeAreaConstrainPage failed to stop opting into E2E",
@@ -397,32 +391,6 @@ public class EdgeToEdgeInstrumentationTest {
                 Color.TRANSPARENT,
                 mActivity.getWindow().getNavigationBarColor());
         assertNavigationBarColor(mActivity.getActivityTab().getBackgroundColor());
-    }
-
-    @Test
-    @MediumTest
-    @Features.DisableFeatures({ChromeFeatureList.DRAW_KEY_NATIVE_EDGE_TO_EDGE})
-    public void testNavigationBarColor_KeyNativeDisabled() {
-        optOutOfToEdge();
-        assertNavigationBarColor(mActivity.getActivityTab().getBackgroundColor());
-
-        goToEdge();
-        assertEquals(
-                "Navigation bar should be transparent in edge to edge.",
-                Color.TRANSPARENT,
-                mActivity.getWindow().getNavigationBarColor());
-
-        TabUiTestHelper.enterTabSwitcher(mActivity);
-        assertNotEquals(
-                "Should not be drawing toEdge in the Tab Switcher.",
-                Color.TRANSPARENT,
-                mActivity.getWindow().getNavigationBarColor());
-
-        TabUiTestHelper.leaveTabSwitcher(mActivity);
-        assertEquals(
-                "Should return toEdge upon leaving the Tab Switcher.",
-                Color.TRANSPARENT,
-                mActivity.getWindow().getNavigationBarColor());
     }
 
     @Test

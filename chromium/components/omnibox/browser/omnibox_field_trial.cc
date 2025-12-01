@@ -23,6 +23,7 @@
 #include "build/build_config.h"
 #include "components/history/core/browser/url_database.h"
 #include "components/omnibox/browser/autocomplete_provider.h"
+#include "components/omnibox/browser/autocomplete_result.h"
 #include "components/omnibox/browser/page_classification_functions.h"
 #include "components/omnibox/browser/url_index_private_data.h"
 #include "components/omnibox/common/omnibox_features.h"
@@ -301,19 +302,7 @@ size_t OmniboxFieldTrial::GetProviderMaxMatches(
 
   std::string param_value;
 #if defined(VIVALDI_BUILD) && !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
-  // Don't add TYPE_RECENT_TYPED_HISTORY here, this is handled by
-  // autocomplete_grouper_sections.cc.
-  // The group of TYPE_RECENT_TYPED_HISTORY is GROUP_PERSONALIZED_ZERO_SUGGEST.
-  param_value =
-    std::to_string(AutocompleteProvider::Type::TYPE_BOOKMARK) +
-    ":10," +
-    std::to_string(AutocompleteProvider::Type::TYPE_HISTORY_QUICK) +
-    ":10," +
-    std::to_string(AutocompleteProvider::Type::TYPE_HISTORY_CLUSTER_PROVIDER) +
-    ":10," +
-    std::to_string(AutocompleteProvider::Type::TYPE_HISTORY_URL) +
-    ":10," +
-    "*:3";
+  default_max_matches_per_provider = AutocompleteResult::GetMaxMatches();
 #else
   if (OmniboxFieldTrial::IsMlUrlScoringEnabled()) {
     param_value =
@@ -721,6 +710,16 @@ namespace OmniboxFieldTrial {
 
 // Local history zero-prefix (aka zero-suggest) and prefix suggestions:
 
+// Whether to ignore all ZPS prefetch responses received from the Suggest
+// service when the user is on a Google SRP. This can be used, for example,
+// during experimentation to measure the performance impact of only the
+// request/response portion of ZPS prefetching (i.e. without updating the
+// user-visible list of suggestions in the Omnibox).
+const base::FeatureParam<bool> kZeroSuggestPrefetchingOnSRPCounterfactual(
+    &omnibox::kZeroSuggestPrefetchingOnSRP,
+    "ZeroSuggestPrefetchingOnSRPCounterfactual",
+    false);
+
 // The debouncing delay (in milliseconds) to use when throttling ZPS prefetch
 // requests.
 const base::FeatureParam<int> kZeroSuggestPrefetchDebounceDelay(
@@ -771,80 +770,52 @@ bool IsZeroSuggestPrefetchingEnabledInContext(
   }
 }
 
+bool IsOnFocusZeroSuggestEnabledInContext(
+    metrics::OmniboxEventProto::PageClassification page_classification) {
+  static bool enabled =
+      base::FeatureList::IsEnabled(omnibox::kFocusTriggersWebAndSRPZeroSuggest);
+
+  switch (page_classification) {
+    case metrics::OmniboxEventProto::
+        SEARCH_RESULT_PAGE_NO_SEARCH_TERM_REPLACEMENT:
+    case metrics::OmniboxEventProto::OTHER:
+      return enabled;
+    default:
+      return false;
+  }
+}
+
+bool IsHideSuggestionGroupHeadersEnabledInContext(
+    metrics::OmniboxEventProto::PageClassification page_classification) {
+  static bool enabled =
+      base::FeatureList::IsEnabled(omnibox::kHideSuggestionGroupHeaders);
+
+  switch (page_classification) {
+    case metrics::OmniboxEventProto::
+        SEARCH_RESULT_PAGE_NO_SEARCH_TERM_REPLACEMENT:
+    case metrics::OmniboxEventProto::OTHER:
+      return enabled;
+    default:
+      return false;
+  }
+}
+
 // Rich autocompletion.
 
 bool IsRichAutocompletionEnabled() {
   return base::FeatureList::IsEnabled(omnibox::kRichAutocompletion);
 }
 
-bool RichAutocompletionShowAdditionalText() {
-  return IsRichAutocompletionEnabled() &&
-         kRichAutocompletionShowAdditionalText.Get();
-}
-
-const base::FeatureParam<bool> kRichAutocompletionAutocompleteTitles(
-    &omnibox::kRichAutocompletion,
-    "RichAutocompletionAutocompleteTitles",
-    false);
-
-const base::FeatureParam<bool>
-    kRichAutocompletionAutocompleteTitlesShortcutProvider(
-        &omnibox::kRichAutocompletion,
-        "RichAutocompletionAutocompleteTitlesShortcutProvider",
-        true);
-
-const base::FeatureParam<int> kRichAutocompletionAutocompleteTitlesMinChar(
+const base::FeatureParam<size_t> kRichAutocompletionAutocompleteTitlesMinChar(
     &omnibox::kRichAutocompletion,
     "RichAutocompletionAutocompleteTitlesMinChar",
     3);
 
-const base::FeatureParam<bool> kRichAutocompletionAutocompleteNonPrefixAll(
-    &omnibox::kRichAutocompletion,
-    "RichAutocompletionAutocompleteNonPrefixAll",
-    false);
-
-const base::FeatureParam<bool>
-    kRichAutocompletionAutocompleteNonPrefixShortcutProvider(
-        &omnibox::kRichAutocompletion,
-        "RichAutocompletionAutocompleteNonPrefixShortcutProvider",
-        false);
-
-const base::FeatureParam<int> kRichAutocompletionAutocompleteNonPrefixMinChar(
-    &omnibox::kRichAutocompletion,
-    "RichAutocompletionAutocompleteNonPrefixMinChar",
-    0);
-
-const base::FeatureParam<bool> kRichAutocompletionShowAdditionalText(
-    &omnibox::kRichAutocompletion,
-    "RichAutocompletionAutocompleteShowAdditionalText",
-    true);
-
-const base::FeatureParam<bool> kRichAutocompletionAdditionalTextWithParenthesis(
-    &omnibox::kRichAutocompletion,
-    "RichAutocompletionAdditionalTextWithParenthesis",
-    false);
-
-const base::FeatureParam<bool> kRichAutocompletionAutocompleteShortcutText(
-    &omnibox::kRichAutocompletion,
-    "RichAutocompletionAutocompleteShortcutText",
-    true);
-
-const base::FeatureParam<int>
+const base::FeatureParam<size_t>
     kRichAutocompletionAutocompleteShortcutTextMinChar(
         &omnibox::kRichAutocompletion,
         "RichAutocompletionAutocompleteShortcutTextMinChar",
         3);
-
-const base::FeatureParam<bool> kRichAutocompletionCounterfactual(
-    &omnibox::kRichAutocompletion,
-    "RichAutocompletionCounterfactual",
-    false);
-
-const base::FeatureParam<bool>
-    kRichAutocompletionAutocompletePreferUrlsOverPrefixes(
-        &omnibox::kRichAutocompletion,
-        "RichAutocompletionAutocompletePreferUrlsOverPrefixes",
-        false);
 
 const base::FeatureParam<bool> kDomainSuggestionsCounterfactual(
     &omnibox::kDomainSuggestions,
@@ -1150,6 +1121,10 @@ bool IsStarterPackExpansionEnabled() {
 
 bool IsStarterPackIPHEnabled() {
   return base::FeatureList::IsEnabled(omnibox::kStarterPackIPH);
+}
+
+bool IsStarterPackPageEnabled() {
+  return base::FeatureList::IsEnabled(omnibox::kStarterPackPage);
 }
 // <- Site Search Starter Pack
 }  // namespace OmniboxFieldTrial

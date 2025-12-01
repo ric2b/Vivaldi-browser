@@ -2,10 +2,13 @@
 
 #include "components/search_engines/search_engines_prompt_manager.h"
 
+#include "base/rand_util.h"
 #include "base/time/time.h"
 #include "chrome/browser/search_engines/template_url_service_factory.h"
+#include "components/country_codes/country_codes.h"
 #include "components/search_engines/search_engine_type.h"
 #include "components/search_engines/search_engine_utils.h"
+#include "components/search_engines/search_engines_helper.h"
 #include "components/search_engines/search_engines_managers_factory.h"
 #include "components/search_engines/template_url.h"
 #include "components/search_engines/template_url_data.h"
@@ -50,96 +53,110 @@ void SearchEnginesPromptManager::IgnoreCurrentPromptVersion(
   }
 }
 
-TemplateURL* SearchEnginesPromptManager::GetDefaultSearchEngineToPrompt(
+bool SearchEnginesPromptManager::ShouldPrompt(
     PrefService* prefs,
     TemplateURLService* template_url_service,
-    adblock_filter::RuleService* rules_service) const {
+    adblock_filter::RuleService* rule_service) const {
   if (!prefs || !template_url_service || !template_url_service->loaded() ||
-      !rules_service->IsLoaded()) {
-    return nullptr;
+      !rule_service->IsLoaded()) {
+    return false;
   }
 
   const TemplateURL* current_search;
   current_search = template_url_service->GetDefaultSearchProvider(
       TemplateURLService::kDefaultSearchMain);
 
-  const TemplateURL default_search =
-      TemplateURL(*TemplateURLPrepopulateData::GetPrepopulatedFallbackSearch(
-          prefs, nullptr, TemplateURLPrepopulateData::SearchType::kMain));
+  // Do not prompt when:
+  // * SearchEnginesPromptManager is invalid (SearchEnginesManager version
+  // dependency is greater than current version)
+  if (!IsValid()) {
+    return false;
+  }
 
-  auto shouldPrompt = [&]() {
-    // Do not prompt when:
+  // * should not show dialog while quarantined
+  if (IsQuarantined(prefs)) {
+    return false;
+  }
 
-    // * SearchEnginesPromptManager is invalid (SearchEnginesManager version
-    // dependency is greater than current version)
-    if (!IsValid()) {
-      return false;
-    }
+  // * 'Allow Ads from our partners' adblocking source is disabled
+  if (!rule_service->GetKnownSourcesHandler()->IsPresetEnabled(
+          (base::Uuid::ParseLowercase(
+              adblock_filter::KnownRuleSourcesHandler::kPartnersListUuid)))) {
+    return false;
+  }
 
-    // * should not show dialog while quarantined
-    if (IsQuarantined(prefs)) {
-      return false;
-    }
+  // * last seen version of the prompt has already been seen
+  if (prefs->GetInteger(
+          vivaldiprefs::kStartupLastSeenSearchEnginePromptVersion) >=
+      GetCurrentVersion()) {
+    return false;
+  }
 
-    // * 'Allow Ads from our partners' adblocking source is disabled
-    if (!rules_service->GetKnownSourcesHandler()->IsPresetEnabled((
-            base::Uuid::ParseLowercase(
-                adblock_filter::KnownRuleSourcesHandler::kPartnersListUuid)))) {
-      return false;
-    }
+  // * should not prompt for current search engine
+  const SearchEngineType current_search_type =
+      current_search->GetEngineType(template_url_service->search_terms_data());
+  if (!ShouldPromptForTypeOrURL(
+          current_search_type,
+          current_search->GenerateSearchURL(
+              template_url_service->search_terms_data()))) {
+    return false;
+  }
 
-    // * last seen version of the prompt has already been seen
-    if (prefs->GetInteger(
-            vivaldiprefs::kStartupLastSeenSearchEnginePromptVersion) >=
-        GetCurrentVersion()) {
-      return false;
-    }
-    // * should not prompt for current search engine
-    const SearchEngineType current_search_type = current_search->GetEngineType(
-        template_url_service->search_terms_data());
-    if (!ShouldPromptForTypeOrURL(
-            current_search_type,
-            current_search->GenerateSearchURL(
-                template_url_service->search_terms_data()))) {
-      return false;
-    }
+  return true;
+}
 
-    const SearchEngineType default_search_type =
-        default_search.GetEngineType(template_url_service->search_terms_data());
-    const GURL default_search_url = default_search.GenerateSearchURL(
-        template_url_service->search_terms_data());
-    // * default search engine for locale is in exclude list
-    if (IsInExcludeList(default_search_type, default_search_url)) {
-      return false;
-    }
-    // * should prompt for default search engine for locale
-    if (ShouldPromptForTypeOrURL(default_search_type, default_search_url)) {
-      return false;
-    }
+std::vector<TemplateURL*>
+SearchEnginesPromptManager::GetPartnerSearchEnginesToPrompt(
+    country_codes::CountryId country_id,
+    const std::string_view application_locale,
+    PrefService& prefs,
+    TemplateURLService* template_url_service) const {
+  std::vector<TemplateURL*> partners;
 
-    return true;
-  };
+  if (!template_url_service || !template_url_service->loaded()) {
+    return partners;
+  }
 
-  auto getTemplateURLByPrepopulateId =
-      [&template_url_service](const auto& id) -> TemplateURL* {
-    TemplateURLService::TemplateURLVector template_urls =
-        template_url_service->GetTemplateURLs();
+  ParsedSearchEngines::EnginesListWithDefaults prepopulated_engines =
+      TemplateURLPrepopulateData::GetPrepopulatedSearchEngines(
+          country_id, application_locale, prefs);
+
+  TemplateURLService::TemplateURLVector template_urls =
+      template_url_service->GetTemplateURLs();
+  for (const TemplateURLPrepopulateData::PrepopulatedEngine* engine :
+       prepopulated_engines.list) {
+    // The partner search engines are not valid TemplateURLs managed by
+    // TemplateURLService, we must find a correct TemplateURL by looking for
+    // the same prepopulate ID.
     const auto template_url_iter =
         std::find_if(template_urls.begin(), template_urls.end(),
-                     [id](const auto template_url) {
-                       return template_url->is_active() !=
+                     [&engine](const auto template_url) {
+                       return engine->is_partner &&
+                              template_url->is_active() !=
                                   TemplateURLData::ActiveStatus::kFalse &&
-                              template_url->prepopulate_id() == id;
+                              template_url->prepopulate_id() == engine->id;
                      });
-    return template_url_iter != template_urls.end() ? *template_url_iter
-                                                    : nullptr;
-  };
-  // The default search engine from GetPrepopulatedFallbackSearch() is not a
-  // valid TemplateURL managed by TemplateURLService, we must find a correct
-  // TemplateURL by looking for the same prepopulate ID.
-  return shouldPrompt()
-             ? getTemplateURLByPrepopulateId(default_search.prepopulate_id())
-             : nullptr;
+    if (template_url_iter == template_urls.end() || !*template_url_iter) {
+      continue;
+    }
+
+    const SearchEngineType default_search_type = engine->type;
+    const GURL default_search_url =
+        (*template_url_iter)
+            ->GenerateSearchURL(template_url_service->search_terms_data());
+
+    if (IsInExcludeList(default_search_type, default_search_url)) {
+      continue;
+    }
+    if (ShouldPromptForTypeOrURL(default_search_type, default_search_url)) {
+      continue;
+    }
+    partners.push_back(*template_url_iter);
+  }
+
+  base::RandomShuffle(partners.begin(), partners.end());
+
+  return partners;
 }
 
 bool SearchEnginesPromptManager::ShouldPromptForTypeOrURL(
@@ -168,7 +185,11 @@ bool SearchEnginesPromptManager::IsInExcludeList(const SearchEngineType& type,
 }
 
 int SearchEnginesPromptManager::GetCurrentVersion() const {
-  return prompt_->version();
+  return prompt_->current_data_version();
+}
+
+std::string SearchEnginesPromptManager::GetDialogType() const {
+  return prompt_->type();
 }
 
 int SearchEnginesPromptManager::GetSearchEnginesDataVersionRequired() const {

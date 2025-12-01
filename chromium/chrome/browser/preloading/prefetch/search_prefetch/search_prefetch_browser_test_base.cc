@@ -28,6 +28,7 @@
 #include "net/dns/mock_host_resolver.h"
 #include "net/http/http_status_code.h"
 #include "net/test/embedded_test_server/http_response.h"
+#include "third_party/blink/public/common/navigation/preloading_headers.h"
 #include "url/gurl.h"
 #include "url/origin.h"
 
@@ -280,10 +281,19 @@ SearchPrefetchBaseBrowserTest::HandleSearchRequest(
     return nullptr;
 
   bool is_prefetch =
-      request.headers.find("Purpose") != request.headers.end() &&
-      request.headers.find("Purpose")->second == "prefetch" &&
-      request.headers.find("Sec-Purpose") != request.headers.end() &&
-      request.headers.find("Sec-Purpose")->second == "prefetch";
+      request.headers.find(blink::kPurposeHeaderName) !=
+          request.headers.end() &&
+      request.headers.find(blink::kPurposeHeaderName)->second ==
+          blink::kSecPurposePrefetchHeaderValue &&
+      request.headers.find(blink::kSecPurposeHeaderName) !=
+          request.headers.end() &&
+      request.headers.find(blink::kSecPurposeHeaderName)->second ==
+          blink::kSecPurposePrefetchHeaderValue;
+  base::StringPairs response_headers{{"cache-control", "private, max-age=0"}};
+  if (is_prefetch) {
+    response_headers.emplace_back("No-Vary-Search",
+                                  "params=(\"pf\" \"gs_lcrp\")");
+  }
 
   content::GetUIThreadTaskRunner({})->PostTask(
       FROM_HERE, base::BindOnce(&SearchPrefetchBaseBrowserTest::
@@ -291,13 +301,12 @@ SearchPrefetchBaseBrowserTest::HandleSearchRequest(
                                 base::Unretained(this), request, is_prefetch));
 
   if (base::Contains(static_files_, request.relative_url)) {
-    return CreateDeferrableResponse(
-        net::HTTP_OK,
-        {{"cache-control", "private, max-age=0"},
-         {"No-Vary-Search", "params(\"pf\", \"gs_lcrp\")"},
-         {"content-type", static_files_[request.relative_url].second}},
-        static_files_[request.relative_url].first);
+    response_headers.emplace_back("content-type",
+                                  static_files_[request.relative_url].second);
+    return CreateDeferrableResponse(net::HTTP_OK, response_headers,
+                                    static_files_[request.relative_url].first);
   }
+  response_headers.emplace_back("content-type", "text/html");
 
   // If this is an embedded search for load in iframe, parse out the iframe
   // URL and serve it as an iframe in the returned HTML.
@@ -309,30 +318,19 @@ SearchPrefetchBaseBrowserTest::HandleSearchRequest(
     content.append("\"/></body></html>");
 
     return CreateDeferrableResponse(
-        is_prefetch ? net::HTTP_BAD_GATEWAY : net::HTTP_OK,
-        {{"cache-control", "private, max-age=0"},
-         {"content-type", "text/html"},
-         {"No-Vary-Search", "params(\"pf\", \"gs_lcrp\")"}},
+        is_prefetch ? net::HTTP_BAD_GATEWAY : net::HTTP_OK, response_headers,
         content);
   }
 
   if (request.GetURL().spec().find("502_on_prefetch") != std::string::npos &&
       is_prefetch) {
-    return CreateDeferrableResponse(
-        net::HTTP_BAD_GATEWAY,
-        {{"content-type", "text/html"},
-         {"No-Vary-Search", "params(\"pf\", \"gs_lcrp\")"}},
-        "<html><body>prefetch</body></html>");
+    return CreateDeferrableResponse(net::HTTP_BAD_GATEWAY, response_headers,
+                                    "<html><body>prefetch</body></html>");
   }
   std::string content = "<html><body> ";
   content.append(is_prefetch ? "prefetch" : "regular");
   content.append(" </body></html>");
-  return CreateDeferrableResponse(
-      net::HTTP_OK,
-      {{"content-type", "text/html"},
-       {"cache-control", "private, max-age=0"},
-       {"No-Vary-Search", "params(\"pf\", \"gs_lcrp\")"}},
-      content);
+  return CreateDeferrableResponse(net::HTTP_OK, response_headers, content);
 }
 
 void SearchPrefetchBaseBrowserTest::MonitorSearchResourceRequestOnUIThread(

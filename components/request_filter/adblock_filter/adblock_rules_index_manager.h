@@ -59,10 +59,6 @@ class RulesIndexManager : public RuleManager::Observer {
   RulesIndexManager(const RulesIndexManager&) = delete;
   RulesIndexManager& operator=(const RulesIndexManager&) = delete;
 
-  base::WeakPtr<RulesIndexManager> AsWeakPtr() {
-    return weak_factory_.GetWeakPtr();
-  }
-
   std::string index_checksum() const { return index_checksum_; }
 
   RulesIndex* rules_index() const { return rules_index_.get(); }
@@ -106,7 +102,7 @@ class RulesIndexManager : public RuleManager::Observer {
 
   scoped_refptr<base::SequencedTaskRunner> file_task_runner_;
 
-  base::WeakPtrFactory<RulesIndexManager> weak_factory_;
+  base::WeakPtrFactory<RulesIndexManager> weak_factory_{this};
 };
 
 }  // namespace adblock_filter

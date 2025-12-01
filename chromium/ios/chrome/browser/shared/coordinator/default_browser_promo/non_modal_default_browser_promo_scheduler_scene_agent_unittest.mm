@@ -16,11 +16,12 @@
 #import "components/feature_engagement/test/test_tracker.h"
 #import "ios/chrome/app/application_delegate/app_state.h"
 #import "ios/chrome/app/application_delegate/fake_startup_information.h"
-#import "ios/chrome/browser/default_browser/model/default_browser_promo_event_exporter.h"
+#import "ios/chrome/browser/default_browser/model/features.h"
 #import "ios/chrome/browser/default_browser/model/utils.h"
 #import "ios/chrome/browser/default_browser/model/utils_test_support.h"
 #import "ios/chrome/browser/default_promo/ui_bundled/default_browser_promo_non_modal_commands.h"
 #import "ios/chrome/browser/default_promo/ui_bundled/default_browser_promo_non_modal_metrics_util.h"
+#import "ios/chrome/browser/feature_engagement/model/event_exporter.h"
 #import "ios/chrome/browser/feature_engagement/model/tracker_factory.h"
 #import "ios/chrome/browser/infobars/model/infobar_ios.h"
 #import "ios/chrome/browser/infobars/model/infobar_manager_impl.h"
@@ -148,6 +149,8 @@ class NonModalDefaultBrowserPromoSchedulerSceneAgentTest : public PlatformTest {
 // Tests that the omnibox paste event triggers the promo to show.
 TEST_F(NonModalDefaultBrowserPromoSchedulerSceneAgentTest,
        TestOmniboxPasteShowsPromo) {
+  base::test::ScopedFeatureList feature_list(kTailoredNonModalDBPromo);
+
   // Mock the FET tracker.
   EXPECT_CALL(*mock_tracker_,
               WouldTriggerHelpUI(testing::Ref(
@@ -173,7 +176,9 @@ TEST_F(NonModalDefaultBrowserPromoSchedulerSceneAgentTest,
 
   // Then advance the timer by the remaining post-load delay. This should
   // trigger the promo.
-  [[promo_commands_handler_ expect] showDefaultBrowserNonModalPromo];
+  [[promo_commands_handler_ expect]
+      showDefaultBrowserNonModalPromoWithReason:
+          NonModalDefaultBrowserPromoReason::PromoReasonOmniboxPaste];
   task_env_.FastForwardBy(base::Seconds(2));
 
   [promo_commands_handler_ verify];
@@ -183,16 +188,18 @@ TEST_F(NonModalDefaultBrowserPromoSchedulerSceneAgentTest,
 // promo.
 TEST_F(NonModalDefaultBrowserPromoSchedulerSceneAgentTest,
        TestFirstPartySchemeShowsPromo) {
+  base::test::ScopedFeatureList feature_list(kTailoredNonModalDBPromo);
+
   // Mock the FET tracker.
   EXPECT_CALL(*mock_tracker_,
               WouldTriggerHelpUI(testing::Ref(
                   feature_engagement::
-                      kIPHiOSPromoNonModalUrlPasteDefaultBrowserFeature)))
+                      kIPHiOSPromoNonModalAppSwitcherDefaultBrowserFeature)))
       .WillRepeatedly(testing::Return(true));
   EXPECT_CALL(*mock_tracker_,
               ShouldTriggerHelpUI(testing::Ref(
                   feature_engagement::
-                      kIPHiOSPromoNonModalUrlPasteDefaultBrowserFeature)))
+                      kIPHiOSPromoNonModalAppSwitcherDefaultBrowserFeature)))
       .WillRepeatedly(testing::Return(true));
 
   [scheduler_ logUserEnteredAppViaFirstPartyScheme];
@@ -208,7 +215,9 @@ TEST_F(NonModalDefaultBrowserPromoSchedulerSceneAgentTest,
 
   // Then advance the timer by the remaining post-load delay. This should
   // trigger the promo.
-  [[promo_commands_handler_ expect] showDefaultBrowserNonModalPromo];
+  [[promo_commands_handler_ expect]
+      showDefaultBrowserNonModalPromoWithReason:
+          NonModalDefaultBrowserPromoReason::PromoReasonAppSwitcher];
   task_env_.FastForwardBy(base::Seconds(2));
 
   [promo_commands_handler_ verify];
@@ -217,16 +226,18 @@ TEST_F(NonModalDefaultBrowserPromoSchedulerSceneAgentTest,
 // Tests that the completed share event triggers the promo.
 TEST_F(NonModalDefaultBrowserPromoSchedulerSceneAgentTest,
        TestShareCompletedShowsPromo) {
+  base::test::ScopedFeatureList feature_list(kTailoredNonModalDBPromo);
+
   // Mock the FET tracker.
-  EXPECT_CALL(*mock_tracker_,
-              WouldTriggerHelpUI(testing::Ref(
-                  feature_engagement::
-                      kIPHiOSPromoNonModalUrlPasteDefaultBrowserFeature)))
+  EXPECT_CALL(
+      *mock_tracker_,
+      WouldTriggerHelpUI(testing::Ref(
+          feature_engagement::kIPHiOSPromoNonModalShareDefaultBrowserFeature)))
       .WillRepeatedly(testing::Return(true));
-  EXPECT_CALL(*mock_tracker_,
-              ShouldTriggerHelpUI(testing::Ref(
-                  feature_engagement::
-                      kIPHiOSPromoNonModalUrlPasteDefaultBrowserFeature)))
+  EXPECT_CALL(
+      *mock_tracker_,
+      ShouldTriggerHelpUI(testing::Ref(
+          feature_engagement::kIPHiOSPromoNonModalShareDefaultBrowserFeature)))
       .WillRepeatedly(testing::Return(true));
 
   [scheduler_ logUserFinishedActivityFlow];
@@ -237,7 +248,9 @@ TEST_F(NonModalDefaultBrowserPromoSchedulerSceneAgentTest,
   test_web_state_->SetLoading(false);
 
   // Advance the timer by the post-share delay. This should trigger the promo.
-  [[promo_commands_handler_ expect] showDefaultBrowserNonModalPromo];
+  [[promo_commands_handler_ expect]
+      showDefaultBrowserNonModalPromoWithReason:
+          NonModalDefaultBrowserPromoReason::PromoReasonShare];
   task_env_.FastForwardBy(base::Seconds(1));
 
   [promo_commands_handler_ verify];
@@ -247,6 +260,8 @@ TEST_F(NonModalDefaultBrowserPromoSchedulerSceneAgentTest,
 // the event is stored.
 TEST_F(NonModalDefaultBrowserPromoSchedulerSceneAgentTest,
        TestTimeoutDismissesPromo) {
+  base::test::ScopedFeatureList feature_list(kTailoredNonModalDBPromo);
+
   // Mock the FET tracker.
   EXPECT_CALL(*mock_tracker_,
               WouldTriggerHelpUI(testing::Ref(
@@ -267,7 +282,9 @@ TEST_F(NonModalDefaultBrowserPromoSchedulerSceneAgentTest,
   test_web_state_->SetLoading(false);
 
   // Advance the timer by the post-load delay. This should trigger the promo.
-  [[promo_commands_handler_ expect] showDefaultBrowserNonModalPromo];
+  [[promo_commands_handler_ expect]
+      showDefaultBrowserNonModalPromoWithReason:
+          NonModalDefaultBrowserPromoReason::PromoReasonOmniboxPaste];
   task_env_.FastForwardBy(base::Seconds(3));
 
   [promo_commands_handler_ verify];
@@ -286,6 +303,8 @@ TEST_F(NonModalDefaultBrowserPromoSchedulerSceneAgentTest,
 // Tests that if the user takes the promo action, that is handled correctly.
 TEST_F(NonModalDefaultBrowserPromoSchedulerSceneAgentTest,
        TestActionDismissesPromo) {
+  base::test::ScopedFeatureList feature_list(kTailoredNonModalDBPromo);
+
   // Mock the FET tracker.
   EXPECT_CALL(*mock_tracker_,
               WouldTriggerHelpUI(testing::Ref(
@@ -306,7 +325,9 @@ TEST_F(NonModalDefaultBrowserPromoSchedulerSceneAgentTest,
   test_web_state_->SetLoading(false);
 
   // Advance the timer by the post-load delay. This should trigger the promo.
-  [[promo_commands_handler_ expect] showDefaultBrowserNonModalPromo];
+  [[promo_commands_handler_ expect]
+      showDefaultBrowserNonModalPromoWithReason:
+          NonModalDefaultBrowserPromoReason::PromoReasonOmniboxPaste];
   task_env_.FastForwardBy(base::Seconds(3));
 
   [promo_commands_handler_ verify];
@@ -324,8 +345,7 @@ TEST_F(NonModalDefaultBrowserPromoSchedulerSceneAgentTest,
 
   // Check that the FET has been updated.
   std::unique_ptr<feature_engagement::Tracker> tracker =
-      feature_engagement::CreateTestTracker(
-          std::make_unique<DefaultBrowserEventExporter>());
+      feature_engagement::CreateTestTracker(std::make_unique<EventExporter>());
   tracker->AddOnInitializedCallback(BoolArgumentQuitClosure());
   run_loop_.Run();
   unsigned int interactions = 0;
@@ -348,6 +368,8 @@ TEST_F(NonModalDefaultBrowserPromoSchedulerSceneAgentTest,
 // interactions count is only incremented once.
 TEST_F(NonModalDefaultBrowserPromoSchedulerSceneAgentTest,
        TestMultipleInteractionsOnlyIncrementsCountOnce) {
+  base::test::ScopedFeatureList feature_list(kTailoredNonModalDBPromo);
+
   // Mock the FET tracker.
   EXPECT_CALL(*mock_tracker_,
               WouldTriggerHelpUI(testing::Ref(
@@ -368,7 +390,9 @@ TEST_F(NonModalDefaultBrowserPromoSchedulerSceneAgentTest,
   test_web_state_->SetLoading(false);
 
   // Advance the timer by the post-load delay. This should trigger the promo.
-  [[promo_commands_handler_ expect] showDefaultBrowserNonModalPromo];
+  [[promo_commands_handler_ expect]
+      showDefaultBrowserNonModalPromoWithReason:
+          NonModalDefaultBrowserPromoReason::PromoReasonOmniboxPaste];
   task_env_.FastForwardBy(base::Seconds(3));
 
   [promo_commands_handler_ verify];
@@ -383,8 +407,7 @@ TEST_F(NonModalDefaultBrowserPromoSchedulerSceneAgentTest,
 
   // Check that the FET has been updated.
   std::unique_ptr<feature_engagement::Tracker> tracker =
-      feature_engagement::CreateTestTracker(
-          std::make_unique<DefaultBrowserEventExporter>());
+      feature_engagement::CreateTestTracker(std::make_unique<EventExporter>());
   tracker->AddOnInitializedCallback(BoolArgumentQuitClosure());
   run_loop_.Run();
   unsigned int interactions = 0;
@@ -407,6 +430,8 @@ TEST_F(NonModalDefaultBrowserPromoSchedulerSceneAgentTest,
 // finishes, the promo does not show.
 TEST_F(NonModalDefaultBrowserPromoSchedulerSceneAgentTest,
        TestTabSwitchPreventsPromoShown) {
+  base::test::ScopedFeatureList feature_list(kTailoredNonModalDBPromo);
+
   // Mock the FET tracker.
   EXPECT_CALL(*mock_tracker_,
               WouldTriggerHelpUI(testing::Ref(
@@ -439,6 +464,8 @@ TEST_F(NonModalDefaultBrowserPromoSchedulerSceneAgentTest,
 // Tests that if a message is triggered on page load, the promo is not shown.
 TEST_F(NonModalDefaultBrowserPromoSchedulerSceneAgentTest,
        TestMessagePreventsPromoShown) {
+  base::test::ScopedFeatureList feature_list(kTailoredNonModalDBPromo);
+
   // Mock the FET tracker.
   EXPECT_CALL(*mock_tracker_,
               WouldTriggerHelpUI(testing::Ref(
@@ -485,6 +512,8 @@ TEST_F(NonModalDefaultBrowserPromoSchedulerSceneAgentTest,
 // does not update the shown promo count.
 TEST_F(NonModalDefaultBrowserPromoSchedulerSceneAgentTest,
        TestBackgroundingDismissesPromo) {
+  base::test::ScopedFeatureList feature_list(kTailoredNonModalDBPromo);
+
   // Mock the FET tracker.
   EXPECT_CALL(*mock_tracker_,
               WouldTriggerHelpUI(testing::Ref(
@@ -505,7 +534,9 @@ TEST_F(NonModalDefaultBrowserPromoSchedulerSceneAgentTest,
   test_web_state_->SetLoading(false);
 
   // Advance the timer by the post-load delay. This should trigger the promo.
-  [[promo_commands_handler_ expect] showDefaultBrowserNonModalPromo];
+  [[promo_commands_handler_ expect]
+      showDefaultBrowserNonModalPromoWithReason:
+          NonModalDefaultBrowserPromoReason::PromoReasonOmniboxPaste];
   task_env_.FastForwardBy(base::Seconds(3));
 
   [promo_commands_handler_ verify];
@@ -522,8 +553,7 @@ TEST_F(NonModalDefaultBrowserPromoSchedulerSceneAgentTest,
 
   // Check that the FET has been updated.
   std::unique_ptr<feature_engagement::Tracker> tracker =
-      feature_engagement::CreateTestTracker(
-          std::make_unique<DefaultBrowserEventExporter>());
+      feature_engagement::CreateTestTracker(std::make_unique<EventExporter>());
   tracker->AddOnInitializedCallback(BoolArgumentQuitClosure());
   run_loop_.Run();
   unsigned int interactions = 0;
@@ -546,6 +576,8 @@ TEST_F(NonModalDefaultBrowserPromoSchedulerSceneAgentTest,
 // does not update the shown promo count.
 TEST_F(NonModalDefaultBrowserPromoSchedulerSceneAgentTest,
        TestTabGridDismissesPromo) {
+  base::test::ScopedFeatureList feature_list(kTailoredNonModalDBPromo);
+
   // Mock the FET tracker.
   EXPECT_CALL(*mock_tracker_,
               WouldTriggerHelpUI(testing::Ref(
@@ -566,7 +598,9 @@ TEST_F(NonModalDefaultBrowserPromoSchedulerSceneAgentTest,
   test_web_state_->SetLoading(false);
 
   // Advance the timer by the post-load delay. This should trigger the promo.
-  [[promo_commands_handler_ expect] showDefaultBrowserNonModalPromo];
+  [[promo_commands_handler_ expect]
+      showDefaultBrowserNonModalPromoWithReason:
+          NonModalDefaultBrowserPromoReason::PromoReasonOmniboxPaste];
   task_env_.FastForwardBy(base::Seconds(3));
 
   [promo_commands_handler_ verify];
@@ -582,8 +616,7 @@ TEST_F(NonModalDefaultBrowserPromoSchedulerSceneAgentTest,
 
   // Check that the FET has been updated.
   std::unique_ptr<feature_engagement::Tracker> tracker =
-      feature_engagement::CreateTestTracker(
-          std::make_unique<DefaultBrowserEventExporter>());
+      feature_engagement::CreateTestTracker(std::make_unique<EventExporter>());
   tracker->AddOnInitializedCallback(BoolArgumentQuitClosure());
   run_loop_.Run();
   unsigned int interactions = 0;
@@ -605,6 +638,8 @@ TEST_F(NonModalDefaultBrowserPromoSchedulerSceneAgentTest,
 // Tests background cancel metric logs correctly.
 TEST_F(NonModalDefaultBrowserPromoSchedulerSceneAgentTest,
        TestBackgroundCancelMetric) {
+  base::test::ScopedFeatureList feature_list(kTailoredNonModalDBPromo);
+
   // Mock the FET tracker.
   EXPECT_CALL(*mock_tracker_,
               WouldTriggerHelpUI(testing::Ref(
@@ -638,6 +673,8 @@ TEST_F(NonModalDefaultBrowserPromoSchedulerSceneAgentTest,
 // Tests background cancel metric is not logged after a promo is shown.
 TEST_F(NonModalDefaultBrowserPromoSchedulerSceneAgentTest,
        TestBackgroundCancelMetricNotLogAfterPromoShown) {
+  base::test::ScopedFeatureList feature_list(kTailoredNonModalDBPromo);
+
   // Mock the FET tracker.
   EXPECT_CALL(*mock_tracker_,
               WouldTriggerHelpUI(testing::Ref(
@@ -663,7 +700,9 @@ TEST_F(NonModalDefaultBrowserPromoSchedulerSceneAgentTest,
   test_web_state_->SetLoading(false);
 
   // Advance the timer by the post-load delay. This should trigger the promo.
-  [[promo_commands_handler_ expect] showDefaultBrowserNonModalPromo];
+  [[promo_commands_handler_ expect]
+      showDefaultBrowserNonModalPromoWithReason:
+          NonModalDefaultBrowserPromoReason::PromoReasonOmniboxPaste];
   task_env_.FastForwardBy(base::Seconds(3));
   [promo_commands_handler_ verify];
 
@@ -681,6 +720,8 @@ TEST_F(NonModalDefaultBrowserPromoSchedulerSceneAgentTest,
 // Tests background cancel metric is not logged after a promo is dismissed.
 TEST_F(NonModalDefaultBrowserPromoSchedulerSceneAgentTest,
        TestBackgroundCancelMetricNotLogAfterPromoDismiss) {
+  base::test::ScopedFeatureList feature_list(kTailoredNonModalDBPromo);
+
   // Mock the FET tracker.
   EXPECT_CALL(*mock_tracker_,
               WouldTriggerHelpUI(testing::Ref(
@@ -706,7 +747,9 @@ TEST_F(NonModalDefaultBrowserPromoSchedulerSceneAgentTest,
   test_web_state_->SetLoading(false);
 
   // Advance the timer by the post-load delay. This should trigger the promo.
-  [[promo_commands_handler_ expect] showDefaultBrowserNonModalPromo];
+  [[promo_commands_handler_ expect]
+      showDefaultBrowserNonModalPromoWithReason:
+          NonModalDefaultBrowserPromoReason::PromoReasonOmniboxPaste];
   task_env_.FastForwardBy(base::Seconds(3));
   [promo_commands_handler_ verify];
 
@@ -730,6 +773,8 @@ TEST_F(NonModalDefaultBrowserPromoSchedulerSceneAgentTest,
 // Prevents crbug.com/1221379 regression.
 TEST_F(NonModalDefaultBrowserPromoSchedulerSceneAgentTest,
        TestBackgroundCancelMetricDoesNotLogWhenPromoNotShown) {
+  base::test::ScopedFeatureList feature_list(kTailoredNonModalDBPromo);
+
   base::HistogramTester histogram_tester;
   histogram_tester.ExpectUniqueSample(
       "IOS.DefaultBrowserPromo.NonModal.VisitPastedLink",
@@ -779,6 +824,8 @@ TEST_F(NonModalDefaultBrowserPromoSchedulerSceneAgentTest,
 // Tests that if the user currently has Chrome as default, the promo does not
 // show. Prevents regression of crbug.com/1224875
 TEST_F(NonModalDefaultBrowserPromoSchedulerSceneAgentTest, NoPromoIfDefault) {
+  base::test::ScopedFeatureList feature_list(kTailoredNonModalDBPromo);
+
   // Mark Chrome as currently default
   LogOpenHTTPURLFromExternalURL();
 
@@ -798,6 +845,8 @@ TEST_F(NonModalDefaultBrowserPromoSchedulerSceneAgentTest, NoPromoIfDefault) {
 // crbug.com/1224427
 TEST_F(NonModalDefaultBrowserPromoSchedulerSceneAgentTest,
        NoDCHECKIfPromoNotShown) {
+  base::test::ScopedFeatureList feature_list(kTailoredNonModalDBPromo);
+
   // Mock the FET tracker.
   EXPECT_CALL(*mock_tracker_,
               WouldTriggerHelpUI(testing::Ref(
@@ -836,6 +885,8 @@ TEST_F(NonModalDefaultBrowserPromoSchedulerSceneAgentTest,
 // have been displayed. See b/326565601.
 TEST_F(NonModalDefaultBrowserPromoSchedulerSceneAgentTest,
        TestBackgroundingDoesNotRecordIfCannotDisplayPromo) {
+  base::test::ScopedFeatureList feature_list(kTailoredNonModalDBPromo);
+
   // Make sure the impression limit is met.
   for (int i = 0; i < GetNonModalDefaultBrowserPromoImpressionLimit(); i++) {
     LogUserInteractionWithNonModalPromo(i);

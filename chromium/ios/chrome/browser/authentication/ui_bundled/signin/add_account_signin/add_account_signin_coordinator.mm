@@ -83,38 +83,33 @@ using signin_metrics::PromoAction;
   return self;
 }
 
-#pragma mark - SigninCoordinator
+#pragma mark - InterruptibleChromeCoordinator
 
-- (void)interruptWithAction:(SigninCoordinatorInterrupt)action
-                 completion:(ProceduralBlock)completion {
+- (void)interruptAnimated:(BOOL)animated {
   // When interrupting `self.postSigninManagerCoordinator` or
   // `self.historySyncPopupCoordinator` below, the signinCompletion is called.
   // This callback is in charge to call `[self
   // runCompletionWithSigninResult: completionIdentity:]`.
   if (self.postSigninManagerCoordinator) {
     DCHECK(!self.addAccountSigninManager);
-    [self.postSigninManagerCoordinator interruptWithAction:action
-                                                completion:completion];
+    [self.postSigninManagerCoordinator interruptAnimated:animated];
     return;
   }
 
   if (self.historySyncPopupCoordinator) {
     DCHECK(!self.addAccountSigninManager);
-    [self.historySyncPopupCoordinator interruptWithAction:action
-                                               completion:completion];
     return;
   }
 
   DCHECK(self.addAccountSigninManager);
-  [self.addAccountSigninManager interruptWithAction:action
-                                         completion:completion];
+  [self.addAccountSigninManager interruptAnimated:animated];
 }
 
 #pragma mark - ChromeCoordinator
 
 - (void)start {
   [super start];
-  ProfileIOS* profile = self.browser->GetProfile()->GetOriginalProfile();
+  ProfileIOS* profile = self.profile->GetOriginalProfile();
   _authenticationService = AuthenticationServiceFactory::GetForProfile(profile);
   _syncService = SyncServiceFactory::GetForProfile(profile);
   _accountManagerService =
@@ -240,7 +235,7 @@ using signin_metrics::PromoAction;
 - (void)continueAddAccountFlowWithSigninResult:
             (SigninCoordinatorResult)signinResult
                                       identity:(id<SystemIdentity>)identity {
-  // TODO(crbug.com/375605482): Handle the case where the identity is assigned
+  // TODO(crbug.com/400902218): Handle the case where the identity is assigned
   // to a different profile. (For kAddAccount this shouldn't matter, and for
   // kPrimaryAccountReauth it should be impossible, but for kResignin it needs
   // to be handled, probably by switching to the other profile and continuing
@@ -289,7 +284,7 @@ using signin_metrics::PromoAction;
 - (void)addAccountDone {
   AuthenticationService* authService =
       AuthenticationServiceFactory::GetForProfile(
-          self.browser->GetProfile()->GetOriginalProfile());
+          self.profile->GetOriginalProfile());
   // Even if `result` is not "success" for the history opt-in step, the sign-in
   // step did succeed, so pass SigninCoordinatorResultSuccess.
   [self addAccountDoneWithSigninResult:SigninCoordinatorResultSuccess
@@ -345,8 +340,7 @@ using signin_metrics::PromoAction;
   }
 
   if (history_sync::GetSkipReason(_syncService, _authenticationService,
-                                  self.browser->GetProfile()->GetPrefs(),
-                                  YES) !=
+                                  self.profile->GetPrefs(), YES) !=
       history_sync::HistorySyncSkipReason::kNone) {
     [self addAccountDone];
   } else {

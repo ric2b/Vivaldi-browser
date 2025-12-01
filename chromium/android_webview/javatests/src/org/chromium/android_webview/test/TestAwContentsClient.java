@@ -15,6 +15,7 @@ import org.junit.Assert;
 
 import org.chromium.android_webview.AwConsoleMessage;
 import org.chromium.android_webview.AwRenderProcessGoneDetail;
+import org.chromium.android_webview.AwWebResourceRequest;
 import org.chromium.base.Callback;
 import org.chromium.base.Log;
 import org.chromium.base.ThreadUtils;
@@ -282,7 +283,7 @@ public class TestAwContentsClient extends NullContentsClient {
 
     @Override
     public void onReceivedError(AwWebResourceRequest request, AwWebResourceError error) {
-        if (TRACE) Log.i(TAG, "onReceivedError " + request.url);
+        if (TRACE) Log.i(TAG, "onReceivedError " + request.getUrl());
         mOnReceivedErrorHelper.notifyCalled(request, error);
     }
 
@@ -573,7 +574,7 @@ public class TestAwContentsClient extends NullContentsClient {
         private boolean mIsRedirect;
         private boolean mHasUserGesture;
         private boolean mIsOutermostMainFrame;
-        private HashMap<String, String> mRequestHeaders;
+        private Map<String, String> mRequestHeaders;
 
         void setShouldOverrideUrlLoadingUrl(String url) {
             mShouldOverrideUrlLoadingUrl = url;
@@ -593,7 +594,7 @@ public class TestAwContentsClient extends NullContentsClient {
         }
 
         public boolean getShouldOverrideUrlLoadingReturnValue(AwWebResourceRequest request) {
-            if (mUrlToOverride != null && !request.url.equals(mUrlToOverride)) {
+            if (mUrlToOverride != null && !request.getUrl().equals(mUrlToOverride)) {
                 // If `mUrlToOverride` is set, only override requests with a matching URL.
                 return false;
             }
@@ -613,7 +614,7 @@ public class TestAwContentsClient extends NullContentsClient {
             return mIsOutermostMainFrame;
         }
 
-        public HashMap<String, String> requestHeaders() {
+        public Map<String, String> requestHeaders() {
             return mRequestHeaders;
         }
 
@@ -622,7 +623,7 @@ public class TestAwContentsClient extends NullContentsClient {
                 boolean isRedirect,
                 boolean hasUserGesture,
                 boolean isOutermostMainFrame,
-                HashMap<String, String> requestHeaders) {
+                Map<String, String> requestHeaders) {
             mShouldOverrideUrlLoadingUrl = url;
             mIsRedirect = isRedirect;
             mHasUserGesture = hasUserGesture;
@@ -634,16 +635,16 @@ public class TestAwContentsClient extends NullContentsClient {
 
     @Override
     public boolean shouldOverrideUrlLoading(AwWebResourceRequest request) {
-        if (TRACE) Log.i(TAG, "shouldOverrideUrlLoading " + request.url);
+        if (TRACE) Log.i(TAG, "shouldOverrideUrlLoading " + request.getUrl());
         super.shouldOverrideUrlLoading(request);
         boolean returnValue =
                 mShouldOverrideUrlLoadingHelper.getShouldOverrideUrlLoadingReturnValue(request);
         mShouldOverrideUrlLoadingHelper.notifyCalled(
-                request.url,
-                request.isRedirect,
-                request.hasUserGesture,
-                request.isOutermostMainFrame,
-                request.requestHeaders);
+                request.getUrl(),
+                request.isRedirect(),
+                request.hasUserGesture(),
+                request.isOutermostMainFrame(),
+                request.getRequestHeaders());
         return returnValue;
     }
 
@@ -711,11 +712,11 @@ public class TestAwContentsClient extends NullContentsClient {
         }
 
         public void notifyCalled(AwWebResourceRequest request) {
-            mShouldInterceptRequestUrls.add(request.url);
-            mRequestsByUrls.put(request.url, request);
+            mShouldInterceptRequestUrls.add(request.getUrl());
+            mRequestsByUrls.put(request.getUrl(), request);
             synchronized (mRequestCountLock) {
-                Integer count = mRequestCountByUrl.get(request.url);
-                mRequestCountByUrl.put(request.url, count == null ? 1 : count + 1);
+                Integer count = mRequestCountByUrl.get(request.getUrl());
+                mRequestCountByUrl.put(request.getUrl(), count == null ? 1 : count + 1);
             }
             if (mRunnableForFirstTimeCallback != null) {
                 mRunnableForFirstTimeCallback.run();
@@ -732,12 +733,12 @@ public class TestAwContentsClient extends NullContentsClient {
     @Override
     public WebResourceResponseInfo shouldInterceptRequest(AwWebResourceRequest request) {
         super.shouldInterceptRequest(request);
-        if (TRACE) Log.i(TAG, "shouldInterceptRequest " + request.url);
+        if (TRACE) Log.i(TAG, "shouldInterceptRequest " + request.getUrl());
         mShouldInterceptRequestHelper.notifyCalled(request);
         if (mShouldInterceptRequestHelper.getRaiseExceptionWhenCalled()) {
             throw new RuntimeException("Exception in ShouldInterceptRequestHelper");
         }
-        return mShouldInterceptRequestHelper.getReturnValue(request.url);
+        return mShouldInterceptRequestHelper.getReturnValue(request.getUrl());
     }
 
     /** Callback helper for OnLoadedResource. */
@@ -852,7 +853,7 @@ public class TestAwContentsClient extends NullContentsClient {
     @Override
     public void onReceivedHttpError(
             AwWebResourceRequest request, WebResourceResponseInfo response) {
-        if (TRACE) Log.i(TAG, "onReceivedHttpError " + request.url);
+        if (TRACE) Log.i(TAG, "onReceivedHttpError " + request.getUrl());
         super.onReceivedHttpError(request, response);
         mOnReceivedHttpErrorHelper.notifyCalled(request, response);
     }

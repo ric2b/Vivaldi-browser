@@ -7,6 +7,7 @@
 
 #include <memory>
 #include <optional>
+#include <variant>
 
 #include "base/containers/circular_deque.h"
 #include "base/memory/raw_ptr.h"
@@ -26,7 +27,6 @@
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_delegate.h"
 #include "content/public/browser/web_contents_observer.h"
-#include "third_party/abseil-cpp/absl/types/variant.h"
 
 #include "extensions/buildflags/buildflags.h"
 
@@ -104,8 +104,8 @@ class GuestViewBase : public content::BrowserPluginGuestDelegate,
   // The implementation of the guest page depends on
   // `features::kGuestViewMPArch`.
   using GuestPageVariant =
-      absl::variant<std::unique_ptr<content::WebContents>,
-                    std::unique_ptr<content::GuestPageHolder>>;
+      std::variant<std::unique_ptr<content::WebContents>,
+                   std::unique_ptr<content::GuestPageHolder>>;
   using GuestPageCreatedCallback =
       base::OnceCallback<void(std::unique_ptr<GuestViewBase> guest,
                               GuestPageVariant guest_page)>;
@@ -354,6 +354,7 @@ class GuestViewBase : public content::BrowserPluginGuestDelegate,
   // WebContentsObserver implementation.
   void DidFinishNavigation(
       content::NavigationHandle* navigation_handle) override;
+  void FrameDeleted(content::FrameTreeNodeId frame_tree_node_id) override;
   void WebContentsDestroyed() override;
 
   // Given a set of initialization parameters, a concrete subclass of

@@ -4,12 +4,15 @@
 
 package org.chromium.android_webview.common;
 
+import org.chromium.build.annotations.NullMarked;
+
 /**
  * A utility class for Variations Fast Fetch Mode to provide a common set of utilities for safemode
  * between embedded and non-embedded WebView.
  *
  * <p>Note: These IDs should not be reused in other locations than the owning SafeModeAction.
  */
+@NullMarked
 public class SafeModeActionIds {
     // LINT.IfChange(SafeModeActionIds)
     public static final String DELETE_VARIATIONS_SEED = "delete_variations_seed";
@@ -20,5 +23,6 @@ public class SafeModeActionIds {
     public static final String DISABLE_AW_SAFE_BROWSING = "disable_safe_browsing";
     public static final String RESET_COMPONENT_UPDATER = "reset_component_updater";
     public static final String DISABLE_SUPERVISION_CHECKS = "disable_supervision_checks";
+    public static final String DISABLE_STARTUP_TASKS_LOGIC = "disable_startup_tasks_logic";
     // LINT.ThenChange(SafeModeController.java:SafeModeActionIds)
 }

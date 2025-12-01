@@ -5,7 +5,8 @@
 #ifndef CHROME_BROWSER_UI_TABS_TEST_MOCK_TAB_INTERFACE_H_
 #define CHROME_BROWSER_UI_TABS_TEST_MOCK_TAB_INTERFACE_H_
 
-#include "chrome/browser/ui/tabs/public/tab_interface.h"
+#include "chrome/browser/ui/tabs/split_tab_id.h"
+#include "components/tab_collections/public/tab_interface.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "ui/views/widget/widget.h"
 #include "ui/views/widget/widget_delegate.h"
@@ -17,6 +18,7 @@ class MockTabInterface : public testing::NiceMock<TabInterface> {
   MockTabInterface();
   ~MockTabInterface() override;
 
+  MOCK_METHOD(base::WeakPtr<TabInterface>, GetWeakPtr, (), (override));
   MOCK_METHOD(content::WebContents*, GetContents, (), (const, override));
   MOCK_METHOD(void, Close, (), (override));
   MOCK_METHOD(base::CallbackListSubscription,
@@ -71,6 +73,10 @@ class MockTabInterface : public testing::NiceMock<TabInterface> {
   MOCK_METHOD(TabFeatures*, GetTabFeatures, (), (override));
   MOCK_METHOD(bool, IsPinned, (), (const override));
   MOCK_METHOD(bool, IsSplit, (), (const override));
+  MOCK_METHOD(std::optional<split_tabs::SplitTabId>,
+              GetSplit,
+              (),
+              (const override));
   MOCK_METHOD(std::optional<tab_groups::TabGroupId>,
               GetGroup,
               (),

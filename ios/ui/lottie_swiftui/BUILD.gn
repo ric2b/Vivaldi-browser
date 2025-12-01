@@ -27,6 +27,7 @@ source_set("lottie_objc_wrapper") {
   deps = [
     "//base",
     "//ios/public/provider/chrome/browser/lottie:lottie_animation_api",
+    "//vivaldi/thirdparty:copy_lottie_headers",
   ]
 
   frameworks = [

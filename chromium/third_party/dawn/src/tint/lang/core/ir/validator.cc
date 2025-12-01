@@ -41,6 +41,7 @@
 #include "src/tint/lang/core/ir/block_param.h"
 #include "src/tint/lang/core/ir/break_if.h"
 #include "src/tint/lang/core/ir/constant.h"
+#include "src/tint/lang/core/ir/constexpr_if.h"
 #include "src/tint/lang/core/ir/construct.h"
 #include "src/tint/lang/core/ir/continue.h"
 #include "src/tint/lang/core/ir/control_instruction.h"
@@ -64,6 +65,7 @@
 #include "src/tint/lang/core/ir/multi_in_block.h"
 #include "src/tint/lang/core/ir/next_iteration.h"
 #include "src/tint/lang/core/ir/override.h"
+#include "src/tint/lang/core/ir/phony.h"
 #include "src/tint/lang/core/ir/referenced_module_vars.h"
 #include "src/tint/lang/core/ir/return.h"
 #include "src/tint/lang/core/ir/store.h"
@@ -91,6 +93,7 @@
 #include "src/tint/lang/core/type/storage_texture.h"
 #include "src/tint/lang/core/type/type.h"
 #include "src/tint/lang/core/type/u32.h"
+#include "src/tint/lang/core/type/u64.h"
 #include "src/tint/lang/core/type/u8.h"
 #include "src/tint/lang/core/type/vector.h"
 #include "src/tint/lang/core/type/void.h"
@@ -101,7 +104,7 @@
 #include "src/tint/utils/diagnostic/diagnostic.h"
 #include "src/tint/utils/ice/ice.h"
 #include "src/tint/utils/macros/defer.h"
-#include "src/tint/utils/result/result.h"
+#include "src/tint/utils/result.h"
 #include "src/tint/utils/rtti/castable.h"
 #include "src/tint/utils/rtti/switch.h"
 #include "src/tint/utils/text/styled_text.h"
@@ -150,13 +153,12 @@ bool InvariantOnlyIfAlsoPosition(const tint::core::IOAttributes& attr) {
 }
 
 /// @returns true if @p ty meets the basic function parameter rules (i.e. one of constructible,
-///          pointer, sampler or texture).
+///          pointer, handle).
 ///
 /// Note: Does not handle corner cases like if certain capabilities are
 /// enabled.
 bool IsValidFunctionParamType(const core::type::Type* ty) {
-    return ty->IsConstructible() || ty->Is<core::type::Pointer>() ||
-           ty->Is<core::type::Texture>() || ty->Is<core::type::Sampler>();
+    return ty->IsConstructible() || ty->Is<core::type::Pointer>() || ty->IsHandle();
 }
 
 /// @returns true if @p ty is a non-struct and decorated with @builtin(position), or if it is a
@@ -1226,6 +1228,10 @@ class Validator {
     /// @param s the store vector element to validate
     void CheckStoreVectorElement(const StoreVectorElement* s);
 
+    /// Validates the given phony assignment
+    /// @param p the phony assignment to validate
+    void CheckPhony(const Phony* p);
+
     /// Validates that the number and types of the source instruction operands match the target's
     /// values.
     /// @param source_inst the source instruction
@@ -1376,7 +1382,7 @@ Result<SuccessType> Validator::Run() {
 
     if (diagnostics_.ContainsErrors()) {
         diagnostics_.AddNote(Source{}) << "# Disassembly\n" << Disassemble().Text();
-        return Failure{std::move(diagnostics_)};
+        return Failure{diagnostics_.Str()};
     }
     return Success;
 }
@@ -1631,6 +1637,12 @@ bool Validator::CheckResult(const Instruction* inst, size_t idx) {
         return false;
     }
 
+    if (DAWN_UNLIKELY(result->Instruction() != inst)) {
+        AddResultError(inst, idx)
+            << "result instruction does not match instruction (possible double usage)";
+        return false;
+    }
+
     return true;
 }
 
@@ -1654,6 +1666,12 @@ bool Validator::CheckResults(const ir::Instruction* inst, std::optional<size_t> 
 
 bool Validator::CheckOperand(const Instruction* inst, size_t idx) {
     auto* operand = inst->Operand(idx);
+
+    // var instructions are allowed to have a nullptr operands
+    if (inst->Is<Var>() && operand == nullptr) {
+        return true;
+    }
+
     if (DAWN_UNLIKELY(operand == nullptr)) {
         AddError(inst, idx) << "operand is undefined";
         return false;
@@ -1815,6 +1833,14 @@ void Validator::CheckType(const core::type::Type* root,
                 }
                 return true;
             },
+            [&](const core::type::U64*) {
+                // u64 types are guarded by the Allow64BitIntegers capability.
+                if (!capabilities_.Contains(Capability::kAllow64BitIntegers)) {
+                    diag() << "64-bit integer types are not permitted";
+                    return false;
+                }
+                return true;
+            },
             [&](const core::type::I8*) {
                 // i8 types are guarded by the Allow8BitIntegers capability.
                 if (!capabilities_.Contains(Capability::kAllow8BitIntegers)) {
@@ -1921,7 +1947,8 @@ void Validator::CheckRootBlock(const Block* blk) {
                 }
             },
             [&](const core::ir::Construct* c) {
-                if (capabilities_.Contains(Capability::kAllowModuleScopeLets)) {
+                if (capabilities_.Contains(Capability::kAllowModuleScopeLets) ||
+                    capabilities_.Contains(Capability::kAllowOverrides)) {
                     CheckInstruction(c);
                     CheckOnlyUsedInRootBlock(inst);
                 } else {
@@ -1935,9 +1962,9 @@ void Validator::CheckRootBlock(const Block* blk) {
                 // require walking up the tree to make sure that operands are const/override and
                 // builtins are allowed.
                 if (capabilities_.Contains(Capability::kAllowOverrides) &&
-                    inst->IsAnyOf<core::ir::Unary, core::ir::Binary, core::ir::CoreBuiltinCall,
+                    inst->IsAnyOf<core::ir::Unary, core::ir::Binary, core::ir::BuiltinCall,
                                   core::ir::Convert, core::ir::Swizzle, core::ir::Access,
-                                  core::ir::Bitcast>()) {
+                                  core::ir::Bitcast, core::ir::ConstExprIf>()) {
                     CheckInstruction(inst);
                     // If overrides are allowed we can have certain regular instructions in the root
                     // block, with the caveat that those instructions can _only_ be used in the root
@@ -1948,6 +1975,8 @@ void Validator::CheckRootBlock(const Block* blk) {
                 }
             });
     }
+    // Our ConstExprIfs in the root require us to process tasks here.
+    ProcessTasks();
 }
 
 void Validator::CheckOnlyUsedInRootBlock(const Instruction* inst) {
@@ -2028,8 +2057,7 @@ void Validator::CheckFunction(const Function* func) {
                     return !IsValidFunctionParamType(m->Type());
                 })) {
                 AddError(param) << "function parameter type, " << NameOf(param->Type())
-                                << ", must be constructible, a pointer, a "
-                                   "texture, or a sampler";
+                                << ", must be constructible, a pointer, or a handle";
             }
         }
 
@@ -2064,7 +2092,7 @@ void Validator::CheckFunction(const Function* func) {
             address_space = mv->AddressSpace();
         } else {
             // ModuleScopeVars transform in MSL backends unwraps pointers to handles
-            if (param->Type()->IsAnyOf<core::type::Texture, core::type::Sampler>()) {
+            if (param->Type()->IsHandle()) {
                 address_space = AddressSpace::kHandle;
             }
         }
@@ -2397,6 +2425,7 @@ void Validator::CheckInstruction(const Instruction* inst) {
         [&](const Load* load) { CheckLoad(load); },                        //
         [&](const LoadVectorElement* l) { CheckLoadVectorElement(l); },    //
         [&](const Loop* l) { CheckLoop(l); },                              //
+        [&](const Phony* p) { CheckPhony(p); },                            //
         [&](const Store* s) { CheckStore(s); },                            //
         [&](const StoreVectorElement* s) { CheckStoreVectorElement(s); },  //
         [&](const Switch* s) { CheckSwitch(s); },                          //
@@ -2418,9 +2447,11 @@ void Validator::CheckOverride(const Override* o) {
         return;
     }
 
-    if (!seen_override_ids_.Add(o->OverrideId())) {
-        AddError(o) << "duplicate override id encountered: " << o->OverrideId().value;
-        return;
+    if (o->OverrideId().has_value()) {
+        if (!seen_override_ids_.Add(o->OverrideId().value())) {
+            AddError(o) << "duplicate override id encountered: " << o->OverrideId().value().value;
+            return;
+        }
     }
 
     if (!o->Result(0)->Type()->IsScalar()) {
@@ -2438,25 +2469,31 @@ void Validator::CheckOverride(const Override* o) {
             return;
         }
     }
+
+    if (!o->OverrideId().has_value() && !o->Initializer()) {
+        AddError(o) << "must have an id or an initializer";
+        return;
+    }
 }
 
 void Validator::CheckVar(const Var* var) {
-    // Intentionally not checking operands, since Var may have a null operand
-    if (!CheckResults(var, Var::kNumResults)) {
+    if (!CheckResultsAndOperands(var, Var::kNumResults, Var::kNumOperands)) {
         return;
     }
 
     auto* result_type = var->Result(0)->Type();
-    if (result_type == nullptr) {
-        AddError(var) << "result type is undefined";
-        return;
-    }
-
     auto* mv = result_type->As<core::type::MemoryView>();
     if (!mv) {
         AddError(var) << "result type " << NameOf(result_type)
                       << " must be a pointer or a reference";
         return;
+    }
+
+    if (mv->UnwrapPtrOrRef()->IsHandle()) {
+        if (mv->AddressSpace() != AddressSpace::kHandle) {
+            AddError(var) << "handle types can only be declared in the 'handle' address space";
+            return;
+        }
     }
 
     if (var->Block() != mod_.root_block && mv->AddressSpace() != AddressSpace::kFunction) {
@@ -2480,10 +2517,9 @@ void Validator::CheckVar(const Var* var) {
             return;
         }
 
-        if (var->Initializer()->Type() != var->Result(0)->Type()->UnwrapPtrOrRef()) {
+        if (var->Initializer()->Type() != result_type->UnwrapPtrOrRef()) {
             AddError(var) << "initializer type " << NameOf(var->Initializer()->Type())
-                          << " does not match store type "
-                          << NameOf(var->Result(0)->Type()->UnwrapPtrOrRef());
+                          << " does not match store type " << NameOf(result_type->UnwrapPtrOrRef());
             return;
         }
     }
@@ -2629,17 +2665,31 @@ void Validator::CheckLet(const Let* l) {
         return;
     }
 
-    if (l->Result(0)->Type()->Is<core::type::Void>()) {
-        AddError(l) << "result type cannot be void";
-        return;
+    auto* value_ty = l->Value()->Type();
+    if (capabilities_.Contains(Capability::kAllowAnyLetType)) {
+        if (value_ty->Is<core::type::Void>()) {
+            AddError(l) << "value type cannot be void";
+        }
+    } else {
+        if (!value_ty->IsConstructible() && !value_ty->Is<core::type::Pointer>()) {
+            AddError(l) << "value type, " << NameOf(value_ty)
+                        << ", must be concrete constructible type or a pointer type";
+        }
     }
 
-    if (l->Value()->Type()->Is<core::type::Void>()) {
-        AddError(l) << "value type cannot be void";
-        return;
+    auto* result_ty = l->Result(0)->Type();
+    if (capabilities_.Contains(Capability::kAllowAnyLetType)) {
+        if (result_ty->Is<core::type::Void>()) {
+            AddError(l) << "result type cannot be void";
+        }
+    } else {
+        if (!result_ty->IsConstructible() && !result_ty->Is<core::type::Pointer>()) {
+            AddError(l) << "result type, " << NameOf(result_ty)
+                        << ", must be concrete constructible type or a pointer type";
+        }
     }
 
-    if (l->Result(0)->Type() != l->Value()->Type()) {
+    if (value_ty != result_ty) {
         AddError(l) << "result type " << NameOf(l->Result(0)->Type())
                     << " does not match value type " << NameOf(l->Value()->Type());
     }
@@ -2774,12 +2824,15 @@ void Validator::CheckBitcastTypes(const Bitcast* bitcast) {
 }
 
 void Validator::CheckBuiltinCall(const BuiltinCall* call) {
-    auto args =
-        Transform<8>(call->Args(), [&](const ir::Value* v) { return v ? v->Type() : nullptr; });
-    if (args.Any([&](const core::type::Type* ty) { return ty == nullptr; })) {
-        AddError(call) << "argument to builtin has undefined type";
+    // This check cannot be more precise, since until intrinsic lookup below, it is unknown what
+    // number of operands are expected, but still need to enforce things are in scope,
+    // have types, etc.
+    if (!CheckResults(call, BuiltinCall::kNumResults) || !CheckOperands(call)) {
         return;
     }
+
+    // CheckOperands above ensures that all args are non-null and have a valid type
+    auto args = Transform<8>(call->Args(), [&](const ir::Value* v) { return v->Type(); });
 
     intrinsic::Context context{
         call->TableData(),
@@ -2797,25 +2850,21 @@ void Validator::CheckBuiltinCall(const BuiltinCall* call) {
 
     TINT_ASSERT(builtin->return_type);
 
-    if (call->Results().Length() != 1) {
-        AddError(call) << "call to builtin has " << call->Results().Length()
-                       << " results, when 1 is expected";
-        return;
-    }
-
-    if (call->Result(0) == nullptr) {
-        AddError(call) << "call to builtin does not have a return type";
-        return;
-    }
-
     if (builtin->return_type != call->Result(0)->Type()) {
         AddError(call) << "call result type " << NameOf(call->Result(0)->Type())
-                       << "does not match builtin return type " << NameOf(builtin->return_type);
+                       << " does not match builtin return type " << NameOf(builtin->return_type);
         return;
     }
 }
 
 void Validator::CheckMemberBuiltinCall(const MemberBuiltinCall* call) {
+    // This check cannot be more precise, since until intrinsic lookup below, it is unknown what
+    // number of operands are expected, but still need to enforce things are in scope,
+    // have types, etc.
+    if (!CheckResults(call, MemberBuiltinCall::kNumResults) || !CheckOperands(call)) {
+        return;
+    }
+
     auto args = Vector<const core::type::Type*, 8>({call->Object()->Type()});
     for (auto* arg : call->Args()) {
         args.Push(arg->Type());
@@ -3576,6 +3625,17 @@ void Validator::CheckStoreVectorElement(const StoreVectorElement* s) {
     }
 }
 
+void Validator::CheckPhony(const Phony* p) {
+    if (!capabilities_.Contains(Capability::kAllowPhonyInstructions)) {
+        AddError(p) << "missing capability 'kAllowPhonyInstructions'";
+        return;
+    }
+
+    if (!CheckResultsAndOperands(p, Phony::kNumResults, Phony::kNumOperands)) {
+        return;
+    }
+}
+
 void Validator::CheckOperandsMatchTarget(const Instruction* source_inst,
                                          size_t source_operand_offset,
                                          size_t source_operand_count,
@@ -3633,7 +3693,11 @@ const core::type::Type* Validator::GetVectorPtrElementType(const Instruction* in
 
 Result<SuccessType> Validate(const Module& mod, Capabilities capabilities) {
     Validator v(mod, capabilities);
-    return v.Run();
+    auto res = v.Run();
+    if (res != Success) {
+        return res;
+    }
+    return Success;
 }
 
 Result<SuccessType> ValidateAndDumpIfNeeded([[maybe_unused]] const Module& ir,

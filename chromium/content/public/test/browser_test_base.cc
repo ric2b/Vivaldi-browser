@@ -11,6 +11,7 @@
 #include <memory>
 #include <string>
 #include <utility>
+#include <variant>
 #include <vector>
 
 #include "base/base_switches.h"
@@ -617,8 +618,7 @@ void BrowserTestBase::SetUp() {
 
     StartBrowserThreadPool();
 
-    tracing::InitTracingPostThreadPoolStartAndFeatureList(
-        /* enable_consumer */ true);
+    tracing::InitTracingPostFeatureList(/*enable_consumer=*/true);
     InitializeBrowserMemoryInstrumentationClient();
   }
 
@@ -663,8 +663,8 @@ void BrowserTestBase::SetUp() {
                                     TestTimeouts::action_max_timeout());
     // Passing "" as the process type to indicate the browser process.
     auto exit_code = delegate->RunProcess("", std::move(params));
-    DCHECK(absl::holds_alternative<int>(exit_code));
-    DCHECK_EQ(absl::get<int>(exit_code), 0);
+    DCHECK(std::holds_alternative<int>(exit_code));
+    DCHECK_EQ(std::get<int>(exit_code), 0);
 
     // Waits for Java to finish initialization, then we can run the test.
     loop.Run();
@@ -955,6 +955,20 @@ void BrowserTestBase::SetTestDohConfig(net::SecureDnsMode secure_dns_mode,
                                        net::DnsOverHttpsConfig config) {
   DCHECK(!test_doh_config_.has_value());
   test_doh_config_ = std::make_pair(secure_dns_mode, std::move(config));
+}
+
+void BrowserTestBase::InitializeHTTPSTestServer() {
+  CHECK(!embedded_https_test_server_)
+      << "HTTPS test server already initialized";
+
+  embedded_https_test_server_ = std::make_unique<net::EmbeddedTestServer>(
+    net::EmbeddedTestServer::TYPE_HTTPS);
+  // Default hostnames for the HTTPS test server. Test fixtures can call this
+  // with different hostnames (before starting the server) to override.
+  embedded_https_test_server_->SetCertHostnames(
+      {"example.com", "*.example.com", "foo.com", "*.foo.com", "bar.com",
+      "*.bar.com", "a.com", "*.a.com", "b.com", "*.b.com", "c.com",
+      "*.c.com"});
 }
 
 void BrowserTestBase::CreateTestServer(const base::FilePath& test_server_base) {

@@ -43,7 +43,8 @@ bool StructTraits<blink::mojom::WebPreferencesDataView,
           &out->low_priority_iframes_threshold) ||
       !data.ReadNetworkQualityEstimatorWebHoldback(
           &out->network_quality_estimator_web_holdback) ||
-      !data.ReadWebAppScope(&out->web_app_scope)
+      !data.ReadWebAppScope(&out->web_app_scope) ||
+      !data.ReadRootScrollbarThemeColor(&out->root_scrollbar_theme_color)
 #if BUILDFLAG(IS_ANDROID)
       || !data.ReadDefaultVideoPosterUrl(&out->default_video_poster_url)
 #endif
@@ -235,6 +236,7 @@ bool StructTraits<blink::mojom::WebPreferencesDataView,
       data.dynamic_safe_area_insets_enabled();
   out->subapps_apis_require_user_gesture_and_authorization =
       data.require_transient_activation_and_user_confirmation_for_subapps_api();
+  out->payment_request_enabled = data.payment_request_enabled();
 
   // Vivaldi
   out->allow_tab_cycle_from_webpage_into_ui =

@@ -21,8 +21,7 @@ describe('The Application Tab', () => {
     // The tests in this suite are particularly slow, as they perform a lot of actions
     this.timeout(20000);
     beforeEach(async () => {
-      const {target} = getBrowserAndPages();
-      await navigateToApplicationTab(target, 'storage-quota');
+      await navigateToApplicationTab('storage-quota');
       await navigateToStorage();
     });
 
@@ -34,11 +33,11 @@ describe('The Application Tab', () => {
         for (let i = 0; i < 20000; i++) {
           array.push(i % 10);
         }
-        // @ts-ignore
+        // @ts-expect-error
         await new Promise(resolve => createDatabase(resolve, 'Database1'));
-        // @ts-ignore
+        // @ts-expect-error
         await new Promise(resolve => createObjectStore(resolve, 'Database1', 'Store1', 'id', true));
-        // @ts-ignore
+        // @ts-expect-error
         await new Promise(resolve => addIDBValue(resolve, 'Database1', 'Store1', {key: 1, value: array}, ''));
       });
 
@@ -63,11 +62,11 @@ describe('The Application Tab', () => {
         for (let i = 0; i < 20000; i++) {
           array.push(i % 10);
         }
-        // @ts-ignore
+        // @ts-expect-error
         await new Promise(resolve => createDatabase(resolve, 'Database1'));
-        // @ts-ignore
+        // @ts-expect-error
         await new Promise(resolve => createObjectStore(resolve, 'Database1', 'Store1', 'id', true));
-        // @ts-ignore
+        // @ts-expect-error
         await new Promise(resolve => addIDBValue(resolve, 'Database1', 'Store1', {key: 1, value: array}, ''));
       });
 

@@ -295,6 +295,7 @@ Për të hapur menynë e shfletuesit Chrome, shtyp Alt+F.</translation>
 <translation id="2867808975387772810">Bibliografi</translation>
 <translation id="2873259058405069099">Shko në fillim të tabelës</translation>
 <translation id="287383510823843610">Portokalli e errët</translation>
+<translation id="2876760662374103627">Kontrolli me anë të fytyrës është aktiv</translation>
 <translation id="2879867157561757640">Rrëshqit shpejt tre gishta poshtë</translation>
 <translation id="288178314850623291">Përdor komandat e kërcimit për të kapërcyer në lloje specifike elementesh. Për të kërcyer përpara mes titujve, shtyp Kërko + H ose për të kërcyer prapa, shtyp Kërko + Shift + H.</translation>
 <translation id="2885764457467528513">{COUNT,plural, =1{minutë}other{minuta}}</translation>
@@ -1115,6 +1116,7 @@ Për të hapur menynë e shfletuesit Chrome, shtyp Alt+F.</translation>
 <translation id="8316881042119029234">Lidhëse blu</translation>
 <translation id="8326783648485765113">E gjelbër lëndine</translation>
 <translation id="8345569862449483843">{COUNT,plural, =1{thurje}other{# shenja thurjeje}}</translation>
+<translation id="8351821207686449674">Aktivizo/çaktivizo titrat</translation>
 <translation id="8378855320830505539">Rajoni</translation>
 <translation id="8382679411218029383">Plotësimi automatik brenda linjës dhe lista</translation>
 <translation id="8394908167088220973">Luaj/pauzo median</translation>

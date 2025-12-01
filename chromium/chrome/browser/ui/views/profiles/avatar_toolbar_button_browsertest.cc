@@ -6,6 +6,7 @@
 
 #include <optional>
 #include <string>
+#include <string_view>
 
 #include "base/functional/bind.h"
 #include "base/functional/callback_helpers.h"
@@ -18,6 +19,7 @@
 #include "base/time/time.h"
 #include "base/timer/timer.h"
 #include "chrome/browser/browser_process.h"
+#include "chrome/browser/enterprise/browser_management/management_service_factory.h"
 #include "chrome/browser/enterprise/util/managed_browser_utils.h"
 #include "chrome/browser/profiles/keep_alive/profile_keep_alive_types.h"
 #include "chrome/browser/profiles/keep_alive/scoped_profile_keep_alive.h"
@@ -45,6 +47,7 @@
 #include "components/keep_alive_registry/scoped_keep_alive.h"
 #include "components/policy/core/browser/browser_policy_connector.h"
 #include "components/policy/core/common/management/management_service.h"
+#include "components/policy/core/common/management/scoped_management_service_override_for_testing.h"
 #include "components/policy/core/common/mock_configuration_policy_provider.h"
 #include "components/policy/core/common/policy_map.h"
 #include "components/policy/policy_constants.h"
@@ -175,17 +178,17 @@ class AvatarToolbarButtonBrowserTest : public InProcessBrowserTest {
   // Returns the window count in avatar button text, if it exists.
   std::optional<int> GetWindowCountInAvatarButtonText(
       AvatarToolbarButton* avatar_button) {
-    std::u16string button_text = avatar_button->GetText();
+    const std::u16string_view button_text = avatar_button->GetText();
 
     size_t before_number = button_text.find('(');
-    if (before_number == std::string::npos) {
+    if (before_number == std::u16string_view::npos) {
       return std::optional<int>();
     }
 
     size_t after_number = button_text.find(')');
-    EXPECT_NE(std::string::npos, after_number);
+    EXPECT_NE(std::u16string_view::npos, after_number);
 
-    std::u16string number_text =
+    const std::u16string_view number_text =
         button_text.substr(before_number + 1, after_number - before_number - 1);
     int window_count;
     return base::StringToInt(number_text, &window_count)
@@ -554,24 +557,13 @@ IN_PROC_BROWSER_TEST_F(AvatarToolbarButtonBrowserTest, SigninBrowser) {
 }
 #endif
 
-class AvatarToolbarButtonBrowserTestWithExplicitBrowserSignin
-    : public base::test::WithFeatureOverride,
-      public AvatarToolbarButtonBrowserTest {
- public:
-  AvatarToolbarButtonBrowserTestWithExplicitBrowserSignin()
-      : base::test::WithFeatureOverride(
-            switches::kExplicitBrowserSigninUIOnDesktop) {}
-
-  bool is_explicit_browser_signin() const { return IsParamFeatureEnabled(); }
-};
-
 // TODO(b/331746545): Check flaky test issue on windows.
 #if BUILDFLAG(IS_WIN)
 #define MAYBE_ShowNameOnSigninThenSync DISABLED_ShowNameOnSigninThenSync
 #else
 #define MAYBE_ShowNameOnSigninThenSync ShowNameOnSigninThenSync
 #endif
-IN_PROC_BROWSER_TEST_P(AvatarToolbarButtonBrowserTestWithExplicitBrowserSignin,
+IN_PROC_BROWSER_TEST_F(AvatarToolbarButtonBrowserTest,
                        MAYBE_ShowNameOnSigninThenSync) {
   AvatarToolbarButton* avatar = GetAvatarToolbarButton(browser());
   // Normal state.
@@ -586,9 +578,7 @@ IN_PROC_BROWSER_TEST_P(AvatarToolbarButtonBrowserTestWithExplicitBrowserSignin,
   // The greeting will only show when the image is loaded.
   AddSignedInImage(account_info.account_id);
   EXPECT_EQ(avatar->GetText(),
-            is_explicit_browser_signin()
-                ? l10n_util::GetStringFUTF16(IDS_AVATAR_BUTTON_GREETING, name)
-                : name);
+            l10n_util::GetStringFUTF16(IDS_AVATAR_BUTTON_GREETING, name));
 
   avatar->TriggerTimeoutForTesting(AvatarDelayType::kNameGreeting);
   // Once the name is not shown anymore, we expect no text.
@@ -605,8 +595,7 @@ IN_PROC_BROWSER_TEST_P(AvatarToolbarButtonBrowserTestWithExplicitBrowserSignin,
 #else
 #define MAYBE_ShowNameOnSync ShowNameOnSync
 #endif
-IN_PROC_BROWSER_TEST_P(AvatarToolbarButtonBrowserTestWithExplicitBrowserSignin,
-                       MAYBE_ShowNameOnSync) {
+IN_PROC_BROWSER_TEST_F(AvatarToolbarButtonBrowserTest, MAYBE_ShowNameOnSync) {
   AvatarToolbarButton* avatar = GetAvatarToolbarButton(browser());
   // Normal state.
   ASSERT_TRUE(avatar->GetText().empty());
@@ -620,9 +609,7 @@ IN_PROC_BROWSER_TEST_P(AvatarToolbarButtonBrowserTestWithExplicitBrowserSignin,
   // The greeting will only show when the image is loaded.
   AddSignedInImage(account_info.account_id);
   EXPECT_EQ(avatar->GetText(),
-            is_explicit_browser_signin()
-                ? l10n_util::GetStringFUTF16(IDS_AVATAR_BUTTON_GREETING, name)
-                : name);
+            l10n_util::GetStringFUTF16(IDS_AVATAR_BUTTON_GREETING, name));
 
   avatar->TriggerTimeoutForTesting(AvatarDelayType::kNameGreeting);
   // Once the name is not shown anymore, we expect no text.
@@ -632,7 +619,7 @@ IN_PROC_BROWSER_TEST_P(AvatarToolbarButtonBrowserTestWithExplicitBrowserSignin,
 // Check www.crbug.com/331499330: This test makes sure that no states attempt to
 // request an update during their construction. But rather do so after all the
 // states are created and the view is added to the Widget.
-IN_PROC_BROWSER_TEST_P(AvatarToolbarButtonBrowserTestWithExplicitBrowserSignin,
+IN_PROC_BROWSER_TEST_F(AvatarToolbarButtonBrowserTest,
                        OpenNewBrowserWhileNameIsShown) {
   AvatarToolbarButton* avatar = GetAvatarToolbarButton(browser());
   // Normal state.
@@ -650,9 +637,7 @@ IN_PROC_BROWSER_TEST_P(AvatarToolbarButtonBrowserTestWithExplicitBrowserSignin,
   // The greeting will only show when the image is loaded.
   AddSignedInImage(account_info.account_id);
   EXPECT_EQ(avatar->GetText(),
-            is_explicit_browser_signin()
-                ? l10n_util::GetStringFUTF16(IDS_AVATAR_BUTTON_GREETING, name)
-                : name);
+            l10n_util::GetStringFUTF16(IDS_AVATAR_BUTTON_GREETING, name));
 
   ASSERT_TRUE(GetIdentityManager()->AreRefreshTokensLoaded());
 
@@ -662,17 +647,10 @@ IN_PROC_BROWSER_TEST_P(AvatarToolbarButtonBrowserTestWithExplicitBrowserSignin,
   AvatarToolbarButton* new_avatar_button = GetAvatarToolbarButton(new_browser);
   // Name is expected to be shown while it is still shown on the first browser.
   ASSERT_EQ(avatar->GetText(),
-            is_explicit_browser_signin()
-                ? l10n_util::GetStringFUTF16(IDS_AVATAR_BUTTON_GREETING, name)
-                : name);
+            l10n_util::GetStringFUTF16(IDS_AVATAR_BUTTON_GREETING, name));
   EXPECT_EQ(new_avatar_button->GetText(),
-            is_explicit_browser_signin()
-                ? l10n_util::GetStringFUTF16(IDS_AVATAR_BUTTON_GREETING, name)
-                : name);
+            l10n_util::GetStringFUTF16(IDS_AVATAR_BUTTON_GREETING, name));
 }
-
-INSTANTIATE_FEATURE_OVERRIDE_TEST_SUITE(
-    AvatarToolbarButtonBrowserTestWithExplicitBrowserSignin);
 
 // TODO(b/331746545): Check flaky test issue on windows.
 #if BUILDFLAG(IS_WIN)
@@ -700,7 +678,10 @@ IN_PROC_BROWSER_TEST_F(AvatarToolbarButtonBrowserTest,
   // profile (not Ash specific logic), the name is always shown on browser that
   // are signed in to show the greenting by default.
   ASSERT_GT(number_of_profiles, 1u);
-  EXPECT_EQ(new_avatar_button->GetText(), u"account_name");
+  EXPECT_EQ(
+      new_avatar_button->GetText(),
+      l10n_util::GetStringFUTF16(IDS_AVATAR_BUTTON_GREETING, u"account_name"));
+
 #else
   ASSERT_EQ(number_of_profiles, 1u);
   // Name is not expected to be shown since it was already shown and cleared on
@@ -1104,9 +1085,7 @@ class AvatarToolbarButtonEnterpriseBadgingBrowserTest
  public:
   AvatarToolbarButtonEnterpriseBadgingBrowserTest() {
     scoped_feature_list_.InitWithFeatures(
-        {features::kEnterpriseProfileBadgingForAvatar,
-         switches::kExplicitBrowserSigninUIOnDesktop},
-        {});
+        {features::kEnterpriseProfileBadgingForAvatar}, {});
   }
   void SetUpInProcessBrowserTestFixture() override {
     provider_.SetDefaultReturns(
@@ -1116,11 +1095,20 @@ class AvatarToolbarButtonEnterpriseBadgingBrowserTest
   }
 
   void SetUpOnMainThread() override {
+    scoped_browser_management_ =
+        std::make_unique<policy::ScopedManagementServiceOverrideForTesting>(
+            policy::ManagementServiceFactory::GetForProfile(
+                browser()->profile()),
+            policy::EnterpriseManagementAuthority::CLOUD);
     AvatarToolbarButtonBrowserTest::SetUpOnMainThread();
   }
 
+  void TearDownOnMainThread() override { scoped_browser_management_.reset(); }
+
  protected:
   testing::NiceMock<policy::MockConfigurationPolicyProvider> provider_;
+  std::unique_ptr<policy::ScopedManagementServiceOverrideForTesting>
+      scoped_browser_management_;
   base::test::ScopedFeatureList scoped_feature_list_;
 };
 
@@ -1139,12 +1127,12 @@ IN_PROC_BROWSER_TEST_F(AvatarToolbarButtonEnterpriseBadgingBrowserTest,
     EXPECT_NE(avatar_button->GetText(), work_label);
     clear_closure.RunAndReset();
     EXPECT_EQ(avatar_button->GetText(), work_label);
-    EXPECT_EQ(GetProfileAttributesEntry(browser()->profile())
-                  ->GetEnterpriseProfileLabel(),
-              work_label);
-    EXPECT_EQ(
-        GetProfileAttributesEntry(browser()->profile())->GetLocalProfileName(),
-        work_label);
+    // The profile name should be the default profile name.
+    std::u16string local_name =
+        GetProfileAttributesEntry(browser()->profile())->GetLocalProfileName();
+    EXPECT_TRUE(g_browser_process->profile_manager()
+                    ->GetProfileAttributesStorage()
+                    .IsDefaultProfileName(local_name, true));
   }
 
   {
@@ -1297,10 +1285,16 @@ IN_PROC_BROWSER_TEST_F(AvatarToolbarButtonEnterpriseBadgingBrowserTest,
   EXPECT_EQ(avatar_button->GetText(), std::u16string());
 }
 
+// TODO(crbug.com/331746545): Check flaky test issue on windows.
+#if BUILDFLAG(IS_WIN)
+#define MAYBE_GreetingShownWhenManagementNotAccepted DISABLED_GreetingShownWhenManagementNotAccepted
+#else
+#define MAYBE_GreetingShownWhenManagementNotAccepted GreetingShownWhenManagementNotAccepted
+#endif
 // test makes sure the greeting is not shown when the management badge is shown
 // in the profile avatar pill.
 IN_PROC_BROWSER_TEST_F(AvatarToolbarButtonEnterpriseBadgingBrowserTest,
-                       GreetingShownWhenManagementNotAccepted) {
+                       MAYBE_GreetingShownWhenManagementNotAccepted) {
   AvatarToolbarButton* avatar = GetAvatarToolbarButton(browser());
   // Normal state.
   ASSERT_TRUE(avatar->GetText().empty());
@@ -1344,9 +1338,17 @@ IN_PROC_BROWSER_TEST_F(AvatarToolbarButtonEnterpriseBadgingBrowserTest,
   EXPECT_EQ(avatar->GetText(), u"Work");
 }
 
+// TODO(crbug.com/331746545): Check flaky test issue on windows.
+#if BUILDFLAG(IS_WIN)
+#define MAYBE_PRE_SignedInWithNewSessionKeepWorkBadge DISABLED_PRE_SignedInWithNewSessionKeepWorkBadge
+#define MAYBE_SignedInWithNewSessionKeepWorkBadge DISABLED_SignedInWithNewSessionKeepWorkBadge
+#else
+#define MAYBE_PRE_SignedInWithNewSessionKeepWorkBadge PRE_SignedInWithNewSessionKeepWorkBadge
+#define MAYBE_SignedInWithNewSessionKeepWorkBadge SignedInWithNewSessionKeepWorkBadge
+#endif
 // Tests the flow for a managed sign-in.
 IN_PROC_BROWSER_TEST_F(AvatarToolbarButtonEnterpriseBadgingBrowserTest,
-                       PRE_SignedInWithNewSessionKeepWorkBadge) {
+                       MAYBE_PRE_SignedInWithNewSessionKeepWorkBadge) {
   // Sign in.
   AvatarToolbarButton* avatar = GetAvatarToolbarButton(browser());
   std::u16string name(u"TestName");
@@ -1365,32 +1367,33 @@ IN_PROC_BROWSER_TEST_F(AvatarToolbarButtonEnterpriseBadgingBrowserTest,
   // Management is usually accepted by the time the greeting is finished. The
   // work badgge should be shown once this happens.
   enterprise_util::SetUserAcceptedAccountManagement(browser()->profile(), true);
-  EXPECT_EQ(avatar->GetText(), u"Work");
+  browser()->profile()->GetPrefs()->SetString(
+      prefs::kEnterpriseCustomLabelForProfile, "Custom Label");
+
+  EXPECT_EQ(avatar->GetText(), u"Custom Label");
 }
 
-// Test that the work badge remains upon restart for a user that has already
-// accepted management.
+// Test that the work badge remains upon restart for a user that is managed.
+// Note that we need to unset and reset UserAcceptedAccountManagement due to the
+// management service override.
 IN_PROC_BROWSER_TEST_F(AvatarToolbarButtonEnterpriseBadgingBrowserTest,
-                       SignedInWithNewSessionKeepWorkBadge) {
+                       MAYBE_SignedInWithNewSessionKeepWorkBadge) {
   signin::WaitForRefreshTokensLoaded(GetIdentityManager());
+  enterprise_util::SetUserAcceptedAccountManagement(browser()->profile(),
+                                                    false);
+  enterprise_util::SetUserAcceptedAccountManagement(browser()->profile(), true);
+
   AvatarToolbarButton* avatar = GetAvatarToolbarButton(browser());
-  EXPECT_EQ(avatar->GetText(), u"Work");
+  EXPECT_EQ(avatar->GetText(), u"Custom Label");
   EXPECT_EQ(GetProfileAttributesEntry(browser()->profile())
                 ->GetEnterpriseProfileLabel(),
-            u"Work");
+            u"Custom Label");
   EXPECT_EQ(
       GetProfileAttributesEntry(browser()->profile())->GetLocalProfileName(),
-      u"Work");
+      u"Custom Label");
   // Previously added image on signin should still be shown in the new session.
   EXPECT_TRUE(IsSignedInImageUsed());
 }
-
-class AvatarToolbarButtonWithExplicitBrowserSigninBrowserTest
-    : public AvatarToolbarButtonBrowserTest {
- private:
-  base::test::ScopedFeatureList scoped_feature_list_{
-      switches::kExplicitBrowserSigninUIOnDesktop};
-};
 
 // TODO(b/331746545): Check flaky test issue on windows.
 #if BUILDFLAG(IS_WIN)
@@ -1400,7 +1403,7 @@ class AvatarToolbarButtonWithExplicitBrowserSigninBrowserTest
 #define MAYBE_SigninPausedFromExternalErrorThenReauth \
   SigninPausedFromExternalErrorThenReauth
 #endif
-IN_PROC_BROWSER_TEST_F(AvatarToolbarButtonWithExplicitBrowserSigninBrowserTest,
+IN_PROC_BROWSER_TEST_F(AvatarToolbarButtonBrowserTest,
                        MAYBE_SigninPausedFromExternalErrorThenReauth) {
   AvatarToolbarButton* avatar = GetAvatarToolbarButton(browser());
   SigninWithImageAndClearGreeting(avatar, u"test@gmail.com");
@@ -1437,7 +1440,7 @@ IN_PROC_BROWSER_TEST_F(AvatarToolbarButtonWithExplicitBrowserSigninBrowserTest,
 #else
 #define MAYBE_SigninPausedFromWebSignout SigninPausedFromWebSignout
 #endif
-IN_PROC_BROWSER_TEST_F(AvatarToolbarButtonWithExplicitBrowserSigninBrowserTest,
+IN_PROC_BROWSER_TEST_F(AvatarToolbarButtonBrowserTest,
                        MAYBE_SigninPausedFromWebSignout) {
   AvatarToolbarButton* avatar = GetAvatarToolbarButton(browser());
 
@@ -1490,7 +1493,7 @@ IN_PROC_BROWSER_TEST_F(AvatarToolbarButtonWithExplicitBrowserSigninBrowserTest,
 #define MAYBE_SigninPausedFromWebSignoutThenRestartChrome \
   SigninPausedFromWebSignoutThenRestartChrome
 #endif
-IN_PROC_BROWSER_TEST_F(AvatarToolbarButtonWithExplicitBrowserSigninBrowserTest,
+IN_PROC_BROWSER_TEST_F(AvatarToolbarButtonBrowserTest,
                        MAYBE_SigninPausedFromWebSignoutThenRestartChrome) {
   // Needed because the current profile will be destroyed.
   ScopedKeepAlive keep_alive(KeepAliveOrigin::SESSION_RESTORE,
@@ -1517,7 +1520,7 @@ IN_PROC_BROWSER_TEST_F(AvatarToolbarButtonWithExplicitBrowserSigninBrowserTest,
 }
 
 // Regression test for https://crbug.com/348587566
-IN_PROC_BROWSER_TEST_F(AvatarToolbarButtonWithExplicitBrowserSigninBrowserTest,
+IN_PROC_BROWSER_TEST_F(AvatarToolbarButtonBrowserTest,
                        SigninPausedDelayEndedNoBrowser) {
   ASSERT_EQ(1u, chrome::GetTotalBrowserCount());
   AvatarToolbarButton* avatar = GetAvatarToolbarButton(browser());
@@ -1549,7 +1552,7 @@ IN_PROC_BROWSER_TEST_F(AvatarToolbarButtonWithExplicitBrowserSigninBrowserTest,
 #else
 #define MAYBE_SigninPausedThenSignout SigninPausedThenSignout
 #endif
-IN_PROC_BROWSER_TEST_F(AvatarToolbarButtonWithExplicitBrowserSigninBrowserTest,
+IN_PROC_BROWSER_TEST_F(AvatarToolbarButtonBrowserTest,
                        MAYBE_SigninPausedThenSignout) {
   AvatarToolbarButton* avatar = GetAvatarToolbarButton(browser());
   SigninWithImageAndClearGreeting(avatar, u"test@gmail.com");
@@ -1565,8 +1568,7 @@ IN_PROC_BROWSER_TEST_F(AvatarToolbarButtonWithExplicitBrowserSigninBrowserTest,
   EXPECT_EQ(avatar->GetText(), std::u16string());
 }
 
-IN_PROC_BROWSER_TEST_F(AvatarToolbarButtonWithExplicitBrowserSigninBrowserTest,
-                       AccessibilityLabels) {
+IN_PROC_BROWSER_TEST_F(AvatarToolbarButtonBrowserTest, AccessibilityLabels) {
   AvatarToolbarButton* avatar = GetAvatarToolbarButton(browser());
 
   const std::u16string profile_name(u"new_profile_name");
@@ -1650,7 +1652,7 @@ IN_PROC_BROWSER_TEST_F(AvatarToolbarButtonWithExplicitBrowserSigninBrowserTest,
 }
 
 class AvatarToolbarButtonWithImprovedSigninUIBrowserTest
-    : public AvatarToolbarButtonWithExplicitBrowserSigninBrowserTest {
+    : public AvatarToolbarButtonBrowserTest {
  private:
   base::test::ScopedFeatureList scoped_feature_list_{
       switches::kImprovedSigninUIOnDesktop};

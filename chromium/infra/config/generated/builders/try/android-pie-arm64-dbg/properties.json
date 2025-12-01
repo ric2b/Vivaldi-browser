@@ -10,21 +10,23 @@
             "builder_id": {
               "bucket": "ci",
               "builder": "Android arm64 Builder (dbg)",
-              "project": "chromium-m134"
+              "project": "chromium-m136"
             },
             "builder_spec": {
               "build_gs_bucket": "chromium-android-archive",
               "builder_group": "chromium.android",
               "execution_mode": "COMPILE_AND_TEST",
               "legacy_android_config": {
-                "config": "main_builder_mb"
+                "config": "base_config"
               },
               "legacy_chromium_config": {
                 "apply_configs": [
+                  "mb",
                   "download_xr_test_apks"
                 ],
                 "build_config": "Debug",
-                "config": "main_builder_mb",
+                "config": "main_builder",
+                "target_arch": "arm",
                 "target_bits": 64,
                 "target_platform": "android"
               },
@@ -40,21 +42,23 @@
             "builder_id": {
               "bucket": "ci",
               "builder": "android-pie-arm64-dbg",
-              "project": "chromium-m134"
+              "project": "chromium-m136"
             },
             "builder_spec": {
               "build_gs_bucket": "chromium-android-archive",
               "builder_group": "chromium.android",
               "execution_mode": "TEST",
               "legacy_android_config": {
-                "config": "main_builder_mb"
+                "config": "base_config"
               },
               "legacy_chromium_config": {
                 "apply_configs": [
+                  "mb",
                   "download_xr_test_apks"
                 ],
                 "build_config": "Debug",
-                "config": "main_builder_mb",
+                "config": "main_builder",
+                "target_arch": "arm",
                 "target_bits": 64,
                 "target_platform": "android"
               },
@@ -67,7 +71,7 @@
               "parent": {
                 "bucket": "ci",
                 "builder": "Android arm64 Builder (dbg)",
-                "project": "chromium-m134"
+                "project": "chromium-m136"
               }
             }
           }
@@ -77,14 +81,14 @@
         {
           "bucket": "ci",
           "builder": "Android arm64 Builder (dbg)",
-          "project": "chromium-m134"
+          "project": "chromium-m136"
         }
       ],
       "builder_ids_in_scope_for_testing": [
         {
           "bucket": "ci",
           "builder": "android-pie-arm64-dbg",
-          "project": "chromium-m134"
+          "project": "chromium-m136"
         }
       ],
       "targets_spec_directory": "src/infra/config/generated/builders/try/android-pie-arm64-dbg/targets"

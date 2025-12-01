@@ -9,16 +9,18 @@
 #include "base/check_is_test.h"
 #include "base/containers/contains.h"
 #include "base/functional/bind.h"
-#include "build/chromeos_buildflags.h"
+#include "build/build_config.h"
 #include "chrome/browser/app_mode/app_mode_utils.h"
 #include "chrome/browser/device_api/device_attribute_api.h"
 #include "chrome/browser/policy/policy_util.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/web_applications/isolated_web_apps/policy/isolated_web_app_policy_constants.h"
 #include "chrome/browser/web_applications/policy/web_app_policy_constants.h"
 #include "chrome/browser/web_applications/proto/proto_helpers.h"
+#include "chrome/browser/web_applications/proto/web_app.pb.h"
 #include "chrome/browser/web_applications/proto/web_app_install_state.pb.h"
 #include "chrome/browser/web_applications/proto/web_app_os_integration_state.pb.h"
-#include "chrome/browser/web_applications/proto/web_app_proto_package.pb.h"
+#include "chrome/browser/web_applications/web_app_filter.h"
 #include "chrome/browser/web_applications/web_app_provider.h"
 #include "chrome/browser/web_applications/web_app_registrar.h"
 #include "chrome/common/pref_names.h"
@@ -36,7 +38,6 @@
 #include "chrome/browser/ash/app_mode/isolated_web_app/kiosk_iwa_manager.h"
 #include "chrome/browser/ash/app_mode/web_app/web_kiosk_app_data.h"
 #include "chrome/browser/ash/app_mode/web_app/web_kiosk_app_manager.h"
-#include "chrome/browser/web_applications/isolated_web_apps/policy/isolated_web_app_policy_constants.h"
 #include "chrome/common/url_constants.h"
 #include "components/user_manager/user_manager.h"
 #endif  // BUILDFLAG(IS_CHROMEOS)
@@ -117,12 +118,7 @@ bool IsForceInstalledOrigin(content::RenderFrameHost& host,
       web_app_provider->registrar_unsafe();
 
   const auto app_id = registrar.FindBestAppWithUrlInScope(
-      origin.GetURL(),
-      {
-          web_app::proto::InstallState::INSTALLED_WITH_OS_INTEGRATION,
-          web_app::proto::InstallState::INSTALLED_WITHOUT_OS_INTEGRATION,
-      },
-      {.include_extended_scope = true});
+      origin.GetURL(), web_app::WebAppFilter::InstalledInChrome());
 
   if (!app_id.has_value()) {
     return false;
@@ -186,11 +182,11 @@ DeviceServiceImpl::DeviceServiceImpl(
       prefs::kWebAppInstallForceList,
       base::BindRepeating(&DeviceServiceImpl::OnDisposingIfNeeded,
                           base::Unretained(this)));
-#if BUILDFLAG(IS_CHROMEOS)
   pref_change_registrar_.Add(
       prefs::kIsolatedWebAppInstallForceList,
       base::BindRepeating(&DeviceServiceImpl::OnDisposingIfNeeded,
                           base::Unretained(this)));
+#if BUILDFLAG(IS_CHROMEOS)
   pref_change_registrar_.Add(
       prefs::kKioskBrowserPermissionsAllowedForOrigins,
       base::BindRepeating(&DeviceServiceImpl::OnDisposingIfNeeded,

@@ -9,6 +9,7 @@
 #include "base/metrics/field_trial_params.h"
 #include "base/run_loop.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/strings/to_string.h"
 #include "base/test/bind.h"
 #include "base/test/gmock_expected_support.h"
 #include "base/test/scoped_feature_list.h"
@@ -20,11 +21,11 @@
 #include "components/content_settings/core/common/features.h"
 #include "components/ukm/content/source_url_recorder.h"
 #include "components/ukm/test_ukm_recorder.h"
-#include "content/browser/dips/dips_browsertest_utils.h"
-#include "content/browser/dips/dips_service_impl.h"
-#include "content/browser/dips/dips_storage.h"
-#include "content/browser/dips/dips_test_utils.h"
-#include "content/browser/dips/dips_utils.h"
+#include "content/browser/btm/btm_browsertest_utils.h"
+#include "content/browser/btm/btm_service_impl.h"
+#include "content/browser/btm/btm_storage.h"
+#include "content/browser/btm/btm_test_utils.h"
+#include "content/browser/btm/btm_utils.h"
 #include "content/browser/tpcd_heuristics/opener_heuristic_metrics.h"
 #include "content/browser/tpcd_heuristics/opener_heuristic_tab_helper.h"
 #include "content/browser/tpcd_heuristics/opener_heuristic_utils.h"
@@ -52,6 +53,7 @@
 #include "services/network/public/cpp/features.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/common/storage_key/storage_key.h"
 #include "third_party/blink/public/common/switches.h"
 #include "ui/base/window_open_disposition.h"
@@ -171,12 +173,11 @@ class OpenerHeuristicBrowserTest : public ContentBrowserTest,
 
   void SetUp() override {
     feature_list_.InitWithFeaturesAndParameters(
-        {
-            {content_settings::features::kTpcdHeuristicsGrants,
-             tpcd_heuristics_grants_params_},
-            {network::features::kSkipTpcdMitigationsForAds,
-             {{"SkipTpcdMitigationsForAdsHeuristics", "true"}}},
-        },
+        {{content_settings::features::kTpcdHeuristicsGrants,
+          tpcd_heuristics_grants_params_},
+         {network::features::kSkipTpcdMitigationsForAds,
+          {{"SkipTpcdMitigationsForAdsHeuristics", "true"}}},
+         {blink::features::kPartitionedPopins, {}}},
         {});
 
     OpenerHeuristicTabHelper::SetClockForTesting(&clock_);
@@ -458,6 +459,31 @@ IN_PROC_BROWSER_TEST_F(OpenerHeuristicBrowserTest,
 
 // TODO(crbug.com/40925352): Flaky on android.
 #if BUILDFLAG(IS_ANDROID)
+#define MAYBE_PopinsDoNotHavePopupState DISABLED_PopinsDoNotHavePopupState
+#else
+#define MAYBE_PopinsDoNotHavePopupState PopinsDoNotHavePopupState
+#endif
+IN_PROC_BROWSER_TEST_F(OpenerHeuristicBrowserTest,
+                       MAYBE_PopinsDoNotHavePopupState) {
+  GURL https_url = https_server_.GetURL("a.test", "/title1.html");
+  WebContents* web_contents = GetActiveWebContents();
+
+  // Initialize popup and interaction.
+  ASSERT_TRUE(NavigateToURL(web_contents, https_url));
+
+  PopupObserver observer(web_contents);
+  ASSERT_TRUE(ExecJs(web_contents,
+                     JsReplace("window.open($1, '', 'popin');", https_url)));
+  observer.Wait();
+
+  auto* popup_tab_helper =
+      OpenerHeuristicTabHelper::FromWebContents(observer.popup());
+  ASSERT_TRUE(popup_tab_helper);
+  ASSERT_FALSE(popup_tab_helper->popup_observer_for_testing());
+}
+
+// TODO(crbug.com/40925352): Flaky on android.
+#if BUILDFLAG(IS_ANDROID)
 #define MAYBE_NewTabURLsHavePopupState DISABLED_NewTabURLsHavePopupState
 #else
 #define MAYBE_NewTabURLsHavePopupState NewTabURLsHavePopupState
@@ -717,7 +743,7 @@ class OpenerHeuristicPastInteractionGrantBrowserTest
             GetParam().write_grant_enabled ? "20m" : "0s";
     tpcd_heuristics_grants_params_
         ["TpcdPopupHeuristicDisableForAdTaggedPopups"] =
-            GetParam().disable_for_ad_tagged_popups ? "true" : "false";
+            base::ToString(GetParam().disable_for_ad_tagged_popups);
   }
 
   void SetUpOnMainThread() override {
@@ -1064,7 +1090,7 @@ class OpenerHeuristicCurrentInteractionGrantBrowserTest
             GetParam().write_grant_enabled ? "20m" : "0s";
     tpcd_heuristics_grants_params_
         ["TpcdPopupHeuristicDisableForAdTaggedPopups"] =
-            GetParam().disable_for_ad_tagged_popups ? "true" : "false";
+            base::ToString(GetParam().disable_for_ad_tagged_popups);
   }
 
   void SetUpOnMainThread() override {

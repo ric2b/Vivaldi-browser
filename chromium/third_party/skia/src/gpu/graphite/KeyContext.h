@@ -11,14 +11,14 @@
 #include "include/core/SkImageInfo.h"
 #include "include/core/SkM44.h"
 #include "include/core/SkMatrix.h"
-#include "include/private/SkColorData.h"
+#include "src/core/SkColorData.h"
 #include "src/core/SkColorSpaceXformSteps.h"
 #include "src/gpu/graphite/TextureProxy.h"
 
 namespace skgpu::graphite {
 
 class Caps;
-enum class DstReadStrategy;
+enum class DstReadStrategy : uint8_t;
 class Recorder;
 class RuntimeEffectDictionary;
 class ShaderCodeDictionary;

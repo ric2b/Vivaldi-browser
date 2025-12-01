@@ -7,7 +7,10 @@
 #include "base/trace_event/trace_event.h"
 #include "third_party/blink/renderer/core/css/invalidation/invalidation_set.h"
 #include "third_party/blink/renderer/core/css/invalidation/invalidation_tracing_flag.h"
+#include "third_party/blink/renderer/core/css/resolver/scoped_style_resolver.h"
 #include "third_party/blink/renderer/core/css/style_engine.h"
+#include "third_party/blink/renderer/core/css/style_sheet_contents.h"
+#include "third_party/blink/renderer/core/inspector/style_rule_to_style_sheet_contents_map.h"
 
 namespace blink {
 
@@ -34,19 +37,74 @@ String InvalidationSetToSelectorMap::IndexedSelector::GetSelectorText() const {
   return style_rule_->SelectorAt(selector_index_).SelectorText();
 }
 
+const StyleSheetContents*
+InvalidationSetToSelectorMap::IndexedSelector::GetStyleSheetContents() const {
+  const StyleRuleToStyleSheetContentsMap* map =
+      GetInstanceReference().Get()->style_rule_to_sheet_map_;
+  return map->Lookup(style_rule_);
+}
+
 // static
 void InvalidationSetToSelectorMap::StartOrStopTrackingIfNeeded(
+    const TreeScope& tree_scope,
     StyleEngine& style_engine) {
   Persistent<InvalidationSetToSelectorMap>& instance = GetInstanceReference();
   const bool is_tracing_enabled = InvalidationTracingFlag::IsEnabled();
-  if (is_tracing_enabled && instance == nullptr) [[unlikely]] {
-    instance = MakeGarbageCollected<InvalidationSetToSelectorMap>();
+  if (is_tracing_enabled) [[unlikely]] {
+    if (instance == nullptr) {
+      instance = MakeGarbageCollected<InvalidationSetToSelectorMap>();
+    }
     // Revisit active style sheets to capture relationships for previously
     // existing rules.
-    style_engine.RevisitActiveStyleSheetsForInspector();
+    // TODO(crbug.com/337076014): Also revisit other stylesheets such as user
+    // sheets and UA sheets.
+    const ScopedStyleResolver* scoped_style_resolver =
+        tree_scope.GetScopedStyleResolver();
+    if (scoped_style_resolver != nullptr) {
+      for (const ActiveStyleSheet& sheet :
+           scoped_style_resolver->GetActiveStyleSheets()) {
+        StyleSheetContents* contents = sheet.first->Contents();
+        if (!instance->revisited_style_sheets_.Contains(contents)) {
+          instance->revisited_style_sheets_.insert(contents);
+          style_engine.RevisitStyleSheetForInspector(contents);
+        }
+      }
+    }
   } else if (!is_tracing_enabled && instance != nullptr) [[unlikely]] {
     instance.Clear();
   }
+}
+
+// static
+void InvalidationSetToSelectorMap::BeginStyleSheetContents(
+    const StyleSheetContents* contents) {
+  InvalidationSetToSelectorMap* instance = GetInstanceReference().Get();
+  if (instance == nullptr) {
+    return;
+  }
+
+  CHECK(instance->current_style_sheet_contents_ == nullptr);
+  instance->current_style_sheet_contents_ = contents;
+}
+
+// static
+void InvalidationSetToSelectorMap::EndStyleSheetContents() {
+  InvalidationSetToSelectorMap* instance = GetInstanceReference().Get();
+  if (instance == nullptr) {
+    return;
+  }
+
+  CHECK(instance->current_style_sheet_contents_ != nullptr);
+  instance->current_style_sheet_contents_.Clear();
+}
+
+InvalidationSetToSelectorMap::StyleSheetContentsScope::StyleSheetContentsScope(
+    const StyleSheetContents* contents) {
+  InvalidationSetToSelectorMap::BeginStyleSheetContents(contents);
+}
+InvalidationSetToSelectorMap::StyleSheetContentsScope::
+    ~StyleSheetContentsScope() {
+  InvalidationSetToSelectorMap::EndStyleSheetContents();
 }
 
 // static
@@ -60,6 +118,10 @@ void InvalidationSetToSelectorMap::BeginSelector(StyleRule* style_rule,
   CHECK(instance->current_selector_ == nullptr);
   instance->current_selector_ =
       MakeGarbageCollected<IndexedSelector>(style_rule, selector_index);
+
+  CHECK(instance->current_style_sheet_contents_ != nullptr);
+  instance->style_rule_to_sheet_map_->Add(
+      style_rule, instance->current_style_sheet_contents_);
 }
 
 // static
@@ -203,11 +265,16 @@ InvalidationSetToSelectorMap::Lookup(const InvalidationSet* invalidation_set,
 
 InvalidationSetToSelectorMap::InvalidationSetToSelectorMap() {
   invalidation_set_map_ = MakeGarbageCollected<InvalidationSetMap>();
+  style_rule_to_sheet_map_ =
+      MakeGarbageCollected<StyleRuleToStyleSheetContentsMap>();
 }
 
 void InvalidationSetToSelectorMap::Trace(Visitor* visitor) const {
   visitor->Trace(invalidation_set_map_);
+  visitor->Trace(revisited_style_sheets_);
+  visitor->Trace(current_style_sheet_contents_);
   visitor->Trace(current_selector_);
+  visitor->Trace(style_rule_to_sheet_map_);
 }
 
 // static

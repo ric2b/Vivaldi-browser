@@ -4,7 +4,7 @@ load("@local_config_rocm//rocm:build_defs.bzl", "if_rocm_is_configured")
 # load("//devtools/deps/check:deps_check.bzl", "check_dependencies")
 # copybara:uncomment_end
 
-load("@local_xla//xla:xla.bzl", "xla_py_proto_library")
+load("@local_xla//xla:xla.default.bzl", "xla_py_proto_library")
 load("@local_xla//xla/service/cpu:build_defs.bzl", "runtime_copts")
 load("@local_xla//xla/tsl/mkl:build_defs.bzl", "mkl_deps")
 load("@local_xla//xla/tsl/platform:build_config_root.bzl", "if_static")
@@ -175,13 +175,13 @@ cc_library(
         ":xla_compiler",
         "//tensorflow/compiler/jit",
         "//tensorflow/compiler/mlir/tensorflow:device_util",
-        "//tensorflow/compiler/mlir/tensorflow:import_model",
         "//tensorflow/compiler/mlir/tensorflow:import_utils",
         "//tensorflow/compiler/mlir/tensorflow:mlir_roundtrip_flags",
         "//tensorflow/compiler/mlir/tensorflow/transforms:bridge",
         "//tensorflow/compiler/mlir/tensorflow/transforms:tf_dialect_passes",
         "//tensorflow/compiler/mlir/tensorflow/translate/tools:parsers",
         "//tensorflow/compiler/mlir/tf2xla:compile_mlir_util",
+        "//tensorflow/compiler/mlir/tf2xla/api/v2:graph_to_tf_executor",
         "//tensorflow/core:core_cpu_base",
         "//tensorflow/core:framework",
         "//tensorflow/core:framework_types_hdr",
@@ -198,6 +198,7 @@ cc_library(
         "@local_tsl//tsl/platform:statusor",
         "@local_xla//xla/client",
         "@local_xla//xla/hlo/builder:xla_computation",
+        "@local_xla//xla/tsl/platform:statusor",
     ],
 )
 
@@ -226,6 +227,7 @@ filegroup(
         "@local_xla//xla/tsl/concurrency:xla_cpu_runtime_hdrs",
         "@local_xla//xla/tsl/framework:xla_cpu_runtime_hdrs",
         "@local_xla//xla/tsl/framework/fixedpoint:xla_cpu_runtime_hdrs",
+        "@local_xla//xla/tsl/lib/math:xla_cpu_runtime_hdrs",
     ],
     visibility = [
         "//tensorflow/tools/pip_package:__pkg__",
@@ -1039,6 +1041,7 @@ tf_cc_test(
         "@local_xla//xla/client:local_client",
         "@local_xla//xla/hlo/builder:xla_builder",
         "@local_xla//xla/service:cpu_plugin",
+        "@local_xla//xla/service:hlo_module_util",
         "@local_xla//xla/service:hlo_proto_cc",
         "@local_xla//xla/service:hlo_proto_util",
         "@local_xla//xla/tests:literal_test_util",
@@ -1133,7 +1136,6 @@ tf_gen_op_wrapper_py(
 cuda_py_strict_test(
     name = "light_outside_compilation_test",
     srcs = ["light_outside_compilation_test.py"],
-    python_version = "PY3",
     tags = [
         "no_oss",
     ],

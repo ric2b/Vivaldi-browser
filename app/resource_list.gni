@@ -202,7 +202,7 @@ ANDROID_VIVALDI_RESOURCE_LIST = [
   ],
   [
     "//components/browser_ui/strings/android:browser_ui_strings_grd__grit",
-    "//vivaldi/app/resources/android-browser-ui/vivaldi_browser_ui_string.grd",
+    "//vivaldi/app/resources/android-browser-ui/vivaldi_browser_ui_strings.grd",
     {
       have_strings_flag = true
       translation_dir_setting = "translations"
@@ -255,6 +255,20 @@ ANDROID_VIVALDI_RESOURCE_LIST = [
       source = "android_webapps_strings.grd"
       vivaldi_translation_dir_setting = "strings"
       string_file_prefix="android_webapps_strings_"
+    },
+  ],
+  [
+    "//content/public/android:content_strings_grd__grit",
+    "//vivaldi/app/resources/android_content/vivaldi_android_content_strings.grd",
+    {
+      have_strings_flag = true
+      translation_dir_setting = "java/strings/translations"
+      pak_file_locale_prefix="values-"
+      pak_file_prefix="android_content_strings"
+      pak_file_extension = "xml"
+      source = "java/strings/android_content_strings.grd"
+      vivaldi_translation_dir_setting = "strings"
+      string_file_prefix="android_content_strings_"
     },
   ],
 ]

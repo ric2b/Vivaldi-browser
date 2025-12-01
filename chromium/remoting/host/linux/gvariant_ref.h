@@ -7,6 +7,7 @@
 
 #include <glib-object.h>
 #include <glib.h>
+#include <glibconfig.h>
 
 #include <algorithm>
 #include <array>
@@ -14,9 +15,8 @@
 #include <concepts>
 #include <cstddef>
 #include <cstdint>
-#include <functional>
+#include <cstring>
 #include <iterator>
-#include <locale>
 #include <map>
 #include <optional>
 #include <ranges>
@@ -30,12 +30,14 @@
 
 #include "base/check.h"
 #include "base/check_op.h"
-#include "base/containers/span.h"
+#include "base/compiler_specific.h"
+#include "base/location.h"
 #include "base/memory/raw_ptr.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/types/expected.h"
+#include "remoting/host/base/loggable.h"
 #include "remoting/host/linux/gvariant_type.h"
 
 // Provides a scoped wrapper, GVariantRef, around a GLib Variant to handle
@@ -148,7 +150,7 @@ namespace gvariant {
 //     GVariantRef<"mb"> variant = ...;
 //     bool b;
 //     // result will contain an error if the maybe value is unexpectedly empty.
-//     base::expected<void> result = variant.TryDestructure(b);
+//     base::expected<void, Loggable> result = variant.TryDestructure(b);
 //
 // Access to the underlying GVariant pointer can be obtained via raw() and
 // release(). A GVariantRef can be created from a raw GVariant pointer via
@@ -242,8 +244,25 @@ namespace gvariant {
 //     must be used to check if the array is, in fact, empty.
 // gvariant::ObjectPath (type code "o") - Wrapper around a std::string that
 //     contains a DBus object path.
+// gvariant::ObjectPathCStr ([Try]From() only, type code "o") - An owned object
+//     path that can be used as a function parameter (somewhat analogous to a
+//     string_view) or to hold a compile-time-verified object path constant.
 // gvariant::TypeSignature (type code "g") - Wrapper around a std::string
 //     that contains a DBus type signature.
+// gvariant::TypeSignatureCStr ([Try]From() only, type code "g") - An owned type
+//     signature that can be used as a function parameter (somewhat analogous to
+//     a string_view) or to hold a compile-time-verified type signature
+//     constant.
+//
+// Convenience functions:
+//
+// GVariantFrom(value) - Like GVariantRef<C>::From(), but infers C from value's
+//     type.
+// gvariant::BoxedRef(value) - Returns a gvariant::Boxed that holds a const
+//     reference to value. (Whereas Boxed{value} would hold a copy of value.)
+// gvariant::FilledMaybeRef(value) - Returns a gvariant::FilledMaybe that holds
+//     a const reference to value. (Whereas FilledMaybe{value} would hold a copy
+//     of value.)
 template <Type C = Type("*")>
 class GVariantRef;
 
@@ -266,7 +285,7 @@ class GVariantRef;
 // GVariantRef<kType>, e.g.,
 //
 //     static GVariantRef<kType> From(const T&);
-//     static base::expected<GVariantRef<kType>> TryFrom(const T&);
+//     static base::expected<GVariantRef<kType>, Loggable> TryFrom(const T&);
 //
 // Usually a specialization will provide one or the other.
 //
@@ -275,7 +294,7 @@ class GVariantRef;
 // value of the type, e.g.,
 //
 //     static T Into(const GVariantRef<kType>&);
-//     static std::expected<T, std::string> TryInto(const GVariantRef<kType>&);
+//     static base::expected<T, Loggable> TryInto(const GVariantRef<kType>&);
 //
 // Usually a specialization will provide one or the other, with one exception:
 // In the event that infallible conversion is possible for only some subtypes of
@@ -284,7 +303,7 @@ class GVariantRef;
 // the definition might look like this:
 //
 //     static constexpr Type kType{"?"};
-//     static std::expected<T, std::string> TryInto(const GVariantRef<kType>&);
+//     static base::expected<T, Loggable> TryInto(const GVariantRef<kType>&);
 //     static T Into(const GVariantRef<"i">&);
 //     static T Into(const GVariantRef<"s">&);
 //
@@ -313,6 +332,8 @@ class GVariantBase {
   // be definite.
   Type<> GetType() const;
 
+  friend bool operator==(const GVariantBase& lhs, const GVariantBase& rhs);
+
  protected:
   // clang-format off
   static constexpr struct {} kTake;
@@ -329,11 +350,11 @@ class GVariantBase {
   GVariantBase& operator=(GVariantBase&& other);
   ~GVariantBase();
 
-  bool operator==(const GVariantBase& other) const;
-
  private:
   raw_ptr<GVariant> variant_;
 };
+
+bool operator==(const GVariantBase& lhs, const GVariantBase& rhs);
 
 template <Type C>
 class GVariantRef : public GVariantBase {
@@ -375,7 +396,7 @@ class GVariantRef : public GVariantBase {
 
   // Constructs a new GVariantRef from the provided value, if possible.
   template <typename T>
-  static base::expected<GVariantRef, std::string> TryFrom(const T& value)
+  static base::expected<GVariantRef, Loggable> TryFrom(const T& value)
     requires(Mapping<T>::kType.HasCommonTypeWith(C) &&
              (requires { Mapping<T>::TryFrom(value); } ||
               requires { Mapping<T>::From(value); }));
@@ -391,7 +412,7 @@ class GVariantRef : public GVariantBase {
   // possible. Fails to compile if the conversion can statically be determined
   // never to succeed.
   template <typename T>
-  base::expected<T, std::string> TryInto() const
+  base::expected<T, Loggable> TryInto() const
     requires(C.HasCommonTypeWith(Mapping<T>::kType) &&
              (requires(GVariantRef<Mapping<T>::kType> v) {
                 Mapping<T>::TryInto(v);
@@ -417,7 +438,7 @@ class GVariantRef : public GVariantBase {
   // indeterminate state, as some values may have been read prior to the error
   // occurring.
   template <typename... Types>
-  base::expected<void, std::string> TryDestructure(Types&&... refs) const;
+  base::expected<void, Loggable> TryDestructure(Types&&... refs) const;
 
   // Iterate through the values of a container GVariant. The value type will be
   // GVariant<TypeBase::ContainedType(C)>.
@@ -499,13 +520,16 @@ class GVariantRef : public GVariantBase {
   static GVariantRef RefUnchecked(GVariant* variant);
   static GVariantRef RefSinkUnchecked(GVariant* variant);
 
-  template <Type D>
-  bool operator==(const GVariantRef<D>& other) const
-    requires(C.HasCommonTypeWith(D));
-
  private:
   using GVariantBase::GVariantBase;
 };
+
+// Constructs a new GVariantRef from the provided value, inferring the type
+// string.
+template <typename T>
+static GVariantRef<Mapping<T>::kType> GVariantFrom(const T& value) {
+  return GVariantRef<Mapping<T>::kType>::From(value);
+}
 
 // Wrapper types and special types
 
@@ -519,47 +543,180 @@ struct Ignored {};
 template <typename T>
 struct Boxed {
   T value;
-
-  bool operator==(const Boxed& other) const = default;
 };
+
+template <typename T, typename U>
+bool operator==(const Boxed<T>& lhs, const Boxed<U>& rhs)
+  requires requires(T t, U u) { t == u; }
+{
+  return lhs.value == rhs.value;
+}
+
+// Returns a gvariant::Boxed that holds a const reference to value. (Whereas
+// Boxed{value} would hold a copy of value.) Useful to avoid making an extra
+// copy when constructing a GVariantRef.
+template <typename T>
+Boxed<const T&> BoxedRef(const T& value LIFETIME_BOUND) {
+  return {value};
+}
 
 // Wrapper for a value that should appear inside a maybe, but will always be
 // present.
 template <typename T>
 struct FilledMaybe {
   T value;
-
-  bool operator==(const FilledMaybe& other) const = default;
 };
+
+template <typename T, typename U>
+bool operator==(const FilledMaybe<T>& lhs, const FilledMaybe<U>& rhs)
+  requires requires(T t, U u) { t == u; }
+{
+  return lhs.value == rhs.value;
+}
+
+// Returns a gvariant::FilledMaybe that holds a const reference to value.
+// (Whereas FilledMaybe{value} would hold a copy of value.) Useful to avoid
+// making an extra copy when constructing a GVariantRef.
+template <typename T>
+FilledMaybe<const T&> FilledMaybeRef(const T& value LIFETIME_BOUND) {
+  return {value};
+}
 
 // Represents an empty array of the given type.
 template <Type C>
 struct EmptyArrayOf {};
 
-// Represents a D-Bus object path.
-class ObjectPath {
- public:
-  static base::expected<ObjectPath, std::string> TryFrom(std::string path);
-  const std::string& value() const;
+class ObjectPath;
 
-  bool operator==(const ObjectPath& other) const = default;
+// Holds an unowned pointer to a null-terminated string known to be a valid
+// D-Bus object path.
+class ObjectPathCStr {
+ public:
+  // Constructs from a compile-time constant. The passed string is checked at
+  // compile time to be a valid object path.
+  // Allows implicit construction so string constants can easily be passed to
+  // ObjectPathCStr parameters.
+  // NOLINTNEXTLINE(google-explicit-constructor)
+  consteval ObjectPathCStr(const char* path);
+  // Constructs from an ObjectPath object. The resulting ObjectPathCStr is only
+  // valid as long as the ObjectPath to which it refers.
+  // Allows explicit construction so ObjectPaths can easily be passed to
+  // ObjectPathCStr parameters.
+  // NOLINTNEXTLINE(google-explicit-constructor)
+  ObjectPathCStr(const ObjectPath& path LIFETIME_BOUND);
+
+  // Attempts to construct from an existing C string. Returns an error string
+  // if |path| is not a valid object path.
+  static base::expected<ObjectPathCStr, Loggable> TryFrom(
+      const char* path LIFETIME_BOUND);
+
+  // Gets the object path C string.
+  constexpr const char* c_str() const LIFETIME_BOUND;
+
+  friend constexpr bool operator==(const ObjectPathCStr& lhs,
+                                   const ObjectPathCStr& rhs);
 
  private:
-  explicit ObjectPath(std::string);
+  struct Checked {};
+  // Construct from already-checked path. Extra parameter to avoid conflicting
+  // with consteval constructor.
+  ObjectPathCStr(const char* path LIFETIME_BOUND, Checked);
+
+  const char* path_;
+};
+
+constexpr bool operator==(const ObjectPathCStr& lhs, const ObjectPathCStr& rhs);
+
+// Represents an owned D-Bus object path.
+class ObjectPath {
+ public:
+  // Constructs an instance of the root path "/"
+  ObjectPath();
+
+  // Constructs an owned copy of |path|.
+  explicit ObjectPath(ObjectPathCStr path);
+
+  // Attempts to construct from an existing std::string. Returns an error string
+  // if |path| is not a valid object path.
+  static base::expected<ObjectPath, Loggable> TryFrom(std::string path);
+
+  // Gets the object path.
+  const std::string& value() const LIFETIME_BOUND;
+
+  // Shorthand for .value().c_str()
+  const char* c_str() const LIFETIME_BOUND;
+
+ private:
+  // Construct from already-checked path.
+  explicit ObjectPath(std::string path);
   std::string path_;
   friend struct Mapping<ObjectPath>;
 };
 
-// Represents a D-Bus type signature.
-class TypeSignature {
- public:
-  static base::expected<TypeSignature, std::string> TryFrom(
-      std::string signature);
-  const std::string& value() const;
+class TypeSignature;
 
-  bool operator==(const TypeSignature& other) const = default;
+// Holds an unowned pointer to a null-terminated string known to be a valid
+// D-Bus type signature.
+class TypeSignatureCStr {
+ public:
+  // Constructs from a compile-time constant. The passed string is checked at
+  // compile time to be a valid type signature.
+  // Allows implicit construction so string constants can easily be passed to
+  // TypeSignatureCStr parameters.
+  // NOLINTNEXTLINE(google-explicit-constructor)
+  consteval TypeSignatureCStr(const char* signature);
+
+  // Constructs from a TypeSignature object. The resulting TypeSignatureCStr is
+  // only valid as long as the TypeSignature to which it refers.
+  // Allows implicit construction so TypeSignatures can easily be passed to
+  // TypeSignatureCStr parameters.
+  // NOLINTNEXTLINE(google-explicit-constructor)
+  TypeSignatureCStr(const TypeSignature& signature LIFETIME_BOUND);
+
+  // Attempts to construct from an existing C string. Returns an error if
+  // |signature| is not a valid type signature.
+  static base::expected<TypeSignatureCStr, Loggable> TryFrom(
+      const char* signature LIFETIME_BOUND);
+
+  // Gets the type signature C string.
+  constexpr const char* c_str() const LIFETIME_BOUND;
+
+  friend constexpr bool operator==(const TypeSignatureCStr& lhs,
+                                   const TypeSignatureCStr& rhs);
 
  private:
+  struct Checked {};
+  // Construct from already-checked path. Extra parameter to avoid conflicting
+  // with consteval constructor.
+  TypeSignatureCStr(const char* signature LIFETIME_BOUND, Checked);
+
+  const char* signature_;
+};
+
+constexpr bool operator==(const TypeSignatureCStr& lhs,
+                          const TypeSignatureCStr& rhs);
+
+// Represents an owned D-Bus type signature.
+class TypeSignature {
+ public:
+  // Constructs an empty type signature.
+  TypeSignature();
+
+  // Constructs an owned copy of |signature|.
+  explicit TypeSignature(TypeSignatureCStr signature);
+
+  // Attempts to construct from an existing std::string. Returns an error if
+  // |signature| is not a valid type signature.
+  static base::expected<TypeSignature, Loggable> TryFrom(std::string signature);
+
+  // Gets the type signature.
+  const std::string& value() const LIFETIME_BOUND;
+
+  // Shorthand for .value().c_str()
+  const char* c_str() const LIFETIME_BOUND;
+
+ private:
+  // Construct from already-checked signature.
   explicit TypeSignature(std::string);
   std::string signature_;
   friend struct Mapping<TypeSignature>;
@@ -654,7 +811,7 @@ GVariantRef<C> GVariantRef<C>::From(const T& value)
 // static
 template <Type C>
 template <typename T>
-base::expected<GVariantRef<C>, std::string> GVariantRef<C>::TryFrom(
+base::expected<GVariantRef<C>, Loggable> GVariantRef<C>::TryFrom(
     const T& value)
   requires(Mapping<T>::kType.HasCommonTypeWith(C) &&
            (requires { Mapping<T>::TryFrom(value); } ||
@@ -679,7 +836,7 @@ T GVariantRef<C>::Into() const
 
 template <Type C>
 template <typename T>
-base::expected<T, std::string> GVariantRef<C>::TryInto() const
+base::expected<T, Loggable> GVariantRef<C>::TryInto() const
   requires(C.HasCommonTypeWith(Mapping<T>::kType) &&
            (requires(GVariantRef<Mapping<T>::kType> v) {
               Mapping<T>::TryInto(v);
@@ -693,9 +850,10 @@ base::expected<T, std::string> GVariantRef<C>::TryInto() const
       return GVariantRef<Mapping<T>::kType>::RefUnchecked(raw())
           .template TryInto<T>();
     } else {
-      return base::unexpected(
+      return base::unexpected(Loggable(
+          FROM_HERE,
           base::StrCat({"Expected type: ", Mapping<T>::kType.string_view(),
-                        " Found: ", GetType().string_view()}));
+                        " Found: ", GetType().string_view()})));
     }
   } else if constexpr (requires { Mapping<T>::TryInto(*this); }) {
     return Mapping<T>::TryInto(*this);
@@ -735,22 +893,24 @@ void GVariantRef<C>::Destructure(Types&&... refs) const {
 
 template <Type C>
 template <typename... Types>
-base::expected<void, std::string> GVariantRef<C>::TryDestructure(
+base::expected<void, Loggable> GVariantRef<C>::TryDestructure(
     Types&&... refs) const {
   static_assert((... && (std::is_lvalue_reference_v<Types> ||
                          requires { std::tuple_size_v<Types>; })));
 
   if (!g_variant_is_container(raw())) {
-    return base::unexpected("Destructured GVariant is not a container.");
+    return base::unexpected(
+        Loggable(FROM_HERE, "Destructured GVariant is not a container."));
   }
 
   if (std::size_t size = g_variant_n_children(raw()); size != sizeof...(refs)) {
-    return base::unexpected(base::StringPrintf(
-        "Incorrect number of elements. Expected: %zd Found: %zd",
-        sizeof...(refs), size));
+    return base::unexpected(Loggable(
+        FROM_HERE, base::StringPrintf(
+                       "Incorrect number of elements. Expected: %zd Found: %zd",
+                       sizeof...(refs), size)));
   }
 
-  base::expected<void, std::string> result;
+  base::expected<void, Loggable> result;
 
   [&]<std::size_t... Is>(std::index_sequence<Is...>) {
     ([&]() {
@@ -759,7 +919,8 @@ base::expected<void, std::string> GVariantRef<C>::TryDestructure(
       if constexpr (std::is_lvalue_reference_v<Types>) {
         auto value = inner_variant.TryInto<std::remove_reference_t<Types>>();
         if (!value.has_value()) {
-          result = base::unexpected(std::move(value).error());
+          result = std::move(value).error().UnexpectedWithContext(
+              FROM_HERE, "While destructuring container");
           return false;
         }
         refs = value.value();
@@ -883,12 +1044,87 @@ GVariantRef<C> GVariantRef<C>::RefSinkUnchecked(GVariant* variant) {
   return GVariantRef<C>(kRefSink, variant);
 }
 
-template <Type C>
-template <Type D>
-bool GVariantRef<C>::operator==(const GVariantRef<D>& other) const
-  requires(C.HasCommonTypeWith(D))
-{
-  return GVariantBase::operator==(other);
+// Wrapper implementation
+
+consteval ObjectPathCStr::ObjectPathCStr(const char* path) {
+  // SAFETY: Since this constructor is consteval, it can only execute at compile
+  // time. Thus, a read past the end triggered by a missing null terminator will
+  // result in a compile-time error, with no risk at runtime.
+
+  // TODO: bug 400761089 - Remove UNSAFE_BUFFERS annotations when Clang no
+  // longer flags consteval code.
+
+  // CHECKs cannot actually print messages at compile time, but a failed check
+  // will trigger a compiler error pointing to the failed check, allowing the
+  // message to be seen in the source code.
+  CHECK_EQ(*path, '/') << "Path must start with a '/'";
+  const char* prev_char = path;
+  const char* current_char = UNSAFE_BUFFERS(path + 1);
+  while (*current_char != '\0') {
+    CHECK((*current_char >= 'A' && *current_char <= 'Z') ||
+          (*current_char >= 'a' && *current_char <= 'z') ||
+          (*current_char >= '0' && *current_char <= '9') ||
+          *current_char == '_' || *current_char == '/')
+        << "Path contains invalid character";
+    CHECK(*prev_char != '/' || *current_char != '/')
+        << "Two '/' characters may not appear in a row";
+    UNSAFE_BUFFERS(++prev_char);
+    UNSAFE_BUFFERS(++current_char;)
+  }
+  CHECK(*prev_char != '/' || prev_char == path)
+      << "Path may not end in '/' unless the whole path is only a single '/' "
+         "referring to the root path";
+  path_ = path;
+}
+
+constexpr const char* ObjectPathCStr::c_str() const {
+  return path_;
+}
+
+constexpr bool operator==(const ObjectPathCStr& lhs,
+                          const ObjectPathCStr& rhs) {
+  if (std::is_constant_evaluated()) {
+    return std::string_view(lhs.c_str()) == std::string_view(rhs.c_str());
+  } else {
+    return UNSAFE_TODO(std::strcmp(lhs.c_str(), rhs.c_str())) == 0;
+  }
+}
+
+consteval TypeSignatureCStr::TypeSignatureCStr(const char* signature) {
+  // SAFETY: Since this constructor is consteval, it can only execute at compile
+  // time. Thus, a read past the end triggered by a missing null terminator will
+  // result in a compile-time error, with no risk at runtime.
+
+  // TODO: bug 400761089 - Remove UNSAFE_BUFFERS annotations when Clang no
+  // longer flags consteval code.
+
+  // CHECKs cannot actually print messages at compile time, but a failed check
+  // will trigger a compiler error pointing to the failed check, allowing the
+  // message to be seen in the source code.
+  CHECK(Type("(", signature, ")").IsValid()) << "Not a valid signature";
+  CHECK(Type("(", signature, ")").IsDefinite()) << "Signature must be definite";
+  char prev_char = '\0';
+  for (const char* current_char = signature; *current_char != '\0';
+       UNSAFE_BUFFERS(++current_char)) {
+    CHECK(*current_char != 'm') << "Maybe type not valid in D-Bus signature";
+    CHECK(*current_char != '{' || prev_char == 'a')
+        << "Dict entry not part of a dictionary.";
+    prev_char = *current_char;
+  }
+  signature_ = signature;
+}
+
+constexpr const char* TypeSignatureCStr::c_str() const {
+  return signature_;
+}
+
+constexpr bool operator==(const TypeSignatureCStr& lhs,
+                          const TypeSignatureCStr& rhs) {
+  if (std::is_constant_evaluated()) {
+    return std::string_view(lhs.c_str()) == std::string_view(rhs.c_str());
+  } else {
+    return UNSAFE_TODO(std::strcmp(lhs.c_str(), rhs.c_str())) == 0;
+  }
 }
 
 // Iterator implementation
@@ -1081,7 +1317,7 @@ struct Mapping<std::string> {
   // Crashes if string is not valid UTF-8.
   static GVariantRef<kType> From(const std::string& value);
   // Fails if string is not valid UTF-8.
-  static base::expected<GVariantRef<kType>, std::string> TryFrom(
+  static base::expected<GVariantRef<kType>, Loggable> TryFrom(
       const std::string& value);
   static std::string Into(const GVariantRef<kType>& variant);
 };
@@ -1092,7 +1328,7 @@ struct Mapping<std::string_view> {
   // Crashes if string is not valid UTF-8.
   static GVariantRef<kType> From(std::string_view value);
   // Fails if string is not valid UTF-8.
-  static base::expected<GVariantRef<kType>, std::string> TryFrom(
+  static base::expected<GVariantRef<kType>, Loggable> TryFrom(
       std::string_view value);
 };
 
@@ -1102,7 +1338,7 @@ struct Mapping<const char*> {
   // Crashes if string is not valid UTF-8.
   static GVariantRef<kType> From(const char* value);
   // Fails if string is not valid UTF-8.
-  static base::expected<GVariantRef<kType>, std::string> TryFrom(
+  static base::expected<GVariantRef<kType>, Loggable> TryFrom(
       const char* value);
 };
 
@@ -1127,7 +1363,7 @@ struct Mapping<std::optional<T>> {
         g_variant_new_maybe(kInnerType.gvariant_type(), child));
   }
 
-  static base::expected<GVariantRef<kType>, std::string> TryFrom(
+  static base::expected<GVariantRef<kType>, Loggable> TryFrom(
       const std::optional<T>& value)
     requires(requires(T v) { GVariantRef<kInnerType>::TryFrom(v); })
   {
@@ -1141,8 +1377,8 @@ struct Mapping<std::optional<T>> {
       return base::ok(
           GVariantRef<kType>::From(std::optional<GVariantRef<kInnerType>>()));
     } else {
-      return base::unexpected(
-          "Can't convert indefinite optional with no value.");
+      return base::unexpected(Loggable(
+          FROM_HERE, "Can't convert indefinite optional with no value."));
     }
   }
 
@@ -1157,7 +1393,7 @@ struct Mapping<std::optional<T>> {
     }
   }
 
-  static base::expected<std::optional<T>, std::string> TryInto(
+  static base::expected<std::optional<T>, Loggable> TryInto(
       const GVariantRef<kType>& variant)
     requires(requires(GVariantRef<kInnerType> v) { v.template TryInto<T>(); })
   {
@@ -1187,10 +1423,11 @@ GVariantRef<kType> FromRange(const R& value)
 }
 
 template <Type kType, Type kInnerType, typename R>
-static base::expected<GVariantRef<kType>, std::string> TryFromRange(
+static base::expected<GVariantRef<kType>, Loggable> TryFromRange(
     const R& value) {
   if (!kInnerType.IsDefinite() && value.empty()) {
-    return base::unexpected("Can't convert empty indefinite array");
+    return base::unexpected(
+        Loggable(FROM_HERE, "Can't convert empty indefinite array"));
   }
 
   std::optional<Type<>> inner_type;
@@ -1207,7 +1444,8 @@ static base::expected<GVariantRef<kType>, std::string> TryFromRange(
         inner_type = converted->GetType();
       } else if (!converted->GetType().IsSubtypeOf(inner_type.value())) {
         g_variant_builder_clear(&builder);
-        return base::unexpected("Mismatched types in array");
+        return base::unexpected(
+            Loggable(FROM_HERE, "Mismatched types in array"));
       }
     }
     g_variant_builder_add_value(&builder, converted->raw());
@@ -1235,7 +1473,7 @@ struct Mapping<std::vector<T>> {
     return internal::FromRange<kType, kInnerType>(value);
   }
 
-  static base::expected<GVariantRef<kType>, std::string> TryFrom(
+  static base::expected<GVariantRef<kType>, Loggable> TryFrom(
       const std::vector<T>& value)
     requires(requires(T v) { GVariantRef<kInnerType>::TryFrom(v); })
   {
@@ -1256,7 +1494,7 @@ struct Mapping<std::vector<T>> {
     return result;
   }
 
-  static base::expected<std::vector<T>, std::string> TryInto(
+  static base::expected<std::vector<T>, Loggable> TryInto(
       const GVariantRef<kType>& variant)
     requires(requires(GVariantRef<kInnerType> v) { v.template TryInto<T>(); })
   {
@@ -1292,7 +1530,7 @@ struct Mapping<std::map<K, T>> {
     return internal::FromRange<kType, kInnerType>(value);
   }
 
-  static base::expected<GVariantRef<kType>, std::string> TryFrom(
+  static base::expected<GVariantRef<kType>, Loggable> TryFrom(
       const std::map<K, T>& value)
     requires(requires(std::pair<K, T> v) {
       GVariantRef<kInnerType>::TryFrom(v);
@@ -1316,7 +1554,7 @@ struct Mapping<std::map<K, T>> {
     return result;
   }
 
-  static base::expected<std::map<K, T>, std::string> TryInto(
+  static base::expected<std::map<K, T>, Loggable> TryInto(
       const GVariantRef<kType>& variant)
     requires(requires(GVariantRef<kInnerType> v) {
       v.template TryInto<std::pair<K, T>>();
@@ -1357,7 +1595,7 @@ struct Mapping<std::pair<K, T>> {
         g_variant_new_dict_entry(key.raw(), value.raw()));
   }
 
-  static base::expected<GVariantRef<kType>, std::string> TryFrom(
+  static base::expected<GVariantRef<kType>, Loggable> TryFrom(
       const std::pair<K, T>& pair)
     requires(requires(K k, T v) {
       GVariantRef<kKeyType>::TryFrom(k);
@@ -1391,7 +1629,7 @@ struct Mapping<std::pair<K, T>> {
                      value_gvariant.template Into<T>());
   }
 
-  static base::expected<std::pair<K, T>, std::string> TryInto(
+  static base::expected<std::pair<K, T>, Loggable> TryInto(
       const GVariantRef<kType>& variant)
     requires(requires(GVariantRef<kKeyType> k, GVariantRef<kValueType> v) {
       k.template TryInto<K>();
@@ -1434,7 +1672,7 @@ struct Mapping<R> {
     return internal::FromRange<kType, kInnerType>(value);
   }
 
-  static base::expected<GVariantRef<kType>, std::string> TryFrom(const R& value)
+  static base::expected<GVariantRef<kType>, Loggable> TryFrom(const R& value)
     requires(requires(std::ranges::range_value_t<R> v) {
       GVariantRef<kInnerType>::TryFrom(v);
     })
@@ -1467,7 +1705,7 @@ struct Mapping<std::tuple<Types...>> {
     return GVariantRef<kType>::TakeUnchecked(g_variant_builder_end(&builder));
   }
 
-  static base::expected<GVariantRef<kType>, std::string> TryFrom(
+  static base::expected<GVariantRef<kType>, Loggable> TryFrom(
       const std::tuple<Types...>& value)
     requires(requires(Types... v) {
       (GVariantRef<Mapping<Types>::kType>::TryFrom(v), ...);
@@ -1501,7 +1739,7 @@ struct Mapping<std::tuple<Types...>> {
         gvariant_items);
   }
 
-  static base::expected<std::tuple<Types...>, std::string> TryInto(
+  static base::expected<std::tuple<Types...>, Loggable> TryInto(
       const GVariantRef<kType>& variant)
     requires(requires(GVariantRef<Mapping<Types>::kType>... v) {
       (v.template TryInto<Types>(), ...);
@@ -1520,14 +1758,14 @@ struct Mapping<std::tuple<Types...>> {
  private:
   // Attempt to turn a tuple of Ts into a tuple of GVariantRefs
   template <typename T = void>
-  static base::expected<std::tuple<>, std::string> TupleTryFrom() {
+  static base::expected<std::tuple<>, Loggable> TupleTryFrom() {
     return base::ok(std::tuple());
   }
 
   template <typename T, typename... Ts>
   static base::expected<std::tuple<GVariantRef<Mapping<T>::kType>,
                                    GVariantRef<Mapping<Ts>::kType>...>,
-                        std::string>
+                        Loggable>
   TupleTryFrom(const T& first, const Ts&... rest) {
     auto first_result = GVariantRef<Mapping<T>::kType>::TryFrom(first);
     if (!first_result.has_value()) {
@@ -1543,12 +1781,12 @@ struct Mapping<std::tuple<Types...>> {
 
   // Attempt to turn a tuple of GVariantRefs into a tuple of Ts
   template <typename T = void>
-  static base::expected<std::tuple<>, std::string> TupleTryInto() {
+  static base::expected<std::tuple<>, Loggable> TupleTryInto() {
     return base::ok(std::tuple());
   }
 
   template <typename T, typename... Ts>
-  static base::expected<std::tuple<T, Ts...>, std::string> TupleTryInto(
+  static base::expected<std::tuple<T, Ts...>, Loggable> TupleTryInto(
       const GVariantRef<Mapping<T>::kType>& first,
       const GVariantRef<Mapping<Ts>::kType>&... rest) {
     auto first_result = first.template TryInto<T>();
@@ -1584,12 +1822,12 @@ struct Mapping<std::variant<Types...>> {
     }(std::index_sequence_for<Types...>());
   }
 
-  static base::expected<GVariantRef<kType>, std::string> TryFrom(
+  static base::expected<GVariantRef<kType>, Loggable> TryFrom(
       const std::variant<Types...>& value)
     requires(requires(Types... v) { (GVariantRef<kType>::TryFrom(v), ...); })
   {
     return [&]<std::size_t... Is>(std::index_sequence<Is...>) {
-      std::optional<base::expected<GVariantRef<kType>, std::string>> result;
+      std::optional<base::expected<GVariantRef<kType>, Loggable>> result;
       ((std::ignore =
             value.index() == Is &&
             (result.emplace(GVariantRef<kType>::TryFrom(std::get<Is>(value))),
@@ -1618,7 +1856,7 @@ struct Mapping<std::variant<Types...>> {
     return VariantInto<C, 0, Types...>(variant);
   }
 
-  static base::expected<std::variant<Types...>, std::string> TryInto(
+  static base::expected<std::variant<Types...>, Loggable> TryInto(
       const GVariantRef<kType>& variant)
       // TryInto is only provided if it is provided by at least one alternative.
     requires(... || requires { variant.template TryInto<Types>(); })
@@ -1628,13 +1866,14 @@ struct Mapping<std::variant<Types...>> {
 
  private:
   template <std::size_t I>
-  static base::expected<std::variant<Types...>, std::string> VariantTryInto(
+  static base::expected<std::variant<Types...>, Loggable> VariantTryInto(
       const GVariantRef<kType>& variant) {
-    return base::unexpected("No variant alternative could decode value");
+    return base::unexpected(
+        Loggable(FROM_HERE, "No variant alternative could decode value"));
   }
 
   template <std::size_t I, typename T, typename... Ts>
-  static base::expected<std::variant<Types...>, std::string> VariantTryInto(
+  static base::expected<std::variant<Types...>, Loggable> VariantTryInto(
       const GVariantRef<kType>& variant) {
     if constexpr (requires { variant.template TryInto<T>(); }) {
       auto alternative_result = variant.template TryInto<T>();
@@ -1691,7 +1930,7 @@ struct Mapping<Boxed<T>> {
         g_variant_new_variant(GVariantRef<>::From(value.value).raw()));
   }
 
-  static base::expected<GVariantRef<kType>, std::string> TryFrom(
+  static base::expected<GVariantRef<kType>, Loggable> TryFrom(
       const Boxed<T>& value)
     requires(requires(T v) { GVariantRef<>::TryFrom(v); })
   {
@@ -1709,7 +1948,7 @@ struct Mapping<Boxed<T>> {
         GVariantRef<>::Take(g_variant_get_variant(variant.raw())).Into<T>()};
   }
 
-  static base::expected<Boxed<T>, std::string> TryInto(
+  static base::expected<Boxed<T>, Loggable> TryInto(
       const GVariantRef<kType>& variant)
     requires(requires(GVariantRef<> v) { v.TryInto<T>(); })
   {
@@ -1730,7 +1969,7 @@ struct Mapping<FilledMaybe<T>> {
         nullptr, GVariantRef<kInnerType>::From(value.value).raw()));
   }
 
-  static base::expected<GVariantRef<kType>, std::string> TryFrom(
+  static base::expected<GVariantRef<kType>, Loggable> TryFrom(
       const FilledMaybe<T>& value)
     requires(requires(T v) { GVariantRef<kInnerType>::TryFrom(v); })
   {
@@ -1741,13 +1980,14 @@ struct Mapping<FilledMaybe<T>> {
     return base::ok(GVariantRef<kType>::From(FilledMaybe{result.value()}));
   }
 
-  static base::expected<FilledMaybe<T>, std::string> TryInto(
+  static base::expected<FilledMaybe<T>, Loggable> TryInto(
       const GVariantRef<kType>& variant)
     requires(requires(GVariantRef<kInnerType> v) { v.template TryInto<T>(); })
   {
     GVariant* contents = g_variant_get_maybe(variant.raw());
     if (!contents) {
-      return base::unexpected("Maybe value unexpectedly empty");
+      return base::unexpected(
+          Loggable(FROM_HERE, "Maybe value unexpectedly empty"));
     }
 
     return GVariantRef<kInnerType>::TakeUnchecked(contents)
@@ -1767,10 +2007,11 @@ struct Mapping<EmptyArrayOf<C>> {
         g_variant_new_array(C.gvariant_type(), nullptr, 0));
   }
 
-  static base::expected<EmptyArrayOf<C>, std::string> TryInto(
+  static base::expected<EmptyArrayOf<C>, Loggable> TryInto(
       const GVariantRef<kType>& variant) {
     if (auto size = g_variant_n_children(variant.raw()); size != 0) {
-      return base::unexpected("Array unexpectedly not empty.");
+      return base::unexpected(
+          Loggable(FROM_HERE, "Array unexpectedly not empty."));
     }
 
     return EmptyArrayOf<C>{};
@@ -1778,10 +2019,22 @@ struct Mapping<EmptyArrayOf<C>> {
 };
 
 template <>
+struct Mapping<ObjectPathCStr> {
+  static constexpr Type kType{"o"};
+  static GVariantRef<kType> From(const ObjectPathCStr& value);
+};
+
+template <>
 struct Mapping<ObjectPath> {
   static constexpr Type kType{"o"};
   static GVariantRef<kType> From(const ObjectPath& value);
   static ObjectPath Into(const GVariantRef<kType>& variant);
+};
+
+template <>
+struct Mapping<TypeSignatureCStr> {
+  static constexpr Type kType{"g"};
+  static GVariantRef<kType> From(const TypeSignatureCStr& value);
 };
 
 template <>
@@ -1793,6 +2046,7 @@ struct Mapping<TypeSignature> {
 
 }  // namespace gvariant
 
+using gvariant::GVariantFrom;
 using gvariant::GVariantRef;
 
 }  // namespace remoting

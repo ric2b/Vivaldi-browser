@@ -107,7 +107,6 @@ using ::int64_t;
 using ::tsl::int16;
 using ::tsl::int32;
 using ::tsl::int8;
-using ::tsl::StatusOr;  // TENSORFLOW_STATUS_OK
 using ::tsl::uint16;
 using ::tsl::uint32;
 using ::tsl::uint64;
@@ -648,9 +647,9 @@ static xla::ResultAccuracy Convert_result_accuracy(
   if (optional_result_accuracy_attr.value().getMode().getValue() ==
       mlir::mhlo::ResultAccuracyMode::TOLERANCE) {
     result_accuracy.mutable_tolerance()->set_atol(
-        optional_result_accuracy_attr.value().getAtol().convertToFloat());
+        optional_result_accuracy_attr.value().getAtol().convertToDouble());
     result_accuracy.mutable_tolerance()->set_rtol(
-        optional_result_accuracy_attr.value().getRtol().convertToFloat());
+        optional_result_accuracy_attr.value().getRtol().convertToDouble());
     result_accuracy.mutable_tolerance()->set_ulps(
         optional_result_accuracy_attr.value().getUlps());
   } else {
@@ -1657,7 +1656,9 @@ LogicalResult ExportXlaOp(CosineOp op, OpLoweringContext ctx) {
   xla::XlaOp arg;
   if (failed(GetXlaOp(*op.getODSOperands(0).begin(), value_map, &arg, op)))
     return mlir::failure();
-  auto xla_result = xla::Cos(Unwrap(arg));
+  xla::ResultAccuracy result_accuracy =
+      Convert_result_accuracy(op.getResultAccuracy());
+  auto xla_result = xla::Cos(Unwrap(arg), result_accuracy);
   value_map[result] = xla_result;
   return mlir::success();
 }
@@ -1666,9 +1667,11 @@ LogicalResult ExportXlaOp(TanOp op, OpLoweringContext ctx) {
   auto& value_map = *ctx.values;
   auto result = op.getResult();
   xla::XlaOp arg;
+  xla::ResultAccuracy result_accuracy =
+      Convert_result_accuracy(op.getResultAccuracy());
   if (failed(GetXlaOp(*op.getODSOperands(0).begin(), value_map, &arg, op)))
     return mlir::failure();
-  auto xla_result = xla::Tan(Unwrap(arg));
+  auto xla_result = xla::Tan(Unwrap(arg), result_accuracy);
   value_map[result] = xla_result;
   return mlir::success();
 }
@@ -2929,9 +2932,11 @@ mlir::LogicalResult ExportXlaOp(mlir::mhlo::SineOp op, OpLoweringContext ctx) {
   auto& value_map = *ctx.values;
   auto result = op.getResult();
   xla::XlaOp arg;
+  xla::ResultAccuracy result_accuracy =
+      Convert_result_accuracy(op.getResultAccuracy());
   if (failed(GetXlaOp(*op.getODSOperands(0).begin(), value_map, &arg, op)))
     return mlir::failure();
-  auto xla_result = xla::Sin(Unwrap(arg));
+  auto xla_result = xla::Sin(Unwrap(arg), result_accuracy);
   value_map[result] = xla_result;
   return mlir::success();
 }

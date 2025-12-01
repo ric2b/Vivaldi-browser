@@ -20,7 +20,7 @@ chromeos {
       test_plan_starlark_files {
         host: "chrome-internal.googlesource.com"
         project: "chromeos/config-internal"
-        path: "test/plans/v2/ctpv1_compatible/bluetooth_cq.star"
+        path: "test/plans/v2/ctpv1_compatible/bluetooth_floss_cq.star"
       }
     }
   }

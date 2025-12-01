@@ -47,6 +47,7 @@ class RandomizedEncoder {
   static constexpr char kFieldPlaceholder[] = "field-placeholder";
   static constexpr char kFieldInitialValueHash[] = "field-initial-hash-value";
   static constexpr char kFieldAutocomplete[] = "field-autocomplete";
+  static constexpr char kFieldPattern[] = "field-pattern";
   static constexpr char kFieldMaxLength[] = "field-max-length";
   static constexpr char kFieldSelectOptionText[] = "field-select-option-text";
   static constexpr char kFieldSelectOptionValue[] = "field-select-option-value";

@@ -135,8 +135,16 @@ ActionButtonView* NullCaptureModeSession::AddActionButton(
 
 void NullCaptureModeSession::AddSmartActionsButton() {}
 
+void NullCaptureModeSession::MaybeShowScannerDisclaimer(
+    ScannerEntryPoint entry_point,
+    base::RepeatingClosure accept_callback,
+    base::RepeatingClosure decline_callback) {}
+
 void NullCaptureModeSession::OnScannerActionsFetched(
-    std::vector<ScannerActionViewModel> scanner_actions) {}
+    ScannerSession::FetchActionsResponse actions_response) {}
+
+void NullCaptureModeSession::ShowActionContainerError(
+    const std::u16string& error_message) {}
 
 void NullCaptureModeSession::InitInternal() {
   layer()->SetName("NullCaptureModeSession");
@@ -144,8 +152,13 @@ void NullCaptureModeSession::InitInternal() {
 
 void NullCaptureModeSession::ShutdownInternal() {}
 
-gfx::Rect NullCaptureModeSession::GetFeedbackWidgetScreenBounds() const {
-  return gfx::Rect();
+void NullCaptureModeSession::OnSearchResultsPanelCreated(
+    views::Widget* panel_widget) {}
+
+bool NullCaptureModeSession::TakeFocusForSearchResultsPanel(bool reverse) {
+  return false;
 }
+
+void NullCaptureModeSession::ClearPseudoFocus() {}
 
 }  // namespace ash

@@ -21,15 +21,22 @@ class EmptyCollaborationService : public CollaborationService {
   void AddObserver(Observer* observer) override;
   void RemoveObserver(Observer* observer) override;
   void StartJoinFlow(std::unique_ptr<CollaborationControllerDelegate> delegate,
-                     const GURL& url) override;
+                     const GURL& url,
+                     CollaborationServiceJoinEntryPoint entry) override;
   void StartShareOrManageFlow(
       std::unique_ptr<CollaborationControllerDelegate> delegate,
-      const tab_groups::EitherGroupID& group_id) override;
+      const tab_groups::EitherGroupID& either_id,
+      CollaborationServiceShareOrManageEntryPoint entry) override;
+  void CancelAllFlows(base::OnceCallback<void()> finish_callback) override;
   ServiceStatus GetServiceStatus() override;
   data_sharing::MemberRole GetCurrentUserRoleForGroup(
       const data_sharing::GroupId& group_id) override;
   std::optional<data_sharing::GroupData> GetGroupData(
       const data_sharing::GroupId& group_id) override;
+  void DeleteGroup(const data_sharing::GroupId& group_id,
+                   base::OnceCallback<void(bool)> callback) override;
+  void LeaveGroup(const data_sharing::GroupId& group_id,
+                  base::OnceCallback<void(bool)> callback) override;
 };
 
 }  // namespace collaboration

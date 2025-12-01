@@ -91,6 +91,7 @@
 #include "services/cert_verifier/public/mojom/cert_verifier_service_factory.mojom.h"
 #include "services/network/public/cpp/cors/origin_access_list.h"
 #include "services/network/public/cpp/features.h"
+#include "services/network/public/cpp/network_switches.h"
 #include "services/network/public/mojom/cert_verifier_service.mojom.h"
 #include "services/network/public/mojom/first_party_sets_access_delegate.mojom.h"
 #include "services/network/public/mojom/network_context.mojom.h"
@@ -136,9 +137,12 @@
 
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
 #include "chrome/browser/enterprise/client_certificates/certificate_provisioning_service_factory.h"
+#include "chrome/browser/policy/chrome_browser_policy_connector.h"
+#include "components/enterprise/browser/controller/chrome_browser_cloud_management_controller.h"
 #include "components/enterprise/client_certificates/core/certificate_provisioning_service.h"
 #include "components/enterprise/client_certificates/core/client_certificates_service.h"
 #include "components/enterprise/client_certificates/core/features.h"
+#include "components/policy/core/browser/browser_policy_connector.h"
 #endif
 
 #if BUILDFLAG(CHROME_ROOT_STORE_CERT_MANAGEMENT_UI)
@@ -231,6 +235,17 @@ bool IsContentSettingsTypeEnabled(ContentSettingsType type) {
   }
 }
 
+void UpdateTrackingProtectionSettings(Profile* profile) {
+  auto settings =
+      HostContentSettingsMapFactory::GetForProfile(profile)
+          ->GetSettingsForOneType(ContentSettingsType::TRACKING_PROTECTION);
+  profile->ForEachLoadedStoragePartition(
+      [&](content::StoragePartition* storage_partition) {
+        storage_partition->GetNetworkContext()
+            ->SetTrackingProtectionContentSetting(settings);
+      });
+}
+
 void UpdateCookieSettings(Profile* profile, ContentSettingsType type) {
   if (!IsContentSettingsTypeEnabled(type)) {
     return;
@@ -265,20 +280,31 @@ void UpdateCookieSettings(Profile* profile, ContentSettingsType type) {
 std::unique_ptr<net::ClientCertStore> GetWrappedCertStore(
     Profile* profile,
     std::unique_ptr<net::ClientCertStore> platform_store) {
-  if (!profile || !client_certificates::features::
-                      IsManagedClientCertificateForUserEnabled()) {
-    return platform_store;
+  client_certificates::CertificateProvisioningService*
+      profile_provisioning_service = nullptr;
+  if (profile && client_certificates::features::
+                     IsManagedClientCertificateForUserEnabled()) {
+    profile_provisioning_service = client_certificates::
+        CertificateProvisioningServiceFactory::GetForProfile(profile);
   }
 
-  auto* provisioning_service =
-      client_certificates::CertificateProvisioningServiceFactory::GetForProfile(
-          profile);
-  if (!provisioning_service) {
+  client_certificates::CertificateProvisioningService*
+      browser_provisioning_service = nullptr;
+  if (client_certificates::features::
+          IsManagedBrowserClientCertificateEnabled()) {
+    browser_provisioning_service =
+        g_browser_process->browser_policy_connector()
+            ->chrome_browser_cloud_management_controller()
+            ->GetCertificateProvisioningService();
+  }
+
+  if (!browser_provisioning_service && !profile_provisioning_service) {
     return platform_store;
   }
 
   return client_certificates::ClientCertificatesService::Create(
-      provisioning_service, std::move(platform_store));
+      profile_provisioning_service, browser_provisioning_service,
+      std::move(platform_store));
 }
 #endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
 
@@ -1244,24 +1270,6 @@ bool GetHttpCacheBackendResetParam(PrefService* local_state) {
   current_field_trial_status +=
       (field_trial ? field_trial->group_name() : "None");
 
-  // For the HTTP Cache keying experiments, if a flag indicates that the user is
-  // in an experiment group, modify `current_field_trial_status` to ensure that
-  // the cache gets cleared. If the user is not a part of the experiment, don't
-  // make any changes so as not to invalidate the existing cache.
-  if (base::FeatureList::IsEnabled(
-          net::features::kSplitCacheByCrossSiteMainFrameNavigationBoolean)) {
-    current_field_trial_status += " 20240814-CrossSiteNavBool";
-  } else if (base::FeatureList::IsEnabled(
-                 net::features::kSplitCacheByMainFrameNavigationInitiator)) {
-    current_field_trial_status += " 20240814-MainFrameNavigationInitiator";
-  } else if (base::FeatureList::IsEnabled(
-                 net::features::kSplitCacheByNavigationInitiator)) {
-    current_field_trial_status += " 20240814-NavigationInitiator";
-  } else if (base::FeatureList::IsEnabled(
-                 net::features::kHttpCacheKeyingExperimentControlGroup2024)) {
-    current_field_trial_status += " 20240814-ExperimentControlGroup";
-  }
-
   if (disk_cache::InBackendExperiment()) {
     if (disk_cache::InSimpleBackendExperimentGroup()) {
       current_field_trial_status += " 20241007-DiskCache-Simple";
@@ -1560,6 +1568,13 @@ void ProfileNetworkContextService::ConfigureNetworkContextParamsInternal(
             .InitWithNewPipeAndPassRemote());
     network_context_params->enable_ip_protection =
         ipp_core_host->IsIpProtectionEnabled();
+    network_context_params->ip_protection_incognito =
+        profile_->IsIncognitoProfile();
+    if (base::CommandLine::ForCurrentProcess()->HasSwitch(
+            network::switches::kStoreProbabilisticRevealTokens)) {
+      network_context_params->ip_protection_data_directory =
+          profile_->GetPath();
+    }
   }
 
   network_context_params->device_bound_sessions_enabled =
@@ -1582,6 +1597,9 @@ void ProfileNetworkContextService::OnContentSettingChanged(
   switch (content_type) {
     case ContentSettingsType::ANTI_ABUSE:
       UpdateAntiAbuseSettings(profile_);
+      break;
+    case ContentSettingsType::TRACKING_PROTECTION:
+      UpdateTrackingProtectionSettings(profile_);
       break;
     case ContentSettingsType::DEFAULT:
       UpdateAntiAbuseSettings(profile_);

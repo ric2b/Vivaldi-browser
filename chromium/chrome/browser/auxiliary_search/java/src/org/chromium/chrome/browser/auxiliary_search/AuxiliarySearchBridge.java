@@ -5,21 +5,21 @@
 package org.chromium.chrome.browser.auxiliary_search;
 
 import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 
-import com.google.protobuf.InvalidProtocolBufferException;
-
+import org.jni_zero.CalledByNative;
 import org.jni_zero.JniType;
 import org.jni_zero.NativeMethods;
 
 import org.chromium.base.Callback;
 import org.chromium.base.task.PostTask;
 import org.chromium.base.task.TaskTraits;
-import org.chromium.chrome.browser.auxiliary_search.AuxiliarySearchGroupProto.AuxiliarySearchBookmarkGroup;
+import org.chromium.build.annotations.Nullable;
+import org.chromium.chrome.browser.auxiliary_search.AuxiliarySearchProvider.Observer;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.tab.Tab;
+import org.chromium.url.GURL;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -27,6 +27,7 @@ import java.util.List;
 /** Java bridge to provide information for the auxiliary search. */
 public class AuxiliarySearchBridge {
     private long mNativeBridge;
+    private AuxiliarySearchProvider.Observer mObserver;
 
     /**
      * Constructs a bridge for the auxiliary search provider.
@@ -44,34 +45,15 @@ public class AuxiliarySearchBridge {
     }
 
     /**
-     * @return AuxiliarySearchGroup for bookmarks, which is necessary for the auxiliary search.
-     */
-    public @Nullable AuxiliarySearchBookmarkGroup getBookmarksSearchableData() {
-        if (mNativeBridge != 0) {
-            try {
-                return AuxiliarySearchBookmarkGroup.parseFrom(
-                        AuxiliarySearchBridgeJni.get().getBookmarksSearchableData(mNativeBridge));
-
-            } catch (InvalidProtocolBufferException e) {
-            }
-        }
-
-        return null;
-    }
-
-    /**
-     * This method will return non sensitive url tabs, and the scheme is http or https.
+     * This method will return non-sensitive url tabs, and the scheme is http or https.
      *
      * @param tabs A list of {@link Tab}s to check if they are sensitive.
-     * @param callback {@link Callback} to pass back the list of non sensitive {@link Tab}s.
+     * @param callback {@link Callback} to pass back the list of non-sensitive {@link Tab}s.
      */
     public void getNonSensitiveTabs(List<Tab> tabs, Callback<List<Tab>> callback) {
         if (mNativeBridge == 0) {
-            PostTask.runOrPostTask(
-                    TaskTraits.UI_DEFAULT,
-                    () -> {
-                        callback.onResult(null);
-                    });
+            PostTask.runOrPostTask(TaskTraits.UI_DEFAULT, () -> callback.onResult(null));
+            return;
         }
 
         AuxiliarySearchBridgeJni.get()
@@ -89,12 +71,97 @@ public class AuxiliarySearchBridge {
                                 }
 
                                 PostTask.runOrPostTask(
-                                        TaskTraits.UI_DEFAULT,
-                                        () -> {
-                                            callback.onResult(tabList);
-                                        });
+                                        TaskTraits.UI_DEFAULT, callback.bind(tabList));
                             }
                         });
+    }
+
+    /**
+     * This method will return non-sensitive URLs of supported data types.
+     *
+     * @param callback {@link Callback} to pass back the list of non-sensitive {@link
+     *     AuxiliarySearchDataEntry}s.
+     */
+    public void getNonSensitiveHistoryData(Callback<List<AuxiliarySearchDataEntry>> callback) {
+        if (mNativeBridge == 0) {
+            PostTask.runOrPostTask(TaskTraits.UI_DEFAULT, () -> callback.onResult(null));
+            return;
+        }
+
+        AuxiliarySearchBridgeJni.get().getNonSensitiveHistoryData(mNativeBridge, callback);
+    }
+
+    /**
+     * Assigns {@link #mObserver}, possibly to null. If non-null {@param observer} is passed,
+     * requires {@link #mObserver} initially null, then fetches the current most visited site
+     * suggestions.
+     *
+     * @param observer The observer to receive suggestions when they are ready.
+     */
+    public void setObserver(Observer observer) {
+        if (observer == null) {
+            mObserver = null;
+            return;
+        }
+
+        assert mObserver == null;
+        mObserver = observer;
+        AuxiliarySearchBridgeJni.get().setObserverAndTrigger(mNativeBridge, this);
+    }
+
+    /** Starts a fetch of the current most visited sites suggestions. */
+    public void getMostVisitedSites() {
+        if (mNativeBridge == 0) {
+            mObserver.onSiteSuggestionsAvailable(null);
+            return;
+        }
+
+        AuxiliarySearchBridgeJni.get().getMostVisitedSites(mNativeBridge);
+    }
+
+    /**
+     * Helper to call previously injected callback to pass suggestion results.
+     *
+     * @param entries The list of fetched entries.
+     * @param callback The callback to notify once the fetching is completed.
+     */
+    @CalledByNative
+    @VisibleForTesting
+    static void onDataReady(
+            @JniType("std::vector") List<AuxiliarySearchDataEntry> entries,
+            Callback<List<AuxiliarySearchDataEntry>> callback) {
+        callback.onResult(entries);
+    }
+
+    @CalledByNative
+    @VisibleForTesting
+    static AuxiliarySearchDataEntry addDataEntry(
+            @AuxiliarySearchEntryType int type,
+            GURL url,
+            String title,
+            long lastActiveTime,
+            int tabId,
+            @Nullable String appId,
+            int visitId,
+            int score) {
+        return new AuxiliarySearchDataEntry(
+                type, url, title, lastActiveTime, tabId, appId, visitId, score);
+    }
+
+    @CalledByNative
+    @VisibleForTesting
+    void onMostVisitedSitesURLsAvailable(
+            @JniType("std::vector") List<AuxiliarySearchDataEntry> entries) {
+        mObserver.onSiteSuggestionsAvailable(entries);
+    }
+
+    @CalledByNative
+    void onIconMadeAvailable(@JniType("GURL") GURL siteUrl) {
+        mObserver.onIconMadeAvailable(siteUrl);
+    }
+
+    AuxiliarySearchProvider.Observer getObserverForTesting() {
+        return mObserver;
     }
 
     @NativeMethods
@@ -102,9 +169,15 @@ public class AuxiliarySearchBridge {
     public interface Natives {
         long getForProfile(@JniType("Profile*") Profile profile);
 
-        byte[] getBookmarksSearchableData(long nativeAuxiliarySearchProvider);
-
         void getNonSensitiveTabs(
                 long nativeAuxiliarySearchProvider, Tab[] tabs, Callback<Object[]> callback);
+
+        void getNonSensitiveHistoryData(
+                long nativeAuxiliarySearchProvider,
+                Callback<List<AuxiliarySearchDataEntry>> callback);
+
+        void setObserverAndTrigger(long nativeAuxiliarySearchProvider, AuxiliarySearchBridge self);
+
+        void getMostVisitedSites(long nativeAuxiliarySearchProvider);
     }
 }

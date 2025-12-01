@@ -10,6 +10,7 @@
 #include <optional>
 #include <tuple>
 #include <utility>
+#include <variant>
 #include <vector>
 
 #include "base/check.h"
@@ -51,9 +52,9 @@
 #include "net/base/net_errors.h"
 #include "net/base/schemeful_site.h"
 #include "net/http/structured_headers.h"
+#include "services/metrics/public/cpp/ukm_source_id.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/abseil-cpp/absl/numeric/int128.h"
-#include "third_party/abseil-cpp/absl/types/variant.h"
 #include "url/gurl.h"
 #include "url/origin.h"
 
@@ -273,7 +274,8 @@ SourceBuilder& SourceBuilder::SetAggregatableNamedBudgetDefs(
 
 StorableSource SourceBuilder::Build() const {
   StorableSource source(reporting_origin_, registration_, source_origin_,
-                        source_type_, is_within_fenced_frame_);
+                        source_type_, is_within_fenced_frame_,
+                        ukm::kInvalidSourceId);
   source.set_cookie_based_debug_allowed(cookie_based_debug_allowed_);
   return source;
 }
@@ -467,7 +469,8 @@ AttributionTrigger TriggerBuilder::Build(
       aggregatable_named_budget_candidates_;
 
   return AttributionTrigger(reporting_origin_, std::move(reg),
-                            destination_origin_, is_within_fenced_frame_);
+                            destination_origin_, is_within_fenced_frame_,
+                            ukm::kInvalidSourceId);
 }
 
 AttributionInfoBuilder::AttributionInfoBuilder(SuitableOrigin context_origin)
@@ -821,7 +824,7 @@ std::ostream& operator<<(std::ostream& out,
 namespace {
 std::ostream& operator<<(std::ostream& out,
                          const AttributionReport::Data& data) {
-  absl::visit([&out](const auto& v) { out << v; }, data);
+  std::visit([&out](const auto& v) { out << v; }, data);
   return out;
 }
 }  // namespace
@@ -863,29 +866,29 @@ std::ostream& operator<<(std::ostream& out, SendResult::Status status) {
 }
 
 std::ostream& operator<<(std::ostream& out, const SendResult& info) {
-  absl::visit(base::Overloaded{
-                  [&](SendResult::Sent sent) {
-                    out << "{Sent={result=";
-                    switch (sent.result) {
-                      case SendResult::Sent::Result::kSent:
-                        out << "kSent";
-                        break;
-                      case SendResult::Sent::Result::kTransientFailure:
-                        out << "kTransientFailure";
-                        break;
-                      case SendResult::Sent::Result::kFailure:
-                        out << "kFailure";
-                        break;
-                    }
-                    out << ",status=" << sent.status << "}}";
-                  },
-                  [&](SendResult::Dropped) { out << "{Dropped={}}"; },
-                  [&](SendResult::AssemblyFailure failure) {
-                    out << "{AssemblyFailure={transient=" << failure.transient
-                        << "}}";
-                  },
-              },
-              info.result);
+  std::visit(base::Overloaded{
+                 [&](SendResult::Sent sent) {
+                   out << "{Sent={result=";
+                   switch (sent.result) {
+                     case SendResult::Sent::Result::kSent:
+                       out << "kSent";
+                       break;
+                     case SendResult::Sent::Result::kTransientFailure:
+                       out << "kTransientFailure";
+                       break;
+                     case SendResult::Sent::Result::kFailure:
+                       out << "kFailure";
+                       break;
+                   }
+                   out << ",status=" << sent.status << "}}";
+                 },
+                 [&](SendResult::Dropped) { out << "{Dropped={}}"; },
+                 [&](SendResult::AssemblyFailure failure) {
+                   out << "{AssemblyFailure={transient=" << failure.transient
+                       << "}}";
+                 },
+             },
+             info.result);
   return out;
 }
 

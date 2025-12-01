@@ -60,7 +60,7 @@ class WebContentsViewDragSecurityInfo {
 
   // Vivaldi additions for checking target and source webcontents and see if
   // they are WebViewGuests.
-  raw_ptr<RenderWidgetHostImpl> source_rwh_;
+  base::WeakPtr<RenderWidgetHostImpl> source_rwh_;
 };
 
 }  // namespace content

@@ -42,12 +42,15 @@ class EchoAIManagerImpl : public blink::mojom::AIManager {
   EchoAIManagerImpl();
 
   // `blink::mojom::AIManager` implementation.
-  void CanCreateLanguageModel(CanCreateLanguageModelCallback callback) override;
+  void CanCreateLanguageModel(
+      blink::mojom::AILanguageModelCreateOptionsPtr options,
+      CanCreateLanguageModelCallback callback) override;
   void CreateLanguageModel(
       mojo::PendingRemote<blink::mojom::AIManagerCreateLanguageModelClient>
           client,
       blink::mojom::AILanguageModelCreateOptionsPtr options) override;
-  void CanCreateSummarizer(CanCreateSummarizerCallback callback) override;
+  void CanCreateSummarizer(blink::mojom::AISummarizerCreateOptionsPtr options,
+                           CanCreateSummarizerCallback callback) override;
   void CreateSummarizer(
       mojo::PendingRemote<blink::mojom::AIManagerCreateSummarizerClient> client,
       blink::mojom::AISummarizerCreateOptionsPtr options) override;
@@ -68,14 +71,16 @@ class EchoAIManagerImpl : public blink::mojom::AIManager {
 
   void ReturnAILanguageModelCreationResult(
       mojo::Remote<blink::mojom::AIManagerCreateLanguageModelClient>
-          client_remote);
+          client_remote,
+      blink::mojom::AILanguageModelSamplingParamsPtr sampling_params);
   void ReturnAISummarizerCreationResult(
       mojo::Remote<blink::mojom::AIManagerCreateSummarizerClient>
           client_remote);
 
   void DoMockDownloadingAndReturn(base::OnceClosure callback);
 
-  bool summarizer_downloaded_ = false;
+  // The mocked download status of an imagined foundational model.
+  bool model_downloaded_ = false;
 
   mojo::RemoteSet<blink::mojom::ModelDownloadProgressObserver>
       download_progress_observers_;

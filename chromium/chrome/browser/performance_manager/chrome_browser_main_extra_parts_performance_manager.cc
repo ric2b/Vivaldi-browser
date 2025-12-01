@@ -8,15 +8,15 @@
 
 #include "base/feature_list.h"
 #include "base/functional/bind.h"
-#include "base/functional/callback_helpers.h"
+#include "base/memory/memory_pressure_monitor.h"
 #include "base/memory/weak_ptr.h"
 #include "base/power_monitor/battery_state_sampler.h"
 #include "base/power_monitor/power_monitor_buildflags.h"
 #include "base/system/sys_info.h"
 #include "base/time/default_tick_clock.h"
 #include "build/build_config.h"
-#include "build/chromeos_buildflags.h"
 #include "chrome/browser/browser_process.h"
+#include "chrome/browser/memory/enterprise_memory_limit_pref_observer.h"
 #include "chrome/browser/performance_manager/decorators/helpers/page_live_state_decorator_helper.h"
 #include "chrome/browser/performance_manager/execution_context_priority/side_panel_loading_voter.h"
 #include "chrome/browser/performance_manager/metrics/metrics_provider_desktop.h"
@@ -34,6 +34,7 @@
 #include "components/performance_manager/embedder/graph_features.h"
 #include "components/performance_manager/embedder/performance_manager_lifetime.h"
 #include "components/performance_manager/embedder/performance_manager_registry.h"
+#include "components/performance_manager/embedder/scoped_global_scenario_memory.h"
 #include "components/performance_manager/graph/policies/bfcache_policy.h"
 #include "components/performance_manager/graph/policies/process_priority_policy.h"
 #include "components/performance_manager/performance_manager_feature_observer_client.h"
@@ -44,15 +45,17 @@
 #include "components/performance_manager/public/features.h"
 #include "components/performance_manager/public/graph/graph.h"
 #include "components/performance_manager/public/metrics/page_resource_monitor.h"
-#include "components/performance_manager/public/scenarios/performance_scenarios.h"
 #include "components/performance_manager/public/user_tuning/tab_revisit_tracker.h"
+#include "components/prefs/pref_service.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/storage_partition.h"
 #include "content/public/common/content_features.h"
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
 #include "base/allocator/buildflags.h"
+#include "chrome/browser/performance_manager/policies/oom_score_policy_chromeos.h"
+#include "chrome/browser/performance_manager/policies/report_page_processes_policy.h"
 #include "chromeos/dbus/power/power_manager_client.h"
 #include "components/performance_manager/power/battery_level_provider_chromeos.h"
 #include "components/performance_manager/power/dbus_power_manager_sampling_event_source.h"
@@ -61,11 +64,6 @@
 #include "chrome/browser/performance_manager/policies/userspace_swap_policy_chromeos.h"
 #endif  // defined(ARCH_CPU_X86_64)
 
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
-
-#if BUILDFLAG(IS_CHROMEOS)
-#include "chrome/browser/performance_manager/policies/oom_score_policy_chromeos.h"
-#include "chrome/browser/performance_manager/policies/report_page_processes_policy.h"
 #endif  // BUILDFLAG(IS_CHROMEOS)
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
@@ -116,8 +114,7 @@ class FreezingDiscarder : public performance_manager::freezing::Discarder {
     CHECK(helper);
     helper->ImmediatelyDiscardMultiplePages(
         page_nodes,
-        ::mojom::LifecycleUnitDiscardReason::FROZEN_WITH_GROWING_MEMORY,
-        base::DoNothing());
+        ::mojom::LifecycleUnitDiscardReason::FROZEN_WITH_GROWING_MEMORY);
   }
 };
 
@@ -164,7 +161,7 @@ void ChromeBrowserMainExtraPartsPerformanceManager::CreatePoliciesAndDecorators(
                            CreatePolicyForPlatform());
   }
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
 #if defined(ARCH_CPU_X86_64)
   if (performance_manager::policies::UserspaceSwapPolicy::
           UserspaceSwapSupportedAndEnabled()) {
@@ -173,9 +170,6 @@ void ChromeBrowserMainExtraPartsPerformanceManager::CreatePoliciesAndDecorators(
   }
 #endif  // defined(ARCH_CPU_X86_64)
 
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
-
-#if BUILDFLAG(IS_CHROMEOS)
   graph->PassToGraph(std::make_unique<
                      performance_manager::policies::OomScorePolicyChromeOS>());
   graph->PassToGraph(
@@ -184,14 +178,18 @@ void ChromeBrowserMainExtraPartsPerformanceManager::CreatePoliciesAndDecorators(
 #endif  // BUILDFLAG(IS_CHROMEOS)
 
 #if !BUILDFLAG(IS_ANDROID)
+  using performance_manager::policies::DiscardEligibilityPolicy;
   using performance_manager::policies::FreezingOptOutChecker;
-  using performance_manager::policies::PageDiscardingHelper;
 
   graph->PassToGraph(FormInteractionTabHelper::CreateGraphObserver());
 
-  auto page_discarding_helper = std::make_unique<PageDiscardingHelper>();
-  auto weak_page_discarding_helper = page_discarding_helper->GetWeakPtr();
-  graph->PassToGraph(std::move(page_discarding_helper));
+  auto discard_eligibility_policy =
+      std::make_unique<DiscardEligibilityPolicy>();
+  auto weak_discard_eligibility_policy =
+      discard_eligibility_policy->GetWeakPtr();
+  graph->PassToGraph(std::move(discard_eligibility_policy));
+  graph->PassToGraph(
+      std::make_unique<performance_manager::policies::PageDiscardingHelper>());
 
 #if URGENT_DISCARDING_FROM_PERFORMANCE_MANAGER()
   graph->PassToGraph(
@@ -219,8 +217,8 @@ void ChromeBrowserMainExtraPartsPerformanceManager::CreatePoliciesAndDecorators(
   std::unique_ptr<FreezingOptOutChecker> freezing_opt_out_checker;
   if (base::FeatureList::IsEnabled(
           performance_manager::features::kFreezingFollowsDiscardOptOut)) {
-    freezing_opt_out_checker =
-        std::make_unique<FreezingOptOutChecker>(weak_page_discarding_helper);
+    freezing_opt_out_checker = std::make_unique<FreezingOptOutChecker>(
+        weak_discard_eligibility_policy);
   }
   graph->PassToGraph(std::make_unique<performance_manager::FreezingPolicy>(
       std::make_unique<FreezingDiscarder>(),
@@ -316,11 +314,8 @@ void ChromeBrowserMainExtraPartsPerformanceManager::PostCreateThreads() {
       new performance_manager::user_tuning::BatterySaverModeManager(
           g_browser_process->local_state()));
 
-  if (performance_manager::features::
-          ShouldUsePerformanceInterventionBackend()) {
-    performance_detection_manager_ = base::WrapUnique(
-        new performance_manager::user_tuning::PerformanceDetectionManager());
-  }
+  performance_detection_manager_ = base::WrapUnique(
+      new performance_manager::user_tuning::PerformanceDetectionManager());
 #endif
 
   page_load_metrics_observer_ =
@@ -343,7 +338,7 @@ void ChromeBrowserMainExtraPartsPerformanceManager::PostCreateThreads() {
     // TODO(crbug.com/40871810): All of the battery level machinery should be in
     // the same location, and the ifdefs should be contained to the
     // `BatteryLevelProvider` and SamplingEventSource` instantiation functions.
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
     battery_state_sampler_ = std::make_unique<base::BatteryStateSampler>(
         std::make_unique<
             performance_manager::power::DbusPowerManagerSamplingEventSource>(
@@ -354,6 +349,17 @@ void ChromeBrowserMainExtraPartsPerformanceManager::PostCreateThreads() {
 #elif BUILDFLAG(HAS_BATTERY_LEVEL_PROVIDER_IMPL)
     battery_state_sampler_ = std::make_unique<base::BatteryStateSampler>();
 #endif
+  }
+}
+
+void ChromeBrowserMainExtraPartsPerformanceManager::PostBrowserStart() {
+  // The MemoryPressureMonitor might not be available in some tests.
+  if (base::MemoryPressureMonitor::Get()) {
+    if (memory::EnterpriseMemoryLimitPrefObserver::PlatformIsSupported()) {
+      memory_limit_pref_observer_ =
+          std::make_unique<memory::EnterpriseMemoryLimitPrefObserver>(
+              g_browser_process->local_state());
+    }
   }
 }
 
@@ -374,6 +380,11 @@ void ChromeBrowserMainExtraPartsPerformanceManager::PreMainMessageLoopRun() {
 }
 
 void ChromeBrowserMainExtraPartsPerformanceManager::PostMainMessageLoopRun() {
+  // |memory_limit_pref_observer_| must be destroyed before its |pref_service_|
+  // is destroyed, as the observer's PrefChangeRegistrar's destructor uses the
+  // pref_service.
+  memory_limit_pref_observer_.reset();
+
   g_browser_process->profile_manager()->RemoveObserver(this);
   profile_observations_.RemoveAllObservations();
 

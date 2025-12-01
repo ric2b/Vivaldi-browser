@@ -120,8 +120,11 @@ message AndroidProcessMetadata {
   // Process name. Usually, cmdline or <package_name>(:<custom_name>)?.
   optional string name = 1;
 
-  // User id under which this process runs.
+  // App uid under which this process runs.
   optional int64 uid = 2;
+
+  // Android user-id running this process (applicable to multi-user android)
+  optional int64 android_user_id = 10;
 
   // Package metadata from Android package list.
   message Package {
@@ -139,6 +142,9 @@ message AndroidProcessMetadata {
 
   // Pid of the process name.
   optional int64 pid = 9;
+
+  // Whether the process is considered kernel or not
+  optional bool is_kernel_task = 11;
 
   reserved 3, 4, 5, 6, 8;
 }
@@ -383,6 +389,8 @@ message AndroidGarbageCollectionUnaggMetric {
     optional int64 gc_monotonic_dur = 19;
     // Details about the process (uid, version, etc)
     optional AndroidProcessMetadata process = 20;
+    // The number of GCs in this event. Namely 1.
+    optional int64 gc_count = 21;
   }
   repeated GarbageCollectionEvent gc_events = 1;
 }
@@ -524,6 +532,48 @@ message AndroidFrameTimelineMetric {
 // Begin of protos/perfetto/metrics/android/android_garbage_collection_stats.proto
 
 message AndroidGarbageCollectionStats {
+  message ProcessStats {
+    // The process the stats are associated with.
+    optional AndroidProcessMetadata process = 1;
+    // Megabyte-seconds of heap size across the device, used in the calculation
+    // of heap_size_mb.
+    optional double heap_size_mbs = 2;
+    // Total size of heap allocations across the device on average, in MB.
+    optional double heap_size_mb = 3;
+    // Total number of bytes allocated over the course of the trace.
+    optional double heap_allocated_mb = 4;
+    // Overall rate of heap allocations in MB per second. This gives a sense of
+    // how much allocation activity is going on during the trace.
+    optional double heap_allocation_rate = 5;
+    // Megabyte-seconds of live heap for processes that had GC events.
+    optional double heap_live_mbs = 6;
+    // Megabyte-seconds of total heap for processes that had GC events.
+    optional double heap_total_mbs = 7;
+    // Overall heap utilization. This gives a sense of how aggressive GC is
+    // during this trace.
+    optional double heap_utilization = 8;
+    // CPU time spent running GC. Used in the calculation of gc_running_rate.
+    optional int64 gc_running_dur = 9;
+    // CPU time spent running GC, as a fraction of the duration of the trace.
+    // This gives a sense of the battery cost of GC.
+    optional double gc_running_rate = 10;
+    // A measure of how efficient GC is with respect to cpu, independent of how
+    // aggressively GC is tuned. Larger values indicate more efficient GC, so
+    // larger is better.
+    optional double gc_running_efficiency = 11;
+    // Time GC is running during app startup. Used in the calculation of
+    // gc_during_android_startup_rate.
+    optional int64 gc_during_android_startup_dur = 12;
+    // Time GC is running during app startup, as a fraction of startup time in
+    // the trace. This gives a sense of how much potential interference there
+    // is between GC and application startup.
+    optional double gc_during_android_startup_rate = 13;
+    // A measure of how efficient GC is with regards to gc during application
+    // startup, independent of how aggressively GC is tuned. Larger values
+    // indicate more efficient GC, so larger is better.
+    optional double gc_during_android_startup_efficiency = 14;
+  }
+
   // The start of the window of time that the stats cover in the trace.
   optional int64 ts = 1;
   // The duration of the window of time that the stats cover in the trace.
@@ -568,6 +618,8 @@ message AndroidGarbageCollectionStats {
   // startup, independent of how aggressively GC is tuned. Larger values
   // indicate more efficient GC, so larger is better.
   optional double gc_during_android_startup_efficiency = 16;
+  // Per-process stats.
+  repeated ProcessStats processes = 17;
 }
 
 // End of protos/perfetto/metrics/android/android_garbage_collection_stats.proto
@@ -3126,7 +3178,8 @@ message AndroidWattsonTasksAttributionMetric {
 // Groups of power per task for each period
 message AndroidWattsonTaskPeriodInfo {
   optional int32 period_id = 1;
-  repeated AndroidWattsonTaskInfo task_info = 2;
+  optional string period_name = 2;
+  repeated AndroidWattsonTaskInfo task_info = 3;
 }
 
 message AndroidWattsonTaskInfo {
@@ -3136,11 +3189,15 @@ message AndroidWattsonTaskInfo {
   optional float estimated_mws = 2;
   // Energy attributed to a thread for causing CPU idle exit
   optional float idle_transitions_mws = 3;
-  optional string thread_name = 4;
-  optional string process_name = 5;
-  optional string package_name = 6;
-  optional int32 thread_id = 7;
-  optional int32 process_id = 8;
+  // Sum of estimated_mws and idle_transition_mws, which represents the energy
+  // during the active time and the energy to transition into active,
+  // respectively
+  optional float total_mws = 4;
+  optional string thread_name = 5;
+  optional string process_name = 6;
+  optional string package_name = 7;
+  optional int32 thread_id = 8;
+  optional int32 process_id = 9;
 }
 
 // End of protos/perfetto/metrics/android/wattson_tasks_attribution.proto
@@ -3160,13 +3217,15 @@ message CloneDuration {
 // Begin of protos/perfetto/metrics/metrics.proto
 
 // Trace processor metadata
-// Next id: 18
+// Next id: 20
 message TraceMetadata {
   reserved 1;
   optional int64 trace_duration_ns = 2;
   optional string trace_uuid = 3;
   optional string android_build_fingerprint = 4;
   optional string android_device_manufacturer = 16;
+  optional int64 android_profile_boot_classpath = 18;
+  optional int64 android_profile_system_server = 19;
   optional int64 statsd_triggering_subscription_id = 5;
   optional int64 trace_size_bytes = 6;
   repeated string trace_trigger = 7;
@@ -3447,6 +3506,10 @@ message TraceMetrics {
   // Android Wattson thread attribution during app startups.
   optional AndroidWattsonTasksAttributionMetric wattson_app_startup_threads =
       79;
+
+  // Android Wattson thread attribution during atrace app windows.
+  optional AndroidWattsonTasksAttributionMetric wattson_atrace_apps_threads =
+      80;
 
   // Android
   // Demo extensions.

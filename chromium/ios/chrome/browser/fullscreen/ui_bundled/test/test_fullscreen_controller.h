@@ -11,6 +11,7 @@
 
 class FullscreenModel;
 @class FullscreenAnimator;
+enum class FullscreenExitReason;
 
 // Test version of FullscreenController with limited functionality:
 // - Enables/disables a FullscreenModel.
@@ -18,7 +19,7 @@ class FullscreenModel;
 // - Supports FullscreenControllerObserver::FullscreenControllerWillShutDown().
 class TestFullscreenController : public FullscreenController {
  public:
-  explicit TestFullscreenController(FullscreenModel* model);
+  TestFullscreenController();
   ~TestFullscreenController() override;
 
   // FullscreenController:
@@ -37,11 +38,14 @@ class TestFullscreenController : public FullscreenController {
   UIEdgeInsets GetCurrentViewportInsets() const override;
   void EnterFullscreen() override;
   void ExitFullscreen() override;
+  void ExitFullscreen(FullscreenExitReason fullscreen_exit_reason) override;
   void ExitFullscreenWithoutAnimation() override;
   bool IsForceFullscreenMode() const override;
   void EnterForceFullscreenMode(bool insets_update_enabled) override;
   void ExitForceFullscreenMode() override;
   void ResizeHorizontalViewport() override;
+  void SetToolbarsSize(ToolbarsSize* ToolbarsSize) override;
+  ToolbarsSize* GetToolbarsSize() const override;
 
   // Calls FullscreenViewportInsetRangeChanged() on observers.
   void OnFullscreenViewportInsetRangeChanged(UIEdgeInsets min_viewport_insets,
@@ -57,13 +61,17 @@ class TestFullscreenController : public FullscreenController {
   // browser.
   static const void* UserDataKeyForTesting();
 
+  raw_ptr<FullscreenModel> getModel();
+
  private:
   // The model.
-  raw_ptr<FullscreenModel> model_ = nullptr;
+  std::unique_ptr<FullscreenModel> model_ = std::make_unique<FullscreenModel>();
   // The broadcaster.
   ChromeBroadcaster* broadcaster_ = nil;
   // The observers.
   base::ObserverList<FullscreenControllerObserver, true> observers_;
+  // Toolbars' size
+  ToolbarsSize* toolbars_size_ = nil;
 };
 
 #endif  // IOS_CHROME_BROWSER_FULLSCREEN_UI_BUNDLED_TEST_TEST_FULLSCREEN_CONTROLLER_H_

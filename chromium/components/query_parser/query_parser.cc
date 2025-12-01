@@ -57,6 +57,19 @@ bool IsQueryQuote(wchar_t ch) {
          ch == 0x201e;    // double low-9 quotation mark
 }
 
+// Special case for allowing symbols in Vivaldi bookmark search
+bool IsVivaldiSpecial(bool special_characters, wchar_t ch) {
+  if (ch == ' ') {
+    return false;
+  } else if (ch == 0x27) {  // ' apostrophes
+    return false;
+  } else if (IsQueryQuote(ch)) {
+    return false;
+  }
+
+  return special_characters;
+}
+
 }  // namespace
 
 // Inheritance structure:
@@ -348,9 +361,10 @@ int QueryParser::ParseQuery(const std::u16string& query,
 // static
 void QueryParser::ParseQueryWords(const std::u16string& query,
                                   MatchingAlgorithm matching_algorithm,
-                                  std::vector<std::u16string>* words) {
+                                  std::vector<std::u16string>* words,
+                                  bool special_characters) {
   QueryNodeList root;
-  if (!ParseQueryImpl(query, matching_algorithm, &root))
+  if (!ParseQueryImpl(query, matching_algorithm, &root, special_characters))
     return;
   root.AppendWords(words);
 }
@@ -410,7 +424,8 @@ bool QueryParser::DoesQueryMatch(const QueryWordVector& find_in_words,
 // static
 bool QueryParser::ParseQueryImpl(const std::u16string& query,
                                  MatchingAlgorithm matching_algorithm,
-                                 QueryNodeList* root) {
+                                 QueryNodeList* root,
+                                 bool special_characters) {
   base::i18n::BreakIterator iter(query, base::i18n::BreakIterator::BREAK_WORD);
   // TODO(evanm): support a locale here
   if (!iter.Init())
@@ -426,7 +441,9 @@ bool QueryParser::ParseQueryImpl(const std::u16string& query,
     // Just found a span between 'prev' (inclusive) and 'pos' (exclusive). It
     // is not necessarily a word, but could also be a sequence of punctuation
     // or whitespace.
-    if (iter.IsWord()) {
+    if (iter.IsWord()
+        // Vivaldi
+        || IsVivaldiSpecial(special_characters, query[iter.prev()])) {
       auto word_node = std::make_unique<QueryNodeWord>(
           std::u16string(iter.GetString()), matching_algorithm);
       if (in_quotes)
@@ -455,7 +472,8 @@ bool QueryParser::ParseQueryImpl(const std::u16string& query,
 
 // static
 void QueryParser::ExtractQueryWords(const std::u16string& text,
-                                    QueryWordVector* words) {
+                                    QueryWordVector* words,
+                                    bool special_characters) {
   DCHECK(text == base::i18n::ToLower(text))
       << "The caller must have already lowercased `text`. Value = "
       << base::UTF16ToUTF8(text);
@@ -468,7 +486,9 @@ void QueryParser::ExtractQueryWords(const std::u16string& text,
     // Just found a span between 'prev' (inclusive) and 'pos' (exclusive). It
     // is not necessarily a word, but could also be a sequence of punctuation
     // or whitespace.
-    if (iter.IsWord()) {
+    if (iter.IsWord()
+        // Vivaldi
+        || IsVivaldiSpecial(special_characters, text[iter.prev()])) {
       std::u16string_view word = iter.GetString();
       if (!word.empty()) {
         words->push_back(QueryWord());

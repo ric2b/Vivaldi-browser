@@ -15,10 +15,8 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
-import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -66,19 +64,20 @@ import org.chromium.base.test.BaseRobolectricTestRunner;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.autofill.AutofillAddress;
 import org.chromium.chrome.browser.autofill.AutofillProfileBridge;
-import org.chromium.chrome.browser.autofill.AutofillProfileBridge.AutofillAddressUiComponent;
 import org.chromium.chrome.browser.autofill.AutofillProfileBridgeJni;
 import org.chromium.chrome.browser.autofill.PersonalDataManager;
 import org.chromium.chrome.browser.autofill.PersonalDataManagerFactory;
 import org.chromium.chrome.browser.autofill.PhoneNumberUtil;
 import org.chromium.chrome.browser.autofill.PhoneNumberUtilJni;
 import org.chromium.chrome.browser.autofill.editors.AddressEditorCoordinator.Delegate;
-import org.chromium.chrome.browser.autofill.editors.EditorProperties.DropdownKeyValue;
 import org.chromium.chrome.browser.autofill.editors.EditorProperties.FieldItem;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.signin.services.IdentityServicesProvider;
 import org.chromium.chrome.browser.sync.SyncServiceFactory;
+import org.chromium.components.autofill.AutofillAddressEditorUiInfo;
+import org.chromium.components.autofill.AutofillAddressUiComponent;
 import org.chromium.components.autofill.AutofillProfile;
+import org.chromium.components.autofill.DropdownKeyValue;
 import org.chromium.components.autofill.FieldType;
 import org.chromium.components.autofill.RecordType;
 import org.chromium.components.signin.base.CoreAccountInfo;
@@ -202,20 +201,14 @@ public class AddressEditorTest {
         mActivityScenarioRule.getScenario().onActivity(activity -> mActivity = activity);
 
         AutofillProfileBridgeJni.setInstanceForTesting(mAutofillProfileBridgeJni);
-        doAnswer(
-                        invocation -> {
-                            List<Integer> requiredFields =
-                                    (List<Integer>) invocation.getArguments()[1];
-                            requiredFields.addAll(
-                                    List.of(
-                                            FieldType.NAME_FULL,
-                                            FieldType.ADDRESS_HOME_CITY,
-                                            FieldType.ADDRESS_HOME_DEPENDENT_LOCALITY,
-                                            FieldType.ADDRESS_HOME_ZIP));
-                            return null;
-                        })
-                .when(mAutofillProfileBridgeJni)
-                .getRequiredFields(anyString(), anyList());
+        when(mAutofillProfileBridgeJni.getRequiredFields(anyString()))
+                .thenReturn(
+                        new int[] {
+                            FieldType.NAME_FULL,
+                            FieldType.ADDRESS_HOME_CITY,
+                            FieldType.ADDRESS_HOME_DEPENDENT_LOCALITY,
+                            FieldType.ADDRESS_HOME_ZIP
+                        });
         PhoneNumberUtilJni.setInstanceForTesting(mPhoneNumberUtilJni);
         when(mPhoneNumberUtilJni.isPossibleNumber(anyString(), anyString())).thenReturn(true);
 
@@ -242,52 +235,14 @@ public class AddressEditorTest {
     }
 
     private void setUpSupportedCountries(List<DropdownKeyValue> supportedCountries) {
-        doAnswer(
-                        invocation -> {
-                            List<String> contryCodes = (List<String>) invocation.getArguments()[0];
-                            List<String> contryNames = (List<String>) invocation.getArguments()[1];
-
-                            for (DropdownKeyValue keyValue : supportedCountries) {
-                                contryCodes.add(keyValue.getKey());
-                                contryNames.add(keyValue.getValue().toString());
-                            }
-
-                            return null;
-                        })
-                .when(mAutofillProfileBridgeJni)
-                .getSupportedCountries(anyList(), anyList());
+        when(mAutofillProfileBridgeJni.getSupportedCountries()).thenReturn(supportedCountries);
     }
 
     private void setUpAddressUiComponents(
             List<AutofillAddressUiComponent> addressUiComponents, String countryCode) {
-        doAnswer(
-                        invocation -> {
-                            List<Integer> componentIds =
-                                    (List<Integer>) invocation.getArguments()[3];
-                            List<String> componentNames =
-                                    (List<String>) invocation.getArguments()[4];
-                            List<Integer> componentRequired =
-                                    (List<Integer>) invocation.getArguments()[5];
-                            List<Integer> componentLength =
-                                    (List<Integer>) invocation.getArguments()[6];
-
-                            for (AutofillAddressUiComponent component : addressUiComponents) {
-                                componentIds.add(component.id);
-                                componentNames.add(component.label);
-                                componentRequired.add(component.isRequired ? 1 : 0);
-                                componentLength.add(component.isFullLine ? 1 : 0);
-                            }
-                            return "EN";
-                        })
-                .when(mAutofillProfileBridgeJni)
-                .getAddressUiComponents(
-                        eq(countryCode),
-                        anyString(),
-                        anyInt(),
-                        anyList(),
-                        anyList(),
-                        anyList(),
-                        anyList());
+        when(mAutofillProfileBridgeJni.getAddressEditorUiInfo(
+                        eq(countryCode), anyString(), anyInt()))
+                .thenReturn(new AutofillAddressEditorUiInfo("EN", addressUiComponents));
     }
 
     private void setUpAddressUiComponents(List<AutofillAddressUiComponent> addressUiComponents) {

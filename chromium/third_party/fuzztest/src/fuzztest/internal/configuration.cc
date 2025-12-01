@@ -203,25 +203,27 @@ std::string Configuration::Serialize() const {
   std::string time_budget_type_str = AbslUnparseFlag(time_budget_type);
   std::string out;
   out.resize(SpaceFor(corpus_database) + SpaceFor(stats_root) +
-             SpaceFor(binary_identifier) + SpaceFor(fuzz_tests) +
-             SpaceFor(fuzz_tests_in_current_shard) +
+             SpaceFor(workdir_root) + SpaceFor(binary_identifier) +
+             SpaceFor(fuzz_tests) + SpaceFor(fuzz_tests_in_current_shard) +
              SpaceFor(reproduce_findings_as_separate_tests) +
              SpaceFor(replay_coverage_inputs) + SpaceFor(only_replay) +
-             SpaceFor(execution_id) + SpaceFor(print_subprocess_log) +
-             SpaceFor(stack_limit) + SpaceFor(rss_limit) +
-             SpaceFor(time_limit_per_input_str) + SpaceFor(time_limit_str) +
-             SpaceFor(time_budget_type_str) + SpaceFor(jobs) +
-             SpaceFor(crashing_input_to_reproduce) +
+             SpaceFor(replay_in_single_process) + SpaceFor(execution_id) +
+             SpaceFor(print_subprocess_log) + SpaceFor(stack_limit) +
+             SpaceFor(rss_limit) + SpaceFor(time_limit_per_input_str) +
+             SpaceFor(time_limit_str) + SpaceFor(time_budget_type_str) +
+             SpaceFor(jobs) + SpaceFor(crashing_input_to_reproduce) +
              SpaceFor(reproduction_command_template));
   size_t offset = 0;
   offset = WriteString(out, offset, corpus_database);
   offset = WriteString(out, offset, stats_root);
+  offset = WriteString(out, offset, workdir_root);
   offset = WriteString(out, offset, binary_identifier);
   offset = WriteVectorOfStrings(out, offset, fuzz_tests);
   offset = WriteVectorOfStrings(out, offset, fuzz_tests_in_current_shard);
   offset = WriteIntegral(out, offset, reproduce_findings_as_separate_tests);
   offset = WriteIntegral(out, offset, replay_coverage_inputs);
   offset = WriteIntegral(out, offset, only_replay);
+  offset = WriteIntegral(out, offset, replay_in_single_process);
   offset = WriteOptionalString(out, offset, execution_id);
   offset = WriteIntegral(out, offset, print_subprocess_log);
   offset = WriteIntegral(out, offset, stack_limit);
@@ -241,6 +243,7 @@ absl::StatusOr<Configuration> Configuration::Deserialize(
   return [=]() mutable -> absl::StatusOr<Configuration> {
     ASSIGN_OR_RETURN(corpus_database, ConsumeString(serialized));
     ASSIGN_OR_RETURN(stats_root, ConsumeString(serialized));
+    ASSIGN_OR_RETURN(workdir_root, ConsumeString(serialized));
     ASSIGN_OR_RETURN(binary_identifier, ConsumeString(serialized));
     ASSIGN_OR_RETURN(fuzz_tests, ConsumeVectorOfStrings(serialized));
     ASSIGN_OR_RETURN(fuzz_tests_in_current_shard,
@@ -249,6 +252,7 @@ absl::StatusOr<Configuration> Configuration::Deserialize(
                      Consume<bool>(serialized));
     ASSIGN_OR_RETURN(replay_coverage_inputs, Consume<bool>(serialized));
     ASSIGN_OR_RETURN(only_replay, Consume<bool>(serialized));
+    ASSIGN_OR_RETURN(replay_in_single_process, Consume<bool>(serialized));
     ASSIGN_OR_RETURN(execution_id, ConsumeOptionalString(serialized));
     ASSIGN_OR_RETURN(print_subprocess_log, Consume<bool>(serialized));
     ASSIGN_OR_RETURN(stack_limit, Consume<size_t>(serialized));
@@ -272,12 +276,14 @@ absl::StatusOr<Configuration> Configuration::Deserialize(
                      ParseTimeBudgetType(*time_budget_type_str));
     return Configuration{*std::move(corpus_database),
                          *std::move(stats_root),
+                         *std::move(workdir_root),
                          *std::move(binary_identifier),
                          *std::move(fuzz_tests),
                          *std::move(fuzz_tests_in_current_shard),
                          *reproduce_findings_as_separate_tests,
                          *replay_coverage_inputs,
                          *only_replay,
+                         *replay_in_single_process,
                          *std::move(execution_id),
                          *print_subprocess_log,
                          *stack_limit,

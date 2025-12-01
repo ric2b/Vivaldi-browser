@@ -1141,6 +1141,7 @@ Reduction LoadElimination::ReduceLoadElement(Node* node) {
     case MachineRepresentation::kWord16:
     case MachineRepresentation::kWord32:
     case MachineRepresentation::kWord64:
+    case MachineRepresentation::kFloat16RawBits:
     case MachineRepresentation::kFloat16:
     case MachineRepresentation::kFloat32:
     case MachineRepresentation::kCompressedPointer:
@@ -1202,6 +1203,7 @@ Reduction LoadElimination::ReduceStoreElement(Node* node) {
     case MachineRepresentation::kWord16:
     case MachineRepresentation::kWord32:
     case MachineRepresentation::kWord64:
+    case MachineRepresentation::kFloat16RawBits:
     case MachineRepresentation::kFloat16:
     case MachineRepresentation::kFloat32:
     case MachineRepresentation::kCompressedPointer:
@@ -1520,6 +1522,7 @@ LoadElimination::IndexRange LoadElimination::FieldIndexOf(
     case MachineRepresentation::kBit:
     case MachineRepresentation::kSimd128:
     case MachineRepresentation::kSimd256:
+    case MachineRepresentation::kFloat16RawBits:
       UNREACHABLE();
     case MachineRepresentation::kWord8:
     case MachineRepresentation::kWord16:
@@ -1562,7 +1565,7 @@ CommonOperatorBuilder* LoadElimination::common() const {
   return jsgraph()->common();
 }
 
-Graph* LoadElimination::graph() const { return jsgraph()->graph(); }
+TFGraph* LoadElimination::graph() const { return jsgraph()->graph(); }
 
 Isolate* LoadElimination::isolate() const { return jsgraph()->isolate(); }
 

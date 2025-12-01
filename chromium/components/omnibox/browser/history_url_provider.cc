@@ -54,6 +54,8 @@
 #include "url/gurl.h"
 #include "url/third_party/mozilla/url_parse.h"
 #include "url/url_util.h"
+
+// Vivaldi
 #include "vivaldi/prefs/vivaldi_gen_prefs.h"
 
 namespace {
@@ -180,6 +182,10 @@ int CalculateRelevanceScoreUsingScoringParams(
       scoring_params.typed_count_buckets, time_since_last_visit, old_relevance,
       match.url_info.typed_count());
 
+// VB-115560: Don't demote URLs that have not been typed even more. The
+// omnibox will never be able to suggest the typed URL if search-suggestions
+// are off.
+#if !defined(VIVALDI_BUILD)
   // Additional demotion (on top of typed_count demotion) of URLs that were
   // never typed.
   if (match.url_info.typed_count() == 0) {
@@ -187,6 +193,7 @@ int CalculateRelevanceScoreUsingScoringParams(
         scoring_params.visited_count_buckets, time_since_last_visit, relevance,
         match.url_info.visit_count());
   }
+#endif
 
   DCHECK_LE(relevance, old_relevance);
   return relevance;
@@ -477,6 +484,12 @@ void HistoryURLProvider::Start(const AutocompleteInput& input,
   }
 
   what_you_typed_match.relevance = CalculateRelevance(WHAT_YOU_TYPED, 0);
+  // Boost URL_WHAT_YOU_TYPED item if autocomplete is disabled to place it
+  // on top of dropdown.
+  if (!client()->GetPrefs()->GetBoolean(
+          vivaldiprefs::kAddressBarAutocompleteEnabled)) {
+    what_you_typed_match.relevance = what_you_typed_match.relevance + 1000;
+  }
   if (autocomplete_input.InKeywordMode()) {
     // TODO(yoangela): We may want to suppress what you typed matches when in
     // keyword mode.
@@ -492,9 +505,9 @@ void HistoryURLProvider::Start(const AutocompleteInput& input,
 
 #if defined(VIVALDI_BUILD)
   PrefService* prefs = client()->GetPrefs();
-  auto show_search =
+  auto show_history =
       prefs->GetBoolean(vivaldiprefs::kAddressBarOmniboxShowBrowserHistory);
-  if (!show_search) {
+  if (!show_history) {
     return;
   }
 #endif
@@ -533,7 +546,6 @@ void HistoryURLProvider::Start(const AutocompleteInput& input,
   // TODO(pkasting): We should just block here until this loads.  Any time
   // someone unloads the history backend, we'll get inconsistent inline
   // autocomplete behavior here.
-
   if (url_db) {
     DoAutocomplete(nullptr, url_db, params.get());
     matches_.clear();
@@ -772,8 +784,14 @@ void HistoryURLProvider::PromoteMatchesIfNecessary(
   if (params.promote_type == HistoryURLProviderParams::NEITHER)
     return;
   if (params.promote_type == HistoryURLProviderParams::FRONT_HISTORY_MATCH) {
+    const int no_autocomplete_boost =
+        client()->GetPrefs()->GetBoolean(
+            vivaldiprefs::kAddressBarAutocompleteEnabled)
+            ? 0
+            : 1000;
     matches_.push_back(HistoryMatchToACMatch(
-        params, 0, CalculateRelevance(INLINE_AUTOCOMPLETE, 0),
+        params, 0,
+        CalculateRelevance(INLINE_AUTOCOMPLETE, 0) + no_autocomplete_boost,
         populate_scoring_signals));
   }
   // There are two cases where we need to add the what-you-typed-match:
@@ -1177,8 +1195,8 @@ AutocompleteMatch HistoryURLProvider::HistoryMatchToACMatch(
   // into the middle of a punycode sequence fixed up to Unicode.  In this case,
   // there can be no inline autocompletion, and the match must not be allowed to
   // be default.
-  if (match.TryRichAutocompletion(match.contents, match.description,
-                                  params.input_before_fixup)) {
+  if (match.TryRichAutocompletion(params.input_before_fixup, match.contents,
+                                  match.description)) {
     // If rich autocompletion applies, we skip trying the alternatives below.
   } else if (inline_autocomplete_offset != std::u16string::npos) {
     DCHECK(inline_autocomplete_offset <= match.fill_into_edit.length());

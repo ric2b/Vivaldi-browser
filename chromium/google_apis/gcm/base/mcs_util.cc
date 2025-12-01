@@ -11,6 +11,8 @@
 
 #include <stddef.h>
 
+#include <string_view>
+
 #include "base/check_op.h"
 #include "base/format_macros.h"
 #include "base/notreached.h"
@@ -26,7 +28,7 @@ namespace {
 // Type names corresponding to MCSProtoTags. Useful for identifying what type
 // of MCS protobuf is contained within a google::protobuf::MessageLite object.
 // WARNING: must match the order in MCSProtoTag.
-const auto kProtoNames = std::to_array<const char*>({
+constexpr auto kProtoNames = std::to_array<const char*>({
     "mcs_proto.HeartbeatPing",
     "mcs_proto.HeartbeatAck",
     "mcs_proto.LoginRequest",
@@ -150,7 +152,7 @@ std::unique_ptr<google::protobuf::MessageLite> BuildProtobufFromTag(
 // Utility method to extract a MCS tag from a google::protobuf::MessageLite
 // object.
 int GetMCSProtoTag(const google::protobuf::MessageLite& message) {
-  const std::string& type_name = message.GetTypeName();
+  std::string_view type_name = message.GetTypeName();
   if (type_name == kProtoNames[kHeartbeatPingTag]) {
     return kHeartbeatPingTag;
   } else if (type_name == kProtoNames[kHeartbeatAckTag]) {

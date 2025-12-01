@@ -5,6 +5,9 @@
 #ifndef V8_OBJECTS_JS_OBJECTS_INL_H_
 #define V8_OBJECTS_JS_OBJECTS_INL_H_
 
+#include "src/objects/js-objects.h"
+// Include the non-inl header before the rest of the headers.
+
 #include <optional>
 
 #include "src/common/globals.h"
@@ -21,7 +24,6 @@
 #include "src/objects/heap-object-inl.h"
 #include "src/objects/heap-object.h"
 #include "src/objects/instance-type-inl.h"
-#include "src/objects/js-objects.h"
 #include "src/objects/keys.h"
 #include "src/objects/lookup-inl.h"
 #include "src/objects/primitive-heap-object.h"
@@ -955,7 +957,19 @@ MaybeDirectHandle<NativeContext> JSReceiver::GetCreationContext(
 Maybe<bool> JSReceiver::HasProperty(Isolate* isolate,
                                     DirectHandle<JSReceiver> object,
                                     DirectHandle<Name> name) {
-  PropertyKey key(isolate, name);
+  return HasPropertyOrElement(isolate, object, PropertyKey(isolate, name));
+}
+
+Maybe<bool> JSReceiver::HasElement(Isolate* isolate,
+                                   DirectHandle<JSReceiver> object,
+                                   uint32_t index) {
+  LookupIterator it(isolate, object, index, object);
+  return HasProperty(&it);
+}
+
+Maybe<bool> JSReceiver::HasPropertyOrElement(Isolate* isolate,
+                                             DirectHandle<JSReceiver> object,
+                                             PropertyKey key) {
   LookupIterator it(isolate, object, key, object);
   return HasProperty(&it);
 }
@@ -994,13 +1008,6 @@ Maybe<PropertyAttributes> JSReceiver::GetOwnPropertyAttributes(
     Isolate* isolate, DirectHandle<JSReceiver> object, uint32_t index) {
   LookupIterator it(isolate, object, index, object, LookupIterator::OWN);
   return GetPropertyAttributes(&it);
-}
-
-Maybe<bool> JSReceiver::HasElement(Isolate* isolate,
-                                   DirectHandle<JSReceiver> object,
-                                   uint32_t index) {
-  LookupIterator it(isolate, object, index, object);
-  return HasProperty(&it);
 }
 
 Maybe<PropertyAttributes> JSReceiver::GetElementAttributes(

@@ -41,7 +41,7 @@
 #include "third_party/blink/renderer/modules/canvas/canvas2d/identifiability_study_helper.h"
 #include "third_party/blink/renderer/modules/modules_export.h"
 #include "third_party/blink/renderer/platform/bindings/script_wrappable.h"
-#include "third_party/blink/renderer/platform/graphics/path.h"
+#include "third_party/blink/renderer/platform/geometry/path.h"
 #include "third_party/blink/renderer/platform/heap/forward.h"  // IWYU pragma: keep (blink::Visitor)
 #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
 #include "third_party/blink/renderer/platform/heap/member.h"
@@ -115,7 +115,7 @@ class MODULES_EXPORT Path2D final : public ScriptWrappable, public CanvasPath {
   Path2D(ScriptState* script_state, const String& path_data)
       : context_(ExecutionContext::From(script_state)) {
     identifiability_study_helper_.SetExecutionContext(context_.Get());
-    BuildPathFromString(path_data, GetModifiablePath());
+    GetModifiablePath() = BuildPathFromString(path_data);
     GetModifiablePath().SetIsVolatile(false);
   }
 

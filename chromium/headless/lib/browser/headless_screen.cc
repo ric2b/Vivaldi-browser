@@ -4,13 +4,16 @@
 
 #include "headless/lib/browser/headless_screen.h"
 
+#include <optional>
+
 #include "base/check_deref.h"
 #include "base/containers/flat_set.h"
-#include "headless/lib/browser/headless_screen_info.h"
+#include "base/notimplemented.h"
+#include "components/headless/display_util/headless_display_util.h"
+#include "components/headless/screen_info/headless_screen_info.h"
 #include "ui/display/display_finder.h"
 #include "ui/display/display_list.h"
 #include "ui/display/util/display_util.h"
-#include "ui/gfx/geometry/rect.h"
 
 #if defined(USE_AURA)
 #include "ui/aura/window.h"
@@ -36,34 +39,31 @@ bool HeadlessScreen::IsWindowUnderCursor(gfx::NativeWindow window) {
 
 gfx::NativeWindow HeadlessScreen::GetWindowAtScreenPoint(
     const gfx::Point& point) {
-  return nullptr;
+  return gfx::NativeWindow();
 }
 
 gfx::NativeWindow HeadlessScreen::GetLocalProcessWindowAtPoint(
     const gfx::Point& point,
     const std::set<gfx::NativeWindow>& ignore) {
-  return nullptr;
+  return gfx::NativeWindow();
 }
 
 display::Display HeadlessScreen::GetDisplayNearestWindow(
     gfx::NativeWindow window) const {
-  // Mac always passes null gfx::NativeWindow, see https://crbug.com/380313546,
-  // so this method currently only returns primary display on Macs.
+  // On Windows and Linux native window is abstracted by aura::Window so we can
+  // use its bounds to find the nearest display.
 #if defined(USE_AURA)
   if (window) {
     const gfx::Rect bounds = window->GetBoundsInScreen();
-    const display::Display* nearest_display =
-        display::FindDisplayWithBiggestIntersection(display_list().displays(),
-                                                    bounds);
-    if (!nearest_display) {
-      nearest_display = display::FindDisplayNearestPoint(
-          display_list().displays(), bounds.CenterPoint());
-    }
-    if (nearest_display) {
-      return *nearest_display;
+    if (std::optional<display::Display> display =
+            GetDisplayFromScreenRect(display_list().displays(), bounds)) {
+      return display.value();
     }
   }
-#endif
+#else
+  NOTIMPLEMENTED_LOG_ONCE();
+#endif  // #if defined(USE_AURA)
+
   return GetPrimaryDisplay();
 }
 
@@ -89,6 +89,11 @@ HeadlessScreen::HeadlessScreen(const gfx::Size& window_size,
 
     if (!it.work_area_insets.IsEmpty()) {
       display.UpdateWorkAreaFromInsets(it.work_area_insets);
+    }
+
+    if (it.rotation) {
+      CHECK(display::Display::IsValidRotation(it.rotation));
+      display.SetRotationAsDegree(it.rotation);
     }
 
     if (it.is_internal) {

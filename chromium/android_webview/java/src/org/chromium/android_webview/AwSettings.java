@@ -217,6 +217,8 @@ public class AwSettings {
     private boolean mSupportZoom = true;
     private boolean mBuiltInZoomControls;
     private boolean mDisplayZoomControls = true;
+    private boolean mPaymentRequestEnabled;
+    private boolean mHasEnrolledInstrumentEnabled = true;
     private final AwMediaIntegrityApiStatusConfig mIntegrityApiStatusConfig;
 
     private @WebauthnMode int mWebauthnMode = WebauthnMode.NONE;
@@ -1753,6 +1755,39 @@ public class AwSettings {
     public boolean getDisplayZoomControls() {
         synchronized (mAwSettingsLock) {
             return mDisplayZoomControls;
+        }
+    }
+
+    public void setPaymentRequestEnabled(boolean enabled) {
+        if (TRACE) Log.i(TAG, "setPaymentRequestEnabled=" + enabled);
+        synchronized (mAwSettingsLock) {
+            if (mPaymentRequestEnabled != enabled) {
+                mPaymentRequestEnabled = enabled;
+                mEventHandler.updateWebkitPreferencesLocked();
+            }
+        }
+    }
+
+    @CalledByNative
+    public boolean getPaymentRequestEnabled() {
+        synchronized (mAwSettingsLock) {
+            return mPaymentRequestEnabled;
+        }
+    }
+
+    public void setHasEnrolledInstrumentEnabled(boolean enabled) {
+        if (TRACE) Log.i(TAG, "setHasEnrolledInstrumentEnabled=" + enabled);
+        synchronized (mAwSettingsLock) {
+            if (mHasEnrolledInstrumentEnabled != enabled) {
+                flushBackForwardCacheOnUiThreadLocked();
+            }
+            mHasEnrolledInstrumentEnabled = enabled;
+        }
+    }
+
+    public boolean getHasEnrolledInstrumentEnabled() {
+        synchronized (mAwSettingsLock) {
+            return mHasEnrolledInstrumentEnabled;
         }
     }
 

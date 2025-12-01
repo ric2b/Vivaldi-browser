@@ -6,6 +6,7 @@
 
 #import "base/check.h"
 #import "base/ios/ios_util.h"
+#import "ios/chrome/browser/ntp/ui_bundled/new_tab_page_feature.h"
 #import "ios/chrome/browser/orchestrator/ui_bundled/edit_view_animatee.h"
 #import "ios/chrome/browser/orchestrator/ui_bundled/location_bar_animatee.h"
 #import "ios/chrome/browser/orchestrator/ui_bundled/toolbar_animatee.h"
@@ -176,7 +177,6 @@
           if (shouldCrossfadeEditAndSteadyViews) {
             [self.locationBarAnimatee
                     resetTextFieldOffsetAndOffsetSteadyViewToMatch];
-            [self.locationBarAnimatee setFakeboxButtonsSnapshotFaded:YES];
 
             // Fading the views happens with a different timing for a better
             // visual effect. The steady view looks like an ordinary label, and
@@ -198,6 +198,14 @@
                                             [self.locationBarAnimatee
                                                 setEditViewFaded:NO];
                                           }];
+
+            [UIView
+                addKeyframeWithRelativeStartTime:0
+                                relativeDuration:0.7
+                                      animations:^{
+                                        [self.locationBarAnimatee
+                                            setFakeboxButtonsSnapshotFaded:YES];
+                                      }];
           }
 
           // Scale the leading icon in with a slight bounce / spring.
@@ -317,8 +325,17 @@
     // Use UIView animateWithDuration instead of UIViewPropertyAnimator to
     // avoid UIKit bug. See https://crbug.com/856155.
     self.inProgressAnimationCount += 1;
+    if (ShouldEnlargeLogoAndFakebox()) {
+      // Set the location bar height to the default.
+      [self.toolbarAnimatee setLocationBarHeightExpanded];
+    }
     [self.toolbarAnimatee setToolbarFaded:NO];
     switch (_trigger) {
+      case OmniboxFocusTrigger::kPinnedFakebox:
+        if (ShouldEnlargeLogoAndFakebox()) {
+          [self.toolbarAnimatee setLocationBarHeightToMatchFakeOmnibox];
+        }
+        break;
       case OmniboxFocusTrigger::kUnpinnedFakebox:
         [self.toolbarAnimatee setToolbarFaded:YES];
         break;
@@ -433,6 +450,10 @@
   } else if (_completion) {
     _completion();
     _completion = nil;
+    if (ShouldEnlargeLogoAndFakebox()) {
+      // Reset the location bar height back to the default.
+      [self.toolbarAnimatee setLocationBarHeightExpanded];
+    }
   }
   [self.locationBarAnimatee clearFakeboxButtonsSnapshot];
   self.stateChangedDuringAnimation = NO;
@@ -445,6 +466,11 @@
   [self.toolbarAnimatee expandLocationBar];
   [self.toolbarAnimatee showCancelButton];
   switch (_trigger) {
+    case OmniboxFocusTrigger::kPinnedFakebox:
+      if (ShouldEnlargeLogoAndFakebox()) {
+        [self.toolbarAnimatee setLocationBarHeightExpanded];
+      }
+      break;
     case OmniboxFocusTrigger::kUnpinnedFakebox:
       [self.toolbarAnimatee setToolbarFaded:NO];
       break;
@@ -456,6 +482,10 @@
 // Visually contracts the location bar for defocus.
 - (void)contraction {
   [self.toolbarAnimatee contractLocationBar];
+  if (_trigger == OmniboxFocusTrigger::kPinnedFakebox &&
+      ShouldEnlargeLogoAndFakebox()) {
+    [self.toolbarAnimatee setLocationBarHeightToMatchFakeOmnibox];
+  }
 }
 
 // Returns YES if the focus event was triggered by the NTP Fakebox in its

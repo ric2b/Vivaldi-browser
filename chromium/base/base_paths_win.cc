@@ -80,15 +80,16 @@ bool PathProviderWin(int key, FilePath* result) {
       if (base::win::OSInfo::GetInstance()->IsWowX86OnAMD64() ||
           base::win::OSInfo::GetInstance()->IsWowX86OnARM64()) {
         std::unique_ptr<base::Environment> env(base::Environment::Create());
-        std::string programfiles_w6432;
         // 32-bit process running in WOW64 sets ProgramW6432 environment
         // variable. See
         // https://msdn.microsoft.com/library/windows/desktop/aa384274.aspx.
-        if (!env->GetVar("ProgramW6432", &programfiles_w6432)) {
+        std::optional<std::string> programfiles_w6432 =
+            env->GetVar("ProgramW6432");
+        if (!programfiles_w6432.has_value()) {
           return false;
         }
         // GetVar returns UTF8 - convert back to Wide.
-        cur = FilePath(UTF8ToWide(programfiles_w6432));
+        cur = FilePath(UTF8ToWide(programfiles_w6432.value()));
         break;
       }
 #endif
@@ -238,6 +239,17 @@ bool PathProviderWin(int key, FilePath* result) {
         return false;
       }
       break;
+    case base::DIR_ONE_DRIVE: {
+      base::win::ScopedCoMem<wchar_t> path_buf;
+      // FOLDERID_OneDrive points on the user OneDrive folder. The default path
+      // is %USERPROFILE%\OneDrive. It is formerly known as FOLDERID_SkyDrive.
+      if (FAILED(SHGetKnownFolderPath(FOLDERID_OneDrive, 0, NULL, &path_buf))) {
+        return false;
+      }
+
+      cur = FilePath(path_buf.get());
+      break;
+    }
     default:
       return false;
   }

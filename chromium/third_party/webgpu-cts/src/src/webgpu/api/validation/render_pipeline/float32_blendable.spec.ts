@@ -4,10 +4,11 @@ Tests for capabilities added by float32-blendable flag.
 
 import { makeTestGroup } from '../../../../common/framework/test_group.js';
 import { ColorTextureFormat } from '../../../format_info.js';
+import { UniqueFeaturesAndLimitsValidationTest } from '../validation_test.js';
 
-import { CreateRenderPipelineValidationTest } from './common.js';
+import { getDescriptorForCreateRenderPipelineValidationTest } from './common.js';
 
-export const g = makeTestGroup(CreateRenderPipelineValidationTest);
+export const g = makeTestGroup(UniqueFeaturesAndLimitsValidationTest);
 
 const kFloat32Formats: ColorTextureFormat[] = ['r32float', 'rg32float', 'rgba32float'];
 
@@ -30,12 +31,10 @@ pipeline that uses blending with any float32-format attachment.
     if (t.params.enabled) {
       t.selectDeviceOrSkipTestCase('float32-blendable');
     }
-    t.skipIfColorRenderableNotSupportedForFormat('r32float');
   })
   .fn(t => {
     const { isAsync, enabled, hasBlend, format } = t.params;
-
-    const descriptor = t.getDescriptor({
+    const descriptor = getDescriptorForCreateRenderPipelineValidationTest(t.device, {
       targets: [
         {
           format,

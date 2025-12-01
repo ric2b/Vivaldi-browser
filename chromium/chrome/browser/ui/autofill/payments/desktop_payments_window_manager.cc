@@ -182,13 +182,18 @@ void DesktopPaymentsWindowManager::CreatePopup(const GURL& url,
     }
     content::WebContentsObserver::Observe(navigation_handle->GetWebContents());
   } else {
-    autofill_metrics::LogVcn3dsFlowEvent(
-        Vcn3dsFlowEvent::kPopupNotShown,
-        /*user_consent_already_given=*/vcn_3ds_context_
-            ->user_consent_already_given);
-    client_->GetPaymentsAutofillClient()->ShowAutofillErrorDialog(
-        AutofillErrorDialogContext::WithVirtualCardPermanentOrTemporaryError(
-            /*is_permanent_error=*/false));
+    if (vcn_3ds_context_.has_value()) {
+      autofill_metrics::LogVcn3dsFlowEvent(
+          Vcn3dsFlowEvent::kPopupNotShown,
+          /*user_consent_already_given=*/vcn_3ds_context_
+              ->user_consent_already_given);
+      client_->GetPaymentsAutofillClient()->ShowAutofillErrorDialog(
+          AutofillErrorDialogContext::WithVirtualCardPermanentOrTemporaryError(
+              /*is_permanent_error=*/false));
+    } else {
+      // TODO(crbug.com/356443046): Add handling for BNPL pop-up window not
+      // being shown.
+    }
   }
 }
 
@@ -295,7 +300,8 @@ void DesktopPaymentsWindowManager::OnWebContentsDestroyedForBnpl() {
       result = BnplFlowResult::kUserClosed;
       break;
   }
-  std::move(bnpl_context_->completion_callback).Run(result);
+  std::move(bnpl_context_->completion_callback)
+      .Run(result, std::move(most_recent_url_navigation_));
   Reset();
 }
 

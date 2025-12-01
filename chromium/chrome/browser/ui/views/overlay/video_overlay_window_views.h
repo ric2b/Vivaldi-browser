@@ -193,6 +193,7 @@ class VideoOverlayWindowViews : public content::VideoOverlayWindow,
       const;
   global_media_controls::MediaProgressView* progress_view_for_testing() const;
   views::Label* timestamp_for_testing() const;
+  views::Label* live_status_for_testing() const;
   views::ImageView* favicon_view_for_testing() const;
   views::Label* origin_for_testing() const;
   CloseImageButton* close_button_for_testing() const;
@@ -408,6 +409,7 @@ class VideoOverlayWindowViews : public content::VideoOverlayWindow,
   raw_ptr<SimpleOverlayWindowImageButton> next_slide_controls_view_ = nullptr;
   raw_ptr<global_media_controls::MediaProgressView> progress_view_ = nullptr;
   raw_ptr<views::Label> timestamp_ = nullptr;
+  raw_ptr<views::Label> live_status_ = nullptr;
   raw_ptr<AutoPipSettingOverlayView> overlay_view_ = nullptr;
 
 #if BUILDFLAG(IS_CHROMEOS)
@@ -420,36 +422,29 @@ class VideoOverlayWindowViews : public content::VideoOverlayWindow,
   // used to toggle play/pause/replay button.
   PlaybackState playback_state_for_testing_ = kEndOfVideo;
 
-  // Whether or not the skip ad button will be shown. This is the
-  // case when Media Session "skipad" action is handled by the website.
+  // True if the Media Session "skipad" action is handled by the website.
   bool show_skip_ad_button_ = false;
 
-  // Whether or not the next track button will be shown. This is the
-  // case when Media Session "nexttrack" action is handled by the website.
+  // True if the Media Session "nexttrack" action is handled by the website.
   bool show_next_track_button_ = false;
 
-  // Whether or not the previous track button will be shown. This is the
-  // case when Media Session "previoustrack" action is handled by the website.
+  // True if the Media Session "previoustrack" action is handled by the website.
   bool show_previous_track_button_ = false;
 
-  // Whether or not the toggle microphone button will be shown. This is the case
-  // when Media Session "togglemicrophone" action is handled by the website.
+  // True if the Media Session "togglemicrophone" action is handled by the
+  // website.
   bool show_toggle_microphone_button_ = false;
 
-  // Whether or not the toggle camera button will be shown. This is the case
-  // when Media Session "togglecamera" action is handled by the website.
+  // True if the Media Session "togglecamera" action is handled by the website.
   bool show_toggle_camera_button_ = false;
 
-  // Whether or not the hang up button will be shown. This is the case when
-  // Media Session "hangup" action is handled by the website.
+  // True if the Media Session "hangup" action is handled by the website.
   bool show_hang_up_button_ = false;
 
-  // Whether or not the previous slide button will be shown. This is the
-  // case when Media Session "previousslide" action is handled by the website.
+  // True if the Media Session "previousslide" action is handled by the website.
   bool show_previous_slide_button_ = false;
 
-  // Whether or not the next slide button will be shown. This is the
-  // case when Media Session "nextslide" action is handled by the website.
+  // True if the Media Session "nextslide" action is handled by the website.
   bool show_next_slide_button_ = false;
 
   // Tracks whether or not the progress bar is currently being dragged by the
@@ -460,6 +455,9 @@ class VideoOverlayWindowViews : public content::VideoOverlayWindow,
   // Tracks the current position of media playback. Used for seeking to the
   // proper time when the user interacts with the progress bar.
   media_session::MediaPosition position_;
+
+  // True if the video in the picture-in-picture window is live.
+  bool is_live_ = false;
 
   // Whether or not the current frame sink for the surface displayed in the
   // |video_view_| is registered as the child of the overlay window frame sink.

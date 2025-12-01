@@ -259,23 +259,28 @@ bool CursorWindowController::ShouldEnableCursorCompositing() {
   }
 
   if (prefs->GetBoolean(prefs::kNightLightEnabled)) {
-    // All or some displays don't support setting a CRTC matrix, which means
-    // Night Light is using the composited color matrix, and hence software
+    // If the current display doesn't support setting a CRTC matrix,
+    // Night Light will be using the composited color matrix, and hence software
     // cursor should be used.
-    // TODO(afakhry): Instead of switching to the composited cursor on all
-    // displays if any of them don't support a CRTC matrix, we should provide
-    // the functionality to turn on the composited cursor on a per-display basis
-    // (i.e. use it only on the displays that don't support CRTC matrices).
-    const DisplayColorManager::DisplayCtmSupport displays_ctm_support =
-        shell->display_color_manager()->displays_ctm_support();
-    UMA_HISTOGRAM_ENUMERATION("Ash.NightLight.DisplayCrtcCtmSupport",
-                              displays_ctm_support);
-    if (displays_ctm_support != DisplayColorManager::DisplayCtmSupport::kAll)
+    if (!shell->display_color_manager()->HasColorCorrectionMatrix(
+            display_.id())) {
       return true;
+    }
   }
 
-  return prefs->GetBoolean(prefs::kAccessibilityLargeCursorEnabled) ||
-         prefs->GetBoolean(prefs::kAccessibilityHighContrastEnabled) ||
+  if (prefs->GetBoolean(prefs::kAccessibilityLargeCursorEnabled)) {
+    // If current display's cursor plane size (i.e. maximum cursor size) is
+    // larger than the large cursor size, then large cursor can be drawn
+    // using hardware plane. Otherwise, software compositing is needed
+    // for cursor.
+    if (gfx::ConvertSizeToDips(display_.maximum_cursor_size(),
+                               display_.device_scale_factor())
+            .height() < large_cursor_size_in_dip_) {
+      return true;
+    }
+  }
+
+  return prefs->GetBoolean(prefs::kAccessibilityHighContrastEnabled) ||
          prefs->GetBoolean(prefs::kDockedMagnifierEnabled);
 }
 
@@ -307,9 +312,6 @@ void CursorWindowController::UpdateContainer() {
 }
 
 void CursorWindowController::SetDisplay(const display::Display& display) {
-  if (!is_cursor_compositing_enabled_)
-    return;
-
   // TODO(oshima): Do not update the composition cursor when crossing
   // display in unified desktop mode for now. crbug.com/517222.
   if (Shell::Get()->display_manager()->IsInUnifiedMode() &&
@@ -321,6 +323,10 @@ void CursorWindowController::SetDisplay(const display::Display& display) {
   aura::Window* root_window = Shell::GetRootWindowForDisplayId(display.id());
   if (!root_window)
     return;
+
+  if (!is_cursor_compositing_enabled_) {
+    return;
+  }
 
   SetContainer(RootWindowController::ForWindow(root_window)
                    ->GetContainer(kShellWindowId_MouseCursorContainer));
@@ -568,8 +574,10 @@ void CursorWindowController::UpdateCursorVisibility() {
 }
 
 void CursorWindowController::UpdateCursorView() {
-  // Return if the container's size is not updated yet.
-  if (container_->GetBoundsInRootWindow().size() != bounds_in_screen_.size()) {
+  // Return if there is existing |cursor_view_widget_| and the container's size
+  // is not updated yet.
+  if (cursor_view_widget_ &&
+      container_->GetBoundsInRootWindow().size() != bounds_in_screen_.size()) {
     return;
   }
 
@@ -608,6 +616,7 @@ void CursorWindowController::UpdateCursorMode() {
   }
 
   if (ShouldUseFastInk()) {
+    delegate_->SetCursorWindow(nullptr);
     cursor_window_.reset();
     UpdateCursorView();
   } else {

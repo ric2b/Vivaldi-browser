@@ -2359,7 +2359,8 @@ PasswordForm LoginDatabaseUndecryptableLoginsTest::AddDummyLogin(
 
 TEST_F(LoginDatabaseUndecryptableLoginsTest, DeleteUndecryptableLoginsTest) {
   base::test::ScopedFeatureList feature_list;
-  feature_list.InitAndDisableFeature(features::kSkipUndecryptablePasswords);
+  feature_list.InitWithFeatures({}, {features::kSkipUndecryptablePasswords,
+                                     features::kClearUndecryptablePasswords});
   auto form1 =
       AddDummyLogin("foo1", GURL("https://foo1.com/"),
                     /*should_be_corrupted=*/false, /*blocklisted=*/false);
@@ -2634,7 +2635,8 @@ TEST_F(LoginDatabaseUndecryptableLoginsTest,
 TEST_F(LoginDatabaseUndecryptableLoginsTest,
        PasswordRecoveryDisabledGetLogins) {
   base::test::ScopedFeatureList feature_list;
-  feature_list.InitAndDisableFeature(features::kSkipUndecryptablePasswords);
+  feature_list.InitWithFeatures({}, {features::kSkipUndecryptablePasswords,
+                                     features::kClearUndecryptablePasswords});
   AddDummyLogin("foo1", GURL("https://foo1.com/"), false,
                 /*blocklisted=*/false);
   AddDummyLogin("foo2", GURL("https://foo2.com/"), true, /*blocklisted=*/false);
@@ -3083,6 +3085,75 @@ TEST_P(LoginDatabaseTest, RemoveLoginRemovesNoteAttachedToTheLogin) {
   EXPECT_TRUE(db().RemoveLogin(form, &list));
   EXPECT_TRUE(
       db().password_notes_table().GetPasswordNotes(FormPrimaryKey(1)).empty());
+}
+
+TEST_P(LoginDatabaseTest, ChangesOnlyWithNotes) {
+  PasswordForm form = GenerateExamplePasswordForm();
+  PasswordStoreChangeList change_list = db().AddLogin(form);
+  FormPrimaryKey primary_key = change_list[0].form().primary_key.value();
+  PasswordNote note(u"example note", base::Time::Now());
+  form.notes = {note};
+
+  EXPECT_EQ(UpdateChangeForForm(form, /*password_changed=*/false,
+                                /*insecure_changed=*/true),
+            db().UpdateLogin(form, nullptr));
+
+  EXPECT_EQ(db().password_notes_table().GetPasswordNotes(
+                FormPrimaryKey(primary_key))[0],
+            note);
+}
+
+TEST_P(LoginDatabaseTest, UpdateLoginNoteRemoved) {
+  PasswordForm form = GenerateExamplePasswordForm();
+  PasswordNote note(u"example note", base::Time::Now());
+  form.notes = {note};
+  PasswordStoreChangeList change_list = db().AddLogin(form);
+  FormPrimaryKey primary_key = change_list[0].form().primary_key.value();
+  form.notes = {};
+  EXPECT_EQ(UpdateChangeForForm(form, /*password_changed=*/false,
+                                /*insecure_changed=*/true),
+            db().UpdateLogin(form, nullptr));
+
+  EXPECT_TRUE(db().password_notes_table()
+                  .GetPasswordNotes(FormPrimaryKey(primary_key))
+                  .empty());
+}
+
+TEST_P(LoginDatabaseTest, UpdateLoginInsecureCredentialsChanged) {
+  PasswordForm form = GenerateExamplePasswordForm();
+  PasswordStoreChangeList change_list = db().AddLogin(form);
+  FormPrimaryKey primary_key = change_list[0].form().primary_key.value();
+  InsecureCredential credential1{
+      form.signon_realm, form.username_value,
+      base::Time(),      InsecureType::kLeaked,
+      IsMuted(false),    TriggerBackendNotification(false)};
+
+  form.password_issues.insert_or_assign(
+      InsecureType::kLeaked,
+      InsecurityMetadata(credential1.create_time, credential1.is_muted,
+                         credential1.trigger_notification_from_backend));
+  EXPECT_EQ(UpdateChangeForForm(form, /*password_changed=*/false,
+                                /*insecure_changed=*/true),
+            db().UpdateLogin(form, nullptr));
+  ASSERT_THAT(
+      db().insecure_credentials_table().GetRows(FormPrimaryKey(primary_key)),
+      ElementsAre(credential1));
+}
+
+TEST_P(LoginDatabaseTest, UpdateLoginNoChanges) {
+  PasswordForm form = GenerateExamplePasswordForm();
+  PasswordStoreChangeList change_list = db().AddLogin(form);
+  FormPrimaryKey primary_key = change_list[0].form().primary_key.value();
+
+  EXPECT_EQ(UpdateChangeForForm(form, /*password_changed=*/false,
+                                /*insecure_changed=*/true),
+            db().UpdateLogin(form, nullptr));
+  EXPECT_TRUE(db().password_notes_table()
+                  .GetPasswordNotes(FormPrimaryKey(primary_key))
+                  .empty());
+  EXPECT_TRUE(db().password_notes_table()
+                  .GetPasswordNotes(FormPrimaryKey(primary_key))
+                  .empty());
 }
 
 TEST_P(LoginDatabaseTest, RemovingLoginRemovesInsecureCredentials) {

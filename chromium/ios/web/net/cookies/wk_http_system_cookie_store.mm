@@ -22,6 +22,7 @@
 #import "ios/web/web_state/ui/wk_web_view_configuration_provider.h"
 #import "net/base/apple/url_conversions.h"
 #import "net/cookies/canonical_cookie.h"
+#import "net/cookies/cookie_access_params.h"
 #import "net/cookies/cookie_constants.h"
 #import "url/gurl.h"
 
@@ -77,9 +78,9 @@ const char kWKHTTPSystemCookieCallbackConfigCreatedRegistrationKey = '\0';
                withProvider:(web::WKWebViewConfigurationProvider*)provider {
   __weak CRWWKHTTPCookieStore* weak_store = store;
   base::CallbackListSubscription subscription =
-      provider->RegisterConfigurationCreatedCallback(
-          base::BindRepeating(^(WKWebViewConfiguration* configuration) {
-            weak_store.websiteDataStore = configuration.websiteDataStore;
+      provider->RegisterWebSiteDataStoreUpdatedCallback(
+          base::BindRepeating(^(WKWebsiteDataStore* websiteDataStore) {
+            weak_store.websiteDataStore = websiteDataStore;
           }));
 
   WKHTTPSystemCookieCallbackConfigCreatedRegistration* wrapper =
@@ -427,8 +428,7 @@ WKHTTPSystemCookieStore::Helper::Helper(
       web::GetIOThreadTaskRunner({});
 
   crw_cookie_store_ = [[CRWWKHTTPCookieStore alloc] init];
-  crw_cookie_store_.websiteDataStore =
-      provider->GetWebViewConfiguration().websiteDataStore;
+  crw_cookie_store_.websiteDataStore = provider->GetWebsiteDataStore();
 
   helper_ = [[WKHTTPSystemCookieStoreCancelableTaskHelper alloc]
       initWithTaskRunner:io_task_runner];

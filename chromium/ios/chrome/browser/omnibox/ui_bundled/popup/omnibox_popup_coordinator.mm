@@ -21,18 +21,21 @@
 #import "ios/chrome/browser/history/model/top_sites_factory.h"
 #import "ios/chrome/browser/menu/ui_bundled/browser_action_factory.h"
 #import "ios/chrome/browser/net/model/crurl.h"
-#import "ios/chrome/browser/omnibox/model/omnibox_popup_controller.h"
+#import "ios/chrome/browser/omnibox/model/autocomplete_result_wrapper.h"
+#import "ios/chrome/browser/omnibox/model/omnibox_autocomplete_controller.h"
+#import "ios/chrome/browser/omnibox/model/omnibox_image_fetcher.h"
 #import "ios/chrome/browser/omnibox/public/omnibox_ui_features.h"
 #import "ios/chrome/browser/omnibox/ui_bundled/popup/carousel/carousel_item.h"
 #import "ios/chrome/browser/omnibox/ui_bundled/popup/carousel/carousel_item_menu_provider.h"
 #import "ios/chrome/browser/omnibox/ui_bundled/popup/content_providing.h"
+#import "ios/chrome/browser/omnibox/ui_bundled/popup/debugger/omnibox_debugger_mediator.h"
+#import "ios/chrome/browser/omnibox/ui_bundled/popup/debugger/omnibox_debugger_view_controller.h"
 #import "ios/chrome/browser/omnibox/ui_bundled/popup/omnibox_pedal_annotator.h"
 #import "ios/chrome/browser/omnibox/ui_bundled/popup/omnibox_popup_mediator.h"
 #import "ios/chrome/browser/omnibox/ui_bundled/popup/omnibox_popup_presenter.h"
 #import "ios/chrome/browser/omnibox/ui_bundled/popup/omnibox_popup_view_controller.h"
 #import "ios/chrome/browser/omnibox/ui_bundled/popup/omnibox_popup_view_ios.h"
 #import "ios/chrome/browser/omnibox/ui_bundled/popup/pedal_section_extractor.h"
-#import "ios/chrome/browser/omnibox/ui_bundled/popup/popup_debug_info_view_controller.h"
 #import "ios/chrome/browser/policy/model/policy_util.h"
 #import "ios/chrome/browser/search_engines/model/template_url_service_factory.h"
 #import "ios/chrome/browser/shared/coordinator/layout_guide/layout_guide_util.h"
@@ -72,17 +75,25 @@
 @end
 
 @implementation OmniboxPopupCoordinator {
-  __weak OmniboxPopupController* _omniboxPopupController;
+  /// The omnibox autocomplete controller.
+  __weak OmniboxAutocompleteController* _omniboxAutocompleteController;
+  /// The omnibox debugger mediator.
+  OmniboxDebuggerMediator* _omniboxDebuggerMediator;
+  /// The omnibox image fetcher.
+  OmniboxImageFetcher* _omniboxImageFetcher;
 }
 
 #pragma mark - Public
 
-- (instancetype)
-    initWithBaseViewController:(UIViewController*)viewController
-                       browser:(Browser*)browser
-        autocompleteController:(AutocompleteController*)autocompleteController
-                     popupView:(std::unique_ptr<OmniboxPopupViewIOS>)popupView
-               popupController:(OmniboxPopupController*)popupController {
+- (instancetype)initWithBaseViewController:(UIViewController*)viewController
+                                   browser:(Browser*)browser
+                    autocompleteController:
+                        (AutocompleteController*)autocompleteController
+                                 popupView:
+                                     (std::unique_ptr<OmniboxPopupViewIOS>)
+                                         popupView
+             omniboxAutocompleteController:
+                 (OmniboxAutocompleteController*)omniboxAutocompleteController {
   self = [super initWithBaseViewController:nil browser:browser];
   if (self) {
     DCHECK(autocompleteController);
@@ -91,7 +102,7 @@
     _popupViewController = [[OmniboxPopupViewController alloc] init];
     _popupReturnDelegate = _popupViewController;
     _KeyboardDelegate = _popupViewController;
-    _omniboxPopupController = popupController;
+    _omniboxAutocompleteController = omniboxAutocompleteController;
   }
   return self;
 }
@@ -99,26 +110,22 @@
 - (void)start {
   std::unique_ptr<image_fetcher::ImageDataFetcher> imageFetcher =
       std::make_unique<image_fetcher::ImageDataFetcher>(
-          self.browser->GetProfile()->GetSharedURLLoaderFactory());
+          self.profile->GetSharedURLLoaderFactory());
 
-  BOOL isIncognito = self.browser->GetProfile()->IsOffTheRecord();
+  _omniboxImageFetcher = [[OmniboxImageFetcher alloc]
+      initWithFaviconLoader:IOSChromeFaviconLoaderFactory::GetForProfile(
+                                self.profile)
+               imageFetcher:std::move(imageFetcher)];
 
-  RemoteSuggestionsService* remoteSuggestionsService =
-      RemoteSuggestionsServiceFactory::GetForProfile(
-          self.browser->GetProfile(), /*create_if_necessary=*/true);
+  BOOL isIncognito = self.profile->IsOffTheRecord();
 
   self.mediator = [[OmniboxPopupMediator alloc]
-               initWithFetcher:std::move(imageFetcher)
-                 faviconLoader:IOSChromeFaviconLoaderFactory::GetForProfile(
-                                   self.browser->GetProfile())
-        autocompleteController:self.autocompleteController
-      remoteSuggestionsService:remoteSuggestionsService
-                      delegate:_popupView.get()
-                       tracker:feature_engagement::TrackerFactory::
-                                   GetForProfile(self.browser->GetProfile())];
+          initWithTracker:feature_engagement::TrackerFactory::GetForProfile(
+                              self.profile)
+      omniboxImageFetcher:_omniboxImageFetcher];
 
   TemplateURLService* templateURLService =
-      ios::TemplateURLServiceFactory::GetForProfile(self.browser->GetProfile());
+      ios::TemplateURLServiceFactory::GetForProfile(self.profile);
   self.mediator.defaultSearchEngineIsGoogle =
       templateURLService && templateURLService->GetDefaultSearchProvider() &&
       templateURLService->GetDefaultSearchProvider()->GetEngineType(
@@ -137,16 +144,16 @@
       initWithBrowser:self.browser
              scenario:kMenuScenarioHistogramOmniboxMostVisitedEntry];
   self.mediator.mostVisitedActionFactory = actionFactory;
+  self.mediator.omniboxAutocompleteController = _omniboxAutocompleteController;
   self.popupViewController.imageRetriever = self.mediator;
   self.popupViewController.faviconRetriever = self.mediator;
   self.popupViewController.delegate = self.mediator;
   self.popupViewController.dataSource = self.mediator;
   self.popupViewController.incognito = isIncognito;
   favicon::LargeIconService* largeIconService =
-      IOSChromeLargeIconServiceFactory::GetForProfile(
-          self.browser->GetProfile());
+      IOSChromeLargeIconServiceFactory::GetForProfile(self.profile);
   LargeIconCache* cache =
-      IOSChromeLargeIconCacheFactory::GetForProfile(self.browser->GetProfile());
+      IOSChromeLargeIconCacheFactory::GetForProfile(self.profile);
   self.popupViewController.largeIconService = largeIconService;
   self.popupViewController.largeIconCache = cache;
   self.popupViewController.carouselMenuProvider = self.mediator;
@@ -159,21 +166,12 @@
   self.popupViewController.acceptReturnDelegate = self.acceptReturnDelegate;
   self.mediator.carouselItemConsumer = self.popupViewController;
   self.mediator.allowIncognitoActions =
-      !IsIncognitoModeDisabled(self.browser->GetProfile()->GetPrefs());
+      !IsIncognitoModeDisabled(self.profile->GetPrefs());
 
-  CommandDispatcher* dispatcher = self.browser->GetCommandDispatcher();
-  OmniboxPedalAnnotator* annotator = [[OmniboxPedalAnnotator alloc] init];
-  annotator.applicationHandler =
-      HandlerForProtocol(dispatcher, ApplicationCommands);
-  annotator.settingsHandler = HandlerForProtocol(dispatcher, SettingsCommands);
-  annotator.omniboxHandler = HandlerForProtocol(dispatcher, OmniboxCommands);
-  annotator.quickDeleteHandler =
-      HandlerForProtocol(dispatcher, QuickDeleteCommands);
+  _omniboxAutocompleteController.delegate = self.mediator;
 
-  self.mediator.pedalAnnotator = annotator;
-
-  self.mediator.applicationCommandsHandler =
-      HandlerForProtocol(dispatcher, ApplicationCommands);
+  self.mediator.applicationCommandsHandler = HandlerForProtocol(
+      self.browser->GetCommandDispatcher(), ApplicationCommands);
   self.mediator.incognito = isIncognito;
   self.mediator.sceneState = self.browser->GetSceneState();
   self.mediator.presenter = [[OmniboxPopupPresenter alloc]
@@ -182,26 +180,21 @@
                    layoutGuideCenter:LayoutGuideCenterForBrowser(self.browser)
                            incognito:isIncognito];
 
-  _popupView->SetMediator(self.mediator);
-
-  _omniboxPopupController.delegate = self.mediator;
-
   if (experimental_flags::IsOmniboxDebuggingEnabled()) {
     [self setupDebug];
   }
 }
 
 - (void)stop {
-  [self.mediator disconnect];
+  [_omniboxDebuggerMediator disconnect];
 
   [self.sharingCoordinator stop];
   self.sharingCoordinator = nil;
-  _omniboxPopupController.delegate = nil;
   _popupView.reset();
 }
 
 - (BOOL)isOpen {
-  return self.mediator.isOpen;
+  return _omniboxAutocompleteController.hasSuggestions;
 }
 
 - (id<ToolbarOmniboxConsumer>)toolbarOmniboxConsumer {
@@ -216,13 +209,13 @@
 #pragma mark - Property accessor
 
 - (BOOL)hasResults {
-  return self.mediator.hasResults;
+  return _omniboxAutocompleteController.hasSuggestions;
 }
 
 #pragma mark - OmniboxPopupMediatorProtocolProvider
 
 - (scoped_refptr<history::TopSites>)topSites {
-  return ios::TopSitesFactory::GetForProfile(self.browser->GetProfile());
+  return ios::TopSitesFactory::GetForProfile(self.profile);
 }
 
 - (id<SnackbarCommands>)snackbarCommandsHandler {
@@ -255,9 +248,17 @@
 - (void)setupDebug {
   DCHECK(experimental_flags::IsOmniboxDebuggingEnabled());
 
+  RemoteSuggestionsService* remoteSuggestionsService =
+      RemoteSuggestionsServiceFactory::GetForProfile(
+          self.profile, /*create_if_necessary=*/true);
+
+  _omniboxDebuggerMediator = [[OmniboxDebuggerMediator alloc]
+      initWithAutocompleteController:_autocompleteController
+            remoteSuggestionsService:remoteSuggestionsService];
+
   PopupDebugInfoViewController* viewController =
       [[PopupDebugInfoViewController alloc] init];
-  self.mediator.debugInfoConsumer = viewController;
+  _omniboxDebuggerMediator.consumer = viewController;
 
   UINavigationController* navController = [[UINavigationController alloc]
       initWithRootViewController:viewController];

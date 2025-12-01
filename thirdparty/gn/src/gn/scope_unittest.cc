@@ -27,7 +27,8 @@ bool HasStringValueEqualTo(const Scope* scope,
 bool ContainsBuildDependencyFile(const Scope* scope,
                                  const SourceFile& source_file) {
   const auto& build_dependency_files = scope->CollectBuildDependencyFiles();
-  return build_dependency_files.find(source_file) != build_dependency_files.end();
+  return build_dependency_files.find(source_file) !=
+         build_dependency_files.end();
 }
 
 }  // namespace

@@ -19,7 +19,8 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.Mock;
-import org.mockito.MockitoAnnotations;
+import org.mockito.junit.MockitoJUnit;
+import org.mockito.junit.MockitoRule;
 
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.supplier.ObservableSupplierImpl;
@@ -53,14 +54,12 @@ import java.util.concurrent.TimeoutException;
 @EnableFeatures(ChromeFeatureList.PRICE_ANNOTATIONS)
 @CommandLineFlags.Add(ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE)
 public class ShoppingPersistedTabDataTest {
+    @Rule public final MockitoRule mMockitoRule = MockitoJUnit.rule();
     @Rule public final ChromeBrowserTestRule mBrowserTestRule = new ChromeBrowserTestRule();
 
     @Mock protected Profile mProfileMock;
 
     @Mock protected NavigationHandle mNavigationHandle;
-
-    // For R8 optimizer - see b/303266326.
-    @Mock private Tab mDoNotUseTab;
 
     @Mock private ShoppingPersistedTabDataService mShoppingPersistedTabDataService;
 
@@ -68,7 +67,6 @@ public class ShoppingPersistedTabDataTest {
 
     @Before
     public void setUp() {
-        MockitoAnnotations.initMocks(this);
         ThreadUtils.runOnUiThreadBlocking(
                 () -> {
                     ShoppingPersistedTabData.onDeferredStartup();

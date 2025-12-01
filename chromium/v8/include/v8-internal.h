@@ -577,7 +577,6 @@ enum ExternalPointerTag : uint16_t {
   kWasmInternalFunctionCallTargetTag,
   kWasmTypeInfoNativeTypeTag,
   kWasmExportedFunctionDataSignatureTag,
-  kWasmContinuationJmpbufTag,
   kWasmStackMemoryTag,
   kWasmIndirectFunctionTargetTag,
 
@@ -906,13 +905,13 @@ class Internals {
   static const int kFastCCallAlignmentPaddingSize =
       kApiSystemPointerSize == 8 ? 5 * kApiSystemPointerSize
                                  : 1 * kApiSystemPointerSize;
-  static const int kIsolateFastCCallCallerFpOffset =
+  static const int kIsolateFastCCallCallerPcOffset =
       kOldAllocationInfoOffset + kLinearAllocationAreaSize +
       kFastCCallAlignmentPaddingSize;
-  static const int kIsolateFastCCallCallerPcOffset =
-      kIsolateFastCCallCallerFpOffset + kApiSystemPointerSize;
-  static const int kIsolateFastApiCallTargetOffset =
+  static const int kIsolateFastCCallCallerFpOffset =
       kIsolateFastCCallCallerPcOffset + kApiSystemPointerSize;
+  static const int kIsolateFastApiCallTargetOffset =
+      kIsolateFastCCallCallerFpOffset + kApiSystemPointerSize;
   static const int kIsolateLongTaskStatsCounterOffset =
       kIsolateFastApiCallTargetOffset + kApiSystemPointerSize;
   static const int kIsolateThreadLocalTopOffset =
@@ -937,8 +936,10 @@ class Internals {
       kIsolateTrustedPointerTableOffset + kTrustedPointerTableSize;
   static const int kIsolateTrustedPointerPublishingScopeOffset =
       kIsolateSharedTrustedPointerTableAddressOffset + kApiSystemPointerSize;
-  static const int kIsolateApiCallbackThunkArgumentOffset =
+  static const int kIsolateCodePointerTableBaseAddressOffset =
       kIsolateTrustedPointerPublishingScopeOffset + kApiSystemPointerSize;
+  static const int kIsolateApiCallbackThunkArgumentOffset =
+      kIsolateCodePointerTableBaseAddressOffset + kApiSystemPointerSize;
 #else
   static const int kIsolateApiCallbackThunkArgumentOffset =
       kIsolateCppHeapPointerTableOffset + kExternalPointerTableSize;
@@ -1343,7 +1344,7 @@ class BackingStoreBase {};
 
 // The maximum value in enum GarbageCollectionReason, defined in heap.h.
 // This is needed for histograms sampling garbage collection reasons.
-constexpr int kGarbageCollectionReasonMaxValue = 28;
+constexpr int kGarbageCollectionReasonMaxValue = 29;
 
 // Base class for the address block allocator compatible with standard
 // containers, which registers its allocated range as strong roots.
@@ -1478,7 +1479,11 @@ class WrappedIterator : public MaybeDefineIteratorConcept<Iterator> {
 
   [[nodiscard]] constexpr reference operator*() const noexcept { return *it_; }
   [[nodiscard]] constexpr pointer operator->() const noexcept {
-    return it_.operator->();
+    if constexpr (std::is_pointer_v<Iterator>) {
+      return it_;
+    } else {
+      return it_.operator->();
+    }
   }
 
   template <typename OtherIterator, typename OtherElementType>

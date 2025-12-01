@@ -32,13 +32,13 @@
 #include "include/gpu/GpuTypes.h"
 #include "include/gpu/ganesh/GrDirectContext.h"
 #include "include/gpu/ganesh/SkSurfaceGanesh.h"
-#include "include/private/SkColorData.h"
 #include "include/private/SkSLSampleUsage.h"
 #include "include/private/base/SkTArray.h"
 #include "include/sksl/SkSLDebugTrace.h"
 #include "include/sksl/SkSLVersion.h"
 #include "src/base/SkStringView.h"
 #include "src/base/SkTLazy.h"
+#include "src/core/SkColorData.h"
 #include "src/core/SkColorSpacePriv.h"
 #include "src/core/SkRuntimeEffectPriv.h"
 #include "src/gpu/KeyBuilder.h"
@@ -729,7 +729,7 @@ DEF_TEST(SkRuntimeEffectSimple, r) {
 
 #if defined(SK_GRAPHITE)
 DEF_GRAPHITE_TEST_FOR_RENDERING_CONTEXTS(SkRuntimeEffectSimple_Graphite, r, context,
-                                         CtsEnforcement::kApiLevel_V) {
+                                         CtsEnforcement::kApiLevel_202404) {
     std::unique_ptr<skgpu::graphite::Recorder> recorder = context->makeRecorder();
     GraphiteInfo graphite = {context, recorder.get()};
     test_RuntimeEffect_Shaders(r, /*grContext=*/nullptr, &graphite);

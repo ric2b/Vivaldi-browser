@@ -31,47 +31,56 @@ bool RequestFilterRule::operator==(const RequestFilterRule& other) const =
     default;
 
 std::ostream& operator<<(std::ostream& os, const RequestFilterRule& rule) {
+  constexpr int kAlignemntPosition = 35;
+  constexpr int kAlignemntPositionNoColon = kAlignemntPosition - 1;
+
   auto print_strings = [&os](std::set<std::string> strings) {
     if (strings.empty()) {
-      os << ":<NULL>" << std::endl;
+      os << ":<NULL>\n";
       return;
     }
 
     std::string result;
     for (const auto& string : strings) {
-      os << ':' << string << std::endl << std::string(20, ' ');
+      os << ':' << string << "\n" << std::string(kAlignemntPosition, ' ');
     }
-    os.seekp(-20, std::ios_base::cur);
+    os.seekp(-kAlignemntPosition, std::ios_base::cur);
   };
 
-  os << std::endl
-     << std::setw(20) << "Decision:" << rule.decision << std::endl
-     << std::setw(20) << "Modify block:" << rule.modify_block << std::endl
-     << std::setw(20) << "Modifier:" << rule.modifier << std::endl
-     << std::setw(19) << "Modifier value";
+  os << "\n"
+     << std::setw(kAlignemntPosition) << "Rule text:" << rule.original_rule_text << "\n"
+     << std::setw(kAlignemntPosition) << "Decision:" << rule.decision << "\n"
+     << std::setw(kAlignemntPosition) << "Modify block:" << rule.modify_block
+     << "\n"
+     << std::setw(kAlignemntPosition) << "Modifier:" << rule.modifier << "\n"
+     << std::setw(kAlignemntPositionNoColon) << "Modifier value";
 
   print_strings(rule.modifier_values);
 
-  os << std::setw(20) << PatternTypeToString(rule.pattern_type) << rule.pattern
-     << std::endl
-     << std::setw(20)
+  os << std::setw(kAlignemntPosition) << PatternTypeToString(rule.pattern_type)
+     << rule.pattern << "\n"
+     << std::setw(kAlignemntPosition)
      << "NGram search string:" << rule.ngram_search_string.value_or("<NULL>")
-     << std::endl
-     << std::setw(20) << "Anchored:" << rule.anchor_type << std::endl
-     << std::setw(20) << "Party:" << rule.party << std::endl
-     << std::setw(20) << "Resources:" << rule.resource_types << std::endl
-     << std::setw(20) << "Explicit resources:" << rule.explicit_types
-     << std::endl
-     << std::setw(20) << "Activations:" << rule.activation_types << std::endl
-     << std::setw(20) << "Case sensitive:" << rule.is_case_sensitive
-     << std::endl
-     << std::setw(20) << "Host:" << rule.host.value_or("<NULL>") << std::endl
-     << std::setw(19) << "Included domains";
+     << "\n"
+     << std::setw(kAlignemntPosition) << "Anchored:" << rule.anchor_type << "\n"
+     << std::setw(kAlignemntPosition) << "Party:" << rule.party << "\n"
+     << std::setw(kAlignemntPosition) << "Resources:" << rule.resource_types
+     << "\n"
+     << std::setw(kAlignemntPosition)
+     << "Explicit resources:" << rule.explicit_types << "\n"
+     << std::setw(kAlignemntPosition) << "Activations:" << rule.activation_types
+     << "\n"
+     << std::setw(kAlignemntPosition)
+     << "Case sensitive:" << rule.is_case_sensitive << "\n"
+     << std::setw(kAlignemntPosition) << "Host:" << rule.host.value_or("<NULL>")
+     << "\n"
+     << std::setw(kAlignemntPositionNoColon) << "Included domains";
   print_strings(rule.included_domains);
-  os << std::setw(19) << "Excluded domains";
+  os << std::setw(kAlignemntPositionNoColon) << "Excluded domains";
   print_strings(rule.excluded_domains);
 
-  os << std::setw(20) << "Ad domains and id query params:" << std::endl;
+  os << std::setw(kAlignemntPositionNoColon)
+     << "Ad domains and id query params";
   print_strings(rule.ad_domains_and_query_triggers);
   return os;
 }

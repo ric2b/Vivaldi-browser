@@ -29,9 +29,11 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.Mock;
 import org.mockito.Mockito;
-import org.mockito.MockitoAnnotations;
+import org.mockito.junit.MockitoJUnit;
+import org.mockito.junit.MockitoRule;
 import org.robolectric.annotation.Config;
 
+import org.chromium.base.CallbackUtils;
 import org.chromium.base.FakeTimeTestRule;
 import org.chromium.base.FeatureList;
 import org.chromium.base.FeatureOverrides;
@@ -97,6 +99,8 @@ import java.util.function.BooleanSupplier;
 @Config(manifest = Config.NONE)
 public final class BaseCustomTabRootUiCoordinatorUnitTest {
 
+    @Rule public final MockitoRule mMockitoRule = MockitoJUnit.rule();
+
     @Rule
     public ActivityScenarioRule<TestActivity> mActivityScenarioRule =
             new ActivityScenarioRule<>(TestActivity.class);
@@ -156,7 +160,6 @@ public final class BaseCustomTabRootUiCoordinatorUnitTest {
     @Before
     public void setup() {
         mActivityScenarioRule.getScenario().onActivity(activity -> mActivity = activity);
-        MockitoAnnotations.initMocks(this);
 
         // Setup the shopping service.
         CommerceFeatureUtilsJni.setInstanceForTesting(mCommerceFeatureUtilsJniMock);
@@ -210,6 +213,7 @@ public final class BaseCustomTabRootUiCoordinatorUnitTest {
                         mTabController,
                         mMinimizeDelegateSupplier,
                         mFeatureOverridesManagerSupplier,
+                        CallbackUtils.emptyRunnable(),
                         mEdgeToEdgeManager) {
 
                     @Nullable

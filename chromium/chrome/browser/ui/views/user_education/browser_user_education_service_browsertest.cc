@@ -37,7 +37,6 @@
 #include "components/user_education/common/user_education_features.h"
 #include "content/public/test/browser_test.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/abseil-cpp/absl/types/variant.h"
 #include "ui/base/interaction/element_identifier.h"
 #include "ui/base/interaction/interaction_sequence.h"
 
@@ -398,6 +397,7 @@ IN_PROC_BROWSER_TEST_F(BrowserUserEducationServiceBrowserTest,
       case user_education::FeaturePromoSpecification::PromoType::kTutorial:
       case user_education::FeaturePromoSpecification::PromoType::kCustomAction:
       case user_education::FeaturePromoSpecification::PromoType::kSnooze:
+      case user_education::FeaturePromoSpecification::PromoType::kCustomUi:
         switch (spec.promo_subtype()) {
           case user_education::FeaturePromoSpecification::PromoSubtype::kNormal:
             // Standard promos should be session-limited and should limit other

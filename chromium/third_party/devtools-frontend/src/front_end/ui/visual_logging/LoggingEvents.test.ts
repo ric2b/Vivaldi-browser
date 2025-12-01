@@ -53,7 +53,7 @@ describe('LoggingEvents', () => {
         Host.InspectorFrontendHost.InspectorFrontendHostInstance,
         'recordClick',
     );
-    // @ts-ignore
+    // @ts-expect-error
     const event = new MouseEvent('click', {button: 0, sourceCapabilities: new InputDeviceCapabilities()});
     VisualLogging.LoggingEvents.logClick(throttler)(element, event);
     await assertThrottled(recordClick);
@@ -241,5 +241,20 @@ describe('LoggingEvents', () => {
     );
     VisualLogging.LoggingEvents.logResize(element, new DOMRect(0, 0, 100, 50));
     assert.deepEqual(recordResize.firstCall.firstArg, {veid, width: 100, height: 50});
+  });
+
+  it('calls UI binding to log a setting access event', async () => {
+    const recordSettingAccess = sinon.stub(
+        Host.InspectorFrontendHost.InspectorFrontendHostInstance,
+        'recordSettingAccess',
+    );
+    await VisualLogging.LoggingEvents.logSettingAccess('test-setting', 'test-value');
+    assert.deepEqual(
+        recordSettingAccess.lastCall.firstArg,
+        {name: 'test-setting', numericValue: undefined, stringValue: 'test-value'});
+
+    await VisualLogging.LoggingEvents.logSettingAccess('test-setting', 123);
+    assert.deepEqual(
+        recordSettingAccess.lastCall.firstArg, {name: 'test-setting', numericValue: 123, stringValue: undefined});
   });
 });

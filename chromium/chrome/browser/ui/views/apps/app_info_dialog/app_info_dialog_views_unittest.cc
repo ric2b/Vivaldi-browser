@@ -22,6 +22,7 @@
 #include "chrome/test/base/browser_with_test_window_test.h"
 #include "chrome/test/base/testing_profile.h"
 #include "components/app_constants/constants.h"
+#include "extensions/browser/extension_registrar.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/browser/extension_system.h"
 #include "extensions/common/extension_urls.h"
@@ -167,7 +168,7 @@ class AppInfoDialogViewsTest : public BrowserWithTestWindowTest,
 
     DCHECK(!widget_);
     widget_ = views::DialogDelegate::CreateDialogWidget(
-        new views::DialogDelegateView(), GetContext(), nullptr);
+        new views::DialogDelegateView(), GetContext(), gfx::NativeView());
     widget_->AddObserver(this);
     dialog_ = widget_->GetContentsView()->AddChildView(
         std::make_unique<AppInfoDialog>(profile, extension));
@@ -293,8 +294,7 @@ TEST_F(AppInfoDialogViewsTest, DestroyedOtherProfileDoesNotCloseDialog) {
 
   scoped_refptr<const extensions::Extension> other_app =
       extension_environment_.MakePackagedApp(kTestOtherExtensionId, false);
-  extensions::ExtensionSystem::Get(other_profile.get())
-      ->extension_service()
+  extensions::ExtensionRegistrar::Get(other_profile.get())
       ->AddExtension(other_app.get());
 
   ASSERT_TRUE(widget_);
@@ -364,8 +364,7 @@ TEST_F(AppInfoDialogViewsTest, ArcAppInfoLinks) {
   scoped_refptr<const extensions::Extension> other_app =
       extension_environment_.MakePackagedApp(app_constants::kChromeAppId,
                                              install);
-  extensions::ExtensionSystem::Get(other_profile.get())
-      ->extension_service()
+  extensions::ExtensionRegistrar::Get(other_profile.get())
       ->AddExtension(other_app.get());
   ShowAppInfoForProfile(app_constants::kChromeAppId, other_profile.get());
   EXPECT_FALSE(widget_->IsClosed());

@@ -96,7 +96,7 @@
       <if expr="not is_android">
         <structure type="chrome_scaled_image" name="IDR_DOWNLOADS_FAVICON" file="common/favicon_downloads.png" />
       </if>
-      <if expr="enable_extensions">
+      <if expr="enable_extensions_core">
         <structure type="chrome_scaled_image" name="IDR_EXTENSIONS_RATING_STAR_HALF_LEFT" file="common/extensions_rating_star_half_left.png" />
         <structure type="chrome_scaled_image" name="IDR_EXTENSIONS_RATING_STAR_OFF" file="common/extensions_rating_star_off.png" />
         <structure type="chrome_scaled_image" name="IDR_EXTENSIONS_RATING_STAR_ON" file="common/extensions_rating_star_on.png" />
@@ -274,6 +274,12 @@
         <structure type="chrome_scaled_image" name="IDR_SAVED_PASSWORDS_SAFE_STATE_DARK" file="common/passwords_safe_state_dark.png" />
         <structure type="chrome_scaled_image" name="IDR_SAVE_ADDRESS" file="common/save_address.png" />
         <structure type="chrome_scaled_image" name="IDR_SAVE_ADDRESS_DARK" file="common/save_address_dark.png" />
+        <structure type="chrome_scaled_image" name="IDR_SAVE_PASSPORT" file="common/save_passport.png" />
+        <structure type="chrome_scaled_image" name="IDR_SAVE_PASSPORT_DARK" file="common/save_passport_dark.png" />
+        <structure type="chrome_scaled_image" name="IDR_SAVE_DRIVERS_LICENSE" file="common/save_drivers_license.png" />
+        <structure type="chrome_scaled_image" name="IDR_SAVE_DRIVERS_LICENSE_DARK" file="common/save_drivers_license_dark.png" />
+        <structure type="chrome_scaled_image" name="IDR_SAVE_VEHICLE" file="common/save_vehicle.png" />
+        <structure type="chrome_scaled_image" name="IDR_SAVE_VEHICLE_DARK" file="common/save_vehicle_dark.png" />
         <structure type="chrome_scaled_image" name="IDR_SAVE_PASSWORD" file="common/save_password.png" />
         <structure type="chrome_scaled_image" name="IDR_SAVE_PASSWORD_DARK" file="common/save_password_dark.png" />
         <structure type="chrome_scaled_image" name="IDR_SAVE_CARD" file="common/save_card.png" />
@@ -298,7 +304,11 @@
       <structure type="chrome_scaled_image" name="IDR_SCREEN_CAPTURE_NOTIFICATION_GRIP" file="screen_capture_notification_grip.png" />
       <if expr="not is_android">
         <structure type="chrome_scaled_image" name="IDR_SETTINGS_FAVICON" file="common/favicon_settings.png" />
-      </if>
+        <if expr="_google_chrome">
+            <structure type="chrome_scaled_image" name="IDR_SHARED_TAB_GROUPS_DARK" file="${branding_path_component}/shared_tab_groups_dark.png" />
+            <structure type="chrome_scaled_image" name="IDR_SHARED_TAB_GROUPS_LIGHT" file="${branding_path_component}/shared_tab_groups_light.png" />
+        </if> <!-- _google_chrome -->
+      </if> <!-- not is_android -->
       <if expr="is_chromeos">
         <structure type="chrome_scaled_image" name="IDR_LOGO_AVATAR_CIRCLE_BLUE_COLOR" file="cros/logo_avatar_circle_blue_color.png" />
         <structure type="chrome_scaled_image" name="IDR_LOGO_GOOGLE_COLOR_90" file="cros/logo_google_color_90.png" />

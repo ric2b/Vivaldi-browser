@@ -9,7 +9,6 @@
 #include "base/functional/bind.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/strings/escape.h"
 #include "base/task/bind_post_task.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/policy/chrome_browser_policy_connector.h"
@@ -24,7 +23,6 @@
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/global_routing_id.h"
 #include "content/public/browser/web_contents.h"
-#include "google_apis/google_api_keys.h"
 #include "net/base/load_flags.h"
 #include "net/http/http_cache.h"
 #include "net/http/http_status_code.h"
@@ -36,9 +34,6 @@
 using content::BrowserThread;
 
 namespace safe_browsing {
-
-const char PPAPIDownloadRequest::kDownloadRequestUrl[] =
-    "https://sb-ssl.google.com/safebrowsing/clientreport/download";
 
 PPAPIDownloadRequest::PPAPIDownloadRequest(
     const GURL& requestor_url,
@@ -132,16 +127,6 @@ void PPAPIDownloadRequest::Start() {
                             weakptr_factory_.GetWeakPtr());
 }
 
-// static
-GURL PPAPIDownloadRequest::GetDownloadRequestUrl() {
-  GURL url(kDownloadRequestUrl);
-  std::string api_key = google_apis::GetAPIKey();
-  if (!api_key.empty())
-    url = url.Resolve("?key=" + base::EscapeQueryParamValue(api_key, true));
-
-  return url;
-}
-
 void PPAPIDownloadRequest::WebContentsDestroyed() {
   Finish(RequestOutcome::REQUEST_DESTROYED, DownloadCheckResult::UNKNOWN);
 }
@@ -214,6 +199,8 @@ void PPAPIDownloadRequest::SendRequest() {
         base::FilePath(default_file_path_.FinalExtension()).AsUTF8Unsafe();
   }
 
+  CHECK(service_);
+
   service_->AddReferrerChainToPPAPIClientDownloadRequest(
       web_contents(), initiating_frame_url_,
       initiating_outermost_main_frame_id_, initiating_main_frame_url_, tab_id_,
@@ -276,7 +263,7 @@ void PPAPIDownloadRequest::SendRequest() {
         deprecated_policies: "SafeBrowsingEnabled"
       })");
   auto resource_request = std::make_unique<network::ResourceRequest>();
-  resource_request->url = GetDownloadRequestUrl();
+  resource_request->url = service_->GetDownloadRequestUrl();
   resource_request->method = "POST";
   resource_request->site_for_cookies =
       net::SiteForCookies::FromUrl(resource_request->url);

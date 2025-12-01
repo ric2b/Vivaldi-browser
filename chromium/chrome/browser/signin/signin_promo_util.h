@@ -5,7 +5,9 @@
 #ifndef CHROME_BROWSER_SIGNIN_SIGNIN_PROMO_UTIL_H_
 #define CHROME_BROWSER_SIGNIN_SIGNIN_PROMO_UTIL_H_
 
+#include "build/build_config.h"
 #include "components/signin/public/base/signin_buildflags.h"
+#include "extensions/buildflags/buildflags.h"
 
 class Profile;
 
@@ -17,10 +19,30 @@ namespace autofill {
 class AutofillProfile;
 }
 
+#if BUILDFLAG(ENABLE_EXTENSIONS)
+namespace extensions {
+class Extension;
+}
+#endif  // BUILDFLAG(ENABLE_EXTENSIONS)
+
 namespace signin {
 
+enum class SignInPromoType;
+
+#if !BUILDFLAG(IS_ANDROID)
 // Whether we should show the sync promo.
 bool ShouldShowSyncPromo(Profile& profile);
+#endif  // !BUILDFLAG(IS_ANDROID)
+
+#if BUILDFLAG(ENABLE_EXTENSIONS)
+// Whether we should show the sync promo after an extension was installed.
+bool ShouldShowExtensionSyncPromo(Profile& profile,
+                                  const extensions::Extension& extension);
+
+// Whether we should show the sign in promo after an extension was installed.
+bool ShouldShowExtensionSignInPromo(Profile& profile,
+                                    const extensions::Extension& extension);
+#endif  // BUILDFLAG(ENABLE_EXTENSIONS)
 
 // Whether we should show the sign in promo after a password was saved.
 bool ShouldShowPasswordSignInPromo(Profile& profile);
@@ -29,8 +51,17 @@ bool ShouldShowPasswordSignInPromo(Profile& profile);
 bool ShouldShowAddressSignInPromo(Profile& profile,
                                   const autofill::AutofillProfile& address);
 
+// Whether we should show the sign in promo after a bookmark was saved.
+bool ShouldShowBookmarkSignInPromo(Profile& profile);
+
 // Returns whether `access_point` has an equivalent autofill signin promo.
 bool IsAutofillSigninPromo(signin_metrics::AccessPoint access_point);
+
+// Returns whether `access_point` has an equivalent signin promo.
+bool IsSignInPromo(signin_metrics::AccessPoint access_point);
+
+SignInPromoType GetSignInPromoTypeFromAccessPoint(
+    signin_metrics::AccessPoint access_point);
 
 #if BUILDFLAG(ENABLE_DICE_SUPPORT)
 // Records that the sign in promo was shown, either for the account used for the

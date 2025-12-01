@@ -132,13 +132,6 @@ void V8::InitializePlatformForTesting(v8::Platform* platform) {
   V8::InitializePlatform(platform);
 }
 
-#define DISABLE_FLAG(flag)                                                    \
-  if (v8_flags.flag) {                                                        \
-    PrintF(stderr,                                                            \
-           "Warning: disabling flag --" #flag " due to conflicting flags\n"); \
-    v8_flags.flag = false;                                                    \
-  }
-
 void V8::Initialize() {
   AdvanceStartupState(V8StartupState::kV8Initializing);
   CHECK(platform_);
@@ -244,8 +237,6 @@ void V8::Initialize() {
   AdvanceStartupState(V8StartupState::kV8Initialized);
 }
 
-#undef DISABLE_FLAG
-
 void V8::Dispose() {
   AdvanceStartupState(V8StartupState::kV8Disposing);
   CHECK(platform_);
@@ -259,6 +250,7 @@ void V8::Dispose() {
   ElementsAccessor::TearDown();
   RegisteredExtension::UnregisterAll();
   FlagList::ReleaseDynamicAllocations();
+  IsolateGroup::TearDownOncePerProcess();
   AdvanceStartupState(V8StartupState::kV8Disposed);
 }
 

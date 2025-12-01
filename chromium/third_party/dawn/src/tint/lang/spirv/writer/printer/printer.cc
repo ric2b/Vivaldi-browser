@@ -89,6 +89,7 @@
 #include "src/tint/lang/core/type/sampler.h"
 #include "src/tint/lang/core/type/storage_texture.h"
 #include "src/tint/lang/core/type/struct.h"
+#include "src/tint/lang/core/type/subgroup_matrix.h"
 #include "src/tint/lang/core/type/texture.h"
 #include "src/tint/lang/core/type/type.h"
 #include "src/tint/lang/core/type/u32.h"
@@ -96,6 +97,7 @@
 #include "src/tint/lang/core/type/void.h"
 #include "src/tint/lang/spirv/ir/builtin_call.h"
 #include "src/tint/lang/spirv/ir/literal_operand.h"
+#include "src/tint/lang/spirv/type/explicit_layout_array.h"
 #include "src/tint/lang/spirv/type/sampled_image.h"
 #include "src/tint/lang/spirv/writer/common/binary_writer.h"
 #include "src/tint/lang/spirv/writer/common/function.h"
@@ -105,7 +107,6 @@
 #include "src/tint/utils/containers/hashmap.h"
 #include "src/tint/utils/containers/vector.h"
 #include "src/tint/utils/macros/scoped_assignment.h"
-#include "src/tint/utils/result/result.h"
 #include "src/tint/utils/rtti/switch.h"
 #include "src/tint/utils/symbol/symbol.h"
 
@@ -525,8 +526,11 @@ class Printer {
                         TINT_ASSERT(arr->Count()->Is<core::type::RuntimeArrayCount>());
                         module_.PushType(spv::Op::OpTypeRuntimeArray, {id, Type(arr->ElemType())});
                     }
-                    module_.PushAnnot(spv::Op::OpDecorate,
-                                      {id, U32Operand(SpvDecorationArrayStride), arr->Stride()});
+                    if (arr->Is<type::ExplicitLayoutArray>()) {
+                        module_.PushAnnot(
+                            spv::Op::OpDecorate,
+                            {id, U32Operand(SpvDecorationArrayStride), arr->Stride()});
+                    }
                 },
                 [&](const core::type::Pointer* ptr) {
                     module_.PushType(spv::Op::OpTypePointer,
@@ -538,6 +542,37 @@ class Printer {
                 [&](const core::type::Sampler*) { module_.PushType(spv::Op::OpTypeSampler, {id}); },
                 [&](const type::SampledImage* s) {
                     module_.PushType(spv::Op::OpTypeSampledImage, {id, Type(s->Image())});
+                },  //
+                [&](const core::type::SubgroupMatrix* sm) {
+                    TINT_ASSERT(options_.use_vulkan_memory_model);
+                    auto scope = Constant(ir_.constant_values.Get(u32(spv::Scope::Subgroup)));
+                    auto cols = Constant(ir_.constant_values.Get(u32(sm->Columns())));
+                    auto rows = Constant(ir_.constant_values.Get(u32(sm->Rows())));
+                    spv::CooperativeMatrixUse use = spv::CooperativeMatrixUse::Max;
+                    switch (sm->Kind()) {
+                        case core::SubgroupMatrixKind::kLeft:
+                            use = spv::CooperativeMatrixUse::MatrixAKHR;
+                            break;
+                        case core::SubgroupMatrixKind::kRight:
+                            use = spv::CooperativeMatrixUse::MatrixBKHR;
+                            break;
+                        case core::SubgroupMatrixKind::kResult:
+                            use = spv::CooperativeMatrixUse::MatrixAccumulatorKHR;
+                            break;
+                        case core::SubgroupMatrixKind::kUndefined:
+                            TINT_UNREACHABLE();
+                    }
+                    module_.PushExtension("SPV_KHR_cooperative_matrix");
+                    module_.PushCapability(SpvCapabilityCooperativeMatrixKHR);
+                    module_.PushType(spv::Op::OpTypeCooperativeMatrixKHR,
+                                     {
+                                         id,
+                                         Type(sm->Type()),
+                                         scope,
+                                         rows,
+                                         cols,
+                                         Constant(ir_.constant_values.Get(u32(use))),
+                                     });
                 },  //
                 TINT_ICE_ON_NO_MATCH);
             return id;
@@ -585,19 +620,21 @@ class Printer {
         for (auto* member : str->Members()) {
             operands.push_back(Type(member->Type()));
 
-            // Generate struct member offset decoration.
-            module_.PushAnnot(
-                spv::Op::OpMemberDecorate,
-                {operands[0], member->Index(), U32Operand(SpvDecorationOffset), member->Offset()});
+            if (str->StructFlags().Contains(core::type::kSpirvExplicitLayout)) {
+                // Generate struct member offset decoration.
+                module_.PushAnnot(spv::Op::OpMemberDecorate,
+                                  {operands[0], member->Index(), U32Operand(SpvDecorationOffset),
+                                   member->Offset()});
 
-            // Emit matrix layout decorations if necessary.
-            if (auto* matrix_type = get_nested_matrix_type(member->Type())) {
-                const uint32_t effective_row_count = (matrix_type->Rows() == 2) ? 2 : 4;
-                module_.PushAnnot(spv::Op::OpMemberDecorate,
-                                  {id, member->Index(), U32Operand(SpvDecorationColMajor)});
-                module_.PushAnnot(spv::Op::OpMemberDecorate,
-                                  {id, member->Index(), U32Operand(SpvDecorationMatrixStride),
-                                   Operand(effective_row_count * matrix_type->Type()->Size())});
+                // Emit matrix layout decorations if necessary.
+                if (auto* matrix_type = get_nested_matrix_type(member->Type())) {
+                    const uint32_t effective_row_count = (matrix_type->Rows() == 2) ? 2 : 4;
+                    module_.PushAnnot(spv::Op::OpMemberDecorate,
+                                      {id, member->Index(), U32Operand(SpvDecorationColMajor)});
+                    module_.PushAnnot(spv::Op::OpMemberDecorate,
+                                      {id, member->Index(), U32Operand(SpvDecorationMatrixStride),
+                                       Operand(effective_row_count * matrix_type->Type()->Size())});
+                }
             }
 
             PushMemberName(id, member->Index(), member->Name());
@@ -1024,6 +1061,7 @@ class Printer {
 
         uint32_t true_label = merge_label;
         uint32_t false_label = merge_label;
+
         if (true_block->Length() > 1 || !i->Results().IsEmpty() ||
             (true_block->Terminator() && !true_block->Terminator()->Is<core::ir::ExitIf>())) {
             true_label = Label(true_block);
@@ -1031,6 +1069,13 @@ class Printer {
         if (false_block->Length() > 1 || !i->Results().IsEmpty() ||
             (false_block->Terminator() && !false_block->Terminator()->Is<core::ir::ExitIf>())) {
             false_label = Label(false_block);
+        }
+
+        // Spirv 1.6 requires that 'OpBranchConditional' have different labels for the true/false
+        // target blocks. This change has also been seen to resolve bugs in control flow for some
+        // backend compilers.
+        if (true_label == false_label) {
+            true_label = Label(true_block);
         }
 
         // Emit the OpSelectionMerge and OpBranchConditional instructions.
@@ -1292,10 +1337,10 @@ class Printer {
             case spirv::BuiltinFn::kArrayLength:
                 op = spv::Op::OpArrayLength;
                 break;
-            case spirv::BuiltinFn::kAtomicIadd:
+            case spirv::BuiltinFn::kAtomicIAdd:
                 op = spv::Op::OpAtomicIAdd;
                 break;
-            case spirv::BuiltinFn::kAtomicIsub:
+            case spirv::BuiltinFn::kAtomicISub:
                 op = spv::Op::OpAtomicISub;
                 break;
             case spirv::BuiltinFn::kAtomicAnd:
@@ -1313,23 +1358,29 @@ class Printer {
             case spirv::BuiltinFn::kAtomicOr:
                 op = spv::Op::OpAtomicOr;
                 break;
-            case spirv::BuiltinFn::kAtomicSmax:
+            case spirv::BuiltinFn::kAtomicSMax:
                 op = spv::Op::OpAtomicSMax;
                 break;
-            case spirv::BuiltinFn::kAtomicSmin:
+            case spirv::BuiltinFn::kAtomicSMin:
                 op = spv::Op::OpAtomicSMin;
                 break;
             case spirv::BuiltinFn::kAtomicStore:
                 op = spv::Op::OpAtomicStore;
                 break;
-            case spirv::BuiltinFn::kAtomicUmax:
+            case spirv::BuiltinFn::kAtomicUMax:
                 op = spv::Op::OpAtomicUMax;
                 break;
-            case spirv::BuiltinFn::kAtomicUmin:
+            case spirv::BuiltinFn::kAtomicUMin:
                 op = spv::Op::OpAtomicUMin;
                 break;
             case spirv::BuiltinFn::kAtomicXor:
                 op = spv::Op::OpAtomicXor;
+                break;
+            case BuiltinFn::kAtomicIIncrement:
+                op = spv::Op::OpAtomicIIncrement;
+                break;
+            case BuiltinFn::kAtomicIDecrement:
+                op = spv::Op::OpAtomicIDecrement;
                 break;
             case spirv::BuiltinFn::kDot:
                 op = spv::Op::OpDot;
@@ -1378,22 +1429,28 @@ class Printer {
             case spirv::BuiltinFn::kMatrixTimesVector:
                 op = spv::Op::OpMatrixTimesVector;
                 break;
-            case spirv::BuiltinFn::kSmax:
+            case spirv::BuiltinFn::kModf:
+                ext_inst(GLSLstd450Modf);
+                break;
+            case spirv::BuiltinFn::kFrexp:
+                ext_inst(GLSLstd450Frexp);
+                break;
+            case spirv::BuiltinFn::kSMax:
                 ext_inst(GLSLstd450SMax);
                 break;
-            case spirv::BuiltinFn::kSmin:
+            case spirv::BuiltinFn::kSMin:
                 ext_inst(GLSLstd450SMin);
                 break;
-            case spirv::BuiltinFn::kSclamp:
+            case spirv::BuiltinFn::kSClamp:
                 ext_inst(GLSLstd450SClamp);
                 break;
-            case spirv::BuiltinFn::kUmax:
+            case spirv::BuiltinFn::kUMax:
                 ext_inst(GLSLstd450UMax);
                 break;
-            case spirv::BuiltinFn::kUmin:
+            case spirv::BuiltinFn::kUMin:
                 ext_inst(GLSLstd450UMin);
                 break;
-            case spirv::BuiltinFn::kUclamp:
+            case spirv::BuiltinFn::kUClamp:
                 ext_inst(GLSLstd450UClamp);
                 break;
             case spirv::BuiltinFn::kNormalize:
@@ -1402,7 +1459,7 @@ class Printer {
             case spirv::BuiltinFn::kSampledImage:
                 op = spv::Op::OpSampledImage;
                 break;
-            case spirv::BuiltinFn::kSdot:
+            case spirv::BuiltinFn::kSDot:
                 module_.PushExtension("SPV_KHR_integer_dot_product");
                 module_.PushCapability(SpvCapabilityDotProductKHR);
                 module_.PushCapability(SpvCapabilityDotProductInput4x8BitPackedKHR);
@@ -1438,7 +1495,7 @@ class Printer {
             case spirv::BuiltinFn::kLdexp:
                 ext_inst(GLSLstd450Ldexp);
                 break;
-            case spirv::BuiltinFn::kUdot:
+            case spirv::BuiltinFn::kUDot:
                 module_.PushExtension("SPV_KHR_integer_dot_product");
                 module_.PushCapability(SpvCapabilityDotProductKHR);
                 module_.PushCapability(SpvCapabilityDotProductInput4x8BitPackedKHR);
@@ -1449,6 +1506,111 @@ class Printer {
                 break;
             case spirv::BuiltinFn::kVectorTimesScalar:
                 op = spv::Op::OpVectorTimesScalar;
+                break;
+            case spirv::BuiltinFn::kCooperativeMatrixLoad:
+                op = spv::Op::OpCooperativeMatrixLoadKHR;
+                break;
+            case spirv::BuiltinFn::kCooperativeMatrixMulAdd:
+                op = spv::Op::OpCooperativeMatrixMulAddKHR;
+                break;
+            case spirv::BuiltinFn::kCooperativeMatrixStore:
+                op = spv::Op::OpCooperativeMatrixStoreKHR;
+                break;
+            case spirv::BuiltinFn::kBitCount:
+                op = spv::Op::OpBitCount;
+                break;
+            case spirv::BuiltinFn::kBitFieldInsert:
+                op = spv::Op::OpBitFieldInsert;
+                break;
+            case spirv::BuiltinFn::kBitFieldSExtract:
+                op = spv::Op::OpBitFieldSExtract;
+                break;
+            case spirv::BuiltinFn::kBitFieldUExtract:
+                op = spv::Op::OpBitFieldUExtract;
+                break;
+            case BuiltinFn::kAdd:
+                op = spv::Op::OpIAdd;
+                break;
+            case BuiltinFn::kSub:
+                op = spv::Op::OpISub;
+                break;
+            case BuiltinFn::kMul:
+                op = spv::Op::OpIMul;
+                break;
+            case BuiltinFn::kSDiv:
+                op = spv::Op::OpSDiv;
+                break;
+            case BuiltinFn::kSMod:
+                op = spv::Op::OpSMod;
+                break;
+            case BuiltinFn::kConvertFToS:
+                op = spv::Op::OpConvertFToS;
+                break;
+            case BuiltinFn::kConvertSToF:
+                op = spv::Op::OpConvertSToF;
+                break;
+            case BuiltinFn::kConvertUToF:
+                op = spv::Op::OpConvertUToF;
+                break;
+            case BuiltinFn::kBitwiseAnd:
+                op = spv::Op::OpBitwiseAnd;
+                break;
+            case BuiltinFn::kBitwiseOr:
+                op = spv::Op::OpBitwiseOr;
+                break;
+            case BuiltinFn::kBitwiseXor:
+                op = spv::Op::OpBitwiseXor;
+                break;
+            case BuiltinFn::kEqual:
+                op = spv::Op::OpIEqual;
+                break;
+            case BuiltinFn::kNotEqual:
+                op = spv::Op::OpINotEqual;
+                break;
+            case BuiltinFn::kSGreaterThan:
+                op = spv::Op::OpSGreaterThan;
+                break;
+            case BuiltinFn::kSGreaterThanEqual:
+                op = spv::Op::OpSGreaterThanEqual;
+                break;
+            case BuiltinFn::kSLessThan:
+                op = spv::Op::OpSLessThan;
+                break;
+            case BuiltinFn::kSLessThanEqual:
+                op = spv::Op::OpSLessThanEqual;
+                break;
+            case BuiltinFn::kUGreaterThan:
+                op = spv::Op::OpUGreaterThan;
+                break;
+            case BuiltinFn::kUGreaterThanEqual:
+                op = spv::Op::OpUGreaterThanEqual;
+                break;
+            case BuiltinFn::kULessThan:
+                op = spv::Op::OpULessThan;
+                break;
+            case BuiltinFn::kULessThanEqual:
+                op = spv::Op::OpULessThanEqual;
+                break;
+            case BuiltinFn::kShiftLeftLogical:
+                op = spv::Op::OpShiftLeftLogical;
+                break;
+            case BuiltinFn::kShiftRightLogical:
+                op = spv::Op::OpShiftRightLogical;
+                break;
+            case BuiltinFn::kShiftRightArithmetic:
+                op = spv::Op::OpShiftRightArithmetic;
+                break;
+            case BuiltinFn::kNot:
+                op = spv::Op::OpNot;
+                break;
+            case BuiltinFn::kSNegate:
+                op = spv::Op::OpSNegate;
+                break;
+            case BuiltinFn::kFMod:
+                op = spv::Op::OpFMod;
+                break;
+            case BuiltinFn::kOuterProduct:
+                op = spv::Op::OpOuterProduct;
                 break;
             case spirv::BuiltinFn::kNone:
                 TINT_ICE() << "undefined spirv ir function";
@@ -1997,15 +2159,23 @@ class Printer {
     /// Emit a construct instruction.
     /// @param construct the construct instruction to emit
     void EmitConstruct(core::ir::Construct* construct) {
+        auto* result_ty = construct->Result(0)->Type();
+
         // If there is just a single argument with the same type as the result, this is an identity
         // constructor and we can just pass through the ID of the argument.
-        if (construct->Args().Length() == 1 &&
-            construct->Result(0)->Type() == construct->Args()[0]->Type()) {
+        if (construct->Args().Length() == 1 && result_ty == construct->Args()[0]->Type()) {
             values_.Add(construct->Result(0), Value(construct->Args()[0]));
             return;
         }
 
-        OperandList operands = {Type(construct->Result(0)->Type()), Value(construct)};
+        // Zero-value constructors for subgroup matrices are not folded into constants, so
+        // special-case them into OpConstantNull here.
+        if (result_ty->Is<core::type::SubgroupMatrix>() && construct->Operands().IsEmpty()) {
+            values_.Add(construct->Result(0), ConstantNull(result_ty));
+            return;
+        }
+
+        OperandList operands = {Type(result_ty), Value(construct)};
         for (auto* arg : construct->Args()) {
             operands.push_back(Value(arg));
         }
@@ -2628,7 +2798,7 @@ class Printer {
 
 }  // namespace
 
-tint::Result<Output> Print(core::ir::Module& module, const Options& options) {
+Result<Output> Print(core::ir::Module& module, const Options& options) {
     return Printer{module, options}.Code();
 }
 

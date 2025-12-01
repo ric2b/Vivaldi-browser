@@ -15,23 +15,36 @@
 #include "./centipede/runner_result.h"
 
 #include <cstdint>
+#include <cstdlib>
 #include <cstring>
+#include <string_view>
 
 #include "./centipede/execution_metadata.h"
 #include "./centipede/feature.h"
 #include "./centipede/shared_memory_blob_sequence.h"
+#include "./common/defs.h"
 
 namespace centipede {
 
 namespace {
+
+// Tags used for both the execution and mutation results. We use the same enum
+// to make the sets of tags disjoint.
 enum Tags : Blob::SizeAndTagT {
   kTagInvalid,  // 0 is an invalid tag.
+
+  // Execution result tags.
   kTagFeatures,
   kTagInputBegin,
   kTagInputEnd,
   kTagStats,
   kTagMetadata,
+
+  // Mutation result tags.
+  kTagHasCustomMutator,
+  kTagMutant,
 };
+
 }  // namespace
 
 bool BatchResult::WriteOneFeatureVec(const feature_t *vec, size_t size,
@@ -88,25 +101,62 @@ bool BatchResult::Read(BlobSequence &blobseq) {
       continue;
     }
     if (blob.tag == kTagMetadata) {
+      if (current_execution_result == nullptr) return false;
       current_execution_result->metadata().Read(blob);
       continue;
     }
     if (blob.tag == kTagStats) {
+      if (current_execution_result == nullptr) return false;
       if (blob.size != sizeof(ExecutionResult::Stats)) return false;
       memcpy(&current_execution_result->stats(), blob.data, blob.size);
       continue;
     }
     if (blob.tag == kTagFeatures) {
-      auto features_beg = reinterpret_cast<const feature_t *>(blob.data);
-      size_t features_size = blob.size / sizeof(features_beg[0]);
+      if (current_execution_result == nullptr) return false;
+      const size_t features_size = blob.size / sizeof(feature_t);
       FeatureVec &features = current_execution_result->mutable_features();
-      // if features.capacity() >= features_size, this will not cause malloc.
-      features.resize(0);
-      features.insert(features.begin(), features_beg,
-                      features_beg + features_size);
+      features.resize(features_size);
+      std::memcpy(features.data(), blob.data,
+                  features_size * sizeof(feature_t));
     }
   }
   num_outputs_read_ = num_ends;
+  return true;
+}
+
+bool BatchResult::IsSetupFailure() const {
+  constexpr std::string_view kSetupFailurePrefix = "SETUP FAILURE:";
+  return exit_code_ != EXIT_SUCCESS &&
+         std::string_view(failure_description_)
+                 .substr(0, kSetupFailurePrefix.size()) == kSetupFailurePrefix;
+}
+
+bool MutationResult::WriteHasCustomMutator(bool has_custom_mutator,
+                                           BlobSequence &blobseq) {
+  return blobseq.Write(
+      {kTagHasCustomMutator, sizeof(has_custom_mutator),
+       reinterpret_cast<const uint8_t *>(&has_custom_mutator)});
+}
+
+bool MutationResult::WriteMutant(ByteSpan mutant, BlobSequence &blobseq) {
+  return blobseq.Write({kTagMutant, mutant.size(), mutant.data()});
+}
+
+bool MutationResult::Read(size_t num_mutants, BlobSequence &blobseq) {
+  const Blob blob = blobseq.Read();
+  if (blob.tag != kTagHasCustomMutator) return false;
+  if (blob.size != sizeof(has_custom_mutator_)) return false;
+  std::memcpy(&has_custom_mutator_, blob.data, blob.size);
+  if (!has_custom_mutator_) return true;
+
+  mutants_.clear();
+  mutants_.reserve(num_mutants);
+  for (size_t i = 0; i < num_mutants; ++i) {
+    const Blob blob = blobseq.Read();
+    if (blob.tag != kTagMutant) return false;
+    if (blob.size == 0) break;
+    mutants_.emplace_back(blob.data, blob.data + blob.size);
+  }
   return true;
 }
 

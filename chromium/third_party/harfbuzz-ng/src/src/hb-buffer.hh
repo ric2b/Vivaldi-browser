@@ -32,6 +32,7 @@
 
 #include "hb.hh"
 #include "hb-unicode.hh"
+#include "hb-bit-set.hh"
 #include "hb-set-digest.hh"
 
 
@@ -182,22 +183,24 @@ struct hb_buffer_t
     allocated_var_bits = 0;
   }
 
+  __attribute__((always_inline))
   hb_glyph_info_t &cur (unsigned int i = 0) { return info[idx + i]; }
+  __attribute__((always_inline))
   hb_glyph_info_t cur (unsigned int i = 0) const { return info[idx + i]; }
 
+  __attribute__((always_inline))
   hb_glyph_position_t &cur_pos (unsigned int i = 0) { return pos[idx + i]; }
+  __attribute__((always_inline))
   hb_glyph_position_t cur_pos (unsigned int i = 0) const { return pos[idx + i]; }
 
+  __attribute__((always_inline))
   hb_glyph_info_t &prev ()      { return out_info[out_len ? out_len - 1 : 0]; }
+  __attribute__((always_inline))
   hb_glyph_info_t prev () const { return out_info[out_len ? out_len - 1 : 0]; }
 
-  hb_set_digest_t digest () const
-  {
-    hb_set_digest_t d;
-    d.init ();
-    d.add_array (&info[0].codepoint, len, sizeof (info[0]));
-    return d;
-  }
+  template <typename set_t>
+  void collect_codepoints (set_t &d) const
+  { d.clear (); d.add_array (&info[0].codepoint, len, sizeof (info[0])); }
 
   HB_INTERNAL void similar (const hb_buffer_t &src);
   HB_INTERNAL void reset ();

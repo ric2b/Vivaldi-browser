@@ -55,6 +55,7 @@
 #include <zstd.h>
 #endif
 
+#include <memory>
 #include <set>
 #include <string>
 #include <utility>
@@ -103,7 +104,6 @@ using google_breakpad::PageAllocator;
 #ifndef NO_STABS_SUPPORT
 using google_breakpad::StabsToModule;
 #endif
-using google_breakpad::scoped_ptr;
 using google_breakpad::wasteful_vector;
 
 // Define AARCH64 ELF architecture if host machine does not include this define.
@@ -150,7 +150,7 @@ class MmapWrapper {
  public:
   MmapWrapper() : is_set_(false) {}
   ~MmapWrapper() {
-    if (is_set_ && base_ != NULL) {
+    if (is_set_ && base_ != nullptr) {
       assert(size_ > 0);
       munmap(base_, size_);
     }
@@ -163,7 +163,7 @@ class MmapWrapper {
   void release() {
     assert(is_set_);
     is_set_ = false;
-    base_ = NULL;
+    base_ = nullptr;
     size_ = 0;
   }
 
@@ -644,7 +644,7 @@ bool LoadELF(const string& obj_file, MmapWrapper* map_wrapper,
             obj_file.c_str(), strerror(errno));
     return false;
   }
-  void* obj_base = mmap(NULL, st.st_size,
+  void* obj_base = mmap(nullptr, st.st_size,
                         PROT_READ | PROT_WRITE, MAP_PRIVATE, obj_fd, 0);
   if (obj_base == MAP_FAILED) {
     fprintf(stderr, "Failed to mmap ELF file '%s': %s\n",
@@ -826,7 +826,7 @@ class LoadSymbolsInfo {
   string debuglink_file() const {
     return debuglink_file_;
   }
-  void set_debuglink_file(string file) {
+  void set_debuglink_file(const string& file) {
     debuglink_file_ = file;
   }
 
@@ -1119,7 +1119,7 @@ const char* ElfArchitecture(const typename ElfClass::Ehdr* elf_header) {
     case EM_X86_64:     return "x86_64";
     case EM_RISCV:      return "riscv";
     case EM_NDS32:      return "nds32";
-    default: return NULL;
+    default: return nullptr;
   }
 }
 
@@ -1159,7 +1159,7 @@ bool InitModuleForElfClass(const typename ElfClass::Ehdr* elf_header,
                            const string& obj_filename,
                            const string& obj_os,
                            const string& module_id,
-                           scoped_ptr<Module>& module,
+                           std::unique_ptr<Module>& module,
                            bool enable_multiple_field) {
   PageAllocator allocator;
   wasteful_vector<uint8_t> identifier(&allocator, kDefaultBuildIdSize);
@@ -1209,9 +1209,9 @@ bool ReadSymbolDataElfClass(const typename ElfClass::Ehdr* elf_header,
                             Module** out_module) {
   typedef typename ElfClass::Ehdr Ehdr;
 
-  *out_module = NULL;
+  *out_module = nullptr;
 
-  scoped_ptr<Module> module;
+  std::unique_ptr<Module> module;
   if (!InitModuleForElfClass<ElfClass>(elf_header, obj_filename, obj_os, module_id,
                                       module, options.enable_multiple_field)) {
     return false;
@@ -1233,7 +1233,7 @@ bool ReadSymbolDataElfClass(const typename ElfClass::Ehdr* elf_header,
     // Load debuglink ELF file.
     fprintf(stderr, "Found debugging info in %s\n", debuglink_file.c_str());
     MmapWrapper debug_map_wrapper;
-    Ehdr* debug_elf_header = NULL;
+    Ehdr* debug_elf_header = nullptr;
     if (!LoadELF(debuglink_file, &debug_map_wrapper,
                  reinterpret_cast<void**>(&debug_elf_header)) ||
         !SanitizeDebugFile<ElfClass>(debug_elf_header, debuglink_file,
@@ -1312,7 +1312,7 @@ bool WriteSymbolFileHeader(const string& load_path,
                            const string& module_id,
                            std::ostream& sym_stream) {
   MmapWrapper map_wrapper;
-  void* elf_header = NULL;
+  void* elf_header = nullptr;
   if (!LoadELF(load_path, &map_wrapper, &elf_header)) {
     fprintf(stderr, "Could not load ELF file: %s\n", obj_file.c_str());
     return false;
@@ -1324,7 +1324,7 @@ bool WriteSymbolFileHeader(const string& load_path,
   }
 
   int elfclass = ElfClass(elf_header);
-  scoped_ptr<Module> module;
+  std::unique_ptr<Module> module;
   if (elfclass == ELFCLASS32) {
     if (!InitModuleForElfClass<ElfClass32>(
         reinterpret_cast<const Elf32_Ehdr*>(elf_header), obj_file, obj_os,
@@ -1355,7 +1355,7 @@ bool ReadSymbolData(const string& load_path,
                     const DumpOptions& options,
                     Module** module) {
   MmapWrapper map_wrapper;
-  void* elf_header = NULL;
+  void* elf_header = nullptr;
   if (!LoadELF(load_path, &map_wrapper, &elf_header))
     return false;
 

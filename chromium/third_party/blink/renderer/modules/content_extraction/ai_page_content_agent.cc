@@ -5,10 +5,16 @@
 #include "third_party/blink/renderer/modules/content_extraction/ai_page_content_agent.h"
 
 #include "base/time/time.h"
+#include "services/metrics/public/cpp/ukm_builders.h"
+#include "third_party/blink/public/mojom/content_extraction/ai_page_content.mojom-blink.h"
+#include "third_party/blink/renderer/core/accessibility/ax_object_cache.h"
 #include "third_party/blink/renderer/core/css/properties/longhands.h"
 #include "third_party/blink/renderer/core/display_lock/display_lock_document_state.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/dom_node_ids.h"
+#include "third_party/blink/renderer/core/editing/editing_utilities.h"
+#include "third_party/blink/renderer/core/editing/frame_selection.h"
+#include "third_party/blink/renderer/core/editing/selection_template.h"
 #include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/html/forms/html_form_control_element.h"
@@ -19,7 +25,10 @@
 #include "third_party/blink/renderer/core/html/forms/option_list.h"
 #include "third_party/blink/renderer/core/html/forms/text_control_element.h"
 #include "third_party/blink/renderer/core/html/html_anchor_element.h"
+#include "third_party/blink/renderer/core/html/html_head_element.h"
 #include "third_party/blink/renderer/core/html/html_image_element.h"
+#include "third_party/blink/renderer/core/html/html_meta_element.h"
+#include "third_party/blink/renderer/core/input/event_handler.h"
 #include "third_party/blink/renderer/core/layout/layout_embedded_content.h"
 #include "third_party/blink/renderer/core/layout/layout_html_canvas.h"
 #include "third_party/blink/renderer/core/layout/layout_iframe.h"
@@ -34,7 +43,9 @@
 #include "third_party/blink/renderer/core/layout/table/layout_table_row.h"
 #include "third_party/blink/renderer/core/layout/table/layout_table_section.h"
 #include "third_party/blink/renderer/core/style/computed_style.h"
+#include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 #include "third_party/blink/renderer/platform/scheduler/public/thread_scheduler.h"
+#include "ui/gfx/geometry/point_conversions.h"
 #include "ui/gfx/geometry/rect_conversions.h"
 
 namespace blink {
@@ -127,7 +138,8 @@ const LayoutIFrame* GetIFrame(const LayoutObject& object) {
 
 bool IsGenericContainer(
     const LayoutObject& object,
-    const Vector<mojom::blink::AIPageContentAnnotatedRole>& annotated_roles) {
+    const Vector<mojom::blink::AIPageContentAnnotatedRole>& annotated_roles,
+    const base::flat_set<DOMNodeId>& interactive_dom_node_ids) {
   if (object.Style()->GetPosition() == EPosition::kFixed) {
     return true;
   }
@@ -154,63 +166,17 @@ bool IsGenericContainer(
     return true;
   }
 
+  // Use `ExistingIdForNode` since an Id should have already been generated if
+  // this node is interactive.
+  if (interactive_dom_node_ids.contains(
+          DOMNodeIds::ExistingIdForNode(object.GetNode()))) {
+    return true;
+  }
+
   return false;
 }
 
-void AddAnnotatedRoles(
-    const LayoutObject& object,
-    Vector<mojom::blink::AIPageContentAnnotatedRole>& annotated_roles) {
-  const auto& style = object.StyleRef();
-  if (style.ContentVisibility() == EContentVisibility::kHidden) {
-    annotated_roles.push_back(
-        mojom::blink::AIPageContentAnnotatedRole::kContentHidden);
-  }
-
-  // Element specific roles below.
-  const auto* element = DynamicTo<HTMLElement>(object.GetNode());
-  if (!element) {
-    return;
-  }
-  if (element->HasTagName(html_names::kHeaderTag) ||
-      element->FastGetAttribute(html_names::kRoleAttr) == "banner") {
-    annotated_roles.push_back(
-        mojom::blink::AIPageContentAnnotatedRole::kHeader);
-  }
-  if (element->HasTagName(html_names::kNavTag) ||
-      element->FastGetAttribute(html_names::kRoleAttr) == "navigation") {
-    annotated_roles.push_back(mojom::blink::AIPageContentAnnotatedRole::kNav);
-  }
-  if (element->HasTagName(html_names::kSearchTag) ||
-      element->FastGetAttribute(html_names::kRoleAttr) == "search") {
-    annotated_roles.push_back(
-        mojom::blink::AIPageContentAnnotatedRole::kSearch);
-  }
-  if (element->HasTagName(html_names::kMainTag) ||
-      element->FastGetAttribute(html_names::kRoleAttr) == "main") {
-    annotated_roles.push_back(mojom::blink::AIPageContentAnnotatedRole::kMain);
-  }
-  if (element->HasTagName(html_names::kArticleTag) ||
-      element->FastGetAttribute(html_names::kRoleAttr) == "article") {
-    annotated_roles.push_back(
-        mojom::blink::AIPageContentAnnotatedRole::kArticle);
-  }
-  if (element->HasTagName(html_names::kSectionTag) ||
-      element->FastGetAttribute(html_names::kRoleAttr) == "region") {
-    annotated_roles.push_back(
-        mojom::blink::AIPageContentAnnotatedRole::kSection);
-  }
-  if (element->HasTagName(html_names::kAsideTag) ||
-      element->FastGetAttribute(html_names::kRoleAttr) == "complementary") {
-    annotated_roles.push_back(mojom::blink::AIPageContentAnnotatedRole::kAside);
-  }
-  if (element->HasTagName(html_names::kFooterTag) ||
-      element->FastGetAttribute(html_names::kRoleAttr) == "contentinfo") {
-    annotated_roles.push_back(
-        mojom::blink::AIPageContentAnnotatedRole::kFooter);
-  }
-}
-
-std::optional<DOMNodeId> GetNodeId(const LayoutObject& object) {
+std::optional<DOMNodeId> GetDomNodeId(const LayoutObject& object) {
   auto* node = object.GetNode();
   if (object.IsLayoutView()) {
     node = &object.GetDocument();
@@ -290,8 +256,7 @@ void ProcessTextNode(const LayoutText& layout_text,
 }
 
 void ProcessImageNode(const LayoutImage& layout_image,
-                      mojom::blink::AIPageContentAttributes& attributes,
-                      const ComputedStyle& document_style) {
+                      mojom::blink::AIPageContentAttributes& attributes) {
   attributes.attribute_type = mojom::blink::AIPageContentAttributeType::kImage;
   CHECK(IsVisible(layout_image));
 
@@ -313,8 +278,7 @@ void ProcessImageNode(const LayoutImage& layout_image,
 }
 
 void ProcessAnchorNode(const HTMLAnchorElement& anchor_element,
-                       mojom::blink::AIPageContentAttributes& attributes,
-                       const ComputedStyle& document_style) {
+                       mojom::blink::AIPageContentAttributes& attributes) {
   attributes.attribute_type = mojom::blink::AIPageContentAttributeType::kAnchor;
   if (!IsVisible(*anchor_element.GetLayoutObject())) {
     return;
@@ -329,8 +293,7 @@ void ProcessAnchorNode(const HTMLAnchorElement& anchor_element,
 }
 
 void ProcessTableNode(const LayoutTable& layout_table,
-                      mojom::blink::AIPageContentAttributes& attributes,
-                      const ComputedStyle& document_style) {
+                      mojom::blink::AIPageContentAttributes& attributes) {
   attributes.attribute_type = mojom::blink::AIPageContentAttributeType::kTable;
   if (!IsVisible(layout_table)) {
     return;
@@ -355,8 +318,7 @@ void ProcessTableNode(const LayoutTable& layout_table,
 }
 
 void ProcessFormNode(const HTMLFormElement& form_element,
-                     mojom::blink::AIPageContentAttributes& attributes,
-                     const ComputedStyle& document_style) {
+                     mojom::blink::AIPageContentAttributes& attributes) {
   attributes.attribute_type = mojom::blink::AIPageContentAttributeType::kForm;
   if (!IsVisible(*form_element.GetLayoutObject())) {
     return;
@@ -369,8 +331,7 @@ void ProcessFormNode(const HTMLFormElement& form_element,
 }
 
 void ProcessFormControlNode(const HTMLFormControlElement& form_control_element,
-                            mojom::blink::AIPageContentAttributes& attributes,
-                            const ComputedStyle& document_style) {
+                            mojom::blink::AIPageContentAttributes& attributes) {
   attributes.attribute_type =
       mojom::blink::AIPageContentAttributeType::kFormControl;
   if (!IsVisible(*form_control_element.GetLayoutObject())) {
@@ -419,8 +380,7 @@ mojom::blink::AIPageContentTableRowType GetTableRowType(
 }
 
 void ProcessTableRowNode(const LayoutTableRow& layout_table_row,
-                         mojom::blink::AIPageContentAttributes& attributes,
-                         const ComputedStyle& document_style) {
+                         mojom::blink::AIPageContentAttributes& attributes) {
   attributes.attribute_type =
       mojom::blink::AIPageContentAttributeType::kTableRow;
   if (!IsVisible(layout_table_row)) {
@@ -477,15 +437,9 @@ void RecordLatencyMetrics(base::TimeDelta latency,
   }
 }
 
-// Runs the given tasks.
-void RunTasks(WTF::Vector<base::OnceClosure> tasks) {
-  for (auto& task : tasks) {
-    std::move(task).Run();
-  }
-}
-
-bool ShouldRunLifecycleForSyncExtraction(
-    const mojom::blink::AIPageContentOptions& options) {
+// Returns true if extracting the content can't be deferred until the next
+// frame.
+bool NeedsSyncExtraction(const mojom::blink::AIPageContentOptions& options) {
   // Including hidden searchable content requires layout for nodes which are
   // skipped during rendering. So we need a special lifecycle for them and can't
   // use the computed state from the regular lifecycle update.
@@ -550,7 +504,10 @@ void AIPageContentAgent::Trace(Visitor* visitor) const {
 }
 
 void AIPageContentAgent::DidFinishPostLifecycleSteps(const LocalFrameView&) {
-  RunTasksIfReady();
+  for (auto& task : std::move(async_extraction_tasks_)) {
+    std::move(task).Run();
+  }
+  async_extraction_tasks_.clear();
 }
 
 void AIPageContentAgent::GetAIPageContent(
@@ -558,46 +515,27 @@ void AIPageContentAgent::GetAIPageContent(
     GetAIPageContentCallback callback) {
   base::TimeTicks start_time = base::TimeTicks::Now();
 
-  if (ShouldRunLifecycleForSyncExtraction(*options)) {
+  LocalFrameView* view = GetSupplementable()->View();
+
+  // If there's no lifecycle pending, we can't rely on post lifecycle
+  // notifications and the layout is likely clean.
+  const bool can_do_sync_extraction = !view || !view->LifecycleUpdatePending();
+
+  if (can_do_sync_extraction || NeedsSyncExtraction(*options)) {
     GetAIPageContentSync(std::move(options), std::move(callback), start_time);
     return;
   }
 
   if (!is_registered_) {
     is_registered_ = true;
-    if (LocalFrameView* view = GetSupplementable()->View()) {
-      view->RegisterForLifecycleNotifications(this);
-    }
+    view->RegisterForLifecycleNotifications(this);
   }
 
-  // Running lifecycle beyond layout is expensive and the information is only
-  // needed to compute geometry. Limit the update to layout if we don't need the
-  // geometry.
   // We don't expect many overlapping calls to this service as the browser will
   // only issue one request at a time.
-  if (options->include_geometry) {
-    geometry_tasks_.push_back(WTF::BindOnce(
-        &AIPageContentAgent::GetAIPageContentSync, WrapWeakPersistent(this),
-        std::move(options), std::move(callback), start_time));
-  } else {
-    layout_clean_tasks_.push_back(WTF::BindOnce(
-        &AIPageContentAgent::GetAIPageContentSync, WrapWeakPersistent(this),
-        std::move(options), std::move(callback), start_time));
-  }
-
-  // Run tasks if the document lifecycle is at least as advanced.
-  RunTasksIfReady();
-}
-
-void AIPageContentAgent::RunTasksIfReady() {
-  if (GetSupplementable()->Lifecycle().GetState() >=
-      DocumentLifecycle::kPrePaintClean) {
-    RunTasks(std::move(geometry_tasks_));
-  }
-  if (GetSupplementable()->Lifecycle().GetState() >=
-      DocumentLifecycle::kLayoutClean) {
-    RunTasks(std::move(layout_clean_tasks_));
-  }
+  async_extraction_tasks_.push_back(WTF::BindOnce(
+      &AIPageContentAgent::GetAIPageContentSync, WrapWeakPersistent(this),
+      std::move(options), std::move(callback), start_time));
 }
 
 void AIPageContentAgent::GetAIPageContentSync(
@@ -650,35 +588,33 @@ mojom::blink::AIPageContentPtr AIPageContentAgent::ContentBuilder::Build(
   // activation reason of FindInPage.
   std::vector<DisplayLockDocumentState::ScopedForceActivatableDisplayLocks>
       forced_activatable_locks;
-  if (ShouldRunLifecycleForSyncExtraction(*options_)) {
-    if (options_->include_hidden_searchable_content) {
-      forced_activatable_locks.emplace_back(
-          document.GetDisplayLockDocumentState()
-              .GetScopedForceActivatableLocks());
-      document.View()->ForAllChildLocalFrameViews(
-          [&](LocalFrameView& frame_view) {
-            if (!frame_view.GetFrame().GetDocument()) {
-              return;
-            }
+  if (options_->include_hidden_searchable_content) {
+    forced_activatable_locks.emplace_back(
+        document.GetDisplayLockDocumentState()
+            .GetScopedForceActivatableLocks());
+    document.View()->ForAllChildLocalFrameViews(
+        [&](LocalFrameView& frame_view) {
+          if (!frame_view.GetFrame().GetDocument()) {
+            return;
+          }
 
-            forced_activatable_locks.emplace_back(
-                frame_view.GetFrame()
-                    .GetDocument()
-                    ->GetDisplayLockDocumentState()
-                    .GetScopedForceActivatableLocks());
-          });
-    }
+          forced_activatable_locks.emplace_back(
+              frame_view.GetFrame()
+                  .GetDocument()
+                  ->GetDisplayLockDocumentState()
+                  .GetScopedForceActivatableLocks());
+        });
+  }
 
-    // Running lifecycle beyond layout is expensive and the information is only
-    // needed to compute geometry. Limit the update to layout if we don't need
-    // the geometry.
-    if (options_->include_geometry) {
-      document.View()->UpdateAllLifecyclePhasesExceptPaint(
-          DocumentUpdateReason::kUnknown);
-    } else {
-      document.View()->UpdateLifecycleToLayoutClean(
-          DocumentUpdateReason::kUnknown);
-    }
+  // Running lifecycle beyond layout is expensive and the information is only
+  // needed to compute geometry. Limit the update to layout if we don't need
+  // the geometry.
+  if (options_->include_geometry) {
+    document.View()->UpdateAllLifecyclePhasesExceptPaint(
+        DocumentUpdateReason::kUnknown);
+  } else {
+    document.View()->UpdateLifecycleToLayoutClean(
+        DocumentUpdateReason::kUnknown);
   }
 
   auto* layout_view = document.GetLayoutView();
@@ -686,16 +622,80 @@ mojom::blink::AIPageContentPtr AIPageContentAgent::ContentBuilder::Build(
   auto root_node = MaybeGenerateContentNode(*layout_view, *document_style);
   CHECK(root_node);
 
+  // Add interaction metadata before walking the tree to ensure we promote
+  // interactive DOM nodes to ContentNodes.
+  AddPageInteractionInfo(document, *page_content);
+  auto frame_data = mojom::blink::AIPageContentFrameData::New();
+  AddFrameData(frame, *frame_data);
+  page_content->frame_data = std::move(frame_data);
+
   WalkChildren(*layout_view, *root_node, *document_style);
   page_content->root_node = std::move(root_node);
+
+  if (stack_depth_exceeded_) {
+    ukm::builders::OptimizationGuide_AIPageContentAgent(document.UkmSourceID())
+        .SetNodeDepthLimitExceeded(true)
+        .Record(document.UkmRecorder());
+  }
+
   return page_content;
+}
+
+void AIPageContentAgent::ContentBuilder::AddMetaData(
+    const LocalFrame& frame,
+    WTF::Vector<mojom::blink::AIPageContentMetaPtr>& meta_data) const {
+  int max = options_->max_meta_elements;
+  if (max == 0) {
+    return;
+  }
+
+  int count = 0;
+  const HTMLHeadElement* head = frame.GetDocument()->head();
+  if (!head) {
+    return;
+  }
+  for (HTMLMetaElement& meta_element :
+       Traversal<HTMLMetaElement>::ChildrenOf(*head)) {
+    auto name = meta_element.GetName();
+    if (name.empty()) {
+      continue;
+    }
+    auto meta = mojom::blink::AIPageContentMeta::New();
+    meta->name = name;
+    auto content = meta_element.Content();
+    if (content.empty()) {
+      meta->content = "";
+    } else {
+      meta->content = content;
+    }
+    meta_data.push_back(std::move(meta));
+    count++;
+    if (count >= max) {
+      break;
+    }
+  }
+}
+
+void AIPageContentAgent::ContentBuilder::AddInteractiveNode(
+    DOMNodeId dom_node_id) {
+  CHECK_NE(dom_node_id, kInvalidDOMNodeId);
+  interactive_dom_node_ids_.insert(dom_node_id);
 }
 
 bool AIPageContentAgent::ContentBuilder::WalkChildren(
     const LayoutObject& object,
     mojom::blink::AIPageContentNode& content_node,
-    const ComputedStyle& document_style) const {
+    const ComputedStyle& document_style) {
   if (object.ChildPrePaintBlockedByDisplayLock()) {
+    return false;
+  }
+
+  // The max tree depth is the mojo kMaxRecursionDepth minus a buffer to leave
+  // room for the root node, attributes of the final node, and mojo wrappers
+  // used in message creation.
+  static const int kMaxTreeDepth = kMaxRecursionDepth - 8;
+  if (stack_depth_ > kMaxTreeDepth) {
+    stack_depth_exceeded_ = true;
     return false;
   }
 
@@ -714,12 +714,22 @@ bool AIPageContentAgent::ContentBuilder::WalkChildren(
         child_content_node->content_attributes->attribute_type ==
             mojom::blink::AIPageContentAttributeType::kIframe) {
       // If the child is an iframe, it does its own tree walk.
+      // TODO(crbug.com/405173553): Moving ProcessIframe here might simplify
+      // tree construction and keep stack depth counting in one place.
     } else {
+      if (child_content_node) {
+        stack_depth_++;
+      }
+
       auto& node_for_child =
           child_content_node ? *child_content_node : content_node;
       child_has_visible_content =
           WalkChildren(*child, node_for_child, document_style);
       has_visible_content |= child_has_visible_content;
+
+      if (child_content_node) {
+        stack_depth_--;
+      }
     }
 
     const bool should_add_node_for_child =
@@ -734,7 +744,7 @@ bool AIPageContentAgent::ContentBuilder::WalkChildren(
 
 void AIPageContentAgent::ContentBuilder::ProcessIframe(
     const LayoutIFrame& object,
-    mojom::blink::AIPageContentNode& content_node) const {
+    mojom::blink::AIPageContentNode& content_node) {
   CHECK(IsVisible(object));
 
   content_node.content_attributes->attribute_type =
@@ -745,9 +755,20 @@ void AIPageContentAgent::ContentBuilder::ProcessIframe(
   auto iframe_data = mojom::blink::AIPageContentIframeData::New();
   iframe_data->frame_token = frame.GetFrameToken();
   iframe_data->likely_ad_frame = frame.IsAdFrame();
+
   content_node.content_attributes->iframe_data = std::move(iframe_data);
 
   auto* local_frame = DynamicTo<LocalFrame>(frame);
+
+  // Add interaction metadata before walking the tree to ensure we promote
+  // interactive DOM nodes to ContentNodes.
+  if (local_frame && local_frame->GetDocument()) {
+    auto frame_data = mojom::blink::AIPageContentFrameData::New();
+    AddFrameData(*local_frame, *frame_data);
+    content_node.content_attributes->iframe_data->local_frame_data =
+        std::move(frame_data);
+  }
+
   auto* child_layout_view =
       local_frame ? local_frame->ContentLayoutObject() : nullptr;
   if (child_layout_view) {
@@ -760,8 +781,10 @@ void AIPageContentAgent::ContentBuilder::ProcessIframe(
     // We could consider removing an iframe with no visible content. But this is
     // likely not common and should be done in the browser so it's consistently
     // done for local and remote frames.
+    stack_depth_++;
     WalkChildren(*child_layout_view, *child_content_node,
                  *child_layout_view->Style());
+    stack_depth_--;
     content_node.children_nodes.emplace_back(std::move(child_content_node));
   }
 }
@@ -769,11 +792,12 @@ void AIPageContentAgent::ContentBuilder::ProcessIframe(
 mojom::blink::AIPageContentNodePtr
 AIPageContentAgent::ContentBuilder::MaybeGenerateContentNode(
     const LayoutObject& object,
-    const ComputedStyle& document_style) const {
+    const ComputedStyle& document_style) {
   auto content_node = mojom::blink::AIPageContentNode::New();
   content_node->content_attributes =
       mojom::blink::AIPageContentAttributes::New();
-  auto& attributes = *content_node->content_attributes;
+  mojom::blink::AIPageContentAttributes& attributes =
+      *content_node->content_attributes;
   AddAnnotatedRoles(object, attributes.annotated_roles);
 
   // Set the attribute type and add any special attributes if the attribute type
@@ -801,23 +825,23 @@ AIPageContentAgent::ContentBuilder::MaybeGenerateContentNode(
     if (!IsVisible(object)) {
       return nullptr;
     }
-    ProcessImageNode(To<LayoutImage>(object), attributes, document_style);
+    ProcessImageNode(To<LayoutImage>(object), attributes);
   } else if (const auto* anchor_element =
                  DynamicTo<HTMLAnchorElement>(object.GetNode())) {
-    ProcessAnchorNode(*anchor_element, attributes, document_style);
+    ProcessAnchorNode(*anchor_element, attributes);
   } else if (object.IsTable()) {
-    ProcessTableNode(To<LayoutTable>(object), attributes, document_style);
+    ProcessTableNode(To<LayoutTable>(object), attributes);
   } else if (object.IsTableRow()) {
-    ProcessTableRowNode(To<LayoutTableRow>(object), attributes, document_style);
+    ProcessTableRowNode(To<LayoutTableRow>(object), attributes);
   } else if (object.IsTableCell()) {
     attributes.attribute_type =
         mojom::blink::AIPageContentAttributeType::kTableCell;
   } else if (const auto* form_element =
                  DynamicTo<HTMLFormElement>(object.GetNode())) {
-    ProcessFormNode(*form_element, attributes, document_style);
+    ProcessFormNode(*form_element, attributes);
   } else if (const auto* form_control =
                  DynamicTo<HTMLFormControlElement>(object.GetNode())) {
-    ProcessFormControlNode(*form_control, attributes, document_style);
+    ProcessFormControlNode(*form_control, attributes);
   } else if (element && IsHeadingTag(*element)) {
     attributes.attribute_type =
         mojom::blink::AIPageContentAttributeType::kHeading;
@@ -836,7 +860,8 @@ AIPageContentAgent::ContentBuilder::MaybeGenerateContentNode(
                          element->HasTagName(html_names::kDdTag))) {
     attributes.attribute_type =
         mojom::blink::AIPageContentAttributeType::kListItem;
-  } else if (IsGenericContainer(object, attributes.annotated_roles)) {
+  } else if (IsGenericContainer(object, attributes.annotated_roles,
+                                interactive_dom_node_ids_)) {
     // Be sure to set annotated roles before calling IsGenericContainer, as
     // IsGenericContainer will check for annotated roles.
     // Keep container at the bottom of the list as it is the least specific.
@@ -847,24 +872,72 @@ AIPageContentAgent::ContentBuilder::MaybeGenerateContentNode(
     return nullptr;
   }
 
-  if (auto node_id = AddNodeId(object, attributes)) {
-    attributes.common_ancestor_dom_node_id = *node_id;
+  if (auto dom_node_id = GetDomNodeId(object)) {
+    attributes.dom_node_id = *dom_node_id;
   }
 
   AddNodeGeometry(object, attributes);
 
+  AddNodeInteractionInfo(object, attributes);
+
   return content_node;
 }
 
-std::optional<DOMNodeId> AIPageContentAgent::ContentBuilder::AddNodeId(
+void AIPageContentAgent::ContentBuilder::AddAnnotatedRoles(
     const LayoutObject& object,
-    mojom::blink::AIPageContentAttributes& attributes) const {
-  if (auto node_id = GetNodeId(object)) {
-    attributes.dom_node_ids.push_back(*node_id);
-    return node_id;
+    Vector<mojom::blink::AIPageContentAnnotatedRole>& annotated_roles) const {
+  const auto& style = object.StyleRef();
+  if (style.ContentVisibility() == EContentVisibility::kHidden) {
+    annotated_roles.push_back(
+        mojom::blink::AIPageContentAnnotatedRole::kContentHidden);
   }
 
-  return std::nullopt;
+  // Element specific roles below.
+  const auto* element = DynamicTo<HTMLElement>(object.GetNode());
+  if (!element) {
+    return;
+  }
+  if (element->HasTagName(html_names::kHeaderTag) ||
+      element->FastGetAttribute(html_names::kRoleAttr) == "banner") {
+    annotated_roles.push_back(
+        mojom::blink::AIPageContentAnnotatedRole::kHeader);
+  }
+  if (element->HasTagName(html_names::kNavTag) ||
+      element->FastGetAttribute(html_names::kRoleAttr) == "navigation") {
+    annotated_roles.push_back(mojom::blink::AIPageContentAnnotatedRole::kNav);
+  }
+  if (element->HasTagName(html_names::kSearchTag) ||
+      element->FastGetAttribute(html_names::kRoleAttr) == "search") {
+    annotated_roles.push_back(
+        mojom::blink::AIPageContentAnnotatedRole::kSearch);
+  }
+  if (element->HasTagName(html_names::kMainTag) ||
+      element->FastGetAttribute(html_names::kRoleAttr) == "main") {
+    annotated_roles.push_back(mojom::blink::AIPageContentAnnotatedRole::kMain);
+  }
+  if (element->HasTagName(html_names::kArticleTag) ||
+      element->FastGetAttribute(html_names::kRoleAttr) == "article") {
+    annotated_roles.push_back(
+        mojom::blink::AIPageContentAnnotatedRole::kArticle);
+  }
+  if (element->HasTagName(html_names::kSectionTag) ||
+      element->FastGetAttribute(html_names::kRoleAttr) == "region") {
+    annotated_roles.push_back(
+        mojom::blink::AIPageContentAnnotatedRole::kSection);
+  }
+  if (element->HasTagName(html_names::kAsideTag) ||
+      element->FastGetAttribute(html_names::kRoleAttr) == "complementary") {
+    annotated_roles.push_back(mojom::blink::AIPageContentAnnotatedRole::kAside);
+  }
+  if (element->HasTagName(html_names::kFooterTag) ||
+      element->FastGetAttribute(html_names::kRoleAttr) == "contentinfo") {
+    annotated_roles.push_back(
+        mojom::blink::AIPageContentAnnotatedRole::kFooter);
+  }
+  if (paid_content_.IsPaidElement(element)) {
+    annotated_roles.push_back(
+        mojom::blink::AIPageContentAnnotatedRole::kPaidContent);
+  }
 }
 
 void AIPageContentAgent::ContentBuilder::AddNodeGeometry(
@@ -875,7 +948,7 @@ void AIPageContentAgent::ContentBuilder::AddNodeGeometry(
   }
 
   attributes.geometry = mojom::blink::AIPageContentGeometry::New();
-  auto& geometry = *attributes.geometry;
+  mojom::blink::AIPageContentGeometry& geometry = *attributes.geometry;
 
   geometry.outer_bounding_box =
       object.AbsoluteBoundingBoxRect(kMapCoordinatesFlags);
@@ -889,8 +962,126 @@ void AIPageContentAgent::ContentBuilder::AddNodeGeometry(
   geometry.is_fixed_or_sticky_position =
       object.Style()->GetPosition() == EPosition::kFixed ||
       object.Style()->GetPosition() == EPosition::kSticky;
-  geometry.scrolls_overflow_x = object.Style()->ScrollsOverflowX();
-  geometry.scrolls_overflow_y = object.Style()->ScrollsOverflowY();
+}
+
+void AIPageContentAgent::ContentBuilder::AddPageInteractionInfo(
+    const Document& document,
+    mojom::blink::AIPageContent& page_content) {
+  page_content.page_interaction_info =
+      mojom::blink::AIPageContentPageInteractionInfo::New();
+  mojom::blink::AIPageContentPageInteractionInfo& page_interaction_info =
+      *page_content.page_interaction_info;
+
+  // Focused element
+  if (Element* element = document.FocusedElement()) {
+    page_interaction_info.focused_dom_node_id = DOMNodeIds::IdForNode(element);
+    AddInteractiveNode(*page_interaction_info.focused_dom_node_id);
+  }
+
+  // Accessibility focus
+  if (AXObjectCache* ax_object_cache = document.ExistingAXObjectCache()) {
+    if (Node* ax_focused_node = ax_object_cache->GetAccessibilityFocus()) {
+      page_interaction_info.accessibility_focused_dom_node_id =
+          DOMNodeIds::IdForNode(ax_focused_node);
+      AddInteractiveNode(
+          *page_interaction_info.accessibility_focused_dom_node_id);
+    }
+  }
+
+  // Mouse location
+  LocalFrame* frame = document.GetFrame();
+  CHECK(frame);
+  EventHandler& event_handler = frame->GetEventHandler();
+  page_interaction_info.mouse_position =
+      gfx::ToRoundedPoint(event_handler.LastKnownMousePositionInRootFrame());
+}
+
+void AIPageContentAgent::ContentBuilder::AddFrameData(
+    const LocalFrame& frame,
+    mojom::blink::AIPageContentFrameData& frame_data) {
+  frame_data.frame_interaction_info =
+      mojom::blink::AIPageContentFrameInteractionInfo::New();
+  frame_data.title = frame.GetDocument()->title();
+  AddFrameInteractionInfo(frame, *frame_data.frame_interaction_info);
+  AddMetaData(frame, frame_data.meta_data);
+
+  if (RuntimeEnabledFeatures::AIPageContentPaidContentAnnotationEnabled()) {
+    if (paid_content_.QueryPaidElements(*frame.GetDocument())) {
+      frame_data.contains_paid_content = true;
+    }
+  }
+}
+
+void AIPageContentAgent::ContentBuilder::AddFrameInteractionInfo(
+    const LocalFrame& frame,
+    mojom::blink::AIPageContentFrameInteractionInfo& frame_interaction_info) {
+  // Selection
+  if (!frame.SelectedText().empty()) {
+    frame_interaction_info.selection =
+        mojom::blink::AIPageContentSelection::New();
+    mojom::blink::AIPageContentSelection& selection =
+        *frame_interaction_info.selection;
+    selection.selected_text = frame.SelectedText();
+
+    const SelectionInDOMTree& frame_selection =
+        frame.Selection().GetSelectionInDOMTree();
+    const Position& start_position = frame_selection.ComputeStartPosition();
+    const Position& end_position = frame_selection.ComputeEndPosition();
+    Node* start_node = start_position.ComputeContainerNode();
+    Node* end_node = end_position.ComputeContainerNode();
+
+    if (start_node) {
+      selection.start_dom_node_id = DOMNodeIds::IdForNode(start_node);
+      AddInteractiveNode(selection.start_dom_node_id);
+
+      selection.start_offset = start_position.ComputeOffsetInContainerNode();
+    }
+
+    if (end_node) {
+      selection.end_dom_node_id = DOMNodeIds::IdForNode(end_node);
+      AddInteractiveNode(selection.end_dom_node_id);
+
+      selection.end_offset = end_position.ComputeOffsetInContainerNode();
+    }
+  }
+}
+
+void AIPageContentAgent::ContentBuilder::AddNodeInteractionInfo(
+    const LayoutObject& object,
+    mojom::blink::AIPageContentAttributes& attributes) const {
+  if (!options_->enable_experimental_actionable_data) {
+    return;
+  }
+
+  attributes.node_interaction_info =
+      mojom::blink::AIPageContentNodeInteractionInfo::New();
+  mojom::blink::AIPageContentNodeInteractionInfo& node_interaction_info =
+      *attributes.node_interaction_info;
+  const ComputedStyle& style = *object.Style();
+  node_interaction_info.scrolls_overflow_x = style.ScrollsOverflowX();
+  node_interaction_info.scrolls_overflow_y = style.ScrollsOverflowY();
+  bool is_selectable = object.IsSelectable();
+  node_interaction_info.is_selectable = is_selectable;
+
+  if (auto* node = object.GetNode()) {
+    node_interaction_info.is_editable = IsEditable(*node);
+  }
+
+  if (auto* box = DynamicTo<LayoutBox>(object)) {
+    if (box->CanResize()) {
+      EResize resize = style.UsedResize();
+      node_interaction_info.can_resize_vertical =
+          resize == EResize::kVertical || resize == EResize::kBoth;
+      node_interaction_info.can_resize_horizontal =
+          resize == EResize::kHorizontal || resize == EResize::kBoth;
+    }
+  }
+
+  if (auto* element = DynamicTo<HTMLElement>(object.GetNode())) {
+    node_interaction_info.is_focusable = element->IsFocusable();
+    node_interaction_info.is_draggable = element->draggable();
+    node_interaction_info.is_clickable = element->IsMaybeClickable();
+  }
 }
 
 }  // namespace blink

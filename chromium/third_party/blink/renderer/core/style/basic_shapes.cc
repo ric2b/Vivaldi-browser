@@ -31,7 +31,8 @@
 
 #include "third_party/blink/renderer/platform/geometry/length.h"
 #include "third_party/blink/renderer/platform/geometry/length_functions.h"
-#include "third_party/blink/renderer/platform/graphics/path.h"
+#include "third_party/blink/renderer/platform/geometry/path.h"
+#include "third_party/blink/renderer/platform/geometry/path_builder.h"
 #include "ui/gfx/geometry/rect_f.h"
 
 namespace blink {
@@ -71,21 +72,20 @@ float BasicShapeCircle::FloatValueForRadiusInBox(
                   std::max(center.y(), height_delta));
 }
 
-void BasicShapeCircle::GetPath(Path& path,
-                               const gfx::RectF& bounding_box,
+Path BasicShapeCircle::GetPath(const gfx::RectF& bounding_box,
                                float zoom) const {
   const gfx::PointF center =
       PointForCenterCoordinate(center_x_, center_y_, bounding_box.size());
-  GetPathFromCenter(path, center, bounding_box, zoom);
+  return GetPathFromCenter(center, bounding_box, zoom);
 }
 
-void BasicShapeCircle::GetPathFromCenter(Path& path,
-                                         const gfx::PointF& center,
+Path BasicShapeCircle::GetPathFromCenter(const gfx::PointF& center,
                                          const gfx::RectF& bounding_box,
                                          float) const {
-  DCHECK(path.IsEmpty());
   const float radius = FloatValueForRadiusInBox(center, bounding_box.size());
-  path.AddEllipse(center + bounding_box.OffsetFromOrigin(), radius, radius);
+
+  return Path::MakeEllipse(center + bounding_box.OffsetFromOrigin(), radius,
+                           radius);
 }
 
 bool BasicShapeEllipse::IsEqualAssumingSameType(const BasicShape& o) const {
@@ -111,51 +111,50 @@ float BasicShapeEllipse::FloatValueForRadiusInBox(
   return std::max(center, width_or_height_delta);
 }
 
-void BasicShapeEllipse::GetPath(Path& path,
-                                const gfx::RectF& bounding_box,
+Path BasicShapeEllipse::GetPath(const gfx::RectF& bounding_box,
                                 float zoom) const {
   const gfx::PointF center =
       PointForCenterCoordinate(center_x_, center_y_, bounding_box.size());
-  GetPathFromCenter(path, center, bounding_box, zoom);
+  return GetPathFromCenter(center, bounding_box, zoom);
 }
 
-void BasicShapeEllipse::GetPathFromCenter(Path& path,
-                                          const gfx::PointF& center,
+Path BasicShapeEllipse::GetPathFromCenter(const gfx::PointF& center,
                                           const gfx::RectF& bounding_box,
                                           float) const {
-  DCHECK(path.IsEmpty());
   const float radius_x =
       FloatValueForRadiusInBox(radius_x_, center.x(), bounding_box.width());
   const float radius_y =
       FloatValueForRadiusInBox(radius_y_, center.y(), bounding_box.height());
-  path.AddEllipse(center + bounding_box.OffsetFromOrigin(), radius_x, radius_y);
+
+  return Path::MakeEllipse(center + bounding_box.OffsetFromOrigin(), radius_x,
+                           radius_y);
 }
 
-void BasicShapePolygon::GetPath(Path& path,
-                                const gfx::RectF& bounding_box,
-                                float) const {
-  DCHECK(path.IsEmpty());
+Path BasicShapePolygon::GetPath(const gfx::RectF& bounding_box, float) const {
   DCHECK(!(values_.size() % 2));
   wtf_size_t length = values_.size();
 
-  path.SetWindRule(wind_rule_);
+  PathBuilder builder;
+  builder.SetWindRule(wind_rule_);
   if (!length) {
-    return;
+    return builder.Finalize();
   }
 
-  path.MoveTo(
+  builder.MoveTo(
       gfx::PointF(FloatValueForLength(values_.at(0), bounding_box.width()) +
                       bounding_box.x(),
                   FloatValueForLength(values_.at(1), bounding_box.height()) +
                       bounding_box.y()));
   for (wtf_size_t i = 2; i < length; i = i + 2) {
-    path.AddLineTo(gfx::PointF(
+    builder.LineTo(gfx::PointF(
         FloatValueForLength(values_.at(i), bounding_box.width()) +
             bounding_box.x(),
         FloatValueForLength(values_.at(i + 1), bounding_box.height()) +
             bounding_box.y()));
   }
-  path.CloseSubpath();
+  builder.Close();
+
+  return builder.Finalize();
 }
 
 bool BasicShapePolygon::IsEqualAssumingSameType(const BasicShape& o) const {
@@ -173,10 +172,7 @@ bool BasicShapeInset::IsEqualAssumingSameType(const BasicShape& o) const {
          bottom_left_radius_ == other.bottom_left_radius_;
 }
 
-void BasicShapeInset::GetPath(Path& path,
-                              const gfx::RectF& bounding_box,
-                              float) const {
-  DCHECK(path.IsEmpty());
+Path BasicShapeInset::GetPath(const gfx::RectF& bounding_box, float) const {
   float left = FloatValueForLength(left_, bounding_box.width());
   float top = FloatValueForLength(top_, bounding_box.height());
   gfx::RectF rect(
@@ -196,7 +192,8 @@ void BasicShapeInset::GetPath(Path& path,
 
   FloatRoundedRect final_rect(rect, radii);
   final_rect.ConstrainRadii();
-  path.AddRoundedRect(final_rect);
+
+  return Path::MakeRoundedRect(final_rect);
 }
 
 }  // namespace blink

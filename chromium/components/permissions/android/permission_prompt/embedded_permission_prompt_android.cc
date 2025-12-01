@@ -8,6 +8,7 @@
 #include "components/permissions/android/permission_prompt/permission_dialog_delegate.h"
 #include "components/permissions/features.h"
 #include "components/permissions/permission_request.h"
+#include "components/permissions/permissions_client.h"
 #include "components/resources/android/theme_resources.h"
 #include "components/strings/grit/components_strings.h"
 #include "components/url_formatter/elide_url.h"
@@ -59,12 +60,23 @@ EmbeddedPermissionPromptAndroid::Create(content::WebContents* web_contents,
 
 PermissionPromptDisposition
 EmbeddedPermissionPromptAndroid::GetPromptDisposition() const {
-  return PermissionPromptDisposition::MODAL_DIALOG;
+  return PermissionPromptDisposition::ELEMENT_ANCHORED_BUBBLE;
 }
 
 bool EmbeddedPermissionPromptAndroid::ShouldFinalizeRequestAfterDecided()
     const {
   return false;
+}
+
+std::optional<gfx::Rect>
+EmbeddedPermissionPromptAndroid::GetViewBoundsInScreen() const {
+  // This is a modal prompt, the view bounds will cover the whole content
+  // view.
+  return web_contents()->GetContainerBounds();
+}
+
+bool EmbeddedPermissionPromptAndroid::IsAskPrompt() const {
+  return (GetEmbeddedPromptVariant() == Variant::kAsk);
 }
 
 std::vector<permissions::ElementAnchoredBubbleVariant>
@@ -83,7 +95,7 @@ void EmbeddedPermissionPromptAndroid::Closing() {
   // than only one dismiss reason of clicking outside the dialog. We are
   // grouping all of them into one single type for now and might expose others
   // later.
-  prompt_model_->RecordOsMetrics(permissions::OsScreenAction::DISMISSED_SCRIM);
+  prompt_model_->RecordOsMetrics(permissions::OsScreenAction::kDismissedScrim);
   prompt_model_->RecordPermissionActionUKM(
       permissions::ElementAnchoredBubbleAction::kDismissedScrim);
   prompt_model_->SetDelegateAction(Action::kDismiss);
@@ -126,7 +138,7 @@ void EmbeddedPermissionPromptAndroid::Resumed() {
 }
 
 void EmbeddedPermissionPromptAndroid::SystemSettingsShown() {
-  prompt_model_->RecordOsMetrics(permissions::OsScreenAction::SYSTEM_SETTINGS);
+  prompt_model_->RecordOsMetrics(permissions::OsScreenAction::kSystemSettings);
   prompt_model_->RecordPermissionActionUKM(
       permissions::ElementAnchoredBubbleAction::kSystemSettings);
 }
@@ -134,12 +146,12 @@ void EmbeddedPermissionPromptAndroid::SystemSettingsShown() {
 void EmbeddedPermissionPromptAndroid::SystemPermissionResolved(bool accepted) {
   if (accepted) {
     prompt_model_->RecordOsMetrics(
-        permissions::OsScreenAction::OS_PROMPT_ALLOWED);
+        permissions::OsScreenAction::kOsPromptAllowed);
     MaybeUpdateDialogWithNewScreenVariant();
   } else {
     prompt_model_->PrecalculateVariantsForMetrics();
     prompt_model_->RecordOsMetrics(
-        permissions::OsScreenAction::OS_PROMPT_DENIED);
+        permissions::OsScreenAction::kOsPromptDenied);
     prompt_model_->SetDelegateAction(Action::kDismiss);
     delegate()->FinalizeCurrentRequests();
   }
@@ -179,8 +191,9 @@ EmbeddedPermissionPromptAndroid::GetAnnotatedMessageText() const {
           /*bolded_ranges=*/{});
     case Variant::kOsSystemSettings:
       return PermissionRequest::AnnotatedMessageText(
-          l10n_util::GetStringFUTF16(IDS_PERMISSION_OFF_FOR_CHROME,
-                                     GetPermissionNameTextFragment()),
+          l10n_util::GetStringFUTF16(
+              IDS_PERMISSION_OFF_FOR_CHROME, GetPermissionNameTextFragment(),
+              PermissionsClient::Get()->GetClientApplicationName()),
           /*bolded_ranges=*/{});
     case Variant::kPreviouslyDenied:
       return PermissionRequest::AnnotatedMessageText(

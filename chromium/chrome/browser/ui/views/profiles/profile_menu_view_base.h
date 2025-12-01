@@ -24,7 +24,6 @@
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/base/models/image_model.h"
 #include "ui/color/color_id.h"
-#include "ui/gfx/paint_vector_icon.h"
 #include "ui/gfx/vector_icon_types.h"
 #include "ui/views/bubble/bubble_dialog_delegate_view.h"
 #include "ui/views/layout/box_layout.h"
@@ -117,6 +116,9 @@ class ProfileMenuViewBase : public content::WebContentsDelegate,
     // `profile_image` must not be empty. It does not need to be circular.
     ui::ImageModel profile_image;
     bool has_dotted_ring = false;
+    // This padding does not make the avatar larger in the menu.
+    // `profile_image` is drawn smaller to leave space around for the padding.
+    int profile_image_padding = 0;
 
     // Must not be empty.
     std::u16string title;
@@ -214,6 +216,8 @@ class ProfileMenuViewBase : public content::WebContentsDelegate,
   void AddProfileManagementFeatureButton(const gfx::VectorIcon& icon,
                                          const std::u16string& text,
                                          base::RepeatingClosure action);
+
+  void AddBottomMargin();
 
   gfx::ImageSkia ColoredImageForMenu(const gfx::VectorIcon& icon,
                                      ui::ColorId color) const;

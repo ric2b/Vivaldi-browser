@@ -117,7 +117,7 @@ void Server::OnRequestDeviceCallback(RequestDeviceUserdata* data,
     // Query and report the adapter limits, including DawnExperimentalSubgroupLimits,
     // DawnExperimentalImmediateDataLimits and DawnTexelCopyBufferRowAlignmentLimits.
     // Reporting to client.
-    WGPUSupportedLimits limits = {};
+    WGPULimits limits = {};
 
     // Chained DawnExperimentalSubgroupLimits.
     // TODO(crbug.com/354751907) Remove this, as it is now in AdapterInfo.
@@ -141,7 +141,7 @@ void Server::OnRequestDeviceCallback(RequestDeviceUserdata* data,
     // Assign the handle and allocated status if the device is created successfully.
     Known<WGPUDevice> reservation;
     if (FillReservation(data->deviceObjectId, device, &reservation) == WireResult::FatalError) {
-        cmd.status = WGPURequestDeviceStatus_InstanceDropped;
+        cmd.status = WGPURequestDeviceStatus_CallbackCancelled;
         cmd.message = ToOutputStringView("Destroyed before request was fulfilled.");
         SerializeCommand(cmd);
         return;

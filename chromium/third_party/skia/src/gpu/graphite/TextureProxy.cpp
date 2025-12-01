@@ -78,10 +78,6 @@ bool TextureProxy::isVolatile() const {
     return fVolatile == Volatile::kYes;
 }
 
-bool TextureProxy::isProtected() const {
-    return fInfo.isProtected() == Protected::kYes;
-}
-
 size_t TextureProxy::uninstantiatedGpuMemorySize() const {
     return ComputeSize(fDimensions, fInfo);
 }
@@ -226,7 +222,7 @@ sk_sp<TextureProxy> TextureProxy::Wrap(sk_sp<Texture> texture) {
 #ifdef SK_DEBUG
 void TextureProxy::validateTexture(const Texture* texture) {
     SkASSERT(this->isFullyLazy() || fDimensions == texture->dimensions());
-    SkASSERTF(fInfo.isCompatible(texture->textureInfo()),
+    SkASSERTF(fInfo.canBeFulfilledBy(texture->textureInfo()),
               "proxy->fInfo[%s] incompatible with texture->fInfo[%s]",
               fInfo.toString().c_str(),
               texture->textureInfo().toString().c_str());

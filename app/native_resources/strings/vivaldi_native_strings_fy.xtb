@@ -37,6 +37,7 @@
 <translation id="2441056087170876076">Meunster 2</translation>
 <translation id="2444387452209867610">Notysje ynfoegje</translation>
 <translation id="2486841023299517366">Bist 4</translation>
+<translation id="2501278716633472235">Tebek</translation>
 <translation id="2612127540243995147">Klear om te ynstallearjen. Vivaldi sil einigje en op 'e nij úteinsetten.</translation>
 <translation id="2613387515621326337">Fernijing webstee sjen litte</translation>
 <translation id="2645477450146475243">Spitich binne de ynstellingen fan de Opera sneuper net beskikber as dizze noch aktyf is. Om de ynstellingen nei Vivaldi te ymportearjen, moat it wurk bewarre wurde en alle finsters fan Opera sluten wurde. Klik dêrnei op trochgean.</translation>
@@ -61,6 +62,7 @@
 <translation id="3259769196742189631">Falidearje</translation>
 <translation id="3291915639428159043">Automatysk ôfspyljen tsjinkeard</translation>
 <translation id="3302905971452834934">Meunster 1</translation>
+<translation id="3308738399950580893">advertinsjes</translation>
 <translation id="3334610655141903168">(gjin titel)</translation>
 <translation id="3372505110412186107">Vivaldi <ph name="VERSION" /> is no de nijste beskikbere ferzje.</translation>
 <translation id="3383198080133834965">De ferzje is folslein by de tiid!</translation>
@@ -83,6 +85,7 @@
 <translation id="3795800845758778870">Jammer, de ynstellingen fan Brave binne net beskikber as de sneuper iepen stiet. Om dy ynstellingen nei Vivaldi te ymportearjen, slut jo wurk ôf en alle finster fan Brave. Klik dan op Fierdergean.</translation>
 <translation id="3822431842304177896">Nije skieding</translation>
 <translation id="3832132597516774400">Lânskip 5</translation>
+<translation id="3894751534882749287">As jo de side dochs besjen wolle, kinne jo it beskerming nivo feroarje yn de pop-up fan it folger filter of troch te klikken op Tastean</translation>
 <translation id="3914946330804881301">Ymportearje út Opera</translation>
 <translation id="3921292902397893431">Meunster 8</translation>
 <translation id="3943857333388298514">Plakke</translation>
@@ -106,6 +109,7 @@
 <translation id="4582480609585453144">Keppeling iepenje yn eftergrûn ljepper</translation>
 <translation id="4636708767492582204">Mei e-post stjoere</translation>
 <translation id="4677434526832593569">Bist 8</translation>
+<translation id="4736016046474602958">Folger filter</translation>
 <translation id="474217410105706308">Ljepper dimme</translation>
 <translation id="4861715717329665002">Automatysk bewarre sesjes</translation>
 <translation id="4881695831933465202">Iepenje</translation>
@@ -151,6 +155,7 @@
 <translation id="7086554968911045110">Lânskip 7</translation>
 <translation id="7099506190679014195">Feilige fernijing fan de keystore</translation>
 <translation id="7111492742514999492">Lânskip 9</translation>
+<translation id="7113310725918019676"><ph name="BLOCKED_TYPE" /> tastean op <ph name="DOMAIN" /></translation>
 <translation id="7208252576848052204">Spitich binne de ynstellingen fan de Arc sneuper net beskikber as dizze noch aktyf is. Om de ynstellingen nei Vivaldi te ymportearjen, moat it wurk bewarre wurde en alle finsters fan Arc sluten wurde. Klik dêrnei op trochgean.</translation>
 <translation id="7321500017121629018">Juster aktyf</translation>
 <translation id="7337881442233988129">Chromium</translation>
@@ -166,9 +171,9 @@
 <translation id="8027581147000338959">Iepenje yn nij finster</translation>
 <translation id="8044382196220116469">Net tastean dat websteeën automatysk fideo's ôfspyljen</translation>
 <translation id="8099620695029051217">Side adres kopiearje</translation>
+<translation id="8119307142152921512">folgers en advertinsjes</translation>
 <translation id="8197810018650377191">Side as blêdwizer taheakje</translation>
 <translation id="8261506727792406068">Wiskje</translation>
-<translation id="8263047843452521549">Eftergrûn tsjinsten ynspektearje</translation>
 <translation id="8331671104904436324">Iepenje op 'e eftergrûn ljepper</translation>
 <translation id="8373293945112511707">Lânskip 1</translation>
 <translation id="8388552048012645975">Fernijing wurdt ynladen...</translation>
@@ -182,7 +187,6 @@
 <translation id="8651348004684669199">Aktive ljepper taheakje</translation>
 <translation id="8669345741879513971">Meunster 10</translation>
 <translation id="867544375504146191">Yandex</translation>
-<translation id="8689295374912158752">Portaal dokumint ynspektearje</translation>
 <translation id="875142999698251063">No ferlitte</translation>
 <translation id="8768970203213061953">Lânskip 14</translation>
 <translation id="8773635261052182196">Jo sille dizze notifikaasjes net langer mear sjen. Jo kinne se wer oansette yn de Vivaldi ynstellings.</translation>
@@ -190,6 +194,7 @@
 <translation id="8813277370772331957">Werinnerje my letter</translation>
 <translation id="8894900864683381599">Keppeling oan webpaniel taheakje</translation>
 <translation id="8912720443398351457">Wolle jo Vivaldi ferlitte?</translation>
+<translation id="8940028675168378100">Tsjinkeard op <ph name="BLOCKER_NAME" /></translation>
 <translation id="8947109330183116400">HTML blêdwizer triem selektearje</translation>
 <translation id="9017566390391482291">Selektearje Vivaldi profyl map foar ymportearjen</translation>
 <translation id="9048058608784130603">Fernijing <ph name="VERSION" /> yn behanneling</translation>
@@ -200,6 +205,7 @@
 <translation id="912022491595344261">Ofbylding iepenje as <ph name="USER" /></translation>
 <translation id="9157539936604258187">Keppeling iepenje</translation>
 <translation id="9169060351863393881">Opera 12.x</translation>
+<translation id="9180553614777056266">Advertinsje tsjinkearder</translation>
 <translation id="939305735877869636">Brave</translation>
 <translation id="970294721402795299">Lânskip 16</translation>
 </translationbundle>

@@ -177,6 +177,12 @@ std::ostream& operator<<(std::ostream& os, OperationPrintStyle styled_op) {
   return os;
 }
 
+std::ostream& operator<<(std::ostream& os, RootIndex index) {
+  // Clearly this doesn't maximize convenience, but we don't want to include
+  // all those names in the binary.
+  return os << static_cast<uint16_t>(index);
+}
+
 std::ostream& operator<<(std::ostream& os, GenericBinopOp::Kind kind) {
   switch (kind) {
 #define PRINT_KIND(Name)              \
@@ -419,6 +425,8 @@ std::ostream& operator<<(std::ostream& os, ChangeOrDeoptOp::Kind kind) {
       return os << "Float64ToInt32";
     case ChangeOrDeoptOp::Kind::kFloat64ToUint32:
       return os << "Float64ToUint32";
+    case ChangeOrDeoptOp::Kind::kFloat64ToAdditiveSafeInteger:
+      return os << "Float64ToAdditiveSafeInteger";
     case ChangeOrDeoptOp::Kind::kFloat64ToInt64:
       return os << "Float64ToInt64";
     case ChangeOrDeoptOp::Kind::kFloat64NotHole:
@@ -1129,6 +1137,15 @@ void SwitchOp::PrintOptions(std::ostream& os) const {
   os << " default: " << default_case << ']';
 }
 
+void SwitchOp::Validate(const Graph& graph) const {
+  // Checking that there are no duplicated cases.
+  std::unordered_set<int> cases_set;
+  for (Case cas : cases) {
+    DCHECK(!cases_set.contains(cas.value));
+    cases_set.insert(cas.value);
+  }
+}
+
 std::ostream& operator<<(std::ostream& os, ObjectIsOp::Kind kind) {
   switch (kind) {
     case ObjectIsOp::Kind::kArrayBufferView:
@@ -1315,6 +1332,9 @@ std::ostream& operator<<(
   switch (kind) {
     case ConvertJSPrimitiveToUntaggedOrDeoptOp::UntaggedKind::kInt32:
       return os << "Int32";
+    case ConvertJSPrimitiveToUntaggedOrDeoptOp::UntaggedKind::
+        kAdditiveSafeInteger:
+      return os << "AdditiveSafeInteger";
     case ConvertJSPrimitiveToUntaggedOrDeoptOp::UntaggedKind::kInt64:
       return os << "Int64";
     case ConvertJSPrimitiveToUntaggedOrDeoptOp::UntaggedKind::kFloat64:
@@ -1328,6 +1348,9 @@ std::ostream& operator<<(
     std::ostream& os,
     ConvertJSPrimitiveToUntaggedOrDeoptOp::JSPrimitiveKind kind) {
   switch (kind) {
+    case ConvertJSPrimitiveToUntaggedOrDeoptOp::JSPrimitiveKind::
+        kAdditiveSafeInteger:
+      return os << "AdditiveSafeInteger";
     case ConvertJSPrimitiveToUntaggedOrDeoptOp::JSPrimitiveKind::kNumber:
       return os << "Number";
     case ConvertJSPrimitiveToUntaggedOrDeoptOp::JSPrimitiveKind::
@@ -1544,14 +1567,6 @@ std::ostream& operator<<(std::ostream& os, FindOrderedHashEntryOp::Kind kind) {
   }
 }
 
-std::ostream& operator<<(std::ostream& os,
-                         SpeculativeNumberBinopOp::Kind kind) {
-  switch (kind) {
-    case SpeculativeNumberBinopOp::Kind::kSafeIntegerAdd:
-      return os << "SafeIntegerAdd";
-  }
-}
-
 std::ostream& operator<<(std::ostream& os, JSStackCheckOp::Kind kind) {
   switch (kind) {
     case JSStackCheckOp::Kind::kFunctionEntry:
@@ -1597,7 +1612,6 @@ const RegisterRepresentation& RepresentationFor(wasm::ValueType type) {
     case wasm::kS128:
       return kSimd128;
     case wasm::kVoid:
-    case wasm::kRtt:
     case wasm::kTop:
     case wasm::kBottom:
       UNREACHABLE();
@@ -1796,8 +1810,48 @@ void Simd128LoadTransformOp::PrintOptions(std::ostream& os) const {
 }
 
 void Simd128ShuffleOp::PrintOptions(std::ostream& os) const {
+  os << '[';
+  switch (kind) {
+    case Kind::kI8x2:
+      os << "I8x2, ";
+      break;
+    case Kind::kI8x4:
+      os << "I8x4, ";
+      break;
+    case Kind::kI8x8:
+      os << "I8x8, ";
+      break;
+    case Kind::kI8x16:
+      os << "I8x16, ";
+      break;
+  }
   PrintSimdValue(os, shuffle);
+  os << ']';
 }
+
+#if V8_ENABLE_WASM_DEINTERLEAVED_MEM_OPS
+void Simd128LoadPairDeinterleaveOp::PrintOptions(std::ostream& os) const {
+  os << '[';
+  if (load_kind.maybe_unaligned) os << "unaligned, ";
+  if (load_kind.with_trap_handler) os << "protected, ";
+
+  switch (kind) {
+    case Kind::k8x32:
+      os << "8x32";
+      break;
+    case Kind::k16x16:
+      os << "16x16";
+      break;
+    case Kind::k32x8:
+      os << "32x8";
+      break;
+    case Kind::k64x4:
+      os << "64x4";
+      break;
+  }
+  os << ']';
+}
+#endif  // V8_ENABLE_WASM_DEINTERLEAVED_MEM_OPS
 
 #if V8_ENABLE_WASM_SIMD256_REVEC
 void Simd256ConstantOp::PrintOptions(std::ostream& os) const {
@@ -1914,13 +1968,12 @@ std::string Operation::ToString() const {
   return ss.str();
 }
 
-base::LazySpinningMutex SupportedOperations::mutex_ =
-    LAZY_SELFISH_MUTEX_INITIALIZER;
+base::LazyMutex SupportedOperations::mutex_ = LAZY_MUTEX_INITIALIZER;
 SupportedOperations SupportedOperations::instance_;
 bool SupportedOperations::initialized_;
 
 void SupportedOperations::Initialize() {
-  base::SpinningMutexGuard lock(mutex_.Pointer());
+  base::MutexGuard lock(mutex_.Pointer());
   if (initialized_) return;
   initialized_ = true;
 
@@ -2101,5 +2154,20 @@ bool Operation::IsOnlyUserOf(const Operation& value, const Graph& graph) const {
   return std::count(inputs().begin(), inputs().end(), graph.Index(value)) ==
          value.saturated_use_count.Get();
 }
+
+#if V8_ENABLE_WEBASSEMBLY
+bool Operation::IsProtectedLoad() const {
+  if (const auto* load = TryCast<LoadOp>()) {
+    return load->kind.with_trap_handler;
+  } else if (const auto* load_t = TryCast<Simd128LoadTransformOp>()) {
+    return load_t->load_kind.with_trap_handler;
+#ifdef V8_ENABLE_WASM_DEINTERLEAVED_MEM_OPS
+  } else if (const auto* load_t = TryCast<Simd128LoadPairDeinterleaveOp>()) {
+    return load_t->load_kind.with_trap_handler;
+#endif  // V8_ENABLE_WASM_DEINTERLEAVED_MEM_OPS
+  }
+  return false;
+}
+#endif  // V8_ENABLE_WEBASSEMBLY
 
 }  // namespace v8::internal::compiler::turboshaft

@@ -6,6 +6,8 @@
 
 #include "base/stl_util.h"
 #include "components/ad_blocker/adblock_rule_manager.h"
+#include "components/ad_blocker/adblock_stats_data.h"
+#include "components/ad_blocker/adblock_types.h"
 #include "components/request_filter/adblock_filter/adblock_rule_service_impl.h"
 #include "components/request_filter/adblock_filter/adblock_tab_state_and_logs.h"
 #include "content/public/browser/browser_context.h"
@@ -22,6 +24,29 @@ const int kSecondsBetweenNotifications = 1;
 constexpr base::TimeDelta kOffSiteTimeout = base::Minutes(30);
 constexpr base::TimeDelta kAdAttributionExpiration = base::Days(7);
 
+TabStateAndLogs::RuleData MakeRuleData(
+    RulesIndex::RuleAndSource rule_and_source) {
+  auto convert_decision = [](flat::Decision decision) {
+    switch (decision) {
+      case flat::Decision_MODIFY:
+        return RequestFilterRule::kModify;
+      case flat::Decision_PASS:
+        return RequestFilterRule::kPass;
+      case flat::Decision_MODIFY_IMPORTANT:
+        return RequestFilterRule::kModifyImportant;
+      default:
+        NOTREACHED();
+    }
+  };
+
+  TabStateAndLogs::RuleData rule_data;
+  rule_data.rule_source_id = rule_and_source.source_id;
+  rule_data.decision = convert_decision(rule_and_source.rule->decision());
+  rule_data.rule_text =
+      rule_and_source.rule->original_rule_text()->string_view();
+  return rule_data;
+}
+
 class TabStateAndLogsImpl
     : public TabStateAndLogs,
       public content::WebContentsObserver,
@@ -32,8 +57,10 @@ class TabStateAndLogsImpl
   TabStateAndLogsImpl& operator=(const TabStateAndLogsImpl&) = delete;
 
   void SetFrameBlockState(RuleGroup group,
+                          RulesIndex::RuleAndSource rule_and_source,
                           content::FrameTreeNodeId frame_tree_node_id) {
-    blocked_frames_[static_cast<size_t>(group)].insert(frame_tree_node_id);
+    blocked_frames_[static_cast<size_t>(group)][frame_tree_node_id] =
+        MakeRuleData(rule_and_source);
   }
 
   void ResetFrameBlockState(RuleGroup group,
@@ -137,9 +164,10 @@ class TabStateAndLogsImpl
     // may be receiving these because of one or another form of preloading.
     // These should be ignored to ensure the reported tab activations match the
     // currrently loaded page.
-    if(has_ongoing_navigations_) {
+    if (has_ongoing_navigations_) {
       did_set_activation_states_[static_cast<size_t>(group)] = true;
-      new_tab_activation_states_[static_cast<size_t>(group)] = std::move(states);
+      new_tab_activation_states_[static_cast<size_t>(group)] =
+          std::move(states);
     }
   }
 
@@ -155,11 +183,20 @@ class TabStateAndLogsImpl
     return blocked_urls_[static_cast<size_t>(group)];
   }
 
-  bool WasFrameBlocked(
-      RuleGroup group,
-      content::FrameTreeNodeId frame_tree_node_id) const override {
-    return blocked_frames_[static_cast<size_t>(group)].contains(
-        frame_tree_node_id);
+  std::array<std::optional<TabStateAndLogs::RuleData>, kRuleGroupCount>
+  WasFrameBlocked(content::FrameTreeNodeId frame_tree_node_id) const override {
+    std::array<std::optional<TabStateAndLogs::RuleData>, kRuleGroupCount>
+        result;
+
+    for (auto group :
+         {RuleGroup::kTrackingRules, RuleGroup::kAdBlockingRules}) {
+      if (blocked_frames_[static_cast<size_t>(group)].contains(
+              frame_tree_node_id)) {
+        result[static_cast<size_t>(group)] =
+            blocked_frames_[static_cast<size_t>(group)].at(frame_tree_node_id);
+      }
+    }
+    return result;
   }
 
   const TabActivations& GetTabActivations(RuleGroup group) const override {
@@ -377,7 +414,7 @@ class TabStateAndLogsImpl
 
   const base::WeakPtr<StateAndLogsImpl> state_and_logs_;
 
-  std::array<std::set<content::FrameTreeNodeId>, kRuleGroupCount>
+  std::array<std::map<content::FrameTreeNodeId, RuleData>, kRuleGroupCount>
       blocked_frames_;
   std::set<std::string> allowed_attribution_trackers_;
   std::set<std::string> new_allowed_attribution_trackers_;
@@ -420,10 +457,11 @@ struct FrameInfo {
 
 // Allow passing a null `state_and_logs` if `create_helper_if_needed`, to allow
 // this being called from const methods.
-std::optional<FrameInfo> GetFrameInfo(StateAndLogsImpl* state_and_logs,
-                                      bool create_helper_if_needed,
-                                      content::RenderFrameHost* frame,
-                                      bool allow_off_the_record) {
+std::optional<FrameInfo> GetFrameInfo(
+    base::WeakPtr<StateAndLogsImpl> state_and_logs,
+    bool create_helper_if_needed,
+    content::RenderFrameHost* frame,
+    bool allow_off_the_record) {
   CHECK(state_and_logs || !create_helper_if_needed);
   content::WebContents* web_contents =
       content::WebContents::FromRenderFrameHost(frame);
@@ -440,8 +478,7 @@ std::optional<FrameInfo> GetFrameInfo(StateAndLogsImpl* state_and_logs,
 
   // Create it if it doesn't exist yet.
   if (create_helper_if_needed) {
-    TabStateAndLogsImpl::CreateForWebContents(web_contents,
-                                              state_and_logs->AsWeakPtr());
+    TabStateAndLogsImpl::CreateForWebContents(web_contents, state_and_logs);
   }
 
   TabStateAndLogsImpl* tab_helper =
@@ -456,20 +493,9 @@ std::optional<FrameInfo> GetFrameInfo(StateAndLogsImpl* state_and_logs,
 
 }  // namespace
 
-StateAndLogsImpl::StateAndLogsImpl(base::Time reporting_start,
-                                   CounterGroup blocked_domains,
-                                   CounterGroup blocked_for_origin,
-                                   RuleServiceImpl* rules_service,
+StateAndLogsImpl::StateAndLogsImpl(RuleServiceImpl* rules_service,
                                    base::RepeatingClosure schedule_save)
-    : reporting_start_(reporting_start),
-      blocked_domains_(std::move(blocked_domains)),
-      blocked_for_origin_(std::move(blocked_for_origin)),
-      schedule_save_(schedule_save),
-      rules_service_(rules_service),
-      weak_factory_(this) {
-  if (reporting_start.is_null())
-    ClearBlockedCounters();
-}
+    : schedule_save_(schedule_save), rules_service_(rules_service) {}
 
 StateAndLogsImpl::~StateAndLogsImpl() = default;
 
@@ -499,20 +525,24 @@ const std::map<uint32_t, base::Value>* StateAndLogsImpl::GetTrackerInfo(
     return &tracker_info->second;
 }
 
-void StateAndLogsImpl::SetFrameBlockState(RuleGroup group,
-                                          content::RenderFrameHost* frame) {
-  std::optional<FrameInfo> frame_info = GetFrameInfo(this, true, frame, false);
+void StateAndLogsImpl::SetFrameBlockState(
+    RuleGroup group,
+    RulesIndex::RuleAndSource rule_and_source,
+    content::RenderFrameHost* frame) {
+  std::optional<FrameInfo> frame_info =
+      GetFrameInfo(weak_factory_.GetWeakPtr(), true, frame, false);
   if (!frame_info) {
     return;
   }
 
-  frame_info->tab_helper->SetFrameBlockState(group,
+  frame_info->tab_helper->SetFrameBlockState(group, rule_and_source,
                                              frame->GetFrameTreeNodeId());
 }
 
 void StateAndLogsImpl::ResetFrameBlockState(RuleGroup group,
                                             content::RenderFrameHost* frame) {
-  std::optional<FrameInfo> frame_info = GetFrameInfo(this, true, frame, false);
+  std::optional<FrameInfo> frame_info =
+      GetFrameInfo(weak_factory_.GetWeakPtr(), true, frame, false);
   if (!frame_info) {
     return;
   }
@@ -530,7 +560,8 @@ void StateAndLogsImpl::ReportTabActivations(
     return;
   }
 
-  std::optional<FrameInfo> frame_info = GetFrameInfo(this, true, frame, false);
+  std::optional<FrameInfo> frame_info =
+      GetFrameInfo(weak_factory_.GetWeakPtr(), true, frame, false);
   if (!frame_info) {
     return;
   }
@@ -547,19 +578,6 @@ void StateAndLogsImpl::ReportTabActivations(
         return RequestFilterRule::kGenericHide;
       case flat::ActivationType_ATTRIBUTE_ADS:
         return RequestFilterRule::kAttributeAds;
-      default:
-        NOTREACHED();
-    }
-  };
-
-  auto convert_decision = [](flat::Decision decision) {
-    switch (decision) {
-      case flat::Decision_MODIFY:
-        return RequestFilterRule::kModify;
-      case flat::Decision_PASS:
-        return RequestFilterRule::kPass;
-      case flat::Decision_MODIFY_IMPORTANT:
-        return RequestFilterRule::kModifyImportant;
       default:
         NOTREACHED();
     }
@@ -585,11 +603,7 @@ void StateAndLogsImpl::ReportTabActivations(
       }
     }();
     if (activation_result.rule_and_source) {
-      TabStateAndLogs::RuleData rule_data;
-      rule_data.decision =
-          convert_decision(activation_result.rule_and_source->rule->decision());
-      rule_data.rule_source_id = activation_result.rule_and_source->source_id;
-      state.rule_data = rule_data;
+      state.rule_data = MakeRuleData(*activation_result.rule_and_source);
     }
 
     logged_activations.emplace(convert_activation_type(activation_type), state);
@@ -603,7 +617,8 @@ void StateAndLogsImpl::OnUrlBlocked(RuleGroup group,
                                     url::Origin origin,
                                     GURL url,
                                     content::RenderFrameHost* frame) {
-  std::optional<FrameInfo> frame_info = GetFrameInfo(this, true, frame, true);
+  std::optional<FrameInfo> frame_info =
+      GetFrameInfo(weak_factory_.GetWeakPtr(), true, frame, true);
   if (!frame_info) {
     return;
   }
@@ -623,8 +638,6 @@ void StateAndLogsImpl::OnUrlBlocked(RuleGroup group,
 
       if (tracker_infos_[static_cast<size_t>(group)].count(subdomain)) {
         tab_helper->OnTrackerBlocked(group, subdomain, url);
-        if (!is_off_the_record)
-          AddToCounter(blocked_domains_, group, subdomain);
         is_known_tracker = true;
         break;
       }
@@ -637,12 +650,10 @@ void StateAndLogsImpl::OnUrlBlocked(RuleGroup group,
 
   if (!is_known_tracker) {
     tab_helper->OnUrlBlocked(group, url);
-    if (url.has_host() && !is_off_the_record)
-      AddToCounter(blocked_domains_, group, url.host());
   }
 
-  if (!origin.host().empty() && !is_off_the_record)
-    AddToCounter(blocked_for_origin_, group, origin.host());
+  if (!is_off_the_record)
+    AddToCounter(group, url, origin.host());
 
   tabs_with_new_blocks_[static_cast<size_t>(group)].insert(web_contents);
 
@@ -653,7 +664,8 @@ void StateAndLogsImpl::SetTabAdQueryTriggers(
     const GURL& ad_url,
     std::vector<std::string> ad_query_triggers,
     content::RenderFrameHost* frame) {
-  std::optional<FrameInfo> frame_info = GetFrameInfo(this, true, frame, false);
+  std::optional<FrameInfo> frame_info =
+      GetFrameInfo(weak_factory_.GetWeakPtr(), true, frame, false);
   if (!frame_info || frame_info->web_contents->GetPrimaryMainFrame() != frame) {
     return;
   }
@@ -665,7 +677,8 @@ bool StateAndLogsImpl::DoesAdAttributionMatch(
     content::RenderFrameHost* frame,
     std::string_view tracker_url_spec,
     std::string_view ad_domain_and_query_trigger) {
-  std::optional<FrameInfo> frame_info = GetFrameInfo(this, true, frame, false);
+  std::optional<FrameInfo> frame_info =
+      GetFrameInfo(weak_factory_.GetWeakPtr(), true, frame, false);
   if (!frame_info) {
     return false;
   }
@@ -680,35 +693,24 @@ bool StateAndLogsImpl::DoesAdAttributionMatch(
   return result;
 }
 
-void StateAndLogsImpl::AddToCounter(CounterGroup& counter_group,
-                                    RuleGroup group,
-                                    std::string domain) {
-  auto& counters = counter_group[static_cast<size_t>(group)];
-  auto domain_counter = counters.find(domain);
-  if (domain_counter != counters.end())
-    domain_counter->second++;
-  else
-    counters.insert({domain, 1});
-}
-
-void StateAndLogsImpl::ClearBlockedCounters() {
-  for (size_t i = 0; i < kRuleGroupCount; i++) {
-    blocked_domains_[i].clear();
-    blocked_for_origin_[i].clear();
+void StateAndLogsImpl::AddToCounter(RuleGroup group,
+                                    const GURL& host,
+                                    const std::string& origin_host) {
+  auto* stats_store = rules_service_->GetStatsStore();
+  if (stats_store && host.has_host()) {
+    stats_store->AddEntry(host, origin_host, base::Time::Now(), group);
   }
-  reporting_start_ = base::Time::Now();
 }
 
-bool StateAndLogsImpl::WasFrameBlocked(RuleGroup group,
-                                       content::RenderFrameHost* frame) const {
+std::array<std::optional<TabStateAndLogs::RuleData>, kRuleGroupCount>
+StateAndLogsImpl::WasFrameBlocked(content::RenderFrameHost* frame) const {
   std::optional<FrameInfo> frame_info =
       GetFrameInfo(nullptr, false, frame, false);
   if (!frame_info) {
-    return false;
+    return {std::nullopt, std::nullopt};
   }
 
-  return frame_info->tab_helper->WasFrameBlocked(group,
-                                                 frame->GetFrameTreeNodeId());
+  return frame_info->tab_helper->WasFrameBlocked(frame->GetFrameTreeNodeId());
 }
 
 void StateAndLogsImpl::OnTabRemoved(content::WebContents* contents) {
@@ -778,7 +780,8 @@ TabStateAndLogs* StateAndLogsImpl::GetTabHelper(
 }
 
 void StateAndLogsImpl::CreateTabHelper(content::WebContents* contents) {
-  TabStateAndLogsImpl::CreateForWebContents(contents, AsWeakPtr());
+  TabStateAndLogsImpl::CreateForWebContents(contents,
+                                            weak_factory_.GetWeakPtr());
 }
 
 void StateAndLogsImpl::SendNotifications() {

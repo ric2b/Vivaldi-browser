@@ -52,7 +52,7 @@ class MODULES_EXPORT SpeechRecognitionController final
   static const char kSupplementName[];
 
   explicit SpeechRecognitionController(LocalDOMWindow&);
-  virtual ~SpeechRecognitionController();
+  ~SpeechRecognitionController();
 
   // Builds the speech recognition request params. If `audio_forwarder` and
   // `audio_parameters` are not defined, speech recognition will use audio from
@@ -83,8 +83,10 @@ class MODULES_EXPORT SpeechRecognitionController final
   void Start(
       media::mojom::blink::StartSpeechRecognitionRequestParamsPtr params);
 
-  void OnDeviceWebSpeechAvailable(const String& language,
-                                  base::OnceCallback<void(bool)> callback);
+  void OnDeviceWebSpeechAvailable(
+      const String& language,
+      base::OnceCallback<void(media::mojom::blink::AvailabilityStatus)>
+          callback);
   void InstallOnDeviceSpeechRecognition(
       const String& language,
       base::OnceCallback<void(bool)> callback);

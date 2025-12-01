@@ -128,55 +128,9 @@ void CreateDefaultTabGroupAndOpenMenu(
       performAction:grey_tap()];
 }
 
-// Shares a tab group and open the tab group indicator menu.
-void ShareTabGroupAndOpenMenu(
-    net::test_server::EmbeddedTestServer* testServer) {
-  // Create a group.
-  [ChromeEarlGrey loadURL:GetQueryTitleURL(testServer, kTab1Title)];
-  [ChromeEarlGreyUI openTabGrid];
-  CreateDefaultFirstGroupFromTabCellAtIndex(0);
-
-  // Share the group.
-  [[EarlGrey selectElementWithMatcher:TabGridGroupCellAtIndex(0)]
-      performAction:grey_longPress()];
-  [[EarlGrey selectElementWithMatcher:ShareGroupButton()]
-      performAction:grey_tap()];
-  [[EarlGrey selectElementWithMatcher:FakeShareFlowView()]
-      assertWithMatcher:grey_sufficientlyVisible()];
-  [[EarlGrey selectElementWithMatcher:NavigationBarSaveButton()]
-      performAction:grey_tap()];
-  [[EarlGrey selectElementWithMatcher:FakeShareFlowView()]
-      assertWithMatcher:grey_notVisible()];
-
-  // Close the tab grid.
-  [[EarlGrey selectElementWithMatcher:chrome_test_util::TabGridDoneButton()]
-      performAction:grey_tap()];
-
-  // Open the tab group indicator menu.
-  [[EarlGrey
-      selectElementWithMatcher:TabGroupIndicatorViewMatcherWithGroupTitle(
-                                   l10n_util::GetPluralNSStringF(
-                                       IDS_IOS_TAB_GROUP_TABS_NUMBER, 1))]
-      performAction:grey_tap()];
-}
-
-// Joins a tab group and open the tab group indicator menu.
-void JoinTabGroupAndOpenMenu() {
-  [TabGroupAppInterface mockSharedEntitiesPreview];
-  GURL joinGroupURL = data_sharing::GetDataSharingUrl(data_sharing::GroupToken(
-      data_sharing::GroupId("resources%2F3be"), "CggHBicxA_slvx"));
-  [ChromeEarlGrey loadURL:joinGroupURL waitForCompletion:NO];
-
-  // Verify that it opened the Join flow.
-  [ChromeEarlGrey waitForUIElementToAppearWithMatcher:FakeJoinFlowView()];
-
-  // Join the group.
-  [[EarlGrey selectElementWithMatcher:NavigationBarSaveButton()]
-      performAction:grey_tap()];
-  [[EarlGrey selectElementWithMatcher:FakeJoinFlowView()]
-      assertWithMatcher:grey_notVisible()];
-
-  // Close the tab and open the shared group.
+// Creates a shared tab group and opens the tab group indicator menu.
+void CreateSharedGroupAndOpenMenu() {
+  [TabGroupAppInterface prepareFakeSharedTabGroups:1 asOwner:NO];
   [ChromeEarlGreyUI openTabGrid];
   [[EarlGrey selectElementWithMatcher:TabGridCloseButtonForCellAtIndex(0)]
       performAction:grey_tap()];
@@ -185,8 +139,6 @@ void JoinTabGroupAndOpenMenu() {
   [ChromeEarlGrey waitForUIElementToAppearWithMatcher:TabGridCellAtIndex(0)];
   [[EarlGrey selectElementWithMatcher:TabGridCellAtIndex(0)]
       performAction:grey_tap()];
-
-  // Open the tab group indicator menu.
   [[EarlGrey
       selectElementWithMatcher:TabGroupIndicatorViewMatcherWithGroupTitle(
                                    @"shared group")] performAction:grey_tap()];
@@ -203,7 +155,6 @@ void JoinTabGroupAndOpenMenu() {
 - (AppLaunchConfiguration)appConfigurationForTestCase {
   AppLaunchConfiguration config;
   config.features_enabled.push_back(kTabGroupsIPad);
-  config.features_enabled.push_back(kModernTabStrip);
   config.features_enabled.push_back(kTabGroupIndicator);
   config.features_enabled.push_back(
       data_sharing::features::kDataSharingFeature);
@@ -223,8 +174,21 @@ void JoinTabGroupAndOpenMenu() {
   [ChromeEarlGrey
       setUserDefaultsObject:@YES
                      forKey:kSharedTabGroupUserEducationShownOnceKey];
-  [SigninEarlGreyUI signinWithFakeIdentity:[FakeSystemIdentity fakeIdentity1]
-                         enableHistorySync:YES];
+
+  // `fakeIdentity2` joins shared groups as member.
+  FakeSystemIdentity* identity = [FakeSystemIdentity fakeIdentity1];
+  if ([self isRunningTest:@selector
+            (testTabGroupIndicatorMenuActionsDeleteSharedGroup)]) {
+    // `fakeIdentity2` joins shared groups as owner.
+    identity = [FakeSystemIdentity fakeIdentity2];
+  }
+  [SigninEarlGreyUI signinWithFakeIdentity:identity enableHistorySync:YES];
+}
+
+- (void)tearDownHelper {
+  [super tearDownHelper];
+  // Delete groups.
+  [TabGroupAppInterface cleanup];
 }
 
 // Tests that the tab group indicator view is visible when the active tab is
@@ -273,6 +237,10 @@ void JoinTabGroupAndOpenMenu() {
 // Tests that the tab group indicator view is visible when the active tab is
 // grouped.
 - (void)testTabGroupIndicatorNotVisibleOnIpad {
+  if (@available(iOS 17, *)) {
+  } else {
+    EARL_GREY_TEST_SKIPPED(@"Skipped on iOS 16.");
+  }
   if (![ChromeEarlGrey isIPadIdiom]) {
     EARL_GREY_TEST_SKIPPED(@"Skipped on iPhone.");
   }
@@ -500,6 +468,10 @@ void JoinTabGroupAndOpenMenu() {
 // Tests that the Tab Grid button indicator is correctly updated whether a tab
 // is grouped or not.
 - (void)testTabGridButtonUpdatesWhenTabIsGroupedUngrouped {
+  if ([ChromeEarlGrey isIPadIdiom]) {
+    EARL_GREY_TEST_SKIPPED(@"On iPad, the tab group indicator is not displayed "
+                           @"if the tab strip is visible.");
+  }
   // Open a second tab.
   [ChromeEarlGreyUI openNewTab];
 
@@ -546,7 +518,7 @@ void JoinTabGroupAndOpenMenu() {
     EARL_GREY_TEST_SKIPPED(@"On iPad, the tab group indicator is not displayed "
                            @"if the tab strip is visible.");
   }
-  ShareTabGroupAndOpenMenu(self.testServer);
+  CreateSharedGroupAndOpenMenu();
 
   // Verify that the leave button is not available.
   [[EarlGrey selectElementWithMatcher:LeaveSharedGroupButton()]
@@ -576,7 +548,7 @@ void JoinTabGroupAndOpenMenu() {
     EARL_GREY_TEST_SKIPPED(@"On iPad, the tab group indicator is not displayed "
                            @"if the tab strip is visible.");
   }
-  JoinTabGroupAndOpenMenu();
+  CreateSharedGroupAndOpenMenu();
 
   // Verify that the delete button is not available.
   [[EarlGrey selectElementWithMatcher:DeleteGroupButton()]

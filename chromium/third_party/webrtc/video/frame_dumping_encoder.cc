@@ -95,7 +95,7 @@ class FrameDumpingEncoder : public VideoEncoder, public EncodedImageCallback {
   std::string FilenameFromSimulcastIndex(int index)
       RTC_EXCLUSIVE_LOCKS_REQUIRED(mu_) {
     char filename_buffer[1024];
-    rtc::SimpleStringBuilder builder(filename_buffer);
+    SimpleStringBuilder builder(filename_buffer);
     builder << output_directory_ << "/webrtc_encoded_frames" << "."
             << origin_time_micros_ << "." << index << ".ivf";
     return builder.str();
@@ -137,8 +137,8 @@ std::unique_ptr<VideoEncoder> MaybeCreateFrameDumpingEncoderWrapper(
     return encoder;
   }
   absl::c_replace(output_directory, ';', '/');
-  return std::make_unique<FrameDumpingEncoder>(
-      std::move(encoder), rtc::TimeMicros(), output_directory);
+  return std::make_unique<FrameDumpingEncoder>(std::move(encoder), TimeMicros(),
+                                               output_directory);
 }
 
 }  // namespace webrtc

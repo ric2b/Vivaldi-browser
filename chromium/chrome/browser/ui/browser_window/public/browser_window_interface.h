@@ -44,6 +44,7 @@ class GURL;
 class Profile;
 class SessionID;
 class TabStripModel;
+class ImmersiveModeController;
 
 class BrowserWindowInterface : public content::PageNavigator {
  public:
@@ -89,6 +90,14 @@ class BrowserWindowInterface : public content::PageNavigator {
   // Returns the top container view.
   virtual views::View* TopContainer() = 0;
 
+  // Returns true if the window is minimized.
+  virtual bool IsMinimized() const = 0;
+
+  virtual base::WeakPtr<BrowserWindowInterface> GetWeakPtr() = 0;
+
+  // Returns the view that houses the Lens overlay.
+  virtual views::View* LensOverlayView() = 0;
+
   using ActiveTabChangeCallback =
       base::RepeatingCallback<void(BrowserWindowInterface*)>;
   virtual base::CallbackListSubscription RegisterActiveTabDidChange(
@@ -118,11 +127,11 @@ class BrowserWindowInterface : public content::PageNavigator {
   GetWebContentsModalDialogHostForWindow() = 0;
 
   // Whether the window is active.
-  // This definition needs to be more precise, as "active" has different
-  // semantics and nuance on each platform.
+  // The definition of "active" aligns with the window being painted as active
+  // instead of the top level widget having focus.
   // Note that this does not work correctly for mac PWA windows, as those are
   // hosted in a separate application with a stub in the browser process.
-  virtual bool IsActive() = 0;
+  virtual bool IsActive() const = 0;
 
   // Register for these two callbacks to detect changes to IsActive().
   using DidBecomeActiveCallback =
@@ -136,6 +145,10 @@ class BrowserWindowInterface : public content::PageNavigator {
 
   // This class is responsible for controlling fullscreen and pointer lock.
   virtual ExclusiveAccessManager* GetExclusiveAccessManager() = 0;
+
+  // This class is responsible for controlling the top chrome reveal state while
+  // in immersive fullscreen.
+  virtual ImmersiveModeController* GetImmersiveModeController() = 0;
 
   // This class manages actions that a user can take that are scoped to a
   // browser window (e.g. most of the 3-dot menu actions).

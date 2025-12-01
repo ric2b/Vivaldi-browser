@@ -18,6 +18,7 @@ import java.lang.annotation.RetentionPolicy;
 @StringDef({
     FeatureConstants.ANDROID_TAB_DECLUTTER_FEATURE,
     FeatureConstants.ADAPTIVE_BUTTON_IN_TOP_TOOLBAR_CUSTOMIZATION_NEW_TAB_FEATURE,
+    FeatureConstants.ADAPTIVE_BUTTON_IN_TOP_TOOLBAR_CUSTOMIZATION_OPEN_IN_BROWSER_FEATURE,
     FeatureConstants.ADAPTIVE_BUTTON_IN_TOP_TOOLBAR_CUSTOMIZATION_SHARE_FEATURE,
     FeatureConstants.ADAPTIVE_BUTTON_IN_TOP_TOOLBAR_CUSTOMIZATION_VOICE_SEARCH_FEATURE,
     FeatureConstants.ADAPTIVE_BUTTON_IN_TOP_TOOLBAR_CUSTOMIZATION_TRANSLATE_FEATURE,
@@ -94,6 +95,7 @@ import java.lang.annotation.RetentionPolicy;
     FeatureConstants.REQUEST_DESKTOP_SITE_EXCEPTIONS_GENERIC_FEATURE,
     FeatureConstants.REQUEST_DESKTOP_SITE_WINDOW_SETTING_FEATURE,
     FeatureConstants.IPH_MIC_TOOLBAR_FEATURE,
+    FeatureConstants.IPH_PDF_PAGE_DOWNLOAD,
     FeatureConstants.IPH_SHARE_SCREENSHOT_FEATURE,
     FeatureConstants.IPH_SHARING_HUB_LINK_TOGGLE_FEATURE,
     FeatureConstants.IPH_WEB_FEED_FOLLOW_FEATURE,
@@ -121,6 +123,8 @@ public @interface FeatureConstants {
     String ACCOUNT_SETTINGS_HISTORY_SYNC = "IPH_AccountSettingsHistorySync";
     String ADAPTIVE_BUTTON_IN_TOP_TOOLBAR_CUSTOMIZATION_NEW_TAB_FEATURE =
             "IPH_AdaptiveButtonInTopToolbarCustomization_NewTab";
+    String ADAPTIVE_BUTTON_IN_TOP_TOOLBAR_CUSTOMIZATION_OPEN_IN_BROWSER_FEATURE =
+            "IPH_AdaptiveButtonInTopToolbarCustomization_OpenInBrowser";
     String ADAPTIVE_BUTTON_IN_TOP_TOOLBAR_CUSTOMIZATION_SHARE_FEATURE =
             "IPH_AdaptiveButtonInTopToolbarCustomization_Share";
     String ADAPTIVE_BUTTON_IN_TOP_TOOLBAR_CUSTOMIZATION_VOICE_SEARCH_FEATURE =
@@ -364,4 +368,7 @@ public @interface FeatureConstants {
 
     /** An IPH feature to inform users about the gesture navigation in RTL mode. */
     String IPH_RTL_GESTURE_NAVIGATION = "IPH_RtlGestureNavigation";
+
+    /** An IPH feature to inform users about the pdf download option in the app menu. */
+    String IPH_PDF_PAGE_DOWNLOAD = "IPH_PdfPageDownload";
 }

@@ -18,8 +18,8 @@
 #include "include/core/SkTileMode.h"
 #include "include/effects/SkGradientShader.h"
 #include "include/gpu/graphite/Context.h"
-#include "include/private/SkColorData.h"
 #include "include/private/base/SkTArray.h"
+#include "src/core/SkColorData.h"
 #include "src/core/SkColorSpaceXformSteps.h"
 #include "src/gpu/graphite/PaintParamsKey.h"
 #include "src/gpu/graphite/ReadSwizzle.h"
@@ -348,7 +348,7 @@ struct ColorSpaceTransformBlock {
                                 SkAlphaType dstAT);
         ColorSpaceTransformData(const SkColorSpaceXformSteps& steps) { fSteps = steps; }
         ColorSpaceTransformData(ReadSwizzle swizzle) : fReadSwizzle(swizzle) {
-            SkASSERT(fSteps.flags.mask() == 0);  // By default, the colorspace should have no effect
+            SkASSERT(fSteps.fFlags.mask() == 0);  // By default, the colorspace should have no effect
         }
         SkColorSpaceXformSteps fSteps;
         ReadSwizzle            fReadSwizzle = ReadSwizzle::kRGBA;
@@ -430,10 +430,17 @@ struct RuntimeEffectBlock {
         sk_sp<const SkData>          fUniforms;
     };
 
-    static void BeginBlock(const KeyContext&,
+    // On a false return, no block has been started
+    static bool BeginBlock(const KeyContext&,
                            PaintParamsKeyBuilder*,
                            PipelineDataGatherer*,
                            const ShaderData&);
+
+    // Add a no-op placeholder for an incorrect runtime effect
+    static void AddNoOpEffect(const KeyContext&,
+                              PaintParamsKeyBuilder*,
+                              PipelineDataGatherer*,
+                              SkRuntimeEffect*);
 };
 
 void AddToKey(const KeyContext&,

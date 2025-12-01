@@ -1,11 +1,11 @@
 // Copyright (c) 2016-2021 Vivaldi Technologies AS. All rights reserved
 
-#include "extensions/api/tabs/tabs_private_api.h"
-
 #include <math.h>
 #include <memory>
 #include <utility>
 #include <vector>
+
+#include "extensions/api/tabs/tabs_private_api.h"
 
 #include "base/json/json_reader.h"
 #include "base/json/json_string_value_serializer.h"
@@ -17,14 +17,13 @@
 #include "browser/translate/vivaldi_translate_client.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
-#include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/extensions/extension_tab_util.h"
 #include "chrome/browser/performance_manager/public/user_tuning/user_performance_tuning_manager.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/renderer_preferences_util.h"
 #include "chrome/browser/resource_coordinator/tab_lifecycle_unit_external.h"
 #include "chrome/browser/resource_coordinator/tab_manager.h"
 #include "chrome/browser/resource_coordinator/utils.h"
+
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/performance_controls/memory_saver_utils.h"
@@ -33,7 +32,9 @@
 #include "chrome/browser/ui/tabs/tab_strip_model_observer.h"
 #include "chrome/browser/ui/tabs/tab_utils.h"
 #include "chrome/browser/ui/zoom/chrome_zoom_level_prefs.h"
+
 #include "chrome/common/extensions/api/tabs.h"
+
 #include "components/content_settings/core/browser/content_settings_observer.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/javascript_dialogs/app_modal_dialog_controller.h"
@@ -43,6 +44,9 @@
 #include "components/translate/core/browser/language_state.h"
 #include "components/translate/core/browser/translate_manager.h"
 #include "components/translate/core/browser/translate_ui_delegate.h"
+
+#include "components/translate/core/browser/translate_pref_names.h"
+
 #include "components/zoom/zoom_controller.h"
 #include "content/browser/renderer_host/render_view_host_delegate_view.h"  // nogncheck
 #include "content/browser/web_contents/web_contents_impl.h"  // nogncheck
@@ -85,6 +89,7 @@
 #include "extensions/schema/vivaldi_utilities.h"
 #include "extensions/tools/vivaldi_tools.h"
 #include "extensions/vivaldi_associated_tabs.h"
+#include "extensions/vivaldi_browser_component_wrapper.h"
 #include "prefs/vivaldi_gen_pref_enums.h"
 #include "prefs/vivaldi_gen_prefs.h"
 #include "prefs/vivaldi_pref_names.h"
@@ -101,20 +106,21 @@
 
 using content::WebContents;
 
+#include "browser/menus/vivaldi_device_menu_controller.h"
 
 #include "components/send_tab_to_self/send_tab_to_self_bridge.h"
 #include "components/send_tab_to_self/send_tab_to_self_entry.h"
 #include "components/send_tab_to_self/target_device_info.h"
 #include "components/send_tab_to_self/send_tab_to_self_sync_service.h"
+#include "components/tabs/tab_helpers.h" // Just string defines
+
 #include "chrome/browser/sync/send_tab_to_self_sync_service_factory.h"
 #include "chrome/browser/send_tab_to_self/receiving_ui_handler.h"
-#include "chrome/browser/send_tab_to_self/receiving_ui_handler_registry.h"
 
 #include "chrome/browser/sync/device_info_sync_service_factory.h"
 #include "components/sync_device_info/device_info_sync_service.h"
 
 namespace extensions {
-
 
 namespace {
 
@@ -140,96 +146,10 @@ std::string VivaldiGetPermissionString(
 
 } // namespace
 
-const char kVivaldiTabZoom[] = "vivaldi_tab_zoom";
-const char kVivaldiTabMuted[] = "vivaldi_tab_muted";
-// Note. This flag is used in vivaldi_session_util.cc
-// TODO: Get rid of this duplication.
-const char kVivaldiWorkspace[] = "workspaceId";
-
 const int& VivaldiPrivateTabObserver::kUserDataKey =
     VivaldiTabCheck::kVivaldiTabObserverContextKey;
 
 namespace tabs_private = vivaldi::tabs_private;
-
-bool IsTabMuted(const WebContents* web_contents) {
-  std::string viv_extdata = web_contents->GetVivExtData();
-  base::JSONParserOptions options = base::JSON_PARSE_RFC;
-  std::optional<base::Value> json =
-      base::JSONReader::Read(viv_extdata, options);
-  std::optional<bool> mute = std::nullopt;
-  if (json && json->is_dict()) {
-    mute = json->GetDict().FindBool(kVivaldiTabMuted);
-  }
-  return mute ? *mute : false;
-}
-
-bool IsTabInAWorkspace(const WebContents* web_contents) {
-  return IsTabInAWorkspace(web_contents->GetVivExtData());
-}
-
-bool IsTabInAWorkspace(const std::string& viv_extdata) {
-  return GetTabWorkspaceId(viv_extdata).has_value();
-}
-
-std::optional<double> GetTabWorkspaceId(const std::string& viv_extdata) {
-  base::JSONParserOptions options = base::JSON_PARSE_RFC;
-  std::optional<base::Value> json =
-      base::JSONReader::Read(viv_extdata, options);
-  std::optional<double> value;
-  if (json && json->is_dict()) {
-    value = json->GetDict().FindDouble(kVivaldiWorkspace);
-  }
-  return value;
-}
-
-Browser* GetWorkspaceBrowser(const double workspace_id) {
-  for (Browser* browser : *BrowserList::GetInstance()) {
-    if (browser == nullptr) {
-      continue;
-    }
-    TabStripModel* tab_strip = browser->tab_strip_model();
-    for (int i = 0; i < tab_strip->count(); ++i) {
-      WebContents* web_contents = tab_strip->GetWebContentsAt(i);
-      auto tabWorkspaceId = GetTabWorkspaceId(web_contents->GetVivExtData());
-      if (
-        tabWorkspaceId.has_value() &&
-        workspace_id == tabWorkspaceId.value()
-      ) {
-        return browser;
-      }
-    }
-  }
-  return nullptr;
-}
-
-int CountTabsInWorkspace(TabStripModel* tab_strip,
-                         const double workspace_id) {
-  int counter = 0;
-  for (int i = 0; i < tab_strip->count(); ++i) {
-    WebContents* web_contents = tab_strip->GetWebContentsAt(i);
-    auto tabWorkspaceId = GetTabWorkspaceId(web_contents->GetVivExtData());
-    if (tabWorkspaceId.has_value() && workspace_id == tabWorkspaceId.value()) {
-      counter++;
-    }
-  }
-  return counter;
-}
-
-base::Value::List getLinkRoutes(content::WebContents* contents) {
-  Profile* profile =
-        Profile::FromBrowserContext(contents->GetBrowserContext());
-  PrefService* prefs = profile->GetPrefs();
-  base::Value::List link_routes =
-    prefs->GetList(vivaldiprefs::kWorkspacesLinkRoutes).Clone();
-  return link_routes;
-}
-
-bool IsWorkspacesEnabled(content::WebContents* contents) {
-  Profile* profile =
-        Profile::FromBrowserContext(contents->GetBrowserContext());
-  PrefService* prefs = profile->GetPrefs();
-  return prefs->GetBoolean(vivaldiprefs::kWorkspacesEnabled);
-}
 
 namespace {
 
@@ -254,7 +174,9 @@ class JSDialogObserver : public javascript_dialogs::AppModalDialogObserver {
     // We notify the UI which tab opened a beforeunload dialog so
     // it can make the tab active.
     int id = sessions::SessionTabHelper::IdForTab(dialog->web_contents()).id();
-    Browser* browser = ::vivaldi::FindBrowserWithTab(dialog->web_contents());
+    Browser* browser =
+        VivaldiBrowserComponentWrapper::GetInstance()->FindBrowserWithTab(
+            dialog->web_contents());
     int window_id = 0;
     if (browser) {
       window_id = browser->session_id().id();
@@ -328,53 +250,25 @@ static const std::vector<tabs_private::TabAlertState> ConvertTabAlertState(
 
 }  // namespace
 
-class TabMutingHandler : public content_settings::Observer {
+class TabMutingHandler : public VivaldiBrowserComponentWrapper::
+                             ContentSettingChangedBridge::Observer {
   using TabsAutoMutingValues = vivaldiprefs::TabsAutoMutingValues;
 
   const raw_ptr<Profile> profile_;
-  const raw_ptr<HostContentSettingsMap> host_content_settings_map_;
   PrefChangeRegistrar prefs_registrar_;
   TabsAutoMutingValues muteRule_ = TabsAutoMutingValues::kOff;
-  // NOTE(andre@vivaldi.com) : This is per profile so make sure the handler
-  // takes this into account.
-  base::ScopedObservation<HostContentSettingsMap, content_settings::Observer>
-      observer_{this};
 
+  //VivaldiBrowserComponentWrapper::ContentSettingChangedBridge::Observer
   void OnContentSettingChanged(const ContentSettingsPattern& primary_pattern,
                                const ContentSettingsPattern& secondary_pattern,
-                               ContentSettingsType content_type) override {
+                               int type) override {
+    ContentSettingsType content_type =
+        static_cast<ContentSettingsType>(type);
+
     if (content_type != ContentSettingsType::SOUND)
       return;
 
     UpdateMuting();
-  }
-
-  bool ContentSettingIsMuted(WebContents* web_contents) {
-    GURL url = web_contents->GetLastCommittedURL();
-    bool contentsetting_says_mute =
-        host_content_settings_map_->GetContentSetting(
-            url, url, ContentSettingsType::SOUND) == CONTENT_SETTING_BLOCK;
-    return contentsetting_says_mute;
-  }
-
-  WebContents* FindActiveTabContentsInThisProfile() {
-    BrowserList* browser_list = BrowserList::GetInstance();
-    for (BrowserList::const_reverse_iterator browser_iterator =
-             browser_list->begin_browsers_ordered_by_activation();
-         browser_iterator != browser_list->end_browsers_ordered_by_activation();
-         ++browser_iterator) {
-      Browser* browser = *browser_iterator;
-      // TODO: Make this into an utility-method.
-      bool is_vivaldi_settings =
-          (browser->is_vivaldi() &&
-           static_cast<VivaldiBrowserWindow*>(browser->window())->type() ==
-               VivaldiBrowserWindow::WindowType::SETTINGS);
-      if (browser->profile()->GetOriginalProfile() == profile_ &&
-          !is_vivaldi_settings) {
-        return browser->tab_strip_model()->GetActiveWebContents();
-      }
-    }
-    return nullptr;
   }
 
   void OnPrefsChanged(const std::string& path) {
@@ -385,10 +279,10 @@ class TabMutingHandler : public content_settings::Observer {
 
  public:
   TabMutingHandler(Profile* profile)
-      : profile_(profile),
-        host_content_settings_map_(
-            HostContentSettingsMapFactory::GetForProfile(profile_)) {
-    observer_.Observe(host_content_settings_map_);
+      : profile_(profile) {
+
+    VivaldiBrowserComponentWrapper::GetInstance()
+        ->AddContentSettingChangeObserver(profile_, this);
 
     prefs_registrar_.Init(profile_->GetPrefs());
     // NOTE(andre@vivaldi.com) : Unretained is safe as this will live along
@@ -397,7 +291,10 @@ class TabMutingHandler : public content_settings::Observer {
                          base::BindRepeating(&TabMutingHandler::OnPrefsChanged,
                                              base::Unretained(this)));
   }
-  ~TabMutingHandler() override {}
+  virtual ~TabMutingHandler() {
+    VivaldiBrowserComponentWrapper::GetInstance()
+        ->RemoveContentSettingChangeObserver(profile_, this);
+  }
 
   void NotifyTabSelectionChange(WebContents* active_contents) {
     UpdateMuting(active_contents);
@@ -407,7 +304,8 @@ class TabMutingHandler : public content_settings::Observer {
   // is changed.
   void UpdateMuting(WebContents* active_contents = nullptr) {
     if (!active_contents) {
-      active_contents = FindActiveTabContentsInThisProfile();
+      active_contents = VivaldiBrowserComponentWrapper::GetInstance()
+                            ->FindActiveTabContentsInThisProfile(profile_);
     }
 
     const TabsAutoMutingValues muteRule = static_cast<TabsAutoMutingValues>(
@@ -418,33 +316,9 @@ class TabMutingHandler : public content_settings::Observer {
       return;
     }
     muteRule_ = muteRule;
-    RecentlyAudibleHelper* audible_helper =
-        active_contents
-            ? RecentlyAudibleHelper::FromWebContents(active_contents)
-            : nullptr;
 
-    bool active_is_audible =
-        audible_helper ? audible_helper->WasRecentlyAudible() : false;
-
-    for (Browser* browser : *BrowserList::GetInstance()) {
-      if (browser->profile()->GetOriginalProfile() == profile_) {
-        for (int i = 0, tab_count = browser->tab_strip_model()->count();
-             i < tab_count; ++i) {
-          WebContents* tab = browser->tab_strip_model()->GetWebContentsAt(i);
-          if (!ContentSettingIsMuted(tab) && !IsTabMuted(tab)) {
-            bool is_active = (tab == active_contents);
-            bool mute = (muteRule_ != TabsAutoMutingValues::kOff);
-            if (muteRule_ == TabsAutoMutingValues::kOnlyactive) {
-              mute = !is_active;
-            } else if (muteRule_ == TabsAutoMutingValues::kPrioritizeactive) {
-              // Only unmute background tabs if the active is not audible.
-              mute = (active_is_audible && !is_active);
-            }
-            tab->SetAudioMuted(mute);
-          }
-        }
-      }
-    }
+    VivaldiBrowserComponentWrapper::GetInstance()->UpdateMuting(active_contents,
+                                                                muteRule_);
   }
 };
 
@@ -494,14 +368,18 @@ void TabsPrivateAPI::NotifyTabChange(content::WebContents* web_contents) {
   UpdateMuting();
 
   std::vector<tabs_private::TabAlertState> states =
-      ConvertTabAlertState(GetTabAlertStatesForContents(web_contents));
+      ConvertTabAlertState(VivaldiBrowserComponentWrapper::GetInstance()
+                           ->GetTabAlertStatesForContents(web_contents));
 
   if (web_contents->IsBeingCaptured()) {
     states.push_back(tabs_private::TabAlertState::kCapturing);
   }
 
-  int tabId = extensions::ExtensionTabUtil::GetTabId(web_contents);
-  int windowId = extensions::ExtensionTabUtil::GetWindowIdOfTab(web_contents);
+  int tabId =
+      VivaldiBrowserComponentWrapper::GetInstance()->GetTabId(web_contents);
+  int windowId =
+      VivaldiBrowserComponentWrapper::GetInstance()->GetWindowIdOfTab(
+          web_contents);
 
   ::vivaldi::BroadcastEvent(
       tabs_private::OnMediaStateChanged::kEventName,
@@ -521,18 +399,13 @@ VivaldiPrivateTabObserver::VivaldiPrivateTabObserver(
     content::WebContents* web_contents)
     : WebContentsObserver(web_contents),
       WebContentsUserData<VivaldiPrivateTabObserver>(*web_contents) {
-  VivaldiTranslateClient* translate_client =
-      VivaldiTranslateClient::FromWebContents(web_contents);
-  if (translate_client) {
-    translate_client->translate_driver()->AddTranslationObserver(this);
-    translate_client->translate_driver()->AddLanguageDetectionObserver(this);
-  }
-
-  TabResourceUsageCollector::Get()->AddObserver(this);
+  VivaldiBrowserComponentWrapper::GetInstance()->AddTabResourceUsageObserver(
+      this);
 }
 
 VivaldiPrivateTabObserver::~VivaldiPrivateTabObserver() {
-    TabResourceUsageCollector::Get()->RemoveObserver(this);
+  VivaldiBrowserComponentWrapper::GetInstance()
+      ->RemoveTabResourceUsageObserver(this);
 }
 
 void VivaldiPrivateTabObserver::OnJavascriptDialogClosed(bool success) {
@@ -546,57 +419,17 @@ void VivaldiPrivateTabObserver::OnJavascriptDialogClosed(bool success) {
 }
 
 void VivaldiPrivateTabObserver::WebContentsDestroyed() {
-  VivaldiTranslateClient* translate_client =
-      VivaldiTranslateClient::FromWebContents(web_contents());
-  if (translate_client) {
-    translate_client->translate_driver()->RemoveTranslationObserver(this);
-    translate_client->translate_driver()->RemoveLanguageDetectionObserver(this);
-  }
 }
 
 void VivaldiPrivateTabObserver::OnTabResourceMetricsRefreshed() {
   int id = sessions::SessionTabHelper::IdForTab(web_contents()).id();
-  uint64_t memory_usage;
-
-  auto* tab_lifecycle_unit_external =
-      resource_coordinator::TabLifecycleUnitExternal::FromWebContents(
-          web_contents());
-
-  bool not_yet_loaded =
-      web_contents()->GetUserData(::vivaldi::kVivaldiStartupTabUserDataKey);
-
-  bool was_discarded =
-      web_contents()->WasDiscarded() ||
-                       (tab_lifecycle_unit_external
-                            ? tab_lifecycle_unit_external->GetTabState() ==
-                                  ::mojom::LifecycleUnitState::DISCARDED
-                                   : false) ||
-      not_yet_loaded;
-
-  // TODO: (andre@vivaldi.com) GetDiscardedMemorySavingsInBytes does not return
-  // anything useful.
-  if (was_discarded) {
-    const auto* const pre_discard_resource_usage =
-        performance_manager::user_tuning::UserPerformanceTuningManager::
-            PreDiscardResourceUsage::FromWebContents(web_contents());
-    memory_usage =
-        pre_discard_resource_usage == nullptr
-            ? 0
-            : pre_discard_resource_usage->memory_footprint_estimate_kb() * 1024;
-
-  } else {
-    auto* const resource_tab_helper =
-        TabResourceUsageTabHelper::FromWebContents(web_contents());
-    memory_usage =
-        (resource_tab_helper ? resource_tab_helper->GetMemoryUsageInBytes()
-                             : 0);
-  }
 
   tabs_private::TabPerformanceData info;
   info.tab_id = id;
+  uint64_t memory_usage; //TabPerformanceData::memory_usage is int.
+  VivaldiBrowserComponentWrapper::GetInstance()->GetTabPerformanceData(
+      web_contents(), memory_usage, info.discarded);
   info.memory_usage = memory_usage;
-  info.discarded = was_discarded;
-
   ::vivaldi::BroadcastEvent(
       tabs_private::OnTabResourceMetricsRefreshed::kEventName,
       tabs_private::OnTabResourceMetricsRefreshed::Create(info),
@@ -616,7 +449,9 @@ void VivaldiPrivateTabObserver::BroadcastTabInfo(
   int id = sessionId.id();
 
   // todo: check sessionId.window_id()
-  int windowId = extensions::ExtensionTabUtil::GetWindowIdOfTab(web_contents);
+  int windowId =
+      VivaldiBrowserComponentWrapper::GetInstance()->GetWindowIdOfTab(
+          web_contents);
 
   ::vivaldi::BroadcastEvent(
       tabs_private::OnTabUpdated::kEventName,
@@ -635,7 +470,8 @@ void VivaldiPrivateTabObserver::DidChangeThemeColor() {
   base::snprintf(rgb_buffer, kThemeColorBufferSize, "#%02x%02x%02x",
                  SkColorGetR(*theme_color), SkColorGetG(*theme_color),
                  SkColorGetB(*theme_color));
-  int tab_id = extensions::ExtensionTabUtil::GetTabId(web_contents());
+  int tab_id =
+      VivaldiBrowserComponentWrapper::GetInstance()->GetTabId(web_contents());
   ::vivaldi::BroadcastEvent(
       tabs_private::OnThemeColorChanged::kEventName,
       tabs_private::OnThemeColorChanged::Create(tab_id, rgb_buffer),
@@ -656,27 +492,6 @@ std::optional<base::Value> GetDictValueFromVivExtData(
     return value;
   }
   return std::nullopt;
-}
-
-bool SetTabWorkspaceId(content::WebContents* contents, double workspace_id) {
-  auto viv_ext_data = contents->GetVivExtData();
-  std::optional<base::Value> json =
-    GetDictValueFromVivExtData(viv_ext_data);
-  if (!json) {
-    return false;
-  }
-  std::optional<double> value = json->GetDict().FindDouble(kVivaldiWorkspace);
-  if (value.has_value() && value.value() == workspace_id) {
-    return false;
-  }
-  json->GetDict().Set(kVivaldiWorkspace, workspace_id);
-  json->GetDict().Remove("group");
-  std::string json_string;
-  if (!ValueToJSONString(*json, json_string)) {
-    return false;
-  }
-  contents->SetVivExtData(json_string);
-  return true;
 }
 
 void VivaldiPrivateTabObserver::DidFinishLoad(
@@ -754,7 +569,8 @@ void VivaldiPrivateTabObserver::OnPermissionAccessed(
     ContentSettingsType content_settings_type,
     std::string origin,
     ContentSetting content_setting) {
-  int tab_id = extensions::ExtensionTabUtil::GetTabId(web_contents());
+  int tab_id =
+      VivaldiBrowserComponentWrapper::GetInstance()->GetTabId(web_contents());
 
   std::string type_name = base::ToLowerASCII(
       VivaldiGetPermissionString(content_settings_type));
@@ -783,27 +599,35 @@ void VivaldiPrivateTabObserver::OnPermissionAccessed(
 }
 
 void VivaldiPrivateTabObserver::WebContentsDidDetach() {
-  int tab_id = extensions::ExtensionTabUtil::GetTabId(web_contents());
-  ::vivaldi::HandleDetachedTab(tab_id);
+  int tab_id =
+      VivaldiBrowserComponentWrapper::GetInstance()->GetTabId(web_contents());
+  VivaldiBrowserComponentWrapper::GetInstance()
+      ->HandleDetachedTabForWebPanel(tab_id);
   ::vivaldi::BroadcastEvent(
       tabs_private::OnTabIsDetached::kEventName,
       tabs_private::OnTabIsDetached::Create(
-          tab_id, ExtensionTabUtil::GetWindowIdOfTab(web_contents())),
+          tab_id, VivaldiBrowserComponentWrapper::GetInstance()->
+                      GetWindowIdOfTab(web_contents())),
       web_contents()->GetBrowserContext());
 }
 
 void VivaldiPrivateTabObserver::WebContentsDidAttach() {
-  int tab_id = extensions::ExtensionTabUtil::GetTabId(web_contents());
+  int tab_id =
+      VivaldiBrowserComponentWrapper::GetInstance()->GetTabId(web_contents());
   ::vivaldi::BroadcastEvent(
       tabs_private::OnTabIsAttached::kEventName,
       tabs_private::OnTabIsAttached::Create(
-          tab_id, ExtensionTabUtil::GetWindowIdOfTab(web_contents())),
+          tab_id, VivaldiBrowserComponentWrapper::GetInstance()
+                      ->GetWindowIdOfTab(web_contents())),
       web_contents()->GetBrowserContext());
 }
 
 void VivaldiPrivateTabObserver::BeforeUnloadFired(bool proceed) {
-  int tab_id = extensions::ExtensionTabUtil::GetTabId(web_contents());
-  Browser* browser = ::vivaldi::FindBrowserWithTab(web_contents());
+  int tab_id =
+      VivaldiBrowserComponentWrapper::GetInstance()->GetTabId(web_contents());
+  Browser* browser =
+      VivaldiBrowserComponentWrapper::GetInstance()->FindBrowserWithTab(
+          web_contents());
   int window_id = browser->session_id().id();
 
   ::vivaldi::BroadcastEvent(
@@ -818,8 +642,8 @@ VivaldiPrivateTabObserver* VivaldiPrivateTabObserver::FromTabId(
     int tab_id,
     std::string* error) {
   content::WebContents* tabstrip_contents =
-      ::vivaldi::ui_tools::GetWebContentsFromTabStrip(tab_id, browser_context,
-                                                      error);
+      VivaldiBrowserComponentWrapper::GetInstance()->GetWebContentsFromTabStrip(
+          browser_context, tab_id, error);
   if (!tabstrip_contents)
     return nullptr;
 
@@ -840,81 +664,18 @@ void VivaldiPrivateTabObserver::NavigationEntryCommitted(
       ->UpdateMuting();
 }
 
-// translate::ContentTranslateDriver::Observer implementation
-void VivaldiPrivateTabObserver::OnLanguageDetermined(
-    const translate::LanguageDetectionDetails& details) {
-  VivaldiTranslateClient* translate_client =
-      VivaldiTranslateClient::FromWebContents(web_contents());
-  if (translate_client && !translate_client->IsTranslatableURL(details.url)) {
-    return;
-  }
-  extensions::vivaldi::tabs_private::LanguageDetectionDetails lang_details;
-
-  lang_details.url = details.url.spec();
-  lang_details.content_language = details.content_language;
-  lang_details.cld_language = details.model_detected_language;
-  lang_details.is_cld_reliable = details.is_model_reliable;
-  lang_details.has_no_translate = details.has_notranslate;
-  lang_details.html_root_language = details.html_root_language;
-  lang_details.adopted_language = details.adopted_language;
-
-  int tab_id = sessions::SessionTabHelper::IdForTab(web_contents()).id();
-  if (tab_id) {
-    ::vivaldi::BroadcastEvent(
-        extensions::vivaldi::tabs_private::OnLanguageDetermined::kEventName,
-        extensions::vivaldi::tabs_private::OnLanguageDetermined::Create(
-            tab_id, std::move(lang_details)),
-        web_contents()->GetBrowserContext());
-  }
-}
-
-void VivaldiPrivateTabObserver::ActivateTab(content::WebContents* contents) {
-  Browser* browser = ::vivaldi::FindBrowserWithTab(contents);
+void VivaldiPrivateTabObserver::ActivateTab(
+    content::WebContents* web_contents) {
+  VivaldiBrowserComponentWrapper::GetInstance()
+      ->ActivateWebContentsInTabStrip(web_contents);
+  Browser* browser =
+      VivaldiBrowserComponentWrapper::GetInstance()->FindBrowserWithTab(
+          web_contents);
   if (!browser) {
     return;
   }
-  int index = browser->tab_strip_model()->GetIndexOfWebContents(contents);
-  if (index == TabStripModel::kNoTab) {
-    return;
-  }
-  browser->tab_strip_model()->ActivateTabAt(index);
   browser->window()->Activate();
 }
-
-void VivaldiPrivateTabObserver::OnPageTranslated(
-    const std::string& original_lang,
-    const std::string& translated_lang,
-    translate::TranslateErrors error_type) {
-  int tab_id = sessions::SessionTabHelper::IdForTab(web_contents()).id();
-  if (tab_id) {
-    ::vivaldi::BroadcastEvent(
-        extensions::vivaldi::tabs_private::OnPageTranslated::kEventName,
-        extensions::vivaldi::tabs_private::OnPageTranslated::Create(
-            tab_id, original_lang, translated_lang,
-            ToVivaldiTranslateError(error_type)),
-        web_contents()->GetBrowserContext());
-  }
-}
-
-void VivaldiPrivateTabObserver::OnIsPageTranslatedChanged(
-    content::WebContents* source) {
-  VivaldiTranslateClient* translate_client =
-      VivaldiTranslateClient::FromWebContents(web_contents());
-  if (!translate_client) {
-    return;
-  }
-  int tab_id = sessions::SessionTabHelper::IdForTab(web_contents()).id();
-  bool isTranslated = translate_client->GetLanguageState().IsPageTranslated();
-
-  // OnPageTranslated is typically the main event, but it's not fired when
-  // revert has been used, so the client will need this event to know.
-  ::vivaldi::BroadcastEvent(
-      extensions::vivaldi::tabs_private::OnIsPageTranslatedChanged::kEventName,
-      extensions::vivaldi::tabs_private::OnIsPageTranslatedChanged::Create(
-          tab_id, isTranslated),
-      web_contents()->GetBrowserContext());
-}
-
 void VivaldiPrivateTabObserver::CaptureStarted() {
   TabsPrivateAPI::FromBrowserContext(web_contents()->GetBrowserContext())
       ->NotifyTabChange(web_contents());
@@ -943,8 +704,8 @@ namespace {
     int tab_id,
     std::string* error) {
   content::WebContents* tabstrip_contents =
-      ::vivaldi::ui_tools::GetWebContentsFromTabStrip(
-          tab_id, function->browser_context(), error);
+      VivaldiBrowserComponentWrapper::GetInstance()->GetWebContentsFromTabStrip(
+          function->browser_context(), tab_id, error);
   if (!tabstrip_contents)
     return nullptr;
 
@@ -1037,7 +798,11 @@ ExtensionFunction::ResponseAction TabsPrivateStartDragFunction::Run() {
   EXTENSION_FUNCTION_VALIDATE(params);
 
   SessionID::id_type window_id = params->drag_data.window_id;
-  VivaldiBrowserWindow* window = VivaldiBrowserWindow::FromId(window_id);
+  Browser* browser =
+      VivaldiBrowserComponentWrapper::GetInstance()->FindBrowserByWindowId(
+          window_id);
+  VivaldiBrowserWindow* window =
+      static_cast<VivaldiBrowserWindow*>(browser ? browser->window() : nullptr);
   if (!window) {
     return RespondNow(Error("No such window"));
   }
@@ -1112,10 +877,12 @@ ExtensionFunction::ResponseAction TabsPrivateStartDragFunction::Run() {
   double y = params->drag_data.pos_y ? *params->drag_data.pos_y : 0.0;
   gfx::RectF rect(x, y, width, height);
   ::vivaldi::FromUICoordinates(window->web_contents(), &rect);
+
   ::vivaldi::CapturePage::CaptureVisible(
       window->web_contents(), rect,
       base::BindOnce(&TabsPrivateStartDragFunction::OnCaptureDone, this,
                      window_id, source_origin));
+
   return RespondLater();
 }
 
@@ -1129,7 +896,11 @@ void TabsPrivateStartDragFunction::OnCaptureDone(SessionID::id_type window_id,
     if (!success)
       break;
 
-    VivaldiBrowserWindow* window = VivaldiBrowserWindow::FromId(window_id);
+    Browser* browser =
+        VivaldiBrowserComponentWrapper::GetInstance()->FindBrowserByWindowId(
+            window_id);
+    VivaldiBrowserWindow* window = static_cast<VivaldiBrowserWindow*>(
+        browser ? browser->window() : nullptr);
     if (!window) {
       // The capture finished after the user closed the browser window.
       LOG(ERROR) << "No such window";
@@ -1310,11 +1081,29 @@ TabsPrivateHasBeforeUnloadOrUnloadFunction::Run() {
   EXTENSION_FUNCTION_VALIDATE(params);
 
   content::WebContents* contents =
-      ::vivaldi::ui_tools::GetWebContentsFromTabStrip(
-          params->tab_id, browser_context(), nullptr);
+      VivaldiBrowserComponentWrapper::GetInstance()->GetWebContentsFromTabStrip(
+          browser_context(), params->tab_id, nullptr);
   return RespondNow(ArgumentList(Results::Create(
       contents && contents->NeedToFireBeforeUnloadOrUnloadEvents())));
 }
+
+namespace {
+std::unique_ptr<translate::TranslateUIDelegate> GetTranslateUIDelegate(
+    int tab_id,
+    content::BrowserContext* context,
+    std::string& original_language,
+    std::string& target_language) {
+  content::WebContents* web_contents =
+      VivaldiBrowserComponentWrapper::GetInstance()->GetWebContentsFromTabStrip(
+          context, tab_id, nullptr);
+
+  if (web_contents) {
+    return VivaldiBrowserComponentWrapper::GetInstance()
+        ->GetTranslateUIDelegate(web_contents, original_language, target_language);
+  }
+  return nullptr;
+}
+}  // namespace
 
 ExtensionFunction::ResponseAction TabsPrivateTranslatePageFunction::Run() {
   using tabs_private::TranslatePage::Params;
@@ -1329,15 +1118,11 @@ ExtensionFunction::ResponseAction TabsPrivateTranslatePageFunction::Run() {
   if (dest.empty()) {
     return RespondNow(Error("Missing destination language"));
   }
-  content::WebContents* contents =
-      ::vivaldi::ui_tools::GetWebContentsFromTabStrip(
-          params->tab_id, browser_context(), nullptr);
 
-  std::unique_ptr<translate::TranslateUIDelegate> ui_delegate =
-      std::make_unique<translate::TranslateUIDelegate>(
-          VivaldiTranslateClient::GetManagerFromWebContents(contents)
-              ->GetWeakPtr(),
-          source, dest);
+  std::unique_ptr<translate::TranslateUIDelegate> ui_delegate(
+          GetTranslateUIDelegate(params->tab_id, browser_context(), source,
+                                 dest));
+
   ui_delegate->Translate();
 
   return RespondNow(ArgumentList(Results::Create(true)));
@@ -1351,15 +1136,12 @@ TabsPrivateRevertTranslatePageFunction::Run() {
   std::optional<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
 
-  content::WebContents* contents =
-      ::vivaldi::ui_tools::GetWebContentsFromTabStrip(
-          params->tab_id, browser_context(), nullptr);
+  content::WebContents* web_contents =
+      VivaldiBrowserComponentWrapper::GetInstance()->GetWebContentsFromTabStrip(
+          browser_context(), params->tab_id, nullptr);
 
-  translate::TranslateManager* translate_manager =
-      VivaldiTranslateClient::GetManagerFromWebContents(contents);
-  if (translate_manager) {
-    translate_manager->RevertTranslation();
-  }
+  VivaldiBrowserComponentWrapper::GetInstance()->RevertTranslation(web_contents);
+
   return RespondNow(ArgumentList(Results::Create(true)));
 }
 
@@ -1398,19 +1180,11 @@ TabsPrivateLoadViaLifeCycleUnitFunction::Run() {
   EXTENSION_FUNCTION_VALIDATE(params);
 
   content::WebContents* tab_contents =
-      ::vivaldi::ui_tools::GetWebContentsFromTabStrip(
-          params->tab_id, browser_context(), nullptr);
+      VivaldiBrowserComponentWrapper::GetInstance()->GetWebContentsFromTabStrip(
+          browser_context(), params->tab_id, nullptr);
 
-  for (resource_coordinator::LifecycleUnit* lifecycle_unit :
-       g_browser_process->GetTabManager()->GetSortedLifecycleUnits()) {
-    resource_coordinator::TabLifecycleUnitExternal*
-        tab_lifecycle_unit_external =
-            lifecycle_unit->AsTabLifecycleUnitExternal();
-    if (tab_lifecycle_unit_external->GetWebContents() == tab_contents) {
-      lifecycle_unit->Load();
-      break;
-    }
-  }
+  VivaldiBrowserComponentWrapper::GetInstance()->LoadViaLifeCycleUnit(
+      tab_contents);
 
   return RespondNow(NoArguments());
 }
@@ -1427,43 +1201,21 @@ TabsPrivateGetTabPerformanceDataFunction::Run() {
   std::vector<tabs_private::TabPerformanceData> data(tabcount);
 
   for (int i = 0; i < tabcount; i++) {
-
     content::WebContents* tab_contents =
-        ::vivaldi::ui_tools::GetWebContentsFromTabStrip(
-            params->tab_ids[i], browser_context(), nullptr);
-
+        VivaldiBrowserComponentWrapper::GetInstance()
+            ->GetWebContentsFromTabStrip(browser_context(),
+                                         params->tab_ids[i],
+                                         nullptr);
     if (tab_contents) {
-
+      uint64_t memory_usage;
+      bool is_discarded;
+      VivaldiBrowserComponentWrapper::GetInstance()->GetTabPerformanceData(
+          tab_contents, memory_usage, is_discarded);
       tabs_private::TabPerformanceData* pdata = &data[i];
       pdata->tab_id = params->tab_ids[i];
-
-      auto* tab_lifecycle_unit_external =
-          resource_coordinator::TabLifecycleUnitExternal::FromWebContents(
-              tab_contents);
-
-      bool notYetLoaded = tab_contents->GetUserData(
-                  ::vivaldi::kVivaldiStartupTabUserDataKey);
-
-      pdata->discarded = tab_contents->WasDiscarded() ||
-                         tab_lifecycle_unit_external->GetTabState() ==
-                             ::mojom::LifecycleUnitState::DISCARDED ||
-                         notYetLoaded;
-
-      if (pdata->discarded) {
-        const auto* const pre_discard_resource_usage =
-            performance_manager::user_tuning::UserPerformanceTuningManager::
-                PreDiscardResourceUsage::FromWebContents(tab_contents);
-        pdata->memory_usage = pre_discard_resource_usage == nullptr
-                   ? 0
-                   : pre_discard_resource_usage->memory_footprint_estimate_kb() *
-                         1024;
-      } else {
-        auto* const resource_tab_helper =
-            TabResourceUsageTabHelper::FromWebContents(tab_contents);
-        pdata->memory_usage = (resource_tab_helper->GetMemoryUsageInBytes());
-      }
+      pdata->memory_usage = memory_usage;
+      pdata->discarded = is_discarded;
     }
-
   }
   return RespondNow(ArgumentList(Results::Create(data)));
 }
@@ -1547,15 +1299,11 @@ void VivaldiGuestViewContentObserver::OnPrefsChanged(const std::string& path) {
 }
 
 void VivaldiGuestViewContentObserver::CommitSettings() {
-  blink::RendererPreferences* render_prefs =
-      web_contents()->GetMutableRendererPrefs();
-  DCHECK(render_prefs);
 
   // We must update from system settings otherwise many settings would fallback
   // to default values when syncing below.
-  Profile* profile =
-      Profile::FromBrowserContext(web_contents()->GetBrowserContext());
-  renderer_preferences_util::UpdateFromSystemSettings(render_prefs, profile);
+  VivaldiBrowserComponentWrapper::GetInstance()->UpdateFromSystemSettings(
+      web_contents());
 
   web_contents()->SyncRendererPrefs();
   web_contents()->OnWebPreferencesChanged();
@@ -1577,7 +1325,7 @@ void VivaldiGuestViewContentObserver::RenderFrameCreated(
   std::optional<base::Value> json = GetDictValueFromVivExtData(viv_ext_data);
   if (::vivaldi::IsTabZoomEnabled(web_contents())) {
     std::optional<double> zoom =
-        json ? json->GetDict().FindDouble(kVivaldiTabZoom) : std::nullopt;
+        json ? json->GetDict().FindDouble(::vivaldi::kVivaldiTabZoom) : std::nullopt;
     if (zoom) {
       tab_zoom_level_ = *zoom;
     } else {
@@ -1590,7 +1338,7 @@ void VivaldiGuestViewContentObserver::RenderFrameCreated(
 
   // This is not necessary for each RVH-change. And only set when the tab is
   // marked as muted to avoid interfering with site-settings.
-  if (IsTabMuted(web_contents())) {
+  if (::vivaldi::IsTabMuted(web_contents())) {
     SetMuted(true);
   }
 
@@ -1675,8 +1423,8 @@ VivaldiGuestViewContentObserver* VivaldiGuestViewContentObserver::FromTabId(
     int tab_id,
     std::string* error) {
   content::WebContents* guest_contents =
-      ::vivaldi::ui_tools::GetWebContentsFromTabStrip(tab_id, browser_context,
-                                                      error);
+      VivaldiBrowserComponentWrapper::GetInstance()->GetWebContentsFromTabStrip(
+          browser_context, tab_id, error);
   if (!guest_contents) {
     return nullptr;
   }
@@ -1697,7 +1445,7 @@ void VivaldiGuestViewContentObserver::SaveZoomLevelToExtData(
   std::string viv_ext_data = web_contents()->GetVivExtData();
   std::optional<base::Value> json = GetDictValueFromVivExtData(viv_ext_data);
   if (json) {
-    json->GetDict().Set(kVivaldiTabZoom, zoom_level);
+    json->GetDict().Set(::vivaldi::kVivaldiTabZoom, zoom_level);
     std::string json_string;
     if (ValueToJSONString(*json, json_string)) {
       web_contents()->SetVivExtData(json_string);
@@ -1735,9 +1483,10 @@ void VivaldiGuestViewContentObserver::SetMuted(bool mute) {
   std::string viv_ext_data = web_contents()->GetVivExtData();
   std::optional<base::Value> json = GetDictValueFromVivExtData(viv_ext_data);
   if (json) {
-    std::optional<bool> existing = json->GetDict().FindBool(kVivaldiTabMuted);
+    std::optional<bool> existing =
+        json->GetDict().FindBool(::vivaldi::kVivaldiTabMuted);
     if ((existing && *existing != mute) || (!existing && mute)) {
-      json->GetDict().Set(kVivaldiTabMuted, mute);
+      json->GetDict().Set(::vivaldi::kVivaldiTabMuted, mute);
       std::string json_string;
       if (ValueToJSONString(*json, json_string)) {
         web_contents()->SetVivExtData(json_string);
@@ -1751,7 +1500,8 @@ void VivaldiGuestViewContentObserver::SetMuted(bool mute) {
     // |SoundContentSettingObserver::MuteOrUnmuteIfNecessary|
     return;
   }
-  SetTabAudioMuted(web_contents(), mute, TabMutedReason::EXTENSION,
+  VivaldiBrowserComponentWrapper::GetInstance()
+      ->SetTabAudioMuted(web_contents(), mute, TabMutedReason::EXTENSION,
                    ::vivaldi::kVivaldiAppId);
 }
 
@@ -1766,34 +1516,26 @@ TabsPrivateGetSendTabToSelfEntriesFunction::Run() {
   namespace Results = tabs_private::GetSendTabToSelfEntries::Results;
 
   std::vector<extensions::vivaldi::tabs_private::SendTabToSelfEntry> list;
-
   Profile* profile =
       Profile::FromBrowserContext(browser_context())->GetOriginalProfile();
 
-  send_tab_to_self::SendTabToSelfModel* model =
-    SendTabToSelfSyncServiceFactory::GetForProfile(profile)
-      ->GetSendTabToSelfModel();
-  syncer::DeviceInfoTracker* device_info_tracker =
-      DeviceInfoSyncServiceFactory::GetForProfile(profile)
-          ->GetDeviceInfoTracker();
-  if (model->IsReady() && device_info_tracker) {
-    std::vector<std::string> guids = model->GetAllGuids();
-    for (auto guid : guids) {
-      const send_tab_to_self::SendTabToSelfEntry* entry =
-        model->GetEntryByGUID(guid);
-      if (entry) {
-        if (device_info_tracker->IsRecentLocalCacheGuid(
-                entry->GetTargetDeviceSyncCacheGuid()) &&
-            !entry->GetNotificationDismissed() && !entry->IsOpened()) {
-          extensions::vivaldi::tabs_private::SendTabToSelfEntry item;
-          item.guid = entry->GetGUID();
-          item.url = entry->GetURL().spec();
-          item.title = entry->GetTitle();
-          item.device_name = entry->GetDeviceName();
-          item.shared_time = entry->GetSharedTime().InMillisecondsFSinceUnixEpoch();
-          list.push_back(std::move(item));
-        }
-      }
+  std::vector<SendTabToSelfEntry*> entries;
+  bool ok = VivaldiBrowserComponentWrapper::GetInstance()
+    ->GetSendTabToSelfReceivedEntries(profile, entries);
+  if (ok) {
+    // Copy into list
+    for (auto entry : entries) {
+      extensions::vivaldi::tabs_private::SendTabToSelfEntry *tmp =
+          reinterpret_cast<
+              extensions::vivaldi::tabs_private::SendTabToSelfEntry*>(entry);
+      //list.push_back(std::move(*tmp)); - could this be possible?
+      extensions::vivaldi::tabs_private::SendTabToSelfEntry item;
+      item.guid = tmp->guid;
+      item.url = tmp->url;
+      item.title = tmp->title;
+      item.device_name = tmp->device_name;
+      item.shared_time = tmp->shared_time;
+      list.push_back(std::move(item));
     }
   } else if (!params->silent) {
     // For simplicity we allow to mute this warning. Will happen on startup if
@@ -1816,13 +1558,8 @@ TabsPrivateDismissSendTabToSelfEntriesFunction::Run() {
   Profile* profile =
       Profile::FromBrowserContext(browser_context())->GetOriginalProfile();
 
-  auto* model = SendTabToSelfSyncServiceFactory::GetForProfile(profile)
-                    ->GetSendTabToSelfModel();
-  if (model->IsReady()) {
-    for (const std::string& guid : params->guids) {
-      model->DeleteEntry(guid);
-    }
-  }
+  VivaldiBrowserComponentWrapper::GetInstance()
+      ->DeleteSendTabToSelfReceivedEntries(profile, params->guids);
 
   return RespondNow(ArgumentList(Results::Create()));
 }
@@ -1835,63 +1572,73 @@ TabsPrivateExecSendTabToSelfActionFunction::Run() {
   std::optional<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
 
+  VivaldiBrowserComponentWrapper* wrapper =
+      VivaldiBrowserComponentWrapper::GetInstance();
   Profile* profile =
       Profile::FromBrowserContext(browser_context())->GetOriginalProfile();
-  auto* model = SendTabToSelfSyncServiceFactory::GetForProfile(profile)
-                    ->GetSendTabToSelfModel();
-  if (model->IsReady()) {
-    switch (params->action) {
-      case tabs_private::SendTabToSelfAction::kDelete:
-        for (const std::string& guid : params->guids) {
-          model->DeleteEntry(guid);
-        }
-        break;
-      case vivaldi::tabs_private::SendTabToSelfAction::kDismiss:
-        for (const std::string& guid : params->guids) {
-          model->DismissEntry(guid);
-        }
-        break;
-      case vivaldi::tabs_private::SendTabToSelfAction::kNone:
-      default:
-        break;
-    }
+
+  switch (params->action) {
+    case tabs_private::SendTabToSelfAction::kDelete:
+      wrapper->DeleteSendTabToSelfReceivedEntries(profile, params->guids);
+      break;
+    case vivaldi::tabs_private::SendTabToSelfAction::kDismiss:
+      wrapper->DismissSendTabToSelfReceivedEntries(profile, params->guids);
+      break;
+    case vivaldi::tabs_private::SendTabToSelfAction::kNone:
+    default:
+      break;
   }
   return RespondNow(ArgumentList(Results::Create()));
 }
 
 ExtensionFunction::ResponseAction
 TabsPrivateGetSendTabToSelfTargetsFunction::Run() {
+  using tabs_private::GetSendTabToSelfTargets::Params;
   namespace Results = tabs_private::GetSendTabToSelfTargets::Results;
 
+  std::optional<Params> params = Params::Create(args());
+  EXTENSION_FUNCTION_VALIDATE(params);
+
+  VivaldiBrowserComponentWrapper* wrapper =
+      VivaldiBrowserComponentWrapper::GetInstance();
   Profile* profile =
       Profile::FromBrowserContext(browser_context())->GetOriginalProfile();
 
   extensions::vivaldi::tabs_private::SendTabToSelfTargets result;
+  result.valid = false;
 
-  // Use the readyness of the model to dermine if system has been enbled or not.
-  send_tab_to_self::SendTabToSelfModel* model =
-    SendTabToSelfSyncServiceFactory::GetForProfile(profile)
-      ->GetSendTabToSelfModel();
-  if (!model || !model->IsReady()) {
-    result.valid = false;
+  if (!wrapper->GetSendTabToSelfModelIsReady(profile)) {
     return RespondNow(ArgumentList(Results::Create(result)));
   }
 
-  for (auto device : model->GetTargetDeviceInfoSortedList()) {
-    extensions::vivaldi::tabs_private::SendTabToSelfTarget item;
-    item.guid = device.cache_guid;
-    item.name = device.full_name;
-    if (device.form_factor == syncer::DeviceInfo::FormFactor::kPhone) {
-      item.type = vivaldi::tabs_private::SendTabToSelfTargetType::kPhone;
-    } else if (device.form_factor == syncer::DeviceInfo::FormFactor::kTablet) {
-      item.type = vivaldi::tabs_private::SendTabToSelfTargetType::kTablet;
-    } else {
-      item.type = vivaldi::tabs_private::SendTabToSelfTargetType::kDesktop;
-    }
-    result.entries.push_back(std::move(item));
+  std::string error;
+  content::WebContents* web_contents = wrapper->GetWebContentsFromTabStrip(
+      browser_context(), params->tab_id, &error);
+  if (!web_contents) {
+    return RespondNow(Error(error));
   }
 
-  result.valid = true;
+  if (!wrapper->GetSendTabToSelfContentHasSupport(web_contents)) {
+    return RespondNow(ArgumentList(Results::Create(result)));
+  }
+
+  std::vector<SendTabToSelfTarget*> targets;
+  bool ok = wrapper->GetSendTabToSelfTargets(profile, targets);
+  if (ok) {
+    // Copy into list
+    for (auto target : targets) {
+      extensions::vivaldi::tabs_private::SendTabToSelfTarget *tmp =
+          reinterpret_cast<
+              extensions::vivaldi::tabs_private::SendTabToSelfTarget*>(target);
+      extensions::vivaldi::tabs_private::SendTabToSelfTarget item;
+      item.guid = tmp->guid;
+      item.name = tmp->name;
+      item.type = tmp->type;
+      result.entries.push_back(std::move(item));
+    }
+    result.valid = true;
+  }
+
   return RespondNow(ArgumentList(Results::Create(result)));
 }
 
@@ -1905,11 +1652,8 @@ TabsPrivateSendSendTabToSelfTargetFunction::Run() {
 
   Profile* profile =
       Profile::FromBrowserContext(browser_context())->GetOriginalProfile();
-
-  send_tab_to_self::SendTabToSelfSyncService* service =
-      SendTabToSelfSyncServiceFactory::GetForProfile(profile);
-  service->GetSendTabToSelfModel()->AddEntry(
-      GURL(params->url), params->title, params->guid);
+  VivaldiBrowserComponentWrapper::GetInstance()->SendTabToSelfAddToModel(
+      profile, GURL(params->url), params->title, params->guid);
 
   return RespondNow(ArgumentList(Results::Create()));
 }

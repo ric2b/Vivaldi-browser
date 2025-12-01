@@ -14,6 +14,7 @@
 #include "browser/menus/vivaldi_render_view_context_menu.h"
 #include "build/build_config.h"
 #include "chrome/app/chrome_command_ids.h"
+#include "chrome/browser/send_tab_to_self/send_tab_to_self_util.h"
 #include "chrome/browser/sync/send_tab_to_self_sync_service_factory.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/grit/generated_resources.h"
@@ -26,6 +27,18 @@
 #include "ui/vivaldi_context_menu.h"
 
 namespace vivaldi {
+
+// static
+bool DeviceMenuController::HasSupport(content::WebContents* web_contents) {
+  // The test here is more restrictive than in
+  // send_tab_to_self::ShouldDisplayEntryPoint() which chrome uses as chrome
+  // code will open a dialog that allows the user to set up sync if it is not
+  // ready to be used. We will send to the device right away.
+  std::optional<send_tab_to_self::EntryPointDisplayReason> displayReason =
+    send_tab_to_self::GetEntryPointDisplayReason(web_contents);
+  return displayReason.has_value() && displayReason.value() ==
+          send_tab_to_self::EntryPointDisplayReason::kOfferFeature;
+}
 
 DeviceMenuController::DeviceMenuController(
     VivaldiRenderViewContextMenu* rv_context_menu, GURL& url,

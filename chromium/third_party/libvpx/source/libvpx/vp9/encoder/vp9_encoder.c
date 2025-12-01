@@ -2069,6 +2069,24 @@ static void free_copy_partition_data(VP9_COMP *cpi) {
   cpi->copied_frame_cnt = NULL;
 }
 
+#if CONFIG_VP9_TEMPORAL_DENOISING
+static void setup_denoiser_buffer(VP9_COMP *cpi) {
+  VP9_COMMON *const cm = &cpi->common;
+  if (cpi->oxcf.noise_sensitivity > 0 &&
+      !cpi->denoiser.frame_buffer_initialized) {
+    if (vp9_denoiser_alloc(cm, &cpi->svc, &cpi->denoiser, cpi->use_svc,
+                           cpi->oxcf.noise_sensitivity, cm->width, cm->height,
+                           cm->subsampling_x, cm->subsampling_y,
+#if CONFIG_VP9_HIGHBITDEPTH
+                           cm->use_highbitdepth,
+#endif
+                           VP9_ENC_BORDER_IN_PIXELS))
+      vpx_internal_error(&cm->error, VPX_CODEC_MEM_ERROR,
+                         "Failed to allocate denoiser");
+  }
+}
+#endif
+
 void vp9_change_config(struct VP9_COMP *cpi, const VP9EncoderConfig *oxcf) {
   VP9_COMMON *const cm = &cpi->common;
   RATE_CONTROL *const rc = &cpi->rc;
@@ -2176,9 +2194,46 @@ void vp9_change_config(struct VP9_COMP *cpi, const VP9EncoderConfig *oxcf) {
         &cm->error, cpi->skin_map,
         vpx_calloc(cm->mi_rows * cm->mi_cols, sizeof(*cpi->skin_map)));
 
+    if (cpi->svc.number_spatial_layers > 1) {
+#if CONFIG_VP9_TEMPORAL_DENOISING
+      // Reset the denoiser for svc on the resize change.
+      if (cpi->oxcf.noise_sensitivity > 0) {
+        vp9_denoiser_free(&cpi->denoiser);
+        setup_denoiser_buffer(cpi);
+      }
+#endif
+      if (cpi->oxcf.aq_mode == CYCLIC_REFRESH_AQ) {
+        for (int sl = 0; sl < cpi->svc.number_spatial_layers; ++sl) {
+          const int layer =
+              LAYER_IDS_TO_IDX(sl, 0, cpi->svc.number_temporal_layers);
+          LAYER_CONTEXT *const lc = &cpi->svc.layer_context[layer];
+          lc->sb_index = 0;
+          lc->actual_num_seg1_blocks = 0;
+          lc->actual_num_seg2_blocks = 0;
+          lc->counter_encode_maxq_scene_change = 0;
+          vpx_free(lc->map);
+          CHECK_MEM_ERROR(
+              &cm->error, lc->map,
+              vpx_calloc(cm->mi_rows * cm->mi_cols, sizeof(*lc->map)));
+          vpx_free(lc->last_coded_q_map);
+          CHECK_MEM_ERROR(&cm->error, lc->last_coded_q_map,
+                          vpx_malloc(cm->mi_rows * cm->mi_cols *
+                                     sizeof(*lc->last_coded_q_map)));
+          memset(lc->last_coded_q_map, MAXQ, cm->mi_rows * cm->mi_cols);
+          vpx_free(lc->consec_zero_mv);
+          CHECK_MEM_ERROR(&cm->error, lc->consec_zero_mv,
+                          vpx_calloc(cm->mi_rows * cm->mi_cols,
+                                     sizeof(*lc->consec_zero_mv)));
+        }
+        cpi->refresh_golden_frame = 1;
+        cpi->refresh_alt_ref_frame = 1;
+      }
+    }
+
     free_copy_partition_data(cpi);
     alloc_copy_partition_data(cpi);
-    if (cpi->oxcf.aq_mode == CYCLIC_REFRESH_AQ)
+    if (cpi->oxcf.aq_mode == CYCLIC_REFRESH_AQ &&
+        cpi->svc.number_spatial_layers == 1)
       vp9_cyclic_refresh_reset_resize(cpi);
     rc->rc_1_frame = 0;
     rc->rc_2_frame = 0;
@@ -2310,8 +2365,17 @@ static void update_initial_width(VP9_COMP *cpi, int use_highbitdepth,
     cm->use_highbitdepth = use_highbitdepth;
 #endif
     alloc_util_frame_buffers(cpi);
-    cpi->initial_width = cm->width;
-    cpi->initial_height = cm->height;
+    // The initial_width/height is used to clamp the encoding width/height in
+    // vp9_set_size_literal(). The check below is added to avoid setting the
+    // initial_width/height to a smaller resolution than the one configured.
+    // This can happen when the user passes in a lower resolution on the very
+    // first frame (after creating the encoder with a larger resolution). For
+    // spatial layers this will prevent user from going back up in resolution
+    // (i.e., the top layer will get stuck at the lower resolution).
+    if (cm->width > cpi->initial_width || cm->height > cpi->initial_height) {
+      cpi->initial_width = cm->width;
+      cpi->initial_height = cm->height;
+    }
     cpi->initial_mbs = cm->MBs;
   }
 }
@@ -2345,24 +2409,6 @@ static INLINE void vpx_img_chroma_subsampling(vpx_img_fmt_t fmt,
 static INLINE int vpx_img_use_highbitdepth(vpx_img_fmt_t fmt) {
   return fmt & VPX_IMG_FMT_HIGHBITDEPTH;
 }
-
-#if CONFIG_VP9_TEMPORAL_DENOISING
-static void setup_denoiser_buffer(VP9_COMP *cpi) {
-  VP9_COMMON *const cm = &cpi->common;
-  if (cpi->oxcf.noise_sensitivity > 0 &&
-      !cpi->denoiser.frame_buffer_initialized) {
-    if (vp9_denoiser_alloc(cm, &cpi->svc, &cpi->denoiser, cpi->use_svc,
-                           cpi->oxcf.noise_sensitivity, cm->width, cm->height,
-                           cm->subsampling_x, cm->subsampling_y,
-#if CONFIG_VP9_HIGHBITDEPTH
-                           cm->use_highbitdepth,
-#endif
-                           VP9_ENC_BORDER_IN_PIXELS))
-      vpx_internal_error(&cm->error, VPX_CODEC_MEM_ERROR,
-                         "Failed to allocate denoiser");
-  }
-}
-#endif
 
 void vp9_update_compressor_with_img_fmt(VP9_COMP *cpi, vpx_img_fmt_t img_fmt) {
   const VP9EncoderConfig *oxcf = &cpi->oxcf;
@@ -2431,6 +2477,8 @@ VP9_COMP *vp9_create_compressor(const VP9EncoderConfig *oxcf,
   vp9_init_rd_parameters(cpi);
 
   init_frame_indexes(cm);
+  cpi->initial_width = cpi->oxcf.width;
+  cpi->initial_height = cpi->oxcf.height;
   cpi->tile_data = NULL;
 
   realloc_segmentation_maps(cpi);
@@ -3452,11 +3500,15 @@ static void loopfilter_frame(VP9_COMP *cpi, VP9_COMMON *cm) {
     lf->filter_level = 0;
     lf->last_filt_level = 0;
   } else {
+#if CONFIG_INTERNAL_STATS
     struct vpx_usec_timer timer;
+#endif
 
     vpx_clear_system_state();
 
+#if CONFIG_INTERNAL_STATS
     vpx_usec_timer_start(&timer);
+#endif
 
     if (!cpi->rc.is_src_frame_alt_ref) {
       if ((cpi->common.frame_type == KEY_FRAME) &&
@@ -3469,8 +3521,10 @@ static void loopfilter_frame(VP9_COMP *cpi, VP9_COMMON *cm) {
       lf->filter_level = 0;
     }
 
+#if CONFIG_INTERNAL_STATS
     vpx_usec_timer_mark(&timer);
     cpi->time_pick_lpf += vpx_usec_timer_elapsed(&timer);
+#endif
   }
 
   if (lf->filter_level > 0 && is_reference_frame) {
@@ -5981,7 +6035,9 @@ int vp9_receive_raw_frame(VP9_COMP *cpi, vpx_enc_frame_flags_t frame_flags,
                           YV12_BUFFER_CONFIG *sd, int64_t time_stamp,
                           int64_t end_time) {
   VP9_COMMON *const cm = &cpi->common;
+#if CONFIG_INTERNAL_STATS
   struct vpx_usec_timer timer;
+#endif
   int res = 0;
   const int subsampling_x = sd->subsampling_x;
   const int subsampling_y = sd->subsampling_y;
@@ -5998,13 +6054,17 @@ int vp9_receive_raw_frame(VP9_COMP *cpi, vpx_enc_frame_flags_t frame_flags,
 
   alloc_raw_frame_buffers(cpi);
 
+#if CONFIG_INTERNAL_STATS
   vpx_usec_timer_start(&timer);
+#endif
 
   if (vp9_lookahead_push(cpi->lookahead, sd, time_stamp, end_time,
                          use_highbitdepth, frame_flags))
     res = -1;
+#if CONFIG_INTERNAL_STATS
   vpx_usec_timer_mark(&timer);
   cpi->time_receive_data += vpx_usec_timer_elapsed(&timer);
+#endif
 
   if ((cm->profile == PROFILE_0 || cm->profile == PROFILE_2) &&
       (subsampling_x != 1 || subsampling_y != 1)) {
@@ -6412,7 +6472,9 @@ int vp9_get_compressed_data(VP9_COMP *cpi, unsigned int *frame_flags,
   VP9_COMMON *const cm = &cpi->common;
   BufferPool *const pool = cm->buffer_pool;
   RATE_CONTROL *const rc = &cpi->rc;
+#if CONFIG_INTERNAL_STATS
   struct vpx_usec_timer cmptimer;
+#endif
   YV12_BUFFER_CONFIG *force_src_buffer = NULL;
   struct lookahead_entry *last_source = NULL;
   struct lookahead_entry *source = NULL;
@@ -6428,7 +6490,9 @@ int vp9_get_compressed_data(VP9_COMP *cpi, unsigned int *frame_flags,
     vp9_one_pass_svc_start_layer(cpi);
   }
 
+#if CONFIG_INTERNAL_STATS
   vpx_usec_timer_start(&cmptimer);
+#endif
 
   vp9_set_high_precision_mv(cpi, ALTREF_HIGH_PRECISION_MV);
 
@@ -6769,8 +6833,10 @@ int vp9_get_compressed_data(VP9_COMP *cpi, unsigned int *frame_flags,
   if (cpi->svc.spatial_layer_id == cpi->svc.number_spatial_layers - 1)
     cpi->fixed_qp_onepass = 0;
 
+#if CONFIG_INTERNAL_STATS
   vpx_usec_timer_mark(&cmptimer);
   cpi->time_compress_data += vpx_usec_timer_elapsed(&cmptimer);
+#endif
 
   if (cpi->keep_level_stats && oxcf->pass != 1)
     update_level_info(cpi, size, arf_src_index);

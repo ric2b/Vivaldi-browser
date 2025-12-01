@@ -32,6 +32,8 @@
 #include "api/scoped_refptr.h"
 #include "api/stats/rtc_stats_report.h"
 #include "api/test/rtc_error_matchers.h"
+#include "pc/peer_connection.h"
+#include "pc/peer_connection_proxy.h"
 #include "pc/sdp_utils.h"
 #include "pc/test/fake_video_track_source.h"
 #include "pc/test/mock_peer_connection_observers.h"
@@ -74,6 +76,13 @@ PeerConnectionInterface* PeerConnectionWrapper::pc() {
 
 MockPeerConnectionObserver* PeerConnectionWrapper::observer() {
   return observer_.get();
+}
+
+PeerConnection* PeerConnectionWrapper::GetInternalPeerConnection() {
+  auto* pci =
+      static_cast<PeerConnectionProxyWithInternal<PeerConnectionInterface>*>(
+          pc());
+  return static_cast<PeerConnection*>(pci->internal());
 }
 
 std::unique_ptr<SessionDescriptionInterface>
@@ -145,7 +154,7 @@ PeerConnectionWrapper::CreateRollback() {
 }
 
 std::unique_ptr<SessionDescriptionInterface> PeerConnectionWrapper::CreateSdp(
-    rtc::FunctionView<void(CreateSessionDescriptionObserver*)> fn,
+    FunctionView<void(CreateSessionDescriptionObserver*)> fn,
     std::string* error_out) {
   auto observer = rtc::make_ref_counted<MockCreateSessionDescriptionObserver>();
   fn(observer.get());
@@ -207,7 +216,7 @@ bool PeerConnectionWrapper::SetRemoteDescription(
 }
 
 bool PeerConnectionWrapper::SetSdp(
-    rtc::FunctionView<void(SetSessionDescriptionObserver*)> fn,
+    FunctionView<void(SetSessionDescriptionObserver*)> fn,
     std::string* error_out) {
   auto observer = rtc::make_ref_counted<MockSetSessionDescriptionObserver>();
   fn(observer.get());
@@ -268,7 +277,7 @@ bool PeerConnectionWrapper::ExchangeOfferAnswerWith(
 }
 
 rtc::scoped_refptr<RtpTransceiverInterface>
-PeerConnectionWrapper::AddTransceiver(cricket::MediaType media_type) {
+PeerConnectionWrapper::AddTransceiver(webrtc::MediaType media_type) {
   RTCErrorOr<rtc::scoped_refptr<RtpTransceiverInterface>> result =
       pc()->AddTransceiver(media_type);
   EXPECT_EQ(RTCErrorType::NONE, result.error().type());
@@ -276,7 +285,7 @@ PeerConnectionWrapper::AddTransceiver(cricket::MediaType media_type) {
 }
 
 rtc::scoped_refptr<RtpTransceiverInterface>
-PeerConnectionWrapper::AddTransceiver(cricket::MediaType media_type,
+PeerConnectionWrapper::AddTransceiver(webrtc::MediaType media_type,
                                       const RtpTransceiverInit& init) {
   RTCErrorOr<rtc::scoped_refptr<RtpTransceiverInterface>> result =
       pc()->AddTransceiver(media_type, init);

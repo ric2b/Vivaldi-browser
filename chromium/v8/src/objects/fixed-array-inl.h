@@ -5,15 +5,19 @@
 #ifndef V8_OBJECTS_FIXED_ARRAY_INL_H_
 #define V8_OBJECTS_FIXED_ARRAY_INL_H_
 
+#include "src/objects/fixed-array.h"
+// Include the non-inl header before the rest of the headers.
+
 #include <optional>
 
 #include "src/common/globals.h"
+#include "src/common/ptr-compr-inl.h"
 #include "src/handles/handles-inl.h"
 #include "src/heap/heap-write-barrier-inl.h"
 #include "src/numbers/conversions.h"
 #include "src/objects/bigint.h"
 #include "src/objects/compressed-slots.h"
-#include "src/objects/fixed-array.h"
+#include "src/objects/hole.h"
 #include "src/objects/map.h"
 #include "src/objects/maybe-object-inl.h"
 #include "src/objects/objects-inl.h"
@@ -721,15 +725,15 @@ void ArrayList ::set_length(int value) {
 
 // static
 template <class IsolateT>
-Handle<ArrayList> ArrayList::New(IsolateT* isolate, int capacity,
-                                 AllocationType allocation) {
+DirectHandle<ArrayList> ArrayList::New(IsolateT* isolate, int capacity,
+                                       AllocationType allocation) {
   if (capacity == 0) return isolate->factory()->empty_array_list();
 
   DCHECK_GT(capacity, 0);
   DCHECK_LE(capacity, kMaxCapacity);
 
   std::optional<DisallowGarbageCollection> no_gc;
-  Handle<ArrayList> result =
+  DirectHandle<ArrayList> result =
       Cast<ArrayList>(Allocate(isolate, capacity, &no_gc, allocation));
   result->set_length(0);
   ReadOnlyRoots roots{isolate};

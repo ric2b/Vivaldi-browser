@@ -23,16 +23,9 @@
 #include "google_apis/gaia/oauth2_access_token_manager.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 
-namespace {
-
-#if BUILDFLAG(ENABLE_BOUND_SESSION_CREDENTIALS)
-constexpr std::string_view kTokenBindingAssertionSentinel =
-    "DBSC_CHALLENGE_IF_REQUIRED";
-constexpr std::string_view kTokenBindingAssertionFailedPlaceholder =
-    "SIGNATURE_FAILED";
-#endif  // BUILDFLAG(ENABLE_BOUND_SESSION_CREDENTIALS)
-
-}  // namespace
+#if BUILDFLAG(IS_IOS)
+#include "components/signin/public/identity_manager/access_token_fetcher.h"
+#endif
 
 ProfileOAuth2TokenService::ProfileOAuth2TokenService(
     PrefService* user_prefs,
@@ -150,6 +143,15 @@ ProfileOAuth2TokenService::StartRequest(
   return token_manager_->StartRequest(account_id, scopes, consumer);
 }
 
+#if BUILDFLAG(IS_IOS)
+void ProfileOAuth2TokenService::GetRefreshTokenFromDevice(
+    const CoreAccountId& account_id,
+    const OAuth2AccessTokenManager::ScopeSet& scopes,
+    signin::AccessTokenFetcher::TokenCallback callback) {
+  delegate_->GetRefreshTokenFromDevice(account_id, scopes, std::move(callback));
+}
+#endif
+
 void ProfileOAuth2TokenService::StartRequestForMultilogin(
     signin::OAuthMultiloginTokenRequest& request,
     const std::string& token_binding_challenge,
@@ -176,7 +178,7 @@ void ProfileOAuth2TokenService::StartRequestForMultilogin(
             // because the server doesn't verify assertions during dark launch.
             // TODO(crbug.com/377942773): fail here immediately after the
             // feature is fully launched.
-            assertion = kTokenBindingAssertionFailedPlaceholder;
+            assertion = GaiaConstants::kTokenBindingAssertionFailedPlaceholder;
           }
           return signin::OAuthMultiloginTokenResponse(std::move(token),
                                                       std::move(assertion));
@@ -195,7 +197,8 @@ void ProfileOAuth2TokenService::StartRequestForMultilogin(
 
   signin::OAuthMultiloginTokenResponse response(
       std::move(refresh_token),
-      is_bound ? std::string(kTokenBindingAssertionSentinel) : std::string());
+      is_bound ? std::string(GaiaConstants::kTokenBindingAssertionSentinel)
+               : std::string());
 #else
   signin::OAuthMultiloginTokenResponse response(std::move(refresh_token));
 #endif  // BUILDFLAG(ENABLE_BOUND_SESSION_CREDENTIALS)
@@ -259,9 +262,8 @@ void ProfileOAuth2TokenService::SetRefreshTokenRevokedFromSourceCallback(
 }
 
 void ProfileOAuth2TokenService::LoadCredentials(
-    const CoreAccountId& primary_account_id,
-    bool is_syncing) {
-  GetDelegate()->LoadCredentials(primary_account_id, is_syncing);
+    const CoreAccountId& primary_account_id) {
+  GetDelegate()->LoadCredentials(primary_account_id);
 }
 
 void ProfileOAuth2TokenService::UpdateCredentials(

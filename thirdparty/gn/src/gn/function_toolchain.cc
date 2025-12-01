@@ -862,8 +862,8 @@ Tool variables
         libraries in this target. Includes any specified renamed dependencies.
 
     {{rustdeps}}
-        Expands to the list of -Ldependency=<path> strings needed to compile
-        this target.
+        Expands to the list of -Ldependency=<path> and -Clink-arg=<path> strings
+        needed to compile this target.
 
     {{rustenv}}
         Expands to the list of environment variables.

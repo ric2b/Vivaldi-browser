@@ -1,4 +1,4 @@
-# Copyright 2024 The Chromium Authors. All rights reserved.
+# Copyright 2025 The Chromium Authors. All rights reserved.
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -81,7 +81,6 @@ if (current_cpu == "arm64" || current_cpu == "x64" ||
     "libavcodec/pthread_slice.c",
     "libavcodec/qsv_api.c",
     "libavcodec/raw.c",
-    "libavcodec/refstruct.c",
     "libavcodec/threadprogress.c",
     "libavcodec/to_upper4.c",
     "libavcodec/utils.c",
@@ -107,6 +106,7 @@ if (current_cpu == "arm64" || current_cpu == "x64" ||
     "libavformat/dovi_isom.c",
     "libavformat/dump.c",
     "libavformat/dv.c",
+    "libavformat/dvdclut.c",
     "libavformat/flac_picture.c",
     "libavformat/format.c",
     "libavformat/id3v1.c",
@@ -159,6 +159,7 @@ if (current_cpu == "arm64" || current_cpu == "x64" ||
     "libavutil/buffer.c",
     "libavutil/camellia.c",
     "libavutil/channel_layout.c",
+    "libavutil/container_fifo.c",
     "libavutil/crc.c",
     "libavutil/csp.c",
     "libavutil/detection_bbox.c",
@@ -194,6 +195,7 @@ if (current_cpu == "arm64" || current_cpu == "x64" ||
     "libavutil/pixelutils.c",
     "libavutil/random_seed.c",
     "libavutil/rational.c",
+    "libavutil/refstruct.c",
     "libavutil/reverse.c",
     "libavutil/samplefmt.c",
     "libavutil/sha.c",

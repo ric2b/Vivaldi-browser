@@ -12,11 +12,11 @@
 
 #include "base/feature_list.h"
 #include "base/functional/bind.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
-#include "build/chromeos_buildflags.h"
 #include "chrome/browser/browser_features.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
@@ -27,9 +27,9 @@
 #include "chrome/browser/notifications/notification_display_service_factory.h"
 #include "chrome/browser/permissions/notifications_engagement_service_factory.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/safe_browsing/notification_content_detection_service_factory.h"
 #include "chrome/browser/ui/exclusive_access/exclusive_access_context.h"
 #include "chrome/browser/ui/exclusive_access/exclusive_access_manager.h"
+#include "chrome/browser/ui/safety_hub/disruptive_notification_permissions_manager.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/grit/generated_resources.h"
@@ -40,8 +40,8 @@
 #include "components/prefs/pref_change_registrar.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
+#include "components/safe_browsing/buildflags.h"
 #include "components/safe_browsing/content/browser/notification_content_detection/notification_content_detection_constants.h"
-#include "components/safe_browsing/content/browser/notification_content_detection/notification_content_detection_service.h"
 #include "components/safe_browsing/core/common/safe_browsing_prefs.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/platform_notification_context.h"
@@ -74,9 +74,14 @@
 #include "extensions/common/constants.h"
 #endif
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
 #include "base/metrics/histogram_functions.h"
-#endif  // IS_CHROMEOS_ASH
+#endif  // IS_CHROMEOS
+
+#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+#include "chrome/browser/safe_browsing/notification_content_detection/notification_content_detection_service_factory.h"
+#include "components/safe_browsing/content/browser/notification_content_detection/notification_content_detection_service.h"
+#endif
 
 using content::BrowserContext;
 using content::BrowserThread;
@@ -90,7 +95,7 @@ constexpr char
         "SafeBrowsing.NotificationContentDetection."
         "DisplayPersistentNotificationEvent";
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
 
 constexpr char kNotificationResourceActionIconMemorySizeHistogram[] =
     "Ash.NotificationResource.ActionIconSizeInKB";
@@ -104,7 +109,7 @@ constexpr char kNotificationReourceIconMemorySizeHistogram[] =
 constexpr char kNotificationResourceImageMemorySizeHistogram[] =
     "Ash.NotificationResource.ImageMemorySizeInKB";
 
-#endif  // IS_CHROMEOS_ASH
+#endif  // IS_CHROMEOS
 
 // Whether a web notification should be displayed when chrome is in full
 // screen mode.
@@ -300,6 +305,7 @@ void PlatformNotificationServiceImpl::DisplayPersistentNotification(
   auto metadata = std::make_unique<PersistentNotificationMetadata>();
   metadata->service_worker_scope = service_worker_scope;
 
+#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
   if (safe_browsing::IsSafeBrowsingEnabled(*profile_->GetPrefs()) &&
       !safe_browsing::IsURLAllowlistedByPolicy(origin, *profile_->GetPrefs()) &&
       base::FeatureList::IsEnabled(
@@ -334,6 +340,7 @@ void PlatformNotificationServiceImpl::DisplayPersistentNotification(
       }
     }
   }
+#endif
 
   NotificationDisplayServiceFactory::GetForProfile(profile_)->Display(
       NotificationHandler::Type::WEB_PERSISTENT, notification,
@@ -341,6 +348,15 @@ void PlatformNotificationServiceImpl::DisplayPersistentNotification(
 
   LogPersistentNotificationShownMetrics(notification_data, origin,
                                         notification.origin_url());
+
+  // Logs metrics for proposed disruptive notification revocation when
+  // displaying a persistent notification. Disruptive are notifications with
+  // high notification volume and low site engagement score.
+  ukm::SourceId source_id = ukm::UkmRecorder::GetSourceIdForNotificationEvent(
+      base::PassKey<PlatformNotificationServiceImpl>(),
+      notification.origin_url());
+  DisruptiveNotificationPermissionsManager::LogMetrics(
+      profile_, notification.origin_url(), source_id);
 }
 
 void PlatformNotificationServiceImpl::CloseNotification(
@@ -534,7 +550,6 @@ PlatformNotificationServiceImpl::CreateNotificationFromData(
   std::optional<WebAppIconAndTitle> web_app_icon_and_title;
 #if BUILDFLAG(IS_CHROMEOS)
   web_app_icon_and_title = FindWebAppIconAndTitle(web_app_hint_url);
-#if BUILDFLAG(IS_CHROMEOS_ASH)
   if (web_app_icon_and_title && notification_resources.badge.isNull()) {
     // ChromeOS: Enables web app theme color only if monochrome web app icon
     // has been specified. `badge` Notifications API icons must be masked with
@@ -545,8 +560,6 @@ PlatformNotificationServiceImpl::CreateNotificationFromData(
   base::UmaHistogramMemoryKB(
       kNotificationReourceIconMemorySizeHistogram,
       notification_resources.notification_icon.computeByteSize() / 1024);
-
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 #endif  // BUILDFLAG(IS_CHROMEOS)
 
   message_center::NotifierId notifier_id(
@@ -579,10 +592,10 @@ PlatformNotificationServiceImpl::CreateNotificationFromData(
       !image.drawsNothing()) {
     notification.set_type(message_center::NOTIFICATION_TYPE_IMAGE);
     notification.SetImage(gfx::Image::CreateFrom1xBitmap(image));
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
     base::UmaHistogramMemoryKB(kNotificationResourceImageMemorySizeHistogram,
                                image.computeByteSize() / 1024);
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+#endif  // BUILDFLAG(IS_CHROMEOS)
   }
 
   if (web_app_icon_and_title && !web_app_icon_and_title->icon.isNull())
@@ -592,10 +605,10 @@ PlatformNotificationServiceImpl::CreateNotificationFromData(
   // 1x bitmap - crbug.com/585815.
   if (const SkBitmap& badge = notification_resources.badge; !badge.isNull()) {
     notification.SetSmallImage(gfx::Image::CreateFrom1xBitmap(badge));
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
     base::UmaHistogramMemoryKB(kNotificationResourceBadgeMemorySizeHistogram,
                                badge.computeByteSize() / 1024);
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+#endif  // BUILDFLAG(IS_CHROMEOS)
   }
 
   // Developer supplied action buttons.
@@ -607,11 +620,11 @@ PlatformNotificationServiceImpl::CreateNotificationFromData(
     // the 1x bitmap - crbug.com/585815.
     const SkBitmap& action_icon = notification_resources.action_icons[i];
     button.icon = gfx::Image::CreateFrom1xBitmap(action_icon);
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
     base::UmaHistogramMemoryKB(
         kNotificationResourceActionIconMemorySizeHistogram,
         action_icon.computeByteSize() / 1024);
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+#endif  // BUILDFLAG(IS_CHROMEOS)
     if (action->type == blink::mojom::NotificationActionType::TEXT) {
       button.placeholder = action->placeholder.value_or(
           l10n_util::GetStringUTF16(IDS_NOTIFICATION_REPLY_PLACEHOLDER));

@@ -5,6 +5,7 @@
 #include "components/dbus/xdg/systemd.h"
 
 #include <string>
+#include <variant>
 #include <vector>
 
 #include "base/environment.h"
@@ -23,7 +24,6 @@
 #include "dbus/object_path.h"
 #include "dbus/object_proxy.h"
 #include "dbus/property.h"
-#include "third_party/abseil-cpp/absl/types/variant.h"
 
 namespace dbus_xdg {
 
@@ -33,8 +33,7 @@ using Dict = DbusArray<DbusStruct<DbusString, T>>;
 using VarDict = Dict<DbusVariant>;
 
 using SystemdUnitCallbacks = std::vector<SystemdUnitCallback>;
-using StatusOrCallbacks =
-    absl::variant<SystemdUnitStatus, SystemdUnitCallbacks>;
+using StatusOrCallbacks = std::variant<SystemdUnitStatus, SystemdUnitCallbacks>;
 
 namespace {
 
@@ -55,6 +54,9 @@ constexpr char kChannelEnvVar[] = "CHROME_VERSION_EXTRA";
 
 #if BUILDFLAG(GOOGLE_CHROME_BRANDING)
 constexpr char kAppNamePrefix[] = "com.google.Chrome";
+#elif defined(VIVALDI_BUILD)
+// Vivaldi: Use vivaldi app name in Vivaldi builds
+constexpr char kAppNamePrefix[] = "com.vivaldi.Vivaldi";
 #else
 constexpr char kAppNamePrefix[] = "org.chromium.Chromium";
 #endif
@@ -160,7 +162,7 @@ StatusOrCallbacks& GetUnitNameState() {
 
 void SetStateAndRunCallbacks(SystemdUnitStatus result) {
   auto& state = GetUnitNameState();
-  auto callbacks = std::move(absl::get<SystemdUnitCallbacks>(state));
+  auto callbacks = std::move(std::get<SystemdUnitCallbacks>(state));
   state = result;
   for (auto& callback : callbacks) {
     std::move(callback).Run(result);
@@ -229,8 +231,7 @@ void OnNameHasOwnerResponse(scoped_refptr<dbus::Bus> bus,
   }
 
   auto env = base::Environment::Create();
-  std::string channel;
-  env->GetVar(kChannelEnvVar, &channel);
+  std::string channel = env->GetVar(kChannelEnvVar).value_or("");
   const char* app_name_suffix = GetAppNameSuffix(channel);
 
   // The unit naming format is specified in
@@ -270,14 +271,14 @@ void SetSystemdScopeUnitNameForXdgPortal(dbus::Bus* bus,
 
   auto& state = GetUnitNameState();
 
-  if (absl::holds_alternative<SystemdUnitStatus>(state)) {
+  if (std::holds_alternative<SystemdUnitStatus>(state)) {
     // If the result is already cached, run the callback immediately.
-    std::move(callback).Run(absl::get<SystemdUnitStatus>(state));
+    std::move(callback).Run(std::get<SystemdUnitStatus>(state));
     return;
   }
 
   // Add the callback to the list of pending callbacks.
-  auto& callbacks = absl::get<SystemdUnitCallbacks>(state);
+  auto& callbacks = std::get<SystemdUnitCallbacks>(state);
   callbacks.push_back(std::move(callback));
 
   if (callbacks.size() > 1) {

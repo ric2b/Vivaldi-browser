@@ -8,6 +8,7 @@ import org.jni_zero.JNINamespace;
 import org.jni_zero.NativeMethods;
 
 import org.chromium.base.Features;
+import org.chromium.build.annotations.NullMarked;
 
 /**
  * Java accessor for base/feature_list.h state.
@@ -17,11 +18,12 @@ import org.chromium.base.Features;
  *
  */
 @JNINamespace("external_intents")
+@NullMarked
 public class ExternalIntentsFeatures extends Features {
     public static final String EXTERNAL_NAVIGATION_DEBUG_LOGS_NAME = "ExternalNavigationDebugLogs";
     public static final String BLOCK_FRAME_RENAVIGATIONS_NAME = "BlockFrameRenavigations3";
     public static final String BLOCK_INTENTS_TO_SELF_NAME = "BlockIntentsToSelf";
-    public static final String TRUSTED_CLIENT_GESTURE_BYPASS_NAME = "TrustedClientGestureBypass";
+    public static final String LOWER_CASE_INTENT_SCHEMES_NAME = "LowerCaseIntentSchemes";
 
     public static final ExternalIntentsFeatures EXTERNAL_NAVIGATION_DEBUG_LOGS =
             new ExternalIntentsFeatures(0, EXTERNAL_NAVIGATION_DEBUG_LOGS_NAME);
@@ -32,8 +34,8 @@ public class ExternalIntentsFeatures extends Features {
     public static final ExternalIntentsFeatures BLOCK_INTENTS_TO_SELF =
             new ExternalIntentsFeatures(2, BLOCK_INTENTS_TO_SELF_NAME);
 
-    public static final ExternalIntentsFeatures TRUSTED_CLIENT_GESTURE_BYPASS =
-            new ExternalIntentsFeatures(3, TRUSTED_CLIENT_GESTURE_BYPASS_NAME);
+    public static final ExternalIntentsFeatures LOWER_CASE_INTENT_SCHEMES =
+            new ExternalIntentsFeatures(3, LOWER_CASE_INTENT_SCHEMES_NAME);
 
     private final int mOrdinal;
 

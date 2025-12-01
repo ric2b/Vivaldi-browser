@@ -4,9 +4,11 @@
 
 #include "third_party/blink/public/common/messaging/accelerated_static_bitmap_image_mojom_traits.h"
 
+#include "components/viz/common/resources/shared_image_format_utils.h"
 #include "gpu/command_buffer/common/shared_image_usage.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "mojo/public/cpp/bindings/self_owned_receiver.h"
+#include "ui/gfx/color_space.h"
 
 namespace {
 
@@ -59,11 +61,20 @@ bool StructTraits<blink::mojom::AcceleratedStaticBitmapImage::DataView,
                   blink::AcceleratedImageInfo>::
     Read(blink::mojom::AcceleratedStaticBitmapImage::DataView data,
          blink::AcceleratedImageInfo* out) {
+  SkImageInfo image_info;
   if (!data.ReadSharedImage(&out->shared_image) ||
       !data.ReadSyncToken(&out->sync_token) ||
-      !data.ReadImageInfo(&out->image_info)) {
+      !data.ReadImageInfo(&image_info)) {
     return false;
   }
+
+  out->size = gfx::Size(image_info.width(), image_info.height());
+  out->format =
+      viz::SkColorTypeToSinglePlaneSharedImageFormat(image_info.colorType());
+  out->alpha_type = image_info.alphaType();
+  out->color_space = image_info.refColorSpace()
+                         ? gfx::ColorSpace(*image_info.refColorSpace())
+                         : gfx::ColorSpace::CreateSRGB();
 
   auto callback = data.TakeReleaseCallback<
       mojo::PendingRemote<blink::mojom::ImageReleaseCallback>>();

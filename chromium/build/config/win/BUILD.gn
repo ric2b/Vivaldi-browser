@@ -83,11 +83,6 @@ config("compiler") {
   cflags_c = [ "/TC" ]
   cflags_cc = [ "/TP" ]
 
-  cflags += [
-    # Work around crbug.com/526851, bug in VS 2015 RTM compiler.
-    "/Zc:sizedDealloc-",
-  ]
-
   if (is_clang) {
     # Required to make the 19041 SDK compatible with clang-cl.
     # See https://crbug.com/1089996 issue #2 for details.
@@ -294,7 +289,7 @@ config("runtime_library") {
 # manually override this config for their compiles.
 config("winver") {
   defines = [
-    "NTDDI_VERSION=NTDDI_WIN10_NI",
+    "NTDDI_VERSION=NTDDI_WIN11_GE",
 
     # We can't say `=_WIN32_WINNT_WIN10` here because some files do
     # `#if WINVER < 0x0600` without including windows.h before,

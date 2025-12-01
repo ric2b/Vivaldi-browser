@@ -72,11 +72,9 @@ import org.chromium.base.test.util.CriteriaHelper;
 import org.chromium.base.test.util.CriteriaNotSatisfiedException;
 import org.chromium.base.test.util.DisableIf;
 import org.chromium.base.test.util.DisabledTest;
-import org.chromium.base.test.util.Features.EnableFeatures;
 import org.chromium.chrome.browser.autofill.PersonalDataManager;
 import org.chromium.chrome.browser.autofill.PersonalDataManagerFactory;
 import org.chromium.chrome.browser.feature_engagement.TrackerFactory;
-import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.keyboard_accessory.R;
 import org.chromium.chrome.browser.keyboard_accessory.bar_component.KeyboardAccessoryProperties.AutofillBarItem;
@@ -451,7 +449,6 @@ public class KeyboardAccessoryViewTest {
                                 .setItemTag("")
                                 .setSuggestionType(SuggestionType.CREATE_NEW_PLUS_ADDRESS)
                                 .setFeatureForIph("")
-                                .setIphDescriptionText("IPH description")
                                 .setApplyDeactivatedStyle(false)
                                 .build(),
                         new Action(AUTOFILL_SUGGESTION, unused -> {}));
@@ -468,7 +465,7 @@ public class KeyboardAccessoryViewTest {
                 });
 
         onViewWaiting(withText("Create plus address"));
-        waitForHelpBubble(withText("IPH description"));
+        waitForHelpBubble(withText(R.string.plus_address_create_suggestion_iph_android));
         assertThat(mKeyboardAccessoryView.take().areClicksAllowedWhenObscured(), is(true));
         onView(withChild(withText("Create plus address"))).check(matches(isSelected()));
         onView(withText("Create plus address")).perform(click());
@@ -742,7 +739,6 @@ public class KeyboardAccessoryViewTest {
 
     @Test
     @MediumTest
-    @EnableFeatures(ChromeFeatureList.AUTOFILL_ENABLE_NEW_CARD_ART_AND_NETWORK_IMAGES)
     public void testCustomIconUrlSet_imageReturnedByPersonalDataManager_customIconSetOnChipView()
             throws InterruptedException {
         GURL customIconUrl = mock(GURL.class);

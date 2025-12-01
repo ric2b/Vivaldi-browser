@@ -4,8 +4,7 @@ Texture Usages Validation Tests in Same or Different Render Pass Encoders.
 
 import { makeTestGroup } from '../../../../../common/framework/test_group.js';
 import { assert, unreachable } from '../../../../../common/util/util.js';
-import { MaxLimitsTestMixin } from '../../../../gpu_test.js';
-import { ValidationTest } from '../../validation_test.js';
+import { AllFeaturesMaxLimitsValidationTest } from '../../validation_test.js';
 
 export type TextureBindingType =
   | 'sampled-texture'
@@ -22,7 +21,7 @@ export function IsReadOnlyTextureBindingType(t: TextureBindingType): boolean {
   return t === 'sampled-texture' || t === 'readonly-storage-texture';
 }
 
-class F extends ValidationTest {
+class F extends AllFeaturesMaxLimitsValidationTest {
   getColorAttachment(
     texture: GPUTexture,
     textureViewDescriptor?: GPUTextureViewDescriptor
@@ -93,7 +92,7 @@ class F extends ValidationTest {
   }
 }
 
-export const g = makeTestGroup(MaxLimitsTestMixin(F));
+export const g = makeTestGroup(F);
 
 const kTextureSize = 16;
 const kTextureLevels = 3;
@@ -115,9 +114,6 @@ g.test('subresources,color_attachments')
       .combine('inSamePass', [true, false])
       .unless(t => t.inSamePass && t.level0 !== t.level1)
   )
-  .beforeAllSubcases(t => {
-    t.skipIfColorRenderableNotSupportedForFormat('r32float');
-  })
   .fn(t => {
     const { layer0, level0, layer1, level1, inSamePass } = t.params;
 
@@ -197,7 +193,6 @@ g.test('subresources,color_attachment_and_bind_group')
         t.params.bgLayerCount !== kTextureLayers,
         'view array layers must equal texture array layers in compatibility mode'
       );
-      t.skipIfColorRenderableNotSupportedForFormat('r32float');
     }
   })
   .fn(t => {
@@ -476,7 +471,6 @@ g.test('subresources,multiple_bind_groups')
         t.params.bg0Layers.count !== kTextureLayers || t.params.bg1Layers.count !== kTextureLayers,
         'view array layers must equal texture array layers in compatibility mode'
       );
-      t.skipIfColorRenderableNotSupportedForFormat('r32float');
     }
   })
   .fn(t => {

@@ -10,10 +10,10 @@
 #include "include/codec/SkEncodedImageFormat.h"
 #include "include/core/SkStream.h"
 #include "include/core/SkTypes.h"
-#include "include/private/SkColorData.h"
 #include "include/private/base/SkTemplates.h"
 #include "src/base/SkEndian.h"
 #include "src/codec/SkCodecPriv.h"
+#include "src/core/SkColorData.h"
 
 #define FOURCC(c1, c2, c3, c4) \
     ((c1) << 24 | (c2) << 16 | (c3) << 8 | (c4))
@@ -399,6 +399,20 @@ bool SkHeifCodec::onGetFrameInfo(int i, FrameInfo* frameInfo) const {
 
 int SkHeifCodec::onGetRepetitionCount() {
     return kRepetitionCountInfinite;
+}
+
+SkCodec::IsAnimated SkHeifCodec::onIsAnimated() {
+    if (!fUseAnimation) {
+        return IsAnimated::kNo;
+    }
+
+    size_t frameCount;
+    HeifFrameInfo frameInfo;
+    if (!fHeifDecoder->getSequenceInfo(&frameInfo, &frameCount)) {
+        return IsAnimated::kUnknown;
+    }
+
+    return (frameCount > 1) ? IsAnimated::kYes : IsAnimated::kNo;
 }
 
 /*

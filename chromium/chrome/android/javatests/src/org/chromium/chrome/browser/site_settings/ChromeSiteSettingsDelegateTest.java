@@ -26,10 +26,12 @@ import org.chromium.base.task.TaskTraits;
 import org.chromium.base.test.util.Batch;
 import org.chromium.base.test.util.CallbackHelper;
 import org.chromium.base.test.util.CommandLineFlags;
+import org.chromium.base.test.util.DisabledTest;
 import org.chromium.chrome.browser.browsing_data.BrowsingDataBridge;
 import org.chromium.chrome.browser.browsing_data.BrowsingDataType;
 import org.chromium.chrome.browser.browsing_data.TimePeriod;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
+import org.chromium.chrome.browser.password_manager.PasswordManagerTestHelper;
 import org.chromium.chrome.browser.profiles.ProfileManager;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
@@ -69,6 +71,14 @@ public class ChromeSiteSettingsDelegateTest {
             new BlankCTATabInitialStateRule(sActivityTestRule, false);
 
     ChromeSiteSettingsDelegate mSiteSettingsDelegate;
+
+    public ChromeSiteSettingsDelegateTest() {
+        // This test suite relies on the real password store. However, that can only store
+        // passwords if the device it runs on has the required min GMS Core version.
+        // To ensure the tests don't depend on the device configuration, set up a fake GMS
+        // Core version instead.
+        PasswordManagerTestHelper.setUpPwmRequiredMinGmsVersion();
+    }
 
     @Before
     public void setUp() throws Exception {
@@ -113,6 +123,7 @@ public class ChromeSiteSettingsDelegateTest {
     // Tests that getBrowsingDataInfo returns the correct sample test data in the hashmap.
     @Test
     @SmallTest
+    @DisabledTest(message = "https://crbug.com/396752397")
     public void testGetBrowsingDataInfoCookie() throws TimeoutException {
         setCookie(Scheme.HTTP, BROWSING_DATA_HOST, "'foo1=bar1'");
         setCookie(Scheme.HTTPS, BROWSING_DATA_HOST, "'foo2=bar2'");
@@ -139,6 +150,7 @@ public class ChromeSiteSettingsDelegateTest {
     // Tests that removeBrowsingData removes data correctly for a given host.
     @Test
     @SmallTest
+    @DisabledTest(message = "https://crbug.com/396752397")
     public void testRemoveBrowsingData() throws TimeoutException {
         setCookie(Scheme.HTTP, BROWSING_DATA_HOST, null);
 

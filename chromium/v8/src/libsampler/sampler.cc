@@ -66,6 +66,7 @@ using zx_thread_state_general_regs_t = zx_arm64_general_regs_t;
 #include <vector>
 
 #include "src/base/atomic-utils.h"
+#include "src/base/platform/mutex.h"
 #include "src/base/platform/platform.h"
 
 #if V8_OS_ZOS
@@ -565,7 +566,11 @@ void SignalHandler::FillRegisterState(void* context, RegisterState* state) {
 #endif  // USE_SIGNALS
 
 Sampler::Sampler(Isolate* isolate)
-    : isolate_(isolate), data_(std::make_unique<PlatformData>()) {}
+    : isolate_(isolate), data_(std::make_unique<PlatformData>()) {
+  // Abseil's deadlock detection uses locks. If we end up taking a sample absl
+  // internally holds this lock, we can end up deadlocking.
+  SetMutexDeadlockDetectionMode(absl::OnDeadlockCycle::kIgnore);
+}
 
 Sampler::~Sampler() { DCHECK(!IsActive()); }
 

@@ -22,11 +22,12 @@
 #include <vector>
 
 #include "absl/container/flat_hash_map.h"
+#include "absl/container/flat_hash_set.h"
 #include "absl/strings/string_view.h"
 #include "tensorflow/compiler/mlir/lite/allocation.h"
 #include "tensorflow/lite/delegates/utils/simple_opaque_delegate.h"
 #include "tensorflow/lite/experimental/litert/c/litert_common.h"
-#include "tensorflow/lite/experimental/litert/c/litert_compiled_model_options.h"
+#include "tensorflow/lite/experimental/litert/c/litert_compilation_options.h"
 #include "tensorflow/lite/experimental/litert/c/litert_model.h"
 #include "tensorflow/lite/experimental/litert/c/litert_tensor_buffer.h"
 #include "tensorflow/lite/experimental/litert/c/litert_tensor_buffer_requirements.h"
@@ -44,12 +45,6 @@
 class LiteRtCompiledModelT {
  public:
   using Ptr = std::unique_ptr<LiteRtCompiledModelT>;
-  struct OptionsDeleter {
-    void operator()(LiteRtCompilationOptionsT* options) {
-      LiteRtDestroyCompilationOptions(options);
-    }
-  };
-  using OptionsPtr = std::unique_ptr<LiteRtCompilationOptionsT, OptionsDeleter>;
 
   LiteRtCompiledModelT() = default;
   ~LiteRtCompiledModelT() = default;
@@ -57,9 +52,9 @@ class LiteRtCompiledModelT {
   // Creates a LiteRtCompiledModelT from a LiteRtModel object.
   // The model is loaded into memory and the caller takes ownership of the
   // returned object.
-  static litert::Expected<Ptr> Create(LiteRtEnvironmentT* env,
-                                      LiteRtModel model,
-                                      OptionsPtr compilation_options = nullptr);
+  static litert::Expected<Ptr> Create(
+      LiteRtEnvironmentT* env, LiteRtModel model,
+      LiteRtCompilationOptions jit_compilation_options = nullptr);
 
   // Returns the buffer requirements for the n-th input tensor. The returned
   // LiteRtTensorBufferRequirements is used to create the input tensor
@@ -98,23 +93,77 @@ class LiteRtCompiledModelT {
   }
 
   // Runs the model of the given signature with the provided input/output
-  // litert::TensorBuffers.
+  // litert::TensorBuffers. If parameter `async` is true, then the model is run
+  // asynchronously, if possible. Upon returning, the function sets parameter
+  // `async` to true if asynchronous execution was requested and possible,
+  // otherwise it sets it to false.
   litert::Expected<void> Run(
       absl::string_view signature_key,
       const std::vector<LiteRtTensorBuffer>& input_buffers,
-      const std::vector<LiteRtTensorBuffer>& output_buffers);
+      const std::vector<LiteRtTensorBuffer>& output_buffers, bool& async);
 
   // The same as Run() for C API.
   litert::Expected<void> RunCApi(size_t signature_index,
                                  size_t num_input_buffers,
                                  LiteRtTensorBuffer* input_buffers,
                                  size_t num_output_buffers,
-                                 LiteRtTensorBuffer* output_buffers);
+                                 LiteRtTensorBuffer* output_buffers,
+                                 bool* async);
 
  private:
-  // Processes the model and initializes the internal states.
+  // Initializes the internal TFLite interpreter and related objects.
   // This is called in the public Create*() methods.
-  litert::Expected<void> Initialize();
+  // The flatbuffer_model_ must be set before calling this method.
+  litert::Expected<void> InitializeRuntime();
+
+  // Handles any JIT compilation and intializes the flatbuffer_model_ and
+  // related field within the compiled model.
+  //
+  // If no JIT compilation is requested, the compiled model will point to the
+  // underlying tflite::Model* owned by the input litert model. The compiled
+  // models alloc_ and model_buf_ will be nullptr as these are only relevant
+  // when compiled model owns a flatbuffer.
+  //
+  // If JIT compilation does occur, a new flatbuffer owned by the compiled model
+  // will be serialized from the result of compilation. The alloc_ and
+  // model_buf_ will be set for storage of the new flatbuffer.
+  //
+  // NOTE: JIT compilation invalidates the input litert model.
+  // TODO: Design a better abstraction for optional ownership for flatbuffer,
+  // consider caching JIT result.
+  litert::Expected<void> InitializeModel(LiteRtModelT& model,
+                                         LiteRtHwAcceleratorSet hw_accelerators,
+                                         LiteRtEnvironmentT& env);
+
+  // Returns the base address of the flatbuffer memory.
+  //
+  // If no JIT compilation has taken place, this points to flatbuffer memory
+  // owned by the incoming litert model (litert models always owns their
+  // flatbuffer memory until serialization).
+  //
+  // If JIT compilation has taken place, this points to the base address of the
+  // a newly serialized flatbuffer which is owned by the compiled model (in
+  // model_buf_);
+  //
+  // NOTE: This should never be nullptr after initialization.
+  const char* GetModelBase() {
+    if (fb_model_ == nullptr) {
+      return nullptr;
+    }
+
+    // fb_model_->allocation is only null when the flatbuffer is built with
+    // BuildFlatBufferFromModel, which is not currently in use in either
+    // litert::LoadModel or LiteRtCompiledModelT::Create.
+    const auto* alloc = fb_model_->allocation();
+    if (alloc) {
+      // NOTE: During JIT, alloc->base() == model_buf_.Data(), which is owned
+      // by the compiled model. Otherwise, model_buf_.Data() is nullptr and
+      // alloc->base() points a buffer owned by the incoming litert model.
+      return reinterpret_cast<const char*>(alloc->base());
+    }
+
+    return nullptr;
+  }
 
   // Returns the buffer requirements for the given tensor.
   litert::Expected<LiteRtTensorBufferRequirements> GetTensorBufferRequirements(
@@ -128,14 +177,19 @@ class LiteRtCompiledModelT {
   // If the TensorBuffer can be directly consumed as CPU Tensors, they'll be
   // locked and use it with CustomAllocation. The locked buffer is kept in the
   // `locked_buffers`. Caller is responsible for unlocking of these buffers.
+  // If the TensorBuffer can be consumed by the delegate, then `tensor` will be
+  // marked as non-CPU to avoid TFLite from allocating it.
   litert::Expected<void> RegisterBuffer(
-      tflite::SignatureRunner* runner, const TfLiteTensor* tensor,
+      tflite::SignatureRunner* runner, TfLiteTensor* tensor,
       const char* tensor_name, LiteRtTensorBuffer buffer, bool is_input,
       std::vector<LiteRtTensorBuffer>& locked_buffers);
 
   void RegisterDelegate(tflite::TfLiteOpaqueDelegateUniquePtr&& delegate) {
     delegates_.push_back(std::move(delegate));
   }
+
+  // Checks the CPU Tensors and stores them in the `cpu_tensors_` set.
+  void CheckCpuTensors();
 
   // Map from signature key to SignatureRunner. This is used to lazy calling
   // GetSignatureRunner() which is expensive.
@@ -152,7 +206,6 @@ class LiteRtCompiledModelT {
   // The Interpreter and related objects used to run the model.
   std::unique_ptr<::tflite::Interpreter> interp_;
   std::unique_ptr<::tflite::FlatBufferModel> fb_model_;
-  std::unique_ptr<::tflite::Allocation> alloc_;
   litert::OwningBufferRef<uint8_t> model_buf_;
   std::vector<const std::string*> signature_keys_;
 
@@ -164,6 +217,10 @@ class LiteRtCompiledModelT {
       buffer_context_;
 
   std::vector<tflite::TfLiteOpaqueDelegateUniquePtr> delegates_;
+
+  // The set of CPU Tensors. This is used to manage TensorBufferRequirements
+  // for shared CPU Tensors.
+  absl::flat_hash_set<const void*> cpu_tensors_;
 };
 
 #endif  // TENSORFLOW_LITE_EXPERIMENTAL_LITERT_RUNTIME_COMPILED_MODEL_H_

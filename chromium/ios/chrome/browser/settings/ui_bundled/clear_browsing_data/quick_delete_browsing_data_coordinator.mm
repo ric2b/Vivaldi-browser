@@ -5,10 +5,12 @@
 #import "ios/chrome/browser/settings/ui_bundled/clear_browsing_data/quick_delete_browsing_data_coordinator.h"
 
 #import "components/browsing_data/core/browsing_data_utils.h"
+#import "components/feature_engagement/public/tracker.h"
 #import "components/signin/public/base/signin_metrics.h"
 #import "ios/chrome/browser/authentication/ui_bundled/signout_action_sheet/signout_action_sheet_coordinator.h"
 #import "ios/chrome/browser/browsing_data/model/browsing_data_remover_factory.h"
 #import "ios/chrome/browser/discover_feed/model/discover_feed_service_factory.h"
+#import "ios/chrome/browser/feature_engagement/model/tracker_factory.h"
 #import "ios/chrome/browser/settings/ui_bundled/clear_browsing_data/browsing_data_counter_wrapper_producer.h"
 #import "ios/chrome/browser/settings/ui_bundled/clear_browsing_data/quick_delete_browsing_data_delegate.h"
 #import "ios/chrome/browser/settings/ui_bundled/clear_browsing_data/quick_delete_browsing_data_view_controller.h"
@@ -47,7 +49,7 @@
 }
 
 - (void)start {
-  ProfileIOS* profile = self.browser->GetProfile();
+  ProfileIOS* profile = self.profile;
 
   CHECK(!profile->IsOffTheRecord());
 
@@ -59,6 +61,8 @@
       BrowsingDataRemoverFactory::GetForProfile(profile);
   DiscoverFeedService* discoverFeedService =
       DiscoverFeedServiceFactory::GetForProfile(profile);
+  feature_engagement::Tracker* tracker =
+      feature_engagement::TrackerFactory::GetForProfile(profile);
 
   _mediator =
       [[QuickDeleteMediator alloc] initWithPrefs:profile->GetPrefs()
@@ -67,7 +71,8 @@
                              browsingDataRemover:browsingDataRemover
                              discoverFeedService:discoverFeedService
                                        timeRange:_initialTimeRange
-                                 uiBlockerTarget:self.browser->GetSceneState()];
+                                 uiBlockerTarget:self.browser->GetSceneState()
+                        featureEngagementTracker:tracker];
 
   _viewController = [[QuickDeleteBrowsingDataViewController alloc] init];
   _viewController.delegate = self;
@@ -116,20 +121,21 @@
     return;
   }
 
-  signin_metrics::ProfileSignout signout_source_metric = signin_metrics::
-      ProfileSignout::kUserClickedSignoutFromClearBrowsingDataPage;
+  constexpr signin_metrics::ProfileSignout signout_source_metric =
+      signin_metrics::ProfileSignout::
+          kUserClickedSignoutFromClearBrowsingDataPage;
+  __weak __typeof(self) weakSelf = self;
   _signoutCoordinator = [[SignoutActionSheetCoordinator alloc]
       initWithBaseViewController:_viewController
                          browser:browser
                             rect:_viewController.view.frame
                             view:_viewController.view
         forceSnackbarOverToolbar:NO
-                      withSource:signout_source_metric];
+                      withSource:signout_source_metric
+                      completion:^(BOOL success) {
+                        [weakSelf handleAuthenticationOperationDidFinish];
+                      }];
   _signoutCoordinator.showUnavailableFeatureDialogHeader = YES;
-  __weak __typeof(self) weakSelf = self;
-  _signoutCoordinator.signoutCompletion = ^(BOOL success) {
-    [weakSelf handleAuthenticationOperationDidFinish];
-  };
   _signoutCoordinator.delegate = self;
   [_signoutCoordinator start];
 }

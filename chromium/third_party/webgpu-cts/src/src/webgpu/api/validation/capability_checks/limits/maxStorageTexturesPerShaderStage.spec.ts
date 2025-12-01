@@ -1,3 +1,4 @@
+import { getGPU } from '../../../../../common/util/navigator_gpu.js';
 import {
   range,
   reorder,
@@ -21,7 +22,7 @@ import {
   LimitsRequest,
   LimitTestsImpl,
   kBindingCombinations,
-  getStageVisibilityForBinidngCombination,
+  getStageVisibilityForBindingCombination,
   MaximumLimitValueTest,
   addMaximumLimitUpToDependentLimit,
 } from './limit_utils.js';
@@ -88,7 +89,7 @@ function skipIfNotEnoughStorageTexturesInStage(
 function skipIfAccessNotSupported(t: LimitTestsImpl, access: GPUStorageTextureAccess) {
   t.skipIf(
     (access === 'read-only' || access === 'read-write') &&
-      !navigator.gpu.wgslLanguageFeatures.has('readonly_and_readwrite_storage_textures'),
+      !getGPU(t.rec).wgslLanguageFeatures.has('readonly_and_readwrite_storage_textures'),
     `access = ${access} but navigator.gpu.wsglLanguageFeatures does not contain 'readonly_and_readwrite_storage_textures'`
   );
 }
@@ -232,7 +233,7 @@ g.test('createPipeline,at_over')
       .combine('access', kStorageTextureAccessValues)
       .filter(t =>
         filterWriteAccessInVertexStage(
-          getStageVisibilityForBinidngCombination(t.bindingCombination),
+          getStageVisibilityForBindingCombination(t.bindingCombination),
           t.access
         )
       )
@@ -257,7 +258,7 @@ g.test('createPipeline,at_over')
           `can not test ${testValue} bindings in same group because maxBindingsPerBindGroup = ${device.limits.maxBindingsPerBindGroup}`
         );
 
-        const visibility = getStageVisibilityForBinidngCombination(bindingCombination);
+        const visibility = getStageVisibilityForBindingCombination(bindingCombination);
         skipIfNotEnoughStorageTexturesInStage(t, visibility, testValue);
 
         const { wgslAccess } = storageTextureBindingTypeInfo({ access });

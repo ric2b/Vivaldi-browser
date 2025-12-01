@@ -27,6 +27,7 @@
 #import "ios/chrome/browser/webui/ui_bundled/autofill_and_password_manager_internals/password_manager_internals_ui_ios.h"
 #import "ios/chrome/browser/webui/ui_bundled/chrome_urls/chrome_urls_ui.h"
 #import "ios/chrome/browser/webui/ui_bundled/crashes_ui.h"
+#import "ios/chrome/browser/webui/ui_bundled/data_sharing_internals/data_sharing_internals_ui.h"
 #import "ios/chrome/browser/webui/ui_bundled/download_internals_ui.h"
 #import "ios/chrome/browser/webui/ui_bundled/flags_ui.h"
 #import "ios/chrome/browser/webui/ui_bundled/gcm/gcm_internals_ui.h"
@@ -42,6 +43,7 @@
 #import "ios/chrome/browser/webui/ui_bundled/optimization_guide_internals/optimization_guide_internals_ui.h"
 #import "ios/chrome/browser/webui/ui_bundled/policy/policy_ui.h"
 #import "ios/chrome/browser/webui/ui_bundled/prefs_internals_ui.h"
+#import "ios/chrome/browser/webui/ui_bundled/profile_internals/profile_internals_ui.h"
 #import "ios/chrome/browser/webui/ui_bundled/signin_internals_ui_ios.h"
 #import "ios/chrome/browser/webui/ui_bundled/terms_ui.h"
 #import "ios/chrome/browser/webui/ui_bundled/translate_internals/translate_internals_ui.h"
@@ -122,8 +124,13 @@ WebUIIOSFactoryFunction GetWebUIIOSFactoryFunction(const GURL& url) {
   if (url_host == kChromeUICrashesHost) {
     return &NewWebUIIOS<CrashesUI>;
   }
+  if (url_host == kChromeUIDataSharingInternalsHost) {
+    return &NewWebUIIOS<DataSharingInternalsUI>;
+  }
   if (url_host == kChromeUIDownloadInternalsHost) {
-    return &NewWebUIIOS<DownloadInternalsUI>;
+    return InternalDebugPagesEnabled()
+               ? &NewWebUIIOS<DownloadInternalsUI>
+               : &NewWebUIIOS<InternalDebugPagesDisabledUI>;
   }
   if (url_host == kChromeUIFlagsHost) {
     return &NewWebUIIOS<FlagsUI>;
@@ -134,11 +141,15 @@ WebUIIOSFactoryFunction GetWebUIIOSFactoryFunction(const GURL& url) {
   if (url_host == kChromeUIInspectHost) {
     return &NewWebUIIOS<InspectUI>;
   }
-  if (url_host == kChromeUIIntersitialsHost) {
-    return &NewWebUIIOS<InterstitialUI>;
+  if (url_host == kChromeUIInterstitialsHost) {
+    return InternalDebugPagesEnabled()
+               ? &NewWebUIIOS<InterstitialUI>
+               : &NewWebUIIOS<InternalDebugPagesDisabledUI>;
   }
   if (url_host == kChromeUILocalStateHost) {
-    return &NewWebUIIOS<LocalStateUI>;
+    return InternalDebugPagesEnabled()
+               ? &NewWebUIIOS<LocalStateUI>
+               : &NewWebUIIOS<InternalDebugPagesDisabledUI>;
   }
   if (url_host == kChromeUIManagementHost) {
     return &NewWebUIIOS<ManagementUI>;
@@ -163,6 +174,11 @@ WebUIIOSFactoryFunction GetWebUIIOSFactoryFunction(const GURL& url) {
   }
   if (url_host == kChromeUIPrefsInternalsHost) {
     return &NewWebUIIOS<PrefsInternalsUI>;
+  }
+  if (url.host_piece() == kChromeUIProfileInternalsHost) {
+    return InternalDebugPagesEnabled()
+               ? &NewWebUIIOS<ProfileInternalsUI>
+               : &NewWebUIIOS<InternalDebugPagesDisabledUI>;
   }
   if (url_host == kChromeUISignInInternalsHost) {
     return &NewWebUIIOS<SignInInternalsUIIOS>;

@@ -17,9 +17,14 @@
 - (void)refreshState;
 @end
 
+@protocol VivaldiPageZoomSettingsDelegate <NSObject>
+// Asks the delegate to show zoom settings.
+- (void)showVivaldiPageZoomSettings;
+@end
 
 @interface VivaldiPageZoomViewController :
     UIViewController <VivaldiPageZoomDialogConsumer>
 @property(nonatomic, weak) id<TextZoomCommands> commandHandler;
 @property(nonatomic, weak) id<PageZoomHandler> zoomHandler;
+@property(nonatomic, weak) id<VivaldiPageZoomSettingsDelegate> settingsDelegate;
 @end

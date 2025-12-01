@@ -107,7 +107,6 @@ bool VideoLayerImpl::WillDraw(DrawMode draw_mode,
         layer_tree_impl()->context_provider(),
         layer_tree_impl()->resource_provider(),
         layer_tree_impl()->layer_tree_frame_sink()->shared_image_interface(),
-        settings.use_stream_video_draw_quad,
         settings.use_gpu_memory_buffer_resources,
         layer_tree_impl()->max_texture_size());
   }
@@ -115,7 +114,8 @@ bool VideoLayerImpl::WillDraw(DrawMode draw_mode,
   return true;
 }
 
-void VideoLayerImpl::AppendQuads(viz::CompositorRenderPass* render_pass,
+void VideoLayerImpl::AppendQuads(const AppendQuadsContext& context,
+                                 viz::CompositorRenderPass* render_pass,
                                  AppendQuadsData* append_quads_data) {
   DCHECK(frame_);
 
@@ -210,14 +210,11 @@ void VideoLayerImpl::SetNeedsRedraw() {
 
 DamageReasonSet VideoLayerImpl::GetDamageReasons() const {
   // Treat all update_rect() as kVideoLayer updates. However keep
-  // LayerPropertyChanged() as kUntracked because it probably has nothing to do
-  // with the video itself.
-  DamageReasonSet reasons;
+  // LayerPropertyChanged() as default behavior because it probably has nothing
+  // to do with the video itself.
+  DamageReasonSet reasons = GetDamageReasonsFromLayerPropertyChange();
   if (!update_rect().IsEmpty()) {
     reasons.Put(DamageReason::kVideoLayer);
-  }
-  if (LayerPropertyChanged()) {
-    reasons.Put(DamageReason::kUntracked);
   }
   return reasons;
 }

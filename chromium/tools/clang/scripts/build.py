@@ -20,6 +20,7 @@ this build script on Mac:
 """
 
 import argparse
+import atexit
 import glob
 import io
 import json
@@ -32,6 +33,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 import urllib
 
 from update import (CDS_URL, CHROMIUM_DIR, CLANG_REVISION, LLVM_BUILD_DIR,
@@ -476,7 +478,7 @@ def BuildZStd():
 
 
 def DownloadPinnedClang():
-  PINNED_CLANG_VERSION = 'llvmorg-17-init-16420-g0c545a44-1'
+  PINNED_CLANG_VERSION = 'llvmorg-21-init-5118-g52cd27e6-4'
   DownloadAndUnpackPackage('clang', PINNED_CLANG_DIR, GetDefaultHostOs(),
                            PINNED_CLANG_VERSION)
 
@@ -569,9 +571,15 @@ def DownloadDebianSysroot(platform_name, skip_download=False):
 
   toolchain_name = f'debian_bullseye_{platform_name}_sysroot'
   output = os.path.join(LLVM_BUILD_TOOLS_DIR, toolchain_name)
-  U = toolchain_bucket + hashes[platform_name]
-  if not skip_download:
-    DownloadAndUnpack(U, output)
+  stamp_file = os.path.join(output, 'stamp')
+  version = hashes[platform_name]
+  if ReadStampFile(stamp_file) == version:
+    print(f'Sysroot for {platform_name} already up to date')
+  else:
+    U = toolchain_bucket + version
+    if not skip_download:
+      DownloadAndUnpack(U, output)
+      WriteStampFile(version, stamp_file)
 
   return output
 
@@ -610,7 +618,38 @@ def gn_arg(v):
       'True', 'False'))
 
 
+class Timer:
+  class Region:
+    def __init__(self, phase, parent):
+      self.parent = parent
+      self.phase = phase
+
+    def __enter__(self):
+      self.start = time.time()
+
+    def __exit__(self, *args):
+      elapsed = time.time() - self.start
+      self.parent.times.append((self.phase, elapsed))
+
+  def __init__(self):
+    self.times = []
+
+  def time(self, phase):
+    return Timer.Region(phase, self)
+
+  def dump(self):
+    if not self.times:
+      return
+    longest_phase = max(len(phase) for (phase, elapsed) in self.times)
+    longest_elapsed = max(len(str(int(elapsed))) for (phase, elapsed) in self.times)
+    print('-- timers --')
+    for (phase, elapsed) in self.times:
+      print('{}: {:{}.1f}'.format(phase.rjust(longest_phase), elapsed, longest_elapsed + 2))
+
 def main():
+  timer = Timer()
+  atexit.register(Timer.dump, timer)
+
   parser = argparse.ArgumentParser(description='Build Clang.')
   parser.add_argument('--bootstrap',
                       action='store_true',
@@ -697,11 +736,6 @@ def main():
 
   global CLANG_REVISION, PACKAGE_VERSION, LLVM_BUILD_DIR
 
-  # TODO(crbug.com/392929930): Remove in next Clang roll.
-  if args.llvm_force_head_revision:
-    global RELEASE_VERSION
-    RELEASE_VERSION = '21'
-
   if (args.pgo or args.thinlto) and not args.bootstrap:
     print('--pgo/--thinlto requires --bootstrap')
     return 1
@@ -754,7 +788,8 @@ def main():
     checkout_revision = CLANG_REVISION
 
   if not args.skip_checkout:
-    CheckoutGitRepo('LLVM monorepo', LLVM_GIT_URL, checkout_revision, LLVM_DIR)
+    with timer.time('checkout llvm'):
+      CheckoutGitRepo('LLVM monorepo', LLVM_GIT_URL, checkout_revision, LLVM_DIR)
 
   if args.llvm_force_head_revision:
     CLANG_REVISION = GetCommitDescription(checkout_revision)
@@ -767,16 +802,18 @@ def main():
   if not args.use_system_cmake:
     AddCMakeToPath()
 
-  if sys.platform == 'win32':
-    # CMake on Windows doesn't like depot_tools's ninja.bat wrapper.
-    ninja_dir = os.path.join(THIRD_PARTY_DIR, 'ninja')
-    os.environ['PATH'] = ninja_dir + os.pathsep + os.environ.get('PATH', '')
+  # CMake on Windows doesn't like depot_tools's ninja.bat wrapper.
+  # Using depot_tools's ninja wrapper also significantly slows down CMake
+  # compiler flag checks, so directly use the native ninja binary.
+  ninja_dir = os.path.join(THIRD_PARTY_DIR, 'ninja')
+  os.environ['PATH'] = ninja_dir + os.pathsep + os.environ.get('PATH', '')
 
   if sys.platform.startswith('linux'):
-    sysroot_amd64 = DownloadDebianSysroot('amd64', args.skip_checkout)
-    sysroot_i386 = DownloadDebianSysroot('i386', args.skip_checkout)
-    sysroot_arm = DownloadDebianSysroot('arm', args.skip_checkout)
-    sysroot_arm64 = DownloadDebianSysroot('arm64', args.skip_checkout)
+    with timer.time('get sysroots'):
+      sysroot_amd64 = DownloadDebianSysroot('amd64', args.skip_checkout)
+      sysroot_i386 = DownloadDebianSysroot('i386', args.skip_checkout)
+      sysroot_arm = DownloadDebianSysroot('arm', args.skip_checkout)
+      sysroot_arm64 = DownloadDebianSysroot('arm64', args.skip_checkout)
 
   if args.skip_build:
     return 0
@@ -859,7 +896,8 @@ def main():
     cc = args.host_cc
     cxx = args.host_cxx
   else:
-    DownloadPinnedClang()
+    with timer.time('get pinned clang'):
+      DownloadPinnedClang()
     if sys.platform == 'win32':
       cc = os.path.join(PINNED_CLANG_DIR, 'bin', 'clang-cl.exe')
       cxx = os.path.join(PINNED_CLANG_DIR, 'bin', 'clang-cl.exe')
@@ -905,14 +943,16 @@ def main():
   # Statically link libxml2 to make lld-link not require mt.exe on Windows,
   # and to make sure lld-link output on other platforms is identical to
   # lld-link on Windows (for cross-builds).
-  libxml_cmake_args, libxml_cflags = BuildLibXml2()
+  with timer.time('libxml2 build'):
+    libxml_cmake_args, libxml_cflags = BuildLibXml2()
   base_cmake_args += libxml_cmake_args
   cflags += libxml_cflags
   cxxflags += libxml_cflags
 
   if args.with_zstd:
     # Statically link zstd to make lld support zstd compression for debug info.
-    zstd_cmake_args, zstd_cflags = BuildZStd()
+    with timer.time('zstd build'):
+      zstd_cmake_args, zstd_cflags = BuildZStd()
     base_cmake_args += zstd_cmake_args
     cflags += zstd_cflags
     cxxflags += zstd_cflags
@@ -929,26 +969,27 @@ def main():
     ]
   elif sys.platform == 'darwin':
     lit_excludes += [
-        # Fails on macOS 14, crbug.com/332589870
-        '^.*Sanitizer.*Darwin/malloc_zone.cpp$',
         # Fails with a recent ld, crbug.com/332589870
-        '^.*ContinuousSyncMode/darwin-proof-of-concept.c$',
         '^.*instrprof-darwin-exports.c$',
-        # Fails on our mac builds, crbug.com/346289767
-        '^.*Interpreter/pretty-print.c$',
     ]
     if platform.machine() == 'arm64':
       lit_excludes += [
           # TODO(https://crbug.com/40270881): fix and re-enable
-          '^.*tools/dsymutil.*$',
           '^.*AddressSanitizer-arm64-darwin.*$',
           '^.*SanitizerCommon-lsan-arm64-Darwin.*$',
           '^.*SanitizerCommon-ubsan-arm64-Darwin.*Posix/dedup_token_length_test.cpp$',
       ]
+  elif sys.platform == 'win32':
+      lit_excludes += [
+          # TODO(https://crbug.com/404547503): fix and re-enable
+          '^.*Profile-x86_64.*ContinuousSyncMode/online-merging-windows.c$',
+      ]
 
-  test_env = None
+  test_env = os.environ.copy()
+  # Dump all FileCheck input on test failure.
+  test_env['FILECHECK_OPTS'] = '--dump-input-filter=all'
+  test_env['LIT_OPTS'] = '--show-flakypass'
   if lit_excludes:
-    test_env = os.environ.copy()
     test_env['LIT_FILTER_OUT'] = '|'.join(lit_excludes)
 
   if args.bootstrap:
@@ -1003,12 +1044,18 @@ def main():
     if cc is not None:  bootstrap_args.append('-DCMAKE_C_COMPILER=' + cc)
     if cxx is not None: bootstrap_args.append('-DCMAKE_CXX_COMPILER=' + cxx)
     if lld is not None: bootstrap_args.append('-DCMAKE_LINKER=' + lld)
-    RunCommand(['cmake'] + bootstrap_args + [os.path.join(LLVM_DIR, 'llvm')],
-               setenv=True)
-    RunCommand(['ninja'], setenv=True)
-    if args.run_tests:
-      RunCommand(['ninja', 'check-all'], env=test_env, setenv=True)
-    RunCommand(['ninja', 'install'], setenv=True)
+    with timer.time('bootstrap cmake'):
+      RunCommand(['cmake'] + bootstrap_args + [os.path.join(LLVM_DIR, 'llvm')],
+                 setenv=True)
+    with timer.time('bootstrap build'):
+      RunCommand(['ninja'], setenv=True)
+    # x86 mac toolchain builds are super slow, skip bootstrap tests
+    if args.run_tests and not (platform.machine() == 'x86_64'
+                               and sys.platform == 'darwin'):
+      with timer.time('bootstrap check-all'):
+        RunCommand(['ninja', 'check-all'], env=test_env, setenv=True)
+    with timer.time('bootstrap install'):
+      RunCommand(['ninja', 'install'], setenv=True)
 
     if sys.platform == 'win32':
       cc = os.path.join(LLVM_BOOTSTRAP_INSTALL_DIR, 'bin', 'clang-cl.exe')
@@ -1052,9 +1099,11 @@ def main():
     if cxx is not None: instrument_args.append('-DCMAKE_CXX_COMPILER=' + cxx)
     if lld is not None: instrument_args.append('-DCMAKE_LINKER=' + lld)
 
-    RunCommand(['cmake'] + instrument_args + [os.path.join(LLVM_DIR, 'llvm')],
-               setenv=True)
-    RunCommand(['ninja', 'clang'], setenv=True)
+    with timer.time('pgo cmake'):
+      RunCommand(['cmake'] + instrument_args + [os.path.join(LLVM_DIR, 'llvm')],
+                 setenv=True)
+    with timer.time('pgo build'):
+      RunCommand(['ninja', 'clang'], setenv=True)
     print('Instrumented compiler built.')
 
     # Train by building some C++ code.
@@ -1079,23 +1128,24 @@ def main():
     # from more platforms, and by doing some linking so that lld can benefit
     # from PGO as well. Perhaps the training could be done asynchronously by
     # dedicated buildbots that upload profiles to the cloud.
-    training_source = 'pgo_training-1.ii'
-    with open(training_source, 'wb') as f:
-      DownloadUrl(CDS_URL + '/' + training_source, f)
-    train_cmd = [os.path.join(LLVM_INSTRUMENTED_DIR, 'bin', 'clang++'),
-                '-target', 'x86_64-unknown-unknown', '-O2', '-g', '-std=c++14',
-                 '-fno-exceptions', '-fno-rtti', '-w', '-c', training_source]
-    if sys.platform == 'darwin':
-      train_cmd.extend(['-isysroot', isysroot])
-    RunCommand(train_cmd, setenv=True)
+    with timer.time('pgo training'):
+      training_source = 'pgo_training-1.ii'
+      with open(training_source, 'wb') as f:
+        DownloadUrl(CDS_URL + '/' + training_source, f)
+      train_cmd = [os.path.join(LLVM_INSTRUMENTED_DIR, 'bin', 'clang++'),
+                  '-target', 'x86_64-unknown-unknown', '-O2', '-g', '-std=c++14',
+                   '-fno-exceptions', '-fno-rtti', '-w', '-c', training_source]
+      if sys.platform == 'darwin':
+        train_cmd.extend(['-isysroot', isysroot])
+      RunCommand(train_cmd, setenv=True)
 
-    # Merge profiles.
-    profdata = os.path.join(LLVM_BOOTSTRAP_INSTALL_DIR, 'bin', 'llvm-profdata')
-    RunCommand(
-        [profdata, 'merge', '-output=' + LLVM_PROFDATA_FILE] +
-        glob.glob(os.path.join(LLVM_INSTRUMENTED_DIR, 'profiles', '*.profraw')),
-        setenv=True)
-    print('Profile generated.')
+      # Merge profiles.
+      profdata = os.path.join(LLVM_BOOTSTRAP_INSTALL_DIR, 'bin', 'llvm-profdata')
+      RunCommand(
+          [profdata, 'merge', '-output=' + LLVM_PROFDATA_FILE] +
+          glob.glob(os.path.join(LLVM_INSTRUMENTED_DIR, 'profiles', '*.profraw')),
+          setenv=True)
+      print('Profile generated.')
 
   deployment_target = '10.12'
 
@@ -1387,9 +1437,10 @@ def main():
     else:
       model_path = args.with_ml_inliner_model
     if not args.tf_path:
-      tf_path = subprocess.check_output(
-          ['vpython3', os.path.join(THIS_DIR, 'get_tensorflow.py')],
-          universal_newlines=True).rstrip()
+      with timer.time('get tensorflow'):
+        tf_path = subprocess.check_output(
+            ['vpython3', os.path.join(THIS_DIR, 'get_tensorflow.py')],
+            universal_newlines=True).rstrip()
     else:
       tf_path = args.tf_path
     print('Embedding MLGO inliner model at %s using Tensorflow at %s' %
@@ -1438,14 +1489,17 @@ def main():
     RmTree(LLVM_BUILD_DIR)
   EnsureDirExists(LLVM_BUILD_DIR)
   os.chdir(LLVM_BUILD_DIR)
-  RunCommand(['cmake'] + cmake_args + [os.path.join(LLVM_DIR, 'llvm')],
-             setenv=True,
-             env=deployment_env)
-  RunCommand(['ninja'], setenv=True)
+  with timer.time('cmake'):
+    RunCommand(['cmake'] + cmake_args + [os.path.join(LLVM_DIR, 'llvm')],
+               setenv=True,
+               env=deployment_env)
+  with timer.time('build'):
+    RunCommand(['ninja'], setenv=True)
 
   if chrome_tools:
-    # If any Chromium tools were built, install those now.
-    RunCommand(['ninja', 'cr-install'], setenv=True)
+    with timer.time('cr-install'):
+      # If any Chromium tools were built, install those now.
+      RunCommand(['ninja', 'cr-install'], setenv=True)
 
   if args.bolt:
     print('Performing BOLT post-link optimizations.')
@@ -1453,12 +1507,13 @@ def main():
     os.mkdir(bolt_profiles_dir)
 
     # Instrument.
-    RunCommand([
-        'bin/llvm-bolt', 'bin/clang', '-o', 'bin/clang-bolt.inst',
-        '-instrument', '--instrumentation-file-append-pid',
-        '--instrumentation-file=' +
-        os.path.join(bolt_profiles_dir, 'prof.fdata')
-    ])
+    with timer.time('bolt instrument'):
+      RunCommand([
+          'bin/llvm-bolt', 'bin/clang', '-o', 'bin/clang-bolt.inst',
+          '-instrument', '--instrumentation-file-append-pid',
+          '--instrumentation-file=' +
+          os.path.join(bolt_profiles_dir, 'prof.fdata')
+      ])
     RunCommand([
         'ln', '-s',
         os.path.join(LLVM_BUILD_DIR, 'bin', 'clang-bolt.inst'),
@@ -1484,26 +1539,29 @@ def main():
         os.path.join(LLVM_BUILD_DIR, 'bin/clang-bolt.inst'),
         '-DCMAKE_ASM_COMPILER_ID=Clang',
     ]
-    RunCommand(['cmake'] + bolt_train_cmake_args +
-               [os.path.join(LLVM_DIR, 'llvm')])
-    RunCommand([
-        'ninja', 'tools/clang/lib/Sema/CMakeFiles/obj.clangSema.dir/Sema.cpp.o'
-    ])
+    with timer.time('bolt training cmake'):
+      RunCommand(['cmake'] + bolt_train_cmake_args +
+                 [os.path.join(LLVM_DIR, 'llvm')])
+    with timer.time('bolt training benchmark'):
+      RunCommand([
+          'ninja', 'tools/clang/lib/Sema/CMakeFiles/obj.clangSema.dir/Sema.cpp.o'
+      ])
     os.chdir(LLVM_BUILD_DIR)
 
     # Optimize.
-    RunCommand([
-        sys.executable,
-        os.path.join(LLVM_DIR, 'clang', 'utils', 'perf-training',
-                     'perf-helper.py'), 'merge-fdata', 'bin/merge-fdata',
-        'merged.fdata', bolt_profiles_dir
-    ])
-    RunCommand([
-        'bin/llvm-bolt', 'bin/clang', '-o', 'bin/clang-bolt.opt', '-data',
-        'merged.fdata', '-reorder-blocks=ext-tsp', '-reorder-functions=hfsort+',
-        '-split-functions', '-split-all-cold', '-split-eh', '-dyno-stats',
-        '-icf=1', '-use-gnu-stack', '-use-old-text'
-    ])
+    with timer.time('bolt optimize'):
+      RunCommand([
+          sys.executable,
+          os.path.join(LLVM_DIR, 'clang', 'utils', 'perf-training',
+                       'perf-helper.py'), 'merge-fdata', 'bin/merge-fdata',
+          'merged.fdata', bolt_profiles_dir
+      ])
+      RunCommand([
+          'bin/llvm-bolt', 'bin/clang', '-o', 'bin/clang-bolt.opt', '-data',
+          'merged.fdata', '-reorder-blocks=ext-tsp', '-reorder-functions=hfsort+',
+          '-split-functions', '-split-all-cold', '-split-eh', '-dyno-stats',
+          '-icf=1', '-use-gnu-stack', '-use-old-text'
+      ])
 
     # Overwrite clang, preserving its timestamp so ninja doesn't rebuild it.
     RunCommand(['touch', '-r', 'bin/clang', 'bin/clang-bolt.opt'])
@@ -1516,18 +1574,23 @@ def main():
 
   # Run tests.
   if (chrome_tools and (args.run_tests or args.llvm_force_head_revision)):
-    RunCommand(['ninja', '-C', LLVM_BUILD_DIR, 'cr-check-all'], setenv=True)
+    with timer.time('cr-check-all'):
+      RunCommand(['ninja', '-C', LLVM_BUILD_DIR, 'cr-check-all'], setenv=True)
 
   if args.run_tests:
-    RunCommand(['ninja', '-C', LLVM_BUILD_DIR, 'check-all'],
-               env=test_env,
-               setenv=True)
+    with timer.time('check-all'):
+      RunCommand(['ninja', '-C', LLVM_BUILD_DIR, 'check-all'],
+                 env=test_env,
+                 setenv=True)
   if args.install_dir:
-    RunCommand(['ninja', 'install'], setenv=True)
+    with timer.time('install'):
+      RunCommand(['ninja', 'install'], setenv=True)
 
   WriteStampFile(PACKAGE_VERSION, STAMP_FILE)
   WriteStampFile(PACKAGE_VERSION, FORCE_HEAD_REVISION_FILE)
+
   print('Clang build was successful.')
+
   return 0
 
 

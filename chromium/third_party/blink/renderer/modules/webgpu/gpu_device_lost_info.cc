@@ -10,7 +10,7 @@ GPUDeviceLostInfo::GPUDeviceLostInfo(const wgpu::DeviceLostReason reason,
                                      const String& message) {
   switch (reason) {
     case wgpu::DeviceLostReason::Unknown:
-    case wgpu::DeviceLostReason::InstanceDropped:
+    case wgpu::DeviceLostReason::CallbackCancelled:
     case wgpu::DeviceLostReason::FailedCreation:
       reason_ = V8GPUDeviceLostReason::Enum::kUnknown;
       break;

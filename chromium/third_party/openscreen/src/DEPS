@@ -66,14 +66,14 @@ deps = {
   # https://chromium.googlesource.com/chromium/src/buildtools/+/refs/heads/main
   'buildtools': {
     'url': Var('chromium_git') + '/chromium/src/buildtools' +
-      '@' + '56013b77b6c0a650d00bde40e750e7c3b7c6bc3d',
+      '@' + '00459762409cb29cecf398a23cdb0cae918b7515',
   },
 
   # and here:
   # https://chromium.googlesource.com/chromium/src/build/+/refs/heads/main
   'build': {
     'url': Var('chromium_git') + '/chromium/src/build' +
-      '@' + '4a2298be62524fd7f8d5a47eb82db333f0dd95de',
+      '@' + '043f0ac1c5fc7a29960fda36ce6689a96bdc11ee',
     'condition': 'not build_with_chromium',
   },
 
@@ -169,7 +169,7 @@ deps = {
   # To roll forward, use quiche_revision from chromium/src/DEPS.
   'third_party/quiche/src': {
     'url': Var('quiche_git') + '/quiche.git' +
-      '@' + '64cdc52a285d82dfd8756e0e30d15c2d08df6081',  # 2024-04-08
+      '@' + '5a433bd7de22c23700d046346bd3d3afe5c9cd07',  # 2025-02-10
     'condition': 'not build_with_chromium',
   },
 
@@ -189,7 +189,7 @@ deps = {
   'third_party/abseil/src': {
     'url': Var('chromium_git') +
       '/external/github.com/abseil/abseil-cpp.git' + '@' +
-      '53e6dae02bf0d9a5a1d304a3d637c083376b86a1',  # 2024-03-06
+      'dd4c89bd657f1e247ce5111a5c89ffe6ccfd0c92',  # 2025-01-30
     'condition': 'not build_with_chromium',
   },
 

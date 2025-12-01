@@ -48,7 +48,7 @@ bootloader, using the vendor-specific protocol.
 While the protocol from the kernel driver to the touch device for the firmware
 update is vendor-specific, [Chrome OS requires that the kernel driver use the
 request_firmware hotplug
-interface](https://www.kernel.org/doc/Documentation/firmware_class/README) to
+interface](https://docs.kernel.org/driver-api/firmware/request_firmware.html) to
 expose the same interface to userspace:
 
 At a high level, request_firmware allows the kernel driver to access a file for
@@ -96,7 +96,7 @@ update the device.
 
 The touch firmware updater consists of a set of scripts and firmware files. The
 firmware update script is available in a [Chromium OS source
-tree](http://git.chromium.org/gitweb/?p=chromiumos/platform/touch_updater.git;a=tree;f=scripts).
+tree](https://chromium.googlesource.com/chromiumos/platform/touch_updater/+/refs/heads/main/scripts).
 
 The files used by the touch firmware updater (as seen on the filesystem of a
 target system) are organized as follows:
@@ -133,7 +133,7 @@ are nonresponsive for the duration of the update, and during this process a user
 should not be able to interact with the device.
 
 For details, see the
-[chromeos-touch-update.conf](http://git.chromium.org/gitweb/?p=chromiumos/platform/touch_updater.git;a=blob;f=scripts/chromeos-touch-update.conf;hb=HEAD)
+[boot-update-firmware.conf](https://source.chromium.org/chromiumos/chromiumos/codesearch/+/main:src/platform2/init/upstart/boot-update-firmware.conf;l=150-156)
 job.
 
 The updater also runs as a part of the recovery process from a recovery image

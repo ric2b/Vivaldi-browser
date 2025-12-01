@@ -5,7 +5,6 @@
 package org.chromium.chrome.browser.autofill.editors;
 
 import static org.mockito.ArgumentMatchers.anyInt;
-import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.when;
@@ -39,7 +38,6 @@ import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.Restriction;
 import org.chromium.chrome.browser.autofill.AutofillAddress;
 import org.chromium.chrome.browser.autofill.AutofillProfileBridge;
-import org.chromium.chrome.browser.autofill.AutofillProfileBridge.AutofillAddressUiComponent;
 import org.chromium.chrome.browser.autofill.AutofillProfileBridgeJni;
 import org.chromium.chrome.browser.autofill.PersonalDataManager;
 import org.chromium.chrome.browser.autofill.PersonalDataManagerFactory;
@@ -55,6 +53,8 @@ import org.chromium.chrome.browser.signin.services.IdentityServicesProvider;
 import org.chromium.chrome.browser.sync.SyncServiceFactory;
 import org.chromium.chrome.test.ChromeJUnit4RunnerDelegate;
 import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
+import org.chromium.components.autofill.AutofillAddressEditorUiInfo;
+import org.chromium.components.autofill.AutofillAddressUiComponent;
 import org.chromium.components.autofill.AutofillProfile;
 import org.chromium.components.autofill.FieldType;
 import org.chromium.components.autofill.RecordType;
@@ -165,21 +165,14 @@ public class AddressEditorRenderTest {
 
         AutofillProfileBridgeJni.setInstanceForTesting(mAutofillProfileBridgeJni);
         PhoneNumberUtilJni.setInstanceForTesting(mPhoneNumberUtilJni);
-        doAnswer(
-                        invocation -> {
-                            List<Integer> requiredFields =
-                                    (List<Integer>) invocation.getArguments()[1];
-                            requiredFields.addAll(
-                                    List.of(
-                                            FieldType.NAME_FULL,
-                                            FieldType.ADDRESS_HOME_CITY,
-                                            FieldType.ADDRESS_HOME_DEPENDENT_LOCALITY,
-                                            FieldType.ADDRESS_HOME_ZIP));
-                            return null;
-                        })
-                .when(mAutofillProfileBridgeJni)
-                .getRequiredFields(anyString(), anyList());
-
+        when(mAutofillProfileBridgeJni.getRequiredFields(anyString()))
+                .thenReturn(
+                        new int[] {
+                            FieldType.NAME_FULL,
+                            FieldType.ADDRESS_HOME_CITY,
+                            FieldType.ADDRESS_HOME_DEPENDENT_LOCALITY,
+                            FieldType.ADDRESS_HOME_ZIP
+                        });
         runOnUiThreadBlocking(
                 () -> {
                     when(mSyncService.isSyncFeatureEnabled()).thenReturn(false);
@@ -222,34 +215,8 @@ public class AddressEditorRenderTest {
     }
 
     private void setUpAddressUiComponents(List<AutofillAddressUiComponent> addressUiComponents) {
-        doAnswer(
-                        invocation -> {
-                            List<Integer> componentIds =
-                                    (List<Integer>) invocation.getArguments()[3];
-                            List<String> componentNames =
-                                    (List<String>) invocation.getArguments()[4];
-                            List<Integer> componentRequired =
-                                    (List<Integer>) invocation.getArguments()[5];
-                            List<Integer> componentLength =
-                                    (List<Integer>) invocation.getArguments()[6];
-
-                            for (AutofillAddressUiComponent component : addressUiComponents) {
-                                componentIds.add(component.id);
-                                componentNames.add(component.label);
-                                componentRequired.add(component.isRequired ? 1 : 0);
-                                componentLength.add(component.isFullLine ? 1 : 0);
-                            }
-                            return "EN";
-                        })
-                .when(mAutofillProfileBridgeJni)
-                .getAddressUiComponents(
-                        anyString(),
-                        anyString(),
-                        anyInt(),
-                        anyList(),
-                        anyList(),
-                        anyList(),
-                        anyList());
+        when(mAutofillProfileBridgeJni.getAddressEditorUiInfo(anyString(), anyString(), anyInt()))
+                .thenReturn(new AutofillAddressEditorUiInfo("EN", addressUiComponents));
     }
 
     @Test

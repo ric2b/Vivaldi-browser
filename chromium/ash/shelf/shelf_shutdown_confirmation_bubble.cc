@@ -145,7 +145,8 @@ ShelfShutdownConfirmationBubble::ShelfShutdownConfirmationBubble(
       views::LayoutProvider::Get()->GetCornerRadiusMetric(
           views::Emphasis::kHigh));
   GetBubbleFrameView()->SetBubbleBorder(std::move(bubble_border));
-  GetBubbleFrameView()->SetBackgroundColor(GetBackgroundColor());
+  GetBubbleFrameView()->SetBackgroundColor(background_color());
+
   // The bubble content size changes after border setting, therefore resize
   // the widget to its content.
   // TODO(crbug.com/41493925): widget should autoresize to its content.
@@ -157,7 +158,7 @@ ShelfShutdownConfirmationBubble::ShelfShutdownConfirmationBubble(
       ShelfShutdownConfirmationBubble::BubbleAction::kOpened);
 
   GetViewAccessibility().SetRole(ax::mojom::Role::kDialog);
-  GetViewAccessibility().SetName(title_->GetText());
+  GetViewAccessibility().SetName(std::u16string(title_->GetText()));
 
   title_text_changed_subscription_ = title_->AddTextChangedCallback(
       base::BindRepeating(&ShelfShutdownConfirmationBubble::OnTitleTextChanged,
@@ -189,12 +190,12 @@ void ShelfShutdownConfirmationBubble::OnThemeChanged() {
       AshColorProvider::ContentLayerType::kButtonLabelColor);
   cancel_->SetEnabledTextColors(button_color);
   confirm_->SetEnabledTextColors(button_color);
-  set_color(ShelfConfig::Get()->GetDefaultShelfColor(GetWidget()));
+  set_background_color(ShelfConfig::Get()->GetDefaultShelfColor(GetWidget()));
 }
 
 std::u16string ShelfShutdownConfirmationBubble::GetAccessibleWindowTitle()
     const {
-  return title_->GetText();
+  return std::u16string(title_->GetText());
 }
 
 void ShelfShutdownConfirmationBubble::OnCancelled() {

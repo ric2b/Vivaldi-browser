@@ -20,6 +20,7 @@
 #include <openssl/aead.h>
 #include <openssl/aes.h>
 #include <openssl/bn.h>
+#include <openssl/bytestring.h>
 #include <openssl/crypto.h>
 #include <openssl/ctrdrbg.h>
 #include <openssl/des.h>
@@ -33,6 +34,7 @@
 #include <openssl/rsa.h>
 #include <openssl/sha.h>
 
+#include "../../crypto/fipsmodule/bcm_interface.h"
 #include "../../crypto/fipsmodule/rand/internal.h"
 #include "../../crypto/fipsmodule/tls/internal.h"
 #include "../../crypto/internal.h"
@@ -405,6 +407,108 @@ static int run_test() {
 
   printf("  got ");
   hexdump(dh_result, sizeof(dh_result));
+
+  /* ML-KEM */
+  printf("About to generate ML-KEM key:\n");
+  auto mlkem_public_key_bytes =
+      std::make_unique<uint8_t[]>(BCM_MLKEM768_PUBLIC_KEY_BYTES);
+  auto mlkem_private_key = std::make_unique<BCM_mlkem768_private_key>();
+  if (BCM_mlkem768_generate_key_fips(mlkem_public_key_bytes.get(), nullptr,
+                                     mlkem_private_key.get()) !=
+      bcm_status::approved) {
+    fprintf(stderr, "ML-KEM generation failed");
+    return 0;
+  }
+  printf("  got ");
+  hexdump(mlkem_public_key_bytes.get(), BCM_MLKEM768_PUBLIC_KEY_BYTES);
+
+  printf("About to do ML-KEM encap:\n");
+  auto mlkem_ciphertext =
+      std::make_unique<uint8_t[]>(BCM_MLKEM768_CIPHERTEXT_BYTES);
+  uint8_t mlkem_shared_secret[BCM_MLKEM_SHARED_SECRET_BYTES];
+  auto mlkem_public_key = std::make_unique<BCM_mlkem768_public_key>();
+  BCM_mlkem768_public_from_private(mlkem_public_key.get(),
+                                   mlkem_private_key.get());
+  if (BCM_mlkem768_encap(mlkem_ciphertext.get(), mlkem_shared_secret,
+                         mlkem_public_key.get()) != bcm_infallible::approved) {
+    fprintf(stderr, "ML-KEM encap failed");
+    return 0;
+  }
+  printf("  got ");
+  hexdump(mlkem_shared_secret, sizeof(mlkem_shared_secret));
+
+  printf("About to do ML-KEM decap:\n");
+  if (BCM_mlkem768_decap(mlkem_shared_secret, mlkem_ciphertext.get(),
+                         BCM_MLKEM768_CIPHERTEXT_BYTES,
+                         mlkem_private_key.get()) != bcm_status::approved) {
+    fprintf(stderr, "ML-KEM decap failed");
+    return 0;
+  }
+  printf("  got ");
+  hexdump(mlkem_shared_secret, sizeof(mlkem_shared_secret));
+
+  /* ML-DSA */
+  printf("About to generate ML-DSA key:\n");
+  auto mldsa_public_key_bytes =
+      std::make_unique<uint8_t[]>(BCM_MLDSA65_PUBLIC_KEY_BYTES);
+  uint8_t mldsa_seed[BCM_MLDSA_SEED_BYTES];
+  auto mldsa_priv = std::make_unique<BCM_mldsa65_private_key>();
+  if (BCM_mldsa65_generate_key_fips(mldsa_public_key_bytes.get(), mldsa_seed,
+                                    mldsa_priv.get()) != bcm_status::approved) {
+    fprintf(stderr, "ML-DSA keygen failed");
+    return 0;
+  }
+  printf("  got ");
+  hexdump(mldsa_public_key_bytes.get(), BCM_MLDSA65_PUBLIC_KEY_BYTES);
+
+  printf("About to ML-DSA sign:\n");
+  auto mldsa_sig = std::make_unique<uint8_t[]>(BCM_MLDSA65_SIGNATURE_BYTES);
+  if (BCM_mldsa65_sign(mldsa_sig.get(), mldsa_priv.get(), nullptr, 0, nullptr,
+                       0) != bcm_status::approved) {
+    fprintf(stderr, "ML-DSA sign failed");
+    return 0;
+  }
+  printf("  got ");
+  hexdump(mldsa_sig.get(), BCM_MLDSA65_SIGNATURE_BYTES);
+
+  printf("About to ML-DSA verify:\n");
+  auto mldsa_pub = std::make_unique<BCM_mldsa65_public_key>();
+  if (BCM_mldsa65_public_from_private(mldsa_pub.get(), mldsa_priv.get()) !=
+          bcm_status::approved ||
+      BCM_mldsa65_verify(mldsa_pub.get(), mldsa_sig.get(), nullptr, 0, nullptr,
+                         0) != bcm_status::approved) {
+    fprintf(stderr, "ML-DSA verify failed");
+    return 0;
+  }
+
+  /* SLH-DSA */
+  printf("About to generate SLH-DSA key:\n");
+  uint8_t slhdsa_seed[3 * BCM_SLHDSA_SHA2_128S_N] = {0};
+  uint8_t slhdsa_pub[BCM_SLHDSA_SHA2_128S_PUBLIC_KEY_BYTES];
+  uint8_t slhdsa_priv[BCM_SLHDSA_SHA2_128S_PRIVATE_KEY_BYTES];
+  BCM_slhdsa_sha2_128s_generate_key_from_seed(slhdsa_pub, slhdsa_priv,
+                                              slhdsa_seed);
+  printf("  got ");
+  hexdump(slhdsa_pub, sizeof(slhdsa_pub));
+
+  printf("About to SLH-DSA sign:\n");
+  auto slhdsa_sig =
+      std::make_unique<uint8_t[]>(BCM_SLHDSA_SHA2_128S_SIGNATURE_BYTES);
+  if (BCM_slhdsa_sha2_128s_sign(slhdsa_sig.get(), slhdsa_priv, nullptr, 0,
+                                nullptr, 0) != bcm_status::approved) {
+    fprintf(stderr, "SLH-DSA sign failed");
+    return 0;
+  }
+  printf("  got ");
+  hexdump(slhdsa_sig.get(), 128);  // value too long to fully print
+
+  printf("About to SLH-DSA verify:\n");
+  if (BCM_slhdsa_sha2_128s_verify(
+          slhdsa_sig.get(), BCM_SLHDSA_SHA2_128S_SIGNATURE_BYTES, slhdsa_pub,
+          nullptr, 0, nullptr, 0) != bcm_status::approved) {
+    fprintf(stderr, "SLH-DSA verify failed");
+    return 0;
+  }
 
   printf("PASS\n");
   return 1;

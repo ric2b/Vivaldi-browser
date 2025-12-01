@@ -26,7 +26,8 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.Mock;
-import org.mockito.MockitoAnnotations;
+import org.mockito.junit.MockitoJUnit;
+import org.mockito.junit.MockitoRule;
 import org.robolectric.annotation.Config;
 import org.robolectric.annotation.Implementation;
 import org.robolectric.annotation.Implements;
@@ -57,7 +58,10 @@ import org.chromium.url.Origin;
 @Config(
         manifest = Config.NONE,
         shadows = {CustomTabActivityUrlLoadingTest.ShadowOrigin.class})
-@Features.EnableFeatures(ChromeFeatureList.CCT_PREWARM_TAB)
+@Features.EnableFeatures({
+    ChromeFeatureList.CCT_PREWARM_TAB,
+    ChromeFeatureList.ANDROID_WEB_APP_LAUNCH_HANDLER
+})
 public class CustomTabActivityUrlLoadingTest {
     @Implements(Origin.class)
     public static class ShadowOrigin {
@@ -66,6 +70,8 @@ public class CustomTabActivityUrlLoadingTest {
             return null;
         }
     }
+
+    @Rule public final MockitoRule mMockitoRule = MockitoJUnit.rule();
 
     @Rule
     public final CustomTabActivityContentTestEnvironment env =
@@ -85,7 +91,6 @@ public class CustomTabActivityUrlLoadingTest {
 
     @Before
     public void setUp() {
-        MockitoAnnotations.initMocks(this);
         UrlUtilitiesJni.setInstanceForTesting(mUrlUtilitiesJniMock);
         CustomTabAuthUrlHeuristicsJni.setInstanceForTesting(mCustomTabAuthUrlHeuristicsJniMock);
         WebContentsFactoryJni.setInstanceForTesting(mWebContentsFactoryJni);

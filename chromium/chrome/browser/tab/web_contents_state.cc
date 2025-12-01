@@ -16,6 +16,7 @@
 #include "base/android/jni_android.h"
 #include "base/android/jni_bytebuffer.h"
 #include "base/android/jni_string.h"
+#include "base/compiler_specific.h"
 #include "base/logging.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
@@ -302,8 +303,8 @@ ScopedJavaLocalRef<jobject> WriteSerializedNavigationsAsByteBuffer(
   ScopedJavaLocalRef<jobject> buffer =
       CreateByteBufferDirect(env, static_cast<jint>(pickle.size()));
   if (buffer) {
-    memcpy(env->GetDirectBufferAddress(buffer.obj()), pickle.data(),
-           pickle.size());
+    UNSAFE_TODO(memcpy(env->GetDirectBufferAddress(buffer.obj()), pickle.data(),
+                       pickle.size()));
   }
   return buffer;
 }
@@ -560,12 +561,6 @@ bool WebContentsState::ExtractNavigationEntries(
                << buffer.size() << ").";
     return false;
   }
-
-  // TODO(crbug.com/41493935): Remove this once we have enough data to
-  // conclude whether V0 and V1 are still used.
-  constexpr size_t kHighestVersion = 3;
-  UMA_HISTOGRAM_EXACT_LINEAR("Android.WebContentsState.SavedStateVersion",
-                             saved_state_version, kHighestVersion);
 
   if (!saved_state_version) {
     // When |saved_state_version| is 0, it predates our notion of each tab

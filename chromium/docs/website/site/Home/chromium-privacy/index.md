@@ -44,7 +44,7 @@ of code in Chromium are subject to the
 [Google Privacy Policy](https://www.google.com/policies/privacy/).
 Learn more about Google Chrome's privacy features
 [here](https://www.google.com/chrome/#safe) and specifically about the Privacy
-Sandbox effort [here](https://www.google.com/chrome/privacy-on-the-web/).
+Sandbox effort [here](https://privacysandbox.com/).
 To understand the privacy practices of some of the most important Chrome
 features that send data to Google, take a look at our series of
 [Help Center articles](https://support.google.com/chrome/answer/14225066).

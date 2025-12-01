@@ -8,6 +8,7 @@
 #include <optional>
 #include <string>
 #include <utility>
+#include <variant>
 #include <vector>
 
 #include "base/test/scoped_feature_list.h"
@@ -17,12 +18,11 @@
 #include "components/bookmarks/browser/bookmark_test_util.h"
 #include "components/bookmarks/test/test_bookmark_client.h"
 #include "components/bookmarks/test/test_matchers.h"
-#include "components/sync/base/features.h"
+#include "components/signin/public/base/signin_switches.h"
 #include "components/sync_bookmarks/bookmark_model_view.h"
 #include "components/sync_bookmarks/test_bookmark_model_view.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/abseil-cpp/absl/types/variant.h"
 #include "url/gurl.h"
 
 namespace sync_bookmarks {
@@ -64,16 +64,16 @@ class UrlBuilder {
 // Test class to build bookmark folders and compactly in tests.
 class FolderBuilder {
  public:
-  using FolderOrUrl = absl::variant<FolderBuilder, UrlBuilder>;
+  using FolderOrUrl = std::variant<FolderBuilder, UrlBuilder>;
 
   static void AddChildTo(BookmarkModelView* model,
                          const bookmarks::BookmarkNode* parent,
                          const FolderOrUrl& folder_or_url) {
-    if (absl::holds_alternative<UrlBuilder>(folder_or_url)) {
-      absl::get<UrlBuilder>(folder_or_url).Build(model, parent);
+    if (std::holds_alternative<UrlBuilder>(folder_or_url)) {
+      std::get<UrlBuilder>(folder_or_url).Build(model, parent);
     } else {
-      CHECK(absl::holds_alternative<FolderBuilder>(folder_or_url));
-      absl::get<FolderBuilder>(folder_or_url).Build(model, parent);
+      CHECK(std::holds_alternative<FolderBuilder>(folder_or_url));
+      std::get<FolderBuilder>(folder_or_url).Build(model, parent);
     }
   }
 
@@ -138,7 +138,7 @@ class LocalBookmarkModelMergerTest : public testing::Test {
   ~LocalBookmarkModelMergerTest() override = default;
 
   base::test::ScopedFeatureList feature_list_{
-      syncer::kSyncEnableBookmarksInTransportMode};
+      switches::kSyncEnableBookmarksInTransportMode};
 };
 
 TEST_F(LocalBookmarkModelMergerTest,

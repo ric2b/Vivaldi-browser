@@ -23,17 +23,16 @@
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
 #include "chrome/browser/ui/exclusive_access/exclusive_access_manager.h"
 #include "chrome/browser/ui/omnibox/omnibox_tab_helper.h"
-#include "chrome/browser/ui/tabs/public/tab_interface.h"
 #include "chrome/browser/ui/toasts/api/toast_id.h"
 #include "chrome/browser/ui/toasts/api/toast_registry.h"
 #include "chrome/browser/ui/toasts/api/toast_specification.h"
-#include "chrome/browser/ui/toasts/toast_dismiss_menu_model.h"
 #include "chrome/browser/ui/toasts/toast_features.h"
 #include "chrome/browser/ui/toasts/toast_metrics.h"
 #include "chrome/browser/ui/toasts/toast_view.h"
 #include "chrome/common/pref_names.h"
 #include "components/omnibox/common/omnibox_focus_state.h"
 #include "components/prefs/pref_service.h"
+#include "components/tab_collections/public/tab_interface.h"
 #include "content/public/browser/web_contents.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/views/bubble/bubble_dialog_delegate_view.h"
@@ -47,14 +46,6 @@
 
 #include "app/vivaldi_apptools.h"
 #include "ui/vivaldi_browser_window.h"
-
-namespace {
-bool ShouldAddDismissMenuOptions(const ToastSpecification* spec) {
-  return base::FeatureList::IsEnabled(toast_features::kToastRefinements) &&
-         !spec->has_close_button() && !spec->has_menu();
-}
-
-}  // namespace
 
 ToastParams::ToastParams(ToastId id) : toast_id(id) {}
 ToastParams::ToastParams(ToastParams&& other) noexcept = default;
@@ -237,12 +228,15 @@ void ToastController::ShowToast(ToastParams params) {
       toast_registry_->GetToastSpecification(params.toast_id);
   CHECK(current_toast_spec);
   CHECK_EQ(current_toast_spec->has_menu(), !!params.menu_model);
+  CHECK(current_toast_spec->body_string_id() != 0 ||
+        params.body_string_override.has_value());
+  CHECK(params.body_string_replacement_params.empty() ||
+        !params.body_string_cardinality_param.has_value());
 
   currently_showing_toast_id_ = params.toast_id;
   const bool is_actionable =
       current_toast_spec->action_button_string_id().has_value() ||
-      current_toast_spec->has_menu() ||
-      ShouldAddDismissMenuOptions(current_toast_spec);
+      current_toast_spec->has_menu();
   base::TimeDelta timeout =
       is_actionable ? toast_features::kToastTimeout.Get()
                     : toast_features::kToastWithoutActionTimeout.Get();
@@ -290,11 +284,15 @@ void ToastController::CreateToast(ToastParams params,
   const ui::ImageModel* image_override = params.image_override.has_value()
                                              ? &params.image_override.value()
                                              : nullptr;
+  const std::u16string body_string =
+      params.body_string_override.has_value()
+          ? params.body_string_override.value()
+          : FormatString(spec->body_string_id(),
+                         params.body_string_replacement_params,
+                         params.body_string_cardinality_param);
   auto toast_view = std::make_unique<toasts::ToastView>(
-      anchor_view,
-      FormatString(spec->body_string_id(),
-                   params.body_string_replacement_params),
-      spec->icon(), image_override, ShouldRenderToastOverWebContents(),
+      anchor_view, body_string, spec->icon(), image_override,
+      ShouldRenderToastOverWebContents(),
       base::BindRepeating(&RecordToastDismissReason, params.toast_id));
 
   if (spec->has_close_button()) {
@@ -305,18 +303,14 @@ void ToastController::CreateToast(ToastParams params,
   if (spec->action_button_string_id().has_value()) {
     toast_view->AddActionButton(
         FormatString(spec->action_button_string_id().value(),
-                     params.action_button_string_replacement_params),
+                     params.action_button_string_replacement_params,
+                     std::nullopt),
         spec->action_button_callback().Then(base::BindRepeating(
             &RecordToastActionButtonClicked, params.toast_id)));
   }
 
   if (spec->has_menu()) {
     toast_view->AddMenu(std::move(params.menu_model));
-  }
-
-  if (ShouldAddDismissMenuOptions(spec)) {
-    toast_view->AddMenu(
-        std::make_unique<ToastDismissMenuModel>(params.toast_id));
   }
 
   toast_view_ = toast_view.get();
@@ -352,8 +346,13 @@ void ToastController::CreateToast(ToastParams params,
 
 std::u16string ToastController::FormatString(
     int string_id,
-    std::vector<std::u16string> replacements) {
-  return l10n_util::GetStringFUTF16(string_id, replacements, nullptr);
+    std::vector<std::u16string> replacements,
+    std::optional<int> cardinality) {
+  if (cardinality.has_value()) {
+    return l10n_util::GetPluralStringFUTF16(string_id, cardinality.value());
+  } else {
+    return l10n_util::GetStringFUTF16(string_id, replacements, nullptr);
+  }
 }
 
 void ToastController::OnFullscreenStateChanged() {
@@ -362,7 +361,6 @@ void ToastController::OnFullscreenStateChanged() {
 }
 
 void ToastController::ClearTabScopedToasts() {
-  toast_close_timer_.Stop();
   if (next_toast_params_.has_value()) {
     const ToastId toast_id = next_toast_params_.value().toast_id;
     const ToastSpecification* const specification =
@@ -377,6 +375,7 @@ void ToastController::ClearTabScopedToasts() {
       !toast_registry_
            ->GetToastSpecification(currently_showing_toast_id_.value())
            ->is_global_scope()) {
+    toast_close_timer_.Stop();
     CloseToast(toasts::ToastCloseReason::kAbort);
   }
 }

@@ -11,7 +11,9 @@
 
 #include <algorithm>
 #include <array>
+#include <variant>
 
+#include "base/functional/overloaded.h"
 #include "base/logging.h"
 #include "base/notreached.h"
 #include "media/base/limits.h"
@@ -150,8 +152,9 @@ H265Decoder::~H265Decoder() = default;
   } while (0)
 
 void H265Decoder::SetStream(int32_t id, const DecoderBuffer& decoder_buffer) {
-  const uint8_t* ptr = decoder_buffer.data();
-  const size_t size = decoder_buffer.size();
+  auto decoder_buffer_span = base::span(decoder_buffer);
+  const uint8_t* ptr = decoder_buffer_span.data();
+  const size_t size = decoder_buffer_span.size();
   const DecryptConfig* decrypt_config = decoder_buffer.decrypt_config();
 
   DCHECK(ptr);
@@ -517,31 +520,31 @@ H265Decoder::DecodeResult H265Decoder::Decode() {
         H265SEI sei;
         if (parser_.ParseSEI(&sei) != H265Parser::kOk)
           break;
-        for (auto& sei_msg : sei.msgs) {
-          switch (sei_msg.type) {
-            case H265SEIMessage::kSEIContentLightLevelInfo:
-              // HEVC HDR metadata may appears in the below places:
-              // 1. Container.
-              // 2. Bitstream.
-              // 3. Both container and bitstream.
-              // Thus we should also extract HDR metadata here in case we
-              // miss the information.
-              if (!hdr_metadata_.has_value()) {
-                hdr_metadata_.emplace();
-              }
-              hdr_metadata_->cta_861_3 =
-                  sei_msg.content_light_level_info.ToGfx();
-              break;
-            case H265SEIMessage::kSEIMasteringDisplayInfo:
-              if (!hdr_metadata_.has_value()) {
-                hdr_metadata_.emplace();
-              }
-              hdr_metadata_->smpte_st_2086 =
-                  sei_msg.mastering_display_info.ToGfx();
-              break;
-            default:
-              break;
-          }
+        for (const auto& sei_msg : sei.msgs) {
+          std::visit(base::Overloaded{
+                         [](const H265SEIAlphaChannelInfo& info) {},
+                         [this](const H265SEIContentLightLevelInfo& info) {
+                           // HEVC HDR metadata may appears in the below
+                           // places:
+                           // 1. Container.
+                           // 2. Bitstream.
+                           // 3. Both container and bitstream.
+                           // Thus we should also extract HDR metadata here in
+                           // case we miss the information.
+                           if (!hdr_metadata_.has_value()) {
+                             hdr_metadata_.emplace();
+                           }
+                           hdr_metadata_->cta_861_3 = info.ToGfx();
+                         },
+                         [this](const H265SEIMasteringDisplayInfo& info) {
+                           if (!hdr_metadata_.has_value()) {
+                             hdr_metadata_.emplace();
+                           }
+                           hdr_metadata_->smpte_st_2086 = info.ToGfx();
+                         },
+                         [](std::monostate) {},
+                     },
+                     sei_msg);
         }
         break;
       }

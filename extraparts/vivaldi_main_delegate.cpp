@@ -8,6 +8,10 @@
 #include "app/vivaldi_apptools.h"
 #include "extraparts/vivaldi_content_browser_client.h"
 
+#if BUILDFLAG(ENABLE_EXTENSIONS)
+#include "extensions/vivaldi_browser_component_wrapper.h"
+#endif
+
 VivaldiMainDelegate::VivaldiMainDelegate()
 #if !BUILDFLAG(IS_ANDROID)
     : VivaldiMainDelegate({.exe_entry_point_ticks = base::TimeTicks::Now()})
@@ -26,6 +30,12 @@ VivaldiMainDelegate::~VivaldiMainDelegate() {}
 content::ContentBrowserClient*
 VivaldiMainDelegate::CreateContentBrowserClient() {
   if (!vivaldi::IsVivaldiRunning() && !vivaldi::ForcedVivaldiRunning()) {
+#if BUILDFLAG(ENABLE_EXTENSIONS)
+    // Create a browser-component side function wrapper that is accessed in the
+    // extension module via VivaldiBrowserComponentWrapper.
+    VivaldiBrowserComponentWrapper::CreateImpl();
+#endif
+
     return ChromeMainDelegate::CreateContentBrowserClient();
   }
 

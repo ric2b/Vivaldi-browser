@@ -45,7 +45,7 @@ namespace ash {
 namespace {
 
 constexpr int kMinItemsInGroup = 4;
-constexpr int kMaxItemsInGroup = 10;
+constexpr int kMaxItemsInGroup = 25;
 constexpr int kMaxGroupsToGenerate = 2;
 // Too many items in 1 request could result in poor performance.
 constexpr size_t kMaxItemsInRequest = 100;
@@ -91,6 +91,17 @@ std::string GroupResponseToString(
   return group_info;
 }
 
+std::string CoralSourceToString(CoralSource source) {
+  switch (source) {
+    case CoralSource::kUnknown:
+      return "Unknown";
+    case CoralSource::kPostLogin:
+      return "Post-login";
+    case CoralSource::kInSession:
+      return "In-session";
+  }
+}
+
 }  // namespace
 
 CoralRequest::CoralRequest() = default;
@@ -98,8 +109,15 @@ CoralRequest::CoralRequest() = default;
 CoralRequest::~CoralRequest() = default;
 
 std::string CoralRequest::ToString() const {
-  auto root = base::Value::Dict().Set(
-      "Coral request", coral_util::EntitiesToListValue(content_));
+  auto request_value = base::Value::Dict();
+  request_value.Set("source", CoralSourceToString(source_));
+  request_value.Set("requested entities",
+                    coral_util::EntitiesToListValue(content_));
+  request_value.Set("suppression context",
+                    coral_util::EntitiesToListValue(suppression_context_));
+  request_value.Set("language", language_);
+  auto root =
+      base::Value::Dict().Set("Coral request", std::move(request_value));
   return root.DebugString();
 }
 
@@ -111,8 +129,8 @@ CoralController::CoralController() = default;
 
 CoralController::~CoralController() = default;
 
-void CoralController::Initialize() {
-  CoralProcessor* coral_processor = EnsureCoralProcessor();
+void CoralController::Initialize(std::string language) {
+  CoralProcessor* coral_processor = EnsureCoralProcessor(std::move(language));
   if (!coral_processor) {
     LOG(ERROR) << "Failed to connect to coral processor.";
   }
@@ -129,7 +147,7 @@ void CoralController::GenerateContentGroups(
     return;
   }
 
-  CoralProcessor* coral_processor = EnsureCoralProcessor();
+  CoralProcessor* coral_processor = EnsureCoralProcessor(request.language());
   if (!coral_processor) {
     LOG(ERROR) << "Failed to connect to coral processor.";
     std::move(callback).Run(nullptr);
@@ -138,16 +156,23 @@ void CoralController::GenerateContentGroups(
 
   auto group_request = coral::mojom::GroupRequest::New();
   group_request->embedding_options = coral::mojom::EmbeddingOptions::New();
+  group_request->embedding_options->check_safety_filter = true;
   group_request->clustering_options = coral::mojom::ClusteringOptions::New();
   group_request->clustering_options->min_items_in_cluster = kMinItemsInGroup;
   group_request->clustering_options->max_items_in_cluster = kMaxItemsInGroup;
   group_request->clustering_options->max_clusters = kMaxGroupsToGenerate;
   group_request->title_generation_options =
       coral::mojom::TitleGenerationOptions::New();
+  group_request->title_generation_options->language_code = request.language();
   const size_t items_in_request =
       std::min(request.content().size(), kMaxItemsInRequest);
   for (size_t i = 0; i < items_in_request; i++) {
     group_request->entities.push_back(request.content()[i]->Clone());
+  }
+
+  if (!request.suppression_context().empty()) {
+    group_request->suppression_context =
+        mojo::Clone(request.suppression_context());
   }
   coral_processor->Group(
       std::move(group_request), std::move(title_observer),
@@ -156,12 +181,10 @@ void CoralController::GenerateContentGroups(
                      std::move(callback), base::TimeTicks::Now()));
 }
 
-void CoralController::CacheEmbeddings(const CoralRequest& request,
-                                      base::OnceCallback<void(bool)> callback) {
-  CoralProcessor* coral_processor = EnsureCoralProcessor();
+void CoralController::CacheEmbeddings(const CoralRequest& request) {
+  CoralProcessor* coral_processor = EnsureCoralProcessor(request.language());
   if (!coral_processor) {
     LOG(ERROR) << "Failed to connect to coral processor.";
-    std::move(callback).Run(false);
     return;
   }
 
@@ -175,7 +198,7 @@ void CoralController::CacheEmbeddings(const CoralRequest& request,
   coral_processor->CacheEmbeddings(
       std::move(cache_embeddings_request),
       base::BindOnce(&CoralController::HandleCacheEmbeddingsResult,
-                     weak_factory_.GetWeakPtr(), std::move(callback)));
+                     weak_factory_.GetWeakPtr()));
 }
 
 void CoralController::OpenNewDeskWithGroup(CoralResponse::Group group,
@@ -242,14 +265,14 @@ void CoralController::OpenNewDeskWithGroup(CoralResponse::Group group,
   }
 }
 
-void CoralController::CreateSavedDeskFromGroup(coral::mojom::GroupPtr group,
+void CoralController::CreateSavedDeskFromGroup(const std::string& template_name,
+                                               coral::mojom::GroupPtr group,
                                                aura::Window* root_window) {
-  std::vector<GURL> tab_urls;
+  std::vector<coral::mojom::EntityPtr> tab_app_entities =
+      mojo::Clone(group->entities);
   base::flat_set<std::string> app_ids;
-  for (const coral::mojom::EntityPtr& entity : group->entities) {
-    if (entity->is_tab()) {
-      tab_urls.push_back(entity->get_tab()->url);
-    } else if (entity->is_app()) {
+  for (const coral::mojom::EntityPtr& entity : tab_app_entities) {
+    if (entity->is_app()) {
       app_ids.insert(entity->get_app()->id);
     }
   }
@@ -261,15 +284,16 @@ void CoralController::CreateSavedDeskFromGroup(coral::mojom::GroupPtr group,
   auto window_tracker = std::make_unique<aura::WindowTracker>(
       aura::WindowTracker::WindowList{root_window});
   if (app_ids.empty()) {
-    OnTemplateCreated(tab_urls, std::move(window_tracker),
+    OnTemplateCreated(std::move(tab_app_entities), std::move(window_tracker),
+                      template_name,
                       /*desk_template=*/nullptr);
     return;
   }
 
   DesksController::Get()->CaptureActiveDeskAsSavedDesk(
       base::BindOnce(&CoralController::OnTemplateCreated,
-                     weak_factory_.GetWeakPtr(), tab_urls,
-                     std::move(window_tracker)),
+                     weak_factory_.GetWeakPtr(), std::move(tab_app_entities),
+                     std::move(window_tracker), template_name),
       DeskTemplateType::kCoral,
       /*root_window_to_show=*/root_window, app_ids);
 }
@@ -281,7 +305,8 @@ void CoralController::OpenFeedbackDialog(const std::string& group_description) {
                      weak_factory_.GetWeakPtr()));
 }
 
-CoralController::CoralProcessor* CoralController::EnsureCoralProcessor() {
+CoralController::CoralProcessor* CoralController::EnsureCoralProcessor(
+    std::string language) {
   // Generate a fake processor if --force-birch-fake-coral-backend is enabled.
   if (base::CommandLine::ForCurrentProcess()->HasSwitch(
           switches::kForceBirchFakeCoralBackend)) {
@@ -311,7 +336,8 @@ CoralController::CoralProcessor* CoralController::EnsureCoralProcessor() {
         ->BindMachineLearningService(
             ml_service.InitWithNewPipeAndPassReceiver());
     coral_service_->Initialize(std::move(ml_service),
-                               coral_processor_.BindNewPipeAndPassReceiver());
+                               coral_processor_.BindNewPipeAndPassReceiver(),
+                               language);
     coral_processor_.reset_on_disconnect();
   }
 
@@ -341,36 +367,49 @@ void CoralController::HandleGroupResult(CoralSource source,
 }
 
 void CoralController::HandleCacheEmbeddingsResult(
-    base::OnceCallback<void(bool)> callback,
     coral::mojom::CacheEmbeddingsResultPtr result) {
   if (result->is_error()) {
     LOG(ERROR) << "Coral cache embeddings request failed with CoralError code: "
                << static_cast<int>(result->get_error());
-    std::move(callback).Run(false);
     return;
   }
-  std::move(callback).Run(true);
 }
 
 void CoralController::OnTemplateCreated(
-    const std::vector<GURL>& tab_urls,
+    std::vector<coral::mojom::EntityPtr> tab_app_entities,
     std::unique_ptr<aura::WindowTracker> window_tracker,
+    const std::string& template_name,
     std::unique_ptr<DeskTemplate> desk_template) {
   std::unique_ptr<DeskTemplate> new_template = std::move(desk_template);
+  std::vector<GURL> tab_urls;
+  for (const auto& entity : tab_app_entities) {
+    if (entity->is_tab()) {
+      tab_urls.emplace_back(entity->get_tab()->url);
+    }
+  }
+
   // There is a chance the template is empty due to unsupported apps.
   if (!new_template) {
     if (tab_urls.empty()) {
       return;
     }
 
-    // TODO(crbug.com/365839564): The title can be nullopt and updated async
-    // after. Figure out how to handle that case.
     new_template = std::make_unique<DeskTemplate>(
         base::Uuid::GenerateRandomV4(), DeskTemplateSource::kUser,
-        "saved group", base::Time::Now(), DeskTemplateType::kCoral);
+        template_name, base::Time::Now(), DeskTemplateType::kCoral);
     new_template->set_desk_restore_data(
         std::make_unique<app_restore::RestoreData>());
+  } else {
+    new_template->set_template_name(base::UTF8ToUTF16(template_name));
   }
+
+  // To limit the memory usage, only save the first
+  // `kMaxItemsForCoralSuppressionContext` items to build the suppression
+  // context.
+  const int entities_size = tab_app_entities.size();
+  tab_app_entities.resize(
+      std::min(entities_size, kMaxItemsForCoralSuppressionContext));
+  new_template->set_coral_tab_app_entities(std::move(tab_app_entities));
 
   auto* shell = Shell::Get();
   if (!tab_urls.empty()) {

@@ -5,9 +5,9 @@
 package org.chromium.chrome.browser.tasks.tab_management;
 
 import android.app.Activity;
+import android.content.Context;
 import android.view.View;
 
-import androidx.annotation.DimenRes;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
@@ -36,19 +36,22 @@ public class TabGridDialogMenuCoordinator extends TabGroupOverflowMenuCoordinato
      * @param tabGroupIdSupplier The tab group ID supplier for the tab group being acted on.
      * @param tabGroupSyncService Used to checking if a group is shared or synced.
      * @param collaborationService Used for checking the user is the owner of a group.
+     * @param context The {@link Context} that the coordinator resides in.
      */
     public TabGridDialogMenuCoordinator(
-            OnItemClickedCallback onItemClicked,
+            OnItemClickedCallback<Token> onItemClicked,
             Supplier<TabModel> tabModelSupplier,
             Supplier<Token> tabGroupIdSupplier,
             @Nullable TabGroupSyncService tabGroupSyncService,
-            @NonNull CollaborationService collaborationService) {
+            @NonNull CollaborationService collaborationService,
+            @NonNull Context context) {
         super(
                 R.layout.tab_switcher_action_menu_layout,
                 onItemClicked,
                 tabModelSupplier,
                 tabGroupSyncService,
-                collaborationService);
+                collaborationService,
+                context);
         mTabGroupIdSupplier = tabGroupIdSupplier;
     }
 
@@ -64,11 +67,12 @@ public class TabGridDialogMenuCoordinator extends TabGroupOverflowMenuCoordinato
 
     @VisibleForTesting
     @Override
-    public void buildMenuActionItems(
-            ModelList itemList,
-            boolean isIncognito,
-            boolean isTabGroupSyncEnabled,
-            boolean hasCollaborationData) {
+    public void buildMenuActionItems(ModelList itemList, Token tabGroupId) {
+        boolean isIncognito = mTabModelSupplier.get().isIncognitoBranded();
+        @Nullable String collaborationId = getCollaborationIdOrNull(tabGroupId);
+        boolean hasCollaborationData =
+                TabShareUtils.isCollaborationIdValid(collaborationId)
+                        && mCollaborationService.getServiceStatus().isAllowedToJoin();
         itemList.add(
                 BrowserUiListMenuUtils.buildMenuListItemWithIncognitoBranding(
                         R.string.menu_select_tabs,
@@ -105,7 +109,7 @@ public class TabGridDialogMenuCoordinator extends TabGroupOverflowMenuCoordinato
                         R.style.TextAppearance_TextLarge_Primary_Baseline_Light,
                         isIncognito,
                         /* enabled= */ true));
-        if (isTabGroupSyncEnabled && !isIncognito && !hasCollaborationData) {
+        if (mTabGroupSyncService != null && !isIncognito && !hasCollaborationData) {
             itemList.add(
                     BrowserUiListMenuUtils.buildMenuListItemWithIncognitoBranding(
                             R.string.tab_grid_dialog_toolbar_delete_group,
@@ -170,8 +174,8 @@ public class TabGridDialogMenuCoordinator extends TabGroupOverflowMenuCoordinato
     }
 
     @Override
-    protected @DimenRes int getMenuWidth() {
-        return R.dimen.menu_width;
+    protected int getMenuWidth(int anchorViewWidthPx) {
+        return getDimensionPixelSize(R.dimen.menu_width);
     }
 
     private int getMenuItemIndex(ModelList itemList, int menuItemId) {

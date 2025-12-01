@@ -156,7 +156,10 @@ class ThreadPoolTempl : public Eigen::ThreadPoolInterface {
   // Tries to assign work to the current task.
   void MaybeGetTask(Task* t) {
     PerThread* pt = GetPerThread();
-    Queue& q = thread_data_[pt->thread_id].queue;
+    const int thread_id = pt->thread_id;
+    // If we are not a worker thread of this pool, we can't get any work.
+    if (thread_id < 0) return;
+    Queue& q = thread_data_[thread_id].queue;
     *t = q.PopFront();
     if (t->f) return;
     if (num_threads_ == 1) {

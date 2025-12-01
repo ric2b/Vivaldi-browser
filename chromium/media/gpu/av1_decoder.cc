@@ -15,6 +15,7 @@
 
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
+#include "media/base/agtm.h"
 #include "media/base/limits.h"
 #include "media/base/media_switches.h"
 #include "media/gpu/av1_picture.h"
@@ -23,6 +24,7 @@
 #include "third_party/libgav1/src/src/gav1/status_code.h"
 #include "third_party/libgav1/src/src/utils/common.h"
 #include "third_party/libgav1/src/src/utils/constants.h"
+#include "third_party/skia/include/core/SkData.h"
 #include "ui/gfx/hdr_metadata.h"
 
 namespace media {
@@ -198,14 +200,15 @@ void AV1Decoder::Reset() {
 
 void AV1Decoder::SetStream(int32_t id, const DecoderBuffer& decoder_buffer) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  auto decoder_buffer_span = base::span(decoder_buffer);
   stream_id_ = id;
-  stream_ = decoder_buffer.data();
-  stream_size_ = decoder_buffer.size();
+  stream_ = decoder_buffer_span.data();
+  stream_size_ = decoder_buffer_span.size();
   ClearCurrentFrame();
 
   parser_ = base::WrapUnique(new (std::nothrow) libgav1::ObuParser(
-      decoder_buffer.data(), decoder_buffer.size(), kDefaultOperatingPoint,
-      buffer_pool_.get(), state_.get()));
+      decoder_buffer_span.data(), decoder_buffer_span.size(),
+      kDefaultOperatingPoint, buffer_pool_.get(), state_.get()));
   if (!parser_) {
     on_error_ = true;
     return;
@@ -480,6 +483,22 @@ AcceleratedVideoDecoder::DecodeResult AV1Decoder::DecodeInternal() {
       }
       hdr_metadata_->smpte_st_2086 =
           ToGfxSmpteSt2086(current_frame_->hdr_mdcv());
+    }
+    if (current_frame_->itut_t35_set()) {
+      // SAFETY: The best we can do is trust the size provided by libgav1.
+      auto t35_payload_span = UNSAFE_BUFFERS(base::span<const uint8_t>(
+          current_frame_->itut_t35().payload_bytes,
+          static_cast<size_t>(current_frame_->itut_t35().payload_size)));
+      const std::optional<gfx::HdrMetadataAgtm> agtm =
+          GetHdrMetadataAgtmFromItutT35(current_frame_->itut_t35().country_code,
+                                        t35_payload_span);
+      if (agtm.has_value()) {
+        if (!hdr_metadata_.has_value()) {
+          hdr_metadata_.emplace();
+        }
+        // Overwrite existing AGTM metadata if any.
+        hdr_metadata_->agtm = agtm;
+      }
     }
 
     DCHECK(current_sequence_header_->film_grain_params_present ||

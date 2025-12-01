@@ -21,6 +21,9 @@
           &gt;
           <ph name="PROXIES_TITLE" />
           og sørg for, at din konfiguration er indstillet til “ingen proxy” eller “direkte”.</translation>
+<translation id="4949828774841497663">Gå til Apps &gt; Systemindstillinger &gt; Netværk, vælg det
+          aktive netværk, klik på knappen “Oplysninger…”, og fravælg eventuelle proxyer,
+          der måtte være valgt.</translation>
 <translation id="5248344925342018662">Du ser en sikker Vivaldi-side</translation>
 <translation id="6690242244468452299">Denne side viser oplysninger om dine nylige nedbrud, hvis du aktiverer nedbrudsrapportering.</translation>
 <translation id="7023871570427738255">Gå til
@@ -32,7 +35,4 @@
         Hvis det ikke løser problemet, anbefaler vi, at du markerer denne indstilling
         igen for bedre ydeevne.</translation>
 <translation id="7496505986576158197">Vivaldi er muliggjort af <ph name="BEGIN_LINK_CHROMIUM" />Chromium<ph name="END_LINK_CHROMIUM" /> open source-projektet og anden <ph name="BEGIN_LINK_OSS" />open source-software<ph name="END_LINK_OSS" />.</translation>
-<translation id="8187289872471304532">Gå til
-          Applikationer &gt; Systemindstillinger &gt; Netværk &gt; Avanceret &gt; Proxyer
-          og fravælg alle valgte proxyer.</translation>
 </translationbundle>

@@ -3,7 +3,6 @@
 set noparent
 # NOTE: keep this in sync with global-owners-override@chromium.org owners
 # by emailing lsc-policy@chromium.org when this list changes.
-altimin@chromium.org
 dcheng@chromium.org
 fdoray@chromium.org
 gab@chromium.org
@@ -35,15 +34,10 @@ per-file feature_list*=isherman@chromium.org
 
 # Logging-related changes:
 per-file check*=olivierli@chromium.org
-per-file check*=pbos@chromium.org
 per-file dcheck*=olivierli@chromium.org
-per-file dcheck*=pbos@chromium.org
 per-file logging*=olivierli@chromium.org
-per-file logging*=pbos@chromium.org
 per-file notimplemented.h=olivierli@chromium.org
-per-file notimplemented.h=pbos@chromium.org
 per-file notreached.h=olivierli@chromium.org
-per-file notreached.h=pbos@chromium.org
 
 # Restricted since rand_util.h also backs the cryptographically secure RNG.
 per-file rand_util*=set noparent

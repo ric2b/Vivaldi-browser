@@ -50,7 +50,7 @@ interface MockRequestResolverEntry {
 }
 
 class MockRequestResolver {
-  #promiseMap: Map<string, MockRequestResolverEntry> = new Map();
+  #promiseMap = new Map<string, MockRequestResolverEntry>();
 
   waitFor(requestId?: string) {
     if (!requestId) {
@@ -261,7 +261,7 @@ describeWithEnvironment('RequestLinkIcon', () => {
     before(() => {
       UI.ViewManager.resetViewRegistration();
       UI.ViewManager.registerViewExtension({
-        // @ts-ignore
+        // @ts-expect-error
         location: 'mock-location',
         id: 'network',
         title: () => 'Network' as Platform.UIString.LocalizedString,

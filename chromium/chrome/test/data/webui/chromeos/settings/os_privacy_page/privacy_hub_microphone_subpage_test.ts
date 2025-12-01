@@ -230,8 +230,8 @@ suite('<settings-privacy-hub-microphone-subpage>', () => {
   test(
       'Toggle disabled but no tooltip displayed when no microphone connected',
       () => {
-        assertTrue(getMicrophoneCrToggle()!.disabled);
-        assertTrue(getMicrophoneTooltip()!.hidden);
+        assertTrue(getMicrophoneCrToggle().disabled);
+        assertTrue(getMicrophoneTooltip().hidden);
       });
 
   test(
@@ -241,8 +241,8 @@ suite('<settings-privacy-hub-microphone-subpage>', () => {
         mediaDevices.addDevice('audioinput', 'Fake Microphone');
         await waitAfterNextRender(privacyHubMicrophoneSubpage);
 
-        assertFalse(getMicrophoneCrToggle()!.disabled);
-        assertTrue(getMicrophoneTooltip()!.hidden);
+        assertFalse(getMicrophoneCrToggle().disabled);
+        assertTrue(getMicrophoneTooltip().hidden);
         assertNull(getNoMicrophoneTextElement());
       });
 
@@ -253,15 +253,15 @@ suite('<settings-privacy-hub-microphone-subpage>', () => {
         mediaDevices.addDevice('audioinput', 'Fake Microphone');
         await waitAfterNextRender(privacyHubMicrophoneSubpage);
 
-        assertFalse(getMicrophoneCrToggle()!.disabled);
-        assertTrue(getMicrophoneTooltip()!.hidden);
+        assertFalse(getMicrophoneCrToggle().disabled);
+        assertTrue(getMicrophoneTooltip().hidden);
 
         // Activate the hw toggle.
         webUIListenerCallback('microphone-hardware-toggle-changed', true);
         await waitAfterNextRender(privacyHubMicrophoneSubpage);
 
-        assertTrue(getMicrophoneCrToggle()!.disabled);
-        assertFalse(getMicrophoneTooltip()!.hidden);
+        assertTrue(getMicrophoneCrToggle().disabled);
+        assertFalse(getMicrophoneTooltip().hidden);
       });
 
   test(
@@ -446,7 +446,7 @@ suite('<settings-privacy-hub-microphone-subpage>', () => {
     return noWebsiteHasAccessTextRow;
   }
 
-  test('Websites section texts', async () => {
+  test('Websites section texts', () => {
     assertEquals(
         privacyHubMicrophoneSubpage.i18n('websitesSectionTitle'),
         privacyHubMicrophoneSubpage.shadowRoot!
@@ -461,7 +461,7 @@ suite('<settings-privacy-hub-microphone-subpage>', () => {
         getNoWebsiteHasAccessTextRow().textContent!.trim());
   });
 
-  test('Websites section when microphone allowed', async () => {
+  test('Websites section when microphone allowed', () => {
     assertFalse(getManagePermissionsInChromeRow().hidden);
     assertTrue(getNoWebsiteHasAccessTextRow().hidden);
   });
@@ -501,7 +501,7 @@ suite('<settings-privacy-hub-microphone-subpage>', () => {
             PermissionType.kUnknown,
             fakeHandler.getLastOpenedBrowserPermissionSettingsType());
 
-        getManagePermissionsInChromeRow()!.click();
+        getManagePermissionsInChromeRow().click();
         await fakeHandler.whenCalled('openBrowserPermissionSettings');
 
         assertEquals(

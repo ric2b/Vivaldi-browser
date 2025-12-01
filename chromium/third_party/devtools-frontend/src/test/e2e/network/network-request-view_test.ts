@@ -37,7 +37,7 @@ const SIMPLE_PAGE_REQUEST_NUMBER = 2;
 const SIMPLE_PAGE_URL = `requests.html?num=${SIMPLE_PAGE_REQUEST_NUMBER}`;
 
 const configureAndCheckHeaderOverrides = async () => {
-  const infoBar = await waitForAria('Select a folder to store override files in.');
+  const infoBar = await waitForAria('Select a folder to store override files in');
   // Allow time for infobar to animate in before clicking the button
   await new Promise<void>(resolve => setTimeout(resolve, 550));
   await click('.infobar-main-row .infobar-button', {
@@ -52,7 +52,7 @@ const configureAndCheckHeaderOverrides = async () => {
   let responseHeaderSection = await waitFor('[aria-label="Response Headers"]', networkView);
 
   let row = await waitFor('.row', responseHeaderSection);
-  assert.deepEqual(await getTextFromHeadersRow(row), ['cache-control:', 'max-age=3600']);
+  assert.deepEqual(await getTextFromHeadersRow(row), ['cache-control', 'max-age=3600']);
 
   await waitForFunction(async () => {
     await click('.header-name', {root: row});
@@ -76,7 +76,7 @@ const configureAndCheckHeaderOverrides = async () => {
 
   responseHeaderSection = await waitFor('[aria-label="Response Headers"]');
   row = await waitFor('.row.header-overridden', responseHeaderSection);
-  assert.deepEqual(await getTextFromHeadersRow(row), ['cache-control:', 'Foo']);
+  assert.deepEqual(await getTextFromHeadersRow(row), ['cache-control', 'Foo']);
 };
 
 describe('The Network Request view', () => {
@@ -156,7 +156,7 @@ describe('The Network Request view', () => {
     await waitForSomeRequestsToAppear(3);
 
     const names = await getAllRequestNames();
-    const name = names.find(v => v && v.startsWith('data:'));
+    const name = names.find(v => v?.startsWith('data:'));
     assertNotNullOrUndefined(name);
     await selectRequestByName(name);
 
@@ -174,7 +174,7 @@ describe('The Network Request view', () => {
     const color = await p.evaluate(e => getComputedStyle(e).color);
 
     assert.deepEqual(color, 'rgb(0, 0, 0)');
-    await waitForFunction(async () => await styleSrcError.caught);
+    await waitForFunction(async () => styleSrcError.caught);
   });
 
   it('permits inline styles on the preview tab.', async () => {
@@ -190,7 +190,7 @@ describe('The Network Request view', () => {
     await waitForSomeRequestsToAppear(2);
 
     const names = await getAllRequestNames();
-    const name = names.find(v => v && v.startsWith('data:'));
+    const name = names.find(v => v?.startsWith('data:'));
     assertNotNullOrUndefined(name);
     await selectRequestByName(name);
 
@@ -223,7 +223,7 @@ describe('The Network Request view', () => {
         '[aria-label=EventStream][role=tab][aria-selected=true]',
         networkView,
     );
-    return waitFor('.event-source-messages-view');
+    return await waitFor('.event-source-messages-view');
   };
 
   interface EventSourceMessageRaw {
@@ -234,13 +234,13 @@ describe('The Network Request view', () => {
   }
 
   const waitForMessages = async (messagesView: puppeteer.ElementHandle<Element>, count: number) => {
-    return waitForFunction(async () => {
+    return await waitForFunction(async () => {
       const messages = await $$('.data-grid-data-grid-node', messagesView);
       if (messages.length !== count) {
         return undefined;
       }
 
-      return Promise.all(messages.map(message => {
+      return await Promise.all(messages.map(message => {
         return new Promise<EventSourceMessageRaw>(async resolve => {
           const [id, type, data] = await Promise.all([
             getTextContent('.id-column', message),
@@ -330,17 +330,17 @@ describe('The Network Request view', () => {
         root: networkView,
       });
       await waitFor('[aria-label=Messages][role=tab][aria-selected=true]', networkView);
-      return waitFor('.websocket-frame-view');
+      return await waitFor('.websocket-frame-view');
     };
 
     let messagesView = await navigateToWebsocketMessages();
     const waitForMessages = async (count: number) => {
-      return waitForFunction(async () => {
+      return await waitForFunction(async () => {
         const messages = await $$('.data-column.websocket-frame-view-td', messagesView);
         if (messages.length !== count) {
           return undefined;
         }
-        return Promise.all(messages.map(message => {
+        return await Promise.all(messages.map(message => {
           return message.evaluate(message => message.textContent || '');
         }));
       });
@@ -389,73 +389,73 @@ describe('The Network Request view', () => {
       {
         aria: 'General',
         rows: [
-          'Request URL:',
+          'Request URL',
           'https://localhost:%/test/e2e/resources/network/image.svg?id=42&param=a%20b',
-          'Request Method:',
+          'Request Method',
           'POST',
-          'Status Code:',
+          'Status Code',
           '200 OK',
-          'Remote Address:',
+          'Remote Address',
           '[::1]:%',
-          'Referrer Policy:',
+          'Referrer Policy',
           'strict-origin-when-cross-origin',
         ],
       },
       {
         aria: 'Response Headers',
         rows: [
-          'cache-control:',
+          'cache-control',
           'max-age=%',
-          'connection:',
+          'connection',
           'keep-alive',
-          'content-type:',
+          'content-type',
           'image/svg+xml; charset=utf-8',
-          'date:',
+          'date',
           '%',
-          'keep-alive:',
+          'keep-alive',
           'timeout=5',
-          'transfer-encoding:',
+          'transfer-encoding',
           'chunked',
-          'vary:',
+          'vary',
           'Origin',
         ],
       },
       {
         aria: 'Request Headers',
         rows: [
-          'accept:',
+          'accept',
           '*/*',
-          'accept-encoding:',
+          'accept-encoding',
           '%',
-          'accept-language:',
+          'accept-language',
           '%',
-          'connection:',
+          'connection',
           'keep-alive',
-          'content-length:',
+          'content-length',
           '32',
-          'content-type:',
+          'content-type',
           'application/x-www-form-urlencoded;charset=UTF-8',
-          'host:',
+          'host',
           'localhost:%',
-          'origin:',
+          'origin',
           'https://localhost:%',
-          'referer:',
+          'referer',
           'https://localhost:%/test/e2e/resources/network/headers-and-payload.html',
-          'sec-ch-ua:',
+          'sec-ch-ua',
           '%',
-          'sec-ch-ua-mobile:',
+          'sec-ch-ua-mobile',
           '?0',
-          'sec-ch-ua-platform:',
+          'sec-ch-ua-platform',
           '%',
-          'sec-fetch-dest:',
+          'sec-fetch-dest',
           'empty',
-          'sec-fetch-mode:',
+          'sec-fetch-mode',
           'cors',
-          'sec-fetch-site:',
+          'sec-fetch-site',
           'same-origin',
-          'user-agent:',
+          'user-agent',
           'Mozilla/5.0 %',
-          'x-same-domain:',
+          'x-same-domain',
           '1',
         ],
       },
@@ -475,15 +475,15 @@ describe('The Network Request view', () => {
     const payloadView = await waitFor('.request-payload-view');
     const payloadOutline = await $$('[role=treeitem]:not(.hidden)', payloadView);
     const payloadOutlineText =
-        await Promise.all(payloadOutline.map(async item => item.evaluate(el => el.textContent || '')));
+        await Promise.all(payloadOutline.map(async item => await item.evaluate(el => el.textContent || '')));
     const expectedPayloadContent = [
-      'Query String Parameters (2)view sourceview URL-encoded',
-      ['id: 42', 'param: a b'],
-      'Form Data (4)view sourceview URL-encoded',
+      'Query String Parameters (2)View sourceView URL-encoded',
+      ['id42', 'parama b'],
+      'Form Data (4)View sourceView URL-encoded',
       [
-        'foo: alpha',
-        'bar: beta:42:0',
-        'baz: ',
+        'fooalpha',
+        'barbeta:42:0',
+        'baz',
         '(empty)',
       ],
     ].flat();
@@ -497,7 +497,7 @@ describe('The Network Request view', () => {
     assert.strictEqual(await readClipboard(), 'alpha');
 
     // Context menu to copy the raw payload.
-    const viewSource = await waitForElementWithTextContent('view source');
+    const viewSource = await waitForElementWithTextContent('View source');
     await viewSource.click();
     const source = await waitForElementWithTextContent('id=42&param=a%20b');
     await source.click({button: 'right'});
@@ -540,54 +540,54 @@ describe('The Network Request view', () => {
       {
         aria: 'General',
         rows: [
-          'Request URL:',
+          'Request URL',
           'https://localhost:%/test/e2e/resources/network/image.svg?id=42&param=a%20b',
-          'Request Method:',
+          'Request Method',
           'POST',
-          'Status Code:',
+          'Status Code',
           '200 OK',
-          'Remote Address:',
+          'Remote Address',
           '[::1]:%',
-          'Referrer Policy:',
+          'Referrer Policy',
           'strict-origin-when-cross-origin',
         ],
       },
       {
         aria: 'Request Headers',
         rows: [
-          'accept:',
+          'accept',
           '*/*',
-          'accept-encoding:',
+          'accept-encoding',
           '%',
-          'accept-language:',
+          'accept-language',
           '%',
-          'connection:',
+          'connection',
           'keep-alive',
-          'content-length:',
+          'content-length',
           '32',
-          'content-type:',
+          'content-type',
           'application/x-www-form-urlencoded;charset=UTF-8',
-          'host:',
+          'host',
           'localhost:%',
-          'origin:',
+          'origin',
           'https://localhost:%',
-          'referer:',
+          'referer',
           'https://localhost:%/test/e2e/resources/network/headers-and-payload.html',
-          'sec-ch-ua:',
+          'sec-ch-ua',
           '%',
-          'sec-ch-ua-mobile:',
+          'sec-ch-ua-mobile',
           '?0',
-          'sec-ch-ua-platform:',
+          'sec-ch-ua-platform',
           '%',
-          'sec-fetch-dest:',
+          'sec-fetch-dest',
           'empty',
-          'sec-fetch-mode:',
+          'sec-fetch-mode',
           'cors',
-          'sec-fetch-site:',
+          'sec-fetch-site',
           'same-origin',
-          'user-agent:',
+          'user-agent',
           'Mozilla/5.0 %',
-          'x-same-domain:',
+          'x-same-domain',
           '1',
         ],
       },
@@ -615,13 +615,13 @@ describe('The Network Request view', () => {
     await waitFor('[aria-label=Payload][role=tab][aria-selected=true]', networkView);
 
     await selectRequestByName('image.svg');
-    await waitForElementWithTextContent('foo: gamma');
+    await waitForElementWithTextContent('foogamma');
   });
 
   it('no duplicate payload tab on headers update', async () => {
     await navigateToNetworkTab('requests.html');
     const {target} = getBrowserAndPages();
-    target.evaluate(() => fetch('image.svg?delay'));
+    void target.evaluate(() => fetch('image.svg?delay'));
     await waitForSomeRequestsToAppear(2);
 
     await selectRequestByName('image.svg?delay');

@@ -9,6 +9,7 @@
 #include "base/strings/strcat.h"
 #include "base/types/pass_key.h"
 #include "net/base/features.h"
+#include "net/cookies/cookie_access_params.h"
 #include "net/cookies/cookie_constants.h"
 #include "net/cookies/cookie_inclusion_status.h"
 #include "net/cookies/cookie_util.h"
@@ -554,9 +555,9 @@ bool CookieBase::IsSecure() const {
 
 bool CookieBase::IsFirstPartyPartitioned() const {
   return IsPartitioned() && !CookiePartitionKey::HasNonce(partition_key_) &&
-         SchemefulSite(GURL(
+         partition_key_->site().IsSameSiteWith(GURL(
              base::StrCat({url::kHttpsScheme, url::kStandardSchemeSeparator,
-                           DomainWithoutDot()}))) == partition_key_->site();
+                           DomainWithoutDot()})));
 }
 
 bool CookieBase::IsThirdPartyPartitioned() const {

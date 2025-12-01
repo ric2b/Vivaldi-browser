@@ -48,8 +48,6 @@
 
 using safe_browsing::ClientSafeBrowsingReportRequest;
 
-namespace {
-
 // Views-specific implementation of download danger prompt dialog, which
 // implements danger warning bypass from the downloads extension API. We use
 // this class rather than a TabModalConfirmDialog so that we can use custom
@@ -345,12 +343,14 @@ void DownloadDangerPromptViews::RunDone(Action action) {
         RecordDownloadDangerPromptHistogram("Proceed", *download_);
       }
       RecordDownloadWarningEvent(action, download_);
+#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
       // Do not send cancel report since it's not a terminal action.
       if (accept) {
         SendSafeBrowsingDownloadReport(
             ClientSafeBrowsingReportRequest::DANGEROUS_DOWNLOAD_BY_API, accept,
             download_);
       }
+#endif
     }
     download_->RemoveObserver(this);
     download_ = nullptr;
@@ -363,8 +363,6 @@ void DownloadDangerPromptViews::RunDone(Action action) {
 BEGIN_METADATA(DownloadDangerPromptViews)
 ADD_READONLY_PROPERTY_METADATA(std::u16string, MessageBody)
 END_METADATA
-
-}  // namespace
 
 // static
 DownloadDangerPrompt* DownloadDangerPrompt::Create(

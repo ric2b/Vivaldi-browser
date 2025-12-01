@@ -10,7 +10,7 @@
 
 #include "base/functional/callback_forward.h"
 #include "base/time/time.h"
-#include "chrome/browser/ash/policy/remote_commands/crd/crd_remote_command_utils.h"
+#include "chrome/browser/ash/policy/remote_commands/crd/public/crd_session_result_codes.h"
 
 namespace policy {
 
@@ -43,6 +43,9 @@ class StartCrdSessionJobDelegate {
     bool show_troubleshooting_tools = false;
     bool allow_reconnections = false;
     bool allow_file_transfer = false;
+    std::optional<base::TimeDelta> connection_auto_accept_timeout =
+        std::nullopt;
+    std::optional<base::TimeDelta> maximum_session_duration = std::nullopt;
   };
 
   virtual ~StartCrdSessionJobDelegate() = default;

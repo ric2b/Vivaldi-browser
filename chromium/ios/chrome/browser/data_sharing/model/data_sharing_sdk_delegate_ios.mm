@@ -49,10 +49,24 @@ void DataSharingSDKDelegateIOS::ReadGroups(
         base::SysUTF8ToNSString(group_param.consistency_token());
     [groupsParam addObject:param];
   }
-  ShareKitReadConfiguration* config = [[ShareKitReadConfiguration alloc] init];
+  ShareKitReadGroupsConfiguration* config =
+      [[ShareKitReadGroupsConfiguration alloc] init];
   config.groupsParam = groupsParam;
   config.callback = base::CallbackToBlock(std::move(callback));
   share_kit_service_->ReadGroups(config);
+}
+
+void DataSharingSDKDelegateIOS::ReadGroupWithToken(
+    const data_sharing_pb::ReadGroupWithTokenParams& params,
+    base::OnceCallback<void(
+        const base::expected<data_sharing_pb::ReadGroupsResult, absl::Status>&)>
+        callback) {
+  ShareKitReadGroupWithTokenConfiguration* config =
+      [[ShareKitReadGroupWithTokenConfiguration alloc] init];
+  config.collabID = base::SysUTF8ToNSString(params.group_id());
+  config.tokenSecret = base::SysUTF8ToNSString(params.access_token());
+  config.callback = base::CallbackToBlock(std::move(callback));
+  share_kit_service_->ReadGroupWithToken(config);
 }
 
 void DataSharingSDKDelegateIOS::AddMember(

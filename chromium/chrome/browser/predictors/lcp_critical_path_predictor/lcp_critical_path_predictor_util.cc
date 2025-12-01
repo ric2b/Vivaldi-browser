@@ -5,7 +5,6 @@
 #include "chrome/browser/predictors/lcp_critical_path_predictor/lcp_critical_path_predictor_util.h"
 
 #include "base/containers/contains.h"
-#include "base/debug/dump_without_crashing.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/no_destructor.h"
 #include "base/strings/string_split.h"
@@ -25,6 +24,7 @@
 namespace predictors {
 
 namespace {
+
 constexpr std::string_view kLcppTableName = "lcp_critical_path_predictor";
 constexpr std::string_view kLcppTableNameInitiatorOrigin =
     "lcp_critical_path_predictor_initiator_origin";
@@ -252,17 +252,17 @@ class LcppFrequencyStatDataUpdater {
   const LcppFrequencyStatDataUpdater& operator=(
       const LcppFrequencyStatDataUpdater&) = delete;
 
-  static std::unique_ptr<LcppFrequencyStatDataUpdater>
-  FromLcppStringFrequencyStatData(
-      size_t sliding_window_size,
-      size_t max_histogram_buckets,
+  static LcppFrequencyStatDataUpdater FromLcppStringFrequencyStatData(
+      int sliding_window_size,
+      int max_histogram_buckets,
       const LcppStringFrequencyStatData& lcpp_stat_data) {
     // Prepare working variables (histogram and other_bucket_frequency) from
     // proto. If the data is corrupted, the previous data will be cleared.
     bool corrupted = false;
     double other_bucket_frequency = lcpp_stat_data.other_bucket_frequency();
     if (other_bucket_frequency < 0 ||
-        lcpp_stat_data.main_buckets().size() > max_histogram_buckets) {
+        lcpp_stat_data.main_buckets().size() >
+            base::saturated_cast<size_t>(max_histogram_buckets)) {
       corrupted = true;
     }
     std::map<std::string, double> histogram;
@@ -277,14 +277,13 @@ class LcppFrequencyStatDataUpdater {
       other_bucket_frequency = 0;
       histogram.clear();
     }
-    return base::WrapUnique(new LcppFrequencyStatDataUpdater(
-        sliding_window_size, max_histogram_buckets, histogram,
-        other_bucket_frequency));
+    return {sliding_window_size, max_histogram_buckets, histogram,
+            other_bucket_frequency};
   }
 
-  static std::unique_ptr<LcppFrequencyStatDataUpdater>
-  FromLcpElementLocatorStat(
-      const LoadingPredictorConfig& config,
+  static LcppFrequencyStatDataUpdater FromLcpElementLocatorStat(
+      int sliding_window_size,
+      int max_histogram_buckets,
       const LcpElementLocatorStat& lcp_element_locator_stat) {
     // Prepare working variables (histogram and other_bucket_frequency) from
     // proto. If the data is corrupted, the previous data will be cleared.
@@ -293,7 +292,7 @@ class LcppFrequencyStatDataUpdater {
         lcp_element_locator_stat.other_bucket_frequency();
     if (other_bucket_frequency < 0 ||
         lcp_element_locator_stat.lcp_element_locator_buckets_size() >
-            static_cast<int>(config.max_lcpp_histogram_buckets)) {
+            max_histogram_buckets) {
       corrupted = true;
     }
     std::map<std::string, double> histogram;
@@ -310,28 +309,33 @@ class LcppFrequencyStatDataUpdater {
       other_bucket_frequency = 0;
       histogram.clear();
     }
-    return base::WrapUnique(new LcppFrequencyStatDataUpdater(
-        config.lcpp_histogram_sliding_window_size,
-        config.max_lcpp_histogram_buckets, histogram, other_bucket_frequency));
+    return {sliding_window_size, max_histogram_buckets, histogram,
+            other_bucket_frequency};
   }
 
   void Update(const std::string& new_entry) {
     // If there is no room to add a `new_entry` (the capacity is
     // the same as the sliding window size), create a room by discounting the
     // existing histogram frequency.
-    if (1 + SumOfFrequency(histogram_, other_bucket_frequency_) >
-        sliding_window_size_) {
-      double discount = 1.0 / sliding_window_size_;
-      for (auto it = histogram_.begin(); it != histogram_.end();) {
-        it->second -= it->second * discount;
-        // Remove item that has too small frequency.
-        if (it->second < 1e-7) {
-          it = histogram_.erase(it);
-        } else {
-          ++it;
+    {
+      double sum_of_frequency =
+          SumOfFrequency(histogram_, other_bucket_frequency_);
+      if (1.0 + sum_of_frequency > sliding_window_size_) {
+        // The following `discount` has to be a value such that:
+        // 1 + sum_of_frequency == sliding_window_size_.
+        double discount =
+            (1.0 + sum_of_frequency - sliding_window_size_) / sum_of_frequency;
+        for (auto it = histogram_.begin(); it != histogram_.end();) {
+          it->second -= it->second * discount;
+          // Remove item that has too small frequency.
+          if (it->second < 1e-7) {
+            it = histogram_.erase(it);
+          } else {
+            ++it;
+          }
         }
+        other_bucket_frequency_ -= other_bucket_frequency_ * discount;
       }
-      other_bucket_frequency_ -= other_bucket_frequency_ * discount;
     }
 
     // Now we have one free space to store a new lcp_script_url.
@@ -353,7 +357,8 @@ class LcppFrequencyStatDataUpdater {
     // than `max_histogram_buckets`. If the bucket count is more than
     // `max_histogram_buckets`, we can merge the least frequent bucket into
     // other_bucket.
-    if (histogram_.size() > max_histogram_buckets_) {
+    if (histogram_.size() >
+        base::saturated_cast<size_t>(max_histogram_buckets_)) {
       const auto& least_frequent_bucket =
           std::min_element(histogram_.begin(), histogram_.end(),
                            [](const auto& lhs, const auto& rhs) {
@@ -399,8 +404,8 @@ class LcppFrequencyStatDataUpdater {
   size_t num_matched() const { return num_matched_; }
 
  private:
-  LcppFrequencyStatDataUpdater(size_t sliding_window_size,
-                               size_t max_histogram_buckets,
+  LcppFrequencyStatDataUpdater(int sliding_window_size,
+                               int max_histogram_buckets,
                                std::map<std::string, double> histogram,
                                double other_bucket_frequency)
       : sliding_window_size_(sliding_window_size),
@@ -408,8 +413,8 @@ class LcppFrequencyStatDataUpdater {
         histogram_(histogram),
         other_bucket_frequency_(other_bucket_frequency) {}
 
-  const size_t sliding_window_size_;
-  const size_t max_histogram_buckets_;
+  const int sliding_window_size_;
+  const int max_histogram_buckets_;
   std::map<std::string, double> histogram_;
   double other_bucket_frequency_;
   bool has_updated_ = false;
@@ -417,7 +422,8 @@ class LcppFrequencyStatDataUpdater {
   std::vector<std::string> dropped_entries_;
 };
 
-bool RecordLcpElementLocatorHistogram(const LoadingPredictorConfig& config,
+bool RecordLcpElementLocatorHistogram(int sliding_window_size,
+                                      int max_histogram_buckets,
                                       const std::string& lcp_element_locator,
                                       LcppStat& stat) {
   if (lcp_element_locator.size() >
@@ -425,70 +431,70 @@ bool RecordLcpElementLocatorHistogram(const LoadingPredictorConfig& config,
       lcp_element_locator.empty()) {
     return false;
   }
-  std::unique_ptr<LcppFrequencyStatDataUpdater> updater =
+  LcppFrequencyStatDataUpdater updater =
       LcppFrequencyStatDataUpdater::FromLcpElementLocatorStat(
-          config, stat.lcp_element_locator_stat());
-  CHECK(updater);
-  updater->Update(lcp_element_locator);
-  *stat.mutable_lcp_element_locator_stat() = updater->ToLcpElementLocatorStat();
+          sliding_window_size, max_histogram_buckets,
+          stat.lcp_element_locator_stat());
+  updater.Update(lcp_element_locator);
+  *stat.mutable_lcp_element_locator_stat() = updater.ToLcpElementLocatorStat();
   return true;
 }
 
 bool RecordLcpInfluencerScriptUrlsHistogram(
-    const LoadingPredictorConfig& config,
+    int sliding_window_size,
+    int max_histogram_buckets,
     const std::vector<GURL>& lcp_influencer_scripts,
     LcppStat& stat) {
   // Contrasting to LCPP Element locator, there are multiple LCP dependency URLs
   // for an origin. Record each in a separate histogram.
-  std::unique_ptr<LcppFrequencyStatDataUpdater> updater =
+  LcppFrequencyStatDataUpdater updater =
       LcppFrequencyStatDataUpdater::FromLcppStringFrequencyStatData(
-          config.lcpp_histogram_sliding_window_size,
-          config.max_lcpp_histogram_buckets, stat.lcp_script_url_stat());
-  CHECK(updater);
+          sliding_window_size, max_histogram_buckets,
+          stat.lcp_script_url_stat());
   for (auto& script_url : lcp_influencer_scripts) {
     const auto& lcpp_script = script_url.spec();
     if (!IsValidUrlInLcppStringFrequencyStatData(lcpp_script)) {
       continue;
     }
-    updater->Update(lcpp_script);
+    updater.Update(lcpp_script);
   }
-  *stat.mutable_lcp_script_url_stat() =
-      updater->ToLcppStringFrequencyStatData();
-  return updater->has_updated();
+  *stat.mutable_lcp_script_url_stat() = updater.ToLcppStringFrequencyStatData();
+  return updater.has_updated();
 }
 
-bool RecordPreconnectOriginsHistogram(const LoadingPredictorConfig& config,
+bool RecordPreconnectOriginsHistogram(int sliding_window_size,
+                                      int max_histogram_buckets,
                                       const std::vector<GURL>& origins,
                                       LcppStat& stat) {
   // There could be multiple preconnect origins. Record each in a separate
   // histogram.
-  std::unique_ptr<LcppFrequencyStatDataUpdater> updater =
+  LcppFrequencyStatDataUpdater updater =
       LcppFrequencyStatDataUpdater::FromLcppStringFrequencyStatData(
-          config.lcpp_histogram_sliding_window_size,
-          config.max_lcpp_histogram_buckets, stat.preconnect_origin_stat());
-  CHECK(updater);
+          sliding_window_size, max_histogram_buckets,
+          stat.preconnect_origin_stat());
   for (auto& origin : origins) {
     const auto& origin_spec = origin.spec();
     if (!IsValidUrlInLcppStringFrequencyStatData(origin_spec)) {
       continue;
     }
-    updater->Update(origin_spec);
+    updater.Update(origin_spec);
   }
   *stat.mutable_preconnect_origin_stat() =
-      updater->ToLcppStringFrequencyStatData();
-  return updater->has_updated();
+      updater.ToLcppStringFrequencyStatData();
+  return updater.has_updated();
 }
 
-bool RecordFetchedFontUrlsHistogram(const LoadingPredictorConfig& config,
+bool RecordFetchedFontUrlsHistogram(int sliding_window_size,
+                                    int max_histogram_buckets,
                                     const std::vector<GURL>& fetched_font_urls,
                                     LcppStat& stat) {
   // Due to LCPP data structure, histogram is saved per origin.
   // Therefore, it sounds better to have this as a histogram instead of
   // a static data.
-  std::unique_ptr<LcppFrequencyStatDataUpdater> updater =
+  LcppFrequencyStatDataUpdater updater =
       LcppFrequencyStatDataUpdater::FromLcppStringFrequencyStatData(
-          config.lcpp_histogram_sliding_window_size,
-          config.max_lcpp_histogram_buckets, stat.fetched_font_url_stat());
+          sliding_window_size, max_histogram_buckets,
+          stat.fetched_font_url_stat());
   std::set<GURL> used_urls;
   size_t max_url_length = 0;
   for (const auto& url : fetched_font_urls) {
@@ -501,34 +507,34 @@ bool RecordFetchedFontUrlsHistogram(const LoadingPredictorConfig& config,
     if (!IsValidUrlInLcppStringFrequencyStatData(font_spec)) {
       continue;
     }
-    updater->Update(font_spec);
+    updater.Update(font_spec);
   }
   *stat.mutable_fetched_font_url_stat() =
-      updater->ToLcppStringFrequencyStatData();
+      updater.ToLcppStringFrequencyStatData();
 
   base::UmaHistogramCounts10000(
       "Blink.LCPP.RecordedFontCount",
       base::checked_cast<int>(fetched_font_urls.size()));
   base::UmaHistogramCounts10000("Blink.LCPP.RecordedFontUrlsMaxLength",
                                 base::checked_cast<int>(max_url_length));
-  base::UmaHistogramCounts10000(
-      "Blink.LCPP.RecordedFontUrlMatchCount",
-      base::checked_cast<int>(updater->num_matched()));
+  base::UmaHistogramCounts10000("Blink.LCPP.RecordedFontUrlMatchCount",
+                                base::checked_cast<int>(updater.num_matched()));
   if (!fetched_font_urls.empty()) {
     base::UmaHistogramCounts10000(
         "Blink.LCPP.RecordedFontUrlMatchCountForPagesWithFonts",
-        base::checked_cast<int>(updater->num_matched()));
+        base::checked_cast<int>(updater.num_matched()));
     base::UmaHistogramPercentage(
         "Blink.LCPP.RecordedFontUrlPredictionMatchPercent",
-        base::checked_cast<int>(100 * updater->num_matched() /
+        base::checked_cast<int>(100 * updater.num_matched() /
                                 fetched_font_urls.size()));
   }
 
-  return updater->has_updated();
+  return updater.has_updated();
 }
 
 bool RecordFetchedSubresourceUrlsHistogram(
-    const LoadingPredictorConfig& config,
+    int sliding_window_size,
+    int max_histogram_buckets,
     const std::map<
         GURL,
         std::pair<base::TimeDelta, network::mojom::RequestDestination>>&
@@ -553,23 +559,22 @@ bool RecordFetchedSubresourceUrlsHistogram(
   // instead of `begin` and `end`.
   std::sort(time_and_urls.rbegin(), time_and_urls.rend());
 
-  std::unique_ptr<LcppFrequencyStatDataUpdater> updater =
+  LcppFrequencyStatDataUpdater updater =
       LcppFrequencyStatDataUpdater::FromLcppStringFrequencyStatData(
-          config.lcpp_histogram_sliding_window_size,
-          config.max_lcpp_histogram_buckets,
+          sliding_window_size, max_histogram_buckets,
           stat.fetched_subresource_url_stat());
   for (const auto& [resource_load_start, subresource_url] : time_and_urls) {
     if (!IsValidUrlInLcppStringFrequencyStatData(subresource_url)) {
       continue;
     }
-    updater->Update(subresource_url);
+    updater.Update(subresource_url);
   }
   *stat.mutable_fetched_subresource_url_stat() =
-      updater->ToLcppStringFrequencyStatData();
-  for (const auto& dropped_url : updater->dropped_entries()) {
+      updater.ToLcppStringFrequencyStatData();
+  for (const auto& dropped_url : updater.dropped_entries()) {
     stat.mutable_fetched_subresource_url_destination()->erase(dropped_url);
   }
-  return updater->has_updated();
+  return updater.has_updated();
 }
 
 bool IsValidLcpElementLocatorHistogram(
@@ -587,24 +592,23 @@ bool IsValidLcpElementLocatorHistogram(
   return true;
 }
 
-bool RecordUnusedPreloadUrlsHistogram(const LoadingPredictorConfig& config,
+bool RecordUnusedPreloadUrlsHistogram(int sliding_window_size,
+                                      int max_histogram_buckets,
                                       const std::vector<GURL>& unused_preloads,
                                       LcppStat& stat) {
-  std::unique_ptr<LcppFrequencyStatDataUpdater> updater =
+  LcppFrequencyStatDataUpdater updater =
       LcppFrequencyStatDataUpdater::FromLcppStringFrequencyStatData(
-          config.lcpp_histogram_sliding_window_size,
-          config.max_lcpp_histogram_buckets, stat.unused_preload_stat());
-  CHECK(updater);
+          sliding_window_size, max_histogram_buckets,
+          stat.unused_preload_stat());
   for (auto& url : unused_preloads) {
     if (!IsValidUrlInLcppStringFrequencyStatData(url.spec())) {
       continue;
     }
-    updater->Update(url.spec());
+    updater.Update(url.spec());
   }
-  *stat.mutable_unused_preload_stat() =
-      updater->ToLcppStringFrequencyStatData();
+  *stat.mutable_unused_preload_stat() = updater.ToLcppStringFrequencyStatData();
 
-  return updater->has_updated();
+  return updater.has_updated();
 }
 
 bool IsValidLcpUrlsHistogram(
@@ -769,6 +773,15 @@ std::vector<GURL> PredictFetchedSubresourceUrlsInternal(
 }
 
 }  // namespace
+
+bool RecordLcpElementLocatorHistogramForTesting(  // IN-TEST
+    int sliding_window_size,
+    int max_histogram_buckets,
+    const std::string& lcp_element_locator,
+    LcppStat& stat) {
+  return RecordLcpElementLocatorHistogram(
+      sliding_window_size, max_histogram_buckets, lcp_element_locator, stat);
+}
 
 std::optional<blink::mojom::LCPCriticalPathPredictorNavigationTimeHint>
 ConvertLcppStatToLCPCriticalPathPredictorNavigationTimeHint(
@@ -984,22 +997,33 @@ std::vector<GURL> PredictUnusedPreloads(const LcppStat& stat) {
 LcppDataInputs::LcppDataInputs() = default;
 LcppDataInputs::~LcppDataInputs() = default;
 
-bool UpdateLcppStatWithLcppDataInputs(const LoadingPredictorConfig& config,
-                                      const LcppDataInputs& inputs,
+bool UpdateLcppStatWithLcppDataInputs(const LcppDataInputs& inputs,
                                       LcppStat& stat) {
   bool data_updated = false;
   data_updated |= RecordLcpElementLocatorHistogram(
-      config, inputs.lcp_element_locator, stat);
+      blink::features::kLCPCriticalPathPredictorSlidingWindowSize.Get(),
+      blink::features::kLCPCriticalPathPredictorMaxHistogramBuckets.Get(),
+      inputs.lcp_element_locator, stat);
   data_updated |= RecordLcpInfluencerScriptUrlsHistogram(
-      config, inputs.lcp_influencer_scripts, stat);
-  data_updated |=
-      RecordFetchedFontUrlsHistogram(config, inputs.font_urls, stat);
+      blink::features::kLCPScriptObserverSlidingWindowSize.Get(),
+      blink::features::kLCPScriptObserverMaxHistogramBuckets.Get(),
+      inputs.lcp_influencer_scripts, stat);
+  data_updated |= RecordFetchedFontUrlsHistogram(
+      blink::features::kLCPPFontURLPredictorSlidingWindowSize.Get(),
+      blink::features::kLCPPFontURLPredictorMaxHistogramBuckets.Get(),
+      inputs.font_urls, stat);
   data_updated |= RecordFetchedSubresourceUrlsHistogram(
-      config, inputs.subresource_urls, stat);
-  data_updated |=
-      RecordPreconnectOriginsHistogram(config, inputs.preconnect_origins, stat);
+      blink::features::kHttpDiskCachePrewarmingSlidingWindowSize.Get(),
+      blink::features::kHttpDiskCachePrewarmingMaxHistogramBuckets.Get(),
+      inputs.subresource_urls, stat);
+  data_updated |= RecordPreconnectOriginsHistogram(
+      blink::features::kLCPPAutoPreconnectSlidingWindowSize.Get(),
+      blink::features::kLCPPAutoPreconnectMaxHistogramBuckets.Get(),
+      inputs.preconnect_origins, stat);
   data_updated |= RecordUnusedPreloadUrlsHistogram(
-      config, inputs.unused_preload_resources, stat);
+      blink::features::kLCPPDeferUnusedPreloadSlidingWindowSize.Get(),
+      blink::features::kLCPPDeferUnusedPreloadMaxHistogramBuckets.Get(),
+      inputs.unused_preload_resources, stat);
   base::UmaHistogramCounts10000("Blink.LCPP.ReportedFontCount",
                                 base::checked_cast<int>(inputs.font_url_count));
   if (inputs.font_url_count > 0 && inputs.font_urls.size() > 0) {
@@ -1045,12 +1069,12 @@ void UpdateLcppStringFrequencyStatData(
     LcppStringFrequencyStatData& lcpp_stat_data,
     std::optional<std::string>& dropped_entry) {
   dropped_entry = std::nullopt;
-  std::unique_ptr<LcppFrequencyStatDataUpdater> updater =
+  LcppFrequencyStatDataUpdater updater =
       LcppFrequencyStatDataUpdater::FromLcppStringFrequencyStatData(
           sliding_window_size, max_histogram_buckets, lcpp_stat_data);
-  updater->Update(new_entry);
-  lcpp_stat_data = updater->ToLcppStringFrequencyStatData();
-  if (auto dropped_entries = updater->dropped_entries();
+  updater.Update(new_entry);
+  lcpp_stat_data = updater.ToLcppStringFrequencyStatData();
+  if (auto dropped_entries = updater.dropped_entries();
       !dropped_entries.empty()) {
     CHECK_EQ(dropped_entries.size(), 1U);
     dropped_entry = dropped_entries.back();
@@ -1286,8 +1310,7 @@ bool LcppDataMap::LearnLcpp(const std::optional<url::Origin>& initiator_origin,
       base::UmaHistogramBoolean("LoadingPredictor.LcppStatCorruptedAtLearnTime",
                                 true);
     }
-    data_updated |=
-        UpdateLcppStatWithLcppDataInputs(config_, inputs, *lcpp_stat);
+    data_updated |= UpdateLcppStatWithLcppDataInputs(inputs, *lcpp_stat);
     if (IsLCPPFontPrefetchExcludedHost(url) &&
         lcpp_stat->has_fetched_font_url_stat()) {
       lcpp_stat->clear_fetched_font_url_stat();

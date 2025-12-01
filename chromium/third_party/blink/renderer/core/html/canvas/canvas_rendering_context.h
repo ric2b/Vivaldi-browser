@@ -38,9 +38,7 @@
 #include "third_party/blink/renderer/core/html/canvas/canvas_context_creation_attributes_core.h"
 #include "third_party/blink/renderer/core/html/canvas/canvas_performance_monitor.h"
 #include "third_party/blink/renderer/core/html/canvas/canvas_rendering_context_host.h"
-#include "third_party/blink/renderer/platform/bindings/script_wrappable.h"
 #include "third_party/blink/renderer/platform/graphics/canvas_resource_provider.h"
-#include "third_party/blink/renderer/platform/graphics/graphics_types.h"
 #include "third_party/blink/renderer/platform/graphics/graphics_types_3d.h"
 #include "third_party/blink/renderer/platform/heap/member.h"
 #include "third_party/blink/renderer/platform/heap/prefinalizer.h"
@@ -87,8 +85,7 @@ class
 class WebGraphicsContext3DVideoFramePool;
 
 class CORE_EXPORT CanvasRenderingContext
-    : public ScriptWrappable,
-      public ActiveScriptWrappable<CanvasRenderingContext>,
+    : public ActiveScriptWrappable<CanvasRenderingContext>,
       public Thread::TaskObserver {
   USING_PRE_FINALIZER(CanvasRenderingContext, Dispose);
 
@@ -96,6 +93,11 @@ class CORE_EXPORT CanvasRenderingContext
   CanvasRenderingContext(const CanvasRenderingContext&) = delete;
   CanvasRenderingContext& operator=(const CanvasRenderingContext&) = delete;
   ~CanvasRenderingContext() override = default;
+
+  // TODO(crbug.com/40280152): Remove these methods once killswitch-guarded
+  // behavior has shipped.
+  static bool CheckProviderInCanCreateCanvas2dResourceProvider();
+  static bool CheckProviderInCanvas2DRenderingContextIsPaintable();
 
   // Correspond to CanvasRenderingAPI defined in
   // tools/metrics/histograms/enums.xml
@@ -180,7 +182,6 @@ class CORE_EXPORT CanvasRenderingContext
   }
 
   virtual SkAlphaType GetAlphaType() const = 0;
-  virtual SkColorType GetSkColorType() const = 0;
   virtual viz::SharedImageFormat GetSharedImageFormat() const = 0;
   virtual gfx::ColorSpace GetColorSpace() const = 0;
 
@@ -263,13 +264,11 @@ class CORE_EXPORT CanvasRenderingContext
   // Canvas2D-specific interface
   virtual void RestoreCanvasMatrixClipStack(cc::PaintCanvas*) const {}
   virtual void Reset() {}
-  virtual void ClearRect(double x, double y, double width, double height) {}
   virtual void RestoreProviderAndContextIfPossible() {}
-  virtual void SetShouldAntialias(bool) {}
   virtual void StyleDidChange(const ComputedStyle* old_style,
                               const ComputedStyle& new_style) {}
+  virtual void LangAttributeChanged() {}
   virtual String GetIdFromControl(const Element* element) { return String(); }
-  virtual void ResetUsageTracking() {}
   virtual int LayerCount() const { return 0; }
 
   virtual void setFontForTesting(const String&) { NOTREACHED(); }
@@ -322,6 +321,8 @@ class CORE_EXPORT CanvasRenderingContext
   virtual bool IdentifiabilityEncounteredPartiallyDigestedImage() const {
     return false;
   }
+
+  virtual bool ShouldTriggerIntervention() const { return false; }
 
   bool did_print_in_current_task() const { return did_print_in_current_task_; }
 

@@ -54,7 +54,7 @@ namespace {
 
 const std::optional<ParsedClientHello> kNoParsedChlo;
 const std::optional<ParsedClientHello> kDefaultParsedChlo =
-    absl::make_optional<ParsedClientHello>();
+    std::make_optional<ParsedClientHello>();
 
 using BufferedPacket = QuicBufferedPacketStore::BufferedPacket;
 using BufferedPacketList = QuicBufferedPacketStore::BufferedPacketList;
@@ -64,7 +64,6 @@ using ::testing::A;
 using ::testing::Conditional;
 using ::testing::Each;
 using ::testing::ElementsAre;
-using ::testing::Invoke;
 using ::testing::Ne;
 using ::testing::Return;
 using ::testing::SizeIs;
@@ -894,12 +893,7 @@ TEST_F(QuicBufferedPacketStoreTest, InitialAckHasClientConnectionId) {
       client_received_packets_[0]->packet_info;
   // From the client's perspective, the destination connection ID is kSCID and
   // the source connection ID is kDCID.
-  if (GetQuicReloadableFlag(quic_buffered_store_set_client_cid)) {
-    EXPECT_EQ(client_received_packet_info.destination_connection_id, kSCID);
-  } else {
-    EXPECT_EQ(client_received_packet_info.destination_connection_id,
-              EmptyQuicConnectionId());
-  }
+  EXPECT_EQ(client_received_packet_info.destination_connection_id, kSCID);
   EXPECT_EQ(client_received_packet_info.source_connection_id, kDCID);
 }
 

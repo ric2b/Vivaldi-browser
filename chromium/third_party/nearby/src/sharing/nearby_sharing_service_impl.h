@@ -157,7 +157,6 @@ class NearbySharingServiceImpl
   void Cancel(int64_t share_target_id,
               std::function<void(StatusCodes status_codes)>
                   status_codes_callback) override;
-  bool DidLocalUserCancelTransfer(int64_t share_target_id) override;
   void SetVisibility(
       proto::DeviceVisibility visibility, absl::Duration expiration,
       absl::AnyInvocable<void(StatusCodes status_code) &&> callback) override;
@@ -168,6 +167,10 @@ class NearbySharingServiceImpl
   NearbyShareCertificateManager* GetCertificateManager() override;
   AccountManager* GetAccountManager() override;
   Clock& GetClock() override { return *context_->GetClock(); }
+  void SetAlternateServiceUuidForDiscovery(
+      uint16_t alternate_service_uuid) override {
+    alternate_service_uuid_ = alternate_service_uuid;
+  }
 
   // NearbyConnectionsManager::IncomingConnectionListener:
   void OnIncomingConnection(absl::string_view endpoint_id,
@@ -458,6 +461,11 @@ class NearbySharingServiceImpl
   void OnIncomingFilesMetadataUpdated(int64_t share_target_id,
                                       TransferMetadata metadata, bool success);
 
+  // Notify all registered send surfaces of share target state changes.
+  void OnShareTargetDiscovered(const ShareTarget& share_target);
+  void OnShareTargetUpdated(const ShareTarget& share_target);
+  void OnShareTargetLost(const ShareTarget& share_target);
+
   // Used to run nearby sharing service APIs.
   std::unique_ptr<TaskRunner> service_thread_;
   Context* const context_;
@@ -526,11 +534,6 @@ class NearbySharingServiceImpl
   // A map of Endpoint id to DiscoveryCacheEntry.
   // All ShareTargets in discovery cache have received_disabled set to true.
   absl::flat_hash_map<std::string, DiscoveryCacheEntry> discovery_cache_;
-  // For metrics. The IDs of ShareTargets that are cancelled while trying to
-  // establish an outgoing connection.
-  absl::flat_hash_set<int64_t> all_cancelled_share_target_ids_;
-  // The IDs of ShareTargets that we cancelled the transfer to.
-  absl::flat_hash_set<int64_t> locally_cancelled_share_target_ids_;
   // A map from endpoint ID to endpoint info from discovered, contact-based
   // advertisements that could not decrypt any available public certificates.
   // During discovery, if certificates are downloaded, we revisit this map and
@@ -594,6 +597,7 @@ class NearbySharingServiceImpl
   // Used to track the time when share sheet activity starts
   absl::Time share_foreground_send_surface_start_timestamp_;
   std::unique_ptr<nearby::api::AppInfo> app_info_;
+  std::optional<uint16_t> alternate_service_uuid_;
 };
 
 }  // namespace nearby::sharing

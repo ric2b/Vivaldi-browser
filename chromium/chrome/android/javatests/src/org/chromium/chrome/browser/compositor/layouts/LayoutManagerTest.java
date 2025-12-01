@@ -19,6 +19,7 @@ import android.view.ContextThemeWrapper;
 import android.view.MotionEvent;
 import android.view.MotionEvent.PointerCoords;
 import android.view.MotionEvent.PointerProperties;
+import android.view.ViewGroup;
 import android.widget.FrameLayout;
 
 import androidx.test.annotation.UiThreadTest;
@@ -33,11 +34,13 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.Mock;
-import org.mockito.MockitoAnnotations;
+import org.mockito.junit.MockitoJUnit;
+import org.mockito.junit.MockitoRule;
 
 import org.chromium.base.Log;
 import org.chromium.base.MathUtils;
 import org.chromium.base.ThreadUtils;
+import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.base.supplier.ObservableSupplierImpl;
 import org.chromium.base.supplier.OneshotSupplierImpl;
 import org.chromium.base.supplier.Supplier;
@@ -48,6 +51,7 @@ import org.chromium.base.test.util.DisableIf;
 import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.Restriction;
+import org.chromium.chrome.browser.compositor.CompositorViewHolder;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.hub.HubLayoutDependencyHolder;
 import org.chromium.chrome.browser.init.ChromeBrowserInitializer;
@@ -67,6 +71,7 @@ import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.tabmodel.TabModelUtils;
 import org.chromium.chrome.browser.tabmodel.TabWindowManager;
 import org.chromium.chrome.browser.theme.TopUiThemeColorProvider;
+import org.chromium.chrome.browser.toolbar.ToolbarManager;
 import org.chromium.chrome.browser.util.ChromeAccessibilityUtil;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
@@ -84,12 +89,18 @@ import java.util.concurrent.TimeoutException;
 public class LayoutManagerTest implements MockTabModelDelegate {
     private static final String TAG = "LayoutManagerTest";
 
+    @Rule public final MockitoRule mMockitoRule = MockitoJUnit.rule();
+
     @Rule
     public ChromeTabbedActivityTestRule mActivityTestRule = new ChromeTabbedActivityTestRule();
 
     @Mock private TopUiThemeColorProvider mTopUiThemeColorProvider;
     @Mock private HubLayoutDependencyHolder mHubLayoutDependencyHolder;
     @Mock private TabWindowManager mTabWindowManager;
+    @Mock private ObservableSupplier<CompositorViewHolder> mCompositorViewHolderSupplier;
+    @Mock private ObservableSupplier<Boolean> mScrimVisibilitySupplier;
+    @Mock private ToolbarManager mToolbarManager;
+    @Mock private ViewGroup mContentView;
 
     private TabModelSelector mTabModelSelector;
     private OneshotSupplierImpl<TabSwitcher> mTabSwitcherSupplier;
@@ -213,7 +224,11 @@ public class LayoutManagerTest implements MockTabModelDelegate {
                         mTabModelSelectorSupplier,
                         tabContentManagerSupplier,
                         () -> mTopUiThemeColorProvider,
-                        mHubLayoutDependencyHolder);
+                        mHubLayoutDependencyHolder,
+                        mCompositorViewHolderSupplier,
+                        mContentView,
+                        mToolbarManager,
+                        mScrimVisibilitySupplier);
 
         tabContentManagerSupplier.set(tabContentManager);
         mManager = mManagerPhone;
@@ -623,7 +638,6 @@ public class LayoutManagerTest implements MockTabModelDelegate {
 
     @Before
     public void setUp() {
-        MockitoAnnotations.initMocks(this);
 
         // Load the browser process.
         ThreadUtils.runOnUiThreadBlocking(

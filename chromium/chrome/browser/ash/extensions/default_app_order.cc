@@ -146,6 +146,8 @@ void GetDefault(std::vector<std::string>* app_ids) {
 
     ash::kMessagesAppId,
 
+    ash::kNotebookLmAppId,
+
     arc::kYoutubeAppId,
     extension_misc::kYoutubeAppId,
     ash::kYoutubeAppId,
@@ -306,10 +308,9 @@ void Get(std::vector<std::string>* app_ids) {
 }
 
 base::span<const apps::LauncherItem> GetAppPreloadServiceDefaults() {
-  static const base::NoDestructor<std::array<apps::LauncherItem, 20>>
+  static const base::NoDestructor<std::array<apps::LauncherItem, 19>>
       kPackageIds({
           PackageId(PackageType::kChromeApp, app_constants::kChromeAppId),
-          PackageId(PackageType::kSystem, app_constants::kLacrosChrome),
           PackageId(PackageType::kChromeApp, arc::kPlayStoreAppId),
           SystemPackageId(ash::SystemWebAppType::FILE_MANAGER),
           PackageId(PackageType::kWeb, ash::kGmailManifestId),

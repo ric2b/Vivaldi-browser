@@ -8,9 +8,9 @@
 #include "base/memory/raw_ptr.h"
 #include "chrome/browser/ui/tab_sharing/tab_sharing_infobar_delegate.h"
 #include "chrome/browser/ui/views/infobars/infobar_view.h"
+#include "chrome/browser/ui/views/tab_sharing/tab_sharing_status_message_view.h"
 
 namespace views {
-class Label;
 class MdTextButton;
 }  // namespace views
 
@@ -22,6 +22,8 @@ class MdTextButton;
 class TabSharingInfoBar : public InfoBarView {
  public:
   TabSharingInfoBar(std::unique_ptr<TabSharingInfoBarDelegate> delegate,
+                    content::GlobalRenderFrameHostId shared_tab_id,
+                    content::GlobalRenderFrameHostId capturer_id,
                     const std::u16string& shared_tab_name,
                     const std::u16string& capturer_name,
                     TabSharingInfoBarDelegate::TabRole role,
@@ -35,17 +37,29 @@ class TabSharingInfoBar : public InfoBarView {
   // InfoBarView:
   void Layout(PassKey) override;
 
-  views::Label* label_for_testing() { return label_; }
-  views::MdTextButton* stop_button_for_testing() { return stop_button_; }
+  const views::View* GetStatusMessageViewForTesting() const {
+    return status_message_view_;
+  }
 
  protected:
   // InfoBarView:
   int GetContentMinimumWidth() const override;
 
  private:
+  std::unique_ptr<views::View> CreateStatusMessageView(
+      content::GlobalRenderFrameHostId shared_tab_id,
+      content::GlobalRenderFrameHostId capturer_id,
+      const std::u16string& shared_tab_name,
+      const std::u16string& capturer_name,
+      TabSharingInfoBarDelegate::TabRole role,
+      TabSharingInfoBarDelegate::TabShareType capture_type) const;
+  std::unique_ptr<views::Label> CreateStatusMessageLabel(
+      const TabSharingStatusMessageView::EndpointInfo& shared_tab_info,
+      const TabSharingStatusMessageView::EndpointInfo& capturer_info,
+      const std::u16string& capturer_name,
+      TabSharingInfoBarDelegate::TabRole role,
+      TabSharingInfoBarDelegate::TabShareType capture_type) const;
   TabSharingInfoBarDelegate* GetDelegate();
-
-  std::u16string GetMessageText() const;
 
   void StopButtonPressed();
   void ShareThisTabInsteadButtonPressed();
@@ -56,19 +70,10 @@ class TabSharingInfoBar : public InfoBarView {
   // Layout uses this to determine how much space the label and link can take.
   int NonLabelWidth() const;
 
-  const std::u16string shared_tab_name_;
+  // Indicates to the local user which are the capturing and captured origins,
+  // and possibly has both as quick-nav links.
+  raw_ptr<views::View> status_message_view_;
 
-  // Represents the app name that's doing the capture in `getDisplayMedia` when
-  // `TabShareType::CAPTURE`, and the sink name (which could be empty) when
-  // `TabShareType::CAST`.
-  const std::u16string capturer_name_;
-
-  const TabSharingInfoBarDelegate::TabRole role_;
-
-  // Indicates whether this instance is used for casting or capturing.
-  const TabSharingInfoBarDelegate::TabShareType capture_type_;
-
-  raw_ptr<views::Label> label_ = nullptr;
   raw_ptr<views::MdTextButton> stop_button_ = nullptr;
   raw_ptr<views::MdTextButton> share_this_tab_instead_button_ = nullptr;
   raw_ptr<views::MdTextButton> quick_nav_button_ = nullptr;

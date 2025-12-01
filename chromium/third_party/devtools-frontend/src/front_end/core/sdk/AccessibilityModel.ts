@@ -202,23 +202,17 @@ export interface EventTypes {
 
 export class AccessibilityModel extends SDKModel<EventTypes> implements ProtocolProxyApi.AccessibilityDispatcher {
   agent: ProtocolProxyApi.AccessibilityApi;
-  #axIdToAXNode: Map<string, AccessibilityNode>;
-  #backendDOMNodeIdToAXNode: Map<Protocol.DOM.BackendNodeId, AccessibilityNode>;
-  #frameIdToAXNode: Map<Protocol.Page.FrameId, AccessibilityNode>;
-  #pendingChildRequests: Map<string, Promise<Protocol.Accessibility.GetChildAXNodesResponse>>;
-  #root: AccessibilityNode|null;
+  #axIdToAXNode = new Map<string, AccessibilityNode>();
+  #backendDOMNodeIdToAXNode = new Map<Protocol.DOM.BackendNodeId, AccessibilityNode>();
+  #frameIdToAXNode = new Map<Protocol.Page.FrameId, AccessibilityNode>();
+  #pendingChildRequests = new Map<string, Promise<Protocol.Accessibility.GetChildAXNodesResponse>>();
+  #root: AccessibilityNode|null = null;
 
   constructor(target: Target) {
     super(target);
     target.registerAccessibilityDispatcher(this);
     this.agent = target.accessibilityAgent();
     void this.resumeModel();
-
-    this.#axIdToAXNode = new Map();
-    this.#backendDOMNodeIdToAXNode = new Map();
-    this.#frameIdToAXNode = new Map();
-    this.#pendingChildRequests = new Map();
-    this.#root = null;
   }
 
   clear(): void {
@@ -286,7 +280,7 @@ export class AccessibilityModel extends SDKModel<EventTypes> implements Protocol
       Promise<AccessibilityNode[]> {
     const parent = this.#axIdToAXNode.get(nodeId);
     if (!parent) {
-      throw Error('Cannot request children before parent');
+      throw new Error('Cannot request children before parent');
     }
     if (!parent.hasUnloadedChildren()) {
       return parent.children();
@@ -334,10 +328,6 @@ export class AccessibilityModel extends SDKModel<EventTypes> implements Protocol
 
   setRootAXNodeForFrameId(frameId: Protocol.Page.FrameId, axNode: AccessibilityNode): void {
     this.#frameIdToAXNode.set(frameId, axNode);
-  }
-
-  axNodeForFrameId(frameId: Protocol.Page.FrameId): AccessibilityNode|null {
-    return this.#frameIdToAXNode.get(frameId) ?? null;
   }
 
   setAXNodeForAXId(axId: string, axNode: AccessibilityNode): void {

@@ -15,7 +15,6 @@
 #include "base/test/bind.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/mojom/v8_cache_options.mojom-blink.h"
 #include "third_party/blink/public/mojom/worker/dedicated_worker_host.mojom-blink.h"
 #include "third_party/blink/public/platform/task_type.h"
@@ -77,7 +76,7 @@ class CustomEventWithData final : public Event {
 
   explicit CustomEventWithData(const AtomicString& event_type,
                                scoped_refptr<SerializedScriptValue> data,
-                               MessagePortArray* ports)
+                               GCedMessagePortArray* ports)
       : Event(event_type, Bubbles::kNo, Cancelable::kNo),
         data_as_serialized_script_value_(
             SerializedScriptValue::Unpack(std::move(data))),
@@ -95,11 +94,11 @@ class CustomEventWithData final : public Event {
     return data_as_serialized_script_value_->Value();
   }
 
-  MessagePortArray* ports() { return ports_; }
+  GCedMessagePortArray* ports() { return ports_; }
 
  private:
   Member<UnpackedSerializedScriptValue> data_as_serialized_script_value_;
-  Member<MessagePortArray> ports_;
+  Member<GCedMessagePortArray> ports_;
 };
 
 ScriptValue CreateStringScriptValue(ScriptState* script_state,
@@ -145,7 +144,7 @@ CustomEventWithPortsFactoryCallback(base::RepeatingClosure quit_closure,
   return CrossThreadBindRepeating(base::BindLambdaForTesting(
       [quit_closure = std::move(quit_closure), out_event](
           ScriptState* script_state, CustomEventMessage message) -> Event* {
-        MessagePortArray* ports = MessagePort::EntanglePorts(
+        GCedMessagePortArray* ports = MessagePort::EntanglePorts(
             *ExecutionContext::From(script_state), std::move(message.ports));
         CustomEventWithData* result = MakeGarbageCollected<CustomEventWithData>(
             AtomicString::FromUTF8(kCustomEventName),
@@ -313,14 +312,13 @@ class DedicatedWorkerMessagingProxyForTest
             WorkerBackingThreadStartupData::AtomicsWaitMode::kAllow),
         WorkerObjectProxy().token());
 
-    if (base::FeatureList::IsEnabled(features::kPlzDedicatedWorker)) {
-      PostCrossThreadTask(
-          *GetDedicatedWorkerThread()->GetTaskRunner(TaskType::kInternalTest),
-          FROM_HERE,
-          CrossThreadBindOnce(
-              &DedicatedWorkerThreadForTest::InitializeGlobalScope,
-              CrossThreadUnretained(GetDedicatedWorkerThread()), script_url_));
-    }
+    PostCrossThreadTask(
+        *GetDedicatedWorkerThread()->GetTaskRunner(TaskType::kInternalTest),
+        FROM_HERE,
+        CrossThreadBindOnce(
+            &DedicatedWorkerThreadForTest::InitializeGlobalScope,
+            CrossThreadUnretained(GetDedicatedWorkerThread()), script_url_));
+
   }
 
   void EvaluateClassicScript(const String& source) {
@@ -352,11 +350,6 @@ class FakeWebDedicatedWorkerHostFactoryClient
     : public WebDedicatedWorkerHostFactoryClient {
  public:
   // Implements WebDedicatedWorkerHostFactoryClient.
-  void CreateWorkerHostDeprecated(
-      const DedicatedWorkerToken& dedicated_worker_token,
-      const WebURL& script_url,
-      const WebSecurityOrigin& origin,
-      CreateWorkerHostCallback callback) override {}
   void CreateWorkerHost(
       const DedicatedWorkerToken& dedicated_worker_token,
       const WebURL& script_url,

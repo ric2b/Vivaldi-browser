@@ -130,14 +130,14 @@ suite('AppTest', () => {
 
   const testId = 'abcdef01-2345-6789-abcd-ef0123456789';
 
-  async function createAppElement(): Promise<ProductSpecificationsElement> {
+  function createAppElement(): Promise<ProductSpecificationsElement> {
     appElement = document.createElement('product-specifications-app');
 
     loadingStartPromise = createLoadingStartPromise();
     loadingEndPromise = createLoadingEndPromise();
 
     document.body.appendChild(appElement);
-    return appElement;
+    return Promise.resolve(appElement);
   }
 
   async function createAppElementWithPromiseValues(
@@ -166,6 +166,18 @@ suite('AppTest', () => {
           }
           const emptyInfo = createProductInfo();
           return Promise.resolve({productInfo: emptyInfo});
+        });
+    shoppingServiceApi.setResultMapperFor(
+        'getProductInfoForUrls', (urls: Url[]) => {
+          const productInfos: ProductInfo[] = [];
+          for (const url of urls) {
+            const info = promiseValues.productInfos.find(
+                (curInfo) => curInfo.productUrl.url === url.url);
+            if (info) {
+              productInfos.push(info);
+            }
+          }
+          return Promise.resolve({productInfos: productInfos});
         });
     productSpecificationsProxy.setResultMapperFor(
         'getPageTitleFromHistory', (url: Url) => {
@@ -203,7 +215,7 @@ suite('AppTest', () => {
     callbackRouterRemote.onProductSpecificationsSetUpdated(set);
   }
 
-  setup(async () => {
+  setup(() => {
     document.body.innerHTML = window.trustedTypes!.emptyHTML;
     loadTimeData.overrideValues({
       defaultTableTitle: 'title',
@@ -621,7 +633,7 @@ suite('AppTest', () => {
               imageUrl: productInfo1.imageUrl.url,
             },
             productDetails: [
-              {title: 'price', content: {price: '', jackpotUrl: ''}},
+              {title: 'price', content: null},
               {title: 'summary', content: {attributes: [], summary: []}},
               {
                 title: detailTitle,
@@ -745,7 +757,7 @@ suite('AppTest', () => {
               imageUrl: productInfo1.imageUrl.url,
             },
             productDetails: [
-              {title: 'price', content: {price: '', jackpotUrl: ''}},
+              {title: 'price', content: null},
               {title: 'summary', content: {attributes: [], summary: []}},
               {
                 title: detailTitle,
@@ -763,7 +775,7 @@ suite('AppTest', () => {
               imageUrl: productInfo2.imageUrl.url,
             },
             productDetails: [
-              {title: 'price', content: {price: '', jackpotUrl: ''}},
+              {title: 'price', content: null},
               {title: 'summary', content: {attributes: [], summary: []}},
               {
                 title: detailTitle,
@@ -956,7 +968,7 @@ suite('AppTest', () => {
               imageUrl: productInfo2.imageUrl.url,
             },
             productDetails: [
-              {title: 'price', content: {price: '', jackpotUrl: ''}},
+              {title: 'price', content: null},
               {title: 'summary', content: {attributes: [], summary: []}},
               {
                 title: rowTitle,
@@ -974,7 +986,7 @@ suite('AppTest', () => {
               imageUrl: productInfo1.imageUrl.url,
             },
             productDetails: [
-              {title: 'price', content: {price: '', jackpotUrl: ''}},
+              {title: 'price', content: null},
               {title: 'summary', content: {attributes: [], summary: []}},
               {
                 title: rowTitle,
@@ -1347,7 +1359,7 @@ suite('AppTest', () => {
 
     async function clickFirstAvailableItemInFirstColumn() {
       const table = appElement.$.summaryTable;
-      const selector = table.shadowRoot!.querySelector<ProductSelectorElement>(
+      const selector = table.shadowRoot.querySelector<ProductSelectorElement>(
           'product-selector');
       assertTrue(!!selector);
       selector.$.currentProductContainer.click();
@@ -1452,7 +1464,7 @@ suite('AppTest', () => {
               CompareTableColumnAction.UPDATE_FROM_RECENTLY_VIEWED));
     });
 
-    test('record metrics for success state', async () => {
+    test('record metrics for success state', () => {
       // Table has been loaded in test setup.
       assertEquals(
           1,
@@ -1670,10 +1682,10 @@ suite('AppTest', () => {
     // Wait for the loading animation to start.
     await loadingStartPromise;
     const feedbackLoading =
-        appElement.shadowRoot!.querySelector('#feedbackLoading');
+        appElement.shadowRoot.querySelector('#feedbackLoading');
     assertTrue(!!feedbackLoading);
     const feedbackButtons =
-        appElement.shadowRoot!.querySelector('#feedbackButtons');
+        appElement.shadowRoot.querySelector('#feedbackButtons');
     assertTrue(!!feedbackButtons);
 
     assertTrue(isVisible(feedbackLoading));
@@ -1700,9 +1712,9 @@ suite('AppTest', () => {
     // Wait for the loading animation to start.
     await loadingStartPromise;
     const feedbackLoading =
-        appElement.shadowRoot!.querySelector('#feedbackLoading');
+        appElement.shadowRoot.querySelector('#feedbackLoading');
     const feedbackButtons =
-        appElement.shadowRoot!.querySelector('#feedbackButtons');
+        appElement.shadowRoot.querySelector('#feedbackButtons');
 
     assertFalse(isVisible(feedbackLoading));
     assertFalse(isVisible(feedbackButtons));
@@ -1720,23 +1732,21 @@ suite('AppTest', () => {
       urlsParam: ['https://example.com/'],
     });
     await createAppElementWithPromiseValues(promiseValues);
-    const learnMoreLink =
-        appElement.shadowRoot!.querySelector('#learnMoreLink');
-    const disclaimer = appElement.shadowRoot!.querySelector('#disclaimer');
+    const learnMoreLink = appElement.shadowRoot.querySelector('#learnMoreLink');
+    const disclaimer = appElement.shadowRoot.querySelector('#disclaimer');
 
     assertTrue(!!learnMoreLink);
     assertTrue(isVisible(learnMoreLink));
     assertEquals(
         loadTimeData.getString('compareLearnMoreUrl'),
-        learnMoreLink!.getAttribute('href'));
+        learnMoreLink.getAttribute('href'));
 
     assertTrue(!!disclaimer);
     assertTrue(!!disclaimer.textContent);
     // Remove the link part before verifying the string to avoid verifying the
     // spaces due to the templated string.
     const disclaimerText =
-        disclaimer!.textContent!.replace(learnMoreLink!.textContent!, '')
-            .trim();
+        disclaimer.textContent.replace(learnMoreLink.textContent!, '').trim();
     assertEquals(
         loadTimeData.getStringF('experimentalFeatureDisclaimer', testEmail),
         disclaimerText);
@@ -1787,7 +1797,7 @@ suite('AppTest', () => {
     assertEquals(1, table.columns.length);
     assertEquals(
         1, shoppingServiceApi.getCallCount('getProductSpecificationsForUrls'));
-    assertEquals(1, shoppingServiceApi.getCallCount('getProductInfoForUrl'));
+    assertEquals(1, shoppingServiceApi.getCallCount('getProductInfoForUrls'));
 
     table.dispatchEvent(new CustomEvent('url-remove', {
       detail: {
@@ -1803,7 +1813,7 @@ suite('AppTest', () => {
     // Should not get called on an empty url list.
     assertEquals(
         1, shoppingServiceApi.getCallCount('getProductSpecificationsForUrls'));
-    assertEquals(1, shoppingServiceApi.getCallCount('getProductInfoForUrl'));
+    assertEquals(1, shoppingServiceApi.getCallCount('getProductInfoForUrls'));
   });
 
   test('deletes product specification set', async () => {
@@ -1895,11 +1905,11 @@ suite('AppTest', () => {
         await createAppElement();
       });
 
-      test('displays correct subtitle', async () => {
+      test('displays correct subtitle', () => {
         assertEquals(null, appElement.$.header.subtitle);
       });
 
-      test('page title is not clickable', async () => {
+      test('page title is not clickable', () => {
         assertFalse(appElement.$.header.isPageTitleClickable);
       });
     });
@@ -1916,7 +1926,7 @@ suite('AppTest', () => {
         await createAppElementWithPromiseValues(promiseValues);
       });
 
-      test('displays correct subtitle', async () => {
+      test('displays correct subtitle', () => {
         assertEquals('fooName', appElement.$.header.subtitle);
       });
 
@@ -1947,7 +1957,7 @@ suite('AppTest', () => {
 
       assertTrue(isVisible(appElement.$.empty));
       assertFalse(isVisible(appElement.$.specs));
-      const footer = appElement.shadowRoot!.querySelector('#footer');
+      const footer = appElement.shadowRoot.querySelector('#footer');
       assertFalse(isVisible(footer));
     });
 
@@ -2221,14 +2231,13 @@ suite('AppTest', () => {
 
     function updateCrFeedbackButtons(option: CrFeedbackOption) {
       const feedbackButtons =
-          appElement.shadowRoot!.querySelector('#feedbackButtons');
+          appElement.shadowRoot.querySelector('#feedbackButtons');
       assertTrue(!!feedbackButtons);
-      feedbackButtons!.dispatchEvent(
-          new CustomEvent('selected-option-changed', {
-            bubbles: true,
-            composed: true,
-            detail: {value: option},
-          }));
+      feedbackButtons.dispatchEvent(new CustomEvent('selected-option-changed', {
+        bubbles: true,
+        composed: true,
+        detail: {value: option},
+      }));
     }
 
     updateCrFeedbackButtons(CrFeedbackOption.THUMBS_DOWN);
@@ -2359,9 +2368,9 @@ suite('AppTest', () => {
       // Wait for the loading animation to start.
       await loadingStartPromise;
       const feedbackLoading =
-          appElement.shadowRoot!.querySelector('#feedbackLoading');
+          appElement.shadowRoot.querySelector('#feedbackLoading');
       const feedbackButtons =
-          appElement.shadowRoot!.querySelector('#feedbackButtons');
+          appElement.shadowRoot.querySelector('#feedbackButtons');
 
       assertFalse(isVisible(feedbackLoading));
       assertFalse(isVisible(feedbackButtons));
@@ -2372,27 +2381,30 @@ suite('AppTest', () => {
       assertFalse(isVisible(feedbackButtons));
     });
 
-    test('shows sync state if user is not syncing', async () => {
-      shoppingServiceApi.setResultFor(
-          'getProductSpecificationsFeatureState', Promise.resolve({
-            state: {
-              isSyncingTabCompare: false,
-              canLoadFullPageUi: true,
-              canManageSets: true,
-              canFetchData: true,
-              isAllowedForEnterprise: true,
-            },
-          }));
-      await createAppElement();
-      await shoppingServiceApi.whenCalled(
-          'getProductSpecificationsFeatureState');
-      await microtasksFinished();
+    test(
+        'shows sync state and disables header if user is not syncing',
+        async () => {
+          shoppingServiceApi.setResultFor(
+              'getProductSpecificationsFeatureState', Promise.resolve({
+                state: {
+                  isSyncingTabCompare: false,
+                  canLoadFullPageUi: true,
+                  canManageSets: true,
+                  canFetchData: true,
+                  isAllowedForEnterprise: true,
+                },
+              }));
+          await createAppElement();
+          await shoppingServiceApi.whenCalled(
+              'getProductSpecificationsFeatureState');
+          await microtasksFinished();
 
-      assertTrue(isVisible(appElement.$.syncPromo));
-      assertFalse(isVisible(appElement.$.error));
-      assertFalse(isVisible(appElement.$.empty));
-      assertFalse(isVisible(appElement.$.specs));
-    });
+          assertTrue(isVisible(appElement.$.syncPromo));
+          assertFalse(isVisible(appElement.$.error));
+          assertFalse(isVisible(appElement.$.empty));
+          assertFalse(isVisible(appElement.$.specs));
+          assertTrue(appElement.$.header.disabled);
+        });
 
     test('shows error state if disabled', async () => {
       shoppingServiceApi.setResultFor(

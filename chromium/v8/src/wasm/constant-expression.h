@@ -2,12 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifndef V8_WASM_CONSTANT_EXPRESSION_H_
+#define V8_WASM_CONSTANT_EXPRESSION_H_
+
 #if !V8_ENABLE_WEBASSEMBLY
 #error This header should only be included if WebAssembly is enabled.
 #endif  // !V8_ENABLE_WEBASSEMBLY
-
-#ifndef V8_WASM_CONSTANT_EXPRESSION_H_
-#define V8_WASM_CONSTANT_EXPRESSION_H_
 
 #include <stdint.h>
 
@@ -51,8 +51,8 @@ class ConstantExpression {
     return ConstantExpression(ValueField::encode(index) |
                               KindField::encode(Kind::kRefFunc));
   }
-  static constexpr ConstantExpression RefNull(HeapType::Representation repr) {
-    return ConstantExpression(ValueField::encode(repr) |
+  static constexpr ConstantExpression RefNull(HeapType type) {
+    return ConstantExpression(ValueField::encode(type.raw_bit_field()) |
                               KindField::encode(Kind::kRefNull));
   }
   static constexpr ConstantExpression WireBytes(uint32_t offset,
@@ -71,10 +71,9 @@ class ConstantExpression {
     return ValueField::decode(bit_field_);
   }
 
-  constexpr HeapType::Representation repr() const {
+  constexpr HeapType type() const {
     DCHECK_EQ(kind(), Kind::kRefNull);
-    return static_cast<HeapType::Representation>(
-        ValueField::decode(bit_field_));
+    return HeapType::FromBits(ValueField::decode(bit_field_));
   }
 
   constexpr int32_t i32_value() const {
@@ -135,8 +134,8 @@ V8_INLINE WasmValue to_value(ValueOrError result) {
 ValueOrError EvaluateConstantExpression(
     Zone* zone, ConstantExpression expr, ValueType expected,
     const WasmModule* module, Isolate* isolate,
-    Handle<WasmTrustedInstanceData> trusted_instance_data,
-    Handle<WasmTrustedInstanceData> shared_trusted_instance_data);
+    DirectHandle<WasmTrustedInstanceData> trusted_instance_data,
+    DirectHandle<WasmTrustedInstanceData> shared_trusted_instance_data);
 
 }  // namespace wasm
 }  // namespace internal

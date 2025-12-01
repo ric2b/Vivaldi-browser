@@ -11,29 +11,29 @@
 namespace v8::internal {
 
 TrustedPointerPublishingScope::TrustedPointerPublishingScope(
-    IsolateForSandbox isolate, const DisallowJavascriptExecution& no_js)
+    Isolate* isolate, const DisallowJavascriptExecution& no_js)
     : isolate_(isolate) {
   // Nesting TrustedPointerPublishingScopes is not supported for now.
-  DCHECK_NULL(isolate.GetTrustedPointerPublishingScope());
-  isolate.SetTrustedPointerPublishingScope(this);
+  DCHECK_NULL(isolate->trusted_pointer_publishing_scope());
+  isolate->set_trusted_pointer_publishing_scope(this);
 }
 
 TrustedPointerPublishingScope::~TrustedPointerPublishingScope() {
   if (state_ == State::kFailure) {
     if (storage_ == Storage::kSingleton) {
-      singleton_->MakeZappedEntry();
+      singleton_->OverwriteTag(kUnpublishedIndirectPointerTag);
     } else if (storage_ == Storage::kVector) {
       for (TrustedPointerTableEntry* entry : *vector_) {
-        entry->MakeZappedEntry();
+        entry->OverwriteTag(kUnpublishedIndirectPointerTag);
       }
-      delete vector_;
     }
   } else {
     // If this DCHECK fails, you probably forgot to call {MarkSuccess()}.
     DCHECK_EQ(state_, State::kSuccess);
   }
-  DCHECK_EQ(this, isolate_.GetTrustedPointerPublishingScope());
-  isolate_.SetTrustedPointerPublishingScope(nullptr);
+  if (storage_ == Storage::kVector) delete vector_;
+  DCHECK_EQ(this, isolate_->trusted_pointer_publishing_scope());
+  isolate_->set_trusted_pointer_publishing_scope(nullptr);
 }
 
 void TrustedPointerPublishingScope::TrackPointer(
@@ -51,6 +51,20 @@ void TrustedPointerPublishingScope::TrackPointer(
     storage_ = Storage::kVector;
   }
   vector_->push_back(entry);
+}
+
+DisableTrustedPointerPublishingScope::DisableTrustedPointerPublishingScope(
+    Isolate* isolate)
+    : isolate_(isolate) {
+  saved_ = isolate->trusted_pointer_publishing_scope();
+  if (saved_) {
+    isolate->set_trusted_pointer_publishing_scope(nullptr);
+  }
+}
+DisableTrustedPointerPublishingScope::~DisableTrustedPointerPublishingScope() {
+  if (saved_) {
+    isolate_->set_trusted_pointer_publishing_scope(saved_);
+  }
 }
 
 }  // namespace v8::internal

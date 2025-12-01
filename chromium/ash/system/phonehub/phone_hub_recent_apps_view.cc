@@ -314,9 +314,9 @@ PhoneHubRecentAppsView::LoadingView::LoadingView() {
 
   for (size_t i = 0; i < 5; i++) {
     app_loading_icons_.push_back(
-        AddChildView(new AppLoadingIcon(AppIcon::kSizeNormal)));
+        AddChildViewRaw(new AppLoadingIcon(AppIcon::kSizeNormal)));
   }
-  more_apps_button_ = AddChildView(new PhoneHubMoreAppsButton());
+  more_apps_button_ = AddChildViewRaw(new PhoneHubMoreAppsButton());
 
   StartLoadingAnimation();
 }
@@ -558,7 +558,7 @@ std::unique_ptr<views::View> PhoneHubRecentAppsView::GenerateMoreAppsButton() {
       views::Button::STATE_NORMAL,
       ui::ImageModel::FromImageSkia(
           gfx::ImageSkiaOperations::ExtractSubset(image, kMoreAppsButtonArea)));
-  more_apps_button->SetBackground(views::CreateThemedRoundedRectBackground(
+  more_apps_button->SetBackground(views::CreateRoundedRectBackground(
       kColorAshControlBackgroundColorInactive, kMoreAppsButtonRadius));
   more_apps_button->SetTooltipText(
       l10n_util::GetStringUTF16(IDS_ASH_PHONE_HUB_FULL_APPS_LIST_BUTTON_TITLE));

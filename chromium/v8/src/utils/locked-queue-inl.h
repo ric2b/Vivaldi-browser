@@ -5,9 +5,11 @@
 #ifndef V8_UTILS_LOCKED_QUEUE_INL_H_
 #define V8_UTILS_LOCKED_QUEUE_INL_H_
 
+#include "src/utils/locked-queue.h"
+// Include the non-inl header before the rest of the headers.
+
 #include "src/base/atomic-utils.h"
 #include "src/utils/allocation.h"
-#include "src/utils/locked-queue.h"
 
 namespace v8 {
 namespace internal {
@@ -45,7 +47,7 @@ inline void LockedQueue<Record>::Enqueue(Record record) {
   CHECK_NOT_NULL(n);
   n->value = std::move(record);
   {
-    base::SpinningMutexGuard guard(&tail_mutex_);
+    base::MutexGuard guard(&tail_mutex_);
     size_++;
     tail_->next.SetValue(n);
     tail_ = n;
@@ -56,7 +58,7 @@ template <typename Record>
 inline bool LockedQueue<Record>::Dequeue(Record* record) {
   Node* old_head = nullptr;
   {
-    base::SpinningMutexGuard guard(&head_mutex_);
+    base::MutexGuard guard(&head_mutex_);
     old_head = head_;
     Node* const next_node = head_->next.Value();
     if (next_node == nullptr) return false;
@@ -72,13 +74,13 @@ inline bool LockedQueue<Record>::Dequeue(Record* record) {
 
 template <typename Record>
 inline bool LockedQueue<Record>::IsEmpty() const {
-  base::SpinningMutexGuard guard(&head_mutex_);
+  base::MutexGuard guard(&head_mutex_);
   return head_->next.Value() == nullptr;
 }
 
 template <typename Record>
 inline bool LockedQueue<Record>::Peek(Record* record) const {
-  base::SpinningMutexGuard guard(&head_mutex_);
+  base::MutexGuard guard(&head_mutex_);
   Node* const next_node = head_->next.Value();
   if (next_node == nullptr) return false;
   *record = next_node->value;

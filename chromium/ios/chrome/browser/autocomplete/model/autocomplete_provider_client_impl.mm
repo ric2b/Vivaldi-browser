@@ -50,18 +50,9 @@
 #import "services/network/public/cpp/shared_url_loader_factory.h"
 
 // Vivaldi
+#import "ios/chrome/browser/history/model/web_history_service_factory.h"
 #import "ios/direct_match/direct_match_service_factory.h"
 // End Vivaldi
-
-namespace {
-
-// Killswitch, can be removed around December 2023. If enabled,
-// IsAuthenticated() will only return true for Sync-consented accounts.
-BASE_FEATURE(kIosAutocompleteProviderRequireSync,
-             "IosAutocompleteProviderRequireSync",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
-}  // namespace
 
 AutocompleteProviderClientImpl::AutocompleteProviderClientImpl(
     ProfileIOS* profile)
@@ -261,19 +252,13 @@ bool AutocompleteProviderClientImpl::IsUrlDataCollectionActive() const {
 bool AutocompleteProviderClientImpl::IsAuthenticated() const {
   signin::IdentityManager* identity_manager =
       IdentityManagerFactory::GetForProfile(profile_);
-  signin::ConsentLevel level =
-      base::FeatureList::IsEnabled(kIosAutocompleteProviderRequireSync)
-          ? signin::ConsentLevel::kSync
-          : signin::ConsentLevel::kSignin;
-  return identity_manager && identity_manager->HasPrimaryAccount(level);
+  return identity_manager &&
+         identity_manager->HasPrimaryAccount(signin::ConsentLevel::kSignin);
 }
 
 bool AutocompleteProviderClientImpl::IsSyncActive() const {
-  syncer::SyncService* sync = SyncServiceFactory::GetForProfile(profile_);
-  // TODO(crbug.com/40066949): Remove usage of IsSyncFeatureActive() after kSync
-  // users are migrated to kSignin in phase 3. See ConsentLevel::kSync
-  // documentation for details.
-  return sync && sync->IsSyncFeatureActive();
+  // Sync-the-feature is gone on iOS.
+  return false;
 }
 
 void AutocompleteProviderClientImpl::Classify(
@@ -313,5 +298,10 @@ void AutocompleteProviderClientImpl::set_in_background_state(
 direct_match::DirectMatchService*
 AutocompleteProviderClientImpl::GetDirectMatchService() {
   return direct_match::DirectMatchServiceFactory::GetForProfile(profile_);
+}
+
+history::WebHistoryService*
+AutocompleteProviderClientImpl::GetWebHistoryService() {
+  return ios::WebHistoryServiceFactory::GetForProfile(profile_);
 }
 // End Vivaldi

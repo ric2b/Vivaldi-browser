@@ -41,9 +41,10 @@ const documents: Document[] = [];
 const pendingResize = new Map<Element, DOMRect>();
 const pendingChange = new Set<Element>();
 
-function observeMutations(roots: Node[]): void {
+function observeMutations(roots: Array<HTMLElement|ShadowRoot>): void {
   for (const root of roots) {
     mutationObserver.observe(root, {attributes: true, childList: true, subtree: true});
+    root.querySelectorAll('[popover]')?.forEach(e => e.addEventListener('toggle', scheduleProcessing));
   }
 }
 
@@ -100,23 +101,6 @@ export async function stopLogging(): Promise<void> {
   pendingChange.clear();
 }
 
-export function pendingWorkComplete(): Promise<void> {
-  return Promise
-      .all([
-        processingThrottler,
-        keyboardLogThrottler,
-        hoverLogThrottler,
-        dragLogThrottler,
-        clickLogThrottler,
-        resizeLogThrottler,
-      ].map(async throttler => {
-        for (let i = 0; throttler.process && i < 3; ++i) {
-          await throttler.processCompleted;
-        }
-      }))
-      .then(() => {});
-}
-
 async function yieldToResize(): Promise<void> {
   while (resizeLogThrottler.process) {
     await resizeLogThrottler.processCompleted;
@@ -162,7 +146,7 @@ async function process(): Promise<void> {
   const {loggables, shadowRoots} = getDomState(documents);
   const visibleLoggables: Loggable[] = [];
   observeMutations(shadowRoots);
-  const nonDomRoots: (Loggable|undefined)[] = [undefined];
+  const nonDomRoots: Array<Loggable|undefined> = [undefined];
 
   for (const {element, parent} of loggables) {
     const loggingState = getOrCreateLoggingState(element, getLoggingConfig(element), parent);

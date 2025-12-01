@@ -10,7 +10,10 @@
 #include "chrome/browser/contextual_cueing/contextual_cueing_enums.h"
 #include "chrome/browser/contextual_cueing/contextual_cueing_features.h"
 #include "chrome/browser/contextual_cueing/contextual_cueing_page_data.h"
+#include "chrome/browser/optimization_guide/optimization_guide_keyed_service.h"
 #include "chrome/browser/ui/tabs/glic_nudge_controller.h"
+#include "content/public/browser/web_contents.h"
+#include "services/metrics/public/cpp/metrics_utils.h"
 #include "services/metrics/public/cpp/ukm_builders.h"
 #include "services/metrics/public/cpp/ukm_recorder.h"
 #include "url/gurl.h"
@@ -24,10 +27,16 @@ void LogNudgeInteractionHistogram(
 }
 
 void LogNudgeInteractionUKM(ukm::SourceId source_id,
-                            contextual_cueing::NudgeInteraction interaction) {
+                            contextual_cueing::NudgeInteraction interaction,
+                            base::TimeTicks document_available_time,
+                            base::TimeTicks nudge_shown_time) {
   auto* ukm_recorder = ukm::UkmRecorder::Get();
   ukm::builders::ContextualCueing_NudgeInteraction(source_id)
       .SetNudgeInteraction(static_cast<int64_t>(interaction))
+      .SetNudgeShownDuration(ukm::GetExponentialBucketMinForUserTiming(
+          (base::TimeTicks::Now() - nudge_shown_time).InMilliseconds()))
+      .SetNudgeLatencyAfterPageLoad(
+          (nudge_shown_time - document_available_time).InMilliseconds())
       .Record(ukm_recorder->Get());
 }
 
@@ -37,22 +46,20 @@ namespace contextual_cueing {
 
 ContextualCueingService::ContextualCueingService(
     page_content_annotations::PageContentExtractionService*
-        page_content_extraction_service)
+        page_content_extraction_service,
+    OptimizationGuideKeyedService* optimization_guide_keyed_service)
     : recent_nudge_tracker_(kNudgeCapCount.Get(), kNudgeCapTime.Get()),
       recent_visited_origins_(kVisitedDomainsLimit.Get()),
-      page_content_extraction_service_(page_content_extraction_service) {
-  if (!base::FeatureList::IsEnabled(contextual_cueing::kContextualCueing)) {
-    return;
-  }
+      page_content_extraction_service_(page_content_extraction_service),
+      optimization_guide_keyed_service_(optimization_guide_keyed_service) {
+  CHECK(base::FeatureList::IsEnabled(contextual_cueing::kContextualCueing));
+
   if (kEnablePageContentExtraction.Get()) {
     page_content_extraction_service_->AddObserver(this);
   }
 }
 
 ContextualCueingService::~ContextualCueingService() {
-  if (!base::FeatureList::IsEnabled(contextual_cueing::kContextualCueing)) {
-    return;
-  }
   if (kEnablePageContentExtraction.Get()) {
     page_content_extraction_service_->RemoveObserver(this);
   }
@@ -66,7 +73,6 @@ void ContextualCueingService::ReportPageLoad() {
 
 void ContextualCueingService::CueingNudgeShown(const GURL& url) {
   recent_nudge_tracker_.CueingNudgeShown();
-  LogNudgeInteractionHistogram(NudgeInteraction::kShown);
 
   if (kMinPageCountBetweenNudges.Get()) {
     // Let the cue logic be performed the next page after quiet count pages.
@@ -84,7 +90,6 @@ void ContextualCueingService::CueingNudgeShown(const GURL& url) {
 }
 
 void ContextualCueingService::CueingNudgeDismissed() {
-  LogNudgeInteractionHistogram(NudgeInteraction::kDismissed);
 
   base::TimeDelta backoff_duration =
       kBackoffTime.Get() * pow(kBackoffMultiplierBase.Get(), dismiss_count_);
@@ -94,8 +99,6 @@ void ContextualCueingService::CueingNudgeDismissed() {
 }
 
 void ContextualCueingService::CueingNudgeClicked() {
-  LogNudgeInteractionHistogram(NudgeInteraction::kClicked);
-
   dismiss_count_ = 0;
 }
 
@@ -121,31 +124,83 @@ bool ContextualCueingService::IsNudgeBlockedByBackoffRule() const {
 }
 
 void ContextualCueingService::OnNudgeActivity(
-    const GURL& url,
-    ukm::SourceId source_id,
+    content::WebContents* web_contents,
+    base::TimeTicks document_available_time,
     tabs::GlicNudgeActivity activity) {
+  std::optional<base::TimeTicks> nudge_time =
+      recent_nudge_tracker_.GetMostRecentNudgeTime();
+  const GURL& url = web_contents->GetLastCommittedURL();
+  NudgeInteraction interaction;
+  bool log_ukm = false;
   switch (activity) {
     case tabs::GlicNudgeActivity::kNudgeShown:
+      interaction = NudgeInteraction::kShown;
       CueingNudgeShown(url);
       break;
     case tabs::GlicNudgeActivity::kNudgeClicked:
       CueingNudgeClicked();
-      LogNudgeInteractionUKM(source_id, NudgeInteraction::kClicked);
+      interaction = NudgeInteraction::kClicked;
+      log_ukm = true;
       break;
     case tabs::GlicNudgeActivity::kNudgeDismissed:
+      interaction = NudgeInteraction::kDismissed;
       CueingNudgeDismissed();
-      LogNudgeInteractionUKM(source_id, NudgeInteraction::kDismissed);
+      log_ukm = true;
       break;
     case tabs::GlicNudgeActivity::kNudgeNotShownWebContents:
-      LogNudgeInteractionHistogram(NudgeInteraction::kNudgeNotShownWebContents);
+      interaction = NudgeInteraction::kNudgeNotShownWebContents;
       break;
     case tabs::GlicNudgeActivity::kNudgeIgnoredActiveTabChanged:
-      LogNudgeInteractionHistogram(NudgeInteraction::kIgnoredTabChange);
-      LogNudgeInteractionUKM(source_id, NudgeInteraction::kIgnoredTabChange);
+      interaction = NudgeInteraction::kIgnoredTabChange;
+      log_ukm = true;
       break;
-      // TODO: b/395169951 - Make sure UKM called for ignored nudges due to
-      // navigation changes.
+    case tabs::GlicNudgeActivity::kNudgeIgnoredNavigation:
+      interaction = NudgeInteraction::kIgnoredNavigation;
+      log_ukm = true;
+      break;
   }
+  LogNudgeInteractionHistogram(interaction);
+  // As this function is called multiple times per nudge only some of the
+  // activities result in a UKM call.
+  if (log_ukm) {
+    CHECK(nudge_time);
+    LogNudgeInteractionUKM(
+        web_contents->GetPrimaryMainFrame()->GetPageUkmSourceId(), interaction,
+        document_available_time, *nudge_time);
+  }
+
+  // Temporary trigger for suggestions request, to be removed when UI is ready.
+  if (activity == tabs::GlicNudgeActivity::kNudgeClicked &&
+      base::FeatureList::IsEnabled(kGlicZeroStateSuggestions)) {
+    ZeroStateSuggestionsPageData::CreateForPage(
+        web_contents->GetPrimaryPage(), web_contents,
+        optimization_guide_keyed_service_, /*is_fre=*/false, base::DoNothing());
+  }
+}
+
+void ContextualCueingService::GetContextualGlicZeroStateSuggestions(
+    content::WebContents* web_contents,
+    bool is_fre,
+    GlicSuggestionsCallback callback) {
+  // TODO(crbug.com/405988283): Add branch for hints suggestions.
+
+  // Remote suggestions generation.
+  ZeroStateSuggestionsPageData::CreateForPage(
+      web_contents->GetPrimaryPage(), web_contents,
+      optimization_guide_keyed_service_, is_fre,
+      base::BindOnce(&ContextualCueingService::OnSuggestionsReceived,
+                     GetWeakPtr(), web_contents, std::move(callback)));
+}
+
+void ContextualCueingService::OnSuggestionsReceived(
+    content::WebContents* web_contents,
+    GlicSuggestionsCallback callback,
+    std::optional<std::vector<std::string>> suggestions) {
+  if (ZeroStateSuggestionsPageData::GetForPage(
+          web_contents->GetPrimaryPage())) {
+    ZeroStateSuggestionsPageData::DeleteForPage(web_contents->GetPrimaryPage());
+  }
+  std::move(callback).Run(suggestions);
 }
 
 void ContextualCueingService::OnPageContentExtracted(

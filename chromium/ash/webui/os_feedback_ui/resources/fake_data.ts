@@ -4,8 +4,9 @@
 
 import {stringToMojoString16} from 'chrome://resources/js/mojo_type_util.js';
 
-import {HelpContentList} from './feedback_types.js';
-import {FeedbackContext, HelpContentType, SearchRequest, SearchResponse} from './os_feedback_ui.mojom-webui.js';
+import type {HelpContentList} from './feedback_types.js';
+import type {FeedbackContext, SearchRequest, SearchResponse} from './os_feedback_ui.mojom-webui.js';
+import {HelpContentType} from './os_feedback_ui.mojom-webui.js';
 
 /**
  * @fileoverview
@@ -81,6 +82,7 @@ export const fakeFeedbackContext: FeedbackContext = {
   fromAssistant: false,
   fromAutofill: false,
   fromSettingsSearch: false,
+  isQueryFingerprint: false,
   hasLinkedCrossDevicePhone: false,
   isInternalAccount: false,
   pageUrl: {url: 'chrome://tab/'},
@@ -97,6 +99,7 @@ export const fakeEmptyFeedbackContext: FeedbackContext = {
   fromAssistant: false,
   fromAutofill: false,
   fromSettingsSearch: false,
+  isQueryFingerprint: false,
   hasLinkedCrossDevicePhone: false,
   isInternalAccount: false,
   pageUrl: {url: ''},
@@ -114,6 +117,7 @@ export const fakeLoginFlowFeedbackContext: FeedbackContext = {
   fromAssistant: false,
   fromAutofill: false,
   fromSettingsSearch: false,
+  isQueryFingerprint: false,
   hasLinkedCrossDevicePhone: false,
   isInternalAccount: false,
   pageUrl: {url: ''},
@@ -130,6 +134,7 @@ export const fakeInternalUserFeedbackContext: FeedbackContext = {
   fromAssistant: true,
   fromAutofill: false,
   fromSettingsSearch: true,
+  isQueryFingerprint: false,
   hasLinkedCrossDevicePhone: true,
   isInternalAccount: true,
   pageUrl: {url: 'chrome://tab/'},
@@ -147,6 +152,7 @@ export const fakeFeedbackContextWithoutLinkedCrossDevicePhone:
       fromAssistant: true,
       fromAutofill: false,
       fromSettingsSearch: true,
+      isQueryFingerprint: false,
       hasLinkedCrossDevicePhone: false,
       isInternalAccount: true,
       pageUrl: {url: 'chrome://tab/'},
@@ -163,6 +169,7 @@ export const fakeFeedbackContextWithExtraDiagnostics: FeedbackContext = {
   fromAssistant: true,
   fromAutofill: false,
   fromSettingsSearch: true,
+  isQueryFingerprint: false,
   hasLinkedCrossDevicePhone: false,
   isInternalAccount: true,
   pageUrl: {url: 'chrome://tab/'},

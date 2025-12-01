@@ -180,6 +180,8 @@ void av1_accumulate_rtc_counters(AV1_COMP *cpi, const MACROBLOCK *const x) {
   if (cpi->oxcf.q_cfg.aq_mode == CYCLIC_REFRESH_AQ)
     av1_accumulate_cyclic_refresh_counters(cpi->cyclic_refresh, x);
   cpi->rc.cnt_zeromv += x->cnt_zeromv;
+  cpi->rc.num_col_blscroll_last_tl0 += x->sb_col_scroll;
+  cpi->rc.num_row_blscroll_last_tl0 += x->sb_row_scroll;
 }
 
 unsigned int av1_get_perpixel_variance(const AV1_COMP *cpi,
@@ -1222,6 +1224,8 @@ static inline void encode_sb_row(AV1_COMP *cpi, ThreadData *td,
     x->sb_me_block = 0;
     x->sb_me_partition = 0;
     x->sb_me_mv.as_int = 0;
+    x->sb_col_scroll = 0;
+    x->sb_row_scroll = 0;
     x->sb_force_fixed_part = 1;
     x->color_palette_thresh = 64;
     x->force_color_check_block_level = 0;
@@ -2015,7 +2019,8 @@ static inline void encode_frame_internal(AV1_COMP *cpi) {
   init_encode_frame_mb_context(cpi);
   set_default_interp_skip_flags(cm, &cpi->interp_search_flags);
 
-  if (cm->prev_frame && cm->prev_frame->seg.enabled)
+  if (cm->prev_frame && cm->prev_frame->seg.enabled &&
+      cpi->svc.number_spatial_layers == 1)
     cm->last_frame_seg_map = cm->prev_frame->seg_map;
   else
     cm->last_frame_seg_map = NULL;

@@ -69,6 +69,7 @@
 
 // Vivaldi
 #include "app/vivaldi_apptools.h"
+#include "vivaldi/prefs/vivaldi_gen_prefs.h"
 // End Vivaldi
 
 using metrics::OmniboxEventProto;
@@ -316,13 +317,14 @@ void SearchProvider::Start(const AutocompleteInput& input,
   // searchboxes do not show suggestions from the history database.
   if (!input.IsZeroSuggest() &&
       !omnibox::IsLensSearchbox(input_.current_page_classification())) {
-
     // Vivaldi: (VIB-914/VAB-7032) - Search provider also does history
     // search by default. When Search Engine Keyword is active disable history
     // search and return only suggestions for Typed Input.
-    if (!client()->GetTemplateURLService()->VivaldiIsDefaultOverridden()) {
+    if (!client()->GetTemplateURLService()->VivaldiIsDefaultOverridden() &&
+        client()->GetPrefs()->GetBoolean(
+            vivaldiprefs::kAddressBarOmniboxSearchHistoryEnable)) {
     DoHistoryQuery(minimal_changes);
-    } // End Vivaldi
+    }  // End Vivaldi
 
     // Answers needs scored history results before any suggest query has been
     // started, since the query for answer-bearing results needs additional
@@ -459,6 +461,15 @@ void SearchProvider::OnURLLoadComplete(
         SortResults(is_keyword, results);
         PrefetchImages(results);
       }
+// Keep top 5 results to avoid showing too many search-suggestions items.
+#if defined(VIVALDI_BUILD)
+      for (int i = results->suggest_results.size(); i > 5; --i) {
+        results->suggest_results.pop_back();
+      }
+      for (int i = results->navigation_results.size(); i > 5; --i) {
+        results->navigation_results.pop_back();
+      }
+#endif
     }
   }
 
@@ -740,7 +751,8 @@ void SearchProvider::StartOrStopSuggestQuery(bool minimal_changes) {
   const bool can_send_any_suggest_request =
       (!query_is_private &&
        //Vivaldi
-       !keyword_turl && !client()->VivaldiOnlyKeywordSearch() &&
+       !keyword_turl &&
+       (!client()->VivaldiOnlyKeywordSearch() || input_.from_search_field) &&
        //End Vivaldi
        CanSendSuggestRequest(page_classification, default_turl, client())) ||
       CanSendSuggestRequest(page_classification, keyword_turl, client());
@@ -800,6 +812,16 @@ void SearchProvider::CancelLoader(
 bool SearchProvider::IsQueryPotentiallyPrivate() const {
   if (input_.text().empty())
     return false;
+
+  // Vivaldi: If the input is a URL there is no need to send request.
+  if (input_.type() == metrics::OmniboxInputType::URL)
+    return true;
+
+  // Vivaldi: The type of input_, is only set to URL if the scheme is HTTP or
+  // HTTPS, all schemes other than HTTP, HTTPS and FTP are covered below so
+  // we add a special case to handle FTP URLs
+  if(base::EqualsCaseInsensitiveASCII(input_.scheme(), url::kFtpScheme))
+    return (input_.type() != metrics::OmniboxInputType::QUERY);
 
   // Check the scheme.  If this is UNKNOWN/URL with a scheme that isn't
   // http/https/ftp, we shouldn't send it.  Sending things like file: and data:
@@ -1005,6 +1027,12 @@ void SearchProvider::ConvertResultsToAutocompleteMatches() {
     if (match_with_answer) {
       verbatim.SetAnswerType(match_with_answer->answer_type);
       verbatim.SetRichAnswerTemplate(*match_with_answer->answer_template);
+    }
+    // Boost SEARCH_WHAT_YOU_TYPED item if autocomplete is disabled to place it
+    // on top of dropdown.
+    if (!client()->GetPrefs()->GetBoolean(
+            vivaldiprefs::kAddressBarAutocompleteEnabled)) {
+      verbatim.set_relevance(verbatim.relevance() + 1000);
     }
     AddMatchToMap(verbatim, GetInput(verbatim.from_keyword()),
                   GetTemplateURL(verbatim.from_keyword()),

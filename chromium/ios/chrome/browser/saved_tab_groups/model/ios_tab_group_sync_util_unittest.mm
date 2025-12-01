@@ -6,10 +6,14 @@
 
 #import "base/test/scoped_feature_list.h"
 #import "components/collaboration/test_support/mock_collaboration_service.h"
+#import "components/data_sharing/public/features.h"
 #import "components/saved_tab_groups/test_support/mock_tab_group_sync_service.h"
 #import "components/tab_groups/tab_group_id.h"
+#import "ios/chrome/browser/data_sharing/model/data_sharing_service_factory.h"
 #import "ios/chrome/browser/saved_tab_groups/model/tab_group_local_update_observer.h"
 #import "ios/chrome/browser/saved_tab_groups/model/tab_group_sync_service_factory.h"
+#import "ios/chrome/browser/share_kit/model/share_kit_service_factory.h"
+#import "ios/chrome/browser/share_kit/model/test_share_kit_service.h"
 #import "ios/chrome/browser/shared/model/browser/browser_list.h"
 #import "ios/chrome/browser/shared/model/browser/browser_list_factory.h"
 #import "ios/chrome/browser/shared/model/browser/test/test_browser.h"
@@ -43,6 +47,17 @@ std::unique_ptr<KeyedService> CreateMockSyncService(
   return std::make_unique<::testing::NiceMock<MockTabGroupSyncService>>();
 }
 
+// Creates a test ShareKitService.
+std::unique_ptr<KeyedService> BuildTestShareKitService(
+    web::BrowserState* context) {
+  ProfileIOS* profile = static_cast<ProfileIOS*>(context);
+  data_sharing::DataSharingService* data_sharing_service =
+      data_sharing::DataSharingServiceFactory::GetForProfile(profile);
+
+  return std::make_unique<TestShareKitService>(data_sharing_service, nullptr,
+                                               nullptr);
+}
+
 // Returns the tab ID for the web state at `index` in `browser`.
 web::WebStateID GetTabIDForWebStateAt(int index, Browser* browser) {
   web::WebState* web_state = browser->GetWebStateList()->GetWebStateAt(index);
@@ -58,10 +73,14 @@ class TabGroupSyncUtilTest : public PlatformTest {
     test_profile_builder.AddTestingFactory(
         TabGroupSyncServiceFactory::GetInstance(),
         base::BindRepeating(&CreateMockSyncService));
+    test_profile_builder.AddTestingFactory(
+        ShareKitServiceFactory::GetInstance(),
+        base::BindRepeating(&BuildTestShareKitService));
     profile_ = std::move(test_profile_builder).Build();
 
     mock_service_ = static_cast<MockTabGroupSyncService*>(
         TabGroupSyncServiceFactory::GetForProfile(profile_.get()));
+    share_kit_service_ = ShareKitServiceFactory::GetForProfile(profile_.get());
 
     browser_ = std::make_unique<TestBrowser>(profile_.get());
     other_browser_ = std::make_unique<TestBrowser>(profile_.get());
@@ -79,7 +98,9 @@ class TabGroupSyncUtilTest : public PlatformTest {
 
   void SetUp() override {
     feature_list_.InitWithFeatures(
-        {kTabGroupsIPad, kModernTabStrip, kTabGroupSync}, {});
+        {kTabGroupsIPad, kTabGroupSync,
+         data_sharing::features::kDataSharingFeature},
+        {});
     AppendNewWebState(browser_.get());
     AppendNewWebState(browser_.get());
     AppendNewWebState(browser_.get());
@@ -104,11 +125,16 @@ class TabGroupSyncUtilTest : public PlatformTest {
   raw_ptr<BrowserList> browser_list_;
   raw_ptr<MockTabGroupSyncService> mock_service_;
   std::unique_ptr<TabGroupLocalUpdateObserver> local_observer_;
+  raw_ptr<ShareKitService> share_kit_service_;
 };
 
 // Tests that a tab group with one tab is moved from one regular browser to
 // another browser.
 TEST_F(TabGroupSyncUtilTest, TestMoveTabGroupOneTabAcrossRegularBrowsers) {
+  if (!IsTabGroupInGridEnabled()) {
+    // Disabled on iPadOS 16.
+    return;
+  }
   WebStateList* web_state_list = browser_->GetWebStateList();
   WebStateList* other_web_state_list = other_browser_->GetWebStateList();
 
@@ -144,6 +170,10 @@ TEST_F(TabGroupSyncUtilTest, TestMoveTabGroupOneTabAcrossRegularBrowsers) {
 // Tests that a tab group with multiple tabs is moved from one regular browser
 // to another browser.
 TEST_F(TabGroupSyncUtilTest, TestMoveTabGroupMutipleTabsAcrossRegularBrowsers) {
+  if (!IsTabGroupInGridEnabled()) {
+    // Disabled on iPadOS 16.
+    return;
+  }
   WebStateList* web_state_list = browser_->GetWebStateList();
   WebStateList* other_web_state_list = other_browser_->GetWebStateList();
 
@@ -179,6 +209,10 @@ TEST_F(TabGroupSyncUtilTest, TestMoveTabGroupMutipleTabsAcrossRegularBrowsers) {
 // Tests that a tab group with multiple tabs is moved from one regular browser
 // to another browser.
 TEST_F(TabGroupSyncUtilTest, TestMoveTabGroupsAcrossRegularBrowsers) {
+  if (!IsTabGroupInGridEnabled()) {
+    // Disabled on iPadOS 16.
+    return;
+  }
   WebStateList* web_state_list = browser_->GetWebStateList();
   WebStateList* other_web_state_list = other_browser_->GetWebStateList();
 
@@ -226,6 +260,10 @@ TEST_F(TabGroupSyncUtilTest, TestMoveTabGroupsAcrossRegularBrowsers) {
 // to another browser with tab group sync disabled.
 TEST_F(TabGroupSyncUtilTest,
        TestMoveTabGroupsAcrossRegularBrowsersSyncDisabled) {
+  if (!IsTabGroupInGridEnabled()) {
+    // Disabled on iPadOS 16.
+    return;
+  }
   feature_list_.Reset();
   feature_list_.InitAndDisableFeature(kTabGroupSync);
   if (ui::GetDeviceFormFactor() != ui::DEVICE_FORM_FACTOR_TABLET) {
@@ -278,6 +316,10 @@ TEST_F(TabGroupSyncUtilTest,
 // Tests that moving a tab group to its owning browser with the same destination
 // index is a no-op.
 TEST_F(TabGroupSyncUtilTest, MoveTabGroupToItsOwningBrowser_SameIndex) {
+  if (!IsTabGroupInGridEnabled()) {
+    // Disabled on iPadOS 16.
+    return;
+  }
   WebStateList* web_state_list = browser_->GetWebStateList();
 
   // Create a group of two tabs.
@@ -311,6 +353,10 @@ TEST_F(TabGroupSyncUtilTest, MoveTabGroupToItsOwningBrowser_SameIndex) {
 // Tests that moving a tab group to its owning browser to a position on its
 // right moves the group accordingly.
 TEST_F(TabGroupSyncUtilTest, MoveTabGroupToItsOwningBrowser_MovingRight) {
+  if (!IsTabGroupInGridEnabled()) {
+    // Disabled on iPadOS 16.
+    return;
+  }
   WebStateList* web_state_list = browser_->GetWebStateList();
 
   // Create a group of two tabs.
@@ -344,6 +390,10 @@ TEST_F(TabGroupSyncUtilTest, MoveTabGroupToItsOwningBrowser_MovingRight) {
 // Tests that moving a tab group to its owning browser to a position on its left
 // moves the group accordingly.
 TEST_F(TabGroupSyncUtilTest, MoveTabGroupToItsOwningBrowser_MovingLeft) {
+  if (!IsTabGroupInGridEnabled()) {
+    // Disabled on iPadOS 16.
+    return;
+  }
   WebStateList* web_state_list = browser_->GetWebStateList();
 
   // Create a group of two tabs.
@@ -376,6 +426,10 @@ TEST_F(TabGroupSyncUtilTest, MoveTabGroupToItsOwningBrowser_MovingLeft) {
 }
 
 TEST_F(TabGroupSyncUtilTest, ShouldUpdateHistory) {
+  if (!IsTabGroupInGridEnabled()) {
+    // Disabled on iPadOS 16.
+    return;
+  }
   std::unique_ptr<web::NavigationItem> item = web::NavigationItem::Create();
   item->SetTransitionType(ui::PAGE_TRANSITION_TYPED);
 
@@ -417,6 +471,10 @@ TEST_F(TabGroupSyncUtilTest, ShouldUpdateHistory) {
 }
 
 TEST_F(TabGroupSyncUtilTest, IsSaveableNavigation) {
+  if (!IsTabGroupInGridEnabled()) {
+    // Disabled on iPadOS 16.
+    return;
+  }
   std::unique_ptr<web::NavigationItem> item = web::NavigationItem::Create();
   item->SetTransitionType(ui::PAGE_TRANSITION_TYPED);
 
@@ -507,6 +565,10 @@ TEST_F(TabGroupSyncUtilTest, IsSaveableNavigation) {
 
 // Tests the `IsTabGroupShared` method with a shared group.
 TEST_F(TabGroupSyncUtilTest, IsTabGroupSharedWithShared) {
+  if (!IsTabGroupInGridEnabled()) {
+    // Disabled on iPadOS 16.
+    return;
+  }
   TabGroupId tab_group_id = TabGroupId::GenerateNew();
   WebStateList* web_state_list = browser_->GetWebStateList();
   const TabGroup* local_group =
@@ -519,12 +581,20 @@ TEST_F(TabGroupSyncUtilTest, IsTabGroupSharedWithShared) {
   EXPECT_CALL(*mock_service_, GetGroup(tab_group_id))
       .WillOnce(testing::Return(saved_group));
 
-  EXPECT_TRUE(IsTabGroupShared(local_group, mock_service_));
-  EXPECT_FALSE(IsTabGroupShared(local_group, nullptr));
+  EXPECT_NE(nullptr, share_kit_service_.get());
+  EXPECT_TRUE(
+      IsTabGroupShared(local_group, mock_service_, share_kit_service_.get()));
+  EXPECT_FALSE(
+      IsTabGroupShared(local_group, nullptr, share_kit_service_.get()));
+  EXPECT_FALSE(IsTabGroupShared(local_group, mock_service_, nullptr));
 }
 
 // Tests the `IsTabGroupShared` method with a non shared group.
 TEST_F(TabGroupSyncUtilTest, IsTabGroupSharedWithNonShared) {
+  if (!IsTabGroupInGridEnabled()) {
+    // Disabled on iPadOS 16.
+    return;
+  }
   TabGroupId tab_group_id = TabGroupId::GenerateNew();
   WebStateList* web_state_list = browser_->GetWebStateList();
   const TabGroup* local_group =
@@ -536,12 +606,19 @@ TEST_F(TabGroupSyncUtilTest, IsTabGroupSharedWithNonShared) {
   EXPECT_CALL(*mock_service_, GetGroup(tab_group_id))
       .WillOnce(testing::Return(saved_group));
 
-  EXPECT_FALSE(IsTabGroupShared(local_group, mock_service_));
-  EXPECT_FALSE(IsTabGroupShared(local_group, nullptr));
+  EXPECT_NE(nullptr, share_kit_service_.get());
+  EXPECT_FALSE(
+      IsTabGroupShared(local_group, mock_service_, share_kit_service_.get()));
+  EXPECT_FALSE(
+      IsTabGroupShared(local_group, nullptr, share_kit_service_.get()));
 }
 
 // Tests the `GetTabGroupCollabID` method with a shared group.
 TEST_F(TabGroupSyncUtilTest, GetTabGroupCollabIDWithShared) {
+  if (!IsTabGroupInGridEnabled()) {
+    // Disabled on iPadOS 16.
+    return;
+  }
   TabGroupId tab_group_id = TabGroupId::GenerateNew();
   WebStateList* web_state_list = browser_->GetWebStateList();
   const TabGroup* local_group =
@@ -562,6 +639,10 @@ TEST_F(TabGroupSyncUtilTest, GetTabGroupCollabIDWithShared) {
 
 // Tests the `GetTabGroupCollabID` method with a non shared group.
 TEST_F(TabGroupSyncUtilTest, GetTabGroupCollabIDWithNonShared) {
+  if (!IsTabGroupInGridEnabled()) {
+    // Disabled on iPadOS 16.
+    return;
+  }
   TabGroupId tab_group_id = TabGroupId::GenerateNew();
   WebStateList* web_state_list = browser_->GetWebStateList();
   const TabGroup* local_group =
@@ -581,6 +662,10 @@ TEST_F(TabGroupSyncUtilTest, GetTabGroupCollabIDWithNonShared) {
 
 // Tests the `GetUserRoleForGroup` method with a shared group.
 TEST_F(TabGroupSyncUtilTest, GetUserRoleForGroupShared) {
+  if (!IsTabGroupInGridEnabled()) {
+    // Disabled on iPadOS 16.
+    return;
+  }
   std::unique_ptr<collaboration::MockCollaborationService>
       collaboration_service_ =
           std::make_unique<collaboration::MockCollaborationService>();
@@ -606,6 +691,10 @@ TEST_F(TabGroupSyncUtilTest, GetUserRoleForGroupShared) {
 
 // Tests the `GetUserRoleForGroup` method with a non shared group.
 TEST_F(TabGroupSyncUtilTest, GetUserRoleForGroupNonShared) {
+  if (!IsTabGroupInGridEnabled()) {
+    // Disabled on iPadOS 16.
+    return;
+  }
   std::unique_ptr<collaboration::MockCollaborationService>
       collaboration_service_ =
           std::make_unique<collaboration::MockCollaborationService>();

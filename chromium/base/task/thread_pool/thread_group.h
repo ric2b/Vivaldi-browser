@@ -218,7 +218,7 @@ class BASE_EXPORT ThreadGroup {
               TrackedRef<TaskTracker> task_tracker,
               TrackedRef<Delegate> delegate);
 
-  void StartImpl(
+  void StartImplLockRequired(
       size_t max_tasks,
       size_t max_best_effort_tasks,
       TimeDelta suggested_reclaim_time,
@@ -226,8 +226,8 @@ class BASE_EXPORT ThreadGroup {
       WorkerThreadObserver* worker_thread_observer,
       WorkerEnvironment worker_environment,
       bool synchronous_thread_start_for_testing = false,
-      std::optional<TimeDelta> may_block_threshold =
-          std::optional<TimeDelta>());
+      std::optional<TimeDelta> may_block_threshold = std::optional<TimeDelta>())
+      EXCLUSIVE_LOCKS_REQUIRED(lock_);
 
   // Derived classes must implement a ScopedCommandsExecutor that derives from
   // this to perform operations at the end of a scope, when all locks have been
@@ -401,8 +401,12 @@ class BASE_EXPORT ThreadGroup {
     ~InitializedInStart();
 
 #if DCHECK_IS_ON()
-    // Set after all members of this struct are set.
+    // Set after all members of this struct are set to ensure
+    // `InitializedInStart` is read-only after initialization.
     bool initialized = false;
+    // Set to ensure Start() is only called once and that `ThreadGroup`
+    // operations only occur after it is called.
+    bool start_called = false;
 #endif
 
     // Initial value of |max_tasks_|.

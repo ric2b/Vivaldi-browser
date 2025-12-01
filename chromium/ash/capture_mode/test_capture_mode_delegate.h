@@ -8,6 +8,7 @@
 #include <limits>
 #include <memory>
 
+#include "ash/capture_mode/capture_mode_types.h"
 #include "ash/public/cpp/capture_mode/capture_mode_delegate.h"
 #include "base/files/file_path.h"
 #include "base/files/scoped_temp_dir.h"
@@ -158,6 +159,12 @@ class TestCaptureModeDelegate : public CaptureModeDelegate {
               DetectTextInImage,
               (const SkBitmap& image, OnTextDetectionComplete callback),
               (override));
+  void SendLensWebRegionSearch(
+      const gfx::Image& original_image,
+      const bool is_standalone_session,
+      ash::OnSearchUrlFetchedCallback search_callback,
+      ash::OnTextDetectionComplete text_callback,
+      base::OnceCallback<void()> error_callback) override;
   void SendRegionSearch(const SkBitmap& image,
                         const gfx::Rect& region,
                         ash::OnSearchUrlFetchedCallback search_callback,
@@ -169,6 +176,7 @@ class TestCaptureModeDelegate : public CaptureModeDelegate {
   MOCK_METHOD(bool, IsNetworkConnectionOffline, (), (const, override));
   void DeleteRemoteFile(const base::FilePath& path,
                         base::OnceCallback<void(bool)> callback) override;
+  bool ActiveUserDefaultSearchProviderIsGoogle() const override;
 
  private:
   std::unique_ptr<recording::RecordingServiceTestApi> recording_service_;

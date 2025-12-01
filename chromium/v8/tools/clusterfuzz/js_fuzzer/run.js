@@ -23,8 +23,11 @@ const sourceHelpers = require('./source_helpers.js');
 
 // Base implementations for default or differential fuzzing.
 const SCRIPT_MUTATORS = {
+  db: scriptMutator.CrossScriptMutator,
   default: scriptMutator.ScriptMutator,
   foozzie: differentialScriptMutator.DifferentialScriptMutator,
+  foozzie_fuzzilli: differentialScriptMutator.FuzzilliDifferentialScriptMutator,
+  wasm: scriptMutator.WasmScriptMutator,
 };
 
 function collect(value, total) {

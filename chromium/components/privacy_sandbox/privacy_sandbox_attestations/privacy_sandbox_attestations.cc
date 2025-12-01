@@ -74,7 +74,7 @@ bool IsOverriddenByFlags(const net::SchemefulSite& site) {
       continue;
     }
 
-    if (net::SchemefulSite(override_url) == site) {
+    if (site.IsSameSiteWith(override_url)) {
       return true;
     }
   }
@@ -84,6 +84,31 @@ bool IsOverriddenByFlags(const net::SchemefulSite& site) {
 
 void RecordParsingStatusHistogram(ParsingStatus status) {
   base::UmaHistogramEnumeration(kAttestationsFileParsingStatusUMA, status);
+}
+
+// Parse the attestations map from the proto string.
+base::expected<PrivacySandboxAttestationsMap, ParsingStatus>
+ParseAttestationsMap(const std::string& proto_str) {
+  base::ElapsedTimer parsing_timer;
+  std::optional<PrivacySandboxAttestationsMap> attestations_map =
+      ParseAttestationsFromString(proto_str);
+  if (!attestations_map.has_value()) {
+    // The parsing failed.
+    return base::unexpected(ParsingStatus::kCannotParseFile);
+  }
+
+  // For an attestations file with 10,000 entries, the average parsing time is
+  // around 240 milliseconds as per local testing on a n2-standard-128 with 128
+  // vCPUs and 512 GB memory. The estimated dynamic memory usage is around 880
+  // KB.
+  base::UmaHistogramTimes(kAttestationsFileParsingTimeUMA,
+                          parsing_timer.Elapsed());
+  // Count up to 10000 KB with a minimum of 1 KB.
+  base::UmaHistogramCounts10000(
+      kAttestationsMapMemoryUsageUMA,
+      base::trace_event::EstimateMemoryUsage(attestations_map.value()) / 1024);
+
+  return base::ok(std::move(attestations_map.value()));
 }
 
 // Trigger the opening and parsing of the attestations file. Returns the
@@ -105,26 +130,7 @@ LoadAttestationsInternal(base::FilePath installed_file_path) {
     return base::unexpected(ParsingStatus::kFileNotExist);
   }
 
-  base::ElapsedTimer parsing_timer;
-  std::optional<PrivacySandboxAttestationsMap> attestations_map =
-      ParseAttestationsFromString(proto_str);
-  if (!attestations_map.has_value()) {
-    // The parsing failed.
-    return base::unexpected(ParsingStatus::kCannotParseFile);
-  }
-
-  // For an attestations file with 10,000 entries, the average parsing time is
-  // around 240 milliseconds as per local testing on a n2-standard-128 with 128
-  // vCPUs and 512 GB memory. The estimated dynamic memory usage is around 880
-  // KB.
-  base::UmaHistogramTimes(kAttestationsFileParsingTimeUMA,
-                          parsing_timer.Elapsed());
-  // Count up to 10000 KB with a minimum of 1 KB.
-  base::UmaHistogramCounts10000(
-      kAttestationsMapMemoryUsageUMA,
-      base::trace_event::EstimateMemoryUsage(attestations_map.value()) / 1024);
-
-  return base::ok(std::move(attestations_map.value()));
+  return ParseAttestationsMap(proto_str);
 }
 
 }  // namespace

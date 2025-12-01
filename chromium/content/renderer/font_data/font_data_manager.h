@@ -11,6 +11,7 @@
 #include <string>
 
 #include "base/containers/lru_cache.h"
+#include "base/hash/hash.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/synchronization/lock.h"
 #include "base/task/single_thread_task_runner.h"
@@ -82,6 +83,13 @@ class CONTENT_EXPORT FontDataManager : public SkFontMgr {
  private:
   font_data_service::mojom::FontDataService& GetRemoteFontDataService() const;
 
+  sk_sp<SkTypeface> CreateTypefaceFromMatchResult(
+      mojom::MatchFamilyNameResultPtr match_result) const;
+
+  // This must be const to allow being called from onCountFamilies and
+  // onGetFamilyNames, but it does mutate family_names_.
+  void GetAllFamilyNames() const;
+
   // Key of the typeface_cache_.
   struct MatchFamilyRequest {
     std::string name;
@@ -91,8 +99,8 @@ class CONTENT_EXPORT FontDataManager : public SkFontMgr {
   };
   struct MatchFamilyRequestHash {
     size_t operator()(const MatchFamilyRequest& key) const {
-      return std::hash<std::string>{}(key.name) ^ key.weight ^
-             (key.width << 8) ^ (key.slant << 16);
+      return base::HashCombine(0ull, key.name, key.weight, key.width,
+                               key.slant);
     }
   };
   struct MatchFamilyRequestEqual {
@@ -119,6 +127,12 @@ class CONTENT_EXPORT FontDataManager : public SkFontMgr {
 
   // Cache of the memory mapped files to ensure the mapping lives.
   mutable std::list<std::unique_ptr<base::MemoryMappedFile>> mapped_files_;
+
+  // A cache of all the font family names that could be returned by
+  // onGetFamilyName. When populated, this has the same amount of elements as
+  // returned by onCountFamilies. This is populated on the first call to either
+  // onCountFamilies or onGetFamilyName.
+  mutable std::vector<std::string> family_names_;
 
 #if BUILDFLAG(ENABLE_FREETYPE)
   sk_sp<SkFontMgr> custom_fnt_mgr_;

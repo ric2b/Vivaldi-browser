@@ -6,7 +6,7 @@
 
 emulator_package {
   package_name: "chromium/third_party/android_sdk/public/emulator"
-  version: "XS__KK27esI_4qZkc_Ybb_ooYjPfcIQ7DDOPUZGYW5wC"  # 35.1.21 (Stable)
+  version: "zbW-DiZAD3fm8BoSXv4L6FYVN79w8r_wMrqWZZ7azxwC"  # 35.4.9 (Stable)
 }
 
 system_image_package {
@@ -30,8 +30,8 @@ avd_settings {
     key: "GLESDynamicVersion"
     value: "on"
   }
-  # Trial Increase RAM size to 6GB for Android 34 AVD
-  ram_size: 6144
+  # 4GB RAM for 34+ API AVDs
+  ram_size: 4096
 }
 avd_variants {
   key: "swarming"
@@ -55,5 +55,5 @@ avd_variants {
 min_sdk: 34
 additional_apk {
   package_name: "chrome_internal/third_party/google3/apks/gmscore/x86_64"
-  version: "5mF806AbGnsm29dfwLgz7FkLBXv2l2POLvQ2nojUlhgC" # 24.26.32
+  version: "7mVKXdcmxohe1QaWUiYV47oHeioRAWJ6_s_LxYbd9I0C" # 25.07.33
 }

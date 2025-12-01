@@ -14,13 +14,49 @@
 licenses(["notice"])
 
 cc_library(
+    name = "types",
+    hdrs = [
+        "pcp.h",
+        "webrtc_state.h",
+    ],
+    visibility = [
+        "//connections:__subpackages__",
+        "//sharing:__subpackages__",
+    ],
+)
+
+cc_library(
+    name = "ble_advertisement",
+    srcs = [
+        "ble_advertisement.cc",
+    ],
+    hdrs = [
+        "ble_advertisement.h",
+    ],
+    visibility = [
+        "//connections:__subpackages__",
+        "//sharing:__subpackages__",
+    ],
+    deps = [
+        ":types",
+        "//internal/platform:base",
+        "//internal/platform:types",
+        "//internal/platform:util",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/strings:str_format",
+    ],
+)
+
+cc_library(
     name = "internal",
     srcs = [
         "base_bwu_handler.cc",
         "base_endpoint_channel.cc",
         "base_pcp_handler.cc",
-        "ble_advertisement.cc",
         "ble_endpoint_channel.cc",
+        "ble_l2cap_endpoint_channel.cc",
         "ble_v2_endpoint_channel.cc",
         "bluetooth_bwu_handler.cc",
         "bluetooth_device_name.cc",
@@ -59,8 +95,8 @@ cc_library(
         "base_bwu_handler.h",
         "base_endpoint_channel.h",
         "base_pcp_handler.h",
-        "ble_advertisement.h",
         "ble_endpoint_channel.h",
+        "ble_l2cap_endpoint_channel.h",
         "ble_v2_endpoint_channel.h",
         "bluetooth_bwu_handler.h",
         "bluetooth_device_name.h",
@@ -83,7 +119,6 @@ cc_library(
         "p2p_point_to_point_pcp_handler.h",
         "p2p_star_pcp_handler.h",
         "payload_manager.h",
-        "pcp.h",
         "pcp_handler.h",
         "pcp_manager.h",
         "reconnect_manager.h",
@@ -114,11 +149,17 @@ cc_library(
         "//sharing:__subpackages__",
     ],
     deps = [
+        ":ble_advertisement",
+        ":types",
         "//connections:core_types",
         "//connections/implementation/analytics",
         "//connections/implementation/flags:connections_flags",
         "//connections/implementation/mediums",
         "//connections/implementation/mediums:utils",
+        "//connections/implementation/mediums:webrtc_utils",
+        "//connections/implementation/mediums/advertisements:dct_advertisement",
+        "//connections/implementation/mediums/advertisements:util",
+        "//connections/implementation/mediums/ble_v2:ble_advertisement_header",
         "//connections/implementation/proto:offline_wire_formats_cc_proto",
         "//connections/v3:v3_types",
         "//internal/analytics:event_logger",
@@ -146,6 +187,7 @@ cc_library(
         "@com_google_absl//absl/functional:any_invocable",
         "@com_google_absl//absl/functional:bind_front",
         "@com_google_absl//absl/log:check",
+        "@com_google_absl//absl/random",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",
@@ -251,8 +293,10 @@ cc_test(
     ],
     shard_count = 8,
     deps = [
+        ":ble_advertisement",
         ":internal",
         ":internal_test",
+        ":types",
         "//connections:core_types",
         "//connections/implementation/analytics",
         "//connections/implementation/flags:connections_flags",
@@ -284,11 +328,14 @@ cc_test(
         "wifi_lan_service_info_test.cc",
     ],
     deps = [
+        ":ble_advertisement",
         ":internal",
+        ":types",
         "//internal/platform:base",
         "//internal/platform/implementation/g3",  # build_cleaner: keep
         "@com_github_protobuf_matchers//protobuf-matchers",
         "@com_google_absl//absl/status",
+        "@com_google_absl//absl/strings:string_view",
         "@com_google_googletest//:gtest_main",
     ],
 )
@@ -298,6 +345,7 @@ cc_test(
     srcs = ["offline_frames_validator_test.cc"],
     deps = [
         ":internal",
+        "//connections:core_types",
         "//connections/implementation/flags:connections_flags",
         "//connections/implementation/proto:offline_wire_formats_cc_proto",
         "//internal/flags:nearby_flags",

@@ -27,7 +27,7 @@ class AccountSelectionViewAndroid : public AccountSelectionView {
 
   // AccountSelectionView:
   bool Show(
-      const std::string& rp_for_display,
+      const content::RelyingPartyData& rp_data,
       const std::vector<IdentityProviderDataPtr>& idp_list,
       const std::vector<IdentityRequestAccountPtr>& accounts,
       Account::SignInMode sign_in_mode,
@@ -60,8 +60,7 @@ class AccountSelectionViewAndroid : public AccountSelectionView {
 
   void OnAccountSelected(JNIEnv* env,
                          const GURL& idp_config_url,
-                         const std::vector<std::string>& account_string_fields,
-                         const GURL& account_picture_url,
+                         const std::string& account_id,
                          bool is_sign_in);
   void OnDismiss(JNIEnv* env, jint dismiss_reason);
   void OnLoginToIdP(JNIEnv* env,

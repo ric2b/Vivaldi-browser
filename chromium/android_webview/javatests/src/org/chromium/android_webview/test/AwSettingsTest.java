@@ -30,6 +30,7 @@ import org.chromium.android_webview.AwContents;
 import org.chromium.android_webview.AwFeatureMap;
 import org.chromium.android_webview.AwSettings;
 import org.chromium.android_webview.AwSettings.LayoutAlgorithm;
+import org.chromium.android_webview.AwWebResourceRequest;
 import org.chromium.android_webview.ManifestMetadataUtil;
 import org.chromium.android_webview.common.AwFeatures;
 import org.chromium.android_webview.test.AwActivityTestRule.TestDependencyFactory;
@@ -47,7 +48,6 @@ import org.chromium.base.test.util.CallbackHelper;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Feature;
-import org.chromium.base.test.util.RequiresRestart;
 import org.chromium.base.test.util.TestFileUtil;
 import org.chromium.base.test.util.UrlUtils;
 import org.chromium.components.embedder_support.util.WebResourceResponseInfo;
@@ -588,49 +588,6 @@ public class AwSettingsTest {
             loadUrlSync(UrlUtils.getIsolatedTestFileUrl(TEST_FILE));
             Assert.assertEquals(
                     value == ENABLED ? HAS_LOCAL_STORAGE : NO_LOCAL_STORAGE, getTitleOnUiThread());
-        }
-    }
-
-    class AwSettingsDatabaseTestHelper extends AwSettingsTestHelper<Boolean> {
-        private static final String TEST_FILE = "android_webview/test/data/database_access.html";
-        private static final String NO_DATABASE = "No database";
-        private static final String HAS_DATABASE = "Has database";
-
-        AwSettingsDatabaseTestHelper(
-                AwTestContainerView containerView, TestAwContentsClient contentViewClient)
-                throws Throwable {
-            super(containerView, contentViewClient, true);
-            AwSettingsTest.assertFileIsReadable(UrlUtils.getIsolatedTestFilePath(TEST_FILE));
-        }
-
-        @Override
-        protected Boolean getAlteredValue() {
-            return ENABLED;
-        }
-
-        @Override
-        protected Boolean getInitialValue() {
-            return DISABLED;
-        }
-
-        @Override
-        protected Boolean getCurrentValue() {
-            return mAwSettings.getDatabaseEnabled();
-        }
-
-        @Override
-        protected void setCurrentValue(Boolean value) {
-            mAwSettings.setDatabaseEnabled(value);
-        }
-
-        @Override
-        protected void doEnsureSettingHasValue(Boolean value) throws Throwable {
-            // It seems accessing the database through a data scheme is not
-            // supported, and fails with a DOM exception (likely a cross-domain
-            // violation).
-            loadUrlSync(UrlUtils.getIsolatedTestFileUrl(TEST_FILE));
-            Assert.assertEquals(
-                    value == ENABLED ? HAS_DATABASE : NO_DATABASE, getTitleOnUiThread());
         }
     }
 
@@ -2179,50 +2136,6 @@ public class AwSettingsTest {
     @Test
     @SmallTest
     @Feature({"AndroidWebView", "Preferences"})
-    @RequiresRestart("setDatabaseEnabled is ignored after the first use of WebView in the process")
-    @CommandLineFlags.Add({"enable-features=kWebSQLAccess"})
-    public void testDatabaseInitialValue() throws Throwable {
-        TestAwContentsClient client = new TestAwContentsClient();
-        final AwTestContainerView testContainerView =
-                mActivityTestRule.createAwTestContainerViewOnMainSync(client);
-        AwSettingsDatabaseTestHelper helper =
-                new AwSettingsDatabaseTestHelper(testContainerView, client);
-        helper.ensureSettingHasInitialValue();
-    }
-
-    @Test
-    @SmallTest
-    @Feature({"AndroidWebView", "Preferences"})
-    @RequiresRestart("setDatabaseEnabled is ignored after the first use of WebView in the process")
-    @CommandLineFlags.Add({"enable-features=kWebSQLAccess"})
-    public void testDatabaseEnabled() throws Throwable {
-        TestAwContentsClient client = new TestAwContentsClient();
-        final AwTestContainerView testContainerView =
-                mActivityTestRule.createAwTestContainerViewOnMainSync(client);
-        AwSettingsDatabaseTestHelper helper =
-                new AwSettingsDatabaseTestHelper(testContainerView, client);
-        helper.setAlteredSettingValue();
-        helper.ensureSettingHasAlteredValue();
-    }
-
-    @Test
-    @SmallTest
-    @Feature({"AndroidWebView", "Preferences"})
-    @RequiresRestart("setDatabaseEnabled is ignored after the first use of WebView in the process")
-    @CommandLineFlags.Add({"enable-features=kWebSQLAccess"})
-    public void testDatabaseDisabled() throws Throwable {
-        TestAwContentsClient client = new TestAwContentsClient();
-        final AwTestContainerView testContainerView =
-                mActivityTestRule.createAwTestContainerViewOnMainSync(client);
-        AwSettingsDatabaseTestHelper helper =
-                new AwSettingsDatabaseTestHelper(testContainerView, client);
-        helper.setInitialSettingValue();
-        helper.ensureSettingHasInitialValue();
-    }
-
-    @Test
-    @SmallTest
-    @Feature({"AndroidWebView", "Preferences"})
     public void testUniversalAccessFromFilesWithTwoViews() throws Throwable {
         ViewPair views = createViews();
         runPerViewSettingsTest(
@@ -3546,7 +3459,7 @@ public class AwSettingsTest {
                     @Override
                     public WebResourceResponseInfo shouldInterceptRequest(
                             AwWebResourceRequest request) {
-                        if (request.url.equals(defaultVideoPosterUrl)) {
+                        if (request.getUrl().equals(defaultVideoPosterUrl)) {
                             videoPosterAccessedCallbackHelper.notifyCalled();
                         }
                         return null;

@@ -4,6 +4,7 @@
 
 package org.chromium.chrome.browser.tabmodel;
 
+import org.chromium.base.Token;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabLaunchType;
 import org.chromium.content_public.browser.LoadUrlParams;
@@ -20,7 +21,7 @@ public class TabGroupUtils {
      * @return The selected tab of the group which contains the {@code tab}
      */
     public static Tab getSelectedTabInGroupForTab(TabGroupModelFilter filter, Tab tab) {
-        return filter.getTabAt(filter.indexOf(tab));
+        return filter.getRepresentativeTabAt(filter.representativeIndexOf(tab));
     }
 
     /**
@@ -69,5 +70,42 @@ public class TabGroupUtils {
         TabCreator tabCreator = tabGroupModelFilter.getTabModel().getTabCreator();
         LoadUrlParams loadUrlParams = new LoadUrlParams(url);
         tabCreator.createNewTab(loadUrlParams, type, lastTab);
+    }
+
+    /**
+     * Regroups the provided list of tabs into a tab group using the given {@link TabGroupMetadata}.
+     *
+     * @param tabGroupModelFilter The {@link TabGroupModelFilter} to act on.
+     * @param tabs The list of tabs to be merged to a group.
+     * @param tabGroupMetadata The metadata used to regrouped the tabs.
+     */
+    public static void regroupTabs(
+            TabGroupModelFilter tabGroupModelFilter,
+            List<Tab> tabs,
+            TabGroupMetadata tabGroupMetadata) {
+        // 1. Extract tab group properties from the metadata.
+        int rootId = tabGroupMetadata.rootId;
+        Token tabGroupId = tabGroupMetadata.tabGroupId;
+        String tabGroupTitle = tabGroupMetadata.tabGroupTitle;
+        boolean tabGroupCollapsed = tabGroupMetadata.tabGroupCollapsed;
+        int tabGroupColor = tabGroupMetadata.tabGroupColor;
+
+        // 2. Set rootId and TabGroupId for all tabs before merging to guarantee they are treated as
+        // part of the same group.
+        for (Tab tab : tabs) {
+            tab.setRootId(rootId);
+            tab.setTabGroupId(tabGroupId);
+        }
+
+        // 3. Merge tabs to recreate tab group
+        for (Tab tab : tabs) {
+            int tabId = tab.getId();
+            tabGroupModelFilter.mergeTabsToGroup(tabId, rootId, /* skipUpdateTabModel= */ true);
+        }
+
+        // 4. Apply the tab group attributes (color, collapsed state, and title).
+        tabGroupModelFilter.setTabGroupColor(rootId, tabGroupColor);
+        tabGroupModelFilter.setTabGroupCollapsed(rootId, tabGroupCollapsed);
+        tabGroupModelFilter.setTabGroupTitle(rootId, tabGroupTitle);
     }
 }

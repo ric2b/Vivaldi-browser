@@ -6,6 +6,7 @@
 
 #include <string_view>
 
+#include "base/containers/contains.h"
 #include "base/feature_list.h"
 #include "base/functional/bind.h"
 #include "base/memory/values_equivalent.h"
@@ -17,6 +18,7 @@
 #include "chrome/browser/themes/browser_theme_pack.h"
 #include "chrome/browser/themes/theme_properties.h"
 #include "chrome/browser/themes/theme_service.h"
+#include "chrome/browser/ui/actions/chrome_action_id.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/browser_window.h"
@@ -24,8 +26,11 @@
 #include "chrome/browser/ui/color/chrome_color_id.h"
 #include "chrome/browser/ui/tabs/tab_menu_model_factory.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
+#include "chrome/browser/ui/ui_features.h"
+#include "chrome/browser/ui/views/page_action/action_ids.h"
 #include "chrome/browser/web_applications/web_app_provider.h"
 #include "chrome/browser/web_applications/web_app_registrar.h"
+#include "chrome/browser/web_applications/web_app_tab_helper.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/chrome_render_frame.mojom.h"
 #include "chrome/common/pref_names.h"
@@ -124,11 +129,49 @@ Browser* AppBrowserController::FindForWebApp(const Profile& profile,
 }
 
 // static
+std::optional<int> AppBrowserController::FindTabIndexForApp(
+    Browser* browser,
+    const webapps::AppId& app_id,
+    bool for_focus_existing,
+    HomeTabScope home_tab_scope) {
+  auto is_valid_tab = [&app_id, home_tab_scope,
+                       for_focus_existing](content::WebContents* contents) {
+    WebAppTabHelper* tab_helper = WebAppTabHelper::FromWebContents(contents);
+    if (app_id != tab_helper->app_id() || contents->HasOpener()) {
+      return false;
+    }
+    if (for_focus_existing && !tab_helper->CanBeUsedForFocusExisting()) {
+      return false;
+    }
+    if (home_tab_scope == HomeTabScope::kDontCare) {
+      return true;
+    }
+    return (home_tab_scope == HomeTabScope::kInScope) ==
+           tab_helper->is_pinned_home_tab();
+  };
+  // The active web contents should have preference if it is in scope.
+  if (browser->tab_strip_model()->active_index() != TabStripModel::kNoTab) {
+    if (is_valid_tab(browser->tab_strip_model()->GetActiveWebContents())) {
+      return {browser->tab_strip_model()->active_index()};
+    }
+  }
+  // Otherwise, use the first one for the app.
+  for (int i = 0; i < browser->tab_strip_model()->count(); ++i) {
+    if (is_valid_tab(browser->tab_strip_model()->GetWebContentsAt(i))) {
+      return {i};
+    }
+  }
+  return std::nullopt;
+}
+
+// static
 std::optional<AppBrowserController::BrowserAndTabIndex>
 AppBrowserController::FindTopLevelBrowsingContextForWebApp(
     const Profile& profile,
     const webapps::AppId& app_id,
-    Browser::Type browser_type) {
+    Browser::Type browser_type,
+    bool for_focus_existing,
+    HomeTabScope home_tab_scope) {
   for (Browser* browser : BrowserList::GetInstance()->OrderedByActivation()) {
     if (browser->IsAttemptingToCloseBrowser() || browser->IsBrowserClosing()) {
       continue;
@@ -142,25 +185,10 @@ AppBrowserController::FindTopLevelBrowsingContextForWebApp(
     if (IsWebApp(browser) && !IsForWebApp(browser, app_id)) {
       continue;
     }
-    // The active web contents should have preference if it is in scope.
-    content::WebContents* active_contents =
-        browser->tab_strip_model()->GetActiveWebContents();
-    if (browser->tab_strip_model()->active_index() != TabStripModel::kNoTab) {
-      if (base::ValuesEquivalent(&app_id,
-                                 WebAppTabHelper::GetAppId(active_contents)) &&
-          !active_contents->HasOpener()) {
-        return {{browser, browser->tab_strip_model()->active_index()}};
-      }
-    }
-    // Otherwise, use the first one for the app.
-    for (int i = 0; i < browser->tab_strip_model()->count(); ++i) {
-      content::WebContents* contents =
-          browser->tab_strip_model()->GetWebContentsAt(i);
-      if (base::ValuesEquivalent(&app_id,
-                                 WebAppTabHelper::GetAppId(contents)) &&
-          !contents->HasOpener()) {
-        return {{browser, i}};
-      }
+    std::optional<int> tab_index =
+        FindTabIndexForApp(browser, app_id, for_focus_existing, home_tab_scope);
+    if (tab_index.has_value()) {
+      return {{browser, *tab_index}};
     }
   }
   return std::nullopt;
@@ -300,8 +328,34 @@ bool AppBrowserController::HasTitlebarContentSettings() const {
 #endif  // BUILDFLAG(IS_CHROMEOS)
 }
 
-std::vector<PageActionIconType> AppBrowserController::GetTitleBarPageActions()
+std::vector<actions::ActionId> AppBrowserController::GetTitleBarPageActions()
     const {
+#if BUILDFLAG(IS_CHROMEOS)
+  if (system_app()) {
+    return {};
+  }
+#endif  // BUILDFLAG(IS_CHROMEOS)
+
+  if (!base::FeatureList::IsEnabled(features::kPageActionsMigration)) {
+    return {};
+  }
+
+  std::vector<actions::ActionId> types_enabled = {
+      kActionShowTranslate,
+      kActionZoomNormal,
+  };
+
+#if DCHECK_IS_ON()
+  for (auto action_id : types_enabled) {
+    DCHECK(base::Contains(page_actions::kActionIds, action_id));
+  }
+#endif
+
+  return types_enabled;
+}
+
+std::vector<PageActionIconType>
+AppBrowserController::GetTitleBarPageActionTypes() const {
 #if BUILDFLAG(IS_CHROMEOS)
   if (system_app()) {
     return {PageActionIconType::kFind, PageActionIconType::kZoom};
@@ -315,7 +369,6 @@ std::vector<PageActionIconType> AppBrowserController::GetTitleBarPageActions()
   types_enabled.push_back(PageActionIconType::kZoom);
   types_enabled.push_back(PageActionIconType::kFileSystemAccess);
   types_enabled.push_back(PageActionIconType::kCookieControls);
-  types_enabled.push_back(PageActionIconType::kLocalCardMigration);
   types_enabled.push_back(PageActionIconType::kSaveCard);
 
   return types_enabled;
@@ -619,8 +672,6 @@ void AppBrowserController::AddColorMixers(
   mixer[kColorPwaSecurityChipForeground] = {ui::kColorSecondaryForeground};
   mixer[kColorPwaSecurityChipForegroundDangerous] = {
       ui::kColorAlertHighSeverity};
-  mixer[kColorPwaSecurityChipForegroundPolicyCert] = {
-      ui::kColorDisabledForeground};
   mixer[kColorPwaSecurityChipForegroundSecure] = {
       kColorPwaSecurityChipForeground};
   auto separator_color =

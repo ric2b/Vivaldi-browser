@@ -17,6 +17,7 @@
 #include "src/ic/ic.h"
 #include "src/init/bootstrapper.h"
 #include "src/objects/feedback-cell-inl.h"
+#include "src/objects/feedback-vector.h"
 #include "src/strings/string-builder-inl.h"
 
 // Has to be the last include (doesn't have include guards):
@@ -65,6 +66,59 @@ CodeKinds JSFunction::GetAvailableCodeKinds(IsolateForSandbox isolate) const {
 
   DCHECK_EQ((result & ~kJSFunctionCodeKindsMask), 0);
   return result;
+}
+
+void JSFunction::TraceOptimizationStatus(const char* format, ...) {
+  if (!v8_flags.trace_opt_status) return;
+  Isolate* const isolate = GetIsolate();
+  PrintF("[optimization status (");
+  {
+    va_list arguments;
+    va_start(arguments, format);
+    base::OS::VPrint(format, arguments);
+    va_end(arguments);
+  }
+  PrintF(")");
+  if (strlen(DebugNameCStr().get()) == 0) {
+    PrintF(" (anonymous %p)", reinterpret_cast<void*>(ptr()));
+  } else {
+    PrintF(" %s", DebugNameCStr().get());
+  }
+  if (!has_feedback_vector()) {
+    PrintF(" !feedback]\n");
+    return;
+  }
+
+  PrintF(" %s", CodeKindToString(GetActiveTier(isolate).value()));
+  if (IsMaglevRequested(isolate)) {
+    PrintF(" ^M");
+
+  } else if (IsTurbofanRequested(isolate)) {
+    PrintF(" ^TF");
+  }
+  Tagged<FeedbackVector> feedback = feedback_vector();
+  Tagged<FeedbackMetadata> metadata = feedback->metadata();
+  for (int i = 0; i < metadata->slot_count(); i++) {
+    FeedbackSlot slot(i);
+    if (metadata->GetKind(slot) == FeedbackSlotKind::kJumpLoop) {
+      Tagged<MaybeObject> value = feedback->Get(slot);
+      if (value.IsCleared()) {
+        PrintF(" .");
+      } else {
+        Tagged<Code> code =
+            Tagged<CodeWrapper>::cast(value.GetHeapObjectAssumeWeak())
+                ->code(isolate);
+        PrintF(" %i:", code->osr_offset().ToInt());
+        if (code->kind() == CodeKind::MAGLEV) {
+          PrintF("m");
+        } else {
+          DCHECK_EQ(CodeKind::TURBOFAN_JS, code->kind());
+          PrintF("t");
+        }
+      }
+    }
+  }
+  PrintF("]\n");
 }
 
 bool JSFunction::HasAttachedOptimizedCode(IsolateForSandbox isolate) const {
@@ -300,7 +354,8 @@ void JSFunction::SetInterruptBudget(
 Maybe<bool> JSFunctionOrBoundFunctionOrWrappedFunction::CopyNameAndLength(
     Isolate* isolate,
     DirectHandle<JSFunctionOrBoundFunctionOrWrappedFunction> function,
-    DirectHandle<JSReceiver> target, Handle<String> prefix, int arg_count) {
+    DirectHandle<JSReceiver> target, DirectHandle<String> prefix,
+    int arg_count) {
   // Setup the "length" property based on the "length" of the {target}.
   // If the targets length is the default JSFunction accessor, we can keep the
   // accessor that's installed by default on the
@@ -351,11 +406,11 @@ Maybe<bool> JSFunctionOrBoundFunctionOrWrappedFunction::CopyNameAndLength(
       name_lookup.state() != LookupIterator::ACCESSOR ||
       !name_lookup.GetAccessors().is_identical_to(function_name_accessor) ||
       (name_lookup.IsFound() && !name_lookup.HolderIsReceiver())) {
-    Handle<Object> target_name;
+    DirectHandle<Object> target_name;
     ASSIGN_RETURN_ON_EXCEPTION_VALUE(isolate, target_name,
                                      Object::GetProperty(&name_lookup),
                                      Nothing<bool>());
-    Handle<String> name;
+    DirectHandle<String> name;
     if (IsString(*target_name)) {
       ASSIGN_RETURN_ON_EXCEPTION_VALUE(
           isolate, name,
@@ -530,7 +585,7 @@ MaybeDirectHandle<Object> JSWrappedFunction::Create(
   // 7. Let result be CopyNameAndLength(wrapped, Target, "wrapped").
   Maybe<bool> is_abrupt =
       JSFunctionOrBoundFunctionOrWrappedFunction::CopyNameAndLength(
-          isolate, wrapped, value, Handle<String>(), 0);
+          isolate, wrapped, value, DirectHandle<String>(), 0);
 
   // 8. If result is an Abrupt Completion, throw a TypeError exception.
   if (is_abrupt.IsNothing()) {
@@ -1323,7 +1378,8 @@ bool UseFastFunctionNameLookup(Isolate* isolate, Tagged<Map> map) {
 
 }  // namespace
 
-Handle<String> JSFunction::GetDebugName(DirectHandle<JSFunction> function) {
+DirectHandle<String> JSFunction::GetDebugName(
+    DirectHandle<JSFunction> function) {
   // Below we use the same fast-path that we already established for
   // Function.prototype.bind(), where we avoid a slow "name" property
   // lookup if the DescriptorArray for the |function| still has the
@@ -1339,7 +1395,7 @@ Handle<String> JSFunction::GetDebugName(DirectHandle<JSFunction> function) {
     // JSFunction where the "name" property is untouched, so we retain
     // that exact behavior and go with SharedFunctionInfo::DebugName()
     // in case of the fast-path.
-    Handle<Object> name =
+    DirectHandle<Object> name =
         GetDataProperty(isolate, function, isolate->factory()->name_string());
     if (IsString(*name)) return Cast<String>(name);
   }
@@ -1347,10 +1403,10 @@ Handle<String> JSFunction::GetDebugName(DirectHandle<JSFunction> function) {
       isolate, direct_handle(function->shared(), isolate));
 }
 
-bool JSFunction::SetName(DirectHandle<JSFunction> function, Handle<Name> name,
-                         DirectHandle<String> prefix) {
+bool JSFunction::SetName(DirectHandle<JSFunction> function,
+                         DirectHandle<Name> name, DirectHandle<String> prefix) {
   Isolate* isolate = function->GetIsolate();
-  Handle<String> function_name;
+  DirectHandle<String> function_name;
   ASSIGN_RETURN_ON_EXCEPTION_VALUE(isolate, function_name,
                                    Name::ToFunctionName(isolate, name), false);
   if (prefix->length() > 0) {
@@ -1358,8 +1414,7 @@ bool JSFunction::SetName(DirectHandle<JSFunction> function, Handle<Name> name,
     builder.AppendString(prefix);
     builder.AppendCharacter(' ');
     builder.AppendString(function_name);
-    ASSIGN_RETURN_ON_EXCEPTION_VALUE(isolate, function_name,
-                                     indirect_handle(builder.Finish(), isolate),
+    ASSIGN_RETURN_ON_EXCEPTION_VALUE(isolate, function_name, builder.Finish(),
                                      false);
   }
   RETURN_ON_EXCEPTION_VALUE(

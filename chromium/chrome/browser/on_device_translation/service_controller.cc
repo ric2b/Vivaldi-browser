@@ -40,6 +40,7 @@
 #include "mojo/public/cpp/bindings/callback_helpers.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
+#include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/mojom/on_device_translation/translation_manager.mojom-shared.h"
 
 using blink::mojom::CanCreateTranslatorResult;
@@ -120,8 +121,6 @@ OnDeviceTranslationServiceController::OnDeviceTranslationServiceController(
         base::BindRepeating(&OnDeviceTranslationServiceController::
                                 OnTranslateKitBinaryPathChanged,
                             base::Unretained(this)));
-    // Registers the TranslateKit component.
-    ComponentManager::GetInstance().RegisterTranslateKitComponent();
   }
   if (!ComponentManager::GetInstance().HasLanguagePackInfoFromCommandLine()) {
     // Start listening to pref changes for language pack keys.
@@ -157,10 +156,11 @@ void OnDeviceTranslationServiceController::CreateTranslator(
                                       to_be_registered_packs);
 
     if (!to_be_registered_packs.empty()) {
-      if (kTranslationAPILimitLanguagePackCount.Get() &&
-          to_be_registered_packs.size() >
-              GetInstallablePackageCount(
-                  ComponentManager::GetRegisteredLanguagePacks().size())) {
+      if (!base::FeatureList::IsEnabled(blink::features::kTranslationAPIV1) &&
+          (kTranslationAPILimitLanguagePackCount.Get() &&
+           to_be_registered_packs.size() >
+               GetInstallablePackageCount(
+                   ComponentManager::GetRegisteredLanguagePacks().size()))) {
         RecordLanguagePairUma(
             "Translate.OnDeviceTranslation.DownloadExceedLimit.LanguagePair",
             source_lang, target_lang);
@@ -180,7 +180,13 @@ void OnDeviceTranslationServiceController::CreateTranslator(
       }
     }
   }
-  // If there is no TranslteKit or there are required language packs that are
+
+  if (!ComponentManager::HasTranslateKitLibraryPathFromCommandLine()) {
+    // Registers the TranslateKit component.
+    ComponentManager::GetInstance().RegisterTranslateKitComponent();
+  }
+
+  // If there is no TranslateKit or there are required language packs that are
   // not installed, we will wait until they are installed to create the
   // translator.
   if (ComponentManager::GetTranslateKitLibraryPath().empty() ||
@@ -315,6 +321,7 @@ OnDeviceTranslationServiceController::CanTranslateImpl(
   }
 
   if (!to_be_registered_packs.empty() &&
+      !base::FeatureList::IsEnabled(blink::features::kTranslationAPIV1) &&
       kTranslationAPILimitLanguagePackCount.Get() &&
       to_be_registered_packs.size() >
           GetInstallablePackageCount(

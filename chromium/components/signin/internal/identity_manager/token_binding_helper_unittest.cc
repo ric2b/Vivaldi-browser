@@ -18,7 +18,7 @@
 #include "components/unexportable_keys/unexportable_key_id.h"
 #include "components/unexportable_keys/unexportable_key_service_impl.h"
 #include "components/unexportable_keys/unexportable_key_task_manager.h"
-#include "crypto/scoped_mock_unexportable_key_provider.h"
+#include "crypto/scoped_fake_unexportable_key_provider.h"
 #include "crypto/signature_verifier.h"
 #include "crypto/unexportable_key.h"
 #include "google_apis/gaia/core_account_id.h"
@@ -79,7 +79,7 @@ class TokenBindingHelperTest : public testing::Test {
       base::test::TaskEnvironment::ThreadPoolExecutionMode::
           QUEUED};  // QUEUED - tasks don't run until `RunUntilIdle()` is
                     // called.
-  crypto::ScopedMockUnexportableKeyProvider scoped_key_provider_;
+  crypto::ScopedFakeUnexportableKeyProvider scoped_key_provider_;
   unexportable_keys::UnexportableKeyTaskManager unexportable_key_task_manager_{
       crypto::UnexportableKeyProvider::Config()};
   unexportable_keys::UnexportableKeyServiceImpl unexportable_key_service_;
@@ -222,7 +222,7 @@ TEST_F(TokenBindingHelperTest, GenerateBindingKeyAssertionInvalidBindingKey) {
 }
 
 TEST_F(TokenBindingHelperTest, GenerateBindingKeyAssertionNoEphemeralKey) {
-  CoreAccountId account_id = CoreAccountId::FromGaiaId("test_gaia_id");
+  CoreAccountId account_id = CoreAccountId::FromGaiaId(GaiaId("test_gaia_id"));
   unexportable_keys::UnexportableKeyId key_id = GenerateNewKey();
   std::vector<uint8_t> wrapped_key = GetWrappedKey(key_id);
   helper().SetBindingKey(account_id, wrapped_key);

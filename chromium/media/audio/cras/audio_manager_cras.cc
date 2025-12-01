@@ -185,10 +185,13 @@ void RetrieveSystemEffectFeatures(bool& enforce_system_aec,
       base::FeatureList::IsEnabled(media::kCrOSSystemAEC);
 }
 
-AudioParameters AudioManagerCras::GetStreamParametersForSystem(
+AudioParameters AudioManagerCras::GetInputStreamParametersForSystem(
     int user_buffer_size) {
   AudioParameters params(
-      AudioParameters::AUDIO_PCM_LOW_LATENCY, ChannelLayoutConfig::Stereo(),
+      AudioParameters::AUDIO_PCM_LOW_LATENCY,
+      base::FeatureList::IsEnabled(media::kCrOSEnforceMonoAudioCapture)
+          ? ChannelLayoutConfig::Mono()
+          : ChannelLayoutConfig::Stereo(),
       kDefaultSampleRate, user_buffer_size,
       AudioParameters::HardwareCapabilities(limits::kMinAudioBufferSize,
                                             limits::kMaxAudioBufferSize));
@@ -257,7 +260,7 @@ AudioParameters AudioManagerCras::GetInputStreamParameters(
   user_buffer_size =
       user_buffer_size ? user_buffer_size : kDefaultInputBufferSize;
 
-  return GetStreamParametersForSystem(user_buffer_size);
+  return GetInputStreamParametersForSystem(user_buffer_size);
 }
 
 std::string AudioManagerCras::GetDefaultInputDeviceID() {
@@ -404,11 +407,7 @@ bool AudioManagerCras::IsDefault(const std::string& device_id, bool is_input) {
 }
 
 enum CRAS_CLIENT_TYPE AudioManagerCras::GetClientType() {
-#if BUILDFLAG(IS_CHROMEOS_ASH)
   return CRAS_CLIENT_TYPE_CHROME;
-#else
-  return CRAS_CLIENT_TYPE_LACROS;
-#endif
 }
 
 }  // namespace media

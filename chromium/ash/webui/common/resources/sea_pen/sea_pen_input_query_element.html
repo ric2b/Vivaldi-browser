@@ -29,6 +29,10 @@
     width: 100%;
   }
 
+  #queryInput::part(text-area)::placeholder {
+    color: var(--cros-sys-secondary);
+  }
+
   #thumbnailsLoadingText {
     color: var(--cros-sys-on_primary_container);
     font: var(--cros-annotation-1-font);
@@ -93,6 +97,7 @@
               slot="prefix-icon"
               asset-url="chrome://resources/ash/common/sea_pen/lightbulb_icon.json"
               loop
+              autoplay="[[autoplay_]]"
               dynamic
               aria-hidden>
           </cros-lottie-renderer>

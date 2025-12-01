@@ -5,7 +5,6 @@
 <translation id="1097355661841455597">Haluaisimme kuulla mietteitäsi.</translation>
 <translation id="1137850887415122856">Yksityisvälilehtien lukitseminen edellyttää Touch ID:n, Face ID:n tai pääsykoodin määritystä.</translation>
 <translation id="1310184829257917508">Kysy, avataanko linkit muista sovelluksista yksityistilassa</translation>
-<translation id="1561609750546413721">Vivaldin kääntäjä</translation>
 <translation id="207677936531967364">Uusi sivu yksityisvälilehdellä</translation>
 <translation id="2353953000228441783">Sivuston oletusnäkymä</translation>
 <translation id="2394192052244849643">Liitä ja etsi</translation>
@@ -17,7 +16,9 @@
 <translation id="3463990832590571933">Avaa uuteen yksityisvälilehteen</translation>
 <translation id="3473652525653758699">Uusi yksityisikkuna</translation>
 <translation id="3501504415290398157">Avaa yksityisvälilehtien lukitus <ph name="BIOMETRIC_AUTHENITCATION_TYPE" />.</translation>
+<translation id="3607792383367580513">Käännä</translation>
 <translation id="3692650606013198282">Avaa yksityistilassa</translation>
+<translation id="3922395466317605522">Mukauta valikkoa</translation>
 <translation id="3981599532037327317">Avaa ${url} yksityistilassa</translation>
 <translation id="398477389655464998">Kopioi linkki korostukseen</translation>
 <translation id="4026745073321351206">🙄 Havaitsitko ongelman?</translation>
@@ -39,10 +40,9 @@
 <translation id="7307970171564921489">Avaa ykistyisvälilehdet <ph name="BIOMETRIC_AUTHENITCATION_TYPE" /></translation>
 <translation id="7347289093190902150">Avaataanko yksityistilassa?</translation>
 <translation id="7549299604720382000">Uusi yksityinen välilehti</translation>
-<translation id="755255281989213264">Mukauta valikkoa</translation>
-<translation id="7920949005883349320">Yksityisyys ja tietoturva</translation>
 <translation id="7961015016161918242">Ei koskaan</translation>
 <translation id="8326104954595890674">Uusi yksityisvälilehti</translation>
 <translation id="8756969031206844760">Päivitetäänkö salasana?</translation>
+<translation id="9042893549633094279">Yksityisyys ja suojaus</translation>
 <translation id="9094033019050270033">Päivitä salasana</translation>
 </translationbundle>

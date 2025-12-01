@@ -9,13 +9,14 @@
 
 #include "base/functional/callback.h"
 #include "components/autofill/core/browser/autofill_progress_dialog_type.h"
-#include "components/autofill/core/browser/data_model/credit_card.h"
+#include "components/autofill/core/browser/data_model/payments/credit_card.h"
 #include "components/autofill/core/browser/payments/autofill_error_dialog_context.h"
 #include "components/autofill/core/browser/payments/card_unmask_challenge_option.h"
 #include "components/autofill/core/browser/payments/card_unmask_delegate.h"
 #include "components/autofill/core/browser/payments/virtual_card_enrollment_manager.h"
 #include "components/autofill/core/browser/single_field_fillers/payments/merchant_promo_code_manager.h"
 #include "components/autofill/core/browser/suggestions/suggestion.h"
+#include "components/autofill/core/browser/ui/payments/bnpl_tos_controller.h"
 #include "components/autofill/core/browser/ui/payments/bubble_show_options.h"
 #include "components/autofill/core/browser/ui/payments/card_unmask_prompt_options.h"
 
@@ -33,21 +34,6 @@ PaymentsAutofillClient::GetOrCreateAutofillSaveCardBottomSheetBridge() {
   return nullptr;
 }
 #elif !BUILDFLAG(IS_IOS)
-void PaymentsAutofillClient::ShowLocalCardMigrationDialog(
-    base::OnceClosure show_migration_dialog_closure) {}
-
-void PaymentsAutofillClient::ConfirmMigrateLocalCardToCloud(
-    const LegalMessageLines& legal_message_lines,
-    const std::string& user_email,
-    const std::vector<MigratableCreditCard>& migratable_credit_cards,
-    LocalCardMigrationCallback start_migrating_cards_callback) {}
-
-void PaymentsAutofillClient::ShowLocalCardMigrationResults(
-    bool has_server_error,
-    const std::u16string& tip_message,
-    const std::vector<MigratableCreditCard>& migratable_credit_cards,
-    MigrationDeleteCardCallback delete_local_card_callback) {}
-
 void PaymentsAutofillClient::ShowWebauthnOfferDialog(
     WebauthnDialogCallback offer_dialog_callback) {}
 
@@ -166,7 +152,11 @@ void PaymentsAutofillClient::ShowUnmaskPrompt(
 void PaymentsAutofillClient::OnUnmaskVerificationResult(
     PaymentsRpcResult result) {}
 
-void PaymentsAutofillClient::ShowBnplTos() {}
+void PaymentsAutofillClient::ShowBnplTos(BnplTosModel bnpl_tos_model,
+                                         base::OnceClosure accept_callback,
+                                         base::OnceClosure cancel_callback) {}
+
+void PaymentsAutofillClient::CloseBnplTos() {}
 
 VirtualCardEnrollmentManager*
 PaymentsAutofillClient::GetVirtualCardEnrollmentManager() {
@@ -233,6 +223,11 @@ bool PaymentsAutofillClient::ShowTouchToFillIban(
 }
 
 void PaymentsAutofillClient::HideTouchToFillPaymentMethod() {}
+
+const PaymentsDataManager& PaymentsAutofillClient::GetPaymentsDataManager()
+    const {
+  return const_cast<PaymentsAutofillClient*>(this)->GetPaymentsDataManager();
+}
 
 #if !BUILDFLAG(IS_IOS)
 std::unique_ptr<webauthn::InternalAuthenticator>

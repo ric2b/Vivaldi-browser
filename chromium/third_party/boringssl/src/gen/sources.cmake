@@ -33,7 +33,6 @@ set(
   crypto/fipsmodule/aes/key_wrap.cc.inc
   crypto/fipsmodule/aes/mode_wrappers.cc.inc
   crypto/fipsmodule/aes/ofb.cc.inc
-  crypto/fipsmodule/aes/polyval.cc.inc
   crypto/fipsmodule/bn/add.cc.inc
   crypto/fipsmodule/bn/asm/x86_64-gcc.cc.inc
   crypto/fipsmodule/bn/bn.cc.inc
@@ -83,7 +82,9 @@ set(
   crypto/fipsmodule/hkdf/hkdf.cc.inc
   crypto/fipsmodule/hmac/hmac.cc.inc
   crypto/fipsmodule/keccak/keccak.cc.inc
+  crypto/fipsmodule/mldsa/fips_known_values.inc
   crypto/fipsmodule/mldsa/mldsa.cc.inc
+  crypto/fipsmodule/mlkem/fips_known_values.inc
   crypto/fipsmodule/mlkem/mlkem.cc.inc
   crypto/fipsmodule/rand/ctrdrbg.cc.inc
   crypto/fipsmodule/rand/rand.cc.inc
@@ -97,6 +98,7 @@ set(
   crypto/fipsmodule/sha/sha1.cc.inc
   crypto/fipsmodule/sha/sha256.cc.inc
   crypto/fipsmodule/sha/sha512.cc.inc
+  crypto/fipsmodule/slhdsa/fips_known_values.inc
   crypto/fipsmodule/slhdsa/fors.cc.inc
   crypto/fipsmodule/slhdsa/merkle.cc.inc
   crypto/fipsmodule/slhdsa/slhdsa.cc.inc
@@ -108,10 +110,10 @@ set(
 set(
   BCM_SOURCES_ASM
 
-  gen/bcm/aes-gcm-avx10-x86_64-apple.S
-  gen/bcm/aes-gcm-avx10-x86_64-linux.S
   gen/bcm/aes-gcm-avx2-x86_64-apple.S
   gen/bcm/aes-gcm-avx2-x86_64-linux.S
+  gen/bcm/aes-gcm-avx512-x86_64-apple.S
+  gen/bcm/aes-gcm-avx512-x86_64-linux.S
   gen/bcm/aesni-gcm-x86_64-apple.S
   gen/bcm/aesni-gcm-x86_64-linux.S
   gen/bcm/aesni-x86-apple.S
@@ -212,8 +214,8 @@ set(
 set(
   BCM_SOURCES_NASM
 
-  gen/bcm/aes-gcm-avx10-x86_64-win.asm
   gen/bcm/aes-gcm-avx2-x86_64-win.asm
+  gen/bcm/aes-gcm-avx512-x86_64-win.asm
   gen/bcm/aesni-gcm-x86_64-win.asm
   gen/bcm/aesni-x86-win.asm
   gen/bcm/aesni-x86_64-win.asm
@@ -272,6 +274,7 @@ set(
 set(
   CRYPTO_SOURCES
 
+  crypto/aes/aes.cc
   crypto/asn1/a_bitstr.cc
   crypto/asn1/a_bool.cc
   crypto/asn1/a_d2i_fp.cc
@@ -314,6 +317,7 @@ set(
   crypto/blake2/blake2.cc
   crypto/bn/bn_asn1.cc
   crypto/bn/convert.cc
+  crypto/bn/exponentiation.cc
   crypto/buf/buf.cc
   crypto/bytestring/asn1_compat.cc
   crypto/bytestring/ber.cc
@@ -323,6 +327,7 @@ set(
   crypto/chacha/chacha.cc
   crypto/cipher/derive_key.cc
   crypto/cipher/e_aesctrhmac.cc
+  crypto/cipher/e_aeseax.cc
   crypto/cipher/e_aesgcmsiv.cc
   crypto/cipher/e_chacha20poly1305.cc
   crypto/cipher/e_des.cc
@@ -380,6 +385,7 @@ set(
   crypto/evp/sign.cc
   crypto/ex_data.cc
   crypto/fipsmodule/fips_shared_support.cc
+  crypto/fuzzer_mode.cc
   crypto/hpke/hpke.cc
   crypto/hrss/hrss.cc
   crypto/kyber/kyber.cc
@@ -660,7 +666,7 @@ set(
   crypto/poly1305/internal.h
   crypto/pool/internal.h
   crypto/rand/getrandom_fillin.h
-  crypto/rand/sysrand_internal.h
+  crypto/rand/internal.h
   crypto/rsa/internal.h
   crypto/spake2plus/internal.h
   crypto/trust_token/internal.h
@@ -802,6 +808,7 @@ set(
   crypto/cipher/test/aes_128_ccm_bluetooth_tests.txt
   crypto/cipher/test/aes_128_ccm_matter_tests.txt
   crypto/cipher/test/aes_128_ctr_hmac_sha256.txt
+  crypto/cipher/test/aes_128_eax_test.txt
   crypto/cipher/test/aes_128_gcm_randnonce_tests.txt
   crypto/cipher/test/aes_128_gcm_siv_tests.txt
   crypto/cipher/test/aes_128_gcm_tests.txt
@@ -809,6 +816,7 @@ set(
   crypto/cipher/test/aes_256_cbc_sha1_tls_implicit_iv_tests.txt
   crypto/cipher/test/aes_256_cbc_sha1_tls_tests.txt
   crypto/cipher/test/aes_256_ctr_hmac_sha256.txt
+  crypto/cipher/test/aes_256_eax_test.txt
   crypto/cipher/test/aes_256_gcm_randnonce_tests.txt
   crypto/cipher/test/aes_256_gcm_siv_tests.txt
   crypto/cipher/test/aes_256_gcm_tests.txt
@@ -978,6 +986,7 @@ set(
   crypto/x509/test/trailing_data_leaf_subject_key_identifier.pem
   third_party/wycheproof_testvectors/aes_cbc_pkcs5_test.txt
   third_party/wycheproof_testvectors/aes_cmac_test.txt
+  third_party/wycheproof_testvectors/aes_eax_test.txt
   third_party/wycheproof_testvectors/aes_gcm_siv_test.txt
   third_party/wycheproof_testvectors/aes_gcm_test.txt
   third_party/wycheproof_testvectors/chacha20_poly1305_test.txt
@@ -1104,6 +1113,7 @@ set(
   fuzz/bn_mod_exp.cc
   fuzz/cert.cc
   fuzz/client.cc
+  fuzz/client_no_fuzzer_mode.cc
   fuzz/conf.cc
   fuzz/crl_getcrlstatusforcert_fuzzer.cc
   fuzz/crl_parse_crl_certificatelist_fuzzer.cc
@@ -1125,6 +1135,7 @@ set(
   fuzz/privkey.cc
   fuzz/read_pem.cc
   fuzz/server.cc
+  fuzz/server_no_fuzzer_mode.cc
   fuzz/session.cc
   fuzz/spki.cc
   fuzz/ssl_ctx_api.cc
@@ -1151,7 +1162,6 @@ set(
   pki/ip_util.cc
   pki/name_constraints.cc
   pki/ocsp.cc
-  pki/ocsp_verify_result.cc
   pki/parse_certificate.cc
   pki/parse_name.cc
   pki/parse_values.cc
@@ -1177,6 +1187,7 @@ set(
   PKI_HEADERS
 
   include/openssl/pki/certificate.h
+  include/openssl/pki/ocsp.h
   include/openssl/pki/signature_verify_cache.h
   include/openssl/pki/verify.h
   include/openssl/pki/verify_error.h
@@ -1203,8 +1214,6 @@ set(
   pki/name_constraints.h
   pki/nist_pkits_unittest.h
   pki/ocsp.h
-  pki/ocsp_revocation_status.h
-  pki/ocsp_verify_result.h
   pki/parse_certificate.h
   pki/parse_name.h
   pki/parse_values.h
@@ -2243,6 +2252,18 @@ set(
   pki/testdata/verify_certificate_chain_unittest/intermediate-eku-any-and-clientauth/serverauth-strict-leaf.test
   pki/testdata/verify_certificate_chain_unittest/intermediate-eku-any-and-clientauth/serverauth-strict.test
   pki/testdata/verify_certificate_chain_unittest/intermediate-eku-any-and-clientauth/serverauth.test
+  pki/testdata/verify_certificate_chain_unittest/intermediate-eku-c2pamanifest/any.test
+  pki/testdata/verify_certificate_chain_unittest/intermediate-eku-c2pamanifest/c2pamanifest.test
+  pki/testdata/verify_certificate_chain_unittest/intermediate-eku-c2pamanifest/c2patimestamp.test
+  pki/testdata/verify_certificate_chain_unittest/intermediate-eku-c2pamanifest/chain.pem
+  pki/testdata/verify_certificate_chain_unittest/intermediate-eku-c2pamanifest/clientauth.test
+  pki/testdata/verify_certificate_chain_unittest/intermediate-eku-c2pamanifest/serverauth.test
+  pki/testdata/verify_certificate_chain_unittest/intermediate-eku-c2patimestamping/any.test
+  pki/testdata/verify_certificate_chain_unittest/intermediate-eku-c2patimestamping/c2pamanifest.test
+  pki/testdata/verify_certificate_chain_unittest/intermediate-eku-c2patimestamping/c2patimestamp.test
+  pki/testdata/verify_certificate_chain_unittest/intermediate-eku-c2patimestamping/chain.pem
+  pki/testdata/verify_certificate_chain_unittest/intermediate-eku-c2patimestamping/clientauth.test
+  pki/testdata/verify_certificate_chain_unittest/intermediate-eku-c2patimestamping/serverauth.test
   pki/testdata/verify_certificate_chain_unittest/intermediate-eku-clientauth/any.test
   pki/testdata/verify_certificate_chain_unittest/intermediate-eku-clientauth/chain.pem
   pki/testdata/verify_certificate_chain_unittest/intermediate-eku-clientauth/clientauth-strict-leaf.test
@@ -2251,6 +2272,14 @@ set(
   pki/testdata/verify_certificate_chain_unittest/intermediate-eku-clientauth/serverauth-strict-leaf.test
   pki/testdata/verify_certificate_chain_unittest/intermediate-eku-clientauth/serverauth-strict.test
   pki/testdata/verify_certificate_chain_unittest/intermediate-eku-clientauth/serverauth.test
+  pki/testdata/verify_certificate_chain_unittest/intermediate-eku-mlsclientauth-extra/any.test
+  pki/testdata/verify_certificate_chain_unittest/intermediate-eku-mlsclientauth-extra/chain.pem
+  pki/testdata/verify_certificate_chain_unittest/intermediate-eku-mlsclientauth-extra/mlsclientauth.test
+  pki/testdata/verify_certificate_chain_unittest/intermediate-eku-mlsclientauth/any.test
+  pki/testdata/verify_certificate_chain_unittest/intermediate-eku-mlsclientauth/chain.pem
+  pki/testdata/verify_certificate_chain_unittest/intermediate-eku-mlsclientauth/clientauth.test
+  pki/testdata/verify_certificate_chain_unittest/intermediate-eku-mlsclientauth/mlsclientauth.test
+  pki/testdata/verify_certificate_chain_unittest/intermediate-eku-mlsclientauth/serverauth.test
   pki/testdata/verify_certificate_chain_unittest/intermediate-eku-server-gated-crypto/sha1-chain.pem
   pki/testdata/verify_certificate_chain_unittest/intermediate-eku-server-gated-crypto/sha1-eku-any.test
   pki/testdata/verify_certificate_chain_unittest/intermediate-eku-server-gated-crypto/sha1-eku-clientAuth-strict.test
@@ -2467,6 +2496,7 @@ set(
   pki/testdata/verify_certificate_chain_unittest/target-eku-any/clientauth-strict-leaf.test
   pki/testdata/verify_certificate_chain_unittest/target-eku-any/clientauth-strict.test
   pki/testdata/verify_certificate_chain_unittest/target-eku-any/clientauth.test
+  pki/testdata/verify_certificate_chain_unittest/target-eku-any/mlsclientauth.test
   pki/testdata/verify_certificate_chain_unittest/target-eku-any/serverauth-strict-leaf.test
   pki/testdata/verify_certificate_chain_unittest/target-eku-any/serverauth-strict.test
   pki/testdata/verify_certificate_chain_unittest/target-eku-any/serverauth.test
@@ -2481,6 +2511,7 @@ set(
   pki/testdata/verify_certificate_chain_unittest/target-eku-many/clientauth-strict-leaf.test
   pki/testdata/verify_certificate_chain_unittest/target-eku-many/clientauth-strict.test
   pki/testdata/verify_certificate_chain_unittest/target-eku-many/clientauth.test
+  pki/testdata/verify_certificate_chain_unittest/target-eku-many/mlsclientauth.test
   pki/testdata/verify_certificate_chain_unittest/target-eku-many/serverauth-strict-leaf.test
   pki/testdata/verify_certificate_chain_unittest/target-eku-many/serverauth-strict.test
   pki/testdata/verify_certificate_chain_unittest/target-eku-many/serverauth.test
@@ -2489,6 +2520,7 @@ set(
   pki/testdata/verify_certificate_chain_unittest/target-eku-none/clientauth-strict-leaf.test
   pki/testdata/verify_certificate_chain_unittest/target-eku-none/clientauth-strict.test
   pki/testdata/verify_certificate_chain_unittest/target-eku-none/clientauth.test
+  pki/testdata/verify_certificate_chain_unittest/target-eku-none/mlsclientauth.test
   pki/testdata/verify_certificate_chain_unittest/target-eku-none/serverauth-strict.test
   pki/testdata/verify_certificate_chain_unittest/target-eku-none/serverauth.test
   pki/testdata/verify_certificate_chain_unittest/target-has-512bit-rsa-key/chain.pem

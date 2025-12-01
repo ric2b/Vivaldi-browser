@@ -77,7 +77,7 @@ GridItems GridNode::ConstructGridItems(
         continue;
       }
 
-      auto grid_item = std::make_unique<GridItemData>(
+      auto* grid_item = MakeGarbageCollected<GridItemData>(
           To<BlockNode>(child), parent_grid_style, root_grid_style,
           must_consider_grid_items_for_column_sizing,
           must_consider_grid_items_for_row_sizing);
@@ -90,11 +90,12 @@ GridItems GridNode::ConstructGridItems(
       if (opt_has_nested_subgrid) {
         *opt_has_nested_subgrid |= grid_item->IsSubgrid();
       }
-      grid_items.Append(std::move(grid_item));
+      grid_items.Append(grid_item);
     }
 
-    if (should_sort_grid_items_by_order_property)
+    if (should_sort_grid_items_by_order_property) {
       grid_items.SortByOrderProperty();
+    }
   }
 
 #if DCHECK_IS_ON()
@@ -113,10 +114,10 @@ GridItems GridNode::ConstructGridItems(
   }
 
   // Copy each resolved position to its respective grid item data.
-  auto resolved_position = cached_placement_data->grid_item_positions.begin();
+  auto resolved_position =
+      base::span(cached_placement_data->grid_item_positions).begin();
   for (auto& grid_item : grid_items) {
-    // TODO(crbug.com/351564777): Resolve a buffer safety issue.
-    grid_item.resolved_position = *(UNSAFE_TODO(resolved_position++));
+    grid_item.resolved_position = *(resolved_position++);
   }
   return grid_items;
 }

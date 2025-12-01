@@ -21,7 +21,6 @@ import org.jni_zero.NativeMethods;
 import org.chromium.base.Callback;
 import org.chromium.base.CommandLine;
 import org.chromium.base.IntentUtils;
-import org.chromium.base.PackageManagerUtils;
 import org.chromium.base.supplier.OneshotSupplier;
 import org.chromium.base.task.PostTask;
 import org.chromium.base.task.TaskTraits;
@@ -55,14 +54,16 @@ import org.chromium.components.browsing_data.content.BrowsingDataModel;
 import org.chromium.components.content_settings.ContentSettingsType;
 import org.chromium.components.embedder_support.util.Origin;
 import org.chromium.components.favicon.LargeIconBridge;
+import org.chromium.components.permissions.PermissionUtil;
 import org.chromium.components.prefs.PrefService;
 import org.chromium.components.user_prefs.UserPrefs;
-import org.chromium.components.webxr.WebXrAndroidFeatureMap;
 import org.chromium.content_public.browser.BrowserContextHandle;
 import org.chromium.content_public.browser.ContentFeatureList;
 import org.chromium.content_public.browser.ContentFeatureMap;
 import org.chromium.content_public.common.ContentFeatures;
 import org.chromium.content_public.common.ContentSwitches;
+import org.chromium.device.DeviceFeatureList;
+import org.chromium.device.DeviceFeatureMap;
 import org.chromium.url.GURL;
 
 import java.util.List;
@@ -70,9 +71,6 @@ import java.util.Set;
 
 /** A SiteSettingsDelegate instance that contains Chrome-specific Site Settings logic. */
 public class ChromeSiteSettingsDelegate implements SiteSettingsDelegate {
-    public static final String EMBEDDED_CONTENT_HELP_CENTER_URL =
-            "https://support.google.com/chrome/?p=embedded_content";
-
     private final Context mContext;
     private final Profile mProfile;
     private final PrivacySandboxBridge mPrivacySandboxBridge;
@@ -167,15 +165,12 @@ public class ChromeSiteSettingsDelegate implements SiteSettingsDelegate {
             case SiteSettingsCategory.Type.FEDERATED_IDENTITY_API:
                 return ContentFeatureMap.isEnabled(ContentFeatures.FED_CM);
             case SiteSettingsCategory.Type.HAND_TRACKING:
-                return PackageManagerUtils.hasSystemFeature(
-                                PackageManagerUtils.XR_IMMERSIVE_FEATURE_NAME)
-                        && WebXrAndroidFeatureMap.isHandTrackingEnabled();
+                return PermissionUtil.handTrackingNeedsAdditionalPermissions();
             case SiteSettingsCategory.Type.REQUEST_DESKTOP_SITE:
                 // Desktop Android always requests desktop sites, so hide the category.
                 return !BuildConfig.IS_DESKTOP_ANDROID;
-            case SiteSettingsCategory.Type.ZOOM:
-                return ContentFeatureMap.isEnabled(
-                        ContentFeatureList.ACCESSIBILITY_PAGE_ZOOM_ENHANCEMENTS);
+            case SiteSettingsCategory.Type.SERIAL_PORT:
+                return DeviceFeatureMap.isEnabled(DeviceFeatureList.BLUETOOTH_RFCOMM_ANDROID);
             default:
                 return true;
         }
@@ -200,11 +195,6 @@ public class ChromeSiteSettingsDelegate implements SiteSettingsDelegate {
     @Override
     public boolean isPermissionSiteSettingsRadioButtonFeatureEnabled() {
         return ChromeFeatureList.isEnabled(ChromeFeatureList.PERMISSION_SITE_SETTING_RADIO_BUTTON);
-    }
-
-    @Override
-    public boolean isPrivacySandboxFirstPartySetsUiFeatureEnabled() {
-        return ChromeFeatureList.isEnabled(ChromeFeatureList.PRIVACY_SANDBOX_FPS_UI);
     }
 
     @Override
@@ -268,10 +258,10 @@ public class ChromeSiteSettingsDelegate implements SiteSettingsDelegate {
     // TODO(crbug.com/40286347): Migrate to `HelpAndFeedbackLauncherImpl` when
     // Chrome has migrated to Open-to-Context (OTC) and new p-links work.
     @Override
-    public void launchStorageAccessHelpActivity(Activity currentActivity) {
+    public void launchUrlInCustomTab(Activity currentActivity, String url) {
         CustomTabsIntent customTabIntent =
                 new CustomTabsIntent.Builder().setShowTitle(false).build();
-        customTabIntent.intent.setData(Uri.parse(EMBEDDED_CONTENT_HELP_CENTER_URL));
+        customTabIntent.intent.setData(Uri.parse(url));
 
         Intent intent =
                 LaunchIntentDispatcher.createCustomTabActivityIntent(
@@ -376,7 +366,7 @@ public class ChromeSiteSettingsDelegate implements SiteSettingsDelegate {
     @Override
     public boolean shouldDisplayIpProtection() {
         // This is copied from the `IsIpProtectionEnabled` check in the TPS API.
-        return ChromeFeatureList.isEnabled(ChromeFeatureList.IP_PROTECTION_V1)
+        return ChromeFeatureList.isEnabled(ChromeFeatureList.IP_PROTECTION_UX)
                 && UserPrefs.get(mProfile).getBoolean(Pref.IP_PROTECTION_ENABLED);
     }
 

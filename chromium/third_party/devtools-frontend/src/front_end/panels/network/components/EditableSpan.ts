@@ -10,7 +10,7 @@ import editableSpanStylesRaw from './EditableSpan.css.js';
 
 // TODO(crbug.com/391381439): Fully migrate off of constructed style sheets.
 const editableSpanStyles = new CSSStyleSheet();
-editableSpanStyles.replaceSync(editableSpanStylesRaw.cssContent);
+editableSpanStyles.replaceSync(editableSpanStylesRaw.cssText);
 
 export interface EditableSpanData {
   value: string;
@@ -19,7 +19,7 @@ export interface EditableSpanData {
 export class EditableSpan extends HTMLElement {
   readonly #shadow = this.attachShadow({mode: 'open'});
   readonly #boundRender = this.#render.bind(this);
-  #value: string = '';
+  #value = '';
 
   connectedCallback(): void {
     this.#shadow.adoptedStyleSheets = [editableSpanStyles];

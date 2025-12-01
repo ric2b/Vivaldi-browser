@@ -68,6 +68,13 @@ class ActiveTabObserver : public TabStripModelObserver,
         PageLiveStateDecorator::SetIsPinnedTab(
             tab.contents, tab_strip_model->IsTabPinned(tab.index));
       }
+    } else if (change.type() == TabStripModelChange::kReplaced) {
+      auto* replace = change.GetReplace();
+      if (replace->new_contents) {
+        PageLiveStateDecorator::SetIsPinnedTab(
+            replace->new_contents,
+            tab_strip_model->IsTabPinned(replace->index));
+      }
     }
   }
 
@@ -257,8 +264,6 @@ void PageLiveStateDecoratorHelper::OnPageNodeCreatedForWebContents(
   // Start observing the WebContents. See comment on
   // |first_web_contents_observer_| for lifetime management details.
   new WebContentsObserver(web_contents, this);
-  PageLiveStateDecorator::SetWasDiscarded(web_contents,
-                                          web_contents->WasDiscarded());
 }
 
 }  // namespace performance_manager

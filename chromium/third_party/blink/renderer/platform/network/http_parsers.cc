@@ -211,8 +211,9 @@ blink::ContentSecurityPolicyPtr ConvertToBlink(
       ConvertToBlink(in->directives), in->upgrade_insecure_requests,
       in->treat_as_public_address, in->block_all_mixed_content, in->sandbox,
       ConvertToBlink(in->header), in->use_reporting_api,
-      ConvertToBlink(in->report_endpoints), in->require_trusted_types_for,
-      ConvertToBlink(in->trusted_types), ConvertToBlink(in->parsing_errors));
+      ConvertToBlink(in->report_endpoints), in->require_sri_for,
+      in->require_trusted_types_for, ConvertToBlink(in->trusted_types),
+      ConvertToBlink(in->parsing_errors));
 }
 
 blink::AllowCSPFromHeaderValuePtr ConvertToBlink(
@@ -289,8 +290,8 @@ blink::NoVarySearchWithParseErrorPtr ConvertToBlink(
 
 // `in` is a Mojo enum type, which is type aliased to the same underlying type
 // by both the non-Blink Mojo variant and the Blink Mojo variant.
-blink::SRIMessageSignatureComponent::Parameter ConvertToBlink(
-    SRIMessageSignatureComponent::Parameter in) {
+blink::SRIMessageSignatureComponentParameter::Type ConvertToBlink(
+    SRIMessageSignatureComponentParameter::Type in) {
   return in;
 }
 
@@ -298,6 +299,22 @@ blink::SRIMessageSignatureComponent::Parameter ConvertToBlink(
 // by both the non-Blink Mojo variant and the Blink Mojo variant.
 blink::SRIMessageSignatureError ConvertToBlink(SRIMessageSignatureError in) {
   return in;
+}
+
+blink::SRIMessageSignatureComponentParameterPtr ConvertToBlink(
+    const SRIMessageSignatureComponentParameterPtr& in) {
+  CHECK(in);
+  return blink::SRIMessageSignatureComponentParameter::New(
+      ConvertToBlink(in->type), ConvertToBlink(in->value));
+}
+
+blink::SRIMessageSignatureIssuePtr ConvertToBlink(
+    const SRIMessageSignatureIssuePtr& in) {
+  return blink::SRIMessageSignatureIssue::New(
+      ConvertToBlink(in->error), ConvertToBlink(in->signature_base),
+      in->integrity_assertions.has_value()
+          ? std::make_optional(ConvertToBlink(in->integrity_assertions.value()))
+          : std::nullopt);
 }
 
 blink::SRIMessageSignatureComponentPtr ConvertToBlink(
@@ -320,7 +337,7 @@ blink::SRIMessageSignaturesPtr ConvertToBlink(
     const SRIMessageSignaturesPtr& in) {
   CHECK(in);
   return blink::SRIMessageSignatures::New(ConvertToBlink(in->signatures),
-                                          ConvertToBlink(in->errors));
+                                          ConvertToBlink(in->issues));
 }
 
 blink::ParsedHeadersPtr ConvertToBlink(const ParsedHeadersPtr& in) {

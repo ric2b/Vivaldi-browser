@@ -44,13 +44,18 @@ WebGPURecyclableResourceCache::GetOrCreateCanvasResource(
     const SkImageInfo& info) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
 
+  gfx::Size size = gfx::Size(info.width(), info.height());
+  viz::SharedImageFormat format =
+      viz::SkColorTypeToSinglePlaneSharedImageFormat(info.colorType());
+  SkAlphaType alpha_type = info.alphaType();
+  gfx::ColorSpace color_space =
+      SkColorSpaceToGfxColorSpace(info.refColorSpace());
+
   std::unique_ptr<CanvasResourceProvider> provider =
-      AcquireCachedProvider(info);
+      AcquireCachedProvider(size, format, alpha_type, color_space);
   if (!provider) {
     provider = CanvasResourceProvider::CreateWebGPUImageProvider(
-        gfx::Size(info.width(), info.height()),
-        viz::SkColorTypeToSinglePlaneSharedImageFormat(info.colorType()),
-        info.alphaType(), SkColorSpaceToGfxColorSpace(info.refColorSpace()));
+        size, format, alpha_type, color_space);
     if (!provider)
       return nullptr;
   }
@@ -62,9 +67,10 @@ WebGPURecyclableResourceCache::GetOrCreateCanvasResource(
 void WebGPURecyclableResourceCache::OnDestroyRecyclableResource(
     std::unique_ptr<CanvasResourceProvider> resource_provider,
     const gpu::SyncToken& completion_sync_token) {
-  int resource_size = resource_provider->Size().width() *
-                      resource_provider->Size().height() *
-                      resource_provider->GetSkImageInfo().bytesPerPixel();
+  int resource_size =
+      resource_provider->GetSharedImageFormat().EstimatedSizeInBytes(
+          resource_provider->Size());
+
   if (context_provider_) {
     total_unused_resources_in_bytes_ += resource_size;
 
@@ -100,20 +106,18 @@ WebGPURecyclableResourceCache::Resource::~Resource() = default;
 
 std::unique_ptr<CanvasResourceProvider>
 WebGPURecyclableResourceCache::AcquireCachedProvider(
-    const SkImageInfo& image_info) {
+    const gfx::Size& size,
+    const viz::SharedImageFormat& format,
+    SkAlphaType alpha_type,
+    const gfx::ColorSpace& color_space) {
   // Loop from MRU to LRU
   DequeResourceProvider::iterator it;
   for (it = unused_providers_.begin(); it != unused_providers_.end(); ++it) {
     CanvasResourceProvider* resource_provider = it->resource_provider_.get();
-    if (image_info == resource_provider->GetSkImageInfo()) {
-      break;
-    }
-    // Detect and allow for the case wherein the passed-info implicitly
-    // specifies sRGB via a null SkColorSpace whereas the resource provider is
-    // explicitly storing sRGB.
-    if (!image_info.colorSpace() &&
-        (image_info.makeColorSpace(SkColorSpace::MakeSRGB()) ==
-         resource_provider->GetSkImageInfo())) {
+    if (resource_provider->Size() == size &&
+        resource_provider->GetSharedImageFormat() == format &&
+        resource_provider->GetAlphaType() == alpha_type &&
+        resource_provider->GetColorSpace() == color_space) {
       break;
     }
   }

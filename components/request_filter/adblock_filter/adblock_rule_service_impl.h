@@ -13,15 +13,17 @@
 #include "base/files/file_path.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
-#include "components/prefs/pref_change_registrar.h"
 #include "base/uuid.h"
 #include "components/ad_blocker/adblock_known_sources_handler_impl.h"
 #include "components/ad_blocker/adblock_resources.h"
 #include "components/ad_blocker/adblock_rule_manager_impl.h"
 #include "components/ad_blocker/adblock_rule_service_storage.h"
 #include "components/ad_blocker/adblock_rule_source_handler.h"
+#include "components/ad_blocker/adblock_stats_store.h"
+#include "components/ad_blocker/adblock_stats_store_impl.h"
 #include "components/ad_blocker/adblock_types.h"
 #include "components/keyed_service/core/keyed_service.h"
+#include "components/prefs/pref_change_registrar.h"
 #include "components/request_filter/adblock_filter/adblock_content_injection_provider.h"
 #include "components/request_filter/adblock_filter/adblock_rule_service_content.h"
 #include "components/request_filter/adblock_filter/adblock_rules_index_manager.h"
@@ -37,6 +39,10 @@ namespace content {
 class BrowserContext;
 }
 
+namespace vivaldi {
+class RequestFilterRegistry;
+}
+
 namespace adblock_filter {
 class AdBlockRequestFilter;
 class RulesIndex;
@@ -44,10 +50,12 @@ class RulesIndex;
 class RuleServiceImpl : public RuleServiceContent,
                         public RuleManager::Observer {
  public:
-  explicit RuleServiceImpl(content::BrowserContext* context,
-                           PrefService* prefs,
-                           RuleSourceHandler::RulesCompiler rules_compiler,
-                           std::string locale);
+  explicit RuleServiceImpl(
+      content::BrowserContext* context,
+      PrefService* prefs,
+      vivaldi::RequestFilterRegistry* request_filter_registry,
+      RuleSourceHandler::RulesCompiler rules_compiler,
+      std::string locale);
   ~RuleServiceImpl() override;
   RuleServiceImpl(const RuleServiceImpl&) = delete;
   RuleServiceImpl& operator=(const RuleServiceImpl&) = delete;
@@ -55,14 +63,15 @@ class RuleServiceImpl : public RuleServiceContent,
   void Load();
 
   RulesIndex* GetRuleIndex(RuleGroup group);
+  StateAndLogsImpl& GetStateAndLogsImpl();
+  Resources& GetResources();
 
   // Implementing RuleService
   bool IsLoaded() const override;
   bool IsRuleGroupEnabled(RuleGroup group) const override;
   void SetRuleGroupEnabled(RuleGroup group, bool enabled) override;
-  bool IsDocumentBlocked(RuleGroup group,
-                         content::RenderFrameHost* frame,
-                         const GURL& url) const override;
+  std::array<std::optional<TabStateAndLogs::RuleData>, kRuleGroupCount>
+  IsDocumentBlocked(content::RenderFrameHost* frame) const override;
   void AddObserver(RuleService::Observer* observer) override;
   void RemoveObserver(RuleService::Observer* observer) override;
   bool IsApplyingIosRules(RuleGroup group) override;
@@ -74,7 +83,9 @@ class RuleServiceImpl : public RuleServiceContent,
   RuleManager* GetRuleManager() override;
   KnownRuleSourcesHandler* GetKnownSourcesHandler() override;
   StateAndLogs* GetStateAndLogs() override;
-  void InitializeCosmeticFilter(CosmeticFilter* filter) override;
+  StatsStore* GetStatsStore() override;
+  std::unique_ptr<CosmeticFilter> MakeCosmeticFilter(
+      content::RenderFrameHost* frame) override;
 
   // Implementing KeyedService
   void Shutdown() override;
@@ -87,6 +98,7 @@ class RuleServiceImpl : public RuleServiceContent,
 
  private:
   void OnStateLoaded(RuleServiceStorage::LoadResult load_result);
+  void MigrateOldStatsData(const RuleServiceStorage::LoadResult* load_result);
 
   void OnRulesIndexChanged(RuleGroup group);
   void OnRulesIndexLoaded(RuleGroup group);
@@ -97,6 +109,7 @@ class RuleServiceImpl : public RuleServiceContent,
 
   const raw_ptr<content::BrowserContext> context_;
   const raw_ptr<PrefService> prefs_;
+  const raw_ptr<vivaldi::RequestFilterRegistry> request_filter_registry_;
   PrefChangeRegistrar pref_change_registrar_;
 
   RuleSourceHandler::RulesCompiler rules_compiler_;
@@ -116,6 +129,7 @@ class RuleServiceImpl : public RuleServiceContent,
 
   std::optional<StateAndLogsImpl> state_and_logs_;
   std::optional<RuleServiceStorage> state_store_;
+  std::unique_ptr<StatsStoreImpl> stats_store_;
   std::optional<Resources> resources_;
 
   bool is_loaded_ = false;
@@ -125,6 +139,8 @@ class RuleServiceImpl : public RuleServiceContent,
   scoped_refptr<base::SequencedTaskRunner> file_task_runner_;
 
   base::ObserverList<RuleService::Observer> observers_;
+
+  base::WeakPtrFactory<RuleServiceImpl> weak_factory_{this};
 };
 
 }  // namespace adblock_filter

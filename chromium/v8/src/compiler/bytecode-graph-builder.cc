@@ -393,7 +393,7 @@ class BytecodeGraphBuilder {
                           operand_index, local_isolate_))));
   }
 
-  Graph* graph() const { return jsgraph_->graph(); }
+  TFGraph* graph() const { return jsgraph_->graph(); }
   CommonOperatorBuilder* common() const { return jsgraph_->common(); }
   Zone* graph_zone() const { return graph()->zone(); }
   JSGraph* jsgraph() const { return jsgraph_; }
@@ -611,7 +611,7 @@ class BytecodeGraphBuilder::Environment : public ZoneObject {
   int RegisterToValuesIndex(interpreter::Register the_register) const;
 
   Zone* zone() const { return builder_->local_zone(); }
-  Graph* graph() const { return builder_->graph(); }
+  TFGraph* graph() const { return builder_->graph(); }
   CommonOperatorBuilder* common() const { return builder_->common(); }
   BytecodeGraphBuilder* builder() const { return builder_; }
   const NodeVector* values() const { return &values_; }
@@ -3844,7 +3844,7 @@ void BytecodeGraphBuilder::VisitForInStep() {
   PrepareEagerCheckpoint();
   interpreter::Register index_reg = bytecode_iterator().GetRegisterOperand(0);
   Node* index = environment()->LookupRegister(index_reg);
-  index = NewNode(simplified()->SpeculativeSafeIntegerAdd(
+  index = NewNode(simplified()->SpeculativeSmallIntegerAdd(
                       NumberOperationHint::kSignedSmall),
                   index, jsgraph()->OneConstant());
   environment()->BindRegister(index_reg, index, Environment::kAttachFrameState);
@@ -4013,7 +4013,7 @@ void BytecodeGraphBuilder::VisitResumeGenerator() {
   Node* generator =
       environment()->LookupRegister(bytecode_iterator().GetRegisterOperand(0));
   interpreter::Register first_reg = bytecode_iterator().GetRegisterOperand(1);
-  // We assume we are restoring registers starting fromm index 0.
+  // We assume we are restoring registers starting from index 0.
   CHECK_EQ(0, first_reg.index());
 
   const BytecodeLivenessState* liveness = bytecode_analysis().GetOutLivenessFor(

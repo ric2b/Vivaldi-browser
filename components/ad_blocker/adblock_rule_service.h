@@ -32,6 +32,7 @@ class RuleManager;
 class KnownRuleSourcesHandler;
 class StateAndLogs;
 class CosmeticFilter;
+class StatsStore;
 
 class RuleService : public KeyedService {
  public:
@@ -93,6 +94,7 @@ class RuleService : public KeyedService {
   virtual RuleManager* GetRuleManager() = 0;
   virtual KnownRuleSourcesHandler* GetKnownSourcesHandler() = 0;
   virtual StateAndLogs* GetStateAndLogs() = 0;
+  virtual StatsStore* GetStatsStore() = 0;
 };
 
 }  // namespace adblock_filter

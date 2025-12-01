@@ -96,7 +96,9 @@ class RenderingTestChromeClient : public EmptyChromeClient {
       CompositorElementId scrollable_area_element_id,
       WebInputEvent::Type injected_type) override;
 
-  void ScheduleAnimation(const LocalFrameView*, base::TimeDelta) override {
+  void ScheduleAnimation(const LocalFrameView*,
+                         base::TimeDelta,
+                         bool) override {
     animation_scheduled_ = true;
   }
   bool AnimationScheduled() const { return animation_scheduled_; }
@@ -121,7 +123,7 @@ class RenderingTest : public PageTestBase {
   explicit RenderingTest(LocalFrameClient* = nullptr);
 
   const Node* HitTest(int x, int y);
-  HitTestResult::NodeSet RectBasedHitTest(const PhysicalRect& rect);
+  const HitTestResult::NodeSet& RectBasedHitTest(const PhysicalRect& rect);
 
  protected:
   void SetUp() override;
@@ -194,7 +196,8 @@ constexpr LogicalRect::LogicalRect(int inline_offset,
                                    int inline_size,
                                    int block_size)
     : offset(inline_offset, block_offset), size(inline_size, block_size) {}
-constexpr PhysicalOffset::PhysicalOffset(int left, int top)
+template <typename ValueType>
+constexpr PhysicalFixedOffset<ValueType>::PhysicalFixedOffset(int left, int top)
     : left(left), top(top) {}
 constexpr PhysicalSize::PhysicalSize(int width, int height)
     : width(width), height(height) {}

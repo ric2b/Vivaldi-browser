@@ -6,7 +6,7 @@ import("//build/config/chromeos/ui_mode.gni")
 import("//extensions/buildflags/buildflags.gni")
 import("//ui/webui/resources/tools/build_webui.gni")
 
-assert(enable_extensions, "enable extensions check failed")
+assert(enable_extensions_core, "enable extensions check failed")
 
 build_webui("build") {
   grd_prefix = "extensions"
@@ -134,6 +134,7 @@ build_webui("build") {
   ]
 
   ts_composite = true
+  ts_tsconfig_base = "//tools/typescript/tsconfig_base_lit_389737066.json"
   ts_definitions = [
     "//tools/typescript/definitions/activity_log_private.d.ts",
     "//tools/typescript/definitions/chrome_event.d.ts",

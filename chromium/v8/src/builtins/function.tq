@@ -64,7 +64,8 @@ transitioning javascript builtin FastFunctionPrototypeBind(
           goto Slow;
         }
 
-        const descriptors: DescriptorArray = fn.map.instance_descriptors;
+        const descriptors: DescriptorArray =
+            UnsafeCast<DescriptorArray>(fn.map.instance_descriptors);
         CheckAccessor(
             descriptors, kLengthDescriptorIndex, LengthStringConstant())
             otherwise Slow;
@@ -76,10 +77,9 @@ transitioning javascript builtin FastFunctionPrototypeBind(
 
         const boundFunctionMap: Map =
             IsConstructor(fn) ?
+            *NativeContextSlot(ContextSlot::BOUND_FUNCTION_WITH_CONSTRUCTOR_MAP_INDEX) :
             *NativeContextSlot(
-                ContextSlot::BOUND_FUNCTION_WITH_CONSTRUCTOR_MAP_INDEX) :
-            *NativeContextSlot(ContextSlot::
-                                    BOUND_FUNCTION_WITHOUT_CONSTRUCTOR_MAP_INDEX);
+                ContextSlot::BOUND_FUNCTION_WITHOUT_CONSTRUCTOR_MAP_INDEX);
 
         // Verify that prototype matches that of the target bound function.
 

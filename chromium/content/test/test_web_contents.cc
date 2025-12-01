@@ -11,7 +11,6 @@
 #include "base/no_destructor.h"
 #include "content/browser/browser_url_handler_impl.h"
 #include "content/browser/display_cutout/display_cutout_host_impl.h"
-#include "content/browser/preloading/preload_pipeline_info.h"
 #include "content/browser/preloading/prerender/prerender_host.h"
 #include "content/browser/preloading/prerender/prerender_host_registry.h"
 #include "content/browser/renderer_host/cross_process_frame_connector.h"
@@ -24,6 +23,7 @@
 #include "content/browser/renderer_host/render_view_host_impl.h"
 #include "content/browser/site_instance_impl.h"
 #include "content/common/render_message_filter.mojom.h"
+#include "content/public/browser/preload_pipeline_info.h"
 #include "content/public/common/referrer_type_converters.h"
 #include "content/public/common/url_utils.h"
 #include "content/public/test/mock_render_process_host.h"
@@ -134,7 +134,7 @@ int TestWebContents::DownloadImageInFrame(
                        bypass_cache, std::move(callback));
 }
 
-const GURL& TestWebContents::GetLastCommittedURL() {
+const GURL& TestWebContents::GetLastCommittedURL() const {
   if (last_committed_url_.is_valid()) {
     return last_committed_url_;
   }
@@ -353,6 +353,11 @@ void TestWebContents::SetOpener(WebContents* opener) {
       static_cast<WebContentsImpl*>(opener)->GetPrimaryFrameTree().root());
 }
 
+void TestWebContents::SetOriginalOpener(WebContents* opener) {
+  primary_frame_tree_.root()->SetOriginalOpener(
+      static_cast<WebContentsImpl*>(opener)->GetPrimaryFrameTree().root());
+}
+
 void TestWebContents::SetIsCrashed(base::TerminationStatus status,
                                    int error_code) {
   SetPrimaryMainFrameProcessStatus(status, error_code);
@@ -388,12 +393,14 @@ RenderWidgetHostImpl* TestWebContents::CreateNewPopupWidget(
   return nullptr;
 }
 
-void TestWebContents::ShowCreatedWindow(
+WebContents* TestWebContents::ShowCreatedWindow(
     RenderFrameHostImpl* opener,
     int route_id,
     WindowOpenDisposition disposition,
     const blink::mojom::WindowFeatures& window_features,
-    bool user_gesture) {}
+    bool user_gesture) {
+  return nullptr;
+}
 
 void TestWebContents::ShowCreatedWidget(int process_id,
                                         int route_id,
@@ -487,16 +494,15 @@ FrameTreeNodeId TestWebContents::AddPrerender(const GURL& url) {
   TestRenderFrameHost* rfhi = GetPrimaryMainFrame();
   return GetPrerenderHostRegistry()->CreateAndStartHost(PrerenderAttributes(
       url, PreloadingTriggerType::kSpeculationRule,
-      /*embedder_histogram_suffix=*/"",
-      blink::mojom::SpeculationTargetHint::kNoHint, Referrer(),
-      blink::mojom::SpeculationEagerness::kEager,
+      /*embedder_histogram_suffix=*/"", SpeculationRulesParams(), Referrer(),
       /*no_vary_search_hint=*/std::nullopt, rfhi, GetWeakPtr(),
       ui::PAGE_TRANSITION_LINK,
       /*should_warm_up_compositor=*/false,
       /*should_prepare_paint_tree=*/false,
       /*url_match_predicate=*/{},
       /*prerender_navigation_handle_callback=*/{},
-      base::MakeRefCounted<PreloadPipelineInfo>()));
+      PreloadPipelineInfoImpl::Create(
+          /*planned_max_preloading_type=*/PreloadingType::kPrerender)));
 }
 
 TestRenderFrameHost* TestWebContents::AddPrerenderAndCommitNavigation(

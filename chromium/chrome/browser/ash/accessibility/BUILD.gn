@@ -175,6 +175,8 @@ source_set("browser_tests") {
     "dictation_bubble_test_helper.cc",
     "dictation_bubble_test_helper.h",
     "facegaze_browsertest.cc",
+    "facegaze_bubble_test_helper.cc",
+    "facegaze_bubble_test_helper.h",
     "magnification_controller_browsertest.cc",
     "magnification_manager_browsertest.cc",
     "select_to_speak_browsertest.cc",
@@ -211,6 +213,7 @@ source_set("browser_tests") {
     "//chrome/test:test_support",
     "//chromeos/ash/components/browser_context_helper",
     "//components/live_caption:constants",
+    "//components/live_caption:live_caption",
     "//ui/base/mojom:ui_base_types",
     "//ui/events:test_support",
 

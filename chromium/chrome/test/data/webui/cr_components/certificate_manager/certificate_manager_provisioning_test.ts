@@ -178,8 +178,8 @@ suite('CertificateManagerProvisioningTests', function() {
               certProvisioningList.shadowRoot!.querySelector(dialogId);
           assertTrue(!!dialog);
           const whenDialogClosed = eventToPromise('close', dialog);
-          dialog.$.dialog.shadowRoot!.querySelector<HTMLElement>(
-                                         '#close')!.click();
+          dialog.$.dialog.shadowRoot.querySelector<HTMLElement>(
+                                        '#close')!.click();
           return whenDialogClosed;
         })
         .then(() => {
@@ -248,7 +248,7 @@ suite('DetailsDialogTests', function() {
     assertTrue(dialog.$.dialog.open);
   });
 
-  test('SeeDetails', async function() {
+  test('SeeDetails', function() {
     const certProfileName =
         dialog.shadowRoot!.querySelector<HTMLElement>(
                               '#certProfileName')!.innerText;

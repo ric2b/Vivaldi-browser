@@ -185,7 +185,7 @@ void check_levels(skiatest::Reporter* reporter,
 } // anonymous namespace
 
 DEF_GRAPHITE_TEST_FOR_RENDERING_CONTEXTS(UpdateImageBackendTextureTest, reporter, context,
-                                         CtsEnforcement::kApiLevel_V) {
+                                         CtsEnforcement::kApiLevel_202404) {
     const Caps* caps = context->priv().caps();
     std::unique_ptr<Recorder> recorder = context->makeRecorder();
 
@@ -237,7 +237,7 @@ DEF_CONDITIONAL_GRAPHITE_TEST_FOR_ALL_CONTEXTS(UpdateBackendTextureFinishedProcT
                                                context,
                                                testContext,
                                                true,
-                                               CtsEnforcement::kNextRelease) {
+                                               CtsEnforcement::kApiLevel_202504) {
     const Caps* caps = context->priv().caps();
     std::unique_ptr<Recorder> recorder = context->makeRecorder();
 

@@ -6,7 +6,6 @@
 
 #include "android_webview/browser/aw_browser_context.h"
 #include "base/notreached.h"
-#include "base/version_info/version_info.h"
 
 namespace android_webview {
 
@@ -21,10 +20,6 @@ AwPrefetchServiceDelegate::~AwPrefetchServiceDelegate() = default;
 void AwPrefetchServiceDelegate::SetAcceptLanguageHeader(
     std::string accept_language_header) {
   accept_language_header_ = accept_language_header;
-}
-
-std::string AwPrefetchServiceDelegate::GetMajorVersionNumber() {
-  return version_info::GetMajorVersionNumber();
 }
 
 std::string AwPrefetchServiceDelegate::GetAcceptLanguageHeader() {
@@ -136,6 +131,14 @@ bool AwPrefetchServiceDelegate::IsDomainInPrefetchAllowList(
 
 bool AwPrefetchServiceDelegate::IsContaminationExempt(
     const GURL& referring_url) {
+  // WebView app initiated prefetching does not use an isolated network context.
+  // However, if WebView ever adds support for non-app triggered prefetching, we
+  // may need to revisit the value returned here.
+  return false;
+}
+
+bool AwPrefetchServiceDelegate::IsContaminationExemptPerOrigin(
+    const url::Origin& referring_origin) {
   // WebView app initiated prefetching does not use an isolated network context.
   // However, if WebView ever adds support for non-app triggered prefetching, we
   // may need to revisit the value returned here.

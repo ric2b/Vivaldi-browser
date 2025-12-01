@@ -326,19 +326,19 @@ ANGLE_INLINE bool ValidateUniformCommonBase(const Context *context,
                                             const LinkedUniform **uniformOut)
 {
     // TODO(Jiajia): Add image uniform check in future.
-    if (count < 0)
+    if (ANGLE_UNLIKELY(count < 0))
     {
         ANGLE_VALIDATION_ERROR(GL_INVALID_VALUE, err::kNegativeCount);
         return false;
     }
 
-    if (!program)
+    if (ANGLE_UNLIKELY(!program))
     {
         ANGLE_VALIDATION_ERROR(GL_INVALID_OPERATION, err::kInvalidProgramName);
         return false;
     }
 
-    if (!program->isLinked())
+    if (ANGLE_UNLIKELY(!program->isLinked()))
     {
         ANGLE_VALIDATION_ERROR(GL_INVALID_OPERATION, err::kProgramNotLinked);
         return false;
@@ -346,14 +346,13 @@ ANGLE_INLINE bool ValidateUniformCommonBase(const Context *context,
 
     if (location.value == -1)
     {
-        // Silently ignore the uniform command
-        return false;
+        return true;  // no-op
     }
 
     const ProgramExecutable &executable = program->getExecutable();
     const auto &uniformLocations        = executable.getUniformLocations();
     size_t castedLocation               = static_cast<size_t>(location.value);
-    if (castedLocation >= uniformLocations.size())
+    if (ANGLE_UNLIKELY(castedLocation >= uniformLocations.size()))
     {
         ANGLE_VALIDATION_ERROR(GL_INVALID_OPERATION, err::kInvalidUniformLocation);
         return false;
@@ -362,11 +361,10 @@ ANGLE_INLINE bool ValidateUniformCommonBase(const Context *context,
     const auto &uniformLocation = uniformLocations[castedLocation];
     if (uniformLocation.ignored)
     {
-        // Silently ignore the uniform command
-        return false;
+        return true;  // no-op
     }
 
-    if (!uniformLocation.used())
+    if (ANGLE_UNLIKELY(!uniformLocation.used()))
     {
         ANGLE_VALIDATION_ERROR(GL_INVALID_OPERATION, err::kInvalidUniformLocation);
         return false;
@@ -375,7 +373,7 @@ ANGLE_INLINE bool ValidateUniformCommonBase(const Context *context,
     const LinkedUniform &uniform = executable.getUniformByIndex(uniformLocation.index);
 
     // attempting to write an array to a non-array uniform is an INVALID_OPERATION
-    if (count > 1 && !uniform.isArray())
+    if (ANGLE_UNLIKELY(count > 1) && ANGLE_UNLIKELY(!uniform.isArray()))
     {
         ANGLE_VALIDATION_ERROR(GL_INVALID_OPERATION, err::kInvalidUniformCount);
         return false;
@@ -398,7 +396,8 @@ ANGLE_INLINE bool ValidateUniformValue(const Context *context,
 {
     // Check that the value type is compatible with uniform type.
     // Do the cheaper test first, for a little extra speed.
-    if (valueType != uniformType && VariableBoolVectorType(valueType) != uniformType)
+    if (ANGLE_UNLIKELY(valueType != uniformType) &&
+        ANGLE_UNLIKELY(VariableBoolVectorType(valueType) != uniformType))
     {
         ANGLE_VALIDATION_ERROR(GL_INVALID_OPERATION, err::kUniformSizeMismatch);
         return false;
@@ -500,7 +499,7 @@ ANGLE_INLINE bool ValidateDrawBase(const Context *context,
 {
     intptr_t drawStatesError = context->getStateCache().getBasicDrawStatesErrorString(
         context, &context->getPrivateStateCache());
-    if (drawStatesError)
+    if (ANGLE_UNLIKELY(drawStatesError))
     {
         const char *errorMessage = reinterpret_cast<const char *>(drawStatesError);
         GLenum errorCode         = context->getStateCache().getBasicDrawElementsErrorCode();
@@ -508,7 +507,7 @@ ANGLE_INLINE bool ValidateDrawBase(const Context *context,
         return false;
     }
 
-    if (!context->getStateCache().isValidDrawMode(mode))
+    if (ANGLE_UNLIKELY(!context->getStateCache().isValidDrawMode(mode)))
     {
         RecordDrawModeError(context, entryPoint, mode);
         return false;
@@ -695,7 +694,10 @@ bool ValidateFlushMappedBufferRangeBase(const Context *context,
                                         GLintptr offset,
                                         GLsizeiptr length);
 
-bool ValidateGenOrDelete(const Context *context, angle::EntryPoint entryPoint, GLint n);
+bool ValidateGenOrDelete(const Context *context,
+                         angle::EntryPoint entryPoint,
+                         GLint n,
+                         const void *ids);
 
 bool ValidateRobustEntryPoint(const Context *context,
                               angle::EntryPoint entryPoint,
@@ -773,7 +775,7 @@ ANGLE_INLINE bool ValidateVertexFormat(const Context *context,
                                        VertexAttribTypeCase validation)
 {
     const Caps &caps = context->getCaps();
-    if (index >= static_cast<GLuint>(caps.maxVertexAttributes))
+    if (ANGLE_UNLIKELY(index >= static_cast<GLuint>(caps.maxVertexAttributes)))
     {
         ANGLE_VALIDATION_ERROR(GL_INVALID_VALUE, err::kIndexExceedsMaxVertexAttribute);
         return false;
@@ -868,11 +870,13 @@ bool ValidateGetActiveUniformBlockivBase(const Context *context,
                                          GLenum pname,
                                          GLsizei *length);
 
+template <typename ParamType>
 bool ValidateGetSamplerParameterBase(const Context *context,
                                      angle::EntryPoint entryPoint,
                                      SamplerID sampler,
                                      GLenum pname,
-                                     GLsizei *length);
+                                     GLsizei *length,
+                                     const ParamType *params);
 
 template <typename ParamType>
 bool ValidateSamplerParameterBase(const Context *context,
@@ -1028,7 +1032,7 @@ ANGLE_INLINE bool ValidateFramebufferComplete(const Context *context,
                                               const Framebuffer *framebuffer)
 {
     const FramebufferStatus &framebufferStatus = framebuffer->checkStatus(context);
-    if (!framebufferStatus.isComplete())
+    if (ANGLE_UNLIKELY(!framebufferStatus.isComplete()))
     {
         ASSERT(framebufferStatus.reason != nullptr);
         ANGLE_VALIDATION_ERROR(ErrorCode, framebufferStatus.reason);
@@ -1054,8 +1058,8 @@ ANGLE_INLINE bool ValidateDrawAttribs(const Context *context,
     // For non-instanced attributes, the maximum vertex must be accessible in the attribute buffers.
     // For instanced attributes, in non-instanced draw calls only attribute 0 is accessed.  In
     // instanced draw calls, the instance limit is checked in ValidateDrawInstancedAttribs.
-    if (maxVertex >= context->getStateCache().getNonInstancedVertexElementLimit() ||
-        context->getStateCache().getInstancedVertexElementLimit() < 1)
+    if (ANGLE_UNLIKELY(maxVertex >= context->getStateCache().getNonInstancedVertexElementLimit()) ||
+        ANGLE_UNLIKELY(context->getStateCache().getInstancedVertexElementLimit() < 1))
     {
         RecordDrawAttribsError(context, entryPoint);
         return false;
@@ -1081,7 +1085,7 @@ ANGLE_INLINE bool ValidateDrawArraysAttribs(const Context *context,
     ASSERT(first >= 0);
     ASSERT(count > 0);
     int64_t maxVertex = static_cast<int64_t>(first) + static_cast<int64_t>(count) - 1;
-    if (maxVertex > static_cast<int64_t>(std::numeric_limits<GLint>::max()))
+    if (ANGLE_UNLIKELY(maxVertex > static_cast<int64_t>(std::numeric_limits<GLint>::max())))
     {
         ANGLE_VALIDATION_ERROR(GL_INVALID_OPERATION, err::kIntegerOverflow);
         return false;
@@ -1095,7 +1099,7 @@ ANGLE_INLINE bool ValidateDrawInstancedAttribs(const Context *context,
                                                GLint primcount,
                                                GLuint baseinstance)
 {
-    if (!context->isBufferAccessValidationEnabled())
+    if (ANGLE_LIKELY(!context->isBufferAccessValidationEnabled()))
     {
         return true;
     }
@@ -1120,7 +1124,7 @@ ANGLE_INLINE bool ValidateDrawArraysCommon(const Context *context,
                                            GLsizei count,
                                            GLsizei primcount)
 {
-    if (first < 0)
+    if (ANGLE_UNLIKELY(first < 0))
     {
         ANGLE_VALIDATION_ERROR(GL_INVALID_VALUE, err::kNegativeStart);
         return false;
@@ -1128,7 +1132,7 @@ ANGLE_INLINE bool ValidateDrawArraysCommon(const Context *context,
 
     if (count <= 0)
     {
-        if (count < 0)
+        if (ANGLE_UNLIKELY(count < 0))
         {
             ANGLE_VALIDATION_ERROR(GL_INVALID_VALUE, err::kNegativeCount);
             return false;
@@ -1140,7 +1144,7 @@ ANGLE_INLINE bool ValidateDrawArraysCommon(const Context *context,
 
     if (primcount <= 0)
     {
-        if (primcount < 0)
+        if (ANGLE_UNLIKELY(primcount < 0))
         {
             ANGLE_VALIDATION_ERROR(GL_INVALID_VALUE, err::kNegativeCount);
             return false;
@@ -1149,13 +1153,13 @@ ANGLE_INLINE bool ValidateDrawArraysCommon(const Context *context,
         return ValidateDrawBase(context, entryPoint, mode);
     }
 
-    if (!ValidateDrawBase(context, entryPoint, mode))
+    if (ANGLE_UNLIKELY(!ValidateDrawBase(context, entryPoint, mode)))
     {
         return false;
     }
 
-    if (context->getStateCache().isTransformFeedbackActiveUnpaused() &&
-        !context->supportsGeometryOrTesselation())
+    if (ANGLE_UNLIKELY(context->getStateCache().isTransformFeedbackActiveUnpaused()) &&
+        ANGLE_UNLIKELY(!context->supportsGeometryOrTesselation()))
     {
         const State &state                      = context->getState();
         TransformFeedback *curTransformFeedback = state.getCurrentTransformFeedback();
@@ -1174,7 +1178,7 @@ ANGLE_INLINE bool ValidateDrawElementsBase(const Context *context,
                                            PrimitiveMode mode,
                                            DrawElementsType type)
 {
-    if (!context->getStateCache().isValidDrawElementsType(type))
+    if (ANGLE_UNLIKELY(!context->getStateCache().isValidDrawElementsType(type)))
     {
         if (type == DrawElementsType::UnsignedInt)
         {
@@ -1188,7 +1192,7 @@ ANGLE_INLINE bool ValidateDrawElementsBase(const Context *context,
     }
 
     intptr_t drawElementsError = context->getStateCache().getBasicDrawElementsError(context);
-    if (drawElementsError)
+    if (ANGLE_UNLIKELY(drawElementsError))
     {
         // All errors from ValidateDrawElementsStates return INVALID_OPERATION.
         const char *errorMessage = reinterpret_cast<const char *>(drawElementsError);
@@ -1208,7 +1212,7 @@ ANGLE_INLINE bool ValidateDrawElementsCommon(const Context *context,
                                              const void *indices,
                                              GLsizei primcount)
 {
-    if (!ValidateDrawElementsBase(context, entryPoint, mode, type))
+    if (ANGLE_UNLIKELY(!ValidateDrawElementsBase(context, entryPoint, mode, type)))
     {
         return false;
     }
@@ -1222,7 +1226,8 @@ ANGLE_INLINE bool ValidateDrawElementsCommon(const Context *context,
 
     if (elementArrayBuffer != nullptr)
     {
-        if ((reinterpret_cast<uintptr_t>(indices) & static_cast<uintptr_t>(typeBytes - 1)) != 0)
+        if (ANGLE_UNLIKELY((reinterpret_cast<uintptr_t>(indices) &
+                            static_cast<uintptr_t>(typeBytes - 1)) != 0))
         {
             // [WebGL 1.0] Section 6.4 Buffer Offset and Stride Requirements:
             // The offset arguments to drawElements and [...], must be a multiple of the size of the
@@ -1238,7 +1243,7 @@ ANGLE_INLINE bool ValidateDrawElementsCommon(const Context *context,
         // [WebGL 1.0] Section 6.4 Buffer Offset and Stride Requirements
         // In addition the offset argument to drawElements must be non-negative or an INVALID_VALUE
         // error is generated.
-        if (reinterpret_cast<intptr_t>(indices) < 0)
+        if (ANGLE_UNLIKELY(reinterpret_cast<intptr_t>(indices) < 0))
         {
             ANGLE_VALIDATION_ERROR(GL_INVALID_VALUE, err::kNegativeOffset);
             return false;
@@ -1247,7 +1252,7 @@ ANGLE_INLINE bool ValidateDrawElementsCommon(const Context *context,
 
     if (count <= 0)
     {
-        if (count < 0)
+        if (ANGLE_UNLIKELY(count < 0))
         {
             ANGLE_VALIDATION_ERROR(GL_INVALID_VALUE, err::kNegativeCount);
             return false;
@@ -1257,14 +1262,14 @@ ANGLE_INLINE bool ValidateDrawElementsCommon(const Context *context,
         return ValidateDrawBase(context, entryPoint, mode);
     }
 
-    if (!ValidateDrawBase(context, entryPoint, mode))
+    if (ANGLE_UNLIKELY(!ValidateDrawBase(context, entryPoint, mode)))
     {
         return false;
     }
 
     if (!elementArrayBuffer)
     {
-        if (!indices)
+        if (ANGLE_UNLIKELY(!indices))
         {
             // This is an application error that would normally result in a crash, but we catch
             // it and return an error
@@ -1291,28 +1296,31 @@ ANGLE_INLINE bool ValidateDrawElementsCommon(const Context *context,
         // The offset can be any value, check for overflows
         uint64_t offset = static_cast<uint64_t>(reinterpret_cast<uintptr_t>(indices));
         uint64_t elementDataSizeWithOffset = elementDataSizeNoOffset + offset;
-        if (elementDataSizeWithOffset < elementDataSizeNoOffset)
+        if (ANGLE_UNLIKELY(elementDataSizeWithOffset < elementDataSizeNoOffset))
         {
             ANGLE_VALIDATION_ERROR(GL_INVALID_OPERATION, err::kIntegerOverflow);
             return false;
         }
 
         // Related to possible test bug: https://github.com/KhronosGroup/WebGL/issues/3064
-        if ((elementDataSizeWithOffset > static_cast<uint64_t>(elementArrayBuffer->getSize())) &&
-            (primcount > 0))
+        if (ANGLE_UNLIKELY(elementDataSizeWithOffset >
+                           static_cast<uint64_t>(elementArrayBuffer->getSize())) &&
+            ANGLE_UNLIKELY(primcount > 0))
         {
             ANGLE_VALIDATION_ERROR(GL_INVALID_OPERATION, err::kInsufficientBufferSize);
             return false;
         }
     }
 
-    if (context->isBufferAccessValidationEnabled() && primcount > 0)
+    if (ANGLE_UNLIKELY(context->isBufferAccessValidationEnabled()) && ANGLE_UNLIKELY(primcount > 0))
     {
         // Use the parameter buffer to retrieve and cache the index range.
         // TODO: this calculation should take basevertex into account for
         // glDrawElementsInstancedBaseVertexBaseInstanceEXT.  http://anglebug.com/41481166
         IndexRange indexRange{IndexRange::Undefined()};
-        ANGLE_VALIDATION_TRY(vao->getIndexRange(context, type, count, indices, &indexRange));
+        ANGLE_VALIDATION_TRY(vao->getIndexRange(context, type, count, indices,
+                                                context->getState().isPrimitiveRestartEnabled(),
+                                                &indexRange));
 
         // If we use an index greater than our maximum supported index range, return an error.
         // The ES3 spec does not specify behaviour here, it is undefined, but ANGLE should
@@ -1339,7 +1347,7 @@ ANGLE_INLINE bool ValidateBindVertexArrayBase(const Context *context,
                                               angle::EntryPoint entryPoint,
                                               VertexArrayID array)
 {
-    if (!context->isVertexArrayGenerated(array))
+    if (ANGLE_UNLIKELY(!context->isVertexArrayGenerated(array)))
     {
         // The default VAO should always exist
         ASSERT(array.value != 0);
@@ -1355,7 +1363,7 @@ ANGLE_INLINE bool ValidateVertexAttribIndex(const PrivateState &state,
                                             angle::EntryPoint entryPoint,
                                             GLuint index)
 {
-    if (index >= static_cast<GLuint>(state.getCaps().maxVertexAttributes))
+    if (ANGLE_UNLIKELY(index >= static_cast<GLuint>(state.getCaps().maxVertexAttributes)))
     {
         errors->validationError(entryPoint, GL_INVALID_VALUE, err::kIndexExceedsMaxVertexAttribute);
         return false;

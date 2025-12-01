@@ -22,7 +22,7 @@
 <translation id="125220115284141797">Padrões</translation>
 <translation id="1257336506558170607">Exportar certificado selecionado</translation>
 <translation id="1297175357211070620">Destino</translation>
-<translation id="1303101771013849280">Arquivo HTML com Marcadores</translation>
+<translation id="1303101771013849280">Arquivo HTML com Favoritos</translation>
 <translation id="1358741672408003399">Ortografia e gramática</translation>
 <translation id="1430915738399379752">Imprimir</translation>
 <translation id="1451375123200651445">Página da Web, arquivo único</translation>
@@ -170,6 +170,7 @@
 <translation id="3838085852053358637">Falha ao carregar extensão</translation>
 <translation id="383891835335927981">Nenhum site teve o zoom modificado</translation>
 <translation id="385051799172605136">Voltar</translation>
+<translation id="3858860766373142691">Nome</translation>
 <translation id="3861977424605124250">Mostrar na inicialização</translation>
 <translation id="3867944738977021751">Campos do certificado</translation>
 <translation id="3905761538810670789">Reparar app</translation>
@@ -463,7 +464,7 @@ Mantenha o seu arquivo de chave privada em um local seguro. Você precisará del
 <translation id="9056810968620647706">Nenhuma correspondência foi encontrada.</translation>
 <translation id="9084064520949870008">Abrir como Janela</translation>
 <translation id="9137916601698928395">Abrir link como <ph name="USER" /></translation>
-<translation id="916607977885256133">Picture in Picture</translation>
+<translation id="916607977885256133">Picture in picture</translation>
 <translation id="9170848237812810038">Des&amp;fazer</translation>
 <translation id="9215293857209265904">"<ph name="EXTENSION_NAME" />" adicionada</translation>
 <translation id="9218430445555521422">Definir como padrão</translation>

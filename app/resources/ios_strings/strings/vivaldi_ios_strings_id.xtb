@@ -5,7 +5,7 @@
 <translation id="1097355661841455597">Kami suka mendengar pendapat Anda.</translation>
 <translation id="1137850887415122856">Untuk mengunci tab Pribadi Anda, atur Touch ID, Face ID, atau kode Pas.</translation>
 <translation id="1310184829257917508">Minta untuk Buka Tautan dari Aplikasi Lain di Pribadi</translation>
-<translation id="1561609750546413721">Terjemah Vivaldi</translation>
+<translation id="1743244221910283364">Buang perubahan</translation>
 <translation id="207677936531967364">Halaman Tab Pribadi Baru</translation>
 <translation id="2353953000228441783">Tampilan situs bawaan</translation>
 <translation id="2394192052244849643">Tempel dan Telusuri</translation>
@@ -17,7 +17,9 @@
 <translation id="3463990832590571933">Buka di tab Pribadi baru</translation>
 <translation id="3473652525653758699">Jendela Pribadi Baru</translation>
 <translation id="3501504415290398157">Gunakan <ph name="BIOMETRIC_AUTHENITCATION_TYPE" /> untuk membuka kunci tab Pribadi Anda.</translation>
+<translation id="3607792383367580513">Terjemahkan</translation>
 <translation id="3692650606013198282">Buka di Pribadi</translation>
+<translation id="3922395466317605522">Sesuaikan Menu</translation>
 <translation id="3981599532037327317">Buka ${url} di Pribadi</translation>
 <translation id="398477389655464998">Salin Tautan ke Sorotan</translation>
 <translation id="4026745073321351206">🙄 Menemukan masalah?</translation>
@@ -33,16 +35,17 @@
 <translation id="570209299585559496">Anda dapat mengubah tampilan situs bawaan ke desktop di pengaturan lalu pengaturan konten</translation>
 <translation id="5962477178930921574">Tempel dan Telusuri</translation>
 <translation id="6233792867654386826">Buka URL yang dimasukkan di Vivaldi.</translation>
+<translation id="6532106788206463496">Simpan perubahan</translation>
 <translation id="6680416467695217368">Sesuaikan Menu</translation>
 <translation id="6827597288286078054">Pencarian Pribadi</translation>
 <translation id="6851516051005285358">Minta Situs Desktop</translation>
 <translation id="7307970171564921489">Buka kunci Tab Pribadi Dengan <ph name="BIOMETRIC_AUTHENITCATION_TYPE" /></translation>
 <translation id="7347289093190902150">Buka di Pribadi?</translation>
+<translation id="7498234416455752244">Lanjut mengedit</translation>
 <translation id="7549299604720382000">Tab Pribadi Baru</translation>
-<translation id="755255281989213264">Sesuaikan menu</translation>
-<translation id="7920949005883349320">Privasi dan Keamanan</translation>
 <translation id="7961015016161918242">Jangan pernah</translation>
 <translation id="8326104954595890674">Tab Pribadi Baru</translation>
 <translation id="8756969031206844760">Perbarui sandi?</translation>
+<translation id="9042893549633094279">Privasi dan Keamanan</translation>
 <translation id="9094033019050270033">Perbarui sandi</translation>
 </translationbundle>

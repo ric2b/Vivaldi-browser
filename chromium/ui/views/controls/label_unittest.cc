@@ -6,6 +6,7 @@
 
 #include <stddef.h>
 
+#include <memory>
 #include <string>
 #include <utility>
 #include <vector>
@@ -15,6 +16,7 @@
 #include "base/functional/bind.h"
 #include "base/i18n/rtl.h"
 #include "base/memory/raw_ptr.h"
+#include "base/strings/strcat.h"
 #include "base/test/gtest_util.h"
 #include "base/test/scoped_feature_list.h"
 #include "build/build_config.h"
@@ -253,7 +255,7 @@ class LabelSelectionTest : public LabelTest {
     return label()->GetRenderTextForSelectionController()->GetNumLines();
   }
 
-  std::u16string GetSelectedText() { return label()->GetSelectedText(); }
+  std::u16string_view GetSelectedText() { return label()->GetSelectedText(); }
 
   ui::test::EventGenerator* event_generator() { return event_generator_.get(); }
 
@@ -317,12 +319,12 @@ TEST_F(LabelTest, ColorPropertyOnEnabledColorIdChange) {
   const auto color = label()->GetWidget()->GetColorProvider()->GetColor(
       ui::kColorPrimaryForeground);
   label()->SetAutoColorReadabilityEnabled(false);
-  label()->SetEnabledColorId(ui::kColorPrimaryForeground);
+  label()->SetEnabledColor(ui::kColorPrimaryForeground);
   EXPECT_EQ(color, label()->GetEnabledColor());
 
   // Update the enabled id and verify the actual enabled color is updated to
   // reflect the color id change. Regression test case for: b/262402965.
-  label()->SetEnabledColorId(ui::kColorAccent);
+  label()->SetEnabledColor(ui::kColorAccent);
   EXPECT_EQ(
       label()->GetWidget()->GetColorProvider()->GetColor(ui::kColorAccent),
       label()->GetEnabledColor());
@@ -342,17 +344,11 @@ TEST_F(LabelTest, BackgroundColorId) {
   EXPECT_EQ(widget()->GetColorProvider()->GetColor(ui::kColorDialogBackground),
             label()->GetBackgroundColor());
 
-  label()->SetBackgroundColorId(ui::kColorAlertHighSeverity);
+  label()->SetBackgroundColor(ui::kColorAlertHighSeverity);
   EXPECT_EQ(widget()->GetColorProvider()->GetColor(ui::kColorAlertHighSeverity),
             label()->GetBackgroundColor());
 
-  // A color id takes precedence.
-  label()->SetBackgroundColor(SK_ColorBLUE);
-  EXPECT_EQ(widget()->GetColorProvider()->GetColor(ui::kColorAlertHighSeverity),
-            label()->GetBackgroundColor());
-
-  // Once a color id is no longer set, colors can be set again.
-  label()->SetBackgroundColorId(std::nullopt);
+  // Use SkColor instead of ColorId.
   label()->SetBackgroundColor(SK_ColorBLUE);
   EXPECT_EQ(SK_ColorBLUE, label()->GetBackgroundColor());
 }
@@ -809,7 +805,7 @@ TEST_F(LabelTest, Accessibility) {
 }
 
 TEST_F(LabelTest, SetTextNotifiesAccessibilityEvent) {
-  test::AXEventCounter counter(views::AXEventManager::Get());
+  test::AXEventCounter counter(views::AXUpdateNotifier::Get());
 
   // Changing the text affects the accessible name, so it should notify.
   EXPECT_EQ(0, counter.GetCount(ax::mojom::Event::kTextChanged));
@@ -1202,7 +1198,7 @@ TEST_F(LabelTest, NoSchedulePaintInOnPaint) {
   label.SetEnabled(false);
   expect_paint_count_increased();
 
-  label.SetText(label.GetText() + u"Changed");
+  label.SetText(base::StrCat({label.GetText(), u"Changed"}));
   expect_paint_count_increased();
 
   label.SizeToPreferredSize();
@@ -1319,8 +1315,9 @@ TEST_F(LabelTest, GetSubstringBounds) {
 #endif
 // Ensures DCHECK for subpixel rendering on transparent layer is working.
 TEST_F(LabelTest, MAYBE_ChecksSubpixelRenderingOntoOpaqueSurface) {
-  View view;
-  Label* label = view.AddChildView(std::make_unique<TestLabel>());
+  View* view =
+      widget()->GetContentsView()->AddChildView(std::make_unique<View>());
+  Label* label = view->AddChildView(std::make_unique<TestLabel>());
   EXPECT_TRUE(label->GetSubpixelRenderingEnabled());
 
   gfx::Canvas canvas;
@@ -1329,11 +1326,11 @@ TEST_F(LabelTest, MAYBE_ChecksSubpixelRenderingOntoOpaqueSurface) {
   label->OnPaint(&canvas);
 
   // Painting to an opaque layer should also be fine.
-  view.SetPaintToLayer();
+  view->SetPaintToLayer();
   label->OnPaint(&canvas);
 
   // Set up a transparent layer for the parent view.
-  view.layer()->SetFillsBoundsOpaquely(false);
+  view->layer()->SetFillsBoundsOpaquely(false);
 
   // Painting on a transparent layer should DCHECK.
   EXPECT_DCHECK_DEATH(label->OnPaint(&canvas));
@@ -1345,7 +1342,7 @@ TEST_F(LabelTest, MAYBE_ChecksSubpixelRenderingOntoOpaqueSurface) {
 
   // Painting onto a transparent layer should not DCHECK if there's an opaque
   // background in a parent of the Label.
-  view.SetBackground(CreateSolidBackground(SK_ColorWHITE));
+  view->SetBackground(CreateSolidBackground(SK_ColorWHITE));
   label->OnPaint(&canvas);
 }
 

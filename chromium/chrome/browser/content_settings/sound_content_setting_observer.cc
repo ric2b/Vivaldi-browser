@@ -23,9 +23,9 @@
 #include "third_party/blink/public/mojom/autoplay/autoplay.mojom.h"
 
 #if !BUILDFLAG(IS_ANDROID)
+#include "components/tabs/tab_helpers.h"
 #include "chrome/browser/ui/tabs/tab_enums.h"
 #include "chrome/browser/ui/tabs/tab_utils.h"
-#include "extensions/api/tabs/tabs_private_api.h"
 #endif
 
 using content_settings::SettingSource;
@@ -146,7 +146,7 @@ void SoundContentSettingObserver::MuteOrUnmuteIfNecessary() {
 
   // NOTE(andre@vivaldi.com) : Vivaldi can set a tab to muted in extdata. Do not
   // override this here.
-  if (extensions::IsTabMuted(web_contents())){
+  if (vivaldi::IsTabMuted(web_contents())){
     return;
   }
 

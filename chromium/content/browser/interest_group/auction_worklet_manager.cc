@@ -29,6 +29,7 @@
 #include "base/memory/scoped_refptr.h"
 #include "base/not_fatal_until.h"
 #include "base/strings/strcat.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/trace_event/trace_event.h"
 #include "content/browser/interest_group/auction_metrics_recorder.h"
 #include "content/browser/interest_group/auction_process_manager.h"
@@ -48,6 +49,7 @@
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/remote.h"
+#include "services/network/public/cpp/features.h"
 #include "services/network/public/mojom/client_security_state.mojom.h"
 #include "services/network/public/mojom/url_loader_factory.mojom.h"
 #include "url/gurl.h"
@@ -64,7 +66,7 @@ using HandleKey = std::pair<uint64_t, AuctionWorkletManager::WorkletHandle*>;
 auction_worklet::mojom::AuctionWorkletPermissionsPolicyStatePtr
 GetAuctionWorkletPermissionsPolicyState(RenderFrameHostImpl* auction_runner_rfh,
                                         const GURL& worklet_script_url) {
-  const blink::PermissionsPolicy* permissions_policy =
+  const network::PermissionsPolicy* permissions_policy =
       auction_runner_rfh->GetPermissionsPolicy();
 
   url::Origin worklet_origin = url::Origin::Create(worklet_script_url);
@@ -311,7 +313,8 @@ AuctionWorkletManager::WorkletOwner::WorkletOwner(
     // pass to the worklet process.
     if (!base::FeatureList::IsEnabled(features::kFledgeUseKVv2SignalsCache)) {
       waiting_on_trusted_signals_kvv2_public_key_ = true;
-      worklet_manager->delegate()->GetBiddingAndAuctionServerKey(
+      worklet_manager->delegate()->GetTrustedKeyValueServerKey(
+          url::Origin::Create(worklet_info_.signals_url.value_or(GURL())),
           std::move(worklet_info_.trusted_signals_coordinator),
           base::BindOnce(&AuctionWorkletManager::WorkletOwner::
                              OnTrustedSignalsKVv2KeyFetched,
@@ -524,9 +527,13 @@ void AuctionWorkletManager::WorkletOwner::OnTrustedSignalsKVv2KeyFetched(
   // more debugging information rather than just pass a nullptr to bidder/seller
   // worklet.
   if (key_or_error.has_value()) {
+    uint32_t key_id = 0;
+    bool success = base::HexStringToUInt(
+        std::string_view(key_or_error->id).substr(0, 2), &key_id);
+    DCHECK(success);
     trusted_signals_kvv2_public_key_ =
         auction_worklet::mojom::TrustedSignalsPublicKey::New(key_or_error->key,
-                                                             key_or_error->id);
+                                                             key_id);
   }
 
   LoadWorkletIfReady(number_of_bidder_threads);
@@ -799,7 +806,8 @@ AuctionWorkletManager::WorkletKey::WorkletKey(
     std::optional<bool> send_creative_scanning_metadata,
     std::optional<uint16_t> experiment_group_id,
     const std::string& trusted_bidding_signals_slot_size_param,
-    const std::optional<url::Origin>& trusted_signals_coordinator)
+    const std::optional<url::Origin>& trusted_signals_coordinator,
+    const std::optional<std::string>& contextual_data)
     : type(type),
       script_url(script_url),
       wasm_url(wasm_url),
@@ -809,7 +817,8 @@ AuctionWorkletManager::WorkletKey::WorkletKey(
       experiment_group_id(experiment_group_id),
       trusted_bidding_signals_slot_size_param(
           trusted_bidding_signals_slot_size_param),
-      trusted_signals_coordinator(trusted_signals_coordinator) {}
+      trusted_signals_coordinator(trusted_signals_coordinator),
+      contextual_data(contextual_data) {}
 
 AuctionWorkletManager::WorkletKey::WorkletKey(const WorkletKey&) = default;
 AuctionWorkletManager::WorkletKey::WorkletKey(WorkletKey&&) = default;
@@ -844,6 +853,9 @@ size_t AuctionWorkletManager::WorkletKey::GetHash() const {
       hash, send_creative_scanning_metadata.has_value()
                 ? (*send_creative_scanning_metadata ? 0x4b9dff24u : 0x2af93982u)
                 : 0x5f0d73ebu);
+  hash = CombineHash(hash, contextual_data.has_value()
+                               ? FastHash(contextual_data.value())
+                               : 0x57a82cf1);
   return hash;
 }
 
@@ -852,14 +864,14 @@ bool AuctionWorkletManager::WorkletKey::WorkletKey::operator<(
   return std::tie(type, script_url, wasm_url, signals_url,
                   needs_cors_for_additional_bid, experiment_group_id,
                   trusted_bidding_signals_slot_size_param,
-                  trusted_signals_coordinator,
-                  send_creative_scanning_metadata) <
+                  trusted_signals_coordinator, send_creative_scanning_metadata,
+                  contextual_data) <
          std::tie(other.type, other.script_url, other.wasm_url,
                   other.signals_url, other.needs_cors_for_additional_bid,
                   other.experiment_group_id,
                   other.trusted_bidding_signals_slot_size_param,
                   other.trusted_signals_coordinator,
-                  other.send_creative_scanning_metadata);
+                  other.send_creative_scanning_metadata, other.contextual_data);
 }
 
 AuctionWorkletManager::WorkletHandle::~WorkletHandle() {
@@ -1002,7 +1014,7 @@ AuctionWorkletManager::AuctionWorkletManager(
       delegate_(delegate),
       auction_network_events_proxy_(
           std::make_unique<AuctionNetworkEventsProxy>(GetFrameTreeNodeID())) {
-  if (base::FeatureList::IsEnabled(blink::features::kSharedStorageAPI)) {
+  if (base::FeatureList::IsEnabled(network::features::kSharedStorageAPI)) {
     auction_shared_storage_host_ = std::make_unique<AuctionSharedStorageHost>(
         static_cast<StoragePartitionImpl*>(
             delegate_->GetFrame()->GetProcess()->GetStoragePartition()));
@@ -1019,21 +1031,23 @@ AuctionWorkletManager::WorkletKey AuctionWorkletManager::BidderWorkletKey(
     bool needs_cors_for_additional_bid,
     std::optional<uint16_t> experiment_group_id,
     const std::string& trusted_bidding_signals_slot_size_param,
-    const std::optional<url::Origin>& trusted_bidding_signals_coordinator) {
-  return WorkletKey(WorkletType::kBidder,
-                    /*script_url=*/bidding_logic_url, wasm_url,
-                    /*signals_url=*/trusted_bidding_signals_url,
-                    needs_cors_for_additional_bid,
-                    /*send_creative_scanning_metadata=*/std::nullopt,
-                    trusted_bidding_signals_url.has_value()
-                        ? experiment_group_id
-                        : std::nullopt,
-                    trusted_bidding_signals_url.has_value()
-                        ? trusted_bidding_signals_slot_size_param
-                        : "",
-                    trusted_bidding_signals_url.has_value()
-                        ? trusted_bidding_signals_coordinator
-                        : std::nullopt);
+    const std::optional<url::Origin>& trusted_bidding_signals_coordinator,
+    const std::optional<std::string>& contextual_data) {
+  return WorkletKey(
+      WorkletType::kBidder,
+      /*script_url=*/bidding_logic_url, wasm_url,
+      /*signals_url=*/trusted_bidding_signals_url,
+      needs_cors_for_additional_bid,
+      /*send_creative_scanning_metadata=*/std::nullopt,
+      trusted_bidding_signals_url.has_value() ? experiment_group_id
+                                              : std::nullopt,
+      trusted_bidding_signals_url.has_value()
+          ? trusted_bidding_signals_slot_size_param
+          : "",
+      trusted_bidding_signals_url.has_value()
+          ? trusted_bidding_signals_coordinator
+          : std::nullopt,
+      trusted_bidding_signals_url.has_value() ? contextual_data : std::nullopt);
 }
 
 void AuctionWorkletManager::RequestBidderWorklet(
@@ -1045,6 +1059,7 @@ void AuctionWorkletManager::RequestBidderWorklet(
     std::optional<uint16_t> experiment_group_id,
     const std::string& trusted_bidding_signals_slot_size_param,
     const std::optional<url::Origin>& trusted_bidding_signals_coordinator,
+    const std::optional<std::string>& contextual_data,
     base::OnceClosure worklet_available_callback,
     FatalErrorCallback fatal_error_callback,
     std::unique_ptr<WorkletHandle>& out_worklet_handle,
@@ -1053,7 +1068,7 @@ void AuctionWorkletManager::RequestBidderWorklet(
       BidderWorkletKey(bidding_logic_url, wasm_url, trusted_bidding_signals_url,
                        needs_cors_for_additional_bid, experiment_group_id,
                        trusted_bidding_signals_slot_size_param,
-                       trusted_bidding_signals_coordinator),
+                       trusted_bidding_signals_coordinator, contextual_data),
       std::move(devtools_auction_id),
       /*process_assigned_callback=*/base::OnceClosure(),
       std::move(worklet_available_callback), std::move(fatal_error_callback),
@@ -1081,7 +1096,8 @@ void AuctionWorkletManager::RequestSellerWorklet(
                           /*needs_cors_for_additional_bid=*/false,
                           send_creative_scanning_metadata, experiment_group_id,
                           /*trusted_bidding_signals_slot_size_param=*/"",
-                          trusted_scoring_signals_coordinator);
+                          trusted_scoring_signals_coordinator,
+                          /*contextual_data=*/std::nullopt);
   RequestWorkletByKey(std::move(worklet_info), std::move(devtools_auction_id),
                       std::move(process_assigned_callback),
                       std::move(worklet_available_callback),
@@ -1151,7 +1167,7 @@ AuctionWorkletManager::MaybeBindAuctionSharedStorageHost(
     const url::Origin& worklet_origin) {
   mojo::PendingRemote<auction_worklet::mojom::AuctionSharedStorageHost> remote;
 
-  const blink::PermissionsPolicy* permissions_policy =
+  const network::PermissionsPolicy* permissions_policy =
       auction_runner_rfh->GetPermissionsPolicy();
 
   if (auction_shared_storage_host_ &&

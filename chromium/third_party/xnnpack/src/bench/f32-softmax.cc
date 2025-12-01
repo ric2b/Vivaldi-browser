@@ -3,20 +3,21 @@
 #include <cstddef>
 #include <cstdint>
 #include <functional>
+#include <limits>
 #include <random>
 
-#include "utils.h"
-#include "xnnpack/buffer.h"
-#include "xnnpack/common.h"
-#include "xnnpack/microfnptr.h"
-#include "xnnpack/microparams.h"
-#include "xnnpack/raddexpminusmax.h"
-#include "xnnpack/raddextexp.h"
-#include "xnnpack/raddstoreexpminusmax.h"
-#include "xnnpack/reduce.h"
-#include "xnnpack/vbinary.h"
-#include "xnnpack/vscaleexpminusmax.h"
-#include "xnnpack/vscaleextexp.h"
+#include "bench/utils.h"
+#include "src/xnnpack/buffer.h"
+#include "src/xnnpack/common.h"
+#include "src/xnnpack/microfnptr.h"
+#include "src/xnnpack/microparams.h"
+#include "src/xnnpack/raddexpminusmax.h"
+#include "src/xnnpack/raddextexp.h"
+#include "src/xnnpack/raddstoreexpminusmax.h"
+#include "src/xnnpack/reduce.h"
+#include "src/xnnpack/vbinary.h"
+#include "src/xnnpack/vscaleexpminusmax.h"
+#include "src/xnnpack/vscaleextexp.h"
 #include <benchmark/benchmark.h>
 
 #ifdef BENCHMARK_INTEL_DNNL
@@ -246,7 +247,7 @@ static void ThreePassSoftMaxWithRecomputing(
     }
 
     const auto start = std::chrono::high_resolution_clock::now();
-    float x_max;
+    float x_max = -std::numeric_limits<float>::infinity();
     rmax(elements * sizeof(float), x.data(), &x_max, &rmax_params);
     float y_sum;
     raddexpminusmax(elements * sizeof(float), x.data(), &y_sum, x_max);
@@ -324,7 +325,7 @@ static void ThreePassSoftMaxWithReloading(
     }
 
     const auto start = std::chrono::high_resolution_clock::now();
-    float x_max;
+    float x_max = -std::numeric_limits<float>::infinity();
     rmax(elements * sizeof(float), x.data(), &x_max, &rmax_params);
     float y_sum;
     raddstoreexpminusmax(elements * sizeof(float), x.data(), &x_max,

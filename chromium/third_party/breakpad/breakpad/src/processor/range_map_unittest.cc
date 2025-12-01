@@ -43,9 +43,10 @@
 #include <limits.h>
 #include <stdio.h>
 
+#include <memory>
+
 #include "processor/range_map-inl.h"
 
-#include "common/scoped_ptr.h"
 #include "processor/linked_ptr.h"
 #include "processor/logging.h"
 
@@ -54,7 +55,6 @@ namespace {
 using google_breakpad::AddIgnoringOverflow;
 using google_breakpad::linked_ptr;
 using google_breakpad::RangeMap;
-using google_breakpad::scoped_ptr;
 
 // A CountedObject holds an int.  A global (not thread safe!) count of
 // allocated CountedObjects is maintained to help test memory management.
@@ -279,14 +279,15 @@ static bool RetrieveTest(TestMap* range_map, const RangeTest* range_test) {
 // false if the test fails.
 static bool RetrieveIndexTest(TestMap* range_map, int set) {
   linked_ptr<CountedObject> object;
-  CountedObject* last_object = NULL;
+  CountedObject* last_object = nullptr;
   AddressType last_base = 0;
 
   int object_count = range_map->GetCount();
   for (int object_index = 0; object_index < object_count; ++object_index) {
     AddressType base;
     if (!range_map->RetrieveRangeAtIndex(object_index, &object, &base,
-                                         NULL /* delta */, NULL /* size */)) {
+                                         nullptr /* delta */,
+                                         nullptr /* size */)) {
       fprintf(stderr, "FAILED: RetrieveRangeAtIndex set %d index %d, "
               "expected success, observed failure\n",
               set, object_index);
@@ -295,7 +296,7 @@ static bool RetrieveIndexTest(TestMap* range_map, int set) {
 
     if (!object.get()) {
       fprintf(stderr, "FAILED: RetrieveRangeAtIndex set %d index %d, "
-              "expected object, observed NULL\n",
+              "expected object, observed nullptr\n",
               set, object_index);
       return false;
     }
@@ -326,8 +327,9 @@ static bool RetrieveIndexTest(TestMap* range_map, int set) {
 
   // Make sure that RetrieveRangeAtIndex doesn't allow lookups at indices that
   // are too high.
-  if (range_map->RetrieveRangeAtIndex(object_count, &object, NULL /* base */,
-                                      NULL /* delta */, NULL /* size */)) {
+  if (range_map->RetrieveRangeAtIndex(object_count, &object, nullptr /* base */,
+                                      nullptr /* delta */,
+                                      nullptr /* size */)) {
     fprintf(stderr, "FAILED: RetrieveRangeAtIndex set %d index %d (too large), "
             "expected failure, observed success\n",
             set, object_count);
@@ -342,7 +344,7 @@ static bool RetrieveIndexTest(TestMap* range_map, int set) {
 // entry, however, it is supposed to retrieve the base address of entry as
 // stated in the comment in range_map.h.
 static bool RetrieveAtIndexTest2() {
-  scoped_ptr<TestMap> range_map(new TestMap());
+  std::unique_ptr<TestMap> range_map(new TestMap());
 
   // Store ranges with base address = 2 * object_id:
   const int range_size = 2;
@@ -357,7 +359,8 @@ static bool RetrieveAtIndexTest2() {
   for (int object_index = 0; object_index < object_count; ++object_index) {
     AddressType base;
     if (!range_map->RetrieveRangeAtIndex(object_index, &object, &base,
-                                         NULL /* delta */, NULL /* size */)) {
+                                         nullptr /* delta */,
+                                         nullptr /* size */)) {
       fprintf(stderr, "FAILED: RetrieveAtIndexTest2 index %d, "
               "expected success, observed failure\n", object_index);
       return false;
@@ -468,7 +471,7 @@ static bool RunTests() {
 
   // Maintain the range map in a pointer so that deletion can be meaningfully
   // tested.
-  scoped_ptr<TestMap> range_map(new TestMap());
+  std::unique_ptr<TestMap> range_map(new TestMap());
 
   // Run all of the test sets in sequence.
   unsigned int range_test_set_count = sizeof(range_test_sets) /

@@ -7,13 +7,16 @@ package org.chromium.components.payments.secure_payment_confirmation;
 import android.graphics.drawable.Drawable;
 import android.util.Pair;
 
+import org.chromium.build.annotations.NullMarked;
 import org.chromium.ui.modelutil.PropertyKey;
+import org.chromium.ui.modelutil.PropertyModel.ReadableBooleanPropertyKey;
 import org.chromium.ui.modelutil.PropertyModel.ReadableObjectPropertyKey;
 
 /**
  * The properties of the SecurePaymentConfirmation Authn UI, which fully describe the state of the
  * UI.
  */
+@NullMarked
 /* package */ class SecurePaymentConfirmationAuthnProperties {
     /** The store value of the UI. */
     /* package */ static final ReadableObjectPropertyKey<String> STORE_LABEL =
@@ -51,6 +54,21 @@ import org.chromium.ui.modelutil.PropertyModel.ReadableObjectPropertyKey;
     /* package */ static final ReadableObjectPropertyKey<Runnable> CANCEL_BUTTON_CALLBACK =
             new ReadableObjectPropertyKey<>();
 
+    /**
+     * When true, shows the issuer and network icons (if provided) in the header instead of the
+     * default header image.
+     */
+    /* package */ static final ReadableBooleanPropertyKey SHOWS_ISSUER_NETWORK_ICONS =
+            new ReadableBooleanPropertyKey();
+
+    /** The issuer icon for the UI. */
+    /* package */ static final ReadableObjectPropertyKey<Drawable> ISSUER_ICON =
+            new ReadableObjectPropertyKey<>();
+
+    /** The network icon for the UI. */
+    /* package */ static final ReadableObjectPropertyKey<Drawable> NETWORK_ICON =
+            new ReadableObjectPropertyKey<>();
+
     /* package */ static final PropertyKey[] ALL_KEYS =
             new PropertyKey[] {
                 STORE_LABEL,
@@ -60,7 +78,10 @@ import org.chromium.ui.modelutil.PropertyModel.ReadableObjectPropertyKey;
                 CURRENCY,
                 OPT_OUT_INFO,
                 CONTINUE_BUTTON_CALLBACK,
-                CANCEL_BUTTON_CALLBACK
+                CANCEL_BUTTON_CALLBACK,
+                SHOWS_ISSUER_NETWORK_ICONS,
+                ISSUER_ICON,
+                NETWORK_ICON
             };
 
     // Prevent instantiation.

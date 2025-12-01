@@ -214,6 +214,11 @@ TEST_F(KeywordProviderTest, Edit) {
       {u"mailto:z", 0, {kEmptyMatch, kEmptyMatch, kEmptyMatch}},
       {u"ftp://z", 0, {kEmptyMatch, kEmptyMatch, kEmptyMatch}},
       {u"https://z", 1, {{u"z ", true}, kEmptyMatch, kEmptyMatch}},
+
+      // Non-substituting keywords, whether typed fully or not
+      // should not add a space.
+      {u"nonsu", 1, {{u"nonsub", false}, kEmptyMatch, kEmptyMatch}},
+      {u"nonsub", 1, {{u"nonsub", true}, kEmptyMatch, kEmptyMatch}},
   };
 
   RunTest<std::u16string>(edit_cases, std::size(edit_cases),
@@ -457,4 +462,22 @@ TEST_F(KeywordProviderTest, DoesNotProvideMatchesOnFocus) {
   input.set_focus_type(metrics::OmniboxFocusType::INTERACTION_FOCUS);
   kw_provider_->Start(input, false);
   ASSERT_TRUE(kw_provider_->matches().empty());
+}
+
+// Ensure that the KeywordProvider does not return a match based on a custom
+// TemplateURL, which, after substituting user input, has an invalid destination
+// URL.
+TEST_F(KeywordProviderTest, TemplateSchemeKeyword) {
+  TemplateURLData data;
+  data.SetShortName(u"я");
+  data.SetKeyword(u"я://я");
+  data.SetURL("{searchTerms}://{searchTerms}");
+  data.starter_pack_id = 1;
+  client_->GetTemplateURLService()->Add(std::make_unique<TemplateURL>(data));
+
+  TestData<void*> url_cases[] = {
+      {u"я я", 0, {}},
+      {u"я://я", 0, {}},
+  };
+  RunTest<void*>(url_cases, std::size(url_cases), nullptr);
 }

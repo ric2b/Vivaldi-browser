@@ -43,6 +43,7 @@ limitations under the License.
 #include "xla/python/ifrt/sharding.h"
 #include "xla/python/ifrt/topology.h"
 #include "xla/python/ifrt/tuple.h"
+#include "xla/python/ifrt/user_context.h"
 #include "xla/python/ifrt/value.h"
 #include "xla/tsl/concurrency/ref_count.h"
 
@@ -93,7 +94,13 @@ class NanoIfrtClient : public llvm::RTTIExtends<NanoIfrtClient, ifrt::Client> {
       std::optional<absl::Span<const int64_t>> byte_strides,
       absl::Nonnull<std::shared_ptr<const ifrt::Sharding>> sharding,
       HostBufferSemantics semantics,
-      std::function<void()> on_done_with_host_buffer) override;
+      std::function<void()> on_done_with_host_buffer,
+      tsl::RCReference<xla::ifrt::UserContext> user_context) override;
+
+  absl::StatusOr<std::vector<tsl::RCReference<ifrt::Array>>>
+  MakeArraysFromHostBufferShards(
+      absl::Span<MakeArraysFromHostBufferShardsSpec> specs,
+      HostBufferSemantics semantics) override;
 
   // Assembles a sharded array from a list of single device arrays. If the
   // provided sharding is specific enough to assemble a dense array, this method
@@ -103,13 +110,7 @@ class NanoIfrtClient : public llvm::RTTIExtends<NanoIfrtClient, ifrt::Client> {
   // accessed by an XLA program.
   absl::StatusOr<tsl::RCReference<ifrt::Array>>
   AssembleArrayFromSingleDeviceArrays(
-      ifrt::Shape shape,
-      absl::Nonnull<std::shared_ptr<const ifrt::Sharding>> sharding,
-      absl::Span<tsl::RCReference<ifrt::Array>> arrays,
-      ifrt::ArrayCopySemantics semantics) override;
-  absl::StatusOr<tsl::RCReference<ifrt::Array>>
-  AssembleArrayFromSingleDeviceArrays(
-      ifrt::Shape shape,
+      ifrt::DType dtype, ifrt::Shape shape,
       absl::Nonnull<std::shared_ptr<const ifrt::Sharding>> sharding,
       absl::Span<tsl::RCReference<ifrt::Array>> arrays,
       ifrt::ArrayCopySemantics array_copy_semantics,
@@ -117,7 +118,7 @@ class NanoIfrtClient : public llvm::RTTIExtends<NanoIfrtClient, ifrt::Client> {
 
   absl::StatusOr<std::vector<tsl::RCReference<ifrt::Array>>> CopyArrays(
       absl::Span<tsl::RCReference<ifrt::Array>> arrays,
-      std::optional<tsl::RCReference<ifrt::DeviceList>> devices,
+      std::optional<ifrt::DeviceListRef> devices,
       std::optional<ifrt::MemoryKind> memory_kind,
       ifrt::ArrayCopySemantics semantics) override;
 
@@ -155,14 +156,21 @@ class NanoIfrtClient : public llvm::RTTIExtends<NanoIfrtClient, ifrt::Client> {
   absl::StatusOr<ifrt::Device*> LookupAddressableDevice(
       int local_hardware_id) const override;
 
+  ifrt::DeviceListRef MakeDeviceList(
+      absl::Span<ifrt::Device* const> devices) const override;
+
   ifrt::Compiler* GetDefaultCompiler() override;
 
   absl::StatusOr<std::shared_ptr<ifrt::Topology>> GetTopologyForDevices(
-      const tsl::RCReference<ifrt::DeviceList>& devices) const override;
+      const ifrt::DeviceListRef& devices) const override;
 
   absl::StatusOr<std::shared_ptr<const PjRtLayout>> GetDefaultLayout(
       ifrt::DType dtype, absl::Span<const int64_t> dims, ifrt::Device* device,
       xla::ifrt::MemoryKind memory_kind) const override;
+
+  tsl::RCReference<xla::ifrt::UserContext> CreateUserContext() override {
+    return tsl::RCReference<xla::ifrt::UserContext>();
+  }
 
   static char ID;  // NOLINT
 

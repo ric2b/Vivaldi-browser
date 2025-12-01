@@ -8,6 +8,7 @@
 #include "src/gpu/graphite/dawn/DawnGraphicsPipeline.h"
 
 #include "include/gpu/graphite/TextureInfo.h"
+#include "include/gpu/graphite/dawn/DawnGraphiteTypes.h"
 #include "include/private/base/SkTemplates.h"
 #include "src/core/SkTraceEvent.h"
 #include "src/gpu/SkSLToBackend.h"
@@ -19,14 +20,13 @@
 #include "src/gpu/graphite/RenderPassDesc.h"
 #include "src/gpu/graphite/RendererProvider.h"
 #include "src/gpu/graphite/ShaderInfo.h"
+#include "src/gpu/graphite/TextureInfoPriv.h"
 #include "src/gpu/graphite/UniformManager.h"
 #include "src/gpu/graphite/dawn/DawnCaps.h"
 #include "src/gpu/graphite/dawn/DawnErrorChecker.h"
-#include "src/gpu/graphite/dawn/DawnGraphiteTypesPriv.h"
-#include "src/gpu/graphite/dawn/DawnGraphiteUtilsPriv.h"
+#include "src/gpu/graphite/dawn/DawnGraphiteUtils.h"
 #include "src/gpu/graphite/dawn/DawnResourceProvider.h"
 #include "src/gpu/graphite/dawn/DawnSharedContext.h"
-#include "src/gpu/graphite/dawn/DawnUtilsPriv.h"
 #include "src/sksl/SkSLProgramSettings.h"
 #include "src/sksl/SkSLUtil.h"
 #include "src/sksl/ir/SkSLProgram.h"
@@ -356,14 +356,16 @@ sk_sp<DawnGraphicsPipeline> DawnGraphicsPipeline::Make(
     samplerDescArrPtr = &samplerDescArr;
 #endif
 
-    std::unique_ptr<ShaderInfo> shaderInfo = ShaderInfo::Make(&caps,
-                                                              sharedContext->shaderCodeDictionary(),
-                                                              runtimeDict,
-                                                              step,
-                                                              paintID,
-                                                              useStorageBuffers,
-                                                              renderPassDesc.fWriteSwizzle,
-                                                              samplerDescArrPtr);
+    std::unique_ptr<ShaderInfo> shaderInfo =
+            ShaderInfo::Make(&caps,
+                             sharedContext->shaderCodeDictionary(),
+                             runtimeDict,
+                             step,
+                             paintID,
+                             useStorageBuffers,
+                             renderPassDesc.fWriteSwizzle,
+                             renderPassDesc.fDstReadStrategyIfRequired,
+                             samplerDescArrPtr);
 
     const std::string& fsSkSL = shaderInfo->fragmentSkSL();
     const BlendInfo& blendInfo = shaderInfo->blendInfo();
@@ -424,8 +426,8 @@ sk_sp<DawnGraphicsPipeline> DawnGraphicsPipeline::Make(
     }
 
     wgpu::ColorTargetState colorTarget;
-    colorTarget.format =
-            TextureInfos::GetDawnViewFormat(renderPassDesc.fColorAttachment.fTextureInfo);
+    colorTarget.format = TextureInfoPriv::Get<DawnTextureInfo>(
+            renderPassDesc.fColorAttachment.fTextureInfo).getViewFormat();
     colorTarget.blend = blendOn ? &blend : nullptr;
     colorTarget.writeMask = blendInfo.fWritesColor && hasFragmentSkSL ? wgpu::ColorWriteMask::All
                                                                       : wgpu::ColorWriteMask::None;
@@ -437,7 +439,7 @@ sk_sp<DawnGraphicsPipeline> DawnGraphicsPipeline::Make(
     // Special case: a render pass loading resolve texture requires additional settings for the
     // pipeline to make it compatible.
     wgpu::ColorTargetStateExpandResolveTextureDawn pipelineMSAALoadResolveTextureDesc;
-    if (loadMsaaFromResolve && sharedContext->dawnCaps()->resolveTextureLoadOp().has_value()) {
+    if (loadMsaaFromResolve && sharedContext->dawnCaps()->loadOpAffectsMSAAPipelines()) {
         SkASSERT(device.HasFeature(wgpu::FeatureName::DawnLoadResolveTexture));
         colorTarget.nextInChain = &pipelineMSAALoadResolveTextureDesc;
         pipelineMSAALoadResolveTextureDesc.enabled = true;
@@ -461,8 +463,8 @@ sk_sp<DawnGraphicsPipeline> DawnGraphicsPipeline::Make(
              depthStencilSettings.fDepthCompareOp == CompareOp::kAlways);
     wgpu::DepthStencilState depthStencil;
     if (renderPassDesc.fDepthStencilAttachment.fTextureInfo.isValid()) {
-        wgpu::TextureFormat dsFormat = TextureInfos::GetDawnViewFormat(
-                renderPassDesc.fDepthStencilAttachment.fTextureInfo);
+        wgpu::TextureFormat dsFormat = TextureInfoPriv::Get<DawnTextureInfo>(
+                renderPassDesc.fDepthStencilAttachment.fTextureInfo).getViewFormat();
         depthStencil.format =
                 DawnFormatIsDepthOrStencil(dsFormat) ? dsFormat : wgpu::TextureFormat::Undefined;
         if (depthStencilSettings.fDepthTestEnabled) {
@@ -689,11 +691,12 @@ sk_sp<DawnGraphicsPipeline> DawnGraphicsPipeline::Make(
                 wgpu::CallbackMode::WaitAnyOnly,
                 [asyncCreationPtr = asyncCreation.get()](wgpu::CreatePipelineAsyncStatus status,
                                                          wgpu::RenderPipeline pipeline,
-                                                         char const* message) {
+                                                         wgpu::StringView message) {
                     if (status != wgpu::CreatePipelineAsyncStatus::Success) {
-                        SKGPU_LOG_E("Failed to create render pipeline (%d): %s",
+                        SKGPU_LOG_E("Failed to create render pipeline (%d): %.*s",
                                     static_cast<int>(status),
-                                    message);
+                                    static_cast<int>(message.length),
+                                    message.data);
                         // invalidate AsyncPipelineCreation pointer to signal that this pipeline has
                         // failed.
                         asyncCreationPtr->fRenderPipeline = nullptr;

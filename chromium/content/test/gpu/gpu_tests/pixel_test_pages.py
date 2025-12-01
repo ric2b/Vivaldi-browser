@@ -5,15 +5,12 @@
 # This is more akin to a .pyl/JSON file, so it's expected to be long.
 # pylint: disable=too-many-lines
 
-from __future__ import print_function
-
-from datetime import date
+from collections.abc import Callable
 import json
 import logging
 import os
 import posixpath
 import time
-from typing import Callable, Dict, List, Optional
 
 from enum import Enum
 
@@ -57,7 +54,7 @@ GENERAL_MP4_ALGO = algo.SobelMatchingAlgorithm(
 ROUNDING_ERROR_ALGO = algo.FuzzyMatchingAlgorithm(
     max_different_pixels=100000000, pixel_per_channel_delta_threshold=1)
 
-BrowserArgType = List[str]
+BrowserArgType = list[str]
 
 
 class PixelTestPage(sghitb.SkiaGoldHeartbeatTestCase):
@@ -70,16 +67,15 @@ class PixelTestPage(sghitb.SkiaGoldHeartbeatTestCase):
       url: str,
       name: str,
       *args,
-      crop_action: Optional[ca.BaseCropAction] = None,
-      browser_args: Optional[BrowserArgType] = None,
+      crop_action: ca.BaseCropAction | None = None,
+      browser_args: BrowserArgType | None = None,
       restart_browser_after_test: bool = False,
-      other_args: Optional[dict] = None,
-      expected_per_process_crashes: Optional[Dict[str, Dict[str, int]]] = None,
+      other_args: dict | None = None,
+      expected_per_process_crashes: dict[str, dict[str, int]] | None = None,
       timeout: int = 300,
-      should_capture_full_screenshot_func: Optional[Callable[
-          [browser_module.Browser], bool]] = None,
-      requires_fullscreen_os_screenshot_func: Optional[Callable[[],
-                                                                bool]] = None,
+      should_capture_full_screenshot_func: Callable[[browser_module.Browser],
+                                                    bool] | None = None,
+      requires_fullscreen_os_screenshot_func: Callable[[], bool] | None = None,
       **kwargs):
     # Video tests can result in non-hermetic test behavior due to overlays, so
     # do a full refresh after each one. See crbug.com/1484212.
@@ -246,11 +242,12 @@ class TestActionRunLowToHighPowerTest(sghitb.TestAction):
           test_instance: sghitb.SkiaGoldHeartbeatIntegrationTestBase) -> None:
     is_dual_gpu = test_instance.IsDualGPUMacLaptop()
     sghitb.EvalInTestIframe(tab_data.tab,
-                            'initialize(%s)' % json.dumps(is_dual_gpu))
+                            f'initialize({json.dumps(is_dual_gpu)})')
 # pytype: enable=signature-mismatch
 
-def GetMediaStreamTestBrowserArgs(media_stream_source_relpath: str
-                                  ) -> List[str]:
+
+def GetMediaStreamTestBrowserArgs(
+    media_stream_source_relpath: str) -> list[str]:
   return [
       '--use-fake-device-for-media-stream', '--use-fake-ui-for-media-stream',
       '--use-file-for-fake-video-capture=' +
@@ -268,7 +265,7 @@ def CaptureFullScreenshotOnFuchsia(browser: browser_module.Browser) -> bool:
 
 class PixelTestPages():
   @staticmethod
-  def DefaultPages(base_name: str) -> List[PixelTestPage]:
+  def DefaultPages(base_name: str) -> list[PixelTestPage]:
     sw_compositing_args = [cba.DISABLE_GPU_COMPOSITING]
     experimental_hdr_args = [cba.ENABLE_EXPERIMENTAL_WEB_PLATFORM_FEATURES]
 
@@ -570,7 +567,11 @@ class PixelTestPages():
             ]),
         PixelTestPage('pixel_svg_huge.html',
                       base_name + '_SVGHuge',
-                      crop_action=ca.FixedRectCropAction(0, 0, 400, 400)),
+                      crop_action=ca.FixedRectCropAction(0, 0, 400, 400),
+                      matching_algorithm=algo.SobelMatchingAlgorithm(
+                          max_different_pixels=0,
+                          pixel_delta_threshold=0,
+                          edge_threshold=90)),
         PixelTestPage('pixel_webgl_display_p3.html',
                       base_name + '_WebGLDisplayP3',
                       crop_action=standard_crop),
@@ -603,12 +604,11 @@ class PixelTestPages():
             base_name + '_PerspectiveTest',
             crop_action=ca.NonWhiteContentCropAction(
                 initial_crop=ca.FixedRectCropAction(0, 0, 500, 300)),
-            grace_period_end=date(2024, 8, 1),
         ),
     ]
 
   @staticmethod
-  def WebGPUPages(base_name) -> List[PixelTestPage]:
+  def WebGPUPages(base_name) -> list[PixelTestPage]:
 
     class Mode(Enum):
       WEBGPU_DEFAULT = 0
@@ -721,7 +721,7 @@ class PixelTestPages():
             webgpu_pages_helper(base_name, mode=Mode.VULKAN_SWIFTSHADER))
 
   @staticmethod
-  def WebGPUCanvasCapturePages(base_name) -> List[PixelTestPage]:
+  def WebGPUCanvasCapturePages(base_name) -> list[PixelTestPage]:
     webgpu_args = cba.ENABLE_WEBGPU_FOR_TESTING + [
         cba.ENABLE_EXPERIMENTAL_WEB_PLATFORM_FEATURES
     ]
@@ -771,7 +771,7 @@ class PixelTestPages():
 
   # Pages that should be run with GPU rasterization enabled.
   @staticmethod
-  def GpuRasterizationPages(base_name: str) -> List[PixelTestPage]:
+  def GpuRasterizationPages(base_name: str) -> list[PixelTestPage]:
     browser_args = [
         cba.ENABLE_GPU_RASTERIZATION,
         cba.DISABLE_SOFTWARE_COMPOSITING_FALLBACK,
@@ -807,7 +807,7 @@ class PixelTestPages():
 
   # Pages that should be run with off-thread paint worklet flags.
   @staticmethod
-  def PaintWorkletPages(base_name: str) -> List[PixelTestPage]:
+  def PaintWorkletPages(base_name: str) -> list[PixelTestPage]:
     browser_args = [
         '--enable-blink-features=OffMainThreadCSSPaint',
         '--enable-gpu-rasterization'
@@ -823,7 +823,7 @@ class PixelTestPages():
 
   # Pages that should be run with experimental canvas features.
   @staticmethod
-  def ExperimentalCanvasFeaturesPages(base_name: str) -> List[PixelTestPage]:
+  def ExperimentalCanvasFeaturesPages(base_name: str) -> list[PixelTestPage]:
     browser_args = [
         cba.ENABLE_EXPERIMENTAL_WEB_PLATFORM_FEATURES,
     ]
@@ -958,7 +958,7 @@ class PixelTestPages():
     ]
 
   @staticmethod
-  def LowLatencyPages(base_name: str) -> List[PixelTestPage]:
+  def LowLatencyPages(base_name: str) -> list[PixelTestPage]:
     unaccelerated_args = [
         cba.DISABLE_ACCELERATED_2D_CANVAS,
         cba.DISABLE_GPU_COMPOSITING,
@@ -1003,9 +1003,42 @@ class PixelTestPages():
   # Only add these tests on platforms where SwiftShader is enabled.
   # Currently this is Windows and Linux.
   @staticmethod
-  def SwiftShaderPages(base_name: str) -> List[PixelTestPage]:
-    browser_args = [cba.DISABLE_GPU]
+  def SwiftShaderPages(base_name: str) -> list[PixelTestPage]:
+    browser_args = [
+        cba.DISABLE_GPU, '--enable-features=AllowSwiftShaderFallback',
+        '--disable-features=AllowD3D11WarpFallback'
+    ]
     suffix = '_SwiftShader'
+    standard_crop = ca.NonWhiteContentCropAction(
+        initial_crop=ca.FixedRectCropAction(0, 0, 350, 350))
+    return [
+        PixelTestPage('pixel_canvas2d.html',
+                      base_name + '_Canvas2DRedBox' + suffix,
+                      crop_action=standard_crop,
+                      browser_args=browser_args),
+        PixelTestPage('pixel_css3d.html',
+                      base_name + '_CSS3DBlueBox' + suffix,
+                      crop_action=standard_crop,
+                      browser_args=browser_args),
+        PixelTestPage('pixel_webgl_aa_alpha.html',
+                      base_name + '_WebGLGreenTriangle_AA_Alpha' + suffix,
+                      crop_action=standard_crop,
+                      browser_args=browser_args),
+        PixelTestPage('pixel_repeated_webgl_to_2d.html',
+                      base_name + '_RepeatedWebGLTo2D' + suffix,
+                      crop_action=standard_crop,
+                      browser_args=browser_args),
+    ]
+
+  # Only add these tests on platforms where D3D11 WARP is enabled.
+  # Currently this is Windows.
+  @staticmethod
+  def WARPPages(base_name: str) -> list[PixelTestPage]:
+    browser_args = [
+        cba.DISABLE_GPU, '--disable-features=AllowSwiftShaderFallback',
+        '--enable-features=AllowD3D11WarpFallback'
+    ]
+    suffix = '_WARP'
     standard_crop = ca.NonWhiteContentCropAction(
         initial_crop=ca.FixedRectCropAction(0, 0, 350, 350))
     return [
@@ -1029,7 +1062,7 @@ class PixelTestPages():
 
   # Test rendering where GPU process is blocked.
   @staticmethod
-  def NoGpuProcessPages(base_name: str) -> List[PixelTestPage]:
+  def NoGpuProcessPages(base_name: str) -> list[PixelTestPage]:
     browser_args = [cba.DISABLE_GPU, cba.DISABLE_SOFTWARE_RASTERIZER]
     suffix = '_NoGpuProcess'
     standard_crop = ca.NonWhiteContentCropAction(
@@ -1050,7 +1083,7 @@ class PixelTestPages():
   # Pages that should be run with various macOS specific command line
   # arguments.
   @staticmethod
-  def MacSpecificPages(base_name: str) -> List[PixelTestPage]:
+  def MacSpecificPages(base_name: str) -> list[PixelTestPage]:
     unaccelerated_2d_canvas_args = [cba.DISABLE_ACCELERATED_2D_CANVAS]
 
     non_chromium_image_args = ['--disable-webgl-image-chromium']
@@ -1191,7 +1224,7 @@ class PixelTestPages():
   # Pages that should be run only on dual-GPU MacBook Pros (at the
   # present time, anyway).
   @staticmethod
-  def DualGPUMacSpecificPages(base_name: str) -> List[PixelTestPage]:
+  def DualGPUMacSpecificPages(base_name: str) -> list[PixelTestPage]:
 
     low_to_high_power_test_actions = [
         sghitb.TestActionWaitForContinue(SHORT_GLOBAL_TIMEOUT),
@@ -1239,8 +1272,8 @@ class PixelTestPages():
   # pylint: disable=too-many-locals
   @staticmethod
   def DirectCompositionPages(base_name: str,
-                             swap_count: Optional[int] = None
-                             ) -> List[PixelTestPage]:
+                             swap_count: int | None = None
+                             ) -> list[PixelTestPage]:
     browser_args = [
         cba.ENABLE_DIRECT_COMPOSITION_VIDEO_OVERLAYS,
         # All bots are connected with a power source, however, we want to to
@@ -1537,7 +1570,7 @@ class PixelTestPages():
   # pylint: enable=too-many-locals
 
   @staticmethod
-  def VideoFromCanvasPages(base_name: str) -> List[PixelTestPage]:
+  def VideoFromCanvasPages(base_name: str) -> list[PixelTestPage]:
     # Tests for <video> element rendering results of <canvas> capture.
     # It's important for video conference software.
 
@@ -1572,15 +1605,6 @@ class PixelTestPages():
                       browser_args=[],
                       matching_algorithm=match_algo,
                       timeout=timeout),
-
-        # Safeguard against repeating crbug.com/1337101
-        PixelTestPage(
-            'pixel_video_from_canvas_2d_alpha.html',
-            base_name + '_VideoStreamFrom2DAlphaCanvas_DisableOOPRaster',
-            crop_action=standard_crop,
-            browser_args=['--disable-features=CanvasOopRasterization'],
-            matching_algorithm=match_algo,
-            timeout=timeout),
 
         # Safeguard against repeating crbug.com/1371308
         PixelTestPage(
@@ -1617,7 +1641,7 @@ class PixelTestPages():
     ]
 
   @staticmethod
-  def HdrTestPages(base_name: str) -> List[PixelTestPage]:
+  def HdrTestPages(base_name: str) -> list[PixelTestPage]:
     standard_crop = ca.NonWhiteContentCropAction(
         ca.FixedRectCropAction(0, 0, 300, 300))
 
@@ -1634,7 +1658,7 @@ class PixelTestPages():
 
   # This should only be used with the cast_streaming suite.
   @staticmethod
-  def CastStreamingReceiverPages(base_name) -> List[PixelTestPage]:
+  def CastStreamingReceiverPages(base_name) -> list[PixelTestPage]:
     return [
         PixelTestPage(
             'receiver.html',

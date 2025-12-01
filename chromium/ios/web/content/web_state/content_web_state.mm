@@ -23,6 +23,7 @@
 #import "ios/web/find_in_page/java_script_find_in_page_manager_impl.h"
 #import "ios/web/public/favicon/favicon_url.h"
 #import "ios/web/public/navigation/navigation_item.h"
+#import "ios/web/public/navigation/navigation_util.h"
 #import "ios/web/public/navigation/web_state_policy_decider.h"
 #import "ios/web/public/session/crw_navigation_item_storage.h"
 #import "ios/web/public/session/crw_session_storage.h"
@@ -81,9 +82,28 @@ FaviconURL::IconType IconTypeFromContentIconType(
 CRWSessionStorage* CreateSessionStorage(
     WebStateID unique_identifier,
     proto::WebStateMetadataStorage metadata,
-    WebState::WebStateStorageLoader storage_loader) {
-  // Load the data from disk as this is needed to create the CRWSessionStorage.
-  proto::WebStateStorage storage = std::move(storage_loader).Run();
+    WebState::WebStateStorageLoader storage_loader,
+    base::Time creation_time) {
+  // Load the data from disk, as it is required to create the CRWSessionStorage,
+  // or return an empty WebStateStorage if no storage value exists.
+  // As https://crrev.com/c/6377364 changed the way that WebState data is loaded
+  // from WebStateStorageLoader, the following has also been updated based on
+  // WebStateImpl::SerializedData::LoadStorage().
+  auto storage_optional = std::move(storage_loader).Run();
+  GURL page_visible_url = GURL(metadata.active_page().page_url());
+  proto::WebStateStorage storage;
+  if (storage_optional.has_value()) {
+    storage = std::move(storage_optional).value();
+  } else if (page_visible_url.is_valid()) {
+    const std::u16string page_title =
+        base::UTF8ToUTF16(metadata.active_page().page_title());
+    storage = CreateWebStateStorage(
+        NavigationManager::WebLoadParams(page_visible_url), page_title, false,
+        UserAgentType::AUTOMATIC, creation_time);
+  } else {
+    storage = proto::WebStateStorage();
+  }
+
   *storage.mutable_metadata() = std::move(metadata);
 
   return [[CRWSessionStorage alloc] initWithProto:storage
@@ -122,7 +142,12 @@ ContentWebState::ContentWebState(const CreateParams& params,
           params.browser_state);
   navigation_manager_ = std::make_unique<ContentNavigationManager>(
       this, params.browser_state, web_contents_->GetController());
-  web_frames_manager_ = std::make_unique<ContentWebFramesManager>(this);
+  managers_[ContentWorld::kAllContentWorlds] =
+      std::make_unique<ContentWebFramesManager>(this);
+  managers_[ContentWorld::kPageContentWorld] =
+      std::make_unique<ContentWebFramesManager>(this);
+  managers_[ContentWorld::kIsolatedWorld] =
+      std::make_unique<ContentWebFramesManager>(this);
 
   UIScrollView* web_contents_view = base::apple::ObjCCastStrict<UIScrollView>(
       web_contents_->GetNativeView().Get());
@@ -161,7 +186,8 @@ ContentWebState::ContentWebState(BrowserState* browser_state,
     : ContentWebState(CreateParams(browser_state),
                       CreateSessionStorage(unique_identifier,
                                            std::move(metadata),
-                                           std::move(storage_loader)),
+                                           std::move(storage_loader),
+                                           base::Time::Now()),
                       base::ReturnValueOnce<NSData*>(nil)) {}
 
 ContentWebState::~ContentWebState() {
@@ -323,7 +349,7 @@ NavigationManager* ContentWebState::GetNavigationManager() {
 }
 
 WebFramesManager* ContentWebState::GetPageWorldWebFramesManager() {
-  return web_frames_manager_.get();
+  return managers_[ContentWorld::kPageContentWorld].get();
 }
 
 const SessionCertificatePolicyCache*
@@ -449,7 +475,7 @@ std::optional<GURL> ContentWebState::GetLastCommittedURLIfTrusted() const {
 }
 
 WebFramesManager* ContentWebState::GetWebFramesManager(ContentWorld world) {
-  return web_frames_manager_.get();
+  return managers_[world].get();
 }
 
 CRWWebViewProxyType ContentWebState::GetWebViewProxy() const {

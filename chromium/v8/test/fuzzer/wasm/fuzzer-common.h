@@ -38,11 +38,23 @@ CompileTimeImports CompileTimeImportsForFuzzing();
 // {module_object} is instantiated, its "main" function is executed, and the
 // result is compared against the reference execution. If non-determinism was
 // detected during the reference execution, the result is allowed to differ.
-void ExecuteAgainstReference(Isolate* isolate,
-                             Handle<WasmModuleObject> module_object,
-                             int32_t max_executed_instructions);
+#ifndef V8_ENABLE_DRUMBRAKE
+// Returns 0 or -1, see {WasmExecutionFuzzer::FuzzWasmModule}.
+V8_WARN_UNUSED_RESULT int ExecuteAgainstReference(
+    Isolate* isolate, DirectHandle<WasmModuleObject> module_object,
+    int32_t max_executed_instructions);
+#else   // V8_ENABLE_DRUMBRAKE
+// It turns `--wasm-jitless` flag on for the second execution when
+// `is_wasm_jitless` is set.
+int ExecuteAgainstReference(Isolate* isolate,
+                            DirectHandle<WasmModuleObject> module_object,
+                            int32_t max_executed_instructions,
+                            bool is_wasm_jitless = false);
 
-Handle<WasmModuleObject> CompileReferenceModule(
+void ClearJsToWasmWrappersForTesting(Isolate* isolate);
+#endif  // V8_ENABLE_DRUMBRAKE
+
+DirectHandle<WasmModuleObject> CompileReferenceModule(
     Isolate* isolate, base::Vector<const uint8_t> wire_bytes,
     int32_t* max_steps);
 
@@ -72,8 +84,15 @@ constexpr int kMaxFuzzerInputSize = 512;
 class WasmExecutionFuzzer {
  public:
   virtual ~WasmExecutionFuzzer() = default;
-  void FuzzWasmModule(base::Vector<const uint8_t> data,
-                      bool require_valid = false);
+
+  // The main entry point: Generate a module from the data, using
+  // `GenerateModule` defined below. Returns `-1` if the test case is not
+  // interesting for fuzzing; otherwise returns `0`.
+  // This should be returned to libfuzzer to indicate that the test case should
+  // not be added to the corpus (see
+  // https://llvm.org/docs/LibFuzzer.html#rejecting-unwanted-inputs).
+  V8_WARN_UNUSED_RESULT int FuzzWasmModule(base::Vector<const uint8_t> data,
+                                           bool require_valid = false);
 
   virtual size_t max_input_size() const { return kMaxFuzzerInputSize; }
 

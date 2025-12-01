@@ -13,4 +13,6 @@ public interface SpeculativeLoadingConfigBoundaryInterface {
     int getMaxPrefetches();
 
     int getPrefetchTTLSeconds();
+
+    int getMaxPrerenders();
 }

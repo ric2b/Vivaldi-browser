@@ -183,7 +183,7 @@ class CC_EXPORT SchedulerStateMachine {
   // Indicates that the system has entered and left a BeginImplFrame callback.
   // The scheduler will not draw more than once in a given BeginImplFrame
   // callback nor send more than one BeginMainFrame message.
-  void OnBeginImplFrame(const viz::BeginFrameId& frame_id, bool animate_only);
+  void OnBeginImplFrame(const viz::BeginFrameArgs& args);
   // Indicates that the scheduler has entered the draw phase. The scheduler
   // will not draw more than once in a single draw phase.
   // TODO(sunnyps): Rename OnBeginImplFrameDeadline to OnDraw or similar.
@@ -207,12 +207,12 @@ class CC_EXPORT SchedulerStateMachine {
 
   bool IsDrawThrottled() const;
 
-  // Throttles main frame production to a given interval, but not compositor
-  // frames.
-  void SetThrottleMainFrames(base::TimeDelta interval);
-  base::TimeDelta main_frame_throttled_interval() const {
-    return main_frame_throttled_interval_;
-  }
+  // May throttle main frame updates, but not compositor frames.
+  void FrameIntervalUpdated(base::TimeDelta frame_interval);
+
+  // Returns the main frame throttle interval computed based on the
+  // static throttle feature and the renderer settings.
+  base::TimeDelta MainFrameThrottledInterval() const;
 
   // Indicates whether the LayerTreeHostImpl is visible.
   void SetVisible(bool visible);
@@ -387,6 +387,8 @@ class CC_EXPORT SchedulerStateMachine {
     waiting_for_scroll_event_ = waiting_for_scroll_event;
   }
 
+  void SetShouldThrottleFrameRate(bool flag);
+
  protected:
   bool BeginFrameRequiredForAction() const;
   bool BeginFrameNeededForVideo() const;
@@ -417,6 +419,7 @@ class CC_EXPORT SchedulerStateMachine {
   bool ShouldDraw() const;
   bool ShouldActivateSyncTree() const;
   bool ShouldSendBeginMainFrame() const;
+  bool ShouldThrottleSendBeginMainFrame() const;
   bool ShouldCommit() const;
   bool ShouldRunPostCommit() const;
   bool ShouldPrepareTiles() const;
@@ -427,9 +430,6 @@ class CC_EXPORT SchedulerStateMachine {
   void WillDrawInternal();
   void WillPerformImplSideInvalidationInternal();
   void DidDrawInternal(DrawResult draw_result);
-
-  // Virtual for testing.
-  virtual base::TimeTicks Now() const;
 
   const SchedulerSettings settings_;
 
@@ -454,8 +454,10 @@ class CC_EXPORT SchedulerStateMachine {
   int last_frame_number_begin_main_frame_sent_ = -1;
   int last_frame_number_invalidate_layer_tree_frame_sink_performed_ = -1;
 
+  base::TimeTicks last_begin_impl_frame_time_;
   base::TimeTicks last_sent_begin_main_frame_time_;
   base::TimeDelta main_frame_throttled_interval_;
+  base::TimeDelta unthrottled_frame_interval_;
 
   // Inputs from the last impl frame that are required for decisions made in
   // this impl frame. The values from the last frame are cached before being
@@ -549,6 +551,8 @@ class CC_EXPORT SchedulerStateMachine {
   // expecting some. Once `is_scrolling_` is false, we are no longer expecting
   // scroll events to arrive.
   bool waiting_for_scroll_event_ = false;
+
+  bool throttle_frame_rate_ = false;
 };
 
 }  // namespace cc

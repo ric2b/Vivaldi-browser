@@ -16,15 +16,19 @@
 
 #ifndef SRC_TRACE_PROCESSOR_UTIL_SQL_ARGUMENT_H_
 #define SRC_TRACE_PROCESSOR_UTIL_SQL_ARGUMENT_H_
-#include <optional>
 
+#include <optional>
+#include <string>
+#include <utility>
+#include <vector>
+
+#include "perfetto/base/logging.h"
 #include "perfetto/base/status.h"
+#include "perfetto/ext/base/string_view.h"
 #include "perfetto/trace_processor/basic_types.h"
 #include "src/trace_processor/containers/null_term_string_view.h"
 
-namespace perfetto {
-namespace trace_processor {
-namespace sql_argument {
+namespace perfetto::trace_processor::sql_argument {
 
 // Possible types which can be specified in SQL.
 // This differs from SqlValue::Type by allowing specifying richer
@@ -107,8 +111,6 @@ base::Status ParseArgumentDefinitions(const std::string& args,
 // Serialises the given argument list into a string.
 std::string SerializeArguments(const std::vector<ArgumentDefinition>& args);
 
-}  // namespace sql_argument
-}  // namespace trace_processor
-}  // namespace perfetto
+}  // namespace perfetto::trace_processor::sql_argument
 
 #endif  // SRC_TRACE_PROCESSOR_UTIL_SQL_ARGUMENT_H_

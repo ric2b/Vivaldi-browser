@@ -63,6 +63,7 @@ source_set("extraparts") {
     "//vivaldi/ui",
     "//vivaldi/components/direct_match:browser",
     "//vivaldi/components/omnibox:browser",
+    "//vivaldi/vivaldi_status:browser",
   ]
   if (!is_android) {
     deps += [

@@ -48,10 +48,17 @@ constexpr std::string_view kIppVersionsSupported = "ipp-versions-supported";
 constexpr std::string_view kIppFeaturesSupported = "ipp-features-supported";
 constexpr std::string_view kDocumentFormatSupported =
     "document-format-supported";
+constexpr std::string_view kDocumentFormatPreferred =
+    "document-format-preferred";
+constexpr std::string_view kDocumentFormatDefault = "document-format-default";
 constexpr std::string_view kOauthAuthorizationServerUri =
     "oauth-authorization-server-uri";
 constexpr std::string_view kOauthAuthorizationScope =
     "oauth-authorization-scope";
+constexpr std::string_view kUrfSupported = "urf-supported";
+constexpr std::string_view kPdfVersions = "pdf-versions";
+constexpr std::string_view kMopriaCertified = "mopria-certified";
+constexpr std::string_view kPrinterKind = "printer-kind";
 
 // job attributes
 constexpr char kJobUri[] = "job-uri";
@@ -130,11 +137,14 @@ constexpr int kHttpConnectTimeoutMs = 1000;
 constexpr std::array<const char* const, 3> kPrinterAttributes{
     {kPrinterState, kPrinterStateReasons, kPrinterStateMessage}};
 
-constexpr std::array<const char* const, 9> kPrinterInfoAndStatus{
+constexpr std::array<const char* const, 15> kPrinterInfoAndStatus{
     {kPrinterMakeAndModel.data(), kIppVersionsSupported.data(),
      kIppFeaturesSupported.data(), kDocumentFormatSupported.data(),
      kPrinterState, kPrinterStateReasons, kPrinterStateMessage,
-     kOauthAuthorizationServerUri.data(), kOauthAuthorizationScope.data()}};
+     kOauthAuthorizationServerUri.data(), kOauthAuthorizationScope.data(),
+     kDocumentFormatPreferred.data(), kDocumentFormatDefault.data(),
+     kUrfSupported.data(), kPdfVersions.data(), kMopriaCertified.data(),
+     kPrinterKind.data()}};
 
 // Converts an IPP attribute `attr` to the appropriate JobState enum.
 CupsJob::JobState ToJobState(ipp_attribute_t* attr) {
@@ -354,6 +364,7 @@ bool ParsePrinterInfo(ipp_t* response, PrinterInfo* printer_info) {
     } else if (name == kIppFeaturesSupported) {
       std::vector<std::string> features;
       ParseCollection(attr, &features);
+      printer_info->ipp_features = features;
       printer_info->ipp_everywhere = base::Contains(features, kIppEverywhere);
     } else if (name == kDocumentFormatSupported) {
       ParseCollection(attr, &printer_info->document_formats);
@@ -382,6 +393,42 @@ bool ParsePrinterInfo(ipp_t* response, PrinterInfo* printer_info) {
         oauth_error = true;
         LOG(WARNING) << "Cannot parse oauth-authorization-scope.";
       }
+    } else if (name == kDocumentFormatPreferred) {
+      int tag = ippGetValueTag(attr);
+      if (tag != IPP_TAG_TEXT && tag != IPP_TAG_TEXTLANG) {
+        LOG(WARNING) << "document-format-preferred value tag is " << tag << ".";
+      }
+      const char* document_format_preferred_string =
+          ippGetString(attr, 0, nullptr);
+      if (document_format_preferred_string) {
+        printer_info->document_format_preferred =
+            document_format_preferred_string;
+      }
+    } else if (name == kDocumentFormatDefault) {
+      int tag = ippGetValueTag(attr);
+      if (tag != IPP_TAG_TEXT && tag != IPP_TAG_TEXTLANG) {
+        LOG(WARNING) << "document-format-default value tag is " << tag << ".";
+      }
+      const char* document_format_default_string =
+          ippGetString(attr, 0, nullptr);
+      if (document_format_default_string) {
+        printer_info->document_format_default = document_format_default_string;
+      }
+    } else if (name == kUrfSupported) {
+      ParseCollection(attr, &printer_info->urf_supported);
+    } else if (name == kPdfVersions) {
+      ParseCollection(attr, &printer_info->pdf_versions);
+    } else if (name == kMopriaCertified) {
+      int tag = ippGetValueTag(attr);
+      if (tag != IPP_TAG_TEXT && tag != IPP_TAG_TEXTLANG) {
+        LOG(WARNING) << "mopria-certified value tag is " << tag << ".";
+      }
+      const char* mopria_certified_string = ippGetString(attr, 0, nullptr);
+      if (mopria_certified_string) {
+        printer_info->mopria_certified = mopria_certified_string;
+      }
+    } else if (name == kPrinterKind) {
+      ParseCollection(attr, &printer_info->printer_kind);
     }
   }
 
@@ -423,6 +470,8 @@ bool CupsJob::ContainsStateReason(CupsJob::JobStateReason reason) const {
 }
 
 PrinterInfo::PrinterInfo() = default;
+
+PrinterInfo::PrinterInfo(const PrinterInfo& other) = default;
 
 PrinterInfo::~PrinterInfo() = default;
 
@@ -551,7 +600,7 @@ PrinterQueryResult GetPrinterInfo(const std::string& address,
     return PrinterQueryResult::kUnreachable;
   }
 
-  // TODO(crbug.com/821497): Use a library to canonicalize the URL.
+  // TODO(crbug.com/172213155): Use a library to canonicalize the URL.
   size_t first_non_slash = resource.find_first_not_of('/');
   const std::string path = (first_non_slash == std::string::npos)
                                ? ""

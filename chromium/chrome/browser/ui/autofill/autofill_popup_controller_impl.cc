@@ -23,7 +23,6 @@
 #include "base/task/sequenced_task_runner.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
-#include "chrome/browser/accessibility/accessibility_state_utils.h"
 #include "chrome/browser/ui/autofill/autofill_popup_view.h"
 #include "chrome/browser/ui/autofill/autofill_suggestion_controller_utils.h"
 #include "chrome/browser/ui/autofill/next_idle_barrier.h"
@@ -43,6 +42,7 @@
 #include "components/compose/core/browser/config.h"
 #include "components/input/native_web_keyboard_event.h"
 #include "components/strings/grit/components_strings.h"
+#include "content/public/browser/browser_accessibility_state.h"
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/render_widget_host_view.h"
@@ -51,6 +51,7 @@
 #include "ui/accessibility/ax_tree_id.h"
 #include "ui/accessibility/ax_tree_manager_map.h"
 #include "ui/accessibility/platform/ax_platform_node.h"
+#include "ui/accessibility/platform/ax_platform_node_delegate.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/events/event.h"
 #include "ui/gfx/canvas.h"
@@ -170,6 +171,10 @@ void AutofillPopupControllerImpl::Show(
       !suggestions.empty() && IsStandaloneSuggestionType(suggestions[0].type)
           ? GetFillingProductFromSuggestionType(suggestions[0].type)
           : FillingProduct::kNone;
+  if (!suggestions.empty() &&
+      suggestions[0].type == SuggestionType::kDatalistEntry) {
+    AutofillMetrics::LogDataListSuggestionsShown();
+  }
   // Autofill popups should only be shown in focused windows because on Windows
   // the popup may overlap the focused window (see crbug.com/1239760).
   if (auto* rwhv = web_contents_->GetRenderWidgetHostView();
@@ -518,6 +523,7 @@ bool AutofillPopupControllerImpl::RemoveSuggestion(
     case FillingProduct::kNone:
     case FillingProduct::kMerchantPromoCode:
     case FillingProduct::kIban:
+    case FillingProduct::kLoyaltyCard:
     case FillingProduct::kPassword:
     case FillingProduct::kCompose:
     case FillingProduct::kPlusAddresses:
@@ -626,7 +632,11 @@ int AutofillPopupControllerImpl::GetPopupLevel() const {
 }
 
 void AutofillPopupControllerImpl::FireControlsChangedEvent(bool is_show) {
-  if (!accessibility_state_utils::IsScreenReaderEnabled()) {
+  if (!content::BrowserAccessibilityState::GetInstance()
+           ->GetAccessibilityMode()
+           .has_mode(ui::AXMode::kExtendedProperties)) {
+    // Skip this additional tree processing unless the overall AXMode for the
+    // browser process contains the flag for extended properties.
     return;
   }
 

@@ -223,13 +223,13 @@ angle::Result Texture::Make2DMSTexture(ContextMtl *context,
 {
     ANGLE_MTL_OBJC_SCOPE
     {
-        AutoObjCPtr<MTLTextureDescriptor *> desc = adoptObjCObj([MTLTextureDescriptor new]);
-        desc.get().textureType                   = MTLTextureType2DMultisample;
-        desc.get().pixelFormat                   = format.metalFormat;
-        desc.get().width                         = width;
-        desc.get().height                        = height;
-        desc.get().mipmapLevelCount              = 1;
-        desc.get().sampleCount                   = samples;
+        angle::ObjCPtr<MTLTextureDescriptor> desc = angle::adoptObjCPtr([MTLTextureDescriptor new]);
+        desc.get().textureType                    = MTLTextureType2DMultisample;
+        desc.get().pixelFormat                    = format.metalFormat;
+        desc.get().width                          = width;
+        desc.get().height                         = height;
+        desc.get().mipmapLevelCount               = 1;
+        desc.get().sampleCount                    = samples;
 
         return MakeTexture(context, format, desc, 1, renderTargetOnly, allowFormatView, refOut);
     }  // ANGLE_MTL_OBJC_SCOPE
@@ -477,8 +477,7 @@ Texture::Texture(ContextMtl *context,
         }
 
         set(metalDevice.newTextureWithDescriptor(desc));
-
-        mCreationDesc.retainAssign(desc);
+        mCreationDesc = std::move(desc);
     }
 }
 
@@ -525,7 +524,7 @@ Texture::Texture(Texture *original, MTLPixelFormat pixelFormat)
 {
     ANGLE_MTL_OBJC_SCOPE
     {
-        set(adoptObjCObj([original->get() newTextureViewWithPixelFormat:pixelFormat]));
+        set(angle::adoptObjCPtr([original->get() newTextureViewWithPixelFormat:pixelFormat]));
         // Texture views consume no additional memory
         mEstimatedByteSize = 0;
     }
@@ -541,10 +540,10 @@ Texture::Texture(Texture *original,
 {
     ANGLE_MTL_OBJC_SCOPE
     {
-        set(adoptObjCObj([original->get() newTextureViewWithPixelFormat:pixelFormat
-                                                            textureType:textureType
-                                                                 levels:levels
-                                                                 slices:slices]));
+        set(angle::adoptObjCPtr([original->get() newTextureViewWithPixelFormat:pixelFormat
+                                                                   textureType:textureType
+                                                                        levels:levels
+                                                                        slices:slices]));
         // Texture views consume no additional memory
         mEstimatedByteSize = 0;
     }
@@ -561,11 +560,11 @@ Texture::Texture(Texture *original,
 {
     ANGLE_MTL_OBJC_SCOPE
     {
-        set(adoptObjCObj([original->get() newTextureViewWithPixelFormat:pixelFormat
-                                                            textureType:textureType
-                                                                 levels:levels
-                                                                 slices:slices
-                                                                swizzle:swizzle]));
+        set(angle::adoptObjCPtr([original->get() newTextureViewWithPixelFormat:pixelFormat
+                                                                   textureType:textureType
+                                                                        levels:levels
+                                                                        slices:slices
+                                                                       swizzle:swizzle]));
 
         // Texture views consume no additional memory
         mEstimatedByteSize = 0;
@@ -879,8 +878,8 @@ angle::Result Texture::resize(ContextMtl *context, uint32_t width, uint32_t heig
 
     ANGLE_MTL_OBJC_SCOPE
     {
-        AutoObjCPtr<MTLTextureDescriptor *> newDesc =
-            adoptObjCObj<MTLTextureDescriptor>([mCreationDesc.get() copy]);
+        angle::ObjCPtr<MTLTextureDescriptor> newDesc =
+            angle::adoptObjCPtr([mCreationDesc.get() copy]);
         newDesc.get().width           = width;
         newDesc.get().height          = height;
         auto newTexture               = context->getMetalDevice().newTextureWithDescriptor(newDesc);
@@ -930,16 +929,17 @@ TextureRef Texture::getReadableCopy(ContextMtl *context,
         // Create a texture that big enough to store the first level data and any smaller level
         ANGLE_MTL_OBJC_SCOPE
         {
-            AutoObjCPtr<MTLTextureDescriptor *> desc = adoptObjCObj([MTLTextureDescriptor new]);
-            desc.get().textureType                   = get().textureType;
-            desc.get().pixelFormat                   = get().pixelFormat;
-            desc.get().width                         = firstLevelSize.width;
-            desc.get().height                        = firstLevelSize.height;
-            desc.get().depth                         = 1;
-            desc.get().arrayLength                   = 1;
-            desc.get().resourceOptions               = MTLResourceStorageModePrivate;
-            desc.get().sampleCount                   = get().sampleCount;
-            desc.get().usage = MTLTextureUsageShaderRead | MTLTextureUsagePixelFormatView;
+            angle::ObjCPtr<MTLTextureDescriptor> desc =
+                angle::adoptObjCPtr([MTLTextureDescriptor new]);
+            desc.get().textureType     = get().textureType;
+            desc.get().pixelFormat     = get().pixelFormat;
+            desc.get().width           = firstLevelSize.width;
+            desc.get().height          = firstLevelSize.height;
+            desc.get().depth           = 1;
+            desc.get().arrayLength     = 1;
+            desc.get().resourceOptions = MTLResourceStorageModePrivate;
+            desc.get().sampleCount     = get().sampleCount;
+            desc.get().usage           = MTLTextureUsageShaderRead | MTLTextureUsagePixelFormatView;
             mReadCopy.reset(new Texture(context->getMetalDevice().newTextureWithDescriptor(desc)));
         }  // ANGLE_MTL_OBJC_SCOPE
     }
@@ -1119,7 +1119,7 @@ angle::Result Buffer::reset(ContextMtl *context,
                             const uint8_t *data)
 {
     auto options = resourceOptionsForStorageMode(storageMode);
-    set([&]() -> AutoObjCPtr<id<MTLBuffer>> {
+    set([&]() -> angle::ObjCPtr<id<MTLBuffer>> {
         const mtl::ContextDevice &metalDevice = context->getMetalDevice();
         if (size > [metalDevice maxBufferLength])
         {
@@ -1147,9 +1147,11 @@ const uint8_t *Buffer::mapReadOnly(ContextMtl *context)
     return mapWithOpt(context, true, false);
 }
 
-uint8_t *Buffer::map(ContextMtl *context)
+uint8_t *Buffer::map(ContextMtl *context, size_t offset)
 {
-    return mapWithOpt(context, false, false);
+    ASSERT(offset < size());
+    uint8_t *result = mapWithOpt(context, false, false);
+    return result != nullptr ? result + offset : nullptr;
 }
 
 uint8_t *Buffer::mapWithOpt(ContextMtl *context, bool readonly, bool noSync)

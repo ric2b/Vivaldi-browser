@@ -8,6 +8,7 @@
 #include <stdint.h>
 
 #include <memory>
+#include <optional>
 #include <unordered_set>
 
 #include "base/containers/flat_map.h"
@@ -29,6 +30,7 @@
 #include "cc/trees/layer_tree_host_client.h"
 #include "cc/trees/layer_tree_host_single_thread_client.h"
 #include "cc/trees/paint_holding_reason.h"
+#include "cc/trees/property_tree.h"
 #include "components/viz/common/frame_sinks/begin_frame_args.h"
 #include "components/viz/common/surfaces/frame_sink_id.h"
 #include "components/viz/common/surfaces/subtree_capture_id.h"
@@ -80,10 +82,6 @@ class Rect;
 class Size;
 }  // namespace gfx
 
-namespace gpu {
-class GpuMemoryBufferManager;
-}  // namespace gpu
-
 namespace viz {
 namespace mojom {
 class DisplayPrivate;
@@ -102,7 +100,6 @@ class ScopedAnimationDurationScaleMode;
 class ScrollInputHandler;
 class CompositorMetricsTracker;
 class CompositorPropertyTreeDelegate;
-struct PendingBeginFrameArgs;
 
 constexpr int kCompositorLockTimeoutMs = 67;
 
@@ -126,9 +123,6 @@ class COMPOSITOR_EXPORT ContextFactory {
   // Destroys per-compositor data.
   virtual void RemoveCompositor(Compositor* compositor) = 0;
 
-  // Gets the GPU memory buffer manager.
-  virtual gpu::GpuMemoryBufferManager* GetGpuMemoryBufferManager() = 0;
-
   // Gets the task graph runner.
   virtual cc::TaskGraphRunner* GetTaskGraphRunner() = 0;
 
@@ -140,6 +134,17 @@ class COMPOSITOR_EXPORT ContextFactory {
 
   // Gets the frame sink manager host instance.
   virtual viz::HostFrameSinkManager* GetHostFrameSinkManager() = 0;
+};
+
+// Factory object to create a ExternalBeginFrameControllerClient on demand.
+class COMPOSITOR_EXPORT ExternalBeginFrameControllerClientFactory {
+ public:
+  virtual ~ExternalBeginFrameControllerClientFactory() = default;
+
+  // Create a new client.
+  virtual mojo::PendingAssociatedRemote<
+      viz::mojom::ExternalBeginFrameControllerClient>
+  CreateExternalBeginFrameControllerClient() = 0;
 };
 
 // Compositor object to take care of GPU painting.
@@ -271,10 +276,6 @@ class COMPOSITOR_EXPORT Compositor : public base::PowerSuspendObserver,
     host_->SetLocalSurfaceIdFromParent(local_surface_id_from_parent);
   }
 
-  void SetExternalPageScaleFactor(float scale) {
-    host_->SetExternalPageScaleFactor(scale, false);
-  }
-
   // Returns the size of the widget that is being drawn to in pixel coordinates.
   const gfx::Size& size() const { return size_; }
 
@@ -374,10 +375,14 @@ class COMPOSITOR_EXPORT Compositor : public base::PowerSuspendObserver,
   void RequestSuccessfulPresentationTimeForNextFrame(
       SuccessfulPresentationTimeCallback callback);
 
+#if BUILDFLAG(IS_IOS)
+  void IssueExternalBeginFrameNoAck(const viz::BeginFrameArgs& args);
+#else
   void IssueExternalBeginFrame(
       const viz::BeginFrameArgs& args,
       bool force,
       base::OnceCallback<void(const viz::BeginFrameAck&)> callback);
+#endif
 
   // Creates a CompositorMetricsTracker for tracking this Compositor.
   CompositorMetricsTracker RequestNewCompositorMetricsTracker();
@@ -544,6 +549,22 @@ class COMPOSITOR_EXPORT Compositor : public base::PowerSuspendObserver,
     return property_tree_delegate_.get();
   }
 
+  ExternalBeginFrameControllerClientFactory*
+  external_begin_frame_controler_client_factory() {
+    return external_begin_frame_controler_client_factory_.get();
+  }
+
+  void SetExternalBeginFrameControllerClientFactory(
+      ExternalBeginFrameControllerClientFactory* factory) {
+    external_begin_frame_controler_client_factory_ = factory;
+  }
+
+  // TODO(crbug.com/389771428) - Right now the local property tree is
+  // an incomplete thing that only partially matches the one the LayerTreeHost
+  // actually uses. Eventually we want to make it completely match and then
+  // switch the LayerTreeHost to using it directly.
+  void CheckPropertyTrees() const;
+
  private:
   friend class base::RefCounted<Compositor>;
   friend class TotalAnimationThroughputReporter;
@@ -582,8 +603,27 @@ class COMPOSITOR_EXPORT Compositor : public base::PowerSuspendObserver,
   mojo::AssociatedRemote<viz::mojom::DisplayPrivate> display_private_;
   mojo::AssociatedRemote<viz::mojom::ExternalBeginFrameController>
       external_begin_frame_controller_;
+  raw_ptr<ExternalBeginFrameControllerClientFactory>
+      external_begin_frame_controler_client_factory_;
 
-  std::unique_ptr<PendingBeginFrameArgs> pending_begin_frame_args_;
+  // Used to hold on to IssueExternalBeginFrame(NoAck) arguments if
+  // |external_begin_frame_controller_| isn't ready yet.
+#if BUILDFLAG(IS_IOS)
+  using PendingBeginFrameArgs = viz::BeginFrameArgs;
+#else
+  struct PendingBeginFrameArgs {
+    PendingBeginFrameArgs(
+        const viz::BeginFrameArgs& args,
+        bool force,
+        base::OnceCallback<void(const viz::BeginFrameAck&)> callback);
+    ~PendingBeginFrameArgs();
+
+    const viz::BeginFrameArgs args;
+    const bool force;
+    base::OnceCallback<void(const viz::BeginFrameAck&)> callback;
+  };
+#endif
+  std::optional<PendingBeginFrameArgs> pending_begin_frame_args_;
 
   ui::HostBeginFrameObserver::SimpleBeginFrameObserverList
       simple_begin_frame_observers_;
@@ -697,6 +737,7 @@ class COMPOSITOR_EXPORT Compositor : public base::PowerSuspendObserver,
   // go back to using the cc::Compositor's default logic for that mode.
   bool uses_layer_lists_ = false;
   std::unique_ptr<CompositorPropertyTreeDelegate> property_tree_delegate_;
+  std::optional<cc::PropertyTrees> property_trees_;
 
   base::WeakPtrFactory<Compositor> context_creation_weak_ptr_factory_{this};
   base::WeakPtrFactory<Compositor> weak_ptr_factory_{this};

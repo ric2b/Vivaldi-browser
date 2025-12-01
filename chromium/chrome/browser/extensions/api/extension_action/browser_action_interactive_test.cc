@@ -23,6 +23,7 @@
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/extensions/extension_action_test_helper.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
+#include "chrome/browser/ui/toolbar/toolbar_action_view_controller.h"
 #include "chrome/browser/ui/toolbar/toolbar_actions_model.h"
 #include "chrome/browser/ui/views/extensions/extensions_toolbar_container.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
@@ -226,7 +227,7 @@ class BrowserActionInteractiveTest : public ExtensionApiTest {
   bool HasPopupNativeView() {
     ToolbarActionViewController* popup_owner =
         extensions_container()->popup_owner_for_testing();
-    return popup_owner ? popup_owner->GetPopupNativeView() != nullptr : false;
+    return popup_owner ? !!popup_owner->GetPopupNativeView() : false;
   }
 
   // Trigger a focus loss to close the popup.

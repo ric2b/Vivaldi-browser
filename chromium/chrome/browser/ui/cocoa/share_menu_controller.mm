@@ -11,15 +11,18 @@
 #include "base/memory/weak_ptr.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/run_loop.h"
+#include "base/strings/escape.h"
 #include "base/strings/sys_string_conversions.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/global_keyboard_shortcuts_mac.h"
+#include "chrome/browser/platform_util.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_window.h"
 #import "chrome/browser/ui/cocoa/accelerators_cocoa.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
+#include "chrome/common/chrome_features.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/omnibox/browser/location_bar_model.h"
 #include "net/base/apple/url_conversions.h"
@@ -28,6 +31,7 @@
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/image/image.h"
 #include "ui/gfx/mac/coordinate_conversion.h"
+#include "ui/gfx/native_widget_types.h"
 #include "ui/snapshot/snapshot.h"
 #include "ui/views/view.h"
 
@@ -112,7 +116,21 @@ bool CanShare() {
   // to fetch sharing services that can handle the NSURL type.
   NSArray* services = [NSSharingService
       sharingServicesForItems:@[ [NSURL URLWithString:@"https://google.com"] ]];
+  bool directMail =
+      base::FeatureList::IsEnabled(features::kMacDirectEmailShare);
+  if (directMail) {
+    NSMenuItem* email = [[NSMenuItem alloc]
+        initWithTitle:l10n_util::GetNSString(IDS_EMAIL_LINK_MAC)
+               action:@selector(emailLink:)
+        keyEquivalent:[self keyEquivalentForMail]];
+    email.target = self;
+    [menu addItem:email];
+  }
   for (NSSharingService* service in services) {
+    if (directMail &&
+        [service.name isEqualToString:NSSharingServiceNameComposeEmail]) {
+      continue;
+    }
     // Don't include "Add to Reading List".
     if ([service.name
             isEqualToString:NSSharingServiceNameAddToSafariReadingList]) {
@@ -205,7 +223,7 @@ bool CanShare() {
 
   gfx::Rect rectInWidget =
       browserView->ConvertRectToWidget(contentsView->bounds());
-  ui::GrabWindowSnapshot(_windowForShare, rectInWidget,
+  ui::GrabWindowSnapshot(gfx::NativeWindow(_windowForShare), rectInWidget,
                          base::BindOnce(
                              [](ShareMenuController* controller,
                                 base::OnceClosure closure, gfx::Image image) {
@@ -269,6 +287,23 @@ bool CanShare() {
       base::mac::SystemSettingsPane::kPrivacySecurity_Extensions_Sharing);
 }
 
+- (void)emailLink:(id)sender {
+  CHECK(CanShare());
+  Browser* browser = chrome::FindLastActive();
+  CHECK(browser);
+
+  content::WebContents* contents =
+      browser->tab_strip_model()->GetActiveWebContents();
+  CHECK(contents);
+  std::string title = base::EscapeQueryParamValue(
+      base::UTF16ToUTF8(contents->GetTitle()), false);
+  std::string pageUrl = base::EscapeQueryParamValue(
+      contents->GetLastCommittedURL().spec(), false);
+  std::string mailto =
+      std::string("mailto:?subject=%20") + title + "&body=%0A%0A" + pageUrl;
+  platform_util::OpenExternal(GURL(mailto));
+}
+
 // Returns the image to be used for the "More..." menu item, or nil on macOS
 // version where this private method is unsupported.
 - (NSImage*)moreImage {
@@ -289,6 +324,22 @@ bool CanShare() {
   NSMenuItem* item = [[NSMenuItem alloc] initWithTitle:title
                                                 action:@selector(performShare:)
                                          keyEquivalent:keyEquivalent];
+
+  if (vivaldi::IsVivaldiRunning() && isMail &&
+      ![keyEquivalent isEqualToString:@""]) {
+    // VB-107999 User configurable shortcut for share Email Link menuitem.
+    // This controller does not check the modifier mask on the accelerator, so
+    // we must add that, otherwise NSMenuItem will assume only meta key is used.
+    ui::Accelerator accelerator;
+    bool found = GetDefaultMacAcceleratorForCommandId(IDC_EMAIL_PAGE_LOCATION,
+                                                      &accelerator);
+    if (found) {
+      KeyEquivalentAndModifierMask* equivalent =
+          GetKeyEquivalentAndModifierMaskFromAccelerator(accelerator);
+      item.keyEquivalentModifierMask = equivalent.modifierMask;
+    }
+  }  // End Vivaldi
+
   item.target = self;
   item.image = service.image;
   item.representedObject = service;
@@ -299,6 +350,13 @@ bool CanShare() {
   ui::Accelerator accelerator;
   bool found = GetDefaultMacAcceleratorForCommandId(IDC_EMAIL_PAGE_LOCATION,
                                                     &accelerator);
+
+  // Vivaldi
+  if (!found) {
+    // VB-107999 Vivaldi allows overriding this shortcut, including removing it
+    return @"";
+  } // End Vivaldi
+
   DCHECK(found);
   return GetKeyEquivalentAndModifierMaskFromAccelerator(accelerator)
       .keyEquivalent;

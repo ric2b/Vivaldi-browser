@@ -32,9 +32,10 @@
 #include "chrome/browser/ui/startup/startup_browser_creator.h"
 #include "chrome/browser/ui/tab_modal_confirm_dialog_browsertest.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
-#include "chrome/browser/ui/ui_features.h"
 #include "chrome/browser/ui/views/side_panel/side_panel_ui.h"
 #include "chrome/test/base/in_process_browser_test.h"
+#include "chrome/test/base/test_browser_window.h"
+#include "chrome/test/base/testing_profile_manager.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/commerce/core/commerce_feature_list.h"
 #include "components/search_engines/template_url_service.h"
@@ -61,6 +62,14 @@
 #if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_WIN)
 #include "chrome/common/chrome_features.h"
 #endif  // BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_WIN)
+
+#if BUILDFLAG(ENABLE_GLIC)
+#include "chrome/browser/glic/glic_keyed_service_factory.h"
+#include "chrome/browser/glic/glic_pref_names.h"
+#include "chrome/common/chrome_switches.h"
+#include "chrome/common/pref_names.h"
+#include "components/prefs/pref_service.h"
+#endif
 
 namespace chrome {
 
@@ -121,22 +130,8 @@ class BrowserCommandControllerBrowserTestRefreshOnly
   }
 };
 // Test case for actions behind Toolbar Pinning.
-class BrowserCommandControllerBrowserTestToolbarPinningOnly
-    : public BrowserCommandControllerBrowserTestRefreshOnly {
- public:
-  BrowserCommandControllerBrowserTestToolbarPinningOnly() {
-    scoped_feature_list_.InitWithFeatures({features::kToolbarPinning}, {});
-  }
-  BrowserCommandControllerBrowserTestToolbarPinningOnly(
-      const BrowserCommandControllerBrowserTestToolbarPinningOnly&) = delete;
-  BrowserCommandControllerBrowserTestToolbarPinningOnly& operator=(
-      const BrowserCommandControllerBrowserTestToolbarPinningOnly&) = delete;
-
-  ~BrowserCommandControllerBrowserTestToolbarPinningOnly() override = default;
-
- private:
-  base::test::ScopedFeatureList scoped_feature_list_;
-};
+using BrowserCommandControllerBrowserTestToolbarPinningOnly =
+    BrowserCommandControllerBrowserTestRefreshOnly;
 
 // Verify that showing a constrained window disables find.
 IN_PROC_BROWSER_TEST_F(BrowserCommandControllerBrowserTest, DisableFind) {
@@ -249,6 +244,9 @@ class BrowserCommandControllerBrowserTestLockedFullscreen
     browser()->command_controller()->FullscreenStateChanged();
     browser()->command_controller()->PrintingStateChanged();
     browser()->command_controller()->ExtensionStateChanged();
+    browser()->command_controller()->FindBarVisibilityChanged();
+    browser()->command_controller()->UpdateReloadStopState(/*is_loading=*/true,
+                                                           /*force=*/false);
   }
 
   void ExitLockedFullscreen() {
@@ -315,9 +313,11 @@ IN_PROC_BROWSER_TEST_F(BrowserCommandControllerBrowserTestLockedFullscreen,
       IDC_CUT, IDC_COPY, IDC_PASTE,
       // Page navigation commands.
       IDC_BACK, IDC_FORWARD, IDC_RELOAD, IDC_RELOAD_BYPASSING_CACHE,
-      IDC_RELOAD_CLEARING_CACHE,
+      IDC_RELOAD_CLEARING_CACHE, IDC_STOP,
       // Tab navigation commands.
-      IDC_SELECT_NEXT_TAB, IDC_SELECT_PREVIOUS_TAB};
+      IDC_SELECT_NEXT_TAB, IDC_SELECT_PREVIOUS_TAB,
+      // Find content commands.
+      IDC_FIND, IDC_FIND_NEXT, IDC_FIND_PREVIOUS, IDC_CLOSE_FIND_OR_STOP};
 
   // Go through all the command ids and ensure only allowlisted commands are
   // enabled.
@@ -461,10 +461,6 @@ IN_PROC_BROWSER_TEST_F(BrowserCommandControllerBrowserTestRefreshOnly,
                        ExecuteShowCustomizeChrome) {
   content::WebContents* web_contents =
       browser()->tab_strip_model()->GetActiveWebContents();
-  if (!features::IsToolbarPinningEnabled()) {
-    ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(),
-                                             GURL("chrome://new-tab-page/")));
-  }
   content::WaitForLoadStop(web_contents);
   EXPECT_TRUE(
       chrome::ExecuteCommand(browser(), IDC_SHOW_CUSTOMIZE_CHROME_SIDE_PANEL));
@@ -478,10 +474,6 @@ IN_PROC_BROWSER_TEST_F(BrowserCommandControllerBrowserTestRefreshOnly,
                        ExecuteShowCustomizeChromeToolbar) {
   content::WebContents* web_contents =
       browser()->tab_strip_model()->GetActiveWebContents();
-  if (!features::IsToolbarPinningEnabled()) {
-    ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(),
-                                             GURL("chrome://new-tab-page/")));
-  }
   content::WaitForLoadStop(web_contents);
   EXPECT_TRUE(
       chrome::ExecuteCommand(browser(), IDC_SHOW_CUSTOMIZE_CHROME_TOOLBAR));
@@ -660,5 +652,102 @@ IN_PROC_BROWSER_TEST_F(BrowserCommandControllerBrowserTestCompare,
   EXPECT_FALSE(browser()->command_controller()->IsCommandEnabled(
       IDC_ADD_TO_COMPARISON_TABLE_MENU));
 }
+
+#if BUILDFLAG(ENABLE_GLIC)
+class BrowserCommandControllerBrowserTestGlic
+    : public BrowserCommandControllerBrowserTest {
+ public:
+  void SetUp() override {
+    scoped_feature_list_.InitWithFeatures(
+        {features::kGlic, features::kTabstripComboButton}, {});
+    BrowserCommandControllerBrowserTest::SetUp();
+  }
+
+  void SetUpCommandLine(base::CommandLine* command_line) override {
+    // Bypass glic eligibility check.
+    base::CommandLine::ForCurrentProcess()->AppendSwitch(::switches::kGlicDev);
+  }
+
+ private:
+  base::test::ScopedFeatureList scoped_feature_list_;
+};
+
+IN_PROC_BROWSER_TEST_F(BrowserCommandControllerBrowserTestGlic,
+                       ExecuteGlicTogglePin) {
+  PrefService* profile_prefs = browser()->profile()->GetPrefs();
+  profile_prefs->SetBoolean(glic::prefs::kGlicPinnedToTabstrip, false);
+
+  EXPECT_TRUE(chrome::ExecuteCommand(browser(), IDC_GLIC_TOGGLE_PIN));
+  EXPECT_TRUE(profile_prefs->GetBoolean(glic::prefs::kGlicPinnedToTabstrip));
+
+  EXPECT_TRUE(chrome::ExecuteCommand(browser(), IDC_GLIC_TOGGLE_PIN));
+  EXPECT_FALSE(profile_prefs->GetBoolean(glic::prefs::kGlicPinnedToTabstrip));
+}
+
+IN_PROC_BROWSER_TEST_F(BrowserCommandControllerBrowserTestGlic,
+                       EnabledInRegularProfile) {
+  ASSERT_TRUE(browser()->profile()->IsRegularProfile());
+  EXPECT_TRUE(chrome::IsCommandEnabled(browser(), IDC_GLIC_TOGGLE_PIN));
+}
+
+IN_PROC_BROWSER_TEST_F(BrowserCommandControllerBrowserTestGlic,
+                       DisabledInIncognitoProfile) {
+  // Set up a profile with an off the record profile.
+  std::unique_ptr<TestingProfile> profile = TestingProfile::Builder().Build();
+  Profile* incognito_profile =
+      profile->GetPrimaryOTRProfile(/*create_if_needed=*/true);
+  ASSERT_EQ(incognito_profile->GetOriginalProfile(), profile.get());
+  ASSERT_TRUE(incognito_profile->IsIncognitoProfile());
+
+  // Create a new browser based on the off the record profile.
+  Browser::CreateParams profile_params(incognito_profile, true);
+  std::unique_ptr<Browser> incognito_browser =
+      CreateBrowserWithTestWindowForParams(profile_params);
+
+  EXPECT_FALSE(
+      chrome::IsCommandEnabled(incognito_browser.get(), IDC_GLIC_TOGGLE_PIN));
+}
+
+IN_PROC_BROWSER_TEST_F(BrowserCommandControllerBrowserTestGlic,
+                       DisabledInGuestProfile) {
+  // Set up a guest profile.
+  std::unique_ptr<TestingProfile> profile = TestingProfile::Builder().Build();
+  profile->SetGuestSession(true);
+  Profile* guest_profile =
+      profile->GetPrimaryOTRProfile(/*create_if_needed=*/true);
+  ASSERT_TRUE(guest_profile->IsGuestSession());
+
+  // Create a new browser based on the off the record profile.
+  Browser::CreateParams profile_params(guest_profile, true);
+  std::unique_ptr<Browser> guest_browser =
+      CreateBrowserWithTestWindowForParams(profile_params);
+
+  EXPECT_FALSE(
+      chrome::IsCommandEnabled(guest_browser.get(), IDC_GLIC_TOGGLE_PIN));
+}
+
+IN_PROC_BROWSER_TEST_F(BrowserCommandControllerBrowserTestGlic,
+                       ThreeDotMenuItemEnabledInRegularProfile) {
+  ASSERT_TRUE(browser()->profile()->IsRegularProfile());
+  EXPECT_TRUE(chrome::IsCommandEnabled(browser(), IDC_OPEN_GLIC));
+}
+
+IN_PROC_BROWSER_TEST_F(BrowserCommandControllerBrowserTestGlic,
+                       ExecuteGlicThreeDotMenuItem) {
+  // Bypass glic eligibility check.
+  PrefService* profile_prefs = browser()->profile()->GetPrefs();
+  profile_prefs->SetInteger(
+      ::prefs::kGeminiSettings,
+      static_cast<int>(glic::prefs::SettingsPolicyState::kEnabled));
+  // Bypass fre.
+  profile_prefs->SetInteger(glic::prefs::kGlicCompletedFre,
+                            static_cast<int>(glic::prefs::FreStatus::kCompleted));
+
+  EXPECT_TRUE(chrome::ExecuteCommand(browser(), IDC_OPEN_GLIC));
+  ASSERT_TRUE(
+      glic::GlicKeyedServiceFactory::GetGlicKeyedService(browser()->profile())
+          ->IsWindowShowing());
+}
+#endif
 
 }  // namespace chrome

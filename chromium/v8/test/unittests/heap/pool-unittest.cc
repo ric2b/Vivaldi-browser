@@ -9,6 +9,7 @@
 #include "src/execution/isolate.h"
 #include "src/heap/heap-inl.h"
 #include "src/heap/memory-allocator.h"
+#include "src/heap/page-pool.h"
 #include "src/heap/spaces-inl.h"
 #include "src/utils/ostreams.h"
 #include "test/unittests/test-utils.h"
@@ -334,11 +335,13 @@ class PoolTest : public                                     //
              SetPlatformPageAllocatorForTesting(old_page_allocator_));
     delete tracking_page_allocator_;
     tracking_page_allocator_ = nullptr;
+
+    IsolateGroup::InitializeOncePerProcess();
   }
 
   Heap* heap() { return isolate()->heap(); }
   MemoryAllocator* allocator() { return heap()->memory_allocator(); }
-  MemoryAllocator::Pool* pool() { return allocator()->pool(); }
+  PagePool* pool() { return allocator()->pool(); }
 
   TrackingPageAllocator* tracking_page_allocator() {
     return tracking_page_allocator_;
@@ -378,7 +381,7 @@ TEST_F(PoolTest, UnmapOnTeardown) {
   allocator()->Free(MemoryAllocator::FreeMode::kPool, page);
   tracking_page_allocator()->CheckPagePermissions(chunk_address, page_size,
                                                   PageAllocator::kReadWrite);
-  pool()->ReleasePooledChunks();
+  pool()->ReleaseImmediately(i_isolate());
 #ifdef V8_COMPRESS_POINTERS
   // In this mode Isolate uses bounded page allocator which allocates pages
   // inside prereserved region. Thus these pages are kept reserved until

@@ -41,7 +41,6 @@
 #include "content/public/browser/service_process_info.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/common/content_features.h"
-#include "content/public/common/user_agent.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/content_browser_test_utils.h"
@@ -649,7 +648,7 @@ IN_PROC_BROWSER_TEST_F(
               /*warnings=*/{net::CookieInclusionStatus::WarningReason::
                                 WARN_PORT_MISMATCH}),
           net::CookieAccessSemantics::NONLEGACY,
-          net::CookieScopeSemantics::UNKNOWN, true)};
+          net::CookieScopeSemantics::NONLEGACY, true)};
   EXPECT_THAT(cookie_tracker.cookie_accesses(),
               testing::ElementsAre(
                   // a.test/title1.html
@@ -678,7 +677,7 @@ IN_PROC_BROWSER_TEST_F(
       net::CookieAccessResult(net::CookieEffectiveSameSite::NO_RESTRICTION,
                               expected_third_party_inclusion_status,
                               net::CookieAccessSemantics::NONLEGACY,
-                              net::CookieScopeSemantics::UNKNOWN, true)};
+                              net::CookieScopeSemantics::NONLEGACY, true)};
   EXPECT_THAT(cookie_tracker.cookie_accesses(),
               testing::ElementsAre(
                   // a.test iframe under b.test

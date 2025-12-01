@@ -6,7 +6,6 @@
 
 #include "base/time/time.h"
 #include "build/build_config.h"
-#include "build/chromeos_buildflags.h"
 #include "chrome/common/pref_names.h"
 #include "components/enterprise/browser/reporting/common_pref_names.h"
 #include "components/pref_registry/pref_registry_syncable.h"
@@ -45,6 +44,8 @@ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
   // reporting for now. This might need to be changed in the future.
   registry->RegisterTimeDeltaPref(kCloudReportingUploadFrequency,
                                   kDefaultReportFrequency);
+  registry->RegisterBooleanPref(kUserSecuritySignalsReporting, false);
+  registry->RegisterBooleanPref(kUserSecurityAuthenticatedReporting, false);
 #if BUILDFLAG(ENABLE_EXTENSIONS)
   registry->RegisterBooleanPref(prefs::kCloudExtensionRequestEnabled, false);
   registry->RegisterDictionaryPref(prefs::kCloudExtensionRequestIds);

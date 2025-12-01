@@ -21,6 +21,9 @@
           &gt;
           <ph name="PROXIES_TITLE" />
           ayarlarında "proksi yoxdur" və ya "birbaşa", seçimlərinin təyin olunduğuna əmin olun</translation>
+<translation id="4949828774841497663">Tətbiqlər &gt; Sistem Ayarları &gt; Şəbəkə bölməsinə keçin,
+          aktiv şəbəkəni keçin, Təfərrüatlar... düyməsinə vurun və seçilmiş ola biləcək bütün proksilərin
+          seçimini ləğv edin.</translation>
 <translation id="5248344925342018662">Siz təhlükəsiz Vivaldi səhifəsinə baxırsınız</translation>
 <translation id="6690242244468452299">Əgər xəta hesabatı göndərişi aktiv edilərsə bu səhifə ən son xətalar haqqında məlumatları göstərir.</translation>
 <translation id="7023871570427738255">İrəli,
@@ -32,7 +35,4 @@
           Əgər bu problemi həll etmədisə, səhifənin daha tez yüklənə bilməsi
           üçün bu seçimi bərpa edin.</translation>
 <translation id="7496505986576158197">Vivaldi, <ph name="BEGIN_LINK_CHROMIUM" />Chromium<ph name="END_LINK_CHROMIUM" /> açıq qaynaq layihəsi və başqa <ph name="BEGIN_LINK_OSS" />açıq qaynaqlı proqram təminatı<ph name="END_LINK_OSS" /> əsasında yaradılb.</translation>
-<translation id="8187289872471304532">silinİrəli,
-          Tətbiqlər &gt; Sistem ayarları &gt; Şəbəkə &gt; Əlavələr &gt; Proksilər
-          üzrə hərəkət edərək proksilərin önündəki işarələri silin.</translation>
 </translationbundle>

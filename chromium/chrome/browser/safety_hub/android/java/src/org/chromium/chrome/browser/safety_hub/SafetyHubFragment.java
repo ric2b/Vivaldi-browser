@@ -24,6 +24,7 @@ import org.chromium.base.supplier.ObservableSupplierImpl;
 import org.chromium.base.task.PostTask;
 import org.chromium.base.task.TaskTraits;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
+import org.chromium.chrome.browser.password_manager.PasswordStoreBridge;
 import org.chromium.chrome.browser.safety_hub.SafetyHubMetricUtils.DashboardInteractions;
 import org.chromium.chrome.browser.safety_hub.SafetyHubMetricUtils.DashboardModuleType;
 import org.chromium.chrome.browser.safety_hub.SafetyHubMetricUtils.LifecycleEvent;
@@ -45,6 +46,7 @@ import java.util.List;
 public class SafetyHubFragment extends SafetyHubBaseFragment
         implements SafetyHubModuleMediatorDelegate {
     private static final String PREF_PASSWORDS = "passwords_account";
+    private static final String PREF_LOCAL_PASSWORDS = "passwords_local";
     private static final String PREF_UPDATE = "update_check";
     private static final String PREF_UNUSED_PERMISSIONS = "permissions";
     private static final String PREF_NOTIFICATIONS_REVIEW = "notifications_review";
@@ -123,15 +125,20 @@ public class SafetyHubFragment extends SafetyHubBaseFragment
                         findPreference(PREF_NOTIFICATIONS_REVIEW),
                         this,
                         NotificationPermissionReviewBridge.getForProfile(getProfile()));
-        SafetyHubAccountPasswordsModuleMediator accountPasswordsModuleMediator =
-                new SafetyHubAccountPasswordsModuleMediator(
-                        findPreference(PREF_PASSWORDS),
-                        this,
+
+        SafetyHubAccountPasswordsDataSource accountPasswordsDataSource =
+                new SafetyHubAccountPasswordsDataSource(
                         mDelegate,
                         UserPrefs.get(getProfile()),
                         safetyHubFetchService,
                         IdentityServicesProvider.get().getSigninManager(getProfile()),
                         getProfile());
+        SafetyHubAccountPasswordsModuleMediator accountPasswordsModuleMediator =
+                new SafetyHubAccountPasswordsModuleMediator(
+                        findPreference(PREF_PASSWORDS),
+                        accountPasswordsDataSource,
+                        /* mediatorDelegate= */ this,
+                        mDelegate);
 
         mModuleMediators =
                 new ArrayList<SafetyHubModuleMediator>(
@@ -142,17 +149,30 @@ public class SafetyHubFragment extends SafetyHubBaseFragment
                                 notificationsModuleMediator,
                                 accountPasswordsModuleMediator));
 
-        for (SafetyHubModuleMediator moduleMediator : mModuleMediators) {
-            moduleMediator.setUpModule();
+        if (ChromeFeatureList.isEnabled(ChromeFeatureList.SAFETY_HUB_LOCAL_PASSWORDS_MODULE)) {
+            SafetyHubLocalPasswordsDataSource localPasswordsDataSource =
+                    new SafetyHubLocalPasswordsDataSource(
+                            mDelegate,
+                            UserPrefs.get(getProfile()),
+                            safetyHubFetchService,
+                            new PasswordStoreBridge(getProfile()));
+            SafetyHubLocalPasswordsModuleMediator localPasswordsModuleMediator =
+                    new SafetyHubLocalPasswordsModuleMediator(
+                            findPreference(PREF_LOCAL_PASSWORDS),
+                            localPasswordsDataSource,
+                            /* mediatorDelegate= */ this,
+                            mDelegate);
+            mModuleMediators.add(localPasswordsModuleMediator);
         }
 
         mBrowserStateModuleMediator =
                 new SafetyHubBrowserStateModuleMediator(
                         findPreference(PREF_BROWSER_STATE_INDICATOR), mModuleMediators);
-
-        // `mBrowserStateModuleMediator` needs to be set up after all the other modules, as it
-        // depends on them.
         mBrowserStateModuleMediator.setUpModule();
+
+        for (SafetyHubModuleMediator moduleMediator : mModuleMediators) {
+            moduleMediator.setUpModule();
+        }
     }
 
     private void setUpSafetyTipsModule() {
@@ -239,9 +259,14 @@ public class SafetyHubFragment extends SafetyHubBaseFragment
         updateAllModules();
 
         for (SafetyHubModuleMediator moduleMediator : mModuleMediators) {
+            // Fetch the passwords again to get the latest result.
             if (moduleMediator.getOption() == ModuleOption.ACCOUNT_PASSWORDS) {
-                // Fetch the passwords again to get the latest result.
                 ((SafetyHubAccountPasswordsModuleMediator) moduleMediator)
+                        .triggerNewCredentialFetch();
+                break;
+            }
+            if (moduleMediator.getOption() == ModuleOption.LOCAL_PASSWORDS) {
+                ((SafetyHubLocalPasswordsModuleMediator) moduleMediator)
                         .triggerNewCredentialFetch();
                 break;
             }
@@ -273,16 +298,15 @@ public class SafetyHubFragment extends SafetyHubBaseFragment
             moduleMediator.updateModule();
         }
 
-        // `mBrowserStateModuleMediator` needs to be updated after all the other modules, as it
-        // depends on them.
-        mBrowserStateModuleMediator.updateModule();
-
         onUpdateNeeded();
     }
 
     @Override
     public void onUpdateNeeded() {
+        // `mBrowserStateModuleMediator` needs to be updated after all the other modules change, as
+        // it depends on them.
         mBrowserStateModuleMediator.updateModule();
+
         updateAllModulesExpandState();
     }
 

@@ -17,8 +17,13 @@
 #include <openssl/bn.h>
 #include <openssl/err.h>
 
+#include "../bn/internal.h"
 #include "internal.h"
 
+
+static_assert(OPENSSL_DH_MAX_MODULUS_BITS <=
+                  BN_MONTGOMERY_MAX_WORDS * BN_BITS2,
+              "Max DH size too big for Montgomery arithmetic");
 
 int dh_check_params_fast(const DH *dh) {
   // Most operations scale with p and q.

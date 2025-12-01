@@ -18,6 +18,7 @@ use crate::parser::mp4box::*;
 use crate::*;
 
 use std::collections::BTreeMap;
+use std::num::NonZero;
 
 #[derive(Debug, Default)]
 pub struct Item {
@@ -94,8 +95,8 @@ impl Item {
     fn validate_derived_image_dimensions(
         width: u32,
         height: u32,
-        size_limit: u32,
-        dimension_limit: u32,
+        size_limit: Option<NonZero<u32>>,
+        dimension_limit: Option<NonZero<u32>>,
     ) -> AvifResult<()> {
         if width == 0 || height == 0 || !check_limits(width, height, size_limit, dimension_limit) {
             return Err(AvifError::InvalidImageGrid(
@@ -110,8 +111,8 @@ impl Item {
         io: &mut GenericIO,
         grid: &mut Grid,
         overlay: &mut Overlay,
-        size_limit: u32,
-        dimension_limit: u32,
+        size_limit: Option<NonZero<u32>>,
+        dimension_limit: Option<NonZero<u32>>,
     ) -> AvifResult<()> {
         match self.item_type.as_str() {
             "grid" => {
@@ -220,8 +221,8 @@ impl Item {
     pub(crate) fn harvest_ispe(
         &mut self,
         alpha_ispe_required: bool,
-        size_limit: u32,
-        dimension_limit: u32,
+        size_limit: Option<NonZero<u32>>,
+        dimension_limit: Option<NonZero<u32>>,
     ) -> AvifResult<()> {
         if self.should_skip() {
             return Ok(());
@@ -325,9 +326,8 @@ impl Item {
     }
 
     pub(crate) fn is_auxiliary_alpha(&self) -> bool {
-        matches!(find_property!(self.properties, AuxiliaryType),
-                 Some(aux_type) if aux_type == "urn:mpeg:mpegB:cicp:systems:auxiliary:alpha" ||
-                                   aux_type == "urn:mpeg:hevc:2015:auxid:1")
+        matches!(find_property!(&self.properties, AuxiliaryType),
+                 Some(aux_type) if is_auxiliary_type_alpha(aux_type))
     }
 
     pub(crate) fn is_image_codec_item(&self) -> bool {

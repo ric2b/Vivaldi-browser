@@ -27,7 +27,6 @@
 
 #include "src/tint/lang/glsl/writer/raise/bitcast_polyfill.h"
 
-#include <string>
 #include <tuple>
 
 #include "src/tint/lang/core/fluent_types.h"  // IWYU pragma: export

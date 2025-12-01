@@ -34,7 +34,7 @@ BASE_FEATURE(kApiPermissionsHostAccessRequests,
 
 BASE_FEATURE(kApiUserScriptsExecute,
              "ApiUserScriptsExecute",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 BASE_FEATURE(kApiUserScriptsMultipleWorlds,
              "ApiUserScriptsMultipleWorlds",
@@ -44,9 +44,9 @@ BASE_FEATURE(kApiOdfsConfigPrivate,
              "ApiOdfsConfigPrivate",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
-BASE_FEATURE(kApiEnterpriseReportingPrivateReportDataMaskingEvent,
-             "ApiEnterpriseReportingPrivateReportDataMaskingEvent",
-             base::FEATURE_ENABLED_BY_DEFAULT);
+BASE_FEATURE(kApiEnterpriseReportingPrivateOnDataMaskingRulesTriggered,
+             "ApiEnterpriseReportingPrivateOnDataMaskingRulesTriggered",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
 ///////////////////////////////////////////////////////////////////////////////
 // Other Features
@@ -70,10 +70,6 @@ BASE_FEATURE(kExtensionDisableUnsupportedDeveloper,
              "ExtensionDisableUnsupportedDeveloper",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
-BASE_FEATURE(kExtensionDynamicURLRedirection,
-             "ExtensionDynamicURLRedirection",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
 BASE_FEATURE(kExtensionIconVariants,
              "ExtensionIconVariants",
              base::FEATURE_DISABLED_BY_DEFAULT);
@@ -92,7 +88,7 @@ BASE_FEATURE(kExtensionManifestV2ExceptionList,
 
 BASE_FEATURE(kExtensionManifestV2Disabled,
              "ExtensionManifestV2Disabled",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 const base::FeatureParam<std::string> kExtensionManifestV2ExceptionListParam(
     &kExtensionManifestV2ExceptionList,
@@ -107,8 +103,8 @@ BASE_FEATURE(kExtensionSourceUrlEnforcement,
              "ExtensionSourceUrlEnforcement",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
-BASE_FEATURE(kExtensionWebFileHandlers,
-             "ExtensionWebFileHandlers",
+BASE_FEATURE(kExtensionWARForRedirect,
+             "ExtensionWARForRedirect",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
 BASE_FEATURE(kExtensionsManifestV3Only,
@@ -156,9 +152,18 @@ BASE_FEATURE(kTelemetryExtensionPendingApprovalApi,
              "TelemetryExtensionPendingApprovalApi",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
-BASE_FEATURE(kNewWebstoreURL,
-             "NewWebstoreURL",
+// TODO(crbug.com/399447642): Clean up this feature after confirming the fix is
+// sufficient.
+BASE_FEATURE(kWebstoreInstallerUserGestureKillSwitch,
+             "WebstoreInstallerUserGestureKillSwitch",
              base::FEATURE_ENABLED_BY_DEFAULT);
+
+#if BUILDFLAG(IS_WIN)
+// TODO(https://crbug.com/400119351): Remove this feature flag in M138.
+BASE_FEATURE(kWinRejectDotSpaceSuffixFilePaths,
+             "WinRejectDotSpaceSuffixFilePaths",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+#endif
 
 BASE_FEATURE(kDeclarativeNetRequestSafeRuleLimits,
              "DeclarativeNetRequestSafeDynamicRules",
@@ -174,10 +179,6 @@ BASE_FEATURE(kDeclarativeNetRequestResponseHeaderMatching,
 
 BASE_FEATURE(kIncludeJSCallStackInExtensionApiRequest,
              "IncludeJSCallStackInExtensionApiRequest",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
-BASE_FEATURE(kUseItemSnippetsAPI,
-             "UseItemSnippetsAPI",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
 BASE_FEATURE(kUseNewServiceWorkerTaskQueue,
@@ -198,6 +199,14 @@ BASE_FEATURE(kRemoveCoreSiteInstance,
 
 BASE_FEATURE(kUserScriptUserExtensionToggle,
              "UserScriptUserExtensionToggle",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+BASE_FEATURE(kDebuggerAPIRestrictedToDevMode,
+             "DebuggerAPIRestrictedToDevMode",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+BASE_FEATURE(kExtensionBrowserNamespaceAlternative,
+             "ExtensionBrowserNamespaceAlternative",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 }  // namespace extensions_features

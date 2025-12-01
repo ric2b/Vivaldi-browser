@@ -50,15 +50,15 @@ class BookmarkNode;
 - (void)willChangeBookmarkNode:(const bookmarks::BookmarkNode*)bookmarkNode;
 // Called when the model is being deleted.
 - (void)bookmarkModelBeingDeleted;
+// Invoked before an extensive set of model changes is about to begin.
+- (void)extensiveBookmarkChangesBeginning;
+// Called after an extensive set of model changes has ended.
+- (void)extensiveBookmarkChangesEnded;
 
 // Vivaldi
 // Bookmark metadata is changed, i.e. Vivaldi specific Description, Nickname &
 // Speed dial status
 - (void)bookmarkMetaInfoChanged:(const bookmarks::BookmarkNode*)bookmarkNode;
-// Extensive changes in Bookmark is starting.This happens at the time of sync.
-- (void)extensiveBookmarkChangesBeginning;
-// Extensive changes in Bookmark is ended.
-- (void)extensiveBookmarkChangesEnded;
 // End Vivaldi
 
 @end
@@ -100,11 +100,11 @@ class BookmarkModelBridge : public bookmarks::BookmarkModelObserver {
   void OnWillRemoveAllUserBookmarks(const base::Location& location) override;
   void BookmarkAllUserNodesRemoved(const std::set<GURL>& removed_urls,
                                    const base::Location& location) override;
+  void ExtensiveBookmarkChangesBeginning() override;
+  void ExtensiveBookmarkChangesEnded() override;
 
   // Vivaldi
   void BookmarkMetaInfoChanged(const bookmarks::BookmarkNode* node) override;
-  void ExtensiveBookmarkChangesBeginning() override;
-  void ExtensiveBookmarkChangesEnded() override;
   // End Vivaldi
 
   __weak id<BookmarkModelBridgeObserver> observer_;

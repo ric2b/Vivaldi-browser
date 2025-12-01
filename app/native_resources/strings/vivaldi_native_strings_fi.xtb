@@ -37,6 +37,7 @@
 <translation id="2441056087170876076">Hirviö 2</translation>
 <translation id="2444387452209867610">Lisää muistiinpano</translation>
 <translation id="2486841023299517366">Eläin 4</translation>
+<translation id="2501278716633472235">Palaa takaisin</translation>
 <translation id="2612127540243995147">Valmis asennukseen. Vivaldi suljetaan ja käynnistetään uudelleen.</translation>
 <translation id="2613387515621326337">Näytä päivityssivusto</translation>
 <translation id="2645477450146475243">Valitettavasti Opera-selaimesi asetukset eivät ole käytettävissä sen ollessa avoinna. Tuodaksesi ne Vivaldiin, tallenna tilanteesi ja sulje kaikki Arcin ikkunat, ja paina lopuksi "Jatka".</translation>
@@ -61,6 +62,7 @@
 <translation id="3259769196742189631">Validoi</translation>
 <translation id="3291915639428159043">Automaattitoisto estetty</translation>
 <translation id="3302905971452834934">Hirviö 1</translation>
+<translation id="3308738399950580893">mainokset</translation>
 <translation id="3334610655141903168">(ei otsikkoa)</translation>
 <translation id="3372505110412186107">Vivaldi <ph name="VERSION" /> on uusin saatavilla oleva versio.</translation>
 <translation id="3383198080133834965">Versiosi on ajan tasalla!</translation>
@@ -83,6 +85,7 @@
 <translation id="3795800845758778870">Braven asetuksia ei valitettavasti voi lukea selaimen ollessa käynnissä. Tuodaksesi asetukset Vivaldiin tallenna työsi, sulje kaikki Brave-ikkunat ja napsauta sitten Jatka.</translation>
 <translation id="3822431842304177896">Uusi erotin</translation>
 <translation id="3832132597516774400">Maisema 5</translation>
+<translation id="3894751534882749287">Jos haluat tästä huolimatta avata sivun, voit vaihtaa seurantasuojauksen tasoa seurantaeston ponnahduksesta tai painaa Salli-painiketta</translation>
 <translation id="3914946330804881301">Tuotu Operasta</translation>
 <translation id="3921292902397893431">Hirviö 8</translation>
 <translation id="3943857333388298514">Liitä</translation>
@@ -107,6 +110,7 @@ Haluatko varmasti jatkaa tietojen menetyksestä huolimatta?</translation>
 <translation id="4582480609585453144">Avaa linkki uuteen taustavälilehteen</translation>
 <translation id="4636708767492582204">Lähetä sähköpostitse</translation>
 <translation id="4677434526832593569">Eläin 8</translation>
+<translation id="4736016046474602958">Seurantaesto</translation>
 <translation id="474217410105706308">Vaimenna välilehti</translation>
 <translation id="4861715717329665002">Automaattisesti tallennetut istunnot</translation>
 <translation id="4881695831933465202">Avaa</translation>
@@ -152,6 +156,7 @@ Haluatko varmasti jatkaa tietojen menetyksestä huolimatta?</translation>
 <translation id="7086554968911045110">Maisema 7</translation>
 <translation id="7099506190679014195">Salatun avaintaltion päivitys</translation>
 <translation id="7111492742514999492">Maisema 9</translation>
+<translation id="7113310725918019676">Salli <ph name="BLOCKED_TYPE" /> verkkotunnukselta <ph name="DOMAIN" /></translation>
 <translation id="7208252576848052204">Valitettavasti Arc-selaimesi asetukset eivät ole käytettävissä sen ollessa avoinna. Tuodaksesi ne Vivaldiin, tallenna tilanteesi ja sulje kaikki Arcin ikkunat, ja paina lopuksi "Jatka".</translation>
 <translation id="7321500017121629018">Aktiivinen eilen</translation>
 <translation id="7337881442233988129">Chromium</translation>
@@ -167,9 +172,9 @@ Haluatko varmasti jatkaa tietojen menetyksestä huolimatta?</translation>
 <translation id="8027581147000338959">Avaa uuteen ikkunaan</translation>
 <translation id="8044382196220116469">Älä salli sivustojen toistaa videoita automaattisesti</translation>
 <translation id="8099620695029051217">Kopioi sivun osoite</translation>
+<translation id="8119307142152921512">seurannat ja mainokset</translation>
 <translation id="8197810018650377191">Lisää sivu kirjanmerkkeihin</translation>
 <translation id="8261506727792406068">Poista</translation>
-<translation id="8263047843452521549">Tarkastele taustapalveluprosessia</translation>
 <translation id="8331671104904436324">Avaa taustavälilehdellä</translation>
 <translation id="8373293945112511707">Maisema 1</translation>
 <translation id="8388552048012645975">Ladataan päivitystä…</translation>
@@ -183,7 +188,6 @@ Haluatko varmasti jatkaa tietojen menetyksestä huolimatta?</translation>
 <translation id="8651348004684669199">Lisää aktiivinen välilehti</translation>
 <translation id="8669345741879513971">Hirviö 10</translation>
 <translation id="867544375504146191">Yandex</translation>
-<translation id="8689295374912158752">Tarkastele portaalitiedostoa</translation>
 <translation id="875142999698251063">Sulje nyt</translation>
 <translation id="8768970203213061953">Maisema 14</translation>
 <translation id="8773635261052182196">Et saa enää näitä ilmoituksia. Voit ottaa ne uudelleen käyttöön Vivaldin asetuksista.</translation>
@@ -191,6 +195,7 @@ Haluatko varmasti jatkaa tietojen menetyksestä huolimatta?</translation>
 <translation id="8813277370772331957">Muistuta myöhemmin</translation>
 <translation id="8894900864683381599">Lisää linkki verkkopaneeliin</translation>
 <translation id="8912720443398351457">Haluatko varmasti sulkea Vivaldin?</translation>
+<translation id="8940028675168378100"><ph name="BLOCKER_NAME" /> estänyt</translation>
 <translation id="8947109330183116400">Valitse HTML-kirjanmerkkitiedosto</translation>
 <translation id="9017566390391482291">Valitse Vivaldin profiilikansio tuomista varten</translation>
 <translation id="9048058608784130603">Odottava päivitys <ph name="VERSION" /></translation>
@@ -201,6 +206,7 @@ Haluatko varmasti jatkaa tietojen menetyksestä huolimatta?</translation>
 <translation id="912022491595344261">Avaa kuva käyttäjänä <ph name="USER" /></translation>
 <translation id="9157539936604258187">Avaa linkki</translation>
 <translation id="9169060351863393881">Opera 12.x</translation>
+<translation id="9180553614777056266">Mainosesto</translation>
 <translation id="939305735877869636">Brave</translation>
 <translation id="970294721402795299">Maisema 16</translation>
 </translationbundle>

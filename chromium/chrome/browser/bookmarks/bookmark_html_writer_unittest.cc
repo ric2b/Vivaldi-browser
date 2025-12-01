@@ -42,9 +42,10 @@
 #include "components/favicon/core/favicon_service.h"
 #include "components/favicon_base/favicon_usage_data.h"
 #include "components/history/core/browser/history_service.h"
+#include "components/signin/public/base/signin_switches.h"
 #include "components/strings/grit/components_strings.h"
-#include "components/sync/base/features.h"
 #include "content/public/test/browser_task_environment.h"
+#include "skia/rusty_png_feature.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "ui/gfx/codec/png_codec.h"
@@ -267,7 +268,7 @@ TEST_F(BookmarkHTMLWriterTest, CheckOutputWhenNoBookmarksWithAccount) {
   // Permanent account folders exist, but there are no local or account
   // bookmarks.
   base::test::ScopedFeatureList scoped_feature_list{
-      syncer::kSyncEnableBookmarksInTransportMode};
+      switches::kSyncEnableBookmarksInTransportMode};
   model()->CreateAccountPermanentFolders();
 
   // Export.
@@ -293,13 +294,16 @@ TEST_F(BookmarkHTMLWriterTest, CheckOutputWhenBookmarksInLocalBookmarkBar) {
   ASSERT_EQ(WriteBookmarksAndWait(), bookmark_html_writer::Result::kSuccess);
 
   // Check against the golden file.
+  const char* kGoldenFilename =
+      skia::IsRustyPngEnabled() ? "bookmarks_in_bookmarks_bar.html"
+                                : "bookmarks_in_bookmarks_bar_with_libpng.html";
   EXPECT_TRUE(base::TextContentsEqual(
-      path_, test_data_path_.AppendASCII("bookmarks_in_bookmarks_bar.html")));
+      path_, test_data_path_.AppendASCII(kGoldenFilename)));
 }
 
 TEST_F(BookmarkHTMLWriterTest, CheckOutputWhenBookmarksInAccountBookmarkBar) {
   base::test::ScopedFeatureList scoped_feature_list{
-      syncer::kSyncEnableBookmarksInTransportMode};
+      switches::kSyncEnableBookmarksInTransportMode};
   model()->CreateAccountPermanentFolders();
 
   // Populate the BookmarkModel. This creates the following bookmark structure:
@@ -316,8 +320,11 @@ TEST_F(BookmarkHTMLWriterTest, CheckOutputWhenBookmarksInAccountBookmarkBar) {
   ASSERT_EQ(WriteBookmarksAndWait(), bookmark_html_writer::Result::kSuccess);
 
   // Check against the golden file.
+  const char* kGoldenFilename =
+      skia::IsRustyPngEnabled() ? "bookmarks_in_bookmarks_bar.html"
+                                : "bookmarks_in_bookmarks_bar_with_libpng.html";
   EXPECT_TRUE(base::TextContentsEqual(
-      path_, test_data_path_.AppendASCII("bookmarks_in_bookmarks_bar.html")));
+      path_, test_data_path_.AppendASCII(kGoldenFilename)));
 }
 
 TEST_F(BookmarkHTMLWriterTest, CheckOutputWhenBookmarksInLocalOther) {
@@ -335,13 +342,16 @@ TEST_F(BookmarkHTMLWriterTest, CheckOutputWhenBookmarksInLocalOther) {
   ASSERT_EQ(WriteBookmarksAndWait(), bookmark_html_writer::Result::kSuccess);
 
   // Check against the golden file.
+  const char* kGoldenFilename = skia::IsRustyPngEnabled()
+                                    ? "bookmarks_in_other.html"
+                                    : "bookmarks_in_other_with_libpng.html";
   EXPECT_TRUE(base::TextContentsEqual(
-      path_, test_data_path_.AppendASCII("bookmarks_in_other.html")));
+      path_, test_data_path_.AppendASCII(kGoldenFilename)));
 }
 
 TEST_F(BookmarkHTMLWriterTest, CheckOutputWhenBookmarksInAccountOther) {
   base::test::ScopedFeatureList scoped_feature_list{
-      syncer::kSyncEnableBookmarksInTransportMode};
+      switches::kSyncEnableBookmarksInTransportMode};
   model()->CreateAccountPermanentFolders();
 
   // Populate the BookmarkModel. This creates the following bookmark structure:
@@ -358,8 +368,11 @@ TEST_F(BookmarkHTMLWriterTest, CheckOutputWhenBookmarksInAccountOther) {
   ASSERT_EQ(WriteBookmarksAndWait(), bookmark_html_writer::Result::kSuccess);
 
   // Check against the golden file.
+  const char* kGoldenFilename = skia::IsRustyPngEnabled()
+                                    ? "bookmarks_in_other.html"
+                                    : "bookmarks_in_other_with_libpng.html";
   EXPECT_TRUE(base::TextContentsEqual(
-      path_, test_data_path_.AppendASCII("bookmarks_in_other.html")));
+      path_, test_data_path_.AppendASCII(kGoldenFilename)));
 }
 
 // Tests bookmark_html_writer by populating a BookmarkModel, writing it out by

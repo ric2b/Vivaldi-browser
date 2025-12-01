@@ -926,6 +926,7 @@ TEST_F(LocalStorageImplTest, InMemoryInvalidPath) {
 }
 
 TEST_F(LocalStorageImplTest, OnDisk) {
+  base::HistogramTester histograms;
   auto key = StdStringToUint8Vector("key");
   auto value = StdStringToUint8Vector("value");
 
@@ -943,6 +944,9 @@ TEST_F(LocalStorageImplTest, OnDisk) {
   InitializeStorage(storage_path());
   EXPECT_TRUE(DoTestGet(key, &result));
   EXPECT_EQ(value, result);
+  histograms.ExpectUniqueSample(
+      "LocalStorage.DatabaseOpen",
+      leveldb_env::LevelDBStatusValue::LEVELDB_STATUS_OK, 2);
 }
 
 TEST_F(LocalStorageImplTest, InvalidVersionOnDisk) {
@@ -983,6 +987,7 @@ TEST_F(LocalStorageImplTest, InvalidVersionOnDisk) {
 }
 
 TEST_F(LocalStorageImplTest, CorruptionOnDisk) {
+  base::HistogramTester histograms;
   auto key = StdStringToUint8Vector("key");
   auto value = StdStringToUint8Vector("value");
 
@@ -1015,6 +1020,9 @@ TEST_F(LocalStorageImplTest, CorruptionOnDisk) {
   ResetStorage(storage_path());
   EXPECT_TRUE(DoTestGet(key, &result));
   EXPECT_EQ(value, result);
+  histograms.ExpectBucketCount(
+      "LocalStorage.DatabaseOpen",
+      leveldb_env::LevelDBStatusValue::LEVELDB_STATUS_IO_ERROR, 1);
 }
 
 TEST_F(LocalStorageImplTest, RecreateOnCommitFailure) {
@@ -1249,26 +1257,8 @@ TEST_F(LocalStorageImplTest, DontRecreateOnRepeatedCommitFailure) {
   EXPECT_TRUE(area.is_connected());
 }
 
-class LocalStorageImplStaleDeletionTest
-    : public LocalStorageImplTest,
-      public testing::WithParamInterface<std::tuple<bool, bool>> {
+class LocalStorageImplStaleDeletionTest : public LocalStorageImplTest {
  public:
-  LocalStorageImplStaleDeletionTest() {
-    feature_list_.InitWithFeatureStates(
-        {{kDeleteStaleLocalStorageOnStartup,
-          ShouldDeleteStaleLocalStorageOnStartup()},
-         {kDeleteOrphanLocalStorageOnStartup,
-          ShouldDeleteOrphanLocalStorageOnStartup()}});
-  }
-
-  bool ShouldDeleteStaleLocalStorageOnStartup() {
-    return std::get<0>(GetParam());
-  }
-
-  bool ShouldDeleteOrphanLocalStorageOnStartup() {
-    return std::get<1>(GetParam());
-  }
-
   void UpdateAccessMetaData(const blink::StorageKey& storage_key,
                             const base::Time& last_accessed) {
     storage::LocalStorageAreaAccessMetaData data;
@@ -1286,17 +1276,9 @@ class LocalStorageImplStaleDeletionTest
     SetDatabaseEntry("META:" + storage_key.SerializeForLocalStorage(),
                      data.SerializeAsString());
   }
-
- private:
-  base::test::ScopedFeatureList feature_list_;
 };
 
-INSTANTIATE_TEST_SUITE_P(
-    /* no prefix */,
-    LocalStorageImplStaleDeletionTest,
-    testing::Combine(testing::Bool(), testing::Bool()));
-
-TEST_P(LocalStorageImplStaleDeletionTest, StaleStorageAreaDeletion) {
+TEST_F(LocalStorageImplStaleDeletionTest, StaleStorageAreaDeletion) {
   const auto storage_key1 =
       blink::StorageKey::CreateFromStringForTesting("http://foo.com");
   const auto storage_key2 =
@@ -1351,22 +1333,18 @@ TEST_P(LocalStorageImplStaleDeletionTest, StaleStorageAreaDeletion) {
   context()->OverrideDeleteStaleStorageAreasDelayForTesting(base::Days(0));
   context()->ForceFakeOpenStorageAreaForTesting(storage_key3);
   WaitForDatabaseOpen();
+  RunUntilIdle();
 
   // We should see that only the data for storage_key4 was cleared.
-  const size_t expected_size =
-      ShouldDeleteStaleLocalStorageOnStartup() ? 13u : 16u;
   EXPECT_TRUE(base::test::RunUntil(
-      [&]() { return GetDatabaseContents().size() == expected_size; }));
-
-  if (ShouldDeleteStaleLocalStorageOnStartup()) {
-    for (const auto& entry : GetDatabaseContents()) {
-      EXPECT_EQ(entry.first.find(storage_key4.origin().Serialize()),
-                std::string::npos);
-    }
+      [&]() { return GetDatabaseContents().size() == 13u; }));
+  for (const auto& entry : GetDatabaseContents()) {
+    EXPECT_EQ(entry.first.find(storage_key4.origin().Serialize()),
+              std::string::npos);
   }
 }
 
-TEST_P(LocalStorageImplStaleDeletionTest, Orphan) {
+TEST_F(LocalStorageImplStaleDeletionTest, Orphan) {
   // Nothing should be orphaned initially.
   mojo::Remote<blink::mojom::StorageArea> area;
   {
@@ -1441,17 +1419,9 @@ TEST_P(LocalStorageImplStaleDeletionTest, Orphan) {
     context()->OverrideDeleteStaleStorageAreasDelayForTesting(base::Days(0));
     WaitForDatabaseOpen();
     RunUntilIdle();
-    EXPECT_EQ((ShouldDeleteStaleLocalStorageOnStartup() &&
-               ShouldDeleteOrphanLocalStorageOnStartup())
-                  ? 1
-                  : 0,
-              histograms.GetTotalSum(
-                  "LocalStorage.OrphanStorageAreasOnStartupCount"));
-    EXPECT_EQ((ShouldDeleteStaleLocalStorageOnStartup() &&
-               ShouldDeleteOrphanLocalStorageOnStartup())
-                  ? 4u
-                  : 7u,
-              GetDatabaseContents().size());
+    EXPECT_EQ(1, histograms.GetTotalSum(
+                     "LocalStorage.OrphanStorageAreasOnStartupCount"));
+    EXPECT_EQ(4u, GetDatabaseContents().size());
   }
 
   // Third party bucket doesn't qualify, even if it's old.
@@ -1474,11 +1444,7 @@ TEST_P(LocalStorageImplStaleDeletionTest, Orphan) {
     RunUntilIdle();
     EXPECT_EQ(0, histograms.GetTotalSum(
                      "LocalStorage.OrphanStorageAreasOnStartupCount"));
-    EXPECT_EQ((ShouldDeleteStaleLocalStorageOnStartup() &&
-               ShouldDeleteOrphanLocalStorageOnStartup())
-                  ? 7u
-                  : 10u,
-              GetDatabaseContents().size());
+    EXPECT_EQ(7u, GetDatabaseContents().size());
 
     UpdateAccessMetaData(third_party_key, base::Time::Now() - base::Days(2));
     UpdateWriteMetaData(third_party_key, base::Time::Now() - base::Days(2), 0);
@@ -1489,11 +1455,7 @@ TEST_P(LocalStorageImplStaleDeletionTest, Orphan) {
     RunUntilIdle();
     EXPECT_EQ(0, histograms.GetTotalSum(
                      "LocalStorage.OrphanStorageAreasOnStartupCount"));
-    EXPECT_EQ((ShouldDeleteStaleLocalStorageOnStartup() &&
-               ShouldDeleteOrphanLocalStorageOnStartup())
-                  ? 7u
-                  : 10u,
-              GetDatabaseContents().size());
+    EXPECT_EQ(7u, GetDatabaseContents().size());
   }
 
   // Third party nonce bucket does qualify, but only if it's old.
@@ -1517,11 +1479,7 @@ TEST_P(LocalStorageImplStaleDeletionTest, Orphan) {
     RunUntilIdle();
     EXPECT_EQ(0, histograms.GetTotalSum(
                      "LocalStorage.OrphanStorageAreasOnStartupCount"));
-    EXPECT_EQ((ShouldDeleteStaleLocalStorageOnStartup() &&
-               ShouldDeleteOrphanLocalStorageOnStartup())
-                  ? 10u
-                  : 13u,
-              GetDatabaseContents().size());
+    EXPECT_EQ(10u, GetDatabaseContents().size());
 
     UpdateAccessMetaData(third_party_nonce_key,
                          base::Time::Now() - base::Days(2));
@@ -1532,17 +1490,9 @@ TEST_P(LocalStorageImplStaleDeletionTest, Orphan) {
     context()->OverrideDeleteStaleStorageAreasDelayForTesting(base::Days(0));
     WaitForDatabaseOpen();
     RunUntilIdle();
-    EXPECT_EQ((ShouldDeleteStaleLocalStorageOnStartup() &&
-               ShouldDeleteOrphanLocalStorageOnStartup())
-                  ? 1
-                  : 0,
-              histograms.GetTotalSum(
-                  "LocalStorage.OrphanStorageAreasOnStartupCount"));
-    EXPECT_EQ((ShouldDeleteStaleLocalStorageOnStartup() &&
-               ShouldDeleteOrphanLocalStorageOnStartup())
-                  ? 7u
-                  : 13u,
-              GetDatabaseContents().size());
+    EXPECT_EQ(1, histograms.GetTotalSum(
+                     "LocalStorage.OrphanStorageAreasOnStartupCount"));
+    EXPECT_EQ(7u, GetDatabaseContents().size());
   }
 }
 

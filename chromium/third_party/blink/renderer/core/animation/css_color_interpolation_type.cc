@@ -13,6 +13,7 @@
 #include "third_party/blink/renderer/core/animation/interpolable_value.h"
 #include "third_party/blink/renderer/core/css/css_color.h"
 #include "third_party/blink/renderer/core/css/css_identifier_value.h"
+#include "third_party/blink/renderer/core/css/resolver/style_builder_converter.h"
 #include "third_party/blink/renderer/core/css/resolver/style_resolver.h"
 #include "third_party/blink/renderer/core/css/resolver/style_resolver_state.h"
 #include "third_party/blink/renderer/core/style/computed_style.h"
@@ -65,12 +66,24 @@ void CSSColorInterpolationType::EnsureCompatibleInterpolableColorTypes(
     InterpolableList& list_b) {
   CHECK_EQ(list_a.length(), list_b.length());
   for (wtf_size_t i = 0; i < list_a.length(); i++) {
-    if (list_a.Get(i)->IsStyleColor() != list_b.Get(i)->IsStyleColor()) {
+    auto& underlying = list_a.GetMutable(i);
+    auto& other = list_b.GetMutable(i);
+
+    if (underlying->IsStyleColor() != other->IsStyleColor()) {
       // If either value is a style color then both must be.
       EnsureInterpolableStyleColor(list_a, i);
       EnsureInterpolableStyleColor(list_b, i);
     }
-    DCHECK_EQ(list_a.Get(i)->IsStyleColor(), list_b.Get(i)->IsStyleColor());
+    DCHECK_EQ(underlying->IsStyleColor(), other->IsStyleColor());
+    DCHECK_EQ(underlying->IsColor(), other->IsColor());
+
+    if (underlying->IsColor() && other->IsColor()) {
+      auto& a = To<InterpolableColor>(*underlying);
+      auto& b = To<InterpolableColor>(*other);
+      if (a.GetColor().GetColorSpace() != b.GetColor().GetColorSpace()) {
+        InterpolableColor::SetupColorInterpolationSpaces(a, b);
+      }
+    }
   }
 }
 
@@ -111,22 +124,42 @@ BaseInterpolableColor* CSSColorInterpolationType::CreateBaseInterpolableColor(
 
 InterpolableColor* CSSColorInterpolationType::MaybeCreateInterpolableColor(
     const CSSValue& value,
-    mojom::blink::ColorScheme color_scheme,
-    const ui::ColorProvider* color_provider) {
+    const StyleResolverState* state) {
   if (auto* color_value = DynamicTo<cssvalue::CSSColor>(value)) {
     return CreateInterpolableColor(color_value->Value());
   }
-  auto* identifier_value = DynamicTo<CSSIdentifierValue>(value);
-  if (!identifier_value)
-    return nullptr;
 
-  // TODO(crbug.com/1500708): Handle unresolved-color-mix. CSS-animations go
-  // through this code path. Unresolved color-mix results in a discrete
-  // animation.
-  if (!StyleColor::IsColorKeyword(identifier_value->GetValueID()))
-    return nullptr;
-  return CreateInterpolableColor(identifier_value->GetValueID(), color_scheme,
-                                 color_provider);
+  mojom::blink::ColorScheme color_scheme =
+      state ? state->StyleBuilder().UsedColorScheme()
+            : mojom::blink::ColorScheme::kLight;
+  const ui::ColorProvider* color_provider =
+      state ? state->GetDocument().GetColorProviderForPainting(color_scheme)
+            : nullptr;
+
+  auto* identifier_value = DynamicTo<CSSIdentifierValue>(value);
+  if (identifier_value &&
+      StyleColor::IsColorKeyword(identifier_value->GetValueID())) {
+    return CreateInterpolableColor(identifier_value->GetValueID(), color_scheme,
+                                   color_provider);
+  }
+
+  if (state && (value.IsLightDarkValuePair() || value.IsColorMixValue() ||
+                value.IsRelativeColorValue())) {
+    ResolveColorValueContext context{
+        .length_resolver = state->CssToLengthConversionData(),
+        .text_link_colors = state->GetDocument().GetTextLinkColors(),
+        .used_color_scheme = color_scheme,
+        .color_provider = color_provider};
+    StyleColor style_color = ResolveColorValue(value, context);
+    if (!style_color.IsUnresolvedColorFunction()) {
+      return CreateInterpolableColor(style_color.GetColor());
+    }
+    // TODO(crbug.com/40940960): Handle unresolved-color-mix and unresolved
+    // relative colors. CSS-animations go through this code path. Unresolved
+    // color-mix and unresolved relative colors result in a discrete animation.
+  }
+
+  return nullptr;
 }
 
 Color CSSColorInterpolationType::GetColor(const InterpolableValue& value) {
@@ -255,14 +288,8 @@ InterpolationValue CSSColorInterpolationType::MaybeConvertValue(
     }
   }
 
-  mojom::blink::ColorScheme color_scheme =
-      state ? state->StyleBuilder().UsedColorScheme()
-            : mojom::blink::ColorScheme::kLight;
-  const ui::ColorProvider* color_provider =
-      state ? state->GetDocument().GetColorProviderForPainting(color_scheme)
-            : nullptr;
   InterpolableColor* interpolable_color =
-      MaybeCreateInterpolableColor(value, color_scheme, color_provider);
+      MaybeCreateInterpolableColor(value, state);
   if (!interpolable_color) {
     return nullptr;
   }
@@ -386,7 +413,6 @@ void CSSColorInterpolationType::Composite(
     auto& underlying =
         To<BaseInterpolableColor>(*underlying_list.GetMutable(i));
     auto& other = To<BaseInterpolableColor>(*other_list.Get(i));
-    DCHECK_EQ(underlying.IsStyleColor(), other.IsStyleColor());
     underlying.Composite(other, underlying_fraction);
   }
 }

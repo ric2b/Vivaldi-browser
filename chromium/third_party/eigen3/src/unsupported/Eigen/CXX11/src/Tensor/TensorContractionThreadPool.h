@@ -932,7 +932,7 @@ struct TensorEvaluator<const TensorContractionOp<Indices, LeftArgType, RightArgT
         kernel(m, n, k, use_thread_local);
       } else {
         eigen_assert(!use_thread_local);
-        device_.enqueueNoNotification([this, m, n, k, use_thread_local]() { 
+        device_.enqueue([this, m, n, k, use_thread_local]() { 
             kernel(m, n, k, use_thread_local); 
           });
       }
@@ -982,7 +982,7 @@ struct TensorEvaluator<const TensorContractionOp<Indices, LeftArgType, RightArgT
       } else {
         while (end - start > 1) {
           Index mid = (start + end) / 2;
-          device_.enqueueNoNotification([this, mid, end, k, rhs]() { 
+          device_.enqueue([this, mid, end, k, rhs]() { 
               enqueue_packing_helper(mid, end, k, rhs);
             });
           end = mid;
@@ -1000,7 +1000,7 @@ struct TensorEvaluator<const TensorContractionOp<Indices, LeftArgType, RightArgT
                           (k > 0 || std::this_thread::get_id() == created_by_thread_id_);
 
         if (pack_async) {
-          device_.enqueueNoNotification([this, start, end, k, rhs]() { 
+          device_.enqueue([this, start, end, k, rhs]() { 
               enqueue_packing_helper(start, end, k, rhs);
             });
         } else {
@@ -1264,7 +1264,7 @@ struct TensorEvaluator<const TensorContractionOp<Indices, LeftArgType, RightArgT
     void eval(Barrier& barrier, Index start_block_idx, Index end_block_idx) {
       while (end_block_idx - start_block_idx > 1) {
         Index mid_block_idx = (start_block_idx + end_block_idx) / 2;
-        evaluator->m_device.enqueueNoNotification([this, &barrier, mid_block_idx, end_block_idx]() {
+        evaluator->m_device.enqueue([this, &barrier, mid_block_idx, end_block_idx]() {
           eval<Alignment>(barrier, mid_block_idx, end_block_idx);
         });
         end_block_idx = mid_block_idx;
@@ -1282,7 +1282,7 @@ struct TensorEvaluator<const TensorContractionOp<Indices, LeftArgType, RightArgT
     void evalAsync(Index start_block_idx, Index end_block_idx) {
       while (end_block_idx - start_block_idx > 1) {
         Index mid_block_idx = (start_block_idx + end_block_idx) / 2;
-        evaluator->m_device.enqueueNoNotification(
+        evaluator->m_device.enqueue(
             [this, mid_block_idx, end_block_idx]() { 
               evalAsync<Alignment>(mid_block_idx, end_block_idx);
             });

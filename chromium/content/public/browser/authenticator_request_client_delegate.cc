@@ -55,8 +55,10 @@ void AuthenticatorRequestClientDelegate::OnTransactionSuccessful(
 
 void AuthenticatorRequestClientDelegate::RegisterActionCallbacks(
     base::OnceClosure cancel_callback,
+    base::OnceClosure immediate_not_found_callback,
     base::RepeatingClosure start_over_callback,
     AccountPreselectedCallback account_preselected_callback,
+    PasswordSelectedCallback password_selected_callback,
     device::FidoRequestHandlerBase::RequestCallback request_callback,
     base::RepeatingClosure bluetooth_adapter_power_on_callback,
     base::RepeatingCallback<
@@ -98,7 +100,7 @@ bool AuthenticatorRequestClientDelegate::IsVirtualEnvironmentEnabled() {
   return virtual_environment_;
 }
 
-void AuthenticatorRequestClientDelegate::SetAmbientCredentialTypes(
+void AuthenticatorRequestClientDelegate::SetCredentialTypes(
     int credential_type_flags) {}
 
 void AuthenticatorRequestClientDelegate::SetCredentialIdFilter(

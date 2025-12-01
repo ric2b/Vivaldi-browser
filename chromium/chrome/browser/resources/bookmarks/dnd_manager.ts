@@ -45,11 +45,11 @@ function getBookmarkElement(path?: EventTarget[]): BookmarkElement|null {
     return null;
   }
 
-  for (let i = 0; i < path!.length; i++) {
-    const element = path![i] as Element;
+  for (let i = 0; i < path.length; i++) {
+    const element = path[i] as Element;
     if (isBookmarkItem(element) || isBookmarkFolderNode(element) ||
         isBookmarkList(element)) {
-      return path![i] as BookmarkElement;
+      return path[i] as BookmarkElement;
     }
   }
   return null;
@@ -58,7 +58,7 @@ function getBookmarkElement(path?: EventTarget[]): BookmarkElement|null {
 function getDragElement(path: EventTarget[]): BookmarkElement|null {
   const dragElement = getBookmarkElement(path);
   for (let i = 0; i < path.length; i++) {
-    if ((path![i] as Element).tagName === 'BUTTON') {
+    if ((path[i] as Element).tagName === 'BUTTON') {
       return null;
     }
   }
@@ -350,14 +350,14 @@ export class DndManager {
       // delay on large amount of bookmark dragging.
       for (const itemId of displayingItems) {
         for (const element of dragData.elements) {
-          if (element!.id === itemId) {
-            draggedNodes.push(element!.id);
+          if (element.id === itemId) {
+            draggedNodes.push(element.id);
             break;
           }
         }
       }
     } else {
-      draggedNodes = dragData.elements.map((item) => item!.id);
+      draggedNodes = dragData.elements.map((item) => item.id);
     }
 
     assert(draggedNodes.length === dragData.elements.length);
@@ -537,7 +537,7 @@ export class DndManager {
     }
 
     return {
-      elements: draggedNodes.map((id) => state.nodes[id]),
+      elements: draggedNodes.map((id) => state.nodes[id]!),
       sameProfile: true,
     };
   }
@@ -664,7 +664,7 @@ export class DndManager {
     // Allow dragging onto empty bookmark lists.
     if (isBookmarkList(overElement)) {
       const state = Store.getInstance().data;
-      return !!state.selectedFolder &&
+      return !!state.selectedFolder && !!state.nodes[state.selectedFolder] &&
           state.nodes[state.selectedFolder]!.children!.length === 0;
     }
 

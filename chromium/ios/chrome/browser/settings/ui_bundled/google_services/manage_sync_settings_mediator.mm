@@ -238,13 +238,16 @@ constexpr CGFloat kBatchUploadSymbolPointSize = 22.;
   if (!self.accountStateSignedIn) {
     return;
   }
-      [self.consumer
-          updatePrimaryAccountWithAvatarImage:
-              _chromeAccountManagerService->GetIdentityAvatarWithIdentity(
-                  _signedInIdentity, IdentityAvatarSize::Large)
-                                         name:_signedInIdentity.userFullName
-                                        email:_signedInIdentity.userEmail
-                              managementState:self.managementState];
+  UIImage* avatarImage =
+      _chromeAccountManagerService->GetIdentityAvatarWithIdentity(
+          _signedInIdentity, IdentityAvatarSize::Large);
+  NSString* managementDescription =
+      GetManagementDescription([self managementState]);
+  [self.consumer
+      updatePrimaryAccountWithAvatarImage:avatarImage
+                                     name:_signedInIdentity.userFullName
+                                    email:_signedInIdentity.userEmail
+                    managementDescription:managementDescription];
 }
 
 // Updates all the sync data type items, and notify the consumer if
@@ -462,6 +465,7 @@ constexpr CGFloat kBatchUploadSymbolPointSize = 22.;
   // There should be a sign-out section. Load it if it's not there yet.
   if (!hasSignOutSection) {
     [self loadSignOutAndManageAccountsSection];
+    [self loadSwitchAccountAndSignOutSection];
     NSUInteger sectionIndex =
         [model sectionForSectionIdentifier:ManageAndSignOutSectionIdentifier];
     [self.consumer insertSections:[NSIndexSet indexSetWithIndex:sectionIndex]
@@ -477,7 +481,7 @@ constexpr CGFloat kBatchUploadSymbolPointSize = 22.;
   // Creates the manage accounts and sign-out section.
   TableViewModel* model = self.consumer.tableViewModel;
   // The AdvancedSettingsSectionIdentifier does not exist when sync is disabled
-  // by administrator for a signed-in not syncing account.
+  // by administrator for a signed-in account.
   NSInteger previousSection =
       [model hasSectionForSectionIdentifier:AdvancedSettingsSectionIdentifier]
           ? [model
@@ -494,6 +498,7 @@ constexpr CGFloat kBatchUploadSymbolPointSize = 22.;
   item.text =
       GetNSString(IDS_IOS_GOOGLE_ACCOUNT_SETTINGS_MANAGE_GOOGLE_ACCOUNT_ITEM);
   item.textColor = [UIColor colorNamed:kBlueColor];
+  item.accessibilityTraits |= UIAccessibilityTraitButton;
   [model addItem:item
       toSectionWithIdentifier:ManageAndSignOutSectionIdentifier];
 
@@ -503,6 +508,7 @@ constexpr CGFloat kBatchUploadSymbolPointSize = 22.;
     item.text =
         GetNSString(IDS_IOS_GOOGLE_ACCOUNT_SETTINGS_MANAGE_STORAGE_ITEM);
     item.textColor = [UIColor colorNamed:kBlueColor];
+    item.accessibilityTraits |= UIAccessibilityTraitButton;
     [model addItem:item
         toSectionWithIdentifier:ManageAndSignOutSectionIdentifier];
   }
@@ -511,19 +517,63 @@ constexpr CGFloat kBatchUploadSymbolPointSize = 22.;
   item = [[TableViewTextItem alloc] initWithType:ManageAccountsItemType];
   item.text = GetNSString(IDS_IOS_GOOGLE_ACCOUNT_SETTINGS_MANAGE_ACCOUNTS_ITEM);
   item.textColor = [UIColor colorNamed:kBlueColor];
+  item.accessibilityTraits |= UIAccessibilityTraitButton;
   [model addItem:item
       toSectionWithIdentifier:ManageAndSignOutSectionIdentifier];
+
+  // If kSeparateProfilesForManagedAccounts is disabled, the signout button
+  // exists in the ManageAndSignOutSection.
+  if (!AreSeparateProfilesForManagedAccountsEnabled()) {
+    // Sign out item.
+    item = [[TableViewTextItem alloc] initWithType:SignOutItemType];
+    item.text = GetNSString(IDS_IOS_GOOGLE_ACCOUNT_SETTINGS_SIGN_OUT_ITEM);
+    item.textColor = [UIColor colorNamed:kBlueColor];
+    item.accessibilityTraits |= UIAccessibilityTraitButton;
+    [model addItem:item
+        toSectionWithIdentifier:ManageAndSignOutSectionIdentifier];
+
+    if (self.forcedSigninEnabled) {
+      [model setFooter:[self createForcedSigninFooterItem]
+          forSectionWithIdentifier:ManageAndSignOutSectionIdentifier];
+    }
+  }
+}
+
+- (void)loadSwitchAccountAndSignOutSection {
+  if (!self.accountStateSignedIn ||
+      !AreSeparateProfilesForManagedAccountsEnabled()) {
+    return;
+  }
+
+  TableViewModel* model = self.consumer.tableViewModel;
+  NSInteger previousSection =
+      [model sectionForSectionIdentifier:ManageAndSignOutSectionIdentifier];
+  CHECK_NE(NSNotFound, previousSection);
+  [model insertSectionWithIdentifier:SwitchAccountAndSignOutSectionIdentifier
+                             atIndex:previousSection + 1];
+
+  // If kSeparateProfilesForManagedAccounts is enabled, the signout button
+  // exists in its own section along with the switch profile item.
+
+  // Creates items in the switch account and sign-out section.
+  // Switch Account item.
+  TableViewTextItem* item =
+      [[TableViewTextItem alloc] initWithType:SwitchAccountItemType];
+  item.text = l10n_util::GetNSString(
+      IDS_IOS_GOOGLE_ACCOUNT_SETTINGS_SWITCH_ACCOUNT_ITEM);
+  item.textColor = [UIColor colorNamed:kBlueColor];
+  [model addItem:item
+      toSectionWithIdentifier:SwitchAccountAndSignOutSectionIdentifier];
 
   // Sign out item.
   item = [[TableViewTextItem alloc] initWithType:SignOutItemType];
   item.text = GetNSString(IDS_IOS_GOOGLE_ACCOUNT_SETTINGS_SIGN_OUT_ITEM);
   item.textColor = [UIColor colorNamed:kBlueColor];
   [model addItem:item
-      toSectionWithIdentifier:ManageAndSignOutSectionIdentifier];
-
+      toSectionWithIdentifier:SwitchAccountAndSignOutSectionIdentifier];
   if (self.forcedSigninEnabled) {
     [model setFooter:[self createForcedSigninFooterItem]
-        forSectionWithIdentifier:ManageAndSignOutSectionIdentifier];
+        forSectionWithIdentifier:SwitchAccountAndSignOutSectionIdentifier];
   }
 }
 
@@ -742,7 +792,9 @@ constexpr CGFloat kBatchUploadSymbolPointSize = 22.;
       break;
     case syncer::UserSelectableType::kPasswords:
       itemType = PasswordsDataTypeItemType;
-      textStringID = IDS_SYNC_DATATYPE_PASSWORDS;
+      textStringID = IOSPasskeysM2Enabled()
+                         ? IDS_SYNC_DATATYPE_PASSWORDS_AND_PASSKEYS
+                         : IDS_SYNC_DATATYPE_PASSWORDS;
       accessibilityIdentifier = kSyncPasswordsIdentifier;
       break;
     case syncer::UserSelectableType::kTabs:
@@ -836,8 +888,6 @@ constexpr CGFloat kBatchUploadSymbolPointSize = 22.;
   return !self.disabledBecauseOfSyncError;
 }
 
-// Only requires Sync-the-feature to not be disabled because of a sync error and
-// to not need a trusted vault key.
 - (BOOL)shouldEncryptionItemBeEnabled {
   return !self.disabledBecauseOfSyncError &&
          _syncService->GetUserActionableError() !=
@@ -881,6 +931,7 @@ constexpr CGFloat kBatchUploadSymbolPointSize = 22.;
   [self loadSyncDataTypeSection];
   [self loadAdvancedSettingsSection];
   [self loadSignOutAndManageAccountsSection];
+  [self loadSwitchAccountAndSignOutSection];
   [self fetchLocalDataDescriptionsForBatchUploadWithFirstLoad:YES];
   // Loading the header asks the consumer to reload the data, so it should be
   // done after all sections are initially loaded.
@@ -1007,6 +1058,7 @@ constexpr CGFloat kBatchUploadSymbolPointSize = 22.;
       }
       case ManageGoogleAccountItemType:
       case ManageAccountsItemType:
+      case SwitchAccountItemType:
       case SignOutItemType:
       case EncryptionItemType:
       case GoogleActivityControlsItemType:
@@ -1088,6 +1140,9 @@ constexpr CGFloat kBatchUploadSymbolPointSize = 22.;
     case ManageAccountsItemType:
       [self.commandHandler showAccountsPage];
       break;
+    case SwitchAccountItemType:
+      [self.commandHandler openAccountMenu];
+      break;
     case BatchUploadButtonItemType:
       [self.commandHandler openBulkUpload];
       break;
@@ -1128,7 +1183,7 @@ constexpr CGFloat kBatchUploadSymbolPointSize = 22.;
 }
 
 // Creates an error action button item to handle the indicated sync error type
-// for signed in not syncing users.
+// for signed in users.
 - (TableViewItem*)createSyncErrorButtonItemWithItemType:(NSInteger)itemType
                                           buttonLabelID:(int)buttonLabelID
                                               messageID:(int)messageID {
@@ -1217,8 +1272,7 @@ constexpr CGFloat kBatchUploadSymbolPointSize = 22.;
   if (type.value() == SyncDisabledByAdministratorErrorItemType) {
     self.syncErrorItem = [self createSyncDisabledByAdministratorErrorItem];
   } else {
-    // For signed in not syncing users, the sync error item will be displayed as
-    // a button.
+    // For signed in users, the sync error item will be displayed as a button.
     self.syncErrorItem =
         [self createSyncErrorButtonItemWithItemType:type.value()
                                       buttonLabelID:GetAccountErrorUIInfo(
@@ -1234,8 +1288,8 @@ constexpr CGFloat kBatchUploadSymbolPointSize = 22.;
     if (type.value() != SyncDisabledByAdministratorErrorItemType) {
       [model insertSectionWithIdentifier:SyncErrorsSectionIdentifier
                                  atIndex:syncErrorSectionIndex];
-      // For signed in not syncing users, the sync error item will be preceded
-      // by a descriptive message item.
+      // For signed in users, the sync error item will be preceded by a
+      // descriptive message item.
       [model addItem:[self createSyncErrorMessageItem:GetAccountErrorUIInfo(
                                                           _syncService)
                                                           .messageID]

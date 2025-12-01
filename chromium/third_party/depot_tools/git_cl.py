@@ -55,6 +55,7 @@ import git_auth
 import git_common
 import git_footers
 import git_new_branch
+import git_squash_branch
 import google_java_format
 import metrics
 import metrics_utils
@@ -4276,6 +4277,91 @@ def CMDarchive(parser, args):
     return 0
 
 
+@metrics.collector.collect_metrics('git cl squash-closed')
+def CMDsquash_closed(parser, args):
+    """Squashes branches associated with closed changelists, and reparents their children."""
+    if gclient_utils.IsEnvCog():
+        print('squash_closed command is not supported in non-git environment.',
+              file=sys.stderr)
+        return 1
+
+    parser.add_option(
+        '-j',
+        '--maxjobs',
+        action='store',
+        type=int,
+        help='The maximum number of jobs to use when retrieving review status.')
+    parser.add_option('-f',
+                      '--force',
+                      action='store_true',
+                      help='Bypasses the confirmation prompt.')
+    parser.add_option('-d',
+                      '--dry-run',
+                      action='store_true',
+                      help='Skip the branch tagging and removal steps.')
+
+    options, args = parser.parse_args(args)
+    if args:
+        parser.error('Unsupported args: %s' % ' '.join(args))
+
+    if git_common.is_dirty_git_tree('squash-closed'):
+        return 1
+
+    branches = RunGit(['for-each-ref', '--format=%(refname)', 'refs/heads'])
+    if not branches:
+        return 0
+
+    print('Finding all branches associated with closed issues...')
+    changes = [Changelist(branchref=b) for b in branches.splitlines()]
+    statuses = get_cl_statuses(changes,
+                               fine_grained=True,
+                               max_processes=options.maxjobs)
+    proposal = [cl.GetBranch() for cl, status in statuses if status == 'closed']
+    proposal.sort()
+
+    if not proposal:
+        print('No branches with closed codereview issues found.')
+        return 0
+
+    print('\nBranches with closed issues that will be squashed:\n')
+    for next_item in proposal:
+        print('  ' + next_item)
+
+    # Quit now on if this is a dry run.
+    if options.dry_run:
+        print('\nNo changes were made (dry run).\n')
+        return 0
+
+    current_branch = scm.GIT.GetBranch(settings.GetRoot())
+    if current_branch in proposal:
+        print('You are currently on a branch \'%s\' which is associated with a '
+              'closed codereview issue, so squash-closed cannot proceed. '
+              'Please checkout another branch and run this command again.' %
+              current_branch)
+        return 1
+
+    # Prompt the user to continue unless they've specified to always continue.
+    if not options.force:
+        answer = gclient_utils.AskForData(
+            '\nProceed with deletion (Y/n)? ').lower()
+        if answer not in ('y', ''):
+            print('Aborted.')
+            return 1
+
+    # scm.GIT.GetBranch does not work for detached HEAD situations.
+    reset_branch = git_common.current_branch()
+    for branch in proposal:
+        RunGit(['checkout', branch])
+        if git_squash_branch.main([]) != 0:
+            RunGit(['checkout', reset_branch])
+            return 1
+
+    RunGit(['checkout', reset_branch])
+    print('\nJob\'s done!')
+
+    return 0
+
+
 @metrics.collector.collect_metrics('git cl status')
 def CMDstatus(parser, args):
     """Show status of changelists.
@@ -4587,7 +4673,7 @@ def CMDcherry_pick(parser, args):
     host = None
     if options.host:
         try:
-            host = urllib.parse.urlparse(host).hostname
+            host = urllib.parse.urlparse(options.host).hostname
         except ValueError as e:
             print(f'Unable to parse host: {host}. Error: {e}', file=sys.stderr)
             return 1
@@ -4938,9 +5024,10 @@ def CMDlint(parser, args):
 def CMDpresubmit(parser, args):
     """Runs presubmit tests on the current changelist."""
     if gclient_utils.IsEnvCog():
-        # TODO - crbug/336555565: give user more instructions on how to
-        # trigger presubmit in Cog once the UX is finalized.
-        print('presubmit command is not supported in non-git environment.',
+        print('presubmit command is not supported in non-git environment. '
+              'Please use the "Chromium PRESUBMITS" panel or the "Run '
+              'Presubmit Checks" command in the command palette in the editor '
+              'instead.',
               file=sys.stderr)
         return 1
     parser.add_option('-u',
@@ -5698,8 +5785,8 @@ def CMDsplit(parser, args):
 
     Creates a branch and uploads a CL for each group of files modified in the
     current branch that share a common OWNERS file. In the CL description and
-    comment, the string '$directory', is replaced with the directory containing
-    the shared OWNERS file.
+    comment, the string '$directory' or '$description', is replaced with the
+    directory containing the shared OWNERS file.
     """
     if gclient_utils.IsEnvCog():
         print('split command is not supported in non-git environment.',
@@ -5709,9 +5796,13 @@ def CMDsplit(parser, args):
     parser.add_option('-d',
                       '--description',
                       dest='description_file',
-                      help='A text file containing a CL description in which '
-                      '$directory will be replaced by each CL\'s directory. '
-                      'Mandatory except in dry runs.')
+                      help='A text file containing a CL description, in which '
+                      'the string $description will be replaced by a '
+                      'description of each generated CL (by default, the list '
+                      'of directories that CL covers). '
+                      'Mandatory except in dry runs.\n'
+                      'Usage of the string $directory instead of $description '
+                      'is deprecated, and will be removed in the future.')
     parser.add_option('-c',
                       '--comment',
                       dest='comment_file',
@@ -5767,18 +5858,51 @@ def CMDsplit(parser, args):
     parser.add_option('--topic',
                       default=None,
                       help='Topic to specify when uploading')
+    parser.add_option('--from-file',
+                      type='str',
+                      default=None,
+                      help='If present, load the split CLs from the given file '
+                      'instead of computing a splitting. These file are '
+                      'generated each time the script is run.')
+    parser.add_option(
+        '-s',
+        '--summarize',
+        action='store_true',
+        default=False,
+        help='If passed during a dry run, will print out a summary of the '
+        'generated splitting, rather than full details. No effect outside of '
+        'a dry run.')
+    # If we ever switch from optparse to argparse, we can combine these flags
+    # using nargs='*'
+    parser.add_option(
+        '--reviewers',
+        action='append',
+        default=None,
+        help='If present, all generated CLs will be sent to the specified '
+        'reviewer(s) specified, rather than automatically assigned reviewers.\n'
+        'Multiple reviewers can be specified as '
+        '--reviewers a@b.com --reviewers c@d.com\n')
+    parser.add_option(
+        '--no-reviewers',
+        action='store_true',
+        help='If present, generated CLs will not be assigned reviewers. '
+        'Overrides --reviewers.')
     options, _ = parser.parse_args(args)
 
     if not options.description_file and not options.dry_run:
         parser.error('No --description flag specified.')
+
+    if options.no_reviewers:
+        options.reviewers = []
 
     def WrappedCMDupload(args):
         return CMDupload(OptionParser(), args)
 
     return split_cl.SplitCl(options.description_file, options.comment_file,
                             Changelist, WrappedCMDupload, options.dry_run,
+                            options.summarize, options.reviewers,
                             options.cq_dry_run, options.enable_auto_submit,
-                            options.max_depth, options.topic,
+                            options.max_depth, options.topic, options.from_file,
                             settings.GetRoot())
 
 
@@ -6222,9 +6346,9 @@ def CMDweb(parser, args):
     """Opens the current CL in the web browser."""
     if gclient_utils.IsEnvCog():
         print(
-            'web command is not supported. Please use "Gerrit: Open Changes '
-            'in Gerrit" functionality in the command palette in the Editor '
-            'instead.',
+            'web command is not supported in non-git environment. Please use '
+            '"Gerrit: Open Changes in Gerrit" functionality in the command '
+            'palette in the editor instead.',
             file=sys.stderr)
         return 1
 
@@ -6515,7 +6639,7 @@ def _RunClangFormatDiff(opts, clang_diff_files, top_dir, upstream_commit):
     except clang_format.NotFoundError as e:
         DieWithError(e)
 
-    if opts.full or settings.GetFormatFullByDefault():
+    if opts.full:
         cmd = [clang_format_tool]
         if not opts.dry_run and not opts.diff:
             cmd.append('-i')
@@ -6582,7 +6706,7 @@ def _RunGoogleJavaFormat(opts, paths, top_dir, upstream_commit):
         else:
             base_cmd += ['--replace']
 
-    changed_lines_only = not (opts.full or settings.GetFormatFullByDefault())
+    changed_lines_only = not opts.full
     if changed_lines_only:
         # Format two lines around each changed line so that the correct amount
         # of blank lines will be added between symbols.
@@ -6872,9 +6996,9 @@ def CMDformat(parser, args):
     """Runs auto-formatting tools (clang-format etc.) on the diff."""
     if gclient_utils.IsEnvCog():
         print(
-            'format command is not supported. Please use the "Format '
-            'Document" functionality in command palette in the Editor '
-            'instead.',
+            'format command is not supported in non-git environment. Please '
+            'use the "Format Modified Lines in All Files (git cl format)" '
+            'functionality in the command palette in the editor instead.',
             file=sys.stderr)
         return 1
     clang_exts = ['.cc', '.cpp', '.h', '.m', '.mm', '.proto']
@@ -6952,6 +7076,7 @@ def CMDformat(parser, args):
                       help='Enables formatting of .star files.')
 
     opts, files = parser.parse_args(args)
+    opts.full = opts.full or settings.GetFormatFullByDefault()
 
     # Normalize files against the current path, so paths relative to the
     # current directory are still resolved as expected.
@@ -7003,7 +7128,7 @@ def CMDformat(parser, args):
     if opts.python is not False:
         formatters += [(['.py'], _RunYapf)]
     if opts.mojom:
-        formatters += [(['.mojom'], _RunMojomFormat)]
+        formatters += [(['.mojom', '.test-mojom'], _RunMojomFormat)]
     if opts.lucicfg:
         formatters += [(['.star'], _RunLUCICfgFormat)]
 

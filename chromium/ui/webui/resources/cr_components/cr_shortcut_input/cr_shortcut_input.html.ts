@@ -16,6 +16,7 @@ export function getHtml(this: CrShortcutInputElement) {
       ?invalid="${this.getIsInvalid_()}"
       .errorMessage="${this.getErrorString_()}"
       ?disabled="${this.inputDisabled}"
+      .inputTabindex="${this.readonly_ ? -1 : 0}"
       .value="${this.computeText_()}">
     <cr-icon-button id="edit" title="$i18n{edit}"
         aria-label="${this.editButtonAriaLabel}"

@@ -50,6 +50,7 @@ import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.Features;
 import org.chromium.base.test.util.Features.DisableFeatures;
 import org.chromium.base.test.util.Features.EnableFeatures;
+import org.chromium.base.test.util.HistogramWatcher;
 import org.chromium.components.browser_ui.settings.BlankUiTestActivitySettingsTestRule;
 import org.chromium.components.browser_ui.settings.ChromeSwitchPreference;
 import org.chromium.components.browser_ui.settings.SettingsNavigation;
@@ -69,7 +70,6 @@ import org.chromium.ui.widget.ChromeImageButton;
  */
 @RunWith(BaseJUnit4ClassRunner.class)
 @Features.DisableFeatures({
-    ContentFeatureList.ACCESSIBILITY_PAGE_ZOOM_ENHANCEMENTS,
     ContentFeatureList.ACCESSIBILITY_PAGE_ZOOM_V2,
     ContentFeatureList.SMART_ZOOM
 })
@@ -273,8 +273,7 @@ public class AccessibilitySettingsTest {
     @Test
     @SmallTest
     @Feature({"Accessibility"})
-    @EnableFeatures({ContentFeatureList.ACCESSIBILITY_PAGE_ZOOM_ENHANCEMENTS})
-    public void testPageZoomPreference_savedZoomLevelsPreference_visibleWhenEnabled() {
+    public void testPageZoomPreference_savedZoomLevelsPreference() {
         Preference zoomInfoPref =
                 mAccessibilitySettings.findPreference(AccessibilitySettings.PREF_ZOOM_INFO);
         Assert.assertNotNull(zoomInfoPref);
@@ -290,28 +289,12 @@ public class AccessibilitySettingsTest {
         verify(mSettingsNavigationMock).startSettings(any(Context.class), any(), any(Bundle.class));
     }
 
-    @Test
-    @SmallTest
-    @Feature({"Accessibility"})
-    @DisableFeatures({ContentFeatureList.ACCESSIBILITY_PAGE_ZOOM_ENHANCEMENTS})
-    public void testPageZoomPreference_savedZoomLevelsPreference_hiddenWhenDisabled() {
-        Preference zoomInfoPref =
-                mAccessibilitySettings.findPreference(AccessibilitySettings.PREF_ZOOM_INFO);
-        Assert.assertNotNull(zoomInfoPref);
-        Assert.assertFalse(
-                "Saved Zoom Levels link should not be visible when disabled",
-                zoomInfoPref.isVisible());
-    }
-
     // Tests related to Page Zoom V2 feature (OS-level adjustment experiments).
 
     @Test
     @SmallTest
     @Feature({"Accessibility"})
-    @Features.EnableFeatures({
-        ContentFeatureList.ACCESSIBILITY_PAGE_ZOOM_ENHANCEMENTS,
-        ContentFeatureList.ACCESSIBILITY_PAGE_ZOOM_V2
-    })
+    @Features.EnableFeatures({ContentFeatureList.ACCESSIBILITY_PAGE_ZOOM_V2})
     public void testPageZoomPreference_osLevelAdjustmentPreference_visibleWhenEnabled() {
         ChromeSwitchPreference osLevelAdjustmentPref =
                 (ChromeSwitchPreference)
@@ -458,6 +441,26 @@ public class AccessibilitySettingsTest {
         onView(withId(R.id.text_size_contrast_slider)).perform(ViewActions.swipeRight());
         Assert.assertNotEquals(
                 startingVal, mPageZoomPref.getTextSizeContrastSliderForTesting().getProgress());
+    }
+
+    @Test
+    @SmallTest
+    @Feature({"Accessibility"})
+    public void testReaderModePreferenceChange() {
+        ChromeSwitchPreference readerModePref =
+                (ChromeSwitchPreference)
+                        mAccessibilitySettings.findPreference(
+                                AccessibilitySettings.PREF_READER_FOR_ACCESSIBILITY);
+        boolean initialValue = readerModePref.isChecked();
+
+        HistogramWatcher watcher =
+                HistogramWatcher.newBuilder()
+                        .expectBooleanRecord(
+                                "DomDistiller.Android.ReaderModeEnabledInAccessibilitySettings",
+                                !initialValue)
+                        .build();
+        readerModePref.callChangeListener(!initialValue);
+        watcher.assertExpected();
     }
 
     // Helper methods.

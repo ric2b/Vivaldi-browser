@@ -96,6 +96,7 @@ cc_library(
     ],
     deps = [
         "//tensorflow/compiler/mlir/lite:tensorflow_lite",
+        "@llvm-project//mlir:AsmParser",
         "@llvm-project//mlir:IR",
         "@llvm-project//mlir:Support",
         "@llvm-project//mlir:TransformUtils",
@@ -340,7 +341,7 @@ cc_library(
     srcs = ["fft.cc"],
     hdrs = ["fft.h"],
     deps = [
-        "//tensorflow/compiler/mlir/lite:constant_utils",
+        "//tensorflow/compiler/mlir/lite:const_tensor_utils",
         "//tensorflow/compiler/mlir/lite:tensorflow_lite",
         "@llvm-project//llvm:Support",
         "@llvm-project//mlir:ArithDialect",

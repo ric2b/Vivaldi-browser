@@ -380,12 +380,16 @@ DesktopSessionProxy::GetKeyboardCurrentLayout() const {
   return keyboard_layout_;
 }
 
-void DesktopSessionProxy::DisconnectSession(protocol::ErrorCode error) {
+void DesktopSessionProxy::DisconnectSession(
+    protocol::ErrorCode error,
+    const std::string& error_details,
+    const SourceLocation& error_location) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   // Disconnect the client session if it hasn't been disconnected yet.
   if (client_session_control_.get()) {
-    client_session_control_->DisconnectSession(error);
+    client_session_control_->DisconnectSession(error, error_details,
+                                               error_location);
   }
 }
 

@@ -16,6 +16,7 @@
 #include "base/functional/concurrent_closures.h"
 #include "base/memory/weak_ptr.h"
 #include "base/metrics/field_trial_params.h"
+#include "base/no_destructor.h"
 #include "base/notreached.h"
 #include "base/strings/string_split.h"
 #include "base/strings/utf_string_conversions.h"
@@ -39,7 +40,6 @@
 #include "components/optimization_guide/content/browser/page_content_proto_provider.h"
 #include "components/optimization_guide/core/optimization_guide_proto_util.h"
 #include "components/optimization_guide/proto/features/common_quality_data.pb.h"
-#include "components/optimization_guide/proto/features/forms_predictions.pb.h"
 #include "components/optimization_guide/proto/features/model_prototyping.pb.h"
 #include "components/site_engagement/content/site_engagement_service.h"
 #include "content/public/browser/browser_context.h"
@@ -56,7 +56,6 @@
 #include "ui/gfx/geometry/rect.h"
 
 #if !BUILDFLAG(IS_ANDROID)
-#include "chrome/browser/autofill_ai/chrome_autofill_ai_client.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/tabs/tab_group.h"
@@ -79,13 +78,30 @@ constexpr size_t kPdfUploadLimitBytes = 128 * kBytesPerMegabyte;
 
 void OnGotAIPageContentForModelPrototyping(
     AiDataKeyedService::AiDataCallback continue_callback,
-    std::optional<optimization_guide::proto::AnnotatedPageContent> proto) {
+    std::optional<optimization_guide::AIPageContentResult> page_content) {
   TRACE_EVENT("browser", "OnGotAIPageContentForModelPrototyping");
 
   AiDataKeyedService::BrowserData data;
-  if (proto) {
+  if (page_content) {
     *data.mutable_page_context()->mutable_annotated_page_content() =
-        std::move(*proto);
+        std::move(page_content->proto);
+    std::move(continue_callback).Run(std::move(data));
+    return;
+  }
+
+  std::move(continue_callback).Run(std::nullopt);
+}
+
+void OnGotAIPageContentWithActionableElementsForModelPrototyping(
+    AiDataKeyedService::AiDataCallback continue_callback,
+    std::optional<optimization_guide::AIPageContentResult> page_content) {
+  TRACE_EVENT("browser",
+              "OnGotAIPageContentWithActionableElementsForModelPrototyping");
+
+  AiDataKeyedService::BrowserData data;
+  if (page_content) {
+    *data.mutable_action_annotated_page_content() =
+        std::move(page_content->proto);
     std::move(continue_callback).Run(std::move(data));
     return;
   }
@@ -98,11 +114,27 @@ void GetAIPageContentForModelPrototyping(
     AiDataKeyedService::AiDataCallback continue_callback) {
   TRACE_EVENT("browser", "GetAIPageContentForModelPrototyping");
 
+  auto options = optimization_guide::DefaultAIPageContentOptions();
+  options->enable_experimental_actionable_data = false;
   optimization_guide::OnAIPageContentDone callback = base::BindOnce(
       &OnGotAIPageContentForModelPrototyping, std::move(continue_callback));
-  optimization_guide::GetAIPageContent(
-      web_contents, optimization_guide::DefaultAIPageContentOptions(),
-      std::move(callback));
+  optimization_guide::GetAIPageContent(web_contents, std::move(options),
+                                       std::move(callback));
+}
+
+void GetAIPageContentWithActionableElementsForModelPrototyping(
+    content::WebContents* web_contents,
+    AiDataKeyedService::AiDataCallback continue_callback) {
+  TRACE_EVENT("browser",
+              "GetAIPageContentWithActionableElementsForModelPrototyping");
+
+  auto options = optimization_guide::DefaultAIPageContentOptions();
+  options->enable_experimental_actionable_data = true;
+  optimization_guide::OnAIPageContentDone callback = base::BindOnce(
+      &OnGotAIPageContentWithActionableElementsForModelPrototyping,
+      std::move(continue_callback));
+  optimization_guide::GetAIPageContent(web_contents, std::move(options),
+                                       std::move(callback));
 }
 
 // Fills an AiData proto with information from GetInnerText. If no result,
@@ -170,8 +202,7 @@ void OnHistorySearchCompleted(
     for (auto& scored_url_row : search_result.scored_url_rows) {
       optimization_guide::proto::HistoryVisitItem* visit_item =
           history_result->mutable_history_data()->add_visit_item();
-      visit_item->set_page_title(
-          reinterpret_cast<const char*>(scored_url_row.row.title().c_str()));
+      visit_item->set_page_title(base::UTF16ToUTF8(scored_url_row.row.title()));
       visit_item->set_page_url(scored_url_row.row.url().spec());
       visit_item->mutable_visit_time()->set_seconds(static_cast<int64_t>(
           scored_url_row.scored_url.visit_time.InSecondsFSinceUnixEpoch()));
@@ -417,36 +448,6 @@ void GetTabDataForModelPrototyping(
   concurrent.CreateCallback().Run(std::move(data));
 }
 
-void GetFormsPredictionsDataForModelPrototyping(
-    content::WebContents* web_contents,
-    AiDataKeyedService::AiDataCallback continue_callback) {
-  AiDataKeyedService::AiData data =
-      std::make_optional<AiDataKeyedService::BrowserData>();
-  tabs::TabInterface* tab = tabs::TabInterface::MaybeGetFromContents(
-      web_contents->GetOutermostWebContents());
-  if (!tab) {
-    std::move(continue_callback).Run(std::move(data));
-    return;
-  }
-  ChromeAutofillAiClient* client =
-      tab->GetTabFeatures()->chrome_autofill_ai_client();
-  if (!client) {
-    std::move(continue_callback).Run(std::move(data));
-    return;
-  }
-  if (std::optional<optimization_guide::proto::FormsPredictionsRequest>
-          request = client->GetModelExecutor()->GetLatestRequest();
-      request) {
-    *data->mutable_forms_predictions_request() = *request;
-  }
-  if (std::optional<optimization_guide::proto::FormsPredictionsResponse>
-          response = client->GetModelExecutor()->GetLatestResponse();
-      response) {
-    *data->mutable_forms_predictions_response() = *response;
-  }
-  std::move(continue_callback).Run(std::move(data));
-}
-
 void GetFormDataByFieldGlobalIdForModelPrototyping(
     content::WebContents* web_contents,
     const optimization_guide::proto::AutofillFieldGlobalId& global_id_proto,
@@ -484,8 +485,8 @@ void GetFormDataByFieldGlobalIdForModelPrototyping(
     return;
   }
   *data->mutable_form_data() = autofill::ToFormDataProto(
-      form_structure->ToFormData(), /*field_eligibility_map=*/{},
-      /*field_value_sensitivity_map=*/{});
+      form_structure->ToFormData(),
+      autofill::FormDataProtoConversionReason::kExtensionAPI);
   std::move(continue_callback).Run(std::move(data));
 }
 #endif
@@ -576,7 +577,6 @@ CreateDefaultPageContextSpecifier(int dom_node_id) {
   page_context_specifier->set_tab_screenshot(true);
   page_context_specifier->set_ax_tree(true);
   page_context_specifier->set_pdf_data(true);
-  page_context_specifier->set_forms_prediction(true);
   return page_context_specifier;
 }
 
@@ -607,6 +607,8 @@ void GetModelPrototypingAiData(AiDataKeyedService::AiDataSpecifier specifiers,
   // collect it.
   GetAIPageContentForModelPrototyping(web_contents,
                                       concurrent.CreateCallback());
+  GetAIPageContentWithActionableElementsForModelPrototyping(
+      web_contents, concurrent.CreateCallback());
   if (page_context_specifier.ax_tree()) {
     RequestAxTreeSnapshotForModelPrototyping(web_contents,
                                              concurrent.CreateCallback());
@@ -644,10 +646,6 @@ void GetModelPrototypingAiData(AiDataKeyedService::AiDataSpecifier specifiers,
             : 0;
     GetTabDataForModelPrototyping(tabs_for_inner_text, web_contents,
                                   concurrent);
-  }
-  if (page_context_specifier.forms_prediction()) {
-    GetFormsPredictionsDataForModelPrototyping(web_contents,
-                                               concurrent.CreateCallback());
   }
   if (page_context_specifier.has_field_global_id()) {
     GetFormDataByFieldGlobalIdForModelPrototyping(
@@ -736,16 +734,18 @@ std::vector<std::string> AiDataKeyedService::GetAllowlistedExtensions() {
   std::vector<std::string> allowlisted_extensions =
       base::SplitString(kAllowlistedExtensions.Get(), ",",
                         base::TRIM_WHITESPACE, base::SPLIT_WANT_NONEMPTY);
-  static const std::vector<std::string> kHardcodedAllowlistedExtensions = {
-      // https://issues.chromium.org/373645534
-      "hpkopmikdojpadgmioifjjodbmnjjjca",
-      // https://issues.chromium.org/377129777
-      "bgbpcgpcobgjpnpiginpidndjpggappi",
-      // https://issues.chromium.org/376699519
-      "eefninhhiifgcimjkmkongegpoaikmhm"};
+  static const base::NoDestructor<std::vector<std::string>>
+      kHardcodedAllowlistedExtensions({// https://issues.chromium.org/373645534
+                                       "hpkopmikdojpadgmioifjjodbmnjjjca",
+                                       // https://issues.chromium.org/377129777
+                                       "bgbpcgpcobgjpnpiginpidndjpggappi",
+                                       // https://issues.chromium.org/376699519
+                                       "eefninhhiifgcimjkmkongegpoaikmhm",
+                                       // https://issues.chromium.org/403366603
+                                       "abdciamfdmknaeggbnmafmbdfdmhfgfa"});
   allowlisted_extensions.insert(allowlisted_extensions.end(),
-                                kHardcodedAllowlistedExtensions.begin(),
-                                kHardcodedAllowlistedExtensions.end());
+                                kHardcodedAllowlistedExtensions->begin(),
+                                kHardcodedAllowlistedExtensions->end());
   std::vector<std::string> blocklisted_extensions =
       base::SplitString(kBlocklistedExtensions.Get(), ",",
                         base::TRIM_WHITESPACE, base::SPLIT_WANT_NONEMPTY);

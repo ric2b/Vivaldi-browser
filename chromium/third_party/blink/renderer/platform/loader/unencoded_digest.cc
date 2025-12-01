@@ -19,17 +19,19 @@ namespace blink {
 namespace {
 
 const char kSHA256Token[] = "sha-256";
-const char kSHA384Token[] = "sha-384";
 const char kSHA512Token[] = "sha-512";
 
 HashAlgorithm GetHashAlgorithm(IntegrityAlgorithm integrity) {
   switch (integrity) {
     case IntegrityAlgorithm::kSha256:
       return kHashAlgorithmSha256;
-    case IntegrityAlgorithm::kSha384:
-      return kHashAlgorithmSha384;
     case IntegrityAlgorithm::kSha512:
       return kHashAlgorithmSha512;
+
+    // `sha-384` is not a valid algorithm for digest headers:
+    // https://www.iana.org/assignments/http-digest-hash-alg/http-digest-hash-alg.xhtml
+    case IntegrityAlgorithm::kSha384:
+      NOTREACHED();
 
     // We don't parse signature algorithms, so we should never generate
     // a parsed `Unencoded-Digest` header with such a prefix:
@@ -42,7 +44,7 @@ HashAlgorithm GetHashAlgorithm(IntegrityAlgorithm integrity) {
 
 UnencodedDigest::UnencodedDigest(IntegrityMetadataSet integrity_metadata)
     : integrity_metadata_(integrity_metadata) {
-  CHECK(integrity_metadata.signatures.empty());
+  CHECK(integrity_metadata.public_keys.empty());
 }
 
 std::optional<UnencodedDigest> UnencodedDigest::Create(
@@ -63,13 +65,10 @@ std::optional<UnencodedDigest> UnencodedDigest::Create(
     IntegrityMetadata parsed_digest;
     size_t expected_digest_length = 0;
     if (entry.first == kSHA256Token) {
-      parsed_digest.SetAlgorithm(IntegrityAlgorithm::kSha256);
+      parsed_digest.algorithm = IntegrityAlgorithm::kSha256;
       expected_digest_length = 32;
-    } else if (entry.first == kSHA384Token) {
-      parsed_digest.SetAlgorithm(IntegrityAlgorithm::kSha384);
-      expected_digest_length = 48;
     } else if (entry.first == kSHA512Token) {
-      parsed_digest.SetAlgorithm(IntegrityAlgorithm::kSha512);
+      parsed_digest.algorithm = IntegrityAlgorithm::kSha512;
       expected_digest_length = 64;
     } else {
       // Skip over entries with unknown algorithm tokens.
@@ -96,8 +95,8 @@ std::optional<UnencodedDigest> UnencodedDigest::Create(
 
     // Store the byte sequence as a base64-encoded digest, matching CSP and
     // SRI's existing `IntegrityMetadata` implementation.
-    parsed_digest.SetDigest(Base64Encode(base::as_byte_span(digest)));
-    integrity_metadata.hashes.insert(parsed_digest.ToPair());
+    parsed_digest.digest = Base64Encode(base::as_byte_span(digest));
+    integrity_metadata.Insert(std::move(parsed_digest));
   }
 
   if (integrity_metadata.hashes.empty()) {
@@ -108,7 +107,7 @@ std::optional<UnencodedDigest> UnencodedDigest::Create(
 
 bool UnencodedDigest::DoesMatch(WTF::SegmentedBuffer* data) {
   for (const IntegrityMetadata& digest : integrity_metadata_.hashes) {
-    HashAlgorithm algorithm = GetHashAlgorithm(digest.Algorithm());
+    HashAlgorithm algorithm = GetHashAlgorithm(digest.algorithm);
     DigestValue computed_digest;
     if (!ComputeDigest(algorithm, data, computed_digest)) {
       // TODO(https://crbug.com/381044049): Emit errors.
@@ -116,8 +115,8 @@ bool UnencodedDigest::DoesMatch(WTF::SegmentedBuffer* data) {
     }
 
     // Convert the stored digest into a `DigestValue`
-    Vector<char> digest_bytes;
-    Base64Decode(digest.Digest(), digest_bytes);
+    Vector<uint8_t> digest_bytes;
+    Base64Decode(digest.digest, digest_bytes);
     DigestValue expected_digest(base::as_byte_span(digest_bytes));
 
     // If any specified digest doesn't match the digest computed over |data|,

@@ -32,6 +32,7 @@ import * as Common from '../../core/common/common.js';
 import * as Host from '../../core/host/host.js';
 import * as i18n from '../../core/i18n/i18n.js';
 import * as Root from '../../core/root/root.js';
+import * as SDK from '../../core/sdk/sdk.js';
 import * as Buttons from '../../ui/components/buttons/buttons.js';
 import * as IconButton from '../components/icon_button/icon_button.js';
 import * as VisualLogging from '../visual_logging/visual_logging.js';
@@ -72,7 +73,7 @@ const UIStrings = {
   /**
    *@description Title of an action that reloads the tab currently being debugged by DevTools
    */
-  reloadDebuggedTab: 'Reload',
+  reloadDebuggedTab: 'Reload page',
   /**
    *@description Title of an action that reloads the DevTools
    */
@@ -91,7 +92,7 @@ const UIStrings = {
    * The placeholder is the current Chrome language.
    * @example {German} PH1
    */
-  devToolsLanguageMissmatch: 'DevTools is now available in {PH1}!',
+  devToolsLanguageMissmatch: 'DevTools is now available in {PH1}',
   /**
    * @description An option the user can select when we notice that DevTools
    * is configured with a different locale than Chrome. This option means DevTools will
@@ -125,12 +126,12 @@ const UIStrings = {
    * @description Request for the user to select a local file system folder for DevTools
    * to store local overrides in.
    */
-  selectOverrideFolder: 'Select a folder to store override files in.',
+  selectOverrideFolder: 'Select a folder to store override files in',
   /**
    *@description Label for a button which opens a file picker.
    */
   selectFolder: 'Select folder',
-};
+} as const;
 const str_ = i18n.i18n.registerUIStrings('ui/legacy/InspectorView.ts', UIStrings);
 const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
 let inspectorViewInstance: InspectorView|null = null;
@@ -313,7 +314,7 @@ export class InspectorView extends VBox implements ViewLocationResolver {
     if (!view) {
       throw new Error(`Expected view for panel '${panelName}'`);
     }
-    return view.widget() as Promise<Panel>;
+    return await (view.widget() as Promise<Panel>);
   }
 
   onSuspendStateChanged(allTargetsSuspended: boolean): void {
@@ -366,7 +367,7 @@ export class InspectorView extends VBox implements ViewLocationResolver {
   }
 
   currentPanelDeprecated(): Widget|null {
-    return (ViewManager.instance().materializedWidget(this.tabbedPane.selectedTabId || '') as Widget | null);
+    return (ViewManager.instance().materializedWidget(this.tabbedPane.selectedTabId || ''));
   }
 
   showDrawer({focus, hasTargetDrawer}: {focus: boolean, hasTargetDrawer: boolean}): void {
@@ -409,10 +410,6 @@ export class InspectorView extends VBox implements ViewLocationResolver {
 
   isDrawerMinimized(): boolean {
     return this.drawerSplitWidget.isSidebarMinimized();
-  }
-
-  closeDrawerTab(id: string, userGesture?: boolean): void {
-    this.drawerTabbedPane.closeTab(id, userGesture);
   }
 
   private keyDown(event: Event): void {
@@ -489,14 +486,12 @@ export class InspectorView extends VBox implements ViewLocationResolver {
           [
             {
               text: i18nString(UIStrings.reloadDebuggedTab),
-              highlight: true,
               delegate: () => {
                 reloadDebuggedTab();
                 this.removeDebuggedTabReloadRequiredWarning();
               },
               dismiss: false,
               buttonVariant: Buttons.Button.Variant.PRIMARY,
-              icon: 'refresh',
               jslogContext: 'main.debug-reload',
             },
           ],
@@ -507,12 +502,19 @@ export class InspectorView extends VBox implements ViewLocationResolver {
       infobar.setCloseCallback(() => {
         delete this.reloadRequiredInfobar;
       });
+
+      SDK.TargetManager.TargetManager.instance().addModelListener(
+          SDK.ResourceTreeModel.ResourceTreeModel, SDK.ResourceTreeModel.Events.PrimaryPageChanged,
+          this.removeDebuggedTabReloadRequiredWarning, this);
     }
   }
 
   removeDebuggedTabReloadRequiredWarning(): void {
     if (this.reloadRequiredInfobar) {
       this.reloadRequiredInfobar.dispose();
+      SDK.TargetManager.TargetManager.instance().removeModelListener(
+          SDK.ResourceTreeModel.ResourceTreeModel, SDK.ResourceTreeModel.Events.PrimaryPageChanged,
+          this.removeDebuggedTabReloadRequiredWarning, this);
     }
   }
 
@@ -523,9 +525,9 @@ export class InspectorView extends VBox implements ViewLocationResolver {
           [
             {
               text: i18nString(UIStrings.reloadDevtools),
-              highlight: true,
               delegate: () => reloadDevTools(),
               dismiss: false,
+              buttonVariant: Buttons.Button.Variant.PRIMARY,
               jslogContext: 'main.debug-reload',
             },
           ],
@@ -546,9 +548,9 @@ export class InspectorView extends VBox implements ViewLocationResolver {
           [
             {
               text: i18nString(UIStrings.selectFolder),
-              highlight: true,
               delegate: () => callback(),
               dismiss: true,
+              buttonVariant: Buttons.Button.Variant.TONAL,
               jslogContext: 'select-folder',
             },
           ],
@@ -611,7 +613,6 @@ function createLocaleInfobar(): Infobar {
       [
         {
           text: i18nString(UIStrings.setToBrowserLanguage),
-          highlight: true,
           delegate: () => {
             languageSetting.set('browserLanguage');
             getDisableLocaleInfoBarSetting().set(true);
@@ -622,7 +623,6 @@ function createLocaleInfobar(): Infobar {
         },
         {
           text: i18nString(UIStrings.setToSpecificLanguage, {PH1: closestSupportedLanguageInCurrentLocale}),
-          highlight: true,
           delegate: () => {
             languageSetting.set(closestSupportedLocale);
             getDisableLocaleInfoBarSetting().set(true);

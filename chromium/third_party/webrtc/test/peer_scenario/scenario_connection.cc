@@ -31,6 +31,7 @@
 #include "call/rtp_packet_sink_interface.h"
 #include "media/base/rtp_utils.h"
 #include "modules/rtp_rtcp/source/rtp_packet_received.h"
+#include "p2p/base/basic_packet_socket_factory.h"
 #include "p2p/base/p2p_constants.h"
 #include "p2p/base/port_allocator.h"
 #include "p2p/base/transport_description.h"
@@ -41,12 +42,15 @@
 #include "pc/rtp_transport_internal.h"
 #include "pc/session_description.h"
 #include "rtc_base/checks.h"
+#include "rtc_base/copy_on_write_buffer.h"
 #include "rtc_base/crypto_random.h"
+#include "rtc_base/network.h"
 #include "rtc_base/rtc_certificate.h"
 #include "rtc_base/ssl_fingerprint.h"
 #include "rtc_base/ssl_identity.h"
 #include "rtc_base/task_queue_for_test.h"
 #include "rtc_base/third_party/sigslot/sigslot.h"
+#include "rtc_base/thread.h"
 #include "rtc_base/thread_annotations.h"
 #include "test/network/network_emulation_manager.h"
 
@@ -82,17 +86,19 @@ class ScenarioIceConnectionImpl : public ScenarioIceConnection,
 
   void OnRtpPacket(const RtpPacketReceived& packet) override;
   void OnCandidates(const std::string& mid,
-                    const std::vector<cricket::Candidate>& candidates);
+                    const std::vector<Candidate>& candidates);
 
   IceConnectionObserver* const observer_;
   EmulatedEndpoint* const endpoint_;
   EmulatedNetworkManagerInterface* const manager_;
-  rtc::Thread* const signaling_thread_;
-  rtc::Thread* const network_thread_;
-  rtc::scoped_refptr<rtc::RTCCertificate> const certificate_
+  Thread* const signaling_thread_;
+  Thread* const network_thread_;
+  rtc::scoped_refptr<RTCCertificate> const certificate_
       RTC_GUARDED_BY(network_thread_);
   cricket::TransportDescription const transport_description_
       RTC_GUARDED_BY(signaling_thread_);
+  std::unique_ptr<rtc::NetworkManager> network_manager_;
+  BasicPacketSocketFactory packet_socket_factory_;
   std::unique_ptr<cricket::BasicPortAllocator> port_allocator_
       RTC_GUARDED_BY(network_thread_);
   PayloadTypePicker payload_type_picker_;
@@ -119,21 +125,24 @@ ScenarioIceConnectionImpl::ScenarioIceConnectionImpl(
     : observer_(observer),
       endpoint_(net->CreateEndpoint(EmulatedEndpointConfig())),
       manager_(net->CreateEmulatedNetworkManagerInterface({endpoint_})),
-      signaling_thread_(rtc::Thread::Current()),
+      signaling_thread_(Thread::Current()),
       network_thread_(manager_->network_thread()),
-      certificate_(rtc::RTCCertificate::Create(
+      certificate_(RTCCertificate::Create(
           rtc::SSLIdentity::Create("", ::rtc::KT_DEFAULT))),
       transport_description_(
           /*transport_options*/ {},
-          rtc::CreateRandomString(cricket::ICE_UFRAG_LENGTH),
-          rtc::CreateRandomString(cricket::ICE_PWD_LENGTH),
+          CreateRandomString(cricket::ICE_UFRAG_LENGTH),
+          CreateRandomString(cricket::ICE_PWD_LENGTH),
           cricket::IceMode::ICEMODE_FULL,
           cricket::ConnectionRole::CONNECTIONROLE_PASSIVE,
           rtc::SSLFingerprint::CreateFromCertificate(*certificate_.get())
               .get()),
-      port_allocator_(
-          new cricket::BasicPortAllocator(manager_->network_manager(),
-                                          manager_->packet_socket_factory())),
+      network_manager_(manager_->ReleaseNetworkManager()),
+      packet_socket_factory_(manager_->socket_factory()),
+      port_allocator_(std::make_unique<cricket::BasicPortAllocator>(
+          env,
+          network_manager_.get(),
+          &packet_socket_factory_)),
       jsep_controller_(
           new JsepTransportController(env,
                                       network_thread_,
@@ -264,7 +273,7 @@ void ScenarioIceConnectionImpl::OnRtpPacket(const RtpPacketReceived& packet) {
 
 void ScenarioIceConnectionImpl::OnCandidates(
     const std::string& mid,
-    const std::vector<cricket::Candidate>& candidates) {
+    const std::vector<Candidate>& candidates) {
   RTC_DCHECK_RUN_ON(signaling_thread_);
   observer_->OnIceCandidates(mid, candidates);
 }

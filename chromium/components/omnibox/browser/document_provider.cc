@@ -22,7 +22,6 @@
 #include "base/feature_list.h"
 #include "base/functional/bind.h"
 #include "base/i18n/case_conversion.h"
-#include "base/i18n/time_formatting.h"
 #include "base/json/json_reader.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/no_destructor.h"
@@ -681,23 +680,7 @@ std::u16string DocumentProvider::GenerateLastModifiedString(
                               &modified_time))
     return std::u16string();
 
-  // Use shorthand if the times fall on the same day or in the same year.
-  base::Time::Exploded exploded_modified_time;
-  base::Time::Exploded exploded_now;
-  modified_time.LocalExplode(&exploded_modified_time);
-  now.LocalExplode(&exploded_now);
-  if (exploded_modified_time.year == exploded_now.year) {
-    if (exploded_modified_time.month == exploded_now.month &&
-        exploded_modified_time.day_of_month == exploded_now.day_of_month) {
-      // Same local calendar day - use localized time.
-      return base::TimeFormatTimeOfDay(modified_time);
-    }
-    // Same year but not the same day: use abbreviated month/day ("Jan 1").
-    return base::LocalizedTimeFormatWithPattern(modified_time, "MMMd");
-  }
-
-  // No shorthand; display full MM/DD/YYYY.
-  return base::TimeFormatShortDateNumeric(modified_time);
+  return AutocompleteProvider::LocalizedLastModifiedString(now, modified_time);
 }
 
 // static
@@ -726,16 +709,16 @@ std::u16string DocumentProvider::GetMatchDescription(
         GenerateLastModifiedString(update_time, base::Time::Now());
     return owner.empty()
                ? l10n_util::GetStringFUTF16(
-                     IDS_DRIVE_SUGGESTION_DESCRIPTION_TEMPLATE_WITHOUT_OWNER,
+                     IDS_CONTENT_SUGGESTION_DESCRIPTION_TEMPLATE_WITHOUT_OWNER,
                      date_desc, mime_desc)
                : l10n_util::GetStringFUTF16(
-                     IDS_DRIVE_SUGGESTION_DESCRIPTION_TEMPLATE, date_desc,
+                     IDS_CONTENT_SUGGESTION_DESCRIPTION_TEMPLATE, date_desc,
                      base::UTF8ToUTF16(owner), mime_desc);
   }
   return owner.empty()
              ? std::move(mime_desc)
              : l10n_util::GetStringFUTF16(
-                   IDS_DRIVE_SUGGESTION_DESCRIPTION_TEMPLATE_WITHOUT_DATE,
+                   IDS_CONTENT_SUGGESTION_DESCRIPTION_TEMPLATE_WITHOUT_DATE,
                    base::UTF8ToUTF16(owner), mime_desc);
 }
 
@@ -842,8 +825,9 @@ ACMatches DocumentProvider::ParseDocumentSearchResults(
                                  match.description_for_shortcuts);
     }
 
-    match.TryRichAutocompletion(base::UTF8ToUTF16(match.destination_url.spec()),
-                                match.contents, input_);
+    match.TryRichAutocompletion(input_,
+                                base::UTF8ToUTF16(match.destination_url.spec()),
+                                match.contents);
     match.transition = ui::PAGE_TRANSITION_GENERATED;
     match.RecordAdditionalInfo("owned", is_owned);
     match.RecordAdditionalInfo("completely matched in title and owner",
@@ -865,8 +849,8 @@ void DocumentProvider::CopyCachedMatchesToMatches() {
       [this](auto match) {
         match.allowed_to_be_default_match = false;
         match.TryRichAutocompletion(
-            base::UTF8ToUTF16(match.destination_url.spec()), match.contents,
-            input_);
+            input_, base::UTF8ToUTF16(match.destination_url.spec()),
+            match.contents);
         match.contents_class =
             DocumentProvider::Classify(match.contents, input_.text());
         match.RecordAdditionalInfo("from cache", "true");

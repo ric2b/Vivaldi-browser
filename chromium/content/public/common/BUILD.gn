@@ -164,6 +164,7 @@ source_set("common_sources") {
 
   sources = [
     "bindings_policy.h",
+    "btm_utils.h",
     "cdm_info.cc",
     "cdm_info.h",
     "color_parser.h",
@@ -182,7 +183,6 @@ source_set("common_sources") {
     "content_paths.h",
     "content_switch_dependent_feature_overrides.cc",
     "content_switch_dependent_feature_overrides.h",
-    "dips_utils.h",
     "drop_data.cc",
     "drop_data.h",
     "isolated_world_ids.h",
@@ -217,7 +217,6 @@ source_set("common_sources") {
     "url_constants.h",
     "url_utils.cc",
     "url_utils.h",
-    "user_agent.h",
     "web_identity.h",
     "webplugininfo.cc",
     "webplugininfo.h",
@@ -272,6 +271,7 @@ source_set("common_sources") {
   ]
   deps = [
     ":content_descriptor_keys",
+    "//build:android_buildflags",
     "//build:branding_buildflags",
     "//build/config/chromebox_for_meetings:buildflags",
 

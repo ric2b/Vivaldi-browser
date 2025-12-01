@@ -265,7 +265,15 @@ export enum UserAction {
   SAVE_SEARCHIFIED_FIRST = 99,
   SAVE_SEARCHIFIED = 100,
 
-  NUMBER_OF_ACTIONS = 101,
+  // Recorded when the user enters Ink2 text annotation mode.
+  ENTER_INK2_TEXT_ANNOTATION_MODE_FIRST = 101,
+  ENTER_INK2_TEXT_ANNOTATION_MODE = 102,
+
+  // Recorded when the user exits Ink2 text annotation mode.
+  EXIT_INK2_TEXT_ANNOTATION_MODE_FIRST = 103,
+  EXIT_INK2_TEXT_ANNOTATION_MODE = 104,
+
+  NUMBER_OF_ACTIONS = 105,
 }
 
 function createFirstMap(): Map<UserAction, UserAction> {
@@ -278,7 +286,7 @@ function createFirstMap(): Map<UserAction, UserAction> {
   const entriesWithFirst = entries.slice(1, entries.length - 1);
   const map = new Map();
   for (let i = 0; i < entriesWithFirst.length - 1; i += 2) {
-    map.set(entriesWithFirst[i + 1]![1]!, entriesWithFirst[i]![1]!);
+    map.set(entriesWithFirst[i + 1]![1], entriesWithFirst[i]![1]);
   }
   return map;
 }

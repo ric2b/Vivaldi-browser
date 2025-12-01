@@ -8,13 +8,16 @@ import {
 } from './events_sender.js';
 import {NoArgStringName} from './i18n.js';
 import {InternalMicInfo} from './microphone_manager.js';
-import {ModelLoader, ModelState} from './on_device_model/types.js';
+import {
+  getModelUiOrder,
+  ModelLoader,
+  ModelState,
+} from './on_device_model/types.js';
 import {PerfLogger} from './perf.js';
 import {effect, ReadonlySignal, Signal} from './reactive/signal.js';
 import {LangPackInfo, LanguageCode} from './soda/language_info.js';
 import {SodaSession} from './soda/types.js';
 import {settings} from './state/settings.js';
-import {assert} from './utils/assert.js';
 
 export abstract class PlatformHandler {
   /**
@@ -33,6 +36,20 @@ export abstract class PlatformHandler {
   }
 
   /**
+   * Returns device type.
+   *
+   * This is the lower level function that is used to replace get device type
+   * string in core/i18n.ts, and shouldn't be directly used.
+   *
+   * This is declared as `static` so it can be directly use at module import
+   * time, and all implementations should ensure that it can be called at
+   * module import time.
+   */
+  static getDeviceType(): string {
+    throw new Error('getDeviceType not implemented');
+  }
+
+  /**
    * Initializes the platform handler.
    *
    * This should only be called once when the app starts.
@@ -48,6 +65,49 @@ export abstract class PlatformHandler {
    * The model loader for title suggestion.
    */
   abstract titleSuggestionModelLoader: ModelLoader<string[]>;
+
+  /**
+   * Gets integrated model state for title suggestion and summarization.
+   *
+   * Model state with smaller UI order will be returned. If both models are
+   * downloading, then return state with smaller progress.
+   */
+  getGenAiModelState(): ModelState {
+    const summaryModelState = this.summaryModelLoader.state.value;
+    const summaryUiOrder = getModelUiOrder(summaryModelState);
+    const titleSuggestionModelState =
+      this.titleSuggestionModelLoader.state.value;
+    const titleSuggestionUiOrder = getModelUiOrder(titleSuggestionModelState);
+
+    if (summaryModelState.kind === 'installing' &&
+        titleSuggestionModelState.kind === 'installing') {
+      if (summaryModelState.progress < titleSuggestionModelState.progress) {
+        return summaryModelState;
+      }
+      return titleSuggestionModelState;
+    }
+
+    if (summaryUiOrder < titleSuggestionUiOrder) {
+      return summaryModelState;
+    }
+    return titleSuggestionModelState;
+  }
+
+  /**
+   * Wrapper to download GenAI-related model.
+   */
+  downloadGenAiModel(): void {
+    this.summaryModelLoader.download();
+    this.titleSuggestionModelLoader.download();
+  }
+
+  /**
+   * Returns the default language based on the application locale or profile
+   * preference.
+   *
+   * Returns EN_US if default language is not available.
+   */
+  abstract getDefaultLanguage(): LanguageCode;
 
   /**
    * Returns a readonly list of language pack info.
@@ -74,13 +134,9 @@ export abstract class PlatformHandler {
     }
     if (selectedLanguage === null && !this.isMultipleLanguageAvailable()) {
       // Use the default language (en-us) when there's no multiple language
-      // pack available.
+      // pack available. Note that the language state may be unavailable.
       selectedLanguage = LanguageCode.EN_US;
     }
-    assert(
-        selectedLanguage === null ||
-            this.getSodaState(selectedLanguage).value.kind !== 'unavailable',
-    );
     return selectedLanguage;
   }
 

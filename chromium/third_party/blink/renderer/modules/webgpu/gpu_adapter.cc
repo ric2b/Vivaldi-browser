@@ -27,56 +27,6 @@ namespace blink {
 
 namespace {
 
-std::optional<V8GPUFeatureName::Enum> ToV8FeatureNameEnum(wgpu::FeatureName f) {
-  switch (f) {
-    case wgpu::FeatureName::Depth32FloatStencil8:
-      return V8GPUFeatureName::Enum::kDepth32FloatStencil8;
-    case wgpu::FeatureName::TimestampQuery:
-      return V8GPUFeatureName::Enum::kTimestampQuery;
-    case wgpu::FeatureName::ChromiumExperimentalTimestampQueryInsidePasses:
-      return V8GPUFeatureName::Enum::
-          kChromiumExperimentalTimestampQueryInsidePasses;
-    case wgpu::FeatureName::TextureCompressionBC:
-      return V8GPUFeatureName::Enum::kTextureCompressionBc;
-    case wgpu::FeatureName::TextureCompressionETC2:
-      return V8GPUFeatureName::Enum::kTextureCompressionEtc2;
-    case wgpu::FeatureName::TextureCompressionASTC:
-      return V8GPUFeatureName::Enum::kTextureCompressionAstc;
-    case wgpu::FeatureName::IndirectFirstInstance:
-      return V8GPUFeatureName::Enum::kIndirectFirstInstance;
-    case wgpu::FeatureName::DepthClipControl:
-      return V8GPUFeatureName::Enum::kDepthClipControl;
-    case wgpu::FeatureName::RG11B10UfloatRenderable:
-      return V8GPUFeatureName::Enum::kRg11B10UfloatRenderable;
-    case wgpu::FeatureName::BGRA8UnormStorage:
-      return V8GPUFeatureName::Enum::kBgra8UnormStorage;
-    case wgpu::FeatureName::ShaderF16:
-      return V8GPUFeatureName::Enum::kShaderF16;
-    case wgpu::FeatureName::Float32Filterable:
-      return V8GPUFeatureName::Enum::kFloat32Filterable;
-    case wgpu::FeatureName::Float32Blendable:
-      return V8GPUFeatureName::Enum::kFloat32Blendable;
-    case wgpu::FeatureName::DualSourceBlending:
-      return V8GPUFeatureName::Enum::kDualSourceBlending;
-    case wgpu::FeatureName::Subgroups:
-      return V8GPUFeatureName::Enum::kSubgroups;
-    case wgpu::FeatureName::ClipDistances:
-      return V8GPUFeatureName::Enum::kClipDistances;
-    case wgpu::FeatureName::MultiDrawIndirect:
-      return V8GPUFeatureName::Enum::kChromiumExperimentalMultiDrawIndirect;
-    case wgpu::FeatureName::Unorm16TextureFormats:
-      return V8GPUFeatureName::Enum::kChromiumExperimentalUnorm16TextureFormats;
-    case wgpu::FeatureName::Snorm16TextureFormats:
-      return V8GPUFeatureName::Enum::kChromiumExperimentalSnorm16TextureFormats;
-    default:
-      return std::nullopt;
-  }
-}
-
-}  // anonymous namespace
-
-namespace {
-
 // TODO(crbug.com/351564777): should be UNSAFE_BUFFER_USAGE
 GPUSupportedFeatures* MakeFeatureNameSet(wgpu::Adapter adapter,
                                          ExecutionContext* execution_context) {
@@ -89,7 +39,8 @@ GPUSupportedFeatures* MakeFeatureNameSet(wgpu::Adapter adapter,
   const auto features_span = UNSAFE_BUFFERS(base::span<const wgpu::FeatureName>(
       supported_features.features, supported_features.featureCount));
   for (const auto& f : features_span) {
-    auto feature_name_enum_optional = ToV8FeatureNameEnum(f);
+    auto feature_name_enum_optional =
+        GPUSupportedFeatures::ToV8FeatureNameEnum(f);
     if (feature_name_enum_optional) {
       V8GPUFeatureName::Enum feature_name_enum =
           feature_name_enum_optional.value();
@@ -145,9 +96,6 @@ GPUAdapter::GPUAdapter(
   is_fallback_adapter_ = info.adapterType == wgpu::AdapterType::CPU;
   adapter_type_ = info.adapterType;
   backend_type_ = info.backendType;
-  is_compatibility_mode_ = info.compatibilityMode;
-  // TODO(crbug.com/382291443): Report feature level from wgpu::Adapter.
-  feature_level_ = info.compatibilityMode ? "compatibility" : "core";
 
   // TODO(crbug.com/359418629): Report xr compatibility in GetInfo()
   is_xr_compatible_ = options->xrCompatible();
@@ -176,7 +124,7 @@ GPUAdapter::GPUAdapter(
 
   features_ = MakeFeatureNameSet(GetHandle(), gpu_->GetExecutionContext());
 
-  wgpu::SupportedLimits limits = {};
+  wgpu::Limits limits = {};
   GetHandle().GetLimits(&limits);
   limits_ = MakeGarbageCollected<GPUSupportedLimits>(limits);
 
@@ -189,15 +137,17 @@ GPUAdapterInfo* GPUAdapter::CreateAdapterInfoForAdapter() {
     // If WebGPU developer features have been enabled then provide all available
     // adapter info values.
     info = MakeGarbageCollected<GPUAdapterInfo>(
-        vendor_, architecture_, subgroup_min_size_, subgroup_max_size_, device_,
-        description_, driver_, FromDawnEnum(backend_type_),
-        FromDawnEnum(adapter_type_), d3d_shader_model_, vk_driver_version_);
+        vendor_, architecture_, subgroup_min_size_, subgroup_max_size_,
+        is_fallback_adapter_, device_, description_, driver_,
+        FromDawnEnum(backend_type_), FromDawnEnum(adapter_type_),
+        d3d_shader_model_, vk_driver_version_);
     for (GPUMemoryHeapInfo* memory_heap : memory_heaps_) {
       info->AppendMemoryHeapInfo(memory_heap);
     }
   } else {
     info = MakeGarbageCollected<GPUAdapterInfo>(
-        vendor_, architecture_, subgroup_min_size_, subgroup_max_size_);
+        vendor_, architecture_, subgroup_min_size_, subgroup_max_size_,
+        is_fallback_adapter_);
   }
   return info;
 }
@@ -243,14 +193,6 @@ bool GPUAdapter::SupportsMultiPlanarFormats() const {
   return GetHandle().HasFeature(wgpu::FeatureName::DawnMultiPlanarFormats);
 }
 
-bool GPUAdapter::isCompatibilityMode() const {
-  return is_compatibility_mode_;
-}
-
-String GPUAdapter::featureLevel() const {
-  return feature_level_;
-}
-
 void GPUAdapter::OnRequestDeviceCallback(
     GPUDevice* device,
     const GPUDeviceDescriptor* descriptor,
@@ -294,7 +236,7 @@ void GPUAdapter::OnRequestDeviceCallback(
     }
 
     case wgpu::RequestDeviceStatus::Error:
-    case wgpu::RequestDeviceStatus::InstanceDropped:
+    case wgpu::RequestDeviceStatus::CallbackCancelled:
       if (dawn_device) {
         // A device provided with an error is already a lost device on the Dawn
         // side, reflect that by resolving the lost property immediately.
@@ -326,7 +268,7 @@ ScriptPromise<GPUDevice> GPUAdapter::requestDevice(
 
   wgpu::DeviceDescriptor dawn_desc = {};
 
-  wgpu::RequiredLimits required_limits = {};
+  wgpu::Limits required_limits = {};
   if (descriptor->hasRequiredLimits()) {
     dawn_desc.requiredLimits = &required_limits;
     GPUSupportedLimits::MakeUndefined(&required_limits);

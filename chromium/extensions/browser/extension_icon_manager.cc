@@ -26,7 +26,7 @@
 #include "ui/gfx/paint_vector_icon.h"
 
 #include "app/vivaldi_apptools.h"
-#include "extensions/api/extension_action_utils/extension_action_utils_api.h"
+#include "extensions/vivaldi_extension_handover.h"
 
 namespace extensions {
 
@@ -87,8 +87,7 @@ void ExtensionIconManager::OnImageLoaded(const ExtensionId& extension_id,
     icons_[extension_id] = modified_image;
 
     if (::vivaldi::IsVivaldiRunning() && context_) {
-      extensions::ExtensionActionUtil::SendIconLoaded(context_, extension_id,
-                                                      image);
+      vivaldi::NotifyExtensionIconLoaded(context_, extension_id, image);
     }
   }
 

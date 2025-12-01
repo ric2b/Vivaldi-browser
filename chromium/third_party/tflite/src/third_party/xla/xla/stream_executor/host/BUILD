@@ -1,7 +1,7 @@
 # Description:
 #   Host-platform specific StreamExecutor support code.
 
-load("//xla:xla.bzl", "xla_cc_test")
+load("//xla:xla.default.bzl", "xla_cc_test")
 load("//xla/stream_executor:build_defs.bzl", "stream_executor_friends")
 load("//xla/tsl:tsl.bzl", "internal_visibility")
 load("//xla/tsl/platform:rules_cc.bzl", "cc_library")
@@ -96,6 +96,20 @@ cc_library(
 )
 
 cc_library(
+    name = "host_stream_factory",
+    srcs = [
+        "host_stream_factory.cc",
+    ],
+    hdrs = [
+        "host_stream_factory.h",
+    ],
+    deps = [
+        ":host_stream",
+        "@local_tsl//tsl/platform:mutex",
+    ],
+)
+
+cc_library(
     name = "host_executor",
     srcs = [
         "host_executor.cc",
@@ -106,12 +120,12 @@ cc_library(
     deps = [
         ":host_event",
         ":host_stream",
+        ":host_stream_factory",
         "//xla/stream_executor:device_description",
         "//xla/stream_executor:device_memory",
         "//xla/stream_executor:event",
         "//xla/stream_executor:generic_memory_allocation",
         "//xla/stream_executor:generic_memory_allocator",
-        "//xla/stream_executor:host_memory_allocation",
         "//xla/stream_executor:kernel",
         "//xla/stream_executor:kernel_spec",
         "//xla/stream_executor:memory_allocation",

@@ -79,12 +79,7 @@ VivaldiSyncServiceImpl::VivaldiSyncServiceImpl(
     : SyncServiceImpl(std::move(init_params)), weak_factory_(this) {
   if (vivaldi::IsVivaldiRunning()) {
     auth_manager_ = std::make_unique<VivaldiSyncAuthManager>(
-        identity_manager_,
-        base::BindRepeating(&VivaldiSyncServiceImpl::AccountStateChanged,
-                            base::Unretained(this)),
-        base::BindRepeating(&VivaldiSyncServiceImpl::CredentialsChanged,
-                            base::Unretained(this)),
-        account_manager);
+        identity_manager_, this, account_manager);
   }
 
   // Self-destructs when sync shuts down.

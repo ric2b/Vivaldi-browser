@@ -36,6 +36,10 @@
 #import "ios/web/public/thread/web_thread.h"
 #import "url/gurl.h"
 
+// Vivaldi
+#import "components/sync_sessions/vivaldi_local_session_observer.h"
+// End Vivaldi
+
 using sync_sessions::SessionSyncService;
 
 namespace {
@@ -58,6 +62,7 @@ bool ShouldSyncURLImpl(const GURL& url) {
 class SyncSessionsClientImpl final : public sync_sessions::SyncSessionsClient {
  public:
   SyncSessionsClientImpl(
+      ProfileIOS* profile, // Vivaldi
       PrefService* pref_service,
       BrowserList* browser_list,
       history::HistoryService* history_service,
@@ -69,7 +74,8 @@ class SyncSessionsClientImpl final : public sync_sessions::SyncSessionsClient {
         data_type_store_service_(data_type_store_service),
         window_delegates_getter_(browser_list),
         local_session_event_router_(browser_list, this, start_sync_flare),
-        session_sync_prefs_(pref_service) {}
+        session_sync_prefs_(pref_service),
+        vivaldi_local_session_observer_(profile, this) {}
 
   SyncSessionsClientImpl(const SyncSessionsClientImpl&) = delete;
   SyncSessionsClientImpl& operator=(const SyncSessionsClientImpl&) = delete;
@@ -115,6 +121,12 @@ class SyncSessionsClientImpl final : public sync_sessions::SyncSessionsClient {
     return weak_ptr_factory_.GetWeakPtr();
   }
 
+  // Vivaldi
+  void NotifyVivaldiObserver() override {
+    vivaldi_local_session_observer_.TriggerSync();
+  }
+  // End Vivaldi
+
  private:
   raw_ptr<history::HistoryService> history_service_;
   raw_ptr<syncer::DeviceInfoSyncService> device_info_service_;
@@ -123,6 +135,10 @@ class SyncSessionsClientImpl final : public sync_sessions::SyncSessionsClient {
   IOSChromeLocalSessionEventRouter local_session_event_router_;
   sync_sessions::SessionSyncPrefs session_sync_prefs_;
   base::WeakPtrFactory<SyncSessionsClientImpl> weak_ptr_factory_{this};
+
+  // Vivaldi
+  vivaldi::VivaldiLocalSessionObserver vivaldi_local_session_observer_;
+  // End Vivaldi
 };
 
 }  // namespace
@@ -161,6 +177,7 @@ SessionSyncServiceFactory::BuildServiceInstanceFor(
   return std::make_unique<sync_sessions::SessionSyncServiceImpl>(
       ::GetChannel(),
       std::make_unique<SyncSessionsClientImpl>(
+          profile, // Vivaldi
           profile->GetPrefs(), BrowserListFactory::GetForProfile(profile),
           ios::HistoryServiceFactory::GetForProfile(
               profile, ServiceAccessType::EXPLICIT_ACCESS),

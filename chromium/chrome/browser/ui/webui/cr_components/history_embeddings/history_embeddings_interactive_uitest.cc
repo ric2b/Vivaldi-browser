@@ -16,11 +16,11 @@
 #include "components/history/core/browser/history_service.h"
 #include "components/history_embeddings/history_embeddings_features.h"
 #include "components/history_embeddings/history_embeddings_service.h"
-#include "components/history_embeddings/mock_embedder.h"
 #include "components/optimization_guide/core/test_model_info_builder.h"
 #include "components/page_content_annotations/core/page_content_annotations_features.h"
 #include "components/page_content_annotations/core/page_content_annotations_service.h"
 #include "components/page_content_annotations/core/test_page_content_annotator.h"
+#include "components/passage_embeddings/passage_embeddings_test_util.h"
 #include "content/public/test/browser_test.h"
 
 namespace {
@@ -46,10 +46,12 @@ class HistoryEmbeddingsInteractiveTest
   void SetUpOnMainThread() override {
     HistoryEmbeddingsServiceFactory::GetInstance()->SetTestingFactory(
         browser()->profile(),
-        base::BindLambdaForTesting([](content::BrowserContext* context) {
+        base::BindLambdaForTesting([this](content::BrowserContext* context) {
           return HistoryEmbeddingsServiceFactory::
               BuildServiceInstanceForBrowserContextForTesting(
-                  context, std::make_unique<history_embeddings::MockEmbedder>(),
+                  context,
+                  passage_embeddings_test_env_.embedder_metadata_provider(),
+                  passage_embeddings_test_env_.embedder(),
                   /*answerer=*/nullptr, /*intent_classifier=*/nullptr);
         }));
 
@@ -85,11 +87,11 @@ class HistoryEmbeddingsInteractiveTest
  private:
   base::test::ScopedFeatureList scoped_feature_list_;
   page_content_annotations::TestPageContentAnnotator page_content_annotator_;
+  passage_embeddings::TestEnvironment passage_embeddings_test_env_;
 };
 
-// Opening the feedback dialog on CrOS & LaCrOS open a system level dialog,
-// which cannot be easily tested here. Instead, LaCrOS has a separate feedback
-// browser test which gives some coverage.
+// Opening the feedback dialog on CrOS open a system level dialog, which cannot
+// be easily tested here.
 #if !BUILDFLAG(IS_CHROMEOS)
 
 // TODO(crbug.com/374710231): Reenable - currently, this fails consistently on

@@ -44,8 +44,8 @@ bool IsSegmentedDefaultBrowserPromoEnabled();
 SegmentedDefaultBrowserExperimentType
 SegmentedDefaultBrowserExperimentTypeEnabled();
 
-// Feature flag to enable the Keyboard Accessory Upgrade.
-BASE_DECLARE_FEATURE(kIOSKeyboardAccessoryUpgrade);
+// Feature flag to enable the Keyboard Accessory Upgrade for iPads.
+BASE_DECLARE_FEATURE(kIOSKeyboardAccessoryUpgradeForIPad);
 
 // Feature flag to enable the Keyboard Accessory Upgrade with a shorter manual
 // fill menu.
@@ -189,9 +189,6 @@ BASE_DECLARE_FEATURE(kSharedHighlightingIOS);
 // Feature flag to enable Share button in web context menu in iOS.
 BASE_DECLARE_FEATURE(kShareInWebContextMenuIOS);
 
-// Feature flag to enable the modern tabstrip.
-BASE_DECLARE_FEATURE(kModernTabStrip);
-
 // Feature flag to log metrics for the edit menu.
 BASE_DECLARE_FEATURE(kIOSBrowserEditMenuMetrics);
 
@@ -315,6 +312,12 @@ BASE_DECLARE_FEATURE(kLensOverlayPriceInsightsCounterfactual);
 // Feature to force allow iPad support of lens overlay.
 BASE_DECLARE_FEATURE(kLensOverlayEnableIPadCompatibility);
 
+// Feature to allow landscape support of lens overlay.
+BASE_DECLARE_FEATURE(kLensOverlayEnableLandscapeCompatibility);
+
+// Feature to enable LVF escape hatch in the overflow menu in Lens overlay.
+BASE_DECLARE_FEATURE(kLensOverlayEnableLVFEscapeHatch);
+
 // Feature to open lens overlay navigation in the same tab.
 BASE_DECLARE_FEATURE(kLensOverlayEnableSameTabNavigation);
 
@@ -329,6 +332,9 @@ extern const char kLensOverlayOnboardingParamUpdatedStringsAndVisuals[];
 
 // Feature flag to change the onboariding experience of Lens Overlay.
 BASE_DECLARE_FEATURE(kLensOverlayAlternativeOnboarding);
+
+// Feature flag to add lens overlay navigation to history.
+BASE_DECLARE_FEATURE(kLensOverlayNavigationHistory);
 
 // Feature flag to enable UITraitCollection workaround for fixing incorrect
 // trait propagation.
@@ -489,6 +495,7 @@ BASE_DECLARE_FEATURE(kEnableWebChannels);
 // the feed. When this feature is enabled, there would not be a separate
 // following feed.
 BASE_DECLARE_FEATURE(kDeprecateFeedHeader);
+bool ShouldDeprecateFeedHeader();
 
 // Feature flag to disable the feed.
 BASE_DECLARE_FEATURE(kEnableFeedAblation);
@@ -539,6 +546,10 @@ BASE_DECLARE_FEATURE(kTabGroupIndicator);
 // Whether the Tab Group Indicator feature is enabled.
 bool IsTabGroupIndicatorEnabled();
 
+// Whether the TabGroup send feedback button is enabled.
+// TODO(crbug.com/398183785): Remove once we got feedback.
+bool IsTabGroupSendFeedbackAvailable();
+
 // Feature flag to enable a new illustration in the sync opt-in promotion view.
 BASE_DECLARE_FEATURE(kNewSyncOptInIllustration);
 
@@ -547,9 +558,6 @@ bool IsNewSyncOptInIllustration();
 
 // Feature flag to disable Lens LVF features.
 BASE_DECLARE_FEATURE(kDisableLensCamera);
-
-// Feature flag that allows clearing data for managed users signing out.
-BASE_DECLARE_FEATURE(kClearDeviceDataOnSignOutForManagedUsers);
 
 // YES when the Downloads Auto Deletion feature is enabled.
 BASE_DECLARE_FEATURE(kDownloadAutoDeletionFeatureEnabled);
@@ -591,21 +599,8 @@ bool IsWebChannelsEnabled();
 // Whether the Discover service is created early, alongside the app creation.
 bool IsDiscoverFeedServiceCreatedEarly();
 
-// Whether feed background refresh is enabled and the capability was enabled at
-// startup.
+// Whether feed background refresh is enabled.
 bool IsFeedBackgroundRefreshEnabled();
-
-// Whether feed background refresh capability is enabled. Returns the value in
-// NSUserDefaults set by
-// `SaveFeedBackgroundRefreshCapabilityEnabledForNextColdStart()`. This is used
-// because registering for background refreshes must happen early in app
-// initialization and FeatureList is not yet available. Enabling or disabling
-// background refresh features will always take effect after two cold starts
-// after the feature has been changed on the server (once for the Finch
-// configuration, and another for reading the stored value from NSUserDefaults).
-// This function always returns false if the `IOS_BACKGROUND_MODE_ENABLED`
-// buildflag is not defined.
-bool IsFeedBackgroundRefreshCapabilityEnabled();
 
 // Saves whether any background refresh experiment is enabled. This call
 // DCHECKs on the availability of `base::FeatureList`.
@@ -620,11 +615,6 @@ void SetFeedRefreshTimestamp(NSDate* timestamp, NSString* NSUserDefaultsKey);
 // defaults.
 bool IsFeedOverrideDefaultsEnabled();
 
-// Returns true if the user should receive a local notification when a feed
-// background refresh is completed. Background refresh completion notifications
-// are only enabled by Experimental Settings.
-bool IsFeedBackgroundRefreshCompletedNotificationEnabled();
-
 // Whether the Following feed should also be refreshed in the background.
 bool IsFollowingFeedBackgroundRefreshEnabled();
 
@@ -632,7 +622,7 @@ bool IsFollowingFeedBackgroundRefreshEnabled();
 bool IsServerDrivenBackgroundRefreshScheduleEnabled();
 
 // Whether a new refresh should be scheduled after completion of a previous
-// background refresh.
+// background refresh. Not currently used in code.
 bool IsRecurringBackgroundRefreshScheduleEnabled();
 
 // Returns the max age that the cache is still considered fresh. In other words,
@@ -682,7 +672,7 @@ bool IsContentPushNotificationsProvisionalRegistrationOnly();
 // change.
 bool IsContentPushNotificationsSetUpListRegistrationOnly();
 
-// Whether or not the kIOSKeyboardAccessoryUpgrade feature is enabled.
+// Whether or not the Keyboard Accessory Upgrade feature is enabled.
 bool IsKeyboardAccessoryUpgradeEnabled();
 
 // Whether or not the kIOSKeyboardAccessoryUpgradeShortManualFillMenu feature is
@@ -695,12 +685,8 @@ BASE_DECLARE_FEATURE(kMagicStack);
 // Feature that enables tab resumption.
 BASE_DECLARE_FEATURE(kTabResumption);
 
-// Feature that enables enhancements for Tab Resumption.
-BASE_DECLARE_FEATURE(kTabResumption1_5);
-
-// A parameter to indicate whether the Tab resumption tile should have a see
-// more button.
-extern const char kTR15SeeMoreButtonParam[];
+// Whether the tab resumption feature is enabled.
+bool IsTabResumptionEnabled();
 
 // Feature that enables images for Tab Resumption.
 BASE_DECLARE_FEATURE(kTabResumptionImages);
@@ -716,12 +702,6 @@ extern const char kTabResumptionImagesTypesSalient[];
 // A parameter value for `kTabResumptionImagesTypes` to only enable thumbnails
 // images images for tab resumption.
 extern const char kTabResumptionImagesTypesThumbnails[];
-
-// Feature that enables tab resumption 2.0.
-BASE_DECLARE_FEATURE(kTabResumption2);
-
-// Feature that enables tab resumption 2.0 reason bubble.
-BASE_DECLARE_FEATURE(kTabResumption2Reason);
 
 // A parameter to indicate whether the Most Visited Tiles should be in the Magic
 // Stack.
@@ -744,34 +724,9 @@ extern const char kSetUpListCompactedTimeThresholdDays[];
 // TODO(crbug.com/40246814): Remove this.
 extern const char kDiscoverFeedIsNativeUIEnabled[];
 
-// Feature parameters for the tab resumption feature. If no parameter is set,
-// the default (most recent tab only) will be used.
-extern const char kTabResumptionParameterName[];
-extern const char kTabResumptionMostRecentTabOnlyParam[];
-extern const char kTabResumptionAllTabsParam[];
-
 // Feature parameters for the tab resumption feature. The threshold for tabs
 // fetched from sync in seconds. Default to 12 hours.
 extern const char kTabResumptionThresholdParameterName[];
-
-// Whether the tab resumption feature is enabled.
-bool IsTabResumptionEnabled();
-
-// Whether the tab resumption feature is enabled in 2.0 version. Implies
-// `IsTabResumptionEnabled`.
-bool IsTabResumption2_0Enabled();
-
-// Whether to show the reason bubble for Tab resumption.
-bool IsTabResumption2ReasonEnabled();
-
-// Whether the tab resumption feature is enabled for most recent tab only.
-bool IsTabResumptionEnabledForMostRecentTabOnly();
-
-// Whether the tab resumption enhancements feature is enabled.
-bool IsTabResumption1_5Enabled();
-
-// Whether the tab resumption with see more button is enabled.
-bool IsTabResumption1_5SeeMoreEnabled();
 
 // Whether the tab resumption with salient images for distant tabs (or fallback
 // for local tabs) is enabled.
@@ -886,11 +841,6 @@ BASE_DECLARE_FEATURE(kHomeMemoryImprovements);
 // Whether Home memory improvements are enabled.
 bool IsHomeMemoryImprovementsEnabled();
 
-// Feature to enable the removal of the image in the rich IPH bubble.
-BASE_DECLARE_FEATURE(kRichBubbleWithoutImage);
-
-bool IsRichBubbleWithoutImageEnabled();
-
 // Feature flag to enable account confirmation snackbar on startup.
 BASE_DECLARE_FEATURE(kIdentityConfirmationSnackbar);
 
@@ -986,6 +936,10 @@ BASE_DECLARE_FEATURE(kIOSReactivationNotifications);
 // notification should trigger.
 extern const char kIOSReactivationNotificationsTriggerTimeParam[];
 
+// Feature param containing a comma separated list of integers that represent
+// cases of the `TipsNotificationType` enum.
+extern const char kIOSReactivationNotificationsOrderParam[];
+
 // Returns whether `kIOSReactivationNotifications` is enabled.
 bool IsIOSReactivationNotificationsEnabled();
 
@@ -1021,14 +975,13 @@ extern const base::FeatureParam<std::string>
 extern const std::string_view
     kFRESignInSecondaryActionLabelUpdateParamStaySignedOut;
 
-// Returns whether 'kFRESignInSecondaryActionLabelUpdate' is enabled
+// Returns whether 'kFRESignInSecondaryActionLabelUpdate' is enabled.
 bool FRESignInSecondaryActionLabelUpdate();
 
 // Enables passkey syncing follow-up features.
 BASE_DECLARE_FEATURE(kIOSPasskeysM2);
 
-// Helper function returning the status of `kIOSPasskeysM2` and the M1
-// prerequisite.
+// Helper function returning the status of `kIOSPasskeysM2`.
 bool IOSPasskeysM2Enabled();
 
 extern const char kFullscreenTransitionSlower[];
@@ -1053,8 +1006,19 @@ extern const char kMediumFullscreenTransitionOffsetParam[];
 // the fullscreen transition or the speed of the transition.
 BASE_DECLARE_FEATURE(kFullscreenTransition);
 
+// Feature flag for switching the toolbar UI to an observer-based architecture.
+BASE_DECLARE_FEATURE(kRefactorToolbarsSize);
+
+bool IsRefactorToolbarsSize();
+
+// Feature flag to enable the new share extension UI and entries.
+BASE_DECLARE_FEATURE(kNewShareExtension);
+
 // Feature that disables all IPH messages.
 BASE_DECLARE_FEATURE(kIPHAblation);
+
+// Feature that disables IPH dismissal pan gesture for lens overlay promos.
+BASE_DECLARE_FEATURE(kLensOverlayDisableIPHPanGesture);
 
 // Returns true if IPH ablation is enabled.
 bool IsIPHAblationEnabled();
@@ -1073,5 +1037,80 @@ bool IsIPHGestureRecognitionPanAblationEnabled();
 
 // Returns true if swipes during an IPH presentation should be ignored.
 bool IsIPHGestureRecognitionSwipeAblationEnabled();
+
+// Returns true if IPH gesture recognizers should set the `cancelsTouchesInView`
+// property to YES.
+bool ShouldCancelTouchesInViewForIPH();
+
+// Returns true if the IPH gesture recognition improvements are enabled.
+bool IsIPHGestureRecognitionImprovementEnabled();
+
+// Feature flag for enabling the non-modal sign-in promo.
+BASE_DECLARE_FEATURE(kNonModalSignInPromo);
+
+// Returns whether the non-modal sign-in promo is enabled.
+bool IsNonModalSignInPromoEnabled();
+
+// Feature flag to remove section breaks when detecting addresses.
+BASE_DECLARE_FEATURE(kIOSOneTapMiniMapRemoveSectionsBreaks);
+
+// Feature flags for enhanced One Tap Minimap experiment
+// The main feature that controls of these restrictions. Different parameters
+// control the different available restrictions.
+BASE_DECLARE_FEATURE(kIOSOneTapMiniMapRestrictions);
+// A parameter that requires revalidating the address using NSDataDetector.
+extern const char kIOSOneTapMiniMapRestrictionCrossValidateParamName[];
+extern const base::FeatureParam<bool>
+    kIOSOneTapMiniMapRestrictionCrossValidateParam;
+// A parameter that requires a higher confidence.
+extern const char kIOSOneTapMiniMapRestrictionThreshholdParamName[];
+extern const base::FeatureParam<double>
+    kIOSOneTapMiniMapRestrictionThreshholdParam;
+// A parameter that requires a minimum length for the address.
+extern const char kIOSOneTapMiniMapRestrictionMinCharsParamName[];
+extern const base::FeatureParam<int> kIOSOneTapMiniMapRestrictionMinCharsParam;
+// A parameter that requires a maximum number of sections for the address.
+extern const char kIOSOneTapMiniMapRestrictionMaxSectionsParamName[];
+extern const base::FeatureParam<int>
+    kIOSOneTapMiniMapRestrictionMaxSectionsParam;
+// A parameter that the address contains a word (separated by spaces) of at
+// least that number of characters.
+extern const char kIOSOneTapMiniMapRestrictionLongestWordMinCharsParamName[];
+extern const base::FeatureParam<int>
+    kIOSOneTapMiniMapRestrictionLongestWordMinCharsParam;
+// A parameter that requires having a higher proportion of alphanumerical
+// characters.
+extern const char kIOSOneTapMiniMapRestrictionMinAlphanumProportionParamName[];
+extern const base::FeatureParam<double>
+    kIOSOneTapMiniMapRestrictionMinAlphanumProportionParam;
+
+// Returns whether notification collision management is enabled.
+bool IsNotificationCollisionManagementEnabled();
+
+// Feature flag for enabling notification collision management.
+BASE_DECLARE_FEATURE(kNotificationCollisionManagement);
+
+// Feature flag to enable integration with iOS's
+// providesAppNotificationSettings.
+BASE_DECLARE_FEATURE(kIOSProvidesAppNotificationSettings);
+
+// Feature flag for enabling the sign-in button without avatar.
+BASE_DECLARE_FEATURE(kSignInButtonNoAvatar);
+
+// Returns whether the sign-in button without avatar is enabled.
+bool IsSignInButtonNoAvatarEnabled();
+
+// Feature flag to enable background customization on the NTP.
+BASE_DECLARE_FEATURE(kNTPBackgroundCustomization);
+
+// Checks if background customization is enabled on the NTP.
+bool IsNTPBackgroundCustomizationEnabled();
+
+// Feature flag to control whether default status API check and reporting are
+// enabled.
+BASE_DECLARE_FEATURE(kRunDefaultStatusCheck);
+
+// Returns whether `kRunDefaultStatusCheck` is enabled.
+bool IsRunDefaultStatusCheckEnabled();
 
 #endif  // IOS_CHROME_BROWSER_SHARED_PUBLIC_FEATURES_FEATURES_H_

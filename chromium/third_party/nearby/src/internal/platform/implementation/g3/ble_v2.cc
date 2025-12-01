@@ -251,6 +251,33 @@ bool BleV2Medium::StartScanning(const Uuid& service_uuid,
   return true;
 }
 
+bool BleV2Medium::StartMultipleServicesScanning(
+    const std::vector<Uuid>& service_uuids,
+    api::ble_v2::TxPowerLevel tx_power_level, ScanCallback callback) {
+  NEARBY_LOGS(INFO) << "G3 Ble StartMultipleServicesScanning";
+
+  absl::MutexLock lock(&mutex_);
+  scan_callback_ = std::move(callback);
+  for (const auto& service_uuid : service_uuids) {
+    auto internal_session_id = Prng().NextUint32();
+    ScanCallback multiple_scan_callback = {
+        .advertisement_found_cb = [this](
+                                      api::ble_v2::BlePeripheral& peripheral,
+                                      BleAdvertisementData advertisement_data) {
+          scan_callback_.advertisement_found_cb(peripheral, advertisement_data);
+        }};
+
+    MediumEnvironment::Instance().UpdateBleV2MediumForScanning(
+        /*enabled=*/true, service_uuid, internal_session_id,
+        {.advertisement_found_cb =
+             std::move(multiple_scan_callback.advertisement_found_cb)},
+        *this);
+    scanning_internal_session_ids_.insert({service_uuid, internal_session_id});
+  }
+
+  return true;
+}
+
 bool BleV2Medium::StopScanning() {
   NEARBY_LOGS(INFO) << "G3 Ble StopScanning";
   absl::MutexLock lock(&mutex_);
@@ -750,6 +777,12 @@ std::unique_ptr<api::ble_v2::BleServerSocket> BleV2Medium::OpenServerSocket(
   absl::MutexLock lock(&mutex_);
   server_sockets_.insert({service_id, server_socket.get()});
   return server_socket;
+}
+
+std::unique_ptr<api::ble_v2::BleL2capServerSocket>
+BleV2Medium::OpenL2capServerSocket(const std::string& service_id) {
+  // TODO(mingshiouwu): add more codes for g3 testing.
+  return nullptr;
 }
 
 std::unique_ptr<api::ble_v2::BleSocket> BleV2Medium::Connect(

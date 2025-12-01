@@ -43,7 +43,8 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.Mock;
-import org.mockito.MockitoAnnotations;
+import org.mockito.junit.MockitoJUnit;
+import org.mockito.junit.MockitoRule;
 
 import org.chromium.base.Promise;
 import org.chromium.base.ThreadUtils;
@@ -67,9 +68,10 @@ import org.chromium.chrome.test.util.ActivityTestUtils;
 import org.chromium.chrome.test.util.browser.sync.SyncTestUtil;
 import org.chromium.components.signin.AccountManagerFacadeProvider;
 import org.chromium.components.signin.base.CoreAccountInfo;
-import org.chromium.components.signin.base.GoogleServiceAuthError;
 import org.chromium.components.signin.test.util.FakeAccountManagerFacade;
 import org.chromium.components.sync.DataType;
+import org.chromium.google_apis.gaia.GoogleServiceAuthError;
+import org.chromium.google_apis.gaia.GoogleServiceAuthErrorState;
 
 import java.util.Set;
 
@@ -77,6 +79,8 @@ import java.util.Set;
 @RunWith(ChromeJUnit4ClassRunner.class)
 @CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE})
 public class ManageSyncSettingsWithFakeSyncServiceImplTest {
+    @Rule public final MockitoRule mMockitoRule = MockitoJUnit.rule();
+
     @Rule(order = 0)
     public final SyncTestRule mSyncTestRule =
             new SyncTestRule() {
@@ -99,7 +103,6 @@ public class ManageSyncSettingsWithFakeSyncServiceImplTest {
 
     @Before
     public void setUp() {
-        MockitoAnnotations.initMocks(this);
         // Prevent "GmsCore outdated" error from being exposed in bots with old version.
         PasswordManagerUtilBridgeJni.setInstanceForTesting(mPasswordManagerUtilBridgeJniMock);
         when(mPasswordManagerUtilBridgeJniMock.isGmsCoreUpdateRequired(any(), any()))
@@ -260,7 +263,8 @@ public class ManageSyncSettingsWithFakeSyncServiceImplTest {
     public void testIdentityErrorCardActionForAuthError() throws Exception {
         final FakeSyncServiceImpl fakeSyncService =
                 (FakeSyncServiceImpl) mSyncTestRule.getSyncService();
-        fakeSyncService.setAuthError(GoogleServiceAuthError.State.INVALID_GAIA_CREDENTIALS);
+        fakeSyncService.setAuthError(
+                new GoogleServiceAuthError(GoogleServiceAuthErrorState.INVALID_GAIA_CREDENTIALS));
 
         // Sign in and open settings.
         mSyncTestRule.setUpAccountAndSignInForTesting();
@@ -278,7 +282,8 @@ public class ManageSyncSettingsWithFakeSyncServiceImplTest {
         doAnswer(
                         invocation -> {
                             // Simulate re-auth by clearing the auth error.
-                            fakeSyncService.setAuthError(GoogleServiceAuthError.State.NONE);
+                            fakeSyncService.setAuthError(
+                                    new GoogleServiceAuthError(GoogleServiceAuthErrorState.NONE));
                             return null;
                         })
                 .when(fakeAccountManagerFacade)

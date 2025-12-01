@@ -2,11 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/342213636): Remove this and spanify to fix the errors.
-#pragma allow_unsafe_buffers
-#endif
-
 #include "content/browser/indexed_db/indexed_db_leveldb_coding.h"
 
 #include <array>
@@ -20,6 +15,7 @@
 
 #include "base/bits.h"
 #include "base/check_op.h"
+#include "base/compiler_specific.h"
 #include "base/containers/span.h"
 #include "base/notreached.h"
 #include "base/numerics/byte_conversions.h"
@@ -190,7 +186,7 @@ void EncodeSortableDouble(double value, std::string* into) {
   CHECK(!std::isnan(value));
 
   uint64_t double_bits = 0;
-  std::memcpy(&double_bits, &value, sizeof(value));
+  UNSAFE_TODO(std::memcpy(&double_bits, &value, sizeof(value)));
 
   // When interpreted as plain bits, negative doubles will sort in reverse, so
   // invert the bits. For positive doubles we only have to invert the sign bit
@@ -231,7 +227,7 @@ bool DecodeSortableDouble(std::string_view& data, double* output) {
     host_bits = host_bits ^ std::numeric_limits<uint64_t>::max();
   }
 
-  std::memcpy(output, &host_bits, kLengthInBytes);
+  UNSAFE_TODO(std::memcpy(output, &host_bits, kLengthInBytes));
   return true;
 }
 
@@ -468,6 +464,7 @@ COMPILE_ASSERT_MATCHING_VALUES(blink::mojom::IDBKeyPathType::String,
                                kIndexedDBKeyPathStringTypeByte);
 COMPILE_ASSERT_MATCHING_VALUES(blink::mojom::IDBKeyPathType::Array,
                                kIndexedDBKeyPathArrayTypeByte);
+#undef COMPILE_ASSERT_MATCHING_VALUES
 
 void EncodeIDBKeyPath(const IndexedDBKeyPath& value, std::string* into) {
   // May be typed, or may be a raw string. An invalid leading

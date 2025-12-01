@@ -38,10 +38,10 @@ limitations under the License.
 #include "xla/hlo/ir/hlo_opcode.h"
 #include "xla/hlo/parser/hlo_parser.h"
 #include "xla/literal_util.h"
+#include "xla/service/collective_permute_cycle.h"
 #include "xla/service/computation_placer.h"
 #include "xla/service/global_device_id.h"
 #include "xla/service/hlo_module_config.h"
-#include "xla/service/source_target_pairs.h"
 #include "xla/shape.h"
 #include "xla/shape_util.h"
 #include "xla/tsl/lib/core/status_test_util.h"
@@ -51,7 +51,7 @@ limitations under the License.
 namespace xla {
 namespace {
 
-using CycleType = SourceTargetPairs::CycleType;
+using CycleType = collective_permute_cycle::CycleType;
 
 // Creates a container of ReplicaGroups.
 std::vector<ReplicaGroup> CreateReplicaGroups(
@@ -104,7 +104,9 @@ TEST(CollectiveOpsUtilsTest, CollectiveWithChannelId) {
     %param0 = f32[512]{0} parameter(0)
     %copy0 = f32[512]{0} copy(param0)
     %reshape0 = f32[1,1,512]{2,0,1} reshape(f32[512]{0} %copy0)
-    %all-gather = f32[1,4,512]{2,0,1} all-gather(f32[1,1,512]{2,0,1} %reshape0), channel_id=3621, replica_groups={{0,1,2,3}}, dimensions={1}, use_global_device_ids=true
+    %all-gather = f32[1,4,512]{2,0,1} all-gather(f32[1,1,512]{2,0,1} %reshape0),
+        channel_id=3621, replica_groups={{0,1,2,3}}, dimensions={1},
+        use_global_device_ids=true
     %copy1 = f32[1,4,512]{2,0,1} copy(all-gather)
     ROOT root = f32[1,4,512]{2,1,0} copy(%copy1)
   })";
@@ -115,6 +117,33 @@ TEST(CollectiveOpsUtilsTest, CollectiveWithChannelId) {
       module->entry_computation()->GetInstructionWithName("all-gather");
 
   EXPECT_EQ(IsOrHasCollectiveWithChannelId(all_gather), all_gather);
+}
+
+TEST(CollectiveOpsUtilsTest, IsNonFusionCollectiveSendRecv) {
+  absl::string_view hlo_string = R"(
+  HloModule module
+
+  ENTRY entry_computation {
+    data = f32[64] parameter(0)
+    tok = token[] after-all()
+    recv_ctx = (f32[64], u32[], token[]) recv(tok), channel_id=2,
+        frontend_attributes={_xla_send_recv_source_target_pairs={{3,0}}}
+    send_ctx = (f32[64], u32[], token[]) send(tok, data), channel_id=2,
+        frontend_attributes={_xla_send_recv_source_target_pairs={{3,0}}}
+    ROOT root = tuple(send_ctx, recv_ctx)
+  })";
+  TF_ASSERT_OK_AND_ASSIGN(std::unique_ptr<HloModule> module,
+                          ParseAndReturnUnverifiedModule(hlo_string));
+
+  HloInstruction *recv_ctx =
+      module->entry_computation()->GetInstructionWithName("recv_ctx");
+  ASSERT_NE(recv_ctx, nullptr);
+  HloInstruction *send_ctx =
+      module->entry_computation()->GetInstructionWithName("send_ctx");
+  ASSERT_NE(send_ctx, nullptr);
+
+  EXPECT_TRUE(IsNonFusionCollective(recv_ctx));
+  EXPECT_TRUE(IsNonFusionCollective(send_ctx));
 }
 
 TEST(CollectiveOpsUtilsTest, CollectiveWithChannelId2) {
@@ -261,6 +290,85 @@ TEST(IsExclusivelyCrossModuleTest, CrossModuleWithGlobalIds) {
   EXPECT_TRUE(is_exclusively_cross_module);
 }
 
+TEST(IsExclusivelyCrossReplicaTest, CrossReplicaNoChannelSet) {
+  int64_t num_replicas = 4;
+  int64_t num_partitions = 2;
+  DeviceAssignment device_assignment(num_replicas, num_partitions);
+  std::vector<ReplicaGroup> replica_groups =
+      CreateReplicaGroups({{0, 1}, {2, 3}});
+  EXPECT_TRUE(
+      IsExclusivelyCrossReplica(replica_groups, /*use_global_ids=*/false,
+                                /*has_channel_id=*/false, device_assignment));
+}
+
+TEST(IsExclusivelyCrossReplicaTest, CrossReplicaAndCrossModuleNoGlobalIds) {
+  int64_t num_replicas = 4;
+  int64_t num_partitions = 2;
+  DeviceAssignment device_assignment(num_replicas, num_partitions);
+  std::vector<ReplicaGroup> replica_groups =
+      CreateReplicaGroups({{0, 1}, {2, 3}});
+
+  EXPECT_FALSE(
+      IsExclusivelyCrossReplica(replica_groups, /*use_global_ids=*/false,
+                                /*has_channel_id=*/true, device_assignment));
+}
+
+TEST(IsExclusivelyCrossReplicaTest, CrossModuleNoGlobalIds) {
+  int64_t num_replicas = 4;
+  int64_t num_partitions = 2;
+  ComputationPlacer placer;
+  TF_ASSERT_OK_AND_ASSIGN(DeviceAssignment device_assignment,
+                          placer.AssignDevices(num_replicas, num_partitions));
+  std::vector<ReplicaGroup> replica_groups =
+      CreateReplicaGroups({{0}, {1}, {2}, {3}});
+
+  EXPECT_FALSE(
+      IsExclusivelyCrossReplica(replica_groups, /*use_global_ids=*/false,
+                                /*has_channel_id=*/true, device_assignment));
+}
+
+TEST(IsExclusivelyCrossReplicaTest, CrossReplicaWithGlobalIds) {
+  int64_t num_replicas = 8;
+  int64_t num_partitions = 1;
+  ComputationPlacer placer;
+  TF_ASSERT_OK_AND_ASSIGN(DeviceAssignment device_assignment,
+                          placer.AssignDevices(num_replicas, num_partitions));
+  std::vector<ReplicaGroup> replica_groups =
+      CreateReplicaGroups({{0, 1, 2, 3, 4, 5, 6, 7}});
+
+  EXPECT_TRUE(IsExclusivelyCrossReplica(replica_groups, /*use_global_ids=*/true,
+                                        /*has_channel_id=*/true,
+                                        device_assignment));
+}
+
+TEST(IsExclusivelyCrossReplicaTest, CrossReplicaAndCrossModuleWithGlobalIds) {
+  int64_t num_replicas = 4;
+  int64_t num_partitions = 2;
+  ComputationPlacer placer;
+  TF_ASSERT_OK_AND_ASSIGN(DeviceAssignment device_assignment,
+                          placer.AssignDevices(num_replicas, num_partitions));
+  std::vector<ReplicaGroup> replica_groups =
+      CreateReplicaGroups({{0, 1, 2, 3, 4, 5, 6, 7}});
+
+  EXPECT_FALSE(
+      IsExclusivelyCrossReplica(replica_groups, /*use_global_ids=*/true,
+                                /*has_channel_id=*/true, device_assignment));
+}
+
+TEST(IsExclusivelyCrossReplicaTest, CrossModuleWithGlobalIds) {
+  int64_t num_replicas = 4;
+  int64_t num_partitions = 2;
+
+  ComputationPlacer placer;
+  TF_ASSERT_OK_AND_ASSIGN(DeviceAssignment device_assignment,
+                          placer.AssignDevices(num_replicas, num_partitions));
+  std::vector<ReplicaGroup> replica_groups =
+      CreateReplicaGroups({{0, 1}, {2, 3}, {4, 5}, {6, 7}});
+
+  EXPECT_FALSE(
+      IsExclusivelyCrossReplica(replica_groups, /*use_global_ids=*/true,
+                                /*has_channel_id=*/true, device_assignment));
+}
 }  // namespace
 
 // Tests for GetCollectOpGroupMode
@@ -345,6 +453,10 @@ std::vector<TestCaseForInstruction> GetTestCasesForInstruction() {
       {HloOpcode::kCollectivePermute, true, std::nullopt,
        CollectiveOpGroupMode::kCrossPartition},
       {HloOpcode::kCollectivePermute, false, std::nullopt,
+       CollectiveOpGroupMode::kCrossReplica},
+      {HloOpcode::kRaggedAllToAll, true, std::nullopt,
+       CollectiveOpGroupMode::kCrossPartition},
+      {HloOpcode::kRaggedAllToAll, false, std::nullopt,
        CollectiveOpGroupMode::kCrossReplica}};
 }
 
@@ -424,6 +536,20 @@ TEST_P(GetCollectOpGroupModeTestForInstruction, Test) {
           builder.AddInstruction(HloInstruction::CreateCollectivePermute(
               two_elements, parameter, source_target_pairs, channel_id()));
       break;
+    case HloOpcode::kRaggedAllToAll: {
+      // Create a parameter with s64 to use a offset and size operands.
+      TF_ASSERT_OK_AND_ASSIGN(
+          HloInstruction * offset_size_parameter,
+          builder.AddParameter(HloInstruction::CreateParameter(
+              1, ShapeUtil::MakeShape(S64, {4}), "offset_size_parameter")));
+
+      collective = builder.AddInstruction(HloInstruction::CreateRaggedAllToAll(
+          eight_elements,
+          {parameter, parameter, offset_size_parameter, offset_size_parameter,
+           offset_size_parameter, offset_size_parameter},
+          {group}, channel_id()));
+      break;
+    }
     default:
       LOG(FATAL) << "Unexpected opcode.";
   }

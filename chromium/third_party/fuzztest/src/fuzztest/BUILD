@@ -77,6 +77,7 @@ cc_library(
     ],
     deps = [
         ":io",
+        ":logging",
         ":registration",
         ":registry",
         "@com_google_absl//absl/log:check",
@@ -93,7 +94,10 @@ cc_test(
     srcs = ["fuzztest_macros_test.cc"],
     deps = [
         ":fuzztest_macros",
+        "@com_google_absl//absl/log:check",
         "@com_google_absl//absl/status",
+        "@com_google_absl//absl/strings",
+        "@com_google_fuzztest//common:temp_dir",
         "@com_google_googletest//:gtest_main",
     ],
 )
@@ -220,6 +224,7 @@ cc_library(
         ":runtime",
         ":table_of_recent_compares",
         "@com_google_absl//absl/algorithm:container",
+        "@com_google_absl//absl/base:no_destructor",
         "@com_google_absl//absl/log",
         "@com_google_absl//absl/memory",
         "@com_google_absl//absl/random",
@@ -236,12 +241,12 @@ cc_library(
         "@com_google_fuzztest//centipede:centipede_interface",
         "@com_google_fuzztest//centipede:centipede_runner_no_main",
         "@com_google_fuzztest//centipede:environment",
+        "@com_google_fuzztest//centipede:execution_metadata",
         "@com_google_fuzztest//centipede:mutation_input",
         "@com_google_fuzztest//centipede:runner_result",
-        "@com_google_fuzztest//centipede:shared_memory_blob_sequence",
-        "@com_google_fuzztest//centipede:stop",
         "@com_google_fuzztest//centipede:workdir",
         "@com_google_fuzztest//common:defs",
+        "@com_google_fuzztest//common:temp_dir",
     ],
 )
 
@@ -350,6 +355,7 @@ cc_library(
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/strings:str_format",
         "@com_google_absl//absl/synchronization",
         "@com_google_absl//absl/types:span",
     ],
@@ -514,6 +520,7 @@ cc_test(
         "@com_google_absl//absl/time",
         "@com_google_fuzztest//common:blob_file",
         "@com_google_fuzztest//common:defs",
+        "@com_google_fuzztest//common:temp_dir",
         "@com_google_googletest//:gtest_main",
     ],
 )
@@ -598,6 +605,11 @@ cc_library(
     name = "runtime",
     srcs = ["internal/runtime.cc"],
     hdrs = ["internal/runtime.h"],
+    linkopts = select({
+        "@platforms//os:linux": ["-lpthread"],
+        "@platforms//os:macos": ["-lpthread"],
+        "//conditions:default": [],
+    }),
     deps = [
         ":configuration",
         ":corpus_database",
@@ -612,6 +624,7 @@ cc_library(
         ":seed_seq",
         ":serialization",
         ":status",
+        "@com_google_absl//absl/base:core_headers",
         "@com_google_absl//absl/functional:any_invocable",
         "@com_google_absl//absl/functional:bind_front",
         "@com_google_absl//absl/functional:function_ref",

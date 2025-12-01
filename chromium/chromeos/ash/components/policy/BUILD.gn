@@ -12,7 +12,10 @@ component("policy") {
 
   sources = []
 
-  public_deps = [ "restriction_schedule" ]
+  public_deps = [
+    "external_storage",
+    "restriction_schedule",
+  ]
 
   deps = []
 }
@@ -21,6 +24,7 @@ source_set("unit_tests") {
   testonly = true
 
   deps = [
+    "external_storage:unit_tests",
     "restriction_schedule:unit_tests",
     "weekly_time:unit_tests",
     "weekly_time:unit_tests_checked",

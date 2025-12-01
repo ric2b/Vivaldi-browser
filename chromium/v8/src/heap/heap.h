@@ -60,6 +60,7 @@ class ClassNameAsHeapObjectNameScope;
 
 namespace heap::base {
 class Stack;
+class StackVisitor;
 }  // namespace heap::base
 
 namespace v8 {
@@ -185,6 +186,7 @@ enum class GCFlag : uint8_t {
   // GCs that are forced, either through testing configurations (requiring
   // --expose-gc) or through DevTools (using LowMemoryNotification).
   kForced = 1 << 1,
+  kLastResort = 1 << 2,
 };
 
 using GCFlags = base::Flags<GCFlag, uint8_t>;
@@ -281,7 +283,7 @@ class Heap final {
 
   // Taking this mutex prevents the GC from entering a phase that relocates
   // object references.
-  base::SpinningMutex* relocation_mutex() { return &relocation_mutex_; }
+  base::Mutex* relocation_mutex() { return &relocation_mutex_; }
 
   // Support for context snapshots.  After calling this we have a linear
   // space to write objects in each space.
@@ -571,6 +573,9 @@ class Heap final {
       ArrayBufferExtension* extension, int64_t delta);
   void DetachArrayBufferExtension(ArrayBufferExtension* extension);
 
+  V8_EXPORT_PRIVATE void ExpandNewSpaceSizeForTesting();
+  V8_EXPORT_PRIVATE void ReduceNewSpaceSizeForTesting();
+
   IsolateSafepoint* safepoint() { return safepoint_.get(); }
 
   V8_EXPORT_PRIVATE double MonotonicallyIncreasingTimeInMs() const;
@@ -579,7 +584,7 @@ class Heap final {
   void VerifyNewSpaceTop();
 #endif  // DEBUG
 
-  void RecordStats(HeapStats* stats, bool take_snapshot = false);
+  void RecordStats(HeapStats* stats);
 
   bool MeasureMemory(std::unique_ptr<v8::MeasureMemoryDelegate> delegate,
                      v8::MeasureMemoryExecution execution);
@@ -594,7 +599,7 @@ class Heap final {
   int NextScriptId();
   int NextDebuggingId();
   int NextStackTraceId();
-  inline int GetNextTemplateSerialNumber();
+  inline uint32_t GetNextTemplateSerialNumber();
 
   void SetSerializedObjects(Tagged<HeapObject> objects);
   void SetSerializedGlobalProxySizes(Tagged<FixedArray> sizes);
@@ -995,8 +1000,11 @@ class Heap final {
   void IterateStackRoots(RootVisitor* v);
 
   void IterateConservativeStackRoots(
-      RootVisitor* v,
+      RootVisitor* root_visitor,
       IterateRootsMode roots_mode = IterateRootsMode::kMainIsolate);
+  void IterateConservativeStackRoots(::heap::base::StackVisitor* stack_visitor);
+
+  void IterateRootsForPrecisePinning(RootVisitor* visitor);
 
   // ===========================================================================
   // Remembered set API. =======================================================
@@ -1038,6 +1046,10 @@ class Heap final {
 
   // Synchronously finalizes incremental marking.
   V8_EXPORT_PRIVATE void FinalizeIncrementalMarkingAtomically(
+      GarbageCollectionReason gc_reason);
+
+  // Synchronously finalizes incremental marking if it is currently running.
+  V8_EXPORT_PRIVATE void FinalizeIncrementalMarkingAtomicallyIfRunning(
       GarbageCollectionReason gc_reason);
 
   V8_EXPORT_PRIVATE void CompleteSweepingFull();
@@ -1095,9 +1107,6 @@ class Heap final {
   // ===========================================================================
   // Unified heap (C++) support. ===============================================
   // ===========================================================================
-
-  V8_EXPORT_PRIVATE void AttachCppHeap(v8::CppHeap* cpp_heap);
-  V8_EXPORT_PRIVATE void DetachCppHeap();
 
   v8::CppHeap* cpp_heap() const { return cpp_heap_; }
 
@@ -1250,10 +1259,7 @@ class Heap final {
   // Returns the capacity of the old generation.
   V8_EXPORT_PRIVATE size_t OldGenerationCapacity() const;
 
-  base::SpinningMutex* heap_expansion_mutex() { return &heap_expansion_mutex_; }
-
-  // Returns the amount of memory currently held alive by the pool.
-  size_t CommittedMemoryOfPool();
+  base::Mutex* heap_expansion_mutex() { return &heap_expansion_mutex_; }
 
   // Returns the amount of memory currently committed for the heap.
   size_t CommittedMemory();
@@ -1602,12 +1608,13 @@ class Heap final {
   // Checks whether OldGenerationCapacity() can be expanded by `size` bytes and
   // still fits into `max_old_generation_size_`.
   V8_EXPORT_PRIVATE bool IsOldGenerationExpansionAllowed(
-      size_t size,
-      const base::SpinningMutexGuard& expansion_mutex_witness) const;
+      size_t size, const base::MutexGuard& expansion_mutex_witness) const;
 
   bool ShouldReduceMemory() const {
     return current_gc_flags_ & GCFlag::kReduceMemoryFootprint;
   }
+
+  bool IsLastResortGC() { return current_gc_flags_ & GCFlag::kLastResort; }
 
   MarkingState* marking_state() { return &marking_state_; }
 
@@ -1636,8 +1643,12 @@ class Heap final {
     return new_space() || v8_flags.sticky_mark_bits;
   }
 
+  bool IsNewSpaceAllowedToGrowAboveTargetCapacity() const;
+
  private:
   class AllocationTrackerForDebugging;
+
+  void AttachCppHeap(v8::CppHeap* cpp_heap);
 
   using ExternalStringTableUpdaterCallback =
       Tagged<String> (*)(Heap* heap, FullObjectSlot pointer);
@@ -1685,7 +1696,7 @@ class Heap final {
     std::vector<TaggedBase> young_strings_;
     std::vector<TaggedBase> old_strings_;
     // Used to protect access with --shared-string-table.
-    base::SpinningMutex mutex_;
+    base::Mutex mutex_;
   };
 
   static const int kInitialEvalCacheSize = 64;
@@ -1791,6 +1802,9 @@ class Heap final {
 
   enum class ResizeNewSpaceMode { kShrink, kGrow, kNone };
   ResizeNewSpaceMode ShouldResizeNewSpace();
+
+  void StartResizeNewSpace();
+  void ResizeNewSpace();
   void ExpandNewSpaceSize();
   void ReduceNewSpaceSize();
 
@@ -1801,6 +1815,8 @@ class Heap final {
 
   void AddToRingBuffer(const char* string);
   void GetFromRingBuffer(char* buffer);
+
+  static constexpr int kRetainMapEntrySize = 2;
 
   void CompactRetainedMaps(Tagged<WeakArrayList> retained_maps);
 
@@ -1936,7 +1952,7 @@ class Heap final {
 
   void ResetOldGenerationAndGlobalAllocationLimit();
 
-  bool always_allocate() { return always_allocate_scope_count_ != 0; }
+  bool always_allocate() const { return always_allocate_scope_count_ != 0; }
 
   bool ShouldExpandOldGenerationOnSlowAllocation(LocalHeap* local_heap,
                                                  AllocationOrigin origin);
@@ -2064,6 +2080,7 @@ class Heap final {
   // constraints and flags.
   size_t code_range_size_ = 0;
   size_t max_semi_space_size_ = 0;
+  size_t min_semi_space_size_ = 0;
   size_t initial_semispace_size_ = 0;
   // Full garbage collections can be skipped if the old generation size
   // is below this threshold.
@@ -2290,9 +2307,9 @@ class Heap final {
   std::optional<EmbedderStackStateOrigin> embedder_stack_state_origin_;
 
   StrongRootsEntry* strong_roots_head_ = nullptr;
-  base::SpinningMutex strong_roots_mutex_;
+  base::Mutex strong_roots_mutex_;
 
-  base::SpinningMutex heap_expansion_mutex_;
+  base::Mutex heap_expansion_mutex_;
 
   bool need_to_remove_stress_concurrent_allocation_observer_ = false;
 
@@ -2345,7 +2362,7 @@ class Heap final {
 
   const AllocationType allocation_type_for_in_place_internalizable_strings_;
 
-  base::SpinningMutex relocation_mutex_;
+  base::Mutex relocation_mutex_;
 
   std::unique_ptr<CollectionBarrier> collection_barrier_;
 
@@ -2474,34 +2491,33 @@ class HeapStats {
   static const int kStartMarker = 0xDECADE00;
   static const int kEndMarker = 0xDECADE01;
 
-  intptr_t* start_marker;                  //  0
-  size_t* ro_space_size;                   //  1
-  size_t* ro_space_capacity;               //  2
-  size_t* new_space_size;                  //  3
-  size_t* new_space_capacity;              //  4
-  size_t* old_space_size;                  //  5
-  size_t* old_space_capacity;              //  6
-  size_t* code_space_size;                 //  7
-  size_t* code_space_capacity;             //  8
-  size_t* map_space_size;                  //  9
-  size_t* map_space_capacity;              // 10
-  size_t* lo_space_size;                   // 11
-  size_t* code_lo_space_size;              // 12
-  size_t* global_handle_count;             // 13
-  size_t* weak_global_handle_count;        // 14
-  size_t* pending_global_handle_count;     // 15
-  size_t* near_death_global_handle_count;  // 16
-  size_t* free_global_handle_count;        // 17
-  size_t* memory_allocator_size;           // 18
-  size_t* memory_allocator_capacity;       // 19
-  size_t* malloced_memory;                 // 20
-  size_t* malloced_peak_memory;            // 21
-  size_t* objects_per_type;                // 22
-  size_t* size_per_type;                   // 23
-  int* os_error;                           // 24
-  char* last_few_messages;                 // 25
-  char* js_stacktrace;                     // 26
-  intptr_t* end_marker;                    // 27
+  intptr_t start_marker = 0;                                     //  0
+  size_t ro_space_size = 0;                                      //  1
+  size_t ro_space_capacity = 0;                                  //  2
+  size_t new_space_size = 0;                                     //  3
+  size_t new_space_capacity = 0;                                 //  4
+  size_t old_space_size = 0;                                     //  5
+  size_t old_space_capacity = 0;                                 //  6
+  size_t code_space_size = 0;                                    //  7
+  size_t code_space_capacity = 0;                                //  8
+  size_t map_space_size = 0;                                     //  9
+  size_t map_space_capacity = 0;                                 // 10
+  size_t lo_space_size = 0;                                      // 11
+  size_t code_lo_space_size = 0;                                 // 12
+  size_t global_handle_count = 0;                                // 13
+  size_t weak_global_handle_count = 0;                           // 14
+  size_t pending_global_handle_count = 0;                        // 15
+  size_t near_death_global_handle_count = 0;                     // 16
+  size_t free_global_handle_count = 0;                           // 17
+  size_t memory_allocator_size = 0;                              // 18
+  size_t memory_allocator_capacity = 0;                          // 19
+  size_t malloced_memory = 0;                                    // 20
+  size_t malloced_peak_memory = 0;                               // 21
+  size_t objects_per_type = 0;                                   // 22
+  size_t size_per_type = 0;                                      // 23
+  int os_error = 0;                                              // 24
+  char last_few_messages[Heap::kTraceRingBufferSize + 1] = {0};  // 25
+  intptr_t end_marker = 0;                                       // 27
 };
 
 // Disables GC for all allocations. It should not be used

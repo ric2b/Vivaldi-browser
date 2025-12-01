@@ -1,0 +1,38 @@
+# Copyright 2025 Vivaldi Technologies AS. All rights reserved.
+
+import("//build/config/apple/swift_source_set.gni")
+
+source_set("bottom_toolbar") {
+  sources = [
+    "vivaldi_ntp_bottom_toolbar_consumer.h",
+  ]
+
+  frameworks = [
+    "UIKit.framework",
+  ]
+
+  deps = [
+    "//ui/base",
+    ":bottom_toolbar_swift"
+  ]
+}
+
+swift_source_set("bottom_toolbar_swift") {
+  bridge_header = "vivaldi_ntp_bottom_toolbar_swift_bridge.h"
+  sources = [
+    "vivaldi_ntp_bottom_toolbar_state.swift",
+    "vivaldi_ntp_bottom_toolbar_view_provider.swift",
+    "vivaldi_ntp_bottom_toolbar_view.swift",
+  ]
+
+  deps = [
+    "//ui/base",
+    "//vivaldi/app:vivaldi_ios_native_strings",
+    "//vivaldi/ios/ui/helpers:helpers_swift",
+  ]
+
+  frameworks = [
+    "UIKit.framework",
+    "SwiftUI.framework",
+  ]
+}

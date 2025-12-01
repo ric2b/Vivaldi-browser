@@ -34,6 +34,7 @@
 #include "chrome/browser/web_applications/web_app_command_scheduler.h"
 #include "chrome/browser/web_applications/web_app_constants.h"
 #include "chrome/browser/web_applications/web_app_helpers.h"
+#include "chrome/browser/web_applications/web_app_install_finalizer.h"
 #include "chrome/browser/web_applications/web_app_install_manager.h"
 #include "chrome/browser/web_applications/web_app_management_type.h"
 #include "chrome/browser/web_applications/web_app_registry_update.h"
@@ -101,11 +102,11 @@ bool IsSyncDataEqualIfApplied(const WebApp& expected_app,
   // Remove OS integration state, as this is never applied with the sync system.
   WebApp expected_app_copy = WebApp(expected_app);
   expected_app_copy.SetCurrentOsIntegrationStates(
-      proto::WebAppOsIntegrationState());
+      proto::os_state::WebAppOsIntegration());
 
   WebApp app_applied_sync_data_copy = WebApp(*app_to_apply_sync_data);
   app_applied_sync_data_copy.SetCurrentOsIntegrationStates(
-      proto::WebAppOsIntegrationState());
+      proto::os_state::WebAppOsIntegration());
 
   // The same as what applies to OS integration state also applies to the
   // "user installed" installation source. So remove that as well.
@@ -1303,11 +1304,7 @@ TEST_F(WebAppSyncBridgeTest, CanDeleteNonUserInstallableApps) {
   // This app should be uninstalled, since the `is_uninstalling` field is set.
   std::unique_ptr<WebApp> app1 =
       test::CreateWebApp(GURL("https://example.com/app1"));
-#if BUILDFLAG(IS_CHROMEOS_LACROS)
-  app1->AddSource(WebAppManagement::kPolicy);
-#else
   app1->AddSource(WebAppManagement::kSystem);
-#endif  // BUILDFLAG(IS_CHROMEOS_LACROS)
   app1->SetIsUninstalling(/*is_uninstalling=*/true);
   const webapps::AppId app_id1 = app1->app_id();
   system_apps.push_back(std::move(app1));
@@ -1315,11 +1312,7 @@ TEST_F(WebAppSyncBridgeTest, CanDeleteNonUserInstallableApps) {
   // This app will not be uninstalled.
   std::unique_ptr<WebApp> app2 =
       test::CreateWebApp(GURL("https://example.com/app2"));
-#if BUILDFLAG(IS_CHROMEOS_LACROS)
-  app2->AddSource(WebAppManagement::kPolicy);
-#else
   app2->AddSource(WebAppManagement::kSystem);
-#endif  // BUILDFLAG(IS_CHROMEOS_LACROS)
   const webapps::AppId app_id2 = app2->app_id();
   system_apps.push_back(std::move(app2));
 
@@ -1602,15 +1595,16 @@ class WebAppSyncBridgeTest_UserDisplayModeSplit
     });
   }
 
-  WebAppSyncBridgeTest_UserDisplayModeSplit() {
+  WebAppSyncBridgeTest_UserDisplayModeSplit()
 #if BUILDFLAG(IS_CHROMEOS)
-    scoped_feature_list_.InitWithFeatureStates({
-        // UDM mitigations mess with the installed local state, disable them so
-        // the state matches the intention of the test.
-        {kUserDisplayModeSyncBrowserMitigation, false},
-        {kUserDisplayModeSyncStandaloneMitigation, false},
-    });
+      // UDM mitigations mess with the installed local state, disable them so
+      // the state matches the intention of the test.
+      : disable_user_display_mode_sync_mitigations_for_testing_(
+            &WebAppInstallFinalizer::
+                DisableUserDisplayModeSyncMitigationsForTesting(),
+            true)
 #endif  // BUILDFLAG(IS_CHROMEOS)
+  {
   }
 
   ~WebAppSyncBridgeTest_UserDisplayModeSplit() override = default;
@@ -1668,7 +1662,9 @@ class WebAppSyncBridgeTest_UserDisplayModeSplit
   }
 
  private:
-  base::test::ScopedFeatureList scoped_feature_list_;
+#if BUILDFLAG(IS_CHROMEOS)
+  base::AutoReset<bool> disable_user_display_mode_sync_mitigations_for_testing_;
+#endif  // BUILDFLAG(IS_CHROMEOS)
 };
 
 TEST_P(WebAppSyncBridgeTest_UserDisplayModeSplit, SyncUpdateToUserDisplayMode) {

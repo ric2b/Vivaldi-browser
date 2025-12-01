@@ -42,7 +42,7 @@ for locale in LOCALES:
   )
   fname = "%%(path)s/%%(filename)s_%%(locale)s.xtb" %% params
   if not os.access(fname, os.R_OK):
-    with open(fname, "wt") as f:
+    with open(fname, "wt", newline="\\n") as f:
       print (\"\"\"<?xml version="1.0" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="%%s">

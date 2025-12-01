@@ -123,8 +123,8 @@ class StyleBuilderConverter {
   STATIC_ONLY(StyleBuilderConverter);
 
  public:
-  static scoped_refptr<StyleReflection> ConvertBoxReflect(StyleResolverState&,
-                                                          const CSSValue&);
+  static StyleReflection* ConvertBoxReflect(StyleResolverState&,
+                                            const CSSValue&);
   template <typename T>
   static T ConvertComputedLength(const StyleResolverState&, const CSSValue&);
   static LengthBox ConvertClip(StyleResolverState&, const CSSValue&);
@@ -139,7 +139,7 @@ class StyleBuilderConverter {
                                                   const CSSValue&,
                                                   CSSPropertyID);
   static FilterOperations ConvertOffscreenFilterOperations(const CSSValue&,
-                                                           const Font&);
+                                                           const Font*);
   // The template parameter ZeroValue indicates which CSSValueID should be
   // converted to zero.
   template <typename T, CSSValueID ZeroValue = CSSValueID::kNone>
@@ -216,6 +216,7 @@ class StyleBuilderConverter {
   static T ConvertLineWidth(StyleResolverState&, const CSSValue&);
   static int ConvertBorderWidth(StyleResolverState&, const CSSValue&);
   static uint16_t ConvertColumnRuleWidth(StyleResolverState&, const CSSValue&);
+  static Superellipse ConvertCornerShape(StyleResolverState&, const CSSValue&);
   static LayoutUnit ConvertLayoutUnit(const StyleResolverState&,
                                       const CSSValue&);
   static std::optional<Length> ConvertGapLength(const StyleResolverState&,
@@ -335,10 +336,8 @@ class StyleBuilderConverter {
   static RespectImageOrientationEnum ConvertImageOrientation(
       StyleResolverState&,
       const CSSValue&);
-  static scoped_refptr<StylePath> ConvertPathOrNone(StyleResolverState&,
-                                                    const CSSValue&);
-  static scoped_refptr<BasicShape> ConvertObjectViewBox(StyleResolverState&,
-                                                        const CSSValue&);
+  static StylePath* ConvertPathOrNone(StyleResolverState&, const CSSValue&);
+  static BasicShape* ConvertObjectViewBox(StyleResolverState&, const CSSValue&);
   static OffsetPathOperation* ConvertOffsetPath(StyleResolverState&,
                                                 const CSSValue&);
   static StyleOffsetRotation ConvertOffsetRotate(const CSSLengthResolver&,
@@ -391,9 +390,6 @@ class StyleBuilderConverter {
   static ScopedCSSNameList* ConvertViewTransitionClass(StyleResolverState&,
                                                        const CSSValue&);
   static StyleViewTransitionGroup ConvertViewTransitionGroup(
-      StyleResolverState&,
-      const CSSValue&);
-  static StyleViewTransitionCaptureMode ConvertViewTransitionCaptureMode(
       StyleResolverState&,
       const CSSValue&);
 

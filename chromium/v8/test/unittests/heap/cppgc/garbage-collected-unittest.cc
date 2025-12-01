@@ -19,7 +19,7 @@ namespace {
 
 class GCed : public GarbageCollected<GCed> {
  public:
-  void Trace(Visitor*) const {}
+  virtual void Trace(Visitor*) const {}
 };
 class NotGCed {};
 class Mixin : public GarbageCollectedMixin {};
@@ -35,6 +35,7 @@ class MergedMixins : public Mixin, public OtherMixin {
 class GCWithMergedMixins : public GCed, public MergedMixins {
  public:
   void Trace(cppgc::Visitor* visitor) const override {
+    GCed::Trace(visitor);
     MergedMixins::Trace(visitor);
   }
 };
@@ -170,10 +171,10 @@ TEST_F(GarbageCollectedTestWithHeap, PostConstructionCallbackForMixin) {
 namespace {
 
 int GetDummyValue() {
-  static v8::base::SpinningMutex mutex;
+  static v8::base::Mutex mutex;
   static int ret = 43;
   // Global lock access to avoid reordering.
-  v8::base::SpinningMutexGuard guard(&mutex);
+  v8::base::MutexGuard guard(&mutex);
   return ret;
 }
 
@@ -251,7 +252,7 @@ namespace {
 
 struct MixinA : GarbageCollectedMixin {};
 struct MixinB : GarbageCollectedMixin {};
-struct GCed1 : GarbageCollected<GCed>, MixinA, MixinB {};
+struct GCed1 : GarbageCollected<GCed1>, MixinA, MixinB {};
 struct GCed2 : MixinA, MixinB {};
 
 static_assert(

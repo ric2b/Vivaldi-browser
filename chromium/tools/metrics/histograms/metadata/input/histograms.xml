@@ -113,7 +113,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Input.ToolType.Android" units="tool type"
-    expires_after="2025-06-22">
+    expires_after="2025-08-24">
   <owner>alexmitra@chromium.org</owner>
   <owner>flackr@chromium.org</owner>
   <owner>peconn@chromium.org</owner>
@@ -967,14 +967,20 @@ chromium-metrics-reviews@google.com.
   </token>
 </histogram>
 
-<histogram name="InputMethod.Commit.Index" units="units"
+<histogram name="InputMethod.Commit.Index{IMEMajorNames}" units="units"
     expires_after="2025-11-01">
   <owner>shend@chromium.org</owner>
   <owner>essential-inputs-team@google.com</owner>
   <summary>
     The suggestion index (1-based) of the suggestion list item which user
-    chooses to commit.
+    chooses to commit. {IMEMajorNames}
   </summary>
+  <token key="IMEMajorNames">
+    <variant name=""/>
+    <variant name=".FR" summary="The French keyboard input method"/>
+    <variant name=".Pinyin" summary="The Chinse Pinyin input method"/>
+    <variant name=".US" summary="The US keyboard input method"/>
+  </token>
 </histogram>
 
 <histogram name="InputMethod.Commit.Type2" enum="IMECommitType2"
@@ -1878,7 +1884,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="InputMethod.SessionDuration" units="ms"
-    expires_after="2025-07-13">
+    expires_after="2025-09-14">
   <owner>shend@chromium.org</owner>
   <owner>essential-inputs-team@google.com</owner>
   <summary>
@@ -1893,7 +1899,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="InputMethod.StylusHandwriting.Gesture"
-    enum="StylusHandwritingGesture" expires_after="2025-06-08">
+    enum="StylusHandwritingGesture" expires_after="2025-08-10">
   <owner>peconn@chromium.org</owner>
   <owner>embedded-experience@google.com</owner>
   <summary>
@@ -1904,7 +1910,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="InputMethod.StylusHandwriting.GestureResult"
-    enum="StylusHandwritingGestureResult" expires_after="2025-06-22">
+    enum="StylusHandwritingGestureResult" expires_after="2025-08-24">
   <owner>alexmitra@chromium.org</owner>
   <owner>embedded-experience@google.com</owner>
   <summary>
@@ -1913,7 +1919,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="InputMethod.StylusHandwriting.GestureTime2" units="ms"
-    expires_after="2025-06-22">
+    expires_after="2025-08-24">
   <owner>alexmitra@chromium.org</owner>
   <owner>embedded-experience@google.com</owner>
   <summary>
@@ -1924,7 +1930,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="InputMethod.StylusHandwriting.Triggered"
-    enum="StylusHandwritingApi" expires_after="2025-06-08">
+    enum="StylusHandwritingApi" expires_after="2025-08-10">
   <owner>peconn@chromium.org</owner>
   <owner>embedded-experience@google.com</owner>
   <summary>
@@ -1986,7 +1992,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="InputMethod.TouchSelection.DragType"
-    enum="TouchSelectionDragType" expires_after="2025-07-13">
+    enum="TouchSelectionDragType" expires_after="2025-09-14">
   <owner>michellegc@google.com</owner>
   <owner>essential-inputs-team@google.com</owner>
   <summary>
@@ -1996,33 +2002,13 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="InputMethod.TouchSelection.MenuAction"
-    enum="TouchSelectionMenuAction" expires_after="2025-07-13">
+    enum="TouchSelectionMenuAction" expires_after="2025-09-14">
   <owner>michellegc@google.com</owner>
   <owner>essential-inputs-team@google.com</owner>
   <summary>
     Action requested by a ChromeOS user from the touch selection menu. Recorded
     when the menu button is pressed.
   </summary>
-</histogram>
-
-<histogram
-    name="InputMethod.TouchSelection.{TouchSelectionResult}Session.TouchDownCount"
-    units="units" expires_after="2025-03-09">
-  <owner>michellegc@google.com</owner>
-  <owner>essential-inputs-team@google.com</owner>
-  <summary>
-    The number of touch down movements made by a user in a 'successful'
-    {TouchSelectionResult} session. A session starts from the first touch down
-    that activates touch selection and ends 'successfully' if an editing action
-    occurs after {TouchSelectionResult}, e.g. typing a character or using the
-    menu cut, copy or paste actions. The touch down count is recorded at the end
-    of a successful session (and is not recorded for sessions that end due to
-    the window closing, timing out after 10s of inactivity, etc.).
-  </summary>
-  <token key="TouchSelectionResult">
-    <variant name="Cursor" summary="cursor placement"/>
-    <variant name="Selection" summary="text selection"/>
-  </token>
 </histogram>
 
 <histogram name="InputMethod.VirtualKeyboard.BackspaceCount" units="units"

@@ -378,6 +378,7 @@ tf_cc_test(
         "//tensorflow/core:test",
         "//tensorflow/core:test_main",
         "//tensorflow/core:testlib",
+        "@com_google_googletest//:gtest",
     ],
 )
 
@@ -411,6 +412,7 @@ tf_cc_test(
         "//tensorflow/core:test",
         "//tensorflow/core:test_main",
         "//tensorflow/core:testlib",
+        "@com_google_googletest//:gtest",
     ],
 )
 
@@ -463,6 +465,7 @@ tf_cc_test(
         "//tensorflow/core:test",
         "//tensorflow/core:test_main",
         "//tensorflow/core:testlib",
+        "@com_google_googletest//:gtest",
     ],
 )
 
@@ -498,6 +501,7 @@ tf_cc_test(
         "//tensorflow/core:test",
         "//tensorflow/core:test_main",
         "//tensorflow/core:testlib",
+        "@com_google_googletest//:gtest",
     ],
 )
 
@@ -533,6 +537,7 @@ tf_cc_test(
         "//tensorflow/core:test",
         "//tensorflow/core:test_main",
         "//tensorflow/core:testlib",
+        "@com_google_googletest//:gtest",
     ],
 )
 
@@ -566,6 +571,7 @@ tf_cc_test(
         "//tensorflow/core:test",
         "//tensorflow/core:test_main",
         "//tensorflow/core:testlib",
+        "@com_google_googletest//:gtest",
     ],
 )
 
@@ -594,6 +600,7 @@ tf_cc_test(
         "//tensorflow/core:test",
         "//tensorflow/core:test_main",
         "//tensorflow/core:testlib",
+        "@com_google_googletest//:gtest",
     ],
 )
 
@@ -625,12 +632,13 @@ tf_cc_test(
         ":grad_testutil",
         ":gradient_checker",
         ":math_grad",
+        ":ops",
         ":testutil",
-        "//tensorflow/cc:ops",
         "//tensorflow/core:protos_all_cc",
         "//tensorflow/core:test",
         "//tensorflow/core:test_main",
         "//tensorflow/core:testlib",
+        "@com_google_googletest//:gtest",
     ],
 )
 
@@ -668,6 +676,7 @@ tf_cc_test(
         "//tensorflow/core:test",
         "//tensorflow/core:test_main",
         "//tensorflow/core:testlib",
+        "@com_google_googletest//:gtest",
     ],
 )
 
@@ -875,7 +884,7 @@ cc_library(
         "@com_google_absl//absl/container:flat_hash_map",
         "@com_google_absl//absl/container:flat_hash_set",
         "@com_google_absl//absl/strings",
-        "@local_tsl//tsl/platform:status",
+        "@local_xla//xla/tsl/platform:status",
     ],
 )
 
@@ -967,6 +976,7 @@ tf_cc_test(
         "//tensorflow/core:tensorflow",
         "//tensorflow/core:test",
         "//tensorflow/core:test_main",
+        "@com_google_absl//absl/status",
         "@local_xla//xla/tsl/protobuf:error_codes_proto_impl_cc",
     ],
 )

@@ -14,11 +14,12 @@
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/public/common/features.h"
-#include "third_party/blink/public/common/permissions_policy/permissions_policy.h"
 #include "third_party/blink/public/common/safe_url_pattern.h"
 #include "third_party/blink/public/mojom/manifest/manifest.mojom-blink.h"
+#include "third_party/blink/public/mojom/use_counter/metrics/web_feature.mojom-shared.h"
+#include "third_party/blink/renderer/core/loader/document_loader.h"
+#include "third_party/blink/renderer/core/testing/sim/sim_test.h"
 #include "third_party/blink/renderer/platform/testing/runtime_enabled_features_test_helpers.h"
-#include "third_party/blink/renderer/platform/testing/task_environment.h"
 #include "third_party/blink/renderer/platform/weborigin/kurl.h"
 #include "third_party/blink/renderer/platform/weborigin/security_origin.h"
 #include "third_party/blink/renderer/platform/wtf/text/wtf_uchar.h"
@@ -32,7 +33,7 @@ bool IsManifestEmpty(const mojom::blink::ManifestPtr& manifest) {
 }
 }  // namespace
 
-class ManifestParserTest : public testing::Test {
+class ManifestParserTest : public SimTest {
  public:
   ManifestParserTest(const ManifestParserTest&) = delete;
   ManifestParserTest& operator=(const ManifestParserTest&) = delete;
@@ -45,7 +46,7 @@ class ManifestParserTest : public testing::Test {
                                                    const KURL& manifest_url,
                                                    const KURL& document_url) {
     ManifestParser parser(data, manifest_url, document_url,
-                          /*execution_context=*/nullptr);
+                          GetDocument().GetExecutionContext());
     parser.Parse();
     Vector<mojom::blink::ManifestErrorPtr> errors;
     parser.TakeErrors(&errors);
@@ -109,7 +110,6 @@ class ManifestParserTest : public testing::Test {
   }
 
  private:
-  test::TaskEnvironment task_environment_;
   mojom::blink::ManifestPtr manifest_;
   Vector<String> errors_;
 };
@@ -5661,6 +5661,8 @@ TEST_F(ManifestParserTest, TranslationsParseRules) {
         ParseManifest(R"({ "translations": {"fr": {"name": "french name"}} })");
     EXPECT_TRUE(manifest->translations.empty());
     EXPECT_EQ(0u, GetErrorCount());
+    EXPECT_FALSE(GetDocument().Loader()->GetUseCounter().IsCounted(
+        WebFeature::kWebAppManifestTranslations));
   }
   {
     ScopedWebAppTranslationsForTest feature(true);
@@ -5700,6 +5702,8 @@ TEST_F(ManifestParserTest, TranslationsParseRules) {
       EXPECT_EQ(manifest->translations.find("fr")->value->description,
                 "french description");
       EXPECT_EQ(0u, GetErrorCount());
+      EXPECT_TRUE(GetDocument().Loader()->GetUseCounter().IsCounted(
+          WebFeature::kWebAppManifestTranslations));
     }
 
     // Don't parse if the property isn't an object.
@@ -5756,6 +5760,8 @@ TEST_F(ManifestParserTest, TranslationsStringsParseRules) {
     EXPECT_EQ(
         "property 'name' of 'translations' ignored, type string expected.",
         errors()[0]);
+    EXPECT_FALSE(GetDocument().Loader()->GetUseCounter().IsCounted(
+        WebFeature::kWebAppManifestTranslations));
   }
 
   // Ignore non-string translations short_name.
@@ -5768,6 +5774,8 @@ TEST_F(ManifestParserTest, TranslationsStringsParseRules) {
         "property 'short_name' of 'translations' ignored, type string "
         "expected.",
         errors()[0]);
+    EXPECT_FALSE(GetDocument().Loader()->GetUseCounter().IsCounted(
+        WebFeature::kWebAppManifestTranslations));
   }
 
   // Ignore non-string translations description.
@@ -5780,6 +5788,8 @@ TEST_F(ManifestParserTest, TranslationsStringsParseRules) {
         "property 'description' of 'translations' ignored, type string "
         "expected.",
         errors()[0]);
+    EXPECT_FALSE(GetDocument().Loader()->GetUseCounter().IsCounted(
+        WebFeature::kWebAppManifestTranslations));
   }
 
   // Translation with empty strings is ignored.
@@ -5796,6 +5806,8 @@ TEST_F(ManifestParserTest, TranslationsStringsParseRules) {
               errors()[1]);
     EXPECT_EQ("property 'description' of 'translations' is an empty string.",
               errors()[2]);
+    EXPECT_FALSE(GetDocument().Loader()->GetUseCounter().IsCounted(
+        WebFeature::kWebAppManifestTranslations));
   }
 }
 
@@ -5811,6 +5823,8 @@ TEST_F(ManifestParserTest, TabStripParseRules) {
       EXPECT_TRUE(manifest->tab_strip.is_null());
       EXPECT_EQ(0u, GetErrorCount());
     }
+    EXPECT_FALSE(GetDocument().Loader()->GetUseCounter().IsCounted(
+        WebFeature::kWebAppManifestTabStrip));
   }
   {
     ScopedWebAppTabStripForTest feature1(true);
@@ -5822,6 +5836,8 @@ TEST_F(ManifestParserTest, TabStripParseRules) {
           ParseManifest(R"({ "tab_strip": {"home_tab": "auto"} })");
       EXPECT_FALSE(manifest->tab_strip.is_null());
       EXPECT_EQ(0u, GetErrorCount());
+      EXPECT_TRUE(GetDocument().Loader()->GetUseCounter().IsCounted(
+          WebFeature::kWebAppManifestTabStrip));
     }
 
     // Manifest does not contain 'tab_strip' field.
@@ -5956,6 +5972,8 @@ TEST_F(ManifestParserTest, TabStripHomeTabScopeParseRules) {
             [{"protocol": "ftp"}, {"hostname": "bar.com"},
             {"protocol": "ftp", "hostname": "bar.com"}]}} })");
     EXPECT_FALSE(manifest->tab_strip.is_null());
+    EXPECT_TRUE(GetDocument().Loader()->GetUseCounter().IsCounted(
+        WebFeature::kWebAppManifestTabStrip));
     EXPECT_FALSE(manifest->tab_strip->home_tab->is_visibility());
     EXPECT_EQ(
         manifest->tab_strip->home_tab->get_params()->scope_patterns.size(), 3u);
@@ -6009,6 +6027,8 @@ TEST_F(ManifestParserTest, TabStripHomeTabScopeParseRules) {
           }} })",
         KURL("http://foo.com/static/manifest.json"), DefaultDocumentUrl());
     EXPECT_FALSE(manifest->tab_strip.is_null());
+    EXPECT_TRUE(GetDocument().Loader()->GetUseCounter().IsCounted(
+        WebFeature::kWebAppManifestTabStrip));
     EXPECT_FALSE(manifest->tab_strip->home_tab->is_visibility());
     EXPECT_EQ(
         manifest->tab_strip->home_tab->get_params()->scope_patterns.size(), 4u);
@@ -6143,6 +6163,8 @@ TEST_F(ManifestParserTest, TabStripHomeTabScopeParseRules) {
           ]}}
          })");
     EXPECT_FALSE(manifest->tab_strip.is_null());
+    EXPECT_TRUE(GetDocument().Loader()->GetUseCounter().IsCounted(
+        WebFeature::kWebAppManifestTabStrip));
     EXPECT_FALSE(manifest->tab_strip->home_tab->is_visibility());
     EXPECT_EQ(
         manifest->tab_strip->home_tab->get_params()->scope_patterns.size(), 5u);
@@ -6235,6 +6257,8 @@ TEST_F(ManifestParserTest, TabStripHomeTabScopeParseRules) {
             {"pathname": "/foo/:bar/*"}]}}
         })");
     EXPECT_FALSE(manifest->tab_strip.is_null());
+    EXPECT_TRUE(GetDocument().Loader()->GetUseCounter().IsCounted(
+        WebFeature::kWebAppManifestTabStrip));
     EXPECT_FALSE(manifest->tab_strip->home_tab->is_visibility());
     EXPECT_EQ(
         manifest->tab_strip->home_tab->get_params()->scope_patterns.size(), 6u);
@@ -6356,6 +6380,8 @@ TEST_F(ManifestParserTest, TabStripHomeTabScopeParseRules) {
             {"hostname": "foo.:bar.*"}, {"hostname": "*.com"}]}}
         })");
     EXPECT_FALSE(manifest->tab_strip.is_null());
+    EXPECT_TRUE(GetDocument().Loader()->GetUseCounter().IsCounted(
+        WebFeature::kWebAppManifestTabStrip));
     EXPECT_FALSE(manifest->tab_strip->home_tab->is_visibility());
     EXPECT_EQ(
         manifest->tab_strip->home_tab->get_params()->scope_patterns.size(), 7u);
@@ -6512,6 +6538,8 @@ TEST_F(ManifestParserTest, TabStripHomeTabScopeParseRules) {
             {"search": "([A-Za-z0-9])+"}
     ]}} })a");
     EXPECT_FALSE(manifest->tab_strip.is_null());
+    EXPECT_TRUE(GetDocument().Loader()->GetUseCounter().IsCounted(
+        WebFeature::kWebAppManifestTabStrip));
     EXPECT_FALSE(manifest->tab_strip->home_tab->is_visibility());
     EXPECT_EQ(
         manifest->tab_strip->home_tab->get_params()->scope_patterns.size(), 0u);
@@ -6525,6 +6553,8 @@ TEST_F(ManifestParserTest, TabStripHomeTabScopeParseRules) {
         "tab_strip": {
           "home_tab": {"scope_patterns": ["blah", 3]}} })");
     EXPECT_FALSE(manifest->tab_strip.is_null());
+    EXPECT_TRUE(GetDocument().Loader()->GetUseCounter().IsCounted(
+        WebFeature::kWebAppManifestTabStrip));
     EXPECT_FALSE(manifest->tab_strip->home_tab->is_visibility());
     EXPECT_EQ(
         manifest->tab_strip->home_tab->get_params()->scope_patterns.size(), 0u);
@@ -6538,6 +6568,8 @@ TEST_F(ManifestParserTest, TabStripHomeTabScopeParseRules) {
         "tab_strip": {
           "home_tab": {"scope_patterns": []}} })");
     EXPECT_FALSE(manifest->tab_strip.is_null());
+    EXPECT_TRUE(GetDocument().Loader()->GetUseCounter().IsCounted(
+        WebFeature::kWebAppManifestTabStrip));
     EXPECT_FALSE(manifest->tab_strip->home_tab->is_visibility());
     EXPECT_EQ(
         manifest->tab_strip->home_tab->get_params()->scope_patterns.size(), 0u);
@@ -6570,6 +6602,100 @@ TEST_F(ManifestParserTest, VersionParseRules) {
     auto& manifest = ParseManifest(R"({ "version": 123 })");
     EXPECT_TRUE(manifest->version.IsNull());
     EXPECT_EQ(1u, GetErrorCount());
+  }
+}
+
+TEST_F(ManifestParserTest, UpdateTokenParseRules) {
+  // update_token is not parsed when manifest id is not specified
+  {
+    auto& manifest = ParseManifest(R"({"update_token": "foo" })");
+    EXPECT_TRUE(manifest->update_token.IsNull());
+    EXPECT_NE(manifest->update_token, "foo");
+    EXPECT_FALSE(GetDocument().IsWebDXFeatureCounted(
+        WebDXFeature::kWebAppManifestUpdateToken));
+    EXPECT_EQ(0u, GetErrorCount());
+  }
+
+  // update_token is not parsed when manifest id is not specified by the
+  // developer and uses the default value.
+  {
+    auto& manifest = ParseManifest(R"({ "id": "", "update_token": "foo" })");
+    EXPECT_TRUE(manifest->update_token.IsNull());
+    EXPECT_NE(manifest->update_token, "foo");
+    EXPECT_FALSE(GetDocument().IsWebDXFeatureCounted(
+        WebDXFeature::kWebAppManifestUpdateToken));
+    EXPECT_EQ(0u, GetErrorCount());
+  }
+
+  // update_token is valid but not parsed since the manifest id is invalid.
+  {
+    auto& manifest = ParseManifest(R"({ "id": 42, "update_token": "foo" })");
+    EXPECT_TRUE(manifest->update_token.IsNull());
+    EXPECT_NE(manifest->update_token, "foo");
+    EXPECT_FALSE(GetDocument().IsWebDXFeatureCounted(
+        WebDXFeature::kWebAppManifestUpdateToken));
+    // 1 error since `id` will be ignored as this is not a string.
+    EXPECT_EQ(1u, GetErrorCount());
+  }
+
+  // update_token is valid but not parsed since the manifest id is a json
+  // (malformed input).
+  {
+    auto& manifest = ParseManifest(R"({ "id": {}, "update_token": "foo" })");
+    EXPECT_TRUE(manifest->update_token.IsNull());
+    EXPECT_NE(manifest->update_token, "foo");
+    EXPECT_FALSE(GetDocument().IsWebDXFeatureCounted(
+        WebDXFeature::kWebAppManifestUpdateToken));
+    // 1 error since `id` will be ignored as this is not a string.
+    EXPECT_EQ(1u, GetErrorCount());
+  }
+
+  // update_token not specified in the manifest so it is not parsed.
+  {
+    auto& manifest = ParseManifest(R"({"id": "foo", "version": "1.2.3" })");
+    EXPECT_TRUE(manifest->update_token.IsNull());
+    EXPECT_FALSE(GetDocument().IsWebDXFeatureCounted(
+        WebDXFeature::kWebAppManifestUpdateToken));
+    EXPECT_EQ(0u, GetErrorCount());
+  }
+
+  // update_token as an empty string is parsed and counted since it is not null.
+  {
+    auto& manifest = ParseManifest(R"({"id": "foo", "update_token": "" })");
+    EXPECT_FALSE(manifest->update_token.IsNull());
+    EXPECT_TRUE(manifest->update_token.empty());
+    EXPECT_EQ(0u, GetErrorCount());
+    EXPECT_TRUE(GetDocument().IsWebDXFeatureCounted(
+        WebDXFeature::kWebAppManifestUpdateToken));
+  }
+
+  // update_token specified in the manifest are parsed and increments use
+  // counter
+  {
+    auto& manifest = ParseManifest(R"({ "id": "foo", "update_token": "foo" })");
+    EXPECT_FALSE(manifest->update_token.IsNull());
+    EXPECT_EQ(manifest->update_token, "foo");
+    EXPECT_TRUE(GetDocument().IsWebDXFeatureCounted(
+        WebDXFeature::kWebAppManifestUpdateToken));
+    EXPECT_EQ(0u, GetErrorCount());
+  }
+
+  // Don't parse if update_token is not a string (invalid data type).
+  {
+    auto& manifest = ParseManifest(R"({"id": "foo", "update_token": 42 })");
+    EXPECT_TRUE(manifest->update_token.IsNull());
+    ASSERT_EQ(1u, GetErrorCount());
+    EXPECT_EQ("property 'update_token' ignored, type string expected.",
+              errors()[0]);
+  }
+
+  // Don't parse if update_token is a json (malformed input).
+  {
+    auto& manifest = ParseManifest(R"({"id": "foo", "update_token": {} })");
+    EXPECT_TRUE(manifest->update_token.IsNull());
+    ASSERT_EQ(1u, GetErrorCount());
+    EXPECT_EQ("property 'update_token' ignored, type string expected.",
+              errors()[0]);
   }
 }
 

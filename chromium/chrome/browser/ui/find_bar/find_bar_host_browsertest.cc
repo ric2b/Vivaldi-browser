@@ -5,6 +5,7 @@
 #include <stddef.h>
 
 #include <string>
+#include <string_view>
 
 #include "base/command_line.h"
 #include "base/files/file_util.h"
@@ -106,22 +107,23 @@ class FindInPageControllerTest : public InProcessBrowserTest {
     return GetFindBarWindowInfoForBrowser(browser(), position, fully_visible);
   }
 
-  std::u16string GetFindBarTextForBrowser(Browser* browser) {
+  std::u16string_view GetFindBarTextForBrowser(Browser* browser) {
     FindBar* find_bar = browser->GetFindBarController()->find_bar();
     return find_bar->GetFindText();
   }
 
-  std::u16string GetFindBarText() {
+  std::u16string_view GetFindBarText() {
     return GetFindBarTextForBrowser(browser());
   }
 
-  std::u16string GetFindBarMatchCountTextForBrowser(Browser* browser) {
-    const FindBarTesting* find_bar =
-        browser->GetFindBarController()->find_bar()->GetFindBarTesting();
-    return find_bar->GetMatchCountText();
+  std::u16string_view GetFindBarMatchCountTextForBrowser(Browser* browser) {
+    return browser->GetFindBarController()
+        ->find_bar()
+        ->GetFindBarTesting()
+        ->GetMatchCountText();
   }
 
-  std::u16string GetMatchCountText() {
+  std::u16string_view GetMatchCountText() {
     return GetFindBarMatchCountTextForBrowser(browser());
   }
 
@@ -503,7 +505,10 @@ IN_PROC_BROWSER_TEST_F(FindInPageControllerTest, SpanSearchable) {
 // TODO(crbug.com/40129326): Test is flaky on Mac debug builds.
 #if BUILDFLAG(IS_MAC) && !defined(NDEBUG)
 #define MAYBE_LargePage DISABLED_LargePage
-#elif BUILDFLAG(IS_LINUX) && (!defined(NDEBUG) || defined(ADDRESS_SANITIZER))
+#elif (BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)) && \
+    (!defined(NDEBUG) || defined(ADDRESS_SANITIZER))
+// TODO(crbug.com/404825193): Test is flaky on Linux ChromiumOS debug and ASAN
+// builds.
 // TODO(crbug.com/40751034): Test is flaky on Linux debug builds.
 // TODO(crbug.com/40760850): Test is flaky on Linux ASAN builds.
 #define MAYBE_LargePage DISABLED_LargePage
@@ -524,7 +529,8 @@ IN_PROC_BROWSER_TEST_F(FindInPageControllerTest, MAYBE_LargePage) {
 // TODO(crbug.com/40700976): Test is flaky on Mac debug builds and Linux asan.
 #if (BUILDFLAG(IS_MAC) && !defined(NDEBUG)) || defined(ADDRESS_SANITIZER)
 #define MAYBE_FindLongString DISABLED_FindLongString
-#elif BUILDFLAG(IS_LINUX) && !defined(NDEBUG)
+#elif (BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)) && !defined(NDEBUG)
+// TODO(crbug.com/404825193): Test is flaky on Linux ChromiumOS debug builds.
 // TODO(crbug.com/40751034): Test is flaky on Linux debug builds.
 #define MAYBE_FindLongString DISABLED_FindLongString
 #else

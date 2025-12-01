@@ -100,7 +100,7 @@ suite('DownloadsHandler', function() {
         '#resetAutoOpenFileTypes');
     assertTrue(!!button);
 
-    button!.click();
+    button.click();
     await downloadsBrowserProxy.whenCalled('resetAutoOpenFileTypes');
 
     webUIListenerCallback('auto-open-downloads-changed', false);
@@ -119,7 +119,7 @@ suite('DownloadsHandler', function() {
     const pathElement =
         downloadsPage.shadowRoot!.querySelector('#defaultDownloadPath');
     assertTrue(!!pathElement);
-    return pathElement!.textContent!.trim();
+    return pathElement.textContent!.trim();
   }
 
   test('rewrite default download paths', async function() {

@@ -18,6 +18,9 @@
 #include "ui/views/layout/flex_layout_view.h"
 #include "ui/views/widget/widget.h"
 
+#include "app/vivaldi_apptools.h"
+#include "ui/vivaldi_browser_window.h"
+
 namespace {
 
 ExtensionsToolbarContainer* GetExtensionsToolbarContainer(
@@ -116,6 +119,21 @@ void ShowDialog(ExtensionsToolbarContainer* container,
 
 void ShowDialog(Browser* browser,
                 std::unique_ptr<ui::DialogModel> dialog_model) {
+  if (vivaldi::IsVivaldiRunning()) {
+    VivaldiBrowserWindow* browserwindow =
+        static_cast<VivaldiBrowserWindow*>(browser->window());
+    ToolbarButtonProvider* toolbar_button_provider =
+        browserwindow->toolbar_button_provider();
+    CHECK(toolbar_button_provider);
+    views::View* const anchor_view =
+        toolbar_button_provider->GetDefaultExtensionDialogAnchorView();
+    auto bubble = std::make_unique<views::BubbleDialogModelHost>(
+        std::move(dialog_model), std::move(anchor_view),
+        views::BubbleBorder::FLOAT);
+    views::Widget* widget =
+        views::BubbleDialogDelegate::CreateBubble(std::move(bubble));
+    widget->Show();
+  } else {
   ToolbarButtonProvider* toolbar_button_provider =
       BrowserView::GetBrowserViewForBrowser(browser)->toolbar_button_provider();
   CHECK(toolbar_button_provider);
@@ -129,4 +147,5 @@ void ShowDialog(Browser* browser,
       views::BubbleDialogDelegate::CreateBubble(std::move(bubble));
 
   widget->Show();
+  }
 }

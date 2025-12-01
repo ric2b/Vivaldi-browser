@@ -12,7 +12,7 @@ using l10n_util::GetNSString;
 
 namespace {
 // Layout constants
-const CGFloat kContentViewHeight = 200.0;
+const CGFloat kContentViewHeight = 240.0;
 const CGFloat kCornerRadius = 18.0;
 const CGFloat kShadowRadius = 1.0;
 const CGFloat kShadowOpacity = 0.2;
@@ -24,6 +24,9 @@ const CGFloat kHorizontalPadding = 20.0;
 const CGFloat kButtonSpacing = 20.0;
 const CGFloat kMaxDialogWidth = 400.0;
 const CGSize kShadowOffset = {0, 1};
+const CGFloat kDividerHeight = 0.4;
+const CGFloat kDividerTopPadding = 15.0;
+const CGFloat kSettingsButtonTopPadding = 15.0;
 
 // Icons
 NSString *fallbackIcon = @"vivaldi_ntp_fallback_favicon";
@@ -40,6 +43,8 @@ NSString *fallbackIcon = @"vivaldi_ntp_fallback_favicon";
 @property (nonatomic, strong) UIButton *doneButton;
 @property (nonatomic, strong) UIView *contentView;
 @property (nonatomic, strong) UIView *dividerView;
+@property (nonatomic, strong) UIView *dividerLine;
+@property (nonatomic, strong) UIButton *openZoomSettingsButton;
 @end
 
 @implementation VivaldiPageZoomViewController
@@ -151,6 +156,27 @@ NSString *fallbackIcon = @"vivaldi_ntp_fallback_favicon";
              forControlEvents:UIControlEventTouchUpInside];
   [self.contentView addSubview:self.resetButton];
 
+  // Divider Line
+  self.dividerLine = [[UIView alloc] init];
+  self.dividerLine.backgroundColor = [UIColor separatorColor];
+  self.dividerLine.translatesAutoresizingMaskIntoConstraints = NO;
+  [self.contentView addSubview:self.dividerLine];
+
+  // Open Zoom Settings Button
+  NSString *settingTitle =
+    GetNSString(IDS_IOS_PAGEZOOM_OPEN_ZOOM_SETTING_BUTTON);
+  self.openZoomSettingsButton = [UIButton buttonWithType:UIButtonTypeSystem];
+  [self.openZoomSettingsButton
+    setTitle:settingTitle forState:UIControlStateNormal];
+  self.openZoomSettingsButton.titleLabel.font =
+    [UIFont preferredFontForTextStyle:UIFontTextStyleBody];
+  self.openZoomSettingsButton.titleLabel.adjustsFontForContentSizeCategory=YES;
+  self.openZoomSettingsButton.translatesAutoresizingMaskIntoConstraints=NO;
+  [self.openZoomSettingsButton addTarget:self
+                                  action:@selector(openZoomSettingsTapped)
+                        forControlEvents:UIControlEventTouchUpInside];
+  [self.contentView addSubview:self.openZoomSettingsButton];
+
   // Zoom Label
   self.zoomLabel = [[UILabel alloc] init];
   self.zoomLabel.font = [UIFont preferredFontForTextStyle:UIFontTextStyleBody];
@@ -228,6 +254,30 @@ NSString *fallbackIcon = @"vivaldi_ntp_fallback_favicon";
                      constant:kHorizontalPadding]
   ]];
 
+  // Divider Line
+  [NSLayoutConstraint activateConstraints:@[
+    [self.dividerLine.topAnchor
+      constraintEqualToAnchor:self.resetButton.bottomAnchor
+                     constant:kDividerTopPadding],
+    [self.dividerLine.leadingAnchor
+      constraintEqualToAnchor:
+        self.contentView.safeAreaLayoutGuide.leadingAnchor],
+    [self.dividerLine.trailingAnchor
+      constraintEqualToAnchor:
+        self.contentView.safeAreaLayoutGuide.trailingAnchor],
+    [self.dividerLine.heightAnchor constraintEqualToConstant:kDividerHeight]
+  ]];
+
+  // Open Zoom Settings Button
+  [NSLayoutConstraint activateConstraints:@[
+    [self.openZoomSettingsButton.topAnchor
+      constraintEqualToAnchor:self.dividerLine.bottomAnchor
+                     constant:kSettingsButtonTopPadding],
+    [self.openZoomSettingsButton.leadingAnchor
+      constraintEqualToAnchor:self.contentView.safeAreaLayoutGuide.leadingAnchor
+                     constant:kHorizontalPadding]
+  ]];
+
   // Zoom Label
   [NSLayoutConstraint activateConstraints:@[
     [self.zoomLabel.centerYAnchor
@@ -274,6 +324,15 @@ NSString *fallbackIcon = @"vivaldi_ntp_fallback_favicon";
     }
   }
   [keyWindow hidePageZoomViewController];
+}
+
+- (void)openZoomSettingsTapped {
+  // Check if the delegate have showVivaldiPageZoomSettings method
+  if ([self.settingsDelegate
+        respondsToSelector:@selector(showVivaldiPageZoomSettings)]) {
+    // Call the delegate to show zoom settings
+    [self.settingsDelegate showVivaldiPageZoomSettings];
+  }
 }
 
 #pragma mark - VivaldiPageZoomDialogConsumer

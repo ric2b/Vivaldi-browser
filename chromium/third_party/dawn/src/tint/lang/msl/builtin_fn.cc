@@ -112,6 +112,14 @@ const char* str(BuiltinFn i) {
             return "quad_shuffle_xor";
         case BuiltinFn::kConvert:
             return "convert";
+        case BuiltinFn::kSimdgroupLoad:
+            return "simdgroup_load";
+        case BuiltinFn::kSimdgroupStore:
+            return "simdgroup_store";
+        case BuiltinFn::kSimdgroupMultiply:
+            return "simdgroup_multiply";
+        case BuiltinFn::kSimdgroupMultiplyAccumulate:
+            return "simdgroup_multiply_accumulate";
     }
     return "<unknown>";
 }
@@ -141,9 +149,11 @@ tint::core::ir::Instruction::Accesses GetSideEffects(BuiltinFn fn) {
         case BuiltinFn::kRead:
         case BuiltinFn::kSample:
         case BuiltinFn::kSampleCompare:
+        case BuiltinFn::kSimdgroupLoad:
             return core::ir::Instruction::Accesses{core::ir::Instruction::Access::kLoad};
 
         case BuiltinFn::kWrite:
+        case BuiltinFn::kSimdgroupStore:
             return core::ir::Instruction::Accesses{core::ir::Instruction::Access::kStore};
 
         case BuiltinFn::kDistance:
@@ -161,6 +171,8 @@ tint::core::ir::Instruction::Accesses GetSideEffects(BuiltinFn fn) {
         case BuiltinFn::kSign:
         case BuiltinFn::kNone:
         case BuiltinFn::kConvert:
+        case BuiltinFn::kSimdgroupMultiply:
+        case BuiltinFn::kSimdgroupMultiplyAccumulate:
             break;
     }
     return core::ir::Instruction::Accesses{};

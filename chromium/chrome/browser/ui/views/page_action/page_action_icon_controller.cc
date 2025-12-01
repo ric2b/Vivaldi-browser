@@ -22,7 +22,6 @@
 #include "chrome/browser/ui/ui_features.h"
 #include "chrome/browser/ui/views/autofill/address_bubbles_icon_view.h"
 #include "chrome/browser/ui/views/autofill/payments/filled_card_information_icon_view.h"
-#include "chrome/browser/ui/views/autofill/payments/local_card_migration_icon_view.h"
 #include "chrome/browser/ui/views/autofill/payments/mandatory_reauth_icon_view.h"
 #include "chrome/browser/ui/views/autofill/payments/offer_notification_icon_view.h"
 #include "chrome/browser/ui/views/autofill/payments/save_payment_icon_view.h"
@@ -61,11 +60,6 @@
 #include "ui/views/layout/box_layout.h"
 
 namespace {
-
-static constexpr std::array<PageActionIconType, 2> kMigratedPageActionTypes = {
-    PageActionIconType::kLensOverlay,
-    PageActionIconType::kTranslate,
-};
 
 void RecordCTRMetrics(const char* name, PageActionCTREvent event) {
   base::UmaHistogramEnumeration(
@@ -112,10 +106,8 @@ void PageActionIconController::Init(const PageActionIconParams& params,
   for (PageActionIconType type : params.types_enabled) {
     // When the page action migration is enabled, the new
     // PageActionContainerView will contain the migrated page action icon.
-    if (base::FeatureList::IsEnabled(features::kPageActionsMigration)) {
-      if (base::Contains(kMigratedPageActionTypes, type)) {
-        continue;
-      }
+    if (IsPageActionMigrated(type)) {
+      continue;
     }
     switch (type) {
       case PageActionIconType::kPaymentsOfferNotification:
@@ -170,12 +162,6 @@ void PageActionIconController::Init(const PageActionIconParams& params,
         add_page_action_icon(
             type, std::make_unique<IntentPickerView>(
                       params.browser, params.icon_label_bubble_delegate,
-                      params.page_action_icon_delegate));
-        break;
-      case PageActionIconType::kLocalCardMigration:
-        add_page_action_icon(
-            type, std::make_unique<autofill::LocalCardMigrationIconView>(
-                      params.command_updater, params.icon_label_bubble_delegate,
                       params.page_action_icon_delegate));
         break;
       case PageActionIconType::kManagePasswords:

@@ -54,10 +54,11 @@ struct MapTableEntry {
 bool CodecPrefersLowerRange(const cricket::Codec& codec) {
   // All audio codecs prefer upper range.
   if (codec.type == cricket::Codec::Type::kAudio) {
-    return false;
+    return absl::EqualsIgnoreCase(codec.name, cricket::kRedCodecName);
   }
   if (absl::EqualsIgnoreCase(codec.name, cricket::kFlexfecCodecName) ||
-      absl::EqualsIgnoreCase(codec.name, cricket::kAv1CodecName)) {
+      absl::EqualsIgnoreCase(codec.name, cricket::kAv1CodecName) ||
+      absl::EqualsIgnoreCase(codec.name, cricket::kH265CodecName)) {
     return true;
   } else if (absl::EqualsIgnoreCase(codec.name, cricket::kH264CodecName)) {
     std::string profile_level_id;
@@ -77,7 +78,7 @@ bool CodecPrefersLowerRange(const cricket::Codec& codec) {
     std::string profile_id;
 
     if (codec.GetParam(cricket::kVP9ProfileId, &profile_id)) {
-      if (profile_id.compare("1") == 0 || profile_id.compare("3") == 0) {
+      if (profile_id == "1" || profile_id == "3") {
         return true;
       }
     }
@@ -167,7 +168,9 @@ PayloadTypePicker::PayloadTypePicker() {
 
       // Payload type assignments currently used by WebRTC.
       // Includes data to reduce collisions (and thus reassignments)
-      {{cricket::kIlbcCodecName, 8000, 1}, 102},
+      // TODO(bugs.webrtc.org/400630582): Delete this, it's only for test
+      // stability.
+      {{"reserved-do-not-use", 0, 0}, 102},
       {{cricket::kCnCodecName, 16000, 1}, 105},
       {{cricket::kCnCodecName, 32000, 1}, 106},
       {{cricket::kOpusCodecName,

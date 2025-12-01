@@ -31,6 +31,7 @@
 #include "ash/assistant/util/assistant_util.h"
 #include "ash/assistant/util/deep_link_util.h"
 #include "ash/capture_mode/capture_mode_constants.h"
+#include "ash/capture_mode/sunfish_scanner_feature_watcher.h"
 #include "ash/constants/ash_features.h"
 #include "ash/constants/ash_pref_names.h"
 #include "ash/constants/ash_switches.h"
@@ -50,6 +51,8 @@
 #include "ash/public/cpp/shell_window_ids.h"
 #include "ash/public/cpp/wallpaper/wallpaper_controller.h"
 #include "ash/root_window_controller.h"
+#include "ash/scanner/scanner_controller.h"
+#include "ash/scanner/scanner_metrics.h"
 #include "ash/screen_util.h"
 #include "ash/session/session_controller_impl.h"
 #include "ash/shelf/home_button.h"
@@ -66,6 +69,7 @@
 #include "ash/wm/window_util.h"
 #include "base/barrier_closure.h"
 #include "base/callback_list.h"
+#include "base/check.h"
 #include "base/command_line.h"
 #include "base/containers/adapters.h"
 #include "base/containers/contains.h"
@@ -286,6 +290,19 @@ bool IsAssistantExitPointInsideLauncher(
          exit_point == AssistantExitPoint::kLauncherSearchIphChip;
 }
 
+SearchBoxModel::SunfishButtonVisibility GetSunfishButtonVisibility(
+    const SunfishScannerFeatureWatcher& feature_watcher) {
+  if (feature_watcher.CanShowSunfishUi()) {
+    return SearchBoxModel::SunfishButtonVisibility::kShownWithSunfishIcon;
+  }
+
+  if (feature_watcher.CanShowScannerUi()) {
+    return SearchBoxModel::SunfishButtonVisibility::kShownWithScannerIcon;
+  }
+
+  return SearchBoxModel::SunfishButtonVisibility::kHidden;
+}
+
 }  // namespace
 
 AppListControllerImpl::AppListControllerImpl()
@@ -305,6 +322,11 @@ AppListControllerImpl::AppListControllerImpl()
   OnSessionStateChanged(session_controller->GetSessionState());
 
   Shell* shell = Shell::Get();
+  sunfish_scanner_feature_observation_.Observe(
+      shell->sunfish_scanner_feature_watcher());
+  // Get the initial Sunfish-session button state.
+  OnSunfishScannerFeatureStatesChanged(
+      *sunfish_scanner_feature_observation_.GetSource());
   WallpaperController::Get()->AddObserver(this);
   shell->AddShellObserver(this);
   shell->overview_controller()->AddObserver(this);
@@ -461,11 +483,6 @@ void AppListControllerImpl::OnActiveUserPrefServiceChanged(
     return;
   }
 
-  sunfish_enabled_ = std::make_unique<BooleanPrefMember>();
-  sunfish_enabled_->Init(
-      prefs::kSunfishEnabled, pref_service,
-      base::BindRepeating(&AppListControllerImpl::UpdateSearchBoxUiVisibilities,
-                          weak_ptr_factory_.GetWeakPtr()));
   UpdateSearchBoxUiVisibilities();
 
   if (!IsInTabletMode()) {
@@ -527,6 +544,12 @@ void AppListControllerImpl::OnUserSessionAdded(const AccountId& account_id) {
   if (features::IsLauncherNudgeSessionResetEnabled()) {
     AppListNudgeController::ResetPrefsForNewUserSession(prefs);
   }
+}
+
+void AppListControllerImpl::OnSunfishScannerFeatureStatesChanged(
+    SunfishScannerFeatureWatcher& source) {
+  GetSearchModel()->search_box()->SetSunfishButtonVisibility(
+      GetSunfishButtonVisibility(source));
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1183,8 +1206,7 @@ void AppListControllerImpl::SetKeyboardTraversalMode(bool engaged) {
     // TODO(https://crbug.com/1262236): class name comparision and static cast
     // should be avoided in the production code. Find a better way to guarantee
     // the item's selection status.
-    if (std::string_view(focused_view->GetClassName()) ==
-        std::string_view(AppListItemView::kViewClassName)) {
+    if (focused_view->GetClassName() == AppListItemView::kViewClassName) {
       static_cast<AppListItemView*>(focused_view)->EnsureSelected();
     }
 
@@ -1704,20 +1726,30 @@ void AppListControllerImpl::OnVisibilityChanged(bool visible,
       app_list_view->OnAppListVisibilityChanged(real_visibility);
 
       // Only handle the tablet mode visibility changes, and let clamshell mode
-      // handle the nudge separately.
+      // handle the nudge and button visibility metrics separately.
       if (real_visibility && IsInTabletMode()) {
-        MaybeShowSunfishLauncherNudge(fullscreen_presenter_->GetView()
-                                          ->search_box_view()
-                                          ->sunfish_button());
+        views::ImageButton* sunfish_button =
+            app_list_view->search_box_view()->sunfish_button();
+        // `sunfish_button` is always initialised in `SearchBoxView`'s
+        // constructor.
+        CHECK(sunfish_button);
+        MaybeShowSunfishLauncherNudge(sunfish_button);
       }
     }
 
     for (auto& observer : observers_)
       observer.OnAppListVisibilityChanged(real_visibility, display_id);
 
-    // Record whether the continue section is hidden by the user.
-    if (real_visibility)
+    if (real_visibility) {
+      // Record whether the continue section is hidden by the user.
       RecordHideContinueSectionMetric();
+
+      SearchBoxModel::SunfishButtonVisibility visibility =
+          GetSearchModel()->search_box()->sunfish_button_visibility();
+      RecordSunfishSessionButtonVisibilityOnLauncherShown(
+          /*is_visible=*/visibility !=
+          SearchBoxModel::SunfishButtonVisibility::kHidden);
+    }
 
     if (!home_launcher_animation_callback_.is_null())
       home_launcher_animation_callback_.Run(real_visibility);
@@ -1778,10 +1810,15 @@ void AppListControllerImpl::OnVisibilityWillChange(bool visible,
                                              display_id);
     }
 
-    // The virtual keyboard should be hidden before the bubble launcher
-    // calculating the work area.
     if (real_target_visibility) {
+      // The virtual keyboard should be hidden before the bubble launcher
+      // calculating the work area.
       keyboard::KeyboardUIController::Get()->HideKeyboardExplicitlyBySystem();
+
+      // Recalculate the Sunfish-session button visibility every time the
+      // launcher will be shown, as there are too many variables that can
+      // control it and not all of them can be observed for changes.
+      sunfish_scanner_feature_observation_.GetSource()->UpdateFeatureStates();
     }
   }
 }
@@ -1800,7 +1837,8 @@ SearchModel* AppListControllerImpl::GetSearchModel() {
 void AppListControllerImpl::UpdateSearchBoxUiVisibilities() {
   SearchBoxModel* search_box_model = GetSearchModel()->search_box();
   search_box_model->SetShowAssistantButton(IsAssistantAllowedAndEnabled());
-  search_box_model->SetShowSunfishButton(IsSunfishAllowedAndEnabled());
+  OnSunfishScannerFeatureStatesChanged(
+      *sunfish_scanner_feature_observation_.GetSource());
 
   if (!client_) {
     return;
@@ -2122,7 +2160,7 @@ void AppListControllerImpl::MaybeShowSunfishLauncherNudge(
     return;
   }
 
-  if (!IsSunfishAllowedAndEnabled()) {
+  if (!CanShowSunfishOrScannerUi()) {
     return;
   }
 

@@ -46,11 +46,12 @@
 #include "base/time/default_tick_clock.h"
 #include "base/types/optional_util.h"
 #include "base/uuid.h"
-#include "build/chromeos_buildflags.h"
+#include "build/build_config.h"
 #include "net/storage_access_api/status.h"
 #include "services/metrics/public/cpp/ukm_builders.h"
 #include "services/network/public/cpp/client_hints.h"
 #include "services/network/public/cpp/header_util.h"
+#include "services/network/public/cpp/permissions_policy/permissions_policy_declaration.h"
 #include "services/network/public/cpp/web_sandbox_flags.h"
 #include "services/network/public/mojom/url_response_head.mojom-shared.h"
 #include "services/network/public/mojom/web_sandbox_flags.mojom-blink.h"
@@ -60,7 +61,6 @@
 #include "third_party/blink/public/common/loader/loading_behavior_flag.h"
 #include "third_party/blink/public/common/metrics/accept_language_and_content_language_usage.h"
 #include "third_party/blink/public/common/page/browsing_context_group_info.h"
-#include "third_party/blink/public/common/permissions_policy/permissions_policy.h"
 #include "third_party/blink/public/common/scheme_registry.h"
 #include "third_party/blink/public/mojom/commit_result/commit_result.mojom-blink.h"
 #include "third_party/blink/public/mojom/fetch/fetch_api_request.mojom-blink.h"
@@ -342,7 +342,8 @@ struct SameSizeAsDocumentLoader
   Member<MHTMLArchive> archive;
   std::unique_ptr<WebNavigationParams> params;
   std::unique_ptr<PolicyContainer> policy_container;
-  std::optional<ParsedPermissionsPolicy> isolated_app_permissions_policy;
+  std::optional<network::ParsedPermissionsPolicy>
+      isolated_app_permissions_policy;
   DocumentToken token;
   KURL url;
   KURL original_url;
@@ -451,6 +452,7 @@ struct SameSizeAsDocumentLoader
   const std::optional<
       HashMap<mojom::blink::PermissionName, mojom::blink::PermissionStatus>>
       initial_permission_statuses;
+  bool force_new_document_sequence_number;
 };
 
 // Asserts size of DocumentLoader, so that whenever a new attribute is added to
@@ -614,7 +616,9 @@ DocumentLoader::DocumentLoader(
       cookie_deprecation_label_(params_->cookie_deprecation_label),
       content_settings_(std::move(params_->content_settings)),
       initial_permission_statuses_(ConvertPermissionStatusFlatMapToHashMap(
-          params_->initial_permission_statuses)) {
+          params_->initial_permission_statuses)),
+      force_new_document_sequence_number_(
+          params_->force_new_document_sequence_number) {
   TRACE_EVENT_WITH_FLOW0("loading", "DocumentLoader::DocumentLoader",
                          TRACE_ID_LOCAL(this), TRACE_EVENT_FLAG_FLOW_OUT);
   DCHECK(frame_);
@@ -780,6 +784,9 @@ DocumentLoader::CreateWebNavigationParamsToCloneDocument() {
             CachedPermissionStatus::From(frame_->DomWindow())
                 ->GetPermissionStatusMap());
   }
+  // Do not copy over force_new_document_sequence_number_, since all
+  // JavaScript and XSLT navigations are same-origin and thus are allowed to
+  // reuse the document sequence number.
   return params;
 }
 
@@ -1061,10 +1068,9 @@ void DocumentLoader::UpdateForSameDocumentNavigation(
   }
 
   last_navigation_had_trusted_initiator_ =
-      initiator_origin ? initiator_origin->IsSameOriginWith(
-                             frame_->DomWindow()->GetSecurityOrigin()) &&
-                             Url().ProtocolIsInHTTPFamily()
-                       : true;
+      !initiator_origin || (initiator_origin->IsSameOriginWith(
+                                frame_->DomWindow()->GetSecurityOrigin()) &&
+                            Url().ProtocolIsInHTTPFamily());
 
   last_navigation_had_transient_user_activation_ =
       has_transient_user_activation;
@@ -1261,14 +1267,17 @@ void DocumentLoader::SetHistoryItemStateForCommit(
 
   // Don't propagate state from the old item if this is a different-document
   // navigation, unless the before and after pages are logically related. This
-  // means they have the same url (ignoring fragment) and the new item was
-  // loaded via reload or client redirect.
-  // TODO(crbug.com/40051596): Also return early if the origin changes as a
-  // result of this commit.
+  // means they have the same origin or a compatible origin for error page
+  // cases (as computed by the browser process in
+  // `force_new_document_sequence_number_ `), the same url (ignoring
+  // fragment), and the new item was loaded via reload or client redirect.
   if (navigation_type == HistoryNavigationType::kDifferentDocument &&
-      (history_commit_type != kWebHistoryInertCommit ||
-       !EqualIgnoringFragmentIdentifier(old_item->Url(), history_item_->Url())))
+      (force_new_document_sequence_number_ ||
+       history_commit_type != kWebHistoryInertCommit ||
+       !EqualIgnoringFragmentIdentifier(old_item->Url(),
+                                        history_item_->Url()))) {
     return;
+  }
   history_item_->SetDocumentSequenceNumber(old_item->DocumentSequenceNumber());
 
   history_item_->CopyViewStateFrom(old_item);
@@ -2996,18 +3005,15 @@ void DocumentLoader::CommitNavigation() {
           ? ScopedOldDocumentInfoForCommitCapturer::CurrentInfo()
           : nullptr;
   bool had_sticky_activation_before_navigation =
-      old_document_info_for_commit
-          ? old_document_info_for_commit
-                ->had_sticky_activation_before_navigation
-          : false;
+      old_document_info_for_commit &&
+      old_document_info_for_commit->had_sticky_activation_before_navigation;
   if (had_sticky_activation_before_navigation != had_sticky_activation_) {
     frame_->SetHadStickyUserActivationBeforeNavigation(had_sticky_activation_);
     frame_->GetLocalFrameHostRemote()
         .HadStickyUserActivationBeforeNavigationChanged(had_sticky_activation_);
   }
-  bool was_focused_frame = old_document_info_for_commit
-                               ? old_document_info_for_commit->was_focused_frame
-                               : false;
+  bool was_focused_frame = old_document_info_for_commit &&
+                           old_document_info_for_commit->was_focused_frame;
   if (was_focused_frame) {
     frame_->GetPage()->GetFocusController().SetFocusedFrame(frame_);
   }
@@ -3547,6 +3553,10 @@ void DocumentLoader::RecordUseCountersForCommit() {
     CountUse(WebFeature::kWindowOpenedAsPopupOnMobile);
   }
 #endif
+
+  if (response_.HttpHeaderField(http_names::kSecSessionRegistration)) {
+    CountUse(WebFeature::kDeviceBoundSessionRegistered);
+  }
 }
 
 void DocumentLoader::RecordConsoleMessagesForCommit() {
@@ -3877,6 +3887,10 @@ void DocumentLoader::StartViewTransitionIfNeeded(Document& document) {
 
 bool DocumentLoader::HasLoadedNonInitialEmptyDocument() const {
   return GetFrameLoader().HasLoadedNonInitialEmptyDocument();
+}
+
+bool DocumentLoader::IsForDiscard() const {
+  return commit_reason_ == CommitReason::kDiscard;
 }
 
 // static

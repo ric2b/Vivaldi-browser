@@ -201,6 +201,11 @@ WebContents* AwWebContentsDelegate::AddNewContents(
   return nullptr;
 }
 
+void AwWebContentsDelegate::SetContentsBounds(content::WebContents* source,
+                                              const gfx::Rect& bounds) {
+  // Do nothing.
+}
+
 void AwWebContentsDelegate::NavigationStateChanged(
     content::WebContents* source,
     content::InvalidateTypes changed_flags) {
@@ -386,13 +391,7 @@ bool AwWebContentsDelegate::ShouldAllowPartialParamMismatchOfPrerender2(
 
   // `ui::PAGE_TRANSITION_FROM_API` bit distinguishes that the activation
   // navigation is triggered by `WebView.loadUrl()`.
-  bool ret =
-      navigation_handle.GetPageTransition() & ui::PAGE_TRANSITION_FROM_API;
-  if (ret) {
-    CHECK(!navigation_handle.GetInitiatorFrameToken().has_value());
-    CHECK(!navigation_handle.GetInitiatorOrigin().has_value());
-  }
-  return ret;
+  return navigation_handle.GetPageTransition() & ui::PAGE_TRANSITION_FROM_API;
 }
 
 scoped_refptr<content::FileSelectListener>

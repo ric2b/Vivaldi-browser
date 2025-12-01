@@ -10,7 +10,6 @@
 class ProfileIOS;
 
 @protocol VivaldiSearchEngineSettingsViewControllerDelegate
-- (void)searchSuggestionsEnabled:(BOOL)enabled;
 - (void)searchEngineNicknameEnabled:(BOOL)enabled;
 @end
 

@@ -106,25 +106,6 @@ std::string DangerTypeToThreatType(download::DownloadDangerType danger_type) {
 }
 
 #if BUILDFLAG(ENTERPRISE_CLOUD_CONTENT_ANALYSIS)
-const char16_t kMaskedUsername[] = u"*****";
-
-enterprise_connectors::EventResult GetEventResultFromThreatType(
-    std::string threat_type) {
-  if (threat_type == "ENTERPRISE_WARNED_SEEN") {
-    return enterprise_connectors::EventResult::WARNED;
-  }
-  if (threat_type == "ENTERPRISE_WARNED_BYPASS") {
-    return enterprise_connectors::EventResult::BYPASSED;
-  }
-  if (threat_type == "ENTERPRISE_BLOCKED_SEEN") {
-    return enterprise_connectors::EventResult::BLOCKED;
-  }
-  if (threat_type.empty()) {
-    return enterprise_connectors::EventResult::ALLOWED;
-  }
-  NOTREACHED();
-}
-
 void AddAnalysisConnectorVerdictToEvent(
     const enterprise_connectors::ContentAnalysisResponse::Result& result,
     base::Value::Dict& event) {
@@ -146,93 +127,6 @@ void AddAnalysisConnectorVerdictToEvent(
   }
   event.Set(extensions::SafeBrowsingPrivateEventRouter::kKeyTriggeredRuleInfo,
             std::move(triggered_rule_info));
-}
-
-std::string ActionFromVerdictType(
-    safe_browsing::RTLookupResponse::ThreatInfo::VerdictType verdict_type) {
-  switch (verdict_type) {
-    case safe_browsing::RTLookupResponse::ThreatInfo::DANGEROUS:
-      return "BLOCK";
-    case safe_browsing::RTLookupResponse::ThreatInfo::WARN:
-      return "WARN";
-    case safe_browsing::RTLookupResponse::ThreatInfo::SAFE:
-      return "REPORT_ONLY";
-    case safe_browsing::RTLookupResponse::ThreatInfo::SUSPICIOUS:
-    case safe_browsing::RTLookupResponse::ThreatInfo::VERDICT_TYPE_UNSPECIFIED:
-      return "ACTION_UNKNOWN";
-  }
-}
-
-void AddTriggeredRuleInfoToUrlFilteringInterstitialEvent(
-    const safe_browsing::RTLookupResponse& response,
-    base::Value::Dict& event) {
-  base::Value::List triggered_rule_info;
-
-  for (const safe_browsing::RTLookupResponse::ThreatInfo& threat_info :
-       response.threat_info()) {
-    base::Value::Dict triggered_rule;
-    triggered_rule.Set(
-        extensions::SafeBrowsingPrivateEventRouter::kKeyTriggeredRuleName,
-        threat_info.matched_url_navigation_rule().rule_name());
-    triggered_rule.Set(
-        extensions::SafeBrowsingPrivateEventRouter::kKeyTriggeredRuleId,
-        threat_info.matched_url_navigation_rule().rule_id());
-    triggered_rule.Set(
-        extensions::SafeBrowsingPrivateEventRouter::kKeyUrlCategory,
-        threat_info.matched_url_navigation_rule().matched_url_category());
-    triggered_rule.Set(extensions::SafeBrowsingPrivateEventRouter::kKeyAction,
-                       ActionFromVerdictType(threat_info.verdict_type()));
-
-    if (threat_info.matched_url_navigation_rule().has_watermark_message()) {
-      triggered_rule.Set(
-          extensions::SafeBrowsingPrivateEventRouter::kKeyHasWatermarking,
-          true);
-    }
-
-    triggered_rule_info.Append(std::move(triggered_rule));
-  }
-  event.Set(extensions::SafeBrowsingPrivateEventRouter::kKeyTriggeredRuleInfo,
-            std::move(triggered_rule_info));
-}
-
-// Do a best-effort masking of `username`. If it's an email address (such as
-// foo@example.com), everything before @ should be masked. Otherwise, the entire
-// username should be masked.
-std::u16string MaskUsername(const std::u16string& username) {
-  size_t pos = username.find(u"@");
-  if (pos == std::string::npos) {
-    return std::u16string(kMaskedUsername);
-  }
-
-  return std::u16string(kMaskedUsername) + username.substr(pos);
-}
-
-// Create a URLMatcher representing the filters in
-// `settings.enabled_opt_in_events` for `event_type`. This field of the
-// reporting settings connector contains a map where keys are event types and
-// values are lists of URL patterns specifying on which URLs the events are
-// allowed to be reported. An event is generated iff its event type is present
-// in the opt-in events field and the URL it relates to matches at least one of
-// the event type's filters.
-std::unique_ptr<url_matcher::URLMatcher> CreateURLMatcherForOptInEvent(
-    const enterprise_connectors::ReportingSettings& settings,
-    const char* event_type) {
-  const auto& it = settings.enabled_opt_in_events.find(event_type);
-  if (it == settings.enabled_opt_in_events.end()) {
-    return nullptr;
-  }
-
-  std::unique_ptr<url_matcher::URLMatcher> matcher =
-      std::make_unique<url_matcher::URLMatcher>();
-  base::MatcherStringPattern::ID unused_id(0);
-  url_matcher::util::AddFiltersWithLimit(matcher.get(), true, &unused_id,
-                                         it->second);
-
-  return matcher;
-}
-
-bool IsOptInEventEnabled(url_matcher::URLMatcher* matcher, const GURL& url) {
-  return matcher && !matcher->MatchURL(url).empty();
 }
 #endif  // BUILDFLAG(ENTERPRISE_CLOUD_CONTENT_ANALYSIS)
 
@@ -270,13 +164,6 @@ const char SafeBrowsingPrivateEventRouter::kKeyFederatedOrigin[] =
     "federatedOrigin";
 const char SafeBrowsingPrivateEventRouter::kKeyLoginUserName[] =
     "loginUserName";
-const char SafeBrowsingPrivateEventRouter::kKeyPasswordBreachIdentities[] =
-    "identities";
-const char SafeBrowsingPrivateEventRouter::kKeyPasswordBreachIdentitiesUrl[] =
-    "url";
-const char
-    SafeBrowsingPrivateEventRouter::kKeyPasswordBreachIdentitiesUsername[] =
-        "username";
 const char SafeBrowsingPrivateEventRouter::kKeyUserJustification[] =
     "userJustification";
 const char SafeBrowsingPrivateEventRouter::kKeyUrlCategory[] = "urlCategory";
@@ -959,115 +846,6 @@ void SafeBrowsingPrivateEventRouter::OnDangerousDownloadWarningBypassed(
 
   reporting_client_->ReportRealtimeEvent(
       enterprise_connectors::kKeyDangerousDownloadEvent,
-      std::move(settings.value()), std::move(event));
-#endif  // BUILDFLAG(ENTERPRISE_CLOUD_CONTENT_ANALYSIS)
-}
-
-void SafeBrowsingPrivateEventRouter::OnLoginEvent(
-    const GURL& url,
-    bool is_federated,
-    const url::SchemeHostPort& federated_origin,
-    const std::u16string& username) {
-#if BUILDFLAG(ENTERPRISE_CLOUD_CONTENT_ANALYSIS)
-  std::optional<enterprise_connectors::ReportingSettings> settings =
-      reporting_client_->GetReportingSettings();
-  if (!settings.has_value()) {
-    return;
-  }
-
-  std::unique_ptr<url_matcher::URLMatcher> matcher =
-      CreateURLMatcherForOptInEvent(settings.value(),
-                                    enterprise_connectors::kKeyLoginEvent);
-  if (!IsOptInEventEnabled(matcher.get(), url)) {
-    return;
-  }
-
-  base::Value::Dict event;
-  event.Set(kKeyUrl, url.spec());
-  event.Set(kKeyIsFederated, is_federated);
-  if (is_federated) {
-    event.Set(kKeyFederatedOrigin, federated_origin.Serialize());
-  }
-  event.Set(kKeyLoginUserName, MaskUsername(username));
-
-  reporting_client_->ReportRealtimeEvent(enterprise_connectors::kKeyLoginEvent,
-                                         std::move(settings.value()),
-                                         std::move(event));
-#endif  // BUILDFLAG(ENTERPRISE_CLOUD_CONTENT_ANALYSIS)
-}
-
-void SafeBrowsingPrivateEventRouter::OnPasswordBreach(
-    const std::string& trigger,
-    const std::vector<std::pair<GURL, std::u16string>>& identities) {
-#if BUILDFLAG(ENTERPRISE_CLOUD_CONTENT_ANALYSIS)
-  std::optional<enterprise_connectors::ReportingSettings> settings =
-      reporting_client_->GetReportingSettings();
-  if (!settings.has_value()) {
-    return;
-  }
-
-  std::unique_ptr<url_matcher::URLMatcher> matcher =
-      CreateURLMatcherForOptInEvent(
-          settings.value(), enterprise_connectors::kKeyPasswordBreachEvent);
-  if (!matcher) {
-    return;
-  }
-
-  base::Value::Dict event;
-  base::Value::List identities_list;
-  event.Set(kKeyTrigger, trigger);
-  for (const std::pair<GURL, std::u16string>& i : identities) {
-    if (!IsOptInEventEnabled(matcher.get(), i.first)) {
-      continue;
-    }
-
-    base::Value::Dict identity;
-    identity.Set(kKeyPasswordBreachIdentitiesUrl, i.first.spec());
-    identity.Set(kKeyPasswordBreachIdentitiesUsername, MaskUsername(i.second));
-    identities_list.Append(std::move(identity));
-  }
-
-  if (identities_list.empty()) {
-    // Don't send an empty event if none of the breached identities matched a
-    // pattern in the URL filters.
-    return;
-  }
-
-  event.Set(kKeyPasswordBreachIdentities, std::move(identities_list));
-
-  reporting_client_->ReportRealtimeEvent(
-      enterprise_connectors::kKeyPasswordBreachEvent,
-      std::move(settings.value()), std::move(event));
-#endif  // BUILDFLAG(ENTERPRISE_CLOUD_CONTENT_ANALYSIS)
-}
-
-void SafeBrowsingPrivateEventRouter::OnUrlFilteringInterstitial(
-    const GURL& url,
-    const std::string& threat_type,
-    const safe_browsing::RTLookupResponse& response) {
-#if BUILDFLAG(ENTERPRISE_CLOUD_CONTENT_ANALYSIS)
-  std::optional<enterprise_connectors::ReportingSettings> settings =
-      reporting_client_->GetReportingSettings();
-  if (!settings.has_value() ||
-      settings->enabled_event_names.count(
-          enterprise_connectors::kKeyUrlFilteringInterstitialEvent) == 0) {
-    return;
-  }
-  base::Value::Dict event;
-  event.Set(kKeyUrl, url.spec());
-  enterprise_connectors::EventResult event_result =
-      GetEventResultFromThreatType(threat_type);
-  event.Set(kKeyClickedThrough,
-            event_result == enterprise_connectors::EventResult::BYPASSED);
-  if (!threat_type.empty()) {
-    event.Set(kKeyThreatType, threat_type);
-  }
-  AddTriggeredRuleInfoToUrlFilteringInterstitialEvent(response, event);
-  event.Set(kKeyEventResult,
-            enterprise_connectors::EventResultToString(event_result));
-
-  reporting_client_->ReportRealtimeEvent(
-      enterprise_connectors::kKeyUrlFilteringInterstitialEvent,
       std::move(settings.value()), std::move(event));
 #endif  // BUILDFLAG(ENTERPRISE_CLOUD_CONTENT_ANALYSIS)
 }

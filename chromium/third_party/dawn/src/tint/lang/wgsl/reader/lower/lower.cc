@@ -35,7 +35,6 @@
 #include "src/tint/lang/core/ir/validator.h"
 #include "src/tint/lang/wgsl/builtin_fn.h"
 #include "src/tint/lang/wgsl/ir/builtin_call.h"
-#include "src/tint/utils/diagnostic/diagnostic.h"
 #include "src/tint/utils/ice/ice.h"
 
 namespace tint::wgsl::reader {
@@ -192,6 +191,10 @@ core::BuiltinFn Convert(wgsl::BuiltinFn fn) {
         CASE(kQuadSwapX)
         CASE(kQuadSwapY)
         CASE(kQuadSwapDiagonal)
+        CASE(kSubgroupMatrixLoad)
+        CASE(kSubgroupMatrixStore)
+        CASE(kSubgroupMatrixMultiply)
+        CASE(kSubgroupMatrixMultiplyAccumulate)
 
         case tint::wgsl::BuiltinFn::kBitcast:               // should lower to ir::Bitcast
         case tint::wgsl::BuiltinFn::kWorkgroupUniformLoad:  // should be handled in Lower()
@@ -234,6 +237,9 @@ Result<SuccessType> Lower(core::ir::Module& mod) {
                     Vector<core::ir::Value*, 8> args(call->Args());
                     auto* replacement = b.CallWithResult(call->DetachResult(),
                                                          Convert(call->Func()), std::move(args));
+                    if (!call->ExplicitTemplateParams().IsEmpty()) {
+                        replacement->SetExplicitTemplateParams(call->ExplicitTemplateParams());
+                    }
                     call->ReplaceWith(replacement);
                     break;
                 }

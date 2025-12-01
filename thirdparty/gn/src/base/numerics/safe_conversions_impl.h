@@ -275,8 +275,7 @@ struct NarrowingRange {
 
 template <typename Dst,
           typename Src,
-          template <typename>
-          class Bounds,
+          template <typename> class Bounds,
           IntegerRepresentation DstSign = std::is_signed<Dst>::value
                                               ? INTEGER_REPRESENTATION_SIGNED
                                               : INTEGER_REPRESENTATION_UNSIGNED,
@@ -294,8 +293,7 @@ struct DstRangeRelationToSrcRangeImpl;
 // Same sign narrowing: The range is contained for normal limits.
 template <typename Dst,
           typename Src,
-          template <typename>
-          class Bounds,
+          template <typename> class Bounds,
           IntegerRepresentation DstSign,
           IntegerRepresentation SrcSign>
 struct DstRangeRelationToSrcRangeImpl<Dst,

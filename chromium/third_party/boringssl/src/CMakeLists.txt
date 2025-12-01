@@ -241,13 +241,8 @@ if(FUZZ)
     message(FATAL_ERROR "You need Clang ≥ 6.0.0")
   endif()
 
-  add_definitions(-DBORINGSSL_UNSAFE_DETERMINISTIC_MODE)
-  set(RUNNER_ARGS "-deterministic")
-
-  if(NOT NO_FUZZER_MODE)
-    add_definitions(-DBORINGSSL_UNSAFE_FUZZER_MODE)
-    set(RUNNER_ARGS ${RUNNER_ARGS} "-fuzzer" "-shim-config" "fuzzer_mode.json")
-  endif()
+  add_definitions(-DFUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION)
+  set(RUNNER_ARGS "-deterministic" "-fuzzer" "-shim-config" "fuzzer_mode.json")
 
   set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fsanitize=address,fuzzer-no-link -fsanitize-coverage=edge,indirect-calls")
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=address,fuzzer-no-link -fsanitize-coverage=edge,indirect-calls")
@@ -549,7 +544,7 @@ if(FIPS_DELOCATE)
     set(TARGET_FLAG "--target=${CMAKE_ASM_COMPILER_TARGET}")
   endif()
 
-  go_executable(delocate boringssl.googlesource.com/boringssl/util/fipstools/delocate)
+  go_executable(delocate boringssl.googlesource.com/boringssl.git/util/fipstools/delocate)
   add_custom_command(
     OUTPUT bcm-delocated.S
     COMMAND ${CMAKE_CURRENT_BINARY_DIR}/delocate
@@ -571,7 +566,7 @@ if(FIPS_DELOCATE)
   set_target_properties(bcm_hashunset PROPERTIES LINKER_LANGUAGE C)
 
   go_executable(inject_hash
-                boringssl.googlesource.com/boringssl/util/fipstools/inject_hash)
+                boringssl.googlesource.com/boringssl.git/util/fipstools/inject_hash)
   add_custom_command(
     OUTPUT bcm.o
     COMMAND ./inject_hash -o bcm.o -in-archive $<TARGET_FILE:bcm_hashunset>
@@ -661,7 +656,7 @@ set_property(TARGET ssl PROPERTY EXPORT_NAME SSL)
 target_link_libraries(ssl crypto)
 
 add_library(decrepit ${DECREPIT_SOURCES})
-target_link_libraries(decrepit crypto ssl)
+target_link_libraries(decrepit ssl crypto)
 
 add_library(test_support_lib STATIC
             ${TEST_SUPPORT_SOURCES} ${TEST_SUPPORT_SOURCES_ASM_USED})
@@ -691,7 +686,7 @@ target_link_libraries(ssl_test test_support_lib boringssl_gtest ssl crypto)
 add_dependencies(all_tests ssl_test)
 add_executable(decrepit_test ${DECREPIT_TEST_SOURCES})
 target_link_libraries(decrepit_test test_support_lib boringssl_gtest
-                      decrepit crypto)
+                      decrepit ssl crypto)
 add_dependencies(all_tests decrepit_test)
 
 if(APPLE)
@@ -753,9 +748,9 @@ if(FIPS)
   add_custom_target(
     acvp_tests
     COMMAND ${GO_EXECUTABLE} build -o ${CMAKE_CURRENT_BINARY_DIR}/acvptool
-            boringssl.googlesource.com/boringssl/util/fipstools/acvp/acvptool
+            boringssl.googlesource.com/boringssl.git/util/fipstools/acvp/acvptool
     COMMAND ${GO_EXECUTABLE} build -o ${CMAKE_CURRENT_BINARY_DIR}/testmodulewrapper
-            boringssl.googlesource.com/boringssl/util/fipstools/acvp/acvptool/testmodulewrapper
+            boringssl.googlesource.com/boringssl.git/util/fipstools/acvp/acvptool/testmodulewrapper
     COMMAND cd util/fipstools/acvp/acvptool/test &&
             ${GO_EXECUTABLE} run check_expected.go
             -tool ${CMAKE_CURRENT_BINARY_DIR}/acvptool

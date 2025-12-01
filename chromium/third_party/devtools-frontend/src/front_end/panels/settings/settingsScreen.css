@@ -26,18 +26,18 @@ fieldset {
   border: none;
 }
 
-.experiments-filter {
-  padding-top: 1px;
-  display: flex;
-  align-items: center;
-}
-
 label {
   padding-right: 8px;
 }
 
-.experiments-filter label {
-  padding-bottom: 0;
+.experiments-filter {
+  width: 100%;
+  padding: 0 var(--sys-size-9) 0 var(--sys-size-8);
+  max-width: var(--sys-size-35);
+
+  > devtools-toolbar {
+    min-width: var(--sys-size-31);
+  }
 }
 
 .settings-select {
@@ -77,8 +77,8 @@ div:has(.settings-select) + div:has(.settings-select) {
   overflow: auto;
   position: absolute;
   inset: var(--sys-size-8) 0 0;
-  container-type: inline-size; /* stylelint-disable-line property-no-unknown */
-  container-name: settings-content; /* stylelint-disable-line property-no-unknown */
+  container-type: inline-size;
+  container-name: settings-content;
 }
 
 .settings-card-container,
@@ -98,7 +98,6 @@ div:has(.settings-select) + div:has(.settings-select) {
 
 /* In multi-column mode, we adopt single-column styles unless
    enough space is available to actually show two columns (at 850px) */
-/* stylelint-disable-next-line at-rule-no-unknown */
 @container settings-content (min-width: 850px) {
   .settings-multicolumn-card-container {
     display: block;

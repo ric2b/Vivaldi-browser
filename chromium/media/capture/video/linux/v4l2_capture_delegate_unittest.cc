@@ -8,6 +8,7 @@
 #include <sys/ioctl.h>
 
 #include "base/files/file_enumerator.h"
+#include "base/memory/scoped_refptr.h"
 #include "base/posix/eintr_wrapper.h"
 #include "base/run_loop.h"
 #include "base/task/single_thread_task_runner.h"
@@ -317,7 +318,7 @@ class MockCaptureHandleProvider
     : public VideoCaptureDevice::Client::Buffer::HandleProvider {
  public:
   MockCaptureHandleProvider(const gfx::Size& size, gfx::BufferFormat format) {
-    gmb_ = std::make_unique<FakeGpuMemoryBuffer>(size, format);
+    gmb_handle_ = CreatePixmapHandleForTesting(size, format);
   }
   // Duplicate as an writable (unsafe) shared memory region.
   base::UnsafeSharedMemoryRegion DuplicateAsUnsafeRegion() override {
@@ -332,10 +333,9 @@ class MockCaptureHandleProvider
 
   // Clone a |GpuMemoryBufferHandle| for IPC.
   gfx::GpuMemoryBufferHandle GetGpuMemoryBufferHandle() override {
-    gfx::GpuMemoryBufferHandle handle;
-    return gmb_->CloneHandle();
+    return gmb_handle_.Clone();
   }
-  std::unique_ptr<FakeGpuMemoryBuffer> gmb_;
+  gfx::GpuMemoryBufferHandle gmb_handle_;
 };
 
 class V4l2CaptureDelegateGPUMemoryBufferTest
@@ -348,7 +348,7 @@ class V4l2CaptureDelegateGPUMemoryBufferTest
   void SetUp() override {
     device_factory_ = std::make_unique<VideoCaptureDeviceFactoryV4L2>(
         base::SingleThreadTaskRunner::GetCurrentDefault());
-    scoped_refptr<FakeV4L2Impl> fake_v4l2(new FakeV4L2Impl());
+    auto fake_v4l2 = base::MakeRefCounted<FakeV4L2Impl>();
     fake_v4l2_ = fake_v4l2.get();
     auto fake_device_provider = std::make_unique<FakeDeviceProvider>();
     fake_device_provider_ = fake_device_provider.get();

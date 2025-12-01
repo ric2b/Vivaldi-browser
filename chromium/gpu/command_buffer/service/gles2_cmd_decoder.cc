@@ -2991,11 +2991,11 @@ gpu::ContextResult GLES2DecoderImpl::Initialize(
   // If the failIfMajorPerformanceCaveat context creation attribute was true
   // and we are using a software renderer, fail.
   if (attrib_helper.fail_if_major_perf_caveat &&
-      feature_info_->feature_flags().is_swiftshader_for_webgl) {
+      feature_info_->feature_flags().is_software_webgl) {
     // Must not destroy ContextGroup if it is not initialized.
     group_ = nullptr;
     LOG(ERROR) << "ContextResult::kFatalFailure: "
-                  "fail_if_major_perf_caveat + swiftshader";
+                  "fail_if_major_perf_caveat + software gl";
     return gpu::ContextResult::kFatalFailure;
   }
 
@@ -17173,7 +17173,6 @@ error::Error GLES2DecoderImpl::HandleSetActiveURLCHROMIUM(
 // Include the auto-generated part of this file. We split this because it means
 // we can easily edit the non-auto generated parts right here in this file
 // instead of having to edit some template or the code generator.
-#include "build/chromeos_buildflags.h"
 #include "gpu/command_buffer/service/gles2_cmd_decoder_autogen.h"
 
 }  // namespace gles2

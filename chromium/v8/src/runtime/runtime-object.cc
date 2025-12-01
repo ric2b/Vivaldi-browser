@@ -366,7 +366,7 @@ RUNTIME_FUNCTION(Runtime_ObjectCreate) {
   return *obj;
 }
 
-MaybeHandle<Object> Runtime::SetObjectProperty(
+MaybeDirectHandle<Object> Runtime::SetObjectProperty(
     Isolate* isolate, DirectHandle<JSAny> lookup_start_obj,
     DirectHandle<Object> key, DirectHandle<Object> value,
     MaybeDirectHandle<JSAny> maybe_receiver, StoreOrigin store_origin,
@@ -394,7 +394,7 @@ MaybeHandle<Object> Runtime::SetObjectProperty(
   // Check if the given key is an array index.
   bool success = false;
   PropertyKey lookup_key(isolate, key, &success);
-  if (!success) return MaybeHandle<Object>();
+  if (!success) return MaybeDirectHandle<Object>();
   LookupIterator it(isolate, receiver, lookup_key, lookup_start_obj);
   if (IsSymbol(*key) && Cast<Symbol>(*key)->is_private_name()) {
     Maybe<bool> can_store = JSReceiver::CheckPrivateNameStore(&it, false);
@@ -407,10 +407,10 @@ MaybeHandle<Object> Runtime::SetObjectProperty(
   MAYBE_RETURN_NULL(
       Object::SetProperty(&it, value, store_origin, should_throw));
 
-  return indirect_handle(value, isolate);
+  return value;
 }
 
-MaybeHandle<Object> Runtime::SetObjectProperty(
+MaybeDirectHandle<Object> Runtime::SetObjectProperty(
     Isolate* isolate, DirectHandle<JSAny> object, DirectHandle<Object> key,
     DirectHandle<Object> value, StoreOrigin store_origin,
     Maybe<ShouldThrow> should_throw) {
@@ -418,11 +418,9 @@ MaybeHandle<Object> Runtime::SetObjectProperty(
                            should_throw);
 }
 
-MaybeHandle<Object> Runtime::DefineObjectOwnProperty(Isolate* isolate,
-                                                     DirectHandle<JSAny> object,
-                                                     DirectHandle<Object> key,
-                                                     Handle<Object> value,
-                                                     StoreOrigin store_origin) {
+MaybeDirectHandle<Object> Runtime::DefineObjectOwnProperty(
+    Isolate* isolate, DirectHandle<JSAny> object, DirectHandle<Object> key,
+    DirectHandle<Object> value, StoreOrigin store_origin) {
   if (IsNullOrUndefined(*object, isolate)) {
     MaybeDirectHandle<String> maybe_property =
         Object::NoSideEffectsToMaybeString(isolate, key);
@@ -441,7 +439,7 @@ MaybeHandle<Object> Runtime::DefineObjectOwnProperty(Isolate* isolate,
   // Check if the given key is an array index.
   bool success = false;
   PropertyKey lookup_key(isolate, key, &success);
-  if (!success) return MaybeHandle<Object>();
+  if (!success) return MaybeDirectHandle<Object>();
 
   if (IsSymbol(*key) && Cast<Symbol>(*key)->is_private_name()) {
     LookupIterator it(isolate, object, lookup_key, LookupIterator::OWN);
@@ -742,7 +740,7 @@ RUNTIME_FUNCTION(Runtime_DefineObjectOwnProperty) {
 
   DirectHandle<JSAny> object = args.at<JSAny>(0);
   DirectHandle<Object> key = args.at(1);
-  Handle<Object> value = args.at(2);
+  DirectHandle<Object> value = args.at(2);
 
   RETURN_RESULT_OR_FAILURE(
       isolate, Runtime::DefineObjectOwnProperty(isolate, object, key, value,
@@ -971,7 +969,7 @@ RUNTIME_FUNCTION(Runtime_SetFunctionName) {
   HandleScope scope(isolate);
   DCHECK_EQ(2, args.length());
   DirectHandle<Object> value = args.at(0);
-  Handle<Name> name = args.at<Name>(1);
+  DirectHandle<Name> name = args.at<Name>(1);
   DCHECK(IsJSFunction(*value));
   auto function = Cast<JSFunction>(value);
   DCHECK(!function->shared()->HasSharedName());
@@ -1076,7 +1074,7 @@ RUNTIME_FUNCTION(Runtime_DefineGetterPropertyUnchecked) {
   HandleScope scope(isolate);
   DCHECK_EQ(4, args.length());
   DirectHandle<JSObject> object = args.at<JSObject>(0);
-  Handle<Name> name = args.at<Name>(1);
+  DirectHandle<Name> name = args.at<Name>(1);
   DirectHandle<JSFunction> getter = args.at<JSFunction>(2);
   auto attrs = PropertyAttributesFromInt(args.smi_value_at(3));
 
@@ -1222,7 +1220,7 @@ RUNTIME_FUNCTION(Runtime_DefineSetterPropertyUnchecked) {
   HandleScope scope(isolate);
   DCHECK_EQ(4, args.length());
   DirectHandle<JSObject> object = args.at<JSObject>(0);
-  Handle<Name> name = args.at<Name>(1);
+  DirectHandle<Name> name = args.at<Name>(1);
   DirectHandle<JSFunction> setter = args.at<JSFunction>(2);
   auto attrs = PropertyAttributesFromInt(args.smi_value_at(3));
 
@@ -1324,7 +1322,7 @@ RUNTIME_FUNCTION(Runtime_SetOwnPropertyIgnoreAttributes) {
   DCHECK_EQ(4, args.length());
   DirectHandle<JSObject> o = args.at<JSObject>(0);
   DirectHandle<String> key = args.at<String>(1);
-  Handle<Object> value = args.at(2);
+  DirectHandle<Object> value = args.at(2);
   int attributes = args.smi_value_at(3);
 
   RETURN_RESULT_OR_FAILURE(isolate,
@@ -1449,7 +1447,7 @@ Maybe<bool> CollectPrivateMembersFromReceiver(
 
 Maybe<bool> FindPrivateMembersFromReceiver(Isolate* isolate,
                                            DirectHandle<JSReceiver> receiver,
-                                           Handle<String> desc,
+                                           DirectHandle<String> desc,
                                            MessageTemplate not_found_message,
                                            PrivateMember* result) {
   std::vector<PrivateMember> results;
@@ -1472,7 +1470,8 @@ Maybe<bool> FindPrivateMembersFromReceiver(Isolate* isolate,
 }  // namespace
 
 MaybeDirectHandle<Object> Runtime::GetPrivateMember(
-    Isolate* isolate, DirectHandle<JSReceiver> receiver, Handle<String> desc) {
+    Isolate* isolate, DirectHandle<JSReceiver> receiver,
+    DirectHandle<String> desc) {
   PrivateMember result;
   MAYBE_RETURN_NULL(FindPrivateMembersFromReceiver(
       isolate, receiver, desc, MessageTemplate::kInvalidPrivateMemberRead,
@@ -1501,8 +1500,8 @@ MaybeDirectHandle<Object> Runtime::GetPrivateMember(
 }
 
 MaybeDirectHandle<Object> Runtime::SetPrivateMember(
-    Isolate* isolate, DirectHandle<JSReceiver> receiver, Handle<String> desc,
-    DirectHandle<Object> value) {
+    Isolate* isolate, DirectHandle<JSReceiver> receiver,
+    DirectHandle<String> desc, DirectHandle<Object> value) {
   PrivateMember result;
   MAYBE_RETURN_NULL(FindPrivateMembersFromReceiver(
       isolate, receiver, desc, MessageTemplate::kInvalidPrivateMemberRead,
@@ -1543,14 +1542,14 @@ RUNTIME_FUNCTION(Runtime_GetPrivateMember) {
   DCHECK_EQ(args.length(), 2);
   DirectHandle<Object> receiver = args.at<Object>(0);
   Handle<String> desc = args.at<String>(1);
-  if (IsNullOrUndefined(*receiver, isolate)) {
-    THROW_NEW_ERROR_RETURN_FAILURE(
-        isolate, NewTypeError(MessageTemplate::kNonObjectPrivateNameAccess,
-                              desc, receiver));
+  if (IsJSReceiver(*receiver)) {
+    RETURN_RESULT_OR_FAILURE(
+        isolate,
+        Runtime::GetPrivateMember(isolate, Cast<JSReceiver>(receiver), desc));
   }
-  RETURN_RESULT_OR_FAILURE(
-      isolate,
-      Runtime::GetPrivateMember(isolate, Cast<JSReceiver>(receiver), desc));
+  THROW_NEW_ERROR_RETURN_FAILURE(
+      isolate, NewTypeError(MessageTemplate::kNonObjectPrivateNameAccess, desc,
+                            receiver));
 }
 
 RUNTIME_FUNCTION(Runtime_SetPrivateMember) {
@@ -1560,15 +1559,15 @@ RUNTIME_FUNCTION(Runtime_SetPrivateMember) {
   DCHECK_EQ(args.length(), 3);
   DirectHandle<Object> receiver = args.at<Object>(0);
   Handle<String> desc = args.at<String>(1);
-  if (IsNullOrUndefined(*receiver, isolate)) {
-    THROW_NEW_ERROR_RETURN_FAILURE(
-        isolate, NewTypeError(MessageTemplate::kNonObjectPrivateNameAccess,
-                              desc, receiver));
+  if (IsJSReceiver(*receiver)) {
+    DirectHandle<Object> value = args.at<Object>(2);
+    RETURN_RESULT_OR_FAILURE(
+        isolate, Runtime::SetPrivateMember(isolate, Cast<JSReceiver>(receiver),
+                                           desc, value));
   }
-  DirectHandle<Object> value = args.at<Object>(2);
-  RETURN_RESULT_OR_FAILURE(
-      isolate, Runtime::SetPrivateMember(isolate, Cast<JSReceiver>(receiver),
-                                         desc, value));
+  THROW_NEW_ERROR_RETURN_FAILURE(
+      isolate, NewTypeError(MessageTemplate::kNonObjectPrivateNameAccess, desc,
+                            receiver));
 }
 
 RUNTIME_FUNCTION(Runtime_LoadPrivateSetter) {

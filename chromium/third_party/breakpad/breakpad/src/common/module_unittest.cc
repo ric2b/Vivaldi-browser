@@ -504,7 +504,7 @@ TEST(Module, ConstructUniqueFiles) {
   EXPECT_EQ(file1, file3);
   EXPECT_EQ(file2, file4);
   EXPECT_EQ(file1, m.FindExistingFile("foo"));
-  EXPECT_TRUE(m.FindExistingFile("baz") == NULL);
+  EXPECT_TRUE(m.FindExistingFile("baz") == nullptr);
 }
 
 TEST(Module, ConstructDuplicateFunctions) {

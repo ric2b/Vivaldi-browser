@@ -30,6 +30,8 @@ const char kANGLEImplementationDefaultName[]  = "default";
 const char kANGLEImplementationD3D9Name[]     = "d3d9";
 const char kANGLEImplementationD3D11Name[]    = "d3d11";
 const char kANGLEImplementationD3D11on12Name[] = "d3d11on12";
+const char kANGLEImplementationD3D11WarpName[] = "d3d11-warp";
+const char kANGLEImplementationD3D11WarpForWebGLName[] = "d3d11-warp-webgl";
 const char kANGLEImplementationOpenGLName[]   = "gl";
 const char kANGLEImplementationOpenGLEGLName[] = "gl-egl";
 const char kANGLEImplementationOpenGLESName[] = "gles";
@@ -135,8 +137,10 @@ const char kDisableGLExtensions[] = "disable-gl-extensions";
 // Enables SwapBuffersWithBounds if it is supported.
 const char kEnableSwapBuffersWithBounds[] = "enable-swap-buffers-with-bounds";
 
-// Enables using DirectComposition video overlays, even if hardware overlays
-// aren't supported.
+// Disable DirectComposition.
+const char kDisableDirectComposition[] = "disable-direct-composition";
+
+// Enable DirectComposition video overlays even if hardware doesn't support it.
 const char kEnableDirectCompositionVideoOverlays[] =
     "enable-direct-composition-video-overlays";
 
@@ -166,6 +170,7 @@ const char* const kGLSwitchesCopiedFromGpuProcessHost[] = {
     kOverrideUseSoftwareGLForTests,
     kUseANGLE,
     kEnableSwapBuffersWithBounds,
+    kDisableDirectComposition,
     kEnableDirectCompositionVideoOverlays,
     kDirectCompositionVideoSwapChainFormat,
     kEnableUnsafeSwiftShader,

@@ -2,30 +2,27 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
-#pragma allow_unsafe_buffers
-#endif
-
 #include "third_party/blink/renderer/modules/manifest/manifest_parser.h"
 
 #include <string>
 
+#include "base/compiler_specific.h"
 #include "base/feature_list.h"
 #include "base/metrics/histogram_functions.h"
 #include "net/base/mime_util.h"
 #include "net/base/registry_controlled_domains/registry_controlled_domain.h"
+#include "services/network/public/cpp/permissions_policy/origin_with_possible_wildcards.h"
+#include "services/network/public/cpp/permissions_policy/permissions_policy_declaration.h"
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/common/manifest/manifest.h"
 #include "third_party/blink/public/common/manifest/manifest_util.h"
 #include "third_party/blink/public/common/mime_util/mime_util.h"
-#include "third_party/blink/public/common/permissions_policy/origin_with_possible_wildcards.h"
-#include "third_party/blink/public/common/permissions_policy/permissions_policy.h"
 #include "third_party/blink/public/common/safe_url_pattern.h"
 #include "third_party/blink/public/common/security/protocol_handler_security_level.h"
 #include "third_party/blink/public/mojom/manifest/manifest.mojom-blink-forward.h"
 #include "third_party/blink/public/mojom/manifest/manifest.mojom-blink.h"
-#include "third_party/blink/public/mojom/permissions_policy/permissions_policy.mojom-blink.h"
+#include "third_party/blink/public/mojom/use_counter/metrics/web_feature.mojom-shared.h"
+#include "third_party/blink/public/mojom/use_counter/metrics/webdx_feature.mojom-shared.h"
 #include "third_party/blink/public/platform/url_conversion.h"
 #include "third_party/blink/public/platform/web_icon_sizes_parser.h"
 #include "third_party/blink/public/platform/web_string.h"
@@ -331,31 +328,108 @@ bool ManifestParser::Parse() {
   manifest_->id = id;
   manifest_->has_custom_id = id_parse_result == ParseIdResultType::kSucceed;
 
+  manifest_->update_token =
+      ParseUpdateToken(root_object.get(), manifest_->has_custom_id);
+  if (!manifest_->update_token.IsNull()) {
+    UseCounter::CountWebDXFeature(execution_context_,
+                                  WebDXFeature::kWebAppManifestUpdateToken);
+  }
+
   manifest_->scope = ParseScope(root_object.get(), manifest_->start_url);
   manifest_->display = ParseDisplay(root_object.get());
+  if (manifest_->display != mojom::blink::DisplayMode::kUndefined) {
+    UseCounter::Count(execution_context_, WebFeature::kWebAppManifestDisplay);
+    switch (manifest_->display) {
+      case blink::mojom::DisplayMode::kBrowser:
+        UseCounter::Count(execution_context_,
+                          WebFeature::kWebAppManifestDisplayBrowser);
+        break;
+      case blink::mojom::DisplayMode::kMinimalUi:
+        UseCounter::Count(execution_context_,
+                          WebFeature::kWebAppManifestDisplayMinimalUI);
+        break;
+      case blink::mojom::DisplayMode::kFullscreen:
+        UseCounter::Count(execution_context_,
+                          WebFeature::kWebAppManifestDisplayFullscreen);
+        break;
+      case blink::mojom::DisplayMode::kStandalone:
+        UseCounter::Count(execution_context_,
+                          WebFeature::kWebAppManifestDisplayStandalone);
+        break;
+      default:
+        break;
+    }
+  }
+
   manifest_->display_override = ParseDisplayOverride(root_object.get());
+  for (const mojom::blink::DisplayMode& display_override :
+       manifest_->display_override) {
+    if (display_override == mojom::blink::DisplayMode::kWindowControlsOverlay) {
+      UseCounter::Count(execution_context_,
+                        WebFeature::kWebAppWindowControlsOverlay);
+    } else if (display_override == mojom::blink::DisplayMode::kBorderless) {
+      UseCounter::Count(execution_context_, WebFeature::kWebAppBorderless);
+    } else if (display_override == mojom::blink::DisplayMode::kTabbed) {
+      UseCounter::Count(execution_context_, WebFeature::kWebAppTabbed);
+    }
+  }
   manifest_->orientation = ParseOrientation(root_object.get());
   manifest_->icons = ParseIcons(root_object.get());
+  if (!manifest_->icons.empty()) {
+    UseCounter::Count(execution_context_, WebFeature::kWebAppManifestIcons);
+  }
   manifest_->screenshots = ParseScreenshots(root_object.get());
+  if (!manifest_->screenshots.empty()) {
+    UseCounter::Count(execution_context_,
+                      WebFeature::kWebAppManifestScreenshots);
+  }
 
   auto share_target = ParseShareTarget(root_object.get());
   if (share_target.has_value()) {
     manifest_->share_target = std::move(*share_target);
+    UseCounter::CountWebDXFeature(execution_context_,
+                                  WebDXFeature::kAppShareTargets);
   }
 
   manifest_->file_handlers = ParseFileHandlers(root_object.get());
   manifest_->protocol_handlers = ParseProtocolHandlers(root_object.get());
+  if (!manifest_->protocol_handlers.empty()) {
+    UseCounter::Count(execution_context_,
+                      WebFeature::kWebAppManifestProtocolHandlers);
+  }
   manifest_->scope_extensions = ParseScopeExtensions(root_object.get());
+  if (!manifest_->scope_extensions.empty()) {
+    UseCounter::Count(execution_context_,
+                      WebFeature::kWebAppManifestScopeExtensions);
+  }
   manifest_->lock_screen = ParseLockScreen(root_object.get());
+  if (!manifest_->lock_screen.is_null()) {
+    UseCounter::Count(execution_context_,
+                      WebFeature::kWebAppManifestLockScreen);
+  }
   manifest_->note_taking = ParseNoteTaking(root_object.get());
+  if (!manifest_->note_taking.is_null()) {
+    UseCounter::Count(execution_context_,
+                      WebFeature::kWebAppManifestNoteTaking);
+  }
   manifest_->related_applications = ParseRelatedApplications(root_object.get());
+  if (!manifest_->related_applications.empty()) {
+    UseCounter::Count(execution_context_,
+                      WebFeature::kWebAppManifestRelated_Applications);
+  }
   manifest_->prefer_related_applications =
       ParsePreferRelatedApplications(root_object.get());
+  if (manifest_->prefer_related_applications) {
+    UseCounter::Count(execution_context_,
+                      WebFeature::kWebAppManifestPrefer_Related_Applications);
+  }
 
   std::optional<RGBA32> theme_color = ParseThemeColor(root_object.get());
   manifest_->has_theme_color = theme_color.has_value();
   if (manifest_->has_theme_color) {
     manifest_->theme_color = *theme_color;
+    UseCounter::Count(execution_context_,
+                      WebFeature::kWebAppManifestThemeColor);
   }
 
   std::optional<RGBA32> background_color =
@@ -363,26 +437,51 @@ bool ManifestParser::Parse() {
   manifest_->has_background_color = background_color.has_value();
   if (manifest_->has_background_color) {
     manifest_->background_color = *background_color;
+    UseCounter::Count(execution_context_,
+                      WebFeature::kWebAppManifestBackgroundColor);
   }
 
   manifest_->gcm_sender_id = ParseGCMSenderID(root_object.get());
   manifest_->shortcuts = ParseShortcuts(root_object.get());
+  if (!manifest_->shortcuts.empty()) {
+    UseCounter::CountWebDXFeature(execution_context_,
+                                  WebDXFeature::kAppShortcuts);
+  }
 
   manifest_->permissions_policy =
       ParseIsolatedAppPermissions(root_object.get());
+  if (!manifest_->permissions_policy.empty()) {
+    UseCounter::Count(execution_context_,
+                      WebFeature::kWebAppManifestPermissionsPolicy);
+  }
 
   manifest_->launch_handler = ParseLaunchHandler(root_object.get());
+  if (!manifest_->launch_handler.is_null()) {
+    UseCounter::Count(execution_context_,
+                      WebFeature::kWebAppManifestLaunchHandler);
+  }
 
   if (RuntimeEnabledFeatures::WebAppTranslationsEnabled(execution_context_)) {
     manifest_->translations = ParseTranslations(root_object.get());
+    if (!manifest_->translations.empty()) {
+      UseCounter::Count(execution_context_,
+                        WebFeature::kWebAppManifestTranslations);
+    }
   }
 
   if (RuntimeEnabledFeatures::WebAppTabStripCustomizationsEnabled(
           execution_context_)) {
     manifest_->tab_strip = ParseTabStrip(root_object.get());
+    if (!manifest_->tab_strip.is_null()) {
+      UseCounter::Count(execution_context_,
+                        WebFeature::kWebAppManifestTabStrip);
+    }
   }
 
   manifest_->version = ParseVersion(root_object.get());
+  if (!manifest_->version.empty()) {
+    UseCounter::Count(execution_context_, WebFeature::kWebAppManifestVersion);
+  }
 
   ParseSucceeded(manifest_, document_url_);
   base::UmaHistogramEnumeration(kUMAIdParseResult, id_parse_result);
@@ -513,7 +612,7 @@ std::optional<RGBA32> ManifestParser::ParseColor(const JSONObject* object,
   }
 
   Color color;
-  if (!CSSParser::ParseColor(color, *parsed_color, true)) {
+  if (!CSSParser::ParseColor(color, *parsed_color)) {
     AddErrorInfo("property '" + key + "' ignored, '" + *parsed_color +
                  "' is not a " + "valid color.");
     return std::nullopt;
@@ -675,6 +774,7 @@ std::pair<KURL, ManifestParser::ParseIdResultType> ManifestParser::ParseId(
   ParseIdResultType parse_result;
   if (id.IsValid()) {
     parse_result = ParseIdResultType::kSucceed;
+    UseCounter::Count(execution_context_, WebFeature::kWebAppManifestIdField);
   } else {
     // If id is not specified, sets to start_url
     parse_result = ParseIdResultType::kDefaultToStartUrl;
@@ -693,6 +793,7 @@ ManifestParser::ParseStartURL(const JSONObject* object,
     return std::make_pair(document_url,
                           ParseStartUrlResult::kDefaultDocumentUrl);
   }
+  UseCounter::Count(execution_context_, WebFeature::kWebAppManifestStartUrl);
   return std::make_pair(start_url, ParseStartUrlResult::kParsedFromJson);
 }
 
@@ -719,6 +820,7 @@ KURL ManifestParser::ParseScope(const JSONObject* object,
 
   DCHECK(scope.IsValid());
   DCHECK(SecurityOrigin::AreSameOrigin(scope, document_url_));
+  UseCounter::Count(execution_context_, WebFeature::kWebAppManifestScope);
   return scope;
 }
 
@@ -1476,7 +1578,7 @@ HashMap<String, Vector<String>> ManifestParser::ParseFileHandlerAccept(
     int extension_overflow =
         total_file_handler_extension_count_ - kExtensionLimit;
     if (extension_overflow > 0) {
-      auto erase_iter = extensions.end() - extension_overflow;
+      auto erase_iter = UNSAFE_TODO(extensions.end() - extension_overflow);
       AddErrorInfo(
           "property 'accept': too many total file extensions, ignoring "
           "extensions starting from \"" +
@@ -1916,21 +2018,21 @@ String ManifestParser::ParseGCMSenderID(const JSONObject* object) {
   return gcm_sender_id.has_value() ? *gcm_sender_id : String();
 }
 
-Vector<blink::ParsedPermissionsPolicyDeclaration>
+Vector<network::ParsedPermissionsPolicyDeclaration>
 ManifestParser::ParseIsolatedAppPermissions(const JSONObject* object) {
   PermissionsPolicyParser::Node policy{
-      OriginWithPossibleWildcards::NodeType::kHeader};
+      network::OriginWithPossibleWildcards::NodeType::kHeader};
 
   JSONValue* json_value = object->Get("permissions_policy");
   if (!json_value) {
-    return Vector<blink::ParsedPermissionsPolicyDeclaration>();
+    return Vector<network::ParsedPermissionsPolicyDeclaration>();
   }
 
   JSONObject* permissions_dict = object->GetJSONObject("permissions_policy");
   if (!permissions_dict) {
     AddErrorInfo(
         "property 'permissions_policy' ignored, type object expected.");
-    return Vector<blink::ParsedPermissionsPolicyDeclaration>();
+    return Vector<network::ParsedPermissionsPolicyDeclaration>();
   }
 
   for (wtf_size_t i = 0; i < permissions_dict->size(); ++i) {
@@ -1979,12 +2081,12 @@ ManifestParser::ParseIsolatedAppPermissions(const JSONObject* object) {
 
   PolicyParserMessageBuffer logger(
       "Error with permissions_policy manifest field: ");
-  blink::ParsedPermissionsPolicy parsed_policy =
+  network::ParsedPermissionsPolicy parsed_policy =
       PermissionsPolicyParser::ParsePolicyFromNode(
           policy, SecurityOrigin::Create(manifest_url_), logger,
           execution_context_);
 
-  Vector<blink::ParsedPermissionsPolicyDeclaration> out;
+  Vector<network::ParsedPermissionsPolicyDeclaration> out;
   for (const auto& decl : parsed_policy) {
     out.push_back(std::move(decl));
   }
@@ -2418,6 +2520,13 @@ ManifestParser::MaybeCreatePatternInit(const JSONObject* pattern_object) {
 
 String ManifestParser::ParseVersion(const JSONObject* object) {
   return ParseString(object, "version", Trim(false)).value_or(String());
+}
+
+String ManifestParser::ParseUpdateToken(const JSONObject* object,
+                                        bool has_id_in_manifest) {
+  return has_id_in_manifest ? ParseString(object, "update_token", Trim(false))
+                                  .value_or(String())
+                            : String();
 }
 
 void ManifestParser::AddErrorInfo(const String& error_msg,

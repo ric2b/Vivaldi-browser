@@ -194,15 +194,16 @@ MDCSnackbarMessage* CreateOrUpdateNoteWithToast(
 
   // Save the note information.
   if (!node) {
-    // Normalize title first from content
-    std::u16string title = base::SysNSStringToUTF16(NormalizeTitle(content));
-    // Create a new note.
+    // Create a new note with empty title
+    // std::u16string() creates empty string
     node = note_model->AddNote(folder, folder->children().size(),
-                                  title, url, contentString);
-  } else {  // Update the information.
-    std::u16string nodeTitle = base::SysNSStringToUTF16(TitleForNoteNode(node));
+                               std::u16string(), url, contentString);
+  } else {
+    // Update the information.
+    // Don't need to update the title here
+    // until we have option to edit in editor screen
+    // note_model->SetTitle(node, nodeTitle);
     note_model->SetContent(node, contentString);
-    note_model->SetTitle(node, nodeTitle);
     note_model->SetURL(node, url);
 
     DCHECK(folder);

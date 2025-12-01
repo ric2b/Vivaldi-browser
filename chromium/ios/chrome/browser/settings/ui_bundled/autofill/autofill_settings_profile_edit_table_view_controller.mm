@@ -166,17 +166,7 @@ const CGFloat kSymbolSize = 22;
       [_delegate didEditAutofillProfileFromSettings];
     }
   }
-
-  [self loadModel];
-  [self.handler reconfigureCells];
-  if (_showMigrateToAccountSection &&
-      base::FeatureList::IsEnabled(
-          kAutofillDynamicallyLoadsFieldsForAddressInput)) {
-    [self reconfigureCellsForItems:
-              [self.tableViewModel
-                  itemsInSectionWithIdentifier:
-                      AutofillProfileDetailsSectionIdentifierMigrationButton]];
-  }
+  [self reloadData];
 }
 
 - (BOOL)editButtonEnabled {
@@ -185,7 +175,13 @@ const CGFloat kSymbolSize = 22;
 }
 
 - (BOOL)showCancelDuringEditing {
-  return YES;
+  SettingsNavigationController* navigationController =
+      base::apple::ObjCCast<SettingsNavigationController>(
+          self.navigationController);
+
+  return navigationController &&
+         navigationController.viewControllers.count > 0 &&
+         navigationController.viewControllers.firstObject == self;
 }
 
 #pragma mark - UITableViewDataSource
@@ -291,7 +287,7 @@ const CGFloat kSymbolSize = 22;
   TableViewTextItem* item = [[TableViewTextItem alloc]
       initWithType:AutofillProfileDetailsItemTypeMigrateToAccountButton];
   item.text = l10n_util::GetNSString(
-      IDS_IOS_SETTINGS_AUTOFILL_MIGRATE_ADDRESS_TO_ACCOUNT_BUTTON_TITLE);
+      IDS_IOS_GOOGLE_ACCOUNT_SETTINGS_BATCH_UPLOAD_BUTTON_ITEM);
   item.textColor = self.tableView.editing
                        ? [UIColor colorNamed:kTextSecondaryColor]
                        : [UIColor colorNamed:kBlueColor];

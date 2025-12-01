@@ -788,8 +788,6 @@ void DataTypeManagerImpl::Stop(SyncStopMetadataFate metadata_fate) {
   // Individual data type controllers might still be STOPPING, but we don't
   // reflect that in `state_` because, for all practical matters, the manager is
   // in a ready state and reconfguration can be triggered.
-  // TODO(mastiz): Reconsider waiting in STOPPING state until all datatypes have
-  // stopped.
   state_ = STOPPED;
 
   // If any configuration was still ongoing or pending, it's obsolete now.
@@ -915,8 +913,9 @@ void DataTypeManagerImpl::GetTypesWithUnsyncedData(
   for (DataType type : requested_types) {
     auto it = controllers_.find(type);
     if (it == controllers_.end()) {
-      // This should be rare, but can happen e.g. if a requested type is
-      // disabled via feature flag.
+      // This can happen if the requested data type is not supported on the
+      // current platform, or in some rare cases, for example, if the requested
+      // data type is disabled via feature flag.
       helper->OnReceivedResultForType(type, /*has_unsynced_data=*/false);
       continue;
     }

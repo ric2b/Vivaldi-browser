@@ -51,6 +51,8 @@
 #include "components/prefs/scoped_user_pref_update.h"
 #include "components/session_manager/core/session_manager.h"
 #include "components/supervised_user/core/common/supervised_user_constants.h"
+#include "components/user_manager/test_helper.h"
+#include "components/user_manager/user_manager.h"
 #include "components/user_manager/user_names.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/test/browser_test.h"
@@ -221,12 +223,12 @@ bool IsReducedAnimationsEnabled() {
   return AccessibilityManager::Get()->IsReducedAnimationsEnabled();
 }
 
-bool IsOverlayScrollbarEnabled() {
-  return AccessibilityManager::Get()->IsOverlayScrollbarEnabled();
+bool IsAlwaysShowScrollbarsEnabled() {
+  return AccessibilityManager::Get()->IsAlwaysShowScrollbarsEnabled();
 }
 
-void SetOverlayScrollbarEnabled(bool enabled) {
-  AccessibilityManager::Get()->EnableOverlayScrollbar(enabled);
+void SetAlwaysShowScrollbarsEnabled(bool enabled) {
+  AccessibilityManager::Get()->EnableAlwaysShowScrollbars(enabled);
 }
 
 void SetMouseKeysEnabled(bool enabled) {
@@ -337,9 +339,9 @@ void SetReducedAnimationsEnabledPref(bool enabled) {
       prefs::kAccessibilityReducedAnimationsEnabled, enabled);
 }
 
-void SetOverlayScrollbarEnabledPref(bool enabled) {
-  GetActiveUserPrefs()->SetBoolean(prefs::kAccessibilityOverlayScrollbarEnabled,
-                                   enabled);
+void SetAlwaysShowScrollbarsEnabledPref(bool enabled) {
+  GetActiveUserPrefs()->SetBoolean(
+      prefs::kAccessibilityAlwaysShowScrollbarsEnabled, enabled);
 }
 
 void SetMouseKeysEnabledPref(bool enabled) {
@@ -601,7 +603,7 @@ IN_PROC_BROWSER_TEST_F(AccessibilityManagerTest, TypePref) {
   EXPECT_FALSE(IsHighContrastEnabled());
   EXPECT_FALSE(IsAutoclickEnabled());
   EXPECT_FALSE(IsReducedAnimationsEnabled());
-  EXPECT_FALSE(IsOverlayScrollbarEnabled());
+  EXPECT_FALSE(IsAlwaysShowScrollbarsEnabled());
   EXPECT_FALSE(IsMouseKeysEnabled());
   EXPECT_EQ(default_autoclick_delay_, GetAutoclickDelay());
   EXPECT_FALSE(IsVirtualKeyboardEnabled());
@@ -627,8 +629,8 @@ IN_PROC_BROWSER_TEST_F(AccessibilityManagerTest, TypePref) {
   SetReducedAnimationsEnabledPref(true);
   EXPECT_TRUE(IsReducedAnimationsEnabled());
 
-  SetOverlayScrollbarEnabledPref(true);
-  EXPECT_TRUE(IsOverlayScrollbarEnabled());
+  SetAlwaysShowScrollbarsEnabledPref(true);
+  EXPECT_TRUE(IsAlwaysShowScrollbarsEnabled());
 
   SetMouseKeysEnabledPref(true);
   EXPECT_TRUE(IsMouseKeysEnabled());
@@ -666,8 +668,8 @@ IN_PROC_BROWSER_TEST_F(AccessibilityManagerTest, TypePref) {
   SetReducedAnimationsEnabledPref(false);
   EXPECT_FALSE(IsReducedAnimationsEnabled());
 
-  SetOverlayScrollbarEnabledPref(false);
-  EXPECT_FALSE(IsOverlayScrollbarEnabled());
+  SetAlwaysShowScrollbarsEnabledPref(false);
+  EXPECT_FALSE(IsAlwaysShowScrollbarsEnabled());
 
   SetMouseKeysEnabledPref(false);
   EXPECT_FALSE(IsMouseKeysEnabled());
@@ -1608,6 +1610,9 @@ IN_PROC_BROWSER_TEST_F(AccessibilityManagerDlcTest,
 // is successfully downloaded.
 IN_PROC_BROWSER_TEST_F(AccessibilityManagerDlcTest, FaceGazeAssetsSucceeded) {
   AccessibilityManager::Get()->EnableFaceGaze(true);
+  // Turning on FaceGaze will add a pinned notification to the message center,
+  // so clear it for the purposes of this test.
+  ClearMessageCenter();
   InstallFaceGazeAssetsAndWait();
 
   message_center::NotificationList::Notifications notifications =
@@ -1623,6 +1628,9 @@ IN_PROC_BROWSER_TEST_F(AccessibilityManagerDlcTest, FaceGazeAssetsSucceeded) {
 // fails to download.
 IN_PROC_BROWSER_TEST_F(AccessibilityManagerDlcTest, FaceGazeAssetsFailed) {
   AccessibilityManager::Get()->EnableFaceGaze(true);
+  // Turning on FaceGaze will add a pinned notification to the message center,
+  // so clear it for the purposes of this test.
+  ClearMessageCenter();
   OnFaceGazeAssetsFailed();
 
   message_center::NotificationList::Notifications notifications =
@@ -1817,9 +1825,16 @@ class AccessibilityManagerLoginTest : public OobeBaseTest {
   }
 
   void CreateSession(const AccountId& account_id) {
+    ASSERT_TRUE(user_manager::TestHelper(user_manager::UserManager::Get())
+                    .AddRegularUser(account_id));
+
     auto* session_manager = session_manager::SessionManager::Get();
-    session_manager->CreateSession(account_id, account_id.GetUserEmail(),
-                                   false);
+    session_manager->CreateSession(
+        account_id,
+        // TODO(crbug.com/278643115): Use fake username hash.
+        account_id.GetUserEmail(),
+        /*new_user=*/false,
+        /*has_active_session=*/false);
   }
 
   void StartUserSession(const AccountId& account_id) {
@@ -1869,7 +1884,7 @@ IN_PROC_BROWSER_TEST_F(AccessibilityManagerLoginTest, Login) {
   EXPECT_FALSE(IsLargeCursorEnabled());
   EXPECT_FALSE(IsMonoAudioEnabled());
   EXPECT_FALSE(IsMouseKeysEnabled());
-  EXPECT_FALSE(IsOverlayScrollbarEnabled());
+  EXPECT_FALSE(IsAlwaysShowScrollbarsEnabled());
   EXPECT_FALSE(IsReducedAnimationsEnabled());
   EXPECT_FALSE(IsSpokenFeedbackEnabled());
   EXPECT_FALSE(IsVirtualKeyboardEnabled());
@@ -1883,7 +1898,7 @@ IN_PROC_BROWSER_TEST_F(AccessibilityManagerLoginTest, Login) {
   EXPECT_FALSE(IsLargeCursorEnabled());
   EXPECT_FALSE(IsMonoAudioEnabled());
   EXPECT_FALSE(IsMouseKeysEnabled());
-  EXPECT_FALSE(IsOverlayScrollbarEnabled());
+  EXPECT_FALSE(IsAlwaysShowScrollbarsEnabled());
   EXPECT_FALSE(IsReducedAnimationsEnabled());
   EXPECT_FALSE(IsSpokenFeedbackEnabled());
   EXPECT_FALSE(IsVirtualKeyboardEnabled());
@@ -1897,7 +1912,7 @@ IN_PROC_BROWSER_TEST_F(AccessibilityManagerLoginTest, Login) {
   EXPECT_FALSE(IsLargeCursorEnabled());
   EXPECT_FALSE(IsMonoAudioEnabled());
   EXPECT_FALSE(IsMouseKeysEnabled());
-  EXPECT_FALSE(IsOverlayScrollbarEnabled());
+  EXPECT_FALSE(IsAlwaysShowScrollbarsEnabled());
   EXPECT_FALSE(IsReducedAnimationsEnabled());
   EXPECT_FALSE(IsSpokenFeedbackEnabled());
   EXPECT_FALSE(IsVirtualKeyboardEnabled());
@@ -1921,8 +1936,8 @@ IN_PROC_BROWSER_TEST_F(AccessibilityManagerLoginTest, Login) {
   SetMouseKeysEnabled(true);
   EXPECT_TRUE(IsMouseKeysEnabled());
 
-  SetOverlayScrollbarEnabled(true);
-  EXPECT_TRUE(IsOverlayScrollbarEnabled());
+  SetAlwaysShowScrollbarsEnabled(true);
+  EXPECT_TRUE(IsAlwaysShowScrollbarsEnabled());
 
   SetReducedAnimationsEnabled(true);
   EXPECT_TRUE(IsReducedAnimationsEnabled());
@@ -2010,8 +2025,15 @@ INSTANTIATE_TEST_SUITE_P(UserTypeInstantiation,
 IN_PROC_BROWSER_TEST_P(AccessibilityManagerUserTypeTest, BrailleWhenLoggedIn) {
   if (GetParam() == user_manager::UserType::kChild) {
     logged_in_user_mixin_->LogInUser();
+    histogram_tester_.ExpectBucketCount("Accessibility.CrosSpokenFeedback",
+                                        /*sample=*/false, 2);
+  } else {
+    histogram_tester_.ExpectBucketCount("Accessibility.CrosSpokenFeedback",
+                                        /*sample=*/false, 1);
   }
 
+  histogram_tester_.ExpectBucketCount("Accessibility.CrosSpokenFeedback",
+                                      /*sample=*/true, 0);
   histogram_tester_.ExpectBucketCount(
       "Accessibility.CrosSpokenFeedback.BrailleDisplayConnected."
       "ConnectionChanged",

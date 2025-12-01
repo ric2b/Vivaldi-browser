@@ -9,11 +9,12 @@
 
 #include "include/core/SkColorSpace.h"
 #include "include/core/SkPixmap.h"
-#include "include/private/SkColorData.h"
+#include "src/core/SkColorData.h"
 
 #include "include/gpu/graphite/Context.h"
 #include "include/gpu/graphite/Recorder.h"
 #include "src/core/SkTraceEvent.h"
+#include "src/gpu/SkBackingFit.h"
 #include "src/gpu/graphite/AtlasProvider.h"
 #include "src/gpu/graphite/Buffer.h"
 #include "src/gpu/graphite/Caps.h"
@@ -95,7 +96,7 @@ DrawContext::DrawContext(const Caps* caps,
         : fTarget(std::move(target))
         , fImageInfo(ii)
         , fSurfaceProps(props)
-        , fDstReadStrategy(caps->getDstReadStrategy())
+        , fDstReadStrategy(caps->getDstReadStrategy(fTarget->textureInfo()))
         , fCurrentDrawTask(sk_make_sp<DrawTask>(fTarget))
         , fPendingDraws(std::make_unique<DrawList>())
         , fPendingUploads(std::make_unique<UploadList>()) {
@@ -262,9 +263,11 @@ void DrawContext::flush(Recorder* recorder) {
             // this is handled inside Image::Copy() except we would need it to expose the task in
             // order to link it correctly.
             SkASSERT(recorder->priv().caps()->isTexturable(fTarget->textureInfo()));
+            // Use approx size for better reuse.
+            SkISize dstCopyTextureSize = GetApproxSize(dstReadPixelBounds.size());
             dstCopy = TextureProxy::Make(recorder->priv().caps(),
                                          recorder->priv().resourceProvider(),
-                                         dstReadPixelBounds.size(),
+                                         dstCopyTextureSize,
                                          fTarget->textureInfo(),
                                          "DstCopyTexture",
                                          skgpu::Budgeted::kYes);
@@ -284,7 +287,8 @@ void DrawContext::flush(Recorder* recorder) {
                                                    pass->depthStencilFlags(),
                                                    pass->clearColor(),
                                                    pass->requiresMSAA(),
-                                                   writeSwizzle);
+                                                   writeSwizzle,
+                                                   fDstReadStrategy);
 
         RenderPassTask::DrawPassList passes;
         passes.emplace_back(std::move(pass));

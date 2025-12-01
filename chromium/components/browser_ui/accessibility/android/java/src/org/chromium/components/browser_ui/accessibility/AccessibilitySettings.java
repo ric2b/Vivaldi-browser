@@ -12,8 +12,11 @@ import androidx.preference.Preference;
 import androidx.preference.PreferenceFragmentCompat;
 
 import org.chromium.base.ContextUtils;
+import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.base.supplier.ObservableSupplierImpl;
+import org.chromium.build.annotations.NullMarked;
+import org.chromium.build.annotations.Nullable;
 import org.chromium.components.browser_ui.settings.ChromeSwitchPreference;
 import org.chromium.components.browser_ui.settings.EmbeddableSettingsPage;
 import org.chromium.components.browser_ui.settings.SettingsUtils;
@@ -30,6 +33,7 @@ import org.chromium.build.BuildConfig;
 import org.vivaldi.browser.preferences.VivaldiPreferences;
 
 /** Fragment to keep track of all the accessibility related preferences. */
+@NullMarked
 public class AccessibilitySettings extends PreferenceFragmentCompat
         implements EmbeddableSettingsPage, Preference.OnPreferenceChangeListener {
     public static final String PREF_PAGE_ZOOM_DEFAULT_ZOOM = "page_zoom_default_zoom";
@@ -41,11 +45,6 @@ public class AccessibilitySettings extends PreferenceFragmentCompat
     public static final String PREF_CAPTIONS = "captions";
     public static final String PREF_ZOOM_INFO = "zoom_info";
     public static final String PREF_IMAGE_DESCRIPTIONS = "image_descriptions";
-
-    // Vivaldi
-    public static final String RESET_UI_SCALE = "reset_ui_scale";
-    public static final String RESET_ZOOM = "reset_zoom";
-    // End Vivaldi
 
     private PageZoomPreference mPageZoomDefaultZoomPref;
     private ChromeSwitchPreference mPageZoomIncludeOSAdjustment;
@@ -62,7 +61,7 @@ public class AccessibilitySettings extends PreferenceFragmentCompat
     }
 
     @Override
-    public void onActivityCreated(Bundle savedInstanceState) {
+    public void onActivityCreated(@Nullable Bundle savedInstanceState) {
         super.onActivityCreated(savedInstanceState);
 
         mPageTitle.set(getString(R.string.prefs_accessibility));
@@ -74,14 +73,13 @@ public class AccessibilitySettings extends PreferenceFragmentCompat
     }
 
     @Override
-    public void onCreatePreferences(Bundle savedInstanceState, String rootKey) {
+    public void onCreatePreferences(@Nullable Bundle savedInstanceState, @Nullable String rootKey) {
         SettingsUtils.addPreferencesFromResource(this, R.xml.accessibility_preferences);
 
-        mPageZoomDefaultZoomPref = (PageZoomPreference) findPreference(PREF_PAGE_ZOOM_DEFAULT_ZOOM);
-        mPageZoomAlwaysShowPref =
-                (ChromeSwitchPreference) findPreference(PREF_PAGE_ZOOM_ALWAYS_SHOW);
+        mPageZoomDefaultZoomPref = findPreference(PREF_PAGE_ZOOM_DEFAULT_ZOOM);
+        mPageZoomAlwaysShowPref = findPreference(PREF_PAGE_ZOOM_ALWAYS_SHOW);
         mPageZoomIncludeOSAdjustment =
-                (ChromeSwitchPreference) findPreference(PREF_PAGE_ZOOM_INCLUDE_OS_ADJUSTMENT);
+                findPreference(PREF_PAGE_ZOOM_INCLUDE_OS_ADJUSTMENT);
 
         // Set the initial values for the page zoom settings, and set change listeners.
         mPageZoomDefaultZoomPref.setInitialValue(
@@ -96,19 +94,18 @@ public class AccessibilitySettings extends PreferenceFragmentCompat
                     mDelegate.getTextSizeContrastAccessibilityDelegate());
         }
 
-        mForceEnableZoomPref = (ChromeSwitchPreference) findPreference(PREF_FORCE_ENABLE_ZOOM);
+        mForceEnableZoomPref = findPreference(PREF_FORCE_ENABLE_ZOOM);
         mForceEnableZoomPref.setOnPreferenceChangeListener(this);
         mForceEnableZoomPref.setChecked(
                 mDelegate.getForceEnableZoomAccessibilityDelegate().getValue());
 
-        mJumpStartOmnibox =
-                (ChromeSwitchPreference) findPreference(OmniboxFeatures.KEY_JUMP_START_OMNIBOX);
+        mJumpStartOmnibox = findPreference(OmniboxFeatures.KEY_JUMP_START_OMNIBOX);
         mJumpStartOmnibox.setOnPreferenceChangeListener(this);
         mJumpStartOmnibox.setChecked(OmniboxFeatures.isJumpStartOmniboxEnabled());
         mJumpStartOmnibox.setVisible(OmniboxFeatures.sJumpStartOmnibox.isEnabled());
 
         ChromeSwitchPreference readerForAccessibilityPref =
-                (ChromeSwitchPreference) findPreference(PREF_READER_FOR_ACCESSIBILITY);
+                findPreference(PREF_READER_FOR_ACCESSIBILITY);
         readerForAccessibilityPref.setChecked(
                 mDelegate.getReaderAccessibilityDelegate().getValue());
         readerForAccessibilityPref.setOnPreferenceChangeListener(this);
@@ -131,7 +128,7 @@ public class AccessibilitySettings extends PreferenceFragmentCompat
                 });
         } // Vivaldi
         // Vivaldi: Resets the UI scale within Accessibility settings
-        Preference resetUiScale = findPreference(RESET_UI_SCALE);
+        Preference resetUiScale = findPreference(VivaldiPreferences.RESET_UI_SCALE);
         resetUiScale.setOnPreferenceClickListener(preference -> {
 
             int ui_dpi = VivaldiPreferences.getSharedPreferencesManager().readInt(
@@ -144,7 +141,7 @@ public class AccessibilitySettings extends PreferenceFragmentCompat
         }); // Vivaldi
 
         // Vivaldi: Resets the Zoom within Accessibility settings
-        Preference resetZoom = findPreference(RESET_ZOOM);
+        Preference resetZoom = findPreference(VivaldiPreferences.RESET_ZOOM);
         resetZoom.setOnPreferenceClickListener(preference -> {
             mPageZoomLatestDefaultZoomPrefValue =
                     PageZoomUtils.PAGE_ZOOM_DEFAULT_SEEK_VALUE;
@@ -156,33 +153,32 @@ public class AccessibilitySettings extends PreferenceFragmentCompat
         });
 
         Preference zoomInfo = findPreference(PREF_ZOOM_INFO);
-        if (ContentFeatureMap.isEnabled(ContentFeatureList.ACCESSIBILITY_PAGE_ZOOM_ENHANCEMENTS)) {
-            zoomInfo.setVisible(true);
-            zoomInfo.setOnPreferenceClickListener(
-                    preference -> {
-                        Bundle initialArguments = new Bundle();
-                        initialArguments.putString(
-                                SingleCategorySettings.EXTRA_CATEGORY,
-                                SiteSettingsCategory.preferenceKey(SiteSettingsCategory.Type.ZOOM));
-                        mDelegate
-                                .getSiteSettingsNavigation()
-                                .startSettings(
-                                        ContextUtils.getApplicationContext(),
-                                        AllSiteSettings.class,
-                                        initialArguments);
-                        return true;
-                    });
+        zoomInfo.setVisible(true);
+        zoomInfo.setOnPreferenceClickListener(
+                preference -> {
+                    Bundle initialArguments = new Bundle();
+                    initialArguments.putString(
+                            SingleCategorySettings.EXTRA_CATEGORY,
+                            SiteSettingsCategory.preferenceKey(SiteSettingsCategory.Type.ZOOM));
+                    mDelegate
+                            .getSiteSettingsNavigation()
+                            .startSettings(
+                                    ContextUtils.getApplicationContext(),
+                                    AllSiteSettings.class,
+                                    initialArguments);
+                    return true;
+                });
 
-            // When Accessibility Page Zoom v2 is also enabled, show additional controls.
-            mPageZoomIncludeOSAdjustment.setVisible(
-                    ContentFeatureMap.isEnabled(ContentFeatureList.ACCESSIBILITY_PAGE_ZOOM_V2));
+        // When Accessibility Page Zoom v2 is enabled, show additional controls.
+        if (ContentFeatureMap.isEnabled(ContentFeatureList.ACCESSIBILITY_PAGE_ZOOM_V2)) {
+            mPageZoomIncludeOSAdjustment.setVisible(true);
             mPageZoomIncludeOSAdjustment.setOnPreferenceChangeListener(this);
         } else {
-            zoomInfo.setVisible(false);
             mPageZoomIncludeOSAdjustment.setVisible(false);
         }
 
-        Preference imageDescriptionsPreference = findPreference(PREF_IMAGE_DESCRIPTIONS);
+        Preference imageDescriptionsPreference =
+                findPreference(PREF_IMAGE_DESCRIPTIONS);
         imageDescriptionsPreference.setVisible(mDelegate.shouldShowImageDescriptionsSetting());
     }
 
@@ -203,7 +199,11 @@ public class AccessibilitySettings extends PreferenceFragmentCompat
         if (PREF_FORCE_ENABLE_ZOOM.equals(preference.getKey())) {
             mDelegate.getForceEnableZoomAccessibilityDelegate().setValue((Boolean) newValue);
         } else if (PREF_READER_FOR_ACCESSIBILITY.equals(preference.getKey())) {
-            mDelegate.getReaderAccessibilityDelegate().setValue((Boolean) newValue);
+            boolean readerModeEnabled = (Boolean) newValue;
+            mDelegate.getReaderAccessibilityDelegate().setValue(readerModeEnabled);
+            RecordHistogram.recordBooleanHistogram(
+                    "DomDistiller.Android.ReaderModeEnabledInAccessibilitySettings",
+                    readerModeEnabled);
         } else if (PREF_PAGE_ZOOM_DEFAULT_ZOOM.equals(preference.getKey())) {
             mPageZoomLatestDefaultZoomPrefValue =
                     PageZoomUtils.convertSeekBarValueToZoomLevel((Integer) newValue);

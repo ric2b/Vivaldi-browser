@@ -32,7 +32,6 @@
 #include "third_party/blink/renderer/bindings/modules/v8/v8_gpu_texture_view_dimension.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_gpu_vertex_format.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_gpu_vertex_step_mode.h"
-#include "third_party/blink/renderer/platform/graphics/graphics_types.h"
 
 namespace blink {
 
@@ -122,6 +121,8 @@ V8GPUQueryType FromDawnEnum(wgpu::QueryType dawn_enum) {
       return V8GPUQueryType(V8GPUQueryType::Enum::kOcclusion);
     case wgpu::QueryType::Timestamp:
       return V8GPUQueryType(V8GPUQueryType::Enum::kTimestamp);
+    default:
+      break;
   }
   NOTREACHED();
 }
@@ -607,7 +608,7 @@ V8GPUTextureDimension FromDawnEnum(wgpu::TextureDimension dawn_enum) {
       return V8GPUTextureDimension(V8GPUTextureDimension::Enum::k2D);
     case wgpu::TextureDimension::e3D:
       return V8GPUTextureDimension(V8GPUTextureDimension::Enum::k3d);
-    case wgpu::TextureDimension::Undefined:
+    default:
       break;
   }
   NOTREACHED();
@@ -717,6 +718,8 @@ wgpu::FeatureName AsDawnEnum(const V8GPUFeatureName& webgpu_enum) {
       return wgpu::FeatureName::DualSourceBlending;
     case V8GPUFeatureName::Enum::kSubgroups:
       return wgpu::FeatureName::Subgroups;
+    case V8GPUFeatureName::Enum::kCoreFeaturesAndLimits:
+      return wgpu::FeatureName::CoreFeaturesAndLimits;
     case V8GPUFeatureName::Enum::kClipDistances:
       return wgpu::FeatureName::ClipDistances;
     case V8GPUFeatureName::Enum::kChromiumExperimentalMultiDrawIndirect:
@@ -983,6 +986,8 @@ V8GPUBufferMapState FromDawnEnum(wgpu::BufferMapState dawn_enum) {
       return V8GPUBufferMapState(V8GPUBufferMapState::Enum::kPending);
     case wgpu::BufferMapState::Mapped:
       return V8GPUBufferMapState(V8GPUBufferMapState::Enum::kMapped);
+    default:
+      break;
   }
   NOTREACHED();
 }
@@ -1007,6 +1012,8 @@ const char* FromDawnEnum(wgpu::BackendType dawn_enum) {
       return "openGL";
     case wgpu::BackendType::OpenGLES:
       return "openGLES";
+    default:
+      break;
   }
   NOTREACHED();
 }
@@ -1021,6 +1028,8 @@ const char* FromDawnEnum(wgpu::AdapterType dawn_enum) {
       return "CPU";
     case wgpu::AdapterType::Unknown:
       return "unknown";
+    default:
+      break;
   }
   NOTREACHED();
 }
@@ -1047,6 +1056,9 @@ const char* FromDawnEnum(wgpu::WGSLLanguageFeatureName dawn_enum) {
       return "chromium_testing_shipped_with_killswitch";
     case wgpu::WGSLLanguageFeatureName::ChromiumTestingShipped:
       return "chromium_testing_shipped";
+
+    default:
+      break;
   }
   return nullptr;
 }

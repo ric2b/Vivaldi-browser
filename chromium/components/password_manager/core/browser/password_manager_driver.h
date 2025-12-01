@@ -35,11 +35,6 @@ class PasswordManagerInterface;
 // (i.e., obtain information from it and give information to it).
 class PasswordManagerDriver {
  public:
-#if BUILDFLAG(IS_ANDROID)
-  using ToShowVirtualKeyboard =
-      base::StrongAlias<class ToShowVirtualKeyboardTag, bool>;
-#endif
-
   PasswordManagerDriver() = default;
 
   PasswordManagerDriver(const PasswordManagerDriver&) = delete;
@@ -55,9 +50,10 @@ class PasswordManagerDriver {
       const autofill::PasswordFormFillData& form_data) = 0;
 
   // Informs the driver that there are no saved credentials in the password
-  // store for the current page.
-  // TODO(crbug.com/41259715): Remove and observe FormFetcher instead.
-  virtual void InformNoSavedCredentials() {}
+  // store for the current page. In certain situations the password manager will
+  // show popups (e.g. promo UIs) when there are no saved credentials.
+  virtual void InformNoSavedCredentials(
+      bool should_show_popup_without_passwords) {}
 
   // Notifies the driver that a password can be generated on the fields
   // identified by `form`.
@@ -130,12 +126,6 @@ class PasswordManagerDriver {
       const std::u16string& user_provided_credential) {}
 
 #if BUILDFLAG(IS_ANDROID)
-  // Informs the renderer that the keyboard replacing surface (e.g. Touch To
-  // Fill sheet) has been closed. Indicates whether the virtual keyboard should
-  // be shown instead.
-  virtual void KeyboardReplacingSurfaceClosed(
-      ToShowVirtualKeyboard show_virtual_keyboard) {}
-
   // Triggers form submission on the last interacted web input element.
   virtual void TriggerFormSubmission() {}
 #endif

@@ -122,16 +122,18 @@ class IntegrationTestCommandsUser : public IntegrationTestCommands {
                               target_url);
   }
 
-  void ExpectAppCommandPing(ScopedServer* test_server,
-                            const std::string& appid,
-                            const std::string& appcommandid,
-                            int errorcode,
-                            int eventresult,
-                            int event_type,
-                            const base::Version& version) const override {
+  void ExpectAppCommandPing(
+      ScopedServer* test_server,
+      const std::string& appid,
+      const std::string& appcommandid,
+      int errorcode,
+      int eventresult,
+      int event_type,
+      const base::Version& version,
+      const base::Version& updater_version) const override {
     updater::test::ExpectAppCommandPing(updater_scope_, test_server, appid,
                                         appcommandid, errorcode, eventresult,
-                                        event_type, version);
+                                        event_type, version, updater_version);
   }
 
   void ExpectUpdateCheckRequest(ScopedServer* test_server) const override {
@@ -480,9 +482,10 @@ class IntegrationTestCommandsUser : public IntegrationTestCommands {
   }
 
   void RunOfflineInstallOsNotSupported(bool is_legacy_install,
-                                       bool is_silent_install) override {
+                                       bool is_silent_install,
+                                       const std::string& language) override {
     updater::test::RunOfflineInstallOsNotSupported(
-        updater_scope_, is_legacy_install, is_silent_install);
+        updater_scope_, is_legacy_install, is_silent_install, language);
   }
 
   void DMPushEnrollmentToken(const std::string& enrollment_token) override {

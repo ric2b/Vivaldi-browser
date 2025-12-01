@@ -10,7 +10,7 @@ import {
   createTarget,
   describeWithEnvironment,
   describeWithLocale,
-  getGetHostConfigStub,
+  updateHostConfig,
 } from '../../testing/EnvironmentHelpers.js';
 import {expectCall} from '../../testing/ExpectStubCall.js';
 import {describeWithMockConnection, setMockConnectionResponseHandler} from '../../testing/MockConnection.js';
@@ -120,23 +120,89 @@ describe('StylesSidebarPane', () => {
       assert.instanceOf(sectionBlocks[1].sections[0], Elements.StylePropertiesSection.FontPaletteValuesRuleSection);
     });
 
+    it('should add @function section to the end', async () => {
+      const stylesSidebarPane =
+          new Elements.StylesSidebarPane.StylesSidebarPane(new Elements.ComputedStyleModel.ComputedStyleModel());
+      const matchedStyles = await getMatchedStyles({
+        cssModel: stylesSidebarPane.cssModel() as SDK.CSSModel.CSSModel,
+        node: sinon.createStubInstance(SDK.DOMModel.DOMNode),
+        functionRules: [{
+          name: {text: '--f'},
+          parameters: [{name: '--x', type: '*'}, {name: '--y', type: '*'}],
+          origin: Protocol.CSS.StyleSheetOrigin.Regular,
+          children: [
+            {
+              condition: {
+                media: {
+                  text: '(width > 400px)',
+                  source: Protocol.CSS.CSSMediaSource.MediaRule,
+                },
+                conditionText: '<unused>',
+                children: [
+                  {
+                    condition: {
+                      containerQueries: {
+                        text: '(width > 300px)',
+                      },
+                      conditionText: '<unused>',
+                      children: [
+                        {
+                          condition: {
+                            supports: {
+                              text: '(color: red)',
+                              active: true,
+                            },
+                            conditionText: '<unused>',
+                            children: [
+                              {
+                                style: {
+                                  cssProperties: [{name: 'result', value: 'var(--y)'}],
+                                  shorthandEntries: [],
+                                }
+                              },
+                            ],
+                          },
+                        },
+                      ],
+                    },
+                  },
+                ],
+              },
+            },
+            {
+              style: {
+                cssProperties: [{name: 'result', value: 'var(--x)'}],
+                shorthandEntries: [],
+              }
+            },
+          ],
+        }],
+      });
+
+      const sectionBlocks =
+          await stylesSidebarPane.rebuildSectionsForMatchedStyleRulesForTest(matchedStyles, new Map(), new Map());
+
+      assert.lengthOf(sectionBlocks, 2);
+      assert.strictEqual(sectionBlocks[1].titleElement()?.textContent, '@function');
+      assert.lengthOf(sectionBlocks[1].sections, 1);
+      assert.instanceOf(sectionBlocks[1].sections[0], Elements.StylePropertiesSection.FunctionRuleSection);
+      assert.strictEqual(
+          sectionBlocks[1].sections[0].element.deepTextContent().replaceAll(/\s+/g, ' ').trim(),
+          '--f(--x, --y) { @media (width > 400px) { @container (width > 300px) { @supports (color: red) { result: var(--y); } } } result: var(--x); }');
+    });
+
     describe('Animation styles', () => {
       function mockGetAnimatedComputedStyles(response: Partial<Protocol.CSS.GetAnimatedStylesForNodeResponse>) {
         setMockConnectionResponseHandler('CSS.getAnimatedStylesForNode', () => response);
       }
 
-      let hostConfigStub: sinon.SinonStub;
       beforeEach(() => {
         sinon.stub(Common.Linkifier.Linkifier, 'linkify').returns(Promise.resolve(document.createTextNode('link')));
-        hostConfigStub = getGetHostConfigStub({
+        updateHostConfig({
           devToolsAnimationStylesInStylesTab: {
             enabled: true,
           },
         });
-      });
-
-      afterEach(() => {
-        hostConfigStub.restore();
       });
 
       it('should render transition & animation styles in the styles tab', async () => {

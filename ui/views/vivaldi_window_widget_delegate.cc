@@ -159,23 +159,13 @@ class VivaldiSplashBackground : public views::Background {
                            (b.width() - size) / 2, (b.height() - size) / 2);
     }
 
-    // Draw text at the bottom:
-    const std::u16string text = u"Made with ❤️ in Europe";
-
-    gfx::Font font("Arial", 16);
-    font = font.Derive(0, gfx::Font::NORMAL, gfx::Font::Weight::NORMAL);
-    gfx::FontList font_list(font);
-
-    int text_margin = 16;  // Spacing from the bottom of the screen.
-    int text_y = b.bottom() - 48 - text_margin;
-
-    // Allocate space near the bottom with padding.
-    // Horizontally it spans the whole canvas, vertically it's 32 pixels high.
-    gfx::Rect text_rect(b.x(), text_y, b.width(), 32);
-
-    // Draw the text centered inside text_rect.
-    canvas->DrawStringRectWithFlags(text, font_list, text_color_, text_rect,
-                                    gfx::Canvas::TEXT_ALIGN_CENTER);
+    // Heart at the bottom center:
+    int size = 178;
+    int margin = 48; // Spacing from the bottom of the window.
+    const ui::ThemedVectorIcon& logo =
+        ui::ThemedVectorIcon(&kVivaldiHeartIcon, text_color_, size);
+    canvas->DrawImageInt(logo.GetImageSkia(view->GetColorProvider()),
+                         (b.width() - size) / 2, b.height() - margin);
   }
 
  private:
@@ -271,20 +261,24 @@ views::ClientView* VivaldiWindowWidgetDelegate::CreateClientView(
   // browser windows is to show splash logo before first content is rendered.
   SkColor background_color_top;
   SkColor background_color_bottom;
-  SkColor text_color = SkColorSetRGB(0x5B, 0x66, 0x7f);
+  SkColor text_color;
+  ui::NativeTheme* theme = widget->GetNativeTheme();
   if (is_private_window) {
     background_color_top = SkColorSetRGB(0x23, 0x23, 0x4f);
     background_color_bottom = background_color_top;
+    text_color = SkColorSetRGB(0x5B, 0x66, 0x7f);
   } else {
-    ui::NativeTheme* theme = widget->GetNativeTheme();
     if (theme && theme->GetDefaultSystemColorScheme() ==
                      ui::NativeTheme::ColorScheme::kDark) {
-      background_color_top = SkColorSetRGB(0x70, 0x6D, 0x84);
-      background_color_bottom = SkColorSetRGB(0x3b, 0x43, 0x53);
-      text_color = SkColorSetRGB(0xb2, 0xc0, 0xde);
+      // Dark: 292929
+      background_color_top = SkColorSetRGB(0x29, 0x29, 0x29);
+      background_color_bottom = background_color_top;
+      text_color = SkColorSetARGB(0x33, 0xff, 0xff, 0xff);
     } else {
-      background_color_top = SkColorSetRGB(0xea, 0xe7, 0xff);
-      background_color_bottom = SkColorSetRGB(0xcb, 0xdc, 0xff);
+      // Light: E4E3EC > C5C9D3
+      background_color_top = SkColorSetRGB(0xe4, 0xe3, 0xec);
+      background_color_bottom = SkColorSetRGB(0xc5, 0xc9, 0xd3);
+      text_color = SkColorSetARGB(0x66, 0x00, 0x00, 0x00);
     }
   }
   const gfx::VectorIcon* icon = nullptr;
@@ -295,8 +289,14 @@ views::ClientView* VivaldiWindowWidgetDelegate::CreateClientView(
       icon_color = SkColorSetRGB(0x57, 0x55, 0x8D);
       icon = &kVivaldiSplashGhostIcon;
     } else {
-      // Will be #282828 for dark mode windows and #bcbcbc for light mode.
-      icon_color = SkColorSetARGB(0x1A, 0x00, 0x00, 0x00);
+      if (theme && theme->GetDefaultSystemColorScheme() ==
+                       ui::NativeTheme::ColorScheme::kDark) {
+        // Dark FFFFFF1A
+        icon_color = SkColorSetARGB(0x1a, 0xff, 0xff, 0xff);
+      } else {
+        // Light 00000040
+        icon_color = SkColorSetARGB(0x40, 0x00, 0x00, 0x00);
+      }
       icon = &kVivaldiSplashIcon;
     }
   }

@@ -10,7 +10,6 @@
 #import "components/signin/public/base/signin_pref_names.h"
 #import "components/signin/public/base/signin_switches.h"
 #import "components/supervised_user/core/common/features.h"
-#import "components/variations/pref_names.h"
 #import "ios/chrome/browser/authentication/ui_bundled/signin_earl_grey.h"
 #import "ios/chrome/browser/authentication/ui_bundled/signin_earl_grey_ui_test_util.h"
 #import "ios/chrome/browser/authentication/ui_bundled/signin_matchers.h"
@@ -18,7 +17,6 @@
 #import "ios/chrome/browser/bookmarks/ui_bundled/bookmark_earl_grey.h"
 #import "ios/chrome/browser/bookmarks/ui_bundled/bookmark_earl_grey_ui.h"
 #import "ios/chrome/browser/ntp/ui_bundled/new_tab_page_feature.h"
-#import "ios/chrome/browser/parcel_tracking/features.h"
 #import "ios/chrome/browser/policy/model/policy_earl_grey_utils.h"
 #import "ios/chrome/browser/policy/model/policy_util.h"
 #import "ios/chrome/browser/settings/ui_bundled/google_services/google_services_settings_app_interface.h"
@@ -122,9 +120,6 @@ void SetSigninEnterprisePolicyValue(BrowserSigninMode signinMode) {
     // the feature is not enabled.
     config.features_enabled.push_back(kIdentityDiscAccountMenu);
   }
-  if ([self isRunningTest:@selector(testParcelTrackingSetting)]) {
-    config.features_disabled.push_back(kIOSDisableParcelTracking);
-  }
   return config;
 }
 
@@ -164,7 +159,7 @@ void SetSigninEnterprisePolicyValue(BrowserSigninMode signinMode) {
 // Tests that disabling the "Allow Chrome sign-in" blocks the user from signing
 // in to Chrome through settings until it is re-enabled.
 - (void)testToggleAllowChromeSignin {
-  // User is signed-in and syncing.
+  // User is signed-in.
   FakeSystemIdentity* fakeIdentity = [FakeSystemIdentity fakeIdentity1];
   [SigninEarlGrey signinWithFakeIdentity:fakeIdentity];
   [SigninEarlGrey verifySignedInWithFakeIdentity:fakeIdentity];
@@ -233,7 +228,12 @@ void SetSigninEnterprisePolicyValue(BrowserSigninMode signinMode) {
   // Sign in with a managed identity.
   FakeSystemIdentity* fakeManagedIdentity =
       [FakeSystemIdentity fakeManagedIdentity];
-  [SigninEarlGrey signinWithFakeIdentity:fakeManagedIdentity];
+  if (AreSeparateProfilesForManagedAccountsEnabled()) {
+    [SigninEarlGrey
+        signinWithFakeManagedIdentityInPersonalProfile:fakeManagedIdentity];
+  } else {
+    [SigninEarlGrey signinWithFakeIdentity:fakeManagedIdentity];
+  }
   [SigninEarlGrey verifySignedInWithFakeIdentity:fakeManagedIdentity];
 
   // Turn off "Allow Chrome Sign-in" feature, which prompts the user with a
@@ -255,19 +255,26 @@ void SetSigninEnterprisePolicyValue(BrowserSigninMode signinMode) {
       selectElementWithMatcher:ButtonWithAccessibilityLabelId(
                                    IDS_IOS_SIGNOUT_DIALOG_SIGN_OUT_BUTTON)]
       performAction:grey_tap()];
-  WaitForSettingDoneButton();
 
-  // Verify that sign-in is disabled.
-  [[EarlGrey selectElementWithMatcher:SettingsMenuBackButton()]
-      performAction:grey_tap()];
+  if (!AreSeparateProfilesForManagedAccountsEnabled()) {
+    WaitForSettingDoneButton();
+
+    // Verify that sign-in is disabled.
+    [[EarlGrey selectElementWithMatcher:SettingsMenuBackButton()]
+        performAction:grey_tap()];
+  } else {
+    // Signing out caused a profile switch, which also closed settings.
+    [ChromeEarlGreyUI openSettingsMenu];
+  }
+
   [[EarlGrey
       selectElementWithMatcher:grey_accessibilityID(kSettingsSignInCellId)]
       assertWithMatcher:grey_notVisible()];
+  [[EarlGrey selectElementWithMatcher:SettingsDoneButton()]
+      performAction:grey_tap()];
 
   // Verify signed out.
   [SigninEarlGrey verifySignedOut];
-  [[EarlGrey selectElementWithMatcher:SettingsDoneButton()]
-      performAction:grey_tap()];
 }
 
 // Tests that canceling the "Allow Chrome sign-in" option does not change the
@@ -340,40 +347,6 @@ void SetSigninEnterprisePolicyValue(BrowserSigninMode signinMode) {
   [[EarlGrey selectElementWithMatcher:grey_text(l10n_util::GetNSString(
                                           IDS_IOS_SETTING_OFF))]
       assertWithMatcher:grey_sufficientlyVisible()];
-}
-
-// Tests the parcel tracking settings row is properly shown.
-- (void)testParcelTrackingSetting {
-  // Parcel tracking is only enabled in the US.
-  [ChromeEarlGrey overrideVariationsServiceStoredPermanentCountry:@"us"];
-
-  [self openGoogleServicesSettings];
-
-  [[EarlGrey
-      selectElementWithMatcher:
-          grey_allOf(
-              grey_accessibilityLabel(GetNSString(
-                  IDS_IOS_CONTENT_SUGGESTIONS_PARCEL_TRACKING_MODULE_TITLE)),
-              grey_kindOfClassName(@"UITableViewCell"),
-              grey_sufficientlyVisible(), nil)]
-      assertWithMatcher:grey_sufficientlyVisible()];
-}
-
-// Tests the parcel tracking settings row is not shown for non-US countries.
-- (void)testParcelTrackingSetting_notShownOutsideUS {
-  // Set permanent country to somthing other than the US.
-  [ChromeEarlGrey overrideVariationsServiceStoredPermanentCountry:@"fr"];
-
-  [self openGoogleServicesSettings];
-
-  [[EarlGrey
-      selectElementWithMatcher:
-          grey_allOf(
-              grey_accessibilityLabel(GetNSString(
-                  IDS_IOS_CONTENT_SUGGESTIONS_PARCEL_TRACKING_MODULE_TITLE)),
-              grey_kindOfClassName(@"UITableViewCell"),
-              grey_sufficientlyVisible(), nil)]
-      assertWithMatcher:grey_notVisible()];
 }
 
 #pragma mark - Helpers

@@ -562,7 +562,7 @@ static gl::TextureCaps GenerateTextureFormatCaps(const FunctionsGL *functions,
     {
         GLenum queryInternalFormat = internalFormat;
 
-        if (internalFormat == GL_BGRA8_EXT)
+        if (internalFormat == GL_BGRA8_EXT || internalFormat == GL_BGRA_EXT)
         {
             // Querying GL_NUM_SAMPLE_COUNTS for GL_BGRA8_EXT generates an INVALID_ENUM on some
             // drivers.  It seems however that allocating a multisampled renderbuffer of this format
@@ -1348,6 +1348,12 @@ void GenerateCaps(const FunctionsGL *functions,
         caps->maxImageUnits = QuerySingleGLInt(functions, GL_MAX_IMAGE_UNITS);
         caps->maxCombinedImageUniforms =
             QuerySingleGLInt(functions, GL_MAX_COMBINED_IMAGE_UNIFORMS);
+        if (features.forceMaxCombinedShaderOutputResources.enabled)
+        {
+            caps->maxCombinedShaderOutputResources = caps->maxCombinedImageUniforms +
+                                                     caps->maxCombinedShaderStorageBlocks +
+                                                     caps->maxColorAttachments;
+        }
     }
     else
     {
@@ -1692,7 +1698,7 @@ void GenerateCaps(const FunctionsGL *functions,
                                         functions->hasGLExtension("GL_ARB_stencil_texturing") ||
                                         functions->isAtLeastGLES(gl::Version(3, 1));
 
-    if (features.supportsShaderFramebufferFetchEXT.enabled)
+    if (features.supportsShaderFramebufferFetchEXT.enabled && extensions->drawBuffersIndexedAny())
     {
         // We can support PLS natively, probably in tiled memory.
         extensions->shaderPixelLocalStorageANGLE         = true;
@@ -2396,6 +2402,11 @@ void InitializeFeatures(const FunctionsGL *functions, angle::FeaturesGL *feature
                             isIntelLinuxLessThanKernelVersion5);
 
     ANGLE_FEATURE_CONDITION(features, allowClearForRobustResourceInit, IsApple());
+
+    // NVidia and PowerVR Rogue report MAX_COMBINED_SHADER_OUTPUT_RESOURCES incorrectly.
+    // Force it to the sum of all sublimits.
+    ANGLE_FEATURE_CONDITION(features, forceMaxCombinedShaderOutputResources,
+                            isNvidia || IsPowerVrRogue(functions));
 
     // The WebGL conformance/uniforms/out-of-bounds-uniform-array-access test has been seen to fail
     // on AMD and Android devices.

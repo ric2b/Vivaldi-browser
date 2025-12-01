@@ -308,6 +308,11 @@ void NetworkServiceClient::OnPrivateNetworkAccessPermissionRequired(
   std::move(callback).Run(false);
 }
 
+void NetworkServiceClient::OnLocalNetworkAccessPermissionRequired(
+    OnLocalNetworkAccessPermissionRequiredCallback callback) {
+  std::move(callback).Run(false);
+}
+
 void NetworkServiceClient::OnClearSiteData(
     const GURL& url,
     const std::string& header_value,
@@ -341,6 +346,9 @@ void NetworkServiceClient::OnSharedStorageHeaderReceived(
     OnSharedStorageHeaderReceivedCallback callback) {
   std::move(callback).Run();
 }
+
+void NetworkServiceClient::OnAdAuctionEventRecordHeaderReceived(
+    network::AdAuctionEventRecord event_record) {}
 
 void NetworkServiceClient::Clone(
     mojo::PendingReceiver<network::mojom::URLLoaderNetworkServiceObserver>

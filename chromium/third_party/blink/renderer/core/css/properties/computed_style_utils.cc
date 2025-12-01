@@ -22,16 +22,19 @@
 #include "third_party/blink/renderer/core/css/css_grid_auto_repeat_value.h"
 #include "third_party/blink/renderer/core/css/css_grid_integer_repeat_value.h"
 #include "third_party/blink/renderer/core/css/css_grid_template_areas_value.h"
+#include "third_party/blink/renderer/core/css/css_identifier_value_mappings.h"
 #include "third_party/blink/renderer/core/css/css_initial_value.h"
 #include "third_party/blink/renderer/core/css/css_math_function_value.h"
 #include "third_party/blink/renderer/core/css/css_numeric_literal_value.h"
-#include "third_party/blink/renderer/core/css/css_primitive_value_mappings.h"
+#include "third_party/blink/renderer/core/css/css_palette_mix_value.h"
+#include "third_party/blink/renderer/core/css/css_primitive_value.h"
 #include "third_party/blink/renderer/core/css/css_quad_value.h"
 #include "third_party/blink/renderer/core/css/css_reflect_value.h"
 #include "third_party/blink/renderer/core/css/css_repeat_value.h"
 #include "third_party/blink/renderer/core/css/css_scroll_value.h"
 #include "third_party/blink/renderer/core/css/css_shadow_value.h"
 #include "third_party/blink/renderer/core/css/css_string_value.h"
+#include "third_party/blink/renderer/core/css/css_superellipse_value.h"
 #include "third_party/blink/renderer/core/css/css_timing_function_value.h"
 #include "third_party/blink/renderer/core/css/css_uri_value.h"
 #include "third_party/blink/renderer/core/css/css_value.h"
@@ -61,6 +64,7 @@
 #include "third_party/blink/renderer/core/style/position_area.h"
 #include "third_party/blink/renderer/core/style/style_intrinsic_length.h"
 #include "third_party/blink/renderer/core/style/style_svg_resource.h"
+#include "third_party/blink/renderer/core/style/superellipse.h"
 #include "third_party/blink/renderer/core/style_property_shorthand.h"
 #include "third_party/blink/renderer/core/svg/svg_rect_element.h"
 #include "third_party/blink/renderer/core/svg_element_type_helpers.h"
@@ -69,6 +73,7 @@
 #include "third_party/blink/renderer/platform/fonts/font_palette.h"
 #include "third_party/blink/renderer/platform/fonts/font_variant_emoji.h"
 #include "third_party/blink/renderer/platform/fonts/opentype/font_settings.h"
+#include "third_party/blink/renderer/platform/heap/garbage_collected.h"
 #include "third_party/blink/renderer/platform/transforms/matrix_3d_transform_operation.h"
 #include "third_party/blink/renderer/platform/transforms/matrix_transform_operation.h"
 #include "third_party/blink/renderer/platform/transforms/perspective_transform_operation.h"
@@ -78,108 +83,49 @@ namespace blink {
 
 namespace {
 
-const double kFinalStatePercentage = 100.0;
-const double kMiddleStatePercentage = 50.0;
-
-CSSValue* ConvertFontPaletteToCSSValue(const blink::FontPalette* palette) {
-  switch (palette->GetPaletteNameKind()) {
-    case blink::FontPalette::kNormalPalette:
+const CSSValue* ConvertFontPaletteToCSSValue(const FontPalette& palette) {
+  switch (palette.GetPaletteNameKind()) {
+    case FontPalette::kNormalPalette:
       return CSSIdentifierValue::Create(CSSValueID::kNormal);
-    case blink::FontPalette::kLightPalette:
+    case FontPalette::kLightPalette:
       return CSSIdentifierValue::Create(CSSValueID::kLight);
-    case blink::FontPalette::kDarkPalette:
+    case FontPalette::kDarkPalette:
       return CSSIdentifierValue::Create(CSSValueID::kDark);
-    case blink::FontPalette::kCustomPalette:
+    case FontPalette::kCustomPalette:
       return MakeGarbageCollected<CSSCustomIdentValue>(
-          palette->GetPaletteValuesName());
-    case blink::FontPalette::kInterpolablePalette: {
-      // TODO(crbug.com/1400620): Change the serialization of palette-mix()
-      // function to match color-mix(), i.e.: palette-mix() =
-      // palette-mix(<color-interpolation-method> , [ [normal | light | dark |
-      // <palette-identifier> | <palette-mix()> ] && <percentage [0,100]>?
-      // ]#{2})
-      CSSFunctionValue* result =
-          MakeGarbageCollected<CSSFunctionValue>(CSSValueID::kPaletteMix);
-
-      CSSValueList* color_space_css_value_list =
-          CSSValueList::CreateSpaceSeparated();
-      color_space_css_value_list->Append(
-          *MakeGarbageCollected<CSSCustomIdentValue>(AtomicString("in")));
-      if (palette->GetHueInterpolationMethod().has_value()) {
-        color_space_css_value_list->Append(
-            *MakeGarbageCollected<CSSCustomIdentValue>(
-                AtomicString(Color::SerializeInterpolationSpace(
-                    palette->GetColorInterpolationSpace(),
-                    *palette->GetHueInterpolationMethod()))));
-      } else {
-        color_space_css_value_list->Append(
-            *MakeGarbageCollected<CSSCustomIdentValue>(
-                AtomicString(Color::SerializeInterpolationSpace(
-                    palette->GetColorInterpolationSpace()))));
-      }
-      result->Append(*color_space_css_value_list);
-
-      double start_percentage_ = palette->GetStartPercentage();
-      double end_percentage_ = palette->GetEndPercentage();
-
-      CSSValueList* start_palette_with_percentage =
-          CSSValueList::CreateSpaceSeparated();
-      CSSValue* start = ConvertFontPaletteToCSSValue(palette->GetStart().get());
-      start_palette_with_percentage->Append(*start);
-      // Percentages in the palette-mix() function should be serialized the same
-      // way they are serialized in color-mix() function. If the first
-      // percentage is equal 50% and the two specified percentages add to 100%,
-      // we should skip the first percentage in the serialization. Second
-      // percentage should be skipped if it equals to 50%, or the two specified
-      // percentages add to 100%. Compare:
-      // https://drafts.csswg.org/css-color-5/#serial-color-mix.
-      if (start_percentage_ + end_percentage_ != kFinalStatePercentage ||
-          start_percentage_ != kMiddleStatePercentage) {
-        CSSValue* param = CSSNumericLiteralValue::Create(
-            start_percentage_, CSSPrimitiveValue::UnitType::kPercentage);
-        start_palette_with_percentage->Append(*param);
-      }
-      result->Append(*start_palette_with_percentage);
-
-      CSSValueList* end_palette_with_percentage =
-          CSSValueList::CreateSpaceSeparated();
-      CSSValue* end = ConvertFontPaletteToCSSValue(palette->GetEnd().get());
+          palette.GetPaletteValuesName());
+    case FontPalette::kInterpolablePalette: {
+      const CSSValue* start = ConvertFontPaletteToCSSValue(*palette.GetStart());
+      const CSSValue* end = ConvertFontPaletteToCSSValue(*palette.GetEnd());
       if (*start == *end) {
         return start;
       }
-      end_palette_with_percentage->Append(*end);
-      if (start_percentage_ + end_percentage_ != kFinalStatePercentage) {
-        CSSValue* param = CSSNumericLiteralValue::Create(
-            end_percentage_, CSSPrimitiveValue::UnitType::kPercentage);
-        end_palette_with_percentage->Append(*param);
-      }
-      result->Append(*end_palette_with_percentage);
-
-      return result;
+      return MakeGarbageCollected<cssvalue::CSSPaletteMixValue>(
+          start, end,
+          CSSNumericLiteralValue::Create(
+              palette.GetStartPercentage(),
+              CSSPrimitiveValue::UnitType::kPercentage),
+          CSSNumericLiteralValue::Create(
+              palette.GetEndPercentage(),
+              CSSPrimitiveValue::UnitType::kPercentage),
+          palette.GetColorInterpolationSpace(),
+          // If no hue interpolation method is specified, use the shorter
+          // interpolation method. This is the default value for the
+          // `<hue-interpolation-method>` production.
+          palette.GetHueInterpolationMethod().value_or(
+              Color::HueInterpolationMethod::kShorter));
     }
-    default:
-      NOTREACHED();
   }
 }
 
 }  // namespace
-
-static Length Negate(const Length& length) {
-  if (length.IsCalculated()) {
-    NOTREACHED();
-  }
-
-  Length ret = Length(-length.GetFloatValue(), length.GetType());
-  ret.SetQuirk(length.Quirk());
-  return ret;
-}
 
 // TODO(rjwright): make this const
 CSSValue* ComputedStyleUtils::ZoomAdjustedPixelValueForLength(
     const Length& length,
     const ComputedStyle& style) {
   if (length.IsFixed()) {
-    return ZoomAdjustedPixelValue(length.Value(), style);
+    return ZoomAdjustedPixelValue(length.Pixels(), style);
   }
   return CSSValue::Create(length, style.EffectiveZoom());
 }
@@ -568,10 +514,12 @@ const CSSValue* ComputedStyleUtils::BackgroundPositionYOrWebkitMaskPositionY(
 
 static CSSNumericLiteralValue* ValueForImageSlice(const Length& slice) {
   CHECK(slice.IsPercent() || slice.IsFixed());
-  return CSSNumericLiteralValue::Create(
-      slice.Value(), slice.IsPercent()
-                         ? CSSPrimitiveValue::UnitType::kPercentage
-                         : CSSPrimitiveValue::UnitType::kNumber);
+  if (slice.IsPercent()) {
+    return CSSNumericLiteralValue::Create(
+        slice.Percent(), CSSPrimitiveValue::UnitType::kPercentage);
+  }
+  return CSSNumericLiteralValue::Create(slice.Pixels(),
+                                        CSSPrimitiveValue::UnitType::kNumber);
 }
 
 cssvalue::CSSBorderImageSliceValue*
@@ -868,7 +816,8 @@ CSSValue* ComputedStyleUtils::ValueForPositionOffset(
       return CSSIdentifierValue::Create(CSSValueID::kAuto);
     }
 
-    Length negated_opposite = Negate(opposite);
+    DCHECK_EQ(opposite.GetType(), Length::Type::kFixed);
+    Length negated_opposite = Length(-opposite.Pixels(), opposite.GetType());
     return ZoomAdjustedPixelValueForLength(negated_opposite, style);
   }
 
@@ -975,7 +924,7 @@ CSSValue* ComputedStyleUtils::ComputedValueForLineHeight(
   }
 
   if (length.IsPercent()) {
-    return CSSNumericLiteralValue::Create(length.GetFloatValue() / 100.0,
+    return CSSNumericLiteralValue::Create(length.Percent() / 100.0,
                                           CSSPrimitiveValue::UnitType::kNumber);
   } else {
     return ZoomAdjustedPixelValue(
@@ -1455,15 +1404,13 @@ CSSValue* ComputedStyleUtils::ValueForFontVariationSettings(
   return list;
 }
 
-CSSValue* ComputedStyleUtils::ValueForFontPalette(const ComputedStyle& style) {
-  const blink::FontPalette* palette =
-      style.GetFontDescription().GetFontPalette();
-
+const CSSValue* ComputedStyleUtils::ValueForFontPalette(
+    const ComputedStyle& style) {
+  const FontPalette* palette = style.GetFontDescription().GetFontPalette();
   if (!palette) {
     return CSSIdentifierValue::Create(CSSValueID::kNormal);
   }
-
-  return ConvertFontPaletteToCSSValue(palette);
+  return ConvertFontPaletteToCSSValue(*palette);
 }
 
 CSSValue* ComputedStyleUtils::ValueForFont(const ComputedStyle& style) {
@@ -1523,8 +1470,7 @@ CSSValue* ComputedStyleUtils::ValueForFont(const ComputedStyle& style) {
       (RuntimeEnabledFeatures::CSSFontSizeAdjustEnabled() &&
        style.GetFontDescription().HasSizeAdjust()) ||
       variant_position != FontDescription::kNormalVariantPosition ||
-      (RuntimeEnabledFeatures::FontVariantEmojiEnabled() &&
-       variant_emoji != kNormalVariantEmoji)) {
+      (variant_emoji != kNormalVariantEmoji)) {
     return nullptr;
   }
 
@@ -2072,9 +2018,8 @@ CSSValue* ComputedStyleUtils::ValueForGridTrackList(
 
   const bool is_subgrid_specified = computed_grid_track_list.IsSubgriddedAxis();
   const bool is_subgrid_valid =
-      (grid && grid->HasCachedPlacementData())
-          ? grid->CachedPlacementData().SubgridSpanSize(direction) != kNotFound
-          : false;
+      grid && grid->HasCachedPlacementData() &&
+      grid->CachedPlacementData().SubgridSpanSize(direction) != kNotFound;
   const bool is_subgrid = is_subgrid_specified && is_subgrid_valid;
 
   // Standalone grids with empty track lists should compute to `none`, but
@@ -2310,15 +2255,17 @@ CSSValue* ComputedStyleUtils::TouchActionFlagsToCSSValue(
   // non-handwriting bits should result in values of auto / manipulation in the
   // exposed CSS value.
   // TODO(crbug.com/382525574): Launch or clean up kHandwriting.
-  touch_action &= ~TouchAction::kInternalHandwriting;
+  const static auto kHandwritingTouchAction =
+      TouchAction::kInternalHandwriting |
+      TouchAction::kInternalHandwritingPanningRules;
+  touch_action &= ~kHandwritingTouchAction;
 
-  if (touch_action ==
-      (TouchAction::kAuto & ~TouchAction::kInternalHandwriting)) {
+  if (touch_action == (TouchAction::kAuto & ~kHandwritingTouchAction)) {
     list->Append(*CSSIdentifierValue::Create(CSSValueID::kAuto));
   } else if (touch_action == TouchAction::kNone) {
     list->Append(*CSSIdentifierValue::Create(CSSValueID::kNone));
-  } else if (touch_action == (TouchAction::kManipulation &
-                              ~TouchAction::kInternalHandwriting)) {
+  } else if (touch_action ==
+             (TouchAction::kManipulation & ~kHandwritingTouchAction)) {
     list->Append(*CSSIdentifierValue::Create(CSSValueID::kManipulation));
   } else {
     if ((touch_action & TouchAction::kPanX) == TouchAction::kPanX) {
@@ -2816,6 +2763,57 @@ CSSValue* ComputedStyleUtils::ValueForBorderRadiusCorner(
       CSSValuePair::kDropIdenticalValues);
 }
 
+CSSValue* ComputedStyleUtils::ValueForCornerShape(
+    const Superellipse& superellipse) {
+  if (superellipse == Superellipse::Bevel()) {
+    return CSSIdentifierValue::Create(CSSValueID::kBevel);
+  }
+  if (superellipse == Superellipse::Notch()) {
+    return CSSIdentifierValue::Create(CSSValueID::kNotch);
+  }
+  if (superellipse == Superellipse::Round()) {
+    return CSSIdentifierValue::Create(CSSValueID::kRound);
+  }
+  if (superellipse == Superellipse::Scoop()) {
+    return CSSIdentifierValue::Create(CSSValueID::kScoop);
+  }
+  if (superellipse == Superellipse::Straight()) {
+    return CSSIdentifierValue::Create(CSSValueID::kStraight);
+  }
+  if (superellipse == Superellipse::Squircle()) {
+    return CSSIdentifierValue::Create(CSSValueID::kSquircle);
+  }
+  return MakeGarbageCollected<cssvalue::CSSSuperellipseValue>(
+      *CSSNumericLiteralValue::Create(superellipse.Exponent(),
+                                      CSSPrimitiveValue::UnitType::kNumber));
+}
+
+CSSValueList* ComputedStyleUtils::ValueForCornerShapeShorthand(
+    const ComputedStyle& style) {
+  CSSValueList* list = CSSValueList::CreateSpaceSeparated();
+
+  bool show_bottom_left =
+      style.CornerTopRightShape() != style.CornerBottomLeftShape();
+  bool show_bottom_right =
+      show_bottom_left ||
+      (style.CornerBottomRightShape() != style.CornerTopLeftShape());
+  bool show_top_right = show_bottom_right || (style.CornerTopRightShape() !=
+                                              style.CornerTopLeftShape());
+
+  list->Append(*ValueForCornerShape(style.CornerTopLeftShape()));
+  if (show_top_right) {
+    list->Append(*ValueForCornerShape(style.CornerTopRightShape()));
+  }
+  if (show_bottom_right) {
+    list->Append(*ValueForCornerShape(style.CornerBottomRightShape()));
+  }
+  if (show_bottom_left) {
+    list->Append(*ValueForCornerShape(style.CornerBottomLeftShape()));
+  }
+
+  return list;
+}
+
 CSSFunctionValue* ComputedStyleUtils::ValueForTransform(
     const gfx::Transform& matrix,
     float zoom,
@@ -2944,7 +2942,7 @@ CSSFunctionValue* ComputedStyleUtils::ValueForTransformOperation(
             *CSSPrimitiveValue::CreateFromLength(translate.X(), zoom));
       }
       if (id == CSSValueID::kTranslateY ||
-          (id == CSSValueID::kTranslate && (translate.Y().Value() != 0.f)) ||
+          (id == CSSValueID::kTranslate && !translate.Y().IsZero()) ||
           id == CSSValueID::kTranslate3d) {
         result->Append(
             *CSSPrimitiveValue::CreateFromLength(translate.Y(), zoom));
@@ -3681,7 +3679,7 @@ CSSValue* ComputedStyleUtils::ValueForFilter(
         filter_value =
             MakeGarbageCollected<CSSFunctionValue>(CSSValueID::kBlur);
         filter_value->Append(*ZoomAdjustedPixelValue(
-            To<BlurFilterOperation>(filter_operation)->StdDeviation().Value(),
+            To<BlurFilterOperation>(filter_operation)->StdDeviation().Pixels(),
             style));
         break;
       case FilterOperation::OperationType::kDropShadow: {

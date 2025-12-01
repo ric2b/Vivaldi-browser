@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <string_view>
+
 #include "ash/accelerators/accelerator_controller_impl.h"
 #include "ash/accessibility/accessibility_controller.h"
 #include "ash/accessibility/drag_event_rewriter.h"
@@ -50,7 +52,7 @@ class TestTextInputView : public views::WidgetDelegateView {
     text_field_->SetTextInputType(ui::TEXT_INPUT_TYPE_TEXT);
     std::string name = "Hello, world";
     text_field_->GetViewAccessibility().SetName(base::UTF8ToUTF16(name));
-    AddChildView(text_field_.get());
+    AddChildViewRaw(text_field_.get());
     SetLayoutManager(std::make_unique<views::FillLayout>());
   }
   TestTextInputView(const TestTextInputView&) = delete;
@@ -63,7 +65,7 @@ class TestTextInputView : public views::WidgetDelegateView {
   }
 
   void FocusOnTextInput() { text_field_->RequestFocus(); }
-  const std::u16string& GetText() { return text_field_->GetText(); }
+  std::u16string_view GetText() { return text_field_->GetText(); }
 
  private:
   raw_ptr<views::Textfield> text_field_;  // owned by views hierarchy.
@@ -141,7 +143,7 @@ class MouseKeysTest : public AshTestBase {
     return GetBubbleController()->widget_->IsVisible();
   }
 
-  const std::u16string GetBubbleText() const {
+  std::u16string_view GetBubbleText() const {
     return GetBubbleView()->GetTextForTesting();
   }
 

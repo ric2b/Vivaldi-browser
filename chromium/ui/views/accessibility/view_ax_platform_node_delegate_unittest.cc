@@ -41,8 +41,8 @@
 #if defined(USE_AURA)
 #include "ui/views/accessibility/ax_aura_obj_cache.h"
 #include "ui/views/accessibility/ax_aura_obj_wrapper.h"
-#include "ui/views/accessibility/ax_event_manager.h"
-#include "ui/views/accessibility/ax_event_observer.h"
+#include "ui/views/accessibility/ax_update_notifier.h"
+#include "ui/views/accessibility/ax_update_observer.h"
 #include "ui/views/accessibility/ax_widget_obj_wrapper.h"
 #endif
 
@@ -64,18 +64,18 @@ BEGIN_METADATA(TestButton)
 END_METADATA
 
 #if defined(USE_AURA)
-class TestAXEventObserver : public AXEventObserver {
+class TestAXEventObserver : public AXUpdateObserver {
  public:
   explicit TestAXEventObserver(AXAuraObjCache* cache) : cache_(cache) {
-    AXEventManager::Get()->AddObserver(this);
+    AXUpdateNotifier::Get()->AddObserver(this);
   }
   TestAXEventObserver(const TestAXEventObserver&) = delete;
   TestAXEventObserver& operator=(const TestAXEventObserver&) = delete;
   ~TestAXEventObserver() override {
-    AXEventManager::Get()->RemoveObserver(this);
+    AXUpdateNotifier::Get()->RemoveObserver(this);
   }
 
-  // AXEventObserver:
+  // AXUpdateObserver:
   void OnViewEvent(View* view, ax::mojom::Event event_type) override {
     std::vector<raw_ptr<AXAuraObjWrapper, VectorExperimental>> out_children;
     AXAuraObjWrapper* ax_obj = cache_->GetOrCreate(view->GetWidget());
@@ -141,9 +141,9 @@ class ViewAXPlatformNodeDelegateTest : public ViewsTestBase {
     label_ = button_->AddChildView(std::make_unique<Label>());
     label_->SetID(DEFAULT_VIEW_ID);
 
-    textfield_ = new Textfield();
+    textfield_ =
+        widget_->GetRootView()->AddChildView(std::make_unique<Textfield>());
     textfield_->SetBounds(0, 0, 100, 40);
-    widget_->GetRootView()->AddChildView(textfield_.get());
 
     widget_->Show();
   }
@@ -736,7 +736,7 @@ TEST_F(ViewAXPlatformNodeDelegateTest, SetNameAndDescription) {
 
   // Setting the labelledby View to itself should trigger a DCHECK.
   EXPECT_DCHECK_DEATH_WITH(button_accessibility()->SetName(*button_),
-                           "Check failed: view_ != &naming_view");
+                           "DCHECK failed: view_ != &naming_view");
 }
 
 TEST_F(ViewAXPlatformNodeDelegateTest, SetIsSelected) {
@@ -1243,6 +1243,54 @@ TEST_F(ViewAXPlatformNodeDelegateTest, GetUnignoredSelection) {
 
   EXPECT_EQ(expected_anchor_offset, selection_2.anchor_offset);
   EXPECT_EQ(expected_focus_offset, selection_2.focus_offset);
+}
+
+TEST_F(ViewAXPlatformNodeDelegateTest, CreateTextPositionAtInLabel) {
+  auto widget = std::make_unique<Widget>();
+  Widget::InitParams init_params = CreateParams(
+      Widget::InitParams::CLIENT_OWNS_WIDGET, Widget::InitParams::TYPE_POPUP);
+  widget->Init(std::move(init_params));
+
+  View* content = widget->SetContentsView(std::make_unique<View>());
+
+  Label* label = new Label(u"Label's Name");
+  content->AddChildViewRaw(label);
+  label->GetViewAccessibility().EnsureAtomicViewAXTreeManager();
+  ViewAXPlatformNodeDelegate* label_accessibility =
+      static_cast<ViewAXPlatformNodeDelegate*>(&label->GetViewAccessibility());
+  label_accessibility->GetData();
+
+  ui::AXNodePosition::AXPositionInstance actual_position =
+      label_accessibility->CreateTextPositionAt(
+          0, ax::mojom::TextAffinity::kDownstream);
+  ASSERT_NE(nullptr, actual_position.get());
+  ASSERT_FALSE(actual_position->IsNullPosition());
+  EXPECT_EQ(0, actual_position->text_offset());
+  EXPECT_EQ(u"Label's Name", actual_position->GetText());
+}
+
+TEST_F(ViewAXPlatformNodeDelegateTest, CreateTextPositionAtInTextfield) {
+  auto widget = std::make_unique<Widget>();
+  Widget::InitParams init_params = CreateParams(
+      Widget::InitParams::CLIENT_OWNS_WIDGET, Widget::InitParams::TYPE_POPUP);
+  widget->Init(std::move(init_params));
+
+  View* content = widget->SetContentsView(std::make_unique<View>());
+
+  Textfield* textfield = new Textfield;
+  textfield->GetViewAccessibility().SetName(u"hello world");
+  textfield->GetViewAccessibility().EnsureAtomicViewAXTreeManager();
+  content->AddChildViewRaw(textfield);
+
+  ViewAXPlatformNodeDelegate* delegate =
+      static_cast<ViewAXPlatformNodeDelegate*>(
+          &textfield->GetViewAccessibility());
+  ui::AXNodePosition::AXPositionInstance text_position =
+      delegate->CreateTextPositionAt(1, ax::mojom::TextAffinity::kDownstream);
+
+  ASSERT_NE(nullptr, text_position.get());
+  ASSERT_FALSE(text_position->IsNullPosition());
+  EXPECT_EQ(1, text_position->text_offset());
 }
 
 TEST_F(ViewAXPlatformNodeDelegateTableTest, TableHasHeader) {

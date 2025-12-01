@@ -100,6 +100,8 @@ struct RequestFilterRule {
   // For regex patterns, this provides a string from which ngrams can be safely
   // extracted for indexing.
   std::optional<std::string> ngram_search_string;
+
+  std::string original_rule_text;
 };
 
 using RequestFilterRules = std::vector<RequestFilterRule>;

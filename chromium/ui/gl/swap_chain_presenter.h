@@ -13,6 +13,7 @@
 
 #include "base/compiler_specific.h"
 #include "base/containers/circular_deque.h"
+#include "base/containers/span.h"
 #include "base/memory/raw_ptr.h"
 #include "base/power_monitor/power_monitor.h"
 #include "base/time/time.h"
@@ -20,6 +21,7 @@
 #include "ui/gfx/color_space.h"
 #include "ui/gl/dc_layer_overlay_params.h"
 #include "ui/gl/dc_layer_tree.h"
+#include "ui/gl/gl_export.h"
 
 namespace gl {
 
@@ -54,7 +56,9 @@ class SwapChainPresenter : public base::PowerStateObserver {
 
   const gfx::Size& content_size() const { return content_size_; }
 
-  void SetFrameRate(float frame_rate);
+  // Valid HANDLE is needed for testing to create an IDCompositionSurface with
+  // `CreateSurfaceFromHandle`.
+  GL_EXPORT static bool CreateSurfaceHandleHelperForTesting(HANDLE* handle);
 
  private:
   // Mapped to DirectCompositonVideoPresentationMode UMA enum.  Do not remove or
@@ -94,7 +98,7 @@ class SwapChainPresenter : public base::PowerStateObserver {
   // video processor input view.  Returns nullptr on failure.
   UNSAFE_BUFFER_USAGE Microsoft::WRL::ComPtr<ID3D11Texture2D> UploadVideoImage(
       const gfx::Size& size,
-      const uint8_t* shm_video_pixmap,
+      base::span<const uint8_t> shm_video_pixmap,
       size_t stride);
 
   // Releases resources that might hold indirect references to the swap chain.
@@ -334,9 +338,6 @@ class SwapChainPresenter : public base::PowerStateObserver {
   bool enable_vp_super_resolution_ = false;
 
   UINT gpu_vendor_id_ = 0;
-
-  // Number of frames per second.
-  float frame_rate_ = 0.f;
 };
 
 }  // namespace gl

@@ -536,7 +536,7 @@ def ytdevinfra(c):
 def ytdevinfra_github(c):
   soln = c.solutions.add()
   soln.name = 'ytdevinfra_github'
-  soln.url = 'https://github.googlesource.com/youtube/cobalt.git'
+  soln.url = 'https://github.com/youtube/cobalt.git'
   soln.custom_vars = {
       'download_remoteexec_cfg': True,
       'rbe_instance': 'projects/cobalt-actions-prod/instances/default_instance'

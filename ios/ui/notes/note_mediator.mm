@@ -44,6 +44,8 @@ const int64_t kLastUsedFolderNone = -1;
 + (void)registerBrowserStatePrefs:(user_prefs::PrefRegistrySyncable*)registry {
   registry->RegisterInt64Pref(vivaldiprefs::kVivaldiNoteFolderDefault,
                               kLastUsedFolderNone);
+  registry->RegisterBooleanPref(vivaldiprefs::kVivaldiNotesShowMarkdownEditor,
+                                false);
 }
 
 + (const NoteNode*)folderForNewNotesInProfile:(ProfileIOS*)profile {

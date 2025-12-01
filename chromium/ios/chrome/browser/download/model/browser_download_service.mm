@@ -13,7 +13,7 @@
 #import "ios/chrome/browser/download/model/pass_kit_tab_helper.h"
 #import "ios/chrome/browser/download/model/safari_download_tab_helper.h"
 #import "ios/chrome/browser/download/model/vcard_tab_helper.h"
-#import "ios/chrome/browser/download/ui_bundled/features.h"
+#import "ios/chrome/browser/download/ui/features.h"
 #import "ios/chrome/browser/prerender/model/prerender_service.h"
 #import "ios/chrome/browser/prerender/model/prerender_service_factory.h"
 #import "ios/chrome/browser/shared/model/profile/profile_ios.h"
@@ -89,7 +89,16 @@ void BrowserDownloadService::OnDownloadCreated(
     if (tab_helper) {
       tab_helper->DownloadCalendar(std::move(task));
     }
-  } else if (task->GetMimeType() == kVcardMimeType &&
+  } else if (task->GetMimeType() == kAppleWalletOrderMimeType &&
+             task->GetOriginalUrl().SchemeIsHTTPOrHTTPS()) {
+    // SFSafariViewController can only open http and https URLs.
+    SafariDownloadTabHelper* tab_helper =
+        SafariDownloadTabHelper::FromWebState(web_state);
+    if (tab_helper) {
+      tab_helper->DownloadAppleWalletOrder(std::move(task));
+    }
+  } else if ((task->GetMimeType() == kVcardMimeType ||
+              task->GetMimeType() == kXVcardMimeType) &&
              !base::FeatureList::IsEnabled(kVCardKillSwitch)) {
     VcardTabHelper* tab_helper = VcardTabHelper::FromWebState(web_state);
     if (tab_helper) {

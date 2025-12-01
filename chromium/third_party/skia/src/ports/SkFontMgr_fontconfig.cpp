@@ -414,13 +414,36 @@ static void fcpattern_from_skfontstyle(SkFontStyle style, FcPattern* pattern) {
 class SkTypeface_fontconfig : public SkTypeface_proxy {
 public:
     static sk_sp<SkTypeface> Make(SkAutoFcPattern pattern,
-                                        SkString sysroot,
-                                        SkFontScanner* scanner) {
-        return sk_sp(new SkTypeface_fontconfig(std::move(pattern), std::move(sysroot), scanner));
+                                  SkString sysroot,
+                                  SkFontScanner* scanner) {
+        SkString resolvedFilename;
+        FCLocker lock;
+        const char* filename = get_string(pattern, FC_FILE);
+        // See FontAccessible for note on searching sysroot then non-sysroot path.
+        if (!sysroot.isEmpty()) {
+            resolvedFilename = sysroot;
+            resolvedFilename += filename;
+            if (sk_exists(resolvedFilename.c_str(), kRead_SkFILE_Flag)) {
+                filename = resolvedFilename.c_str();
+            }
+        }
+        // TODO: FC_VARIABLE and FC_FONT_VARIATIONS in arguments
+        int ttcIndex = get_int(pattern, FC_INDEX, 0);
+        auto realTypeface = scanner->MakeFromStream(SkStream::MakeFromFile(filename),
+                                                    SkFontArguments().setCollectionIndex(ttcIndex));
+        if (!realTypeface) {
+            // Unref the pattern while holding the lock.
+            pattern.reset();
+            return nullptr;
+        }
+
+        SkFontStyle proxyStyle = skfontstyle_from_fcpattern(pattern);
+        return sk_sp(new SkTypeface_fontconfig(std::move(realTypeface), std::move(pattern),
+                                               proxyStyle, nullptr));
     }
 
     mutable SkAutoFcPattern fPattern;  // Mutable for passing to FontConfig API.
-    const SkString fSysroot;
+    SkFontStyle fOriginalRealStyle;
 
 protected:
     void onGetFamilyName(SkString* familyName) const override {
@@ -488,32 +511,40 @@ protected:
     }
 
     sk_sp<SkTypeface> onMakeClone(const SkFontArguments& args) const override {
-        // TODO: need to clone FC_MATRIX and FC_EMBOLDEN by wrapping this
-        return SkTypeface_proxy::onMakeClone(args);
+        sk_sp<SkTypeface> realTypeface = SkTypeface_proxy::onMakeClone(args);
+        if (!realTypeface) {
+            return nullptr;
+        }
+        SkAutoFcPattern pattern;
+        {
+            FCLocker lock;
+            FcPatternReference(fPattern);
+            pattern.reset(fPattern.get());
+        }
+
+        SkFontStyle newRealStyle = realTypeface->fontStyle();
+        SkFontStyle originalProxyStyle = skfontstyle_from_fcpattern(pattern);
+        SkFontStyle newProxyStyle(
+            // keep consistent weight and width offsets (though they will be clamped)
+            originalProxyStyle.weight() + (newRealStyle.weight() - fOriginalRealStyle.weight()),
+            originalProxyStyle.width() + (newRealStyle.width() - fOriginalRealStyle.width()),
+            // the originalProxyStyle's slant is an override for the originalRealStyle's slant
+            newRealStyle.slant() == fOriginalRealStyle.slant() ? originalProxyStyle.slant()
+                                                               : newRealStyle.slant());
+
+        return sk_sp(new SkTypeface_fontconfig(std::move(realTypeface), std::move(pattern),
+                                               newProxyStyle, &fOriginalRealStyle));
     }
 
 private:
-    SkTypeface_fontconfig(SkAutoFcPattern pattern, SkString sysroot, SkFontScanner* fontScanner)
-        : SkTypeface_proxy(skfontstyle_from_fcpattern(pattern),
+    SkTypeface_fontconfig(sk_sp<SkTypeface> realTypeface, SkAutoFcPattern pattern,
+                          const SkFontStyle& proxyStyle, const SkFontStyle* originalRealStyle)
+        : SkTypeface_proxy(realTypeface, proxyStyle,
                            FC_PROPORTIONAL != get_int(pattern, FC_SPACING, FC_PROPORTIONAL))
         , fPattern(std::move(pattern))
-        , fSysroot(std::move(sysroot)) {
-        SkString resolvedFilename;
-        FCLocker lock;
-        const char* filename = get_string(fPattern, FC_FILE);
-        // See FontAccessible for note on searching sysroot then non-sysroot path.
-        if (!fSysroot.isEmpty()) {
-            resolvedFilename = fSysroot;
-            resolvedFilename += filename;
-            if (sk_exists(resolvedFilename.c_str(), kRead_SkFILE_Flag)) {
-                filename = resolvedFilename.c_str();
-            }
-        }
-        // TODO: FC_VARIABLE and FC_FONT_VARIATIONS in arguments
-        auto ttcIndex = get_int(fPattern, FC_INDEX, 0);
-        this->setProxy(fontScanner->MakeFromStream(SkStream::MakeFromFile(filename),
-                                                   SkFontArguments().setCollectionIndex(ttcIndex)));
-    }
+        , fOriginalRealStyle(originalRealStyle ? *originalRealStyle
+                                               : SkTypeface_proxy::onGetFontStyle())
+    {}
 };
 
 class SkFontMgr_fontconfig : public SkFontMgr {
@@ -662,9 +693,10 @@ class SkFontMgr_fontconfig : public SkFontMgr {
             return face;
         }();
         if (!face) {
+            // Cannot hold FCLocker around Make; may need to destory pattern.
             face = SkTypeface_fontconfig::Make(std::move(pattern), fSysroot, fScanner.get());
             if (face) {
-                // Cannot hold FCLocker in fTFCache.add; evicted typefaces may need to lock.
+                // Cannot hold FCLocker around fTFCache.add; evicted typefaces may need to lock.
                 fTFCache.add(face);
             }
         }
@@ -764,10 +796,15 @@ protected:
             resolvedFilename = fSysroot;
             resolvedFilename += filename;
             if (sk_exists(resolvedFilename.c_str(), kRead_SkFILE_Flag)) {
-                return true;
+                auto&& file(SkData::MakeFromFileName(resolvedFilename.c_str()));
+                return file && fScanner->scanFile(SkMemoryStream::Make(file).get(), nullptr);
             }
         }
-        return sk_exists(filename, kRead_SkFILE_Flag);
+        if (sk_exists(filename, kRead_SkFILE_Flag)) {
+            auto&& file(SkData::MakeFromFileName(filename));
+            return file && fScanner->scanFile(SkMemoryStream::Make(file).get(), nullptr);
+        }
+        return false;
     }
 
     static bool FontFamilyNameMatches(FcPattern* font, FcPattern* pattern) {
@@ -827,7 +864,7 @@ protected:
 
             for (int fontIndex = 0; fontIndex < allFonts->nfont; ++fontIndex) {
                 FcPattern* font = allFonts->fonts[fontIndex];
-                if (FontAccessible(font) && FontFamilyNameMatches(font, matchPattern)) {
+                if (FontFamilyNameMatches(font, matchPattern) && FontAccessible(font)) {
                     FcFontSetAdd(matches, FcFontRenderPrepare(fFC, pattern, font));
                 }
             }
@@ -868,7 +905,7 @@ protected:
 
             FcResult result;
             SkAutoFcPattern font(FcFontMatch(fFC, pattern, &result));
-            if (!font || !FontAccessible(font) || !FontFamilyNameMatches(font, matchPattern)) {
+            if (!font || !FontFamilyNameMatches(font, matchPattern) || !FontAccessible(font)) {
                 font.reset();
             }
             return font;
@@ -912,7 +949,7 @@ protected:
 
             FcResult result;
             SkAutoFcPattern font(FcFontMatch(fFC, pattern, &result));
-            if (!font || !FontAccessible(font) || !FontContainsCharacter(font, character)) {
+            if (!font || !FontContainsCharacter(font, character) || !FontAccessible(font)) {
                 font.reset();
             }
             return font;

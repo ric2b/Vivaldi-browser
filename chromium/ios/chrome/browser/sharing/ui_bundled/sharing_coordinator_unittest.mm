@@ -154,7 +154,7 @@ TEST_F(SharingCoordinatorTest, Start_ShareCurrentPage) {
 
   [activityHandler activityServiceDidEndPresenting];
 
-  [vc_partial_mock verify];
+  EXPECT_OCMOCK_VERIFY(vc_partial_mock);
   [coordinator stop];
 }
 
@@ -174,17 +174,17 @@ TEST_F(SharingCoordinatorTest, GenerateQRCode) {
                                        completion:nil];
 
   auto handler = static_cast<id<QRGenerationCommands>>(coordinator);
-  [handler generateQRCode:[[GenerateQRCodeCommand alloc]
-                              initWithURL:GURL("https://example.com")
-                                    title:@"Some Title"]];
+  [handler showQRCode:[[GenerateQRCodeCommand alloc]
+                          initWithURL:GURL("https://example.com")
+                                title:@"Some Title"]];
 
-  [vc_partial_mock verify];
+  EXPECT_OCMOCK_VERIFY(vc_partial_mock);
 
   [[vc_partial_mock expect] dismissViewControllerAnimated:YES completion:nil];
 
   [handler hideQRCode];
 
-  [vc_partial_mock verify];
+  EXPECT_OCMOCK_VERIFY(vc_partial_mock);
   [coordinator stop];
 }
 
@@ -216,7 +216,7 @@ TEST_F(SharingCoordinatorTest, Start_ShareURL) {
 
   [coordinator start];
 
-  [vc_partial_mock verify];
+  EXPECT_OCMOCK_VERIFY(vc_partial_mock);
 
   // Make sure share sheet finishes it's init (which means calling
   // canPerformWithActivityItems and reading prefs) before the

@@ -48,6 +48,7 @@ namespace data_sharing {
 class DataSharingNetworkLoader;
 class PreviewServerProxy;
 class AvatarFetcher;
+class Logger;
 
 // The internal implementation of the DataSharingService.
 class DataSharingServiceImpl : public DataSharingService,
@@ -112,7 +113,7 @@ class DataSharingServiceImpl : public DataSharingService,
   void LeaveGroup(
       const GroupId& group_id,
       base::OnceCallback<void(PeopleGroupActionOutcome)> callback) override;
-  bool IsLeavingGroup(const GroupId& group_id) override;
+  bool IsLeavingOrDeletingGroup(const GroupId& group_id) override;
   std::vector<GroupEvent> GetGroupEventsSinceStartup() override;
   bool ShouldInterceptNavigationForShareURL(const GURL& url) override;
   void HandleShareURLNavigationIntercepted(
@@ -139,10 +140,12 @@ class DataSharingServiceImpl : public DataSharingService,
   void SetUIDelegate(
       std::unique_ptr<DataSharingUIDelegate> ui_delegate) override;
   DataSharingUIDelegate* GetUiDelegate() override;
+  Logger* GetLogger() override;
   void AddGroupDataForTesting(GroupData group_data) override;
   void SetPreviewServerProxyForTesting(
       std::unique_ptr<PreviewServerProxy> preview_server_proxy) override;
   PreviewServerProxy* GetPreviewServerProxyForTesting() override;
+  void OnCollaborationGroupRemoved(const GroupId& group_id) override;
 
   // GroupDataModel::Observer implementation.
   void OnModelLoaded() override;
@@ -219,6 +222,7 @@ class DataSharingServiceImpl : public DataSharingService,
   base::ObserverList<DataSharingService::Observer> observers_;
   std::unique_ptr<PreviewServerProxy> preview_server_proxy_;
   std::unique_ptr<AvatarFetcher> avatar_fetcher_;
+  std::unique_ptr<Logger> logger_;
 
   // An in-memory map of groups that have been removed this session. This is
   // required to be able to inform users about which groups they have been
@@ -231,7 +235,7 @@ class DataSharingServiceImpl : public DataSharingService,
   // The set of groups that the user has attempted to leave in the current
   // session. Not cleared until a chrome restart.
   std::set<GroupId>
-      groups_attempted_to_leave_by_current_user_in_current_session_;
+      groups_attempted_to_leave_or_delete_by_current_user_in_current_session_;
 
   base::WeakPtrFactory<DataSharingServiceImpl> weak_ptr_factory_{this};
 };

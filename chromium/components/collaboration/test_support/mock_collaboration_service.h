@@ -21,13 +21,16 @@ class MockCollaborationService : public CollaborationService {
   MOCK_METHOD(void,
               StartJoinFlow,
               (std::unique_ptr<CollaborationControllerDelegate> delegate,
-               const GURL& url),
+               const GURL& url,
+               CollaborationServiceJoinEntryPoint entry),
               (override));
   MOCK_METHOD(void,
               StartShareOrManageFlow,
               (std::unique_ptr<CollaborationControllerDelegate> delegate,
-               const tab_groups::EitherGroupID& either_id),
+               const tab_groups::EitherGroupID& either_id,
+               CollaborationServiceShareOrManageEntryPoint entry),
               (override));
+  MOCK_METHOD(void, CancelAllFlows, (base::OnceCallback<void()>), (override));
   MOCK_METHOD(ServiceStatus, GetServiceStatus, (), (override));
   MOCK_METHOD(data_sharing::MemberRole,
               GetCurrentUserRoleForGroup,
@@ -37,6 +40,12 @@ class MockCollaborationService : public CollaborationService {
               GetGroupData,
               (const data_sharing::GroupId& group_id),
               (override));
+  MOCK_METHOD2(DeleteGroup,
+               void(const data_sharing::GroupId&,
+                    base::OnceCallback<void(bool)>));
+  MOCK_METHOD2(LeaveGroup,
+               void(const data_sharing::GroupId&,
+                    base::OnceCallback<void(bool)>));
 };
 
 }  // namespace collaboration

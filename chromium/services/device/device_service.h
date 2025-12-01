@@ -23,7 +23,6 @@
 #include "services/device/public/mojom/device_service.mojom.h"
 #include "services/device/public/mojom/fingerprint.mojom.h"
 #include "services/device/public/mojom/geolocation.mojom.h"
-#include "services/device/public/mojom/geolocation_config.mojom.h"
 #include "services/device/public/mojom/geolocation_context.mojom.h"
 #include "services/device/public/mojom/geolocation_control.mojom.h"
 #include "services/device/public/mojom/geolocation_internals.mojom.h"
@@ -74,11 +73,14 @@ namespace device {
 
 #if !BUILDFLAG(IS_ANDROID)
 class HidManagerImpl;
-class SerialPortManagerImpl;
 #endif
 
 #if BUILDFLAG(ENABLE_COMPUTE_PRESSURE)
 class PressureManagerImpl;
+#endif
+
+#if defined(IS_SERIAL_ENABLED_PLATFORM)
+class SerialPortManagerImpl;
 #endif
 
 class DeviceService;
@@ -158,12 +160,16 @@ class DeviceService : public mojom::DeviceService {
   static void OverrideNFCProviderBinderForTesting(NFCProviderBinder binder);
 #endif
 
+  // Supports global override of UsbDeviceManager binding within the service.
+  using UsbDeviceManagerBinder = base::RepeatingCallback<void(
+      mojo::PendingReceiver<mojom::UsbDeviceManager>)>;
+  static void OverrideUsbDeviceManagerBinderForTesting(
+      UsbDeviceManagerBinder binder);
+
  private:
   // mojom::DeviceService implementation:
   void BindFingerprint(
       mojo::PendingReceiver<mojom::Fingerprint> receiver) override;
-  void BindGeolocationConfig(
-      mojo::PendingReceiver<mojom::GeolocationConfig> receiver) override;
   void BindGeolocationContext(
       mojo::PendingReceiver<mojom::GeolocationContext> receiver) override;
   void BindGeolocationControl(

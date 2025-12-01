@@ -17,7 +17,7 @@
 namespace {
 // Increment this whenever an incompatible change is made to
 // adblock_rules_list.fbs or to the parser
-constexpr int kRulesListFormatVersion = 10;
+constexpr int kRulesListFormatVersion = 12;
 
 // Increment this whenever an incompatible change is made to
 // adblock_rules_index.fbs

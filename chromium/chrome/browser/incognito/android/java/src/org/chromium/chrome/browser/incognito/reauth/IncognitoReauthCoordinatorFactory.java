@@ -152,7 +152,9 @@ public class IncognitoReauthCoordinatorFactory {
             return () -> {
                 mTabModelSelector.selectModel(/* incognito= */ false);
                 if (mLayoutManager.isLayoutVisible(LayoutType.TAB_SWITCHER)) {
-                    mHubManagerSupplier.get().getPaneManager().focusPane(PaneId.TAB_SWITCHER);
+                    mHubManagerSupplier.runSyncOrOnAvailable(
+                            hubManager ->
+                                    hubManager.getPaneManager().focusPane(PaneId.TAB_SWITCHER));
                     return;
                 }
 

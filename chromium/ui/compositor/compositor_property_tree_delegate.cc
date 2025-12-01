@@ -11,6 +11,7 @@
 #include "cc/trees/layer_tree_host.h"
 #include "cc/trees/mutator_host_client.h"
 #include "cc/trees/property_tree_builder.h"
+#include "ui/compositor/compositor.h"
 #include "ui/compositor/compositor_export.h"
 #include "ui/gfx/geometry/vector2d_f.h"
 
@@ -27,6 +28,10 @@ void CompositorPropertyTreeDelegate::UpdatePropertyTreesIfNeeded() {
   TRACE_EVENT0("ui",
                "CompositorPropertyTreeDelegate::UpdatePropertyTreesIfNeeded");
   cc::PropertyTreeBuilder::BuildPropertyTrees(host());
+
+  DCHECK(compositor_);
+  compositor_->CheckPropertyTrees();
+
   TRACE_EVENT_INSTANT1(TRACE_DISABLED_BY_DEFAULT("cc.debug"),
                        "CompositorPropertyTreeDelegate::"
                        "UpdatePropertyTreesIfNeeded_BuiltPropertyTrees",
@@ -111,6 +116,17 @@ void CompositorPropertyTreeDelegate::OnElementOpacityMutated(
   // out of date.
   cc::PropertyTreeLayerTreeDelegate::OnElementOpacityMutated(
       element_id, list_type, opacity);
+}
+
+void CompositorPropertyTreeDelegate::OnElementTransformMutated(
+    cc::ElementId element_id,
+    cc::ElementListType list_type,
+    const gfx::Transform& transform) {
+  // TODO(crbug.com/389771428): Implement this w/ layer lists. For now,
+  // just call the base class implementation to ensure that we don't get
+  // out of date.
+  cc::PropertyTreeLayerTreeDelegate::OnElementTransformMutated(
+      element_id, list_type, transform);
 }
 
 void CompositorPropertyTreeDelegate::SetObserverForTesting(Observer* observer) {

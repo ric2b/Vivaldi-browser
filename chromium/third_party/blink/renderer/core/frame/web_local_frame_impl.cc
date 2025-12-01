@@ -104,6 +104,7 @@
 #include "mojo/public/cpp/bindings/pending_associated_remote.h"
 #include "services/metrics/public/cpp/ukm_source_id.h"
 #include "services/network/public/cpp/web_sandbox_flags.h"
+#include "services/network/public/mojom/permissions_policy/permissions_policy_feature.mojom-blink.h"
 #include "services/network/public/mojom/web_sandbox_flags.mojom-blink.h"
 #include "third_party/blink/public/common/context_menu_data/context_menu_params_builder.h"
 #include "third_party/blink/public/common/frame/fenced_frame_sandbox_flags.h"
@@ -116,7 +117,6 @@
 #include "third_party/blink/public/mojom/frame/media_player_action.mojom-blink.h"
 #include "third_party/blink/public/mojom/frame/tree_scope_type.mojom-blink.h"
 #include "third_party/blink/public/mojom/lcp_critical_path_predictor/lcp_critical_path_predictor.mojom.h"
-#include "third_party/blink/public/mojom/permissions_policy/permissions_policy.mojom-blink.h"
 #include "third_party/blink/public/platform/interface_registry.h"
 #include "third_party/blink/public/platform/task_type.h"
 #include "third_party/blink/public/platform/web_isolated_world_info.h"
@@ -284,6 +284,11 @@
 #include "third_party/blink/renderer/core/layout/layout_font_accessor_win.h"
 #endif
 
+#if BUILDFLAG(IS_IOS)
+#include "third_party/blink/renderer/core/editing/dom_selection.h"
+#include "third_party/blink/renderer/core/page/autoscroll_controller.h"
+#endif  // BUILDFLAG(IS_IOS)
+
 namespace blink {
 
 namespace {
@@ -305,7 +310,7 @@ class DummyFrameOwner final : public GarbageCollected<DummyFrameOwner>,
   }
   void AddResourceTiming(mojom::blink::ResourceTimingInfoPtr) override {}
   void DispatchLoad() override {}
-  void IntrinsicSizingInfoChanged() override {}
+  void NaturalSizingInfoChanged() override {}
   void SetNeedsOcclusionTracking(bool) override {}
   AtomicString BrowsingContextContainerName() const override {
     return AtomicString();
@@ -815,6 +820,11 @@ WebContentSettingsClient* WebLocalFrameImpl::GetContentSettingsClient() const {
 void WebLocalFrameImpl::SetContentSettingsClient(
     WebContentSettingsClient* client) {
   content_settings_client_ = client;
+}
+
+const mojom::RendererContentSettingsPtr& WebLocalFrameImpl::GetContentSettings()
+    const {
+  return GetFrame()->GetContentSettings();
 }
 
 ScrollableArea* WebLocalFrameImpl::LayoutViewport() const {
@@ -1627,6 +1637,34 @@ void WebLocalFrameImpl::MoveCaretSelection(
   GetFrame()->Selection().MoveCaretSelection(point_in_contents);
 }
 
+#if BUILDFLAG(IS_IOS)
+void WebLocalFrameImpl::StartAutoscrollForSelectionToPoint(
+    const gfx::PointF& point_in_viewport) {
+  TRACE_EVENT0("blink",
+               "WebLocalFrameImpl::StartAutoscrollForSelectionToPoint");
+  if (!ViewImpl() || !ViewImpl()->GetPage()) {
+    return;
+  }
+  auto* element = GetFrame()->GetDocument()->GetSelection()->baseNode();
+  if (!element) {
+    return;
+  }
+  ViewImpl()
+      ->GetPage()
+      ->GetAutoscrollController()
+      .StartAutoscrollForSelectionToPoint(element->GetLayoutObject(),
+                                          point_in_viewport);
+}
+
+void WebLocalFrameImpl::StopAutoscroll() {
+  TRACE_EVENT0("blink", "WebLocalFrameImpl::StopAutoscroll");
+  if (!ViewImpl() || !ViewImpl()->GetPage()) {
+    return;
+  }
+  ViewImpl()->GetPage()->GetAutoscrollController().StopAutoscroll();
+}
+#endif  // BUILDFLAG(IS_IOS)
+
 bool WebLocalFrameImpl::SetEditableSelectionOffsets(int start, int end) {
   TRACE_EVENT0("blink", "WebLocalFrameImpl::setEditableSelectionOffsets");
   if (EditContext* edit_context =
@@ -2127,7 +2165,6 @@ WebLocalFrameImpl* WebLocalFrameImpl::CreateProvisional(
       frame_token);
   network::mojom::blink::WebSandboxFlags sandbox_flags =
       network::mojom::blink::WebSandboxFlags::kNone;
-  PermissionsPolicyFeatureState feature_state;
   if (!previous_frame->Owner() || previous_frame->IsFencedFrameRoot()) {
     // Provisional main frames need to force sandbox flags.  This is necessary
     // to inherit sandbox flags when a sandboxed frame does a window.open()
@@ -2851,9 +2888,21 @@ void WebLocalFrameImpl::DownloadURL(
 }
 
 WebFrame* WebLocalFrameImpl::GetProvisionalOwnerFrame() {
-  return GetFrame()->IsProvisional()
-             ? WebFrame::FromCoreFrame(GetFrame()->GetProvisionalOwnerFrame())
-             : nullptr;
+  if (!GetFrame()->IsProvisional()) {
+    return nullptr;
+  }
+  if (GetFrame()->IsMainFrame()) {
+    // For provisional main frames created for a local <-> local swap, the
+    // `GetProvisionalOwnerFrame()` will return the "fake" RemoteFrame created
+    // as a placeholder for the new WebView / Page. To get the previous local
+    // frame, get it using `GetPreviousMainFrameForLocalSwap()` instead.
+    Frame* previous_local_main_frame =
+        ViewImpl()->GetPage()->GetPreviousMainFrameForLocalSwap();
+    if (previous_local_main_frame) {
+      return WebFrame::FromCoreFrame(previous_local_main_frame);
+    }
+  }
+  return WebFrame::FromCoreFrame(GetFrame()->GetProvisionalOwnerFrame());
 }
 
 void WebLocalFrameImpl::MaybeStartOutermostMainFrameNavigation(
@@ -3119,17 +3168,6 @@ scoped_refptr<base::SingleThreadTaskRunner> WebLocalFrameImpl::GetTaskRunner(
 
 WebInputMethodController* WebLocalFrameImpl::GetInputMethodController() {
   return &input_method_controller_;
-}
-
-bool WebLocalFrameImpl::ShouldSuppressKeyboardForFocusedElement() {
-  if (!autofill_client_)
-    return false;
-
-  DCHECK(GetFrame()->GetDocument());
-  auto* focused_form_control_element = DynamicTo<HTMLFormControlElement>(
-      GetFrame()->GetDocument()->FocusedElement());
-  return focused_form_control_element &&
-         autofill_client_->ShouldSuppressKeyboard(focused_form_control_element);
 }
 
 void WebLocalFrameImpl::AddMessageToConsoleImpl(

@@ -22,6 +22,10 @@
 #include "chrome/updater/persisted_data.h"
 #include "chrome/updater/policy/manager.h"
 
+namespace policy {
+enum class PolicyFetchReason;
+}  // namespace policy
+
 namespace updater {
 
 class PolicyFetcher;
@@ -126,7 +130,8 @@ class PolicyService : public base::RefCountedThreadSafe<PolicyService> {
   // While a call to FetchPolicies is outstanding (i.e. has not invoked the
   // callback), concurrent calls to FetchPolicies will reuse the results of the
   // outstanding request.
-  void FetchPolicies(base::OnceCallback<void(int)> callback);
+  void FetchPolicies(policy::PolicyFetchReason reason,
+                     base::OnceCallback<void(int)> callback);
 
   std::string source() const;
 
@@ -165,9 +170,6 @@ class PolicyService : public base::RefCountedThreadSafe<PolicyService> {
   // Enterprise Core (formerly Chrome Enterprise Cloud Management).
   void IsCloudManaged(base::OnceCallback<void(bool)> callback) const;
 
-  // Returns the last policy fetch result.
-  std::optional<int> LastFetchResult() const { return last_fetch_result_; }
-
   void SetManagersForTesting(
       std::vector<scoped_refptr<PolicyManagerInterface>> managers);
 
@@ -184,7 +186,8 @@ class PolicyService : public base::RefCountedThreadSafe<PolicyService> {
   using AppPolicyQueryFunction =
       std::optional<T> (PolicyManagerInterface::*)(const std::string&) const;
 
-  void DoFetchPolicies(base::OnceCallback<void(int)> callback,
+  void DoFetchPolicies(policy::PolicyFetchReason reason,
+                       base::OnceCallback<void(int)> callback,
                        bool has_enrollment_token);
 
   // Called when `FetchPolicies` has completed. If `dm_policy_manager` is valid,
@@ -222,8 +225,6 @@ class PolicyService : public base::RefCountedThreadSafe<PolicyService> {
   PolicyManagers policy_managers_;
   const scoped_refptr<ExternalConstants> external_constants_;
 
-  // Holds the last policy fetch result.
-  std::optional<int> last_fetch_result_;
   base::OnceCallback<void(int)> fetch_policies_callback_;
   scoped_refptr<PersistedData> persisted_data_;
   const bool is_ceca_experiment_enabled_;

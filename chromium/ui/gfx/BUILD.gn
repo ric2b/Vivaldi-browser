@@ -125,6 +125,8 @@ component("gfx") {
     "image/image_util.h",
     "interpolated_transform.cc",
     "interpolated_transform.h",
+    "overlay_layer_id.cc",
+    "overlay_layer_id.h",
     "overlay_plane_data.cc",
     "overlay_plane_data.h",
     "overlay_transform_utils.cc",
@@ -169,6 +171,7 @@ component("gfx") {
       "android/android_surface_control_compat.h",
       "android/java_bitmap.cc",
       "android/java_bitmap.h",
+      "android/surface_control_frame_rate.h",
       "android/view_configuration.cc",
       "android/view_configuration.h",
     ]
@@ -531,6 +534,8 @@ source_set("native_widget_types_sources") {
 
   configs += [ ":gfx_impl_define" ]
 
+  deps = [ "//build:blink_buildflags" ]
+
   if (is_mac) {
     sources = [ "native_widget_types_mac.mm" ]
     frameworks = [ "AppKit.framework" ]
@@ -793,6 +798,7 @@ test("gfx_unittests") {
     sources += [
       "font_fallback_win_unittest.cc",
       "win/get_elevation_icon_unittest.cc",
+      "win/hwnd_util_unittest.cc",
     ]
   }
   if (is_ios) {
@@ -951,6 +957,7 @@ test("gfx_unittests") {
     libs = [
       "d2d1.lib",
       "d3d10_1.lib",
+      "dwmapi.lib",
       "dwrite.lib",
       "imm32.lib",
       "oleacc.lib",

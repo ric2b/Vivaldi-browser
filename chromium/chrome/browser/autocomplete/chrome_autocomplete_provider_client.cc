@@ -12,7 +12,6 @@
 #include "base/strings/cstring_view.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
-#include "build/chromeos_buildflags.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/autocomplete/autocomplete_classifier_factory.h"
 #include "chrome/browser/autocomplete/document_suggestions_service_factory.h"
@@ -77,7 +76,7 @@
 #include "third_party/blink/public/common/storage_key/storage_key.h"
 #include "url/origin.h"
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
 #include "chrome/browser/ash/app_list/search/essential_search/essential_search_manager.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/browser_process_platform_part.h"
@@ -94,10 +93,13 @@
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_list.h"
+#include "chrome/browser/ui/lens/lens_overlay_controller.h"
+#include "chrome/browser/ui/tabs/public/tab_features.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/ui_features.h"
 #include "chrome/browser/ui/views/side_panel/history_clusters/history_clusters_side_panel_coordinator.h"
 #include "chrome/browser/upgrade_detector/upgrade_detector.h"
+#include "components/lens/lens_overlay_invocation_source.h"
 #endif
 
 #if BUILDFLAG(BUILD_WITH_TFLITE_LIB)
@@ -111,6 +113,7 @@
 #include "app/vivaldi_apptools.h"
 #include "browser/ui/webui_url_constants.h"
 #include "browser/vivaldi_internal_urls_constants.cc"
+#include "chrome/browser/history/web_history_service_factory.h"
 #include "components/direct_match/direct_match_service.h"
 #include "components/direct_match/direct_match_service_factory.h"
 #include "vivaldi/prefs/vivaldi_gen_prefs.h"
@@ -131,7 +134,7 @@ constexpr auto kChromeSettingsSubPages = std::to_array<base::cstring_view>({
     chrome::kResetProfileSettingsSubPage,
     chrome::kSearchEnginesSubPage,
     chrome::kSyncSetupSubPage,
-#if !BUILDFLAG(IS_CHROMEOS_ASH)
+#if !BUILDFLAG(IS_CHROMEOS)
     chrome::kImportDataSubPage,
     chrome::kManageProfileSubPage,
     chrome::kPeopleSubPage,
@@ -414,7 +417,7 @@ bool ChromeAutocompleteProviderClient::IsGuestSession() const {
 }
 
 bool ChromeAutocompleteProviderClient::SearchSuggestEnabled() const {
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
   return profile_->GetPrefs()->GetBoolean(prefs::kSearchSuggestEnabled) &&
          (!g_browser_process->platform_part() ||
           !g_browser_process->platform_part()->essential_search_manager() ||
@@ -610,6 +613,46 @@ bool ChromeAutocompleteProviderClient::OpenJourneys(const std::string& query) {
   return false;
 }
 
+void ChromeAutocompleteProviderClient::OpenLensOverlay(bool show) {
+#if !BUILDFLAG(IS_ANDROID)
+  // TODO(crbug.com/401583049): Prepare lens overlay controller directly.
+  if (Browser* browser = BrowserList::GetInstance()->GetLastActive()) {
+    CHECK(browser->GetActiveTabInterface());
+    // TODO(crbug.com/402497756): For prototyping, reusing the existing
+    // omnibox entry point. However, for production, create a new invocation
+    // source for this new entry point.
+    if (show) {
+      browser->GetActiveTabInterface()
+          ->GetTabFeatures()
+          ->lens_overlay_controller()
+          ->ShowUI(lens::LensOverlayInvocationSource::kOmnibox);
+    } else {
+      browser->GetActiveTabInterface()
+          ->GetTabFeatures()
+          ->lens_overlay_controller()
+          ->StartContextualizationWithoutOverlay(
+              lens::LensOverlayInvocationSource::kOmnibox);
+    }
+  }
+#endif  // !BUILDFLAG(IS_ANDROID)
+}
+
+void ChromeAutocompleteProviderClient::IssueContextualSearchRequest(
+      const GURL& destination_url,
+      AutocompleteMatchType::Type match_type,
+      bool is_zero_prefix_suggestion) {
+#if !BUILDFLAG(IS_ANDROID)
+  if (Browser* browser = BrowserList::GetInstance()->GetLastActive()) {
+    CHECK(browser->GetActiveTabInterface());
+    browser->GetActiveTabInterface()
+        ->GetTabFeatures()
+        ->lens_overlay_controller()
+        ->IssueContextualSearchRequest(
+            destination_url, match_type, is_zero_prefix_suggestion);
+  }
+#endif  // !BUILDFLAG(IS_ANDROID)
+}
+
 void ChromeAutocompleteProviderClient::PromptPageTranslation() {
 #if !BUILDFLAG(IS_ANDROID)
   Browser* browser = BrowserList::GetInstance()->GetLastActive();
@@ -633,6 +676,11 @@ direct_match::DirectMatchService*
 ChromeAutocompleteProviderClient::GetDirectMatchService() {
   return direct_match::DirectMatchServiceFactory::GetForBrowserContext(
       profile_);
+}
+
+history::WebHistoryService*
+ChromeAutocompleteProviderClient::GetWebHistoryService() {
+  return WebHistoryServiceFactory::GetForProfile(profile_);
 }
 
 void ChromeAutocompleteProviderClient::SetFromSearchField(bool from_search_field) {

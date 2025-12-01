@@ -62,6 +62,7 @@ export class TestService extends TestBrowserProxy implements ServiceInterface {
       'requestFileSource',
       'retryLoadUnpacked',
       'setItemAllowedIncognito',
+      'setItemAllowedUserScripts',
       'setItemAllowedOnFileUrls',
       'setItemCollectsErrors',
       'setItemEnabled',
@@ -155,6 +156,10 @@ export class TestService extends TestBrowserProxy implements ServiceInterface {
 
   setItemAllowedIncognito(id: string, isAllowedIncognito: boolean) {
     this.methodCalled('setItemAllowedIncognito', [id, isAllowedIncognito]);
+  }
+
+  setItemAllowedUserScripts(id: string, isAllowedIncognito: boolean) {
+    this.methodCalled('setItemAllowedUserScripts', [id, isAllowedIncognito]);
   }
 
   setItemAllowedOnFileUrls(id: string, isAllowedOnFileUrls: boolean) {
@@ -411,6 +416,6 @@ export class TestService extends TestBrowserProxy implements ServiceInterface {
 
   uploadItemToAccount(id: string) {
     this.methodCalled('uploadItemToAccount', id);
-    return Promise.resolve();
+    return Promise.resolve(false);
   }
 }

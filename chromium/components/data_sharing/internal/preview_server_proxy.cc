@@ -53,7 +53,7 @@ constexpr char kStableAndBetaServiceBaseUrl[] =
     "https://chromesyncsharedentities-pa.googleapis.com/v1";
 
 // How many share entities to retrieve for preview.
-constexpr int kDefaultPreviewDataSize = 100;
+constexpr int kDefaultPreviewDataSize = 550;
 constexpr base::FeatureParam<int> kPreviewDataSize{
     &features::kDataSharingFeature, "preview_data_size",
     kDefaultPreviewDataSize};
@@ -72,7 +72,6 @@ constexpr char kTabKey[] = "tab";
 constexpr char kTabGroupKey[] = "tabGroup";
 constexpr char kUrlKey[] = "url";
 constexpr char kTitleKey[] = "title";
-constexpr char kFaviconUrlKey[] = "faviconUrl";
 constexpr char kSharedTabGroupGuidKey[] = "sharedTabGroupGuid";
 constexpr char kUniquePositionKey[] = "uniquePosition";
 constexpr char kCustomCompressedV1Key[] = "customCompressedV1";
@@ -150,9 +149,6 @@ std::optional<sync_pb::SharedTab> ParseSharedTab(
   }
 
   auto* title = dict.FindString(kTitleKey);
-  if (!title) {
-    return std::nullopt;
-  }
 
   auto* shared_tab_group_guid = dict.FindString(kSharedTabGroupGuidKey);
   if (!shared_tab_group_guid) {
@@ -165,12 +161,10 @@ std::optional<sync_pb::SharedTab> ParseSharedTab(
   std::optional<sync_pb::SharedTab> shared_tab =
       std::make_optional<sync_pb::SharedTab>();
   shared_tab->set_url(*url);
-  shared_tab->set_title(*title);
-  shared_tab->set_shared_tab_group_guid(*shared_tab_group_guid);
-  auto* favicon_url = dict.FindString(kFaviconUrlKey);
-  if (favicon_url) {
-    shared_tab->set_favicon_url(*favicon_url);
+  if (title) {
+    shared_tab->set_title(*title);
   }
+  shared_tab->set_shared_tab_group_guid(*shared_tab_group_guid);
   if (custom_compressed) {
     std::string decoded;
     base::Base64Decode(custom_compressed.value(), &decoded);

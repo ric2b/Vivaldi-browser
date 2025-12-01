@@ -109,7 +109,7 @@ in sync, add a `files/chromeos-version.sh` script like this:
 
 # Assumes the first 'version =' line in the Cargo.toml is the version for the
 # crate.
-awk '/^version = / { print $3; exit }' "$1/<path/to/Cargo.toml>" | tr -d '"'
+awk '/^version = / { gsub(/"/, "", $0); print $3; exit }' "$1/<path/to/Cargo.toml>"
 ```
 
 Replace `<path/to/Cargo.toml>` with the path of `Cargo.toml` relative

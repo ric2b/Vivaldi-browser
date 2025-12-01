@@ -7,14 +7,15 @@
 
 #include <map>
 #include <optional>
+#include <variant>
 
+#include "base/component_export.h"
 #include "base/containers/flat_map.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/raw_ptr_exclusion.h"
 #include "base/observer_list.h"
 #include "base/sequence_checker.h"
 #include "build/build_config.h"
-#include "third_party/abseil-cpp/absl/types/variant.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/base/models/menu_separator_types.h"
 #include "ui/color/color_id.h"
@@ -24,7 +25,6 @@
 #include "ui/gfx/geometry/size.h"
 #include "ui/gfx/native_widget_types.h"
 #include "ui/native_theme/caption_style.h"
-#include "ui/native_theme/native_theme_export.h"
 #include "ui/native_theme/native_theme_observer.h"
 
 namespace cc {
@@ -56,7 +56,7 @@ namespace ui {
 //
 // NativeTheme also supports getting the default size of a given part with
 // the GetPartSize() method.
-class NATIVE_THEME_EXPORT NativeTheme {
+class COMPONENT_EXPORT(NATIVE_THEME) NativeTheme {
  public:
   // The part to be painted / sized.
   enum Part {
@@ -237,7 +237,7 @@ class NATIVE_THEME_EXPORT NativeTheme {
     kRight,
   };
 
-  struct NATIVE_THEME_EXPORT MenuListExtraParams {
+  struct COMPONENT_EXPORT(NATIVE_THEME) MenuListExtraParams {
     bool has_border = false;
     bool has_border_radius = false;
     int arrow_x = 0;
@@ -336,7 +336,7 @@ class NATIVE_THEME_EXPORT NativeTheme {
     bool right_to_left = false;
   };
 
-  struct NATIVE_THEME_EXPORT TextFieldExtraParams {
+  struct COMPONENT_EXPORT(NATIVE_THEME) TextFieldExtraParams {
     bool is_text_area = false;
     bool is_listbox = false;
     SkColor background_color = gfx::kPlaceholderColor;
@@ -359,25 +359,25 @@ class NATIVE_THEME_EXPORT NativeTheme {
     int classic_state = 0;  // Used on Windows when uxtheme is not available.
   };
 
-  using ExtraParams = absl::variant<ButtonExtraParams,
-                                    FrameTopAreaExtraParams,
-                                    InnerSpinButtonExtraParams,
-                                    MenuArrowExtraParams,
-                                    MenuCheckExtraParams,
-                                    MenuItemExtraParams,
-                                    MenuSeparatorExtraParams,
-                                    MenuListExtraParams,
-                                    MenuBackgroundExtraParams,
-                                    ProgressBarExtraParams,
-                                    ScrollbarArrowExtraParams,
+  using ExtraParams = std::variant<ButtonExtraParams,
+                                   FrameTopAreaExtraParams,
+                                   InnerSpinButtonExtraParams,
+                                   MenuArrowExtraParams,
+                                   MenuCheckExtraParams,
+                                   MenuItemExtraParams,
+                                   MenuSeparatorExtraParams,
+                                   MenuListExtraParams,
+                                   MenuBackgroundExtraParams,
+                                   ProgressBarExtraParams,
+                                   ScrollbarArrowExtraParams,
 #if BUILDFLAG(IS_APPLE)
-                                    ScrollbarExtraParams,
+                                   ScrollbarExtraParams,
 #endif
-                                    ScrollbarTrackExtraParams,
-                                    ScrollbarThumbExtraParams,
-                                    SliderExtraParams,
-                                    TextFieldExtraParams,
-                                    TrackbarExtraParams>;
+                                   ScrollbarTrackExtraParams,
+                                   ScrollbarThumbExtraParams,
+                                   SliderExtraParams,
+                                   TextFieldExtraParams,
+                                   TrackbarExtraParams>;
 
   NativeTheme(const NativeTheme&) = delete;
   NativeTheme& operator=(const NativeTheme&) = delete;
@@ -657,7 +657,7 @@ class NATIVE_THEME_EXPORT NativeTheme {
   // web native theme for Windows observes the corresponding ui native theme in
   // order to receive changes regarding the state of dark mode, forced colors
   // mode, preferred color scheme and preferred contrast.
-  class NATIVE_THEME_EXPORT ColorSchemeNativeThemeObserver
+  class COMPONENT_EXPORT(NATIVE_THEME) ColorSchemeNativeThemeObserver
       : public NativeThemeObserver {
    public:
     ColorSchemeNativeThemeObserver(NativeTheme* theme_to_update);

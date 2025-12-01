@@ -8,6 +8,7 @@
 #include <optional>
 #include <string>
 #include <tuple>
+#include <variant>
 #include <vector>
 
 #include "ash/constants/ash_features.h"
@@ -35,7 +36,6 @@
 #include "chrome/browser/ash/arc/session/arc_play_store_enabled_preference_handler.h"
 #include "chrome/browser/ash/arc/session/arc_provisioning_result.h"
 #include "chrome/browser/ash/arc/session/arc_session_manager_observer.h"
-#include "chrome/browser/ash/arc/session/mock_arc_reven_hardware_checker.h"
 #include "chrome/browser/ash/arc/test/arc_data_removed_waiter.h"
 #include "chrome/browser/ash/arc/test/test_arc_session_manager.h"
 #include "chrome/browser/ash/login/demo_mode/demo_setup_controller.h"
@@ -67,11 +67,9 @@
 #include "chromeos/ash/experiences/arc/arc_features.h"
 #include "chromeos/ash/experiences/arc/arc_prefs.h"
 #include "chromeos/ash/experiences/arc/arc_util.h"
-#include "chromeos/ash/experiences/arc/dlc_install_notification/arc_dlc_install_notification_manager.h"
 #include "chromeos/ash/experiences/arc/session/arc_service_manager.h"
 #include "chromeos/ash/experiences/arc/session/arc_session_runner.h"
 #include "chromeos/ash/experiences/arc/test/arc_util_test_support.h"
-#include "chromeos/ash/experiences/arc/test/fake_arc_dlc_install_notification_delegate.h"
 #include "chromeos/ash/experiences/arc/test/fake_arc_session.h"
 #include "chromeos/dbus/power/power_manager_client.h"
 #include "components/account_id/account_id.h"
@@ -80,7 +78,6 @@
 #include "components/prefs/testing_pref_service.h"
 #include "components/session_manager/core/session_manager.h"
 #include "components/signin/public/identity_manager/identity_test_environment.h"
-#include "components/strings/grit/components_strings.h"
 #include "components/sync/test/fake_sync_change_processor.h"
 #include "components/sync_preferences/testing_pref_service_syncable.h"
 #include "components/user_manager/known_user.h"
@@ -94,7 +91,6 @@
 #include "google_apis/gaia/gaia_urls.h"
 #include "net/http/http_status_code.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "ui/base/l10n/l10n_util.h"
 
 // TODO(b/254819616): Replace base::RunLoop().RunUntilIdle() with
 // task_environment_.RunUntilIdle() or Run() & Quit() to make the tests less
@@ -394,11 +390,9 @@ class ArcSessionManagerTest : public ArcSessionManagerTestBase {
 
   void SetUp() override {
     ArcSessionManagerTestBase::SetUp();
-    ash::DlcserviceClient::InitializeFake();
 
     const AccountId account_id(AccountId::FromUserEmailGaiaId(
         profile()->GetProfileUserName(), GaiaId("1234567890")));
-    ash::AnnotatedAccountId::Set(profile(), account_id);
     GetFakeUserManager()->AddUser(account_id);
     GetFakeUserManager()->LoginUser(account_id);
     resourced_client_ = ash::ResourcedClient::InitializeFake();
@@ -409,7 +403,6 @@ class ArcSessionManagerTest : public ArcSessionManagerTestBase {
 
   void TearDown() override {
     resourced_client_ = nullptr;
-    ash::DlcserviceClient::Shutdown();
     ash::ResourcedClient::Shutdown();
     ArcSessionManagerTestBase::TearDown();
   }
@@ -1672,107 +1665,6 @@ TEST_F(ArcSessionManagerTest, RequestDisableWithArcDataRemoval) {
   arc_session_manager()->Shutdown();
 }
 
-// Hardware check enablement test case on the board that supports
-// the arcvm dlc method. (Only the reven board has arcvm dlc feature now).
-TEST_F(ArcSessionManagerTest, EnableHardwareCheck) {
-  cros_settings_test_helper_.InstallAttributes()->SetCloudManaged(
-      "example.com", "fake-device-id");
-  base::CommandLine::ForCurrentProcess()->AppendSwitch(
-      ash::switches::kRevenBranding);
-  // Add arcvm-dlc command flag.
-  base::CommandLine::ForCurrentProcess()->AppendSwitch(
-      ash::switches::kEnableArcVmDlc);
-  // Enable enable-android-vpn-apps-on-flex chrome flag.
-  base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitAndEnableFeature(ash::features::kVpnAppsOnFlex);
-  auto mock_hardware_checker_ = std::make_unique<MockArcRevenHardwareChecker>();
-  EXPECT_CALL(*mock_hardware_checker_,
-              IsRevenDeviceCompatibleForArc(::testing::_))
-      .WillOnce(
-          ::testing::Invoke([](base::OnceCallback<void(bool)> callback) {}));
-  // Inject the mock hardware checker into the ArcSessionManager.
-  arc_session_manager()->SetHardwareCheckerForTesting(
-      std::move(mock_hardware_checker_));
-  arc_session_manager()->ExpandPropertyFilesAndReadSalt();
-}
-
-// Verify that dlc_notification_manager_ will send any pending notifications
-// when the user profile is set.
-TEST_F(ArcSessionManagerTest, SendDlcInstallNotification) {
-  // Trigger it twice to test multi-pending-notification scenario.
-  arc_session_manager()->OnEnableArcOnRevenForTesting({}, true);
-  arc_session_manager()->OnEnableArcOnRevenForTesting({}, true);
-
-  auto fake_delegate =
-      std::make_unique<FakeArcDlcInstallNotificationDelegate>();
-  FakeArcDlcInstallNotificationDelegate* fake_delegate_ptr =
-      fake_delegate.get();
-  auto fake_dlc_notification_manager =
-      std::make_unique<ArcDlcInstallNotificationManager>(
-          std::move(fake_delegate), *ash::AnnotatedAccountId::Get(profile()));
-
-  // Check that no notifications are displayed before the profile is set.
-  EXPECT_TRUE(fake_delegate_ptr->displayed_notifications().empty());
-
-  arc_session_manager()->SetArcDlcInstallNotificationManagerForTesting(
-      std::move(fake_dlc_notification_manager));
-  SetArcvmDlcImageStatusForTesting(true);
-  profile()->GetProfilePolicyConnector()->OverrideIsManagedForTesting(true);
-
-  // Set the profile and initialize the session manager, which should process
-  // any pending notifications.
-  arc_session_manager()->SetProfile(profile());
-  arc_session_manager()->Initialize();
-
-  const auto& notifications = fake_delegate_ptr->displayed_notifications();
-  ASSERT_EQ(2u, notifications.size());
-  EXPECT_EQ(notifications[0].title(),
-            l10n_util::GetStringUTF16(IDS_ARC_VM_PRELOAD_NOTIFICATION_TITLE));
-  EXPECT_EQ(notifications[0].message(),
-            l10n_util::GetStringUTF16(IDS_ARC_VM_PRELOAD_STARTED_MESSAGE));
-  EXPECT_EQ(notifications[1].title(),
-            l10n_util::GetStringUTF16(IDS_ARC_VM_PRELOAD_NOTIFICATION_TITLE));
-  EXPECT_EQ(notifications[1].message(),
-            l10n_util::GetStringUTF16(IDS_ARC_VM_PRELOAD_STARTED_MESSAGE));
-}
-
-// Verify that the hardware check is not being run to install
-// the arcvm DLC image for unmanaged reven devices.
-TEST_F(ArcSessionManagerTest, NoArcVmInstallOnUnmanaged) {
-  base::CommandLine::ForCurrentProcess()->AppendSwitch(
-      ash::switches::kRevenBranding);
-  // Add arcvm-dlc command flag.
-  base::CommandLine::ForCurrentProcess()->AppendSwitch(
-      ash::switches::kEnableArcVmDlc);
-  auto mock_hardware_checker_ = std::make_unique<MockArcRevenHardwareChecker>();
-  EXPECT_CALL(*mock_hardware_checker_,
-              IsRevenDeviceCompatibleForArc(::testing::_))
-      .Times(0);
-  arc_session_manager()->reset_property_files_expansion_result();
-  arc_session_manager()->ExpandPropertyFilesAndReadSalt();
-}
-
-// Verify that the hardware check is not being run to install
-// the arcvm DLC image when enable-android-vpn-apps-on-flex flag is off.
-TEST_F(ArcSessionManagerTest, NoArcVmInstallWithFlagOff) {
-  cros_settings_test_helper_.InstallAttributes()->SetCloudManaged(
-      "example.com", "fake-device-id");
-  base::CommandLine::ForCurrentProcess()->AppendSwitch(
-      ash::switches::kRevenBranding);
-  // Add arcvm-dlc command flag.
-  base::CommandLine::ForCurrentProcess()->AppendSwitch(
-      ash::switches::kEnableArcVmDlc);
-  // Disable enable-android-vpn-apps-on-flex chrome flag.
-  base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitAndDisableFeature(ash::features::kVpnAppsOnFlex);
-  auto mock_hardware_checker_ = std::make_unique<MockArcRevenHardwareChecker>();
-  EXPECT_CALL(*mock_hardware_checker_,
-              IsRevenDeviceCompatibleForArc(::testing::_))
-      .Times(0);
-  arc_session_manager()->reset_property_files_expansion_result();
-  arc_session_manager()->ExpandPropertyFilesAndReadSalt();
-}
-
 class ArcSessionManagerArcAlwaysStartTest : public ArcSessionManagerTest {
  public:
   ArcSessionManagerArcAlwaysStartTest() = default;
@@ -1789,38 +1681,38 @@ class ArcSessionManagerArcAlwaysStartTest : public ArcSessionManagerTest {
 };
 
 ArcProvisioningResult CreateProvisioningResult(
-    const absl::variant<arc::mojom::GeneralSignInError,
-                        arc::mojom::GMSSignInError,
-                        arc::mojom::GMSCheckInError,
-                        arc::mojom::CloudProvisionFlowError,
-                        ArcStopReason,
-                        ChromeProvisioningTimeout>& error) {
-  if (absl::holds_alternative<arc::mojom::GeneralSignInError>(error)) {
+    const std::variant<arc::mojom::GeneralSignInError,
+                       arc::mojom::GMSSignInError,
+                       arc::mojom::GMSCheckInError,
+                       arc::mojom::CloudProvisionFlowError,
+                       ArcStopReason,
+                       ChromeProvisioningTimeout>& error) {
+  if (std::holds_alternative<arc::mojom::GeneralSignInError>(error)) {
     return ArcProvisioningResult(arc::mojom::ArcSignInResult::NewError(
         arc::mojom::ArcSignInError::NewGeneralError(
-            absl::get<arc::mojom::GeneralSignInError>(error))));
+            std::get<arc::mojom::GeneralSignInError>(error))));
   }
 
-  if (absl::holds_alternative<arc::mojom::GMSSignInError>(error)) {
+  if (std::holds_alternative<arc::mojom::GMSSignInError>(error)) {
     return ArcProvisioningResult(arc::mojom::ArcSignInResult::NewError(
         arc::mojom::ArcSignInError::NewSignInError(
-            absl::get<arc::mojom::GMSSignInError>(error))));
+            std::get<arc::mojom::GMSSignInError>(error))));
   }
 
-  if (absl::holds_alternative<arc::mojom::GMSCheckInError>(error)) {
+  if (std::holds_alternative<arc::mojom::GMSCheckInError>(error)) {
     return ArcProvisioningResult(arc::mojom::ArcSignInResult::NewError(
         arc::mojom::ArcSignInError::NewCheckInError(
-            absl::get<arc::mojom::GMSCheckInError>(error))));
+            std::get<arc::mojom::GMSCheckInError>(error))));
   }
 
-  if (absl::holds_alternative<arc::mojom::CloudProvisionFlowError>(error)) {
+  if (std::holds_alternative<arc::mojom::CloudProvisionFlowError>(error)) {
     return ArcProvisioningResult(arc::mojom::ArcSignInResult::NewError(
         arc::mojom::ArcSignInError::NewCloudProvisionFlowError(
-            absl::get<arc::mojom::CloudProvisionFlowError>(error))));
+            std::get<arc::mojom::CloudProvisionFlowError>(error))));
   }
 
-  if (absl::holds_alternative<ArcStopReason>(error)) {
-    return ArcProvisioningResult(absl::get<ArcStopReason>(error));
+  if (std::holds_alternative<ArcStopReason>(error)) {
+    return ArcProvisioningResult(std::get<ArcStopReason>(error));
   }
 
   return ArcProvisioningResult(ChromeProvisioningTimeout{});
@@ -1828,12 +1720,12 @@ ArcProvisioningResult CreateProvisioningResult(
 
 struct ProvisioningErrorDisplayTestParam {
   // The reason for arc instance stopping.
-  absl::variant<arc::mojom::GeneralSignInError,
-                arc::mojom::GMSSignInError,
-                arc::mojom::GMSCheckInError,
-                arc::mojom::CloudProvisionFlowError,
-                ArcStopReason,
-                ChromeProvisioningTimeout>
+  std::variant<arc::mojom::GeneralSignInError,
+               arc::mojom::GMSSignInError,
+               arc::mojom::GMSCheckInError,
+               arc::mojom::CloudProvisionFlowError,
+               ArcStopReason,
+               ChromeProvisioningTimeout>
       error;
 
   // The error sent to arc support host.
@@ -2270,12 +2162,12 @@ struct ArcSessionRetryTestParam {
   // Whether data is removed on error.
   bool data_removed;
 
-  absl::variant<arc::mojom::GeneralSignInError,
-                arc::mojom::GMSSignInError,
-                arc::mojom::GMSCheckInError,
-                arc::mojom::CloudProvisionFlowError,
-                ArcStopReason,
-                ChromeProvisioningTimeout>
+  std::variant<arc::mojom::GeneralSignInError,
+               arc::mojom::GMSSignInError,
+               arc::mojom::GMSCheckInError,
+               arc::mojom::CloudProvisionFlowError,
+               ArcStopReason,
+               ChromeProvisioningTimeout>
       error;
 };
 

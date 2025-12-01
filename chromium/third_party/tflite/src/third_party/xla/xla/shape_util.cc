@@ -51,17 +51,19 @@ limitations under the License.
 #include "xla/primitive_util.h"
 #include "xla/printer.h"
 #include "xla/shape.h"
+#include "xla/shape_partition.h"
 #include "xla/status_macros.h"
+#include "xla/tsl/lib/math/math_util.h"
+#include "xla/tsl/platform/env.h"
+#include "xla/tsl/platform/errors.h"
+#include "xla/tsl/platform/logging.h"  // IWYU pragma: keep
+#include "xla/tsl/platform/macros.h"
+#include "xla/tsl/platform/status.h"
+#include "xla/tsl/platform/statusor.h"
+#include "xla/tsl/platform/threadpool.h"
 #include "xla/util.h"
 #include "xla/xla_data.pb.h"
 #include "tsl/platform/cpu_info.h"
-#include "tsl/platform/env.h"
-#include "tsl/platform/errors.h"
-#include "tsl/platform/logging.h"  // IWYU pragma: keep
-#include "tsl/platform/macros.h"
-#include "tsl/platform/status.h"
-#include "tsl/platform/statusor.h"
-#include "tsl/platform/threadpool.h"
 
 namespace xla {
 
@@ -142,7 +144,7 @@ absl::StatusOr<Shape> MakeShapeWithLayoutInternal(
       pointer_primitive_type, element_size_in_bits, memory_space, split_configs,
       std::move(physical_shape));
   TF_RETURN_IF_ERROR(ShapeUtil::ValidateShape(shape));
-  return std::move(shape);
+  return shape;
 }
 
 template <typename T>
@@ -225,7 +227,7 @@ std::ostream& operator<<(std::ostream& out, const ShapeIndex& shape_index) {
   return equal;
 }
 
-/* static */ int64_t ShapeUtil::TrueRank(const Shape& shape) {
+/* static */ int64_t ShapeUtil::TrueNumDimensions(const Shape& shape) {
   int64_t accum = 0;
   for (int64_t dimension : shape.dimensions()) {
     // We do not count unit dimensions.
@@ -314,7 +316,7 @@ std::ostream& operator<<(std::ostream& out, const ShapeIndex& shape_index) {
                            static_cast<int>(element_type),
                            absl::StrJoin(dimensions, ","));
   }
-  return std::move(shape);
+  return shape;
 }
 
 /* static */ absl::StatusOr<Shape> ShapeUtil::MakeValidatedShape(
@@ -340,7 +342,7 @@ std::ostream& operator<<(std::ostream& out, const ShapeIndex& shape_index) {
           "Cannot mark a dynamic dimension at dim=%d as static", i);
     }
   }
-  return std::move(shape);
+  return shape;
 }
 
 /* static */ Shape ShapeUtil::MakeShapeWithDenseLayout(
@@ -524,7 +526,7 @@ ShapeUtil::MakeShapeWithDescendingLayoutAndSamePhysicalLayout(
 /* static */ void ShapeUtil::AppendMajorDimension(int bound, Shape* shape) {
   CHECK(LayoutUtil::IsDenseArray(*shape));
   if (shape->has_layout()) {
-    shape->mutable_layout()->add_minor_to_major(shape->rank());
+    shape->mutable_layout()->add_minor_to_major(shape->dimensions_size());
   }
   shape->add_dimensions(bound);
   TF_DCHECK_OK(ValidateShape(*shape));
@@ -532,7 +534,7 @@ ShapeUtil::MakeShapeWithDescendingLayoutAndSamePhysicalLayout(
 
 // Prepend new major-most dimension sized `bound` to the shape.
 Shape ShapeUtil::PrependMajorDimension(int64_t bound, Shape shape) {
-  Shape new_shape(shape.element_type(), {}, {}, {});
+  Shape new_shape(shape.element_type(), {}, {});
   new_shape.add_dimensions(bound);
   for (const int64_t dim : shape.dimensions()) {
     new_shape.add_dimensions(dim);
@@ -559,15 +561,16 @@ Shape ShapeUtil::PrependMajorDimension(int64_t bound, Shape shape) {
       shape->mutable_layout()->set_minor_to_major(dim_idx + 1, layout_idx);
     }
     // Insert the newly added dimension at the minor-most position.
-    shape->mutable_layout()->set_minor_to_major(0, shape->rank() - 1);
+    shape->mutable_layout()->set_minor_to_major(0,
+                                                shape->dimensions_size() - 1);
   }
   TF_DCHECK_OK(ValidateShape(*shape));
 }
 
 /* static */ void ShapeUtil::CopyDynamicDimensions(Shape* to,
                                                    const Shape& from) {
-  CHECK_EQ(to->rank(), from.rank());
-  for (int64_t i = 0; i < from.rank(); ++i) {
+  CHECK_EQ(to->dimensions_size(), from.dimensions_size());
+  for (int64_t i = 0; i < from.dimensions_size(); ++i) {
     to->set_dynamic_dimension(i, from.is_dynamic_dimension(i));
   }
   TF_DCHECK_OK(ValidateShape(*to));
@@ -799,7 +802,7 @@ Shape ShapeUtil::PrependMajorDimension(int64_t bound, Shape shape) {
 /* static */ bool ShapeUtil::SameDimensions(const Shape& lhs,
                                             const Shape& rhs) {
   if (!SameRank(lhs, rhs)) return false;
-  for (int i = 0; i < lhs.rank(); ++i) {
+  for (int i = 0; i < lhs.dimensions_size(); ++i) {
     if (!lhs.is_unbounded_dynamic_dimension(i) &&
         !rhs.is_unbounded_dynamic_dimension(i) &&
         lhs.dimensions(i) != rhs.dimensions(i)) {
@@ -811,7 +814,7 @@ Shape ShapeUtil::PrependMajorDimension(int64_t bound, Shape shape) {
 }
 
 /* static */ bool ShapeUtil::SameRank(const Shape& lhs, const Shape& rhs) {
-  return lhs.rank() == rhs.rank();
+  return lhs.dimensions_size() == rhs.dimensions_size();
 }
 
 /* static */ bool ShapeUtil::Compatible(const Shape& lhs, const Shape& rhs) {
@@ -861,7 +864,7 @@ Shape ShapeUtil::PrependMajorDimension(int64_t bound, Shape shape) {
 /* static */ int64_t ShapeUtil::GetDimensionNumber(const Shape& shape,
                                                    int64_t dimension_number) {
   if (dimension_number < 0) {
-    dimension_number += shape.rank();
+    dimension_number += shape.dimensions_size();
   }
   CHECK_GE(dimension_number, 0);
   return dimension_number;
@@ -936,7 +939,7 @@ Shape ShapeUtil::PrependMajorDimension(int64_t bound, Shape shape) {
           return ShapeError(shape, "Shape cannot be serialiized.");
         }
         if (subshape.is_dynamic()) {
-          size += sizeof(DynamicSizeType) * subshape.rank();
+          size += sizeof(DynamicSizeType) * subshape.dimensions_size();
         }
         if (subshape.element_type() == PRED) {
           // PRED is packed 8 elements per byte.
@@ -980,7 +983,7 @@ absl::Status ValidateShapeSize(const Shape& shape) {
 absl::Status ValidateDimensions(const Shape& shape) {
   bool any_overflows = false;
   int64_t product = 1;
-  for (int64_t i = 0; i < shape.rank(); ++i) {
+  for (int64_t i = 0; i < shape.dimensions_size(); ++i) {
     int64_t dimension = shape.dimensions(i);
     if (dimension == Shape::kUnboundedSize) {
       continue;
@@ -1172,7 +1175,7 @@ bool ShapeUtil::IsLeafIndex(const Shape& shape, const ShapeIndex& index) {
 
 /* static */ absl::StatusOr<int64_t>
 ShapeUtil::PackedFactorFor1DInterleavedArray(const Shape& shape) {
-  if (shape.rank() == 1 && shape.layout().tiles_size() == 3 &&
+  if (shape.dimensions_size() == 1 && shape.layout().tiles_size() == 3 &&
       shape.layout().tiles()[2].dimensions().size() == 2) {
     return shape.layout().tiles()[2].dimension(0);
   }
@@ -1193,7 +1196,7 @@ ShapeUtil::PackedFactorFor1DInterleavedArray(const Shape& shape) {
     new_shape.add_dimensions(dim);
   }
   auto inv_permutation = InversePermutation(permutation);
-  for (int64_t i = 0; i < shape.rank(); i++) {
+  for (int64_t i = 0; i < shape.dimensions_size(); i++) {
     new_shape.set_dynamic_dimension(inv_permutation[i],
                                     shape.is_dynamic_dimension(i));
   }
@@ -1293,7 +1296,9 @@ ShapeUtil::InsertedOrDeleted1SizedDimensions(const Shape& shape_pre,
     auto unmodified_dim_pair =
         i < unmodified_dims.size()
             ? unmodified_dims[i]
-            : std::make_pair(shape_pre.rank(), shape_post.rank());
+            : std::make_pair(
+                  static_cast<int64_t>(shape_pre.dimensions_size()),
+                  static_cast<int64_t>(shape_post.dimensions_size()));
     if (!check_modified_dims(prior_unmodified_dim_pair, unmodified_dim_pair)) {
       return std::nullopt;
     }
@@ -1540,12 +1545,13 @@ ShapeUtil::ReshapeLeavesDimensionsUnmodified(
     Shape output_shape_dim0_major = MakeShapeWithDescendingLayout(
         output_shape.element_type(), output_shape.dimensions());
 
-    for (int64_t input_dim = 0; input_dim < input_shape.rank(); ++input_dim) {
+    for (int64_t input_dim = 0; input_dim < input_shape.dimensions_size();
+         ++input_dim) {
       if (input_shape.dimensions(input_dim) <= 1) {
         continue;
       }
 
-      std::vector<int64_t> input_unit_index(input_shape.rank(), 0);
+      std::vector<int64_t> input_unit_index(input_shape.dimensions_size(), 0);
       input_unit_index[input_dim] = 1;
       int64_t logical_linear_index =
           IndexUtil::MultidimensionalIndexToLinearIndex(input_shape_dim0_major,
@@ -1575,7 +1581,7 @@ static absl::Span<const int64_t> LayoutPerm(const Shape& s) {
 /* static */ std::optional<std::vector<int64_t>>
 ShapeUtil::DeduceTransposeDimensionsForBitcast(const Shape& input_shape,
                                                const Shape& output_shape) {
-  if (output_shape.rank() != input_shape.rank()) {
+  if (output_shape.dimensions_size() != input_shape.dimensions_size()) {
     return std::nullopt;
   }
 
@@ -1632,7 +1638,7 @@ ShapeUtil::DecomposeBitcastToTrt(const Shape& input_shape,
   // transpose1_dims * R = input_layout  | * R, knowing R * R = I
   // transpose1_dims = input_layout * R
   decomposition.transpose1_dims = ComposePermutations(
-      LayoutPerm(input_shape), ReverseIota(input_shape.rank()));
+      LayoutPerm(input_shape), ReverseIota(input_shape.dimensions_size()));
   CHECK(TransposeIsBitcast(input_shape, decomposition.transpose1_shape,
                            decomposition.transpose1_dims,
                            /*ignore_element_type=*/false));
@@ -1641,7 +1647,7 @@ ShapeUtil::DecomposeBitcastToTrt(const Shape& input_shape,
   // transpose2_dims * output_layout = R  | * inv(output_layout)
   // transpose2_dims = R * inv(output_layout)
   decomposition.transpose2_dims =
-      ComposePermutations(ReverseIota(output_shape.rank()),
+      ComposePermutations(ReverseIota(output_shape.dimensions_size()),
                           InversePermutation(LayoutPerm(output_shape)));
   CHECK(TransposeIsBitcast(decomposition.reshape_shape, output_shape,
                            decomposition.transpose2_dims,
@@ -1688,8 +1694,8 @@ ShapeUtil::DecomposeBitcastToTrt(const Shape& input_shape,
     // For each one sized dimension in the output, increment the dimension
     // numbers in layout that are more minor than the one.
     absl::InlinedVector<int64_t, 8> dim_map;
-    dim_map.reserve(simple_output_shape->rank());
-    for (int64_t i = 0; i < output_shape.rank(); ++i) {
+    dim_map.reserve(simple_output_shape->dimensions_size());
+    for (int64_t i = 0; i < output_shape.dimensions_size(); ++i) {
       if (output_shape.dimensions(i) != 1) {
         dim_map.push_back(i);
       }
@@ -1700,7 +1706,7 @@ ShapeUtil::DecomposeBitcastToTrt(const Shape& input_shape,
 
     // Add the ones in descending order to the layout. Descending layouts tend
     // to reduce the number of copies inserted in layout assignment.
-    for (int64_t i = output_shape.rank() - 1; i >= 0; --i) {
+    for (int64_t i = output_shape.dimensions_size() - 1; i >= 0; --i) {
       if (output_shape.dimensions(i) == 1) {
         layout.push_back(i);
       }
@@ -1712,7 +1718,7 @@ ShapeUtil::DecomposeBitcastToTrt(const Shape& input_shape,
 
   auto common_factors =
       CommonFactors(input_shape.dimensions(), output_shape.dimensions());
-  const int64_t input_rank = input_shape.rank();
+  const int64_t input_rank = input_shape.dimensions_size();
   DimensionVector input_to_factor(input_rank);
   for (int64_t pos = 0; pos < common_factors.size() - 1; ++pos) {
     const int64_t input_start = common_factors[pos].first;
@@ -1730,7 +1736,7 @@ ShapeUtil::DecomposeBitcastToTrt(const Shape& input_shape,
     }
   }
 
-  int64_t output_rank = output_shape.rank();
+  int64_t output_rank = output_shape.dimensions_size();
   DimensionVector output_layout;
   output_layout.reserve(output_rank);
   int64_t input_minor = 0;
@@ -1765,8 +1771,7 @@ ShapeUtil::DecomposeBitcastToTrt(const Shape& input_shape,
   Shape new_shape(shape.element_type(),
                   Permute(shape.dimensions(), permutation),
                   absl::InlinedVector<bool, 8>(dynamic_dimensions.begin(),
-                                               dynamic_dimensions.end()),
-                  {});
+                                               dynamic_dimensions.end()));
   if (shape.has_layout()) {
     *new_shape.mutable_layout() = shape.layout();
     for (int64_t& dim : *new_shape.mutable_layout()->mutable_minor_to_major()) {
@@ -1785,10 +1790,10 @@ ShapeUtil::DecomposeBitcastToTrt(const Shape& input_shape,
 
 /* static */ bool ShapeUtil::DynamicArrayShapeIsCompatible(
     const xla::Shape& dynamic_shape, const xla::Shape& bounded_shape) {
-  if (dynamic_shape.rank() != bounded_shape.rank()) {
+  if (dynamic_shape.dimensions_size() != bounded_shape.dimensions_size()) {
     return false;
   }
-  for (int64_t i = 0; i < dynamic_shape.rank(); ++i) {
+  for (int64_t i = 0; i < dynamic_shape.dimensions_size(); ++i) {
     if (dynamic_shape.dimensions(i) > bounded_shape.dimensions(i)) {
       return false;
     }
@@ -1930,7 +1935,7 @@ ShapeUtil::DecomposeBitcastToTrt(const Shape& input_shape,
 namespace {
 
 struct ParallelState {
-  explicit ParallelState(int64_t task_count) : counter(task_count) {
+  explicit ParallelState(int64_t task_count) {
     // If this method is changed, please remember to change
     // GetForEachIndexParallelThreadCount() as well.
     static auto* global_pool = new tsl::thread::ThreadPool(
@@ -1938,13 +1943,10 @@ struct ParallelState {
     pool = global_pool;
   }
   ~ParallelState() = default;
-  void Wait() { counter.Wait(); }
-  void TaskComplete() { counter.DecrementCount(); }
 
   absl::Mutex mu;
   tsl::thread::ThreadPool* pool;
   absl::Status status;  // Guarded by mu
-  absl::BlockingCounter counter;
 };
 
 }  // anonymous namespace
@@ -1953,32 +1955,101 @@ struct ParallelState {
     const Shape& shape, absl::Span<const int64_t> base,
     absl::Span<const int64_t> count, absl::Span<const int64_t> incr,
     const ForEachParallelVisitorFunction& visitor_function) {
+  // Short-circuit if there is no work to do.
   ForEachState s(shape, base, count, incr);
-  ParallelState pstate(s.CalculateNumSteps());
-  if (s.IsZeroElementArray()) {
-    return pstate.status;
+  if (s.IsZeroElementArray()) return absl::OkStatus();
+
+  // Execute the visitor function inline in the caller thread.
+  auto execute_inline = [&] {
+    return ForEachIndexInternal(shape, base, count, incr,
+                                [&](absl::Span<const int64_t> index) {
+                                  return visitor_function(index, 0);
+                                });
+  };
+
+  // Don't try to handle special cases with 0 counts or increments in parallel.
+  auto is_zero = [](int64_t value) { return value == 0; };
+  if (absl::c_any_of(count, is_zero) || absl::c_any_of(incr, is_zero)) {
+    return execute_inline();
   }
-  // Allows handling R0 arrays, such that the visitor function will be called
-  // once with the proper empty indexes.
-  int64_t n = -1;
-  while (n < s.rank) {
-    auto indexes_copy = s.indexes;
-    pstate.pool->Schedule([indexes_copy, &visitor_function, &pstate] {
-      const int thread_id = pstate.pool->CurrentThreadId();
-      absl::StatusOr<bool> result = visitor_function(indexes_copy, thread_id);
+
+  // Don't try to handle scalar shapes in parallel.
+  if (ElementsIn(shape) == 1) {
+    return execute_inline();
+  }
+
+  // Compute the dimensions of the "work" which are defined by the count of
+  // elements in each dimension and the increment.
+  std::vector<int64_t> work_dims(shape.dimensions_size());
+  for (size_t d = 0; d < shape.dimensions_size(); ++d) {
+    work_dims[d] = tsl::MathUtil::CeilOfRatio(count[d], incr[d]);
+  }
+
+  // Create the shape of the "work" which has same layout as the original shape.
+  Shape work_shape = ShapeUtil::MakeShape(shape.element_type(), work_dims);
+  *work_shape.mutable_layout() = shape.layout();
+
+  // We target one task (partition) per available thread.
+  size_t target_partition_count = GetForEachIndexParallelThreadCount();
+
+  // Compute major-to-minor partition counts for parallelizing the work.
+  ShapePartitionAssigner assigner(work_shape);
+  std::vector<int64_t> partition_counts = assigner.Run(target_partition_count);
+  int64_t partition_count = assigner.GetTotalPartitionCount(partition_counts);
+
+  // For a single partition compute everything in the caller thread.
+  if (partition_count == 1) return execute_inline();
+
+  // Iterate over all partitions in parallel.
+  ShapePartitionIterator iterator(work_shape, partition_counts);
+  ParallelState pstate(partition_count);
+
+  // Process a single partition using bounds defined by the partition iterator.
+  auto process_partition = [&](size_t i) {
+    auto partition = iterator.GetPartition(i);
+
+    // Adjust base and count for the `i`-th partition.
+    std::vector<int64_t> partition_base(base.begin(), base.end());
+    std::vector<int64_t> partition_count(count.begin(), count.end());
+
+    // Iterate over all dimension bounds starting from the outermost dimension.
+    for (int64_t d = 0; d < partition.size(); ++d) {
+      // Size and offset in the `work_shape` for the `i`-th partition.
+      auto [partition_start, partition_size] = partition[d];
+
+      // Update base and count for the `i`-th partition.
+      size_t dim = LayoutUtil::Major(shape.layout(), d);
+      partition_base[dim] += partition_start * incr[dim];
+      partition_count[dim] = std::min(count[dim] - partition_start * incr[dim],
+                                      partition_size * incr[dim]);
+    }
+
+    ForEachState s(shape, partition_base, partition_count, incr);
+    const int thread_id = pstate.pool->CurrentThreadId();
+
+    // Allows handling R0 arrays, such that the visitor function will be
+    // called once with the proper empty indexes.
+    int64_t n = -1;
+    while (n < s.rank) {
+      absl::StatusOr<bool> result = visitor_function(s.indexes, thread_id);
       if (!result.ok()) {
         absl::MutexLock lock(&pstate.mu);
         if (pstate.status.ok()) {
           pstate.status = result.status();
         }
       }
-      pstate.TaskComplete();
-    });
-    // Increments dimensions in minor to major order.
-    n = s.IncrementDim();
-  }
+      // Increments dimensions in minor to major order.
+      n = s.IncrementDim();
+    }
+  };
 
-  pstate.Wait();
+  // Launch parallel for loop to process all partitions.
+  pstate.pool->ParallelFor(partition_count, /*cost_per_unit=*/1000000,
+                           [&](int64_t p_begin, int64_t p_end) {
+                             for (size_t i = p_begin; i < p_end; ++i) {
+                               process_partition(i);
+                             }
+                           });
   return pstate.status;
 }
 
@@ -2000,7 +2071,7 @@ struct ParallelState {
     absl::FunctionRef<bool(int64_t)> p, Shape shape) {
   CHECK(shape.IsArray());
   std::vector<int64_t> dims_to_delete;
-  for (int64_t i = 0; i < shape.rank(); ++i) {
+  for (int64_t i = 0; i < shape.dimensions_size(); ++i) {
     if (!p(i)) {
       dims_to_delete.push_back(i);
     }
@@ -2142,4 +2213,23 @@ int64_t ShapeUtil::ForEachState::CalculateNumSteps() const {
     }
   });
 }
+
+/*static*/ void ShapeUtil::FlattenTupleShape(
+    const Shape& shape, std::vector<const Shape*>& flattened) {
+  if (shape.IsTuple()) {
+    for (const Shape& subshape : shape.tuple_shapes()) {
+      FlattenTupleShape(subshape, flattened);
+    }
+  } else {
+    flattened.push_back(&shape);
+  }
+}
+
+/*static*/ std::vector<const Shape*> ShapeUtil::FlattenTupleShape(
+    const Shape& shape) {
+  std::vector<const Shape*> flattened;
+  FlattenTupleShape(shape, flattened);
+  return flattened;
+}
+
 }  // namespace xla

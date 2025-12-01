@@ -11107,6 +11107,17 @@ void main()
     EXPECT_NE(shader, 0u);
 }
 
+// Test that output variables declared after main work in combination with initOutputVariables
+// (which is enabled on WebGL).
+TEST_P(WebGLGLSLTest, OutputAfterMain)
+{
+    constexpr char kVS[] = R"(void main(){}
+varying float r;)";
+
+    GLuint shader = CompileShader(GL_VERTEX_SHADER, kVS);
+    EXPECT_NE(shader, 0u);
+}
+
 // Test that clamp applied on non-literal indices is correct on es 100 shaders.
 TEST_P(GLSLTest, ValidIndexClampES100)
 {
@@ -17275,6 +17286,35 @@ TEST_P(GLSLTest_ES3, UnsuccessfulRelinkWithBindAttribLocation)
     EXPECT_GL_NO_ERROR();
 }
 
+// Regression test for an unsuccessful link with a varying followed by another link
+TEST_P(GLSLTest_ES3, UnsuccessfulLinkFollowedByAnotherLink)
+{
+    // Make a simple program.
+    ANGLE_GL_PROGRAM(program, essl1_shaders::vs::Simple(), essl1_shaders::fs::Green());
+
+    // Install the executable.
+    glUseProgram(program);
+
+    // Re-link with a bad XFB varying and a bound attrib location.
+    const char *tfVaryings = "gl_FragColor";
+    glTransformFeedbackVaryings(program, 1, &tfVaryings, GL_SEPARATE_ATTRIBS);
+    glBindAttribLocation(program, 8, essl1_shaders::PositionAttrib());
+    glLinkProgram(program);
+    GLint linkStatus = 999;
+    glGetProgramiv(program, GL_LINK_STATUS, &linkStatus);
+    ASSERT_GL_NO_ERROR();
+    // Link expected to fail on the first program
+    ASSERT_EQ(linkStatus, GL_FALSE);
+
+    // Another program with the same shaders but without the varying is expected to link
+    ANGLE_GL_PROGRAM(anotherProgram, essl1_shaders::vs::Simple(), essl1_shaders::fs::Green());
+    ASSERT_NE(program, anotherProgram);
+    glUseProgram(anotherProgram);
+    glLinkProgram(anotherProgram);
+    ASSERT_GL_NO_ERROR();
+    ASSERT_NE(CheckLinkStatusAndReturnProgram(anotherProgram, true), 0u);
+}
+
 // Tests an unsuccessful re-link using glBindAttribLocation under WebGL.
 TEST_P(WebGL2GLSLTest, UnsuccessfulRelinkWithBindAttribLocation)
 {
@@ -20608,6 +20648,97 @@ void main()
     EXPECT_PIXEL_COLOR_EQ(0, 0, GLColor::transparentBlack);
     ASSERT_GL_NO_ERROR();
 }
+
+// Test that lowp and mediump varyings can be correctly matched between VS and FS.
+TEST_P(GLSLTest, LowpMediumpVarying)
+{
+    const char kVS[] = R"(varying lowp float lowpVarying;
+attribute vec4 position;
+void main ()
+{
+  lowpVarying = 1.;
+  gl_Position = position;
+})";
+
+    const char kFS[] = R"(varying mediump float lowpVarying;
+void main ()
+{
+  gl_FragColor = vec4(lowpVarying, 0, 0, 1);
+})";
+
+    ANGLE_GL_PROGRAM(program, kVS, kFS);
+    drawQuad(program, "position", 0);
+    EXPECT_PIXEL_COLOR_EQ(0, 0, GLColor::red);
+}
+
+// Test that a mismatched varying that is unused in fragshader compiles.
+TEST_P(GLSLTest, MismatchedInactiveVarying)
+{
+    const char kVS[] = R"(precision mediump float;
+
+attribute vec2 a_position_0;
+attribute vec4 a_color_0;
+
+varying vec4 vertexColor;
+
+void main()
+{
+    vertexColor = a_color_0;
+    gl_Position = vec4(a_position_0, 0.0, 1.0);
+})";
+
+    const char kFS[] = R"(precision highp float;
+
+uniform vec2 resolution;
+uniform vec2 fragOffset;
+uniform vec2 fragScale;
+
+varying vec4 vertexColor;
+varying vec2 texCoord;
+
+void main()
+{
+    vec2 uv = (fragScale * gl_FragCoord.xy + fragOffset) / resolution;
+    gl_FragColor = vec4(uv, 1.0, 1.0);
+})";
+
+    ANGLE_GL_PROGRAM(program, kVS, kFS);
+}
+
+// Regression test for a bug where the sampler-in-struct rewrite transformation did not take a
+// specific pattern of side_effect,index_the_struct_to_write into account.
+TEST_P(GLSLTest_ES3, StructWithSamplerRHSOfCommaWithSideEffect)
+{
+    constexpr char kVS[] = R"(uniform struct S {
+    sampler2D s;
+    mat2 m;
+} u[2];
+void main()
+{
+    ++gl_Position, u[0];
+})";
+
+    GLuint shader = CompileShader(GL_VERTEX_SHADER, kVS);
+    EXPECT_NE(0u, shader);
+    glDeleteShader(shader);
+}
+
+// Regression test for a bug where the sampler-in-struct rewrite transformation did not take a
+// specific pattern of side_effect,struct_with_only_samplers into account.
+TEST_P(GLSLTest_ES3, StructWithOnlySamplersRHSOfCommaWithSideEffect)
+{
+    constexpr char kVS[] = R"(uniform struct S {
+    sampler2D s;
+} u;
+void main()
+{
+    ++gl_Position, u;
+})";
+
+    GLuint shader = CompileShader(GL_VERTEX_SHADER, kVS);
+    EXPECT_NE(0u, shader);
+    glDeleteShader(shader);
+}
 }  // anonymous namespace
 
 ANGLE_INSTANTIATE_TEST_ES2_AND_ES3_AND(
@@ -20617,7 +20748,8 @@ ANGLE_INSTANTIATE_TEST_ES2_AND_ES3_AND(
     ES3_OPENGLES().enable(Feature::ScalarizeVecAndMatConstructorArgs),
     ES3_VULKAN().enable(Feature::AvoidOpSelectWithMismatchingRelaxedPrecision),
     ES3_VULKAN().enable(Feature::ForceInitShaderVariables),
-    ES3_VULKAN().disable(Feature::SupportsSPIRV14));
+    ES3_VULKAN().disable(Feature::SupportsSPIRV14),
+    ES2_VULKAN().enable(Feature::VaryingsRequireMatchingPrecisionInSpirv));
 
 ANGLE_INSTANTIATE_TEST_ES2_AND_ES3(GLSLTestNoValidation);
 

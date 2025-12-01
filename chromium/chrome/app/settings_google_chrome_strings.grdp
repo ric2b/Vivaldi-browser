@@ -83,17 +83,14 @@
   </message>
 
   <!-- Autofill with AI Page-->
-  <message name="IDS_SETTINGS_AUTOFILL_PREDICTION_IMPROVEMENTS_WHEN_ON_SAVED_INFO" desc="One of the items describing what happens when improved autofill predictions are enabled.">
-    Chrome will ask if you want to save form information, such as your birthday, age, and passport number
-  </message>
-  <message name="IDS_SETTINGS_AUTOFILL_PREDICTION_IMPROVEMENTS_WHEN_ON_USE_TO_FILL"  desc="One of the items describing what happens when improved autofill predictions are enabled.">
-    Later, Chrome will ask if you want to use saved info to automatically fill forms
-  </message>
-  <message name="IDS_SETTINGS_AUTOFILL_PREDICTION_IMPROVEMENTS_DESCRIPTION" desc="The description of the Autofill AI feature.">
+  <message name="IDS_SETTINGS_AUTOFILL_AI_DESCRIPTION" desc="The description of the autofill AI button on chrome://settings/autofill.">
     Chrome understands forms better and can autofill them faster for you
   </message>
-  <message name="IDS_SETTINGS_AUTOFILL_PREDICTION_IMPROVEMENTS_TOGGLE_SUB_LABEL" desc="The description of the main toggle that enables/disables improved autofill predictions.">
-    Chrome understands forms better and can autofill them faster for you. Learn more about <ph name="BEGIN_LINK">&lt;a target="_blank" href="$1"&gt;</ph>Chrome Autofill<ph name="END_LINK">&lt;/a&gt;<ex>&lt;/a&gt;</ex></ph>
+  <message name="IDS_SETTINGS_AUTOFILL_AI_TOGGLE_SUB_LABEL" desc="The description of the setting. By 'understand forms better', we mean that when a user submits a form on a website, and if they're using Autofill with AI, this feature can offer to save the user's submitted info. When Chrome saves that info, we save the submitted values and consider the page context.">
+    Chrome understands forms better and can autofill them faster for you
+  </message>
+  <message name="IDS_SETTINGS_AUTOFILL_AI_WHEN_ON_USE_TO_FILL"  desc="Bullet 2 of 2 that appears beneath the 'When on' title. 'Later': this is a two-step feature. 1) data is saved, 2) it becomes valuable to the user later when they want to fill in a form with similar data. 'Chrome can ask': the user has a choice, every time, whether their data is saved and also whether they want to autofill their saved info into forms.">
+    Later, Chrome can ask if you want to use saved info to autofill forms for you
   </message>
 
   <!-- Default Browser Page -->
@@ -167,9 +164,6 @@
   </message>
 
   <!-- Site Settings - Site Data Page-->
-  <message name="IDS_SETTINGS_SITE_DATA_PAGE_CLEAR_ON_EXIT_RADIO_SUBLABEL" desc="A description of the benefit/cost of choosing 'Sites can save content on your device. In short, a site will remember your preferences, shopping cart content, etc. during this browser session. But once you close all open windows, and then visit the site again, it's as if you're coming to the site for the first time.">
-    Sites will probably work as you expect but won't remember you after you close all Chrome windows
-  </message>
   <message name="IDS_SETTINGS_SITE_DATA_PAGE_CLEAR_ON_EXIT_WITH_EXCEPTION_RADIO_SUBLABEL" desc="A description of the benefit/cost of choosing 'Sites can save content on your device. In short, a site will remember your preferences, shopping cart content, etc. during this browser session. But once you close all open windows, and then visit the site again, it's as if you're coming to the site for the first time.">
     Sites will probably work as expected. You'll be signed out of most sites when you close all Chrome windows, except your Google Account if you're signed in to Chrome.
   </message>

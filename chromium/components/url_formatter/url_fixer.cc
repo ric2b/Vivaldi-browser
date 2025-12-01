@@ -567,7 +567,7 @@ std::string SegmentURLInternal(std::string* text, url::Parsed* parts) {
 
 }  // namespace
 
-std::string SegmentURL(const std::string& text, url::Parsed* parts) {
+std::string SegmentURL(std::string_view text, url::Parsed* parts) {
   std::string mutable_text(text);
   return SegmentURLInternal(&mutable_text, parts);
 }
@@ -633,12 +633,7 @@ GURL FixupURLInternal(const std::string& text,
     }
   }
 
-#if BUILDFLAG(IS_ANDROID)
-  // NOTE(jarle): Android: this fixes https://bugs.vivaldi.com/browse/VB-60615
-  bool vivaldi_url = false;
-#else
   bool vivaldi_url = (scheme == kVivaldiUIScheme);
-#endif
 
   // For some schemes whose layouts we understand, we rebuild the URL.
   bool chrome_url =

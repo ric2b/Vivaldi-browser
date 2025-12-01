@@ -3,6 +3,8 @@
 // found in the LICENSE file.
 
 import {getBrowserAndPages} from '../../conductor/puppeteer-state.js';
+import type {DevToolsPage} from '../../e2e_non_hosted/shared/frontend-helper.js';
+import {getBrowserAndPagesWrappers} from '../../shared/non_hosted_wrappers.js';
 
 // Corresponds to the type in front_end/ui/visual_logging/Debugging.ts
 interface TestImpressionLogEntry {
@@ -146,7 +148,7 @@ export function veImpressionForDrawerToolbar(options?: {
 export async function dumpVeEvents(label: string) {
   const {frontend} = getBrowserAndPages();
   const events =
-      // @ts-ignore
+      // @ts-expect-error
       await frontend.evaluate(async () => (await globalThis.getUnmatchedVeEvents()) as unknown as string[]);
   // eslint-disable-next-line no-console
   console.log(label + '\n', events);
@@ -154,13 +156,12 @@ export async function dumpVeEvents(label: string) {
 
 // Verifies that VE events contains all the expected events in given order.
 // Unexpected VE events are ignored.
-export async function expectVeEvents(expectedEvents: TestLogEntry[], root?: string) {
+export async function expectVeEvents(expectedEvents: TestLogEntry[], root?: string, devToolsPage?: DevToolsPage) {
   collapseConsecutiveImpressions(expectedEvents);
   prependRoot(expectedEvents, root);
-
-  const {frontend} = getBrowserAndPages();
-  // @ts-ignore
-  await frontend.evaluate(async expectedEvents => await globalThis.expectVeEvents(expectedEvents), expectedEvents);
+  devToolsPage = devToolsPage || getBrowserAndPagesWrappers().devToolsPage;
+  // @ts-expect-error
+  await devToolsPage.evaluate(async expectedEvents => await globalThis.expectVeEvents(expectedEvents), expectedEvents);
 }
 
 function collapseConsecutiveImpressions(events: TestLogEntry[]) {

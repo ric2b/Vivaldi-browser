@@ -48,6 +48,7 @@
 #include "ash/public/cpp/window_properties.h"
 #include "ash/root_window_controller.h"
 #include "ash/rotator/screen_rotation_animator.h"
+#include "ash/scanner/scanner_controller.h"
 #include "ash/shell.h"
 #include "ash/style/dark_light_mode_controller_impl.h"
 #include "ash/wallpaper/views/wallpaper_widget_controller.h"
@@ -210,6 +211,7 @@
 #include "components/variations/pref_names.h"
 #include "components/viz/host/host_frame_sink_manager.h"
 #include "components/webapps/browser/banners/app_banner_manager.h"
+#include "components/webui/chrome_urls/pref_names.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/web_contents.h"
@@ -549,6 +551,11 @@ std::string SetAllowedPref(Profile* profile,
   if (pref_name == variations::prefs::kVariationsCompressedSeed ||
       pref_name == variations::prefs::kVariationsSeedSignature) {
     DCHECK(value.is_string());
+    g_browser_process->local_state()->Set(pref_name, value);
+    return std::string();
+  }
+  if (pref_name == chrome_urls::kInternalOnlyUisEnabled) {
+    DCHECK(value.is_bool());
     g_browser_process->local_state()->Set(pref_name, value);
     return std::string();
   }
@@ -1442,7 +1449,7 @@ ExtensionFunction::ResponseAction AutotestPrivateLoginStatusFunction::Run() {
     result.Set("isReadyForPassword",
                ash::LoginScreen::Get()->IsReadyForPassword());
 
-    const user_manager::UserList& users = user_manager->GetUsers();
+    const user_manager::UserList& users = user_manager->GetPersistedUsers();
     bool user_images_loaded = true;
     for (const user_manager::User* user : users) {
       if (user->image_is_loading()) {
@@ -1620,8 +1627,7 @@ ExtensionFunction::ResponseAction
 AutotestPrivateGetExtensionsInfoFunction::Run() {
   DVLOG(1) << "AutotestPrivateGetExtensionsInfoFunction";
 
-  ExtensionService* service =
-      ExtensionSystem::Get(browser_context())->extension_service();
+  ExtensionRegistrar* registrar = ExtensionRegistrar::Get(browser_context());
   ExtensionRegistry* registry = ExtensionRegistry::Get(browser_context());
   const ExtensionSet& extensions = registry->enabled_extensions();
   const ExtensionSet& disabled_extensions = registry->disabled_extensions();
@@ -1659,7 +1665,7 @@ AutotestPrivateGetExtensionsInfoFunction::Run() {
             .Set("isInternal", location == ManifestLocation::kInternal)
             .Set("isUserInstalled", location == ManifestLocation::kInternal ||
                                         Manifest::IsUnpackedLocation(location))
-            .Set("isEnabled", service->IsExtensionEnabled(id))
+            .Set("isEnabled", registrar->IsExtensionEnabled(id))
             .Set("allowedInIncognito",
                  util::IsIncognitoEnabled(id, browser_context()))
             .Set("hasPageAction",
@@ -6393,6 +6399,36 @@ AutotestPrivateOverrideOrcaResponseForTestingFunction::Run() {
 }
 
 ///////////////////////////////////////////////////////////////////////////////
+// AutotestPrivateOverrideScannerResponsesForTestingFunction
+//////////////////////////////////////////////////////////////////////////////
+
+AutotestPrivateOverrideScannerResponsesForTestingFunction::
+    AutotestPrivateOverrideScannerResponsesForTestingFunction() = default;
+
+AutotestPrivateOverrideScannerResponsesForTestingFunction::
+    ~AutotestPrivateOverrideScannerResponsesForTestingFunction() = default;
+
+ExtensionFunction::ResponseAction
+AutotestPrivateOverrideScannerResponsesForTestingFunction::Run() {
+  std::optional<
+      api::autotest_private::OverrideScannerResponsesForTesting::Params>
+      params = api::autotest_private::OverrideScannerResponsesForTesting::
+          Params::Create(args());
+
+  EXTENSION_FUNCTION_VALIDATE(params);
+
+  if (!ash::Shell::HasInstance() || !ash::Shell::Get()->scanner_controller()) {
+    return RespondNow(WithArguments(false));
+  }
+
+  ash::ScannerController* controller = ash::Shell::Get()->scanner_controller();
+  controller->SetScannerResponsesForTesting(  // IN-TEST
+      std::move(params->array.responses));
+
+  return RespondNow(WithArguments(true));
+}
+
+///////////////////////////////////////////////////////////////////////////////
 // AutotestPrivateMakeFuseboxTempDirFunction
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -6845,7 +6881,7 @@ AutotestPrivateIsFeatureEnabledFunction::Run() {
   static const base::Feature* const kAllowList[] = {
       // clang-format off
       &ash::features::kFeatureManagementVideoConference,
-      &ash::features::kSavedDeskUiRevamp,
+      &ash::features::kForestFeature,
       &kDisabledFeatureForTest,
       &kEnabledFeatureForTest,
       // clang-format on

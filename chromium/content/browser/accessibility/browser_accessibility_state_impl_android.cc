@@ -430,27 +430,21 @@ void BrowserAccessibilityStateImplAndroid::OnContrastLevelChanged(
   native_theme->NotifyOnNativeThemeUpdated();
 }
 
-void BrowserAccessibilityStateImplAndroid::UpdateHistogramsOnOtherThread() {
-  BrowserAccessibilityStateImpl::UpdateHistogramsOnOtherThread();
+void BrowserAccessibilityStateImplAndroid::SetScreenReaderAppActive(
+    bool is_active) {
+  static auto* ax_talkback_crash_key = base::debug::AllocateCrashKeyString(
+      "ax_talkback", base::debug::CrashKeySize::Size32);
 
-  // NOTE: this method is run from another thread to reduce jank, since
-  // there's no guarantee these system calls will return quickly. Be careful
-  // not to add any code that isn't safe to run from a non-main thread!
-  DCHECK(!BrowserThread::CurrentlyOn(BrowserThread::UI));
+  if (is_active) {
+    base::debug::SetCrashKeyString(ax_talkback_crash_key, "true");
+  } else {
+    base::debug::ClearCrashKeyString(ax_talkback_crash_key);
+  }
 
-  // Screen reader metric.
-  ui::AXMode mode =
-      BrowserAccessibilityStateImpl::GetInstance()->GetAccessibilityMode();
-  UMA_HISTOGRAM_BOOLEAN("Accessibility.Android.ScreenReader",
-                        mode.has_mode(ui::AXMode::kScreenReader));
-}
+  UMA_HISTOGRAM_BOOLEAN("Accessibility.Android.Talkback", is_active);
 
-void BrowserAccessibilityStateImplAndroid::UpdateUniqueUserHistograms() {
-  BrowserAccessibilityStateImpl::UpdateUniqueUserHistograms();
-
-  ui::AXMode mode = GetAccessibilityMode();
-  UMA_HISTOGRAM_BOOLEAN("Accessibility.Android.ScreenReader.EveryReport",
-                        mode.has_mode(ui::AXMode::kScreenReader));
+  OnAssistiveTechFound(is_active ? ui::AssistiveTech::kTalkback
+                                 : ui::AssistiveTech::kNone);
 }
 
 // static

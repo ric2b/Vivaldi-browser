@@ -107,29 +107,31 @@ export class ManagedUserProfileNoticeAppElement extends
 
   protected email_: string = '';
   protected accountName_: string = '';
-  private continueAs_: string = '';
-  protected showEnterpriseBadge_: boolean = false;
-  protected pictureUrl_: string = '';
-  protected title_: string = '';
-  protected subtitle_: string = '';
-  protected isModalDialog_: boolean = loadTimeData.getBoolean('isModalDialog');
-  protected proceedLabel_: string = '';
-  protected cancelLabel_: string = '';
-  protected errorTitle_: string = '';
-  protected errorSubtitle_: string = '';
-  protected disableProceedButton_: boolean = false;
-  private currentState_: State = State.DISCLOSURE;
+  private accessor continueAs_: string = '';
+  protected accessor showEnterpriseBadge_: boolean = false;
+  protected accessor pictureUrl_: string = '';
+  protected accessor title_: string = '';
+  protected accessor subtitle_: string = '';
+  protected accessor isModalDialog_: boolean =
+      loadTimeData.getBoolean('isModalDialog');
+  protected accessor proceedLabel_: string = '';
+  protected accessor cancelLabel_: string = '';
+  protected accessor errorTitle_: string = '';
+  protected accessor errorSubtitle_: string = '';
+  protected accessor disableProceedButton_: boolean = false;
+  private accessor currentState_: State = State.DISCLOSURE;
   protected showValueProposition_: boolean = false;
-  protected showDisclosure_: boolean = false;
-  protected showProcessing_: boolean = false;
-  protected showSuccess_: boolean = false;
-  protected showTimeout_: boolean = false;
-  protected showError_: boolean = false;
-  protected useUpdatedUi_: boolean = loadTimeData.getBoolean('useUpdatedUi');
-  protected processingSubtitle_: string =
+  protected accessor showDisclosure_: boolean = false;
+  protected accessor showProcessing_: boolean = false;
+  protected accessor showSuccess_: boolean = false;
+  protected accessor showTimeout_: boolean = false;
+  protected accessor showError_: boolean = false;
+  protected accessor useUpdatedUi_: boolean =
+      loadTimeData.getBoolean('useUpdatedUi');
+  protected accessor processingSubtitle_: string =
       loadTimeData.getString('processingSubtitle');
-  protected showUserDataHandling_: boolean = false;
-  protected selectedDataHandling_: BrowsingDataHandling|null = null;
+  protected accessor showUserDataHandling_: boolean = false;
+  protected accessor selectedDataHandling_: BrowsingDataHandling|null = null;
   private managedUserProfileNoticeBrowserProxy_:
       ManagedUserProfileNoticeBrowserProxy =
           ManagedUserProfileNoticeBrowserProxyImpl.getInstance();
@@ -185,7 +187,16 @@ export class ManagedUserProfileNoticeAppElement extends
 
   /** Called when the cancel button is clicked. */
   protected onCancel_() {
+    if (this.allowValuePropStateBackFromDisclosure_()) {
+      this.updateCurrentState_(State.VALUE_PROPOSITION);
+      return;
+    }
     this.managedUserProfileNoticeBrowserProxy_.cancel();
+  }
+
+  protected allowValuePropStateBackFromDisclosure_() {
+    return this.currentState_ === State.DISCLOSURE &&
+        loadTimeData.getInteger('initialState') !== State.DISCLOSURE;
   }
 
   private setProfileInfo_(info: ManagedUserProfileInfo) {
@@ -224,10 +235,14 @@ export class ManagedUserProfileNoticeAppElement extends
   }
 
   private computeCancelLabel_() {
-    return this.currentState_ === State.VALUE_PROPOSITION &&
-            !loadTimeData.getBoolean('enforcedByPolicy') ?
-        this.i18n('cancelValueProp') :
-        this.i18n('cancelLabel');
+    if (this.currentState_ === State.VALUE_PROPOSITION &&
+        !loadTimeData.getBoolean('enforcedByPolicy')) {
+      return this.i18n('cancelValueProp');
+    }
+    if (this.allowValuePropStateBackFromDisclosure_()) {
+      return this.i18n('backLabel');
+    }
+    return this.i18n('cancelLabel');
   }
 
   protected allowProceedButton_() {

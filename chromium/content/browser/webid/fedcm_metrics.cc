@@ -226,6 +226,17 @@ void FedCmMetrics::RecordMismatchDialogShownDuration(
 
 void FedCmMetrics::RecordCancelReason(
     IdentityRequestDialogController::DismissReason dismiss_reason) {
+  DCHECK_GT(session_id_, 0);
+  auto RecordUkm = [&](auto& ukm_builder) {
+    ukm_builder.SetCancelReason(
+        static_cast<std::underlying_type_t<
+            IdentityRequestDialogController::DismissReason>>(dismiss_reason));
+    ukm_builder.SetFedCmSessionID(session_id_);
+    ukm_builder.Record(ukm::UkmRecorder::Get());
+  };
+  ukm::builders::Blink_FedCm fedcm_builder(page_source_id_);
+  RecordUkm(fedcm_builder);
+
   base::UmaHistogramEnumeration("Blink.FedCm.CancelReason", dismiss_reason);
 }
 
@@ -275,7 +286,8 @@ void FedCmMetrics::RecordRequestTokenStatus(
     std::optional<FedCmUseOtherAccountResult> use_other_account_result,
     std::optional<FedCmVerifyingDialogResult> verifying_dialog_result,
     FedCmThirdPartyCookiesStatus tpc_status,
-    const FedCmRequesterFrameType& requester_frame_type) {
+    const FedCmRequesterFrameType& requester_frame_type,
+    std::optional<bool> has_signin_account) {
   // The following check is to avoid double recording in the following scenario:
   // 1. The request has failed but we have not yet rejected the promise, e.g.
   // when the API is disabled. We record a metric immediately but only post a
@@ -313,6 +325,9 @@ void FedCmMetrics::RecordRequestTokenStatus(
           static_cast<int>(*verifying_dialog_result));
     }
     ukm_builder.SetFrameType(static_cast<int>(requester_frame_type));
+    if (has_signin_account.has_value()) {
+      ukm_builder.SetHasSigninAccount(*has_signin_account);
+    }
     ukm_builder.SetFedCmSessionID(session_id_);
     ukm_builder.Record(ukm::UkmRecorder::Get());
   };
@@ -349,6 +364,10 @@ void FedCmMetrics::RecordRequestTokenStatus(
   if (verifying_dialog_result.has_value()) {
     base::UmaHistogramEnumeration("Blink.FedCm.VerifyingDialogResult",
                                   *verifying_dialog_result);
+  }
+  if (has_signin_account.has_value()) {
+    base::UmaHistogramBoolean("Blink.FedCm.HasSigninAccount",
+                              *has_signin_account);
   }
   // Reset the `session_id_`. We expect no more metrics from this API call.
   session_id_ = -1;
@@ -753,6 +772,40 @@ void FedCmMetrics::RecordMultipleRequestsFromDifferentIdPs(
                             from_different_idps);
 }
 
+void FedCmMetrics::RecordRpUrlHasPath(bool rp_url_has_path) {
+  DCHECK_GT(session_id_, 0);
+  auto RecordUkm = [&](auto& ukm_builder) {
+    ukm_builder.SetRpUrlHasPath(rp_url_has_path);
+    ukm_builder.SetFedCmSessionID(session_id_);
+    ukm_builder.Record(ukm::UkmRecorder::Get());
+  };
+  ukm::builders::Blink_FedCm fedcm_builder(page_source_id_);
+  RecordUkm(fedcm_builder);
+}
+
+void FedCmMetrics::RecordAccountSelectionScrollPosition(
+    const gfx::Point& scroll_position) {
+  DCHECK_GT(session_id_, 0);
+  auto RecordUkm = [&](auto& ukm_builder) {
+    ukm_builder.SetAccountSelectionScrollPosition(ukm::GetExponentialBucketMin(
+        scroll_position.y(), /*bucket_spacing=*/1.15));
+    ukm_builder.SetFedCmSessionID(session_id_);
+    ukm_builder.Record(ukm::UkmRecorder::Get());
+  };
+  ukm::builders::Blink_FedCm fedcm_builder(page_source_id_);
+  RecordUkm(fedcm_builder);
+}
+
+void FedCmMetrics::RecordIdentityProvidersCount(int count) {
+  CHECK_GT(count, 0);
+  base::UmaHistogramCounts100("Blink.FedCm.IdentityProvidersCount", count);
+  ukm::builders::Blink_FedCm fedcm_builder(page_source_id_);
+  fedcm_builder.SetIdentityProvidersCount(
+      ukm::GetExponentialBucketMin(count, /*bucket_spacing=*/1.3));
+  fedcm_builder.SetFedCmSessionID(session_id_);
+  fedcm_builder.Record(ukm::UkmRecorder::Get());
+}
+
 ukm::SourceId FedCmMetrics::GetOrCreateProviderSourceId(const GURL& provider) {
   auto it = provider_source_ids_.find(provider);
   if (it != provider_source_ids_.end()) {
@@ -825,11 +878,6 @@ void RecordReadyToShowAccountsSize(int size) {
   base::UmaHistogramCustomCounts("Blink.FedCm.AccountsSize.ReadyToShow", size,
                                  /*min=*/1,
                                  /*exclusive_max=*/10, /*buckets=*/10);
-}
-
-void RecordIdentityProvidersCount(int count) {
-  CHECK_GT(count, 0);
-  base::UmaHistogramCounts100("Blink.FedCm.IdentityProvidersCount", count);
 }
 
 }  // namespace content

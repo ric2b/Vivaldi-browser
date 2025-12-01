@@ -20,8 +20,6 @@ BLINK_COMMON_EXPORT extern const char kDarkModeSettings[];
 BLINK_COMMON_EXPORT extern const char kDataUrlInSvgUseEnabled[];
 BLINK_COMMON_EXPORT extern const char kDefaultTileHeight[];
 BLINK_COMMON_EXPORT extern const char kDefaultTileWidth[];
-BLINK_COMMON_EXPORT extern const char
-    kForcePermissionPolicyUnloadDefaultEnabled[];
 BLINK_COMMON_EXPORT extern const char kDisableImageAnimationResync[];
 BLINK_COMMON_EXPORT extern const char kDisableLowResTiling[];
 BLINK_COMMON_EXPORT extern const char kDisablePartialRaster[];
@@ -63,7 +61,7 @@ BLINK_COMMON_EXPORT extern const char kTouchTextSelectionStrategy_Character[];
 BLINK_COMMON_EXPORT extern const char kTouchTextSelectionStrategy_Direction[];
 BLINK_COMMON_EXPORT extern const char kDisableStandardizedBrowserZoom[];
 BLINK_COMMON_EXPORT extern const char kWebAudioBypassOutputBufferingOptOut[];
-
+BLINK_COMMON_EXPORT extern const char kDisableReduceAcceptLanguage[];
 }  // namespace switches
 }  // namespace blink
 

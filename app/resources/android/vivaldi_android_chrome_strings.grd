@@ -208,6 +208,9 @@ Touch to Search is a feature that is only available when Google is set as the de
       <message name="IDS_MENU_CLOSE_ALL_INCOGNITO_TABS" desc="Menu item for closing all open private tabs. [CHAR-LIMIT=27]">
         Close private tabs
       </message>
+      <message name="IDS_ACCESSIBILITY_INCOGNITO_TAB" desc="Content description for tabs that are in Private mode">
+        Private tab
+      </message>
       <!-- Vivaldi Storage Preference UI strings for clearing storage. -->
       <message name="IDS_STORAGE_MANAGEMENT_ACTIVITY_LABEL" desc="Title for Vivaldi's Manage Space Activity.">
         <ph name="APP_NAME">
@@ -226,8 +229,8 @@ Touch to Search is a feature that is only available when Google is set as the de
       <message name="IDS_MENU_HOME" desc="Tooltip for the homepage button. [CHAR-LIMIT=27]">
         Homepage
       </message>
-      <message name="IDS_ACCESSIBILITY_TABSTRIP_INCOGNITO_IDENTIFIER" desc="Content description for tabs that are not selected in incognito mode">
-        Private Tab
+      <message name="IDS_ACCESSIBILITY_TABSTRIP_INCOGNITO_IDENTIFIER" desc="Content description for tabs that are not selected in Private mode">
+        Private tab
       </message>
 
     <!-- Bookmark snackbar -->
@@ -275,6 +278,13 @@ Touch to Search is a feature that is only available when Google is set as the de
       </message>
       <message name="IDS_SEND_TAB_TO_SELF_ANDROID_NO_TARGET_DEVICE_LABEL" desc="Text shown when a user with no available target devices attempts to use send-tab-to-self.">
         To send this tab to another device, sign in to Vivaldi Sync on both devices. Ensure you enter the encryption password if necessary.
+      </message>
+      <!-- Adaptive toolbar string overrides -->
+      <message name="IDS_ADAPTIVE_TOOLBAR_BUTTON_PREFERENCE_PAGE_SUMMARY" desc="Title name for the Reader View option in the preference.">
+        Reader view for web pages
+      </message>
+      <message name="IDS_SHARING_CREATE_SUMMARY" desc="Label of Reader view button.">
+        Reader view
       </message>
     </messages>
   </release>

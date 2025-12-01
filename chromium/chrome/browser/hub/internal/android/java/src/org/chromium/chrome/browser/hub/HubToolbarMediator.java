@@ -6,7 +6,7 @@ package org.chromium.chrome.browser.hub;
 
 import static org.chromium.chrome.browser.hub.HubToolbarProperties.ACTION_BUTTON_DATA;
 import static org.chromium.chrome.browser.hub.HubToolbarProperties.APPLY_DELAY_FOR_SEARCH_BOX_ANIMATION;
-import static org.chromium.chrome.browser.hub.HubToolbarProperties.COLOR_SCHEME;
+import static org.chromium.chrome.browser.hub.HubToolbarProperties.HUB_SEARCH_ENABLED_STATE;
 import static org.chromium.chrome.browser.hub.HubToolbarProperties.IS_INCOGNITO;
 import static org.chromium.chrome.browser.hub.HubToolbarProperties.MENU_BUTTON_VISIBLE;
 import static org.chromium.chrome.browser.hub.HubToolbarProperties.PANE_BUTTON_LOOKUP_CALLBACK;
@@ -15,8 +15,6 @@ import static org.chromium.chrome.browser.hub.HubToolbarProperties.PANE_SWITCHER
 import static org.chromium.chrome.browser.hub.HubToolbarProperties.SEARCH_BOX_VISIBLE;
 import static org.chromium.chrome.browser.hub.HubToolbarProperties.SEARCH_LISTENER;
 import static org.chromium.chrome.browser.hub.HubToolbarProperties.SEARCH_LOUPE_VISIBLE;
-import static org.chromium.chrome.browser.hub.HubToolbarProperties.SHOW_ACTION_BUTTON_TEXT;
-import static org.chromium.chrome.browser.hub.HubToolbarProperties.TOOLBAR_OVERVIEW_COLOR_SETTER;
 
 import android.content.ComponentCallbacks;
 import android.content.Context;
@@ -26,14 +24,13 @@ import android.view.View;
 import androidx.annotation.IntDef;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.annotation.VisibleForTesting;
 import androidx.core.util.Pair;
 
 import org.chromium.base.Callback;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.supplier.ObservableSupplier;
-import org.chromium.base.supplier.ObservableSupplierImpl;
 import org.chromium.base.supplier.TransitiveObservableSupplier;
-import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.hub.HubToolbarProperties.PaneButtonLookup;
 import org.chromium.chrome.browser.ui.searchactivityutils.SearchActivityClient;
 import org.chromium.chrome.browser.ui.searchactivityutils.SearchActivityExtras.ResolutionType;
@@ -81,6 +78,9 @@ public class HubToolbarMediator {
             new ComponentCallbacks() {
                 @Override
                 public void onConfigurationChanged(@NonNull Configuration configuration) {
+                    Pane focusedPane = mPaneManager.getFocusedPaneSupplier().get();
+                    if (focusedPane == null) return;
+
                     // Only show the search box visuals in the tab switcher and incognito panes.
                     @PaneId
                     int focusedPaneId = mPaneManager.getFocusedPaneSupplier().get().getPaneId();
@@ -100,8 +100,6 @@ public class HubToolbarMediator {
                     mPropertyModel.set(APPLY_DELAY_FOR_SEARCH_BOX_ANIMATION, false);
                     mPropertyModel.set(SEARCH_BOX_VISIBLE, !showLoupe);
                     mPropertyModel.set(SEARCH_LOUPE_VISIBLE, showLoupe);
-
-                    updateShowActionButtonText();
                 }
 
                 @Override
@@ -127,6 +125,8 @@ public class HubToolbarMediator {
     // changes in the returned panes or suppliers.
     private final @NonNull List<Runnable> mRemoveReferenceButtonObservers = new ArrayList<>();
     private final @NonNull Callback<Pane> mOnFocusedPaneChange = this::onFocusedPaneChange;
+    private final @NonNull Callback<Boolean> mOnHubSearchEnabledStateChange =
+            this::onHubSearchEnabledStateChange;
 
     private @Nullable PaneButtonLookup mPaneButtonLookup;
 
@@ -136,8 +136,7 @@ public class HubToolbarMediator {
             @NonNull PropertyModel propertyModel,
             @NonNull PaneManager paneManager,
             @NonNull Tracker tracker,
-            @NonNull SearchActivityClient searchActivityClient,
-            @NonNull ObservableSupplierImpl<Integer> hubToolbarOverviewColorSupplier) {
+            @NonNull SearchActivityClient searchActivityClient) {
         mContext = context;
         mPropertyModel = propertyModel;
         mPaneManager = paneManager;
@@ -160,6 +159,10 @@ public class HubToolbarMediator {
             mCachedPaneSwitcherButtonData.add(new Pair<>(paneId, currentButtonData));
 
             mRemoveReferenceButtonObservers.add(() -> supplier.removeObserver(observer));
+
+            if (OmniboxFeatures.sAndroidHubSearch.isEnabled()) {
+                pane.getHubSearchEnabledStateSupplier().addObserver(mOnHubSearchEnabledStateChange);
+            }
         }
         ObservableSupplier<Pane> focusedPaneSupplier = paneManager.getFocusedPaneSupplier();
         focusedPaneSupplier.addObserver(mOnFocusedPaneChange);
@@ -182,7 +185,6 @@ public class HubToolbarMediator {
             mComponentCallbacks.onConfigurationChanged(mContext.getResources().getConfiguration());
             mContext.registerComponentCallbacks(mComponentCallbacks);
         }
-        mPropertyModel.set(TOOLBAR_OVERVIEW_COLOR_SETTER, hubToolbarOverviewColorSupplier::set);
     }
 
     /** Cleans up observers. */
@@ -196,6 +198,13 @@ public class HubToolbarMediator {
         mPaneManager.getFocusedPaneSupplier().removeObserver(mOnFocusedPaneChange);
         if (OmniboxFeatures.sAndroidHubSearch.isEnabled()) {
             mContext.unregisterComponentCallbacks(mComponentCallbacks);
+
+            for (@PaneId int paneId : mPaneManager.getPaneOrderController().getPaneOrder()) {
+                @Nullable Pane pane = mPaneManager.getPaneForId(paneId);
+                if (pane == null) continue;
+                pane.getHubSearchEnabledStateSupplier()
+                        .removeObserver(mOnHubSearchEnabledStateChange);
+            }
         }
     }
 
@@ -262,37 +271,24 @@ public class HubToolbarMediator {
         }
         mPropertyModel.set(PANE_SWITCHER_INDEX, selectedIndex);
         mPropertyModel.set(PANE_SWITCHER_BUTTON_DATA, buttonDataList);
-        updateShowActionButtonText();
     }
 
-    private void updateShowActionButtonText() {
-        @Nullable List<FullButtonData> buttonData = mPropertyModel.get(PANE_SWITCHER_BUTTON_DATA);
-        if (buttonData == null) return;
-
-        int screenWidthDp = mContext.getResources().getConfiguration().screenWidthDp;
-        boolean showText = shouldShowActionButtonText(buttonData.size(), screenWidthDp);
-
-        mPropertyModel.set(SHOW_ACTION_BUTTON_TEXT, showText);
-    }
-
-    private static boolean shouldShowActionButtonText(int buttonCount, int screenWidthDp) {
-        if (ChromeFeatureList.sTabSwitcherFullNewTabButton.isEnabled()) {
-            return buttonCount <= (isScreenWidthTablet(screenWidthDp) ? 3 : 2);
-        } else {
-            return buttonCount <= 1;
-        }
+    private FullButtonData wrapButtonData(
+            @PaneId int paneId, @NonNull DisplayButtonData referenceButtonData) {
+        Runnable onPress =
+                () -> {
+                    // TODO(crbug.com/345492118): Move the event name into the tab group pane impl.
+                    if (paneId == PaneId.TAB_GROUPS) {
+                        mTracker.notifyEvent("tab_groups_surface_clicked");
+                    }
+                    mPaneManager.focusPane(paneId);
+                    RecordHistogram.recordEnumeratedHistogram(
+                            "Android.Hub.PaneFocused.PaneSwitcher", paneId, PaneId.COUNT);
+                };
+        return new DelegateButtonData(referenceButtonData, onPress);
     }
 
     private void onFocusedPaneChange(@Nullable Pane focusedPane) {
-        @HubColorScheme int newColorScheme = HubColors.getColorSchemeSafe(focusedPane);
-        @HubColorScheme
-        int prevColorScheme =
-                mPropertyModel.get(COLOR_SCHEME) == null
-                        ? newColorScheme
-                        : mPropertyModel.get(COLOR_SCHEME).newColorScheme;
-
-        mPropertyModel.set(COLOR_SCHEME, new HubColorSchemeUpdate(newColorScheme, prevColorScheme));
-
         @Nullable Integer focusedPaneId = focusedPane == null ? null : focusedPane.getPaneId();
         if (focusedPaneId == null) {
             mPropertyModel.set(PANE_SWITCHER_INDEX, INVALID_PANE_SWITCHER_INDEX);
@@ -307,6 +303,12 @@ public class HubToolbarMediator {
         if (OmniboxFeatures.sAndroidHubSearch.isEnabled()) {
             // Fire an event to determine what is shown.
             mComponentCallbacks.onConfigurationChanged(mContext.getResources().getConfiguration());
+
+            // Reset the enabled state of hub search to the supplier value or true if uninitialized
+            // when toggling panes to account for a potential disabled state from incognito reauth.
+            Boolean hubSearchEnabledState = focusedPane.getHubSearchEnabledStateSupplier().get();
+            boolean enabled = hubSearchEnabledState == null ? true : hubSearchEnabledState;
+            mPropertyModel.set(HUB_SEARCH_ENABLED_STATE, enabled);
         }
 
         mPropertyModel.set(MENU_BUTTON_VISIBLE, focusedPane.getMenuButtonVisible());
@@ -326,19 +328,8 @@ public class HubToolbarMediator {
         }
     }
 
-    private FullButtonData wrapButtonData(
-            @PaneId int paneId, @NonNull DisplayButtonData referenceButtonData) {
-        Runnable onPress =
-                () -> {
-                    // TODO(crbug.com/345492118): Move the event name into the tab group pane impl.
-                    if (paneId == PaneId.TAB_GROUPS) {
-                        mTracker.notifyEvent("tab_groups_surface_clicked");
-                    }
-                    mPaneManager.focusPane(paneId);
-                    RecordHistogram.recordEnumeratedHistogram(
-                            "Android.Hub.PaneFocused.PaneSwitcher", paneId, PaneId.COUNT);
-                };
-        return new DelegateButtonData(referenceButtonData, onPress);
+    private void onHubSearchEnabledStateChange(boolean enabled) {
+        mPropertyModel.set(HUB_SEARCH_ENABLED_STATE, enabled);
     }
 
     private void consumeButtonLookup(PaneButtonLookup paneButtonLookup) {
@@ -358,7 +349,8 @@ public class HubToolbarMediator {
     }
 
     /** Utility to determine which UI variants to show based on device width. */
-    private static boolean isScreenWidthTablet(int screenWidthDp) {
+    @VisibleForTesting
+    public static boolean isScreenWidthTablet(int screenWidthDp) {
         return screenWidthDp >= DeviceFormFactor.MINIMUM_TABLET_WIDTH_DP;
     }
 

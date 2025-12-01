@@ -8,12 +8,12 @@
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_element_identifiers.h"
 #include "chrome/browser/ui/tabs/public/tab_features.h"
-#include "chrome/browser/ui/tabs/public/tab_interface.h"
 #include "chrome/browser/ui/tabs/saved_tab_groups/collaboration_messaging_tab_data.h"
 #include "chrome/browser/ui/tabs/saved_tab_groups/saved_tab_group_utils.h"
 #include "chrome/browser/ui/views/page_action/page_action_icon_view.h"
 #include "chrome/browser/ui/views/tabs/recent_activity_bubble_dialog_view.h"
 #include "chrome/grit/generated_resources.h"
+#include "components/tab_collections/public/tab_interface.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/views/view_class_properties.h"
@@ -95,11 +95,13 @@ void CollaborationMessagingPageActionIconView::UpdateContent(
       NOTREACHED();
   }
 
+  collaboration_messaging_tab_data_ =
+      collaboration_messaging_tab_data->GetWeakPtr();
+
   // Label is always visible.
   SetLabel(label_text);
   label()->SetVisible(true);
 
-  avatar_image_ = collaboration_messaging_tab_data->page_action_avatar();
   UpdateIconImage();
 }
 
@@ -113,8 +115,11 @@ CollaborationMessagingPageActionIconView::GetGroupId() {
 
 void CollaborationMessagingPageActionIconView::OnExecuting(
     PageActionIconView::ExecuteSource source) {
-  bubble_coordinator_.Show(
+  auto* tab = tabs::TabInterface::GetFromContents(GetWebContents());
+  bubble_coordinator_.ShowForCurrentTab(
       this, GetWebContents(),
+      tab_groups::SavedTabGroupUtils::GetRecentActivity(
+          profile_, GetGroupId(), tab->GetHandle().raw_value()),
       tab_groups::SavedTabGroupUtils::GetRecentActivity(profile_, GetGroupId()),
       profile_);
 }
@@ -126,12 +131,17 @@ CollaborationMessagingPageActionIconView::GetBubble() const {
 
 const gfx::VectorIcon& CollaborationMessagingPageActionIconView::GetVectorIcon()
     const {
+  // In practice, this should never be used since we use a fallback icon
+  // when the avatar is unavailable.
   return kPersonFilledPaddedSmallIcon;
 }
 
 ui::ImageModel CollaborationMessagingPageActionIconView::GetSizedIconImage(
     int icon_size) const {
-  return avatar_image_;
+  if (!collaboration_messaging_tab_data_) {
+    return ui::ImageModel();
+  }
+  return collaboration_messaging_tab_data_->GetPageActionImage(GetWidget());
 }
 
 BEGIN_METADATA(CollaborationMessagingPageActionIconView)

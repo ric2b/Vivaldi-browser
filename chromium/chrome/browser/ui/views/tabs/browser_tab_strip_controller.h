@@ -81,7 +81,7 @@ class BrowserTabStripController : public TabStripController,
   void AddSelectionFromAnchorTo(int model_index) override;
   void OnCloseTab(int model_index,
                   CloseTabSource source,
-                  base::OnceCallback<void()> callback) override;
+                  base::OnceCallback<void(CloseTabSource)> callback) override;
   void CloseTab(int model_index) override;
   void ToggleTabAudioMute(int model_index) override;
   void AddTabToGroup(int model_index,
@@ -150,11 +150,22 @@ class BrowserTabStripController : public TabStripController,
                              int model_index) override;
   void TabBlockedStateChanged(content::WebContents* contents,
                               int model_index) override;
-  void TabGroupedStateChanged(std::optional<tab_groups::TabGroupId> group,
+  void TabGroupedStateChanged(TabStripModel* tab_strip_model,
+                              std::optional<tab_groups::TabGroupId> old_group,
+                              std::optional<tab_groups::TabGroupId> new_group,
                               tabs::TabInterface* tab,
                               int index) override;
   void SetTabNeedsAttentionAt(int index, bool attention) override;
   bool IsFrameButtonsRightAligned() const override;
+
+  void OnSplitTabCreated(std::vector<std::pair<tabs::TabInterface*, int>> tabs,
+                         split_tabs::SplitTabId split_id,
+                         SplitTabAddReason reason,
+                         tabs::SplitTabLayout tab_layout) override;
+  void OnSplitTabRemoved(std::vector<std::pair<tabs::TabInterface*, int>> tabs,
+                         split_tabs::SplitTabId split_id,
+                         SplitTabRemoveReason reason) override;
+
   const Browser* browser() const { return browser_view_->browser(); }
 
   // Test-specific methods.
@@ -169,8 +180,9 @@ class BrowserTabStripController : public TabStripController,
   // Invokes tabstrip_->SetTabData.
   void SetTabDataAt(content::WebContents* web_contents, int model_index);
 
-  // Adds a tab.
-  void AddTab(content::WebContents* contents, int index);
+  // Adds tabs to the view model.
+  void AddTabs(
+      std::vector<std::pair<content::WebContents*, int>> contents_list);
 
   void OnDiscardRingTreatmentEnabledChanged();
 
@@ -187,7 +199,7 @@ class BrowserTabStripController : public TabStripController,
   HoverTabSelector hover_tab_selector_;
 
   // Forces the tabs to use the regular (non-immersive) style and the
-  // top-of-window views to be revealed when the user is dragging |tabstrip|'s
+  // top-of-window views to be revealed when the user is dragging `tabstrip`'s
   // tabs.
   std::unique_ptr<ImmersiveRevealedLock> immersive_reveal_lock_;
 

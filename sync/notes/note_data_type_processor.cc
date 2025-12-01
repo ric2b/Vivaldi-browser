@@ -297,7 +297,6 @@ void NoteDataTypeProcessor::ModelReadyToSync(
     const base::RepeatingClosure& schedule_save_closure,
     NoteModelView* model) {
   DCHECK(model);
-  DCHECK(model->loaded());
   DCHECK(!notes_model_);
   DCHECK(!note_tracker_);
   DCHECK(!notes_model_observer_);
@@ -315,14 +314,6 @@ void NoteDataTypeProcessor::ModelReadyToSync(
     pending_clear_metadata_ = false;
     // Schedule save empty metadata, if not already empty.
     if (!metadata_str.empty()) {
-      if (syncer::IsInitialSyncDone(
-              model_metadata.data_type_state().initial_sync_state())) {
-        // There used to be a tracker, which is dropped now due to
-        // `pending_clear_metadata_`. This isn't very different to
-        // ClearMetadataIfStopped(), in the sense that the need to wipe the
-        // local model needs to be considered.
-        TriggerWipeModelUponSyncDisabledBehavior();
-      }
       schedule_save_closure_.Run();
     }
   } else if (model_metadata
@@ -348,29 +339,13 @@ void NoteDataTypeProcessor::ModelReadyToSync(
     }
   }
 
-  if (!note_tracker_) {
-    switch (wipe_model_upon_sync_disabled_behavior_) {
-      case syncer::WipeModelUponSyncDisabledBehavior::kNever:
-        // Nothing to do.
-        break;
-      case syncer::WipeModelUponSyncDisabledBehavior::kOnceIfTrackingMetadata:
-        // Since the model isn't initially tracking metadata, move away from
-        // kOnceIfTrackingMetadata so the behavior doesn't kick in, in case sync
-        // is turned on later and back to off. This should be practically
-        // unreachable because usually ClearMetadataIfStopped() would be invoked
-        // earlier, but let's be extra safe and avoid relying on this behavior.
-        wipe_model_upon_sync_disabled_behavior_ =
-            syncer::WipeModelUponSyncDisabledBehavior::kNever;
-        break;
-      case syncer::WipeModelUponSyncDisabledBehavior::kAlways:
-        // Remove any previous data that may exist, if its lifetime is strongly
-        // coupled with the tracker's (sync metadata's).
-        notes_model_->RemoveAllSyncableNodes();
-        break;
-    }
-  }
-
-  ConnectIfReady();
+  // Post a task instead of invoking ConnectIfReady() immediately to avoid
+  // sophisticated operations while NotesModel is being loaded. In
+  // particular, cache GUID mismatches (edge case) lead to deleting account
+  // notes.
+  base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+      FROM_HERE, base::BindOnce(&NoteDataTypeProcessor::ConnectIfReady,
+                                weak_ptr_factory_for_controller_.GetWeakPtr()));
 }
 
 size_t NoteDataTypeProcessor::EstimateMemoryUsage() const {
@@ -409,7 +384,8 @@ void NoteDataTypeProcessor::ConnectIfReady() {
   if (!notes_model_) {
     return;
   }
-  // Return if Sync didn't start yet.
+  // Return if Sync didn't start yet, or ConnectIfReady() already succeeded
+  // before.
   if (!start_callback_) {
     return;
   }
@@ -452,7 +428,7 @@ void NoteDataTypeProcessor::ConnectIfReady() {
 
   if (note_tracker_ && note_tracker_->data_type_state().cache_guid() !=
                            activation_request_.cache_guid) {
-    // In case of a cache uuid mismatch, treat it as a corrupted metadata and
+    // In case of a cache guid mismatch, treat it as a corrupted metadata and
     // start clean.
     StopTrackingMetadataAndResetTracker();
   }
@@ -797,12 +773,6 @@ void NoteDataTypeProcessor::TriggerWipeModelUponSyncDisabledBehavior() {
     case syncer::WipeModelUponSyncDisabledBehavior::kNever:
       // Nothing to do.
       break;
-    case syncer::WipeModelUponSyncDisabledBehavior::kOnceIfTrackingMetadata:
-      // Do it this time, but switch to kNever so it doesn't trigger next
-      // time.
-      wipe_model_upon_sync_disabled_behavior_ =
-          syncer::WipeModelUponSyncDisabledBehavior::kNever;
-      [[fallthrough]];
     case syncer::WipeModelUponSyncDisabledBehavior::kAlways:
       notes_model_->RemoveAllSyncableNodes();
       break;

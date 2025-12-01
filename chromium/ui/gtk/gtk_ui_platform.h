@@ -31,10 +31,6 @@ class GtkUiPlatform {
   // a dummy window passed in for context.
   virtual void OnInitialized(GtkWidget* widget) = 0;
 
-  // Gets the GdkKeymap instance, which is used to translate KeyEvents into
-  // GdkEvents before filtering them through GtkIM API.
-  virtual GdkKeymap* GetGdkKeymap() = 0;
-
   // Gets the GDK key event state for a KeyEvent.
   virtual GdkModifierType GetGdkKeyEventState(
       const ui::KeyEvent& key_event) = 0;
@@ -64,6 +60,9 @@ class GtkUiPlatform {
   // If true, the device scale factor should be multiplied by the font scale. If
   // false, the font size should be multiplied by the font scale.
   virtual bool IncludeFontScaleInDeviceScale() const = 0;
+
+  // Returns true if the cursor size should be multiplied by the scale factor.
+  virtual bool IncludeScaleInCursorSize() const = 0;
 };
 
 }  // namespace gtk

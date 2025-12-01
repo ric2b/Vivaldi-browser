@@ -66,10 +66,10 @@ V8InspectorImpl::V8InspectorImpl(v8::Isolate* isolate,
       m_client(client),
       m_debugger(new V8Debugger(isolate, this)),
       m_lastExceptionId(0),
-      m_lastContextId(0),
-      m_isolateId(generateUniqueId()) {
+      m_lastContextId(0) {
   v8::debug::SetInspector(m_isolate, this);
   v8::debug::SetConsoleDelegate(m_isolate, console());
+  v8::debug::SetIsolateId(m_isolate, generateUniqueId());
 }
 
 V8InspectorImpl::~V8InspectorImpl() {
@@ -207,6 +207,10 @@ V8DebuggerId V8InspectorImpl::uniqueDebuggerId(int contextId) {
   if (context) unique_id = m_debugger->debuggerIdFor(context->contextGroupId());
 
   return unique_id.toV8DebuggerId();
+}
+
+uint64_t V8InspectorImpl::isolateId() {
+  return v8::debug::GetIsolateId(m_isolate);
 }
 
 void V8InspectorImpl::contextCreated(const V8ContextInfo& info) {
@@ -443,7 +447,7 @@ V8InspectorImpl::EvaluateScope::EvaluateScope(
     : m_scope(scope), m_isolate(scope.inspector()->isolate()) {}
 
 struct V8InspectorImpl::EvaluateScope::CancelToken {
-  v8::base::SpinningMutex m_mutex;
+  v8::base::Mutex m_mutex;
   bool m_canceled = false;
 };
 
@@ -452,7 +456,7 @@ V8InspectorImpl::EvaluateScope::~EvaluateScope() {
     m_scope.inspector()->debugger()->reportTermination();
   }
   if (m_cancelToken) {
-    v8::base::SpinningMutexGuard lock(&m_cancelToken->m_mutex);
+    v8::base::MutexGuard lock(&m_cancelToken->m_mutex);
     m_cancelToken->m_canceled = true;
     m_isolate->CancelTerminateExecution();
   }
@@ -466,7 +470,7 @@ class V8InspectorImpl::EvaluateScope::TerminateTask : public v8::Task {
   void Run() override {
     // CancelToken contains m_canceled bool which may be changed from main
     // thread, so lock mutex first.
-    v8::base::SpinningMutexGuard lock(&m_token->m_mutex);
+    v8::base::MutexGuard lock(&m_token->m_mutex);
     if (m_token->m_canceled) return;
     m_isolate->TerminateExecution();
   }

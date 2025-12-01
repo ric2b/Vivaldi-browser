@@ -35,7 +35,6 @@
 #include "base/unguessable_token.h"
 #include "build/branding_buildflags.h"
 #include "build/build_config.h"
-#include "build/chromeos_buildflags.h"
 #include "cc/input/scroll_utils.h"
 #include "chrome/browser/download/download_prefs.h"
 #include "chrome/browser/pdf/pdf_extension_test_base.h"
@@ -51,6 +50,7 @@
 #include "chrome/browser/ui/tabs/tab_enums.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
+#include "chrome/browser/ui/zoom/chrome_zoom_level_prefs.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/pref_names.h"
@@ -71,6 +71,7 @@
 #include "components/zoom/zoom_controller.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/download_manager.h"
+#include "content/public/browser/host_zoom_map.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/plugin_service.h"
@@ -111,13 +112,14 @@
 #include "third_party/blink/public/common/input/web_input_event.h"
 #include "third_party/blink/public/common/input/web_mouse_event.h"
 #include "third_party/blink/public/common/messaging/transferable_message.h"
+#include "third_party/blink/public/common/page/page_zoom.h"
 #include "ui/base/clipboard/clipboard.h"
 #include "ui/base/clipboard/clipboard_monitor.h"
 #include "ui/base/clipboard/clipboard_observer.h"
 #include "ui/base/clipboard/test/test_clipboard.h"
 #include "ui/gfx/geometry/point.h"
 #include "ui/gfx/geometry/rect.h"
-#include "ui/native_theme/native_theme_features.h"
+#include "ui/native_theme/features/native_theme_features.h"
 #include "url/gurl.h"
 
 #if defined(TOOLKIT_VIEWS) && !BUILDFLAG(IS_MAC)
@@ -258,6 +260,66 @@ IN_PROC_BROWSER_TEST_P(PDFExtensionTest, PdfExtensionLoaded) {
                         "document.body.firstChild.hasAttribute('internalid');")
             .ExtractBool());
   }
+}
+
+// The pdf extension's frame should not allow cross-origin navigations. They
+// should be blocked, but not crash.
+// https://crbug.com/394513280
+IN_PROC_BROWSER_TEST_P(PDFExtensionTest,
+                       NoCrossOriginNavigationFromPdfExtensionFrame) {
+  if (UseOopif()) {
+    // This test only applies to MimeHandlerViewGuest PDF.
+    GTEST_SKIP();
+  }
+
+  const GURL main_url(embedded_test_server()->GetURL("/pdf/test.pdf"));
+  content::RenderFrameHost* extension_host = LoadPdfGetExtensionHost(main_url);
+  ASSERT_TRUE(extension_host);
+
+  content::TestFrameNavigationObserver frame_nav_observer(extension_host);
+  ASSERT_TRUE(content::ExecJs(extension_host,
+                              "window.location = 'https://example.com';"));
+  frame_nav_observer.Wait();
+
+  EXPECT_EQ(net::ERR_BLOCKED_BY_CLIENT,
+            frame_nav_observer.last_net_error_code());
+  const GURL extension_url(
+      "chrome-extension://mhjfbmdgcfjbbpaeojofohoefgiehjai/index.html");
+  EXPECT_EQ(extension_url, extension_host->GetLastCommittedURL());
+}
+
+// A test to verify that the presence of a pending NavigationEntry on the
+// NavigationController of a WebContents hosting a PDF does not affect the
+// value returned by WebContentsImpl::GetPendingZoomLevel() when called on
+// the PDF extension frame's RenderWidgetHost.
+IN_PROC_BROWSER_TEST_P(PDFExtensionTest,
+                       ZoomNotAffectedByPendingNavigationEntry) {
+  // Set default zoom factor to 200%.
+  auto* web_contents = GetActiveWebContents();
+  content::HostZoomMap::GetForWebContents(web_contents)
+      ->SetDefaultZoomLevel(blink::ZoomFactorToZoomLevel(2.0));
+
+  // Load PDF.
+  const GURL main_url(embedded_test_server()->GetURL("/pdf/test.pdf"));
+  content::RenderFrameHost* extension_host = LoadPdfGetExtensionHost(main_url);
+  ASSERT_TRUE(extension_host);
+
+  // Verify PDF extension frame has zoom factor 100%.
+  EXPECT_EQ(
+      blink::ZoomFactorToZoomLevel(1.0),
+      content::GetPendingZoomLevel(extension_host->GetRenderWidgetHost()));
+
+  // Navigate and immediately check GetPendingZoomLevel stays at factor 100%.
+  auto& controller = web_contents->GetController();
+  controller.LoadURLWithParams(content::NavigationController::LoadURLParams(
+      embedded_test_server()->GetURL("/title1.html")));
+  EXPECT_EQ(
+      blink::ZoomFactorToZoomLevel(1.0),
+      content::GetPendingZoomLevel(extension_host->GetRenderWidgetHost()));
+  // Verify the navigation is still pending. This gives assurance that the
+  // preceding call to GetPendingZoomLevel did encounter the condition being
+  // tested.
+  EXPECT_NE(nullptr, controller.GetPendingEntry());
 }
 
 // Helper class to allow pausing the asynchronous attachment of an inner
@@ -2643,7 +2705,7 @@ IN_PROC_BROWSER_TEST_P(PDFExtensionTest, CtrlWheelInvokesCustomZoom) {
 }
 
 // Flaky on ChromeOS (https://crbug.com/922974)
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
 #define MAYBE_TouchscreenPinchInvokesCustomZoom \
   DISABLED_TouchscreenPinchInvokesCustomZoom
 #else
@@ -3714,6 +3776,59 @@ IN_PROC_BROWSER_TEST_P(PDFExtensionSameSiteProcessTest,
   EXPECT_EQ(content_host1->GetProcess(), content_host2->GetProcess());
 }
 
+class PDFExtensionZoomTest : public PDFExtensionTest {
+ public:
+  PDFExtensionZoomTest() = default;
+  ~PDFExtensionZoomTest() override = default;
+
+ protected:
+  // Callers must set the default zoom level and load the PDF before calling
+  // `TestDefaultZoom()`.
+  void TestDefaultZoom(content::RenderFrameHost* extension_host) {
+    WebContents* web_contents = GetActiveWebContents();
+    auto* main_contents_zoom_controller =
+        zoom::ZoomController::FromWebContents(web_contents);
+    ASSERT_TRUE(main_contents_zoom_controller);
+
+    // The PDF extension should not use the default zoom level and stay at 0
+    // zoom level, since the PDF UI should not be affected by zoom.
+    auto* extension_host_zoom_controller =
+        UseOopif()
+            ? zoom::ZoomController::FromWebContentsAndRenderFrameHost(
+                  web_contents, extension_host->GetGlobalId())
+            : zoom::ZoomController::FromWebContents(
+                  content::WebContents::FromRenderFrameHost(extension_host));
+    ASSERT_TRUE(extension_host_zoom_controller);
+    EXPECT_NE(main_contents_zoom_controller, extension_host_zoom_controller);
+
+    const double actual_zoom = extension_host_zoom_controller->GetZoomLevel();
+    EXPECT_NE(main_contents_zoom_controller->GetZoomLevel(), actual_zoom);
+    // A zoom level of 0 corresponds to a zoom factor of 1, or 100%.
+    EXPECT_EQ(0, actual_zoom);
+  }
+};
+
+IN_PROC_BROWSER_TEST_P(PDFExtensionZoomTest, DefaultZoomFullPage) {
+  browser()->profile()->GetZoomLevelPrefs()->SetDefaultZoomLevelPref(0.5);
+
+  content::RenderFrameHost* extension_host =
+      LoadPdfGetExtensionHost(embedded_test_server()->GetURL("/pdf/test.pdf"));
+  ASSERT_TRUE(extension_host);
+
+  TestDefaultZoom(extension_host);
+}
+
+IN_PROC_BROWSER_TEST_P(PDFExtensionZoomTest, DefaultZoomEmbed) {
+  browser()->profile()->GetZoomLevelPrefs()->SetDefaultZoomLevelPref(0.5);
+
+  content::RenderFrameHost* extension_host =
+      LoadPdfInFirstChildGetExtensionHost(
+          embedded_test_server()->GetURL("/pdf/pdf_embed.html"));
+  ASSERT_TRUE(extension_host);
+
+  TestDefaultZoom(extension_host);
+}
+
 // PDF extension tests for the OOPIF PDF viewer.
 class PDFExtensionOopifTest : public PDFExtensionTestWithoutOopifOverride {
  public:
@@ -4535,3 +4650,4 @@ INSTANTIATE_FEATURE_OVERRIDE_TEST_SUITE(
     PDFExtensionPrerenderAndFencedFrameTest);
 INSTANTIATE_FEATURE_OVERRIDE_TEST_SUITE(PDFExtensionIncognitoTest);
 INSTANTIATE_FEATURE_OVERRIDE_TEST_SUITE(PDFExtensionSameSiteProcessTest);
+INSTANTIATE_FEATURE_OVERRIDE_TEST_SUITE(PDFExtensionZoomTest);

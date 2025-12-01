@@ -150,17 +150,7 @@ def check_file(
     error_messages = []
     warning_messages = []
     for result in results:
-        # TODO(aredulla): Actually distinguish between validation errors
-        # and warnings. The quality of metadata is currently being
-        # uplifted, but is not yet guaranteed to pass validation. So for
-        # now, all validation results will be returned as warnings so
-        # CLs are not blocked by invalid metadata in presubmits yet.
-        # Bug: b/285453019.
-        if result.is_fatal():
-            message = result.get_message(prescript=_TRANSITION_PRESCRIPT,
-                                         width=60)
-        else:
-            message = result.get_message(width=60)
-        warning_messages.append(message)
+        target = error_messages if result.is_fatal() else warning_messages
+        target.append(result.get_message(width=60))
 
     return error_messages, warning_messages

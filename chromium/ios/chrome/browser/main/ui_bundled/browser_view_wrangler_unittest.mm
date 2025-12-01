@@ -34,7 +34,6 @@
 #import "ios/chrome/browser/signin/model/authentication_service_factory.h"
 #import "ios/chrome/browser/signin/model/fake_authentication_service_delegate.h"
 #import "ios/chrome/browser/sync/model/send_tab_to_self_sync_service_factory.h"
-#import "ios/chrome/browser/tabs/model/inactive_tabs/features.h"
 #import "ios/chrome/test/ios_chrome_scoped_testing_local_state.h"
 #import "ios/web/public/test/web_task_environment.h"
 #import "testing/platform_test.h"
@@ -47,40 +46,40 @@ class BrowserViewWranglerTest : public PlatformTest {
     scene_state_ = [[SceneStateWithFakeScene alloc] initWithScene:fake_scene_
                                                          appState:nil];
 
-    TestProfileIOS::Builder test_cbs_builder;
-    test_cbs_builder.AddTestingFactory(
+    TestProfileIOS::Builder test_profile_builder;
+    test_profile_builder.AddTestingFactory(
         SendTabToSelfSyncServiceFactory::GetInstance(),
         SendTabToSelfSyncServiceFactory::GetDefaultFactory());
-    test_cbs_builder.AddTestingFactory(
+    test_profile_builder.AddTestingFactory(
         ios::TemplateURLServiceFactory::GetInstance(),
         ios::TemplateURLServiceFactory::GetDefaultFactory());
-    test_cbs_builder.AddTestingFactory(
+    test_profile_builder.AddTestingFactory(
         IOSChromeFaviconLoaderFactory::GetInstance(),
         IOSChromeFaviconLoaderFactory::GetDefaultFactory());
-    test_cbs_builder.AddTestingFactory(
+    test_profile_builder.AddTestingFactory(
         IOSChromeLargeIconServiceFactory::GetInstance(),
         IOSChromeLargeIconServiceFactory::GetDefaultFactory());
-    test_cbs_builder.AddTestingFactory(
+    test_profile_builder.AddTestingFactory(
         ios::FaviconServiceFactory::GetInstance(),
         ios::FaviconServiceFactory::GetDefaultFactory());
-    test_cbs_builder.AddTestingFactory(
+    test_profile_builder.AddTestingFactory(
         ios::HistoryServiceFactory::GetInstance(),
         ios::HistoryServiceFactory::GetDefaultFactory());
-    test_cbs_builder.AddTestingFactory(
+    test_profile_builder.AddTestingFactory(
         PrerenderServiceFactory::GetInstance(),
         PrerenderServiceFactory::GetDefaultFactory());
-    test_cbs_builder.AddTestingFactory(
+    test_profile_builder.AddTestingFactory(
         ios::BookmarkModelFactory::GetInstance(),
         ios::BookmarkModelFactory::GetDefaultFactory());
-    test_cbs_builder.AddTestingFactory(
+    test_profile_builder.AddTestingFactory(
         AuthenticationServiceFactory::GetInstance(),
         AuthenticationServiceFactory::GetFactoryWithDelegate(
             std::make_unique<FakeAuthenticationServiceDelegate>()));
-    test_cbs_builder.AddTestingFactory(
+    test_profile_builder.AddTestingFactory(
         SessionRestorationServiceFactory::GetInstance(),
         TestSessionRestorationService::GetTestingFactory());
 
-    profile_ = std::move(test_cbs_builder).Build();
+    profile_ = std::move(test_profile_builder).Build();
     profile_->CreateOffTheRecordProfileWithTestingFactories(
         {TestProfileIOS::TestingFactory{
             SessionRestorationServiceFactory::GetInstance(),
@@ -183,11 +182,6 @@ TEST_F(BrowserViewWranglerTest, TestInitNilObserver) {
 }
 
 TEST_F(BrowserViewWranglerTest, TestBrowserList) {
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitWithFeatures(
-      {/* Enabled features */},
-      {/* Disabled features */ kInactiveTabsIPadFeature});
-
   BrowserViewWrangler* wrangler =
       [[BrowserViewWrangler alloc] initWithProfile:profile()
                                         sceneState:scene_state()
@@ -255,10 +249,6 @@ TEST_F(BrowserViewWranglerTest, TestBrowserList) {
 }
 
 TEST_F(BrowserViewWranglerTest, TestInactiveInterface) {
-  // Enabled inactive tabs feature.
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitAndEnableFeature(kInactiveTabsIPadFeature);
-
   BrowserViewWrangler* wrangler =
       [[BrowserViewWrangler alloc] initWithProfile:profile()
                                         sceneState:scene_state()

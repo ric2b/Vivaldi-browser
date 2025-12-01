@@ -2690,29 +2690,123 @@ TEST_F(CompositorFrameReportingControllerTest, JankyScrolledFrameArg) {
   ASSERT_TRUE(status.ok()) << status.message();
   constexpr char query[] =
       R"(
-      SELECT COUNT(*) AS cnt
+      SELECT
+        EXTRACT_ARG(
+          slice.arg_set_id,
+          'event_latency.is_janky_scrolled_frame'
+        ) AS is_janky,
+        EXTRACT_ARG(
+          slice.arg_set_id,
+          'event_latency.is_janky_scrolled_frame_v3'
+        ) AS is_janky_v3
       FROM slice
       WHERE name = 'EventLatency'
-      AND EXTRACT_ARG(slice.arg_set_id,
-             'event_latency.is_janky_scrolled_frame') %s
+      ORDER BY ts ASC
       )";
-  auto result = ttp.RunQuery(base::StringPrintf(query, "= FALSE"));
+  auto result = ttp.RunQuery(query);
   ASSERT_TRUE(result.has_value()) << result.error();
   EXPECT_THAT(result.value(),
-              ::testing::ElementsAre(std::vector<std::string>{"cnt"},
-                                     std::vector<std::string>{"1"}));
+              ::testing::ElementsAre(
+                  std::vector<std::string>{"is_janky", "is_janky_v3"},
+                  std::vector<std::string>{"0", "0"},
+                  std::vector<std::string>{"1", "1"},
+                  std::vector<std::string>{"[NULL]", "[NULL]"}));
+}
 
-  result = ttp.RunQuery(base::StringPrintf(query, "= TRUE"));
-  ASSERT_TRUE(result.has_value()) << result.error();
-  EXPECT_THAT(result.value(),
-              ::testing::ElementsAre(std::vector<std::string>{"cnt"},
-                                     std::vector<std::string>{"1"}));
+/*
+Test if the new v3 metric logic identifies scroll jank in a scenario where a
+frame is dropped.
+vsync                   v1     v2      v3
+        |       |       |       |      |
+input  GSU1    GSU2    GSU3
+        |       |       |
+F1:     |---------------|
+F2:             |---------------x (throttled)
+F3:                     |--------------|
+The new v3 metric should identify scroll jank because F2 got dropped even though
+there was consistent input for a frame to have been generated.
+*/
+TEST_F(CompositorFrameReportingControllerTest, JankyThrottledScrolledFrameArg) {
+  base::test::TestTraceProcessor ttp;
+  ttp.StartTrace("input");
 
-  result = ttp.RunQuery(base::StringPrintf(query, "IS NULL"));
+  std::unique_ptr<EventMetrics> metrics_1 = CreateScrollUpdateEventMetrics(
+      ui::ScrollInputType::kWheel, /*is_inertial=*/false,
+      ScrollUpdateEventMetrics::ScrollUpdateType::kStarted, std::nullopt);
+  base::TimeTicks event1_generation_ts = metrics_1->GetDispatchStageTimestamp(
+      EventMetrics::DispatchStage::kGenerated);
+
+  std::unique_ptr<EventMetrics> metrics_2 = CreateScrollUpdateEventMetrics(
+      ui::ScrollInputType::kWheel, /*is_inertial=*/false,
+      ScrollUpdateEventMetrics::ScrollUpdateType::kContinued, std::nullopt);
+  base::TimeTicks event2_generation_ts = metrics_2->GetDispatchStageTimestamp(
+      EventMetrics::DispatchStage::kGenerated);
+
+  std::unique_ptr<EventMetrics> metrics_3 = CreateScrollUpdateEventMetrics(
+      ui::ScrollInputType::kWheel, /*is_inertial=*/false,
+      ScrollUpdateEventMetrics::ScrollUpdateType::kContinued, std::nullopt);
+  base::TimeTicks event3_generation_ts = metrics_3->GetDispatchStageTimestamp(
+      EventMetrics::DispatchStage::kGenerated);
+
+  base::TimeDelta vsync_interval = event2_generation_ts - event1_generation_ts;
+  args_.interval = vsync_interval;
+
+  SimulateBeginImplFrame();  // BF1
+  reporting_controller_.OnFinishImplFrame(current_id_);
+  EventMetrics::List metrics_list_1;
+  metrics_list_1.push_back(std::move(metrics_1));
+  SimulateSubmitCompositorFrame({{}, std::move(metrics_list_1)});
+
+  viz::FrameTimingDetails details_1 = {};
+  details_1.presentation_feedback.timestamp =
+      event1_generation_ts + base::Microseconds(200);
+  reporting_controller_.DidPresentCompositorFrame(*current_token_,
+                                                  details_1);  // PF1
+
+  SimulateBeginImplFrame();  // BF2
+  reporting_controller_.OnFinishImplFrame(current_id_);
+  AdvanceNowByMs(10);
+  reporting_controller_.DidNotProduceFrame(current_id_,
+                                           FrameSkippedReason::kDrawThrottled);
+
+  SimulateBeginImplFrame();  // BF3
+  reporting_controller_.OnFinishImplFrame(current_id_);
+  EventMetrics::List metrics_list_3;
+  metrics_list_3.push_back(std::move(metrics_2));
+  metrics_list_3.push_back(std::move(metrics_3));
+  SimulateSubmitCompositorFrame({{}, std::move(metrics_list_3)});
+
+  viz::FrameTimingDetails details_3 = {};
+  details_3.presentation_feedback.timestamp =
+      event3_generation_ts + base::Microseconds(200);
+  reporting_controller_.DidPresentCompositorFrame(*current_token_,
+                                                  details_3);  // PF3
+
+  absl::Status status = ttp.StopAndParseTrace();
+  ASSERT_TRUE(status.ok()) << status.message();
+  constexpr char query[] =
+      R"(
+      SELECT
+        EXTRACT_ARG(
+          slice.arg_set_id,
+          'event_latency.is_janky_scrolled_frame'
+        ) AS is_janky,
+        EXTRACT_ARG(
+          slice.arg_set_id,
+          'event_latency.is_janky_scrolled_frame_v3'
+        ) AS is_janky_v3
+      FROM slice
+      WHERE name = 'EventLatency'
+      ORDER BY ts ASC
+      )";
+  auto result = ttp.RunQuery(query);
   ASSERT_TRUE(result.has_value()) << result.error();
   EXPECT_THAT(result.value(),
-              ::testing::ElementsAre(std::vector<std::string>{"cnt"},
-                                     std::vector<std::string>{"1"}));
+              ::testing::ElementsAre(
+                  std::vector<std::string>{"is_janky", "is_janky_v3"},
+                  std::vector<std::string>{"0", "0"},
+                  std::vector<std::string>{"[NULL]", "1"},
+                  std::vector<std::string>{"0", "[NULL]"}));
 }
 
 // A simple test that ensures the vsync_interval is copied onto the

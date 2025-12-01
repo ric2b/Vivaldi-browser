@@ -38,10 +38,12 @@ import org.chromium.base.test.util.CriteriaHelper;
 import org.chromium.base.test.util.DisableIf;
 import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Feature;
+import org.chromium.base.test.util.Features;
 import org.chromium.base.test.util.Restriction;
 import org.chromium.chrome.browser.ChromeTabbedActivity;
 import org.chromium.chrome.browser.app.ChromeActivity;
 import org.chromium.chrome.browser.compositor.layouts.LayoutManagerImpl;
+import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.layouts.LayoutTestUtils;
 import org.chromium.chrome.browser.layouts.LayoutType;
@@ -72,6 +74,7 @@ import org.chromium.ui.util.ColorUtils;
 @RunWith(ChromeJUnit4ClassRunner.class)
 @Batch(Batch.PER_CLASS)
 @CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE})
+@Features.DisableFeatures({ChromeFeatureList.EDGE_TO_EDGE_EVERYWHERE})
 public class StatusBarColorControllerTest {
     @ClassRule
     public static ChromeTabbedActivityTestRule sActivityTestRule =
@@ -161,8 +164,7 @@ public class StatusBarColorControllerTest {
     public void testStatusBarColorNtp() {
         ChromeTabbedActivity activity = sActivityTestRule.getActivity();
         final @ColorInt int expectedColor =
-                ChromeColors.getSurfaceColor(
-                        activity, R.dimen.home_surface_background_color_elevation);
+                ContextCompat.getColor(activity, R.color.home_surface_background_color);
 
         sActivityTestRule.loadUrlInNewTab(UrlConstants.NTP_URL, false);
         NewTabPageTestUtils.waitForNtpLoaded(activity.getActivityTab());
@@ -247,8 +249,7 @@ public class StatusBarColorControllerTest {
 
         mOmniboxUtils.requestFocus();
         final @ColorInt int focusedColor =
-                ChromeColors.getSurfaceColor(
-                        activity, R.dimen.omnibox_suggestion_dropdown_bg_elevation);
+                ContextCompat.getColor(activity, R.color.omnibox_suggestion_dropdown_bg);
 
         statusBarColorController.onSuggestionDropdownScroll();
         final @ColorInt int scrolledColor =
@@ -284,8 +285,7 @@ public class StatusBarColorControllerTest {
     public void testBrandColorIgnoredWhenOmniboxIsFocused() throws Exception {
         ChromeTabbedActivity activity = sActivityTestRule.getActivity();
         final @ColorInt int expectedFocusedColor =
-                ChromeColors.getSurfaceColor(
-                        activity, R.dimen.omnibox_suggestion_dropdown_bg_elevation);
+                ContextCompat.getColor(activity, R.color.omnibox_suggestion_dropdown_bg);
 
         String pageWithBrandColorUrl =
                 sActivityTestRule
@@ -309,8 +309,7 @@ public class StatusBarColorControllerTest {
             throws Exception {
         ChromeTabbedActivity activity = sActivityTestRule.getActivity();
         final @ColorInt int expectedFocusedColor =
-                ChromeColors.getSurfaceColor(
-                        activity, R.dimen.omnibox_suggestion_dropdown_bg_elevation);
+                ContextCompat.getColor(activity, R.color.omnibox_suggestion_dropdown_bg);
 
         String pageWithBrandColorUrl =
                 sActivityTestRule

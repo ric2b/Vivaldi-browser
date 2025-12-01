@@ -37,12 +37,10 @@ export const reloadDockableFrontEnd = async () => {
 };
 
 export const deviceModeIsEnabled = async () => {
-  const deviceToolbarToggler = await waitFor(DEVICE_TOOLBAR_TOGGLER_SELECTOR);
-  const pressed = await deviceToolbarToggler.evaluate(element => {
-    const button = element.shadowRoot?.querySelector('.primary-toggle') as HTMLButtonElement;
-    return button.getAttribute('aria-pressed');
-  });
-  return pressed === 'true';
+  // Check the userAgent string to see whether emulation is really enabled.
+  const {target} = getBrowserAndPages();
+  const userAgent = await target.evaluate(() => navigator.userAgent);
+  return userAgent.includes('Mobile');
 };
 
 export const clickDeviceModeToggler = async () => {
@@ -56,14 +54,6 @@ export const openDeviceToolbar = async () => {
   }
   await clickDeviceModeToggler();
   await waitFor(DEVICE_TOOLBAR_SELECTOR);
-};
-
-export const deviceModeButtonCanEnable = async () => {
-  const deviceToolbarToggler = await waitFor(DEVICE_TOOLBAR_TOGGLER_SELECTOR);
-  return await deviceToolbarToggler.evaluate(element => {
-    const button = element.shadowRoot?.querySelector('.primary-toggle') as HTMLButtonElement;
-    return !button.disabled;
-  });
 };
 
 export const showMediaQueryInspector = async () => {
@@ -182,13 +172,13 @@ export const clickToggleButton = async () => {
 export const getWidthOfDevice = async () => {
   // Read the width of spanned duo to make sure spanning works.
   const widthInput = await waitFor(SCREEN_DIM_INPUT_SELECTOR);
-  return widthInput.evaluate(e => (e as HTMLInputElement).value);
+  return await widthInput.evaluate(e => (e as HTMLInputElement).value);
 };
 
 export const getZoom = async () => {
   // Read the width of spanned duo to make sure spanning works.
   const widthInput = await waitFor(ZOOM_LIST_DROPDOWN_SELECTOR);
-  return widthInput.evaluate(e => (e as HTMLInputElement).innerText);
+  return await widthInput.evaluate(e => (e as HTMLInputElement).innerText);
 };
 
 export const toggleAutoAdjustZoom = async () => {

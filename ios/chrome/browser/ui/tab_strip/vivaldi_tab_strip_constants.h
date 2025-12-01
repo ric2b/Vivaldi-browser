@@ -6,6 +6,10 @@
 #import <Foundation/Foundation.h>
 #import <UIKit/UIKit.h>
 
+#pragma mark - ASSETS
+// Icon for the new tab
+extern NSString* vTabStripNewTab;
+
 #pragma mark - COLORS
 // The default color of the tab strip background
 extern NSString* const vTabStripDefaultBackgroundColor;
@@ -17,10 +21,8 @@ extern NSString* const vTabViewNotSelectedBackgroundColor;
 extern NSString* const vTabViewSelectedTintColor;
 // The tint color for the tab view items when the tabs are not selected
 extern NSString* const vTabViewNotSelectedTintColor;
-// Opacity for background tab view for dark tint color
-extern CGFloat const vTabViewDarkTintOpacity;
-// Opacity for background tab view for light tint color
-extern CGFloat const vTabViewLightTintOpacity;
+// Opacity for background tab view for tint color
+extern CGFloat const vTabViewBackgroundColorOpacity;
 
 #pragma mark - SIZES
 // Corner radius for vivaldi tab view background

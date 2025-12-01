@@ -5,11 +5,14 @@
 #ifndef V8_OBJECTS_DESCRIPTOR_ARRAY_INL_H_
 #define V8_OBJECTS_DESCRIPTOR_ARRAY_INL_H_
 
+#include "src/objects/descriptor-array.h"
+// Include the non-inl header before the rest of the headers.
+
 #include "src/execution/isolate.h"
 #include "src/handles/maybe-handles-inl.h"
 #include "src/heap/heap-write-barrier.h"
 #include "src/heap/heap.h"
-#include "src/objects/descriptor-array.h"
+#include "src/objects/api-callbacks.h"
 #include "src/objects/dictionary.h"
 #include "src/objects/field-type.h"
 #include "src/objects/heap-object-inl.h"
@@ -174,6 +177,19 @@ ObjectSlot DescriptorArray::GetDescriptorSlot(int descriptor) {
   // address that comes after the last descriptor (for iterating).
   DCHECK_LE(descriptor, number_of_all_descriptors());
   return RawField(OffsetOfDescriptorAt(descriptor));
+}
+
+bool DescriptorArray::IsInitializedDescriptor(
+    InternalIndex descriptor_number) const {
+  DCHECK_LT(descriptor_number.as_int(), number_of_descriptors());
+  int entry_offset = OffsetOfDescriptorAt(descriptor_number.as_int());
+  PtrComprCageBase cage_base = GetPtrComprCageBase(*this);
+  Tagged<Object> maybe_name =
+      EntryKeyField::Relaxed_Load(cage_base, *this, entry_offset);
+  bool is_initialized = !IsUndefined(maybe_name);
+  DCHECK_IMPLIES(is_initialized,
+                 IsSmi(EntryDetailsField::Relaxed_Load(*this, entry_offset)));
+  return is_initialized;
 }
 
 Tagged<Name> DescriptorArray::GetKey(InternalIndex descriptor_number) const {

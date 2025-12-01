@@ -16,14 +16,12 @@ ts_library("unittests") {
     "InteractionsTrackAppender.test.ts",
     "LayoutShiftsTrackAppender.test.ts",
     "NetworkTrackAppender.test.ts",
-    "ServerTimingsTrackAppender.test.ts",
     "ThreadAppender.test.ts",
     "TimingsTrackAppender.test.ts",
   ]
 
   deps = [
     "../../../core/sdk:bundle",
-    "../../../models/timeline_model:bundle",
     "../../../models/trace/handlers:unittests",
     "../../../panels/timeline:bundle",
     "../../../testing",

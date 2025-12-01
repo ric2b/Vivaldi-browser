@@ -13,17 +13,17 @@
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "build/build_config.h"
-#include "build/chromeos_buildflags.h"
 #include "gpu/command_buffer/common/gles2_cmd_utils.h"
 #include "gpu/command_buffer/service/context_group.h"
 #include "gpu/command_buffer/service/gpu_switches.h"
 #include "gpu/config/gpu_finch_features.h"
 #include "skia/buildflags.h"
 #include "ui/gl/gl_bindings.h"
+#include "ui/gl/gl_features.h"
 #include "ui/gl/gl_implementation.h"
+#include "ui/gl/gl_surface_egl.h"
 #include "ui/gl/gl_switches.h"
 #include "ui/gl/gl_utils.h"
-#include "ui/gl/gl_surface_egl.h"
 
 namespace gpu {
 namespace gles2 {
@@ -189,6 +189,8 @@ gl::GLContextAttribs GenerateGLContextAttribsForCompositor(
     attribs.global_texture_share_group = true;
     attribs.global_semaphore_share_group = true;
 
+    attribs.passthrough_shaders = features::IsANGLEPassthroughShadersAllowed();
+
     // Disable resource initialization and buffer bounds checks for trusted
     // contexts.
     attribs.robust_resource_initialization = false;
@@ -209,10 +211,6 @@ gl::GLContextAttribs GenerateGLContextAttribsForCompositor(
 
 bool UsePassthroughCommandDecoder(const base::CommandLine* command_line) {
   return gl::UsePassthroughCommandDecoder(command_line);
-}
-
-bool PassthroughCommandDecoderSupported() {
-  return gl::PassthroughCommandDecoderSupported();
 }
 
 GpuPreferences ParseGpuPreferences(const base::CommandLine* command_line) {

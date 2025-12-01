@@ -21071,7 +21071,38 @@ Set libswscale input parameters for scaling algorithms that need them. See
 complete documentation. If not explicitly specified the filter applies
 empty parameters.
 
+@item intent
+Set the ICC rendering intent to use when transforming between different color
+spaces. It accepts the following values:
 
+@table @samp
+@item perceptual
+Use a perceptually guided tone and gamut mapping curve. The exact details of
+the mapping used may change at any time and should not be relied on as stable.
+This intent is recommended for final viewing of image/video content in typical
+viewing settings.
+
+@item relative_colorimetric
+Statically clip out-of-gamut colors using a colorimetric clipping curve which
+attempts to find the colorimetrically least dissimilar in-gamut color. This
+intent performs white point adaptation and black point adaptation. This is
+the default. This intent is recommended wherever faithful color reproduction
+is of the utmost importance, even at the cost of clipping.
+
+@item absolute_colorimetric
+Hard clip out-of-gamut colors with no attempt at white or black point
+reproduction. This intent will reproduce in-gamut colors 1:1 on the output
+display as they would appear on the reference display, assuming the output
+display is appropriately calibrated.
+
+@item saturation
+Performs saturation mapping - that is, stretches the input color volume
+directly onto the output color volume, in non-linear fashion that preserves the
+original signal appearance as much as possible. This intent is recommended for
+signal content evaluation, as it will not lead to any clipping. It is roughly
+analogous to not performing any color mapping, although it still takes into
+account the mastering display primaries and any differences in encoding TRC.
+@end table
 
 @item size, s
 Set the video size. For the syntax of this option, check the
@@ -21156,6 +21187,62 @@ is used by default. Possible values:
 @item top
 @item bottomleft
 @item bottom
+@end table
+
+@item in_primaries
+@item out_primaries
+Set in/output RGB primaries.
+
+This allows the autodetected value to be overridden as well as allows forcing
+a specific value used for the output and encoder. Possible values:
+
+@table @samp
+@item auto
+Choose automatically. This is the default.
+
+@item bt709
+@item bt470m
+@item bt470bg
+@item smpte170m
+@item smpte240m
+@item film
+@item bt2020
+@item smpte428
+@item smpte431
+@item smpte432
+@item jedec-p22
+@item ebu3213
+@end table
+
+@item in_transfer
+@item out_transfer
+Set in/output transfer response curve (TRC).
+
+This allows the autodetected value to be overridden as well as allows forcing
+a specific value used for the output and encoder. Possible values:
+
+@table @samp
+@item auto
+Choose automatically. This is the default.
+
+@item bt709
+@item bt470m
+@item gamma22
+@item bt470bg
+@item gamma28
+@item smpte170m
+@item smpte240m
+@item linear
+@item iec61966-2-1
+@item srgb
+@item iec61966-2-4
+@item xvycc
+@item bt1361e
+@item bt2020-10
+@item bt2020-12
+@item smpte2084
+@item smpte428
+@item arib-std-b67
 @end table
 
 @item force_original_aspect_ratio

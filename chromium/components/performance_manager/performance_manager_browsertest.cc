@@ -21,6 +21,7 @@
 #include "content/public/test/browser_test.h"
 #include "content/public/test/content_browser_test_utils.h"
 #include "content/public/test/fenced_frame_test_util.h"
+#include "content/public/test/url_loader_interceptor.h"
 #include "content/shell/browser/shell.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -52,27 +53,8 @@ IN_PROC_BROWSER_TEST_F(PerformanceManagerBrowserTest,
   base::WeakPtr<FrameNode> frame_node =
       PerformanceManager::GetFrameNodeForRenderFrameHost(rfh);
 
-  // Post a task to the Graph and make it call a function on the UI thread that
-  // will ensure that |frame_node| is really associated with |rfh|.
-
-  base::RunLoop run_loop;
-  auto check_rfh_on_main_thread =
-      base::BindLambdaForTesting([&](const RenderFrameHostProxy& rfh_proxy) {
-        EXPECT_EQ(rfh, rfh_proxy.Get());
-        run_loop.Quit();
-      });
-
-  auto call_on_graph_cb = base::BindLambdaForTesting([&]() {
-    EXPECT_TRUE(frame_node.get());
-    content::GetUIThreadTaskRunner({})->PostTask(
-        FROM_HERE, base::BindOnce(std::move(check_rfh_on_main_thread),
-                                  frame_node->GetRenderFrameHostProxy()));
-  });
-
-  PerformanceManager::CallOnGraph(FROM_HERE, call_on_graph_cb);
-
-  // Wait for |check_rfh_on_main_thread| to be called.
-  run_loop.Run();
+  const RenderFrameHostProxy& rfh_proxy = frame_node->GetRenderFrameHostProxy();
+  EXPECT_EQ(rfh, rfh_proxy.Get());
 
   // This closes the window, and destroys the underlying WebContents.
   shell()->Close();
@@ -80,15 +62,7 @@ IN_PROC_BROWSER_TEST_F(PerformanceManagerBrowserTest,
 
   // After deleting |contents| the corresponding FrameNode WeakPtr should be
   // invalid.
-  base::RunLoop run_loop_after_contents_reset;
-  auto quit_closure = run_loop_after_contents_reset.QuitClosure();
-  auto call_on_graph_cb_2 = base::BindLambdaForTesting([&]() {
-    EXPECT_FALSE(frame_node.get());
-    std::move(quit_closure).Run();
-  });
-
-  PerformanceManager::CallOnGraph(FROM_HERE, call_on_graph_cb_2);
-  run_loop_after_contents_reset.Run();
+  EXPECT_FALSE(frame_node);
 }
 
 IN_PROC_BROWSER_TEST_F(PerformanceManagerBrowserTest, OpenerTrackingWorks) {
@@ -150,6 +124,59 @@ IN_PROC_BROWSER_TEST_F(PerformanceManagerBrowserTest, UsesWebRTC) {
 
   EXPECT_TRUE(page->UsesWebRTC());
   EXPECT_TRUE(page->GetMainFrameNode()->UsesWebRTC());
+
+  graph->RemovePageNodeObserver(&waiter);
+}
+
+namespace {
+
+class FreezingOriginTrialOptOutWaiter : public PageNodeObserver {
+ public:
+  FreezingOriginTrialOptOutWaiter() = default;
+
+  void WaitForFreezingOriginTrialOptOut() { run_loop_.Run(); }
+
+  // PageNodeObserver:
+  void OnPageHasFreezingOriginTrialOptOutChanged(
+      const PageNode* page_node) override {
+    run_loop_.Quit();
+  }
+
+ private:
+  base::RunLoop run_loop_;
+};
+
+}  // namespace
+
+// Integration test for freezing origin trial opt-out tracking on PageNode and
+// FrameNode.
+//
+// This test uses `content::URLLoaderInterceptor` instead of
+// `net::test::EmbeddedTestServer` to control the port on which the test data is
+// served, which is required because an Origin Trial token is tied to a specific
+// origin (including port).
+IN_PROC_BROWSER_TEST_F(PerformanceManagerBrowserTest,
+                       HasFreezingOriginTrialOptOut) {
+  Graph* graph = PerformanceManager::GetGraph();
+
+  FreezingOriginTrialOptOutWaiter waiter;
+  graph->AddPageNodeObserver(&waiter);
+
+  const GURL kHost("https://example.test");
+  auto interceptor =
+      content::URLLoaderInterceptor::ServeFilesFromDirectoryAtOrigin(
+          "components/test/data/performance_manager",
+          GURL("https://example.test"));
+  ASSERT_TRUE(
+      NavigateToURL(shell(), kHost.Resolve("page_freeze_ot_opt_out.html")));
+
+  auto* contents = shell()->web_contents();
+  auto page = PerformanceManager::GetPrimaryPageNodeForWebContents(contents);
+
+  waiter.WaitForFreezingOriginTrialOptOut();
+
+  EXPECT_TRUE(page->HasFreezingOriginTrialOptOut());
+  EXPECT_TRUE(page->GetMainFrameNode()->HasFreezingOriginTrialOptOut());
 
   graph->RemovePageNodeObserver(&waiter);
 }

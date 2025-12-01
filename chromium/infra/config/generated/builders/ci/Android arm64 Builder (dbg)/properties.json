@@ -10,7 +10,7 @@
             "builder_id": {
               "bucket": "ci",
               "builder": "Android WebView O (dbg)",
-              "project": "chromium-m134"
+              "project": "chromium-m136"
             },
             "builder_spec": {
               "build_gs_bucket": "chromium-android-archive",
@@ -20,14 +20,16 @@
                 "apply_configs": [
                   "remove_all_system_webviews"
                 ],
-                "config": "main_builder_mb"
+                "config": "base_config"
               },
               "legacy_chromium_config": {
                 "apply_configs": [
+                  "mb",
                   "download_xr_test_apks"
                 ],
                 "build_config": "Debug",
-                "config": "main_builder_mb",
+                "config": "main_builder",
+                "target_arch": "arm",
                 "target_bits": 64,
                 "target_platform": "android"
               },
@@ -40,7 +42,7 @@
               "parent": {
                 "bucket": "ci",
                 "builder": "Android arm64 Builder (dbg)",
-                "project": "chromium-m134"
+                "project": "chromium-m136"
               }
             }
           },
@@ -48,7 +50,7 @@
             "builder_id": {
               "bucket": "ci",
               "builder": "Android WebView P (dbg)",
-              "project": "chromium-m134"
+              "project": "chromium-m136"
             },
             "builder_spec": {
               "build_gs_bucket": "chromium-android-archive",
@@ -58,14 +60,16 @@
                 "apply_configs": [
                   "remove_all_system_webviews"
                 ],
-                "config": "main_builder_mb"
+                "config": "base_config"
               },
               "legacy_chromium_config": {
                 "apply_configs": [
+                  "mb",
                   "download_xr_test_apks"
                 ],
                 "build_config": "Debug",
-                "config": "main_builder_mb",
+                "config": "main_builder",
+                "target_arch": "arm",
                 "target_bits": 64,
                 "target_platform": "android"
               },
@@ -78,7 +82,7 @@
               "parent": {
                 "bucket": "ci",
                 "builder": "Android arm64 Builder (dbg)",
-                "project": "chromium-m134"
+                "project": "chromium-m136"
               }
             }
           },
@@ -86,21 +90,23 @@
             "builder_id": {
               "bucket": "ci",
               "builder": "Android arm64 Builder (dbg)",
-              "project": "chromium-m134"
+              "project": "chromium-m136"
             },
             "builder_spec": {
               "build_gs_bucket": "chromium-android-archive",
               "builder_group": "chromium.android",
               "execution_mode": "COMPILE_AND_TEST",
               "legacy_android_config": {
-                "config": "main_builder_mb"
+                "config": "base_config"
               },
               "legacy_chromium_config": {
                 "apply_configs": [
+                  "mb",
                   "download_xr_test_apks"
                 ],
                 "build_config": "Debug",
-                "config": "main_builder_mb",
+                "config": "main_builder",
+                "target_arch": "arm",
                 "target_bits": 64,
                 "target_platform": "android"
               },
@@ -116,21 +122,23 @@
             "builder_id": {
               "bucket": "ci",
               "builder": "Oreo Phone Tester",
-              "project": "chromium-m134"
+              "project": "chromium-m136"
             },
             "builder_spec": {
               "build_gs_bucket": "chromium-android-archive",
               "builder_group": "chromium.android",
               "execution_mode": "TEST",
               "legacy_android_config": {
-                "config": "main_builder_mb"
+                "config": "base_config"
               },
               "legacy_chromium_config": {
                 "apply_configs": [
+                  "mb",
                   "download_xr_test_apks"
                 ],
                 "build_config": "Debug",
-                "config": "main_builder_mb",
+                "config": "main_builder",
+                "target_arch": "arm",
                 "target_bits": 64,
                 "target_platform": "android"
               },
@@ -143,7 +151,7 @@
               "parent": {
                 "bucket": "ci",
                 "builder": "Android arm64 Builder (dbg)",
-                "project": "chromium-m134"
+                "project": "chromium-m136"
               }
             }
           },
@@ -151,21 +159,23 @@
             "builder_id": {
               "bucket": "ci",
               "builder": "android-pie-arm64-dbg",
-              "project": "chromium-m134"
+              "project": "chromium-m136"
             },
             "builder_spec": {
               "build_gs_bucket": "chromium-android-archive",
               "builder_group": "chromium.android",
               "execution_mode": "TEST",
               "legacy_android_config": {
-                "config": "main_builder_mb"
+                "config": "base_config"
               },
               "legacy_chromium_config": {
                 "apply_configs": [
+                  "mb",
                   "download_xr_test_apks"
                 ],
                 "build_config": "Debug",
-                "config": "main_builder_mb",
+                "config": "main_builder",
+                "target_arch": "arm",
                 "target_bits": 64,
                 "target_platform": "android"
               },
@@ -178,7 +188,7 @@
               "parent": {
                 "bucket": "ci",
                 "builder": "Android arm64 Builder (dbg)",
-                "project": "chromium-m134"
+                "project": "chromium-m136"
               }
             }
           }
@@ -188,29 +198,29 @@
         {
           "bucket": "ci",
           "builder": "Android arm64 Builder (dbg)",
-          "project": "chromium-m134"
+          "project": "chromium-m136"
         }
       ],
       "builder_ids_in_scope_for_testing": [
         {
           "bucket": "ci",
           "builder": "Android WebView O (dbg)",
-          "project": "chromium-m134"
+          "project": "chromium-m136"
         },
         {
           "bucket": "ci",
           "builder": "Android WebView P (dbg)",
-          "project": "chromium-m134"
+          "project": "chromium-m136"
         },
         {
           "bucket": "ci",
           "builder": "Oreo Phone Tester",
-          "project": "chromium-m134"
+          "project": "chromium-m136"
         },
         {
           "bucket": "ci",
           "builder": "android-pie-arm64-dbg",
-          "project": "chromium-m134"
+          "project": "chromium-m136"
         }
       ],
       "mirroring_builder_group_and_names": [
@@ -234,18 +244,15 @@
       "targets_spec_directory": "src/infra/config/generated/builders/ci/Android arm64 Builder (dbg)/targets"
     }
   },
-  "$build/reclient": {
-    "instance": "rbe-chromium-trusted",
-    "metrics_project": "chromium-reclient-metrics",
-    "scandeps_server": true
-  },
   "$build/siso": {
     "configs": [
       "builder"
     ],
+    "enable_cloud_monitoring": true,
     "enable_cloud_profiler": true,
     "enable_cloud_trace": true,
     "experiments": [],
+    "metrics_project": "chromium-reclient-metrics",
     "project": "rbe-chromium-trusted",
     "remote_jobs": 500
   },

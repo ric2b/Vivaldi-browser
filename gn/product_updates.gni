@@ -69,11 +69,13 @@ if (is_win) {
     vivaldi_release_file = "$root_gen_dir/vivaldi/vivaldi.release"
     inputs -= [
       "$root_out_dir/chrome.dll",
+      "$root_out_dir/chrome_elf.dll",
       "$root_out_dir/chrome.exe",
       release_file
     ]
     inputs += [
       "$root_out_dir/vivaldi.dll",
+      "$root_out_dir/vivaldi_elf.dll",
       "$root_out_dir/vivaldi.exe",
       "$root_out_dir/vivaldi_proxy.exe",
       "$root_out_dir/update_notifier.exe",

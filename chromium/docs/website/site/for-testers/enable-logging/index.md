@@ -50,8 +50,6 @@ to a log file
             `--log-file=c:\src\log.txt` as well also specifying the
             `--enable-logging` command line.
 
-*   To see WTF_LOG, use `--blink-platform-log-channels`
-
 Note that:
 
 *   If the environment variable CHROME_LOG_FILE is set, Chrome will

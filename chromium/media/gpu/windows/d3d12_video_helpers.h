@@ -5,7 +5,8 @@
 #ifndef MEDIA_GPU_WINDOWS_D3D12_VIDEO_HELPERS_H_
 #define MEDIA_GPU_WINDOWS_D3D12_VIDEO_HELPERS_H_
 
-#include <d3d12video.h>
+#include "third_party/microsoft_dxheaders/src/include/directx/d3d12video.h"
+// Windows SDK headers should be included after DirectX headers.
 
 #include "media/base/encoder_status.h"
 #include "media/gpu/windows/d3d12_video_encoder_wrapper.h"
@@ -16,6 +17,10 @@ EncoderStatus CheckD3D12VideoEncoderCodec(
     ID3D12VideoDevice* video_device,
     D3D12_FEATURE_DATA_VIDEO_ENCODER_CODEC* codec);
 
+// Get the supported configurations for the codec and profile. This method
+// handles the special variation of the usages for HEVC documented in
+// https://learn.microsoft.com/en-us/windows/win32/api/d3d12video/ns-d3d12video-d3d12_feature_data_video_encoder_codec_configuration_support#members
+// and always returns a supported configuration if there is any.
 EncoderStatus CheckD3D12VideoEncoderCodecConfigurationSupport(
     ID3D12VideoDevice* video_device,
     D3D12_FEATURE_DATA_VIDEO_ENCODER_CODEC_CONFIGURATION_SUPPORT* support);
@@ -36,6 +41,10 @@ EncoderStatus CheckD3D12VideoEncoderResourceRequirements(
 EncoderStatus CheckD3D12VideoEncoderSupport(
     ID3D12VideoDevice* video_device,
     D3D12_FEATURE_DATA_VIDEO_ENCODER_SUPPORT* support);
+
+EncoderStatus CheckD3D12VideoEncoderSupport1(
+    ID3D12VideoDevice* video_device,
+    D3D12_FEATURE_DATA_VIDEO_ENCODER_SUPPORT1* support);
 
 std::unique_ptr<D3D12VideoEncoderWrapper> CreateD3D12VideoEncoderWrapper(
     ID3D12VideoDevice* video_device,

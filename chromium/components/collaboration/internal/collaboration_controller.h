@@ -15,6 +15,7 @@
 #include "components/data_sharing/public/data_sharing_service.h"
 #include "components/data_sharing/public/group_data.h"
 #include "components/saved_tab_groups/public/types.h"
+#include "components/signin/public/identity_manager/identity_manager.h"
 
 namespace syncer {
 class SyncService;
@@ -38,9 +39,16 @@ class CollaborationController {
     // initialized and authentication status to be verified.
     kPending,
 
+    // Waiting on more information about a potentially managed account.
+    kWaitingForPolicyUpdate,
+
     // UI is showing authentication screens (sign-in/sync/access token). Waiting
     // for result.
     kAuthenticating,
+
+    // Waiting for tab group sync service and data sharing service to be ready
+    // to use.
+    kWaitingForServicesToInitialize,
 
     // Authentication is completed. Controller will check requirements for each
     // specific flows.
@@ -67,6 +75,9 @@ class CollaborationController {
 
     // Delegate is showing the manage people screen.
     kShowingManageScreen,
+
+    // A shared tab group has been deleted, cleaning up.
+    kCleaningUpSharedTabGroup,
 
     // The flow is cancelled.
     kCancel,
@@ -126,6 +137,7 @@ class CollaborationController {
       data_sharing::DataSharingService* data_sharing_service,
       tab_groups::TabGroupSyncService* tab_group_sync_service,
       syncer::SyncService* sync_service,
+      signin::IdentityManager* identity_manager,
       std::unique_ptr<CollaborationControllerDelegate> delegate,
       FinishCallback finish_and_delete);
   ~CollaborationController();
@@ -143,6 +155,9 @@ class CollaborationController {
     return tab_group_sync_service_.get();
   }
   syncer::SyncService* sync_service() { return sync_service_.get(); }
+  signin::IdentityManager* identity_manager() {
+    return identity_manager_.get();
+  }
   CollaborationService* collaboration_service() {
     return collaboration_service_.get();
   }
@@ -162,33 +177,61 @@ class CollaborationController {
   // service.
   void Exit();
 
+  // Cancels and exits the current flow.
+  void Cancel();
+
   // Helper functions used in tests.
   void SetStateForTesting(StateId state);
   StateId GetStateForTesting();
 
  private:
-  static constexpr std::array<std::pair<StateId, StateId>, 27>
+  static constexpr std::array<std::pair<StateId, StateId>, 35>
       kValidTransitions = {{
           // kPending transitions to:
           //
           //   kAuthenticating: After all initialization steps complete
           //   successfully and authentication status is not valid.
+          //   kWaitingForPolicyUpdate: Current account info are not ready.
           //   kCheckingFlowRequirements: After all initialization steps
           //   complete successfully and authentication status is valid.
           //   kError: An error occurred during initialization.
           {StateId::kPending, StateId::kAuthenticating},
-          {StateId::kPending, StateId::kCheckingFlowRequirements},
+          {StateId::kPending, StateId::kWaitingForPolicyUpdate},
+          {StateId::kPending, StateId::kWaitingForServicesToInitialize},
           {StateId::kPending, StateId::kError},
+
+          // kWaitingForPolicyUpdate transitions to:
+          //
+          //   kAuthenticating: Current account is not managed and sync consent
+          //   is needed.
+          //   kCheckingFlowRequirements: Current account is not managed.
+          //   kError: Current account is managed.
+          {StateId::kWaitingForPolicyUpdate, StateId::kAuthenticating},
+          {StateId::kWaitingForPolicyUpdate,
+           StateId::kCheckingFlowRequirements},
+          {StateId::kWaitingForPolicyUpdate, StateId::kError},
 
           // kAuthenticating transitions to:
           //
+          //   kWaitingForPolicyUpdate: Current account info are not ready.
           //   kCheckingFlowRequirements: After all authentication steps are
           //   completed and verified.
           //   kCancel: After the user cancels the process.
           //   kError: An error occurred during authentication.
-          {StateId::kAuthenticating, StateId::kCheckingFlowRequirements},
+          {StateId::kAuthenticating, StateId::kWaitingForPolicyUpdate},
+          {StateId::kAuthenticating, StateId::kWaitingForServicesToInitialize},
           {StateId::kAuthenticating, StateId::kCancel},
           {StateId::kAuthenticating, StateId::kError},
+
+          // kWaitingForServicesToInitialize transition to:
+          //
+          //   kCheckingFlowRequirements: After all services finish
+          //   initializing.
+          //   kError: An error occurred while waiting for service
+          //   initialization.
+          {StateId::kWaitingForServicesToInitialize,
+           StateId::kCheckingFlowRequirements},
+          {StateId::kWaitingForServicesToInitialize, StateId::kError},
 
           // kCheckingFlowRequirements transition to:
           //
@@ -268,7 +311,10 @@ class CollaborationController {
 
           // kShowingManageScreen transition to:
           //
+          //   kCleaningUpSharedTabGroup: When deletion happened on a manage
+          //   screen.
           //   kError: An error occurred while showing the manage people screen.
+          {StateId::kShowingManageScreen, StateId::kCleaningUpSharedTabGroup},
           {StateId::kShowingManageScreen, StateId::kError},
       }};
 
@@ -278,10 +324,12 @@ class CollaborationController {
   std::unique_ptr<ControllerState> current_state_;
 
   Flow flow_;
+  bool is_deleting_{false};
   const raw_ptr<CollaborationService> collaboration_service_;
   const raw_ptr<data_sharing::DataSharingService> data_sharing_service_;
   const raw_ptr<tab_groups::TabGroupSyncService> tab_group_sync_service_;
   const raw_ptr<syncer::SyncService> sync_service_;
+  const raw_ptr<signin::IdentityManager> identity_manager_;
   std::unique_ptr<CollaborationControllerDelegate> delegate_;
   FinishCallback finish_and_delete_;
   base::WeakPtrFactory<CollaborationController> weak_ptr_factory_{this};

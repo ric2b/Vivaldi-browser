@@ -17,22 +17,11 @@ pub mod pixels;
 pub mod stream;
 
 use crate::parser::mp4box::*;
+use crate::utils::*;
 use crate::*;
 
+use std::num::NonZero;
 use std::ops::Range;
-
-// Some HEIF fractional fields can be negative, hence Fraction and UFraction.
-// The denominator is always unsigned.
-
-/// cbindgen:field-names=[n,d]
-#[derive(Clone, Copy, Debug, Default)]
-#[repr(C)]
-pub struct Fraction(pub i32, pub u32);
-
-/// cbindgen:field-names=[n,d]
-#[derive(Clone, Copy, Debug, Default, PartialEq)]
-#[repr(C)]
-pub struct UFraction(pub u32, pub u32);
 
 // 'clap' fractions do not follow this pattern: both numerators and denominators
 // are used as i32, but they are signalled as u32 according to the specification
@@ -158,7 +147,7 @@ conversion_function!(u32_from_i32, u32, i32);
 conversion_function!(i32_from_u32, i32, u32);
 #[cfg(feature = "android_mediacodec")]
 conversion_function!(isize_from_i32, isize, i32);
-#[cfg(feature = "capi")]
+#[cfg(any(feature = "capi", feature = "android_mediacodec"))]
 conversion_function!(isize_from_u32, isize, u32);
 conversion_function!(isize_from_usize, isize, usize);
 #[cfg(feature = "android_mediacodec")]
@@ -221,15 +210,24 @@ pub(crate) fn find_icc(properties: &[ItemProperty]) -> AvifResult<Option<&Vec<u8
     Ok(single_icc)
 }
 
-pub(crate) fn check_limits(width: u32, height: u32, size_limit: u32, dimension_limit: u32) -> bool {
+pub(crate) fn check_limits(
+    width: u32,
+    height: u32,
+    size_limit: Option<NonZero<u32>>,
+    dimension_limit: Option<NonZero<u32>>,
+) -> bool {
     if height == 0 {
         return false;
     }
-    if width > size_limit / height {
-        return false;
+    if let Some(limit) = size_limit {
+        if width > limit.get() / height {
+            return false;
+        }
     }
-    if dimension_limit != 0 && (width > dimension_limit || height > dimension_limit) {
-        return false;
+    if let Some(limit) = dimension_limit {
+        if width > limit.get() || height > limit.get() {
+            return false;
+        }
     }
     true
 }
@@ -285,4 +283,9 @@ pub(crate) fn check_slice_range(len: usize, range: &Range<usize>) -> AvifResult<
         return Err(AvifError::NoContent);
     }
     Ok(())
+}
+
+pub(crate) fn is_auxiliary_type_alpha(aux_type: &str) -> bool {
+    aux_type == "urn:mpeg:mpegB:cicp:systems:auxiliary:alpha"
+        || aux_type == "urn:mpeg:hevc:2015:auxid:1"
 }

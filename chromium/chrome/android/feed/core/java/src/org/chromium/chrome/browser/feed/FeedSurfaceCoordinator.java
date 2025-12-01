@@ -23,6 +23,7 @@ import androidx.annotation.Nullable;
 import androidx.annotation.Px;
 import androidx.annotation.VisibleForTesting;
 import androidx.appcompat.content.res.AppCompatResources;
+import androidx.core.content.ContextCompat;
 import androidx.recyclerview.widget.RecyclerView;
 
 import org.chromium.base.Callback;
@@ -160,6 +161,7 @@ public class FeedSurfaceCoordinator
 
     // Used to handle padding adjustment when edge to edge is enabled.
     private @Nullable EdgeToEdgePadAdjuster mEdgePadAdjuster;
+    private final boolean mIsNewTabPageCustomizationEnabled;
 
     /** Provides the additional capabilities needed for the container view. */
     private class RootView extends FrameLayout {
@@ -430,6 +432,7 @@ public class FeedSurfaceCoordinator
         mToolbarHeight = toolbarHeight;
         mTabStripHeightSupplier = tabStripHeightSupplier;
         mUseStaggeredLayout = DeviceFormFactor.isNonMultiDisplayContextOnTablet(mActivity);
+        mIsNewTabPageCustomizationEnabled = ChromeFeatureList.sNewTabPageCustomization.isEnabled();
 
         mRootView = new RootView(mActivity);
         mRootView.setPadding(0, mTabStripHeightSupplier.get(), 0, 0);
@@ -879,8 +882,9 @@ public class FeedSurfaceCoordinator
                                 },
                                 gutterPadding));
             }
-            view.setBackground(
-                    AppCompatResources.getDrawable(mActivity, R.drawable.home_surface_background));
+
+            view.setBackgroundColor(
+                    ContextCompat.getColor(mActivity, R.color.home_surface_background_color));
 
             // Work around https://crbug.com/943873 where default focus highlight shows up after
             // toggling dark mode.
@@ -997,9 +1001,9 @@ public class FeedSurfaceCoordinator
             } else if (header == mSectionHeaderView) {
                 lateralPaddingsPx = 0;
                 if (!ChromeFeatureList.isEnabled(ChromeFeatureList.FEED_CONTAINMENT)) {
-                    mSectionHeaderView.setBackground(
-                            AppCompatResources.getDrawable(
-                                    mActivity, R.drawable.home_surface_background));
+                    mSectionHeaderView.setBackgroundColor(
+                            ContextCompat.getColor(
+                                    mActivity, R.color.home_surface_background_color));
                 }
             } else if (header == mSigninPromoView) {
                 hasSigninPromoView = true;
@@ -1043,7 +1047,7 @@ public class FeedSurfaceCoordinator
     /**
      * @return The {@link View} for this class.
      */
-    // TODO(crbug.com/327387704): Remove after uno phase 2 follow-up launch.
+    // TODO(crbug.com/352735671): Remove after uno phase 2 follow-up launch.
     @Deprecated
     View getSigninPromoView() {
         assert !ChromeFeatureList.isEnabled(ChromeFeatureList.UNO_PHASE_2_FOLLOW_UP);
@@ -1105,7 +1109,9 @@ public class FeedSurfaceCoordinator
             mScrollableContainerDelegate = new ScrollableContainerDelegateImpl();
         }
 
-        createHeaderIphScrollListener();
+        if (!mIsNewTabPageCustomizationEnabled) {
+            createHeaderIphScrollListener();
+        }
         createRefreshIphScrollListener();
     }
 

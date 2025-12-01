@@ -36,6 +36,7 @@ chromium-metrics-reviews@google.com.
   <int value="3" label="Translate text in region"/>
   <int value="4" label="Copy as image"/>
   <int value="5" label="Save as image"/>
+  <int value="6" label="Copy text in region"/>
 </enum>
 
 <!-- LINT.ThenChange(//chrome/browser/resources/lens/overlay/metrics_utils.ts:ContextMenuOption) -->
@@ -75,6 +76,7 @@ chromium-metrics-reviews@google.com.
   <int value="28" label="Low memory"/>
   <int value="29" label="Network issue"/>
   <int value="30" label="Escape key press on preselection toast"/>
+  <int value="31" label="Search with camera requested"/>
 </enum>
 
 <!-- LINT.ThenChange(//components/lens/lens_overlay_dismissal_source.h:LensOverlayDismissalSource) -->
@@ -102,6 +104,9 @@ chromium-metrics-reviews@google.com.
   <int value="3" label="Toolbar button"/>
   <int value="4" label="Find in page dialog button"/>
   <int value="5" label="Omnibox button"/>
+  <int value="6" label="LVF Shutter Button"/>
+  <int value="7" label="LVF Gallery"/>
+  <int value="8" label="Context Menu"/>
 </enum>
 
 <!-- LINT.ThenChange(//components/lens/lens_overlay_invocation_source.h:LensOverlayInvocationSource) -->
@@ -183,6 +188,8 @@ chromium-metrics-reviews@google.com.
 
 <!-- LINT.IfChange(LensOverlayMimeType) -->
 
+<!-- The MimeType enum used for UKM metrics. -->
+
 <enum name="MimeType">
   <summary>
     The mime type of the document the Lens Overlay is invoked on.
@@ -195,9 +202,26 @@ chromium-metrics-reviews@google.com.
   <int value="5" label="Video"/>
   <int value="6" label="Audio"/>
   <int value="7" label="Json"/>
+  <int value="8" label="AnnotatedPageContent"/>
 </enum>
 
 <!-- LINT.ThenChange(//components/lens/lens_overlay_mime_type.h:LensOverlayMimeType) -->
+
+<!-- LINT.IfChange(SheetDimensionState) -->
+
+<enum name="SheetDimensionState">
+  <summary>
+    Indicates the size of the bottom panel. When the panel is closed, value 0
+    &quot;hidden&quot; is used.
+  </summary>
+  <int value="0" label="Hidden"/>
+  <int value="1" label="Large"/>
+  <int value="2" label="Medium"/>
+  <int value="3" label="Peaking"/>
+  <int value="4" label="Consent"/>
+</enum>
+
+<!-- LINT.ThenChange(//ios/chrome/browser/lens_overlay/model/lens_overlay_sheet_detent_state.h:SheetDimensionState) -->
 
 <!-- LINT.IfChange(LensOverlaySidePanelResultStatus) -->
 

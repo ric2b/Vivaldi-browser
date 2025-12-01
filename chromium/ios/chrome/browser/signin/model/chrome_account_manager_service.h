@@ -11,6 +11,7 @@
 #import <vector>
 
 #import "base/memory/raw_ptr.h"
+#import "base/memory/weak_ptr.h"
 #import "base/observer_list.h"
 #import "base/scoped_observation.h"
 #import "base/types/pass_key.h"
@@ -45,8 +46,7 @@ class ChromeAccountManagerService : public KeyedService,
     // Handles change events for per-profile identity list.
     // Notifications with no account list update are possible, this has to be
     // handled by the observer.
-    // TODO(crbug.com/368409110): Rename to OnIdentitiesPerProfileChanged.
-    virtual void OnIdentityListChanged() {}
+    virtual void OnIdentitiesInProfileChanged() {}
 
     // Handles change events for on-device identity list.
     // Notifications with no account list update are possible, this has to be
@@ -54,8 +54,7 @@ class ChromeAccountManagerService : public KeyedService,
     virtual void OnIdentitiesOnDeviceChanged() {}
 
     // Called when an identity in this profile is updated.
-    // TODO(crbug.com/368409110): Rename to OnIdentitiesInProfileChanged.
-    virtual void OnIdentityUpdated(id<SystemIdentity> identity) {}
+    virtual void OnIdentityInProfileUpdated(id<SystemIdentity> identity) {}
 
     // Called when an identity on this device is updated.
     virtual void OnIdentityOnDeviceUpdated(id<SystemIdentity> identity) {}
@@ -113,7 +112,8 @@ class ChromeAccountManagerService : public KeyedService,
 
   // Returns the identity avatar. If the avatar is not available, it is fetched
   // in background (a notification will be received when it will be available),
-  // and the default avatar is returned (see `Observer::OnIdentityUpdated()`).
+  // and the default avatar is returned (see
+  // `Observer::OnIdentityInProfileUpdated()`).
   UIImage* GetIdentityAvatarWithIdentity(id<SystemIdentity> identity,
                                          IdentityAvatarSize size);
 
@@ -159,6 +159,9 @@ class ChromeAccountManagerService : public KeyedService,
       id<SystemIdentity> identity,
       id<RefreshAccessTokenError> error) override;
 
+  // Gets base::WeakPtr to the object.
+  base::WeakPtr<ChromeAccountManagerService> GetWeakPtr();
+
  private:
   // Updates PatternAccountRestriction with the current `local_state_`. If
   // `local_state_` is null, no identity will be filtered.
@@ -187,6 +190,8 @@ class ChromeAccountManagerService : public KeyedService,
   ResizedAvatarCache* large_avatar_cache_;
 
   const std::string profile_name_;
+
+  base::WeakPtrFactory<ChromeAccountManagerService> weak_ptr_factory_;
 };
 
 #endif  // IOS_CHROME_BROWSER_SIGNIN_MODEL_CHROME_ACCOUNT_MANAGER_SERVICE_H_

@@ -15,6 +15,14 @@ below.**
 
 [TOC]
 
+## Work With Us
+
+*   See the [playbook](./playbook.md) for step-by-step instructions on how to
+    work with Chromium DevTools to implement your idea.
+*   See the [Ecosystem Guide](./ecosystem/README.md) if you are working on Web
+    development tools and services, and would like to learn more about
+    integration and extension points with Chromium DevTools.
+
 ## Document Index
 
 ### Design Documents
@@ -36,6 +44,7 @@ below.**
 *   [Architecture of DevTools](architecture_of_devtools.md)
 *   [Chrome DevTools Protocol (CDP)](devtools-protocol.md)
 *   [Resource management in DevTools](resource_management.md)
+*   [UI Engineering](ui_engineering.md)
 
 ### Chromium
 

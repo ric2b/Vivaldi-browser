@@ -18,6 +18,7 @@
 #include "base/functional/callback_forward.h"
 #include "base/memory/raw_ptr.h"
 #include "base/strings/strcat.h"
+#include "third_party/skia/include/core/SkColor.h"
 #include "third_party/skia/include/core/SkPath.h"
 #include "ui/base/ime/text_input_flags.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -97,7 +98,7 @@ void SetupLabelView(views::Label* label,
   label->GetViewAccessibility().SetIsIgnored(true);
   label->SetBackgroundColor(SK_ColorTRANSPARENT);
   label->SetAutoColorReadabilityEnabled(false);
-  label->SetEnabledColorId(color_id);
+  label->SetEnabledColor(color_id);
   label->SetFontList(font_list);
   label->SetVisible(true);
   label->SetElideBehavior(gfx::ELIDE_TAIL);
@@ -111,8 +112,10 @@ void SetupLabelView(views::Label* label,
 // border.
 class SearchBoxBackground : public views::Background {
  public:
-  explicit SearchBoxBackground(int corner_radius)
-      : corner_radius_(corner_radius) {}
+  SearchBoxBackground(SkColor color, int corner_radius)
+      : corner_radius_(corner_radius) {
+    SetColor(color);
+  }
 
   SearchBoxBackground(const SearchBoxBackground&) = delete;
   SearchBoxBackground& operator=(const SearchBoxBackground&) = delete;
@@ -128,7 +131,7 @@ class SearchBoxBackground : public views::Background {
 
     cc::PaintFlags flags;
     flags.setAntiAlias(true);
-    flags.setColor(get_color());
+    flags.setColor(color().ConvertToSkColor(view->GetColorProvider()));
     canvas->DrawRoundRect(bounds, corner_radius_, flags);
   }
 
@@ -222,10 +225,9 @@ class SearchBoxTextfield : public views::Textfield {
       const views::SizeBounds& available_size) const override {
     // Overridden so the BoxLayoutView 'text_container_' can properly layout
     // the search box and ghost text.
-    const std::u16string& text = GetText();
     int width = 0;
     int height = 0;
-    gfx::Canvas::SizeStringInt(text, GetFontList(), &width, &height, 0,
+    gfx::Canvas::SizeStringInt(GetText(), GetFontList(), &width, &height, 0,
                                gfx::Canvas::NO_ELLIPSIS);
     gfx::Size size{width + GetCaretBounds().width(), height};
     const auto insets = GetInsets();
@@ -251,7 +253,7 @@ class SearchBoxTextfield : public views::Textfield {
     auto& accessibility = GetViewAccessibility();
     if (accessibility.GetIsIgnored()) {
       accessibility.SetIsIgnored(false);
-      NotifyAccessibilityEvent(ax::mojom::Event::kTreeChanged, true);
+      NotifyAccessibilityEventDeprecated(ax::mojom::Event::kTreeChanged, true);
     }
   }
 
@@ -406,7 +408,7 @@ SearchBoxViewBase::SearchBoxViewBase()
   content_container_->SetFlexForView(text_container_, 1,
                                      /*use_min_size=*/false);
 
-  text_container_->AddChildView(search_box_.get());
+  text_container_->AddChildViewRaw(search_box_.get());
   ghost_text_container_ =
       text_container_->AddChildView(std::make_unique<views::BoxLayoutView>());
   ghost_text_container_->SetCrossAxisAlignment(
@@ -466,8 +468,8 @@ void SearchBoxViewBase::Init(const InitParams& params) {
   layer()->SetFillsBoundsOpaquely(false);
   layer()->SetMasksToBounds(true);
   if (params.create_background) {
-    SetBackground(
-        std::make_unique<SearchBoxBackground>(kSearchBoxBorderCornerRadius));
+    SetBackground(std::make_unique<SearchBoxBackground>(
+        gfx::kPlaceholderColor, kSearchBoxBorderCornerRadius));
   }
 
   if (params.increase_child_view_padding) {
@@ -936,7 +938,7 @@ void SearchBoxViewBase::HandleSearchBoxEvent(ui::LocatedEvent* located_event) {
 void SearchBoxViewBase::UpdateBackgroundColor(SkColor color) {
   auto* search_box_background = background();
   if (search_box_background)
-    search_box_background->SetNativeControlColor(color);
+    search_box_background->SetColor(color);
   if (close_button_)
     close_button_->UpdateInkDropColorAndOpacity(color);
   if (assistant_button_)

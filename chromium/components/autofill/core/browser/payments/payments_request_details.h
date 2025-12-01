@@ -11,8 +11,8 @@
 #include <string>
 
 #include "base/values.h"
-#include "components/autofill/core/browser/data_model/autofill_profile.h"
-#include "components/autofill/core/browser/data_model/credit_card.h"
+#include "components/autofill/core/browser/data_model/addresses/autofill_profile.h"
+#include "components/autofill/core/browser/data_model/payments/credit_card.h"
 #include "components/autofill/core/browser/payments/autofill_error_dialog_context.h"
 #include "components/autofill/core/browser/payments/card_unmask_challenge_option.h"
 #include "components/autofill/core/browser/payments/card_unmask_delegate.h"
@@ -37,8 +37,9 @@ struct UnmaskDetails {
   // The type of authentication method suggested for card unmask.
   PaymentsAutofillClient::UnmaskAuthMethod unmask_auth_method =
       PaymentsAutofillClient::UnmaskAuthMethod::kUnknown;
-  // Set to true if the user should be offered opt-in for FIDO Authentication.
-  bool offer_fido_opt_in = false;
+  // Boolean to denote that the user is not opted-in to FIDO in the server, but
+  // is eligible for opt-in.
+  bool server_denotes_fido_eligible_but_not_opted_in = false;
   // Public Key Credential Request Options required for authentication.
   // https://www.w3.org/TR/webauthn/#dictdef-publickeycredentialrequestoptions
   base::Value::Dict fido_request_options;
@@ -344,12 +345,6 @@ enum UploadCardSource {
   UPSTREAM_SETTINGS_PAGE,
   // Single card is being uploaded after being scanned by OCR.
   UPSTREAM_CARD_OCR,
-  // 1+ cards are being uploaded from a migration request that started during
-  // a checkout flow.
-  LOCAL_CARD_MIGRATION_CHECKOUT_FLOW,
-  // 1+ cards are being uploaded from a migration request that was initiated
-  // from chrome://settings/payments.
-  LOCAL_CARD_MIGRATION_SETTINGS_PAGE,
 };
 
 // A collection of information received in the response for an
@@ -435,7 +430,7 @@ struct CreateBnplPaymentInstrumentRequestDetails {
   // The ID of the BNPL partner to be linked. i.e. Affirm
   std::string issuer_id;
   // An opaque token used to chain consecutive payments requests together.
-  std::u16string context_token;
+  std::string context_token;
   // Client encoded risk data.
   std::string risk_data;
 };

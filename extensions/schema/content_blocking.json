@@ -199,7 +199,10 @@
           "domain": {
             "type": "string"
           },
-          "blocked_count": {
+          "ads_blocked": {
+            "type": "integer"
+          },
+          "trackers_blocked": {
             "type": "integer"
           }
         }
@@ -771,9 +774,9 @@
         }
       },
       {
-        "name": "getBlockedCounters",
+        "name": "getAdBlockingStats",
         "type": "function",
-        "description": "Retrieves the amount of requests blocked since the last time the counters got reset.",
+        "description": "Retrieves the stats for ads and trackers blocked.",
         "parameters": [],
         "returns_async": {
           "name": "callback",
@@ -785,52 +788,38 @@
               "description": "The time at which the counters have been initialized or reset."
             },
             {
-              "name": "counters",
-              "type": "object",
-              "properties": {
-                "blocked_domains": {
-                  "type": "object",
-                  "properties": {
-                    "tracking": {
-                      "type": "array",
-                      "items": {
-                        "$ref": "BlockedCounter"
-                      }
-                    },
-                    "ad_blocking": {
-                      "type": "array",
-                      "items": {
-                        "$ref": "BlockedCounter"
-                      }
-                    }
-                  }
-                },
-                "blocked_for_origin": {
-                  "type": "object",
-                  "properties": {
-                    "tracking": {
-                      "type": "array",
-                      "items": {
-                        "$ref": "BlockedCounter"
-                      }
-                    },
-                    "ad_blocking": {
-                      "type": "array",
-                      "items": {
-                        "$ref": "BlockedCounter"
-                      }
-                    }
-                  }
-                }
-              }
+              "name": "total_ads_blocked",
+              "type": "integer",
+              "description": "Number of ads blocked."
+            },
+            {
+              "name": "total_trackers_blocked",
+              "type": "integer",
+              "description": "Number of trackers blocked."
+            },
+            {
+              "name": "blocked_domains",
+              "type": "array",
+              "items": {
+                 "$ref": "BlockedCounter"
+              },
+              "description": "Counter with domains blocked."
+            },
+            {
+              "name": "blocked_for_origin",
+              "type": "array",
+              "items": {
+                 "$ref": "BlockedCounter"
+              },
+              "description": "Counter with a domain that was an origin for blocking."
             }
           ]
         }
       },
       {
-        "name": "clearBlockedCounters",
+        "name": "clearAdBlockingStats",
         "type": "function",
-        "description": "Resets the counters used for getBlockedCounters",
+        "description": "Resets ad blocking stats.",
         "parameters": []
       },
       {

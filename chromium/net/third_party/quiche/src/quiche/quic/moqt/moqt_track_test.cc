@@ -4,20 +4,44 @@
 
 #include "quiche/quic/moqt/moqt_track.h"
 
+#include <cstdint>
 #include <memory>
 #include <optional>
 #include <utility>
+#include <vector>
 
+#include "absl/memory/memory.h"
 #include "absl/status/status.h"
+#include "quiche/quic/core/quic_alarm.h"
+#include "quiche/quic/core/quic_default_clock.h"
 #include "quiche/quic/moqt/moqt_messages.h"
 #include "quiche/quic/moqt/moqt_publisher.h"
 #include "quiche/quic/moqt/tools/moqt_mock_visitor.h"
 #include "quiche/quic/platform/api/quic_test.h"
+#include "quiche/quic/test_tools/quic_test_utils.h"
 #include "quiche/common/platform/api/quiche_mem_slice.h"
 
 namespace moqt {
 
 namespace test {
+
+namespace {
+
+class AlarmDelegate : public quic::QuicAlarm::DelegateWithoutContext {
+ public:
+  AlarmDelegate(bool* fired) : fired_(fired) {}
+  void OnAlarm() override { *fired_ = true; }
+  bool* fired_;
+};
+
+}  // namespace
+
+class SubscribeRemoteTrackPeer {
+ public:
+  static MoqtFetchTask* GetFetchTask(SubscribeRemoteTrack* track) {
+    return track->fetch_task_.get();
+  }
+};
 
 class SubscribeRemoteTrackTest : public quic::test::QuicTest {
  public:
@@ -30,9 +54,7 @@ class SubscribeRemoteTrackTest : public quic::test::QuicTest {
       /*full_track_name=*/FullTrackName("foo", "bar"),
       /*subscriber_priority=*/128,
       /*group_order=*/std::nullopt,
-      /*ranges=*/2,
-      0,
-      std::nullopt,
+      /*start=*/FullSequence(2, 0),
       std::nullopt,
       MoqtSubscribeParameters(),
   };
@@ -52,7 +74,6 @@ TEST_F(SubscribeRemoteTrackTest, UpdateDataStreamType) {
       track_.CheckDataStreamType(MoqtDataStreamType::kStreamHeaderSubgroup));
   EXPECT_TRUE(
       track_.CheckDataStreamType(MoqtDataStreamType::kStreamHeaderSubgroup));
-  EXPECT_FALSE(track_.CheckDataStreamType(MoqtDataStreamType::kObjectDatagram));
 }
 
 TEST_F(SubscribeRemoteTrackTest, AllowError) {
@@ -64,9 +85,10 @@ TEST_F(SubscribeRemoteTrackTest, AllowError) {
 
 TEST_F(SubscribeRemoteTrackTest, Windows) {
   EXPECT_TRUE(track_.InWindow(FullSequence(2, 0)));
-  SubscribeWindow new_window(2, 1);
-  track_.ChangeWindow(new_window);
+  track_.TruncateStart(FullSequence(2, 1));
   EXPECT_FALSE(track_.InWindow(FullSequence(2, 0)));
+  track_.TruncateEnd(2);
+  EXPECT_FALSE(track_.InWindow(FullSequence(3, 0)));
 }
 
 class UpstreamFetchTest : public quic::test::QuicTest {
@@ -78,9 +100,10 @@ class UpstreamFetchTest : public quic::test::QuicTest {
 
   MoqtFetch fetch_message_ = {
       /*fetch_id=*/1,
-      /*full_track_name=*/FullTrackName("foo", "bar"),
       /*subscriber_priority=*/128,
       /*group_order=*/std::nullopt,
+      /*joining_fetch=*/std::nullopt,
+      /*full_track_name=*/FullTrackName("foo", "bar"),
       /*start_object=*/FullSequence(1, 1),
       /*end_group=*/3,
       /*end_object=*/100,
@@ -149,7 +172,7 @@ TEST_F(UpstreamFetchTest, ObjectRetrieval) {
   PublishedObject object;
   EXPECT_EQ(fetch_task_->GetNextObject(object),
             MoqtFetchTask::GetNextObjectResult::kPending);
-  MoqtObject new_object = {1, 3, 0, 128, MoqtObjectStatus::kNormal, 0, 6};
+  MoqtObject new_object = {1, 3, 0, 128, "", MoqtObjectStatus::kNormal, 0, 6};
   bool got_object = false;
   fetch_task_->SetObjectAvailableCallback([&]() {
     got_object = true;

@@ -45,7 +45,7 @@ class Settings;
 class CORE_EXPORT WebSettingsImpl final : public WebSettings {
  public:
   WebSettingsImpl(Settings*, DevToolsEmulator*);
-  virtual ~WebSettingsImpl() = default;
+  ~WebSettingsImpl() = default;
 
   void SetFromStrings(const WebString& name, const WebString& value) override;
 
@@ -236,6 +236,7 @@ class CORE_EXPORT WebSettingsImpl final : public WebSettings {
   void SetModalContextMenu(bool) override;
   void SetRequireTransientActivationAndAuthorizationForSubAppsAPIs(
       bool) override;
+  void SetRootScrollbarThemeColor(std::optional<SkColor>) override;
 
   bool RenderVSyncNotificationEnabled() const {
     return render_v_sync_notification_enabled_;

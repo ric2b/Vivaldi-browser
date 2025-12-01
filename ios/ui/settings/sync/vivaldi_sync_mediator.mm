@@ -541,11 +541,6 @@ struct PendingRegistration {
 
 - (void)updateDeviceName:(NSString*)deviceName {
   [self setSessionName:deviceName];
-
-  if (self.userInfoItem) {
-    self.userInfoItem.sessionName = deviceName;
-    [self updateUserInfoSection];
-  }
 }
 
 - (void)updateChosenTypes:(UserSelectableType)type isOn:(BOOL)isOn {
@@ -1259,20 +1254,29 @@ struct PendingRegistration {
 }
 
 - (void)setSessionName:(NSString*)name {
-  NSString* sessionName = name;
+  NSString* sessionName =
+      [name stringByTrimmingCharactersInSet:
+          [NSCharacterSet whitespaceAndNewlineCharacterSet]];
 
   // If sessionName is nil or empty, save default client name.
-  if (name == nil || [name isEqualToString:@""]) {
+  if ([sessionName length] == 0) {
     sessionName = [self localDeviceClientName];
   }
 
   _prefService->SetString(vivaldiprefs::kSyncSessionName,
                           SysNSStringToUTF8(sessionName));
+
+  if (self.userInfoItem) {
+    self.userInfoItem.sessionName = sessionName;
+    [self updateUserInfoSection];
+  }
 }
 
 - (NSString*)sessionName {
   NSString* sessionName = base::SysUTF8ToNSString(
       _prefService->GetString(vivaldiprefs::kSyncSessionName));
+  sessionName = [sessionName stringByTrimmingCharactersInSet:
+                    [NSCharacterSet whitespaceAndNewlineCharacterSet]];
 
   // If sessionName is empty try checking if local device name is already
   // available. If thats also not available force calling the method to load

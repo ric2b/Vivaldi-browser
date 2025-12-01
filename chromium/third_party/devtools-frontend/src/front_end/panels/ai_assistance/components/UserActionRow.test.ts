@@ -3,16 +3,18 @@
 // found in the LICENSE file.
 
 import * as Host from '../../../core/host/host.js';
+import {assertScreenshot, renderElementIntoDOM} from '../../../testing/DOMHelpers.js';
 import {
   describeWithEnvironment,
 } from '../../../testing/EnvironmentHelpers.js';
-import * as Freestyler from '../ai_assistance.js';
+import {createViewFunctionStub, type ViewFunctionStub} from '../../../testing/ViewFunctionHelpers.js';
+import * as AiAssistance from '../ai_assistance.js';
 
 describeWithEnvironment('UserActionRow', () => {
-  function createComponent(props: Freestyler.UserActionRowWidgetParams):
-      [sinon.SinonStub<[Freestyler.ViewInput, Freestyler.ViewOutput, HTMLElement], void>, Freestyler.UserActionRow] {
-    const view = sinon.stub<[Freestyler.ViewInput, Freestyler.ViewOutput, HTMLElement]>();
-    const component = new Freestyler.UserActionRow(undefined, view);
+  function createComponent(props: AiAssistance.UserActionRow.UserActionRowWidgetParams):
+      [ViewFunctionStub<typeof AiAssistance.UserActionRow.UserActionRow>, AiAssistance.UserActionRow.UserActionRow] {
+    const view = createViewFunctionStub(AiAssistance.UserActionRow.UserActionRow);
+    const component = new AiAssistance.UserActionRow.UserActionRow(undefined, view);
     Object.assign(component, props);
     component.wasShown();
     return [view, component];
@@ -26,18 +28,16 @@ describeWithEnvironment('UserActionRow', () => {
       onFeedbackSubmit: sinon.stub(),
     });
 
-    assert.isTrue(view.calledOnce);
+    assert.strictEqual(view.callCount, 1);
 
     {
-      const [viewInput] = view.lastCall.args;
-      expect(viewInput.isShowingFeedbackForm).equals(false);
-      viewInput.onRatingClick(Host.AidaClient.Rating.POSITIVE);
+      expect(view.input.isShowingFeedbackForm).equals(false);
+      view.input.onRatingClick(Host.AidaClient.Rating.POSITIVE);
     }
 
-    assert.isTrue(view.calledTwice);
+    assert.strictEqual(view.callCount, 2);
     {
-      const [viewInput] = view.lastCall.args;
-      expect(viewInput.isShowingFeedbackForm).equals(true);
+      expect(view.input.isShowingFeedbackForm).equals(true);
     }
   });
 
@@ -49,18 +49,16 @@ describeWithEnvironment('UserActionRow', () => {
       onFeedbackSubmit: sinon.stub(),
     });
 
-    assert.isTrue(view.calledOnce);
+    assert.strictEqual(view.callCount, 1);
 
     {
-      const [viewInput] = view.lastCall.args;
-      expect(viewInput.isShowingFeedbackForm).equals(false);
-      viewInput.onRatingClick(Host.AidaClient.Rating.POSITIVE);
+      expect(view.input.isShowingFeedbackForm).equals(false);
+      view.input.onRatingClick(Host.AidaClient.Rating.POSITIVE);
     }
 
-    assert.isTrue(view.calledTwice);
+    assert.strictEqual(view.callCount, 2);
     {
-      const [viewInput] = view.lastCall.args;
-      expect(viewInput.isShowingFeedbackForm).equals(false);
+      expect(view.input.isShowingFeedbackForm).equals(false);
     }
   });
 
@@ -72,27 +70,50 @@ describeWithEnvironment('UserActionRow', () => {
       onFeedbackSubmit: sinon.stub(),
     });
 
-    assert.isTrue(view.calledOnce);
+    assert.strictEqual(view.callCount, 1);
 
     {
-      const [viewInput] = view.lastCall.args;
-      expect(viewInput.isSubmitButtonDisabled).equals(false);
-      viewInput.onRatingClick(Host.AidaClient.Rating.POSITIVE);
+      expect(view.input.isSubmitButtonDisabled).equals(true);
+      view.input.onRatingClick(Host.AidaClient.Rating.POSITIVE);
     }
 
-    assert.isTrue(view.calledTwice);
+    assert.strictEqual(view.callCount, 2);
 
     {
-      const [viewInput] = view.lastCall.args;
-      expect(viewInput.isSubmitButtonDisabled).equals(false);
-      expect(viewInput.isShowingFeedbackForm).equals(true);
-      viewInput.onInputChange('test');
-      viewInput.onSubmit(new SubmitEvent('submit'));
+      expect(view.input.isShowingFeedbackForm).equals(true);
+      view.input.onInputChange('test');
     }
 
     {
-      const [viewInput] = view.lastCall.args;
-      expect(viewInput.isSubmitButtonDisabled).equals(true);
+      expect(view.input.isSubmitButtonDisabled).equals(false);
+      view.input.onSubmit(new SubmitEvent('submit'));
     }
+
+    {
+      expect(view.input.isSubmitButtonDisabled).equals(true);
+    }
+  });
+
+  describe('view', () => {
+    it('looks fine', async () => {
+      const target = document.createElement('div');
+      renderElementIntoDOM(target);
+      AiAssistance.UserActionRow.DEFAULT_VIEW(
+          {
+            onRatingClick: () => {},
+            onReportClick: () => {},
+            scrollSuggestionsScrollContainer: () => {},
+            onSuggestionsScrollOrResize: () => {},
+            onSuggestionClick: () => {},
+            onSubmit: () => {},
+            onClose: () => {},
+            onInputChange: () => {},
+            showRateButtons: true,
+            isSubmitButtonDisabled: false,
+            isShowingFeedbackForm: true,
+          },
+          {}, target);
+      await assertScreenshot('ai_assistance/user_action_row.png');
+    });
   });
 });

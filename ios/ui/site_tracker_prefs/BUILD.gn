@@ -43,6 +43,7 @@ swift_source_set("site_tracker_prefs_view_swift") {
   ]
 
   deps = [
+    "//vivaldi/app:vivaldi_ios_native_strings",
     "//vivaldi/ios/ui/helpers:helpers_swift",
     "//vivaldi/ios/ui/ntp:vivaldi_ntp",
   ]

@@ -804,6 +804,21 @@
     "type": "console_test_launcher",
     "skip_usage_check": True,
   },
+  "crossbench_smoketests": {
+    "label": "//chrome/test:crossbench_smoketests",
+    "type": "generated_script",
+    "skip_usage_check": True,
+    "args": [
+      "../../third_party/crossbench/cb.py",
+      "--benchmarks=speedometer_3.0",
+      "--isolated-script-test-output=${ISOLATED_OUTDIR}",
+      "--repeat=1",
+      "--iterations=2",
+      "--fast",
+      "--fileserver",
+      "--luci-chromium",
+    ],
+  },
   "crypto_unittests": {
     "label": "//crypto:crypto_unittests",
     "type": "console_test_launcher",
@@ -1421,10 +1436,6 @@
     "label": "//components/optimization_guide/internal:ondevice_model_benchmark",
     "type": "additional_compile_target",
   },
-  "ondevice_model_example": {
-    "label": "//components/optimization_guide/internal:ondevice_model_example",
-    "type": "additional_compile_target",
-  },
   "ondevice_stability_tests": {
     "label": "//components/optimization_guide/internal/testing:ondevice_stability_tests",
     "type": "generated_script",
@@ -1515,16 +1526,6 @@
   "performance_test_suite": {
     "label": "//chrome/test:performance_test_suite",
     "type": "generated_script",
-  },
-  "performance_test_suite_android_clank_trichrome_bundle": {
-    "label": "//chrome/test:performance_test_suite_android_clank_trichrome_bundle",
-    "type": "generated_script",
-    "skip_usage_check": True,
-  },
-  "performance_test_suite_android_clank_trichrome_chrome_google_64_32_bundle": {
-    "label": "//chrome/test:performance_test_suite_android_clank_trichrome_chrome_google_64_32_bundle",
-    "type": "generated_script",
-    "skip_usage_check": True,
   },
   "performance_test_suite_android_trichrome_chrome_google_64_32_bundle": {
     "label": "//chrome/test:performance_test_suite_android_trichrome_chrome_google_64_32_bundle",
@@ -2099,6 +2100,11 @@
       "--results-directory",
       "${ISOLATED_OUTDIR}",
     ],
+  },
+  "webui_resources_tools_python_unittests": {
+    "label": "//ui/webui/resources/tools:webui_resources_tools_python_unittests",
+    "type": "generated_script",
+    "skip_usage_check": True,
   },
   "webview_64_cts_tests": {
     "label": "//android_webview/test:webview_64_cts_tests",

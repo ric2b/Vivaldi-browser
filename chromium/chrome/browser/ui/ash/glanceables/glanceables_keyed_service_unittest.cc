@@ -19,7 +19,7 @@ namespace {
 
 constexpr char kPrimaryProfileName[] = "primary_profile@example.com";
 constexpr char kSecondaryProfileName[] = "secondary_profile@example.com";
-constexpr char kFakeGaia2[] = "fakegaia2";
+constexpr GaiaId::Literal kFakeGaia2("fakegaia2");
 
 }  // namespace
 
@@ -33,8 +33,7 @@ class GlanceablesKeyedServiceTest : public BrowserWithTestWindowTest {
   // BrowserWithTestWindowTest:
   TestingProfile* CreateProfile(const std::string& profile_name) override {
     EXPECT_EQ(kPrimaryProfileName, profile_name);
-    return profile_manager()->CreateTestingProfile(profile_name,
-                                                   /*is_main_profile=*/true);
+    return profile_manager()->CreateTestingProfile(profile_name);
   }
 };
 
@@ -60,10 +59,9 @@ TEST_F(GlanceablesKeyedServiceTest, RegisterClientsInAshForNonPrimaryUser) {
   EXPECT_TRUE(classroom_client_primary);
   EXPECT_TRUE(tasks_client_primary);
 
-  LogIn(kSecondaryProfileName, GaiaId(kFakeGaia2));
+  LogIn(kSecondaryProfileName, kFakeGaia2);
   auto* secondary_profile =
-      profile_manager()->CreateTestingProfile(kSecondaryProfileName,
-                                              /*is_main_profile=*/false);
+      profile_manager()->CreateTestingProfile(kSecondaryProfileName);
   SwitchActiveUser(kSecondaryProfileName);
   auto service_secondary =
       std::make_unique<GlanceablesKeyedService>(secondary_profile);

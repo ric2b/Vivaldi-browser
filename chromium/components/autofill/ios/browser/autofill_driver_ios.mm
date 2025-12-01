@@ -4,6 +4,8 @@
 
 #import "components/autofill/ios/browser/autofill_driver_ios.h"
 
+#include <variant>
+
 #import "base/check_deref.h"
 #import "base/containers/contains.h"
 #import "base/containers/to_vector.h"
@@ -38,8 +40,6 @@
 #import "ios/web/public/js_messaging/web_frames_manager.h"
 #import "ios/web/public/web_state.h"
 #import "services/network/public/cpp/shared_url_loader_factory.h"
-#import "ui/accessibility/ax_tree_id.h"
-#import "ui/gfx/geometry/rect_f.h"
 #import "url/origin.h"
 
 namespace autofill {
@@ -62,6 +62,10 @@ base::TimeDelta GetDocumentFormScanPeriod() {
 
 base::TimeDelta GetFilteredDocumentFormScanPeriod() {
   return base::Milliseconds(kAutofillFilteredDocumentFormScanPeriodMs.Get());
+}
+
+bool UseXhrFix() {
+  return base::FeatureList::IsEnabled(kAutofillFixXhrForXframe);
 }
 
 }  // namespace
@@ -131,11 +135,11 @@ std::optional<LocalFrameToken> AutofillDriverIOS::Resolve(FrameToken query) {
     return std::nullopt;
   }
 
-  if (absl::holds_alternative<LocalFrameToken>(query)) {
-    return absl::get<LocalFrameToken>(query);
+  if (std::holds_alternative<LocalFrameToken>(query)) {
+    return std::get<LocalFrameToken>(query);
   }
-  CHECK(absl::holds_alternative<RemoteFrameToken>(query));
-  auto remote_token = absl::get<RemoteFrameToken>(query);
+  CHECK(std::holds_alternative<RemoteFrameToken>(query));
+  auto remote_token = std::get<RemoteFrameToken>(query);
   auto* registrar = ChildFrameRegistrar::FromWebState(web_state_);
   return registrar ? registrar->LookupChildFrame(remote_token) : std::nullopt;
 }
@@ -333,7 +337,7 @@ void AutofillDriverIOS::ScanForms(bool immediately) {
   }
 }
 
-void AutofillDriverIOS::FetchFromsFilteredByName(
+void AutofillDriverIOS::FetchFormsFilteredByName(
     const std::u16string& form_name,
     FormFetchCompletion completion) {
   if (!web_frame()) {
@@ -424,9 +428,16 @@ void AutofillDriverIOS::AskForValuesToFill(const FormData& form,
 
 void AutofillDriverIOS::DidFillAutofillFormData(const FormData& form,
                                                 base::TimeTicks timestamp) {
+  if (UseXhrFix()) {
+    // Update the last_interacted_form_ locally in the renderer frame before
+    // routing so XHR detection can be done when a renderer form is deleted.
+    UpdateLastInteractedForm(/*form_data=*/form);
+  }
   auto callback = [](AutofillDriver& driver, const FormData& form,
                      base::TimeTicks timestamp) {
-    cast(&driver)->UpdateLastInteractedForm(/*form_data=*/form);
+    if (!UseXhrFix()) {
+      cast(&driver)->UpdateLastInteractedForm(/*form_data=*/form);
+    }
     driver.GetAutofillManager().OnDidFillAutofillFormData(form, timestamp);
   };
   if (IsAcrossIframesEnabled()) {
@@ -452,10 +463,10 @@ void AutofillDriverIOS::FormsSeen(
     for (const autofill::FormData& form : updated_forms) {
       for (const autofill::FrameTokenWithPredecessor& child_frame :
            form.child_frames()) {
-        // This absl::get is safe because on iOS, FormData::child_frames is
-        // only ever populated with RemoteFrameTokens. absl::get will fail a
+        // This std::get is safe because on iOS, FormData::child_frames is
+        // only ever populated with RemoteFrameTokens. std::get will fail a
         // CHECK if this assumption is ever wrong.
-        auto token = absl::get<autofill::RemoteFrameToken>(child_frame.token);
+        auto token = std::get<autofill::RemoteFrameToken>(child_frame.token);
         auto* registrar =
             ChildFrameRegistrar::GetOrCreateForWebState(web_state_);
         if (registrar && known_child_frames_.insert(token).second) {
@@ -474,17 +485,34 @@ void AutofillDriverIOS::FormsSeen(
 void AutofillDriverIOS::FormSubmitted(
     const FormData& form,
     mojom::SubmissionSource submission_source) {
-  auto callback = [](AutofillDriver& driver, const FormData& form,
-                     mojom::SubmissionSource submission_source) {
+  auto callback = [webstate_ptr = web_state_](
+                      AutofillDriver& driver, const FormData& form,
+                      mojom::SubmissionSource submission_source) {
+    CHECK(webstate_ptr);
     base::UmaHistogramEnumeration(kAutofillSubmissionDetectionSourceHistogram,
                                   submission_source);
     driver.GetAutofillManager().OnFormSubmitted(form, submission_source);
+    if (UseXhrFix()) {
+      // Clear the last interacted form on the child frames to not trigger
+      // XHR again in case there were some interactions with forms in these
+      // frames prior to submission. This is to avoid spamming submits.
+      for (const auto& remote_token : form.child_frames()) {
+        if (std::optional<LocalFrameToken> local_token =
+                driver.Resolve(remote_token.token)) {
+          FromWebStateAndLocalFrameToken(webstate_ptr, *local_token)
+              ->ClearLastInteractedForm();
+        }
+      }
+    }
     cast(&driver)->ClearLastInteractedForm();
   };
   if (IsAcrossIframesEnabled()) {
     router_->FormSubmitted(callback, *this, form, submission_source);
   } else {
     callback(*this, form, submission_source);
+  }
+  if (UseXhrFix()) {
+    ClearLastInteractedForm();
   }
 }
 
@@ -497,13 +525,23 @@ void AutofillDriverIOS::CaretMovedInFormField(const FormData& form,
 void AutofillDriverIOS::TextFieldValueChanged(const FormData& form,
                                               const FieldGlobalId& field_id,
                                               base::TimeTicks timestamp) {
+  if (UseXhrFix()) {
+    // Update the last_interacted_form_ locally in the renderer frame before
+    // routing so XHR detection can be done when a renderer form is deleted.
+    UpdateLastInteractedForm(
+        /*form_data=*/form,
+        /*formless_field=*/form.renderer_id() ? FieldRendererId()
+                                              : field_id.renderer_id);
+  }
   auto callback = [&](AutofillDriver& driver, const FormData& form,
                       const FieldGlobalId& field_global_id,
                       base::TimeTicks timestamp) {
-    cast(&driver)->UpdateLastInteractedForm(
-        /*form_data=*/form,
-        /*formless_field=*/form.renderer_id() ? FieldRendererId()
-                                              : field_global_id.renderer_id);
+    if (!UseXhrFix()) {
+      cast(&driver)->UpdateLastInteractedForm(
+          /*form_data=*/form,
+          /*formless_field=*/form.renderer_id() ? FieldRendererId()
+                                                : field_global_id.renderer_id);
+    }
     driver.GetAutofillManager().OnTextFieldValueChanged(form, field_id,
                                                         timestamp);
   };
@@ -592,7 +630,7 @@ void AutofillDriverIOS::OnAfterFormsSeen(
 void AutofillDriverIOS::FormsRemoved(
     const std::set<FormRendererId>& removed_forms,
     const std::set<FieldRendererId>& removed_unowned_fields) {
-  const bool submission_detected = DetectFormSubmissionAfterFormRemoval(
+  bool submission_detected = DetectFormSubmissionAfterFormRemoval(
       removed_forms, removed_unowned_fields);
   RecordFormRemoval(
       submission_detected, /*removed_forms_count=*/removed_forms.size(),

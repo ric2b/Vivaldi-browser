@@ -1,7 +1,10 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="el">
+<translation id="1204037785786432551">Σύνδεσμος λήψης</translation>
+<translation id="1206892813135768548">Αντιγραφή κειμένου συνδέσμου</translation>
 <translation id="1397811292916898096">Αναζήτηση με <ph name="PRODUCT_NAME" /></translation>
+<translation id="1435593198351412143">Αυτόματο άνοιγμα PDF</translation>
 <translation id="1456207338570705181">Το Αγγίξτε για Αναζήτηση είναι μια λειτουργία που είναι διαθέσιμη μόνο όταν το Google έχει οριστεί ως προεπιλεγμένη μηχανή αναζήτησης στο Vivaldi. Στέλνει την επιλεγμένη λέξη και την τρέχουσα σελίδα ως πλαίσιο στην Αναζήτηση Google. Μπορείτε να το απενεργοποιήσετε στις <ph name="BEGIN_LINK" />Ρυθμίσεις<ph name="END_LINK" />.</translation>
 <translation id="1598449788754183301">Εναλλαγή κανονικών/ ιδιωτικών καρτελών</translation>
 <translation id="1644574205037202324">Ιστορικό</translation>
@@ -14,13 +17,21 @@
 <translation id="2433507940547922241">Εμφάνιση</translation>
 <translation id="2501278716633472235">Πάει πίσω</translation>
 <translation id="2633278372998075009">Ιδιωτικές καρτέλες</translation>
+<translation id="2650751991977523696">Επανάληψη λήψης αρχείου;</translation>
+<translation id="265156376773362237">Βασική προφόρτωση</translation>
 <translation id="272026394418727548">Αρχική σελίδα του Vivaldi</translation>
+<translation id="2842985007712546952">Γονικός φάκελος</translation>
+<translation id="2871733351037274014">Προφόρτωση σελίδων</translation>
+<translation id="2904300462646366554">Τα PDF που κατεβάζετε ανοίγουν αυτόματα με ένα από τα προγράμματα προβολής PDF στη συσκευή σας</translation>
 <translation id="2951071800649516099">Προσθέστε σελίδες στη λίστα ανάγνωσης για αργότερα</translation>
+<translation id="3029276696788198026">Χωρίς προφόρτωση</translation>
 <translation id="3060635849835183725">{BOOKMARKS_COUNT, plural,
           =1 {<ph name="BOOKMARKS_COUNT_ONE" /> σελιδοδείκτης}
           other {<ph name="BOOKMARKS_COUNT_MANY" /> σελιδοδείκτες}}</translation>
 <translation id="3076631378407175873">Πνευματικά δικαιώματα <ph name="YEAR" /> Vivaldi Technologies AS. Με επιφύλαξη παντός δικαιώματος.</translation>
+<translation id="3232293466644486101">Διαγραφή δεδομένων περιήγησης…</translation>
 <translation id="3234355010754616171">Νέα ιδιωτική καρτέλα</translation>
+<translation id="3237087289225714896">Βασική προφόρτωση:</translation>
 <translation id="3377025655491224618">Ιδιωτική Καρτέλα</translation>
 <translation id="3504699618187058974">Στοίβαξη καρτελών</translation>
 <translation id="3518985090088779359">Αποδοχή και συνέχεια</translation>
@@ -28,7 +39,9 @@
 <translation id="3602290021589620013">Προεπισκόπηση</translation>
 <translation id="3700829948786686853">Καλώς ήρθατε στο Vivaldi</translation>
 <translation id="3719826155360621982">Αρχική σελίδα</translation>
+<translation id="3738139272394829648">Αγγίξτε για Αναζήτηση</translation>
 <translation id="385051799172605136">Πίσω</translation>
+<translation id="3987993985790029246">Αντ. συνδ.</translation>
 <translation id="399014816462153200">Διαβασμένα Άρθρα:</translation>
 <translation id="4121750346708795461">Χρησιμοποιώντας αυτήν την εφαρμογή, αποδέχεστε τους <ph name="BEGIN_LINK1" />Όρους Παροχής Υπηρεσιών<ph name="END_LINK1" /> και τη <ph name="BEGIN_LINK2" />Σημείωση Απορρήτου<ph name="END_LINK2" /> του Vivaldi.</translation>
 <translation id="4137746084635924146">Τρέχουσα γλώσσα συσκευής</translation>
@@ -36,9 +49,13 @@
 <translation id="4195643157523330669">Άνοιγμα σε νέα καρτέλα</translation>
 <translation id="4225895483398857530">Συντόμευση γραμμής εργαλείων</translation>
 <translation id="4243710787042215766">Άνοιγμα σε ιδιωτική καρτέλα</translation>
+<translation id="4269820728363426813">Αντιγραφή Διεύθυνσης Συνδέσμου</translation>
+<translation id="4291407919474070700"><ph name="BEGIN_LINK" />Ενεργοποιήστε το κλείδωμα οθόνης στις ρυθμίσεις του Android<ph name="END_LINK" /></translation>
 <translation id="4304713468139749426">Διαχειριστής Κωδικών Πρόσβασης</translation>
 <translation id="451872707440238414">Αναζήτηση στους σελιδοδείκτες</translation>
 <translation id="4526803704855831732">Ιδιωτικές Καρτέλες</translation>
+<translation id="4532845899244822526">Επιλογή φακέλου</translation>
+<translation id="4699172675775169585">Εικόνες και αρχεία στην προσωρινή μνήμη</translation>
 <translation id="4719086422742491124">Μάθετε για θέματα σε ιστότοπους χωρίς να φύγετε από τη σελίδα. Επιλέξτε μία ή περισσότερες λέξεις στη σελίδα για να τις αναζητήσετε.
 
 Το Αγγίξτε για Αναζήτηση είναι μια λειτουργία που είναι διαθέσιμη μόνο όταν το Google έχει οριστεί ως η προεπιλεγμένη μηχανή αναζήτησης στο Vivaldi.</translation>
@@ -49,32 +66,59 @@
 <translation id="49576331685473090">Αποκλεισμός περιεχομένου</translation>
 <translation id="5079259810715830221">Όταν ένας ιστότοπος της Google ζητά να προφορτώσει ιδιωτικά συνδέσμους στη σελίδα του, ο Vivaldi κρυπτογραφεί και προφορτώνει σελίδες μέσω των διακομιστών Google χωρίς cookie. Αυτό αποκρύπτει την ταυτότητά σας από τον προφορτωμένο ιστότοπο.</translation>
 <translation id="5118676864324397542">Αποθηκευτικός χώρος Vivaldi <ph name="APP_NAME" /></translation>
+<translation id="5144385790872094440">Ορισμένες από τις σελίδες που επισκέπτεστε έχουν προφορτωθεί. Οι σελίδες μπορεί να προφορτώνονται μέσω των διακομιστών της Google, όταν συνδέονται από έναν ιστότοπο ή μια εφαρμογή Google.</translation>
 <translation id="5186185447130319458">Ιδιωτικό</translation>
+<translation id="5206168361184759344">{FILE_COUNT, plural,
+            =1 {Λήψη αρχείου…}
+            other {Λήψη # αρχείων…}}</translation>
 <translation id="5233638681132016545">Νέα καρτέλα</translation>
 <translation id="5375131951310889874">Μάθετε για θέματα σε ιστότοπους χωρίς να φύγετε από τη σελίδα. Το Αγγίξτε για Αναζήτηση είναι μια λειτουργία που είναι διαθέσιμη μόνο όταν το Google έχει οριστεί ως προεπιλεγμένη μηχανή αναζήτησης στο Vivaldi. Στέλνει μια λέξη και το γύρο της περιεχόμενο στην Αναζήτηση Google, επιστρέφοντας ορισμούς, εικόνες, αποτελέσματα αναζήτησης και άλλες λεπτομέρειες.
 
 Για να προσαρμόσετε τον όρο αναζήτησής σας, πατήστε παρατεταμένα για επιλογή. Για να κάνετε πιο συγκεκριμένη την αναζήτησή σας, σύρετε το πλαίσιο μέχρι τέρμα προς τα πάνω και πατήστε το πλαίσιο αναζήτησης.</translation>
+<translation id="543338862236136125">Επεξεργασία κωδικού πρόσβασης</translation>
 <translation id="572328651809341494">Πρόσφατες καρτέλες</translation>
+<translation id="5833984609253377421">Κοινοποίηση συνδέσμου</translation>
 <translation id="6150320133806434356">Ο σελιδοδείκτης αποθηκεύτηκε</translation>
+<translation id="6193448654517602979">Επιλογή καρτελών</translation>
 <translation id="6336451774241870485">Νέα ιδιωτική καρτέλα</translation>
+<translation id="6337323516034698937">Για να στείλετε αυτή την καρτέλα σε άλλη συσκευή, συνδεθείτε στο Συγχρονισμό Vivaldi και στις δύο συσκευές. Βεβαιωθείτε ότι έχετε εισαγάγει τον κωδικό πρόσβασης κρυπτογράφησης, εάν είναι απαραίτητο.</translation>
+<translation id="6341580099087024258">Ερώτηση για το πού να αποθηκεύονται τα αρχεία</translation>
 <translation id="6404511346730675251">Επεξεργασία σελιδοδείκτη</translation>
+<translation id="650224091954855786">{FILE_COUNT, plural,
+          =1 {Η λήψη του αρχείου ολοκληρώθηκε}
+          other {# ολοκληρωμένες λήψεις}}</translation>
 <translation id="6585139692466700358">Δυνατότητα μετάφρασης σελίδων σε άλλες γλώσσες χρησιμοποιώντας την υπηρεσία μετάφρασης του Vivaldi</translation>
+<translation id="6588043302623806746">Χρήση ασφαλούς DNS</translation>
 <translation id="6593061639179217415">Για υπολογιστή</translation>
 <translation id="6610147964972079463">Κλείσιμο ιδιωτικών καρτελών</translation>
+<translation id="6627583120233659107">Επεξεργασία φακέλου</translation>
+<translation id="6865313869410766144">Φόρμα αυτόματης συμπλήρωσης δεδομένων</translation>
+<translation id="6909589135458168665">Προφόρτωση Σελίδων</translation>
 <translation id="7029995644714925509">Όταν ένας ιστότοπος ζητά να προφορτώσει ιδιωτικά συνδέσμους στη σελίδα του, ο Vivaldi κρυπτογραφεί και προφορτώνει σελίδες μέσω των διακομιστών Google χωρίς cookie. Αυτό αποκρύπτει την ταυτότητά σας από τον προφορτωμένο ιστότοπο.</translation>
 <translation id="706339621163631076">Πολιτική Απορρήτου του Προγράμματος Περιήγησης</translation>
 <translation id="732145680195464316">Ο σελιδοδείκτης αποθηκεύτηκε στο <ph name="PRODUCT_NAME" /></translation>
+<translation id="7324354302972299151">Αποστολή αιτήματος «Μην παρακολουθείτε»</translation>
+<translation id="7359002509206457351">Πρόσβαση σε τρόπους πληρωμής</translation>
+<translation id="7419565702166471774">Να χρησιμοποιούνται πάντα ασφαλείς συνδέσεις</translation>
 <translation id="7427132068601343474">Σχετικά με το Vivaldi</translation>
+<translation id="7456774706094330779">Εκτεταμένη προφόρτωση</translation>
 <translation id="7465104139234185284">Κλείσιμο όλων των ιδιωτικών καρτελών</translation>
 <translation id="7481312909269577407">Προώθηση</translation>
+<translation id="7764225426217299476">Προσθήκη διεύθυνσης</translation>
 <translation id="7968014550143838305">Προστέθηκε στη λίστα ανάγνωσης</translation>
 <translation id="804786196054284061">Άδεια Χρήσης</translation>
+<translation id="8062594758852531064">Εκτεταμένη προφόρτωση:</translation>
+<translation id="8073388330009372546">Άνοιγμα εικόνας σε νέα καρτέλα</translation>
 <translation id="8127542551745560481">Επεξεργασία αρχικής σελίδας</translation>
+<translation id="8266862848225348053">Τοποθεσία λήψης</translation>
+<translation id="8348430946834215779">Χρησιμοποιήστε HTTPS όποτε είναι δυνατόν και λάβετε ειδοποίηση πριν από τη φόρτωση ιστοτόπων που δεν το υποστηρίζουν</translation>
 <translation id="8560602726703398413">Βρείτε τη λίστα ανάγνωσης στους Σελιδοδείκτες</translation>
 <translation id="85991616550051997">Μετάβαση στην αρχική σελίδα</translation>
 <translation id="8820817407110198400">Σελιδοδείκτες</translation>
 <translation id="9042893549633094279">Απόρρητο και ασφάλεια</translation>
 <translation id="9063523880881406963">Απενεργοποίηση αιτήματος ιστότοπου για υπολογιστές</translation>
 <translation id="9080642952018487277">Είσοδος σε ιδιωτική λειτουργία</translation>
+<translation id="930124987204876019">Διαγραφή ιστορικού, cookies, δεδομένων ιστοτόπου, κρυφής μνήμης…</translation>
+<translation id="961856697154696964">Διαγραφή δεδομένων περιήγησης</translation>
 <translation id="96681097142096641">Προβολή απλοποιημένης σελίδας;</translation>
 </translationbundle>

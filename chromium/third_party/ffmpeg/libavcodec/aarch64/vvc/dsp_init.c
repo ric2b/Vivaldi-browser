@@ -27,16 +27,34 @@
 #include "libavcodec/vvc/dec.h"
 #include "libavcodec/vvc/ctu.h"
 
+#define BDOF_BLOCK_SIZE         16
+#define BDOF_MIN_BLOCK_SIZE     4
+
+void ff_vvc_prof_grad_filter_8x_neon(int16_t *gradient_h,
+                                     int16_t *gradient_v,
+                                     ptrdiff_t gradient_stride,
+                                     const int16_t *_src,
+                                     ptrdiff_t src_stride,
+                                     int width, int height);
+
+void ff_vvc_derive_bdof_vx_vy_neon(const int16_t *_src0, const int16_t *_src1,
+                                   int pad_mask,
+                                   const int16_t **gradient_h,
+                                   const int16_t **gradient_v,
+                                   int16_t *vx, int16_t *vy);
 #define BIT_DEPTH 8
 #include "alf_template.c"
+#include "of_template.c"
 #undef BIT_DEPTH
 
 #define BIT_DEPTH 10
 #include "alf_template.c"
+#include "of_template.c"
 #undef BIT_DEPTH
 
 #define BIT_DEPTH 12
 #include "alf_template.c"
+#include "of_template.c"
 #undef BIT_DEPTH
 
 int ff_vvc_sad_neon(const int16_t *src0, const int16_t *src1, int dx, int dy,
@@ -131,6 +149,13 @@ void ff_vvc_dsp_init_aarch64(VVCDSPContext *const c, const int bd)
         c->inter.put[0][5][1][1] = ff_vvc_put_qpel_hv64_8_neon;
         c->inter.put[0][6][1][1] = ff_vvc_put_qpel_hv128_8_neon;
 
+        c->inter.put[1][1][0][0] = ff_vvc_put_pel_pixels4_8_neon;
+        c->inter.put[1][2][0][0] = ff_vvc_put_pel_pixels8_8_neon;
+        c->inter.put[1][3][0][0] = ff_vvc_put_pel_pixels16_8_neon;
+        c->inter.put[1][4][0][0] = ff_vvc_put_pel_pixels32_8_neon;
+        c->inter.put[1][5][0][0] = ff_vvc_put_pel_pixels64_8_neon;
+        c->inter.put[1][6][0][0] = ff_vvc_put_pel_pixels128_8_neon;
+
         c->inter.put[1][1][0][1] = ff_vvc_put_epel_h4_8_neon;
         c->inter.put[1][2][0][1] = ff_vvc_put_epel_h8_8_neon;
         c->inter.put[1][3][0][1] = ff_vvc_put_epel_h16_8_neon;
@@ -170,6 +195,7 @@ void ff_vvc_dsp_init_aarch64(VVCDSPContext *const c, const int bd)
         c->inter.w_avg = vvc_w_avg_8;
         c->inter.dmvr[0][0] = ff_vvc_dmvr_8_neon;
         c->inter.dmvr[1][1] = ff_vvc_dmvr_hv_8_neon;
+        c->inter.apply_bdof = apply_bdof_8;
 
         for (int i = 0; i < FF_ARRAY_ELEMS(c->sao.band_filter); i++)
             c->sao.band_filter[i] = ff_h26x_sao_band_filter_8x8_8_neon;
@@ -212,6 +238,7 @@ void ff_vvc_dsp_init_aarch64(VVCDSPContext *const c, const int bd)
         c->inter.avg = ff_vvc_avg_10_neon;
         c->inter.w_avg = vvc_w_avg_10;
         c->inter.dmvr[1][1] = ff_vvc_dmvr_hv_10_neon;
+        c->inter.apply_bdof = apply_bdof_10;
 
         c->alf.filter[LUMA] = alf_filter_luma_10_neon;
         c->alf.filter[CHROMA] = alf_filter_chroma_10_neon;
@@ -220,6 +247,7 @@ void ff_vvc_dsp_init_aarch64(VVCDSPContext *const c, const int bd)
         c->inter.w_avg = vvc_w_avg_12;
         c->inter.dmvr[0][0] = ff_vvc_dmvr_12_neon;
         c->inter.dmvr[1][1] = ff_vvc_dmvr_hv_12_neon;
+        c->inter.apply_bdof = apply_bdof_12;
 
         c->alf.filter[LUMA] = alf_filter_luma_12_neon;
         c->alf.filter[CHROMA] = alf_filter_chroma_12_neon;

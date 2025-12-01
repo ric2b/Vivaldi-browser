@@ -15,7 +15,7 @@
 use crate::decoder::*;
 use crate::*;
 
-pub const MAX_AV1_LAYER_COUNT: usize = 4;
+use std::num::NonZero;
 
 #[derive(Debug, Default)]
 pub struct DecodeSample {
@@ -68,14 +68,6 @@ pub struct DecodeInput {
     pub category: Category,
 }
 
-#[derive(Clone, Copy, Debug, Default)]
-pub struct Grid {
-    pub rows: u32,
-    pub columns: u32,
-    pub width: u32,
-    pub height: u32,
-}
-
 #[derive(Debug, Default)]
 pub struct Overlay {
     pub canvas_fill_value: [u16; 4],
@@ -86,7 +78,7 @@ pub struct Overlay {
 }
 
 #[derive(Debug, Default)]
-pub struct TileInfo {
+pub(crate) struct TileInfo {
     pub tile_count: u32,
     pub decoded_tile_count: u32,
     pub grid: Grid,
@@ -143,7 +135,7 @@ impl Tile {
     pub(crate) fn create_from_item(
         item: &mut Item,
         allow_progressive: bool,
-        image_count_limit: u32,
+        image_count_limit: Option<NonZero<u32>>,
         size_hint: u64,
     ) -> AvifResult<Tile> {
         if size_hint != 0 && item.size as u64 > size_hint {
@@ -239,10 +231,12 @@ impl Tile {
         } else if item.progressive && allow_progressive {
             // Progressive image. Decode all layers and expose them all to the
             // user.
-            if image_count_limit != 0 && layer_count as u32 > image_count_limit {
-                return Err(AvifError::BmffParseFailed(
-                    "exceeded image_count_limit (progressive)".into(),
-                ));
+            if let Some(limit) = image_count_limit {
+                if layer_count as u32 > limit.get() {
+                    return Err(AvifError::BmffParseFailed(
+                        "exceeded image_count_limit (progressive)".into(),
+                    ));
+                }
             }
             tile.input.all_layers = true;
             let mut offset = 0;
@@ -275,7 +269,7 @@ impl Tile {
 
     pub(crate) fn create_from_track(
         track: &Track,
-        mut image_count_limit: u32,
+        image_count_limit: Option<NonZero<u32>>,
         size_hint: u64,
         category: Category,
     ) -> AvifResult<Tile> {
@@ -298,7 +292,8 @@ impl Tile {
         };
         let sample_table = &track.sample_table.unwrap_ref();
 
-        if image_count_limit != 0 {
+        if let Some(limit) = image_count_limit {
+            let mut limit = limit.get();
             for (chunk_index, _chunk_offset) in sample_table.chunk_offsets.iter().enumerate() {
                 // Figure out how many samples are in this chunk.
                 let sample_count = sample_table.get_sample_count_of_chunk(chunk_index as u32);
@@ -307,12 +302,12 @@ impl Tile {
                         "chunk with 0 samples found".into(),
                     ));
                 }
-                if sample_count > image_count_limit {
+                if sample_count > limit {
                     return Err(AvifError::BmffParseFailed(
                         "exceeded image_count_limit".into(),
                     ));
                 }
-                image_count_limit -= sample_count;
+                limit -= sample_count;
             }
         }
 

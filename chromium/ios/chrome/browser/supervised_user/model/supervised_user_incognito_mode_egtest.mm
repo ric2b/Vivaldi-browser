@@ -4,17 +4,16 @@
 
 #import "base/feature_list.h"
 #import "components/signin/internal/identity_manager/account_capabilities_constants.h"
-#import "components/supervised_user/core/common/features.h"
 #import "components/supervised_user/core/common/supervised_user_constants.h"
 #import "ios/chrome/browser/authentication/ui_bundled/signin_earl_grey.h"
 #import "ios/chrome/browser/authentication/ui_bundled/signin_earl_grey_ui_test_util.h"
 #import "ios/chrome/browser/metrics/model/metrics_app_interface.h"
 #import "ios/chrome/browser/policy/model/policy_earl_grey_matchers.h"
+#import "ios/chrome/browser/popup_menu/ui_bundled/popup_menu_constants.h"
 #import "ios/chrome/browser/signin/model/fake_system_identity.h"
 #import "ios/chrome/browser/tab_switcher/ui_bundled/tab_grid/tab_grid_constants.h"
 #import "ios/chrome/browser/tab_switcher/ui_bundled/tab_grid/tab_grid_metrics.h"
 #import "ios/chrome/browser/toolbar/ui_bundled/public/toolbar_constants.h"
-#import "ios/chrome/browser/ui/popup_menu/popup_menu_constants.h"
 #import "ios/chrome/grit/ios_strings.h"
 #import "ios/chrome/test/earl_grey/chrome_earl_grey.h"
 #import "ios/chrome/test/earl_grey/chrome_earl_grey_ui.h"
@@ -226,9 +225,6 @@ id<GREYMatcher> SupervisedIncognitoMessage() {
     "-", test_switches::kAddFakeIdentitiesAtStartup, "=",
         [FakeSystemIdentity encodeIdentitiesToBase64:@[ fakeIdentity ]]
   }));
-  config.features_enabled.push_back(
-      supervised_user::
-          kReplaceSupervisionSystemCapabilitiesWithAccountCapabilitiesOnIOS);
   [[AppLaunchManager sharedManager] ensureAppLaunchedWithConfiguration:config];
 
   // Set up the histogram tester after restarting.

@@ -9,7 +9,6 @@
 #include "services/metrics/public/cpp/ukm_recorder.h"
 #include "services/metrics/public/cpp/ukm_source_id.h"
 #include "third_party/blink/renderer/core/core_export.h"
-#include "third_party/blink/renderer/core/frame/frame.h"
 #include "third_party/blink/renderer/core/probe/core_probes.h"
 #include "third_party/blink/renderer/core/timing/animation_frame_timing_info.h"
 #include "third_party/blink/renderer/platform/heap/collection_support/heap_vector.h"
@@ -48,7 +47,7 @@ class CORE_EXPORT AnimationFrameTimingMonitor final
 
   ~AnimationFrameTimingMonitor() override = default;
 
-  virtual void Trace(Visitor*) const;
+  void Trace(Visitor*) const;
 
   void Shutdown();
 

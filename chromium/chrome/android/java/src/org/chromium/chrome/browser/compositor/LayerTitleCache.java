@@ -13,12 +13,14 @@ import android.util.SparseIntArray;
 import android.view.View;
 
 import androidx.annotation.ColorInt;
+import androidx.annotation.Nullable;
 import androidx.core.content.res.ResourcesCompat;
 
 import org.jni_zero.CalledByNative;
 import org.jni_zero.JNINamespace;
 import org.jni_zero.NativeMethods;
 
+import org.chromium.base.Token;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.compositor.layouts.content.TitleBitmapFactory;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
@@ -108,8 +110,7 @@ public class LayerTitleCache {
         mBubbleOffset =
                 res.getDimensionPixelSize(R.dimen.compositor_tab_title_favicon_bubble_offset);
         mBubbleBorderColor =
-                TabUiThemeUtil.getTabStripBackgroundColorForActivityState(
-                        context, /* isIncognito= */ false, /* isActivityFocused= */ true);
+                TabUiThemeUtil.getTabStripBackgroundColor(context, /* isIncognito= */ false);
         mBubbleFillColor = TabUiThemeProvider.getTabBubbleFillColor(context);
         mNativeLayerTitleCache =
                 LayerTitleCacheJni.get()
@@ -263,7 +264,8 @@ public class LayerTitleCache {
                 mTabModelSelector
                         .getTabGroupModelFilterProvider()
                         .getTabGroupModelFilter(incognito);
-        if (!filter.tabGroupExistsForRootId(groupRootId)) return;
+        @Nullable Token tabGroupId = filter.getTabGroupIdFromRootId(groupRootId);
+        if (tabGroupId == null || !filter.tabGroupExists(tabGroupId)) return;
 
         String titleString = filter.getTabGroupTitle(groupRootId);
         getUpdatedGroupTitle(groupRootId, titleString, incognito);

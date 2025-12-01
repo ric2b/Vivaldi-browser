@@ -5,27 +5,37 @@
 #include "chromeos/ash/components/mantis/media_app/mantis_untrusted_service_manager.h"
 
 #include <memory>
+#include <optional>
 #include <utility>
 
+#include "ash/constants/ash_features.h"
 #include "ash/constants/ash_pref_names.h"
 #include "ash/constants/ash_switches.h"
+#include "ash/constants/generative_ai_country_restrictions.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback_forward.h"
 #include "base/sequence_checker.h"
+#include "base/uuid.h"
 #include "chromeos/ash/components/mantis/media_app/mantis_untrusted_service.h"
 #include "chromeos/ash/components/mantis/mojom/mantis_service.mojom.h"
 #include "chromeos/ash/components/mojo_service_manager/connection.h"
 #include "chromeos/ash/components/mojo_service_manager/mojom/mojo_service_manager.mojom.h"
 #include "chromeos/ash/components/specialized_features/feature_access_checker.h"
+#include "chromeos/services/machine_learning/public/cpp/service_connection.h"
+#include "chromeos/services/machine_learning/public/mojom/machine_learning_service.mojom.h"
+#include "chromeos/services/machine_learning/public/mojom/text_classifier.mojom.h"
 #include "components/signin/public/identity_manager/account_capabilities.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
+#include "mojo/public/cpp/bindings/remote.h"
 #include "third_party/cros_system_api/mojo/service_constants.h"
 
 namespace ash {
 namespace {
 
 using ::ash::media_app_ui::mojom::MantisUntrustedPage;
+using ::chromeos::machine_learning::mojom::LoadModelResult;
+using ::chromeos::machine_learning::mojom::TextClassifier;
 using ::mantis::mojom::PlatformModelProgressObserver;
 
 enum class GenAIPhotoEditingSettings {
@@ -60,6 +70,8 @@ MantisUntrustedServiceManager::MantisUntrustedServiceManager(
       chromeos::mojo_services::kCrosMantisService, std::nullopt,
       cros_service_.BindNewPipeAndPassReceiver().PassPipe());
   cros_service_.reset_on_disconnect();
+  chromeos::machine_learning::ServiceConnection::GetInstance()
+      ->BindMachineLearningService(ml_service_.BindNewPipeAndPassReceiver());
 }
 
 MantisUntrustedServiceManager::~MantisUntrustedServiceManager() = default;
@@ -68,11 +80,11 @@ MantisUntrustedServiceManager::~MantisUntrustedServiceManager() = default;
 specialized_features::FeatureAccessConfig
 MantisUntrustedServiceManager::GetFeatureAccessConfig() {
   specialized_features::FeatureAccessConfig access_config;
-  // TODO(crbug.com/362993438): Check region restriction.
   access_config.capability_callback =
       base::BindRepeating([](AccountCapabilities capabilities) {
         return capabilities.can_use_generative_ai_photo_editing();
       });
+  access_config.country_codes = ash::GetGenerativeAiCountryAllowlist();
   return access_config;
 }
 
@@ -97,6 +109,10 @@ void MantisUntrustedServiceManager::IsAvailable(
     base::OnceCallback<void(bool)> callback) {
   if (switches::IsMantisSecretKeyMatched()) {
     std::move(callback).Run(true);
+    return;
+  }
+  if (!base::FeatureList::IsEnabled(ash::features::kMediaAppImageMantisModel)) {
+    std::move(callback).Run(false);
     return;
   }
 
@@ -131,8 +147,21 @@ MantisUntrustedServiceManager::CreateProgressObserver(
   return progress_observer;
 }
 
+mojo::PendingRemote<TextClassifier>
+MantisUntrustedServiceManager::GetTextClassifier() {
+  mojo::PendingRemote<TextClassifier> text_classifier;
+  ml_service_->LoadTextClassifier(
+      text_classifier.InitWithNewPipeAndPassReceiver(),
+      base::BindOnce([](LoadModelResult result) {
+        LOG_IF(ERROR, result != LoadModelResult::OK)
+            << "LoadTextClassifier error: " << result;
+      }));
+  return text_classifier;
+}
+
 void MantisUntrustedServiceManager::Create(
     mojo::PendingRemote<MantisUntrustedPage> page,
+    const std::optional<base::Uuid>& dlc_uuid,
     CreateCallback callback) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
@@ -140,7 +169,7 @@ void MantisUntrustedServiceManager::Create(
   // This API is designed by CrOS service to handle multiple calls safely.
   cros_service_->Initialize(
       CreateProgressObserver(std::move(page)),
-      processor.InitWithNewPipeAndPassReceiver(),
+      processor.InitWithNewPipeAndPassReceiver(), dlc_uuid, GetTextClassifier(),
       base::BindOnce(&MantisUntrustedServiceManager::OnInitializeDone,
                      weak_ptr_factory_.GetWeakPtr(), std::move(callback),
                      std::move(processor)));

@@ -99,7 +99,6 @@ class TabGroupSyncNavigationIntegrationTest : public InProcessBrowserTest {
     std::vector<base::test::FeatureRef> enabled_features;
     std::vector<base::test::FeatureRef> disabled_features;
 
-    enabled_features.push_back(tab_groups::kTabGroupsSaveV2);
     enabled_features.push_back(
         tab_groups::kTabGroupSyncServiceDesktopMigration);
 
@@ -121,7 +120,7 @@ class TabGroupSyncNavigationIntegrationTest : public InProcessBrowserTest {
   void SetupSyncBridgeModelObserver() {
     TabGroupSyncServiceImpl* service_impl =
         static_cast<TabGroupSyncServiceImpl*>(service());
-    SavedTabGroupModel* model = service_impl->GetModelForTesting();
+    SavedTabGroupModel* model = service_impl->GetModel();
     model->AddObserver(&sync_bridge_model_observer_);
   }
 
@@ -190,13 +189,13 @@ IN_PROC_BROWSER_TEST_F(TabGroupSyncNavigationIntegrationTest,
   std::unique_ptr<TabGroupActionContextDesktop> desktop_context =
       std::make_unique<TabGroupActionContextDesktop>(browser(),
                                                      OpeningSource::kUnknown);
-  service()->OpenTabGroup(saved_id, std::move(desktop_context));
+  std::optional<LocalTabGroupID> group_id =
+      service()->OpenTabGroup(saved_id, std::move(desktop_context));
 
-  retrieved_group = service()->GetGroup(saved_id);
-  EXPECT_TRUE(retrieved_group->local_group_id().has_value());
-  EXPECT_NE(local_group_id, retrieved_group->local_group_id());
+  EXPECT_TRUE(group_id.has_value());
+  EXPECT_NE(local_group_id, group_id);
   EXPECT_TRUE(browser()->tab_strip_model()->group_model()->ContainsTabGroup(
-      retrieved_group->local_group_id().value()));
+      group_id.value()));
 
   // There should be no write event back to sync.
   VerifyWrittenToSync(/*write_events_since_last=*/0);
@@ -207,7 +206,7 @@ IN_PROC_BROWSER_TEST_F(TabGroupSyncNavigationIntegrationTest,
   SetupSyncBridgeModelObserver();
   TabGroupSyncServiceImpl* service_impl =
       static_cast<TabGroupSyncServiceImpl*>(service());
-  SavedTabGroupModel* model = service_impl->GetModelForTesting();
+  SavedTabGroupModel* model = service_impl->GetModel();
 
   TabStripModel* const tabstrip = browser()->tab_strip_model();
 
@@ -243,7 +242,7 @@ IN_PROC_BROWSER_TEST_F(TabGroupSyncNavigationIntegrationTest,
   SetupSyncBridgeModelObserver();
   TabGroupSyncServiceImpl* service_impl =
       static_cast<TabGroupSyncServiceImpl*>(service());
-  SavedTabGroupModel* model = service_impl->GetModelForTesting();
+  SavedTabGroupModel* model = service_impl->GetModel();
 
   TabStripModel* const tabstrip = browser()->tab_strip_model();
 
@@ -308,5 +307,4 @@ IN_PROC_BROWSER_TEST_F(TabGroupSyncNavigationIntegrationTest,
                                /*add_to_end=*/true);
   VerifyWrittenToSync(/*write_events_since_last=*/1);
 }
-
 }  // namespace tab_groups

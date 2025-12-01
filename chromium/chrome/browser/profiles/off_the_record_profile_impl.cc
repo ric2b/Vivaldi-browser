@@ -96,6 +96,7 @@
 #if BUILDFLAG(IS_ANDROID)
 #include "components/prefs/scoped_user_pref_update.h"
 #else
+#include "chrome/browser/accessibility/tree_fixing/pref_names.h"
 #include "chrome/browser/profiles/guest_profile_creation_logger.h"
 #endif  // BUILDFLAG(IS_ANDROID)
 
@@ -233,6 +234,12 @@ void OffTheRecordProfileImpl::Init() {
   // AccessibilityLabelsService has a default prefs behavior in incognito.
   AccessibilityLabelsService::InitOffTheRecordPrefs(this);
 
+#if !BUILDFLAG(IS_ANDROID)
+  // To avoid using any server-side tree fixing service, it is disabled in
+  // Incognito profiles.
+  tree_fixing::InitOffTheRecordPrefs(this);
+#endif  // !BUILDFLAG(IS_ANDROID)
+
   // The ad service might not be available for some irregular profiles, like the
   // System Profile.
   if (heavy_ad_intervention::HeavyAdService* heavy_ad_service =
@@ -270,11 +277,6 @@ OffTheRecordProfileImpl::~OffTheRecordProfileImpl() {
 #endif
 
   FullBrowserTransitionManager::Get()->OnProfileDestroyed(this);
-
-  // Records the number of active KeyedServices for SystemProfile right before
-  // shutting them down.
-  if (IsSystemProfile())
-    ProfileMetrics::LogSystemProfileKeyedServicesCount(this);
 
   // The SimpleDependencyManager should always be passed after the
   // BrowserContextDependencyManager. This is because the KeyedService instances

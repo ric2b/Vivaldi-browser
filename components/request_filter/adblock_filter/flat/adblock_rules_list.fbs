@@ -111,6 +111,10 @@ table RequestFilterRule {
   // use for ngram extraction. It contains only string pieces that a url must
   // match to match the full regex, separated by wildcards
   ngram_search_string : string;
+
+  // The rule as it was originally written in the rules file. Useful for
+  // logging.
+  original_rule_text: string;
 }
 
 table ContentInjectionRuleCore {

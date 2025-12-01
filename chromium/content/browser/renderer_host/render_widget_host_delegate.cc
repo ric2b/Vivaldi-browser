@@ -13,6 +13,11 @@
 
 namespace content {
 
+bool RenderWidgetHostDelegate::PreHandleMouseEvent(
+    const blink::WebMouseEvent& event) {
+  return false;
+}
+
 KeyboardEventProcessingResult RenderWidgetHostDelegate::PreHandleKeyboardEvent(
     const input::NativeWebKeyboardEvent& event) {
   return KeyboardEventProcessingResult::NOT_HANDLED;
@@ -186,5 +191,11 @@ input::mojom::RenderInputRouterDelegate*
 RenderWidgetHostDelegate::GetRenderInputRouterDelegateRemote() {
   return nullptr;
 }
+
+#if BUILDFLAG(IS_ANDROID)
+float RenderWidgetHostDelegate::GetCurrentTouchSequenceYOffset() {
+  return 0.f;
+}
+#endif
 
 }  // namespace content

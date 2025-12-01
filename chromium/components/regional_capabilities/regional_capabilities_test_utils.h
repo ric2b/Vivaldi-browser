@@ -18,17 +18,17 @@
 
 namespace regional_capabilities {
 
-class RegionalCapabilitiesService;
+using country_codes::CountryId;
 
 std::unique_ptr<RegionalCapabilitiesService> CreateServiceWithFakeClient(
     PrefService& profile_prefs,
-    int country_id = country_codes::kCountryIDUnknown);
+    CountryId country_id = CountryId());
 
 class FakeRegionalCapabilitiesServiceClient
     : public RegionalCapabilitiesService::Client {
  public:
   explicit FakeRegionalCapabilitiesServiceClient(
-      int country_id = country_codes::kCountryIDUnknown);
+      CountryId country_id = CountryId());
 
   FakeRegionalCapabilitiesServiceClient(
       const FakeRegionalCapabilitiesServiceClient&) = delete;
@@ -38,22 +38,16 @@ class FakeRegionalCapabilitiesServiceClient
   ~FakeRegionalCapabilitiesServiceClient() override;
 
   void FetchCountryId(
-      base::OnceCallback<void(int)> on_country_id_fetched) override;
+      base::OnceCallback<void(CountryId)> on_country_id_fetched) override;
 
-  int GetFallbackCountryId() override;
+  CountryId GetFallbackCountryId() override;
+
+  CountryId GetVariationsLatestCountryId() override;
 
  private:
-  const int country_id_;
+  const CountryId country_id_;
 };
 
 }  // namespace regional_capabilities
-
-namespace testing::regional_capabilities {
-
-// Exposes `RegionalCapabilitiesService::GetCountryId()` to test functions,
-// as it is a friended private method.
-int GetCountryId(::regional_capabilities::RegionalCapabilitiesService& service);
-
-}  // namespace testing::regional_capabilities
 
 #endif  // COMPONENTS_REGIONAL_CAPABILITIES_REGIONAL_CAPABILITIES_TEST_UTILS_H_

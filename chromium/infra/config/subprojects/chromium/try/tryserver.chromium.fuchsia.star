@@ -204,12 +204,18 @@ try_.orchestrator_builder(
         "chromium.add_one_test_shard": 10,
         # crbug.com/940930
         "chromium.enable_cleandead": 100,
-        # b/346598710
-        "chromium.luci_analysis_v2": 100,
     },
     main_list_view = "try",
     tryjob = try_.job(),
     use_clang_coverage = True,
+)
+
+# TODO(fxbug.dev/370067428): Remove once Netstack2 no longer exists.
+try_.builder(
+    name = "fuchsia-netstack2-x64-cast-receiver-rel",
+    mirrors = ["ci/fuchsia-netstack2-x64-cast-receiver-rel"],
+    gn_args = "ci/fuchsia-netstack2-x64-cast-receiver-rel",
+    contact_team_email = "chrome-fuchsia-engprod@google.com",
 )
 
 try_.compilator_builder(

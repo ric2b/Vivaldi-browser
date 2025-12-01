@@ -11,6 +11,7 @@ import './shared_style.css.js';
 import './privacy_sandbox_dialog_learn_more.js';
 import './privacy_sandbox_privacy_policy_dialog.js';
 
+import {I18nMixin} from 'chrome://resources/cr_elements/i18n_mixin.js';
 import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {PrivacySandboxDialogBrowserProxy, PrivacySandboxPromptAction} from './privacy_sandbox_dialog_browser_proxy.js';
@@ -18,7 +19,7 @@ import {getTemplate} from './privacy_sandbox_dialog_consent_step.html.js';
 import {PrivacySandboxDialogMixin} from './privacy_sandbox_dialog_mixin.js';
 
 const PrivacySandboxDialogConsentStepElementBase =
-    PrivacySandboxDialogMixin(PolymerElement);
+    PrivacySandboxDialogMixin(I18nMixin(PolymerElement));
 
 export class PrivacySandboxDialogConsentStepElement extends
     PrivacySandboxDialogConsentStepElementBase {
@@ -38,14 +39,6 @@ export class PrivacySandboxDialogConsentStepElement extends
       },
 
       /**
-       * If true, the privacy policy text is hyperlinked.
-       */
-      isPrivacyPolicyLinkEnabled_: {
-        type: Boolean,
-        value: false,
-      },
-
-      /**
        * If true, the consent notice page is hidden.
        * On load, this page should not be hidden.
        */
@@ -53,11 +46,37 @@ export class PrivacySandboxDialogConsentStepElement extends
         type: Boolean,
         value: false,
       },
+
+      /**
+       * If true, the Ad Topics Content parity should be shown.
+       */
+      shouldShowAdTopicsContentParity_: {
+        type: Boolean,
+        value: false,
+      },
+
+      consentContentV2FirstDescription_: {
+        type: String,
+        computed:
+            'computeConsentContentV2FirstDescription_(shouldShowAdTopicsContentParity_)',
+      },
     };
   }
 
-  private isPrivacyPolicyLinkEnabled_: boolean;
+  private expanded_: boolean;
   private hideConsentNoticePage_: boolean;
+  private shouldShowAdTopicsContentParity_: boolean;
+  private consentContentV2FirstDescription_: string;
+
+  override ready() {
+    super.ready();
+
+    PrivacySandboxDialogBrowserProxy.getInstance()
+        .shouldShowAdTopicsContentParity()
+        .then(shouldShow => {
+          this.shouldShowAdTopicsContentParity_ = shouldShow;
+        });
+  }
 
   private onConsentAccepted_() {
     this.promptActionOccurred(PrivacySandboxPromptAction.CONSENT_ACCEPTED);
@@ -72,28 +91,15 @@ export class PrivacySandboxDialogConsentStepElement extends
   }
 
   private onConsentLearnMoreExpanded_(newValue: boolean, oldValue: boolean) {
-    this.loadPrivacyPolicyOnExpand_(newValue, oldValue);
     this.onConsentLearnMoreExpandedChanged(newValue, oldValue);
-  }
-
-  private loadPrivacyPolicyOnExpand_(newValue: boolean, oldValue: boolean) {
-    // When the expand is triggered, if the iframe hasn't been loaded yet,
-    // load it the first time the learn more expand section is clicked.
-    if (newValue && !oldValue) {
-      if (!this.shadowRoot!.querySelector('#privacyPolicyDialog')) {
-        PrivacySandboxDialogBrowserProxy.getInstance()
-            .shouldShowPrivacySandboxPrivacyPolicy()
-            .then(isPrivacyPolicyLinkEnabled => {
-              this.isPrivacyPolicyLinkEnabled_ = isPrivacyPolicyLinkEnabled;
-            });
-      }
-    }
   }
 
   private onBackButtonClicked_() {
     this.hideConsentNoticePage_ = false;
-    const privacyPolicyLinkId =
-        this.shouldShowV2() ? '#privacyPolicyLinkV2' : '#privacyPolicyLink';
+    const privacyPolicyLinkId = this.shouldShowV2() ?
+        (this.shouldShowAdTopicsContentParity_ ? '#privacyPolicyLinkV3' :
+                                                 '#privacyPolicyLinkV2') :
+        '#privacyPolicyLink';
     // Send focus back to privacy policy link for a11y screen reader.
     this.shadowRoot!.querySelector<HTMLElement>(privacyPolicyLinkId)!.focus();
   }
@@ -104,6 +110,13 @@ export class PrivacySandboxDialogConsentStepElement extends
 
   private getButtonsClass_() {
     return this.equalizedButtons() ? 'tonal-button' : '';
+  }
+
+  private computeConsentContentV2FirstDescription_(): string {
+    return this.i18n(
+        this.shouldShowAdTopicsContentParity_ ?
+            'm1ConsentDescription1ContentParity' :
+            'm1ConsentDescription2V2');
   }
 }
 

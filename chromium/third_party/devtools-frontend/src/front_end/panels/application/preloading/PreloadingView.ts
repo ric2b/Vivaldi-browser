@@ -2,7 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import '../../../ui/components/split_view/split_view.js';
 import '../../../ui/legacy/legacy.js';
 
 import * as Common from '../../../core/common/common.js';
@@ -13,7 +12,6 @@ import * as SDK from '../../../core/sdk/sdk.js';
 import * as Protocol from '../../../generated/protocol.js';
 import * as Bindings from '../../../models/bindings/bindings.js';
 import * as Buttons from '../../../ui/components/buttons/buttons.js';
-import type * as SplitView from '../../../ui/components/split_view/split_view.js';
 // eslint-disable-next-line rulesdir/es-modules-import
 import emptyWidgetStyles from '../../../ui/legacy/emptyWidget.css.js';
 import * as UI from '../../../ui/legacy/legacy.js';
@@ -79,12 +77,36 @@ const UIStrings = {
    *@description Text to pretty print a file
    */
   prettyPrint: 'Pretty print',
-};
+  /**
+   *@description Placeholder text if there are no rules to show. https://developer.chrome.com/docs/devtools/application/debugging-speculation-rules
+   */
+  noRulesDetected: 'No rules detected',
+  /**
+   *@description Placeholder text if there are no rules to show. https://developer.chrome.com/docs/devtools/application/debugging-speculation-rules
+   */
+  rulesDescription: 'On this page you will see the speculation rules used to prefetch and prerender page navigations.',
+  /**
+   *@description Placeholder text if there are no speculation attempts for prefetching or prerendering urls. https://developer.chrome.com/docs/devtools/application/debugging-speculation-rules
+   */
+  noPrefetchAttempts: 'No speculation detected',
+  /**
+   *@description Placeholder text if there are no speculation attempts for prefetching or prerendering urls. https://developer.chrome.com/docs/devtools/application/debugging-speculation-rules
+   */
+  prefetchDescription: 'On this page you will see details on speculative loads.',
+  /**
+   *@description Text for a learn more link
+   */
+  learnMore: 'Learn more',
+} as const;
 const str_ = i18n.i18n.registerUIStrings('panels/application/preloading/PreloadingView.ts', UIStrings);
 const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
 
+const SPECULATION_EXPLANATION_URL =
+    'https://developer.chrome.com/docs/devtools/application/debugging-speculation-rules' as
+    Platform.DevToolsPath.UrlString;
+
 // Used for selector, indicating no filter is specified.
-const AllRuleSetRootId: symbol = Symbol('AllRuleSetRootId');
+const AllRuleSetRootId = Symbol('AllRuleSetRootId');
 
 class PreloadingUIUtils {
   static status(status: SDK.PreloadingModel.PreloadingStatus): string {
@@ -150,7 +172,7 @@ class PreloadingUIUtils {
       return ruleSet.url;
     }
 
-    throw Error('unreachable');
+    throw new Error('unreachable');
   }
 
   static processLocalId(id: Protocol.Preload.RuleSetId): string {
@@ -182,7 +204,7 @@ export class PreloadingRuleSetView extends UI.Widget.VBox {
 
   private readonly warningsContainer: HTMLDivElement;
   private readonly warningsView = new PreloadingWarningsView();
-  private readonly hsplit: SplitView.SplitView.SplitView;
+  private readonly hsplit: HTMLElement;
   private readonly ruleSetGrid = new PreloadingComponents.RuleSetGrid.RuleSetGrid();
   private readonly ruleSetDetails = new PreloadingComponents.RuleSetDetailsView.RuleSetDetailsView();
 
@@ -219,7 +241,6 @@ export class PreloadingRuleSetView extends UI.Widget.VBox {
     this.warningsView.show(this.warningsContainer);
 
     this.ruleSetGrid.addEventListener('select', this.onRuleSetsGridCellFocused.bind(this));
-
     const onPrettyPrintToggle = (): void => {
       this.shouldPrettyPrint = !this.shouldPrettyPrint;
       this.updateRuleSetDetails();
@@ -228,12 +249,18 @@ export class PreloadingRuleSetView extends UI.Widget.VBox {
     // clang-format off
     render(
         html`
-        <devtools-split-view .horizontal=${true} style="--min-sidebar-size: max(100vh-200px, 0px)">
-          <div slot="main" class="overflow-auto" style="height: 100%">
+        <div class="empty-state">
+          <span class="empty-state-header">${i18nString(UIStrings.noRulesDetected)}</span>
+          <div class="empty-state-description">
+            <span>${i18nString(UIStrings.rulesDescription)}</span>
+            ${UI.XLink.XLink.create(SPECULATION_EXPLANATION_URL, i18nString(UIStrings.learnMore), 'x-link', undefined, 'learn-more')}
+          </div>
+        </div>
+        <devtools-split-view sidebar-position="second">
+          <div slot="main">
             ${this.ruleSetGrid}
           </div>
-          <div slot="sidebar" class="overflow-auto" style="height: 100%"
-          jslog=${VisualLogging.section('rule-set-details')}>
+          <div slot="sidebar" jslog=${VisualLogging.section('rule-set-details')}>
             ${this.ruleSetDetails}
           </div>
         </devtools-split-view>
@@ -251,7 +278,7 @@ export class PreloadingRuleSetView extends UI.Widget.VBox {
         </div>`,
         this.contentElement, {host: this});
     // clang-format on
-    this.hsplit = this.contentElement.querySelector('devtools-split-view') as SplitView.SplitView.SplitView;
+    this.hsplit = this.contentElement.querySelector('devtools-split-view') as HTMLElement;
   }
 
   override wasShown(): void {
@@ -281,9 +308,9 @@ export class PreloadingRuleSetView extends UI.Widget.VBox {
     this.ruleSetDetails.data = ruleSet;
 
     if (ruleSet === null) {
-      this.hsplit.style.setProperty('--current-main-area-size', '100%');
+      this.hsplit.setAttribute('sidebar-visibility', 'hidden');
     } else {
-      this.hsplit.style.setProperty('--current-main-area-size', '60%');
+      this.hsplit.removeAttribute('sidebar-visibility');
     }
   }
 
@@ -298,7 +325,7 @@ export class PreloadingRuleSetView extends UI.Widget.VBox {
       };
     });
     this.ruleSetGrid.update({rows: ruleSetRows, pageURL: pageURL()});
-
+    this.contentElement.classList.toggle('empty', ruleSetRows.length === 0);
     this.updateRuleSetDetails();
   }
 
@@ -377,7 +404,16 @@ export class PreloadingAttemptView extends UI.Widget.VBox {
     this.preloadingGrid.addEventListener('select', this.onPreloadingGridCellFocused.bind(this));
     render(
         html`
-        <devtools-split-view .horizontal=${true} style="--min-sidebar-size: 0px">
+        <div class="empty-state">
+          <span class="empty-state-header">${i18nString(UIStrings.noPrefetchAttempts)}</span>
+          <div class="empty-state-description">
+            <span>${i18nString(UIStrings.prefetchDescription)}</span>
+            ${
+            UI.XLink.XLink.create(
+                SPECULATION_EXPLANATION_URL, i18nString(UIStrings.learnMore), 'x-link', undefined, 'learn-more')}
+          </div>
+        </div>
+        <devtools-split-view sidebar-position="second">
           <div slot="main" class="overflow-auto" style="height: 100%">
             ${this.preloadingGrid}
           </div>
@@ -421,8 +457,7 @@ export class PreloadingAttemptView extends UI.Widget.VBox {
       this.preloadingDetails.data = null;
     } else {
       const pipeline = this.model.getPipeline(preloadingAttempt);
-      const ruleSets = preloadingAttempt.ruleSetIds.map(id => this.model.getRuleSetById(id)).filter(x => x !== null) as
-          Protocol.Preload.RuleSet[];
+      const ruleSets = preloadingAttempt.ruleSetIds.map(id => this.model.getRuleSetById(id)).filter(x => x !== null);
       this.preloadingDetails.data = {
         pipeline,
         ruleSets,
@@ -448,6 +483,7 @@ export class PreloadingAttemptView extends UI.Widget.VBox {
       };
     });
     this.preloadingGrid.update({rows, pageURL: pageURL()});
+    this.contentElement.classList.toggle('empty', rows.length === 0);
 
     this.updatePreloadingDetails();
   }
@@ -582,7 +618,7 @@ class PreloadingRuleSetSelector implements
 
   private onModelUpdated(): void {
     const ids = this.model.getAllRuleSets().map(({id}) => id);
-    const items = [AllRuleSetRootId, ...ids];
+    const items = [AllRuleSetRootId, ...ids] as [typeof AllRuleSetRootId, ...Protocol.Preload.RuleSetId[]];
     const selected = this.dropDown.getSelectedItem();
     this.listModel.replaceAll(items);
     if (selected === null) {
@@ -594,7 +630,7 @@ class PreloadingRuleSetSelector implements
   }
 
   // Updates the width for the DropDown element.
-  private updateWidth(items: (Protocol.Preload.RuleSetId|typeof AllRuleSetRootId)[]): void {
+  private updateWidth(items: Array<Protocol.Preload.RuleSetId|typeof AllRuleSetRootId>): void {
     // Width set by `UI.SoftDropDown`.
     const DEFAULT_WIDTH = 315;
     const urlLengths = items.map(x => this.titleFor(x).length);

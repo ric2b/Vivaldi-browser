@@ -9,12 +9,13 @@
 #include "content/browser/shared_storage/shared_storage_runtime_manager.h"
 #include "content/browser/storage_partition_impl.h"
 #include "services/network/public/mojom/shared_storage.mojom.h"
+#include "third_party/blink/public/common/shared_storage/shared_storage_utils.h"
 
 namespace content {
 
 namespace {
 
-using AccessScope = SharedStorageLockManager::AccessScope;
+using AccessScope = blink::SharedStorageAccessScope;
 
 blink::mojom::WebFeature ToWebFeature(
     auction_worklet::mojom::AuctionWorkletFunction auction_worklet_function) {
@@ -73,7 +74,8 @@ void AuctionSharedStorageHost::SharedStorageUpdate(
       .SharedStorageUpdate(std::move(method_with_options),
                            receiver_set_.current_context().worklet_origin,
                            AccessScope::kProtectedAudienceWorklet,
-                           main_frame_id, base::DoNothing());
+                           main_frame_id, /*worklet_id=*/std::nullopt,
+                           base::DoNothing());
 
   GetContentClient()->browser()->LogWebFeatureForCurrentPage(
       receiver_set_.current_context().auction_runner_rfh,
@@ -96,7 +98,8 @@ void AuctionSharedStorageHost::SharedStorageBatchUpdate(
       .SharedStorageBatchUpdate(std::move(methods_with_options), with_lock,
                                 receiver_set_.current_context().worklet_origin,
                                 AccessScope::kProtectedAudienceWorklet,
-                                main_frame_id, base::DoNothing());
+                                main_frame_id, /*worklet_id=*/std::nullopt,
+                                base::DoNothing());
 
   GetContentClient()->browser()->LogWebFeatureForCurrentPage(
       receiver_set_.current_context().auction_runner_rfh,

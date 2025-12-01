@@ -32,7 +32,7 @@
 #include "tensorflow/lite/experimental/litert/core/model/model.h"
 #include "tensorflow/lite/experimental/litert/core/model/model_graph.h"
 #include "tensorflow/lite/experimental/litert/core/util/flatbuffer_tools.h"
-#include "tensorflow/lite/experimental/litert/test/test_macros.h"
+#include "tensorflow/lite/experimental/litert/test/matchers.h"
 #include "tensorflow/lite/experimental/litert/vendors/cc/backend_ir.h"
 #include "tensorflow/lite/experimental/litert/vendors/examples/example_conversion_impl.h"
 #include "tensorflow/lite/experimental/litert/vendors/examples/example_ir.h"
@@ -150,7 +150,7 @@ TEST(ConvertGraphTest, ConvertSingleSimpleConversion) {
       litert_subgraph, std::string(kGraphName), MakeTensorConverter,
       tensor_alloc, op_alloc, MakeAllLegalizations(), builder);
 
-  LITERT_ASSERT_STATUS_OK(stat);
+  LITERT_ASSERT_OK(stat);
 }
 
 TEST(ConvertGraphTest, ConvertSingleGeneralConversion) {
@@ -163,7 +163,7 @@ TEST(ConvertGraphTest, ConvertSingleGeneralConversion) {
   add_opts.fused_activation_function = tflite::ActivationFunctionType_RELU;
   internal::TflOptions tfl_opts;
   tfl_opts.Set(std::move(add_opts));
-  detail::SetTflOptions(op, std::move(tfl_opts));
+  litert::internal::SetTflOptions(op, std::move(tfl_opts));
 
   auto& input1 = subgraph.EmplaceTensor();
   input1.SetType(GetTestTensorType());
@@ -259,7 +259,7 @@ TEST(ConvertGraphTest, ConvertSingleGeneralConversion) {
       litert_subgraph, std::string(kGraphName), MakeTensorConverter,
       tensor_alloc, op_alloc, MakeAllLegalizations(), builder);
 
-  LITERT_ASSERT_STATUS_OK(stat);
+  LITERT_ASSERT_OK(stat);
 }
 
 TEST(ConvertGraphTest, ConvertMultipleOps) {
@@ -383,7 +383,7 @@ TEST(ConvertGraphTest, ConvertMultipleOps) {
       litert_subgraph, std::string(kGraphName), MakeTensorConverter,
       tensor_alloc, op_alloc, MakeAllLegalizations(), builder);
 
-  LITERT_ASSERT_STATUS_OK(stat);
+  LITERT_ASSERT_OK(stat);
 }
 
 }  // namespace

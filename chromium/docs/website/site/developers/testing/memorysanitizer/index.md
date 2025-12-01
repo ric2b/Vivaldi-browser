@@ -41,6 +41,16 @@ You can grab fresh Chrome binaries for Linux built with MSan
 
 ## How to build and run
 
+In the `.gclient` file, add
+
+```
+...
+"custom_vars" : {
+    "checkout_instrumented_libraries": True,
+}
+...
+```
+
 To set up an MSan build in GN:
 
 ```shell

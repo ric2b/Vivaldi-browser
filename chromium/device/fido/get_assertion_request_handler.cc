@@ -20,7 +20,6 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/timer/elapsed_timer.h"
 #include "build/build_config.h"
-#include "build/chromeos_buildflags.h"
 #include "components/cbor/diagnostic_writer.h"
 #include "components/device_event_log/device_event_log.h"
 #include "device/fido/authenticator_get_assertion_response.h"
@@ -261,7 +260,8 @@ CtapGetAssertionRequest SpecializeRequestForAuthenticator(
     specialized_request.user_verification =
         AtLeastUVPreferred(specialized_request.user_verification);
   }
-  if (preselected_credential) {
+  if (preselected_credential &&
+      preselected_credential->source == authenticator.GetType()) {
     specialized_request.allow_list = {PublicKeyCredentialDescriptor(
         CredentialType::kPublicKey, preselected_credential->cred_id,
         {preselected_credential->source == device::AuthenticatorType::kPhone

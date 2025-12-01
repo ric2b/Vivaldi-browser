@@ -1144,12 +1144,6 @@ void sqlite3Pragma(
         ** in auto-commit mode.  */
         mask &= ~(SQLITE_ForeignKeys);
       }
-#if SQLITE_USER_AUTHENTICATION
-      if( db->auth.authLevel==UAUTH_User ){
-        /* Do not allow non-admin users to modify the schema arbitrarily */
-        mask &= ~(SQLITE_WriteSchema);
-      }
-#endif
 
       if( sqlite3GetBoolean(zRight, 0) ){
         if( (mask & SQLITE_WriteSchema)==0
@@ -1285,7 +1279,8 @@ void sqlite3Pragma(
             char *zSql = sqlite3MPrintf(db, "SELECT*FROM\"%w\"", pTab->zName);
             if( zSql ){
               sqlite3_stmt *pDummy = 0;
-              (void)sqlite3_prepare(db, zSql, -1, &pDummy, 0);
+              (void)sqlite3_prepare_v3(db, zSql, -1, SQLITE_PREPARE_DONT_LOG,
+                                       &pDummy, 0);
               (void)sqlite3_finalize(pDummy);
               sqlite3DbFree(db, zSql);
             }
@@ -1761,11 +1756,12 @@ void sqlite3Pragma(
 
       /* Make sure sufficient number of registers have been allocated */
       sqlite3TouchRegister(pParse, 8+cnt);
+      sqlite3VdbeAddOp3(v, OP_Null, 0, 8, 8+cnt);
       sqlite3ClearTempRegCache(pParse);
 
       /* Do the b-tree integrity checks */
       sqlite3VdbeAddOp4(v, OP_IntegrityCk, 1, cnt, 8, (char*)aRoot,P4_INTARRAY);
-      sqlite3VdbeChangeP5(v, (u8)i);
+      sqlite3VdbeChangeP5(v, (u16)i);
       addr = sqlite3VdbeAddOp1(v, OP_IsNull, 2); VdbeCoverage(v);
       sqlite3VdbeAddOp4(v, OP_String8, 0, 3, 0,
          sqlite3MPrintf(db, "*** in database %s ***\n", db->aDb[i].zDbSName),

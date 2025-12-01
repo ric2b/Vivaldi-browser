@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef OPENSSL_HEADER_ASN1_INTERNAL_H
-#define OPENSSL_HEADER_ASN1_INTERNAL_H
+#ifndef OPENSSL_HEADER_CRYPTO_ASN1_INTERNAL_H
+#define OPENSSL_HEADER_CRYPTO_ASN1_INTERNAL_H
 
 #include <time.h>
 
@@ -219,4 +219,4 @@ typedef struct ASN1_EXTERN_FUNCS_st {
 }  // extern C
 #endif
 
-#endif  // OPENSSL_HEADER_ASN1_INTERNAL_H
+#endif  // OPENSSL_HEADER_CRYPTO_ASN1_INTERNAL_H

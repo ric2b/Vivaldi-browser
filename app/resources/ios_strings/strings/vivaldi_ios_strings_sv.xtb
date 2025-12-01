@@ -5,7 +5,7 @@
 <translation id="1097355661841455597">Vi vill gärna höra dina tankar.</translation>
 <translation id="1137850887415122856">För att låsa dina privata flikar, ställ in Touch ID, Face ID eller ett lösenord.</translation>
 <translation id="1310184829257917508">Be att få öppna länkar från andra appar privat</translation>
-<translation id="1561609750546413721">Vivaldi Översätt</translation>
+<translation id="1743244221910283364">Radera ändringar</translation>
 <translation id="207677936531967364">Ny privat fliksida</translation>
 <translation id="2353953000228441783">Standardvy för webbplats</translation>
 <translation id="2394192052244849643">Klistra in och sök</translation>
@@ -17,7 +17,9 @@
 <translation id="3463990832590571933">Öppna i ny privat flik</translation>
 <translation id="3473652525653758699">Nytt privat fönster</translation>
 <translation id="3501504415290398157">Använd <ph name="BIOMETRIC_AUTHENITCATION_TYPE" /> för att låsa upp dina privata flikar.</translation>
+<translation id="3607792383367580513">Översätt</translation>
 <translation id="3692650606013198282">Öppna privat</translation>
+<translation id="3922395466317605522">Anpassa meny</translation>
 <translation id="3981599532037327317">Öppna ${url} privat</translation>
 <translation id="398477389655464998">Kopiera länk till markering</translation>
 <translation id="4026745073321351206">🙄 Hittat ett problem?</translation>
@@ -33,16 +35,17 @@
 <translation id="570209299585559496">Du kan ändra standardwebbplatsvyn till skrivbordet i inställningar och sedan innehållsinställningar</translation>
 <translation id="5962477178930921574">Klistra in och sök</translation>
 <translation id="6233792867654386826">Öppnar de inmatade webbadresserna i Vivaldi.</translation>
+<translation id="6532106788206463496">Spara ändringar</translation>
 <translation id="6680416467695217368">Anpassa meny</translation>
 <translation id="6827597288286078054">Privat sök</translation>
 <translation id="6851516051005285358">Begär skrivbordswebbplats</translation>
 <translation id="7307970171564921489">Lås upp privata flikar med <ph name="BIOMETRIC_AUTHENITCATION_TYPE" /></translation>
 <translation id="7347289093190902150">Öppna privat?</translation>
+<translation id="7498234416455752244">Fortsätt redigera</translation>
 <translation id="7549299604720382000">Ny privat flik</translation>
-<translation id="755255281989213264">Anpassa meny</translation>
-<translation id="7920949005883349320">Integritet och säkerhet</translation>
 <translation id="7961015016161918242">Aldrig</translation>
 <translation id="8326104954595890674">Ny privat flik</translation>
 <translation id="8756969031206844760">Vill du uppdatera lösenordet?</translation>
+<translation id="9042893549633094279">Integritet och säkerhet</translation>
 <translation id="9094033019050270033">Uppdatera lösenordet</translation>
 </translationbundle>

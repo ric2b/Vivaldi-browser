@@ -48,14 +48,6 @@ export class SettingsTranslatePageElement extends
   static get properties() {
     return {
       /**
-       * Preferences state.
-       */
-      prefs: {
-        type: Object,
-        notify: true,
-      },
-
-      /**
        * Read-only reference to the languages model provided by the
        * 'settings-languages' instance.
        */
@@ -125,7 +117,7 @@ export class SettingsTranslatePageElement extends
    */
   private hasDisplayName_(language: chrome.languageSettingsPrivate.Language|
                           undefined): boolean {
-    return !!language && !!language!.displayName;
+    return !!language && !!language.displayName;
   }
 
   /**

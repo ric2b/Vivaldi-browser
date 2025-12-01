@@ -23,7 +23,7 @@ import {assert} from 'chrome://resources/js/assert.js';
 import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {DeepLinkingMixin} from '../common/deep_linking_mixin.js';
-import {isAssistantAllowed, isLobsterSettingsToggleVisible, isMagicBoostFeatureEnabled, isMagicBoostNoticeBannerVisible, isQuickAnswersSupported, isSunfishSettingsToggleVisible} from '../common/load_time_booleans.js';
+import {isAssistantAllowed, isLobsterSettingsToggleVisible, isMagicBoostFeatureEnabled, isMagicBoostNoticeBannerVisible, isQuickAnswersSupported, isScannerSettingsToggleVisible} from '../common/load_time_booleans.js';
 import {RouteOriginMixin} from '../common/route_origin_mixin.js';
 import type {PrefsState} from '../common/types.js';
 import {Setting} from '../mojom-webui/setting.mojom-webui.js';
@@ -31,6 +31,8 @@ import type {Route} from '../router.js';
 import {Router, routes} from '../router.js';
 
 import {getTemplate} from './search_and_assistant_settings_card.html.js';
+
+const ENTERPRISE_POLICY_DISALLOWED = 2;
 
 const SearchAndAssistantSettingsCardElementBase =
     DeepLinkingMixin(RouteOriginMixin(I18nMixin(PolymerElement)));
@@ -80,12 +82,42 @@ export class SearchAndAssistantSettingsCardElement extends
         },
       },
 
-      isSunfishSettingsToggleVisible_: {
+      isScannerSettingsToggleVisible_: {
         type: Boolean,
         readOnly: true,
         value: () => {
-          return isSunfishSettingsToggleVisible();
+          return isScannerSettingsToggleVisible();
         },
+      },
+
+      isLobsterAllowedByEnterprisePolicy_: {
+        type: Boolean,
+        computed: 'isEnterprisePolicyAllowed_(' +
+            'prefs.settings.lobster.enterprise_settings.value)',
+      },
+
+      isScannerAllowedByEnterprisePolicy_: {
+        type: Boolean,
+        computed: 'isEnterprisePolicyAllowed_(' +
+            'prefs.ash.scanner.enterprise_policy_allowed.value)',
+      },
+
+      isHmrAllowedByEnterprisePolicy_: {
+        type: Boolean,
+        computed: 'isEnterprisePolicyAllowed_(' +
+            'prefs.settings.managed.help_me_read.value)',
+      },
+
+      isHmwAllowedByEnterprisePolicy_: {
+        type: Boolean,
+        computed: 'isEnterprisePolicyAllowed_(' +
+            'prefs.settings.managed.help_me_write.value)',
+      },
+
+      enterprisePolicyToggleUncheckedValues_: {
+        type: Array,
+        readOnly: true,
+        value: () => [ENTERPRISE_POLICY_DISALLOWED],
       },
 
       /** Can be disallowed due to flag, policy, locale, etc. */
@@ -108,6 +140,7 @@ export class SearchAndAssistantSettingsCardElement extends
           Setting.kShowOrca,
           Setting.kLobsterOnOff,
           Setting.kSunfishOnOff,
+          Setting.kScannerOnOff,
         ]),
       },
     };
@@ -117,7 +150,7 @@ export class SearchAndAssistantSettingsCardElement extends
   private isAssistantAllowed_: boolean;
   private isQuickAnswersSupported_: boolean;
   private isMagicBoostFeatureEnabled_: boolean;
-  private readonly isSunfishSettingsToggleVisible_: boolean;
+  private readonly isScannerSettingsToggleVisible_: boolean;
 
   constructor() {
     super();
@@ -159,6 +192,10 @@ export class SearchAndAssistantSettingsCardElement extends
     return this.i18n(
         isAssistantEnabled ? 'searchGoogleAssistantEnabled' :
                              'searchGoogleAssistantDisabled');
+  }
+
+  private isEnterprisePolicyAllowed_(value: number): boolean {
+    return value !== ENTERPRISE_POLICY_DISALLOWED;
   }
 }
 

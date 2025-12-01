@@ -33,18 +33,6 @@ export class PrivacyGuideMsbbFragmentElement extends
     return getTemplate();
   }
 
-  static get properties() {
-    return {
-      /**
-       * Preferences state.
-       */
-      prefs: {
-        type: Object,
-        notify: true,
-      },
-    };
-  }
-
   private metricsBrowserProxy_: MetricsBrowserProxy =
       MetricsBrowserProxyImpl.getInstance();
   private startStateMsbbOn_: boolean;
@@ -86,7 +74,7 @@ export class PrivacyGuideMsbbFragmentElement extends
       state = endStateMsbbOn ? PrivacyGuideSettingsStates.MSBB_OFF_TO_ON :
                                PrivacyGuideSettingsStates.MSBB_OFF_TO_OFF;
     }
-    this.metricsBrowserProxy_.recordPrivacyGuideSettingsStatesHistogram(state!);
+    this.metricsBrowserProxy_.recordPrivacyGuideSettingsStatesHistogram(state);
   }
 
   private onMsbbToggleClick_() {

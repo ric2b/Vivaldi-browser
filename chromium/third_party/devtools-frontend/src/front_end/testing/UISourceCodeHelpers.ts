@@ -14,12 +14,12 @@ import * as Workspace from '../models/workspace/workspace.js';
 const {urlString} = Platform.DevToolsPath;
 
 export function createContentProviderUISourceCodes(options: {
-  items: {
+  items: Array<{
     url: Platform.DevToolsPath.UrlString,
     content?: string, mimeType: string,
     resourceType?: Common.ResourceType.ResourceType,
     metadata?: Workspace.UISourceCode.UISourceCodeMetadata,
-  }[],
+  }>,
   projectType?: Workspace.Workspace.projectTypes,
   projectId?: string,
   target?: SDK.Target.Target,
@@ -71,10 +71,15 @@ class TestPlatformFileSystem extends Persistence.PlatformFileSystem.PlatformFile
   readonly #mimeType: string;
   readonly #autoMapping: boolean;
 
-  constructor(path: Platform.DevToolsPath.UrlString, type: string, mimeType: string, autoMapping: boolean) {
-    super(path, type);
+  constructor(
+      path: Platform.DevToolsPath.UrlString, type: Persistence.PlatformFileSystem.PlatformFileSystemType,
+      mimeType: string, autoMapping: boolean) {
+    super(path, type, false);
     this.#mimeType = mimeType;
     this.#autoMapping = autoMapping;
+  }
+  override tooltipForURL(_url: Platform.DevToolsPath.UrlString): string {
+    return 'tooltip-for-url';
   }
   override supportsAutomapping(): boolean {
     return this.#autoMapping;
@@ -117,7 +122,7 @@ export function createFileSystemUISourceCode(options: {
   content?: string,
   fileSystemPath?: string,
   autoMapping?: boolean,
-  type?: string,
+  type?: Persistence.PlatformFileSystem.PlatformFileSystemType,
   metadata?: Workspace.UISourceCode.UISourceCodeMetadata,
 }): {uiSourceCode: Workspace.UISourceCode.UISourceCode, project: Persistence.FileSystemWorkspaceBinding.FileSystem} {
   const workspace = Workspace.Workspace.WorkspaceImpl.instance();
@@ -127,8 +132,9 @@ export function createFileSystemUISourceCode(options: {
   const fileSystemPath = urlString`${options.fileSystemPath || ''}`;
   const type = options.type || '';
   const content = options.content || '';
-  const platformFileSystem =
-      new TestPlatformFileSystem(fileSystemPath, type, options.mimeType, Boolean(options.autoMapping));
+  const platformFileSystem = new TestPlatformFileSystem(
+      fileSystemPath, type || Persistence.PlatformFileSystem.PlatformFileSystemType.WORKSPACE_PROJECT, options.mimeType,
+      Boolean(options.autoMapping));
   const metadata = options.metadata || new Workspace.UISourceCode.UISourceCodeMetadata(null, null);
 
   const project = new TestFileSystem({fileSystemWorkspaceBinding, platformFileSystem, workspace, content, metadata});
@@ -139,7 +145,7 @@ export function createFileSystemUISourceCode(options: {
   return {uiSourceCode, project};
 }
 
-export function setupMockedUISourceCode(url: string = 'https://example.com/') {
+export function setupMockedUISourceCode(url = 'https://example.com/') {
   const projectStub = sinon.createStubInstance(Bindings.ContentProviderBasedProject.ContentProviderBasedProject);
   const urlStringTagExample = urlString`${url}`;
   const contentTypeStub = sinon.createStubInstance(Common.ResourceType.ResourceType);

@@ -148,9 +148,9 @@ bool SortPRFValuesByCredentialId(const PRFValuesPtr& a, const PRFValuesPtr& b) {
 }
 
 Vector<uint8_t> Base64UnpaddedURLDecodeOrCheck(const String& encoded) {
-  Vector<char> decoded;
+  Vector<uint8_t> decoded;
   CHECK(WTF::Base64UnpaddedURLDecode(encoded, decoded));
-  return Vector<uint8_t>(base::as_byte_span(decoded));
+  return decoded;
 }
 
 }  // namespace
@@ -238,8 +238,6 @@ TypeConverter<blink::AuthenticationExtensionsClientOutputs*,
   }
 #endif
   if (extensions->echo_large_blob) {
-    DCHECK(blink::RuntimeEnabledFeatures::
-               WebAuthenticationLargeBlobExtensionEnabled());
     blink::AuthenticationExtensionsLargeBlobOutputs* large_blob_outputs =
         blink::AuthenticationExtensionsLargeBlobOutputs::Create();
     if (extensions->large_blob) {
@@ -983,11 +981,7 @@ TypeConverter<IdentityProviderRequestOptionsPtr,
 
   mojo_options->nonce = options.getNonceOr("");
   mojo_options->login_hint = options.getLoginHintOr("");
-  mojo_options->domain_hint =
-      blink::RuntimeEnabledFeatures::FedCmDomainHintEnabled()
-          ? options.getDomainHintOr("")
-          : "";
-
+  mojo_options->domain_hint = options.getDomainHintOr("");
   if (options.hasFormat()) {
     // Only one format type is supported at the time and the bindings code
     // verifies that the correct one was specified.

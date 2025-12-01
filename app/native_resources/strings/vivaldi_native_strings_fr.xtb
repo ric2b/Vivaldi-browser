@@ -14,6 +14,7 @@
 <translation id="1454726940098520109">Ne plus afficher la boîte de confirmation</translation>
 <translation id="1462666970065907900">Voulez-vous vraiment fermer cette fenêtre ?</translation>
 <translation id="1480046233931937785">Crédits</translation>
+<translation id="1490502035430975848">Inspecter le document du portail</translation>
 <translation id="1521774566618522728">Actif aujourd’hui</translation>
 <translation id="1526344461589023948">Une erreur est survenue lors de l’enregistrement de la mise à jour téléchargée. Veuillez vérifier l’espace disque disponible sur votre ordinateur et essayer plus tard.</translation>
 <translation id="1635542496948266458">Basculer d’un profil à un autre</translation>
@@ -34,9 +35,11 @@
 <translation id="2141974047387702305">Une erreur est survenue lors du téléchargement des fichiers de mise à jour. Veuillez vérifier votre connexion et essayer plus tard.</translation>
 <translation id="2226825946708954262">⚠ Continuer avec perte de données</translation>
 <translation id="2339641773402824483">Recherche des mises à jour…</translation>
+<translation id="2429571091666452569">Depuis la liste :</translation>
 <translation id="2441056087170876076">Monstre 2</translation>
 <translation id="2444387452209867610">Insérer une note</translation>
 <translation id="2486841023299517366">Animal 4</translation>
+<translation id="2501278716633472235">Retour</translation>
 <translation id="2612127540243995147">La nouvelle version est prête à être installée. Vivaldi sera fermé puis relancé automatiquement.</translation>
 <translation id="2613387515621326337">Afficher le site de la mise à jour</translation>
 <translation id="2645477450146475243">Malheureusement, les paramètres d’Opera ne sont pas disponibles lorsque le navigateur est en cours d’exécution. Pour importer ces paramètres dans Vivaldi, sauvegardez votre travail et fermez toutes les fenêtres d’Opera. Cliquez ensuite sur Continuer.</translation>
@@ -61,6 +64,7 @@
 <translation id="3259769196742189631">Valider cette page (W3C)</translation>
 <translation id="3291915639428159043">Lecture automatique bloquée</translation>
 <translation id="3302905971452834934">Monstre 1</translation>
+<translation id="3308738399950580893">publicités</translation>
 <translation id="3334610655141903168">(pas de titre)</translation>
 <translation id="3372505110412186107">Vivaldi <ph name="VERSION" /> est actuellement la dernière version disponible.</translation>
 <translation id="3383198080133834965">Vivaldi est bien à jour !</translation>
@@ -71,9 +75,11 @@
 <translation id="3521635864657970829">Voulez-vous vraiment fermer cette fenêtre ?</translation>
 <translation id="3540597690227428180">Animal 9</translation>
 <translation id="3542768452570884558">Ouvrir le lien dans une nouvelle &amp;fenêtre</translation>
+<translation id="3586931643579894722">Masquer les détails</translation>
 <translation id="3588820906588687999">Ouvrir l’image dans un nouvel onglet</translation>
 <translation id="3601066750251199488">Monstre 3</translation>
 <translation id="3620979700683094848">Les sites peuvent automatiquement lire les vidéos</translation>
+<translation id="3650023731264842343">Pendant le chargement de la page suivante :</translation>
 <translation id="3658651522139217005">Opera GX</translation>
 <translation id="3680031241659195730">Une nouvelle version de Vivaldi est disponible !</translation>
 <translation id="3708982624815781692">Le téléchargement a été annulé.</translation>
@@ -83,6 +89,7 @@
 <translation id="3795800845758778870">Malheureusement, vos paramètres Brave ne sont pas disponibles lorsque celui-ci est lancé. Pour importer ces paramètres sur Vivaldi, enregistrez votre travail et fermez toutes les fenêtres de Brave. Cliquez ensuite sur Continuer.</translation>
 <translation id="3822431842304177896">Nouveau séparateur</translation>
 <translation id="3832132597516774400">Paysage 5</translation>
+<translation id="3894751534882749287">Si vous souhaitez afficher la page malgré tout, vous pouvez modifier son niveau de protection dans la popup de blocage des traqueurs ou en cliquant sur le bouton Autoriser</translation>
 <translation id="3914946330804881301">Importés d’Opera</translation>
 <translation id="3921292902397893431">Monstre 8</translation>
 <translation id="3943857333388298514">Coller</translation>
@@ -107,6 +114,7 @@
 <translation id="4582480609585453144">Ouvrir le lien en arrière-plan</translation>
 <translation id="4636708767492582204">Envoyer l’adresse de cette page par mail</translation>
 <translation id="4677434526832593569">Animal 8</translation>
+<translation id="4736016046474602958">Bloqueur de traqueurs</translation>
 <translation id="474217410105706308">Mettre l’onglet en sourdine</translation>
 <translation id="4861715717329665002">Sessions enregistrées automatiquement</translation>
 <translation id="4881695831933465202">Ouvrir</translation>
@@ -133,9 +141,11 @@
 <translation id="588258955323874662">Plein écran</translation>
 <translation id="5916080360077521750">Malheureusement, les données de Chrome ne sont pas accessibles lorsque ce navigateur est lancé. Pour importer ces données dans Vivaldi, enregistrez votre travail en cours et fermez toutes les fenêtres Chrome. Puis cliquez sur « Continuer ».</translation>
 <translation id="6040143037577758943">Fermer</translation>
+<translation id="6140948187512243695">Afficher les détails</translation>
 <translation id="6229528619562190452">Cliquez ici pour mettre à jour Vivaldi.</translation>
 <translation id="6234173136417926046">Utiliser cette image comme image de fond de Speed Dial</translation>
 <translation id="6339818817272922368">Compte local</translation>
+<translation id="6376435169746695498">Le chargement de cette page a été bloqué par une règle de <ph name="BLOCKER_NAME" /></translation>
 <translation id="6398710281890660037">Sécuriser mon profil</translation>
 <translation id="6438786710866753178">Paysage 4</translation>
 <translation id="6477028720702061455">Sélectionner le répertoire du profil d’Opera à importer</translation>
@@ -152,6 +162,7 @@
 <translation id="7086554968911045110">Paysage 7</translation>
 <translation id="7099506190679014195">Mise à jour du stockage de clés sécurisé</translation>
 <translation id="7111492742514999492">Paysage 9</translation>
+<translation id="7113310725918019676">Autoriser <ph name="BLOCKED_TYPE" /> depuis <ph name="DOMAIN" /></translation>
 <translation id="7208252576848052204">Malheureusement, vos paramètres d’Arc ne sont pas disponibles lorsque ce navigateur est en cours d’exécution. Pour importer ces paramètres dans Vivaldi, sauvegardez votre travail et fermez toutes les fenêtres d’Arc. Cliquez ensuite sur Continuer.</translation>
 <translation id="7321500017121629018">Actif hier</translation>
 <translation id="7337881442233988129">Chromium</translation>
@@ -167,12 +178,13 @@
 <translation id="8027581147000338959">Ouvrir dans une nouvelle fenêtre</translation>
 <translation id="8044382196220116469">Ne pas autoriser les sites à lire automatiquement les vidéos</translation>
 <translation id="8099620695029051217">Copier l’adresse de la page</translation>
+<translation id="8119307142152921512">traqueurs et publicités</translation>
 <translation id="8197810018650377191">Enregistrer cette page dans les signets</translation>
 <translation id="8261506727792406068">Supprimer</translation>
-<translation id="8263047843452521549">Inspecter le service-worker en arrière-plan</translation>
 <translation id="8331671104904436324">Ouvrir dans un nouvel onglet en arrière-plan</translation>
 <translation id="8373293945112511707">Paysage 1</translation>
 <translation id="8388552048012645975">Téléchargement de la mise à jour…</translation>
+<translation id="8392904568172593155">Sans paramètre</translation>
 <translation id="8427094907586191051">Paysage 17</translation>
 <translation id="8439034818057146672">Une nouvelle version de Vivaldi est prête à être installée.</translation>
 <translation id="8446668873108041390">L’exécution de JavaScript via AppleScript est désactivée. Dans Paramètres &gt; Confidentialité &gt; Événements Apple, il y a un paramètre pour autoriser JavaScript à partir des événements Apple.</translation>
@@ -183,14 +195,15 @@
 <translation id="8651348004684669199">Ajouter l’onglet actif aux signets</translation>
 <translation id="8669345741879513971">Monstre 10</translation>
 <translation id="867544375504146191">Yandex</translation>
-<translation id="8689295374912158752">Inspecter le portal-document</translation>
 <translation id="875142999698251063">Quitter maintenant</translation>
 <translation id="8768970203213061953">Paysage 14</translation>
 <translation id="8773635261052182196">Vous ne verrez plus ces notifications. Vous pourrez toujours les rétablir dans les réglages de Vivaldi.</translation>
 <translation id="8774017153185436870">Les sites peuvent lire automatiquement les vidéos</translation>
 <translation id="8813277370772331957">Me le rappeler ultérieurement</translation>
+<translation id="8837256239226739065">Inspecter le Service Worker d’arrière-plan</translation>
 <translation id="8894900864683381599">Ajouter le lien à un panneau Web</translation>
 <translation id="8912720443398351457">Voulez-vous vraiment fermer Vivaldi ?</translation>
+<translation id="8940028675168378100">Bloqué par <ph name="BLOCKER_NAME" /></translation>
 <translation id="8947109330183116400">Sélectionner le fichier HTML contenant des signets</translation>
 <translation id="9017566390391482291">Sélectionner le dossier du profil Vivaldi à importer</translation>
 <translation id="9048058608784130603">Mise à jour <ph name="VERSION" /> en attente</translation>
@@ -201,6 +214,7 @@
 <translation id="912022491595344261">Ouvrir l’image en tant que <ph name="USER" /></translation>
 <translation id="9157539936604258187">Ouvrir le lien</translation>
 <translation id="9169060351863393881">Opera 12.x</translation>
+<translation id="9180553614777056266">Bloqueur de publicités</translation>
 <translation id="939305735877869636">Brave</translation>
 <translation id="970294721402795299">Paysage 16</translation>
 </translationbundle>

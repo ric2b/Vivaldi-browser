@@ -19,7 +19,7 @@ import networkThrottlingSelectorStylesRaw from './networkThrottlingSelector.css.
 
 // TODO(crbug.com/391381439): Fully migrate off of constructed style sheets.
 const networkThrottlingSelectorStyles = new CSSStyleSheet();
-networkThrottlingSelectorStyles.replaceSync(networkThrottlingSelectorStylesRaw.cssContent);
+networkThrottlingSelectorStyles.replaceSync(networkThrottlingSelectorStylesRaw.cssText);
 
 const {html, nothing} = Lit;
 
@@ -59,7 +59,7 @@ const UIStrings = {
    * @description Text label for a menu option to add a new custom throttling preset.
    */
   add: 'Add…',
-};
+} as const;
 
 const str_ = i18n.i18n.registerUIStrings('panels/timeline/components/NetworkThrottlingSelector.ts', UIStrings);
 const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);

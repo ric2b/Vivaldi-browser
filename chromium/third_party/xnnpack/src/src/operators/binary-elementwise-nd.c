@@ -10,22 +10,21 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "xnnpack.h"
-#include "xnnpack/allocator.h"
-#include "xnnpack/common.h"
-#include "xnnpack/compute.h"
-#include "xnnpack/config-types.h"
-#include "xnnpack/config.h"
-#include "xnnpack/datatype.h"
-#include "xnnpack/log.h"
-#include "xnnpack/math.h"
-#include "xnnpack/microparams.h"
-#include "xnnpack/operator-type.h"
-#include "xnnpack/operator-utils.h"
-#include "xnnpack/operator.h"
-#include "xnnpack/params.h"
-#include "xnnpack/reference-config.h"
-#include "pthreadpool.h"
+#include "include/xnnpack.h"
+#include "src/xnnpack/allocator.h"
+#include "src/xnnpack/compute.h"
+#include "src/xnnpack/config-types.h"
+#include "src/xnnpack/config.h"
+#include "src/xnnpack/datatype.h"
+#include "src/xnnpack/log.h"
+#include "src/xnnpack/math.h"
+#include "src/xnnpack/microparams.h"
+#include "src/xnnpack/operator-type.h"
+#include "src/xnnpack/operator-utils.h"
+#include "src/xnnpack/operator.h"
+#include "src/xnnpack/params.h"
+#include "src/xnnpack/reference-config.h"
+#include <pthreadpool.h>
 
 static const struct xnn_binary_elementwise_config* init_config(
     enum xnn_binary_operator type, enum xnn_datatype datatype, int* sign_b) {
@@ -137,7 +136,10 @@ static enum xnn_status init_binary_elementwise_nd(
   int sign_b = 1;
   const struct xnn_binary_elementwise_config* config =
       init_config(type, datatype, &sign_b);
-  if (config == NULL) {
+  if (config == NULL ||
+      config->op_ukernel == NULL ||
+      config->opc_ukernel == NULL ||
+      config->ropc_ukernel == NULL) {
     xnn_log_debug(
       "unsupported operator %s for datatype %s, falling back to reference kernel",
       xnn_binary_operator_to_string(type), xnn_datatype_to_string(datatype));
@@ -208,6 +210,7 @@ static enum xnn_status init_binary_elementwise_nd(
       xnn_datatype_log2_size_bytes(datatype);
 
   op->type = xnn_operator_type_binary_elementwise;
+  op->binary_elementwise.op_type = type;
   op->flags = flags;
 
   op->state = xnn_run_state_invalid;
@@ -261,7 +264,7 @@ enum xnn_status xnn_reshape_binary_elementwise_nd(xnn_operator_t op,
         "failed to reshape %s operator with %zu and %zu dimensions in input "
         "shapes: "
         "the number of input dimensions must not exceed %d",
-        xnn_operator_type_to_string(op->type), num_input1_dims, num_input2_dims,
+        xnn_operator_type_to_string_v2(op), num_input1_dims, num_input2_dims,
         XNN_MAX_TENSOR_DIMS);
     return xnn_status_unsupported_parameter;
   }
@@ -320,8 +323,8 @@ enum xnn_status xnn_reshape_binary_elementwise_nd(xnn_operator_t op,
           "failed to reshape %s operator: "
           "shape dimension #%zu of input1 (%zu) does not match shape dimension "
           "#%zu of input2 (%zu)",
-          xnn_operator_type_to_string(op->type), num_input1_dims - i,
-          input1_dim, num_input2_dims - i, input2_dim);
+          xnn_operator_type_to_string_v2(op), num_input1_dims - i, input1_dim,
+          num_input2_dims - i, input2_dim);
       return xnn_status_invalid_parameter;
     }
     first_nonunit = false;
@@ -476,7 +479,7 @@ enum xnn_status xnn_setup_binary_elementwise_nd(xnn_operator_t op,
     case xnn_run_state_invalid:
       xnn_log_error(
           "failed to setup %s operator: operator has not been reshaped yet",
-          xnn_operator_type_to_string(op->type));
+          xnn_operator_type_to_string_v2(op));
       return xnn_status_invalid_state;
     case xnn_run_state_needs_setup:
       // Operator has been reshaped, but not setup, continue with setup.

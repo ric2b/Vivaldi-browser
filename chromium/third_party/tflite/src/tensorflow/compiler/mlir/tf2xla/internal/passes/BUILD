@@ -98,7 +98,7 @@ tf_cc_test(
         "@llvm-project//mlir:IR",
         "@llvm-project//mlir:Pass",
         "@llvm-project//mlir:Support",
-        "@local_tsl//tsl/platform:statusor",
+        "@local_xla//xla/tsl/platform:statusor",
     ],
 )
 
@@ -425,6 +425,7 @@ cc_library(
         "//tensorflow/compiler/mlir/tf2xla/transforms:legalize_tf",
         "//tensorflow/core:framework",
         "//tensorflow/core:lib",
+        "//tensorflow/core/ir/types:Dialect",
         "@com_google_absl//absl/container:flat_hash_map",
         "@com_google_absl//absl/log",
         "@com_google_absl//absl/status:statusor",
@@ -504,7 +505,7 @@ tf_cc_test(
         "@llvm-project//mlir:IR",
         "@llvm-project//mlir:Pass",
         "@llvm-project//mlir:Support",
-        "@local_tsl//tsl/platform:statusor",
+        "@local_xla//xla/tsl/platform:statusor",
     ],
 )
 

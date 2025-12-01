@@ -21,7 +21,6 @@
 #include "base/files/file_util.h"
 #include "base/functional/bind.h"
 #include "base/json/json_reader.h"
-#include "base/json/json_writer.h"
 #include "base/path_service.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
@@ -56,9 +55,6 @@ namespace {
 // Kiosk app crx file download path under web store site.
 constexpr std::string_view kCrxDownloadPath =
     "/chromeos/app_mode/webstore/downloads/";
-
-constexpr std::string_view kDetailsURLPrefix =
-    "/chromeos/app_mode/webstore/inlineinstall/detail/";
 
 constexpr std::string_view kItemSnippetsURLPrefix =
     "/chromeos/app_mode/webstore/itemsnippet/";
@@ -100,20 +96,19 @@ constexpr std::string_view kAppHasUpdateTemplateJSON =
     "  \"status\": \"ok\","
     "  \"updatecheck\": {"
     "    \"status\": \"ok\","
-    "    \"manifest\": {"
-    "      \"version\": \"$Version\","
-    "      \"packages\": {"
-    "        \"package\": ["
-    "          {"
-    "            \"fp\": \"1.$FP\","
-    "            \"size\": \"$Size\","
-    "            \"hash_sha256\": \"$FP\","
-    "            \"name\": \"\""
-    "          }"
-    "        ]"
-    "      }"
-    "    },"
-    "    \"urls\": { \"url\": [ { \"codebase\": \"$CrxDownloadUrl\"} ] }"
+    "    \"nextversion\": \"$Version\","
+    "    \"pipelines\": ["
+    "      {\"operations\": ["
+    "        {\"type\": \"download\","
+    "         \"urls\":[{\"url\":\"$CrxDownloadUrl\"}],"
+    "         \"size\":$Size,"
+    "         \"out\":{\"sha256\":\"$FP\"}"
+    "        },"
+    "        {\"type\": \"crx3\","
+    "         \"in\":{\"sha256\":\"$FP\"}"
+    "        }"
+    "      ]}"
+    "    ]"
     "  }"
     "}";
 
@@ -121,12 +116,12 @@ constexpr std::string_view kUpdateContentTemplateJSON =
     ")]}'\n"
     "{"
     "  \"response\": {"
-    "    \"protocol\": \"3.1\","
+    "    \"protocol\": \"4.0\","
     "    \"daystart\": {"
     "      \"elapsed_days\": 2569,"
     "      \"elapsed_seconds\": 36478"
     "    },"
-    "    \"app\": ["
+    "    \"apps\": ["
     "      $APPS"
     "    ]"
     "  }"
@@ -164,7 +159,7 @@ bool GetAppIdsFromUpdateUrl(const GURL& update_url,
 //
 //   {
 //      "request": {
-//         "app": [ {
+//         "apps": [ {
 //            "appid": "ilaggnhkinenadmhbbdgbddpaipgfomg",
 //            ...
 //         }, {
@@ -196,7 +191,7 @@ bool GetAppIdsFromRequestBody(const std::string& request_body,
     return false;
   }
 
-  const auto* app_list = request->FindList("app");
+  const auto* app_list = request->FindList("apps");
   if (app_list == nullptr) {
     return false;
   }
@@ -218,19 +213,6 @@ bool GetAppIdsFromRequestBody(const std::string& request_body,
 
   ids->insert(ids->end(), result.begin(), result.end());
   return true;
-}
-
-// The detail request has an URL in form of
-// https://<domain>/chromeos/app_mode/webstore/inlineinstall/detail/<id>.
-// Returns std::nullopt if the `request_path` doesn't look like request for
-// extension details.
-std::optional<std::string> GetAppIdFromDetailRequest(
-    const std::string& request_path) {
-  size_t prefix_length = kDetailsURLPrefix.size();
-  if (request_path.substr(0, prefix_length) != kDetailsURLPrefix) {
-    return std::nullopt;
-  }
-  return request_path.substr(prefix_length);
 }
 
 // Returns the app ID from `request_path` if the request's URL looks like one
@@ -332,10 +314,11 @@ void FakeCWS::Init(net::EmbeddedTestServer* embedded_test_server) {
 }
 
 void FakeCWS::InitAsPrivateStore(net::EmbeddedTestServer* embedded_test_server,
+                                 const GURL& web_store_url,
                                  std::string_view update_check_end_point) {
   use_private_store_templates_ = true;
   update_check_end_point_ = update_check_end_point;
-  web_store_url_ = embedded_test_server->base_url();
+  web_store_url_ = web_store_url;
 
   embedded_test_server->RegisterRequestHandler(
       base::BindRepeating(&FakeCWS::HandleRequest, base::Unretained(this)));
@@ -506,26 +489,6 @@ std::unique_ptr<HttpResponse> FakeCWS::HandleRequest(
         http_response->set_content(update_check_content);
         return std::move(http_response);
       }
-    }
-  }
-
-  std::optional<std::string> details_id =
-      GetAppIdFromDetailRequest(request_path);
-  if (details_id) {
-    auto it = id_to_details_map_.find(*details_id);
-    if (it != id_to_details_map_.end()) {
-      std::string details =
-          base::WriteJson(base::Value::Dict()
-                              .Set("id", *details_id)
-                              .Set("icon_url", it->second.icon_url)
-                              .Set("localized_name", it->second.localized_name)
-                              .Set("manifest", it->second.manifest_json))
-              .value();
-      auto http_response = std::make_unique<BasicHttpResponse>();
-      http_response->set_code(net::HTTP_OK);
-      http_response->set_content_type("application/json");
-      http_response->set_content(details);
-      return std::move(http_response);
     }
   }
 

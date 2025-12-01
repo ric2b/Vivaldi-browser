@@ -142,9 +142,7 @@ module {
 
 // CHECK-LABEL: module {
 // CHECK: @caller
-// CHECK-NOT: xla.pure_call
-// CHECK: arith.addf
-// CHECK: arith.addf
+// CHECK-COUNT-2: xla.pure_call
 
 // -----
 
@@ -268,9 +266,10 @@ module {
 }
 
 // CHECK-LABEL: module {
-// CHECK-NOT: func.func
-// CHECK: func.func @caller
-// CHECK-NOT: xla.pure_call
+// CHECK:      func.func private @callee2
+// CHECK-NOT:  func.func private @callee1
+// CHECK:      func.func @caller
+// CHECK:        pure_call @callee2
 // CHECK-NOT: func.func
 
 // -----
@@ -321,3 +320,24 @@ module {
 // CHECK-NOT:     callee2
 // CHECK:         func.func @caller
 // CHECK-COUNT-2: pure_call @callee1
+
+// -----
+
+module {
+  func.func private @has_no_compute(%a: f32) -> f32
+      attributes {no_compute = true} {
+    return %a : f32
+  }
+
+  func.func @caller(%a: f32, %b: f32) -> f32 {
+    %call1 = xla.pure_call @has_no_compute(%a) : (f32) -> (f32)
+    %call2 = xla.pure_call @has_no_compute(%b) : (f32) -> (f32)
+    %sum = arith.addf %call1, %call2 : f32
+    return %sum : f32
+  }
+}
+
+// CHECK-LABEL: module {
+// CHECK: @caller
+// CHECK-NEXT: arith.addf
+// CHECK-NEXT: return

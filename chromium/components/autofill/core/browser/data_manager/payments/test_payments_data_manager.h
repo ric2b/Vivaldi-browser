@@ -13,9 +13,9 @@
 #include <vector>
 
 #include "components/autofill/core/browser/data_manager/payments/payments_data_manager.h"
-#include "components/autofill/core/browser/data_model/autofill_wallet_usage_data.h"
-#include "components/autofill/core/browser/data_model/credit_card.h"
-#include "components/autofill/core/browser/data_model/iban.h"
+#include "components/autofill/core/browser/data_model/payments/autofill_wallet_usage_data.h"
+#include "components/autofill/core/browser/data_model/payments/credit_card.h"
+#include "components/autofill/core/browser/data_model/payments/iban.h"
 #include "components/autofill/core/browser/payments/payments_customer_data.h"
 
 namespace autofill {
@@ -95,6 +95,9 @@ class TestPaymentsDataManager : public PaymentsDataManager {
   // Add a BNPL issuer to 'unlinked_bnpl_issuer_` or 'linked_bnpl_issuer_` based
   // on its properties.
   void AddBnplIssuer(const BnplIssuer& bnpl_issuer);
+
+  // Clears BNPL issuers from `TestPaymentsDataManager`.
+  void ClearBnplIssuers();
 
   // Adds offer data to `autofill_offer_data_`.
   void AddAutofillOfferData(const AutofillOfferData& offer_data);

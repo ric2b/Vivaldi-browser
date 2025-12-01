@@ -382,6 +382,54 @@ void pthreadpool_parallelize_4d_tile_2d_with_uarch(
   }
 }
 
+void pthreadpool_parallelize_4d_tile_2d_dynamic(
+    pthreadpool_t threadpool, pthreadpool_task_4d_tile_2d_dynamic_t function,
+    void* context, size_t range_i, size_t range_j, size_t range_k,
+    size_t range_l, size_t tile_k, size_t tile_l, uint32_t flags) {
+  if (range_l <= tile_l) {
+    for (size_t index_i = 0; index_i < range_i; index_i++) {
+      for (size_t index_j = 0; index_j < range_j; index_j++) {
+        function(context, index_i, index_j, /*index_k=*/0, /*index_l=*/0,
+                 range_k, range_l);
+      }
+    }
+  } else {
+    for (size_t index_i = 0; index_i < range_i; index_i++) {
+      for (size_t index_j = 0; index_j < range_j; index_j++) {
+        for (size_t index_k = 0; index_k < range_k; index_k += tile_k) {
+          function(context, index_i, index_j, index_k, /*index_l=*/0,
+                   min(tile_k, range_k - index_k), range_l);
+        }
+      }
+    }
+  }
+}
+
+void pthreadpool_parallelize_4d_tile_2d_dynamic_with_uarch(
+    pthreadpool_t threadpool,
+    pthreadpool_task_4d_tile_2d_dynamic_with_id_t function, void* context,
+    uint32_t default_uarch_index, uint32_t max_uarch_index, size_t range_i,
+    size_t range_j, size_t range_k, size_t range_l, size_t tile_k,
+    size_t tile_l, uint32_t flags) {
+  if (range_l <= tile_l) {
+    for (size_t index_i = 0; index_i < range_i; index_i++) {
+      for (size_t index_j = 0; index_j < range_j; index_j++) {
+        function(context, default_uarch_index, index_i, index_j, /*index_k=*/0,
+                 /*index_l=*/0, range_k, range_l);
+      }
+    }
+  } else {
+    for (size_t index_i = 0; index_i < range_i; index_i++) {
+      for (size_t index_j = 0; index_j < range_j; index_j++) {
+        for (size_t index_k = 0; index_k < range_k; index_k += tile_k) {
+          function(context, default_uarch_index, index_i, index_j, index_k,
+                   /*index_l=*/0, min(tile_k, range_k - index_k), range_l);
+        }
+      }
+    }
+  }
+}
+
 void pthreadpool_parallelize_5d(pthreadpool_t threadpool,
                                 pthreadpool_task_5d_t function, void* context,
                                 size_t range_i, size_t range_j, size_t range_k,

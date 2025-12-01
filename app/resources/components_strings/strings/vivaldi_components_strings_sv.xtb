@@ -2,11 +2,13 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="sv">
 <translation id="1038842779957582377">okänt namn</translation>
+<translation id="1068672505746868501">Översätt aldrig sidor på <ph name="SOURCE_LANGUAGE" /></translation>
 <translation id="1089439967362294234">Byt lösenord</translation>
 <translation id="1110994991967754504">Välj behörighet för <ph name="PERMISSION_NAME" /></translation>
 <translation id="1158211211994409885"><ph name="HOST_NAME" /> stängde oväntat ner anslutningen.</translation>
 <translation id="1161325031994447685">Ansluta till det trådlösa nätet på nytt</translation>
 <translation id="1175364870820465910">&amp;Skriv ut...</translation>
+<translation id="1285320974508926690">Översätt aldrig den här webbplatsen</translation>
 <translation id="1375198122581997741">Om version</translation>
 <translation id="139305205187523129"><ph name="HOST_NAME" /> skickade ingen data.</translation>
 <translation id="1555191101192706055">Angripare på webbplatsen du försökte besöka kan lura dig att installera skadlig programvara som påverkar hur du surfar – till exempel genom att ändra din startsida eller visa dig extra annonser på webbplatser du besöker.</translation>
@@ -20,6 +22,7 @@
 <translation id="1768211456781949159"><ph name="BEGIN_LINK" />Testa att köra Windows nätverksdiagnostik<ph name="END_LINK" />.</translation>
 <translation id="1974060860693918893">Avancerat</translation>
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />Kontrollerar mellanservern (proxyn) och brandväggen<ph name="END_LINK" /></translation>
+<translation id="2048261947532620704">Översätter sida</translation>
 <translation id="2119505898009119320">Utfärdat till: <ph name="ORGANIZATION" /> [<ph name="JURISDICTION" />]</translation>
 <translation id="2166378884831602661">Webbplatsen kan inte tillhandahålla en säker anslutning</translation>
 <translation id="2178904466768126352">Angripare på webbplatsen du försökte besöka kan installera skadlig programvara som stjäl eller raderar saker som dina lösenord, foton, meddelanden eller kreditkortsnummer.</translation>
@@ -35,7 +38,6 @@
 <translation id="2388886110302389394">Öppna sidan i ett nytt privat fönster (Ctrl-Skift-N)</translation>
 <translation id="2467694685043708798"><ph name="BEGIN_LINK" />Kör nätverksdiagnostik<ph name="END_LINK" /></translation>
 <translation id="2491414235131909199">Den här sidan har blockerats av ett tillägg</translation>
-<translation id="2501278716633472235">Gå tillbaka</translation>
 <translation id="2539524384386349900">Identifiera</translation>
 <translation id="255002559098805027"><ph name="HOST_NAME" /> skickade ett ogiltigt svar.</translation>
 <translation id="2634124572758952069">Det gick inte att hitta IP-adressen till servern för <ph name="HOST_NAME" />.</translation>
@@ -45,6 +47,7 @@
 <translation id="2730326759066348565"><ph name="BEGIN_LINK" />Kör anslutningsdiagnostik<ph name="END_LINK" /></translation>
 <translation id="2784949926578158345">Anslutningen har återställts.</translation>
 <translation id="2826760142808435982">Anslutningen är krypterad och verifieras med <ph name="CIPHER" /> och använder <ph name="KX" /> som nyckelutbytesmekanism.</translation>
+<translation id="290376772003165898">Är sidan inte på <ph name="LANGUAGE" />?</translation>
 <translation id="2909946352844186028">En nätverksförändring upptäcktes.</translation>
 <translation id="2948083400971632585">Du kan inaktivera mellanservrar (proxy) konfigurerade för en anslutning från inställningssidan.</translation>
 <translation id="2954624054936281172">Tabell över sparade betalningsmetoder</translation>
@@ -62,7 +65,6 @@
       <ph name="PLATFORM_TEXT" /></translation>
 <translation id="3226128629678568754">Tryck knappen Hämta om för att sända de data som behövs för att läsa in sidan på nytt.</translation>
 <translation id="3234666976984236645">Upptäck alltid viktigt innehåll på den här webbplatsen</translation>
-<translation id="3308738399950580893">annonser</translation>
 <translation id="3384522979010096022">Din organisation tillåter inte att du visar den här webbplatsen</translation>
 <translation id="3422472998109090673"><ph name="HOST_NAME" /> kan inte nås för tillfället.</translation>
 <translation id="3427092606871434483">Tillåt (standard)</translation>
@@ -80,7 +82,7 @@
 <translation id="3681007416295224113">Certifikatinformation</translation>
 <translation id="3717027428350673159"><ph name="BEGIN_LINK" />Kontrollerar mellanservern (proxy), brandväggen och DNS-konfigurationen<ph name="END_LINK" /></translation>
 <translation id="382518646247711829">Om du använder en proxyserver ...</translation>
-<translation id="3894751534882749287">Om du ändå vill se sidan så kan du ändra dess blockeringsnivå i popup-fönstret för spårningsblockeraren eller genom att klicka på Tillåt-knappen</translation>
+<translation id="3861977424605124250">Visa vid uppstart</translation>
 <translation id="3950820424414687140">Logga in</translation>
 <translation id="3973234410852337861"><ph name="HOST_NAME" /> har blockerats</translation>
 <translation id="3987940399970879459">Mindre än 1 MB</translation>
@@ -108,7 +110,6 @@
 <translation id="4701488924964507374"><ph name="SENTENCE1" /> <ph name="SENTENCE2" /></translation>
 <translation id="4708268264240856090">Anslutningen avbröts</translation>
 <translation id="4722547256916164131"><ph name="BEGIN_LINK" />Kör Windows nätverksdiagnostik<ph name="END_LINK" /></translation>
-<translation id="4736016046474602958">Spårningsblockerare</translation>
 <translation id="4744603770635761495">Sökväg till körbar fil</translation>
 <translation id="4750917950439032686">Dina uppgifter (till exempel lösenord eller kreditkortsnummer) är privata när de skickas till den här webbplatsen.</translation>
 <translation id="4764776831041365478">Webbsidan på <ph name="URL" /> kan ligga nere för tillfället eller kan ha flyttats permanent till en ny webbadress.</translation>
@@ -153,27 +154,30 @@
 <translation id="6328639280570009161">Prova att inaktivera nätverksförslag</translation>
 <translation id="6348220984832452017">Aktiva variationer</translation>
 <translation id="6358450015545214790">Vad innebär dessa?</translation>
+<translation id="6404511346730675251">Redigera bokmärke</translation>
 <translation id="6433595998831338502"><ph name="HOST_NAME" /> avvisade anslutningen.</translation>
 <translation id="6447842834002726250">Kakor (cookies)</translation>
 <translation id="6451458296329894277">Bekräfta återsändning av formulär</translation>
 <translation id="6569060085658103619">Du visar en tilläggssida</translation>
+<translation id="6653655836861174026">Med Vivaldi profiler kan du separera alla dina Vivaldi grejer. Skapa profiler för vänner och familj, eller dela mellan arbete och nöje.</translation>
 <translation id="6657585470893396449">Lösenord</translation>
 <translation id="6711464428925977395">Något är fel med proxyservern eller så är adressen felaktig.</translation>
 <translation id="6757797048963528358">Enheten gick ner i vänteläge.</translation>
 <translation id="6890956352250146925">Alternativ för cookies och webbplatsdata</translation>
 <translation id="6897140037006041989">Användaragent</translation>
+<translation id="6935179587384421592"><ph name="SIZE" />. Vissa webbplatser kan laddas långsammare vid ditt nästa besök.</translation>
 <translation id="6957624206566198865">Öppna sidan på en ny privat flik</translation>
 <translation id="7053983685419859001">Blockera</translation>
+<translation id="7066262000446496119">Vem använder Vivaldi?</translation>
 <translation id="7096937462164235847">Identiteten för denna webbplats är inte verifierad.</translation>
 <translation id="7108819624672055576">Beviljades av ett tillägg</translation>
 <translation id="7111012039238467737">(Giltigt)</translation>
-<translation id="7113310725918019676">Tillåt <ph name="BLOCKED_TYPE" /> från <ph name="DOMAIN" /></translation>
 <translation id="7126644664682723998">Klistra in och sök</translation>
 <translation id="7210863904660874423"><ph name="HOST_NAME" /> följer inte säkerhetsstandarderna.</translation>
 <translation id="7219179957768738017">För anslutningen används <ph name="SSL_VERSION" />.</translation>
 <translation id="7221855153210829124">Visa aviseringar</translation>
+<translation id="7283555985781738399">Gästläge</translation>
 <translation id="7353601530677266744">Kommandorad</translation>
-<translation id="7364115444476960850">Sidan du försökte komma åt blockerades av Vivaldis <ph name="BLOCKER_NAME" /></translation>
 <translation id="7419106976560586862">Profilsökväg</translation>
 <translation id="7455133967321480974">Använd global standardinställning (Blockera)</translation>
 <translation id="7518003948725431193">Det fanns ingen webbsida på webbadressen: <ph name="URL" /></translation>
@@ -184,6 +188,7 @@
 <translation id="7714464543167945231">Certifikat</translation>
 <translation id="7716147886133743102">Blockerades av administratören</translation>
 <translation id="7716424297397655342">Det går inte att läsa in webbplatsen från cachelagringen</translation>
+<translation id="773466115871691567">Översätt alltid sidor på <ph name="SOURCE_LANGUAGE" /></translation>
 <translation id="7758069387465995638">Anslutningen kan ha blockerats av en brandvägg eller antivirusprogram.</translation>
 <translation id="7800304661137206267">Anslutningen är krypterad med <ph name="CIPHER" />, med <ph name="MAC" /> för meddelandeautentisering och <ph name="KX" /> som mekanism för nyckelutbyte.</translation>
 <translation id="7834399512844817676">På <ph name="SITE" /> används normalt kryptering för att skydda din information. När Vivaldi försökte ansluta till <ph name="SITE" /> den här gången skickade webbplatsen tillbaka ovanliga och felaktiga uppgifter. Sådant kan hända när en angripare utger sig för att vara <ph name="SITE" /> eller när anslutningen har avbrutits av en Wi-Fi-inloggningsskärm. Din information är fortfarande säker eftersom Vivaldi avbröt anslutningen innan någon data utbyttes.</translation>
@@ -193,7 +198,6 @@
 <translation id="8037357227543935929">Fråga (standard)</translation>
 <translation id="8041940743680923270">Använd global standardinställning (Fråga)</translation>
 <translation id="808894953321890993">Byt lösenord</translation>
-<translation id="8119307142152921512">spårare och annonser</translation>
 <translation id="8149426793427495338">Datorn gick ner i vänteläge.</translation>
 <translation id="8150722005171944719">Det går inte att läsa filen på <ph name="URL" />. Den kan ha tagits bort eller flyttats, eller så krävs behörighet för att få åtkomst till den.</translation>
 <translation id="8184538546369750125">Använd global standardinställning (Tillåt)</translation>
@@ -210,7 +214,6 @@
 <translation id="8703575177326907206">Din anslutning till <ph name="DOMAIN" /> är inte krypterad.</translation>
 <translation id="8740359287975076522"><ph name="HOST_NAME" />s &lt;abbr id="dnsDefinition"&gt;DNS-adress&lt;/abbr&gt; kunde inte hittas. Diagnostiserar problemet.</translation>
 <translation id="8820817407110198400">Bokmärken</translation>
-<translation id="8940028675168378100">Blockerad av <ph name="BLOCKER_NAME" /></translation>
 <translation id="8963117664422609631">Öppna webbplatsinställningarna</translation>
 <translation id="8975012916872825179">Inkluderar information som telefonnummer, e-postadresser och leveransadresser</translation>
 <translation id="9001074447101275817">Proxyservern <ph name="DOMAIN" /> kräver användarnamn och lösenord.</translation>
@@ -222,7 +225,6 @@
 <translation id="9073799351042754113">Du har valt att stänga av säkerhetsvarningar för den här webbplatsen.</translation>
 <translation id="9168814207360376865">Tillåt webbplatser att kontrollera om du har sparade betalningsmetoder</translation>
 <translation id="9169664750068251925">Blockera alltid på den här webbplatsen</translation>
-<translation id="9180553614777056266">Annonsblockerare</translation>
 <translation id="9183425211371246419"><ph name="HOST_NAME" /> använder ett protokoll som inte stöds.</translation>
 <translation id="936602727769022409">Du kan förlora tillgången till Google-kontot. Vivaldi rekommenderar att du ändrar lösenordet nu. Du kommer bli uppmanad att logga in.</translation>
 <translation id="969892804517981540">Officiell version</translation>

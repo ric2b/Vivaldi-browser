@@ -50,7 +50,7 @@ String UniversalGlobalScope::atob(const String& encoded_string,
         "characters outside of the Latin1 range.");
     return String();
   }
-  Vector<char> out;
+  Vector<uint8_t> out;
   if (!Base64Decode(encoded_string, out, Base64DecodePolicy::kForgiving)) {
     exception_state.ThrowDOMException(
         DOMExceptionCode::kInvalidCharacterError,
@@ -101,8 +101,9 @@ ScriptValue UniversalGlobalScope::structuredClone(
   DCHECK(unpacked);
 
   SerializedScriptValue::DeserializeOptions deserialize_options;
-  deserialize_options.message_ports = MessagePort::EntanglePorts(
-      *ExecutionContext::From(script_state), std::move(ports));
+  auto message_ports = MessagePortArray(*MessagePort::EntanglePorts(
+      *ExecutionContext::From(script_state), std::move(ports)));
+  deserialize_options.message_ports = &message_ports;
 
   return ScriptValue(isolate,
                      unpacked->Deserialize(isolate, deserialize_options));

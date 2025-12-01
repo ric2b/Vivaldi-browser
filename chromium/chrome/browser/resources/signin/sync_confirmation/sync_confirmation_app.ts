@@ -62,18 +62,19 @@ export class SyncConfirmationAppElement extends SyncConfirmationAppElementBase {
     };
   }
 
-  protected accountImageSrc_: string =
+  protected accessor accountImageSrc_: string =
       loadTimeData.getString('accountPictureUrl');
-  protected anyButtonClicked_: boolean = false;
-  protected isModalDialog_: boolean = loadTimeData.getBoolean('isModalDialog');
-  private showEnterpriseBadge_: boolean = false;
-  protected syncBenefitsList_: SyncBenefit[] =
+  protected accessor anyButtonClicked_: boolean = false;
+  protected accessor isModalDialog_: boolean =
+      loadTimeData.getBoolean('isModalDialog');
+  private accessor showEnterpriseBadge_: boolean = false;
+  protected accessor syncBenefitsList_: SyncBenefit[] =
       JSON.parse(loadTimeData.getString('syncBenefitsList'));
   private syncConfirmationBrowserProxy_: SyncConfirmationBrowserProxy =
       SyncConfirmationBrowserProxyImpl.getInstance();
-  protected useClickableSyncInfoDesc_: boolean =
+  protected accessor useClickableSyncInfoDesc_: boolean =
       loadTimeData.getBoolean('useClickableSyncInfoDesc');
-  private screenMode_: ScreenMode = ScreenMode.PENDING;
+  private accessor screenMode_: ScreenMode = ScreenMode.PENDING;
 
   override connectedCallback() {
     super.connectedCallback();
@@ -124,7 +125,7 @@ export class SyncConfirmationAppElement extends SyncConfirmationAppElementBase {
   /** @return Text of the consent description elements. */
   private getConsentDescription_(): string[] {
     const consentDescription =
-        Array.from(this.shadowRoot!.querySelectorAll('[consent-description]'))
+        Array.from(this.shadowRoot.querySelectorAll('[consent-description]'))
             .filter(
                 element => element.getBoundingClientRect().width *
                         element.getBoundingClientRect().height >

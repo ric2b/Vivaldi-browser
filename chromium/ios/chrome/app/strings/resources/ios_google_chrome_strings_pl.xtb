@@ -1,7 +1,6 @@
 <?xml version="1.0" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="pl">
-<translation id="1066101356081285416">Chrome będzie wykrywać numery śledzenia w odwiedzanych przez Ciebie witrynach i wyświetlać aktualne informacje o przesyłkach na stronie Nowa karta. Numery śledzenia przesyłek i nazwy witryn będą wysyłane do Google i używane do obsługi tej funkcji oraz do ogólnego ulepszania funkcji zakupów. Możesz to zmienić w dowolnym momencie w <ph name="BEGIN_LINK" />ustawieniach śledzenia przesyłek<ph name="END_LINK" />.</translation>
 <translation id="1076643793026027628">Chrome automatycznie otwiera linki incognito z YouTube w trybie incognito.</translation>
 <translation id="1086486568852410168">Szukaj za pomocą Obiektywu Google</translation>
 <translation id="1143896152279775643">Hasło zostanie zapisane w menedżerze haseł Google na koncie <ph name="EMAIL" />.</translation>
@@ -37,15 +36,18 @@ Pamiętaj, że:
 <translation id="1634522710245925681">Używaj domyślnie Chrome, aby łatwo otrzymywać statystyki dotyczące cen</translation>
 <translation id="1646463005043273333">Otwiera opcję Chrome pozwalającą ustawić Chrome jako przeglądarkę domyślną.</translation>
 <translation id="1670609221633730681">Wskazówka dotycząca Chrome: wybierz położenie paska adresu</translation>
+<translation id="1683863426423719967">Aby otrzymywać przypomnienia o kartach z Chrome, włącz powiadomienia w ustawieniach iOS.</translation>
 <translation id="1759842336958782510">Chrome</translation>
 <translation id="1784567647421309104">Zapisuj hasła w Chrome</translation>
 <translation id="1790080846677398234">Dodaje wpisane adresy URL do zakładek w Chrome.</translation>
 <translation id="1799920918471566157">Chrome – wskazówki</translation>
 <translation id="1830634592642484976">Ten adres jest obecnie zapisany w Chrome. Aby używać go w różnych usługach Google, zapisz go na swoim koncie Google <ph name="USER_EMAIL" />.</translation>
 <translation id="1891812034154776216">Po zamknięciu Chrome ukrywaj otwarte karty incognito</translation>
+<translation id="1894434821386148799">Tutaj znajdziesz ustawienia Chrome i inne opcje</translation>
 <translation id="1917964099031477364">To konto razem z wszelkimi niezapisanymi danymi zostanie usunięte z Chrome i innych aplikacji Google na tym urządzeniu.</translation>
 <translation id="1919130412786645364">Zezwalaj na logowanie się w Chrome</translation>
 <translation id="1965935827552890526">Dokończ czynności rozpoczęte w innym otwartym oknie Chrome.</translation>
+<translation id="1973910962341002002">W ustawieniach „<ph name="TEXT_OF_THE_SETTINGS_MENU_ITEM" />” włącz opcję „Chrome”</translation>
 <translation id="1984705450038014246">Synchronizuj dane Chrome</translation>
 <translation id="1987779152850321833">Wykonaj te sugerowane działania, aby w pełni wykorzystać możliwości Chrome.</translation>
 <translation id="2055826352861631739">Domyślnie używaj Chrome na iPada</translation>
@@ -68,7 +70,6 @@ Pamiętaj, że:
 <translation id="2574249610672786438">Aby widzieć swoje karty zawsze, kiedy korzystasz z Chrome, zaloguj się na wszystkich urządzeniach</translation>
 <translation id="2576431527583832481">Chrome jest teraz jeszcze lepszy! Dostępna jest nowa wersja.</translation>
 <translation id="257708665678654955">Czy następnym razem Google Chrome ma zaproponować Ci tłumaczenie stron tej witryny, których język to <ph name="LANGUAGE_NAME" />?</translation>
-<translation id="2650286135394207535">Pozwól Chrome na ułatwianie Ci śledzenia przesyłek</translation>
 <translation id="2668242166988961773">Wyszukaj głosowo w Chrome.</translation>
 <translation id="2671426118752779020">Haseł zapisanych w menedżerze haseł Google możesz używać w innych aplikacjach na iPhonie.</translation>
 <translation id="2689064829982324496">Aby wylogować się z konta Google na wszystkich stronach, <ph name="BEGIN_LINK" />wyloguj się z Chrome<ph name="END_LINK" />.</translation>
@@ -98,10 +99,13 @@ Odczekaj kilka minut, zanim się wylogujesz. Jeśli wylogujesz się teraz, te da
 <translation id="3282568296779691940">Zaloguj się w Chrome</translation>
 <translation id="3303503998967553377">Korzystaj z Działań w Chrome na iOS</translation>
 <translation id="3348862487678490430">Dodaj element listy Do przeczytania do Chrome</translation>
+<translation id="3357827134511189025">Logowanie się za pomocą zapisanych haseł i kluczy dostępu z dowolnej aplikacji dzięki autouzupełnianiu w Chrome</translation>
 <translation id="3360031466389132716">{THRESHOLD,plural, =1{Dzieje się tak, gdy nie korzystasz z Chrome przez {THRESHOLD} minutę}few{Dzieje się tak, gdy nie korzystasz z Chrome przez {THRESHOLD} minuty}many{Dzieje się tak, gdy nie korzystasz z Chrome przez {THRESHOLD} minut}other{Dzieje się tak, gdy nie korzystasz z Chrome przez {THRESHOLD} minuty}}</translation>
 <translation id="3367797402528056312">Dokończ konfigurowanie Chrome</translation>
 <translation id="3371064404604898522">Ustaw Chrome jako przeglądarkę domyślną</translation>
 <translation id="3399930248910934354">Otwórz ustawienia Chrome</translation>
+<translation id="3440830787838130530">W Menedżerze haseł Google możesz łatwo i bezpiecznie udostępniać kopie swoich haseł grupie rodzinnej</translation>
+<translation id="3460369101684070455">Aby mieć łatwy dostęp do zapisanych haseł w innych aplikacjach, użyj autouzupełniania w Chrome</translation>
 <translation id="3472587960215700950">Chrome używa Map Google, aby podawać wskazówki dojazdu i informacje lokalne o wykrytych adresach.</translation>
 <translation id="3503014945441706099">Włącz też Ulepszone Bezpieczne przeglądanie na tym profilu Chrome</translation>
 <translation id="3522659714780527202">Aby widzieć swoje karty zawsze, kiedy korzystasz z Chrome, włącz synchronizację</translation>
@@ -121,11 +125,12 @@ Odczekaj kilka minut, zanim się wylogujesz. Jeśli wylogujesz się teraz, te da
 <translation id="4064699917955374540">Aby móc zapisywać dane z Chrome na koncie Google i ich używać, potwierdź swoją tożsamość.</translation>
 <translation id="417201473131094001">Nieobsługiwane w Chrome Canary</translation>
 <translation id="424864128008805179">Wylogować z Chrome?</translation>
+<translation id="4430797724889237570">Otwieraj linki z Gmaila, Map, YouTube i innych aplikacji w Chrome</translation>
 <translation id="447252321002412580">Pomóż w ulepszaniu funkcji i działania Chrome</translation>
 <translation id="4523886039239821078">Niektóre dodatki mogą powodować awarie Chrome. Odinstaluj je.</translation>
+<translation id="4574806550936185355">Włącz opcję „Po zamknięciu Chrome blokuj karty incognito”</translation>
 <translation id="4633328489441962921">Chrome nie może sprawdzić dostępności aktualizacji</translation>
 <translation id="4636900170638246267">Zaloguj się w na tej stronie i w Chrome.</translation>
-<translation id="4646014602299206846">Chrome wykryje numery śledzenia przesyłek w odwiedzanych przez Ciebie witrynach i wyświetli aktualne informacje o przesyłkach na stronie Nowa karta. Aby ta funkcja mogła działać, Twoje dane będą udostępniane Google. Pozwoli to też na ulepszanie Zakupów Google.</translation>
 <translation id="4647910807533196601">Otwórz moją ostatnio używaną kartę w Chrome.</translation>
 <translation id="4693084815234024320">Jesteś w trybie incognito w Chrome</translation>
 <translation id="4724297637870447613">Korzystaj z Chrome w dowolnym miejscu</translation>
@@ -137,7 +142,6 @@ Odczekaj kilka minut, zanim się wylogujesz. Jeśli wylogujesz się teraz, te da
 <translation id="4830799082179398588">Ustawić Chrome jako przeglądarkę domyślną?</translation>
 <translation id="484033449593719797">Nieobsługiwane w Chrome Beta</translation>
 <translation id="4840404732697892756">Menedżer haseł Google może sprawdzać Twoje hasła, gdy zalogujesz się na konto Google.</translation>
-<translation id="4860330141789125848">{COUNT,plural, =1{Chrome może pomóc Ci śledzić tę przesyłkę na stronie nowej karty.}few{Chrome może pomóc Ci śledzić te przesyłki na stronie nowej karty.}many{Chrome może pomóc Ci śledzić te przesyłki na stronie nowej karty.}other{Chrome może pomóc Ci śledzić te przesyłki na stronie nowej karty.}}</translation>
 <translation id="4903674399067644695">Ta karta zawiera sugestie, które pomogą Ci w pełni wykorzystać możliwości Chrome.</translation>
 <translation id="49200511069271369">Twoja organizacja (<ph name="DOMAIN" />) zarządza kontem, na które się logujesz, oraz sposobem korzystania z Chrome. Administrator może konfigurować lub ograniczać pewne funkcje.</translation>
 <translation id="4925322001044117929">Domyślnie używaj Chrome na iPada</translation>
@@ -157,9 +161,7 @@ Odczekaj kilka minut, zanim się wylogujesz. Jeśli wylogujesz się teraz, te da
 <translation id="5395376160638294582">Upewnij się, że zawsze możesz używać danych Chrome na swoim koncie Google</translation>
 <translation id="5404252374083197467">Ustawić Chrome jako domyślną przeglądarkę?</translation>
 <translation id="5439191312780166229">Ostrzega o niebezpiecznych witrynach, nawet takich, które wcześniej nie były znane Google. Jest to możliwe dzięki analizowaniu większej ilości danych z witryn niż w trybie standardowej ochrony. Możesz wybrać pomijanie ostrzeżeń Chrome.</translation>
-<translation id="5442013002200339429">Jeśli ukryjesz „<ph name="MODULE_NAME" />”, Chrome nie będzie już automatycznie śledzić przesyłek w przyszłości i usunie wszystkie wcześniejsze dane śledzenia.</translation>
 <translation id="5460571915754665838">4. Wybierz Chrome.</translation>
-<translation id="546541279759910616">{COUNT,plural, =1{Chrome pomoże Ci śledzić tę przesyłkę na stronie nowej karty.}few{Chrome pomoże Ci śledzić te przesyłki na stronie nowej karty.}many{Chrome pomoże Ci śledzić te przesyłki na stronie nowej karty.}other{Chrome pomoże Ci śledzić te przesyłki na stronie nowej karty.}}</translation>
 <translation id="5492504007368565877">Menedżer haseł Google nie może sprawdzić Twoich haseł.</translation>
 <translation id="5525095647255982834">Aby wysłać tę kartę na inne urządzenie, zaloguj się na nim w Chrome.</translation>
 <translation id="5527026824954593399">Kliknij „Zobacz w Mapach Google w Chrome”.</translation>
@@ -177,6 +179,7 @@ Odczekaj kilka minut, zanim się wylogujesz. Jeśli wylogujesz się teraz, te da
 <translation id="5716154293141027663">Otwieraj Chrome po kliknięciu linków w innych aplikacjach</translation>
 <translation id="5752489513673657785">Spersonalizowane karty utworzone dla Ciebie przez Google</translation>
 <translation id="5772407442571703917">Tutaj możesz pobrać Chrome.</translation>
+<translation id="5777468213129569553">Otwórz Chrome</translation>
 <translation id="5779767936254214055">Po zamknięciu Chrome lub przełączeniu się na inną aplikację zablokuj karty incognito.</translation>
 <translation id="5808435672482059465">Wyświetl historię Chrome</translation>
 <translation id="5833027901704861726">Niektóre dane z Chrome nie zostały jeszcze zapisane na koncie <ph name="EMAIL" />.
@@ -184,6 +187,7 @@ Zanim przełączysz się na inne konto, odczekaj kilka minut. Jeśli przełączy
 <translation id="5998675059699164418">Twoja organizacja wymaga od Ciebie zalogowania się w Chrome.</translation>
 <translation id="6021312115739110405">Spersonalizowane karty utworzone dla Ciebie przez Google. Obejmują wiadomości, sport i pogodę.</translation>
 <translation id="6022659036123304283">Dostosuj Chrome do swoich potrzeb</translation>
+<translation id="6132075343662013154">Chrome zaproponuje zapisanie hasła</translation>
 <translation id="6132149203299792222">Zaloguj się na konto Google, aby synchronizować swoje hasła, zakładki i inne dane.</translation>
 <translation id="6145223986912084844">chrome</translation>
 <translation id="6177442314419606057">Szukaj w Chrome</translation>
@@ -206,11 +210,11 @@ Zanim przełączysz się na inne konto, odczekaj kilka minut. Jeśli przełączy
 
 Dane zostały zaszyfrowane za pomocą Twojego hasła wielowyrazowego. Podaj to hasło, aby korzystać z danych Chrome i zapisywać je na swoim koncie Google.</translation>
 <translation id="6533470733797826516">Loguj się szybciej dzięki autouzupełnianiu w Chrome</translation>
+<translation id="6536544321553662809">Ustaw Chrome jako przeglądarkę domyślną, aby łatwo udostępniać i otwierać linki</translation>
 <translation id="6545449117344801102">Chrome wykrywa adresy i wykorzystuje Mapy Google, aby wyświetlać Ci wskazówki dojazdu i informacje lokalne.</translation>
 <translation id="6636941099779251629">Twoja organizacja wymaga od Ciebie zalogowania się w Chrome. <ph name="BEGIN_LINK" />Więcej informacji<ph name="END_LINK" /></translation>
 <translation id="6646696210740573446">Wysyła zaciemnioną część adresu URL do Google przez serwer prywatności, który ukrywa Twój adres IP. Jeśli strona próbuje wykraść Twoje hasło lub pobierasz szkodliwy plik, Chrome może też wysłać adresy URL wraz z fragmentami zawartości strony do Google.</translation>
 <translation id="6647304104688527905">Otwiera nową kartę w Chrome.</translation>
-<translation id="6648150602980899529">Logujesz się na konto, którym zarządza <ph name="DOMAIN" />, i przekazujesz jego administratorowi kontrolę nad Twoimi danymi Chrome. Zostaną one trwale przypisane do tego konta. Gdy się wylogujesz, znikną one z tego urządzenia, ale pozostaną zapisane na Twoim koncie Google.</translation>
 <translation id="6684809838922667136">Ulepsz Chrome</translation>
 <translation id="6695698548122852044">{THRESHOLD,plural, =1{Dzieje się tak, gdy nie używasz Chrome przez {THRESHOLD} minutę. Dane zapisane tylko na tym urządzeniu, gdy korzystałeś(-aś) z niego po zalogowaniu, zostaną usunięte. Może to obejmować historię i hasła.}few{Dzieje się tak, gdy nie używasz Chrome przez {THRESHOLD} minuty. Dane zapisane tylko na tym urządzeniu, gdy korzystałeś(-aś) z niego po zalogowaniu, zostaną usunięte. Może to obejmować historię i hasła.}many{Dzieje się tak, gdy nie używasz Chrome przez {THRESHOLD} minut. Dane zapisane tylko na tym urządzeniu, gdy korzystałeś(-aś) z niego po zalogowaniu, zostaną usunięte. Może to obejmować historię i hasła.}other{Dzieje się tak, gdy nie używasz Chrome przez {THRESHOLD} minuty. Dane zapisane tylko na tym urządzeniu, gdy korzystałeś(-aś) z niego po zalogowaniu, zostaną usunięte. Może to obejmować historię i hasła.}}</translation>
 <translation id="6709398533399187136">Wskutek naruszenia bezpieczeństwa danych doszło do ujawnienia hasła. Menedżer haseł Google zaleca, aby jak najszybciej je zmienić.</translation>
@@ -230,6 +234,7 @@ W <ph name="BEGIN_LINK" />usługach Google<ph name="END_LINK" /> znajdziesz wi�
 <translation id="7061455974939528301">Naciśnij i przytrzymaj ikonę Chrome i kliknij „Edytuj ekran główny”</translation>
 <translation id="7065813315247345131">Przenieś Chrome do Docka</translation>
 <translation id="7124339256045485976">Zawsze używaj aktualnej wersji Chrome</translation>
+<translation id="7145599899567697473">Zapisuj i automatycznie uzupełniaj hasła w Chrome</translation>
 <translation id="7161390184744336561">Masz nieaktualną wersję Google Chrome</translation>
 <translation id="7165736900384873061">Skaner QR w Google Chrome</translation>
 <translation id="7175129790242719365">Wskazówka dotycząca Chrome: zaloguj się w Chrome</translation>
@@ -257,12 +262,14 @@ W <ph name="BEGIN_LINK" />usługach Google<ph name="END_LINK" /> znajdziesz wi�
 <translation id="7575971113404272499">Wskazówka dotycząca Chrome: używaj domyślnie Chrome</translation>
 <translation id="7581063337314642333">Wyświetl siatkę kart w Chrome</translation>
 <translation id="7599894504325210080">Widok rozwinięty autouzupełniania w Chrome</translation>
+<translation id="7617512710641355143">Przeglądarka Chrome jest zarządzana</translation>
 <translation id="7642373780953416937">Otrzymuj alerty o problemach związanych z prywatnością i bezpieczeństwem, które automatycznie wykrywa Chrome.</translation>
 <translation id="7660356333829433649">Wróć tutaj, aby zobaczyć więcej przydatnych wskazówek, które pomogą Ci w pełni wykorzystać możliwości Chrome.</translation>
 <translation id="7662994914830945754">Aby widzieć swoje karty zawsze, kiedy korzystasz z Chrome, zaloguj się i włącz synchronizację</translation>
 <translation id="7693590760643069321">Teraz możesz używać Chrome za każdym razem, gdy klikniesz link w wiadomościach, dokumentach i w innych aplikacjach.</translation>
 <translation id="7698568245838009292">Chrome chce mieć dostęp do kamery</translation>
 <translation id="7707877166818730835">Otwórz moją ostatnio używaną kartę w Chrome</translation>
+<translation id="7747746207470479571">Korzystaj z autouzupełniania w Chrome, aby mieć łatwy dostęp do haseł i kluczy dostępu</translation>
 <translation id="776305366874821582">Uruchamiaj Chrome szybciej z Docka na ekranie głównym iPhone'a.</translation>
 <translation id="7780154209050837198">Aby w pełni wykorzystać możliwości Chrome, zaloguj się na konto Google.</translation>
 <translation id="7787205077729386167">Otwórz Ustawienia Chrome na urządzeniu z iOS, kliknij „Domyślna przeglądarka” i wybierz Chrome.</translation>
@@ -283,6 +290,7 @@ W <ph name="BEGIN_LINK" />usługach Google<ph name="END_LINK" /> znajdziesz wi�
 <translation id="8136856065410661948">Będziemy z tego korzystać, aby tworzyć wydarzenia z Chrome i Obiektywu Google w kalendarzu Apple.</translation>
 <translation id="8154120522323162874">Aby w pełni wykorzystywać możliwości Chrome, kontynuuj konfigurowanie przeglądarki.</translation>
 <translation id="8160472928944011082">Nie udało się zaktualizować Chrome</translation>
+<translation id="8245080522851805544">Chroń swoją prywatność podczas przeglądania dzięki uwierzytelnianiu urządzenia przy zamykaniu Chrome</translation>
 <translation id="8248887045858762645">Wskazówka dotycząca Chrome</translation>
 <translation id="8265730590513812063">Otwórz menu Chrome</translation>
 <translation id="8317674518145175158">Formy płatności i adresy nie będą zaszyfrowane. Historia przeglądania z Chrome nie będzie synchronizowana.
@@ -291,6 +299,7 @@ Twoje zaszyfrowane dane może odczytać tylko osoba znająca hasło. Nie jest on
 <translation id="8370517070665726704">Copyright <ph name="YEAR" /> Google LLC. Wszelkie prawa zastrzeżone.</translation>
 <translation id="8371138994040262994">Otwiera ustawienia w Chrome.</translation>
 <translation id="8387459386171870978">Nadal korzystaj z Chrome</translation>
+<translation id="8392023217086447677">Otwarto w Chrome w trybie incognito</translation>
 <translation id="840168496893712993">Niektóre dodatki mogą powodować awarie Chrome. Spróbuj je odinstalować.</translation>
 <translation id="8413500425974960807">Wskazówka dotycząca Chrome: przenieś Chrome do Docka</translation>
 <translation id="8413795581997394485">Chroni przed stronami, pobieranymi plikami i rozszerzeniami, o których wiadomo, że są niebezpieczne. Gdy wchodzisz na stronę, Chrome wysyła zaciemniony fragment adresu URL do Google przez serwer prywatności, który ukrywa Twój adres IP. Jeśli strona robi coś podejrzanego, wysyłane są też pełne adresy URL i fragmenty zawartości strony.</translation>
@@ -325,5 +334,6 @@ Dane zostały zaszyfrowane za pomocą hasła wielowyrazowego <ph name="TIME" />.
 <translation id="9181628561061032322">Otwiera ostatnie karty w Chrome.</translation>
 <translation id="948597495737267756">Otwiera stronę historii Chrome.</translation>
 <translation id="97300214378190234">Używaj Chrome, zawsze gdy klikasz linki w innych aplikacjach.</translation>
+<translation id="997929539742564806">Szybko loguj się w aplikacjach i na stronach dzięki autouzupełnianiu haseł i kluczy dostępu z Chrome</translation>
 <translation id="998677222109959694">Zarządzanie ustawieniami Chrome</translation>
 </translationbundle>

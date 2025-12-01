@@ -56,6 +56,7 @@ cc_binary(
     "//src/tint/lang/hlsl/type:test",
     "//src/tint/lang/hlsl/writer/common:test",
     "//src/tint/lang/hlsl/writer/raise:test",
+    "//src/tint/lang/msl/ir/transform:test",
     "//src/tint/lang/msl/ir:test",
     "//src/tint/lang/msl/type:test",
     "//src/tint/lang/spirv/ir:test",
@@ -81,7 +82,6 @@ cc_binary(
     "//src/tint/utils/macros:test",
     "//src/tint/utils/math:test",
     "//src/tint/utils/memory:test",
-    "//src/tint/utils/result:test",
     "//src/tint/utils/rtti:test",
     "//src/tint/utils/strconv:test",
     "//src/tint/utils/symbol:test",
@@ -117,15 +117,9 @@ cc_binary(
     "//conditions:default": [],
   }) + select({
     ":tint_build_msl_writer": [
-      "//src/tint/lang/msl/writer/ast_printer:test",
       "//src/tint/lang/msl/writer/common:test",
       "//src/tint/lang/msl/writer/raise:test",
       "//src/tint/lang/msl/writer:test",
-    ],
-    "//conditions:default": [],
-  }) + select({
-    ":tint_build_msl_writer_and_tint_build_wgsl_reader_and_tint_build_wgsl_writer": [
-      "//src/tint/lang/msl/writer/ast_raise:test",
     ],
     "//conditions:default": [],
   }) + select({
@@ -255,14 +249,6 @@ selects.config_setting_group(
     name = "tint_build_hlsl_writer_and_tint_build_wgsl_reader_and_tint_build_wgsl_writer",
     match_all = [
         ":tint_build_hlsl_writer",
-        ":tint_build_wgsl_reader",
-        ":tint_build_wgsl_writer",
-    ],
-)
-selects.config_setting_group(
-    name = "tint_build_msl_writer_and_tint_build_wgsl_reader_and_tint_build_wgsl_writer",
-    match_all = [
-        ":tint_build_msl_writer",
         ":tint_build_wgsl_reader",
         ":tint_build_wgsl_writer",
     ],

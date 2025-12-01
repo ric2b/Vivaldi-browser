@@ -13,10 +13,12 @@ import gclient_paths
 # Keeps track of whether our SIGINT handler was called.
 _is_canceled = False
 
-def _register_build_id(local_dev_server_path, build_id):
+
+def _register_build_id(local_dev_server_path, build_id, out_dir):
     subprocess.run([
         local_dev_server_path, '--register-build-id', build_id, '--builder-pid',
-        str(os.getpid())
+        str(os.getpid()), '--output-directory',
+        os.path.abspath(out_dir)
     ])
 
 
@@ -50,19 +52,22 @@ def _start_server(local_dev_server_path):
 
 def _set_tty_env():
     stdout_name = os.readlink('/proc/self/fd/1')
-    os.environ.setdefault("AUTONINJA_STDOUT_NAME", stdout_name)
+    # Anonymous pipes can't be opened. These look like "pipe:[394765110]".
+    ret = os.path.exists(stdout_name)
+    if ret:
+        os.environ.setdefault("AUTONINJA_STDOUT_NAME", stdout_name)
+    return ret
 
 
 @contextlib.contextmanager
-def build_server_context(build_id, use_android_build_server=False):
-    if not use_android_build_server:
+def build_server_context(build_id, out_dir, use_android_build_server=False):
+    if not use_android_build_server or not _set_tty_env():
         yield
         return
-    _set_tty_env()
     server_path = _get_server_path()
     _start_server(server_path)
     # Tell the build server about us.
-    _register_build_id(server_path, build_id)
+    _register_build_id(server_path, build_id, out_dir)
     _set_signal_handler(server_path, build_id)
     yield
     # No need to print status if we CTRL+Ced out.

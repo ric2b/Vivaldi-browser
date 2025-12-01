@@ -46,6 +46,7 @@
 #include "chrome/browser/ui/webui/browser_command/browser_command_handler.h"
 #include "chrome/browser/ui/webui/cr_components/most_visited/most_visited_handler.h"
 #include "chrome/browser/ui/webui/favicon_source.h"
+#include "chrome/browser/ui/webui/metrics_reporter/metrics_reporter_service.h"
 #include "chrome/browser/ui/webui/new_tab_page/new_tab_page_handler.h"
 #include "chrome/browser/ui/webui/new_tab_page/ntp_pref_names.h"
 #include "chrome/browser/ui/webui/new_tab_page/untrusted_source.h"
@@ -205,11 +206,14 @@ content::WebUIDataSource* CreateAndAddNewTabPageUiHtmlSource(Profile* profile) {
       "mostRelevantTabResumptionDeviceIconEnabled",
       base::FeatureList::IsEnabled(
           ntp_features::kNtpMostRelevantTabResumptionModuleDeviceIcon));
-
   source->AddBoolean(
       "mostRelevantTabResumptionUseIsKnownToSync",
       base::FeatureList::IsEnabled(
           ntp_features::kNtpMostRelevantTabResumptionUseIsKnownToSync));
+  source->AddBoolean(
+      "mostRelevantTabResumptionModuleFallbackToHost",
+      base::FeatureList::IsEnabled(
+          ntp_features::kNtpMostRelevantTabResumptionModuleFallbackToHost));
 
   static constexpr webui::LocalizedString kStrings[] = {
       {"doneButton", IDS_DONE},
@@ -372,10 +376,13 @@ content::WebUIDataSource* CreateAndAddNewTabPageUiHtmlSource(Profile* profile) {
       {"modulesOutlookCalendarInfo", IDS_NTP_MODULES_OUTLOOK_CALENDAR_INFO},
       {"modulesCalendarJoinMeetingButtonText",
        IDS_NTP_MODULES_CALENDAR_JOIN_MEETING_BUTTON_TEXT},
+      {"modulesCalendarJoinMeetingButtonAcc",
+       IDS_NTP_MODULES_CALENDAR_JOIN_MEETING_BUTTON_ACCNAME},
       {"modulesCalendarInProgress", IDS_NTP_MODULES_CALENDAR_IN_PROGRESS},
       {"modulesCalendarInXMin", IDS_NTP_MODULES_CALENDAR_IN_X_MIN},
       {"modulesCalendarInXHr", IDS_NTP_MODULES_CALENDAR_IN_X_HR},
       {"modulesCalendarSeeMore", IDS_NTP_MODULES_CALENDAR_SEE_MORE},
+      {"modulesCalendarSeeMoreAcc", IDS_NTP_MODULES_CALENDAR_SEE_MORE_ACCNAME},
       {"modulesKaleidoscopeTitle", IDS_NTP_MODULES_KALEIDOSCOPE_TITLE},
       {"modulesTasksInfoTitle", IDS_NTP_MODULES_SHOPPING_TASKS_INFO_TITLE},
       {"modulesTasksInfoClose", IDS_NTP_MODULES_SHOPPING_TASKS_INFO_CLOSE},
@@ -640,14 +647,11 @@ void NewTabPageUI::BindInterface(
 
 void NewTabPageUI::BindInterface(
     mojo::PendingReceiver<searchbox::mojom::PageHandler> pending_page_handler) {
+  MetricsReporterService* service =
+      MetricsReporterService::GetFromWebContents(web_ui()->GetWebContents());
   realbox_handler_ = std::make_unique<RealboxHandler>(
       std::move(pending_page_handler), profile_, web_contents(),
-      &metrics_reporter_, /*omnibox_controller=*/nullptr);
-}
-
-void NewTabPageUI::BindInterface(
-    mojo::PendingReceiver<metrics_reporter::mojom::PageMetricsHost> receiver) {
-  metrics_reporter_.BindInterface(std::move(receiver));
+      service->metrics_reporter(), /*omnibox_controller=*/nullptr);
 }
 
 void NewTabPageUI::BindInterface(
@@ -774,7 +778,8 @@ void NewTabPageUI::CreateBrowserCommandHandler(
       Command::kNoOpCommand,
   };
   promo_browser_command_handler_ = std::make_unique<BrowserCommandHandler>(
-      std::move(pending_handler), profile_, supported_commands);
+      std::move(pending_handler), profile_, supported_commands,
+      web_ui()->GetWebContents());
 }
 
 void NewTabPageUI::CreatePageHandler(

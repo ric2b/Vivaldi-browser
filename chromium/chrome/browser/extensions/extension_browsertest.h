@@ -25,37 +25,28 @@
 #include "extensions/browser/extension_creator.h"
 #include "extensions/browser/extension_host.h"
 #include "extensions/browser/extension_protocols.h"
-#include "extensions/browser/extension_registry.h"
-#include "extensions/browser/extension_registry_observer.h"
 #include "extensions/browser/extension_system.h"
 #include "extensions/browser/sandboxed_unpacker.h"
 #include "extensions/browser/scoped_ignore_content_verifier_for_test.h"
 #include "extensions/common/extension.h"
 #include "extensions/common/extension_id.h"
 #include "extensions/common/feature_switch.h"
-#include "extensions/common/features/feature_channel.h"
 #include "extensions/common/manifest.h"
 #include "extensions/common/mojom/manifest.mojom-shared.h"
 
 class Profile;
 
-namespace content {
-class BrowserContext;
-class ServiceWorkerContext;
-}  // namespace content
-
 namespace extensions {
 class ChromeExtensionTestNotificationObserver;
+class ExtensionBrowserTestPlatformDelegate;
 class ExtensionCacheFake;
 class ExtensionService;
 class ExtensionSet;
-class ProcessManager;
 class WindowController;
 
 // Base class for extension browser tests. Provides utilities for loading,
 // unloading, and installing extensions.
-class ExtensionBrowserTest : public ExtensionPlatformBrowserTest,
-                             public ExtensionRegistryObserver {
+class ExtensionBrowserTest : public ExtensionPlatformBrowserTest {
  public:
   using ContextType = extensions::browser_test_util::ContextType;
   using LoadOptions = extensions::browser_test_util::LoadOptions;
@@ -63,30 +54,20 @@ class ExtensionBrowserTest : public ExtensionPlatformBrowserTest,
   ExtensionBrowserTest(const ExtensionBrowserTest&) = delete;
   ExtensionBrowserTest& operator=(const ExtensionBrowserTest&) = delete;
 
-  // ExtensionRegistryObserver:
-  void OnExtensionLoaded(content::BrowserContext* browser_context,
-                         const Extension* extension) override;
-  void OnShutdown(ExtensionRegistry* registry) override;
-
   bool IsContextTypeForServiceWorker() const {
     return IsServiceWorkerContext(context_type_);
   }
 
  protected:
+  // The platform delegate is an implementation detail of the test harness
+  // and should be able to access anything any general test would access.
+  friend class ExtensionBrowserTestPlatformDelegate;
+
   explicit ExtensionBrowserTest(ContextType context_type = ContextType::kNone);
   ~ExtensionBrowserTest() override;
 
   // Useful accessors.
   ExtensionService* extension_service();
-
-  ExtensionRegistry* extension_registry();
-
-  const extensions::ExtensionId& last_loaded_extension_id() {
-    return last_loaded_extension_id_;
-  }
-
-  // Get the profile to use.
-  virtual Profile* profile();
 
   // Extensions used in tests are typically not from the web store and will have
   // missing content verification hashes. The default implementation disables
@@ -111,7 +92,9 @@ class ExtensionBrowserTest : public ExtensionPlatformBrowserTest,
   void SetUp() override;
   void SetUpCommandLine(base::CommandLine* command_line) override;
   void SetUpOnMainThread() override;
-  void TearDownOnMainThread() override;
+
+  // ExtensionPlatformBrowserTest:
+  Profile* profile() final;
 
   // These functions intentionally shadow the versions in the base class
   // ExtensionPlatformBrowserTest. They cannot be made virtual because there
@@ -120,8 +103,6 @@ class ExtensionBrowserTest : public ExtensionPlatformBrowserTest,
   const Extension* LoadExtension(const base::FilePath& path);
   const Extension* LoadExtension(const base::FilePath& path,
                                  const LoadOptions& options);
-
-  void DisableExtension(const std::string& extension_id, int disable_reasons);
 
   // Loads unpacked extension from |path| with manifest |manifest_relative_path|
   // and imitates that it is a component extension.
@@ -145,23 +126,6 @@ class ExtensionBrowserTest : public ExtensionPlatformBrowserTest,
 
   // Launches |extension| as a window and returns the browser.
   Browser* LaunchAppBrowser(const Extension* extension);
-
-  // Pack the extension in |dir_path| into a crx file and return its path.
-  // Return an empty FilePath if there were errors.
-  base::FilePath PackExtension(
-      const base::FilePath& dir_path,
-      int extra_run_flags = ExtensionCreator::kNoRunFlags);
-
-  // Pack the extension in |dir_path| into a crx file at |crx_path|, using the
-  // key |pem_path|. If |pem_path| does not exist, create a new key at
-  // |pem_out_path|.
-  // Return the path to the crx file, or an empty FilePath if there were errors.
-  base::FilePath PackExtensionWithOptions(
-      const base::FilePath& dir_path,
-      const base::FilePath& crx_path,
-      const base::FilePath& pem_path,
-      const base::FilePath& pem_out_path,
-      int extra_run_flags = ExtensionCreator::kNoRunFlags);
 
   // |expected_change| indicates how many extensions should be installed (or
   // disabled, if negative).
@@ -237,14 +201,6 @@ class ExtensionBrowserTest : public ExtensionPlatformBrowserTest,
 
   void ReloadExtension(const extensions::ExtensionId& extension_id);
 
-  void UnloadExtension(const extensions::ExtensionId& extension_id);
-
-  void UninstallExtension(const extensions::ExtensionId& extension_id);
-
-  void DisableExtension(const extensions::ExtensionId& extension_id);
-
-  void EnableExtension(const extensions::ExtensionId& extension_id);
-
   // Wait for the number of visible page actions to change to |count|.
   bool WaitForPageActionVisibilityChangeTo(int count);
 
@@ -256,36 +212,6 @@ class ExtensionBrowserTest : public ExtensionPlatformBrowserTest,
 
   // Wait for the extension to not be idle.
   bool WaitForExtensionNotIdle(const extensions::ExtensionId& extension_id);
-
-  // Simulates a page calling window.open on an URL and waits for the
-  // navigation.
-  // |should_succeed| indicates whether the navigation should succeed, in which
-  // case the last committed url should match the passed url and the page should
-  // not be an error or interstitial page.
-  void OpenWindow(content::WebContents* contents,
-                  const GURL& url,
-                  bool newtab_process_should_equal_opener,
-                  bool should_succeed,
-                  content::WebContents** newtab_result);
-
-  // Simulates a page navigating itself to an URL and waits for the
-  // navigation. Returns true if the navigation succeeds.
-  [[nodiscard]] bool NavigateInRenderer(content::WebContents* contents,
-                                        const GURL& url);
-
-  // Looks for an ExtensionHost whose URL has the given path component
-  // (including leading slash).  Also verifies that the expected number of hosts
-  // are loaded.
-  ExtensionHost* FindHostWithPath(ProcessManager* manager,
-                                  const std::string& path,
-                                  int expected_hosts);
-
-  // Get the ServiceWorkerContext for the default browser's profile.
-  content::ServiceWorkerContext* GetServiceWorkerContext();
-
-  // Get the ServiceWorkerContext for the `browser_context`.
-  static content::ServiceWorkerContext* GetServiceWorkerContext(
-      content::BrowserContext* browser_context);
 
 #if BUILDFLAG(IS_CHROMEOS)
   // True if the command line should be tweaked as if ChromeOS user is
@@ -339,15 +265,6 @@ class ExtensionBrowserTest : public ExtensionPlatformBrowserTest,
   // Returns the WindowController for this test's browser window.
   WindowController* GetWindowController();
 
-  // Used for setting the default scoped current channel for extension browser
-  // tests to UNKNOWN (trunk), in order to enable channel restricted features.
-  // TODO(crbug.com/40261741): We should remove this and have the current
-  // channel respect what is defined on the builder. If a test requires a
-  // specific channel for a channel restricted feature, it should be defining
-  // its own scoped channel override. As this stands, it means we don't really
-  // have non-trunk coverage for most extension browser tests.
-  ScopedCurrentChannel current_channel_;
-
   // Disable external install UI.
   FeatureSwitch::ScopedOverride override_prompt_for_external_extensions_;
 
@@ -382,12 +299,6 @@ class ExtensionBrowserTest : public ExtensionPlatformBrowserTest,
 
   // Allows MV2 extensions to be loaded.
   std::optional<ScopedTestMV2Enabler> mv2_enabler_;
-
-  // Listens to extension loaded notifications.
-  base::ScopedObservation<ExtensionRegistry, ExtensionRegistryObserver>
-      registry_observation_{this};
-
-  extensions::ExtensionId last_loaded_extension_id_;
 };
 
 }  // namespace extensions

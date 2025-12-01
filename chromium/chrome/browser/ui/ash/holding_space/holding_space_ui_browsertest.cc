@@ -49,8 +49,6 @@
 #include "base/test/scoped_locale.h"
 #include "base/uuid.h"
 #include "build/build_config.h"
-#include "chrome/browser/ash/crosapi/crosapi_ash.h"
-#include "chrome/browser/ash/crosapi/crosapi_manager.h"
 #include "chrome/browser/ash/file_manager/file_tasks_observer.h"
 #include "chrome/browser/ash/file_suggest/file_suggest_keyed_service.h"
 #include "chrome/browser/ash/file_suggest/file_suggest_keyed_service_factory.h"
@@ -116,7 +114,7 @@ using ::testing::Property;
 // Matchers --------------------------------------------------------------------
 
 MATCHER_P(EnabledColorId, matcher, "") {
-  return Matches(matcher)(arg->GetEnabledColorId());
+  return Matches(matcher)(arg->GetRequestedEnabledColor());
 }
 
 // Helpers ---------------------------------------------------------------------
@@ -328,7 +326,6 @@ class DropSenderView : public views::WidgetDelegateView,
     params.activatable = views::Widget::InitParams::Activatable::kNo;
     params.context = context;
     params.delegate = this;
-    params.wants_mouse_events_when_inactive = true;
 
     views::Widget* widget = new views::Widget();
     widget->Init(std::move(params));
@@ -392,7 +389,6 @@ class DropTargetView : public views::WidgetDelegateView {
     params.activatable = views::Widget::InitParams::Activatable::kNo;
     params.context = context;
     params.delegate = this;
-    params.wants_mouse_events_when_inactive = true;
 
     views::Widget* widget = new views::Widget();
     widget->Init(std::move(params));
@@ -1744,8 +1740,7 @@ IN_PROC_BROWSER_TEST_F(HoldingSpaceUiInProgressDownloadsBrowserTest,
   // `0 B` as there is no knowledge of the total number of bytes expected.
   EXPECT_TRUE(secondary_label->GetVisible());
   EXPECT_EQ(secondary_label->GetText(), u"0 B");
-  EXPECT_THAT(secondary_label,
-              EnabledColorId(Optional(kColorAshTextColorSecondary)));
+  EXPECT_THAT(secondary_label, EnabledColorId(kColorAshTextColorSecondary));
 
   // The accessible name should indicate that the download is in progress.
   EXPECT_EQ(GetAccessibleName(download_chips.at(0)),
@@ -1763,8 +1758,7 @@ IN_PROC_BROWSER_TEST_F(HoldingSpaceUiInProgressDownloadsBrowserTest,
   EXPECT_EQ(primary_label->GetText(), target_file_name);
   EXPECT_TRUE(secondary_label->GetVisible());
   WaitForText(secondary_label, u"Paused, 0 B");
-  EXPECT_THAT(secondary_label,
-              EnabledColorId(Optional(kColorAshTextColorSecondary)));
+  EXPECT_THAT(secondary_label, EnabledColorId(kColorAshTextColorSecondary));
 
   // The accessible name should indicate that the download is in progress and
   // that progress is paused.
@@ -1782,8 +1776,7 @@ IN_PROC_BROWSER_TEST_F(HoldingSpaceUiInProgressDownloadsBrowserTest,
   EXPECT_EQ(primary_label->GetText(), target_file_name);
   EXPECT_TRUE(secondary_label->GetVisible());
   WaitForText(secondary_label, u"Paused, 1,024 KB");
-  EXPECT_THAT(secondary_label,
-              EnabledColorId(Optional(kColorAshTextColorSecondary)));
+  EXPECT_THAT(secondary_label, EnabledColorId(kColorAshTextColorSecondary));
 
   // The accessible name should indicate that the download is in progress and
   // that progress is paused.
@@ -1801,8 +1794,7 @@ IN_PROC_BROWSER_TEST_F(HoldingSpaceUiInProgressDownloadsBrowserTest,
   EXPECT_EQ(primary_label->GetText(), target_file_name);
   EXPECT_TRUE(secondary_label->GetVisible());
   WaitForText(secondary_label, u"1,024 KB");
-  EXPECT_THAT(secondary_label,
-              EnabledColorId(Optional(kColorAshTextColorSecondary)));
+  EXPECT_THAT(secondary_label, EnabledColorId(kColorAshTextColorSecondary));
 
   // The accessible name should indicate that the download is in progress.
   EXPECT_EQ(GetAccessibleName(download_chips.at(0)),
@@ -1820,8 +1812,7 @@ IN_PROC_BROWSER_TEST_F(HoldingSpaceUiInProgressDownloadsBrowserTest,
   EXPECT_EQ(primary_label->GetText(), target_file_name);
   EXPECT_TRUE(secondary_label->GetVisible());
   WaitForText(secondary_label, u"1.0/2.0 MB");
-  EXPECT_THAT(secondary_label,
-              EnabledColorId(Optional(kColorAshTextColorSecondary)));
+  EXPECT_THAT(secondary_label, EnabledColorId(kColorAshTextColorSecondary));
 
   // The accessible name should indicate that the download is in progress.
   EXPECT_EQ(GetAccessibleName(download_chips.at(0)),
@@ -1839,8 +1830,7 @@ IN_PROC_BROWSER_TEST_F(HoldingSpaceUiInProgressDownloadsBrowserTest,
   EXPECT_EQ(primary_label->GetText(), target_file_name);
   EXPECT_TRUE(secondary_label->GetVisible());
   WaitForText(secondary_label, u"Paused, 1.0/2.0 MB");
-  EXPECT_THAT(secondary_label,
-              EnabledColorId(Optional(kColorAshTextColorSecondary)));
+  EXPECT_THAT(secondary_label, EnabledColorId(kColorAshTextColorSecondary));
 
   // The accessible name should indicate that the download is in progress and
   // that progress is paused.
@@ -1861,8 +1851,7 @@ IN_PROC_BROWSER_TEST_F(HoldingSpaceUiInProgressDownloadsBrowserTest,
   EXPECT_EQ(primary_label->GetText(), target_file_name);
   EXPECT_TRUE(secondary_label->GetVisible());
   WaitForText(secondary_label, u"Paused, 2.0/2.0 MB");
-  EXPECT_THAT(secondary_label,
-              EnabledColorId(Optional(kColorAshTextColorSecondary)));
+  EXPECT_THAT(secondary_label, EnabledColorId(kColorAshTextColorSecondary));
 
   // The accessible name should indicate that the download is in progress and
   // that progress is paused.
@@ -1882,8 +1871,7 @@ IN_PROC_BROWSER_TEST_F(HoldingSpaceUiInProgressDownloadsBrowserTest,
   EXPECT_EQ(primary_label->GetText(), target_file_name);
   EXPECT_TRUE(secondary_label->GetVisible());
   WaitForText(secondary_label, u"Dangerous file");
-  EXPECT_THAT(secondary_label,
-              EnabledColorId(Optional(cros_tokens::kTextColorAlert)));
+  EXPECT_THAT(secondary_label, EnabledColorId(cros_tokens::kTextColorAlert));
 
   // The accessible name should indicate that the download is dangerous.
   EXPECT_EQ(GetAccessibleName(download_chips.at(0)),
@@ -1899,7 +1887,7 @@ IN_PROC_BROWSER_TEST_F(HoldingSpaceUiInProgressDownloadsBrowserTest,
   EXPECT_TRUE(secondary_label->GetVisible());
   WaitForText(secondary_label, u"Scanning");
   EXPECT_THAT(secondary_label,
-              EnabledColorId(Optional(cros_tokens::kTextColorProminent)));
+              EnabledColorId(cros_tokens::kTextColorProminent));
 
   // The accessible name should indicate that the download is being scanning.
   EXPECT_EQ(GetAccessibleName(download_chips.at(0)),
@@ -1917,8 +1905,7 @@ IN_PROC_BROWSER_TEST_F(HoldingSpaceUiInProgressDownloadsBrowserTest,
   EXPECT_EQ(primary_label->GetText(), target_file_name);
   EXPECT_TRUE(secondary_label->GetVisible());
   WaitForText(secondary_label, u"Confirm download");
-  EXPECT_THAT(secondary_label,
-              EnabledColorId(Optional(cros_tokens::kTextColorWarning)));
+  EXPECT_THAT(secondary_label, EnabledColorId(cros_tokens::kTextColorWarning));
 
   // The accessible name should indicate that the download must be confirmed.
   EXPECT_EQ(GetAccessibleName(download_chips.at(0)),
@@ -1937,8 +1924,7 @@ IN_PROC_BROWSER_TEST_F(HoldingSpaceUiInProgressDownloadsBrowserTest,
   EXPECT_EQ(primary_label->GetText(), target_file_name);
   EXPECT_TRUE(secondary_label->GetVisible());
   WaitForText(secondary_label, u"Paused, 2.0/2.0 MB");
-  EXPECT_THAT(secondary_label,
-              EnabledColorId(Optional(kColorAshTextColorSecondary)));
+  EXPECT_THAT(secondary_label, EnabledColorId(kColorAshTextColorSecondary));
 
   // The accessible name should indicate that the download is in progress and
   // that progress is paused.
@@ -1958,8 +1944,7 @@ IN_PROC_BROWSER_TEST_F(HoldingSpaceUiInProgressDownloadsBrowserTest,
   EXPECT_EQ(primary_label->GetText(), target_file_name);
   EXPECT_TRUE(secondary_label->GetVisible());
   WaitForText(secondary_label, u"Dangerous file");
-  EXPECT_THAT(secondary_label,
-              EnabledColorId(Optional(cros_tokens::kTextColorAlert)));
+  EXPECT_THAT(secondary_label, EnabledColorId(cros_tokens::kTextColorAlert));
 
   // The accessible name should indicate that the download is dangerous.
   EXPECT_EQ(GetAccessibleName(download_chips.at(0)),
@@ -1978,8 +1963,7 @@ IN_PROC_BROWSER_TEST_F(HoldingSpaceUiInProgressDownloadsBrowserTest,
   EXPECT_EQ(primary_label->GetText(), target_file_name);
   EXPECT_TRUE(secondary_label->GetVisible());
   WaitForText(secondary_label, u"Paused, 2.0/2.0 MB");
-  EXPECT_THAT(secondary_label,
-              EnabledColorId(Optional(kColorAshTextColorSecondary)));
+  EXPECT_THAT(secondary_label, EnabledColorId(kColorAshTextColorSecondary));
 
   // The accessible name should indicate that the download is in progress and
   // that progress is paused.
@@ -1993,8 +1977,7 @@ IN_PROC_BROWSER_TEST_F(HoldingSpaceUiInProgressDownloadsBrowserTest,
   EXPECT_TRUE(primary_label->GetVisible());
   EXPECT_EQ(primary_label->GetText(), target_file_name);
   EXPECT_FALSE(secondary_label->GetVisible());
-  EXPECT_THAT(secondary_label,
-              EnabledColorId(Optional(kColorAshTextColorSecondary)));
+  EXPECT_THAT(secondary_label, EnabledColorId(kColorAshTextColorSecondary));
 
   // The accessible name should indicate the target file name.
   EXPECT_EQ(GetAccessibleName(download_chips.at(0)),

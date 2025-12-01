@@ -11,6 +11,7 @@ import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 
+import androidx.annotation.IntDef;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.StringRes;
@@ -50,13 +51,25 @@ import org.chromium.ui.modelutil.PropertyKey;
 import org.chromium.ui.modelutil.PropertyModel;
 import org.chromium.ui.modelutil.PropertyModelChangeProcessor;
 
+import java.lang.annotation.ElementType;
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
+import java.lang.annotation.Target;
 import java.util.List;
 
 /**
- * This class is a coordinator for TabListEditor component. It manages the communication with
- * {@link TabListCoordinator} as well as the life-cycle of shared component.
+ * This class is a coordinator for TabListEditor component. It manages the communication with {@link
+ * TabListCoordinator} as well as the life-cycle of shared component.
  */
 class TabListEditorCoordinator {
+    @IntDef({CreationMode.FULL_SCREEN, CreationMode.DIALOG})
+    @Target(ElementType.TYPE_USE)
+    @Retention(RetentionPolicy.SOURCE)
+    public @interface CreationMode {
+        int FULL_SCREEN = 0;
+        int DIALOG = 1;
+    }
+
     static final String COMPONENT_NAME = "TabListEditor";
 
     // TODO(crbug.com/41467140): Unify similar interfaces in other components that used the
@@ -111,6 +124,11 @@ class TabListEditorCoordinator {
          * @return Whether the TabListEditor is visible.
          */
         boolean isVisible();
+
+        /**
+         * @return Whether the TabListEditor needs to be cleaned up.
+         */
+        boolean needsCleanUp();
 
         /** Sets the toolbar title when no items are selected. */
         void setToolbarTitle(String title);
@@ -174,6 +192,7 @@ class TabListEditorCoordinator {
                 @Override
                 public void hide() {
                     mTabListEditorMediator.hide();
+                    mNeedsCleanUp = true;
                 }
 
                 @Override
@@ -186,6 +205,11 @@ class TabListEditorCoordinator {
                 @Override
                 public boolean isVisible() {
                     return mTabListEditorMediator.isVisible();
+                }
+
+                @Override
+                public boolean needsCleanUp() {
+                    return mNeedsCleanUp;
                 }
 
                 @Override
@@ -232,7 +256,10 @@ class TabListEditorCoordinator {
     private final @NonNull ObservableSupplier<TabGroupModelFilter>
             mCurrentTabGroupModelFilterSupplier;
     private final TabListEditorLayout mTabListEditorLayout;
-    private final SelectionDelegate<Integer> mSelectionDelegate = new SelectionDelegate<>();
+    // Make sure the selection delegate starts out with selection mode enabled for 0 items.
+    // Otherwise we'll trigger notifyObservers when we enable the selection mode, and that will
+    // result in an accessibility announcement.
+    private final SelectionDelegate<Integer> mSelectionDelegate = new SelectionDelegate<>(true);
     private final PropertyModel mModel;
     private final TabListEditorMediator mTabListEditorMediator;
     private final Callback<RecyclerViewPosition> mClientTabListRecyclerViewPositionSetter;
@@ -248,6 +275,7 @@ class TabListEditorCoordinator {
     private TabListCoordinator mTabListCoordinator;
     private PropertyModelChangeProcessor mTabListEditorLayoutChangeProcessor;
     private @TabActionState int mTabActionState;
+    private boolean mNeedsCleanUp;
     private @Nullable EdgeToEdgePadAdjuster mEdgeToEdgePadAdjuster;
 
     /**
@@ -269,6 +297,7 @@ class TabListEditorCoordinator {
      * @param modalDialogManager Used for managing the modal dialogs.
      * @param desktopWindowStateManager Manager to get desktop window and app header state.
      * @param edgeToEdgeSupplier Supplier to the {@link EdgeToEdgeController} instance.
+     * @param creationMode Mode in which list is created e.g. full screen mode or in a dialog.
      */
     public TabListEditorCoordinator(
             Activity activity,
@@ -286,7 +315,8 @@ class TabListEditorCoordinator {
             @Nullable GridCardOnClickListenerProvider gridCardOnClickListenerProvider,
             @NonNull ModalDialogManager modalDialogManager,
             @Nullable DesktopWindowStateManager desktopWindowStateManager,
-            @Nullable ObservableSupplier<EdgeToEdgeController> edgeToEdgeSupplier) {
+            @Nullable ObservableSupplier<EdgeToEdgeController> edgeToEdgeSupplier,
+            @CreationMode int creationMode) {
         try (TraceEvent e = TraceEvent.scoped("TabListEditorCoordinator.constructor")) {
             mActivity = activity;
             mRootView = rootView;
@@ -324,9 +354,11 @@ class TabListEditorCoordinator {
                             bottomSheetController,
                             mTabListEditorLayout,
                             mTabActionState,
-                            desktopWindowStateManager);
+                            desktopWindowStateManager,
+                            creationMode);
             mTabListEditorMediator.setNavigationProvider(
                     new TabListEditorNavigationProvider(activity, mTabListEditorController));
+            mNeedsCleanUp = false;
         }
     }
 
@@ -375,6 +407,7 @@ class TabListEditorCoordinator {
             mEdgeToEdgePadAdjuster.destroy();
             mEdgeToEdgePadAdjuster = null;
         }
+        mNeedsCleanUp = false;
     }
 
     /**
@@ -498,7 +531,6 @@ class TabListEditorCoordinator {
                         /* emptyHeadingStringResId= */ Resources.ID_NULL,
                         /* emptySubheadingStringResId= */ Resources.ID_NULL,
                         /* onTabGroupCreation= */ null,
-                        /* backgroundColorSupplier= */ null,
                         /* allowDragAndDrop= */ false);
 
         // Note: The TabListEditorCoordinator is always created after native is initialized.
@@ -523,7 +555,6 @@ class TabListEditorCoordinator {
                 mTabListCoordinator.getContainerView(),
                 mTabListCoordinator.getContainerView().getAdapter(),
                 mSelectionDelegate);
-        mSelectionDelegate.setSelectionModeEnabledForZeroItems(true);
         mTabListEditorMediator.initializeWithTabListCoordinator(mTabListCoordinator, resetHandler);
 
         mTabListEditorLayoutChangeProcessor =

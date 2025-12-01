@@ -5,7 +5,7 @@
 <translation id="1097355661841455597">Voleli bismo da čujemo vaše mišljenje.</translation>
 <translation id="1137850887415122856">Da biste zaključali svoje privatne kartice, podesite Touch ID, Face ID ili kod.</translation>
 <translation id="1310184829257917508">Zatraži otvaranje veza iz drugih aplikacija u privatnom režimu</translation>
-<translation id="1561609750546413721">Vivaldi prevodilac</translation>
+<translation id="1743244221910283364">Odbaci promene</translation>
 <translation id="207677936531967364">Nova stranica privatne kartice</translation>
 <translation id="2353953000228441783">Podrazumevani prikaz sajtova</translation>
 <translation id="2394192052244849643">Nalepi i pretraži</translation>
@@ -17,7 +17,9 @@
 <translation id="3463990832590571933">Otvori u novoj privatnoj kartici</translation>
 <translation id="3473652525653758699">Novi privatni prozor</translation>
 <translation id="3501504415290398157">Koristite <ph name="BIOMETRIC_AUTHENITCATION_TYPE" /> da biste otključali svoje privatne kartice.</translation>
+<translation id="3607792383367580513">Prevedi</translation>
 <translation id="3692650606013198282">Otvori u privatnom režimu</translation>
+<translation id="3922395466317605522">Prilagođavanje menija</translation>
 <translation id="3981599532037327317">Otvori ${url} u privatnom režimu</translation>
 <translation id="398477389655464998">Kopiraj vezu do istaknutog teksta</translation>
 <translation id="4026745073321351206">🙄 Primetili ste problem?</translation>
@@ -33,16 +35,17 @@
 <translation id="570209299585559496">Za promenu podrazumevanog prikaza sajtova na desktop verziju, otvorite podešavanja a zatim podešavanja sadržaja</translation>
 <translation id="5962477178930921574">Nalepi i pretraži</translation>
 <translation id="6233792867654386826">Otvara unete URL adrese u Vivaldi prgledaču.</translation>
+<translation id="6532106788206463496">Sačuvaj promene</translation>
 <translation id="6680416467695217368">Prilagodi meni</translation>
 <translation id="6827597288286078054">Privatna pretraga</translation>
 <translation id="6851516051005285358">Zahtevaj desktop verziju sajta</translation>
 <translation id="7307970171564921489">Otključajte privatne kartice pomoću <ph name="BIOMETRIC_AUTHENITCATION_TYPE" /></translation>
 <translation id="7347289093190902150">Otvoriti u privatnom režimu?</translation>
+<translation id="7498234416455752244">Nastavi uređivanje</translation>
 <translation id="7549299604720382000">Nova privatna kartica</translation>
-<translation id="755255281989213264">Prilagođavanje menija</translation>
-<translation id="7920949005883349320">Privatnost i bezbednost</translation>
 <translation id="7961015016161918242">Nikada</translation>
 <translation id="8326104954595890674">Nova privatna kartica</translation>
 <translation id="8756969031206844760">Ažurirati lozinku?</translation>
+<translation id="9042893549633094279">Privatnost i bezbednost</translation>
 <translation id="9094033019050270033">Ažuriraj lozinku</translation>
 </translationbundle>

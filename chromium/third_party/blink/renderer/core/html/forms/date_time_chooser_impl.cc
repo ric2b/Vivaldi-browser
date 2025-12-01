@@ -146,16 +146,6 @@ void DateTimeChooserImpl::WriteDocument(SegmentedBuffer& data) {
 
   data.Append(ChooserResourceLoader::GetPickerCommonStyleSheet());
   data.Append(ChooserResourceLoader::GetSuggestionPickerStyleSheet());
-
-  const String& disabled_color_style =
-      RuntimeEnabledFeatures::
-              CalendarPickerMonthPopupButtonDisabledColorEnabled()
-          ? ":root { --month-popup-button-disabled-color: rgba(16, 16, 16, "
-            "0.9) }"
-          : ":root { --month-popup-button-disabled-color: rgba(16, 16, 16, "
-            "0.3) }";
-  AddString(disabled_color_style, data);
-
   data.Append(ChooserResourceLoader::GetCalendarPickerStyleSheet());
   if (parameters_->type == InputType::Type::kTime ||
       parameters_->type == InputType::Type::kDateTimeLocal) {
@@ -279,7 +269,8 @@ Locale& DateTimeChooserImpl::GetLocale() {
 }
 
 void DateTimeChooserImpl::SetValueAndClosePopup(int num_value,
-                                                const String& string_value) {
+                                                const String& string_value,
+                                                bool is_keyboard_event) {
   if (num_value >= 0)
     SetValue(string_value);
   EndChooser();

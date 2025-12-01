@@ -13,6 +13,7 @@ import type {CrDialogElement} from 'chrome://resources/cr_elements/cr_dialog/cr_
 import {I18nMixinLit} from 'chrome://resources/cr_elements/i18n_mixin_lit.js';
 import {WebUiListenerMixinLit} from 'chrome://resources/cr_elements/web_ui_listener_mixin_lit.js';
 import {assertNotReached} from 'chrome://resources/js/assert.js';
+import {htmlEscape} from 'chrome://resources/js/util.js';
 import type {PropertyValues} from 'chrome://resources/lit/v3_0/lit.rollup.js';
 import {CrLitElement} from 'chrome://resources/lit/v3_0/lit.rollup.js';
 
@@ -92,22 +93,22 @@ export class ProfileCardMenuElement extends ProfileCardMenuElementBase {
     };
   }
 
-  profileState: ProfileState = createDummyProfileState();
-  private statistics_: Statistics = {
+  accessor profileState: ProfileState = createDummyProfileState();
+  private accessor statistics_: Statistics = {
     BrowsingHistory: 0,
     Passwords: 0,
     Bookmarks: 0,
     Autofill: 0,
   };
-  protected moreActionsButtonAriaLabel_: string = '';
-  protected profileStatistics_: ProfileStatistics[] = [
+  protected accessor moreActionsButtonAriaLabel_: string = '';
+  protected accessor profileStatistics_: ProfileStatistics[] = [
     ProfileStatistics.BROWSING_HISTORY,
     ProfileStatistics.PASSWORDS,
     ProfileStatistics.BOOKMARKS,
     ProfileStatistics.AUTOFILL,
   ];
-  protected removeWarningText_: string = '';
-  protected removeWarningTitle_: string = '';
+  protected accessor removeWarningText_: string = '';
+  protected accessor removeWarningTitle_: string = '';
   private manageProfilesBrowserProxy_: ManageProfilesBrowserProxy =
       ManageProfilesBrowserProxyImpl.getInstance();
 
@@ -134,8 +135,11 @@ export class ProfileCardMenuElement extends ProfileCardMenuElementBase {
   }
 
   private computeMoreActionsButtonAriaLabel_(): string {
+    // `localProfileName` has to be escaped because it's user-provided and may
+    // contain HTML tags, which makes `i18n()` unhappy. See
+    // https://crbug.com/400338974.
     return this.i18n(
-        'profileMenuAriaLabel', this.profileState.localProfileName);
+        'profileMenuAriaLabel', htmlEscape(this.profileState.localProfileName));
   }
 
   private computeRemoveWarningText_(): string {

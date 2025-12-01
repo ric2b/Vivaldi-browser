@@ -34,10 +34,10 @@
 #include "third_party/blink/renderer/core/css/css_border_image_slice_value.h"
 #include "third_party/blink/renderer/core/css/css_custom_ident_value.h"
 #include "third_party/blink/renderer/core/css/css_identifier_value.h"
+#include "third_party/blink/renderer/core/css/css_identifier_value_mappings.h"
 #include "third_party/blink/renderer/core/css/css_math_function_value.h"
 #include "third_party/blink/renderer/core/css/css_numeric_literal_value.h"
 #include "third_party/blink/renderer/core/css/css_primitive_value.h"
-#include "third_party/blink/renderer/core/css/css_primitive_value_mappings.h"
 #include "third_party/blink/renderer/core/css/css_quad_value.h"
 #include "third_party/blink/renderer/core/css/css_repeat_style_value.h"
 #include "third_party/blink/renderer/core/css/css_scroll_value.h"
@@ -314,7 +314,7 @@ Timing::Delay MapAnimationTimingDelay(const CSSLengthResolver& length_resolver,
                                       const CSSValue& value) {
   if (const auto* primitive = DynamicTo<CSSPrimitiveValue>(value)) {
     return Timing::Delay(
-        AnimationTimeDelta(primitive->ComputeSeconds(length_resolver)));
+        ANIMATION_TIME_DELTA_FROM_SECONDS(primitive->ComputeSeconds(length_resolver)));
   }
 
   return Timing::Delay();
@@ -590,9 +590,15 @@ scoped_refptr<TimingFunction> CSSToStyleMap::MapAnimationTimingFunction(
 
   const auto& steps_timing_function =
       To<cssvalue::CSSStepsTimingFunctionValue>(value);
-  return StepsTimingFunction::Create(
-      steps_timing_function.NumberOfSteps()->ComputeInteger(length_resolver),
-      steps_timing_function.GetStepPosition());
+  int steps =
+      steps_timing_function.NumberOfSteps()->ComputeInteger(length_resolver);
+  if (steps_timing_function.GetStepPosition() ==
+          StepsTimingFunction::StepPosition::JUMP_NONE &&
+      steps < 2) {
+    steps = 2;
+  }
+  return StepsTimingFunction::Create(steps,
+                                     steps_timing_function.GetStepPosition());
 }
 
 scoped_refptr<TimingFunction> CSSToStyleMap::MapAnimationTimingFunction(

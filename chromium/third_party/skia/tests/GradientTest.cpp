@@ -9,7 +9,6 @@
 #include "include/core/SkBitmap.h"
 #include "include/core/SkCanvas.h"
 #include "include/core/SkColor.h"
-#include "include/core/SkColorPriv.h"
 #include "include/core/SkColorSpace.h"
 #include "include/core/SkColorType.h"
 #include "include/core/SkImageInfo.h"
@@ -35,6 +34,7 @@
 #include "include/private/base/SkTo.h"
 #include "include/private/gpu/ganesh/GrTypesPriv.h"
 #include "src/base/SkTLazy.h"
+#include "src/core/SkColorPriv.h"
 #include "src/gpu/ganesh/GrColorInfo.h"
 #include "src/gpu/ganesh/GrFPArgs.h"
 #include "src/gpu/ganesh/GrFragmentProcessors.h"
@@ -579,7 +579,7 @@ void test_sweep_gradient_zero_x(skiatest::Reporter* reporter, SkSurface* surface
 DEF_GANESH_TEST_FOR_RENDERING_CONTEXTS(TestSweepGradientZeroXGanesh,
                                        reporter,
                                        contextInfo,
-                                       CtsEnforcement::kApiLevel_V) {
+                                       CtsEnforcement::kApiLevel_202404) {
     SkImageInfo ii = SkImageInfo::Make(SkISize::Make(5, 5),
                                        SkColorType::kRGBA_8888_SkColorType,
                                        SkAlphaType::kPremul_SkAlphaType);

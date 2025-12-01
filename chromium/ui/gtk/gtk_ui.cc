@@ -39,6 +39,7 @@
 #include "ui/base/ime/input_method.h"
 #include "ui/base/ime/linux/fake_input_method_context.h"
 #include "ui/base/ime/linux/linux_input_method_context.h"
+#include "ui/base/ime/text_edit_commands.h"
 #include "ui/base/ime/text_input_flags.h"
 #include "ui/base/ozone_buildflags.h"
 #include "ui/base/ui_base_switches.h"
@@ -313,20 +314,22 @@ void GtkUi::InitializeFontSettings() {
       base::SplitString(pango_font_description_get_family(desc), ",",
                         base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
 
-  constexpr double kPangoScale = PANGO_SCALE;
+  double pango_size =
+      pango_font_description_get_size(desc) / static_cast<double>(PANGO_SCALE);
+  if (GtkCheckVersion(4)) {
+    pango_size /= FontScale();
+  }
   double size_pixels;
   if (pango_font_description_get_size_is_absolute(desc)) {
     // If the size is absolute, it's specified in Pango units. There are
     // PANGO_SCALE Pango units in a device unit (pixel).
-    size_pixels = pango_font_description_get_size(desc) / kPangoScale;
+    size_pixels = pango_size;
     query.pixel_size = std::round(size_pixels);
   } else {
     // Non-absolute sizes are in points (again scaled by PANGO_SIZE).
     // Round the value when converting to pixels to match GTK's logic.
-    const double size_points =
-        pango_font_description_get_size(desc) / kPangoScale;
-    size_pixels = size_points * kDefaultDPI / 72.0;
-    query.point_size = std::round(size_points);
+    size_pixels = pango_size * kDefaultDPI / 72.0;
+    query.point_size = std::round(pango_size);
   }
   if (!platform_->IncludeFontScaleInDeviceScale()) {
     size_pixels *= FontScale();
@@ -584,11 +587,12 @@ std::unique_ptr<ui::NavButtonProvider> GtkUi::CreateNavButtonProvider() {
 }
 
 ui::WindowFrameProvider* GtkUi::GetWindowFrameProvider(bool solid_frame,
-                                                       bool tiled) {
-  auto& provider = frame_providers_[solid_frame][tiled];
+                                                       bool tiled,
+                                                       bool maximized) {
+  auto& provider = frame_providers_[solid_frame][tiled][maximized];
   if (!provider) {
-    provider =
-        std::make_unique<gtk::WindowFrameProviderGtk>(solid_frame, tiled);
+    provider = std::make_unique<gtk::WindowFrameProviderGtk>(solid_frame, tiled,
+                                                             maximized);
   }
   return provider.get();
 }
@@ -671,33 +675,29 @@ int GtkUi::GetCursorThemeSize() {
   gint size = 0;
   g_object_get(gtk_settings_get_default(), "gtk-cursor-theme-size", &size,
                nullptr);
+  if (platform_->IncludeScaleInCursorSize()) {
+    CHECK(GtkCheckVersion(4));
+    GdkDisplay* display = gdk_display_get_default();
+    GListModel* list = gdk_display_get_monitors(display);
+    auto n_monitors = g_list_model_get_n_items(list);
+    if (n_monitors) {
+      GdkMonitor* primary =
+          static_cast<GdkMonitor*>(g_list_model_get_item(list, 0));
+      size *= gdk_monitor_get_scale_factor(primary);
+    }
+  }
   return size;
 }
 
-bool GtkUi::GetTextEditCommandsForEvent(
-    const ui::Event& event,
-    int text_flags,
-    std::vector<ui::TextEditCommandAuraLinux>* commands) {
-  // GTK4 dropped custom key bindings.
-  if (GtkCheckVersion(4)) {
-    return false;
-  }
-
-  // TODO(crbug.com/40627552): Use delegate's |GetGdkKeymap| here to
-  // determine if GtkUi's key binding handling implementation is used or not.
-  // Ozone/Wayland was unintentionally using GtkUi for keybinding handling, so
-  // early out here, for now, until a proper solution for ozone is implemented.
-  if (!platform_->GetGdkKeymap()) {
-    return false;
-  }
-
+ui::TextEditCommand GtkUi::GetTextEditCommandForEvent(const ui::Event& event,
+                                                      int text_flags) {
   // Skip mapping arrow keys to edit commands for vertical text fields in a
   // renderer.  Blink handles them.  See crbug.com/484651.
   if (text_flags & ui::TEXT_INPUT_FLAG_VERTICAL) {
     ui::KeyboardCode code = event.AsKeyEvent()->key_code();
     if (code == ui::VKEY_LEFT || code == ui::VKEY_RIGHT ||
         code == ui::VKEY_UP || code == ui::VKEY_DOWN) {
-      return false;
+      return ui::TextEditCommand::INVALID_COMMAND;
     }
   }
 
@@ -706,7 +706,7 @@ bool GtkUi::GetTextEditCommandsForEvent(
     key_bindings_handler_ = std::make_unique<GtkKeyBindingsHandler>();
   }
 
-  return key_bindings_handler_->MatchEvent(event, commands);
+  return key_bindings_handler_->MatchEvent(event);
 }
 
 #if BUILDFLAG(ENABLE_PRINTING)
@@ -839,7 +839,7 @@ void GtkUi::UpdateColors() {
     colors_[ThemeProperties::COLOR_LOCATION_BAR_BORDER] = location_bar_border;
   }
 
-  inactive_selection_bg_color_ = GetSelectionBgColor(
+  inactive_selection_bg_color_ = GetBgColor(
       "textview.view:backdrop "
       "text:backdrop selection:backdrop");
   inactive_selection_fg_color_ = GetFgColor(
@@ -1050,6 +1050,8 @@ void GtkUi::UpdateDeviceScaleFactor() {
   }
   set_default_font_settings(std::nullopt);
   default_font_render_params_.reset();
+  // On GTK4, the cursor theme size depends on the display scale factor.
+  OnCursorThemeSizeChanged(gtk_settings_get_default(), nullptr);
 }
 
 }  // namespace gtk

@@ -26,9 +26,9 @@ viewer-toolbar {
 }
 
 <if expr="enable_pdf_ink2">
-  viewer-side-panel {
-    border-inline-start: 1px solid var(--viewer-border-color);
-  }
+#side-panel {
+  border-inline-start: 1px solid var(--viewer-border-color);
+}
 </if>
 
 viewer-toolbar {
@@ -118,6 +118,7 @@ viewer-ink-host {
   left: 0;
   position: sticky;
   top: 0;
+  user-select: none;
   z-index: initial;
 }
 
@@ -157,7 +158,8 @@ viewer-ink-host {
 
 .spinner {
   mask-image: url(chrome://resources/images/throbber_small.svg);
-  margin-inline-end: 10px;
+  margin-inline-end: 8px;
+  --cr-spinner-size: 16px;
 }
 
 /* Dark mode styles copied from

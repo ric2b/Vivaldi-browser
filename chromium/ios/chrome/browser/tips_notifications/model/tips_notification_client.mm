@@ -17,6 +17,8 @@
 #import "components/search/search.h"
 #import "components/signin/public/identity_manager/identity_manager.h"
 #import "ios/chrome/browser/authentication/ui_bundled/signin_presenter.h"
+#import "ios/chrome/browser/content_suggestions/ui_bundled/content_suggestions_commands.h"
+#import "ios/chrome/browser/content_suggestions/ui_bundled/set_up_list/utils.h"
 #import "ios/chrome/browser/default_browser/model/promo_source.h"
 #import "ios/chrome/browser/default_browser/model/utils.h"
 #import "ios/chrome/browser/feature_engagement/model/tracker_factory.h"
@@ -49,8 +51,6 @@
 #import "ios/chrome/browser/signin/model/chrome_account_manager_service_factory.h"
 #import "ios/chrome/browser/signin/model/identity_manager_factory.h"
 #import "ios/chrome/browser/tips_notifications/model/utils.h"
-#import "ios/chrome/browser/ui/content_suggestions/content_suggestions_commands.h"
-#import "ios/chrome/browser/ui/content_suggestions/set_up_list/utils.h"
 #import "ios/public/provider/chrome/browser/lens/lens_api.h"
 #import "ui/base/device_form_factor.h"
 
@@ -158,8 +158,11 @@ bool TipsNotificationClient::HandleNotificationInteraction(
                                   TipsNotificationType::kError);
     return false;
   }
-  base::UmaHistogramEnumeration("IOS.Notifications.Tips.Interaction",
-                                interacted_type_.value());
+  const char* histogram =
+      IsProactiveTipsNotification(response.notification.request)
+          ? "IOS.Notifications.Tips.Proactive.Interaction"
+          : "IOS.Notifications.Tips.Interaction";
+  base::UmaHistogramEnumeration(histogram, interacted_type_.value());
 
   // If the app is not yet foreground active, store the notification type and
   // handle it later when the app becomes foreground active.
@@ -182,19 +185,44 @@ void TipsNotificationClient::HandleNotificationInteraction(
               base::BindOnce(&TipsNotificationClient::ShowUIForNotificationType,
                              weak_ptr_factory_.GetWeakPtr(), type, browser))];
 
-  if (IsProvisionalNotificationAlertEnabled() && !permitted_) {
-    // Set `permitted_` here so that the OnPermittedPrefChanged exits early.
-    permitted_ = true;
-    AuthenticationService* authService =
-        AuthenticationServiceFactory::GetForProfile(browser->GetProfile());
-    id<SystemIdentity> identity =
-        authService->GetPrimaryIdentity(signin::ConsentLevel::kSignin);
-    const std::string& gaiaID = base::SysNSStringToUTF8(identity.gaiaID);
-    PushNotificationService* service =
-        GetApplicationContext()->GetPushNotificationService();
-    service->SetPreference(base::SysUTF8ToNSString(gaiaID),
-                           PushNotificationClientId::kTips, true);
+  // If a relavent feature is enabled and the user hasn't yet opted-in, and the
+  // current auth status is "authorized", interacting with a notification (which
+  // must have been sent provisionally) will be treated as a positive signal to
+  // opt in the user to this type of notification.
+  if ((IsProvisionalNotificationAlertEnabled() ||
+       IsIOSReactivationNotificationsEnabled()) &&
+      !permitted_) {
+    [PushNotificationUtil
+        getPermissionSettings:base::CallbackToBlock(base::BindOnce(
+                                  &TipsNotificationClient::OptInIfAuthorized,
+                                  weak_ptr_factory_.GetWeakPtr(),
+                                  browser->GetProfile()->AsWeakPtr()))];
   }
+}
+
+void TipsNotificationClient::OptInIfAuthorized(
+    base::WeakPtr<ProfileIOS> weak_profile,
+    UNNotificationSettings* settings) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  if (settings.authorizationStatus != UNAuthorizationStatusAuthorized) {
+    return;
+  }
+  ProfileIOS* profile = weak_profile.get();
+  if (!profile) {
+    return;
+  }
+
+  AuthenticationService* authService =
+      AuthenticationServiceFactory::GetForProfile(profile);
+  id<SystemIdentity> identity =
+      authService->GetPrimaryIdentity(signin::ConsentLevel::kSignin);
+  const std::string& gaiaID = base::SysNSStringToUTF8(identity.gaiaID);
+  PushNotificationService* service =
+      GetApplicationContext()->GetPushNotificationService();
+  // Set `permitted_` here so that the OnPermittedPrefChanged exits early.
+  permitted_ = true;
+  service->SetPreference(base::SysUTF8ToNSString(gaiaID),
+                         PushNotificationClientId::kTips, true);
 }
 
 std::optional<UIBackgroundFetchResult>
@@ -349,8 +377,33 @@ void TipsNotificationClient::ClearAllRequestedNotifications() {
 void TipsNotificationClient::RequestNotification(TipsNotificationType type,
                                                  base::OnceClosure completion) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  UNNotificationRequest* request =
-      TipsNotificationRequest(type, CanSendReactivation(), user_type_);
+
+  if (IsNotificationCollisionManagementEnabled()) {
+    ScheduledNotificationRequest request = {
+        kTipsNotificationId,
+        ContentForTipsNotificationType(type, CanSendReactivation()),
+        TipsNotificationTriggerDelta(CanSendReactivation(), user_type_)};
+    CheckRateLimitBeforeSchedulingNotification(
+        request,
+        base::BindPostTask(
+            base::SequencedTaskRunner::GetCurrentDefault(),
+            base::BindOnce(&TipsNotificationClient::OnNotificationRequested,
+                           weak_ptr_factory_.GetWeakPtr(), type)
+                .Then(std::move(completion))));
+    MarkNotificationTypeSent(type);
+    return;
+  }
+
+  UNNotificationRequest* request = [UNNotificationRequest
+      requestWithIdentifier:kTipsNotificationId
+                    content:ContentForTipsNotificationType(
+                                type, CanSendReactivation())
+                    trigger:[UNTimeIntervalNotificationTrigger
+                                triggerWithTimeInterval:
+                                    TipsNotificationTriggerDelta(
+                                        CanSendReactivation(), user_type_)
+                                        .InSecondsF()
+                                                repeats:NO]];
 
   auto completion_block = base::CallbackToBlock(base::BindPostTask(
       base::SequencedTaskRunner::GetCurrentDefault(),
@@ -619,7 +672,10 @@ void TipsNotificationClient::MarkNotificationTypeSent(
   local_state_->SetInteger(kTipsNotificationsSentPref, sent_bitfield);
   local_state_->SetInteger(kTipsNotificationsLastSent, int(type));
   local_state_->SetTime(kTipsNotificationsLastRequestedTime, base::Time::Now());
-  base::UmaHistogramEnumeration("IOS.Notifications.Tips.Sent", type);
+  const char* histogram = CanSendReactivation()
+                              ? "IOS.Notifications.Tips.Proactive.Sent"
+                              : "IOS.Notifications.Tips.Sent";
+  base::UmaHistogramEnumeration(histogram, type);
 }
 
 void TipsNotificationClient::MarkNotificationTypeNotSent(
@@ -641,7 +697,10 @@ void TipsNotificationClient::MaybeLogTriggeredNotification() {
 
   TipsNotificationType type =
       static_cast<TipsNotificationType>(last_sent->GetValue()->GetInt());
-  base::UmaHistogramEnumeration("IOS.Notifications.Tips.Triggered", type);
+  const char* triggered_histogram =
+      CanSendReactivation() ? "IOS.Notifications.Tips.Proactive.Triggered"
+                            : "IOS.Notifications.Tips.Triggered";
+  base::UmaHistogramEnumeration(triggered_histogram, type);
   base::UmaHistogramEnumeration("IOS.Notification.Received",
                                 NotificationTypeForTipsNotificationType(type));
   local_state_->SetInteger(kTipsNotificationsLastTriggered, int(type));
@@ -681,7 +740,10 @@ void TipsNotificationClient::OnGetDeliveredNotifications(
   local_state_->SetInteger(kTipsNotificationsDismissCount, dismiss_count);
   TipsNotificationType type = static_cast<TipsNotificationType>(
       local_state_->GetInteger(kTipsNotificationsLastTriggered));
-  base::UmaHistogramEnumeration("IOS.Notifications.Tips.Dismissed", type);
+  const char* dismissed_histogram =
+      CanSendReactivation() ? "IOS.Notifications.Tips.Proactive.Dismissed"
+                            : "IOS.Notifications.Tips.Dismissed";
+  base::UmaHistogramEnumeration(dismissed_histogram, type);
   local_state_->ClearPref(kTipsNotificationsLastTriggered);
 }
 

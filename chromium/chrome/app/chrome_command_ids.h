@@ -139,6 +139,7 @@
 #define IDC_ORGANIZE_TABS               35044
 #define IDC_CREATE_NEW_TAB_GROUP        35045
 #define IDC_DECLUTTER_TABS              35046
+#define IDC_SEND_SHARED_TAB_GROUP_FEEDBACK 35047
 
 // Page-manipulation commands that target a specified tab, which may not be the
 // active one.
@@ -279,6 +280,8 @@
 #define IDC_SHOW_ALL_COMPARISON_TABLES  40290
 #define IDC_ADD_TO_COMPARISON_TABLE_MENU 40291
 #define IDC_CREATE_NEW_COMPARISON_TABLE_WITH_TAB 40292
+#define IDC_SHOW_HISTORY_SIDE_PANEL     40293
+#define IDC_OPEN_GLIC  40294
 
 // Spell-check
 // Insert any additional suggestions before _LAST; these have to be consecutive.
@@ -457,6 +460,7 @@
 #define IDC_BOOKMARK_BAR_ADD_TO_BOOKMARKS_BAR 51019
 #define IDC_BOOKMARK_BAR_REMOVE_FROM_BOOKMARKS_BAR 51020
 #define IDC_BOOKMARK_BAR_TOGGLE_SHOW_TAB_GROUPS 51021
+#define IDC_BOOKMARK_BAR_MOVE 51022
 
 // Context menu items for Sharing
 #define IDC_CONTENT_CONTEXT_SHARING_CLICK_TO_CALL_SINGLE_DEVICE 51030
@@ -471,6 +475,7 @@
 
 // Context menu items in the status tray
 #define IDC_STATUS_TRAY_KEEP_CHROME_RUNNING_IN_BACKGROUND 51100
+#define IDC_STATUS_TRAY_KEEP_CHROME_RUNNING_IN_BACKGROUND_SETTING 51101
 
 // Context menu items for media router
 #define IDC_MEDIA_ROUTER_ABOUT 51200
@@ -538,7 +543,6 @@
 // Autofill feedback.
 #define IDC_CONTENT_CONTEXT_AUTOFILL_FEEDBACK 52990
 // Autofill context menu commands
-#define IDC_CONTENT_CONTEXT_AUTOFILL_PREDICTION_IMPROVEMENTS 52993
 #define IDC_CONTENT_CONTEXT_AUTOFILL_FALLBACK_PLUS_ADDRESS 52994
 #define IDC_CONTENT_CONTEXT_AUTOFILL_FALLBACK_PASSWORDS_SELECT_PASSWORD 52998
 #define IDC_CONTENT_CONTEXT_AUTOFILL_FALLBACK_PASSWORDS_IMPORT_PASSWORDS 52999
@@ -561,6 +565,13 @@
 #define IDC_GLIC_STATUS_ICON_MENU_REMOVE_ICON                 53312
 #define IDC_GLIC_STATUS_ICON_MENU_SETTINGS                    53313
 #define IDC_GLIC_STATUS_ICON_MENU_EXIT                        53314
+#define IDC_GLIC_STATUS_ICON_MENU_CLOSE                       53315
+
+// Glic button context menu and tabstrip context menu
+#define IDC_GLIC_TOGGLE_PIN 53320
+
+// Glic focus navigation
+#define IDC_GLIC_TOGGLE_FOCUS 53325
 
 // NOTE: The last valid command value is 57343 (0xDFFF)
 // See http://msdn.microsoft.com/en-us/library/t2zechd4(VS.71).aspx

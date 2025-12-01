@@ -234,6 +234,8 @@ class UI_ANDROID_EXPORT ViewAndroid {
 
   void NotifyVirtualKeyboardOverlayRect(const gfx::Rect& keyboard_rect);
 
+  void NotifyContextMenuInsetsObservers(const gfx::Rect&);
+
   void SetLayoutForTesting(int x, int y, int width, int height);
 
   EventForwarder* event_forwarder() { return event_forwarder_.get(); }
@@ -244,6 +246,8 @@ class UI_ANDROID_EXPORT ViewAndroid {
 
  protected:
   void RemoveAllChildren(bool attached_to_window);
+
+  void OnPointerLockRelease();
 
   raw_ptr<ViewAndroid> parent_;
 
@@ -257,6 +261,7 @@ class UI_ANDROID_EXPORT ViewAndroid {
   FRIEND_TEST_ALL_PREFIXES(ViewAndroidBoundsTest, OnSizeChanged);
   friend class EventForwarder;
   friend class ViewAndroidBoundsTest;
+  friend class WindowAndroid;
 
   bool OnDragEvent(const DragEventAndroid& event);
   bool OnTouchEvent(const MotionEventAndroid& event);

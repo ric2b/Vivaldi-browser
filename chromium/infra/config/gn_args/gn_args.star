@@ -412,16 +412,21 @@ gn_args.config(
 gn_args.config(
     name = "cronet_android",
     args = {
+        # PLEASE TRY TO AVOID ADDING NEW GN ARGS HERE. Special snowflake gn args
+        # are a pain to maintain; see https://crbug.com/40287068. Instead, try
+        # to change the GN build rules so that the default value for the arg
+        # is derived from the `is_cronet_build` gn arg.
+        # TODO: https://crbug.com/40287068 - clean up this list. Ideally it
+        # should be empty.
+        # LINT.IfChange(cronet_android)
         "use_partition_alloc": False,
-        "enable_reporting": True,
         "use_hashed_jni_names": True,
         "default_min_sdk_version": 23,
-        "enable_base_tracing": False,
         "clang_use_default_sample_profile": False,
-        "media_use_ffmpeg": False,
         # https://crbug.com/1136963
         "use_thin_lto": False,
         "enable_resource_allowlist_generation": False,
+        # LINT.ThenChange(//tools/mb/mb_config.pyl:cronet_android)
     },
     configs = [
         "android",
@@ -444,11 +449,19 @@ gn_args.config(
 gn_args.config(
     name = "cronet_common",
     args = {
+        # PLEASE TRY TO AVOID ADDING NEW GN ARGS HERE. Special snowflake gn args
+        # are a pain to maintain; see https://crbug.com/40287068. Instead, try
+        # to change the GN build rules so that the default value for the arg
+        # is derived from the `is_cronet_build` gn arg.
+        # TODO: https://crbug.com/40287068 - clean up this list. Ideally it
+        # should contain `is_cronet_build` and nothing else.
+        # LINT.IfChange(cronet_common)
         "disable_file_support": True,
         "enable_websockets": False,
         "include_transport_security_state_preload_list": False,
         "is_cronet_build": True,
         "use_platform_icu_alternatives": True,
+        # LINT.ThenChange(//tools/mb/mb_config.pyl:cronet_common)
     },
 )
 
@@ -562,6 +575,13 @@ gn_args.config(
     configs = [
         "enable_vulkan",
     ],
+)
+
+gn_args.config(
+    name = "enable_android_secondary_abi",
+    args = {
+        "enable_android_secondary_abi": True,
+    },
 )
 
 # Enables backup ref ptr by changing the default value of the feature flag.
@@ -744,6 +764,13 @@ gn_args.config(
 )
 
 gn_args.config(
+    name = "reclient",
+    args = {
+        "use_reclient": True,
+    },
+)
+
+gn_args.config(
     name = "include_unwind_tables",
     args = {
         "exclude_unwind_tables": False,
@@ -772,13 +799,6 @@ gn_args.config(
     configs = [
         "ios",
     ],
-)
-
-gn_args.config(
-    name = "ios_chromium_cert",
-    args = {
-        "ios_code_signing_identity_description": "iPhone Developer",
-    },
 )
 
 gn_args.config(
@@ -836,9 +856,6 @@ gn_args.config(
 gn_args.config(
     name = "libcxx_modules",
     args = {
-        # TODO: crbug.com/351909443 - remove once performance of plugins is
-        # improved.
-        "clang_use_chrome_plugins": False,
         "use_libcxx_modules": True,
     },
 )
@@ -867,6 +884,7 @@ gn_args.config(
         "ozone_platform_wayland": True,
         "ozone_platform": "wayland",
         "use_bundled_weston": True,
+        "use_bundled_mutter": True,
     },
 )
 
@@ -998,18 +1016,6 @@ gn_args.config(
     name = "no_resource_allowlisting",
     args = {
         "enable_resource_allowlist_generation": False,
-    },
-)
-
-gn_args.config(
-    name = "no_secondary_abi",
-    args = {
-        "skip_secondary_abi_for_cq": True,
-        # A chromium build with "skip_secondary_abi_for_cq" enabled in a
-        # checkout that has src-internal fails if enable_chrome_android_internal
-        # is not set to false.
-        # TODO(crbug.com/361540497): Can remove this when the build is fixed.
-        "enable_chrome_android_internal": False,
     },
 )
 
@@ -1375,6 +1381,20 @@ gn_args.config(
 )
 
 gn_args.config(
+    name = "v8_backtrace",
+    args = {
+        "v8_enable_backtrace": True,
+    },
+)
+
+gn_args.config(
+    name = "v8_debug",
+    args = {
+        "v8_enable_debug_code": True,
+    },
+)
+
+gn_args.config(
     name = "v8_heap",
     args = {
         "v8_enable_verify_heap": True,
@@ -1400,6 +1420,13 @@ gn_args.config(
 )
 
 gn_args.config(
+    name = "v8_sandbox_testing",
+    args = {
+        "v8_enable_memory_corruption_api": True,
+    },
+)
+
+gn_args.config(
     name = "v8_simulate_arm",
     args = {
         "v8_target_cpu": "arm",
@@ -1420,9 +1447,9 @@ gn_args.config(
 )
 
 gn_args.config(
-    name = "v8_sandbox_testing",
+    name = "v8_static",
     args = {
-        "v8_enable_memory_corruption_api": True,
+        "v8_static_library": True,
     },
 )
 

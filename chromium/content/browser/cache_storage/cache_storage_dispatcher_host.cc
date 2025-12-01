@@ -709,11 +709,7 @@ class CacheStorageDispatcherHost::CacheStorageImpl final
     auto cb = base::BindOnce(
         [](base::TimeTicks start_time, int64_t trace_id,
            blink::mojom::CacheStorage::KeysCallback callback,
-           std::vector<std::string> cache_names) {
-          std::vector<std::u16string> string16s;
-          for (const auto& name : cache_names) {
-            string16s.push_back(base::UTF8ToUTF16(name));
-          }
+           std::vector<std::u16string> cache_names) {
           UMA_HISTOGRAM_LONG_TIMES(
               "ServiceWorkerCache.CacheStorage.Browser.Keys",
               base::TimeTicks::Now() - start_time);
@@ -722,14 +718,14 @@ class CacheStorageDispatcherHost::CacheStorageImpl final
               "CacheStorageDispatchHost::CacheStorageImpl::Keys::Callback",
               TRACE_ID_GLOBAL(trace_id),
               TRACE_EVENT_FLAG_FLOW_IN | TRACE_EVENT_FLAG_FLOW_OUT, "key_list",
-              CacheStorageTracedValue(string16s));
-          std::move(callback).Run(string16s);
+              CacheStorageTracedValue(cache_names));
+          std::move(callback).Run(cache_names);
         },
         base::TimeTicks::Now(), trace_id, std::move(callback));
 
     // Return error if failed to retrieve bucket from QuotaManager.
     if (!bucket_.has_value()) {
-      std::move(cb).Run(std::vector<std::string>());
+      std::move(cb).Run(std::vector<std::u16string>());
       return;
     }
 
@@ -737,7 +733,7 @@ class CacheStorageDispatcherHost::CacheStorageImpl final
         [](int64_t trace_id, content::CacheStorage::EnumerateCachesCallback cb,
            content::CacheStorage* cache_storage) {
           if (!cache_storage) {
-            std::move(cb).Run(std::vector<std::string>());
+            std::move(cb).Run(std::vector<std::u16string>());
             return;
           }
 
@@ -782,7 +778,7 @@ class CacheStorageDispatcherHost::CacheStorageImpl final
     }
 
     GetOrCreateCacheStorage(base::BindOnce(
-        [](std::string utf8_cache_name, int64_t trace_id,
+        [](std::u16string cache_name, int64_t trace_id,
            content::CacheStorage::ErrorCallback cb,
            content::CacheStorage* cache_storage) {
           if (!cache_storage) {
@@ -791,9 +787,9 @@ class CacheStorageDispatcherHost::CacheStorageImpl final
             return;
           }
 
-          cache_storage->DoomCache(utf8_cache_name, trace_id, std::move(cb));
+          cache_storage->DoomCache(cache_name, trace_id, std::move(cb));
         },
-        std::move(utf8_cache_name), trace_id, std::move(cb)));
+        std::move(cache_name), trace_id, std::move(cb)));
   }
 
   void Has(const std::u16string& cache_name,
@@ -835,7 +831,7 @@ class CacheStorageDispatcherHost::CacheStorageImpl final
     }
 
     GetOrCreateCacheStorage(base::BindOnce(
-        [](std::string utf8_cache_name, int64_t trace_id,
+        [](std::u16string cache_name, int64_t trace_id,
            content::CacheStorage::BoolAndErrorCallback cb,
            content::CacheStorage* cache_storage) {
           if (!cache_storage) {
@@ -845,9 +841,9 @@ class CacheStorageDispatcherHost::CacheStorageImpl final
             return;
           }
 
-          cache_storage->HasCache(utf8_cache_name, trace_id, std::move(cb));
+          cache_storage->HasCache(cache_name, trace_id, std::move(cb));
         },
-        std::move(utf8_cache_name), trace_id, std::move(cb)));
+        std::move(cache_name), trace_id, std::move(cb)));
   }
 
   void Match(blink::mojom::FetchAPIRequestPtr request,
@@ -958,9 +954,9 @@ class CacheStorageDispatcherHost::CacheStorageImpl final
                 priority, trace_id, std::move(cb));
             return;
           }
-          std::string cache_name =
-              base::UTF16ToUTF8(*match_options->cache_name);
-          cache_storage->MatchCache(std::move(cache_name), std::move(request),
+
+          cache_storage->MatchCache(std::move(*match_options->cache_name),
+                                    std::move(request),
                                     std::move(match_options->query_options),
                                     priority, trace_id, std::move(cb));
         },
@@ -1040,7 +1036,7 @@ class CacheStorageDispatcherHost::CacheStorageImpl final
     }
 
     GetOrCreateCacheStorage(base::BindOnce(
-        [](std::string utf8_cache_name, int64_t trace_id,
+        [](std::u16string cache_name, int64_t trace_id,
            content::CacheStorage::CacheAndErrorCallback cb,
            content::CacheStorage* cache_storage) {
           if (!cache_storage) {
@@ -1049,9 +1045,9 @@ class CacheStorageDispatcherHost::CacheStorageImpl final
                 MakeErrorStorage(ErrorStorageType::kStorageHandleNull));
             return;
           }
-          cache_storage->OpenCache(utf8_cache_name, trace_id, std::move(cb));
+          cache_storage->OpenCache(cache_name, trace_id, std::move(cb));
         },
-        std::move(utf8_cache_name), trace_id, std::move(cb)));
+        std::move(cache_name), trace_id, std::move(cb)));
   }
 
  private:

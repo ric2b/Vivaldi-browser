@@ -81,14 +81,6 @@ export class SettingsPrivacyPageElement extends SettingsPrivacyPageElementBase {
 
   static get properties() {
     return {
-      /**
-       * Preferences state.
-       */
-      prefs: {
-        type: Object,
-        notify: true,
-      },
-
       isGuest_: {
         type: Boolean,
         value() {
@@ -125,6 +117,11 @@ export class SettingsPrivacyPageElement extends SettingsPrivacyPageElementBase {
         value() {
           return {};
         },
+      },
+
+      enableDeleteBrowsingDataRevamp_: {
+        type: Boolean,
+        value: () => loadTimeData.getBoolean('enableDeleteBrowsingDataRevamp'),
       },
 
       enablePaymentHandlerContentSetting_: {
@@ -240,6 +237,12 @@ export class SettingsPrivacyPageElement extends SettingsPrivacyPageElementBase {
             loadTimeData.getBoolean('enableAutomaticFullscreenContentSetting'),
       },
 
+      enablePermissionSiteSettingsRadioButton_: {
+        type: Boolean,
+        value: () =>
+            loadTimeData.getBoolean('enablePermissionSiteSettingsRadioButton'),
+      },
+
       focusConfig_: {
         type: Object,
         value() {
@@ -291,7 +294,11 @@ export class SettingsPrivacyPageElement extends SettingsPrivacyPageElementBase {
         value: SettingsState,
       },
 
-      searchFilter_: String,
+      searchFilter_: {
+        type: String,
+        value: '',
+        observer: 'updateAllSitesPageTitle_',
+      },
 
       /**
        * Expose ContentSettingsTypes enum to HTML bindings.
@@ -344,10 +351,21 @@ export class SettingsPrivacyPageElement extends SettingsPrivacyPageElementBase {
         value: () => loadTimeData.getBoolean('enableWebAppInstallation'),
       },
 
+      enableRelatedWebsiteSetsV2Ui_: {
+        type: Boolean,
+        value: () => loadTimeData.getBoolean('isRelatedWebsiteSetsV2UiEnabled'),
+      },
+
+      enableLocalNetworkAccessSetting_: {
+        type: Boolean,
+        value: () => loadTimeData.getBoolean('enableLocalNetworkAccessSetting'),
+      },
+
       isNotificationAllowed_: Boolean,
       isLocationAllowed_: Boolean,
       notificationPermissionsReviewHeader_: String,
-      notificationPermissionsReviewSubeader_: String,
+      notificationPermissionsReviewSubheader_: String,
+      allSitesPageTitle_: String,
     };
   }
 
@@ -357,7 +375,9 @@ export class SettingsPrivacyPageElement extends SettingsPrivacyPageElementBase {
   private showPrivacyGuideDialog_: boolean;
   private enableSafeBrowsingSubresourceFilter_: boolean;
   private enableBlockAutoplayContentSetting_: boolean;
+  private enableManagePhones_: boolean;
   private blockAutoplayStatus_: BlockAutoplayStatus;
+  private enableDeleteBrowsingDataRevamp_: boolean;
   private enableFederatedIdentityApiContentSetting_: boolean;
   private enablePaymentHandlerContentSetting_: boolean;
   private enableHandTrackingContentSetting_: boolean;
@@ -372,6 +392,7 @@ export class SettingsPrivacyPageElement extends SettingsPrivacyPageElementBase {
   private isPrivacySandboxRestricted_: boolean;
   private isPrivacySandboxRestrictedNoticeEnabled_: boolean;
   private enableAutomaticFullscreenContentSetting_: boolean;
+  private enablePermissionSiteSettingsRadioButton_: boolean;
   private privateStateTokensEnabled_: boolean;
   private autoPictureInPictureEnabled_: boolean;
   private capturedSurfaceControlEnabled_: boolean;
@@ -379,6 +400,7 @@ export class SettingsPrivacyPageElement extends SettingsPrivacyPageElementBase {
   private enableComposeProactiveNudge_: boolean;
   private shouldShowSafetyHub_: boolean;
   private enableWebAppInstallation_: boolean;
+  private enableLocalNetworkAccessSetting_: boolean;
   private focusConfig_: FocusConfig;
   private searchFilter_: string;
   private notificationPermissionsReviewHeader_: string;
@@ -397,6 +419,8 @@ export class SettingsPrivacyPageElement extends SettingsPrivacyPageElementBase {
   private enableCertManagementUIV2_: boolean;
   // </if>
   private enableKeyboardLockPrompt_: boolean;
+  private enableRelatedWebsiteSetsV2Ui_: boolean;
+  private allSitesPageTitle_: string;
 
   override ready() {
     super.ready();
@@ -427,6 +451,7 @@ export class SettingsPrivacyPageElement extends SettingsPrivacyPageElementBase {
     }
 
     this.updateLocationAndNotificationState_();
+    this.updateAllSitesPageTitle_();
   }
 
   override currentRouteChanged() {
@@ -564,6 +589,30 @@ export class SettingsPrivacyPageElement extends SettingsPrivacyPageElementBase {
     }
   }
 
+  private onLocationTopLevelRadioChanged2_(
+      event: CustomEvent<{value: boolean}>) {
+    const selected = event.detail.value;
+    if (selected) {
+      this.setPrefValue('generated.geolocation', SettingsState.CPSS);
+      this.isLocationAllowed_ = true;
+    } else {
+      this.setPrefValue('generated.geolocation', SettingsState.BLOCK);
+      this.isLocationAllowed_ = false;
+    }
+  }
+
+  private onNotificationTopLevelRadioChanged2_(
+      event: CustomEvent<{value: boolean}>) {
+    const selected = event.detail.value;
+    if (selected) {
+      this.setPrefValue('generated.notification', SettingsState.CPSS);
+      this.isNotificationAllowed_ = true;
+    } else {
+      this.setPrefValue('generated.notification', SettingsState.BLOCK);
+      this.isNotificationAllowed_ = false;
+    }
+  }
+
   private onPrivacyGuideClick_() {
     // this.metricsBrowserProxy_.recordPrivacyGuideEntryExitHistogram(
     //     PrivacyGuideInteractions.SETTINGS_LINK_ROW_ENTRY);
@@ -631,6 +680,19 @@ export class SettingsPrivacyPageElement extends SettingsPrivacyPageElementBase {
         return this.i18n('thirdPartyCookiesLinkRowSublabelDisabled');
       default:
         assertNotReached();
+    }
+  }
+
+  private updateAllSitesPageTitle_(): void {
+    const rwsPrefix = 'related:';
+    if (this.enableRelatedWebsiteSetsV2Ui_ &&
+        this.searchFilter_.length > rwsPrefix.length &&
+        this.searchFilter_.startsWith(rwsPrefix)) {
+      this.allSitesPageTitle_ = loadTimeData.getStringF(
+          'allSitesRwsFilterViewTitle',
+          this.searchFilter_.substring(rwsPrefix.length));
+    } else {
+      this.allSitesPageTitle_ = this.i18n('siteSettingsAllSites');
     }
   }
 

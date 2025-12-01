@@ -170,6 +170,7 @@
 <translation id="3838085852053358637">Kon nie uitbreiding laai nie</translation>
 <translation id="383891835335927981">Geen werwe is in- of uitgezoem nie</translation>
 <translation id="385051799172605136">Terug</translation>
+<translation id="3858860766373142691">Naam</translation>
 <translation id="3861977424605124250">Wys by begin</translation>
 <translation id="3867944738977021751">Sertifikaatvelde</translation>
 <translation id="3905761538810670789">Repareer toep</translation>
@@ -415,6 +416,9 @@ Bewaar u sleutellêer op ’n veilige plek. U benodig dit om nuwe weergawes van 
 <translation id="8004582292198964060">Blaaier</translation>
 <translation id="8018313076035239964">Beheer welke inligting webwerwe kan gebruik en welke inhoud dit aan u kan toon</translation>
 <translation id="8071432093239591881">Druk af as beeld</translation>
+<translation id="8118448640060360549">{EXTENSIONS_COUNT, plural,
+        =1 {# boekmerk}
+        other {# boekmerke}}</translation>
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" />K</translation>
 <translation id="8212008074015601248">{NUM_DOWNLOAD, plural,
         =1 {Aflaai is besig} other {Aflaaie is besig}}</translation>

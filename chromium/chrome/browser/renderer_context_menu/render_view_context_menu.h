@@ -157,6 +157,9 @@ class RenderViewContextMenu
   }
 #endif
 
+  void AddObserverForTesting(RenderViewContextMenuObserver* observer);
+  void RemoveObserverForTesting(RenderViewContextMenuObserver* observer);
+
  protected:
   Profile* GetProfile() const;
 
@@ -277,6 +280,7 @@ class RenderViewContextMenu
       bool is_full_page_translation) const;
 
   bool IsInProgressiveWebApp() const;
+  bool IsLinkToIsolatedWebApp() const;
 
   void AppendDeveloperItems();
   void AppendDevtoolsForUnpackedExtensions();
@@ -584,11 +588,6 @@ class RenderViewContextMenu
 
            // Link preview feature.
            IDC_CONTENT_CONTEXT_OPENLINKPREVIEW,
-
-           // Download commands.
-           IDC_CONTENT_CONTEXT_SAVELINKAS, IDC_CONTENT_CONTEXT_SAVEIMAGEAS,
-           IDC_CONTENT_CONTEXT_SAVEAVAS, IDC_CONTENT_CONTEXT_SAVEPLUGINAS,
-           IDC_CONTENT_CONTEXT_SAVEVIDEOFRAMEAS,
 
            // Image loading commands.
            IDC_CONTENT_CONTEXT_LOAD_IMAGE,

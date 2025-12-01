@@ -83,9 +83,9 @@ bool IsWgpuError(wgpu::WaitStatus waitStatus)
     return waitStatus != wgpu::WaitStatus::Success;
 }
 
-bool IsWgpuError(WGPUBufferMapAsyncStatus mapBufferStatus)
+bool IsWgpuError(wgpu::MapAsyncStatus mapAsyncStatus)
 {
-    return mapBufferStatus != WGPUBufferMapAsyncStatus_Success;
+    return mapAsyncStatus != wgpu::MapAsyncStatus::Success;
 }
 
 ClearValuesArray::ClearValuesArray() : mValues{}, mEnabled{} {}
@@ -162,8 +162,8 @@ void GenerateCaps(const wgpu::Limits &limitsWgpu,
     glCaps->maxVertexAttribStride =
         rx::LimitToInt(std::min(limitsWgpu.maxVertexBufferArrayStride,
                                 static_cast<uint32_t>(std::numeric_limits<uint16_t>::max())));
-    glCaps->maxElementsIndices    = std::numeric_limits<GLint>::max();
-    glCaps->maxElementsVertices   = std::numeric_limits<GLint>::max();
+    glCaps->maxElementsIndices  = std::numeric_limits<GLint>::max();
+    glCaps->maxElementsVertices = std::numeric_limits<GLint>::max();
     glCaps->vertexHighpFloat.setIEEEFloat();
     glCaps->vertexMediumpFloat.setIEEEHalfFloat();
     glCaps->vertexLowpFloat.setIEEEHalfFloat();
@@ -212,7 +212,7 @@ void GenerateCaps(const wgpu::Limits &limitsWgpu,
         glCaps->maxCombinedShaderUniformComponents[shaderType] = maxCombinedUniformComponents;
     }
 
-    const GLint maxVarryingComponents = rx::LimitToInt(limitsWgpu.maxInterStageShaderComponents);
+    const GLint maxVaryingComponents = rx::LimitToInt(limitsWgpu.maxInterStageShaderVariables * 4);
 
     glCaps->maxVertexAttributes = rx::LimitToInt(
         limitsWgpu.maxVertexBuffers);  // WebGPU has maxVertexBuffers and maxVertexAttributes but
@@ -222,10 +222,10 @@ void GenerateCaps(const wgpu::Limits &limitsWgpu,
         maxUniformVectors;  // Uniforms are implemented using a uniform buffer, so the max number of
                             // uniforms we can support is the max buffer range divided by the size
                             // of a single uniform (4X float).
-    glCaps->maxVertexOutputComponents = maxVarryingComponents;
+    glCaps->maxVertexOutputComponents = maxVaryingComponents;
 
     glCaps->maxFragmentUniformVectors     = maxUniformVectors;
-    glCaps->maxFragmentInputComponents    = maxVarryingComponents;
+    glCaps->maxFragmentInputComponents    = maxVaryingComponents;
     glCaps->minProgramTextureGatherOffset = 0;
     glCaps->maxProgramTextureGatherOffset = 0;
     glCaps->minProgramTexelOffset         = -8;
@@ -244,7 +244,7 @@ void GenerateCaps(const wgpu::Limits &limitsWgpu,
     glCaps->uniformBufferOffsetAlignment =
         rx::LimitToInt(limitsWgpu.minUniformBufferOffsetAlignment);
     glCaps->maxCombinedUniformBlocks = glCaps->maxUniformBufferBindings;
-    glCaps->maxVaryingComponents     = maxVarryingComponents;
+    glCaps->maxVaryingComponents     = maxVaryingComponents;
     glCaps->maxVaryingVectors        = rx::LimitToInt(limitsWgpu.maxInterStageShaderVariables);
     glCaps->maxCombinedTextureImageUnits =
         rx::LimitToInt(limitsWgpu.maxSamplersPerShaderStage * kShaderStageCount);
@@ -439,7 +439,6 @@ wgpu::IndexFormat GetIndexFormat(gl::DrawElementsType drawElementsType)
     switch (drawElementsType)
     {
         case gl::DrawElementsType::UnsignedByte:
-            UNIMPLEMENTED();
             return wgpu::IndexFormat::Uint16;  // Emulated
         case gl::DrawElementsType::UnsignedShort:
             return wgpu::IndexFormat::Uint16;
@@ -495,6 +494,121 @@ wgpu::ColorWriteMask GetColorWriteMask(bool r, bool g, bool b, bool a)
            (g ? wgpu::ColorWriteMask::Green : wgpu::ColorWriteMask::None) |
            (b ? wgpu::ColorWriteMask::Blue : wgpu::ColorWriteMask::None) |
            (a ? wgpu::ColorWriteMask::Alpha : wgpu::ColorWriteMask::None);
+}
+
+wgpu::BlendFactor GetBlendFactor(gl::BlendFactorType blendFactor)
+{
+    switch (blendFactor)
+    {
+        case gl::BlendFactorType::Zero:
+            return wgpu::BlendFactor::Zero;
+
+        case gl::BlendFactorType::One:
+            return wgpu::BlendFactor::One;
+
+        case gl::BlendFactorType::SrcColor:
+            return wgpu::BlendFactor::Src;
+
+        case gl::BlendFactorType::OneMinusSrcColor:
+            return wgpu::BlendFactor::OneMinusSrc;
+
+        case gl::BlendFactorType::SrcAlpha:
+            return wgpu::BlendFactor::SrcAlpha;
+
+        case gl::BlendFactorType::OneMinusSrcAlpha:
+            return wgpu::BlendFactor::OneMinusSrcAlpha;
+
+        case gl::BlendFactorType::DstAlpha:
+            return wgpu::BlendFactor::DstAlpha;
+
+        case gl::BlendFactorType::OneMinusDstAlpha:
+            return wgpu::BlendFactor::OneMinusDstAlpha;
+
+        case gl::BlendFactorType::DstColor:
+            return wgpu::BlendFactor::Dst;
+
+        case gl::BlendFactorType::OneMinusDstColor:
+            return wgpu::BlendFactor::OneMinusDst;
+
+        case gl::BlendFactorType::SrcAlphaSaturate:
+            return wgpu::BlendFactor::SrcAlphaSaturated;
+
+        case gl::BlendFactorType::ConstantColor:
+            return wgpu::BlendFactor::Constant;
+
+        case gl::BlendFactorType::OneMinusConstantColor:
+            return wgpu::BlendFactor::OneMinusConstant;
+
+        case gl::BlendFactorType::ConstantAlpha:
+            UNIMPLEMENTED();
+            return wgpu::BlendFactor::Undefined;
+
+        case gl::BlendFactorType::OneMinusConstantAlpha:
+            UNIMPLEMENTED();
+            return wgpu::BlendFactor::Undefined;
+
+        case gl::BlendFactorType::Src1Alpha:
+            return wgpu::BlendFactor::Src1Alpha;
+
+        case gl::BlendFactorType::Src1Color:
+            return wgpu::BlendFactor::Src1;
+
+        case gl::BlendFactorType::OneMinusSrc1Color:
+            return wgpu::BlendFactor::OneMinusSrc1;
+
+        case gl::BlendFactorType::OneMinusSrc1Alpha:
+            return wgpu::BlendFactor::OneMinusSrc1Alpha;
+
+        default:
+            UNREACHABLE();
+            return wgpu::BlendFactor::Undefined;
+    }
+}
+
+wgpu::BlendOperation GetBlendEquation(gl::BlendEquationType blendEquation)
+{
+    switch (blendEquation)
+    {
+        case gl::BlendEquationType::Add:
+            return wgpu::BlendOperation::Add;
+
+        case gl::BlendEquationType::Min:
+            return wgpu::BlendOperation::Min;
+
+        case gl::BlendEquationType::Max:
+            return wgpu::BlendOperation::Max;
+
+        case gl::BlendEquationType::Subtract:
+            return wgpu::BlendOperation::Subtract;
+
+        case gl::BlendEquationType::ReverseSubtract:
+            return wgpu::BlendOperation::ReverseSubtract;
+
+        case gl::BlendEquationType::Multiply:
+        case gl::BlendEquationType::Screen:
+        case gl::BlendEquationType::Overlay:
+        case gl::BlendEquationType::Darken:
+        case gl::BlendEquationType::Lighten:
+        case gl::BlendEquationType::Colordodge:
+        case gl::BlendEquationType::Colorburn:
+        case gl::BlendEquationType::Hardlight:
+        case gl::BlendEquationType::Softlight:
+        case gl::BlendEquationType::Unused2:
+        case gl::BlendEquationType::Difference:
+        case gl::BlendEquationType::Unused3:
+        case gl::BlendEquationType::Exclusion:
+        case gl::BlendEquationType::HslHue:
+        case gl::BlendEquationType::HslSaturation:
+        case gl::BlendEquationType::HslColor:
+        case gl::BlendEquationType::HslLuminosity:
+            // EXT_blend_equation_advanced
+            UNIMPLEMENTED();
+            return wgpu::BlendOperation::Undefined;
+
+        default:
+            UNREACHABLE();
+            return wgpu::BlendOperation::Undefined;
+    }
 }
 
 wgpu::TextureDimension getWgpuTextureDimension(gl::TextureType glTextureType)

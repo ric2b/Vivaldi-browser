@@ -21,6 +21,9 @@ zaštitnog zida ili antivirusa.</translation>
           &gt;
           <ph name="PROXIES_TITLE" />
           i proverite da li je konfiguracija podešena na „bez proksija“ ili „direktno“.</translation>
+<translation id="4949828774841497663">Idite u Aplikacije &gt; Podešavanja sistema &gt; Mreža, izaberite
+          aktivnu mrežu, kliknite na dugme Detalji... i poništite izbor svih proksija
+          koji su izabrani.</translation>
 <translation id="5248344925342018662">Gledate bezbednu Vivaldi stranicu</translation>
 <translation id="6690242244468452299">Ova stranica prikazuje informacije o nedavnim rušenjima pregledača ako omogućite izveštavanje o rušenju.</translation>
 <translation id="7023871570427738255">Idite u
@@ -32,7 +35,4 @@ zaštitnog zida ili antivirusa.</translation>
           Ako vam to ne reši problem, preporučujemo da ponovo izaberete
           ovu opciju radi boljih performansi.</translation>
 <translation id="7496505986576158197">Vivaldi su omogućili projekat otvorenog koda <ph name="BEGIN_LINK_CHROMIUM" />Chromium<ph name="END_LINK_CHROMIUM" /> i drugi <ph name="BEGIN_LINK_OSS" />softver otvorenog koda<ph name="END_LINK_OSS" />.</translation>
-<translation id="8187289872471304532">Idite na
-Aplikacije &gt; Podešavanja sistema &gt; Mreža &gt; Više opcija &gt; Proksiji
-i opozovite izbor svih proksija koji su izabrani.</translation>
 </translationbundle>

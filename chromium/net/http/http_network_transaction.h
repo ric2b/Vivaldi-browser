@@ -7,6 +7,7 @@
 
 #include <stdint.h>
 
+#include <array>
 #include <memory>
 #include <optional>
 #include <string>
@@ -84,6 +85,8 @@ class NET_EXPORT_PRIVATE HttpNetworkTransaction
   LoadState GetLoadState() const override;
   void SetQuicServerInfo(QuicServerInfo* quic_server_info) override;
   bool GetLoadTimingInfo(LoadTimingInfo* load_timing_info) const override;
+  void PopulateLoadTimingInternalInfo(
+      LoadTimingInternalInfo* load_timing_internal_info) const override;
   bool GetRemoteEndpoint(IPEndPoint* endpoint) const override;
   void PopulateNetErrorDetails(NetErrorDetails* details) const override;
   void SetPriority(RequestPriority priority) override;
@@ -352,6 +355,8 @@ class NET_EXPORT_PRIVATE HttpNetworkTransaction
 
   void RecordStreamRequestResult(int result);
 
+  void ProcessAltSvcHeader();
+
   // These values are persisted to logs. Entries should not be renumbered and
   // numeric values should never be reused.
   enum class QuicProtocolErrorRetryStatus {
@@ -366,8 +371,8 @@ class NET_EXPORT_PRIVATE HttpNetworkTransaction
   static void SetProxyInfoInResponse(const ProxyInfo& proxy_info,
                                      HttpResponseInfo* response_info);
 
-  scoped_refptr<HttpAuthController>
-      auth_controllers_[HttpAuth::AUTH_NUM_TARGETS];
+  std::array<scoped_refptr<HttpAuthController>, HttpAuth::AUTH_NUM_TARGETS>
+      auth_controllers_;
 
   // Whether this transaction is waiting for proxy auth, server auth, or is
   // not waiting for any auth at all. |pending_auth_target_| is read and
@@ -519,6 +524,10 @@ class NET_EXPORT_PRIVATE HttpNetworkTransaction
   // using DNS times coming from the established stream.
   base::TimeTicks dns_resolution_start_time_override_;
   base::TimeTicks dns_resolution_end_time_override_;
+
+  // The time at which initialize stream started / ended.
+  base::TimeTicks initialize_stream_start_time_;
+  base::TimeTicks initialize_stream_end_time_;
 
   base::TimeTicks blocked_initialize_stream_start_time_;
   base::TimeTicks blocked_generate_proxy_auth_token_start_time_;

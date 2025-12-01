@@ -6,6 +6,7 @@
 
 #include <memory>
 #include <string_view>
+#include <variant>
 
 #include "base/files/file_enumerator.h"
 #include "base/files/file_path.h"
@@ -35,6 +36,7 @@
 #include "chrome/browser/web_applications/web_app_install_finalizer.h"
 #include "chrome/browser/web_applications/web_app_provider.h"
 #include "chrome/browser/web_applications/web_app_registry_update.h"
+#include "chrome/browser/web_applications/web_app_sync_bridge.h"
 #include "chrome/common/url_constants.h"
 #include "components/web_package/signed_web_bundles/signed_web_bundle_id.h"
 #include "components/webapps/browser/install_result_code.h"
@@ -43,7 +45,6 @@
 #include "services/data_decoder/public/cpp/test_support/in_process_data_decoder.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/abseil-cpp/absl/types/variant.h"
 #include "ui/gfx/geometry/size.h"
 #include "url/url_constants.h"
 
@@ -51,6 +52,7 @@ namespace web_app {
 namespace {
 
 using base::test::HasValue;
+using base::test::ValueIs;
 using ::testing::ElementsAre;
 using ::testing::Eq;
 using ::testing::HasSubstr;
@@ -134,16 +136,18 @@ class IsolatedWebAppApplyUpdateCommandTest : public WebAppTest {
 
     // Create a dummy bundle at the expected path.
     base::FilePath installed_path =
-        absl::get<IwaStorageOwnedBundle>(installed_location_.variant())
+        std::get<IwaStorageOwnedBundle>(installed_location_.variant())
             .GetPath(profile()->GetPath());
     base::CreateDirectory(installed_path.DirName());
     base::WriteFile(installed_path, "");
   }
 
-  base::expected<void, IsolatedWebAppApplyUpdateCommandError>
+  base::expected<IsolatedWebAppApplyUpdateCommandSuccess,
+                 IsolatedWebAppApplyUpdateCommandError>
   ApplyPendingUpdate() {
     base::test::TestFuture<
-        base::expected<void, IsolatedWebAppApplyUpdateCommandError>>
+        base::expected<IsolatedWebAppApplyUpdateCommandSuccess,
+                       IsolatedWebAppApplyUpdateCommandError>>
         future;
     fake_provider().scheduler().ApplyPendingIsolatedWebAppUpdate(
         url_info_, /*optional_keep_alive=*/nullptr,
@@ -196,7 +200,7 @@ class IsolatedWebAppApplyUpdateCommandTest : public WebAppTest {
         web_app->isolation_data()->location();
     const base::FilePath iwa_base_dir =
         profile()->GetPath().Append(kIwaDirName);
-    absl::visit(
+    std::visit(
         base::Overloaded{
             [&](const IwaStorageOwnedBundle& bundle) {
               // Only installed app can be located in the IWA directory.
@@ -236,8 +240,9 @@ TEST_F(IsolatedWebAppApplyUpdateCommandTest, Succeeds) {
       url_info_.origin().GetURL().Resolve(kIconPath));
   icon_state.bitmaps = {web_app::CreateSquareIcon(32, SK_ColorWHITE)};
 
-  auto result = ApplyPendingUpdate();
-  EXPECT_THAT(result, HasValue());
+  EXPECT_THAT(ApplyPendingUpdate(),
+              ValueIs(IsolatedWebAppApplyUpdateCommandSuccess(
+                  update_version_, update_bundle_location_)));
 
   const WebApp* web_app =
       fake_provider().registrar_unsafe().GetAppById(url_info_.app_id());
@@ -255,7 +260,7 @@ TEST_F(IsolatedWebAppApplyUpdateCommandTest,
   fake_provider().Shutdown();
 
   auto result = ApplyPendingUpdate();
-  ASSERT_THAT(result.has_value(), IsFalse());
+  ASSERT_FALSE(result.has_value());
   EXPECT_THAT(result.error().message, HasSubstr("shutting down"));
 }
 
@@ -265,7 +270,7 @@ TEST_F(IsolatedWebAppApplyUpdateCommandTest, FailsIfIwaIsNotInstalled) {
   CreateDefaultPageState();
 
   auto result = ApplyPendingUpdate();
-  ASSERT_THAT(result.has_value(), IsFalse());
+  ASSERT_FALSE(result.has_value());
   EXPECT_THAT(result.error().message, HasSubstr("App is no longer installed"));
 
   const WebApp* web_app =
@@ -282,7 +287,7 @@ TEST_F(IsolatedWebAppApplyUpdateCommandTest, FailsIfInstalledAppIsNotIsolated) {
   CreateDefaultPageState();
 
   auto result = ApplyPendingUpdate();
-  ASSERT_THAT(result.has_value(), IsFalse());
+  ASSERT_FALSE(result.has_value());
   EXPECT_THAT(result.error().message, HasSubstr("not an Isolated Web App"));
 
   const WebApp* web_app =
@@ -298,7 +303,7 @@ TEST_F(IsolatedWebAppApplyUpdateCommandTest,
   CreateDefaultPageState();
 
   auto result = ApplyPendingUpdate();
-  ASSERT_THAT(result.has_value(), IsFalse());
+  ASSERT_FALSE(result.has_value());
   EXPECT_THAT(result.error().message,
               HasSubstr("does not have a pending update"));
   ExpectAppNotUpdatedAndDataCleared();
@@ -312,7 +317,7 @@ TEST_F(IsolatedWebAppApplyUpdateCommandTest, FailsIfAppNotTrusted) {
   SetTrustedWebBundleIdsForTesting({});
 
   auto result = ApplyPendingUpdate();
-  ASSERT_THAT(result.has_value(), IsFalse());
+  ASSERT_FALSE(result.has_value());
   EXPECT_THAT(result.error().message,
               HasSubstr("The public key(s) are not trusted"));
   ExpectAppNotUpdatedAndDataCleared();
@@ -327,7 +332,7 @@ TEST_F(IsolatedWebAppApplyUpdateCommandTest, FailsIfUrlLoadingFails) {
       webapps::WebAppUrlLoaderResult::kFailedErrorPageLoaded;
 
   auto result = ApplyPendingUpdate();
-  ASSERT_THAT(result.has_value(), IsFalse());
+  ASSERT_FALSE(result.has_value());
   EXPECT_THAT(result.error().message, HasSubstr("FailedErrorPageLoaded"));
   ExpectAppNotUpdatedAndDataCleared();
 }
@@ -342,7 +347,7 @@ TEST_F(IsolatedWebAppApplyUpdateCommandTest, FailsIfInstallabilityCheckFails) {
       webapps::InstallableStatusCode::MANIFEST_MISSING_NAME_OR_SHORT_NAME;
 
   auto result = ApplyPendingUpdate();
-  ASSERT_THAT(result.has_value(), IsFalse());
+  ASSERT_FALSE(result.has_value());
   EXPECT_THAT(
       result.error().message,
       HasSubstr("Manifest does not contain a 'name' or 'short_name' field"));
@@ -358,7 +363,7 @@ TEST_F(IsolatedWebAppApplyUpdateCommandTest, FailsIfManifestIsInvalid) {
       GURL("https://example.com/foo/");
 
   auto result = ApplyPendingUpdate();
-  ASSERT_THAT(result.has_value(), IsFalse());
+  ASSERT_FALSE(result.has_value());
   EXPECT_THAT(result.error().message,
               HasSubstr("Scope should resolve to the origin"));
   ExpectAppNotUpdatedAndDataCleared();
@@ -371,7 +376,7 @@ TEST_F(IsolatedWebAppApplyUpdateCommandTest, FailsIfIconDownloadFails) {
   CreateDefaultPageState();
 
   auto result = ApplyPendingUpdate();
-  ASSERT_THAT(result.has_value(), IsFalse());
+  ASSERT_FALSE(result.has_value());
   EXPECT_THAT(result.error().message,
               HasSubstr("Error during icon downloading"));
   ExpectAppNotUpdatedAndDataCleared();
@@ -406,7 +411,7 @@ TEST_F(IsolatedWebAppApplyUpdateCommandTest, FailsIfInstallFinalizerFails) {
   icon_state.bitmaps = {web_app::CreateSquareIcon(32, SK_ColorWHITE)};
 
   auto result = ApplyPendingUpdate();
-  ASSERT_THAT(result.has_value(), IsFalse());
+  ASSERT_FALSE(result.has_value());
   EXPECT_THAT(result.error().message, HasSubstr("Error during finalization"));
   ExpectAppNotUpdatedAndDataCleared();
 }

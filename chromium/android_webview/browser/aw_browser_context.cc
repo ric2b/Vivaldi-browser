@@ -73,7 +73,6 @@
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/download_request_utils.h"
-#include "content/public/browser/prefetch_request_status_listener.h"
 #include "content/public/browser/ssl_host_state_delegate.h"
 #include "content/public/browser/storage_partition.h"
 #include "content/public/browser/web_contents.h"
@@ -97,53 +96,6 @@ using base::FilePath;
 using content::BrowserThread;
 
 namespace android_webview {
-
-class AwPrefetchRequestStatusListener
-    : public content::PrefetchRequestStatusListener {
- public:
-  AwPrefetchRequestStatusListener(
-      const base::android::ScopedJavaGlobalRef<jobject>
-          browser_context_java_object,
-      const base::android::JavaRef<jobject>& callback,
-      const base::android::JavaRef<jobject>& callback_executor)
-      : browser_context_java_object_(browser_context_java_object),
-        prefetch_java_callback_(callback),
-        prefetch_java_callback_executor_(callback_executor) {}
-  ~AwPrefetchRequestStatusListener() override = default;
-
-  void OnPrefetchStartFailed() override {
-    JNIEnv* env = base::android::AttachCurrentThread();
-    Java_AwBrowserContext_onPrefetchStartFailed(
-        env, browser_context_java_object_, prefetch_java_callback_,
-        prefetch_java_callback_executor_);
-  }
-
-  void OnPrefetchResponseCompleted() override {
-    JNIEnv* env = base::android::AttachCurrentThread();
-    Java_AwBrowserContext_onPrefetchResponseCompleted(
-        env, browser_context_java_object_, prefetch_java_callback_,
-        prefetch_java_callback_executor_);
-  }
-
-  void OnPrefetchResponseError() override {
-    JNIEnv* env = base::android::AttachCurrentThread();
-    Java_AwBrowserContext_onPrefetchResponseError(
-        env, browser_context_java_object_, prefetch_java_callback_,
-        prefetch_java_callback_executor_);
-  }
-
-  void OnPrefetchResponseServerError(int response_code) override {
-    JNIEnv* env = base::android::AttachCurrentThread();
-    Java_AwBrowserContext_onPrefetchResponseServerError(
-        env, browser_context_java_object_, prefetch_java_callback_,
-        prefetch_java_callback_executor_, response_code);
-  }
-
- private:
-  base::android::ScopedJavaGlobalRef<jobject> browser_context_java_object_;
-  base::android::ScopedJavaGlobalRef<jobject> prefetch_java_callback_;
-  base::android::ScopedJavaGlobalRef<jobject> prefetch_java_callback_executor_;
-};
 
 namespace {
 
@@ -626,17 +578,14 @@ void AwBrowserContext::ConfigureNetworkContextParams(
   // Allow SHA-1 to be used for locally-installed trust anchors, as WebView
   // should behave like the Android system would.
   context_params->initial_ssl_config->sha1_local_anchors_enabled = true;
-  // Do not enforce the Legacy Symantec PKI policies outlined in
-  // https://security.googleblog.com/2017/09/chromes-plan-to-distrust-symantec.html,
-  // defer to the Android system.
-  context_params->initial_ssl_config->symantec_enforcement_disabled = true;
 
-  // WebView does not currently support Certificate Transparency
-  // (http://crbug.com/921750).
+  // WebView supports Certificate Transparency from Android B via Android's CT
+  // policy. (http://crbug.com/921750).
   context_params->enforce_chrome_ct_policy = false;
 
   context_params->enable_brotli = true;
   context_params->enable_zstd = true;
+  context_params->stale_dns_enabled = enable_stale_dns_;
 
   context_params->check_clear_text_permitted =
       AwContentBrowserClient::get_check_cleartext_permitted();
@@ -685,7 +634,8 @@ AwBrowserContext::GetJavaBrowserContext() {
     JNIEnv* env = base::android::AttachCurrentThread();
     obj_ = Java_AwBrowserContext_create(
         env, reinterpret_cast<intptr_t>(this), name_, relative_path_.value(),
-        GetCookieManager()->GetJavaCookieManager(), IsDefaultBrowserContext());
+        GetCookieManager()->GetJavaCookieManager(),
+        prefetch_manager_->GetJavaPrefetchManager(), IsDefaultBrowserContext());
   }
   return base::android::ScopedJavaLocalRef<jobject>(obj_);
 }
@@ -719,38 +669,17 @@ void AwBrowserContext::SetServiceWorkerIoThreadClient(
       base::android::ScopedJavaGlobalRef<jobject>(io_thread_client);
 }
 
-void AwBrowserContext::StartPrefetchRequest(
-    JNIEnv* env,
-    const std::string& url,
-    const base::android::JavaParamRef<jobject>& prefetch_params,
-    const base::android::JavaParamRef<jobject>& callback,
-    const base::android::JavaParamRef<jobject>& callback_executor) {
-  DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  TRACE_EVENT0("android_webview", "AwBrowserContext::StartPrefetchRequest");
-
-  GURL pf_url = GURL(url);
-  net::HttpRequestHeaders additional_headers =
-      GetAdditionalHeadersFromPrefetchParameters(env, prefetch_params);
-  std::optional<net::HttpNoVarySearchData> expected_no_vary_search =
-      GetExpectedNoVarySearchFromPrefetchParameters(env, prefetch_params);
-  std::unique_ptr<content::PrefetchRequestStatusListener>
-      request_status_listener =
-          std::make_unique<AwPrefetchRequestStatusListener>(obj_, callback,
-                                                            callback_executor);
-  prefetch_manager_->StartBrowserPrefetchRequest(
-      pf_url,
-      GetIsJavaScriptEnabledFromPrefetchParameters(env, prefetch_params),
-      expected_no_vary_search, additional_headers,
-      std::move(request_status_listener));
-}
-
 int AwBrowserContext::AllowedPrerenderingCount() const {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
   return allowed_prerendering_count_;
 }
 
-void AwBrowserContext::SetAllowedPrerenderingCount(int allowed_count) {
+void AwBrowserContext::SetAllowedPrerenderingCount(JNIEnv* const env,
+                                                   int allowed_count) {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
   CHECK_GT(allowed_count, 0);
-  allowed_prerendering_count_ = allowed_count;
+  allowed_prerendering_count_ =
+      std::min(allowed_count, MAX_ALLOWED_PRERENDERING_COUNT);
 }
 
 std::unique_ptr<AwContentsIoThreadClient>

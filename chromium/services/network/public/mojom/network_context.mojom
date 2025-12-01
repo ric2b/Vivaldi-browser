@@ -4,6 +4,7 @@
 
 module network.mojom;
 
+import "components/content_settings/core/common/content_settings.mojom";
 import "components/ip_protection/mojom/core.mojom";
 import "mojo/public/mojom/base/file_path.mojom";
 import "mojo/public/mojom/base/time.mojom";
@@ -448,6 +449,16 @@ struct NetworkContextParams {
   // `SetIpProtectionEnabled` method of the `IpProtectionControl` interface.
   bool enable_ip_protection = false;
 
+  // Signals to IP Protection if this is an incognito network context.
+  bool ip_protection_incognito = false;
+
+  // Points to the user-data directory of the active profile, where
+  // Probabilistic Reveal Tokens will be stored if the
+  // `StoreProbabilisticRevealTokens` switch is enabled. This path will be
+  // populated when the IP Protection feature and the PRT storage switch are
+  // enabled, even for incognito contexts when `file_paths` is empty.
+  mojo_base.mojom.FilePath? ip_protection_data_directory;
+
   // When PAC quick checking is enabled, DNS lookups for PAC script's host are
   // timed out aggressively. This prevents hanging all network request on DNS
   // lookups that are slow or are blockholed, at the cost of making it more
@@ -614,6 +625,12 @@ struct NetworkContextParams {
   // Stores mapping of endpoint name to endpoint url from initial reporting
   // endpoints set by the ReportingEndpoints enterprise policy.
   map<string, url.mojom.Url>? enterprise_reporting_endpoints;
+
+  // Enables usage of net::dns::StaleHostResolver. This is only available
+  // as opt-in in Android. This will be used during constructing
+  // the URLRequestContextOwner object in the NetworkContext.
+  [EnableIf=is_android]
+  bool stale_dns_enabled = false;
 };
 
 struct NetworkConditions {
@@ -1026,6 +1043,11 @@ interface NetworkContext {
 
   // Set Trust Token blocking to |block|.
   SetBlockTrustTokens(bool block);
+
+  // Sets the list of TRACKING_PROTECTION content setting exceptions in
+  // IpProtectionCore.
+  SetTrackingProtectionContentSetting(
+      array<content_settings.mojom.ContentSettingPatternSource> settings);
 
   // Clears network objects with implicit URL history information. Data related
   // to events that happened prior to |start_time| and after |end_time| may be
@@ -1513,10 +1535,17 @@ interface NetworkContext {
   CreateHostResolver(DnsConfigOverrides? config_overrides,
                      pending_receiver<HostResolver> host_resolver);
 
-  // Checks the given certificate against the CertVerifier and CTVerifier. This
-  // implementation is currently specific for use by Signed Exchange.
+  // Checks the given certificate against the CertVerifier and CTVerifier.
+  VerifyCert(X509Certificate certificate,
+             HostPortPair host_port,
+             string ocsp_response,
+             string sct_list)
+      => (int32 error_code, CertVerifyResult cv_result, bool pkp_bypassed);
+
+  // Checks the given certificate against the CertVerifier and CTVerifier.
+  // This implementation is specific for use by Signed Exchange.
   VerifyCertForSignedExchange(X509Certificate certificate,
-                              url.mojom.Url url,
+                              HostPortPair host_port,
                               string ocsp_response,
                               string sct_list)
       => (int32 error_code, CertVerifyResult cv_result, bool pkp_bypassed);

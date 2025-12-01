@@ -294,20 +294,53 @@ jobs:
           key: ${{ github.job }}
           restore-keys: |
             ${{ github.job }}-
-      - name: Build tests
-        env:
-          CC: clang-18
-          CXX: clang++-18
-        run: |
-            bazel build :pthreadpool_test :pthreadpool_cxx_test
-        working-directory: ${{ github.workspace }}
-      - name: Run tests
+      - name: Build and run tests
         if: ${{ inputs.run-tests }}
         env:
           CC: clang-18
           CXX: clang++-18
         run: |
-            bazel test --test_output=errors :pthreadpool_test :pthreadpool_cxx_test
+          bazel test --test_output=errors :pthreadpool_test :pthreadpool_cxx_test
+        working-directory: ${{ github.workspace }}
+      - name: Compress disk cache
+        # Bazel's `--disk-cache` currently grows without bounds, so we remove files
+        # that haven't been accessed in 7+ days manually.
+        if: ${{ inputs.update-caches }}
+        run: find $HOME/.cache/bazel -type f -atime +7 -delete
+      - name: Save bazel cache
+        if: ${{ inputs.update-caches }}
+        uses: actions/cache/save@v4
+        with:
+          path: "/home/runner/.cache/bazel"
+          key: ${{ github.job }}-${{ github.sha }}
+
+  bazel-linux-aarch64-clang18:
+    runs-on: arm-ubuntu-arm-22.04-4core
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - name: Update apt
+        run: sudo apt update
+      - name: Install clang-18
+        working-directory: ${{ github.workspace }}
+        run: |
+          wget https://apt.llvm.org/llvm.sh
+          chmod +x llvm.sh
+          sudo ./llvm.sh 18
+      - name: Restore bazel cache
+        uses: actions/cache/restore@v4
+        with:
+          path: "/home/runner/.cache/bazel"
+          key: ${{ github.job }}
+          restore-keys: |
+            ${{ github.job }}-
+      - name: Build and run tests
+        if: ${{ inputs.run-tests }}
+        env:
+          CC: clang-18
+          CXX: clang++-18
+        run: |
+          bazel test --verbose_failures --test_output=errors :pthreadpool_test :pthreadpool_cxx_test
         working-directory: ${{ github.workspace }}
       - name: Compress disk cache
         # Bazel's `--disk-cache` currently grows without bounds, so we remove files

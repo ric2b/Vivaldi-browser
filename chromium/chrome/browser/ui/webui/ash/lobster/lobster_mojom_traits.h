@@ -36,7 +36,9 @@ struct EnumTraits<lobster::mojom::StatusCode, ash::LobsterErrorCode> {
              {ash::LobsterErrorCode::kUnsupportedLanguage,
               lobster::mojom::StatusCode::kUnsupportedLanguage},
              {ash::LobsterErrorCode::kRestrictedRegion,
-              lobster::mojom::StatusCode::kRestrictedRegion}});
+              lobster::mojom::StatusCode::kRestrictedRegion},
+             {ash::LobsterErrorCode::kContainsPeople,
+              lobster::mojom::StatusCode::kContainsPeople}});
     return lobster_status_code_map.at(error_code);
   }
 
@@ -66,6 +68,9 @@ struct EnumTraits<lobster::mojom::StatusCode, ash::LobsterErrorCode> {
         return true;
       case lobster::mojom::StatusCode::kRestrictedRegion:
         *out = ash::LobsterErrorCode::kRestrictedRegion;
+        return true;
+      case lobster::mojom::StatusCode::kContainsPeople:
+        *out = ash::LobsterErrorCode::kContainsPeople;
         return true;
       case lobster::mojom::StatusCode::kOk:
         LOG(ERROR) << "Can not convert Lobster mojom OK status code into "
@@ -147,6 +152,19 @@ struct EnumTraits<lobster::mojom::WebUIMetricEvent, ash::LobsterMetricState> {
       case ash::LobsterMetricState::kCommitAsInsert:
       case ash::LobsterMetricState::kCommitAsInsertSuccess:
       case ash::LobsterMetricState::kCommitAsInsertError:
+      case ash::LobsterMetricState::kBlockedByConsent:
+      case ash::LobsterMetricState::kBlockedByAccountCapabilities:
+      case ash::LobsterMetricState::kBlockedByAccountType:
+      case ash::LobsterMetricState::kBlockedByGeolocation:
+      case ash::LobsterMetricState::kBlockedByInputField:
+      case ash::LobsterMetricState::kBlockedBySettings:
+      case ash::LobsterMetricState::kBlockedByInternetConnection:
+      case ash::LobsterMetricState::kBlockedByInputMethod:
+      case ash::LobsterMetricState::kBlockedByFeatureFlags:
+      case ash::LobsterMetricState::kBlockedByHardware:
+      case ash::LobsterMetricState::kBlockedByKioskMode:
+      case ash::LobsterMetricState::kBlockedByFormFactor:
+      case ash::LobsterMetricState::kBlockedByPolicy:
         return lobster::mojom::WebUIMetricEvent::kUnknown;
     }
   }

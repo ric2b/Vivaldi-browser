@@ -34,7 +34,6 @@
 #include "src/tint/lang/core/ir/validator.h"
 #include "src/tint/lang/core/type/external_texture.h"
 #include "src/tint/lang/core/type/sampled_texture.h"
-#include "src/tint/utils/result/result.h"
 
 using namespace tint::core::fluent_types;     // NOLINT
 using namespace tint::core::number_suffixes;  // NOLINT
@@ -114,7 +113,7 @@ struct State {
 
     /// @returns a 2D sampled texture type with a f32 sampled type
     const core::type::SampledTexture* SampledTexture() {
-        return ty.Get<core::type::SampledTexture>(core::type::TextureDimension::k2d, ty.f32());
+        return ty.sampled_texture(core::type::TextureDimension::k2d, ty.f32());
     }
 
     /// Replace an external texture variable declaration.

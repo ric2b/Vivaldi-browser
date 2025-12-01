@@ -14,6 +14,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/bind.h"
 #include "base/test/scoped_feature_list.h"
+#include "base/test/with_feature_override.h"
 #include "base/time/time.h"
 #include "base/timer/elapsed_timer.h"
 #include "chrome/browser/autocomplete/chrome_autocomplete_scheme_classifier.h"
@@ -38,6 +39,7 @@
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/content_settings/core/common/content_settings.h"
+#include "components/metrics/content/subprocess_metrics_provider.h"
 #include "components/omnibox/browser/autocomplete_input.h"
 #include "components/omnibox/browser/omnibox_controller.h"
 #include "components/omnibox/browser/omnibox_edit_model.h"
@@ -56,6 +58,7 @@
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/preloading_test_util.h"
 #include "content/public/test/test_navigation_observer.h"
+#include "net/base/features.h"
 #include "net/base/network_interfaces.h"
 #include "net/base/url_util.h"
 #include "net/test/embedded_test_server/http_request.h"
@@ -1317,7 +1320,41 @@ IN_PROC_BROWSER_TEST_F(SearchPrefetchServiceEnabledBrowserTest,
   }
 }
 
-IN_PROC_BROWSER_TEST_F(SearchPrefetchServiceEnabledBrowserTest,
+// Tests used for integrating to No-Vary-Search Disk Cache.
+class SearchPrefetchServiceEnabledWithNVSBrowserTest
+    : public testing::WithParamInterface<bool>,
+      public SearchPrefetchServiceEnabledBrowserTest {
+ public:
+  SearchPrefetchServiceEnabledWithNVSBrowserTest() {
+    if (GetParam()) {
+      feature_list_.InitWithFeaturesAndParameters(
+          {{net::features::kHttpCacheNoVarySearch, {{"max_entries", "1"}}},
+           {kSearchPrefetchWithNoVarySearchDiskCache, {}}},
+          /*disabled_features=*/{});
+    } else {
+      feature_list_.InitWithFeatures(
+          {}, {net::features::kHttpCacheNoVarySearch,
+               kSearchPrefetchWithNoVarySearchDiskCache});
+    }
+  }
+  void SetUpOnMainThread() override {
+    // Disable back/forward cache to ensure that it doesn't get preserved in the
+    // back/forward cache.
+    content::DisableBackForwardCacheForTesting(
+        GetWebContents(), content::BackForwardCache::TEST_REQUIRES_NO_CACHING);
+
+    SearchPrefetchServiceEnabledBrowserTest::SetUpOnMainThread();
+  }
+
+ private:
+  base::test::ScopedFeatureList feature_list_;
+};
+
+INSTANTIATE_TEST_SUITE_P(All,
+                         SearchPrefetchServiceEnabledWithNVSBrowserTest,
+                         testing::Bool());
+
+IN_PROC_BROWSER_TEST_P(SearchPrefetchServiceEnabledWithNVSBrowserTest,
                        BackPrefetchServed) {
   // This test prefetches and serves two SRP responses. It then navigates back
   // then forward, the back navigation should not be cached, due to cache limit
@@ -1327,11 +1364,6 @@ IN_PROC_BROWSER_TEST_F(SearchPrefetchServiceEnabledBrowserTest,
   auto* search_prefetch_service =
       SearchPrefetchServiceFactory::GetForProfile(browser()->profile());
   EXPECT_NE(nullptr, search_prefetch_service);
-
-  // Disable back/forward cache to ensure that it doesn't get preserved in the
-  // back/forward cache.
-  content::DisableBackForwardCacheForTesting(
-      GetWebContents(), content::BackForwardCache::TEST_REQUIRES_NO_CACHING);
 
   std::string search_terms = "prefetch_content";
   auto [prefetch_url, search_url] =
@@ -1355,6 +1387,12 @@ IN_PROC_BROWSER_TEST_F(SearchPrefetchServiceEnabledBrowserTest,
   CheckCorrectForwardingResultMetric(
       histogram_tester,
       StreamingSearchPrefetchURLLoader::ForwardingResult::kCompleted, 1);
+  if (IsNoVarySearchDiskCacheEnabled()) {
+    content::FetchHistogramsFromChildProcesses();
+    metrics::SubprocessMetricsProvider::MergeHistogramDeltasForTesting();
+    histogram_tester.ExpectBucketCount(
+        "HttpCache.NoVarySearch.HeaderParseResult", 0, 1);
+  }
 
   search_terms = "prefetch_content_2";
   auto [prefetch_url_2, search_url_2] =
@@ -1404,11 +1442,16 @@ IN_PROC_BROWSER_TEST_F(SearchPrefetchServiceEnabledBrowserTest,
   EXPECT_TRUE(base::Contains(inner_html, "prefetch"));
   histogram_tester.ExpectTotalCount(
       "Omnibox.SearchPrefetch.ClickToNavigationIntercepted", 2);
+  // When NoVarySearchDiskCache is enabled, the request is not handled by
+  // CacheAliasSearchPrefetchURLLoader, so it should not record anything
+  // new.
+  const int expected_count = IsNoVarySearchDiskCacheEnabled() ? 2 : 3;
   histogram_tester.ExpectTotalCount(
-      "Omnibox.SearchPrefetch.NavigationInterceptedToForwardingComplete", 3);
+      "Omnibox.SearchPrefetch.NavigationInterceptedToForwardingComplete",
+      expected_count);
 }
 
-IN_PROC_BROWSER_TEST_F(SearchPrefetchServiceEnabledBrowserTest,
+IN_PROC_BROWSER_TEST_P(SearchPrefetchServiceEnabledWithNVSBrowserTest,
                        BackPrefetchServedRefParam) {
   // This test prefetches and serves two SRP responses. It then navigates back
   // then forward, the back navigation should not be cached, due to cache limit
@@ -1418,11 +1461,6 @@ IN_PROC_BROWSER_TEST_F(SearchPrefetchServiceEnabledBrowserTest,
   auto* search_prefetch_service =
       SearchPrefetchServiceFactory::GetForProfile(browser()->profile());
   EXPECT_NE(nullptr, search_prefetch_service);
-
-  // Disable back/forward cache to ensure that it doesn't get preserved in the
-  // back/forward cache.
-  content::DisableBackForwardCacheForTesting(
-      GetWebContents(), content::BackForwardCache::TEST_REQUIRES_NO_CACHING);
 
   std::string search_terms = "prefetch_content";
   auto [prefetch_url, search_url] =
@@ -1505,11 +1543,16 @@ IN_PROC_BROWSER_TEST_F(SearchPrefetchServiceEnabledBrowserTest,
   EXPECT_TRUE(base::Contains(inner_html, "prefetch"));
   histogram_tester.ExpectTotalCount(
       "Omnibox.SearchPrefetch.ClickToNavigationIntercepted", 2);
+  // When NoVarySearchDiskCache is enabled, the request is not handled by
+  // CacheAliasSearchPrefetchURLLoader, so it should not record anything
+  // new.
+  const int expected_count = IsNoVarySearchDiskCacheEnabled() ? 2 : 3;
   histogram_tester.ExpectTotalCount(
-      "Omnibox.SearchPrefetch.NavigationInterceptedToForwardingComplete", 3);
+      "Omnibox.SearchPrefetch.NavigationInterceptedToForwardingComplete",
+      expected_count);
 }
 
-IN_PROC_BROWSER_TEST_F(SearchPrefetchServiceEnabledBrowserTest,
+IN_PROC_BROWSER_TEST_P(SearchPrefetchServiceEnabledWithNVSBrowserTest,
                        BackPrefetchServedAfterPrefs) {
   // This test prefetches and serves two SRP responses. It then navigates back
   // then forward, the back navigation should not be cached, due to cache limit
@@ -1519,11 +1562,6 @@ IN_PROC_BROWSER_TEST_F(SearchPrefetchServiceEnabledBrowserTest,
   auto* search_prefetch_service =
       SearchPrefetchServiceFactory::GetForProfile(browser()->profile());
   EXPECT_NE(nullptr, search_prefetch_service);
-
-  // Disable back/forward cache to ensure that it doesn't get preserved in the
-  // back/forward cache.
-  content::DisableBackForwardCacheForTesting(
-      GetWebContents(), content::BackForwardCache::TEST_REQUIRES_NO_CACHING);
 
   std::string search_terms = "prefetch_content";
   GURL prefetch_url = GetSearchServerQueryURL(search_terms + "&pf=cs");
@@ -1584,7 +1622,7 @@ IN_PROC_BROWSER_TEST_F(SearchPrefetchServiceEnabledBrowserTest,
   EXPECT_TRUE(base::Contains(inner_html, "prefetch"));
 }
 
-IN_PROC_BROWSER_TEST_F(SearchPrefetchServiceEnabledBrowserTest,
+IN_PROC_BROWSER_TEST_P(SearchPrefetchServiceEnabledWithNVSBrowserTest,
                        BackPrefetchServedAfterPrefsNoOverflow) {
   // This test prefetches and serves two SRP responses. It then navigates back
   // then forward, the back navigation should not be cached, due to cache limit
@@ -1637,7 +1675,7 @@ IN_PROC_BROWSER_TEST_F(SearchPrefetchServiceEnabledBrowserTest,
   EXPECT_TRUE(base::Contains(inner_html, "prefetch"));
 }
 
-IN_PROC_BROWSER_TEST_F(SearchPrefetchServiceEnabledBrowserTest,
+IN_PROC_BROWSER_TEST_P(SearchPrefetchServiceEnabledWithNVSBrowserTest,
                        EvictedCacheFallsback) {
   // This test prefetches and serves a SRP responses. It then navigates to a
   // different URL. Then it clears cache as if it was evicted. Then it navigates
@@ -1648,11 +1686,6 @@ IN_PROC_BROWSER_TEST_F(SearchPrefetchServiceEnabledBrowserTest,
   auto* search_prefetch_service =
       SearchPrefetchServiceFactory::GetForProfile(browser()->profile());
   EXPECT_NE(nullptr, search_prefetch_service);
-
-  // Disable back/forward cache to ensure that it doesn't get preserved in the
-  // back/forward cache.
-  content::DisableBackForwardCacheForTesting(
-      GetWebContents(), content::BackForwardCache::TEST_REQUIRES_NO_CACHING);
 
   std::string search_terms = "prefetch_content";
   GURL prefetch_url = GetSearchServerQueryURL(search_terms + "&pf=cs");
@@ -1706,11 +1739,81 @@ IN_PROC_BROWSER_TEST_F(SearchPrefetchServiceEnabledBrowserTest,
   EXPECT_TRUE(base::Contains(inner_html, "regular"));
   EXPECT_FALSE(base::Contains(inner_html, "prefetch"));
 
+  // If NVS is enabled, we do not rely on CacheAlias hack.
+  if (IsNoVarySearchDiskCacheEnabled()) {
+    return;
+  }
   histogram_tester.ExpectUniqueSample(
       "Omnibox.SearchPrefetch.CacheAliasFallbackReason",
       CacheAliasSearchPrefetchURLLoader::FallbackReason::kErrorOnComplete, 1);
   histogram_tester.ExpectTotalCount(
       "Omnibox.SearchPrefetch.CacheAliasElapsedTimeToFallback", 1);
+}
+
+// Test LoadFromPrefs() when "cache_size" of kSearchPrefetchServicePrefetching
+// is modified. The function should load at most N entries specified by the
+// parameter regardless of the number of the entries actually stored in the
+// prefs.
+IN_PROC_BROWSER_TEST_P(SearchPrefetchServiceEnabledWithNVSBrowserTest,
+                       SearchPrefetchMaxCacheEntries) {
+  if (IsNoVarySearchDiskCacheEnabled()) {
+    GTEST_SKIP();
+  }
+  // Set the max cache size to 5.
+  SetSearchPrefetchMaxCacheEntriesForTesting(5);
+  ASSERT_EQ(5u, SearchPrefetchMaxCacheEntries());
+
+  // Prepare 10 search/prefetch URL pairs.
+  std::vector<std::pair<GURL, GURL>> search_and_prefetch_urls;
+  std::string search_terms = "prefetch_content";
+  for (int i = 0; i < 10; ++i) {
+    GURL prefetch_url = GetSearchServerQueryURL(
+        search_terms + base::NumberToString(i) + "&pf=cs");
+    GURL canonical_search_url = GetCanonicalSearchURL(prefetch_url);
+    search_and_prefetch_urls.emplace_back(canonical_search_url, prefetch_url);
+  }
+
+  // 10 entries were added, but only 5 entries should be kept in the cache due
+  // to the limit.
+  for (auto& [search_url, prefetch_url] : search_and_prefetch_urls) {
+    AddCacheEntry(search_url, prefetch_url);
+  }
+  EXPECT_EQ(5u, GetCacheEntriesSize());
+
+  // Restore the cache from the prefs. Only 5 entries should be restored.
+  ClearCache();
+  ASSERT_EQ(0u, GetCacheEntriesSize());
+  GetSearchPrefetchService().LoadFromPrefsForTesting();
+  ASSERT_EQ(5u, GetCacheEntriesSize());
+
+  // Restore the cache from the prefs after changing the max cache size from 5
+  // to 3. Only 3 entries should be restored.
+  ClearCache();
+  ASSERT_EQ(0u, GetCacheEntriesSize());
+  SetSearchPrefetchMaxCacheEntriesForTesting(3);
+  GetSearchPrefetchService().LoadFromPrefsForTesting();
+  ASSERT_EQ(3u, GetCacheEntriesSize());
+
+  // Forcibly save the last 3 entries to the prefs.
+  AddCacheEntry(search_and_prefetch_urls[0].first,
+                search_and_prefetch_urls[0].second);
+
+  // Restore the cache from the prefs after changing the max cache size from 3
+  // to 5, but only 3 entries should be in the cache.
+  ClearCache();
+  ASSERT_EQ(0u, GetCacheEntriesSize());
+  SetSearchPrefetchMaxCacheEntriesForTesting(5);
+  GetSearchPrefetchService().LoadFromPrefsForTesting();
+  ASSERT_EQ(3u, GetCacheEntriesSize());
+
+  // New entries can be added up to 5.
+  for (auto& [search_url, prefetch_url] : search_and_prefetch_urls) {
+    AddCacheEntry(search_url, prefetch_url);
+  }
+  EXPECT_EQ(5u, GetCacheEntriesSize());
+
+  // Reset the max cache size.
+  SetSearchPrefetchMaxCacheEntriesForTesting(0);
 }
 
 IN_PROC_BROWSER_TEST_F(SearchPrefetchServiceEnabledBrowserTest,
@@ -2248,69 +2351,6 @@ IN_PROC_BROWSER_TEST_F(SearchPrefetchServiceEnabledBrowserTest,
   EXPECT_EQ(helper->GetSecurityLevel(), security_state::SECURE);
 }
 
-// Test LoadFromPrefs() when "cache_size" of kSearchPrefetchServicePrefetching
-// is modified. The function should load at most N entries specified by the
-// parameter regardless of the number of the entries actually stored in the
-// prefs.
-IN_PROC_BROWSER_TEST_F(SearchPrefetchServiceEnabledBrowserTest,
-                       SearchPrefetchMaxCacheEntries) {
-  // Set the max cache size to 5.
-  SetSearchPrefetchMaxCacheEntriesForTesting(5);
-  ASSERT_EQ(5u, SearchPrefetchMaxCacheEntries());
-
-  // Prepare 10 search/prefetch URL pairs.
-  std::vector<std::pair<GURL, GURL>> search_and_prefetch_urls;
-  std::string search_terms = "prefetch_content";
-  for (int i = 0; i < 10; ++i) {
-    GURL prefetch_url = GetSearchServerQueryURL(
-        search_terms + base::NumberToString(i) + "&pf=cs");
-    GURL canonical_search_url = GetCanonicalSearchURL(prefetch_url);
-    search_and_prefetch_urls.emplace_back(canonical_search_url, prefetch_url);
-  }
-
-  // 10 entries were added, but only 5 entries should be kept in the cache due
-  // to the limit.
-  for (auto& [search_url, prefetch_url] : search_and_prefetch_urls) {
-    AddCacheEntry(search_url, prefetch_url);
-  }
-  EXPECT_EQ(5u, GetCacheEntriesSize());
-
-  // Restore the cache from the prefs. Only 5 entries should be restored.
-  ClearCache();
-  ASSERT_EQ(0u, GetCacheEntriesSize());
-  GetSearchPrefetchService().LoadFromPrefsForTesting();
-  ASSERT_EQ(5u, GetCacheEntriesSize());
-
-  // Restore the cache from the prefs after changing the max cache size from 5
-  // to 3. Only 3 entries should be restored.
-  ClearCache();
-  ASSERT_EQ(0u, GetCacheEntriesSize());
-  SetSearchPrefetchMaxCacheEntriesForTesting(3);
-  GetSearchPrefetchService().LoadFromPrefsForTesting();
-  ASSERT_EQ(3u, GetCacheEntriesSize());
-
-  // Forcibly save the last 3 entries to the prefs.
-  AddCacheEntry(search_and_prefetch_urls[0].first,
-                search_and_prefetch_urls[0].second);
-
-  // Restore the cache from the prefs after changing the max cache size from 3
-  // to 5, but only 3 entries should be in the cache.
-  ClearCache();
-  ASSERT_EQ(0u, GetCacheEntriesSize());
-  SetSearchPrefetchMaxCacheEntriesForTesting(5);
-  GetSearchPrefetchService().LoadFromPrefsForTesting();
-  ASSERT_EQ(3u, GetCacheEntriesSize());
-
-  // New entries can be added up to 5.
-  for (auto& [search_url, prefetch_url] : search_and_prefetch_urls) {
-    AddCacheEntry(search_url, prefetch_url);
-  }
-  EXPECT_EQ(5u, GetCacheEntriesSize());
-
-  // Reset the max cache size.
-  SetSearchPrefetchMaxCacheEntriesForTesting(0);
-}
-
 IN_PROC_BROWSER_TEST_F(SearchPrefetchServiceEnabledBrowserTest,
                        ClearCacheRemovesPrefetch) {
   auto* search_prefetch_service =
@@ -2386,7 +2426,7 @@ IN_PROC_BROWSER_TEST_F(SearchPrefetchServiceEnabledBrowserTest,
   EXPECT_TRUE(prefetch_status.has_value());
 }
 
-IN_PROC_BROWSER_TEST_F(SearchPrefetchServiceEnabledBrowserTest,
+IN_PROC_BROWSER_TEST_P(SearchPrefetchServiceEnabledWithNVSBrowserTest,
                        ChangeDSESameOriginClearsPrefetches) {
   auto* search_prefetch_service =
       SearchPrefetchServiceFactory::GetForProfile(browser()->profile());
@@ -2413,7 +2453,7 @@ IN_PROC_BROWSER_TEST_F(SearchPrefetchServiceEnabledBrowserTest,
   EXPECT_FALSE(prefetch_status.has_value());
 }
 
-IN_PROC_BROWSER_TEST_F(SearchPrefetchServiceEnabledBrowserTest,
+IN_PROC_BROWSER_TEST_P(SearchPrefetchServiceEnabledWithNVSBrowserTest,
                        ChangeDSECrossOriginClearsPrefetches) {
   auto* search_prefetch_service =
       SearchPrefetchServiceFactory::GetForProfile(browser()->profile());
@@ -3349,7 +3389,7 @@ IN_PROC_BROWSER_TEST_F(GooglePFTestDefaultFieldTrialValue,
       default_search->url_ref().ReplaceSearchTerms(
           search_terms_args, template_url_service->search_terms_data(),
           nullptr);
-  EXPECT_TRUE(base::Contains(navigation_generated_url, "pf=cs"));
+  EXPECT_TRUE(base::Contains(navigation_generated_url, "pf=op"));
 }
 
 class SearchPrefetchServiceNavigationPrefetchBrowserTest
@@ -3696,7 +3736,7 @@ IN_PROC_BROWSER_TEST_F(SearchPrefetchServiceNavigationPrefetchBrowserTest,
 }
 
 IN_PROC_BROWSER_TEST_F(SearchPrefetchServiceNavigationPrefetchBrowserTest,
-                       NavigationPrefetchDoesntReplaceComplete) {
+                       NavigationPrefetchIsServedForOmniboxOpenSelection) {
   SetDSEWithURL(
       GetSearchServerQueryURL(
           "{searchTerms}&{google:assistedQueryStats}{google:prefetchSource}"),
@@ -3748,10 +3788,8 @@ IN_PROC_BROWSER_TEST_F(SearchPrefetchServiceNavigationPrefetchBrowserTest,
 
   omnibox->model()->OpenSelection();
 
-  prefetch_status = search_prefetch_service->GetSearchPrefetchStatusForTesting(
-      canonical_search_url);
-  ASSERT_TRUE(prefetch_status.has_value());
-  EXPECT_EQ(SearchPrefetchStatus::kComplete, prefetch_status.value());
+  // Wait until it is served to the navigation.
+  WaitUntilStatusChangesTo(canonical_search_url, std::nullopt);
 }
 
 IN_PROC_BROWSER_TEST_F(SearchPrefetchServiceNavigationPrefetchBrowserTest,
@@ -3795,15 +3833,11 @@ IN_PROC_BROWSER_TEST_F(SearchPrefetchServiceNavigationPrefetchBrowserTest,
 
   omnibox->model()->OpenSelection();
 
-  prefetch_status = search_prefetch_service->GetSearchPrefetchStatusForTesting(
-      canonical_search_url);
-  EXPECT_FALSE(prefetch_status.has_value());
+  // Suggestion server does not suggest the user agent to prefetch the resource,
+  // so there should be no prefetch attempt.
+  WaitUntilStatusChangesTo(canonical_search_url, std::nullopt);
 
   content::WaitForLoadStop(GetWebContents());
-
-  prefetch_status = search_prefetch_service->GetSearchPrefetchStatusForTesting(
-      canonical_search_url);
-  EXPECT_FALSE(prefetch_status.has_value());
 
   auto inner_html = GetDocumentInnerHTML();
   EXPECT_TRUE(base::Contains(inner_html, "regular"));
@@ -3985,20 +4019,30 @@ IN_PROC_BROWSER_TEST_F(SearchNavigationPrefetchNoCancelBrowserTest,
 }
 
 class SearchNavigationPrefetchDefaultMatchBrowserTest
-    : public SearchPrefetchBaseBrowserTest {
+    : public testing::WithParamInterface<bool>,
+      public SearchPrefetchBaseBrowserTest {
  public:
   SearchNavigationPrefetchDefaultMatchBrowserTest() {
     std::vector<base::test::FeatureRefAndParams> enabled_features = {
         {kSearchPrefetchServicePrefetching,
          {{"max_attempts_per_caching_duration", "3"},
           {"cache_size", "1"},
-          {"device_memory_threshold_MB", "0"}}},
-        {kSearchPrefetchOnlyAllowDefaultMatchPreloading, {{}}}};
+          {"device_memory_threshold_MB", "0"}}}};
     std::vector<base::test::FeatureRef> disabled_features = {};
+
+    if (OnlyAllowDefaultMatchPreloading()) {
+      enabled_features.push_back(
+          {{kSearchPrefetchOnlyAllowDefaultMatchPreloading}, {{}}});
+    } else {
+      disabled_features.push_back(
+          kSearchPrefetchOnlyAllowDefaultMatchPreloading);
+    }
 
     feature_list_.InitWithFeaturesAndParameters(enabled_features,
                                                 disabled_features);
   }
+
+  bool OnlyAllowDefaultMatchPreloading() const { return GetParam(); }
 
   void SetUpOnMainThread() override {
     SearchPrefetchBaseBrowserTest::SetUpOnMainThread();
@@ -4008,7 +4052,14 @@ class SearchNavigationPrefetchDefaultMatchBrowserTest
   base::test::ScopedFeatureList feature_list_;
 };
 
-IN_PROC_BROWSER_TEST_F(SearchNavigationPrefetchDefaultMatchBrowserTest,
+INSTANTIATE_TEST_SUITE_P(All,
+                         SearchNavigationPrefetchDefaultMatchBrowserTest,
+                         testing::Bool());
+
+// Tests the case where the search suggestion does not match the omnibox
+// default match. In this case, Chrome may run prefetching depending on the
+// kSearchPrefetchOnlyAllowDefaultMatchPreloading flag.
+IN_PROC_BROWSER_TEST_P(SearchNavigationPrefetchDefaultMatchBrowserTest,
                        NotDefaultMatch) {
   SetDSEWithURL(
       GetSearchServerQueryURL(
@@ -4038,16 +4089,25 @@ IN_PROC_BROWSER_TEST_F(SearchNavigationPrefetchDefaultMatchBrowserTest,
   ui_test_utils::WaitForAutocompleteDone(browser());
   EXPECT_TRUE(autocomplete_controller->done());
 
-  GURL canonical_search_url = GetCanonicalSearchURL(
-      autocomplete_controller->result().match_at(0).destination_url);
+  GURL prefetch_url = GetSearchServerQueryURL(search_terms);
+  GURL canonical_prefetch_url = GetCanonicalSearchURL(prefetch_url);
 
-  WaitForDuration(base::Milliseconds(50));
   auto prefetch_status =
       search_prefetch_service->GetSearchPrefetchStatusForTesting(
-          GetCanonicalSearchURL(canonical_search_url));
-  EXPECT_FALSE(prefetch_status.has_value());
+          canonical_prefetch_url);
 
-  omnibox->model()->SetPopupSelection(OmniboxPopupSelection(1));
+  if (OnlyAllowDefaultMatchPreloading()) {
+    // The search suggestion doesn't match the default match, so it shouldn't be
+    // prefetched.
+    EXPECT_FALSE(prefetch_status.has_value());
+  } else {
+    // The search suggestion doesn't match the default match, but it should be
+    // prefetched anyway.
+    ASSERT_TRUE(prefetch_status.has_value());
+    EXPECT_EQ(SearchPrefetchStatus::kCanBeServed, prefetch_status.value());
+    WaitUntilStatusChangesTo(canonical_prefetch_url,
+                             SearchPrefetchStatus::kComplete);
+  }
 }
 
 // Test suite to check the AutocompleteDictionaryPreload feature.
@@ -4157,4 +4217,82 @@ IN_PROC_BROWSER_TEST_F(AutocompleteDictionaryPreloadBrowserTest,
   EXPECT_TRUE(HasPreloadedSharedDictionaryInfo());
   SendMemoryPressureToNetworkService();
   EXPECT_FALSE(HasPreloadedSharedDictionaryInfo());
+}
+
+class SearchNavigationPrefetchIncognitoBrowserTest
+    : public SearchPrefetchBaseBrowserTest {
+ public:
+  SearchNavigationPrefetchIncognitoBrowserTest() {
+    std::vector<base::test::FeatureRefAndParams> enabled_features = {
+        {kSearchPrefetchServicePrefetching,
+         {{"max_attempts_per_caching_duration", "3"},
+          {"cache_size", "1"},
+          {"device_memory_threshold_MB", "0"}}},
+        {
+            kSearchNavigationPrefetch,
+            {{"allow_incognito", "true"}},
+        }};
+    feature_list_.InitWithFeaturesAndParameters(enabled_features, {});
+  }
+
+  void SetUpOnMainThread() override {
+    // Close normal browser and switch the test's browser instance to an
+    // incognito instance.
+    Browser* incognito = CreateIncognitoBrowser(browser()->profile());
+    CloseBrowserSynchronously(browser());
+    SelectFirstBrowser();
+    ASSERT_EQ(browser(), incognito);
+
+    SearchPrefetchBaseBrowserTest::SetUpOnMainThread();
+
+    ASSERT_TRUE(browser()->profile()->IsOffTheRecord());
+  }
+
+ private:
+  base::test::ScopedFeatureList feature_list_;
+};
+
+IN_PROC_BROWSER_TEST_F(SearchNavigationPrefetchIncognitoBrowserTest,
+                       NavigationPrefetchIsServedMouseDown) {
+  SetDSEWithURL(
+      GetSearchServerQueryURL(
+          "{searchTerms}&{google:assistedQueryStats}{google:prefetchSource}"),
+      true);
+
+  auto* search_prefetch_service =
+      SearchPrefetchServiceFactory::GetForProfile(browser()->profile());
+  ASSERT_NE(search_prefetch_service, nullptr);
+  std::string search_terms = "terms of service";
+  std::string user_input = "terms";
+
+  AutocompleteMatch autocomplete_match =
+      CreateSearchSuggestionMatch(search_terms, search_terms, false);
+  search_prefetch_service->OnNavigationLikely(
+      1, autocomplete_match, NavigationPredictor::kMouseDown, GetWebContents());
+
+  WaitUntilStatusChangesTo(
+      GetCanonicalSearchURL(autocomplete_match.destination_url),
+      SearchPrefetchStatus::kComplete);
+
+  auto prefetch_status =
+      search_prefetch_service->GetSearchPrefetchStatusForTesting(
+          GetCanonicalSearchURL(autocomplete_match.destination_url));
+  ASSERT_TRUE(prefetch_status.has_value());
+  EXPECT_EQ(SearchPrefetchStatus::kComplete, prefetch_status.value());
+
+  auto [prefetch_url, search_url] =
+      GetSearchPrefetchAndNonPrefetch(search_terms);
+  GURL canonical_search_url = GetCanonicalSearchURL(prefetch_url);
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), search_url));
+
+  prefetch_status = search_prefetch_service->GetSearchPrefetchStatusForTesting(
+      canonical_search_url);
+  EXPECT_FALSE(prefetch_status.has_value());
+
+  auto inner_html =
+      content::EvalJs(browser()->tab_strip_model()->GetActiveWebContents(),
+                      "document.documentElement.innerHTML")
+          .ExtractString();
+  EXPECT_FALSE(base::Contains(inner_html, "regular"));
+  EXPECT_TRUE(base::Contains(inner_html, "prefetch"));
 }

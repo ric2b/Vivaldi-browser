@@ -116,9 +116,9 @@ base::WeakPtr<DisplayResourceProvider> DisplayResourceProvider::GetWeakPtr() {
 }
 
 #if BUILDFLAG(IS_ANDROID)
-bool DisplayResourceProvider::IsBackedBySurfaceTexture(ResourceId id) const {
+bool DisplayResourceProvider::IsBackedBySurfaceView(ResourceId id) const {
   const ChildResource* resource = GetResource(id);
-  return resource->transferable.is_backed_by_surface_texture;
+  return resource->transferable.is_backed_by_surface_view;
 }
 #endif
 
@@ -139,6 +139,11 @@ bool DisplayResourceProvider::IsOverlayCandidate(ResourceId id) const {
   // be doing so on Android in rare cases. Handle this gracefully until a
   // better solution can be found. https://crbug.com/811858
   return resource && resource->transferable.is_overlay_candidate;
+}
+
+bool DisplayResourceProvider::IsLowLatencyRendering(ResourceId id) const {
+  const ChildResource* resource = TryGetResource(id);
+  return resource && resource->transferable.is_low_latency_rendering;
 }
 
 SurfaceId DisplayResourceProvider::GetSurfaceId(ResourceId id) const {

@@ -7,6 +7,7 @@
 namespace  {
 // Constants for layout configurations
 const CGFloat kSpacing = 16.0;
+const CGFloat kBottomSpacing = 100.0;
 const CGFloat kTopInsetForHiddenToolbar = 0;
 const CGFloat kMinimumSidePadding = 12.0;
 const CGFloat kListStyleItemHeight = 76.0;
@@ -96,7 +97,7 @@ const CGFloat kMinimumSidePaddingPreview = 2.0;
   if (extraSpace < oneColumnWidth && adjustedNumberOfColumns >= 1) {
     self.sectionInset = UIEdgeInsetsMake(
         [self kTopInset], [self horizontalSpacing],
-        kSpacing, [self horizontalSpacing]);
+        kBottomSpacing, [self horizontalSpacing]);
     CGFloat remainingWidth =
         availableWidth - ([self horizontalSpacing] * 2) -
             (kSpacing * (adjustedNumberOfColumns - 1));
@@ -104,7 +105,7 @@ const CGFloat kMinimumSidePaddingPreview = 2.0;
   } else {
     CGFloat edgeInsets = MAX((availableWidth - totalWidthNeeded) / 2, kSpacing);
     self.sectionInset = UIEdgeInsetsMake(
-        [self kTopInset], edgeInsets, kSpacing, edgeInsets);
+        [self kTopInset], edgeInsets, kBottomSpacing, edgeInsets);
   }
 
   CGFloat itemHeight = self.layoutStyle == VivaldiStartPageLayoutStyleList ?

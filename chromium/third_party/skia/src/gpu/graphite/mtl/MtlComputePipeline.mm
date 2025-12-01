@@ -7,12 +7,13 @@
 
 #include "src/gpu/graphite/mtl/MtlComputePipeline.h"
 
+#include "include/gpu/GpuTypes.h"
 #include "include/gpu/ShaderErrorHandler.h"
 #include "src/gpu/graphite/ComputePipelineDesc.h"
 #include "src/gpu/graphite/ContextUtils.h"
 #include "src/gpu/graphite/Log.h"
 #include "src/gpu/graphite/ResourceProvider.h"
-#include "src/gpu/graphite/mtl/MtlGraphiteUtilsPriv.h"
+#include "src/gpu/graphite/mtl/MtlGraphiteUtils.h"
 #include "src/gpu/graphite/mtl/MtlSharedContext.h"
 #include "src/gpu/mtl/MtlUtilsPriv.h"
 #include "src/sksl/SkSLCompiler.h"
@@ -45,7 +46,9 @@ sk_sp<MtlComputePipeline> MtlComputePipeline::Make(const MtlSharedContext* share
         SkSL::ProgramSettings settings;
 
         SkSL::Compiler skslCompiler;
-        std::string sksl = BuildComputeSkSL(sharedContext->caps(), pipelineDesc.computeStep());
+        std::string sksl = BuildComputeSkSL(sharedContext->caps(),
+                                            pipelineDesc.computeStep(),
+                                            BackendApi::kMetal);
         if (!SkSLToMSL(sharedContext->caps()->shaderCaps(),
                        sksl,
                        SkSL::ProgramKind::kCompute,

@@ -32,7 +32,4 @@
           Si esto no resuelve el problema, vuelve a habilitar esta opción
           para obtener un rendimiento mayor.</translation>
 <translation id="7496505986576158197">Vivaldi es posible por <ph name="BEGIN_LINK_CHROMIUM" /> Chromium <ph name="END_LINK_CHROMIUM" /> y otros <ph name="BEGIN_LINK_OSS" /> proyectos de código abierto <ph name="END_LINK_OSS" />.</translation>
-<translation id="8187289872471304532">Ve a
-          Aplicaciones &gt; Preferencias del Sistema &gt; Red &gt; Avanzado &gt; Proxies
-          y desmarca las casillas de verificación de los proxis que se hayan seleccionado.</translation>
 </translationbundle>

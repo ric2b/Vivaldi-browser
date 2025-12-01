@@ -18,7 +18,7 @@ import type {DOMNode} from './Helper.js';
 
 // TODO(crbug.com/391381439): Fully migrate off of constructed style sheets.
 const elementsBreadcrumbsStyles = new CSSStyleSheet();
-elementsBreadcrumbsStyles.replaceSync(elementsBreadcrumbsStylesRaw.cssContent);
+elementsBreadcrumbsStyles.replaceSync(elementsBreadcrumbsStylesRaw.cssText);
 
 const {html} = Lit;
 
@@ -35,7 +35,7 @@ const UIStrings = {
    * @description A label/tooltip for a button that scrolls the breadcrumbs bar to the right to show more entries.
    */
   scrollRight: 'Scroll right',
-};
+} as const;
 
 const str_ = i18n.i18n.registerUIStrings('panels/elements/components/ElementsBreadcrumbs.ts', UIStrings);
 const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
@@ -120,12 +120,10 @@ export class ElementsBreadcrumbs extends HTMLElement {
       if (scrollContainerWidth < crumbWindowWidth) {
         this.#overflowing = false;
       }
-    } else {
       // We currently do not have overflow buttons.
       // If the content won't fit anymore, then rerender with overflow.
-      if (scrollContainerWidth > crumbWindowWidth) {
-        this.#overflowing = true;
-      }
+    } else if (scrollContainerWidth > crumbWindowWidth) {
+      this.#overflowing = true;
     }
     void this.#ensureSelectedNodeIsVisible();
     void this.#updateScrollState(crumbWindow);
@@ -194,13 +192,11 @@ export class ElementsBreadcrumbs extends HTMLElement {
         this.#overflowing = false;
         void this.#render();
       }
-    } else {
       // We currently do not have overflow buttons.
       // If the content won't fit anymore, then rerender with overflow.
-      if (scrollContainerWidth > crumbWindowWidth) {
-        this.#overflowing = true;
-        void this.#render();
-      }
+    } else if (scrollContainerWidth > crumbWindowWidth) {
+      this.#overflowing = true;
+      void this.#render();
     }
   }
 
@@ -293,7 +289,7 @@ export class ElementsBreadcrumbs extends HTMLElement {
         </devtools-icon>
       </button>
       `;
-          // clang-format on
+        // clang-format on
   }
 
   #render(): void {

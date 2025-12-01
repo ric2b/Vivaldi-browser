@@ -8,7 +8,7 @@
 #import "base/strings/sys_string_conversions.h"
 #import "base/test/ios/wait_util.h"
 #import "base/time/time.h"
-#import "components/autofill/core/browser/data_model/credit_card.h"
+#import "components/autofill/core/browser/data_model/payments/credit_card.h"
 #import "components/autofill/core/browser/test_utils/autofill_test_utils.h"
 #import "components/autofill/core/common/autofill_payments_features.h"
 #import "components/autofill/ios/common/features.h"
@@ -31,6 +31,7 @@
 #import "net/test/embedded_test_server/default_handlers.h"
 #import "ui/base/l10n/l10n_util_mac.h"
 
+using chrome_test_util::SettingsToolbarEditButton;
 using chrome_test_util::TextFieldForCellWithLabelId;
 
 namespace {
@@ -119,11 +120,6 @@ id<GREYMatcher> ContinueButton() {
 id<GREYMatcher> UseKeyboardButton() {
   return chrome_test_util::ButtonWithAccessibilityLabelId(
       IDS_IOS_PAYMENT_BOTTOM_SHEET_USE_KEYBOARD);
-}
-
-// Matcher for the toolbar's edit button.
-id<GREYMatcher> SettingToolbarEditButton() {
-  return grey_accessibilityID(kSettingsToolbarEditButtonId);
 }
 
 // Matcher for the toolbar's done button.
@@ -611,7 +607,7 @@ void CheckAutofillSuggestionAcceptedIndexMetricsCount(
   [ChromeEarlGreyUI waitForAppToIdle];
 
   // Edit the card's nickname.
-  [[EarlGrey selectElementWithMatcher:SettingToolbarEditButton()]
+  [[EarlGrey selectElementWithMatcher:SettingsToolbarEditButton()]
       performAction:grey_tap()];
 
   NSString* nickname = @"Card Nickname";
@@ -664,7 +660,7 @@ void CheckAutofillSuggestionAcceptedIndexMetricsCount(
   [ChromeEarlGreyUI waitForAppToIdle];
 
   // Edit the card's nickname.
-  [[EarlGrey selectElementWithMatcher:SettingToolbarEditButton()]
+  [[EarlGrey selectElementWithMatcher:SettingsToolbarEditButton()]
       performAction:grey_tap()];
 
   NSString* nickname = @"Card Nickname";
@@ -709,7 +705,7 @@ void CheckAutofillSuggestionAcceptedIndexMetricsCount(
   [ChromeEarlGreyUI waitForAppToIdle];
 
   // Delete the credit card
-  [[EarlGrey selectElementWithMatcher:SettingToolbarEditButton()]
+  [[EarlGrey selectElementWithMatcher:SettingsToolbarEditButton()]
       performAction:grey_tap()];
 
   [[EarlGrey selectElementWithMatcher:creditCardEntry]

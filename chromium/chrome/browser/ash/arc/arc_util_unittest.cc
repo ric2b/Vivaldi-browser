@@ -269,6 +269,20 @@ TEST_F(ChromeArcUtilTest, IsArcAllowedForProfile_GuestAccount) {
   EXPECT_TRUE(IsArcAllowedForProfileOnFirstCall(profile()));
 }
 
+// The reven devices enable ignore-device-flex-arc-enabled-policy
+// flag is not allowed to use arc.
+TEST_F(ChromeArcUtilTest, IsArcAllowedForProfile_EnableIgnoreFlag_Reven) {
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitWithFeatureState(
+      ash::features::kIgnoreDeviceFlexArcEnabledPolicy,
+      /*ignore VPN apps enable policy=*/true);
+  base::CommandLine::ForCurrentProcess()->InitFromArgv(
+      {"", "--arc-availability=officially-supported", "--reven-branding"});
+
+  SetArcvmDlcImageStatusForTesting(/*arcvm dlc image availability=*/true);
+  EXPECT_FALSE(IsArcAllowedForProfileOnFirstCall(profile()));
+}
+
 // The reven devices without the ARCVM DLC image is not allowed to
 // use arc.
 TEST_F(ChromeArcUtilTest, IsArcAllowedForProfile_NoArcvmDlcImage_Reven) {
@@ -627,19 +641,6 @@ TEST_F(ChromeArcUtilTest, ArcStartModeDefaultDemoMode) {
                     AccountId::FromUserEmail("public_user@gmail.com"),
                     user_manager::UserType::kPublicAccount);
   EXPECT_TRUE(IsPlayStoreAvailable());
-}
-
-TEST_F(ChromeArcUtilTest, ArcStartModeDefaultDemoModeWithoutPlayStore) {
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitWithFeatureState(ash::features::kShowPlayInDemoMode,
-                                    false /* disabled */);
-  auto* command_line = base::CommandLine::ForCurrentProcess();
-  command_line->InitFromArgv({"", "--arc-availability=installed"});
-  cros_settings_test_helper_.InstallAttributes()->SetDemoMode();
-  ScopedLogIn login(GetFakeUserManager(),
-                    AccountId::FromUserEmail("public_user@gmail.com"),
-                    user_manager::UserType::kPublicAccount);
-  EXPECT_FALSE(IsPlayStoreAvailable());
 }
 
 TEST_F(ChromeArcUtilTest, ArcStartModeWithoutPlayStore) {

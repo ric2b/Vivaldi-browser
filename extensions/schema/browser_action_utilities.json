@@ -233,6 +233,28 @@
             "description": "Int id to lookup an error on action."
           }
         }
+      },
+      {
+        "id": "ExtensionActionParams",
+        "type": "object",
+        "description": "Describes action when the extension button is clicked",
+        "properties": {
+          "extensionId" : {
+            "type": "string",
+            "optional": true,
+            "description": "Related extensionId"
+          },
+          "popupUrl": {
+            "type": "string",
+            "optional": true,
+            "description": "relative url for the popup document if exists."
+          },
+          "openPanelOnActionClick": {
+            "type": "boolean",
+            "optional": true,
+            "description": "openPanelOnActionClick value set by chrome.sidePanel.setPanelBehavior"
+          }
+        }
       }
     ],
     "functions": [
@@ -269,13 +291,12 @@
           }
         ],
         "returns_async": {
-          "name": "showPopup",
-          "description": "Callback for popup actions.",
+          "name": "handleAction",
+          "description": "Callback for the actions.",
           "parameters": [
             {
-              "name": "popupUrl",
-              "type": "string",
-              "description": "Relative url for the popup document."
+              "$ref": "ExtensionActionParams",
+              "name": "result"
             }
           ]
         }

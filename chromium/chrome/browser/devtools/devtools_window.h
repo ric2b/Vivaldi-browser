@@ -286,9 +286,8 @@ class DevToolsWindow : public DevToolsUIBindings::Delegate,
   // by user.
   static void OnPageCloseCanceled(content::WebContents* contents);
 
-  content::WebContents* GetInspectedWebContents();
-
   // content::DevToolsUIBindings::Delegate overrides
+  content::WebContents* GetInspectedWebContents() override;
   void ActivateWindow() override;
 
   void MainWebContentRenderFrameHostChanged(
@@ -367,6 +366,7 @@ class DevToolsWindow : public DevToolsUIBindings::Delegate,
     kFrontendNode,
     kFrontendRemote,
     kFrontendRemoteWorker,
+    kFrontendRemoteTab,
   };
 
   DevToolsWindow(FrontendType frontend_type,

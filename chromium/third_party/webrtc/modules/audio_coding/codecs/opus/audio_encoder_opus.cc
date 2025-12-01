@@ -94,7 +94,7 @@ int CalculateBitrate(int max_playback_rate_hz,
       CalculateDefaultBitrate(max_playback_rate_hz, num_channels);
 
   if (bitrate_param) {
-    const auto bitrate = rtc::StringToNumber<int>(*bitrate_param);
+    const auto bitrate = StringToNumber<int>(*bitrate_param);
     if (bitrate) {
       const int chosen_bitrate =
           std::max(AudioEncoderOpusConfig::kMinBitrateBps,
@@ -313,18 +313,18 @@ std::optional<int> AudioEncoderOpusImpl::GetNewBandwidth(
 class AudioEncoderOpusImpl::PacketLossFractionSmoother {
  public:
   explicit PacketLossFractionSmoother()
-      : last_sample_time_ms_(rtc::TimeMillis()),
+      : last_sample_time_ms_(TimeMillis()),
         smoother_(kAlphaForPacketLossFractionSmoother) {}
 
   // Gets the smoothed packet loss fraction.
   float GetAverage() const {
     float value = smoother_.filtered();
-    return (value == rtc::ExpFilter::kValueUndefined) ? 0.0f : value;
+    return (value == ExpFilter::kValueUndefined) ? 0.0f : value;
   }
 
   // Add new observation to the packet loss fraction smoother.
   void AddSample(float packet_loss_fraction) {
-    int64_t now_ms = rtc::TimeMillis();
+    int64_t now_ms = TimeMillis();
     smoother_.Apply(static_cast<float>(now_ms - last_sample_time_ms_),
                     packet_loss_fraction);
     last_sample_time_ms_ = now_ms;
@@ -334,7 +334,7 @@ class AudioEncoderOpusImpl::PacketLossFractionSmoother {
   int64_t last_sample_time_ms_;
 
   // An exponential filter is used to smooth the packet loss fraction.
-  rtc::ExpFilter smoother_;
+  ExpFilter smoother_;
 };
 
 std::unique_ptr<AudioEncoderOpusImpl> AudioEncoderOpusImpl::CreateForTesting(
@@ -733,9 +733,9 @@ void AudioEncoderOpusImpl::SetProjectedPacketLossRate(float fraction) {
 }
 
 void AudioEncoderOpusImpl::SetTargetBitrate(int bits_per_second) {
-  const int new_bitrate = rtc::SafeClamp<int>(
-      bits_per_second, AudioEncoderOpusConfig::kMinBitrateBps,
-      AudioEncoderOpusConfig::kMaxBitrateBps);
+  const int new_bitrate =
+      SafeClamp<int>(bits_per_second, AudioEncoderOpusConfig::kMinBitrateBps,
+                     AudioEncoderOpusConfig::kMaxBitrateBps);
   if (config_.bitrate_bps && *config_.bitrate_bps != new_bitrate) {
     config_.bitrate_bps = new_bitrate;
     RTC_DCHECK(config_.IsOk());
@@ -783,7 +783,7 @@ AudioEncoderOpusImpl::DefaultAudioNetworkAdaptorCreator(
 
 void AudioEncoderOpusImpl::MaybeUpdateUplinkBandwidth() {
   if (audio_network_adaptor_ && !use_stable_target_for_adaptation_) {
-    int64_t now_ms = rtc::TimeMillis();
+    int64_t now_ms = TimeMillis();
     if (!bitrate_smoother_last_update_time_ ||
         now_ms - *bitrate_smoother_last_update_time_ >=
             config_.uplink_bandwidth_update_interval_ms) {

@@ -90,22 +90,22 @@ export class DownloadsManagerElement extends DownloadsManagerElementBase {
     return ['itemsChanged_(items_.*)'];
   }
 
-  protected items_: MojomData[] = [];
-  protected hasDownloads_: boolean = false;
+  protected accessor items_: MojomData[] = [];
+  protected accessor hasDownloads_: boolean = false;
   // Used for CSS styling.
-  protected hasShadow_: boolean = false;
-  protected inSearchMode_: boolean = false;
-  protected spinnerActive_: boolean = false;
-  protected bypassPromptItemId_: string = '';
+  protected accessor hasShadow_: boolean = false;
+  protected accessor inSearchMode_: boolean = false;
+  protected accessor spinnerActive_: boolean = false;
+  protected accessor bypassPromptItemId_: string = '';
   // <if expr="_google_chrome">
-  private firstDangerousItemId_: string = '';
-  private esbDownloadRowPromo_: boolean =
+  private accessor firstDangerousItemId_: string = '';
+  private accessor esbDownloadRowPromo_: boolean =
       loadTimeData.getBoolean('esbDownloadRowPromo');
-  private isEligibleForEsbPromo_: boolean = false;
+  private accessor isEligibleForEsbPromo_: boolean = false;
   // </if>
-  protected lastFocused_: HTMLElement|null = null;
-  protected listBlurred_: boolean = false;
-  protected listScrollTarget_: HTMLElement|null = null;
+  protected accessor lastFocused_: HTMLElement|null = null;
+  protected accessor listBlurred_: boolean = false;
+  protected accessor listScrollTarget_: HTMLElement|null = null;
 
   private announcerTimeout_: number|null = null;
   private mojoHandler_: PageHandlerInterface;
@@ -163,11 +163,11 @@ export class DownloadsManagerElement extends DownloadsManagerElementBase {
 
     // Intercepts clicks on toast.
     const toastManager = getToastManager();
-    toastManager.shadowRoot!.querySelector<HTMLElement>('#toast')!.onclick =
-        e => this.onToastClicked_(e);
+    toastManager.shadowRoot.querySelector<HTMLElement>('#toast')!.onclick = e =>
+        this.onToastClicked_(e);
 
     // <if expr="_google_chrome">
-    this.mojoHandler_!.isEligibleForEsbPromo().then((result) => {
+    this.mojoHandler_.isEligibleForEsbPromo().then((result) => {
       this.isEligibleForEsbPromo_ = result.result;
     });
     // </if>
@@ -246,7 +246,7 @@ export class DownloadsManagerElement extends DownloadsManagerElementBase {
   }
 
   protected onBypassWarningConfirmationDialogClose_() {
-    const dialog = this.shadowRoot!.querySelector(
+    const dialog = this.shadowRoot.querySelector(
         'downloads-bypass-warning-confirmation-dialog');
     assert(dialog);
     assert(this.bypassPromptItemId_ !== '');

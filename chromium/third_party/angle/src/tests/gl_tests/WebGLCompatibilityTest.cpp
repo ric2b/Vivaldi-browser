@@ -2064,7 +2064,7 @@ TEST_P(WebGLCompatibilityTest, DrawBuffersIndexedGetIndexedParameter)
     ANGLE_SKIP_TEST_IF(!IsGLExtensionRequestable("GL_OES_draw_buffers_indexed"));
 
     GLint value;
-    GLboolean data[4];
+    GLint data[4];
 
     glGetIntegeri_v(GL_BLEND_EQUATION_RGB, 0, &value);
     EXPECT_GL_ERROR(GL_INVALID_ENUM);
@@ -2078,8 +2078,8 @@ TEST_P(WebGLCompatibilityTest, DrawBuffersIndexedGetIndexedParameter)
     EXPECT_GL_ERROR(GL_INVALID_ENUM);
     glGetIntegeri_v(GL_BLEND_DST_ALPHA, 0, &value);
     EXPECT_GL_ERROR(GL_INVALID_ENUM);
-    glGetBooleani_v(GL_COLOR_WRITEMASK, 0, data);
-    EXPECT_GL_ERROR(GL_INVALID_OPERATION);
+    glGetIntegeri_v(GL_COLOR_WRITEMASK, 0, data);
+    EXPECT_GL_ERROR(GL_INVALID_ENUM);
 
     glRequestExtensionANGLE("GL_OES_draw_buffers_indexed");
     EXPECT_GL_NO_ERROR();
@@ -2112,7 +2112,7 @@ TEST_P(WebGLCompatibilityTest, DrawBuffersIndexedGetIndexedParameter)
     glGetIntegeri_v(GL_BLEND_DST_ALPHA, 0, &value);
     EXPECT_GL_NO_ERROR();
     EXPECT_EQ(GL_ZERO, value);
-    glGetBooleani_v(GL_COLOR_WRITEMASK, 0, data);
+    glGetIntegeri_v(GL_COLOR_WRITEMASK, 0, data);
     EXPECT_GL_NO_ERROR();
     EXPECT_EQ(true, data[0]);
     EXPECT_EQ(false, data[1]);
@@ -6842,6 +6842,34 @@ void main()
         glDrawArraysInstancedBaseInstanceANGLE(GL_POINTS, 120, 359, 1, 14);
         EXPECT_GL_ERROR(GL_INVALID_OPERATION);
     }
+}
+
+// Tests that indexing with primitive restart index produces error, even
+// if it's done after toggling GL_PRIMITIVE_RESTART_FIXED_INDEX.
+// If there is MAX_ELEMENT_INDEX, it is smaller or equal than primitive
+// restart index 2^32 - 1 for GLuint.
+TEST_P(WebGL2CompatibilityTest, PrimitiveRestartIndexAfterToggleIsError)
+{
+    constexpr char kVS[] = "void main() { gl_Position = vec4(0); }";
+    constexpr char kFS[] = "void main() { gl_FragColor = vec4(0, 1, 0, 1); }";
+    ANGLE_GL_PROGRAM(program, kVS, kFS);
+    glUseProgram(program);
+    ASSERT_GL_NO_ERROR();
+    std::vector<GLuint> indices(1);
+    indices[0] = 0xFFFFFFFFu;
+    GLBuffer indexBuffer;
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, indexBuffer);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(indices[0]), &indices[0],
+                 GL_STATIC_DRAW);
+    EXPECT_GL_NO_ERROR();
+    // Primitive restart works, no-op draw.
+    glEnable(GL_PRIMITIVE_RESTART_FIXED_INDEX);
+    glDrawElements(GL_POINTS, indices.size(), GL_UNSIGNED_INT, 0);
+    EXPECT_GL_NO_ERROR();
+    // This is being tested: ensure that any cached state keys on PRIMITIVE_RESTART_FIXED_INDEX.
+    glDisable(GL_PRIMITIVE_RESTART_FIXED_INDEX);
+    glDrawElements(GL_POINTS, indices.size(), GL_UNSIGNED_INT, 0);
+    EXPECT_GL_ERROR(GL_INVALID_OPERATION);
 }
 
 ANGLE_INSTANTIATE_TEST_ES2_AND_ES3(WebGLCompatibilityTest);

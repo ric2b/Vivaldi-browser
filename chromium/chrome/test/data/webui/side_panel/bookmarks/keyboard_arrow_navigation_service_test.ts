@@ -89,7 +89,7 @@ suite('KeyArrowNavigationServiceTest', () => {
     element.dispatchEvent(new KeyboardEvent('keydown', {key: direction}));
   }
 
-  setup(async () => {
+  setup(() => {
     document.body.innerHTML = window.trustedTypes!.emptyHTML;
     rootElement = createParentHTMLNode(parentFolder);
     document.body.append(rootElement);
@@ -164,7 +164,7 @@ suite('KeyArrowNavigationServiceTest', () => {
   });
 
   test('AddsElements', () => {
-    service.removeElementsWithin(rootElement as HTMLElement);
+    service.removeElementsWithin(rootElement);
     let elementListIds =
         service.getElementsForTesting().map((el: HTMLElement) => el.id);
 

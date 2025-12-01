@@ -96,6 +96,10 @@ class MockFrontendAPI : public PrivacyHubDelegate {
  public:
   MOCK_METHOD(void, MicrophoneHardwareToggleChanged, (bool), (override));
   MOCK_METHOD(void, SetForceDisableCameraSwitch, (bool), (override));
+  MOCK_METHOD(void,
+              SystemGeolocationAccessLevelChanged,
+              (GeolocationAccessLevel),
+              (override));
 };
 
 }  // namespace
@@ -255,11 +259,11 @@ TEST_P(PrivacyHubMicrophoneControllerTest, SetSystemMuteOnLogin) {
     const AccountId user1_account_id =
         Shell::Get()->session_controller()->GetActiveAccountId();
 
-    SimulateUserLogin("other@user.test");
+    SimulateUserLogin({"other@user.test"});
     SetUserPref(microphone_muted);
     EXPECT_EQ(CrasAudioHandler::Get()->IsInputMuted(), microphone_allowed);
 
-    SimulateUserLogin(user1_account_id);
+    SwitchActiveUser(user1_account_id);
     EXPECT_EQ(CrasAudioHandler::Get()->IsInputMuted(), microphone_muted);
   }
 }

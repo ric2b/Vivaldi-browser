@@ -16,7 +16,7 @@ import extensionViewStylesRaw from './extensionView.css.js';
 
 // TODO(crbug.com/391381439): Fully migrate off of constructed style sheets.
 const extensionViewStyles = new CSSStyleSheet();
-extensionViewStyles.replaceSync(extensionViewStylesRaw.cssContent);
+extensionViewStyles.replaceSync(extensionViewStylesRaw.cssText);
 
 const {html} = Lit;
 
@@ -29,7 +29,7 @@ const UIStrings = {
    * @description The label that indicates that the content shown is provided by a browser extension.
    */
   extension: 'Content provided by a browser extension',
-};
+} as const;
 const str_ = i18n.i18n.registerUIStrings(
     'panels/recorder/components/ExtensionView.ts',
     UIStrings,

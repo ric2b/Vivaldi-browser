@@ -2,12 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifndef V8_COMPILER_TURBOSHAFT_WASM_GC_TYPED_OPTIMIZATION_REDUCER_H_
+#define V8_COMPILER_TURBOSHAFT_WASM_GC_TYPED_OPTIMIZATION_REDUCER_H_
+
 #if !V8_ENABLE_WEBASSEMBLY
 #error This header should only be included if WebAssembly is enabled.
 #endif  // !V8_ENABLE_WEBASSEMBLY
-
-#ifndef V8_COMPILER_TURBOSHAFT_WASM_GC_TYPED_OPTIMIZATION_REDUCER_H_
-#define V8_COMPILER_TURBOSHAFT_WASM_GC_TYPED_OPTIMIZATION_REDUCER_H_
 
 #include "src/compiler/turboshaft/assembler.h"
 #include "src/compiler/turboshaft/operations.h"
@@ -218,7 +218,8 @@ class WasmGCTypedOptimizationReducer : public Next {
       wasm::ValueType from_type =
           wasm::Intersection(type, cast_op.config.from, module_, module_).type;
       DCHECK(!from_type.is_uninhabited());
-      WasmTypeCheckConfig config{from_type, cast_op.config.to};
+      WasmTypeCheckConfig config{from_type, cast_op.config.to,
+                                 cast_op.config.exactness};
       return __ WasmTypeCast(__ MapToNewGraph(cast_op.object()),
                              __ MapToNewGraph(cast_op.rtt()), config);
     }
@@ -280,7 +281,8 @@ class WasmGCTypedOptimizationReducer : public Next {
           wasm::Intersection(type, type_check.config.from, module_, module_)
               .type;
       DCHECK(!from_type.is_uninhabited());
-      WasmTypeCheckConfig config{from_type, type_check.config.to};
+      WasmTypeCheckConfig config{from_type, type_check.config.to,
+                                 type_check.config.exactness};
       return __ WasmTypeCheck(__ MapToNewGraph(type_check.object()),
                               __ MapToNewGraph(type_check.rtt()), config);
     }

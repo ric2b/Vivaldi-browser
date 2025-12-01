@@ -6,7 +6,7 @@ package org.chromium.chrome.browser.share;
 
 import androidx.annotation.Nullable;
 
-import org.chromium.base.BuildInfo;
+import org.chromium.base.DeviceInfo;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.components.embedder_support.util.UrlConstants;
 import org.chromium.url.GURL;
@@ -17,12 +17,13 @@ import org.chromium.build.BuildConfig;
 
 /** A collection of helper functions for sharing in a non static context. */
 public class ShareUtils {
-    /*
+    /**
      * Determines whether a tab is eligible to be shared.
      *
      * @param tab The tab being tested.
+     * @return Whether the tab is eligible to be shared.
      */
-    public boolean shouldEnableShare(@Nullable Tab tab) {
+    public static boolean shouldEnableShare(@Nullable Tab tab) {
         // Vivaldi
         if (BuildConfig.IS_OEM_AUTOMOTIVE_BUILD) return false;
 
@@ -42,6 +43,6 @@ public class ShareUtils {
 
     /** In the context of custom tabs, should the share be enabled. */
     public static boolean enableShareForAutomotive(boolean isCustomTabs) {
-        return !isCustomTabs || !BuildInfo.getInstance().isAutomotive;
+        return !isCustomTabs || !DeviceInfo.isAutomotive();
     }
 }

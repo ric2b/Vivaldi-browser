@@ -118,9 +118,6 @@
 [submodule "third_party/gemmlowp/src"]
 	path = third_party/gemmlowp/src
 	url = ../../external/github.com/google/gemmlowp.git
-[submodule "third_party/grpc/src"]
-	path = third_party/grpc/src
-	url = ../../external/github.com/grpc/grpc.git
 [submodule "third_party/freetype/src"]
 	path = third_party/freetype/src
 	url = ../src/third_party/freetype2.git
@@ -177,9 +174,6 @@
 [submodule "third_party/libaom/source/libaom"]
 	path = third_party/libaom/source/libaom
 	url = ../../aomedia/aom.git
-[submodule "third_party/libavif/src"]
-	path = third_party/libavif/src
-	url = ../../external/github.com/AOMediaCodec/libavif.git
 [submodule "third_party/crabbyavif/src"]
 	path = third_party/crabbyavif/src
 	url = ../../external/github.com/webmproject/CrabbyAvif.git
@@ -267,10 +261,13 @@
 	url = ../../pdfium/pdfium.git
 [submodule "third_party/perfetto"]
 	path = third_party/perfetto
-	url = ../../android/platform/external/perfetto.git
+	url = ../../external/github.com/google/perfetto.git
 [submodule "third_party/protobuf-javascript/src"]
 	path = third_party/protobuf-javascript/src
 	url = ../../external/github.com/protocolbuffers/protobuf-javascript.git
+[submodule "third_party/pthreadpool/src"]
+	path = third_party/pthreadpool/src
+	url = ../../external/github.com/google/pthreadpool.git
 [submodule "third_party/quic_trace/src"]
 	path = third_party/quic_trace/src
 	url = ../../external/github.com/google/quic-trace.git
@@ -362,9 +359,6 @@
 [submodule "third_party/webgpu-cts/src"]
 	path = third_party/webgpu-cts/src
 	url = ../../external/github.com/gpuweb/cts.git
-[submodule "third_party/webpagereplay"]
-	path = third_party/webpagereplay
-	url = ../../webpagereplay.git
 [submodule "third_party/webrtc"]
 	path = third_party/webrtc
 	url = ../../webrtc/src.git
@@ -388,6 +382,3 @@
 [submodule "v8"]
 	path = v8
 	url = ../../v8/v8.git
-[submodule "third_party/pthreadpool/src"]
-	path = third_party/pthreadpool/src
-	url = ../../external/github.com/google/pthreadpool.git

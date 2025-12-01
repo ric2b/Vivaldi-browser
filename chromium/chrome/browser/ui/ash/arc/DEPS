@@ -11,6 +11,7 @@ include_rules = [
   # refactor ash codes in //chrome to break these dependencies; see b/332804822.
   # Whenever possible, avoid adding new //chrome dependencies to this list.
   "+chrome/browser/apps/app_service",
+  "+chrome/browser/apps/link_capturing",
   "+chrome/browser/ash/app_list/arc",
   "+chrome/browser/ash/apps",
   "+chrome/browser/ash/arc/arc_util.h",
@@ -30,7 +31,6 @@ include_rules = [
   "+chrome/browser/ui/browser.h",
   "+chrome/browser/ui/browser_list.h",
   "+chrome/browser/ui/settings_window_manager_chromeos.h",
-  "+chrome/browser/ui/views/chrome_layout_provider.h",
   "+chrome/browser/ui/views/chrome_typography.h",
   "+chrome/browser/ui/web_applications/test",
   "+chrome/browser/web_applications",
@@ -38,3 +38,10 @@ include_rules = [
   "+chrome/common",
   "+chrome/test",
 ]
+
+specific_include_rules = {
+  # Allow access for tests.
+  "arc_vm_data_migration_confirmation_dialog_unittest\.cc": [
+    "+chrome/browser/ui/views/chrome_layout_provider.h",
+  ]
+}

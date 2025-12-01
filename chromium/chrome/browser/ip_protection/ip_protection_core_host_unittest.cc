@@ -8,6 +8,7 @@
 #include <optional>
 #include <vector>
 
+#include "base/base64.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/notreached.h"
 #include "base/strings/strcat.h"
@@ -18,11 +19,16 @@
 #include "base/test/test_future.h"
 #include "base/time/time.h"
 #include "base/types/expected.h"
+#include "chrome/browser/browser_process.h"
+#include "chrome/test/base/testing_browser_process.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/ip_protection/common/ip_protection_config_http.h"
 #include "components/ip_protection/common/ip_protection_data_types.h"
 #include "components/ip_protection/common/ip_protection_proxy_config_direct_fetcher.h"
 #include "components/ip_protection/common/mock_blind_sign_auth.h"
+#include "components/metrics/enabled_state_provider.h"
+#include "components/metrics/metrics_state_manager.h"
+#include "components/metrics/test/test_enabled_state_provider.h"
 #include "components/policy/core/common/management/management_service.h"
 #include "components/prefs/testing_pref_service.h"
 #include "components/privacy_sandbox/privacy_sandbox_features.h"
@@ -32,6 +38,8 @@
 #include "components/signin/public/identity_manager/identity_test_environment.h"
 #include "components/signin/public/identity_manager/primary_account_change_event.h"
 #include "components/sync_preferences/testing_pref_service_syncable.h"
+#include "components/variations/service/test_variations_service.h"
+#include "components/variations/service/variations_service.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/test/browser_task_environment.h"
 #include "net/base/features.h"
@@ -62,6 +70,7 @@ constexpr char kTokenBatchHistogram[] =
     "NetworkService.IpProtection.TokenBatchRequestTime";
 
 constexpr char kTestEmail[] = "test@example.com";
+constexpr size_t kPRTPointSize = 33;
 
 enum class PrimaryAccountBehavior {
   // Primary account not set.
@@ -76,6 +85,9 @@ enum class PrimaryAccountBehavior {
 
   // Primary account exists but is not eligible for IP protection.
   kIneligible,
+
+  // Like kIneligible, but also a dogfooder.
+  kIneligibleDogfooder,
 
   // Primary account exists but eligibility is kUnknown.
   kUnknownEligibility,
@@ -93,9 +105,18 @@ class IpProtectionCoreHostTest : public testing::Test {
       : expiration_time_(base::Time::Now() + base::Hours(1)),
         geo_hint_({.country_code = "US",
                    .iso_region = "US-AL",
-                   .city_name = "ALABASTER"}) {
+                   .city_name = "ALABASTER"}),
+        enabled_state_provider_(/*consent=*/false, /*enabled=*/false) {
     privacy_sandbox::RegisterProfilePrefs(prefs()->registry());
     HostContentSettingsMap::RegisterProfilePrefs(prefs()->registry());
+    variations::TestVariationsService::RegisterPrefs(prefs()->registry());
+    metrics_state_manager_ = metrics::MetricsStateManager::Create(
+        prefs(), &enabled_state_provider_,
+        /*backup_registry_key=*/std::wstring(),
+        /*user_data_dir=*/base::FilePath(),
+        metrics::StartupVisibility::kUnknown);
+    variations_service_ = std::make_unique<variations::TestVariationsService>(
+        prefs(), metrics_state_manager_.get());
   }
 
   void SetUp() override {
@@ -133,9 +154,14 @@ class IpProtectionCoreHostTest : public testing::Test {
         net::features::kIpPrivacyTryGetAuthTokensTransientBackoff.Get();
     default_bug_backoff_ =
         net::features::kIpPrivacyTryGetAuthTokensBugBackoff.Get();
+
+    TestingBrowserProcess::GetGlobal()->SetVariationsService(
+        variations_service_.get());
   }
 
   void TearDown() override {
+    TestingBrowserProcess::GetGlobal()->SetVariationsService(nullptr);
+
     // Remove the raw_ptr to the Mock BSA before `core_host_` frees it.
     bsa_ = nullptr;
     host_content_settings_map_->ShutdownOnUIThread();
@@ -167,6 +193,10 @@ class IpProtectionCoreHostTest : public testing::Test {
       } else {
         SetCanUseChromeIpProtectionCapability(true);
       }
+
+      variations_service_->SetIsLikelyDogfoodClientForTesting(
+          primary_account_behavior_ ==
+          PrimaryAccountBehavior::kIneligibleDogfooder);
     }
   }
 
@@ -189,6 +219,7 @@ class IpProtectionCoreHostTest : public testing::Test {
         break;
       case PrimaryAccountBehavior::kUnknownEligibility:
       case PrimaryAccountBehavior::kReturnsToken:
+      case PrimaryAccountBehavior::kIneligibleDogfooder:
         identity_test_env_
             .WaitForAccessTokenRequestIfNecessaryAndRespondWithToken(
                 "access_token", base::Time::Now());
@@ -286,6 +317,12 @@ class IpProtectionCoreHostTest : public testing::Test {
   // quiche::BlindSignAuthInterface owned and used by the sequence bound
   // ip_protection_token_fetcher_ in core_host_.
   raw_ptr<ip_protection::MockBlindSignAuth> bsa_;
+
+  // Variations service and associated values, used to indicate
+  // whether the client is dogfooding.
+  metrics::TestEnabledStateProvider enabled_state_provider_;
+  std::unique_ptr<metrics::MetricsStateManager> metrics_state_manager_;
+  std::unique_ptr<variations::TestVariationsService> variations_service_;
 
   // Default backoff times applied for calculating `try_again_after`.
   base::TimeDelta default_not_eligible_backoff_;
@@ -600,10 +637,50 @@ TEST_F(IpProtectionCoreHostTest, NoPrimary) {
   histogram_tester_.ExpectTotalCount(kTokenBatchHistogram, 0);
 }
 
+// Primary account exists but does not have CanUseChromeIpProtection.
+TEST_F(IpProtectionCoreHostTest, NoCapability) {
+  primary_account_behavior_ = PrimaryAccountBehavior::kIneligible;
+
+  TryGetAuthTokens(1, ip_protection::ProxyLayer::kProxyB);
+
+  EXPECT_FALSE(bsa_->get_tokens_called());
+  ExpectTryGetAuthTokensResultFailed(default_not_eligible_backoff_);
+  histogram_tester_.ExpectUniqueSample(
+      kTryGetAuthTokensResultHistogram,
+      ip_protection::TryGetAuthTokensResult::kFailedNotEligible, 1);
+  histogram_tester_.ExpectTotalCount(kOAuthTokenFetchHistogram, 0);
+  histogram_tester_.ExpectTotalCount(kTokenBatchHistogram, 0);
+}
+
+// Primary account exists, does not have CanUseChromeIpProtection, but is a
+// dogfooder.
+TEST_F(IpProtectionCoreHostTest, NoCapabilityButDogfooder) {
+  primary_account_behavior_ = PrimaryAccountBehavior::kIneligibleDogfooder;
+  bsa_->set_tokens({ip_protection::IpProtectionTokenFetcherHelper::
+                        CreateBlindSignTokenForTesting(
+                            "single-use-1", expiration_time_, geo_hint_)});
+
+  TryGetAuthTokens(1, ip_protection::ProxyLayer::kProxyB);
+
+  EXPECT_TRUE(bsa_->get_tokens_called());
+  EXPECT_EQ(bsa_->proxy_layer(), quiche::ProxyLayer::kProxyB);
+  std::vector<BlindSignedAuthToken> expected;
+  expected.push_back(ip_protection::IpProtectionTokenFetcherHelper::
+                         CreateMockBlindSignedAuthTokenForTesting(
+                             "single-use-1", expiration_time_, geo_hint_)
+                             .value());
+  ExpectTryGetAuthTokensResult(std::move(expected));
+  histogram_tester_.ExpectUniqueSample(
+      kTryGetAuthTokensResultHistogram,
+      ip_protection::TryGetAuthTokensResult::kSuccess, 1);
+  histogram_tester_.ExpectTotalCount(kOAuthTokenFetchHistogram, 1);
+  histogram_tester_.ExpectTotalCount(kTokenBatchHistogram, 1);
+}
+
 // TryGetAuthTokens() fails because IP Protection is disabled by user settings.
 TEST_F(IpProtectionCoreHostTest, TryGetAuthTokens_IpProtectionDisabled) {
   base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitAndEnableFeature(privacy_sandbox::kIpProtectionV1);
+  scoped_feature_list.InitAndEnableFeature(privacy_sandbox::kIpProtectionUx);
 
   primary_account_behavior_ = PrimaryAccountBehavior::kNone;
 
@@ -929,7 +1006,7 @@ TEST_F(IpProtectionCoreHostTest, GetProxyConfigFailure) {
 
 TEST_F(IpProtectionCoreHostTest, GetProxyConfig_IpProtectionDisabled) {
   base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitAndEnableFeature(privacy_sandbox::kIpProtectionV1);
+  scoped_feature_list.InitAndEnableFeature(privacy_sandbox::kIpProtectionUx);
 
   prefs()->SetBoolean(prefs::kIpProtectionEnabled, false);
 
@@ -942,6 +1019,134 @@ TEST_F(IpProtectionCoreHostTest, GetProxyConfig_IpProtectionDisabled) {
 
   EXPECT_EQ(proxy_list, std::nullopt);
   EXPECT_FALSE(geo_hint.has_value());
+}
+
+TEST_F(IpProtectionCoreHostTest, TryGetProbabilisticRevealTokensSuccess) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndEnableFeature(
+      net::features::kEnableIpProtectionProxy);
+  const std::uint64_t expiration =
+      (base::Time::Now() + base::Hours(10)).InSecondsFSinceUnixEpoch();
+  const std::uint64_t next_start =
+      (base::Time::Now() + base::Hours(5)).InSecondsFSinceUnixEpoch();
+  const int32_t num_tokens_with_signal = 3;
+  std::string public_key;
+  ASSERT_TRUE(base::Base64Decode("Aibvzr0O6eNKZpGH4Ys6kSKy9zOUW2Scyfn5Ien52tgS",
+                                 &public_key));
+  std::string response_str;
+  {
+    ip_protection::GetProbabilisticRevealTokenResponse response_proto;
+    for (size_t i = 0; i < 10; ++i) {
+      ip_protection::
+          GetProbabilisticRevealTokenResponse_ProbabilisticRevealToken* token =
+              response_proto.add_tokens();
+      token->set_version(1);
+      token->set_u(std::string(kPRTPointSize, 'u'));
+      token->set_e(std::string(kPRTPointSize, 'e'));
+    }
+    response_proto.mutable_public_key()->set_y(public_key);
+    response_proto.mutable_expiration_time()->set_seconds(expiration);
+    response_proto.mutable_next_epoch_start_time()->set_seconds(next_start);
+    response_proto.set_num_tokens_with_signal(num_tokens_with_signal);
+    response_proto.set_epoch_id(std::string(8, '0'));
+    response_str = response_proto.SerializeAsString();
+  }
+
+  const GURL issuer_server_url =
+      GURL("https://aaftokenissuer.pa.googleapis.com/v1/issueprts");
+  test_url_loader_factory_.SetInterceptor(
+      base::BindLambdaForTesting([&](const network::ResourceRequest& request) {
+        auto head = network::mojom::URLResponseHead::New();
+        test_url_loader_factory_.AddResponse(
+            issuer_server_url, std::move(head), response_str,
+            network::URLLoaderCompletionStatus(net::OK));
+      }));
+
+  base::test::TestFuture<
+      const std::optional<
+          ip_protection::TryGetProbabilisticRevealTokensOutcome>&,
+      const ip_protection::TryGetProbabilisticRevealTokensResult&>
+      future;
+
+  core_host_->TryGetProbabilisticRevealTokens(future.GetCallback());
+  ASSERT_TRUE(future.Wait())
+      << "TryGetProbabilisticRevealTokens did not call back";
+
+  const auto& outcome = future.Get<0>();
+  ASSERT_TRUE(outcome);
+  EXPECT_THAT(outcome->tokens, testing::SizeIs(10));
+  EXPECT_EQ(outcome->tokens[9].u, std::string(kPRTPointSize, 'u'));
+  EXPECT_EQ(outcome->tokens[9].e, std::string(kPRTPointSize, 'e'));
+  EXPECT_EQ(outcome->public_key, public_key);
+  EXPECT_EQ(outcome->expiration_time_seconds, expiration);
+  EXPECT_EQ(outcome->next_epoch_start_time_seconds, next_start);
+  EXPECT_EQ(outcome->num_tokens_with_signal, num_tokens_with_signal);
+
+  const auto& result = std::move(future.Get<1>());
+  EXPECT_EQ(result.status,
+            ip_protection::TryGetProbabilisticRevealTokensStatus::kSuccess);
+  EXPECT_EQ(result.network_error_code, net::OK);
+  EXPECT_EQ(result.try_again_after, std::nullopt);
+}
+
+TEST_F(IpProtectionCoreHostTest,
+       TryGetProbabilisticRevealTokensInvalidPublicKey) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndEnableFeature(
+      net::features::kEnableIpProtectionProxy);
+  const std::uint64_t expiration =
+      (base::Time::Now() + base::Hours(9)).InSecondsFSinceUnixEpoch();
+  const std::uint64_t next_start =
+      (base::Time::Now() + base::Hours(4)).InSecondsFSinceUnixEpoch();
+  const int32_t num_tokens_with_signal = 7;
+  const std::string public_key = "invalid-public-key";
+  std::string response_str;
+  {
+    ip_protection::GetProbabilisticRevealTokenResponse response_proto;
+    for (size_t i = 0; i < 13; ++i) {
+      ip_protection::
+          GetProbabilisticRevealTokenResponse_ProbabilisticRevealToken* token =
+              response_proto.add_tokens();
+      token->set_version(1);
+      token->set_u(std::string(29, 'u'));
+      token->set_e(std::string(29, 'e'));
+    }
+    response_proto.mutable_public_key()->set_y(public_key);
+    response_proto.mutable_expiration_time()->set_seconds(expiration);
+    response_proto.mutable_next_epoch_start_time()->set_seconds(next_start);
+    response_proto.set_num_tokens_with_signal(num_tokens_with_signal);
+    response_str = response_proto.SerializeAsString();
+  }
+
+  const GURL issuer_server_url =
+      GURL("https://aaftokenissuer.pa.googleapis.com/v1/issueprts");
+  test_url_loader_factory_.SetInterceptor(
+      base::BindLambdaForTesting([&](const network::ResourceRequest& request) {
+        auto head = network::mojom::URLResponseHead::New();
+        test_url_loader_factory_.AddResponse(
+            issuer_server_url, std::move(head), response_str,
+            network::URLLoaderCompletionStatus(net::OK));
+      }));
+
+  base::test::TestFuture<
+      const std::optional<
+          ip_protection::TryGetProbabilisticRevealTokensOutcome>&,
+      const ip_protection::TryGetProbabilisticRevealTokensResult&>
+      future;
+
+  core_host_->TryGetProbabilisticRevealTokens(future.GetCallback());
+  ASSERT_TRUE(future.Wait())
+      << "TryGetProbabilisticRevealTokens did not call back";
+
+  const auto& outcome = future.Get<0>();
+  EXPECT_FALSE(outcome);
+
+  const auto& result = std::move(future.Get<1>());
+  EXPECT_EQ(
+      result.status,
+      ip_protection::TryGetProbabilisticRevealTokensStatus::kInvalidPublicKey);
+  EXPECT_EQ(result.network_error_code, net::OK);
+  EXPECT_EQ(result.try_again_after, std::nullopt);
 }
 
 // Do a basic check of the token formats.

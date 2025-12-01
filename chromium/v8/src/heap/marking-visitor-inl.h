@@ -5,6 +5,9 @@
 #ifndef V8_HEAP_MARKING_VISITOR_INL_H_
 #define V8_HEAP_MARKING_VISITOR_INL_H_
 
+#include "src/heap/marking-visitor.h"
+// Include the non-inl header before the rest of the headers.
+
 #include "src/common/globals.h"
 #include "src/heap/ephemeron-remembered-set.h"
 #include "src/heap/heap-layout-inl.h"
@@ -12,7 +15,6 @@
 #include "src/heap/heap-visitor.h"
 #include "src/heap/marking-progress-tracker.h"
 #include "src/heap/marking-state-inl.h"
-#include "src/heap/marking-visitor.h"
 #include "src/heap/marking-worklist-inl.h"
 #include "src/heap/marking.h"
 #include "src/heap/pretenuring-handler-inl.h"
@@ -281,7 +283,9 @@ void MarkingVisitorBase<ConcreteVisitor>::VisitIndirectPointer(
     // alive if necessary. Indirect pointers never have to be added to a
     // remembered set because the referenced object will update the pointer
     // table entry when it is relocated.
-    Tagged<Object> value = slot.Relaxed_Load(heap_->isolate());
+    // The marker might visit objects whose trusted pointers to each other
+    // are not yet or no longer accessible, so we must handle those here.
+    Tagged<Object> value = slot.Relaxed_Load_AllowUnpublished(heap_->isolate());
     if (IsHeapObject(value)) {
       Tagged<HeapObject> obj = Cast<HeapObject>(value);
       SynchronizePageAccess(obj);
@@ -460,7 +464,9 @@ bool MarkingVisitorBase<ConcreteVisitor>::HasBytecodeArrayForFlushing(
 template <typename ConcreteVisitor>
 bool MarkingVisitorBase<ConcreteVisitor>::ShouldFlushCode(
     Tagged<SharedFunctionInfo> sfi) const {
-  return IsStressFlushingEnabled(code_flush_mode_) || IsOld(sfi);
+  // This method is used both for flushing bytecode and baseline code.
+  // During last resort GCs and stress testing we consider all code old.
+  return IsOld(sfi) || V8_UNLIKELY(IsForceFlushingEnabled(code_flush_mode_));
 }
 
 template <typename ConcreteVisitor>
@@ -635,6 +641,7 @@ template <typename ConcreteVisitor>
 size_t MarkingVisitorBase<ConcreteVisitor>::VisitEphemeronHashTable(
     Tagged<Map> map, Tagged<EphemeronHashTable> table, MaybeObjectSize) {
   local_weak_objects_->ephemeron_hash_tables_local.Push(table);
+  const bool use_key_to_values = key_to_values_ != nullptr;
 
   for (InternalIndex i : table->IterateEntries()) {
     ObjectSlot key_slot =
@@ -674,8 +681,13 @@ size_t MarkingVisitorBase<ConcreteVisitor>::VisitEphemeronHashTable(
         // Revisit ephemerons with both key and value unreachable at end
         // of concurrent marking cycle.
         if (concrete_visitor()->marking_state()->IsUnmarked(value)) {
-          local_weak_objects_->discovered_ephemerons_local.Push(
-              Ephemeron{key, value});
+          if (V8_LIKELY(!use_key_to_values)) {
+            local_weak_objects_->next_ephemerons_local.Push(
+                Ephemeron{key, value});
+          } else {
+            auto it = key_to_values_->try_emplace(key).first;
+            it->second.push_back(value);
+          }
         }
       }
     }

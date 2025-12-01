@@ -19,12 +19,12 @@ use_gn_unique_name = os.access(os.path.join(sourcedir, ".enable_gn_unique_name")
 use_gn_reclient = os.access(os.path.join(sourcedir, ".enable_gn_reclient"), os.F_OK)
 
 # Check python version
-try:
-  if is_windows:
-    import check_python
-    check_python.CheckPythonInstall()
-except:
-  pass
+#try:
+#  if is_windows:
+#    import check_python
+#    check_python.CheckPythonInstall()
+#except:
+#  pass
 
 GN_env = dict(os.environ)
 
@@ -72,6 +72,7 @@ checkout_google_benchmark=false
 checkout_ios_webkit=false
 generate_location_tags = false
 checkout_src_internal = false
+checkout_mutter = false
 """
 
 gclient_gni_file_name = os.path.join(sourcedir, "chromium/build/config/gclient_args.gni")

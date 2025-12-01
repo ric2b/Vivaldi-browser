@@ -8,6 +8,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <variant>
 #include <vector>
 
 #include "base/containers/flat_map.h"
@@ -15,7 +16,6 @@
 #include "base/sequence_checker.h"
 #include "components/policy/policy_export.h"
 #include "components/prefs/persistent_pref_store.h"
-#include "third_party/abseil-cpp/absl/types/variant.h"
 
 // For more imformation about this file please read
 // //components/policy/core/common/management/management_service.md
@@ -31,6 +31,10 @@ namespace policy {
 
 class ManagementService;
 
+// These values are persisted to logs. Entries should not be renumbered and
+// numeric values should never be reused.
+//
+// LINT.IfChange(ManagementAuthorityTrustworthiness)
 enum class ManagementAuthorityTrustworthiness {
   NONE = 0,           // No management authority found
   LOW = 1,            // Local device management authority
@@ -39,6 +43,7 @@ enum class ManagementAuthorityTrustworthiness {
                       // ChromeOS
   kMaxValue = FULLY_TRUSTED
 };
+// LINT.ThenChange(//tools/metrics/histograms/enums.xml:ManagementAuthorityTrustworthiness)
 
 enum EnterpriseManagementAuthority : int {
   NONE = 0,
@@ -85,7 +90,7 @@ class POLICY_EXPORT ManagementStatusProvider {
   const std::string& cache_pref_name() const { return cache_pref_name_; }
 
  private:
-  absl::variant<PrefService*, scoped_refptr<PersistentPrefStore>> cache_ =
+  std::variant<PrefService*, scoped_refptr<PersistentPrefStore>> cache_ =
       nullptr;
   const std::string cache_pref_name_;
 };

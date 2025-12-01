@@ -163,7 +163,7 @@ GlanceablesClassroomStudentView::GlanceablesClassroomStudentView()
   empty_list_label_ = content_scroll_view()->contents()->AddChildView(
       views::Builder<views::Label>()
           .SetProperty(views::kMarginsKey, kEmptyListLabelMargins)
-          .SetEnabledColorId(cros_tokens::kCrosSysOnSurface)
+          .SetEnabledColor(cros_tokens::kCrosSysOnSurface)
           .SetFontList(typography_provider->ResolveTypographyToken(
               TypographyToken::kCrosButton2))
           .SetLineHeight(typography_provider->ResolveLineHeight(
@@ -386,7 +386,7 @@ void GlanceablesClassroomStudentView::OnGetAssignments(
   items_container_view()->GetViewAccessibility().SetName(
       l10n_util::GetStringFUTF16(
           IDS_GLANCEABLES_CLASSROOM_SELECTED_LIST_ACCESSIBLE_NAME, list_name));
-  items_container_view()->NotifyAccessibilityEvent(
+  items_container_view()->NotifyAccessibilityEventDeprecated(
       ax::mojom::Event::kChildrenChanged,
       /*send_native_event=*/true);
 

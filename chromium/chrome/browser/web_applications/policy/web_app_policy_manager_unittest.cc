@@ -25,7 +25,6 @@
 #include "base/test/test_future.h"
 #include "base/values.h"
 #include "build/build_config.h"
-#include "build/chromeos_buildflags.h"
 #include "chrome/browser/web_applications/external_install_options.h"
 #include "chrome/browser/web_applications/externally_managed_app_manager.h"
 #include "chrome/browser/web_applications/mojom/user_display_mode.mojom.h"
@@ -61,22 +60,19 @@
 #include "third_party/skia/include/core/SkColor.h"
 #include "url/gurl.h"
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
 #include "ash/constants/ash_features.h"
 #include "ash/constants/ash_pref_names.h"
 #include "ash/constants/ash_switches.h"
 #include "base/test/scoped_command_line.h"
-#include "chrome/browser/ash/crosapi/browser_util.h"
 #include "chrome/browser/ash/login/users/fake_chrome_user_manager.h"
 #include "chrome/browser/ash/profiles/profile_helper.h"
 #include "chrome/browser/ash/system_web_apps/test_support/test_system_web_app_manager.h"
-#include "components/user_manager/scoped_user_manager.h"
-#include "components/user_manager/user_names.h"
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
-
-#if BUILDFLAG(IS_CHROMEOS)
 #include "chrome/browser/policy/system_features_disable_list_policy_handler.h"
 #include "components/policy/core/common/policy_pref_names.h"
+#include "components/user_manager/scoped_user_manager.h"
+#include "components/user_manager/test_helper.h"
+#include "components/user_manager/user_names.h"
 #endif  // BUILDFLAG(IS_CHROMEOS)
 
 #if BUILDFLAG(IS_WIN)
@@ -356,8 +352,7 @@ class WebAppPolicyManagerTestBase : public ChromeRenderViewHostTestHarness {
   ~WebAppPolicyManagerTestBase() override = default;
 
   void SetUp() override {
-#if BUILDFLAG(IS_CHROMEOS_ASH)
-    // Set up user manager to so that Lacros mode can be enabled.
+#if BUILDFLAG(IS_CHROMEOS)
     // Need to run the ChromeRenderViewHostTestHarness::SetUp() after the fake
     // user manager set up so that the scoped_user_manager can be destructed in
     // the correct order.
@@ -367,11 +362,11 @@ class WebAppPolicyManagerTestBase : public ChromeRenderViewHostTestHarness {
     auto* fake_user_manager = user_manager.get();
     scoped_user_manager_ = std::make_unique<user_manager::ScopedUserManager>(
         std::move(user_manager));
-    auto* user = fake_user_manager->AddUser(user_manager::StubAccountId());
-    fake_user_manager->UserLoggedIn(user_manager::StubAccountId(),
-                                    user->username_hash(),
-                                    /*browser_restart=*/false,
-                                    /*is_child=*/false);
+    fake_user_manager->AddUser(user_manager::StubAccountId());
+    fake_user_manager->UserLoggedIn(
+        user_manager::StubAccountId(),
+        user_manager::TestHelper::GetFakeUsernameHash(
+            user_manager::StubAccountId()));
 #endif
 
     ChromeRenderViewHostTestHarness::SetUp();
@@ -379,7 +374,7 @@ class WebAppPolicyManagerTestBase : public ChromeRenderViewHostTestHarness {
 
     auto fake_externally_managed_app_manager =
         std::make_unique<FakeExternallyManagedAppManager>(profile());
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
     test_system_app_manager_ =
         std::make_unique<ash::TestSystemWebAppManager>(profile());
 #endif
@@ -430,7 +425,7 @@ class WebAppPolicyManagerTestBase : public ChromeRenderViewHostTestHarness {
               return webapps::UninstallResultCode::kAppRemoved;
             }));
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
     web_app_policy_manager_->SetSystemWebAppDelegateMap(
         &system_app_manager().system_app_delegates());
 #endif
@@ -440,7 +435,7 @@ class WebAppPolicyManagerTestBase : public ChromeRenderViewHostTestHarness {
 
   void TearDown() override {
     provider_->Shutdown();
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
     test_system_app_manager_.reset();
 #endif
     ChromeRenderViewHostTestHarness::TearDown();
@@ -470,7 +465,7 @@ class WebAppPolicyManagerTestBase : public ChromeRenderViewHostTestHarness {
     web_app::test::InstallWebApp(profile(), std::move(web_app_info));
   }
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
   ash::TestSystemWebAppManager& system_app_manager() {
     return *test_system_app_manager_;
   }
@@ -542,7 +537,7 @@ class WebAppPolicyManagerTestBase : public ChromeRenderViewHostTestHarness {
   base::ScopedPathOverride override_start_dir_{base::DIR_START_MENU};
 #endif  // BUILDFLAG(IS_WIN)
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
   std::unique_ptr<ash::TestSystemWebAppManager> test_system_app_manager_;
   std::unique_ptr<user_manager::ScopedUserManager> scoped_user_manager_;
 #endif
@@ -1188,7 +1183,7 @@ TEST_F(WebAppPolicyManagerTest, InvalidUrlParsingSkipped) {
   EXPECT_EQ(0u, install_requests.size());
 }
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
 TEST_F(WebAppPolicyManagerTest, DisableSystemWebApps) {
   auto disabled_apps = policy_manager().GetDisabledSystemWebApps();
   EXPECT_TRUE(disabled_apps.empty());
@@ -1234,7 +1229,7 @@ TEST_F(WebAppPolicyManagerTest, DisableSystemWebApps) {
   base::RunLoop().RunUntilIdle();
   EXPECT_TRUE(policy_manager().IsDisabledAppsModeHidden());
 }
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+#endif  // BUILDFLAG(IS_CHROMEOS)
 
 TEST_F(WebAppPolicyManagerTest, WebAppSettingsDynamicRefresh) {
   const char kWebAppSettingInitialConfiguration[] = R"([
@@ -1368,7 +1363,7 @@ TEST_F(WebAppPolicyManagerTest, WebAppSettingsForceInstallNewApps) {
   app_registrar().RemoveObserver(&mock_observer);
 }
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
 class WebAppPolicyManagerWithGraduationTest
     : public WebAppPolicyManagerTestBase {
  public:
@@ -1445,7 +1440,7 @@ TEST_F(WebAppPolicyManagerWithBocaTest,
   app_registrar().RemoveObserver(&mock_observer);
 }
 
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+#endif  // BUILDFLAG(IS_CHROMEOS)
 
 class WebAppPolicyManagerPreventCloseTest
     : public WebAppPolicyManagerTestBase,

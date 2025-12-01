@@ -11,7 +11,6 @@
 #include "base/strings/escape.h"
 #include "base/strings/string_util.h"
 #include "build/build_config.h"
-#include "build/chromeos_buildflags.h"
 #include "chrome/browser/feedback/feedback_dialog_utils.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
@@ -23,8 +22,9 @@
 #include "components/prefs/pref_service.h"
 #include "components/signin/public/base/consent_level.h"
 #include "extensions/browser/api/feedback_private/feedback_private_api.h"
+#include "third_party/re2/src/re2/re2.h"
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
 #include "ash/webui/os_feedback_ui/url_constants.h"
 #include "ash/webui/system_apps/public/system_web_app_type.h"
 #include "base/functional/bind.h"
@@ -43,19 +43,21 @@ namespace chrome {
 
 namespace {
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
 constexpr char kExtraDiagnosticsQueryParam[] = "extra_diagnostics";
 constexpr char kDescriptionTemplateQueryParam[] = "description_template";
 constexpr char kDescriptionPlaceholderQueryParam[] =
     "description_placeholder_text";
 constexpr char kFromAssistantQueryParam[] = "from_assistant";
 constexpr char kSettingsSearchFeedbackQueryParam[] = "from_settings_search";
+constexpr char kIsQueryFingerprint[] = "is_query_fingerprint";
 constexpr char kCategoryTagParam[] = "category_tag";
 constexpr char kPageURLParam[] = "page_url";
 constexpr char kQueryParamSeparator[] = "&";
 constexpr char kQueryParamKeyValueSeparator[] = "=";
 constexpr char kFromAssistantQueryParamValue[] = "true";
 constexpr char kSettingsSearchFeedbackQueryParamValue[] = "true";
+constexpr char kIsQueryFingerprintValue[] = "true";
 constexpr char kFromAutofillQueryParam[] = "from_autofill";
 constexpr char kFromAutofillParamValue[] = "true";
 constexpr char kAutofillMetadataQueryParam[] = "autofill_metadata";
@@ -85,6 +87,14 @@ GURL BuildFeedbackUrl(const std::string& extra_diagnostics,
   if (!description_template.empty()) {
     query_params.emplace_back(
         StrCatQueryParam(kDescriptionTemplateQueryParam, description_template));
+
+    // If the user has queried for "fingerprint" in Settings app, we want to
+    // check the 'Send system & app info and metrics' checkbox in the feedback
+    // dialog.
+    if (re2::RE2::PartialMatch(description_template, "fingerprint")) {
+      query_params.emplace_back(
+          StrCatQueryParam(kIsQueryFingerprint, kIsQueryFingerprintValue));
+    }
   }
 
   if (!description_placeholder_text.empty()) {
@@ -169,7 +179,7 @@ bool IsFromUserInteraction(feedback::FeedbackSource source) {
   }
 }
 
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+#endif  // BUILDFLAG(IS_CHROMEOS)
 
 feedback_private::FeedbackFlow GetFeedbackFlowFromSource(
     feedback::FeedbackSource source) {
@@ -198,7 +208,7 @@ void RequestFeedbackFlow(const GURL& page_url,
   feedback_private::FeedbackFlow flow = GetFeedbackFlowFromSource(source);
   bool include_bluetooth_logs = false;
   bool show_questionnaire = false;
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
   // TODO(crbug.com/40941303) Support ChromeOS feedback dialog for
   // `kFeedbackSourceAI`.
   if (source != feedback::kFeedbackSourceAI) {
@@ -220,7 +230,7 @@ void RequestFeedbackFlow(const GURL& page_url,
       return;
     }
   }
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+#endif  // BUILDFLAG(IS_CHROMEOS)
 
   extensions::FeedbackPrivateAPI* api =
       extensions::FeedbackPrivateAPI::GetFactoryInstance()->Get(profile);

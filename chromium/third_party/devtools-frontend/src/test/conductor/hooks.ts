@@ -4,9 +4,7 @@
 
 /* eslint-disable no-console */
 
-// use require here due to
-// https://github.com/evanw/esbuild/issues/587#issuecomment-901397213
-import puppeteer = require('puppeteer-core');
+import * as puppeteer from 'puppeteer-core';
 
 import {
   dumpCollectedErrors,
@@ -14,26 +12,19 @@ import {
   setupBrowserProcessIO,
 } from './events.js';
 import {
+  type DevToolsFrontendReloadOptions,
   DevToolsFrontendTab,
   loadEmptyPageAndWaitForContent,
-  type DevToolsFrontendReloadOptions,
 } from './frontend_tab.js';
 import {
   clearPuppeteerState,
   getBrowserAndPages,
   registerHandlers,
   setBrowserAndPages,
-  setTestServerPort,
 } from './puppeteer-state.js';
+import {setTestServerPort} from './server_port.js';
 import {TargetTab} from './target_tab.js';
 import {TestConfig} from './test_config.js';
-
-// Workaround for mismatching versions of puppeteer types and puppeteer library.
-declare module 'puppeteer-core' {
-  interface ConsoleMessage {
-    stackTrace(): ConsoleMessageLocation[];
-  }
-}
 
 const viewportWidth = 1280;
 const viewportHeight = 720;
@@ -64,6 +55,7 @@ const envChromeFeatures = process.env['CHROME_FEATURES'];
 
 function launchChrome() {
   // Use port 0 to request any free port.
+  // LINT.IfChange(features)
   const enabledFeatures = [
     'Portals',
     'PortalsCrossOrigin',
@@ -73,14 +65,13 @@ function launchChrome() {
     'PrivacySandboxAdsAPIsOverride',
     'AutofillEnableDevtoolsIssues',
   ];
-
   const disabledFeatures = [
-    'DeferRendererTasksAfterInput',                // crbug.com/361078921
     'PMProcessPriorityPolicy',                     // crbug.com/361252079
     'MojoChannelAssociatedSendUsesRunOrPostTask',  // crbug.com/376228320
     'RasterInducingScroll',                        // crbug.com/381055647
     'CompositeBackgroundColorAnimation',           // crbug.com/381055647
   ];
+  // LINT.ThenChange(/test/e2e_non_hosted/shared/browser-helper.ts:features)
   const launchArgs = [
     '--remote-allow-origins=*',
     '--remote-debugging-port=0',
@@ -91,6 +82,10 @@ function launchChrome() {
     '--site-per-process',  // Default on Desktop anyway, but ensure that we always use out-of-process frames when we intend to.
     '--host-resolver-rules=MAP *.test 127.0.0.1',
     '--disable-gpu',
+    '--disable-font-subpixel-positioning',
+    '--disable-lcd-text',
+    '--force-device-scale-factor=1',
+    '--hide-scrollbars',
     '--enable-blink-features=CSSContainerQueries,HighlightInheritance',  // TODO(crbug.com/1218390) Remove globally enabled flags and conditionally enable them
     '--disable-blink-features=WebAssemblyJSPromiseIntegration',  // TODO(crbug.com/325123665) Remove once heap snapshots work again with JSPI
     `--disable-features=${disabledFeatures.join(',')}`,
@@ -108,7 +103,7 @@ function launchChrome() {
 
   // Always set the default viewport because setting only the window size for
   // headful mode would result in much smaller actual viewport.
-  opts.defaultViewport = {width: viewportWidth, height: viewportHeight};
+  opts.defaultViewport = {width: viewportWidth, height: viewportHeight, deviceScaleFactor: 1};
   // Toggle either viewport or window size depending on headless vs not.
   if (!headless) {
     launchArgs.push(`--window-size=${windowWidth},${windowHeight}`);
@@ -212,10 +207,11 @@ async function throttleCPUIfRequired(page: puppeteer.Page): Promise<void> {
     return;
   }
   console.log(`Throttling CPU: ${envThrottleRate}x slowdown`);
-  const client = await page.target().createCDPSession();
+  const client = await page.createCDPSession();
   await client.send('Emulation.setCPUThrottlingRate', {
     rate: envThrottleRate,
   });
+  await client.detach();
 }
 
 export async function reloadDevTools(options?: DevToolsFrontendReloadOptions) {

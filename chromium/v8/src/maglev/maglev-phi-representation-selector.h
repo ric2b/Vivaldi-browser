@@ -29,7 +29,8 @@ class MaglevPhiRepresentationSelector {
   explicit MaglevPhiRepresentationSelector(MaglevGraphBuilder* builder)
       : builder_(builder),
         phi_taggings_(builder->zone()),
-        predecessors_(builder->zone()) {}
+        predecessors_(builder->zone()),
+        new_nodes_at_start_(builder->zone()) {}
 
   void PreProcessGraph(Graph* graph) {
     if (v8_flags.trace_maglev_phi_untagging) {
@@ -42,6 +43,7 @@ class MaglevPhiRepresentationSelector {
     }
   }
   BlockProcessResult PreProcessBasicBlock(BasicBlock* block);
+  void PostProcessBasicBlock(BasicBlock* block);
   void PostPhiProcessing() {}
 
   enum ProcessPhiResult { kNone, kRetryOnChange, kChanged };
@@ -80,6 +82,10 @@ class MaglevPhiRepresentationSelector {
   // updates {phi}'s representation to {repr}.
   void ConvertTaggedPhiTo(Phi* phi, ValueRepresentation repr,
                           const HoistTypeList& hoist_untagging);
+  template <class NodeT>
+  ValueNode* GetReplacementForPhiInputConversion(ValueNode* conversion_node,
+                                                 Phi* phi,
+                                                 uint32_t input_index);
 
   // Since this pass changes the representation of Phis, it makes some untagging
   // operations outdated: if we've decided that a Phi should have Int32
@@ -105,17 +111,6 @@ class MaglevPhiRepresentationSelector {
       }
     } else {
       result = UpdateNonUntaggingNodeInputs(n, state);
-    }
-
-    // It's important to check the properties of {node} rather than the static
-    // properties of `NodeT`, because `UpdateUntaggingOfPhi` could have changed
-    // the opcode of {node}, potentially converting a deopting node into a
-    // non-deopting one.
-    if (node->properties().can_eager_deopt()) {
-      BypassIdentities(node->eager_deopt_info());
-    }
-    if (node->properties().can_lazy_deopt()) {
-      BypassIdentities(node->lazy_deopt_info());
     }
 
     return result;
@@ -201,10 +196,6 @@ class MaglevPhiRepresentationSelector {
   // been updated to Identity, FixLoopPhisBackedge unwraps those Identity.
   void FixLoopPhisBackedge(BasicBlock* block);
 
-  // Replaces Identity nodes by their inputs in {deopt_info}
-  template <typename DeoptInfoT>
-  void BypassIdentities(DeoptInfoT* deopt_info);
-
   void PreparePhiTaggings(BasicBlock* old_block, const BasicBlock* new_block);
 
   MaglevGraphLabeller* graph_labeller() const {
@@ -222,6 +213,10 @@ class MaglevPhiRepresentationSelector {
   // {predecessors_} is used during merging, but we use an instance variable for
   // it, in order to save memory and not reallocate it for each merge.
   ZoneVector<Snapshot> predecessors_;
+
+  ZoneVector<Node*> new_nodes_at_start_;
+
+  absl::flat_hash_map<BasicBlock::Id, Snapshot> snapshots_;
 
 #ifdef DEBUG
   std::unordered_set<NodeBase*> new_nodes_;

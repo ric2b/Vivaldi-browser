@@ -1340,7 +1340,10 @@ public class LocationBarMediatorTest {
 
         verify(mLocationBarTablet).setMicButtonVisibility(false);
         verify(mLocationBarTablet).setBookmarkButtonVisibility(true);
-        verify(mLocationBarTablet).setSaveOfflineButtonVisibility(true, true);
+
+        boolean showDownloadButton =
+                !ChromeFeatureList.sHideTabletToolbarDownloadButton.isEnabled();
+        verify(mLocationBarTablet).setSaveOfflineButtonVisibility(showDownloadButton, true);
     }
 
     @Test
@@ -1365,6 +1368,17 @@ public class LocationBarMediatorTest {
         mTabletMediator.updateButtonVisibility();
 
         verify(mLocationBarTablet).setSaveOfflineButtonVisibility(false, true);
+    }
+
+    @Test
+    @DisableFeatures({ChromeFeatureList.HIDE_TABLET_TOOLBAR_DOWNLOAD_BUTTON})
+    public void testSaveOfflineButtonVisibility_showSaveOfflineButton() {
+        doReturn(mTab).when(mLocationBarDataProvider).getTab();
+        mTabletMediator.onFinishNativeInitialization();
+        Mockito.reset(mLocationBarTablet);
+        mTabletMediator.updateButtonVisibility();
+
+        verify(mLocationBarTablet).setSaveOfflineButtonVisibility(true, true);
     }
 
     public void testRecordHistogramOmniboxClick_Ntp_base() {
@@ -1515,6 +1529,19 @@ public class LocationBarMediatorTest {
         mMediator.onResumeWithNative();
         assertEquals(2, sGeoHeaderPrimeCount);
         assertEquals(1, sGeoHeaderStopCount);
+    }
+
+    @Test
+    public void testDeleteButtonClicked() {
+        mMediator.onFinishNativeInitialization();
+        mMediator.deleteButtonClicked(null);
+
+        verify(mUrlCoordinator)
+                .setUrlBarData(
+                        UrlBarData.EMPTY,
+                        UrlBar.ScrollType.SCROLL_TO_BEGINNING,
+                        SelectionState.SELECT_ALL);
+        verify(mUrlCoordinator).requestAccessibilityFocus();
     }
 
     private ArgumentMatcher<UrlBarData> matchesUrlBarDataForQuery(String query) {

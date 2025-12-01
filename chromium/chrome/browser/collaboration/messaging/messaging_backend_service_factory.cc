@@ -18,6 +18,7 @@
 #include "components/collaboration/internal/messaging/configuration.h"
 #include "components/collaboration/internal/messaging/data_sharing_change_notifier_impl.h"
 #include "components/collaboration/internal/messaging/empty_messaging_backend_service.h"
+#include "components/collaboration/internal/messaging/instant_message_processor_impl.h"
 #include "components/collaboration/internal/messaging/messaging_backend_service_impl.h"
 #include "components/collaboration/internal/messaging/storage/empty_messaging_backend_database.h"
 #include "components/collaboration/internal/messaging/storage/messaging_backend_database_impl.h"
@@ -66,8 +67,7 @@ MessagingBackendServiceFactory::BuildServiceInstanceForBrowserContext(
 
   // This service requires the data sharing and tab group sync service features
   // to be enabled.
-  if (!base::FeatureList::IsEnabled(
-          data_sharing::features::kDataSharingFeature) ||
+  if (!data_sharing::features::IsDataSharingFunctionalityEnabled() ||
       !tab_groups::IsTabGroupSyncEnabled(profile->GetPrefs()) ||
       !base::FeatureList::IsEnabled(
           collaboration::features::kCollaborationMessaging)) {
@@ -79,8 +79,8 @@ MessagingBackendServiceFactory::BuildServiceInstanceForBrowserContext(
   auto* data_sharing_service =
       data_sharing::DataSharingServiceFactory::GetForProfile(profile);
   auto* identity_manager = IdentityManagerFactory::GetForProfile(profile);
-  auto tab_group_change_notifier =
-      std::make_unique<TabGroupChangeNotifierImpl>(tab_group_sync_service);
+  auto tab_group_change_notifier = std::make_unique<TabGroupChangeNotifierImpl>(
+      tab_group_sync_service, identity_manager);
   auto data_sharing_change_notifier =
       std::make_unique<DataSharingChangeNotifierImpl>(data_sharing_service);
 
@@ -96,6 +96,8 @@ MessagingBackendServiceFactory::BuildServiceInstanceForBrowserContext(
 
   auto messaging_backend_store = std::make_unique<MessagingBackendStoreImpl>(
       std::move(messaging_backend_database));
+  auto instant_message_processor =
+      std::make_unique<InstantMessageProcessorImpl>();
 
   // This configuration object allows us to control platform specific behavior.
   MessagingBackendConfiguration configuration;
@@ -107,8 +109,8 @@ MessagingBackendServiceFactory::BuildServiceInstanceForBrowserContext(
   auto service = std::make_unique<MessagingBackendServiceImpl>(
       configuration, std::move(tab_group_change_notifier),
       std::move(data_sharing_change_notifier),
-      std::move(messaging_backend_store), tab_group_sync_service,
-      data_sharing_service, identity_manager);
+      std::move(messaging_backend_store), std::move(instant_message_processor),
+      tab_group_sync_service, data_sharing_service, identity_manager);
 
   return std::move(service);
 }

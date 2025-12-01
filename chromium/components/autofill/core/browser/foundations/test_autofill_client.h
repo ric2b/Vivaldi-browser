@@ -24,7 +24,7 @@
 #include "components/autofill/core/browser/crowdsourcing/autofill_crowdsourcing_manager.h"
 #include "components/autofill/core/browser/crowdsourcing/mock_autofill_crowdsourcing_manager.h"
 #include "components/autofill/core/browser/crowdsourcing/test_votes_uploader.h"
-#include "components/autofill/core/browser/data_manager/entities/test_entity_data_manager.h"
+#include "components/autofill/core/browser/data_manager/autofill_ai/entity_data_manager.h"
 #include "components/autofill/core/browser/data_manager/test_personal_data_manager.h"
 #include "components/autofill/core/browser/data_quality/addresses/test_address_normalizer.h"
 #include "components/autofill/core/browser/foundations/autofill_client.h"
@@ -33,13 +33,14 @@
 #include "components/autofill/core/browser/integrators/mock_autofill_ai_delegate.h"
 #include "components/autofill/core/browser/integrators/mock_autofill_optimization_guide.h"
 #include "components/autofill/core/browser/integrators/mock_fast_checkout_client.h"
+#include "components/autofill/core/browser/integrators/valuables/mock_valuable_manager.h"
 #include "components/autofill/core/browser/logging/log_manager.h"
 #include "components/autofill/core/browser/logging/log_router.h"
 #include "components/autofill/core/browser/logging/text_log_receiver.h"
 #include "components/autofill/core/browser/metrics/autofill_metrics.h"
 #include "components/autofill/core/browser/metrics/form_interactions_ukm_logger.h"
-#include "components/autofill/core/browser/payments/local_card_migration_manager.h"
 #include "components/autofill/core/browser/payments/test_payments_autofill_client.h"
+#include "components/autofill/core/browser/permissions/autofill_ai/autofill_ai_permission_utils.h"
 #include "components/autofill/core/browser/single_field_fillers/autocomplete/mock_autocomplete_history_manager.h"
 #include "components/autofill/core/browser/single_field_fillers/payments/mock_merchant_promo_code_manager.h"
 #include "components/autofill/core/browser/single_field_fillers/single_field_fill_router.h"
@@ -53,8 +54,13 @@
 #include "components/autofill/core/common/autofill_features.h"
 #include "components/autofill/core/common/autofill_prefs.h"
 #include "components/device_reauth/mock_device_authenticator.h"
+#include "components/optimization_guide/core/feature_registry/feature_registration.h"
+#include "components/optimization_guide/core/model_execution/model_execution_prefs.h"
 #include "components/optimization_guide/machine_learning_tflite_buildflags.h"
+#include "components/pref_registry/pref_registry_syncable.h"
+#include "components/prefs/pref_registry.h"
 #include "components/prefs/pref_service.h"
+#include "components/signin/public/identity_manager/account_capabilities_test_mutator.h"
 #include "components/signin/public/identity_manager/identity_test_environment.h"
 #include "components/translate/core/browser/language_state.h"
 #include "components/translate/core/browser/mock_translate_driver.h"
@@ -136,11 +142,9 @@ class TestAutofillClientTemplate : public T {
   }
 
   EntityDataManager* GetEntityDataManager() override {
-    if (!test_entity_data_manager_ &&
-        base::FeatureList::IsEnabled(features::kAutofillAiWithDataSchema)) {
-      test_entity_data_manager_ = std::make_unique<TestEntityDataManager>();
-    }
-    return test_entity_data_manager_.get();
+    return entity_data_manager_non_owning_
+               ? entity_data_manager_non_owning_.get()
+               : entity_data_manager_.get();
   }
 
   MockAutofillOptimizationGuide* GetAutofillOptimizationGuide() const override {
@@ -210,6 +214,13 @@ class TestAutofillClientTemplate : public T {
           std::make_unique<payments::TestPaymentsAutofillClient>(this);
     }
     return payments_autofill_client_.get();
+  }
+
+  MockValuableManager* GetValuableManager() override {
+    if (!valuable_manager_) {
+      valuable_manager_ = std::make_unique<MockValuableManager>();
+    }
+    return valuable_manager_.get();
   }
 
   TestStrikeDatabase* GetStrikeDatabase() override {
@@ -449,9 +460,45 @@ class TestAutofillClientTemplate : public T {
     }
   }
 
+  // Sets up prefs and identity state to simulate an opted-in AutofillAI user.
+  // Returns `true` iff the setup was successful.
+  bool SetUpPrefsAndIdentityForAutofillAi() {
+    SetAutofillProfileEnabled(true);
+    GetPrefs()->registry()->RegisterIntegerPref(
+        optimization_guide::prefs::
+            kAutofillPredictionImprovementsEnterprisePolicyAllowed,
+        base::to_underlying(optimization_guide::model_execution::prefs::
+                                ModelExecutionEnterprisePolicyValue::kAllow),
+        PrefRegistry::LOSSY_PREF);
+
+    identity_test_environment().MakePrimaryAccountAvailable(
+        "foo@gmail.com", signin::ConsentLevel::kSignin);
+    SetCanUseModelExecutionFeatures(true);
+    SetVariationConfigCountryCode(GeoIpCountryCode("US"));
+    return SetAutofillAiOptInStatus(*this, true);
+  }
+
+  // Updates whether the currently signed in primary account can use model
+  // execution features. CHECKs that there is a primary account.
+  void SetCanUseModelExecutionFeatures(bool can_use_model_execution) {
+    AccountInfo account_info = GetIdentityManager()->FindExtendedAccountInfo(
+        GetIdentityManager()->GetPrimaryAccountInfo(
+            signin::ConsentLevel::kSignin));
+    CHECK(!account_info.account_id.empty());
+    AccountCapabilitiesTestMutator(&account_info.capabilities)
+        .set_can_use_model_execution_features(can_use_model_execution);
+    signin::UpdateAccountInfoForAccount(GetIdentityManager(), account_info);
+  }
+
   void set_entity_data_manager(
-      std::unique_ptr<TestEntityDataManager> test_entity_data_manager) {
-    test_entity_data_manager_ = std::move(test_entity_data_manager);
+      std::unique_ptr<EntityDataManager> entity_data_manager) {
+    entity_data_manager_non_owning_ = nullptr;
+    entity_data_manager_ = std::move(entity_data_manager);
+  }
+
+  void set_entity_data_manager(EntityDataManager* entity_data_manager) {
+    entity_data_manager_.reset();
+    entity_data_manager_non_owning_ = entity_data_manager;
   }
 
   void set_payments_autofill_client(
@@ -572,13 +619,15 @@ class TestAutofillClientTemplate : public T {
   std::unique_ptr<TestStrikeDatabase> test_strike_database_;
 
   std::unique_ptr<TestPersonalDataManager> test_personal_data_manager_;
-  std::unique_ptr<TestEntityDataManager> test_entity_data_manager_;
+  std::unique_ptr<EntityDataManager> entity_data_manager_;
+  raw_ptr<EntityDataManager> entity_data_manager_non_owning_ = nullptr;
   // The below objects must be destroyed before `TestPersonalDataManager`
   // because they keep a reference to it.
   std::unique_ptr<payments::TestPaymentsAutofillClient>
       payments_autofill_client_;
   std::unique_ptr<SingleFieldFillRouter> single_field_fill_router_;
   std::unique_ptr<FormDataImporter> form_data_importer_;
+  std::unique_ptr<MockValuableManager> valuable_manager_;
 
   GeoIpCountryCode variation_config_country_code_;
 
@@ -608,8 +657,6 @@ class TestAutofillClientTemplate : public T {
 
   // Test addresses used to allow developers to test their forms.
   std::vector<AutofillProfile> test_addresses_;
-
-  std::vector<std::string> migration_card_selection_;
 
   std::vector<Suggestion> suggestions_;
 

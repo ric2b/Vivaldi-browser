@@ -21,6 +21,7 @@
 
 #include "absl/flags/flag.h"
 #include "absl/flags/parse.h"
+#include "absl/log/check.h"
 #include "absl/strings/string_view.h"
 #include "google/protobuf/util/json_util.h"
 #include "quic_trace/quic_trace.pb.h"
@@ -71,7 +72,11 @@ void OutputTrace(const quic_trace::Trace& trace) {
   std::string output;
   JsonPrintOptions options;
   options.add_whitespace = absl::GetFlag(FLAGS_whitespace);
-  MessageToJsonString(trace, &output, options);
+  auto status = MessageToJsonString(trace, &output, options);
+  if (!status.ok()) {
+    std::cerr << "Error serializing to JSON: " << status;
+    return;
+  }
   std::cout << output;
 }
 

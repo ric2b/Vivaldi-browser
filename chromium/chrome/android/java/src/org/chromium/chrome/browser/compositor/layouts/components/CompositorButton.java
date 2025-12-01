@@ -13,7 +13,7 @@ import androidx.annotation.Nullable;
 
 import org.chromium.chrome.browser.compositor.overlays.strip.StripLayoutView;
 import org.chromium.chrome.browser.compositor.overlays.strip.TooltipManager;
-import org.chromium.ui.MotionEventUtils;
+import org.chromium.ui.util.MotionEventUtils;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
@@ -84,7 +84,7 @@ public class CompositorButton extends StripLayoutView {
             float height,
             StripLayoutViewOnClickHandler clickHandler,
             float clickSlopDp) {
-        super(false, clickHandler);
+        super(false, clickHandler, context);
         mDrawBounds.set(0, 0, width, height);
 
         mType = type;
@@ -194,11 +194,11 @@ public class CompositorButton extends StripLayoutView {
 
     /**
      * @param state The pressed state of the button.
-     * @param fromMouse Whether the event originates from a mouse.
+     * @param fromMousePrimaryButton Whether the event originates from a mouse.
      */
-    public void setPressed(boolean state, boolean fromMouse) {
+    public void setPressed(boolean state, boolean fromMousePrimaryButton) {
         mIsPressed = state;
-        mIsPressedFromMouse = fromMouse;
+        mIsPressedFromMouse = fromMousePrimaryButton;
     }
 
     /**
@@ -243,14 +243,12 @@ public class CompositorButton extends StripLayoutView {
      *
      * @param x The x offset of the event.
      * @param y The y offset of the event.
-     * @param fromMouse Whether the event originates from a mouse.
      * @param buttons State of all buttons that were pressed when onDown was invoked.
      * @return Whether or not the button was hit.
      */
-    public boolean onDown(float x, float y, boolean fromMouse, int buttons) {
-        if (checkClickedOrHovered(x, y)
-                && MotionEventUtils.isTouchOrPrimaryButton(fromMouse, buttons)) {
-            setPressed(true, fromMouse);
+    public boolean onDown(float x, float y, int buttons) {
+        if (checkClickedOrHovered(x, y) && MotionEventUtils.isTouchOrPrimaryButton(buttons)) {
+            setPressed(true, MotionEventUtils.isPrimaryButton(buttons));
             return true;
         }
         return false;
@@ -259,14 +257,12 @@ public class CompositorButton extends StripLayoutView {
     /**
      * @param x The x offset of the event.
      * @param y The y offset of the event.
-     * @param fromMouse Whether the event originates from a mouse.
      * @param buttons State of all buttons that were pressed when onDown was invoked.
      * @return Whether or not the button was clicked.
      */
-    public boolean click(float x, float y, boolean fromMouse, int buttons) {
-        if (checkClickedOrHovered(x, y)
-                && MotionEventUtils.isTouchOrPrimaryButton(fromMouse, buttons)) {
-            setPressed(false, false);
+    public boolean click(float x, float y, int buttons) {
+        if (checkClickedOrHovered(x, y) && MotionEventUtils.isTouchOrPrimaryButton(buttons)) {
+            setPressed(false, MotionEventUtils.isPrimaryButton(buttons));
             return true;
         }
         return false;
@@ -274,11 +270,12 @@ public class CompositorButton extends StripLayoutView {
 
     /**
      * Set state for an onUpOrCancel event.
+     *
      * @return Whether or not the button was selected.
      */
     public boolean onUpOrCancel() {
         boolean state = isPressed();
-        setPressed(false, false);
+        setPressed(/* state= */ false, /* fromMousePrimaryButton= */ false);
         return state;
     }
 

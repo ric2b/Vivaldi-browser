@@ -7,7 +7,6 @@
 #include <tuple>
 
 #include "base/strings/utf_string_conversions.h"
-#include "base/test/scoped_feature_list.h"
 #include "chrome/browser/favicon/favicon_utils.h"
 #include "chrome/browser/ui/tab_sharing/tab_sharing_ui.h"
 #include "chrome/grit/generated_resources.h"
@@ -61,6 +60,8 @@ class TabSharingInfoBarDelegateTest
       public ::testing::WithParamInterface<std::tuple<bool, bool>> {
  public:
   struct Preferences {
+    content::GlobalRenderFrameHostId shared_tab_id;
+    content::GlobalRenderFrameHostId capturer_id;
     std::u16string shared_tab_name;
     std::u16string capturer_name;
     TabRole role;
@@ -74,8 +75,6 @@ class TabSharingInfoBarDelegateTest
   TabSharingInfoBarDelegateTest()
       : captured_surface_control_active_(testing::get<0>(GetParam())),
         favicons_used_for_switch_to_tab_button_(testing::get<1>(GetParam())) {
-    scoped_feature_list_.InitAndEnableFeature(
-        features::kCapturedSurfaceControlStickyPermissions);
   }
 
   infobars::InfoBar* CreateInfobar(const Preferences& prefs) {
@@ -83,7 +82,8 @@ class TabSharingInfoBarDelegateTest
         browser()->tab_strip_model()->GetWebContentsAt(prefs.tab_index);
     return TabSharingInfoBarDelegate::Create(
         infobars::ContentInfoBarManager::FromWebContents(web_contents), nullptr,
-        prefs.shared_tab_name, prefs.capturer_name, web_contents, prefs.role,
+        prefs.shared_tab_id, prefs.capturer_id, prefs.shared_tab_name,
+        prefs.capturer_name, web_contents, prefs.role,
         prefs.can_share_instead
             ? TabSharingInfoBarDelegate::ButtonState::ENABLED
             : TabSharingInfoBarDelegate::ButtonState::NOT_SHOWN,
@@ -123,19 +123,16 @@ class TabSharingInfoBarDelegateTest
   const bool captured_surface_control_active_;
   const bool favicons_used_for_switch_to_tab_button_;
 
-  base::test::ScopedFeatureList scoped_feature_list_;
-
  private:
   MockTabSharingUIViews mock_ui;
 };
 
-// Templatize test on:
-// 1. Whether Captured Surface Control is considered "active". That is,
-// sendWheel() or setZoomLevel() were called.
-// 2. Whether a favicon is expected.
-INSTANTIATE_TEST_SUITE_P(All,
-                         TabSharingInfoBarDelegateTest,
-                         testing::Combine(testing::Bool(), testing::Bool()));
+INSTANTIATE_TEST_SUITE_P(
+    ,
+    TabSharingInfoBarDelegateTest,
+    testing::Combine(
+        /*captured_surface_control_active=*/testing::Bool(),
+        /*favicons_used_for_switch_to_tab_button=*/testing::Bool()));
 
 TEST_P(TabSharingInfoBarDelegateTest, StartSharingOnCancel) {
   AddTab(browser(), GURL("about:blank"));

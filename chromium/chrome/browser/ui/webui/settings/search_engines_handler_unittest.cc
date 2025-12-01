@@ -15,11 +15,11 @@
 #include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/base/testing_profile_manager.h"
 #include "components/country_codes/country_codes.h"
+#include "components/regional_capabilities/regional_capabilities_switches.h"
 #include "components/search_engines/search_engine_choice/search_engine_choice_service.h"
 #include "components/search_engines/search_engine_choice/search_engine_choice_utils.h"
 #include "components/search_engines/search_engine_type.h"
 #include "components/search_engines/search_engines_pref_names.h"
-#include "components/search_engines/search_engines_switches.h"
 #include "components/search_engines/template_url.h"
 #include "components/search_engines/template_url_service.h"
 #include "components/signin/public/base/signin_switches.h"
@@ -30,6 +30,8 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/search_engines_data/resources/definitions/prepopulated_engines.h"
 #include "ui/events/devices/device_data_manager.h"
+
+using ::country_codes::CountryId;
 
 namespace settings {
 namespace {
@@ -68,11 +70,9 @@ class SearchEnginesHandlerTest : public testing::Test {
 
     // The search engine choice feature is only enabled for countries in the
     // EEA region.
-    const int kBelgiumCountryId =
-        country_codes::CountryCharsToCountryID('B', 'E');
+    const CountryId kBelgiumCountryId("BE");
     base::CommandLine::ForCurrentProcess()->AppendSwitchASCII(
-        switches::kSearchEngineChoiceCountry,
-        country_codes::CountryIDToCountryString(kBelgiumCountryId));
+        switches::kSearchEngineChoiceCountry, kBelgiumCountryId.CountryCode());
 
     ASSERT_TRUE(profile_manager_.SetUp());
     profile_ = profile_manager_.CreateTestingProfile("Profile 1");
@@ -168,11 +168,9 @@ TEST_F(SearchEnginesHandlerTest,
   PrefService* pref_service = profile()->GetPrefs();
   // The search engine choice feature is only enabled for countries in the EEA
   // region.
-  const int kBelgiumCountryId =
-      country_codes::CountryCharsToCountryID('B', 'E');
+  const CountryId kBelgiumCountryId("BE");
   base::CommandLine::ForCurrentProcess()->AppendSwitchASCII(
-      switches::kSearchEngineChoiceCountry,
-      country_codes::CountryIDToCountryString(kBelgiumCountryId));
+      switches::kSearchEngineChoiceCountry, kBelgiumCountryId.CountryCode());
 
   EXPECT_FALSE(pref_service->HasPrefPath(
       prefs::kDefaultSearchProviderChoiceScreenCompletionTimestamp));
@@ -202,11 +200,9 @@ TEST_F(SearchEnginesHandlerTest,
       TemplateURLServiceFactory::GetForProfile(profile());
   // The search engine choice feature is only enabled for countries in the EEA
   // region.
-  const int kBelgiumCountryId =
-      country_codes::CountryCharsToCountryID('B', 'E');
+  const CountryId kBelgiumCountryId("BE");
   base::CommandLine::ForCurrentProcess()->AppendSwitchASCII(
-      switches::kSearchEngineChoiceCountry,
-      country_codes::CountryIDToCountryString(kBelgiumCountryId));
+      switches::kSearchEngineChoiceCountry, kBelgiumCountryId.CountryCode());
 
   const TemplateURL* default_search_engine =
       template_url_service->GetDefaultSearchProvider();

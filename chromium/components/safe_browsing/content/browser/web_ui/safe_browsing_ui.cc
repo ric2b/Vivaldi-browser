@@ -39,27 +39,23 @@
 #include "components/safe_browsing/core/common/proto/csd.pb.h"
 #include "components/safe_browsing/core/common/proto/safebrowsingv5.pb.h"
 #include "components/safe_browsing/core/common/safe_browsing_prefs.h"
-#include "content/public/browser/global_routing_id.h"
-#include "services/network/public/mojom/cookie_manager.mojom.h"
-#if BUILDFLAG(FULL_SAFE_BROWSING)
-#include "components/enterprise/common/proto/connectors.pb.h"
-#endif
 #include "components/safe_browsing/core/common/web_ui_constants.h"
 #include "components/strings/grit/components_strings.h"
 #include "components/user_prefs/user_prefs.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
+#include "content/public/browser/global_routing_id.h"
 #include "content/public/browser/web_contents.h"
 #include "services/network/public/mojom/content_security_policy.mojom.h"
+#include "services/network/public/mojom/cookie_manager.mojom.h"
 
 #if BUILDFLAG(SAFE_BROWSING_DB_LOCAL)
 #include "components/safe_browsing/core/browser/db/v4_local_database_manager.h"
 #endif
 
-#if BUILDFLAG(FULL_SAFE_BROWSING)
-using TriggeredRule =
-    enterprise_connectors::ContentAnalysisResponse::Result::TriggeredRule;
+#if BUILDFLAG(SAFE_BROWSING_DOWNLOAD_PROTECTION) && !BUILDFLAG(IS_ANDROID)
+#include "components/enterprise/common/proto/connectors.pb.h"
 #endif
 
 using base::Time;
@@ -430,7 +426,7 @@ void WebUIInfoSingleton::ClearReportingEvents() {
   std::vector<base::Value::Dict>().swap(reporting_events_);
 }
 
-#if BUILDFLAG(FULL_SAFE_BROWSING)
+#if BUILDFLAG(SAFE_BROWSING_DOWNLOAD_PROTECTION) && !BUILDFLAG(IS_ANDROID)
 void WebUIInfoSingleton::AddToDeepScanRequests(
     bool per_profile_request,
     const std::string& access_token,
@@ -519,7 +515,8 @@ void WebUIInfoSingleton::ClearTailoredVerdictOverride() {
     }
   }
 }
-#endif  // BUILDFLAG(FULL_SAFE_BROWSING)
+#endif  // BUILDFLAG(SAFE_BROWSING_DOWNLOAD_PROTECTION) &&
+        // !BUILDFLAG(IS_ANDROID)
 
 void WebUIInfoSingleton::RegisterWebUIInstance(SafeBrowsingUIHandler* webui) {
   webui_instances_.push_back(webui);
@@ -528,7 +525,7 @@ void WebUIInfoSingleton::RegisterWebUIInstance(SafeBrowsingUIHandler* webui) {
 void WebUIInfoSingleton::UnregisterWebUIInstance(SafeBrowsingUIHandler* webui) {
   std::erase(webui_instances_, webui);
 
-#if BUILDFLAG(FULL_SAFE_BROWSING)
+#if BUILDFLAG(SAFE_BROWSING_DOWNLOAD_PROTECTION) && !BUILDFLAG(IS_ANDROID)
   // Notify other WebUIs that the source of the tailored verdict override is
   // going away.
   if (tailored_verdict_override_.IsFromSource(webui)) {
@@ -593,14 +590,14 @@ void WebUIInfoSingleton::MaybeClearData() {
     ClearLogMessages();
     ClearReportingEvents();
 
-#if BUILDFLAG(FULL_SAFE_BROWSING)
+#if BUILDFLAG(SAFE_BROWSING_DOWNLOAD_PROTECTION) && !BUILDFLAG(IS_ANDROID)
     ClearDeepScans();
     ClearTailoredVerdictOverride();
 #endif
   }
 }
 
-#if BUILDFLAG(FULL_SAFE_BROWSING)
+#if BUILDFLAG(SAFE_BROWSING_DOWNLOAD_PROTECTION) && !BUILDFLAG(IS_ANDROID)
 DeepScanDebugData::DeepScanDebugData() = default;
 DeepScanDebugData::DeepScanDebugData(const DeepScanDebugData&) = default;
 DeepScanDebugData::~DeepScanDebugData() = default;
@@ -850,6 +847,8 @@ base::Value::Dict SerializeClientReportingMetadata(
     device_dict.Set("os_version", client_metadata.device().os_version());
     device_dict.Set("os_platform", client_metadata.device().os_platform());
     device_dict.Set("name", client_metadata.device().name());
+    device_dict.Set("device_fqdn", client_metadata.device().device_fqdn());
+    device_dict.Set("network_name", client_metadata.device().network_name());
     client_metadata_dict.Set("device", std::move(device_dict));
   }
   if (client_metadata.has_profile()) {
@@ -1000,6 +999,27 @@ base::Value::Dict SerializeReferrer(const ReferrerChainEntry& referrer) {
   return referrer_dict;
 }
 
+base::Value::Dict SerializeSafeBrowsingWebAppKey(
+    const SafeBrowsingWebAppKey& key) {
+  base::Value::Dict dict;
+  dict.Set("start_url_origin", key.start_url_origin());
+  dict.Set("id_or_start_path", key.id_or_start_path());
+  return dict;
+}
+
+// This serializes the protobuf message ReferringAppInfo.
+base::Value::Dict SerializeReferringAppInfo(const ReferringAppInfo& info) {
+  base::Value::Dict dict;
+  dict.Set("referring_app_source", ReferringAppInfo_ReferringAppSource_Name(
+                                       info.referring_app_source()));
+  dict.Set("referring_app_name", info.referring_app_name());
+  if (info.has_referring_webapk()) {
+    dict.Set("referring_webapk",
+             SerializeSafeBrowsingWebAppKey(info.referring_webapk()));
+  }
+  return dict;
+}
+
 std::string SerializeClientDownloadRequest(const ClientDownloadRequest& cdr) {
   base::Value::Dict dict;
   if (cdr.has_url()) {
@@ -1084,6 +1104,11 @@ std::string SerializeClientDownloadRequest(const ClientDownloadRequest& cdr) {
     dict.Set("previous_token", cdr.previous_token());
   }
 
+  if (cdr.has_referring_app_info()) {
+    dict.Set("referring_app_info",
+             SerializeReferringAppInfo(cdr.referring_app_info()));
+  }
+
   std::string request_serialized;
   JSONStringValueSerializer serializer(&request_serialized);
   serializer.set_pretty_print(true);
@@ -1098,13 +1123,6 @@ base::Value::Dict SerializeTailoredVerdict(
       "tailored_verdict_type",
       ClientDownloadResponse_TailoredVerdict_TailoredVerdictType_Name(
           tv.tailored_verdict_type()));
-  base::Value::List adjustments;
-  for (const auto& adjustment : tv.adjustments()) {
-    adjustments.Append(
-        ClientDownloadResponse_TailoredVerdict_ExperimentalWarningAdjustment_Name(
-            adjustment));
-  }
-  dict_tailored_verdict.Set("adjustments", std::move(adjustments));
   return dict_tailored_verdict;
 }
 
@@ -1791,6 +1809,9 @@ base::Value::Dict SerializeUrlDisplayExperiment(
 }
 
 #if BUILDFLAG(IS_ANDROID)
+// This serializes the internal::ReferringAppInfo struct (not to be confused
+// with the protobuf message ReferringAppInfo), which contains intermediate
+// information obtained from Java.
 base::Value::Dict SerializeReferringAppInfo(
     const internal::ReferringAppInfo& info) {
   base::Value::Dict dict;
@@ -1804,14 +1825,6 @@ base::Value::Dict SerializeReferringAppInfo(
   return dict;
 }
 #endif
-
-base::Value::Dict SerializeReferringAppInfo(const ReferringAppInfo& info) {
-  base::Value::Dict dict;
-  dict.Set("referring_app_source", ReferringAppInfo_ReferringAppSource_Name(
-                                       info.referring_app_source()));
-  dict.Set("referring_app_info", info.referring_app_name());
-  return dict;
-}
 
 base::Value::Dict SerializeCsdDebuggingMetadata(
     const LoginReputationClientRequest::DebuggingMetadata& debugging_metadata) {
@@ -2117,7 +2130,7 @@ base::Value::Dict SerializeReportingEvent(const base::Value::Dict& event) {
   return result;
 }
 
-#if BUILDFLAG(FULL_SAFE_BROWSING)
+#if BUILDFLAG(SAFE_BROWSING_DOWNLOAD_PROTECTION) && !BUILDFLAG(IS_ANDROID)
 std::string SerializeContentAnalysisRequest(
     bool per_profile_request,
     const std::string& access_token_truncated,
@@ -2208,6 +2221,8 @@ std::string SerializeContentAnalysisRequest(
       device_metadata.Set("os_version", device.os_version());
       device_metadata.Set("os_platform", device.os_platform());
       device_metadata.Set("name", device.name());
+      device_metadata.Set("device_fqdn", device.device_fqdn());
+      device_metadata.Set("network_name", device.network_name());
       metadata.Set("device", std::move(device_metadata));
     }
 
@@ -2335,8 +2350,9 @@ base::Value::Dict SerializeDeepScanDebugData(const std::string& token,
 
   return value;
 }
+#endif  // BUILDFLAG(SAFE_BROWSING_DOWNLOAD_PROTECTION) &&
+        // !BUILDFLAG(IS_ANDROID)
 
-#endif  // BUILDFLAG(FULL_SAFE_BROWSING)
 }  // namespace
 
 SafeBrowsingUI::SafeBrowsingUI(
@@ -2869,13 +2885,14 @@ void SafeBrowsingUIHandler::GetLogMessages(const base::Value::List& args) {
 
 void SafeBrowsingUIHandler::GetDeepScans(const base::Value::List& args) {
   base::Value::List pings_sent;
-#if BUILDFLAG(FULL_SAFE_BROWSING)
+#if BUILDFLAG(SAFE_BROWSING_DOWNLOAD_PROTECTION) && !BUILDFLAG(IS_ANDROID)
   for (const auto& token_and_data :
        WebUIInfoSingleton::GetInstance()->deep_scan_requests()) {
     pings_sent.Append(SerializeDeepScanDebugData(token_and_data.first,
                                                  token_and_data.second));
   }
-#endif
+#endif  // BUILDFLAG(SAFE_BROWSING_DOWNLOAD_PROTECTION) &&
+        // !BUILDFLAG(IS_ANDROID)
 
   AllowJavascript();
   DCHECK(!args.empty());
@@ -2885,7 +2902,7 @@ void SafeBrowsingUIHandler::GetDeepScans(const base::Value::List& args) {
 
 base::Value::Dict SafeBrowsingUIHandler::GetFormattedTailoredVerdictOverride() {
   base::Value::Dict override_dict;
-#if BUILDFLAG(FULL_SAFE_BROWSING)
+#if BUILDFLAG(SAFE_BROWSING_DOWNLOAD_PROTECTION) && !BUILDFLAG(IS_ANDROID)
   const char kStatusKey[] = "status";
   const char kOverrideValueKey[] = "override_value";
   const TailoredVerdictOverrideData& override_data =
@@ -2902,14 +2919,15 @@ base::Value::Dict SafeBrowsingUIHandler::GetFormattedTailoredVerdictOverride() {
     override_dict.Set(kOverrideValueKey,
                       SerializeTailoredVerdict(*override_data.override_value));
   }
-#endif
+#endif  // BUILDFLAG(SAFE_BROWSING_DOWNLOAD_PROTECTION) &&
+        // !BUILDFLAG(IS_ANDROID)
   return override_dict;
 }
 
 void SafeBrowsingUIHandler::SetTailoredVerdictOverride(
     const base::Value::List& args) {
   DCHECK_GE(args.size(), 2U);
-#if BUILDFLAG(FULL_SAFE_BROWSING)
+#if BUILDFLAG(SAFE_BROWSING_DOWNLOAD_PROTECTION) && !BUILDFLAG(IS_ANDROID)
   ClientDownloadResponse::TailoredVerdict tv;
   const base::Value::Dict& input = args[1].GetDict();
 
@@ -2927,21 +2945,10 @@ void SafeBrowsingUIHandler::SetTailoredVerdictOverride(
         ClientDownloadResponse::TailoredVerdict::SUSPICIOUS_ARCHIVE);
   }
 
-  const base::Value::List* adjustments = input.FindList("adjustments");
-  CHECK(adjustments);
-  for (const base::Value& adjustment : *adjustments) {
-    if (adjustment.GetString() == "ADJUSTMENT_UNSPECIFIED") {
-      tv.add_adjustments(
-          ClientDownloadResponse::TailoredVerdict::ADJUSTMENT_UNSPECIFIED);
-    } else if (adjustment.GetString() == "ACCOUNT_INFO_STRING") {
-      tv.add_adjustments(
-          ClientDownloadResponse::TailoredVerdict::ACCOUNT_INFO_STRING);
-    }
-  }
-
   WebUIInfoSingleton::GetInstance()->SetTailoredVerdictOverride(std::move(tv),
                                                                 this);
-#endif
+#endif  // BUILDFLAG(SAFE_BROWSING_DOWNLOAD_PROTECTION) &&
+        // !BUILDFLAG(IS_ANDROID)
 
   ResolveTailoredVerdictOverrideCallback(args[0].GetString());
 }
@@ -2953,7 +2960,7 @@ void SafeBrowsingUIHandler::GetTailoredVerdictOverride(
 
 void SafeBrowsingUIHandler::ClearTailoredVerdictOverride(
     const base::Value::List& args) {
-#if BUILDFLAG(FULL_SAFE_BROWSING)
+#if BUILDFLAG(SAFE_BROWSING_DOWNLOAD_PROTECTION) && !BUILDFLAG(IS_ANDROID)
   WebUIInfoSingleton::GetInstance()->ClearTailoredVerdictOverride();
 #endif
 
@@ -3117,7 +3124,7 @@ void SafeBrowsingUIHandler::NotifyReportingEventJsListener(
   FireWebUIListener("reporting-events-update", SerializeReportingEvent(event));
 }
 
-#if BUILDFLAG(FULL_SAFE_BROWSING)
+#if BUILDFLAG(SAFE_BROWSING_DOWNLOAD_PROTECTION) && !BUILDFLAG(IS_ANDROID)
 void SafeBrowsingUIHandler::NotifyDeepScanJsListener(
     const std::string& token,
     const DeepScanDebugData& deep_scan_data) {

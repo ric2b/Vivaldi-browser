@@ -5,6 +5,7 @@
 #include "chrome/browser/ash/crostini/crostini_util.h"
 
 #include <utility>
+#include <variant>
 
 #include "ash/constants/ash_features.h"
 #include "base/feature_list.h"
@@ -53,6 +54,7 @@
 namespace crostini {
 namespace {
 
+// Keep 'penguin' terminal label for backwards-consistent appearance.
 constexpr char kCrostiniAppLaunchHistogram[] = "Crostini.AppLaunch";
 constexpr char kCrostiniAppLaunchResultHistogram[] = "Crostini.AppLaunchResult";
 constexpr char kCrostiniAppLaunchResultHistogramTerminal[] =
@@ -149,14 +151,14 @@ void LaunchApplication(
   auto paths_or_error = share_path->ConvertArgsToPathsToShare(
       registration, args, crostini::ContainerChromeOSBaseDirectory(),
       /*map_crostini_home=*/true);
-  if (absl::holds_alternative<std::string>(paths_or_error)) {
+  if (std::holds_alternative<std::string>(paths_or_error)) {
     OnLaunchFailed(app_id, std::move(callback),
-                   absl::get<std::string>(paths_or_error),
+                   std::get<std::string>(paths_or_error),
                    CrostiniResult::SHARE_PATHS_FAILED);
     return;
   }
   const auto& paths =
-      absl::get<guest_os::GuestOsSharePath::PathsToShare>(paths_or_error);
+      std::get<guest_os::GuestOsSharePath::PathsToShare>(paths_or_error);
   share_path->SharePaths(
       vm_name, vm_info->seneschal_server_handle(),
       std::move(paths.paths_to_share),
@@ -447,6 +449,13 @@ std::u16string GetTimeRemainingMessage(base::TimeTicks start, int percent) {
 const guest_os::GuestId& DefaultContainerId() {
   static const base::NoDestructor<guest_os::GuestId> container_id(
       kCrostiniDefaultVmType, kCrostiniDefaultVmName,
+      kCrostiniDefaultContainerName);
+  return *container_id;
+}
+
+const guest_os::GuestId& DefaultBaguetteContainerId() {
+  static const base::NoDestructor<guest_os::GuestId> container_id(
+      kBaguetteDefaultVmType, kCrostiniDefaultVmName,
       kCrostiniDefaultContainerName);
   return *container_id;
 }

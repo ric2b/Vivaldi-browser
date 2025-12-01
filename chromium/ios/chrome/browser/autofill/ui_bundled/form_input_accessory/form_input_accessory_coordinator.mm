@@ -144,10 +144,6 @@ bool CanReloadInputViews() {
 // Active Form Input View Controller.
 @property(nonatomic, strong) UIViewController* formInputViewController;
 
-// The profile. May return null after the coordinator has been stopped
-// (thus the returned value must be checked for null).
-@property(nonatomic, readonly) ProfileIOS* profile;
-
 // Bubble view controller presenter for autofill suggestion tip.
 @property(nonatomic, strong) BubbleViewControllerPresenter* bubblePresenter;
 
@@ -234,7 +230,7 @@ bool CanReloadInputViews() {
         securityAlertHandler:securityAlertHandler
       reauthenticationModule:_reauthenticationModule
            engagementTracker:feature_engagement::TrackerFactory::GetForProfile(
-                                 self.browser->GetProfile())];
+                                 self.profile)];
   _formInputAccessoryViewController.formSuggestionClient =
       _formInputAccessoryMediator;
 
@@ -379,8 +375,9 @@ bool CanReloadInputViews() {
 }
 
 // Starts the expanded manual fill coordinator and displays its view controller.
-- (void)startManualFillForDataType:(manual_fill::ManualFillDataType)dataType
-          invokedOnObfuscatedField:(BOOL)invokedOnObfuscatedField {
+- (void)startManualFillFromButton:(UIButton*)button
+                      forDataType:(manual_fill::ManualFillDataType)dataType
+         invokedOnObfuscatedField:(BOOL)invokedOnObfuscatedField {
   manual_fill::ManualFillDataType focusedFieldDataType = [ManualFillUtil
       manualFillDataTypeFromFillingProduct:
           [_formInputAccessoryMediator currentProviderMainFillingProduct]];
@@ -400,8 +397,12 @@ bool CanReloadInputViews() {
       expandedManualFillCoordinator;
   [expandedManualFillCoordinator start];
 
-  self.formInputViewController = expandedManualFillCoordinator.viewController;
-  [self maybeReloadInputViews];
+  if (ui::GetDeviceFormFactor() == ui::DEVICE_FORM_FACTOR_TABLET) {
+    [expandedManualFillCoordinator presentFromButton:button];
+  } else {
+    self.formInputViewController = expandedManualFillCoordinator.viewController;
+    [self maybeReloadInputViews];
+  }
 
   [self.childCoordinators addObject:expandedManualFillCoordinator];
 }
@@ -448,13 +449,6 @@ bool CanReloadInputViews() {
       kAutofillSuggestionHighlightDelay);
 }
 
-- (void)startManualFillForDataType:(manual_fill::ManualFillDataType)dataType {
-  // Currently only payment methods form input accessory may start manual fill
-  // directly.
-  CHECK_EQ(dataType, manual_fill::ManualFillDataType::kPaymentMethod);
-  [self startManualFillForDataType:dataType invokedOnObfuscatedField:NO];
-}
-
 #pragma mark - FormInputAccessoryViewControllerDelegate
 
 - (void)formInputAccessoryViewController:
@@ -497,15 +491,16 @@ bool CanReloadInputViews() {
                                  (manual_fill::ManualFillDataType)dataType {
   CHECK(IsKeyboardAccessoryUpgradeEnabled());
 
-  [self stopChildren];
   BOOL invokedOnObfuscatedField =
       [_formInputAccessoryMediator lastFocusedFieldWasObfuscated];
-  [self startManualFillForDataType:dataType
-          invokedOnObfuscatedField:invokedOnObfuscatedField];
 
-  // TODO(crbug.com/326265397): Hide the keyboard accessory and remove line
-  // below.
-  [self updateKeyboardAccessoryForManualFilling];
+  if (ui::GetDeviceFormFactor() != ui::DEVICE_FORM_FACTOR_TABLET) {
+    [self stopChildren];
+  }
+
+  [self startManualFillFromButton:manualFillButton
+                      forDataType:dataType
+         invokedOnObfuscatedField:invokedOnObfuscatedField];
 }
 
 - (void)formInputAccessoryViewController:
@@ -716,6 +711,12 @@ bool CanReloadInputViews() {
   [self reset];
 }
 
+// Called when the user has taken action to dismiss a popover.
+- (void)expandedManualFillCoordinatorDidDismissPopover:
+    (ExpandedManualFillCoordinator*)coordinator {
+  [self reset];
+}
+
 #pragma mark - SecurityAlertCommands
 
 - (void)presentSecurityWarningAlertWithText:(NSString*)body {
@@ -801,17 +802,12 @@ bool CanReloadInputViews() {
   _alertCoordinator = nil;
 }
 
-- (ProfileIOS*)profile {
-  return self.browser ? self.browser->GetProfile() : nullptr;
-}
-
 - (feature_engagement::Tracker*)featureEngagementTracker {
-  ProfileIOS* profile = self.profile;
-  if (!profile) {
+  if (!self.profile) {
     return nullptr;
   }
   feature_engagement::Tracker* tracker =
-      feature_engagement::TrackerFactory::GetForProfile(profile);
+      feature_engagement::TrackerFactory::GetForProfile(self.profile);
   CHECK(tracker);
   return tracker;
 }
@@ -903,10 +899,8 @@ bool CanReloadInputViews() {
   // Prepare the dismissal callback.
   __weak __typeof(self) weakSelf = self;
   CallbackWithIPHDismissalReasonType dismissalCallback =
-      ^(IPHDismissalReasonType IPHDismissalReasonType,
-        feature_engagement::Tracker::SnoozeAction snoozeAction) {
-        [weakSelf IPHDidDismissWithSnoozeAction:snoozeAction
-                                     forFeature:featureForIPH];
+      ^(IPHDismissalReasonType IPHDismissalReasonType) {
+        [weakSelf IPHDidDismissForFeature:featureForIPH];
       };
 
   // Create the BubbleViewControllerPresenter.
@@ -914,7 +908,6 @@ bool CanReloadInputViews() {
       [[BubbleViewControllerPresenter alloc]
                initWithText:text
                       title:nil
-                      image:nil
              arrowDirection:BubbleArrowDirectionDown
                   alignment:BubbleAlignmentTopOrLeading
                  bubbleType:BubbleViewTypeWithClose
@@ -957,13 +950,11 @@ bool CanReloadInputViews() {
       kAutofillSuggestionTipDelay);
 }
 
-- (void)IPHDidDismissWithSnoozeAction:
-            (feature_engagement::Tracker::SnoozeAction)snoozeAction
-                           forFeature:(SuggestionFeatureForIPH)featureForIPH {
+- (void)IPHDidDismissForFeature:(SuggestionFeatureForIPH)featureForIPH {
   feature_engagement::Tracker* tracker = self.featureEngagementTracker;
   if (tracker) {
     const base::Feature* feature = FetchIPHFeatureFromEnum(featureForIPH);
-    tracker->DismissedWithSnooze(*feature, snoozeAction);
+    tracker->Dismissed(*feature);
   }
   self.bubblePresenter = nil;
 }

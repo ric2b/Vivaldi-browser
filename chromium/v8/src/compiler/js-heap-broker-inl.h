@@ -6,14 +6,15 @@
 #define V8_COMPILER_JS_HEAP_BROKER_INL_H_
 
 #include "src/compiler/js-heap-broker.h"
+// Include the non-inl header before the rest of the headers.
+
 #include "src/heap/parked-scope-inl.h"
 
 namespace v8::internal::compiler {
 
 V8_INLINE
 JSHeapBroker::RecursiveMutexGuardIfNeeded::RecursiveMutexGuardIfNeeded(
-    LocalIsolate* local_isolate, base::SpinningMutex* mutex,
-    int* mutex_depth_address)
+    LocalIsolate* local_isolate, base::Mutex* mutex, int* mutex_depth_address)
     : mutex_depth_address_(mutex_depth_address),
       initial_mutex_depth_(*mutex_depth_address_),
       mutex_guard_(local_isolate, mutex, initial_mutex_depth_ == 0) {

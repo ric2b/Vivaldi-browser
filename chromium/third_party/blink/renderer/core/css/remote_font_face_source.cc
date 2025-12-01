@@ -363,6 +363,10 @@ void RemoteFontFaceSource::BeginLoadIfNeeded() {
   if (IsLoaded()) {
     return;
   }
+  // Skip loading if the document is for markup sanitization.
+  if (GetDocument() && GetDocument()->IsForMarkupSanitization()) {
+    return;
+  }
   ExecutionContext* const execution_context =
       font_selector_->GetExecutionContext();
   if (!execution_context) {
@@ -377,7 +381,7 @@ void RemoteFontFaceSource::BeginLoadIfNeeded() {
   CHECK(font);
   if (font->StillNeedsLoad()) {
     TRACE_EVENT("devtools.timeline", "BeginRemoteFontLoad", "id",
-                font->InspectorId(), "display",
+                font->InspectorId(), "url", font->Url(), "display",
                 face_->GetFontFace()->display());
     if (font->IsLowPriorityLoadingAllowedForRemoteFont()) {
       execution_context->AddConsoleMessage(MakeGarbageCollected<ConsoleMessage>(

@@ -1,0 +1,10 @@
+Reviewers: [a@example.com]
+Description: ['chrome/browser']
+M, chrome/browser/a.cc
+M, chrome/browser/b.cc
+
+Reviewers: [a@example.com, b@example.com]
+Description: ['foo', 'bar/baz']
+M, chrome/browser/b.cc
+M, bar/baz/b.cc
+D, foo/bar/c.h

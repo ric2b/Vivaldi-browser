@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/390223051): Remove C-library calls to fix the errors.
+#pragma allow_unsafe_libc_calls
+#endif
+
 #include "chrome/updater/certificate_tag.h"
 
 #include <cstdint>
@@ -570,7 +575,7 @@ INSTANTIATE_TEST_SUITE_P(
 TEST_P(CertificateTagMsiValidateTest, TestCases) {
   base::MemoryMappedFile mapped_file;
   ASSERT_TRUE(mapped_file.Initialize(
-      test::GetTestFilePath("tagged_msi").AppendASCII(GetParam().infile)));
+      test::GetTestFilePath("tagged_msi").AppendUTF8(GetParam().infile)));
   const std::unique_ptr<MSIBinary> bin = MSIBinary::Parse(mapped_file.bytes());
   ASSERT_TRUE(bin);
 

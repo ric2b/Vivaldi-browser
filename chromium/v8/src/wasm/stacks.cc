@@ -28,6 +28,11 @@ StackMemory::~StackMemory() {
   }
 }
 
+void* StackMemory::jslimit() const {
+  return (active_segment_ ? active_segment_->limit_ : limit_) +
+         SimulatorStack::JSStackLimitMargin();
+}
+
 StackMemory::StackMemory() : owned_(true) {
   static std::atomic<int> next_id(1);
   id_ = next_id.fetch_add(1);
@@ -37,8 +42,9 @@ StackMemory::StackMemory() : owned_(true) {
   const size_t size_limit = v8_flags.stack_size;
   PageAllocator* allocator = GetPlatformPageAllocator();
   auto page_size = allocator->AllocatePageSize();
-  size_t initial_size =
-      std::min<size_t>(size_limit, kJsStackSizeKB + kJSLimitOffsetKB) * KB;
+  size_t initial_size = std::min<size_t>(
+      size_limit * KB,
+      kJsStackSizeKB * KB + SimulatorStack::JSStackLimitMargin());
   first_segment_ =
       new StackSegment(RoundUp(initial_size, page_size) / page_size);
   active_segment_ = first_segment_;
@@ -63,6 +69,10 @@ StackMemory::StackSegment::StackSegment(size_t pages) {
   limit_ = static_cast<uint8_t*>(
       allocator->AllocatePages(nullptr, size_, allocator->AllocatePageSize(),
                                PageAllocator::kReadWrite));
+  if (limit_ == nullptr) {
+    V8::FatalProcessOutOfMemory(nullptr,
+                                "StackMemory::StackSegment::StackSegment");
+  }
 }
 
 StackMemory::StackSegment::~StackSegment() {

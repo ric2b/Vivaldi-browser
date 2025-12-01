@@ -19,7 +19,7 @@
 #import "ios/chrome/browser/browsing_data/model/browsing_data_remover_factory.h"
 #import "ios/chrome/browser/discover_feed/model/discover_feed_service.h"
 #import "ios/chrome/browser/discover_feed/model/discover_feed_service_factory.h"
-#import "ios/chrome/browser/intents/intents_donation_helper.h"
+#import "ios/chrome/browser/intents/model/intents_donation_helper.h"
 #import "ios/chrome/browser/keyboard/ui_bundled/UIKeyCommand+Chrome.h"
 #import "ios/chrome/browser/net/model/crurl.h"
 #import "ios/chrome/browser/settings/ui_bundled/cells/clear_browsing_data_constants.h"
@@ -668,20 +668,21 @@
     // An action is already in progress, ignore user's request.
     return;
   }
-  signin_metrics::ProfileSignout signout_source_metric = signin_metrics::
-      ProfileSignout::kUserClickedSignoutFromClearBrowsingDataPage;
+  constexpr signin_metrics::ProfileSignout signout_source_metric =
+      signin_metrics::ProfileSignout::
+          kUserClickedSignoutFromClearBrowsingDataPage;
+  __weak ClearBrowsingDataTableViewController* weakSelf = self;
   _signoutCoordinator = [[SignoutActionSheetCoordinator alloc]
       initWithBaseViewController:self
                          browser:browser
                             rect:itemView.frame
                             view:itemView
         forceSnackbarOverToolbar:NO
-                      withSource:signout_source_metric];
+                      withSource:signout_source_metric
+                      completion:^(BOOL success) {
+                        [weakSelf handleAuthenticationOperationDidFinish];
+                      }];
   _signoutCoordinator.showUnavailableFeatureDialogHeader = YES;
-  __weak ClearBrowsingDataTableViewController* weakSelf = self;
-  _signoutCoordinator.signoutCompletion = ^(BOOL success) {
-    [weakSelf handleAuthenticationOperationDidFinish];
-  };
   _signoutCoordinator.delegate = self;
   [_signoutCoordinator start];
 }

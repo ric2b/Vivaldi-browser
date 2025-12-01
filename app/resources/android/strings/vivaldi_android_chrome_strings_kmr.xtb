@@ -1,71 +1,125 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="kmr">
+<translation id="1204037785786432551">Girêdanê daxe</translation>
+<translation id="1206892813135768548">Nivîsa girêdanê jê bigire</translation>
 <translation id="1397811292916898096">Lêgerîn bi riya <ph name="PRODUCT_NAME" /></translation>
+<translation id="1435593198351412143">PDF xweber veke</translation>
 <translation id="1456207338570705181">Touch to Search taybetmendiyeke ku tenê dema ku Google di Vivaldi de wekî motora lêgerînê ya berdest be peyda dibe. ew peyvê hilbijartî û rûpela heyî wekî naverok dişîne bo lêgerîna Google. Tu dikarî wê vemrînî di <ph name="BEGIN_LINK" /> sazkariyên <ph name="END_LINK" /> de.</translation>
 <translation id="1598449788754183301">Rûgerên berdest/taybet biguherîne</translation>
 <translation id="1644574205037202324">Dîrok</translation>
 <translation id="1829244130665387512">Di rûpelê de bibîne</translation>
 <translation id="1910514478706885609">Di rûgera komkirî ya nû de veke</translation>
-<translation id="1925021887439448749">Navnîşana tevnê ya kesane binivîse</translation>
+<translation id="1925021887439448749">Navnîşana tevnê ya kesane têxe</translation>
 <translation id="2038563949887743358">Daxwaza malpera sermaseyê veke</translation>
-<translation id="2149973817440762519">Şûnpelê serrast bike</translation>
-<translation id="2306442503286132111">Şûnpel li peldanka <ph name="FOLDER_NAME" /> hate tomarkirin</translation>
+<translation id="2149973817440762519">Şûnpelê biguherîne</translation>
+<translation id="2306442503286132111">Şûnpel li peldanka <ph name="FOLDER_NAME" /> hat tomarkirin</translation>
 <translation id="2433507940547922241">Xuyang</translation>
 <translation id="2501278716633472235">Vegere</translation>
 <translation id="2633278372998075009">Rûgerên taybet</translation>
+<translation id="2650751991977523696">Pelê dîsa daxe?</translation>
+<translation id="265156376773362237">Pêşbarkirina standart</translation>
+<translation id="272026394418727548">Rûpela destpêkê ya Vivaldi</translation>
+<translation id="2842985007712546952">Peldanka sereke</translation>
+<translation id="2871733351037274014">Pêşbarkirina malperan</translation>
+<translation id="2904300462646366554">PDF daketî xweber bi riya yek ji nîşandarên PDF li ser amûra te vedibe</translation>
 <translation id="2951071800649516099">Malperan tevlî rêza xwendinê ya xwe bike ji bo paşê</translation>
+<translation id="3029276696788198026">Pêşbakirin tine ye</translation>
 <translation id="3060635849835183725">{BOOKMARKS_COUNT, plural,
           =1 {<ph name="BOOKMARKS_COUNT_ONE" />  şûnpel}
           other {<ph name="BOOKMARKS_COUNT_MANY" /> şûnpel}}</translation>
-<translation id="3076631378407175873">Mafên jêgirtinê li ser <ph name="YEAR" />Vivaldi Technologies AS ne. Hemû maf parastî ne.</translation>
+<translation id="3076631378407175873">Mafên jêgirtinê li ser <ph name="YEAR" />Vivaldi Technologies AS ne. Tevahiya mafan parastî ne.</translation>
+<translation id="3232293466644486101">Daneyên geranê jê bibe…</translation>
 <translation id="3234355010754616171">Rûgera nû ya taybet</translation>
-<translation id="3377025655491224618">Rûgerekê taybet</translation>
+<translation id="3237087289225714896">Pêşbarkirina standart:</translation>
+<translation id="3377025655491224618">Rûgereke taybet</translation>
 <translation id="3504699618187058974">Komkirina rûgeran</translation>
 <translation id="3518985090088779359">Bipejirîne &amp; bidomîne</translation>
 <translation id="3571177741182643350">Gotarên nexwendî - Derhêl pêkan e:</translation>
-<translation id="3700829948786686853">Tu bi xêr hatî Vivaldiyê</translation>
+<translation id="3602290021589620013">Pêşdîtin</translation>
+<translation id="3700829948786686853">Tu bi xêr hatî Vivaldi</translation>
 <translation id="3719826155360621982">Rûpela destpêkê</translation>
+<translation id="3738139272394829648">Bitikîne bo lêgerînê</translation>
 <translation id="385051799172605136">Vegere</translation>
+<translation id="3987993985790029246">Girêdanê jê bigire</translation>
 <translation id="399014816462153200">Gotaran bixwîne:</translation>
 <translation id="4121750346708795461">Bi xebitandina vê sepanê, tu : <ph name="BEGIN_LINK1" /> Peymana lîsansê dawî ya bikarhênerên <ph name="END_LINK1" /> û <ph name="BEGIN_LINK2" /> politîka taybetiyê <ph name="END_LINK2" /> ya Vivaldi dipejirînî.</translation>
 <translation id="4137746084635924146">Zimanê amûrê heyî</translation>
 <translation id="4167670741834902166">Rûgera nû ya taybet</translation>
-<translation id="4243710787042215766">Di rûgerekê taybet de veke</translation>
+<translation id="4195643157523330669">Di rûgera nû de veke</translation>
+<translation id="4225895483398857530">Kurteriya alavbendê</translation>
+<translation id="4243710787042215766">Di rûgera taybet de veke</translation>
+<translation id="4269820728363426813">Navnîşana girêdanê jê bigire</translation>
+<translation id="4291407919474070700"><ph name="BEGIN_LINK" />Di sazkariyên Android de dîmenderê kilîtê çalak bike<ph name="END_LINK" /></translation>
+<translation id="4304713468139749426">Rêveberiya borînpeyvê</translation>
+<translation id="451872707440238414">Şûnpelên xwe bigere</translation>
 <translation id="4526803704855831732">Rûgerên taybet</translation>
-<translation id="4719086422742491124">Bêyî ku ji rûpelê derkevî li ser mijarên li ser malperan fêr bibe. Li ser rûpelê yek an bêhtir peyvan hilbijêre ku li wan bigerî.
+<translation id="4532845899244822526">Peldankekê hilbijêre</translation>
+<translation id="4699172675775169585">Wêne û pelên pêşbîrkirî</translation>
+<translation id="4719086422742491124">Bê ku ji rûpelê derkevî mijaran li ser malperan fêr bibe. Li ser rûpelê yek an bêtir peyvan hilbijêre ji bo li wan bigerî.
 
-Touch to Search taybetmendiyeke ku tenê dema ku Google di Vivaldi de wekî motora lêgerînê ya berdest be peyda dibe.</translation>
+Touch to Search taybetmendiyeke pêkan e ku tenê dema ku Google di Vivaldi de wekî motora lêgerînê ya berdest hatiye sazkirin.</translation>
 <translation id="4759238208242260848">Daxistin</translation>
-<translation id="4883379392681899581">Dev ji moda taybet berde</translation>
-<translation id="4943872375798546930">Encam tune ye</translation>
+<translation id="4850886885716139402">Nîşan bide</translation>
+<translation id="4883379392681899581">Ji awaya taybet derkeve</translation>
+<translation id="4943872375798546930">Encam tine ye</translation>
 <translation id="49576331685473090">Astengkera naverokê</translation>
-<translation id="5079259810715830221">Dema malpereke Google daxwaz dike ku bi taybetî girêdanan li ser rûpela xwe pêş bar bike, Vivaldi rûpelan bi riya rajekarên Google-ê bêyî kiloran şîfre dike û pêş bar dike. Ev nasnameya te ji malpera berê barkirî vedişêre.</translation>
-<translation id="5118676864324397542">bîrdanka <ph name="APP_NAME" /></translation>
+<translation id="5079259810715830221">Dema malpereke Google daxwaz dike ku bi taybetî girêdanan li ser rûpela xwe pêş bar bike, Vivaldi rûpelan bi riya rajekarên Google bê kiloran şîfre dike û pêş bar dike. Ev nasnameya te ji malpera berê barkirî vedişêre.</translation>
+<translation id="5118676864324397542">Bîrdanka <ph name="APP_NAME" /></translation>
+<translation id="5144385790872094440">Hinek rûpelên ku tu serdan dikî pêbarkirî ne. Dema ku ji malperek an sepanek Google ve têne girêdan dibe ku rûpel bi riya pêşkêşkerên Google werin pêşbarkirin.</translation>
 <translation id="5186185447130319458">Taybet</translation>
+<translation id="5206168361184759344">{FILE_COUNT, plural,
+            =1 {Pelê dadixe…}
+            other {Pelan # dadixe…}}</translation>
 <translation id="5233638681132016545">Rûgera nû</translation>
-<translation id="5375131951310889874">Bêyî ku ji rûpelê derkevî li ser mijarên li ser malperan fêr bibe. Li ser rûpelê yek an bêhtir peyvan hilbijêre ku li wan bigerî. Touch to Search taybetmendiyeke ku tenê dema ku Google di Vivaldi de wekî motora lêgerînê ya berdest be peyda dibe. Ew peyvekê û çarçoveya ku li derdora wê ji lêgerîna Google re dişîne, pênase, wêne, encamên lêgerînê û hûrguliyên din vedigerîne.
+<translation id="5375131951310889874">Bê ku ji rûpelê derkevî mijaran li ser malperan fêr bibe. Li ser rûpelê yek an bêtir peyvan hilbijêre ji bo li wan bigerî. Touch to Search taybetmendiyeke pêkan e ku tenê dema ku Google di Vivaldi de wekî motora lêgerînê ya berdest hatiye sazkirin.
+Ew peyvekê û çarçoveya ku li derdora wê ji lêgerîna Google re dişîne, pênase, wêne, encamên lêgerînê û hûrguliyên din vedigerîne.
 
 Ji bo sazkirina peyva lêgerîna xwe, dirêj bitikîne bo hilbijêrî. Ji bo ku lêgerîna xwe zelaltir bikî, destgehê bo jor kaş bike û kodika lêgerînê bitikîne.</translation>
+<translation id="543338862236136125">Borînpeyvê biguherîne</translation>
 <translation id="572328651809341494">Rûgerên dawî</translation>
-<translation id="6150320133806434356">Şûnpel hate tomarkirin</translation>
+<translation id="5833984609253377421">Girêdanê parve bike</translation>
+<translation id="6150320133806434356">Şûnpel hat tomarkirin</translation>
+<translation id="6193448654517602979">Rûgeran hilbijêre</translation>
 <translation id="6336451774241870485">Rûgera nû ya taybet</translation>
-<translation id="6404511346730675251">Şûnpelê serrast bike</translation>
-<translation id="6585139692466700358">Pêşniyaz bike ku rûpel bi riya karûbarê wergerê ya Vivaldiyê re werin wergerandin</translation>
+<translation id="6337323516034698937">Ji bo şandina vê rûgerê ji amûreke din re, li ser her du amûran têkeve hevdemiya Vivaldi. Piştrast bike ku pêdivî hebe tu borînpeyva şîfrekirinê binivîsî.</translation>
+<translation id="6341580099087024258">Bipirse ku tu yê pelan li ku derê tomar bikî</translation>
+<translation id="6404511346730675251">Şûnpelê biguherîne</translation>
+<translation id="650224091954855786">{FILE_COUNT, plural,
+          =1 {Pel daket}
+          other {# daxistin qediyan}}</translation>
+<translation id="6585139692466700358">Pêşniyar bike ku rûpel bi riya rajeya wergerê ya Vivaldi re werin wergerandin</translation>
+<translation id="6588043302623806746">DNS a ewle bi kar bîne</translation>
 <translation id="6593061639179217415">Malpera sermaseyê</translation>
 <translation id="6610147964972079463">Rûgerên taybet bigire</translation>
-<translation id="7029995644714925509">Dema malpereke Google daxwaz dike ku bi taybetî girêdanan li ser rûpela xwe pêş bar bike, Vivaldi rûpelan bi riya rajekarên Google-ê bêyî kiloran şîfre dike û pêş bar dike. Ev nasnameya te ji malpera berê barkirî vedişêre.</translation>
+<translation id="6627583120233659107">Peldankê biguherîne</translation>
+<translation id="6865313869410766144">Daneyên dagirtina xweber</translation>
+<translation id="6909589135458168665">Pêşbarkirina rûpelan</translation>
+<translation id="7029995644714925509">Dema malpereke Google daxwaz dike ku bi taybetî girêdanan li ser rûpela xwe pêş bar bike, Vivaldi rûpelan bi riya rajekarên Google bê kiloran şîfre dike û pêş bar dike. Ev nasnameya te ji malpera berê barkirî vedişêre.</translation>
 <translation id="706339621163631076">Politîka taybetiyê ya gerokê</translation>
-<translation id="732145680195464316">Şûnpel li <ph name="PRODUCT_NAME" /> hate tomarkirin</translation>
+<translation id="732145680195464316">Şûnpel li <ph name="PRODUCT_NAME" /> hat tomarkirin</translation>
+<translation id="7324354302972299151">Daxwazeke "Neşopîne" bişîne</translation>
+<translation id="7359002509206457351">Gihiştina rêbazên dravdanê</translation>
+<translation id="7419565702166471774">Her dem girdanên ewle bi kar bîne</translation>
 <translation id="7427132068601343474">Di derbarê Vivaldi de</translation>
-<translation id="7465104139234185284">Hemû rûgerên taybet bigire</translation>
+<translation id="7456774706094330779">Pêşbarkirina dirêjkirî</translation>
+<translation id="7465104139234185284">Tevahiya rûgerên taybet bigire</translation>
 <translation id="7481312909269577407">Pêş</translation>
-<translation id="7968014550143838305">Hate tevlîkirin bo rêza xwendinê</translation>
+<translation id="7764225426217299476">Navnîşanê tevlî bike</translation>
+<translation id="7968014550143838305">Hat tevlîkirin bo rêza xwendinê</translation>
 <translation id="804786196054284061">Peymana lîsansê dawî ya bikarhênerên</translation>
-<translation id="8127542551745560481">Rûpela destpêkê serrast bike</translation>
+<translation id="8062594758852531064">Pêşbarkirina dirêjkirî:</translation>
+<translation id="8073388330009372546">Wêneyê di rûgera nû de veke</translation>
+<translation id="8127542551745560481">Rûpela destpêkê biguherîne</translation>
+<translation id="8266862848225348053">Cihê daxe</translation>
+<translation id="8348430946834215779">Dema ku pêkan be HTTPS bi kar bîne û berî barkirina malperên ku wê piştgirî nakin hişyarî bide</translation>
 <translation id="8560602726703398413">Rêza xwendinê ya xwe di şûnpelan de bibîne</translation>
 <translation id="85991616550051997">Vegere rûpela destpêkê</translation>
 <translation id="8820817407110198400">Şûnpel</translation>
+<translation id="9042893549633094279">Taybetî û parastin</translation>
 <translation id="9063523880881406963">Daxwaza malpera sermaseyê bigire</translation>
-<translation id="9080642952018487277">Têkeve moda taybet</translation>
+<translation id="9080642952018487277">Têkeve awaya taybet</translation>
+<translation id="930124987204876019">Dîrok, kilor, daneyên malperan, bîrdanka demkî jê bibe…</translation>
+<translation id="961856697154696964">Dîroka geranê jê bibe</translation>
+<translation id="96681097142096641">Rûpelê hêsankirî nîşan bide?</translation>
 </translationbundle>

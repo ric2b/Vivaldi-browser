@@ -21,32 +21,33 @@
 #include "base/sequence_checker.h"
 #include "base/timer/timer.h"
 #include "build/build_config.h"
-#include "build/chromeos_buildflags.h"
 #include "chrome/browser/webauthn/enclave_manager_interface.h"
-#include "chrome/browser/webauthn/unexportable_key_utils.h"
-#include "components/keyed_service/core/keyed_service.h"
+#include "chrome/browser/webauthn/local_authentication_token.h"
 #include "components/trusted_vault/trusted_vault_connection.h"
 #include "content/public/browser/global_routing_id.h"
 #include "crypto/user_verifying_key.h"
 #include "device/fido/enclave/types.h"
 #include "device/fido/network_context_factory.h"
-#include "services/network/public/mojom/network_context.mojom-forward.h"
 
 #if BUILDFLAG(IS_MAC)
 #include "chrome/common/chrome_version.h"
-#include "crypto/scoped_lacontext.h"
 #endif  // BUILDFLAG(IS_MAC)
 
 class GaiaId;
+
+namespace base {
+class ElapsedTimer;
+}
 
 namespace crypto {
 class RefCountedUserVerifyingSigningKey;
 }  // namespace crypto
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
 namespace ash {
 class WebAuthNDialogController;
-}
+class ActiveSessionAuthController;
+}  // namespace ash
 #endif
 
 #if BUILDFLAG(IS_MAC)
@@ -122,17 +123,38 @@ class EnclaveManager : public EnclaveManagerInterface {
     // The RenderFrameHost from which the request originates.
     content::GlobalRenderFrameHostId render_frame_host_id;
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
     std::variant<raw_ptr<ash::WebAuthNDialogController>,
                  raw_ptr<ash::ActiveSessionAuthController>>
         dialog_controller;
 #endif
 
-#if BUILDFLAG(IS_MAC)
-    // An optional LAcontext to pass to apple keychain operations.
-    std::optional<crypto::ScopedLAContext> lacontext;
-#endif  // BUILDFLAG(IS_MAC)
+    // An optional auth context. Currently only used to pass LAcontext to Apple
+    // Keychain operations.
+    std::optional<webauthn::LocalAuthenticationToken> local_auth_token;
   };
+
+  // These values are detailed failure reasons. They are emitted whenever PIN
+  // renewal fails and give detailed information about why the attempt failed.
+  // These values are persisted to logs. Entries should not be renumbered and
+  // numeric values should never be reused.
+  //
+  // LINT.IfChange(PinRenewalFailureCause)
+  enum class PinRenewalFailureCause {
+    kDuringDownload = 1,
+    kGettingAccessToken = 2,
+    kEnclaveRequest1 = 3,
+    kEnclaveRequest2 = 4,
+    kEnclaveResponse1 = 5,
+    kEnclaveResponse2 = 6,
+    kRKSUpload = 7,
+    kJoiningToDomain = 8,
+    kSecurityDomainReportsNoPin = 9,
+    kSecurityDomainReset = 10,
+
+    kMaxValue = kSecurityDomainReset,
+  };
+  // LINT.ThenChange(//tools/metrics/histograms/metadata/webauthn/enums.xml:PinRenewalFailureCauseEnum)
 
   EnclaveManager(
       const base::FilePath& base_dir,
@@ -183,7 +205,12 @@ class EnclaveManager : public EnclaveManagerInterface {
   // Adds the current device, and a GPM PIN, to the security domain. Only valid
   // to call after `StoreKeys` has been called and thus `has_pending_keys`
   // returns true.
-  void AddDeviceAndPINToAccount(std::string pin, Callback callback);
+  // `previous_pin_public_key` must be set if the PIN is replacing an existing
+  // GPM PIN.
+  void AddDeviceAndPINToAccount(
+      std::string pin,
+      std::optional<std::string> previous_pin_public_key,
+      Callback callback);
   // Set a PIN on an account that doesn't currently have one.
   void SetPIN(std::string pin, std::string rapt, Callback callback);
   // Change the GPM PIN on the account. If a RAPT (Reauthentication Proof Token)
@@ -381,6 +408,13 @@ class EnclaveManager : public EnclaveManagerInterface {
   void ConsiderPinRenewal();
   void OnRenewalComplete(bool success);
 
+  // Returns true if |state| indicates that the security domain has been reset,
+  // i.e. that the local Chrome state no longer matches what's on the security
+  // domain.
+  bool IsSecurityDomainReset(
+      const trusted_vault::DownloadAuthenticationFactorsRegistrationStateResult&
+          state);
+
   const base::FilePath file_path_;
   const raw_ptr<signin::IdentityManager> identity_manager_;
   device::NetworkContextFactory network_context_factory_;
@@ -423,6 +457,10 @@ class EnclaveManager : public EnclaveManagerInterface {
       identity_key_;
 
   unsigned store_keys_count_ = 0;
+
+  // Timer for recording a metric measuring the delay to load the Enclave
+  // state.
+  std::unique_ptr<base::ElapsedTimer> load_duration_timer_;
 
   base::ObserverList<Observer> observer_list_;
 

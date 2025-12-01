@@ -23,6 +23,7 @@
 #include "ash/capture_mode/capture_mode_util.h"
 #include "ash/capture_mode/null_capture_mode_session.h"
 #include "ash/capture_mode/search_results_panel.h"
+#include "ash/capture_mode/sunfish_scanner_feature_watcher.h"
 #include "ash/constants/ash_features.h"
 #include "ash/constants/ash_pref_names.h"
 #include "ash/constants/notifier_catalogs.h"
@@ -38,6 +39,7 @@
 #include "ash/root_window_controller.h"
 #include "ash/scanner/scanner_action_view_model.h"
 #include "ash/scanner/scanner_controller.h"
+#include "ash/scanner/scanner_disclaimer.h"
 #include "ash/scanner/scanner_metrics.h"
 #include "ash/scanner/scanner_session.h"
 #include "ash/session/session_controller_impl.h"
@@ -46,6 +48,7 @@
 #include "ash/system/notification_center/message_view_factory.h"
 #include "ash/system/toast/anchored_nudge_manager_impl.h"
 #include "ash/system/video_conference/video_conference_tray_controller.h"
+#include "ash/wm/screen_pinning_controller.h"
 #include "base/auto_reset.h"
 #include "base/check.h"
 #include "base/check_op.h"
@@ -75,6 +78,10 @@
 #include "components/vector_icons/vector_icons.h"
 #include "components/viz/host/host_frame_sink_manager.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
+#include "services/data_decoder/public/cpp/data_decoder.h"
+#include "services/network/public/cpp/shared_url_loader_factory.h"
+#include "services/network/public/cpp/simple_url_loader.h"
+#include "services/network/public/mojom/url_response_head.mojom.h"
 #include "third_party/abseil-cpp/absl/cleanup/cleanup.h"
 #include "ui/aura/env.h"
 #include "ui/base/clipboard/clipboard_buffer.h"
@@ -369,10 +376,9 @@ void ShowVideoRecordingStoppedByHdcpNotification() {
 
 // Shows a toast informing the user that text has been copied to clipboard.
 void ShowTextCopiedToast() {
-  // TODO(crbug.com/375967525): Finalize and translate the toast string.
-  ToastManager::Get()->Show(ToastData(kCaptureModeTextCopiedToastId,
-                                      ToastCatalogName::kCaptureModeTextCopied,
-                                      u"Text copied to clipboard"));
+  ToastManager::Get()->Show(ToastData(
+      kCaptureModeTextCopiedToastId, ToastCatalogName::kCaptureModeTextCopied,
+      l10n_util::GetStringUTF16(IDS_ASH_SCREEN_CAPTURE_TEXT_COPIED_TOAST)));
 }
 
 // Copies the bitmap representation of the given |image| to the clipboard.
@@ -517,7 +523,7 @@ BehaviorType ToBehaviorType(CaptureModeEntryType entry_type) {
     case CaptureModeEntryType::kGameDashboard:
       return BehaviorType::kGameDashboard;
     case CaptureModeEntryType::kSunfish:
-      DCHECK(IsSunfishAllowedAndEnabled());
+      DCHECK(CanShowSunfishOrScannerUi());
       return BehaviorType::kSunfish;
     default:
       return BehaviorType::kDefault;
@@ -533,38 +539,51 @@ bool ShouldPerformTextDetection(PerformCaptureType capture_type) {
 
 // Returns true if Scanner actions should be fetched for a captured image with
 // the given `capture_type`.
+// This will return true even if Scanner is disabled so the appropriate metrics
+// can be emitted.
 bool ShouldFetchScannerActions(PerformCaptureType capture_type) {
-  return Shell::Get()->scanner_controller() &&
-         (capture_type == PerformCaptureType::kSunfish ||
-          capture_type == PerformCaptureType::kScanner);
+  return capture_type == PerformCaptureType::kSunfish ||
+         capture_type == PerformCaptureType::kScanner;
 }
 
 // Returns true if region search should be performed on a captured image with
 // the given `capture_type`.
 bool ShouldSendRegionSearch(PerformCaptureType capture_type) {
-  return features::IsSunfishFeatureEnabled() &&
-         (capture_type == PerformCaptureType::kSunfish ||
-          capture_type == PerformCaptureType::kSearch);
+  return CanShowSunfishUi() && (capture_type == PerformCaptureType::kSunfish ||
+                                capture_type == PerformCaptureType::kSearch);
+}
+
+// Returns true if the capture type requires a network connection.
+bool CaptureTypeRequiresNetworkConnection(PerformCaptureType capture_type) {
+  switch (capture_type) {
+    case PerformCaptureType::kCapture:
+    case PerformCaptureType::kTextDetection:
+      return false;
+    case PerformCaptureType::kSearch:
+    case PerformCaptureType::kScanner:
+    case PerformCaptureType::kSunfish:
+      return true;
+  }
 }
 
 // Returns the target panel bounds in screen coordinates.
 gfx::Rect CalculateSearchResultPanelScreenBounds(
     const gfx::Rect& work_area_in_screen,
-    const gfx::Rect& captured_region_in_screen,
-    const gfx::Rect& feedback_bounds_in_screen) {
+    const gfx::Rect& captured_region_in_screen) {
   // Attempt to place the panel on the left by default.
   gfx::Rect bounds(
       work_area_in_screen.x() + capture_mode::kPanelWorkAreaSpacing,
-      work_area_in_screen.bottom() - capture_mode::kSearchResultsPanelHeight -
+      work_area_in_screen.bottom() -
+          capture_mode::kSearchResultsPanelTotalHeight -
           capture_mode::kPanelWorkAreaSpacing,
-      capture_mode::kSearchResultsPanelWidth,
-      capture_mode::kSearchResultsPanelHeight);
+      capture_mode::kSearchResultsPanelTotalWidth,
+      capture_mode::kSearchResultsPanelTotalHeight);
 
   // If the region would then intersect with the panel, attempt to place the
   // panel on the right.
   if (bounds.Intersects(captured_region_in_screen)) {
     bounds.set_x(work_area_in_screen.right() -
-                 capture_mode::kSearchResultsPanelWidth -
+                 capture_mode::kSearchResultsPanelTotalWidth -
                  capture_mode::kPanelWorkAreaSpacing);
 
     // If the region would still intersect with the panel, choose the side with
@@ -582,14 +601,6 @@ gfx::Rect CalculateSearchResultPanelScreenBounds(
                      capture_mode::kPanelWorkAreaSpacing);
       }
     }
-  }
-
-  // If the panel would overlap with the feedback button when it is created,
-  // instead place it just above the button.
-  if (bounds.Intersects(feedback_bounds_in_screen)) {
-    bounds.set_y(feedback_bounds_in_screen.y() -
-                 capture_mode::kSearchResultsPanelHeight -
-                 capture_mode::kPanelButtonSpacing);
   }
 
   return bounds;
@@ -646,6 +657,7 @@ CaptureModeController::CaptureModeController(
 
   Shell::Get()->session_controller()->AddObserver(this);
   chromeos::PowerManagerClient::Get()->AddObserver(this);
+  shell_observation_.Observe(Shell::Get());
 }
 
 CaptureModeController::~CaptureModeController() {
@@ -687,9 +699,7 @@ void CaptureModeController::RegisterProfilePrefs(PrefRegistrySimple* registry) {
   // TODO: crbug.com/388287849 - Clear this pref.
   registry->RegisterBooleanPref(kCanShowDemoToolsNudge,
                                 /*default_value=*/true);
-  registry->RegisterBooleanPref(prefs::kSunfishEnabled,
-                                /*default_value=*/true);
-  registry->RegisterBooleanPref(prefs::kSunfishConsentDisclaimerAccepted,
+  registry->RegisterBooleanPref(prefs::kScannerConsentDisclaimerAccepted,
                                 /*default_value=*/false);
   registry->RegisterBooleanPref(kCanShowSunfishRegionNudge,
                                 /*default_value=*/true);
@@ -704,8 +714,14 @@ SearchResultsPanel* CaptureModeController::GetSearchResultsPanel() const {
 
 void CaptureModeController::ShowSearchResultsPanel(const gfx::ImageSkia& image,
                                                    GURL url) {
+  // We should not use `CanShowSunfishUi` here, as that could change between
+  // sending the region and receiving a URL (for example, if the Sunfish policy
+  // changes).
   DCHECK(features::IsSunfishFeatureEnabled());
   const bool is_active = IsActive();
+  const bool should_end_session =
+      is_active && capture_mode_session_->active_behavior()
+                       ->ShouldEndSessionOnShowingSearchResults();
   if (!search_results_panel_widget_) {
     // A session must be active when the panel is first loaded, because it is
     // used to determine the panel bounds. If the user ends the session before
@@ -716,8 +732,15 @@ void CaptureModeController::ShowSearchResultsPanel(const gfx::ImageSkia& image,
 
     search_results_panel_widget_ = SearchResultsPanel::CreateWidget(
         capture_mode_session_->current_root(), is_active);
-
     RecordSearchResultsPanelEntryType(capture_mode_session_->active_behavior());
+
+    // Let the session (and the focus cycler) know that the panel has been
+    // created so it can be observed for focus changes. We only need to notify
+    // the session if it isn't about to end.
+    if (!should_end_session) {
+      capture_mode_session_->OnSearchResultsPanelCreated(
+          search_results_panel_widget_.get());
+    }
   }
 
   // If the panel was not visible beforehand (either the panel was not created
@@ -735,10 +758,13 @@ void CaptureModeController::ShowSearchResultsPanel(const gfx::ImageSkia& image,
 
   // Note at this point the session may no longer be active.
   auto* search_results_panel = GetSearchResultsPanel();
-  search_results_panel->SetSearchBoxImage(image);
+  // The Lens Web API implementation has its own searchbox, so there's no need
+  // to set the thumbnail image.
+  if (!features::IsSunfishLensWebEnabled()) {
+    search_results_panel->SetSearchBoxImage(image);
+  }
   search_results_panel->Navigate(url);
-  if (is_active && capture_mode_session_->active_behavior()
-                       ->ShouldEndSessionOnShowingSearchResults()) {
+  if (should_end_session) {
     Stop();
   }
 }
@@ -756,6 +782,9 @@ void CaptureModeController::MaybeUpdateSearchResultsPanelBounds() {
     return;
   }
 
+  // We should not use `CanShowSunfishUi` here, as that could change between
+  // sending the region and receiving a URL (for example, if the Sunfish policy
+  // changes).
   CHECK(features::IsSunfishFeatureEnabled());
 
   aura::Window* current_root = capture_mode_session_->current_root();
@@ -769,8 +798,7 @@ void CaptureModeController::MaybeUpdateSearchResultsPanelBounds() {
   wm::ConvertRectToScreen(current_root, &captured_region_in_screen);
 
   gfx::Rect panel_bounds_in_screen = CalculateSearchResultPanelScreenBounds(
-      work_area_in_screen, captured_region_in_screen,
-      capture_mode_session_->GetFeedbackWidgetScreenBounds());
+      work_area_in_screen, captured_region_in_screen);
 
   search_results_panel_widget_->SetBounds(panel_bounds_in_screen);
 }
@@ -779,8 +807,11 @@ void CaptureModeController::OnLocatedEventDragged() {
   if (IsSearchResultsPanelVisible()) {
     // Clear the search box text for the next time the panel is opened. Note we
     // don't need to reset the image or URL since the panel will always be
-    // re-opened with those.
-    GetSearchResultsPanel()->SetSearchBoxText(std::u16string());
+    // re-opened with those. Only necessary if the Lens Web API implementation
+    // is not enabled and we are still using the native search box.
+    if (!features::IsSunfishLensWebEnabled()) {
+      GetSearchResultsPanel()->SetSearchBoxText(std::u16string());
+    }
     search_results_panel_widget_->Hide();
   }
 }
@@ -845,6 +876,10 @@ bool CaptureModeController::IsEventOnSearchResultsPanel(
 bool CaptureModeController::IsSearchResultsPanelVisible() const {
   return search_results_panel_widget_ &&
          search_results_panel_widget_->IsVisible();
+}
+
+bool CaptureModeController::IsNetworkConnectionOffline() const {
+  return delegate_->IsNetworkConnectionOffline();
 }
 
 bool CaptureModeController::SupportsBehaviorChange(
@@ -940,14 +975,14 @@ void CaptureModeController::StartRecordingInstantlyForGameDashboard(
 void CaptureModeController::StartSunfishSession() {
   RecordScannerFeatureUserState(
       ScannerFeatureUserState::kSunfishScreenEnteredViaShortcut);
-  DCHECK(IsSunfishAllowedAndEnabled());
-  if (!capture_mode_util::GetActiveUserPrefService()->GetBoolean(
-          prefs::kSunfishEnabled)) {
-    return;
-  }
+  CHECK(CanShowSunfishOrScannerUi());
   // Close the launcher nudge if it is still visible.
   AnchoredNudgeManager::Get()->Cancel(capture_mode::kSunfishLauncherNudgeId);
-  StartInternal(SessionType::kReal, CaptureModeEntryType::kSunfish);
+  StartInternal(
+      SessionType::kReal, CaptureModeEntryType::kSunfish,
+      base::BindOnce(
+          &CaptureModeController::MaybeShowScannerDisclaimerOnSunfishStartup,
+          weak_ptr_factory_.GetWeakPtr()));
 }
 
 void CaptureModeController::Stop() {
@@ -1110,6 +1145,13 @@ void CaptureModeController::CaptureScreenshotOfGivenWindow(
 
 void CaptureModeController::PerformCapture(PerformCaptureType capture_type) {
   DCHECK(IsActive());
+
+  if (CaptureTypeRequiresNetworkConnection(capture_type) &&
+      delegate_->IsNetworkConnectionOffline()) {
+    capture_mode_session_->ShowActionContainerError(l10n_util::GetStringUTF16(
+        IDS_ASH_SCREEN_CAPTURE_ACTION_ATTEMPTED_OFFLINE_ERROR));
+    return;
+  }
 
   if (pending_dlp_check_)
     return;
@@ -1357,6 +1399,10 @@ void CaptureModeController::SendMultimodalSearch(const gfx::ImageSkia& image,
   RecordMultimodalSearchRequest();
 }
 
+bool CaptureModeController::ActiveUserDefaultSearchProviderIsGoogle() const {
+  return delegate_->ActiveUserDefaultSearchProviderIsGoogle();
+}
+
 void CaptureModeController::OnRecordingEnded(
     recording::mojom::RecordingStatus status,
     const gfx::ImageSkia& thumbnail) {
@@ -1470,6 +1516,20 @@ void CaptureModeController::SetSystemMediaDeviceStatus(
 void CaptureModeController::StopAllScreenShare() {
   // Our screen recordings are not considered screen shares, and we already have
   // the stop recording button, so this does nothing.
+}
+
+void CaptureModeController::OnPinnedStateChanged(aura::Window* pinned_window) {
+  // TODO: crbug.com/404941151 - Remove this method and use
+  // `SunfishScannerFeatureWatcher` instead.
+  if (!Shell::Get()->screen_pinning_controller()->IsPinned()) {
+    return;
+  }
+
+  if (IsActive() && capture_mode_session_->active_behavior()->behavior_type() ==
+                        BehaviorType::kSunfish) {
+    Stop();
+  }
+  CloseSearchResultsPanel();
 }
 
 void CaptureModeController::StartVideoRecordingImmediatelyForTesting() {
@@ -1971,78 +2031,123 @@ void CaptureModeController::OnImageCapturedForSearch(
   }
 
   if (ShouldFetchScannerActions(capture_type)) {
+    bool actions_fetched = false;
+    if (ScannerController* scanner_controller =
+            Shell::Get()->scanner_controller()) {
+      // Note that `OnScannerActionsFetched` is always called, even if
+      // `actions_fetched` is false. This is intentional, as
+      // `OnScannerActionsFetched` stops the glow started by
+      // `ShouldShowGlowWhileProcessingCaptureType` in `DefaultBehavior`
+      // (guarded on whether `scanner_controller()` is non-null on `Shell`), and
+      // in `SunfishBehavior` (always true).
+      actions_fetched = scanner_controller->FetchActionsForImage(
+          jpeg_bytes,
+          base::BindOnce(&CaptureModeController::OnScannerActionsFetched,
+                         weak_ptr_factory_.GetWeakPtr(), image_search_token));
+    }
+
     if (capture_type == PerformCaptureType::kSunfish) {
       RecordScannerFeatureUserState(
-          ScannerFeatureUserState::
-              kSunfishScreenInitialScreenCaptureSentToScannerServer);
+          actions_fetched
+              ? ScannerFeatureUserState::
+                    kSunfishSessionImageCapturedAndActionsFetchStarted
+              : ScannerFeatureUserState::
+                    kSunfishSessionImageCapturedAndActionsNotFetched);
     }
     if (capture_type == PerformCaptureType::kScanner) {
       RecordScannerFeatureUserState(
-          ScannerFeatureUserState::
-              kScreenCaptureModeInitialScreenCaptureSentToScannerServer);
+          actions_fetched
+              ? ScannerFeatureUserState::
+                    kSmartActionsButtonImageCapturedAndActionsFetchStarted
+              : ScannerFeatureUserState::
+                    kSmartActionsButtonImageCapturedAndActionsNotFetched);
     }
-
-    Shell::Get()->scanner_controller()->FetchActionsForImage(
-        jpeg_bytes,
-        base::BindOnce(&CaptureModeController::OnScannerActionsFetched,
-                       weak_ptr_factory_.GetWeakPtr(), image_search_token));
   }
 
-  if (ShouldSendRegionSearch(capture_type)) {
-    const gfx::ImageSkia image = gfx::ImageSkia::CreateFrom1xBitmap(bitmap);
-    // `OnSearchUrlFetched()` will be invoked with `image` when the server
-    // response is fetched.
-    delegate_->SendRegionSearch(
-        bitmap, user_capture_region_,
+  if (!ShouldSendRegionSearch(capture_type)) {
+    return;
+  }
+
+  if (features::IsSunfishLensWebEnabled()) {
+    const gfx::Image image = gfx::Image::CreateFrom1xBitmap(bitmap);
+    const bool is_standalone_session =
+        capture_mode_session_->active_behavior()->behavior_type() ==
+        BehaviorType::kSunfish;
+    delegate_->SendLensWebRegionSearch(
+        image, is_standalone_session,
         base::BindRepeating(&CaptureModeController::OnSearchUrlFetched,
                             weak_ptr_factory_.GetWeakPtr(),
-                            user_capture_region_, image),
+                            user_capture_region_, gfx::ImageSkia()),
         base::BindRepeating(&CaptureModeController::OnLensTextDetectionComplete,
+                            weak_ptr_factory_.GetWeakPtr(), image_search_token),
+        base::BindRepeating(&CaptureModeController::OnLensWebError,
                             weak_ptr_factory_.GetWeakPtr(),
                             image_search_token));
+    return;
   }
+
+  const gfx::ImageSkia image = gfx::ImageSkia::CreateFrom1xBitmap(bitmap);
+  // `OnSearchUrlFetched()` will be invoked with `image` when the server
+  // response is fetched.
+  delegate_->SendRegionSearch(
+      bitmap, user_capture_region_,
+      base::BindRepeating(&CaptureModeController::OnSearchUrlFetched,
+                          weak_ptr_factory_.GetWeakPtr(), user_capture_region_,
+                          image),
+      base::BindRepeating(&CaptureModeController::OnLensTextDetectionComplete,
+                          weak_ptr_factory_.GetWeakPtr(), image_search_token));
 }
 
 void CaptureModeController::OnTextDetectionComplete(
     base::WeakPtr<BaseCaptureModeSession> image_search_token,
     base::TimeTicks ocr_attempt_start_time,
-    std::string detected_text) {
+    std::optional<std::string> detected_text) {
   RecordOnDeviceOcrTimerCompleted(ocr_attempt_start_time);
-  if (!image_search_token || detected_text.empty()) {
+  if (!image_search_token || !detected_text.has_value()) {
+    RecordScannerFeatureUserState(
+        ScannerFeatureUserState::
+            kSmartActionsButtonNotShownDueToTextDetectionCancelled);
     return;
   }
 
-  AddCopyTextAndSmartActionsButtons(detected_text);
+  if (detected_text->empty()) {
+    RecordScannerFeatureUserState(
+        ScannerFeatureUserState::
+            kSmartActionsButtonNotShownDueToNoTextDetected);
+    return;
+  }
+
+  AddCopyTextButton(*detected_text);
+  capture_mode_session_->AddSmartActionsButton();
 }
 
 void CaptureModeController::OnLensTextDetectionComplete(
     base::WeakPtr<BaseCaptureModeSession> image_search_token,
-    std::string detected_text) {
-  if (!image_search_token || detected_text.empty()) {
+    std::optional<std::string> detected_text) {
+  if (!image_search_token || !detected_text.has_value() ||
+      detected_text->empty()) {
     return;
   }
 
-  // Only use lens to automatically add Copy Text and Smart Actions buttons if
-  // we are in a sunfish session.
+  // Only use lens to automatically add a Copy Text button if we are in a
+  // sunfish session.
   if (capture_mode_session_->active_behavior()->behavior_type() ==
       BehaviorType::kSunfish) {
-    AddCopyTextAndSmartActionsButtons(detected_text);
+    AddCopyTextButton(*detected_text);
   }
 }
 
-void CaptureModeController::AddCopyTextAndSmartActionsButtons(
-    std::string detected_text) {
+void CaptureModeController::AddCopyTextButton(std::string_view detected_text) {
   CHECK(!detected_text.empty());
 
-  // TODO(crbug.com/375967525): Finalize and translate the copy text label.
   capture_mode_util::AddActionButton(
       base::BindOnce(&CaptureModeController::OnCopyTextButtonClicked,
                      weak_ptr_factory_.GetWeakPtr(),
                      base::UTF8ToUTF16(detected_text)),
-      u"Copy text", &vector_icons::kContentCopyIcon,
+      l10n_util::GetStringUTF16(IDS_ASH_SCREEN_CAPTURE_COPY_TEXT_BUTTON_LABEL),
+      &vector_icons::kContentCopyIcon,
       ActionButtonRank{ActionButtonType::kCopyText, /*weight=*/0},
       ActionButtonViewID::kCopyTextButton);
-  capture_mode_session_->AddSmartActionsButton();
 }
 
 void CaptureModeController::OnCopyTextButtonClicked(
@@ -2052,20 +2157,51 @@ void CaptureModeController::OnCopyTextButtonClicked(
   Stop();
 }
 
+void CaptureModeController::MaybeShowScannerDisclaimerOnSunfishStartup(
+    bool startup_success) {
+  if (!startup_success ||
+      // Below conditions imply scanner is disabled in some way.
+      // Hence we should skip showing the disclaimer.
+      !ScannerController::CanShowUiForShell()) {
+    if (!CanShowSunfishUi() && IsActive()) {
+      // Should stop because if both scanner and sunfish are disabled, then
+      // there is nothing you can do in the session.
+      Stop();
+    }
+    return;
+  }
+  // Since this is at the end of startup internal, the capture_mode_session
+  // should exist.
+  CHECK(capture_mode_session_);
+
+  // If declined, we should completely stop the sunfish session if only scanner
+  // is enabled. If both scanner consent is declined and sunfish is disabled,
+  // then there is nothing you can do in the session.
+  // Otherwise, allow the session to continue (DoNothing) since sunfish can run
+  // without scanner.
+  base::RepeatingClosure decline_callback =
+      CanShowSunfishUi() ? base::DoNothing()
+                         : base::BindRepeating(&CaptureModeController::Stop,
+                                               weak_ptr_factory_.GetWeakPtr());
+  capture_mode_session_->MaybeShowScannerDisclaimer(
+      ScannerEntryPoint::kSunfishSession,
+      /*accept_callback=*/base::BindRepeating([]() {
+        // Start a session after the disclaimer to ensure that it is started
+        // correctly if the user has just consented.
+        if (auto* scanner_controller = Shell::Get()->scanner_controller()) {
+          scanner_controller->StartNewSession();
+        }
+      }),
+      decline_callback);
+}
+
 void CaptureModeController::OnScannerActionsFetched(
     base::WeakPtr<BaseCaptureModeSession> image_search_token,
     ScannerSession::FetchActionsResponse actions_response) {
   if (!image_search_token) {
     return;
   }
-  if (!actions_response.has_value()) {
-    // TODO(crbug.com/378582420): Pass the whole `actions_response` to the
-    // capture mode session, which should show an error if the actions response
-    // contains an error.
-    capture_mode_session_->OnScannerActionsFetched(/*scanner_actions=*/{});
-    return;
-  }
-  capture_mode_session_->OnScannerActionsFetched(std::move(*actions_response));
+  capture_mode_session_->OnScannerActionsFetched(std::move(actions_response));
 }
 
 void CaptureModeController::OnSearchUrlFetched(const gfx::Rect& captured_region,
@@ -2074,6 +2210,20 @@ void CaptureModeController::OnSearchUrlFetched(const gfx::Rect& captured_region,
   if (captured_region == user_capture_region_) {
     ShowSearchResultsPanel(image, url);
   }
+}
+
+void CaptureModeController::OnLensWebError(
+    base::WeakPtr<BaseCaptureModeSession> image_search_token) {
+  // TODO: crbug.com/406072681 - Show an error message if the session is no
+  // longer active, such as in the case of clicking the Search with Lens button
+  // in a regular session.
+  if (!image_search_token) {
+    return;
+  }
+
+  CHECK(IsActive());
+  capture_mode_session_->ShowActionContainerError(
+      l10n_util::GetStringUTF16(IDS_ASH_SCANNER_ERROR_GENERIC));
 }
 
 void CaptureModeController::OnSearchResultClicked() {
@@ -2488,7 +2638,6 @@ void CaptureModeController::OnDlpRestrictionCheckedAtPerformingCapture(
   // We don't need to bring capture mode UIs back if `proceed` is false or if
   // the session is about to shutdown. See also
   // `CaptureModeBehavior::ShouldReShowUisAtPerformingCapture`.
-  // TODO(b/374381937): Determine whether to reshow UIs or end the session.
   auto* active_behavior = capture_mode_session_->active_behavior();
   capture_mode_session_->OnWaitingForDlpConfirmationEnded(
       /*reshow_uis=*/proceed &&

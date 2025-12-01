@@ -44,6 +44,8 @@ update_target("//content/browser:browser") {
     "//vivaldi/components/content/vivaldi_render_frame_host_impl.cc",
     "//vivaldi/components/content/vivaldi_render_view_host_impl.cc",
     "//vivaldi/components/content/vivaldi_web_contents.cc",
+    "//vivaldi/components/content/vivaldi_postponed_calls.cc",
+    "//vivaldi/components/content/vivaldi_postponed_calls.h",
     "//vivaldi/content/browser/renderer_host/vivaldi_render_widget_host_view_child_frame.cc",
   ]
   if (is_mac) {
@@ -110,8 +112,6 @@ if (!is_ios && !is_android) {
 
 update_target("//chrome/browser:browser") {
   sources += [
-    "//vivaldi/components/capture/capture_page.cc",
-    "//vivaldi/components/capture/capture_page.h",
     "//vivaldi/components/capture/thumbnail_capture_contents.cc",
     "//vivaldi/components/capture/thumbnail_capture_contents.h",
     "//vivaldi/components/datasource/vivaldi_data_source.cc",
@@ -122,8 +122,6 @@ update_target("//chrome/browser:browser") {
     "//vivaldi/components/datasource/vivaldi_image_store.h",
     "//vivaldi/components/datasource/vivaldi_theme_io.cc",
     "//vivaldi/components/datasource/vivaldi_theme_io.h",
-    "//vivaldi/components/request_filter/adblock_filter/adblock_rule_service_factory.cc",
-    "//vivaldi/components/request_filter/adblock_filter/adblock_rule_service_factory.h",
     "//vivaldi/components/theme/vivaldi_theme_download.cc",
     "//vivaldi/components/theme/vivaldi_theme_download.h",
   ]
@@ -163,6 +161,7 @@ if (!is_android) {
     deps += [
       "//vivaldi/components:panel_utils",
       "//vivaldi/components:panel",
+      "//vivaldi/components:tabs",
     ]
   }
 
@@ -188,6 +187,9 @@ if (!is_android) {
     ]
     deps += [
       "//vivaldi/extensions/schema",
+      "//chrome/common/compose:mojo_bindings",
+      "//chrome/browser:compose_optimization_guide_proto",
+      "//components/autofill/content/common/mojom",
     ]
   }
 
@@ -196,6 +198,9 @@ if (!is_android) {
       "//vivaldi/components/browser/vivaldi_app_window.cc",
       "//vivaldi/components/guest_view/vivaldi_guest_view_internal_api.cc",
       "//vivaldi/components/guest_view/vivaldi_web_view_permission_helper_delegate.cc",
+    ]
+    deps += [
+      "//vivaldi/extensions:vivaldi_extension_component_wrapper",
     ]
   }
 
@@ -272,7 +277,7 @@ if (is_android) {
   }
 }
 
-update_target("//components/embedder_support:browser_util"){
+update_target("//components/embedder_support:user_agent"){
   sources += [
     "//vivaldi/components/browser/vivaldi_brand_select.cc",
     "//vivaldi/components/browser/vivaldi_brand_select.h",
@@ -281,6 +286,7 @@ update_target("//components/embedder_support:browser_util"){
     "//base/version_info:generate_version_info",
     "//vivaldi/base:edge_version",
     "//vivaldi/components:user_agent",
+    "//vivaldi/prefs:prefs_strings",
   ]
 }
 
@@ -334,4 +340,21 @@ if (!is_android) {
       "//vivaldi/renderer/mojo:encrypted_media_access",
     ]
   }
+}
+
+update_target("//chrome/browser:browser") {
+  sources += [
+    "//vivaldi/components/request_filter/request_filter_manager_factory.cc",
+    "//vivaldi/components/request_filter/request_filter_manager_factory.h",
+    "//vivaldi/components/request_filter/adblock_filter/adblock_rule_service_factory.cc",
+    "//vivaldi/components/request_filter/adblock_filter/adblock_rule_service_factory.h",
+  ]
+}
+
+update_target("//components/safe_browsing/content/renderer:throttles") {
+  sources += [
+    "//vivaldi/components/safe_browsing/content/renderer/vivaldi_renderer_url_loader_throttle.cc",
+    "//vivaldi/components/safe_browsing/content/renderer/vivaldi_throttle_guard.cc",
+    "//vivaldi/components/safe_browsing/content/renderer/vivaldi_throttle_guard.h",
+  ]
 }

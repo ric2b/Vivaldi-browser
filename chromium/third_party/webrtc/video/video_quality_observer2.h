@@ -72,14 +72,14 @@ class VideoQualityObserver {
   bool is_last_frame_blocky_;
   // Decoded timestamp of the last delayed frame.
   int64_t last_unfreeze_time_ms_;
-  rtc::MovingAverage render_interframe_delays_;
+  MovingAverage render_interframe_delays_;
   double sum_squared_interframe_delays_secs_;
   // An inter-frame delay is counted as a freeze if it's significantly longer
   // than average inter-frame delay.
-  rtc::SampleCounter freezes_durations_;
-  rtc::SampleCounter pauses_durations_;
+  SampleCounter freezes_durations_;
+  SampleCounter pauses_durations_;
   // Time between freezes.
-  rtc::SampleCounter smooth_playback_durations_;
+  SampleCounter smooth_playback_durations_;
   // Counters for time spent in different resolutions. Time between each two
   // Consecutive frames is counted to bin corresponding to the first frame
   // resolution.

@@ -21,6 +21,7 @@ TEST_F(SigninPromoViewTest, ChromiumLogoImage) {
   UIWindow* currentWindow = GetAnyKeyWindow();
   SigninPromoView* view =
       [[SigninPromoView alloc] initWithFrame:CGRectMake(0, 0, 100, 100)];
+  [view configurePrimaryButtonWithTitle:@"Test"];
   view.mode = SigninPromoViewModeNoAccounts;
   [currentWindow.rootViewController.view addSubview:view];
   UIImage* chromiumLogo = view.imageView.image;
@@ -43,12 +44,14 @@ TEST_F(SigninPromoViewTest, ChromiumLogoImage) {
   // The image should be different than the one set, since a circular background
   // should have been added.
   EXPECT_NE(customImage, view.imageView.image);
+  [view removeFromSuperview];
 }
 
 TEST_F(SigninPromoViewTest, SecondaryButtonVisibility) {
   UIWindow* currentWindow = GetAnyKeyWindow();
   SigninPromoView* view =
       [[SigninPromoView alloc] initWithFrame:CGRectMake(0, 0, 100, 100)];
+  [view configurePrimaryButtonWithTitle:@"Test"];
   view.mode = SigninPromoViewModeNoAccounts;
   [currentWindow.rootViewController.view addSubview:view];
   EXPECT_TRUE(view.secondaryButton.hidden);
@@ -56,11 +59,12 @@ TEST_F(SigninPromoViewTest, SecondaryButtonVisibility) {
   EXPECT_FALSE(view.secondaryButton.hidden);
   view.mode = SigninPromoViewModeSignedInWithPrimaryAccount;
   EXPECT_TRUE(view.secondaryButton.hidden);
+  [view removeFromSuperview];
 }
 
 // Tests the accessibility label (based on the `textLabel` and the primary
-// button title).
-TEST_F(SigninPromoViewTest, AccessibilityLabel) {
+// button title) as SigninPromoViewStyleStandard.
+TEST_F(SigninPromoViewTest, AccessibilityLabelSigninPromoViewStyleStandard) {
   UIWindow* currentWindow = GetAnyKeyWindow();
   SigninPromoView* view =
       [[SigninPromoView alloc] initWithFrame:CGRectMake(0, 0, 100, 100)];
@@ -71,9 +75,50 @@ TEST_F(SigninPromoViewTest, AccessibilityLabel) {
   view.primaryButton.configuration = buttonConfigutation;
   NSString* promoText = @"This is the promo text.";
   view.textLabel.text = promoText;
+  view.promoViewStyle = SigninPromoViewStyleStandard;
   NSString* expectedAccessibilityLabel =
       [NSString stringWithFormat:@"%@ %@", promoText, primaryButtonTitle];
   EXPECT_NSEQ(view.accessibilityLabel, expectedAccessibilityLabel);
+  [view removeFromSuperview];
+}
+
+// Tests the accessibility label (based on the `textLabel` and the primary
+// button title) as SigninPromoViewStyleCompact.
+TEST_F(SigninPromoViewTest, AccessibilityLabelSigninPromoViewStyleCompact) {
+  UIWindow* currentWindow = GetAnyKeyWindow();
+  SigninPromoView* view =
+      [[SigninPromoView alloc] initWithFrame:CGRectMake(0, 0, 100, 100)];
+  [currentWindow.rootViewController.view addSubview:view];
+  UIButtonConfiguration* buttonConfigutation = view.primaryButton.configuration;
+  NSString* primaryButtonTitle = @"Primary Button Title";
+  buttonConfigutation.title = primaryButtonTitle;
+  view.primaryButton.configuration = buttonConfigutation;
+  NSString* promoText = @"This is the promo text.";
+  view.textLabel.text = promoText;
+  view.promoViewStyle = SigninPromoViewStyleCompact;
+  NSString* expectedAccessibilityLabel =
+      [NSString stringWithFormat:@"%@ %@", promoText, primaryButtonTitle];
+  EXPECT_NSEQ(view.accessibilityLabel, expectedAccessibilityLabel);
+  [view removeFromSuperview];
+}
+
+// Tests the accessibility label (based on the `textLabel` and the primary
+// button title) as SigninPromoViewStyleOnlyButton.
+TEST_F(SigninPromoViewTest, AccessibilityLabelSigninPromoViewStyleOnlyButton) {
+  UIWindow* currentWindow = GetAnyKeyWindow();
+  SigninPromoView* view =
+      [[SigninPromoView alloc] initWithFrame:CGRectMake(0, 0, 100, 100)];
+  [currentWindow.rootViewController.view addSubview:view];
+  UIButtonConfiguration* buttonConfigutation = view.primaryButton.configuration;
+  NSString* primaryButtonTitle = @"Primary Button Title";
+  buttonConfigutation.title = primaryButtonTitle;
+  view.primaryButton.configuration = buttonConfigutation;
+  NSString* promoText = @"This is the promo text.";
+  view.textLabel.text = promoText;
+  view.promoViewStyle = SigninPromoViewStyleOnlyButton;
+  NSString* expectedAccessibilityLabel = primaryButtonTitle;
+  EXPECT_NSEQ(view.accessibilityLabel, expectedAccessibilityLabel);
+  [view removeFromSuperview];
 }
 
 // Tests that signin is created on non-compact layout and that setting compact
@@ -82,6 +127,7 @@ TEST_F(SigninPromoViewTest, ChangeLayout) {
   UIWindow* currentWindow = GetAnyKeyWindow();
   SigninPromoView* view =
       [[SigninPromoView alloc] initWithFrame:CGRectMake(0, 0, 100, 100)];
+  [view configurePrimaryButtonWithTitle:@"Test"];
   view.mode = SigninPromoViewModeNoAccounts;
   [currentWindow.rootViewController.view addSubview:view];
   // The default mode should be CompactVertical.
@@ -98,6 +144,7 @@ TEST_F(SigninPromoViewTest, ChangeLayout) {
   EXPECT_GT(view.primaryButton.layer.cornerRadius, 0.0);
   // The secondary button should be hidden.
   EXPECT_TRUE(view.secondaryButton.hidden);
+  [view removeFromSuperview];
 }
 
 // Tests that buttons are disabled or enabled when the spinner started or
@@ -106,6 +153,7 @@ TEST_F(SigninPromoViewTest, StartAndStopSpinner) {
   UIWindow* currentWindow = GetAnyKeyWindow();
   SigninPromoView* view =
       [[SigninPromoView alloc] initWithFrame:CGRectMake(0, 0, 100, 100)];
+  [view configurePrimaryButtonWithTitle:@"Test"];
   view.mode = SigninPromoViewModeNoAccounts;
   [currentWindow.rootViewController.view addSubview:view];
   view.mode = SigninPromoViewModeSigninWithAccount;
@@ -120,4 +168,5 @@ TEST_F(SigninPromoViewTest, StartAndStopSpinner) {
   EXPECT_TRUE(view.primaryButton.enabled);
   EXPECT_TRUE(view.secondaryButton.enabled);
   EXPECT_TRUE(view.closeButton.enabled);
+  [view removeFromSuperview];
 }
